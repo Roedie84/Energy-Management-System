@@ -536,3 +536,22 @@ bij een constant vermogen van 500W kwam er voorheen geen 12,0 kWh maar
 zo'n 9,0 kWh uit over 24 uur). Dit is gefixt door het interval exact op
 de uur-grens te splitsen — geverifieerd met een test die nu wél exact
 12,0 kWh over 24 uur teruggeeft.
+
+## v0.19.1 — Diagnostiek-export (om te delen voor optimalisatie)
+
+Home Assistant's ingebouwde **Diagnostics**-functie is nu ondersteund:
+ga naar **Instellingen → Apparaten & Diensten → Energy Management System
+→ drie puntjes (⋮) → Diagnostiek downloaden**. Dit genereert een
+JSON-bestand met:
+
+- de huidige configuratie (welke entities gekoppeld zijn),
+- de laatste beslissing + reden, verwachte modus, energie-brug-check,
+  SoC-bescherming,
+- alle geleerde geschiedenis: nachtverbruik, uurverbruiksprofiel,
+  Solcast-bias (dag én per uur), overgangs-logboek van de energie-check,
+- of de historische bootstrap is gelukt.
+
+Geen geheimen of tokens erin — alleen entity-ID's en geleerde getallen.
+Dit bestand kun je direct met mij delen (bijvoorbeeld hier plakken/
+uploaden) zodat ik gericht kan zien wat er speelt, zonder dat we steeds
+losse Ontwikkelaarshulpmiddelen-schermpjes hoeven te doorlopen.
