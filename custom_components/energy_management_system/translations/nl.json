@@ -1,0 +1,50 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Energy Management System instellen",
+        "data": {
+          "price_sensor_entity": "Dynamische prijssensor (bv. Zonneplan elektriciteitstarief)",
+          "price_attribute": "Te gebruiken prijs (incl. of excl. belasting)",
+          "operation_select_entity": "Zendure operation select entity",
+          "manual_power_number_entity": "Zendure manual power number entity",
+          "manual_discharge_power": "Ontlaadvermogen tijdens duurste kwartier (W)",
+          "expensive_quarters_count": "Aantal duurste kwartieren per dag dat als 'duur' geldt",
+          "solar_forecast_sensor_entity": "Solcast PV-voorspelling sensor (morgen)",
+          "solar_actual_sensor_entity": "Werkelijke dagopbrengst sensor (bv. SolarEdge)",
+          "consumption_power_sensor_entity": "Huishoudverbruik sensor (bv. P1-meter)",
+          "low_solar_threshold_kwh": "Drempel lage zon-verwachting (kWh) - alleen fallback, tot er genoeg leergeschiedenis is",
+          "available_energy_sensor_entity": "Beschikbare accu-energie sensor (kWh) - bepaalt of laden uitgesteld kan worden",
+          "manual_charge_power": "Laadvermogen tijdens goedkoopste blok bij weinig zon (W, negatief)",
+          "battery_soc_sensor_entity": "Accu SoC sensor (voor bescherming tegen te ver ontladen)",
+          "min_soc_percent": "Minimale SoC (%) - onder deze grens geen geforceerd ontladen meer"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "Deze integratie is al geconfigureerd."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "price_sensor_entity": "Dynamische prijssensor (bv. Zonneplan elektriciteitstarief)",
+          "price_attribute": "Te gebruiken prijs (incl. of excl. belasting)",
+          "operation_select_entity": "Zendure operation select entity",
+          "manual_power_number_entity": "Zendure manual power number entity",
+          "manual_discharge_power": "Ontlaadvermogen tijdens duurste kwartier (W)",
+          "expensive_quarters_count": "Aantal duurste kwartieren per dag dat als 'duur' geldt",
+          "solar_forecast_sensor_entity": "Solcast PV-voorspelling sensor (morgen)",
+          "solar_actual_sensor_entity": "Werkelijke dagopbrengst sensor (bv. SolarEdge)",
+          "consumption_power_sensor_entity": "Huishoudverbruik sensor (bv. P1-meter)",
+          "low_solar_threshold_kwh": "Drempel lage zon-verwachting (kWh) - alleen fallback, tot er genoeg leergeschiedenis is",
+          "available_energy_sensor_entity": "Beschikbare accu-energie sensor (kWh) - bepaalt of laden uitgesteld kan worden",
+          "manual_charge_power": "Laadvermogen tijdens goedkoopste blok bij weinig zon (W, negatief)",
+          "battery_soc_sensor_entity": "Accu SoC sensor (voor bescherming tegen te ver ontladen)",
+          "min_soc_percent": "Minimale SoC (%) - onder deze grens geen geforceerd ontladen meer"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "domain": "energy_management_system",
+  "name": "Energy Management System",
+  "codeowners": ["@Roedie84"],
+  "config_flow": true,
+  "documentation": "https://github.com/Roedie84/Energy-Management-System",
+  "issue_tracker": "https://github.com/Roedie84/Energy-Management-System/issues",
+  "iot_class": "local_polling",
+  "integration_type": "service",
+  "requirements": [],
+  "version": "0.12.0"
+}
