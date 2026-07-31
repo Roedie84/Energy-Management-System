@@ -134,7 +134,7 @@ diagnostische sensoren toe (zichtbaar onder "Diagnostiek" bij het apparaat):
   inclusief geleerde bias
 
 Een kant-en-klare Lovelace-kaart om deze te tonen staat in
-`dashboards/energy_management_system_debug_card.yaml` — pas de entity_id's aan als jouw
+`dashboards/energy_management_system_dashboard.yaml` — pas de entity_id's aan als jouw
 installatie een andere naamgeving gebruikt.
 
 ## Overzicht komende uren (v0.8.0+)
@@ -195,7 +195,7 @@ zou kiezen (`smart`, `smart_discharging`, `manual`) — onafhankelijk van
 `select.zendure_manager_operation`-entity in een history-graph om in één
 oogopslag te zien wanneer en waarom de realiteit van het plan afwijkt.
 
-De dashboard-kaart (`dashboards/energy_management_system_debug_card.yaml`) bevat nu ook:
+De dashboard-kaart (`dashboards/energy_management_system_dashboard.yaml`) bevat nu ook:
 - Een "Nu"-overzicht met accu-SoC, beschikbare kWh, verwachte vs.
   werkelijke modus, en huidig verbruik.
 - Een grafiek die verwachte vs. werkelijke modus over de laatste 48 uur
@@ -555,3 +555,39 @@ Geen geheimen of tokens erin — alleen entity-ID's en geleerde getallen.
 Dit bestand kun je direct met mij delen (bijvoorbeeld hier plakken/
 uploaden) zodat ik gericht kan zien wat er speelt, zonder dat we steeds
 losse Ontwikkelaarshulpmiddelen-schermpjes hoeven te doorlopen.
+
+## v0.20.0 — leesbare live-uitleg ("wat gebeurt er nu en waarom?")
+
+Nieuwe sensor: **`sensor.explanation`**. In plaats van zelf losse
+getallen (SoC, beschikbare kWh, reden-code) te moeten combineren, geeft
+deze sensor een volledige Nederlandse zin die uitlegt wat de integratie
+nu doet en waarom — bijvoorbeeld:
+
+> "De accu heeft nu 3.20 kWh beschikbaar - genoeg om de resterende tijd
+> tot het goedkoopste blok te overbruggen (geschat nodig: 2.10 kWh).
+> Daarom wordt laden uitgesteld en krijgt teruglevering nu voorrang
+> (smart_discharging)."
+
+Dekt alle 7 mogelijke redenen (inclusief SoC-bescherming, winter-laden bij
+weinig zon, en de force_manual/learning_only-overrides), getest tegen 5
+scenario's.
+
+**Let op:** Home Assistant beperkt sensor-*states* tot 255 tekens, dus de
+`state` van deze sensor wordt afgekapt als het nodig is. De **volledige,
+onverkorte tekst staat altijd in het `explanation`-attribuut** — gebruik
+die in een markdown-kaart (zoals nu ook in de meegeleverde dashboard-kaart
+gebeurt) om altijd de complete uitleg te zien.
+
+## v0.20.1 — één geconsolideerd dashboard-bestand
+
+De twee losse dashboard-YAML's (`_debug_card.yaml` en de aparte
+`_gecorrigeerd.yaml`) zijn samengevoegd tot **één bestand**:
+`dashboards/energy_management_system_dashboard.yaml`. Dat bevat nu al de
+correcte, deels `woonkamer_`-geprefixte entity-ID's voor de sensoren die
+zijn aangemaakt nadat het apparaat aan een ruimte werd gekoppeld
+(`hourly_consumption_profile`, `pv_hourly_forecast_bias`, `explanation`).
+
+**Als jouw installatie geen ruimte-koppeling heeft** (dus geen
+`woonkamer_`-voorvoegsel nodig), verwijder dat voorvoegsel dan zelf uit
+deze drie regels — check via Ontwikkelaarshulpmiddelen → Staten wat bij
+jou klopt.

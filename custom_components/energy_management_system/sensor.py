@@ -38,6 +38,7 @@ async def async_setup_entry(
         DischargeWindowStartSensor(coordinator, entry.entry_id),
         EffectiveExpensiveQuartersSensor(coordinator, entry.entry_id),
         LastDecisionReasonSensor(coordinator, entry.entry_id),
+        ExplanationSensor(coordinator, entry.entry_id),
         SimulatedActionSensor(coordinator, entry.entry_id),
         LearnedNightConsumptionSensor(coordinator, entry.entry_id),
         HourlyConsumptionProfileSensor(coordinator, entry.entry_id),
@@ -230,6 +231,35 @@ class LastDecisionReasonSensor(_CoordinatorDiagnosticSensor):
     @property
     def native_value(self) -> str | None:
         return self._coordinator.last_reason
+
+
+class ExplanationSensor(_CoordinatorDiagnosticSensor):
+    """Plain-language (Dutch) explanation of what the integration is
+    doing right now and why - so you can read in the dashboard what's
+    happening without piecing together raw sensor values yourself.
+
+    Home Assistant limits sensor *states* to 255 characters, so the state
+    is truncated if needed; the full, untruncated text is always in the
+    `explanation` attribute (use that in a markdown card for the complete
+    text).
+    """
+
+    _attr_name = "Explanation"
+    _attr_icon = "mdi:text-box-outline"
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        super().__init__(coordinator, entry_id, "explanation")
+
+    @property
+    def native_value(self) -> str | None:
+        text = self._coordinator.last_explanation
+        if text is None:
+            return None
+        return text if len(text) <= 255 else text[:252] + "..."
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return {"explanation": self._coordinator.last_explanation}
 
 
 class SimulatedActionSensor(_CoordinatorDiagnosticSensor):

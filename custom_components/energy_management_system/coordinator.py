@@ -149,6 +149,7 @@ class EnergyManagementSystemCoordinator:
         self.last_needed_kwh_to_bridge: float | None = None
         self.last_has_enough_energy: bool | None = None
         self.energy_bridge_transition_log: list[dict] = []
+        self.last_explanation: str = "Nog geen data verwerkt."
         self.last_soc_percent: float | None = None
         self.last_discharge_power_applied: float | None = None
         self.last_timeline: list[dict] = []
@@ -1447,6 +1448,106 @@ class EnergyManagementSystemCoordinator:
         async with self._lock:
             await self._async_update_locked()
 
+    def _build_explanation(self) -> str:
+        """Build a plain-language (Dutch) explanation of the current
+        decision, so you can read in the dashboard what the integration
+        is doing and why - without having to piece together raw sensor
+        values yourself.
+        """
+        if self.force_manual:
+            return (
+                "De 'Force manual'-schakelaar staat aan: de integratie doet nu "
+                "niets en laat de Zendure ongemoeid - jij hebt zelf de controle."
+            )
+
+        reason = self.last_reason
+        parts: list[str] = []
+
+        if reason == "no_forecast_data":
+            parts.append(
+                "Er kon geen bruikbare prijsvoorspelling gevonden worden op de "
+                "geconfigureerde prijssensor. Controleer of die sensor bestaat "
+                "en een geldig 'forecast'-attribuut heeft."
+            )
+
+        elif reason == "expensive_quarter":
+            power = self.last_discharge_power_applied
+            power_txt = f"{power:.0f}W" if power else "het ingestelde vermogen"
+            parts.append(
+                f"Dit kwartier hoort bij de {self.last_effective_expensive_quarters_count} "
+                f"duurste van vandaag, dus de accu ontlaadt nu actief op "
+                f"{power_txt} om van de hoge prijs te profiteren."
+            )
+            if self.last_soc_percent is not None:
+                parts.append(f"Huidige accu-SoC: {self.last_soc_percent:.0f}%.")
+
+        elif reason == "expensive_quarter_soc_protected":
+            soc_txt = (
+                f"{self.last_soc_percent:.0f}%"
+                if self.last_soc_percent is not None
+                else "onbekend"
+            )
+            parts.append(
+                f"Dit zou een duur kwartier zijn om te ontladen, maar de "
+                f"accu-SoC ({soc_txt}) is te laag om dat te rechtvaardigen. "
+                f"Daarom blijft de Zendure op 'smart' staan in plaats van "
+                f"geforceerd te ontladen."
+            )
+
+        elif reason == "grid_charging_low_solar":
+            parts.append(
+                "Er wordt weinig zon verwacht, dus tijdens dit goedkoopste "
+                "moment van de dag wordt er actief bijgeladen vanaf het net "
+                "(manual, negatief vermogen) in plaats van te wachten op zon."
+            )
+
+        elif reason == "discharging_window":
+            if self.last_has_enough_energy is not None and self.last_available_kwh is not None:
+                needed_txt = (
+                    f"{self.last_needed_kwh_to_bridge:.2f}"
+                    if self.last_needed_kwh_to_bridge is not None
+                    else "onbekend"
+                )
+                parts.append(
+                    f"De accu heeft nu {self.last_available_kwh:.2f} kWh "
+                    f"beschikbaar - genoeg om de resterende tijd tot het "
+                    f"goedkoopste blok te overbruggen (geschat nodig: "
+                    f"{needed_txt} kWh). Daarom wordt laden uitgesteld en "
+                    f"krijgt teruglevering nu voorrang (smart_discharging)."
+                )
+            else:
+                parts.append(
+                    "Het is nog vóór het goedkoopste blok, dus laden wordt "
+                    "uitgesteld en teruglevering krijgt voorrang "
+                    "(smart_discharging)."
+                )
+
+        elif reason == "default_smart":
+            if self.last_has_enough_energy is False:
+                parts.append(
+                    "De accu heeft niet genoeg beschikbare energie om te "
+                    "wachten tot het goedkoopste blok, dus mag de Zendure nu "
+                    "zelf bijladen (smart-modus)."
+                )
+            else:
+                parts.append(
+                    "Er is nu geen speciale reden om in te grijpen: de prijs "
+                    "is niet bijzonder hoog, en het goedkoopste blok is al "
+                    "gaande of voorbij. De Zendure regelt dit zelf "
+                    "(smart-modus)."
+                )
+
+        else:
+            parts.append(f"Onbekende reden: {reason}.")
+
+        if self.learning_only:
+            parts.append(
+                "Let op: 'Learning only' staat aan - dit wordt alleen berekend "
+                "en gesimuleerd, er wordt niets echt naar de Zendure gestuurd."
+            )
+
+        return " ".join(parts)
+
     async def _async_update_locked(self) -> None:
         now = dt_util.now()
         entries = self._get_forecast_entries()
@@ -1460,6 +1561,7 @@ class EnergyManagementSystemCoordinator:
                 self.config.get(CONF_PRICE_ATTRIBUTE, DEFAULT_PRICE_ATTRIBUTE),
             )
             self.last_reason = "no_forecast_data"
+            self.last_explanation = self._build_explanation()
             return
 
         cheap_block_start, cheap_block_end = self._cheapest_block_range(entries, now)
@@ -1528,6 +1630,7 @@ class EnergyManagementSystemCoordinator:
             # Explicit manual override: leave the Zendure mode untouched.
             self.last_reason = "force_manual"
             self.last_simulated_action = None
+            self.last_explanation = self._build_explanation()
             return
 
         if is_expensive:
@@ -1543,6 +1646,7 @@ class EnergyManagementSystemCoordinator:
             else:
                 await self._async_apply_manual(scaled_power)
                 self.last_reason = "expensive_quarter"
+            self.last_explanation = self._build_explanation()
             return
 
         if should_force_charge:
@@ -1551,15 +1655,18 @@ class EnergyManagementSystemCoordinator:
             )
             await self._async_apply_manual(charge_power)
             self.last_reason = "grid_charging_low_solar"
+            self.last_explanation = self._build_explanation()
             return
 
         if should_postpone_charging:
             await self._async_apply_operation(OPTION_SMART_DISCHARGING)
             self.last_reason = "discharging_window"
+            self.last_explanation = self._build_explanation()
             return
 
         await self._async_apply_operation(OPTION_SMART)
         self.last_reason = "default_smart"
+        self.last_explanation = self._build_explanation()
 
     async def _async_apply_operation(self, option: str) -> None:
         """Set the Zendure operation mode, unless in learning_only mode."""
