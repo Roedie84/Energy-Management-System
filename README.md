@@ -354,3 +354,44 @@ Nieuwe sensor: `sensor.hourly_consumption_profile` (state = huidig uur,
 `profile`-attribuut = alle 24 geleerde waarden). Valt automatisch terug op
 het oude gedrag (vast nachtgemiddelde / live meting) zolang het profiel
 nog niet voor alle relevante uren gevuld is.
+
+## v0.16.0 — fix absurd hoge Solcast-afwijkingen
+
+**Oorzaak:** de voorspelling voor "morgen" werd vastgelegd op hetzelfde
+moment als de vergelijking (23:59:50) — precies het moment waarop sommige
+forecast-sensoren "omslaan" (voorspelling voor morgen wordt voorspelling
+voor vandaag, en er start een nieuwe/instabiele waarde voor de nieuwe
+"morgen"). Dat leverde soms een piepklein/instabiel getal op, wat bij de
+deling in de afwijking-berekening tot waarden van 500-700% leidde.
+
+**Fix:**
+1. Vastleggen en vergelijken zijn nu twee aparte momenten: de voorspelling
+   voor morgen wordt om **20:00** vastgelegd (ruim voor de omslag, als de
+   voorspelling allang stabiel is), en pas om 23:59:50 vergeleken met de
+   werkelijke opbrengst.
+2. Een sanity-filter (`MAX_REASONABLE_DEVIATION_PERCENT = 200%`) negeert
+   elke afwijking die toch nog onmogelijk hoog is — zowel bij nieuwe
+   metingen als bij de historische bootstrap. Dit geldt ook voor **al
+   opgeslagen** corrupte waarden: die worden simpelweg genegeerd bij het
+   berekenen van de geleerde bias, en worden vanzelf uit de rollende
+   geschiedenis geduwd zodra er nieuwe (nu wel correcte) metingen
+   binnenkomen.
+
+Getest tegen exact het scenario uit de praktijk (600%+ afwijkingen) — de
+geleerde bias valt correct terug op `None` totdat er weer valide data is,
+in plaats van een absurd getal te blijven tonen.
+
+**Geen actie nodig na deze update** — de bestaande foutieve waarden lossen
+zichzelf op na verloop van dagen; je hoeft niets handmatig te resetten.
+
+## v0.16.1 — fix 500-fout bij openen van Configureren (options flow)
+
+Op Home Assistant 2025.12+ gaf het openen van **Instellingen → Energy
+Management System → Configureren** een 500 Internal Server Error. Oorzaak:
+de integratie wees `self.config_entry` handmatig toe in de options-flow
+`__init__`, wat sinds HA 2025.12 een `AttributeError` oplevert omdat
+`config_entry` daar een automatisch ingevulde, alleen-lezen eigenschap is
+geworden (een bekend probleem dat meerdere custom integraties trof, o.a.
+LocalTuya). Fix: de handmatige toewijzing is verwijderd — Home Assistant
+vult `self.config_entry` nu vanzelf in, volgens de door HA zelf
+aanbevolen migratie-aanpak.

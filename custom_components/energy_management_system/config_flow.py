@@ -163,14 +163,11 @@ class EnergyManagementSystemConfigFlow(config_entries.ConfigFlow, domain=DOMAIN)
     def async_get_options_flow(
         config_entry: config_entries.ConfigEntry,
     ) -> EnergyManagementSystemOptionsFlow:
-        return EnergyManagementSystemOptionsFlow(config_entry)
+        return EnergyManagementSystemOptionsFlow()
 
 
 class EnergyManagementSystemOptionsFlow(config_entries.OptionsFlow):
     """Allow changing the linked entities and thresholds after initial setup."""
-
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        self.config_entry = config_entry
 
     async def async_step_init(
         self, user_input: dict | None = None

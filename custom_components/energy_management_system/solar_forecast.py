@@ -1,11 +1,16 @@
 """Tracks the accuracy of the Solcast PV forecast against actual solar yield.
 
-Every day, just before midnight, this:
-1. Compares the forecast that was captured 24 hours ago (predicting
-   *today*) against the actual measured yield of today (about to reset
-   at midnight), and stores the resulting deviation.
-2. Captures the current Solcast "forecast for tomorrow" value, to be
-   compared again 24 hours later.
+Two separate moments each day:
+1. Around 20:00 (well before midnight), captures the current Solcast
+   "forecast for tomorrow" value, to be compared 24 hours later. This is
+   deliberately NOT done at midnight itself, since some Solcast/forecast
+   sensors "roll over" right around midnight (today's forecast becomes
+   the new "today", a fresh "tomorrow" forecast starts from a
+   near-empty/transitional value) - capturing at 20:00 avoids catching
+   that transition and grabbing an unstable or near-zero value.
+2. Just before midnight (23:59:50), compares the forecast captured the
+   previous evening against the actual measured yield of today (about to
+   reset at midnight), and stores the resulting deviation.
 
 This is purely diagnostic: it does not influence charge/discharge
 decisions, it only exposes a sensor entity.
@@ -28,11 +33,23 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
-# Capture/compare just before midnight, so the "actual" sensor is read
-# right before it resets for the new day.
-CAPTURE_HOUR = 23
-CAPTURE_MINUTE = 59
-CAPTURE_SECOND = 50
+# Compare just before midnight, so the "actual" sensor is read right
+# before it resets for the new day.
+COMPARE_HOUR = 23
+COMPARE_MINUTE = 59
+COMPARE_SECOND = 50
+
+# Capture "tomorrow's forecast" well before midnight, to avoid the
+# forecast sensor's own day-rollover/reset moment.
+FORECAST_CAPTURE_HOUR = 20
+FORECAST_CAPTURE_MINUTE = 0
+FORECAST_CAPTURE_SECOND = 0
+
+# A deviation this large almost certainly means the forecast was captured
+# during a sensor's day-rollover/reset transition (or some other glitch),
+# not a genuine forecast miss - even a very bad Solcast day wouldn't
+# reasonably be off by more than this. Treated as an invalid outlier.
+MAX_REASONABLE_DEVIATION_PERCENT = 200.0
 
 
 def _read_float(hass: HomeAssistant, entity_id: str | None) -> float | None:
@@ -77,7 +94,8 @@ class SolarForecastAccuracyTracker:
         # (informational only, shown as a diagnostic attribute).
         self.was_bootstrapped_from_history: bool = False
 
-        self._unsub_time = None
+        self._unsub_compare = None
+        self._unsub_capture = None
         self._listeners: list = []
 
     def register_listener(self, callback_fn) -> None:
@@ -101,15 +119,21 @@ class SolarForecastAccuracyTracker:
 
     @property
     def learned_bias_percent(self) -> float | None:
-        """Rolling average deviation (%) over the last LEARNING_HISTORY_DAYS.
+        """Rolling average deviation (%) over the last LEARNING_HISTORY_DAYS,
+        ignoring implausible outliers (see MAX_REASONABLE_DEVIATION_PERCENT).
 
         A positive value means Solcast has been under-forecasting for this
         installation (actual yield higher than predicted); negative means
         it has been over-forecasting.
         """
-        if not self.deviation_history:
+        valid = [
+            v
+            for v in self.deviation_history
+            if abs(v) <= MAX_REASONABLE_DEVIATION_PERCENT
+        ]
+        if not valid:
             return None
-        return round(sum(self.deviation_history) / len(self.deviation_history), 1)
+        return round(sum(valid) / len(valid), 1)
 
     @property
     def learned_typical_forecast_kwh(self) -> float | None:
@@ -127,12 +151,19 @@ class SolarForecastAccuracyTracker:
         if not self.enabled:
             return
         await self.async_bootstrap_from_history()
-        self._unsub_time = async_track_time_change(
+        self._unsub_compare = async_track_time_change(
             self.hass,
-            self._handle_midnight,
-            hour=CAPTURE_HOUR,
-            minute=CAPTURE_MINUTE,
-            second=CAPTURE_SECOND,
+            self._handle_compare,
+            hour=COMPARE_HOUR,
+            minute=COMPARE_MINUTE,
+            second=COMPARE_SECOND,
+        )
+        self._unsub_capture = async_track_time_change(
+            self.hass,
+            self._handle_forecast_capture,
+            hour=FORECAST_CAPTURE_HOUR,
+            minute=FORECAST_CAPTURE_MINUTE,
+            second=FORECAST_CAPTURE_SECOND,
         )
 
     async def async_bootstrap_from_history(self) -> None:
@@ -209,10 +240,14 @@ class SolarForecastAccuracyTracker:
                 datetime.combine(
                     target_day - timedelta(days=1), datetime.min.time()
                 )
-            ).replace(hour=CAPTURE_HOUR, minute=CAPTURE_MINUTE, second=CAPTURE_SECOND)
+            ).replace(
+                hour=FORECAST_CAPTURE_HOUR,
+                minute=FORECAST_CAPTURE_MINUTE,
+                second=FORECAST_CAPTURE_SECOND,
+            )
             actual_at = dt_util.as_local(
                 datetime.combine(target_day, datetime.min.time())
-            ).replace(hour=CAPTURE_HOUR, minute=CAPTURE_MINUTE, second=CAPTURE_SECOND)
+            ).replace(hour=COMPARE_HOUR, minute=COMPARE_MINUTE, second=COMPARE_SECOND)
 
             predicted = _value_at_or_before(forecast_states, predicted_at)
             actual = _value_at_or_before(actual_states, actual_at)
@@ -222,7 +257,9 @@ class SolarForecastAccuracyTracker:
             forecast_values.append(predicted)
 
             if actual is not None and predicted:
-                deviations.append(round((actual - predicted) / predicted * 100, 1))
+                deviation = round((actual - predicted) / predicted * 100, 1)
+                if abs(deviation) <= MAX_REASONABLE_DEVIATION_PERCENT:
+                    deviations.append(deviation)
 
         if forecast_values:
             self.forecast_value_history = forecast_values[-LEARNING_HISTORY_DAYS:]
@@ -239,18 +276,21 @@ class SolarForecastAccuracyTracker:
             )
 
     async def async_unload(self) -> None:
-        if self._unsub_time:
-            self._unsub_time()
+        if self._unsub_compare:
+            self._unsub_compare()
+        if self._unsub_capture:
+            self._unsub_capture()
 
     @callback
-    def _handle_midnight(self, _now) -> None:
-        self.hass.async_create_task(self._async_handle_midnight())
+    def _handle_compare(self, _now) -> None:
+        self.hass.async_create_task(self._async_handle_compare())
 
-    async def _async_handle_midnight(self) -> None:
+    async def _async_handle_compare(self) -> None:
+        """Compare the forecast captured this evening (around 20:00) for
+        today, against the actual, about-to-reset yield of today.
+        """
         today = dt_util.now().date()
 
-        # Step 1: compare the forecast made yesterday (for today) against
-        # today's actual, about-to-reset yield.
         if (
             self.pending_predicted_kwh is not None
             and self.pending_predicted_date == today
@@ -267,10 +307,20 @@ class SolarForecastAccuracyTracker:
                         * 100,
                         1,
                     )
-                    self.deviation_history.append(self.last_deviation_percent)
-                    self.deviation_history = self.deviation_history[
-                        -LEARNING_HISTORY_DAYS:
-                    ]
+                    if abs(self.last_deviation_percent) <= MAX_REASONABLE_DEVIATION_PERCENT:
+                        self.deviation_history.append(self.last_deviation_percent)
+                        self.deviation_history = self.deviation_history[
+                            -LEARNING_HISTORY_DAYS:
+                        ]
+                    else:
+                        _LOGGER.warning(
+                            "Ignoring implausible forecast deviation of %.1f%% "
+                            "(predicted %.2f kWh, actual %.2f kWh) - likely "
+                            "captured during a sensor reset/rollover",
+                            self.last_deviation_percent,
+                            self.pending_predicted_kwh,
+                            actual,
+                        )
                 else:
                     self.last_deviation_percent = None
             else:
@@ -280,8 +330,19 @@ class SolarForecastAccuracyTracker:
                     self.config.get(CONF_SOLAR_ACTUAL_SENSOR),
                 )
 
-        # Step 2: capture the current forecast (predicting tomorrow) so it
-        # can be compared 24 hours from now.
+        self._notify_listeners()
+
+    @callback
+    def _handle_forecast_capture(self, _now) -> None:
+        self.hass.async_create_task(self._async_handle_forecast_capture())
+
+    async def _async_handle_forecast_capture(self) -> None:
+        """Capture the current Solcast "forecast for tomorrow" value,
+        well before midnight, so it reflects a stable, fully-updated
+        forecast rather than a value caught mid-rollover.
+        """
+        today = dt_util.now().date()
+
         forecast_value = _read_float(
             self.hass, self.config.get(CONF_SOLAR_FORECAST_SENSOR)
         )
