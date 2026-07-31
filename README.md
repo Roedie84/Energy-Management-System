@@ -591,3 +591,30 @@ zijn aangemaakt nadat het apparaat aan een ruimte werd gekoppeld
 `woonkamer_`-voorvoegsel nodig), verwijder dat voorvoegsel dan zelf uit
 deze drie regels — check via Ontwikkelaarshulpmiddelen → Staten wat bij
 jou klopt.
+
+## v0.20.2 — sanity-check tegen verkeerde Solcast-sensor + bootstrap-gate-bug
+
+**Gevonden via diagnostiek-export:**
+
+1. **Sanity-check tegen verkeerde/verwisselde Solcast-sensor.** Als
+   `solar_forecast_sensor_entity` per ongeluk naar een piekvermogen-sensor
+   wijst (of iets anders met een veel te hoge waarde) in plaats van de
+   dagtotaal-kWh-voorspelling, werd dat eerder stilzwijgend als "kWh"
+   geïnterpreteerd — met absurde bias-percentages tot gevolg (500-750%,
+   zoals we eerder zagen). Nu wordt elke voorspelling boven 100 kWh/dag
+   (`MAX_REASONABLE_DAILY_FORECAST_KWH`) genegeerd, met een duidelijke
+   waarschuwing in de logs die naar de configuratie verwijst. Geldt voor
+   nieuwe metingen, de historische bootstrap, én de berekening van het
+   geleerde typische dagtotaal (bestaande corrupte waarden in de
+   geschiedenis worden er nu ook uitgefilterd).
+
+2. **Bootstrap-gate-bug gefixt:** zodra het uurverbruiksprofiel al
+   gedeeltelijk gevuld was (bv. slechts 4 van de 24 uur, via live
+   leren sinds een update), sloeg de bootstrap de ontbrekende 20 uur
+   voorgoed over — de guard keek alleen of de héle verzameling leeg was,
+   niet of er nog specifieke uren ontbraken. Getest met exact dit
+   scenario: na de fix vult de bootstrap alle 24 uur, zonder de al
+   levend-geleerde uren te overschrijven.
+
+Beide problemen zijn gevonden dankzij een gedeelde diagnostiek-export —
+precies waar die functie (v0.19.1) voor bedoeld is.

@@ -227,7 +227,13 @@ class EnergyManagementSystemCoordinator:
         learning takes over.
         """
         need_night_bootstrap = not self.night_consumption_history
-        need_hourly_bootstrap = not self.hourly_consumption_profile
+        # Bootstrap the hourly profile as long as ANY hour-of-day (0-23)
+        # is still missing - not just when the whole dict is empty. This
+        # matters once live learning has already filled in a handful of
+        # hours (e.g. just the hours since the integration was last
+        # updated): without this, the remaining ~20 empty hours would
+        # never get backfilled from history at all.
+        need_hourly_bootstrap = len(self.hourly_consumption_profile) < 24
         if not need_night_bootstrap and not need_hourly_bootstrap:
             return
 

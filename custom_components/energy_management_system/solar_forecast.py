@@ -51,6 +51,14 @@ FORECAST_CAPTURE_SECOND = 0
 # reasonably be off by more than this. Treated as an invalid outlier.
 MAX_REASONABLE_DEVIATION_PERCENT = 200.0
 
+# A daily PV forecast this high almost certainly means the wrong Solcast
+# sensor was configured (e.g. a peak-power sensor in W, or a sensor with
+# a name containing "piek", instead of the daily total in kWh) - even a
+# large residential installation wouldn't reasonably forecast more than
+# this per day. Values above this are treated as invalid and ignored,
+# rather than silently corrupting the learned history.
+MAX_REASONABLE_DAILY_FORECAST_KWH = 100.0
+
 
 def _read_float(hass: HomeAssistant, entity_id: str | None) -> float | None:
     if not entity_id:
@@ -137,15 +145,22 @@ class SolarForecastAccuracyTracker:
 
     @property
     def learned_typical_forecast_kwh(self) -> float | None:
-        """Rolling average raw forecast (kWh) over the last LEARNING_HISTORY_DAYS.
+        """Rolling average raw forecast (kWh) over the last LEARNING_HISTORY_DAYS,
+        ignoring implausible outliers (see MAX_REASONABLE_DAILY_FORECAST_KWH -
+        e.g. leftover values from a previously misconfigured sensor).
 
-        Returns None until MIN_SOLAR_HISTORY_FOR_DYNAMIC_THRESHOLD samples
-        are available, so callers can fall back to a fixed default until
-        there is enough data to learn from.
+        Returns None until MIN_SOLAR_HISTORY_FOR_DYNAMIC_THRESHOLD valid
+        samples are available, so callers can fall back to a fixed default
+        until there is enough data to learn from.
         """
-        if len(self.forecast_value_history) < MIN_SOLAR_HISTORY_FOR_DYNAMIC_THRESHOLD:
+        valid = [
+            v
+            for v in self.forecast_value_history
+            if v <= MAX_REASONABLE_DAILY_FORECAST_KWH
+        ]
+        if len(valid) < MIN_SOLAR_HISTORY_FOR_DYNAMIC_THRESHOLD:
             return None
-        return sum(self.forecast_value_history) / len(self.forecast_value_history)
+        return sum(valid) / len(valid)
 
     async def async_setup(self) -> None:
         if not self.enabled:
@@ -252,7 +267,7 @@ class SolarForecastAccuracyTracker:
             predicted = _value_at_or_before(forecast_states, predicted_at)
             actual = _value_at_or_before(actual_states, actual_at)
 
-            if predicted is None:
+            if predicted is None or predicted > MAX_REASONABLE_DAILY_FORECAST_KWH:
                 continue
             forecast_values.append(predicted)
 
@@ -346,6 +361,19 @@ class SolarForecastAccuracyTracker:
         forecast_value = _read_float(
             self.hass, self.config.get(CONF_SOLAR_FORECAST_SENSOR)
         )
+        was_rejected_as_implausible = False
+        if forecast_value is not None and forecast_value > MAX_REASONABLE_DAILY_FORECAST_KWH:
+            _LOGGER.warning(
+                "Ignoring implausible Solcast forecast of %.1f kWh from %s - "
+                "this looks like the wrong sensor is configured (e.g. a peak "
+                "power sensor instead of the daily total kWh forecast). "
+                "Check the configured 'solar_forecast_sensor_entity'.",
+                forecast_value,
+                self.config.get(CONF_SOLAR_FORECAST_SENSOR),
+            )
+            forecast_value = None
+            was_rejected_as_implausible = True
+
         if forecast_value is not None:
             self.pending_predicted_kwh = forecast_value
             self.pending_predicted_date = today + timedelta(days=1)
@@ -353,7 +381,7 @@ class SolarForecastAccuracyTracker:
             self.forecast_value_history = self.forecast_value_history[
                 -LEARNING_HISTORY_DAYS:
             ]
-        else:
+        elif not was_rejected_as_implausible:
             _LOGGER.warning(
                 "Could not read Solcast forecast from %s to store for "
                 "tomorrow's comparison",
