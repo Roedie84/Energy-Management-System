@@ -1191,6 +1191,45 @@ class EnergyManagementSystemCoordinator:
         # worth of transitions, assuming a handful of flips per day).
         self.energy_bridge_transition_log = self.energy_bridge_transition_log[-50:]
 
+    def _estimate_upcoming_discharge_kwh(
+        self,
+        entries: list[PriceEntry],
+        now: datetime,
+        cheap_block_start: datetime,
+        effective_count: int,
+    ) -> float:
+        """Energy (kWh) that will be actively discharged during today's
+        remaining expensive quarters before the cheap block starts, at
+        the configured (uncapped) discharge power.
+
+        This is added on top of the baseline consumption estimate in the
+        energy bridge check, so the battery reserves enough to execute
+        those profitable discharges at full power - instead of only
+        reserving enough for household consumption and then having the
+        SoC-protection taper reduce the discharge when the expensive
+        quarter actually arrives.
+        """
+        todays_entries = [e for e in entries if e[0].date() == now.date()]
+        if not todays_entries:
+            return 0.0
+
+        most_expensive = sorted(todays_entries, key=lambda e: e[2], reverse=True)[
+            :effective_count
+        ]
+        upcoming_expensive = [
+            e for e in most_expensive if now <= e[0] < cheap_block_start
+        ]
+        if not upcoming_expensive:
+            return 0.0
+
+        discharge_power_w = self.config.get(
+            CONF_MANUAL_DISCHARGE_POWER, DEFAULT_MANUAL_DISCHARGE_POWER
+        )
+        total_hours = sum(
+            (end - start).total_seconds() / 3600 for start, end, _ in upcoming_expensive
+        )
+        return (discharge_power_w / 1000) * total_hours
+
     def _should_postpone_charging(
         self,
         entries: list[PriceEntry],
@@ -1256,6 +1295,17 @@ class EnergyManagementSystemCoordinator:
                     now, cheap_block_start
                 )
                 needed_kwh_raw = max(0.0, needed_kwh_raw - expected_pv_kwh)
+
+                # Also reserve enough to execute today's remaining
+                # expensive-quarter discharges at full power - otherwise
+                # the battery might look "sufficient" for household use
+                # but come up short (SoC-protection tapering the payout)
+                # when the actual price peak arrives later today.
+                upcoming_discharge_kwh = self._estimate_upcoming_discharge_kwh(
+                    entries, now, cheap_block_start, effective_count
+                )
+                needed_kwh_raw += upcoming_discharge_kwh
+
                 needed_kwh = needed_kwh_raw * ENERGY_BRIDGE_SAFETY_MARGIN
             else:
                 needed_kwh = None

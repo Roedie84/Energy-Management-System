@@ -703,3 +703,27 @@ De dashboard-kaart is bijgewerkt met deze 8 regels (2 totaal-sinds-install
 **Let op:** de eerste cyclus per meter is altijd incompleet — een
 dag-sensor klopt pas vanaf morgen, een maand-sensor pas vanaf de 1e van
 volgende maand. Dit is standaard Home Assistant-gedrag, geen bug.
+
+## v0.23.0 — reservering voor nog-komende dure kwartieren in de energie-brug-check
+
+**Gevonden gat (geen leerprobleem, een echte strategische blinde vlek):**
+de energie-brug-check rekende alleen uit of er genoeg was om het
+**basisverbruik** te overbruggen tot het goedkoopste blok — niet dat er
+óók nog een dure kwartier kan volgen waarin je juist actief wilt
+ontladen/verkopen. Daardoor kon de accu "genoeg lijken" te hebben voor je
+huishouden, terwijl er straks bij het daadwerkelijke prijspiek te weinig
+over was om vol vermogen te ontladen (de SoC-bescherming zou het
+ontlaadvermogen dan afromen — gemiste winst).
+
+**Fix:** de benodigde energie in de brug-check telt nu ook de energie mee
+die nodig is om **alle nog-komende dure kwartieren van vandaag** (vóór
+het goedkoopste blok) op volle kracht te kunnen ontladen. Is er
+onvoldoende voor zowel basisverbruik als deze geplande ontlading, dan
+schakelt de integratie naar `smart` (bijladen toegestaan) in plaats van
+`smart_discharging` (laden uitstellen).
+
+Getest: bij een basisverbruik van 50W en 4 dure kwartieren vanavond
+(1600W, dus 1,6 kWh) veranderde de beslissing van "genoeg" (1,09 kWh
+benodigd) naar "niet genoeg" (2,93 kWh benodigd) bij exact hetzelfde
+beschikbare vermogen van 1,8 kWh — precies het scenario waar dit voor
+bedoeld is.
