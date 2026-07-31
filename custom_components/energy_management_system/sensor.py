@@ -47,6 +47,8 @@ async def async_setup_entry(
         ExpectedOperationModeSensor(coordinator, entry.entry_id),
         EnergyBridgeCheckSensor(coordinator, entry.entry_id),
         BatteryProtectionSensor(coordinator, entry.entry_id),
+        DischargeValueSensor(coordinator, entry.entry_id),
+        ChargeCostSensor(coordinator, entry.entry_id),
     ]
 
     if tracker.enabled:
@@ -364,6 +366,81 @@ class BatteryProtectionSensor(_CoordinatorDiagnosticSensor):
     @property
     def extra_state_attributes(self) -> dict:
         return {"soc_percent": self._coordinator.last_soc_percent}
+
+
+class DischargeValueSensor(SensorEntity, RestoreEntity):
+    """Cumulative euro value of energy discharged during expensive
+    quarters (energy x price at that exact moment). Persisted across
+    restarts.
+
+    Deliberately NOT called "savings", since that would imply a
+    counterfactual (what would have happened without this integration)
+    that can't be honestly verified. This is the direct monetary value
+    of the discharge/export action itself.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Discharge value (expensive quarters)"
+    _attr_icon = "mdi:cash-plus"
+    _attr_native_unit_of_measurement = "€"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_state_class = "total_increasing"
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_discharge_value"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def native_value(self) -> float:
+        return round(self._coordinator.total_discharge_value_eur, 4)
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if last_state is not None:
+            try:
+                self._coordinator.total_discharge_value_eur = float(last_state.state)
+            except (TypeError, ValueError):
+                pass
+
+
+class ChargeCostSensor(SensorEntity, RestoreEntity):
+    """Cumulative euro cost of energy force-charged from the grid during
+    a low-solar cheap block (energy x price at that exact moment).
+    Persisted across restarts.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Charge cost (grid charging)"
+    _attr_icon = "mdi:cash-minus"
+    _attr_native_unit_of_measurement = "€"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_state_class = "total_increasing"
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_charge_cost"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def native_value(self) -> float:
+        return round(self._coordinator.total_charge_cost_eur, 4)
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if last_state is not None:
+            try:
+                self._coordinator.total_charge_cost_eur = float(last_state.state)
+            except (TypeError, ValueError):
+                pass
 
 
 class LearnedNightConsumptionSensor(SensorEntity, RestoreEntity):

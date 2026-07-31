@@ -1,0 +1,43 @@
+# Utility Meter configuratie: dag/week/maand-overzicht van de financiële
+# EMS-sensoren. Voeg dit toe aan je configuration.yaml (of een los bestand
+# dat je via "utility_meter: !include utility_meter_ems.yaml" insluit).
+#
+# LET OP:
+# - Pas de "source"-entity_id's aan als jouw apparaat het
+#   "woonkamer_"-voorvoegsel heeft (check zelf via Ontwikkelaarshulpmiddelen).
+# - Na toevoegen: Ontwikkelaarshulpmiddelen -> YAML -> Configuratie controleren,
+#   en dan Home Assistant herstarten (utility_meter kan niet via "YAML herladen"
+#   worden bijgewerkt, een volledige herstart is nodig bij nieuwe meters).
+# - De eerste cyclus per meter is incompleet: een dag-meter klopt pas vanaf
+#   morgen, een maand-meter pas vanaf de 1e van volgende maand.
+
+utility_meter:
+  ems_discharge_value_daily:
+    source: sensor.energy_management_system_discharge_value_expensive_quarters
+    name: "EMS Ontlaadwaarde - vandaag"
+    cycle: daily
+
+  ems_discharge_value_weekly:
+    source: sensor.energy_management_system_discharge_value_expensive_quarters
+    name: "EMS Ontlaadwaarde - deze week"
+    cycle: weekly
+
+  ems_discharge_value_monthly:
+    source: sensor.energy_management_system_discharge_value_expensive_quarters
+    name: "EMS Ontlaadwaarde - deze maand"
+    cycle: monthly
+
+  ems_charge_cost_daily:
+    source: sensor.energy_management_system_charge_cost_grid_charging
+    name: "EMS Netlaadkosten - vandaag"
+    cycle: daily
+
+  ems_charge_cost_weekly:
+    source: sensor.energy_management_system_charge_cost_grid_charging
+    name: "EMS Netlaadkosten - deze week"
+    cycle: weekly
+
+  ems_charge_cost_monthly:
+    source: sensor.energy_management_system_charge_cost_grid_charging
+    name: "EMS Netlaadkosten - deze maand"
+    cycle: monthly

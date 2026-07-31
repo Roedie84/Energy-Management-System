@@ -191,6 +191,17 @@ class EnergyManagementSystemCoordinator:
         self._pv_hour_duration_hours: float = 0.0
         self._pv_hour_last_sample: datetime | None = None
 
+        # -- Financial tracking --
+        # Cumulative, persisted-across-restarts euro values. Deliberately
+        # limited to the two actions with a clean, defensible calculation
+        # (energy x price at that exact moment) rather than a vague "total
+        # savings" figure that would require an unverifiable counterfactual
+        # (what would have happened without this integration).
+        self.total_discharge_value_eur: float = 0.0
+        self.total_charge_cost_eur: float = 0.0
+        self.last_charge_power_applied: float | None = None
+        self._last_value_calc_time: datetime | None = None
+
         self._lock = asyncio.Lock()
         self._unsub_interval = None
         self._unsub_state = None
@@ -1395,6 +1406,54 @@ class EnergyManagementSystemCoordinator:
                 )
         return blocks
 
+    def _get_current_price_per_kwh(
+        self, entries: list[PriceEntry], now: datetime
+    ) -> float | None:
+        """Price (€/kWh) for the interval containing 'now', or None if not found."""
+        for start, end, price in entries:
+            if start <= now < end:
+                return price / PRICE_SCALE_FACTOR
+        return None
+
+    def _update_financial_tracking(
+        self,
+        now: datetime,
+        entries: list[PriceEntry],
+        reason: str,
+        discharge_power_w: float | None,
+        charge_power_w: float | None,
+    ) -> None:
+        """Accumulate the euro value of the two actions with a clean,
+        defensible calculation: energy moved x price at that exact moment.
+
+        Deliberately does NOT attempt a "total savings" figure, since that
+        would require a counterfactual (what would have happened without
+        this integration) that can't be honestly verified. This only
+        tracks the direct monetary value of energy discharged during
+        expensive quarters, and the direct cost of energy force-charged
+        from the grid during a low-solar cheap block.
+        """
+        elapsed_hours = 0.0
+        if self._last_value_calc_time is not None:
+            elapsed_hours = max(
+                (now - self._last_value_calc_time).total_seconds() / 3600, 0
+            )
+        self._last_value_calc_time = now
+
+        if elapsed_hours <= 0:
+            return
+
+        current_price = self._get_current_price_per_kwh(entries, now)
+        if current_price is None:
+            return
+
+        if reason == "expensive_quarter" and discharge_power_w:
+            energy_kwh = (discharge_power_w / 1000) * elapsed_hours
+            self.total_discharge_value_eur += energy_kwh * current_price
+        elif reason == "grid_charging_low_solar" and charge_power_w:
+            energy_kwh = (abs(charge_power_w) / 1000) * elapsed_hours
+            self.total_charge_cost_eur += energy_kwh * current_price
+
     def _cheapest_block_range(
         self, entries: list[PriceEntry], now: datetime
     ) -> tuple[datetime | None, datetime | None]:
@@ -1567,6 +1626,7 @@ class EnergyManagementSystemCoordinator:
                 self.config.get(CONF_PRICE_ATTRIBUTE, DEFAULT_PRICE_ATTRIBUTE),
             )
             self.last_reason = "no_forecast_data"
+            self._last_value_calc_time = now
             self.last_explanation = self._build_explanation()
             return
 
@@ -1636,6 +1696,7 @@ class EnergyManagementSystemCoordinator:
             # Explicit manual override: leave the Zendure mode untouched.
             self.last_reason = "force_manual"
             self.last_simulated_action = None
+            self._update_financial_tracking(now, entries, self.last_reason, None, None)
             self.last_explanation = self._build_explanation()
             return
 
@@ -1652,6 +1713,9 @@ class EnergyManagementSystemCoordinator:
             else:
                 await self._async_apply_manual(scaled_power)
                 self.last_reason = "expensive_quarter"
+            self._update_financial_tracking(
+                now, entries, self.last_reason, scaled_power, None
+            )
             self.last_explanation = self._build_explanation()
             return
 
@@ -1661,17 +1725,23 @@ class EnergyManagementSystemCoordinator:
             )
             await self._async_apply_manual(charge_power)
             self.last_reason = "grid_charging_low_solar"
+            self.last_charge_power_applied = charge_power
+            self._update_financial_tracking(
+                now, entries, self.last_reason, None, charge_power
+            )
             self.last_explanation = self._build_explanation()
             return
 
         if should_postpone_charging:
             await self._async_apply_operation(OPTION_SMART_DISCHARGING)
             self.last_reason = "discharging_window"
+            self._update_financial_tracking(now, entries, self.last_reason, None, None)
             self.last_explanation = self._build_explanation()
             return
 
         await self._async_apply_operation(OPTION_SMART)
         self.last_reason = "default_smart"
+        self._update_financial_tracking(now, entries, self.last_reason, None, None)
         self.last_explanation = self._build_explanation()
 
     async def _async_apply_operation(self, option: str) -> None:

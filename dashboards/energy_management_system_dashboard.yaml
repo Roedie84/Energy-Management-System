@@ -59,6 +59,27 @@ cards:
         name: Energie-check (genoeg om te overbruggen?)
 
   - type: entities
+    title: Financieel
+    entities:
+      - entity: sensor.energy_management_system_discharge_value_expensive_quarters
+        name: Waarde ontladen (totaal sinds installatie)
+      - entity: sensor.ems_discharge_value_daily
+        name: Waarde ontladen - vandaag
+      - entity: sensor.ems_discharge_value_weekly
+        name: Waarde ontladen - deze week
+      - entity: sensor.ems_discharge_value_monthly
+        name: Waarde ontladen - deze maand
+      - type: divider
+      - entity: sensor.energy_management_system_charge_cost_grid_charging
+        name: Netlaadkosten (totaal sinds installatie)
+      - entity: sensor.ems_charge_cost_daily
+        name: Netlaadkosten - vandaag
+      - entity: sensor.ems_charge_cost_weekly
+        name: Netlaadkosten - deze week
+      - entity: sensor.ems_charge_cost_monthly
+        name: Netlaadkosten - deze maand
+
+  - type: entities
     title: Zelflerend
     entities:
       - entity: sensor.woonkamer_energy_management_system_hourly_consumption_profile

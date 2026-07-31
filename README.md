@@ -659,3 +659,47 @@ Nog steeds bewust buiten beschouwing: locks, camera's, media players, en
 al het andere dat niets met energiebeheer of bewoningspatronen te maken
 heeft. Getest met een mix van 9 entities — alle 6 relevante gevonden
 (inclusief de nieuwe categorieën), de 3 irrelevante correct genegeerd.
+
+## v0.22.0 — financiële tracking (waarde ontladen / kosten netladen)
+
+Twee nieuwe sensoren die de euro-waarde van twee concrete acties bijhouden,
+cumulatief en persistent over herstarts heen:
+
+- **`sensor.discharge_value_expensive_quarters`** — de euro-waarde van
+  energie die is ontladen tijdens dure kwartieren (energie × prijs op dat
+  exacte moment).
+- **`sensor.charge_cost_grid_charging`** — de kosten van energie die
+  actief vanaf het net is bijgeladen tijdens een goedkoopste blok bij
+  weinig zon (winter-laden, v0.18.0).
+
+**Bewuste keuze — dit heet geen "besparing".** Een echte besparing zou een
+counterfactual vereisen ("wat was er gebeurd zonder deze integratie?"),
+en dat is niet eerlijk te berekenen of te verifiëren. Deze twee getallen
+zijn wél hard te onderbouwen: het is simpelweg energie × prijs op het
+moment van de actie. Zie het als "de directe monetaire waarde van deze
+specifieke acties", niet als een garantie dat je zonder deze integratie
+dat bedrag meer kwijt zou zijn geweest.
+
+Getest: een uur durende geforceerde ontlading op 1600W tegen €0,35/kWh
+resulteerde in de verwachte cumulatieve waarde (kleine afwijking door het
+eenmalige opstart-effect van de tijdmeting, net als bij de andere
+leerprocessen in deze integratie).
+
+## v0.22.1 — dag/week/maand-overzicht financiële sensoren
+
+Gebruikt Home Assistant's ingebouwde **Utility Meter**-helper (geen extra
+code in de integratie nodig, want beide financiële sensoren zijn al
+`state_class: total_increasing`, precies wat Utility Meter nodig heeft).
+
+Nieuw bestand: `dashboards/utility_meter_ems.yaml` — voeg dit toe aan je
+`configuration.yaml` (of sluit het in via `utility_meter: !include
+dashboards/utility_meter_ems.yaml`), en herstart Home Assistant. Dit maakt
+6 nieuwe sensoren: dag/week/maand voor zowel de ontlaadwaarde als de
+netlaadkosten.
+
+De dashboard-kaart is bijgewerkt met deze 8 regels (2 totaal-sinds-install
++ 6 periode-sensoren), inclusief een divider tussen de twee categorieën.
+
+**Let op:** de eerste cyclus per meter is altijd incompleet — een
+dag-sensor klopt pas vanaf morgen, een maand-sensor pas vanaf de 1e van
+volgende maand. Dit is standaard Home Assistant-gedrag, geen bug.
