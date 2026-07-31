@@ -65,6 +65,7 @@ from .const import (
     CONF_PV_POWER_SENSOR,
     CONF_SOC_SENSOR,
     CONF_SOLAR_FORECAST_SENSOR,
+    CONF_SOLAR_TODAY_FORECAST_SENSOR,
     DEFAULT_EXPENSIVE_QUARTERS_COUNT,
     DEFAULT_LOW_SOLAR_THRESHOLD_KWH,
     DEFAULT_MANUAL_CHARGE_POWER,
@@ -74,6 +75,7 @@ from .const import (
     ENERGY_BRIDGE_SAFETY_MARGIN,
     LEARNING_HISTORY_DAYS,
     LOW_SOLAR_RELATIVE_FRACTION,
+    MIN_SOLAR_HISTORY_FOR_DYNAMIC_THRESHOLD,
     OPTION_MANUAL,
     OPTION_SMART,
     OPTION_SMART_DISCHARGING,
@@ -173,6 +175,20 @@ class EnergyManagementSystemCoordinator:
         self._hour_energy_kwh: float = 0.0
         self._hour_duration_hours: float = 0.0
         self._hour_last_sample: datetime | None = None
+
+        # -- Per-hour PV forecast bias --
+        # Continuously compares actual measured PV production (from a
+        # live power sensor) against what Solcast forecasted for that
+        # specific hour, learning a per-hour-of-day accuracy ratio -
+        # more precise than a single flat daily bias, since Solcast may
+        # e.g. systematically under-forecast mornings but over-forecast
+        # afternoons for a given installation/orientation.
+        # Maps hour-of-day (0-23) -> rolling history of (actual/forecast) ratios.
+        self.pv_hourly_bias_history: dict[int, list[float]] = {}
+        self._pv_current_tracked_hour: int | None = None
+        self._pv_hour_energy_kwh: float = 0.0
+        self._pv_hour_duration_hours: float = 0.0
+        self._pv_hour_last_sample: datetime | None = None
 
         self._lock = asyncio.Lock()
         self._unsub_interval = None
@@ -596,14 +612,36 @@ class EnergyManagementSystemCoordinator:
             self._hour_last_sample = now
             return
 
+        power_w = self._read_corrected_consumption_power()
+
         if current_hour != self._current_tracked_hour:
+            # Split the elapsed interval exactly at the hour boundary, so
+            # the last few minutes before the transition are still
+            # credited to the hour that's ending (instead of being lost).
+            hour_boundary = now.replace(minute=0, second=0, microsecond=0)
+            if self._hour_last_sample is not None and power_w is not None:
+                elapsed_to_boundary = max(
+                    (hour_boundary - self._hour_last_sample).total_seconds() / 3600, 0
+                )
+                self._hour_energy_kwh += (power_w / 1000) * elapsed_to_boundary
+                self._hour_duration_hours += elapsed_to_boundary
+
             self._finalize_hourly_bucket()
             self._current_tracked_hour = current_hour
+
+            elapsed_in_new_hour = max(
+                (now - hour_boundary).total_seconds() / 3600, 0
+            )
+            if power_w is not None and elapsed_in_new_hour > 0:
+                self._hour_energy_kwh = (power_w / 1000) * elapsed_in_new_hour
+                self._hour_duration_hours = elapsed_in_new_hour
+            else:
+                self._hour_energy_kwh = 0.0
+                self._hour_duration_hours = 0.0
             self._hour_last_sample = now
             return
 
         elapsed_hours = max((now - self._hour_last_sample).total_seconds() / 3600, 0)
-        power_w = self._read_corrected_consumption_power()
         if power_w is not None and elapsed_hours > 0:
             self._hour_energy_kwh += (power_w / 1000) * elapsed_hours
             self._hour_duration_hours += elapsed_hours
@@ -662,6 +700,254 @@ class EnergyManagementSystemCoordinator:
             cursor = segment_end
 
         return total_kwh
+
+    # -- Solcast hourly PV production forecast -----------------------------
+
+    def _get_pv_forecast_entries(self) -> list[tuple[datetime, datetime, float]]:
+        """Parse the Solcast "detailedForecast" attribute (today + tomorrow
+        sensors, if configured) into a merged, chronologically sorted list
+        of (start, end, kwh) tuples - the expected PV production for each
+        half-hour interval.
+
+        Solcast's `pv_estimate` is an average power in kW for that
+        interval; multiplied by the interval's duration (in hours) to get
+        the energy (kWh) produced during it.
+        """
+        entries: list[tuple[datetime, datetime, float]] = []
+
+        for entity_id in (
+            self.config.get(CONF_SOLAR_TODAY_FORECAST_SENSOR),
+            self.config.get(CONF_SOLAR_FORECAST_SENSOR),
+        ):
+            if not entity_id:
+                continue
+            state = self.hass.states.get(entity_id)
+            if state is None:
+                continue
+            items = state.attributes.get("detailedForecast") or state.attributes.get(
+                "detailedHourly"
+            )
+            if not items:
+                continue
+
+            for item in items:
+                period_start = item.get("period_start")
+                pv_estimate_kw = item.get("pv_estimate")
+                if period_start is None or pv_estimate_kw is None:
+                    continue
+                if not isinstance(period_start, datetime):
+                    # Defensive: some setups might expose this as a string.
+                    period_start = dt_util.parse_datetime(str(period_start))
+                    if period_start is None:
+                        continue
+                if period_start.tzinfo is None:
+                    period_start = period_start.replace(tzinfo=dt_util.UTC)
+                period_start = dt_util.as_local(period_start)
+
+                try:
+                    pv_estimate_kw = float(pv_estimate_kw)
+                except (TypeError, ValueError):
+                    continue
+
+                entries.append((period_start, pv_estimate_kw))
+
+        if not entries:
+            return []
+
+        entries.sort(key=lambda e: e[0])
+
+        # Derive each interval's end from the next entry's start (assume
+        # the last one has the same duration as the previous interval).
+        result: list[tuple[datetime, datetime, float]] = []
+        for i, (start, pv_kw) in enumerate(entries):
+            if i + 1 < len(entries):
+                end = entries[i + 1][0]
+            else:
+                # Fall back to the typical interval length seen so far.
+                prev_duration = (
+                    result[-1][1] - result[-1][0] if result else timedelta(minutes=30)
+                )
+                end = start + prev_duration
+            duration_hours = max((end - start).total_seconds() / 3600, 0)
+            result.append((start, end, pv_kw * duration_hours))
+
+        return result
+
+    def _estimate_pv_kwh_for_period(self, start: datetime, end: datetime) -> float:
+        """Estimate expected PV production (kWh) over a period, from the
+        Solcast hourly/half-hourly forecast.
+
+        Each interval is corrected with the most precise correction
+        available: a learned per-hour-of-day accuracy ratio (see
+        `learned_pv_hourly_ratio`) when there's enough history for that
+        specific hour, falling back to the flatter daily forecast bias
+        (see SolarForecastAccuracyTracker) otherwise, or no correction at
+        all if neither is available yet.
+
+        Returns 0.0 if no PV forecast sensor is configured or no data
+        covers the period (i.e. "assume no solar" - the previous, more
+        conservative behaviour).
+        """
+        if end <= start:
+            return 0.0
+
+        pv_entries = self._get_pv_forecast_entries()
+        if not pv_entries:
+            return 0.0
+
+        daily_bias_percent = (
+            self.solar_tracker.learned_bias_percent if self.solar_tracker else None
+        )
+
+        total_kwh = 0.0
+        for entry_start, entry_end, entry_kwh in pv_entries:
+            overlap_start = max(entry_start, start)
+            overlap_end = min(entry_end, end)
+            if overlap_end <= overlap_start:
+                continue
+            entry_duration = (entry_end - entry_start).total_seconds()
+            if entry_duration <= 0:
+                continue
+            overlap_fraction = (
+                overlap_end - overlap_start
+            ).total_seconds() / entry_duration
+            segment_kwh = entry_kwh * overlap_fraction
+
+            hourly_ratio = self.learned_pv_hourly_ratio(entry_start.hour)
+            if hourly_ratio is not None:
+                segment_kwh *= hourly_ratio
+            elif daily_bias_percent is not None:
+                segment_kwh *= 1 + daily_bias_percent / 100
+
+            total_kwh += segment_kwh
+
+        return max(0.0, total_kwh)
+
+    def _get_forecast_kwh_for_hour(self, target_date, hour: int) -> float | None:
+        """Sum the Solcast-forecasted kWh for a specific hour on a
+        specific date, from the currently available forecast entries.
+        Returns None if no forecast data covers that hour.
+        """
+        pv_entries = self._get_pv_forecast_entries()
+        if not pv_entries:
+            return None
+
+        hour_start = datetime.combine(target_date, datetime.min.time()).replace(
+            hour=hour, tzinfo=pv_entries[0][0].tzinfo
+        )
+        hour_end = hour_start + timedelta(hours=1)
+
+        total = 0.0
+        found = False
+        for entry_start, entry_end, entry_kwh in pv_entries:
+            overlap_start = max(entry_start, hour_start)
+            overlap_end = min(entry_end, hour_end)
+            if overlap_end <= overlap_start:
+                continue
+            entry_duration = (entry_end - entry_start).total_seconds()
+            if entry_duration <= 0:
+                continue
+            fraction = (overlap_end - overlap_start).total_seconds() / entry_duration
+            total += entry_kwh * fraction
+            found = True
+
+        return total if found else None
+
+    def _update_pv_hourly_bias_tracking(self, now: datetime) -> None:
+        """Sample actual PV production continuously, all day, and compare
+        each completed hour's actual output against what was forecasted
+        for that hour - learning a per-hour-of-day accuracy ratio.
+        """
+        pv_entity = self.config.get(CONF_PV_POWER_SENSOR)
+        if not pv_entity:
+            return
+
+        current_hour = now.hour
+
+        if self._pv_current_tracked_hour is None:
+            self._pv_current_tracked_hour = current_hour
+            self._pv_hour_last_sample = now
+            return
+
+        pv_power_w = self._read_sensor_float(pv_entity)
+
+        if current_hour != self._pv_current_tracked_hour:
+            # Split the elapsed interval exactly at the hour boundary (see
+            # _update_hourly_consumption_profile for the same fix/rationale).
+            hour_boundary = now.replace(minute=0, second=0, microsecond=0)
+            if self._pv_hour_last_sample is not None and pv_power_w is not None:
+                elapsed_to_boundary = max(
+                    (hour_boundary - self._pv_hour_last_sample).total_seconds()
+                    / 3600,
+                    0,
+                )
+                self._pv_hour_energy_kwh += (pv_power_w / 1000) * elapsed_to_boundary
+                self._pv_hour_duration_hours += elapsed_to_boundary
+
+            self._finalize_pv_hourly_bucket(now)
+            self._pv_current_tracked_hour = current_hour
+
+            elapsed_in_new_hour = max(
+                (now - hour_boundary).total_seconds() / 3600, 0
+            )
+            if pv_power_w is not None and elapsed_in_new_hour > 0:
+                self._pv_hour_energy_kwh = (pv_power_w / 1000) * elapsed_in_new_hour
+                self._pv_hour_duration_hours = elapsed_in_new_hour
+            else:
+                self._pv_hour_energy_kwh = 0.0
+                self._pv_hour_duration_hours = 0.0
+            self._pv_hour_last_sample = now
+            return
+
+        elapsed_hours = max(
+            (now - self._pv_hour_last_sample).total_seconds() / 3600, 0
+        )
+        if pv_power_w is not None and elapsed_hours > 0:
+            self._pv_hour_energy_kwh += (pv_power_w / 1000) * elapsed_hours
+            self._pv_hour_duration_hours += elapsed_hours
+        self._pv_hour_last_sample = now
+
+    def _finalize_pv_hourly_bucket(self, now: datetime) -> None:
+        if self._pv_current_tracked_hour is not None and self._pv_hour_duration_hours > 0:
+            actual_kwh = self._pv_hour_energy_kwh
+            # The hour that just completed is the previous local hour,
+            # on the date it happened on (usually today, but handles the
+            # 23:00 -> 00:00 rollover correctly too).
+            completed_hour_date = (now - timedelta(hours=1)).date()
+            forecast_kwh = self._get_forecast_kwh_for_hour(
+                completed_hour_date, self._pv_current_tracked_hour
+            )
+            if forecast_kwh is not None and forecast_kwh > 0.01:
+                ratio = actual_kwh / forecast_kwh
+                bucket = self.pv_hourly_bias_history.setdefault(
+                    self._pv_current_tracked_hour, []
+                )
+                bucket.append(ratio)
+                self.pv_hourly_bias_history[self._pv_current_tracked_hour] = bucket[
+                    -LEARNING_HISTORY_DAYS:
+                ]
+                _LOGGER.debug(
+                    "PV hour %d: actual=%.3f kWh, forecast=%.3f kWh, "
+                    "ratio=%.2f. Learned history: %s",
+                    self._pv_current_tracked_hour,
+                    actual_kwh,
+                    forecast_kwh,
+                    ratio,
+                    self.pv_hourly_bias_history[self._pv_current_tracked_hour],
+                )
+
+        self._pv_hour_energy_kwh = 0.0
+        self._pv_hour_duration_hours = 0.0
+
+    def learned_pv_hourly_ratio(self, hour: int) -> float | None:
+        """Learned (actual/forecast) ratio for a given hour-of-day (0-23).
+        1.0 = forecast matches reality, <1.0 = Solcast over-forecasts that
+        hour, >1.0 = Solcast under-forecasts it. None if not enough data yet.
+        """
+        values = self.pv_hourly_bias_history.get(hour)
+        if not values or len(values) < MIN_SOLAR_HISTORY_FOR_DYNAMIC_THRESHOLD:
+            return None
+        return sum(values) / len(values)
 
     def _get_soc_scaled_discharge_power(self, base_power: float) -> float | None:
         """Scale down the forced-discharge power as SoC gets low, to avoid
@@ -809,6 +1095,13 @@ class EnergyManagementSystemCoordinator:
                 power_kw = power_w / 1000
             expected_consumption_kwh = power_kw * hours_until_solar
 
+        # Subtract expected PV production during the bridging window (e.g.
+        # a midday stretch of an otherwise "low solar" day still produces
+        # something), so we don't over-reserve battery capacity for energy
+        # the sun will supply anyway.
+        expected_pv_kwh = self._estimate_pv_kwh_for_period(now, cheap_block_start)
+        expected_consumption_kwh = max(0.0, expected_consumption_kwh - expected_pv_kwh)
+
         needed_quarters = max(
             1, math.ceil(expected_consumption_kwh / quarter_energy_kwh)
         )
@@ -921,7 +1214,6 @@ class EnergyManagementSystemCoordinator:
                 now, cheap_block_start
             )
             if needed_kwh_raw is not None:
-                needed_kwh = needed_kwh_raw * ENERGY_BRIDGE_SAFETY_MARGIN
                 power_kw = (
                     needed_kwh_raw / hours_until_cheap
                     if hours_until_cheap > 0
@@ -934,11 +1226,21 @@ class EnergyManagementSystemCoordinator:
                 else:
                     power_w = self._read_corrected_consumption_power()
                     power_kw = power_w / 1000 if power_w is not None else None
-                needed_kwh = (
-                    power_kw * hours_until_cheap * ENERGY_BRIDGE_SAFETY_MARGIN
-                    if power_kw is not None
-                    else None
+                needed_kwh_raw = (
+                    power_kw * hours_until_cheap if power_kw is not None else None
                 )
+
+            # Subtract expected PV production during the bridging window -
+            # solar coming online soon reduces how much the battery/grid
+            # actually needs to cover.
+            if needed_kwh_raw is not None:
+                expected_pv_kwh = self._estimate_pv_kwh_for_period(
+                    now, cheap_block_start
+                )
+                needed_kwh_raw = max(0.0, needed_kwh_raw - expected_pv_kwh)
+                needed_kwh = needed_kwh_raw * ENERGY_BRIDGE_SAFETY_MARGIN
+            else:
+                needed_kwh = None
 
             if needed_kwh is not None:
                 has_enough = available_kwh >= needed_kwh
@@ -1186,6 +1488,7 @@ class EnergyManagementSystemCoordinator:
         )
         self._update_night_consumption_tracking(now, should_postpone_charging)
         self._update_hourly_consumption_profile(now)
+        self._update_pv_hourly_bias_tracking(now)
 
         self.last_is_expensive = is_expensive
         self.last_effective_expensive_quarters_count = effective_count

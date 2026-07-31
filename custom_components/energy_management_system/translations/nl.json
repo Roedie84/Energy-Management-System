@@ -20,7 +20,8 @@
           "min_soc_percent": "Minimale SoC (%) - onder deze grens geen geforceerd ontladen meer",
           "battery_power_sensor_entity": "Accu vermogen sensor (voor correctie huishoudverbruik: positief=ontladen, negatief=laden)",
           "pv_power_sensor_entity": "Live PV-productievermogen sensor (voor nog nauwkeurigere verbruikscorrectie)",
-          "invert_battery_power_sign": "Teken omdraaien accu-vermogen (aan = negatief betekent ontladen)"
+          "invert_battery_power_sign": "Teken omdraaien accu-vermogen (aan = negatief betekent ontladen)",
+          "solar_today_forecast_sensor_entity": "Solcast PV-voorspelling sensor (vandaag) \u2014 voor uur-voor-uur opbrengst-schatting"
         }
       }
     },
@@ -48,7 +49,8 @@
           "min_soc_percent": "Minimale SoC (%) - onder deze grens geen geforceerd ontladen meer",
           "battery_power_sensor_entity": "Accu vermogen sensor (voor correctie huishoudverbruik: positief=ontladen, negatief=laden)",
           "pv_power_sensor_entity": "Live PV-productievermogen sensor (voor nog nauwkeurigere verbruikscorrectie)",
-          "invert_battery_power_sign": "Teken omdraaien accu-vermogen (aan = negatief betekent ontladen)"
+          "invert_battery_power_sign": "Teken omdraaien accu-vermogen (aan = negatief betekent ontladen)",
+          "solar_today_forecast_sensor_entity": "Solcast PV-voorspelling sensor (vandaag) \u2014 voor uur-voor-uur opbrengst-schatting"
         }
       }
     }

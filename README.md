@@ -464,3 +464,75 @@ niet weten hoeveel beschikbare energie je over een paar uur hebt).
 
 Getest over 8 verschillende tijdstippen in een scenario waar dit eerder
 zou mismatchen — nu overal consistent.
+
+## v0.18.0 — uur-voor-uur PV-forecast (Solcast detailedForecast)
+
+Tot nu toe gebruikte de integratie alleen het **dagtotaal** van de
+Solcast-voorspelling. Vanaf nu wordt, indien beschikbaar, ook de
+`detailedForecast`/`detailedHourly`-attribuut gebruikt (per half uur/uur
+`pv_estimate` in kW) om de **verwachte opbrengst tijdens de specifieke
+overbrug-periode** (nu tot het goedkoopste blok) te schatten.
+
+Die verwachte opbrengst wordt afgetrokken van de benodigde energie in:
+- de energie-brug-check (`sensor.energy_bridge_check`),
+- de reductie van het aantal dure kwartieren bij weinig zon.
+
+**Resultaat:** als er over een paar uur alweer zon verwacht wordt, hoeft
+de integratie niet onnodig conservatief te zijn — getest tegen een
+scenario met een ochtendpiek: zonder deze feature werd 2,76 kWh als
+benodigd berekend, mét de PV-forecast (12 kWh verwacht tijdens het
+venster) viel dat terug naar 0 kWh nodig.
+
+Nieuw optioneel veld: **Solcast PV-voorspelling sensor (vandaag)** —
+naast de al bestaande "morgen"-sensor, zodat ook de resterende uren van
+vandaag worden meegenomen. Zonder deze sensoren (of zonder
+`detailedForecast`/`detailedHourly`-attribuut) blijft het oude,
+conservatieve gedrag (aanname: geen zon) gewoon intact.
+
+**Let op:** de exacte attribuutstructuur (`detailedForecast` met
+`period_start`/`pv_estimate` in kW) is specifiek voor de Solcast PV
+Forecast-integratie zoals getest. Andere Solcast-varianten kunnen een
+andere structuur hebben — check dit zelf via Ontwikkelaarshulpmiddelen
+als de PV-correctie geen effect lijkt te hebben.
+
+## v0.18.1 — geleerde bias-correctie ook toegepast op uur-forecast
+
+De uur-voor-uur PV-schatting (`_estimate_pv_kwh_for_period`, zie v0.18.0)
+wordt nu automatisch gecorrigeerd met dezelfde geleerde bias die al werd
+gebruikt voor de dagtotaal-check (`sensor.pv_forecast_accuracy` →
+`learned_bias_percent`). Voorspelt Solcast bij jou structureel te veel of
+te weinig, dan wordt dat verschil nu ook doorgerekend in de uur-schatting
+die de energie-brug-check en kwartier-reductie gebruiken.
+
+Getest: bij een geleerde bias van -20% (Solcast voorspelt te optimistisch)
+wordt een ruwe schatting van 8,0 kWh teruggerekend naar 6,4 kWh; bij +15%
+naar 9,2 kWh. Zonder geleerde bias (bv. tijdens de eerste dagen) blijft de
+ruwe Solcast-schatting gewoon staan.
+
+## v0.19.0 — per-uur geleerde PV-voorspelling-bias (preciezer dan één dagbias)
+
+**Nieuw:** in plaats van één vaste dagelijkse bias-correctie op de hele
+PV-voorspelling toe te passen, monitort de integratie nu continu (elk
+kwartier, de hele dag) de werkelijke PV-productie via je live
+PV-vermogensensor, en vergelijkt dat per **uur-van-de-dag** met wat
+Solcast voor dat specifieke uur voorspelde. Zo leert hij bijvoorbeeld dat
+Solcast bij jouw installatie 's ochtends structureel te optimistisch is
+(bv. door een boom die vroeg schaduw geeft) maar 's middags prima klopt —
+in plaats van dat verschil te middelen tot één te grove correctie.
+
+Deze per-uur-ratio wordt gebruikt in de uur-voor-uur PV-schatting
+(`_estimate_pv_kwh_for_period`), met terugval naar de vlakke dagbias voor
+uren waar nog onvoldoende geschiedenis is, en geen correctie als er
+helemaal geen geleerde data is.
+
+Nieuwe sensor: `sensor.pv_hourly_forecast_bias` (state = ratio voor het
+huidige uur, `profile`-attribuut = alle 24 geleerde ratio's).
+
+**Bijgevangen bug tijdens het bouwen hiervan:** het bestaande
+uurverbruiksprofiel (`sensor.hourly_consumption_profile`, sinds v0.15.0)
+verloor bij elke uur-overgang het laatste kwartier van het afgelopen uur,
+wat leidde tot een structurele onderschatting van ongeveer 25% (getest:
+bij een constant vermogen van 500W kwam er voorheen geen 12,0 kWh maar
+zo'n 9,0 kWh uit over 24 uur). Dit is gefixt door het interval exact op
+de uur-grens te splitsen — geverifieerd met een test die nu wél exact
+12,0 kWh over 24 uur teruggeeft.

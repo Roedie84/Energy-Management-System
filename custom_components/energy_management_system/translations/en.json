@@ -20,7 +20,8 @@
           "min_soc_percent": "Minimum SoC (%) - below this, forced discharge is disabled",
           "battery_power_sensor_entity": "Battery power sensor (to correct household consumption: positive=discharging, negative=charging)",
           "pv_power_sensor_entity": "Live PV production power sensor (for even more accurate consumption correction)",
-          "invert_battery_power_sign": "Invert battery power sign (on = negative means discharging)"
+          "invert_battery_power_sign": "Invert battery power sign (on = negative means discharging)",
+          "solar_today_forecast_sensor_entity": "Solcast PV forecast sensor (today) - for hour-by-hour production estimate"
         }
       }
     },
@@ -48,7 +49,8 @@
           "min_soc_percent": "Minimum SoC (%) - below this, forced discharge is disabled",
           "battery_power_sensor_entity": "Battery power sensor (to correct household consumption: positive=discharging, negative=charging)",
           "pv_power_sensor_entity": "Live PV production power sensor (for even more accurate consumption correction)",
-          "invert_battery_power_sign": "Invert battery power sign (on = negative means discharging)"
+          "invert_battery_power_sign": "Invert battery power sign (on = negative means discharging)",
+          "solar_today_forecast_sensor_entity": "Solcast PV forecast sensor (today) - for hour-by-hour production estimate"
         }
       }
     }

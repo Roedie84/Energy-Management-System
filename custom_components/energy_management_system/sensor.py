@@ -41,6 +41,7 @@ async def async_setup_entry(
         SimulatedActionSensor(coordinator, entry.entry_id),
         LearnedNightConsumptionSensor(coordinator, entry.entry_id),
         HourlyConsumptionProfileSensor(coordinator, entry.entry_id),
+        PvHourlyBiasSensor(coordinator, entry.entry_id),
         UpcomingTimelineSensor(coordinator, entry.entry_id),
         ExpectedOperationModeSensor(coordinator, entry.entry_id),
         EnergyBridgeCheckSensor(coordinator, entry.entry_id),
@@ -455,6 +456,67 @@ class HourlyConsumptionProfileSensor(SensorEntity, RestoreEntity):
                 continue
         if restored:
             self._coordinator.hourly_consumption_profile = restored
+
+
+class PvHourlyBiasSensor(SensorEntity, RestoreEntity):
+    """Learned (actual/forecast) ratio per hour-of-day (0-23) for the
+    Solcast PV forecast - more precise than the single flat daily bias,
+    since Solcast may e.g. systematically under-forecast mornings but
+    over-forecast afternoons for a given installation/orientation.
+
+    State is the current hour's learned ratio (1.0 = forecast matches
+    reality); the full profile is in the `profile` attribute. Persisted
+    across restarts.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "PV hourly forecast bias"
+    _attr_icon = "mdi:weather-partly-cloudy"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_pv_hourly_bias"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def native_value(self) -> float | None:
+        current_hour = datetime.now().hour
+        value = self._coordinator.learned_pv_hourly_ratio(current_hour)
+        return round(value, 3) if value is not None else None
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        profile = {
+            str(hour): round(self._coordinator.learned_pv_hourly_ratio(hour), 3)
+            for hour in range(24)
+            if self._coordinator.learned_pv_hourly_ratio(hour) is not None
+        }
+        return {
+            "profile": profile,
+            "hours_with_data": len(profile),
+        }
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if last_state is None:
+            return
+        raw_profile = last_state.attributes.get("profile")
+        if not isinstance(raw_profile, dict):
+            return
+        restored: dict[int, list[float]] = {}
+        for hour_str, ratio_value in raw_profile.items():
+            try:
+                hour = int(hour_str)
+                restored[hour] = [float(ratio_value)]
+            except (TypeError, ValueError):
+                continue
+        if restored:
+            self._coordinator.pv_hourly_bias_history = restored
 
 
 class UpcomingTimelineSensor(_CoordinatorDiagnosticSensor):

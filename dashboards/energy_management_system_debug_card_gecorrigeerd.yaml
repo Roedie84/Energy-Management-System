@@ -61,6 +61,8 @@ cards:
         name: Nachtvenster-gemiddelde (W, legacy fallback)
       - entity: sensor.energy_management_system_pv_forecast_accuracy
         name: PV-voorspelling afwijking (%)
+      - entity: sensor.energy_management_system_pv_hourly_forecast_bias
+        name: PV-voorspelling bias (huidig uur)
 
   - type: markdown
     title: Overgangen energie-check (logboek)
@@ -151,3 +153,9 @@ cards:
       **Geleerde Solcast-bias:** {{
       state_attr('sensor.energy_management_system_pv_forecast_accuracy',
       'learned_bias_percent') }}%
+
+
+      **PV-voorspelling bias per uur (ratio werkelijk/voorspeld):**
+
+      {{ state_attr('sensor.energy_management_system_pv_hourly_forecast_bias',
+      'profile') }}
