@@ -907,3 +907,20 @@ logica in beide richtingen, inclusief het starten van de ramp-taken.
 
 Bijgewerkt met de zonnepaneel-vermogenslimiet-sensor en een aangepast
 label voor het (nu informatieve) aantal dure kwartieren.
+
+## v0.27.1 — diagnostics.py bijgewerkt met ontbrekende velden
+
+De diagnostiek-export miste een aantal velden die in eerdere versies al
+waren toegevoegd aan de code, maar nooit waren doorgevoerd naar
+`diagnostics.py`. Nu compleet, inclusief:
+
+- `total_discharge_value_eur` / `total_charge_cost_eur` (financiële
+  tracking, v0.22.0 — stond er nog nooit in)
+- `last_needed_kwh_breakdown` (opsplitsing van de energie-brug-berekening,
+  v0.23.1)
+- `last_charge_power_applied`
+- `grid_charged_today` (winter-guard-status, v0.27.0)
+- `is_negative_price_active` (v0.27.0)
+
+Getest: alle velden komen correct mee en het geheel blijft
+JSON-serialiseerbaar.

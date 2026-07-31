@@ -135,10 +135,18 @@ async def async_get_config_entry_diagnostics(
             "last_discharge_start": _iso(coordinator.last_discharge_start),
             "last_soc_percent": coordinator.last_soc_percent,
             "last_discharge_power_applied": coordinator.last_discharge_power_applied,
+            "last_charge_power_applied": coordinator.last_charge_power_applied,
             "last_available_kwh": coordinator.last_available_kwh,
             "last_needed_kwh_to_bridge": coordinator.last_needed_kwh_to_bridge,
+            "last_needed_kwh_breakdown": coordinator.last_needed_kwh_breakdown,
             "last_has_enough_energy": coordinator.last_has_enough_energy,
             "energy_bridge_transition_log": coordinator.energy_bridge_transition_log,
+            "grid_charged_today": coordinator._grid_charged_today,
+            "is_negative_price_active": coordinator._is_negative_price_active,
+            "total_discharge_value_eur": round(
+                coordinator.total_discharge_value_eur, 4
+            ),
+            "total_charge_cost_eur": round(coordinator.total_charge_cost_eur, 4),
             "night_consumption_history_kw": coordinator.night_consumption_history,
             "learned_night_consumption_kw": coordinator.learned_night_consumption_kw,
             "hourly_consumption_profile_kw": {
