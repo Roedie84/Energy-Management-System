@@ -19,7 +19,8 @@
           "battery_soc_sensor_entity": "Battery SoC sensor (for over-discharge protection)",
           "min_soc_percent": "Minimum SoC (%) - below this, forced discharge is disabled",
           "battery_power_sensor_entity": "Battery power sensor (to correct household consumption: positive=discharging, negative=charging)",
-          "pv_power_sensor_entity": "Live PV production power sensor (for even more accurate consumption correction)"
+          "pv_power_sensor_entity": "Live PV production power sensor (for even more accurate consumption correction)",
+          "invert_battery_power_sign": "Invert battery power sign (on = negative means discharging)"
         }
       }
     },
@@ -46,7 +47,8 @@
           "battery_soc_sensor_entity": "Battery SoC sensor (for over-discharge protection)",
           "min_soc_percent": "Minimum SoC (%) - below this, forced discharge is disabled",
           "battery_power_sensor_entity": "Battery power sensor (to correct household consumption: positive=discharging, negative=charging)",
-          "pv_power_sensor_entity": "Live PV production power sensor (for even more accurate consumption correction)"
+          "pv_power_sensor_entity": "Live PV production power sensor (for even more accurate consumption correction)",
+          "invert_battery_power_sign": "Invert battery power sign (on = negative means discharging)"
         }
       }
     }

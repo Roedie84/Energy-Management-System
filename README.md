@@ -416,3 +416,21 @@ aan een ruimte is gekoppeld (bv. "Woonkamer"), krijgen entities een
 voorvoegsel zoals `sensor.woonkamer_energy_management_system_...`. Check
 dit altijd via Ontwikkelaarshulpmiddelen → Staten voordat je de
 dashboard-YAML plakt, en pas de entity-ID's zo nodig aan.
+
+## v0.17.0 — fix negatief nachtverbruik (teken-conventie batterijsensor)
+
+**Oorzaak gevonden:** niet elke Zendure/SolarFlow-integratie gebruikt
+dezelfde teken-conventie voor het batterijvermogen. Waar de aanname was
+"positief = ontladen, negatief = laden" (zoals bij de handmatige
+laadvermogen-instelling), bleek jouw `Vermogen`-sensor (Schuur → Zendure
+Batterij) het **omgekeerde** te doen: negatief = ontladen. Daardoor werd
+tijdens het ontladen juist afgetrokken in plaats van opgeteld, wat de
+negatieve verbruikswaarden verklaart die je zag.
+
+**Fix:** nieuwe optie **"Teken omdraaien accu-vermogen"** (aan/uit,
+standaard uit). Zet deze aan als jouw batterijsensor negatief laat zien
+tijdens ontladen. Getest: met deze optie aan wordt -300W (ontladen bij
+jouw sensor) correct als +300W meegeteld in de verbruikscorrectie, i.p.v.
+het verkeerd aftrekken van daarvoor.
+
+Geldt voor zowel de live correctie als de historische bootstrap.

@@ -53,6 +53,7 @@ from .const import (
     CONF_BATTERY_POWER_SENSOR,
     CONF_CONSUMPTION_POWER_SENSOR,
     CONF_EXPENSIVE_QUARTERS_COUNT,
+    CONF_INVERT_BATTERY_POWER_SIGN,
     CONF_LOW_SOLAR_THRESHOLD_KWH,
     CONF_MANUAL_CHARGE_POWER,
     CONF_MANUAL_DISCHARGE_POWER,
@@ -219,6 +220,7 @@ class EnergyManagementSystemCoordinator:
 
         battery_entity = self.config.get(CONF_BATTERY_POWER_SENSOR)
         pv_entity = self.config.get(CONF_PV_POWER_SENSOR)
+        invert_battery_sign = self.config.get(CONF_INVERT_BATTERY_POWER_SIGN, False)
 
         try:
             from homeassistant.components.recorder import get_instance, history
@@ -292,6 +294,8 @@ class EnergyManagementSystemCoordinator:
             if battery_states:
                 battery_value = battery_tracker.value_at(local_dt)
                 if battery_value is not None:
+                    if invert_battery_sign:
+                        battery_value = -battery_value
                     corrected_value += battery_value
             if pv_states:
                 pv_value = pv_tracker.value_at(local_dt)
@@ -508,6 +512,8 @@ class EnergyManagementSystemCoordinator:
         if battery_entity:
             battery_power = self._read_sensor_float(battery_entity)
             if battery_power is not None:
+                if self.config.get(CONF_INVERT_BATTERY_POWER_SIGN, False):
+                    battery_power = -battery_power
                 corrected += battery_power
 
         pv_entity = self.config.get(CONF_PV_POWER_SENSOR)

@@ -12,6 +12,7 @@ from .const import (
     CONF_BATTERY_POWER_SENSOR,
     CONF_CONSUMPTION_POWER_SENSOR,
     CONF_EXPENSIVE_QUARTERS_COUNT,
+    CONF_INVERT_BATTERY_POWER_SIGN,
     CONF_LOW_SOLAR_THRESHOLD_KWH,
     CONF_MANUAL_CHARGE_POWER,
     CONF_MANUAL_DISCHARGE_POWER,
@@ -119,6 +120,10 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
                 CONF_BATTERY_POWER_SENSOR,
                 default=defaults.get(CONF_BATTERY_POWER_SENSOR),
             ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            vol.Optional(
+                CONF_INVERT_BATTERY_POWER_SIGN,
+                default=defaults.get(CONF_INVERT_BATTERY_POWER_SIGN, False),
+            ): selector.BooleanSelector(),
             vol.Optional(
                 CONF_PV_POWER_SENSOR,
                 default=defaults.get(CONF_PV_POWER_SENSOR),
