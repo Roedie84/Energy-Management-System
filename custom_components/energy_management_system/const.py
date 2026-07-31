@@ -11,6 +11,8 @@ CONF_PRICE_ATTRIBUTE = "price_attribute"
 CONF_EXPENSIVE_QUARTERS_COUNT = "expensive_quarters_count"
 CONF_MANUAL_DISCHARGE_POWER = "manual_discharge_power"
 CONF_MANUAL_CHARGE_POWER = "manual_charge_power"
+CONF_NEGATIVE_PRICE_CHARGE_POWER = "negative_price_charge_power"
+CONF_SOLAR_POWER_LIMIT_ENTITY = "solar_power_limit_entity"
 CONF_SOLAR_FORECAST_SENSOR = "solar_forecast_sensor_entity"
 CONF_SOLAR_TODAY_FORECAST_SENSOR = "solar_today_forecast_sensor_entity"
 CONF_SOLAR_REMAINING_TODAY_SENSOR = "solar_remaining_today_sensor_entity"
@@ -66,6 +68,14 @@ MIN_SOLAR_HISTORY_FOR_DYNAMIC_THRESHOLD = 3
 # "Low" = below this fraction of the learned typical forecast.
 LOW_SOLAR_RELATIVE_FRACTION = 0.4
 
+# Dynamic "expensive quarter" threshold: a quarter counts as expensive if
+# its price is within this fraction of today's price *range* from the
+# day's maximum - no fixed count of quarters, self-adjusting to however
+# many quarters actually clear the bar each day. Narrowed (fewer quarters
+# qualify) when little solar is expected, for extra caution.
+EXPENSIVE_PRICE_THRESHOLD_FRACTION = 0.20
+EXPENSIVE_PRICE_THRESHOLD_FRACTION_LOW_SOLAR = 0.08
+
 # How far (as a fraction of the day's price range above the minimum) the
 # cheap block is allowed to extend when detecting its natural width.
 CHEAP_BLOCK_THRESHOLD_MARGIN_FRACTION = 0.2
@@ -81,6 +91,12 @@ DEFAULT_PRICE_ATTRIBUTE = PRICE_ATTRIBUTE_INCL_TAX
 DEFAULT_EXPENSIVE_QUARTERS_COUNT = 4
 DEFAULT_MANUAL_DISCHARGE_POWER = 1600
 DEFAULT_MANUAL_CHARGE_POWER = -2000
+DEFAULT_NEGATIVE_PRICE_CHARGE_POWER = -2000
+
+# Ramp duration/steps for gradually curtailing/restoring the solar
+# inverter's power limit around negative-price periods.
+SOLAR_RAMP_DURATION_SECONDS = 30
+SOLAR_RAMP_STEPS = 10
 
 # Zonneplan's raw "amount" values are scaled by this factor to get €/kWh
 # (e.g. 3728480 / 10_000_000 = 0.372848 €/kWh).

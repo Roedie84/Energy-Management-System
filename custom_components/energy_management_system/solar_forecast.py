@@ -189,9 +189,25 @@ class SolarForecastAccuracyTracker:
         Never raises - if the recorder isn't available, or anything goes
         wrong reading history, this silently does nothing and normal
         day-by-day learning takes over from here. Never overwrites
-        already-learned (live) data.
+        already-learned (live) *valid* data - but if the existing history
+        is entirely implausible (e.g. leftover values from a previously
+        misconfigured sensor - see MAX_REASONABLE_DAILY_FORECAST_KWH /
+        MAX_REASONABLE_DEVIATION_PERCENT), this bootstraps fresh from
+        history instead of leaving it stuck on garbage forever.
         """
-        if self.forecast_value_history or self.deviation_history:
+        valid_existing_forecast = [
+            v
+            for v in self.forecast_value_history
+            if v <= MAX_REASONABLE_DAILY_FORECAST_KWH
+        ]
+        valid_existing_deviation = [
+            v
+            for v in self.deviation_history
+            if abs(v) <= MAX_REASONABLE_DEVIATION_PERCENT
+        ]
+        need_forecast_bootstrap = not valid_existing_forecast
+        need_deviation_bootstrap = not valid_existing_deviation
+        if not need_forecast_bootstrap and not need_deviation_bootstrap:
             return
 
         forecast_entity = self.config.get(CONF_SOLAR_FORECAST_SENSOR)
@@ -276,12 +292,14 @@ class SolarForecastAccuracyTracker:
                 if abs(deviation) <= MAX_REASONABLE_DEVIATION_PERCENT:
                     deviations.append(deviation)
 
-        if forecast_values:
+        if need_forecast_bootstrap and forecast_values:
             self.forecast_value_history = forecast_values[-LEARNING_HISTORY_DAYS:]
-        if deviations:
+        if need_deviation_bootstrap and deviations:
             self.deviation_history = deviations[-LEARNING_HISTORY_DAYS:]
 
-        if forecast_values or deviations:
+        if (need_forecast_bootstrap and forecast_values) or (
+            need_deviation_bootstrap and deviations
+        ):
             self.was_bootstrapped_from_history = True
             _LOGGER.info(
                 "Bootstrapped solar forecast learning from history: %d "

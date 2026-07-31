@@ -41,6 +41,8 @@ cards:
         name: Werkelijke modus (Zendure)
       - entity: sensor.hw_p1_vermogen
         name: Huidig verbruik (W)
+      - entity: number.solaredge_i1_active_power_limit
+        name: Zonnepaneel-vermogenslimiet (%) — bij negatieve prijs
 
   - type: entities
     title: Actuele beslissing
@@ -50,7 +52,7 @@ cards:
       - entity: sensor.energy_management_system_simulated_action
         name: Gesimuleerde actie (bij learning only)
       - entity: sensor.energy_management_system_effective_expensive_quarters
-        name: Effectief aantal dure kwartieren
+        name: Aantal kwartieren boven dynamische prijsdrempel (informatief)
       - entity: sensor.energy_management_system_cheapest_block_start
         name: Start goedkoopste blok
       - entity: sensor.energy_management_system_discharge_window_start

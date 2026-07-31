@@ -38,7 +38,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import math
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.helpers.event import (
@@ -56,6 +56,8 @@ from .const import (
     CONF_INVERT_BATTERY_POWER_SIGN,
     CONF_LOW_SOLAR_THRESHOLD_KWH,
     CONF_MANUAL_CHARGE_POWER,
+    CONF_NEGATIVE_PRICE_CHARGE_POWER,
+    CONF_SOLAR_POWER_LIMIT_ENTITY,
     CONF_MANUAL_DISCHARGE_POWER,
     CONF_MANUAL_POWER_NUMBER,
     CONF_MIN_SOC_PERCENT,
@@ -80,6 +82,11 @@ from .const import (
     MIN_ACTIVE_SOLAR_PRODUCTION_W,
     LEARNING_HISTORY_DAYS,
     LOW_SOLAR_RELATIVE_FRACTION,
+    EXPENSIVE_PRICE_THRESHOLD_FRACTION,
+    EXPENSIVE_PRICE_THRESHOLD_FRACTION_LOW_SOLAR,
+    DEFAULT_NEGATIVE_PRICE_CHARGE_POWER,
+    SOLAR_RAMP_DURATION_SECONDS,
+    SOLAR_RAMP_STEPS,
     MIN_SOLAR_HISTORY_FOR_DYNAMIC_THRESHOLD,
     OPTION_MANUAL,
     OPTION_SMART,
@@ -206,6 +213,17 @@ class EnergyManagementSystemCoordinator:
         self.total_discharge_value_eur: float = 0.0
         self.total_charge_cost_eur: float = 0.0
         self.last_charge_power_applied: float | None = None
+
+        # -- Winter guard: don't manual-discharge after grid-charging today --
+        # If the battery was force-charged from the grid today (low solar),
+        # don't also manual-discharge at high prices that same day - that
+        # energy was bought to cover the household, not to arbitrage.
+        self._grid_charged_today: bool = False
+        self._grid_charged_date: date | None = None
+
+        # -- Negative price handling --
+        self._is_negative_price_active: bool = False
+        self._solar_ramp_task = None
         self._last_value_calc_time: datetime | None = None
 
         self._lock = asyncio.Lock()
@@ -480,10 +498,51 @@ class EnergyManagementSystemCoordinator:
         entries.sort(key=lambda entry: entry[0])
         return entries
 
+    def _price_threshold_for_entries(
+        self, day_entries: list[PriceEntry], narrow_for_low_solar: bool = False
+    ) -> float | None:
+        """Dynamic "expensive" threshold for an arbitrary set of same-day
+        price entries (top fraction of that day's price range). Shared by
+        today's live decision and the multi-day timeline projection.
+        """
+        if not day_entries:
+            return None
+        prices = [entry[2] for entry in day_entries]
+        min_price, max_price = min(prices), max(prices)
+        price_range = max_price - min_price
+        if price_range <= 0:
+            return None
+        fraction = (
+            EXPENSIVE_PRICE_THRESHOLD_FRACTION_LOW_SOLAR
+            if narrow_for_low_solar
+            else EXPENSIVE_PRICE_THRESHOLD_FRACTION
+        )
+        return max_price - fraction * price_range
+
+    def _get_expensive_price_threshold(
+        self, entries: list[PriceEntry], now: datetime
+    ) -> float | None:
+        """Dynamic "expensive" price threshold for today: the top fraction
+        of today's actual price range, no fixed count of quarters. Narrowed
+        (fewer quarters qualify) when little solar is expected, for extra
+        caution. Returns None if there's no meaningful price spread today
+        (flat prices - nothing is "more expensive" than anything else).
+        """
+        todays_entries = [entry for entry in entries if entry[0].date() == now.date()]
+        return self._price_threshold_for_entries(
+            todays_entries, narrow_for_low_solar=self._is_low_solar_expected()
+        )
+
     def _is_expensive_now(
-        self, entries: list[PriceEntry], now: datetime, count: int | None = None
+        self, entries: list[PriceEntry], now: datetime, threshold: float | None = None
     ) -> bool:
-        """Is 'now' one of the most expensive intervals of today?"""
+        """Is 'now' priced within the dynamic "expensive" threshold for
+        today? No fixed count of quarters - self-adjusting to however many
+        quarters actually clear the bar each day (see
+        `_get_expensive_price_threshold`). How much is actually discharged
+        is governed separately by the dynamic reserve check (see
+        `_get_soc_scaled_discharge_power`), not by this classification.
+        """
         todays_entries = [entry for entry in entries if entry[0].date() == now.date()]
         if not todays_entries:
             return False
@@ -495,17 +554,25 @@ class EnergyManagementSystemCoordinator:
         if current_entry is None:
             return False
 
-        if count is None:
-            count = int(
-                self.config.get(
-                    CONF_EXPENSIVE_QUARTERS_COUNT, DEFAULT_EXPENSIVE_QUARTERS_COUNT
-                )
-            )
-        count = max(1, count)
-        most_expensive = sorted(todays_entries, key=lambda e: e[2], reverse=True)[
-            :count
-        ]
-        return any(entry[0] == current_entry[0] for entry in most_expensive)
+        if threshold is None:
+            threshold = self._get_expensive_price_threshold(entries, now)
+        if threshold is None:
+            return False
+
+        return current_entry[2] >= threshold
+
+    def _count_expensive_quarters_today(
+        self, entries: list[PriceEntry], now: datetime
+    ) -> int:
+        """How many of today's quarters currently clear the dynamic
+        "expensive" threshold - informational only (shown in
+        sensor.effective_expensive_quarters), not used to limit discharge.
+        """
+        threshold = self._get_expensive_price_threshold(entries, now)
+        if threshold is None:
+            return 0
+        todays_entries = [entry for entry in entries if entry[0].date() == now.date()]
+        return sum(1 for entry in todays_entries if entry[2] >= threshold)
 
     def _read_sensor_float(self, entity_id: str | None) -> float | None:
         if not entity_id:
@@ -1261,121 +1328,30 @@ class EnergyManagementSystemCoordinator:
 
         return count
 
-    def _effective_expensive_quarters_count(
-        self, now: datetime, cheap_block_start: datetime | None
-    ) -> int:
-        """Reduce the expensive-quarters count when little solar is expected
-        tomorrow, based on how much energy is needed to bridge the time
-        until the battery starts charging again (the cheapest block).
-
-        Uses the learned rolling-average night consumption when available
-        (falling back to a live sensor reading otherwise), and corrects the
-        raw solar forecast with the learned Solcast bias for this
-        installation, when known.
-        """
-        normal_count = max(
-            1,
-            int(
-                self.config.get(
-                    CONF_EXPENSIVE_QUARTERS_COUNT, DEFAULT_EXPENSIVE_QUARTERS_COUNT
-                )
-            ),
-        )
-
-        forecast_entity = self.config.get(CONF_SOLAR_FORECAST_SENSOR)
-        consumption_entity = self.config.get(CONF_CONSUMPTION_POWER_SENSOR)
-        if not forecast_entity or not consumption_entity or cheap_block_start is None:
-            return normal_count
-
-        if not self._is_low_solar_expected():
-            return normal_count
-
-        hours_until_solar = max((cheap_block_start - now).total_seconds() / 3600, 0)
-        if hours_until_solar <= 0:
-            return normal_count
-
-        discharge_power_w = self.config.get(
-            CONF_MANUAL_DISCHARGE_POWER, DEFAULT_MANUAL_DISCHARGE_POWER
-        )
-        quarter_energy_kwh = (discharge_power_w / 1000) * 0.25
-        if quarter_energy_kwh <= 0:
-            return normal_count
-
-        # Prefer the learned hourly profile (reflects the actual time-of-day
-        # mix the bridging period spans - important in autumn/winter when
-        # this can extend into daytime hours). Falls back to the flat
-        # night-average or a live reading if the profile isn't complete yet.
-        expected_consumption_kwh = self._estimate_consumption_kwh_for_period(
-            now, cheap_block_start
-        )
-        used_profile = expected_consumption_kwh is not None
-
-        if expected_consumption_kwh is None:
-            learned_kw = self.learned_night_consumption_kw
-            if learned_kw is not None:
-                power_kw = learned_kw
-            else:
-                power_w = self._read_corrected_consumption_power()
-                if power_w is None or power_w <= 0:
-                    return normal_count
-                power_kw = power_w / 1000
-            expected_consumption_kwh = power_kw * hours_until_solar
-
-        # Subtract expected PV production during the bridging window (e.g.
-        # a midday stretch of an otherwise "low solar" day still produces
-        # something), so we don't over-reserve battery capacity for energy
-        # the sun will supply anyway.
-        expected_pv_kwh = self._estimate_pv_kwh_for_period(now, cheap_block_start)
-        expected_consumption_kwh = max(0.0, expected_consumption_kwh - expected_pv_kwh)
-
-        needed_quarters = max(
-            1, math.ceil(expected_consumption_kwh / quarter_energy_kwh)
-        )
-
-        reduced_count = min(needed_quarters, normal_count)
-        _LOGGER.debug(
-            "Low solar forecast detected: reducing expensive quarters "
-            "from %d to %d (expected consumption %.2f kWh over %.1fh, "
-            "source: %s)",
-            normal_count,
-            reduced_count,
-            expected_consumption_kwh,
-            hours_until_solar,
-            "hourly profile" if used_profile else "flat average/live reading",
-        )
-        return reduced_count
-
-    def _normal_expensive_quarters_count(self) -> int:
-        return max(
-            1,
-            int(
-                self.config.get(
-                    CONF_EXPENSIVE_QUARTERS_COUNT, DEFAULT_EXPENSIVE_QUARTERS_COUNT
-                )
-            ),
-        )
-
     def _compute_dynamic_discharge_start(
-        self, entries: list[PriceEntry], now: datetime, effective_count: int
+        self, entries: list[PriceEntry], now: datetime
     ) -> datetime | None:
         """Start the discharging window right when today's expensive
         quarters end, instead of at a fixed clock hour.
 
         Uses the end of the last (chronologically latest) of today's
-        expensive quarters. Returns None if no expensive quarters are
-        found for today (e.g. all prices are equal, or no data).
+        quarters that clear the dynamic "expensive" threshold. Returns
+        None if none are found for today (e.g. all prices are equal, or
+        no data).
         """
         todays_entries = [entry for entry in entries if entry[0].date() == now.date()]
         if not todays_entries:
             return None
 
-        most_expensive = sorted(todays_entries, key=lambda e: e[2], reverse=True)[
-            :effective_count
-        ]
-        if not most_expensive:
+        threshold = self._get_expensive_price_threshold(entries, now)
+        if threshold is None:
             return None
 
-        return max(entry[1] for entry in most_expensive)
+        expensive_entries = [e for e in todays_entries if e[2] >= threshold]
+        if not expensive_entries:
+            return None
+
+        return max(entry[1] for entry in expensive_entries)
 
     def _log_energy_transition(
         self, now: datetime, has_enough: bool, available_kwh: float, needed_kwh: float
@@ -1404,28 +1380,31 @@ class EnergyManagementSystemCoordinator:
         entries: list[PriceEntry],
         now: datetime,
         cheap_block_start: datetime,
-        effective_count: int,
     ) -> float:
         """Energy (kWh) that will be actively discharged during today's
-        remaining expensive quarters before the cheap block starts, at
-        the configured (uncapped) discharge power.
+        remaining quarters that clear the dynamic "expensive" threshold,
+        before the cheap block starts, at the configured (uncapped)
+        discharge power.
 
         This is added on top of the baseline consumption estimate in the
         energy bridge check, so the battery reserves enough to execute
         those profitable discharges at full power - instead of only
         reserving enough for household consumption and then having the
-        SoC-protection taper reduce the discharge when the expensive
+        dynamic reserve check taper the discharge when the expensive
         quarter actually arrives.
         """
         todays_entries = [e for e in entries if e[0].date() == now.date()]
         if not todays_entries:
             return 0.0
 
-        most_expensive = sorted(todays_entries, key=lambda e: e[2], reverse=True)[
-            :effective_count
-        ]
+        threshold = self._get_expensive_price_threshold(entries, now)
+        if threshold is None:
+            return 0.0
+
         upcoming_expensive = [
-            e for e in most_expensive if now <= e[0] < cheap_block_start
+            e
+            for e in todays_entries
+            if e[2] >= threshold and now <= e[0] < cheap_block_start
         ]
         if not upcoming_expensive:
             return 0.0
@@ -1443,7 +1422,6 @@ class EnergyManagementSystemCoordinator:
         entries: list[PriceEntry],
         now: datetime,
         cheap_block_start: datetime | None,
-        effective_count: int,
     ) -> bool:
         """Should we use smart_discharging (postpone charging, favour
         export) right now, ahead of the cheapest block?
@@ -1511,7 +1489,7 @@ class EnergyManagementSystemCoordinator:
                 # but come up short (SoC-protection tapering the payout)
                 # when the actual price peak arrives later today.
                 upcoming_discharge_kwh = self._estimate_upcoming_discharge_kwh(
-                    entries, now, cheap_block_start, effective_count
+                    entries, now, cheap_block_start
                 )
                 needed_kwh_raw += upcoming_discharge_kwh
 
@@ -1567,7 +1545,6 @@ class EnergyManagementSystemCoordinator:
         now: datetime,
         cheap_block_start: datetime | None,
         discharge_start: datetime | None,
-        effective_count: int,
         live_is_expensive: bool | None = None,
         live_should_postpone_charging: bool | None = None,
     ) -> list[dict]:
@@ -1576,10 +1553,9 @@ class EnergyManagementSystemCoordinator:
         This is an approximation: the real coordinator recomputes the
         cheapest block and discharge window fresh on every run, so this
         projection only reflects the currently known cheapest block/window
-        for "today". Beyond that window, only each day's own expensive
-        quarters are still marked; everything else defaults to 'smart'.
-        The effective (possibly solar-reduced) count is only applied to
-        today's date, matching the live decision logic.
+        for "today". Beyond that window, only each day's own quarters that
+        clear that day's dynamic price threshold are still marked as
+        expensive; everything else defaults to 'smart'.
 
         The interval containing "now" is overridden with the live,
         energy-aware decision (live_is_expensive/live_should_postpone_charging)
@@ -1602,15 +1578,8 @@ class EnergyManagementSystemCoordinator:
 
             entry_date = entry[0].date()
             day_entries = by_date[entry_date]
-            count = (
-                effective_count
-                if entry_date == today
-                else self._normal_expensive_quarters_count()
-            )
-            most_expensive = sorted(day_entries, key=lambda e: e[2], reverse=True)[
-                :count
-            ]
-            is_expensive = any(e[0] == entry[0] for e in most_expensive)
+            threshold = self._price_threshold_for_entries(day_entries)
+            is_expensive = threshold is not None and entry[2] >= threshold
 
             is_current_interval = entry[0] <= now < entry[1]
 
@@ -1674,6 +1643,58 @@ class EnergyManagementSystemCoordinator:
                     }
                 )
         return blocks
+
+    async def _ramp_solar_power_limit(self, target_percent: float) -> None:
+        """Gradually move the solar inverter's power limit (%) towards
+        target_percent over SOLAR_RAMP_DURATION_SECONDS, in
+        SOLAR_RAMP_STEPS steps - used to curtail production during
+        negative prices and restore it afterwards, instead of an abrupt
+        jump.
+        """
+        entity_id = self.config.get(CONF_SOLAR_POWER_LIMIT_ENTITY)
+        if not entity_id:
+            return
+
+        current = self._read_sensor_float(entity_id)
+        if current is None:
+            current = 0.0 if target_percent >= 100 else 100.0
+
+        step_duration = SOLAR_RAMP_DURATION_SECONDS / SOLAR_RAMP_STEPS
+        step_size = (target_percent - current) / SOLAR_RAMP_STEPS
+
+        try:
+            for _ in range(SOLAR_RAMP_STEPS):
+                current += step_size
+                await self.hass.services.async_call(
+                    "number",
+                    "set_value",
+                    {"entity_id": entity_id, "value": round(current, 1)},
+                    blocking=True,
+                )
+                await asyncio.sleep(step_duration)
+            # Ensure the exact final value, correcting any rounding drift.
+            await self.hass.services.async_call(
+                "number",
+                "set_value",
+                {"entity_id": entity_id, "value": target_percent},
+                blocking=True,
+            )
+        except Exception as err:  # noqa: BLE001 - background task, must not crash silently
+            _LOGGER.warning(
+                "Error while ramping solar power limit (%s) towards %.0f%%: %s",
+                entity_id,
+                target_percent,
+                err,
+            )
+
+    def _start_solar_ramp(self, target_percent: float) -> None:
+        """Fire-and-forget the ramp as a background task, so it doesn't
+        block the main coordinator update loop for
+        SOLAR_RAMP_DURATION_SECONDS.
+        """
+        self._solar_ramp_task = self.hass.async_create_task(
+            self._ramp_solar_power_limit(target_percent)
+        )
 
     def _get_current_price_per_kwh(
         self, entries: list[PriceEntry], now: datetime
@@ -1835,6 +1856,19 @@ class EnergyManagementSystemCoordinator:
                 "(manual, negatief vermogen) in plaats van te wachten op zon."
             )
 
+        elif reason == "negative_price":
+            power_txt = (
+                f"{abs(self.last_charge_power_applied):.0f}W"
+                if self.last_charge_power_applied is not None
+                else "het ingestelde vermogen"
+            )
+            parts.append(
+                f"De energieprijs is nu negatief: de accu laadt actief op "
+                f"{power_txt} (je wordt betaald om te verbruiken), en de "
+                f"zonnepanelen worden geleidelijk afgeregeld om niet tegen "
+                f"een negatieve prijs terug te leveren."
+            )
+
         elif reason == "discharging_window":
             if self.last_has_enough_energy is not None and self.last_available_kwh is not None:
                 needed_txt = (
@@ -1935,17 +1969,15 @@ class EnergyManagementSystemCoordinator:
         self.last_cheap_block_start = cheap_block_start
         self.last_cheap_block_end = cheap_block_end
 
-        effective_count = self._effective_expensive_quarters_count(
-            now, cheap_block_start
-        )
-        is_expensive = self._is_expensive_now(entries, now, count=effective_count)
+        effective_count = self._count_expensive_quarters_today(entries, now)
+        is_expensive = self._is_expensive_now(entries, now)
 
         # Always compute the time-based discharge_start for the timeline
         # projection (it can't know about live battery energy for future
         # intervals), even though the live decision below may use the
         # energy-based check instead.
         self.last_discharge_start = self._compute_dynamic_discharge_start(
-            entries, now, effective_count
+            entries, now
         )
 
         # Should we postpone charging (smart_discharging) ahead of the
@@ -1953,7 +1985,7 @@ class EnergyManagementSystemCoordinator:
         # enough available battery energy to bridge the remaining time?),
         # falling back to the time-based rule if no energy sensor is set.
         should_postpone_charging = self._should_postpone_charging(
-            entries, now, cheap_block_start, effective_count
+            entries, now, cheap_block_start
         )
 
         # Never postpone charging while the sun is actually producing right
@@ -1987,7 +2019,6 @@ class EnergyManagementSystemCoordinator:
             now,
             cheap_block_start,
             self.last_discharge_start,
-            effective_count,
             live_is_expensive=is_expensive,
             live_should_postpone_charging=should_postpone_charging,
         )
@@ -2022,6 +2053,56 @@ class EnergyManagementSystemCoordinator:
             self.last_explanation = self._build_explanation()
             return
 
+        # Negative price handling: takes priority over everything else
+        # (except an explicit force_manual override, handled above).
+        # Charge the battery hard and curtail solar production - exporting
+        # or even just running the panels is actively costing money at a
+        # negative price. Restore both when the price turns positive again.
+        current_price_per_kwh = self._get_current_price_per_kwh(entries, now)
+        is_negative_price = (
+            current_price_per_kwh is not None and current_price_per_kwh < 0
+        )
+
+        if is_negative_price:
+            if not self._is_negative_price_active:
+                self._is_negative_price_active = True
+                self._start_solar_ramp(0.0)
+            charge_power = self.config.get(
+                CONF_NEGATIVE_PRICE_CHARGE_POWER, DEFAULT_NEGATIVE_PRICE_CHARGE_POWER
+            )
+            await self._async_apply_manual(charge_power)
+            self.last_reason = "negative_price"
+            self.last_charge_power_applied = charge_power
+            self._update_financial_tracking(
+                now, entries, self.last_reason, None, charge_power
+            )
+            self.last_explanation = self._build_explanation()
+            return
+
+        if self._is_negative_price_active:
+            # Price just turned positive again - restore the panels, then
+            # fall through to the normal decision logic below (whichever
+            # mode it determines now takes over, as requested).
+            self._is_negative_price_active = False
+            self._start_solar_ramp(100.0)
+
+        # Winter guard: if the battery was force-charged from the grid
+        # today (low solar), don't also manual-discharge at high prices
+        # that same day - that energy was bought to cover the household
+        # through a low-solar stretch, not to arbitrage. Reset the flag
+        # once a new day starts.
+        if self._grid_charged_date != now.date():
+            self._grid_charged_today = False
+            self._grid_charged_date = now.date()
+
+        if is_expensive and self._grid_charged_today:
+            _LOGGER.debug(
+                "Suppressing expensive_quarter discharge: the battery was "
+                "already grid-charged today (low solar) - selling that "
+                "same energy back would just be a loss, not arbitrage."
+            )
+            is_expensive = False
+
         if is_expensive:
             discharge_power = self.config.get(
                 CONF_MANUAL_DISCHARGE_POWER, DEFAULT_MANUAL_DISCHARGE_POWER
@@ -2049,6 +2130,7 @@ class EnergyManagementSystemCoordinator:
             )
             await self._async_apply_manual(charge_power)
             self.last_reason = "grid_charging_low_solar"
+            self._grid_charged_today = True
             self.last_charge_power_applied = charge_power
             self._update_financial_tracking(
                 now, entries, self.last_reason, None, charge_power

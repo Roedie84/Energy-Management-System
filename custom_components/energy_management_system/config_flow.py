@@ -15,6 +15,8 @@ from .const import (
     CONF_INVERT_BATTERY_POWER_SIGN,
     CONF_LOW_SOLAR_THRESHOLD_KWH,
     CONF_MANUAL_CHARGE_POWER,
+    CONF_NEGATIVE_PRICE_CHARGE_POWER,
+    CONF_SOLAR_POWER_LIMIT_ENTITY,
     CONF_MANUAL_DISCHARGE_POWER,
     CONF_MANUAL_POWER_NUMBER,
     CONF_MIN_SOC_PERCENT,
@@ -31,6 +33,7 @@ from .const import (
     DEFAULT_EXPENSIVE_QUARTERS_COUNT,
     DEFAULT_LOW_SOLAR_THRESHOLD_KWH,
     DEFAULT_MANUAL_CHARGE_POWER,
+    DEFAULT_NEGATIVE_PRICE_CHARGE_POWER,
     DEFAULT_MANUAL_DISCHARGE_POWER,
     DEFAULT_MIN_SOC_PERCENT,
     DEFAULT_NAME,
@@ -85,6 +88,21 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
                     min=-10000, max=0, step=50, mode=selector.NumberSelectorMode.BOX
                 )
             ),
+            vol.Optional(
+                CONF_NEGATIVE_PRICE_CHARGE_POWER,
+                default=defaults.get(
+                    CONF_NEGATIVE_PRICE_CHARGE_POWER,
+                    DEFAULT_NEGATIVE_PRICE_CHARGE_POWER,
+                ),
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=-10000, max=0, step=50, mode=selector.NumberSelectorMode.BOX
+                )
+            ),
+            vol.Optional(
+                CONF_SOLAR_POWER_LIMIT_ENTITY,
+                default=defaults.get(CONF_SOLAR_POWER_LIMIT_ENTITY),
+            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="number")),
             vol.Optional(
                 CONF_EXPENSIVE_QUARTERS_COUNT,
                 default=defaults.get(

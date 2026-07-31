@@ -844,3 +844,66 @@ los getal dat ik zelf had gekozen.
 
 Getest: 6 opeenvolgende lage-zon-dagen (morgen t/m dag 7) resulteerden in
 exact 40% marge op het basisverbruik, zonder af te toppen.
+
+## v0.27.0 — dynamische prijsdrempel, winter-regel, negatieve prijzen
+
+Groot pakket, vier onderdelen:
+
+### 1. Bootstrap-gate-bug in de Solcast-tracker gefixt
+
+Zelfde soort bug als eerder bij het uurverbruiksprofiel: bestaande
+(corrupte) `forecast_value_history`/`deviation_history` blokkeerden een
+herstart van de bootstrap voorgoed. Nu wordt bestaande data eerst
+gefilterd op plausibiliteit; is alles corrupt, dan bootstrapt hij alsnog
+vers uit de geschiedenis. Getest: 7 corrupte waarden (2175, 2694, ... kWh)
+werden vervangen door echte, correcte historische waarden.
+
+### 2. Dynamische prijsdrempel i.p.v. vaste "4 dure kwartieren"
+
+Er is geen vast aantal kwartieren meer. Een kwartier geldt nu als "duur"
+als de prijs binnen de **top 20% van de dagelijkse prijsrange** valt
+(versmald naar top 8% bij weinig zon verwacht) — past zich dus aan aan
+hoe groot het prijsverschil die dag daadwerkelijk is, in plaats van altijd
+precies 4 kwartieren te pakken ongeacht of die eigenlijk wel duur zijn.
+
+De **hoeveelheid** die daadwerkelijk wordt ontladen blijft bepaald door
+het al bestaande dynamische-reserve-mechanisme (v0.25.0): "houd genoeg
+voor eigen verbruik tot er weer zon is, plus marge" — dat deed al precies
+wat gevraagd werd. `sensor.effective_expensive_quarters` toont nu hoeveel
+kwartieren vandaag de drempel halen (informatief).
+
+De config-optie `expensive_quarters_count` wordt niet meer gebruikt in de
+beslislogica (staat er nog voor eventuele backwards-compatibility, maar
+heeft geen effect meer).
+
+### 3. Winter-regel: geen manual-ontladen na grid-laden diezelfde dag
+
+Als de accu vandaag al geforceerd is bijgeladen vanaf het net (winter,
+weinig zon), wordt diezelfde dag niet meer geforceerd ontladen bij dure
+kwartieren — dat zou gewoon verlies opleveren, geen winst. De vlag reset
+automatisch bij een nieuwe dag. Getest: grid-laden 's ochtends blokkeert
+het dure-kwartier-ontladen die avond; de volgende dag werkt alles weer
+normaal.
+
+### 4. Negatieve-prijs-afhandeling
+
+Nieuw: bij een negatieve energieprijs (hoogste prioriteit, alleen
+`force_manual` gaat ervoor):
+- De accu laadt actief op het ingestelde vermogen (nieuwe optie
+  **"Laadvermogen bij negatieve prijs"**, standaard -2000W).
+- De zonnepanelen worden **geleidelijk** (30 seconden, 10 stappen) naar
+  0% afgeregeld via de nieuwe optie **"Zonnepaneel-vermogenslimiet
+  slider"** (bv. `number.solaredge_i1_active_power_limit`) — niet
+  terugleveren tegen een negatieve prijs.
+- Zodra de prijs weer positief wordt: panelen geleidelijk terug naar
+  100% (ook 30 seconden), en de accu hervat de normale, door de
+  integratie bepaalde modus.
+
+De ramp draait als achtergrondtaak (blokkeert de reguliere update-cyclus
+niet). Getest: correcte overgang tussen `negative_price` en normale
+logica in beide richtingen, inclusief het starten van de ramp-taken.
+
+### Dashboard
+
+Bijgewerkt met de zonnepaneel-vermogenslimiet-sensor en een aangepast
+label voor het (nu informatieve) aantal dure kwartieren.

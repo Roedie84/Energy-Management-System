@@ -23,7 +23,9 @@
           "invert_battery_power_sign": "Invert battery power sign (on = negative means discharging)",
           "solar_today_forecast_sensor_entity": "Solcast PV forecast sensor (today) - for hour-by-hour production estimate",
           "solar_remaining_today_sensor_entity": "Solcast remaining forecast today sensor (declining, for real-time correction)",
-          "solar_extended_forecast_sensor_entities": "Solcast day+3, day+4, etc. sensors (in order, for multi-day low-solar detection)"
+          "solar_extended_forecast_sensor_entities": "Solcast day+3, day+4, etc. sensors (in order, for multi-day low-solar detection)",
+          "negative_price_charge_power": "Charge power at negative price (W, negative = charging)",
+          "solar_power_limit_entity": "Solar panel power limit slider (e.g. number.solaredge_i1_active_power_limit)"
         }
       }
     },
@@ -54,7 +56,9 @@
           "invert_battery_power_sign": "Invert battery power sign (on = negative means discharging)",
           "solar_today_forecast_sensor_entity": "Solcast PV forecast sensor (today) - for hour-by-hour production estimate",
           "solar_remaining_today_sensor_entity": "Solcast remaining forecast today sensor (declining, for real-time correction)",
-          "solar_extended_forecast_sensor_entities": "Solcast day+3, day+4, etc. sensors (in order, for multi-day low-solar detection)"
+          "solar_extended_forecast_sensor_entities": "Solcast day+3, day+4, etc. sensors (in order, for multi-day low-solar detection)",
+          "negative_price_charge_power": "Charge power at negative price (W, negative = charging)",
+          "solar_power_limit_entity": "Solar panel power limit slider (e.g. number.solaredge_i1_active_power_limit)"
         }
       }
     }
