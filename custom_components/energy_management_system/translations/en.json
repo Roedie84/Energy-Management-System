@@ -21,7 +21,8 @@
           "battery_power_sensor_entity": "Battery power sensor (to correct household consumption: positive=discharging, negative=charging)",
           "pv_power_sensor_entity": "Live PV production power sensor (for even more accurate consumption correction)",
           "invert_battery_power_sign": "Invert battery power sign (on = negative means discharging)",
-          "solar_today_forecast_sensor_entity": "Solcast PV forecast sensor (today) - for hour-by-hour production estimate"
+          "solar_today_forecast_sensor_entity": "Solcast PV forecast sensor (today) - for hour-by-hour production estimate",
+          "solar_remaining_today_sensor_entity": "Solcast remaining forecast today sensor (declining, for real-time correction)"
         }
       }
     },
@@ -50,7 +51,8 @@
           "battery_power_sensor_entity": "Battery power sensor (to correct household consumption: positive=discharging, negative=charging)",
           "pv_power_sensor_entity": "Live PV production power sensor (for even more accurate consumption correction)",
           "invert_battery_power_sign": "Invert battery power sign (on = negative means discharging)",
-          "solar_today_forecast_sensor_entity": "Solcast PV forecast sensor (today) - for hour-by-hour production estimate"
+          "solar_today_forecast_sensor_entity": "Solcast PV forecast sensor (today) - for hour-by-hour production estimate",
+          "solar_remaining_today_sensor_entity": "Solcast remaining forecast today sensor (declining, for real-time correction)"
         }
       }
     }

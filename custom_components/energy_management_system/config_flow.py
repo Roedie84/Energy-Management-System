@@ -25,6 +25,7 @@ from .const import (
     CONF_SOC_SENSOR,
     CONF_SOLAR_ACTUAL_SENSOR,
     CONF_SOLAR_FORECAST_SENSOR,
+    CONF_SOLAR_REMAINING_TODAY_SENSOR,
     CONF_SOLAR_TODAY_FORECAST_SENSOR,
     DEFAULT_EXPENSIVE_QUARTERS_COUNT,
     DEFAULT_LOW_SOLAR_THRESHOLD_KWH,
@@ -112,6 +113,10 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
             vol.Optional(
                 CONF_SOLAR_TODAY_FORECAST_SENSOR,
                 default=defaults.get(CONF_SOLAR_TODAY_FORECAST_SENSOR),
+            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            vol.Optional(
+                CONF_SOLAR_REMAINING_TODAY_SENSOR,
+                default=defaults.get(CONF_SOLAR_REMAINING_TODAY_SENSOR),
             ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
             vol.Optional(
                 CONF_SOLAR_ACTUAL_SENSOR,

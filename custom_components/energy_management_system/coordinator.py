@@ -66,6 +66,7 @@ from .const import (
     CONF_SOC_SENSOR,
     CONF_SOLAR_FORECAST_SENSOR,
     CONF_SOLAR_TODAY_FORECAST_SENSOR,
+    CONF_SOLAR_REMAINING_TODAY_SENSOR,
     DEFAULT_EXPENSIVE_QUARTERS_COUNT,
     DEFAULT_LOW_SOLAR_THRESHOLD_KWH,
     DEFAULT_MANUAL_CHARGE_POWER,
@@ -792,16 +793,64 @@ class EnergyManagementSystemCoordinator:
 
         return result
 
+    def _get_pv_remaining_correction_ratio(
+        self, now: datetime, pv_entries: list[tuple[datetime, datetime, float]]
+    ) -> float | None:
+        """Compare the live "remaining PV today" Solcast sensor against the
+        sum of our own detailedForecast entries for the rest of today, to
+        derive a real-time correction ratio.
+
+        This sensor is continuously updated by Solcast based on actually
+        observed conditions (it counts down through the day), so it
+        reflects "reality" more directly than the static detailedForecast
+        snapshot. Using it as a scaling ratio lets today's estimate
+        benefit from that live correction, while still being able to
+        properly slice partial-day periods (which the raw sensor value
+        alone can't do, since it only covers "all of the rest of today",
+        not an arbitrary sub-window).
+        """
+        remaining_entity = self.config.get(CONF_SOLAR_REMAINING_TODAY_SENSOR)
+        if not remaining_entity:
+            return None
+
+        remaining_value = self._read_sensor_float(remaining_entity)
+        if remaining_value is None:
+            return None
+
+        today = now.date()
+        today_end = datetime.combine(
+            today, datetime.min.time(), tzinfo=now.tzinfo
+        ) + timedelta(days=1)
+
+        sum_today_remaining = 0.0
+        for entry_start, entry_end, entry_kwh in pv_entries:
+            if entry_start.date() != today or entry_end <= now:
+                continue
+            overlap_start = max(entry_start, now)
+            overlap_end = min(entry_end, today_end)
+            if overlap_end <= overlap_start:
+                continue
+            entry_duration = (entry_end - entry_start).total_seconds()
+            if entry_duration <= 0:
+                continue
+            fraction = (overlap_end - overlap_start).total_seconds() / entry_duration
+            sum_today_remaining += entry_kwh * fraction
+
+        if sum_today_remaining <= 0.01:
+            return None
+
+        return remaining_value / sum_today_remaining
+
     def _estimate_pv_kwh_for_period(self, start: datetime, end: datetime) -> float:
         """Estimate expected PV production (kWh) over a period, from the
         Solcast hourly/half-hourly forecast.
 
-        Each interval is corrected with the most precise correction
-        available: a learned per-hour-of-day accuracy ratio (see
-        `learned_pv_hourly_ratio`) when there's enough history for that
-        specific hour, falling back to the flatter daily forecast bias
-        (see SolarForecastAccuracyTracker) otherwise, or no correction at
-        all if neither is available yet.
+        Today's portion is preferentially scaled using the live "remaining
+        PV today" sensor (see `_get_pv_remaining_correction_ratio`), if
+        configured - this benefits from Solcast's own real-time
+        adjustment based on actual observed conditions. Any portion beyond
+        today (e.g. tomorrow) falls back to the learned per-hour accuracy
+        ratio, then the flatter daily forecast bias, then no correction.
 
         Returns 0.0 if no PV forecast sensor is configured or no data
         covers the period (i.e. "assume no solar" - the previous, more
@@ -817,6 +866,10 @@ class EnergyManagementSystemCoordinator:
         daily_bias_percent = (
             self.solar_tracker.learned_bias_percent if self.solar_tracker else None
         )
+        remaining_correction_ratio = self._get_pv_remaining_correction_ratio(
+            start, pv_entries
+        )
+        today = start.date()
 
         total_kwh = 0.0
         for entry_start, entry_end, entry_kwh in pv_entries:
@@ -832,11 +885,14 @@ class EnergyManagementSystemCoordinator:
             ).total_seconds() / entry_duration
             segment_kwh = entry_kwh * overlap_fraction
 
-            hourly_ratio = self.learned_pv_hourly_ratio(entry_start.hour)
-            if hourly_ratio is not None:
-                segment_kwh *= hourly_ratio
-            elif daily_bias_percent is not None:
-                segment_kwh *= 1 + daily_bias_percent / 100
+            if entry_start.date() == today and remaining_correction_ratio is not None:
+                segment_kwh *= remaining_correction_ratio
+            else:
+                hourly_ratio = self.learned_pv_hourly_ratio(entry_start.hour)
+                if hourly_ratio is not None:
+                    segment_kwh *= hourly_ratio
+                elif daily_bias_percent is not None:
+                    segment_kwh *= 1 + daily_bias_percent / 100
 
             total_kwh += segment_kwh
 

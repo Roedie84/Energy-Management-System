@@ -741,3 +741,29 @@ bedoeld is.
 Zo kun je zelf verifiëren waar het eindtotaal vandaan komt, in plaats van
 alleen het resultaat te zien — vooral handig sinds v0.23.0, waar de
 reservering voor dure kwartieren is toegevoegd aan die berekening.
+
+## v0.24.0 — realtime correctie via de aflopende "resterend vandaag"-sensor
+
+Nieuw optioneel veld: **Solcast resterende voorspelling vandaag sensor**
+(bv. `sensor.solcast_pv_forecast_resterende_voorspelling_vandaag`) — een
+waarde die door Solcast zelf doorlopend wordt bijgesteld op basis van de
+daadwerkelijk waargenomen omstandigheden vandaag, en afloopt richting het
+einde van de dag.
+
+**Hoe dit wordt gebruikt:** in plaats van deze waarde blind te gebruiken
+(wat problemen zou geven bij deelperiodes, want de sensor dekt altijd
+"de rest van vandaag" en niet een specifiek tijdvak), berekent de
+integratie een **correctie-ratio**: de sensorwaarde gedeeld door onze
+eigen som van de resterende dag uit de detailedForecast-data. Die ratio
+wordt vervolgens toegepast op elk kwartier/uur-segment van vandaag in de
+PV-schatting — ook bij een deelperiode die niet tot middernacht loopt.
+
+Voor het gedeelte van de schatting dat over vandaag heen valt (bv.
+morgen), blijft de bestaande per-uur-geleerde of dagelijkse bias-correctie
+gewoon van kracht.
+
+Getest tegen drie scenario's: zonder de sensor (ongewijzigd gedrag), met
+een lagere resterende-waarde (bv. door bewolking) toegepast op de volledige
+resterende periode, én specifiek op een **deelperiode** (de helft van de
+resterende uren) — in alle gevallen kwam de schaling exact overeen met de
+verwachting.
