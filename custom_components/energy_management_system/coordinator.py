@@ -65,6 +65,7 @@ from .const import (
     CONF_PV_POWER_SENSOR,
     CONF_SOC_SENSOR,
     CONF_SOLAR_FORECAST_SENSOR,
+    CONF_SOLAR_EXTENDED_FORECAST_SENSORS,
     CONF_SOLAR_TODAY_FORECAST_SENSOR,
     CONF_SOLAR_REMAINING_TODAY_SENSOR,
     DEFAULT_EXPENSIVE_QUARTERS_COUNT,
@@ -74,6 +75,9 @@ from .const import (
     DEFAULT_MIN_SOC_PERCENT,
     DEFAULT_PRICE_ATTRIBUTE,
     ENERGY_BRIDGE_SAFETY_MARGIN,
+    DYNAMIC_DISCHARGE_RESERVE_MARGIN,
+    EXTENDED_LOW_SOLAR_MARGIN_BONUS_PER_DAY,
+    MIN_ACTIVE_SOLAR_PRODUCTION_W,
     LEARNING_HISTORY_DAYS,
     LOW_SOLAR_RELATIVE_FRACTION,
     MIN_SOLAR_HISTORY_FOR_DYNAMIC_THRESHOLD,
@@ -1024,14 +1028,133 @@ class EnergyManagementSystemCoordinator:
             return None
         return sum(values) / len(values)
 
-    def _get_soc_scaled_discharge_power(self, base_power: float) -> float | None:
-        """Scale down the forced-discharge power as SoC gets low, to avoid
-        over-draining the battery just to sell into an expensive quarter.
+    def _get_dynamic_discharge_reserve_kwh(
+        self, now: datetime, cheap_block_start: datetime | None
+    ) -> float | None:
+        """How much energy (kWh) actually needs to stay in the battery
+        right now: the estimated baseline household consumption until the
+        cheap block, minus expected PV production over that period, plus
+        a safety margin - instead of a flat SoC percentage.
 
-        Returns the (possibly reduced) power, or None if SoC is at/below
-        the configured minimum - in which case forced discharge should be
-        skipped entirely (protect the battery, fall back to smart mode).
+        This deliberately does NOT also add a reservation for other
+        upcoming expensive quarters today (unlike the energy bridge
+        check's needed_kwh) - that reservation governs whether to
+        postpone *charging*, whereas this governs how far we can safely
+        *discharge* right now without dipping below what's needed for the
+        rest of the bridge. Each expensive quarter checks this
+        independently as it arrives.
+
+        Returns None if there isn't enough information to compute this
+        (no cheap block found, or no consumption estimate available) -
+        callers should fall back to the flat SoC percentage in that case.
         """
+        if cheap_block_start is None or now >= cheap_block_start:
+            return None
+
+        hours_until_cheap = max((cheap_block_start - now).total_seconds() / 3600, 0)
+        if hours_until_cheap <= 0:
+            return None
+
+        needed_kwh = self._estimate_consumption_kwh_for_period(now, cheap_block_start)
+        if needed_kwh is None:
+            learned_kw = self.learned_night_consumption_kw
+            if learned_kw is not None:
+                power_kw = learned_kw
+            else:
+                power_w = self._read_corrected_consumption_power()
+                power_kw = power_w / 1000 if power_w is not None else None
+            if power_kw is None:
+                return None
+            needed_kwh = power_kw * hours_until_cheap
+
+        expected_pv_kwh = self._estimate_pv_kwh_for_period(now, cheap_block_start)
+        needed_kwh = max(0.0, needed_kwh - expected_pv_kwh)
+
+        # Scale up the margin if an extended low-solar stretch is ahead -
+        # less confidence the battery gets refilled quickly, so keep more
+        # in reserve. consecutive_low_solar_days=0 -> base margin only;
+        # each additional day adds a bonus. No separate artificial cap -
+        # this is naturally bounded by how many extended-day forecast
+        # sensors are actually configured (real data availability).
+        consecutive_low_solar_days = self._count_consecutive_upcoming_low_solar_days()
+        margin_bonus_percent = (
+            consecutive_low_solar_days * EXTENDED_LOW_SOLAR_MARGIN_BONUS_PER_DAY
+        )
+        margin = DYNAMIC_DISCHARGE_RESERVE_MARGIN + margin_bonus_percent / 100
+
+        if margin_bonus_percent > 0:
+            _LOGGER.debug(
+                "Extended low-solar stretch detected (%d consecutive "
+                "day(s)): increasing discharge reserve margin from %.0f%% "
+                "to %.0f%%",
+                consecutive_low_solar_days,
+                (DYNAMIC_DISCHARGE_RESERVE_MARGIN - 1) * 100,
+                (margin - 1) * 100,
+            )
+
+        return needed_kwh * margin
+
+    def _get_soc_scaled_discharge_power(
+        self,
+        base_power: float,
+        now: datetime | None = None,
+        cheap_block_start: datetime | None = None,
+    ) -> float | None:
+        """Scale down the forced-discharge power to avoid over-draining
+        the battery just to sell into an expensive quarter.
+
+        Prefers a dynamic, energy-based reserve ("keep what I actually
+        need for tonight + margin", see `_get_dynamic_discharge_reserve_kwh`)
+        when an available-energy sensor and cheap-block context are
+        present. Falls back to a flat SoC-percentage taper otherwise.
+
+        Returns the (possibly reduced) power, or None if there isn't
+        enough headroom to discharge at all - in which case forced
+        discharge should be skipped entirely (protect the battery, fall
+        back to smart mode).
+        """
+        available_entity = self.config.get(CONF_AVAILABLE_ENERGY_SENSOR)
+        if available_entity and now is not None:
+            available_kwh = self._read_sensor_float(available_entity)
+            reserve_kwh = self._get_dynamic_discharge_reserve_kwh(
+                now, cheap_block_start
+            )
+            if available_kwh is not None and reserve_kwh is not None:
+                headroom_kwh = max(0.0, available_kwh - reserve_kwh)
+                interval_hours = UPDATE_INTERVAL_MINUTES / 60
+                max_power_w = (headroom_kwh / interval_hours) * 1000 if interval_hours > 0 else 0
+
+                soc_entity = self.config.get(CONF_SOC_SENSOR)
+                if soc_entity:
+                    self.last_soc_percent = self._read_sensor_float(soc_entity)
+
+                if max_power_w <= 0:
+                    self.last_discharge_power_applied = None
+                    _LOGGER.debug(
+                        "Dynamic discharge reserve: available=%.2f kWh, "
+                        "needed reserve=%.2f kWh - no headroom, skipping "
+                        "forced discharge this tick",
+                        available_kwh,
+                        reserve_kwh,
+                    )
+                    return None
+
+                scaled = round(min(base_power, max_power_w), 1)
+                self.last_discharge_power_applied = scaled
+                if scaled < base_power:
+                    _LOGGER.debug(
+                        "Dynamic discharge reserve: available=%.2f kWh, "
+                        "needed reserve=%.2f kWh - scaling discharge from "
+                        "%.0fW to %.0fW to protect the reserve",
+                        available_kwh,
+                        reserve_kwh,
+                        base_power,
+                        scaled,
+                    )
+                return scaled
+
+        # Fallback: flat SoC-percentage taper (no available-energy sensor,
+        # or the dynamic reserve couldn't be computed this tick).
         soc_entity = self.config.get(CONF_SOC_SENSOR)
         if not soc_entity:
             self.last_soc_percent = None
@@ -1058,8 +1181,8 @@ class EnergyManagementSystemCoordinator:
         scaled = round(base_power * fraction, 1)
         self.last_discharge_power_applied = scaled
         _LOGGER.debug(
-            "SoC protection: %.1f%% is between min (%.1f%%) and full power "
-            "(%.1f%%) - scaling discharge from %.0fW to %.0fW",
+            "SoC protection (fallback): %.1f%% is between min (%.1f%%) and "
+            "full power (%.1f%%) - scaling discharge from %.0fW to %.0fW",
             soc,
             min_soc,
             taper_start,
@@ -1068,20 +1191,13 @@ class EnergyManagementSystemCoordinator:
         )
         return scaled
 
-    def _is_low_solar_expected(self) -> bool:
-        """Is little solar yield expected (tomorrow / today), based on the
-        Solcast forecast sensor - bias-corrected and compared against a
-        learned dynamic threshold when enough history exists, falling
-        back to the fixed configured threshold otherwise.
-
-        Returns False if no forecast sensor is configured or its state
-        can't be read (i.e. "assume normal/sufficient solar" by default).
+    def _is_forecast_value_low(self, forecast_kwh_raw: float | None) -> bool:
+        """Is a given raw daily forecast value (kWh) "low", bias-corrected
+        and compared against a learned dynamic threshold when enough
+        history exists, falling back to the fixed configured threshold
+        otherwise. Shared logic used both for tomorrow's forecast and for
+        the extended (day+3, day+4, ...) forecast sensors.
         """
-        forecast_entity = self.config.get(CONF_SOLAR_FORECAST_SENSOR)
-        if not forecast_entity:
-            return False
-
-        forecast_kwh_raw = self._read_sensor_float(forecast_entity)
         if forecast_kwh_raw is None:
             return False
 
@@ -1109,6 +1225,41 @@ class EnergyManagementSystemCoordinator:
             )
 
         return corrected_forecast_kwh < threshold_kwh
+
+    def _is_low_solar_expected(self) -> bool:
+        """Is little solar yield expected tomorrow, based on the Solcast
+        forecast sensor. Returns False if no forecast sensor is configured
+        or its state can't be read (i.e. "assume normal/sufficient solar"
+        by default).
+        """
+        forecast_entity = self.config.get(CONF_SOLAR_FORECAST_SENSOR)
+        if not forecast_entity:
+            return False
+        return self._is_forecast_value_low(self._read_sensor_float(forecast_entity))
+
+    def _count_consecutive_upcoming_low_solar_days(self) -> int:
+        """How many consecutive days, starting from tomorrow, are expected
+        to have low solar - using tomorrow's forecast sensor plus any
+        configured extended (day+3, day+4, ...) forecast sensors, in
+        order. Stops counting at the first day that's NOT low (i.e. "how
+        many days until solar recovers").
+
+        Used to scale up the dynamic discharge reserve margin: a longer
+        cloudy stretch ahead means less confidence the battery will be
+        quickly refilled by solar, so more caution is warranted about
+        deep discharging tonight.
+        """
+        if not self._is_low_solar_expected():
+            return 0
+
+        count = 1
+        extended_entities = self.config.get(CONF_SOLAR_EXTENDED_FORECAST_SENSORS) or []
+        for entity_id in extended_entities:
+            if not self._is_forecast_value_low(self._read_sensor_float(entity_id)):
+                break
+            count += 1
+
+        return count
 
     def _effective_expensive_quarters_count(
         self, now: datetime, cheap_block_start: datetime | None
@@ -1804,6 +1955,27 @@ class EnergyManagementSystemCoordinator:
         should_postpone_charging = self._should_postpone_charging(
             entries, now, cheap_block_start, effective_count
         )
+
+        # Never postpone charging while the sun is actually producing right
+        # now - that solar is free and perishable (this exact moment's
+        # output is lost/exported at a mediocre value if not captured now),
+        # unlike grid charging which can genuinely wait for a cheaper
+        # moment. Let "smart" (the Zendure's own logic) capture it instead.
+        pv_entity = self.config.get(CONF_PV_POWER_SENSOR)
+        if pv_entity and should_postpone_charging:
+            current_pv_power_w = self._read_sensor_float(pv_entity)
+            if (
+                current_pv_power_w is not None
+                and current_pv_power_w > MIN_ACTIVE_SOLAR_PRODUCTION_W
+            ):
+                _LOGGER.debug(
+                    "Overriding smart_discharging: %.0fW of solar is "
+                    "currently being produced - letting smart mode capture "
+                    "it instead of postponing charging",
+                    current_pv_power_w,
+                )
+                should_postpone_charging = False
+
         self._update_night_consumption_tracking(now, should_postpone_charging)
         self._update_hourly_consumption_profile(now)
         self._update_pv_hourly_bias_tracking(now)
@@ -1854,7 +2026,9 @@ class EnergyManagementSystemCoordinator:
             discharge_power = self.config.get(
                 CONF_MANUAL_DISCHARGE_POWER, DEFAULT_MANUAL_DISCHARGE_POWER
             )
-            scaled_power = self._get_soc_scaled_discharge_power(discharge_power)
+            scaled_power = self._get_soc_scaled_discharge_power(
+                discharge_power, now, cheap_block_start
+            )
             if scaled_power is None:
                 # SoC too low to justify forced export - protect the
                 # battery and let the Zendure's own smart mode take over.

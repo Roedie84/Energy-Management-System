@@ -767,3 +767,80 @@ een lagere resterende-waarde (bv. door bewolking) toegepast op de volledige
 resterende periode, én specifiek op een **deelperiode** (de helft van de
 resterende uren) — in alle gevallen kwam de schaling exact overeen met de
 verwachting.
+
+## v0.25.0 — dynamische ontlaad-reserve + geen laden-uitstel bij actieve zon
+
+**1. Dynamische energie-gebaseerde ontlaad-reserve (i.p.v. vaste SoC%)**
+
+De SoC-bescherming tijdens dure kwartieren gebruikt nu, als je een
+beschikbare-energie-sensor hebt ingesteld, een **dynamisch berekende
+reserve** in plaats van een vast percentage: "houd minimaal het
+geschatte resterende basisverbruik tot het goedkoopste blok aan, plus
+10% marge" — precies zoals besproken. Is er meer beschikbaar dan die
+reserve, dan wordt er vol vermogen ontladen; is er net iets meer dan de
+reserve, dan wordt het vermogen evenredig afgeroomd; is er precies de
+reserve (of minder), dan wordt er niet geforceerd ontladen.
+
+Zonder een beschikbare-energie-sensor blijft de oude, vaste SoC%-aanpak
+(met `min_soc_percent`) gewoon als terugval werken.
+
+Getest: bij een berekende reserve van 3,08 kWh (2,8 kWh basisverbruik ×
+1,10 marge) werd het vermogen exact evenredig afgeroomd naarmate de
+beschikbare energie dichter bij die reserve kwam (1600W → 800W bij
+precies de helft van de headroom → 0W/geen ontlading bij exact de
+reserve).
+
+**2. Geen laden-uitstel meer als er nu actief zon wordt geproduceerd**
+
+`smart_discharging` (laden uitstellen tot het goedkoopste blok) wordt nu
+nooit meer geforceerd zolang er op dit moment daadwerkelijk zon wordt
+geproduceerd (drempel: 50W, verwaarloosbare ruis daaronder). Zonne-energie
+van dit moment is namelijk vergankelijk — niet gebruikt betekent
+kwijtgeraakt (geëxporteerd tegen een matige prijs), in tegenstelling tot
+duur netladen, dat je wél zinvol kunt uitstellen. In plaats daarvan blijft
+de integratie op `smart` zodat de Zendure's eigen logica de beschikbare
+zon kan opvangen.
+
+Getest: bij 800W actieve zon bleef de modus `smart` ondanks dat er
+normaliter (zonder zon) `smart_discharging` gekozen zou zijn; zonder
+actieve zon (0W) werd op exact hetzelfde moment wél `smart_discharging`
+gekozen.
+
+## v0.26.0 — meerdaagse zon-vooruitzicht (dag+3, dag+4, ...)
+
+Nieuw optioneel veld: **Solcast dag+3, dag+4, etc. sensoren** — een
+meervoudige entity-selector waar je zoveel toekomstige-dag-sensoren kunt
+toevoegen als je hebt (bv. `sensor.solcast_pv_forecast_voorspelling_dag_3`,
+`_dag_4`, ...), in volgorde.
+
+**Wat dit oplost:** voorheen keek de "weinig zon"-logica alleen naar
+morgen. Als er een langere bewolkte periode aankomt (meerdere dagen
+achter elkaar weinig zon), moet de integratie voorzichtiger zijn met diep
+ontladen vanavond — de accu wordt dan namelijk niet snel weer bijgevuld.
+
+De integratie telt nu het aantal **opeenvolgende** dagen (vanaf morgen)
+met weinig verwachte zon, en verhoogt daarmee de dynamische
+ontlaad-reserve-marge (v0.25.0): elke extra opeenvolgende lage-zon-dag
+voegt 5 procentpunt toe aan de marge (van standaard 10%), tot een maximum
+van +20 procentpunt.
+
+Getest: 1 lage-zon-dag → 10% marge (ongewijzigd), 3 opeenvolgende
+lage-zon-dagen → marge stijgt naar 25% (10% + 3×5%), en zodra een dag in
+de reeks weer voldoende zon toont, stopt de telling daar — precies zoals
+bedoeld.
+
+Zonder deze sensoren blijft het gedrag ongewijzigd (alleen morgen wordt
+meegewogen, zoals voorheen).
+
+## v0.26.1 — geen kunstmatig plafond meer op de meerdaagse marge
+
+Het vaste maximum van +20 procentpunt (v0.26.0) is verwijderd. De
+marge-verhoging schaalt nu puur door met `5 procentpunt × aantal
+opeenvolgende lage-zon-dagen`, zonder aparte cap — het "plafond" wordt nu
+vanzelf bepaald door hoeveel dag-sensoren je daadwerkelijk hebt
+geconfigureerd (bv. met dag 3 t/m 7 kun je tot 6 opeenvolgende dagen
+tellen, wat een marge van 10% + 6×5% = 40% oplevert), in plaats van een
+los getal dat ik zelf had gekozen.
+
+Getest: 6 opeenvolgende lage-zon-dagen (morgen t/m dag 7) resulteerden in
+exact 40% marge op het basisverbruik, zonder af te toppen.

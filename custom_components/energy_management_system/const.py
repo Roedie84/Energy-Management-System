@@ -14,6 +14,7 @@ CONF_MANUAL_CHARGE_POWER = "manual_charge_power"
 CONF_SOLAR_FORECAST_SENSOR = "solar_forecast_sensor_entity"
 CONF_SOLAR_TODAY_FORECAST_SENSOR = "solar_today_forecast_sensor_entity"
 CONF_SOLAR_REMAINING_TODAY_SENSOR = "solar_remaining_today_sensor_entity"
+CONF_SOLAR_EXTENDED_FORECAST_SENSORS = "solar_extended_forecast_sensor_entities"
 CONF_SOLAR_ACTUAL_SENSOR = "solar_actual_sensor_entity"
 CONF_CONSUMPTION_POWER_SENSOR = "consumption_power_sensor_entity"
 CONF_BATTERY_POWER_SENSOR = "battery_power_sensor_entity"
@@ -38,6 +39,25 @@ SOC_TAPER_BAND_PERCENT = 15.0
 # battery energy is enough to bridge until the cheap block starts (e.g.
 # 1.15 = require 15% more than the bare estimated need).
 ENERGY_BRIDGE_SAFETY_MARGIN = 1.15
+
+# Margin applied specifically to the dynamic (energy-based) discharge
+# reserve during expensive quarters - "keep at least what I actually need
+# for tonight, plus this buffer", as opposed to a flat SoC percentage.
+DYNAMIC_DISCHARGE_RESERVE_MARGIN = 1.10
+
+# Below this live PV power (W), solar production is considered
+# negligible/noise - above it, we consider the sun "actively producing"
+# for the purpose of not postponing charging (see coordinator.py).
+MIN_ACTIVE_SOLAR_PRODUCTION_W = 50
+
+# For each additional consecutive day (beyond tomorrow) that's expected
+# to have low solar, add this many extra percentage points to the
+# dynamic discharge reserve margin - a longer cloudy stretch means less
+# confidence the battery will be quickly refilled, so be more cautious
+# about deep discharging. Naturally bounded by how many extended-day
+# forecast sensors are configured (real data availability), not an
+# arbitrary separate cap.
+EXTENDED_LOW_SOLAR_MARGIN_BONUS_PER_DAY = 5.0
 
 # Once at least this many days of forecast history are known, the "low
 # solar" threshold is derived from the installation's own learned typical

@@ -24,6 +24,7 @@ from .const import (
     CONF_PV_POWER_SENSOR,
     CONF_SOC_SENSOR,
     CONF_SOLAR_ACTUAL_SENSOR,
+    CONF_SOLAR_EXTENDED_FORECAST_SENSORS,
     CONF_SOLAR_FORECAST_SENSOR,
     CONF_SOLAR_REMAINING_TODAY_SENSOR,
     CONF_SOLAR_TODAY_FORECAST_SENSOR,
@@ -118,6 +119,12 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
                 CONF_SOLAR_REMAINING_TODAY_SENSOR,
                 default=defaults.get(CONF_SOLAR_REMAINING_TODAY_SENSOR),
             ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            vol.Optional(
+                CONF_SOLAR_EXTENDED_FORECAST_SENSORS,
+                default=defaults.get(CONF_SOLAR_EXTENDED_FORECAST_SENSORS, []),
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="sensor", multiple=True)
+            ),
             vol.Optional(
                 CONF_SOLAR_ACTUAL_SENSOR,
                 default=defaults.get(CONF_SOLAR_ACTUAL_SENSOR),

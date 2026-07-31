@@ -22,7 +22,8 @@
           "pv_power_sensor_entity": "Live PV-productievermogen sensor (voor nog nauwkeurigere verbruikscorrectie)",
           "invert_battery_power_sign": "Teken omdraaien accu-vermogen (aan = negatief betekent ontladen)",
           "solar_today_forecast_sensor_entity": "Solcast PV-voorspelling sensor (vandaag) \u2014 voor uur-voor-uur opbrengst-schatting",
-          "solar_remaining_today_sensor_entity": "Solcast resterende voorspelling vandaag sensor (aflopend, voor realtime correctie)"
+          "solar_remaining_today_sensor_entity": "Solcast resterende voorspelling vandaag sensor (aflopend, voor realtime correctie)",
+          "solar_extended_forecast_sensor_entities": "Solcast dag+3, dag+4, etc. sensoren (in volgorde, voor meerdaagse lage-zon-detectie)"
         }
       }
     },
@@ -52,7 +53,8 @@
           "pv_power_sensor_entity": "Live PV-productievermogen sensor (voor nog nauwkeurigere verbruikscorrectie)",
           "invert_battery_power_sign": "Teken omdraaien accu-vermogen (aan = negatief betekent ontladen)",
           "solar_today_forecast_sensor_entity": "Solcast PV-voorspelling sensor (vandaag) \u2014 voor uur-voor-uur opbrengst-schatting",
-          "solar_remaining_today_sensor_entity": "Solcast resterende voorspelling vandaag sensor (aflopend, voor realtime correctie)"
+          "solar_remaining_today_sensor_entity": "Solcast resterende voorspelling vandaag sensor (aflopend, voor realtime correctie)",
+          "solar_extended_forecast_sensor_entities": "Solcast dag+3, dag+4, etc. sensoren (in volgorde, voor meerdaagse lage-zon-detectie)"
         }
       }
     }
