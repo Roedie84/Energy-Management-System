@@ -87,6 +87,8 @@ from .const import (
     DEFAULT_NEGATIVE_PRICE_CHARGE_POWER,
     SOLAR_RAMP_DURATION_SECONDS,
     SOLAR_RAMP_STEPS,
+    GRID_IMPORT_SHORTFALL_THRESHOLD_W,
+    SHORTFALL_MARGIN_BONUS_PER_RECENT_DAY,
     MIN_SOLAR_HISTORY_FOR_DYNAMIC_THRESHOLD,
     OPTION_MANUAL,
     OPTION_SMART,
@@ -224,6 +226,15 @@ class EnergyManagementSystemCoordinator:
         # -- Negative price handling --
         self._is_negative_price_active: bool = False
         self._solar_ramp_task = None
+
+        # -- Reserve shortfall detection & learning --
+        # If net grid import happens during a period we believe should be
+        # self-sufficient (smart_discharging / expensive quarter), the
+        # reserve estimate for that day was too optimistic. Track this per
+        # day, and learn a margin bonus if it keeps happening.
+        self.reserve_shortfall_history: list[bool] = []
+        self._shortfall_detected_today: bool = False
+        self._shortfall_check_date: date | None = None
         self._last_value_calc_time: datetime | None = None
 
         self._lock = asyncio.Lock()
@@ -1144,22 +1155,79 @@ class EnergyManagementSystemCoordinator:
         # this is naturally bounded by how many extended-day forecast
         # sensors are actually configured (real data availability).
         consecutive_low_solar_days = self._count_consecutive_upcoming_low_solar_days()
-        margin_bonus_percent = (
+        low_solar_bonus_percent = (
             consecutive_low_solar_days * EXTENDED_LOW_SOLAR_MARGIN_BONUS_PER_DAY
         )
+
+        # Also learn from recent reality: if unexpected grid import kept
+        # happening during periods we believed were self-sufficient, the
+        # reserve has been running too tight - add a bonus proportional to
+        # how often that's happened in the last LEARNING_HISTORY_DAYS.
+        recent_shortfalls = sum(1 for v in self.reserve_shortfall_history if v)
+        shortfall_bonus_percent = (
+            recent_shortfalls * SHORTFALL_MARGIN_BONUS_PER_RECENT_DAY
+        )
+
+        margin_bonus_percent = low_solar_bonus_percent + shortfall_bonus_percent
         margin = DYNAMIC_DISCHARGE_RESERVE_MARGIN + margin_bonus_percent / 100
 
         if margin_bonus_percent > 0:
             _LOGGER.debug(
-                "Extended low-solar stretch detected (%d consecutive "
-                "day(s)): increasing discharge reserve margin from %.0f%% "
-                "to %.0f%%",
-                consecutive_low_solar_days,
+                "Discharge reserve margin: base %.0f%% + %.0f%% (low-solar, "
+                "%d day(s)) + %.0f%% (%d recent shortfall day(s)) = %.0f%%",
                 (DYNAMIC_DISCHARGE_RESERVE_MARGIN - 1) * 100,
+                low_solar_bonus_percent,
+                consecutive_low_solar_days,
+                shortfall_bonus_percent,
+                recent_shortfalls,
                 (margin - 1) * 100,
             )
 
         return needed_kwh * margin
+
+    def _update_shortfall_detection(self, now: datetime, reason: str) -> None:
+        """Detect unexpected net grid import during a period this
+        integration believes should be self-sufficient (smart_discharging
+        or an expensive-quarter discharge), so the learned reserve margin
+        (see `_get_dynamic_discharge_reserve_kwh`) can self-correct if the
+        estimate keeps running too tight.
+        """
+        if self._shortfall_check_date != now.date():
+            if self._shortfall_check_date is not None:
+                self.reserve_shortfall_history.append(self._shortfall_detected_today)
+                self.reserve_shortfall_history = self.reserve_shortfall_history[
+                    -LEARNING_HISTORY_DAYS:
+                ]
+            self._shortfall_detected_today = False
+            self._shortfall_check_date = now.date()
+
+        if self._shortfall_detected_today:
+            return
+
+        self_sufficient_reasons = (
+            "smart_discharging",
+            "expensive_quarter",
+            "expensive_quarter_soc_protected",
+        )
+        if reason not in self_sufficient_reasons:
+            return
+
+        grid_entity = self.config.get(CONF_CONSUMPTION_POWER_SENSOR)
+        grid_power_w = self._read_sensor_float(grid_entity)
+        if (
+            grid_power_w is not None
+            and grid_power_w > GRID_IMPORT_SHORTFALL_THRESHOLD_W
+        ):
+            self._shortfall_detected_today = True
+            _LOGGER.warning(
+                "Unexpected grid import detected (%.0fW) during a "
+                "supposedly self-sufficient period (%s) - the reserve "
+                "estimate for today may have been too optimistic. This "
+                "will increase the learned safety margin if it keeps "
+                "happening.",
+                grid_power_w,
+                reason,
+            )
 
     def _get_soc_scaled_discharge_power(
         self,
@@ -1940,6 +2008,15 @@ class EnergyManagementSystemCoordinator:
         else:
             parts.append(f"Onbekende reden: {reason}.")
 
+        recent_shortfalls = sum(1 for v in self.reserve_shortfall_history if v)
+        if recent_shortfalls > 0:
+            parts.append(
+                f"Let op: de afgelopen {LEARNING_HISTORY_DAYS} dagen kwam het "
+                f"{recent_shortfalls}x voor dat er onverwacht stroom van het net "
+                f"kwam terwijl de accu genoeg had moeten hebben - de "
+                f"veiligheidsmarge is daardoor automatisch verhoogd."
+            )
+
         if self.learning_only:
             parts.append(
                 "Let op: 'Learning only' staat aan - dit wordt alleen berekend "
@@ -2121,6 +2198,7 @@ class EnergyManagementSystemCoordinator:
             self._update_financial_tracking(
                 now, entries, self.last_reason, scaled_power, None
             )
+            self._update_shortfall_detection(now, self.last_reason)
             self.last_explanation = self._build_explanation()
             return
 
@@ -2135,6 +2213,7 @@ class EnergyManagementSystemCoordinator:
             self._update_financial_tracking(
                 now, entries, self.last_reason, None, charge_power
             )
+            self._update_shortfall_detection(now, self.last_reason)
             self.last_explanation = self._build_explanation()
             return
 
@@ -2142,12 +2221,14 @@ class EnergyManagementSystemCoordinator:
             await self._async_apply_operation(OPTION_SMART_DISCHARGING)
             self.last_reason = "discharging_window"
             self._update_financial_tracking(now, entries, self.last_reason, None, None)
+            self._update_shortfall_detection(now, self.last_reason)
             self.last_explanation = self._build_explanation()
             return
 
         await self._async_apply_operation(OPTION_SMART)
         self.last_reason = "default_smart"
         self._update_financial_tracking(now, entries, self.last_reason, None, None)
+        self._update_shortfall_detection(now, self.last_reason)
         self.last_explanation = self._build_explanation()
 
     async def _async_apply_operation(self, option: str) -> None:

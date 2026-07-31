@@ -80,6 +80,9 @@ cards:
         name: Netlaadkosten - deze week
       - entity: sensor.woonkamer_ems_charge_cost_monthly
         name: Netlaadkosten - deze maand
+      - type: divider
+      - entity: sensor.energy_management_system_reserve_shortfall_days
+        name: Onverwachte netimport-dagen (laatste 7)
 
   - type: entities
     title: Zelflerend

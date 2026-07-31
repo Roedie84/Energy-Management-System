@@ -98,6 +98,19 @@ DEFAULT_NEGATIVE_PRICE_CHARGE_POWER = -2000
 SOLAR_RAMP_DURATION_SECONDS = 30
 SOLAR_RAMP_STEPS = 10
 
+# Above this net grid import (W), during a period the integration
+# believes should be self-sufficient (smart_discharging / expensive
+# quarter), counts as an unexpected shortfall - the reserve estimate for
+# that day turned out too optimistic. Set above typical sensor noise.
+GRID_IMPORT_SHORTFALL_THRESHOLD_W = 100.0
+
+# For each of the last LEARNING_HISTORY_DAYS days that had a detected
+# shortfall, add this many extra percentage points to the dynamic
+# discharge reserve margin - self-correcting if the reserve estimate has
+# been running too tight. No separate cap (same philosophy as the
+# multi-day low-solar margin): naturally bounded by the rolling window.
+SHORTFALL_MARGIN_BONUS_PER_RECENT_DAY = 5.0
+
 # Zonneplan's raw "amount" values are scaled by this factor to get €/kWh
 # (e.g. 3728480 / 10_000_000 = 0.372848 €/kWh).
 PRICE_SCALE_FACTOR = 10_000_000

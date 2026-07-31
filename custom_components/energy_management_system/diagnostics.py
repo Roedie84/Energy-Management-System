@@ -143,6 +143,10 @@ async def async_get_config_entry_diagnostics(
             "energy_bridge_transition_log": coordinator.energy_bridge_transition_log,
             "grid_charged_today": coordinator._grid_charged_today,
             "is_negative_price_active": coordinator._is_negative_price_active,
+            "reserve_shortfall_history": coordinator.reserve_shortfall_history,
+            "shortfall_detected_today_so_far": (
+                coordinator._shortfall_detected_today
+            ),
             "total_discharge_value_eur": round(
                 coordinator.total_discharge_value_eur, 4
             ),

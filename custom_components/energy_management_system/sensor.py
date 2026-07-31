@@ -49,6 +49,7 @@ async def async_setup_entry(
         BatteryProtectionSensor(coordinator, entry.entry_id),
         DischargeValueSensor(coordinator, entry.entry_id),
         ChargeCostSensor(coordinator, entry.entry_id),
+        ReserveShortfallSensor(coordinator, entry.entry_id),
     ]
 
     if tracker.enabled:
@@ -441,6 +442,54 @@ class ChargeCostSensor(SensorEntity, RestoreEntity):
                 self._coordinator.total_charge_cost_eur = float(last_state.state)
             except (TypeError, ValueError):
                 pass
+
+
+class ReserveShortfallSensor(SensorEntity, RestoreEntity):
+    """Tracks days where unexpected grid import happened during a period
+    the integration believed should be self-sufficient (smart_discharging
+    or an expensive-quarter discharge) - meaning the dynamic discharge
+    reserve estimate for that day was too optimistic.
+
+    State is the count of shortfall days in the last LEARNING_HISTORY_DAYS
+    (used to self-correct the reserve margin - see
+    `_get_dynamic_discharge_reserve_kwh`); the `history` attribute shows
+    the raw True/False per day. Persisted across restarts.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Reserve shortfall days"
+    _attr_icon = "mdi:battery-alert-variant-outline"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_reserve_shortfall"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def native_value(self) -> int:
+        return sum(1 for v in self._coordinator.reserve_shortfall_history if v)
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return {
+            "history": self._coordinator.reserve_shortfall_history,
+            "detected_today_so_far": self._coordinator._shortfall_detected_today,
+        }
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if last_state is None:
+            return
+        raw_history = last_state.attributes.get("history")
+        if isinstance(raw_history, list):
+            self._coordinator.reserve_shortfall_history = [
+                bool(v) for v in raw_history
+            ]
 
 
 class LearnedNightConsumptionSensor(SensorEntity, RestoreEntity):

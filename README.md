@@ -924,3 +924,39 @@ waren toegevoegd aan de code, maar nooit waren doorgevoerd naar
 
 Getest: alle velden komen correct mee en het geheel blijft
 JSON-serialiseerbaar.
+
+## v0.28.0 — detectie en zelfcorrectie bij onverwachte netimport
+
+Nieuw: de integratie **detecteert** en **leert** nu van momenten waarop de
+dynamische reserve (v0.25.0) achteraf te krap bleek — het antwoord op
+"wat als er toch te weinig overblijft om op 0 te blijven?".
+
+**Hoe het werkt:**
+- Tijdens elke periode waarin de integratie "zelfvoorzienend" veronderstelt
+  (`smart_discharging`, `expensive_quarter`, `expensive_quarter_soc_protected`),
+  wordt de rauwe P1/netmeter-waarde gecontroleerd. Onverwachte netimport
+  boven 100W betekent: de reserve-schatting voor die dag was te optimistisch.
+- Dit wordt per dag bijgehouden (rollend over de laatste 7 dagen, net als
+  de andere leerprocessen).
+- Elke dag met een gedetecteerde tekortkoming verhoogt de
+  ontlaad-reserve-marge met 5 procentpunt, zonder apart plafond (zelfde
+  filosofie als de meerdaagse-lage-zon-marge) — de integratie corrigeert
+  zichzelf dus automatisch als dit vaker voorkomt.
+
+Nieuwe sensor: **`sensor.reserve_shortfall_days`** — toont het aantal
+dagen met een tekortkoming in de laatste week, met de ruwe geschiedenis
+als attribuut. De live-uitleg (`sensor.explanation`) vermeldt het ook
+expliciet als dit recent is voorgekomen.
+
+**Belangrijk om te weten:** dit is een **reactieve** correctie — de eerste
+keer dat de reserve tekortschiet, gebeurt dat gewoon (de integratie kan
+niet vooraf weten dat de schatting fout zit). Pas ná detectie wordt de
+marge voor toekomstige dagen verhoogd. Dit is dus geen garantie tegen een
+eerste keer, maar wel bescherming tegen het herhaaldelijk misgaan.
+
+Getest: detectie bij 150W onverwachte import, correcte dag-rollover naar
+de geschiedenis, en de marge-berekening met 3 recente tekortkomingen
+(10% → 25%, exact zoals verwacht).
+
+Ook `diagnostics.py` is meteen bijgewerkt met deze nieuwe velden — geleerd
+van de vorige keer dat dit werd vergeten.
