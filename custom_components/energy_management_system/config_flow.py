@@ -9,6 +9,7 @@ from homeassistant.helpers import selector
 
 from .const import (
     CONF_AVAILABLE_ENERGY_SENSOR,
+    CONF_BATTERY_POWER_SENSOR,
     CONF_CONSUMPTION_POWER_SENSOR,
     CONF_EXPENSIVE_QUARTERS_COUNT,
     CONF_LOW_SOLAR_THRESHOLD_KWH,
@@ -19,6 +20,7 @@ from .const import (
     CONF_OPERATION_SELECT,
     CONF_PRICE_ATTRIBUTE,
     CONF_PRICE_SENSOR,
+    CONF_PV_POWER_SENSOR,
     CONF_SOC_SENSOR,
     CONF_SOLAR_ACTUAL_SENSOR,
     CONF_SOLAR_FORECAST_SENSOR,
@@ -112,6 +114,14 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
             vol.Optional(
                 CONF_CONSUMPTION_POWER_SENSOR,
                 default=defaults.get(CONF_CONSUMPTION_POWER_SENSOR),
+            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            vol.Optional(
+                CONF_BATTERY_POWER_SENSOR,
+                default=defaults.get(CONF_BATTERY_POWER_SENSOR),
+            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            vol.Optional(
+                CONF_PV_POWER_SENSOR,
+                default=defaults.get(CONF_PV_POWER_SENSOR),
             ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
             vol.Optional(
                 CONF_AVAILABLE_ENERGY_SENSOR,

@@ -281,3 +281,49 @@ voorheen. Zichtbaar via `bootstrapped_from_history` op
 > Assistant-installatie. Controleer na de update in de logs (zoek op
 > "Bootstrapped") of het gelukt is, en check de `bootstrapped_from_history`-
 > attributen.
+
+## v0.13.0 — correctie huishoudverbruik voor accu-invloed op P1-meter
+
+**Probleem:** je P1-meter meet het netto vermogen op de aansluiting. Als de
+accu op dat moment ontlaadt, dekt dat een deel van je huishoudverbruik af
+— de P1-meter toont dan een veel lagere waarde dan je werkelijke verbruik.
+Omgekeerd toont hij een hogere waarde als de accu laadt.
+
+**Oplossing:** nieuw optioneel veld **Accu vermogen sensor**
+(`sensor.zendure_batterij_vermogen`, positief = ontladen, negatief = laden
+— zelfde teken-conventie als het handmatige laadvermogen). Zodra
+ingevuld, wordt overal waar het huishoudverbruik gebruikt wordt (live
+tracking, geleerd nachtverbruik, de energie-brug-check, en de historische
+bootstrap) gecorrigeerd:
+
+```
+werkelijk verbruik = P1-vermogen + accu-vermogen
+```
+
+Getest tegen twee scenario's (ontladen en laden) en tegen de historische
+bootstrap — in alle gevallen wordt het werkelijke verbruik nu correct
+teruggerekend in plaats van de door de accu vertekende P1-waarde.
+
+Zonder deze sensor blijft de oude (minder nauwkeurige) aanpak gewoon
+werken — dit is dus een optionele verbetering, geen verplichte wijziging.
+
+## v0.14.0 — PV-productie meegenomen in verbruikscorrectie
+
+De verbruikscorrectie uit v0.13.0 houdt nu ook rekening met live
+PV-productie, niet alleen de accu. Nieuw optioneel veld: **Live
+PV-productievermogen sensor** (bv. `sensor.solaredge_i1_ac_power`).
+
+Volledige energiebalans:
+```
+werkelijk verbruik = P1-vermogen + accu-vermogen + PV-productievermogen
+```
+
+Getest tegen twee scenario's (accu laadt deels uit zon met netto import,
+en een volledig zelfvoorzienend scenario met alleen export) — in beide
+gevallen wordt het werkelijke verbruik nu correct teruggerekend, ook
+tijdens de uren dat de zon meespeelt. Zonder deze sensor blijft de
+eerdere (P1 + accu) correctie gewoon werken.
+
+De historische bootstrap past dezelfde 3-bron-correctie nu ook toe op
+oude data, via een efficiënte tijd-gesynchroniseerde matching tussen alle
+drie de sensoren.

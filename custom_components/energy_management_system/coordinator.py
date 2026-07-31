@@ -50,6 +50,7 @@ from homeassistant.util import dt as dt_util
 from .const import (
     CHEAP_BLOCK_THRESHOLD_MARGIN_FRACTION,
     CONF_AVAILABLE_ENERGY_SENSOR,
+    CONF_BATTERY_POWER_SENSOR,
     CONF_CONSUMPTION_POWER_SENSOR,
     CONF_EXPENSIVE_QUARTERS_COUNT,
     CONF_LOW_SOLAR_THRESHOLD_KWH,
@@ -60,6 +61,7 @@ from .const import (
     CONF_OPERATION_SELECT,
     CONF_PRICE_ATTRIBUTE,
     CONF_PRICE_SENSOR,
+    CONF_PV_POWER_SENSOR,
     CONF_SOC_SENSOR,
     CONF_SOLAR_FORECAST_SENSOR,
     DEFAULT_EXPENSIVE_QUARTERS_COUNT,
@@ -83,6 +85,36 @@ _LOGGER = logging.getLogger(__name__)
 
 # (interval start, interval end, price)
 PriceEntry = tuple[datetime, datetime, float]
+
+
+class _ChronologicalValueTracker:
+    """Tracks the latest known float value from a chronologically sorted
+    list of recorder states, as you advance forward through increasing
+    target timestamps (a single forward pass, O(n) overall).
+    """
+
+    __slots__ = ("_states", "_idx", "_current")
+
+    def __init__(self, states: list) -> None:
+        self._states = states
+        self._idx = 0
+        self._current: float | None = None
+
+    def value_at(self, target_dt: datetime) -> float | None:
+        while self._idx < len(self._states):
+            try:
+                changed = dt_util.as_local(self._states[self._idx].last_changed)
+            except (TypeError, ValueError):
+                self._idx += 1
+                continue
+            if changed > target_dt:
+                break
+            try:
+                self._current = float(self._states[self._idx].state)
+            except (TypeError, ValueError):
+                pass
+            self._idx += 1
+        return self._current
 
 
 class EnergyManagementSystemCoordinator:
@@ -157,9 +189,12 @@ class EnergyManagementSystemCoordinator:
         Since we don't know the exact discharge window for past days
         (that depends on price data we don't retroactively have), this
         approximates using a fixed 01:00-08:00 local-time window each day
-        as a stand-in "night" period. Never overwrites already-learned
-        (live) data, and never raises - any failure just means normal
-        day-by-day learning takes over from here.
+        as a stand-in "night" period. If a battery and/or PV power sensor
+        is configured, each P1 sample is corrected for what they mask
+        from the true household load (see `_read_corrected_consumption_power`
+        for the live equivalent). Never overwrites already-learned (live)
+        data, and never raises - any failure just means normal day-by-day
+        learning takes over.
         """
         if self.night_consumption_history:
             return
@@ -167,6 +202,9 @@ class EnergyManagementSystemCoordinator:
         consumption_entity = self.config.get(CONF_CONSUMPTION_POWER_SENSOR)
         if not consumption_entity:
             return
+
+        battery_entity = self.config.get(CONF_BATTERY_POWER_SENSOR)
+        pv_entity = self.config.get(CONF_PV_POWER_SENSOR)
 
         try:
             from homeassistant.components.recorder import get_instance, history
@@ -179,10 +217,15 @@ class EnergyManagementSystemCoordinator:
 
         now = dt_util.now()
         start = now - timedelta(days=LEARNING_HISTORY_DAYS + 1)
+        entities_to_fetch = [consumption_entity]
+        if battery_entity:
+            entities_to_fetch.append(battery_entity)
+        if pv_entity:
+            entities_to_fetch.append(pv_entity)
 
         def _fetch():
             return history.get_significant_states(
-                self.hass, start, now, [consumption_entity]
+                self.hass, start, now, entities_to_fetch
             )
 
         try:
@@ -195,26 +238,51 @@ class EnergyManagementSystemCoordinator:
             )
             return
 
-        states = states_by_entity.get(consumption_entity, [])
-        if not states:
+        p1_states = states_by_entity.get(consumption_entity, [])
+        if not p1_states:
             _LOGGER.debug(
                 "No historical states found for %s to bootstrap from",
                 consumption_entity,
             )
             return
 
+        battery_states = (
+            sorted(states_by_entity.get(battery_entity, []), key=lambda s: s.last_changed)
+            if battery_entity
+            else []
+        )
+        pv_states = (
+            sorted(states_by_entity.get(pv_entity, []), key=lambda s: s.last_changed)
+            if pv_entity
+            else []
+        )
+        battery_tracker = _ChronologicalValueTracker(battery_states)
+        pv_tracker = _ChronologicalValueTracker(pv_states)
+
         by_day: dict[object, list[float]] = {}
-        for state in states:
+
+        for state in p1_states:
             try:
-                value = float(state.state)
+                p1_value = float(state.state)
             except (TypeError, ValueError):
                 continue
             try:
                 local_dt = dt_util.as_local(state.last_changed)
             except (TypeError, ValueError):
                 continue
+
+            corrected_value = p1_value
+            if battery_states:
+                battery_value = battery_tracker.value_at(local_dt)
+                if battery_value is not None:
+                    corrected_value += battery_value
+            if pv_states:
+                pv_value = pv_tracker.value_at(local_dt)
+                if pv_value is not None:
+                    corrected_value += pv_value
+
             if 1 <= local_dt.hour < 8:
-                by_day.setdefault(local_dt.date(), []).append(value)
+                by_day.setdefault(local_dt.date(), []).append(corrected_value)
 
         daily_averages: list[float] = []
         for day in sorted(by_day.keys()):
@@ -225,11 +293,18 @@ class EnergyManagementSystemCoordinator:
         if daily_averages:
             self.night_consumption_history = daily_averages[-LEARNING_HISTORY_DAYS:]
             self.was_bootstrapped_from_history = True
+            corrections = []
+            if battery_states:
+                corrections.append("battery")
+            if pv_states:
+                corrections.append("PV")
             _LOGGER.info(
                 "Bootstrapped night consumption learning from history: %s "
-                "kW (approximate 01:00-08:00 window over the last %d days)",
+                "kW (approximate 01:00-08:00 window over the last %d days, "
+                "corrections applied: %s)",
                 [round(v, 3) for v in self.night_consumption_history],
                 len(daily_averages),
+                ", ".join(corrections) if corrections else "none",
             )
 
     async def async_unload(self) -> None:
@@ -353,6 +428,50 @@ class EnergyManagementSystemCoordinator:
         except (TypeError, ValueError):
             return None
 
+    def _read_corrected_consumption_power(self) -> float | None:
+        """Household consumption estimate (W), corrected for the battery
+        and (optionally) solar production masking the true load on the
+        grid meter.
+
+        The P1/grid meter only sees net grid exchange: while the battery
+        discharges, or the sun produces, part (or all) of the household
+        load is covered without the grid meter seeing it - so P1 alone
+        understates true consumption. Conversely, battery charging adds
+        extra draw that P1 sees but isn't household load. Correcting for
+        this, using the full energy balance at the connection point:
+
+            consumption = grid_power + battery_power + pv_power
+
+        where battery_power follows the manual power number's sign
+        convention (positive = discharging, negative = charging), and
+        pv_power is the live PV production (always >= 0).
+
+        Both battery_power and pv_power are optional refinements - if
+        configured, they're added; if not (or unavailable), this falls
+        back to a less precise estimate that ignores them.
+        """
+        p1_power = self._read_sensor_float(
+            self.config.get(CONF_CONSUMPTION_POWER_SENSOR)
+        )
+        if p1_power is None:
+            return None
+
+        corrected = p1_power
+
+        battery_entity = self.config.get(CONF_BATTERY_POWER_SENSOR)
+        if battery_entity:
+            battery_power = self._read_sensor_float(battery_entity)
+            if battery_power is not None:
+                corrected += battery_power
+
+        pv_entity = self.config.get(CONF_PV_POWER_SENSOR)
+        if pv_entity:
+            pv_power = self._read_sensor_float(pv_entity)
+            if pv_power is not None:
+                corrected += pv_power
+
+        return corrected
+
     # -- Night consumption learning ---------------------------------------
 
     def _update_night_consumption_tracking(
@@ -361,8 +480,6 @@ class EnergyManagementSystemCoordinator:
         """Sample the consumption sensor while inside the discharging window,
         and finalize + learn from the window once it ends.
         """
-        consumption_entity = self.config.get(CONF_CONSUMPTION_POWER_SENSOR)
-
         if in_window:
             if self._tracking_window_end != self.last_cheap_block_start:
                 # A new window has started (or this is the first tick):
@@ -381,7 +498,7 @@ class EnergyManagementSystemCoordinator:
             elapsed_hours = max(
                 (now - self._window_last_sample).total_seconds() / 3600, 0
             )
-            power_w = self._read_sensor_float(consumption_entity)
+            power_w = self._read_corrected_consumption_power()
             if power_w is not None and elapsed_hours > 0:
                 self._window_energy_kwh += (power_w / 1000) * elapsed_hours
                 self._window_duration_hours += elapsed_hours
@@ -530,7 +647,7 @@ class EnergyManagementSystemCoordinator:
         if learned_kw is not None:
             power_kw = learned_kw
         else:
-            power_w = self._read_sensor_float(consumption_entity)
+            power_w = self._read_corrected_consumption_power()
             if power_w is None or power_w <= 0:
                 return normal_count
             power_kw = power_w / 1000
@@ -656,9 +773,7 @@ class EnergyManagementSystemCoordinator:
             if learned_kw is not None:
                 power_kw = learned_kw
             else:
-                power_w = self._read_sensor_float(
-                    self.config.get(CONF_CONSUMPTION_POWER_SENSOR)
-                )
+                power_w = self._read_corrected_consumption_power()
                 power_kw = power_w / 1000 if power_w is not None else None
 
             if power_kw is not None:
