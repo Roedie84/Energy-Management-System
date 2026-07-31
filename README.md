@@ -727,3 +727,17 @@ Getest: bij een basisverbruik van 50W en 4 dure kwartieren vanavond
 benodigd) naar "niet genoeg" (2,93 kWh benodigd) bij exact hetzelfde
 beschikbare vermogen van 1,8 kWh — precies het scenario waar dit voor
 bedoeld is.
+
+## v0.23.1 — opsplitsing zichtbaar in de live-uitleg
+
+`sensor.explanation` toont nu, bij de energie-brug-gerelateerde redenen
+(`discharging_window` en `default_smart` met te weinig energie), ook de
+**opsplitsing** van het benodigde-energie-getal:
+
+> "Opsplitsing van die 2.93 kWh: 0.95 kWh basisverbruik, minus 0.0 kWh
+> verwachte zon, plus 1.6 kWh reservering voor nog-komende dure
+> kwartieren vandaag, met 15.0% veiligheidsmarge erover."
+
+Zo kun je zelf verifiëren waar het eindtotaal vandaan komt, in plaats van
+alleen het resultaat te zien — vooral handig sinds v0.23.0, waar de
+reservering voor dure kwartieren is toegevoegd aan die berekening.

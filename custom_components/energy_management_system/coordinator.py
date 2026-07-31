@@ -147,6 +147,7 @@ class EnergyManagementSystemCoordinator:
         self.last_expected_mode: str | None = None
         self.last_available_kwh: float | None = None
         self.last_needed_kwh_to_bridge: float | None = None
+        self.last_needed_kwh_breakdown: dict = {}
         self.last_has_enough_energy: bool | None = None
         self.energy_bridge_transition_log: list[dict] = []
         self.last_explanation: str = "Nog geen data verwerkt."
@@ -1290,6 +1291,7 @@ class EnergyManagementSystemCoordinator:
             # Subtract expected PV production during the bridging window -
             # solar coming online soon reduces how much the battery/grid
             # actually needs to cover.
+            baseline_consumption_kwh = needed_kwh_raw
             if needed_kwh_raw is not None:
                 expected_pv_kwh = self._estimate_pv_kwh_for_period(
                     now, cheap_block_start
@@ -1307,8 +1309,18 @@ class EnergyManagementSystemCoordinator:
                 needed_kwh_raw += upcoming_discharge_kwh
 
                 needed_kwh = needed_kwh_raw * ENERGY_BRIDGE_SAFETY_MARGIN
+
+                self.last_needed_kwh_breakdown = {
+                    "basisverbruik_kwh": round(baseline_consumption_kwh, 3),
+                    "verwachte_pv_kwh": round(expected_pv_kwh, 3),
+                    "reservering_dure_kwartieren_kwh": round(upcoming_discharge_kwh, 3),
+                    "veiligheidsmarge_procent": round(
+                        (ENERGY_BRIDGE_SAFETY_MARGIN - 1) * 100, 1
+                    ),
+                }
             else:
                 needed_kwh = None
+                self.last_needed_kwh_breakdown = {}
 
             if needed_kwh is not None:
                 has_enough = available_kwh >= needed_kwh
@@ -1630,6 +1642,17 @@ class EnergyManagementSystemCoordinator:
                     f"{needed_txt} kWh). Daarom wordt laden uitgesteld en "
                     f"krijgt teruglevering nu voorrang (smart_discharging)."
                 )
+                b = self.last_needed_kwh_breakdown
+                if b:
+                    parts.append(
+                        f"Opsplitsing van die {needed_txt} kWh: "
+                        f"{b.get('basisverbruik_kwh', '?')} kWh basisverbruik, "
+                        f"minus {b.get('verwachte_pv_kwh', '?')} kWh verwachte zon, "
+                        f"plus {b.get('reservering_dure_kwartieren_kwh', '?')} kWh "
+                        f"reservering voor nog-komende dure kwartieren vandaag, "
+                        f"met {b.get('veiligheidsmarge_procent', '?')}% "
+                        f"veiligheidsmarge erover."
+                    )
             else:
                 parts.append(
                     "Het is nog vóór het goedkoopste blok, dus laden wordt "
@@ -1639,11 +1662,32 @@ class EnergyManagementSystemCoordinator:
 
         elif reason == "default_smart":
             if self.last_has_enough_energy is False:
-                parts.append(
-                    "De accu heeft niet genoeg beschikbare energie om te "
-                    "wachten tot het goedkoopste blok, dus mag de Zendure nu "
-                    "zelf bijladen (smart-modus)."
+                needed_txt = (
+                    f"{self.last_needed_kwh_to_bridge:.2f}"
+                    if self.last_needed_kwh_to_bridge is not None
+                    else "onbekend"
                 )
+                avail_txt = (
+                    f"{self.last_available_kwh:.2f}"
+                    if self.last_available_kwh is not None
+                    else "onbekend"
+                )
+                parts.append(
+                    f"De accu heeft niet genoeg beschikbare energie "
+                    f"({avail_txt} kWh) om zowel het basisverbruik als de "
+                    f"nog-komende dure kwartieren van vandaag te overbruggen "
+                    f"(geschat nodig: {needed_txt} kWh), dus mag de Zendure "
+                    f"nu zelf bijladen (smart-modus)."
+                )
+                b = self.last_needed_kwh_breakdown
+                if b:
+                    parts.append(
+                        f"Opsplitsing: {b.get('basisverbruik_kwh', '?')} kWh "
+                        f"basisverbruik, minus {b.get('verwachte_pv_kwh', '?')} "
+                        f"kWh verwachte zon, plus "
+                        f"{b.get('reservering_dure_kwartieren_kwh', '?')} kWh "
+                        f"reservering voor dure kwartieren."
+                    )
             else:
                 parts.append(
                     "Er is nu geen speciale reden om in te grijpen: de prijs "
