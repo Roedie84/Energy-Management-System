@@ -55,10 +55,10 @@ cards:
   - type: entities
     title: Zelflerend
     entities:
-      - entity: sensor.energy_management_system_learned_night_consumption
-        name: Geleerd nachtverbruik (kW)
       - entity: sensor.energy_management_system_hourly_consumption_profile
-        name: Geleerd verbruiksprofiel (huidig uur, kW)
+        name: Verbruiksprofiel (huidig uur, kW)
+      - entity: sensor.energy_management_system_learned_night_consumption
+        name: Nachtvenster-gemiddelde (kW, legacy fallback)
       - entity: sensor.energy_management_system_pv_forecast_accuracy
         name: PV-voorspelling afwijking (%)
 
@@ -115,16 +115,24 @@ cards:
         name: Verbruik (W)
 
   - type: history-graph
-    title: Nachtverbruik & voorspelling-afwijking over tijd
+    title: Verbruiksprofiel (hele dag) & voorspelling-afwijking over tijd
     hours_to_show: 168
     entities:
-      - entity: sensor.energy_management_system_learned_night_consumption
+      - entity: sensor.energy_management_system_hourly_consumption_profile
+        name: Verbruiksprofiel (huidig uur, kW)
       - entity: sensor.energy_management_system_pv_forecast_accuracy
+        name: PV-voorspelling afwijking (%)
 
   - type: markdown
     title: Geleerde geschiedenis (ruwe data)
     content: >
-      **Nachtverbruik (laatste 7 nachten, kW):**
+      **Verbruiksprofiel per uur (kW, huidige geleerde gemiddelden):**
+
+      {{ state_attr('sensor.energy_management_system_hourly_consumption_profile',
+      'profile') }}
+
+
+      **Nachtvenster-gemiddelde (laatste 7 nachten, kW, legacy fallback):**
 
       {{ state_attr('sensor.energy_management_system_learned_night_consumption', 'history_kw')
       }}
