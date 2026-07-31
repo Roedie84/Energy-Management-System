@@ -618,3 +618,44 @@ jou klopt.
 
 Beide problemen zijn gevonden dankzij een gedeelde diagnostiek-export —
 precies waar die functie (v0.19.1) voor bedoeld is.
+
+## v0.21.0 — bredere systeemscan in de diagnostiek-export
+
+De diagnostiek-export (v0.19.1) bevat nu ook een **`system_scan`**-sectie:
+een gerichte scan van je hele Home Assistant-omgeving op zoek naar
+entities die relevant zouden kunnen zijn voor een toekomstige uitbreiding
+van dit EMS — niet een blinde dump van alles.
+
+**Wat wordt meegenomen:**
+- Alle `climate`- en `humidifier`-entities (airco, warmtepomp, etc.)
+- Sensoren met `device_class` power/energy/battery/monetary
+- Alles met een herkenbaar sleutelwoord in entity-ID of naam (vaatwasser,
+  wasmachine, droger, airco, warmtepomp, boiler, laadpaal, dishwasher,
+  washer, dryer, heatpump, ev_charger, wallbox)
+
+**Wat bewust wordt overgeslagen:** lampen, locks, camera's,
+aanwezigheidsdetectie, en al het andere dat niets met energiebeheer te
+maken heeft.
+
+Elke gevonden entity toont ook `already_used_by_this_integration`, zodat
+je in één oogopslag ziet wat er al gekoppeld is en wat nog "vrij" ligt
+voor een volgende stap richting een vollediger EMS.
+
+Getest met een gesimuleerde mix van 10 entities — de 5 relevante werden
+gevonden, de 5 irrelevante correct genegeerd.
+
+## v0.21.1 — systeemscan uitgebreid met bewoningsdata (beweging, verlichting, lux)
+
+De `system_scan` in de diagnostiek-export neemt nu ook mee:
+- **Alle `light`-entities** (verlichting) — voor het correleren van
+  gebruikspatronen met bewoning.
+- **Bewegings-/aanwezigheidssensoren** (`device_class`: motion,
+  occupancy, presence).
+- **Lux-/lichtsterkte-sensoren** (`device_class`: illuminance) — handig
+  om tegen de Solcast-voorspelling/PV-productie af te zetten, en om
+  daglicht-gedreven gebruikspatronen te begrijpen.
+
+Nog steeds bewust buiten beschouwing: locks, camera's, media players, en
+al het andere dat niets met energiebeheer of bewoningspatronen te maken
+heeft. Getest met een mix van 9 entities — alle 6 relevante gevonden
+(inclusief de nieuwe categorieën), de 3 irrelevante correct genegeerd.

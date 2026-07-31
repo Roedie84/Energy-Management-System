@@ -6,6 +6,13 @@ System -> drie puntjes), producing a JSON file with the current
 configuration and all learned/internal state. Meant to be shared for
 debugging/optimizing the integration - it does not contain secrets, only
 entity references and learned numeric history.
+
+Also includes a bounded scan of the wider Home Assistant instance for
+entities that could be relevant to expanding this into a fuller,
+usage-aware EMS (other energy/power sensors, climate/appliance entities,
+lighting, occupancy/motion sensors, and illuminance/lux sensors) - not a
+full dump of everything, to avoid pulling in unrelated things like
+cameras, locks, or media players.
 """
 from __future__ import annotations
 
@@ -17,9 +24,89 @@ from homeassistant.core import HomeAssistant
 
 from .const import DOMAIN
 
+# Domains that are inherently relevant to an EMS, regardless of naming.
+# "light" is included to help correlate lighting usage with occupancy
+# patterns - useful context for a smarter, usage-aware EMS.
+RELEVANT_DOMAINS = {"climate", "humidifier", "light"}
+
+# device_class values worth surfacing even outside those domains.
+# motion/occupancy/presence -> occupancy patterns; illuminance -> lux
+# sensors, useful to cross-check against solar forecast/actual data and
+# to understand daylight-driven lighting/appliance usage.
+RELEVANT_DEVICE_CLASSES = {
+    "power",
+    "energy",
+    "battery",
+    "monetary",
+    "motion",
+    "occupancy",
+    "presence",
+    "illuminance",
+}
+
+# Keywords (in entity_id or friendly_name) hinting at shiftable appliances
+# or other EMS-relevant equipment, based on what's come up in this
+# integration's own development (dishwasher, washing machine, EV, etc.).
+RELEVANT_KEYWORDS = (
+    "vaatwasser",
+    "wasmachine",
+    "droger",
+    "airco",
+    "warmtepomp",
+    "boiler",
+    "laadpaal",
+    "dishwasher",
+    "washer",
+    "dryer",
+    "heatpump",
+    "ev_charger",
+    "wallbox",
+)
+
 
 def _iso(value: datetime | date | None) -> str | None:
     return value.isoformat() if value is not None else None
+
+
+def _scan_relevant_entities(
+    hass: HomeAssistant, already_configured: set[str]
+) -> list[dict[str, Any]]:
+    """Bounded scan of Home Assistant entities that could be relevant for
+    expanding this EMS. Not every result is necessarily useful - this is
+    meant as a starting point to spot new possibilities, not an automatic
+    recommendation.
+    """
+    results: list[dict[str, Any]] = []
+
+    for state in hass.states.async_all():
+        entity_id = state.entity_id
+        domain = entity_id.split(".", 1)[0]
+        device_class = state.attributes.get("device_class")
+        friendly_name = state.attributes.get("friendly_name", "") or ""
+        unit = state.attributes.get("unit_of_measurement")
+
+        is_relevant = (
+            domain in RELEVANT_DOMAINS
+            or device_class in RELEVANT_DEVICE_CLASSES
+            or any(kw in entity_id.lower() for kw in RELEVANT_KEYWORDS)
+            or any(kw in friendly_name.lower() for kw in RELEVANT_KEYWORDS)
+        )
+        if not is_relevant:
+            continue
+
+        results.append(
+            {
+                "entity_id": entity_id,
+                "domain": domain,
+                "device_class": device_class,
+                "unit_of_measurement": unit,
+                "friendly_name": friendly_name,
+                "state": state.state,
+                "already_used_by_this_integration": entity_id in already_configured,
+            }
+        )
+
+    return sorted(results, key=lambda item: item["entity_id"])
 
 
 async def async_get_config_entry_diagnostics(
@@ -29,8 +116,10 @@ async def async_get_config_entry_diagnostics(
     coordinator = hass.data[DOMAIN][entry.entry_id]
     solar_tracker = hass.data[DOMAIN].get(f"{entry.entry_id}_solar_tracker")
 
+    config = {**entry.data, **entry.options}
+
     diagnostics: dict[str, Any] = {
-        "config": {**entry.data, **entry.options},
+        "config": config,
         "coordinator": {
             "force_manual": coordinator.force_manual,
             "learning_only": coordinator.learning_only,
@@ -88,5 +177,22 @@ async def async_get_config_entry_diagnostics(
                 solar_tracker.was_bootstrapped_from_history
             ),
         }
+
+    already_configured = {
+        value for value in config.values() if isinstance(value, str) and "." in value
+    }
+    diagnostics["system_scan"] = {
+        "note": (
+            "Bounded scan of Home Assistant entities that could be "
+            "relevant for expanding this EMS into a usage-aware system: "
+            "energy/power/battery sensors, climate entities, lighting, "
+            "occupancy/motion sensors, illuminance (lux) sensors, and "
+            "common shiftable-appliance keywords. This is a starting "
+            "point for discussion, not an automatic recommendation - not "
+            "everything listed here is necessarily useful or safe to "
+            "wire up."
+        ),
+        "entities": _scan_relevant_entities(hass, already_configured),
+    }
 
     return diagnostics
