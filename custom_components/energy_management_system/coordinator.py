@@ -161,6 +161,18 @@ class EnergyManagementSystemCoordinator:
         self._window_duration_hours: float = 0.0
         self._window_last_sample: datetime | None = None
 
+        # -- Full-day hourly consumption profile --
+        # Learned continuously, all day every day (not just during the
+        # discharge window), so that seasons with less predictable solar
+        # (autumn/winter) still get an accurate consumption estimate even
+        # when the bridging period extends into daytime hours.
+        # Maps hour-of-day (0-23) -> rolling history of avg kW for that hour.
+        self.hourly_consumption_profile: dict[int, list[float]] = {}
+        self._current_tracked_hour: int | None = None
+        self._hour_energy_kwh: float = 0.0
+        self._hour_duration_hours: float = 0.0
+        self._hour_last_sample: datetime | None = None
+
         self._lock = asyncio.Lock()
         self._unsub_interval = None
         self._unsub_state = None
@@ -260,6 +272,9 @@ class EnergyManagementSystemCoordinator:
         pv_tracker = _ChronologicalValueTracker(pv_states)
 
         by_day: dict[object, list[float]] = {}
+        # (date, hour) -> list of corrected-power samples, used to build
+        # the full 24-hour profile alongside the narrower night average.
+        by_day_hour: dict[tuple, list[float]] = {}
 
         for state in p1_states:
             try:
@@ -284,6 +299,10 @@ class EnergyManagementSystemCoordinator:
             if 1 <= local_dt.hour < 8:
                 by_day.setdefault(local_dt.date(), []).append(corrected_value)
 
+            by_day_hour.setdefault((local_dt.date(), local_dt.hour), []).append(
+                corrected_value
+            )
+
         daily_averages: list[float] = []
         for day in sorted(by_day.keys()):
             values = by_day[day]
@@ -305,6 +324,28 @@ class EnergyManagementSystemCoordinator:
                 [round(v, 3) for v in self.night_consumption_history],
                 len(daily_averages),
                 ", ".join(corrections) if corrections else "none",
+            )
+
+        # Build the full 24-hour profile from the same fetched data: for
+        # each (day, hour) bucket, compute that day's average kW, then feed
+        # it into the rolling per-hour history exactly like live learning.
+        per_hour_daily_averages: dict[int, list[float]] = {}
+        for (day, hour), values in by_day_hour.items():
+            if not values:
+                continue
+            avg_kw = (sum(values) / len(values)) / 1000
+            per_hour_daily_averages.setdefault(hour, []).append(avg_kw)
+
+        if per_hour_daily_averages:
+            for hour, day_values in per_hour_daily_averages.items():
+                if not self.hourly_consumption_profile.get(hour):
+                    self.hourly_consumption_profile[hour] = day_values[
+                        -LEARNING_HISTORY_DAYS:
+                    ]
+            _LOGGER.info(
+                "Bootstrapped full-day hourly consumption profile from "
+                "history for %d hour-of-day buckets",
+                len(per_hour_daily_averages),
             )
 
     async def async_unload(self) -> None:
@@ -528,6 +569,89 @@ class EnergyManagementSystemCoordinator:
         self._window_duration_hours = 0.0
         self._window_last_sample = None
 
+    # -- Full-day hourly consumption profile ------------------------------
+
+    def _update_hourly_consumption_profile(self, now: datetime) -> None:
+        """Sample the corrected consumption continuously, all day every
+        day, bucketed by hour-of-day (0-23). Unlike the discharge-window
+        tracking above, this always runs regardless of mode, so the
+        integration builds a full daily profile - useful in autumn/winter
+        when the relevant bridging period may extend into daytime hours.
+        """
+        current_hour = now.hour
+
+        if self._current_tracked_hour is None:
+            self._current_tracked_hour = current_hour
+            self._hour_last_sample = now
+            return
+
+        if current_hour != self._current_tracked_hour:
+            self._finalize_hourly_bucket()
+            self._current_tracked_hour = current_hour
+            self._hour_last_sample = now
+            return
+
+        elapsed_hours = max((now - self._hour_last_sample).total_seconds() / 3600, 0)
+        power_w = self._read_corrected_consumption_power()
+        if power_w is not None and elapsed_hours > 0:
+            self._hour_energy_kwh += (power_w / 1000) * elapsed_hours
+            self._hour_duration_hours += elapsed_hours
+        self._hour_last_sample = now
+
+    def _finalize_hourly_bucket(self) -> None:
+        if self._current_tracked_hour is not None and self._hour_duration_hours > 0:
+            avg_power_kw = self._hour_energy_kwh / self._hour_duration_hours
+            bucket = self.hourly_consumption_profile.setdefault(
+                self._current_tracked_hour, []
+            )
+            bucket.append(avg_power_kw)
+            self.hourly_consumption_profile[self._current_tracked_hour] = bucket[
+                -LEARNING_HISTORY_DAYS:
+            ]
+
+        self._hour_energy_kwh = 0.0
+        self._hour_duration_hours = 0.0
+
+    def learned_hourly_avg_kw(self, hour: int) -> float | None:
+        """Learned average power (kW) for a given hour-of-day (0-23)."""
+        values = self.hourly_consumption_profile.get(hour)
+        if not values:
+            return None
+        return sum(values) / len(values)
+
+    def _estimate_consumption_kwh_for_period(
+        self, start: datetime, end: datetime
+    ) -> float | None:
+        """Estimate total household energy consumption (kWh) over a period,
+        using the learned per-hour profile - so it reflects the actual
+        time-of-day mix (e.g. partly daytime in winter), instead of a
+        single flat average.
+
+        Returns None if the profile doesn't yet have data for every hour
+        the period spans, so the caller can fall back to a simpler
+        estimate.
+        """
+        if end <= start:
+            return 0.0
+
+        total_kwh = 0.0
+        cursor = start
+        while cursor < end:
+            hour_end = cursor.replace(minute=0, second=0, microsecond=0) + timedelta(
+                hours=1
+            )
+            segment_end = min(hour_end, end)
+            fraction_hours = (segment_end - cursor).total_seconds() / 3600
+
+            avg_kw = self.learned_hourly_avg_kw(cursor.hour)
+            if avg_kw is None:
+                return None
+
+            total_kwh += avg_kw * fraction_hours
+            cursor = segment_end
+
+        return total_kwh
+
     def _get_soc_scaled_discharge_power(self, base_power: float) -> float | None:
         """Scale down the forced-discharge power as SoC gets low, to avoid
         over-draining the battery just to sell into an expensive quarter.
@@ -643,15 +767,6 @@ class EnergyManagementSystemCoordinator:
         if not self._is_low_solar_expected():
             return normal_count
 
-        learned_kw = self.learned_night_consumption_kw
-        if learned_kw is not None:
-            power_kw = learned_kw
-        else:
-            power_w = self._read_corrected_consumption_power()
-            if power_w is None or power_w <= 0:
-                return normal_count
-            power_kw = power_w / 1000
-
         hours_until_solar = max((cheap_block_start - now).total_seconds() / 3600, 0)
         if hours_until_solar <= 0:
             return normal_count
@@ -663,7 +778,26 @@ class EnergyManagementSystemCoordinator:
         if quarter_energy_kwh <= 0:
             return normal_count
 
-        expected_consumption_kwh = power_kw * hours_until_solar
+        # Prefer the learned hourly profile (reflects the actual time-of-day
+        # mix the bridging period spans - important in autumn/winter when
+        # this can extend into daytime hours). Falls back to the flat
+        # night-average or a live reading if the profile isn't complete yet.
+        expected_consumption_kwh = self._estimate_consumption_kwh_for_period(
+            now, cheap_block_start
+        )
+        used_profile = expected_consumption_kwh is not None
+
+        if expected_consumption_kwh is None:
+            learned_kw = self.learned_night_consumption_kw
+            if learned_kw is not None:
+                power_kw = learned_kw
+            else:
+                power_w = self._read_corrected_consumption_power()
+                if power_w is None or power_w <= 0:
+                    return normal_count
+                power_kw = power_w / 1000
+            expected_consumption_kwh = power_kw * hours_until_solar
+
         needed_quarters = max(
             1, math.ceil(expected_consumption_kwh / quarter_energy_kwh)
         )
@@ -671,14 +805,13 @@ class EnergyManagementSystemCoordinator:
         reduced_count = min(needed_quarters, normal_count)
         _LOGGER.debug(
             "Low solar forecast detected: reducing expensive quarters "
-            "from %d to %d (expected consumption %.2f kWh over %.1fh at "
-            "%.0fW, %s)",
+            "from %d to %d (expected consumption %.2f kWh over %.1fh, "
+            "source: %s)",
             normal_count,
             reduced_count,
             expected_consumption_kwh,
             hours_until_solar,
-            power_kw * 1000,
-            "learned average" if learned_kw is not None else "live reading",
+            "hourly profile" if used_profile else "flat average/live reading",
         )
         return reduced_count
 
@@ -769,15 +902,34 @@ class EnergyManagementSystemCoordinator:
             hours_until_cheap = max(
                 (cheap_block_start - now).total_seconds() / 3600, 0
             )
-            learned_kw = self.learned_night_consumption_kw
-            if learned_kw is not None:
-                power_kw = learned_kw
-            else:
-                power_w = self._read_corrected_consumption_power()
-                power_kw = power_w / 1000 if power_w is not None else None
 
-            if power_kw is not None:
-                needed_kwh = power_kw * hours_until_cheap * ENERGY_BRIDGE_SAFETY_MARGIN
+            # Prefer the learned hourly profile (accounts for the actual
+            # time-of-day mix of the bridging period), falling back to the
+            # flat night-average or a live reading if incomplete.
+            needed_kwh_raw = self._estimate_consumption_kwh_for_period(
+                now, cheap_block_start
+            )
+            if needed_kwh_raw is not None:
+                needed_kwh = needed_kwh_raw * ENERGY_BRIDGE_SAFETY_MARGIN
+                power_kw = (
+                    needed_kwh_raw / hours_until_cheap
+                    if hours_until_cheap > 0
+                    else None
+                )
+            else:
+                learned_kw = self.learned_night_consumption_kw
+                if learned_kw is not None:
+                    power_kw = learned_kw
+                else:
+                    power_w = self._read_corrected_consumption_power()
+                    power_kw = power_w / 1000 if power_w is not None else None
+                needed_kwh = (
+                    power_kw * hours_until_cheap * ENERGY_BRIDGE_SAFETY_MARGIN
+                    if power_kw is not None
+                    else None
+                )
+
+            if needed_kwh is not None:
                 has_enough = available_kwh >= needed_kwh
 
                 self._log_energy_transition(now, has_enough, available_kwh, needed_kwh)
@@ -788,12 +940,12 @@ class EnergyManagementSystemCoordinator:
 
                 _LOGGER.debug(
                     "Energy bridge check: available=%.2f kWh, needed=%.2f "
-                    "kWh (over %.1fh at %.0fW + %.0f%% margin) -> %s",
+                    "kWh (over %.1fh + %.0f%% margin, source: %s) -> %s",
                     available_kwh,
                     needed_kwh,
                     hours_until_cheap,
-                    power_kw * 1000,
                     (ENERGY_BRIDGE_SAFETY_MARGIN - 1) * 100,
+                    "hourly profile" if needed_kwh_raw is not None else "flat/live",
                     "enough, postpone charging" if has_enough else "top up now",
                 )
                 return has_enough
@@ -1001,6 +1153,7 @@ class EnergyManagementSystemCoordinator:
             entries, now, cheap_block_start, effective_count
         )
         self._update_night_consumption_tracking(now, should_postpone_charging)
+        self._update_hourly_consumption_profile(now)
 
         self.last_is_expensive = is_expensive
         self.last_effective_expensive_quarters_count = effective_count

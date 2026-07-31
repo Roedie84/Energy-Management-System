@@ -327,3 +327,30 @@ eerdere (P1 + accu) correctie gewoon werken.
 De historische bootstrap past dezelfde 3-bron-correctie nu ook toe op
 oude data, via een efficiënte tijd-gesynchroniseerde matching tussen alle
 drie de sensoren.
+
+## v0.15.0 — volledig 24-uurs verbruiksprofiel (niet meer alleen 's nachts)
+
+De integratie monitorde tot nu toe alleen het verbruik tijdens het
+ontlaadvenster (meestal 's nachts). In herfst/winter kan de relevante
+"overbrug-periode" tot het goedkoopste blok echter ook overdag vallen,
+waar het verbruikspatroon anders is dan 's nachts.
+
+**Nieuw:** de integratie monitort nu **continu, de hele dag door**, en
+bouwt een geleerd gemiddelde verbruik per uur-van-de-dag op (0-23u,
+rollend gemiddelde over de laatste 7 dagen per uur). Bij het schatten van
+de benodigde energie om een periode te overbruggen (voor de
+kwartier-reductie én de energie-brug-check), wordt nu het exacte
+uur-voor-uur profiel gebruikt in plaats van één vast gemiddelde — dit
+werkt correct ongeacht of de periode 's nachts, overdag, of een mix
+daarvan overspant.
+
+Getest met een 3-daagse simulatie (ochtendpiek/dagdal/avondpiek/nacht) —
+het profiel leert exact het juiste patroon per uur, en de schatting voor
+een periode die avond+nacht+ochtend overspant kwam exact uit. De
+historische bootstrap bouwt dit profiel nu ook met terugwerkende kracht op
+uit alle 24 uur, niet meer alleen het 01:00-08:00-venster.
+
+Nieuwe sensor: `sensor.hourly_consumption_profile` (state = huidig uur,
+`profile`-attribuut = alle 24 geleerde waarden). Valt automatisch terug op
+het oude gedrag (vast nachtgemiddelde / live meting) zolang het profiel
+nog niet voor alle relevante uren gevuld is.

@@ -57,6 +57,8 @@ cards:
     entities:
       - entity: sensor.energy_management_system_learned_night_consumption
         name: Geleerd nachtverbruik (kW)
+      - entity: sensor.energy_management_system_hourly_consumption_profile
+        name: Geleerd verbruiksprofiel (huidig uur, kW)
       - entity: sensor.energy_management_system_pv_forecast_accuracy
         name: PV-voorspelling afwijking (%)
 

@@ -40,6 +40,7 @@ async def async_setup_entry(
         LastDecisionReasonSensor(coordinator, entry.entry_id),
         SimulatedActionSensor(coordinator, entry.entry_id),
         LearnedNightConsumptionSensor(coordinator, entry.entry_id),
+        HourlyConsumptionProfileSensor(coordinator, entry.entry_id),
         UpcomingTimelineSensor(coordinator, entry.entry_id),
         ExpectedOperationModeSensor(coordinator, entry.entry_id),
         EnergyBridgeCheckSensor(coordinator, entry.entry_id),
@@ -382,6 +383,67 @@ class LearnedNightConsumptionSensor(SensorEntity, RestoreEntity):
                     ][-LEARNING_HISTORY_DAYS:]
                 except (TypeError, ValueError):
                     pass
+
+
+class HourlyConsumptionProfileSensor(SensorEntity, RestoreEntity):
+    """Learned average power (kW) per hour-of-day (0-23), sampled
+    continuously all day every day - so seasons with less predictable
+    solar (autumn/winter) still get an accurate consumption estimate,
+    even when the relevant bridging period extends into daytime hours.
+
+    State is the current hour's learned average; the full profile is in
+    the `profile` attribute. Persisted across restarts.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Hourly consumption profile"
+    _attr_icon = "mdi:chart-bell-curve"
+    _attr_native_unit_of_measurement = "kW"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_hourly_consumption_profile"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def native_value(self) -> float | None:
+        current_hour = datetime.now().hour
+        value = self._coordinator.learned_hourly_avg_kw(current_hour)
+        return round(value, 3) if value is not None else None
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        profile = {
+            str(hour): round(self._coordinator.learned_hourly_avg_kw(hour), 3)
+            for hour in range(24)
+            if self._coordinator.learned_hourly_avg_kw(hour) is not None
+        }
+        return {
+            "profile": profile,
+            "hours_with_data": len(profile),
+        }
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if last_state is None:
+            return
+        raw_profile = last_state.attributes.get("profile")
+        if not isinstance(raw_profile, dict):
+            return
+        restored: dict[int, list[float]] = {}
+        for hour_str, avg_value in raw_profile.items():
+            try:
+                hour = int(hour_str)
+                restored[hour] = [float(avg_value)]
+            except (TypeError, ValueError):
+                continue
+        if restored:
+            self._coordinator.hourly_consumption_profile = restored
 
 
 class UpcomingTimelineSensor(_CoordinatorDiagnosticSensor):
