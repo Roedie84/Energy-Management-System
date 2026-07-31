@@ -434,3 +434,33 @@ jouw sensor) correct als +300W meegeteld in de verbruikscorrectie, i.p.v.
 het verkeerd aftrekken van daarvoor.
 
 Geldt voor zowel de live correctie als de historische bootstrap.
+
+## v0.17.1 — verbruikswaarden nu in Watt weergegeven (gebruiksvriendelijker)
+
+`sensor.learned_night_consumption` en `sensor.hourly_consumption_profile`
+tonen hun state nu in **W** (bv. `318 W`) in plaats van `kW` (bv.
+`0.318`). Intern blijft alles gewoon in kW gerekend (nodig voor de
+kWh-berekeningen elders) — alleen de weergave is aangepast, dus dit heeft
+geen invloed op de logica of de opgeslagen/herstelde geschiedenis.
+
+Nieuw attribuut `profile_watts` op `sensor.hourly_consumption_profile`
+(naast het bestaande `profile` in kW, dat ongewijzigd blijft omdat
+daaruit na een HA-herstart wordt hersteld). De dashboard-kaart is
+bijgewerkt om deze Watt-attributen te tonen.
+
+## v0.17.2 — fix: komende-uren-tabel kwam niet altijd overeen met live status
+
+**Bug:** `sensor.expected_operation_mode` (live, energie-bewust) en de
+huidige rij in `sensor.upcoming_schedule` (een prijs-only projectie)
+konden voor hetzelfde moment een andere modus tonen — bijvoorbeeld live
+`smart_discharging` terwijl de tabel voor datzelfde kwartier `smart` liet
+zien. Dit gebeurde zodra de energie-gebaseerde beslissing (beschikbare
+kWh) een ander antwoord gaf dan de tijd-gebaseerde projectie.
+
+**Fix:** het kwartier dat "nu" bevat in de tabel gebruikt voortaan altijd
+exact dezelfde live beslissing als de `Expected operation mode`-sensor.
+Alleen toekomstige kwartieren blijven een projectie (die kan namelijk
+niet weten hoeveel beschikbare energie je over een paar uur hebt).
+
+Getest over 8 verschillende tijdstippen in een scenario waar dit eerder
+zou mismatchen — nu overal consistent.

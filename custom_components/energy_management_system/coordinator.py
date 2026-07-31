@@ -979,6 +979,8 @@ class EnergyManagementSystemCoordinator:
         cheap_block_start: datetime | None,
         discharge_start: datetime | None,
         effective_count: int,
+        live_is_expensive: bool | None = None,
+        live_should_postpone_charging: bool | None = None,
     ) -> list[dict]:
         """Project the current logic forward over all known forecast data.
 
@@ -989,6 +991,13 @@ class EnergyManagementSystemCoordinator:
         quarters are still marked; everything else defaults to 'smart'.
         The effective (possibly solar-reduced) count is only applied to
         today's date, matching the live decision logic.
+
+        The interval containing "now" is overridden with the live,
+        energy-aware decision (live_is_expensive/live_should_postpone_charging)
+        when provided, so the table's current row always matches what the
+        "Expected operation mode" sensor actually shows right now - only
+        intervals further in the future remain a price-only projection
+        (which can't know about live battery energy ahead of time).
         """
         today = now.date()
         by_date: dict = {}
@@ -1014,7 +1023,19 @@ class EnergyManagementSystemCoordinator:
             ]
             is_expensive = any(e[0] == entry[0] for e in most_expensive)
 
-            if is_expensive:
+            is_current_interval = entry[0] <= now < entry[1]
+
+            if is_current_interval and live_is_expensive is not None:
+                # Use the exact same live decision shown elsewhere, instead
+                # of the price-only projection, for this one interval.
+                is_expensive = live_is_expensive
+                if is_expensive:
+                    mode = OPTION_MANUAL
+                elif live_should_postpone_charging:
+                    mode = OPTION_SMART_DISCHARGING
+                else:
+                    mode = OPTION_SMART
+            elif is_expensive:
                 mode = OPTION_MANUAL
             elif (
                 discharge_start is not None
@@ -1169,7 +1190,13 @@ class EnergyManagementSystemCoordinator:
         self.last_is_expensive = is_expensive
         self.last_effective_expensive_quarters_count = effective_count
         self.last_timeline = self._build_forecast_timeline(
-            entries, now, cheap_block_start, self.last_discharge_start, effective_count
+            entries,
+            now,
+            cheap_block_start,
+            self.last_discharge_start,
+            effective_count,
+            live_is_expensive=is_expensive,
+            live_should_postpone_charging=should_postpone_charging,
         )
         self.last_transitions = self._collapse_timeline(self.last_timeline)
 

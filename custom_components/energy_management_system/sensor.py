@@ -345,7 +345,7 @@ class LearnedNightConsumptionSensor(SensorEntity, RestoreEntity):
     _attr_has_entity_name = True
     _attr_name = "Learned night consumption"
     _attr_icon = "mdi:chart-line"
-    _attr_native_unit_of_measurement = "kW"
+    _attr_native_unit_of_measurement = "W"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(self, coordinator, entry_id: str) -> None:
@@ -358,8 +358,10 @@ class LearnedNightConsumptionSensor(SensorEntity, RestoreEntity):
 
     @property
     def native_value(self) -> float | None:
+        # Stored/learned internally in kW (used for kWh math elsewhere);
+        # displayed in W for readability.
         value = self._coordinator.learned_night_consumption_kw
-        return round(value, 3) if value is not None else None
+        return round(value * 1000) if value is not None else None
 
     @property
     def extra_state_attributes(self) -> dict:
@@ -398,7 +400,7 @@ class HourlyConsumptionProfileSensor(SensorEntity, RestoreEntity):
     _attr_has_entity_name = True
     _attr_name = "Hourly consumption profile"
     _attr_icon = "mdi:chart-bell-curve"
-    _attr_native_unit_of_measurement = "kW"
+    _attr_native_unit_of_measurement = "W"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(self, coordinator, entry_id: str) -> None:
@@ -411,20 +413,29 @@ class HourlyConsumptionProfileSensor(SensorEntity, RestoreEntity):
 
     @property
     def native_value(self) -> float | None:
+        # Stored/learned internally in kW (used for kWh math elsewhere);
+        # displayed in W for readability.
         current_hour = datetime.now().hour
         value = self._coordinator.learned_hourly_avg_kw(current_hour)
-        return round(value, 3) if value is not None else None
+        return round(value * 1000) if value is not None else None
 
     @property
     def extra_state_attributes(self) -> dict:
-        profile = {
+        # "profile" stays in kW (used to restore state after a restart -
+        # do not change its scale). "profile_watts" is a display-friendly
+        # copy in whole Watts for dashboards.
+        profile_kw = {
             str(hour): round(self._coordinator.learned_hourly_avg_kw(hour), 3)
             for hour in range(24)
             if self._coordinator.learned_hourly_avg_kw(hour) is not None
         }
+        profile_watts = {
+            hour: round(value * 1000) for hour, value in profile_kw.items()
+        }
         return {
-            "profile": profile,
-            "hours_with_data": len(profile),
+            "profile": profile_kw,
+            "profile_watts": profile_watts,
+            "hours_with_data": len(profile_kw),
         }
 
     async def async_added_to_hass(self) -> None:
