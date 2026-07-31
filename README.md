@@ -395,3 +395,24 @@ geworden (een bekend probleem dat meerdere custom integraties trof, o.a.
 LocalTuya). Fix: de handmatige toewijzing is verwijderd — Home Assistant
 vult `self.config_entry` nu vanzelf in, volgens de door HA zelf
 aanbevolen migratie-aanpak.
+
+## v0.16.2 — fix: uurprofiel-bootstrap werd overgeslagen bij bestaande nachtverbruik-geschiedenis
+
+**Bug:** de historische bootstrap-functie stopte meteen zodra
+`night_consumption_history` (de oude, losse nachtvenster-meting) al
+gevuld was — óók als het nieuwe 24-uurs `hourly_consumption_profile` nog
+volledig leeg was. Voor iedereen die al vóór v0.15.0 had geleerd, werd
+het uurprofiel dus nooit met terugwerkende kracht gevuld, en moest het
+vanaf nul live opbouwen (uur voor uur, dag na dag).
+
+**Fix:** beide leerprocessen worden nu onafhankelijk van elkaar
+gecontroleerd en gebootstrapt. Getest: met een bestaande (niet-lege)
+`night_consumption_history` bootstrapt het uurprofiel nu alsnog correct
+voor alle 24 uur, zonder de bestaande nachtverbruik-geschiedenis aan te
+raken.
+
+**Let op — entity-ID's met apparaat/ruimte-voorvoegsel:** als je apparaat
+aan een ruimte is gekoppeld (bv. "Woonkamer"), krijgen entities een
+voorvoegsel zoals `sensor.woonkamer_energy_management_system_...`. Check
+dit altijd via Ontwikkelaarshulpmiddelen → Staten voordat je de
+dashboard-YAML plakt, en pas de entity-ID's zo nodig aan.

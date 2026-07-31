@@ -208,7 +208,9 @@ class EnergyManagementSystemCoordinator:
         data, and never raises - any failure just means normal day-by-day
         learning takes over.
         """
-        if self.night_consumption_history:
+        need_night_bootstrap = not self.night_consumption_history
+        need_hourly_bootstrap = not self.hourly_consumption_profile
+        if not need_night_bootstrap and not need_hourly_bootstrap:
             return
 
         consumption_entity = self.config.get(CONF_CONSUMPTION_POWER_SENSOR)
@@ -304,10 +306,11 @@ class EnergyManagementSystemCoordinator:
             )
 
         daily_averages: list[float] = []
-        for day in sorted(by_day.keys()):
-            values = by_day[day]
-            if values:
-                daily_averages.append(sum(values) / len(values) / 1000)
+        if need_night_bootstrap:
+            for day in sorted(by_day.keys()):
+                values = by_day[day]
+                if values:
+                    daily_averages.append(sum(values) / len(values) / 1000)
 
         if daily_averages:
             self.night_consumption_history = daily_averages[-LEARNING_HISTORY_DAYS:]
@@ -330,11 +333,12 @@ class EnergyManagementSystemCoordinator:
         # each (day, hour) bucket, compute that day's average kW, then feed
         # it into the rolling per-hour history exactly like live learning.
         per_hour_daily_averages: dict[int, list[float]] = {}
-        for (day, hour), values in by_day_hour.items():
-            if not values:
-                continue
-            avg_kw = (sum(values) / len(values)) / 1000
-            per_hour_daily_averages.setdefault(hour, []).append(avg_kw)
+        if need_hourly_bootstrap:
+            for (day, hour), values in by_day_hour.items():
+                if not values:
+                    continue
+                avg_kw = (sum(values) / len(values)) / 1000
+                per_hour_daily_averages.setdefault(hour, []).append(avg_kw)
 
         if per_hour_daily_averages:
             for hour, day_values in per_hour_daily_averages.items():
@@ -342,6 +346,7 @@ class EnergyManagementSystemCoordinator:
                     self.hourly_consumption_profile[hour] = day_values[
                         -LEARNING_HISTORY_DAYS:
                     ]
+            self.was_bootstrapped_from_history = True
             _LOGGER.info(
                 "Bootstrapped full-day hourly consumption profile from "
                 "history for %d hour-of-day buckets",
