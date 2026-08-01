@@ -488,6 +488,21 @@ class EnergyManagementSystemCoordinator:
 
     # -- Forecast parsing -------------------------------------------------
 
+    def _parse_forecast_datetime(self, value) -> datetime | None:
+        """Parse a forecast entry's start/end into a datetime, accepting
+        either an ISO string (the usual case) or an already-parsed
+        datetime object (some integrations, or newer versions of the same
+        integration, may expose these natively instead of as text -
+        calling dt_util.parse_datetime() on a non-string silently fails,
+        which previously caused every entry to be dropped and the whole
+        forecast to look empty).
+        """
+        if isinstance(value, datetime):
+            return value
+        if isinstance(value, str):
+            return dt_util.parse_datetime(value)
+        return None
+
     def _get_forecast_entries(self) -> list[PriceEntry]:
         """Read and parse the raw forecast attribute into (start, end, price) tuples."""
         state = self.hass.states.get(self.config[CONF_PRICE_SENSOR])
@@ -519,8 +534,8 @@ class EnergyManagementSystemCoordinator:
             if price_raw is None:
                 continue
 
-            start = dt_util.parse_datetime(start_raw)
-            end = dt_util.parse_datetime(end_raw)
+            start = self._parse_forecast_datetime(start_raw)
+            end = self._parse_forecast_datetime(end_raw)
             if start is None or end is None:
                 continue
             if start.tzinfo is None:

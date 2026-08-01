@@ -1218,3 +1218,30 @@ dat geleerde getal kreeg vervolgens correct voorrang boven een
 `available_energy_sensor_entity` moeten ingesteld zijn — zonder een van
 beide kan dit niet leren (en blijft de handmatige config-waarde gewoon
 gebruikt worden, zoals voorheen).
+
+## v0.34.1 — fix: "no_forecast_data" ondanks zichtbaar geldige prijsdata
+
+**Aanleiding:** een gebruiker zag `no_forecast_data` in het dashboard,
+terwijl de onderliggende Zonneplan-sensor aantoonbaar een volledig
+correcte `forecast`-lijst had (tientallen kwartieren met geldige
+start/eind-tijden en prijzen).
+
+**Vermoedelijke oorzaak:** `dt_util.parse_datetime()` verwacht een
+**tekst-string** als invoer. Als de Zonneplan-integratie is bijgewerkt en
+`start_date`/`end_date` sindsdien als **al-geparste Python-datetime-
+objecten** aanlevert in plaats van tekst (onzichtbaar in elke YAML/JSON-
+weergave, die altijd tekst toont), faalt die aanroep stilzwijgend op elk
+item — met precies "geen bruikbare data" tot gevolg, ook al ziet de
+brondata er prima uit.
+
+**Fix:** nieuwe helper `_parse_forecast_datetime()` die zowel tekst-
+strings als al-geparste datetime-objecten accepteert, in plaats van
+alleen tekst te verwachten. Getest: beide varianten worden nu correct
+verwerkt, zonder het bestaande (tekst-)gedrag te breken.
+
+**Kanttekening:** ik kon niet 100% hard bevestigen dat dit exact de
+oorzaak was (de gedeelde data was een YAML-weergave, die het onderliggende
+Python-type altijd als tekst toont, ongeacht wat het echt is) — maar de
+fix is veilig sowieso, en lost precies deze klasse van fout op. Mocht het
+probleem hierna nog steeds optreden, dan weten we dat de oorzaak elders
+zit en gaan we verder zoeken.
