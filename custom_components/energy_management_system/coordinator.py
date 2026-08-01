@@ -89,6 +89,7 @@ from .const import (
     SOLAR_RAMP_STEPS,
     GRID_IMPORT_SHORTFALL_THRESHOLD_W,
     SHORTFALL_MARGIN_BONUS_PER_RECENT_DAY,
+    EMERGENCY_LOW_BATTERY_KWH_THRESHOLD,
     MIN_SOLAR_HISTORY_FOR_DYNAMIC_THRESHOLD,
     OPTION_MANUAL,
     OPTION_SMART,
@@ -778,6 +779,14 @@ class EnergyManagementSystemCoordinator:
         time-of-day mix (e.g. partly daytime in winter), instead of a
         single flat average.
 
+        Corrected with a live-consumption scaling factor: if what's
+        actually being drawn right now is higher than the learned average
+        for this hour (e.g. the airco is running tonight), the whole
+        remaining estimate is scaled up proportionally - a tonight-only
+        spike wouldn't otherwise show up until it's baked into tomorrow's
+        learned average, by which point it's too late to protect the
+        reserve for this same night.
+
         Returns None if the profile doesn't yet have data for every hour
         the period spans, so the caller can fall back to a simpler
         estimate.
@@ -800,6 +809,23 @@ class EnergyManagementSystemCoordinator:
 
             total_kwh += avg_kw * fraction_hours
             cursor = segment_end
+
+        current_hour_learned_kw = self.learned_hourly_avg_kw(start.hour)
+        if current_hour_learned_kw and current_hour_learned_kw > 0:
+            live_power_w = self._read_corrected_consumption_power()
+            if live_power_w is not None and live_power_w > 0:
+                live_kw = live_power_w / 1000
+                if live_kw > current_hour_learned_kw:
+                    correction_ratio = live_kw / current_hour_learned_kw
+                    _LOGGER.debug(
+                        "Live consumption (%.0fW) is %.1fx the learned "
+                        "average for this hour (%.0fW) - scaling up the "
+                        "remaining consumption estimate accordingly",
+                        live_power_w,
+                        correction_ratio,
+                        current_hour_learned_kw * 1000,
+                    )
+                    total_kwh *= correction_ratio
 
         return total_kwh
 
@@ -1184,6 +1210,42 @@ class EnergyManagementSystemCoordinator:
             )
 
         return needed_kwh * margin
+
+    def _is_emergency_low_battery(self) -> bool:
+        """Is the battery critically low right now, AND is little solar
+        expected to refill it soon? Deliberately scoped to the winter
+        scenario: in summer, a critically low battery refills quickly from
+        solar the next morning anyway (better handled by discharging less
+        in the first place - see the live-consumption correction in
+        `_estimate_consumption_kwh_for_period`), so an emergency grid
+        top-up isn't needed or desirable there. In winter, with little
+        solar in the outlook, a critically low battery risks running the
+        household on grid power for an extended stretch, so a safety-net
+        top-up makes sense.
+
+        Prefers the SoC sensor (compared against the same configured
+        minimum used elsewhere); falls back to a small absolute kWh
+        buffer on the available-energy sensor if no SoC sensor is set.
+        """
+        if not self._is_low_solar_expected():
+            return False
+
+        soc_entity = self.config.get(CONF_SOC_SENSOR)
+        if soc_entity:
+            soc = self._read_sensor_float(soc_entity)
+            if soc is not None:
+                min_soc = float(
+                    self.config.get(CONF_MIN_SOC_PERCENT, DEFAULT_MIN_SOC_PERCENT)
+                )
+                return soc <= min_soc
+
+        available_entity = self.config.get(CONF_AVAILABLE_ENERGY_SENSOR)
+        if available_entity:
+            available_kwh = self._read_sensor_float(available_entity)
+            if available_kwh is not None:
+                return available_kwh <= EMERGENCY_LOW_BATTERY_KWH_THRESHOLD
+
+        return False
 
     def _update_shortfall_detection(self, now: datetime, reason: str) -> None:
         """Detect unexpected net grid import during a period this
@@ -1808,7 +1870,10 @@ class EnergyManagementSystemCoordinator:
         if reason == "expensive_quarter" and discharge_power_w:
             energy_kwh = (discharge_power_w / 1000) * elapsed_hours
             self.total_discharge_value_eur += energy_kwh * current_price
-        elif reason == "grid_charging_low_solar" and charge_power_w:
+        elif (
+            reason in ("grid_charging_low_solar", "emergency_low_battery")
+            and charge_power_w
+        ):
             energy_kwh = (abs(charge_power_w) / 1000) * elapsed_hours
             self.total_charge_cost_eur += energy_kwh * current_price
 
@@ -1922,6 +1987,20 @@ class EnergyManagementSystemCoordinator:
                 "Er wordt weinig zon verwacht, dus tijdens dit goedkoopste "
                 "moment van de dag wordt er actief bijgeladen vanaf het net "
                 "(manual, negatief vermogen) in plaats van te wachten op zon."
+            )
+
+        elif reason == "emergency_low_battery":
+            soc_txt = (
+                f"{self.last_soc_percent:.0f}%"
+                if self.last_soc_percent is not None
+                else "kritiek laag"
+            )
+            parts.append(
+                f"NOODLADEN: de accu staat op {soc_txt}, te kritiek om te "
+                f"wachten tot het goedkoopste blok. De integratie laadt nu "
+                f"actief bij vanaf het net, ook al is dit niet het "
+                f"goedkoopste moment - beter een klein beetje duurder laden "
+                f"dan de accu helemaal leeg laten lopen."
             )
 
         elif reason == "negative_price":
@@ -2187,6 +2266,24 @@ class EnergyManagementSystemCoordinator:
             scaled_power = self._get_soc_scaled_discharge_power(
                 discharge_power, now, cheap_block_start
             )
+            if scaled_power is None and self._is_emergency_low_battery():
+                # SoC too low to discharge - and critically low, not just
+                # "protected". Don't just sit in smart mode hoping for the
+                # best (that's exactly what failed in the reported
+                # incident) - actively top up instead.
+                charge_power = self.config.get(
+                    CONF_MANUAL_CHARGE_POWER, DEFAULT_MANUAL_CHARGE_POWER
+                )
+                await self._async_apply_manual(charge_power)
+                self.last_reason = "emergency_low_battery"
+                self._grid_charged_today = True
+                self.last_charge_power_applied = charge_power
+                self._update_financial_tracking(
+                    now, entries, self.last_reason, None, charge_power
+                )
+                self._update_shortfall_detection(now, self.last_reason)
+                self.last_explanation = self._build_explanation()
+                return
             if scaled_power is None:
                 # SoC too low to justify forced export - protect the
                 # battery and let the Zendure's own smart mode take over.
@@ -2208,6 +2305,26 @@ class EnergyManagementSystemCoordinator:
             )
             await self._async_apply_manual(charge_power)
             self.last_reason = "grid_charging_low_solar"
+            self._grid_charged_today = True
+            self.last_charge_power_applied = charge_power
+            self._update_financial_tracking(
+                now, entries, self.last_reason, None, charge_power
+            )
+            self._update_shortfall_detection(now, self.last_reason)
+            self.last_explanation = self._build_explanation()
+            return
+
+        # Emergency top-up: the battery is critically low right now,
+        # regardless of price timing. Don't passively wait for the cheap
+        # block to arrive - that's exactly what failed in the reported
+        # incident (the shortage was visible hours in advance, but nothing
+        # intervened outside the cheap block until the battery was empty).
+        if self._is_emergency_low_battery():
+            charge_power = self.config.get(
+                CONF_MANUAL_CHARGE_POWER, DEFAULT_MANUAL_CHARGE_POWER
+            )
+            await self._async_apply_manual(charge_power)
+            self.last_reason = "emergency_low_battery"
             self._grid_charged_today = True
             self.last_charge_power_applied = charge_power
             self._update_financial_tracking(

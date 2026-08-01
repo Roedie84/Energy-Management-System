@@ -111,6 +111,11 @@ GRID_IMPORT_SHORTFALL_THRESHOLD_W = 100.0
 # multi-day low-solar margin): naturally bounded by the rolling window.
 SHORTFALL_MARGIN_BONUS_PER_RECENT_DAY = 5.0
 
+# Fallback threshold (kWh) for the emergency low-battery charge trigger,
+# used only when no SoC sensor is configured (SoC% is preferred - see
+# _is_emergency_low_battery). Keeps a small buffer above absolute zero.
+EMERGENCY_LOW_BATTERY_KWH_THRESHOLD = 0.3
+
 # Zonneplan's raw "amount" values are scaled by this factor to get €/kWh
 # (e.g. 3728480 / 10_000_000 = 0.372848 €/kWh).
 PRICE_SCALE_FACTOR = 10_000_000

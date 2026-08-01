@@ -960,3 +960,71 @@ de geschiedenis, en de marge-berekening met 3 recente tekortkomingen
 
 Ook `diagnostics.py` is meteen bijgewerkt met deze nieuwe velden — geleerd
 van de vorige keer dat dit werd vergeten.
+
+## v0.28.1 — noodlaad-mechanisme (fix voor lege accu 's nachts)
+
+**Aanleiding:** een gebruiker rapporteerde dat de accu rond 04:00 leeg
+raakte terwijl er nog huishoudverbruik nodig was, met ongewenste
+netimport tot gevolg. Analyse van diens `energy_bridge_transition_log`
+liet zien dat de integratie het al om **middernacht zag aankomen**
+(4,84 kWh beschikbaar tegen 9,2 kWh benodigd → "top_up_needed"), maar
+niets deed omdat het goedkoopste blok pas om 09:00 begon — buiten dat
+blok greep de integratie nooit in, ze wachtte gewoon passief af terwijl
+de accu leegliep.
+
+**Kern van het probleem:** de energie-brug-check bepaalt alleen of laden
+mag worden **uitgesteld** — bij een tekort viel de integratie terug op
+`smart` (Zendure's eigen logica), zonder dat de Zendure wist dat wíj al
+een tekort hadden berekend. Onze reserve-bescherming beschermde alleen
+tegen onze eigen geforceerde acties, niet tegen normale huishoud-ontlading
+buiten het goedkoopste blok.
+
+**Fix — nieuw noodlaad-mechanisme:** als de accu **kritiek laag** staat
+(op of onder de ingestelde minimum-SoC, of een kleine kWh-marge zonder
+SoC-sensor), begint de integratie **nu al** actief te laden vanaf het net
+— ook buiten het goedkoopste blok, ook tijdens een duur kwartier als de
+SoC-bescherming daar toch al geen ontlading toestaat. Nieuwe reden:
+`emergency_low_battery`, met een duidelijke melding in `sensor.explanation`.
+
+Getest: bij exact het gerapporteerde scenario (SoC 7%, middernacht, ver
+van het goedkoopste blok om 09:00) triggert de integratie nu correct
+`emergency_low_battery` en laadt actief bij, in plaats van passief
+`default_smart` te blijven. Zodra de SoC weer boven het minimum komt,
+stopt het noodladen vanzelf.
+
+Ook meegenomen in de winter-guard (`_grid_charged_today`) en de
+financiële tracking, zodat noodladen consistent wordt behandeld als elke
+andere netlaad-actie.
+
+## v0.29.0 — correctie: het echte probleem was over-ontladen, niet te weinig laden
+
+**Belangrijke correctie op v0.28.1.** De gebruiker die het oorspronkelijke
+incident meldde, gaf aan: de accu was **vol** aan het begin van de avond en
+dat was ruim voldoende geweest voor de nacht — het probleem was dat er
+tijdens het dure kwartier **te veel is teruggeleverd/ontladen**, niet dat
+er te weinig was om bij te laden. Het noodlaad-mechanisme van v0.28.1
+loste dus het verkeerde probleem op.
+
+**De echte oorzaak:** onze dynamische ontlaad-reserve gebruikte alleen het
+**geleerde gemiddelde verbruik per uur** — niet het **live actuele
+verbruik**. Als je 's nachts bijvoorbeeld de airco aan hebt, verbruik je
+veel meer dan het historische gemiddelde voor dat uur, maar dat zag de
+integratie pas terug in het geleerde profiel van morgen — te laat om die
+specifieke nacht te beschermen.
+
+**Fix:** de periode-schatting (`_estimate_consumption_kwh_for_period`)
+vergelijkt nu het live verbruik met het geleerde gemiddelde voor het
+huidige uur. Is het live verbruik hoger (airco, wasmachine, etc.), dan
+wordt de **hele resterende schatting evenredig opgeschaald** — minder
+headroom om te verkopen, meer reserve voor je eigen verbruik. Getest:
+bij 3x hoger live verbruik dan het geleerde gemiddelde steeg de reserve
+ook exact 3x (van 1,1 naar 3,3 kWh).
+
+**Het noodlaad-mechanisme (v0.28.1) blijft bestaan, maar nu specifiek
+gekoppeld aan de winter-situatie:** het triggert alleen nog als de accu
+kritiek laag staat ÉN er weinig zon wordt verwacht (dezelfde detectie als
+het winter-netladen-mechanisme, v0.18.0). In de zomer lost de
+live-verbruik-correctie het probleem al op (minder ontladen), en vult de
+accu zich toch snel weer bij met zon — bijladen is dan niet nodig. Getest:
+zelfde kritiek lage SoC (7%) triggert nu geen noodladen bij veel zon
+morgen, maar wel bij weinig zon.
