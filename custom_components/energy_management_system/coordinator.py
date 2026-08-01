@@ -220,6 +220,11 @@ class EnergyManagementSystemCoordinator:
         self.total_charge_cost_eur: float = 0.0
         self.last_charge_power_applied: float | None = None
 
+        # Tracked so diagnostics can flag "no progress despite enough
+        # elapsed time" for the various learning mechanisms below,
+        # instead of that only being caught by manually reading code.
+        self.first_seen_date: date | None = None
+
         # -- Winter guard: don't manual-discharge after grid-charging today --
         # If the battery was force-charged from the grid today (low solar),
         # don't also manual-discharge at high prices that same day - that
@@ -2216,6 +2221,8 @@ class EnergyManagementSystemCoordinator:
 
     async def _async_update_locked(self) -> None:
         now = dt_util.now()
+        if self.first_seen_date is None:
+            self.first_seen_date = now.date()
         entries = self._get_forecast_entries()
 
         if not entries:

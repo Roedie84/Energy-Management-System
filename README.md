@@ -1119,3 +1119,36 @@ bevestigd), wordt nu wél behouden bij een herstart.
 **Voor de duidelijkheid:** dit gold **alleen** voor de PV-uurbias-sensor.
 Het uurverbruiksprofiel had deze bug niet (gebruikt een andere,
 drempel-vrije methode) en bouwde dus al die tijd al correct op.
+
+## v0.32.0 — volledige audit + zelf-diagnosticerende "learning_health"
+
+**Aanleiding:** terechte feedback dat de PV-uurbias-bug (v0.31.1) eerder
+had moeten opvallen uit eerdere diagnostiek-exports, in plaats van pas
+na expliciet doorvragen.
+
+**1. Volledige audit uitgevoerd** op hetzelfde patroon (weergave-drempel
+die per ongeluk ook persistentie blokkeert): alle 9 persistente sensoren
+en beide switches gecontroleerd. Alleen de al gefixte PV-uurbias-sensor
+had dit probleem — de rest slaat overal de rauwe data op, los van elke
+weergave-drempel.
+
+**2. Nieuwe `learning_health`-sectie in de diagnostiek-export**, die
+automatisch signaleert of een leerproces geen voortgang boekt ondanks
+voldoende verstreken tijd (bijgehouden via een nieuw `first_seen_date`).
+Elke tracker (uurverbruiksprofiel, nachtverbruik, PV-uurbias,
+Solcast-nauwkeurigheid) krijgt een `OK`/`SUSPICIOUS`-vlag met een
+concrete verklaring, inclusief expliciete verwijzing naar bekende eerdere
+bugs als mogelijke oorzaak.
+
+Getest: exact het gerapporteerde scenario (12 dagen geïnstalleerd, 0 uur
+PV-uurbias-data) werd meteen correct als `SUSPICIOUS` gemarkeerd, met een
+directe verwijzing naar de v0.31.1-bug.
+
+**Ook toegevoegd:** `pv_hourly_bias_profile_raw` (alle uren met
+minstens 1 meting) naast de bestaande `_confident`-versie, zodat
+gedeeltelijke voortgang ook in de hoofd-diagnostiek zichtbaar is, niet
+alleen in de nieuwe health-sectie.
+
+Dit is bedoeld om dit soort problemen voortaan **direct uit een enkele
+diagnostiek-export** te kunnen signaleren, zonder dat daar eerst
+expliciet naar gevraagd hoeft te worden.

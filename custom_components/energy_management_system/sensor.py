@@ -576,6 +576,11 @@ class LearnedNightConsumptionSensor(SensorEntity, RestoreEntity):
             ],
             ATTR_SAMPLE_COUNT: len(self._coordinator.night_consumption_history),
             "bootstrapped_from_history": self._coordinator.was_bootstrapped_from_history,
+            "first_seen_date": (
+                self._coordinator.first_seen_date.isoformat()
+                if self._coordinator.first_seen_date
+                else None
+            ),
         }
 
     async def async_added_to_hass(self) -> None:
@@ -588,6 +593,14 @@ class LearnedNightConsumptionSensor(SensorEntity, RestoreEntity):
                     self._coordinator.night_consumption_history = [
                         float(v) for v in history
                     ][-LEARNING_HISTORY_DAYS:]
+                except (TypeError, ValueError):
+                    pass
+            first_seen_raw = last_state.attributes.get("first_seen_date")
+            if first_seen_raw:
+                try:
+                    self._coordinator.first_seen_date = date.fromisoformat(
+                        first_seen_raw
+                    )
                 except (TypeError, ValueError):
                     pass
 

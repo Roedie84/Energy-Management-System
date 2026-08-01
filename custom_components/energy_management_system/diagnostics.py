@@ -109,6 +109,99 @@ def _scan_relevant_entities(
     return sorted(results, key=lambda item: item["entity_id"])
 
 
+def _hours_with_data(getter) -> int:
+    return sum(1 for hour in range(24) if getter(hour) is not None)
+
+
+def _build_learning_health(coordinator, solar_tracker, now: datetime) -> dict[str, Any]:
+    """Explicit, automated health check for every learning/history
+    mechanism - flags "no progress despite enough elapsed time" so this
+    kind of issue is visible directly in the exported JSON, instead of
+    only being caught by manually reading the code (see the
+    pv_hourly_bias persistence bug found in v0.31.1 - this section exists
+    specifically so that class of bug is easier to catch next time).
+    """
+    days_since_install = (
+        (now.date() - coordinator.first_seen_date).days
+        if coordinator.first_seen_date
+        else None
+    )
+
+    def _flag(condition_ok: bool, hint: str) -> str:
+        return "OK" if condition_ok else f"SUSPICIOUS: {hint}"
+
+    installed_long_enough_for_days = (
+        days_since_install is not None and days_since_install >= 2
+    )
+    installed_long_enough_for_hours = (
+        days_since_install is not None and days_since_install >= 4
+    )
+
+    hourly_consumption_hours = _hours_with_data(coordinator.learned_hourly_avg_kw)
+    pv_hourly_raw_hours = _hours_with_data(coordinator.raw_pv_hourly_avg)
+    pv_hourly_confident_hours = _hours_with_data(coordinator.learned_pv_hourly_ratio)
+
+    checks: dict[str, Any] = {
+        "hourly_consumption_profile": {
+            "hours_with_data": hourly_consumption_hours,
+            "flag": _flag(
+                hourly_consumption_hours > 0 or not installed_long_enough_for_hours,
+                "0/24 hours filled despite being installed for "
+                f"{days_since_install} day(s) - check consumption_power_sensor_entity "
+                "is configured and readable, and that the coordinator is actually "
+                "running (not stuck on force_manual or a setup error).",
+            ),
+        },
+        "night_consumption_history": {
+            "entries": len(coordinator.night_consumption_history),
+            "flag": _flag(
+                len(coordinator.night_consumption_history) > 0
+                or not installed_long_enough_for_days,
+                "No entries despite being installed for "
+                f"{days_since_install} day(s) - legacy fallback, only "
+                "fills during an actual discharging window.",
+            ),
+        },
+        "pv_hourly_bias": {
+            "hours_with_any_data": pv_hourly_raw_hours,
+            "hours_with_confident_data": pv_hourly_confident_hours,
+            "flag": _flag(
+                pv_hourly_raw_hours > 0 or not installed_long_enough_for_hours,
+                "0/24 hours have ANY data (not even 1 sample) despite "
+                f"being installed for {days_since_install} day(s) - check "
+                "pv_power_sensor_entity and the solar forecast sensors are "
+                "configured and readable. If this ever shows >0 hours_with_any_data "
+                "but the sensor's own 'profile' attribute in Home Assistant is "
+                "empty, that's the persistence bug fixed in v0.31.1 recurring - "
+                "check the sensor's async_added_to_hass restore logic.",
+            ),
+        },
+    }
+
+    if solar_tracker is not None:
+        checks["solar_forecast_accuracy"] = {
+            "forecast_value_history_entries": len(
+                solar_tracker.forecast_value_history
+            ),
+            "deviation_history_entries": len(solar_tracker.deviation_history),
+            "flag": _flag(
+                len(solar_tracker.forecast_value_history) > 0
+                or not installed_long_enough_for_days,
+                "No forecast_value_history entries despite being "
+                f"installed for {days_since_install} day(s) - check "
+                "solar_forecast_sensor_entity is configured, readable, and "
+                "that its value looks like a plausible daily kWh total "
+                "(not e.g. a peak-power sensor - see the "
+                "MAX_REASONABLE_DAILY_FORECAST_KWH sanity check).",
+            ),
+        }
+
+    return {
+        "days_since_install": days_since_install,
+        "checks": checks,
+    }
+
+
 async def async_get_config_entry_diagnostics(
     hass: HomeAssistant, entry: ConfigEntry
 ) -> dict[str, Any]:
@@ -120,7 +213,11 @@ async def async_get_config_entry_diagnostics(
 
     diagnostics: dict[str, Any] = {
         "config": config,
+        "learning_health": _build_learning_health(
+            coordinator, solar_tracker, datetime.now()
+        ),
         "coordinator": {
+            "first_seen_date": _iso(coordinator.first_seen_date),
             "force_manual": coordinator.force_manual,
             "learning_only": coordinator.learning_only,
             "last_reason": coordinator.last_reason,
@@ -160,10 +257,15 @@ async def async_get_config_entry_diagnostics(
                 for hour in range(24)
                 if coordinator.learned_hourly_avg_kw(hour) is not None
             },
-            "pv_hourly_bias_profile": {
+            "pv_hourly_bias_profile_confident": {
                 str(hour): coordinator.learned_pv_hourly_ratio(hour)
                 for hour in range(24)
                 if coordinator.learned_pv_hourly_ratio(hour) is not None
+            },
+            "pv_hourly_bias_profile_raw": {
+                str(hour): coordinator.raw_pv_hourly_avg(hour)
+                for hour in range(24)
+                if coordinator.raw_pv_hourly_avg(hour) is not None
             },
             "was_bootstrapped_from_history": (
                 coordinator.was_bootstrapped_from_history
