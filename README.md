@@ -1090,3 +1090,32 @@ de fix nog maar **1**, gevolgd door een correcte terugval naar `smart`.
 **Resultaat:** wat je in het dashboard ziet, komt nu overeen met wat er
 werkelijk gaat gebeuren — geen misleidend lange ontlaadblokken meer die
 geen rekening houden met wat je accu daadwerkelijk aankan.
+
+## v0.31.1 — fix: PV-uurbias verloor alle voortgang bij elke herstart
+
+**Gevonden bug:** `sensor.pv_hourly_forecast_bias` bleef na weken nog
+steeds volledig leeg (`{}`), terwijl het uurverbruiksprofiel prima vulde.
+Oorzaak: het `profile`-attribuut (gebruikt om na een herstart te
+herstellen) werd opgebouwd via `learned_pv_hourly_ratio()`, die pas een
+waarde teruggeeft zodra een uur **minstens 3 metingen** heeft. Een uur met
+1 of 2 metingen werd dus nooit opgeslagen — en ging bij elke Home
+Assistant-herstart (waarvan er, met alle updates, behoorlijk wat zijn
+geweest) gewoon **verloren**, voordat het ooit de kans kreeg om aan 3
+metingen te komen.
+
+**Fix:** nieuwe methode `raw_pv_hourly_avg()` zonder de
+minimum-metingen-eis, specifiek voor persistentie. De weergave/besluit­
+vorming (`learned_pv_hourly_ratio()`, ongewijzigd) blijft wel pas een
+waarde gebruiken bij voldoende vertrouwen — alleen het **opslaan** van
+tussentijdse voortgang is losgekoppeld van die eis.
+
+Nieuw attribuut `profile_confident` (het oude gedrag, alleen uren met
+genoeg metingen) naast het bestaande `profile` (nu alle uren met minstens
+1 meting, voor persistentie).
+
+Getest: een uur met slechts 1 meting werd voorheen nooit opgeslagen (bug
+bevestigd), wordt nu wél behouden bij een herstart.
+
+**Voor de duidelijkheid:** dit gold **alleen** voor de PV-uurbias-sensor.
+Het uurverbruiksprofiel had deze bug niet (gebruikt een andere,
+drempel-vrije methode) en bouwde dus al die tijd al correct op.

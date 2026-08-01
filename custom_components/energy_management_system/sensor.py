@@ -694,14 +694,27 @@ class PvHourlyBiasSensor(SensorEntity, RestoreEntity):
 
     @property
     def extra_state_attributes(self) -> dict:
+        # "profile" is used to restore state after a restart - built from
+        # the RAW average (no minimum-sample gate), so partial progress
+        # (1-2 samples for an hour) survives a restart instead of being
+        # silently discarded. "profile_confident" is the display-friendly
+        # version, only showing hours with enough history to be used in
+        # actual decisions (see learned_pv_hourly_ratio).
         profile = {
+            str(hour): round(self._coordinator.raw_pv_hourly_avg(hour), 3)
+            for hour in range(24)
+            if self._coordinator.raw_pv_hourly_avg(hour) is not None
+        }
+        profile_confident = {
             str(hour): round(self._coordinator.learned_pv_hourly_ratio(hour), 3)
             for hour in range(24)
             if self._coordinator.learned_pv_hourly_ratio(hour) is not None
         }
         return {
             "profile": profile,
+            "profile_confident": profile_confident,
             "hours_with_data": len(profile),
+            "hours_with_confident_data": len(profile_confident),
         }
 
     async def async_added_to_hass(self) -> None:

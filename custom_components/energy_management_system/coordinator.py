@@ -1128,12 +1128,30 @@ class EnergyManagementSystemCoordinator:
         self._pv_hour_duration_hours = 0.0
 
     def learned_pv_hourly_ratio(self, hour: int) -> float | None:
-        """Learned (actual/forecast) ratio for a given hour-of-day (0-23).
-        1.0 = forecast matches reality, <1.0 = Solcast over-forecasts that
-        hour, >1.0 = Solcast under-forecasts it. None if not enough data yet.
+        """Learned (actual/forecast) ratio for a given hour-of-day (0-23),
+        used for actual decisions/display. 1.0 = forecast matches reality,
+        <1.0 = Solcast over-forecasts that hour, >1.0 = under-forecasts it.
+        None if there isn't yet enough history to be confident (see
+        MIN_SOLAR_HISTORY_FOR_DYNAMIC_THRESHOLD).
+
+        For persistence across restarts, use `raw_pv_hourly_avg` instead -
+        gating persistence on this same confidence threshold would mean
+        any hour with 1-2 samples (not yet "confident") never gets saved
+        at all, silently losing all partial progress on every restart.
         """
         values = self.pv_hourly_bias_history.get(hour)
         if not values or len(values) < MIN_SOLAR_HISTORY_FOR_DYNAMIC_THRESHOLD:
+            return None
+        return sum(values) / len(values)
+
+    def raw_pv_hourly_avg(self, hour: int) -> float | None:
+        """Same average as `learned_pv_hourly_ratio`, but without the
+        minimum-sample-count gate - returns a value as soon as there's at
+        least one sample. Used for persistence, so partial progress (1-2
+        samples) survives a restart instead of being silently discarded.
+        """
+        values = self.pv_hourly_bias_history.get(hour)
+        if not values:
             return None
         return sum(values) / len(values)
 
