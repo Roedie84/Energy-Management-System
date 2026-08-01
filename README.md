@@ -1270,3 +1270,45 @@ dit gebeurt, de logs eindelijk de echte oorzaak tonen (bestandsnaam, regel
 en het exacte type fout) in plaats van een leeg "task: None". Zodra dat
 zich voordoet: deel die volledige stacktrace, dan kunnen we de
 onderliggende oorzaak definitief vinden.
+
+## v0.34.3 — kritieke regressie gefixt: `_read_corrected_consumption_power` was per ongeluk verwijderd
+
+**De daadwerkelijke oorzaak van de "no_forecast_data"-melding**, dankzij
+de volledige stacktrace die de v0.34.2-fix eindelijk zichtbaar maakte:
+
+```
+AttributeError: 'EnergyManagementSystemCoordinator' object has no
+attribute '_read_corrected_consumption_power'.
+```
+
+**Wat er misging:** bij het toevoegen van het zelflerende accu-rendement
+(v0.34.0) is per ongeluk de `def`-regel van de bestaande methode
+`_read_corrected_consumption_power` overschreven, waardoor de docstring
+en implementatie van die methode los kwamen te hangen en per ongeluk als
+dode/onbereikbare code binnen een andere (nieuwe) property terechtkwamen.
+Python's compiler accepteerde dit stilzwijgend (geen syntaxfout — het was
+gewoon onbereikbare code binnen een functie-body), dus de fout kwam pas
+aan het licht bij daadwerkelijk gebruik: elke berekening die deze methode
+aanriep, crashte met een `AttributeError`, wat de coordinator liet
+stoppen halverwege de update — precies op het punt waar hij normaal de
+prijsvoorspelling zou verwerken, vandaar de misleidende
+"no_forecast_data"-melding (de update crashte namelijk vóórdat dat
+specifieke stukje ooit bereikt kon worden bij een latere,
+gedeeltelijk geslaagde tick).
+
+**Fix:** de methode is hersteld met zijn eigen `def`-regel, exact zoals
+hij hoorde te zijn.
+
+**Extra controle uitgevoerd:** een volledige AST-scan van het hele
+bestand, die alle `self.<methode>()`-aanroepen vergelijkt met alle
+daadwerkelijk gedefinieerde methoden — bevestigt dat dit de **enige**
+zo'n regressie was, nergens anders in het bestand.
+
+**Getest:** de methode geeft na de fix weer correct het gecorrigeerde
+verbruik terug (300+500+100=900W in een testscenario), en een volledige
+update-cyclus draait weer zonder te crashen.
+
+Dank aan de gebruiker die dit heeft gemeld en, cruciaal, de volledige
+stacktrace heeft gedeeld zodra die beschikbaar was — zonder die
+stacktrace (mogelijk gemaakt door de v0.34.2-fix) was dit vrijwel
+onmogelijk geweest om te vinden.

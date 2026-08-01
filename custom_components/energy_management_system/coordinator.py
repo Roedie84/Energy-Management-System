@@ -755,7 +755,7 @@ class EnergyManagementSystemCoordinator:
             self.learned_efficiency_history
         )
 
-
+    def _read_corrected_consumption_power(self) -> float | None:
         """Household consumption estimate (W), corrected for the battery
         and (optionally) solar production masking the true load on the
         grid meter.
