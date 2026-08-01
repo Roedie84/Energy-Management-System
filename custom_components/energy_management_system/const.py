@@ -13,6 +13,7 @@ CONF_MANUAL_DISCHARGE_POWER = "manual_discharge_power"
 CONF_MANUAL_CHARGE_POWER = "manual_charge_power"
 CONF_NEGATIVE_PRICE_CHARGE_POWER = "negative_price_charge_power"
 CONF_SOLAR_POWER_LIMIT_ENTITY = "solar_power_limit_entity"
+CONF_BATTERY_ROUND_TRIP_EFFICIENCY = "battery_round_trip_efficiency_percent"
 CONF_SOLAR_FORECAST_SENSOR = "solar_forecast_sensor_entity"
 CONF_SOLAR_TODAY_FORECAST_SENSOR = "solar_today_forecast_sensor_entity"
 CONF_SOLAR_REMAINING_TODAY_SENSOR = "solar_remaining_today_sensor_entity"
@@ -92,6 +93,24 @@ DEFAULT_EXPENSIVE_QUARTERS_COUNT = 4
 DEFAULT_MANUAL_DISCHARGE_POWER = 1600
 DEFAULT_MANUAL_CHARGE_POWER = -2000
 DEFAULT_NEGATIVE_PRICE_CHARGE_POWER = -2000
+
+# Typical Li-ion home battery round-trip efficiency, if not overridden.
+# Applied to discount how much expected solar production actually reduces
+# the discharge reserve need - solar routed through the battery (rather
+# than covering household load directly) loses some energy to round-trip
+# conversion losses before it's usable again.
+DEFAULT_BATTERY_ROUND_TRIP_EFFICIENCY_PERCENT = 90.0
+
+# Minimum cumulative charged energy (kWh) before computing a new
+# efficiency sample - avoids noisy estimates from tiny amounts of energy
+# where sensor rounding/timing errors dominate.
+MIN_CHARGED_KWH_FOR_EFFICIENCY_SAMPLE = 1.0
+
+# Sanity bounds for a single efficiency sample (%) - outside this range is
+# almost certainly a measurement glitch (e.g. a sensor reset, a missed
+# reading), not a real efficiency value, and gets discarded.
+MIN_PLAUSIBLE_EFFICIENCY_PERCENT = 50.0
+MAX_PLAUSIBLE_EFFICIENCY_PERCENT = 100.0
 
 # Ramp duration/steps for gradually curtailing/restoring the solar
 # inverter's power limit around negative-price periods.

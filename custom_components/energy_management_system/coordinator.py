@@ -58,6 +58,11 @@ from .const import (
     CONF_MANUAL_CHARGE_POWER,
     CONF_NEGATIVE_PRICE_CHARGE_POWER,
     CONF_SOLAR_POWER_LIMIT_ENTITY,
+    CONF_BATTERY_ROUND_TRIP_EFFICIENCY,
+    DEFAULT_BATTERY_ROUND_TRIP_EFFICIENCY_PERCENT,
+    MIN_CHARGED_KWH_FOR_EFFICIENCY_SAMPLE,
+    MIN_PLAUSIBLE_EFFICIENCY_PERCENT,
+    MAX_PLAUSIBLE_EFFICIENCY_PERCENT,
     CONF_MANUAL_DISCHARGE_POWER,
     CONF_MANUAL_POWER_NUMBER,
     CONF_MIN_SOC_PERCENT,
@@ -235,6 +240,19 @@ class EnergyManagementSystemCoordinator:
         # -- Negative price handling --
         self._is_negative_price_active: bool = False
         self._solar_ramp_task = None
+
+        # -- Self-learned battery round-trip efficiency --
+        # Continuously track cumulative charged/discharged energy plus
+        # the actual change in available (usable) energy, so the real
+        # efficiency can be derived empirically instead of relying on a
+        # guessed config value: charged_kwh * efficiency = discharged_kwh
+        # + delta_available_kwh (energy that went in either came back out
+        # again, or is still stored - what's missing is the loss).
+        self.learned_efficiency_history: list[float] = []
+        self._efficiency_cumulative_charged_kwh: float = 0.0
+        self._efficiency_cumulative_discharged_kwh: float = 0.0
+        self._efficiency_checkpoint_available_kwh: float | None = None
+        self._efficiency_last_sample_time: datetime | None = None
 
         # -- Reserve shortfall detection & learning --
         # If net grid import happens during a period we believe should be
@@ -607,7 +625,122 @@ class EnergyManagementSystemCoordinator:
         except (TypeError, ValueError):
             return None
 
-    def _read_corrected_consumption_power(self) -> float | None:
+    def _read_corrected_battery_power(self) -> float | None:
+        """Battery power (W), sign-corrected: positive = discharging,
+        negative = charging (matching the manual power number's
+        convention). Returns None if no battery power sensor is
+        configured or unavailable.
+        """
+        battery_entity = self.config.get(CONF_BATTERY_POWER_SENSOR)
+        if not battery_entity:
+            return None
+        battery_power = self._read_sensor_float(battery_entity)
+        if battery_power is None:
+            return None
+        if self.config.get(CONF_INVERT_BATTERY_POWER_SIGN, False):
+            battery_power = -battery_power
+        return battery_power
+
+    def _update_battery_efficiency_learning(self, now: datetime) -> None:
+        """Continuously learn the battery's real round-trip efficiency
+        from actual charge/discharge energy, instead of relying solely on
+        the configured guess.
+
+        Energy balance: charged_kwh * efficiency = discharged_kwh +
+        delta_available_kwh (whatever went in either came back out
+        again, or is still stored - the gap between what went in and what
+        came out-or-is-stored is the round-trip loss). Accumulates until
+        enough charged energy has passed for a meaningful sample, then
+        resets the checkpoint.
+        """
+        battery_power_w = self._read_corrected_battery_power()
+        available_entity = self.config.get(CONF_AVAILABLE_ENERGY_SENSOR)
+        available_kwh = (
+            self._read_sensor_float(available_entity) if available_entity else None
+        )
+
+        if battery_power_w is None or available_kwh is None:
+            return
+
+        if self._efficiency_checkpoint_available_kwh is None:
+            self._efficiency_checkpoint_available_kwh = available_kwh
+            self._efficiency_last_sample_time = now
+            return
+
+        elapsed_hours = max(
+            (now - self._efficiency_last_sample_time).total_seconds() / 3600, 0
+        )
+        self._efficiency_last_sample_time = now
+
+        if elapsed_hours > 0:
+            energy_kwh = (battery_power_w / 1000) * elapsed_hours
+            if energy_kwh > 0:
+                self._efficiency_cumulative_discharged_kwh += energy_kwh
+            elif energy_kwh < 0:
+                self._efficiency_cumulative_charged_kwh += -energy_kwh
+
+        if (
+            self._efficiency_cumulative_charged_kwh
+            < MIN_CHARGED_KWH_FOR_EFFICIENCY_SAMPLE
+        ):
+            return
+
+        delta_available_kwh = (
+            available_kwh - self._efficiency_checkpoint_available_kwh
+        )
+        efficiency_percent = (
+            (
+                self._efficiency_cumulative_discharged_kwh
+                + delta_available_kwh
+            )
+            / self._efficiency_cumulative_charged_kwh
+        ) * 100
+
+        if (
+            MIN_PLAUSIBLE_EFFICIENCY_PERCENT
+            <= efficiency_percent
+            <= MAX_PLAUSIBLE_EFFICIENCY_PERCENT
+        ):
+            self.learned_efficiency_history.append(round(efficiency_percent, 1))
+            self.learned_efficiency_history = self.learned_efficiency_history[
+                -LEARNING_HISTORY_DAYS:
+            ]
+            _LOGGER.debug(
+                "New battery efficiency sample: %.1f%% (charged=%.2f kWh, "
+                "discharged=%.2f kWh, delta_available=%.2f kWh)",
+                efficiency_percent,
+                self._efficiency_cumulative_charged_kwh,
+                self._efficiency_cumulative_discharged_kwh,
+                delta_available_kwh,
+            )
+        else:
+            _LOGGER.debug(
+                "Discarding implausible battery efficiency sample: %.1f%% "
+                "(likely a sensor glitch, not real - charged=%.2f kWh, "
+                "discharged=%.2f kWh, delta_available=%.2f kWh)",
+                efficiency_percent,
+                self._efficiency_cumulative_charged_kwh,
+                self._efficiency_cumulative_discharged_kwh,
+                delta_available_kwh,
+            )
+
+        self._efficiency_cumulative_charged_kwh = 0.0
+        self._efficiency_cumulative_discharged_kwh = 0.0
+        self._efficiency_checkpoint_available_kwh = available_kwh
+
+    @property
+    def learned_battery_efficiency_percent(self) -> float | None:
+        """Self-learned round-trip efficiency (%), averaged over recent
+        samples. None until enough samples exist - callers should fall
+        back to the configured value in that case.
+        """
+        if len(self.learned_efficiency_history) < MIN_SOLAR_HISTORY_FOR_DYNAMIC_THRESHOLD:
+            return None
+        return sum(self.learned_efficiency_history) / len(
+            self.learned_efficiency_history
+        )
+
+
         """Household consumption estimate (W), corrected for the battery
         and (optionally) solar production masking the true load on the
         grid meter.
@@ -1016,6 +1149,40 @@ class EnergyManagementSystemCoordinator:
 
         return max(0.0, total_kwh)
 
+    def _get_efficiency_discounted_pv_offset(
+        self, start: datetime, end: datetime
+    ) -> float:
+        """Expected PV production for a period, discounted by the
+        battery's round-trip efficiency - used specifically when this
+        expected solar is being used to *offset* how much reserve/grid
+        energy is needed.
+
+        Solar that covers household load directly doesn't lose anything,
+        but any of it routed through the battery (charged now, discharged
+        later) loses some energy to round-trip conversion losses before
+        it's usable again. Since we can't cleanly separate "direct" from
+        "battery-routed" solar without a much more detailed simulation,
+        applying the efficiency factor to the whole expected PV amount is
+        a deliberately conservative simplification - slightly
+        underestimates how much solar helps, rather than overestimating
+        it (which would mean reserving less than actually needed).
+
+        Prefers the self-learned efficiency (see
+        `learned_battery_efficiency_percent`) once enough real
+        charge/discharge samples exist, falling back to the configured
+        guess otherwise.
+        """
+        expected_pv_kwh = self._estimate_pv_kwh_for_period(start, end)
+        efficiency_percent = self.learned_battery_efficiency_percent
+        if efficiency_percent is None:
+            efficiency_percent = float(
+                self.config.get(
+                    CONF_BATTERY_ROUND_TRIP_EFFICIENCY,
+                    DEFAULT_BATTERY_ROUND_TRIP_EFFICIENCY_PERCENT,
+                )
+            )
+        return expected_pv_kwh * (efficiency_percent / 100)
+
     def _get_forecast_kwh_for_hour(self, target_date, hour: int) -> float | None:
         """Sum the Solcast-forecasted kWh for a specific hour on a
         specific date, from the currently available forecast entries.
@@ -1199,7 +1366,9 @@ class EnergyManagementSystemCoordinator:
                 return None
             needed_kwh = power_kw * hours_until_cheap
 
-        expected_pv_kwh = self._estimate_pv_kwh_for_period(now, cheap_block_start)
+        expected_pv_kwh = self._get_efficiency_discounted_pv_offset(
+            now, cheap_block_start
+        )
         needed_kwh = max(0.0, needed_kwh - expected_pv_kwh)
 
         # Scale up the margin if an extended low-solar stretch is ahead -
@@ -1689,7 +1858,7 @@ class EnergyManagementSystemCoordinator:
             # actually needs to cover.
             baseline_consumption_kwh = needed_kwh_raw
             if needed_kwh_raw is not None:
-                expected_pv_kwh = self._estimate_pv_kwh_for_period(
+                expected_pv_kwh = self._get_efficiency_discounted_pv_offset(
                     now, cheap_block_start
                 )
                 needed_kwh_raw = max(0.0, needed_kwh_raw - expected_pv_kwh)
@@ -2284,6 +2453,7 @@ class EnergyManagementSystemCoordinator:
         self._update_night_consumption_tracking(now, should_postpone_charging)
         self._update_hourly_consumption_profile(now)
         self._update_pv_hourly_bias_tracking(now)
+        self._update_battery_efficiency_learning(now)
 
         self.last_is_expensive = is_expensive
         self.last_effective_expensive_quarters_count = effective_count

@@ -176,6 +176,18 @@ def _build_learning_health(coordinator, solar_tracker, now: datetime) -> dict[st
                 "check the sensor's async_added_to_hass restore logic.",
             ),
         },
+        "battery_efficiency_learning": {
+            "samples": len(coordinator.learned_efficiency_history),
+            "learned_percent": coordinator.learned_battery_efficiency_percent,
+            "flag": _flag(
+                len(coordinator.learned_efficiency_history) > 0
+                or not installed_long_enough_for_days,
+                "0 efficiency samples despite being installed for "
+                f"{days_since_install} day(s) - check battery_power_sensor_entity "
+                "and available_energy_sensor_entity are both configured and "
+                "readable (both are required for this to learn anything).",
+            ),
+        },
     }
 
     if solar_tracker is not None:
@@ -250,6 +262,10 @@ async def async_get_config_entry_diagnostics(
                 coordinator.total_discharge_value_eur, 4
             ),
             "total_charge_cost_eur": round(coordinator.total_charge_cost_eur, 4),
+            "learned_battery_efficiency_percent": (
+                coordinator.learned_battery_efficiency_percent
+            ),
+            "learned_efficiency_history": coordinator.learned_efficiency_history,
             "night_consumption_history_kw": coordinator.night_consumption_history,
             "learned_night_consumption_kw": coordinator.learned_night_consumption_kw,
             "hourly_consumption_profile_kw": {

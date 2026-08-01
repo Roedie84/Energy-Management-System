@@ -25,7 +25,8 @@
           "solar_remaining_today_sensor_entity": "Solcast resterende voorspelling vandaag sensor (aflopend, voor realtime correctie)",
           "solar_extended_forecast_sensor_entities": "Solcast dag+3, dag+4, etc. sensoren (in volgorde, voor meerdaagse lage-zon-detectie)",
           "negative_price_charge_power": "Laadvermogen bij negatieve prijs (W, negatief = laden)",
-          "solar_power_limit_entity": "Zonnepaneel-vermogenslimiet slider (bv. number.solaredge_i1_active_power_limit)"
+          "solar_power_limit_entity": "Zonnepaneel-vermogenslimiet slider (bv. number.solaredge_i1_active_power_limit)",
+          "battery_round_trip_efficiency_percent": "Accu-rendement (%) \u2014 voor de PV-aftrek in de reserve-berekening"
         }
       }
     },
@@ -58,7 +59,8 @@
           "solar_remaining_today_sensor_entity": "Solcast resterende voorspelling vandaag sensor (aflopend, voor realtime correctie)",
           "solar_extended_forecast_sensor_entities": "Solcast dag+3, dag+4, etc. sensoren (in volgorde, voor meerdaagse lage-zon-detectie)",
           "negative_price_charge_power": "Laadvermogen bij negatieve prijs (W, negatief = laden)",
-          "solar_power_limit_entity": "Zonnepaneel-vermogenslimiet slider (bv. number.solaredge_i1_active_power_limit)"
+          "solar_power_limit_entity": "Zonnepaneel-vermogenslimiet slider (bv. number.solaredge_i1_active_power_limit)",
+          "battery_round_trip_efficiency_percent": "Accu-rendement (%) \u2014 voor de PV-aftrek in de reserve-berekening"
         }
       }
     }

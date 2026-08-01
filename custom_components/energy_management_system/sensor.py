@@ -51,6 +51,7 @@ async def async_setup_entry(
         ChargeCostSensor(coordinator, entry.entry_id),
         ReserveShortfallSensor(coordinator, entry.entry_id),
         ReserveExcessSensor(coordinator, entry.entry_id),
+        LearnedBatteryEfficiencySensor(coordinator, entry.entry_id),
     ]
 
     if tracker.enabled:
@@ -538,6 +539,55 @@ class ReserveExcessSensor(SensorEntity, RestoreEntity):
             self._coordinator.reserve_excess_history = [
                 bool(v) for v in raw_history
             ]
+
+
+class LearnedBatteryEfficiencySensor(SensorEntity, RestoreEntity):
+    """Self-learned battery round-trip efficiency (%), derived from
+    actual charge/discharge energy plus the real change in available
+    energy - instead of relying solely on the configured guess.
+
+    State is the average of recent samples (used automatically in the PV
+    offset calculation once enough samples exist - see
+    `learned_battery_efficiency_percent`); the `history` attribute shows
+    each individual sample. Persisted across restarts.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Learned battery efficiency"
+    _attr_icon = "mdi:battery-sync"
+    _attr_native_unit_of_measurement = "%"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_learned_battery_efficiency"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def native_value(self) -> float | None:
+        value = self._coordinator.learned_battery_efficiency_percent
+        return round(value, 1) if value is not None else None
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return {"history": self._coordinator.learned_efficiency_history}
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if last_state is None:
+            return
+        raw_history = last_state.attributes.get("history")
+        if isinstance(raw_history, list):
+            try:
+                self._coordinator.learned_efficiency_history = [
+                    float(v) for v in raw_history
+                ]
+            except (TypeError, ValueError):
+                pass
 
 
 class LearnedNightConsumptionSensor(SensorEntity, RestoreEntity):

@@ -17,6 +17,8 @@ from .const import (
     CONF_MANUAL_CHARGE_POWER,
     CONF_NEGATIVE_PRICE_CHARGE_POWER,
     CONF_SOLAR_POWER_LIMIT_ENTITY,
+    CONF_BATTERY_ROUND_TRIP_EFFICIENCY,
+    DEFAULT_BATTERY_ROUND_TRIP_EFFICIENCY_PERCENT,
     CONF_MANUAL_DISCHARGE_POWER,
     CONF_MANUAL_POWER_NUMBER,
     CONF_MIN_SOC_PERCENT,
@@ -103,6 +105,17 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
                 CONF_SOLAR_POWER_LIMIT_ENTITY,
                 default=defaults.get(CONF_SOLAR_POWER_LIMIT_ENTITY),
             ): selector.EntitySelector(selector.EntitySelectorConfig(domain="number")),
+            vol.Optional(
+                CONF_BATTERY_ROUND_TRIP_EFFICIENCY,
+                default=defaults.get(
+                    CONF_BATTERY_ROUND_TRIP_EFFICIENCY,
+                    DEFAULT_BATTERY_ROUND_TRIP_EFFICIENCY_PERCENT,
+                ),
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=50, max=100, step=1, mode=selector.NumberSelectorMode.BOX
+                )
+            ),
             vol.Optional(
                 CONF_EXPENSIVE_QUARTERS_COUNT,
                 default=defaults.get(

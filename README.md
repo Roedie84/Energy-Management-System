@@ -1152,3 +1152,69 @@ alleen in de nieuwe health-sectie.
 Dit is bedoeld om dit soort problemen voortaan **direct uit een enkele
 diagnostiek-export** te kunnen signaleren, zonder dat daar eerst
 expliciet naar gevraagd hoeft te worden.
+
+## v0.33.0 — accu-rendement meegenomen in de PV-aftrek
+
+Nieuw optioneel veld: **Accu-rendement (%)** (standaard 90%, pas aan naar
+jouw eigen ~80%).
+
+**Waar dit wél toe doet:** de verwachte zon-opbrengst wordt afgetrokken
+van wat je nog aan reserve nodig hebt (zowel in de dynamische
+ontlaad-reserve als de energie-brug-check). Als die zon eerst de accu
+inlaadt voordat je het weer gebruikt, gaat een deel verloren via het
+rendement — we waren dus iets te optimistisch over hoeveel die
+verwachte zon je reserve daadwerkelijk verlicht. De aftrek wordt nu
+vermenigvuldigd met het geconfigureerde rendement, een bewust
+conservatieve aanpak (we kunnen niet exact scheiden welke zon direct je
+huishouden voedt vs. via de accu gaat, dus we passen het rendement toe op
+de hele aftrek — dat onderschat het effect van zon eerder dan het te
+overschatten).
+
+**Waar dit géén aanpassing kreeg (met reden):**
+- Financiële tracking (waarde ontladen / netlaadkosten): we meten steeds
+  het werkelijk toegepaste vermogen op het moment zelf, niet een
+  "wat erin gaat moet eruit komen"-aanname — rendementsverlies zit daar
+  al impliciet in verwerkt.
+- Beschikbare-energie-sensor: die komt van de Zendure zelf en geeft
+  vermoedelijk al de bruikbare (dus al gecorrigeerde) capaciteit.
+
+Getest: bij 80% rendement werd een ruwe PV-schatting van 6,0 kWh correct
+teruggebracht naar 4,8 kWh aftrek.
+
+## v0.34.0 — zelflerend accu-rendement (i.p.v. handmatig ingesteld)
+
+**Aanleiding:** de vraag of de integratie het werkelijke accu-rendement
+(~80%) ook zelf kan afleiden, in plaats van dat je het handmatig moet
+schatten en instellen.
+
+**Hoe het werkt:** de integratie houdt continu bij hoeveel energie er
+daadwerkelijk **in** de accu gaat (laden) en **uit** komt (ontladen), via
+je batterijvermogen-sensor, en vergelijkt dat met de werkelijke
+verandering in beschikbare energie:
+
+> geladen_kWh × rendement = ontladen_kWh + verandering_beschikbare_kWh
+
+Zodra er genoeg geladen energie is verzameld voor een betrouwbare meting
+(minimaal 1 kWh per meting, om ruis te vermijden), wordt er een nieuwe
+rendement-schatting toegevoegd aan een rollend gemiddelde (7 dagen, zelfde
+patroon als de andere leerprocessen). Onmogelijke uitschieters (buiten
+50-100%, vrijwel zeker een sensor-hapering) worden genegeerd.
+
+**Voorrang:** zodra er genoeg metingen zijn (minimaal 3), wint het
+**geleerde** rendement automatisch van de handmatig ingestelde
+config-waarde in de PV-aftrek-berekening (v0.33.0). Zonder genoeg
+metingen blijft de configuratiewaarde gewoon de terugval.
+
+Nieuwe sensor: **`sensor.learned_battery_efficiency`** (met de losse
+metingen als attribuut). Ook meegenomen in de `learning_health`-controle
+uit v0.32.0, zodat je meteen ziet als dit leerproces vastzit.
+
+Getest: een gesimuleerde volledige laad/ontlaad-cyclus op exact 80%
+rendement werd door de integratie zelf ook exact als 80,0% herkend — en
+dat geleerde getal kreeg vervolgens correct voorrang boven een
+(expres afwijkend ingestelde) config-waarde van 95%.
+
+**Vereist:** zowel `battery_power_sensor_entity` als
+`available_energy_sensor_entity` moeten ingesteld zijn — zonder een van
+beide kan dit niet leren (en blijft de handmatige config-waarde gewoon
+gebruikt worden, zoals voorheen).
