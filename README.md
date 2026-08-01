@@ -1059,3 +1059,34 @@ de ondergrens werkte correct bij een extreem overschot-scenario (7 van de
 7 dagen).
 
 `diagnostics.py` is meteen meegenomen met de nieuwe velden.
+
+## v0.31.0 — planningstabel houdt nu ook rekening met beschikbare energie
+
+**Aanleiding:** een gebruiker zag `sensor.effective_expensive_quarters` op
+**42** staan (10,5 uur!) en de planning toonde een ononderbroken
+"manual"-blok van 19:15 tot ver in de volgende dag — met de vrees dat de
+accu daardoor al rond het middaguur leeg zou zijn.
+
+**Wat er speelde:** de dynamische prijsdrempel (top 20% van de dagrange)
+kan op dagen met een breed "duur plateau" (relatief vlakke prijzen dicht
+bij de top) veel meer kwartieren als "duur" classificeren dan
+daadwerkelijk zinvol is om te ontladen. De **live beslissing** wordt hier
+al tegen beschermd door de dynamische reserve — maar de **planningstabel**
+(Overzicht komende uren) hield daar geen rekening mee en toonde dus élk
+prijs-kwalificerend kwartier als "manual", ongeacht hoeveel energie er
+werkelijk beschikbaar is.
+
+**Fix:** de planning simuleert nu een lopende energiebalans: startend
+vanaf de huidige beschikbare kWh, wordt bij elk geprojecteerd
+"manual"-kwartier de verwachte ontlading afgetrokken. Zodra de
+gesimuleerde balans de (live-verbruik-gecorrigeerde) reserve bereikt,
+worden verdere prijs-kwalificerende kwartieren getoond als `smart` in
+plaats van `manual` — exact wat de live logica ook zou doen.
+
+Getest: bij een gesimuleerd "duur plateau" van 24+ kwartieren maar slechts
+3 kWh beschikbaar, toonde de planning voorheen ~24 manual-kwartieren; na
+de fix nog maar **1**, gevolgd door een correcte terugval naar `smart`.
+
+**Resultaat:** wat je in het dashboard ziet, komt nu overeen met wat er
+werkelijk gaat gebeuren — geen misleidend lange ontlaadblokken meer die
+geen rekening houden met wat je accu daadwerkelijk aankan.

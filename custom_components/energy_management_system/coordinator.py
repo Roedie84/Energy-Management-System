@@ -1735,6 +1735,8 @@ class EnergyManagementSystemCoordinator:
         discharge_start: datetime | None,
         live_is_expensive: bool | None = None,
         live_should_postpone_charging: bool | None = None,
+        available_kwh: float | None = None,
+        reserve_kwh: float | None = None,
     ) -> list[dict]:
         """Project the current logic forward over all known forecast data.
 
@@ -1744,6 +1746,17 @@ class EnergyManagementSystemCoordinator:
         for "today". Beyond that window, only each day's own quarters that
         clear that day's dynamic price threshold are still marked as
         expensive; everything else defaults to 'smart'.
+
+        If available_kwh/reserve_kwh are provided, price-qualifying
+        "expensive" quarters are also capped by a simulated running
+        battery balance: once the projected available energy would drop
+        to the reserve floor, further otherwise-"expensive" quarters are
+        shown as 'smart' instead of 'manual' - matching what the live,
+        reserve-aware discharge logic would actually do, instead of
+        naively showing every price-qualifying quarter as a full-power
+        discharge regardless of how much energy is actually available.
+        This is what makes the schedule reflect actual live consumption,
+        not just price.
 
         The interval containing "now" is overridden with the live,
         energy-aware decision (live_is_expensive/live_should_postpone_charging)
@@ -1759,6 +1772,11 @@ class EnergyManagementSystemCoordinator:
                 continue
             by_date.setdefault(entry[0].date(), []).append(entry)
 
+        discharge_power_w = self.config.get(
+            CONF_MANUAL_DISCHARGE_POWER, DEFAULT_MANUAL_DISCHARGE_POWER
+        )
+        simulated_available = available_kwh
+
         timeline: list[dict] = []
         for entry in entries:
             if entry[1] <= now:
@@ -1770,6 +1788,22 @@ class EnergyManagementSystemCoordinator:
             is_expensive = threshold is not None and entry[2] >= threshold
 
             is_current_interval = entry[0] <= now < entry[1]
+
+            # Cap price-qualifying "expensive" quarters by the simulated
+            # running balance, so a long stretch of nominally-expensive
+            # quarters doesn't get shown as an unbounded full-power
+            # discharge once there's no realistic energy left for it.
+            if (
+                is_expensive
+                and not is_current_interval
+                and simulated_available is not None
+                and reserve_kwh is not None
+            ):
+                if simulated_available <= reserve_kwh:
+                    is_expensive = False
+                else:
+                    duration_hours = (entry[1] - entry[0]).total_seconds() / 3600
+                    simulated_available -= (discharge_power_w / 1000) * duration_hours
 
             if is_current_interval and live_is_expensive is not None:
                 # Use the exact same live decision shown elsewhere, instead
@@ -2228,6 +2262,9 @@ class EnergyManagementSystemCoordinator:
 
         self.last_is_expensive = is_expensive
         self.last_effective_expensive_quarters_count = effective_count
+        projection_reserve_kwh = self._get_dynamic_discharge_reserve_kwh(
+            now, cheap_block_start
+        )
         self.last_timeline = self._build_forecast_timeline(
             entries,
             now,
@@ -2235,6 +2272,8 @@ class EnergyManagementSystemCoordinator:
             self.last_discharge_start,
             live_is_expensive=is_expensive,
             live_should_postpone_charging=should_postpone_charging,
+            available_kwh=self.last_available_kwh,
+            reserve_kwh=projection_reserve_kwh,
         )
         self.last_transitions = self._collapse_timeline(self.last_timeline)
 
