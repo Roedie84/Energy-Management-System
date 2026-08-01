@@ -1245,3 +1245,28 @@ Python-type altijd als tekst toont, ongeacht wat het echt is) — maar de
 fix is veilig sowieso, en lost precies deze klasse van fout op. Mocht het
 probleem hierna nog steeds optreden, dan weten we dat de oorzaak elders
 zit en gaan we verder zoeken.
+
+## v0.34.2 — fout-tracering toegevoegd bij achtergrondtaken
+
+**Aanleiding:** een gebruiker zag naast de "no_forecast_data"-melding ook
+een nietszeggende `Task exception was never retrieved (task: None)`-fout
+in de logs, drie keer opgetreden — zonder enige stacktrace of details om
+de daadwerkelijke oorzaak te achterhalen.
+
+**Gevonden gat:** `async_update()` (aangeroepen als achtergrondtaak bij
+elke periodieke tick én elke statuswijziging van gekoppelde entiteiten)
+had **geen enkele foutafhandeling**. Een onverwachte fout ergens in de
+update-logica verdween daardoor spoorloos, op deze content-loze
+asyncio-melding na — onmogelijk om te diagnosticeren.
+
+**Fix:** `async_update()` vangt nu alle onverwachte fouten af en logt de
+**volledige Python-foutmelding met stacktrace** (via `_LOGGER.exception`),
+in plaats van dat de fout onzichtbaar verdwijnt. De vorige status blijft
+gewoon staan tot de volgende geslaagde update.
+
+**Voor de gebruiker die dit meldde:** dit lost het "no_forecast_data"-
+probleem zelf nog niet direct op, maar zorgt dat de **volgende keer** dat
+dit gebeurt, de logs eindelijk de echte oorzaak tonen (bestandsnaam, regel
+en het exacte type fout) in plaats van een leeg "task: None". Zodra dat
+zich voordoet: deel die volledige stacktrace, dan kunnen we de
+onderliggende oorzaak definitief vinden.

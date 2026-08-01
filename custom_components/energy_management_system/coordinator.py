@@ -2231,9 +2231,25 @@ class EnergyManagementSystemCoordinator:
     # -- Control loop -------------------------------------------------
 
     async def async_update(self) -> None:
-        """Recompute the desired mode and apply it if needed."""
-        async with self._lock:
-            await self._async_update_locked()
+        """Recompute the desired mode and apply it if needed.
+
+        Wrapped in a broad try/except that logs the full traceback -
+        without this, an unexpected error anywhere in the update logic
+        would previously vanish silently except for a content-free
+        asyncio "Task exception was never retrieved" message, making it
+        impossible to diagnose. The previous state remains in effect
+        until the next successful update.
+        """
+        try:
+            async with self._lock:
+                await self._async_update_locked()
+        except Exception:  # noqa: BLE001 - must never crash silently
+            _LOGGER.exception(
+                "Unexpected error while updating Energy Management System "
+                "- this update was skipped, the previous state remains in "
+                "effect until the next successful one. Please share this "
+                "traceback (and a diagnostics export) if you report this."
+            )
 
     def _build_explanation(self) -> str:
         """Build a plain-language (Dutch) explanation of the current
