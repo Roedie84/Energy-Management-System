@@ -1028,3 +1028,34 @@ live-verbruik-correctie het probleem al op (minder ontladen), en vult de
 accu zich toch snel weer bij met zon — bijladen is dan niet nodig. Getest:
 zelfde kritiek lage SoC (7%) triggert nu geen noodladen bij veel zon
 morgen, maar wel bij weinig zon.
+
+## v0.30.0 — tweezijdig zelflerend systeem (niet alleen voorzichtiger, ook scherper)
+
+**Aanleiding:** de vraag "leert het systeem echt op alle fronten?" bracht
+een scheefheid aan het licht: de zelfcorrectie van de ontlaad-reserve
+(v0.28.0) kon de marge alleen **verhogen** bij een gedetecteerd tekort,
+maar nooit **verlagen** als er structureel te veel werd gereserveerd. Op
+termijn zou de integratie dus alleen maar voorzichtiger worden, nooit
+weer scherper durven verkopen zodra dat verantwoord is.
+
+**Fix — nu tweezijdig:**
+- **Tekort-detectie** (ongewijzigd): onverwachte netimport tijdens een
+  zelfvoorzienend-veronderstelde periode → marge omhoog.
+- **Nieuw: overschot-detectie** — als de beschikbare energie ≥3x hoger
+  blijft dan wat daadwerkelijk nodig was, terwijl laden nog steeds werd
+  uitgesteld, betekent dat de reserve die dag onnodig conservatief was →
+  marge omlaag (3 procentpunt per recente overschot-dag).
+- Beide worden verrekend tot één netto-marge, met een ondergrens van
+  **-5 procentpunt totale correctie** (nooit minder dan 5% onder de
+  basismarge van 10%, dus altijd minimaal 5% marge over blijft).
+
+Nieuwe sensor: **`sensor.reserve_excess_days`** (spiegelbeeld van
+`sensor.reserve_shortfall_days`).
+
+Getest: 3 recente overschot-dagen verlaagden de marge naar het
+minimum (afgetopt op -5%); een mix van 2 tekorten + 3 overschot-dagen
+resulteerde in de correcte netto-marge (+10% - 9% = +1% t.o.v. de basis);
+de ondergrens werkte correct bij een extreem overschot-scenario (7 van de
+7 dagen).
+
+`diagnostics.py` is meteen meegenomen met de nieuwe velden.

@@ -90,6 +90,9 @@ from .const import (
     GRID_IMPORT_SHORTFALL_THRESHOLD_W,
     SHORTFALL_MARGIN_BONUS_PER_RECENT_DAY,
     EMERGENCY_LOW_BATTERY_KWH_THRESHOLD,
+    RESERVE_EXCESS_RATIO_THRESHOLD,
+    EXCESS_MARGIN_REDUCTION_PER_RECENT_DAY,
+    MIN_TOTAL_MARGIN_BONUS_PERCENT,
     MIN_SOLAR_HISTORY_FOR_DYNAMIC_THRESHOLD,
     OPTION_MANUAL,
     OPTION_SMART,
@@ -236,6 +239,8 @@ class EnergyManagementSystemCoordinator:
         self.reserve_shortfall_history: list[bool] = []
         self._shortfall_detected_today: bool = False
         self._shortfall_check_date: date | None = None
+        self.reserve_excess_history: list[bool] = []
+        self._excess_detected_today: bool = False
         self._last_value_calc_time: datetime | None = None
 
         self._lock = asyncio.Lock()
@@ -1194,18 +1199,34 @@ class EnergyManagementSystemCoordinator:
             recent_shortfalls * SHORTFALL_MARGIN_BONUS_PER_RECENT_DAY
         )
 
-        margin_bonus_percent = low_solar_bonus_percent + shortfall_bonus_percent
+        # And the counterbalance: if the reserve has been running way
+        # more conservative than needed (excess energy left over while
+        # still postponing charging), reduce the margin - otherwise it
+        # could only ever ratchet upward and get stuck too cautious,
+        # missing out on legitimate selling opportunities.
+        recent_excess_days = sum(1 for v in self.reserve_excess_history if v)
+        excess_reduction_percent = (
+            recent_excess_days * EXCESS_MARGIN_REDUCTION_PER_RECENT_DAY
+        )
+
+        margin_bonus_percent = max(
+            MIN_TOTAL_MARGIN_BONUS_PERCENT,
+            low_solar_bonus_percent + shortfall_bonus_percent - excess_reduction_percent,
+        )
         margin = DYNAMIC_DISCHARGE_RESERVE_MARGIN + margin_bonus_percent / 100
 
-        if margin_bonus_percent > 0:
+        if margin_bonus_percent != 0:
             _LOGGER.debug(
                 "Discharge reserve margin: base %.0f%% + %.0f%% (low-solar, "
-                "%d day(s)) + %.0f%% (%d recent shortfall day(s)) = %.0f%%",
+                "%d day(s)) + %.0f%% (%d shortfall day(s)) - %.0f%% "
+                "(%d excess day(s)) = %.0f%%",
                 (DYNAMIC_DISCHARGE_RESERVE_MARGIN - 1) * 100,
                 low_solar_bonus_percent,
                 consecutive_low_solar_days,
                 shortfall_bonus_percent,
                 recent_shortfalls,
+                excess_reduction_percent,
+                recent_excess_days,
                 (margin - 1) * 100,
             )
 
@@ -1247,12 +1268,28 @@ class EnergyManagementSystemCoordinator:
 
         return False
 
-    def _update_shortfall_detection(self, now: datetime, reason: str) -> None:
-        """Detect unexpected net grid import during a period this
-        integration believes should be self-sufficient (smart_discharging
-        or an expensive-quarter discharge), so the learned reserve margin
-        (see `_get_dynamic_discharge_reserve_kwh`) can self-correct if the
-        estimate keeps running too tight.
+    def _update_shortfall_detection(
+        self,
+        now: datetime,
+        reason: str,
+        available_kwh: float | None = None,
+        needed_kwh: float | None = None,
+    ) -> None:
+        """Two-sided daily learning for the dynamic discharge reserve:
+
+        - SHORTFALL: unexpected net grid import during a period this
+          integration believes should be self-sufficient. Means the
+          reserve estimate ran too tight - the learned margin goes UP.
+        - EXCESS: available energy stayed far above what was actually
+          needed while still in the "postpone charging" window. Means
+          the reserve estimate was overly conservative - the learned
+          margin goes DOWN. Without this side, the margin could only
+          ever ratchet upward over time and get stuck too conservative,
+          missing out on legitimate selling opportunities.
+
+        Both are tracked per day (rolling LEARNING_HISTORY_DAYS window),
+        and the net effect (shortfalls push up, excess days push down)
+        is applied in `_get_dynamic_discharge_reserve_kwh`.
         """
         if self._shortfall_check_date != now.date():
             if self._shortfall_check_date is not None:
@@ -1260,11 +1297,13 @@ class EnergyManagementSystemCoordinator:
                 self.reserve_shortfall_history = self.reserve_shortfall_history[
                     -LEARNING_HISTORY_DAYS:
                 ]
+                self.reserve_excess_history.append(self._excess_detected_today)
+                self.reserve_excess_history = self.reserve_excess_history[
+                    -LEARNING_HISTORY_DAYS:
+                ]
             self._shortfall_detected_today = False
+            self._excess_detected_today = False
             self._shortfall_check_date = now.date()
-
-        if self._shortfall_detected_today:
-            return
 
         self_sufficient_reasons = (
             "smart_discharging",
@@ -1274,20 +1313,39 @@ class EnergyManagementSystemCoordinator:
         if reason not in self_sufficient_reasons:
             return
 
-        grid_entity = self.config.get(CONF_CONSUMPTION_POWER_SENSOR)
-        grid_power_w = self._read_sensor_float(grid_entity)
+        if not self._shortfall_detected_today:
+            grid_entity = self.config.get(CONF_CONSUMPTION_POWER_SENSOR)
+            grid_power_w = self._read_sensor_float(grid_entity)
+            if (
+                grid_power_w is not None
+                and grid_power_w > GRID_IMPORT_SHORTFALL_THRESHOLD_W
+            ):
+                self._shortfall_detected_today = True
+                _LOGGER.warning(
+                    "Unexpected grid import detected (%.0fW) during a "
+                    "supposedly self-sufficient period (%s) - the reserve "
+                    "estimate for today may have been too optimistic. This "
+                    "will increase the learned safety margin if it keeps "
+                    "happening.",
+                    grid_power_w,
+                    reason,
+                )
+
         if (
-            grid_power_w is not None
-            and grid_power_w > GRID_IMPORT_SHORTFALL_THRESHOLD_W
+            not self._excess_detected_today
+            and available_kwh is not None
+            and needed_kwh is not None
+            and needed_kwh > 0.1
+            and available_kwh >= needed_kwh * RESERVE_EXCESS_RATIO_THRESHOLD
         ):
-            self._shortfall_detected_today = True
-            _LOGGER.warning(
-                "Unexpected grid import detected (%.0fW) during a "
-                "supposedly self-sufficient period (%s) - the reserve "
-                "estimate for today may have been too optimistic. This "
-                "will increase the learned safety margin if it keeps "
+            self._excess_detected_today = True
+            _LOGGER.debug(
+                "Reserve looks overly conservative today: %.2f kWh "
+                "available vs only %.2f kWh actually needed (%s) - this "
+                "will decrease the learned safety margin if it keeps "
                 "happening.",
-                grid_power_w,
+                available_kwh,
+                needed_kwh,
                 reason,
             )
 
@@ -2281,7 +2339,7 @@ class EnergyManagementSystemCoordinator:
                 self._update_financial_tracking(
                     now, entries, self.last_reason, None, charge_power
                 )
-                self._update_shortfall_detection(now, self.last_reason)
+                self._update_shortfall_detection(now, self.last_reason, self.last_available_kwh, self.last_needed_kwh_to_bridge)
                 self.last_explanation = self._build_explanation()
                 return
             if scaled_power is None:
@@ -2295,7 +2353,7 @@ class EnergyManagementSystemCoordinator:
             self._update_financial_tracking(
                 now, entries, self.last_reason, scaled_power, None
             )
-            self._update_shortfall_detection(now, self.last_reason)
+            self._update_shortfall_detection(now, self.last_reason, self.last_available_kwh, self.last_needed_kwh_to_bridge)
             self.last_explanation = self._build_explanation()
             return
 
@@ -2310,7 +2368,7 @@ class EnergyManagementSystemCoordinator:
             self._update_financial_tracking(
                 now, entries, self.last_reason, None, charge_power
             )
-            self._update_shortfall_detection(now, self.last_reason)
+            self._update_shortfall_detection(now, self.last_reason, self.last_available_kwh, self.last_needed_kwh_to_bridge)
             self.last_explanation = self._build_explanation()
             return
 
@@ -2330,7 +2388,7 @@ class EnergyManagementSystemCoordinator:
             self._update_financial_tracking(
                 now, entries, self.last_reason, None, charge_power
             )
-            self._update_shortfall_detection(now, self.last_reason)
+            self._update_shortfall_detection(now, self.last_reason, self.last_available_kwh, self.last_needed_kwh_to_bridge)
             self.last_explanation = self._build_explanation()
             return
 
@@ -2338,14 +2396,14 @@ class EnergyManagementSystemCoordinator:
             await self._async_apply_operation(OPTION_SMART_DISCHARGING)
             self.last_reason = "discharging_window"
             self._update_financial_tracking(now, entries, self.last_reason, None, None)
-            self._update_shortfall_detection(now, self.last_reason)
+            self._update_shortfall_detection(now, self.last_reason, self.last_available_kwh, self.last_needed_kwh_to_bridge)
             self.last_explanation = self._build_explanation()
             return
 
         await self._async_apply_operation(OPTION_SMART)
         self.last_reason = "default_smart"
         self._update_financial_tracking(now, entries, self.last_reason, None, None)
-        self._update_shortfall_detection(now, self.last_reason)
+        self._update_shortfall_detection(now, self.last_reason, self.last_available_kwh, self.last_needed_kwh_to_bridge)
         self.last_explanation = self._build_explanation()
 
     async def _async_apply_operation(self, option: str) -> None:

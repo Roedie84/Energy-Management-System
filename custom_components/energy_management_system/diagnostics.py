@@ -147,6 +147,8 @@ async def async_get_config_entry_diagnostics(
             "shortfall_detected_today_so_far": (
                 coordinator._shortfall_detected_today
             ),
+            "reserve_excess_history": coordinator.reserve_excess_history,
+            "excess_detected_today_so_far": coordinator._excess_detected_today,
             "total_discharge_value_eur": round(
                 coordinator.total_discharge_value_eur, 4
             ),

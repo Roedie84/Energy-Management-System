@@ -83,6 +83,8 @@ cards:
       - type: divider
       - entity: sensor.energy_management_system_reserve_shortfall_days
         name: Onverwachte netimport-dagen (laatste 7)
+      - entity: sensor.energy_management_system_reserve_excess_days
+        name: Overschot-dagen - had scherper mogen verkopen (laatste 7)
 
   - type: entities
     title: Zelflerend

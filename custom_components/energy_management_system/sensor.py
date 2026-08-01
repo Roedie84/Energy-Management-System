@@ -50,6 +50,7 @@ async def async_setup_entry(
         DischargeValueSensor(coordinator, entry.entry_id),
         ChargeCostSensor(coordinator, entry.entry_id),
         ReserveShortfallSensor(coordinator, entry.entry_id),
+        ReserveExcessSensor(coordinator, entry.entry_id),
     ]
 
     if tracker.enabled:
@@ -488,6 +489,53 @@ class ReserveShortfallSensor(SensorEntity, RestoreEntity):
         raw_history = last_state.attributes.get("history")
         if isinstance(raw_history, list):
             self._coordinator.reserve_shortfall_history = [
+                bool(v) for v in raw_history
+            ]
+
+
+class ReserveExcessSensor(SensorEntity, RestoreEntity):
+    """Mirror of ReserveShortfallSensor: tracks days where the dynamic
+    discharge reserve was overly conservative (available energy stayed
+    far above what was actually needed while still postponing charging).
+
+    Without this counterbalance, the learned reserve margin could only
+    ever increase over time (from shortfall days) and get stuck too
+    cautious, missing out on legitimate selling opportunities. Persisted
+    across restarts.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Reserve excess days"
+    _attr_icon = "mdi:battery-high"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_reserve_excess"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def native_value(self) -> int:
+        return sum(1 for v in self._coordinator.reserve_excess_history if v)
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return {
+            "history": self._coordinator.reserve_excess_history,
+            "detected_today_so_far": self._coordinator._excess_detected_today,
+        }
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if last_state is None:
+            return
+        raw_history = last_state.attributes.get("history")
+        if isinstance(raw_history, list):
+            self._coordinator.reserve_excess_history = [
                 bool(v) for v in raw_history
             ]
 

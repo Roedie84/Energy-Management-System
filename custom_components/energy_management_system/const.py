@@ -116,6 +116,18 @@ SHORTFALL_MARGIN_BONUS_PER_RECENT_DAY = 5.0
 # _is_emergency_low_battery). Keeps a small buffer above absolute zero.
 EMERGENCY_LOW_BATTERY_KWH_THRESHOLD = 0.3
 
+# If available energy stays at/above this multiple of what was actually
+# needed while still in a "self-sufficient" window, the reserve looks
+# overly conservative that day - counterbalances the shortfall-based
+# margin increase, so the learned margin isn't a one-way ratchet.
+RESERVE_EXCESS_RATIO_THRESHOLD = 3.0
+EXCESS_MARGIN_REDUCTION_PER_RECENT_DAY = 3.0
+
+# Floor for the total learned margin bonus (can go negative once excess
+# days accumulate, but never below this - always keep at least this much
+# safety margin over the raw estimate).
+MIN_TOTAL_MARGIN_BONUS_PERCENT = -5.0
+
 # Zonneplan's raw "amount" values are scaled by this factor to get €/kWh
 # (e.g. 3728480 / 10_000_000 = 0.372848 €/kWh).
 PRICE_SCALE_FACTOR = 10_000_000
