@@ -147,6 +147,15 @@ EXCESS_MARGIN_REDUCTION_PER_RECENT_DAY = 3.0
 # safety margin over the raw estimate).
 MIN_TOTAL_MARGIN_BONUS_PERCENT = -5.0
 
+# Structural extra buffer: an expensive-quarter discharge is only
+# protected by the reserve *during* that action - once control passes to
+# 'smart' mode afterwards, the battery can be drawn further down for
+# household use with no reserve protection at all. This flat extra margin
+# compensates for that blind spot (added after a real incident where the
+# reserve was technically respected during the expensive quarter, but the
+# unprotected night afterwards still ran the battery to empty).
+UNPROTECTED_AFTERMATH_MARGIN_PERCENT = 15.0
+
 # Zonneplan's raw "amount" values are scaled by this factor to get €/kWh
 # (e.g. 3728480 / 10_000_000 = 0.372848 €/kWh).
 PRICE_SCALE_FACTOR = 10_000_000

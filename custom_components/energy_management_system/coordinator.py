@@ -98,6 +98,7 @@ from .const import (
     RESERVE_EXCESS_RATIO_THRESHOLD,
     EXCESS_MARGIN_REDUCTION_PER_RECENT_DAY,
     MIN_TOTAL_MARGIN_BONUS_PERCENT,
+    UNPROTECTED_AFTERMATH_MARGIN_PERCENT,
     MIN_SOLAR_HISTORY_FOR_DYNAMIC_THRESHOLD,
     OPTION_MANUAL,
     OPTION_SMART,
@@ -1416,9 +1417,22 @@ class EnergyManagementSystemCoordinator:
             recent_excess_days * EXCESS_MARGIN_REDUCTION_PER_RECENT_DAY
         )
 
+        # Structural extra buffer: once an expensive-quarter discharge
+        # ends, control passes to 'smart' mode, where the Zendure's own
+        # logic decides how much more to discharge for household use -
+        # completely outside our reserve protection. We can sell down to
+        # the reserve floor safely *during* the expensive quarter itself,
+        # but can't stop the battery being drawn further below that floor
+        # afterwards. This extra margin compensates for that structural
+        # blind spot (found after a real incident: ~6.5 kWh was correctly
+        # sold to the reserve floor, then the unprotected night finished
+        # the job and ran the battery to empty).
         margin_bonus_percent = max(
             MIN_TOTAL_MARGIN_BONUS_PERCENT,
-            low_solar_bonus_percent + shortfall_bonus_percent - excess_reduction_percent,
+            low_solar_bonus_percent
+            + shortfall_bonus_percent
+            - excess_reduction_percent
+            + UNPROTECTED_AFTERMATH_MARGIN_PERCENT,
         )
         margin = DYNAMIC_DISCHARGE_RESERVE_MARGIN + margin_bonus_percent / 100
 
@@ -1839,6 +1853,11 @@ class EnergyManagementSystemCoordinator:
         available_kwh = (
             self._read_sensor_float(available_entity) if available_entity else None
         )
+        if available_kwh is not None and available_kwh < 0:
+            # Physically impossible - almost certainly sensor noise right
+            # around empty. Clamp instead of letting a slightly-negative
+            # reading skew the comparison below.
+            available_kwh = 0.0
 
         if available_kwh is not None:
             hours_until_cheap = max(
@@ -1903,7 +1922,21 @@ class EnergyManagementSystemCoordinator:
                 self.last_needed_kwh_breakdown = {}
 
             if needed_kwh is not None:
-                has_enough = available_kwh >= needed_kwh
+                # Hysteresis: require a clear enough margin before flipping
+                # the decision, instead of comparing right at the exact
+                # threshold - otherwise small sensor noise right around
+                # the boundary (seen in practice: available_kwh flickering
+                # between ~0 and slightly negative) causes rapid,
+                # unhealthy switching back and forth every tick.
+                buffer_kwh = max(0.15, needed_kwh * 0.10)
+                if self.last_has_enough_energy is True:
+                    # Was postponing - only give up once clearly short.
+                    has_enough = available_kwh >= needed_kwh - buffer_kwh
+                elif self.last_has_enough_energy is False:
+                    # Was topping up - only postpone once clearly ahead.
+                    has_enough = available_kwh >= needed_kwh + buffer_kwh
+                else:
+                    has_enough = available_kwh >= needed_kwh
 
                 self._log_energy_transition(now, has_enough, available_kwh, needed_kwh)
 
@@ -2457,29 +2490,18 @@ class EnergyManagementSystemCoordinator:
         # cheapest block? Prefers an energy-based check (is there already
         # enough available battery energy to bridge the remaining time?),
         # falling back to the time-based rule if no energy sensor is set.
+        #
+        # No special-case override for "the sun is currently producing"
+        # here (removed in v0.37.0, was added in v0.25.0 on a mistaken
+        # assumption): on this Zendure hardware, smart_discharging doesn't
+        # block/waste solar - it routes it straight to export instead of
+        # into the battery, and the battery only covers consumption
+        # spikes. Solar is used productively either way; only the
+        # destination (export vs. storage) differs, which is exactly what
+        # the price-driven decision below should determine.
         should_postpone_charging = self._should_postpone_charging(
             entries, now, cheap_block_start
         )
-
-        # Never postpone charging while the sun is actually producing right
-        # now - that solar is free and perishable (this exact moment's
-        # output is lost/exported at a mediocre value if not captured now),
-        # unlike grid charging which can genuinely wait for a cheaper
-        # moment. Let "smart" (the Zendure's own logic) capture it instead.
-        pv_entity = self.config.get(CONF_PV_POWER_SENSOR)
-        if pv_entity and should_postpone_charging:
-            current_pv_power_w = self._read_sensor_float(pv_entity)
-            if (
-                current_pv_power_w is not None
-                and current_pv_power_w > MIN_ACTIVE_SOLAR_PRODUCTION_W
-            ):
-                _LOGGER.debug(
-                    "Overriding smart_discharging: %.0fW of solar is "
-                    "currently being produced - letting smart mode capture "
-                    "it instead of postponing charging",
-                    current_pv_power_w,
-                )
-                should_postpone_charging = False
 
         self._update_night_consumption_tracking(now, should_postpone_charging)
         self._update_hourly_consumption_profile(now)

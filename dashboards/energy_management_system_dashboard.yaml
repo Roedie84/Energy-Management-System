@@ -97,8 +97,8 @@ cards:
         name: PV-voorspelling afwijking (%)
       - entity: sensor.woonkamer_energy_management_system_pv_hourly_forecast_bias
         name: PV-voorspelling bias (huidig uur)
-      - entity: sensor.energy_management_system_learned_battery_efficiency
-        name: Geleerd accu-rendement (%) — check evt. woonkamer_-voorvoegsel
+      - entity: sensor.woonkamer_energy_management_system_learned_battery_efficiency
+        name: Geleerd accu-rendement (%)
 
   - type: markdown
     title: Overgangen energie-check (logboek)

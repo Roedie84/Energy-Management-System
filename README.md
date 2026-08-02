@@ -1312,3 +1312,87 @@ Dank aan de gebruiker die dit heeft gemeld en, cruciaal, de volledige
 stacktrace heeft gedeeld zodra die beschikbaar was — zonder die
 stacktrace (mogelijk gemaakt door de v0.34.2-fix) was dit vrijwel
 onmogelijk geweest om te vinden.
+
+## v0.35.0 — hysterese tegen flikkerende energie-brug-beslissing
+
+**Aanleiding:** een gebruiker zag in het overgangs-logboek 10 wisselingen
+tussen "genoeg energie" en "te weinig" binnen anderhalf uur, inclusief een
+onmogelijke negatieve beschikbare energie (-0,09 kWh) — de beslissing
+"twijfelde" continu rond het omslagpunt in plaats van stabiel te blijven.
+
+**Twee fixes:**
+
+1. **Negatieve beschikbare energie wordt geklemd op 0.** Fysiek
+   onmogelijk, vrijwel zeker sensorruis rond een lege accu — voorheen liet
+   dit de vergelijking onnodig verschuiven.
+
+2. **Hysterese (dode zone) rond de drempel.** In plaats van precies op
+   het omslagpunt te vergelijken, vereist een wissel nu een duidelijke
+   marge (minimaal 0,15 kWh, of 10% van de benodigde energie): als de
+   integratie aan het uitstellen was, moet het tekort eerst duidelijk
+   zijn voordat er weer wordt bijgeladen; als de integratie aan het
+   bijladen was, moet er eerst duidelijk genoeg overschot zijn voordat
+   het uitstellen weer wordt hervat.
+
+Getest: exact het geobserveerde patroon (available_kwh wisselend tussen
+0,00 en -0,09 kWh, 9 metingen over anderhalf uur) resulteerde voorheen in
+bijna constant wisselen, en blijft nu volledig stabiel.
+
+**Nog steeds relevant om te weten:** het noodladen (v0.29.0) grijpt bewust
+niet in als er geen weinig-zon-verwachting is (zomer-scenario) — als de
+accu dan toch leegloopt, is dat een bewuste afweging (snel weer bijgevuld
+door zon) in plaats van een bug. Mocht dit vaker frustreren, is dat een
+apart gesprek waard over of die grens moet verschuiven.
+
+## v0.36.0 — structurele extra marge tegen de onbeschermde "smart"-periode
+
+**Vervolg op het incident van v0.35.0.** Analyse van de financiële
+tracking (discharge-waarde steeg met €2,22 tussen twee metingen, tegen
+~€0,32-0,36/kWh) bevestigde: er is die avond ~6,5 kWh verkocht tijdens
+het dure-kwartier-blok — de reserve werd **correct** gerespecteerd tot
+precies de grens. Het probleem zat in wat **daarna** gebeurde: zodra het
+dure kwartier voorbij is, gaat de integratie terug naar `smart`-modus,
+waarin de Zendure's eigen logica het huishoudverbruik dekt — volledig
+buiten onze reserve-bescherming om. Die nacht is de accu dus verder
+leeggetrokken zonder dat wij daar iets tegen konden doen.
+
+**Fix:** een nieuwe, structurele extra marge van **+15 procentpunt**
+(bovenop de bestaande 10% basis en de andere geleerde correcties) in de
+ontlaad-reserve-berekening, specifiek om deze onbeschermde periode te
+compenseren — minder verkopen tijdens het dure kwartier zelf, zodat er
+meer buffer overblijft voor wat er daarna, buiten onze controle, nog
+wordt verbruikt.
+
+Getest: de reserve-marge steeg van 10% naar 25% in een representatief
+scenario, wat in de praktijk zo'n 0,4 kWh minder verkoop betekent per
+duur kwartier-avond — een bewuste, structurele trade-off tussen iets
+minder verdienen en betrouwbaarder zelfvoorzienend blijven.
+
+**Werkt samen met de bestaande zelflerende correcties** (tekort-/
+overschot-detectie, v0.30.0) — die blijven de marge verder verfijnen
+bovenop deze nieuwe structurele basis.
+
+## v0.37.0 — correctie: smart_discharging blokkeert zon niet (verkeerde aanname uit v0.25.0 hersteld)
+
+**Belangrijke correctie.** In v0.25.0 bouwden we een uitzondering: "forceer
+nooit `smart_discharging` zolang er actief zon wordt geproduceerd" — de
+aanname was dat `smart_discharging` zonne-energie zou blokkeren/missen.
+
+**Die aanname bleek onjuist.** Op deze Zendure-hardware (2400AC, 3
+accu's) blokkeert `smart_discharging` de zon niet — het stuurt de zon
+gewoon rechtstreeks naar het net (export) in plaats van de accu op te
+laden, en de accu helpt dan alleen bij verbruikspieken. Zon wordt dus in
+**beide** modi nuttig gebruikt; alleen de bestemming (opslaan vs.
+verkopen) verschilt. De uitzondering blokkeerde daardoor precies het
+gewenste gedrag: zon verkopen tegen een redelijke prijs nú, in plaats van
+'m op te slaan voor een moment dat toch al goedkoper wordt.
+
+**Fix:** de uitzondering is volledig verwijderd. De normale prijs-/
+reserve-logica bepaalt nu weer zelf of het `smart_discharging` (zon
+verkopen) of `smart` (zon opslaan) wordt, ongeacht of er op dat moment
+toevallig zon wordt geproduceerd.
+
+Getest: bij een normale (niet-duur) prijs, actieve zon, en vóór het
+goedkoopste blok, kiest de integratie nu correct `discharging_window`
+(zon gaat het net op) in plaats van geforceerd `smart` (zon zou worden
+opgeslagen).
