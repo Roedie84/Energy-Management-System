@@ -181,6 +181,18 @@ class CheapestBlockStartSensor(_CoordinatorDiagnosticSensor):
     _attr_icon = "mdi:cash-clock"
     _attr_device_class = SensorDeviceClass.TIMESTAMP
 
+    def __init__(self, coordinator, entry_id: str) -> None:
+        super().__init__(coordinator, entry_id, "cheapest_block_start")
+
+    @property
+    def native_value(self) -> datetime | None:
+        return self._coordinator.last_cheap_block_start
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        end = self._coordinator.last_cheap_block_end
+        return {"end": end.isoformat() if end else None}
+
 
 class CurrentPricePerKwhSensor(_CoordinatorDiagnosticSensor):
     """The price (EUR/kWh) the integration itself last computed for
@@ -200,18 +212,6 @@ class CurrentPricePerKwhSensor(_CoordinatorDiagnosticSensor):
     def native_value(self) -> float | None:
         value = self._coordinator.last_current_price_per_kwh
         return round(value, 4) if value is not None else None
-
-    def __init__(self, coordinator, entry_id: str) -> None:
-        super().__init__(coordinator, entry_id, "cheapest_block_start")
-
-    @property
-    def native_value(self) -> datetime | None:
-        return self._coordinator.last_cheap_block_start
-
-    @property
-    def extra_state_attributes(self) -> dict:
-        end = self._coordinator.last_cheap_block_end
-        return {"end": end.isoformat() if end else None}
 
 
 class DischargeWindowStartSensor(_CoordinatorDiagnosticSensor):

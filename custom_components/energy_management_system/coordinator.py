@@ -1585,11 +1585,52 @@ class EnergyManagementSystemCoordinator:
                 reason,
             )
 
+    def _is_worth_discharging_now(
+        self,
+        entries: list[PriceEntry],
+        now: datetime,
+        headroom_kwh: float,
+        discharge_power_w: float,
+    ) -> bool:
+        """Is 'now' worth spending discharge headroom on, given the other
+        remaining expensive quarters today?
+
+        Without this, headroom gets consumed chronologically - the first
+        expensive quarters encountered "win", even if later quarters
+        today are priced higher. This ranks all of today's remaining
+        expensive quarters by price and only spends headroom on however
+        many of the *priciest* ones it can actually sustain, holding back
+        otherwise - so a long elevated-price evening with a genuine peak
+        later on sells at the peak, not just whichever quarter happened
+        to come first.
+        """
+        todays_entries = [e for e in entries if e[0].date() == now.date()]
+        threshold = self._get_expensive_price_threshold(entries, now)
+        if threshold is None:
+            return True  # no meaningful ranking possible, don't block
+
+        remaining_expensive = [
+            e for e in todays_entries if e[2] >= threshold and e[1] > now
+        ]
+        if not remaining_expensive:
+            return True
+
+        remaining_expensive.sort(key=lambda e: e[2], reverse=True)
+
+        energy_per_quarter_kwh = (discharge_power_w / 1000) * 0.25
+        if energy_per_quarter_kwh <= 0:
+            return True
+        quarters_affordable = max(1, int(headroom_kwh / energy_per_quarter_kwh))
+
+        top_slots = remaining_expensive[:quarters_affordable]
+        return any(e[0] <= now < e[1] for e in top_slots)
+
     def _get_soc_scaled_discharge_power(
         self,
         base_power: float,
         now: datetime | None = None,
         cheap_block_start: datetime | None = None,
+        entries: list[PriceEntry] | None = None,
     ) -> float | None:
         """Scale down the forced-discharge power to avoid over-draining
         the battery just to sell into an expensive quarter.
@@ -1599,10 +1640,17 @@ class EnergyManagementSystemCoordinator:
         when an available-energy sensor and cheap-block context are
         present. Falls back to a flat SoC-percentage taper otherwise.
 
+        When entries are provided, also checks whether 'now' ranks among
+        the priciest remaining quarters the current headroom can actually
+        sustain (see `_is_worth_discharging_now`) - so limited headroom
+        goes to the genuine peak, not just whichever expensive quarter
+        happens to come first chronologically.
+
         Returns the (possibly reduced) power, or None if there isn't
-        enough headroom to discharge at all - in which case forced
-        discharge should be skipped entirely (protect the battery, fall
-        back to smart mode).
+        enough headroom to discharge at all, or a better-priced quarter
+        is still ahead today - in which case forced discharge should be
+        skipped this tick (protect the battery / hold out for the peak,
+        fall back to smart mode).
         """
         available_entity = self.config.get(CONF_AVAILABLE_ENERGY_SENSOR)
         if available_entity and now is not None:
@@ -1627,6 +1675,18 @@ class EnergyManagementSystemCoordinator:
                         "forced discharge this tick",
                         available_kwh,
                         reserve_kwh,
+                    )
+                    return None
+
+                if entries is not None and not self._is_worth_discharging_now(
+                    entries, now, headroom_kwh, base_power
+                ):
+                    self.last_discharge_power_applied = None
+                    _LOGGER.debug(
+                        "Holding off: limited headroom (%.2f kWh) is "
+                        "better spent on a pricier quarter later today "
+                        "than this one",
+                        headroom_kwh,
                     )
                     return None
 
@@ -2045,7 +2105,43 @@ class EnergyManagementSystemCoordinator:
         discharge_power_w = self.config.get(
             CONF_MANUAL_DISCHARGE_POWER, DEFAULT_MANUAL_DISCHARGE_POWER
         )
-        simulated_available = available_kwh
+
+        # Determine which "expensive" candidates actually make the cut,
+        # simulating headroom consumption in *price-priority* order
+        # (priciest quarters first) rather than chronologically - so a
+        # long elevated-price stretch spends limited headroom on its
+        # genuine peak, not just whichever quarter happens to come first.
+        # Simulated once per day, using that day's own threshold.
+        makes_the_cut: set = set()
+        if available_kwh is not None and reserve_kwh is not None:
+            for entry_date, day_entries in by_date.items():
+                threshold = self._price_threshold_for_entries(day_entries)
+                if threshold is None:
+                    continue
+                candidates = [e for e in day_entries if e[2] >= threshold]
+                candidates.sort(key=lambda e: e[2], reverse=True)
+
+                simulated_available = available_kwh
+                for candidate in candidates:
+                    if simulated_available <= reserve_kwh:
+                        break
+                    makes_the_cut.add(candidate[0])
+                    duration_hours = (
+                        candidate[1] - candidate[0]
+                    ).total_seconds() / 3600
+                    simulated_available -= (
+                        discharge_power_w / 1000
+                    ) * duration_hours
+        else:
+            # No energy context available - every price-qualifying quarter
+            # makes the cut (old behaviour, price-only projection).
+            for day_entries in by_date.values():
+                threshold = self._price_threshold_for_entries(day_entries)
+                if threshold is None:
+                    continue
+                for e in day_entries:
+                    if e[2] >= threshold:
+                        makes_the_cut.add(e[0])
 
         timeline: list[dict] = []
         for entry in entries:
@@ -2055,25 +2151,10 @@ class EnergyManagementSystemCoordinator:
             entry_date = entry[0].date()
             day_entries = by_date[entry_date]
             threshold = self._price_threshold_for_entries(day_entries)
-            is_expensive = threshold is not None and entry[2] >= threshold
+            price_qualifies = threshold is not None and entry[2] >= threshold
+            is_expensive = price_qualifies and entry[0] in makes_the_cut
 
             is_current_interval = entry[0] <= now < entry[1]
-
-            # Cap price-qualifying "expensive" quarters by the simulated
-            # running balance, so a long stretch of nominally-expensive
-            # quarters doesn't get shown as an unbounded full-power
-            # discharge once there's no realistic energy left for it.
-            if (
-                is_expensive
-                and not is_current_interval
-                and simulated_available is not None
-                and reserve_kwh is not None
-            ):
-                if simulated_available <= reserve_kwh:
-                    is_expensive = False
-                else:
-                    duration_hours = (entry[1] - entry[0]).total_seconds() / 3600
-                    simulated_available -= (discharge_power_w / 1000) * duration_hours
 
             if is_current_interval and live_is_expensive is not None:
                 # Use the exact same live decision shown elsewhere, instead
@@ -2640,7 +2721,7 @@ class EnergyManagementSystemCoordinator:
                 CONF_MANUAL_DISCHARGE_POWER, DEFAULT_MANUAL_DISCHARGE_POWER
             )
             scaled_power = self._get_soc_scaled_discharge_power(
-                discharge_power, now, cheap_block_start
+                discharge_power, now, cheap_block_start, entries
             )
             if scaled_power is None and self._is_emergency_low_battery():
                 # SoC too low to discharge - and critically low, not just

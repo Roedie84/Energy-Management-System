@@ -1460,3 +1460,72 @@ De financiële kaart is vervangen door de door de gebruiker zelf
 gecorrigeerde versie (enkele utility_meter-entiteitsnamen kwamen niet
 overeen met wat er daadwerkelijk in HA staat). De nieuwe prijs-
 vergelijkingssensor is toegevoegd aan de "Actuele beslissing"-kaart.
+
+## v0.40.0 — headroom prioritair naar de duurste kwartieren, niet chronologisch
+
+**Aanleiding:** de vraag om écht op de duurste kwartieren te ontladen,
+niet gewoon een blok van x uren. Bij een langdurige avondpiek met
+oplopende prijzen (bv. 0,317 → 0,364 €/kWh over 5 uur) verbruikte de
+beperkte headroom zich voorheen **chronologisch**: de eerste kwartieren
+die de dynamische drempel haalden "wonnen", ook al kwamen er later
+diezelfde piek nog duurdere kwartieren aan.
+
+**Fix:** nieuwe methode `_is_worth_discharging_now()` rangschikt alle
+resterende dure kwartieren van vandaag op prijs, en berekent hoeveel
+kwartieren de huidige headroom daadwerkelijk aankan. Alleen als "nu" tot
+die duurste, betaalbare kwartieren behoort, wordt er ontladen — anders
+wordt de headroom bewust bewaard voor een beter moment later diezelfde
+piek.
+
+Getest: bij een piek van 0,317 tot 0,364 €/kWh met headroom voor slechts
+~2 kwartieren, hield de integratie correct in bij 18:30 (relatief
+goedkoop binnen de piek) en ontlaadde ze wél vol vermogen bij 20:27
+(bijna de topprijs) — exact het "duurste eerst"-gedrag.
+
+**Werkt samen met** de bestaande reserve-bescherming: als er sowieso geen
+headroom is (reserve al opgesoupeerd), blijft dat de eerste blokkade;
+deze nieuwe check is een extra laag daarbovenop, specifiek voor het
+prioriteren wélke kwartieren de beschikbare headroom mogen gebruiken.
+
+## Aanvulling op v0.40.0: planningstabel toont nu ook prijs-prioriteit
+
+De planningstabel (Overzicht komende uren) simuleerde headroom-verbruik
+nog steeds chronologisch. Bijgewerkt zodat de simulatie **ook** eerst de
+duurste kwartieren van elke dag rangschikt en de headroom daaraan
+toewijst — exact hetzelfde principe als de live beslissing (v0.40.0),
+zodat wat je in het dashboard ziet overeenkomt met wat er echt gaat
+gebeuren.
+
+Getest: bij dezelfde 5-uur-piek (0,317 → 0,3637 → 0,317 €/kWh) met
+headroom voor ~13 kwartieren, toont de planning nu correct de 13
+kwartieren rond de piekprijs (19:15-22:15), niet de eerste 13
+chronologische kwartieren vanaf 18:30.
+
+## v0.40.1 — kritieke regressie gefixt: sensor-setup crashte volledig
+
+**Oorzaak van "veel entiteiten niet beschikbaar":** bij het toevoegen van
+`CurrentPricePerKwhSensor` (v0.39.0) is exact hetzelfde soort fout gemaakt
+als eerder bij `_read_corrected_consumption_power` (v0.34.3) — de
+`__init__`/`native_value`/`extra_state_attributes` van de bestaande
+`CheapestBlockStartSensor` raakten losgekoppeld van hun eigen klasse en
+belandden per ongeluk in de nieuwe `CurrentPricePerKwhSensor`. Resultaat:
+`CheapestBlockStartSensor(coordinator, entry_id)` miste een verplicht
+argument, waardoor **de hele sensor-platform-setup crashte** bij het
+opstarten — vandaar dat zoveel entiteiten (niet alleen de nieuwe) als
+"niet beschikbaar" verschenen.
+
+**Fix:** beide klassen hersteld met hun eigen, correcte `__init__`.
+
+**Extra controle:** een volledige AST-scan over **alle** bestanden
+(sensor.py, coordinator.py, diagnostics.py, config_flow.py, switch.py,
+solar_forecast.py) bevestigt dat dit de enige zo'n regressie was.
+
+**Getest:** alle drie betrokken sensoren (`CheapestBlockStartSensor`,
+`CurrentPricePerKwhSensor`, `DischargeWindowStartSensor`) daadwerkelijk
+runtime geïnstantieerd (niet alleen gecompileerd) — allemaal correct,
+met werkende `native_value`.
+
+**Les:** dit is de tweede keer dat een str_replace-bewerking een
+bestaande klasse per ongeluk beschadigde bij het toevoegen van nieuwe
+code ernaast. Voortaan extra alert op deze specifieke faalmodus bij het
+invoegen van nieuwe sensor-klassen vlak naast bestaande.
