@@ -49,6 +49,8 @@ cards:
     entities:
       - entity: sensor.energy_management_system_last_decision_reason
         name: Reden laatste beslissing
+      - entity: sensor.energy_management_system_current_price_used_by_integration
+        name: Huidige prijs volgens integratie (vergelijk met Zonneplan-sensor)
       - entity: sensor.energy_management_system_simulated_action
         name: Gesimuleerde actie (bij learning only)
       - entity: sensor.energy_management_system_effective_expensive_quarters
@@ -63,27 +65,28 @@ cards:
   - type: entities
     title: Financieel
     entities:
-      - entity: sensor.woonkamer_energy_management_system_discharge_value_expensive_quarters
+      - entity: >-
+          sensor.woonkamer_energy_management_system_discharge_value_expensive_quarters
         name: Waarde ontladen (totaal sinds installatie)
-      - entity: sensor.woonkamer_ems_discharge_value_daily
+      - entity: sensor.ems_ontlaadwaarde_vandaag
         name: Waarde ontladen - vandaag
-      - entity: sensor.woonkamer_ems_discharge_value_weekly
+      - entity: sensor.ems_ontlaadwaarde_deze_week
         name: Waarde ontladen - deze week
-      - entity: sensor.woonkamer_ems_discharge_value_monthly
+      - entity: sensor.ems_ontlaadwaarde_deze_maand
         name: Waarde ontladen - deze maand
       - type: divider
       - entity: sensor.woonkamer_energy_management_system_charge_cost_grid_charging
         name: Netlaadkosten (totaal sinds installatie)
-      - entity: sensor.woonkamer_ems_charge_cost_daily
+      - entity: sensor.ems_netlaadkosten_vandaag
         name: Netlaadkosten - vandaag
-      - entity: sensor.woonkamer_ems_charge_cost_weekly
+      - entity: sensor.ems_netlaadkosten_deze_week
         name: Netlaadkosten - deze week
-      - entity: sensor.woonkamer_ems_charge_cost_monthly
+      - entity: sensor.ems_netlaadkosten_deze_maand
         name: Netlaadkosten - deze maand
       - type: divider
-      - entity: sensor.energy_management_system_reserve_shortfall_days
+      - entity: sensor.woonkamer_energy_management_system_reserve_shortfall_days
         name: Onverwachte netimport-dagen (laatste 7)
-      - entity: sensor.energy_management_system_reserve_excess_days
+      - entity: sensor.woonkamer_energy_management_system_reserve_excess_days
         name: Overschot-dagen - had scherper mogen verkopen (laatste 7)
 
   - type: entities

@@ -35,6 +35,7 @@ async def async_setup_entry(
 
     entities: list[SensorEntity] = [
         CheapestBlockStartSensor(coordinator, entry.entry_id),
+        CurrentPricePerKwhSensor(coordinator, entry.entry_id),
         DischargeWindowStartSensor(coordinator, entry.entry_id),
         EffectiveExpensiveQuartersSensor(coordinator, entry.entry_id),
         LastDecisionReasonSensor(coordinator, entry.entry_id),
@@ -179,6 +180,26 @@ class CheapestBlockStartSensor(_CoordinatorDiagnosticSensor):
     _attr_name = "Cheapest block start"
     _attr_icon = "mdi:cash-clock"
     _attr_device_class = SensorDeviceClass.TIMESTAMP
+
+
+class CurrentPricePerKwhSensor(_CoordinatorDiagnosticSensor):
+    """The price (EUR/kWh) the integration itself last computed for
+    'now', straight from the same forecast data used for every decision -
+    compare this directly against the price sensor's own live state to
+    check they agree (e.g. if you suspect a parsing or timing mismatch).
+    """
+
+    _attr_name = "Current price used by integration"
+    _attr_icon = "mdi:cash-sync"
+    _attr_native_unit_of_measurement = "EUR/kWh"
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        super().__init__(coordinator, entry_id, "current_price_used")
+
+    @property
+    def native_value(self) -> float | None:
+        value = self._coordinator.last_current_price_per_kwh
+        return round(value, 4) if value is not None else None
 
     def __init__(self, coordinator, entry_id: str) -> None:
         super().__init__(coordinator, entry_id, "cheapest_block_start")

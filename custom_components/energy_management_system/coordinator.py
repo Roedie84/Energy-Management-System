@@ -225,6 +225,7 @@ class EnergyManagementSystemCoordinator:
         self.total_discharge_value_eur: float = 0.0
         self.total_charge_cost_eur: float = 0.0
         self.last_charge_power_applied: float | None = None
+        self.last_current_price_per_kwh: float | None = None
 
         # Tracked so diagnostics can flag "no progress despite enough
         # elapsed time" for the various learning mechanisms below,
@@ -1752,15 +1753,25 @@ class EnergyManagementSystemCoordinator:
         return count
 
     def _compute_dynamic_discharge_start(
-        self, entries: list[PriceEntry], now: datetime
+        self,
+        entries: list[PriceEntry],
+        now: datetime,
+        cheap_block_start: datetime | None = None,
     ) -> datetime | None:
         """Start the discharging window right when today's expensive
         quarters end, instead of at a fixed clock hour.
 
         Uses the end of the last (chronologically latest) of today's
-        quarters that clear the dynamic "expensive" threshold. Returns
-        None if none are found for today (e.g. all prices are equal, or
-        no data).
+        quarters that clear the dynamic "expensive" threshold - but only
+        among quarters *before* cheap_block_start. Without this bound, an
+        unusual price shape (e.g. a solar-driven midday dip followed by a
+        separate evening peak, so the day's cheapest block comes *before*
+        its latest expensive quarter) would return a discharge_start
+        *after* cheap_block_start, making the [discharge_start,
+        cheap_block_start) smart_discharging window invalid/empty - so it
+        would never show up at all, even though it should apply earlier
+        that same day. Returns None if none are found for today (e.g. all
+        prices are equal, or no data).
         """
         todays_entries = [entry for entry in entries if entry[0].date() == now.date()]
         if not todays_entries:
@@ -1770,7 +1781,12 @@ class EnergyManagementSystemCoordinator:
         if threshold is None:
             return None
 
-        expensive_entries = [e for e in todays_entries if e[2] >= threshold]
+        expensive_entries = [
+            e
+            for e in todays_entries
+            if e[2] >= threshold
+            and (cheap_block_start is None or e[1] <= cheap_block_start)
+        ]
         if not expensive_entries:
             return None
 
@@ -2497,7 +2513,7 @@ class EnergyManagementSystemCoordinator:
         # intervals), even though the live decision below may use the
         # energy-based check instead.
         self.last_discharge_start = self._compute_dynamic_discharge_start(
-            entries, now
+            entries, now, cheap_block_start
         )
 
         # Should we postpone charging (smart_discharging) ahead of the
@@ -2574,6 +2590,7 @@ class EnergyManagementSystemCoordinator:
         # or even just running the panels is actively costing money at a
         # negative price. Restore both when the price turns positive again.
         current_price_per_kwh = self._get_current_price_per_kwh(entries, now)
+        self.last_current_price_per_kwh = current_price_per_kwh
         is_negative_price = (
             current_price_per_kwh is not None and current_price_per_kwh < 0
         )

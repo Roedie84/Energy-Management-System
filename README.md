@@ -1427,3 +1427,36 @@ alleen echte Wh/MWh-sensoren worden nu automatisch omgerekend.
 **Verwacht effect:** vanaf vanavond (23:59:50) zou de eerste geldige
 vergelijking eindelijk moeten lukken, en vervolgens dagelijks verder
 opbouwen zoals bedoeld.
+
+## v0.39.0 — fix: smart_discharging verscheen nooit bij een ongebruikelijk prijspatroon
+
+**Gevonden:** `discharge_start` (23:45) lag ná `cheap_block_start` (14:00)
+— een onmogelijke, lege tijdspanne, waardoor `smart_discharging` nooit
+kon verschijnen. Oorzaak: `_compute_dynamic_discharge_start` zocht "het
+laatste dure kwartier van vandaag" zonder rekening te houden met dagen
+waarin het goedkoopste blok **overdag** valt (zon-gedreven dip) gevolgd
+door een **latere avondpiek** — dan ligt die "laatste dure periode" ná
+het eerstvolgende goedkope blok, wat de venster-berekening omkeert.
+
+**Fix:** `_compute_dynamic_discharge_start` houdt nu alleen rekening met
+dure kwartieren die vóór `cheap_block_start` liggen. Getest: in een
+normaal patroon (avond duur → nacht goedkoop) verschijnt
+`smart_discharging` gewoon weer (bevestigd met 4 kwartieren in een
+testscenario); bij het ongebruikelijke patroon van vandaag levert de
+berekening nu terecht `None` op (geen geldig venster) in plaats van een
+kapotte, omgekeerde tijdspanne.
+
+## Nieuwe sensor: live prijsvergelijking
+
+Om voortaan zelf te kunnen controleren of de integratie dezelfde prijs
+ziet als de Zonneplan-sensor: nieuwe sensor
+**`sensor.current_price_used_by_integration`**, die exact de prijs toont
+die de integratie op dit moment gebruikt voor haar beslissing — direct
+vergelijkbaar met de actuele status van je Zonneplan-sensor.
+
+## Dashboard bijgewerkt
+
+De financiële kaart is vervangen door de door de gebruiker zelf
+gecorrigeerde versie (enkele utility_meter-entiteitsnamen kwamen niet
+overeen met wat er daadwerkelijk in HA staat). De nieuwe prijs-
+vergelijkingssensor is toegevoegd aan de "Actuele beslissing"-kaart.
