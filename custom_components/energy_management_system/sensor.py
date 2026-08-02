@@ -839,12 +839,18 @@ class UpcomingTimelineSensor(_CoordinatorDiagnosticSensor):
     @property
     def native_value(self) -> int:
         """Number of upcoming intervals in the timeline (state is a count;
-        use the 'timeline' attribute for the actual table)."""
+        use the 'transitions' attribute for the actual table)."""
         return len(self._coordinator.last_timeline)
 
     @property
     def extra_state_attributes(self) -> dict:
+        # Only the collapsed 'transitions' (one entry per block, not per
+        # 15-minute quarter) - the full per-quarter timeline can easily
+        # exceed the recorder's 16KB attribute size limit (up to ~192
+        # quarters over 48h of forecast data), causing history storage
+        # for this entity to silently fail. Nothing else reads
+        # 'timeline' (the dashboard only uses 'transitions'), so it's
+        # dropped here entirely rather than trimmed.
         return {
-            "timeline": self._coordinator.last_timeline,
             "transitions": self._coordinator.last_transitions,
         }

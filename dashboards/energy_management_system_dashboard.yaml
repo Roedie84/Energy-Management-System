@@ -49,7 +49,7 @@ cards:
     entities:
       - entity: sensor.energy_management_system_last_decision_reason
         name: Reden laatste beslissing
-      - entity: sensor.energy_management_system_current_price_used_by_integration
+      - entity: sensor.woonkamer_energy_management_system_current_price_used_by_integration
         name: Huidige prijs volgens integratie (vergelijk met Zonneplan-sensor)
       - entity: sensor.energy_management_system_simulated_action
         name: Gesimuleerde actie (bij learning only)

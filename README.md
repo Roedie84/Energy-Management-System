@@ -1529,3 +1529,59 @@ met werkende `native_value`.
 bestaande klasse per ongeluk beschadigde bij het toevoegen van nieuwe
 code ernaast. Voortaan extra alert op deze specifieke faalmodus bij het
 invoegen van nieuwe sensor-klassen vlak naast bestaande.
+
+## v0.40.2 — fix: attributen van upcoming_schedule te groot voor de recorder
+
+**Gevonden in de logs:** "State attributes for
+sensor.energy_management_system_upcoming_schedule exceed maximum size of
+16384 bytes" — 593 keer gelogd. Oorzaak: het `timeline`-attribuut bevatte
+**elk los kwartier** (tot ~48 uur vooruit = ~150+ items), wat de
+16KB-grens van Home Assistant's recorder overschrijdt. Gevolg: de
+geschiedenis van deze sensor werd niet opgeslagen (wel de live status,
+dus het dashboard bleef werken, maar de historische grafiek niet).
+
+**Fix:** het `timeline`-attribuut is verwijderd — het werd nergens
+gebruikt (het dashboard leest alleen het veel kleinere, samengevatte
+`transitions`-attribuut). Getest met een realistisch 48-uurs scenario:
+21.896 bytes (oud, boven de limiet) → 754 bytes (nieuw, ruim eronder).
+
+**Voor de duidelijkheid:** `sensor.cloudems_battery_schedule` in dezelfde
+foutmelding hoort bij CloudEMS, niet bij deze integratie — die val ik
+buiten mijn verantwoordelijkheid, gezien je CloudEMS toch wilt
+verwijderen.
+
+## v0.41.0 — verouderde dubbele reservering verwijderd (8,4 kWh → 0,0 kWh)
+
+**Aanleiding:** de opsplitsing in het dashboard toonde 8,4 kWh
+"reservering dure kwartieren" — veel te veel, terecht bevraagd.
+
+**Oorzaak:** `_estimate_upcoming_discharge_kwh()` (v0.23.0) telde alle
+resterende dure kwartieren van vandaag bij elkaar op tegen **vol
+vermogen** (1600W), als extra reservering bovenop de basisbehoefte. Dit
+was destijds nodig omdat er geen andere bescherming was tegen "te veel
+verkopen tijdens dure kwartieren". Maar sinds v0.31.0/v0.40.0 wordt de
+daadwerkelijke ontlading tijdens dure kwartieren al **zelf begrensd**
+door de headroom-check en prijs-prioriteit — die zal nooit onder de
+reserve-drempel zakken, per ontwerp. De aparte reservering telde dus
+dezelfde bescherming **dubbel**, en blies de benodigde energie
+onnodig op.
+
+**Fix:** de aparte reservering is verwijderd (nu altijd 0,0 kWh, veld
+blijft zichtbaar in de opsplitsing voor transparantie/consistentie). De
+nu-overbodige functie `_estimate_upcoming_discharge_kwh()` is ook
+verwijderd.
+
+Getest: opsplitsing toont nu correct `reservering_dure_kwartieren_kwh:
+0.0` in plaats van een opgeblazen waarde.
+
+**Effect:** de energie-brug-check (en dus de smart_discharging-beslissing)
+wordt hiermee minder onnodig conservatief — er wordt niet langer
+gewacht met het uitstellen van laden vanwege een dubbeltellende
+reservering die niet meer nodig is.
+
+## v0.41.1 — dashboard-fix: woonkamer-voorvoegsel voor de prijsvergelijkingssensor
+
+`sensor.current_price_used_by_integration` (v0.39.0) kreeg, net als
+eerdere nieuwe sensoren, het `woonkamer_`-voorvoegsel toegewezen. Het
+dashboard-bestand is bijgewerkt naar
+`sensor.woonkamer_energy_management_system_current_price_used_by_integration`.
