@@ -1665,3 +1665,28 @@ effect dat we destijds voor de gewone reserve-berekening bevestigden.
 **Dus ja, dit getal is nu écht dynamisch**: het wordt elke ~15 minuten
 opnieuw berekend, en reageert direct op ongebruikelijk hoog actueel
 verbruik zoals de airco, niet alleen op historische gemiddelden.
+
+## v0.44.0 — update-interval verlaagd van 15 naar 5 minuten
+
+**Aanleiding:** de wens voor een zo responsief mogelijk systeem — de
+reactieve live-verbruikscorrectie (v0.29.0/v0.43.1) kan nu binnen 5
+minuten in plaats van 15 minuten reageren op bv. de airco die aanslaat.
+
+**Gecontroleerd voor het wijzigen:** het interval wordt op één plek
+zowel als klok-timer als in de vermogensberekening gebruikt
+(`_get_soc_scaled_discharge_power`). Die berekening is intern
+consistent: bij een korter interval staat hij terecht een hoger
+*instantaan* vermogen toe voor dezelfde headroom, omdat er ook sneller
+opnieuw wordt gecontroleerd — geen bug, maar noodzakelijk gevolg van
+vaker bijsturen. De leerprocessen (rendement, verbruiksprofiel) gebruiken
+al de werkelijk verstreken tijd (niet een aanname van 15 minuten), dus
+die zijn ongevoelig voor deze wijziging.
+
+**Overweging om te weten:** de Zendure ontvangt hiermee 3x zo vaak een
+her-bevestiging van de modus/het vermogen (elke 5 in plaats van 15
+minuten). Dit zou probleemloos moeten werken (dit is normaal voor
+dit soort besturing), maar ik kan niet met zekerheid zeggen hoe de
+Zendure-hardware zelf omgaat met vaker herhaalde commando's — mocht je
+iets vreemds merken (bv. schokkerig schakelen), dan is dit de eerste
+plek om naar te kijken en eventueel terug te zetten naar 15 (of een
+tussenwaarde als 10).
