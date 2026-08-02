@@ -631,15 +631,29 @@ class EnergyManagementSystemCoordinator:
         return sum(1 for entry in todays_entries if entry[2] >= threshold)
 
     def _read_sensor_float(self, entity_id: str | None) -> float | None:
+        """Read a sensor's state as a float, automatically converting to
+        kWh if it reports energy in Wh or MWh instead - without this, a
+        sensor reporting in Wh (seen in practice: a SolarEdge yield
+        sensor) gets misread as if the raw number were already kWh, off
+        by a factor 1000. Only triggers for energy units (Wh/MWh) - power
+        sensors (W) are unaffected, since their unit never matches those.
+        """
         if not entity_id:
             return None
         state = self.hass.states.get(entity_id)
         if state is None or state.state in (None, "unknown", "unavailable"):
             return None
         try:
-            return float(state.state)
+            value = float(state.state)
         except (TypeError, ValueError):
             return None
+
+        unit = (state.attributes.get("unit_of_measurement") or "").strip().lower()
+        if unit == "wh":
+            return value / 1000
+        if unit == "mwh":
+            return value * 1000
+        return value
 
     def _read_corrected_battery_power(self) -> float | None:
         """Battery power (W), sign-corrected: positive = discharging,

@@ -1396,3 +1396,34 @@ Getest: bij een normale (niet-duur) prijs, actieve zon, en vóór het
 goedkoopste blok, kiest de integratie nu correct `discharging_window`
 (zon gaat het net op) in plaats van geforceerd `smart` (zon zou worden
 opgeslagen).
+
+## v0.38.0 — fix: eenheid-mismatch bij Wh-sensoren (werkelijke PV-opbrengst)
+
+**Gevonden bij het uitzoeken waarom de PV-voorspelling-vergelijking nooit
+nieuwe resultaten opleverde:** `sensor.solaredge_energy_today` rapporteert
+in **Wh** (Watt-uur), niet **kWh** — bevestigd via de status-attributen
+(`unit_of_measurement: Wh`, waarde `1694.0`). Onze code las dit getal
+altijd rechtstreeks in alsof het al kWh was, een factor 1000 te groot.
+Elke vergelijking werd daardoor terecht (door onze eigen
+plausibiliteitscontrole) afgewezen als onmogelijke uitschieter — vandaar
+dat er nooit nieuwe, geldige afwijkingen werden bijgeschreven.
+
+**Fix:** zowel `_read_float` (solar_forecast.py) als
+`_read_sensor_float` (coordinator.py, gebruikt door vrijwel alles) kijken
+nu naar het `unit_of_measurement`-attribuut van een sensor, en zetten
+automatisch **Wh → kWh** (delen door 1000) en **MWh → kWh** (keer 1000)
+om. Vermogensensoren (W) en sensoren zonder eenheid-attribuut blijven
+ongewijzigd — de conversie triggert alleen specifiek op "wh"/"mwh".
+
+Ook de historische bootstrap (`async_bootstrap_from_history`) is
+bijgewerkt om dezelfde conversie toe te passen op de werkelijke-opbrengst-
+sensor.
+
+**Getest:** exact jouw waarde (1694,0 Wh) wordt nu correct gelezen als
+1,694 kWh. Volledige regressietest bevestigt dat vermogensensoren (W),
+percentages, en sensoren zonder eenheid-attribuut ongewijzigd blijven —
+alleen echte Wh/MWh-sensoren worden nu automatisch omgerekend.
+
+**Verwacht effect:** vanaf vanavond (23:59:50) zou de eerste geldige
+vergelijking eindelijk moeten lukken, en vervolgens dagelijks verder
+opbouwen zoals bedoeld.

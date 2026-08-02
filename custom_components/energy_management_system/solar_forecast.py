@@ -61,15 +61,27 @@ MAX_REASONABLE_DAILY_FORECAST_KWH = 100.0
 
 
 def _read_float(hass: HomeAssistant, entity_id: str | None) -> float | None:
+    """Read a sensor's state as a float, automatically converting to kWh
+    if the sensor reports a different energy unit (Wh or MWh) - without
+    this, a sensor reporting in Wh (e.g. some SolarEdge integrations) gets
+    misread as if the raw number were already kWh, off by a factor 1000.
+    """
     if not entity_id:
         return None
     state = hass.states.get(entity_id)
     if state is None or state.state in (None, "unknown", "unavailable"):
         return None
     try:
-        return float(state.state)
+        value = float(state.state)
     except (TypeError, ValueError):
         return None
+
+    unit = (state.attributes.get("unit_of_measurement") or "").strip().lower()
+    if unit == "wh":
+        return value / 1000
+    if unit == "mwh":
+        return value * 1000
+    return value
 
 
 class SolarForecastAccuracyTracker:
@@ -248,6 +260,25 @@ class SolarForecastAccuracyTracker:
             )
             return
 
+        # Auto-convert to kWh if the actual-yield sensor reports in a
+        # different energy unit (e.g. Wh) - assumes the unit doesn't
+        # change over the lookback period, using its current unit as a
+        # stand-in for what it was historically.
+        actual_unit = (
+            self.hass.states.get(actual_entity).attributes.get(
+                "unit_of_measurement", ""
+            )
+            if self.hass.states.get(actual_entity)
+            else ""
+        ) or ""
+        actual_unit = actual_unit.strip().lower()
+        if actual_unit == "wh":
+            actual_unit_factor = 0.001
+        elif actual_unit == "mwh":
+            actual_unit_factor = 1000.0
+        else:
+            actual_unit_factor = 1.0
+
         def _value_at_or_before(states, target: datetime) -> float | None:
             best: float | None = None
             for state in states:
@@ -282,6 +313,8 @@ class SolarForecastAccuracyTracker:
 
             predicted = _value_at_or_before(forecast_states, predicted_at)
             actual = _value_at_or_before(actual_states, actual_at)
+            if actual is not None:
+                actual *= actual_unit_factor
 
             if predicted is None or predicted > MAX_REASONABLE_DAILY_FORECAST_KWH:
                 continue
