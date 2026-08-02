@@ -2586,6 +2586,20 @@ class EnergyManagementSystemCoordinator:
         projection_reserve_kwh = self._get_dynamic_discharge_reserve_kwh(
             now, cheap_block_start
         )
+        # Read fresh directly, rather than relying on self.last_available_kwh -
+        # that's only populated when _should_postpone_charging's energy-based
+        # check actually runs this tick, which isn't guaranteed (e.g. outside
+        # the relevant decision window). Without this, the schedule
+        # projection's headroom-based capping (see _build_forecast_timeline)
+        # would silently fall back to the uncapped price-only projection
+        # whenever last_available_kwh happened to be stale/None, showing a
+        # misleadingly long "manual" block regardless of actual battery
+        # capacity.
+        projection_available_kwh = self._read_sensor_float(
+            self.config.get(CONF_AVAILABLE_ENERGY_SENSOR)
+        )
+        if projection_available_kwh is not None and projection_available_kwh < 0:
+            projection_available_kwh = 0.0
         self.last_timeline = self._build_forecast_timeline(
             entries,
             now,
@@ -2593,7 +2607,7 @@ class EnergyManagementSystemCoordinator:
             self.last_discharge_start,
             live_is_expensive=is_expensive,
             live_should_postpone_charging=should_postpone_charging,
-            available_kwh=self.last_available_kwh,
+            available_kwh=projection_available_kwh,
             reserve_kwh=projection_reserve_kwh,
         )
         self.last_transitions = self._collapse_timeline(self.last_timeline)

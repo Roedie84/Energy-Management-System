@@ -1585,3 +1585,26 @@ reservering die niet meer nodig is.
 eerdere nieuwe sensoren, het `woonkamer_`-voorvoegsel toegewezen. Het
 dashboard-bestand is bijgewerkt naar
 `sensor.woonkamer_energy_management_system_current_price_used_by_integration`.
+
+## v0.42.0 — planning gebruikt nu altijd verse beschikbare-energie-data
+
+**Aanleiding:** de zorg over lange "manual"-blokken in de planning bleef
+bestaan, ook na de prijs-prioriteit van v0.40.0.
+
+**Gevonden oorzaak:** de planningsprojectie gebruikte
+`self.last_available_kwh`, die alleen wordt bijgewerkt als de
+energie-brug-check die specifieke tick daadwerkelijk (volledig)
+doorloopt — dat gebeurt niet altijd (bv. midden op de dag, ver van elk
+beslismoment). Als die waarde stale/`None` was, viel de
+aftopping-logica volledig terug op de oude, ongelimiteerde prijs-only
+projectie — vandaar dat het lange blok bleef verschijnen ondanks de
+v0.40.0-fix.
+
+**Fix:** de planning leest nu altijd een **verse** meting van de
+beschikbare-energie-sensor, los van wat de energie-brug-check die tick
+wel of niet heeft bijgewerkt.
+
+Getest met realistische meerdaagse prijsdata (goedkoopste blok correct
+wijzend naar de volgende dag, niet naar "nu"): bij 3,9 kWh beschikbaar
+tegen een ~19 uur lange overbruggingsperiode werd het volledige
+"manual"-blok terecht afgetopt naar 0 kwartieren.
