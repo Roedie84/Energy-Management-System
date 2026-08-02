@@ -1608,3 +1608,37 @@ Getest met realistische meerdaagse prijsdata (goedkoopste blok correct
 wijzend naar de volgende dag, niet naar "nu"): bij 3,9 kWh beschikbaar
 tegen een ~19 uur lange overbruggingsperiode werd het volledige
 "manual"-blok terecht afgetopt naar 0 kwartieren.
+
+## v0.43.0 — reserve beschermt nu het diepste punt, niet alleen het eindsaldo
+
+**De kernvraag die dit blootlegde:** "dit lange blok zorgt er toch voor
+dat mijn accu te leeg is om 's nachts nul op de meter te houden?" — en
+daar zat een echt, structureel probleem achter.
+
+**Het probleem:** de reserve-berekening telde verbruik minus verwachte
+zon op tot **één netto-getal over de hele overbruggingsperiode** (bv. nu
+tot morgen 11:15). Maar zon komt alleen overdag binnen — als de
+verwachte zonopbrengst voor morgen groot genoeg is, kan het netto-saldo
+er prima uitzien (of zelfs op 0 uitkomen), terwijl er 's nachts, vóórdat
+de zon opkomt, alsnog een reëel tekort is. Het totaalgetal verborg dit
+dieptepunt volledig.
+
+**Fix:** nieuwe methode `_estimate_worst_case_deficit_kwh()` loopt uur
+voor uur door de overbruggingsperiode heen en houdt het **cumulatieve
+tekort** bij (verbruik minus zon per uur, nooit onder 0 geklemd — een
+overschot aan zon overdag kan een eerder nachtelijk tekort niet met
+terugwerkende kracht compenseren). De reserve wordt nu bepaald door het
+**diepste punt** dat onderweg wordt bereikt (meestal vlak vóór
+zonsopkomst), niet het eindsaldo.
+
+Getest met een realistisch scenario (11+ kWh zon verwacht, geconcentreerd
+tussen 8:00-16:00, nul zon 's nachts): de oude methode gaf 0,0 kWh
+reserve, de nieuwe methode identificeerde correct 2,475 kWh nachtelijk
+tekort. In de volledige beslissingscyclus resulteerde dit in een
+planning die het lange avondblok correct aftopte naar 14 kwartieren in
+plaats van bijna het hele blok (~20 kwartieren).
+
+**Dit is waarschijnlijk de daadwerkelijke, onderliggende oorzaak** van
+meerdere eerdere meldingen over een te snel lege accu — niet opgelost
+door losse marges of noodladen, maar door de reserve-berekening zelf
+fundamenteel correct te maken.

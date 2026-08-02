@@ -1214,6 +1214,66 @@ class EnergyManagementSystemCoordinator:
             )
         return expected_pv_kwh * (efficiency_percent / 100)
 
+    def _estimate_worst_case_deficit_kwh(
+        self, start: datetime, end: datetime
+    ) -> float | None:
+        """The deepest cumulative shortfall reached at any point between
+        start and end, hour by hour - not just the net balance at the
+        end of the period.
+
+        A simple net total (consumption - PV) over the whole bridging
+        window can look fine on paper while still hiding a real overnight
+        shortfall: solar credit is concentrated in daylight hours, so a
+        big expected PV total for tomorrow doesn't help *tonight*, before
+        it arrives. Walking hour by hour and tracking the running
+        cumulative deficit (clamped at 0 - surplus daytime PV can't
+        retroactively cover an earlier night's shortfall) finds the
+        actual worst moment, typically just before sunrise, which is
+        what the reserve genuinely needs to protect against.
+
+        Returns None if the hourly consumption profile doesn't have data
+        for every hour the period spans, so the caller can fall back to
+        a simpler estimate.
+        """
+        if end <= start:
+            return 0.0
+
+        efficiency_percent = self.learned_battery_efficiency_percent
+        if efficiency_percent is None:
+            efficiency_percent = float(
+                self.config.get(
+                    CONF_BATTERY_ROUND_TRIP_EFFICIENCY,
+                    DEFAULT_BATTERY_ROUND_TRIP_EFFICIENCY_PERCENT,
+                )
+            )
+        efficiency_factor = efficiency_percent / 100
+
+        cumulative_deficit = 0.0
+        max_deficit = 0.0
+        cursor = start
+        while cursor < end:
+            hour_end = cursor.replace(minute=0, second=0, microsecond=0) + timedelta(
+                hours=1
+            )
+            segment_end = min(hour_end, end)
+            fraction_hours = (segment_end - cursor).total_seconds() / 3600
+
+            avg_kw = self.learned_hourly_avg_kw(cursor.hour)
+            if avg_kw is None:
+                return None
+
+            consumption_kwh = avg_kw * fraction_hours
+            pv_kwh = (
+                self._estimate_pv_kwh_for_period(cursor, segment_end)
+                * efficiency_factor
+            )
+
+            cumulative_deficit = max(0.0, cumulative_deficit + consumption_kwh - pv_kwh)
+            max_deficit = max(max_deficit, cumulative_deficit)
+            cursor = segment_end
+
+        return max_deficit
+
     def _get_forecast_kwh_for_hour(self, target_date, hour: int) -> float | None:
         """Sum the Solcast-forecasted kWh for a specific hour on a
         specific date, from the currently available forecast entries.
@@ -1385,22 +1445,26 @@ class EnergyManagementSystemCoordinator:
         if hours_until_cheap <= 0:
             return None
 
-        needed_kwh = self._estimate_consumption_kwh_for_period(now, cheap_block_start)
+        needed_kwh = self._estimate_worst_case_deficit_kwh(now, cheap_block_start)
         if needed_kwh is None:
-            learned_kw = self.learned_night_consumption_kw
-            if learned_kw is not None:
-                power_kw = learned_kw
-            else:
-                power_w = self._read_corrected_consumption_power()
-                power_kw = power_w / 1000 if power_w is not None else None
-            if power_kw is None:
-                return None
-            needed_kwh = power_kw * hours_until_cheap
+            needed_kwh = self._estimate_consumption_kwh_for_period(
+                now, cheap_block_start
+            )
+            if needed_kwh is None:
+                learned_kw = self.learned_night_consumption_kw
+                if learned_kw is not None:
+                    power_kw = learned_kw
+                else:
+                    power_w = self._read_corrected_consumption_power()
+                    power_kw = power_w / 1000 if power_w is not None else None
+                if power_kw is None:
+                    return None
+                needed_kwh = power_kw * hours_until_cheap
 
-        expected_pv_kwh = self._get_efficiency_discounted_pv_offset(
-            now, cheap_block_start
-        )
-        needed_kwh = max(0.0, needed_kwh - expected_pv_kwh)
+            expected_pv_kwh = self._get_efficiency_discounted_pv_offset(
+                now, cheap_block_start
+            )
+            needed_kwh = max(0.0, needed_kwh - expected_pv_kwh)
 
         # Scale up the margin if an extended low-solar stretch is ahead -
         # less confidence the battery gets refilled quickly, so keep more
