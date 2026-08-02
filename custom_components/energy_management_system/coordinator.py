@@ -1248,6 +1248,24 @@ class EnergyManagementSystemCoordinator:
             )
         efficiency_factor = efficiency_percent / 100
 
+        # Live-consumption correction (same principle as
+        # _estimate_consumption_kwh_for_period): if what's actually being
+        # drawn right now is higher than the learned average for this
+        # hour (e.g. the airco is running tonight), scale every hour's
+        # consumption estimate in this walk-through by the same ratio -
+        # a live spike is applied for the whole remaining window, not
+        # just silently averaged away by historical data. This is what
+        # makes the worst-case reserve responsive to what's actually
+        # happening tonight, not just what usually happens.
+        consumption_correction_ratio = 1.0
+        current_hour_learned_kw = self.learned_hourly_avg_kw(start.hour)
+        if current_hour_learned_kw and current_hour_learned_kw > 0:
+            live_power_w = self._read_corrected_consumption_power()
+            if live_power_w is not None and live_power_w > 0:
+                live_kw = live_power_w / 1000
+                if live_kw > current_hour_learned_kw:
+                    consumption_correction_ratio = live_kw / current_hour_learned_kw
+
         cumulative_deficit = 0.0
         max_deficit = 0.0
         cursor = start
@@ -1262,7 +1280,7 @@ class EnergyManagementSystemCoordinator:
             if avg_kw is None:
                 return None
 
-            consumption_kwh = avg_kw * fraction_hours
+            consumption_kwh = avg_kw * fraction_hours * consumption_correction_ratio
             pv_kwh = (
                 self._estimate_pv_kwh_for_period(cursor, segment_end)
                 * efficiency_factor

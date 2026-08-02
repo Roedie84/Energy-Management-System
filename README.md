@@ -1642,3 +1642,26 @@ plaats van bijna het hele blok (~20 kwartieren).
 meerdere eerdere meldingen over een te snel lege accu — niet opgelost
 door losse marges of noodladen, maar door de reserve-berekening zelf
 fundamenteel correct te maken.
+
+## v0.43.1 — live-verbruikscorrectie ontbrak in de nieuwe diepste-tekort-berekening
+
+**Terechte vraag:** is de nieuwe 2,475 kWh-reserve (v0.43.0) dynamisch,
+en houdt die rekening met bv. de airco die een keer 's nachts aanstaat?
+
+**Antwoord: nog niet volledig.** De nieuwe
+`_estimate_worst_case_deficit_kwh()` gebruikte alleen het **geleerde
+gemiddelde per uur** - de live-verbruikscorrectie die we bij het
+airco-scenario bouwden (v0.29.0) was hier niet toegepast.
+
+**Fix:** dezelfde live-verbruikscorrectie toegevoegd - als het huidige
+live verbruik hoger is dan het geleerde gemiddelde voor dit uur, wordt
+de **hele** diepste-tekort-berekening evenredig opgeschaald, niet alleen
+het huidige uur.
+
+Getest: bij 3x hoger live verbruik (airco aan) steeg de berekende
+reserve ook exact 3x (van 2,475 naar 7,425 kWh) - identiek aan het
+effect dat we destijds voor de gewone reserve-berekening bevestigden.
+
+**Dus ja, dit getal is nu écht dynamisch**: het wordt elke ~15 minuten
+opnieuw berekend, en reageert direct op ongebruikelijk hoog actueel
+verbruik zoals de airco, niet alleen op historische gemiddelden.
