@@ -1690,3 +1690,50 @@ Zendure-hardware zelf omgaat met vaker herhaalde commando's — mocht je
 iets vreemds merken (bv. schokkerig schakelen), dan is dit de eerste
 plek om naar te kijken en eventueel terug te zetten naar 15 (of een
 tussenwaarde als 10).
+
+## v0.44.1 — diagnostiek uitgebreid: exacte planning-cijfers zichtbaar
+
+**Aanleiding:** een lang "manual"-blok op zondagavond, terwijl
+`last_available_kwh` in de diagnostiek `None` toonde — leek op een
+kapotte sensor, maar bleek uiteindelijk een rode haring: dat veld wordt
+doelbewust op `None` gezet zodra "nu" al in/na het goedkoopste blok ligt
+(dan is de energie-brug-check niet meer relevant). De sensor zelf bleek
+prima te werken (7,776 kWh).
+
+**Probleem:** hierdoor was het onmogelijk om met zekerheid vast te
+stellen welke cijfers de **planningstabel** (die sinds v0.42.0 een eigen,
+verse meting gebruikt) daadwerkelijk had gebruikt op het moment van de
+diagnostiek-export.
+
+**Fix:** twee nieuwe diagnostiekvelden, die exact vastleggen wat de
+planning gebruikte: `last_projection_available_kwh` en
+`last_projection_reserve_kwh`. Voortaan direct te zien of de planning
+wél of niet over bruikbare cijfers beschikte, zonder giswerk.
+
+## v0.45.0 — wacht op volledige HA-opstart vóór de eerste dataophaal
+
+**Aanleiding:** de terugkerende "No usable forecast entries"-meldingen,
+telkens precies rond het moment van een Home Assistant-herstart —
+was het mogelijk dat de integratie te snel data opvroeg, vóórdat andere
+integraties (zoals Zonneplan) klaar waren met opstarten?
+
+**Bevestigd: ja.** `async_setup()` riep meteen `async_update()` aan
+tijdens het eigen opstarten, zonder te wachten tot Home Assistant zelf
+volledig was opgestart. Bij een koude boot kan onze integratie sneller
+klaar zijn met haar eigen setup dan de Zonneplan-integratie, waardoor de
+prijssensor nog geen `forecast`-attribuut heeft op het moment dat wij
+ernaar vragen — precies de waargenomen fout, en precies waarom die
+zichzelf altijd na een paar tellen oploste.
+
+**Fix:** de integratie checkt nu of Home Assistant al volledig draait
+(`hass.state == CoreState.running`). Zo ja (bv. bij het herladen van de
+integratie zelf, niet een volledige HA-herstart): meteen data ophalen
+zoals voorheen. Zo nee (koude boot): wacht netjes op het
+`EVENT_HOMEASSISTANT_STARTED`-signaal, zodat alle andere integraties
+eerst de kans krijgen om te laden.
+
+Getest: beide paden (koude boot → wacht correct; HA al actief → meteen
+update) gedragen zich exact zoals bedoeld.
+
+**Verwacht effect:** de "No usable forecast entries"-meldingen bij
+opstarten zouden hiermee (grotendeels) moeten verdwijnen.

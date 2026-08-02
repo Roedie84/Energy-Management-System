@@ -234,6 +234,8 @@ async def async_get_config_entry_diagnostics(
             "learning_only": coordinator.learning_only,
             "last_reason": coordinator.last_reason,
             "last_current_price_per_kwh": coordinator.last_current_price_per_kwh,
+            "last_projection_available_kwh": coordinator.last_projection_available_kwh,
+            "last_projection_reserve_kwh": coordinator.last_projection_reserve_kwh,
             "last_expected_mode": coordinator.last_expected_mode,
             "last_simulated_action": coordinator.last_simulated_action,
             "last_is_expensive": coordinator.last_is_expensive,

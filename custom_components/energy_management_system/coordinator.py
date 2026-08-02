@@ -40,7 +40,8 @@ import logging
 import math
 from datetime import date, datetime, timedelta
 
-from homeassistant.core import Event, HomeAssistant, callback
+from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
+from homeassistant.core import CoreState, Event, HomeAssistant, callback
 from homeassistant.helpers.event import (
     async_track_state_change_event,
     async_track_time_interval,
@@ -226,6 +227,8 @@ class EnergyManagementSystemCoordinator:
         self.total_charge_cost_eur: float = 0.0
         self.last_charge_power_applied: float | None = None
         self.last_current_price_per_kwh: float | None = None
+        self.last_projection_available_kwh: float | None = None
+        self.last_projection_reserve_kwh: float | None = None
 
         # Tracked so diagnostics can flag "no progress despite enough
         # elapsed time" for the various learning mechanisms below,
@@ -277,7 +280,18 @@ class EnergyManagementSystemCoordinator:
         return [self.config[CONF_PRICE_SENSOR]]
 
     async def async_setup(self) -> None:
-        """Start listening for updates and run once immediately."""
+        """Start listening for updates and run once immediately - unless
+        Home Assistant itself is still starting up, in which case wait
+        for it to fully finish first.
+
+        Without this, a fresh restart would have this integration query
+        the price sensor's forecast immediately as part of its own setup,
+        which can easily run *before* other integrations (e.g. the price
+        sensor's own integration) have finished loading and populated
+        their state - causing a spurious "No usable forecast entries"
+        warning right at startup that clears itself up moments later once
+        everything else has caught up.
+        """
         await self.async_bootstrap_night_consumption_from_history()
         self._unsub_interval = async_track_time_interval(
             self.hass,
@@ -287,6 +301,21 @@ class EnergyManagementSystemCoordinator:
         self._unsub_state = async_track_state_change_event(
             self.hass, self.tracked_entities, self._handle_state_change
         )
+        if self.hass.state == CoreState.running:
+            # Home Assistant is already fully up (e.g. this integration
+            # was just installed/reloaded, not a cold boot) - safe to
+            # fetch data right away.
+            await self.async_update()
+        else:
+            self.hass.bus.async_listen_once(
+                EVENT_HOMEASSISTANT_STARTED, self._handle_hass_started
+            )
+
+    async def _handle_hass_started(self, _event: Event) -> None:
+        """Run the first real update once Home Assistant has finished
+        starting up, so every other integration has had a chance to load
+        and populate its state first.
+        """
         await self.async_update()
 
     async def async_bootstrap_night_consumption_from_history(self) -> None:
@@ -2682,6 +2711,8 @@ class EnergyManagementSystemCoordinator:
         )
         if projection_available_kwh is not None and projection_available_kwh < 0:
             projection_available_kwh = 0.0
+        self.last_projection_available_kwh = projection_available_kwh
+        self.last_projection_reserve_kwh = projection_reserve_kwh
         self.last_timeline = self._build_forecast_timeline(
             entries,
             now,
