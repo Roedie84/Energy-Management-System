@@ -1737,3 +1737,36 @@ update) gedragen zich exact zoals bedoeld.
 
 **Verwacht effect:** de "No usable forecast entries"-meldingen bij
 opstarten zouden hiermee (grotendeels) moeten verdwijnen.
+
+## v0.45.1 — permanente testsuite toegevoegd (pytest)
+
+**Aanleiding:** de vraag hoe ik zelf tegen de integratie aankijk bracht
+een eerlijk antwoord naar boven: complexiteit is inmiddels het grootste
+risico, en we testten dit hele traject ad-hoc met eenmalige scriptjes
+die na gebruik weer verdwenen. Twee regressies (v0.34.3, v0.40.1)
+ontstonden allebei doordat een bewerking per ongeluk een bestaande
+klasse/methode beschadigde — beide compileerden probleemloos en kwamen
+pas aan het licht bij daadwerkelijk gebruik.
+
+**Toegevoegd: een echte, blijvende testsuite** (`tests/`, 25 tests, alle
+groen), inclusief:
+- Alle belangrijke scenario's uit dit hele traject vastgelegd als
+  automatische regressietest (dynamische prijsdrempel, winter-guard,
+  noodladen, negatieve prijzen, hysterese, rendement-leren,
+  **diepste-tekort-reserve** (de belangrijkste veiligheidsfix),
+  prijs-prioriteit, eenheid-conversie, opstart-timing).
+- Een AST-gebaseerde structurele check die **specifiek** het soort fout
+  vangt dat de twee historische regressies veroorzaakte (een verweesde
+  methode/klasse na een bewerking) — geen live Home Assistant nodig.
+  **Gevalideerd** door beide historische bugs tijdelijk opnieuw in te
+  voeren: allebei meteen gevangen, met dezelfde foutmelding als destijds
+  in productie.
+- Een lichtgewicht mock van de benodigde `homeassistant`-modules
+  (`tests/conftest.py`), zodat de integratie op de normale manier (eigen
+  relatieve imports) getest wordt, zonder een echte HA-installatie nodig
+  te hebben.
+- GitHub Actions-workflow (`tests.yml`) die de suite automatisch draait
+  bij elke push/pull request.
+
+**Draaien:** `pip install pytest && python3 -m pytest -v` vanuit de
+repo-root. Zie `tests/README.md` voor een overzicht per bestand.
