@@ -26,7 +26,8 @@
           "solar_extended_forecast_sensor_entities": "Solcast day+3, day+4, etc. sensors (in order, for multi-day low-solar detection)",
           "negative_price_charge_power": "Charge power at negative price (W, negative = charging)",
           "solar_power_limit_entity": "Solar panel power limit slider (e.g. number.solaredge_i1_active_power_limit)",
-          "battery_round_trip_efficiency_percent": "Battery round-trip efficiency (%) - for the PV offset in the reserve calculation"
+          "battery_round_trip_efficiency_percent": "Battery round-trip efficiency (%) - for the PV offset in the reserve calculation",
+          "vacation_consumption_reduction_percent": "Vacation consumption reduction (%) - how much lower than normal during vacation mode"
         }
       }
     },
@@ -60,7 +61,8 @@
           "solar_extended_forecast_sensor_entities": "Solcast day+3, day+4, etc. sensors (in order, for multi-day low-solar detection)",
           "negative_price_charge_power": "Charge power at negative price (W, negative = charging)",
           "solar_power_limit_entity": "Solar panel power limit slider (e.g. number.solaredge_i1_active_power_limit)",
-          "battery_round_trip_efficiency_percent": "Battery round-trip efficiency (%) - for the PV offset in the reserve calculation"
+          "battery_round_trip_efficiency_percent": "Battery round-trip efficiency (%) - for the PV offset in the reserve calculation",
+          "vacation_consumption_reduction_percent": "Vacation consumption reduction (%) - how much lower than normal during vacation mode"
         }
       }
     }

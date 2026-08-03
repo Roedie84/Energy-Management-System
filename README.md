@@ -1770,3 +1770,36 @@ groen), inclusief:
 
 **Draaien:** `pip install pytest && python3 -m pytest -v` vanuit de
 repo-root. Zie `tests/README.md` voor een overzicht per bestand.
+
+## v0.46.0 — vakantiemodus
+
+**Aanleiding:** tijdens vakantie is het huishoudverbruik compleet anders
+— zonder aanpassing zou de integratie ofwel te veel reserveren (als ze
+het normale profiel blijft gebruiken) ofwel het geleerde "normale"
+profiel vervuilen met weken lage vakantiedata, wat na thuiskomst weer
+tijd zou kosten om te herstellen.
+
+**Nieuw: `switch.vacation_mode`.** Zet 'm aan vóór vertrek, uit bij
+thuiskomst. Doet twee dingen tegelijk:
+
+1. **Verbruiksinschatting verlaagd** — alle verbruiksschattingen
+   (inclusief de diepste-tekort-reserve, v0.43.0) worden vermenigvuldigd
+   met een instelbare reductiefactor, standaard **60%** (dus 40% van het
+   normale verbruik wordt aangenomen). Aan te passen via de nieuwe optie
+   **"Vakantie-verbruiksreductie (%)"**.
+2. **Verbruiksleren gepauzeerd** — het uurverbruiksprofiel en het
+   nachtvenster-gemiddelde worden niet bijgewerkt tijdens vakantiemodus,
+   zodat de geleerde "normale" gegevens niet vervuild raken. PV-bias en
+   accu-rendement blijven wél gewoon leren (die zijn niet
+   verbruiksafhankelijk).
+
+Getest (nu ook als permanente regressietest,
+`tests/test_vacation_mode.py`): bij de standaard 60% reductie daalde de
+verbruiksschatting exact naar 40% van normaal, en het uurverbruiksprofiel
+bleef ongewijzigd tijdens een volledige update-cyclus met vakantiemodus
+aan.
+
+**Belangrijk:** de reductiefactor is een **schatting**, geen exacte
+meting — sommige apparaten (koelkast, eventuele verwarming/koeling)
+blijven wel verbruiken tijdens vakantie. De standaard 60% is bewust
+conservatief; pas 'm aan als je eigen situatie sterk afwijkt.

@@ -60,6 +60,8 @@ from .const import (
     CONF_NEGATIVE_PRICE_CHARGE_POWER,
     CONF_SOLAR_POWER_LIMIT_ENTITY,
     CONF_BATTERY_ROUND_TRIP_EFFICIENCY,
+    CONF_VACATION_CONSUMPTION_REDUCTION_PERCENT,
+    DEFAULT_VACATION_CONSUMPTION_REDUCTION_PERCENT,
     DEFAULT_BATTERY_ROUND_TRIP_EFFICIENCY_PERCENT,
     MIN_CHARGED_KWH_FOR_EFFICIENCY_SAMPLE,
     MIN_PLAUSIBLE_EFFICIENCY_PERCENT,
@@ -161,6 +163,11 @@ class EnergyManagementSystemCoordinator:
         # If True: compute and learn everything as normal, but never send
         # commands to the Zendure entities. Set via a dedicated switch.
         self.learning_only: bool = False
+        # If True: assume much lower household consumption (see
+        # CONF_VACATION_CONSUMPTION_REDUCTION_PERCENT) and pause learning
+        # from live consumption data, so the vacation period doesn't
+        # pollute the learned "normal" profile. Set via a dedicated switch.
+        self.vacation_mode: bool = False
 
         self.last_reason: str | None = None
         self.last_cheap_block_start: datetime | None = None
@@ -974,6 +981,21 @@ class EnergyManagementSystemCoordinator:
             return None
         return sum(values) / len(values)
 
+    def _vacation_adjusted_kwh(self, kwh: float) -> float:
+        """Scale down an estimated consumption amount while vacation mode
+        is on - see the 'Vacation consumption reduction (%)' option.
+        No-op when vacation mode is off.
+        """
+        if not self.vacation_mode:
+            return kwh
+        reduction_percent = float(
+            self.config.get(
+                CONF_VACATION_CONSUMPTION_REDUCTION_PERCENT,
+                DEFAULT_VACATION_CONSUMPTION_REDUCTION_PERCENT,
+            )
+        )
+        return kwh * (1 - reduction_percent / 100)
+
     def _estimate_consumption_kwh_for_period(
         self, start: datetime, end: datetime
     ) -> float | None:
@@ -1030,7 +1052,7 @@ class EnergyManagementSystemCoordinator:
                     )
                     total_kwh *= correction_ratio
 
-        return total_kwh
+        return self._vacation_adjusted_kwh(total_kwh)
 
     # -- Solcast hourly PV production forecast -----------------------------
 
@@ -1309,7 +1331,9 @@ class EnergyManagementSystemCoordinator:
             if avg_kw is None:
                 return None
 
-            consumption_kwh = avg_kw * fraction_hours * consumption_correction_ratio
+            consumption_kwh = self._vacation_adjusted_kwh(
+                avg_kw * fraction_hours * consumption_correction_ratio
+            )
             pv_kwh = (
                 self._estimate_pv_kwh_for_period(cursor, segment_end)
                 * efficiency_factor
@@ -2687,8 +2711,15 @@ class EnergyManagementSystemCoordinator:
             entries, now, cheap_block_start
         )
 
-        self._update_night_consumption_tracking(now, should_postpone_charging)
-        self._update_hourly_consumption_profile(now)
+        # Pause consumption-related learning during vacation mode, so the
+        # unusually low readings don't pollute the learned "normal"
+        # profile - it would otherwise take a while to recover after
+        # coming back. PV bias and battery efficiency learning are
+        # unaffected by household consumption, so those keep learning
+        # normally throughout.
+        if not self.vacation_mode:
+            self._update_night_consumption_tracking(now, should_postpone_charging)
+            self._update_hourly_consumption_profile(now)
         self._update_pv_hourly_bias_tracking(now)
         self._update_battery_efficiency_learning(now)
 

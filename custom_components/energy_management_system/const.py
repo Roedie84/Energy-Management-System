@@ -14,6 +14,7 @@ CONF_MANUAL_CHARGE_POWER = "manual_charge_power"
 CONF_NEGATIVE_PRICE_CHARGE_POWER = "negative_price_charge_power"
 CONF_SOLAR_POWER_LIMIT_ENTITY = "solar_power_limit_entity"
 CONF_BATTERY_ROUND_TRIP_EFFICIENCY = "battery_round_trip_efficiency_percent"
+CONF_VACATION_CONSUMPTION_REDUCTION_PERCENT = "vacation_consumption_reduction_percent"
 CONF_SOLAR_FORECAST_SENSOR = "solar_forecast_sensor_entity"
 CONF_SOLAR_TODAY_FORECAST_SENSOR = "solar_today_forecast_sensor_entity"
 CONF_SOLAR_REMAINING_TODAY_SENSOR = "solar_remaining_today_sensor_entity"
@@ -100,6 +101,13 @@ DEFAULT_NEGATIVE_PRICE_CHARGE_POWER = -2000
 # than covering household load directly) loses some energy to round-trip
 # conversion losses before it's usable again.
 DEFAULT_BATTERY_ROUND_TRIP_EFFICIENCY_PERCENT = 90.0
+
+# How much lower than normal household consumption is assumed to be
+# while vacation mode is on (e.g. 60 -> use only 40% of the normal
+# estimate). A conservative default - actual vacation consumption varies
+# a lot by household (some appliances still run, heating/cooling may
+# still be needed), so this errs on the side of not under-reserving.
+DEFAULT_VACATION_CONSUMPTION_REDUCTION_PERCENT = 60.0
 
 # Minimum cumulative charged energy (kWh) before computing a new
 # efficiency sample - avoids noisy estimates from tiny amounts of energy

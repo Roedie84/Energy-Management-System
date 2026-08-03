@@ -25,6 +25,8 @@ cards:
         name: Force manual (negeer alle logica)
       - entity: switch.energy_management_system_learning_only_no_control
         name: Learning only (geen aansturing)
+      - entity: switch.energy_management_system_vacation_mode
+        name: Vakantiemodus (lager verbruik aannemen, leren pauzeren)
 
   - type: entities
     title: Nu — live status

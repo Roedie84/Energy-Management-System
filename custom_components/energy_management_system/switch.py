@@ -18,6 +18,7 @@ async def async_setup_entry(
         [
             ForceManualSwitch(coordinator, entry_id=entry.entry_id),
             LearningOnlySwitch(coordinator, entry_id=entry.entry_id),
+            VacationModeSwitch(coordinator, entry_id=entry.entry_id),
         ]
     )
 
@@ -92,4 +93,43 @@ class LearningOnlySwitch(SwitchEntity, RestoreEntity):
 
     async def async_turn_off(self, **kwargs) -> None:
         await self._coordinator.async_set_learning_only(False)
+        self.async_write_ha_state()
+
+
+class VacationModeSwitch(SwitchEntity, RestoreEntity):
+    """When on: assume much lower household consumption (see the
+    'Vacation consumption reduction (%)' option), and pause learning from
+    live consumption data entirely - so the unusually low vacation
+    readings don't pollute the learned "normal" profile, which would
+    otherwise take a while to recover after coming back.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Vacation mode"
+    _attr_icon = "mdi:bag-suitcase-outline"
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_vacation_mode"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def is_on(self) -> bool:
+        return self._coordinator.vacation_mode
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if last_state is not None:
+            self._coordinator.vacation_mode = last_state.state == "on"
+
+    async def async_turn_on(self, **kwargs) -> None:
+        self._coordinator.vacation_mode = True
+        self.async_write_ha_state()
+
+    async def async_turn_off(self, **kwargs) -> None:
+        self._coordinator.vacation_mode = False
         self.async_write_ha_state()
