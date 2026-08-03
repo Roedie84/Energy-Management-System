@@ -2111,3 +2111,37 @@ sjabloonfouten (vaatwasser/wasmachine Home Connect-kaarten,
 slaapkamertemperatuur-styling) horen bij je **andere**, losse
 dashboard-kaarten — niet bij deze integratie. Gecontroleerd: geen van
 die entiteiten komt voor in ons dashboard-bestand.
+
+## v0.53.1 — dashboard: gauge-crash gefixt, tijdstempel netjes geformatteerd
+
+**Gevonden fout:** "Entiteit is niet-numeriek" op het Zelflerend-tabblad.
+Oorzaak: `sensor.pv_forecast_accuracy` en
+`sensor.learned_battery_efficiency` retourneren `None` (state "unknown")
+totdat er genoeg data is — een `gauge`-kaart kan fundamenteel geen
+niet-numerieke state weergeven en crasht daarop. Bij deze gebruiker
+toevallig niet zichtbaar voor het rendement (al genoeg data), maar een
+sluimerende fout voor elke nieuwe installatie.
+
+**Fix:** alle drie gauge-kaarten voor deze twee sensoren (Overzicht +
+Zelflerend, in totaal 3 plekken) vervangen door `mushroom-template-card`-
+tegels die "unknown"/"unavailable" netjes afvangen (grijs, geen %-teken)
+in plaats van te crashen.
+
+**Ook gefixt:** de tijdstempel onder de systeemstatus-tegel toonde de
+ruwe ISO-string inclusief microseconden. Nu netjes geformatteerd via
+`as_timestamp` + `timestamp_custom` (bv. "zo 12:59:10").
+
+## v0.53.2 — geleerde geschiedenis nu als nette tabellen i.p.v. ruwe data-dump
+
+**Aanleiding:** de "Geleerde geschiedenis"-kaart toonde ruwe
+Python-dict/lijst-representaties (bv. `{'0': 264, '1': 219, ...}`) —
+functioneel, maar niet overzichtelijk.
+
+**Omgezet naar vier aparte tabellen met headers:**
+- **Verbruiksprofiel per uur** — 24 rijen, "Uur" en "Verbruik (W)".
+- **Nachtvenster-gemiddelde** — genummerd 1-7, meest recente nacht
+  gemarkeerd.
+- **Solcast-nauwkeurigheid per dag** — inclusief de geleerde
+  bias als laatste, vetgedrukte rij.
+- **PV-voorspelling bias per uur** — alleen uren met data (dus geen lege
+  nachtelijke rijen), met een korte uitleg wat de ratio betekent.

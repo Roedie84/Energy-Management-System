@@ -14,8 +14,10 @@ views:
       - type: custom:mushroom-template-card
         primary: "{{ states('sensor.woonkamer_energy_management_system_system_status') }}"
         secondary: >-
-          {{ state_attr('sensor.woonkamer_energy_management_system_system_status',
-          'last_successful_update') }}
+          {% set t =
+          state_attr('sensor.woonkamer_energy_management_system_system_status',
+          'last_successful_update') %}
+          {{ as_timestamp(t) | timestamp_custom('%a %H:%M:%S') if t else 'nog geen succesvolle update' }}
         icon: >-
           {{ 'mdi:check-circle-outline' if
           states('sensor.woonkamer_energy_management_system_system_status') == 'OK' else
@@ -40,16 +42,21 @@ views:
               green: 40
               yellow: 20
               red: 0
-          - type: gauge
+          - type: custom:mushroom-template-card
+            primary: >-
+              {{
+              states('sensor.woonkamer_energy_management_system_learned_battery_efficiency')
+              }}{{ '%' if
+              states('sensor.woonkamer_energy_management_system_learned_battery_efficiency')
+              not in ['unknown', 'unavailable'] else '' }}
+            secondary: Geleerd rendement
+            icon: mdi:battery-sync
+            icon_color: >-
+              {{ 'green' if
+              states('sensor.woonkamer_energy_management_system_learned_battery_efficiency')
+              not in ['unknown', 'unavailable'] else 'grey' }}
             entity: >-
               sensor.woonkamer_energy_management_system_learned_battery_efficiency
-            name: Geleerd rendement
-            min: 50
-            max: 100
-            severity:
-              green: 75
-              yellow: 60
-              red: 0
 
       - type: grid
         columns: 2
@@ -268,25 +275,34 @@ views:
         columns: 2
         square: false
         cards:
-          - type: gauge
+          - type: custom:mushroom-template-card
+            primary: >-
+              {{
+              states('sensor.woonkamer_energy_management_system_learned_battery_efficiency')
+              }}{{ '%' if
+              states('sensor.woonkamer_energy_management_system_learned_battery_efficiency')
+              not in ['unknown', 'unavailable'] else '' }}
+            secondary: Geleerd accu-rendement
+            icon: mdi:battery-sync
+            icon_color: >-
+              {{ 'green' if
+              states('sensor.woonkamer_energy_management_system_learned_battery_efficiency')
+              not in ['unknown', 'unavailable'] else 'grey' }}
             entity: >-
               sensor.woonkamer_energy_management_system_learned_battery_efficiency
-            name: Geleerd accu-rendement
-            min: 50
-            max: 100
-            severity:
-              green: 75
-              yellow: 60
-              red: 0
-          - type: gauge
+          - type: custom:mushroom-template-card
+            primary: >-
+              {{ states('sensor.energy_management_system_pv_forecast_accuracy')
+              }}{{ '%' if
+              states('sensor.energy_management_system_pv_forecast_accuracy') not
+              in ['unknown', 'unavailable'] else '' }}
+            secondary: PV-voorspelling afwijking
+            icon: mdi:solar-power-variant
+            icon_color: >-
+              {{ 'amber' if
+              states('sensor.energy_management_system_pv_forecast_accuracy') not
+              in ['unknown', 'unavailable'] else 'grey' }}
             entity: sensor.energy_management_system_pv_forecast_accuracy
-            name: PV-afwijking (%)
-            min: -50
-            max: 50
-            severity:
-              green: 0
-              yellow: -20
-              red: -50
 
       - type: grid
         columns: 2
@@ -321,41 +337,85 @@ views:
               sensor.woonkamer_energy_management_system_pv_hourly_forecast_bias
 
       - type: markdown
-        title: Geleerde geschiedenis (ruwe data)
+        title: Verbruiksprofiel per uur (W)
         content: >
-          **Verbruiksprofiel per uur (W, huidige geleerde gemiddelden):**
+          | Uur | Verbruik (W) |
+          |---|---|
 
-          {{
+          {% set profile =
           state_attr('sensor.woonkamer_energy_management_system_hourly_consumption_profile',
-          'profile_watts') }}
+          'profile_watts') or {} %}
 
+          {% for hour in range(24) %}
 
-          **Nachtvenster-gemiddelde (laatste 7 nachten, W, legacy fallback):**
+          | {{ '%02d:00' | format(hour) }} | {{ profile.get(hour|string, '—')
+          }} |
+
+          {% endfor %}
+
+      - type: markdown
+        title: Nachtvenster-gemiddelde (laatste 7 nachten, W)
+        content: >
+          Legacy fallback — alleen gebruikt als het uur-profiel hierboven geen
+          data heeft voor het huidige uur.
+
+          | Nacht | Gemiddelde (W) |
+          |---|---|
 
           {% set history_kw =
           state_attr('sensor.energy_management_system_learned_night_consumption',
-          'history_kw') %}
+          'history_kw') or [] %}
 
-          [{% if history_kw %}{% for v in history_kw %}{{ (v * 1000) | round }}{% if
-          not loop.last %}, {% endif %}{% endfor %}{% endif %}]
+          {% for v in history_kw %}
 
+          | {{ loop.index }}{{ ' (meest recent)' if loop.last else '' }} | {{
+          (v * 1000) | round }} |
 
-          **Solcast-afwijking (laatste 7 dagen, %):**
+          {% endfor %}
 
-          {{ state_attr('sensor.energy_management_system_pv_forecast_accuracy',
-          'deviation_history') }}
+      - type: markdown
+        title: Solcast-voorspelling — nauwkeurigheid per dag
+        content: >
+          | Dag | Afwijking (%) |
+          |---|---|
 
-
-          **Geleerde Solcast-bias:** {{
+          {% set deviations =
           state_attr('sensor.energy_management_system_pv_forecast_accuracy',
-          'learned_bias_percent') }}%
+          'deviation_history') or [] %}
 
+          {% for v in deviations %}
 
-          **PV-voorspelling bias per uur (ratio werkelijk/voorspeld):**
+          | {{ loop.index }}{{ ' (meest recent)' if loop.last else '' }} | {{ v
+          }}% |
 
-          {{
+          {% endfor %}
+
+          | **Geleerde bias (gemiddeld)** | **{{
+          state_attr('sensor.energy_management_system_pv_forecast_accuracy',
+          'learned_bias_percent') }}%** |
+
+      - type: markdown
+        title: PV-voorspelling bias per uur (werkelijk / voorspeld)
+        content: >
+          Een ratio van 1,0 betekent dat de voorspelling voor dat uur precies
+          klopte; lager dan 1,0 betekent minder zon dan voorspeld.
+
+          | Uur | Ratio |
+          |---|---|
+
+          {% set bias =
           state_attr('sensor.woonkamer_energy_management_system_pv_hourly_forecast_bias',
-          'profile') }}
+          'profile') or {} %}
+
+          {% for hour in range(24) %}
+
+          {% if bias.get(hour|string) is not none %}
+
+          | {{ '%02d:00' | format(hour) }} | {{ bias.get(hour|string) }} |
+
+          {% endif %}
+
+          {% endfor %}
 
   - title: Apparaten
     path: apparaten
