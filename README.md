@@ -2265,3 +2265,21 @@ Deze volgorde ligt nu vast — geen automatische herschikking meer.
 
 Structuur nu: Status + uitleg → Accu & rendement (compact) → Live
 cijfers → Modus & besluit → Besturing → Actuele beslissing (detail).
+
+## v0.55.2 — transitielogboek beperkt tot laatste 10 rijen
+
+De "Overgangen energie-check"-tabel toonde tot nu toe de volledige
+opgeslagen geschiedenis (tot 50 vermeldingen). Nu beperkt tot de
+**laatste 10** (meest recent bovenaan), voor een overzichtelijker
+tabblad. De onderliggende opslag (max. 50) blijft ongewijzigd — alleen
+de weergave in het dashboard is beperkt.
+
+## v0.55.3 — tegels breder, niet meer afgekapt
+
+**Aanleiding:** de tegels in "Live cijfers" (3 naast elkaar,
+`columns: 4`) en "Modus & besluit" (4 naast elkaar, `columns: 3`) waren
+te smal, waardoor tekst werd afgekapt ("7.603...", "S...", "1...").
+
+**Fix:** alle acht tegels in deze twee secties verbreed naar
+`columns: 6` — nu twee per rij in plaats van drie of vier, met genoeg
+ruimte voor de volledige tekst.

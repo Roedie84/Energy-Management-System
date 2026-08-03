@@ -116,7 +116,7 @@ views:
             icon_color: green
             entity: sensor.solarflow_2400_ac_available_kwh
             grid_options:
-              columns: 4
+              columns: 6
               rows: 1
           - type: custom:mushroom-template-card
             primary: "{{ states('sensor.hw_p1_vermogen') }} W"
@@ -125,7 +125,7 @@ views:
             icon_color: orange
             entity: sensor.hw_p1_vermogen
             grid_options:
-              columns: 4
+              columns: 6
               rows: 1
           - type: custom:mushroom-template-card
             primary: >-
@@ -138,7 +138,7 @@ views:
             entity: >-
               sensor.woonkamer_energy_management_system_current_price_used_by_integration
             grid_options:
-              columns: 4
+              columns: 6
               rows: 1
 
       - type: grid
@@ -159,7 +159,7 @@ views:
             hold_action:
               action: none
             grid_options:
-              columns: 3
+              columns: 6
               rows: 1
           - type: custom:mushroom-template-card
             primary: >-
@@ -171,7 +171,7 @@ views:
             icon_color: purple
             entity: sensor.energy_management_system_expected_operation_mode
             grid_options:
-              columns: 3
+              columns: 6
               rows: 1
           - type: custom:mushroom-template-card
             primary: >-
@@ -183,7 +183,7 @@ views:
             icon_color: red
             entity: sensor.energy_management_system_effective_expensive_quarters
             grid_options:
-              columns: 3
+              columns: 6
               rows: 1
           - type: custom:mushroom-template-card
             primary: "{{ states('number.solaredge_i1_active_power_limit') }}%"
@@ -196,7 +196,7 @@ views:
             hold_action:
               action: none
             grid_options:
-              columns: 3
+              columns: 6
               rows: 1
 
       - type: grid
@@ -631,15 +631,17 @@ views:
         title: Geschiedenis
 
       - type: markdown
-        title: Overgangen energie-check (logboek)
+        title: Overgangen energie-check (logboek, laatste 10)
         content: >
           | Tijdstip | Beslissing | Beschikbaar | Benodigd | Doel-goedkoop-blok |
 
           |---|---|---|---|---|
 
           {%- for entry in
-          state_attr('sensor.energy_management_system_energy_bridge_check',
-          'transition_log') | default([]) | reverse %}
+          (state_attr('sensor.energy_management_system_energy_bridge_check',
+          'transition_log') or []) | reverse | list %}
+
+          {%- if loop.index0 < 10 %}
 
           | {{ as_timestamp(entry.get('at')) | timestamp_custom('%a %H:%M') if
           entry.get('at') else 'onbekend' }} | {{ entry.get('decision', 'onbekend') }}
@@ -648,6 +650,8 @@ views:
           (as_timestamp(entry.get('cheap_block_start')) |
           timestamp_custom('%a %H:%M')) if entry.get('cheap_block_start') else
           'onbekend' }} |
+
+          {%- endif %}
 
           {%- endfor %}
       - type: markdown
