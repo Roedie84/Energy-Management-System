@@ -1023,7 +1023,15 @@ class HourlyConsumptionProfileSensor(SensorEntity, RestoreEntity):
         for hour_str, avg_value in raw_profile.items():
             try:
                 hour = int(hour_str)
-                restored[hour] = [float(avg_value)]
+                # Store the restored average twice, not once - a single
+                # restored value gives previous_hourly_avg_kw nothing to
+                # compare against (needs >=2 samples), so the "Verschil"
+                # trend column would show "-" for every hour right after
+                # every restart until enough new samples came in. Two
+                # identical entries mean "previous == current" (shown as
+                # "->" no change) immediately, and the very next real
+                # sample already produces a genuine trend.
+                restored[hour] = [float(avg_value), float(avg_value)]
             except (TypeError, ValueError):
                 continue
         if restored:
@@ -1106,7 +1114,11 @@ class PvHourlyBiasSensor(SensorEntity, RestoreEntity):
         for hour_str, ratio_value in raw_profile.items():
             try:
                 hour = int(hour_str)
-                restored[hour] = [float(ratio_value)]
+                # Same principle as HourlyConsumptionProfileSensor: store
+                # the restored ratio twice so previous_pv_hourly_ratio has
+                # something to compare against right after a restart,
+                # instead of showing "-" until a new sample comes in.
+                restored[hour] = [float(ratio_value), float(ratio_value)]
             except (TypeError, ValueError):
                 continue
         if restored:

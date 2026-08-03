@@ -2317,3 +2317,24 @@ dezelfde maand, en correcte doorvoer vanuit de financiële tracking.
 vergelijking, geen seizoensanalyse of "bespaart dit systeem mij geld
 t.o.v. geen integratie" — dat laatste vereist een contrafeitelijke
 vergelijking die niet eerlijk te verifiëren is.
+
+## v0.56.1 — "Verschil"-kolom reset niet meer na elke herstart
+
+**Gevonden:** de "Verschil" (trend)-kolommen voor verbruiksprofiel-per-uur
+en PV-bias-per-uur toonden na elke herstart "—" voor alle uren, ook al
+was er al weken aan geleerde data.
+
+**Oorzaak:** bij herstel na een herstart wordt alleen het **gemiddelde**
+per uur teruggezet, als één enkele waarde — niet de onderliggende reeks
+metingen. Aangezien "vorige waarde" minstens 2 metingen nodig heeft om
+iets te kunnen berekenen, bleef dit na elke herstart leeg totdat er
+weer nieuwe, echte metingen binnenkwamen.
+
+**Fix:** de herstelde waarde wordt nu **tweemaal** opgeslagen (als twee
+identieke metingen). Direct na een herstart toont "Verschil" daardoor
+"→" (geen verandering) in plaats van "—", en zodra er ook maar **één**
+nieuwe, echte meting binnenkomt, verschijnt meteen een zinvol verschil.
+
+Getest (3 nieuwe permanente tests): direct na herstel is "vorige" gelijk
+aan "huidig" (geen onbeschikbaar meer), en na één nieuwe meting toont
+het verschil correct.
