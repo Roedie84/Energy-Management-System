@@ -1968,3 +1968,56 @@ dashboard verschijnt daarna **permanent als eigen item in de zijbalk** —
 elke toekomstige update van dit bestand (bij een nieuwe versie van de
 integratie) verschijnt dan vanzelf, zonder dat je iets in de UI hoeft te
 kopiëren/plakken.
+
+## v0.49.3 — industriële tegel-look voor het Overzicht-tabblad (Mushroom Cards)
+
+**Aanleiding:** de wens voor een strakkere, "industriële" uitstraling
+(zoals de Zendure-app zelf) met waarden in tegels/plaatjes in plaats van
+platte tekstlijsten.
+
+**Vereist: Mushroom Cards (via HACS).** Het Overzicht-tabblad gebruikt nu:
+- `custom:mushroom-title-card` — titel + actuele reden als ondertitel.
+- Twee `gauge`-kaarten (ingebouwd in HA) voor Accu-SoC en geleerd
+  rendement — ronde meters, net als de Zendure-app.
+- Een raster van `custom:mushroom-template-card`-tegels (beschikbare
+  energie, verbruik, prijs, modus, verwachte modus, aantal dure
+  kwartieren) — elk met een eigen icoon en kleur.
+- `custom:mushroom-select-card` voor de Zendure-modus — een nette
+  segmented-button-achtige weergave in plaats van een dropdown.
+- `custom:mushroom-entity-card`-tegels voor de drie schakelaars (Force
+  manual / Learning only / Vakantiemodus).
+
+De overige tabbladen (Financieel, Zelflerend, Apparaten, Geschiedenis)
+gebruiken voorlopig nog de standaard `entities`-weergave — laat weten of
+je wilt dat dezelfde tegel-stijl daar ook wordt doorgevoerd.
+
+**Belangrijk:** dit tabblad werkt nu **alleen** met Mushroom Cards
+geïnstalleerd (bevestigd dat je dit al hebt via HACS). Zonder Mushroom
+zou dit tabblad kapotte kaarten tonen.
+
+## v0.50.0 — systeemstatus-sensor (werkt de integratie goed?)
+
+**Aanleiding:** de wens voor een entiteit die in één oogopslag laat zien
+of de integratie goed functioneert, zonder dat je daarvoor de Home
+Assistant-logs hoeft te doorzoeken.
+
+**Nieuw: `sensor.system_status`.** Toont:
+- **"OK"** — de laatste update is geslaagd.
+- **"Fout"** — de laatste update crashte met een onverwachte fout (sinds
+  v0.34.2 vangen we die al af zodat de integratie niet stopt, maar nu
+  wordt dat ook zichtbaar gemaakt i.p.v. alleen in de logs).
+- **"Mogelijk vastgelopen"** — er is al langer dan 3x het update-interval
+  (nu 5 minuten, dus >15 minuten) geen enkele update meer geweest, geslaagd
+  of niet — een signaal dat de update-cyclus zelf mogelijk is gestopt.
+
+Attributen: `last_error` (de foutmelding zelf), `last_error_time`,
+`last_successful_update` — voor als je toch wilt doorklikken naar meer
+detail.
+
+Getest (4 nieuwe permanente tests): OK na een geslaagde update, Fout na
+een crash, herstel naar OK bij een volgende geslaagde update, en
+"Mogelijk vastgelopen" als er te lang niks is gebeurd.
+
+Toegevoegd als prominente tegel bovenaan het Overzicht-tabblad (groen
+vinkje bij OK, rood uitroepteken anders), en meegenomen in
+`diagnostics.py`.

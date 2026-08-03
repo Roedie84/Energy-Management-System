@@ -4,55 +4,147 @@ views:
     path: overzicht
     icon: mdi:home-lightning-bolt
     cards:
+      - type: custom:mushroom-title-card
+        title: Energy Management System
+        subtitle: >-
+          {{ state_attr('sensor.energy_management_system_last_decision_reason',
+          'friendly_name') }}: {{
+          states('sensor.energy_management_system_last_decision_reason') }}
+
+      - type: custom:mushroom-template-card
+        primary: "{{ states('sensor.energy_management_system_system_status') }}"
+        secondary: >-
+          {{ state_attr('sensor.energy_management_system_system_status',
+          'last_successful_update') }}
+        icon: >-
+          {{ 'mdi:check-circle-outline' if
+          states('sensor.energy_management_system_system_status') == 'OK' else
+          'mdi:alert-circle-outline' }}
+        icon_color: >-
+          {{ 'green' if states('sensor.energy_management_system_system_status')
+          == 'OK' else 'red' }}
+        entity: sensor.energy_management_system_system_status
+        tap_action:
+          action: more-info
+
+      - type: grid
+        columns: 2
+        square: false
+        cards:
+          - type: gauge
+            entity: sensor.solarflow_2400_ac_electric_level
+            name: Accu SoC
+            min: 0
+            max: 100
+            severity:
+              green: 40
+              yellow: 20
+              red: 0
+          - type: gauge
+            entity: >-
+              sensor.woonkamer_energy_management_system_learned_battery_efficiency
+            name: Geleerd rendement
+            min: 50
+            max: 100
+            severity:
+              green: 75
+              yellow: 60
+              red: 0
+
+      - type: grid
+        columns: 2
+        square: false
+        cards:
+          - type: custom:mushroom-template-card
+            primary: "{{ states('sensor.solarflow_2400_ac_available_kwh') }} kWh"
+            secondary: Beschikbare energie
+            icon: mdi:battery-high
+            icon_color: green
+            entity: sensor.solarflow_2400_ac_available_kwh
+          - type: custom:mushroom-template-card
+            primary: "{{ states('sensor.hw_p1_vermogen') }} W"
+            secondary: Huidig verbruik
+            icon: mdi:home-lightning-bolt-outline
+            icon_color: orange
+            entity: sensor.hw_p1_vermogen
+          - type: custom:mushroom-template-card
+            primary: >-
+              {{
+              states('sensor.woonkamer_energy_management_system_current_price_used_by_integration')
+              }} €/kWh
+            secondary: Huidige prijs
+            icon: mdi:cash-sync
+            icon_color: blue
+            entity: >-
+              sensor.woonkamer_energy_management_system_current_price_used_by_integration
+          - type: custom:mushroom-template-card
+            primary: "{{ states('select.zendure_manager_operation') }}"
+            secondary: Werkelijke modus (Zendure)
+            icon: mdi:battery-sync
+            icon_color: cyan
+            entity: select.zendure_manager_operation
+          - type: custom:mushroom-template-card
+            primary: >-
+              {{
+              states('sensor.energy_management_system_expected_operation_mode')
+              }}
+            secondary: Verwachte modus (logica)
+            icon: mdi:brain
+            icon_color: purple
+            entity: sensor.energy_management_system_expected_operation_mode
+          - type: custom:mushroom-template-card
+            primary: >-
+              {{
+              states('sensor.energy_management_system_effective_expensive_quarters')
+              }} kwartieren
+            secondary: Boven dynamische prijsdrempel
+            icon: mdi:chart-bell-curve
+            icon_color: red
+            entity: sensor.energy_management_system_effective_expensive_quarters
+
+      - type: custom:mushroom-select-card
+        entity: select.zendure_manager_operation
+        name: Modus wijzigen
+        icon: mdi:battery-sync
+
       - type: markdown
         title: Wat gebeurt er nu, en waarom?
         content: >
           {{ state_attr('sensor.woonkamer_energy_management_system_explanation',
           'explanation') }}
+
+      - type: grid
+        columns: 3
+        square: false
+        cards:
+          - type: custom:mushroom-entity-card
+            entity: switch.energy_management_system_force_manual
+            name: Force manual
+            icon: mdi:hand-back-right
+          - type: custom:mushroom-entity-card
+            entity: switch.energy_management_system_learning_only_no_control
+            name: Learning only
+            icon: mdi:school-outline
+          - type: custom:mushroom-entity-card
+            entity: switch.woonkamer_energy_management_system_vacation_mode
+            name: Vakantiemodus
+            icon: mdi:bag-suitcase-outline
+
       - type: entities
-        title: Besturing
-        entities:
-          - entity: switch.energy_management_system_force_manual
-            name: Force manual (negeer alle logica)
-          - entity: switch.energy_management_system_learning_only_no_control
-            name: Learning only (geen aansturing)
-          - entity: switch.woonkamer_energy_management_system_vacation_mode
-            name: Vakantiemodus (lager verbruik aannemen, leren pauzeren)
-      - type: entities
-        title: Nu — live status
-        entities:
-          - entity: sensor.solarflow_2400_ac_electric_level
-            name: Accu SoC
-          - entity: sensor.solarflow_2400_ac_available_kwh
-            name: Beschikbare kWh
-          - entity: sensor.energy_management_system_expected_operation_mode
-            name: Verwachte modus (logica)
-          - entity: sensor.energy_management_system_battery_protection
-            name: Ontlaadvermogen toegepast (SoC-bescherming)
-          - entity: select.zendure_manager_operation
-            name: Werkelijke modus (Zendure)
-          - entity: sensor.hw_p1_vermogen
-            name: Huidig verbruik (W)
-          - entity: number.solaredge_i1_active_power_limit
-            name: Zonnepaneel-vermogenslimiet (%) — bij negatieve prijs
-      - type: entities
-        title: Actuele beslissing
+        title: Actuele beslissing (detail)
         entities:
           - entity: sensor.energy_management_system_last_decision_reason
             name: Reden laatste beslissing
-          - entity: >-
-              sensor.woonkamer_energy_management_system_current_price_used_by_integration
-            name: Huidige prijs volgens integratie (vergelijk met Zonneplan-sensor)
           - entity: sensor.energy_management_system_simulated_action
             name: Gesimuleerde actie (bij learning only)
-          - entity: sensor.energy_management_system_effective_expensive_quarters
-            name: Aantal kwartieren boven dynamische prijsdrempel (informatief)
           - entity: sensor.energy_management_system_cheapest_block_start
             name: Start goedkoopste blok
           - entity: sensor.energy_management_system_discharge_window_start
             name: Start ontlaadvenster
           - entity: sensor.energy_management_system_energy_bridge_check
             name: Energie-check (genoeg om te overbruggen?)
+          - entity: number.solaredge_i1_active_power_limit
+            name: Zonnepaneel-vermogenslimiet (%) — bij negatieve prijs
 
   - title: Financieel
     path: financieel

@@ -262,6 +262,10 @@ class EnergyManagementSystemCoordinator:
         self.last_current_price_per_kwh: float | None = None
         self.last_projection_available_kwh: float | None = None
         self.last_projection_reserve_kwh: float | None = None
+        # -- System health tracking (for sensor.system_status) --
+        self.last_error: str | None = None
+        self.last_error_time: datetime | None = None
+        self.last_successful_update: datetime | None = None
 
         # Tracked so diagnostics can flag "no progress despite enough
         # elapsed time" for the various learning mechanisms below,
@@ -2730,17 +2734,48 @@ class EnergyManagementSystemCoordinator:
         asyncio "Task exception was never retrieved" message, making it
         impossible to diagnose. The previous state remains in effect
         until the next successful update.
+
+        Also records success/failure for `sensor.system_status`, so you
+        can see at a glance whether the integration is actually working,
+        without needing to check the Home Assistant logs yourself.
         """
         try:
             async with self._lock:
                 await self._async_update_locked()
-        except Exception:  # noqa: BLE001 - must never crash silently
+        except Exception as err:  # noqa: BLE001 - must never crash silently
+            self.last_error = str(err)
+            self.last_error_time = dt_util.now()
             _LOGGER.exception(
                 "Unexpected error while updating Energy Management System "
                 "- this update was skipped, the previous state remains in "
                 "effect until the next successful one. Please share this "
                 "traceback (and a diagnostics export) if you report this."
             )
+        else:
+            self.last_successful_update = dt_util.now()
+
+    @property
+    def system_status(self) -> str:
+        """A single, simple health status: 'OK' if the integration is
+        actively working, or an explanation of what's wrong otherwise -
+        so you don't have to check the Home Assistant logs yourself to
+        notice something is off.
+        """
+        if (
+            self.last_error_time is not None
+            and (
+                self.last_successful_update is None
+                or self.last_error_time >= self.last_successful_update
+            )
+        ):
+            return "Fout"
+
+        if self.last_successful_update is not None:
+            stale_after = timedelta(minutes=UPDATE_INTERVAL_MINUTES * 3)
+            if dt_util.now() - self.last_successful_update > stale_after:
+                return "Mogelijk vastgelopen"
+
+        return "OK"
 
     def _build_explanation(self) -> str:
         """Build a plain-language (Dutch) explanation of the current

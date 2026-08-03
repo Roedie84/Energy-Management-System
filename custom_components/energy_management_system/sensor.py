@@ -39,6 +39,7 @@ async def async_setup_entry(
         DischargeWindowStartSensor(coordinator, entry.entry_id),
         EffectiveExpensiveQuartersSensor(coordinator, entry.entry_id),
         LastDecisionReasonSensor(coordinator, entry.entry_id),
+        SystemStatusSensor(coordinator, entry.entry_id),
         ExplanationSensor(coordinator, entry.entry_id),
         SimulatedActionSensor(coordinator, entry.entry_id),
         LearnedNightConsumptionSensor(coordinator, entry.entry_id),
@@ -285,6 +286,48 @@ class LastDecisionReasonSensor(_CoordinatorDiagnosticSensor):
     @property
     def native_value(self) -> str | None:
         return self._coordinator.last_reason
+
+
+class SystemStatusSensor(_CoordinatorDiagnosticSensor):
+    """A single, simple health status for the integration itself: 'OK'
+    if it's actively working, or an explanation of what's wrong
+    otherwise - so a problem shows up directly on the dashboard instead
+    of only in the Home Assistant logs.
+    """
+
+    _attr_name = "System status"
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        super().__init__(coordinator, entry_id, "system_status")
+
+    @property
+    def native_value(self) -> str:
+        return self._coordinator.system_status
+
+    @property
+    def icon(self) -> str:
+        status = self._coordinator.system_status
+        if status == "OK":
+            return "mdi:check-circle-outline"
+        if status == "Fout":
+            return "mdi:alert-circle-outline"
+        return "mdi:help-circle-outline"
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return {
+            "last_error": self._coordinator.last_error,
+            "last_error_time": (
+                self._coordinator.last_error_time.isoformat()
+                if self._coordinator.last_error_time
+                else None
+            ),
+            "last_successful_update": (
+                self._coordinator.last_successful_update.isoformat()
+                if self._coordinator.last_successful_update
+                else None
+            ),
+        }
 
 
 class ExplanationSensor(_CoordinatorDiagnosticSensor):
