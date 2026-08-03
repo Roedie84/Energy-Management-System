@@ -2223,3 +2223,28 @@ met de uitgebreide testdata.
 **Bijwerking:** de tabellen voor verbruiksprofiel-per-uur en
 PV-bias-per-uur tonen nu alleen uren **met** data (geen "—"-plaatshouder
 meer voor lege uren) — logischer nu er ook een verschil-kolom bij komt.
+
+## v0.55.0 — %-teken i.p.v. "pp", en een logischere dashboard-indeling
+
+**%-teken:** alle "procentpunt"/"pp"-labels (trend-indicatoren,
+Solcast-verschil-kolom) vervangen door een gewoon %-teken, zoals
+gevraagd.
+
+**Logischere indeling.** De vorige lay-out gebruikte een standaard
+"masonry"-view — Home Assistant herschikt kaarten daarin automatisch
+over kolommen op basis van hoogte, wat de bedoelde volgorde behoorlijk
+kon door elkaar husselen (zoals zichtbaar in de gedeelde screenshot).
+
+**Fix: het Overzicht-tabblad gebruikt nu `type: sections`** (HA's
+nieuwere, expliciete layout-systeem) met 7 duidelijk gescheiden,
+getitelde groepen, in deze vaste volgorde:
+1. Status (titel + systeemstatus)
+2. Accu & rendement (beide gauges + trend)
+3. Live cijfers (beschikbare energie, verbruik, prijs)
+4. Modus & besluit (werkelijke/verwachte modus, dure kwartieren,
+   zonnepaneel-limiet)
+5. Besturing (de drie schakelaars)
+6. Wat gebeurt er nu, en waarom (uitleg)
+7. Actuele beslissing (detail)
+
+Deze volgorde ligt nu vast — geen automatische herschikking meer.

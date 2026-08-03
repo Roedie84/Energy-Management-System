@@ -102,6 +102,17 @@ def _timestamp_custom(value, fmt):
     return datetime.fromtimestamp(value, tz=timezone.utc).strftime(fmt)
 
 
+def _iter_all_cards(data):
+    """Yield every card in the dashboard, whether the view uses a flat
+    `cards:` list or a `type: sections` layout with `sections: [{cards:
+    [...]}]`."""
+    for view in data["views"]:
+        if "cards" in view:
+            yield from view["cards"]
+        for section in view.get("sections", []):
+            yield from section.get("cards", [])
+
+
 def _render_markdown_cards():
     with open(DASHBOARD_PATH) as f:
         data = yaml.safe_load(f)
@@ -110,13 +121,12 @@ def _render_markdown_cards():
     env.globals["as_timestamp"] = _as_timestamp
     env.filters["timestamp_custom"] = _timestamp_custom
     rendered = {}
-    for view in data["views"]:
-        for card in view["cards"]:
-            if card.get("type") == "markdown":
-                title = card.get("title", f"(untitled, view={view['title']})")
-                rendered[title] = env.from_string(card["content"]).render(
-                    state_attr=_fake_state_attr
-                )
+    for i, card in enumerate(_iter_all_cards(data)):
+        if card.get("type") == "markdown":
+            title = card.get("title") or f"(untitled #{i})"
+            rendered[title] = env.from_string(card["content"]).render(
+                state_attr=_fake_state_attr
+            )
     return rendered
 
 
