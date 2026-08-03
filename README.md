@@ -2248,3 +2248,20 @@ getitelde groepen, in deze vaste volgorde:
 7. Actuele beslissing (detail)
 
 Deze volgorde ligt nu vast — geen automatische herschikking meer.
+
+## v0.55.1 — Overzicht-tabblad verder verfijnd: minder lege ruimte, gauges gehalveerd
+
+**Drie punten opgepakt:**
+
+1. **"Wat gebeurt er nu, en waarom?"** staat nu direct in de eerste
+   sectie, meteen onder de status — niet meer onderaan.
+2. **Gauges nemen minder ruimte in** — Accu SoC en Geleerd rendement
+   staan nu **naast elkaar** (elk de halve breedte) in plaats van
+   gestapeld op volle breedte.
+3. **Minder lege vakken** — elke kaart heeft nu een expliciete
+   `grid_options`-breedte (in HA's 12-koloms sectie-raster), zodat
+   secties met 3 of 4 kaarten precies de volledige breedte vullen in
+   plaats van een leeg gat over te laten.
+
+Structuur nu: Status + uitleg → Accu & rendement (compact) → Live
+cijfers → Modus & besluit → Besturing → Actuele beslissing (detail).

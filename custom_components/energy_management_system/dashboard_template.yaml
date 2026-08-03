@@ -13,6 +13,9 @@ views:
               {{ state_attr('sensor.energy_management_system_last_decision_reason',
               'friendly_name') }}: {{
               states('sensor.energy_management_system_last_decision_reason') }}
+            grid_options:
+              columns: 12
+              rows: 1
           - type: custom:mushroom-template-card
             primary: "{{ states('sensor.woonkamer_energy_management_system_system_status') }}"
             secondary: >-
@@ -30,11 +33,24 @@ views:
             entity: sensor.woonkamer_energy_management_system_system_status
             tap_action:
               action: more-info
+            grid_options:
+              columns: 12
+              rows: 1
+          - type: markdown
+            content: >
+              {{ state_attr('sensor.woonkamer_energy_management_system_explanation',
+              'explanation') }}
+            grid_options:
+              columns: 12
+              rows: auto
 
       - type: grid
         cards:
           - type: heading
             heading: Accu & rendement
+            grid_options:
+              columns: 12
+              rows: 1
           - type: gauge
             entity: sensor.solarflow_2400_ac_electric_level
             name: Accu SoC
@@ -44,6 +60,9 @@ views:
               green: 40
               yellow: 20
               red: 0
+            grid_options:
+              columns: 6
+              rows: 2
           - type: gauge
             entity: >-
               sensor.woonkamer_energy_management_system_learned_battery_efficiency
@@ -54,6 +73,9 @@ views:
               green: 75
               yellow: 60
               red: 0
+            grid_options:
+              columns: 6
+              rows: 2
           - type: markdown
             content: >
               {%- set history =
@@ -76,23 +98,35 @@ views:
               Nog niet genoeg metingen voor een trend
 
               {%- endif %}
+            grid_options:
+              columns: 12
+              rows: 1
 
       - type: grid
         cards:
           - type: heading
             heading: Live cijfers
+            grid_options:
+              columns: 12
+              rows: 1
           - type: custom:mushroom-template-card
             primary: "{{ states('sensor.solarflow_2400_ac_available_kwh') }} kWh"
             secondary: Beschikbare energie
             icon: mdi:battery-high
             icon_color: green
             entity: sensor.solarflow_2400_ac_available_kwh
+            grid_options:
+              columns: 4
+              rows: 1
           - type: custom:mushroom-template-card
             primary: "{{ states('sensor.hw_p1_vermogen') }} W"
             secondary: Huidig verbruik
             icon: mdi:home-lightning-bolt-outline
             icon_color: orange
             entity: sensor.hw_p1_vermogen
+            grid_options:
+              columns: 4
+              rows: 1
           - type: custom:mushroom-template-card
             primary: >-
               {{
@@ -103,11 +137,17 @@ views:
             icon_color: blue
             entity: >-
               sensor.woonkamer_energy_management_system_current_price_used_by_integration
+            grid_options:
+              columns: 4
+              rows: 1
 
       - type: grid
         cards:
           - type: heading
             heading: Modus & besluit
+            grid_options:
+              columns: 12
+              rows: 1
           - type: custom:mushroom-template-card
             primary: "{{ states('select.zendure_manager_operation') }}"
             secondary: Werkelijke modus (Zendure — alleen weergave)
@@ -118,6 +158,9 @@ views:
               action: none
             hold_action:
               action: none
+            grid_options:
+              columns: 3
+              rows: 1
           - type: custom:mushroom-template-card
             primary: >-
               {{
@@ -127,6 +170,9 @@ views:
             icon: mdi:brain
             icon_color: purple
             entity: sensor.energy_management_system_expected_operation_mode
+            grid_options:
+              columns: 3
+              rows: 1
           - type: custom:mushroom-template-card
             primary: >-
               {{
@@ -136,6 +182,9 @@ views:
             icon: mdi:chart-bell-curve
             icon_color: red
             entity: sensor.energy_management_system_effective_expensive_quarters
+            grid_options:
+              columns: 3
+              rows: 1
           - type: custom:mushroom-template-card
             primary: "{{ states('number.solaredge_i1_active_power_limit') }}%"
             secondary: Zonnepaneel-vermogenslimiet (bij negatieve prijs)
@@ -146,37 +195,46 @@ views:
               action: none
             hold_action:
               action: none
+            grid_options:
+              columns: 3
+              rows: 1
 
       - type: grid
         cards:
           - type: heading
             heading: Besturing
+            grid_options:
+              columns: 12
+              rows: 1
           - type: custom:mushroom-entity-card
             entity: switch.energy_management_system_force_manual
             name: Force manual
             icon: mdi:hand-back-right
+            grid_options:
+              columns: 4
+              rows: 1
           - type: custom:mushroom-entity-card
             entity: switch.energy_management_system_learning_only_no_control
             name: Learning only
             icon: mdi:school-outline
+            grid_options:
+              columns: 4
+              rows: 1
           - type: custom:mushroom-entity-card
             entity: switch.woonkamer_energy_management_system_vacation_mode
             name: Vakantiemodus
             icon: mdi:bag-suitcase-outline
-
-      - type: grid
-        cards:
-          - type: heading
-            heading: Wat gebeurt er nu, en waarom?
-          - type: markdown
-            content: >
-              {{ state_attr('sensor.woonkamer_energy_management_system_explanation',
-              'explanation') }}
+            grid_options:
+              columns: 4
+              rows: 1
 
       - type: grid
         cards:
           - type: heading
             heading: Actuele beslissing (detail)
+            grid_options:
+              columns: 12
+              rows: 1
           - type: entities
             entities:
               - entity: sensor.energy_management_system_last_decision_reason
