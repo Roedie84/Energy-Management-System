@@ -87,6 +87,12 @@ LOW_SOLAR_RELATIVE_FRACTION = 0.4
 EXPENSIVE_PRICE_THRESHOLD_FRACTION = 0.20
 EXPENSIVE_PRICE_THRESHOLD_FRACTION_LOW_SOLAR = 0.08
 
+# A wider, more lenient "worth selling if there's spare capacity"
+# threshold - only used to fill headroom left unused after today's
+# genuinely expensive (primary-tier) quarters are accounted for. Never
+# applied by itself; see _get_secondary_expensive_price_threshold.
+SECONDARY_EXPENSIVE_PRICE_THRESHOLD_FRACTION = 0.45
+
 # How far (as a fraction of the day's price range above the minimum) the
 # cheap block is allowed to extend when detecting its natural width.
 CHEAP_BLOCK_THRESHOLD_MARGIN_FRACTION = 0.2

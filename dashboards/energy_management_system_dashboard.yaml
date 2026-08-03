@@ -178,12 +178,21 @@ views:
               {{
               states('sensor.energy_management_system_effective_expensive_quarters')
               }} kwartieren
-            secondary: Boven dynamische prijsdrempel
+            secondary: Boven prijsdrempel (hele dag, incl. voorbije uren)
             icon: mdi:chart-bell-curve
             icon_color: red
             entity: sensor.energy_management_system_effective_expensive_quarters
             grid_options:
               columns: 6
+              rows: 1
+          - type: markdown
+            content: >
+              ℹ️ Dit telt de **hele kalenderdag** (ook uren die al voorbij
+              zijn) — dat kan dus hoger uitvallen dan het aantal
+              "manual"-kwartieren dat je nog in het schema (Geschiedenis-
+              tabblad) ziet, wat alleen de **resterende** tijd toont.
+            grid_options:
+              columns: 12
               rows: 1
           - type: custom:mushroom-template-card
             primary: "{{ states('number.solaredge_i1_active_power_limit') }}%"

@@ -101,6 +101,7 @@ from .const import (
     LOW_SOLAR_RELATIVE_FRACTION,
     EXPENSIVE_PRICE_THRESHOLD_FRACTION,
     EXPENSIVE_PRICE_THRESHOLD_FRACTION_LOW_SOLAR,
+    SECONDARY_EXPENSIVE_PRICE_THRESHOLD_FRACTION,
     DEFAULT_NEGATIVE_PRICE_CHARGE_POWER,
     SOLAR_RAMP_DURATION_SECONDS,
     SOLAR_RAMP_STEPS,
@@ -636,11 +637,18 @@ class EnergyManagementSystemCoordinator:
         return entries
 
     def _price_threshold_for_entries(
-        self, day_entries: list[PriceEntry], narrow_for_low_solar: bool = False
+        self,
+        day_entries: list[PriceEntry],
+        narrow_for_low_solar: bool = False,
+        fraction_override: float | None = None,
     ) -> float | None:
         """Dynamic "expensive" threshold for an arbitrary set of same-day
         price entries (top fraction of that day's price range). Shared by
         today's live decision and the multi-day timeline projection.
+
+        `fraction_override` lets a caller compute a threshold at a
+        different (typically wider/more lenient) fraction than the
+        standard one - see `_get_secondary_expensive_price_threshold`.
         """
         if not day_entries:
             return None
@@ -649,12 +657,32 @@ class EnergyManagementSystemCoordinator:
         price_range = max_price - min_price
         if price_range <= 0:
             return None
-        fraction = (
-            EXPENSIVE_PRICE_THRESHOLD_FRACTION_LOW_SOLAR
-            if narrow_for_low_solar
-            else EXPENSIVE_PRICE_THRESHOLD_FRACTION
-        )
+        if fraction_override is not None:
+            fraction = fraction_override
+        else:
+            fraction = (
+                EXPENSIVE_PRICE_THRESHOLD_FRACTION_LOW_SOLAR
+                if narrow_for_low_solar
+                else EXPENSIVE_PRICE_THRESHOLD_FRACTION
+            )
         return max_price - fraction * price_range
+
+    def _get_secondary_expensive_price_threshold(
+        self, entries: list[PriceEntry], now: datetime
+    ) -> float | None:
+        """A more lenient "worth selling if there's spare capacity"
+        threshold for today - wider than the primary dynamic threshold
+        (see `_get_expensive_price_threshold`), used only to fill
+        headroom left unused after today's genuinely expensive (primary-
+        tier) quarters are accounted for. Never applied on its own -
+        always gated by `_get_spare_headroom_after_primary_tier_kwh`
+        being > 0, so this can never eat into the reserve that protects
+        tonight/tomorrow.
+        """
+        todays_entries = [entry for entry in entries if entry[0].date() == now.date()]
+        return self._price_threshold_for_entries(
+            todays_entries, fraction_override=SECONDARY_EXPENSIVE_PRICE_THRESHOLD_FRACTION
+        )
 
     def _get_expensive_price_threshold(
         self, entries: list[PriceEntry], now: datetime
@@ -1992,6 +2020,103 @@ class EnergyManagementSystemCoordinator:
                 reason,
             )
 
+    def _get_spare_headroom_after_primary_tier_kwh(
+        self,
+        entries: list[PriceEntry],
+        now: datetime,
+        headroom_kwh: float,
+        discharge_power_w: float,
+    ) -> float:
+        """How much of the current headroom is left over after reserving
+        enough for today's remaining genuinely-expensive (primary-tier)
+        quarters still ahead of 'now'. Used to size the secondary,
+        more-lenient tier - so it can never eat into what the real price
+        peak still needs.
+        """
+        primary_threshold = self._get_expensive_price_threshold(entries, now)
+        if primary_threshold is None:
+            return 0.0
+
+        todays_entries = [e for e in entries if e[0].date() == now.date()]
+        remaining_primary = [
+            e for e in todays_entries if e[2] >= primary_threshold and e[1] > now
+        ]
+        energy_per_quarter_kwh = (discharge_power_w / 1000) * 0.25
+        primary_needed_kwh = len(remaining_primary) * energy_per_quarter_kwh
+        return max(0.0, headroom_kwh - primary_needed_kwh)
+
+    def _is_worth_discharging_at_secondary_tier(
+        self,
+        entries: list[PriceEntry],
+        now: datetime,
+        headroom_kwh: float,
+        discharge_power_w: float,
+    ) -> bool:
+        """Is 'now' worth discharging at the wider, secondary price tier
+        (see `_get_secondary_expensive_price_threshold`), using only
+        *spare* headroom left over after today's remaining primary-tier
+        (genuinely expensive) quarters are accounted for?
+
+        Without this, headroom that's clearly more than today's real
+        price peak needs goes unused on quarters that don't quite clear
+        the strict threshold but are still meaningfully above the day's
+        cheap baseline - "leaving money on the table" on days with
+        abundant battery capacity (found via a live report: 8kWh
+        available, only a single 15-minute quarter sold, while
+        surrounding quarters at a only slightly lower price went
+        untouched).
+
+        Same price-priority principle as `_is_worth_discharging_now`,
+        just applied to the secondary tier's candidates and spare
+        headroom specifically, ranked purely by price so the best of the
+        "not quite primary-tier" quarters win first.
+        """
+        secondary_threshold = self._get_secondary_expensive_price_threshold(
+            entries, now
+        )
+        if secondary_threshold is None:
+            return False
+
+        # Find 'now's raw price directly (same scale as the thresholds
+        # above, both derived from raw entry prices) - not
+        # _get_current_price_per_kwh, which converts to €/kWh and would
+        # silently compare mismatched units against the raw threshold.
+        now_price_raw = next(
+            (e[2] for e in entries if e[0] <= now < e[1]), None
+        )
+        if now_price_raw is None or now_price_raw < secondary_threshold:
+            return False
+
+        spare_headroom_kwh = self._get_spare_headroom_after_primary_tier_kwh(
+            entries, now, headroom_kwh, discharge_power_w
+        )
+        if spare_headroom_kwh <= 0:
+            return False
+
+        primary_threshold = self._get_expensive_price_threshold(entries, now)
+        todays_entries = [e for e in entries if e[0].date() == now.date()]
+        secondary_candidates = [
+            e
+            for e in todays_entries
+            if e[2] >= secondary_threshold
+            and (primary_threshold is None or e[2] < primary_threshold)
+            and e[1] > now
+        ]
+        if not secondary_candidates:
+            return False
+
+        secondary_candidates.sort(key=lambda e: e[2], reverse=True)
+
+        energy_per_quarter_kwh = (discharge_power_w / 1000) * 0.25
+        if energy_per_quarter_kwh <= 0:
+            return False
+        quarters_affordable = max(
+            1, int(spare_headroom_kwh / energy_per_quarter_kwh)
+        )
+
+        top_slots = secondary_candidates[:quarters_affordable]
+        return any(e[0] <= now < e[1] for e in top_slots)
+
     def _is_worth_discharging_now(
         self,
         entries: list[PriceEntry],
@@ -3234,6 +3359,42 @@ class EnergyManagementSystemCoordinator:
                 "same energy back would just be a loss, not arbitrage."
             )
             is_expensive = False
+
+        # Secondary tier: if 'now' doesn't clear the strict, primary
+        # dynamic threshold, check whether there's genuinely *spare*
+        # headroom left over after today's remaining genuinely-expensive
+        # quarters are accounted for - and if so, whether 'now' is worth
+        # selling at the wider, more lenient secondary threshold instead.
+        # Without this, a day with abundant available energy could leave
+        # meaningfully-above-average quarters untouched purely because
+        # they don't clear the strict top-tier cutoff, even though there
+        # was clearly no risk in selling more (found via a live report:
+        # 8kWh available, only a single 15-minute quarter sold, while
+        # surrounding quarters at only a slightly lower price went
+        # unused). Never applies if the winter guard above already
+        # suppressed selling today, or while grid-charged.
+        if not is_expensive and not self._grid_charged_today:
+            secondary_available_entity = self.config.get(CONF_AVAILABLE_ENERGY_SENSOR)
+            secondary_available_kwh = (
+                self._read_sensor_float(secondary_available_entity)
+                if secondary_available_entity
+                else None
+            )
+            if secondary_available_kwh is not None and secondary_available_kwh > 0:
+                secondary_reserve_kwh = self._get_dynamic_discharge_reserve_kwh(
+                    now, cheap_block_start
+                )
+                if secondary_reserve_kwh is not None:
+                    secondary_headroom_kwh = max(
+                        0.0, secondary_available_kwh - secondary_reserve_kwh
+                    )
+                    secondary_discharge_power = self.config.get(
+                        CONF_MANUAL_DISCHARGE_POWER, DEFAULT_MANUAL_DISCHARGE_POWER
+                    )
+                    if self._is_worth_discharging_at_secondary_tier(
+                        entries, now, secondary_headroom_kwh, secondary_discharge_power
+                    ):
+                        is_expensive = True
 
         if is_expensive:
             discharge_power = self.config.get(

@@ -2398,3 +2398,44 @@ beslissing aanstuurt, niet alleen in een aparte weergave.
 "laden uitstellen ten gunste van teruglevering"-beslissing voorheen te
 optimistisch kon zijn op precies de dagen met veel verwachte zon —
 exact het scenario waar de bescherming het hardst nodig is.
+
+## v0.58.0 — secundaire prijslaag: spare headroom niet meer onbenut
+
+**Aanleiding:** een dag met 7,60 kWh beschikbaar, waarvan maar 15
+minuten daadwerkelijk werd verkocht (tegen €0,4177), terwijl de
+omringende kwartieren (€0,33-0,38) — met duidelijk nog ruimte over in de
+accu — onbenut bleven.
+
+**Ook opgehelderd:** de "Boven dynamische prijsdrempel"-teller (8
+kwartieren) leek niet te kloppen met het schema (1 kwartier) — bleek een
+schijnbare inconsistentie: die teller telt de **hele kalenderdag**
+(inclusief al gepasseerde uren), het schema toont alleen wat nog **komt**.
+Verduidelijkt in het dashboard.
+
+**De echte verbetering: een tweede, ruimere prijslaag.** Naast de
+bestaande strikte drempel (top 20% van de dagprijs-range) is er nu een
+**secundaire, ruimere drempel** (top 45%) die ook mag verkopen — maar
+uitsluitend met **spare headroom**: wat overblijft nadat alle nog
+resterende, écht dure (primaire) kwartieren van vandaag al zijn
+gereserveerd. Deze laag kan dus **nooit** ten koste gaan van de
+bescherming voor de echte piek of de nachtelijke reserve — hij vult
+alleen aan wat toch al onbenut zou blijven.
+
+**Nieuwe functies:**
+- `_get_secondary_expensive_price_threshold()` — de ruimere drempel.
+- `_get_spare_headroom_after_primary_tier_kwh()` — hoeveel headroom
+  overblijft na de primaire kwartieren.
+- `_is_worth_discharging_at_secondary_tier()` — prijs-prioriteit binnen
+  de secundaire laag, zelfde principe als de bestaande primaire
+  prijs-prioriteit (v0.40.0).
+
+Ingehaakt in de hoofdbeslisboom: als een kwartier de strikte drempel
+niet haalt, wordt nu ook gecontroleerd of het de secundaire drempel wél
+haalt én er spare headroom is — zo niet, blijft het gedrag exact zoals
+voorheen.
+
+**Getest (4 nieuwe permanente tests):** secundaire laag wordt gebruikt
+bij ruime headroom, niet gebruikt als de headroom al nodig is voor de
+échte piek, nooit van toepassing onder de secundaire drempel zelf (ook
+niet bij extreem veel headroom), en spare headroom is terecht 0 als de
+primaire laag alles al opeist.
