@@ -2283,3 +2283,37 @@ te smal, waardoor tekst werd afgekapt ("7.603...", "S...", "1...").
 **Fix:** alle acht tegels in deze twee secties verbreed naar
 `columns: 6` — nu twee per rij in plaats van drie of vier, met genoeg
 ruimte voor de volledige tekst.
+
+## v0.56.0 — maandelijkse samenvatting: echte langetermijntrend
+
+**Aanleiding:** de vraag hoe het systeem zichzelf over de langere termijn
+evalueert. Eerlijk antwoord destijds: de bestaande zelfcorrectie kijkt
+alleen naar een rollend venster van 7 dagen — er was geen manier om
+maand-op-maand te vergelijken.
+
+**Nieuw: `sensor.monthly_summary`.** State = netto resultaat deze maand
+tot nu toe (ontladen-waarde minus netlaadkosten). Attributen bevatten de
+volledige vergelijking:
+- `current_month_discharge_value_eur`, `current_month_charge_cost_eur`
+- `current_month_shortfall_days`, `current_month_excess_days`
+- `previous_month_*` (dezelfde velden, van de vorige volledige maand)
+- `previous_month_net_eur`
+
+**Werking:** nieuwe methode `_check_monthly_rollover()` detecteert een
+kalendermaand-wisseling, legt dan de huidige maand-totalen vast als
+"vorige maand" en reset de tellers voor de nieuwe maand. De bestaande
+financiële tracking en dag-afsluiting (tekort/overschot) voeden nu ook
+deze maandelijkse tellers, naast de bestaande cumulatieve/rollende
+tellers.
+
+**Dashboard:** nieuwe kaart op het Financieel-tabblad, met trendpijl
+t.o.v. dezelfde periode vorige maand.
+
+Getest (4 nieuwe permanente tests): eerste keer geen "vorige maand",
+correcte snapshot-en-reset bij een maandwisseling, geen wisseling binnen
+dezelfde maand, en correcte doorvoer vanuit de financiële tracking.
+
+**Blijft bewust beperkt:** dit toont een directe maand-op-maand
+vergelijking, geen seizoensanalyse of "bespaart dit systeem mij geld
+t.o.v. geen integratie" — dat laatste vereist een contrafeitelijke
+vergelijking die niet eerlijk te verifiëren is.

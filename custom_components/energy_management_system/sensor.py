@@ -40,6 +40,7 @@ async def async_setup_entry(
         EffectiveExpensiveQuartersSensor(coordinator, entry.entry_id),
         LastDecisionReasonSensor(coordinator, entry.entry_id),
         SystemStatusSensor(coordinator, entry.entry_id),
+        MonthlySummarySensor(coordinator, entry.entry_id),
         ExplanationSensor(coordinator, entry.entry_id),
         SimulatedActionSensor(coordinator, entry.entry_id),
         LearnedNightConsumptionSensor(coordinator, entry.entry_id),
@@ -328,6 +329,109 @@ class SystemStatusSensor(_CoordinatorDiagnosticSensor):
                 else None
             ),
         }
+
+
+class MonthlySummarySensor(_CoordinatorDiagnosticSensor, RestoreEntity):
+    """Genuine month-over-month trend, on top of the existing rolling
+    7-day self-correction (which only ever looks at the recent past,
+    not whether things are improving release over release).
+
+    State is this month's net result (discharge value minus charge
+    cost) so far; attributes carry the full comparison against last
+    month.
+    """
+
+    _attr_name = "Monthly summary"
+    _attr_icon = "mdi:calendar-month-outline"
+    _attr_native_unit_of_measurement = "EUR"
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        super().__init__(coordinator, entry_id, "monthly_summary")
+
+    @property
+    def native_value(self) -> float:
+        net = (
+            self._coordinator.current_month_discharge_value_eur
+            - self._coordinator.current_month_charge_cost_eur
+        )
+        return round(net, 2)
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        c = self._coordinator
+        previous_net = None
+        if (
+            c.previous_month_discharge_value_eur is not None
+            and c.previous_month_charge_cost_eur is not None
+        ):
+            previous_net = round(
+                c.previous_month_discharge_value_eur
+                - c.previous_month_charge_cost_eur,
+                2,
+            )
+        return {
+            "current_month_discharge_value_eur": round(
+                c.current_month_discharge_value_eur, 2
+            ),
+            "current_month_charge_cost_eur": round(
+                c.current_month_charge_cost_eur, 2
+            ),
+            "current_month_shortfall_days": c.current_month_shortfall_days,
+            "current_month_excess_days": c.current_month_excess_days,
+            "current_month_days_tracked": c.current_month_days_tracked,
+            "previous_month_discharge_value_eur": c.previous_month_discharge_value_eur,
+            "previous_month_charge_cost_eur": c.previous_month_charge_cost_eur,
+            "previous_month_shortfall_days": c.previous_month_shortfall_days,
+            "previous_month_excess_days": c.previous_month_excess_days,
+            "previous_month_days_tracked": c.previous_month_days_tracked,
+            "previous_month_net_eur": previous_net,
+        }
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if last_state is None:
+            return
+        attrs = last_state.attributes
+        try:
+            c = self._coordinator
+            c.current_month_discharge_value_eur = float(
+                attrs.get("current_month_discharge_value_eur", 0.0)
+            )
+            c.current_month_charge_cost_eur = float(
+                attrs.get("current_month_charge_cost_eur", 0.0)
+            )
+            c.current_month_shortfall_days = int(
+                attrs.get("current_month_shortfall_days", 0)
+            )
+            c.current_month_excess_days = int(
+                attrs.get("current_month_excess_days", 0)
+            )
+            c.current_month_days_tracked = int(
+                attrs.get("current_month_days_tracked", 0)
+            )
+            if attrs.get("previous_month_discharge_value_eur") is not None:
+                c.previous_month_discharge_value_eur = float(
+                    attrs["previous_month_discharge_value_eur"]
+                )
+            if attrs.get("previous_month_charge_cost_eur") is not None:
+                c.previous_month_charge_cost_eur = float(
+                    attrs["previous_month_charge_cost_eur"]
+                )
+            if attrs.get("previous_month_shortfall_days") is not None:
+                c.previous_month_shortfall_days = int(
+                    attrs["previous_month_shortfall_days"]
+                )
+            if attrs.get("previous_month_excess_days") is not None:
+                c.previous_month_excess_days = int(
+                    attrs["previous_month_excess_days"]
+                )
+            if attrs.get("previous_month_days_tracked") is not None:
+                c.previous_month_days_tracked = int(
+                    attrs["previous_month_days_tracked"]
+                )
+        except (TypeError, ValueError):
+            pass
 
 
 class ExplanationSensor(_CoordinatorDiagnosticSensor):

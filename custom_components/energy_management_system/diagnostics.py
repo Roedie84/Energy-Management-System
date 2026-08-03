@@ -267,6 +267,18 @@ async def async_get_config_entry_diagnostics(
             "last_washing_machine_notification": (
                 coordinator.last_washing_machine_notification
             ),
+            "current_month_discharge_value_eur": round(
+                coordinator.current_month_discharge_value_eur, 2
+            ),
+            "current_month_charge_cost_eur": round(
+                coordinator.current_month_charge_cost_eur, 2
+            ),
+            "current_month_shortfall_days": coordinator.current_month_shortfall_days,
+            "current_month_excess_days": coordinator.current_month_excess_days,
+            "previous_month_discharge_value_eur": coordinator.previous_month_discharge_value_eur,
+            "previous_month_charge_cost_eur": coordinator.previous_month_charge_cost_eur,
+            "previous_month_shortfall_days": coordinator.previous_month_shortfall_days,
+            "previous_month_excess_days": coordinator.previous_month_excess_days,
             "last_expected_mode": coordinator.last_expected_mode,
             "last_simulated_action": coordinator.last_simulated_action,
             "last_is_expensive": coordinator.last_is_expensive,

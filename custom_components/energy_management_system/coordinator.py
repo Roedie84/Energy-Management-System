@@ -267,6 +267,20 @@ class EnergyManagementSystemCoordinator:
         self.last_error_time: datetime | None = None
         self.last_successful_update: datetime | None = None
 
+        # -- Monthly summary (long-term trend, vs. the existing rolling
+        # 7-day self-correction) --
+        self._summary_month_key: int | None = None  # e.g. 202608 for Aug 2026
+        self.current_month_discharge_value_eur: float = 0.0
+        self.current_month_charge_cost_eur: float = 0.0
+        self.current_month_shortfall_days: int = 0
+        self.current_month_excess_days: int = 0
+        self.current_month_days_tracked: int = 0
+        self.previous_month_discharge_value_eur: float | None = None
+        self.previous_month_charge_cost_eur: float | None = None
+        self.previous_month_shortfall_days: int | None = None
+        self.previous_month_excess_days: int | None = None
+        self.previous_month_days_tracked: int | None = None
+
         # Tracked so diagnostics can flag "no progress despite enough
         # elapsed time" for the various learning mechanisms below,
         # instead of that only being caught by manually reading code.
@@ -1908,6 +1922,12 @@ class EnergyManagementSystemCoordinator:
                 self.reserve_excess_history = self.reserve_excess_history[
                     -LEARNING_HISTORY_DAYS:
                 ]
+                # Also feed the monthly summary - a day just closed out.
+                self.current_month_days_tracked += 1
+                if self._shortfall_detected_today:
+                    self.current_month_shortfall_days += 1
+                if self._excess_detected_today:
+                    self.current_month_excess_days += 1
             self._shortfall_detected_today = False
             self._excess_detected_today = False
             self._shortfall_check_date = now.date()
@@ -2626,6 +2646,38 @@ class EnergyManagementSystemCoordinator:
                 return price / PRICE_SCALE_FACTOR
         return None
 
+    def _check_monthly_rollover(self, now: datetime) -> None:
+        """Detect a new calendar month starting, snapshotting the current
+        month's totals into "previous month" before resetting - this is
+        what makes a genuine month-over-month trend comparison possible,
+        on top of the existing rolling 7-day self-correction (shortfall/
+        excess margin, PV bias) which only ever looks at the recent
+        past, not whether things are improving release over release.
+        """
+        month_key = now.year * 100 + now.month
+        if self._summary_month_key is None:
+            self._summary_month_key = month_key
+            return
+        if month_key == self._summary_month_key:
+            return
+
+        self.previous_month_discharge_value_eur = round(
+            self.current_month_discharge_value_eur, 2
+        )
+        self.previous_month_charge_cost_eur = round(
+            self.current_month_charge_cost_eur, 2
+        )
+        self.previous_month_shortfall_days = self.current_month_shortfall_days
+        self.previous_month_excess_days = self.current_month_excess_days
+        self.previous_month_days_tracked = self.current_month_days_tracked
+
+        self.current_month_discharge_value_eur = 0.0
+        self.current_month_charge_cost_eur = 0.0
+        self.current_month_shortfall_days = 0
+        self.current_month_excess_days = 0
+        self.current_month_days_tracked = 0
+        self._summary_month_key = month_key
+
     def _update_financial_tracking(
         self,
         now: datetime,
@@ -2660,13 +2712,17 @@ class EnergyManagementSystemCoordinator:
 
         if reason == "expensive_quarter" and discharge_power_w:
             energy_kwh = (discharge_power_w / 1000) * elapsed_hours
-            self.total_discharge_value_eur += energy_kwh * current_price
+            value_eur = energy_kwh * current_price
+            self.total_discharge_value_eur += value_eur
+            self.current_month_discharge_value_eur += value_eur
         elif (
             reason in ("grid_charging_low_solar", "emergency_low_battery")
             and charge_power_w
         ):
             energy_kwh = (abs(charge_power_w) / 1000) * elapsed_hours
-            self.total_charge_cost_eur += energy_kwh * current_price
+            cost_eur = energy_kwh * current_price
+            self.total_charge_cost_eur += cost_eur
+            self.current_month_charge_cost_eur += cost_eur
 
     def _cheapest_block_range(
         self, entries: list[PriceEntry], now: datetime
@@ -3033,6 +3089,7 @@ class EnergyManagementSystemCoordinator:
             self._update_hourly_consumption_profile(now)
         self._update_pv_hourly_bias_tracking(now)
         self._update_battery_efficiency_learning(now)
+        self._check_monthly_rollover(now)
         self._update_appliance_usage_tracking(now)
         self._track_recent_consumption_reading(now)
 

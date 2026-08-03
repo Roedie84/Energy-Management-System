@@ -352,6 +352,45 @@ views:
             entity: >-
               sensor.woonkamer_energy_management_system_reserve_excess_days
 
+      - type: markdown
+        title: Maandoverzicht (t.o.v. vorige maand)
+        content: >
+          {%- set cur_discharge =
+          state_attr('sensor.woonkamer_energy_management_system_monthly_summary',
+          'current_month_discharge_value_eur') or 0 %}
+
+          {%- set cur_cost =
+          state_attr('sensor.woonkamer_energy_management_system_monthly_summary',
+          'current_month_charge_cost_eur') or 0 %}
+
+          {%- set cur_net = cur_discharge - cur_cost %}
+
+          {%- set prev_net =
+          state_attr('sensor.woonkamer_energy_management_system_monthly_summary',
+          'previous_month_net_eur') %}
+
+          **Deze maand tot nu toe:** € {{ '%.2f'|format(cur_net) }} netto ({{
+          '%.2f'|format(cur_discharge) }} ontladen − {{ '%.2f'|format(cur_cost)
+          }} netladen)
+
+
+          {%- if prev_net is not none %}
+
+          **Vorige maand:** € {{ '%.2f'|format(prev_net) }} netto
+
+          {%- set diff = cur_net - prev_net %}
+
+          {{ '↑' if diff > 0 else ('↓' if diff < 0 else '→') }} {{
+          '%+.2f'|format(diff) }} ten opzichte van dezelfde periode vorige
+          maand
+
+          {%- else %}
+
+          Nog geen vorige maand om mee te vergelijken — dat verschijnt na de
+          eerste maandwisseling.
+
+          {%- endif %}
+
   - title: Zelflerend
     path: zelflerend
     icon: mdi:school-outline

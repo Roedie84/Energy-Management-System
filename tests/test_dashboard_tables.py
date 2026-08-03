@@ -61,6 +61,18 @@ def _fake_state_attr(entity, attr):
             "history",
         ): [92.9, 85.1, 85.3, 76.8, 76.7, 76.6, 88.2],
         (
+            "sensor.woonkamer_energy_management_system_monthly_summary",
+            "current_month_discharge_value_eur",
+        ): 45.5,
+        (
+            "sensor.woonkamer_energy_management_system_monthly_summary",
+            "current_month_charge_cost_eur",
+        ): 12.3,
+        (
+            "sensor.woonkamer_energy_management_system_monthly_summary",
+            "previous_month_net_eur",
+        ): 30.0,
+        (
             "sensor.energy_management_system_energy_bridge_check",
             "transition_log",
         ): [
