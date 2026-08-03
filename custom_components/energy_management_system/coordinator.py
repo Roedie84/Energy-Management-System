@@ -2335,7 +2335,23 @@ class EnergyManagementSystemCoordinator:
             # Prefer the learned hourly profile (accounts for the actual
             # time-of-day mix of the bridging period), falling back to the
             # flat night-average or a live reading if incomplete.
-            needed_kwh_raw = self._estimate_consumption_kwh_for_period(
+            baseline_consumption_kwh = self._estimate_consumption_kwh_for_period(
+                now, cheap_block_start
+            )
+
+            # The reserve requirement itself uses the worst-case
+            # cumulative deficit (v0.43.0), not a net balance over the
+            # whole window - a net balance can look fine on paper
+            # (abundant solar expected tomorrow) while still hiding a
+            # real overnight shortfall before that solar actually
+            # arrives. This was previously only wired into the
+            # discharge-power cap, not this postpone-charging decision
+            # itself - found via a live report showing "0.00 kWh
+            # needed" purely because expected solar (5.78 kWh) slightly
+            # exceeded flat baseline consumption (5.356 kWh), even
+            # though nothing protects the hours before dawn
+            # specifically.
+            needed_kwh_raw = self._estimate_worst_case_deficit_kwh(
                 now, cheap_block_start
             )
             if needed_kwh_raw is not None:
@@ -2355,36 +2371,25 @@ class EnergyManagementSystemCoordinator:
                     power_kw * hours_until_cheap if power_kw is not None else None
                 )
 
-            # Subtract expected PV production during the bridging window -
-            # solar coming online soon reduces how much the battery/grid
-            # actually needs to cover.
-            baseline_consumption_kwh = needed_kwh_raw
+            # Kept purely as informational context in the breakdown
+            # below (and the dashboard explanation text) - the
+            # worst-case-deficit figure above is what actually drives
+            # the decision now.
             if needed_kwh_raw is not None:
                 expected_pv_kwh = self._get_efficiency_discounted_pv_offset(
                     now, cheap_block_start
                 )
-                needed_kwh_raw = max(0.0, needed_kwh_raw - expected_pv_kwh)
-
-                # No separate reservation for today's remaining
-                # expensive-quarter discharges (removed in v0.41.0): since
-                # v0.40.0, the actual discharge amount during those
-                # quarters is already self-limited by the headroom check
-                # and price-priority ranking - it will never dip below
-                # this same reserve floor by design, so adding a second,
-                # speculative buffer on top double-counted the same
-                # protection and inflated the reservation far beyond what
-                # was actually needed (reported: 8.4 kWh for a single
-                # evening, assuming full-power discharge through every
-                # threshold-clearing quarter regardless of headroom).
-                upcoming_discharge_kwh = 0.0
-                needed_kwh_raw += upcoming_discharge_kwh
 
                 needed_kwh = needed_kwh_raw * ENERGY_BRIDGE_SAFETY_MARGIN
 
                 self.last_needed_kwh_breakdown = {
-                    "basisverbruik_kwh": round(baseline_consumption_kwh, 3),
+                    "basisverbruik_kwh": (
+                        round(baseline_consumption_kwh, 3)
+                        if baseline_consumption_kwh is not None
+                        else None
+                    ),
                     "verwachte_pv_kwh": round(expected_pv_kwh, 3),
-                    "reservering_dure_kwartieren_kwh": round(upcoming_discharge_kwh, 3),
+                    "diepste_tekort_kwh": round(needed_kwh_raw, 3),
                     "veiligheidsmarge_procent": round(
                         (ENERGY_BRIDGE_SAFETY_MARGIN - 1) * 100, 1
                     ),
@@ -2972,12 +2977,13 @@ class EnergyManagementSystemCoordinator:
                 b = self.last_needed_kwh_breakdown
                 if b:
                     parts.append(
-                        f"Opsplitsing van die {needed_txt} kWh: "
-                        f"{b.get('basisverbruik_kwh', '?')} kWh basisverbruik, "
-                        f"minus {b.get('verwachte_pv_kwh', '?')} kWh verwachte zon, "
-                        f"plus {b.get('reservering_dure_kwartieren_kwh', '?')} kWh "
-                        f"reservering voor nog-komende dure kwartieren vandaag, "
-                        f"met {b.get('veiligheidsmarge_procent', '?')}% "
+                        f"De diepste-tekort-berekening (het echte dieptepunt "
+                        f"onderweg, niet zomaar het eindsaldo) komt uit op "
+                        f"{b.get('diepste_tekort_kwh', '?')} kWh, tegenover "
+                        f"{b.get('basisverbruik_kwh', '?')} kWh basisverbruik "
+                        f"en {b.get('verwachte_pv_kwh', '?')} kWh verwachte "
+                        f"zon over de hele periode - met "
+                        f"{b.get('veiligheidsmarge_procent', '?')}% "
                         f"veiligheidsmarge erover."
                     )
             else:
@@ -3009,11 +3015,11 @@ class EnergyManagementSystemCoordinator:
                 b = self.last_needed_kwh_breakdown
                 if b:
                     parts.append(
-                        f"Opsplitsing: {b.get('basisverbruik_kwh', '?')} kWh "
-                        f"basisverbruik, minus {b.get('verwachte_pv_kwh', '?')} "
-                        f"kWh verwachte zon, plus "
-                        f"{b.get('reservering_dure_kwartieren_kwh', '?')} kWh "
-                        f"reservering voor dure kwartieren."
+                        f"De diepste-tekort-berekening komt uit op "
+                        f"{b.get('diepste_tekort_kwh', '?')} kWh (tegenover "
+                        f"{b.get('basisverbruik_kwh', '?')} kWh basisverbruik "
+                        f"en {b.get('verwachte_pv_kwh', '?')} kWh verwachte "
+                        f"zon over de hele periode)."
                     )
             else:
                 parts.append(

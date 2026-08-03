@@ -2364,3 +2364,37 @@ Getest (bijgewerkt + 1 nieuwe permanente test): een geïsoleerde piek
 geen piek (1,0x, geen correctie) — voorheen nog altijd afgetopt op 5x.
 Een aanhoudende verandering (2 van de 4 metingen verhoogd, zoals de
 airco net na het aanslaan) blijft volledig herkend op 2,0x.
+
+## v0.57.1 — kritieke inconsistentie gefixt: laden-uitstellen-beslissing gebruikte nog de oude, minder veilige reserve-berekening
+
+**Wat opviel:** "geschat nodig: 0.00 kWh" in de uitleg, terwijl de
+opsplitsing liet zien dat basisverbruik (5.356 kWh) en verwachte zon
+(5.78 kWh) elkaar bijna precies opheften.
+
+**Gevonden, belangrijke inconsistentie:** de diepste-tekort-reserve
+(v0.43.0) — specifiek gebouwd om te voorkomen dat veel verwachte zon
+een reëel nachtelijk tekort kan verbergen — was alleen gekoppeld aan de
+**ontlaad-vermogen-begrenzing**, niet aan de **laden-uitstellen-
+beslissing** zelf (`_should_postpone_charging`). Die gebruikte nog
+steeds de oude, simpele netto-berekening (basisverbruik minus zon over
+de hele periode, geklemd op 0) — exact het soort berekening waarvan we
+al hadden vastgesteld dat die een nachtelijk tekort kan verbergen.
+
+**Fix:** `_should_postpone_charging` gebruikt nu ook de
+diepste-tekort-berekening als de daadwerkelijke beslissingsgrondslag.
+Basisverbruik en verwachte zon blijven zichtbaar in de opsplitsing, maar
+puur als informatieve context — niet meer als de berekening die de
+beslissing aanstuurt. Het veld `reservering_dure_kwartieren_kwh` (altijd
+0, sinds v0.41.0 toch al overbodig) is vervangen door
+`diepste_tekort_kwh`, en de uitleg-tekst is hierop aangepast.
+
+**Getest** (nieuwe permanente test): een scenario waarin de oude
+netto-methode ~0 kWh zou tonen (basisverbruik < verwachte zon) geeft nu
+via de diepste-tekort-berekening een reëel, positief tekort — en dat
+getal komt nu ook daadwerkelijk terecht in de opsplitsing die de
+beslissing aanstuurt, niet alleen in een aparte weergave.
+
+**Dit is waarschijnlijk relevanter dan het lijkt:** dit betekent dat de
+"laden uitstellen ten gunste van teruglevering"-beslissing voorheen te
+optimistisch kon zijn op precies de dagen met veel verwachte zon —
+exact het scenario waar de bescherming het hardst nodig is.
