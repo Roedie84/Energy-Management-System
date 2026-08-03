@@ -1201,6 +1201,20 @@ class EnergyManagementSystemCoordinator:
             return None
         return sum(values) / len(values)
 
+    def previous_hourly_avg_kw(self, hour: int) -> float | None:
+        """The learned average for this hour as it was *before* the most
+        recent sample came in - i.e. excluding the last sample. Used to
+        show a "previous vs current" trend on the dashboard for what is
+        otherwise a continuously-updating rolling average with no single
+        "previous value" of its own. None if there are fewer than 2
+        samples (nothing meaningful to compare against yet).
+        """
+        values = self.hourly_consumption_profile.get(hour)
+        if not values or len(values) < 2:
+            return None
+        previous_values = values[:-1]
+        return sum(previous_values) / len(previous_values)
+
     def _vacation_adjusted_kwh(self, kwh: float) -> float:
         """Scale down an estimated consumption amount while vacation mode
         is on - see the 'Vacation consumption reduction (%)' option.
@@ -1687,6 +1701,18 @@ class EnergyManagementSystemCoordinator:
         if not values or len(values) < MIN_SOLAR_HISTORY_FOR_DYNAMIC_THRESHOLD:
             return None
         return sum(values) / len(values)
+
+    def previous_pv_hourly_ratio(self, hour: int) -> float | None:
+        """The learned ratio for this hour as it was *before* the most
+        recent sample came in - same principle as
+        `previous_hourly_avg_kw`, for the "previous vs current" trend
+        display. None if there are fewer than 2 samples.
+        """
+        values = self.pv_hourly_bias_history.get(hour)
+        if not values or len(values) < 2:
+            return None
+        previous_values = values[:-1]
+        return sum(previous_values) / len(previous_values)
 
     def raw_pv_hourly_avg(self, hour: int) -> float | None:
         """Same average as `learned_pv_hourly_ratio`, but without the

@@ -33,6 +33,10 @@ def _fake_state_attr(entity, attr):
             "profile_watts",
         ): {"0": 264, "9": 497, "23": 346},
         (
+            "sensor.woonkamer_energy_management_system_hourly_consumption_profile",
+            "previous_profile_watts",
+        ): {"0": 250, "9": 480},
+        (
             "sensor.energy_management_system_learned_night_consumption",
             "history_kw",
         ): [0.229, 0.407, 0.276],
@@ -48,6 +52,14 @@ def _fake_state_attr(entity, attr):
             "sensor.woonkamer_energy_management_system_pv_hourly_forecast_bias",
             "profile",
         ): {"6": 0.793, "9": 0.284, "20": 0.32},
+        (
+            "sensor.woonkamer_energy_management_system_pv_hourly_forecast_bias",
+            "previous_profile",
+        ): {"6": 0.750, "20": 0.35},
+        (
+            "sensor.woonkamer_energy_management_system_learned_battery_efficiency",
+            "history",
+        ): [92.9, 85.1, 85.3, 76.8, 76.7, 76.6, 88.2],
         (
             "sensor.energy_management_system_energy_bridge_check",
             "transition_log",

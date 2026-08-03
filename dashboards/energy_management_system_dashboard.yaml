@@ -42,21 +42,39 @@ views:
               green: 40
               yellow: 20
               red: 0
-          - type: custom:mushroom-template-card
-            primary: >-
-              {{
-              states('sensor.woonkamer_energy_management_system_learned_battery_efficiency')
-              }}{{ '%' if
-              states('sensor.woonkamer_energy_management_system_learned_battery_efficiency')
-              not in ['unknown', 'unavailable'] else '' }}
-            secondary: Geleerd rendement
-            icon: mdi:battery-sync
-            icon_color: >-
-              {{ 'green' if
-              states('sensor.woonkamer_energy_management_system_learned_battery_efficiency')
-              not in ['unknown', 'unavailable'] else 'grey' }}
+          - type: gauge
             entity: >-
               sensor.woonkamer_energy_management_system_learned_battery_efficiency
+            name: Geleerd rendement
+            min: 50
+            max: 100
+            severity:
+              green: 75
+              yellow: 60
+              red: 0
+
+      - type: markdown
+        content: >
+          {%- set history =
+          state_attr('sensor.woonkamer_energy_management_system_learned_battery_efficiency',
+          'history') or [] %}
+
+          {%- if history|length >= 2 %}
+
+          {%- set previous = history[-2] %}
+
+          {%- set current = history[-1] %}
+
+          {%- set diff = current - previous %}
+
+          Rendement {{ '↑' if diff > 0 else ('↓' if diff < 0 else '→') }} vorige
+          meting was {{ previous }}% ({{ '%+.1f'|format(diff) }} procentpunt)
+
+          {%- else %}
+
+          Nog niet genoeg metingen voor een trend
+
+          {%- endif %}
 
       - type: grid
         columns: 2
@@ -275,21 +293,16 @@ views:
         columns: 2
         square: false
         cards:
-          - type: custom:mushroom-template-card
-            primary: >-
-              {{
-              states('sensor.woonkamer_energy_management_system_learned_battery_efficiency')
-              }}{{ '%' if
-              states('sensor.woonkamer_energy_management_system_learned_battery_efficiency')
-              not in ['unknown', 'unavailable'] else '' }}
-            secondary: Geleerd accu-rendement
-            icon: mdi:battery-sync
-            icon_color: >-
-              {{ 'green' if
-              states('sensor.woonkamer_energy_management_system_learned_battery_efficiency')
-              not in ['unknown', 'unavailable'] else 'grey' }}
+          - type: gauge
             entity: >-
               sensor.woonkamer_energy_management_system_learned_battery_efficiency
+            name: Geleerd accu-rendement
+            min: 50
+            max: 100
+            severity:
+              green: 75
+              yellow: 60
+              red: 0
           - type: custom:mushroom-template-card
             primary: >-
               {{ states('sensor.energy_management_system_pv_forecast_accuracy')
@@ -303,6 +316,52 @@ views:
               states('sensor.energy_management_system_pv_forecast_accuracy') not
               in ['unknown', 'unavailable'] else 'grey' }}
             entity: sensor.energy_management_system_pv_forecast_accuracy
+
+      - type: markdown
+        content: >
+          {%- set eff_history =
+          state_attr('sensor.woonkamer_energy_management_system_learned_battery_efficiency',
+          'history') or [] %}
+
+          {%- if eff_history|length >= 2 %}
+
+          {%- set previous = eff_history[-2] %}
+
+          {%- set current = eff_history[-1] %}
+
+          {%- set diff = current - previous %}
+
+          **Rendement:** {{ '↑' if diff > 0 else ('↓' if diff < 0 else '→') }}
+          vorige meting was {{ previous }}% ({{ '%+.1f'|format(diff) }}
+          procentpunt)
+
+          {%- else %}
+
+          **Rendement:** nog niet genoeg metingen voor een trend
+
+          {%- endif %}
+
+
+          {%- set dev_history =
+          state_attr('sensor.energy_management_system_pv_forecast_accuracy',
+          'deviation_history') or [] %}
+
+          {%- if dev_history|length >= 2 %}
+
+          {%- set previous = dev_history[-2] %}
+
+          {%- set current = dev_history[-1] %}
+
+          {%- set diff = current - previous %}
+
+          **PV-afwijking:** {{ '↑' if diff > 0 else ('↓' if diff < 0 else '→') }}
+          vorige dag was {{ previous }}% ({{ '%+.1f'|format(diff) }} procentpunt)
+
+          {%- else %}
+
+          **PV-afwijking:** nog niet genoeg dagen voor een trend
+
+          {%- endif %}
 
       - type: grid
         columns: 2
@@ -339,17 +398,31 @@ views:
       - type: markdown
         title: Verbruiksprofiel per uur (W)
         content: >
-          | Uur | Verbruik |
+          | Uur | Verbruik | Verschil |
 
-          |---|---|
+          |---|---|---|
 
           {%- set profile =
           state_attr('sensor.woonkamer_energy_management_system_hourly_consumption_profile',
           'profile_watts') or {} %}
 
+          {%- set previous =
+          state_attr('sensor.woonkamer_energy_management_system_hourly_consumption_profile',
+          'previous_profile_watts') or {} %}
+
           {%- for hour in range(24) %}
 
-          | {{ '%02d:00' | format(hour) }} | {{ profile.get(hour|string, '—') }} W |
+          {%- set current_val = profile.get(hour|string) %}
+
+          {%- if current_val is not none %}
+
+          | {{ '%02d:00' | format(hour) }} | {{ current_val }} W | {%- set
+          prev_val = previous.get(hour|string) %}{%- if prev_val is not none
+          %} {% set diff = current_val - prev_val %}{{ '↑' if diff > 0 else
+          ('↓' if diff < 0 else '→') }} {{ '%+d'|format(diff) }} W{%- else %}
+          — {%- endif %} |
+
+          {%- endif %}
 
           {%- endfor %}
 
@@ -360,9 +433,9 @@ views:
           data heeft voor het huidige uur.
 
 
-          | Nacht | Gemiddelde |
+          | Nacht | Gemiddelde | Verschil |
 
-          |---|---|
+          |---|---|---|
 
           {%- set history_kw =
           state_attr('sensor.energy_management_system_learned_night_consumption',
@@ -371,16 +444,19 @@ views:
           {%- for v in history_kw %}
 
           | {{ loop.index }}{{ ' (meest recent)' if loop.last else '' }} | {{
-          (v * 1000) | round(0) | int }} W |
+          (v * 1000) | round(0) | int }} W | {%- if not loop.first %} {% set
+          diff = (v - history_kw[loop.index0 - 1]) * 1000 %}{{ '↑' if diff > 0
+          else ('↓' if diff < 0 else '→') }} {{ '%+.0f'|format(diff) }} W{%-
+          else %} — {%- endif %} |
 
           {%- endfor %}
 
       - type: markdown
         title: Solcast-voorspelling — nauwkeurigheid per dag
         content: >
-          | Dag | Afwijking |
+          | Dag | Afwijking | Verschil |
 
-          |---|---|
+          |---|---|---|
 
           {%- set deviations =
           state_attr('sensor.energy_management_system_pv_forecast_accuracy',
@@ -388,13 +464,16 @@ views:
 
           {%- for v in deviations %}
 
-          | {{ loop.index }}{{ ' (meest recent)' if loop.last else '' }} | {{ v }}% |
+          | {{ loop.index }}{{ ' (meest recent)' if loop.last else '' }} | {{ v }}%
+          | {%- if not loop.first %} {% set diff = v -
+          deviations[loop.index0 - 1] %}{{ '↑' if diff > 0 else ('↓' if diff <
+          0 else '→') }} {{ '%+.1f'|format(diff) }}pp{%- else %} — {%- endif %} |
 
           {%- endfor %}
 
           | **Geleerde bias (gemiddeld)** | **{{
           state_attr('sensor.energy_management_system_pv_forecast_accuracy',
-          'learned_bias_percent') }}%** |
+          'learned_bias_percent') }}%** | |
 
       - type: markdown
         title: PV-voorspelling bias per uur (werkelijk / voorspeld)
@@ -403,19 +482,29 @@ views:
           klopte; lager dan 1,0 betekent minder zon dan voorspeld.
 
 
-          | Uur | Ratio |
+          | Uur | Ratio | Verschil |
 
-          |---|---|
+          |---|---|---|
 
           {%- set bias =
           state_attr('sensor.woonkamer_energy_management_system_pv_hourly_forecast_bias',
           'profile') or {} %}
 
+          {%- set previous_bias =
+          state_attr('sensor.woonkamer_energy_management_system_pv_hourly_forecast_bias',
+          'previous_profile') or {} %}
+
           {%- for hour in range(24) %}
 
-          {%- if bias.get(hour|string) is not none %}
+          {%- set current_val = bias.get(hour|string) %}
 
-          | {{ '%02d:00' | format(hour) }} | {{ bias.get(hour|string) }} |
+          {%- if current_val is not none %}
+
+          | {{ '%02d:00' | format(hour) }} | {{ current_val }} | {%- set
+          prev_val = previous_bias.get(hour|string) %}{%- if prev_val is not
+          none %} {% set diff = current_val - prev_val %}{{ '↑' if diff > 0
+          else ('↓' if diff < 0 else '→') }} {{ '%+.3f'|format(diff) }}{%- else
+          %} — {%- endif %} |
 
           {%- endif %}
 

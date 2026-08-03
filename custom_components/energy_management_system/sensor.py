@@ -892,9 +892,18 @@ class HourlyConsumptionProfileSensor(SensorEntity, RestoreEntity):
         profile_watts = {
             hour: round(value * 1000) for hour, value in profile_kw.items()
         }
+        # The average as it was before the most recent sample - lets the
+        # dashboard show a "previous vs current" trend for what is
+        # otherwise a continuously-updating rolling average.
+        previous_profile_watts = {
+            str(hour): round(self._coordinator.previous_hourly_avg_kw(hour) * 1000)
+            for hour in range(24)
+            if self._coordinator.previous_hourly_avg_kw(hour) is not None
+        }
         return {
             "profile": profile_kw,
             "profile_watts": profile_watts,
+            "previous_profile_watts": previous_profile_watts,
             "hours_with_data": len(profile_kw),
         }
 
@@ -965,9 +974,18 @@ class PvHourlyBiasSensor(SensorEntity, RestoreEntity):
             for hour in range(24)
             if self._coordinator.learned_pv_hourly_ratio(hour) is not None
         }
+        # The ratio as it was before the most recent sample - lets the
+        # dashboard show a "previous vs current" trend, same principle as
+        # HourlyConsumptionProfileSensor.previous_profile_watts.
+        previous_profile = {
+            str(hour): round(self._coordinator.previous_pv_hourly_ratio(hour), 3)
+            for hour in range(24)
+            if self._coordinator.previous_pv_hourly_ratio(hour) is not None
+        }
         return {
             "profile": profile,
             "profile_confident": profile_confident,
+            "previous_profile": previous_profile,
             "hours_with_data": len(profile),
             "hours_with_confident_data": len(profile_confident),
         }

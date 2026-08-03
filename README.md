@@ -2172,3 +2172,54 @@ haalt en controleert op (a) geen lege regels tussen tabelrijen, en (b)
 header en scheidingslijn altijd op eigen, opeenvolgende regels. Dit
 voorkomt dat deze specifieke, subtiele fout ooit nog terugkeert bij een
 toekomstige dashboard-wijziging.
+
+## v0.53.4 — gauge terug voor Geleerd rendement (op eigen verzoek)
+
+**Herstart-vraag beantwoord (geen codewijziging):** onderzocht en
+bevestigd — een volledige HA-herstart bij elke code-update is een
+fundamentele eigenschap van hoe Python module-caching werkt in
+combinatie met HACS, en geldt voor vrijwel elke custom integratie in
+het hele ecosysteem. "Herladen" ververst alleen de configuratie, niet de
+Python-code zelf. Dit is niet iets wat vanuit deze (of enige andere)
+integratie op te lossen is.
+
+**Gauge teruggezet** voor "Geleerd rendement" (Overzicht + Zelflerend),
+op expliciet verzoek — bewust terug naar de ronde-meter-look, met het
+kleine, geaccepteerde risico dat deze kaart tijdelijk kan crashen bij een
+gloednieuwe installatie (vóórdat er 3 rendementsmetingen zijn
+verzameld). Bij een bestaande installatie met al voldoende data (zoals
+deze) speelt dat risico niet.
+
+## v0.54.0 — vorige waarde, procentueel verschil en trendpijl (Zelflerend-tabblad)
+
+**Aanleiding:** de wens om voor de zelflerende cijfers de vorige waarde,
+het verschil en een pijl (↑/↓/→) te zien.
+
+**Drie sensoren hadden al een expliciete geschiedenis-lijst — direct
+uitgebreid, zonder Python-wijzigingen:**
+- **Geleerd rendement** — nieuwe trend-tekstkaart naast de gauge
+  (Overzicht + Zelflerend), gebruikt de bestaande `history`-lijst.
+- **Solcast-nauwkeurigheid per dag** — nieuwe "Verschil"-kolom in de
+  tabel (procentpunt-verschil met de vorige dag).
+- **Nachtvenster-gemiddelde** — nieuwe "Verschil"-kolom (W-verschil met
+  de vorige nacht).
+
+**Twee sensoren waren doorlopend bijgewerkte voortschrijdende
+gemiddelden zonder los "vorige waarde"-concept — hiervoor is een kleine
+Python-uitbreiding gebouwd:**
+- Nieuwe coordinator-methoden `previous_hourly_avg_kw(hour)` en
+  `previous_pv_hourly_ratio(hour)` — berekenen het gemiddelde
+  **exclusief** de meest recente meting, zodat er alsnog een zinvolle
+  "vorige waarde" is om mee te vergelijken.
+- Nieuwe sensor-attributen `previous_profile_watts`
+  (verbruiksprofiel-sensor) en `previous_profile` (PV-bias-sensor).
+- Beide tabellen (Verbruiksprofiel per uur, PV-bias per uur) hebben nu
+  ook een "Verschil"-kolom.
+
+**Getest:** 4 nieuwe permanente tests voor de nieuwe helper-methoden,
+plus alle dashboard-tabellen opnieuw end-to-end (YAML+Jinja) gevalideerd
+met de uitgebreide testdata.
+
+**Bijwerking:** de tabellen voor verbruiksprofiel-per-uur en
+PV-bias-per-uur tonen nu alleen uren **met** data (geen "—"-plaatshouder
+meer voor lege uren) — logischer nu er ook een verschil-kolom bij komt.
