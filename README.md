@@ -2439,3 +2439,24 @@ bij ruime headroom, niet gebruikt als de headroom al nodig is voor de
 échte piek, nooit van toepassing onder de secundaire drempel zelf (ook
 niet bij extreem veel headroom), en spare headroom is terecht 0 als de
 primaire laag alles al opeist.
+
+## v0.58.1 — planningstabel toont nu ook de secundaire prijslaag
+
+**Gevonden bij analyse van een verse diagnostiek-export:** de secundaire
+laag (v0.58.0) werkte correct in de **live beslissing** (bevestigd:
+`last_reason: expensive_quarter` tijdens het huidige kwartier), maar de
+**planningstabel** (Overzicht komende uren) bleef toekomstige
+secundaire-laag-kwartieren tonen als "smart" — omdat
+`_build_forecast_timeline` alleen ooit de primaire drempel checkte, nooit
+de secundaire laag of de spare headroom die daarna overblijft.
+
+**Fix:** dezelfde spare-headroom-simulatie die de live beslissing al
+gebruikt, is nu ook in de planningsprojectie ingebouwd. Na het simuleren
+van de primaire-laag-kwartieren per dag, wordt eventuele resterende
+headroom nu ook besteed aan secundaire-laag-kwartieren, in dezelfde
+prijs-prioriteit-volgorde.
+
+**Getest** (1 nieuwe permanente test, exact het gerapporteerde scenario
+nagebouwd): de planning toont nu correct extra "manual"-kwartieren rond
+de piek (20:15-20:45, eerder onterecht "smart"), naast het bestaande
+piek-kwartier zelf.

@@ -2646,6 +2646,40 @@ class EnergyManagementSystemCoordinator:
                     simulated_available -= (
                         discharge_power_w / 1000
                     ) * duration_hours
+
+                # Secondary tier: if there's spare headroom left over
+                # after the primary-tier candidates above, extend
+                # eligibility to the wider, more lenient secondary
+                # threshold too - same principle as the live decision's
+                # _is_worth_discharging_at_secondary_tier (v0.58.0), so
+                # the displayed schedule matches what will actually
+                # happen instead of only reflecting the secondary tier
+                # for "now" and showing 'smart' for identical future
+                # quarters.
+                if simulated_available > reserve_kwh:
+                    secondary_threshold = self._price_threshold_for_entries(
+                        day_entries,
+                        fraction_override=SECONDARY_EXPENSIVE_PRICE_THRESHOLD_FRACTION,
+                    )
+                    if secondary_threshold is not None:
+                        secondary_candidates = [
+                            e
+                            for e in day_entries
+                            if secondary_threshold <= e[2] < threshold
+                        ]
+                        secondary_candidates.sort(
+                            key=lambda e: e[2], reverse=True
+                        )
+                        for candidate in secondary_candidates:
+                            if simulated_available <= reserve_kwh:
+                                break
+                            makes_the_cut.add(candidate[0])
+                            duration_hours = (
+                                candidate[1] - candidate[0]
+                            ).total_seconds() / 3600
+                            simulated_available -= (
+                                discharge_power_w / 1000
+                            ) * duration_hours
         else:
             # No energy context available - every price-qualifying quarter
             # makes the cut (old behaviour, price-only projection).
@@ -2665,7 +2699,13 @@ class EnergyManagementSystemCoordinator:
             entry_date = entry[0].date()
             day_entries = by_date[entry_date]
             threshold = self._price_threshold_for_entries(day_entries)
-            price_qualifies = threshold is not None and entry[2] >= threshold
+            secondary_threshold = self._price_threshold_for_entries(
+                day_entries,
+                fraction_override=SECONDARY_EXPENSIVE_PRICE_THRESHOLD_FRACTION,
+            )
+            price_qualifies = (threshold is not None and entry[2] >= threshold) or (
+                secondary_threshold is not None and entry[2] >= secondary_threshold
+            )
             is_expensive = price_qualifies and entry[0] in makes_the_cut
 
             is_current_interval = entry[0] <= now < entry[1]
