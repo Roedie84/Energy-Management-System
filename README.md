@@ -2145,3 +2145,30 @@ functioneel, maar niet overzichtelijk.
   bias als laatste, vetgedrukte rij.
 - **PV-voorspelling bias per uur** — alleen uren met data (dus geen lege
   nachtelijke rijen), met een korte uitleg wat de ratio betekent.
+
+## v0.53.3 — tabellen echt gefixt (YAML-vouwing + Jinja bleek subtieler dan gedacht)
+
+**Wat er misging in v0.53.2:** het "verwijderen van lege regels" om de
+tabellen compact te maken, brak ze juist volledig — YAML's `>`-vouwstijl
+voegt opeenvolgende niet-lege regels samen met een **spatie**, niet een
+newline. Zonder lege regels smolten header, scheidingslijn en elke rij
+samen tot bijna één lange regel, wat Markdown niet meer als tabel
+herkent.
+
+**Correcte oplossing, nu daadwerkelijk end-to-end getest (YAML-parse
+gevolgd door Jinja-rendering, exact zoals Home Assistant het doet):**
+precies één lege regel op elk punt waar één newline nodig is,
+gecombineerd met Jinja's `{%- %}`-whitespace-controle om de eigen
+newlines van de `{% for %}`/`{% endfor %}`-tags weg te snijden.
+
+**Bonus: hierbij ook twee tabellen op het Geschiedenis-tabblad gevonden
+en gefixt** (transitielogboek en verwacht-schema) die **dezelfde**
+onderliggende fout al hadden, nog van vóór dit gesprek — mijn nieuwe
+test vond dit automatisch.
+
+**Nieuw: permanente test (`tests/test_dashboard_tables.py`)** die elke
+markdown-tabel in het dashboard door de volledige YAML+Jinja-pijplijn
+haalt en controleert op (a) geen lege regels tussen tabelrijen, en (b)
+header en scheidingslijn altijd op eigen, opeenvolgende regels. Dit
+voorkomt dat deze specifieke, subtiele fout ooit nog terugkeert bij een
+toekomstige dashboard-wijziging.

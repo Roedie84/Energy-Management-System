@@ -339,19 +339,19 @@ views:
       - type: markdown
         title: Verbruiksprofiel per uur (W)
         content: >
-          | Uur | Verbruik (W) |
+          | Uur | Verbruik |
+
           |---|---|
 
-          {% set profile =
+          {%- set profile =
           state_attr('sensor.woonkamer_energy_management_system_hourly_consumption_profile',
           'profile_watts') or {} %}
 
-          {% for hour in range(24) %}
+          {%- for hour in range(24) %}
 
-          | {{ '%02d:00' | format(hour) }} | {{ profile.get(hour|string, '—')
-          }} |
+          | {{ '%02d:00' | format(hour) }} | {{ profile.get(hour|string, '—') }} W |
 
-          {% endfor %}
+          {%- endfor %}
 
       - type: markdown
         title: Nachtvenster-gemiddelde (laatste 7 nachten, W)
@@ -359,36 +359,38 @@ views:
           Legacy fallback — alleen gebruikt als het uur-profiel hierboven geen
           data heeft voor het huidige uur.
 
-          | Nacht | Gemiddelde (W) |
+
+          | Nacht | Gemiddelde |
+
           |---|---|
 
-          {% set history_kw =
+          {%- set history_kw =
           state_attr('sensor.energy_management_system_learned_night_consumption',
           'history_kw') or [] %}
 
-          {% for v in history_kw %}
+          {%- for v in history_kw %}
 
           | {{ loop.index }}{{ ' (meest recent)' if loop.last else '' }} | {{
-          (v * 1000) | round }} |
+          (v * 1000) | round(0) | int }} W |
 
-          {% endfor %}
+          {%- endfor %}
 
       - type: markdown
         title: Solcast-voorspelling — nauwkeurigheid per dag
         content: >
-          | Dag | Afwijking (%) |
+          | Dag | Afwijking |
+
           |---|---|
 
-          {% set deviations =
+          {%- set deviations =
           state_attr('sensor.energy_management_system_pv_forecast_accuracy',
           'deviation_history') or [] %}
 
-          {% for v in deviations %}
+          {%- for v in deviations %}
 
-          | {{ loop.index }}{{ ' (meest recent)' if loop.last else '' }} | {{ v
-          }}% |
+          | {{ loop.index }}{{ ' (meest recent)' if loop.last else '' }} | {{ v }}% |
 
-          {% endfor %}
+          {%- endfor %}
 
           | **Geleerde bias (gemiddeld)** | **{{
           state_attr('sensor.energy_management_system_pv_forecast_accuracy',
@@ -400,22 +402,24 @@ views:
           Een ratio van 1,0 betekent dat de voorspelling voor dat uur precies
           klopte; lager dan 1,0 betekent minder zon dan voorspeld.
 
+
           | Uur | Ratio |
+
           |---|---|
 
-          {% set bias =
+          {%- set bias =
           state_attr('sensor.woonkamer_energy_management_system_pv_hourly_forecast_bias',
           'profile') or {} %}
 
-          {% for hour in range(24) %}
+          {%- for hour in range(24) %}
 
-          {% if bias.get(hour|string) is not none %}
+          {%- if bias.get(hour|string) is not none %}
 
           | {{ '%02d:00' | format(hour) }} | {{ bias.get(hour|string) }} |
 
-          {% endif %}
+          {%- endif %}
 
-          {% endfor %}
+          {%- endfor %}
 
   - title: Apparaten
     path: apparaten
@@ -471,9 +475,10 @@ views:
         title: Overgangen energie-check (logboek)
         content: >
           | Tijdstip | Beslissing | Beschikbaar | Benodigd | Doel-goedkoop-blok |
+
           |---|---|---|---|---|
 
-          {% for entry in
+          {%- for entry in
           state_attr('sensor.energy_management_system_energy_bridge_check',
           'transition_log') | default([]) | reverse %}
 
@@ -485,13 +490,15 @@ views:
           timestamp_custom('%a %H:%M')) if entry.get('cheap_block_start') else
           'onbekend' }} |
 
-          {% endfor %}
+          {%- endfor %}
       - type: markdown
         title: Overzicht komende uren (verwacht schema)
         content: >
-          | Van | Tot | Modus | Prijsrange | |---|---|---|---|
+          | Van | Tot | Modus | Prijsrange |
 
-          {% for block in
+          |---|---|---|---|
+
+          {%- for block in
           state_attr('sensor.energy_management_system_upcoming_schedule',
           'transitions') | default([]) %}
 
@@ -502,7 +509,7 @@ views:
           }} | {{ '%.4f'|format(block.get('min_price_per_kwh', 0)) }} - {{
           '%.4f'|format(block.get('max_price_per_kwh', 0)) }} €/kWh |
 
-          {% endfor %}
+          {%- endfor %}
       - type: history-graph
         title: Verwachte vs. werkelijke modus over tijd
         hours_to_show: 48
