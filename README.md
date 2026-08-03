@@ -2075,3 +2075,39 @@ vóórdat je een nieuwe versie installeert.
 Getest (2 bijgewerkte permanente tests): het sjabloon wordt zowel
 geplaatst als het ontbreekt, als overschreven als er al iets anders
 staat.
+
+## v0.53.0 — dashboard: naam-fix, read-only modus/vermogenslimiet, robuustere tabel, alle tabbladen gemoderniseerd
+
+**Naam-fix:** `sensor.energy_management_system_system_status` →
+`sensor.woonkamer_energy_management_system_system_status`.
+
+**Modus-tegel en vermogenslimiet nu duidelijk alleen-lezen.** De
+"Werkelijke modus (Zendure)"-tegel toonde voorheen ook een aparte,
+interactieve dropdown (`mushroom-select-card`) waarmee je de modus zelf
+kon wijzigen — verwarrend, aangezien de integratie dit volledig zelf
+regelt. Die losse dropdown is verwijderd; de tegel zelf heeft nu
+`tap_action`/`hold_action: none` zodat die niet meer per ongeluk aan te
+klikken is. Zelfde behandeling voor de zonnepaneel-vermogenslimiet: was
+een interactieve schuifregelaar, nu een platte weergave-tegel.
+
+**Transitielog-tabel robuuster tegen oude/ontbrekende velden.** Gebruikt
+nu `.get(...)` met standaardwaarden voor elk veld, zodat een oudere,
+onvolledige logboek-vermelding (van vóór een sensortoevoeging) de hele
+tabel niet meer kan laten crashen.
+
+**Overige vier tabbladen gemoderniseerd** naar dezelfde
+Mushroom-tegel-stijl als het Overzicht-tabblad:
+- **Financieel**: gauges/tegels voor totaalwaarden, een 3-koloms-raster
+  voor vandaag/week/maand (ontladen én netladen), tegels voor
+  tekort-/overschot-dagen (met kleurindicatie).
+- **Zelflerend**: gauges voor rendement en PV-afwijking, tegels voor
+  verbruiksprofiel/nachtvenster/PV-bias.
+- **Apparaten**: tegels voor typische gebruiksuren per apparaat.
+- **Geschiedenis**: titel-kaart toegevoegd, logboek-/schema-tabellen en
+  geschiedenis-grafieken ongewijzigd qua functie, wel robuuster.
+
+**Ter info, uit de gedeelde logmelding:** de meeste getoonde
+sjabloonfouten (vaatwasser/wasmachine Home Connect-kaarten,
+slaapkamertemperatuur-styling) horen bij je **andere**, losse
+dashboard-kaarten — niet bij deze integratie. Gecontroleerd: geen van
+die entiteiten komt voor in ons dashboard-bestand.
