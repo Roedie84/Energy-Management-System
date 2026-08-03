@@ -29,6 +29,19 @@ cards:
         name: Vakantiemodus (lager verbruik aannemen, leren pauzeren)
 
   - type: entities
+    title: Apparaten (informatief — geen aansturing)
+    entities:
+      - entity: sensor.energy_management_system_dishwasher_last_notification
+        name: Vaatwasser — laatste melding
+      - entity: sensor.energy_management_system_dishwasher_typical_usage_hours
+        name: Vaatwasser — aantal typische gebruiksuren
+      - type: divider
+      - entity: sensor.energy_management_system_washing_machine_last_notification
+        name: Wasmachine — laatste melding
+      - entity: sensor.energy_management_system_washing_machine_typical_usage_hours
+        name: Wasmachine — aantal typische gebruiksuren
+
+  - type: entities
     title: Nu — live status
     entities:
       - entity: sensor.solarflow_2400_ac_electric_level

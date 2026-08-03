@@ -21,6 +21,11 @@ from .const import (
     DEFAULT_BATTERY_ROUND_TRIP_EFFICIENCY_PERCENT,
     CONF_VACATION_CONSUMPTION_REDUCTION_PERCENT,
     DEFAULT_VACATION_CONSUMPTION_REDUCTION_PERCENT,
+    CONF_DISHWASHER_POWER_SENSOR,
+    CONF_DISHWASHER_READY_SENSOR,
+    CONF_WASHING_MACHINE_POWER_SENSOR,
+    CONF_WASHING_MACHINE_READY_SENSOR,
+    CONF_APPLIANCE_NOTIFY_SERVICE,
     CONF_MANUAL_DISCHARGE_POWER,
     CONF_MANUAL_POWER_NUMBER,
     CONF_MIN_SOC_PERCENT,
@@ -129,6 +134,30 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
                     min=0, max=100, step=5, mode=selector.NumberSelectorMode.BOX
                 )
             ),
+            vol.Optional(
+                CONF_DISHWASHER_POWER_SENSOR,
+                default=defaults.get(CONF_DISHWASHER_POWER_SENSOR),
+            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            vol.Optional(
+                CONF_DISHWASHER_READY_SENSOR,
+                default=defaults.get(CONF_DISHWASHER_READY_SENSOR),
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="binary_sensor")
+            ),
+            vol.Optional(
+                CONF_WASHING_MACHINE_POWER_SENSOR,
+                default=defaults.get(CONF_WASHING_MACHINE_POWER_SENSOR),
+            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            vol.Optional(
+                CONF_WASHING_MACHINE_READY_SENSOR,
+                default=defaults.get(CONF_WASHING_MACHINE_READY_SENSOR),
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="binary_sensor")
+            ),
+            vol.Optional(
+                CONF_APPLIANCE_NOTIFY_SERVICE,
+                default=defaults.get(CONF_APPLIANCE_NOTIFY_SERVICE, ""),
+            ): str,
             vol.Optional(
                 CONF_EXPENSIVE_QUARTERS_COUNT,
                 default=defaults.get(

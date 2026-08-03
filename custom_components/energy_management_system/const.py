@@ -15,6 +15,15 @@ CONF_NEGATIVE_PRICE_CHARGE_POWER = "negative_price_charge_power"
 CONF_SOLAR_POWER_LIMIT_ENTITY = "solar_power_limit_entity"
 CONF_BATTERY_ROUND_TRIP_EFFICIENCY = "battery_round_trip_efficiency_percent"
 CONF_VACATION_CONSUMPTION_REDUCTION_PERCENT = "vacation_consumption_reduction_percent"
+
+# Optional appliance-awareness (informational learning + a "ready to
+# start, and it's cheap now" notification - never controls the
+# appliance itself).
+CONF_DISHWASHER_POWER_SENSOR = "dishwasher_power_sensor_entity"
+CONF_DISHWASHER_READY_SENSOR = "dishwasher_ready_sensor_entity"
+CONF_WASHING_MACHINE_POWER_SENSOR = "washing_machine_power_sensor_entity"
+CONF_WASHING_MACHINE_READY_SENSOR = "washing_machine_ready_sensor_entity"
+CONF_APPLIANCE_NOTIFY_SERVICE = "appliance_notify_service"
 CONF_SOLAR_FORECAST_SENSOR = "solar_forecast_sensor_entity"
 CONF_SOLAR_TODAY_FORECAST_SENSOR = "solar_today_forecast_sensor_entity"
 CONF_SOLAR_REMAINING_TODAY_SENSOR = "solar_remaining_today_sensor_entity"
@@ -108,6 +117,24 @@ DEFAULT_BATTERY_ROUND_TRIP_EFFICIENCY_PERCENT = 90.0
 # a lot by household (some appliances still run, heating/cooling may
 # still be needed), so this errs on the side of not under-reserving.
 DEFAULT_VACATION_CONSUMPTION_REDUCTION_PERCENT = 60.0
+
+# A power reading above this (W) counts as "the appliance is actively
+# running" for usage-pattern learning and the ready-to-start check.
+# Deliberately above typical standby draw (a few W) to avoid false
+# positives from an idle-but-powered appliance.
+APPLIANCE_RUNNING_POWER_THRESHOLD_W = 15.0
+
+# Smoothing for the live-consumption correction (see
+# _get_smoothed_consumption_correction_ratio): average over this many
+# recent samples (at the ~5 minute update interval, this is roughly
+# 15-25 minutes) instead of a single instantaneous reading, so a brief
+# spike doesn't scale a 15+ hour reserve estimate to an absurd value.
+CONSUMPTION_CORRECTION_SMOOTHING_SAMPLES = 4
+
+# Even after smoothing, cap the correction ratio at this multiple of the
+# learned average - an uncapped ratio beyond this is more likely a
+# sensor glitch than a genuine sustained change like the airco running.
+MAX_CONSUMPTION_CORRECTION_RATIO = 5.0
 
 # Minimum cumulative charged energy (kWh) before computing a new
 # efficiency sample - avoids noisy estimates from tiny amounts of energy

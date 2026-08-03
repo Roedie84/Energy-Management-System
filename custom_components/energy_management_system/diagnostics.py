@@ -236,6 +236,25 @@ async def async_get_config_entry_diagnostics(
             "last_current_price_per_kwh": coordinator.last_current_price_per_kwh,
             "last_projection_available_kwh": coordinator.last_projection_available_kwh,
             "last_projection_reserve_kwh": coordinator.last_projection_reserve_kwh,
+            "vacation_mode": coordinator.vacation_mode,
+            "dishwasher_usage_hours_with_data": len(
+                coordinator.dishwasher_usage_hourly_history
+            ),
+            "dishwasher_typical_usage_hours": coordinator.learned_appliance_usage_hours(
+                coordinator.dishwasher_usage_hourly_history
+            ),
+            "last_dishwasher_notification": coordinator.last_dishwasher_notification,
+            "washing_machine_usage_hours_with_data": len(
+                coordinator.washing_machine_usage_hourly_history
+            ),
+            "washing_machine_typical_usage_hours": (
+                coordinator.learned_appliance_usage_hours(
+                    coordinator.washing_machine_usage_hourly_history
+                )
+            ),
+            "last_washing_machine_notification": (
+                coordinator.last_washing_machine_notification
+            ),
             "last_expected_mode": coordinator.last_expected_mode,
             "last_simulated_action": coordinator.last_simulated_action,
             "last_is_expensive": coordinator.last_is_expensive,

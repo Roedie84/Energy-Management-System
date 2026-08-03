@@ -1803,3 +1803,79 @@ aan.
 meting — sommige apparaten (koelkast, eventuele verwarming/koeling)
 blijven wel verbruiken tijdens vakantie. De standaard 60% is bewust
 conservatief; pas 'm aan als je eigen situatie sterk afwijkt.
+
+## v0.47.0 — apparaat-bewustzijn (vaatwasser & wasmachine, puur informatief)
+
+**Aanleiding:** het eerder gedeelde overzicht van apparaat-entiteiten
+(`ems_apparaat_entiteiten_overzicht.md`) — drie gekozen vervolgstappen:
+een dashboard-kaart, verbruikspatroon-leren, en actieve meldingen.
+
+**Belangrijk: niets hiervan stuurt een apparaat aan.** Alles is puur
+informatief/adviserend.
+
+### 1. Nieuwe optionele config-velden
+`Vaatwasser vermogen-sensor`, `Vaatwasser "klaar om te starten"-sensor`,
+zelfde twee voor de wasmachine, en een optionele `Notify-service` (leeg =
+gewone HA-pop-up-melding).
+
+### 2. Verbruikspatroon-leren per apparaat
+Nieuwe sensoren **`sensor.dishwasher_typical_usage_hours`** en
+**`sensor.washing_machine_typical_usage_hours`** — houden per uur van de
+dag bij hoe vaak dit apparaat actief is, en tonen de uren waarin dat
+"typisch" is (≥15% van de tijd). Compact opgeslagen (samengevat per uur,
+niet de ruwe metingen) om de eerder gevonden 16KB-attribuutlimiet
+(v0.40.2) niet opnieuw te raken. Wordt **gepauzeerd tijdens vakantiemodus**
+(v0.46.0), net als het huishoud-verbruiksprofiel.
+
+### 3. Eén melding per dag, op het juiste moment
+Zodra een apparaat klaarstaat om te starten (via de "klaar"-sensor) én
+we ons momenteel in het goedkoopste prijsblok van de dag bevinden, stuurt
+de integratie **één keer per dag per apparaat** een melding — via een HA-
+pop-up (standaard) of een eigen notify-service. Geen melding als het
+apparaat al draait, en geen dubbele meldingen dezelfde dag.
+
+**Getest (13 nieuwe permanente tests):** geen melding buiten het
+goedkoopste blok, wél erbinnen, geen dubbele melding, geen melding bij
+een al-draaiend apparaat, correcte per-uur-tracking, pauzeren tijdens
+vakantiemodus, en een correcte "typische uren"-berekening op basis van
+frequentie.
+
+**Bonus: de structurele-integriteitstest zelf is verbeterd** om ook
+sensoren met extra constructor-argumenten (zoals deze twee) te dekken —
+dat gat zou anders deze nieuwe sensoren ongetest hebben gelaten.
+
+Dashboard bijgewerkt met een nieuwe "Apparaten"-kaart en de
+vakantiemodus-schakelaar.
+
+## v0.48.0 — live-verbruikscorrectie gedempt (alsnog gebouwd)
+
+**Aanleiding:** een gebruiker zag `select.zendure_manager_operation`
+binnen 30-50 seconden twee keer wisselen (Slim ontladen ↔ Slimme
+Matching), en apart daarvan een absurd hoog basisverbruik (17,4 kWh)
+in de live-uitleg. Beide bleken hetzelfde onderliggende probleem: de
+live-verbruikscorrectie (v0.29.0/v0.43.1) gebruikte één momentane
+meting, die door een korte piek de **hele** resterende schatting (soms
+15+ uur) kon opblazen — precies het scenario dat we eerder al
+signaleerden (de 33,5→0,4 kWh-sprong) maar destijds bewust niet
+aanpakten.
+
+**Fix — nu wel gebouwd, met twee lagen bescherming:**
+1. **Demping via een glijdend gemiddelde**: in plaats van één meting
+   gebruiken we het gemiddelde van de laatste 4 metingen (~15-20
+   minuten bij de huidige 5-minuten-cyclus). Eén korte piek tussen
+   normale metingen wordt daardoor sterk afgevlakt.
+2. **Bovengrens op de correctiefactor**: zelfs na demping wordt de
+   factor nooit hoger dan **5x** — een grotere afwijking is
+   vrijwel zeker een sensor-hapering, geen echte structurele verandering.
+
+**Blijft volledig responsief voor een echte, aanhoudende verandering**
+(bv. de airco die een tijd aan blijft staan) — dat wordt nog steeds
+correct met de volle factor doorberekend, alleen een kortstondige piek
+niet meer.
+
+Getest (nu ook permanent, 4 nieuwe/bijgewerkte tests): één korte piek
+(900W tussen normale metingen) werd gedempt van een rauwe 3x naar 1,5x;
+een aanhoudende verhoging bleef volledig responsief op 3x; een extreme
+uitschieter (9000W, vermoedelijk een glitch) werd via demping al
+teruggebracht van 30x naar 8,25x, en vervolgens afgetopt op de
+maximale 5x.

@@ -27,7 +27,12 @@
           "negative_price_charge_power": "Charge power at negative price (W, negative = charging)",
           "solar_power_limit_entity": "Solar panel power limit slider (e.g. number.solaredge_i1_active_power_limit)",
           "battery_round_trip_efficiency_percent": "Battery round-trip efficiency (%) - for the PV offset in the reserve calculation",
-          "vacation_consumption_reduction_percent": "Vacation consumption reduction (%) - how much lower than normal during vacation mode"
+          "vacation_consumption_reduction_percent": "Vacation consumption reduction (%) - how much lower than normal during vacation mode",
+          "dishwasher_power_sensor_entity": "Dishwasher power sensor (optional)",
+          "dishwasher_ready_sensor_entity": "Dishwasher \"ready to start\" sensor (optional)",
+          "washing_machine_power_sensor_entity": "Washing machine power sensor (optional)",
+          "washing_machine_ready_sensor_entity": "Washing machine \"ready to start\" sensor (optional)",
+          "appliance_notify_service": "Notify service for appliance notifications (empty = HA popup)"
         }
       }
     },
@@ -62,7 +67,12 @@
           "negative_price_charge_power": "Charge power at negative price (W, negative = charging)",
           "solar_power_limit_entity": "Solar panel power limit slider (e.g. number.solaredge_i1_active_power_limit)",
           "battery_round_trip_efficiency_percent": "Battery round-trip efficiency (%) - for the PV offset in the reserve calculation",
-          "vacation_consumption_reduction_percent": "Vacation consumption reduction (%) - how much lower than normal during vacation mode"
+          "vacation_consumption_reduction_percent": "Vacation consumption reduction (%) - how much lower than normal during vacation mode",
+          "dishwasher_power_sensor_entity": "Dishwasher power sensor (optional)",
+          "dishwasher_ready_sensor_entity": "Dishwasher \"ready to start\" sensor (optional)",
+          "washing_machine_power_sensor_entity": "Washing machine power sensor (optional)",
+          "washing_machine_ready_sensor_entity": "Washing machine \"ready to start\" sensor (optional)",
+          "appliance_notify_service": "Notify service for appliance notifications (empty = HA popup)"
         }
       }
     }

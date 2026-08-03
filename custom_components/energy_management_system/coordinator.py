@@ -63,6 +63,14 @@ from .const import (
     CONF_VACATION_CONSUMPTION_REDUCTION_PERCENT,
     DEFAULT_VACATION_CONSUMPTION_REDUCTION_PERCENT,
     DEFAULT_BATTERY_ROUND_TRIP_EFFICIENCY_PERCENT,
+    CONF_DISHWASHER_POWER_SENSOR,
+    CONF_DISHWASHER_READY_SENSOR,
+    CONF_WASHING_MACHINE_POWER_SENSOR,
+    CONF_WASHING_MACHINE_READY_SENSOR,
+    CONF_APPLIANCE_NOTIFY_SERVICE,
+    APPLIANCE_RUNNING_POWER_THRESHOLD_W,
+    CONSUMPTION_CORRECTION_SMOOTHING_SAMPLES,
+    MAX_CONSUMPTION_CORRECTION_RATIO,
     MIN_CHARGED_KWH_FOR_EFFICIENCY_SAMPLE,
     MIN_PLAUSIBLE_EFFICIENCY_PERCENT,
     MAX_PLAUSIBLE_EFFICIENCY_PERCENT,
@@ -168,6 +176,23 @@ class EnergyManagementSystemCoordinator:
         # from live consumption data, so the vacation period doesn't
         # pollute the learned "normal" profile. Set via a dedicated switch.
         self.vacation_mode: bool = False
+        # Rolling buffer of recent live consumption readings (kW), used
+        # to smooth the live-consumption correction (see
+        # _get_smoothed_consumption_correction_ratio) against brief
+        # spikes.
+        self._recent_consumption_readings_kw: list[float] = []
+
+        # -- Optional appliance awareness (informational only) --
+        # Per hour-of-day, a rolling history of samples (1.0 = was
+        # actively running, 0.0 = not) - used to learn which hours this
+        # appliance is typically used, purely for insight (nothing here
+        # ever controls the appliance itself).
+        self.dishwasher_usage_hourly_history: dict[int, list[float]] = {}
+        self.washing_machine_usage_hourly_history: dict[int, list[float]] = {}
+        self._dishwasher_notified_date: date | None = None
+        self._washing_machine_notified_date: date | None = None
+        self.last_dishwasher_notification: str | None = None
+        self.last_washing_machine_notification: str | None = None
 
         self.last_reason: str | None = None
         self.last_cheap_block_start: datetime | None = None
@@ -807,6 +832,196 @@ class EnergyManagementSystemCoordinator:
             self.learned_efficiency_history
         )
 
+    def _update_single_appliance_usage_tracking(
+        self, now: datetime, power_entity: str | None, history: dict[int, list[float]]
+    ) -> None:
+        """Record one sample (running / not running) for the current
+        hour-of-day, for a single appliance. Purely informational - never
+        used to control anything."""
+        if not power_entity:
+            return
+        power_w = self._read_sensor_float(power_entity)
+        if power_w is None:
+            return
+        sample = 1.0 if power_w >= APPLIANCE_RUNNING_POWER_THRESHOLD_W else 0.0
+        bucket = history.setdefault(now.hour, [])
+        bucket.append(sample)
+        if len(bucket) > 500:  # keep it bounded - many samples/day add up over weeks
+            del bucket[: len(bucket) - 500]
+
+    def _update_appliance_usage_tracking(self, now: datetime) -> None:
+        if self.vacation_mode:
+            return  # atypical period - don't let it skew the learned pattern
+        self._update_single_appliance_usage_tracking(
+            now,
+            self.config.get(CONF_DISHWASHER_POWER_SENSOR),
+            self.dishwasher_usage_hourly_history,
+        )
+        self._update_single_appliance_usage_tracking(
+            now,
+            self.config.get(CONF_WASHING_MACHINE_POWER_SENSOR),
+            self.washing_machine_usage_hourly_history,
+        )
+
+    def learned_appliance_usage_hours(
+        self, history: dict[int, list[float]], threshold: float = 0.15
+    ) -> list[int]:
+        """Hours of the day (0-23) where this appliance is typically
+        active at least `threshold` fraction of the time, sorted.
+        Informational only.
+        """
+        typical_hours = []
+        for hour, samples in history.items():
+            if not samples:
+                continue
+            if sum(samples) / len(samples) >= threshold:
+                typical_hours.append(hour)
+        return sorted(typical_hours)
+
+    def _check_and_notify_appliance_ready(
+        self,
+        now: datetime,
+        is_currently_cheapest_block: bool,
+    ) -> None:
+        """If an appliance is ready to start (and not already running),
+        and we're currently in today's cheapest price block, send one
+        notification per appliance per day. Never starts anything itself
+        - purely a suggestion for the person to act on."""
+        notify_service = self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE)
+
+        self._notify_if_appliance_ready(
+            now=now,
+            is_currently_cheapest_block=is_currently_cheapest_block,
+            ready_entity=self.config.get(CONF_DISHWASHER_READY_SENSOR),
+            power_entity=self.config.get(CONF_DISHWASHER_POWER_SENSOR),
+            last_notified_attr="_dishwasher_notified_date",
+            message_attr="last_dishwasher_notification",
+            appliance_label="vaatwasser",
+            notify_service=notify_service,
+        )
+        self._notify_if_appliance_ready(
+            now=now,
+            is_currently_cheapest_block=is_currently_cheapest_block,
+            ready_entity=self.config.get(CONF_WASHING_MACHINE_READY_SENSOR),
+            power_entity=self.config.get(CONF_WASHING_MACHINE_POWER_SENSOR),
+            last_notified_attr="_washing_machine_notified_date",
+            message_attr="last_washing_machine_notification",
+            appliance_label="wasmachine",
+            notify_service=notify_service,
+        )
+
+    def _notify_if_appliance_ready(
+        self,
+        now: datetime,
+        is_currently_cheapest_block: bool,
+        ready_entity: str | None,
+        power_entity: str | None,
+        last_notified_attr: str,
+        message_attr: str,
+        appliance_label: str,
+        notify_service: str | None,
+    ) -> None:
+        if not ready_entity or not is_currently_cheapest_block:
+            return
+
+        ready_state = self.hass.states.get(ready_entity)
+        if ready_state is None or ready_state.state not in ("on", "true", "True"):
+            return
+
+        # Don't suggest starting something that's already running.
+        if power_entity:
+            power_w = self._read_sensor_float(power_entity)
+            if power_w is not None and power_w >= APPLIANCE_RUNNING_POWER_THRESHOLD_W:
+                return
+
+        if getattr(self, last_notified_attr) == now.date():
+            return  # already notified today for this appliance
+
+        message = (
+            f"De {appliance_label} staat klaar om te starten, en dit is nu "
+            f"het goedkoopste moment van vandaag om 'm te draaien."
+        )
+        setattr(self, message_attr, message)
+        setattr(self, last_notified_attr, now.date())
+
+        service_domain, _, service_name = (notify_service or "persistent_notification.create").partition(".")
+        try:
+            if service_domain == "persistent_notification":
+                self.hass.async_create_task(
+                    self.hass.services.async_call(
+                        "persistent_notification",
+                        "create",
+                        {
+                            "title": f"Goedkoop moment voor de {appliance_label}",
+                            "message": message,
+                            "notification_id": f"ems_{appliance_label}_ready",
+                        },
+                    )
+                )
+            else:
+                self.hass.async_create_task(
+                    self.hass.services.async_call(
+                        service_domain,
+                        service_name,
+                        {"message": message, "title": "Energy Management System"},
+                    )
+                )
+        except Exception:  # noqa: BLE001 - a failed notification must never crash the update
+            _LOGGER.exception(
+                "Failed to send the %s-ready notification", appliance_label
+            )
+
+    def _track_recent_consumption_reading(self, now: datetime) -> None:
+        """Append the current live consumption reading (kW) to a short
+        rolling buffer, used to smooth the live-consumption correction
+        below - so a brief spike (a kettle, a few minutes of a washing
+        machine's heating element) doesn't get treated the same as a
+        sustained change (the airco running for a while), and can't
+        single-handedly scale a 15+ hour estimate to an absurd value.
+        """
+        live_power_w = self._read_corrected_consumption_power()
+        if live_power_w is None:
+            return
+        self._recent_consumption_readings_kw.append(live_power_w / 1000)
+        self._recent_consumption_readings_kw = self._recent_consumption_readings_kw[
+            -CONSUMPTION_CORRECTION_SMOOTHING_SAMPLES:
+        ]
+
+    def _get_smoothed_consumption_correction_ratio(self, current_hour: int) -> float:
+        """How much higher (if at all) recent live consumption has been
+        running compared to the learned average for this hour - averaged
+        over a short rolling window (see
+        `_track_recent_consumption_reading`) instead of a single instant
+        reading, and capped at a reasonable maximum so one glitchy
+        reading can't produce a wildly inflated estimate. Returns 1.0
+        (no correction) if there isn't enough data, or live consumption
+        isn't actually running higher than usual.
+        """
+        if not self._recent_consumption_readings_kw:
+            return 1.0
+
+        current_hour_learned_kw = self.learned_hourly_avg_kw(current_hour)
+        if not current_hour_learned_kw or current_hour_learned_kw <= 0:
+            return 1.0
+
+        smoothed_live_kw = sum(self._recent_consumption_readings_kw) / len(
+            self._recent_consumption_readings_kw
+        )
+        if smoothed_live_kw <= current_hour_learned_kw:
+            return 1.0
+
+        ratio = smoothed_live_kw / current_hour_learned_kw
+        capped_ratio = min(ratio, MAX_CONSUMPTION_CORRECTION_RATIO)
+        if capped_ratio < ratio:
+            _LOGGER.debug(
+                "Smoothed live consumption correction ratio %.1fx capped "
+                "to %.1fx - an uncapped ratio this large is more likely a "
+                "sensor glitch than a genuine sustained change",
+                ratio,
+                capped_ratio,
+            )
+        return capped_ratio
+
     def _read_corrected_consumption_power(self) -> float | None:
         """Household consumption estimate (W), corrected for the battery
         and (optionally) solar production masking the true load on the
@@ -1035,22 +1250,14 @@ class EnergyManagementSystemCoordinator:
             total_kwh += avg_kw * fraction_hours
             cursor = segment_end
 
-        current_hour_learned_kw = self.learned_hourly_avg_kw(start.hour)
-        if current_hour_learned_kw and current_hour_learned_kw > 0:
-            live_power_w = self._read_corrected_consumption_power()
-            if live_power_w is not None and live_power_w > 0:
-                live_kw = live_power_w / 1000
-                if live_kw > current_hour_learned_kw:
-                    correction_ratio = live_kw / current_hour_learned_kw
-                    _LOGGER.debug(
-                        "Live consumption (%.0fW) is %.1fx the learned "
-                        "average for this hour (%.0fW) - scaling up the "
-                        "remaining consumption estimate accordingly",
-                        live_power_w,
-                        correction_ratio,
-                        current_hour_learned_kw * 1000,
-                    )
-                    total_kwh *= correction_ratio
+        correction_ratio = self._get_smoothed_consumption_correction_ratio(start.hour)
+        if correction_ratio != 1.0:
+            _LOGGER.debug(
+                "Smoothed live consumption correction: %.1fx - scaling up "
+                "the remaining consumption estimate accordingly",
+                correction_ratio,
+            )
+            total_kwh *= correction_ratio
 
         return self._vacation_adjusted_kwh(total_kwh)
 
@@ -1307,15 +1514,13 @@ class EnergyManagementSystemCoordinator:
         # a live spike is applied for the whole remaining window, not
         # just silently averaged away by historical data. This is what
         # makes the worst-case reserve responsive to what's actually
-        # happening tonight, not just what usually happens.
-        consumption_correction_ratio = 1.0
-        current_hour_learned_kw = self.learned_hourly_avg_kw(start.hour)
-        if current_hour_learned_kw and current_hour_learned_kw > 0:
-            live_power_w = self._read_corrected_consumption_power()
-            if live_power_w is not None and live_power_w > 0:
-                live_kw = live_power_w / 1000
-                if live_kw > current_hour_learned_kw:
-                    consumption_correction_ratio = live_kw / current_hour_learned_kw
+        # happening tonight, not just what usually happens. Smoothed
+        # over a short rolling window and capped (see
+        # _get_smoothed_consumption_correction_ratio) so a brief spike
+        # can't scale a 15+ hour estimate to an absurd value.
+        consumption_correction_ratio = self._get_smoothed_consumption_correction_ratio(
+            start.hour
+        )
 
         cumulative_deficit = 0.0
         max_deficit = 0.0
@@ -2722,6 +2927,15 @@ class EnergyManagementSystemCoordinator:
             self._update_hourly_consumption_profile(now)
         self._update_pv_hourly_bias_tracking(now)
         self._update_battery_efficiency_learning(now)
+        self._update_appliance_usage_tracking(now)
+        self._track_recent_consumption_reading(now)
+
+        is_currently_cheapest_block = (
+            cheap_block_start is not None
+            and cheap_block_end is not None
+            and cheap_block_start <= now < cheap_block_end
+        )
+        self._check_and_notify_appliance_ready(now, is_currently_cheapest_block)
 
         self.last_is_expensive = is_expensive
         self.last_effective_expensive_quarters_count = effective_count

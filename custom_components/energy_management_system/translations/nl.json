@@ -27,7 +27,12 @@
           "negative_price_charge_power": "Laadvermogen bij negatieve prijs (W, negatief = laden)",
           "solar_power_limit_entity": "Zonnepaneel-vermogenslimiet slider (bv. number.solaredge_i1_active_power_limit)",
           "battery_round_trip_efficiency_percent": "Accu-rendement (%) \u2014 voor de PV-aftrek in de reserve-berekening",
-          "vacation_consumption_reduction_percent": "Vakantie-verbruiksreductie (%) \u2014 hoeveel lager dan normaal tijdens vakantiemodus"
+          "vacation_consumption_reduction_percent": "Vakantie-verbruiksreductie (%) \u2014 hoeveel lager dan normaal tijdens vakantiemodus",
+          "dishwasher_power_sensor_entity": "Vaatwasser vermogen-sensor (optioneel)",
+          "dishwasher_ready_sensor_entity": "Vaatwasser \"klaar om te starten\"-sensor (optioneel)",
+          "washing_machine_power_sensor_entity": "Wasmachine vermogen-sensor (optioneel)",
+          "washing_machine_ready_sensor_entity": "Wasmachine \"klaar om te starten\"-sensor (optioneel)",
+          "appliance_notify_service": "Notify-service voor apparaat-meldingen (leeg = pop-up in HA)"
         }
       }
     },
@@ -62,7 +67,12 @@
           "negative_price_charge_power": "Laadvermogen bij negatieve prijs (W, negatief = laden)",
           "solar_power_limit_entity": "Zonnepaneel-vermogenslimiet slider (bv. number.solaredge_i1_active_power_limit)",
           "battery_round_trip_efficiency_percent": "Accu-rendement (%) \u2014 voor de PV-aftrek in de reserve-berekening",
-          "vacation_consumption_reduction_percent": "Vakantie-verbruiksreductie (%) \u2014 hoeveel lager dan normaal tijdens vakantiemodus"
+          "vacation_consumption_reduction_percent": "Vakantie-verbruiksreductie (%) \u2014 hoeveel lager dan normaal tijdens vakantiemodus",
+          "dishwasher_power_sensor_entity": "Vaatwasser vermogen-sensor (optioneel)",
+          "dishwasher_ready_sensor_entity": "Vaatwasser \"klaar om te starten\"-sensor (optioneel)",
+          "washing_machine_power_sensor_entity": "Wasmachine vermogen-sensor (optioneel)",
+          "washing_machine_ready_sensor_entity": "Wasmachine \"klaar om te starten\"-sensor (optioneel)",
+          "appliance_notify_service": "Notify-service voor apparaat-meldingen (leeg = pop-up in HA)"
         }
       }
     }

@@ -231,6 +231,16 @@ class FakeStates:
     def get(self, entity_id: str):
         return self._values.get(entity_id)
 
+    def async_all(self):
+        """Stand-in for hass.states.async_all() - used by diagnostics.py's
+        system_scan. Real Home Assistant states carry an entity_id
+        attribute; attach one here so callers can rely on it."""
+        results = []
+        for entity_id, state in self._values.items():
+            state.entity_id = entity_id
+            results.append(state)
+        return results
+
 
 class FakeServices:
     """Stand-in for hass.services - records every call made."""
@@ -264,10 +274,19 @@ class FakeHass:
         self.created_tasks: list = []
 
     def async_create_task(self, coro):
-        # Fire-and-forget in tests too - callers that need to observe the
-        # ramp/background behaviour drive it explicitly instead.
+        # Actually schedule it (best-effort) so nothing is left as an
+        # un-awaited coroutine; tests that need to assert on the result
+        # can still inspect self.services.calls afterwards since the
+        # scheduled task typically completes before the test finishes.
+        import asyncio
+
         self.created_tasks.append(coro)
-        return coro
+        try:
+            return asyncio.ensure_future(coro)
+        except RuntimeError:
+            # No running loop (e.g. called from sync test code) - leave
+            # it for the fixture's teardown to close.
+            return coro
 
 
 @pytest.fixture
@@ -278,7 +297,7 @@ def hass():
     # the solar ramp task) that nothing awaited, to avoid
     # "coroutine was never awaited" warnings leaking between tests.
     for task in instance.created_tasks:
-        if hasattr(task, "close"):
+        if hasattr(task, "close") and not hasattr(task, "cancel"):
             task.close()
 
 

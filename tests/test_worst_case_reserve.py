@@ -77,9 +77,97 @@ def test_worst_case_deficit_reacts_to_live_consumption_spike(make_coordinator, h
     end = (DAY0 + timedelta(days=1)).replace(hour=11, minute=15)
 
     hass.states.set("sensor.p1", "300")  # matches the learned average
+    for _ in range(4):
+        coordinator._track_recent_consumption_reading(start)
     reserve_normal = coordinator._estimate_worst_case_deficit_kwh(start, end)
 
-    hass.states.set("sensor.p1", "900")  # airco on: 3x the learned average
-    reserve_with_airco = coordinator._estimate_worst_case_deficit_kwh(start, end)
+    coordinator2 = make_coordinator(
+        {
+            "solar_forecast_sensor_entity": "sensor.solcast",
+            "consumption_power_sensor_entity": "sensor.p1",
+        }
+    )
+    for hour in range(24):
+        coordinator2.hourly_consumption_profile[hour] = [0.3]
+    hass.states.set("sensor.p1", "900")  # airco on and sustained: 3x the learned avg
+    for _ in range(4):
+        coordinator2._track_recent_consumption_reading(start)
+    reserve_with_airco = coordinator2._estimate_worst_case_deficit_kwh(start, end)
 
     assert reserve_with_airco == pytest.approx(reserve_normal * 3, rel=0.01)
+
+
+def test_brief_single_tick_spike_does_not_scale_the_whole_estimate(
+    make_coordinator, hass
+):
+    """Regression test for a real-world incident: a single brief power
+    spike used to scale a 15+ hour estimate to an absurd value (reported:
+    17.4 kWh baseline for what should have been a few kWh). Smoothing
+    over a short rolling window should mostly cancel out a one-off blip
+    surrounded by normal readings."""
+    coordinator = make_coordinator(
+        {"consumption_power_sensor_entity": "sensor.p1"}
+    )
+    for hour in range(24):
+        coordinator.hourly_consumption_profile[hour] = [0.3]
+
+    start = DAY0.replace(hour=7, minute=0)
+    end = DAY0.replace(hour=22, minute=0)  # a long ~15 hour window
+
+    # Establish the normal (no-spike) baseline for comparison.
+    hass.states.set("sensor.p1", "300")
+    for _ in range(4):
+        coordinator._track_recent_consumption_reading(start)
+    normal_estimate = coordinator._estimate_consumption_kwh_for_period(start, end)
+
+    # Now simulate a single brief spike among otherwise-normal readings.
+    coordinator2 = make_coordinator({"consumption_power_sensor_entity": "sensor.p1"})
+    for hour in range(24):
+        coordinator2.hourly_consumption_profile[hour] = [0.3]
+    hass.states.set("sensor.p1", "300")
+    coordinator2._track_recent_consumption_reading(start)
+    coordinator2._track_recent_consumption_reading(start)
+    hass.states.set("sensor.p1", "9000")  # a huge, brief spike (e.g. a glitch)
+    coordinator2._track_recent_consumption_reading(start)
+    hass.states.set("sensor.p1", "300")
+    coordinator2._track_recent_consumption_reading(start)
+    spiky_estimate = coordinator2._estimate_consumption_kwh_for_period(start, end)
+
+    # A single blip should be dampened by the surrounding normal
+    # readings AND capped - not allowed to apply anywhere near its raw
+    # ratio (9000/300 = 30x). The smoothed average here (2.475 kW vs a
+    # 0.3 kW learned baseline) works out to 8.25x, which the cap then
+    # limits to exactly 5x - still far below the uncapped/unsmoothed 30x
+    # a single-point reading would have produced.
+    assert spiky_estimate == pytest.approx(normal_estimate * 5.0, rel=0.01)
+    assert spiky_estimate < normal_estimate * 30
+
+
+def test_moderate_brief_spike_is_dampened_by_smoothing(make_coordinator, hass):
+    """A milder single-tick spike (not extreme enough to hit the ratio
+    cap) should still be visibly dampened by the surrounding normal
+    readings, compared to what a single-instant reading would have
+    produced."""
+    coordinator = make_coordinator({"consumption_power_sensor_entity": "sensor.p1"})
+    for hour in range(24):
+        coordinator.hourly_consumption_profile[hour] = [0.3]
+
+    start = DAY0.replace(hour=7, minute=0)
+
+    hass.states.set("sensor.p1", "300")
+    coordinator._track_recent_consumption_reading(start)
+    coordinator._track_recent_consumption_reading(start)
+    hass.states.set("sensor.p1", "900")  # one brief 3x spike
+    coordinator._track_recent_consumption_reading(start)
+    hass.states.set("sensor.p1", "300")
+    coordinator._track_recent_consumption_reading(start)
+
+    ratio = coordinator._get_smoothed_consumption_correction_ratio(7)
+
+    # Smoothed average = (300+300+900+300)/4 = 450W -> 450/300 = 1.5x,
+    # well below the raw single-reading ratio of 3x.
+    assert ratio == pytest.approx(1.5, rel=0.01)
+    assert ratio < 3.0
+
+
+

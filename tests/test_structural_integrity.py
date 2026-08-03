@@ -115,6 +115,7 @@ def test_sensor_platform_setup_instantiates_every_registered_sensor():
     style constructor inside async_setup_entry, exactly like Home
     Assistant would at startup. A displaced __init__ raises a
     TypeError here, exactly as it did in production."""
+    import inspect
     import re
 
     from custom_components.energy_management_system import sensor as sensor_mod
@@ -123,8 +124,14 @@ def test_sensor_platform_setup_instantiates_every_registered_sensor():
     source = sensor_path.read_text()
 
     # Find every "SomeSensor(coordinator, ...)" construction inside the
-    # file (the pattern used throughout async_setup_entry).
-    class_names = set(re.findall(r"\b([A-Z]\w*Sensor)\(coordinator", source))
+    # file (the pattern used throughout async_setup_entry). DOTALL so a
+    # constructor call spanning multiple lines (extra positional args on
+    # their own line) still matches - this is what would have missed
+    # ApplianceUsageHoursSensor/ApplianceReadyNotificationSensor, which
+    # take extra args beyond (coordinator, entry_id).
+    class_names = set(
+        re.findall(r"\b([A-Z]\w*Sensor)\(\s*coordinator", source, re.DOTALL)
+    )
     assert class_names, "no sensor classes found - check the regex still matches"
 
     class _StubCoordinator:
@@ -153,6 +160,10 @@ def test_sensor_platform_setup_instantiates_every_registered_sensor():
         reserve_excess_history = []
         _excess_detected_today = False
         learned_efficiency_history = []
+        dishwasher_usage_hourly_history = {}
+        washing_machine_usage_hourly_history = {}
+        last_dishwasher_notification = None
+        last_washing_machine_notification = None
 
         def learned_hourly_avg_kw(self, hour):
             return None
@@ -162,6 +173,9 @@ def test_sensor_platform_setup_instantiates_every_registered_sensor():
 
         def raw_pv_hourly_avg(self, hour):
             return None
+
+        def learned_appliance_usage_hours(self, history, threshold=0.15):
+            return []
 
         @property
         def learned_night_consumption_kw(self):
@@ -175,8 +189,27 @@ def test_sensor_platform_setup_instantiates_every_registered_sensor():
     failures = {}
     for class_name in class_names:
         cls = getattr(sensor_mod, class_name)
+        # Build a plausible argument list from the __init__ signature,
+        # instead of assuming every sensor takes exactly (coordinator,
+        # entry_id) - some take extra positional args (e.g. which
+        # appliance, a display name, an icon).
         try:
-            cls(stub, "test_entry_id")
+            params = list(inspect.signature(cls.__init__).parameters.values())[1:]
+        except (TypeError, ValueError):
+            params = []
+        args = []
+        for param in params:
+            if param.name == "coordinator":
+                args.append(stub)
+            elif param.name == "entry_id":
+                args.append("test_entry_id")
+            elif param.default is not inspect.Parameter.empty:
+                break  # remaining params are optional - stop here
+            else:
+                args.append("test_value")  # generic filler for str-typed extras
+
+        try:
+            cls(*args)
         except Exception as exc:  # noqa: BLE001 - we want to see every failure
             failures[class_name] = repr(exc)
 

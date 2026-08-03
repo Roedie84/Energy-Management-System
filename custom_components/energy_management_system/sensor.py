@@ -53,6 +53,34 @@ async def async_setup_entry(
         ReserveShortfallSensor(coordinator, entry.entry_id),
         ReserveExcessSensor(coordinator, entry.entry_id),
         LearnedBatteryEfficiencySensor(coordinator, entry.entry_id),
+        ApplianceUsageHoursSensor(
+            coordinator,
+            entry.entry_id,
+            "dishwasher",
+            "Dishwasher typical usage hours",
+            "mdi:dishwasher",
+        ),
+        ApplianceReadyNotificationSensor(
+            coordinator,
+            entry.entry_id,
+            "dishwasher",
+            "Dishwasher last notification",
+            "mdi:bell-outline",
+        ),
+        ApplianceUsageHoursSensor(
+            coordinator,
+            entry.entry_id,
+            "washing_machine",
+            "Washing machine typical usage hours",
+            "mdi:washing-machine",
+        ),
+        ApplianceReadyNotificationSensor(
+            coordinator,
+            entry.entry_id,
+            "washing_machine",
+            "Washing machine last notification",
+            "mdi:bell-outline",
+        ),
     ]
 
     if tracker.enabled:
@@ -609,6 +637,106 @@ class LearnedBatteryEfficiencySensor(SensorEntity, RestoreEntity):
                 ]
             except (TypeError, ValueError):
                 pass
+
+
+class ApplianceUsageHoursSensor(SensorEntity, RestoreEntity):
+    """Informational only: the hours of the day this appliance is
+    typically active, learned from its power sensor. Never used to
+    control anything - purely so you (or a future automation) can see
+    the pattern."""
+
+    _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(
+        self, coordinator, entry_id: str, appliance_key: str, name: str, icon: str
+    ) -> None:
+        self._coordinator = coordinator
+        self._appliance_key = appliance_key
+        self._attr_name = name
+        self._attr_icon = icon
+        self._attr_unique_id = f"{entry_id}_{appliance_key}_usage_hours"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    def _history(self) -> dict:
+        return getattr(
+            self._coordinator, f"{self._appliance_key}_usage_hourly_history"
+        )
+
+    @property
+    def native_value(self) -> int:
+        return len(self._coordinator.learned_appliance_usage_hours(self._history()))
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        # Store a compact per-hour average for persistence, not the raw
+        # sample lists (which can grow to hundreds of samples per hour -
+        # easily exceeding the recorder's 16KB attribute limit, the exact
+        # issue fixed for the schedule sensor in v0.40.2).
+        history = self._history()
+        compact_averages = {
+            str(hour): round(sum(samples) / len(samples), 3)
+            for hour, samples in history.items()
+            if samples
+        }
+        return {
+            "typical_hours": self._coordinator.learned_appliance_usage_hours(history),
+            "hours_with_data": len(history),
+            "hourly_averages": compact_averages,
+        }
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if last_state is None:
+            return
+        compact_averages = last_state.attributes.get("hourly_averages")
+        if isinstance(compact_averages, dict):
+            try:
+                # Restore as a single representative sample per hour -
+                # loses fine-grained history but keeps the learned
+                # pattern intact after a restart, within a tiny footprint.
+                restored = {
+                    int(hour): [float(avg)] for hour, avg in compact_averages.items()
+                }
+                setattr(
+                    self._coordinator,
+                    f"{self._appliance_key}_usage_hourly_history",
+                    restored,
+                )
+            except (TypeError, ValueError):
+                pass
+
+
+class ApplianceReadyNotificationSensor(SensorEntity):
+    """Informational only: the most recent 'ready to start during the
+    cheapest block' notification for this appliance, if any today."""
+
+    _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(
+        self, coordinator, entry_id: str, appliance_key: str, name: str, icon: str
+    ) -> None:
+        self._coordinator = coordinator
+        self._appliance_key = appliance_key
+        self._attr_name = name
+        self._attr_icon = icon
+        self._attr_unique_id = f"{entry_id}_{appliance_key}_last_notification"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def native_value(self) -> str:
+        value = getattr(
+            self._coordinator, f"last_{self._appliance_key}_notification"
+        )
+        return value or "Geen"
 
 
 class LearnedNightConsumptionSensor(SensorEntity, RestoreEntity):
