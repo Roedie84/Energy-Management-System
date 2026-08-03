@@ -1914,3 +1914,24 @@ steeds direct (hysterese beschermt alleen tegen bijna-gelijke standen).
 
 Dashboard bijgewerkt met de door de gebruiker gecorrigeerde
 entiteitsnamen en de nieuwe logboek-kolom.
+
+## v0.49.1 — icoon toegevoegd (accu + bliksem)
+
+**Aanleiding:** de integratie toonde "icon not available" in HACS.
+
+Sinds Home Assistant 2026.3 kunnen custom integraties hun eigen
+merkicoon direct meeleveren via een `brand/`-map in de integratie zelf —
+de oude `home-assistant/brands`-repository accepteert daar geen PR's meer
+voor (aangekondigd via de Brands Proxy API). Toegevoegd:
+`custom_components/energy_management_system/brand/icon.png` (256×256) en
+`icon@2x.png` (512×512), voldoend aan de HA-richtlijnen (vierkant,
+transparante achtergrond, getrimd).
+
+**Bekende beperking (niet iets wat ik kan oplossen):** er is een actuele
+HACS-bug (`hacs/integration#5171` / `#5223`) waarbij het "Update"-
+overzicht in HACS zelf dit soort inline-merkicoontjes nog niet toont —
+dat scherm haalt icoontjes nog van een externe CDN die geen weet heeft
+van custom-integratie-icoontjes. Het icoon **zou wel gewoon moeten
+verschijnen** in Instellingen → Apparaten & Diensten en op de
+apparaatpagina zelf, aangezien Home Assistant die rechtstreeks via de
+lokale brands-proxy serveert.
