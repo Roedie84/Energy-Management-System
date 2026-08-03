@@ -2338,3 +2338,29 @@ nieuwe, echte meting binnenkomt, verschijnt meteen een zinvol verschil.
 Getest (3 nieuwe permanente tests): direct na herstel is "vorige" gelijk
 aan "huidig" (geen onbeschikbaar meer), en na één nieuwe meting toont
 het verschil correct.
+
+## v0.57.0 — mediaan i.p.v. gemiddelde: oven/Quooker-pieken volledig genegeerd
+
+**Terechte vraag:** waarom schiet het basisverbruik omhoog na de oven of
+Quooker, terwijl 2000W voor 2 minuten nauwelijks energie is?
+
+**Gevonden, echt ontwerpprobleem:** onze demping (v0.48.0) gebruikte het
+**gemiddelde** van de laatste 4 metingen (~20 minuten). Als een korte
+apparaat-piek (oven/Quooker, 2000W gedurende 1-2 minuten terwijl het
+verwarmingselement cyclisch aan/uit schakelt) toevallig precies binnen
+één 5-minuten-meting viel, werd bijvoorbeeld `[400, 400, 400, 2000]` →
+**gemiddelde 800W** — een verdubbeling die vervolgens over de hele
+resterende overbruggingsperiode (soms 12+ uur) werd doorgerekend. Voor
+een gebeurtenis van een paar minuten volstrekt onevenredig.
+
+**Fix:** de **mediaan** van de laatste 4 metingen in plaats van het
+gemiddelde. Bij `[400, 400, 400, 2000]` is de mediaan gewoon 400W — de
+uitschieter wordt volledig genegeerd. Een écht aanhoudende verandering
+(airco, minstens 2 van de 4 metingen verhoogd) wordt nog steeds volledig
+herkend.
+
+Getest (bijgewerkt + 1 nieuwe permanente test): een geïsoleerde piek
+(zelfs een extreme van 9000W) geeft nu exact hetzelfde resultaat als
+geen piek (1,0x, geen correctie) — voorheen nog altijd afgetopt op 5x.
+Een aanhoudende verandering (2 van de 4 metingen verhoogd, zoals de
+airco net na het aanslaan) blijft volledig herkend op 2,0x.

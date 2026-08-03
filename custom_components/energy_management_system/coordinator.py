@@ -1008,13 +1008,25 @@ class EnergyManagementSystemCoordinator:
 
     def _get_smoothed_consumption_correction_ratio(self, current_hour: int) -> float:
         """How much higher (if at all) recent live consumption has been
-        running compared to the learned average for this hour - averaged
-        over a short rolling window (see
-        `_track_recent_consumption_reading`) instead of a single instant
-        reading, and capped at a reasonable maximum so one glitchy
-        reading can't produce a wildly inflated estimate. Returns 1.0
-        (no correction) if there isn't enough data, or live consumption
-        isn't actually running higher than usual.
+        running compared to the learned average for this hour - based
+        on the *median* of a short rolling window (see
+        `_track_recent_consumption_reading`), not the mean, and capped
+        at a reasonable maximum so one glitchy reading can't produce a
+        wildly inflated estimate. Returns 1.0 (no correction) if there
+        isn't enough data, or live consumption isn't actually running
+        higher than usual.
+
+        Median rather than mean: found in the field that a single brief
+        high-power event (an oven or a "Quooker"-style instant hot water
+        tap, drawing ~2000W for just a minute or two while its heating
+        element cycles) could land inside one 5-minute sample and skew
+        the *mean* of 4 samples enough to double the correction ratio -
+        disproportionately inflating a multi-hour reserve estimate for
+        an event that used a trivial amount of actual energy. The median
+        of e.g. [400, 400, 400, 2000] W is 400 (the outlier is ignored
+        outright); a *genuinely* sustained change (like the airco
+        running continuously) still shows up once at least half the
+        window reflects the new level.
         """
         if not self._recent_consumption_readings_kw:
             return 1.0
@@ -1023,9 +1035,13 @@ class EnergyManagementSystemCoordinator:
         if not current_hour_learned_kw or current_hour_learned_kw <= 0:
             return 1.0
 
-        smoothed_live_kw = sum(self._recent_consumption_readings_kw) / len(
-            self._recent_consumption_readings_kw
-        )
+        sorted_readings = sorted(self._recent_consumption_readings_kw)
+        mid = len(sorted_readings) // 2
+        if len(sorted_readings) % 2 == 0:
+            smoothed_live_kw = (sorted_readings[mid - 1] + sorted_readings[mid]) / 2
+        else:
+            smoothed_live_kw = sorted_readings[mid]
+
         if smoothed_live_kw <= current_hour_learned_kw:
             return 1.0
 
