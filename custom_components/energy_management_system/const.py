@@ -91,6 +91,14 @@ EXPENSIVE_PRICE_THRESHOLD_FRACTION_LOW_SOLAR = 0.08
 # cheap block is allowed to extend when detecting its natural width.
 CHEAP_BLOCK_THRESHOLD_MARGIN_FRACTION = 0.2
 
+# Hysteresis for the cheapest-block selection: keep the previously
+# chosen cheap block instead of switching to a newly found candidate,
+# as long as its price is within this fraction of today's price range
+# of the new candidate. Prevents flip-flopping between two near-tied
+# candidates elsewhere in the day as time passes and which quarters
+# still count as "upcoming" shifts.
+CHEAP_BLOCK_STABILITY_MARGIN_FRACTION = 0.05
+
 # Price attribute options, matching the Zonneplan ONE "forecast" list items:
 # {"start_date": ..., "end_date": ..., "price_tax_included": {"amount": ...},
 #  "price_tax_excluded": {"amount": ...}, "sustainability_score": {...}}

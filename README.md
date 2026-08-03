@@ -1879,3 +1879,38 @@ een aanhoudende verhoging bleef volledig responsief op 3x; een extreme
 uitschieter (9000W, vermoedelijk een glitch) werd via demping al
 teruggebracht van 30x naar 8,25x, en vervolgens afgetopt op de
 maximale 5x.
+
+## v0.49.0 — stabiliteit goedkoopste-blok-selectie (nieuwe, andere oorzaak)
+
+**Aanleiding:** ondanks de demping van v0.48.0 blijven wilde
+schommelingen optreden in het energie-brug-logboek (bv. 24,37 kWh direct
+gevolgd door 0,0 kWh, met **ongewijzigde** beschikbare energie). Dit kon
+niet door een verbruikspiek komen — de sprong was te groot en
+`available_kwh` bleef gelijk.
+
+**Gevonden, andere oorzaak:** de goedkoopste-blok-detectie
+(`_cheapest_block_range`) kon wisselen tussen twee **bijna-gelijke**
+kandidaten ergens anders op de dag, zodra "nu" een kwartiergrens
+overschreed en de "nog aankomende" kwartieren-lijst verschoof. Zo'n
+wissel verandert het aantal uren tot het goedkoopste blok drastisch,
+en dus ook de benodigde reserve — zonder dat er iets wezenlijks is
+veranderd.
+
+**Fix:** hysterese op de blok-selectie zelf. Zolang het vorige gekozen
+kwartier nog "aankomend" is én het prijsverschil met de nieuwe
+kandidaat klein is (binnen 5% van de dagelijkse prijsrange), blijft de
+vorige keuze staan. Een écht goedkopere kandidaat (buiten die marge)
+wint gewoon meteen, zoals het moet.
+
+**Ook toegevoegd:** `cheap_block_start` wordt nu opgeslagen bij elke
+logboek-vermelding, zodat een toekomstige schommeling **met zekerheid**
+kan worden toegeschreven aan een gewisseld doelblok, in plaats van te
+moeten gissen. Dashboard-tabel uitgebreid met deze kolom.
+
+Getest (4 nieuwe permanente tests): de vorige keuze blijft stabiel
+zolang die nog geldig is, wisselt onvermijdelijk zodra die kwartier
+écht is verstreken, en een werkelijk veel goedkopere kandidaat wint nog
+steeds direct (hysterese beschermt alleen tegen bijna-gelijke standen).
+
+Dashboard bijgewerkt met de door de gebruiker gecorrigeerde
+entiteitsnamen en de nieuwe logboek-kolom.

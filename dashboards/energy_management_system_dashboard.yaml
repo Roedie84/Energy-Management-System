@@ -1,23 +1,13 @@
-# Energy Management System — Debug/diagnose dashboard-kaart
-#
-# Plak dit in een Lovelace-dashboard (via de YAML-editor van een kaart, of
-# van een heel dashboard). Pas de entity_id's aan als jouw installatie een
-# andere apparaatnaam/slug gebruikt dan de standaard "Energy Management System" — check dit
-# via Instellingen > Apparaten & Diensten > Energy Management System > (klik het apparaat)
-# om de exacte entity_id's te zien.
-
 type: vertical-stack
 cards:
   - type: heading
     heading: Energy Management System — Status
     icon: mdi:home-lightning-bolt
-
   - type: markdown
     title: Wat gebeurt er nu, en waarom?
     content: >
       {{ state_attr('sensor.woonkamer_energy_management_system_explanation',
       'explanation') }}
-
   - type: entities
     title: Besturing
     entities:
@@ -25,22 +15,23 @@ cards:
         name: Force manual (negeer alle logica)
       - entity: switch.energy_management_system_learning_only_no_control
         name: Learning only (geen aansturing)
-      - entity: switch.energy_management_system_vacation_mode
+      - entity: switch.woonkamer_energy_management_system_vacation_mode
         name: Vakantiemodus (lager verbruik aannemen, leren pauzeren)
-
   - type: entities
     title: Apparaten (informatief — geen aansturing)
     entities:
-      - entity: sensor.energy_management_system_dishwasher_last_notification
+      - entity: sensor.woonkamer_energy_management_system_dishwasher_last_notification
         name: Vaatwasser — laatste melding
-      - entity: sensor.energy_management_system_dishwasher_typical_usage_hours
+      - entity: >-
+          sensor.woonkamer_energy_management_system_dishwasher_typical_usage_hours
         name: Vaatwasser — aantal typische gebruiksuren
       - type: divider
-      - entity: sensor.energy_management_system_washing_machine_last_notification
+      - entity: >-
+          sensor.woonkamer_energy_management_system_washing_machine_last_notification
         name: Wasmachine — laatste melding
-      - entity: sensor.energy_management_system_washing_machine_typical_usage_hours
+      - entity: >-
+          sensor.woonkamer_energy_management_system_washing_machine_typical_usage_hours
         name: Wasmachine — aantal typische gebruiksuren
-
   - type: entities
     title: Nu — live status
     entities:
@@ -58,13 +49,13 @@ cards:
         name: Huidig verbruik (W)
       - entity: number.solaredge_i1_active_power_limit
         name: Zonnepaneel-vermogenslimiet (%) — bij negatieve prijs
-
   - type: entities
     title: Actuele beslissing
     entities:
       - entity: sensor.energy_management_system_last_decision_reason
         name: Reden laatste beslissing
-      - entity: sensor.woonkamer_energy_management_system_current_price_used_by_integration
+      - entity: >-
+          sensor.woonkamer_energy_management_system_current_price_used_by_integration
         name: Huidige prijs volgens integratie (vergelijk met Zonneplan-sensor)
       - entity: sensor.energy_management_system_simulated_action
         name: Gesimuleerde actie (bij learning only)
@@ -76,7 +67,6 @@ cards:
         name: Start ontlaadvenster
       - entity: sensor.energy_management_system_energy_bridge_check
         name: Energie-check (genoeg om te overbruggen?)
-
   - type: entities
     title: Financieel
     entities:
@@ -103,7 +93,6 @@ cards:
         name: Onverwachte netimport-dagen (laatste 7)
       - entity: sensor.woonkamer_energy_management_system_reserve_excess_days
         name: Overschot-dagen - had scherper mogen verkopen (laatste 7)
-
   - type: entities
     title: Zelflerend
     entities:
@@ -117,39 +106,37 @@ cards:
         name: PV-voorspelling bias (huidig uur)
       - entity: sensor.woonkamer_energy_management_system_learned_battery_efficiency
         name: Geleerd accu-rendement (%)
-
   - type: markdown
     title: Overgangen energie-check (logboek)
     content: >
-      | Tijdstip | Beslissing | Beschikbaar | Benodigd |
-      |---|---|---|---|
+      | Tijdstip | Beslissing | Beschikbaar | Benodigd | Doel-goedkoop-blok |
+      |---|---|---|---|---|
 
       {% for entry in
-      state_attr('sensor.energy_management_system_energy_bridge_check', 'transition_log') |
-      reverse %}
+      state_attr('sensor.energy_management_system_energy_bridge_check',
+      'transition_log') | reverse %}
 
       | {{ as_timestamp(entry.at) | timestamp_custom('%a %H:%M') }} | {{
-      entry.decision }} | {{ entry.available_kwh }} kWh | {{
-      entry.needed_kwh }} kWh |
+      entry.decision }} | {{ entry.available_kwh }} kWh | {{ entry.needed_kwh }}
+      kWh | {{ (as_timestamp(entry.cheap_block_start) | timestamp_custom('%a %H:%M'))
+      if entry.cheap_block_start else 'onbekend' }} |
 
       {% endfor %}
-
   - type: markdown
     title: Overzicht komende uren (verwacht schema)
     content: >
-      | Van | Tot | Modus | Prijsrange |
-      |---|---|---|---|
+      | Van | Tot | Modus | Prijsrange | |---|---|---|---|
 
       {% for block in
-      state_attr('sensor.energy_management_system_upcoming_schedule', 'transitions') %}
+      state_attr('sensor.energy_management_system_upcoming_schedule',
+      'transitions') %}
 
       | {{ as_timestamp(block.start) | timestamp_custom('%a %H:%M') }} | {{
-      as_timestamp(block.end) | timestamp_custom('%a %H:%M') }} | {{
-      block.mode }} | {{ '%.4f'|format(block.min_price_per_kwh) }} - {{
+      as_timestamp(block.end) | timestamp_custom('%a %H:%M') }} | {{ block.mode
+      }} | {{ '%.4f'|format(block.min_price_per_kwh) }} - {{
       '%.4f'|format(block.max_price_per_kwh) }} €/kWh |
 
       {% endfor %}
-
   - type: history-graph
     title: Verwachte vs. werkelijke modus over tijd
     hours_to_show: 48
@@ -158,7 +145,6 @@ cards:
         name: Verwacht
       - entity: select.zendure_manager_operation
         name: Werkelijk
-
   - type: history-graph
     title: SoC & verbruik over tijd
     hours_to_show: 48
@@ -169,7 +155,6 @@ cards:
         name: Beschikbare kWh
       - entity: sensor.hw_p1_vermogen
         name: Verbruik (W)
-
   - type: history-graph
     title: Verbruiksprofiel (hele dag) & voorspelling-afwijking over tijd
     hours_to_show: 168
@@ -178,13 +163,13 @@ cards:
         name: Verbruiksprofiel (huidig uur, W)
       - entity: sensor.energy_management_system_pv_forecast_accuracy
         name: PV-voorspelling afwijking (%)
-
   - type: markdown
     title: Geleerde geschiedenis (ruwe data)
     content: >
       **Verbruiksprofiel per uur (W, huidige geleerde gemiddelden):**
 
-      {{ state_attr('sensor.woonkamer_energy_management_system_hourly_consumption_profile',
+      {{
+      state_attr('sensor.woonkamer_energy_management_system_hourly_consumption_profile',
       'profile_watts') }}
 
 
@@ -194,8 +179,8 @@ cards:
       state_attr('sensor.energy_management_system_learned_night_consumption',
       'history_kw') %}
 
-      [{% if history_kw %}{% for v in history_kw %}{{ (v * 1000) | round }}{%
-      if not loop.last %}, {% endif %}{% endfor %}{% endif %}]
+      [{% if history_kw %}{% for v in history_kw %}{{ (v * 1000) | round }}{% if
+      not loop.last %}, {% endif %}{% endfor %}{% endif %}]
 
 
       **Solcast-afwijking (laatste 7 dagen, %):**
@@ -211,5 +196,6 @@ cards:
 
       **PV-voorspelling bias per uur (ratio werkelijk/voorspeld):**
 
-      {{ state_attr('sensor.woonkamer_energy_management_system_pv_hourly_forecast_bias',
+      {{
+      state_attr('sensor.woonkamer_energy_management_system_pv_hourly_forecast_bias',
       'profile') }}

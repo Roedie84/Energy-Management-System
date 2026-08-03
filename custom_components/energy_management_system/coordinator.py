@@ -50,6 +50,7 @@ from homeassistant.util import dt as dt_util
 
 from .const import (
     CHEAP_BLOCK_THRESHOLD_MARGIN_FRACTION,
+    CHEAP_BLOCK_STABILITY_MARGIN_FRACTION,
     CONF_AVAILABLE_ENERGY_SENSOR,
     CONF_BATTERY_POWER_SENSOR,
     CONF_CONSUMPTION_POWER_SENSOR,
@@ -2193,11 +2194,21 @@ class EnergyManagementSystemCoordinator:
         return max(entry[1] for entry in expensive_entries)
 
     def _log_energy_transition(
-        self, now: datetime, has_enough: bool, available_kwh: float, needed_kwh: float
+        self,
+        now: datetime,
+        has_enough: bool,
+        available_kwh: float,
+        needed_kwh: float,
+        cheap_block_start: datetime | None = None,
     ) -> None:
         """Record a log entry whenever the energy-bridge decision flips,
         so you can review afterwards exactly when and why it switched -
         without needing to watch it live.
+
+        Includes cheap_block_start so a wild swing in needed_kwh between
+        two nearby entries can be attributed with certainty to the target
+        cheap block having changed (e.g. a near-tied candidate elsewhere
+        that day taking over), instead of having to guess.
         """
         if self.last_has_enough_energy is None or self.last_has_enough_energy == has_enough:
             return
@@ -2208,6 +2219,9 @@ class EnergyManagementSystemCoordinator:
                 "decision": "enough_to_postpone" if has_enough else "top_up_needed",
                 "available_kwh": round(available_kwh, 2),
                 "needed_kwh": round(needed_kwh, 2),
+                "cheap_block_start": (
+                    cheap_block_start.isoformat() if cheap_block_start else None
+                ),
             }
         )
         # Keep a bounded amount of history (roughly the last ~10 days
@@ -2330,7 +2344,9 @@ class EnergyManagementSystemCoordinator:
                 else:
                     has_enough = available_kwh >= needed_kwh
 
-                self._log_energy_transition(now, has_enough, available_kwh, needed_kwh)
+                self._log_energy_transition(
+                    now, has_enough, available_kwh, needed_kwh, cheap_block_start
+                )
 
                 self.last_available_kwh = available_kwh
                 self.last_needed_kwh_to_bridge = needed_kwh
@@ -2634,6 +2650,16 @@ class EnergyManagementSystemCoordinator:
         price range above the minimum. This makes the block's width adapt
         to how wide the actual daily price dip is, instead of assuming a
         fixed number of hours.
+
+        Includes hysteresis: if the previously selected cheap block is
+        still upcoming and its price is within
+        CHEAP_BLOCK_STABILITY_MARGIN_FRACTION of the newly found
+        candidate, keeps the previous choice instead of switching. Found
+        after a real incident: as time passes and which quarters count as
+        "still upcoming" shifts, two near-tied candidates elsewhere in
+        the day could otherwise flip which one "wins" from one tick to
+        the next - each requiring a wildly different reserve (hours until
+        a cheap block a few minutes away vs. one many hours away).
         """
         if not entries:
             return None, None
@@ -2648,6 +2674,25 @@ class EnergyManagementSystemCoordinator:
         price_range = max_price - min_price
 
         cheapest_idx = min(range(len(upcoming)), key=lambda i: upcoming[i][2])
+
+        if (
+            self.last_cheap_block_start is not None
+            and price_range > 0
+        ):
+            previous_idx = next(
+                (
+                    i
+                    for i, entry in enumerate(upcoming)
+                    if entry[0] == self.last_cheap_block_start
+                ),
+                None,
+            )
+            if previous_idx is not None:
+                previous_price = upcoming[previous_idx][2]
+                new_price = upcoming[cheapest_idx][2]
+                stability_margin = price_range * CHEAP_BLOCK_STABILITY_MARGIN_FRACTION
+                if previous_price <= new_price + stability_margin:
+                    cheapest_idx = previous_idx
 
         if price_range <= 0:
             # Flat prices: no meaningful valley, just use the single
