@@ -2021,3 +2021,57 @@ een crash, herstel naar OK bij een volgende geslaagde update, en
 Toegevoegd als prominente tegel bovenaan het Overzicht-tabblad (groen
 vinkje bij OK, rood uitroepteken anders), en meegenomen in
 `diagnostics.py`.
+
+## v0.51.0 — dashboard-sjabloon automatisch geplaatst bij eerste installatie
+
+**Correctie op eerdere, te stellige uitspraak:** het registreren van het
+dashboard in `configuration.yaml` (v0.49.2) zorgde er **niet** voor dat
+het bestand zelf zich bijwerkt — dat vereiste nog steeds handmatig
+kopiëren. Excuus voor de verwarring.
+
+**Ook gevonden en gefixt: het dashboard-bestand stond buiten de map die
+HACS daadwerkelijk naar je systeem installeert** (`custom_components/
+energy_management_system/`) — het stond in een `dashboards/`-map op
+repo-niveau, die HACS nooit meekopieert. Verplaatst naar
+`custom_components/energy_management_system/dashboard_template.yaml`,
+zodat het bestand ook echt op je systeem terechtkomt.
+
+**Nieuw: automatisch geplaatst bij de allereerste installatie.** Bij het
+opstarten van de integratie wordt gecontroleerd of
+`config/energy_management_system_dashboard.yaml` al bestaat — zo niet,
+dan wordt het meegeleverde sjabloon daar automatisch naartoe gekopieerd.
+**Bestaat het bestand al** (bijvoorbeeld omdat je het al hebt, of eigen
+aanpassingen hebt gedaan), dan wordt het **nooit overschreven** — je
+aanpassingen gaan dus nooit verloren.
+
+**Belangrijke beperking, eerlijk gezegd:** dit helpt alleen bij de
+allereerste keer. Toekomstige dashboard-verbeteringen van mij moeten nog
+steeds handmatig gekopieerd worden — een bestaand, mogelijk aangepast
+bestand veilig automatisch "bijwerken" zonder je eigen wijzigingen kwijt
+te raken, is niet iets wat dit automatisch kan (of zou moeten) doen.
+
+Getest (2 nieuwe permanente tests): het sjabloon wordt gekopieerd als het
+bestand ontbreekt, en een al bestaand (aangepast) bestand blijft
+gegarandeerd ongewijzigd.
+
+## v0.52.0 — dashboard wordt nu bij elke update automatisch overschreven
+
+**Afspraak:** de gebruiker geeft expliciet toestemming om het
+dashboard-bestand voortaan altijd te overschrijven bij een herstart, op
+voorwaarde dat handmatige wijzigingen altijd eerst worden teruggekoppeld
+(zodat ze in het sjabloon verwerkt kunnen worden vóórdat een nieuwe
+versie wordt uitgebracht).
+
+**Wijziging:** `_copy_dashboard_template_if_missing()` is vervangen door
+`_copy_dashboard_template()` — kopieert nu **altijd** het meegeleverde
+sjabloon naar `config/energy_management_system_dashboard.yaml`, ook als
+het bestand al bestaat.
+
+**Consequentie om te onthouden:** een handmatige aanpassing die niet is
+teruggekoppeld, gaat bij de eerstvolgende herstart **verloren**. Dit is
+een bewuste, afgesproken trade-off — geef wijzigingen dus altijd door
+vóórdat je een nieuwe versie installeert.
+
+Getest (2 bijgewerkte permanente tests): het sjabloon wordt zowel
+geplaatst als het ontbreekt, als overschreven als er al iets anders
+staat.
