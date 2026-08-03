@@ -1935,3 +1935,36 @@ van custom-integratie-icoontjes. Het icoon **zou wel gewoon moeten
 verschijnen** in Instellingen → Apparaten & Diensten en op de
 apparaatpagina zelf, aangezien Home Assistant die rechtstreeks via de
 lokale brands-proxy serveert.
+
+## v0.49.2 — dashboard: eigen zijbalk-item + meerdere tabbladen
+
+**Twee dingen aangepakt:**
+
+**1. Overzichtelijker: 5 tabbladen in plaats van 1 lange lijst.**
+`dashboards/energy_management_system_dashboard.yaml` is omgezet naar een
+dashboard met eigen `views:` (tabbladen): **Overzicht**, **Financieel**,
+**Zelflerend**, **Apparaten**, **Geschiedenis**.
+
+**2. Automatisch een eigen item in de zijbalk (eenmalige instelling).**
+Een integratie kan niet veilig zelf `configuration.yaml` aanpassen — dat
+zou risicovol zijn voor je HA-installatie. In plaats daarvan: voeg
+**eenmalig** dit toe aan je `configuration.yaml` (via **Instellingen →
+Add-ons → Bestandseditor**, of via Samba/SSH):
+
+```yaml
+lovelace:
+  dashboards:
+    energy-management-system:
+      mode: yaml
+      title: Energy Management System
+      icon: mdi:home-lightning-bolt
+      show_in_sidebar: true
+      filename: energy_management_system_dashboard.yaml
+```
+
+Plaats `energy_management_system_dashboard.yaml` in je `config/`-map
+(dezelfde map als `configuration.yaml`), herstart Home Assistant, en het
+dashboard verschijnt daarna **permanent als eigen item in de zijbalk** —
+elke toekomstige update van dit bestand (bij een nieuwe versie van de
+integratie) verschijnt dan vanzelf, zonder dat je iets in de UI hoeft te
+kopiëren/plakken.

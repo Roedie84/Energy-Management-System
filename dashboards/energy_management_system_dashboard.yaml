@@ -1,201 +1,228 @@
-type: vertical-stack
-cards:
-  - type: heading
-    heading: Energy Management System — Status
+title: Energy Management System
+views:
+  - title: Overzicht
+    path: overzicht
     icon: mdi:home-lightning-bolt
-  - type: markdown
-    title: Wat gebeurt er nu, en waarom?
-    content: >
-      {{ state_attr('sensor.woonkamer_energy_management_system_explanation',
-      'explanation') }}
-  - type: entities
-    title: Besturing
-    entities:
-      - entity: switch.energy_management_system_force_manual
-        name: Force manual (negeer alle logica)
-      - entity: switch.energy_management_system_learning_only_no_control
-        name: Learning only (geen aansturing)
-      - entity: switch.woonkamer_energy_management_system_vacation_mode
-        name: Vakantiemodus (lager verbruik aannemen, leren pauzeren)
-  - type: entities
-    title: Apparaten (informatief — geen aansturing)
-    entities:
-      - entity: sensor.woonkamer_energy_management_system_dishwasher_last_notification
-        name: Vaatwasser — laatste melding
-      - entity: >-
-          sensor.woonkamer_energy_management_system_dishwasher_typical_usage_hours
-        name: Vaatwasser — aantal typische gebruiksuren
-      - type: divider
-      - entity: >-
-          sensor.woonkamer_energy_management_system_washing_machine_last_notification
-        name: Wasmachine — laatste melding
-      - entity: >-
-          sensor.woonkamer_energy_management_system_washing_machine_typical_usage_hours
-        name: Wasmachine — aantal typische gebruiksuren
-  - type: entities
-    title: Nu — live status
-    entities:
-      - entity: sensor.solarflow_2400_ac_electric_level
-        name: Accu SoC
-      - entity: sensor.solarflow_2400_ac_available_kwh
-        name: Beschikbare kWh
-      - entity: sensor.energy_management_system_expected_operation_mode
-        name: Verwachte modus (logica)
-      - entity: sensor.energy_management_system_battery_protection
-        name: Ontlaadvermogen toegepast (SoC-bescherming)
-      - entity: select.zendure_manager_operation
-        name: Werkelijke modus (Zendure)
-      - entity: sensor.hw_p1_vermogen
-        name: Huidig verbruik (W)
-      - entity: number.solaredge_i1_active_power_limit
-        name: Zonnepaneel-vermogenslimiet (%) — bij negatieve prijs
-  - type: entities
-    title: Actuele beslissing
-    entities:
-      - entity: sensor.energy_management_system_last_decision_reason
-        name: Reden laatste beslissing
-      - entity: >-
-          sensor.woonkamer_energy_management_system_current_price_used_by_integration
-        name: Huidige prijs volgens integratie (vergelijk met Zonneplan-sensor)
-      - entity: sensor.energy_management_system_simulated_action
-        name: Gesimuleerde actie (bij learning only)
-      - entity: sensor.energy_management_system_effective_expensive_quarters
-        name: Aantal kwartieren boven dynamische prijsdrempel (informatief)
-      - entity: sensor.energy_management_system_cheapest_block_start
-        name: Start goedkoopste blok
-      - entity: sensor.energy_management_system_discharge_window_start
-        name: Start ontlaadvenster
-      - entity: sensor.energy_management_system_energy_bridge_check
-        name: Energie-check (genoeg om te overbruggen?)
-  - type: entities
-    title: Financieel
-    entities:
-      - entity: >-
-          sensor.woonkamer_energy_management_system_discharge_value_expensive_quarters
-        name: Waarde ontladen (totaal sinds installatie)
-      - entity: sensor.ems_ontlaadwaarde_vandaag
-        name: Waarde ontladen - vandaag
-      - entity: sensor.ems_ontlaadwaarde_deze_week
-        name: Waarde ontladen - deze week
-      - entity: sensor.ems_ontlaadwaarde_deze_maand
-        name: Waarde ontladen - deze maand
-      - type: divider
-      - entity: sensor.woonkamer_energy_management_system_charge_cost_grid_charging
-        name: Netlaadkosten (totaal sinds installatie)
-      - entity: sensor.ems_netlaadkosten_vandaag
-        name: Netlaadkosten - vandaag
-      - entity: sensor.ems_netlaadkosten_deze_week
-        name: Netlaadkosten - deze week
-      - entity: sensor.ems_netlaadkosten_deze_maand
-        name: Netlaadkosten - deze maand
-      - type: divider
-      - entity: sensor.woonkamer_energy_management_system_reserve_shortfall_days
-        name: Onverwachte netimport-dagen (laatste 7)
-      - entity: sensor.woonkamer_energy_management_system_reserve_excess_days
-        name: Overschot-dagen - had scherper mogen verkopen (laatste 7)
-  - type: entities
-    title: Zelflerend
-    entities:
-      - entity: sensor.woonkamer_energy_management_system_hourly_consumption_profile
-        name: Verbruiksprofiel (huidig uur, W)
-      - entity: sensor.energy_management_system_learned_night_consumption
-        name: Nachtvenster-gemiddelde (W, legacy fallback)
-      - entity: sensor.energy_management_system_pv_forecast_accuracy
-        name: PV-voorspelling afwijking (%)
-      - entity: sensor.woonkamer_energy_management_system_pv_hourly_forecast_bias
-        name: PV-voorspelling bias (huidig uur)
-      - entity: sensor.woonkamer_energy_management_system_learned_battery_efficiency
-        name: Geleerd accu-rendement (%)
-  - type: markdown
-    title: Overgangen energie-check (logboek)
-    content: >
-      | Tijdstip | Beslissing | Beschikbaar | Benodigd | Doel-goedkoop-blok |
-      |---|---|---|---|---|
+    cards:
+      - type: markdown
+        title: Wat gebeurt er nu, en waarom?
+        content: >
+          {{ state_attr('sensor.woonkamer_energy_management_system_explanation',
+          'explanation') }}
+      - type: entities
+        title: Besturing
+        entities:
+          - entity: switch.energy_management_system_force_manual
+            name: Force manual (negeer alle logica)
+          - entity: switch.energy_management_system_learning_only_no_control
+            name: Learning only (geen aansturing)
+          - entity: switch.woonkamer_energy_management_system_vacation_mode
+            name: Vakantiemodus (lager verbruik aannemen, leren pauzeren)
+      - type: entities
+        title: Nu — live status
+        entities:
+          - entity: sensor.solarflow_2400_ac_electric_level
+            name: Accu SoC
+          - entity: sensor.solarflow_2400_ac_available_kwh
+            name: Beschikbare kWh
+          - entity: sensor.energy_management_system_expected_operation_mode
+            name: Verwachte modus (logica)
+          - entity: sensor.energy_management_system_battery_protection
+            name: Ontlaadvermogen toegepast (SoC-bescherming)
+          - entity: select.zendure_manager_operation
+            name: Werkelijke modus (Zendure)
+          - entity: sensor.hw_p1_vermogen
+            name: Huidig verbruik (W)
+          - entity: number.solaredge_i1_active_power_limit
+            name: Zonnepaneel-vermogenslimiet (%) — bij negatieve prijs
+      - type: entities
+        title: Actuele beslissing
+        entities:
+          - entity: sensor.energy_management_system_last_decision_reason
+            name: Reden laatste beslissing
+          - entity: >-
+              sensor.woonkamer_energy_management_system_current_price_used_by_integration
+            name: Huidige prijs volgens integratie (vergelijk met Zonneplan-sensor)
+          - entity: sensor.energy_management_system_simulated_action
+            name: Gesimuleerde actie (bij learning only)
+          - entity: sensor.energy_management_system_effective_expensive_quarters
+            name: Aantal kwartieren boven dynamische prijsdrempel (informatief)
+          - entity: sensor.energy_management_system_cheapest_block_start
+            name: Start goedkoopste blok
+          - entity: sensor.energy_management_system_discharge_window_start
+            name: Start ontlaadvenster
+          - entity: sensor.energy_management_system_energy_bridge_check
+            name: Energie-check (genoeg om te overbruggen?)
 
-      {% for entry in
-      state_attr('sensor.energy_management_system_energy_bridge_check',
-      'transition_log') | reverse %}
+  - title: Financieel
+    path: financieel
+    icon: mdi:cash-multiple
+    cards:
+      - type: entities
+        title: Financieel
+        entities:
+          - entity: >-
+              sensor.woonkamer_energy_management_system_discharge_value_expensive_quarters
+            name: Waarde ontladen (totaal sinds installatie)
+          - entity: sensor.ems_ontlaadwaarde_vandaag
+            name: Waarde ontladen - vandaag
+          - entity: sensor.ems_ontlaadwaarde_deze_week
+            name: Waarde ontladen - deze week
+          - entity: sensor.ems_ontlaadwaarde_deze_maand
+            name: Waarde ontladen - deze maand
+          - type: divider
+          - entity: >-
+              sensor.woonkamer_energy_management_system_charge_cost_grid_charging
+            name: Netlaadkosten (totaal sinds installatie)
+          - entity: sensor.ems_netlaadkosten_vandaag
+            name: Netlaadkosten - vandaag
+          - entity: sensor.ems_netlaadkosten_deze_week
+            name: Netlaadkosten - deze week
+          - entity: sensor.ems_netlaadkosten_deze_maand
+            name: Netlaadkosten - deze maand
+          - type: divider
+          - entity: sensor.woonkamer_energy_management_system_reserve_shortfall_days
+            name: Onverwachte netimport-dagen (laatste 7)
+          - entity: sensor.woonkamer_energy_management_system_reserve_excess_days
+            name: Overschot-dagen - had scherper mogen verkopen (laatste 7)
 
-      | {{ as_timestamp(entry.at) | timestamp_custom('%a %H:%M') }} | {{
-      entry.decision }} | {{ entry.available_kwh }} kWh | {{ entry.needed_kwh }}
-      kWh | {{ (as_timestamp(entry.cheap_block_start) | timestamp_custom('%a %H:%M'))
-      if entry.cheap_block_start else 'onbekend' }} |
+  - title: Zelflerend
+    path: zelflerend
+    icon: mdi:school-outline
+    cards:
+      - type: entities
+        title: Zelflerend
+        entities:
+          - entity: >-
+              sensor.woonkamer_energy_management_system_hourly_consumption_profile
+            name: Verbruiksprofiel (huidig uur, W)
+          - entity: sensor.energy_management_system_learned_night_consumption
+            name: Nachtvenster-gemiddelde (W, legacy fallback)
+          - entity: sensor.energy_management_system_pv_forecast_accuracy
+            name: PV-voorspelling afwijking (%)
+          - entity: >-
+              sensor.woonkamer_energy_management_system_pv_hourly_forecast_bias
+            name: PV-voorspelling bias (huidig uur)
+          - entity: >-
+              sensor.woonkamer_energy_management_system_learned_battery_efficiency
+            name: Geleerd accu-rendement (%)
+      - type: markdown
+        title: Geleerde geschiedenis (ruwe data)
+        content: >
+          **Verbruiksprofiel per uur (W, huidige geleerde gemiddelden):**
 
-      {% endfor %}
-  - type: markdown
-    title: Overzicht komende uren (verwacht schema)
-    content: >
-      | Van | Tot | Modus | Prijsrange | |---|---|---|---|
-
-      {% for block in
-      state_attr('sensor.energy_management_system_upcoming_schedule',
-      'transitions') %}
-
-      | {{ as_timestamp(block.start) | timestamp_custom('%a %H:%M') }} | {{
-      as_timestamp(block.end) | timestamp_custom('%a %H:%M') }} | {{ block.mode
-      }} | {{ '%.4f'|format(block.min_price_per_kwh) }} - {{
-      '%.4f'|format(block.max_price_per_kwh) }} €/kWh |
-
-      {% endfor %}
-  - type: history-graph
-    title: Verwachte vs. werkelijke modus over tijd
-    hours_to_show: 48
-    entities:
-      - entity: sensor.energy_management_system_expected_operation_mode
-        name: Verwacht
-      - entity: select.zendure_manager_operation
-        name: Werkelijk
-  - type: history-graph
-    title: SoC & verbruik over tijd
-    hours_to_show: 48
-    entities:
-      - entity: sensor.solarflow_2400_ac_electric_level
-        name: SoC (%)
-      - entity: sensor.solarflow_2400_ac_available_kwh
-        name: Beschikbare kWh
-      - entity: sensor.hw_p1_vermogen
-        name: Verbruik (W)
-  - type: history-graph
-    title: Verbruiksprofiel (hele dag) & voorspelling-afwijking over tijd
-    hours_to_show: 168
-    entities:
-      - entity: sensor.woonkamer_energy_management_system_hourly_consumption_profile
-        name: Verbruiksprofiel (huidig uur, W)
-      - entity: sensor.energy_management_system_pv_forecast_accuracy
-        name: PV-voorspelling afwijking (%)
-  - type: markdown
-    title: Geleerde geschiedenis (ruwe data)
-    content: >
-      **Verbruiksprofiel per uur (W, huidige geleerde gemiddelden):**
-
-      {{
-      state_attr('sensor.woonkamer_energy_management_system_hourly_consumption_profile',
-      'profile_watts') }}
+          {{
+          state_attr('sensor.woonkamer_energy_management_system_hourly_consumption_profile',
+          'profile_watts') }}
 
 
-      **Nachtvenster-gemiddelde (laatste 7 nachten, W, legacy fallback):**
+          **Nachtvenster-gemiddelde (laatste 7 nachten, W, legacy fallback):**
 
-      {% set history_kw =
-      state_attr('sensor.energy_management_system_learned_night_consumption',
-      'history_kw') %}
+          {% set history_kw =
+          state_attr('sensor.energy_management_system_learned_night_consumption',
+          'history_kw') %}
 
-      [{% if history_kw %}{% for v in history_kw %}{{ (v * 1000) | round }}{% if
-      not loop.last %}, {% endif %}{% endfor %}{% endif %}]
-
-
-      **Solcast-afwijking (laatste 7 dagen, %):**
-
-      {{ state_attr('sensor.energy_management_system_pv_forecast_accuracy',
-      'deviation_history') }}
+          [{% if history_kw %}{% for v in history_kw %}{{ (v * 1000) | round }}{% if
+          not loop.last %}, {% endif %}{% endfor %}{% endif %}]
 
 
-      **Geleerde Solcast-bias:** {{
-      state_attr('sensor.energy_management_system_pv_forecast_accuracy',
-      'learned_bias_percent') }}%
+          **Solcast-afwijking (laatste 7 dagen, %):**
+
+          {{ state_attr('sensor.energy_management_system_pv_forecast_accuracy',
+          'deviation_history') }}
 
 
-      **PV-voorspelling bias per uur (ratio werkelijk/voorspeld):**
+          **Geleerde Solcast-bias:** {{
+          state_attr('sensor.energy_management_system_pv_forecast_accuracy',
+          'learned_bias_percent') }}%
 
-      {{
-      state_attr('sensor.woonkamer_energy_management_system_pv_hourly_forecast_bias',
-      'profile') }}
+
+          **PV-voorspelling bias per uur (ratio werkelijk/voorspeld):**
+
+          {{
+          state_attr('sensor.woonkamer_energy_management_system_pv_hourly_forecast_bias',
+          'profile') }}
+
+  - title: Apparaten
+    path: apparaten
+    icon: mdi:dishwasher
+    cards:
+      - type: entities
+        title: Apparaten (informatief — geen aansturing)
+        entities:
+          - entity: >-
+              sensor.woonkamer_energy_management_system_dishwasher_last_notification
+            name: Vaatwasser — laatste melding
+          - entity: >-
+              sensor.woonkamer_energy_management_system_dishwasher_typical_usage_hours
+            name: Vaatwasser — aantal typische gebruiksuren
+          - type: divider
+          - entity: >-
+              sensor.woonkamer_energy_management_system_washing_machine_last_notification
+            name: Wasmachine — laatste melding
+          - entity: >-
+              sensor.woonkamer_energy_management_system_washing_machine_typical_usage_hours
+            name: Wasmachine — aantal typische gebruiksuren
+
+  - title: Geschiedenis
+    path: geschiedenis
+    icon: mdi:history
+    cards:
+      - type: markdown
+        title: Overgangen energie-check (logboek)
+        content: >
+          | Tijdstip | Beslissing | Beschikbaar | Benodigd | Doel-goedkoop-blok |
+          |---|---|---|---|---|
+
+          {% for entry in
+          state_attr('sensor.energy_management_system_energy_bridge_check',
+          'transition_log') | reverse %}
+
+          | {{ as_timestamp(entry.at) | timestamp_custom('%a %H:%M') }} | {{
+          entry.decision }} | {{ entry.available_kwh }} kWh | {{ entry.needed_kwh }}
+          kWh | {{ (as_timestamp(entry.cheap_block_start) | timestamp_custom('%a %H:%M'))
+          if entry.cheap_block_start else 'onbekend' }} |
+
+          {% endfor %}
+      - type: markdown
+        title: Overzicht komende uren (verwacht schema)
+        content: >
+          | Van | Tot | Modus | Prijsrange | |---|---|---|---|
+
+          {% for block in
+          state_attr('sensor.energy_management_system_upcoming_schedule',
+          'transitions') %}
+
+          | {{ as_timestamp(block.start) | timestamp_custom('%a %H:%M') }} | {{
+          as_timestamp(block.end) | timestamp_custom('%a %H:%M') }} | {{ block.mode
+          }} | {{ '%.4f'|format(block.min_price_per_kwh) }} - {{
+          '%.4f'|format(block.max_price_per_kwh) }} €/kWh |
+
+          {% endfor %}
+      - type: history-graph
+        title: Verwachte vs. werkelijke modus over tijd
+        hours_to_show: 48
+        entities:
+          - entity: sensor.energy_management_system_expected_operation_mode
+            name: Verwacht
+          - entity: select.zendure_manager_operation
+            name: Werkelijk
+      - type: history-graph
+        title: SoC & verbruik over tijd
+        hours_to_show: 48
+        entities:
+          - entity: sensor.solarflow_2400_ac_electric_level
+            name: SoC (%)
+          - entity: sensor.solarflow_2400_ac_available_kwh
+            name: Beschikbare kWh
+          - entity: sensor.hw_p1_vermogen
+            name: Verbruik (W)
+      - type: history-graph
+        title: Verbruiksprofiel (hele dag) & voorspelling-afwijking over tijd
+        hours_to_show: 168
+        entities:
+          - entity: >-
+              sensor.woonkamer_energy_management_system_hourly_consumption_profile
+            name: Verbruiksprofiel (huidig uur, W)
+          - entity: sensor.energy_management_system_pv_forecast_accuracy
+            name: PV-voorspelling afwijking (%)
