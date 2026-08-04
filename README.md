@@ -2460,3 +2460,41 @@ prijs-prioriteit-volgorde.
 nagebouwd): de planning toont nu correct extra "manual"-kwartieren rond
 de piek (20:15-20:45, eerder onterecht "smart"), naast het bestaande
 piek-kwartier zelf.
+
+## v0.59.0 — ontlaadvermogen zakt niet meer onder het huishoudverbruik
+
+**Gerapporteerd:** rond 22:00 schakelde de modus naar `manual` (een
+geldig `expensive_quarter`-kwartier), maar het toegepaste ontlaadvermogen
+kwam uit op slechts ~150W terwijl de woning ~340W verbruikte — het
+verschil (~190W) werd geïmporteerd, tegen dezelfde piekprijs waarop net
+was besloten te gaan verkopen.
+
+**Root cause:** `_get_soc_scaled_discharge_power()` schaalt het
+ontlaadvermogen naar de *headroom* (beschikbare energie min de
+nachtreserve), niet naar het actuele huishoudverbruik. Terugrekenen
+vanuit de gerapporteerde 150W (bij `manual_discharge_power` = 1600W, 5
+min interval) gaf een headroom van slechts ~12,5 Wh — bevestigd met een
+"Beschikbare Energie"-geschiedenisgrafiek die rond dat tijdstip ~5,7-5,8
+kWh liet zien, bijna gelijk aan de berekende reserve. De schaling deed
+dus precies wat hij moest doen (nachtreserve beschermen), maar dat is
+tijdens een reeds-actief verkoop-kwartier de verkeerde afweging: minder
+verkopen dan het huisverbruik betekent alsnog importeren, tegen dezelfde
+piekprijs, in hetzelfde kwartier.
+
+**Fix:** een ondergrens toegevoegd op basis van het live, gecorrigeerde
+huishoudverbruik (`_read_corrected_consumption_power()`, bestond al voor
+de mediaan-smoothing van v0.57.0). Het toegepaste ontlaadvermogen zakt
+nu nooit meer onder het actuele huisverbruik, begrensd door wat fysiek
+beschikbaar is in deze tick (`available_kwh` / interval) en door
+`manual_discharge_power` als plafond. Geldt zowel wanneer de
+headroom-schaling een te lage waarde geeft als wanneer de headroom
+volledig op is (voorheen: geen geforceerde ontlading). De
+prijs-prioriteit-logica (welk kwartier het bést is om in te verkopen,
+v0.40.0) blijft ongewijzigd — dit raakt alleen hoeveel er wordt verkocht
+zodra een kwartier al gekozen is.
+
+**Getest** (5 nieuwe permanente tests): headroom te laag → opgehoogd tot
+huisverbruik; headroom volledig op → toch dekking i.p.v. skip; vloer
+nooit hoger dan fysiek beschikbare energie; ruime headroom → ongewijzigd
+gedrag (regressietest); geen verbruikssensor geconfigureerd → ongewijzigd
+gedrag (regressietest).

@@ -2199,7 +2199,46 @@ class EnergyManagementSystemCoordinator:
                 if soc_entity:
                     self.last_soc_percent = self._read_sensor_float(soc_entity)
 
+                # Household-consumption floor: the reserve-based headroom
+                # above protects tonight's deepest deficit, but during an
+                # is_expensive quarter we're already committed to selling -
+                # throttling the discharge below the live household load
+                # just means the shortfall is bought back from the grid at
+                # that same peak price, in the same quarter we just decided
+                # was worth selling in. Reported live: house at ~340W,
+                # headroom-scaled discharge only ~150W, ~190W imported at
+                # the peak rate. So the discharge is never allowed to drop
+                # below what the house is actually drawing right now -
+                # capped by what's physically available this tick (can't
+                # give out more than the battery currently holds) and by
+                # base_power. This intentionally lets a tick dip below the
+                # "ideal" reserve line when necessary; importing at the
+                # peak price is worse than a slightly thinner reserve.
+                household_load_w = self._read_corrected_consumption_power()
+                physical_ceiling_w = (
+                    (available_kwh / interval_hours) * 1000
+                    if interval_hours > 0
+                    else 0
+                )
+                floor_w = 0.0
+                if household_load_w is not None and household_load_w > 0:
+                    floor_w = round(
+                        min(household_load_w, physical_ceiling_w, base_power), 1
+                    )
+
                 if max_power_w <= 0:
+                    if floor_w > 0:
+                        self.last_discharge_power_applied = floor_w
+                        _LOGGER.debug(
+                            "Dynamic discharge reserve: available=%.2f kWh, "
+                            "needed reserve=%.2f kWh - no headroom, but "
+                            "applying %.0fW consumption floor to avoid "
+                            "importing at the peak price",
+                            available_kwh,
+                            reserve_kwh,
+                            floor_w,
+                        )
+                        return floor_w
                     self.last_discharge_power_applied = None
                     _LOGGER.debug(
                         "Dynamic discharge reserve: available=%.2f kWh, "
@@ -2222,18 +2261,32 @@ class EnergyManagementSystemCoordinator:
                     )
                     return None
 
-                scaled = round(min(base_power, max_power_w), 1)
+                scaled = round(min(base_power, max(max_power_w, floor_w)), 1)
                 self.last_discharge_power_applied = scaled
                 if scaled < base_power:
-                    _LOGGER.debug(
-                        "Dynamic discharge reserve: available=%.2f kWh, "
-                        "needed reserve=%.2f kWh - scaling discharge from "
-                        "%.0fW to %.0fW to protect the reserve",
-                        available_kwh,
-                        reserve_kwh,
-                        base_power,
-                        scaled,
-                    )
+                    if floor_w > max_power_w:
+                        _LOGGER.debug(
+                            "Dynamic discharge reserve: available=%.2f kWh, "
+                            "needed reserve=%.2f kWh - headroom-scaled power "
+                            "(%.0fW) was below the %.0fW household load, "
+                            "raised to %.0fW to avoid importing at the peak "
+                            "price",
+                            available_kwh,
+                            reserve_kwh,
+                            max_power_w,
+                            floor_w,
+                            scaled,
+                        )
+                    else:
+                        _LOGGER.debug(
+                            "Dynamic discharge reserve: available=%.2f kWh, "
+                            "needed reserve=%.2f kWh - scaling discharge from "
+                            "%.0fW to %.0fW to protect the reserve",
+                            available_kwh,
+                            reserve_kwh,
+                            base_power,
+                            scaled,
+                        )
                 return scaled
 
         # Fallback: flat SoC-percentage taper (no available-energy sensor,

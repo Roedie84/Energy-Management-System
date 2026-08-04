@@ -30,6 +30,7 @@ geïmporteerd en getest kan worden.
 | `test_price_priority_and_scheduling.py` | Prijs-prioriteit bij beperkte headroom + discharge_start-ordeningsfix |
 | `test_unit_conversion.py` | Automatische Wh/MWh → kWh-conversie |
 | `test_structural_integrity.py` | AST-gebaseerde scan die de twee historische "verweesde klasse"-regressies had gevangen |
+| `test_consumption_floor.py` | Ontlaadvermogen zakt nooit onder het live huishoudverbruik (v0.59.0) |
 | `test_startup_timing.py` | Wachten op volledige HA-opstart vóór de eerste dataophaal |
 
 ## Waarom dit de moeite waard is
