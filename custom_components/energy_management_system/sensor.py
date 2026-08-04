@@ -700,6 +700,7 @@ class ReserveShortfallSensor(SensorEntity, RestoreEntity):
     def extra_state_attributes(self) -> dict:
         return {
             "history": self._coordinator.reserve_shortfall_history,
+            "history_dates": self._coordinator.reserve_shortfall_dates,
             "detected_today_so_far": self._coordinator._shortfall_detected_today,
         }
 
@@ -713,6 +714,9 @@ class ReserveShortfallSensor(SensorEntity, RestoreEntity):
             self._coordinator.reserve_shortfall_history = [
                 bool(v) for v in raw_history
             ]
+        raw_dates = last_state.attributes.get("history_dates")
+        if isinstance(raw_dates, list):
+            self._coordinator.reserve_shortfall_dates = [str(v) for v in raw_dates]
 
 
 class ReserveExcessSensor(SensorEntity, RestoreEntity):
@@ -747,6 +751,7 @@ class ReserveExcessSensor(SensorEntity, RestoreEntity):
     def extra_state_attributes(self) -> dict:
         return {
             "history": self._coordinator.reserve_excess_history,
+            "history_dates": self._coordinator.reserve_excess_dates,
             "detected_today_so_far": self._coordinator._excess_detected_today,
         }
 
@@ -760,6 +765,9 @@ class ReserveExcessSensor(SensorEntity, RestoreEntity):
             self._coordinator.reserve_excess_history = [
                 bool(v) for v in raw_history
             ]
+        raw_dates = last_state.attributes.get("history_dates")
+        if isinstance(raw_dates, list):
+            self._coordinator.reserve_excess_dates = [str(v) for v in raw_dates]
 
 
 class LearnedBatteryEfficiencySensor(SensorEntity, RestoreEntity):

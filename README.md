@@ -80,13 +80,43 @@ ln -s $(pwd)/custom_components/energy_management_system /path/to/homeassistant/c
 
 ## Bekende beperkingen / ideeën voor later
 
-- Geen State-of-Charge check: de accu kan nu tot een negatief punt ontladen als de
-  Zendure zelf geen ondergrens afdwingt.
-- Geen hysterese: bij snel wisselende prijzen kan de mode elke 15 minuten omslaan.
-- Zonneplan levert de "tomorrow"-forecast vaak pas 's middags — tot die tijd
-  zoekt de integratie het goedkoopste blok alleen binnen de al bekende data.
-- `iot_class: local_polling` — pas aan naar `local_push` als je alles alleen op
-  state-events wil laten draaien zonder de 15-minuten timer.
+*(Bijgewerkt na controle op v0.63.10 — 3 van de 4 oorspronkelijke punten
+bleken achterhaald door latere ontwikkeling en zijn hieronder
+gecorrigeerd, niet blind overgenomen.)*
+
+- ~~Geen State-of-Charge check~~ — **achterhaald.** Sinds lange tijd is
+  er uitgebreide SoC-bescherming: een taps toelopende ontlaad-limiet
+  richting `min_soc_percent`, een aparte noodlaad-drempel
+  (`_is_emergency_low_battery`), en de diepste-tekort-reserveberekening
+  die specifiek beschermt tegen te diep ontladen vóór het goedkoopste
+  blok.
+- ~~Geen hysterese: bij snel wisselende prijzen kan de mode elke 15
+  minuten omslaan~~ — **grotendeels achterhaald / verkeerd geframed.**
+  Prijzen per kwartier liggen vooraf vast (bekend uit de dagvooruitzicht-
+  forecast), dus een mode-wissel van kwartier naar kwartier is een
+  bewuste, prijs-gedreven beslissing — geen instabiliteit. Wél een
+  echt, smaller randgeval dat ik heb geïdentificeerd maar nog niet
+  gefixt: de secundaire-laag-drempel (v0.58.0) gebruikt de **live**
+  beschikbare energie, die tijdens hetzelfde kwartier kan schommelen
+  door het ontladen zelf — theoretisch kan dat een kwartier heen-en-weer
+  laten flikkeren tussen wel/niet-secundair-in-aanmerking-komen. Nog niet
+  bevestigd als een daadwerkelijk voorkomend probleem; laat het weten
+  als je dit ziet, dan bouw ik er gerichte hysterese voor.
+- Zonneplan levert de "tomorrow"-forecast vaak pas 's middags — tot die
+  tijd zoekt de integratie het goedkoopste blok alleen binnen de al
+  bekende data. **Dit is geen bug, maar correct, verwacht gedrag** —
+  een eerlijke beschrijving van een inherente beperking van wanneer
+  day-ahead-prijzen beschikbaar komen, niet iets om te "fixen".
+- ~~`iot_class: local_polling` — pas aan naar `local_push`~~ —
+  **onjuist advies, laten staan.** Deze integratie draait fundamenteel
+  op een tijd-gebaseerde 5-minuten-cyclus (`UPDATE_INTERVAL_MINUTES`,
+  sinds v0.44.0 verlaagd van 15 naar 5), omdat kernberekeningen zoals
+  "hoeveel tijd is er nog tot het goedkoopste blok" continu veranderen
+  puur door het verstrijken van tijd — onafhankelijk van welke
+  entity-state dan ook. `local_push` past hier niet: er is geen enkele
+  entity-state-wijziging die "nu opnieuw herberekenen" kan vervangen.
+  `local_polling` is de correcte classificatie voor dit soort
+  tijd-gedreven logica.
 
 ## Zelflerend gedrag (v0.7.0+)
 
@@ -3166,3 +3196,56 @@ alleen.
 scenario's uit de diagnostiek-export): de uitschieter beweegt de
 mediaan niet noemenswaardig, ter vergelijking met wat het (foute)
 gemiddelde zou hebben gedaan.
+
+## v0.63.11 — drie diagnostiek-uitbreidingen, plus een audit van de README-beperkingenlijst
+
+**Drie diagnostiek-uitbreidingen (op verzoek):**
+
+1. **`mode_change_log`** — bouwt voort op de bestaande
+   modus-wijziging-detectie (v0.63.8): elke genuine wijziging (reden of
+   toegepast vermogen) landt nu in een bounded logboek (laatste 50),
+   **onafhankelijk van of er een notify-service is ingesteld**. Eén
+   diagnostiek-export volstaat nu om de hele dag se modus-geschiedenis
+   te reconstrueren, in plaats van een export op precies het juiste
+   moment nodig te hebben.
+2. **`reserve_shortfall_dates` / `reserve_excess_dates`** — parallelle
+   datumlijst naast de bestaande boolean-historie
+   (`reserve_shortfall_history`/`reserve_excess_history`), puur
+   additief (raakt de bestaande marge-berekening en restore-logica
+   niet). Had de asymmetrie-vraag van vorige keer meteen beantwoord in
+   plaats van giswerk.
+3. **`pv_forecast_raw`** — de ruwe Solcast-halfuur-voorspelling
+   (start/eind/kWh, komende ~48 uur) rechtstreeks in de export, zodat
+   de PV-voorspelling zelf te verifiëren is zonder los in
+   Ontwikkelaarshulpmiddelen te hoeven kijken.
+
+**README-audit — "Bekende beperkingen" was verouderd, niet blind
+overgenomen:**
+
+Vóór het toepassen van de vier genoemde punten eerst gecontroleerd of
+ze nog klopten (het stuk noemde nog "15-minuten timer", terwijl dat
+sinds v0.44.0 al 5 minuten is). Resultaat: **3 van de 4 waren
+achterhaald of feitelijk onjuist**, en zijn gecorrigeerd in plaats van
+geïmplementeerd:
+
+- **SoC-check**: allang aanwezig (taps toelopende ontlaad-limiet,
+  noodladen, diepste-tekort-reserve).
+- **Hysterese**: het genoemde "elke 15 min omslaan" is normaal,
+  prijs-gedreven gedrag, geen instabiliteit — maar wél een écht, smaller
+  randgeval geïdentificeerd (secundaire-laag-drempel kan theoretisch
+  flikkeren op live beschikbare energie binnen hetzelfde kwartier), nog
+  niet bevestigd als daadwerkelijk probleem.
+- **Zonneplan tomorrow-forecast-timing**: geen bug, correct verwacht
+  gedrag — heretiketteerd als zodanig i.p.v. als "op te lossen
+  beperking".
+- **`iot_class: local_push`**: dit advies was **onjuist** en had ik niet
+  moeten uitvoeren zonder controle — deze integratie is fundamenteel
+  tijd-gedreven (tijd-tot-goedkoopste-blok verandert puur door het
+  verstrijken van tijd, niet door een entity-state-wijziging),
+  `local_polling` is hier de juiste classificatie. Laten staan.
+
+**Getest** (3 nieuwe permanente tests in `test_diagnostics_extensions.py`):
+mode-change-log bevat de juiste reden/vermogen na een echte
+tick-op-tick-wijziging; datum-lijsten komen correct door in de export;
+ruwe PV-forecast-entries worden correct omgezet van kW naar kWh per
+interval.

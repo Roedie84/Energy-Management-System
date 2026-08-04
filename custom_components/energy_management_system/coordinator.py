@@ -209,6 +209,7 @@ class EnergyManagementSystemCoordinator:
 
         self.last_reason: str | None = None
         self._last_notified_mode_signature: tuple | None = None
+        self.mode_change_log: list[dict] = []
         self.last_cheap_block_start: datetime | None = None
         self.last_cheap_block_end: datetime | None = None
         self.last_discharge_start: datetime | None = None
@@ -340,9 +341,11 @@ class EnergyManagementSystemCoordinator:
         # reserve estimate for that day was too optimistic. Track this per
         # day, and learn a margin bonus if it keeps happening.
         self.reserve_shortfall_history: list[bool] = []
+        self.reserve_shortfall_dates: list[str] = []
         self._shortfall_detected_today: bool = False
         self._shortfall_check_date: date | None = None
         self.reserve_excess_history: list[bool] = []
+        self.reserve_excess_dates: list[str] = []
         self._excess_detected_today: bool = False
         self._last_value_calc_time: datetime | None = None
 
@@ -2146,8 +2149,20 @@ class EnergyManagementSystemCoordinator:
                 self.reserve_shortfall_history = self.reserve_shortfall_history[
                     -LEARNING_HISTORY_DAYS:
                 ]
+                self.reserve_shortfall_dates.append(
+                    self._shortfall_check_date.isoformat()
+                )
+                self.reserve_shortfall_dates = self.reserve_shortfall_dates[
+                    -LEARNING_HISTORY_DAYS:
+                ]
                 self.reserve_excess_history.append(self._excess_detected_today)
                 self.reserve_excess_history = self.reserve_excess_history[
+                    -LEARNING_HISTORY_DAYS:
+                ]
+                self.reserve_excess_dates.append(
+                    self._shortfall_check_date.isoformat()
+                )
+                self.reserve_excess_dates = self.reserve_excess_dates[
                     -LEARNING_HISTORY_DAYS:
                 ]
                 # Also feed the monthly summary - a day just closed out.
@@ -3422,6 +3437,22 @@ class EnergyManagementSystemCoordinator:
         if signature == self._last_notified_mode_signature:
             return
         self._last_notified_mode_signature = signature
+
+        # Bounded log of every genuine change (v0.63.11), independent of
+        # whether a notify service is configured - so a single
+        # diagnostics export can reconstruct the whole day's mode
+        # history, instead of needing an export pulled at exactly the
+        # right moment (or a screenshot from the phone) each time.
+        self.mode_change_log.append(
+            {
+                "at": now.isoformat(),
+                "reason": self.last_reason,
+                "expected_mode": self.last_expected_mode,
+                "discharge_power_applied": self.last_discharge_power_applied,
+                "charge_power_applied": self.last_charge_power_applied,
+            }
+        )
+        self.mode_change_log = self.mode_change_log[-50:]
 
         notify_service = self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE)
         if not notify_service:

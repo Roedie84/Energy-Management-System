@@ -68,6 +68,34 @@ def _iso(value: datetime | date | None) -> str | None:
     return value.isoformat() if value is not None else None
 
 
+def _build_raw_pv_forecast_snapshot(coordinator) -> dict[str, Any]:
+    """Raw Solcast half-hour forecast entries (start/end/kwh), bounded to
+    roughly the next 48 hours - lets you verify the PV forecast itself
+    against the integration's own processed numbers (basisverbruik/
+    verwachte_pv_kwh in the explanation breakdown table, v0.61.2)
+    without a separate trip to Ontwikkelaarshulpmiddelen each time.
+    """
+    try:
+        entries = coordinator._get_pv_forecast_entries()
+    except Exception:  # noqa: BLE001 - diagnostics must never crash on this
+        return {"note": "Could not read the PV forecast entries.", "entries": []}
+
+    return {
+        "note": (
+            "Raw Solcast half-hour entries (start, end, kwh for that "
+            "interval), bounded to the next ~48 hours."
+        ),
+        "entries": [
+            {
+                "start": _iso(start),
+                "end": _iso(end),
+                "kwh": round(kwh, 4),
+            }
+            for start, end, kwh in entries[:96]
+        ],
+    }
+
+
 def _scan_relevant_entities(
     hass: HomeAssistant, already_configured: set[str]
 ) -> list[dict[str, Any]]:
@@ -296,6 +324,7 @@ async def async_get_config_entry_diagnostics(
             "last_discharge_floor_applied": coordinator.last_discharge_floor_applied,
             "discharge_floor_events": coordinator.discharge_floor_events,
             "last_expensive_tier": coordinator.last_expensive_tier,
+            "mode_change_log": coordinator.mode_change_log,
             "last_expensive_price_threshold": coordinator.last_expensive_price_threshold,
             "last_secondary_price_threshold": coordinator.last_secondary_price_threshold,
             "last_low_solar_narrowed_threshold": (
@@ -316,10 +345,12 @@ async def async_get_config_entry_diagnostics(
             "grid_charged_today": coordinator._grid_charged_today,
             "is_negative_price_active": coordinator._is_negative_price_active,
             "reserve_shortfall_history": coordinator.reserve_shortfall_history,
+            "reserve_shortfall_dates": coordinator.reserve_shortfall_dates,
             "shortfall_detected_today_so_far": (
                 coordinator._shortfall_detected_today
             ),
             "reserve_excess_history": coordinator.reserve_excess_history,
+            "reserve_excess_dates": coordinator.reserve_excess_dates,
             "excess_detected_today_so_far": coordinator._excess_detected_today,
             "total_discharge_value_eur": round(
                 coordinator.total_discharge_value_eur, 4
@@ -376,6 +407,7 @@ async def async_get_config_entry_diagnostics(
     already_configured = {
         value for value in config.values() if isinstance(value, str) and "." in value
     }
+    diagnostics["pv_forecast_raw"] = _build_raw_pv_forecast_snapshot(coordinator)
     diagnostics["system_scan"] = {
         "note": (
             "Bounded scan of Home Assistant entities that could be "
