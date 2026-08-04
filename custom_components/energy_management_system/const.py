@@ -35,6 +35,13 @@ CONF_APPLIANCE_NOTIFY_SERVICE = "appliance_notify_service"
 
 # Emoji shown in the mode/power-change notification title (v0.63.8), one
 # per possible coordinator.last_reason value - see _maybe_notify_mode_change.
+# Maps the final coordinator.last_reason (decided only after headroom/
+# SoC/price-priority checks run) to the mode that was actually applied
+# this tick - used to correct last_expected_mode after the fact (v0.63.20).
+# last_expected_mode is set early, from the price check alone, before
+# those later checks can downgrade an "expensive, should discharge"
+# guess back to smart - without this correction, the displayed
+# "Verwachte modus" could disagree with what was actually decided.
 MODE_CHANGE_EMOJI = {
     "expensive_quarter": "💰⬇️",
     "expensive_quarter_soc_protected": "🛡️",
@@ -292,3 +299,22 @@ UPDATE_INTERVAL_MINUTES = 5
 OPTION_SMART = "smart"
 OPTION_SMART_DISCHARGING = "smart_discharging"
 OPTION_MANUAL = "manual"
+
+# Maps the final coordinator.last_reason (decided only after headroom/
+# SoC/price-priority checks run) to the mode that was actually applied
+# this tick - used to correct last_expected_mode after the fact
+# (v0.63.20). last_expected_mode is set early, from the price check
+# alone, before those later checks can downgrade an "expensive, should
+# discharge" guess back to smart - without this correction, the
+# displayed "Verwachte modus" could disagree with what was actually
+# decided.
+REASON_TO_MODE = {
+    "expensive_quarter": OPTION_MANUAL,
+    "expensive_quarter_soc_protected": OPTION_SMART,
+    "negative_price": OPTION_MANUAL,
+    "emergency_low_battery": OPTION_MANUAL,
+    "grid_charging_low_solar": OPTION_MANUAL,
+    "discharging_window": OPTION_SMART_DISCHARGING,
+    "arbitrage_charging": OPTION_MANUAL,
+    "default_smart": OPTION_SMART,
+}

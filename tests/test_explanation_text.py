@@ -83,12 +83,32 @@ def test_soc_protected_still_explains_genuine_soc_protection(make_coordinator):
     coordinator = make_coordinator({})
     coordinator.last_reason = "expensive_quarter_soc_protected"
     coordinator.last_price_priority_held_off = False
+    coordinator.last_used_soc_taper_fallback = True
     coordinator.last_soc_percent = 12.0
 
     text = coordinator._build_explanation()
 
     assert "12" in text
     assert "prijs-prioriteit" not in text
+
+
+def test_soc_protected_explains_reserve_exhaustion_not_soc(make_coordinator):
+    """v0.63.20: with the dynamic reserve branch (not the flat SoC-taper
+    fallback), the real cause is the reserve calculation leaving no
+    room - not a literally-low SoC (reported: 88% SoC labelled as 'too
+    low', which is misleading at that level)."""
+    coordinator = make_coordinator({})
+    coordinator.last_reason = "expensive_quarter_soc_protected"
+    coordinator.last_price_priority_held_off = False
+    coordinator.last_used_soc_taper_fallback = False
+    coordinator.last_soc_percent = 88.0
+    coordinator.last_available_kwh = 6.83
+
+    text = coordinator._build_explanation()
+
+    assert "nachtreserve" in text
+    assert "6.83" in text
+    assert "accu-SoC" not in text
 
 
 def test_expensive_quarter_mentions_secondary_tier(make_coordinator):

@@ -84,6 +84,7 @@ from .const import (
     HOME_CONNECT_ACTIVE_STATES,
     CONF_APPLIANCE_NOTIFY_SERVICE,
     MODE_CHANGE_EMOJI,
+    REASON_TO_MODE,
     APPLIANCE_RUNNING_POWER_THRESHOLD_W,
     CONSUMPTION_CORRECTION_SMOOTHING_SAMPLES,
     MAX_CONSUMPTION_CORRECTION_RATIO,
@@ -3732,13 +3733,21 @@ class EnergyManagementSystemCoordinator:
 
     def _finish_decision_tick(self, now: datetime) -> None:
         """Common tail for every branch of the decision tree that actually
-        applied something to the device: build the explanation text, then
-        check whether the mode/power genuinely changed since the last
-        tick and notify if so (see `_maybe_notify_mode_change`). Not used
-        by the two branches that don't apply anything (no_forecast_data,
-        force_manual) - those just build the explanation directly, since
-        there's nothing the integration did to notify about.
+        applied something to the device: correct last_expected_mode to
+        match what was actually decided (see REASON_TO_MODE - it's set
+        early from the price check alone, before headroom/SoC/price-
+        priority checks can downgrade an "expensive, should discharge"
+        guess back to smart, e.g. expensive_quarter_soc_protected), build
+        the explanation text, then check whether the mode/power genuinely
+        changed since the last tick and notify if so (see
+        `_maybe_notify_mode_change`). Not used by the two branches that
+        don't apply anything (no_forecast_data, force_manual) - those
+        just build the explanation directly, since there's nothing the
+        integration did to notify about.
         """
+        self.last_expected_mode = REASON_TO_MODE.get(
+            self.last_reason, self.last_expected_mode
+        )
         self.last_explanation = self._build_explanation()
         self._maybe_notify_mode_change(now)
 
@@ -3875,7 +3884,7 @@ class EnergyManagementSystemCoordinator:
                     "dus blijft de Zendure voor nu op 'smart' staan in "
                     "plaats van al te verkopen."
                 )
-            else:
+            elif self.last_used_soc_taper_fallback:
                 soc_txt = (
                     f"{self.last_soc_percent:.0f}%"
                     if self.last_soc_percent is not None
@@ -3886,6 +3895,21 @@ class EnergyManagementSystemCoordinator:
                     f"accu-SoC ({soc_txt}) is te laag om dat te "
                     f"rechtvaardigen. Daarom blijft de Zendure op 'smart' "
                     f"staan in plaats van geforceerd te ontladen."
+                )
+            else:
+                available_txt = (
+                    f"{self.last_available_kwh:.2f} kWh"
+                    if self.last_available_kwh is not None
+                    else "onbekend"
+                )
+                parts.append(
+                    f"Dit zou een duur kwartier zijn om te ontladen, maar de "
+                    f"nachtreserve-berekening laat geen ruimte over: alle "
+                    f"beschikbare energie ({available_txt}) is al nodig om "
+                    f"de rest van de nacht te overbruggen. Daarom blijft de "
+                    f"Zendure op 'smart' staan (die regelt zelf verder, "
+                    f"zonder onze reserve te verkleinen) in plaats van "
+                    f"geforceerd te ontladen."
                 )
 
         elif reason == "grid_charging_low_solar":

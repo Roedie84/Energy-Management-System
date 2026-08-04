@@ -3314,3 +3314,44 @@ verandert.
 zowel dat de helper-functie `None` teruggeeft bij exact geen headroom,
 als dat de volledige beslisboom daadwerkelijk het `select.select_option`
 "smart"-commando verstuurt in dat scenario.
+
+## v0.63.20 — twee inconsistenties in dezelfde export gevonden en gefixt
+
+**Gerapporteerd (met screenshot):** twee dingen klopten niet met elkaar
+in dezelfde weergave:
+
+1. De uitlegtekst zei "de accu-SoC (88%) is te laag om dat te
+   rechtvaardigen" — maar 88% is allesbehalve laag.
+2. "Werkelijke modus (Zendure ...)" toonde `smart`, maar "Verwachte
+   modus (logica)" toonde `manual` — tegenstrijdig.
+
+**Bug 1 — verkeerde verklaring:** de `expensive_quarter_soc_protected`-
+tekst had maar twee takken: prijs-prioriteit, of "SoC te laag". Die
+tweede tak was geschreven voor de vlakke SoC-taper-fallback (geen
+`available_energy_sensor_entity` geconfigureerd), maar wordt ook getoond
+wanneer de **dynamische reserve-tak** simpelweg geen headroom meer over
+heeft (sinds v0.63.19 valt dat terug op `smart` zonder geforceerd
+commando) — een heel andere, legitieme reden die niets met de SoC zelf
+te maken heeft. Nu een derde tak toegevoegd (herkend via de al
+bestaande `last_used_soc_taper_fallback`-vlag, v0.60.0): bij de
+dynamische tak wordt nu de werkelijke reden uitgelegd (de
+nachtreserve-berekening laat geen ruimte over), met het beschikbare
+aantal kWh erbij, in plaats van ten onrechte de SoC de schuld te geven.
+
+**Bug 2 — verkeerde "Verwachte modus":** `last_expected_mode` werd
+vroeg in de beslisboom precies één keer berekend, puur op basis van "is
+dit kwartier duur" — vóórdat de headroom-/SoC-/prijs-prioriteitschecks
+konden bepalen dat het uiteindelijke besluit toch `smart` werd. Die
+correctie gebeurde daarna nergens meer, dus bleef de weergave op
+`manual` staan hangen terwijl er allang `smart` was toegepast. Nu
+gecorrigeerd in `_finish_decision_tick()` (draait aan het einde van elk
+pad dat daadwerkelijk iets toepast): een nieuwe `REASON_TO_MODE`-mapping
+zet `last_expected_mode` na afloop gelijk aan wat er op basis van de
+uiteindelijke `last_reason` daadwerkelijk is besloten.
+
+**Getest** (1 nieuwe permanente test in `test_explanation_text.py` voor
+de tekst-fix, 2 nieuwe in `test_expected_mode_correction.py` voor de
+modus-correctie): de dynamische-reserve-tak noemt nu de nachtreserve en
+niet de SoC; en `last_expected_mode` komt na afloop overeen met de
+daadwerkelijke beslissing, zowel voor een geslaagde ontlading als voor
+de terugval naar smart.
