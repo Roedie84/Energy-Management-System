@@ -21,6 +21,7 @@ async def async_setup_entry(
             VacationModeSwitch(coordinator, entry_id=entry.entry_id),
             SteelstofzuigerOverrideSwitch(coordinator, entry_id=entry.entry_id),
             FietsladersOverrideSwitch(coordinator, entry_id=entry.entry_id),
+            ArbitrageChargingSwitch(coordinator, entry_id=entry.entry_id),
         ]
     )
 
@@ -206,4 +207,45 @@ class FietsladersOverrideSwitch(SwitchEntity, RestoreEntity):
 
     async def async_turn_off(self, **kwargs) -> None:
         await self._coordinator.async_set_fietsladers_override(False)
+        self.async_write_ha_state()
+
+
+class ArbitrageChargingSwitch(SwitchEntity, RestoreEntity):
+    """When on, the coordinator may actively buy from the grid during a
+    cheap quarter specifically because a known, more expensive quarter
+    is still coming later today (v0.63.15) - profitable price arbitrage
+    beyond the existing "protect the bridging reserve" and "sell what's
+    already there" behaviour. Off by default: this is new, real-money
+    behaviour, so it's opt-in rather than silently active after an
+    update.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Arbitrage-laden"
+    _attr_icon = "mdi:chart-line"
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_arbitrage_charging"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def is_on(self) -> bool:
+        return self._coordinator.arbitrage_charging_enabled
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if last_state is not None:
+            self._coordinator.arbitrage_charging_enabled = last_state.state == "on"
+
+    async def async_turn_on(self, **kwargs) -> None:
+        await self._coordinator.async_set_arbitrage_charging_enabled(True)
+        self.async_write_ha_state()
+
+    async def async_turn_off(self, **kwargs) -> None:
+        await self._coordinator.async_set_arbitrage_charging_enabled(False)
         self.async_write_ha_state()

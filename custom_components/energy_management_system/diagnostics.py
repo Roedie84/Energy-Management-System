@@ -261,6 +261,14 @@ async def async_get_config_entry_diagnostics(
             "force_manual": coordinator.force_manual,
             "steelstofzuiger_override": coordinator.steelstofzuiger_override,
             "fietsladers_override": coordinator.fietsladers_override,
+            "arbitrage_charging_enabled": coordinator.arbitrage_charging_enabled,
+            "last_arbitrage_margin_eur_per_kwh": (
+                coordinator.last_arbitrage_margin_eur_per_kwh
+            ),
+            "last_arbitrage_solar_surplus_w": (
+                coordinator.last_arbitrage_solar_surplus_w
+            ),
+            "last_arbitrage_grid_power_w": coordinator.last_arbitrage_grid_power_w,
             "learning_only": coordinator.learning_only,
             "last_reason": coordinator.last_reason,
             "last_explanation": coordinator.last_explanation,

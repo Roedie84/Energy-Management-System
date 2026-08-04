@@ -179,6 +179,45 @@ Plus een vaste "onbeschermde nasleep"-marge van 15%
 neemt de Zendure's eigen smart-modus het over, buiten onze reserve-
 bescherming om — deze marge compenseert dat structurele blinde vlek.
 
+### Arbitrage-laden (optioneel, standaard uit)
+
+Naast "genoeg reserve aanhouden" en "verkopen wat er al is", kan de
+integratie ook **actief bijkopen** tijdens een goedkoop kwartier, puur
+omdat er later diezelfde dag een bekend duurder kwartier aankomt — ook
+als de bestaande reserve al genoeg is om te overbruggen ("genoeg om te
+overbruggen" en "winstgevend om nu meer te kopen" zijn onafhankelijke
+vragen). Staat achter een eigen schakelaar,
+`switch.arbitrage_laden` — **standaard uit**, bewust opt-in omdat dit
+nieuw, echt-geld-gedrag is.
+
+Alleen actief als de projectie, ná laad/ontlaad-verlies, een minimale
+marge overhoudt:
+
+```
+netto_eur_per_kwh = (geleerd_rendement × beste_resterende_verkoopprijs_vandaag)
+                    − huidige_prijs
+```
+
+Moet minimaal `MIN_ARBITRAGE_MARGIN_EUR_PER_KWH` (3 cent/kWh) opleveren
+— een buffer tegen onzekerheid in de prijsvoorspelling en de
+rendementsschatting.
+
+**Zon-prioriteit** (expliciet gevraagd: "tijdens goedkope uren vooral
+zonne-energie blijft opslaan"): het gewenste laadvermogen
+(`manual_charge_power`) wordt eerst verminderd met het **live
+zonoverschot** (PV-productie minus werkelijk huishoudverbruik, met
+`pv_power_sensor_entity` geconfigureerd) — alleen het overblijvende gat
+wordt daadwerkelijk van het net gekocht. Is het zonoverschot al groter
+dan het gewenste vermogen, dan gebeurt er niets: de bestaande
+smart-modus (P1-volgend) vangt die zon toch al zelf op, geen reden om
+dat te verstoren met een geforceerde manual-modus.
+
+Zet **nooit** de winter-guard-vlag (`_grid_charged_today`) — dat
+mechanisme bestaat om te voorkomen dat noodzakelijk gekochte energie
+diezelfde dag met verlies wordt terugverkocht; arbitrage-laden koopt
+juist *omdat* er een winstgevende verkoop aankomt, dus zou die vlag de
+hele functie tegenwerken.
+
 ## Grootverbruiker-bevestiging
 
 Bevestigt een geconfigureerde vaatwasser/wasmachine/Quooker/airco/oven/

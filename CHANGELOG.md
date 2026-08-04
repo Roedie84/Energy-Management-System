@@ -3114,3 +3114,58 @@ raakt de fietsladers niet en andersom, en beide staan los van
 schakelaar volledig ongemoeid tijdens het goedkoopste blok, voor beide
 apparaten afzonderlijk, en een overrule op het ene apparaat heeft geen
 effect op het andere.
+
+## v0.63.15 — arbitrage-laden: actief bijkopen bij een winstgevend prijsverschil
+
+**Aanleiding:** een terechte tegenwerping op de eerdere uitleg (v0.63.14
+gaf een te makkelijk antwoord op "waarom laadt de accu nu niet bij tegen
+21 ct, terwijl vanavond duurdere kwartieren aankomen?"). Na het
+laad/ontlaad-rendement (destijds 88,2%) mee te rekenen bleek dit wél
+degelijk winstgevend — de integratie liet hier bewust marge liggen,
+omdat ze alleen "genoeg reserve aanhouden" en "verkopen wat er al is"
+deed, niet "actief bijkopen omdat het loont".
+
+**Nieuw: `_get_arbitrage_charge_power()`.** Vergelijkt elke tick de
+huidige prijs met de hoogste nog resterende prijs van vandaag,
+verdisconteerd met het geleerde (of geconfigureerde fallback-)
+accu-rendement:
+
+```
+netto_eur_per_kwh = (rendement × beste_resterende_verkoopprijs_vandaag) − huidige_prijs
+```
+
+Alleen winstgevend genoeg (≥ `MIN_ARBITRAGE_MARGIN_EUR_PER_KWH` = 3
+cent/kWh, buffer tegen voorspellingsonzekerheid) triggert een
+geforceerde manual-laadactie, reden `arbitrage_charging`.
+
+**Zon-prioriteit** (expliciet gevraagd: "tijdens goedkope uren vooral
+zonne-energie blijft opslaan"): het gewenste laadvermogen wordt eerst
+verminderd met het live zonoverschot (PV-productie minus werkelijk
+huishoudverbruik); alleen het restgat wordt van het net gekocht. Dekt
+het zonoverschot het gewenste vermogen al, dan gebeurt er niets — de
+bestaande smart-modus (P1-volgend) vangt die zon toch al zelf op.
+
+**Kritieke ontwerpkeuze:** deze branch staat vóór de
+`should_postpone_charging`-check in de beslisboom, niet erna — het
+gerapporteerde scenario had namelijk precies dit patroon: "genoeg
+beschikbaar om te overbruggen" triggerde `smart_discharging`
+(uitstellen), wat de arbitrage-kans nooit had bereikt als hij ná die
+check stond. "Genoeg om te overbruggen" en "winstgevend om nu meer te
+kopen" zijn onafhankelijke vragen. Zet daarnaast **nooit**
+`_grid_charged_today` — dat zou de winter-guard activeren en precies de
+verkoop onderdrukken waar deze aankoop voor bedoeld was.
+
+**Nieuwe schakelaar:** `switch.arbitrage_laden` — **standaard uit**,
+bewust opt-in omdat dit nieuw, echt-geld-gedrag is na een update.
+
+**Nieuwe diagnostiek:** `last_arbitrage_margin_eur_per_kwh`,
+`last_arbitrage_solar_surplus_w`, `last_arbitrage_grid_power_w`.
+
+**Getest** (8 nieuwe permanente tests in `test_arbitrage_charging.py`):
+geen actie als uitgeschakeld; laadt wanneer winstgevend (reproduceert
+het gerapporteerde scenario, 21 ct nu vs. 39 ct later, 88,2% rendement);
+geen actie bij een te kleine marge; zonoverschot dat het volledige
+doelvermogen dekt voorkomt netaankoop; gedeeltelijk zonoverschot koopt
+alleen het gat; zet nooit de winter-guard-vlag; overrulet
+`should_postpone_charging` wanneer winstgevend; en gedraagt zich netjes
+zonder resterende prijsdata.

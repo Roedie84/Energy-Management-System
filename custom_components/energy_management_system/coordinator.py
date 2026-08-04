@@ -121,6 +121,8 @@ from .const import (
     SOLAR_RAMP_DURATION_SECONDS,
     SOLAR_RAMP_STEPS,
     GRID_IMPORT_SHORTFALL_THRESHOLD_W,
+    MIN_ARBITRAGE_MARGIN_EUR_PER_KWH,
+    MIN_ARBITRAGE_GRID_POWER_W,
     SHORTFALL_MARGIN_BONUS_PER_RECENT_DAY,
     EMERGENCY_LOW_BATTERY_KWH_THRESHOLD,
     RESERVE_EXCESS_RATIO_THRESHOLD,
@@ -187,6 +189,10 @@ class EnergyManagementSystemCoordinator:
         self.force_manual: bool = False
         self.steelstofzuiger_override: bool = False
         self.fietsladers_override: bool = False
+        self.arbitrage_charging_enabled: bool = False
+        self.last_arbitrage_margin_eur_per_kwh: float | None = None
+        self.last_arbitrage_solar_surplus_w: float | None = None
+        self.last_arbitrage_grid_power_w: float | None = None
         # If True: compute and learn everything as normal, but never send
         # commands to the Zendure entities. Set via a dedicated switch.
         self.learning_only: bool = False
@@ -608,6 +614,10 @@ class EnergyManagementSystemCoordinator:
 
     async def async_set_fietsladers_override(self, value: bool) -> None:
         self.fietsladers_override = value
+        await self.async_update()
+
+    async def async_set_arbitrage_charging_enabled(self, value: bool) -> None:
+        self.arbitrage_charging_enabled = value
         await self.async_update()
 
     async def async_set_learning_only(self, value: bool) -> None:
@@ -2297,6 +2307,89 @@ class EnergyManagementSystemCoordinator:
 
         return needed_kwh * margin
 
+    def _get_best_remaining_sell_price_today_eur(
+        self, entries: list[PriceEntry], now: datetime
+    ) -> float | None:
+        """Highest price (EUR/kWh) among today's still-upcoming quarters -
+        the best-case sale this bought energy could realistically be
+        sold into later today. None if there's no more price data left
+        today."""
+        todays_remaining = [
+            e for e in entries if e[0].date() == now.date() and e[0] >= now
+        ]
+        if not todays_remaining:
+            return None
+        return max(e[2] for e in todays_remaining) / PRICE_SCALE_FACTOR
+
+    def _get_arbitrage_charge_power(
+        self, entries: list[PriceEntry], now: datetime
+    ) -> float | None:
+        """How much to actively buy from the grid right now, purely
+        because a known, more expensive quarter is still coming later
+        today and buying now is profitable even after round-trip losses
+        (reported: 'nu tegen 21 ct niet laden en dan vanavond wat meer
+        tegen dure uren ontladen' - the margin was being left on the
+        table). Returns None if arbitrage charging is disabled, not
+        profitable right now, or the live solar surplus already covers
+        the desired charge rate on its own.
+
+        Deliberately solar-first (reported: 'tijdens goedkope uren
+        vooral zonne-energie blijft opslaan'): only tops up the *gap*
+        between the desired charge rate and whatever live PV surplus is
+        already available - if solar alone already covers it, this
+        returns None and the existing smart-mode P1-following captures
+        that solar itself, same as it always has. Only steps in with
+        grid power for the shortfall.
+        """
+        if not self.arbitrage_charging_enabled:
+            return None
+        if self.last_current_price_per_kwh is None:
+            return None
+
+        best_sell_price = self._get_best_remaining_sell_price_today_eur(entries, now)
+        if best_sell_price is None:
+            return None
+
+        efficiency_percent = self.learned_battery_efficiency_percent
+        if efficiency_percent is None:
+            efficiency_percent = float(
+                self.config.get(
+                    CONF_BATTERY_ROUND_TRIP_EFFICIENCY,
+                    DEFAULT_BATTERY_ROUND_TRIP_EFFICIENCY_PERCENT,
+                )
+            )
+        efficiency_factor = efficiency_percent / 100
+
+        projected_net_eur_per_kwh = (
+            efficiency_factor * best_sell_price
+        ) - self.last_current_price_per_kwh
+        self.last_arbitrage_margin_eur_per_kwh = round(projected_net_eur_per_kwh, 4)
+        if projected_net_eur_per_kwh < MIN_ARBITRAGE_MARGIN_EUR_PER_KWH:
+            return None
+
+        target_power_w = abs(
+            self.config.get(CONF_MANUAL_CHARGE_POWER, DEFAULT_MANUAL_CHARGE_POWER)
+        )
+
+        pv_entity = self.config.get(CONF_PV_POWER_SENSOR)
+        pv_power_w = self._read_sensor_float(pv_entity) if pv_entity else None
+        household_load_w = self._read_corrected_consumption_power()
+        solar_surplus_w = 0.0
+        if pv_power_w is not None and household_load_w is not None:
+            solar_surplus_w = max(0.0, pv_power_w - household_load_w)
+        self.last_arbitrage_solar_surplus_w = round(solar_surplus_w, 1)
+
+        grid_power_w = max(0.0, target_power_w - solar_surplus_w)
+        self.last_arbitrage_grid_power_w = round(grid_power_w, 1)
+        if grid_power_w < MIN_ARBITRAGE_GRID_POWER_W:
+            # Solar surplus already covers (most of) the desired rate -
+            # let the existing smart-mode P1-following capture it
+            # itself, rather than disrupting it for a trickle of grid
+            # power.
+            return None
+
+        return grid_power_w
+
     def _is_emergency_low_battery(self) -> bool:
         """Is the battery critically low right now, AND is little solar
         expected to refill it soon? Deliberately scoped to the winter
@@ -3793,6 +3886,31 @@ class EnergyManagementSystemCoordinator:
                 f"een negatieve prijs terug te leveren."
             )
 
+        elif reason == "arbitrage_charging":
+            power_txt = (
+                f"{abs(self.last_charge_power_applied):.0f}W"
+                if self.last_charge_power_applied is not None
+                else "het ingestelde vermogen"
+            )
+            margin_txt = (
+                f"€{self.last_arbitrage_margin_eur_per_kwh:.3f}/kWh"
+                if self.last_arbitrage_margin_eur_per_kwh is not None
+                else "onbekend"
+            )
+            solar_txt = (
+                f"{self.last_arbitrage_solar_surplus_w:.0f}W"
+                if self.last_arbitrage_solar_surplus_w is not None
+                else "0W"
+            )
+            parts.append(
+                f"Arbitrage-laden: er komt later vandaag een duurder "
+                f"kwartier, dus wordt er nu actief bijgekocht op "
+                f"{power_txt} - geschatte nettowinst na laad/ontlaad-"
+                f"verlies: {margin_txt}. Live zonoverschot ({solar_txt}) "
+                f"wordt eerst benut; alleen het gat wordt van het net "
+                f"gekocht."
+            )
+
         elif reason == "discharging_window":
             if self.last_has_enough_energy is not None and self.last_available_kwh is not None:
                 needed_txt = (
@@ -4267,6 +4385,24 @@ class EnergyManagementSystemCoordinator:
             self.last_charge_power_applied = charge_power
             self._update_financial_tracking(
                 now, entries, self.last_reason, None, charge_power
+            )
+            self._update_shortfall_detection(now, self.last_reason, self.last_available_kwh, self.last_needed_kwh_to_bridge)
+            self._finish_decision_tick(now)
+            return
+
+        arbitrage_power = self._get_arbitrage_charge_power(entries, now)
+        if arbitrage_power is not None:
+            await self._async_apply_manual(-arbitrage_power)
+            self.last_reason = "arbitrage_charging"
+            # Deliberately does NOT set _grid_charged_today: the winter
+            # guard exists to stop selling energy bought out of
+            # necessity at a loss - this purchase is the opposite, made
+            # *because* a known, more profitable sale is coming later
+            # today. Suppressing that sale would defeat the entire
+            # point of buying now.
+            self.last_charge_power_applied = -arbitrage_power
+            self._update_financial_tracking(
+                now, entries, self.last_reason, None, -arbitrage_power
             )
             self._update_shortfall_detection(now, self.last_reason, self.last_available_kwh, self.last_needed_kwh_to_bridge)
             self._finish_decision_tick(now)

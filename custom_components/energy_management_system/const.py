@@ -42,6 +42,7 @@ MODE_CHANGE_EMOJI = {
     "emergency_low_battery": "🚨",
     "negative_price": "🎁⬆️",
     "discharging_window": "⏳",
+    "arbitrage_charging": "📈⬆️",
     "default_smart": "🤖",
     "no_forecast_data": "⚠️",
 }
@@ -229,6 +230,17 @@ SOLAR_RAMP_STEPS = 10
 # quarter), counts as an unexpected shortfall - the reserve estimate for
 # that day turned out too optimistic. Set above typical sensor noise.
 GRID_IMPORT_SHORTFALL_THRESHOLD_W = 100.0
+
+# Arbitrage charging (v0.63.15): buy from the grid during a cheap
+# quarter specifically because a known, more expensive quarter is still
+# coming later today - only worthwhile if the projected net return
+# clears this minimum margin (EUR/kWh) after round-trip losses, as a
+# buffer against price-forecast/efficiency-estimate uncertainty.
+MIN_ARBITRAGE_MARGIN_EUR_PER_KWH = 0.03
+
+# Below this, forcing manual mode just to top up a trickle isn't worth
+# disrupting the Zendure's own solar-following smart mode for.
+MIN_ARBITRAGE_GRID_POWER_W = 100.0
 
 # For each of the last LEARNING_HISTORY_DAYS days that had a detected
 # shortfall, add this many extra percentage points to the dynamic
