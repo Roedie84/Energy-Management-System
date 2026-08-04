@@ -84,6 +84,7 @@ async def async_setup_entry(
             "mdi:bell-outline",
         ),
         SteelstofzuigerStatusSensor(coordinator, entry.entry_id),
+        FietsladersStatusSensor(coordinator, entry.entry_id),
     ]
 
     if tracker.enabled:
@@ -617,6 +618,32 @@ class SteelstofzuigerStatusSensor(_CoordinatorDiagnosticSensor):
             ),
             "learned_duration_minutes": (
                 self._coordinator.learned_steelstofzuiger_duration_minutes
+            ),
+        }
+
+
+class FietsladersStatusSensor(_CoordinatorDiagnosticSensor):
+    """Mirror of SteelstofzuigerStatusSensor, for the e-bike chargers
+    (v0.63.13)."""
+
+    _attr_name = "Fietsladers status"
+    _attr_icon = "mdi:bike"
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        super().__init__(coordinator, entry_id, "fietsladers_status")
+
+    @property
+    def native_value(self) -> str | None:
+        return self._coordinator.last_fietsladers_action
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return {
+            "duration_history_minutes": (
+                self._coordinator.fietsladers_charge_duration_history
+            ),
+            "learned_duration_minutes": (
+                self._coordinator.learned_fietsladers_duration_minutes
             ),
         }
 

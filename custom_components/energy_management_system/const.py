@@ -29,6 +29,8 @@ CONF_OVEN_STATE_SENSOR = "oven_state_sensor_entity"
 CONF_KOOKPLAAT_STATE_SENSOR = "kookplaat_state_sensor_entity"
 CONF_STEELSTOFZUIGER_SWITCH = "steelstofzuiger_switch_entity"
 CONF_STEELSTOFZUIGER_POWER_SENSOR = "steelstofzuiger_power_sensor_entity"
+CONF_FIETSLADERS_SWITCH = "fietsladers_switch_entity"
+CONF_FIETSLADERS_POWER_SENSOR = "fietsladers_power_sensor_entity"
 CONF_APPLIANCE_NOTIFY_SERVICE = "appliance_notify_service"
 
 # Emoji shown in the mode/power-change notification title (v0.63.8), one
@@ -185,8 +187,15 @@ QUOOKER_SUSTAINED_MINUTES = 2
 # How long the steelstofzuiger's power draw must stay below
 # APPLIANCE_RUNNING_POWER_THRESHOLD_W before the charge is considered
 # complete (mirror of QUOOKER_SUSTAINED_MINUTES - a brief dip in a
-# charging curve shouldn't be mistaken for "done").
+# charging curve shouldn't be mistaken for "done"). Shared by every
+# scheduled-charge appliance (v0.63.13).
 STEELSTOFZUIGER_COMPLETE_SUSTAINED_MINUTES = 2
+
+# The e-bike chargers draw more standby power than the generic
+# APPLIANCE_RUNNING_POWER_THRESHOLD_W (15W) would allow for a clean
+# "done" signal (reported: 20W is the right cutoff for this specific
+# charger), hence its own threshold rather than reusing the shared one.
+FIETSLADERS_COMPLETE_THRESHOLD_W = 20.0
 
 # hvac_action values that mean the climate entity's compressor/heating
 # element is actually drawing power right now - 'idle' and 'off' don't

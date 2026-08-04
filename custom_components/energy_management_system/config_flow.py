@@ -31,6 +31,8 @@ from .const import (
     CONF_KOOKPLAAT_STATE_SENSOR,
     CONF_STEELSTOFZUIGER_SWITCH,
     CONF_STEELSTOFZUIGER_POWER_SENSOR,
+    CONF_FIETSLADERS_SWITCH,
+    CONF_FIETSLADERS_POWER_SENSOR,
     CONF_APPLIANCE_NOTIFY_SERVICE,
     CONF_MANUAL_DISCHARGE_POWER,
     CONF_MANUAL_POWER_NUMBER,
@@ -185,6 +187,14 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
             vol.Optional(
                 CONF_STEELSTOFZUIGER_POWER_SENSOR,
                 default=defaults.get(CONF_STEELSTOFZUIGER_POWER_SENSOR),
+            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            vol.Optional(
+                CONF_FIETSLADERS_SWITCH,
+                default=defaults.get(CONF_FIETSLADERS_SWITCH),
+            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="switch")),
+            vol.Optional(
+                CONF_FIETSLADERS_POWER_SENSOR,
+                default=defaults.get(CONF_FIETSLADERS_POWER_SENSOR),
             ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
             vol.Optional(
                 CONF_APPLIANCE_NOTIFY_SERVICE,

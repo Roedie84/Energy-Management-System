@@ -269,6 +269,20 @@ views:
             grid_options:
               columns: 4
               rows: 1
+          - type: custom:mushroom-entity-card
+            entity: switch.woonkamer_energy_management_system_steelstofzuiger_overrule
+            name: Steelstofzuiger overrule
+            icon: mdi:hand-back-right-outline
+            grid_options:
+              columns: 4
+              rows: 1
+          - type: custom:mushroom-entity-card
+            entity: switch.woonkamer_energy_management_system_fietsladers_overrule
+            name: Fietsladers overrule
+            icon: mdi:hand-back-right-outline
+            grid_options:
+              columns: 4
+              rows: 1
 
       - type: grid
         cards:
@@ -667,11 +681,14 @@ views:
 
   - title: Apparaten
     path: apparaten
-    icon: mdi:dishwasher
+    icon: mdi:devices
     cards:
       - type: custom:mushroom-title-card
         title: Apparaten
-        subtitle: Informatief — geen aansturing
+        subtitle: >-
+          Vaatwasser/wasmachine: informatief (geen aansturing).
+          Steelstofzuiger/fietsladers: automatisch aangestuurd tijdens
+          het goedkoopste blok.
 
       - type: grid
         columns: 2
@@ -697,6 +714,30 @@ views:
             icon_color: blue
             entity: >-
               sensor.woonkamer_energy_management_system_washing_machine_typical_usage_hours
+          - type: custom:mushroom-template-card
+            primary: >-
+              {{ states('sensor.woonkamer_energy_management_system_steelstofzuiger_status') }}
+            secondary: >-
+              Steelstofzuiger — status ({{
+              state_attr('sensor.woonkamer_energy_management_system_steelstofzuiger_status', 'learned_duration_minutes')
+              | round(0) if state_attr('sensor.woonkamer_energy_management_system_steelstofzuiger_status', 'learned_duration_minutes')
+              is not none else '?' }} min geleerde laadduur)
+            icon: mdi:vacuum
+            icon_color: green
+            entity: >-
+              sensor.woonkamer_energy_management_system_steelstofzuiger_status
+          - type: custom:mushroom-template-card
+            primary: >-
+              {{ states('sensor.woonkamer_energy_management_system_fietsladers_status') }}
+            secondary: >-
+              Fietsladers — status ({{
+              state_attr('sensor.woonkamer_energy_management_system_fietsladers_status', 'learned_duration_minutes')
+              | round(0) if state_attr('sensor.woonkamer_energy_management_system_fietsladers_status', 'learned_duration_minutes')
+              is not none else '?' }} min geleerde laadduur)
+            icon: mdi:bike
+            icon_color: green
+            entity: >-
+              sensor.woonkamer_energy_management_system_fietsladers_status
 
       - type: entities
         title: Laatste meldingen

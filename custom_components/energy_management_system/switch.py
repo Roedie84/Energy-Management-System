@@ -19,6 +19,8 @@ async def async_setup_entry(
             ForceManualSwitch(coordinator, entry_id=entry.entry_id),
             LearningOnlySwitch(coordinator, entry_id=entry.entry_id),
             VacationModeSwitch(coordinator, entry_id=entry.entry_id),
+            SteelstofzuigerOverrideSwitch(coordinator, entry_id=entry.entry_id),
+            FietsladersOverrideSwitch(coordinator, entry_id=entry.entry_id),
         ]
     )
 
@@ -132,4 +134,76 @@ class VacationModeSwitch(SwitchEntity, RestoreEntity):
 
     async def async_turn_off(self, **kwargs) -> None:
         self._coordinator.vacation_mode = False
+        self.async_write_ha_state()
+
+
+class SteelstofzuigerOverrideSwitch(SwitchEntity, RestoreEntity):
+    """When on, the coordinator leaves the steelstofzuiger charger switch
+    completely alone (v0.63.14) - per-appliance equivalent of
+    `Force manual`, but scoped to just this one appliance instead of the
+    whole battery control loop.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Steelstofzuiger overrule"
+    _attr_icon = "mdi:hand-back-right-outline"
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_steelstofzuiger_override"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def is_on(self) -> bool:
+        return self._coordinator.steelstofzuiger_override
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if last_state is not None:
+            self._coordinator.steelstofzuiger_override = last_state.state == "on"
+
+    async def async_turn_on(self, **kwargs) -> None:
+        await self._coordinator.async_set_steelstofzuiger_override(True)
+        self.async_write_ha_state()
+
+    async def async_turn_off(self, **kwargs) -> None:
+        await self._coordinator.async_set_steelstofzuiger_override(False)
+        self.async_write_ha_state()
+
+
+class FietsladersOverrideSwitch(SwitchEntity, RestoreEntity):
+    """Mirror of SteelstofzuigerOverrideSwitch, for the e-bike chargers."""
+
+    _attr_has_entity_name = True
+    _attr_name = "Fietsladers overrule"
+    _attr_icon = "mdi:hand-back-right-outline"
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_fietsladers_override"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def is_on(self) -> bool:
+        return self._coordinator.fietsladers_override
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if last_state is not None:
+            self._coordinator.fietsladers_override = last_state.state == "on"
+
+    async def async_turn_on(self, **kwargs) -> None:
+        await self._coordinator.async_set_fietsladers_override(True)
+        self.async_write_ha_state()
+
+    async def async_turn_off(self, **kwargs) -> None:
+        await self._coordinator.async_set_fietsladers_override(False)
         self.async_write_ha_state()

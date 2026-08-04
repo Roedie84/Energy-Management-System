@@ -3042,3 +3042,75 @@ duur-registratie), blijft uit voor de rest van de dag na voltooiing,
 reset de "voltooid"-vlag bij een nieuwe dag, doet niets zonder
 geconfigureerde schakelaar, raakt de schakelaar nooit aan in
 `learning_only`, en de geleerde duur gebruikt de mediaan.
+
+## v0.63.13 — fietsladers toegevoegd, logica gegeneraliseerd
+
+**Aanleiding:** een tweede, bijna identieke losse HA-automatisering
+zette de e-bike-laders uit zodra het vermogen 2 minuten onder 20W bleef
+("Fietsladers: Automatisch uit bij volle accu"), met een melding erbij
+- maar geen prijs-gestuurde inschakeling ("in principe zetten we nu de
+schakelaar handmatig aan"). In plaats van dit als tweede, bijna
+identieke kopie van de steelstofzuiger-code (v0.63.12) te bouwen, eerst
+gegeneraliseerd naar een herbruikbare, parametrische functie.
+
+**Refactor:** `_async_update_steelstofzuiger_charging()` is vervangen
+door de gedeelde `_async_update_scheduled_charge_appliance()`, die
+per-apparaat state via expliciete attribuutnamen doorgeeft
+(`getattr`/`setattr`, hetzelfde patroon dat `_notify_if_appliance_ready`
+al gebruikte) - geen dictionary-herstructurering nodig, dus alle
+bestaande steelstofzuiger-attributen/tests blijven ongewijzigd werken.
+Ook `_finish_steelstofzuiger_session()` is gegeneraliseerd naar
+`_finish_scheduled_charge_session()`.
+
+**Fietsladers, nieuw:** eigen configuratievelden
+(`fietsladers_switch_entity` / `fietsladers_power_sensor_entity`), eigen
+**20W-drempel** (`FIETSLADERS_COMPLETE_THRESHOLD_W`) in plaats van de
+gedeelde 15W (`APPLIANCE_RUNNING_POWER_THRESHOLD_W`) - de gerapporteerde
+laders hebben kennelijk een hogere standby-trek dan de steelstofzuiger.
+Stuurt bij voltooiing een melding ("🚲 Fietsen opgeladen"), exact de
+tekst uit de oorspronkelijke automatisering. Dezelfde
+voltooiing-melding is ook met terugwerkende kracht aan de
+steelstofzuiger toegevoegd, voor consistentie.
+
+**Dashboard ("Apparaten"-pagina):**
+- Icoon aangepast van `mdi:dishwasher` naar `mdi:devices` - representeert
+  nu meerdere soorten apparaten, niet alleen de vaatwasser.
+- Ondertitel gecorrigeerd: was nog "Informatief — geen aansturing", wat
+  sinds v0.63.12 niet meer klopt voor de steelstofzuiger/fietsladers
+  (die worden wél echt aangestuurd).
+- Twee nieuwe kaarten: actuele status + geleerde laadduur voor beide
+  geplande laadapparaten.
+
+**Nieuwe sensor:** `sensor.fietsladers_status` (mirror van
+`sensor.steelstofzuiger_status`, v0.63.12).
+
+**Getest** (3 nieuwe permanente tests, toegevoegd aan het hernoemde
+`test_scheduled_charge_appliances.py`): de 20W-drempel wordt
+daadwerkelijk gebruikt (niet de gedeelde 15W - getest met 18W, dat bij
+de verkeerde drempel nooit als "klaar" zou zijn herkend); de
+voltooiing-melding wordt verstuurd met de juiste titel; en beide
+apparaten lopen via dezelfde gedeelde functie zonder dat hun state door
+elkaar loopt.
+
+## v0.63.14 — overrule-schakelaars voor steelstofzuiger en fietsladers
+
+**Aanleiding:** de nieuwe geplande-laadapparaten-functie (v0.63.12/
+v0.63.13) had geen manier om een apparaat tijdelijk over te nemen zonder
+de hele configuratie te verwijderen.
+
+**Nieuw:** twee `switch`-entiteiten, `switch.steelstofzuiger_overrule`
+en `switch.fietsladers_overrule` (persistent over herstarts, zelfde
+`RestoreEntity`-patroon als `Force manual`/`Learning only`/
+`Vakantiemodus`). Staat er eentje aan, dan laat
+`_async_update_scheduled_charge_appliance()` die ene schakelaar
+volledig met rust — geen aan/uit-commando's, geen
+klaar-met-laden-detectie, niets. De status verandert dan naar
+`overruled` (zichtbaar in de bijbehorende sensor en de diagnostiek).
+Bewust per apparaat, niet gedeeld: het overrulen van de steelstofzuiger
+raakt de fietsladers niet en andersom, en beide staan los van
+`Force manual` (dat blijft specifiek voor de accu).
+
+**Getest** (4 nieuwe permanente tests): overrule laat de betreffende
+schakelaar volledig ongemoeid tijdens het goedkoopste blok, voor beide
+apparaten afzonderlijk, en een overrule op het ene apparaat heeft geen
+effect op het andere.

@@ -75,7 +75,10 @@ from .const import (
     CONF_KOOKPLAAT_STATE_SENSOR,
     CONF_STEELSTOFZUIGER_SWITCH,
     CONF_STEELSTOFZUIGER_POWER_SENSOR,
+    CONF_FIETSLADERS_SWITCH,
+    CONF_FIETSLADERS_POWER_SENSOR,
     STEELSTOFZUIGER_COMPLETE_SUSTAINED_MINUTES,
+    FIETSLADERS_COMPLETE_THRESHOLD_W,
     QUOOKER_SUSTAINED_MINUTES,
     AIRCO_ACTIVE_HVAC_ACTIONS,
     HOME_CONNECT_ACTIVE_STATES,
@@ -182,6 +185,8 @@ class EnergyManagementSystemCoordinator:
 
         # Replaces the old input_boolean.accu_laden_forceer_manual helper.
         self.force_manual: bool = False
+        self.steelstofzuiger_override: bool = False
+        self.fietsladers_override: bool = False
         # If True: compute and learn everything as normal, but never send
         # commands to the Zendure entities. Set via a dedicated switch.
         self.learning_only: bool = False
@@ -203,6 +208,12 @@ class EnergyManagementSystemCoordinator:
         self._steelstofzuiger_below_threshold_since: datetime | None = None
         self.steelstofzuiger_charge_duration_history: list[float] = []
         self.last_steelstofzuiger_action: str | None = None
+        self._fietsladers_complete_today: bool = False
+        self._fietsladers_complete_date: date | None = None
+        self._fietsladers_charge_started_at: datetime | None = None
+        self._fietsladers_below_threshold_since: datetime | None = None
+        self.fietsladers_charge_duration_history: list[float] = []
+        self.last_fietsladers_action: str | None = None
 
         # -- Optional appliance awareness (informational only) --
         # Per hour-of-day, a rolling history of samples (1.0 = was
@@ -591,6 +602,14 @@ class EnergyManagementSystemCoordinator:
         self.force_manual = value
         await self.async_update()
 
+    async def async_set_steelstofzuiger_override(self, value: bool) -> None:
+        self.steelstofzuiger_override = value
+        await self.async_update()
+
+    async def async_set_fietsladers_override(self, value: bool) -> None:
+        self.fietsladers_override = value
+        await self.async_update()
+
     async def async_set_learning_only(self, value: bool) -> None:
         self.learning_only = value
         await self.async_update()
@@ -621,6 +640,14 @@ class EnergyManagementSystemCoordinator:
         if not self.steelstofzuiger_charge_duration_history:
             return None
         return statistics.median(self.steelstofzuiger_charge_duration_history)
+
+    @property
+    def learned_fietsladers_duration_minutes(self) -> float | None:
+        """Same as learned_steelstofzuiger_duration_minutes, for the
+        e-bike chargers."""
+        if not self.fietsladers_charge_duration_history:
+            return None
+        return statistics.median(self.fietsladers_charge_duration_history)
 
     # -- Forecast parsing -------------------------------------------------
 
@@ -1056,108 +1083,158 @@ class EnergyManagementSystemCoordinator:
             notification_id=f"ems_{appliance_label}_ready",
         )
 
-    async def _async_update_steelstofzuiger_charging(
-        self, now: datetime, is_currently_cheapest_block: bool
+    async def _async_update_scheduled_charge_appliance(
+        self,
+        now: datetime,
+        is_currently_cheapest_block: bool,
+        switch_entity: str | None,
+        power_entity: str | None,
+        complete_threshold_w: float,
+        complete_today_attr: str,
+        complete_date_attr: str,
+        charge_started_attr: str,
+        below_threshold_since_attr: str,
+        duration_history_attr: str,
+        last_action_attr: str,
+        notify_title: str | None = None,
+        notify_message: str | None = None,
+        override_attr: str | None = None,
     ) -> None:
-        """Actually switch the steelstofzuiger's charger on during today's
-        cheapest price block, and back off again once charging is
-        genuinely complete (power draw sustained below
-        APPLIANCE_RUNNING_POWER_THRESHOLD_W for
-        STEELSTOFZUIGER_COMPLETE_SUSTAINED_MINUTES - a brief dip in a
-        charging curve shouldn't be mistaken for "done", same principle
-        as the Quooker's sustained-active check, just inverted).
+        """Shared logic (v0.63.13, generalised from the steelstofzuiger-
+        only v0.63.12) for any appliance that should charge only during
+        today's cheapest price block, year-round, and switch itself off
+        once charging is genuinely complete (power draw sustained below
+        `complete_threshold_w` for STEELSTOFZUIGER_COMPLETE_SUSTAINED_MINUTES
+        - a brief dip in a charging curve shouldn't be mistaken for
+        "done", same principle as the Quooker's sustained-active check,
+        just inverted).
+
+        State is kept in per-appliance attributes (passed in by name via
+        `getattr`/`setattr`, same pattern already used by
+        `_notify_if_appliance_ready`) rather than a shared dict, so each
+        appliance's diagnostics/sensor stay simple, independently-named
+        attributes instead of nested lookups.
 
         Unlike the dishwasher/washing machine appliance-awareness
         feature (informational only, v0.47.0), this one actually
-        controls a switch entity - "altijd op de goedkoopste uren laten
-        laden, het hele jaar door" (reported), rather than a fixed
-        clock window that ignores the actual daily price shape.
+        controls a switch entity. Charges at most once per day; once
+        complete, stays off for the rest of the day even if still
+        inside the cheap block. Respects learning_only (never actually
+        flips the switch, only simulates) but is deliberately
+        independent of force_manual - that switch is about the battery
+        control loop specifically, not this.
 
-        Charges at most once per day: once complete, stays off for the
-        rest of the day even if still inside the cheap block (no reason
-        to keep a full battery charger running). Respects learning_only
-        (never actually flips the switch, only simulates) but is
-        deliberately independent of force_manual - that switch is about
-        the battery control loop specifically, not this.
+        `override_attr` (v0.63.14): if that coordinator attribute is
+        True, this appliance is left completely untouched - the person
+        has taken manual control back, mirroring `force_manual` for the
+        battery but scoped per appliance instead of one switch for
+        everything.
         """
-        switch_entity = self.config.get(CONF_STEELSTOFZUIGER_SWITCH)
         if not switch_entity:
             return
+        if override_attr is not None and getattr(self, override_attr):
+            setattr(self, last_action_attr, "overruled")
+            return
 
-        if self._steelstofzuiger_complete_date != now.date():
-            self._steelstofzuiger_complete_today = False
-            self._steelstofzuiger_complete_date = now.date()
+        if getattr(self, complete_date_attr) != now.date():
+            setattr(self, complete_today_attr, False)
+            setattr(self, complete_date_attr, now.date())
 
-        power_entity = self.config.get(CONF_STEELSTOFZUIGER_POWER_SENSOR)
         power_w = self._read_sensor_float(power_entity) if power_entity else None
-
         switch_state = self.hass.states.get(switch_entity)
         is_on = switch_state is not None and switch_state.state == "on"
 
-        should_charge = is_currently_cheapest_block and not self._steelstofzuiger_complete_today
+        complete_today = getattr(self, complete_today_attr)
+        should_charge = is_currently_cheapest_block and not complete_today
 
         if not should_charge:
             if is_on:
                 await self._async_set_switch(switch_entity, turn_on=False)
-                self._finish_steelstofzuiger_session(now, completed=False)
-            self.last_steelstofzuiger_action = (
-                "voltooid_vandaag" if self._steelstofzuiger_complete_today else "wacht_op_goedkoop_blok"
+                self._finish_scheduled_charge_session(
+                    now,
+                    charge_started_attr,
+                    below_threshold_since_attr,
+                    duration_history_attr,
+                    completed=False,
+                )
+            setattr(
+                self,
+                last_action_attr,
+                "voltooid_vandaag" if complete_today else "wacht_op_goedkoop_blok",
             )
             return
 
         if not is_on:
             await self._async_set_switch(switch_entity, turn_on=True)
-            self._steelstofzuiger_charge_started_at = now
-            self._steelstofzuiger_below_threshold_since = None
-            self.last_steelstofzuiger_action = "laden_gestart"
+            setattr(self, charge_started_attr, now)
+            setattr(self, below_threshold_since_attr, None)
+            setattr(self, last_action_attr, "laden_gestart")
             return
 
         # Already on and inside the cheap block - watch for completion.
-        if power_entity and power_w is not None and power_w < APPLIANCE_RUNNING_POWER_THRESHOLD_W:
-            if self._steelstofzuiger_below_threshold_since is None:
-                self._steelstofzuiger_below_threshold_since = now
-            elapsed_minutes = (
-                now - self._steelstofzuiger_below_threshold_since
-            ).total_seconds() / 60
+        if power_entity and power_w is not None and power_w < complete_threshold_w:
+            since = getattr(self, below_threshold_since_attr)
+            if since is None:
+                since = now
+                setattr(self, below_threshold_since_attr, since)
+            elapsed_minutes = (now - since).total_seconds() / 60
             if elapsed_minutes >= STEELSTOFZUIGER_COMPLETE_SUSTAINED_MINUTES:
                 await self._async_set_switch(switch_entity, turn_on=False)
-                self._finish_steelstofzuiger_session(now, completed=True)
-                self._steelstofzuiger_complete_today = True
-                self.last_steelstofzuiger_action = "voltooid"
+                self._finish_scheduled_charge_session(
+                    now,
+                    charge_started_attr,
+                    below_threshold_since_attr,
+                    duration_history_attr,
+                    completed=True,
+                )
+                setattr(self, complete_today_attr, True)
+                setattr(self, last_action_attr, "voltooid")
+                if notify_title and notify_message:
+                    notify_service = self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE)
+                    if notify_service:
+                        self._dispatch_notification(
+                            notify_service=notify_service,
+                            title=notify_title,
+                            message=notify_message,
+                            notification_id=f"ems_{last_action_attr}_complete",
+                        )
                 return
         else:
-            self._steelstofzuiger_below_threshold_since = None
+            setattr(self, below_threshold_since_attr, None)
 
-        self.last_steelstofzuiger_action = "aan_het_laden"
+        setattr(self, last_action_attr, "aan_het_laden")
 
-    def _finish_steelstofzuiger_session(self, now: datetime, completed: bool) -> None:
+    def _finish_scheduled_charge_session(
+        self,
+        now: datetime,
+        charge_started_attr: str,
+        below_threshold_since_attr: str,
+        duration_history_attr: str,
+        completed: bool,
+    ) -> None:
         """Record how long a charge session ran, for the learned-duration
         history (median, same outlier-resistant approach as v0.62.0) -
         purely informational/diagnostic, not itself a decision input
         (the power-threshold detection above is the actual, more
         reliable signal for "is it done").
         """
-        if self._steelstofzuiger_charge_started_at is None:
+        started_at = getattr(self, charge_started_attr)
+        if started_at is None:
             return
-        duration_minutes = (
-            now - self._steelstofzuiger_charge_started_at
-        ).total_seconds() / 60
+        duration_minutes = (now - started_at).total_seconds() / 60
         if completed and duration_minutes > 0:
-            self.steelstofzuiger_charge_duration_history.append(
-                round(duration_minutes, 1)
-            )
-            self.steelstofzuiger_charge_duration_history = (
-                self.steelstofzuiger_charge_duration_history[-LEARNING_HISTORY_DAYS:]
-            )
-        self._steelstofzuiger_charge_started_at = None
-        self._steelstofzuiger_below_threshold_since = None
+            history = getattr(self, duration_history_attr)
+            history.append(round(duration_minutes, 1))
+            setattr(self, duration_history_attr, history[-LEARNING_HISTORY_DAYS:])
+        setattr(self, charge_started_attr, None)
+        setattr(self, below_threshold_since_attr, None)
 
     async def _async_set_switch(self, entity_id: str, turn_on: bool) -> None:
         """Turn a switch entity on/off, unless in learning_only mode.
         Deliberately doesn't touch `last_simulated_action` - that field
         is shared with the battery decision tree's own learning_only
         simulation, which runs later in the same tick and would
-        overwrite it. The caller's `last_steelstofzuiger_action` already
+        overwrite it. The caller's own last-action attribute already
         reflects the intended action either way.
         """
         if self.learning_only:
@@ -3921,7 +3998,38 @@ class EnergyManagementSystemCoordinator:
             and cheap_block_start <= now < cheap_block_end
         )
         self._check_and_notify_appliance_ready(now, is_currently_cheapest_block)
-        await self._async_update_steelstofzuiger_charging(now, is_currently_cheapest_block)
+        await self._async_update_scheduled_charge_appliance(
+            now,
+            is_currently_cheapest_block,
+            switch_entity=self.config.get(CONF_STEELSTOFZUIGER_SWITCH),
+            power_entity=self.config.get(CONF_STEELSTOFZUIGER_POWER_SENSOR),
+            complete_threshold_w=APPLIANCE_RUNNING_POWER_THRESHOLD_W,
+            complete_today_attr="_steelstofzuiger_complete_today",
+            complete_date_attr="_steelstofzuiger_complete_date",
+            charge_started_attr="_steelstofzuiger_charge_started_at",
+            below_threshold_since_attr="_steelstofzuiger_below_threshold_since",
+            duration_history_attr="steelstofzuiger_charge_duration_history",
+            last_action_attr="last_steelstofzuiger_action",
+            notify_title="🧹 Steelstofzuiger opgeladen",
+            notify_message="De steelstofzuiger is klaar met laden en de lader is uitgeschakeld.",
+            override_attr="steelstofzuiger_override",
+        )
+        await self._async_update_scheduled_charge_appliance(
+            now,
+            is_currently_cheapest_block,
+            switch_entity=self.config.get(CONF_FIETSLADERS_SWITCH),
+            power_entity=self.config.get(CONF_FIETSLADERS_POWER_SENSOR),
+            complete_threshold_w=FIETSLADERS_COMPLETE_THRESHOLD_W,
+            complete_today_attr="_fietsladers_complete_today",
+            complete_date_attr="_fietsladers_complete_date",
+            charge_started_attr="_fietsladers_charge_started_at",
+            below_threshold_since_attr="_fietsladers_below_threshold_since",
+            duration_history_attr="fietsladers_charge_duration_history",
+            last_action_attr="last_fietsladers_action",
+            notify_title="🚲 Fietsen opgeladen",
+            notify_message="De fietsladers zijn uitgeschakeld omdat de accu's vol zijn.",
+            override_attr="fietsladers_override",
+        )
 
         self.last_is_expensive = is_expensive
         self.last_effective_expensive_quarters_count = effective_count

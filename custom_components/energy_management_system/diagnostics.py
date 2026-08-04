@@ -259,6 +259,8 @@ async def async_get_config_entry_diagnostics(
         "coordinator": {
             "first_seen_date": _iso(coordinator.first_seen_date),
             "force_manual": coordinator.force_manual,
+            "steelstofzuiger_override": coordinator.steelstofzuiger_override,
+            "fietsladers_override": coordinator.fietsladers_override,
             "learning_only": coordinator.learning_only,
             "last_reason": coordinator.last_reason,
             "last_explanation": coordinator.last_explanation,
@@ -292,6 +294,13 @@ async def async_get_config_entry_diagnostics(
             ),
             "learned_steelstofzuiger_duration_minutes": (
                 coordinator.learned_steelstofzuiger_duration_minutes
+            ),
+            "last_fietsladers_action": coordinator.last_fietsladers_action,
+            "fietsladers_charge_duration_history": (
+                coordinator.fietsladers_charge_duration_history
+            ),
+            "learned_fietsladers_duration_minutes": (
+                coordinator.learned_fietsladers_duration_minutes
             ),
             "washing_machine_usage_hours_with_data": len(
                 coordinator.washing_machine_usage_hourly_history

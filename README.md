@@ -190,6 +190,40 @@ gedempt door de gebruikelijke mediaan-voorzichtigheid (die specifiek
 bestaat om een korte, onbevestigde piek te negeren) — de meting wordt
 direct vertrouwd, in plaats van pas na meerdere ticks.
 
+## Geplande laadapparaten (steelstofzuiger, fietsladers)
+
+Twee optioneel te configureren apparaten worden **daadwerkelijk
+aangestuurd** (niet alleen informatief, in tegenstelling tot de
+apparaat-bewustzijn-functie hierboven): een schakelaar gaat aan zodra
+het goedkoopste prijsblok van de dag begint, en weer uit zodra het
+laden **daadwerkelijk klaar is** — gedetecteerd doordat het vermogen
+minstens 2 minuten aanhoudend onder een drempel zakt (zelfde principe
+als de Quooker-detectie, maar omgekeerd: aanhoudend láág bevestigt
+"klaar" in plaats van aanhoudend hóóg "actief"). Laadt maximaal 1x per
+dag; eenmaal klaar blijft de schakelaar uit voor de rest van de dag, ook
+al valt die nog binnen het goedkope blok.
+
+| Veld | Drempel | Betekenis |
+|---|---|---|
+| `steelstofzuiger_switch_entity` / `steelstofzuiger_power_sensor_entity` | 15W (`APPLIANCE_RUNNING_POWER_THRESHOLD_W`) | Steelstofzuiger-lader |
+| `fietsladers_switch_entity` / `fietsladers_power_sensor_entity` | 20W (`FIETSLADERS_COMPLETE_THRESHOLD_W`) | E-bike-laders |
+
+De laadduur per sessie wordt bijgehouden als leerdata (mediaan over de
+laatste 7 sessies, dezelfde uitschieter-resistente aanpak als het
+zelflerend gedrag hieronder) — puur informatief; de aan/uit-beslissing
+zelf leunt op de live vermogensmeting, niet op de schatting. Stuurt bij
+voltooiing een melding via `appliance_notify_service` (dezelfde
+instelling als voor de overige apparaat-meldingen).
+
+Beide zijn bewust onafhankelijk van `force_manual` (dat gaat specifiek
+over de accu-besturing), maar respecteren wel `learning_only` (simuleert
+dan alleen, stuurt nooit echt iets naar de schakelaar). Elk apparaat
+heeft een eigen **overrule-schakelaar**
+(`switch.steelstofzuiger_overrule` / `switch.fietsladers_overrule`) —
+staat die aan, dan laat de integratie die ene schakelaar volledig met
+rust (per-apparaat equivalent van `Force manual`, maar zonder de rest
+van de besturing te raken).
+
 ## Zelflerend gedrag
 
 Alle onderstaande waarden gebruiken de **mediaan** over de laatste 7

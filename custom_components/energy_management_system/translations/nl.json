@@ -38,6 +38,8 @@
           "kookplaat_state_sensor_entity": "Kookplaat status-sensor (optioneel, bijv. Home Connect operation_state)",
           "steelstofzuiger_switch_entity": "Steelstofzuiger schakelaar (optioneel, laadt automatisch in het goedkoopste blok)",
           "steelstofzuiger_power_sensor_entity": "Steelstofzuiger vermogen-sensor (optioneel, detecteert einde lading)",
+          "fietsladers_switch_entity": "Fietsladers schakelaar (optioneel, laadt automatisch in het goedkoopste blok)",
+          "fietsladers_power_sensor_entity": "Fietsladers vermogen-sensor (optioneel, detecteert volle accu's)",
           "appliance_notify_service": "Notify-service voor apparaat- en accumodus-meldingen (leeg = pop-up in HA)"
         }
       }
@@ -84,6 +86,8 @@
           "kookplaat_state_sensor_entity": "Kookplaat status-sensor (optioneel, bijv. Home Connect operation_state)",
           "steelstofzuiger_switch_entity": "Steelstofzuiger schakelaar (optioneel, laadt automatisch in het goedkoopste blok)",
           "steelstofzuiger_power_sensor_entity": "Steelstofzuiger vermogen-sensor (optioneel, detecteert einde lading)",
+          "fietsladers_switch_entity": "Fietsladers schakelaar (optioneel, laadt automatisch in het goedkoopste blok)",
+          "fietsladers_power_sensor_entity": "Fietsladers vermogen-sensor (optioneel, detecteert volle accu's)",
           "appliance_notify_service": "Notify-service voor apparaat- en accumodus-meldingen (leeg = pop-up in HA)"
         }
       }
