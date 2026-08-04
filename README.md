@@ -2920,3 +2920,34 @@ cijfers → Modus & besluit.
 **Getest:** bestaande dashboard-testpijplijn (YAML-geldigheid +
 Jinja-rendering) blijft groen - puur een herschikking en
 hoogte-aanpassing, geen nieuwe databronnen.
+
+## v0.63.4 — sectie-herschikking uit v0.63.3 teruggedraaid
+
+**Gerapporteerd (met screenshot):** de herschikking uit v0.63.3
+(Besturing/Actuele beslissing direct na de eerste sectie) maakte het
+juist slechter — afgeknapte tekst ("Reden laatste beslissing" toonde
+"...lt_smart" in plaats van "default_smart") en een nieuwe, grotere
+lege ruimte tussen "Besturing" en "Modus & besluit".
+
+**Wat er mis ging:** de aanname dat secties simpelweg rij-voor-rij
+wrappen bleek onjuist — Home Assistant's `sections`-layout plaatst elke
+sectie kennelijk in de op dat moment kortste kolom (masonry-achtig),
+niet strikt links-naar-rechts. Door de volgorde te wijzigen verschoof
+de kolomtoewijzing op een manier die niet was te voorspellen zonder het
+live te zien, met de afgeknapte tekst en een nieuwe lege ruimte tot
+gevolg.
+
+**Fix:** de sectie-volgorde teruggedraaid naar v0.63.2 (Energy
+Management System → Accu & rendement → Live cijfers → Modus & besluit →
+Besturing → Actuele beslissing). De **wel** ondubbelzinnig goede fix uit
+v0.63.3 (scroll-pijltjes weg door `rows: 2` op de twee te-krappe
+markdown-kaartjes) blijft staan.
+
+**Les:** een layout-eigenschap aannemen zonder het live te kunnen zien
+is te riskant zodra het om iets minder voorspelbaars gaat dan een
+enkele kaart-hoogte - voor verdere lege-ruimte-verbeteringen is een
+screenshot-feedback-cyclus per stap veiliger dan een grotere
+herschikking ineens.
+
+**Getest:** bestaande dashboard-testpijplijn blijft groen; puur een
+terugdraai naar een eerder bevestigde structuur.
