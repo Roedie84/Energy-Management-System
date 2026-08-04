@@ -18,6 +18,7 @@ def test_explanation_sensor_exposes_crucial_values_as_attributes(make_coordinato
     coordinator.last_expensive_price_threshold = 0.378
     coordinator.last_secondary_price_threshold = 0.349
     coordinator.last_effective_expensive_quarters_count = 8
+    coordinator.last_heavy_load_source = "airco"
 
     sensor = ExplanationSensor(coordinator, "entry1")
     attrs = sensor.extra_state_attributes
@@ -30,6 +31,7 @@ def test_explanation_sensor_exposes_crucial_values_as_attributes(make_coordinato
     assert attrs["expensive_price_threshold"] == 0.378
     assert attrs["secondary_price_threshold"] == 0.349
     assert attrs["effective_expensive_quarters_count"] == 8
+    assert attrs["heavy_load_source"] == "airco"
 
 
 def test_explanation_sensor_handles_missing_data_gracefully(make_coordinator):
@@ -40,3 +42,4 @@ def test_explanation_sensor_handles_missing_data_gracefully(make_coordinator):
 
     assert attrs["last_successful_update"] is None
     assert attrs["expensive_price_threshold"] is None
+    assert attrs["heavy_load_source"] is None

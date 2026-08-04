@@ -484,6 +484,7 @@ class ExplanationSensor(_CoordinatorDiagnosticSensor):
             "effective_expensive_quarters_count": (
                 self._coordinator.last_effective_expensive_quarters_count
             ),
+            "heavy_load_source": self._coordinator.last_heavy_load_source,
         }
 
 

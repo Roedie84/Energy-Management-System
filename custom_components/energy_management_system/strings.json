@@ -32,6 +32,10 @@
           "dishwasher_ready_sensor_entity": "Dishwasher \"ready to start\" sensor (optional)",
           "washing_machine_power_sensor_entity": "Washing machine power sensor (optional)",
           "washing_machine_ready_sensor_entity": "Washing machine \"ready to start\" sensor (optional)",
+          "quooker_power_sensor_entity": "Quooker power sensor (optional)",
+          "airco_climate_entity": "Airco climate entity (optional)",
+          "oven_state_sensor_entity": "Oven state sensor (optional, e.g. Home Connect operation_state)",
+          "kookplaat_state_sensor_entity": "Cooktop state sensor (optional, e.g. Home Connect operation_state)",
           "appliance_notify_service": "Notify service for appliance notifications (empty = HA popup)"
         }
       }
@@ -72,6 +76,10 @@
           "dishwasher_ready_sensor_entity": "Dishwasher \"ready to start\" sensor (optional)",
           "washing_machine_power_sensor_entity": "Washing machine power sensor (optional)",
           "washing_machine_ready_sensor_entity": "Washing machine \"ready to start\" sensor (optional)",
+          "quooker_power_sensor_entity": "Quooker power sensor (optional)",
+          "airco_climate_entity": "Airco climate entity (optional)",
+          "oven_state_sensor_entity": "Oven state sensor (optional, e.g. Home Connect operation_state)",
+          "kookplaat_state_sensor_entity": "Cooktop state sensor (optional, e.g. Home Connect operation_state)",
           "appliance_notify_service": "Notify service for appliance notifications (empty = HA popup)"
         }
       }

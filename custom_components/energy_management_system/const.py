@@ -23,6 +23,10 @@ CONF_DISHWASHER_POWER_SENSOR = "dishwasher_power_sensor_entity"
 CONF_DISHWASHER_READY_SENSOR = "dishwasher_ready_sensor_entity"
 CONF_WASHING_MACHINE_POWER_SENSOR = "washing_machine_power_sensor_entity"
 CONF_WASHING_MACHINE_READY_SENSOR = "washing_machine_ready_sensor_entity"
+CONF_QUOOKER_POWER_SENSOR = "quooker_power_sensor_entity"
+CONF_AIRCO_CLIMATE_ENTITY = "airco_climate_entity"
+CONF_OVEN_STATE_SENSOR = "oven_state_sensor_entity"
+CONF_KOOKPLAAT_STATE_SENSOR = "kookplaat_state_sensor_entity"
 CONF_APPLIANCE_NOTIFY_SERVICE = "appliance_notify_service"
 CONF_SOLAR_FORECAST_SENSOR = "solar_forecast_sensor_entity"
 CONF_SOLAR_TODAY_FORECAST_SENSOR = "solar_today_forecast_sensor_entity"
@@ -149,6 +153,30 @@ CONSUMPTION_CORRECTION_SMOOTHING_SAMPLES = 4
 # learned average - an uncapped ratio beyond this is more likely a
 # sensor glitch than a genuine sustained change like the airco running.
 MAX_CONSUMPTION_CORRECTION_RATIO = 5.0
+
+# Heavy-load awareness (v0.63.0): when a known heavy consumer (vaatwasser,
+# wasmachine, Quooker, airco) is *confirmed* active via its own entity,
+# the median smoothing's built-in caution above is no longer needed - it
+# exists specifically to protect against a brief spike that MIGHT be one
+# of these appliances but might also be a sensor glitch. With external
+# confirmation there's no ambiguity left, so the live reading is trusted
+# immediately instead of waiting several update ticks for the median to
+# catch up. The Quooker still needs its own sustained-duration check
+# (below): a single brief tap is exactly the kind of noise the median
+# smoothing was originally built to ignore (v0.57.0) - only a longer
+# session counts as a genuine, immediately-actionable load.
+QUOOKER_SUSTAINED_MINUTES = 2
+
+# hvac_action values that mean the climate entity's compressor/heating
+# element is actually drawing power right now - 'idle' and 'off' don't
+# count (thermostat satisfied / unit switched off).
+AIRCO_ACTIVE_HVAC_ACTIONS = {"heating", "cooling"}
+
+# Home Connect's BSH.Common.EnumType.OperationState, lowercased as HA
+# exposes it. Only 'run' means the appliance is actually drawing power
+# right now - 'ready'/'delayedstart' are scheduled-but-idle, 'pause' has
+# the heating element off mid-cycle, 'finished'/'inactive' are done.
+HOME_CONNECT_ACTIVE_STATES = {"run"}
 
 # Minimum cumulative charged energy (kWh) before computing a new
 # efficiency sample - avoids noisy estimates from tiny amounts of energy

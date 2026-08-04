@@ -32,6 +32,10 @@
           "dishwasher_ready_sensor_entity": "Vaatwasser \"klaar om te starten\"-sensor (optioneel)",
           "washing_machine_power_sensor_entity": "Wasmachine vermogen-sensor (optioneel)",
           "washing_machine_ready_sensor_entity": "Wasmachine \"klaar om te starten\"-sensor (optioneel)",
+          "quooker_power_sensor_entity": "Quooker vermogen-sensor (optioneel)",
+          "airco_climate_entity": "Airco climate-entiteit (optioneel)",
+          "oven_state_sensor_entity": "Oven status-sensor (optioneel, bijv. Home Connect operation_state)",
+          "kookplaat_state_sensor_entity": "Kookplaat status-sensor (optioneel, bijv. Home Connect operation_state)",
           "appliance_notify_service": "Notify-service voor apparaat-meldingen (leeg = pop-up in HA)"
         }
       }
@@ -72,6 +76,10 @@
           "dishwasher_ready_sensor_entity": "Vaatwasser \"klaar om te starten\"-sensor (optioneel)",
           "washing_machine_power_sensor_entity": "Wasmachine vermogen-sensor (optioneel)",
           "washing_machine_ready_sensor_entity": "Wasmachine \"klaar om te starten\"-sensor (optioneel)",
+          "quooker_power_sensor_entity": "Quooker vermogen-sensor (optioneel)",
+          "airco_climate_entity": "Airco climate-entiteit (optioneel)",
+          "oven_state_sensor_entity": "Oven status-sensor (optioneel, bijv. Home Connect operation_state)",
+          "kookplaat_state_sensor_entity": "Kookplaat status-sensor (optioneel, bijv. Home Connect operation_state)",
           "appliance_notify_service": "Notify-service voor apparaat-meldingen (leeg = pop-up in HA)"
         }
       }

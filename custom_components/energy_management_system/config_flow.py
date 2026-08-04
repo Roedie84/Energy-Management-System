@@ -25,6 +25,10 @@ from .const import (
     CONF_DISHWASHER_READY_SENSOR,
     CONF_WASHING_MACHINE_POWER_SENSOR,
     CONF_WASHING_MACHINE_READY_SENSOR,
+    CONF_QUOOKER_POWER_SENSOR,
+    CONF_AIRCO_CLIMATE_ENTITY,
+    CONF_OVEN_STATE_SENSOR,
+    CONF_KOOKPLAAT_STATE_SENSOR,
     CONF_APPLIANCE_NOTIFY_SERVICE,
     CONF_MANUAL_DISCHARGE_POWER,
     CONF_MANUAL_POWER_NUMBER,
@@ -154,6 +158,24 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
             ): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="binary_sensor")
             ),
+            vol.Optional(
+                CONF_QUOOKER_POWER_SENSOR,
+                default=defaults.get(CONF_QUOOKER_POWER_SENSOR),
+            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            vol.Optional(
+                CONF_AIRCO_CLIMATE_ENTITY,
+                default=defaults.get(CONF_AIRCO_CLIMATE_ENTITY),
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="climate")
+            ),
+            vol.Optional(
+                CONF_OVEN_STATE_SENSOR,
+                default=defaults.get(CONF_OVEN_STATE_SENSOR),
+            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            vol.Optional(
+                CONF_KOOKPLAAT_STATE_SENSOR,
+                default=defaults.get(CONF_KOOKPLAAT_STATE_SENSOR),
+            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
             vol.Optional(
                 CONF_APPLIANCE_NOTIFY_SERVICE,
                 default=defaults.get(CONF_APPLIANCE_NOTIFY_SERVICE, ""),

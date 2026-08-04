@@ -212,6 +212,27 @@ views:
             grid_options:
               columns: 6
               rows: 1
+          - type: custom:mushroom-template-card
+            primary: >-
+              {% set source = state_attr('sensor.woonkamer_energy_management_system_explanation', 'heavy_load_source') %}
+              {{ {'vaatwasser': 'Vaatwasser', 'wasmachine': 'Wasmachine', 'quooker': 'Quooker', 'airco': 'Airco', 'oven': 'Oven', 'kookplaat': 'Kookplaat'}.get(source, 'Geen') }}
+            secondary: Grootverbruiker bevestigd actief (omzeilt mediaan-vertraging)
+            icon: >-
+              {{ 'mdi:lightning-bolt' if
+              state_attr('sensor.woonkamer_energy_management_system_explanation', 'heavy_load_source')
+              else 'mdi:lightning-bolt-outline' }}
+            icon_color: >-
+              {{ 'orange' if
+              state_attr('sensor.woonkamer_energy_management_system_explanation', 'heavy_load_source')
+              else 'grey' }}
+            entity: sensor.woonkamer_energy_management_system_explanation
+            tap_action:
+              action: none
+            hold_action:
+              action: none
+            grid_options:
+              columns: 6
+              rows: 1
 
       - type: grid
         cards:

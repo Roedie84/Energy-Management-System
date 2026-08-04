@@ -2798,3 +2798,98 @@ door zodra een meerderheid van de 7 dagen het bevestigt; een verandering
 die nog geen meerderheid heeft, beweegt de mediaan terecht nog niet; en
 de "vorige"-trendwaarde gebruikt dezelfde mediaan-aggregatie als de
 huidige waarde.
+
+## v0.63.0 — grootverbruiker-bevestiging omzeilt mediaan-vertraging
+
+**Aanleiding:** een herfstavond waarop de airco onregelmatig op
+verwarmen gaat (bijv. maandag wel, dinsdag/woensdag niet, donderdag
+weer wel) is precies het soort patroon waar de 7-daagse mediaan
+(v0.62.0) terecht sceptisch over blijft — het wordt nooit een
+meerderheid van de week, dus het geleerde profiel leert dit patroon
+bewust niet aan. Voor de reserve die diezelfde avond nog moet kloppen is
+dat te traag: de live-correctie (mediaan van de laatste 4 metingen, ~20
+min) heeft eerst meerdere ticks nodig om een echte, aanhoudende
+verbruiksverhoging te "geloven" — dezelfde voorzichtigheid die een
+Quooker-tik van een paar minuten terecht negeert, vertraagt nu ook een
+legitieme airco-avond.
+
+**Oplossing:** als een bekende grootverbruiker via zijn **eigen
+entiteit bevestigt** dat hij actief is, is die onzekerheid weg - dan
+wordt de live meting direct vertrouwd, zonder op de mediaan te wachten.
+
+**Nieuwe optionele configuratievelden** (Instellingen → dit apparaat →
+Configureren): Quooker-vermogen-sensor en airco-climate-entiteit.
+Vaatwasser en wasmachine hergebruiken de al bestaande
+vermogen-sensoren uit de apparaat-bewustzijn-functie (v0.47.0) - geen
+nieuwe configuratie nodig voor die twee.
+
+**Per apparaat:**
+- **Vaatwasser / wasmachine:** vermogen boven `APPLIANCE_RUNNING_POWER_THRESHOLD_W`
+  (15W, dezelfde drempel als de bestaande gebruiksdetectie) → direct bevestigd.
+- **Quooker:** zelfde drempel, maar moet minstens `QUOOKER_SUSTAINED_MINUTES`
+  (2 minuten) **aanhoudend** actief zijn. Een enkele korte tik blijft
+  bewust genegeerd - dat was namelijk precies de reden waarom de
+  mediaan-smoothing (v0.57.0) ooit is toegevoegd.
+- **Airco:** de climate-entiteit's `hvac_action` staat op `heating` of
+  `cooling` (niet `idle`/`off`).
+
+**Nog niet gedekt:** oven en kookplaat - daar heb je nog geen
+vermogen-sensoren voor. Zodra die er zijn, is hetzelfde patroon
+(drempel-gebaseerd, zoals vaatwasser/wasmachine) eenvoudig toe te
+voegen.
+
+**Wat het niet oplost:** zonder vermogen-sensor voor de airco blijft het
+bij "bevestigd actief", niet "hoeveel Watt precies" - de correctie werkt
+nog steeds via de totale P1-meting, alleen zonder de ingebouwde
+mediaan-vertraging wanneer bevestiging er is.
+
+**Getest** (12 nieuwe permanente tests in `test_heavy_load_awareness.py`):
+elk apparaat afzonderlijk bevestigd/niet bevestigd, Quooker-tik genegeerd
+vs. aanhoudend gebruik wél bevestigd (inclusief reset bij tussentijds
+uitvallen), de correctieratio omzeilt de mediaan zodra er bevestiging is
+maar blijft wel afgetopt bij een onwaarschijnlijke meting, en een
+end-to-end-test die bevestigt dat dit ook echt in de normale update-tick
+wordt bijgehouden (zichtbaar in de diagnostiek via `last_heavy_load_source`).
+
+## v0.63.1 — oven en kookplaat toegevoegd (Home Connect operation_state)
+
+**Aanleiding:** geen vermogen-sensoren voor oven/kookplaat, wel Home
+Connect `operation_state`-sensoren
+(`sensor.oven_operation_state`/`sensor.kookplaat_operation_state`).
+
+**Aanpak:** anders dan de vermogen-drempel-apparaten hierboven, werkt dit
+status-gebaseerd - dezelfde soort aanpak als de airco's `hvac_action`.
+Home Connect's `operation_state` kent o.a. `Inactive`, `Ready`,
+`DelayedStart`, `Run`, `Pause`, `Finished`, `Error`, `Aborting`; alleen
+**`Run`** (hoofdletterongevoelig vergeleken) betekent dat het apparaat
+daadwerkelijk vermogen trekt. `Ready`/`DelayedStart` is
+ingepland-maar-inactief, `Pause` heeft het verwarmingselement
+tussentijds uit, `Finished`/`Inactive` is klaar.
+
+**Nieuwe optionele configuratievelden:** oven- en
+kookplaat-status-sensor (beide domain `sensor`, geen vermogen-sensor
+nodig).
+
+**Getest** (5 nieuwe permanente tests): `Run` wordt bevestigd (ook
+hoofdletterongevoelig), `Ready`/`Finished` terecht niet, en kookplaat
+afzonderlijk.
+
+## v0.63.2 — grootverbruiker-status zichtbaar op het dashboard
+
+**Aanleiding:** v0.63.0/v0.63.1 voegden de logica en de
+diagnostiek-zichtbaarheid toe, maar niets op het dashboard zelf liet
+zien óf, en welke, grootverbruiker net bevestigd actief was.
+
+**Toegevoegd:**
+- `ExplanationSensor` (sensor.py) exporteert nu ook `heavy_load_source`
+  als attribuut, naast de al bestaande cruciale-waarden-attributen
+  (v0.61.1).
+- Nieuwe kaart in de "Modus & besluit"-sectie: toont "Geen" of de naam
+  van het bevestigde apparaat (Vaatwasser/Wasmachine/Quooker/Airco/
+  Oven/Kookplaat), met een oplichtend bliksem-icoon zodra er
+  daadwerkelijk iets bevestigd actief is.
+
+**Getest:** bestaande dashboard-testpijplijn blijft groen; de nieuwe
+sensor-attribute is meegenomen in de bestaande
+`test_explanation_sensor_attributes.py`-tests (aanwezig + correct
+`None` als fallback).

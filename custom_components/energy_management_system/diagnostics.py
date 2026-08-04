@@ -257,6 +257,7 @@ async def async_get_config_entry_diagnostics(
                 coordinator.dishwasher_usage_hourly_history
             ),
             "last_dishwasher_notification": coordinator.last_dishwasher_notification,
+            "last_heavy_load_source": coordinator.last_heavy_load_source,
             "washing_machine_usage_hours_with_data": len(
                 coordinator.washing_machine_usage_hourly_history
             ),

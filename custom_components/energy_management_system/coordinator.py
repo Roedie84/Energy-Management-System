@@ -69,6 +69,13 @@ from .const import (
     CONF_DISHWASHER_READY_SENSOR,
     CONF_WASHING_MACHINE_POWER_SENSOR,
     CONF_WASHING_MACHINE_READY_SENSOR,
+    CONF_QUOOKER_POWER_SENSOR,
+    CONF_AIRCO_CLIMATE_ENTITY,
+    CONF_OVEN_STATE_SENSOR,
+    CONF_KOOKPLAAT_STATE_SENSOR,
+    QUOOKER_SUSTAINED_MINUTES,
+    AIRCO_ACTIVE_HVAC_ACTIONS,
+    HOME_CONNECT_ACTIVE_STATES,
     CONF_APPLIANCE_NOTIFY_SERVICE,
     APPLIANCE_RUNNING_POWER_THRESHOLD_W,
     CONSUMPTION_CORRECTION_SMOOTHING_SAMPLES,
@@ -184,6 +191,8 @@ class EnergyManagementSystemCoordinator:
         # _get_smoothed_consumption_correction_ratio) against brief
         # spikes.
         self._recent_consumption_readings_kw: list[float] = []
+        self._quooker_active_since: datetime | None = None
+        self.last_heavy_load_source: str | None = None
 
         # -- Optional appliance awareness (informational only) --
         # Per hour-of-day, a rolling history of samples (1.0 = was
@@ -1046,6 +1055,90 @@ class EnergyManagementSystemCoordinator:
             -CONSUMPTION_CORRECTION_SMOOTHING_SAMPLES:
         ]
 
+    def _update_quooker_tracking(self, now: datetime) -> None:
+        """Track how long the Quooker's power draw has been continuously
+        above the running threshold - a single brief tap (a minute or
+        less) resets this, only a longer session (several taps back to
+        back, or a long fill) counts as sustained (see
+        QUOOKER_SUSTAINED_MINUTES)."""
+        quooker_entity = self.config.get(CONF_QUOOKER_POWER_SENSOR)
+        if not quooker_entity:
+            self._quooker_active_since = None
+            return
+        power_w = self._read_sensor_float(quooker_entity)
+        if power_w is not None and power_w >= APPLIANCE_RUNNING_POWER_THRESHOLD_W:
+            if self._quooker_active_since is None:
+                self._quooker_active_since = now
+        else:
+            self._quooker_active_since = None
+
+    def _is_quooker_sustained_active(self, now: datetime) -> bool:
+        if self._quooker_active_since is None:
+            return False
+        elapsed_minutes = (now - self._quooker_active_since).total_seconds() / 60
+        return elapsed_minutes >= QUOOKER_SUSTAINED_MINUTES
+
+    def _get_confirmed_heavy_load_source(self, now: datetime) -> str | None:
+        """Is a known heavy load (vaatwasser, wasmachine, Quooker, airco,
+        oven, kookplaat) genuinely, confirmably active right now? Returns
+        the appliance label if so, else None - used to skip the median
+        smoothing's built-in caution (see
+        `_get_smoothed_consumption_correction_ratio`) for the live
+        consumption correction. That caution exists specifically to
+        protect against a brief spike that *might* be a real appliance
+        but might also be a sensor glitch or a passing blip; if the
+        appliance's own entity confirms it's genuinely running, there's
+        no ambiguity left to protect against, so the live reading can be
+        trusted immediately instead of waiting several update ticks
+        (~15-20 min) for the median to catch up.
+
+        Oven/kookplaat use their Home Connect `operation_state` sensor
+        (state-based, no power sensor available) rather than a power
+        threshold - see HOME_CONNECT_ACTIVE_STATES.
+
+        Reported scenario: an autumn evening where the airco (heating)
+        only runs some evenings, unpredictably - too irregular for the
+        7-day learned profile (median, v0.62.0) to ever treat as normal,
+        but a real load worth reacting to immediately on the nights it
+        does run.
+        """
+        dishwasher_entity = self.config.get(CONF_DISHWASHER_POWER_SENSOR)
+        if dishwasher_entity:
+            power_w = self._read_sensor_float(dishwasher_entity)
+            if power_w is not None and power_w >= APPLIANCE_RUNNING_POWER_THRESHOLD_W:
+                return "vaatwasser"
+
+        washing_machine_entity = self.config.get(CONF_WASHING_MACHINE_POWER_SENSOR)
+        if washing_machine_entity:
+            power_w = self._read_sensor_float(washing_machine_entity)
+            if power_w is not None and power_w >= APPLIANCE_RUNNING_POWER_THRESHOLD_W:
+                return "wasmachine"
+
+        if self._is_quooker_sustained_active(now):
+            return "quooker"
+
+        airco_entity = self.config.get(CONF_AIRCO_CLIMATE_ENTITY)
+        if airco_entity:
+            state = self.hass.states.get(airco_entity)
+            if state is not None:
+                hvac_action = state.attributes.get("hvac_action")
+                if hvac_action in AIRCO_ACTIVE_HVAC_ACTIONS:
+                    return "airco"
+
+        oven_entity = self.config.get(CONF_OVEN_STATE_SENSOR)
+        if oven_entity:
+            state = self.hass.states.get(oven_entity)
+            if state is not None and state.state.lower() in HOME_CONNECT_ACTIVE_STATES:
+                return "oven"
+
+        kookplaat_entity = self.config.get(CONF_KOOKPLAAT_STATE_SENSOR)
+        if kookplaat_entity:
+            state = self.hass.states.get(kookplaat_entity)
+            if state is not None and state.state.lower() in HOME_CONNECT_ACTIVE_STATES:
+                return "kookplaat"
+
+        return None
+
     def _get_smoothed_consumption_correction_ratio(self, current_hour: int) -> float:
         """How much higher (if at all) recent live consumption has been
         running compared to the learned average for this hour - based
@@ -1075,12 +1168,20 @@ class EnergyManagementSystemCoordinator:
         if not current_hour_learned_kw or current_hour_learned_kw <= 0:
             return 1.0
 
-        sorted_readings = sorted(self._recent_consumption_readings_kw)
-        mid = len(sorted_readings) // 2
-        if len(sorted_readings) % 2 == 0:
-            smoothed_live_kw = (sorted_readings[mid - 1] + sorted_readings[mid]) / 2
+        if self.last_heavy_load_source is not None:
+            # A known heavy consumer is confirmed active right now (see
+            # _get_confirmed_heavy_load_source) - no ambiguity left to
+            # protect against, so trust the latest live reading directly
+            # instead of waiting for the median of several ticks to
+            # catch up. Still capped below like the median path.
+            smoothed_live_kw = self._recent_consumption_readings_kw[-1]
         else:
-            smoothed_live_kw = sorted_readings[mid]
+            sorted_readings = sorted(self._recent_consumption_readings_kw)
+            mid = len(sorted_readings) // 2
+            if len(sorted_readings) % 2 == 0:
+                smoothed_live_kw = (sorted_readings[mid - 1] + sorted_readings[mid]) / 2
+            else:
+                smoothed_live_kw = sorted_readings[mid]
 
         if smoothed_live_kw <= current_hour_learned_kw:
             return 1.0
@@ -3532,6 +3633,8 @@ class EnergyManagementSystemCoordinator:
         self._update_battery_efficiency_learning(now)
         self._check_monthly_rollover(now)
         self._update_appliance_usage_tracking(now)
+        self._update_quooker_tracking(now)
+        self.last_heavy_load_source = self._get_confirmed_heavy_load_source(now)
         self._track_recent_consumption_reading(now)
 
         is_currently_cheapest_block = (
