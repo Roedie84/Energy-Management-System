@@ -14,7 +14,7 @@ views:
               'friendly_name') }}: {{
               states('sensor.energy_management_system_last_decision_reason') }}
             grid_options:
-              columns: 8
+              columns: 12
               rows: 1
           - type: custom:mushroom-template-card
             primary: "{{ states('sensor.woonkamer_energy_management_system_system_status') }}"
@@ -34,7 +34,7 @@ views:
             tap_action:
               action: more-info
             grid_options:
-              columns: 4
+              columns: 12
               rows: 1
           - type: markdown
             content: |

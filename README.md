@@ -2728,3 +2728,25 @@ onopvallend) `—`-teken te geven in plaats van lege cellen.
 **Getest:** bestaande dashboard-testpijplijn (YAML + Jinja-rendering)
 blijft groen; geen nieuwe tests nodig, het is dezelfde kaart met dezelfde
 databronnen, alleen compacter opgemaakt.
+
+## v0.61.4 — titel/status-samenvoeging uit v0.61.3 teruggedraaid
+
+**Gerapporteerd:** de titelkaart en statuskaart naast elkaar op 8+4
+kolommen zag er kapot uit - de ondertitel-tekst ("Reden laatste
+beslissing: ...") wrapt naar een tweede regel die niet in de
+`rows: 1`-hoogte past, en overlapt zichtbaar met de tabel eronder
+("Energy Management Systeem" werd afgekapt tot "Energy Management" met
+de tabel er half overheen).
+
+**Fix:** titelkaart en statuskaart terug naar elk hun eigen volle rij
+(12 kolommen), zoals vóór v0.61.3. De andere compacte wijziging uit
+v0.61.3 (de icoon-samenvatting als 2-koloms tabel i.p.v. 6 losse
+alinea's) blijft staan - die leverde de daadwerkelijke hoogtewinst op
+zonder dit probleem.
+
+**Les:** twee kaarten naast elkaar proppen op basis van geschatte
+tekstbreedte is fragiel zodra de inhoud (hier: de "reason"-sensor se
+naam) langer is dan getest - een kleinere, voorspelbare wijziging
+(alleen de tabel) was hier de betere afweging geweest dan beide
+tegelijk. Geen aparte tests aan toegevoegd, dit is puur een layout-
+terugdraai naar een eerder bevestigd werkende staat.
