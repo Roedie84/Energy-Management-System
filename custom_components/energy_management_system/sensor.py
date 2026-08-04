@@ -1194,6 +1194,20 @@ class HourlyConsumptionProfileSensor(SensorEntity, RestoreEntity):
                 except (TypeError, ValueError):
                     continue
                 if parsed:
+                    # v0.63.21: collapse a leading duplicate pair - the
+                    # tell-tale signature of the old pre-v0.60.1
+                    # duplicate-seed restore (v0.56.1). Two identical
+                    # "votes" for the same old value keep outvoting a
+                    # single genuine new sample in the median (v0.62.0),
+                    # e.g. [x, x, y] medians to x either way - a real,
+                    # different y never becomes visible as a "Verschil"
+                    # until enough further samples build a majority
+                    # against the duplicate. One-time cleanup: [x, x, y]
+                    # -> [x, y], so the very next genuine sample already
+                    # shows a real trend, same as the original single-
+                    # value-seed design intended.
+                    if len(parsed) >= 2 and parsed[0] == parsed[1]:
+                        parsed = parsed[1:]
                     restored[hour] = parsed[-LEARNING_HISTORY_DAYS:]
             if restored:
                 self._coordinator.hourly_consumption_profile = restored
@@ -1344,6 +1358,11 @@ class PvHourlyBiasSensor(SensorEntity, RestoreEntity):
                 except (TypeError, ValueError):
                     continue
                 if parsed:
+                    # v0.63.21: same leading-duplicate cleanup as
+                    # HourlyConsumptionProfileSensor - see there for the
+                    # full rationale.
+                    if len(parsed) >= 2 and parsed[0] == parsed[1]:
+                        parsed = parsed[1:]
                     restored[hour] = parsed[-LEARNING_HISTORY_DAYS:]
             if restored:
                 self._coordinator.pv_hourly_bias_history = restored

@@ -257,3 +257,81 @@ def test_in_progress_hour_discarded_after_a_long_gap(make_coordinator, hass):
     assert coordinator._hour_energy_kwh == 0.0
     assert coordinator._hour_duration_hours == 0.0
     assert coordinator._current_tracked_hour == 16
+
+
+def test_leading_duplicate_seed_is_collapsed_on_restore(make_coordinator):
+    """v0.63.21: reproduces the exact field scenario - an hour whose
+    history is [x, x, y] (the pre-v0.60.1 duplicate-seed x twice, plus
+    one genuine new sample y) medians identically whether you include y
+    or not, since the duplicate pair outvotes it. So a single new
+    sample never showed up as a 'Verschil' - the leading duplicate is
+    now collapsed on restore ([x, x, y] -> [x, y]), so a real difference
+    shows up right away."""
+    coordinator = make_coordinator({})
+    from custom_components.energy_management_system.sensor import (
+        HourlyConsumptionProfileSensor,
+    )
+
+    sensor = HourlyConsumptionProfileSensor(coordinator, "entry1")
+
+    async def get_last_state():
+        return _FakeLastState(
+            {
+                "profile": {"15": 0.781},
+                "profile_history": {"15": [0.781, 0.781, 0.826]},
+            }
+        )
+
+    sensor.async_get_last_state = get_last_state
+    asyncio.run(sensor.async_added_to_hass())
+
+    assert coordinator.hourly_consumption_profile[15] == [0.781, 0.826]
+    assert coordinator.previous_hourly_avg_kw(15) == 0.781
+    assert coordinator.learned_hourly_avg_kw(15) == pytest.approx((0.781 + 0.826) / 2)
+    assert coordinator.previous_hourly_avg_kw(15) != coordinator.learned_hourly_avg_kw(15)
+
+
+def test_no_leading_duplicate_is_left_untouched(make_coordinator):
+    """Genuinely different first two samples must not be collapsed -
+    only the exact-equal duplicate-seed signature triggers cleanup."""
+    coordinator = make_coordinator({})
+    from custom_components.energy_management_system.sensor import (
+        HourlyConsumptionProfileSensor,
+    )
+
+    sensor = HourlyConsumptionProfileSensor(coordinator, "entry1")
+
+    async def get_last_state():
+        return _FakeLastState(
+            {
+                "profile": {"9": 0.4},
+                "profile_history": {"9": [0.3, 0.4, 0.5]},
+            }
+        )
+
+    sensor.async_get_last_state = get_last_state
+    asyncio.run(sensor.async_added_to_hass())
+
+    assert coordinator.hourly_consumption_profile[9] == [0.3, 0.4, 0.5]
+
+
+def test_pv_hourly_bias_leading_duplicate_is_collapsed_on_restore(make_coordinator):
+    coordinator = make_coordinator({})
+    from custom_components.energy_management_system.sensor import (
+        PvHourlyBiasSensor,
+    )
+
+    sensor = PvHourlyBiasSensor(coordinator, "entry1")
+
+    async def get_last_state():
+        return _FakeLastState(
+            {
+                "profile": {"9": 0.497},
+                "profile_history": {"9": [0.497, 0.497, 0.319]},
+            }
+        )
+
+    sensor.async_get_last_state = get_last_state
+    asyncio.run(sensor.async_added_to_hass())
+
+    assert coordinator.pv_hourly_bias_history[9] == [0.497, 0.319]

@@ -3982,21 +3982,15 @@ class EnergyManagementSystemCoordinator:
                     f"De accu heeft nu {self.last_available_kwh:.2f} kWh "
                     f"beschikbaar - genoeg om de resterende tijd tot het "
                     f"goedkoopste blok te overbruggen (geschat nodig: "
-                    f"{needed_txt} kWh). Daarom wordt laden uitgesteld en "
-                    f"krijgt teruglevering nu voorrang (smart_discharging)."
+                    f"{needed_txt} kWh). Daarom wordt laden uitgesteld: de "
+                    f"accu dekt het huishoudverbruik zelf (0 op de meter), "
+                    f"zonder actief te verkopen (smart_discharging)."
                 )
-                b = self.last_needed_kwh_breakdown
-                if b:
-                    parts.append(
-                        "Diepste-tekort-berekening (het echte dieptepunt "
-                        "onderweg, niet zomaar het eindsaldo):\n\n"
-                        + self._build_needed_kwh_breakdown_table()
-                        + "\n\n"
-                    )
             else:
                 parts.append(
                     "Het is nog vóór het goedkoopste blok, dus laden wordt "
-                    "uitgesteld en teruglevering krijgt voorrang "
+                    "uitgesteld: de accu dekt het huishoudverbruik zelf (0 "
+                    "op de meter), zonder actief te verkopen "
                     "(smart_discharging)."
                 )
 
@@ -4019,13 +4013,6 @@ class EnergyManagementSystemCoordinator:
                     f"(geschat nodig: {needed_txt} kWh), dus mag de Zendure "
                     f"nu zelf bijladen (smart-modus)."
                 )
-                b = self.last_needed_kwh_breakdown
-                if b:
-                    parts.append(
-                        "Diepste-tekort-berekening:\n\n"
-                        + self._build_needed_kwh_breakdown_table()
-                        + "\n\n"
-                    )
             else:
                 price_txt = (
                     f"€{self.last_current_price_per_kwh:.3f}/kWh"
@@ -4070,6 +4057,21 @@ class EnergyManagementSystemCoordinator:
 
         else:
             parts.append(f"Onbekende reden: {reason}.")
+
+        # v0.63.22: shown for every reason where it's meaningful context
+        # (reported: only visible for discharging_window before this -
+        # the underlying data was already fresh every tick regardless of
+        # reason, `_should_postpone_charging` runs early and
+        # unconditionally, this was purely a text-building gap). Not
+        # shown for no_forecast_data (nothing to compute a reserve
+        # against) or when the breakdown itself is empty.
+        if reason not in ("no_forecast_data",) and self.last_needed_kwh_breakdown:
+            parts.append(
+                "Diepste-tekort-berekening (het echte dieptepunt onderweg, "
+                "niet zomaar het eindsaldo):\n\n"
+                + self._build_needed_kwh_breakdown_table()
+                + "\n\n"
+            )
 
         recent_shortfalls = sum(1 for v in self.reserve_shortfall_history if v)
         if recent_shortfalls > 0:

@@ -3355,3 +3355,94 @@ modus-correctie): de dynamische-reserve-tak noemt nu de nachtreserve en
 niet de SoC; en `last_expected_mode` komt na afloop overeen met de
 daadwerkelijke beslissing, zowel voor een geslaagde ontlading als voor
 de terugval naar smart.
+
+## v0.63.21 — laatste stuk van "Verschil blijft leeg": een verankerd duplicaat opgeruimd
+
+**Gerapporteerd, met de daadwerkelijke `profile_history`-attributen erbij
+(geen giswerk deze keer):** ondanks v0.63.16 (lopend uur overleeft een
+herstart) bleef "Verschil" op `+0` staan. De data zelf liet zien dát er
+al een derde, echte meting was bijgekomen voor de meeste uren — het
+probleem zat 'm dus niet in het verzamelen, maar in de mediaan-wiskunde
+zelf.
+
+**Root cause:** elk uur begon zijn leven met **twee identieke**
+waarden (het duplicaat-restpatroon van de allereerste, oude
+restore-methode van vóór v0.60.1, v0.56.1). Met die twee identieke
+"stemmen" plus precies één nieuwe, echte meting — bijv. `[0.781, 0.781,
+0.826]` — verandert de mediaan van alle 3 waarden helemaal niet ten
+opzichte van de mediaan van de eerste 2: `0.781` in beide gevallen. Het
+duplicaat-paar houdt de mediaan dus verankerd totdat er een
+**meerderheid** van échte, nieuwe metingen tegenover staat — precies
+het mechanisme dat mediaan-gebaseerd leren (v0.62.0) bewust
+uitschieter-resistent maakt, maar hier ongewenst een oud restant
+bevoordeelde boven verse data.
+
+**Fix:** bij het herstellen van `profile_history` wordt een **leidend
+duplicaat-paar** (`waarde[0] == waarde[1]`, exact de vingerafdruk van
+het oude seed-patroon) nu eenmalig teruggebracht tot één waarde
+(`[x, x, y]` → `[x, y]`). Daarmee telt de eerstvolgende écht nieuwe
+meting weer meteen mee, zoals het oorspronkelijke ontwerp
+(v0.56.1: "twee identieke waarden = geen wijziging, tot de eerstvolgende
+meting een echt verschil laat zien") altijd al bedoeld had — vóórdat de
+overstap naar mediaan (v0.62.0) dat stilzwijgend ondermijnde voor uren
+met weinig samples.
+
+**Getest** (3 nieuwe permanente tests in `test_trend_restore.py`, met
+de exacte gerapporteerde waarden): het duplicaat-paar wordt opgeruimd en
+laat de eerstvolgende meting meteen een echt verschil tonen; een
+niet-duplicaat leidend paar (twee daadwerkelijk verschillende dagen)
+blijft terecht ongemoeid; en hetzelfde voor de PV-bias-sensor.
+
+## v0.63.22 — diepste-tekort-tabel nu bij elke reden zichtbaar, niet alleen discharging_window
+
+**Gerapporteerd:** "Ik zie de 2e tabel alleen bij smart_discharging,
+waarom niet bij andere operation modes?"
+
+**Onderzoek, en een correctie op mijn eigen eerste inschatting:**
+aanvankelijk vermoedde ik dat `last_needed_kwh_breakdown` alleen
+ververst werd wanneer `_should_postpone_charging()` daadwerkelijk
+"aan de beurt" kwam in de beslisboom. Bij het echt narekenen bleek dat
+niet te kloppen — die functie wordt al vroeg in elke tick aangeroepen,
+**vóórdat** de reden-specifieke takken (negative_price, expensive_quarter,
+grid_charging_low_solar, enz.) een keuze maken. De data was dus allang
+elke tick vers beschikbaar; het probleem zat puur in de tekstopbouw
+(`_build_explanation()`), die de tabel maar in twee van de acht
+mogelijke redenen daadwerkelijk liet zien.
+
+**Fix:** de tabel-toevoeging is verplaatst van losse code per reden naar
+één centrale plek, die voor **elke** reden (behalve `no_forecast_data`,
+waar geen reserve-context relevant is) de tabel toont zodra
+`last_needed_kwh_breakdown` gevuld is. Geen duplicatie meer, en
+consistente zichtbaarheid ongeacht welke modus er op dat moment actief
+is.
+
+**Getest** (2 nieuwe permanente tests in `test_explanation_text.py`):
+de tabel verschijnt nu ook bij een reden als `expensive_quarter` zodra
+er data is, en blijft terecht weg wanneer de breakdown leeg is.
+
+## v0.63.23 — "teruglevering krijgt voorrang" was onjuiste terminologie
+
+**Gerapporteerd, na de eigen definities van de drie smart-varianten
+(v0.63.22-conversatie):**
+
+| Modus | Ontladen (0 op meter) | Laden |
+|---|---|---|
+| `smart_discharging` | Ja | Nee |
+| `smart_charging` | Nee | Ja, alleen bij PV-overschot |
+| `smart` | Ja | Ja, alleen bij PV-overschot |
+
+De `discharging_window`-uitleg zei "laden wordt uitgesteld en krijgt
+teruglevering nu voorrang (smart_discharging)" — maar "teruglevering
+krijgt voorrang" suggereert **actief exporteren/verkopen**, terwijl
+`smart_discharging` volgens de eigen definitie alleen betekent: de accu
+dekt het huishoudverbruik zelf (0 op de meter), zonder actieve
+verkoop. Een te stellige/verkeerde formulering, in beide varianten van
+deze tekst (met en zonder energie-context).
+
+**Fix:** "de accu dekt het huishoudverbruik zelf (0 op de meter), zonder
+actief te verkopen (smart_discharging)" — in lijn met de daadwerkelijke
+betekenis.
+
+**Niet gewijzigd:** de historische vermelding van de oude tekst in dit
+CHANGELOG-bestand zelf (v0.30.0-sectie) - dat is een citaat van hoe de
+tekst destijds daadwerkelijk luidde, geen actuele documentatie.

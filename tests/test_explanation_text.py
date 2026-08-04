@@ -135,6 +135,42 @@ def test_expensive_quarter_mentions_household_floor_when_applied(make_coordinato
     assert "340" in text
 
 
+def test_breakdown_table_shown_for_reasons_other_than_discharging_window(
+    make_coordinator,
+):
+    """v0.63.22: reported that the diepste-tekort-breakdown table only
+    ever showed up for discharging_window, even though the underlying
+    data (last_needed_kwh_breakdown) is computed fresh every tick
+    regardless of which reason ultimately fires - purely a text-building
+    gap, now shown for every reason where the data exists."""
+    coordinator = make_coordinator({})
+    coordinator.last_reason = "expensive_quarter"
+    coordinator.last_expensive_tier = "primary"
+    coordinator.last_discharge_power_applied = 1600.0
+    coordinator.last_needed_kwh_breakdown = {
+        "basisverbruik_kwh": 3.719,
+        "verwachte_pv_kwh": 1.652,
+        "diepste_tekort_kwh": 3.719,
+        "veiligheidsmarge_procent": 15.0,
+    }
+
+    text = coordinator._build_explanation()
+
+    assert "| Onderdeel | Waarde |" in text
+    assert "3.719 kWh" in text
+
+
+def test_no_breakdown_table_without_data(make_coordinator):
+    coordinator = make_coordinator({})
+    coordinator.last_reason = "negative_price"
+    coordinator.last_charge_power_applied = -2000.0
+    coordinator.last_needed_kwh_breakdown = {}
+
+    text = coordinator._build_explanation()
+
+    assert "Onderdeel" not in text
+
+
 def test_discharging_window_shows_breakdown_as_a_markdown_table(make_coordinator, monkeypatch):
     """v0.61.2: the vague 'over de hele periode' prose is replaced by an
     actual table, with the exact period (start, end, duration) spelled
