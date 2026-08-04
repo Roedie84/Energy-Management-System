@@ -165,6 +165,28 @@ class PvForecastAccuracySensor(SensorEntity, RestoreEntity):
                     self._tracker.forecast_value_history = [
                         float(v) for v in forecast_history
                     ]
+
+                # v0.63.17: last_deviation_percent restores from the
+                # sensor's own last STATE STRING, which is "unknown"
+                # whenever no comparison had (yet) completed at the
+                # moment of the previous shutdown - including the
+                # perfectly ordinary case of the very first restart
+                # after setup. Restoring "unknown" -> None every time is
+                # self-perpetuating: even once deviation_history has real
+                # entries from later, successful daily comparisons, this
+                # field keeps coming back empty on every subsequent
+                # restart, since it never restores FROM deviation_history
+                # itself. Fall back to the most recent entry there if the
+                # direct restore came up empty, so a single early
+                # "unknown" moment doesn't leave the display stuck
+                # indefinitely once real data exists.
+                if (
+                    self._tracker.last_deviation_percent is None
+                    and self._tracker.deviation_history
+                ):
+                    self._tracker.last_deviation_percent = (
+                        self._tracker.deviation_history[-1]
+                    )
             except (TypeError, ValueError):
                 pass
 

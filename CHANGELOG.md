@@ -3214,3 +3214,30 @@ tot de volgende uurgrens, resulteert in een daadwerkelijk nieuwe meting
 die de tijd van vóór én na de herstart samenvoegt; en een té oud
 hersteld tijdstip (>20 min) wordt terecht verworpen in plaats van
 gebruikt.
+
+## v0.63.17 — "PV-voorspelling afwijking" bleef vastzitten op unknown
+
+**Gerapporteerd (met screenshot):** naast de al bekende "PV-voorspelling
+bias (huidig uur)" (verwacht gedrag zolang dat specifieke uur nog geen 3
+dagen data heeft — zou met v0.63.16 vanzelf opbouwen) bleef ook
+"PV-voorspelling afwijking" hardnekkig op `unknown` staan.
+
+**Root cause, een andere zelfversterkende restore-bug:**
+`last_deviation_percent` (de weergegeven waarde) werd bij een herstart
+hersteld vanuit de **eigen vorige status-string van de sensor**
+(`last_state.state`). Was die status op enig moment "unknown" — bijv.
+heel normaal vóórdat ooit een eerste dagvergelijking had plaatsgevonden
+— dan herstelt elke volgende herstart gewoon weer "unknown" → `None`,
+**ook nadat** `deviation_history` (de historielijst) allang echte
+metingen bevat uit latere, succesvolle dagvergelijkingen. De restore
+keek namelijk nooit naar die historielijst zelf als terugval.
+
+**Fix:** als de directe restore leeg uitvalt maar `deviation_history`
+wél waarden bevat, wordt de laatst bekende historische afwijking
+gebruikt in plaats van vast te blijven zitten op `unknown`.
+
+**Getest** (3 nieuwe permanente tests in
+`test_pv_forecast_accuracy_restore.py`): terugval naar de historie
+werkt bij een "unknown" laatste status; een geldige laatste status
+wordt gewoon gebruikt (geen onnodige overschrijving); en zonder enige
+historie blijft de waarde terecht `None` (niets om op terug te vallen).
