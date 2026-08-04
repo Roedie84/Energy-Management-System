@@ -2498,3 +2498,105 @@ huisverbruik; headroom volledig op → toch dekking i.p.v. skip; vloer
 nooit hoger dan fysiek beschikbare energie; ruime headroom → ongewijzigd
 gedrag (regressietest); geen verbruikssensor geconfigureerd → ongewijzigd
 gedrag (regressietest).
+
+## v0.59.1 — vloer-toepassingen zichtbaar in de diagnostiek-export
+
+**Aanleiding:** om een volgend geval van de v0.59.0-situatie te kunnen
+beoordelen was tot nu toe een los uit HA getrokken geschiedenisgrafiek
+nodig ("Beschikbare Energie") — omdat de diagnostiek-export een
+momentopname is, miste die het moment zelf als er niet toevallig net op
+dat tijdstip werd geëxporteerd.
+
+**Toegevoegd aan `coordinator` (state) en diagnostiek:**
+- `last_household_load_w` — laatst gemeten, gecorrigeerd huishoudverbruik
+  bij de meest recente ontlaad-berekening.
+- `last_discharge_floor_applied` — of de vloer op de laatste tick
+  daadwerkelijk iets heeft opgehoogd.
+- `discharge_floor_events` — bijgehouden log (laatste 50, zelfde patroon
+  als `energy_bridge_transition_log`) met per gebeurtenis: tijdstip,
+  huishoudverbruik, wat de headroom-schaling zou hebben gegeven, wat er
+  uiteindelijk is toegepast, en de onderliggende `available_kwh`/
+  `reserve_kwh`. Wordt alleen gelogd wanneer de vloer de headroom-schaling
+  daadwerkelijk overstijgt — niet elke tick.
+
+**Getest** (1 nieuwe permanente test): een vloer-toepassing wordt
+gelogd, staat in `discharge_floor_events`, en de volledige
+diagnostiek-export blijft JSON-serialiseerbaar.
+
+## v0.60.0 — bredere diagnostiek-uitbreiding: meer beslispunten zichtbaar
+
+**Aanleiding:** meerdere beslispunten in de hoofdboom werden tot nu toe
+alleen via `_LOGGER.debug` gelogd — onzichtbaar zodra een diagnostiek-
+export wordt gedeeld zonder dat er live wordt meegekeken in de HA-logs.
+Dit maakte eerdere analyses (zoals v0.59.0) trager dan nodig: er moest
+telkens los uit HA een geschiedenisgrafiek worden getrokken om te
+reconstrueren wat er was gebeurd.
+
+**Vijf nieuwe velden in `coordinator`-state en diagnostiek:**
+- **`last_expensive_tier`** (`"primary"` | `"secondary"` | `null`) — of
+  het huidige/laatste verkoop-besluit via de strikte primaire drempel
+  (top 20%) of de ruimere secundaire laag (top 45%, v0.58.0) tot stand
+  kwam. Voorheen alleen af te leiden uit prijs + drempel-berekeningen
+  achteraf.
+- **`last_price_priority_held_off`** — of de prijs-prioriteit-logica
+  (v0.40.0) een kwartier bewust heeft overgeslagen omdat de beperkte
+  headroom beter besteed is aan een duurder kwartier later die dag. Dit
+  verklaart het "waarom staat de modus op smart terwijl is_expensive
+  eigenlijk True was"-scenario.
+- **`last_used_soc_taper_fallback`** — of de primitievere platte
+  SoC-percentage-aftopping is gebruikt in plaats van de
+  diepste-tekort-reserve-berekening (gebeurt als er geen
+  `available_energy`-sensor is geconfigureerd, of de reserve die tick
+  niet berekend kon worden). Nuttig om configuratie- of
+  sensor-problemen te signaleren.
+- **`last_reserve_margin_breakdown`** — de volledige opbouw van de
+  veiligheidsmarge op de nachtreserve: basispercentage, lage-zon-bonus
+  (+ aantal dagen), tekort-bonus (+ aantal recente tekortdagen),
+  overschot-reductie (+ aantal recente overschotdagen), de vaste
+  "onbeschermde nasleep"-marge, en het totaal — plus de kWh vóór en ná
+  marge. Voorheen alleen zichtbaar als een `_LOGGER.debug`-regel wanneer
+  de bonus niet 0 was.
+- **`last_winter_guard_suppressed_today`** — of de winter-guard
+  (v0.27.0) vandaag een verkoop heeft onderdrukt omdat er die dag al
+  netgeladen is. Reset bij een nieuwe dag, net als `grid_charged_today`.
+
+**Getest** (7 nieuwe permanente tests, verdeeld over
+`test_decision_visibility.py` en een uitbreiding van
+`test_winter_guard_and_emergency_charge.py`): primaire vs. secundaire
+laag correct geregistreerd, prijs-prioriteit-hold-off geregistreerd,
+SoC-taper-fallback-vlag correct gezet en weer gewist zodra de dynamische
+tak weer bruikbaar is, marge-breakdown correct gevuld, en de
+winter-guard-vlag zet en reset op de juiste momenten.
+
+## v0.60.1 — "Verschil"-trend in de dashboardtabellen overleeft een herstart niet echt
+
+**Gerapporteerd:** na een herstart toonden zowel "PV-voorspelling bias
+per uur" als "Verbruiksprofiel per uur" voor elk uur `+0` / `+0.000` in
+de Verschil-kolom.
+
+**Root cause:** dit was deels bewust gedrag uit v0.56.1 — bij een
+herstart wordt alleen het **gecollapste gemiddelde** per uur
+gepersisteerd (in de `profile`-attribute), niet de onderliggende losse
+dagwaarden. Om te voorkomen dat de Verschil-kolom "-" toont totdat er
+weer twee samples zijn, werd dat ene herstelde gemiddelde **dubbel**
+opgeslagen (previous == current), wat een genuine "+0,000" oplevert. Dat
+is op zich geen foute data, maar het betekent wél dat de **echte**
+dag-op-dag-trend van vóór de herstart verloren gaat, en dat elk uur
+afzonderlijk pas weer een echte trend toont zodra dat specifieke
+uur-van-de-dag opnieuw wordt doorlopen (tot ~24 uur later). Bij
+meerdere herstarts op één dag (zoals vandaag, voor v0.59.0/v0.59.1/
+v0.60.0) blijft de kolom daardoor voortdurend op nul staan.
+
+**Fix:** naast de bestaande `profile`-attribute wordt nu ook de volledige
+onderliggende lijst per uur gepersisteerd (`profile_history`, max
+`LEARNING_HISTORY_DAYS` = 7 waarden per uur — verwaarloosbaar qua
+grootte). Bij het herstellen wordt deze volledige historie gebruikt
+wanneer aanwezig, zodat de échte trend van vóór de herstart intact
+blijft. Blijft achterwaarts compatibel: state opgeslagen door een oudere
+versie (zonder `profile_history`) valt terug op de oude
+dubbele-waarde-aanpak.
+
+**Getest** (4 nieuwe permanente tests): volledige historie wordt
+hersteld en toont direct een échte previous/current-afwijking; oude
+state zonder `profile_history` valt terecht terug op de
+dubbele-waarde-aanpak; zelfde voor de PV-bias-sensor.

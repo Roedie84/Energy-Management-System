@@ -124,3 +124,48 @@ def test_no_consumption_sensor_no_floor_applied(make_coordinator, hass, monkeypa
     scaled = coordinator._get_soc_scaled_discharge_power(1600.0, now, None, None)
 
     assert scaled is None
+
+
+def test_floor_event_logged_and_exposed_in_diagnostics(make_coordinator, hass, monkeypatch):
+    """When the floor actually raises the power (the reported field
+    incident), it must show up in a shared diagnostics export - so a
+    future report can be diagnosed from the file alone, without also
+    needing a separately-pulled sensor history graph."""
+    import asyncio
+    import json
+
+    from custom_components.energy_management_system import diagnostics as diag_mod
+    from custom_components.energy_management_system.const import DOMAIN
+
+    class _FakeConfigEntry:
+        data = {}
+        options = {}
+        entry_id = "entry1"
+
+    coordinator = make_coordinator(_base_config())
+    hass.states.set("sensor.available_energy", "5.75")
+    hass.states.set("sensor.p1", "340")
+    monkeypatch.setattr(
+        coordinator, "_get_dynamic_discharge_reserve_kwh", lambda now, cbs: 5.7375
+    )
+
+    now = DAY0.replace(hour=22, minute=0)
+    scaled = coordinator._get_soc_scaled_discharge_power(1600.0, now, None, None)
+    assert scaled == pytest.approx(340.0, abs=0.5)
+
+    assert coordinator.last_discharge_floor_applied is True
+    assert coordinator.last_household_load_w == pytest.approx(340.0, abs=0.5)
+    assert len(coordinator.discharge_floor_events) == 1
+    event = coordinator.discharge_floor_events[0]
+    assert event["household_load_w"] == pytest.approx(340.0, abs=0.5)
+    assert event["applied_w"] == pytest.approx(340.0, abs=0.5)
+    assert event["headroom_scaled_w"] < event["applied_w"]
+
+    hass.data = {DOMAIN: {"entry1": coordinator}}
+    result = asyncio.run(
+        diag_mod.async_get_config_entry_diagnostics(hass, _FakeConfigEntry())
+    )
+    c = result["coordinator"]
+    assert c["last_discharge_floor_applied"] is True
+    assert len(c["discharge_floor_events"]) == 1
+    json.dumps(result)  # must remain JSON-serializable

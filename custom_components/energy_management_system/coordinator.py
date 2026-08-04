@@ -212,6 +212,14 @@ class EnergyManagementSystemCoordinator:
         self.last_explanation: str = "Nog geen data verwerkt."
         self.last_soc_percent: float | None = None
         self.last_discharge_power_applied: float | None = None
+        self.last_household_load_w: float | None = None
+        self.last_discharge_floor_applied: bool = False
+        self.discharge_floor_events: list[dict] = []
+        self.last_expensive_tier: str | None = None
+        self.last_price_priority_held_off: bool = False
+        self.last_used_soc_taper_fallback: bool = False
+        self.last_reserve_margin_breakdown: dict = {}
+        self.last_winter_guard_suppressed_today: bool = False
         self.last_timeline: list[dict] = []
         self.last_transitions: list[dict] = []
 
@@ -1880,6 +1888,22 @@ class EnergyManagementSystemCoordinator:
         )
         margin = DYNAMIC_DISCHARGE_RESERVE_MARGIN + margin_bonus_percent / 100
 
+        self.last_reserve_margin_breakdown = {
+            "base_percent": round((DYNAMIC_DISCHARGE_RESERVE_MARGIN - 1) * 100, 1),
+            "low_solar_bonus_percent": round(low_solar_bonus_percent, 1),
+            "consecutive_low_solar_days": consecutive_low_solar_days,
+            "shortfall_bonus_percent": round(shortfall_bonus_percent, 1),
+            "recent_shortfall_days": recent_shortfalls,
+            "excess_reduction_percent": round(excess_reduction_percent, 1),
+            "recent_excess_days": recent_excess_days,
+            "unprotected_aftermath_percent": round(
+                UNPROTECTED_AFTERMATH_MARGIN_PERCENT, 1
+            ),
+            "total_percent": round((margin - 1) * 100, 1),
+            "needed_kwh_before_margin": round(needed_kwh, 3),
+            "reserve_kwh_after_margin": round(needed_kwh * margin, 3),
+        }
+
         if margin_bonus_percent != 0:
             _LOGGER.debug(
                 "Discharge reserve margin: base %.0f%% + %.0f%% (low-solar, "
@@ -2157,6 +2181,37 @@ class EnergyManagementSystemCoordinator:
         top_slots = remaining_expensive[:quarters_affordable]
         return any(e[0] <= now < e[1] for e in top_slots)
 
+    def _log_discharge_floor_event(
+        self,
+        now: datetime,
+        household_load_w: float | None,
+        headroom_scaled_w: float,
+        applied_w: float,
+        available_kwh: float,
+        reserve_kwh: float,
+    ) -> None:
+        """Record it whenever the household-consumption floor (v0.59.0)
+        actually raises the discharge power above what the reserve-based
+        headroom scaling alone would have given - so a shared diagnostics
+        export shows exactly when and how often this kicked in, without
+        needing a separately-pulled sensor history graph.
+        """
+        self.last_discharge_floor_applied = True
+        self.discharge_floor_events.append(
+            {
+                "at": now.isoformat(),
+                "household_load_w": (
+                    round(household_load_w, 1) if household_load_w is not None else None
+                ),
+                "headroom_scaled_w": round(headroom_scaled_w, 1),
+                "applied_w": round(applied_w, 1),
+                "available_kwh": round(available_kwh, 2),
+                "reserve_kwh": round(reserve_kwh, 2),
+            }
+        )
+        # Bounded history, same window as energy_bridge_transition_log.
+        self.discharge_floor_events = self.discharge_floor_events[-50:]
+
     def _get_soc_scaled_discharge_power(
         self,
         base_power: float,
@@ -2191,6 +2246,7 @@ class EnergyManagementSystemCoordinator:
                 now, cheap_block_start
             )
             if available_kwh is not None and reserve_kwh is not None:
+                self.last_used_soc_taper_fallback = False
                 headroom_kwh = max(0.0, available_kwh - reserve_kwh)
                 interval_hours = UPDATE_INTERVAL_MINUTES / 60
                 max_power_w = (headroom_kwh / interval_hours) * 1000 if interval_hours > 0 else 0
@@ -2215,6 +2271,9 @@ class EnergyManagementSystemCoordinator:
                 # "ideal" reserve line when necessary; importing at the
                 # peak price is worse than a slightly thinner reserve.
                 household_load_w = self._read_corrected_consumption_power()
+                self.last_household_load_w = (
+                    round(household_load_w, 1) if household_load_w is not None else None
+                )
                 physical_ceiling_w = (
                     (available_kwh / interval_hours) * 1000
                     if interval_hours > 0
@@ -2225,10 +2284,16 @@ class EnergyManagementSystemCoordinator:
                     floor_w = round(
                         min(household_load_w, physical_ceiling_w, base_power), 1
                     )
+                self.last_discharge_floor_applied = False
+                self.last_price_priority_held_off = False
 
                 if max_power_w <= 0:
                     if floor_w > 0:
                         self.last_discharge_power_applied = floor_w
+                        self._log_discharge_floor_event(
+                            now, household_load_w, 0.0, floor_w,
+                            available_kwh, reserve_kwh,
+                        )
                         _LOGGER.debug(
                             "Dynamic discharge reserve: available=%.2f kWh, "
                             "needed reserve=%.2f kWh - no headroom, but "
@@ -2253,6 +2318,7 @@ class EnergyManagementSystemCoordinator:
                     entries, now, headroom_kwh, base_power
                 ):
                     self.last_discharge_power_applied = None
+                    self.last_price_priority_held_off = True
                     _LOGGER.debug(
                         "Holding off: limited headroom (%.2f kWh) is "
                         "better spent on a pricier quarter later today "
@@ -2265,6 +2331,10 @@ class EnergyManagementSystemCoordinator:
                 self.last_discharge_power_applied = scaled
                 if scaled < base_power:
                     if floor_w > max_power_w:
+                        self._log_discharge_floor_event(
+                            now, household_load_w, max_power_w, scaled,
+                            available_kwh, reserve_kwh,
+                        )
                         _LOGGER.debug(
                             "Dynamic discharge reserve: available=%.2f kWh, "
                             "needed reserve=%.2f kWh - headroom-scaled power "
@@ -2291,6 +2361,7 @@ class EnergyManagementSystemCoordinator:
 
         # Fallback: flat SoC-percentage taper (no available-energy sensor,
         # or the dynamic reserve couldn't be computed this tick).
+        self.last_used_soc_taper_fallback = True
         soc_entity = self.config.get(CONF_SOC_SENSOR)
         if not soc_entity:
             self.last_soc_percent = None
@@ -3444,14 +3515,19 @@ class EnergyManagementSystemCoordinator:
         if self._grid_charged_date != now.date():
             self._grid_charged_today = False
             self._grid_charged_date = now.date()
+            self.last_winter_guard_suppressed_today = False
+
+        expensive_tier = "primary" if is_expensive else None
 
         if is_expensive and self._grid_charged_today:
+            self.last_winter_guard_suppressed_today = True
             _LOGGER.debug(
                 "Suppressing expensive_quarter discharge: the battery was "
                 "already grid-charged today (low solar) - selling that "
                 "same energy back would just be a loss, not arbitrage."
             )
             is_expensive = False
+            expensive_tier = None
 
         # Secondary tier: if 'now' doesn't clear the strict, primary
         # dynamic threshold, check whether there's genuinely *spare*
@@ -3488,6 +3564,9 @@ class EnergyManagementSystemCoordinator:
                         entries, now, secondary_headroom_kwh, secondary_discharge_power
                     ):
                         is_expensive = True
+                        expensive_tier = "secondary"
+
+        self.last_expensive_tier = expensive_tier
 
         if is_expensive:
             discharge_power = self.config.get(

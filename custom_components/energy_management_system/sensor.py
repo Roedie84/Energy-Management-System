@@ -1004,10 +1004,23 @@ class HourlyConsumptionProfileSensor(SensorEntity, RestoreEntity):
             for hour in range(24)
             if self._coordinator.previous_hourly_avg_kw(hour) is not None
         }
+        # Full underlying per-day sample lists (v0.60.1) - restoring just
+        # the collapsed average after a restart gives previous_hourly_avg_kw
+        # nothing genuine to compare against, so the "Verschil" column was
+        # showing +0 for every hour right after every restart, only
+        # recovering hour-by-hour as each hour-of-day's boundary was next
+        # crossed (up to ~24h later). Persisting the raw lists lets the
+        # real day-to-day trend survive a restart intact.
+        profile_history = {
+            str(hour): [round(v, 3) for v in values]
+            for hour, values in self._coordinator.hourly_consumption_profile.items()
+            if values
+        }
         return {
             "profile": profile_kw,
             "profile_watts": profile_watts,
             "previous_profile_watts": previous_profile_watts,
+            "profile_history": profile_history,
             "hours_with_data": len(profile_kw),
         }
 
@@ -1016,10 +1029,31 @@ class HourlyConsumptionProfileSensor(SensorEntity, RestoreEntity):
         last_state = await self.async_get_last_state()
         if last_state is None:
             return
+
+        # Prefer the full per-day history (v0.60.1) when present - it
+        # restores the genuine trend intact. Falls back to the old
+        # single-average duplication for state saved by a pre-v0.60.1
+        # version (upgrade path), which only restores a flat "no change
+        # yet" starting point.
+        raw_history = last_state.attributes.get("profile_history")
+        if isinstance(raw_history, dict):
+            restored: dict[int, list[float]] = {}
+            for hour_str, values in raw_history.items():
+                try:
+                    hour = int(hour_str)
+                    parsed = [float(v) for v in values]
+                except (TypeError, ValueError):
+                    continue
+                if parsed:
+                    restored[hour] = parsed[-LEARNING_HISTORY_DAYS:]
+            if restored:
+                self._coordinator.hourly_consumption_profile = restored
+                return
+
         raw_profile = last_state.attributes.get("profile")
         if not isinstance(raw_profile, dict):
             return
-        restored: dict[int, list[float]] = {}
+        restored = {}
         for hour_str, avg_value in raw_profile.items():
             try:
                 hour = int(hour_str)
@@ -1098,6 +1132,11 @@ class PvHourlyBiasSensor(SensorEntity, RestoreEntity):
             "profile": profile,
             "profile_confident": profile_confident,
             "previous_profile": previous_profile,
+            "profile_history": {
+                str(hour): [round(v, 3) for v in values]
+                for hour, values in self._coordinator.pv_hourly_bias_history.items()
+                if values
+            },
             "hours_with_data": len(profile),
             "hours_with_confident_data": len(profile_confident),
         }
@@ -1107,10 +1146,30 @@ class PvHourlyBiasSensor(SensorEntity, RestoreEntity):
         last_state = await self.async_get_last_state()
         if last_state is None:
             return
+
+        # Prefer the full per-day history (v0.60.1) - see
+        # HourlyConsumptionProfileSensor for the full rationale. Falls
+        # back to the old single-ratio duplication for state saved by a
+        # pre-v0.60.1 version.
+        raw_history = last_state.attributes.get("profile_history")
+        if isinstance(raw_history, dict):
+            restored: dict[int, list[float]] = {}
+            for hour_str, values in raw_history.items():
+                try:
+                    hour = int(hour_str)
+                    parsed = [float(v) for v in values]
+                except (TypeError, ValueError):
+                    continue
+                if parsed:
+                    restored[hour] = parsed[-LEARNING_HISTORY_DAYS:]
+            if restored:
+                self._coordinator.pv_hourly_bias_history = restored
+                return
+
         raw_profile = last_state.attributes.get("profile")
         if not isinstance(raw_profile, dict):
             return
-        restored: dict[int, list[float]] = {}
+        restored = {}
         for hour_str, ratio_value in raw_profile.items():
             try:
                 hour = int(hour_str)

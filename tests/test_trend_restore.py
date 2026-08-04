@@ -7,6 +7,8 @@ right after every restart.
 """
 import asyncio
 
+import pytest
+
 
 class _FakeLastState:
     def __init__(self, attributes):
@@ -72,3 +74,80 @@ def test_pv_hourly_bias_restore_seeds_a_comparable_previous(make_coordinator):
     asyncio.run(sensor.async_added_to_hass())
 
     assert coordinator.previous_pv_hourly_ratio(9) == 0.284
+
+
+def test_hourly_consumption_profile_restores_genuine_history(make_coordinator):
+    """v0.60.1: the raw per-day sample list (profile_history) restores
+    intact across a restart, instead of the previous behaviour of only
+    persisting the collapsed average - which meant the 'Verschil' column
+    reset to +0 on every restart until enough new samples came in
+    (reported live)."""
+    coordinator = make_coordinator({})
+    from custom_components.energy_management_system.sensor import (
+        HourlyConsumptionProfileSensor,
+    )
+
+    sensor = HourlyConsumptionProfileSensor(coordinator, "entry1")
+
+    async def get_last_state():
+        return _FakeLastState(
+            {
+                "profile": {"9": 0.45},
+                "profile_history": {"9": [0.4, 0.5]},
+            }
+        )
+
+    sensor.async_get_last_state = get_last_state
+    asyncio.run(sensor.async_added_to_hass())
+
+    # The genuine pre-restart history survives, not a flat duplicate -
+    # previous/current differ immediately, no waiting for a new sample.
+    assert coordinator.hourly_consumption_profile[9] == [0.4, 0.5]
+    assert coordinator.previous_hourly_avg_kw(9) == 0.4
+    assert coordinator.learned_hourly_avg_kw(9) == pytest.approx(0.45)
+    assert coordinator.previous_hourly_avg_kw(9) != coordinator.learned_hourly_avg_kw(9)
+
+
+def test_hourly_consumption_profile_falls_back_without_history_attribute(
+    make_coordinator,
+):
+    """State saved by a pre-v0.60.1 version has no profile_history -
+    must still restore via the old duplication approach rather than
+    losing the data entirely."""
+    coordinator = make_coordinator({})
+    from custom_components.energy_management_system.sensor import (
+        HourlyConsumptionProfileSensor,
+    )
+
+    sensor = HourlyConsumptionProfileSensor(coordinator, "entry1")
+
+    async def get_last_state():
+        return _FakeLastState({"profile": {"9": 0.497}})
+
+    sensor.async_get_last_state = get_last_state
+    asyncio.run(sensor.async_added_to_hass())
+
+    assert coordinator.hourly_consumption_profile[9] == [0.497, 0.497]
+
+
+def test_pv_hourly_bias_restores_genuine_history(make_coordinator):
+    coordinator = make_coordinator({})
+    from custom_components.energy_management_system.sensor import (
+        PvHourlyBiasSensor,
+    )
+
+    sensor = PvHourlyBiasSensor(coordinator, "entry1")
+
+    async def get_last_state():
+        return _FakeLastState(
+            {
+                "profile": {"9": 0.31},
+                "profile_history": {"9": [0.25, 0.284, 0.31]},
+            }
+        )
+
+    sensor.async_get_last_state = get_last_state
+    asyncio.run(sensor.async_added_to_hass())
+
+    assert coordinator.pv_hourly_bias_history[9] == [0.25, 0.284, 0.31]
+    assert coordinator.previous_pv_hourly_ratio(9) == pytest.approx((0.25 + 0.284) / 2)

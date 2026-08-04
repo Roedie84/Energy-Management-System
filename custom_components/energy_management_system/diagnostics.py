@@ -290,6 +290,16 @@ async def async_get_config_entry_diagnostics(
             "last_discharge_start": _iso(coordinator.last_discharge_start),
             "last_soc_percent": coordinator.last_soc_percent,
             "last_discharge_power_applied": coordinator.last_discharge_power_applied,
+            "last_household_load_w": coordinator.last_household_load_w,
+            "last_discharge_floor_applied": coordinator.last_discharge_floor_applied,
+            "discharge_floor_events": coordinator.discharge_floor_events,
+            "last_expensive_tier": coordinator.last_expensive_tier,
+            "last_price_priority_held_off": coordinator.last_price_priority_held_off,
+            "last_used_soc_taper_fallback": coordinator.last_used_soc_taper_fallback,
+            "last_reserve_margin_breakdown": coordinator.last_reserve_margin_breakdown,
+            "last_winter_guard_suppressed_today": (
+                coordinator.last_winter_guard_suppressed_today
+            ),
             "last_charge_power_applied": coordinator.last_charge_power_applied,
             "last_available_kwh": coordinator.last_available_kwh,
             "last_needed_kwh_to_bridge": coordinator.last_needed_kwh_to_bridge,

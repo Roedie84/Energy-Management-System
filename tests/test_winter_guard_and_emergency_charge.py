@@ -65,6 +65,47 @@ def test_grid_charged_today_suppresses_same_day_expensive_discharge(
     asyncio.run(run())
 
 
+def test_winter_guard_suppression_flag_visible_in_diagnostics(make_coordinator, hass):
+    """The v0.60.0 diagnostic flag mirrors the suppression itself: set
+    for the rest of the day it happens, cleared again the next day."""
+    forecast = make_price_forecast(DAY0, _flat_price_with_cheap_block)
+    hass.states.set("sensor.price", "0", {"forecast": forecast})
+    hass.states.set("sensor.solcast", "2.0")
+    hass.states.set("sensor.p1", "200")
+
+    coordinator = make_coordinator(
+        {
+            "price_sensor_entity": "sensor.price",
+            "price_attribute": "price_tax_included",
+            "operation_select_entity": "select.op",
+            "manual_power_number_entity": "number.pow",
+            "manual_discharge_power": 1600,
+            "manual_charge_power": -2000,
+            "solar_forecast_sensor_entity": "sensor.solcast",
+            "consumption_power_sensor_entity": "sensor.p1",
+            "low_solar_threshold_kwh": 5.0,
+        }
+    )
+
+    async def run():
+        with_now(coordinator, DAY0.replace(hour=10, minute=0))
+        await coordinator._async_update_locked()
+        assert coordinator.last_winter_guard_suppressed_today is False
+
+        with_now(coordinator, DAY0.replace(hour=19, minute=15))
+        await coordinator._async_update_locked()
+        assert coordinator.last_winter_guard_suppressed_today is True
+
+        day1 = DAY0 + timedelta(days=1)
+        forecast2 = make_price_forecast(day1, _flat_price_with_cheap_block)
+        hass.states.set("sensor.price", "0", {"forecast": forecast2})
+        with_now(coordinator, day1.replace(hour=8, minute=0))
+        await coordinator._async_update_locked()
+        assert coordinator.last_winter_guard_suppressed_today is False
+
+    asyncio.run(run())
+
+
 def test_emergency_charge_only_when_low_solar_expected(make_coordinator, hass):
     """A critically low SoC should trigger emergency grid-charging only
     when little solar is expected (winter scenario) - not when solar is
