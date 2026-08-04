@@ -282,6 +282,8 @@ views:
                 name: Start ontlaadvenster
               - entity: sensor.energy_management_system_energy_bridge_check
                 name: Energie-check (genoeg om te overbruggen?)
+              - entity: sensor.energy_management_system_battery_protection
+                name: Accu-bescherming (toegepast ontlaadvermogen)
 
   - title: Financieel
     path: financieel

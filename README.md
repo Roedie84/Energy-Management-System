@@ -2951,3 +2951,58 @@ herschikking ineens.
 
 **Getest:** bestaande dashboard-testpijplijn blijft groen; puur een
 terugdraai naar een eerder bevestigde structuur.
+
+## v0.63.5 — utility_meter_ems.yaml: verkeerde source-entity's
+
+**Gerapporteerd:** de "Vandaag/Deze week/Deze maand"-kaartjes op het
+Financieel-tabblad bleven na correcte installatie van de Utility
+Meter-helpers permanent op €0 staan, terwijl de totaalteller er wel
+gewoon boven (€6,0583) stond.
+
+**Root cause:** `dashboards/utility_meter_ems.yaml` gebruikte
+`source: sensor.energy_management_system_discharge_value_expensive_quarters`
+(zonder voorvoegsel), terwijl de daadwerkelijke entity-naam bij een
+apparaat met een area-naam (hier: "woonkamer")
+`sensor.woonkamer_energy_management_system_discharge_value_expensive_quarters`
+is — exact dezelfde inconsistentie in entity-naamgeving die al eerder
+in dit dashboard is tegengekomen (sommige sensoren krijgen wel, andere
+geen device-naam-voorvoegsel, afhankelijk van of ze `has_entity_name`
+gebruiken). Een niet-bestaande `source` levert bij Utility Meter geen
+foutmelding op - de meter blijft simpelweg voor altijd op 0 staan, wat
+het onopgemerkt liet tot nu.
+
+**Fix:** beide `source`-verwijzingen (discharge value én charge cost)
+voorzien van het "woonkamer_"-voorvoegsel, en een waarschuwing in de
+bovenste commentaarregels toegevoegd dat een foute source-naam
+stilzwijgend faalt (geen foutmelding, gewoon altijd 0) - zodat een
+volgende keer, bij een naamswijziging, sneller wordt herkend wat er aan
+de hand is.
+
+**Vereist:** een nieuwe volledige HA-herstart (Utility Meter-config
+wordt niet met "YAML herladen" bijgewerkt, zoals het bestand zelf ook
+al aangaf). Na de herstart begint de teller op dat moment opnieuw vanaf
+0 als startpunt - dus ook nu weer pas zichtbaar bij de eerstvolgende
+ontlading/netlading.
+
+**Niet in tests gedekt:** dit bestand wordt buiten Home Assistant om
+gebruikt (los toe te voegen aan `configuration.yaml`) en valt buiten de
+testsuite van deze integratie.
+
+## v0.63.6 — ontbrekende "Accu-bescherming"-sensor toegevoegd aan dashboard
+
+**Aanleiding:** een systematische controle van alle entity-referenties
+in het dashboard tegen de daadwerkelijke entiteitenlijst (n.a.v. de
+utility_meter-bug) bracht aan het licht dat
+`sensor.energy_management_system_battery_protection` — bestaat,
+werkt prima — nergens op het dashboard stond. Deze toont het
+daadwerkelijk toegepaste ontlaadvermogen tijdens dure kwartieren
+(inclusief SoC-aftopping en de huishoudverbruik-vloer uit v0.59.0), met
+de SoC op dat moment als attribuut.
+
+**Fix:** toegevoegd als extra rij in de "Actuele beslissing
+(detail)"-lijst, naast de andere diagnostische regels.
+
+**Verder gecontroleerd, geen extra fouten gevonden:** alle overige 29
+EMS-entity-referenties in het dashboard kloppen exact met de
+daadwerkelijke entiteitenlijst (inclusief het wisselende
+`woonkamer_`-voorvoegsel per sensor).
