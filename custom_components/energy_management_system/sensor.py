@@ -83,6 +83,7 @@ async def async_setup_entry(
             "Washing machine last notification",
             "mdi:bell-outline",
         ),
+        SteelstofzuigerStatusSensor(coordinator, entry.entry_id),
     ]
 
     if tracker.enabled:
@@ -590,6 +591,34 @@ class BatteryProtectionSensor(_CoordinatorDiagnosticSensor):
     @property
     def extra_state_attributes(self) -> dict:
         return {"soc_percent": self._coordinator.last_soc_percent}
+
+
+class SteelstofzuigerStatusSensor(_CoordinatorDiagnosticSensor):
+    """Status of the steelstofzuiger charge-during-cheapest-block control
+    (v0.63.12) - None/unavailable if `steelstofzuiger_switch_entity`
+    isn't configured.
+    """
+
+    _attr_name = "Steelstofzuiger status"
+    _attr_icon = "mdi:vacuum"
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        super().__init__(coordinator, entry_id, "steelstofzuiger_status")
+
+    @property
+    def native_value(self) -> str | None:
+        return self._coordinator.last_steelstofzuiger_action
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return {
+            "duration_history_minutes": (
+                self._coordinator.steelstofzuiger_charge_duration_history
+            ),
+            "learned_duration_minutes": (
+                self._coordinator.learned_steelstofzuiger_duration_minutes
+            ),
+        }
 
 
 class DischargeValueSensor(SensorEntity, RestoreEntity):

@@ -291,6 +291,8 @@ views:
                 name: Energie-check (genoeg om te overbruggen?)
               - entity: sensor.energy_management_system_battery_protection
                 name: Accu-bescherming (toegepast ontlaadvermogen)
+              - entity: sensor.woonkamer_energy_management_system_steelstofzuiger_status
+                name: Steelstofzuiger status
 
   - title: Financieel
     path: financieel

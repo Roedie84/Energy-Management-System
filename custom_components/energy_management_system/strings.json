@@ -36,6 +36,8 @@
           "airco_climate_entity": "Airco climate entity (optional)",
           "oven_state_sensor_entity": "Oven state sensor (optional, e.g. Home Connect operation_state)",
           "kookplaat_state_sensor_entity": "Cooktop state sensor (optional, e.g. Home Connect operation_state)",
+          "steelstofzuiger_switch_entity": "Stick vacuum charger switch (optional, charges automatically during the cheapest block)",
+          "steelstofzuiger_power_sensor_entity": "Stick vacuum power sensor (optional, detects when charging is complete)",
           "appliance_notify_service": "Notify service for appliance and battery-mode notifications (empty = HA popup)"
         }
       }
@@ -80,6 +82,8 @@
           "airco_climate_entity": "Airco climate entity (optional)",
           "oven_state_sensor_entity": "Oven state sensor (optional, e.g. Home Connect operation_state)",
           "kookplaat_state_sensor_entity": "Cooktop state sensor (optional, e.g. Home Connect operation_state)",
+          "steelstofzuiger_switch_entity": "Stick vacuum charger switch (optional, charges automatically during the cheapest block)",
+          "steelstofzuiger_power_sensor_entity": "Stick vacuum power sensor (optional, detects when charging is complete)",
           "appliance_notify_service": "Notify service for appliance and battery-mode notifications (empty = HA popup)"
         }
       }

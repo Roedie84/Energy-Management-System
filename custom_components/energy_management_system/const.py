@@ -27,6 +27,8 @@ CONF_QUOOKER_POWER_SENSOR = "quooker_power_sensor_entity"
 CONF_AIRCO_CLIMATE_ENTITY = "airco_climate_entity"
 CONF_OVEN_STATE_SENSOR = "oven_state_sensor_entity"
 CONF_KOOKPLAAT_STATE_SENSOR = "kookplaat_state_sensor_entity"
+CONF_STEELSTOFZUIGER_SWITCH = "steelstofzuiger_switch_entity"
+CONF_STEELSTOFZUIGER_POWER_SENSOR = "steelstofzuiger_power_sensor_entity"
 CONF_APPLIANCE_NOTIFY_SERVICE = "appliance_notify_service"
 
 # Emoji shown in the mode/power-change notification title (v0.63.8), one
@@ -179,6 +181,12 @@ MAX_CONSUMPTION_CORRECTION_RATIO = 5.0
 # smoothing was originally built to ignore (v0.57.0) - only a longer
 # session counts as a genuine, immediately-actionable load.
 QUOOKER_SUSTAINED_MINUTES = 2
+
+# How long the steelstofzuiger's power draw must stay below
+# APPLIANCE_RUNNING_POWER_THRESHOLD_W before the charge is considered
+# complete (mirror of QUOOKER_SUSTAINED_MINUTES - a brief dip in a
+# charging curve shouldn't be mistaken for "done").
+STEELSTOFZUIGER_COMPLETE_SUSTAINED_MINUTES = 2
 
 # hvac_action values that mean the climate entity's compressor/heating
 # element is actually drawing power right now - 'idle' and 'off' don't

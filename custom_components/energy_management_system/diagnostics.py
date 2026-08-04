@@ -286,6 +286,13 @@ async def async_get_config_entry_diagnostics(
             ),
             "last_dishwasher_notification": coordinator.last_dishwasher_notification,
             "last_heavy_load_source": coordinator.last_heavy_load_source,
+            "last_steelstofzuiger_action": coordinator.last_steelstofzuiger_action,
+            "steelstofzuiger_charge_duration_history": (
+                coordinator.steelstofzuiger_charge_duration_history
+            ),
+            "learned_steelstofzuiger_duration_minutes": (
+                coordinator.learned_steelstofzuiger_duration_minutes
+            ),
             "washing_machine_usage_hours_with_data": len(
                 coordinator.washing_machine_usage_hourly_history
             ),

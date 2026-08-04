@@ -2986,3 +2986,59 @@ mode-change-log bevat de juiste reden/vermogen na een echte
 tick-op-tick-wijziging; datum-lijsten komen correct door in de export;
 ruwe PV-forecast-entries worden correct omgezet van kW naar kWh per
 interval.
+
+## v0.63.12 — steelstofzuiger laadt automatisch tijdens het goedkoopste blok
+
+**Aanleiding:** een bestaande, losse HA-automatisering zette de lader van
+de steelstofzuiger op een vaste klok aan/uit (12:00-16:00), met als doel
+"altijd op zonne-energie laden". Een vast blok is daar een zwakke
+benadering van — op een bewolkte dag laadt hij dan gewoon van het net, en
+op een lange zomerdag met veel zon buiten dat venster blijven bruikbare
+uren onbenut. Na overleg gekozen voor een eenvoudiger, robuuster doel:
+**altijd op de goedkoopste uren van de dag laden, het hele jaar door** —
+en dat wél in de integratie zelf, met leerbare laadduur.
+
+**Nieuw: `_async_update_steelstofzuiger_charging()`.** Hergebruikt de
+al bestaande "is dit het goedkoopste blok van vandaag"-berekening
+(dezelfde die ook de accu-logica gebruikt) om de schakelaar aan te
+zetten zodra het blok begint. Zet zichzelf weer uit zodra het vermogen
+**2 minuten aanhoudend** onder de bekende "apparaat actief"-drempel
+(15W, `APPLIANCE_RUNNING_POWER_THRESHOLD_W`) zakt — hetzelfde principe
+als de Quooker-detectie (v0.63.0), nu omgekeerd toegepast: niet
+"aanhoudend actief bevestigen", maar "aanhoudend inactief bevestigen dat
+de lading klaar is". Laadt maximaal 1x per dag; eenmaal klaar blijft de
+schakelaar uit voor de rest van de dag, ook al valt die nog binnen het
+goedkope blok.
+
+**Geleerde laadduur** (mediaan over de laatste 7 sessies, dezelfde
+uitschieter-resistente aanpak als v0.62.0) wordt bijgehouden voor
+diagnostiek/weergave — puur informatief, de aan/uit-beslissing zelf
+leunt op de live vermogensmeting, niet op de schatting.
+
+**Nieuwe configuratievelden:** `steelstofzuiger_switch_entity` (de
+schakelaar) en `steelstofzuiger_power_sensor_entity` (voor
+klaar-detectie, optioneel maar zonder deze wordt "klaar" nooit
+gedetecteerd en blijft de schakelaar aan tot het einde van het
+goedkope blok).
+
+**Bewuste ontwerpkeuze:** los van `force_manual` (dat gaat specifiek over
+de accu-besturing, niet over dit apparaat), wél gebonden aan
+`learning_only` (simuleert dan alleen, stuurt niets echt). De
+`_async_set_switch()`-helper schrijft bewust niet naar
+`last_simulated_action` — dat veld wordt in dezelfde tick ook door de
+accu-beslisboom gebruikt en zou elkaar overschrijven;
+`last_steelstofzuiger_action` is de eigen, aparte statusindicator.
+
+**Nieuwe sensor:** `sensor.steelstofzuiger_status` (toegevoegd aan het
+dashboard, "Actuele beslissing (detail)"-sectie) toont de huidige actie
+(`wacht_op_goedkoop_blok` / `laden_gestart` / `aan_het_laden` /
+`voltooid` / `voltooid_vandaag`) plus de laadduur-historie en geleerde
+mediaan als attributen. Ook zichtbaar in de diagnostiek-export.
+
+**Getest** (8 nieuwe permanente tests in `test_steelstofzuiger_charging.py`):
+schakelaar gaat aan bij start van het goedkope blok, blijft uit erbuiten,
+gaat uit zodra de lading aanhoudend voltooid is (met correcte
+duur-registratie), blijft uit voor de rest van de dag na voltooiing,
+reset de "voltooid"-vlag bij een nieuwe dag, doet niets zonder
+geconfigureerde schakelaar, raakt de schakelaar nooit aan in
+`learning_only`, en de geleerde duur gebruikt de mediaan.

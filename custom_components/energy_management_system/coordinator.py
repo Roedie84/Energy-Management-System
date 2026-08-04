@@ -73,6 +73,9 @@ from .const import (
     CONF_AIRCO_CLIMATE_ENTITY,
     CONF_OVEN_STATE_SENSOR,
     CONF_KOOKPLAAT_STATE_SENSOR,
+    CONF_STEELSTOFZUIGER_SWITCH,
+    CONF_STEELSTOFZUIGER_POWER_SENSOR,
+    STEELSTOFZUIGER_COMPLETE_SUSTAINED_MINUTES,
     QUOOKER_SUSTAINED_MINUTES,
     AIRCO_ACTIVE_HVAC_ACTIONS,
     HOME_CONNECT_ACTIVE_STATES,
@@ -194,6 +197,12 @@ class EnergyManagementSystemCoordinator:
         self._recent_consumption_readings_kw: list[float] = []
         self._quooker_active_since: datetime | None = None
         self.last_heavy_load_source: str | None = None
+        self._steelstofzuiger_complete_today: bool = False
+        self._steelstofzuiger_complete_date: date | None = None
+        self._steelstofzuiger_charge_started_at: datetime | None = None
+        self._steelstofzuiger_below_threshold_since: datetime | None = None
+        self.steelstofzuiger_charge_duration_history: list[float] = []
+        self.last_steelstofzuiger_action: str | None = None
 
         # -- Optional appliance awareness (informational only) --
         # Per hour-of-day, a rolling history of samples (1.0 = was
@@ -603,6 +612,15 @@ class EnergyManagementSystemCoordinator:
         if not self.night_consumption_history:
             return None
         return statistics.median(self.night_consumption_history)
+
+    @property
+    def learned_steelstofzuiger_duration_minutes(self) -> float | None:
+        """Median charge-session duration (minutes) - informational only,
+        for diagnostics/display. The actual on/off control uses the live
+        power-threshold detection, not this estimate."""
+        if not self.steelstofzuiger_charge_duration_history:
+            return None
+        return statistics.median(self.steelstofzuiger_charge_duration_history)
 
     # -- Forecast parsing -------------------------------------------------
 
@@ -1036,6 +1054,124 @@ class EnergyManagementSystemCoordinator:
             title=f"Goedkoop moment voor de {appliance_label}",
             message=message,
             notification_id=f"ems_{appliance_label}_ready",
+        )
+
+    async def _async_update_steelstofzuiger_charging(
+        self, now: datetime, is_currently_cheapest_block: bool
+    ) -> None:
+        """Actually switch the steelstofzuiger's charger on during today's
+        cheapest price block, and back off again once charging is
+        genuinely complete (power draw sustained below
+        APPLIANCE_RUNNING_POWER_THRESHOLD_W for
+        STEELSTOFZUIGER_COMPLETE_SUSTAINED_MINUTES - a brief dip in a
+        charging curve shouldn't be mistaken for "done", same principle
+        as the Quooker's sustained-active check, just inverted).
+
+        Unlike the dishwasher/washing machine appliance-awareness
+        feature (informational only, v0.47.0), this one actually
+        controls a switch entity - "altijd op de goedkoopste uren laten
+        laden, het hele jaar door" (reported), rather than a fixed
+        clock window that ignores the actual daily price shape.
+
+        Charges at most once per day: once complete, stays off for the
+        rest of the day even if still inside the cheap block (no reason
+        to keep a full battery charger running). Respects learning_only
+        (never actually flips the switch, only simulates) but is
+        deliberately independent of force_manual - that switch is about
+        the battery control loop specifically, not this.
+        """
+        switch_entity = self.config.get(CONF_STEELSTOFZUIGER_SWITCH)
+        if not switch_entity:
+            return
+
+        if self._steelstofzuiger_complete_date != now.date():
+            self._steelstofzuiger_complete_today = False
+            self._steelstofzuiger_complete_date = now.date()
+
+        power_entity = self.config.get(CONF_STEELSTOFZUIGER_POWER_SENSOR)
+        power_w = self._read_sensor_float(power_entity) if power_entity else None
+
+        switch_state = self.hass.states.get(switch_entity)
+        is_on = switch_state is not None and switch_state.state == "on"
+
+        should_charge = is_currently_cheapest_block and not self._steelstofzuiger_complete_today
+
+        if not should_charge:
+            if is_on:
+                await self._async_set_switch(switch_entity, turn_on=False)
+                self._finish_steelstofzuiger_session(now, completed=False)
+            self.last_steelstofzuiger_action = (
+                "voltooid_vandaag" if self._steelstofzuiger_complete_today else "wacht_op_goedkoop_blok"
+            )
+            return
+
+        if not is_on:
+            await self._async_set_switch(switch_entity, turn_on=True)
+            self._steelstofzuiger_charge_started_at = now
+            self._steelstofzuiger_below_threshold_since = None
+            self.last_steelstofzuiger_action = "laden_gestart"
+            return
+
+        # Already on and inside the cheap block - watch for completion.
+        if power_entity and power_w is not None and power_w < APPLIANCE_RUNNING_POWER_THRESHOLD_W:
+            if self._steelstofzuiger_below_threshold_since is None:
+                self._steelstofzuiger_below_threshold_since = now
+            elapsed_minutes = (
+                now - self._steelstofzuiger_below_threshold_since
+            ).total_seconds() / 60
+            if elapsed_minutes >= STEELSTOFZUIGER_COMPLETE_SUSTAINED_MINUTES:
+                await self._async_set_switch(switch_entity, turn_on=False)
+                self._finish_steelstofzuiger_session(now, completed=True)
+                self._steelstofzuiger_complete_today = True
+                self.last_steelstofzuiger_action = "voltooid"
+                return
+        else:
+            self._steelstofzuiger_below_threshold_since = None
+
+        self.last_steelstofzuiger_action = "aan_het_laden"
+
+    def _finish_steelstofzuiger_session(self, now: datetime, completed: bool) -> None:
+        """Record how long a charge session ran, for the learned-duration
+        history (median, same outlier-resistant approach as v0.62.0) -
+        purely informational/diagnostic, not itself a decision input
+        (the power-threshold detection above is the actual, more
+        reliable signal for "is it done").
+        """
+        if self._steelstofzuiger_charge_started_at is None:
+            return
+        duration_minutes = (
+            now - self._steelstofzuiger_charge_started_at
+        ).total_seconds() / 60
+        if completed and duration_minutes > 0:
+            self.steelstofzuiger_charge_duration_history.append(
+                round(duration_minutes, 1)
+            )
+            self.steelstofzuiger_charge_duration_history = (
+                self.steelstofzuiger_charge_duration_history[-LEARNING_HISTORY_DAYS:]
+            )
+        self._steelstofzuiger_charge_started_at = None
+        self._steelstofzuiger_below_threshold_since = None
+
+    async def _async_set_switch(self, entity_id: str, turn_on: bool) -> None:
+        """Turn a switch entity on/off, unless in learning_only mode.
+        Deliberately doesn't touch `last_simulated_action` - that field
+        is shared with the battery decision tree's own learning_only
+        simulation, which runs later in the same tick and would
+        overwrite it. The caller's `last_steelstofzuiger_action` already
+        reflects the intended action either way.
+        """
+        if self.learning_only:
+            _LOGGER.debug(
+                "Learning-only mode: would turn %s %s",
+                "on" if turn_on else "off",
+                entity_id,
+            )
+            return
+        await self.hass.services.async_call(
+            "switch",
+            "turn_on" if turn_on else "turn_off",
+            {"entity_id": entity_id},
+            blocking=True,
         )
 
     def _dispatch_notification(
@@ -3785,6 +3921,7 @@ class EnergyManagementSystemCoordinator:
             and cheap_block_start <= now < cheap_block_end
         )
         self._check_and_notify_appliance_ready(now, is_currently_cheapest_block)
+        await self._async_update_steelstofzuiger_charging(now, is_currently_cheapest_block)
 
         self.last_is_expensive = is_expensive
         self.last_effective_expensive_quarters_count = effective_count
