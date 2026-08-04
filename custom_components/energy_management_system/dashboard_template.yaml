@@ -37,9 +37,22 @@ views:
               columns: 12
               rows: 1
           - type: markdown
-            content: >
-              {{ state_attr('sensor.woonkamer_energy_management_system_explanation',
-              'explanation') }}
+            content: |
+              {% set updated = state_attr('sensor.woonkamer_energy_management_system_explanation', 'last_successful_update') %}🕐 **Tijd:** {{ as_timestamp(updated) | timestamp_custom('%d-%m %H:%M') if updated else 'onbekend' }}
+
+              {% set fm = state_attr('sensor.woonkamer_energy_management_system_explanation', 'force_manual') %}🔒 **Force manual:** {{ 'aan' if fm else 'uit' }}
+
+              {% set mode = state_attr('sensor.woonkamer_energy_management_system_explanation', 'expected_mode') %}⚙️ **Actuele modus:** {{ mode if mode else 'onbekend' }}
+
+              {% set price = state_attr('sensor.woonkamer_energy_management_system_explanation', 'current_price_per_kwh') %}💰 **Actuele kwartierprijs:** {{ '€%.3f/kWh' | format(price) if price is not none else 'onbekend' }}
+
+              {% set threshold = state_attr('sensor.woonkamer_energy_management_system_explanation', 'expensive_price_threshold') %}📈 **Drempel 'duur' vandaag:** {{ '€%.3f/kWh' | format(threshold) if threshold is not none else 'geen prijsspreiding vandaag' }}
+
+              {% set count = state_attr('sensor.woonkamer_energy_management_system_explanation', 'effective_expensive_quarters_count') %}🎯 **Dure kwartieren vandaag:** {{ count if count is not none else 0 }}
+
+              ---
+
+              {{ state_attr('sensor.woonkamer_energy_management_system_explanation', 'explanation') }}
             grid_options:
               columns: 12
               rows: auto

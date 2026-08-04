@@ -460,7 +460,31 @@ class ExplanationSensor(_CoordinatorDiagnosticSensor):
 
     @property
     def extra_state_attributes(self) -> dict:
-        return {"explanation": self._coordinator.last_explanation}
+        # Crucial values behind the current decision, exposed as their own
+        # flat attributes (not just baked into the text) so a markdown
+        # card can render a scannable icon summary above the full
+        # explanation, instead of the person having to parse the prose or
+        # go hunting across several other entities to piece it together.
+        return {
+            "explanation": self._coordinator.last_explanation,
+            "last_successful_update": (
+                self._coordinator.last_successful_update.isoformat()
+                if self._coordinator.last_successful_update
+                else None
+            ),
+            "force_manual": self._coordinator.force_manual,
+            "expected_mode": self._coordinator.last_expected_mode,
+            "current_price_per_kwh": self._coordinator.last_current_price_per_kwh,
+            "expensive_price_threshold": (
+                self._coordinator.last_expensive_price_threshold
+            ),
+            "secondary_price_threshold": (
+                self._coordinator.last_secondary_price_threshold
+            ),
+            "effective_expensive_quarters_count": (
+                self._coordinator.last_effective_expensive_quarters_count
+            ),
+        }
 
 
 class SimulatedActionSensor(_CoordinatorDiagnosticSensor):

@@ -96,6 +96,38 @@ def _fake_state_attr(entity, attr):
                 "max_price_per_kwh": 0.3637,
             }
         ],
+        (
+            "sensor.woonkamer_energy_management_system_explanation",
+            "explanation",
+        ): "Er is nu geen speciale reden om in te grijpen.",
+        (
+            "sensor.woonkamer_energy_management_system_explanation",
+            "last_successful_update",
+        ): "2026-08-04T07:30:55+02:00",
+        (
+            "sensor.woonkamer_energy_management_system_explanation",
+            "force_manual",
+        ): False,
+        (
+            "sensor.woonkamer_energy_management_system_explanation",
+            "expected_mode",
+        ): "smart",
+        (
+            "sensor.woonkamer_energy_management_system_explanation",
+            "current_price_per_kwh",
+        ): 0.3389,
+        (
+            "sensor.woonkamer_energy_management_system_explanation",
+            "expensive_price_threshold",
+        ): 0.378,
+        (
+            "sensor.woonkamer_energy_management_system_explanation",
+            "secondary_price_threshold",
+        ): 0.349,
+        (
+            "sensor.woonkamer_energy_management_system_explanation",
+            "effective_expensive_quarters_count",
+        ): 8,
     }
     return fake_data.get((entity, attr))
 

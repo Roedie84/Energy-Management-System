@@ -216,6 +216,9 @@ class EnergyManagementSystemCoordinator:
         self.last_discharge_floor_applied: bool = False
         self.discharge_floor_events: list[dict] = []
         self.last_expensive_tier: str | None = None
+        self.last_expensive_price_threshold: float | None = None
+        self.last_secondary_price_threshold: float | None = None
+        self.last_low_solar_narrowed_threshold: bool = False
         self.last_price_priority_held_off: bool = False
         self.last_used_soc_taper_fallback: bool = False
         self.last_reserve_margin_breakdown: dict = {}
@@ -3194,26 +3197,48 @@ class EnergyManagementSystemCoordinator:
         elif reason == "expensive_quarter":
             power = self.last_discharge_power_applied
             power_txt = f"{power:.0f}W" if power else "het ingestelde vermogen"
-            parts.append(
-                f"Dit kwartier hoort bij de {self.last_effective_expensive_quarters_count} "
-                f"duurste van vandaag, dus de accu ontlaadt nu actief op "
-                f"{power_txt} om van de hoge prijs te profiteren."
+            tier_txt = (
+                "de ruimere secundaire laag (top 45% van de dagprijsrange, "
+                "alleen omdat er toch nog vrije ruimte over was)"
+                if self.last_expensive_tier == "secondary"
+                else "de strikte primaire drempel (top 20% van de "
+                "dagprijsrange)"
             )
+            parts.append(
+                f"Dit kwartier haalt {tier_txt}, dus de accu ontlaadt nu "
+                f"actief op {power_txt} om van de hoge prijs te profiteren."
+            )
+            if self.last_household_load_w is not None and self.last_discharge_floor_applied:
+                parts.append(
+                    f"Let op: het vermogen is opgehoogd tot minstens je "
+                    f"huidige huisverbruik ({self.last_household_load_w:.0f}W), "
+                    f"zodat er niet alsnog tegen de piekprijs wordt "
+                    f"geïmporteerd."
+                )
             if self.last_soc_percent is not None:
                 parts.append(f"Huidige accu-SoC: {self.last_soc_percent:.0f}%.")
 
         elif reason == "expensive_quarter_soc_protected":
-            soc_txt = (
-                f"{self.last_soc_percent:.0f}%"
-                if self.last_soc_percent is not None
-                else "onbekend"
-            )
-            parts.append(
-                f"Dit zou een duur kwartier zijn om te ontladen, maar de "
-                f"accu-SoC ({soc_txt}) is te laag om dat te rechtvaardigen. "
-                f"Daarom blijft de Zendure op 'smart' staan in plaats van "
-                f"geforceerd te ontladen."
-            )
+            if self.last_price_priority_held_off:
+                parts.append(
+                    "Dit kwartier is duur genoeg, maar de beperkte "
+                    "beschikbare energie wordt bewust bewaard voor een nog "
+                    "duurder kwartier later vandaag (prijs-prioriteit) - "
+                    "dus blijft de Zendure voor nu op 'smart' staan in "
+                    "plaats van al te verkopen."
+                )
+            else:
+                soc_txt = (
+                    f"{self.last_soc_percent:.0f}%"
+                    if self.last_soc_percent is not None
+                    else "onbekend"
+                )
+                parts.append(
+                    f"Dit zou een duur kwartier zijn om te ontladen, maar de "
+                    f"accu-SoC ({soc_txt}) is te laag om dat te "
+                    f"rechtvaardigen. Daarom blijft de Zendure op 'smart' "
+                    f"staan in plaats van geforceerd te ontladen."
+                )
 
         elif reason == "grid_charging_low_solar":
             parts.append(
@@ -3311,12 +3336,46 @@ class EnergyManagementSystemCoordinator:
                         f"zon over de hele periode)."
                     )
             else:
-                parts.append(
-                    "Er is nu geen speciale reden om in te grijpen: de prijs "
-                    "is niet bijzonder hoog, en het goedkoopste blok is al "
-                    "gaande of voorbij. De Zendure regelt dit zelf "
-                    "(smart-modus)."
+                price_txt = (
+                    f"€{self.last_current_price_per_kwh:.3f}/kWh"
+                    if self.last_current_price_per_kwh is not None
+                    else "onbekend"
                 )
+                if self.last_expensive_price_threshold is not None:
+                    threshold_txt = f"€{self.last_expensive_price_threshold:.3f}/kWh"
+                    low_solar_txt = (
+                        " (vandaag extra streng, want er wordt weinig zon "
+                        "verwacht)"
+                        if self.last_low_solar_narrowed_threshold
+                        else ""
+                    )
+                    parts.append(
+                        f"Er is nu geen speciale reden om in te grijpen: de "
+                        f"huidige prijs ({price_txt}) haalt de drempel voor "
+                        f"'duur' vandaag ({threshold_txt}{low_solar_txt}) "
+                        f"niet, en het goedkoopste blok is al gaande of "
+                        f"voorbij. De Zendure regelt dit zelf (smart-modus)."
+                    )
+                    if self.last_secondary_price_threshold is not None:
+                        parts.append(
+                            f"Ook de ruimere secundaire drempel "
+                            f"(€{self.last_secondary_price_threshold:.3f}/kWh, "
+                            f"top 45%) wordt niet gehaald."
+                        )
+                else:
+                    parts.append(
+                        "Er is nu geen speciale reden om in te grijpen: de "
+                        "prijs is niet bijzonder hoog, en het goedkoopste "
+                        "blok is al gaande of voorbij. De Zendure regelt dit "
+                        "zelf (smart-modus)."
+                    )
+                if self.last_winter_guard_suppressed_today:
+                    parts.append(
+                        "Let op: er is vandaag al bijgeladen vanaf het net "
+                        "bij weinig zon (winter-guard), dus eventuele dure "
+                        "kwartieren worden vandaag bewust niet verkocht - "
+                        "dat zou anders met verlies zijn."
+                    )
 
         else:
             parts.append(f"Onbekende reden: {reason}.")
@@ -3363,6 +3422,20 @@ class EnergyManagementSystemCoordinator:
 
         effective_count = self._count_expensive_quarters_today(entries, now)
         is_expensive = self._is_expensive_now(entries, now)
+
+        # Stash the threshold context behind is_expensive/is_expensive_tier
+        # so _build_explanation can say *why* - not just *that* - a
+        # quarter did or didn't qualify (reported: guessing "probably
+        # because of low solar" when it was actually just a below-
+        # threshold price, or vice versa). Converted to EUR/kWh right
+        # away, same scale as last_current_price_per_kwh.
+        primary_threshold_raw = self._get_expensive_price_threshold(entries, now)
+        self.last_expensive_price_threshold = (
+            primary_threshold_raw / PRICE_SCALE_FACTOR
+            if primary_threshold_raw is not None
+            else None
+        )
+        self.last_low_solar_narrowed_threshold = self._is_low_solar_expected()
 
         # Always compute the time-based discharge_start for the timeline
         # projection (it can't know about live battery energy for future
@@ -3518,6 +3591,7 @@ class EnergyManagementSystemCoordinator:
             self.last_winter_guard_suppressed_today = False
 
         expensive_tier = "primary" if is_expensive else None
+        self.last_secondary_price_threshold = None
 
         if is_expensive and self._grid_charged_today:
             self.last_winter_guard_suppressed_today = True
@@ -3543,6 +3617,14 @@ class EnergyManagementSystemCoordinator:
         # unused). Never applies if the winter guard above already
         # suppressed selling today, or while grid-charged.
         if not is_expensive and not self._grid_charged_today:
+            secondary_threshold_raw = self._get_secondary_expensive_price_threshold(
+                entries, now
+            )
+            self.last_secondary_price_threshold = (
+                secondary_threshold_raw / PRICE_SCALE_FACTOR
+                if secondary_threshold_raw is not None
+                else None
+            )
             secondary_available_entity = self.config.get(CONF_AVAILABLE_ENERGY_SENSOR)
             secondary_available_kwh = (
                 self._read_sensor_float(secondary_available_entity)

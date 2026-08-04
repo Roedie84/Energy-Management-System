@@ -233,6 +233,7 @@ async def async_get_config_entry_diagnostics(
             "force_manual": coordinator.force_manual,
             "learning_only": coordinator.learning_only,
             "last_reason": coordinator.last_reason,
+            "last_explanation": coordinator.last_explanation,
             "last_current_price_per_kwh": coordinator.last_current_price_per_kwh,
             "last_projection_available_kwh": coordinator.last_projection_available_kwh,
             "last_projection_reserve_kwh": coordinator.last_projection_reserve_kwh,
@@ -294,6 +295,11 @@ async def async_get_config_entry_diagnostics(
             "last_discharge_floor_applied": coordinator.last_discharge_floor_applied,
             "discharge_floor_events": coordinator.discharge_floor_events,
             "last_expensive_tier": coordinator.last_expensive_tier,
+            "last_expensive_price_threshold": coordinator.last_expensive_price_threshold,
+            "last_secondary_price_threshold": coordinator.last_secondary_price_threshold,
+            "last_low_solar_narrowed_threshold": (
+                coordinator.last_low_solar_narrowed_threshold
+            ),
             "last_price_priority_held_off": coordinator.last_price_priority_held_off,
             "last_used_soc_taper_fallback": coordinator.last_used_soc_taper_fallback,
             "last_reserve_margin_breakdown": coordinator.last_reserve_margin_breakdown,

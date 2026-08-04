@@ -2600,3 +2600,73 @@ dubbele-waarde-aanpak.
 hersteld en toont direct een échte previous/current-afwijking; oude
 state zonder `profile_history` valt terecht terug op de
 dubbele-waarde-aanpak; zelfde voor de PV-bias-sensor.
+
+## v0.61.0 — de uitlegtekst zegt nu ook wáárom, niet alleen wát
+
+**Aanleiding:** de tekstsensor liet zien dat het "smart" was, met als
+uitleg "de prijs is niet bijzonder hoog" — te generiek om te kunnen
+beoordelen of dat klopte. Moest geraden worden (bijv. "vermoedelijk
+vanwege weinig zon vandaag") in plaats van afgelezen.
+
+**Wat er nu bij staat, per situatie:**
+- **`default_smart` (geen speciale reden):** toont nu de **werkelijke
+  prijs vs. de dynamische drempel voor 'duur' vandaag** (bijv. "€0,339
+  haalt de drempel van €0,378 niet"), en vermeldt expliciet als die
+  drempel vandaag **strenger staat omdat er weinig zon wordt verwacht**
+  (top 8% i.p.v. top 20% van de prijsrange) — dus je hoeft niet meer te
+  gokken of dat de reden was. Vermeldt ook de secundaire drempel, en of
+  de winter-guard vandaag al een verkoop heeft onderdrukt.
+- **`expensive_quarter`:** vermeldt nu of het kwartier via de **primaire**
+  of **secundaire** prijslaag kwalificeerde, en of het toegepaste
+  vermogen is opgehoogd door de huishoudverbruik-vloer (v0.59.0).
+- **`expensive_quarter_soc_protected`:** **bugfix in de tekst zelf** — dit
+  label wordt namelijk gebruikt in twee heel verschillende gevallen (te
+  lage SoC, **of** prijs-prioriteit die bewust wacht op een duurder
+  kwartier later), maar de tekst zei tot nu toe altijd "de accu-SoC is
+  te laag", ook wanneer de SoC prima was en het eigenlijk om
+  prijs-prioriteit ging. Onderscheidt dit nu correct met de
+  `last_price_priority_held_off`-vlag uit v0.60.0.
+
+**Drie nieuwe coordinator-velden** (ook in diagnostiek):
+`last_expensive_price_threshold`, `last_secondary_price_threshold`,
+`last_low_solar_narrowed_threshold`. Daarnaast staat `last_explanation`
+zelf nu ook in de diagnostiek-export (stond er tot nu toe niet in,
+alleen op het dashboard).
+
+**Getest** (8 nieuwe permanente tests in `test_explanation_text.py`):
+prijs-vs-drempel-tekst, lage-zon-vermelding, winter-guard-vermelding,
+nette fallback zonder prijsspreiding, correcte onderscheiding
+SoC-bescherming vs. prijs-prioriteit in beide richtingen, vermelding van
+de gebruikte prijslaag, en vermelding van de huishoudverbruik-vloer.
+
+## v0.61.1 — icoon-samenvatting boven de uitlegtekst op het dashboard
+
+**Verzoek:** de cruciale waarden achter de uitleg (tijd, force manual,
+modus, prijs, drempel) los en met icoontjes bovenaan de uitlegkaart,
+met de bestaande volledige tekst er direct onder — naar het voorbeeld
+van een vergelijkbaar overzichtskaartje.
+
+**`ExplanationSensor` (sensor.py):** exporteert nu naast de bestaande
+`explanation`-attribute ook de losse waarden erachter als eigen
+attributen: `last_successful_update`, `force_manual`, `expected_mode`,
+`current_price_per_kwh`, `expensive_price_threshold`,
+`secondary_price_threshold`, `effective_expensive_quarters_count`. Zo
+hoeft het dashboard niet meerdere andere entiteiten te combineren of de
+prozatekst te parsen.
+
+**Dashboard:** de uitlegkaart (`dashboard_template.yaml` en de
+gesynchroniseerde kopie in `dashboards/`) toont nu bovenaan een
+icoon-per-regel samenvatting (🕐 Tijd, 🔒 Force manual, ⚙️ Actuele
+modus, 💰 Actuele kwartierprijs, 📈 Drempel 'duur' vandaag, 🎯 Dure
+kwartieren vandaag), gevolgd door een `---`-scheiding en daaronder de
+volledige, ongewijzigde uitlegtekst zoals voorheen. De kaart is
+overgezet van YAML's folded (`>`) naar literal (`|`) block-stijl voor
+dit specifieke kaartje — voorkomt exact het soort fold-gerelateerde
+opmaakverrassingen waar `test_dashboard_tables.py` al eerder voor is
+gebouwd, door de regel-einden hier expliciet zelf te bepalen in plaats
+van op YAML's folding-regels te vertrouwen.
+
+**Getest** (2 nieuwe permanente tests voor de sensor-attributen, plus
+uitgebreide fake-testdata in de bestaande
+`test_dashboard_tables.py`-pijplijn zodat deze kaart nu ook echt
+gerenderd wordt gecontroleerd op geldige YAML + Jinja).
