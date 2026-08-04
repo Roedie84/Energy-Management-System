@@ -77,6 +77,7 @@ from .const import (
     AIRCO_ACTIVE_HVAC_ACTIONS,
     HOME_CONNECT_ACTIVE_STATES,
     CONF_APPLIANCE_NOTIFY_SERVICE,
+    MODE_CHANGE_EMOJI,
     APPLIANCE_RUNNING_POWER_THRESHOLD_W,
     CONSUMPTION_CORRECTION_SMOOTHING_SAMPLES,
     MAX_CONSUMPTION_CORRECTION_RATIO,
@@ -207,6 +208,7 @@ class EnergyManagementSystemCoordinator:
         self.last_washing_machine_notification: str | None = None
 
         self.last_reason: str | None = None
+        self._last_notified_mode_signature: tuple | None = None
         self.last_cheap_block_start: datetime | None = None
         self.last_cheap_block_end: datetime | None = None
         self.last_discharge_start: datetime | None = None
@@ -1012,7 +1014,30 @@ class EnergyManagementSystemCoordinator:
         setattr(self, message_attr, message)
         setattr(self, last_notified_attr, now.date())
 
-        service_domain, _, service_name = (notify_service or "persistent_notification.create").partition(".")
+        self._dispatch_notification(
+            notify_service=notify_service,
+            title=f"Goedkoop moment voor de {appliance_label}",
+            message=message,
+            notification_id=f"ems_{appliance_label}_ready",
+        )
+
+    def _dispatch_notification(
+        self,
+        notify_service: str | None,
+        title: str,
+        message: str,
+        notification_id: str,
+    ) -> None:
+        """Shared notification dispatch, used for both the appliance-ready
+        suggestion (v0.47.0) and the mode/power-change notification
+        (v0.63.8) - both reuse the same CONF_APPLIANCE_NOTIFY_SERVICE
+        config option, so nothing extra needs to be set up for either.
+        Falls back to a persistent notification in the HA UI if no
+        notify service is configured.
+        """
+        service_domain, _, service_name = (
+            notify_service or "persistent_notification.create"
+        ).partition(".")
         try:
             if service_domain == "persistent_notification":
                 self.hass.async_create_task(
@@ -1020,9 +1045,9 @@ class EnergyManagementSystemCoordinator:
                         "persistent_notification",
                         "create",
                         {
-                            "title": f"Goedkoop moment voor de {appliance_label}",
+                            "title": title,
                             "message": message,
-                            "notification_id": f"ems_{appliance_label}_ready",
+                            "notification_id": notification_id,
                         },
                     )
                 )
@@ -1031,13 +1056,11 @@ class EnergyManagementSystemCoordinator:
                     self.hass.services.async_call(
                         service_domain,
                         service_name,
-                        {"message": message, "title": "Energy Management System"},
+                        {"message": message, "title": title},
                     )
                 )
         except Exception:  # noqa: BLE001 - a failed notification must never crash the update
-            _LOGGER.exception(
-                "Failed to send the %s-ready notification", appliance_label
-            )
+            _LOGGER.exception("Failed to send notification: %s", title)
 
     def _track_recent_consumption_reading(self, now: datetime) -> None:
         """Append the current live consumption reading (kW) to a short
@@ -3336,6 +3359,80 @@ class EnergyManagementSystemCoordinator:
         lines.extend(f"| {label} | {value} |" for label, value in rows)
         return "\n".join(lines)
 
+    def _finish_decision_tick(self, now: datetime) -> None:
+        """Common tail for every branch of the decision tree that actually
+        applied something to the device: build the explanation text, then
+        check whether the mode/power genuinely changed since the last
+        tick and notify if so (see `_maybe_notify_mode_change`). Not used
+        by the two branches that don't apply anything (no_forecast_data,
+        force_manual) - those just build the explanation directly, since
+        there's nothing the integration did to notify about.
+        """
+        self.last_explanation = self._build_explanation()
+        self._maybe_notify_mode_change(now)
+
+    def _maybe_notify_mode_change(self, now: datetime) -> None:
+        """Send a notification whenever the mode or applied power the
+        integration just sent to the Zendure genuinely changed since the
+        last tick - reusing CONF_APPLIANCE_NOTIFY_SERVICE (the same
+        setting already used for appliance-ready suggestions, v0.47.0),
+        so nothing extra needs to be configured for this.
+
+        Reported: on this setup, the Zendure device does nothing
+        autonomous in 'smart' mode - every charge/discharge decision
+        comes from this integration, so "the integration changed
+        something" and "the battery's behaviour changed" are the same
+        event here, worth surfacing directly rather than only readable
+        indirectly via the mode/power entities.
+
+        The signature is (reason, discharge power, charge power) so a
+        change in applied wattage within the same reason (e.g. the
+        household-consumption floor, v0.59.0, adjusting the discharge
+        power tick to tick) also counts as a genuine change, not just a
+        change of reason/mode. Skipped in learning_only mode (nothing
+        was actually sent to the device) and on the very first tick
+        after startup/reload (nothing yet to compare against - would
+        otherwise fire a spurious notification on every restart).
+        """
+        if self.learning_only:
+            return
+
+        signature = (
+            self.last_reason,
+            self.last_discharge_power_applied,
+            self.last_charge_power_applied,
+        )
+        if self._last_notified_mode_signature is None:
+            self._last_notified_mode_signature = signature
+            return
+        if signature == self._last_notified_mode_signature:
+            return
+        self._last_notified_mode_signature = signature
+
+        notify_service = self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE)
+        if not notify_service:
+            return
+
+        emoji = MODE_CHANGE_EMOJI.get(self.last_reason, "🔄")
+        power = (
+            self.last_discharge_power_applied
+            if self.last_discharge_power_applied is not None
+            else self.last_charge_power_applied
+        )
+        power_txt = f"{power:.0f} W" if power is not None else "n.v.t."
+        title = f"{emoji} Accu naar {self.last_expected_mode}"
+        message = (
+            f"🔌 Vermogen: {power_txt}\n"
+            f"🕒 {now.strftime('%H:%M:%S')}\n\n"
+            f"{self.last_explanation}"
+        )
+        self._dispatch_notification(
+            notify_service=notify_service,
+            title=title,
+            message=message,
+            notification_id="ems_mode_change",
+        )
+
     def _build_explanation(self) -> str:
         """Build a plain-language (Dutch) explanation of the current
         decision, so you can read in the dashboard what the integration
@@ -3730,7 +3827,7 @@ class EnergyManagementSystemCoordinator:
             self._update_financial_tracking(
                 now, entries, self.last_reason, None, charge_power
             )
-            self.last_explanation = self._build_explanation()
+            self._finish_decision_tick(now)
             return
 
         if self._is_negative_price_active:
@@ -3833,7 +3930,7 @@ class EnergyManagementSystemCoordinator:
                     now, entries, self.last_reason, None, charge_power
                 )
                 self._update_shortfall_detection(now, self.last_reason, self.last_available_kwh, self.last_needed_kwh_to_bridge)
-                self.last_explanation = self._build_explanation()
+                self._finish_decision_tick(now)
                 return
             if scaled_power is None:
                 # SoC too low to justify forced export - protect the
@@ -3847,7 +3944,7 @@ class EnergyManagementSystemCoordinator:
                 now, entries, self.last_reason, scaled_power, None
             )
             self._update_shortfall_detection(now, self.last_reason, self.last_available_kwh, self.last_needed_kwh_to_bridge)
-            self.last_explanation = self._build_explanation()
+            self._finish_decision_tick(now)
             return
 
         if should_force_charge:
@@ -3862,7 +3959,7 @@ class EnergyManagementSystemCoordinator:
                 now, entries, self.last_reason, None, charge_power
             )
             self._update_shortfall_detection(now, self.last_reason, self.last_available_kwh, self.last_needed_kwh_to_bridge)
-            self.last_explanation = self._build_explanation()
+            self._finish_decision_tick(now)
             return
 
         # Emergency top-up: the battery is critically low right now,
@@ -3882,7 +3979,7 @@ class EnergyManagementSystemCoordinator:
                 now, entries, self.last_reason, None, charge_power
             )
             self._update_shortfall_detection(now, self.last_reason, self.last_available_kwh, self.last_needed_kwh_to_bridge)
-            self.last_explanation = self._build_explanation()
+            self._finish_decision_tick(now)
             return
 
         if should_postpone_charging:
@@ -3890,14 +3987,14 @@ class EnergyManagementSystemCoordinator:
             self.last_reason = "discharging_window"
             self._update_financial_tracking(now, entries, self.last_reason, None, None)
             self._update_shortfall_detection(now, self.last_reason, self.last_available_kwh, self.last_needed_kwh_to_bridge)
-            self.last_explanation = self._build_explanation()
+            self._finish_decision_tick(now)
             return
 
         await self._async_apply_operation(OPTION_SMART)
         self.last_reason = "default_smart"
         self._update_financial_tracking(now, entries, self.last_reason, None, None)
         self._update_shortfall_detection(now, self.last_reason, self.last_available_kwh, self.last_needed_kwh_to_bridge)
-        self.last_explanation = self._build_explanation()
+        self._finish_decision_tick(now)
 
     async def _async_apply_operation(self, option: str) -> None:
         """Set the Zendure operation mode, unless in learning_only mode."""

@@ -36,7 +36,7 @@
           "airco_climate_entity": "Airco climate-entiteit (optioneel)",
           "oven_state_sensor_entity": "Oven status-sensor (optioneel, bijv. Home Connect operation_state)",
           "kookplaat_state_sensor_entity": "Kookplaat status-sensor (optioneel, bijv. Home Connect operation_state)",
-          "appliance_notify_service": "Notify-service voor apparaat-meldingen (leeg = pop-up in HA)"
+          "appliance_notify_service": "Notify-service voor apparaat- en accumodus-meldingen (leeg = pop-up in HA)"
         }
       }
     },
@@ -80,7 +80,7 @@
           "airco_climate_entity": "Airco climate-entiteit (optioneel)",
           "oven_state_sensor_entity": "Oven status-sensor (optioneel, bijv. Home Connect operation_state)",
           "kookplaat_state_sensor_entity": "Kookplaat status-sensor (optioneel, bijv. Home Connect operation_state)",
-          "appliance_notify_service": "Notify-service voor apparaat-meldingen (leeg = pop-up in HA)"
+          "appliance_notify_service": "Notify-service voor apparaat- en accumodus-meldingen (leeg = pop-up in HA)"
         }
       }
     }

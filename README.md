@@ -3044,3 +3044,52 @@ integratie-wijziging).
 buiten Home Assistant om gebruikt), wel handmatig gevalideerd: YAML
 laadt correct, en de emoji-Jinja-template is doorgerekend voor alle 8
 bekende `last_decision_reason`-waarden plus de fallback.
+
+## v0.63.8 — modus/vermogen-melding ingebouwd (v0.63.7 losse automatisering vervalt)
+
+**Aanleiding:** de losse automatisering uit v0.63.7 werkte, maar de
+verwachting was dat dit net als de vaatwasser/wasmachine-melding
+**ingebouwd** zou zijn — geen eigen automatisering nodig, gewoon het al
+ingevulde `appliance_notify_service`-veld hergebruiken. Terechte
+verwachting, dus alsnog zo gebouwd.
+
+**`dashboards/notify_battery_mode_change.yaml` is verwijderd** — zou nu
+dubbele meldingen geven als hij ook nog als automatisering bestond.
+**Als je die eerder had aangemaakt: verwijder 'm handmatig** (Instellingen
+→ Automatiseringen), anders krijg je 'm dubbel.
+
+**Nieuw in de coordinator:**
+- `_dispatch_notification()` — gedeelde verzendlogica, geëxtraheerd uit
+  de bestaande vaatwasser/wasmachine-melding (v0.47.0) zodat beide
+  functies 'm hergebruiken. Zelfde fallback-gedrag als voorheen
+  (persistent notification in de HA-UI als er geen notify-service is
+  ingevuld).
+- `_maybe_notify_mode_change()` — vergelijkt elke tick de combinatie
+  (reden, toegepast ontlaad-/laadvermogen) met de vorige tick; bij een
+  echt verschil wordt genotificeerd. Dekt zowel een modus-wissel als een
+  vermogens-aanpassing binnen dezelfde modus (bijv. de
+  huishoudverbruik-vloer uit v0.59.0 die het ontlaadvermogen tussentijds
+  ophoogt). Slaat notificeren over bij: de allereerste tick na een
+  herstart (niets om mee te vergelijken), `learning_only`-modus (er
+  wordt toch niets echt verstuurd), en de `force_manual`/
+  `no_forecast_data`-paden (die passeren `_finish_decision_tick` niet,
+  want daar wordt sowieso niets naar het apparaat gestuurd).
+- `_finish_decision_tick()` — nieuwe gedeelde afsluiter voor elk pad in
+  de beslisboom dat daadwerkelijk iets naar het apparaat stuurt: bouwt
+  de uitlegtekst én checkt de melding, in één aanroep in plaats van op 7
+  plekken losse code te herhalen.
+
+**Bericht bevat:** een reden-specifieke emoji in de titel (alle 8
+mogelijke `last_reason`-waarden gedekt, plus een generieke fallback),
+het toegepaste vermogen, het tijdstip, en de **volledige, live berekende
+uitlegtekst** (`_build_explanation()`) — dus geen tweede, losse kopie
+van de beslislogica die op termijn uit de pas kan gaan lopen, zoals bij
+een losse automatisering wel het risico was.
+
+**Getest** (7 nieuwe permanente tests in `test_mode_change_notification.py`):
+geen melding op de allereerste tick; melding bij een echte
+reden-wijziging, met de juiste titel/inhoud; geen dubbele melding bij
+eenzelfde reden op de volgende tick; geen melding zonder ingevulde
+notify-service; geen melding in `learning_only`; geen melding tijdens
+`force_manual`; en de gedeelde `_dispatch_notification`-helper valt nog
+steeds correct terug op een persistent notification.

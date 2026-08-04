@@ -36,7 +36,7 @@
           "airco_climate_entity": "Airco climate entity (optional)",
           "oven_state_sensor_entity": "Oven state sensor (optional, e.g. Home Connect operation_state)",
           "kookplaat_state_sensor_entity": "Cooktop state sensor (optional, e.g. Home Connect operation_state)",
-          "appliance_notify_service": "Notify service for appliance notifications (empty = HA popup)"
+          "appliance_notify_service": "Notify service for appliance and battery-mode notifications (empty = HA popup)"
         }
       }
     },
@@ -80,7 +80,7 @@
           "airco_climate_entity": "Airco climate entity (optional)",
           "oven_state_sensor_entity": "Oven state sensor (optional, e.g. Home Connect operation_state)",
           "kookplaat_state_sensor_entity": "Cooktop state sensor (optional, e.g. Home Connect operation_state)",
-          "appliance_notify_service": "Notify service for appliance notifications (empty = HA popup)"
+          "appliance_notify_service": "Notify service for appliance and battery-mode notifications (empty = HA popup)"
         }
       }
     }

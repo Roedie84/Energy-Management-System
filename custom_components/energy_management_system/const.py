@@ -28,6 +28,19 @@ CONF_AIRCO_CLIMATE_ENTITY = "airco_climate_entity"
 CONF_OVEN_STATE_SENSOR = "oven_state_sensor_entity"
 CONF_KOOKPLAAT_STATE_SENSOR = "kookplaat_state_sensor_entity"
 CONF_APPLIANCE_NOTIFY_SERVICE = "appliance_notify_service"
+
+# Emoji shown in the mode/power-change notification title (v0.63.8), one
+# per possible coordinator.last_reason value - see _maybe_notify_mode_change.
+MODE_CHANGE_EMOJI = {
+    "expensive_quarter": "💰⬇️",
+    "expensive_quarter_soc_protected": "🛡️",
+    "grid_charging_low_solar": "⚡⬆️",
+    "emergency_low_battery": "🚨",
+    "negative_price": "🎁⬆️",
+    "discharging_window": "⏳",
+    "default_smart": "🤖",
+    "no_forecast_data": "⚠️",
+}
 CONF_SOLAR_FORECAST_SENSOR = "solar_forecast_sensor_entity"
 CONF_SOLAR_TODAY_FORECAST_SENSOR = "solar_today_forecast_sensor_entity"
 CONF_SOLAR_REMAINING_TODAY_SENSOR = "solar_remaining_today_sensor_entity"
