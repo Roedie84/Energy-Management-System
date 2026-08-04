@@ -52,6 +52,55 @@ views:
       - type: grid
         cards:
           - type: heading
+            heading: Besturing
+            grid_options:
+              columns: 12
+              rows: 1
+          - type: custom:mushroom-entity-card
+            entity: switch.energy_management_system_force_manual
+            name: Force manual
+            icon: mdi:hand-back-right
+            grid_options:
+              columns: 4
+              rows: 1
+          - type: custom:mushroom-entity-card
+            entity: switch.energy_management_system_learning_only_no_control
+            name: Learning only
+            icon: mdi:school-outline
+            grid_options:
+              columns: 4
+              rows: 1
+          - type: custom:mushroom-entity-card
+            entity: switch.woonkamer_energy_management_system_vacation_mode
+            name: Vakantiemodus
+            icon: mdi:bag-suitcase-outline
+            grid_options:
+              columns: 4
+              rows: 1
+
+      - type: grid
+        cards:
+          - type: heading
+            heading: Actuele beslissing (detail)
+            grid_options:
+              columns: 12
+              rows: 1
+          - type: entities
+            entities:
+              - entity: sensor.energy_management_system_last_decision_reason
+                name: Reden laatste beslissing
+              - entity: sensor.energy_management_system_simulated_action
+                name: Gesimuleerde actie (bij learning only)
+              - entity: sensor.energy_management_system_cheapest_block_start
+                name: Start goedkoopste blok
+              - entity: sensor.energy_management_system_discharge_window_start
+                name: Start ontlaadvenster
+              - entity: sensor.energy_management_system_energy_bridge_check
+                name: Energie-check (genoeg om te overbruggen?)
+
+      - type: grid
+        cards:
+          - type: heading
             heading: Accu & rendement
             grid_options:
               columns: 12
@@ -105,7 +154,7 @@ views:
               {%- endif %}
             grid_options:
               columns: 12
-              rows: 1
+              rows: 2
 
       - type: grid
         cards:
@@ -198,7 +247,7 @@ views:
               tabblad) ziet, wat alleen de **resterende** tijd toont.
             grid_options:
               columns: 12
-              rows: 1
+              rows: 2
           - type: custom:mushroom-template-card
             primary: "{{ states('number.solaredge_i1_active_power_limit') }}%"
             secondary: Zonnepaneel-vermogenslimiet (bij negatieve prijs)
@@ -233,55 +282,6 @@ views:
             grid_options:
               columns: 6
               rows: 1
-
-      - type: grid
-        cards:
-          - type: heading
-            heading: Besturing
-            grid_options:
-              columns: 12
-              rows: 1
-          - type: custom:mushroom-entity-card
-            entity: switch.energy_management_system_force_manual
-            name: Force manual
-            icon: mdi:hand-back-right
-            grid_options:
-              columns: 4
-              rows: 1
-          - type: custom:mushroom-entity-card
-            entity: switch.energy_management_system_learning_only_no_control
-            name: Learning only
-            icon: mdi:school-outline
-            grid_options:
-              columns: 4
-              rows: 1
-          - type: custom:mushroom-entity-card
-            entity: switch.woonkamer_energy_management_system_vacation_mode
-            name: Vakantiemodus
-            icon: mdi:bag-suitcase-outline
-            grid_options:
-              columns: 4
-              rows: 1
-
-      - type: grid
-        cards:
-          - type: heading
-            heading: Actuele beslissing (detail)
-            grid_options:
-              columns: 12
-              rows: 1
-          - type: entities
-            entities:
-              - entity: sensor.energy_management_system_last_decision_reason
-                name: Reden laatste beslissing
-              - entity: sensor.energy_management_system_simulated_action
-                name: Gesimuleerde actie (bij learning only)
-              - entity: sensor.energy_management_system_cheapest_block_start
-                name: Start goedkoopste blok
-              - entity: sensor.energy_management_system_discharge_window_start
-                name: Start ontlaadvenster
-              - entity: sensor.energy_management_system_energy_bridge_check
-                name: Energie-check (genoeg om te overbruggen?)
 
   - title: Financieel
     path: financieel

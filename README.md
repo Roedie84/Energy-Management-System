@@ -2893,3 +2893,30 @@ zien óf, en welke, grootverbruiker net bevestigd actief was.
 sensor-attribute is meegenomen in de bestaande
 `test_explanation_sensor_attributes.py`-tests (aanwezig + correct
 `None` als fallback).
+
+## v0.63.3 — scroll-pijltjes weg, secties herschikt tegen lege ruimte
+
+**Gerapporteerd (met screenshot):** twee kleine kaartjes toonden
+onbedoelde scroll-pijltjes (Rendement-trend in "Accu & rendement", en de
+"hele kalenderdag"-toelichting in "Modus & besluit"), en er bleef nog
+steeds een grote lege ruimte over rechts, onder de kortere secties.
+
+**Scroll-pijltjes:** beide kaartjes stonden op `rows: 1`, maar hun tekst
+past over 2 regels - Home Assistant maakt de kaart dan intern
+scrollbaar in plaats van hem uit te rekken. Opgelost door `rows: 2` te
+geven aan beide.
+
+**Lege ruimte:** de "Besturing"- en "Actuele beslissing
+(detail)"-secties (samen zo'n 5-6 rijen aan echte inhoud) stonden ver
+onderaan de pagina, in een eigen rij die pas begint nadat de hoogste
+sectie van rij 1 (de uitlegkaart) is afgelopen - met een hoop lege
+ruimte rechts ervan. Verplaatst naar direct na de eerste sectie (Energy
+Management System), zodat ze nu in dezelfde rij meelopen en de ruimte
+naast de uitlegkaart met echte inhoud vullen in plaats van pas in een
+nieuwe rij te verschijnen. Nieuwe volgorde: Energy Management System →
+Besturing → Actuele beslissing (detail) → Accu & rendement → Live
+cijfers → Modus & besluit.
+
+**Getest:** bestaande dashboard-testpijplijn (YAML-geldigheid +
+Jinja-rendering) blijft groen - puur een herschikking en
+hoogte-aanpassing, geen nieuwe databronnen.
