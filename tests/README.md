@@ -32,6 +32,7 @@ geïmporteerd en getest kan worden.
 | `test_structural_integrity.py` | AST-gebaseerde scan die de twee historische "verweesde klasse"-regressies had gevangen |
 | `test_consumption_floor.py` | Ontlaadvermogen zakt nooit onder het live huishoudverbruik (v0.59.0) |
 | `test_decision_visibility.py` | Extra diagnostiek-zichtbaarheid: prijslaag, prijs-prioriteit-hold-off, SoC-taper-fallback, reserve-marge-breakdown (v0.60.0) |
+| `test_outlier_resistant_learning.py` | Mediaan i.p.v. gemiddelde voor het 7-daagse uurprofiel en de PV-bias, uitschieterdagen bewegen de leerdata niet noemenswaardig (v0.62.0) |
 | `test_startup_timing.py` | Wachten op volledige HA-opstart vóór de eerste dataophaal |
 
 ## Waarom dit de moeite waard is

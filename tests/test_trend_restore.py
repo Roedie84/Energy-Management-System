@@ -37,9 +37,20 @@ def test_hourly_consumption_profile_restore_seeds_a_comparable_previous(
     assert coordinator.previous_hourly_avg_kw(9) == 0.497
 
 
-def test_hourly_consumption_profile_shows_a_real_trend_after_one_new_sample(
+def test_hourly_consumption_profile_fallback_restore_needs_two_new_samples_for_trend(
     make_coordinator,
 ):
+    """With the pre-v0.60.1 fallback restore (duplicates the single
+    restored value twice - see HourlyConsumptionProfileSensor), one new
+    real sample alone isn't enough to move the *median* (v0.62.0): the
+    duplicated old value holds a 2-vote majority against the single new
+    one. This differs from the old mean-based behaviour, where one
+    sample was already enough. A second new sample breaks the tie and
+    the median moves - the trend still recovers, just one sample later
+    than before. This one-time lag only affects state saved by a
+    pre-v0.60.1 version; the current profile_history-based restore
+    doesn't have this limitation (see the test below).
+    """
     coordinator = make_coordinator({})
     from custom_components.energy_management_system.sensor import (
         HourlyConsumptionProfileSensor,
@@ -54,9 +65,11 @@ def test_hourly_consumption_profile_shows_a_real_trend_after_one_new_sample(
     asyncio.run(sensor.async_added_to_hass())
 
     coordinator.hourly_consumption_profile[9].append(0.6)
+    assert coordinator.learned_hourly_avg_kw(9) == 0.497  # unchanged - still 2 vs 1
 
+    coordinator.hourly_consumption_profile[9].append(0.6)
     assert coordinator.previous_hourly_avg_kw(9) == 0.497
-    assert coordinator.learned_hourly_avg_kw(9) != 0.497
+    assert coordinator.learned_hourly_avg_kw(9) != 0.497  # now 2 vs 2 -> moves
 
 
 def test_pv_hourly_bias_restore_seeds_a_comparable_previous(make_coordinator):

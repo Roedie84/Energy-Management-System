@@ -2750,3 +2750,51 @@ naam) langer is dan getest - een kleinere, voorspelbare wijziging
 (alleen de tabel) was hier de betere afweging geweest dan beide
 tegelijk. Geen aparte tests aan toegevoegd, dit is puur een layout-
 terugdraai naar een eerder bevestigd werkende staat.
+
+## v0.62.0 — geleerd uurprofiel & PV-bias: mediaan i.p.v. gemiddelde
+
+**Vraag:** hoe wordt omgegaan met een uitschieterdag - een regenbui die
+de zon plots wegneemt, of de wasmachine die op één dag drie keer draait?
+
+**Antwoord vóór deze versie:** twee gescheiden lagen. (1) Het live
+moment zelf was al beschermd (mediaan van de laatste 4 metingen, ~20
+min, afgetopt op 5x - sinds v0.57.0) tegen een korte piek die dezelfde
+avond nog een projectie zou verpesten. Maar (2) de **langetermijn**-
+leerdata (het 7-daagse uurprofiel en de PV-uur-bias) gebruikte gewoon
+het **gemiddelde** over de laatste `LEARNING_HISTORY_DAYS` (7) dagen -
+een uitschieterdag telde daar gewoon 1/7 mee, zonder filtering, tot hij
+na een week vanzelf uit het venster viel.
+
+**Afweging en besluit:** overgestapt op **mediaan** voor beide
+leerreeksen. Een enkele uitschieterdag heeft nu vrijwel geen invloed
+(pas als een meerderheid van de 7 dagen het nieuwe niveau bevestigt,
+verschuift de mediaan mee). Het risico dat dit een échte, structurele
+verandering te traag oppikt (thuiswerken, seizoensovergang) wordt al
+opgevangen door het bestaande zelfcorrigerende marge-mechanisme
+(`reserve_shortfall_history`) aan de veiligheidskant, en seizoenverloop
+in zonopbrengst is sowieso te traag om een paar dagen vertraging te
+voelen.
+
+**Gewijzigde functies:** `learned_hourly_avg_kw`,
+`previous_hourly_avg_kw`, `learned_pv_hourly_ratio`,
+`previous_pv_hourly_ratio`, `raw_pv_hourly_avg` - stuk voor stuk van
+`sum(values) / len(values)` naar `statistics.median(values)`.
+
+**Bijwerking van een bestaande test:** de v0.56.1-restore-fallback
+(dupliceert bij een herstart van vóór v0.60.1 de herstelde waarde
+tweemaal, zodat er meteen een "vorige" waarde is) kreeg met een mediaan
+een subtiele bijwerking - de dubbele oude waarde heeft nu 2 stemmen
+tegen 1 nieuwe meting, dus is er na een herstart **één meting extra**
+nodig voordat de trend zichtbaar verschuift (was: al na de eerste
+nieuwe meting). Geldt alleen voor state van vóór v0.60.1 tijdens de
+overgang; de huidige `profile_history`-restore (v0.60.1) heeft dit
+probleem niet, want die herstelt de échte historie.
+
+**Getest** (5 nieuwe permanente tests in
+`test_outlier_resistant_learning.py`, 1 bestaande test bijgewerkt):
+een enkele uitschieterdag beweegt de mediaan niet noemenswaardig (zowel
+voor verbruik als PV-bias); een échte structurele verandering komt wél
+door zodra een meerderheid van de 7 dagen het bevestigt; een verandering
+die nog geen meerderheid heeft, beweegt de mediaan terecht nog niet; en
+de "vorige"-trendwaarde gebruikt dezelfde mediaan-aggregatie als de
+huidige waarde.

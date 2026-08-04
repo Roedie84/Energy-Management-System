@@ -38,6 +38,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import math
+import statistics
 from datetime import date, datetime, timedelta
 
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
@@ -1264,17 +1265,28 @@ class EnergyManagementSystemCoordinator:
         self._hour_duration_hours = 0.0
 
     def learned_hourly_avg_kw(self, hour: int) -> float | None:
-        """Learned average power (kW) for a given hour-of-day (0-23)."""
+        """Learned power (kW) for a given hour-of-day (0-23), as the
+        *median* of the last LEARNING_HISTORY_DAYS daily averages - not
+        the mean (v0.62.0). A single unusual day (e.g. the washing
+        machine running three loads back-to-back) shouldn't meaningfully
+        move a 7-day baseline; with a mean it still gets a 1/7 vote every
+        day until it ages out a week later, while the median effectively
+        ignores it outright unless it becomes the new normal (needs a
+        majority of the window to agree). Genuine sustained shifts still
+        come through once enough of the recent days reflect them - and
+        the separate shortfall self-correction (margin bonus) already
+        protects against the median trailing a real change too slowly.
+        """
         values = self.hourly_consumption_profile.get(hour)
         if not values:
             return None
-        return sum(values) / len(values)
+        return statistics.median(values)
 
     def previous_hourly_avg_kw(self, hour: int) -> float | None:
-        """The learned average for this hour as it was *before* the most
+        """The learned value for this hour as it was *before* the most
         recent sample came in - i.e. excluding the last sample. Used to
         show a "previous vs current" trend on the dashboard for what is
-        otherwise a continuously-updating rolling average with no single
+        otherwise a continuously-updating rolling median with no single
         "previous value" of its own. None if there are fewer than 2
         samples (nothing meaningful to compare against yet).
         """
@@ -1282,7 +1294,7 @@ class EnergyManagementSystemCoordinator:
         if not values or len(values) < 2:
             return None
         previous_values = values[:-1]
-        return sum(previous_values) / len(previous_values)
+        return statistics.median(previous_values)
 
     def _vacation_adjusted_kwh(self, kwh: float) -> float:
         """Scale down an estimated consumption amount while vacation mode
@@ -1761,6 +1773,12 @@ class EnergyManagementSystemCoordinator:
         None if there isn't yet enough history to be confident (see
         MIN_SOLAR_HISTORY_FOR_DYNAMIC_THRESHOLD).
 
+        Median rather than mean (v0.62.0), same rationale as
+        `learned_hourly_avg_kw`: a single passing rain cloud during an
+        otherwise sunny forecast shouldn't meaningfully move a 7-day
+        baseline. Genuine seasonal drift is slow enough that a few days'
+        lag in the median catching up doesn't matter in practice.
+
         For persistence across restarts, use `raw_pv_hourly_avg` instead -
         gating persistence on this same confidence threshold would mean
         any hour with 1-2 samples (not yet "confident") never gets saved
@@ -1769,7 +1787,7 @@ class EnergyManagementSystemCoordinator:
         values = self.pv_hourly_bias_history.get(hour)
         if not values or len(values) < MIN_SOLAR_HISTORY_FOR_DYNAMIC_THRESHOLD:
             return None
-        return sum(values) / len(values)
+        return statistics.median(values)
 
     def previous_pv_hourly_ratio(self, hour: int) -> float | None:
         """The learned ratio for this hour as it was *before* the most
@@ -1781,18 +1799,19 @@ class EnergyManagementSystemCoordinator:
         if not values or len(values) < 2:
             return None
         previous_values = values[:-1]
-        return sum(previous_values) / len(previous_values)
+        return statistics.median(previous_values)
 
     def raw_pv_hourly_avg(self, hour: int) -> float | None:
-        """Same average as `learned_pv_hourly_ratio`, but without the
-        minimum-sample-count gate - returns a value as soon as there's at
-        least one sample. Used for persistence, so partial progress (1-2
-        samples) survives a restart instead of being silently discarded.
+        """Same value as `learned_pv_hourly_ratio` (median, v0.62.0), but
+        without the minimum-sample-count gate - returns a value as soon
+        as there's at least one sample. Used for persistence, so partial
+        progress (1-2 samples) survives a restart instead of being
+        silently discarded.
         """
         values = self.pv_hourly_bias_history.get(hour)
         if not values:
             return None
-        return sum(values) / len(values)
+        return statistics.median(values)
 
     def _get_dynamic_discharge_reserve_kwh(
         self, now: datetime, cheap_block_start: datetime | None
