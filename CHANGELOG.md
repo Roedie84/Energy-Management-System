@@ -3241,3 +3241,43 @@ gebruikt in plaats van vast te blijven zitten op `unknown`.
 werkt bij een "unknown" laatste status; een geldige laatste status
 wordt gewoon gebruikt (geen onnodige overschrijving); en zonder enige
 historie blijft de waarde terecht `None` (niets om op terug te vallen).
+
+## v0.63.18 — "1600W of niets", geen doorlopende trickle-schaling meer
+
+**Aanleiding:** het geschaalde ontlaadvermogen tijdens dure kwartieren
+werd continu afgeknepen door een per-tick-headroomformule
+(`headroom_kwh / 5-minuten-interval`), die er de facto van uitgaat dat
+alle beschikbare headroom binnen die ene 5-minuten-tick besteed zou
+moeten worden. Resultaat: een kwartier dat de prijs-prioriteitscheck
+(`_is_worth_discharging_now`) al als "betaalbaar op vol vermogen"
+bestempelde, kreeg tóch vaak maar een fractie daarvan toegepast (bijv.
+150W van de ingestelde 1600W) — een bedrag dat volgens de gebruiker
+"niets oplevert" in verhouding tot de moeite.
+
+**Kernwijziging:** zodra `_is_worth_discharging_now` bevestigt dat dit
+kwartier hoort bij de zoveel duurste kwartieren die de headroom op **vol**
+`manual_discharge_power` kan bekostigen, wordt dat volle bedrag nu ook
+daadwerkelijk toegepast — begrensd alleen door wat fysiek in de accu zit
+op dat moment (en, als ondergrens, door de huishoudverbruik-vloer,
+v0.59.0). De per-tick-headroomformule (`max_power_w`) wordt niet meer
+gebruikt als extra afknijp-stap bovenop een reeds-goedgekeurd kwartier —
+alleen nog als vangnet in het pad zonder prijscontext (`entries=None`,
+uitsluitend een testscenario; de echte beslisboom geeft altijd
+`entries` mee).
+
+**Bewust ongewijzigd:** het "niet-betaalbaar"-pad (kwartier valt buiten
+de headroom-affordable top) blijft exact zoals het was — geen ontlading,
+geen huishoudverbruik-vloer-uitzondering daar, headroom blijft intact
+voor een duurder kwartier later. En de huishoudverbruik-vloer zelf blijft
+ongewijzigd begrensd op `manual_discharge_power` (was al zo, niet nieuw
+in deze versie) — bij een huisverbruik hoger dan het ingestelde
+maximum wordt dus nog steeds "slechts" dat maximum toegepast, niet meer.
+
+**Getest** (5 nieuwe permanente tests in `test_full_power_or_nothing.py`,
+2 bestaande tests in `test_price_priority_and_scheduling.py` en
+`test_consumption_floor.py` bleven ongewijzigd/groen zonder aanpassing
+nodig): vol vermogen bij een betaalbaar bevonden kwartier, ondanks een
+kunstmatig kleine per-tick-headroom; begrensd door fysieke
+beschikbaarheid; onveranderd "niets" bij een niet-betaalbaar kwartier;
+en de huishoudverbruik-vloer blijft correct werken als ondergrens
+(zowel onder als boven `base_power`).

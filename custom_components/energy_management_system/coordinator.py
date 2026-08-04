@@ -2834,36 +2834,48 @@ class EnergyManagementSystemCoordinator:
                     )
                     return None
 
-                scaled = round(min(base_power, max(max_power_w, floor_w)), 1)
+                # v0.63.18: reported that a continuously-scaled, throttled
+                # discharge (e.g. 150W of a 1600W base_power) barely earns
+                # anything - "1600W or nothing", not a trickle. The
+                # affordability check above (_is_worth_discharging_now)
+                # already establishes that headroom can sustain base_power
+                # for this quarter (ranked among however many of today's
+                # priciest remaining quarters the headroom affords, at
+                # FULL base_power) - so once that passes, apply base_power
+                # directly rather than re-throttling it down to whatever a
+                # single-tick slice of headroom_kwh happens to allow. Only
+                # applies when `entries` was actually given (i.e. the
+                # affordability check above genuinely ran and passed) -
+                # without it, there's no "this quarter is affordable"
+                # signal to justify skipping the conservative per-tick
+                # throttle, so that throttle is kept as the safe default.
+                physical_ceiling_w = (
+                    (available_kwh / interval_hours) * 1000
+                    if interval_hours > 0
+                    else 0
+                )
+                if entries is not None:
+                    scaled = round(
+                        max(floor_w, min(base_power, physical_ceiling_w)), 1
+                    )
+                else:
+                    scaled = round(min(base_power, max(max_power_w, floor_w)), 1)
                 self.last_discharge_power_applied = scaled
                 if scaled < base_power:
-                    if floor_w > max_power_w:
+                    if entries is None and floor_w > max_power_w:
                         self._log_discharge_floor_event(
                             now, household_load_w, max_power_w, scaled,
                             available_kwh, reserve_kwh,
                         )
-                        _LOGGER.debug(
-                            "Dynamic discharge reserve: available=%.2f kWh, "
-                            "needed reserve=%.2f kWh - headroom-scaled power "
-                            "(%.0fW) was below the %.0fW household load, "
-                            "raised to %.0fW to avoid importing at the peak "
-                            "price",
-                            available_kwh,
-                            reserve_kwh,
-                            max_power_w,
-                            floor_w,
-                            scaled,
-                        )
-                    else:
-                        _LOGGER.debug(
-                            "Dynamic discharge reserve: available=%.2f kWh, "
-                            "needed reserve=%.2f kWh - scaling discharge from "
-                            "%.0fW to %.0fW to protect the reserve",
-                            available_kwh,
-                            reserve_kwh,
-                            base_power,
-                            scaled,
-                        )
+                    _LOGGER.debug(
+                        "Dynamic discharge reserve: available=%.2f kWh, "
+                        "needed reserve=%.2f kWh - capped at %.0fW (base_power "
+                        "is %.0fW)",
+                        available_kwh,
+                        reserve_kwh,
+                        scaled,
+                        base_power,
+                    )
                 return scaled
 
         # Fallback: flat SoC-percentage taper (no available-energy sensor,

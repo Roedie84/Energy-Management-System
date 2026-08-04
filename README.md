@@ -159,6 +159,19 @@ Het basisvermogen (`manual_discharge_power`) wordt per tick geschaald:
    deel van je verbruik alsnog tegen piekprijs importeert, terwijl de accu
    net had besloten te gaan verkopen.
 
+**Vol vermogen of niets (v0.63.18):** zodra een kwartier via de
+prijs-prioriteit (`_is_worth_discharging_now`) is aangemerkt als
+betaalbaar op het volle `manual_discharge_power` — d.w.z. het hoort bij
+de zoveel duurste kwartieren van vandaag als de headroom op vól vermogen
+kan bekostigen — wordt ook daadwerkelijk het volle bedrag toegepast, niet
+alsnog afgeknepen tot een klein deel daarvan door de per-tick-
+headroomformule. "1600W of niets", geen uitgesmeerde trickle-ontlading
+die amper iets oplevert. Alleen begrensd door wat fysiek in de accu zit
+op dat moment, en (als minimum) door de huishoudverbruik-vloer hierboven.
+Is een kwartier niet betaalbaar bevonden, dan gebeurt er niets (geen
+gedeeltelijke ontlading) — de headroom blijft gereserveerd voor een
+duurder kwartier later die dag.
+
 ### Zelfcorrigerende veiligheidsmarge
 
 Twee onafhankelijke, dagelijkse detecties passen de marge op de
