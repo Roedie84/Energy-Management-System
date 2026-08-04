@@ -2697,3 +2697,34 @@ en rijen zonder tussenliggende lege regels (zelfde regel als
 `test_dashboard_tables.py` al afdwingt voor de statische dashboard-YAML),
 en de fallback naar "onbekend" werkt correct wanneer er geen
 goedkoopste-blok-tijdstip bekend is.
+
+## v0.61.3 — dashboard compacter: minder lege ruimte
+
+**Aanleiding:** de eerste kolom (Energy Management System) werd door de
+grote uitlegkaart (icoon-samenvatting + tabel + tekst) veel hoger dan de
+kolommen ernaast (Accu & rendement, Live cijfers, Modus & besluit) - de
+volgende rij secties (Besturing, Actuele beslissing) start pas na de
+hoogte van de hoogste kolom in de vorige rij, dus die extra hoogte werd
+puur verloren witruimte.
+
+**Wijzigingen:**
+- De titel-kaart en de status-kaart delen nu één rij (8 + 4 kolommen)
+  in plaats van elk een eigen volle rij - scheelt een regel hoogte.
+- De icoon-samenvatting (v0.61.1) is omgezet van 6 losse, door lege
+  regels gescheiden alinea's naar een compacte 2-koloms tabel (3 rijen)
+  - ongeveer de helft van de eerdere hoogte voor hetzelfde aantal
+    waarden.
+
+**Onderweg gevonden en gefixt:** de lege kop-cellen (`|  |  |`) van die
+nieuwe tabel bleken per ongeluk te matchen met de regex die
+`test_dashboard_tables.py` gebruikt om scheidingsregels (`|---|---|`) te
+herkennen — met een lege koprij ontstaat een tweede "match", waarna de
+test via een omslachtige `lines[idx - 1]`-vergelijking (Python's
+negatieve index-wraparound) de láátste regel van de kaart als
+"voorafgaande regel" pakte in plaats van de echte koprij, en zo ten
+onrechte faalde. Opgelost door de koprij een niet-blanco (maar visueel
+onopvallend) `—`-teken te geven in plaats van lege cellen.
+
+**Getest:** bestaande dashboard-testpijplijn (YAML + Jinja-rendering)
+blijft groen; geen nieuwe tests nodig, het is dezelfde kaart met dezelfde
+databronnen, alleen compacter opgemaakt.
