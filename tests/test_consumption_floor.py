@@ -9,11 +9,14 @@ Live numbers from diagnostics: available=1.728 kWh, and a "Beschikbare
 Energie" history graph showing ~5.7-5.8 kWh available around the time of
 the incident, base_power (manual_discharge_power) = 1600W.
 
-The fix: `_get_soc_scaled_discharge_power` now never returns less than
-the live corrected household load, capped by what's physically available
-this tick and by base_power - so an expensive-quarter tick either sells
-enough to cover the house, or (if truly empty) sells nothing, but never
-sells a trickle while quietly importing the rest at the peak rate.
+The fix (still active when there's *some* positive headroom, however
+small): `_get_soc_scaled_discharge_power` never returns less than the
+live corrected household load in that case, capped by what's physically
+available this tick and by base_power.
+
+v0.63.19 narrowed this: when headroom is fully exhausted (exactly zero,
+not just small), the floor is no longer used to force a manual command -
+see test_no_headroom_returns_none_and_lets_smart_mode_handle_it below.
 """
 from datetime import datetime, timezone
 
@@ -52,10 +55,15 @@ def test_low_headroom_is_raised_to_cover_household_load(make_coordinator, hass, 
     assert scaled == pytest.approx(340.0, abs=0.5)
 
 
-def test_no_headroom_still_applies_floor(make_coordinator, hass, monkeypatch):
-    """Even when headroom is fully exhausted (max_power_w <= 0), a live
-    household load should still be covered rather than skipping the
-    forced discharge entirely and importing at the peak price."""
+def test_no_headroom_returns_none_and_lets_smart_mode_handle_it(
+    make_coordinator, hass, monkeypatch
+):
+    """v0.63.19: with headroom fully exhausted (max_power_w <= 0), the
+    function no longer forces a manual command just to cover the
+    household load - reported that 'smart' mode's own P1-following
+    already avoids grid import on its own (continuously, unlike a fixed
+    manual wattage), making a forced floor-covering manual command
+    redundant. Returns None so the caller falls through to smart mode."""
     coordinator = make_coordinator(_base_config())
     hass.states.set("sensor.available_energy", "3.0")
     hass.states.set("sensor.p1", "250")
@@ -67,7 +75,7 @@ def test_no_headroom_still_applies_floor(make_coordinator, hass, monkeypatch):
     now = DAY0.replace(hour=22, minute=0)
     scaled = coordinator._get_soc_scaled_discharge_power(1600.0, now, None, None)
 
-    assert scaled == pytest.approx(250.0, abs=0.5)
+    assert scaled is None
 
 
 def test_floor_never_exceeds_physically_available_energy(make_coordinator, hass, monkeypatch):

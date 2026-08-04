@@ -3281,3 +3281,36 @@ kunstmatig kleine per-tick-headroom; begrensd door fysieke
 beschikbaarheid; onveranderd "niets" bij een niet-betaalbaar kwartier;
 en de huishoudverbruik-vloer blijft correct werken als ondergrens
 (zowel onder als boven `base_power`).
+
+## v0.63.19 — bij exact geen headroom: smart, geen geforceerd manual-commando
+
+**Gerapporteerd (met diagnostiek-export):** een echt duur kwartier
+(`expensive_tier: primary`) resulteerde in `last_reason: expensive_quarter`
+met `manual`-modus op slechts 458,7W — exact gelijk aan het live
+huisverbruik. Dat kwam van de huishoudverbruik-vloer (v0.59.0), die bij
+headroom = 0 nog altijd een `manual`-commando stuurde puur om import te
+voorkomen.
+
+**Waarom dat overbodig bleek:** deze installatie's zendure-ha-configuratie
+regelt `smart`-modus al P1-volgend richting een klein terugleverdoel
+(eerder gedeeld: "HW P1 Vermogen -50W"). Dat voorkomt netimport al
+vanzelf, en doet dat **continu bijgesteld**, terwijl een handmatig
+commando pas bij de volgende 5-minuten-tick wordt herzien. Een
+geforceerd `manual`-commando met exact het huisverbruik voegt dus niets
+toe aan wat `smart` toch al doet — en blokkeert bovendien dat
+`smart` zijn eigen, actievere regeling kan toepassen.
+
+**Fix:** bij `max_power_w <= 0` (headroom exact uitgeput) stuurt
+`_get_soc_scaled_discharge_power` niet langer een vloer-commando, maar
+geeft `None` terug — de aanroepende beslisboom schakelt dan (zoals al
+sinds eerder) expliciet naar `smart`
+(`expensive_quarter_soc_protected`). De huishoudverbruik-vloer blijft
+wél actief zodra er íets aan headroom is (hoe klein ook, tot aan de
+"1600W of niets"-drempel uit v0.63.18) — alleen het exact-nul-geval
+verandert.
+
+**Getest** (1 bestaande test omgezet naar het nieuwe verwachte gedrag,
+1 nieuwe end-to-end test in `test_full_power_or_nothing.py`): bevestigt
+zowel dat de helper-functie `None` teruggeeft bij exact geen headroom,
+als dat de volledige beslisboom daadwerkelijk het `select.select_option`
+"smart"-commando verstuurt in dat scenario.

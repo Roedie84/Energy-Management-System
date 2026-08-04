@@ -144,3 +144,48 @@ def test_household_floor_covered_when_below_base_power(make_coordinator, hass, m
     # path; physical ceiling (0.6 kWh / 5 min = 7200W) is well above both
     # 1600W base_power and the 340W floor - base_power wins here.
     assert scaled == 1600.0
+
+
+def test_no_headroom_falls_through_to_smart_mode_end_to_end(make_coordinator, hass, monkeypatch):
+    """v0.63.19, end-to-end via the full decision tree: with headroom
+    fully exhausted during a genuine expensive quarter, the coordinator
+    explicitly switches the Zendure to 'smart' (not just skips the
+    tick) - smart mode's own P1-following already avoids grid import,
+    so no manual command is needed or sent."""
+    import asyncio
+
+    from conftest import make_price_forecast
+
+    def price_fn(hour, minute):
+        return 3_600_000 if hour == 20 else 2_000_000
+
+    forecast = make_price_forecast(DAY0, price_fn)
+    hass.states.set("sensor.price", "0", {"forecast": forecast})
+    hass.states.set("sensor.p1", "250")
+    hass.states.set("sensor.available_energy", "3.0")
+
+    coordinator = make_coordinator(
+        {
+            "price_sensor_entity": "sensor.price",
+            "price_attribute": "price_tax_included",
+            "operation_select_entity": "select.op",
+            "manual_power_number_entity": "number.pow",
+            "manual_discharge_power": 1600,
+            "available_energy_sensor_entity": "sensor.available_energy",
+            "consumption_power_sensor_entity": "sensor.p1",
+        }
+    )
+    monkeypatch.setattr(
+        coordinator, "_get_dynamic_discharge_reserve_kwh", lambda now, cbs: 3.0
+    )
+
+    from custom_components.energy_management_system import coordinator as coord_mod
+
+    coord_mod.dt_util.now = lambda: DAY0.replace(hour=20, minute=0)
+    asyncio.run(coordinator._async_update_locked())
+
+    assert coordinator.last_reason == "expensive_quarter_soc_protected"
+    assert coordinator.last_discharge_power_applied is None
+
+    select_calls = [c for c in hass.services.calls if c[0] == "select"]
+    assert any(c[2].get("option") == "smart" for c in select_calls)

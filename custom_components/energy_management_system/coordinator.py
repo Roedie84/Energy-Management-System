@@ -2795,27 +2795,25 @@ class EnergyManagementSystemCoordinator:
                 self.last_price_priority_held_off = False
 
                 if max_power_w <= 0:
-                    if floor_w > 0:
-                        self.last_discharge_power_applied = floor_w
-                        self._log_discharge_floor_event(
-                            now, household_load_w, 0.0, floor_w,
-                            available_kwh, reserve_kwh,
-                        )
-                        _LOGGER.debug(
-                            "Dynamic discharge reserve: available=%.2f kWh, "
-                            "needed reserve=%.2f kWh - no headroom, but "
-                            "applying %.0fW consumption floor to avoid "
-                            "importing at the peak price",
-                            available_kwh,
-                            reserve_kwh,
-                            floor_w,
-                        )
-                        return floor_w
+                    # v0.63.19: no headroom left to justify a forced,
+                    # profitable sell - reported that forcing a manual
+                    # command here (even just to match live load and
+                    # avoid importing) is redundant with what 'smart'
+                    # mode already does on its own: this setup's
+                    # zendure-ha config P1-follows toward a small export
+                    # target, which keeps net import near zero without
+                    # any explicit command from this integration, and
+                    # does so continuously rather than a fixed manual
+                    # wattage that goes stale until the next 5-min tick.
+                    # So: no headroom -> no manual command at all, let
+                    # the caller fall through to smart mode (see
+                    # `expensive_quarter_soc_protected`).
                     self.last_discharge_power_applied = None
                     _LOGGER.debug(
                         "Dynamic discharge reserve: available=%.2f kWh, "
                         "needed reserve=%.2f kWh - no headroom, skipping "
-                        "forced discharge this tick",
+                        "forced discharge this tick (smart mode's own "
+                        "P1-following already avoids import)",
                         available_kwh,
                         reserve_kwh,
                     )

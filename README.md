@@ -172,6 +172,17 @@ Is een kwartier niet betaalbaar bevonden, dan gebeurt er niets (geen
 gedeeltelijke ontlading) — de headroom blijft gereserveerd voor een
 duurder kwartier later die dag.
 
+**Geen headroom meer over? Dan smart, geen geforceerd commando (v0.63.19):**
+staat de headroom exact op 0 (de reserve-berekening zegt: alles is al
+nodig, geen ruimte voor extra verkoop), dan stuurt de integratie geen
+handmatig commando meer om puur je huisverbruik te dekken — dat werd
+voorheen wel gedaan (de huishoudverbruik-vloer, v0.59.0), maar bleek
+overbodig: `smart`-modus regelt dit via de eigen P1-volgende aansturing
+van de Zendure toch al, continu bijgesteld in plaats van een vast
+getal dat tot de volgende tick blijft staan. De huishoudverbruik-vloer
+blijft wél actief zodra er wél íets aan headroom is (hoe klein ook) —
+alleen bij exact nul headroom valt de integratie terug op `smart`.
+
 ### Zelfcorrigerende veiligheidsmarge
 
 Twee onafhankelijke, dagelijkse detecties passen de marge op de
