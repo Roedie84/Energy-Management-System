@@ -2670,3 +2670,30 @@ van op YAML's folding-regels te vertrouwen.
 uitgebreide fake-testdata in de bestaande
 `test_dashboard_tables.py`-pijplijn zodat deze kaart nu ook echt
 gerenderd wordt gecontroleerd op geldige YAML + Jinja).
+
+## v0.61.2 — diepste-tekort-berekening als tabel i.p.v. dichte zin
+
+**Aanleiding:** de zin "tegenover 1,415 kWh basisverbruik en 3,805 kWh
+verwachte zon over de hele periode" oogde ongeloofwaardig totdat de
+exacte periode (nu → goedkoopste blok) met de hand werd
+gereconstrueerd uit een losse diagnostiek-export. Bij nacontrole klopten
+beide getallen exact (basisverbruik matcht het geleerde profiel +
+live-correctie; zon komt overeen met ~18,6% van de dagvoorspelling in
+dat tijdvak) — het probleem zat dus puur in de leesbaarheid van de
+tekst, niet in de berekening zelf.
+
+**Fix:** `_build_needed_kwh_breakdown_table()` (coordinator.py) zet deze
+breakdown nu om in een echte Markdown-tabel, met de periode expliciet
+uitgeschreven (start, eind, duur — bijv. "nu (08:32) → 11:29 (2u57m)")
+in plaats van de vage formulering "over de hele periode". Gebruikt in
+zowel de `discharging_window`- als de `default_smart`-uitleg (beide
+gebruiken dezelfde breakdown-data). Omdat de uitlegtekst al rechtstreeks
+als Markdown wordt gerenderd in de dashboardkaart (sinds v0.61.1), komt
+dit vanzelf als een nette tabel op het scherm - geen dashboard-aanpassing
+nodig.
+
+**Getest** (2 nieuwe permanente tests): tabel bevat header, scheidingsregel
+en rijen zonder tussenliggende lege regels (zelfde regel als
+`test_dashboard_tables.py` al afdwingt voor de statische dashboard-YAML),
+en de fallback naar "onbekend" werkt correct wanneer er geen
+goedkoopste-blok-tijdstip bekend is.

@@ -3172,6 +3172,50 @@ class EnergyManagementSystemCoordinator:
 
         return "OK"
 
+    def _build_needed_kwh_breakdown_table(self) -> str:
+        """Render the diepste-tekort breakdown as a small Markdown table
+        instead of a dense prose sentence - the explanation text is
+        rendered as-is in a markdown card, so an actual table shows up as
+        one. Explicitly states the period's start/end/duration too,
+        instead of the vague "over de hele periode" wording, which was
+        the actual point of confusion (reported: the numbers looked
+        implausible until the exact period was reconstructed by hand).
+        """
+        b = self.last_needed_kwh_breakdown
+        if not b:
+            return ""
+
+        now = dt_util.now()
+        cheap_block_start = self.last_cheap_block_start
+        if cheap_block_start is not None:
+            duration = cheap_block_start - now
+            total_minutes = max(0, int(duration.total_seconds() // 60))
+            hours, minutes = divmod(total_minutes, 60)
+            duration_txt = f"{hours}u{minutes:02d}m"
+            period_txt = (
+                f"nu ({now.strftime('%H:%M')}) → "
+                f"{cheap_block_start.strftime('%H:%M')} ({duration_txt})"
+            )
+        else:
+            period_txt = "onbekend"
+
+        rows = [
+            ("Periode", period_txt),
+            ("Basisverbruik", f"{b.get('basisverbruik_kwh', '?')} kWh"),
+            (
+                "Verwachte zon (na rendementskorting)",
+                f"{b.get('verwachte_pv_kwh', '?')} kWh",
+            ),
+            ("Diepste tekort onderweg", f"{b.get('diepste_tekort_kwh', '?')} kWh"),
+            ("Veiligheidsmarge", f"+{b.get('veiligheidsmarge_procent', '?')}%"),
+        ]
+        lines = [
+            "| Onderdeel | Waarde |",
+            "|---|---|",
+        ]
+        lines.extend(f"| {label} | {value} |" for label, value in rows)
+        return "\n".join(lines)
+
     def _build_explanation(self) -> str:
         """Build a plain-language (Dutch) explanation of the current
         decision, so you can read in the dashboard what the integration
@@ -3291,14 +3335,10 @@ class EnergyManagementSystemCoordinator:
                 b = self.last_needed_kwh_breakdown
                 if b:
                     parts.append(
-                        f"De diepste-tekort-berekening (het echte dieptepunt "
-                        f"onderweg, niet zomaar het eindsaldo) komt uit op "
-                        f"{b.get('diepste_tekort_kwh', '?')} kWh, tegenover "
-                        f"{b.get('basisverbruik_kwh', '?')} kWh basisverbruik "
-                        f"en {b.get('verwachte_pv_kwh', '?')} kWh verwachte "
-                        f"zon over de hele periode - met "
-                        f"{b.get('veiligheidsmarge_procent', '?')}% "
-                        f"veiligheidsmarge erover."
+                        "Diepste-tekort-berekening (het echte dieptepunt "
+                        "onderweg, niet zomaar het eindsaldo):\n\n"
+                        + self._build_needed_kwh_breakdown_table()
+                        + "\n\n"
                     )
             else:
                 parts.append(
@@ -3329,11 +3369,9 @@ class EnergyManagementSystemCoordinator:
                 b = self.last_needed_kwh_breakdown
                 if b:
                     parts.append(
-                        f"De diepste-tekort-berekening komt uit op "
-                        f"{b.get('diepste_tekort_kwh', '?')} kWh (tegenover "
-                        f"{b.get('basisverbruik_kwh', '?')} kWh basisverbruik "
-                        f"en {b.get('verwachte_pv_kwh', '?')} kWh verwachte "
-                        f"zon over de hele periode)."
+                        "Diepste-tekort-berekening:\n\n"
+                        + self._build_needed_kwh_breakdown_table()
+                        + "\n\n"
                     )
             else:
                 price_txt = (

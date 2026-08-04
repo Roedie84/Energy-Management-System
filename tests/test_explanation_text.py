@@ -113,3 +113,70 @@ def test_expensive_quarter_mentions_household_floor_when_applied(make_coordinato
     text = coordinator._build_explanation()
 
     assert "340" in text
+
+
+def test_discharging_window_shows_breakdown_as_a_markdown_table(make_coordinator, monkeypatch):
+    """v0.61.2: the vague 'over de hele periode' prose is replaced by an
+    actual table, with the exact period (start, end, duration) spelled
+    out - reported as confusing since the numbers only made sense after
+    manually reconstructing the period length by hand."""
+    import custom_components.energy_management_system.coordinator as coord_mod
+    from datetime import datetime, timedelta, timezone
+
+    coordinator = make_coordinator({})
+    coordinator.last_reason = "discharging_window"
+    coordinator.last_has_enough_energy = True
+    coordinator.last_available_kwh = 1.47
+    coordinator.last_needed_kwh_to_bridge = 0.0
+    now = datetime(2026, 8, 4, 8, 32, 41, tzinfo=timezone.utc)
+    coordinator.last_cheap_block_start = now + timedelta(hours=2, minutes=57)
+    coordinator.last_needed_kwh_breakdown = {
+        "basisverbruik_kwh": 1.415,
+        "verwachte_pv_kwh": 3.805,
+        "diepste_tekort_kwh": 0.0,
+        "veiligheidsmarge_procent": 15.0,
+    }
+    monkeypatch.setattr(coord_mod.dt_util, "now", lambda: now)
+
+    text = coordinator._build_explanation()
+
+    assert "| Onderdeel | Waarde |" in text
+    assert "|---|---|" in text
+    assert "| Periode |" in text
+    assert "2u57m" in text
+    assert "1.415 kWh" in text
+    assert "3.805 kWh" in text
+    assert "+15.0%" in text
+    # No blank line between the header, separator, and rows.
+    lines = text.split("\n")
+    table_start = lines.index("| Onderdeel | Waarde |")
+    assert lines[table_start + 1] == "|---|---|"
+    assert lines[table_start + 2].startswith("| Periode |")
+
+
+def test_default_smart_not_enough_energy_shows_breakdown_table(make_coordinator, monkeypatch):
+    import custom_components.energy_management_system.coordinator as coord_mod
+    from datetime import datetime, timezone
+
+    coordinator = make_coordinator({})
+    coordinator.last_reason = "default_smart"
+    coordinator.last_has_enough_energy = False
+    coordinator.last_available_kwh = 0.5
+    coordinator.last_needed_kwh_to_bridge = 2.0
+    coordinator.last_cheap_block_start = None
+    coordinator.last_needed_kwh_breakdown = {
+        "basisverbruik_kwh": 2.0,
+        "verwachte_pv_kwh": 0.0,
+        "diepste_tekort_kwh": 2.0,
+        "veiligheidsmarge_procent": 15.0,
+    }
+    monkeypatch.setattr(
+        coord_mod.dt_util,
+        "now",
+        lambda: datetime(2026, 8, 4, 23, 0, 0, tzinfo=timezone.utc),
+    )
+
+    text = coordinator._build_explanation()
+
+    assert "| Onderdeel | Waarde |" in text
+    assert "onbekend" in text  # no cheap_block_start -> period unknown
