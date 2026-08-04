@@ -3093,3 +3093,37 @@ eenzelfde reden op de volgende tick; geen melding zonder ingevulde
 notify-service; geen melding in `learning_only`; geen melding tijdens
 `force_manual`; en de gedeelde `_dispatch_notification`-helper valt nog
 steeds correct terug op een persistent notification.
+
+## v0.63.9 — testknop voor de melding
+
+**Aanleiding:** de nieuwe modus/vermogen-melding (v0.63.8) is alleen te
+testen door op een échte volgende beslissingswijziging te wachten - de
+oude trucje (via Ontwikkelaarshulpmiddelen een status forceren op
+`select.zendure_manager_operation`) werkt niet meer, want de melding
+wordt nu aangestuurd door de coordinator-cyclus zelf, niet door
+state-wijzigingen van die entiteit.
+
+**Nieuw: `button.py`** — een `button`-entiteit ("Test notificatie
+versturen") die bij indrukken **dezelfde** `_dispatch_notification()`
+-code aanroept als de echte melding, met dezelfde geconfigureerde
+`appliance_notify_service`. Test dus niet alleen "werkt notify.*
+uberhaupt", maar specifiek "werkt mijn eigen configuratie in deze
+integratie" - de eigenlijke vraag.
+
+**Nieuw platform:** `button` toegevoegd aan `PLATFORMS` in `__init__.py`.
+Kaartje toegevoegd aan de "Besturing"-sectie op het dashboard.
+
+**Let op:** de entity-ID (`button.woonkamer_energy_management_system_...`)
+is de verwachte naam op basis van het bestaande naamgevingspatroon voor
+nieuw toegevoegde entiteiten met `has_entity_name`, maar dat patroon is
+in dit project al eens onverwacht gebleken (zie de eerdere
+`utility_meter`-bug) - controleer na installeren zelf even via
+Ontwikkelaarshulpmiddelen of de knop op het dashboard verschijnt zoals
+verwacht, en pas de entity-ID in het dashboard-bestand aan indien nodig.
+
+**Getest** (2 nieuwe permanente tests in
+`test_test_notification_button.py`): knop verstuurt via de
+geconfigureerde notify-service, en valt correct terug op een persistent
+notification zonder geconfigureerde service. `homeassistant.components.button`
+toegevoegd aan de test-mocks in `conftest.py`, naar hetzelfde patroon
+als `switch`.

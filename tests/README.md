@@ -35,6 +35,7 @@ geïmporteerd en getest kan worden.
 | `test_outlier_resistant_learning.py` | Mediaan i.p.v. gemiddelde voor het 7-daagse uurprofiel en de PV-bias, uitschieterdagen bewegen de leerdata niet noemenswaardig (v0.62.0) |
 | `test_heavy_load_awareness.py` | Grootverbruiker-bevestiging (vaatwasser/wasmachine/Quooker/airco/oven/kookplaat) omzeilt de mediaan-vertraging in de live-correctie (v0.63.0/v0.63.1) |
 | `test_mode_change_notification.py` | Ingebouwde modus/vermogen-wijziging-melding: alleen bij echte wijziging, niet op eerste tick/learning_only/force_manual (v0.63.8) |
+| `test_test_notification_button.py` | Testknop voor de melding, gebruikt dezelfde verzendcode als de echte melding (v0.63.9) |
 | `test_startup_timing.py` | Wachten op volledige HA-opstart vóór de eerste dataophaal |
 
 ## Waarom dit de moeite waard is

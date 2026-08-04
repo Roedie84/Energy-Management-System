@@ -177,6 +177,14 @@ def _install_ha_mocks() -> None:
     components_switch.SwitchEntity = SwitchEntity
     sys.modules["homeassistant.components.switch"] = components_switch
 
+    components_button = types.ModuleType("homeassistant.components.button")
+
+    class ButtonEntity:
+        pass
+
+    components_button.ButtonEntity = ButtonEntity
+    sys.modules["homeassistant.components.button"] = components_button
+
     # -- homeassistant.util.dt --------------------------------------------
     util = types.ModuleType("homeassistant.util")
     sys.modules["homeassistant.util"] = util

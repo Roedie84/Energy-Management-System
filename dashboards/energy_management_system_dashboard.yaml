@@ -262,6 +262,13 @@ views:
             grid_options:
               columns: 4
               rows: 1
+          - type: custom:mushroom-entity-card
+            entity: button.woonkamer_energy_management_system_test_notificatie_versturen
+            name: Test notificatie
+            icon: mdi:bell-ring-outline
+            grid_options:
+              columns: 4
+              rows: 1
 
       - type: grid
         cards:

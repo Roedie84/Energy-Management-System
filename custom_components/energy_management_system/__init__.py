@@ -12,7 +12,7 @@ from .const import DOMAIN
 from .coordinator import EnergyManagementSystemCoordinator
 from .solar_forecast import SolarForecastAccuracyTracker
 
-PLATFORMS = ["switch", "sensor"]
+PLATFORMS = ["switch", "sensor", "button"]
 
 _LOGGER = logging.getLogger(__name__)
 
