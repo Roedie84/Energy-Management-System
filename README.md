@@ -3127,3 +3127,42 @@ geconfigureerde notify-service, en valt correct terug op een persistent
 notification zonder geconfigureerde service. `homeassistant.components.button`
 toegevoegd aan de test-mocks in `conftest.py`, naar hetzelfde patroon
 als `switch`.
+
+## v0.63.10 — twee gemiste plekken uit de mediaan-conversie (v0.62.0) alsnog gefixt
+
+**Gevonden bij analyse van een verse diagnostiek-export:** twee
+eigenschappen gebruikten nog het gewone gemiddelde over de laatste 7
+dagen, en de export liet daar een live voorbeeld van zien:
+
+- **`learned_night_consumption_kw`** (legacy fallback, alleen gebruikt
+  als het uurprofiel geen data heeft voor het relevante uur): een
+  historie van `[0.407, 0.274, 0.217, 0.166, 0.254, 0.276, 2.121]` gaf
+  een gemiddelde van **0,531 kW** — bijna het dubbele van wat 6 van de 7
+  bijgehouden nachten daadwerkelijk lieten zien, puur door die ene
+  uitschieter-nacht van 2,121 kW.
+- **`learned_battery_efficiency_percent`**: een historie van
+  `[93.3, 93.6, 84.9, 84.7, 92.0, 92.9, 75.9]` liet een vergelijkbare
+  scheeftrekking zien door de uitschieter van 75,9%. Deze waarde
+  schaalt rechtstreeks de veiligheidskritische reserve-berekening
+  (`_get_efficiency_discounted_pv_offset`,
+  `_estimate_worst_case_deficit_kwh`), dus een uitschieter hier raakt
+  niet alleen een displaywaarde maar ook hoeveel reserve er 's nachts
+  wordt aangehouden.
+
+**Fix:** beide overgezet naar `statistics.median()`, exact dezelfde
+aanpak en onderbouwing als v0.62.0 — een enkele ongewone nacht/cyclus
+mag een 7-daagse basiswaarde niet noemenswaardig verschuiven.
+
+**Bijkomende observatie, geen actie ondernomen:** `reserve_excess_days`
+(1 dag) en `reserve_shortfall_days` (4 dagen) in dezelfde export hadden
+een opvallend verschillende historielengte, terwijl beide in exact
+hetzelfde codeblok worden bijgewerkt (geverifieerd: geen logicafout in
+de huidige code). Vermoedelijk een eenmalig historisch artefact; niet
+schadelijk (leidt hooguit tot een licht conservatievere marge dan
+strikt nodig), maar niet met zekerheid te verklaren vanuit deze export
+alleen.
+
+**Getest** (2 nieuwe permanente tests, reproduceren beide exacte
+scenario's uit de diagnostiek-export): de uitschieter beweegt de
+mediaan niet noemenswaardig, ter vergelijking met wat het (foute)
+gemiddelde zou hebben gedaan.

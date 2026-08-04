@@ -74,3 +74,37 @@ def test_previous_hourly_avg_kw_uses_median_too(make_coordinator):
     ]
 
     assert coordinator.previous_hourly_avg_kw(9) == 0.30
+
+
+def test_night_consumption_outlier_barely_moves_the_median(make_coordinator):
+    """v0.63.10: the legacy night-consumption fallback was missed in the
+    v0.62.0 switch to median - reproduces the exact field scenario from a
+    diagnostics export (mean was pulled to 0.531 kW, roughly double what
+    6 of 7 tracked nights actually looked like, by a single 2.121 kW
+    outlier night)."""
+    coordinator = make_coordinator({})
+    coordinator.night_consumption_history = [
+        0.407, 0.274, 0.217, 0.166, 0.254, 0.276, 2.121,
+    ]
+
+    median = coordinator.learned_night_consumption_kw
+    mean = sum(coordinator.night_consumption_history) / 7
+
+    assert median == 0.274
+    assert mean > 0.5  # for comparison: the old (buggy) mean behaviour
+
+
+def test_battery_efficiency_outlier_barely_moves_the_median(make_coordinator):
+    """Same fix, same rationale, for learned_battery_efficiency_percent -
+    a single noisy charge/discharge cycle shouldn't meaningfully move a
+    value that directly scales the safety-critical reserve calculation."""
+    coordinator = make_coordinator({})
+    coordinator.learned_efficiency_history = [
+        93.3, 93.6, 84.9, 84.7, 92.0, 92.9, 75.9,
+    ]
+
+    median = coordinator.learned_battery_efficiency_percent
+    mean = sum(coordinator.learned_efficiency_history) / 7
+
+    assert median == 92.0
+    assert abs(median - mean) > 3  # the outlier meaningfully drags the mean down

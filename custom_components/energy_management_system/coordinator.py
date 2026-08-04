@@ -585,12 +585,21 @@ class EnergyManagementSystemCoordinator:
 
     @property
     def learned_night_consumption_kw(self) -> float | None:
-        """Rolling average power (kW) measured during past discharging windows."""
+        """Median power (kW) measured during past discharging windows -
+        legacy fallback, only used when the hourly profile has no data
+        for the relevant hour(s) (see `_get_dynamic_discharge_reserve_kwh`).
+
+        Was a plain mean until v0.63.10 - missed in the v0.62.0 switch to
+        median for the main hourly profile/PV bias, and demonstrably
+        skewed by it: a single outlier night (2.121 kW against a ~0.2-0.4
+        kW baseline on the rest) pulled this mean to 0.531 kW, roughly
+        double what 6 of the 7 tracked nights actually looked like. Same
+        fix, same rationale as v0.62.0: a single unusual night shouldn't
+        meaningfully move a 7-day baseline.
+        """
         if not self.night_consumption_history:
             return None
-        return sum(self.night_consumption_history) / len(
-            self.night_consumption_history
-        )
+        return statistics.median(self.night_consumption_history)
 
     # -- Forecast parsing -------------------------------------------------
 
@@ -892,15 +901,20 @@ class EnergyManagementSystemCoordinator:
 
     @property
     def learned_battery_efficiency_percent(self) -> float | None:
-        """Self-learned round-trip efficiency (%), averaged over recent
-        samples. None until enough samples exist - callers should fall
-        back to the configured value in that case.
+        """Self-learned round-trip efficiency (%), as the median of
+        recent samples (v0.63.10; was a plain mean, missed in the
+        v0.62.0 switch to median elsewhere) - a single noisy
+        charge/discharge cycle (partial cycle, measurement timing edge)
+        shouldn't meaningfully move this, since it directly scales the
+        safety-critical reserve calculation
+        (`_get_efficiency_discounted_pv_offset`,
+        `_estimate_worst_case_deficit_kwh`). None until enough samples
+        exist - callers should fall back to the configured value in that
+        case.
         """
         if len(self.learned_efficiency_history) < MIN_SOLAR_HISTORY_FOR_DYNAMIC_THRESHOLD:
             return None
-        return sum(self.learned_efficiency_history) / len(
-            self.learned_efficiency_history
-        )
+        return statistics.median(self.learned_efficiency_history)
 
     def _update_single_appliance_usage_tracking(
         self, now: datetime, power_entity: str | None, history: dict[int, list[float]]
