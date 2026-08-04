@@ -1,0 +1,77 @@
+# Home Assistant automatisering: stuurt een mobiele melding zodra de
+# integratie de Zendure-accumodus of het handmatige vermogen wijzigt.
+#
+# Anders dan een losse automatisering die de reden zelf probeert af te
+# leiden (SoC/prijs-drempels naspelen), gebruikt deze de al berekende,
+# altijd actuele waarden rechtstreeks uit de integratie zelf
+# (sensor.energy_management_system_last_decision_reason en de volledige
+# `explanation`-tekst op sensor...explanation, zie v0.61.0/v0.61.2).
+# Blijft daardoor vanzelf kloppen als de beslislogica ooit verandert -
+# geen aparte onderhoudslast in een tweede kopie van de logica.
+#
+# INSTALLEREN:
+# Instellingen -> Automatiseringen -> nieuwe automatisering -> rechtsboven
+# de drie puntjes -> "In YAML bewerken", en plak de inhoud hieronder (het
+# stuk ná de header-comments, dus vanaf "alias:"). Pas de volgende twee
+# dingen aan naar jouw situatie:
+#   1. `notify.mobile_app_iphone_16_pro_max` -> jouw eigen notify-service
+#      (Instellingen -> Apparaten & diensten -> Mobiele app, of check
+#      Ontwikkelaarshulpmiddelen -> Acties, zoek op "notify").
+#   2. Als `select.zendure_manager_operation` of
+#      `number.zendure_manager_manual_power` bij jou anders heten, pas de
+#      triggers hieronder aan.
+#
+# Meldt alleen wijzigingen die de integratie zelf heeft doorgevoerd - een
+# wijziging terwijl "Force manual" aanstaat (dus een handmatige wijziging
+# van jouzelf) wordt bewust overgeslagen.
+
+alias: "EMS: accumodus/vermogen gewijzigd"
+description: >-
+  Melding zodra de Energy Management System-integratie de Zendure-modus
+  of het handmatige vermogen wijzigt. Gebruikt live data uit de
+  integratie (reden + volledige uitleg), niet een eigen herhaling van
+  de beslislogica.
+triggers:
+  - trigger: state
+    entity_id: select.zendure_manager_operation
+  - trigger: state
+    entity_id: number.zendure_manager_manual_power
+conditions:
+  - condition: template
+    value_template: >-
+      {{ trigger.from_state is not none and trigger.to_state is not none
+         and trigger.from_state.state != trigger.to_state.state }}
+  - condition: not
+    conditions:
+      - condition: state
+        entity_id: switch.energy_management_system_force_manual
+        state: "on"
+variables:
+  reason: "{{ states('sensor.energy_management_system_last_decision_reason') }}"
+  mode: "{{ states('select.zendure_manager_operation') }}"
+  power: "{{ states('number.zendure_manager_manual_power') }}"
+  explanation: >-
+    {{ state_attr('sensor.woonkamer_energy_management_system_explanation', 'explanation')
+       or 'Geen uitleg beschikbaar.' }}
+  emoji: >-
+    {%- if reason == 'expensive_quarter' -%}💰⬇️
+    {%- elif reason == 'expensive_quarter_soc_protected' -%}🛡️
+    {%- elif reason == 'grid_charging_low_solar' -%}⚡⬆️
+    {%- elif reason == 'emergency_low_battery' -%}🚨
+    {%- elif reason == 'negative_price' -%}🎁⬆️
+    {%- elif reason == 'discharging_window' -%}⏳
+    {%- elif reason == 'default_smart' -%}🤖
+    {%- elif reason == 'no_forecast_data' -%}⚠️
+    {%- else -%}🔄
+    {%- endif -%}
+actions:
+  - action: notify.mobile_app_iphone_16_pro_max
+    data:
+      title: "{{ emoji }} Accu naar {{ mode }}"
+      message: >-
+        🔌 Vermogen: {{ power }} W
+        🕒 {{ as_local(trigger.to_state.last_changed).strftime('%H:%M:%S') }}
+
+
+        {{ explanation }}
+mode: single

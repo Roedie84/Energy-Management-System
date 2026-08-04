@@ -3006,3 +3006,41 @@ de SoC op dat moment als attribuut.
 EMS-entity-referenties in het dashboard kloppen exact met de
 daadwerkelijke entiteitenlijst (inclusief het wisselende
 `woonkamer_`-voorvoegsel per sensor).
+
+## v0.63.7 — losse automatisering: melding bij accumodus/vermogen-wijziging
+
+**Verzoek:** een mobiele melding zodra de integratie de Zendure-modus of
+het handmatige vermogen wijzigt, naar het voorbeeld van een bestaande
+eigen automatisering — maar dan met live data uit de integratie zelf,
+in plaats van de reden opnieuw af te leiden via een eigen kopie van de
+SoC/prijs-drempel-logica (die drempels zijn dynamisch en zelflerend
+sinds v0.40.0+, dus een statische herhaling zou vroeg of laat uit de
+pas gaan lopen).
+
+**Nieuw bestand: `dashboards/notify_battery_mode_change.yaml`** — een
+losse Home Assistant-automatisering, zelfde installatiepatroon als
+`utility_meter_ems.yaml` (plakken in de automatisering-YAML-editor, geen
+integratie-wijziging).
+
+**Aanpak:**
+- Trigger op `select.zendure_manager_operation` én
+  `number.zendure_manager_manual_power` (dekt zowel een modus-wissel als
+  een vermogens-aanpassing binnen dezelfde modus, bijv. de
+  huishoudverbruik-vloer uit v0.59.0 die het ontlaadvermogen tussentijds
+  ophoogt).
+- Meldt alleen wijzigingen die de **integratie zelf** heeft doorgevoerd
+  — een wijziging terwijl "Force manual" aanstaat (dus een handmatige
+  wijziging van jouzelf) wordt bewust overgeslagen.
+- Titel: een emoji + de modus, afgeleid van
+  `sensor...last_decision_reason` (alle 8 mogelijke waarden gedekt, plus
+  een fallback-icoon voor onbekende/toekomstige waarden).
+- Bericht: het toegepaste vermogen, tijdstip, en de **volledige,
+  al berekende uitlegtekst** uit `sensor...explanation` (dezelfde tekst
+  als op het dashboard, inclusief tabel bij `discharging_window`/
+  `default_smart` — blijft vanzelf kloppen bij toekomstige wijzigingen
+  aan de beslislogica, geen tweede plek om bij te houden).
+
+**Niet in tests gedekt** (zelfde reden als `utility_meter_ems.yaml`:
+buiten Home Assistant om gebruikt), wel handmatig gevalideerd: YAML
+laadt correct, en de emoji-Jinja-template is doorgerekend voor alle 8
+bekende `last_decision_reason`-waarden plus de fallback.
