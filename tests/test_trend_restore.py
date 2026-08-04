@@ -164,3 +164,96 @@ def test_pv_hourly_bias_restores_genuine_history(make_coordinator):
 
     assert coordinator.pv_hourly_bias_history[9] == [0.25, 0.284, 0.31]
     assert coordinator.previous_pv_hourly_ratio(9) == pytest.approx((0.25 + 0.284) / 2)
+
+
+def test_in_progress_hour_survives_a_restart(make_coordinator, hass):
+    """v0.63.16: without this, a restart mid-hour silently discards
+    whatever of the current hour had already been sampled - with
+    frequent restarts, a genuinely new sample might never land at all,
+    leaving 'Verschil' at +0 indefinitely rather than just briefly."""
+    from datetime import datetime, timedelta, timezone
+
+    from custom_components.energy_management_system.sensor import (
+        HourlyConsumptionProfileSensor,
+    )
+
+    coordinator = make_coordinator({"consumption_power_sensor_entity": "sensor.p1"})
+    hass.states.set("sensor.p1", "300")
+
+    now = datetime(2026, 8, 4, 14, 0, 0, tzinfo=timezone.utc)
+    coordinator._update_hourly_consumption_profile(now)  # first tick, seeds tracker
+    now2 = now + timedelta(minutes=20)
+    coordinator._update_hourly_consumption_profile(now2)  # 20 min accumulated at 300W
+
+    # Simulate a restart: a fresh sensor restores from the saved attrs.
+    sensor = HourlyConsumptionProfileSensor(coordinator, "entry1")
+    saved_attrs = sensor.extra_state_attributes
+
+    fresh_coordinator = make_coordinator(
+        {"consumption_power_sensor_entity": "sensor.p1"}
+    )
+    fresh_sensor = HourlyConsumptionProfileSensor(fresh_coordinator, "entry1")
+
+    async def get_last_state():
+        return _FakeLastState(saved_attrs)
+
+    fresh_sensor.async_get_last_state = get_last_state
+    asyncio.run(fresh_sensor.async_added_to_hass())
+
+    assert fresh_coordinator._current_tracked_hour == 14
+    assert fresh_coordinator._hour_duration_hours == pytest.approx(20 / 60, abs=0.01)
+
+    # Cross into the next hour via realistic 5-minute ticks (not one big
+    # jump - a jump bigger than MAX_HOUR_TRACKING_GAP_MINUTES would (and
+    # should) trip the staleness guard tested separately below). The
+    # finalized sample should reflect the restored 20 minutes plus
+    # whatever ran after the "restart".
+    tick = now2
+    while tick < datetime(2026, 8, 4, 15, 5, 0, tzinfo=timezone.utc):
+        tick += timedelta(minutes=5)
+        fresh_coordinator._update_hourly_consumption_profile(tick)
+
+    assert fresh_coordinator.hourly_consumption_profile.get(14)
+
+
+def test_in_progress_hour_discarded_after_a_long_gap(make_coordinator, hass):
+    """A genuine long outage (not a quick restart) shouldn't attribute
+    the whole gap to a single power level - the stale progress is
+    discarded instead of restored."""
+    from datetime import datetime, timedelta, timezone
+
+    from custom_components.energy_management_system.sensor import (
+        HourlyConsumptionProfileSensor,
+    )
+
+    coordinator = make_coordinator({"consumption_power_sensor_entity": "sensor.p1"})
+    hass.states.set("sensor.p1", "300")
+
+    stale_saved_attrs = {
+        "profile_history": {},
+        "in_progress": {
+            "hour": 10,
+            "energy_kwh": 0.5,
+            "duration_hours": 1.0,
+            "last_sample": datetime(
+                2026, 8, 4, 10, 30, 0, tzinfo=timezone.utc
+            ).isoformat(),
+        },
+    }
+    sensor = HourlyConsumptionProfileSensor(coordinator, "entry1")
+
+    async def get_last_state():
+        return _FakeLastState(stale_saved_attrs)
+
+    sensor.async_get_last_state = get_last_state
+    asyncio.run(sensor.async_added_to_hass())
+
+    # Restored, but the *next* tick is hours later - the gap guard in
+    # _update_hourly_consumption_profile should discard it rather than
+    # attributing a multi-hour gap to a single power reading.
+    much_later = datetime(2026, 8, 4, 16, 0, 0, tzinfo=timezone.utc)
+    coordinator._update_hourly_consumption_profile(much_later)
+
+    assert coordinator._hour_energy_kwh == 0.0
+    assert coordinator._hour_duration_hours == 0.0
+    assert coordinator._current_tracked_hour == 16

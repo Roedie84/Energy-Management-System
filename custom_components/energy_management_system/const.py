@@ -231,6 +231,13 @@ SOLAR_RAMP_STEPS = 10
 # that day turned out too optimistic. Set above typical sensor noise.
 GRID_IMPORT_SHORTFALL_THRESHOLD_W = 100.0
 
+# In-progress hourly-bucket tracking (v0.63.16) restores across a
+# restart, but only within this gap - a longer gap (real outage, not a
+# quick update-restart) makes the accumulated partial-hour energy
+# unreliable (assumes a single power level held for the whole gap), so
+# it's discarded and tracking starts fresh instead.
+MAX_HOUR_TRACKING_GAP_MINUTES = 20
+
 # Arbitrage charging (v0.63.15): buy from the grid during a cheap
 # quarter specifically because a known, more expensive quarter is still
 # coming later today - only worthwhile if the projected net return

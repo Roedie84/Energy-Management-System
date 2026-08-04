@@ -3169,3 +3169,48 @@ doelvermogen dekt voorkomt netaankoop; gedeeltelijk zonoverschot koopt
 alleen het gat; zet nooit de winter-guard-vlag; overrulet
 `should_postpone_charging` wanneer winstgevend; en gedraagt zich netjes
 zonder resterende prijsdata.
+
+## v0.63.16 — de échte oorzaak van "Verschil blijft leeg"
+
+**Aanleiding:** ondanks de eerdere fixes (v0.60.1: volledige
+dagreeks-restore i.p.v. alleen het gemiddelde; v0.62.0: mediaan i.p.v.
+gemiddelde) bleef de "Verschil"-kolom in beide dashboardtabellen
+(uurprofiel-verbruik en PV-voorspellingsbias) voor elk uur op `+0`
+staan, ook dagen later.
+
+**Root cause, dieper dan de restore-logica zelf:** het **lopende, nog
+niet afgeronde uur** wordt nergens bewaard — alleen al-afgeronde uren
+landen in `hourly_consumption_profile`/`pv_hourly_bias_history`. Een
+nieuw uur wordt pas als meting bijgeschreven zodra dat uur **zonder
+onderbreking volledig is doorlopen**
+(`_finalize_hourly_bucket`/`_finalize_pv_hourly_bucket`). Bij elke
+HA-herstart resette de in-memory tracker
+(`_current_tracked_hour`/`_hour_energy_kwh`/`_hour_duration_hours`/
+`_hour_last_sample`, en de PV-tegenhangers) zonder dat er iets werd
+gerestored — dus bij frequente herstarts (zoals deze week, tientallen
+keren kort na elkaar voor alle versie-updates) kreeg géén enkel uur ooit
+de kans om volledig af te ronden. `hourly_consumption_profile` bleef
+daardoor bevroren op zijn oude staat, en `previous_hourly_avg_kw` ==
+`learned_hourly_avg_kw` exact, voor elk uur, keer op keer.
+
+**Fix:** de opbouw van het lopende uur wordt nu ook gepersisteerd (nieuw
+`in_progress`-attribuut op beide sensoren: uur, opgebouwde kWh, duur,
+laatste-meting-tijdstip) en bij een herstart hersteld. De bestaande
+uur-boundary-logica in `_update_hourly_consumption_profile`/
+`_update_pv_hourly_bias_tracking` rondt dan vanzelf correct af zodra de
+eerstvolgende uurgrens wordt gepasseerd — inclusief de tijd van vóór de
+herstart.
+
+**Veiligheidsgrens tegen een echte, lange storing:** een hersteld
+tijdstip dat meer dan `MAX_HOUR_TRACKING_GAP_MINUTES` (20 min) in het
+verleden ligt, wordt **niet** gebruikt — bij een uren durende storing
+zou de hele tussenliggende tijd anders ten onrechte worden toegeschreven
+aan één enkel vermogensniveau, wat dat uur juist zou verpesten. In dat
+geval wordt gewoon opnieuw begonnen, zoals voorheen.
+
+**Getest** (2 nieuwe permanente tests in `test_trend_restore.py`): een
+herstart halverwege een uur, gevolgd door realistische 5-minuten-ticks
+tot de volgende uurgrens, resulteert in een daadwerkelijk nieuwe meting
+die de tijd van vóór én na de herstart samenvoegt; en een té oud
+hersteld tijdstip (>20 min) wordt terecht verworpen in plaats van
+gebruikt.

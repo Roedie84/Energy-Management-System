@@ -121,6 +121,7 @@ from .const import (
     SOLAR_RAMP_DURATION_SECONDS,
     SOLAR_RAMP_STEPS,
     GRID_IMPORT_SHORTFALL_THRESHOLD_W,
+    MAX_HOUR_TRACKING_GAP_MINUTES,
     MIN_ARBITRAGE_MARGIN_EUR_PER_KWH,
     MIN_ARBITRAGE_GRID_POWER_W,
     SHORTFALL_MARGIN_BONUS_PER_RECENT_DAY,
@@ -1579,6 +1580,21 @@ class EnergyManagementSystemCoordinator:
             self._hour_last_sample = now
             return
 
+        # A gap bigger than a normal update tick means either a restart
+        # that lost the in-memory tracker (restored to a stale timestamp
+        # - see HourlyConsumptionProfileSensor.async_added_to_hass,
+        # v0.63.16) or a genuine outage. Either way, the elapsed time
+        # can't be reliably attributed to a single power level - discard
+        # the partial hour instead of polluting the average with it.
+        if self._hour_last_sample is not None:
+            gap_minutes = (now - self._hour_last_sample).total_seconds() / 60
+            if gap_minutes > MAX_HOUR_TRACKING_GAP_MINUTES:
+                self._hour_energy_kwh = 0.0
+                self._hour_duration_hours = 0.0
+                self._current_tracked_hour = current_hour
+                self._hour_last_sample = now
+                return
+
         power_w = self._read_corrected_consumption_power()
 
         if current_hour != self._current_tracked_hour:
@@ -2059,6 +2075,16 @@ class EnergyManagementSystemCoordinator:
             self._pv_current_tracked_hour = current_hour
             self._pv_hour_last_sample = now
             return
+
+        # Same staleness guard as _update_hourly_consumption_profile.
+        if self._pv_hour_last_sample is not None:
+            gap_minutes = (now - self._pv_hour_last_sample).total_seconds() / 60
+            if gap_minutes > MAX_HOUR_TRACKING_GAP_MINUTES:
+                self._pv_hour_energy_kwh = 0.0
+                self._pv_hour_duration_hours = 0.0
+                self._pv_current_tracked_hour = current_hour
+                self._pv_hour_last_sample = now
+                return
 
         pv_power_w = self._read_sensor_float(pv_entity)
 

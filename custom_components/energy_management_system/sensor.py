@@ -1105,11 +1105,31 @@ class HourlyConsumptionProfileSensor(SensorEntity, RestoreEntity):
             for hour, values in self._coordinator.hourly_consumption_profile.items()
             if values
         }
+        # In-progress (not-yet-finalised) current-hour accumulation
+        # (v0.63.16) - without this, every restart discards whatever of
+        # the current hour had already been sampled, and a brand new
+        # sample only gets appended to profile_history once a FULL,
+        # uninterrupted hour elapses. With frequent restarts (e.g.
+        # during active development, one update per few minutes), that
+        # can mean no new sample ever lands - profile_history stays
+        # frozen at whatever it was, so "Verschil" stays +0 indefinitely,
+        # not just right after a restart.
+        in_progress = {
+            "hour": self._coordinator._current_tracked_hour,
+            "energy_kwh": round(self._coordinator._hour_energy_kwh, 4),
+            "duration_hours": round(self._coordinator._hour_duration_hours, 4),
+            "last_sample": (
+                self._coordinator._hour_last_sample.isoformat()
+                if self._coordinator._hour_last_sample
+                else None
+            ),
+        }
         return {
             "profile": profile_kw,
             "profile_watts": profile_watts,
             "previous_profile_watts": previous_profile_watts,
             "profile_history": profile_history,
+            "in_progress": in_progress,
             "hours_with_data": len(profile_kw),
         }
 
@@ -1118,6 +1138,24 @@ class HourlyConsumptionProfileSensor(SensorEntity, RestoreEntity):
         last_state = await self.async_get_last_state()
         if last_state is None:
             return
+
+        raw_in_progress = last_state.attributes.get("in_progress")
+        if isinstance(raw_in_progress, dict) and raw_in_progress.get("hour") is not None:
+            try:
+                self._coordinator._current_tracked_hour = int(raw_in_progress["hour"])
+                self._coordinator._hour_energy_kwh = float(
+                    raw_in_progress.get("energy_kwh") or 0.0
+                )
+                self._coordinator._hour_duration_hours = float(
+                    raw_in_progress.get("duration_hours") or 0.0
+                )
+                last_sample_raw = raw_in_progress.get("last_sample")
+                if last_sample_raw:
+                    self._coordinator._hour_last_sample = datetime.fromisoformat(
+                        last_sample_raw
+                    )
+            except (TypeError, ValueError):
+                pass
 
         # Prefer the full per-day history (v0.60.1) when present - it
         # restores the genuine trend intact. Falls back to the old
@@ -1226,6 +1264,18 @@ class PvHourlyBiasSensor(SensorEntity, RestoreEntity):
                 for hour, values in self._coordinator.pv_hourly_bias_history.items()
                 if values
             },
+            "in_progress": {
+                "hour": self._coordinator._pv_current_tracked_hour,
+                "energy_kwh": round(self._coordinator._pv_hour_energy_kwh, 4),
+                "duration_hours": round(
+                    self._coordinator._pv_hour_duration_hours, 4
+                ),
+                "last_sample": (
+                    self._coordinator._pv_hour_last_sample.isoformat()
+                    if self._coordinator._pv_hour_last_sample
+                    else None
+                ),
+            },
             "hours_with_data": len(profile),
             "hours_with_confident_data": len(profile_confident),
         }
@@ -1235,6 +1285,28 @@ class PvHourlyBiasSensor(SensorEntity, RestoreEntity):
         last_state = await self.async_get_last_state()
         if last_state is None:
             return
+
+        # In-progress current-hour accumulation (v0.63.16) - see
+        # HourlyConsumptionProfileSensor for the full rationale.
+        raw_in_progress = last_state.attributes.get("in_progress")
+        if isinstance(raw_in_progress, dict) and raw_in_progress.get("hour") is not None:
+            try:
+                self._coordinator._pv_current_tracked_hour = int(
+                    raw_in_progress["hour"]
+                )
+                self._coordinator._pv_hour_energy_kwh = float(
+                    raw_in_progress.get("energy_kwh") or 0.0
+                )
+                self._coordinator._pv_hour_duration_hours = float(
+                    raw_in_progress.get("duration_hours") or 0.0
+                )
+                last_sample_raw = raw_in_progress.get("last_sample")
+                if last_sample_raw:
+                    self._coordinator._pv_hour_last_sample = datetime.fromisoformat(
+                        last_sample_raw
+                    )
+            except (TypeError, ValueError):
+                pass
 
         # Prefer the full per-day history (v0.60.1) - see
         # HourlyConsumptionProfileSensor for the full rationale. Falls
