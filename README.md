@@ -903,6 +903,31 @@ negeren laat de eerstvolgende kandidaat automatisch instromen) blijft
 ongewijzigd werken, nu gewoon met één zichtbare sleuf in plaats van
 acht.
 
+**Écht fundamentele oorzaak van bijna alle breedteproblemen (v0.63.84):**
+zelfs met 12 kolommen bleef de kandidaatnaam afgekapt, en de kaart
+toonde veel lege verticale ruimte. Nagetrokken tegen de officiële
+Home Assistant-documentatie: dit dashboard gebruikt voor elk tabblad
+behalve "Overzicht" géén `type: sections`, maar het klassieke
+**Masonry**-weergavetype (`cards:` rechtstreeks onder de view, geen
+`sections:`). De `- type: grid`-kaarten in die tabbladen zijn dus geen
+Sections-"secties" maar de gewone **Grid-kaart**
+(https://www.home-assistant.io/dashboards/grid/) — met een compleet
+ander eigenschappenmodel. Die kaart heeft standaard `columns: 3` én
+`square: true` (kaarten vierkant gedwongen) als er geen `columns`/
+`square` expliciet op de kaart zélf wordt gezet — de `grid_options` die
+ik op de onderliggende kaarten had gezet, is een **Sections-specifieke**
+eigenschap en heeft in een Grid-kaart-context geen enkel effect. Dat
+verklaart zowel de afgekapte tekst als de vierkante, halflege kaarten
+in bijna elke NILM-screenshot deze hele sessie — inclusief de
+"NI... 80" / "NI... 20"-afkapping bovenaan het "Apparaten"-tabblad.
+
+Gefixt door `columns: 1` en `square: false` rechtstreeks op de
+betreffende Grid-kaarten te zetten (niet op de kinderen) — zowel de
+bevestig/negeer-kaart als de NILM-tellingen/kandidaten-kaart erboven.
+Andere Grid-kaarten in de overige tabbladen (Financieel, Zelflerend,
+Advies, Klimaat, Geschiedenis) hadden dit al eerder correct
+ingesteld — alleen deze twee ontbraken nog.
+
 **Fundamentele oorzaak gevonden: onvoorspelbare entity_id's
 (v0.63.74):** gerapporteerd — er verscheen helemaal niets meer onder
 "Bevestigen / negeren", waardoor bevestigen/negeren van nieuwe

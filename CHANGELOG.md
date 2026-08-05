@@ -5548,3 +5548,41 @@ in plaats van acht.
 aangepast om dynamisch met `NILM_DASHBOARD_SLOT_COUNT` mee te schalen,
 zodat een toekomstige aanpassing van dit aantal niet opnieuw
 testonderhoud vereist.
+
+## v0.63.84 — écht fundamentele oorzaak: Grid-kaart, geen Sections-sectie
+
+**Gerapporteerd, met screenshot**: zelfs met 12 kolommen op de knoppen
+(v0.63.83) bleef de kandidaatnaam afgekapt, met veel lege verticale
+ruimte in de kaart. Gevraagd: "Kun je niet beter een 'sections
+dashboard' maken?"
+
+**Nagetrokken tegen de officiële Home Assistant-documentatie** (niet
+zomaar aangenomen, na de eerdere `_attr_suggested_object_id`-misser):
+dit dashboard gebruikt voor élk tabblad behalve "Overzicht" géén
+`type: sections`, maar het klassieke **Masonry**-weergavetype (`cards:`
+rechtstreeks onder de view-definitie, in plaats van `sections:`). De
+`- type: grid`-kaarten in die tabbladen zijn daardoor geen
+Sections-"secties", maar de gewone **Grid-kaart**
+(https://www.home-assistant.io/dashboards/grid/) — met een volledig
+ander eigenschappenmodel:
+- Sections-secties gebruiken per-kaart `grid_options` binnen een
+  intern 12-koloms-raster.
+- De Grid-kaart heeft in plaats daarvan haar éígen `columns`
+  (standaard **3**) en `square` (standaard **true** — kaarten
+  vierkant gedwongen) op de Grid-kaart zélf, niet op de kinderen.
+
+Zonder deze twee expliciet te zetten, viel de knoppenkaart (en de
+NILM-tellingen/kandidaten-kaart erboven) terug op 3 kolommen + vierkante
+cellen — ongeacht welke `grid_options` ik op de onderliggende kaarten
+zette (die eigenschap heeft in deze context simpelweg geen enkel
+effect). Dit verklaart zowel de afgekapte namen als de vierkante,
+halflege kaarten in vrijwel elke NILM-screenshot deze hele sessie —
+inclusief de aanhoudende "NI... 80" / "NI... 20"-afkapping bovenaan het
+"Apparaten"-tabblad.
+
+**Fix**: `columns: 1` en `square: false` rechtstreeks op de twee
+betrokken Grid-kaarten gezet (niet op de kinderen — dat blijft zoals
+het was). Andere Grid-kaarten in de overige tabbladen bleken dit al
+eerder correct te hebben ingesteld; alleen deze twee ontbraken nog.
+
+**Geen codewijziging nodig** — uitsluitend een dashboard-YAML-fix.

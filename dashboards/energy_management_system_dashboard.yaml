@@ -854,6 +854,8 @@ views:
             name: Wasmachine
 
       - type: grid
+        columns: 1
+        square: false
         cards:
           - type: heading
             heading: NILM — automatisch ontdekte apparaten
@@ -883,6 +885,8 @@ views:
           {% endif %}
 
       - type: grid
+        columns: 1
+        square: false
         cards:
           - type: markdown
             content: >-
