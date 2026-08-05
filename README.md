@@ -734,24 +734,31 @@ Ontwikkelaarshulpmiddelen → Acties (of een eigen script/knop):
 lijst (met naam en huidig vermogen) als attribuut, zodat je weet welke
 `entity_id`'s je aan de services moet meegeven.
 
-### Bevestigen/negeren via het dashboard (v0.63.41)
+### Bevestigen/negeren via het dashboard (v0.63.41/.43)
 
 Een kale Home Assistant-installatie kan geen dynamische, onbekende-
 lengte-lijst automatisch in knoppen omzetten (dat vereist een externe
 HACS-frontend-kaart) — daarom werkt dit met een **vaste set van 8
 sleuven**: `button.nilm_kandidaat_1_bevestigen` t/m `_8_bevestigen`
-(en hetzelfde met `_negeren`). Elke sleuf toont via zijn eigen
-attributen (`kandidaat_naam`, `kandidaat_vermogen_w`) welke kandidaat
-er momenteel in zit — alfabetisch gesorteerd op `entity_id`, dus stabiel
-tussen ticks. Ruim genoeg voor een realistisch aantal tegelijk nieuw
-ontdekte apparaten; bij meer dan 8 tegelijk zijn de extra kandidaten
-gewoon nog niet zichtbaar totdat er een sleuf vrijkomt.
+(en hetzelfde met `_negeren`). Ruim genoeg voor een realistisch aantal
+tegelijk nieuw ontdekte apparaten; bij meer dan 8 tegelijk zijn de
+extra kandidaten gewoon nog niet zichtbaar totdat er een sleuf vrijkomt.
 
-Het dashboard (paneel "Apparaten" — samen met de overige apparaat- en
-grootverbruiker-kaarten) toont een tabel die per sleuf laat
-zien welke kandidaat er zit, met daaronder de 16 knoppen om te
-bevestigen/negeren. Een sleuf verschuift automatisch naar de volgende
-kandidaat zodra je 'm bevestigt of negeert.
+**Elke knop toont zijn eigen kandidaat direct in de naam** (bijv. "✅
+Koelkast 82W") — géén aparte tabel meer om te kruisverwijzen, dat bleek
+op een smal/mobiel dashboard onleesbaar. Een lege sleuf toont "(leeg)".
+Alfabetisch gesorteerd op `entity_id`, dus stabiel tussen ticks. Het
+dashboard (paneel "Apparaten") toont de 16 knoppen; een sleuf
+verschuift automatisch naar de volgende kandidaat zodra je 'm bevestigt
+of negeert.
+
+**Verwacht bij brede detectie**: met "alle sensoren met een
+vermogens-eenheid" als detectiebereik kunnen ook granulaire
+deelmetingen van je eigen Zendure-accu verschijnen als kandidaat (bijv.
+losse laad-/ontlaad-/PV-vermogenssensoren per accupack) — geen losse
+"apparaten", maar facetten van de accu die je al via
+`battery_power_sensor_entity` volgt. Negeer die gewoon; ze worden dan
+nooit meer voorgesteld.
 
 ### Drift-detectie na bevestiging (mogelijk defect)
 

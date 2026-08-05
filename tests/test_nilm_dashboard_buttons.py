@@ -136,3 +136,35 @@ def test_setup_registers_all_slot_buttons(make_coordinator, hass):
 
     # 1 test-notification button + (confirm+reject) x N slots.
     assert len(added) == 1 + 2 * NILM_DASHBOARD_SLOT_COUNT
+
+
+def test_button_name_shows_the_candidate_directly(make_coordinator, hass):
+    """v0.63.43: the entity's own name should contain the candidate's
+    name/power, so nothing needs cross-referencing against a separate
+    table - reported: a static generic label plus a table got
+    truncated and unusable on a narrow dashboard."""
+    from custom_components.energy_management_system.button import (
+        NilmConfirmCandidateButton,
+        NilmRejectCandidateButton,
+    )
+
+    coordinator = make_coordinator({})
+    _seed_two_candidates(hass, coordinator)
+
+    confirm_button = NilmConfirmCandidateButton(coordinator, "entry1", slot=0)
+    reject_button = NilmRejectCandidateButton(coordinator, "entry1", slot=0)
+
+    assert "A-apparaat" in confirm_button.name
+    assert "20" in confirm_button.name  # its power, 20W
+    assert "A-apparaat" in reject_button.name
+
+
+def test_button_name_for_an_empty_slot(make_coordinator, hass):
+    from custom_components.energy_management_system.button import (
+        NilmConfirmCandidateButton,
+    )
+
+    coordinator = make_coordinator({})
+    button = NilmConfirmCandidateButton(coordinator, "entry1", slot=0)
+
+    assert "leeg" in button.name.lower()

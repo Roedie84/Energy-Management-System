@@ -861,62 +861,45 @@ views:
               columns: 12
               rows: 1
           - type: entities
+            grid_options:
+              columns: 12
+              rows: 2
             entities:
               - entity: sensor.woonkamer_energy_management_system_nilm_onbevestigde_kandidaten
                 name: NILM onbevestigde kandidaten
               - entity: sensor.woonkamer_energy_management_system_nilm_bevestigde_apparaten
                 name: NILM bevestigde apparaten (drift-detectie)
           - type: markdown
-            content: |
-              Elke rij toont welke kandidaat momenteel in die sleuf zit
-              (indien aanwezig). Druk op de bijbehorende knop hieronder
-              om te bevestigen (start drift-detectie) of te negeren
-              (nooit meer voorgesteld).
-
-              | Sleuf | Kandidaat | Vermogen |
-              |---|---|---|
-              {% for i in range(1, 9) -%}
-              {%- set btn = 'button.woonkamer_energy_management_system_nilm_kandidaat_' ~ i ~ '_bevestigen' -%}
-              | {{ i }} | {{ state_attr(btn, 'kandidaat_naam') or '—' }} | {{ (state_attr(btn, 'kandidaat_vermogen_w') | string ~ ' W') if state_attr(btn, 'kandidaat_vermogen_w') is not none else '—' }} |
-              {% endfor %}
+            content: >-
+              Elke knop hieronder toont zelf welke kandidaat er nu in
+              zit (naam + huidig vermogen) — leeg als er geen kandidaat
+              in die sleuf zit. ✅ = bevestigen (start drift-detectie),
+              ❌ = negeren (nooit meer voorgesteld).
             grid_options:
               columns: 12
-              rows: 6
+              rows: 2
           - type: entities
             title: Bevestigen / negeren
+            grid_options:
+              columns: 12
+              rows: 10
             entities:
               - entity: button.woonkamer_energy_management_system_nilm_kandidaat_1_bevestigen
-                name: "1 — bevestigen"
               - entity: button.woonkamer_energy_management_system_nilm_kandidaat_1_negeren
-                name: "1 — negeren"
               - entity: button.woonkamer_energy_management_system_nilm_kandidaat_2_bevestigen
-                name: "2 — bevestigen"
               - entity: button.woonkamer_energy_management_system_nilm_kandidaat_2_negeren
-                name: "2 — negeren"
               - entity: button.woonkamer_energy_management_system_nilm_kandidaat_3_bevestigen
-                name: "3 — bevestigen"
               - entity: button.woonkamer_energy_management_system_nilm_kandidaat_3_negeren
-                name: "3 — negeren"
               - entity: button.woonkamer_energy_management_system_nilm_kandidaat_4_bevestigen
-                name: "4 — bevestigen"
               - entity: button.woonkamer_energy_management_system_nilm_kandidaat_4_negeren
-                name: "4 — negeren"
               - entity: button.woonkamer_energy_management_system_nilm_kandidaat_5_bevestigen
-                name: "5 — bevestigen"
               - entity: button.woonkamer_energy_management_system_nilm_kandidaat_5_negeren
-                name: "5 — negeren"
               - entity: button.woonkamer_energy_management_system_nilm_kandidaat_6_bevestigen
-                name: "6 — bevestigen"
               - entity: button.woonkamer_energy_management_system_nilm_kandidaat_6_negeren
-                name: "6 — negeren"
               - entity: button.woonkamer_energy_management_system_nilm_kandidaat_7_bevestigen
-                name: "7 — bevestigen"
               - entity: button.woonkamer_energy_management_system_nilm_kandidaat_7_negeren
-                name: "7 — negeren"
               - entity: button.woonkamer_energy_management_system_nilm_kandidaat_8_bevestigen
-                name: "8 — bevestigen"
               - entity: button.woonkamer_energy_management_system_nilm_kandidaat_8_negeren
-                name: "8 — negeren"
 
   - title: Geschiedenis
     path: geschiedenis

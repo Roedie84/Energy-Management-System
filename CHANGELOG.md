@@ -4220,3 +4220,35 @@ vaatwasser/wasmachine/steelstofzuiger/fietsladers-kaarten en de
 
 **Geen wijziging aan sensoren, knoppen, of services** — puur een
 herindeling van waar bestaande kaarten in het dashboard staan.
+
+## v0.63.43 — NILM-knoppen tonen kandidaat direct, dashboard leesbaar op mobiel
+
+**Gerapporteerd, met screenshots:** de dashboard-tabel + generieke
+knoplabels ("1 — bevestigen") werden op een smal/mobiel scherm zwaar
+afgekapt en onbruikbaar — kandidaatnamen waren niet te lezen, en welke
+knop bij welke kandidaat hoorde was niet duidelijk.
+
+**Root cause:** het ontwerp vereiste kruisverwijzing tussen een aparte
+tabel (sleufnummer → kandidaat) en een losse knoppenlijst met alleen
+generieke sleufnummers — bij afkapping op een smal scherm viel die
+koppeling volledig weg.
+
+**Fix:** de knoppen tonen nu **zelf** direct welke kandidaat erin zit —
+`name` is niet langer een statisch `_attr_name`, maar een dynamische
+property die de kandidaatnaam + huidig vermogen combineert (bijv. "✅
+Koelkast 82W"), met "(leeg)" voor een onbezette sleuf. Geen aparte
+tabel meer nodig; de dashboard-YAML verwijdert de per-rij `name:`-
+overrides zodat de echte, dynamische entiteitsnaam zichtbaar wordt, en
+geeft de knoppenkaart de volle breedte (`grid_options: columns: 12`) in
+plaats van een smalle kolom.
+
+**Zijopmerking over de gerapporteerde "AB3000"/"accu_*"-kandidaten**:
+dit is verwacht gedrag van de bewust brede detectie (alle
+vermogens-sensoren) — vermoedelijk granulaire deelmetingen van de
+Zendure-accu zelf (per-pack laad-/ontlaad-/PV-vermogen), geen losse
+apparaten. Negeren via de knop is de bedoelde oplossing; nu ook
+expliciet zo benoemd in de README.
+
+**Getest** (2 nieuwe permanente tests in `test_nilm_dashboard_buttons.py`):
+de knopnaam bevat de kandidaatnaam + vermogen; een lege sleuf toont
+"(leeg)".

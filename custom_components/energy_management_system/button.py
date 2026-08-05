@@ -62,12 +62,21 @@ class TestNotificationButton(ButtonEntity):
 
 
 class _NilmSlotButton(ButtonEntity):
-    """Shared base for the 8 confirm/reject slot-pairs (v0.63.41) - see
-    `EnergyManagementSystemCoordinator.get_nilm_candidate_at_slot` for
-    why a fixed number of slots is used instead of one dynamic button
-    per candidate (a static Lovelace dashboard can't render an unknown-
-    length, changing list without an extra HACS frontend card).
+    """Shared base for the 8 confirm/reject slot-pairs (v0.63.41/.43) -
+    see `EnergyManagementSystemCoordinator.get_nilm_candidate_at_slot`
+    for why a fixed number of slots is used instead of one dynamic
+    button per candidate (a static Lovelace dashboard can't render an
+    unknown-length, changing list without an extra HACS frontend card).
+
+    v0.63.43: the entity's own `name` is now dynamic (candidate name +
+    live power), not a static "slot N" label - reported: a static
+    label plus a separate cross-reference table got badly truncated on
+    a narrow/mobile dashboard, making it unusable. Putting the actual
+    candidate directly in the button's name removes the need to
+    cross-reference anything.
     """
+
+    _attr_has_entity_name = True
 
     def __init__(self, coordinator, entry_id: str, slot: int, unique_suffix: str) -> None:
         self._coordinator = coordinator
@@ -77,6 +86,16 @@ class _NilmSlotButton(ButtonEntity):
             "identifiers": {(DOMAIN, entry_id)},
             "name": DEFAULT_NAME,
         }
+
+    def _slot_label(self) -> str:
+        entity_id = self._coordinator.get_nilm_candidate_at_slot(self._slot)
+        if entity_id is None:
+            return f"Sleuf {self._slot + 1} (leeg)"
+        candidate = self._coordinator.nilm_unconfirmed_candidates.get(entity_id, {})
+        naam = candidate.get("friendly_name") or entity_id
+        power_w = candidate.get("current_power_w")
+        power_txt = f" {power_w:.0f}W" if power_w is not None else ""
+        return f"{naam}{power_txt}"
 
     @property
     def extra_state_attributes(self) -> dict:
@@ -94,12 +113,14 @@ class _NilmSlotButton(ButtonEntity):
 class NilmConfirmCandidateButton(_NilmSlotButton):
     """Confirms whichever candidate currently occupies this slot."""
 
-    _attr_has_entity_name = True
     _attr_icon = "mdi:check-circle-outline"
 
     def __init__(self, coordinator, entry_id: str, slot: int) -> None:
         super().__init__(coordinator, entry_id, slot, "confirm")
-        self._attr_name = f"NILM kandidaat {slot + 1} bevestigen"
+
+    @property
+    def name(self) -> str:
+        return f"✅ {self._slot_label()}"
 
     async def async_press(self) -> None:
         entity_id = self._coordinator.get_nilm_candidate_at_slot(self._slot)
@@ -110,12 +131,14 @@ class NilmConfirmCandidateButton(_NilmSlotButton):
 class NilmRejectCandidateButton(_NilmSlotButton):
     """Rejects whichever candidate currently occupies this slot."""
 
-    _attr_has_entity_name = True
     _attr_icon = "mdi:close-circle-outline"
 
     def __init__(self, coordinator, entry_id: str, slot: int) -> None:
         super().__init__(coordinator, entry_id, slot, "reject")
-        self._attr_name = f"NILM kandidaat {slot + 1} negeren"
+
+    @property
+    def name(self) -> str:
+        return f"❌ {self._slot_label()}"
 
     async def async_press(self) -> None:
         entity_id = self._coordinator.get_nilm_candidate_at_slot(self._slot)
