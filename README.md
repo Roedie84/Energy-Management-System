@@ -515,7 +515,163 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
-## Water-tabblad (v0.63.85)
+## Model- en parameternauwkeurigheid — trends (v0.63.88)
+
+Gevraagd: "wel wil ik allerlei waardes welke je nu hebt toegevoegd ook
+inzicht zien op het dashboard met trends of ze naar beneden of naar
+boven gaan en wat het verschil in % over tijd is dus of het
+model/parameter nauwkeuriger wordt."
+
+**Gedeelde `_compute_trend_summary()`-helper**: een kleinste-
+kwadraten-regressielijn door een korte tijdreeks — statistisch de meest
+verdedigbare manier om een genuine trend te detecteren, in plaats van
+simpelweg de nieuwste met de oudste waarde te vergelijken (te gevoelig
+voor één toevallig ruizig datapunt aan een van beide uiteinden).
+Gebruikt alle beschikbare punten; rapporteert het %-verschil dat de
+gefitte lijn impliceert van begin tot eind van het venster.
+
+**Belangrijke, tijdens het testen ontdekte statistische nuance**: een
+regressielijn is juist gevoelig voor een uitschieter precies áán het
+uiteinde van de reeks (een bekende "leverage"-eigenschap) — robuuster
+dan een naïeve 2-punts-vergelijking in het algemeen, maar geen
+wondermiddel tegen elke soort ruis. Documenteerd in de tests zodat dit
+niet opnieuw als verrassing opduikt.
+
+Toegepast op drie nieuwe metrics uit deze release, elk met een eigen,
+dagelijks bijgehouden geschiedenis:
+1. **Zonvoorspelling-spreiding** (`deviation_stdev_history`) — wordt de
+   voorspelling consistenter (dalend) of wisselvalliger (stijgend)?
+2. **Extra-dip-laadmarge** (`extra_dip_margin_history`) — hoeveel marge
+   is er typisch beschikbaar, en verandert dat?
+3. **Temperatuur-regressie-nauwkeurigheid**
+   (`temp_consumption_prediction_error_history`) — wordt de
+   voorspelling nauwkeuriger over tijd (dalend = beter)?
+
+Alle drie gebundeld in de nieuwe sensor
+`sensor.woonkamer_energy_management_system_model_en_parameternauwkeurigheid`,
+met een eigen dashboardkaart op het Advies-tabblad. RestoreEntity — de
+onderliggende geschiedenissen overleven een herstart (deviation_stdev_
+history piggybackt op de bestaande `PvForecastAccuracySensor`-restore,
+naast `deviation_history` zelf).
+
+## Temperatuur-verbruik-regressie voor extreme-koude-dagen (v0.63.88)
+
+Uitgebreid besproken en ontworpen door de gebruiker, als vervolg op de
+extreme-koude-dag-analyse. **Bewust puur adviserend voor nu**
+("eerst observeren" — expliciet zo afgesproken) — beïnvloedt de
+bestaande reserve-/dieptekort-berekening nog op geen enkele manier.
+
+**Data verzamelen**: tijdens hetzelfde nachtvenster waar het
+verbruik al wordt gevolgd (`_update_night_consumption_tracking`),
+wordt nu ook de buitentemperatuur meegesampled (hergebruikt de
+bestaande `_get_live_outdoor_temp_c()`, geen nieuwe sensor-
+configuratie nodig). Bij afsluiten van het venster wordt het
+(gemiddelde temperatuur, totaal verbruik)-paar toegevoegd aan
+`temp_consumption_history` (rollend venster,
+`LEARNING_HISTORY_DAYS`).
+
+**Regressie**: een gedeelde `_ols_fit()`-helper (gewone kleinste-
+kwadraten) door de (temperatuur, verbruik)-paren, vanaf minimaal 4
+samples (`TEMP_CONSUMPTION_MIN_SAMPLES`).
+
+**Eerlijke, niet-lekkende validatie**: bij het afsluiten van elk
+nachtvenster wordt éérst — met de geschiedenis zoals die vóór die
+nacht al bekend was — voorspeld wat die nacht had moeten kosten, pas
+dáárna wordt het nieuwe paar zelf toegevoegd. Zo meet
+`temp_consumption_prediction_error_history` een eerlijke validatie
+(voorspellen met wat toen al bekend was), niet een achteraf-passende
+schijnnauwkeurigheid.
+
+`last_temp_consumption_note` toont in gewone taal wat er is voorspeld
+vs. wat er werkelijk gebeurde, elke nacht.
+
+## Extra-dip laden op weinig-zon-dagen (v0.63.87)
+
+Uitgebreid besproken en ontworpen door de gebruiker, naar aanleiding
+van een extreme-koude-dag-analyse (11 januari 2026, laagste
+etmaalgemiddelde van het jaar, -4,1 °C).
+
+**Aanleiding**: sinds v0.63.77 laadt het systeem tijdens een
+weinig-zon-dag alleen nog gedwongen bij binnen het ene, hoofd-goedkope
+blok van de dag (`should_force_charge`). Een aparte, losse prijsdip
+elders die dag werd volledig genegeerd, ook al zou bijladen daar
+aantoonbaar voordeliger zijn dan wachten — een direct, onbedoeld
+neveneffect van het volledig verwijderen van het oude arbitrage-
+mechanisme.
+
+**Ontwerp, na uitgebreide discussie**:
+- Alleen relevant wanneer `_is_low_solar_expected()` al `True` is
+  (dezelfde genuine behoefte als het hoofdblok) én we ons **buiten**
+  het hoofdblok bevinden.
+- Rendement-gecorrigeerde marge-check (net als het oude, verwijderde
+  arbitrage-mechanisme): `geleerde_efficiëntie × beste-resterende-prijs-
+  vandaag − huidige-prijs ≥ 0,03 €/kWh`
+  (`LOW_SOLAR_EXTRA_DIP_MIN_MARGIN_EUR_PER_KWH`). Gebruikt dezelfde
+  `learned_battery_efficiency_percent` die al continu op de achtergrond
+  wordt bijgehouden (elke tick, ongeacht reden), met terugval op de
+  geconfigureerde `battery_round_trip_efficiency_percent`.
+- Bewust **géén** rendement-check op het bestaande hoofdblok zelf
+  (expliciet zo besloten) — dat is al per definitie het goedkoopste
+  moment van de dag.
+- Laadt met hetzelfde vaste `manual_charge_power` als het hoofdblok.
+- Zet ook de winter-guard-vlag (`_grid_charged_today`) — deze energie
+  wordt om dezelfde reden gekocht (genuine behoefte bij weinig zon),
+  dus mag ook niet diezelfde dag worden terugverkocht.
+- **Belangrijke correctie tijdens het bouwen**: de vlag-poort was
+  aanvankelijk `not self._grid_charged_today` — maar op een
+  weinig-zon-dag heeft het hoofdblok (vroeg op de dag) die vlag vrijwel
+  altijd al gezet, wat dit mechanisme in de praktijk onbereikbaar zou
+  maken. De vlag onderdrukt alleen **verkopen** later, niet verdere
+  **legitieme** lading — dus de poort is uitsluitend
+  `is_low_solar and not in_cheap_block` (plus de marge-check).
+- Eigen reden-label `grid_charging_low_solar_extra_dip`, met een eigen
+  uitlegtekst-tak (toont de berekende marge).
+
+**Belangrijke test-subtiliteit** (relevant bij toekomstig onderhoud):
+`_cheapest_block_range()` kijkt alleen naar *toekomstige* prijzen vanaf
+"nu". Zodra "nu" het oorspronkelijke hoofdblok is gepasseerd, telt dat
+niet meer mee als "upcoming" — zonder een nóg-goedkopere stretch later
+die dag zou het huidige testmoment zélf als (nieuw) hoofdblok worden
+herkend. Tests simuleren daarom bewust een prijspatroon met een latere,
+nóg goedkopere stretch, zodat het extra-dip-mechanisme specifiek wordt
+beproefd in plaats van het hoofdblok opnieuw te raken.
+
+## Spreidingsgebaseerde "weinig zon"-drempel (v0.63.87)
+
+Eveneens uitgebreid besproken: de fractie die bepaalt of de geleerde
+"typische dag" als "weinig zon" geldt (`LOW_SOLAR_RELATIVE_FRACTION`)
+was een vaste 40%. Nu beweegt die mee met hoe **consistent** de
+(bias-gecorrigeerde) voorspelling recent is gebleken, via de
+standaarddeviatie van de al bestaande `deviation_history` (tot nu toe
+alleen gebruikt voor het gemiddelde/de systematische bias, niet voor de
+spreiding).
+
+Drie vaste, uitlegbare niveaus (bewust geen continue formule, "black
+box", consistent met de rest van deze integratie):
+```
+stdev(deviation_history) < 10%  → fractie 0,6 (consistente voorspelling, ruimer vertrouwen)
+stdev(deviation_history) 10–25% → fractie 0,4 (huidige, voorzichtige standaard)
+stdev(deviation_history) > 25%  → fractie 0,3 (onbetrouwbaar, extra conservatief)
+```
+Vereist minimaal 5 samples (`MIN_SOLAR_HISTORY_FOR_SPREAD_BASED_FRACTION`)
+voor een betrouwbare standaarddeviatie — met minder valt het terug op de
+vaste 40%.
+
+**Doorgesproken alternatieven, bewust niet gebouwd**: de gebruiker gaf
+een uitgebreide lijst statistische methoden (procesprestaties,
+hypothesetoetsen, SPC-kaarten, DOE, Gage R&R, FMEA/Weibull) om te
+overwegen. Beoordeeld en verworpen: process capability/SPC vereisen
+formele specificatiegrenzen die hier niet natuurlijk bestaan;
+hypothesetoetsen hebben te weinig power bij 7-30 dagsamples;
+DOE vereist actief experimenteren (dit systeem observeert alleen
+passief); Gage R&R valideert meetsystemen zelf (niet relevant, sensor-
+waarden worden vertrouwd as-is); FMEA/Weibull vereisen kwalitatieve
+risico-oefeningen resp. faaltijd-data die hier niet wordt bijgehouden.
+Wél als kansrijk genoemd voor een vervolgstap: een eenvoudige
+temperatuur-verbruik-regressie voor extreme-koude-dagen (nog niet
+gebouwd).
+
+
 
 Gevraagd: "Meldingen/tracking zoals bij vaatwasser/wasmachine" —
 herzien na verduidelijking naar "geen meldingen alleen een watertabblad

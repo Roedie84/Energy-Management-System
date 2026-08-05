@@ -1018,6 +1018,42 @@ views:
             name: NILM apparaat-detectie
           - entity: sensor.woonkamer_energy_management_system_advies_gereedheid_8_modules
             name: Advies-gereedheid (samenvatting)
+          - entity: sensor.woonkamer_energy_management_system_model_en_parameternauwkeurigheid
+            name: Model- en parameternauwkeurigheid
+
+      - type: markdown
+        title: Model- en parameternauwkeurigheid — trends
+        content: >-
+          {% set attrs =
+          state_attr('sensor.woonkamer_energy_management_system_model_en_parameternauwkeurigheid',
+          'zon_voorspelling_spreiding_trend') %} {% set marge_trend =
+          state_attr('sensor.woonkamer_energy_management_system_model_en_parameternauwkeurigheid',
+          'extra_dip_marge_trend') %} {% set temp_trend =
+          state_attr('sensor.woonkamer_energy_management_system_model_en_parameternauwkeurigheid',
+          'temperatuur_regressie_nauwkeurigheid_trend') %}
+
+          **Zonvoorspelling-spreiding** ({{
+          state_attr('sensor.woonkamer_energy_management_system_model_en_parameternauwkeurigheid',
+          'zon_voorspelling_spreiding_procent') }}%): {% if attrs %}{{ attrs.richting
+          }}{% if attrs.verschil_procent is not none %} ({{ attrs.verschil_procent }}%
+          over het venster){% endif %}{% else %}nog niet genoeg geschiedenis{% endif
+          %}
+
+          **Extra-dip-laadmarge** ({{
+          state_attr('sensor.woonkamer_energy_management_system_model_en_parameternauwkeurigheid',
+          'extra_dip_marge_eur_per_kwh') }} €/kWh): {% if marge_trend %}{{
+          marge_trend.richting }}{% if marge_trend.verschil_procent is not none %} ({{
+          marge_trend.verschil_procent }}% over het venster){% endif %}{% else %}nog
+          niet genoeg geschiedenis{% endif %}
+
+          **Temperatuur-regressie-nauwkeurigheid**: {% if temp_trend %}afwijking is
+          {{ temp_trend.richting }} ({{ temp_trend.verschil_procent }}% over het
+          venster - dalend = wordt nauwkeuriger){% else %}nog niet genoeg
+          geschiedenis{% endif %}
+
+          {{
+          state_attr('sensor.woonkamer_energy_management_system_model_en_parameternauwkeurigheid',
+          'temperatuur_regressie_note') or '' }}
 
   - title: Klimaat
     path: klimaat

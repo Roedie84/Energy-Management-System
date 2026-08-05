@@ -278,6 +278,13 @@ async def async_get_config_entry_diagnostics(
             "water_softener_last_regeneration": _iso(
                 coordinator.water_softener_last_regeneration
             ),
+            "last_extra_dip_margin_eur_per_kwh": coordinator.last_extra_dip_margin_eur_per_kwh,
+            "extra_dip_margin_history": coordinator.extra_dip_margin_history,
+            "temp_consumption_history": coordinator.temp_consumption_history,
+            "temp_consumption_prediction_error_history": (
+                coordinator.temp_consumption_prediction_error_history
+            ),
+            "last_temp_consumption_note": coordinator.last_temp_consumption_note,
             "last_reason": coordinator.last_reason,
             "last_explanation": coordinator.last_explanation,
             "last_current_price_per_kwh": coordinator.last_current_price_per_kwh,

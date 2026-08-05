@@ -18,6 +18,7 @@ decisions, it only exposes a sensor entity.
 from __future__ import annotations
 
 import logging
+import statistics
 from datetime import date, datetime, timedelta
 
 from homeassistant.core import HomeAssistant, callback
@@ -29,6 +30,7 @@ from .const import (
     CONF_SOLAR_FORECAST_SENSOR,
     LEARNING_HISTORY_DAYS,
     MIN_SOLAR_HISTORY_FOR_DYNAMIC_THRESHOLD,
+    MIN_SOLAR_HISTORY_FOR_SPREAD_BASED_FRACTION,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -104,6 +106,7 @@ class SolarForecastAccuracyTracker:
         # Rolling history of deviation percentages, used to learn a
         # systematic bias in the Solcast forecast for this installation.
         self.deviation_history: list[float] = []
+        self.deviation_stdev_history: list[float] = []
 
         # Rolling history of the raw forecast values themselves, used to
         # learn a "typical" forecast for this installation (and from that,
@@ -154,6 +157,33 @@ class SolarForecastAccuracyTracker:
         if not valid:
             return None
         return round(sum(valid) / len(valid), 1)
+
+    @property
+    def deviation_stdev_percent(self) -> float | None:
+        """Standard deviation (%) of the same recent deviation history
+        used for `learned_bias_percent` - a measure of how CONSISTENT
+        the (bias-corrected) forecast has been, not just its average
+        direction/magnitude (v0.63.87, uitgebreid besproken en
+        ontworpen door de gebruiker).
+
+        Used to scale `LOW_SOLAR_RELATIVE_FRACTION`: a low spread means
+        the forecast can be trusted more (a wider fraction, less
+        cautious); a high spread means the forecast has been
+        unreliable, warranting more caution (a narrower fraction).
+
+        Returns None until MIN_SOLAR_HISTORY_FOR_SPREAD_BASED_FRACTION
+        valid samples are available (a stdev from very few samples is
+        itself unreliable), so callers can fall back to the fixed
+        default fraction until there is enough data to learn from.
+        """
+        valid = [
+            v
+            for v in self.deviation_history
+            if abs(v) <= MAX_REASONABLE_DEVIATION_PERCENT
+        ]
+        if len(valid) < MIN_SOLAR_HISTORY_FOR_SPREAD_BASED_FRACTION:
+            return None
+        return round(statistics.pstdev(valid), 1)
 
     @property
     def learned_typical_forecast_kwh(self) -> float | None:
@@ -378,6 +408,19 @@ class SolarForecastAccuracyTracker:
                         self.deviation_history = self.deviation_history[
                             -LEARNING_HISTORY_DAYS:
                         ]
+                        # v0.63.88, gevraagd: inzicht of het model/de
+                        # parameter nauwkeuriger wordt over tijd. Sample
+                        # de spreidingsmaat zelf eenmaal per dag in een
+                        # eigen, rollend venster - zo kan een trend
+                        # (wordt de voorspelling consistenter of juist
+                        # wisselvalliger?) worden getoond, los van het
+                        # gemiddelde/de systematische bias zelf.
+                        stdev_sample = self.deviation_stdev_percent
+                        if stdev_sample is not None:
+                            self.deviation_stdev_history.append(stdev_sample)
+                            self.deviation_stdev_history = self.deviation_stdev_history[
+                                -LEARNING_HISTORY_DAYS:
+                            ]
                     else:
                         _LOGGER.warning(
                             "Ignoring implausible forecast deviation of %.1f%% "

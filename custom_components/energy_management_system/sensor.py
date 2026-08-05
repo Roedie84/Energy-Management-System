@@ -29,6 +29,7 @@ ATTR_COMPARED_DATE = "compared_date"
 ATTR_PENDING_PREDICTED_KWH = "pending_predicted_kwh"
 ATTR_PENDING_PREDICTED_DATE = "pending_predicted_date"
 ATTR_DEVIATION_HISTORY = "deviation_history"
+ATTR_DEVIATION_STDEV_HISTORY = "deviation_stdev_history"
 ATTR_LEARNED_BIAS_PERCENT = "learned_bias_percent"
 ATTR_FORECAST_VALUE_HISTORY = "forecast_value_history"
 ATTR_LEARNED_TYPICAL_FORECAST_KWH = "learned_typical_forecast_kwh"
@@ -77,6 +78,7 @@ async def async_setup_entry(
         LivingRoomAircoPredictionSensor(coordinator, entry.entry_id),
         ClimateForecastSensor(coordinator, entry.entry_id),
         WaterUsageSensor(coordinator, entry.entry_id),
+        ModelTrendInsightSensor(coordinator, entry.entry_id),
         ReserveShortfallSensor(coordinator, entry.entry_id),
         ReserveExcessSensor(coordinator, entry.entry_id),
         LearnedBatteryEfficiencySensor(coordinator, entry.entry_id),
@@ -155,6 +157,7 @@ class PvForecastAccuracySensor(SensorEntity, RestoreEntity):
                 else None
             ),
             ATTR_DEVIATION_HISTORY: self._tracker.deviation_history,
+            ATTR_DEVIATION_STDEV_HISTORY: self._tracker.deviation_stdev_history,
             ATTR_LEARNED_BIAS_PERCENT: self._tracker.learned_bias_percent,
             ATTR_FORECAST_VALUE_HISTORY: self._tracker.forecast_value_history,
             ATTR_LEARNED_TYPICAL_FORECAST_KWH: self._tracker.learned_typical_forecast_kwh,
@@ -185,6 +188,11 @@ class PvForecastAccuracySensor(SensorEntity, RestoreEntity):
                 history = attrs.get(ATTR_DEVIATION_HISTORY)
                 if isinstance(history, list):
                     self._tracker.deviation_history = [float(v) for v in history]
+                stdev_history = attrs.get(ATTR_DEVIATION_STDEV_HISTORY)
+                if isinstance(stdev_history, list):
+                    self._tracker.deviation_stdev_history = [
+                        float(v) for v in stdev_history
+                    ]
                 forecast_history = attrs.get(ATTR_FORECAST_VALUE_HISTORY)
                 if isinstance(forecast_history, list):
                     self._tracker.forecast_value_history = [
@@ -1846,6 +1854,117 @@ class WaterUsageSensor(SensorEntity, RestoreEntity):
                 self._coordinator.water_softener_last_regeneration = (
                     datetime.fromisoformat(raw_regen)
                 )
+            except (TypeError, ValueError):
+                pass
+
+
+class ModelTrendInsightSensor(SensorEntity, RestoreEntity):
+    """Model-/parameternauwkeurigheid over tijd (v0.63.88, gevraagd:
+    "wel wil ik allerlei waardes welke je nu hebt toegevoegd ook
+    inzicht zien op het dashboard met trends... en wat het verschil in
+    % over tijd is dus of het model/parameter nauwkeuriger wordt").
+
+    Bundelt de trend (richting + %-verschil, via
+    `_compute_trend_summary` - een kleinste-kwadraten-regressielijn
+    door elke tijdreeks, statistisch robuuster dan een nieuwste-vs-
+    oudste-vergelijking) van drie nieuwe metrics uit deze release:
+
+    1. Spreiding van de zonvoorspelling (`deviation_stdev_history`) -
+       wordt de voorspelling consistenter (dalend = beter) of juist
+       wisselvalliger (stijgend) over tijd?
+    2. Extra-dip-laadmarge (`extra_dip_margin_history`) - hoeveel
+       marge is er typisch beschikbaar op weinig-zon-dagen, en
+       verandert dat?
+    3. Temperatuur-verbruik-regressie-nauwkeurigheid
+       (`temp_consumption_prediction_error_history`) - wordt de
+       voorspelling van het nachtverbruik op basis van
+       buitentemperatuur nauwkeuriger over tijd (dalend = beter)?
+
+    Puur informatief - stuurt niets aan. Wél een RestoreEntity, zodat
+    de onderliggende geschiedenissen (bijgehouden op de coordinator,
+    niet hier) een herstart overleven via dezelfde restore-aanpak als
+    elders in deze integratie.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Model- en parameternauwkeurigheid"
+    _attr_icon = "mdi:chart-line-variant"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_model_trend_insight"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def native_value(self) -> str:
+        return self._coordinator.last_temp_consumption_note or "onbekend"
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        coordinator = self._coordinator
+        return {
+            "zon_voorspelling_spreiding_procent": (
+                coordinator.solar_tracker.deviation_stdev_percent
+                if coordinator.solar_tracker
+                else None
+            ),
+            "zon_voorspelling_spreiding_trend": coordinator._compute_trend_summary(
+                coordinator.solar_tracker.deviation_stdev_history
+                if coordinator.solar_tracker
+                else []
+            ),
+            "extra_dip_marge_eur_per_kwh": coordinator.last_extra_dip_margin_eur_per_kwh,
+            "extra_dip_marge_geschiedenis": coordinator.extra_dip_margin_history,
+            "extra_dip_marge_trend": coordinator._compute_trend_summary(
+                coordinator.extra_dip_margin_history
+            ),
+            "temperatuur_regressie_note": coordinator.last_temp_consumption_note,
+            "temperatuur_regressie_paren": coordinator.temp_consumption_history,
+            "temperatuur_regressie_nauwkeurigheid_geschiedenis": (
+                coordinator.temp_consumption_prediction_error_history
+            ),
+            "temperatuur_regressie_nauwkeurigheid_trend": coordinator._compute_trend_summary(
+                coordinator.temp_consumption_prediction_error_history
+            ),
+        }
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if last_state is None:
+            return
+        raw_pairs = last_state.attributes.get("temperatuur_regressie_paren")
+        if isinstance(raw_pairs, list):
+            self._coordinator.temp_consumption_history = raw_pairs
+        raw_note = last_state.attributes.get("temperatuur_regressie_note")
+        if raw_note:
+            self._coordinator.last_temp_consumption_note = raw_note
+        raw_error_history = last_state.attributes.get(
+            "temperatuur_regressie_nauwkeurigheid_geschiedenis"
+        )
+        if isinstance(raw_error_history, list):
+            try:
+                self._coordinator.temp_consumption_prediction_error_history = [
+                    float(v) for v in raw_error_history
+                ]
+            except (TypeError, ValueError):
+                pass
+        raw_margin = last_state.attributes.get("extra_dip_marge_eur_per_kwh")
+        if raw_margin is not None:
+            try:
+                self._coordinator.last_extra_dip_margin_eur_per_kwh = float(raw_margin)
+            except (TypeError, ValueError):
+                pass
+        raw_margin_history = last_state.attributes.get("extra_dip_marge_geschiedenis")
+        if isinstance(raw_margin_history, list):
+            try:
+                self._coordinator.extra_dip_margin_history = [
+                    float(v) for v in raw_margin_history
+                ]
             except (TypeError, ValueError):
                 pass
 

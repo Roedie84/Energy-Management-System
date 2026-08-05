@@ -5680,3 +5680,175 @@ uitgebreide tabel.
 een nachtelijk gebruiksmoment wordt correct als waterontharder
 gemarkeerd; een overdag-gebruiksmoment (bijv. douche) niet; de sensor
 toont het tijdstip correct; en herstelt het na een herstart.
+
+## v0.63.87 — extra-dip laden op weinig-zon-dagen + spreidingsgebaseerde drempel
+
+Uitgebreid besproken en ontworpen door de gebruiker, naar aanleiding
+van een extreme-koude-dag-analyse (11 januari 2026: laagste
+etmaalgemiddelde van het jaar, -4,1 °C, bijna -10 °C 's nachts).
+
+### Extra-dip laden op weinig-zon-dagen
+
+**Aanleiding**: sinds v0.63.77 laadt het systeem tijdens een
+weinig-zon-dag alleen nog gedwongen bij binnen het ene, hoofd-goedkope
+blok van de dag (`should_force_charge`). Een aparte, losse prijsdip
+elders die dag werd volledig genegeerd, ook al zou bijladen daar
+aantoonbaar voordeliger zijn dan wachten — een onbedoeld neveneffect
+van de volledige arbitrage-verwijdering.
+
+**Fix**: nieuwe beslistak direct na `should_force_charge`. Vuurt alleen
+wanneer `_is_low_solar_expected() = True` én we ons buiten het
+hoofdblok bevinden, met een rendement-gecorrigeerde marge-check
+(`geleerde_efficiëntie × beste-resterende-prijs-vandaag − huidige-prijs
+≥ 0,03 €/kWh`, nieuwe constante
+`LOW_SOLAR_EXTRA_DIP_MIN_MARGIN_EUR_PER_KWH`). Hergebruikt de al
+continu bijgehouden `learned_battery_efficiency_percent` (terugval op
+`battery_round_trip_efficiency_percent`). Laadt met hetzelfde vaste
+`manual_charge_power`, en zet ook de winter-guard-vlag
+(`_grid_charged_today`) — deze energie is om dezelfde reden gekocht,
+dus mag ook niet diezelfde dag worden terugverkocht. Bewust géén
+rendement-check op het bestaande hoofdblok zelf (expliciet zo
+besloten). Nieuwe reden `grid_charging_low_solar_extra_dip`, met eigen
+uitlegtekst, `REASON_TO_MODE`-entry, emoji, en financiële tracking.
+
+**Kritieke ontwerpfout gevonden tijdens het testen, direct
+gecorrigeerd**: de eerste versie gebruikte
+`is_low_solar and not in_cheap_block and not self._grid_charged_today`
+als poort. Op elke weinig-zon-dag zet het hoofdblok (vroeg op de dag)
+die vlag echter vrijwel altijd al — waardoor deze poort het hele
+mechanisme in de praktijk onbereikbaar maakte. De vlag is bedoeld om
+later VERKOPEN te onderdrukken (winter-guard), niet om verdere
+LEGITIEME lading te blokkeren. Gecorrigeerd naar uitsluitend
+`is_low_solar and not in_cheap_block` (plus de marge-check).
+
+**Getest** (6 permanente tests,
+`test_low_solar_extra_dip_charging.py`): vuurt bij voldoende marge;
+zet de winter-guard-vlag zodat later verkopen wordt onderdrukt; vuurt
+niet bij onvoldoende marge; vuurt nooit op een dag met voldoende zon;
+blijft vuren ook als het hoofdblok die dag al eerder heeft geladen
+(de gecorrigeerde poort); gebruikt de geleerde efficiëntie boven de
+geconfigureerde terugval. Belangrijke test-subtiliteit gedocumenteerd:
+`_cheapest_block_range()` kijkt alleen naar toekomstige prijzen, dus
+elke testreeks bevat bewust een latere, nóg goedkopere stretch zodat
+het testmoment zelf niet abusievelijk als hoofdblok wordt herkend.
+
+### Spreidingsgebaseerde "weinig zon"-drempel
+
+**Aanleiding**: `LOW_SOLAR_RELATIVE_FRACTION` (bepaalt of de geleerde
+"typische dag" als "weinig zon" geldt) was een vaste 40%, ongeacht hoe
+betrouwbaar de voorspelling recent is gebleken.
+
+**Fix**: nieuwe `deviation_stdev_percent`-property op
+`SolarForecastAccuracyTracker`, die de standaarddeviatie berekent van
+de al bestaande `deviation_history` (voorheen alleen gebruikt voor het
+gemiddelde/de systematische bias via `learned_bias_percent` - geen
+nieuwe meting nodig). Nieuwe `_get_low_solar_relative_fraction()` op de
+coordinator kiest tussen drie vaste niveaus:
+```
+stdev < 10%   → fractie 0,6 (consistente voorspelling, ruimer vertrouwen)
+stdev 10–25%  → fractie 0,4 (huidige, voorzichtige standaard)
+stdev > 25%   → fractie 0,3 (onbetrouwbaar, extra conservatief)
+```
+Vereist minimaal 5 samples (nieuwe constante
+`MIN_SOLAR_HISTORY_FOR_SPREAD_BASED_FRACTION`) voor een betrouwbare
+standaarddeviatie; valt anders terug op de vaste 40%. Bewust drie
+uitlegbare niveaus in plaats van een continue formule, consistent met
+de rest van deze integratie.
+
+**Doorgesproken alternatieven, bewust niet gebouwd**: een uitgebreide
+lijst statistische methoden (procesprestaties/Cp-Cpk, hypothesetoetsen,
+SPC-kaarten, DOE, Gage R&R, FMEA/Weibull) is beoordeeld en afgewezen -
+zie README voor de volledige, beargumenteerde doorloop. Wél als
+kansrijk genoemd voor een vervolgstap: een temperatuur-verbruik-
+regressie voor extreme-koude-dagen (nog niet gebouwd).
+
+**Getest** (8 permanente tests,
+`test_low_solar_spread_based_fraction.py`): stdev is `None` zonder
+genoeg samples; correcte berekening met genoeg samples; negeert
+implausibele uitschieters (net als `learned_bias_percent`); fractie
+valt terug op 0,4 zonder genoeg geschiedenis; verbreedt naar 0,6 bij
+lage spreiding; versmalt naar 0,3 bij hoge spreiding; blijft 0,4 bij
+gematigde spreiding; end-to-end via `_is_forecast_value_low`.
+
+## v0.63.88 — model-/parameternauwkeurigheid-trends + temperatuur-verbruik-regressie
+
+Uitgebreid besproken en ontworpen door de gebruiker, als vervolg op de
+extreme-koude-dag-discussie (11 januari 2026).
+
+### Gedeelde trend-infrastructuur
+
+**Gevraagd**: "wel wil ik allerlei waardes welke je nu hebt toegevoegd
+ook inzicht zien op het dashboard met trends... en of het
+model/parameter nauwkeuriger wordt", met als expliciete eis:
+"Statistisch de beste keuze nemen" voor de berekening.
+
+**Fix**: nieuwe `_compute_trend_summary()` — een kleinste-kwadraten-
+regressielijn door een korte tijdreeks, in plaats van een naïeve
+nieuwste-vs-oudste-vergelijking. Gebruikt alle beschikbare punten;
+rapporteert het %-verschil dat de gefitte lijn impliceert van begin tot
+eind van het venster.
+
+**Statistische nuance ontdekt tijdens het testen, gedocumenteerd**:
+een eerste test nam aan dat regressie ongevoelig zou zijn voor een
+uitschieter aan het uiteinde van de reeks - dat bleek feitelijk
+onjuist (een bekende "leverage"-eigenschap: uitschieters aan de randen
+hebben juist veel invloed op een regressielijn). Test gecorrigeerd naar
+een eerlijke claim: robuustheid bij een uitschieter in het midden van
+de reeks (lage leverage daar), niet aan een uiteinde.
+
+Toegepast op drie nieuwe metrics, elk met een eigen, dagelijks
+bijgehouden geschiedenis:
+1. **Zonvoorspelling-spreiding** (`deviation_stdev_history`, nieuw op
+   `SolarForecastAccuracyTracker`, meegerestored via de bestaande
+   `PvForecastAccuracySensor`).
+2. **Extra-dip-laadmarge** (`extra_dip_margin_history`, één sample per
+   dag - niet elke tick, anders zou de geschiedenis met bijna-
+   identieke waarden overspoeld raken).
+3. **Temperatuur-regressie-nauwkeurigheid** (zie hieronder).
+
+**Nieuwe sensor**:
+`ModelTrendInsightSensor`
+(`sensor.woonkamer_energy_management_system_model_en_parameternauwkeurigheid`),
+bundelt alle drie trends. RestoreEntity. Nieuwe dashboardkaart op het
+Advies-tabblad.
+
+**Getest**: 5 tests voor `_compute_trend_summary` zelf, 3 voor de
+nieuwe sensor (blootstelling + herstel na restart + het bestaande
+PvForecastAccuracySensor-restorepad uitgebreid).
+
+### Temperatuur-verbruik-regressie voor extreme-koude-dagen
+
+**Bewust puur adviserend voor nu** ("eerst observeren", expliciet zo
+afgesproken) - beïnvloedt de bestaande reserve-/dieptekort-berekening
+nog op geen enkele manier.
+
+**Data verzamelen**: tijdens hetzelfde nachtvenster waar het verbruik
+al wordt gevolgd (`_update_night_consumption_tracking`), wordt nu ook
+de buitentemperatuur meegesampled (hergebruikt de bestaande
+`_get_live_outdoor_temp_c()` - geen nieuwe sensor-configuratie nodig).
+Bij afsluiten van het venster wordt het (gemiddelde temperatuur,
+totaal verbruik)-paar toegevoegd aan `temp_consumption_history`
+(rollend venster, `LEARNING_HISTORY_DAYS`).
+
+**Regressie**: nieuwe, gedeelde `_ols_fit()`-helper (gewone kleinste-
+kwadraten) door de (temperatuur, verbruik)-paren, vanaf minimaal 4
+samples (nieuwe constante `TEMP_CONSUMPTION_MIN_SAMPLES`).
+
+**Eerlijke, niet-lekkende validatie**: bij het afsluiten van elk
+nachtvenster wordt éérst - met de geschiedenis zoals die vóór die nacht
+al bekend was - voorspeld wat die nacht had moeten kosten, en pas
+dáárna wordt het nieuwe paar zelf toegevoegd aan de geschiedenis. Zo
+meet `temp_consumption_prediction_error_history` een eerlijke
+validatie (voorspellen met wat toen al bekend was), niet een achteraf-
+passende schijnnauwkeurigheid.
+
+`last_temp_consumption_note` toont in gewone taal wat er is voorspeld
+vs. wat er werkelijk gebeurde, elke nacht.
+
+**Getest** (9 permanente tests, `test_temp_consumption_regression.py`):
+`_ols_fit` correct op een bekende lijn, None bij te weinig punten/geen
+x-variatie; voorspelling correct kouder-is-meer-verbruik; venster-
+afsluiting sampelt temperatuur en voegt toe aan de geschiedenis; geen
+temperatuurmeting → geen toevoeging; validatie gebruikt uitsluitend
+eerder-bekende geschiedenis (niet-lekkend); geschiedenis begrensd tot
+het leervenster.

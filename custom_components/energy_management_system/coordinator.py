@@ -167,6 +167,12 @@ from .const import (
     WEATHER_ENSEMBLE_OVERPERFORM_RATIO,
     WEATHER_ENSEMBLE_MIN_SOLCAST_KW,
     LOW_SOLAR_RELATIVE_FRACTION,
+    LOW_SOLAR_FRACTION_LOW_SPREAD_THRESHOLD_PERCENT,
+    LOW_SOLAR_FRACTION_HIGH_SPREAD_THRESHOLD_PERCENT,
+    LOW_SOLAR_FRACTION_CONSISTENT,
+    LOW_SOLAR_FRACTION_DEFAULT,
+    LOW_SOLAR_FRACTION_UNRELIABLE,
+    TEMP_CONSUMPTION_MIN_SAMPLES,
     EXPENSIVE_PRICE_THRESHOLD_FRACTION,
     EXPENSIVE_PRICE_THRESHOLD_FRACTION_LOW_SOLAR,
     SECONDARY_EXPENSIVE_PRICE_THRESHOLD_FRACTION,
@@ -184,6 +190,7 @@ from .const import (
     FEEDIN_PREMIUM_EUR_PER_KWH,
     MPC_HORIZON_HOURS,
     MPC_MIN_MARGIN_EUR_PER_KWH,
+    LOW_SOLAR_EXTRA_DIP_MIN_MARGIN_EUR_PER_KWH,
     MONTE_CARLO_SIMULATIONS,
     MONTE_CARLO_MAX_HOURS,
     KALMAN_SOC_PROCESS_NOISE_KWH2,
@@ -416,6 +423,14 @@ class EnergyManagementSystemCoordinator:
         self._window_energy_kwh: float = 0.0
         self._window_duration_hours: float = 0.0
         self._window_last_sample: datetime | None = None
+        self._window_temp_samples: list[float] = []
+
+        # -- Temperatuur-verbruik-regressie (v0.63.88, "eerst
+        # observeren" - puur adviserend, stuurt de bestaande reserve-
+        # berekening nog op geen enkele manier aan) --
+        self.temp_consumption_history: list[dict] = []
+        self.temp_consumption_prediction_error_history: list[float] = []
+        self.last_temp_consumption_note: str | None = None
 
         # -- Full-day hourly consumption profile --
         # Learned continuously, all day every day (not just during the
@@ -618,6 +633,9 @@ class EnergyManagementSystemCoordinator:
         # energy was bought to cover the household, not to arbitrage.
         self._grid_charged_today: bool = False
         self._grid_charged_date: date | None = None
+        self.last_extra_dip_margin_eur_per_kwh: float | None = None
+        self.extra_dip_margin_history: list[float] = []
+        self._extra_dip_margin_last_sample_date: date | None = None
 
         # -- Negative price handling --
         self._is_negative_price_active: bool = False
@@ -2038,6 +2056,7 @@ class EnergyManagementSystemCoordinator:
                 self._window_energy_kwh = 0.0
                 self._window_duration_hours = 0.0
                 self._window_last_sample = now
+                self._window_temp_samples = []
                 return
 
             if self._window_last_sample is None:
@@ -2051,10 +2070,73 @@ class EnergyManagementSystemCoordinator:
             if power_w is not None and elapsed_hours > 0:
                 self._window_energy_kwh += (power_w / 1000) * elapsed_hours
                 self._window_duration_hours += elapsed_hours
+            # v0.63.88, temperatuur-verbruik-regressie (uitgebreid
+            # besproken, "eerst observeren" - puur adviserend, stuurt
+            # nog niets aan): buitentemperatuur meesamplen tijdens
+            # hetzelfde venster als het verbruik, voor de latere
+            # temperatuur-vs-verbruik-regressie.
+            outdoor_temp_c = self._get_live_outdoor_temp_c()
+            if outdoor_temp_c is not None:
+                self._window_temp_samples.append(outdoor_temp_c)
             self._window_last_sample = now
         else:
             if self._tracking_window_end is not None:
                 self._finalize_night_consumption_window()
+
+    @staticmethod
+    def _compute_trend_summary(history: list[float]) -> dict | None:
+        """Statistisch de meest verdedigbare manier om een genuine trend
+        in een korte, ruizige tijdreeks te detecteren (v0.63.88,
+        gevraagd: inzicht of nieuwe modellen/parameters nauwkeuriger/
+        stabieler worden over tijd) - een gewone kleinste-kwadraten-
+        regressielijn door de (dagindex, waarde)-punten, in plaats van
+        simpelweg de nieuwste met de oudste waarde te vergelijken (te
+        gevoelig voor één toevallig ruizig datapunt aan een van beide
+        uiteinden). Gebruikt alle beschikbare punten.
+
+        Het gerapporteerde %-verschil is het verschil dat de GEFITTE
+        lijn impliceert van begin tot eind van het venster - niet de
+        rauwe eindpunten zelf, die nog steeds ruis kunnen bevatten.
+
+        Retourneert None bij minder dan 3 punten (te weinig voor een
+        zinvolle trendlijn).
+        """
+        n = len(history)
+        if n < 3:
+            return None
+
+        xs = list(range(n))
+        x_mean = sum(xs) / n
+        y_mean = sum(history) / n
+        denominator = sum((x - x_mean) ** 2 for x in xs)
+        if denominator == 0:
+            return None
+        numerator = sum(
+            (x - x_mean) * (y - y_mean) for x, y in zip(xs, history)
+        )
+        slope = numerator / denominator
+        intercept = y_mean - slope * x_mean
+        fitted_start = intercept
+        fitted_end = intercept + slope * (n - 1)
+
+        if fitted_start == 0:
+            percent_change = None
+            richting = "stabiel"
+        else:
+            percent_change = round(
+                100 * (fitted_end - fitted_start) / abs(fitted_start), 1
+            )
+            if abs(percent_change) < 5:
+                richting = "stabiel"
+            elif percent_change > 0:
+                richting = "stijgend"
+            else:
+                richting = "dalend"
+
+        return {
+            "richting": richting,
+            "verschil_procent": percent_change,
+        }
 
     def _finalize_night_consumption_window(self) -> None:
         if self._window_duration_hours > 0:
@@ -2071,11 +2153,110 @@ class EnergyManagementSystemCoordinator:
                 avg_power_kw * 1000,
                 self.night_consumption_history,
             )
+            self._finalize_temp_consumption_regression(
+                self._window_temp_samples, self._window_energy_kwh
+            )
 
         self._tracking_window_end = None
         self._window_energy_kwh = 0.0
         self._window_duration_hours = 0.0
         self._window_last_sample = None
+        self._window_temp_samples = []
+
+    @staticmethod
+    def _ols_fit(xs: list[float], ys: list[float]) -> tuple[float, float] | None:
+        """Gewone kleinste-kwadraten-regressie (slope, intercept) door
+        (x, y)-puntenparen - de generieke rekenkern, hergebruikt door
+        de temperatuur-verbruik-regressie (v0.63.88). Retourneert None
+        bij minder dan 2 punten of als alle x-waarden identiek zijn
+        (geen variatie om een lijn doorheen te trekken).
+        """
+        n = len(xs)
+        if n < 2 or n != len(ys):
+            return None
+        x_mean = sum(xs) / n
+        y_mean = sum(ys) / n
+        denominator = sum((x - x_mean) ** 2 for x in xs)
+        if denominator == 0:
+            return None
+        numerator = sum((x - x_mean) * (y - y_mean) for x, y in zip(xs, ys))
+        slope = numerator / denominator
+        intercept = y_mean - slope * x_mean
+        return slope, intercept
+
+    def _predict_temp_consumption_kwh(self, temp_c: float) -> float | None:
+        """Verwacht nachtverbruik (kWh) bij een gegeven buitentemperatuur,
+        op basis van de tot nu toe geleerde (temperatuur, verbruik)-
+        paren. None zolang er nog niet genoeg geschiedenis is
+        (TEMP_CONSUMPTION_MIN_SAMPLES).
+        """
+        if len(self.temp_consumption_history) < TEMP_CONSUMPTION_MIN_SAMPLES:
+            return None
+        xs = [pair["temp_c"] for pair in self.temp_consumption_history]
+        ys = [pair["kwh"] for pair in self.temp_consumption_history]
+        fit = self._ols_fit(xs, ys)
+        if fit is None:
+            return None
+        slope, intercept = fit
+        return intercept + slope * temp_c
+
+    def _finalize_temp_consumption_regression(
+        self, temp_samples: list[float], window_energy_kwh: float
+    ) -> None:
+        """Temperatuur-verbruik-regressie voor extreme-koude-dagen
+        (v0.63.88, uitgebreid besproken en ontworpen door de gebruiker
+        na een analyse van 11 januari 2026 - het koudste etmaal van het
+        jaar). Puur adviserend ("eerst observeren" - expliciet zo
+        afgesproken): toont een verwachte-verbruik-schatting en of die
+        schatting nauwkeuriger wordt over tijd, maar beïnvloedt de
+        bestaande reserve-/dieptekort-berekening nog op geen enkele
+        manier.
+
+        Validatie-volgorde is bewust belangrijk: eerst wordt met de
+        REEDS BESTAANDE geschiedenis (dus zonder de zojuist afgeronde
+        nacht) voorspeld wat déze nacht had moeten kosten, en pas
+        daarna wordt de nieuwe (temperatuur, verbruik)-paar toegevoegd -
+        zo meet de nauwkeurigheids-geschiedenis een eerlijke,
+        niet-lekkende validatie (voorspellen met wat toen al bekend
+        was), niet een achteraf-passende schijnnauwkeurigheid.
+        """
+        if not temp_samples:
+            self.last_temp_consumption_note = (
+                "Geen buitentemperatuurmeting beschikbaar tijdens dit "
+                "venster - geen sample toegevoegd."
+            )
+            return
+
+        avg_temp_c = sum(temp_samples) / len(temp_samples)
+
+        predicted_kwh = self._predict_temp_consumption_kwh(avg_temp_c)
+        if predicted_kwh is not None and predicted_kwh > 0:
+            error_percent = round(
+                100 * (window_energy_kwh - predicted_kwh) / predicted_kwh, 1
+            )
+            self.temp_consumption_prediction_error_history.append(abs(error_percent))
+            self.temp_consumption_prediction_error_history = (
+                self.temp_consumption_prediction_error_history[-LEARNING_HISTORY_DAYS:]
+            )
+            self.last_temp_consumption_note = (
+                f"Voorspeld {predicted_kwh:.2f} kWh bij {avg_temp_c:.1f}°C, "
+                f"werkelijk {window_energy_kwh:.2f} kWh "
+                f"(afwijking {error_percent:+.1f}%)."
+            )
+        else:
+            self.last_temp_consumption_note = (
+                f"Nog niet genoeg geschiedenis ({len(self.temp_consumption_history)}/"
+                f"{TEMP_CONSUMPTION_MIN_SAMPLES}) voor een voorspelling deze nacht."
+            )
+
+        self.temp_consumption_history.append(
+            {"temp_c": round(avg_temp_c, 1), "kwh": round(window_energy_kwh, 2)}
+        )
+        self.temp_consumption_history = self.temp_consumption_history[
+            -LEARNING_HISTORY_DAYS:
+        ]
+
+
 
     # -- Full-day hourly consumption profile ------------------------------
 
@@ -3434,6 +3615,31 @@ class EnergyManagementSystemCoordinator:
         )
         return scaled
 
+    def _get_low_solar_relative_fraction(self) -> float:
+        """De fractie van de geleerde "typische dag" die als "weinig
+        zon" geldt - beweegt mee met hoe consistent de (bias-
+        gecorrigeerde) voorspelling recent is gebleken (v0.63.87,
+        uitgebreid besproken en ontworpen door de gebruiker).
+
+        Consistente voorspellingen (lage spreiding) verdienen meer
+        vertrouwen: een ruimere fractie, minder snel "laag"
+        gealarmeerd. Wisselvallige voorspellingen (hoge spreiding)
+        vragen om meer voorzichtigheid: een kleinere fractie, sneller
+        "laag" gealarmeerd bij twijfel. Valt terug op de vaste
+        standaardfractie zolang er nog niet genoeg samples zijn voor
+        een betrouwbare standaarddeviatie.
+        """
+        stdev_percent = (
+            self.solar_tracker.deviation_stdev_percent if self.solar_tracker else None
+        )
+        if stdev_percent is None:
+            return LOW_SOLAR_RELATIVE_FRACTION
+        if stdev_percent < LOW_SOLAR_FRACTION_LOW_SPREAD_THRESHOLD_PERCENT:
+            return LOW_SOLAR_FRACTION_CONSISTENT
+        if stdev_percent > LOW_SOLAR_FRACTION_HIGH_SPREAD_THRESHOLD_PERCENT:
+            return LOW_SOLAR_FRACTION_UNRELIABLE
+        return LOW_SOLAR_FRACTION_DEFAULT
+
     def _is_forecast_value_low(self, forecast_kwh_raw: float | None) -> bool:
         """Is a given raw daily forecast value (kWh) "low", bias-corrected
         and compared against a learned dynamic threshold when enough
@@ -3459,7 +3665,7 @@ class EnergyManagementSystemCoordinator:
             else None
         )
         if learned_typical_kwh is not None:
-            threshold_kwh = learned_typical_kwh * LOW_SOLAR_RELATIVE_FRACTION
+            threshold_kwh = learned_typical_kwh * self._get_low_solar_relative_fraction()
         else:
             threshold_kwh = float(
                 self.config.get(
@@ -4096,7 +4302,12 @@ class EnergyManagementSystemCoordinator:
             self.current_month_discharge_value_eur += value_eur
             self.total_feedin_premium_eur += feedin_premium_eur
         elif (
-            reason in ("grid_charging_low_solar", "emergency_low_battery")
+            reason
+            in (
+                "grid_charging_low_solar",
+                "grid_charging_low_solar_extra_dip",
+                "emergency_low_battery",
+            )
             and charge_power_w
         ):
             energy_kwh = (abs(charge_power_w) / 1000) * elapsed_hours
@@ -6289,6 +6500,26 @@ class EnergyManagementSystemCoordinator:
 
         self.advisory_readiness = readiness
 
+    def _get_best_remaining_price_today_eur(
+        self, entries: list[PriceEntry], now: datetime
+    ) -> float | None:
+        """Hoogste prijs (€/kWh) onder de resterende kwartieren van
+        VANDAAG (tot middernacht) - gebruikt door de extra-dip-laad-
+        marge-check (v0.63.87). Bewust begrensd tot vandaag, niet
+        verder de nacht in: de winter-guard-vlag (waarvoor deze marge
+        de poort is) reset zelf ook om middernacht, dus "later vandaag"
+        is de enige relevante vergelijking hier.
+        """
+        end_of_today = datetime.combine(
+            now.date(), datetime.max.time(), tzinfo=now.tzinfo
+        )
+        remaining_today = [
+            entry for entry in entries if now <= entry[0] < end_of_today
+        ]
+        if not remaining_today:
+            return None
+        return max(entry[2] for entry in remaining_today) / PRICE_SCALE_FACTOR
+
     def _cheapest_block_range(
         self, entries: list[PriceEntry], now: datetime
     ) -> tuple[datetime | None, datetime | None]:
@@ -6734,6 +6965,22 @@ class EnergyManagementSystemCoordinator:
                 "Er wordt weinig zon verwacht, dus tijdens dit goedkoopste "
                 "moment van de dag wordt er actief bijgeladen vanaf het net "
                 "(manual, negatief vermogen) in plaats van te wachten op zon."
+            )
+
+        elif reason == "grid_charging_low_solar_extra_dip":
+            margin_txt = (
+                f"{self.last_extra_dip_margin_eur_per_kwh:.3f} €/kWh"
+                if self.last_extra_dip_margin_eur_per_kwh is not None
+                else "onbekend"
+            )
+            parts.append(
+                "Er wordt weinig zon verwacht vandaag, en dit is een aparte, "
+                "losse prijsdip buiten het hoofd-goedkope blok - maar "
+                "aantoonbaar voordeliger dan wachten tot het duurste "
+                f"resterende moment vandaag (marge, na rendementsverlies: "
+                f"{margin_txt}). Daarom wordt er nu ook actief bijgeladen "
+                "vanaf het net. Deze energie wordt vandaag niet meer "
+                "verkocht (winter-guard)."
             )
 
         elif reason == "emergency_low_battery":
@@ -7300,6 +7547,71 @@ class EnergyManagementSystemCoordinator:
             self._update_shortfall_detection(now, self.last_reason, self.last_available_kwh, self.last_needed_kwh_to_bridge)
             self._finish_decision_tick(now)
             return
+
+        # Extra-dip laden op weinig-zon-dagen (v0.63.87, uitgebreid
+        # besproken en ontworpen door de gebruiker). Buiten het
+        # hoofdblok (should_force_charge hierboven al niet gevuurd),
+        # maar alleen relevant wanneer het al een weinig-zon-dag is
+        # (dezelfde genuine behoefte als het hoofdblok) - een aparte,
+        # losse prijsdip elders vandaag die aantoonbaar voordeliger is
+        # dan het duurste resterende moment, na rendementsverlies.
+        # Bewust GEEN `not self._grid_charged_today`-poort: op een
+        # weinig-zon-dag heeft het hoofdblok (vroeg op de dag) die vlag
+        # vrijwel altijd al gezet, dus zo'n poort zou dit mechanisme in
+        # de praktijk onbereikbaar maken. De vlag is bedoeld om later
+        # VERKOPEN te onderdrukken (winter-guard), niet om verder LADEN
+        # te blokkeren - meer bijladen wanneer aantoonbaar voordelig is
+        # blijft prima, ongeacht of er die dag al eerder is bijgeladen.
+        # Bewust GEEN rendement-check op het hoofdblok zelf (expliciet
+        # zo gevraagd - dat is al per definitie het goedkoopste moment
+        # van de dag) - alleen hier, waar dit een echte
+        # winst-vergelijking is, niet een gegarandeerde-behoefte-check.
+        self.last_extra_dip_margin_eur_per_kwh = None
+        if is_low_solar and not in_cheap_block:
+            efficiency_percent = self.learned_battery_efficiency_percent
+            if efficiency_percent is None:
+                efficiency_percent = float(
+                    self.config.get(
+                        CONF_BATTERY_ROUND_TRIP_EFFICIENCY,
+                        DEFAULT_BATTERY_ROUND_TRIP_EFFICIENCY_PERCENT,
+                    )
+                )
+            efficiency = efficiency_percent / 100
+            best_remaining_price_eur = self._get_best_remaining_price_today_eur(
+                entries, now
+            )
+            if best_remaining_price_eur is not None and current_price_per_kwh is not None:
+                margin_eur_per_kwh = (
+                    efficiency * best_remaining_price_eur
+                ) - current_price_per_kwh
+                self.last_extra_dip_margin_eur_per_kwh = round(margin_eur_per_kwh, 4)
+                # v0.63.88, gevraagd: inzicht of de marge over tijd
+                # groter/kleiner wordt. Eén sample per dag (niet elke
+                # tick - de marge wordt elke tick herberekend zolang de
+                # voorwaarden gelden, dat zou de geschiedenis met
+                # bijna-identieke waarden overspoelen).
+                if self._extra_dip_margin_last_sample_date != now.date():
+                    self._extra_dip_margin_last_sample_date = now.date()
+                    self.extra_dip_margin_history.append(
+                        self.last_extra_dip_margin_eur_per_kwh
+                    )
+                    self.extra_dip_margin_history = self.extra_dip_margin_history[
+                        -LEARNING_HISTORY_DAYS:
+                    ]
+                if margin_eur_per_kwh >= LOW_SOLAR_EXTRA_DIP_MIN_MARGIN_EUR_PER_KWH:
+                    charge_power = self.config.get(
+                        CONF_MANUAL_CHARGE_POWER, DEFAULT_MANUAL_CHARGE_POWER
+                    )
+                    await self._async_apply_manual(charge_power)
+                    self.last_reason = "grid_charging_low_solar_extra_dip"
+                    self._grid_charged_today = True
+                    self.last_charge_power_applied = charge_power
+                    self._update_financial_tracking(
+                        now, entries, self.last_reason, None, charge_power
+                    )
+                    self._update_shortfall_detection(now, self.last_reason, self.last_available_kwh, self.last_needed_kwh_to_bridge)
+                    self._finish_decision_tick(now)
+                    return
 
         # Emergency top-up: the battery is critically low right now,
         # regardless of price timing. Don't passively wait for the cheap

@@ -165,6 +165,30 @@ def _fake_state_attr(entity, attr):
                 "waarschijnlijk_waterontharder": True,
             },
         ],
+        (
+            "sensor.woonkamer_energy_management_system_model_en_parameternauwkeurigheid",
+            "zon_voorspelling_spreiding_trend",
+        ): {"richting": "dalend", "verschil_procent": -12.5},
+        (
+            "sensor.woonkamer_energy_management_system_model_en_parameternauwkeurigheid",
+            "zon_voorspelling_spreiding_procent",
+        ): 14.0,
+        (
+            "sensor.woonkamer_energy_management_system_model_en_parameternauwkeurigheid",
+            "extra_dip_marge_trend",
+        ): {"richting": "stijgend", "verschil_procent": 8.0},
+        (
+            "sensor.woonkamer_energy_management_system_model_en_parameternauwkeurigheid",
+            "extra_dip_marge_eur_per_kwh",
+        ): 0.07,
+        (
+            "sensor.woonkamer_energy_management_system_model_en_parameternauwkeurigheid",
+            "temperatuur_regressie_nauwkeurigheid_trend",
+        ): {"richting": "dalend", "verschil_procent": -20.0},
+        (
+            "sensor.woonkamer_energy_management_system_model_en_parameternauwkeurigheid",
+            "temperatuur_regressie_note",
+        ): "Voorspeld 5.2 kWh bij -3.0°C, werkelijk 5.5 kWh (afwijking +5.8%).",
     }
     return fake_data.get((entity, attr))
 

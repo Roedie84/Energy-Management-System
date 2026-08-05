@@ -63,6 +63,7 @@ MODE_CHANGE_EMOJI = {
     "expensive_quarter": "💰⬇️",
     "expensive_quarter_soc_protected": "🛡️",
     "grid_charging_low_solar": "⚡⬆️",
+    "grid_charging_low_solar_extra_dip": "⚡🔎",
     "emergency_low_battery": "🚨",
     "negative_price": "🎁⬆️",
     "discharging_window": "⏳",
@@ -149,8 +150,43 @@ EXTENDED_LOW_SOLAR_MARGIN_BONUS_PER_DAY = 5.0
 # solar" threshold is derived from the installation's own learned typical
 # forecast instead of the fixed CONF_LOW_SOLAR_THRESHOLD_KWH fallback.
 MIN_SOLAR_HISTORY_FOR_DYNAMIC_THRESHOLD = 3
+
 # "Low" = below this fraction of the learned typical forecast.
-LOW_SOLAR_RELATIVE_FRACTION = 0.4
+#
+# v0.63.87, uitgebreid besproken en ontworpen door de gebruiker: deze
+# fractie is niet langer vast, maar beweegt mee met hoe CONSISTENT de
+# (bias-gecorrigeerde) voorspelling recent is gebleken - een
+# standaarddeviatie van `deviation_history` (al bestaande, ruwe
+# afwijkingsdata, tot nu toe alleen gebruikt voor het gemiddelde/de
+# systematische bias). Consistente voorspellingen verdienen meer
+# vertrouwen (een ruimere fractie, minder snel "laag" gealarmeerd);
+# wisselvallige voorspellingen vragen om meer voorzichtigheid (een
+# kleinere fractie, sneller "laag" gealarmeerd bij twijfel). Bewust
+# vaste, uitlegbare niveaus (net als de rest van deze integratie) in
+# plaats van een continue formule - drie simpele stappen, geen
+# "black box".
+LOW_SOLAR_RELATIVE_FRACTION = 0.4  # terugval zonder genoeg spreidingsdata
+LOW_SOLAR_FRACTION_LOW_SPREAD_THRESHOLD_PERCENT = 10.0
+LOW_SOLAR_FRACTION_HIGH_SPREAD_THRESHOLD_PERCENT = 25.0
+LOW_SOLAR_FRACTION_CONSISTENT = 0.6  # stdev < 10%: vertrouw ruimer
+LOW_SOLAR_FRACTION_DEFAULT = 0.4  # stdev 10-25%: huidige, voorzichtige standaard
+LOW_SOLAR_FRACTION_UNRELIABLE = 0.3  # stdev > 25%: extra conservatief
+# Minimaal aantal samples voor een zinvolle standaarddeviatie - iets
+# hoger dan MIN_SOLAR_HISTORY_FOR_DYNAMIC_THRESHOLD zelf, voor een
+# stabielere spreidingsschatting (2 samples geven een zeer ruizige
+# stdev).
+MIN_SOLAR_HISTORY_FOR_SPREAD_BASED_FRACTION = 5
+
+# Temperatuur-verbruik-regressie voor extreme-koude-dagen (v0.63.88,
+# uitgebreid besproken en ontworpen door de gebruiker na een analyse
+# van 11 januari 2026 - het koudste etmaal van het jaar). Puur
+# adviserend ("eerst observeren", expliciet zo afgesproken) - toont een
+# verwachte-verbruik-schatting en of die nauwkeuriger wordt over tijd,
+# maar beïnvloedt de bestaande reserve-/dieptekort-berekening nog op
+# geen enkele manier. Minimaal aantal (temperatuur, verbruik)-paren
+# voordat er een voorspelling wordt gedaan - een regressie door te
+# weinig punten is zelf onbetrouwbaar.
+TEMP_CONSUMPTION_MIN_SAMPLES = 4
 
 # Dynamic "expensive quarter" threshold: a quarter counts as expensive if
 # its price is within this fraction of today's price *range* from the
@@ -525,6 +561,22 @@ MEASUREMENT_QUALITY_DEGRADED_THRESHOLD = 50
 MPC_HORIZON_HOURS = 48
 MPC_MIN_MARGIN_EUR_PER_KWH = 0.03
 
+# Extra-dip laden op weinig-zon-dagen (v0.63.87, uitgebreid besproken en
+# ontworpen door de gebruiker). Sinds v0.63.77 laadt het systeem tijdens
+# een weinig-zon-dag alleen nog gedwongen bij binnen het ene, hoofd-
+# goedkope blok van de dag (`should_force_charge`) - een aparte, losse
+# prijsdip elders die dag (buiten dat blok) werd volledig genegeerd,
+# ook al zou bijladen daar aantoonbaar voordeliger zijn dan wachten.
+# Bewust géén algemene comeback van het verwijderde arbitrage-
+# mechanisme (dat was altijd actief, ongeacht behoefte) - dit vuurt
+# uitsluitend wanneer `_is_low_solar_expected()` al `True` is (dus de
+# accu toch al gedwongen van het net bijlaadt vanwege een genuine
+# behoefte), en gebruikt dezelfde rendement-gecorrigeerde marge-check
+# als het oude mechanisme. Bewust géén rendement-check op het
+# hoofdblok zelf (expliciet zo gevraagd) - dat blijft ongewijzigd,
+# want dat is per definitie al het goedkoopste moment van de dag.
+LOW_SOLAR_EXTRA_DIP_MIN_MARGIN_EUR_PER_KWH = 0.03
+
 # Monte Carlo advisory engine (v0.63.34). Advisory ONLY - never sends a
 # device command, never overrides the existing decision tree. Bootstrap-
 # resamples the empirical distributions already collected for
@@ -624,6 +676,7 @@ REASON_TO_MODE = {
     "negative_price": OPTION_MANUAL,
     "emergency_low_battery": OPTION_MANUAL,
     "grid_charging_low_solar": OPTION_MANUAL,
+    "grid_charging_low_solar_extra_dip": OPTION_MANUAL,
     "discharging_window": OPTION_SMART_DISCHARGING,
     "arbitrage_solar_capture": OPTION_SMART,
     "default_smart": OPTION_SMART,
