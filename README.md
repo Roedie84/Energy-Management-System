@@ -260,18 +260,27 @@ dan het gewenste vermogen, **en zou de accu anders in de gewone
 zon toch al zelf op via P1-volgend laden, geen reden om dat te
 verstoren met een geforceerde manual-modus.
 
-**Uitzondering, gevonden n.a.v. een gerapporteerd geval (v0.63.59):**
+**Uitzondering, gevonden n.a.v. een gerapporteerd geval (v0.63.59/.60):**
 "accu wordt weer ingesteld op smart_discharging terwijl ik juist wil
 doorladen" — de zon-prioriteit-aanname hierboven ging er stilzwijgend
 van uit dat de terugval-modus altijd `smart` zou zijn. Zou de accu bij
 het uitblijven van arbitrage in plaats daarvan `smart_discharging`
 ("laden uitstellen") ingaan, dan klopt die aanname niet — die modus
 dekt alleen het huishoudverbruik en laadt (bevestigd met de gebruiker)
-juist **niet** bij vanuit een zonoverschot. In dat specifieke geval
-koopt arbitrage-laden nu het volle gewenste vermogen in, zodat het
-zonoverschot alsnog wordt vastgelegd in plaats van onbenut te blijven —
-de fysieke PV/net-verdeling gebeurt vanzelf bij de meter, er wordt dus
-niet meer van het net gekocht dan nodig.
+juist **niet** bij vanuit een zonoverschot.
+
+v0.63.59 loste dit eerst op door in dat geval het volle gewenste
+laadvermogen via **manual**-modus in te kopen — teruggekoppeld dat dit
+de verkeerde modus was ("moet naar smart niet naar manual"): er is
+namelijk helemaal geen actieve netaankoop nodig (het zonoverschot dekt
+het doelvermogen al volledig), dus manual-modus afdwingen was zwaarder
+dan nodig. v0.63.60 schakelt in dit specifieke geval in plaats daarvan
+gewoon over naar de gewone **`smart`**-modus (reden:
+`arbitrage_solar_capture`) — die vangt het zonoverschot vanzelf op via
+P1-volgend laden, precies zoals ze dat altijd al doet wanneer er geen
+sprake is van "laden uitstellen". Geen handmatig commando, geen
+expliciete netaankoop — dit voorkomt alleen dat `smart_discharging`
+gratis zon zou laten liggen.
 
 Zet **nooit** de winter-guard-vlag (`_grid_charged_today`) — dat
 mechanisme bestaat om te voorkomen dat noodzakelijk gekochte energie

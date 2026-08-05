@@ -297,6 +297,7 @@ class EnergyManagementSystemCoordinator:
         self.last_arbitrage_margin_eur_per_kwh: float | None = None
         self.last_arbitrage_solar_surplus_w: float | None = None
         self.last_arbitrage_grid_power_w: float | None = None
+        self._arbitrage_wants_smart_over_postpone: bool = False
         # If True: compute and learn everything as normal, but never send
         # commands to the Zendure entities. Set via a dedicated switch.
         self.learning_only: bool = False
@@ -2794,8 +2795,10 @@ class EnergyManagementSystemCoordinator:
         today and buying now is profitable even after round-trip losses
         (reported: 'nu tegen 21 ct niet laden en dan vanavond wat meer
         tegen dure uren ontladen' - the margin was being left on the
-        table). Returns None if arbitrage charging is disabled or not
-        profitable right now.
+        table). Returns None if arbitrage charging is disabled, not
+        profitable right now, or no active grid purchase is actually
+        needed (see `_arbitrage_wants_smart_over_postpone` below for
+        that last case, v0.63.60).
 
         Deliberately solar-first (reported: 'tijdens goedkope uren
         vooral zonne-energie blijft opslaan'): if the fallback mode
@@ -2805,23 +2808,32 @@ class EnergyManagementSystemCoordinator:
         gets captured by that mode's own P1-following, so only the
         shortfall needs an explicit manual command.
 
-        v0.63.59, reported ('accu wordt weer ingesteld op
+        v0.63.59/.60, reported ('accu wordt weer ingesteld op
         smart_discharging terwijl ik juist wil doorladen'): that
         solar-first assumption silently broke down whenever the
         fallback would instead be OPTION_SMART_DISCHARGING
         (`should_postpone_charging=True`) - confirmed with the person
         that mode covers household load only and does NOT charge from
         surplus solar, so a large solar surplus that would fully cover
-        the desired rate was being left completely unused (not even
-        exported productively into the battery) instead of captured.
-        In that specific case, this now commands the *full* target
-        charge rate rather than just the grid-shortfall gap - the
-        physical PV/grid split still happens naturally at the meter
-        (solar covers what it can, grid tops up the rest), so this
-        doesn't buy more from the grid than actually needed, it just
-        stops discarding free solar that smart_discharging wouldn't
-        otherwise capture.
+        the desired rate was being left completely unused instead of
+        captured.
+
+        v0.63.59 first fixed this by forcing a manual charge at the
+        full target rate - reported back that this was the wrong mode
+        (should be `smart`, not `manual`): there's no actual grid
+        purchase needed here (solar alone covers the target), so
+        forcing manual mode was heavier-handed than necessary. v0.63.60
+        instead sets `self._arbitrage_wants_smart_over_postpone = True`
+        and returns None - the caller uses this signal to apply
+        OPTION_SMART instead of OPTION_SMART_DISCHARGING, letting that
+        mode's own P1-following capture the solar naturally, exactly
+        like it already does whenever should_postpone_charging is
+        False. No manual command, no explicit grid purchase - this
+        only ever stops smart_discharging from discarding solar that
+        smart mode would have captured anyway.
         """
+        self._arbitrage_wants_smart_over_postpone = False
+
         if not self.arbitrage_charging_enabled:
             return None
         if self.last_current_price_per_kwh is None:
@@ -2863,17 +2875,16 @@ class EnergyManagementSystemCoordinator:
         grid_power_w = max(0.0, target_power_w - solar_surplus_w)
         self.last_arbitrage_grid_power_w = round(grid_power_w, 1)
         if grid_power_w < MIN_ARBITRAGE_GRID_POWER_W:
-            if not should_postpone_charging:
-                # Solar surplus already covers (most of) the desired
-                # rate, and the fallback here is OPTION_SMART - let its
-                # own P1-following capture it, rather than disrupting
-                # that for a trickle of grid power.
-                return None
-            # The fallback here would instead be smart_discharging,
-            # which doesn't capture solar surplus at all - command the
-            # full target rate so that surplus actually gets used
-            # instead of discarded.
-            return target_power_w
+            if should_postpone_charging:
+                # The fallback here would be smart_discharging, which
+                # doesn't capture solar surplus at all - signal the
+                # caller to use plain smart mode instead, rather than
+                # forcing a manual command for energy that mode would
+                # capture on its own anyway.
+                self._arbitrage_wants_smart_over_postpone = True
+            # Solar surplus already covers (most of) the desired rate -
+            # no active grid purchase needed either way.
+            return None
 
         return grid_power_w
 
@@ -6969,6 +6980,23 @@ class EnergyManagementSystemCoordinator:
             self._update_financial_tracking(
                 now, entries, self.last_reason, None, -arbitrage_power
             )
+            self._update_shortfall_detection(now, self.last_reason, self.last_available_kwh, self.last_needed_kwh_to_bridge)
+            self._finish_decision_tick(now)
+            return
+
+        if should_postpone_charging and self._arbitrage_wants_smart_over_postpone:
+            # v0.63.60, reported ('moet naar smart niet naar manual') -
+            # solar surplus alone already covers the desired arbitrage
+            # charge rate, and smart_discharging (the plain postpone
+            # fallback) wouldn't capture it at all. No active grid
+            # purchase is needed here - just don't let that free solar
+            # go to waste by staying in smart_discharging. Plain
+            # OPTION_SMART's own P1-following captures it naturally,
+            # exactly like it always does when should_postpone_charging
+            # is False - no manual command involved.
+            await self._async_apply_operation(OPTION_SMART)
+            self.last_reason = "arbitrage_solar_capture"
+            self._update_financial_tracking(now, entries, self.last_reason, None, None)
             self._update_shortfall_detection(now, self.last_reason, self.last_available_kwh, self.last_needed_kwh_to_bridge)
             self._finish_decision_tick(now)
             return

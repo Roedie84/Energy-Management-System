@@ -125,16 +125,19 @@ def test_solar_surplus_fully_covers_target_no_grid_purchase(make_coordinator, ha
 def test_solar_surplus_fully_covers_target_but_would_otherwise_be_wasted(
     make_coordinator, hass
 ):
-    """v0.63.59, reported ('accu wordt weer ingesteld op
-    smart_discharging terwijl ik juist wil doorladen'): confirmed with
-    the person that smart_discharging does NOT charge from surplus
-    solar (unlike OPTION_SMART) - so when the fallback here would be
+    """v0.63.59/.60, reported ('accu wordt weer ingesteld op
+    smart_discharging terwijl ik juist wil doorladen', daarna: 'moet
+    naar smart niet naar manual'): confirmed with the person that
+    smart_discharging does NOT charge from surplus solar (unlike
+    OPTION_SMART) - so when the fallback here would be
     smart_discharging (should_postpone_charging=True), a solar surplus
     that fully covers the desired rate must NOT be waved off the same
-    way - it would otherwise go completely unused. Must charge at the
-    full target rate instead (the PV/grid split still happens
-    naturally at the meter, this doesn't buy more from the grid than
-    needed).
+    way - it would otherwise go completely unused. v0.63.60: rather
+    than forcing a manual charge, this returns None (no active grid
+    purchase needed - solar alone covers it) and signals via
+    `_arbitrage_wants_smart_over_postpone` that the caller should use
+    plain OPTION_SMART instead of OPTION_SMART_DISCHARGING, letting
+    that mode's own P1-following capture the solar naturally.
 
     Calls `_get_arbitrage_charge_power` directly with
     should_postpone_charging=True, rather than through the full update
@@ -158,7 +161,8 @@ def test_solar_surplus_fully_covers_target_but_would_otherwise_be_wasted(
         entries, now, should_postpone_charging=True
     )
 
-    assert result == 2000.0
+    assert result is None
+    assert coordinator._arbitrage_wants_smart_over_postpone is True
 
 
 def test_solar_surplus_fully_covers_target_and_smart_mode_would_capture_it(
@@ -184,6 +188,7 @@ def test_solar_surplus_fully_covers_target_and_smart_mode_would_capture_it(
     )
 
     assert result is None
+    assert coordinator._arbitrage_wants_smart_over_postpone is False
 
 
 def test_solar_surplus_partially_covers_only_buys_the_gap(make_coordinator, hass):
@@ -230,6 +235,44 @@ def test_arbitrage_overrides_postpone_charging(make_coordinator, hass):
     asyncio.run(coordinator._async_update_locked())
 
     assert coordinator.last_reason == "arbitrage_charging"
+
+
+def test_solar_capture_signal_switches_to_smart_not_manual(make_coordinator, hass):
+    """v0.63.60, reported ('moet naar smart niet naar manual'): when
+    _get_arbitrage_charge_power signals _arbitrage_wants_smart_over_
+    postpone (solar surplus would otherwise be wasted under
+    smart_discharging), the full decision tick must apply OPTION_SMART
+    - not force a manual charge - with a distinct reason label.
+
+    Monkeypatches both _should_postpone_charging (to force the
+    should_postpone_charging=True precondition directly, rather than
+    depending on a realistic reserve/cheap-block scenario that turned
+    out not to reliably produce it with this fixture's price shape)
+    and _get_arbitrage_charge_power (to isolate this decision-tree
+    branch from the unrelated live solar-surplus arithmetic already
+    covered by the unit tests above).
+    """
+    coordinator = _make_ready_coordinator(make_coordinator, hass)
+    coordinator.arbitrage_charging_enabled = True
+
+    def fake_should_postpone(entries, now, cheap_block_start):
+        return True
+
+    def fake_get_arbitrage_charge_power(entries, now, should_postpone_charging):
+        coordinator._arbitrage_wants_smart_over_postpone = should_postpone_charging
+        return None
+
+    coordinator._should_postpone_charging = fake_should_postpone
+    coordinator._get_arbitrage_charge_power = fake_get_arbitrage_charge_power
+
+    with_now(coordinator, DAY0.replace(hour=13, minute=0))
+    asyncio.run(coordinator._async_update_locked())
+
+    assert coordinator.last_reason == "arbitrage_solar_capture"
+    apply_operation_calls = [
+        c for c in hass.services.calls if c[0] == "select" and c[1] == "select_option"
+    ]
+    assert apply_operation_calls[-1][2]["option"] == "smart"
 
 
 def test_no_arbitrage_without_more_price_data_today(make_coordinator, hass):

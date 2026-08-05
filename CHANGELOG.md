@@ -4727,3 +4727,42 @@ testen van de (ongerelateerde) reserve-berekening die
 `should_postpone_charging=True` → nu het volle doelvermogen; hetzelfde
 scenario met `should_postpone_charging=False` → nog steeds `None`
 (oorspronkelijk, correct gedrag voor de `smart`-terugval blijft intact).
+
+## v0.63.60 — zonoverschot vastleggen via smart-modus, niet manual
+
+**Teruggekoppeld direct na v0.63.59:** "Nee met arbitrage aan moet hij
+naar smart niet naar manual" — de vorige fix loste het probleem
+(zonoverschot bleef onbenut tijdens smart_discharging) inhoudelijk al
+op, maar deed dat door een geforceerde **manual**-laadopdracht op het
+volle doelvermogen. Dat was zwaarder dan nodig: er is in dit scenario
+namelijk helemaal geen actieve netaankoop nodig, het zonoverschot dekt
+het doelvermogen al volledig uit zichzelf.
+
+**Fix**: `_get_arbitrage_charge_power()` geeft nu in dit specifieke
+geval `None` terug (geen netaankoop nodig) en zet een nieuwe vlag,
+`_arbitrage_wants_smart_over_postpone`. De hoofdbeslisboom herkent die
+vlag en schakelt dan gewoon over naar de gewone **`smart`**-modus
+(nieuwe reden: `arbitrage_solar_capture`) in plaats van
+`smart_discharging` — die vangt het zonoverschot vanzelf op via
+P1-volgend laden, exact zoals ze dat altijd al doet wanneer er geen
+sprake is van laden uitstellen. Geen handmatig commando, geen
+expliciete netaankoop.
+
+**Tijdens het testen ontdekt**: de bestaande testfixture
+(`_price_fn_cheap_now_expensive_later`, cheap vóór 14u) bleek "nu" zélf
+al als het goedkoopste moment van de dag te zien, waardoor
+`should_postpone_charging` er nooit betrouwbaar op `True` mee te
+forceren was via de gebruikelijke techniek (een vlak, laag
+verbruiksprofiel) — dat verklaarde ook waarom een eerdere test
+toevallig slaagde: arbitrage vuurde daar sowieso al af, ongeacht wat
+`should_postpone_charging` deed. De nieuwe test isoleert dit daarom
+netjes door `_should_postpone_charging` zelf te monkeypatchen naar
+`True`, in plaats van op een toevallig scenario te vertrouwen.
+
+**Getest** (2 nieuwe/bijgewerkte permanente tests in
+`test_arbitrage_charging.py`): de "zon dekt het doelvermogen al"-cases
+geven nu `None` + de juiste vlag terug (in beide varianten: met en
+zonder `should_postpone_charging`); en een end-to-end-test die
+bevestigt dat de volledige beslisboom bij die vlag daadwerkelijk
+`select.select_option` met `option: smart` aanroept, met reden
+`arbitrage_solar_capture` — niet `manual`.
