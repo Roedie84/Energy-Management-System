@@ -912,10 +912,6 @@ views:
               service: button.press
               target:
                 entity_id: button.woonkamer_energy_management_system_nilm_kandidaat_1_bevestigen
-            visibility:
-              - condition: template
-                value_template: >-
-                  {{ state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_1_bevestigen', 'kandidaat_entity_id') is not none }}
             grid_options:
               columns: 6
               rows: 1
@@ -933,10 +929,6 @@ views:
               service: button.press
               target:
                 entity_id: button.woonkamer_energy_management_system_nilm_kandidaat_1_negeren
-            visibility:
-              - condition: template
-                value_template: >-
-                  {{ state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_1_negeren', 'kandidaat_entity_id') is not none }}
             grid_options:
               columns: 6
               rows: 1
@@ -954,10 +946,6 @@ views:
               service: button.press
               target:
                 entity_id: button.woonkamer_energy_management_system_nilm_kandidaat_2_bevestigen
-            visibility:
-              - condition: template
-                value_template: >-
-                  {{ state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_2_bevestigen', 'kandidaat_entity_id') is not none }}
             grid_options:
               columns: 6
               rows: 1
@@ -975,10 +963,6 @@ views:
               service: button.press
               target:
                 entity_id: button.woonkamer_energy_management_system_nilm_kandidaat_2_negeren
-            visibility:
-              - condition: template
-                value_template: >-
-                  {{ state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_2_negeren', 'kandidaat_entity_id') is not none }}
             grid_options:
               columns: 6
               rows: 1
@@ -996,10 +980,6 @@ views:
               service: button.press
               target:
                 entity_id: button.woonkamer_energy_management_system_nilm_kandidaat_3_bevestigen
-            visibility:
-              - condition: template
-                value_template: >-
-                  {{ state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_3_bevestigen', 'kandidaat_entity_id') is not none }}
             grid_options:
               columns: 6
               rows: 1
@@ -1017,10 +997,6 @@ views:
               service: button.press
               target:
                 entity_id: button.woonkamer_energy_management_system_nilm_kandidaat_3_negeren
-            visibility:
-              - condition: template
-                value_template: >-
-                  {{ state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_3_negeren', 'kandidaat_entity_id') is not none }}
             grid_options:
               columns: 6
               rows: 1
@@ -1038,10 +1014,6 @@ views:
               service: button.press
               target:
                 entity_id: button.woonkamer_energy_management_system_nilm_kandidaat_4_bevestigen
-            visibility:
-              - condition: template
-                value_template: >-
-                  {{ state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_4_bevestigen', 'kandidaat_entity_id') is not none }}
             grid_options:
               columns: 6
               rows: 1
@@ -1059,10 +1031,6 @@ views:
               service: button.press
               target:
                 entity_id: button.woonkamer_energy_management_system_nilm_kandidaat_4_negeren
-            visibility:
-              - condition: template
-                value_template: >-
-                  {{ state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_4_negeren', 'kandidaat_entity_id') is not none }}
             grid_options:
               columns: 6
               rows: 1
@@ -1080,10 +1048,6 @@ views:
               service: button.press
               target:
                 entity_id: button.woonkamer_energy_management_system_nilm_kandidaat_5_bevestigen
-            visibility:
-              - condition: template
-                value_template: >-
-                  {{ state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_5_bevestigen', 'kandidaat_entity_id') is not none }}
             grid_options:
               columns: 6
               rows: 1
@@ -1101,10 +1065,6 @@ views:
               service: button.press
               target:
                 entity_id: button.woonkamer_energy_management_system_nilm_kandidaat_5_negeren
-            visibility:
-              - condition: template
-                value_template: >-
-                  {{ state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_5_negeren', 'kandidaat_entity_id') is not none }}
             grid_options:
               columns: 6
               rows: 1
@@ -1122,10 +1082,6 @@ views:
               service: button.press
               target:
                 entity_id: button.woonkamer_energy_management_system_nilm_kandidaat_6_bevestigen
-            visibility:
-              - condition: template
-                value_template: >-
-                  {{ state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_6_bevestigen', 'kandidaat_entity_id') is not none }}
             grid_options:
               columns: 6
               rows: 1
@@ -1143,10 +1099,6 @@ views:
               service: button.press
               target:
                 entity_id: button.woonkamer_energy_management_system_nilm_kandidaat_6_negeren
-            visibility:
-              - condition: template
-                value_template: >-
-                  {{ state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_6_negeren', 'kandidaat_entity_id') is not none }}
             grid_options:
               columns: 6
               rows: 1
@@ -1164,10 +1116,6 @@ views:
               service: button.press
               target:
                 entity_id: button.woonkamer_energy_management_system_nilm_kandidaat_7_bevestigen
-            visibility:
-              - condition: template
-                value_template: >-
-                  {{ state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_7_bevestigen', 'kandidaat_entity_id') is not none }}
             grid_options:
               columns: 6
               rows: 1
@@ -1185,10 +1133,6 @@ views:
               service: button.press
               target:
                 entity_id: button.woonkamer_energy_management_system_nilm_kandidaat_7_negeren
-            visibility:
-              - condition: template
-                value_template: >-
-                  {{ state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_7_negeren', 'kandidaat_entity_id') is not none }}
             grid_options:
               columns: 6
               rows: 1
@@ -1206,10 +1150,6 @@ views:
               service: button.press
               target:
                 entity_id: button.woonkamer_energy_management_system_nilm_kandidaat_8_bevestigen
-            visibility:
-              - condition: template
-                value_template: >-
-                  {{ state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_8_bevestigen', 'kandidaat_entity_id') is not none }}
             grid_options:
               columns: 6
               rows: 1
@@ -1227,10 +1167,6 @@ views:
               service: button.press
               target:
                 entity_id: button.woonkamer_energy_management_system_nilm_kandidaat_8_negeren
-            visibility:
-              - condition: template
-                value_template: >-
-                  {{ state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_8_negeren', 'kandidaat_entity_id') is not none }}
             grid_options:
               columns: 6
               rows: 1

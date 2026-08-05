@@ -877,13 +877,18 @@ wijziging alle geregistreerde luisteraars aan (niet pas bij de
 volgende tick), dus beide knoppen van een sleuf verversen meteen
 samen, ongeacht welke van de twee je indrukte.
 
-**Lege sleuven verdwijnen nu uit beeld (v0.63.52):** gevraagd — met 8
-sleuven × 2 knoppen kan het dashboard er snel vol uitzien als de
-meeste sleuven leeg zijn. Elke kaart heeft nu een
-`visibility`-voorwaarde die rechtstreeks leest of die sleuf een
-kandidaat heeft (`kandidaat_entity_id` niet `None`) — een lege sleuf
-neemt geen ruimte meer in, en zodra er een nieuwe kandidaat instroomt
-verschijnt de kaart vanzelf weer.
+**Lege sleuven verdwijnen nu uit beeld (v0.63.52, teruggedraaid in
+v0.63.82):** gevraagd — met 8 sleuven × 2 knoppen kan het dashboard er
+snel vol uitzien als de meeste sleuven leeg zijn. Elke kaart had een
+`visibility`-voorwaarde die rechtstreeks las of die sleuf een kandidaat
+had (`kandidaat_entity_id` niet `None`). **Verwijderd in v0.63.82**:
+na de langdurige entity_id-migratie (v0.63.74 t/m .81, uiteindelijk
+succesvol) bleek de kaart nog steeds niets te tonen — de
+`visibility`-conditie zelf werkte niet betrouwbaar in deze
+dashboard-configuratie (genest in een grid binnen de Sections-layout).
+In plaats van verder te blijven zoeken naar waarom, is betrouwbaarheid
+boven cosmetiek gekozen: alle 16 knoppen zijn nu altijd zichtbaar (met
+"Sleuf N (leeg)" waar niets in zit) — gegarandeerd werkend.
 
 **Fundamentele oorzaak gevonden: onvoorspelbare entity_id's
 (v0.63.74):** gerapporteerd — er verscheen helemaal niets meer onder

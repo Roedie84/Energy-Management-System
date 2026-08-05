@@ -5492,3 +5492,30 @@ installeren + herstarten:**
    correcte naam moeten krijgen.
 
 **Getest**: bestaande test bijgewerkt naar de `_v3`-suffix.
+
+## v0.63.82 — zichtbaarheids-conditie verwijderd: entiteiten kloppen, dashboard toch leeg
+
+**Bevestigd via Ontwikkelaarshulpmiddelen → Statussen**: na de volledige
+v0.63.74-t/m-.81-migratie hebben alle 16 sleufknoppen eindelijk de
+correcte, kale entity_id (exact matchend met wat het dashboard
+verwacht) én correct gevulde `kandidaat_entity_id`/`kandidaat_naam`/
+`kandidaat_vermogen_w`-attributen. De entity-registratie-kant van dit
+probleem is dus volledig opgelost.
+
+**Toch bleef "Bevestigen / negeren" leeg** — wat de zichtbaarheids-
+conditie (`visibility: condition: template`, v0.63.52) als enige
+overgebleven verdachte aanwijst. In plaats van verder te blijven zoeken
+naar waarom die specifieke conditie niet betrouwbaar werkt in deze
+dashboard-configuratie (genest in een grid binnen de Sections-layout),
+is gekozen voor de pragmatische, gegarandeerd werkende route die al
+eerder als alternatief was voorgesteld.
+
+**Fix**: alle 16 `visibility`-blokken verwijderd uit zowel
+`dashboards/energy_management_system_dashboard.yaml` als het
+meegeleverde `dashboard_template.yaml`. Alle 16 knoppen zijn nu altijd
+zichtbaar, met "Sleuf N (leeg)" als er geen kandidaat in zit — ten
+koste van soms een paar lege kaarten te zien, maar met gegarandeerde
+functionaliteit.
+
+**Geen codewijziging nodig** — dit is uitsluitend een dashboard-YAML-
+aanpassing; de coordinator/button-logica blijft ongewijzigd.
