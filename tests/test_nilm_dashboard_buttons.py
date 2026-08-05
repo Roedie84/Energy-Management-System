@@ -384,14 +384,17 @@ def test_reject_button_has_a_stable_entity_id(make_coordinator, hass):
 
 
 def test_unique_id_bumped_to_force_a_fresh_registration(make_coordinator, hass):
-    """v0.63.80, reported ('Je kunt enkel 0 van de 16 entiteiten
-    verwijderen') - Home Assistant blocks manually deleting entities
-    still actively provided by a loaded integration, and even a
-    restart alone wouldn't re-apply a new entity_id for an
+    """v0.63.80/.81, reported ('Je kunt enkel 0 van de 16 entiteiten
+    verwijderen', then still showing a "_2"-suffixed entity_id even
+    after deleting the v1 entities) - Home Assistant blocks manually
+    deleting entities still actively provided by a loaded integration,
+    and even a restart alone wouldn't re-apply a new entity_id for an
     already-registered unique_id (the registry looks up the existing
-    entry by unique_id first). The unique_id must carry a "_v2" suffix
-    so Home Assistant has no matching registry entry and genuinely
-    re-registers these buttons fresh, with no manual deletion needed."""
+    entry by unique_id first). Once a "_2"-deduplicated entity_id gets
+    assigned for a given unique_id, that's permanent - it never
+    upgrades back to the plain name later. The unique_id must carry a
+    "_v3" suffix so Home Assistant has no matching registry entry at
+    all and genuinely re-registers these buttons fresh."""
     from custom_components.energy_management_system.button import (
         NilmConfirmCandidateButton,
         NilmRejectCandidateButton,
@@ -401,8 +404,8 @@ def test_unique_id_bumped_to_force_a_fresh_registration(make_coordinator, hass):
     confirm = NilmConfirmCandidateButton(coordinator, "entry1", slot=0)
     reject = NilmRejectCandidateButton(coordinator, "entry1", slot=0)
 
-    assert confirm._attr_unique_id.endswith("_v2")
-    assert reject._attr_unique_id.endswith("_v2")
+    assert confirm._attr_unique_id.endswith("_v3")
+    assert reject._attr_unique_id.endswith("_v3")
     assert confirm._attr_unique_id != reject._attr_unique_id
 
 

@@ -5454,3 +5454,41 @@ gekeyed op de gemonitorde sensor-entity_id, niet op deze knoppen).
 **Getest**: nieuwe permanente test die bevestigt dat beide
 knoptypes (bevestigen/negeren) een `_v2`-gesuffixte, onderling
 verschillende `unique_id` krijgen.
+
+## v0.63.81 — de v0.63.80-fix loste het maar half op: eenmalig toegewezen deduplicatie is blijvend
+
+**Gerapporteerd, met Ontwikkelaarshulpmiddelen → Statussen-screenshot**:
+na het verwijderen van de 16 oude (unavailable) v1-entiteiten en een
+herstart, registreerde de nieuwe knop zich alsnog onder
+`..._nilm_kandidaat_1_bevestigen_2` — nog steeds niet de naam die het
+dashboard verwacht.
+
+**Root cause, nagetrokken via Ontwikkelaarshulpmiddelen**: de "_v2"
+-generatie (v0.63.80) had zichzelf al eerder — tijdens een eerdere
+herstart, toen de oude v1-entiteiten nog niet verwijderd waren en dus
+de kale naam nog bezet hielden — een `_2`-gededuplificeerde entity_id
+laten toewijzen. Zodra Home Assistant die deduplicatie eenmaal heeft
+vastgelegd voor een gegeven `unique_id`, is dat **permanent** — de naam
+wordt nooit later automatisch "geüpgraded" terug naar de kale versie,
+ook niet als het onderliggende conflict inmiddels is opgelost. En omdat
+deze "_2"-entiteit zelf nu weer actief is, loopt handmatig verwijderen
+tegen precies dezelfde "0 van de 16 verwijderbaar"-muur op als de
+v1-entiteiten daarvoor.
+
+**Fix**: de `unique_id` nogmaals opgehoogd, naar een `_v3`-suffix.
+
+**Belangrijk — dit vereist ditmaal een tweetrapsvolgorde, niet zomaar
+installeren + herstarten:**
+1. Installeer v0.63.81 en herstart HA. De huidige `_2`-entiteiten (unique_id
+   `_v2`) worden dan niet meer door de integratie aangeboden en worden
+   zelf `unavailable` — maar ze **houden de kale naam nog steeds bezet**
+   in de registry op het moment van déze herstart, dus de nieuwe
+   `_v3`-registratie krijgt bij déze eerste herstart mogelijk zelf weer
+   een gededupliceerde naam.
+2. Verwijder daarna de nu-`unavailable` geworden `_2`-entiteiten (nu wél
+   verwijderbaar, want niet meer actief) via Instellingen → Apparaten &
+   Diensten → Entiteiten, en herstart **nogmaals**. Pas dan is er echt
+   niets meer om mee te botsen, en zou de `_v3`-generatie de kale,
+   correcte naam moeten krijgen.
+
+**Getest**: bestaande test bijgewerkt naar de `_v3`-suffix.

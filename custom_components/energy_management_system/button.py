@@ -139,10 +139,26 @@ class _NilmSlotButton(ButtonEntity):
     already-registered unique_id. Fixed by bumping `unique_id` itself
     (a "_v2" suffix) - Home Assistant then has no matching registry
     entry at all, so it genuinely re-registers these 16 buttons fresh,
-    correctly applying the explicit entity_id this time. No manual
-    deletion needed any more; the old v1 entities simply stop being
-    provided and can be ignored or cleaned up whenever convenient - no
-    state was ever tied to these buttons' own unique_id.
+    correctly applying the explicit entity_id this time.
+
+    v0.63.81, reported (still showing a "_2"-suffixed entity_id after
+    deleting the old v1 entities and restarting): confirmed via
+    Developer Tools > States - the "_v2" entities themselves had
+    already been assigned a "_2"-deduplicated entity_id during an
+    *earlier* restart, at a point where the old v1 entities (not yet
+    deleted then) were still occupying the plain name. Once Home
+    Assistant assigns a deduplicated entity_id for a given unique_id,
+    that assignment is permanent in the registry - it never gets
+    "upgraded" back to the plain name later just because the conflict
+    is resolved, and by the time these "_v2" entities are themselves
+    the live, actively-provided ones, they hit the exact same
+    can't-delete-active-entities wall as the v1 ones did. Bumped to
+    "_v3" - since the v1 entities are now genuinely gone from the
+    registry (the person confirmed deleting them), this generation has
+    nothing left to collide with and should register with the plain,
+    correct entity_id on the very next restart. No manual deletion
+    needed; the "_v2" entities simply stop being provided and can be
+    ignored or cleaned up whenever convenient.
     """
 
     def __init__(
@@ -155,20 +171,20 @@ class _NilmSlotButton(ButtonEntity):
     ) -> None:
         self._coordinator = coordinator
         self._slot = slot
-        # v0.63.80, reported ("Je kunt enkel 0 van de 16 entiteiten
-        # verwijderen" - Home Assistant blocks manually deleting
-        # entities still actively provided by a loaded integration):
-        # bumped with a "_v2" suffix so these are treated as entirely
-        # new entities (no matching unique_id in the registry yet) -
-        # forcing a fresh registration that actually applies the
-        # explicitly-set entity_id below, without requiring any manual
-        # deletion at all. The old, wrongly-named v1 entities become
-        # orphaned (no longer provided under their old unique_id) and
-        # can be safely ignored or removed later - no state was ever
-        # tied to these buttons' own unique_id (the coordinator's own
-        # persisted state is keyed by the monitored sensor's entity_id,
-        # not by this button's identity).
-        self._attr_unique_id = f"{entry_id}_nilm_slot_{slot}_{unique_suffix}_v2"
+        # v0.63.81: bumped to "_v3" - the "_v2" generation (v0.63.80)
+        # had itself already been assigned a "_2"-deduplicated
+        # entity_id during an earlier restart (while the old v1
+        # entities were still occupying the plain name), and once
+        # assigned, Home Assistant never "upgrades" that back to the
+        # plain name later. With the v1 entities now genuinely deleted,
+        # this generation has nothing left to collide with. No manual
+        # deletion needed - the old generations simply stop being
+        # provided and can be ignored or cleaned up whenever
+        # convenient. No state was ever tied to these buttons' own
+        # unique_id (the coordinator's own persisted state is keyed by
+        # the monitored sensor's entity_id, not by this button's
+        # identity).
+        self._attr_unique_id = f"{entry_id}_nilm_slot_{slot}_{unique_suffix}_v3"
         # v0.63.79: set entity_id directly - a genuine, respected
         # override, unlike the non-existent _attr_suggested_object_id
         # tried in v0.63.74. Matches the "woonkamer_energy_management_
