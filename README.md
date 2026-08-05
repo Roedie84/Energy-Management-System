@@ -300,6 +300,32 @@ uitlegtekst-generator — waardoor die terugviel op de generieke
 "onbekende reden"-tekst in plaats van een echte uitleg. Beide nu
 aangevuld.
 
+**Derde plek gevonden (v0.63.70):** gerapporteerd, met screenshots —
+"Zie nu alleen in het verwachtte schema nog smart_discharging staan op
+dit tijdstip". Het "Overzicht komende uren"-schema (`last_timeline`/
+`last_transitions`) heeft zijn eigen, aparte override voor de huidige
+tijdslot (zodat die altijd matcht met de live beslissing) — maar die
+kende alleen `live_is_expensive`/`live_should_postpone_charging`, niet
+de nieuwere `arbitrage_solar_capture`-override. Nu opgelost: het
+schema evalueert dezelfde zon-overschot-check vroeg in de tick (puur
+voor de projectie; de echte beslissing later in de tick berekent 'm
+gewoon opnieuw), en gebruikt dat om de huidige rij correct op `smart`
+te zetten in plaats van `smart_discharging`.
+
+**Live PV-ruis vervangen door de Solcast-verwachting (v0.63.71):**
+gerapporteerd, met screenshots en een eigen vermoeden dat bleek te
+kloppen — de modus wisselde binnen 7 minuten van `smart` naar `manual`
+omdat een voorbijtrekkende wolk de live PV-meting liet duiken (2668W →
+1707W), en de zon-overschot-berekening las tot dan toe de **live,
+ogenblikkelijke** PV-sensor rechtstreeks. Nu leest die berekening in
+plaats daarvan de **Solcast-voorspelling** voor exact dit half-uur
+(`_get_expected_pv_power_w`), gecorrigeerd met de al bestaande, per uur
+geleerde Solcast-biascorrectie — een kortstondige wolk beïnvloedt het
+half-uur-gemiddelde nauwelijks, in tegenstelling tot de ogenblikkelijke
+meting. Valt terug op de live meting als er geen
+`solar_forecast_sensor_entity` is geconfigureerd (ongewijzigd gedrag
+in dat geval).
+
 Zet **nooit** de winter-guard-vlag (`_grid_charged_today`) — dat
 mechanisme bestaat om te voorkomen dat noodzakelijk gekochte energie
 diezelfde dag met verlies wordt terugverkocht; arbitrage-laden koopt
@@ -804,6 +830,17 @@ Ontwikkelaarshulpmiddelen → Acties (of een eigen script/knop):
   verplicht) — negeert de kandidaat permanent (wordt nooit meer
   voorgesteld); verwijdert 'm ook uit de bevestigde lijst als je van
   gedachten verandert.
+- **`energy_management_system.unconfirm_nilm_device`** (`entity_id`
+  verplicht, v0.63.68, gevraagd "hoe kan ik een NILM apparaat
+  verwijderen en opnieuw beoordelen?") — verwijdert een bevestigd
+  apparaat inclusief zijn volledige geleerde geschiedenis (basislijn,
+  drift-status, dagelijkse gemiddelden). In tegenstelling tot negeren
+  wordt het apparaat **niet** permanent geblokkeerd — bij de
+  eerstvolgende scan verschijnt het gewoon weer als nieuwe,
+  onbevestigde kandidaat, zodat je 'm met een verse basislijn opnieuw
+  kunt bevestigen. Bruikbaar bijvoorbeeld wanneer het fysieke apparaat
+  is vervangen of gerepareerd en de oude, geleerde basislijn niet meer
+  klopt.
 
 `sensor.nilm_onbevestigde_kandidaten` toont het echte totaal-aantal
 als state, met een **begrensd voorbeeld** (standaard de eerste

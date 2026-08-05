@@ -2273,6 +2273,37 @@ class EnergyManagementSystemCoordinator:
 
         return result
 
+    def _get_expected_pv_power_w(self, now: datetime) -> float | None:
+        """Expected PV power (W) for this exact moment, from the Solcast
+        `detailedForecast` (v0.63.71, requested: "hij kijkt naar het
+        live PV opbrengst en niet naar de verwachtte zon"). Corrected by
+        the already-learned per-hour Solcast bias ratio
+        (`learned_pv_hourly_ratio`) - Solcast's raw estimate is
+        systematically off for this specific installation.
+
+        Reported: a passing cloud momentarily dipping the *live* PV
+        reading was flip-flopping the arbitrage/solar-capture decision
+        between smart and manual every few minutes (2668W -> 1707W in 7
+        minutes). Forecast-based instead of live-instantaneous is
+        deliberately much more stable - it reflects what the sun is
+        expected to do this half-hour on average, not a momentary dip,
+        at the cost of not reacting to a genuinely sustained weather
+        change until the next forecast interval. Returns None if no
+        solar forecast sensor is configured, or "now" falls outside all
+        known forecast intervals (e.g. it's night).
+        """
+        pv_entries = self._get_pv_forecast_entries()
+        for start, end, kwh in pv_entries:
+            if start <= now < end:
+                duration_hours = (end - start).total_seconds() / 3600
+                if duration_hours <= 0:
+                    return None
+                raw_kw = kwh / duration_hours
+                bias_ratio = self.learned_pv_hourly_ratio(now.hour)
+                corrected_kw = raw_kw * bias_ratio if bias_ratio is not None else raw_kw
+                return max(0.0, corrected_kw * 1000)
+        return None
+
     def _get_pv_remaining_correction_ratio(
         self, now: datetime, pv_entries: list[tuple[datetime, datetime, float]]
     ) -> float | None:
@@ -2836,9 +2867,19 @@ class EnergyManagementSystemCoordinator:
         vooral zonne-energie blijft opslaan'): if the fallback mode
         would be OPTION_SMART (`should_postpone_charging=False`), only
         tops up the *gap* between the desired charge rate and whatever
-        live PV surplus is already available - solar alone already
-        gets captured by that mode's own P1-following, so only the
-        shortfall needs an explicit manual command.
+        PV surplus is expected - solar alone already gets captured by
+        that mode's own P1-following, so only the shortfall needs an
+        explicit manual command.
+
+        v0.63.71, requested ("hij kijkt naar het live PV opbrengst en
+        niet naar de verwachtte zon"): the solar-surplus side of this
+        now prefers the Solcast-based expected PV power for this exact
+        moment (`_get_expected_pv_power_w`, bias-corrected using the
+        already-learned per-hour ratio) over the raw live PV reading,
+        which a passing cloud could momentarily dip - flip-flopping
+        this decision between smart and manual every few minutes (a
+        reported 2668W -> 1707W dip within 7 minutes). Falls back to
+        the live reading if no solar forecast sensor is configured.
 
         v0.63.59/.60, reported ('accu wordt weer ingesteld op
         smart_discharging terwijl ik juist wil doorladen'): that
@@ -2895,7 +2936,18 @@ class EnergyManagementSystemCoordinator:
         )
 
         pv_entity = self.config.get(CONF_PV_POWER_SENSOR)
-        pv_power_w = self._read_sensor_float(pv_entity) if pv_entity else None
+        # v0.63.71, requested ("hij kijkt naar het live PV opbrengst en
+        # niet naar de verwachtte zon"): prefer the Solcast-based
+        # expected PV power for this exact moment over the raw live
+        # reading, which a passing cloud can momentarily dip and
+        # flip-flop this decision every few minutes. Falls back to the
+        # live reading if no solar forecast sensor is configured (or
+        # "now" falls outside all known forecast intervals).
+        expected_pv_power_w = self._get_expected_pv_power_w(now)
+        if expected_pv_power_w is not None:
+            pv_power_w = expected_pv_power_w
+        else:
+            pv_power_w = self._read_sensor_float(pv_entity) if pv_entity else None
         household_load_w = self._read_corrected_consumption_power()
         solar_surplus_w = 0.0
         if pv_power_w is not None and household_load_w is not None:
@@ -3722,6 +3774,7 @@ class EnergyManagementSystemCoordinator:
         discharge_start: datetime | None,
         live_is_expensive: bool | None = None,
         live_should_postpone_charging: bool | None = None,
+        live_should_capture_solar: bool = False,
         available_kwh: float | None = None,
         reserve_kwh: float | None = None,
     ) -> list[dict]:
@@ -3751,6 +3804,13 @@ class EnergyManagementSystemCoordinator:
         "Expected operation mode" sensor actually shows right now - only
         intervals further in the future remain a price-only projection
         (which can't know about live battery energy ahead of time).
+
+        `live_should_capture_solar` (v0.63.70, reported: "verwacht schema"
+        kept showing smart_discharging for the current interval even
+        when the live decision was actually smart, via the
+        arbitrage_solar_capture override, v0.63.60) - when True, further
+        overrides the current interval to smart even though
+        live_should_postpone_charging is True, matching that override.
         """
         today = now.date()
         by_date: dict = {}
@@ -3859,7 +3919,7 @@ class EnergyManagementSystemCoordinator:
                 is_expensive = live_is_expensive
                 if is_expensive:
                     mode = OPTION_MANUAL
-                elif live_should_postpone_charging:
+                elif live_should_postpone_charging and not live_should_capture_solar:
                     mode = OPTION_SMART_DISCHARGING
                 else:
                     mode = OPTION_SMART
@@ -5227,6 +5287,31 @@ class EnergyManagementSystemCoordinator:
         self.hass.async_create_task(self._async_save_nilm_confirmed_devices_store())
         return True
 
+    def unconfirm_nilm_device(self, entity_id: str) -> bool:
+        """Removes a confirmed device and its entire learned CUSUM
+        history (baseline, drift state, daily averages) so it can be
+        re-discovered and re-confirmed fresh with a brand-new baseline
+        (v0.63.68, requested: "hoe kan ik een NILM apparaat verwijderen
+        en opnieuw beoordelen?") - e.g. the appliance itself changed
+        (replaced, repaired) so its old learned baseline no longer
+        applies.
+
+        Deliberately different from `reject_nilm_device`: does NOT add
+        the entity to `nilm_rejected_entities`, so the next discovery
+        scan is free to surface it again as a fresh, unconfirmed
+        candidate - unlike reject, which permanently blacklists it.
+        Returns False if the entity wasn't actually a confirmed device.
+
+        Notifies listeners immediately and persists to the dedicated
+        Store, same as confirm/reject (v0.63.50/.66).
+        """
+        removed = self.nilm_confirmed_devices.pop(entity_id, None)
+        if removed is None:
+            return False
+        self._notify_listeners()
+        self.hass.async_create_task(self._async_save_nilm_confirmed_devices_store())
+        return True
+
     async def _async_load_nilm_confirmed_devices_store(self) -> None:
         """Loads confirmed NILM devices + rejected entities from the
         dedicated Store (v0.63.66) - see the `_nilm_confirmed_devices_
@@ -6518,7 +6603,7 @@ class EnergyManagementSystemCoordinator:
                 f"Arbitrage-laden: er komt later vandaag een duurder "
                 f"kwartier, dus wordt er nu actief bijgekocht op "
                 f"{power_txt} - geschatte nettowinst na laad/ontlaad-"
-                f"verlies: {margin_txt}. Live zonoverschot ({solar_txt}) "
+                f"verlies: {margin_txt}. Verwacht zonoverschot ({solar_txt}) "
                 f"wordt eerst benut; alleen het gat wordt van het net "
                 f"gekocht."
             )
@@ -6537,7 +6622,7 @@ class EnergyManagementSystemCoordinator:
             parts.append(
                 f"Er komt later vandaag een duurder kwartier, dus is "
                 f"bijkopen nu winstgevend (geschatte marge: {margin_txt}) - "
-                f"maar het live zonoverschot ({solar_txt}) dekt het "
+                f"maar het verwachte zonoverschot ({solar_txt}) dekt het "
                 f"gewenste laadvermogen al volledig, dus is er geen "
                 f"actieve netaankoop nodig. In plaats van 'laden uitstellen' "
                 f"(dat dit overschot zou laten liggen) staat de Zendure nu "
@@ -6728,6 +6813,20 @@ class EnergyManagementSystemCoordinator:
         should_postpone_charging = self._should_postpone_charging(
             entries, now, cheap_block_start
         )
+        # v0.63.70, reported ("verwacht schema" nog steeds
+        # smart_discharging op dit moment, ondanks een live "smart"-
+        # besluit via de arbitrage_solar_capture-override): evaluate the
+        # same arbitrage/solar-capture check early, purely so the
+        # schedule projection below can reflect it too - this state
+        # (last_current_price_per_kwh, last_arbitrage_*,
+        # _arbitrage_wants_smart_over_postpone) all gets safely
+        # recomputed and overwritten again later in this same tick, when
+        # the real decision is made.
+        self.last_current_price_per_kwh = self._get_current_price_per_kwh(
+            entries, now
+        )
+        self._get_arbitrage_charge_power(entries, now, should_postpone_charging)
+        live_should_capture_solar = self._arbitrage_wants_smart_over_postpone
         self._update_battery_cost_basis_and_savings(now, entries)
         self._update_energy_balance_validation(now)
         self._update_anomaly_detection(now)
@@ -6847,6 +6946,7 @@ class EnergyManagementSystemCoordinator:
             self.last_discharge_start,
             live_is_expensive=is_expensive,
             live_should_postpone_charging=should_postpone_charging,
+            live_should_capture_solar=live_should_capture_solar,
             available_kwh=projection_available_kwh,
             reserve_kwh=projection_reserve_kwh,
         )

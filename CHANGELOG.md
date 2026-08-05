@@ -4985,3 +4985,109 @@ opgesomd:
 deze reden en een bewust verouderde "verwachte modus" resolvt correct
 naar `smart`; en `_build_explanation()` met deze reden bevat geen
 "onbekende reden" meer en vermeldt het zonoverschot en de smart-modus.
+
+## v0.63.68 — nieuwe service: NILM-apparaat verwijderen en opnieuw laten beoordelen
+
+**Gevraagd:** "Hoe kan ik de NILM apparaat verwijderen en opnieuw
+beoordelen?" — de bestaande `reject_nilm_device` verwijdert een
+apparaat weliswaar uit de bevestigde lijst, maar zet het meteen op de
+permanente negeer-lijst (nooit meer voorgesteld), wat niet is wat je
+wilt als je het apparaat juist opnieuw met een verse basislijn wilt
+laten beoordelen.
+
+**Nieuw: `unconfirm_nilm_device()` + de service
+`energy_management_system.unconfirm_nilm_device`.** Verwijdert een
+bevestigd apparaat inclusief zijn volledige geleerde geschiedenis
+(basislijn, drift-status, dagelijkse gemiddelden) — maar voegt het,
+in tegenstelling tot negeren, **niet** toe aan de permanente
+negeer-lijst. Bij de eerstvolgende NILM-scan verschijnt het apparaat
+daardoor gewoon weer als nieuwe, onbevestigde kandidaat, klaar om met
+een schone lei opnieuw bevestigd te worden. Bruikbaar wanneer het
+fysieke apparaat is vervangen of gerepareerd en de oude basislijn niet
+meer relevant is.
+
+Persisteert naar de dedicated Store (v0.63.66) en meldt geregistreerde
+luisteraars direct, net als confirm/reject.
+
+**Getest** (5 nieuwe permanente tests): de coordinator-methode
+verwijdert correct zonder te blokkeren; geeft `False` terug als het
+apparaat niet bevestigd was; het apparaat verschijnt daadwerkelijk
+weer als kandidaat bij de eerstvolgende scan (de kern van deze
+functie); slaat op naar de Store; en de service zelf roept de
+coordinator correct aan.
+
+## v0.63.70 — verwacht schema kende de solar-capture-override nog niet
+
+**Gerapporteerd, met screenshots:** "Zie nu alleen in het verwachtte
+schema nog smart_discharging staan op dit tijdstip" — de live
+beslissing toonde al correct `smart` (dankzij de
+`arbitrage_solar_capture`-override uit v0.63.60), maar het "Overzicht
+komende uren"-schema bleef voor exact datzelfde moment
+`smart_discharging` tonen.
+
+**Root cause**: `_build_forecast_timeline()` (de functie achter dat
+schema) heeft al langer een eigen mechanisme om de "nu"-rij te
+overschrijven met de live beslissing, zodat die altijd matcht met wat
+er daadwerkelijk gebeurt — maar dat mechanisme kende alleen
+`live_is_expensive`/`live_should_postpone_charging`. De nieuwere
+`arbitrage_solar_capture`-override (v0.63.60) was daar nooit aan
+toegevoegd, dus bleef de "nu"-rij de kale, prijs-alleen-projectie tonen
+in plaats van de echte, zon-bewuste beslissing.
+
+**Fix**: een nieuwe parameter `live_should_capture_solar` toegevoegd
+aan `_build_forecast_timeline()`. De onderliggende zon-overschot-check
+wordt nu vroeg in de tick geëvalueerd (uitsluitend voor deze
+projectie — de echte beslissing verderop in dezelfde tick berekent
+gewoon opnieuw en overschrijft veilig dezelfde staat), en gebruikt om
+de "nu"-rij correct op `smart` te zetten wanneer die override actief
+is, in plaats van `smart_discharging`.
+
+**Getest** (3 nieuwe permanente tests in
+`test_schedule_solar_capture_override.py`): de override zet de huidige
+rij op `smart`; zonder de override blijft het bestaande gedrag
+(`smart_discharging`) intact; en een volledige tick (met een echt
+prijsverschil zodat de marge-check slaagt, en `_should_postpone_
+charging` gemonkeypatcht naar `True` om het scenario betrouwbaar te
+forceren) bevestigt dat `last_timeline`'s huidige rij daadwerkelijk
+`smart` toont wanneer `last_reason == "arbitrage_solar_capture"`.
+
+## v0.63.71 — zon-overschot-beslissing gebruikt nu de Solcast-verwachting, niet de live meting
+
+**Gerapporteerd, met screenshots en een eigen, correct vermoeden:**
+"Modus toch weer naar manual, heb nu een vermoeden, hij kijkt naar het
+live PV opbrengst en niet naar de verwachtte zon" — de modus wisselde
+binnen 7 minuten van `smart` (zonoverschot 2668W, dekte het
+doelvermogen volledig) naar `manual` (zonoverschot gedaald naar 1707W,
+dus een net van 293W bijgekocht) — een klassiek gevolg van het
+reageren op een ogenblikkelijke meting in plaats van een gedempte of
+voorspelde waarde.
+
+**Bevestigd**: `_get_arbitrage_charge_power()` las `pv_power_w` via
+`self._read_sensor_float(pv_entity)` — de live, ogenblikkelijke
+PV-sensorwaarde, zonder enige demping.
+
+**Bewust géén simpele mediaan-demping** (het eerste voorstel) — de
+gebruiker gaf expliciet aan de Solcast-voorspelling te bedoelen, niet
+een gladgestreken live meting. Nieuw: `_get_expected_pv_power_w(now)`
+— zoekt het half-uur-interval in de al bestaande Solcast
+`detailedForecast`-parsing (`_get_pv_forecast_entries`) dat "nu" bevat,
+en corrigeert de ruwe Solcast-schatting met de **al bestaande**, per
+uur geleerde bias-ratio (`learned_pv_hourly_ratio`) — geen nieuwe
+koppeling nodig, hergebruik van bestaande infrastructuur. Valt terug op
+de live meting als er geen `solar_forecast_sensor_entity` is
+geconfigureerd (ongewijzigd gedrag in dat geval).
+
+`_get_arbitrage_charge_power()` gebruikt deze verwachte waarde nu als
+primaire bron voor het zonoverschot in de arbitrage/solar-capture-
+beslissing, met terugval naar de live meting. De uitlegtekst
+("Live zonoverschot") is bijgewerkt naar "Verwacht zonoverschot" om dit
+correct te weerspiegelen.
+
+**Getest** (5 nieuwe permanente tests in
+`test_arbitrage_forecast_not_live_pv.py`): de nieuwe helper leest het
+juiste half-uur-interval; past de geleerde bias correct toe; geeft
+`None` terug zonder geconfigureerde voorspellingssensor; de kern-
+regressietest (een gedempte live PV-meting mag de beslissing niet meer
+omslaan zolang de Solcast-voorspelling een comfortabel overschot
+toont); en de terugval-naar-live-meting blijft exact werken zoals
+voorheen wanneer er geen voorspellingssensor is geconfigureerd.

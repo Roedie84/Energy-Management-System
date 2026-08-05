@@ -235,3 +235,71 @@ def test_finalizing_a_device_day_saves_to_the_store(make_coordinator, hass):
     )
     assert stored is not None
     assert stored["nilm_confirmed_devices"]["sensor.koelkast"]["daily_avg_history"]
+
+
+def test_unconfirm_removes_device_without_blacklisting(make_coordinator, hass):
+    """v0.63.68, requested ('hoe kan ik een NILM apparaat verwijderen
+    en opnieuw beoordelen?') - unlike reject_nilm_device, this must NOT
+    add the entity to nilm_rejected_entities, so a future discovery
+    scan is free to surface it again as a fresh candidate."""
+    coordinator = make_coordinator({})
+    coordinator.nilm_confirmed_devices["sensor.oude_koelkast"] = {
+        "friendly_name": "Oude koelkast",
+        "daily_avg_history": [80.0, 82.0],
+    }
+
+    result = coordinator.unconfirm_nilm_device("sensor.oude_koelkast")
+
+    assert result is True
+    assert "sensor.oude_koelkast" not in coordinator.nilm_confirmed_devices
+    assert "sensor.oude_koelkast" not in coordinator.nilm_rejected_entities
+
+
+def test_unconfirm_returns_false_when_not_confirmed(make_coordinator, hass):
+    coordinator = make_coordinator({})
+
+    result = coordinator.unconfirm_nilm_device("sensor.niet_bevestigd")
+
+    assert result is False
+
+
+def test_unconfirmed_device_reappears_as_a_fresh_candidate(make_coordinator, hass):
+    """Confirms the actual point of this feature: after unconfirm, the
+    device is eligible for discovery again (unlike after reject)."""
+    from datetime import datetime, timezone
+
+    coordinator = make_coordinator({})
+    hass.states.set(
+        "sensor.oude_koelkast",
+        "80",
+        {"unit_of_measurement": "W", "friendly_name": "Oude koelkast"},
+    )
+    coordinator.nilm_confirmed_devices["sensor.oude_koelkast"] = {
+        "friendly_name": "Oude koelkast",
+        "daily_avg_history": [80.0, 82.0],
+    }
+
+    coordinator.unconfirm_nilm_device("sensor.oude_koelkast")
+    coordinator._update_nilm_discovery(datetime(2026, 8, 4, tzinfo=timezone.utc))
+
+    assert "sensor.oude_koelkast" in coordinator.nilm_unconfirmed_candidates
+
+
+def test_unconfirm_saves_to_the_store(make_coordinator, hass):
+    coordinator = make_coordinator({})
+    coordinator.nilm_confirmed_devices["sensor.oude_koelkast"] = {
+        "friendly_name": "Oude koelkast",
+        "daily_avg_history": [80.0, 82.0],
+    }
+
+    async def run():
+        coordinator.unconfirm_nilm_device("sensor.oude_koelkast")
+        await asyncio.sleep(0)
+
+    asyncio.run(run())
+
+    stored = hass._fake_store_backing.get(
+        "energy_management_system_nilm_confirmed_devices"
+    )
+    assert stored is not None
+    assert "sensor.oude_koelkast" not in stored["nilm_confirmed_devices"]

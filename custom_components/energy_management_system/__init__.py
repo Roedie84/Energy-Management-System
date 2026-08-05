@@ -22,6 +22,7 @@ DASHBOARD_FILENAME = "energy_management_system_dashboard.yaml"
 
 SERVICE_CONFIRM_NILM_DEVICE = "confirm_nilm_device"
 SERVICE_REJECT_NILM_DEVICE = "reject_nilm_device"
+SERVICE_UNCONFIRM_NILM_DEVICE = "unconfirm_nilm_device"
 NILM_SERVICE_SCHEMA = vol.Schema({vol.Required("entity_id"): cv.entity_id})
 
 
@@ -126,11 +127,29 @@ def _async_register_nilm_services(hass: HomeAssistant) -> None:
         for coordinator in _iter_coordinators():
             coordinator.reject_nilm_device(entity_id)
 
+    async def _handle_unconfirm(call: ServiceCall) -> None:
+        entity_id = call.data["entity_id"]
+        unconfirmed_anywhere = False
+        for coordinator in _iter_coordinators():
+            if coordinator.unconfirm_nilm_device(entity_id):
+                unconfirmed_anywhere = True
+        if not unconfirmed_anywhere:
+            _LOGGER.warning(
+                "unconfirm_nilm_device: %s was not a confirmed NILM device",
+                entity_id,
+            )
+
     hass.services.async_register(
         DOMAIN, SERVICE_CONFIRM_NILM_DEVICE, _handle_confirm, schema=NILM_SERVICE_SCHEMA
     )
     hass.services.async_register(
         DOMAIN, SERVICE_REJECT_NILM_DEVICE, _handle_reject, schema=NILM_SERVICE_SCHEMA
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_UNCONFIRM_NILM_DEVICE,
+        _handle_unconfirm,
+        schema=NILM_SERVICE_SCHEMA,
     )
 
 

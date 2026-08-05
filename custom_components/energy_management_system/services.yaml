@@ -30,3 +30,22 @@ reject_nilm_device:
       selector:
         entity:
           domain: sensor
+
+unconfirm_nilm_device:
+  name: Verwijder bevestigd NILM-apparaat (opnieuw beoordelen)
+  description: >-
+    Verwijder een bevestigd apparaat inclusief zijn volledige geleerde
+    geschiedenis (basislijn, drift-status, dagelijkse gemiddelden) -
+    bijvoorbeeld omdat het apparaat zelf is vervangen of gerepareerd en
+    de oude basislijn niet meer klopt. In tegenstelling tot negeren
+    wordt het apparaat NIET permanent geblokkeerd: bij de eerstvolgende
+    scan verschijnt het gewoon weer als nieuwe, onbevestigde kandidaat,
+    zodat je 'm met een verse basislijn opnieuw kunt bevestigen.
+  fields:
+    entity_id:
+      name: Entiteit
+      description: De entity_id van het te verwijderen, bevestigde apparaat.
+      required: true
+      selector:
+        entity:
+          domain: sensor
