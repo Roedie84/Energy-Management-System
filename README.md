@@ -938,8 +938,26 @@ via `has_entity_name` + de geconfigureerde apparaatnaam) — voor deze 16
 knoppen expliciet uitgeschreven, omdat ze bewust geen `has_entity_name`
 gebruiken (v0.63.47).
 
-De eerder beschreven migratiestap (verwijderen + herstarten) blijft
-nodig en ongewijzigd van toepassing.
+**Correctie: geen handmatige verwijdering meer nodig (v0.63.80).**
+Gerapporteerd — "Je kunt enkel 0 van de 16 entiteiten verwijderen. De
+andere vereisen dat de integratie stopt met ze aan te leveren." Home
+Assistant blokkeert het handmatig verwijderen van entiteiten die nog
+actief door een geladen integratie worden geleverd, waardoor de
+verwijder-en-herstart-instructie hierboven onuitvoerbaar was. Bovendien
+zou een kale herstart ook niet hebben geholpen: Home Assistant's
+entity-registry zoekt eerst een bestaand item op via de `unique_id` en
+hergebruikt daarvan de opgeslagen (oude, foute) entity_id — een nieuw
+gezette `self.entity_id` wordt nooit toegepast op een al-geregistreerde
+`unique_id`.
+
+**Fix**: de `unique_id` van deze 16 knoppen zelf is opgehoogd (een
+`_v2`-suffix). Home Assistant heeft daardoor geen match meer in de
+registry en registreert deze knoppen dus daadwerkelijk vers, met
+correcte toepassing van de expliciet gezette entity_id — **geen
+handmatige verwijdering meer nodig**, alleen een gewone HA-herstart. De
+oude v1-entiteiten stoppen simpelweg met bestaan (worden niet meer
+geleverd) en kunnen naar wens genegeerd of later opgeruimd worden — er
+was nooit state gekoppeld aan de unique_id van deze knoppen zelf.
 
 **Verwacht bij brede detectie**: met "alle sensoren met een
 vermogens-eenheid" als detectiebereik kunnen ook granulaire

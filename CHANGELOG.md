@@ -5425,3 +5425,32 @@ correcte, expliciet gezette entity_id.
 **Getest**: de 3 bestaande tests uit v0.63.74 herschreven om
 `entity_id` te controleren in plaats van het niet-bestaande
 `_attr_suggested_object_id` — alle drie slagen nu tegen de echte fix.
+
+## v0.63.80 — handmatige verwijdering niet meer nodig (unique_id opgehoogd)
+
+**Gerapporteerd, met screenshot**: "Je kunt enkel 0 van de 16
+entiteiten verwijderen. De andere vereisen dat de integratie stopt met
+ze aan te leveren" — Home Assistant blokkeert het handmatig verwijderen
+van entiteiten die nog actief door een geladen integratie worden
+geleverd, waardoor de v0.63.74/.79-migratie-instructie (verwijderen +
+herstarten) simpelweg onuitvoerbaar was via de UI.
+
+**Bovendien**: zelfs een kale herstart zonder verwijderen zou niet
+geholpen hebben. Home Assistant's entity-registry zoekt bij registratie
+eerst een bestaand item op via de `unique_id` — vindt het er één, dan
+wordt de **opgeslagen, oude** entity_id hergebruikt; een in de code
+nieuw gezette `self.entity_id` (v0.63.79) wordt dan nooit toegepast.
+
+**Fix**: de `unique_id` van de 16 sleufknoppen zelf is opgehoogd (een
+`_v2`-suffix toegevoegd). Home Assistant heeft daardoor geen enkele
+match meer in de registry en registreert deze knoppen dus daadwerkelijk
+vers — met correcte toepassing van de expliciet gezette entity_id uit
+v0.63.79. **Geen handmatige verwijdering meer nodig** — alleen een
+gewone HA-herstart volstaat. De oude v1-entiteiten stoppen simpelweg
+met bestaan; er was nooit state gekoppeld aan hun unique_id (het
+NILM-kandidaten-/bevestigde-apparaten-state leeft in de coordinator,
+gekeyed op de gemonitorde sensor-entity_id, niet op deze knoppen).
+
+**Getest**: nieuwe permanente test die bevestigt dat beide
+knoptypes (bevestigen/negeren) een `_v2`-gesuffixte, onderling
+verschillende `unique_id` krijgen.

@@ -126,6 +126,23 @@ class _NilmSlotButton(ButtonEntity):
     `has_entity_name` + the device's own configured name) - since these
     16 buttons deliberately don't use `has_entity_name`, that prefix has
     to be spelled out explicitly here instead.
+
+    v0.63.80, reported ("Je kunt enkel 0 van de 16 entiteiten
+    verwijderen. De andere vereisen dat de integratie stopt met ze aan
+    te leveren"): Home Assistant blocks manually deleting entities that
+    are still actively provided by a loaded integration, making the
+    v0.63.74/.79 migration instructions (delete then restart)
+    unworkable via the UI - and even restarting alone wouldn't have
+    helped anyway, since HA's entity registry looks up an *existing*
+    entry by `unique_id` first and reuses its stored (old, wrong)
+    entity_id, never re-applying a newly-set `self.entity_id` for an
+    already-registered unique_id. Fixed by bumping `unique_id` itself
+    (a "_v2" suffix) - Home Assistant then has no matching registry
+    entry at all, so it genuinely re-registers these 16 buttons fresh,
+    correctly applying the explicit entity_id this time. No manual
+    deletion needed any more; the old v1 entities simply stop being
+    provided and can be ignored or cleaned up whenever convenient - no
+    state was ever tied to these buttons' own unique_id.
     """
 
     def __init__(
@@ -138,7 +155,20 @@ class _NilmSlotButton(ButtonEntity):
     ) -> None:
         self._coordinator = coordinator
         self._slot = slot
-        self._attr_unique_id = f"{entry_id}_nilm_slot_{slot}_{unique_suffix}"
+        # v0.63.80, reported ("Je kunt enkel 0 van de 16 entiteiten
+        # verwijderen" - Home Assistant blocks manually deleting
+        # entities still actively provided by a loaded integration):
+        # bumped with a "_v2" suffix so these are treated as entirely
+        # new entities (no matching unique_id in the registry yet) -
+        # forcing a fresh registration that actually applies the
+        # explicitly-set entity_id below, without requiring any manual
+        # deletion at all. The old, wrongly-named v1 entities become
+        # orphaned (no longer provided under their old unique_id) and
+        # can be safely ignored or removed later - no state was ever
+        # tied to these buttons' own unique_id (the coordinator's own
+        # persisted state is keyed by the monitored sensor's entity_id,
+        # not by this button's identity).
+        self._attr_unique_id = f"{entry_id}_nilm_slot_{slot}_{unique_suffix}_v2"
         # v0.63.79: set entity_id directly - a genuine, respected
         # override, unlike the non-existent _attr_suggested_object_id
         # tried in v0.63.74. Matches the "woonkamer_energy_management_
