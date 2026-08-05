@@ -267,6 +267,14 @@ LEARNED_THRESHOLD_MARGIN_W = 5.0
 NILM_CUSUM_SLACK_FRACTION = 0.10
 NILM_CUSUM_ALARM_THRESHOLD = 1.0
 
+# NILM devices overview table trend labels (v0.63.51). A lighter-weight,
+# more granular signal than the anomaly_detected flag (which only fires
+# on a *sustained* CUSUM breach) - just compares the most recent daily
+# average against the reference, so a modest upward/downward move shows
+# up in the table well before it would ever cross the alarm threshold.
+NILM_TREND_RISING_THRESHOLD_PERCENT = 5.0
+NILM_TREND_FALLING_THRESHOLD_PERCENT = 5.0
+
 # NILM dashboard confirm/reject slots (v0.63.41): a fixed number of
 # button pairs, since a static Lovelace YAML dashboard (no extra HACS
 # frontend card assumed) can't dynamically render one button per

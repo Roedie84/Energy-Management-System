@@ -260,3 +260,73 @@ def test_coordinator_notifies_listeners_even_after_an_exception(make_coordinator
     asyncio.run(coordinator.async_update())
 
     assert calls == [1]
+
+
+def test_confirming_immediately_notifies_the_sibling_reject_button(
+    make_coordinator, hass
+):
+    """v0.63.50, reported: after pressing confirm/reject on one slot's
+    button, the sibling button (the other action for that same slot)
+    kept showing the old candidate until the next 5-minute update tick
+    - a button press only auto-writes its own state, not its sibling's.
+    Confirm the coordinator now pushes an immediate refresh to every
+    registered listener when a candidate is confirmed/rejected."""
+    coordinator = make_coordinator({})
+    _seed_two_candidates(hass, coordinator)
+
+    calls = []
+    coordinator.register_listener(lambda: calls.append(1))
+
+    coordinator.confirm_nilm_device("sensor.a_apparaat")
+
+    assert calls == [1]
+
+
+def test_rejecting_immediately_notifies_all_registered_listeners(
+    make_coordinator, hass
+):
+    coordinator = make_coordinator({})
+    _seed_two_candidates(hass, coordinator)
+
+    calls = []
+    coordinator.register_listener(lambda: calls.append("a"))
+    coordinator.register_listener(lambda: calls.append("b"))
+
+    coordinator.reject_nilm_device("sensor.b_apparaat")
+
+    assert calls == ["a", "b"]
+
+
+def test_slot_sibling_shows_the_shifted_candidate_right_after_a_press(
+    make_coordinator, hass
+):
+    """End-to-end: two confirm-button instances for the same slot both
+    reflect the shift immediately after one of them (or the reject
+    button) is pressed - not just the one that was pressed."""
+    from custom_components.energy_management_system.button import (
+        NilmConfirmCandidateButton,
+        NilmRejectCandidateButton,
+    )
+
+    coordinator = make_coordinator({})
+    _seed_two_candidates(hass, coordinator)
+
+    confirm_slot0 = NilmConfirmCandidateButton(coordinator, "entry1", slot=0)
+    reject_slot0 = NilmRejectCandidateButton(coordinator, "entry1", slot=0)
+    assert confirm_slot0.extra_state_attributes["kandidaat_entity_id"] == (
+        "sensor.a_apparaat"
+    )
+    assert reject_slot0.extra_state_attributes["kandidaat_entity_id"] == (
+        "sensor.a_apparaat"
+    )
+
+    asyncio.run(reject_slot0.async_press())
+
+    # Both buttons for slot 0 must now reflect the shifted candidate -
+    # neither is "stale" just because it wasn't the one pressed.
+    assert confirm_slot0.extra_state_attributes["kandidaat_entity_id"] == (
+        "sensor.b_apparaat"
+    )
+    assert reject_slot0.extra_state_attributes["kandidaat_entity_id"] == (
+        "sensor.b_apparaat"
+    )

@@ -809,6 +809,18 @@ rechtstreeks uit de al-correct-verversende attributen
 entity-naam-caching. Tikken op een kaart roept de knop nog steeds aan
 via een `tap_action`-service-call.
 
+**Sleufgenoot ververst nu ook direct (v0.63.50):** gerapporteerd —
+"als ik iets weiger past de accepteer-kaart zich niet aan". Oorzaak:
+een druk op een knop laat Home Assistant automatisch alléén díe ene
+knop-entiteit zijn eigen status wegschrijven — de andere knop
+(bevestigen/negeren) voor diezelfde sleuf weet daar niets van, en bleef
+daardoor tot de volgende reguliere update-cyclus (max. 5 minuten)
+de oude kandidaat tonen, terwijl de sleuf zelf al was doorgeschoven.
+`confirm_nilm_device()`/`reject_nilm_device()` roepen nu direct na de
+wijziging alle geregistreerde luisteraars aan (niet pas bij de
+volgende tick), dus beide knoppen van een sleuf verversen meteen
+samen, ongeacht welke van de twee je indrukte.
+
 **Verwacht bij brede detectie**: met "alle sensoren met een
 vermogens-eenheid" als detectiebereik kunnen ook granulaire
 deelmetingen van je eigen Zendure-accu verschijnen als kandidaat (bijv.
@@ -835,6 +847,24 @@ werken door vervuilde filters. Stuurt een melding via
 gedetecteerd, als attributen. Wél een `RestoreEntity` (in tegenstelling
 tot de kandidatenlijst) — die geschiedenis moet wekenlang opbouwen, dat
 mag een herstart niet resetten.
+
+### Overzichtstabel: naam, huidig vermogen, trend (v0.63.51)
+
+Op verzoek — een driekoloms-tabel van alle bevestigde apparaten, direct
+op het "Apparaten"-dashboard. Geen nieuwe trackinglaag: het huidige
+vermogen wordt live uitgelezen, en de trend is een lichtere, granulaire
+aftakking van de al bestaande CUSUM-drift-detectie hierboven — een
+kleine verschuiving (>5% t.o.v. de langere-termijn-referentie) is al
+zichtbaar in de tabel (`↗ licht stijgend` / `↘ dalend` /
+`→ stabiel`), ruim vóórdat die groot genoeg zou zijn om de
+alarmdrempel (10% aanhoudend) te bereiken. Bij een daadwerkelijk
+gesignaleerde afwijking toont de trend-kolom expliciet "mogelijk
+defect" met het geschatte percentage.
+
+Beschikbaar als `tabel`-attribuut op `sensor.nilm_bevestigde_apparaten`
+(lijst met `naam`/`huidig_vermogen_w`/`trend` per apparaat, alfabetisch
+gesorteerd), en gerenderd als leesbare markdown-tabel op het
+dashboard.
 
 **Puur informatief** — nergens meegewogen in accubeslissingen, zoals
 afgesproken.

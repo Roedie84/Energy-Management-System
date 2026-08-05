@@ -4462,3 +4462,65 @@ expliciete `tap_action: call-service, service: button.press`.
 **Geen Python-wijzigingen** — puur dashboard-YAML. Handmatig
 gerenderd en gevalideerd (16 kaarten, geen duplicaten, correcte
 tekstopbouw) voordat dit werd uitgeleverd.
+
+## v0.63.50 — sleufgenoot ververst nu ook direct na bevestigen/negeren
+
+**Gerapporteerd, met screenshot:** "werkbaar alleen als ik iets weiger
+past de accepteer-kaart zich niet aan" — na het negeren van een
+kandidaat bleef de bijbehorende bevestig-knop voor diezelfde sleuf de
+oude, inmiddels verwijderde kandidaat tonen.
+
+**Root cause:** een druk op een knop laat Home Assistant automatisch
+alléén díe ene knop-entiteit zijn eigen status wegschrijven (ingebouwd
+gedrag na `async_press()`). Het luisteraar-mechanisme uit v0.63.48
+werkte weliswaar correct, maar werd alleen aangeroepen aan het einde
+van de reguliere 5-minuten-update-cyclus — niet direct na een
+handmatige bevestiging/weigering. De sleuf zelf schoof al meteen door
+naar de volgende kandidaat (de onderliggende data was direct correct),
+maar de niet-ingedrukte buurknop wist dat pas bij de eerstvolgende
+tick.
+
+**Fix:** `confirm_nilm_device()` en `reject_nilm_device()` roepen nu
+zelf direct `_notify_listeners()` aan zodra de wijziging is
+doorgevoerd — niet pas wachten op de volgende tick. Alle 16
+geregistreerde sleufknoppen verversen daardoor onmiddellijk samen,
+ongeacht welke van de twee (bevestigen/negeren) je daadwerkelijk hebt
+ingedrukt.
+
+**Getest** (3 nieuwe permanente tests): bevestigen meldt geregistreerde
+luisteraars direct; negeren meldt alle geregistreerde luisteraars
+direct; en een end-to-end-test die exact het gerapporteerde scenario
+natrekt — twee knop-instanties voor dezelfde sleuf tonen na het indrukken
+van slechts één ervan allebei correct de doorgeschoven kandidaat.
+
+## v0.63.51 — overzichtstabel bevestigde NILM-apparaten (naam, vermogen, trend)
+
+**Gevraagd:** een tabel met bevestigde NILM-apparaten, hun huidige
+verbruik, en een trend in verbruik — drie kolommen.
+
+**Nieuw: `get_nilm_devices_table()` + `_describe_nilm_trend()`.** Geen
+nieuwe trackinglaag — het huidige vermogen wordt live uitgelezen per
+apparaat, en de trend is een lichtere, granulaire aftakking van de
+al bestaande CUSUM-drift-detectie (v0.63.39): vergelijkt simpelweg de
+meest recente dagelijkse gemiddelde met de langere-termijn-referentie.
+Een verschuiving van >5% is al zichtbaar (`↗ licht stijgend` /
+`↘ dalend` / `→ stabiel`), ruim vóórdat die de 10%-aanhoudende-
+alarmdrempel van de bestaande detectie zou bereiken. Bij een
+daadwerkelijk gesignaleerde, aanhoudende afwijking toont de trend-kolom
+expliciet "mogelijk defect" met het geschatte percentage. Alfabetisch
+gesorteerd voor een voorspelbare volgorde.
+
+**Beschikbaar als `tabel`-attribuut** op de al bestaande
+`sensor.nilm_bevestigde_apparaten` (geen nieuwe entiteit nodig) en in
+de diagnostiek-export.
+
+**Dashboard**: nieuwe markdown-tabelkaart op het "Apparaten"-paneel,
+direct boven de bevestigen/negeren-knoppen — toont "Nog geen apparaten
+bevestigd" als de lijst leeg is, anders een nette driekoloms-tabel.
+
+**Getest** (8 nieuwe permanente tests in `test_nilm_devices_table.py`):
+elke rij heeft precies de drie gevraagde kolommen; alfabetisch
+gesorteerd; onbekende trend zonder genoeg geschiedenis; stabiel binnen
+de marge; stijgend/dalend boven de drempel, correct onderscheiden van
+een aanhoudende, gesignaleerde afwijking; en een lege tabel zonder
+bevestigde apparaten.

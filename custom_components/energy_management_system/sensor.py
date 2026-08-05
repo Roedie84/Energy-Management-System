@@ -1441,6 +1441,7 @@ class NilmConfirmedDevicesSensor(SensorEntity, RestoreEntity):
             "apparaten": self._coordinator.nilm_confirmed_devices,
             "mogelijke_defecten": anomalies,
             "rejected_entities": self._coordinator.nilm_rejected_entities,
+            "tabel": self._coordinator.get_nilm_devices_table(),
         }
 
     async def async_added_to_hass(self) -> None:

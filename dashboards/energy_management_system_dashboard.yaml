@@ -870,6 +870,22 @@ views:
               - entity: sensor.woonkamer_energy_management_system_nilm_bevestigde_apparaten
                 name: NILM bevestigde apparaten (drift-detectie)
           - type: markdown
+            title: Bevestigde apparaten — verbruik en trend
+            content: |
+              {% set tabel = state_attr('sensor.woonkamer_energy_management_system_nilm_bevestigde_apparaten', 'tabel') or [] %}
+              {% if tabel | length == 0 %}
+              Nog geen apparaten bevestigd.
+              {% else %}
+              | Apparaat | Huidig vermogen | Trend |
+              |---|---|---|
+              {% for rij in tabel -%}
+              | {{ rij.naam }} | {{ (rij.huidig_vermogen_w | round(0) | string ~ ' W') if rij.huidig_vermogen_w is not none else '—' }} | {{ rij.trend }} |
+              {% endfor %}
+              {% endif %}
+            grid_options:
+              columns: 12
+              rows: 5
+          - type: markdown
             content: >-
               Elke knop hieronder toont zelf welke kandidaat er nu in
               zit (naam + huidig vermogen) — leeg als er geen kandidaat

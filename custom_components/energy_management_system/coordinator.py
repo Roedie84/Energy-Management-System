@@ -86,6 +86,8 @@ from .const import (
     LEARNED_THRESHOLD_MARGIN_W,
     NILM_CUSUM_SLACK_FRACTION,
     NILM_CUSUM_ALARM_THRESHOLD,
+    NILM_TREND_RISING_THRESHOLD_PERCENT,
+    NILM_TREND_FALLING_THRESHOLD_PERCENT,
     APPLIANCE_CYCLE_COMPLETE_SUSTAINED_MINUTES,
     FIETSLADERS_COMPLETE_THRESHOLD_W,
     QUOOKER_SUSTAINED_MINUTES,
@@ -5052,6 +5054,16 @@ class EnergyManagementSystemCoordinator:
         per-device CUSUM drift-detection for it. Returns False if the
         entity isn't a currently-known candidate (e.g. a typo, or it's
         already confirmed/rejected).
+
+        Notifies listeners immediately (v0.63.50) - reported: after
+        pressing confirm/reject on one slot's button, its sibling button
+        (the other action for that same slot) kept showing the old
+        candidate until the next 5-minute update tick. A button press
+        only writes *that one entity's* own state automatically; it
+        doesn't know its slot-sibling exists. Since a slot's occupant
+        can shift right after any confirm/reject (the next candidate
+        moves in), every registered NILM button needs to refresh right
+        away, not just the one that was pressed.
         """
         candidate = self.nilm_unconfirmed_candidates.pop(entity_id, None)
         if candidate is None:
@@ -5068,18 +5080,70 @@ class EnergyManagementSystemCoordinator:
             "_today_count": 0,
             "_check_date": None,
         }
+        self._notify_listeners()
         return True
 
     def reject_nilm_device(self, entity_id: str) -> bool:
         """Permanently ignore a discovered candidate - never suggested
         again. Also removes it from the confirmed list, if it was
         confirmed earlier and the person changed their mind.
+
+        Notifies listeners immediately - see `confirm_nilm_device`'s
+        docstring for why (v0.63.50).
         """
         self.nilm_unconfirmed_candidates.pop(entity_id, None)
         self.nilm_confirmed_devices.pop(entity_id, None)
         if entity_id not in self.nilm_rejected_entities:
             self.nilm_rejected_entities.append(entity_id)
+        self._notify_listeners()
         return True
+
+    def get_nilm_devices_table(self) -> list[dict]:
+        """Simple 3-column overview (naam, huidig vermogen, trend) of
+        all confirmed NILM devices, requested for the dashboard
+        (v0.63.51). Live power read fresh on every call; trend derived
+        from the existing CUSUM tracking (v0.63.39) - no new tracking
+        mechanism needed. Sorted by name for a stable, predictable
+        display order.
+        """
+        rows = []
+        for entity_id, device in sorted(
+            self.nilm_confirmed_devices.items(),
+            key=lambda item: item[1].get("friendly_name") or item[0],
+        ):
+            rows.append(
+                {
+                    "naam": device.get("friendly_name") or entity_id,
+                    "huidig_vermogen_w": self._read_sensor_float(entity_id),
+                    "trend": self._describe_nilm_trend(device),
+                }
+            )
+        return rows
+
+    def _describe_nilm_trend(self, device: dict) -> str:
+        """A lighter-weight, more granular trend label than
+        `anomaly_detected` (which only fires on a *sustained* CUSUM
+        breach, v0.63.39) - just compares the most recent daily average
+        against the learned reference, so a modest move shows up well
+        before it would ever reach the alarm threshold.
+        """
+        reference_avg_w = device.get("reference_avg_w")
+        history = device.get("daily_avg_history") or []
+        if reference_avg_w is None or not history or reference_avg_w <= 0:
+            return "onbekend (nog niet genoeg data)"
+
+        latest_avg_w = history[-1]
+        change_percent = 100 * (latest_avg_w - reference_avg_w) / reference_avg_w
+
+        if device.get("anomaly_detected"):
+            drift = device.get("estimated_drift_percent")
+            drift_txt = f" ({drift:+.0f}%)" if drift is not None else ""
+            return f"⚠️ aanhoudend stijgend{drift_txt} - mogelijk defect"
+        if change_percent >= NILM_TREND_RISING_THRESHOLD_PERCENT:
+            return f"↗ licht stijgend ({change_percent:+.0f}%)"
+        if change_percent <= -NILM_TREND_FALLING_THRESHOLD_PERCENT:
+            return f"↘ dalend ({change_percent:+.0f}%)"
+        return "→ stabiel"
 
     def get_nilm_candidate_at_slot(self, slot_index: int) -> str | None:
         """Which candidate entity_id currently occupies dashboard slot
