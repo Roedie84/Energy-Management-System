@@ -363,6 +363,13 @@ class EnergyManagementSystemCoordinator:
         self.last_available_kwh: float | None = None
         self.last_needed_kwh_to_bridge: float | None = None
         self.last_needed_kwh_breakdown: dict = {}
+        # v0.63.76, requested ("ik wil daarom ook altijd de tabel
+        # zien"): the actual end-of-window used for the breakdown
+        # above, so _build_needed_kwh_breakdown_table's "Periode" text
+        # stays consistent with whatever reference window was actually
+        # used (cheap_block_start, or the 24h fallback when there's no
+        # meaningful upcoming cheap block).
+        self.last_needed_kwh_breakdown_end_time: datetime | None = None
         self.last_has_enough_energy: bool | None = None
         self.energy_bridge_transition_log: list[dict] = []
         self.last_explanation: str = "Nog geen data verwerkt."
@@ -3798,6 +3805,7 @@ class EnergyManagementSystemCoordinator:
         live_is_expensive: bool | None = None,
         live_should_postpone_charging: bool | None = None,
         live_should_capture_solar: bool = False,
+        live_is_arbitrage_charging: bool = False,
         available_kwh: float | None = None,
         reserve_kwh: float | None = None,
     ) -> list[dict]:
@@ -3834,6 +3842,17 @@ class EnergyManagementSystemCoordinator:
         arbitrage_solar_capture override, v0.63.60) - when True, further
         overrides the current interval to smart even though
         live_should_postpone_charging is True, matching that override.
+
+        `live_is_arbitrage_charging` (v0.63.75, reported: schedule still
+        showed "smart" for the current interval while the actual live
+        decision was "manual" via arbitrage_charging) - a genuine grid
+        purchase (v0.63.73's "reserve insufficient, margin profitable"
+        case) is neither `is_expensive` (that's the separate
+        expensive_quarter reason) nor `should_postpone_charging`, so
+        without this the override logic's else-branch silently defaulted
+        the current row to smart, missing this case entirely. When True,
+        overrides the current interval to manual, regardless of the
+        other flags.
         """
         today = now.date()
         by_date: dict = {}
@@ -3941,6 +3960,8 @@ class EnergyManagementSystemCoordinator:
                 # of the price-only projection, for this one interval.
                 is_expensive = live_is_expensive
                 if is_expensive:
+                    mode = OPTION_MANUAL
+                elif live_is_arbitrage_charging:
                     mode = OPTION_MANUAL
                 elif live_should_postpone_charging and not live_should_capture_solar:
                     mode = OPTION_SMART_DISCHARGING
@@ -6347,6 +6368,73 @@ class EnergyManagementSystemCoordinator:
 
         return "OK"
 
+    def _update_needed_kwh_breakdown_for_display(
+        self, now: datetime, cheap_block_start: datetime | None
+    ) -> None:
+        """Always (re)computes the "capacity expectations" breakdown
+        shown in the explanation card (basisverbruik/verwachte zon/
+        diepste tekort/veiligheidsmarge) - v0.63.76, requested ("ik wil
+        daarom ook altijd de tabel zien").
+
+        Previously this only ever got computed inside
+        `_should_postpone_charging`'s own narrow "before today's cheap
+        block" scope (`now < cheap_block_start`) - once past that point,
+        or whenever there simply wasn't a cheap block identifiable
+        (`cheap_block_start is None`), that function takes an early
+        return without touching `last_needed_kwh_breakdown` at all, so
+        it silently kept whatever stale value it had (often empty, e.g.
+        right after a restart) - even though a decision like
+        arbitrage_charging (reported, v0.63.73) can perfectly well be
+        the live outcome in that same window, with no breakdown shown
+        for it at all.
+
+        Uses `cheap_block_start` as the reference end-of-window if it's
+        meaningfully ahead of `now`; otherwise falls back to a generic
+        24-hour outlook, so there's always something meaningful to show
+        regardless of reason or timing. Deliberately independent of
+        `_should_postpone_charging`'s own copy of this same computation
+        (kept there unchanged, for its own decision-making) - this is
+        purely for display, called unconditionally every tick.
+        """
+        target_time = (
+            cheap_block_start
+            if cheap_block_start is not None and cheap_block_start > now
+            else now + timedelta(hours=24)
+        )
+        self.last_needed_kwh_breakdown_end_time = target_time
+
+        baseline_consumption_kwh = self._estimate_consumption_kwh_for_period(
+            now, target_time
+        )
+        needed_kwh_raw = self._estimate_worst_case_deficit_kwh(now, target_time)
+        if needed_kwh_raw is None:
+            hours = max((target_time - now).total_seconds() / 3600, 0)
+            learned_kw = self.learned_night_consumption_kw
+            if learned_kw is not None:
+                power_kw = learned_kw
+            else:
+                power_w = self._read_corrected_consumption_power()
+                power_kw = power_w / 1000 if power_w is not None else None
+            needed_kwh_raw = power_kw * hours if power_kw is not None else None
+
+        if needed_kwh_raw is None:
+            self.last_needed_kwh_breakdown = {}
+            return
+
+        expected_pv_kwh = self._get_efficiency_discounted_pv_offset(now, target_time)
+        self.last_needed_kwh_breakdown = {
+            "basisverbruik_kwh": (
+                round(baseline_consumption_kwh, 3)
+                if baseline_consumption_kwh is not None
+                else None
+            ),
+            "verwachte_pv_kwh": round(expected_pv_kwh, 3),
+            "diepste_tekort_kwh": round(needed_kwh_raw, 3),
+            "veiligheidsmarge_procent": round(
+                (ENERGY_BRIDGE_SAFETY_MARGIN - 1) * 100, 1
+            ),
+        }
+
     def _build_needed_kwh_breakdown_table(self) -> str:
         """Render the diepste-tekort breakdown as a small Markdown table
         instead of a dense prose sentence - the explanation text is
@@ -6361,15 +6449,19 @@ class EnergyManagementSystemCoordinator:
             return ""
 
         now = dt_util.now()
-        cheap_block_start = self.last_cheap_block_start
-        if cheap_block_start is not None:
-            duration = cheap_block_start - now
+        # v0.63.76: use the actual end-of-window this breakdown was
+        # computed against (cheap_block_start, or the 24h fallback when
+        # there wasn't a meaningful upcoming cheap block) - kept
+        # consistent with `_update_needed_kwh_breakdown_for_display`.
+        end_time = self.last_needed_kwh_breakdown_end_time
+        if end_time is not None:
+            duration = end_time - now
             total_minutes = max(0, int(duration.total_seconds() // 60))
             hours, minutes = divmod(total_minutes, 60)
             duration_txt = f"{hours}u{minutes:02d}m"
             period_txt = (
                 f"nu ({now.strftime('%H:%M')}) → "
-                f"{cheap_block_start.strftime('%H:%M')} ({duration_txt})"
+                f"{end_time.strftime('%H:%M')} ({duration_txt})"
             )
         else:
             period_txt = "onbekend"
@@ -6854,8 +6946,22 @@ class EnergyManagementSystemCoordinator:
         self.last_current_price_per_kwh = self._get_current_price_per_kwh(
             entries, now
         )
-        self._get_arbitrage_charge_power(entries, now, should_postpone_charging)
+        early_arbitrage_power = self._get_arbitrage_charge_power(
+            entries, now, should_postpone_charging
+        )
         live_should_capture_solar = self._arbitrage_wants_smart_over_postpone
+        # v0.63.75, reported: "verwacht schema" still showed smart for
+        # the current interval while the actual live decision was manual
+        # via arbitrage_charging - a genuine grid purchase is neither
+        # is_expensive nor should_postpone_charging, so the schedule's
+        # override logic needs its own explicit signal for this case too.
+        live_is_arbitrage_charging = early_arbitrage_power is not None
+        # v0.63.76, requested ("ik wil daarom ook altijd de tabel
+        # zien"): always (re)compute the capacity-expectations
+        # breakdown for the explanation card, regardless of reason or
+        # of whether _should_postpone_charging's own narrow "before the
+        # cheap block" scope was even reached this tick.
+        self._update_needed_kwh_breakdown_for_display(now, cheap_block_start)
         self._update_battery_cost_basis_and_savings(now, entries)
         self._update_energy_balance_validation(now)
         self._update_anomaly_detection(now)
@@ -6976,6 +7082,7 @@ class EnergyManagementSystemCoordinator:
             live_is_expensive=is_expensive,
             live_should_postpone_charging=should_postpone_charging,
             live_should_capture_solar=live_should_capture_solar,
+            live_is_arbitrage_charging=live_is_arbitrage_charging,
             available_kwh=projection_available_kwh,
             reserve_kwh=projection_reserve_kwh,
         )

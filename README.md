@@ -327,6 +327,46 @@ voor de projectie; de echte beslissing later in de tick berekent 'm
 gewoon opnieuw), en gebruikt dat om de huidige rij correct op `smart`
 te zetten in plaats van `smart_discharging`.
 
+**Vierde plek gevonden (v0.63.75):** gerapporteerd, met screenshots —
+het "Overzicht komende uren" toonde `smart` voor het huidige tijdslot,
+terwijl "Verwachte modus (logica)" tegelijkertijd `manual`
+(`arbitrage_charging`) liet zien. Een écht winstgevende netaankoop
+(v0.63.73's "reserve ontoereikend, marge winstgevend"-geval) is noch
+`is_expensive` (dat is de aparte `expensive_quarter`-reden), noch
+`should_postpone_charging` — de override-logica had hier helemaal geen
+signaal voor en viel stilzwijgend terug op `smart`. Nu opgelost: dezelfde
+vroege arbitrage-evaluatie (al aanwezig sinds v0.63.70) levert nu ook
+een `live_is_arbitrage_charging`-signaal, dat de huidige rij correct op
+`manual` zet wanneer dat de daadwerkelijke beslissing is.
+
+**Voor alle duidelijkheid**: de daadwerkelijke beslissing zelf
+(`manual`/`arbitrage_charging`) was in het gerapporteerde geval
+inhoudelijk gewoon correct volgens de v0.63.73-regel — de reserve was op
+dat moment ontoereikend om de nacht te overbruggen, dus mocht er
+volgens je eigen regel actief bijgeladen worden. Het was uitsluitend het
+"Overzicht komende uren"-schema dat een inconsistent beeld gaf.
+
+**Capaciteitstabel nu altijd zichtbaar, niet alleen vóór het goedkope
+blok (v0.63.76):** gevraagd — "in de tekst card wil ik daarom ook altijd
+de tabel zien, wat de verwachtingen zijn qua capaciteit". Root cause:
+de "diepste-tekort"-tabel (Periode/Basisverbruik/Verwachte zon/Diepste
+tekort/Veiligheidsmarge) werd tot dan toe alleen berekend **binnen**
+`_should_postpone_charging`'s eigen, smalle scope (`nu < cheap_block_
+start`). Zodra dat moment voorbij was — of er simpelweg geen naderend
+goedkoop blok was — nam die functie een vroege `return` zonder de tabel
+aan te raken, waardoor 'm gewoon de oude (vaak lege) waarde bleef tonen,
+zelfs als bijvoorbeeld `arbitrage_charging` de daadwerkelijke, actuele
+beslissing was.
+
+Losgekoppeld in een aparte, **onvoorwaardelijke** berekening
+(`_update_needed_kwh_breakdown_for_display`) die elke tick draait,
+ongeacht reden of timing — gebruikt `cheap_block_start` als eindpunt
+zodra die zinvol in de toekomst ligt, en valt anders terug op een
+generieke vooruitblik van 24 uur, zodat er altijd iets zinvols te tonen
+is. De beslissingslogica van `_should_postpone_charging` zelf is
+ongewijzigd gebleven — dit raakt uitsluitend wat er in de uitlegtekst
+wordt getoond.
+
 **Live PV-ruis vervangen door de Solcast-verwachting (v0.63.71):**
 gerapporteerd, met screenshots en een eigen vermoeden dat bleek te
 kloppen — de modus wisselde binnen 7 minuten van `smart` naar `manual`
@@ -964,6 +1004,35 @@ meeste sleuven leeg zijn. Elke kaart heeft nu een
 kandidaat heeft (`kandidaat_entity_id` niet `None`) — een lege sleuf
 neemt geen ruimte meer in, en zodra er een nieuwe kandidaat instroomt
 verschijnt de kaart vanzelf weer.
+
+**Fundamentele oorzaak gevonden: onvoorspelbare entity_id's
+(v0.63.74):** gerapporteerd — er verscheen helemaal niets meer onder
+"Bevestigen / negeren", waardoor bevestigen/negeren van nieuwe
+apparaten onmogelijk was. Root cause: sinds `has_entity_name` uit
+staat (v0.63.47) én er geen expliciete `object_id` was ingesteld, leidt
+Home Assistant de entity_id af van de entiteit's eigen `name`-property
+bij de **eerste registratie** — maar die naam is bewust **dynamisch**
+(toont steeds de kandidaat die op dat moment in de sleuf zit, v0.63.43).
+Bij een verse registratie werd daardoor een onvoorspelbare entity_id
+vastgelegd (afhankelijk van welke kandidaat er toevallig in zat, of
+"sleuf-n-leeg" als er nog niets was) — niet de stabiele
+`nilm_kandidaat_N_bevestigen`/`_negeren`-id die het meegeleverde
+dashboard hardcodeert. Elke dashboardverwijzing naar deze knoppen wees
+daardoor stilzwijgend naar een niet-bestaande entiteit.
+
+Gefixt door een expliciete, stabiele `suggested_object_id` te zetten,
+afgeleid puur van het vaste sleufnummer — nooit van de dynamische
+kandidaatnaam.
+
+**Belangrijk voor bestaande installaties**: deze fix werkt alleen voor
+**nieuw geregistreerde** entiteiten — een al-bestaande, verkeerd
+benoemde entiteit behoudt zijn oude entity_id voor altijd (gekoppeld
+aan de `unique_id`, niet aan de naam). Heb je dit probleem, verwijder
+dan eenmalig de 16 NILM-sleufknoppen via Instellingen → Apparaten &
+Diensten → Energy Management System → apparaat → de betreffende
+knop-entiteiten (of het hele apparaat) verwijderen, en herstart HA
+daarna — ze worden dan opnieuw aangemaakt met de correcte, stabiele
+entity_id.
 
 **Verwacht bij brede detectie**: met "alle sensoren met een
 vermogens-eenheid" als detectiebereik kunnen ook granulaire

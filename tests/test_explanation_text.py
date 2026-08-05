@@ -186,6 +186,7 @@ def test_discharging_window_shows_breakdown_as_a_markdown_table(make_coordinator
     coordinator.last_needed_kwh_to_bridge = 0.0
     now = datetime(2026, 8, 4, 8, 32, 41, tzinfo=timezone.utc)
     coordinator.last_cheap_block_start = now + timedelta(hours=2, minutes=57)
+    coordinator.last_needed_kwh_breakdown_end_time = coordinator.last_cheap_block_start
     coordinator.last_needed_kwh_breakdown = {
         "basisverbruik_kwh": 1.415,
         "verwachte_pv_kwh": 3.805,

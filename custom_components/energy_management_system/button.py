@@ -93,12 +93,43 @@ class _NilmSlotButton(ButtonEntity):
     happened to be the one time Home Assistant wrote their initial
     state during setup - typically "(leeg)", since discovery hadn't run
     yet at that point.
+
+    v0.63.74, reported ("kan niet beoordelen afwijzen etc van nieuwe
+    apparaten" - nothing rendered at all under "Bevestigen / negeren"):
+    without `has_entity_name` (turned off in v0.63.47) and without an
+    explicit object_id, Home Assistant derives the entity_id from this
+    entity's own `name` property at first registration - but that name
+    is deliberately DYNAMIC (v0.63.43, shows whichever candidate
+    currently occupies the slot). On a fresh registration this baked an
+    unpredictable entity_id (based on whatever candidate happened to be
+    in that slot the very first time, or "sleuf-n-leeg" if none yet) -
+    not the stable `nilm_kandidaat_N_bevestigen/negeren` id the bundled
+    dashboard hardcodes, so every dashboard reference to these buttons
+    silently pointed at a non-existent entity. Fixed by setting an
+    explicit `_attr_suggested_object_id` derived purely from the fixed
+    slot number and suffix, never from the dynamic candidate name, so
+    the entity_id is stable and predictable regardless of what's
+    currently in the slot.
     """
 
-    def __init__(self, coordinator, entry_id: str, slot: int, unique_suffix: str) -> None:
+    def __init__(
+        self,
+        coordinator,
+        entry_id: str,
+        slot: int,
+        unique_suffix: str,
+        object_id_suffix: str,
+    ) -> None:
         self._coordinator = coordinator
         self._slot = slot
         self._attr_unique_id = f"{entry_id}_nilm_slot_{slot}_{unique_suffix}"
+        # v0.63.74: a separate, Dutch object_id suffix matching what the
+        # bundled dashboard hardcodes (nilm_kandidaat_N_bevestigen/
+        # negeren) - kept independent from unique_suffix (English,
+        # confirm/reject) so unique_id's naming stays as it always was.
+        self._attr_suggested_object_id = (
+            f"nilm_kandidaat_{slot + 1}_{object_id_suffix}"
+        )
         self._attr_device_info = {
             "identifiers": {(DOMAIN, entry_id)},
             "name": DEFAULT_NAME,
@@ -141,7 +172,7 @@ class NilmConfirmCandidateButton(_NilmSlotButton):
     _attr_icon = "mdi:check-circle-outline"
 
     def __init__(self, coordinator, entry_id: str, slot: int) -> None:
-        super().__init__(coordinator, entry_id, slot, "confirm")
+        super().__init__(coordinator, entry_id, slot, "confirm", "bevestigen")
 
     @property
     def name(self) -> str:
@@ -159,7 +190,7 @@ class NilmRejectCandidateButton(_NilmSlotButton):
     _attr_icon = "mdi:close-circle-outline"
 
     def __init__(self, coordinator, entry_id: str, slot: int) -> None:
-        super().__init__(coordinator, entry_id, slot, "reject")
+        super().__init__(coordinator, entry_id, slot, "reject", "negeren")
 
     @property
     def name(self) -> str:

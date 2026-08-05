@@ -5185,3 +5185,129 @@ netaankoop meer bij voldoende reserve, ongeacht de marge; arbitrage
 vuurt nog gewoon bij een echt ontoereikende reserve; en het aanwezige
 zonoverschot wordt bij voldoende reserve nog steeds via smart-modus
 vastgelegd in plaats van verspild.
+
+## v0.63.74 — sleufknoppen kregen onvoorspelbare entity_id's
+
+**Gerapporteerd, met screenshot:** "Tabel NILM is nu goed genoeg,
+alleen kan niet beoordelen afwijzen etc van nieuwe apparaten" — onder
+"Bevestigen / negeren" verscheen helemaal niets, ondanks 80 openstaande
+kandidaten.
+
+**Eerste vermoeden (breedteprobleem) getoetst en verworpen**: de
+zichtbaarheids-voorwaarde (v0.63.52) verbergt lege sleuven, maar hier
+verdween alles, niet gedeeltelijk — dat wees op iets fundamentelers.
+
+**Werkelijke root cause, gevonden bij het narekenen van hoe Home
+Assistant entity_id's genereert**: sinds `has_entity_name` uit staat
+voor deze knoppen (v0.63.47, om naam-afkapping te voorkomen) én er
+nooit een expliciete `object_id` was ingesteld, leidt Home Assistant de
+entity_id af van de entiteit's eigen `name`-property **op het moment
+van de allereerste registratie**. Die naam is echter bewust dynamisch
+(v0.63.43 — toont steeds welke kandidaat er op dat moment in de sleuf
+zit). Bij een verse registratie werd daardoor een onvoorspelbare
+entity_id vastgelegd, afhankelijk van toeval (welke kandidaat er op dat
+exacte moment in zat) — niet de stabiele `nilm_kandidaat_N_bevestigen`/
+`_negeren`-id die het meegeleverde dashboard hardcodeert. Elke
+dashboardverwijzing naar deze 16 knoppen wees daardoor stilzwijgend
+naar een niet-bestaande entiteit — vandaar dat er letterlijk niets
+verscheen.
+
+**Fix**: een expliciete `_attr_suggested_object_id` toegevoegd, apart
+gehouden van de (Engelse) `unique_suffix` die de `unique_id` al gebruikt
+— gebaseerd puur op het vaste sleufnummer, nooit op de dynamische
+kandidaatnaam. Resultaat: `nilm_kandidaat_1_bevestigen` t/m
+`nilm_kandidaat_8_negeren`, exact matchend met wat het dashboard
+verwacht.
+
+**Belangrijke beperking, expliciet benoemd**: dit fixt alleen **nieuw
+geregistreerde** entiteiten — een al-bestaande, verkeerd benoemde
+entiteit behoudt zijn oude entity_id voor altijd (gekoppeld aan
+`unique_id`, niet aan de naam). Bestaande installaties met dit probleem
+moeten de 16 sleufknoppen eenmalig handmatig verwijderen (Instellingen
+→ Apparaten & Diensten → Energy Management System → apparaat) en HA
+herstarten, zodat ze opnieuw worden aangemaakt met de correcte,
+stabiele entity_id.
+
+**Gecontroleerd of dit probleem nog ergens anders sluimert**: alle
+overige entiteiten in de integratie hebben `has_entity_name = True`
+(of expliciet ingesteld) — alleen deze 16 sleufknoppen liepen risico.
+
+**Getest** (3 nieuwe permanente tests): de object_id blijft stabiel
+ongeacht welke kandidaat er in de sleuf zit; bevestig- en
+negeer-knoppen krijgen de juiste, verschillende Nederlandse suffix; en
+alle 16 object_id's zijn uniek en matchen exact wat het dashboard
+hardcodeert.
+
+## v0.63.75 — verwacht schema kende ook de arbitrage_charging-uitkomst nog niet
+
+**Gerapporteerd, met screenshots:** "we hadden toch juist afgesproken
+om dit anders te doen" — de gebruiker citeerde de uitlegtekst voor
+`arbitrage_charging` (manual, 418W bijgekocht van het net) en
+overrulede het systeem naar Learning-only omdat dit ongewenst leek.
+
+**Onderzocht en gebleken: de beslissing zelf was correct.** De
+"Overzicht komende uren"-tabel toonde `smart` voor exact hetzelfde
+tijdslot als waarvoor "Verwachte modus (logica)" `manual` liet zien —
+een directe tegenstrijdigheid, geen bevestiging dat de v0.63.73-regel
+verkeerd was toegepast. Nagetrokken: de reserve was op dat moment
+daadwerkelijk ontoereikend om de nacht te overbruggen
+(`should_postpone_charging = False`), dus mocht er volgens de eigen,
+net vastgestelde regel ("is er te weinig om de nacht te overbruggen dan
+mag hij manual bijladen") gewoon actief bijgeladen worden.
+
+**Root cause, dezelfde soort fout als v0.63.70**: de "nu"-override in
+`_build_forecast_timeline()` kende alleen `live_is_expensive` en
+`live_should_postpone_charging`/`live_should_capture_solar`. Een échte,
+winstgevende netaankoop (`arbitrage_charging`) is geen van beide — de
+override-logica had hier geen signaal voor en viel stilzwijgend terug
+op `smart`, terwijl de daadwerkelijke beslissing `manual` was.
+
+**Fix**: de al bestaande, vroege arbitrage-evaluatie (sinds v0.63.70,
+puur voor de schema-projectie) levert nu ook een expliciet
+`live_is_arbitrage_charging`-signaal, doorgegeven aan
+`_build_forecast_timeline()`, dat de huidige rij correct op `manual`
+zet wanneer dat de daadwerkelijke beslissing is.
+
+**Getest** (2 nieuwe permanente tests in
+`test_schedule_solar_capture_override.py`): het signaal zet de huidige
+rij op `manual`; en een volledige tick (met `_should_postpone_charging`
+gemonkeypatcht naar `False` om een echt ontoereikende reserve
+betrouwbaar te forceren) bevestigt dat `last_timeline`'s huidige rij
+daadwerkelijk `manual` toont wanneer `last_reason ==
+"arbitrage_charging"`.
+
+## v0.63.76 — capaciteitstabel nu altijd zichtbaar in de uitlegtekst
+
+**Gevraagd**: "In de tekst card wil ik daarom ook altijd de tabel zien,
+wat de verwachtingen zijn qua capaciteit" — naar aanleiding van het
+vorige rapport, waarbij bleek dat de "diepste-tekort"-tabel
+(Periode/Basisverbruik/Verwachte zon/Diepste tekort/Veiligheidsmarge)
+niet verscheen bij de `arbitrage_charging`-reden.
+
+**Root cause, empirisch nagerekend** (niet zomaar aangenomen): de tabel
+werd tot dan toe alleen berekend **binnen** `_should_postpone_
+charging`'s eigen, smalle scope (`nu < cheap_block_start`). Zodra dat
+moment voorbij was, of er simpelweg geen naderend goedkoop blok
+identificeerbaar was, nam die functie een vroege `return` zónder de
+tabel aan te raken — waardoor 'm gewoon de oude, vaak lege waarde bleef
+tonen, zelfs wanneer `arbitrage_charging` (of in principe elke andere
+reden) de daadwerkelijke, actuele beslissing was.
+
+**Fix**: een nieuwe, volledig onvoorwaardelijke functie
+(`_update_needed_kwh_breakdown_for_display`) die elke tick draait,
+losgekoppeld van `_should_postpone_charging`'s eigen scope en
+beslissingslogica (die zelf ongewijzigd blijft). Gebruikt
+`cheap_block_start` als eindpunt zodra die zinvol in de toekomst ligt;
+valt anders terug op een generieke vooruitblik van 24 uur, zodat er
+altijd iets zinvols te tonen is. Het nieuwe
+`last_needed_kwh_breakdown_end_time`-veld houdt de tabel se
+"Periode"-tekst consistent met welk eindpunt daadwerkelijk is gebruikt.
+
+**Getest** (5 nieuwe permanente tests in
+`test_needed_kwh_breakdown_always_shown.py`, plus 1 bestaande test
+bijgewerkt naar het nieuwe veld): de tabel verschijnt nu daadwerkelijk
+bij `arbitrage_charging`; valt terug op de 24-uurs-vooruitblik zonder
+naderend goedkoop blok; gebruikt `cheap_block_start` wanneer die wél
+zinvol in de toekomst ligt; valt terug wanneer `cheap_block_start` al
+gepasseerd is; en de "Periode"-tekst blijft consistent met het
+daadwerkelijk gebruikte eindpunt.
