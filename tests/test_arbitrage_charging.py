@@ -297,3 +297,22 @@ def test_no_arbitrage_without_more_price_data_today(make_coordinator, hass):
     asyncio.run(coordinator._async_update_locked())
 
     assert coordinator.last_reason != "arbitrage_charging"
+
+
+def test_arbitrage_solar_capture_resolves_to_smart_mode(make_coordinator, hass):
+    """v0.63.66, reported: 'Verwachting zegt nog steeds smart discharge'
+    - REASON_TO_MODE had no entry for 'arbitrage_solar_capture'
+    (introduced in v0.63.60), so _finish_decision_tick's .get(...,
+    self.last_expected_mode) fallback silently kept whatever mode was
+    expected on a PREVIOUS tick (e.g. smart_discharging) instead of
+    correctly resolving to smart for this reason."""
+    from custom_components.energy_management_system import coordinator as coord_mod
+
+    coordinator = make_coordinator(_base_config())
+    coordinator.last_expected_mode = "smart_discharging"  # stale, from a prior tick
+    coordinator.last_reason = "arbitrage_solar_capture"
+
+    coord_mod.dt_util.now = lambda: DAY0
+    coordinator._finish_decision_tick(DAY0)
+
+    assert coordinator.last_expected_mode == "smart"

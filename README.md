@@ -289,6 +289,17 @@ sprake is van "laden uitstellen". Geen handmatig commando, geen
 expliciete netaankoop — dit voorkomt alleen dat `smart_discharging`
 gratis zon zou laten liggen.
 
+**Twee vervolggaten gevonden en gefixt (v0.63.67):** gerapporteerd,
+met screenshots — "Verwachting zegt nog steeds smart discharge" en de
+uitlegtekst toonde "Onbekende reden: arbitrage_solar_capture". Bij het
+introduceren van deze reden in v0.63.60 was vergeten om 'm ook toe te
+voegen aan (1) `REASON_TO_MODE` — waardoor "Verwachte modus (logica)"
+bleef hangen op de vorige tick's waarde (vaak `smart_discharging`) in
+plaats van correct naar `smart` te resolven, en (2) de
+uitlegtekst-generator — waardoor die terugviel op de generieke
+"onbekende reden"-tekst in plaats van een echte uitleg. Beide nu
+aangevuld.
+
 Zet **nooit** de winter-guard-vlag (`_grid_charged_today`) — dat
 mechanisme bestaat om te voorkomen dat noodzakelijk gekochte energie
 diezelfde dag met verlies wordt terugverkocht; arbitrage-laden koopt

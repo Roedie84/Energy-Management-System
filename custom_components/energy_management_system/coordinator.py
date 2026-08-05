@@ -6523,6 +6523,28 @@ class EnergyManagementSystemCoordinator:
                 f"gekocht."
             )
 
+        elif reason == "arbitrage_solar_capture":
+            solar_txt = (
+                f"{self.last_arbitrage_solar_surplus_w:.0f}W"
+                if self.last_arbitrage_solar_surplus_w is not None
+                else "onbekend"
+            )
+            margin_txt = (
+                f"€{self.last_arbitrage_margin_eur_per_kwh:.3f}/kWh"
+                if self.last_arbitrage_margin_eur_per_kwh is not None
+                else "onbekend"
+            )
+            parts.append(
+                f"Er komt later vandaag een duurder kwartier, dus is "
+                f"bijkopen nu winstgevend (geschatte marge: {margin_txt}) - "
+                f"maar het live zonoverschot ({solar_txt}) dekt het "
+                f"gewenste laadvermogen al volledig, dus is er geen "
+                f"actieve netaankoop nodig. In plaats van 'laden uitstellen' "
+                f"(dat dit overschot zou laten liggen) staat de Zendure nu "
+                f"gewoon in smart-modus, die het zonoverschot vanzelf "
+                f"opvangt via P1-volgend laden."
+            )
+
         elif reason == "discharging_window":
             if self.last_has_enough_energy is not None and self.last_available_kwh is not None:
                 needed_txt = (

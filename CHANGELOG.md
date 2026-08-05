@@ -4954,3 +4954,34 @@ uit de Store vult de coordinator-status correct; laden bij een lege
 Store laat bestaande status met rust; en de eenmalige migratie werkt
 correct in beide richtingen (valt terug wanneer de Store leeg is, wint
 niet wanneer de Store al data heeft).
+
+## v0.63.67 — arbitrage_solar_capture: twee vergeten aansluitingen gefixt
+
+**Gerapporteerd, met screenshots:** "Verwachting zegt nog steeds smart
+discharge" — ondanks dat "Werkelijke modus" al correct `smart` toonde
+sinds v0.63.60, bleef "Verwachte modus (logica)" op `smart_discharging`
+staan. Ook toonde de uitlegtekst "Onbekende reden:
+arbitrage_solar_capture" in plaats van een echte uitleg.
+
+**Root cause, beide keren dezelfde soort fout**: bij het introduceren
+van de reden `arbitrage_solar_capture` in v0.63.60 is vergeten om die
+ook toe te voegen aan twee plekken die per-reden expliciet zijn
+opgesomd:
+
+1. **`REASON_TO_MODE`** — `_finish_decision_tick()` gebruikt
+   `REASON_TO_MODE.get(self.last_reason, self.last_expected_mode)` om
+   de weergegeven "verwachte modus" te corrigeren naar wat er
+   daadwerkelijk is besloten. Zonder een item voor deze reden viel dit
+   terug op de **vorige tick's** waarde (vaak nog `smart_discharging`
+   van een eerdere beslissing) in plaats van correct naar `smart` te
+   resolven — nu toegevoegd.
+2. **De uitlegtekst-generator** (`_build_explanation`) — had geen
+   `elif reason == "arbitrage_solar_capture"`-tak, dus viel terug op de
+   generieke "Onbekende reden: ..."-melding. Nu een volwaardige uitleg
+   toegevoegd (vermeldt de winstmarge en het zonoverschot, net als de
+   bestaande `arbitrage_charging`-uitleg).
+
+**Getest** (2 nieuwe permanente tests): `_finish_decision_tick()` met
+deze reden en een bewust verouderde "verwachte modus" resolvt correct
+naar `smart`; en `_build_explanation()` met deze reden bevat geen
+"onbekende reden" meer en vermeldt het zonoverschot en de smart-modus.

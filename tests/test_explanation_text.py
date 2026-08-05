@@ -236,3 +236,21 @@ def test_default_smart_not_enough_energy_shows_breakdown_table(make_coordinator,
 
     assert "| Onderdeel | Waarde |" in text
     assert "onbekend" in text  # no cheap_block_start -> period unknown
+
+
+def test_arbitrage_solar_capture_has_a_real_explanation(make_coordinator):
+    """v0.63.66, reported: 'Onbekende reden: arbitrage_solar_capture' -
+    this reason label (introduced in v0.63.60) was never wired into the
+    explanation-text generator, so it fell through to the generic
+    unknown-reason fallback instead of explaining what actually
+    happened."""
+    coordinator = make_coordinator({})
+    coordinator.last_reason = "arbitrage_solar_capture"
+    coordinator.last_arbitrage_solar_surplus_w = 1033.0
+    coordinator.last_arbitrage_margin_eur_per_kwh = 0.1728
+
+    text = coordinator._build_explanation()
+
+    assert "onbekende reden" not in text.lower()
+    assert "1033" in text
+    assert "smart" in text.lower()

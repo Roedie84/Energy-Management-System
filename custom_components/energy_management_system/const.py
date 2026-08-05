@@ -567,5 +567,6 @@ REASON_TO_MODE = {
     "grid_charging_low_solar": OPTION_MANUAL,
     "discharging_window": OPTION_SMART_DISCHARGING,
     "arbitrage_charging": OPTION_MANUAL,
+    "arbitrage_solar_capture": OPTION_SMART,
     "default_smart": OPTION_SMART,
 }
