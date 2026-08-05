@@ -269,6 +269,14 @@ class EnergyManagementSystemCoordinator:
         self.force_manual: bool = False
         self.steelstofzuiger_override: bool = False
         self.fietsladers_override: bool = False
+        # Appliance-ready notification toggle (v0.63.54, requested):
+        # "Goedkoop moment voor de vaatwasser/wasmachine" - separate
+        # from CONF_APPLIANCE_NOTIFY_SERVICE, which is shared by many
+        # other notification types (mode-change, steelstofzuiger/
+        # fietsladers-done, NILM anomaly, sluipverbruik) that shouldn't
+        # all go silent just because this one specific suggestion isn't
+        # wanted. Defaults on (unchanged behaviour) until turned off.
+        self.appliance_ready_notifications_enabled: bool = True
         self.arbitrage_charging_enabled: bool = False
         self.last_arbitrage_margin_eur_per_kwh: float | None = None
         self.last_arbitrage_solar_surplus_w: float | None = None
@@ -820,6 +828,10 @@ class EnergyManagementSystemCoordinator:
         self.fietsladers_override = value
         await self.async_update()
 
+    async def async_set_appliance_ready_notifications_enabled(self, value: bool) -> None:
+        self.appliance_ready_notifications_enabled = value
+        await self.async_update()
+
     async def async_set_arbitrage_charging_enabled(self, value: bool) -> None:
         self.arbitrage_charging_enabled = value
         await self.async_update()
@@ -1294,7 +1306,17 @@ class EnergyManagementSystemCoordinator:
         """If an appliance is ready to start (and not already running),
         and we're currently in today's cheapest price block, send one
         notification per appliance per day. Never starts anything itself
-        - purely a suggestion for the person to act on."""
+        - purely a suggestion for the person to act on.
+
+        Gated by `appliance_ready_notifications_enabled` (v0.63.54,
+        requested) - a dedicated on/off switch for just this
+        notification type, independent of `appliance_notify_service`
+        itself (shared by several other, unrelated notification types
+        that should keep working even if this specific suggestion is
+        unwanted).
+        """
+        if not self.appliance_ready_notifications_enabled:
+            return
         notify_service = self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE)
 
         self._notify_if_appliance_ready(

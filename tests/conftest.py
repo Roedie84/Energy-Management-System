@@ -182,7 +182,8 @@ def _install_ha_mocks() -> None:
     components_switch = types.ModuleType("homeassistant.components.switch")
 
     class SwitchEntity:
-        pass
+        def async_write_ha_state(self) -> None:
+            pass
 
     components_switch.SwitchEntity = SwitchEntity
     sys.modules["homeassistant.components.switch"] = components_switch

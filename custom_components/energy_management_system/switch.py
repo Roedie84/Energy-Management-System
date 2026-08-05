@@ -21,6 +21,7 @@ async def async_setup_entry(
             VacationModeSwitch(coordinator, entry_id=entry.entry_id),
             SteelstofzuigerOverrideSwitch(coordinator, entry_id=entry.entry_id),
             FietsladersOverrideSwitch(coordinator, entry_id=entry.entry_id),
+            ApplianceReadyNotificationsSwitch(coordinator, entry_id=entry.entry_id),
             ArbitrageChargingSwitch(coordinator, entry_id=entry.entry_id),
         ]
     )
@@ -207,6 +208,49 @@ class FietsladersOverrideSwitch(SwitchEntity, RestoreEntity):
 
     async def async_turn_off(self, **kwargs) -> None:
         await self._coordinator.async_set_fietsladers_override(False)
+        self.async_write_ha_state()
+
+
+class ApplianceReadyNotificationsSwitch(SwitchEntity, RestoreEntity):
+    """When off, suppresses the "Goedkoop moment voor de vaatwasser/
+    wasmachine" suggestion notifications specifically (v0.63.54,
+    requested) - independent of `appliance_notify_service` itself,
+    which is shared by several other, unrelated notification types
+    (mode-change, steelstofzuiger/fietsladers-done, NILM anomaly,
+    sluipverbruik) that should keep working even if this one specific
+    suggestion is unwanted. Defaults on (unchanged prior behaviour).
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Vaatwasser/wasmachine-meldingen"
+    _attr_icon = "mdi:bell-outline"
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_appliance_ready_notifications_enabled"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def is_on(self) -> bool:
+        return self._coordinator.appliance_ready_notifications_enabled
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if last_state is not None:
+            self._coordinator.appliance_ready_notifications_enabled = (
+                last_state.state == "on"
+            )
+
+    async def async_turn_on(self, **kwargs) -> None:
+        await self._coordinator.async_set_appliance_ready_notifications_enabled(True)
+        self.async_write_ha_state()
+
+    async def async_turn_off(self, **kwargs) -> None:
+        await self._coordinator.async_set_appliance_ready_notifications_enabled(False)
         self.async_write_ha_state()
 
 

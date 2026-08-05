@@ -265,6 +265,9 @@ async def async_get_config_entry_diagnostics(
             "force_manual": coordinator.force_manual,
             "steelstofzuiger_override": coordinator.steelstofzuiger_override,
             "fietsladers_override": coordinator.fietsladers_override,
+            "appliance_ready_notifications_enabled": (
+                coordinator.appliance_ready_notifications_enabled
+            ),
             "arbitrage_charging_enabled": coordinator.arbitrage_charging_enabled,
             "last_arbitrage_margin_eur_per_kwh": (
                 coordinator.last_arbitrage_margin_eur_per_kwh

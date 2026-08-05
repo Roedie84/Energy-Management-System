@@ -4524,3 +4524,91 @@ gesorteerd; onbekende trend zonder genoeg geschiedenis; stabiel binnen
 de marge; stijgend/dalend boven de drempel, correct onderscheiden van
 een aanhoudende, gesignaleerde afwijking; en een lege tabel zonder
 bevestigde apparaten.
+
+## v0.63.52 — apparaten-lijst leesbaar op smal scherm, lege sleuven verborgen
+
+**Gerapporteerd, met screenshots:** "al beter, echter tabel niet in 1
+oogopzicht duidelijk inzichtelijk, en knoppen mogen verdwijnen wanneer
+een sleuf leeg is".
+
+**Fix 1 — apparatenoverzicht als lopende lijst in plaats van een
+markdown-tabel.** Een `|kolom|kolom|kolom|`-markdown-tabel werd op een
+smal scherm per kolom apart onder elkaar gestapeld (eerst alle namen,
+dan een lange losse lijst met alleen vermogens, dan een lange losse
+lijst met alleen trends) — onmogelijk in één oogopzicht te lezen. Elke
+rij toont nu gewoon "**Naam** — vermogen — trend" op één regel via een
+markdown-lijst (`- `-items, die altijd los blijven staan, in
+tegenstelling tot losse tekstregels die markdown zonder lege regel
+ertussen samenvoegt tot één alinea). Buigt natuurlijk mee op elke
+schermbreedte, geen kolomopmaak nodig.
+
+**Fix 2 — lege sleuf-knoppen verdwijnen nu uit beeld.** Elke van de 16
+sleufknop-kaarten heeft nu een `visibility`-conditie
+(`condition: template`) die rechtstreeks leest of
+`state_attr(entity, 'kandidaat_entity_id')` niet `None` is. Een lege
+sleuf neemt geen ruimte meer in op het dashboard; zodra er een nieuwe
+kandidaat instroomt en de sleuf bezet raakt, verschijnt de kaart
+vanzelf weer (dezelfde live-verversende attributen die al sinds
+v0.63.48/.50 correct bijgewerkt worden).
+
+**Geen Python-wijzigingen** — puur dashboard-YAML. Handmatig
+gerenderd en gevalideerd (16 kaarten met visibility, correcte
+lijstopbouw met/zonder data) voordat dit werd uitgeleverd.
+
+## v0.63.53 — echte oorzaak van de tabel-onleesbaarheid gevonden: vaste kaarthoogte
+
+**Gerapporteerd, met screenshot van een wél-goed-werkende tabel:**
+"tabel er ongeveer zo uit laten zien" — verwijzend naar de vergelijkbare
+3-koloms-tabel op het "Advies"-tabblad, die prima leesbaar rendert.
+
+**Echte root cause, nu gevonden door de twee kaarten te vergelijken:**
+niet de tabelopmaak zelf — v0.63.52's omzetting naar een lopende lijst
+loste dus het verkeerde probleem op. De NILM-tabelkaart zat, in
+tegenstelling tot de Advies-tabelkaart (een kale kaartenlijst zonder
+vaste afmeting), in een grid-layout met een **vaste hoogte**
+(`grid_options: rows: 5`). Bij genoeg bevestigde apparaten paste de
+tabel daar niet meer in, met inklappen/overlappen tot gevolg.
+
+**Fix:** teruggezet naar een echte markdown-tabel (zoals gevraagd),
+met `grid_options: rows: auto` in plaats van een vaste waarde — de
+kaart groeit nu automatisch mee met het aantal bevestigde apparaten,
+net als de Advies-tabel dat vanzelf al deed.
+
+**Gecontroleerd of dit probleem nog ergens anders in het dashboard
+sluimert**: enige andere dynamische (Jinja-`for`-lus) markdown-tabel is
+de Advies-tabel zelf, die al geen vaste hoogte heeft — geen verdere
+risicoplekken gevonden.
+
+**Geen Python-wijzigingen** — puur dashboard-YAML. Handmatig
+gerenderd en gevalideerd voordat dit werd uitgeleverd.
+
+## v0.63.54 — vaatwasser/wasmachine-"goedkoop moment"-melding apart uit te zetten
+
+**Gevraagd:** geen melding meer voor "Goedkoop moment voor de
+vaatwasser/wasmachine" (v0.47.0's apparaat-gereed-suggestie).
+
+**Bewust geen simpele "notify-service leegmaken"-oplossing**:
+`appliance_notify_service` wordt gedeeld door veel andere, ongerelateerde
+meldingstypes (modus-wijziging, steelstofzuiger/fietsladers-klaar,
+sluipverbruik-detectie, NILM-afwijkingen) — die leegmaken had al die
+andere, waarschijnlijk wél gewenste meldingen ook stilgelegd.
+
+**Fix: een nieuwe, dedicated switch.** `appliance_ready_notifications_
+enabled` (standaard `True`, ongewijzigd gedrag) op de coordinator,
+met een nieuwe `switch.vaatwasser_wasmachine_meldingen`-entiteit
+(`RestoreEntity`, zelfde patroon als de bestaande overrule-switches).
+`_check_and_notify_appliance_ready()` controleert deze vlag als eerste
+en stopt direct als hij uit staat — vóór er ooit een
+`_dispatch_notification`-aanroep plaatsvindt.
+
+**Testomgeving uitgebreid**: de nep-`SwitchEntity` in de testharnas
+miste `async_write_ha_state` — toegevoegd (zelfde gat als eerder bij
+`ButtonEntity` gevonden en gefixt).
+
+**Getest** (6 nieuwe permanente tests in
+`test_appliance_ready_notification_toggle.py`): standaard aan; melding
+wordt verstuurd als de switch aan staat; geen melding als de switch uit
+staat; het uitzetten van deze switch heeft geen effect op andere
+meldingstypes via dezelfde notify-service; de switch-entiteit
+weerspiegelt en wijzigt de coordinator-vlag correct in beide richtingen;
+en de uit-stand overleeft een herstart.

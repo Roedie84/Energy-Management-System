@@ -97,6 +97,15 @@ specifieke functionaliteit bij.
 | `oven_state_sensor_entity` / `kookplaat_state_sensor_entity` | sensor | Home Connect `operation_state` (bevestigd bij `Run`) |
 | `appliance_notify_service` | tekst | Notify-service voor apparaat-klaar-meldingen én accumodus-wijziging-meldingen (leeg = pop-up in HA) |
 
+**"Goedkoop moment voor de vaatwasser/wasmachine"-melding uit te
+zetten (v0.63.54, gevraagd):** de switch
+`switch.vaatwasser_wasmachine_meldingen` (standaard aan) schakelt
+uitsluitend déze ene meldingssoort uit — niet de gedeelde
+`appliance_notify_service`, die ook gebruikt wordt voor de
+modus-wijziging-melding, de steelstofzuiger/fietsladers-klaar-melding,
+sluipverbruik en NILM-afwijkingen. Die blijven gewoon werken als je
+alleen deze ene melding niet meer wilt.
+
 ## Hoe de beslislogica werkt
 
 Elke 5 minuten (`UPDATE_INTERVAL_MINUTES`) doorloopt de coordinator deze
@@ -821,6 +830,14 @@ wijziging alle geregistreerde luisteraars aan (niet pas bij de
 volgende tick), dus beide knoppen van een sleuf verversen meteen
 samen, ongeacht welke van de twee je indrukte.
 
+**Lege sleuven verdwijnen nu uit beeld (v0.63.52):** gevraagd — met 8
+sleuven × 2 knoppen kan het dashboard er snel vol uitzien als de
+meeste sleuven leeg zijn. Elke kaart heeft nu een
+`visibility`-voorwaarde die rechtstreeks leest of die sleuf een
+kandidaat heeft (`kandidaat_entity_id` niet `None`) — een lege sleuf
+neemt geen ruimte meer in, en zodra er een nieuwe kandidaat instroomt
+verschijnt de kaart vanzelf weer.
+
 **Verwacht bij brede detectie**: met "alle sensoren met een
 vermogens-eenheid" als detectiebereik kunnen ook granulaire
 deelmetingen van je eigen Zendure-accu verschijnen als kandidaat (bijv.
@@ -848,23 +865,32 @@ gedetecteerd, als attributen. Wél een `RestoreEntity` (in tegenstelling
 tot de kandidatenlijst) — die geschiedenis moet wekenlang opbouwen, dat
 mag een herstart niet resetten.
 
-### Overzichtstabel: naam, huidig vermogen, trend (v0.63.51)
+### Overzichtstabel: naam, huidig vermogen, trend (v0.63.51/.52)
 
-Op verzoek — een driekoloms-tabel van alle bevestigde apparaten, direct
-op het "Apparaten"-dashboard. Geen nieuwe trackinglaag: het huidige
-vermogen wordt live uitgelezen, en de trend is een lichtere, granulaire
-aftakking van de al bestaande CUSUM-drift-detectie hierboven — een
-kleine verschuiving (>5% t.o.v. de langere-termijn-referentie) is al
-zichtbaar in de tabel (`↗ licht stijgend` / `↘ dalend` /
-`→ stabiel`), ruim vóórdat die groot genoeg zou zijn om de
+Op verzoek — een overzicht van alle bevestigde apparaten (naam, huidig
+vermogen, trend), direct op het "Apparaten"-dashboard. Geen nieuwe
+trackinglaag: het huidige vermogen wordt live uitgelezen, en de trend
+is een lichtere, granulaire aftakking van de al bestaande
+CUSUM-drift-detectie hierboven — een kleine verschuiving (>5% t.o.v. de
+langere-termijn-referentie) is al zichtbaar (`↗ licht stijgend` /
+`↘ dalend` / `→ stabiel`), ruim vóórdat die groot genoeg zou zijn om de
 alarmdrempel (10% aanhoudend) te bereiken. Bij een daadwerkelijk
-gesignaleerde afwijking toont de trend-kolom expliciet "mogelijk
-defect" met het geschatte percentage.
+gesignaleerde afwijking staat er expliciet "mogelijk defect" met het
+geschatte percentage.
 
 Beschikbaar als `tabel`-attribuut op `sensor.nilm_bevestigde_apparaten`
 (lijst met `naam`/`huidig_vermogen_w`/`trend` per apparaat, alfabetisch
-gesorteerd), en gerenderd als leesbare markdown-tabel op het
-dashboard.
+gesorteerd), weergegeven als een echte markdown-tabel.
+
+**Echte oorzaak van de eerdere onleesbaarheid gevonden (v0.63.53):**
+niet de tabelopmaak zelf (v0.63.52's omzetting naar een lopende lijst
+loste het verkeerde probleem op) — de kaart zat in een grid-layout met
+een **vaste hoogte** (`grid_options: rows: 5`) die te krap was voor het
+aantal apparaatrijen, waardoor de tabel inklapte/overlapte. Vergeleken
+met de wél goed werkende tabel op het "Advies"-tabblad (die geen vaste
+hoogte heeft) en teruggezet naar een echte tabel, nu met
+`grid_options: rows: auto` zodat de kaart automatisch meegroeit met
+het aantal bevestigde apparaten.
 
 **Puur informatief** — nergens meegewogen in accubeslissingen, zoals
 afgesproken.
