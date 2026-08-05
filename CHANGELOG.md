@@ -3578,3 +3578,48 @@ scenario als de bestaande kostprijsmodel-tests (200W huisverbruik,
 1000W ontlading → 800W echte export), en bevestigt dat
 `discharge_value_expensive_quarters` nu ook €0,016 premie meerekent op
 die 0,8 kWh export.
+
+## v0.63.27 — "Dure kwartieren" begrensd op wat de accu fysiek aankan
+
+**Gerapporteerd (met screenshot):** "Drempel duur" toonde 35 kwartieren
+— 8,75 uur bij 1600W, tegenover een accu met slechts ~7,4 kWh
+beschikbaar. Fysiek onmogelijk, en daarmee meer verwarrend dan nuttig.
+
+**Root cause:** `_count_expensive_quarters_today()` telde simpelweg alle
+kwartieren van de hele kalenderdag die de dynamische drempel (top 20%
+van de prijsrange) haalden, zonder enige begrenzing op wat de accu ooit
+zou kunnen verkopen. Bij een relatief vlakke prijsdag met één duidelijke
+dip en een lang "schouder"-gebied van vergelijkbaar hoge prijzen kan dat
+aantal ver boven de nominale 20% uitkomen.
+
+**Fix:** twee nieuwe, optionele configuratievelden —
+`battery_total_capacity_sensor_entity` (bijv.
+`sensor.zendure_manager_total_kwh`) en `battery_min_soc_number_entity`
+(bijv. `number.solarflow_2400_ac_min_soc`, de **hardware**-ondergrens
+van het apparaat zelf, los van de eigen `min_soc_percent`-instelling van
+deze integratie). Beide **live** uitgelezen, niet statisch
+geconfigureerd, zodat het blijft kloppen als de capaciteit verandert
+(bijv. door veroudering) of de min-SoC handmatig wordt aangepast.
+
+Bruikbare capaciteit = `totale_capaciteit × (1 − hardware_min_soc / 100)`.
+Maximaal aantal kwartieren = die capaciteit gedeeld door de energie per
+kwartier bij `manual_discharge_power`. De uiteindelijke telling is
+`min(ruwe_telling, capaciteit_maximum)` — een grove, fysieke bovengrens,
+bewust geen precieze "hoeveel kan ik vandaag echt verkopen"-voorspelling
+(dat vereist de dynamische nachtreserve, die per kwartier verschilt en
+al door de bestaande prijs-prioriteitslogica wordt afgehandeld). Zonder
+de twee nieuwe velden: exact hetzelfde gedrag als voorheen (geen
+regressie voor bestaande installaties).
+
+**Nieuwe diagnostiek:** `last_max_sellable_quarters_by_capacity`.
+
+**Dashboard:** de info-kaart naast "Dure kwartieren" is bijgewerkt om
+de nieuwe capaciteit-begrenzing uit te leggen.
+
+**Getest** (5 nieuwe permanente tests in
+`test_realistic_expensive_quarters.py`): reproduceert het gerapporteerde
+scenario (36 ruwe kwartieren, 7,4 kWh → begrensd tot 18); een
+hardware-min-SoC vermindert de bruikbare capaciteit correct; de kleinste
+van de twee waarden wint altijd (geen kunstmatige verhoging op een dag
+met weinig dure kwartieren); en zonder (één van) de twee entiteiten
+blijft het exact de oude, ongebreidelde telling.

@@ -92,6 +92,8 @@ from .const import (
     MIN_PLAUSIBLE_EFFICIENCY_PERCENT,
     MAX_PLAUSIBLE_EFFICIENCY_PERCENT,
     CONF_MANUAL_DISCHARGE_POWER,
+    CONF_BATTERY_TOTAL_CAPACITY_SENSOR,
+    CONF_BATTERY_MIN_SOC_NUMBER,
     CONF_MANUAL_POWER_NUMBER,
     CONF_MIN_SOC_PERCENT,
     CONF_OPERATION_SELECT,
@@ -246,6 +248,7 @@ class EnergyManagementSystemCoordinator:
         self.last_discharge_start: datetime | None = None
         self.last_is_expensive: bool = False
         self.last_effective_expensive_quarters_count: int | None = None
+        self.last_max_sellable_quarters_by_capacity: int | None = None
         self.last_simulated_action: str | None = None
         self.last_expected_mode: str | None = None
         self.last_available_kwh: float | None = None
@@ -844,14 +847,70 @@ class EnergyManagementSystemCoordinator:
         self, entries: list[PriceEntry], now: datetime
     ) -> int:
         """How many of today's quarters currently clear the dynamic
-        "expensive" threshold - informational only (shown in
-        sensor.effective_expensive_quarters), not used to limit discharge.
+        "expensive" threshold, capped by how many the battery could
+        physically ever discharge into (v0.63.27).
+
+        Reported: on a day with a relatively flat price shape (one clear
+        dip, a long "shoulder" of similarly-elevated prices above it),
+        this raw count can run far higher than what the battery's usable
+        capacity could ever actually sell into - e.g. 35 quarters (~8-9
+        kWh at 1600W) against a battery with maybe 7,4 kWh available,
+        making the number more confusing than informative.
+
+        Usable discharge capacity = the Zendure's own reported total
+        capacity, reduced by its own hardware minimum SoC (the device
+        won't discharge below that regardless of what this integration
+        asks for) - both read live, not configured statically, so this
+        stays accurate if either ever changes (e.g. capacity fade from
+        aging, or a manually adjusted min SoC). Falls back to the
+        uncapped raw count if either entity isn't configured/available -
+        same behaviour as before this version for anyone not using them.
+
+        Deliberately doesn't also subtract the dynamic overnight reserve
+        (that varies quarter to quarter and day to day) - this is a
+        coarse physical sanity cap, not a precise sellable-today
+        prediction; the actual decision logic (price-priority,
+        `_is_worth_discharging_now`) already handles the precise
+        quarter-by-quarter allocation.
         """
         threshold = self._get_expensive_price_threshold(entries, now)
         if threshold is None:
             return 0
         todays_entries = [entry for entry in entries if entry[0].date() == now.date()]
-        return sum(1 for entry in todays_entries if entry[2] >= threshold)
+        raw_count = sum(1 for entry in todays_entries if entry[2] >= threshold)
+
+        max_by_capacity = self._max_sellable_quarters_by_capacity()
+        self.last_max_sellable_quarters_by_capacity = max_by_capacity
+        if max_by_capacity is None:
+            return raw_count
+        return min(raw_count, max_by_capacity)
+
+    def _max_sellable_quarters_by_capacity(self) -> int | None:
+        """How many 15-minute quarters at manual_discharge_power the
+        battery's usable capacity (total capacity minus its own hardware
+        minimum SoC) could ever physically sustain. None if the two
+        entities needed for this aren't configured/available.
+        """
+        total_capacity_entity = self.config.get(CONF_BATTERY_TOTAL_CAPACITY_SENSOR)
+        min_soc_entity = self.config.get(CONF_BATTERY_MIN_SOC_NUMBER)
+        if not total_capacity_entity or not min_soc_entity:
+            return None
+
+        total_capacity_kwh = self._read_sensor_float(total_capacity_entity)
+        min_soc_percent = self._read_sensor_float(min_soc_entity)
+        if total_capacity_kwh is None or min_soc_percent is None:
+            return None
+
+        usable_capacity_kwh = total_capacity_kwh * max(
+            0.0, 1 - min_soc_percent / 100
+        )
+        base_power = self.config.get(
+            CONF_MANUAL_DISCHARGE_POWER, DEFAULT_MANUAL_DISCHARGE_POWER
+        )
+        energy_per_quarter_kwh = (base_power / 1000) * 0.25
+        if energy_per_quarter_kwh <= 0:
+            return None
+        return int(usable_capacity_kwh / energy_per_quarter_kwh)
 
     def _read_sensor_float(self, entity_id: str | None) -> float | None:
         """Read a sensor's state as a float, automatically converting to

@@ -183,7 +183,7 @@ views:
               {{
               states('sensor.energy_management_system_effective_expensive_quarters')
               }} kwartieren
-            secondary: Boven prijsdrempel (hele dag, incl. voorbije uren)
+            secondary: Boven prijsdrempel (hele dag, capaciteit-begrensd)
             icon: mdi:chart-bell-curve
             icon_color: red
             entity: sensor.energy_management_system_effective_expensive_quarters
@@ -192,13 +192,18 @@ views:
               rows: 1
           - type: markdown
             content: >
-              ℹ️ Dit telt de **hele kalenderdag** (ook uren die al voorbij
-              zijn) — dat kan dus hoger uitvallen dan het aantal
-              "manual"-kwartieren dat je nog in het schema (Geschiedenis-
-              tabblad) ziet, wat alleen de **resterende** tijd toont.
+              ℹ️ Telt de **hele kalenderdag** (ook uren die al voorbij zijn),
+              maar wél begrensd op wat de accu fysiek zou kunnen verkopen
+              (totale capaciteit min de hardware-min.-SoC, gedeeld door het
+              ontlaadvermogen) — mits `battery_total_capacity_sensor_entity`
+              en `battery_min_soc_number_entity` zijn geconfigureerd. Zonder
+              die twee: ongebreidelde ruwe telling, zoals voorheen. Kan
+              hoger uitvallen dan het aantal "manual"-kwartieren dat je nog
+              in het schema (Geschiedenis-tabblad) ziet, wat alleen de
+              **resterende** tijd toont.
             grid_options:
               columns: 12
-              rows: 2
+              rows: 3
           - type: custom:mushroom-template-card
             primary: "{{ states('number.solaredge_i1_active_power_limit') }}%"
             secondary: Zonnepaneel-vermogenslimiet (bij negatieve prijs)

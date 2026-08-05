@@ -35,6 +35,8 @@ from .const import (
     CONF_FIETSLADERS_POWER_SENSOR,
     CONF_APPLIANCE_NOTIFY_SERVICE,
     CONF_MANUAL_DISCHARGE_POWER,
+    CONF_BATTERY_TOTAL_CAPACITY_SENSOR,
+    CONF_BATTERY_MIN_SOC_NUMBER,
     CONF_MANUAL_POWER_NUMBER,
     CONF_MIN_SOC_PERCENT,
     CONF_OPERATION_SELECT,
@@ -95,6 +97,14 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
                     min=0, max=10000, step=50, mode=selector.NumberSelectorMode.BOX
                 )
             ),
+            vol.Optional(
+                CONF_BATTERY_TOTAL_CAPACITY_SENSOR,
+                default=defaults.get(CONF_BATTERY_TOTAL_CAPACITY_SENSOR),
+            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            vol.Optional(
+                CONF_BATTERY_MIN_SOC_NUMBER,
+                default=defaults.get(CONF_BATTERY_MIN_SOC_NUMBER),
+            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="number")),
             vol.Optional(
                 CONF_MANUAL_CHARGE_POWER,
                 default=defaults.get(

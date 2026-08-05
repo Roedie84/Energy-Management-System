@@ -83,6 +83,7 @@ specifieke functionaliteit bij.
 | `solar_remaining_today_sensor_entity` | Live bijstelling van vandaags PV-restschatting |
 | `solar_actual_sensor_entity` | Voorspelling-vs-werkelijkheid-tracking (leert de Solcast-bias) |
 | `solar_power_limit_entity` | Zonnepanelen afregelen bij een negatieve prijs |
+| `battery_total_capacity_sensor_entity` + `battery_min_soc_number_entity` | Capaciteit-bewuste "dure kwartieren"-telling (v0.63.27) |
 
 ### Grootverbruiker-bevestiging (optioneel, elk apart te configureren)
 
@@ -132,6 +133,18 @@ alleen aan wat anders toch onbenut zou blijven.
 Binnen beperkte headroom geldt **prijs-prioriteit**: de duurste kwartieren
 gaan eerst, niet chronologisch — een kwartier kan bewust worden
 overgeslagen ten gunste van een duurder kwartier later diezelfde dag.
+
+**"Dure kwartieren"-telling (dashboard/diagnostiek), capaciteit-bewust
+sinds v0.63.27:** de ruwe telling (hoeveel kwartieren van de hele dag de
+drempel halen) kan bij een relatief vlakke prijsdag flink hoger uitvallen
+dan wat de accu ooit fysiek zou kunnen verkopen. Met
+`battery_total_capacity_sensor_entity` + `battery_min_soc_number_entity`
+geconfigureerd (beide live uitgelezen, niet statisch ingesteld) wordt de
+telling begrensd op `(totale_capaciteit × (1 − hardware_min_soc%)) /
+(manual_discharge_power × 0,25h)` — een grove, fysieke bovengrens, geen
+precieze voorspelling (houdt bewust geen rekening met de dynamische
+nachtreserve, die verandert per kwartier). Zonder deze twee velden:
+ongebreidelde ruwe telling, zoals voorheen.
 
 ### Winter-guard
 

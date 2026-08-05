@@ -339,6 +339,9 @@ async def async_get_config_entry_diagnostics(
             "last_effective_expensive_quarters_count": (
                 coordinator.last_effective_expensive_quarters_count
             ),
+            "last_max_sellable_quarters_by_capacity": (
+                coordinator.last_max_sellable_quarters_by_capacity
+            ),
             "last_cheap_block_start": _iso(coordinator.last_cheap_block_start),
             "last_cheap_block_end": _iso(coordinator.last_cheap_block_end),
             "last_discharge_start": _iso(coordinator.last_discharge_start),
