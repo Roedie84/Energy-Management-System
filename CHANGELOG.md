@@ -4357,3 +4357,75 @@ begrensd tot 20 metingen; metingen tijdens de testpoging worden
 daadwerkelijk vastgelegd; en echte laadstroom (honderden watts) wordt
 nog steeds correct herkend tegen de nieuwe, veel lagere geleerde
 drempel.
+
+## v0.63.47 — echte oorzaak van de afkapping gevonden: apparaatnaam-voorvoegsel
+
+**Gerapporteerd, opnieuw met screenshots:** ondanks v0.63.43's dynamische
+knopnamen bleef alles afgekapt tot "E...".
+
+**Werkelijke root cause, nu gevonden:** `_attr_has_entity_name = True`
+(zoals elke andere entiteit in deze integratie) laat Home Assistant de
+apparaatnaam ("Energy Management System") vóór elke weergavenaam
+plakken. In een smalle naamkolom kapte dat af tot alleen "E..." — de
+knop droeg intern al de juiste naam ("✅ Koelkast 82W"), maar die werd
+nooit zichtbaar doordat het lange voorvoegsel als eerste werd afgekapt.
+
+**Fix:** `has_entity_name` staat nu bewust **uit** voor deze 16
+sleufknoppen (enige uitzondering in de hele integratie) — ze worden
+gelezen als losstaande actie-labels, niet als apparaat-subfuncties, dus
+het voorvoegsel voegt niets toe behalve lengte.
+
+**Kaartvorm ook aangepast**: de knoppenlijst gebruikte `type: entities`
+(een layout met een intrinsiek smalle naamkolom, ongeacht het
+voorvoegsel-probleem) — vervangen door 16 losse
+`custom:mushroom-entity-card`s in een raster (2 per rij, groen voor
+bevestigen/rood voor negeren), consistent met de rest van dit
+dashboard en met veel meer ruimte voor de volledige naam.
+
+**Getest**: nieuwe permanente test bevestigt expliciet dat
+`has_entity_name` uit staat op beide knoptypes, zodat een toekomstige
+wijziging dit niet per ongeluk terugzet.
+
+## v0.63.48 — knoppen ververst nu daadwerkelijk live (was structureel bevroren)
+
+**Gerapporteerd:** "alle sleuven zijn ook leeg, als ik er overheen
+hover" — ondanks een correct werkende detectie (de sensor toonde
+eerder al 120 kandidaten).
+
+**Werkelijke root cause:** `ButtonEntity` pollt, in tegenstelling tot
+`SensorEntity`, niet standaard. Onze knoppen berekenen hun naam/
+attributen weliswaar correct als Python-property bij elke aanroep, maar
+zonder polling of een expliciete "schrijf je status nu"-melding wordt
+die berekening nooit opnieuw naar Home Assistant's state-machine
+weggeschreven — de weergave bleef letterlijk bevroren op het allereerste
+moment dat de knop werd geregistreerd (nog vóórdat er ooit een
+detectie had gelopen), en zou dat voor altijd blijven doen.
+
+**Fix:** een luisteraar-mechanisme (`register_listener`/
+`unregister_listener`/`_notify_listeners`) toegevoegd aan de
+hoofdcoordinator — exact hetzelfde bewezen patroon dat de aparte
+PV-nauwkeurigheids-tracker al gebruikte. Elke sleufknop registreert
+zichzelf (`async_write_ha_state`) bij het toevoegen aan Home Assistant,
+en de coordinator roept alle geregistreerde luisteraars aan na **elke**
+update-poging — in een `finally`-blok, dus gegarandeerd ook bij een
+vroege `return` in een van de vele beslistakken van de hoofdlus, en
+zelfs bij een onverwachte fout.
+
+**Bijkomend gevonden en gefixt tijdens het bouwen hiervan:** een eerdere
+`str_replace`-bewerking had per ongeluk een stuk van `__init__`
+(ongeveer 70 regels state-initialisatie, inclusief `self._lock`) laten
+opslokken door de nieuwe `_notify_listeners()`-methode door een
+samenvallende inspringing — dit veroorzaakte in eerste instantie 96
+falende tests (`AttributeError: object has no attribute '_lock'`) en
+een sterk vertraagde testrun. Teruggevonden en hersteld voordat dit
+werd uitgeleverd.
+
+**Testomgeving uitgebreid**: de nep-`ButtonEntity` in de testharnas
+miste `async_write_ha_state`/`async_added_to_hass`/
+`async_will_remove_from_hass` — toegevoegd zodat dit gedrag
+daadwerkelijk getest kan worden.
+
+**Getest** (4 nieuwe permanente tests): een knop registreert zichzelf
+bij toevoeging; een knop meldt zich correct af bij verwijdering; de
+coordinator meldt luisteraars ook bij een vroege `return`; en ook na
+een onverwachte uitzondering.

@@ -168,3 +168,95 @@ def test_button_name_for_an_empty_slot(make_coordinator, hass):
     button = NilmConfirmCandidateButton(coordinator, "entry1", slot=0)
 
     assert "leeg" in button.name.lower()
+
+
+def test_has_entity_name_is_off_to_avoid_device_prefix_truncation(
+    make_coordinator, hass
+):
+    """v0.63.47, reported: with has_entity_name on, Home Assistant
+    prefixes the display name with the device name ("Energy Management
+    System ..."), which truncated to just "E..." in a narrow name
+    column - defeating the point of showing the candidate directly in
+    the name."""
+    from custom_components.energy_management_system.button import (
+        NilmConfirmCandidateButton,
+        NilmRejectCandidateButton,
+    )
+
+    coordinator = make_coordinator({})
+    confirm_button = NilmConfirmCandidateButton(coordinator, "entry1", slot=0)
+    reject_button = NilmRejectCandidateButton(coordinator, "entry1", slot=0)
+
+    assert getattr(confirm_button, "_attr_has_entity_name", False) is False
+    assert getattr(reject_button, "_attr_has_entity_name", False) is False
+
+
+def test_button_registers_as_a_coordinator_listener_on_added(make_coordinator, hass):
+    """v0.63.48, reported: slots stayed empty/stale indefinitely.
+    ButtonEntity doesn't poll by default, so without an explicit push
+    the button's displayed name/attributes never refreshed. Confirms
+    the button registers `async_write_ha_state` as a coordinator
+    listener when added to hass."""
+    import asyncio
+
+    from custom_components.energy_management_system.button import (
+        NilmConfirmCandidateButton,
+    )
+
+    coordinator = make_coordinator({})
+    button = NilmConfirmCandidateButton(coordinator, "entry1", slot=0)
+
+    asyncio.run(button.async_added_to_hass())
+
+    assert button.async_write_ha_state in coordinator._listeners
+
+
+def test_button_unregisters_on_removal(make_coordinator, hass):
+    import asyncio
+
+    from custom_components.energy_management_system.button import (
+        NilmConfirmCandidateButton,
+    )
+
+    coordinator = make_coordinator({})
+    button = NilmConfirmCandidateButton(coordinator, "entry1", slot=0)
+
+    asyncio.run(button.async_added_to_hass())
+    asyncio.run(button.async_will_remove_from_hass())
+
+    assert button.async_write_ha_state not in coordinator._listeners
+
+
+def test_coordinator_notifies_listeners_even_on_an_early_return(make_coordinator, hass):
+    """The real _async_update_locked has many early `return` points for
+    different decision branches - notification must happen regardless
+    of which one fires, via the `finally` in async_update()."""
+    import asyncio
+
+    coordinator = make_coordinator({})
+    calls = []
+    coordinator.register_listener(lambda: calls.append(1))
+
+    async def fake_locked():
+        return  # simulates an early-return decision branch
+
+    coordinator._async_update_locked = fake_locked
+    asyncio.run(coordinator.async_update())
+
+    assert calls == [1]
+
+
+def test_coordinator_notifies_listeners_even_after_an_exception(make_coordinator, hass):
+    import asyncio
+
+    coordinator = make_coordinator({})
+    calls = []
+    coordinator.register_listener(lambda: calls.append(1))
+
+    async def broken_locked():
+        raise ValueError("boom")
+
+    coordinator._async_update_locked = broken_locked
+    asyncio.run(coordinator.async_update())
+
+    assert calls == [1]

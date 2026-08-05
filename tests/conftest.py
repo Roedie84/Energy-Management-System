@@ -190,7 +190,14 @@ def _install_ha_mocks() -> None:
     components_button = types.ModuleType("homeassistant.components.button")
 
     class ButtonEntity:
-        pass
+        def async_write_ha_state(self) -> None:
+            pass
+
+        async def async_added_to_hass(self) -> None:
+            pass
+
+        async def async_will_remove_from_hass(self) -> None:
+            pass
 
     components_button.ButtonEntity = ButtonEntity
     sys.modules["homeassistant.components.button"] = components_button

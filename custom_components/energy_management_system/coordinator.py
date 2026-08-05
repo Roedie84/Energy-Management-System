@@ -487,6 +487,7 @@ class EnergyManagementSystemCoordinator:
         self.nilm_rejected_entities: list[str] = []
         # Advisory readiness assessment (v0.63.40).
         self.advisory_readiness: dict[str, dict] = {}
+        self._listeners: list = []
         self._last_cost_basis_calc_time: datetime | None = None
         self.last_charge_power_applied: float | None = None
         self.last_current_price_per_kwh: float | None = None
@@ -557,6 +558,28 @@ class EnergyManagementSystemCoordinator:
         self._lock = asyncio.Lock()
         self._unsub_interval = None
         self._unsub_state = None
+
+    def register_listener(self, callback_fn) -> None:
+        """Register a callback (e.g. entity.async_write_ha_state) to
+        notify after each update tick completes (v0.63.48). Reported:
+        the NILM confirm/reject slot buttons showed stale/empty data
+        indefinitely - `ButtonEntity` doesn't poll by default (unlike
+        `SensorEntity`, which is why every sensor in this integration
+        refreshes fine without this), so without an explicit push their
+        displayed name/attributes just froze at whatever they were the
+        moment Home Assistant first wrote their state during setup.
+        Same pattern already used by `SolarForecastAccuracyTracker` for
+        the same reason.
+        """
+        self._listeners.append(callback_fn)
+
+    def unregister_listener(self, callback_fn) -> None:
+        if callback_fn in self._listeners:
+            self._listeners.remove(callback_fn)
+
+    def _notify_listeners(self) -> None:
+        for listener in self._listeners:
+            listener()
 
     @property
     def tracked_entities(self) -> list[str]:
@@ -5454,6 +5477,15 @@ class EnergyManagementSystemCoordinator:
             )
         else:
             self.last_successful_update = dt_util.now()
+        finally:
+            # v0.63.48: notify registered listeners (entities that don't
+            # poll, e.g. the NILM confirm/reject slot buttons) after
+            # every attempt, success or failure, so their displayed
+            # name/attributes never silently stay frozen - placed in a
+            # `finally` specifically because _async_update_locked has
+            # many early `return` points for different decision
+            # branches, not one single exit.
+            self._notify_listeners()
 
     @property
     def system_status(self) -> str:

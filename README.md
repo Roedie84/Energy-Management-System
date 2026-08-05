@@ -759,7 +759,7 @@ diagnostiek-export (Instellingen → Apparaten → Energy Management
 System → Diagnostische gegevens downloaden), die niet aan die limiet
 gebonden is.
 
-### Bevestigen/negeren via het dashboard (v0.63.41/.43)
+### Bevestigen/negeren via het dashboard (v0.63.41/.43/.47/.48)
 
 Een kale Home Assistant-installatie kan geen dynamische, onbekende-
 lengte-lijst automatisch in knoppen omzetten (dat vereist een externe
@@ -771,11 +771,28 @@ extra kandidaten gewoon nog niet zichtbaar totdat er een sleuf vrijkomt.
 
 **Elke knop toont zijn eigen kandidaat direct in de naam** (bijv. "✅
 Koelkast 82W") — géén aparte tabel meer om te kruisverwijzen, dat bleek
-op een smal/mobiel dashboard onleesbaar. Een lege sleuf toont "(leeg)".
-Alfabetisch gesorteerd op `entity_id`, dus stabiel tussen ticks. Het
-dashboard (paneel "Apparaten") toont de 16 knoppen; een sleuf
-verschuift automatisch naar de volgende kandidaat zodra je 'm bevestigt
-of negeert.
+op een smal/mobiel dashboard onleesbaar (v0.63.43). Een lege sleuf toont
+"(leeg)". Alfabetisch gesorteerd op `entity_id`, dus stabiel tussen
+ticks. Het dashboard (paneel "Apparaten") toont de 16 knoppen als losse
+kaarten in een raster; een sleuf verschuift automatisch naar de
+volgende kandidaat zodra je 'm bevestigt of negeert.
+
+`has_entity_name` staat bewust **uit** voor deze 16 knoppen — enige
+uitzondering in de hele integratie (v0.63.47, gerapporteerd): normaal
+gesproken plakt Home Assistant de apparaatnaam ("Energy Management
+System") vóór elke entiteitsnaam, wat de knoptekst in de praktijk
+afkapte tot onleesbare fragmenten.
+
+**Ververst nu ook daadwerkelijk live (v0.63.48, gerapporteerd — sleuven
+bleven leeg tonen, ook na verversen):** `ButtonEntity` pollt in
+tegenstelling tot `SensorEntity` niet standaard, dus zonder een
+expliciete melding bleef de weergave bevroren op wat 'm was bij de
+allereerste keer dat Home Assistant de status wegschreef (typisch
+"(leeg)", nog vóór er ooit een detectie had gelopen). De coordinator
+heeft nu een luisteraar-mechanisme (zelfde patroon als de
+PV-nauwkeurigheids-tracker): na elke update-cyclus — inclusief bij een
+vroege terugkeer in een van de vele beslistakken, of zelfs bij een
+onverwachte fout — worden alle geregistreerde knoppen actief ververst.
 
 **Verwacht bij brede detectie**: met "alle sensoren met een
 vermogens-eenheid" als detectiebereik kunnen ook granulaire

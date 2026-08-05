@@ -878,28 +878,123 @@ views:
             grid_options:
               columns: 12
               rows: 2
-          - type: entities
-            title: Bevestigen / negeren
+          - type: heading
+            heading: Bevestigen / negeren
             grid_options:
               columns: 12
-              rows: 10
-            entities:
-              - entity: button.woonkamer_energy_management_system_nilm_kandidaat_1_bevestigen
-              - entity: button.woonkamer_energy_management_system_nilm_kandidaat_1_negeren
-              - entity: button.woonkamer_energy_management_system_nilm_kandidaat_2_bevestigen
-              - entity: button.woonkamer_energy_management_system_nilm_kandidaat_2_negeren
-              - entity: button.woonkamer_energy_management_system_nilm_kandidaat_3_bevestigen
-              - entity: button.woonkamer_energy_management_system_nilm_kandidaat_3_negeren
-              - entity: button.woonkamer_energy_management_system_nilm_kandidaat_4_bevestigen
-              - entity: button.woonkamer_energy_management_system_nilm_kandidaat_4_negeren
-              - entity: button.woonkamer_energy_management_system_nilm_kandidaat_5_bevestigen
-              - entity: button.woonkamer_energy_management_system_nilm_kandidaat_5_negeren
-              - entity: button.woonkamer_energy_management_system_nilm_kandidaat_6_bevestigen
-              - entity: button.woonkamer_energy_management_system_nilm_kandidaat_6_negeren
-              - entity: button.woonkamer_energy_management_system_nilm_kandidaat_7_bevestigen
-              - entity: button.woonkamer_energy_management_system_nilm_kandidaat_7_negeren
-              - entity: button.woonkamer_energy_management_system_nilm_kandidaat_8_bevestigen
-              - entity: button.woonkamer_energy_management_system_nilm_kandidaat_8_negeren
+              rows: 1
+          - type: custom:mushroom-entity-card
+            entity: button.woonkamer_energy_management_system_nilm_kandidaat_1_bevestigen
+            icon_color: green
+            secondary_info: none
+            grid_options:
+              columns: 6
+              rows: 1
+          - type: custom:mushroom-entity-card
+            entity: button.woonkamer_energy_management_system_nilm_kandidaat_1_negeren
+            icon_color: red
+            secondary_info: none
+            grid_options:
+              columns: 6
+              rows: 1
+          - type: custom:mushroom-entity-card
+            entity: button.woonkamer_energy_management_system_nilm_kandidaat_2_bevestigen
+            icon_color: green
+            secondary_info: none
+            grid_options:
+              columns: 6
+              rows: 1
+          - type: custom:mushroom-entity-card
+            entity: button.woonkamer_energy_management_system_nilm_kandidaat_2_negeren
+            icon_color: red
+            secondary_info: none
+            grid_options:
+              columns: 6
+              rows: 1
+          - type: custom:mushroom-entity-card
+            entity: button.woonkamer_energy_management_system_nilm_kandidaat_3_bevestigen
+            icon_color: green
+            secondary_info: none
+            grid_options:
+              columns: 6
+              rows: 1
+          - type: custom:mushroom-entity-card
+            entity: button.woonkamer_energy_management_system_nilm_kandidaat_3_negeren
+            icon_color: red
+            secondary_info: none
+            grid_options:
+              columns: 6
+              rows: 1
+          - type: custom:mushroom-entity-card
+            entity: button.woonkamer_energy_management_system_nilm_kandidaat_4_bevestigen
+            icon_color: green
+            secondary_info: none
+            grid_options:
+              columns: 6
+              rows: 1
+          - type: custom:mushroom-entity-card
+            entity: button.woonkamer_energy_management_system_nilm_kandidaat_4_negeren
+            icon_color: red
+            secondary_info: none
+            grid_options:
+              columns: 6
+              rows: 1
+          - type: custom:mushroom-entity-card
+            entity: button.woonkamer_energy_management_system_nilm_kandidaat_5_bevestigen
+            icon_color: green
+            secondary_info: none
+            grid_options:
+              columns: 6
+              rows: 1
+          - type: custom:mushroom-entity-card
+            entity: button.woonkamer_energy_management_system_nilm_kandidaat_5_negeren
+            icon_color: red
+            secondary_info: none
+            grid_options:
+              columns: 6
+              rows: 1
+          - type: custom:mushroom-entity-card
+            entity: button.woonkamer_energy_management_system_nilm_kandidaat_6_bevestigen
+            icon_color: green
+            secondary_info: none
+            grid_options:
+              columns: 6
+              rows: 1
+          - type: custom:mushroom-entity-card
+            entity: button.woonkamer_energy_management_system_nilm_kandidaat_6_negeren
+            icon_color: red
+            secondary_info: none
+            grid_options:
+              columns: 6
+              rows: 1
+          - type: custom:mushroom-entity-card
+            entity: button.woonkamer_energy_management_system_nilm_kandidaat_7_bevestigen
+            icon_color: green
+            secondary_info: none
+            grid_options:
+              columns: 6
+              rows: 1
+          - type: custom:mushroom-entity-card
+            entity: button.woonkamer_energy_management_system_nilm_kandidaat_7_negeren
+            icon_color: red
+            secondary_info: none
+            grid_options:
+              columns: 6
+              rows: 1
+          - type: custom:mushroom-entity-card
+            entity: button.woonkamer_energy_management_system_nilm_kandidaat_8_bevestigen
+            icon_color: green
+            secondary_info: none
+            grid_options:
+              columns: 6
+              rows: 1
+          - type: custom:mushroom-entity-card
+            entity: button.woonkamer_energy_management_system_nilm_kandidaat_8_negeren
+            icon_color: red
+            secondary_info: none
+            grid_options:
+              columns: 6
+              rows: 1
 
   - title: Advies
     path: advies
