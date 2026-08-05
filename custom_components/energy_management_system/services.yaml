@@ -1,0 +1,32 @@
+confirm_nilm_device:
+  name: Bevestig NILM-apparaat
+  description: >-
+    Bevestig dat een automatisch ontdekte vermogen-sensor daadwerkelijk
+    een apparaat is dat je wilt volgen. Start vanaf dat moment de
+    verbruik-drift-detectie (mogelijk defect) voor dit apparaat.
+  fields:
+    entity_id:
+      name: Entiteit
+      description: >-
+        De entity_id van de ontdekte vermogen-sensor (zie
+        sensor.woonkamer_energy_management_system_nilm_onbevestigde_kandidaten
+        voor de lijst).
+      required: true
+      selector:
+        entity:
+          domain: sensor
+
+reject_nilm_device:
+  name: Negeer NILM-apparaat
+  description: >-
+    Negeer een automatisch ontdekte vermogen-sensor permanent - wordt
+    nooit meer voorgesteld. Verwijdert 'm ook uit de bevestigde lijst
+    als je van gedachten bent veranderd.
+  fields:
+    entity_id:
+      name: Entiteit
+      description: De entity_id van de te negeren vermogen-sensor.
+      required: true
+      selector:
+        entity:
+          domain: sensor

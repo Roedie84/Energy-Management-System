@@ -449,6 +449,15 @@ async def async_get_config_entry_diagnostics(
             "kalman_pv_raw_w": coordinator.kalman_pv_raw_w,
             "kalman_load_filtered_w": coordinator.kalman_load_filtered_w,
             "kalman_load_raw_w": coordinator.kalman_load_raw_w,
+            "digital_twin_projected_profit_eur": (
+                coordinator.digital_twin_projected_profit_eur
+            ),
+            "digital_twin_final_soc_kwh": coordinator.digital_twin_final_soc_kwh,
+            "digital_twin_hours_simulated": coordinator.digital_twin_hours_simulated,
+            "digital_twin_note": coordinator.digital_twin_note,
+            "nilm_unconfirmed_candidates": coordinator.nilm_unconfirmed_candidates,
+            "nilm_confirmed_devices": coordinator.nilm_confirmed_devices,
+            "nilm_rejected_entities": coordinator.nilm_rejected_entities,
             "total_feedin_premium_eur": round(
                 coordinator.total_feedin_premium_eur, 4
             ),

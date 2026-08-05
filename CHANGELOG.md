@@ -3946,3 +3946,183 @@ metingen binnenkomen; correcte koppeling aan SoC/PV/verbruik in de
 coordinator; nette omgang met ontbrekende sensoren; nooit een
 device-commando; en het filter behoudt zijn state over meerdere ticks
 (geen reset per tick).
+
+## v0.63.36 — Digital Twin (gesimuleerde SoC/winst), uitsluitend adviserend
+
+**Aanleiding:** vervolg op de architectuur-wishlist, vierde van de vijf
+zwaardere technieken die vooraf expliciet als uitsluitend adviserend
+zijn afgesproken.
+
+**Nieuw: `_run_digital_twin_simulation()`.** Simuleert vooruit wat de
+**bestaande, regelgebaseerde logica** aan SoC/financieel resultaat zou
+opleveren — als natuurlijk vergelijkingspunt naast het MPC-adviesplan
+(theoretisch optimum, v0.63.33). Het verschil tussen de twee laat zien
+hoeveel arbitrage-ruimte de huidige logica al daadwerkelijk benut.
+
+**Kernontwerpkeuze**: hergebruikt bewust `self.last_timeline` — al elke
+tick berekend voor de bestaande "Overzicht komende uren"-tabel op het
+dashboard (v0.40.0/v0.60.0), compleet met reserve-bewuste,
+prijs-prioriteit-bewuste kwartier-classificatie inclusief de secundaire
+laag — in plaats van een eigen, mogelijk afwijkende classificatielogica
+te verzinnen. Dit is een échte tweeling van de bestaande projectie, geen
+tweede, potentieel inconsistente benadering ernaast.
+
+Loopt die tijdlijn door en simuleert per kwartier: `manual`
+(dure kwartieren) ontlaadt tegen `manual_discharge_power`, begrensd
+door de resterende gesimuleerde SoC; `smart` binnen het
+geïdentificeerde goedkoopste blok laadt tegen `manual_charge_power`,
+begrensd door de resterende capaciteit-headroom; overige modi
+(`smart_discharging`, of `smart` buiten het goedkoopste blok) geven
+geen expliciete SoC-wijziging — dezelfde scope-beperking als de
+MPC-adviesmotor (geen huishoudverbruik-/PV-net-load-modellering),
+expliciet zo benoemd in het `note`-attribuut.
+
+**Nieuwe sensor:** `sensor.digital_twin_gesimuleerde_soc_winst` —
+geprojecteerde winst (€) als state, volledig gesimuleerd traject
+(per kwartier: modus, SoC) als attribuut. Geen `RestoreEntity` (elke
+tick een verse simulatie vanaf de live tijdlijn).
+
+**Getest** (6 nieuwe permanente tests in `test_digital_twin_advisory.py`):
+geen simulatie zonder tijdlijn; geen simulatie zonder
+beschikbare-energie-sensor; een volledige tick produceert een traject
+zonder ooit het apparaat aan te raken; ontlading correct begrensd door
+resterende SoC; laden gebeurt alleen binnen het geïdentificeerde
+goedkoopste blok; en `smart_discharging` laat de SoC terecht ongewijzigd.
+
+## v0.63.37 — geen valse "voltooid" meer als er nog niets is aangesloten
+
+**Gerapporteerd:** "wat als het goedkoopste kwartier nu start maar de
+fietsen pas 2 uur later aan de lader worden gezet, maar het nog wel een
+goedkoop uur is? Kan er een soort controle-cyclus op basis van
+stroomverbruik worden ingebouwd?"
+
+**Root cause, bevestigd na natrekken van de gedeelde
+`_async_update_scheduled_charge_appliance()` (steelstofzuiger +
+fietsladers, v0.63.12/.13):** de schakelaar gaat aan zodra het goedkope
+blok begint. Als er op dat moment niets is aangesloten, blijft het
+vermogen laag — en dat zag er **identiek** uit als "was aan het laden,
+nu klaar" (aanhoudend laag vermogen). Met een drempel van 2 minuten en
+een tick-interval van 5 minuten was **één enkele tick** al genoeg om
+ten onrechte te concluderen dat de lading voltooid was, de schakelaar
+weer uit te zetten en de dag als "voltooid" te markeren — nog vóórdat
+er ooit iets was aangesloten. Als de fietsen dan 2 uur later alsnog aan
+de lader gingen (nog steeds binnen hetzelfde goedkope blok), gebeurde
+er niets meer.
+
+**Fix:** een nieuwe, per-sessie vlag (`ever_active_this_session`,
+gereset bij elke nieuwe keer dat de schakelaar aangaat) houdt bij of het
+vermogen tijdens de huidige sessie **ooit** daadwerkelijk boven de
+drempel is gekomen. Aanhoudend laag vermogen telt nu alleen als "echt
+klaar" als dat waar is — anders blijft de schakelaar gewoon aan,
+wachtend tot er daadwerkelijk iets wordt aangesloten, zolang het
+goedkope blok duurt. Nieuwe status `wacht_op_apparaat` maakt dit
+onderscheid zichtbaar op het dashboard/in de diagnostiek (was voorheen
+niet te onderscheiden van `aan_het_laden`).
+
+**Getest**: 3 bestaande tests bijgewerkt naar het correcte 3-fasen-
+patroon (eerst een echte actieve meting, dán pas de
+laag-vermogen-detectie) — deze testten voorheen onbedoeld precies het
+foute gedrag. Plus 1 nieuwe, gerichte regressietest die het exact
+gerapporteerde scenario natrekt: schakelaar gaat aan, blijft 10 minuten
+op stand-by-vermogen staan zonder ooit uit te gaan, en pas zodra er 2
+uur later daadwerkelijk stroom wordt getrokken schakelt de status naar
+`aan_het_laden`.
+
+## v0.63.38 — polling in plaats van continu aan (brandveiligheid)
+
+**Gerapporteerd, direct na v0.63.37:** "het gevaar bij die fietsen is
+dat de omvormers wel altijd aan de stroom hangen, dat is toch
+brandgevaarlijk?" — terechte vervolgvraag. De v0.63.37-fix loste de
+valse "voltooid"-melding op, maar had als bijwerking dat de schakelaar
+nu continu aan bleef staan zolang er niets was aangesloten — mogelijk
+urenlang, wat een lader/omvormer onnodig lang onder spanning laat staan
+zonder toezicht.
+
+**Fix: polling in plaats van "aan en wachten".** Sluit exact aan bij de
+oorspronkelijke suggestie ("een soort 15 minuten controle cyclus... op
+basis van stroomverbruik"): de schakelaar gaat kort aan (één
+update-tick, ~5 minuten) om te testen of er iets is aangesloten. Wordt
+niets gevonden, dan gaat hij weer uit voor een afkoelperiode van
+`SCHEDULED_CHARGE_POLL_OFF_MINUTES` (15 minuten) voordat de volgende
+testpoging volgt — een duty-cycle van ~25% in plaats van continu onder
+spanning. Zodra er tijdens zo'n testvenster daadwerkelijk stroom wordt
+getrokken, schakelt het systeem meteen over naar normaal, doorlopend
+laden.
+
+**Nieuwe status:** `test_aan` (lopende testpoging), naast het bestaande
+`wacht_op_apparaat` (afkoelperiode tussen pogingen).
+
+**Nauwkeuriger geleerde laadduur als bijeffect:** de duur-meting start
+nu pas zodra er daadwerkelijk stroom wordt getrokken, niet vanaf de
+allereerste testpoging — dus telt niet meer de tijd mee die is
+besteed aan wachten/pollen.
+
+**Getest**: 6 bestaande tests bijgewerkt naar de nieuwe statusnamen en
+tick-volgorde (inclusief een herberekende geleerde laadduur: 8 minuten
+i.p.v. 13, nu de meting pas start bij bevestigde activiteit). Plus 1
+nieuwe, gerichte test die de polling-cyclus zelf natrekt: bevestigt een
+~5-minuten-testvenster gevolgd door een 15-minuten-afkoelperiode, met
+in totaal twee losse aan/uit-cycli in plaats van één continue
+aan-periode.
+
+## v0.63.39 — NILM-achtige apparaat-auto-detectie met bevestigingssysteem
+
+**Aanleiding:** laatste van de architectuur-wishlist-punten. Vooraf de
+haalbaarheid eerlijk doorgenomen: "echte" NILM (blinde disaggregatie
+van één geaggregeerd vermogenssignaal, zonder trainingsdata) is bewust
+niet gebouwd — zelfde reden als bij MPC/Monte Carlo/Kalman/Digital
+Twin. In overleg gekozen voor een haalbare, eerlijke versie: bestaande
+vermogen-sensoren automatisch ontdekken die nog niet elders
+geconfigureerd zijn, met een expliciet bevestigingssysteem voordat er
+iets wordt gevolgd, en drift-detectie na bevestiging.
+
+**Database-laag (het laatste punt van de vijf zwaardere technieken)
+bewust overgeslagen** na overleg — HA's eigen `recorder` (+ eventueel
+Grafana/InfluxDB) dekt de "lange-termijn-analyse"-behoefte al beter dan
+een zelfgebouwde database in een HACS-integratie zou kunnen, zonder de
+risico's (schema-migraties, corruptie) daarvan.
+
+**Nieuw: `_update_nilm_discovery()`.** Scant elke tick alle
+`sensor.*`-entiteiten met een vermogens-eenheid (W/kW), sluit alle al
+elders geconfigureerde entiteiten uit (accu, PV, verbruik, de benoemde
+apparaten), en houdt nieuwe vondsten bij als onbevestigde kandidaten.
+
+**Bevestigingssysteem via Home Assistant-services** (op verzoek —
+"een systeem bedenken waarbij ik kan bevestigen dat iets correct is
+gedetecteerd"): twee nieuwe services,
+`energy_management_system.confirm_nilm_device` en `reject_nilm_device`
+(beide met `entity_id` als verplichte parameter), aanroepbaar via
+Ontwikkelaarshulpmiddelen → Acties. Een `services.yaml` erbij voor
+nette veldbeschrijvingen in de HA-UI. Geregistreerd één keer per
+HA-instantie (niet per config-entry, voorkomt een
+"service-al-geregistreerd"-fout bij een opties-reload).
+
+**Drift-detectie na bevestiging** (`_update_nilm_confirmed_devices()` +
+`_finalize_nilm_device_day()`): zelfde CUSUM-principe als de
+sluipverbruik-detectie (v0.63.29), maar per apparaat en
+**percentage-gebaseerd** (10% dode zone, 100%-cumulatieve alarmdrempel)
+in plaats van een vaste Watt-drempel — vermogensniveaus verschillen te
+veel tussen apparaten voor één vaste drempel. Volgt het dagelijkse
+gemiddelde vermogen per bevestigd apparaat; een aanhoudende stijging
+wordt gesignaleerd als mogelijk beginnend defect, met een melding via
+`appliance_notify_service`.
+
+**Nieuwe sensoren:** `sensor.nilm_onbevestigde_kandidaten` (geen
+`RestoreEntity` — elke tick vers herontdekt) en
+`sensor.nilm_bevestigde_apparaten` (wél `RestoreEntity` — de geleerde
+geschiedenis moet wekenlang opbouwen).
+
+**Puur informatief**, zoals afgesproken — nergens meegewogen in
+accubeslissingen.
+
+**Getest** (14 nieuwe permanente tests: 10 in `test_nilm_discovery.py`,
+4 in `test_nilm_services.py`): ontdekking van een vermogen-sensor;
+niet-vermogen-sensoren worden genegeerd; al-geconfigureerde entiteiten
+uitgesloten; bevestigen verplaatst correct naar de bevestigde lijst;
+onbekende entiteit bij bevestigen geeft `False`; negeren voorkomt
+permanent herontdekking; negeren verwijdert ook een al-bevestigd
+apparaat; dagelijks gemiddelde wordt correct bijgehouden; een
+aanhoudende stijging wordt gesignaleerd; nooit een device-commando;
+beide services registreren correct; dubbele registratie geeft geen
+fout; en beide services roepen daadwerkelijk de juiste
+coordinator-methode aan.

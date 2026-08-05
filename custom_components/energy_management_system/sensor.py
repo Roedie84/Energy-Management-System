@@ -61,6 +61,9 @@ async def async_setup_entry(
         MpcAdvisorySensor(coordinator, entry.entry_id),
         MonteCarloAdvisorySensor(coordinator, entry.entry_id),
         KalmanFilterAdvisorySensor(coordinator, entry.entry_id),
+        DigitalTwinAdvisorySensor(coordinator, entry.entry_id),
+        NilmUnconfirmedCandidatesSensor(coordinator, entry.entry_id),
+        NilmConfirmedDevicesSensor(coordinator, entry.entry_id),
         ReserveShortfallSensor(coordinator, entry.entry_id),
         ReserveExcessSensor(coordinator, entry.entry_id),
         LearnedBatteryEfficiencySensor(coordinator, entry.entry_id),
@@ -1250,6 +1253,154 @@ class KalmanFilterAdvisorySensor(SensorEntity):
                 "voor deze specifieke installatie."
             ),
         }
+
+
+class DigitalTwinAdvisorySensor(SensorEntity):
+    """Digital Twin advisory engine (v0.63.36).
+
+    ADVISORY ONLY - simulates forward what the *existing* rule-based
+    logic (via self.last_timeline, already computed for the "Overzicht
+    komende uren" dashboard table) would do to the SoC/financial
+    outcome. Never sends a device command, never overrides the real
+    decision tree it's modelling. Natural comparison point: MPC's
+    theoretical-optimum plan (v0.63.33) vs. this twin's projection of
+    what current rule-based behaviour would actually achieve.
+
+    Not a RestoreEntity - a fresh simulation is run every tick from the
+    live timeline; a restored stale trajectory would be actively
+    misleading.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Digital Twin (gesimuleerde SoC/winst)"
+    _attr_icon = "mdi:cube-outline"
+    _attr_native_unit_of_measurement = "€"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_digital_twin"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def native_value(self) -> float | None:
+        return self._coordinator.digital_twin_projected_profit_eur
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return {
+            "gesimuleerd_eind_soc_kwh": self._coordinator.digital_twin_final_soc_kwh,
+            "uren_gesimuleerd": self._coordinator.digital_twin_hours_simulated,
+            "traject": self._coordinator.digital_twin_trajectory,
+            "note": self._coordinator.digital_twin_note,
+        }
+
+
+class NilmUnconfirmedCandidatesSensor(SensorEntity):
+    """NILM-like device auto-discovery: unconfirmed candidates
+    (v0.63.39).
+
+    NOT genuine NILM - discovers *existing* power-measuring sensor
+    entities in Home Assistant that aren't already tracked elsewhere in
+    this integration. Requires explicit confirmation via the
+    `energy_management_system.confirm_nilm_device` /
+    `reject_nilm_device` services before any drift-detection tracking
+    begins - purely informational, never influences any battery
+    decision.
+
+    Not a RestoreEntity - candidates are rediscovered fresh every tick;
+    a candidate that's meanwhile been confirmed/rejected should
+    disappear from this list immediately, not linger from a restored
+    stale state.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "NILM onbevestigde kandidaten"
+    _attr_icon = "mdi:magnify-scan"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_nilm_unconfirmed"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def native_value(self) -> int:
+        return len(self._coordinator.nilm_unconfirmed_candidates)
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return {
+            "kandidaten": self._coordinator.nilm_unconfirmed_candidates,
+            "note": (
+                "Bevestig een kandidaat met de service "
+                "energy_management_system.confirm_nilm_device "
+                "(entity_id als parameter), of negeer 'm permanent met "
+                "energy_management_system.reject_nilm_device."
+            ),
+        }
+
+
+class NilmConfirmedDevicesSensor(SensorEntity, RestoreEntity):
+    """NILM-like device auto-discovery: confirmed devices, with per-
+    device CUSUM drift-detection (v0.63.39) - same principle as the
+    household sluipverbruik detector (v0.63.29), but per device and
+    percentage-based (device power levels vary too much for one fixed
+    Watt threshold). Purely informational, never influences any
+    battery decision.
+
+    Is a RestoreEntity - the confirmed list and each device's learned
+    history are meant to build up over weeks; a restart shouldn't reset
+    that (unlike the unconfirmed-candidates list above).
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "NILM bevestigde apparaten"
+    _attr_icon = "mdi:devices"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_nilm_confirmed"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def native_value(self) -> int:
+        return len(self._coordinator.nilm_confirmed_devices)
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        anomalies = [
+            data["friendly_name"]
+            for data in self._coordinator.nilm_confirmed_devices.values()
+            if data.get("anomaly_detected")
+        ]
+        return {
+            "apparaten": self._coordinator.nilm_confirmed_devices,
+            "mogelijke_defecten": anomalies,
+            "rejected_entities": self._coordinator.nilm_rejected_entities,
+        }
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if last_state is None:
+            return
+        raw_rejected = last_state.attributes.get("rejected_entities")
+        if isinstance(raw_rejected, list):
+            self._coordinator.nilm_rejected_entities = list(raw_rejected)
+        raw_devices = last_state.attributes.get("apparaten")
+        if isinstance(raw_devices, dict):
+            self._coordinator.nilm_confirmed_devices = dict(raw_devices)
 
 
 class ReserveShortfallSensor(SensorEntity, RestoreEntity):

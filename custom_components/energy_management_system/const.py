@@ -231,6 +231,29 @@ QUOOKER_SUSTAINED_MINUTES = 2
 # scheduled-charge appliance (v0.63.13).
 STEELSTOFZUIGER_COMPLETE_SUSTAINED_MINUTES = 2
 
+# Scheduled-charge appliance polling (v0.63.38). Reported fire-safety
+# concern: with v0.63.37's "wait for the device" fix, the switch stayed
+# continuously ON for however long nothing was plugged in - potentially
+# hours, keeping a charger/inverter needlessly energised unattended.
+# Instead of staying on continuously while nothing is detected, the
+# switch now polls: on briefly to test for a load, back off for a
+# cooldown if nothing found, repeat - matching the reported "15-minuten
+# controle-cyclus" suggestion. The "on" test window is naturally one
+# update tick (~5 min, UPDATE_INTERVAL_MINUTES) - no separate constant
+# needed for that half of the cycle.
+SCHEDULED_CHARGE_POLL_OFF_MINUTES = 15
+
+# NILM-achtige apparaat-auto-detectie (v0.63.39). Geen "echte" NILM
+# (blinde disaggregatie van één geaggregeerd vermogenssignaal, een
+# onderzoeksmatig vraagstuk zonder trainingsdata) - ontdekt bestaande
+# vermogen-sensoren (W/kW) in Home Assistant die nog niet elders
+# geconfigureerd zijn, en past na expliciete bevestiging door de
+# gebruiker dezelfde CUSUM-drift-detectie toe als sluipverbruik
+# (v0.63.29), maar per apparaat en percentage-gebaseerd (vermogensniveaus
+# verschillen te veel tussen apparaten voor een vaste Watt-drempel).
+NILM_CUSUM_SLACK_FRACTION = 0.10
+NILM_CUSUM_ALARM_THRESHOLD = 1.0
+
 # Markov-achtige RUSTEND/ACTIEF/KLAAR-toestandsmachine voor vaatwasser/
 # wasmachine (v0.63.32, "Optie 1" - geen fase-detectie, daarvoor
 # ontbreekt trainingsdata per merk/model). Ruimere marge dan de
@@ -368,6 +391,18 @@ KALMAN_PV_PROCESS_NOISE_W2 = 2500.0  # live PV can swing quickly (clouds)
 KALMAN_PV_MEASUREMENT_NOISE_W2 = 10000.0
 KALMAN_LOAD_PROCESS_NOISE_W2 = 400.0
 KALMAN_LOAD_MEASUREMENT_NOISE_W2 = 2500.0
+
+# Digital Twin advisory engine (v0.63.36). Advisory ONLY - simulates
+# forward in time what the *existing* rule-based logic would do (using
+# the same primary-expensive-quarter threshold and cheapest-block
+# identification already computed elsewhere), as a complement to MPC's
+# theoretical-optimum plan - the gap between the two shows how much
+# headroom (if any) exists between current behaviour and the arbitrage
+# ceiling. Deliberately a simplification (doesn't replicate SoC-taper,
+# the household floor, or price-priority partial allocation - those
+# live only in the real decision tree, this is a twin, not a full
+# duplicate) - documented plainly wherever the result is shown.
+DIGITAL_TWIN_HORIZON_HOURS = 48
 
 # Below this, forcing manual mode just to top up a trickle isn't worth
 # disrupting the Zendure's own solar-following smart mode for.

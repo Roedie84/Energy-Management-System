@@ -42,6 +42,10 @@ def _install_ha_mocks() -> None:
             self.event_type = event_type
             self.data = data or {}
 
+    class ServiceCall:
+        def __init__(self, data: dict | None = None):
+            self.data = data or {}
+
     class CoreState:
         not_running = "NOT_RUNNING"
         starting = "STARTING"
@@ -56,6 +60,7 @@ def _install_ha_mocks() -> None:
 
     core.HomeAssistant = HomeAssistant
     core.Event = Event
+    core.ServiceCall = ServiceCall
     core.CoreState = CoreState
     core.callback = callback
     sys.modules["homeassistant.core"] = core
@@ -96,6 +101,11 @@ def _install_ha_mocks() -> None:
     helpers_event.async_track_time_interval = lambda *a, **k: (lambda: None)
     helpers_event.async_track_time_change = lambda *a, **k: (lambda: None)
     sys.modules["homeassistant.helpers.event"] = helpers_event
+
+    helpers_cv = types.ModuleType("homeassistant.helpers.config_validation")
+    helpers_cv.entity_id = lambda value: value
+    helpers_cv.string = lambda value: value
+    sys.modules["homeassistant.helpers.config_validation"] = helpers_cv
 
     helpers_entity = types.ModuleType("homeassistant.helpers.entity")
 
@@ -255,9 +265,16 @@ class FakeServices:
 
     def __init__(self):
         self.calls: list[tuple[str, str, dict]] = []
+        self._registered: dict[tuple[str, str], object] = {}
 
     async def async_call(self, domain, service, data, blocking=True):
         self.calls.append((domain, service, data))
+
+    def has_service(self, domain, service) -> bool:
+        return (domain, service) in self._registered
+
+    def async_register(self, domain, service, handler, schema=None):
+        self._registered[(domain, service)] = handler
 
 
 class FakeBus:

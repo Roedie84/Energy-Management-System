@@ -331,6 +331,12 @@ views:
                 name: Monte Carlo risico (tekortkans, adviserend)
               - entity: sensor.woonkamer_energy_management_system_kalman_filtering_soc_pv_verbruik
                 name: Kalman filtering (SoC/PV/verbruik, adviserend)
+              - entity: sensor.woonkamer_energy_management_system_digital_twin_gesimuleerde_soc_winst
+                name: Digital Twin (gesimuleerde SoC/winst, adviserend)
+              - entity: sensor.woonkamer_energy_management_system_nilm_onbevestigde_kandidaten
+                name: NILM onbevestigde kandidaten
+              - entity: sensor.woonkamer_energy_management_system_nilm_bevestigde_apparaten
+                name: NILM bevestigde apparaten (drift-detectie)
 
   - title: Financieel
     path: financieel

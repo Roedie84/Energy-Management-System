@@ -280,6 +280,33 @@ als de Quooker-detectie, maar omgekeerd: aanhoudend láág bevestigt
 dag; eenmaal klaar blijft de schakelaar uit voor de rest van de dag, ook
 al valt die nog binnen het goedkope blok.
 
+**Wacht op het apparaat, geen valse "klaar"-melding (v0.63.37):**
+gerapporteerd scenario — het goedkoopste blok begint en de schakelaar
+gaat aan, maar de fietsen worden pas 2 uur later (nog steeds binnen
+hetzelfde goedkope blok) daadwerkelijk aan de lader gehangen. Zonder
+onderscheid zag "aan, maar nog niets aangesloten" er identiek uit als
+"was aan het laden, nu klaar" — na slechts 2 minuten (één tick) werd het
+dan ten onrechte als "voltooid" gemarkeerd en ging de schakelaar weer
+uit, nog vóórdat er ooit iets was aangesloten. Nu wordt bijgehouden of
+het vermogen tijdens de huidige sessie **ooit** daadwerkelijk boven de
+drempel is gekomen — pas dán telt aanhoudend laag vermogen als "echt
+klaar", niet als "nooit begonnen". Status `wacht_op_apparaat` maakt dit
+onderscheid zichtbaar.
+
+**Polling in plaats van continu aan (v0.63.38, brandveiligheid):**
+terechte vervolgvraag na de fix hierboven — als er niets is aangesloten,
+bleef de schakelaar daarmee wél de hele tijd continu aan staan, mogelijk
+urenlang, wat een lader/omvormer onnodig lang onder spanning laat staan
+zonder toezicht. In plaats daarvan **polt** de integratie nu: kort aan
+(één update-tick, ~5 minuten) om te testen of er iets is aangesloten,
+en bij niets gevonden weer uit voor een afkoelperiode van
+`SCHEDULED_CHARGE_POLL_OFF_MINUTES` (15 minuten) voordat de volgende
+testpoging volgt — een duty-cycle van ~25% in plaats van continu
+onder spanning. Status `test_aan` toont een lopende testpoging. Zodra
+er daadwerkelijk stroom wordt getrokken, schakelt het systeem over naar
+normaal laden en blijft het gewoon aan tot de lading (of het goedkope
+blok) voorbij is.
+
 | Veld | Drempel | Betekenis |
 |---|---|---|
 | `steelstofzuiger_switch_entity` / `steelstofzuiger_power_sensor_entity` | 15W (`APPLIANCE_RUNNING_POWER_THRESHOLD_W`) | Steelstofzuiger-lader |
@@ -641,6 +668,93 @@ niet is.
 met de gefilterde én ruwe waarde voor alle drie signalen als
 attributen. Geen `RestoreEntity` — elk filter herstelt zichzelf
 natuurlijk binnen enkele ticks vanaf de eerstvolgende live meting.
+
+## Digital Twin (gesimuleerde SoC/winst)
+
+**Uitsluitend adviserend** — simuleert vooruit wat de **bestaande,
+regelgebaseerde logica** aan SoC/financieel resultaat zou opleveren,
+als natuurlijk vergelijkingspunt naast het MPC-adviesplan
+(theoretisch optimum, v0.63.33). Het verschil tussen de twee laat zien
+hoeveel arbitrage-ruimte (indien aanwezig) de huidige logica al
+daadwerkelijk benut.
+
+**Hergebruikt bewust `self.last_timeline`** (al elke tick berekend voor
+de "Overzicht komende uren"-tabel op het dashboard, compleet met
+reserve-bewuste, prijs-prioriteit-bewuste kwartier-classificatie) in
+plaats van een eigen, mogelijk afwijkende classificatielogica te
+verzinnen — een échte tweeling van de bestaande projectie, geen tweede
+benadering ernaast.
+
+Loopt die tijdlijn door en simuleert per kwartier:
+- **`manual`** (dure kwartieren): ontladen tegen `manual_discharge_power`,
+  begrensd door de resterende gesimuleerde SoC.
+- **`smart` binnen het geïdentificeerde goedkoopste blok**: laden tegen
+  `manual_charge_power`, begrensd door de resterende capaciteit-headroom.
+- **Overig** (`smart_discharging`, of `smart` buiten het goedkoopste
+  blok): geen expliciete SoC-wijziging in deze vereenvoudigde tweeling —
+  dezelfde scope-beperking als de MPC-adviesmotor: geen
+  huishoudverbruik-/PV-net-load-modellering.
+
+`sensor.digital_twin_gesimuleerde_soc_winst` toont de geprojecteerde
+winst (€), met het volledige gesimuleerde traject (per kwartier: modus,
+SoC) als attribuut. Geen `RestoreEntity` — elke tick een verse
+simulatie vanaf de live tijdlijn.
+
+## NILM-achtige apparaat-auto-detectie
+
+**Geen "echte" NILM.** Blinde disaggregatie van één geaggregeerd
+vermogenssignaal naar losse apparaten (op basis van signaalherkenning
+alleen) is een onderzoeksmatig vraagstuk waar deze integratie geen
+trainingsdata voor heeft — dat is bewust niet gebouwd, om dezelfde reden
+dat MPC/Monte Carlo/Kalman/Digital Twin bewust adviserend zijn gebleven.
+
+**Wat er wél gebeurt:** elke tick worden bestaande vermogen-sensoren
+(W/kW) in je Home Assistant-installatie ontdekt die nog niet ergens
+anders in deze integratie zijn geconfigureerd — slimme stekkers,
+apparaten die hun eigen verbruik al rapporteren. Breed (elke
+W/kW-sensor), dus met kans op ruis (irrelevante of verkeerd
+geïnterpreteerde entiteiten) — vandaar het bevestigingssysteem
+hieronder.
+
+### Bevestigen via Home Assistant-services
+
+Nieuw ontdekte kandidaten belanden in `nilm_unconfirmed_candidates` en
+worden **pas gevolgd nadat je ze expliciet bevestigt** — via
+Ontwikkelaarshulpmiddelen → Acties (of een eigen script/knop):
+
+- **`energy_management_system.confirm_nilm_device`** (`entity_id`
+  verplicht) — verplaatst de kandidaat naar de bevestigde lijst en start
+  de drift-detectie ervoor.
+- **`energy_management_system.reject_nilm_device`** (`entity_id`
+  verplicht) — negeert de kandidaat permanent (wordt nooit meer
+  voorgesteld); verwijdert 'm ook uit de bevestigde lijst als je van
+  gedachten verandert.
+
+`sensor.nilm_onbevestigde_kandidaten` toont het aantal + de volledige
+lijst (met naam en huidig vermogen) als attribuut, zodat je weet welke
+`entity_id`'s je aan de services moet meegeven.
+
+### Drift-detectie na bevestiging (mogelijk defect)
+
+Zelfde CUSUM-principe als de sluipverbruik-detectie hierboven, maar per
+apparaat en **percentage-gebaseerd** in plaats van een vaste
+Watt-drempel — vermogensniveaus verschillen te veel tussen apparaten
+(een koelkast en een router) om één vaste drempel voor allebei te laten
+gelden. Volgt het dagelijkse gemiddelde vermogen per bevestigd apparaat;
+een aanhoudende stijging van >10% boven de langere-termijn-referentie
+(30 dagen) wordt gesignaleerd als mogelijk beginnend defect — bijv. een
+koelkast met een falende compressor, of een warmtepomp die harder moet
+werken door vervuilde filters. Stuurt een melding via
+`appliance_notify_service`, edge-triggered net als sluipverbruik.
+
+`sensor.nilm_bevestigde_apparaten` toont het aantal bevestigde apparaten
++ per apparaat de geleerde geschiedenis en of er een afwijking is
+gedetecteerd, als attributen. Wél een `RestoreEntity` (in tegenstelling
+tot de kandidatenlijst) — die geschiedenis moet wekenlang opbouwen, dat
+mag een herstart niet resetten.
+
+**Puur informatief** — nergens meegewogen in accubeslissingen, zoals
+afgesproken.
 
 ## Diagnostiek
 

@@ -80,6 +80,9 @@ from .const import (
     CONF_FIETSLADERS_SWITCH,
     CONF_FIETSLADERS_POWER_SENSOR,
     STEELSTOFZUIGER_COMPLETE_SUSTAINED_MINUTES,
+    SCHEDULED_CHARGE_POLL_OFF_MINUTES,
+    NILM_CUSUM_SLACK_FRACTION,
+    NILM_CUSUM_ALARM_THRESHOLD,
     APPLIANCE_CYCLE_COMPLETE_SUSTAINED_MINUTES,
     FIETSLADERS_COMPLETE_THRESHOLD_W,
     QUOOKER_SUSTAINED_MINUTES,
@@ -158,6 +161,7 @@ from .const import (
     KALMAN_PV_MEASUREMENT_NOISE_W2,
     KALMAN_LOAD_PROCESS_NOISE_W2,
     KALMAN_LOAD_MEASUREMENT_NOISE_W2,
+    DIGITAL_TWIN_HORIZON_HOURS,
     MIN_ARBITRAGE_GRID_POWER_W,
     SHORTFALL_MARGIN_BONUS_PER_RECENT_DAY,
     EMERGENCY_LOW_BATTERY_KWH_THRESHOLD,
@@ -283,12 +287,16 @@ class EnergyManagementSystemCoordinator:
         self._steelstofzuiger_complete_date: date | None = None
         self._steelstofzuiger_charge_started_at: datetime | None = None
         self._steelstofzuiger_below_threshold_since: datetime | None = None
+        self._steelstofzuiger_ever_active_this_session: bool = False
+        self._steelstofzuiger_next_poll_at: datetime | None = None
         self.steelstofzuiger_charge_duration_history: list[float] = []
         self.last_steelstofzuiger_action: str | None = None
         self._fietsladers_complete_today: bool = False
         self._fietsladers_complete_date: date | None = None
         self._fietsladers_charge_started_at: datetime | None = None
         self._fietsladers_below_threshold_since: datetime | None = None
+        self._fietsladers_ever_active_this_session: bool = False
+        self._fietsladers_next_poll_at: datetime | None = None
         self.fietsladers_charge_duration_history: list[float] = []
         self.last_fietsladers_action: str | None = None
 
@@ -462,6 +470,16 @@ class EnergyManagementSystemCoordinator:
         self.kalman_pv_raw_w: float | None = None
         self.kalman_load_filtered_w: float | None = None
         self.kalman_load_raw_w: float | None = None
+        # Digital Twin advisory engine (v0.63.36).
+        self.digital_twin_trajectory: list[dict] = []
+        self.digital_twin_projected_profit_eur: float | None = None
+        self.digital_twin_final_soc_kwh: float | None = None
+        self.digital_twin_hours_simulated: int = 0
+        self.digital_twin_note: str | None = None
+        # NILM-achtige apparaat-auto-detectie (v0.63.39).
+        self.nilm_unconfirmed_candidates: dict[str, dict] = {}
+        self.nilm_confirmed_devices: dict[str, dict] = {}
+        self.nilm_rejected_entities: list[str] = []
         self._last_cost_basis_calc_time: datetime | None = None
         self.last_charge_power_applied: float | None = None
         self.last_current_price_per_kwh: float | None = None
@@ -1322,6 +1340,8 @@ class EnergyManagementSystemCoordinator:
         below_threshold_since_attr: str,
         duration_history_attr: str,
         last_action_attr: str,
+        ever_active_this_session_attr: str,
+        next_poll_attr: str,
         notify_title: str | None = None,
         notify_message: str | None = None,
         override_attr: str | None = None,
@@ -1355,6 +1375,25 @@ class EnergyManagementSystemCoordinator:
         has taken manual control back, mirroring `force_manual` for the
         battery but scoped per appliance instead of one switch for
         everything.
+
+        `ever_active_this_session_attr` + `next_poll_attr` (v0.63.37/
+        .38): reported - the cheap block starts, the switch turns on,
+        but the appliance (e-bikes, vacuum) isn't physically plugged in
+        until later, still within the same cheap block.
+        v0.63.37 fixed the false-"voltooid" bug this caused (sustained
+        low power looked identical whether nothing was ever plugged in,
+        or a real charge had genuinely finished) by tracking whether
+        power ever actually crossed the threshold this session. But that
+        fix left the switch ON continuously for however long nothing was
+        detected - a follow-up fire-safety concern: a charger/inverter
+        sitting energised, unattended, for potentially hours.
+        v0.63.38 replaces "stay on and wait" with polling: on for one
+        update tick (~5 min) to test for a load, back off for
+        SCHEDULED_CHARGE_POLL_OFF_MINUTES (15 min) if nothing found,
+        repeat - matching the reported "15-minuten controle-cyclus"
+        suggestion. `charge_started_attr` is only set once genuine
+        activity is actually confirmed, so the learned duration reflects
+        real charging time, not time spent polling.
         """
         if not switch_entity:
             return
@@ -1383,6 +1422,7 @@ class EnergyManagementSystemCoordinator:
                     duration_history_attr,
                     completed=False,
                 )
+            setattr(self, next_poll_attr, None)
             setattr(
                 self,
                 last_action_attr,
@@ -1390,14 +1430,51 @@ class EnergyManagementSystemCoordinator:
             )
             return
 
+        ever_active = getattr(self, ever_active_this_session_attr)
+
         if not is_on:
+            next_poll_at = getattr(self, next_poll_attr)
+            if next_poll_at is not None and now < next_poll_at:
+                # In the cooldown between poll attempts - stay off.
+                setattr(self, last_action_attr, "wacht_op_apparaat")
+                return
+            # First attempt, or a fresh poll attempt after a cooldown -
+            # turn on for one tick to test for a load.
             await self._async_set_switch(switch_entity, turn_on=True)
-            setattr(self, charge_started_attr, now)
             setattr(self, below_threshold_since_attr, None)
-            setattr(self, last_action_attr, "laden_gestart")
+            setattr(self, ever_active_this_session_attr, False)
+            setattr(self, next_poll_attr, now + timedelta(minutes=UPDATE_INTERVAL_MINUTES))
+            setattr(self, last_action_attr, "test_aan")
             return
 
-        # Already on and inside the cheap block - watch for completion.
+        # Already on - register genuine activity, regardless of what
+        # happens below (a tick that crosses the threshold always
+        # counts, even the very tick this evaluates).
+        if power_entity and power_w is not None and power_w >= complete_threshold_w:
+            if not ever_active:
+                # Genuine charging just confirmed - start the duration
+                # timer now, not from whenever polling first began.
+                setattr(self, charge_started_attr, now)
+            setattr(self, ever_active_this_session_attr, True)
+            ever_active = True
+
+        if not ever_active:
+            # Still in the poll-test window - has it elapsed without
+            # detecting anything?
+            poll_deadline = getattr(self, next_poll_attr)
+            if poll_deadline is not None and now >= poll_deadline:
+                await self._async_set_switch(switch_entity, turn_on=False)
+                setattr(
+                    self,
+                    next_poll_attr,
+                    now + timedelta(minutes=SCHEDULED_CHARGE_POLL_OFF_MINUTES),
+                )
+                setattr(self, last_action_attr, "wacht_op_apparaat")
+                return
+            setattr(self, last_action_attr, "test_aan")
+            return
+
+        # Genuinely charging - watch for completion (sustained low power).
         if power_entity and power_w is not None and power_w < complete_threshold_w:
             since = getattr(self, below_threshold_since_attr)
             if since is None:
@@ -1414,6 +1491,7 @@ class EnergyManagementSystemCoordinator:
                     completed=True,
                 )
                 setattr(self, complete_today_attr, True)
+                setattr(self, next_poll_attr, None)
                 setattr(self, last_action_attr, "voltooid")
                 if notify_title and notify_message:
                     notify_service = self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE)
@@ -4716,6 +4794,291 @@ class EnergyManagementSystemCoordinator:
             self.kalman_load_raw_w = load_w
             self.kalman_load_filtered_w = round(self._kalman_load.update(load_w), 1)
 
+    def _run_digital_twin_simulation(self, now: datetime) -> None:
+        """Digital Twin advisory engine (v0.63.36).
+
+        ADVISORY ONLY - confirmed for the whole MPC/Monte Carlo/Kalman/
+        Digital Twin/Database batch before building any of them: purely
+        computes and exposes a simulated SoC/financial trajectory,
+        never sends a device command, never overrides the real decision
+        tree it's modelling.
+
+        Deliberately reuses `self.last_timeline` (already computed every
+        tick for the "Overzicht komende uren" dashboard table, complete
+        with reserve-aware, price-priority-aware quarter classification
+        - v0.40.0/v0.60.0) rather than re-deriving its own
+        classification logic - a genuine twin of the real projection,
+        not a second, potentially-diverging approximation of it. Walks
+        that timeline forward, simulating what the SoC and running
+        profit/cost would look like if the projected mode sequence
+        actually played out:
+        - `manual` (is_expensive quarters): discharge at
+          manual_discharge_power, bounded by remaining SoC.
+        - `smart` within the identified cheap block: charge at
+          manual_charge_power, bounded by remaining capacity headroom.
+        - Everything else (smart_discharging, smart outside the cheap
+          block): no explicit SoC change in this simplified twin - same
+          scope limitation as the MPC advisory engine (v0.63.33), no
+          household consumption/PV net-load modelling.
+
+        The natural comparison point: MPC's theoretical-optimum plan
+        (v0.63.33) vs. this twin's projection of what *current* rule-
+        based behaviour would actually achieve - the gap between them
+        shows how much arbitrage headroom (if any) the current logic is
+        already capturing.
+        """
+        self.digital_twin_trajectory = []
+        self.digital_twin_projected_profit_eur = None
+        self.digital_twin_final_soc_kwh = None
+        self.digital_twin_hours_simulated = 0
+
+        if not self.last_timeline:
+            self.digital_twin_note = (
+                "Nog geen tijdlijn-projectie beschikbaar om te simuleren."
+            )
+            return
+
+        available_entity = self.config.get(CONF_AVAILABLE_ENERGY_SENSOR)
+        if not available_entity:
+            self.digital_twin_note = (
+                "Geen available_energy_sensor_entity geconfigureerd - de "
+                "twin heeft een startpunt nodig om vanaf te simuleren."
+            )
+            return
+        soc_kwh = self._read_sensor_float(available_entity)
+        if soc_kwh is None:
+            self.digital_twin_note = "Beschikbare-energie-sensor niet uitleesbaar."
+            return
+
+        usable_capacity_kwh = self._max_usable_battery_capacity_kwh()
+        discharge_power_w = self.config.get(
+            CONF_MANUAL_DISCHARGE_POWER, DEFAULT_MANUAL_DISCHARGE_POWER
+        )
+        charge_power_w = abs(
+            self.config.get(CONF_MANUAL_CHARGE_POWER, DEFAULT_MANUAL_CHARGE_POWER)
+        )
+        horizon_end = now + timedelta(hours=DIGITAL_TWIN_HORIZON_HOURS)
+
+        trajectory = []
+        total_profit_eur = 0.0
+        hours_simulated = 0.0
+
+        for entry in self.last_timeline:
+            start = datetime.fromisoformat(entry["start"])
+            end = datetime.fromisoformat(entry["end"])
+            if start >= horizon_end:
+                break
+            interval_hours = (end - start).total_seconds() / 3600
+            price = entry["price_per_kwh"]
+            mode = entry["mode"]
+
+            if mode == OPTION_MANUAL and entry["is_expensive"]:
+                energy_kwh = min(soc_kwh, (discharge_power_w / 1000) * interval_hours)
+                soc_kwh -= energy_kwh
+                total_profit_eur += energy_kwh * price
+            elif (
+                mode == OPTION_SMART
+                and self.last_cheap_block_start is not None
+                and self.last_cheap_block_end is not None
+                and self.last_cheap_block_start <= start < self.last_cheap_block_end
+                and usable_capacity_kwh is not None
+            ):
+                headroom_kwh = max(0.0, usable_capacity_kwh - soc_kwh)
+                energy_kwh = min(headroom_kwh, (charge_power_w / 1000) * interval_hours)
+                soc_kwh += energy_kwh
+                total_profit_eur -= energy_kwh * price
+            # else (smart_discharging, or smart outside the cheap block):
+            # no explicit SoC change in this simplified twin.
+
+            trajectory.append(
+                {"start": entry["start"], "mode": mode, "soc_kwh": round(soc_kwh, 3)}
+            )
+            hours_simulated += interval_hours
+
+        self.digital_twin_trajectory = trajectory
+        self.digital_twin_projected_profit_eur = round(total_profit_eur, 4)
+        self.digital_twin_final_soc_kwh = round(soc_kwh, 3)
+        self.digital_twin_hours_simulated = round(hours_simulated, 1)
+        self.digital_twin_note = (
+            "Adviserend - simuleert wat de bestaande, regelgebaseerde "
+            "logica (dezelfde tijdlijn als 'Overzicht komende uren') aan "
+            "SoC/financieel resultaat zou opleveren, als vergelijkingspunt "
+            "naast het MPC-adviesplan (theoretisch optimum). Vereenvoudigd: "
+            "geen huishoudverbruik/PV-modellering buiten het geïdentificeerde "
+            "goedkoopste blok. Stuurt nooit een commando."
+        )
+
+    def _nilm_excluded_entity_ids(self) -> set[str]:
+        """Entities already tracked elsewhere in this integration -
+        never suggested as a "new" NILM candidate, to avoid double-
+        counting the battery/PV/grid meter or an already-named
+        appliance under a second identity.
+        """
+        keys = (
+            CONF_BATTERY_POWER_SENSOR,
+            CONF_PV_POWER_SENSOR,
+            CONF_CONSUMPTION_POWER_SENSOR,
+            CONF_DISHWASHER_POWER_SENSOR,
+            CONF_WASHING_MACHINE_POWER_SENSOR,
+            CONF_QUOOKER_POWER_SENSOR,
+            CONF_STEELSTOFZUIGER_POWER_SENSOR,
+            CONF_FIETSLADERS_POWER_SENSOR,
+        )
+        return {self.config[k] for k in keys if self.config.get(k)}
+
+    def _update_nilm_discovery(self, now: datetime) -> None:
+        """NILM-like device auto-discovery (v0.63.39).
+
+        NOT genuine NILM (blind disaggregation of a single aggregate
+        power signal into individual appliance loads - a research-grade
+        problem this integration has no training data for). Instead:
+        discovers *existing* power-measuring sensor entities already in
+        Home Assistant (smart plugs, appliances that report their own
+        consumption) that aren't already tracked elsewhere in this
+        integration, and lists them as unconfirmed candidates.
+
+        Deliberately requires explicit human confirmation
+        (`confirm_nilm_device`/`reject_nilm_device` services) before any
+        drift-detection tracking begins - broad auto-discovery (any W/kW
+        sensor) will pick up false positives (a random utility sensor
+        that happens to report Watts, or this integration's own derived
+        sensors), and confirming/rejecting is the only way to keep the
+        confirmed list actually meaningful. Never influences any battery
+        decision - purely informational (confirmed with the person
+        before building this).
+        """
+        excluded = self._nilm_excluded_entity_ids()
+        for state in self.hass.states.async_all():
+            entity_id = getattr(state, "entity_id", None)
+            if not entity_id or not entity_id.startswith("sensor."):
+                continue
+            if entity_id in excluded:
+                continue
+            if entity_id in self.nilm_confirmed_devices:
+                continue
+            if entity_id in self.nilm_rejected_entities:
+                continue
+            unit = state.attributes.get("unit_of_measurement")
+            if unit not in ("W", "kW"):
+                continue
+            power_w = self._read_sensor_float(entity_id)
+            existing = self.nilm_unconfirmed_candidates.get(entity_id, {})
+            self.nilm_unconfirmed_candidates[entity_id] = {
+                "friendly_name": state.attributes.get("friendly_name", entity_id),
+                "current_power_w": power_w,
+                "first_seen": existing.get("first_seen", now.date().isoformat()),
+            }
+
+    def confirm_nilm_device(self, entity_id: str) -> bool:
+        """Move a discovered candidate to the confirmed list, starting
+        per-device CUSUM drift-detection for it. Returns False if the
+        entity isn't a currently-known candidate (e.g. a typo, or it's
+        already confirmed/rejected).
+        """
+        candidate = self.nilm_unconfirmed_candidates.pop(entity_id, None)
+        if candidate is None:
+            return False
+        self.nilm_confirmed_devices[entity_id] = {
+            "friendly_name": candidate["friendly_name"],
+            "confirmed_at": date.today().isoformat(),
+            "daily_avg_history": [],
+            "cusum_accumulator": 0.0,
+            "anomaly_detected": False,
+            "estimated_drift_percent": None,
+            "reference_avg_w": None,
+            "_today_sum": 0.0,
+            "_today_count": 0,
+            "_check_date": None,
+        }
+        return True
+
+    def reject_nilm_device(self, entity_id: str) -> bool:
+        """Permanently ignore a discovered candidate - never suggested
+        again. Also removes it from the confirmed list, if it was
+        confirmed earlier and the person changed their mind.
+        """
+        self.nilm_unconfirmed_candidates.pop(entity_id, None)
+        self.nilm_confirmed_devices.pop(entity_id, None)
+        if entity_id not in self.nilm_rejected_entities:
+            self.nilm_rejected_entities.append(entity_id)
+        return True
+
+    def _update_nilm_confirmed_devices(self, now: datetime) -> None:
+        """Per-device daily-average tracking + CUSUM drift-detection for
+        every confirmed NILM device - same principle as the household
+        sluipverbruik detector (v0.63.29), but per device and
+        percentage-based (device power levels vary too much for one
+        fixed Watt slack/threshold to make sense across all of them).
+        """
+        for entity_id, device in self.nilm_confirmed_devices.items():
+            power_w = self._read_sensor_float(entity_id)
+
+            check_date = device.get("_check_date")
+            if check_date != now.date():
+                if check_date is not None and device.get("_today_count", 0) > 0:
+                    daily_avg_w = device["_today_sum"] / device["_today_count"]
+                    self._finalize_nilm_device_day(entity_id, device, daily_avg_w)
+                device["_today_sum"] = 0.0
+                device["_today_count"] = 0
+                device["_check_date"] = now.date()
+
+            if power_w is not None:
+                device["_today_sum"] = device.get("_today_sum", 0.0) + power_w
+                device["_today_count"] = device.get("_today_count", 0) + 1
+
+    def _finalize_nilm_device_day(
+        self, entity_id: str, device: dict, daily_avg_w: float
+    ) -> None:
+        history = device.setdefault("daily_avg_history", [])
+        history.append(round(daily_avg_w, 2))
+        device["daily_avg_history"] = history[-CUSUM_BASELINE_HISTORY_DAYS:]
+        history = device["daily_avg_history"]
+
+        if len(history) < CUSUM_MIN_HISTORY_FOR_REFERENCE:
+            return
+        if len(history) > CUSUM_REFERENCE_EXCLUDE_RECENT_DAYS:
+            reference_samples = history[:-CUSUM_REFERENCE_EXCLUDE_RECENT_DAYS]
+        else:
+            reference_samples = history
+        if not reference_samples:
+            return
+
+        reference_avg_w = statistics.median(reference_samples)
+        if reference_avg_w <= 0:
+            return
+        device["reference_avg_w"] = round(reference_avg_w, 2)
+
+        deviation_fraction = (
+            (daily_avg_w - reference_avg_w) / reference_avg_w
+            - NILM_CUSUM_SLACK_FRACTION
+        )
+        device["cusum_accumulator"] = max(
+            0.0, device.get("cusum_accumulator", 0.0) + deviation_fraction
+        )
+
+        was_detected = device.get("anomaly_detected", False)
+        device["anomaly_detected"] = (
+            device["cusum_accumulator"] >= NILM_CUSUM_ALARM_THRESHOLD
+        )
+        if device["anomaly_detected"]:
+            device["estimated_drift_percent"] = round(
+                100 * (daily_avg_w - reference_avg_w) / reference_avg_w, 1
+            )
+            if not was_detected:
+                notify_service = self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE)
+                if notify_service:
+                    self._dispatch_notification(
+                        notify_service=notify_service,
+                        title=f"🔍 Mogelijk defect: {device['friendly_name']}",
+                        message=(
+                            f"Het verbruik van {device['friendly_name']} ligt "
+                            f"structureel ~{device['estimated_drift_percent']:.0f}% "
+                            f"hoger dan normaal - mogelijk een beginnend defect. "
+                            f"Gebaseerd op een aanhoudende trend, niet één losse dag."
+                        ),
+                        notification_id=f"ems_nilm_anomaly_{entity_id}",
+                    )
+
     def _cheapest_block_range(
         self, entries: list[PriceEntry], now: datetime
     ) -> tuple[datetime | None, datetime | None]:
@@ -5379,6 +5742,8 @@ class EnergyManagementSystemCoordinator:
             below_threshold_since_attr="_steelstofzuiger_below_threshold_since",
             duration_history_attr="steelstofzuiger_charge_duration_history",
             last_action_attr="last_steelstofzuiger_action",
+            ever_active_this_session_attr="_steelstofzuiger_ever_active_this_session",
+            next_poll_attr="_steelstofzuiger_next_poll_at",
             notify_title="🧹 Steelstofzuiger opgeladen",
             notify_message="De steelstofzuiger is klaar met laden en de lader is uitgeschakeld.",
             override_attr="steelstofzuiger_override",
@@ -5395,6 +5760,8 @@ class EnergyManagementSystemCoordinator:
             below_threshold_since_attr="_fietsladers_below_threshold_since",
             duration_history_attr="fietsladers_charge_duration_history",
             last_action_attr="last_fietsladers_action",
+            ever_active_this_session_attr="_fietsladers_ever_active_this_session",
+            next_poll_attr="_fietsladers_next_poll_at",
             notify_title="🚲 Fietsen opgeladen",
             notify_message="De fietsladers zijn uitgeschakeld omdat de accu's vol zijn.",
             override_attr="fietsladers_override",
@@ -5432,6 +5799,9 @@ class EnergyManagementSystemCoordinator:
             reserve_kwh=projection_reserve_kwh,
         )
         self.last_transitions = self._collapse_timeline(self.last_timeline)
+        self._run_digital_twin_simulation(now)
+        self._update_nilm_discovery(now)
+        self._update_nilm_confirmed_devices(now)
 
         # What the pure price/solar logic wants, independent of
         # force_manual or learning_only - lets you graph this against the

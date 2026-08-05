@@ -5,8 +5,10 @@ import logging
 import shutil
 from pathlib import Path
 
+import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.helpers import config_validation as cv
 
 from .const import DOMAIN
 from .coordinator import EnergyManagementSystemCoordinator
@@ -17,6 +19,10 @@ PLATFORMS = ["switch", "sensor", "button"]
 _LOGGER = logging.getLogger(__name__)
 
 DASHBOARD_FILENAME = "energy_management_system_dashboard.yaml"
+
+SERVICE_CONFIRM_NILM_DEVICE = "confirm_nilm_device"
+SERVICE_REJECT_NILM_DEVICE = "reject_nilm_device"
+NILM_SERVICE_SCHEMA = vol.Schema({vol.Required("entity_id"): cv.entity_id})
 
 
 def _copy_dashboard_template(hass: HomeAssistant) -> None:
@@ -80,8 +86,52 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await hass.async_add_executor_job(_copy_dashboard_template, hass)
 
     entry.async_on_unload(entry.add_update_listener(async_update_options))
+    _async_register_nilm_services(hass)
 
     return True
+
+
+def _async_register_nilm_services(hass: HomeAssistant) -> None:
+    """Register the confirm/reject NILM-device services (v0.63.39) once
+    per Home Assistant instance - not per config entry, to avoid a
+    "service already registered" error if the integration's options are
+    ever reloaded. Applies the action to every coordinator this
+    integration has set up (in practice, just one per household) -
+    confirming/rejecting an entity_id that a particular coordinator
+    doesn't currently have as a candidate is a harmless no-op there.
+    """
+    if hass.services.has_service(DOMAIN, SERVICE_CONFIRM_NILM_DEVICE):
+        return
+
+    def _iter_coordinators():
+        for key, value in hass.data.get(DOMAIN, {}).items():
+            if isinstance(key, str) and key.endswith("_solar_tracker"):
+                continue
+            yield value
+
+    async def _handle_confirm(call: ServiceCall) -> None:
+        entity_id = call.data["entity_id"]
+        confirmed_anywhere = False
+        for coordinator in _iter_coordinators():
+            if coordinator.confirm_nilm_device(entity_id):
+                confirmed_anywhere = True
+        if not confirmed_anywhere:
+            _LOGGER.warning(
+                "confirm_nilm_device: %s was not a known NILM candidate",
+                entity_id,
+            )
+
+    async def _handle_reject(call: ServiceCall) -> None:
+        entity_id = call.data["entity_id"]
+        for coordinator in _iter_coordinators():
+            coordinator.reject_nilm_device(entity_id)
+
+    hass.services.async_register(
+        DOMAIN, SERVICE_CONFIRM_NILM_DEVICE, _handle_confirm, schema=NILM_SERVICE_SCHEMA
+    )
+    hass.services.async_register(
+        DOMAIN, SERVICE_REJECT_NILM_DEVICE, _handle_reject, schema=NILM_SERVICE_SCHEMA
+    )
 
 
 async def async_update_options(hass: HomeAssistant, entry: ConfigEntry) -> None:
