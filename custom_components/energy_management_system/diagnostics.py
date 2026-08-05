@@ -458,6 +458,7 @@ async def async_get_config_entry_diagnostics(
             "nilm_unconfirmed_candidates": coordinator.nilm_unconfirmed_candidates,
             "nilm_confirmed_devices": coordinator.nilm_confirmed_devices,
             "nilm_rejected_entities": coordinator.nilm_rejected_entities,
+            "advisory_readiness": coordinator.advisory_readiness,
             "total_feedin_premium_eur": round(
                 coordinator.total_feedin_premium_eur, 4
             ),

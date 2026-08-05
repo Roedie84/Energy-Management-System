@@ -64,6 +64,7 @@ async def async_setup_entry(
         DigitalTwinAdvisorySensor(coordinator, entry.entry_id),
         NilmUnconfirmedCandidatesSensor(coordinator, entry.entry_id),
         NilmConfirmedDevicesSensor(coordinator, entry.entry_id),
+        AdvisoryReadinessSensor(coordinator, entry.entry_id),
         ReserveShortfallSensor(coordinator, entry.entry_id),
         ReserveExcessSensor(coordinator, entry.entry_id),
         LearnedBatteryEfficiencySensor(coordinator, entry.entry_id),
@@ -1401,6 +1402,59 @@ class NilmConfirmedDevicesSensor(SensorEntity, RestoreEntity):
         raw_devices = last_state.attributes.get("apparaten")
         if isinstance(raw_devices, dict):
             self._coordinator.nilm_confirmed_devices = dict(raw_devices)
+
+
+class AdvisoryReadinessSensor(SensorEntity):
+    """Readiness assessment for the eight advisory-only modules
+    (Kirchhoff, sluipverbruik, Weather Ensemble, MPC, Monte Carlo,
+    Kalman, Digital Twin, NILM) - v0.63.40, reported: "kunnen we een
+    advies afgeven wanneer betrouwbaar genoeg om er werkelijk iets mee
+    te doen?"
+
+    Deliberate honesty distinction: modules with a genuine data-
+    maturity signal get a real readiness status
+    ("klaar"/"bijna_klaar"/"onvoldoende_data"/"kwaliteit_te_laag").
+    Modules with no mechanism comparing past predictions to what
+    actually happened (Weather Ensemble, MPC, Digital Twin) get
+    "structureel_beschikbaar" instead - never a false claim of proven
+    accuracy this integration hasn't earned.
+
+    Not a RestoreEntity - recomputed fresh every tick from live state.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Advies-gereedheid (8 modules)"
+    _attr_icon = "mdi:clipboard-check-outline"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_advisory_readiness"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def native_value(self) -> int:
+        return sum(
+            1
+            for m in self._coordinator.advisory_readiness.values()
+            if m.get("status") == "klaar"
+        )
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return {
+            "modules": self._coordinator.advisory_readiness,
+            "note": (
+                "'klaar' = genoeg data verzameld om de uitkomst te "
+                "vertrouwen. 'structureel_beschikbaar' = werkt, maar er "
+                "is geen mechanisme dat de voorspelling ooit tegen de "
+                "werkelijkheid legt - géén bewezen nauwkeurigheid, dus "
+                "bewust nooit als 'klaar' gelabeld."
+            ),
+        }
 
 
 class ReserveShortfallSensor(SensorEntity, RestoreEntity):

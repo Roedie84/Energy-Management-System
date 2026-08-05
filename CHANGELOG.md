@@ -4126,3 +4126,97 @@ aanhoudende stijging wordt gesignaleerd; nooit een device-commando;
 beide services registreren correct; dubbele registratie geeft geen
 fout; en beide services roepen daadwerkelijk de juiste
 coordinator-methode aan.
+
+## v0.63.40 — advies-gereedheid: wanneer is een adviesmodule betrouwbaar genoeg?
+
+**Aanleiding:** na afronding van de acht adviserende modules (Kirchhoff
+t/m NILM) gevraagd of er een advies kan worden afgegeven wanneer elke
+module betrouwbaar genoeg is om er daadwerkelijk iets mee te doen.
+
+**Kernbeslissing — bewuste eerlijkheidsscheiding, geen valse claim van
+bewezen betrouwbaarheid:**
+
+- **Vijf modules met een echte data-volwassenheid-signaal** (Kirchhoff,
+  sluipverbruik, Monte Carlo, Kalman, NILM) krijgen een genuine
+  gereedheidsstatus: `klaar` / `bijna_klaar` / `onvoldoende_data` /
+  `kwaliteit_te_laag` / `niet_geconfigureerd` — gebaseerd op al bestaande
+  interne signalen (steekproefaantallen t.o.v. hun ontwerpdrempel, of
+  bij Kalman: hoever de eigen onzekerheid is gekrompen t.o.v. het
+  startpunt).
+- **Drie modules zonder mechanisme dat een voorspelling ooit tegen de
+  werkelijkheid legt** (Weather Ensemble, MPC, Digital Twin) krijgen
+  bewust **nooit** `klaar` — in plaats daarvan `structureel_beschikbaar`,
+  met expliciete vermelding dat de nauwkeurigheid niet wordt gevolgd.
+  Dit voorkomt een schijnbaar gereedheidsoordeel dat de integratie niet
+  heeft verdiend.
+
+**Nieuw: `_update_advisory_readiness()`.** Berekent elke tick, voor elk
+van de acht modules, de status + een leesbare reden, puur op basis van
+al bestaande state (geen nieuwe tracking-infrastructuur nodig — dit is
+een laag bovenop wat er al werd bijgehouden).
+
+**Nieuwe sensor:** `sensor.advies_gereedheid_8_modules` — toont het
+aantal modules met status `klaar`, met de volledige uitsplitsing per
+module als attribuut. Geen `RestoreEntity` (elke tick vers berekend).
+
+**Getest** (16 nieuwe permanente tests in `test_advisory_readiness.py`):
+alle drie de niveaus voor Kirchhoff (onvoldoende data, klaar,
+kwaliteit te laag) en sluipverbruik (onvoldoende/bijna/klaar); expliciete
+bevestiging dat Weather Ensemble/MPC/Digital Twin nooit `klaar` krijgen,
+zelfs met volop data; Monte Carlo- en Kalman-convergentie; NILM-
+maturiteit over meerdere apparaten heen; alle acht modules altijd
+aanwezig in de uitvoer; en nooit een device-commando.
+
+## v0.63.41 — NILM bevestigen/negeren direct vanuit het dashboard
+
+**Gevraagd:** een overzicht in het dashboard van gedetecteerde
+NILM-kandidaten, met de optie om ze direct te accepteren of te weigeren
+— zonder via Ontwikkelaarshulpmiddelen → Acties te hoeven.
+
+**Beperking eerlijk vooraf benoemd:** een kale Lovelace-dashboard (geen
+extra HACS-frontend-kaart aangenomen) kan geen dynamische, onbekende-
+lengte-lijst automatisch in knoppen omzetten. Opgelost met een **vaste
+set van 8 sleuven** in plaats van dynamisch aangemaakte/verwijderde
+entiteiten (wat de complexiteit en het risico van entity-lifecycle-
+beheer had toegevoegd).
+
+**Nieuw: `get_nilm_candidate_at_slot()`** op de coordinator — bepaalt
+welke kandidaat een gegeven sleuf-index (0-7) momenteel bevat,
+alfabetisch gesorteerd op `entity_id` voor een stabiele, deterministische
+volgorde (geen onverwacht wisselende sleuven tussen ticks).
+
+**16 nieuwe knop-entiteiten** (`NilmConfirmCandidateButton` /
+`NilmRejectCandidateButton`, 8 sleuven × 2): elke knop toont via zijn
+eigen attributen (`kandidaat_naam`, `kandidaat_vermogen_w`) welke
+kandidaat er momenteel in zit, en werkt bij indrukken op *whichever*
+kandidaat op dat moment in die sleuf zit — geen vaste koppeling aan één
+specifieke entity_id.
+
+**Dashboard**: een nieuwe kaartensectie op het "Overzicht"-paneel met
+een tabel (Jinja-template die alle 8 sleuven doorloopt) plus de 16
+knoppen eronder.
+
+**Getest** (7 nieuwe permanente tests in `test_nilm_dashboard_buttons.py`):
+een sleuf toont de alfabetisch eerste kandidaat; een lege sleuf toont
+niets; bevestigen/negeren via de knop werkt op de juiste, op dat moment
+gesloten kandidaat; drukken op een lege sleuf doet niets (geen crash);
+sleuven verschuiven correct nadat een kandidaat is bevestigd; en de
+setup registreert alle 16 sleufknoppen plus de bestaande testmelding-
+knop.
+
+## v0.63.42 — NILM-onderdelen verplaatst naar het "Apparaten"-tabblad
+
+**Gevraagd:** alles wat apparaat-/NILM-gerelateerd is bij elkaar op het
+"Apparaten"-tabblad in plaats van verspreid over "Overzicht" en
+"Apparaten".
+
+**Wijziging (puur dashboard-YAML, geen code):** de NILM-sensorrijen
+(onbevestigde kandidaten, bevestigde apparaten) en de hele sleuf-tabel
++ 16 bevestigen/negeren-knoppen zijn verplaatst van het
+"Overzicht"-paneel naar het "Apparaten"-paneel, direct na de bestaande
+vaatwasser/wasmachine/steelstofzuiger/fietsladers-kaarten en de
+"Laatste meldingen"-sectie — zodat alles rond fysieke apparaten nu op
+één plek staat.
+
+**Geen wijziging aan sensoren, knoppen, of services** — puur een
+herindeling van waar bestaande kaarten in het dashboard staan.

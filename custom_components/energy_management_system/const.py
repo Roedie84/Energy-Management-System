@@ -254,6 +254,16 @@ SCHEDULED_CHARGE_POLL_OFF_MINUTES = 15
 NILM_CUSUM_SLACK_FRACTION = 0.10
 NILM_CUSUM_ALARM_THRESHOLD = 1.0
 
+# NILM dashboard confirm/reject slots (v0.63.41): a fixed number of
+# button pairs, since a static Lovelace YAML dashboard (no extra HACS
+# frontend card assumed) can't dynamically render one button per
+# candidate for an unknown-length, changing list. Each slot shows
+# whichever candidate currently occupies that position in a
+# deterministic (alphabetically sorted by entity_id) ordering - plenty
+# for a typical household's realistic number of newly-discovered power
+# sensors at once.
+NILM_DASHBOARD_SLOT_COUNT = 8
+
 # Markov-achtige RUSTEND/ACTIEF/KLAAR-toestandsmachine voor vaatwasser/
 # wasmachine (v0.63.32, "Optie 1" - geen fase-detectie, daarvoor
 # ontbreekt trainingsdata per merk/model). Ruimere marge dan de

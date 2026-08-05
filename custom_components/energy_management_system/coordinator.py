@@ -480,6 +480,8 @@ class EnergyManagementSystemCoordinator:
         self.nilm_unconfirmed_candidates: dict[str, dict] = {}
         self.nilm_confirmed_devices: dict[str, dict] = {}
         self.nilm_rejected_entities: list[str] = []
+        # Advisory readiness assessment (v0.63.40).
+        self.advisory_readiness: dict[str, dict] = {}
         self._last_cost_basis_calc_time: datetime | None = None
         self.last_charge_power_applied: float | None = None
         self.last_current_price_per_kwh: float | None = None
@@ -5003,6 +5005,19 @@ class EnergyManagementSystemCoordinator:
             self.nilm_rejected_entities.append(entity_id)
         return True
 
+    def get_nilm_candidate_at_slot(self, slot_index: int) -> str | None:
+        """Which candidate entity_id currently occupies dashboard slot
+        `slot_index` (0-based) - v0.63.41. Sorted alphabetically by
+        entity_id for a deterministic, stable ordering (so a given
+        candidate doesn't visibly jump between slots from one tick to
+        the next just because dict iteration order shifted). Returns
+        None if fewer candidates exist than that slot index.
+        """
+        sorted_ids = sorted(self.nilm_unconfirmed_candidates.keys())
+        if slot_index < 0 or slot_index >= len(sorted_ids):
+            return None
+        return sorted_ids[slot_index]
+
     def _update_nilm_confirmed_devices(self, now: datetime) -> None:
         """Per-device daily-average tracking + CUSUM drift-detection for
         every confirmed NILM device - same principle as the household
@@ -5078,6 +5093,202 @@ class EnergyManagementSystemCoordinator:
                         ),
                         notification_id=f"ems_nilm_anomaly_{entity_id}",
                     )
+
+    def _update_advisory_readiness(self, now: datetime) -> None:
+        """Readiness assessment for the eight advisory-only modules
+        (v0.63.40) - reported: "kunnen we een advies afgeven wanneer
+        betrouwbaar genoeg om er werkelijk iets mee te doen?"
+
+        Important, deliberate honesty distinction kept throughout: for
+        some modules (Kirchhoff, sluipverbruik, Monte Carlo, Kalman,
+        NILM) there's a genuine data-maturity signal already being
+        tracked (a sample count reaching its design threshold, or a
+        Kalman filter's own uncertainty having converged) - "klaar"
+        there means the underlying data is mature enough for the output
+        to be meaningful. For three modules (Weather Ensemble, MPC,
+        Digital Twin) there is NO mechanism comparing past predictions
+        against what actually happened - "klaar" there would be a false
+        claim of proven accuracy this integration hasn't earned. Those
+        are labelled "structureel beschikbaar, nauwkeurigheid niet
+        gevolgd" instead of a readiness status, so the distinction stays
+        visible rather than papered over.
+        """
+        readiness: dict[str, dict] = {}
+
+        # 1. Kirchhoff energiebalans-validatie - has its own rolling
+        # sample count/score already.
+        sample_count = len(self.energy_balance_error_history)
+        if not self.config.get(CONF_AVAILABLE_ENERGY_SENSOR) or not self.config.get(
+            CONF_BATTERY_POWER_SENSOR
+        ):
+            readiness["kirchhoff"] = {
+                "status": "niet_geconfigureerd",
+                "reden": "available_energy_sensor_entity en/of battery_power_sensor_entity ontbreken.",
+            }
+        elif sample_count < ENERGY_BALANCE_ERROR_HISTORY_LENGTH:
+            readiness["kirchhoff"] = {
+                "status": "onvoldoende_data",
+                "reden": f"{sample_count}/{ENERGY_BALANCE_ERROR_HISTORY_LENGTH} metingen verzameld.",
+            }
+        elif (self.sensor_health_score or 0) >= MEASUREMENT_QUALITY_GOOD_THRESHOLD:
+            readiness["kirchhoff"] = {
+                "status": "klaar",
+                "reden": f"Score {self.sensor_health_score}% over {sample_count} metingen.",
+            }
+        else:
+            readiness["kirchhoff"] = {
+                "status": "kwaliteit_te_laag",
+                "reden": f"Score {self.sensor_health_score}% - sensoren zelf lijken inconsistent.",
+            }
+
+        # 2. CUSUM-sluipverbruik - reference needs the full window to
+        # be mature, not just the minimum to compute anything at all.
+        history_len = len(self.baseline_load_history)
+        if history_len >= CUSUM_BASELINE_HISTORY_DAYS:
+            readiness["sluipverbruik"] = {
+                "status": "klaar",
+                "reden": f"Volledige {CUSUM_BASELINE_HISTORY_DAYS}-dagen-referentie opgebouwd.",
+            }
+        elif history_len >= CUSUM_MIN_HISTORY_FOR_REFERENCE:
+            readiness["sluipverbruik"] = {
+                "status": "bijna_klaar",
+                "reden": f"{history_len}/{CUSUM_BASELINE_HISTORY_DAYS} dagen - detecteert al, referentie nog niet volgroeid.",
+            }
+        else:
+            readiness["sluipverbruik"] = {
+                "status": "onvoldoende_data",
+                "reden": f"{history_len}/{CUSUM_MIN_HISTORY_FOR_REFERENCE} dagen minimum.",
+            }
+
+        # 3. Weather Ensemble - no accuracy tracking exists.
+        if self.weather_ensemble_sources_used:
+            readiness["weather_ensemble"] = {
+                "status": "structureel_beschikbaar",
+                "reden": (
+                    f"{len(self.weather_ensemble_sources_used)} bron(nen) actief - "
+                    "nauwkeurigheid t.o.v. de werkelijkheid wordt niet bijgehouden."
+                ),
+            }
+        else:
+            readiness["weather_ensemble"] = {
+                "status": "niet_geconfigureerd",
+                "reden": "Geen knmi_weather_entity/openweathermap_weather_entity geconfigureerd.",
+            }
+
+        # 4. MPC - no accuracy tracking (plan vs realised outcome) exists.
+        if self.mpc_horizon_quarters_used:
+            readiness["mpc"] = {
+                "status": "structureel_beschikbaar",
+                "reden": (
+                    f"Plant over {self.mpc_horizon_quarters_used} kwartieren - "
+                    "nauwkeurigheid t.o.v. het daadwerkelijke resultaat wordt niet bijgehouden."
+                ),
+            }
+        else:
+            readiness["mpc"] = {
+                "status": "niet_geconfigureerd",
+                "reden": self.mpc_note or "Geen plan beschikbaar.",
+            }
+
+        # 5. Monte Carlo - depends on the same learned history as
+        # sluipverbruik/Digital Twin; maturity = how many of the 24
+        # hours have a full LEARNING_HISTORY_DAYS window of samples.
+        mature_hours = sum(
+            1
+            for h in range(24)
+            if len(self.hourly_consumption_profile.get(h, [])) >= LEARNING_HISTORY_DAYS
+        )
+        if mature_hours >= 24:
+            readiness["monte_carlo"] = {
+                "status": "klaar",
+                "reden": "Alle 24 uren hebben een volledig geleerd verbruiksprofiel.",
+            }
+        elif mature_hours > 0:
+            readiness["monte_carlo"] = {
+                "status": "bijna_klaar",
+                "reden": f"{mature_hours}/24 uren volledig geleerd.",
+            }
+        else:
+            readiness["monte_carlo"] = {
+                "status": "onvoldoende_data",
+                "reden": "Nog geen enkel uur met een volledig geleerd profiel.",
+            }
+
+        # 6. Kalman filtering - each filter's own uncertainty, converged
+        # once it has shrunk well below its starting point.
+        converged = []
+        for kf, label in (
+            (self._kalman_soc, "soc"),
+            (self._kalman_pv, "pv"),
+            (self._kalman_load, "load"),
+        ):
+            if kf.estimate is None:
+                continue
+            starting_uncertainty = kf.measurement_noise
+            if starting_uncertainty > 0 and kf.uncertainty <= starting_uncertainty * 0.5:
+                converged.append(label)
+        active_filters = sum(
+            1
+            for kf in (self._kalman_soc, self._kalman_pv, self._kalman_load)
+            if kf.estimate is not None
+        )
+        if active_filters == 0:
+            readiness["kalman"] = {
+                "status": "niet_geconfigureerd",
+                "reden": "Geen van de drie signalen (SoC/PV/verbruik) heeft nog een meting gehad.",
+            }
+        elif len(converged) == active_filters:
+            readiness["kalman"] = {
+                "status": "klaar",
+                "reden": f"Alle {active_filters} actieve filters geconvergeerd.",
+            }
+        else:
+            readiness["kalman"] = {
+                "status": "bijna_klaar",
+                "reden": f"{len(converged)}/{active_filters} filters geconvergeerd.",
+            }
+
+        # 7. Digital Twin - no accuracy tracking exists, same caveat as MPC.
+        if self.digital_twin_trajectory:
+            readiness["digital_twin"] = {
+                "status": "structureel_beschikbaar",
+                "reden": (
+                    f"Simuleert over {self.digital_twin_hours_simulated} uur - "
+                    "nauwkeurigheid t.o.v. het daadwerkelijke resultaat wordt niet bijgehouden."
+                ),
+            }
+        else:
+            readiness["digital_twin"] = {
+                "status": "niet_geconfigureerd",
+                "reden": self.digital_twin_note or "Geen simulatie beschikbaar.",
+            }
+
+        # 8. NILM - per confirmed device, same maturity logic as
+        # sluipverbruik, summarised across all of them.
+        if not self.nilm_confirmed_devices:
+            readiness["nilm"] = {
+                "status": "niet_geconfigureerd",
+                "reden": "Nog geen apparaten bevestigd via confirm_nilm_device.",
+            }
+        else:
+            mature_devices = sum(
+                1
+                for d in self.nilm_confirmed_devices.values()
+                if len(d.get("daily_avg_history", [])) >= CUSUM_BASELINE_HISTORY_DAYS
+            )
+            total_devices = len(self.nilm_confirmed_devices)
+            if mature_devices == total_devices:
+                readiness["nilm"] = {
+                    "status": "klaar",
+                    "reden": f"Alle {total_devices} bevestigde apparaten hebben een volledige referentie.",
+                }
+            else:
+                readiness["nilm"] = {
+                    "status": "bijna_klaar",
+                    "reden": f"{mature_devices}/{total_devices} bevestigde apparaten volledig volgroeid.",
+                }
+
+        self.advisory_readiness = readiness
 
     def _cheapest_block_range(
         self, entries: list[PriceEntry], now: datetime
@@ -5802,6 +6013,7 @@ class EnergyManagementSystemCoordinator:
         self._run_digital_twin_simulation(now)
         self._update_nilm_discovery(now)
         self._update_nilm_confirmed_devices(now)
+        self._update_advisory_readiness(now)
 
         # What the pure price/solar logic wants, independent of
         # force_manual or learning_only - lets you graph this against the

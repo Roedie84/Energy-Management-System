@@ -7,14 +7,23 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import CONF_APPLIANCE_NOTIFY_SERVICE, DEFAULT_NAME, DOMAIN
+from .const import (
+    CONF_APPLIANCE_NOTIFY_SERVICE,
+    DEFAULT_NAME,
+    DOMAIN,
+    NILM_DASHBOARD_SLOT_COUNT,
+)
 
 
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     coordinator = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities([TestNotificationButton(coordinator, entry_id=entry.entry_id)])
+    entities = [TestNotificationButton(coordinator, entry_id=entry.entry_id)]
+    for slot in range(NILM_DASHBOARD_SLOT_COUNT):
+        entities.append(NilmConfirmCandidateButton(coordinator, entry.entry_id, slot))
+        entities.append(NilmRejectCandidateButton(coordinator, entry.entry_id, slot))
+    async_add_entities(entities)
 
 
 class TestNotificationButton(ButtonEntity):
@@ -50,3 +59,65 @@ class TestNotificationButton(ButtonEntity):
             ),
             notification_id="ems_test_notification",
         )
+
+
+class _NilmSlotButton(ButtonEntity):
+    """Shared base for the 8 confirm/reject slot-pairs (v0.63.41) - see
+    `EnergyManagementSystemCoordinator.get_nilm_candidate_at_slot` for
+    why a fixed number of slots is used instead of one dynamic button
+    per candidate (a static Lovelace dashboard can't render an unknown-
+    length, changing list without an extra HACS frontend card).
+    """
+
+    def __init__(self, coordinator, entry_id: str, slot: int, unique_suffix: str) -> None:
+        self._coordinator = coordinator
+        self._slot = slot
+        self._attr_unique_id = f"{entry_id}_nilm_slot_{slot}_{unique_suffix}"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        entity_id = self._coordinator.get_nilm_candidate_at_slot(self._slot)
+        if entity_id is None:
+            return {"kandidaat_entity_id": None, "kandidaat_naam": None}
+        candidate = self._coordinator.nilm_unconfirmed_candidates.get(entity_id, {})
+        return {
+            "kandidaat_entity_id": entity_id,
+            "kandidaat_naam": candidate.get("friendly_name"),
+            "kandidaat_vermogen_w": candidate.get("current_power_w"),
+        }
+
+
+class NilmConfirmCandidateButton(_NilmSlotButton):
+    """Confirms whichever candidate currently occupies this slot."""
+
+    _attr_has_entity_name = True
+    _attr_icon = "mdi:check-circle-outline"
+
+    def __init__(self, coordinator, entry_id: str, slot: int) -> None:
+        super().__init__(coordinator, entry_id, slot, "confirm")
+        self._attr_name = f"NILM kandidaat {slot + 1} bevestigen"
+
+    async def async_press(self) -> None:
+        entity_id = self._coordinator.get_nilm_candidate_at_slot(self._slot)
+        if entity_id is not None:
+            self._coordinator.confirm_nilm_device(entity_id)
+
+
+class NilmRejectCandidateButton(_NilmSlotButton):
+    """Rejects whichever candidate currently occupies this slot."""
+
+    _attr_has_entity_name = True
+    _attr_icon = "mdi:close-circle-outline"
+
+    def __init__(self, coordinator, entry_id: str, slot: int) -> None:
+        super().__init__(coordinator, entry_id, slot, "reject")
+        self._attr_name = f"NILM kandidaat {slot + 1} negeren"
+
+    async def async_press(self) -> None:
+        entity_id = self._coordinator.get_nilm_candidate_at_slot(self._slot)
+        if entity_id is not None:
+            self._coordinator.reject_nilm_device(entity_id)

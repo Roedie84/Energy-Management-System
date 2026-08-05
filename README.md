@@ -734,6 +734,25 @@ Ontwikkelaarshulpmiddelen → Acties (of een eigen script/knop):
 lijst (met naam en huidig vermogen) als attribuut, zodat je weet welke
 `entity_id`'s je aan de services moet meegeven.
 
+### Bevestigen/negeren via het dashboard (v0.63.41)
+
+Een kale Home Assistant-installatie kan geen dynamische, onbekende-
+lengte-lijst automatisch in knoppen omzetten (dat vereist een externe
+HACS-frontend-kaart) — daarom werkt dit met een **vaste set van 8
+sleuven**: `button.nilm_kandidaat_1_bevestigen` t/m `_8_bevestigen`
+(en hetzelfde met `_negeren`). Elke sleuf toont via zijn eigen
+attributen (`kandidaat_naam`, `kandidaat_vermogen_w`) welke kandidaat
+er momenteel in zit — alfabetisch gesorteerd op `entity_id`, dus stabiel
+tussen ticks. Ruim genoeg voor een realistisch aantal tegelijk nieuw
+ontdekte apparaten; bij meer dan 8 tegelijk zijn de extra kandidaten
+gewoon nog niet zichtbaar totdat er een sleuf vrijkomt.
+
+Het dashboard (paneel "Apparaten" — samen met de overige apparaat- en
+grootverbruiker-kaarten) toont een tabel die per sleuf laat
+zien welke kandidaat er zit, met daaronder de 16 knoppen om te
+bevestigen/negeren. Een sleuf verschuift automatisch naar de volgende
+kandidaat zodra je 'm bevestigt of negeert.
+
 ### Drift-detectie na bevestiging (mogelijk defect)
 
 Zelfde CUSUM-principe als de sluipverbruik-detectie hierboven, maar per
@@ -755,6 +774,37 @@ mag een herstart niet resetten.
 
 **Puur informatief** — nergens meegewogen in accubeslissingen, zoals
 afgesproken.
+
+## Advies-gereedheid: wanneer is een adviesmodule betrouwbaar genoeg?
+
+Acht modules zijn uitsluitend adviserend/informatief (Kirchhoff,
+sluipverbruik-detectie, Weather Ensemble, MPC, Monte Carlo, Kalman
+filtering, Digital Twin, NILM) — geen ervan stuurt ooit een commando of
+weegt mee in een accubeslissing. `sensor.advies_gereedheid_8_modules`
+(v0.63.40) geeft per module een eerlijke inschatting van hoe betrouwbaar
+de uitkomst inmiddels is, gebaseerd op wat er al aan data is verzameld.
+
+**Bewuste eerlijkheidsscheiding — twee categorieën, niet één schaal:**
+
+- **Echte data-volwassenheid** (Kirchhoff, sluipverbruik, Monte Carlo,
+  Kalman, NILM): deze hebben allemaal al een intern signaal dat laat
+  zien hoeveel data er is verzameld t.o.v. wat het ontwerp nodig heeft
+  (bijv. 30 dagen voor de sluipverbruik-referentie, een Kalman-filter
+  dat aantoonbaar geconvergeerd is). Status: `klaar` / `bijna_klaar` /
+  `onvoldoende_data` / `kwaliteit_te_laag` (bij Kirchhoff, als de
+  sensoren zelf inconsistent blijken) / `niet_geconfigureerd`.
+- **Structureel beschikbaar, geen bewezen nauwkeurigheid** (Weather
+  Ensemble, MPC, Digital Twin): deze drie hebben **geen** mechanisme dat
+  ooit een eerdere voorspelling tegen wat er daadwerkelijk gebeurde
+  legt. Ze werken en berekenen prima, maar "klaar" zou een valse claim
+  van bewezen betrouwbaarheid zijn die deze integratie niet heeft
+  verdiend — vandaar bewust altijd `structureel_beschikbaar` in plaats
+  van een schijnbaar gereedheids-oordeel.
+
+De sensor toont het aantal modules met status `klaar`, met de volledige
+uitsplitsing (status + reden per module) als attribuut. Geen
+`RestoreEntity` — elke tick opnieuw berekend uit de actuele staat van
+elke module.
 
 ## Diagnostiek
 
