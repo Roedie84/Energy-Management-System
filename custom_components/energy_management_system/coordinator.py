@@ -2787,24 +2787,40 @@ class EnergyManagementSystemCoordinator:
         return max(e[2] for e in todays_remaining) / PRICE_SCALE_FACTOR
 
     def _get_arbitrage_charge_power(
-        self, entries: list[PriceEntry], now: datetime
+        self, entries: list[PriceEntry], now: datetime, should_postpone_charging: bool
     ) -> float | None:
         """How much to actively buy from the grid right now, purely
         because a known, more expensive quarter is still coming later
         today and buying now is profitable even after round-trip losses
         (reported: 'nu tegen 21 ct niet laden en dan vanavond wat meer
         tegen dure uren ontladen' - the margin was being left on the
-        table). Returns None if arbitrage charging is disabled, not
-        profitable right now, or the live solar surplus already covers
-        the desired charge rate on its own.
+        table). Returns None if arbitrage charging is disabled or not
+        profitable right now.
 
         Deliberately solar-first (reported: 'tijdens goedkope uren
-        vooral zonne-energie blijft opslaan'): only tops up the *gap*
-        between the desired charge rate and whatever live PV surplus is
-        already available - if solar alone already covers it, this
-        returns None and the existing smart-mode P1-following captures
-        that solar itself, same as it always has. Only steps in with
-        grid power for the shortfall.
+        vooral zonne-energie blijft opslaan'): if the fallback mode
+        would be OPTION_SMART (`should_postpone_charging=False`), only
+        tops up the *gap* between the desired charge rate and whatever
+        live PV surplus is already available - solar alone already
+        gets captured by that mode's own P1-following, so only the
+        shortfall needs an explicit manual command.
+
+        v0.63.59, reported ('accu wordt weer ingesteld op
+        smart_discharging terwijl ik juist wil doorladen'): that
+        solar-first assumption silently broke down whenever the
+        fallback would instead be OPTION_SMART_DISCHARGING
+        (`should_postpone_charging=True`) - confirmed with the person
+        that mode covers household load only and does NOT charge from
+        surplus solar, so a large solar surplus that would fully cover
+        the desired rate was being left completely unused (not even
+        exported productively into the battery) instead of captured.
+        In that specific case, this now commands the *full* target
+        charge rate rather than just the grid-shortfall gap - the
+        physical PV/grid split still happens naturally at the meter
+        (solar covers what it can, grid tops up the rest), so this
+        doesn't buy more from the grid than actually needed, it just
+        stops discarding free solar that smart_discharging wouldn't
+        otherwise capture.
         """
         if not self.arbitrage_charging_enabled:
             return None
@@ -2847,11 +2863,17 @@ class EnergyManagementSystemCoordinator:
         grid_power_w = max(0.0, target_power_w - solar_surplus_w)
         self.last_arbitrage_grid_power_w = round(grid_power_w, 1)
         if grid_power_w < MIN_ARBITRAGE_GRID_POWER_W:
-            # Solar surplus already covers (most of) the desired rate -
-            # let the existing smart-mode P1-following capture it
-            # itself, rather than disrupting it for a trickle of grid
-            # power.
-            return None
+            if not should_postpone_charging:
+                # Solar surplus already covers (most of) the desired
+                # rate, and the fallback here is OPTION_SMART - let its
+                # own P1-following capture it, rather than disrupting
+                # that for a trickle of grid power.
+                return None
+            # The fallback here would instead be smart_discharging,
+            # which doesn't capture solar surplus at all - command the
+            # full target rate so that surplus actually gets used
+            # instead of discarded.
+            return target_power_w
 
         return grid_power_w
 
@@ -6931,7 +6953,9 @@ class EnergyManagementSystemCoordinator:
             self._finish_decision_tick(now)
             return
 
-        arbitrage_power = self._get_arbitrage_charge_power(entries, now)
+        arbitrage_power = self._get_arbitrage_charge_power(
+            entries, now, should_postpone_charging
+        )
         if arbitrage_power is not None:
             await self._async_apply_manual(-arbitrage_power)
             self.last_reason = "arbitrage_charging"

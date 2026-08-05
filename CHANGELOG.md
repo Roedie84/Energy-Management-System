@@ -4689,3 +4689,41 @@ venster, weersvoorspelling-ophalen inclusief foutafhandeling,
 projectie met beide betrouwbaarheidsniveaus, throttling, en de
 correctie-op-actuele-waarde binnen het ophaal-throttle-venster) + 10
 tests in `test_living_room_airco_prediction.py`.
+
+## v0.63.59 — arbitrage-laden negeerde vermijdbaar zonoverschot tijdens smart_discharging
+
+**Gerapporteerd, met diagnostiek-export en dashboard-screenshot:** "de
+accu wordt nu toch weer ingesteld op smart_discharging terwijl ik juist
+wil om verder te laden omdat vanavond vele dure uren zijn" — ondanks
+zowel `arbitrage_charging_enabled` als `learning_only` correct
+ingesteld (bevestigd via de aangeleverde diagnostiek: marge
+€0,1709/kWh, ruim boven de drempel).
+
+**Root cause, gevonden via de diagnostiek-cijfers**: er stond op dat
+moment 2858W aan zonoverschot. Arbitrage-laden's "zon-prioriteit"-logica
+zag dat overschot ruim genoeg om het gewenste laadvermogen te dekken,
+en deed daarom bewust niets — met de aanname "de bestaande
+`smart`-modus vangt dit toch al zelf op". Die aanname bleek in dit
+geval niet te kloppen: de terugvalmodus was hier niet `smart` maar
+`smart_discharging` (laden uitstellen, want er was al genoeg om te
+overbruggen tot het goedkope blok) — en bevestigd met de gebruiker:
+`smart_discharging` dekt alléén het huishoudverbruik en laadt **niet**
+bij vanuit een zonoverschot. Dat overschot bleef daardoor volledig
+onbenut in plaats van gratis in de accu te belanden.
+
+**Fix**: `_get_arbitrage_charge_power()` krijgt nu `should_postpone_
+charging` als parameter. Zou de accu zonder ingrijpen in
+`smart_discharging` terechtkomen (in plaats van `smart`), dan wordt nu
+bewust het **volle** gewenste laadvermogen ingesteld in plaats van
+alleen het net-gat boven het zonoverschot — de fysieke PV/net-verdeling
+gebeurt vanzelf bij de meter (zon dekt wat ze kan, net vult de rest
+aan), dus dit koopt niet meer van het net dan nodig, het voorkomt
+alleen dat het zonoverschot verloren gaat.
+
+**Getest** (2 nieuwe permanente tests in `test_arbitrage_charging.py`,
+rechtstreeks op `_get_arbitrage_charge_power` om deze beslissing los te
+testen van de (ongerelateerde) reserve-berekening die
+`should_postpone_charging` zelf bepaalt): vol zonoverschot met
+`should_postpone_charging=True` → nu het volle doelvermogen; hetzelfde
+scenario met `should_postpone_charging=False` → nog steeds `None`
+(oorspronkelijk, correct gedrag voor de `smart`-terugval blijft intact).

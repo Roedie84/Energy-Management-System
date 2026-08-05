@@ -255,9 +255,23 @@ zonne-energie blijft opslaan"): het gewenste laadvermogen
 zonoverschot** (PV-productie minus werkelijk huishoudverbruik, met
 `pv_power_sensor_entity` geconfigureerd) — alleen het overblijvende gat
 wordt daadwerkelijk van het net gekocht. Is het zonoverschot al groter
-dan het gewenste vermogen, dan gebeurt er niets: de bestaande
-smart-modus (P1-volgend) vangt die zon toch al zelf op, geen reden om
-dat te verstoren met een geforceerde manual-modus.
+dan het gewenste vermogen, **en zou de accu anders in de gewone
+`smart`-modus terechtkomen**, dan gebeurt er niets: die modus vangt de
+zon toch al zelf op via P1-volgend laden, geen reden om dat te
+verstoren met een geforceerde manual-modus.
+
+**Uitzondering, gevonden n.a.v. een gerapporteerd geval (v0.63.59):**
+"accu wordt weer ingesteld op smart_discharging terwijl ik juist wil
+doorladen" — de zon-prioriteit-aanname hierboven ging er stilzwijgend
+van uit dat de terugval-modus altijd `smart` zou zijn. Zou de accu bij
+het uitblijven van arbitrage in plaats daarvan `smart_discharging`
+("laden uitstellen") ingaan, dan klopt die aanname niet — die modus
+dekt alleen het huishoudverbruik en laadt (bevestigd met de gebruiker)
+juist **niet** bij vanuit een zonoverschot. In dat specifieke geval
+koopt arbitrage-laden nu het volle gewenste vermogen in, zodat het
+zonoverschot alsnog wordt vastgelegd in plaats van onbenut te blijven —
+de fysieke PV/net-verdeling gebeurt vanzelf bij de meter, er wordt dus
+niet meer van het net gekocht dan nodig.
 
 Zet **nooit** de winter-guard-vlag (`_grid_charged_today`) — dat
 mechanisme bestaat om te voorkomen dat noodzakelijk gekochte energie

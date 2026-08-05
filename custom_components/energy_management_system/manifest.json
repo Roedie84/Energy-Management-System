@@ -8,5 +8,5 @@
   "iot_class": "local_polling",
   "integration_type": "service",
   "requirements": [],
-  "version": "0.63.58"
+  "version": "0.63.59"
 }
