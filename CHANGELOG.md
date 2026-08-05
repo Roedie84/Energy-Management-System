@@ -4612,3 +4612,80 @@ staat; het uitzetten van deze switch heeft geen effect op andere
 meldingstypes via dezelfde notify-service; de switch-entiteit
 weerspiegelt en wijzigt de coordinator-vlag correct in beide richtingen;
 en de uit-stand overleeft een herstart.
+
+## v0.63.55 t/m v0.63.58 — Klimaat-tabblad: geleerde woonkamertemperatuur-projectie
+
+**Gevraagd, in meerdere stappen**: eerst een airco-verwachting op basis
+van woonkamertemperatuur (v0.63.55), toen uitgebreid met rolluikstand +
+een 24-uurs uurlijkse temperatuurprojectie op basis van de KNMI/
+OpenWeatherMap-buitentemperatuur-voorspelling (v0.63.56), daarna
+tweeledige betrouwbaarheid — "indicatief" vs "betrouwbaar" (v0.63.57),
+en tot slot correctie op de actueel gemeten waarde (v0.63.58).
+
+### v0.63.55 — Airco-verwachting op basis van woonkamertemperatuur
+
+Nieuw: `_update_living_room_airco_prediction()` — echte anticipatie, niet
+alleen "staat de airco nu aan". Gebruikt hetzelfde "wacht af en
+bevestig later"-patroon als de PV-nauwkeurigheids-tracker: elke
+temperatuurmeting (1°C-bakken) wordt gequeued en 60 minuten later
+bevestigd als de airco in die periode is aangeslagen. Kort, glijdend
+venster per bucket (niet seizoensgebonden) — spring/herfst kan
+dag-afhankelijk zijn. Luchtvochtigheid bijgehouden als context.
+Nieuwe sensor: `sensor.airco_verwachting_woonkamertemperatuur`.
+
+### v0.63.56 — Rolluikstand + 24-uurs temperatuurprojectie
+
+Nieuwe configvelden `living_room_shutter_entity_1`/`_2`, gecombineerd
+tot "beide_dicht"/"gedeeltelijk"/"beide_open". Nieuw geleerd:
+verandersnelheid (°C/uur) van de woonkamertemperatuur per combinatie
+van buitentemperatuur-bucket (2°C) × rolluikstand × airco-status
+("uit"/"verwarmen"/"koelen", via `hvac_action`) — bewust **zonder
+bewolking** als aparte dimensie (bevestigd met de gebruiker: een
+volledig model zou honderden cellen opleveren die maandenlang
+onvoldoende data zouden tonen).
+
+Eerste gebruik van `weather.get_forecasts` met een échte respons in
+deze integratie (`_async_fetch_hourly_outdoor_forecast`) — nieuw
+terrein, foutbestendig geïmplementeerd. Tijdens het bouwen ontdekt en
+gefixt: een tik-voor-tik-snelheidsberekening (elke 5 min) was veel te
+ruisgevoelig voor zo'n langzaam fysiek proces — herontworpen naar een
+"anker"-aanpak die over ongeveer een uur meet.
+
+### v0.63.57 — Twee betrouwbaarheidsniveaus
+
+`get_climate_rate()` geeft nu "onvoldoende_data"/"indicatief" (≥5
+samples)/"betrouwbaar" (≥15 samples). De projectie berekent voortaan
+twee parallelle reeksen per uur (`kort_termijn_temp_c` en
+`betrouwbaar_temp_c`), niet twee losse modellen — beide bevriezen op
+het voorgaande uur zolang hun eigen drempel niet is gehaald.
+
+### v0.63.58 — Correctie op de actueel gemeten waarde
+
+Gesplitst in twee delen met eigen ritme:
+`_async_maybe_refresh_outdoor_forecast()` haalt de weersvoorspelling
+nog steeds maar eens per 30 minuten op (een échte, dure
+service-aanroep), maar `_recompute_climate_trajectory()` — goedkoop,
+geen netwerk-aanroep — draait elke tick en verankert de projectie
+steeds opnieuw aan de actueel gemeten temperatuur. Zonder deze
+scheiding zou de projectie tot 30 minuten kunnen wegdrijven van wat er
+intussen echt gemeten wordt.
+
+**Nieuwe sensor**: `sensor.klimaat_projectie_woonkamertemperatuur`
+(`RestoreEntity` — het geleerde snelheidsmodel moet weken opbouwen).
+**Nieuw dashboard-tabblad "Klimaat"**: live context-kaarten (temperatuur,
+luchtvochtigheid, buitentemperatuur, rolluikstand, airco-status,
+airco-verwachting), een betrouwbaarheid-legenda, en **twee tabellen**
+(kort-termijn/indicatief en betrouwbaar), elk met tijd, voorspelde
+buitentemperatuur, voorspelde woonkamertemperatuur, en
+betrouwbaarheidsniveau per uur.
+
+**Puur informatief**, zoals bij alle andere adviesmodules — stuurt
+nooit een commando, weegt niet mee in accubeslissingen.
+
+**Getest**: 26 nieuwe permanente tests in `test_climate_tab.py`
+(rolluikstand-combinaties, airco-statuslabels, live buitentemperatuur
+met fallback, snelheid-leren inclusief staleness-guard en begrensd
+venster, weersvoorspelling-ophalen inclusief foutafhandeling,
+projectie met beide betrouwbaarheidsniveaus, throttling, en de
+correctie-op-actuele-waarde binnen het ophaal-throttle-venster) + 10
+tests in `test_living_room_airco_prediction.py`.

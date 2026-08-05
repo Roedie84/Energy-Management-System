@@ -485,6 +485,19 @@ async def async_get_config_entry_diagnostics(
             "nilm_rejected_entities": coordinator.nilm_rejected_entities,
             "nilm_devices_table": coordinator.get_nilm_devices_table(),
             "advisory_readiness": coordinator.advisory_readiness,
+            "living_room_current_temp_c": coordinator.living_room_current_temp_c,
+            "living_room_current_humidity_percent": (
+                coordinator.living_room_current_humidity_percent
+            ),
+            "living_room_temp_bucket_history": (
+                coordinator.living_room_temp_bucket_history
+            ),
+            "climate_rate_history": coordinator.climate_rate_history,
+            "climate_forecast_trajectory": coordinator.climate_forecast_trajectory,
+            "climate_forecast_note": coordinator.climate_forecast_note,
+            "climate_shutter_state": coordinator.climate_shutter_state,
+            "climate_airco_state": coordinator.climate_airco_state,
+            "climate_live_outdoor_temp_c": coordinator.climate_live_outdoor_temp_c,
             "total_feedin_premium_eur": round(
                 coordinator.total_feedin_premium_eur, 4
             ),

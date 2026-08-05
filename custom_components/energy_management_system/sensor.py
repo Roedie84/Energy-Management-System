@@ -72,6 +72,8 @@ async def async_setup_entry(
         NilmUnconfirmedCandidatesSensor(coordinator, entry.entry_id),
         NilmConfirmedDevicesSensor(coordinator, entry.entry_id),
         AdvisoryReadinessSensor(coordinator, entry.entry_id),
+        LivingRoomAircoPredictionSensor(coordinator, entry.entry_id),
+        ClimateForecastSensor(coordinator, entry.entry_id),
         ReserveShortfallSensor(coordinator, entry.entry_id),
         ReserveExcessSensor(coordinator, entry.entry_id),
         LearnedBatteryEfficiencySensor(coordinator, entry.entry_id),
@@ -1508,6 +1510,156 @@ class AdvisoryReadinessSensor(SensorEntity):
                 "bewust nooit als 'klaar' gelabeld."
             ),
         }
+
+
+class LivingRoomAircoPredictionSensor(SensorEntity, RestoreEntity):
+    """Living-room-temperature airco activation predictor (v0.63.55,
+    requested: "verwacht wanneer ik de airco aanzet").
+
+    Genuine anticipation, not just "is the airco on right now" - uses
+    the same "queue an observation, confirm it later" technique as the
+    PV-forecast-accuracy tracker. Each living-room temperature reading
+    is bucketed (1°C bins) and, 60 minutes later, confirmed True/False
+    depending on whether the airco was seen active at any point during
+    that window - learned per bucket, over a short rolling window (not
+    a long/seasonal one), since spring/autumn conditions can swing day
+    to day.
+
+    Is a RestoreEntity - the learned per-bucket history is meant to
+    build up over weeks, a restart shouldn't reset that.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Airco-verwachting (woonkamertemperatuur)"
+    _attr_icon = "mdi:thermometer-lines"
+    _attr_native_unit_of_measurement = "°C"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_living_room_airco_prediction"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def native_value(self) -> float | None:
+        return self._coordinator.living_room_current_temp_c
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        temp_c = self._coordinator.living_room_current_temp_c
+        bucket_key = None
+        current = {
+            "bucket": None,
+            "sample_count": 0,
+            "probability_percent": None,
+            "gemiddelde_luchtvochtigheid_percent": None,
+            "voldoende_data": False,
+        }
+        if temp_c is not None:
+            from .const import LIVING_ROOM_TEMP_BUCKET_SIZE_C
+
+            bucket_key = str(
+                round(temp_c / LIVING_ROOM_TEMP_BUCKET_SIZE_C)
+                * LIVING_ROOM_TEMP_BUCKET_SIZE_C
+            )
+            current = self._coordinator.get_airco_activation_probability(bucket_key)
+        return {
+            "huidige_luchtvochtigheid_percent": (
+                self._coordinator.living_room_current_humidity_percent
+            ),
+            "huidige_bucket": bucket_key,
+            "kans_airco_binnen_1_uur_procent": current["probability_percent"],
+            "aantal_metingen_deze_bucket": current["sample_count"],
+            "voldoende_data": current["voldoende_data"],
+            "alle_buckets": self._coordinator.living_room_temp_bucket_history,
+            "note": (
+                "Bij de huidige woonkamertemperatuur: hoe vaak is de "
+                "airco historisch binnen het uur na een meting op deze "
+                "temperatuur aangeslagen? Kort, glijdend venster per "
+                "bucket (niet seizoensgebonden) - reageert dus snel op "
+                "veranderend weer in lente/herfst. Puur informatief, "
+                "stuurt nooit iets aan."
+            ),
+        }
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if last_state is None:
+            return
+        raw_buckets = last_state.attributes.get("alle_buckets")
+        if isinstance(raw_buckets, dict):
+            self._coordinator.living_room_temp_bucket_history = {
+                str(k): [bool(v) for v in vals]
+                for k, vals in raw_buckets.items()
+            }
+
+
+class ClimateForecastSensor(SensorEntity, RestoreEntity):
+    """Klimaat-tabblad: geleerde woonkamertemperatuur-projectie
+    (v0.63.56/.57/.58, requested).
+
+    Leert de verandersnelheid (°C/uur) van de woonkamertemperatuur per
+    combinatie van buitentemperatuur-bucket x rolluikstand x
+    airco-status (bewust zonder bewolking als aparte dimensie - te veel
+    cellen). Projecteert 24 uur vooruit met de KNMI/OpenWeatherMap-
+    buitentemperatuur-voorspelling, in twee parallelle reeksen:
+    "kort_termijn" (indicatief, al vanaf 5 samples per cel) en
+    "betrouwbaar" (pas vanaf 15 samples) - allebei bevriezen op het
+    voorgaande uur zolang hun eigen drempel niet is gehaald.
+
+    De projectie wordt elke tick opnieuw verankerd aan de actueel
+    gemeten temperatuur (v0.63.58) - alleen het ophalen van de
+    buitentemperatuur-voorspelling zelf is (om prestatieredenen)
+    begrensd tot eens per 30 minuten.
+
+    Puur informatief, stuurt nooit een commando. Wél een RestoreEntity
+    - het geleerde snelheidsmodel per cel moet weken kunnen opbouwen,
+    dat mag een herstart niet resetten.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Klimaat-projectie (woonkamertemperatuur)"
+    _attr_icon = "mdi:home-thermometer-outline"
+    _attr_native_unit_of_measurement = "°C"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_climate_forecast"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def native_value(self) -> float | None:
+        return self._coordinator.living_room_current_temp_c
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return {
+            "buitentemperatuur_live_c": self._coordinator.climate_live_outdoor_temp_c,
+            "rolluikstand": self._coordinator.climate_shutter_state,
+            "airco_status": self._coordinator.climate_airco_state,
+            "traject": self._coordinator.climate_forecast_trajectory,
+            "geleerde_cellen": self._coordinator.climate_rate_history,
+            "note": self._coordinator.climate_forecast_note,
+        }
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if last_state is None:
+            return
+        raw_cells = last_state.attributes.get("geleerde_cellen")
+        if isinstance(raw_cells, dict):
+            self._coordinator.climate_rate_history = {
+                str(k): [float(v) for v in vals] for k, vals in raw_cells.items()
+            }
 
 
 class ReserveShortfallSensor(SensorEntity, RestoreEntity):

@@ -935,6 +935,61 @@ veilig is om ergens op te sturen. Alle acht blijven, ongeacht hun
 status, uitsluitend adviserend; geen van deze modules stuurt ooit een
 commando of wordt in een accubeslissing meegewogen.
 
+## Klimaat-tabblad: geleerde woonkamertemperatuur-projectie (v0.63.56/.57/.58)
+
+Op verzoek — een apart "Klimaat"-tabblad dat 24 uur vooruit projecteert
+wat de woonkamertemperatuur gaat doen, gebaseerd op de KNMI/
+OpenWeatherMap-buitentemperatuur-voorspelling, de rolluikstand (2
+geconfigureerde entiteiten, gecombineerd tot "beide_dicht"/
+"gedeeltelijk"/"beide_open"), en de airco-status ("uit"/"verwarmen"/
+"koelen", granulairder dan de bestaande grootverbruiker-detectie).
+
+**Bewust vereenvoudigd om bruikbaar te blijven**: een volledig model
+(buitentemperatuur × rolluikstand × bewolking × airco-status) zou
+honderden cellen opleveren die elk apart genoeg data nodig hebben — bij
+een normaal huishouden zou het merendeel daarvan maandenlang
+"onvoldoende data" blijven tonen. Bewolking is daarom **expliciet
+weggelaten** als aparte leerdimensie (bevestigd met de gebruiker); de
+buitentemperatuur-vóórspelling wordt wel gebruikt om de projectie uur
+voor uur door te rekenen.
+
+**Wat er wordt geleerd**: de verandersnelheid (°C/uur) van de
+woonkamertemperatuur per combinatie van buitentemperatuur-bucket (2°C)
+× rolluikstand × airco-status, in een kort, glijdend venster (niet
+seizoensgebonden) — reageert dus snel op veranderend weer in
+lente/herfst, in plaats van door weken-oude data uit een heel ander
+regime verwaterd te worden. Gemeten over ongeveer een uur (niet elke
+5-minuten-tick) — een tik-voor-tik-berekening zou voor zo'n langzaam
+fysiek proces veel te ruisgevoelig zijn geweest.
+
+**Twee betrouwbaarheidsniveaus, parallel berekend** (niet twee losse
+modellen): `kort_termijn_temp_c` past de geleerde snelheid al toe
+vanaf 5 samples per cel ("indicatief" — bruikbaar, maar met nog weinig
+data), `betrouwbaar_temp_c` pas vanaf 15 samples. Een uur onder de
+eigen drempel bevriest op de temperatuur van het vorige uur, in plaats
+van te gokken.
+
+**Correctie op de actueel gemeten waarde (v0.63.58)**: het ophalen van
+de buitentemperatuur-voorspelling (een échte `weather.get_forecasts`-
+service-aanroep met een respons, nieuw terrein voor deze integratie)
+gebeurt om prestatieredenen maar eens per 30 minuten. De projectie
+zélf wordt echter **elke tick** opnieuw doorgerekend, steeds verankerd
+aan de actueel gemeten woonkamertemperatuur — zonder deze scheiding zou
+de projectie tot 30 minuten kunnen "wegdrijven" van wat er intussen
+echt gemeten wordt.
+
+**Beperking, expliciet benoemd**: rolluikstand en airco-status worden
+voor de hele 24-uurs-projectie constant gehouden op hun huidige stand
+— onbekend wat je daar over een paar uur mee doet.
+
+`sensor.klimaat_projectie_woonkamertemperatuur` toont het volledige
+traject (tijd, voorspelde buitentemperatuur, beide temperatuurreeksen,
+betrouwbaarheidsniveau, aantal metingen per uur) als attribuut. Wél een
+`RestoreEntity` — het geleerde snelheidsmodel per cel moet weken kunnen
+opbouwen.
+
+Puur informatief, stuurt nooit een commando.
+
 ## Diagnostiek
 
 "Instellingen → Apparaten & Diensten → Energy Management System → drie

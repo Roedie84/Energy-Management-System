@@ -1324,6 +1324,108 @@ views:
           - entity: sensor.woonkamer_energy_management_system_advies_gereedheid_8_modules
             name: Advies-gereedheid (samenvatting)
 
+  - title: Klimaat
+    path: klimaat
+    icon: mdi:home-thermometer-outline
+    cards:
+      - type: custom:mushroom-title-card
+        title: Klimaat — woonkamertemperatuur-projectie
+        subtitle: >-
+          Puur informatief — stuurt nooit een commando. Rolluikstand en
+          airco-status worden voor de hele projectie constant gehouden
+          op de huidige stand (onbekend wat die over enkele uren zijn).
+          Bewolking is bewust géén aparte leerdimensie (te veel cellen
+          zouden maandenlang "onvoldoende data" blijven tonen) — de
+          KNMI/OpenWeatherMap-buitentemperatuur-voorspelling wordt wel
+          gebruikt om de projectie uur voor uur door te rekenen. De
+          projectie verankert elke tick opnieuw aan de actueel gemeten
+          temperatuur; alleen het ophalen van de buitentemperatuur-
+          voorspelling zelf gebeurt om prestatieredenen maar eens per
+          30 minuten.
+
+      - type: grid
+        columns: 2
+        square: false
+        cards:
+          - type: custom:mushroom-template-card
+            primary: >-
+              {{ states('sensor.woonkamer_energy_management_system_klimaat_projectie_woonkamertemperatuur') }} °C
+            secondary: Woonkamertemperatuur (live)
+            icon: mdi:thermometer
+            icon_color: blue
+          - type: custom:mushroom-template-card
+            primary: >-
+              {{ state_attr('sensor.woonkamer_energy_management_system_klimaat_projectie_woonkamertemperatuur', 'buitentemperatuur_live_c') }} °C
+            secondary: Buitentemperatuur (live, KNMI/OpenWeatherMap)
+            icon: mdi:thermometer-lines
+            icon_color: cyan
+          - type: custom:mushroom-template-card
+            primary: >-
+              {{ state_attr('sensor.woonkamer_energy_management_system_klimaat_projectie_woonkamertemperatuur', 'rolluikstand') or 'onbekend' }}
+            secondary: Rolluikstand (beide entiteiten samen)
+            icon: mdi:blinds-horizontal
+            icon_color: grey
+          - type: custom:mushroom-template-card
+            primary: >-
+              {{ state_attr('sensor.woonkamer_energy_management_system_klimaat_projectie_woonkamertemperatuur', 'airco_status') or 'onbekend' }}
+            secondary: Airco-status
+            icon: mdi:air-conditioner
+            icon_color: orange
+          - type: custom:mushroom-template-card
+            primary: >-
+              {{ states('sensor.woonkamer_energy_management_system_airco_verwachting_woonkamertemperatuur') }} °C
+            secondary: >-
+              Airco-verwachting — kans binnen 1 uur: {{
+              state_attr('sensor.woonkamer_energy_management_system_airco_verwachting_woonkamertemperatuur', 'kans_airco_binnen_1_uur_procent')
+              }}%
+            icon: mdi:thermometer-lines
+            icon_color: purple
+
+      - type: markdown
+        content: |
+          **Betrouwbaarheid-legenda:** 🟡 `indicatief` (≥5 metingen
+          voor deze combinatie van buitentemperatuur/rolluikstand/
+          airco-status — al bruikbaar, maar nog weinig data) · ✅
+          `betrouwbaar` (≥15 metingen) · ⚪ `onvoldoende_data`
+          (temperatuur blijft ongewijzigd t.o.v. het vorige uur, in
+          plaats van te gokken).
+
+      - type: markdown
+        title: Korte termijn (indicatief)
+        content: |
+          {% set traject = state_attr('sensor.woonkamer_energy_management_system_klimaat_projectie_woonkamertemperatuur', 'traject') or [] %}
+          {% if traject | length == 0 %}
+          Nog geen projectie beschikbaar - {{ state_attr('sensor.woonkamer_energy_management_system_klimaat_projectie_woonkamertemperatuur', 'note') or 'onbekende reden' }}.
+          {% else %}
+          | Uur | Buiten (°C) | Woonkamer (°C) | Betrouwbaarheid |
+          |---|---|---|---|
+          {% for rij in traject -%}
+          {%- set icoon = {'betrouwbaar': '✅', 'indicatief': '🟡', 'onvoldoende_data': '⚪'}.get(rij.betrouwbaarheid, '?') -%}
+          | {{ rij.tijd[11:16] }} | {{ rij.buitentemp_voorspeld_c }} | {{ rij.kort_termijn_temp_c }} | {{ icoon }} {{ rij.betrouwbaarheid }} |
+          {% endfor %}
+          {% endif %}
+        grid_options:
+          columns: 12
+          rows: auto
+
+      - type: markdown
+        title: Betrouwbaar (≥15 metingen per cel)
+        content: |
+          {% set traject = state_attr('sensor.woonkamer_energy_management_system_klimaat_projectie_woonkamertemperatuur', 'traject') or [] %}
+          {% if traject | length == 0 %}
+          Nog geen projectie beschikbaar.
+          {% else %}
+          | Uur | Buiten (°C) | Woonkamer (°C) | Betrouwbaarheid |
+          |---|---|---|---|
+          {% for rij in traject -%}
+          {%- set icoon = {'betrouwbaar': '✅', 'indicatief': '🟡', 'onvoldoende_data': '⚪'}.get(rij.betrouwbaarheid, '?') -%}
+          | {{ rij.tijd[11:16] }} | {{ rij.buitentemp_voorspeld_c }} | {{ rij.betrouwbaar_temp_c }} | {{ icoon }} {{ rij.betrouwbaarheid }} |
+          {% endfor %}
+          {% endif %}
+        grid_options:
+          columns: 12
+          rows: auto
+
   - title: Geschiedenis
     path: geschiedenis
     icon: mdi:history

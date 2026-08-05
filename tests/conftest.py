@@ -274,9 +274,20 @@ class FakeServices:
     def __init__(self):
         self.calls: list[tuple[str, str, dict]] = []
         self._registered: dict[tuple[str, str], object] = {}
+        self._responses: dict[tuple[str, str], object] = {}
 
-    async def async_call(self, domain, service, data, blocking=True):
+    async def async_call(
+        self, domain, service, data, blocking=True, return_response=False
+    ):
         self.calls.append((domain, service, data))
+        if return_response:
+            return self._responses.get((domain, service), {})
+
+    def set_response(self, domain, service, response) -> None:
+        """Test helper: configure what a return_response=True call to
+        this domain/service should return (v0.63.56, for
+        weather.get_forecasts)."""
+        self._responses[(domain, service)] = response
 
     def has_service(self, domain, service) -> bool:
         return (domain, service) in self._registered

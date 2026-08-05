@@ -177,7 +177,7 @@ def _render_markdown_cards():
 def test_dashboard_yaml_is_valid():
     with open(DASHBOARD_PATH) as f:
         data = yaml.safe_load(f)
-    assert len(data["views"]) == 6
+    assert len(data["views"]) == 7
 
 
 def test_markdown_tables_have_no_blank_lines_between_rows():

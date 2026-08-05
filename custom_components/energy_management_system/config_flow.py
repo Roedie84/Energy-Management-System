@@ -30,6 +30,10 @@ from .const import (
     CONF_QUOOKER_POWER_SENSOR,
     CONF_AIRCO_CLIMATE_ENTITY,
     CONF_SLAAPKAMER_CLIMATE_ENTITY,
+    CONF_LIVING_ROOM_TEMPERATURE_SENSOR,
+    CONF_LIVING_ROOM_HUMIDITY_SENSOR,
+    CONF_LIVING_ROOM_SHUTTER_ENTITY_1,
+    CONF_LIVING_ROOM_SHUTTER_ENTITY_2,
     CONF_OVEN_STATE_SENSOR,
     CONF_KOOKPLAAT_STATE_SENSOR,
     CONF_STEELSTOFZUIGER_SWITCH,
@@ -199,6 +203,22 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
             ): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="climate")
             ),
+            vol.Optional(
+                CONF_LIVING_ROOM_TEMPERATURE_SENSOR,
+                default=defaults.get(CONF_LIVING_ROOM_TEMPERATURE_SENSOR),
+            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            vol.Optional(
+                CONF_LIVING_ROOM_HUMIDITY_SENSOR,
+                default=defaults.get(CONF_LIVING_ROOM_HUMIDITY_SENSOR),
+            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            vol.Optional(
+                CONF_LIVING_ROOM_SHUTTER_ENTITY_1,
+                default=defaults.get(CONF_LIVING_ROOM_SHUTTER_ENTITY_1),
+            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="cover")),
+            vol.Optional(
+                CONF_LIVING_ROOM_SHUTTER_ENTITY_2,
+                default=defaults.get(CONF_LIVING_ROOM_SHUTTER_ENTITY_2),
+            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="cover")),
             vol.Optional(
                 CONF_OVEN_STATE_SENSOR,
                 default=defaults.get(CONF_OVEN_STATE_SENSOR),

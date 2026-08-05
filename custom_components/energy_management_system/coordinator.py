@@ -73,6 +73,10 @@ from .const import (
     CONF_QUOOKER_POWER_SENSOR,
     CONF_AIRCO_CLIMATE_ENTITY,
     CONF_SLAAPKAMER_CLIMATE_ENTITY,
+    CONF_LIVING_ROOM_TEMPERATURE_SENSOR,
+    CONF_LIVING_ROOM_HUMIDITY_SENSOR,
+    CONF_LIVING_ROOM_SHUTTER_ENTITY_1,
+    CONF_LIVING_ROOM_SHUTTER_ENTITY_2,
     CONF_OVEN_STATE_SENSOR,
     CONF_KOOKPLAAT_STATE_SENSOR,
     CONF_STEELSTOFZUIGER_SWITCH,
@@ -92,6 +96,18 @@ from .const import (
     FIETSLADERS_COMPLETE_THRESHOLD_W,
     QUOOKER_SUSTAINED_MINUTES,
     AIRCO_ACTIVE_HVAC_ACTIONS,
+    LIVING_ROOM_TEMP_BUCKET_SIZE_C,
+    AIRCO_PREDICTION_LOOKAHEAD_MINUTES,
+    AIRCO_PREDICTION_MIN_SAMPLES,
+    AIRCO_PREDICTION_HISTORY_LENGTH,
+    OUTDOOR_TEMP_BUCKET_SIZE_C,
+    CLIMATE_RATE_HISTORY_LENGTH,
+    CLIMATE_RATE_MIN_INTERVAL_HOURS,
+    CLIMATE_RATE_MAX_INTERVAL_HOURS,
+    CLIMATE_RATE_MIN_SAMPLES,
+    CLIMATE_RATE_RELIABLE_SAMPLES,
+    CLIMATE_FORECAST_HORIZON_HOURS,
+    CLIMATE_FORECAST_FETCH_INTERVAL_MINUTES,
     HOME_CONNECT_ACTIVE_STATES,
     CONF_APPLIANCE_NOTIFY_SERVICE,
     MODE_CHANGE_EMOJI,
@@ -497,6 +513,26 @@ class EnergyManagementSystemCoordinator:
         self.nilm_rejected_entities: list[str] = []
         # Advisory readiness assessment (v0.63.40).
         self.advisory_readiness: dict[str, dict] = {}
+        # Living-room-temperature airco activation predictor (v0.63.55).
+        self.living_room_temp_bucket_history: dict[str, list[bool]] = {}
+        self.living_room_temp_bucket_humidity: dict[str, list[float]] = {}
+        self._temp_prediction_pending: list[dict] = []
+        self.living_room_current_temp_c: float | None = None
+        self.living_room_current_humidity_percent: float | None = None
+        # Klimaat-tabblad: geleerde temperatuur-projectie (v0.63.56).
+        self.climate_rate_history: dict[str, list[float]] = {}
+        self._climate_anchor_temp_c: float | None = None
+        self._climate_anchor_time: datetime | None = None
+        self._climate_anchor_outdoor_bucket: str | None = None
+        self._climate_anchor_shutter_state: str | None = None
+        self._climate_anchor_airco_state: str | None = None
+        self.climate_forecast_trajectory: list[dict] = []
+        self.climate_forecast_note: str | None = None
+        self.climate_shutter_state: str | None = None
+        self.climate_airco_state: str | None = None
+        self.climate_live_outdoor_temp_c: float | None = None
+        self._climate_forecast_last_fetch: datetime | None = None
+        self._climate_cached_forecast: list[tuple] | None = None
         self._listeners: list = []
         self._last_cost_basis_calc_time: datetime | None = None
         self.last_charge_power_applied: float | None = None
@@ -5256,6 +5292,502 @@ class EnergyManagementSystemCoordinator:
                         notification_id=f"ems_nilm_anomaly_{entity_id}",
                     )
 
+    def _update_living_room_airco_prediction(self, now: datetime) -> None:
+        """Living-room-temperature airco activation predictor
+        (v0.63.55, requested: "verwacht wanneer ik de airco aanzet").
+
+        Genuine anticipation, not just "is the airco on right now" -
+        uses the same "queue an observation, confirm it later"
+        technique already established by `SolarForecastAccuracyTracker`
+        (a prediction captured today, compared against tomorrow's
+        actual yield): each living-room temperature reading is bucketed
+        (LIVING_ROOM_TEMP_BUCKET_SIZE_C = 1°C bins) and queued with a
+        deadline `AIRCO_PREDICTION_LOOKAHEAD_MINUTES` (60 min) later.
+        Every tick, any still-open queued observation gets marked "seen
+        active" the moment the airco is confirmed active (regardless of
+        which tick that happens on, as long as it's before the
+        deadline) - once the deadline passes, the observation is
+        finalised as True/False into that bucket's learned history.
+
+        Deliberately a SHORT, bounded rolling window per bucket
+        (AIRCO_PREDICTION_HISTORY_LENGTH = 20 outcomes) rather than an
+        ever-growing one - requested: spring/autumn conditions can swing
+        day to day, so a bucket's learned probability should track
+        recent behaviour, not get diluted by weeks-old data from a
+        different regime (e.g. thermostat settings that have since
+        changed).
+
+        Humidity is tracked alongside per bucket purely as *context* for
+        display (its own rolling average) - not a second bucketing
+        dimension, which would fragment the already-limited sample count
+        per cell too thinly to ever reach AIRCO_PREDICTION_MIN_SAMPLES.
+        """
+        temp_entity = self.config.get(CONF_LIVING_ROOM_TEMPERATURE_SENSOR)
+        if not temp_entity:
+            return
+        temp_c = self._read_sensor_float(temp_entity)
+        if temp_c is None:
+            return
+        self.living_room_current_temp_c = temp_c
+
+        humidity_entity = self.config.get(CONF_LIVING_ROOM_HUMIDITY_SENSOR)
+        humidity_percent = (
+            self._read_sensor_float(humidity_entity) if humidity_entity else None
+        )
+        self.living_room_current_humidity_percent = humidity_percent
+
+        bucket_key = str(
+            round(temp_c / LIVING_ROOM_TEMP_BUCKET_SIZE_C) * LIVING_ROOM_TEMP_BUCKET_SIZE_C
+        )
+
+        airco_active_now = self.last_heavy_load_source == "airco"
+
+        # Mark every still-open pending observation "seen active" if the
+        # airco is active on this tick - a queued observation from any
+        # earlier tick (as long as its deadline hasn't passed yet) counts.
+        if airco_active_now:
+            for pending in self._temp_prediction_pending:
+                pending["airco_seen_active"] = True
+
+        # Finalise anything whose lookahead window has now elapsed.
+        still_pending = []
+        for pending in self._temp_prediction_pending:
+            if now >= pending["deadline"]:
+                history = self.living_room_temp_bucket_history.setdefault(
+                    pending["bucket"], []
+                )
+                history.append(pending["airco_seen_active"])
+                self.living_room_temp_bucket_history[pending["bucket"]] = history[
+                    -AIRCO_PREDICTION_HISTORY_LENGTH:
+                ]
+            else:
+                still_pending.append(pending)
+        self._temp_prediction_pending = still_pending
+
+        # Queue this tick's own observation.
+        self._temp_prediction_pending.append(
+            {
+                "bucket": bucket_key,
+                "deadline": now + timedelta(minutes=AIRCO_PREDICTION_LOOKAHEAD_MINUTES),
+                "airco_seen_active": airco_active_now,
+            }
+        )
+
+        if humidity_percent is not None:
+            humidity_history = self.living_room_temp_bucket_humidity.setdefault(
+                bucket_key, []
+            )
+            humidity_history.append(humidity_percent)
+            self.living_room_temp_bucket_humidity[bucket_key] = humidity_history[
+                -AIRCO_PREDICTION_HISTORY_LENGTH:
+            ]
+
+    def get_airco_activation_probability(self, bucket_key: str) -> dict:
+        """Learned probability the airco activates within
+        AIRCO_PREDICTION_LOOKAHEAD_MINUTES of a reading in this
+        temperature bucket, plus sample count and readiness - used by
+        both the sensor and (indirectly) the advisory-readiness table.
+        """
+        history = self.living_room_temp_bucket_history.get(bucket_key, [])
+        humidity_history = self.living_room_temp_bucket_humidity.get(bucket_key, [])
+        sample_count = len(history)
+        result = {
+            "bucket": bucket_key,
+            "sample_count": sample_count,
+            "probability_percent": None,
+            "gemiddelde_luchtvochtigheid_percent": (
+                round(sum(humidity_history) / len(humidity_history), 1)
+                if humidity_history
+                else None
+            ),
+            "voldoende_data": sample_count >= AIRCO_PREDICTION_MIN_SAMPLES,
+        }
+        if history:
+            result["probability_percent"] = round(
+                100 * sum(history) / len(history), 1
+            )
+        return result
+
+    def _get_shutter_state_label(self) -> str | None:
+        """Combines the two configured shutter (rolluik) entities into
+        one label (v0.63.56) - "beide_dicht" (no solar gain through
+        this room's windows), "gedeeltelijk" (one open, one closed), or
+        "beide_open" (maximum solar gain potential). None if neither
+        entity is configured or readable.
+        """
+        entity_1 = self.config.get(CONF_LIVING_ROOM_SHUTTER_ENTITY_1)
+        entity_2 = self.config.get(CONF_LIVING_ROOM_SHUTTER_ENTITY_2)
+        states = []
+        for entity_id in (entity_1, entity_2):
+            if not entity_id:
+                continue
+            state = self.hass.states.get(entity_id)
+            if state is not None:
+                states.append(state.state)
+        if not states:
+            return None
+        open_count = sum(1 for s in states if s == "open")
+        if open_count == len(states):
+            return "beide_open"
+        if open_count == 0:
+            return "beide_dicht"
+        return "gedeeltelijk"
+
+    def _get_current_airco_state_label(self) -> str:
+        """Uit/verwarmen/koelen op basis van `hvac_action` (v0.63.56) -
+        meer granulair dan de bestaande grootverbruiker-detectie
+        (die alleen "actief ja/nee" onderscheidt), omdat verwarmen en
+        koelen tegenovergestelde effecten op de kamertemperatuur hebben.
+        """
+        airco_entity = self.config.get(CONF_AIRCO_CLIMATE_ENTITY)
+        if not airco_entity:
+            return "onbekend"
+        state = self.hass.states.get(airco_entity)
+        if state is None:
+            return "onbekend"
+        hvac_action = state.attributes.get("hvac_action")
+        if hvac_action == "heating":
+            return "verwarmen"
+        if hvac_action == "cooling":
+            return "koelen"
+        return "uit"
+
+    def _get_live_outdoor_temp_c(self) -> float | None:
+        """Live buitentemperatuur, van welke geconfigureerde
+        weerentiteit dan ook beschikbaar is (KNMI eerst, dan
+        OpenWeatherMap) - v0.63.56. Hergebruikt de al geconfigureerde
+        Weather Ensemble-entiteiten (v0.63.30), geen nieuwe koppeling
+        nodig.
+        """
+        for entity_id in (
+            self.config.get(CONF_KNMI_WEATHER_ENTITY),
+            self.config.get(CONF_OPENWEATHERMAP_WEATHER_ENTITY),
+        ):
+            if not entity_id:
+                continue
+            state = self.hass.states.get(entity_id)
+            if state is None:
+                continue
+            temp = state.attributes.get("temperature")
+            if temp is not None:
+                try:
+                    return float(temp)
+                except (TypeError, ValueError):
+                    continue
+        return None
+
+    @staticmethod
+    def _outdoor_temp_bucket(temp_c: float) -> str:
+        return str(round(temp_c / OUTDOOR_TEMP_BUCKET_SIZE_C) * OUTDOOR_TEMP_BUCKET_SIZE_C)
+
+    def _climate_rate_key(
+        self, outdoor_bucket: str, shutter_state: str, airco_state: str
+    ) -> str:
+        return f"{outdoor_bucket}|{shutter_state}|{airco_state}"
+
+    def _update_climate_rate_learning(self, now: datetime) -> None:
+        """Learns the living room's own rate of temperature change
+        (°C/hour) as a function of (outdoor temperature bucket, shutter
+        state, airco state) - v0.63.56, requested. Deliberately leaves
+        cloud cover OUT as a separate learning dimension (confirmed with
+        the person) - a full model (outdoor temp x shutter x cloud x
+        airco) would produce hundreds of cells that would each need
+        their own data, most staying "onvoldoende data" for months in a
+        typical household.
+
+        Short, bounded rolling window per cell (CLIMATE_RATE_HISTORY_
+        LENGTH = 20), same principle as the airco-activation predictor
+        above - spring/autumn conditions can swing day to day, so a
+        cell's learned rate should track recent behaviour.
+
+        Measured over roughly an hour (an "anchor" reading compared
+        against the next one ~an hour later), not every 5-minute tick -
+        a rate computed from tick-to-tick deltas would be numerically
+        unstable for a physically slow-moving quantity like room
+        temperature (typical sensor resolution ~0.1°C, divided by a tiny
+        5/60h timespan amplifies noise into wildly swinging rates).
+        Reads the living room temperature directly (not via
+        `living_room_current_temp_c`, which is set by
+        `_update_living_room_airco_prediction`) so this function stays
+        independently correct and testable regardless of call order.
+        """
+        temp_entity = self.config.get(CONF_LIVING_ROOM_TEMPERATURE_SENSOR)
+        temp_c = self._read_sensor_float(temp_entity) if temp_entity else None
+        outdoor_temp_c = self._get_live_outdoor_temp_c()
+        shutter_state = self._get_shutter_state_label()
+        airco_state = self._get_current_airco_state_label()
+        self.climate_shutter_state = shutter_state
+        self.climate_airco_state = airco_state
+        self.climate_live_outdoor_temp_c = outdoor_temp_c
+
+        if temp_c is None or outdoor_temp_c is None or shutter_state is None:
+            return
+
+        if self._climate_anchor_time is None or self._climate_anchor_temp_c is None:
+            self._set_climate_anchor(now, temp_c, outdoor_temp_c, shutter_state, airco_state)
+            return
+
+        elapsed_hours = (now - self._climate_anchor_time).total_seconds() / 3600
+
+        if elapsed_hours > CLIMATE_RATE_MAX_INTERVAL_HOURS:
+            # Restart-sized gap - don't attribute it to a single rate,
+            # just start a fresh anchor from here.
+            self._set_climate_anchor(now, temp_c, outdoor_temp_c, shutter_state, airco_state)
+            return
+
+        if elapsed_hours < CLIMATE_RATE_MIN_INTERVAL_HOURS:
+            # Not enough time has passed yet for a stable measurement -
+            # keep the current anchor, try again next tick.
+            return
+
+        rate_c_per_hour = (temp_c - self._climate_anchor_temp_c) / elapsed_hours
+        key = self._climate_rate_key(
+            self._climate_anchor_outdoor_bucket,
+            self._climate_anchor_shutter_state,
+            self._climate_anchor_airco_state,
+        )
+        history = self.climate_rate_history.setdefault(key, [])
+        history.append(round(rate_c_per_hour, 3))
+        self.climate_rate_history[key] = history[-CLIMATE_RATE_HISTORY_LENGTH:]
+
+        self._set_climate_anchor(now, temp_c, outdoor_temp_c, shutter_state, airco_state)
+
+    def _set_climate_anchor(
+        self,
+        now: datetime,
+        temp_c: float,
+        outdoor_temp_c: float,
+        shutter_state: str,
+        airco_state: str,
+    ) -> None:
+        self._climate_anchor_time = now
+        self._climate_anchor_temp_c = temp_c
+        self._climate_anchor_outdoor_bucket = self._outdoor_temp_bucket(outdoor_temp_c)
+        self._climate_anchor_shutter_state = shutter_state
+        self._climate_anchor_airco_state = airco_state
+
+    def get_climate_rate(
+        self, outdoor_bucket: str, shutter_state: str, airco_state: str
+    ) -> dict:
+        """Learned rate of living-room temperature change (°C/hour) for
+        this combination, plus sample count and a two-tier reliability
+        level (v0.63.57, requested): "indicatief" once
+        CLIMATE_RATE_MIN_SAMPLES (5) exist, "betrouwbaar" only once
+        CLIMATE_RATE_RELIABLE_SAMPLES (15) do.
+        """
+        key = self._climate_rate_key(outdoor_bucket, shutter_state, airco_state)
+        history = self.climate_rate_history.get(key, [])
+        sample_count = len(history)
+        if sample_count >= CLIMATE_RATE_RELIABLE_SAMPLES:
+            betrouwbaarheid = "betrouwbaar"
+        elif sample_count >= CLIMATE_RATE_MIN_SAMPLES:
+            betrouwbaarheid = "indicatief"
+        else:
+            betrouwbaarheid = "onvoldoende_data"
+        return {
+            "key": key,
+            "sample_count": sample_count,
+            "rate_c_per_hour": (
+                round(statistics.median(history), 3) if history else None
+            ),
+            "betrouwbaarheid": betrouwbaarheid,
+            "voldoende_data": sample_count >= CLIMATE_RATE_MIN_SAMPLES,
+        }
+
+    async def _async_fetch_hourly_outdoor_forecast(
+        self, entity_id: str
+    ) -> list[tuple[datetime, float]] | None:
+        """Fetches the hourly outdoor temperature forecast via the
+        `weather.get_forecasts` service (v0.63.56) - a genuinely
+        different kind of call than anything else in this integration
+        (needs `return_response=True`, unlike every other service call
+        here, which are all fire-and-forget). Defensive: any failure
+        (service missing, malformed response, an integration that uses
+        different attribute names) is caught and treated as "no
+        forecast available" rather than crashing the whole update tick.
+        """
+        try:
+            response = await self.hass.services.async_call(
+                "weather",
+                "get_forecasts",
+                {"entity_id": entity_id, "type": "hourly"},
+                blocking=True,
+                return_response=True,
+            )
+        except Exception:  # noqa: BLE001 - a forecast fetch must never crash the tick
+            _LOGGER.exception(
+                "Kon geen uurlijkse weersvoorspelling ophalen bij %s", entity_id
+            )
+            return None
+
+        if not response or entity_id not in response:
+            return None
+        raw_forecast = response[entity_id].get("forecast")
+        if not raw_forecast:
+            return None
+
+        entries = []
+        for item in raw_forecast:
+            temp = item.get("temperature")
+            when = item.get("datetime")
+            if temp is None or when is None:
+                continue
+            parsed_when = dt_util.parse_datetime(when) if isinstance(when, str) else when
+            if parsed_when is None:
+                continue
+            try:
+                entries.append((parsed_when, float(temp)))
+            except (TypeError, ValueError):
+                continue
+        return entries or None
+
+    async def _async_update_climate_forecast(self, now: datetime) -> None:
+        """Klimaat-tabblad (v0.63.56/.57/.58): projects the living room
+        temperature forward hour by hour, using the KNMI/OpenWeatherMap
+        hourly outdoor-temperature forecast to drive the walk and the
+        learned per-cell rate (see `_update_climate_rate_learning`) to
+        translate outdoor conditions into indoor change. Shutter state
+        and airco state are held CONSTANT at their current values for
+        the whole projection (limitation, stated plainly) - there's no
+        way to know what either will be doing in 6 hours.
+
+        Two parallel projections per hour (v0.63.57, requested), not two
+        separate models - just two different thresholds applied to the
+        same learned rate:
+        - `kort_termijn_temp_c`: applies the rate once
+          CLIMATE_RATE_MIN_SAMPLES (5) samples exist - "indicatief",
+          usable early even with still-thin data.
+        - `betrouwbaar_temp_c`: only applies the rate once
+          CLIMATE_RATE_RELIABLE_SAMPLES (15) do - a more conservative,
+          slower-to-mature projection.
+        Either series carries forward unchanged (not a guessed rate)
+        for any hour below its own threshold, rather than silently
+        compounding a made-up number forward through the 24-hour chain.
+
+        v0.63.58, requested ("correctie op de actueel gemeten waarde"):
+        split into two parts with two different cadences -
+        `_async_maybe_refresh_outdoor_forecast` (this method) only
+        RE-FETCHES the outdoor forecast at most once per
+        CLIMATE_FORECAST_FETCH_INTERVAL_MINUTES (30 min, since that's a
+        genuine `return_response=True` service call, not a cheap
+        state-machine read, and hourly forecast data doesn't change
+        meaningfully every 5 minutes anyway) - but
+        `_recompute_climate_trajectory` (called every tick, cheap, no
+        network/service call) always re-walks the projection from
+        whatever the CURRENT live-measured temperature is, using the
+        cached forecast. Without this split, the projection's starting
+        point would drift stale for up to 30 minutes between fetches,
+        even though the actual room temperature keeps changing in the
+        meantime.
+        """
+        await self._async_maybe_refresh_outdoor_forecast(now)
+        self._recompute_climate_trajectory(now)
+
+    async def _async_maybe_refresh_outdoor_forecast(self, now: datetime) -> None:
+        """Throttled fetch of the hourly outdoor-temperature forecast -
+        see `_async_update_climate_forecast`'s docstring for why this is
+        split from the (cheap, every-tick) trajectory recomputation.
+        """
+        if (
+            self._climate_forecast_last_fetch is not None
+            and (now - self._climate_forecast_last_fetch).total_seconds() / 60
+            < CLIMATE_FORECAST_FETCH_INTERVAL_MINUTES
+        ):
+            return
+        self._climate_forecast_last_fetch = now
+
+        weather_entity = self.config.get(CONF_KNMI_WEATHER_ENTITY) or self.config.get(
+            CONF_OPENWEATHERMAP_WEATHER_ENTITY
+        )
+        if not weather_entity:
+            self._climate_cached_forecast = None
+            self.climate_forecast_note = (
+                "Geen knmi_weather_entity/openweathermap_weather_entity "
+                "geconfigureerd - geen buitentemperatuur-voorspelling "
+                "beschikbaar om de projectie op te baseren."
+            )
+            return
+
+        forecast = await self._async_fetch_hourly_outdoor_forecast(weather_entity)
+        if not forecast:
+            self._climate_cached_forecast = None
+            self.climate_forecast_note = (
+                "Kon geen uurlijkse buitentemperatuur-voorspelling ophalen "
+                f"bij {weather_entity}."
+            )
+            return
+        self._climate_cached_forecast = forecast
+
+    def _recompute_climate_trajectory(self, now: datetime) -> None:
+        """Re-walks the 24-hour projection from the CURRENT
+        live-measured living room temperature, using whichever outdoor
+        forecast is currently cached (see
+        `_async_maybe_refresh_outdoor_forecast`). Cheap, no network/
+        service call - safe to run every tick, so the projection's
+        starting point is always corrected to the actual measured
+        value, not just whenever the forecast happens to be re-fetched
+        (v0.63.58, requested).
+        """
+        self.climate_forecast_trajectory = []
+
+        temp_c = self.living_room_current_temp_c
+        if temp_c is None:
+            self.climate_forecast_note = (
+                "Geen living_room_temperature_sensor_entity geconfigureerd "
+                "of niet uitleesbaar."
+            )
+            return
+
+        if not self._climate_cached_forecast:
+            # climate_forecast_note is already set by the fetch step
+            # above with the specific reason (no entity / fetch failed).
+            return
+
+        shutter_state = self.climate_shutter_state or "onbekend"
+        airco_state = self.climate_airco_state or "onbekend"
+
+        kort_termijn_temp = temp_c
+        betrouwbaar_temp = temp_c
+        trajectory = []
+        for hour_dt, outdoor_temp_c in self._climate_cached_forecast[
+            :CLIMATE_FORECAST_HORIZON_HOURS
+        ]:
+            outdoor_bucket = self._outdoor_temp_bucket(outdoor_temp_c)
+            rate = self.get_climate_rate(outdoor_bucket, shutter_state, airco_state)
+            rate_value = rate["rate_c_per_hour"]
+
+            if rate["betrouwbaarheid"] in ("indicatief", "betrouwbaar") and rate_value is not None:
+                kort_termijn_temp = kort_termijn_temp + rate_value
+            if rate["betrouwbaarheid"] == "betrouwbaar" and rate_value is not None:
+                betrouwbaar_temp = betrouwbaar_temp + rate_value
+
+            trajectory.append(
+                {
+                    "tijd": hour_dt.isoformat(),
+                    "buitentemp_voorspeld_c": round(outdoor_temp_c, 1),
+                    "kort_termijn_temp_c": round(kort_termijn_temp, 1),
+                    "betrouwbaar_temp_c": round(betrouwbaar_temp, 1),
+                    "betrouwbaarheid": rate["betrouwbaarheid"],
+                    "aantal_metingen": rate["sample_count"],
+                }
+            )
+
+        self.climate_forecast_trajectory = trajectory
+        self.climate_forecast_note = (
+            "Adviserend - rolluikstand en airco-status worden voor de "
+            "hele projectie constant gehouden op de huidige stand "
+            "(onbekend wat die over enkele uren zijn). 'kort_termijn_"
+            "temp_c' toont al een indicatie vanaf 5 samples per cel, "
+            "'betrouwbaar_temp_c' pas vanaf 15 - beide bevriezen op het "
+            "voorgaande uur zolang hun eigen drempel niet is gehaald, "
+            "in plaats van te gokken. De projectie wordt elke tick "
+            "opnieuw verankerd aan de actueel gemeten "
+            "woonkamertemperatuur (de onderliggende buitentemperatuur-"
+            "voorspelling wordt wél maar om de "
+            f"{CLIMATE_FORECAST_FETCH_INTERVAL_MINUTES} minuten ververst). "
+            "Stuurt nooit een commando."
+        )
+
     def _update_advisory_readiness(self, now: datetime) -> None:
         """Readiness assessment for the eight advisory-only modules
         (v0.63.40) - reported: "kunnen we een advies afgeven wanneer
@@ -6105,6 +6637,9 @@ class EnergyManagementSystemCoordinator:
         self._update_quooker_tracking(now)
         self.last_heavy_load_source = self._get_confirmed_heavy_load_source(now)
         self._track_recent_consumption_reading(now)
+        self._update_living_room_airco_prediction(now)
+        self._update_climate_rate_learning(now)
+        await self._async_update_climate_forecast(now)
 
         is_currently_cheapest_block = (
             cheap_block_start is not None

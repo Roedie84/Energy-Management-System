@@ -30,6 +30,10 @@ CONF_WASHING_MACHINE_READY_SENSOR = "washing_machine_ready_sensor_entity"
 CONF_QUOOKER_POWER_SENSOR = "quooker_power_sensor_entity"
 CONF_AIRCO_CLIMATE_ENTITY = "airco_climate_entity"
 CONF_SLAAPKAMER_CLIMATE_ENTITY = "slaapkamer_climate_entity"
+CONF_LIVING_ROOM_TEMPERATURE_SENSOR = "living_room_temperature_sensor_entity"
+CONF_LIVING_ROOM_HUMIDITY_SENSOR = "living_room_humidity_sensor_entity"
+CONF_LIVING_ROOM_SHUTTER_ENTITY_1 = "living_room_shutter_entity_1"
+CONF_LIVING_ROOM_SHUTTER_ENTITY_2 = "living_room_shutter_entity_2"
 CONF_OVEN_STATE_SENSOR = "oven_state_sensor_entity"
 CONF_KOOKPLAAT_STATE_SENSOR = "kookplaat_state_sensor_entity"
 CONF_STEELSTOFZUIGER_SWITCH = "steelstofzuiger_switch_entity"
@@ -316,6 +320,58 @@ FIETSLADERS_COMPLETE_THRESHOLD_W = 20.0
 # element is actually drawing power right now - 'idle' and 'off' don't
 # count (thermostat satisfied / unit switched off).
 AIRCO_ACTIVE_HVAC_ACTIONS = {"heating", "cooling"}
+
+# Living-room-temperature airco activation predictor (v0.63.55,
+# requested): "wanneer ik de airco aanzet" - a genuine anticipatory
+# indicator, not just a live correlation. Uses the same "queue an
+# observation, confirm it later" technique as
+# SolarForecastAccuracyTracker (pending_predicted_kwh -> compared the
+# next day) - each living-room-temperature reading is bucketed and
+# queued, then AIRCO_PREDICTION_LOOKAHEAD_MINUTES later it's finalised
+# as True/False depending on whether the airco was confirmed active at
+# any point during that window. Deliberately a SHORT rolling window per
+# bucket (not a long, season-spanning one) - requested: spring/autumn
+# conditions can swing day to day, so a bucket's learned probability
+# should track recent behaviour, not get diluted by weeks-old data from
+# a different regime.
+LIVING_ROOM_TEMP_BUCKET_SIZE_C = 1.0
+AIRCO_PREDICTION_LOOKAHEAD_MINUTES = 60
+AIRCO_PREDICTION_MIN_SAMPLES = 5
+AIRCO_PREDICTION_HISTORY_LENGTH = 20
+
+# Klimaat-tabblad: geleerde woonkamertemperatuur-projectie (v0.63.56,
+# requested). Bewust vereenvoudigd t.o.v. een volledig model (buitentemp
+# x rolluikstand x bewolking x airco-status zou honderden cellen
+# opleveren die elk apart genoeg data nodig hebben) - bewolking is
+# expliciet WEGGELATEN als aparte leerdimensie (bevestigd met de
+# gebruiker), maar de buitentemperatuur-vóórspelling van KNMI/
+# OpenWeatherMap wordt wel gebruikt om de projectie uur voor uur door
+# te rekenen. Geleerd: de verandersnelheid (°C/uur) van de
+# woonkamertemperatuur, per combinatie van buitentemperatuur-bucket x
+# rolluikstand (beide_dicht/gedeeltelijk/beide_open) x airco-status
+# (uit/verwarmen/koelen). Kort, glijdend venster per cel (zelfde
+# principe als de airco-verwachting hierboven) - reageert snel op
+# veranderend weer, niet seizoensgebonden.
+OUTDOOR_TEMP_BUCKET_SIZE_C = 2.0
+CLIMATE_RATE_HISTORY_LENGTH = 20
+# A rate computed from 5-minute-tick deltas would be numerically
+# unstable (typical sensor resolution ~0.1C, divided by a tiny 5/60h
+# timespan amplifies noise into wildly swinging rates) for a physically
+# slow-moving quantity like room temperature - so the rate is measured
+# over roughly an hour, not every tick. CLIMATE_RATE_MAX_INTERVAL_HOURS
+# guards against a restart-sized gap being misread as one huge "hour".
+CLIMATE_RATE_MIN_INTERVAL_HOURS = 0.9
+CLIMATE_RATE_MAX_INTERVAL_HOURS = 3.0
+CLIMATE_RATE_MIN_SAMPLES = 5
+# Two-tier reliability (v0.63.57, requested): "indicatief" (>=
+# CLIMATE_RATE_MIN_SAMPLES, 5) shows a first-pass estimate even with
+# still-thin data; "betrouwbaar" (>= CLIMATE_RATE_RELIABLE_SAMPLES, 15)
+# requires substantially more confirmed samples before being shown as
+# the more confident projection. Both tiers are computed in parallel
+# for the same forecast, not two separate models.
+CLIMATE_RATE_RELIABLE_SAMPLES = 15
+CLIMATE_FORECAST_HORIZON_HOURS = 24
+CLIMATE_FORECAST_FETCH_INTERVAL_MINUTES = 30
 
 # Home Connect's BSH.Common.EnumType.OperationState, lowercased as HA
 # exposes it. Only 'run' means the appliance is actually drawing power
