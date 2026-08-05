@@ -515,6 +515,86 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## NILM-trendlabel: misleidend percentage naast "stijgend" (v0.63.90)
+
+Gevonden tijdens een grondige analyse van een aangeleverd diagnostiek-
+bestand (op verzoek: "wil je het gehele statistiek bestand nakijken,
+dan hoeft ik HA niet zo vaak te herstarten"): 5 "Eetkamer lamp"-
+sensoren toonden `⚠️ aanhoudend stijgend (-0%) - mogelijk defect` — een
+negatief/nul percentage naast het woord "stijgend".
+
+**Verklaring**: de CUSUM-detector is bewust **eenzijdig** (accumuleert
+alleen bij afwijkingen boven de referentie, geklemd op minimaal 0) —
+dus "stijgend" is conceptueel altijd correct zodra het alarm afgaat.
+Maar het getoonde percentage (`estimated_drift_percent`) is puur de
+afwijking van de **laatste dag** — die kan toevallig rond nul liggen,
+ook al was de opgebouwde geschiedenis (over meerdere eerdere dagen)
+wél voldoende om het alarm te triggeren. Dat maakt een niet-positief
+getal naast "stijgend" misleidend/tegenstrijdig ogend.
+
+**Fix**: het percentage wordt nu alleen getoond als het ook echt een
+stijging weergeeft (`drift > 0`); bij een niet-positieve waarde toont
+het label gewoon "⚠️ aanhoudend stijgend - mogelijk defect" zonder het
+verwarrende getal.
+
+**Bijkomende observatie, geen bug**: de 5 betrokken "Eetkamer lamp"-
+sensoren delen een identieke vermogensgeschiedenis — vermoedelijk 5
+HA-entiteiten die hetzelfde fysieke circuit rapporteren. Geen actie
+vereist, maar het overwegen waard om er een paar af te wijzen voor een
+overzichtelijkere lijst.
+
+**Ook onderzocht tijdens dezelfde analyse, bevestigd géén bug**: twee
+schijnbaar tegenstrijdige "veiligheidsmarge"-percentages
+(energiebrug-check's vaste 15% vs. de dynamische ontlaadreserve's
+10-32%) bleken twee daadwerkelijk verschillende, bewust gescheiden
+mechanismen te zijn (zie `_get_dynamic_discharge_reserve_kwh`'s eigen
+docstring) — de ene beantwoordt "is het veilig om nu niet bij te
+laden", de andere "hoeveel mag ik nu veilig ontladen", bewust met een
+andere scope (wel/niet rekening houden met latere dure kwartieren
+vandaag). Op uitdrukkelijk verzoek ongewijzigd gelaten.
+
+**Getest**: bestaande NILM-tabeltest uitgebreid met een gerichte test
+voor het niet-positieve-drift-scenario.
+
+## NILM structurele naampatroon-uitsluiting (v0.63.89)
+
+Gerapporteerd: "de afgewezen NILM apparaten komen bij elke herstart
+terug". Onderzocht met een volledige diagnostiek-export (niet de
+afgekapte dashboard-preview) — bleek **geen bug**: de daadwerkelijk
+afgewezen entiteit (`sensor.aquarium_jill_vermogen_fase_1`) stond
+correct en blijvend in de volledige `nilm_rejected_entities`-lijst. Wat
+de gebruiker zag terugkomen was "Aquarium Jill Vermogen" zelf — een
+apparaat dat destijds was **bevestigd**, niet afgewezen, en dus
+terecht altijd in de "Bevestigde apparaten"-lijst blijft staan (dat is
+precies wat bevestigen betekent).
+
+Vervolgvraag: "alles waar fase 1 bij staat mag sowieso uitgesloten
+worden net als solaredge en zendure entiteiten" — een structurele
+uitsluiting in plaats van losse afwijzingen per sub-fase-sensor of
+accu-/omvormer-signaal.
+
+**Nieuwe, aparte uitsluitingslaag** (`_is_nilm_pattern_excluded`,
+substring-match tegen zowel entity_id als friendly_name, kleine
+letters): `fase 1`, `fase_1`, `solaredge`, `zendure`
+(`NILM_PATTERN_EXCLUDED_KEYWORDS`) - naast de bestaande, exacte-match
+uitsluiting van specifiek geconfigureerde entiteiten
+(`_nilm_excluded_entity_ids`).
+
+**Ruimt ook met terugwerkende kracht op**: `_prune_nilm_pattern_
+excluded_entries()` draait één keer per tick, vóór de discovery-scan
+zelf, en verwijdert alles wat al in de kandidaten-, bevestigde- of
+afgewezen-lijst stond en nu aan het patroon voldoet - niet alleen
+nieuw ontdekte entiteiten vanaf nu. Eerder afgewezen entiteiten die nu
+patroon-uitgesloten zijn, worden ook uit de aparte
+`nilm_rejected_entities`-lijst verwijderd (overbodig geworden, houdt
+die lijst klein en betekenisvol).
+
+**Getest** (8 permanente tests, `test_nilm_pattern_exclusion.py`):
+fase_1 in entity_id/friendly_name uitgesloten; solaredge/zendure
+uitgesloten; niet-gerelateerde sensoren blijven werken; bestaande
+kandidaten/bevestigde/afgewezen entiteiten die aan het patroon voldoen
+worden met terugwerkende kracht opgeruimd.
+
 ## Model- en parameternauwkeurigheid — trends (v0.63.88)
 
 Gevraagd: "wel wil ik allerlei waardes welke je nu hebt toegevoegd ook

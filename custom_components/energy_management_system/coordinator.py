@@ -95,6 +95,7 @@ from .const import (
     LEARNED_THRESHOLD_MARGIN_W,
     NILM_CUSUM_SLACK_FRACTION,
     NILM_CUSUM_ALARM_THRESHOLD,
+    NILM_PATTERN_EXCLUDED_KEYWORDS,
     NILM_TREND_RISING_THRESHOLD_PERCENT,
     NILM_TREND_FALLING_THRESHOLD_PERCENT,
     APPLIANCE_CYCLE_COMPLETE_SUSTAINED_MINUTES,
@@ -5507,6 +5508,60 @@ class EnergyManagementSystemCoordinator:
         )
         return {self.config[k] for k in keys if self.config.get(k)}
 
+    @staticmethod
+    def _is_nilm_pattern_excluded(entity_id: str, friendly_name: str) -> bool:
+        """Structurele uitsluiting op naampatroon (v0.63.89, gevraagd:
+        "alles waar fase 1 bij staat mag sowieso uitgesloten worden net
+        als solaredge en zendure entiteiten") - een substring-match
+        tegen zowel entity_id als friendly_name, kleine letters. Anders
+        dan `_nilm_excluded_entity_ids()` (exacte match tegen specifiek
+        geconfigureerde entiteiten), dit sluit hele categorieën uit
+        zonder losse afwijzing per sub-fase-sensor of accu-/omvormer-
+        signaal.
+        """
+        haystack = f"{entity_id} {friendly_name}".lower()
+        return any(keyword in haystack for keyword in NILM_PATTERN_EXCLUDED_KEYWORDS)
+
+    def _prune_nilm_pattern_excluded_entries(self) -> None:
+        """Ruimt entiteiten op die al als kandidaat, bevestigd of
+        afgewezen stonden vóórdat het naampatroon werd ingesteld
+        (v0.63.89) - anders zou een structurele uitsluiting alleen
+        NIEUW ontdekte entiteiten raken, niet wat er al in de lijsten
+        stond.
+        """
+        for entity_id in list(self.nilm_unconfirmed_candidates.keys()):
+            candidate = self.nilm_unconfirmed_candidates[entity_id]
+            if self._is_nilm_pattern_excluded(
+                entity_id, candidate.get("friendly_name", entity_id)
+            ):
+                del self.nilm_unconfirmed_candidates[entity_id]
+
+        removed_confirmed = False
+        for entity_id in list(self.nilm_confirmed_devices.keys()):
+            device = self.nilm_confirmed_devices[entity_id]
+            if self._is_nilm_pattern_excluded(
+                entity_id, device.get("friendly_name", entity_id)
+            ):
+                del self.nilm_confirmed_devices[entity_id]
+                removed_confirmed = True
+
+        # Ook eerder afgewezen entiteiten die nu al patroon-uitgesloten
+        # zijn, uit de aparte lijst verwijderen - overbodig geworden nu
+        # de patroonmatch dat werk structureel doet, en houdt die lijst
+        # klein en betekenisvol.
+        pruned_rejected = [
+            entity_id
+            for entity_id in self.nilm_rejected_entities
+            if not self._is_nilm_pattern_excluded(entity_id, entity_id)
+        ]
+        rejected_changed = len(pruned_rejected) != len(self.nilm_rejected_entities)
+        self.nilm_rejected_entities = pruned_rejected
+
+        if removed_confirmed or rejected_changed:
+            self.hass.async_create_task(
+                self._async_save_nilm_confirmed_devices_store()
+            )
+
     def _update_nilm_discovery(self, now: datetime) -> None:
         """NILM-like device auto-discovery (v0.63.39).
 
@@ -5527,7 +5582,15 @@ class EnergyManagementSystemCoordinator:
         confirmed list actually meaningful. Never influences any battery
         decision - purely informational (confirmed with the person
         before building this).
+
+        v0.63.89: structural name-pattern exclusion ("fase 1"/"fase_1"/
+        "solaredge"/"zendure") runs once per tick, before the discovery
+        scan itself, pruning anything already in the candidate/
+        confirmed/rejected lists that matches - so this reaches
+        everything already present, not just newly-discovered entities
+        going forward.
         """
+        self._prune_nilm_pattern_excluded_entries()
         excluded = self._nilm_excluded_entity_ids()
         for state in self.hass.states.async_all():
             entity_id = getattr(state, "entity_id", None)
@@ -5539,13 +5602,16 @@ class EnergyManagementSystemCoordinator:
                 continue
             if entity_id in self.nilm_rejected_entities:
                 continue
+            friendly_name = state.attributes.get("friendly_name", entity_id)
+            if self._is_nilm_pattern_excluded(entity_id, friendly_name):
+                continue
             unit = state.attributes.get("unit_of_measurement")
             if unit not in ("W", "kW"):
                 continue
             power_w = self._read_sensor_float(entity_id)
             existing = self.nilm_unconfirmed_candidates.get(entity_id, {})
             self.nilm_unconfirmed_candidates[entity_id] = {
-                "friendly_name": state.attributes.get("friendly_name", entity_id),
+                "friendly_name": friendly_name,
                 "current_power_w": power_w,
                 "first_seen": existing.get("first_seen", now.date().isoformat()),
             }
@@ -5691,6 +5757,20 @@ class EnergyManagementSystemCoordinator:
         breach, v0.63.39) - just compares the most recent daily average
         against the learned reference, so a modest move shows up well
         before it would ever reach the alarm threshold.
+
+        v0.63.90, gevonden tijdens een diagnostiek-analyse (5 "Eetkamer
+        lamp"-sensoren toonden "⚠️ aanhoudend stijgend (-0%) - mogelijk
+        defect" - een negatief/nul percentage naast "stijgend"). De
+        CUSUM-detector zelf is bewust eenzijdig (accumuleert alleen bij
+        afwijkingen boven de referentie, geklemd op minimaal 0), dus
+        "stijgend" is conceptueel altijd correct zodra het alarm
+        afgaat - maar `estimated_drift_percent` is puur de afwijking
+        van de LAATSTE dag, die toevallig rond nul kan liggen ook al
+        was de OPGEBOUWDE geschiedenis (over meerdere eerdere dagen)
+        wél voldoende om het alarm te triggeren. Een niet-positief
+        getal naast "stijgend" tonen is dan misleidend/tegenstrijdig
+        ogend - toon het percentage daarom alleen als het ook echt een
+        stijging weergeeft.
         """
         reference_avg_w = device.get("reference_avg_w")
         history = device.get("daily_avg_history") or []
@@ -5702,7 +5782,7 @@ class EnergyManagementSystemCoordinator:
 
         if device.get("anomaly_detected"):
             drift = device.get("estimated_drift_percent")
-            drift_txt = f" ({drift:+.0f}%)" if drift is not None else ""
+            drift_txt = f" ({drift:+.0f}%)" if drift is not None and drift > 0 else ""
             return f"⚠️ aanhoudend stijgend{drift_txt} - mogelijk defect"
         if change_percent >= NILM_TREND_RISING_THRESHOLD_PERCENT:
             return f"↗ licht stijgend ({change_percent:+.0f}%)"

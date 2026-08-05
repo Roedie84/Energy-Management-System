@@ -315,6 +315,16 @@ LEARNED_THRESHOLD_MARGIN_W = 5.0
 NILM_CUSUM_SLACK_FRACTION = 0.10
 NILM_CUSUM_ALARM_THRESHOLD = 1.0
 
+# Structurele NILM-uitsluitingspatronen (v0.63.89, gevraagd: "alles
+# waar fase 1 bij staat mag sowieso uitgesloten worden net als
+# solaredge en zendure entiteiten"). Substring-match (kleine letters)
+# tegen zowel de entity_id als de friendly_name - anders dan
+# `_nilm_excluded_entity_ids()` (exacte match tegen specifiek
+# geconfigureerde entiteiten), dit is een structurele, patroon-
+# gebaseerde uitsluiting die geen losse afwijzing per sub-fase-sensor
+# of accu-/omvormer-signaal meer vereist.
+NILM_PATTERN_EXCLUDED_KEYWORDS = ("fase 1", "fase_1", "solaredge", "zendure")
+
 # NILM devices overview table trend labels (v0.63.51). A lighter-weight,
 # more granular signal than the anomaly_detected flag (which only fires
 # on a *sustained* CUSUM breach) - just compares the most recent daily

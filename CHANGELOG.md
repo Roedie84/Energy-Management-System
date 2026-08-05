@@ -5852,3 +5852,80 @@ afsluiting sampelt temperatuur en voegt toe aan de geschiedenis; geen
 temperatuurmeting → geen toevoeging; validatie gebruikt uitsluitend
 eerder-bekende geschiedenis (niet-lekkend); geschiedenis begrensd tot
 het leervenster.
+
+## v0.63.89 — NILM structurele naampatroon-uitsluiting (fase 1/solaredge/zendure)
+
+**Gerapporteerd**: "de afgewezen NILM apparaten komen bij elke
+herstart terug."
+
+**Onderzocht met een volledige diagnostiek-export** (niet de afgekapte
+dashboard-preview, die alleen de eerste ~20 van mogelijk veel meer
+afgewezen entiteiten toont) - bleek **geen bug**: de daadwerkelijk
+afgewezen entiteit (`sensor.aquarium_jill_vermogen_fase_1`) stond
+correct en blijvend in de volledige `nilm_rejected_entities`-lijst.
+Wat terugkwam was "Aquarium Jill Vermogen" zelf - een destijds
+**bevestigd** (niet afgewezen) apparaat, dat terecht altijd in de
+"Bevestigde apparaten"-lijst blijft staan.
+
+**Vervolgvraag, wél geïmplementeerd**: "alles waar fase 1 bij staat
+mag sowieso uitgesloten worden net als solaredge en zendure
+entiteiten" - een structurele uitsluiting in plaats van losse
+afwijzingen per sub-fase-sensor of accu-/omvormer-signaal.
+
+**Nieuwe uitsluitingslaag**: `_is_nilm_pattern_excluded()`, substring-
+match (kleine letters) tegen zowel entity_id als friendly_name:
+`fase 1`, `fase_1`, `solaredge`, `zendure` (nieuwe constante
+`NILM_PATTERN_EXCLUDED_KEYWORDS`) - naast de bestaande, exacte-match
+uitsluiting van specifiek geconfigureerde entiteiten.
+
+**Ruimt ook met terugwerkende kracht op**: nieuwe
+`_prune_nilm_pattern_excluded_entries()`, draait elke tick vóór de
+discovery-scan zelf. Verwijdert alles wat al in de kandidaten-,
+bevestigde- of afgewezen-lijst stond en nu aan het patroon voldoet -
+niet alleen nieuw ontdekte entiteiten vanaf nu. Eerder afgewezen
+entiteiten die nu patroon-uitgesloten zijn, worden ook uit de aparte
+`nilm_rejected_entities`-lijst verwijderd (overbodig geworden na de
+structurele uitsluiting).
+
+**Getest** (8 permanente tests, `test_nilm_pattern_exclusion.py`):
+fase_1 uitgesloten via entity_id én via friendly_name apart;
+solaredge/zendure uitgesloten; niet-gerelateerde sensoren (bijv.
+"Koelkast") blijven normaal werken; bestaande kandidaten/bevestigde/
+afgewezen entiteiten die aan het patroon voldoen worden met
+terugwerkende kracht opgeruimd bij de eerstvolgende tick.
+
+## v0.63.90 — NILM-trendlabel: misleidend percentage naast "stijgend"
+
+**Gevraagd, tijdens een grondige diagnostiek-analyse**: "wil je het
+gehele statistiek bestand nakijken, dan hoeft ik HA niet zo vaak te
+herstarten."
+
+**Gevonden**: 5 "Eetkamer lamp"-sensoren toonden `⚠️ aanhoudend
+stijgend (-0%) - mogelijk defect` in de NILM-apparatentabel — een
+negatief/nul percentage naast het woord "stijgend".
+
+**Root cause**: de CUSUM-detector is bewust eenzijdig (accumuleert
+alleen bij afwijkingen boven de referentie, geklemd op minimaal 0) -
+"stijgend" is dus conceptueel altijd correct zodra het alarm afgaat.
+Maar `estimated_drift_percent` is puur de afwijking van de LAATSTE dag,
+die toevallig rond nul kan liggen ook al was de OPGEBOUWDE geschiedenis
+(over meerdere eerdere dagen) wél voldoende om het alarm te triggeren.
+
+**Fix**: `_describe_nilm_trend()` toont het percentage nu alleen als
+het ook echt een stijging weergeeft (`drift > 0`); bij een niet-
+positieve waarde toont het label "⚠️ aanhoudend stijgend - mogelijk
+defect" zonder het verwarrende getal.
+
+**Tijdens dezelfde analyse ook onderzocht, bevestigd géén bug**: twee
+schijnbaar tegenstrijdige "veiligheidsmarge"-percentages
+(energiebrug-check's vaste 15% vs. de dynamische ontlaadreserve's
+10-32%) - bleken twee bewust gescheiden mechanismen met een eigen
+scope te zijn (zie `_get_dynamic_discharge_reserve_kwh`'s docstring).
+Op uitdrukkelijk verzoek ongewijzigd gelaten - geen wijziging.
+
+**Getest**: nieuwe permanente test
+(`test_anomaly_with_non_positive_latest_drift_omits_the_misleading_percentage`)
+in `test_nilm_devices_table.py` - bevestigt dat "mogelijk defect" en
+"aanhoudend stijgend" nog steeds getoond worden, maar zonder een
+misleidend percentage wanneer de laatste-dag-afwijking niet positief
+is.

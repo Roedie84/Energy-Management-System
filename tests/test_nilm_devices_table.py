@@ -102,6 +102,38 @@ def test_trend_flags_sustained_anomaly_distinctly(make_coordinator, hass):
     assert "62" in table[0]["trend"]
 
 
+def test_anomaly_with_non_positive_latest_drift_omits_the_misleading_percentage(
+    make_coordinator, hass
+):
+    """v0.63.90, found during a diagnostics review: the CUSUM alarm is
+    one-sided (only ever accumulates from sustained rises, clamped at
+    0), so "aanhoudend stijgend" is conceptually always correct once
+    it fires - but estimated_drift_percent is just the MOST RECENT
+    day's deviation, which can legitimately be near-zero or slightly
+    negative even while the accumulated history (built up over earlier
+    days) triggered the alarm. Showing a non-positive number right next
+    to "stijgend" (rising) looks contradictory - it must be omitted."""
+    coordinator = make_coordinator({})
+    _confirm_device(coordinator, "sensor.eetkamer_lamp", "Eetkamer lamp")
+    coordinator.nilm_confirmed_devices["sensor.eetkamer_lamp"]["reference_avg_w"] = 0.17
+    coordinator.nilm_confirmed_devices["sensor.eetkamer_lamp"][
+        "daily_avg_history"
+    ] = [0.17]
+    coordinator.nilm_confirmed_devices["sensor.eetkamer_lamp"][
+        "anomaly_detected"
+    ] = True
+    coordinator.nilm_confirmed_devices["sensor.eetkamer_lamp"][
+        "estimated_drift_percent"
+    ] = -0.0
+
+    table = coordinator.get_nilm_devices_table()
+
+    trend = table[0]["trend"]
+    assert "mogelijk defect" in trend
+    assert "aanhoudend stijgend" in trend
+    assert "%" not in trend  # no misleading (-0%) shown
+
+
 def test_empty_table_when_nothing_confirmed(make_coordinator, hass):
     coordinator = make_coordinator({})
 
