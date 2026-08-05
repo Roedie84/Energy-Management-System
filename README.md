@@ -426,6 +426,69 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Sensor-gezondheid (energiebalans-validatie)
+
+Optioneel, actief zodra zowel `available_energy_sensor_entity` als
+`battery_power_sensor_entity` zijn geconfigureerd (v0.63.28) — geen
+nieuwe sensoren nodig, puur een interne consistentiecontrole op wat er
+al gemeten wordt.
+
+Vergelijkt elke tick het batterijvermogen-sensor met wat de verandering
+in beschikbare energie sinds de vorige tick **impliceert** dat het
+vermogen geweest moet zijn. Een structurele afwijking is deels verwacht
+(laad/ontlaad-rendementsverlies is niet 0) — dit is dus een
+**signaal**, geen harde alarmering.
+
+`sensor.sensor_health_score` (0-100%): het percentage van de laatste 20
+metingen dat binnen `ENERGY_BALANCE_ERROR_BAD_THRESHOLD_W` (300W) bleef.
+Een ontbrekende/niet-beschikbare sensorwaarde telt mee als "slecht" —
+precies het soort fout die deze check moet vangen (een vastgelopen
+sensor, verkeerde entity gekozen bij het instellen, een
+eenheden-mismatch, of een tekenfout die `invert_battery_power_sign`
+had moeten corrigeren maar niet deed). `measurement_quality` vertaalt
+de score naar "goed" (≥80%) / "verminderd" (≥50%) / "slecht" (<50%).
+
+Een herstart-grote onderbreking (>20 minuten sinds de vorige meting)
+wordt overgeslagen in plaats van als fout geteld — net als bij de
+uurprofiel-tracking zou dat anders ten onrechte een lange stilstand aan
+één enkel vermogensniveau toeschrijven.
+
+## Sluipverbruik-detectie (CUSUM)
+
+Optioneel, actief zodra `consumption_power_sensor_entity` is
+geconfigureerd (v0.63.29) — geen nieuwe sensoren nodig.
+
+Volgt dagelijks het laagste gecorrigeerd-verbruik-moment (meestal diep
+in de nacht, waar sluimer-/stand-by-verbruik domineert) en past daar een
+klassieke **cumulatieve-som-controlekaart (CUSUM)** op toe — een
+techniek die specifiek een **aanhoudende** verschuiving in een
+gemiddelde detecteert, niet een losse uitschieter. Gebruikt bewust een
+**langere, aparte geschiedenis** (`CUSUM_BASELINE_HISTORY_DAYS` = 30
+dagen) dan de adaptieve 7-dagen-mediaan die de rest van de integratie
+voor beslissingen gebruikt — die zou een langzame sluipende stijging
+namelijk binnen een week stilzwijgend als "de nieuwe norm" opnemen,
+precies het faalscenario dat CUSUM moet vangen.
+
+- `CUSUM_SLACK_KW` (20W): een bewuste dode zone — normale ruis
+  accumuleert niet.
+- `CUSUM_ALARM_THRESHOLD_KW` (150W cumulatief): een kleine, geleidelijke
+  afwijking heeft ongeveer een week nodig om te alarmeren; een grotere,
+  plotselinge sprong (bijv. een nieuw sluimerend apparaat) alarmeert
+  binnen een paar dagen.
+- Referentie sluit de meest recente 5 dagen uit, zodat een lopende
+  afwijking niet al in zijn eigen vergelijkingsbasis zit.
+- Gepauzeerd tijdens vakantiemodus (kunstmatig laag verbruik zou de
+  referentie vervuilen).
+
+Stuurt een melding (via `appliance_notify_service`) zodra detectie voor
+het eerst omslaat naar "gedetecteerd" — bewust **niet** elke dag
+opnieuw zolang de afwijking aanhoudt, dat zou er alleen toe leiden dat
+je 'm gaat negeren.
+
+`sensor.sluipverbruik_detectie` toont "normaal" of "gedetecteerd", met
+het geschatte verschil (W), de referentiewaarde, en de ruwe
+CUSUM-accumulator als attributen.
+
 ## Diagnostiek
 
 "Instellingen → Apparaten & Diensten → Energy Management System → drie

@@ -391,6 +391,19 @@ async def async_get_config_entry_diagnostics(
                 if coordinator.battery_cost_basis_eur_per_kwh is not None
                 else None
             ),
+            "last_energy_balance_error_w": coordinator.last_energy_balance_error_w,
+            "energy_balance_error_history": (
+                coordinator.energy_balance_error_history
+            ),
+            "sensor_health_score": coordinator.sensor_health_score,
+            "measurement_quality": coordinator.measurement_quality,
+            "sluipverbruik_detected": coordinator.sluipverbruik_detected,
+            "sluipverbruik_estimated_drift_w": (
+                coordinator.sluipverbruik_estimated_drift_w
+            ),
+            "sluipverbruik_reference_w": coordinator.sluipverbruik_reference_w,
+            "cusum_accumulator_kw": round(coordinator.cusum_accumulator_kw, 4),
+            "baseline_load_history": coordinator.baseline_load_history,
             "total_feedin_premium_eur": round(
                 coordinator.total_feedin_premium_eur, 4
             ),

@@ -73,6 +73,19 @@ CONF_LOW_SOLAR_THRESHOLD_KWH = "low_solar_threshold_kwh"
 
 DEFAULT_LOW_SOLAR_THRESHOLD_KWH = 5.0
 LEARNING_HISTORY_DAYS = 7
+
+# CUSUM sluipverbruik-detectie (v0.63.29): detects a sustained shift in
+# the household's daily "floor load" (lowest consumption reading of the
+# day - phantom/standby loads dominate there), distinct from the
+# adaptive LEARNING_HISTORY_DAYS window used for actual decisions.
+# CUSUM needs a longer, more stable reference to detect a *gradual*
+# drift that a 7-day rolling median would just quietly absorb as "the
+# new normal".
+CUSUM_BASELINE_HISTORY_DAYS = 30
+CUSUM_MIN_HISTORY_FOR_REFERENCE = 10
+CUSUM_REFERENCE_EXCLUDE_RECENT_DAYS = 5
+CUSUM_SLACK_KW = 0.02
+CUSUM_ALARM_THRESHOLD_KW = 0.15
 DEFAULT_MIN_SOC_PERCENT = 15.0
 # Discharge power tapers linearly to 0 over this many percentage points
 # above the configured minimum SoC (e.g. min=15%, band=15 -> full power
@@ -262,6 +275,17 @@ FEEDIN_PREMIUM_EUR_PER_KWH = 0.02
 # unreliable (assumes a single power level held for the whole gap), so
 # it's discarded and tracking starts fresh instead.
 MAX_HOUR_TRACKING_GAP_MINUTES = 20
+
+# Kirchhoff energy-balance validation (v0.63.28): cross-checks the
+# battery power sensor's own reading against what the available-energy
+# sensor's rate of change *implies* the battery power must be - a
+# genuine internal-consistency check using only sensors already
+# configured, not a new measurement. A rolling window of recent
+# per-tick errors feeds a 0-100 sensor_health_score.
+ENERGY_BALANCE_ERROR_HISTORY_LENGTH = 20
+ENERGY_BALANCE_ERROR_BAD_THRESHOLD_W = 300.0
+MEASUREMENT_QUALITY_GOOD_THRESHOLD = 80
+MEASUREMENT_QUALITY_DEGRADED_THRESHOLD = 50
 
 # Arbitrage charging (v0.63.15): buy from the grid during a cheap
 # quarter specifically because a known, more expensive quarter is still

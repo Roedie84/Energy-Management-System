@@ -53,6 +53,8 @@ async def async_setup_entry(
         DischargeValueSensor(coordinator, entry.entry_id),
         ChargeCostSensor(coordinator, entry.entry_id),
         BatterySavingsSensor(coordinator, entry.entry_id),
+        EnergyBalanceHealthSensor(coordinator, entry.entry_id),
+        SluipverbruikSensor(coordinator, entry.entry_id),
         ReserveShortfallSensor(coordinator, entry.entry_id),
         ReserveExcessSensor(coordinator, entry.entry_id),
         LearnedBatteryEfficiencySensor(coordinator, entry.entry_id),
@@ -832,6 +834,124 @@ class BatterySavingsSensor(SensorEntity, RestoreEntity):
                 self._coordinator.total_feedin_premium_eur = float(premium)
             except (TypeError, ValueError):
                 pass
+
+
+class EnergyBalanceHealthSensor(SensorEntity):
+    """Kirchhoff-style internal-consistency check (v0.63.28): cross-
+    checks the battery power sensor against what the available-energy
+    sensor's rate of change implies the battery power must be. A
+    genuine validation using only sensors already configured - catches
+    a stale/unavailable sensor, a wrong entity, a unit mismatch, or a
+    sign-convention issue, not a completely new measurement.
+
+    Not a RestoreEntity - this is a live rolling health signal about the
+    last ENERGY_BALANCE_ERROR_HISTORY_LENGTH ticks, not a cumulative
+    total; restoring stale history from before a restart would be
+    actively misleading about *current* sensor health.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Sensor health score"
+    _attr_icon = "mdi:pulse"
+    _attr_native_unit_of_measurement = "%"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_sensor_health_score"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def native_value(self) -> float | None:
+        return self._coordinator.sensor_health_score
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return {
+            "measurement_quality": self._coordinator.measurement_quality,
+            "last_energy_balance_error_w": (
+                self._coordinator.last_energy_balance_error_w
+            ),
+            "sample_count": len(self._coordinator.energy_balance_error_history),
+            "note": (
+                "Vergelijkt het batterijvermogen-sensor met wat de "
+                "verandering in beschikbare energie impliceert. Een "
+                "structurele afwijking is deels verwacht "
+                "(laad/ontlaad-rendementsverlies is niet 0) - dit is een "
+                "signaal, geen harde foutmelding."
+            ),
+        }
+
+
+class SluipverbruikSensor(SensorEntity, RestoreEntity):
+    """CUSUM-gebaseerde detectie van een structurele stijging in het
+    dagelijkse "vloer"-verbruik (v0.63.29) - de laagste
+    gecorrigeerd-verbruik-meting van de dag, waar sluimer-/
+    stand-by-verbruik domineert. Een cumulatieve-som-controlekaart
+    (CUSUM) vangt een *aanhoudende* afwijking, niet een losse
+    uitschieter - precies het soort verschuiving dat het gewone,
+    7-dagen-mediaan-lerende uurprofiel juist stilzwijgend als "de nieuwe
+    norm" zou opnemen binnen een week.
+
+    Is wel een RestoreEntity (in tegenstelling tot de
+    EnergyBalanceHealthSensor) - de onderliggende 30-dagen-geschiedenis
+    en CUSUM-accumulator zijn juist bedoeld om over een lange periode
+    op te bouwen, dat mag een herstart niet steeds resetten.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Sluipverbruik-detectie"
+    _attr_icon = "mdi:chart-line-variant"
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_sluipverbruik"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def native_value(self) -> str:
+        return "gedetecteerd" if self._coordinator.sluipverbruik_detected else "normaal"
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return {
+            "geschat_verschil_w": self._coordinator.sluipverbruik_estimated_drift_w,
+            "referentie_vloerverbruik_w": self._coordinator.sluipverbruik_reference_w,
+            "cusum_accumulator_kw": round(self._coordinator.cusum_accumulator_kw, 4),
+            "baseline_load_history": self._coordinator.baseline_load_history,
+            "dagen_geschiedenis": len(self._coordinator.baseline_load_history),
+            "note": (
+                "Vergelijkt het laagste dagelijkse verbruik (meestal "
+                "diep in de nacht) met een langere-termijn-referentie "
+                "(30 dagen). Een geleidelijke stijging die een week "
+                "aanhoudt wordt gemeld; losse hoge nachten niet."
+            ),
+        }
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if last_state is None:
+            return
+        attrs = last_state.attributes
+        try:
+            raw_history = attrs.get("baseline_load_history")
+            if isinstance(raw_history, list):
+                self._coordinator.baseline_load_history = [
+                    float(v) for v in raw_history
+                ]
+            self._coordinator.cusum_accumulator_kw = float(
+                attrs.get("cusum_accumulator_kw", 0.0) or 0.0
+            )
+        except (TypeError, ValueError):
+            pass
+        self._coordinator.sluipverbruik_detected = last_state.state == "gedetecteerd"
 
 
 class ReserveShortfallSensor(SensorEntity, RestoreEntity):

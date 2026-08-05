@@ -319,6 +319,10 @@ views:
                 name: Accu-bescherming (toegepast ontlaadvermogen)
               - entity: sensor.woonkamer_energy_management_system_steelstofzuiger_status
                 name: Steelstofzuiger status
+              - entity: sensor.woonkamer_energy_management_system_sensor_health_score
+                name: Sensor-gezondheidsscore (energiebalans-check)
+              - entity: sensor.woonkamer_energy_management_system_sluipverbruik_detectie
+                name: Sluipverbruik-detectie
 
   - title: Financieel
     path: financieel

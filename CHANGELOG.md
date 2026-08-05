@@ -3623,3 +3623,96 @@ hardware-min-SoC vermindert de bruikbare capaciteit correct; de kleinste
 van de twee waarden wint altijd (geen kunstmatige verhoging op een dag
 met weinig dure kwartieren); en zonder (één van) de twee entiteiten
 blijft het exact de oude, ongebreidelde telling.
+
+## v0.63.28 — Kirchhoff-energiebalans-validatie (fase 1 van de architectuur-uitbreiding)
+
+**Aanleiding:** een uitgebreide architectuur-wishlist ontvangen
+(Kirchhoff Validation, Occupancy Engine, Dynamic Reserve Engine,
+Battery Profit/Wear Engine, MPC, Monte Carlo, NILM, Markov States,
+Kalman Filtering, Weather Ensemble, Anomaly/CUSUM, Digital Twin,
+Database-laag, nieuwe dashboards, testmatrix). Na beoordeling: 6-7 van
+de veertien voorgestelde onderdelen bleken **al te bestaan** onder een
+andere naam (Energy Bridge, Reserve/Battery/Forecast-Bias Learning,
+Forecast Confidence, deels Kirchhoff zelf, NILM). De zwaardere
+technieken (MPC over 96 kwartieren, Monte Carlo, Kalman filtering,
+Digital Twin, een eigen database-laag) zijn bewust **niet** opgepakt —
+te zwaar en te moeilijk te verifiëren voor een installatie met één
+huishouden en één accu, en in directe spanning met de uitlegbaarheid
+waar deze integratie de hele ontwikkeling al op inzet. In overleg
+gekozen om te beginnen met het stuk dat het meest natuurlijk voortbouwt
+op bestaande, geteste logica: energiebalans-validatie.
+
+**Nieuw: `_update_energy_balance_validation()`.** Vergelijkt elke tick
+het batterijvermogen-sensor met wat de verandering in beschikbare
+energie sinds de vorige tick **impliceert** dat het vermogen geweest
+moet zijn — een interne consistentiecontrole op sensoren die al
+geconfigureerd zijn, geen nieuwe meting. Vangt: een vastgelopen/
+niet-beschikbare sensor, een verkeerd gekozen entity, een
+eenheden-mismatch, of een tekenfout die `invert_battery_power_sign` had
+moeten corrigeren.
+
+**`sensor.sensor_health_score`** (0-100%): percentage van de laatste 20
+metingen binnen de foutmarge (300W). Een ontbrekende sensorwaarde telt
+als "slecht". **`measurement_quality`**: vertaalt de score naar
+goed/verminderd/slecht. Bewust géén `RestoreEntity` — dit is een live
+signaal over recente ticks, geen cumulatieve teller; verouderde
+historie herstellen zou juist misleidend zijn over de **huidige**
+sensor-gezondheid.
+
+**Veiligheidsgrens:** een herstart-grote onderbreking (>20 minuten)
+wordt overgeslagen in plaats van als fout geteld — dezelfde
+staleness-guard als bij de uurprofiel-tracking (v0.63.16).
+
+**Getest** (7 nieuwe permanente tests in
+`test_energy_balance_validation.py`): consistente metingen scoren
+perfect; een grote mismatch wordt gevlagd; een ontbrekende sensorwaarde
+telt als slecht; een herstart-grote onderbreking wordt niet als fout
+geteld; de score middelt correct over een glijdend venster; en zonder
+beide sensoren gebeurt er niets (geen regressie).
+
+## v0.63.29 — CUSUM-sluipverbruik-detectie (fase 2 van de architectuur-uitbreiding)
+
+**Aanleiding:** vervolg op de architectuur-wishlist (v0.63.28). Van de
+resterende vijf onderdelen (Occupancy Engine, Battery Profit/Wear
+Engine, Markov States, Weather Ensemble, Anomaly/CUSUM) beoordeeld en
+in overleg gekozen om te beginnen met Anomaly/CUSUM — geen nieuwe
+sensoren nodig, bouwt volledig voort op de al bestaande, geleerde
+verbruiksdata. Battery Wear Engine voorlopig overgeslagen (vereist
+vervangingskosten + verwachte levensduur, nog niet aangeleverd);
+Occupancy Engine, Markov States en Weather Ensemble beoordeeld als
+minder gunstige verhouding tussen moeite en meerwaarde gegeven wat er
+al bestaat (zie v0.63.28-toelichting in de conversatie).
+
+**Nieuw: `_update_anomaly_detection()` + `_finalize_baseline_load_day()`.**
+Volgt dagelijks het laagste gecorrigeerd-verbruik-moment (meestal diep
+in de nacht) en past een klassieke **CUSUM-controlekaart** toe om een
+**aanhoudende** stijging te detecteren — bewust met een aparte, langere
+geschiedenis (30 dagen) dan de adaptieve 7-dagen-mediaan die de rest van
+de integratie gebruikt, want die zou een langzame sluipende stijging
+juist binnen een week stilzwijgend als "normaal" opnemen.
+
+Parameters: 20W dode zone (normale ruis accumuleert niet), 150W
+cumulatieve alarmdrempel (een kleine afwijking kost ~een week om te
+alarmeren, een grote sprong een paar dagen), referentie sluit de meest
+recente 5 dagen uit (voorkomt dat een lopende afwijking zijn eigen
+vergelijkingsbasis vervuilt). Gepauzeerd tijdens vakantiemodus.
+
+**Nieuwe sensor:** `sensor.sluipverbruik_detectie` ("normaal"/
+"gedetecteerd"), mét `RestoreEntity` (in tegenstelling tot de
+Kirchhoff-gezondheidsscore van v0.63.28 — deze geschiedenis is juist
+bedoeld om over weken op te bouwen, dat mag een herstart niet
+resetten).
+
+**Melding:** edge-triggered (alleen bij de overgang naar
+"gedetecteerd", niet elke dag opnieuw zolang het aanhoudt) via
+`appliance_notify_service`.
+
+**Getest** (9 nieuwe permanente tests in
+`test_sluipverbruik_detection.py`): geen detectie met onvoldoende
+geschiedenis; een stabiele belasting triggert nooit; een aanhoudende
+verschuiving wordt na een paar dagen gedetecteerd; een losse
+uitschieter-nacht triggert niet; kleine afwijkingen binnen de dode zone
+accumuleren niet; gepauzeerd tijdens vakantiemodus; de laagste meting
+binnen één dag wordt correct bijgehouden; zonder verbruikssensor
+gebeurt er niets; en de melding wordt precies één keer verstuurd, niet
+elke dag opnieuw.

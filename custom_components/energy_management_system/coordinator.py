@@ -116,6 +116,11 @@ from .const import (
     EXTENDED_LOW_SOLAR_MARGIN_BONUS_PER_DAY,
     MIN_ACTIVE_SOLAR_PRODUCTION_W,
     LEARNING_HISTORY_DAYS,
+    CUSUM_BASELINE_HISTORY_DAYS,
+    CUSUM_MIN_HISTORY_FOR_REFERENCE,
+    CUSUM_REFERENCE_EXCLUDE_RECENT_DAYS,
+    CUSUM_SLACK_KW,
+    CUSUM_ALARM_THRESHOLD_KW,
     LOW_SOLAR_RELATIVE_FRACTION,
     EXPENSIVE_PRICE_THRESHOLD_FRACTION,
     EXPENSIVE_PRICE_THRESHOLD_FRACTION_LOW_SOLAR,
@@ -125,6 +130,10 @@ from .const import (
     SOLAR_RAMP_STEPS,
     GRID_IMPORT_SHORTFALL_THRESHOLD_W,
     MAX_HOUR_TRACKING_GAP_MINUTES,
+    ENERGY_BALANCE_ERROR_HISTORY_LENGTH,
+    ENERGY_BALANCE_ERROR_BAD_THRESHOLD_W,
+    MEASUREMENT_QUALITY_GOOD_THRESHOLD,
+    MEASUREMENT_QUALITY_DEGRADED_THRESHOLD,
     MIN_COST_BASIS_DELTA_KWH,
     FEEDIN_PREMIUM_EUR_PER_KWH,
     FEEDIN_PREMIUM_EUR_PER_KWH,
@@ -335,6 +344,21 @@ class EnergyManagementSystemCoordinator:
         self._last_available_kwh_for_cost_basis: float | None = None
         self.total_battery_savings_eur: float = 0.0
         self.total_feedin_premium_eur: float = 0.0
+        # Kirchhoff energy-balance validation (v0.63.28).
+        self._last_balance_check_time: datetime | None = None
+        self._last_balance_check_available_kwh: float | None = None
+        self.last_energy_balance_error_w: float | None = None
+        self.energy_balance_error_history: list[float | None] = []
+        self.sensor_health_score: float | None = None
+        self.measurement_quality: str | None = None
+        # CUSUM sluipverbruik-detectie (v0.63.29).
+        self.baseline_load_history: list[float] = []
+        self._cusum_check_date: date | None = None
+        self._today_min_load_kw: float | None = None
+        self.cusum_accumulator_kw: float = 0.0
+        self.sluipverbruik_detected: bool = False
+        self.sluipverbruik_estimated_drift_w: float | None = None
+        self.sluipverbruik_reference_w: float | None = None
         self._last_cost_basis_calc_time: datetime | None = None
         self.last_charge_power_applied: float | None = None
         self.last_current_price_per_kwh: float | None = None
@@ -3773,6 +3797,206 @@ class EnergyManagementSystemCoordinator:
                 self.total_battery_savings_eur += savings_eur
                 self.total_feedin_premium_eur += feedin_premium_eur
 
+    def _update_energy_balance_validation(self, now: datetime) -> None:
+        """Kirchhoff-style internal-consistency check (v0.63.28): cross-
+        checks the battery power sensor's own reading against what the
+        available-energy sensor's rate of change *implies* the battery
+        power must be, over this tick's interval. A genuine validation
+        using only sensors already configured - not a new measurement,
+        so it can't catch every possible fault (e.g. both sensors being
+        wrong in a correlated way), but it does catch the common,
+        practically useful cases: a stale/unavailable sensor, a wrong
+        entity picked during setup, a unit mismatch, or a sign-convention
+        error that `invert_battery_power_sign` should have corrected but
+        didn't.
+
+        available_kwh(now) - available_kwh(previous) over elapsed time
+        gives the implied battery power (positive = discharging, matching
+        `_read_corrected_battery_power`'s own convention) - some
+        persistent gap against the measured value is *expected* (round-
+        trip efficiency losses aren't zero), so this isn't a "should be
+        exactly zero" check; it's a rolling health signal, not a hard
+        alarm.
+
+        `sensor_health_score` (0-100): fraction of the last
+        ENERGY_BALANCE_ERROR_HISTORY_LENGTH samples that stayed within
+        ENERGY_BALANCE_ERROR_BAD_THRESHOLD_W, with an unavailable-sensor
+        sample counted as fully "bad" (a stale sensor is exactly the
+        kind of fault this is meant to catch).
+        `measurement_quality`: a coarser "goed"/"verminderd"/"slecht"
+        label derived from that score, easier to glance at on a
+        dashboard than a raw number.
+
+        Does nothing (all fields stay None) if either sensor isn't
+        configured - this is meant to be a bonus check when the data is
+        already there, not a reason to ask for more sensors.
+        """
+        available_entity = self.config.get(CONF_AVAILABLE_ENERGY_SENSOR)
+        battery_entity = self.config.get(CONF_BATTERY_POWER_SENSOR)
+        if not available_entity or not battery_entity:
+            return
+
+        available_kwh = self._read_sensor_float(available_entity)
+        measured_battery_power_w = self._read_corrected_battery_power()
+
+        if self._last_balance_check_time is None:
+            self._last_balance_check_time = now
+            self._last_balance_check_available_kwh = available_kwh
+            return
+
+        elapsed_hours = (now - self._last_balance_check_time).total_seconds() / 3600
+        prev_kwh = self._last_balance_check_available_kwh
+        self._last_balance_check_time = now
+        self._last_balance_check_available_kwh = available_kwh
+
+        if available_kwh is None or measured_battery_power_w is None:
+            # A missing reading is itself a health-relevant event (a
+            # stale/unavailable sensor) - record it as a "bad" sample
+            # rather than silently skipping.
+            self._record_balance_sample(None)
+            return
+
+        if elapsed_hours <= 0 or elapsed_hours > MAX_HOUR_TRACKING_GAP_MINUTES / 60:
+            # No baseline yet, or too large a gap (restart etc.) to
+            # attribute reliably to a single rate - skip this sample
+            # rather than record a misleading spike.
+            return
+
+        if prev_kwh is None:
+            return
+
+        delta_kwh = available_kwh - prev_kwh
+        implied_battery_power_w = -(delta_kwh / elapsed_hours) * 1000
+        error_w = implied_battery_power_w - measured_battery_power_w
+        self.last_energy_balance_error_w = round(error_w, 1)
+        self._record_balance_sample(abs(error_w))
+
+    def _record_balance_sample(self, abs_error_w: float | None) -> None:
+        """Append one sample (or None for a missing-sensor tick) to the
+        rolling window and recompute the health score/quality label.
+        """
+        self.energy_balance_error_history.append(abs_error_w)
+        self.energy_balance_error_history = self.energy_balance_error_history[
+            -ENERGY_BALANCE_ERROR_HISTORY_LENGTH:
+        ]
+
+        total = len(self.energy_balance_error_history)
+        if total == 0:
+            self.sensor_health_score = None
+            self.measurement_quality = None
+            return
+
+        good = sum(
+            1
+            for v in self.energy_balance_error_history
+            if v is not None and v <= ENERGY_BALANCE_ERROR_BAD_THRESHOLD_W
+        )
+        self.sensor_health_score = round(100 * good / total, 1)
+
+        if self.sensor_health_score >= MEASUREMENT_QUALITY_GOOD_THRESHOLD:
+            self.measurement_quality = "goed"
+        elif self.sensor_health_score >= MEASUREMENT_QUALITY_DEGRADED_THRESHOLD:
+            self.measurement_quality = "verminderd"
+        else:
+            self.measurement_quality = "slecht"
+
+    def _update_anomaly_detection(self, now: datetime) -> None:
+        """CUSUM sluipverbruik-detectie (v0.63.29): tracks the
+        household's daily "floor load" (the lowest corrected-consumption
+        reading seen that day - phantom/standby loads dominate at that
+        point, everything else is normally off) and runs a classic
+        cumulative-sum control chart against it to catch a *sustained*
+        upward drift, not a single noisy day.
+
+        Deliberately uses a separate, longer history
+        (CUSUM_BASELINE_HISTORY_DAYS = 30) from the adaptive
+        LEARNING_HISTORY_DAYS = 7 window the rest of this integration
+        uses for decisions - a 7-day rolling median would just quietly
+        treat a slow creep as "the new normal" within a week, which is
+        exactly the failure mode CUSUM is meant to catch. The reference
+        excludes the most recent CUSUM_REFERENCE_EXCLUDE_RECENT_DAYS
+        days, so a genuine ongoing drift isn't already baked into its
+        own comparison baseline.
+
+        CUSUM_SLACK_KW (20W) is a deliberate dead zone - small day-to-day
+        noise doesn't accumulate. CUSUM_ALARM_THRESHOLD_KW (150W
+        cumulative) means a small, gradual drift takes roughly a week of
+        sustained deviation to alarm, while a sudden larger jump (e.g. a
+        new always-on device) alarms within a couple of days - the
+        standard CUSUM trade-off between sensitivity and false alarms.
+
+        Paused during vacation_mode (artificially low readings would
+        corrupt the reference, and could make the return to normal look
+        like a false "spike" afterwards) - same principle as the hourly
+        consumption profile's own vacation-mode pause.
+        """
+        if self.vacation_mode:
+            return
+        household_load_w = self._read_corrected_consumption_power()
+        if household_load_w is None:
+            return
+        household_load_kw = household_load_w / 1000
+
+        if self._cusum_check_date != now.date():
+            if self._cusum_check_date is not None and self._today_min_load_kw is not None:
+                self._finalize_baseline_load_day(self._today_min_load_kw)
+            self._today_min_load_kw = household_load_kw
+            self._cusum_check_date = now.date()
+            return
+
+        if self._today_min_load_kw is None or household_load_kw < self._today_min_load_kw:
+            self._today_min_load_kw = household_load_kw
+
+    def _finalize_baseline_load_day(self, floor_load_kw: float) -> None:
+        self.baseline_load_history.append(round(floor_load_kw, 4))
+        self.baseline_load_history = self.baseline_load_history[
+            -CUSUM_BASELINE_HISTORY_DAYS:
+        ]
+
+        if len(self.baseline_load_history) < CUSUM_MIN_HISTORY_FOR_REFERENCE:
+            return
+
+        if len(self.baseline_load_history) > CUSUM_REFERENCE_EXCLUDE_RECENT_DAYS:
+            reference_samples = self.baseline_load_history[
+                :-CUSUM_REFERENCE_EXCLUDE_RECENT_DAYS
+            ]
+        else:
+            reference_samples = self.baseline_load_history
+        if not reference_samples:
+            return
+
+        reference_kw = statistics.median(reference_samples)
+        self.sluipverbruik_reference_w = round(reference_kw * 1000, 1)
+
+        deviation_kw = floor_load_kw - reference_kw - CUSUM_SLACK_KW
+        self.cusum_accumulator_kw = max(0.0, self.cusum_accumulator_kw + deviation_kw)
+
+        was_detected = self.sluipverbruik_detected
+        self.sluipverbruik_detected = self.cusum_accumulator_kw >= CUSUM_ALARM_THRESHOLD_KW
+        if self.sluipverbruik_detected:
+            self.sluipverbruik_estimated_drift_w = round(
+                (floor_load_kw - reference_kw) * 1000, 1
+            )
+            if not was_detected:
+                # Edge-triggered (only on the False -> True transition) -
+                # otherwise this would re-notify every single day the
+                # drift stays elevated, which teaches the person to
+                # ignore it rather than act on it.
+                notify_service = self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE)
+                self._dispatch_notification(
+                    notify_service=notify_service,
+                    title="🔍 Mogelijk sluipverbruik gedetecteerd",
+                    message=(
+                        f"Het laagste dagelijkse verbruik ligt structureel "
+                        f"~{self.sluipverbruik_estimated_drift_w:.0f}W hoger "
+                        f"dan de langere-termijn-referentie "
+                        f"({self.sluipverbruik_reference_w:.0f}W) - "
+                        f"mogelijk een nieuw sluimerend apparaat. Gebaseerd "
+                        f"op een aanhoudende trend, niet één losse nacht."
+                    ),
+                    notification_id="ems_sluipverbruik_detected",
+                )
+
     def _cheapest_block_range(
         self, entries: list[PriceEntry], now: datetime
     ) -> tuple[datetime | None, datetime | None]:
@@ -4376,6 +4600,8 @@ class EnergyManagementSystemCoordinator:
             entries, now, cheap_block_start
         )
         self._update_battery_cost_basis_and_savings(now, entries)
+        self._update_energy_balance_validation(now)
+        self._update_anomaly_detection(now)
 
         # Pause consumption-related learning during vacation mode, so the
         # unusually low readings don't pollute the learned "normal"
