@@ -5519,3 +5519,32 @@ functionaliteit.
 
 **Geen codewijziging nodig** — dit is uitsluitend een dashboard-YAML-
 aanpassing; de coordinator/button-logica blijft ongewijzigd.
+
+## v0.63.83 — van 8 zichtbare sleuven terug naar 1 (breedteprobleem)
+
+**Gerapporteerd, met screenshot**: de knoppen verschenen eindelijk
+(v0.63.82 loste dat op), maar de kandidaatnaam werd afgekapt ("Houten
+la..." in plaats van de volledige naam) — met 8 sleuven × 2 knoppen
+naast elkaar (2 per rij) was er simpelweg te weinig breedte per kaart.
+
+**Gevraagd**: "1 optie tonen is voldoende, als de 1e beoordeeld is
+verschijnt de 2e automatisch" — beoordelen gebeurt toch al één voor
+één, dus 8 gelijktijdig zichtbare sleuven voegden weinig toe.
+
+**Fix**: `NILM_DASHBOARD_SLOT_COUNT` verlaagd van 8 naar 1 in
+`const.py`. Het dashboard toont nu nog maar één bevestig/negeer-
+kaartpaar, met de volle breedte (12 kolommen in plaats van 6) — ruim
+voldoende voor de langste kandidaatnaam. 30 van de 32 knopkaarten
+(sleuf 2 t/m 8) zijn uit het dashboard verwijderd; de introtekst is
+aangepast om het nieuwe, sequentiële gedrag te beschrijven.
+
+**Geen wijziging nodig aan het onderliggende doorschuifmechanisme**:
+`get_nilm_candidate_at_slot`/confirm/reject werken al generiek voor elk
+aantal sleuven — bevestigen of negeren van de huidige kandidaat laat de
+eerstvolgende gewoon automatisch instromen, nu met één zichtbare sleuf
+in plaats van acht.
+
+**Getest**: bestaande test (voorheen hardcoded op "16"/"range(1, 9)")
+aangepast om dynamisch met `NILM_DASHBOARD_SLOT_COUNT` mee te schalen,
+zodat een toekomstige aanpassing van dit aantal niet opnieuw
+testonderhoud vereist.

@@ -284,10 +284,17 @@ NILM_TREND_FALLING_THRESHOLD_PERCENT = 5.0
 # frontend card assumed) can't dynamically render one button per
 # candidate for an unknown-length, changing list. Each slot shows
 # whichever candidate currently occupies that position in a
-# deterministic (alphabetically sorted by entity_id) ordering - plenty
-# for a typical household's realistic number of newly-discovered power
-# sensors at once.
-NILM_DASHBOARD_SLOT_COUNT = 8
+# deterministic (alphabetically sorted by entity_id) ordering.
+#
+# v0.63.83, requested ("1 optie tonen is voldoende, als de 1e beoordeeld
+# is verschijnt de 2e automatisch"): reduced from 8 to 1 - beoordeling
+# happens one candidate at a time anyway, and a single slot gives each
+# card much more width to show the full candidate name/power without
+# truncation (reported: "nog niet de volledige naam leesbaar" with 8
+# slots crammed two-per-row). Confirming/rejecting the current slot
+# still automatically shifts the next candidate into view, exactly as
+# before - only the number of simultaneously visible slots changed.
+NILM_DASHBOARD_SLOT_COUNT = 1
 
 # NILM sensor attribute size cap (v0.63.45). Reported: with the broad
 # "any W/kW sensor" discovery scope, the full unconfirmed-candidates

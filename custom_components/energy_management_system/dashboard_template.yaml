@@ -886,10 +886,11 @@ views:
         cards:
           - type: markdown
             content: >-
-              Elke knop hieronder toont zelf welke kandidaat er nu in
-              zit (naam + huidig vermogen) — leeg als er geen kandidaat
-              in die sleuf zit. ✅ = bevestigen (start drift-detectie),
-              ❌ = negeren (nooit meer voorgesteld).
+              Toont zelf welke kandidaat er nu klaarstaat (naam +
+              huidig vermogen) — leeg als er niets meer te beoordelen
+              is. ✅ = bevestigen (start drift-detectie), ❌ = negeren
+              (nooit meer voorgesteld). Zodra je deze kandidaat
+              beoordeelt, verschijnt de volgende automatisch.
             grid_options:
               columns: 12
               rows: 2
@@ -900,7 +901,7 @@ views:
               rows: 1
           - type: custom:mushroom-template-card
             primary: >-
-              {{ state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_1_bevestigen', 'kandidaat_naam') or 'Sleuf 1 (leeg)' }}
+              {{ state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_1_bevestigen', 'kandidaat_naam') or 'Geen kandidaat' }}
             secondary: >-
               {{ (state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_1_bevestigen', 'kandidaat_vermogen_w') | round(0) | string ~
               ' W — tik om te bevestigen') if state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_1_bevestigen',
@@ -913,11 +914,11 @@ views:
               target:
                 entity_id: button.woonkamer_energy_management_system_nilm_kandidaat_1_bevestigen
             grid_options:
-              columns: 6
+              columns: 12
               rows: 1
           - type: custom:mushroom-template-card
             primary: >-
-              {{ state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_1_negeren', 'kandidaat_naam') or 'Sleuf 1 (leeg)' }}
+              {{ state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_1_negeren', 'kandidaat_naam') or 'Geen kandidaat' }}
             secondary: >-
               {{ (state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_1_negeren', 'kandidaat_vermogen_w') | round(0) | string ~
               ' W — tik om te negeren') if state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_1_negeren',
@@ -930,245 +931,7 @@ views:
               target:
                 entity_id: button.woonkamer_energy_management_system_nilm_kandidaat_1_negeren
             grid_options:
-              columns: 6
-              rows: 1
-          - type: custom:mushroom-template-card
-            primary: >-
-              {{ state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_2_bevestigen', 'kandidaat_naam') or 'Sleuf 2 (leeg)' }}
-            secondary: >-
-              {{ (state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_2_bevestigen', 'kandidaat_vermogen_w') | round(0) | string ~
-              ' W — tik om te bevestigen') if state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_2_bevestigen',
-              'kandidaat_vermogen_w') is not none else 'Tik om te bevestigen' }}
-            icon: mdi:check-circle-outline
-            icon_color: green
-            tap_action:
-              action: call-service
-              service: button.press
-              target:
-                entity_id: button.woonkamer_energy_management_system_nilm_kandidaat_2_bevestigen
-            grid_options:
-              columns: 6
-              rows: 1
-          - type: custom:mushroom-template-card
-            primary: >-
-              {{ state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_2_negeren', 'kandidaat_naam') or 'Sleuf 2 (leeg)' }}
-            secondary: >-
-              {{ (state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_2_negeren', 'kandidaat_vermogen_w') | round(0) | string ~
-              ' W — tik om te negeren') if state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_2_negeren',
-              'kandidaat_vermogen_w') is not none else 'Tik om te negeren' }}
-            icon: mdi:close-circle-outline
-            icon_color: red
-            tap_action:
-              action: call-service
-              service: button.press
-              target:
-                entity_id: button.woonkamer_energy_management_system_nilm_kandidaat_2_negeren
-            grid_options:
-              columns: 6
-              rows: 1
-          - type: custom:mushroom-template-card
-            primary: >-
-              {{ state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_3_bevestigen', 'kandidaat_naam') or 'Sleuf 3 (leeg)' }}
-            secondary: >-
-              {{ (state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_3_bevestigen', 'kandidaat_vermogen_w') | round(0) | string ~
-              ' W — tik om te bevestigen') if state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_3_bevestigen',
-              'kandidaat_vermogen_w') is not none else 'Tik om te bevestigen' }}
-            icon: mdi:check-circle-outline
-            icon_color: green
-            tap_action:
-              action: call-service
-              service: button.press
-              target:
-                entity_id: button.woonkamer_energy_management_system_nilm_kandidaat_3_bevestigen
-            grid_options:
-              columns: 6
-              rows: 1
-          - type: custom:mushroom-template-card
-            primary: >-
-              {{ state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_3_negeren', 'kandidaat_naam') or 'Sleuf 3 (leeg)' }}
-            secondary: >-
-              {{ (state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_3_negeren', 'kandidaat_vermogen_w') | round(0) | string ~
-              ' W — tik om te negeren') if state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_3_negeren',
-              'kandidaat_vermogen_w') is not none else 'Tik om te negeren' }}
-            icon: mdi:close-circle-outline
-            icon_color: red
-            tap_action:
-              action: call-service
-              service: button.press
-              target:
-                entity_id: button.woonkamer_energy_management_system_nilm_kandidaat_3_negeren
-            grid_options:
-              columns: 6
-              rows: 1
-          - type: custom:mushroom-template-card
-            primary: >-
-              {{ state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_4_bevestigen', 'kandidaat_naam') or 'Sleuf 4 (leeg)' }}
-            secondary: >-
-              {{ (state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_4_bevestigen', 'kandidaat_vermogen_w') | round(0) | string ~
-              ' W — tik om te bevestigen') if state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_4_bevestigen',
-              'kandidaat_vermogen_w') is not none else 'Tik om te bevestigen' }}
-            icon: mdi:check-circle-outline
-            icon_color: green
-            tap_action:
-              action: call-service
-              service: button.press
-              target:
-                entity_id: button.woonkamer_energy_management_system_nilm_kandidaat_4_bevestigen
-            grid_options:
-              columns: 6
-              rows: 1
-          - type: custom:mushroom-template-card
-            primary: >-
-              {{ state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_4_negeren', 'kandidaat_naam') or 'Sleuf 4 (leeg)' }}
-            secondary: >-
-              {{ (state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_4_negeren', 'kandidaat_vermogen_w') | round(0) | string ~
-              ' W — tik om te negeren') if state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_4_negeren',
-              'kandidaat_vermogen_w') is not none else 'Tik om te negeren' }}
-            icon: mdi:close-circle-outline
-            icon_color: red
-            tap_action:
-              action: call-service
-              service: button.press
-              target:
-                entity_id: button.woonkamer_energy_management_system_nilm_kandidaat_4_negeren
-            grid_options:
-              columns: 6
-              rows: 1
-          - type: custom:mushroom-template-card
-            primary: >-
-              {{ state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_5_bevestigen', 'kandidaat_naam') or 'Sleuf 5 (leeg)' }}
-            secondary: >-
-              {{ (state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_5_bevestigen', 'kandidaat_vermogen_w') | round(0) | string ~
-              ' W — tik om te bevestigen') if state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_5_bevestigen',
-              'kandidaat_vermogen_w') is not none else 'Tik om te bevestigen' }}
-            icon: mdi:check-circle-outline
-            icon_color: green
-            tap_action:
-              action: call-service
-              service: button.press
-              target:
-                entity_id: button.woonkamer_energy_management_system_nilm_kandidaat_5_bevestigen
-            grid_options:
-              columns: 6
-              rows: 1
-          - type: custom:mushroom-template-card
-            primary: >-
-              {{ state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_5_negeren', 'kandidaat_naam') or 'Sleuf 5 (leeg)' }}
-            secondary: >-
-              {{ (state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_5_negeren', 'kandidaat_vermogen_w') | round(0) | string ~
-              ' W — tik om te negeren') if state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_5_negeren',
-              'kandidaat_vermogen_w') is not none else 'Tik om te negeren' }}
-            icon: mdi:close-circle-outline
-            icon_color: red
-            tap_action:
-              action: call-service
-              service: button.press
-              target:
-                entity_id: button.woonkamer_energy_management_system_nilm_kandidaat_5_negeren
-            grid_options:
-              columns: 6
-              rows: 1
-          - type: custom:mushroom-template-card
-            primary: >-
-              {{ state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_6_bevestigen', 'kandidaat_naam') or 'Sleuf 6 (leeg)' }}
-            secondary: >-
-              {{ (state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_6_bevestigen', 'kandidaat_vermogen_w') | round(0) | string ~
-              ' W — tik om te bevestigen') if state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_6_bevestigen',
-              'kandidaat_vermogen_w') is not none else 'Tik om te bevestigen' }}
-            icon: mdi:check-circle-outline
-            icon_color: green
-            tap_action:
-              action: call-service
-              service: button.press
-              target:
-                entity_id: button.woonkamer_energy_management_system_nilm_kandidaat_6_bevestigen
-            grid_options:
-              columns: 6
-              rows: 1
-          - type: custom:mushroom-template-card
-            primary: >-
-              {{ state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_6_negeren', 'kandidaat_naam') or 'Sleuf 6 (leeg)' }}
-            secondary: >-
-              {{ (state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_6_negeren', 'kandidaat_vermogen_w') | round(0) | string ~
-              ' W — tik om te negeren') if state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_6_negeren',
-              'kandidaat_vermogen_w') is not none else 'Tik om te negeren' }}
-            icon: mdi:close-circle-outline
-            icon_color: red
-            tap_action:
-              action: call-service
-              service: button.press
-              target:
-                entity_id: button.woonkamer_energy_management_system_nilm_kandidaat_6_negeren
-            grid_options:
-              columns: 6
-              rows: 1
-          - type: custom:mushroom-template-card
-            primary: >-
-              {{ state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_7_bevestigen', 'kandidaat_naam') or 'Sleuf 7 (leeg)' }}
-            secondary: >-
-              {{ (state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_7_bevestigen', 'kandidaat_vermogen_w') | round(0) | string ~
-              ' W — tik om te bevestigen') if state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_7_bevestigen',
-              'kandidaat_vermogen_w') is not none else 'Tik om te bevestigen' }}
-            icon: mdi:check-circle-outline
-            icon_color: green
-            tap_action:
-              action: call-service
-              service: button.press
-              target:
-                entity_id: button.woonkamer_energy_management_system_nilm_kandidaat_7_bevestigen
-            grid_options:
-              columns: 6
-              rows: 1
-          - type: custom:mushroom-template-card
-            primary: >-
-              {{ state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_7_negeren', 'kandidaat_naam') or 'Sleuf 7 (leeg)' }}
-            secondary: >-
-              {{ (state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_7_negeren', 'kandidaat_vermogen_w') | round(0) | string ~
-              ' W — tik om te negeren') if state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_7_negeren',
-              'kandidaat_vermogen_w') is not none else 'Tik om te negeren' }}
-            icon: mdi:close-circle-outline
-            icon_color: red
-            tap_action:
-              action: call-service
-              service: button.press
-              target:
-                entity_id: button.woonkamer_energy_management_system_nilm_kandidaat_7_negeren
-            grid_options:
-              columns: 6
-              rows: 1
-          - type: custom:mushroom-template-card
-            primary: >-
-              {{ state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_8_bevestigen', 'kandidaat_naam') or 'Sleuf 8 (leeg)' }}
-            secondary: >-
-              {{ (state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_8_bevestigen', 'kandidaat_vermogen_w') | round(0) | string ~
-              ' W — tik om te bevestigen') if state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_8_bevestigen',
-              'kandidaat_vermogen_w') is not none else 'Tik om te bevestigen' }}
-            icon: mdi:check-circle-outline
-            icon_color: green
-            tap_action:
-              action: call-service
-              service: button.press
-              target:
-                entity_id: button.woonkamer_energy_management_system_nilm_kandidaat_8_bevestigen
-            grid_options:
-              columns: 6
-              rows: 1
-          - type: custom:mushroom-template-card
-            primary: >-
-              {{ state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_8_negeren', 'kandidaat_naam') or 'Sleuf 8 (leeg)' }}
-            secondary: >-
-              {{ (state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_8_negeren', 'kandidaat_vermogen_w') | round(0) | string ~
-              ' W — tik om te negeren') if state_attr('button.woonkamer_energy_management_system_nilm_kandidaat_8_negeren',
-              'kandidaat_vermogen_w') is not none else 'Tik om te negeren' }}
-            icon: mdi:close-circle-outline
-            icon_color: red
-            tap_action:
-              action: call-service
-              service: button.press
-              target:
-                entity_id: button.woonkamer_energy_management_system_nilm_kandidaat_8_negeren
-            grid_options:
-              columns: 6
+              columns: 12
               rows: 1
 
   - title: Advies

@@ -890,6 +890,19 @@ In plaats van verder te blijven zoeken naar waarom, is betrouwbaarheid
 boven cosmetiek gekozen: alle 16 knoppen zijn nu altijd zichtbaar (met
 "Sleuf N (leeg)" waar niets in zit) — gegarandeerd werkend.
 
+**Van 8 sleuven terug naar 1 (v0.63.83):** gerapporteerd — met 8
+sleuven × 2 knoppen naast elkaar (2 per rij) werd de kandidaatnaam
+afgekapt ("Houten la..." in plaats van de volledige naam), simpelweg
+te weinig breedte per kaart. Gevraagd: "1 optie tonen is voldoende,
+als de 1e beoordeeld is verschijnt de 2e automatisch" — beoordelen
+gebeurt toch al één voor één. `NILM_DASHBOARD_SLOT_COUNT` is verlaagd
+van 8 naar 1, en de overgebleven bevestig/negeer-kaart krijgt nu de
+volle breedte (12 kolommen i.p.v. 6) — ruim voldoende voor de langste
+kandidaatnaam. Het bestaande sleuf-doorschuifmechanisme (confirmeren/
+negeren laat de eerstvolgende kandidaat automatisch instromen) blijft
+ongewijzigd werken, nu gewoon met één zichtbare sleuf in plaats van
+acht.
+
 **Fundamentele oorzaak gevonden: onvoorspelbare entity_id's
 (v0.63.74):** gerapporteerd — er verscheen helemaal niets meer onder
 "Bevestigen / negeren", waardoor bevestigen/negeren van nieuwe

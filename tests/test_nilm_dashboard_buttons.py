@@ -409,7 +409,7 @@ def test_unique_id_bumped_to_force_a_fresh_registration(make_coordinator, hass):
     assert confirm._attr_unique_id != reject._attr_unique_id
 
 
-def test_all_16_slot_entity_ids_are_unique_and_match_the_dashboard(
+def test_all_slot_entity_ids_are_unique_and_match_the_dashboard(
     make_coordinator, hass
 ):
     """Confirms the entity_ids exactly match what the bundled dashboard
@@ -418,7 +418,10 @@ def test_all_16_slot_entity_ids_are_unique_and_match_the_dashboard(
     import asyncio as aio
 
     from custom_components.energy_management_system.button import async_setup_entry
-    from custom_components.energy_management_system.const import DOMAIN
+    from custom_components.energy_management_system.const import (
+        DOMAIN,
+        NILM_DASHBOARD_SLOT_COUNT,
+    )
 
     coordinator = make_coordinator({})
     hass.data = {DOMAIN: {"entry1": coordinator}}
@@ -440,8 +443,8 @@ def test_all_16_slot_entity_ids_are_unique_and_match_the_dashboard(
         and "nilm_kandidaat" in e.entity_id
     ]
 
-    assert len(entity_ids) == len(set(entity_ids)) == 16
-    for slot in range(1, 9):
+    assert len(entity_ids) == len(set(entity_ids)) == 2 * NILM_DASHBOARD_SLOT_COUNT
+    for slot in range(1, NILM_DASHBOARD_SLOT_COUNT + 1):
         assert (
             f"button.woonkamer_energy_management_system_nilm_kandidaat_"
             f"{slot}_bevestigen" in entity_ids
