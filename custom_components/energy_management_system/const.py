@@ -325,6 +325,16 @@ NILM_CUSUM_ALARM_THRESHOLD = 1.0
 # of accu-/omvormer-signaal meer vereist.
 NILM_PATTERN_EXCLUDED_KEYWORDS = ("fase 1", "fase_1", "solaredge", "zendure")
 
+# NILM-duplicaatdetectie (v0.63.91, gevraagd na een diagnostiek-review
+# waarbij 5 "Eetkamer lamp"-sensoren identieke vermogensgeschiedenis
+# bleken te delen - vermoedelijk hetzelfde fysieke circuit onder
+# meerdere HA-entiteiten). Twee bevestigde apparaten worden als
+# waarschijnlijk duplicaat gemarkeerd als hun dagelijkse-gemiddelde-
+# geschiedenis over minimaal dit aantal gedeelde dagen steeds binnen
+# de relatieve tolerantie van elkaar ligt.
+NILM_DUPLICATE_MIN_SHARED_DAYS = 3
+NILM_DUPLICATE_TOLERANCE_FRACTION = 0.02
+
 # NILM devices overview table trend labels (v0.63.51). A lighter-weight,
 # more granular signal than the anomaly_detected flag (which only fires
 # on a *sustained* CUSUM breach) - just compares the most recent daily

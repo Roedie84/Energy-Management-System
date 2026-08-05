@@ -100,15 +100,19 @@ def test_diagnostics_includes_dated_shortfall_and_excess_history(
     make_coordinator, hass
 ):
     """v0.63.11: the boolean history alone doesn't say *which* days had
-    a shortfall/excess - a parallel dates list fills that gap."""
+    a shortfall/excess - a parallel dates list fills that gap.
+
+    v0.63.91: shortfall/excess are now tracked as one unified list of
+    daily records (`reserve_daily_records`) instead of four separate,
+    independently-appended lists - set that directly here."""
     from custom_components.energy_management_system import diagnostics as diag_mod
     import asyncio as _asyncio
 
     coordinator = make_coordinator({})
-    coordinator.reserve_shortfall_history = [False, True]
-    coordinator.reserve_shortfall_dates = ["2026-08-02", "2026-08-03"]
-    coordinator.reserve_excess_history = [True]
-    coordinator.reserve_excess_dates = ["2026-08-03"]
+    coordinator.reserve_daily_records = [
+        {"date": "2026-08-02", "shortfall": False, "excess": False},
+        {"date": "2026-08-03", "shortfall": True, "excess": True},
+    ]
 
     hass.data = {DOMAIN: {"entry1": coordinator}}
     result = _asyncio.run(
@@ -117,7 +121,7 @@ def test_diagnostics_includes_dated_shortfall_and_excess_history(
     c = result["coordinator"]
 
     assert c["reserve_shortfall_dates"] == ["2026-08-02", "2026-08-03"]
-    assert c["reserve_excess_dates"] == ["2026-08-03"]
+    assert c["reserve_excess_dates"] == ["2026-08-02", "2026-08-03"]
     json.dumps(result)
 
 

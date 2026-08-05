@@ -175,7 +175,7 @@ def test_nilm_maturity_across_devices(make_coordinator, hass):
     assert coordinator.advisory_readiness["nilm"]["status"] == "klaar"
 
 
-def test_all_eight_modules_always_present(make_coordinator, hass):
+def test_all_ten_modules_always_present(make_coordinator, hass):
     coordinator = make_coordinator({})
     coordinator._update_advisory_readiness(DAY0)
 
@@ -188,6 +188,8 @@ def test_all_eight_modules_always_present(make_coordinator, hass):
         "kalman",
         "digital_twin",
         "nilm",
+        "extra_dip_marge",
+        "temperatuur_regressie",
     }
     assert set(coordinator.advisory_readiness.keys()) == expected
 
@@ -197,3 +199,51 @@ def test_never_calls_any_hass_service(make_coordinator, hass):
     coordinator._update_advisory_readiness(DAY0)
 
     assert hass.services.calls == []
+
+
+def test_extra_dip_marge_klaar_with_enough_samples(make_coordinator, hass):
+    coordinator = make_coordinator({})
+    coordinator.extra_dip_margin_history = [0.05, 0.06, 0.07]
+
+    coordinator._update_advisory_readiness(DAY0)
+
+    assert coordinator.advisory_readiness["extra_dip_marge"]["status"] == "klaar"
+
+
+def test_extra_dip_marge_onvoldoende_data_without_samples(make_coordinator, hass):
+    coordinator = make_coordinator({})
+    coordinator.extra_dip_margin_history = []
+
+    coordinator._update_advisory_readiness(DAY0)
+
+    assert (
+        coordinator.advisory_readiness["extra_dip_marge"]["status"]
+        == "onvoldoende_data"
+    )
+
+
+def test_temperatuur_regressie_klaar_with_enough_samples(make_coordinator, hass):
+    from custom_components.energy_management_system.const import (
+        TEMP_CONSUMPTION_MIN_SAMPLES,
+    )
+
+    coordinator = make_coordinator({})
+    coordinator.temp_consumption_history = [
+        {"temp_c": float(i), "kwh": 3.0} for i in range(TEMP_CONSUMPTION_MIN_SAMPLES)
+    ]
+
+    coordinator._update_advisory_readiness(DAY0)
+
+    assert coordinator.advisory_readiness["temperatuur_regressie"]["status"] == "klaar"
+
+
+def test_temperatuur_regressie_onvoldoende_data_without_samples(make_coordinator, hass):
+    coordinator = make_coordinator({})
+    coordinator.temp_consumption_history = []
+
+    coordinator._update_advisory_readiness(DAY0)
+
+    assert (
+        coordinator.advisory_readiness["temperatuur_regressie"]["status"]
+        == "onvoldoende_data"
+    )

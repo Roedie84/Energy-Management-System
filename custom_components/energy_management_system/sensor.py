@@ -1525,6 +1525,7 @@ class NilmConfirmedDevicesSensor(SensorEntity, RestoreEntity):
                 :NILM_SENSOR_ATTRIBUTE_PREVIEW_LIMIT
             ],
             "totaal_aantal": len(all_devices),
+            "waarschijnlijke_duplicaten": self._coordinator.get_nilm_duplicate_pairs(),
             "note": (
                 "De volledige, opgeslagen apparatenlijst leeft in een "
                 "aparte Store (niet in dit attribuut) en gaat nooit "
@@ -1568,11 +1569,12 @@ class NilmConfirmedDevicesSensor(SensorEntity, RestoreEntity):
 
 
 class AdvisoryReadinessSensor(SensorEntity):
-    """Readiness assessment for the eight advisory-only modules
+    """Readiness assessment for the ten advisory-only modules
     (Kirchhoff, sluipverbruik, Weather Ensemble, MPC, Monte Carlo,
-    Kalman, Digital Twin, NILM) - v0.63.40, reported: "kunnen we een
-    advies afgeven wanneer betrouwbaar genoeg om er werkelijk iets mee
-    te doen?"
+    Kalman, Digital Twin, NILM, extra-dip-marge, temperatuur-regressie)
+    - v0.63.40, uitgebreid met de laatste twee in v0.63.91, reported:
+    "kunnen we een advies afgeven wanneer betrouwbaar genoeg om er
+    werkelijk iets mee te doen?"
 
     Deliberate honesty distinction: modules with a genuine data-
     maturity signal get a real readiness status
@@ -1586,7 +1588,7 @@ class AdvisoryReadinessSensor(SensorEntity):
     """
 
     _attr_has_entity_name = True
-    _attr_name = "Advies-gereedheid (8 modules)"
+    _attr_name = "Advies-gereedheid (10 modules)"
     _attr_icon = "mdi:clipboard-check-outline"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
@@ -1969,6 +1971,39 @@ class ModelTrendInsightSensor(SensorEntity, RestoreEntity):
                 pass
 
 
+def _merge_reserve_daily_records(
+    existing_records: list[dict],
+    dates: list,
+    shortfall_values: list | None = None,
+    excess_values: list | None = None,
+) -> list[dict]:
+    """Merge restored shortfall/excess data into a single, atomic list
+    of daily records (v0.63.91) - needed because two separate sensors
+    (ReserveShortfallSensor, ReserveExcessSensor) each restore their own
+    half of the data, in an order HA doesn't guarantee. Whichever
+    sensor's `async_added_to_hass` runs first creates each day's record
+    (defaulting the field it doesn't have to False); the second
+    restores by matching date and fills in its own field, rather than
+    overwriting what the first already restored.
+    """
+    by_date = {r["date"]: dict(r) for r in existing_records}
+    for i, raw_date in enumerate(dates):
+        date_str = str(raw_date)
+        record = by_date.get(
+            date_str, {"date": date_str, "shortfall": False, "excess": False}
+        )
+        if shortfall_values is not None and i < len(shortfall_values):
+            record["shortfall"] = bool(shortfall_values[i])
+        if excess_values is not None and i < len(excess_values):
+            record["excess"] = bool(excess_values[i])
+        by_date[date_str] = record
+
+    ordered_dates = [str(d) for d in dates] + [
+        r["date"] for r in existing_records if r["date"] not in [str(d) for d in dates]
+    ]
+    return [by_date[d] for d in ordered_dates if d in by_date]
+
+
 class ReserveShortfallSensor(SensorEntity, RestoreEntity):
     """Tracks days where unexpected grid import happened during a period
     the integration believed should be self-sufficient (smart_discharging
@@ -2012,13 +2047,14 @@ class ReserveShortfallSensor(SensorEntity, RestoreEntity):
         if last_state is None:
             return
         raw_history = last_state.attributes.get("history")
-        if isinstance(raw_history, list):
-            self._coordinator.reserve_shortfall_history = [
-                bool(v) for v in raw_history
-            ]
         raw_dates = last_state.attributes.get("history_dates")
-        if isinstance(raw_dates, list):
-            self._coordinator.reserve_shortfall_dates = [str(v) for v in raw_dates]
+        if not isinstance(raw_history, list) or not isinstance(raw_dates, list):
+            return
+        self._coordinator.reserve_daily_records = _merge_reserve_daily_records(
+            self._coordinator.reserve_daily_records,
+            raw_dates,
+            shortfall_values=raw_history,
+        )
 
 
 class ReserveExcessSensor(SensorEntity, RestoreEntity):
@@ -2063,13 +2099,14 @@ class ReserveExcessSensor(SensorEntity, RestoreEntity):
         if last_state is None:
             return
         raw_history = last_state.attributes.get("history")
-        if isinstance(raw_history, list):
-            self._coordinator.reserve_excess_history = [
-                bool(v) for v in raw_history
-            ]
         raw_dates = last_state.attributes.get("history_dates")
-        if isinstance(raw_dates, list):
-            self._coordinator.reserve_excess_dates = [str(v) for v in raw_dates]
+        if not isinstance(raw_history, list) or not isinstance(raw_dates, list):
+            return
+        self._coordinator.reserve_daily_records = _merge_reserve_daily_records(
+            self._coordinator.reserve_daily_records,
+            raw_dates,
+            excess_values=raw_history,
+        )
 
 
 class LearnedBatteryEfficiencySensor(SensorEntity, RestoreEntity):

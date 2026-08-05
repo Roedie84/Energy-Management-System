@@ -96,6 +96,8 @@ from .const import (
     NILM_CUSUM_SLACK_FRACTION,
     NILM_CUSUM_ALARM_THRESHOLD,
     NILM_PATTERN_EXCLUDED_KEYWORDS,
+    NILM_DUPLICATE_MIN_SHARED_DAYS,
+    NILM_DUPLICATE_TOLERANCE_FRACTION,
     NILM_TREND_RISING_THRESHOLD_PERCENT,
     NILM_TREND_FALLING_THRESHOLD_PERCENT,
     APPLIANCE_CYCLE_COMPLETE_SUSTAINED_MINUTES,
@@ -660,12 +662,23 @@ class EnergyManagementSystemCoordinator:
         # self-sufficient (smart_discharging / expensive quarter), the
         # reserve estimate for that day was too optimistic. Track this per
         # day, and learn a margin bonus if it keeps happening.
-        self.reserve_shortfall_history: list[bool] = []
-        self.reserve_shortfall_dates: list[str] = []
+        #
+        # v0.63.91, gevonden tijdens een diagnostiek-review: shortfall/
+        # excess elk hadden een aparte "_history" (bool per dag) EN een
+        # aparte "_dates" lijst (datum per dag), apart bijgehouden en
+        # apart afgekapt - een structuur die op zich al correct in sync
+        # bleef (beide worden altijd samen toegevoegd), maar wel
+        # gevoelig is voor toekomstige, per-ongeluk-uit-sync-lopende
+        # uitbreidingen. Nu één enkele lijst van dag-records
+        # (datum + shortfall + excess samen, altijd atomisch
+        # toegevoegd) - `reserve_shortfall_history`/`reserve_excess_
+        # history`/`reserve_shortfall_dates`/`reserve_excess_dates`
+        # blijven bestaan als afgeleide, berekende properties (zie
+        # verderop) voor volledige achterwaartse compatibiliteit met
+        # bestaande sensoren/diagnostiek-attributen.
+        self.reserve_daily_records: list[dict] = []
         self._shortfall_detected_today: bool = False
         self._shortfall_check_date: date | None = None
-        self.reserve_excess_history: list[bool] = []
-        self.reserve_excess_dates: list[str] = []
         self._excess_detected_today: bool = False
         self._last_value_calc_time: datetime | None = None
 
@@ -698,6 +711,30 @@ class EnergyManagementSystemCoordinator:
     @property
     def tracked_entities(self) -> list[str]:
         return [self.config[CONF_PRICE_SENSOR]]
+
+    @property
+    def reserve_shortfall_history(self) -> list[bool]:
+        """Afgeleide, berekende view (v0.63.91) over `reserve_daily_
+        records` - behouden voor achterwaartse compatibiliteit met
+        bestaande sensoren/diagnostiek-attributen."""
+        return [r["shortfall"] for r in self.reserve_daily_records]
+
+    @property
+    def reserve_shortfall_dates(self) -> list[str]:
+        """Eén datum per dag in `reserve_daily_records` (niet alleen
+        shortfall-dagen) - parallel aan `reserve_shortfall_history`,
+        exact dezelfde semantiek als vóór v0.63.91."""
+        return [r["date"] for r in self.reserve_daily_records]
+
+    @property
+    def reserve_excess_history(self) -> list[bool]:
+        return [r["excess"] for r in self.reserve_daily_records]
+
+    @property
+    def reserve_excess_dates(self) -> list[str]:
+        """Eén datum per dag - parallel aan `reserve_excess_history`,
+        zelfde semantiek als `reserve_shortfall_dates` hierboven."""
+        return [r["date"] for r in self.reserve_daily_records]
 
     async def async_setup(self) -> None:
         """Start listening for updates and run once immediately - unless
@@ -3178,24 +3215,14 @@ class EnergyManagementSystemCoordinator:
         """
         if self._shortfall_check_date != now.date():
             if self._shortfall_check_date is not None:
-                self.reserve_shortfall_history.append(self._shortfall_detected_today)
-                self.reserve_shortfall_history = self.reserve_shortfall_history[
-                    -LEARNING_HISTORY_DAYS:
-                ]
-                self.reserve_shortfall_dates.append(
-                    self._shortfall_check_date.isoformat()
+                self.reserve_daily_records.append(
+                    {
+                        "date": self._shortfall_check_date.isoformat(),
+                        "shortfall": self._shortfall_detected_today,
+                        "excess": self._excess_detected_today,
+                    }
                 )
-                self.reserve_shortfall_dates = self.reserve_shortfall_dates[
-                    -LEARNING_HISTORY_DAYS:
-                ]
-                self.reserve_excess_history.append(self._excess_detected_today)
-                self.reserve_excess_history = self.reserve_excess_history[
-                    -LEARNING_HISTORY_DAYS:
-                ]
-                self.reserve_excess_dates.append(
-                    self._shortfall_check_date.isoformat()
-                )
-                self.reserve_excess_dates = self.reserve_excess_dates[
+                self.reserve_daily_records = self.reserve_daily_records[
                     -LEARNING_HISTORY_DAYS:
                 ]
                 # Also feed the monthly summary - a day just closed out.
@@ -5751,6 +5778,136 @@ class EnergyManagementSystemCoordinator:
             )
         return rows
 
+    def get_nilm_duplicate_pairs(self) -> list[dict]:
+        """Waarschijnlijke duplicaten onder bevestigde NILM-apparaten
+        (v0.63.91, gevonden tijdens een diagnostiek-review: 5
+        "Eetkamer lamp"-sensoren deelden een identieke vermogens-
+        geschiedenis - vermoedelijk hetzelfde fysieke circuit onder
+        meerdere HA-entiteiten).
+
+        Vergelijkt elk paar bevestigde apparaten op basis van hun
+        `daily_avg_history` over de gedeelde dagen: als alle gedeelde
+        dagwaarden binnen
+        `NILM_DUPLICATE_TOLERANCE_FRACTION` van elkaar liggen (en er
+        genoeg gedeelde dagen zijn, `NILM_DUPLICATE_MIN_SHARED_DAYS`),
+        is dat een sterke aanwijzing dat beide entiteiten hetzelfde
+        onderliggende signaal meten. Puur informatief - stuurt niets
+        aan, beslist niets automatisch (de gebruiker kiest zelf of/welk
+        apparaat af te wijzen via `reject_nilm_device`).
+        """
+        entities = sorted(self.nilm_confirmed_devices.keys())
+        pairs = []
+        for i, entity_a in enumerate(entities):
+            history_a = self.nilm_confirmed_devices[entity_a].get(
+                "daily_avg_history"
+            ) or []
+            if len(history_a) < NILM_DUPLICATE_MIN_SHARED_DAYS:
+                continue
+            for entity_b in entities[i + 1 :]:
+                history_b = self.nilm_confirmed_devices[entity_b].get(
+                    "daily_avg_history"
+                ) or []
+                shared_len = min(len(history_a), len(history_b))
+                if shared_len < NILM_DUPLICATE_MIN_SHARED_DAYS:
+                    continue
+
+                shared_a = history_a[-shared_len:]
+                shared_b = history_b[-shared_len:]
+                all_close = True
+                for value_a, value_b in zip(shared_a, shared_b):
+                    reference = max(abs(value_a), abs(value_b), 0.01)
+                    if (
+                        abs(value_a - value_b) / reference
+                        > NILM_DUPLICATE_TOLERANCE_FRACTION
+                    ):
+                        all_close = False
+                        break
+
+                if all_close:
+                    pairs.append(
+                        {
+                            "apparaat_1": (
+                                self.nilm_confirmed_devices[entity_a].get(
+                                    "friendly_name"
+                                )
+                                or entity_a
+                            ),
+                            "apparaat_2": (
+                                self.nilm_confirmed_devices[entity_b].get(
+                                    "friendly_name"
+                                )
+                                or entity_b
+                            ),
+                            "entity_id_1": entity_a,
+                            "entity_id_2": entity_b,
+                            "gedeelde_dagen": shared_len,
+                        }
+                    )
+        return pairs
+
+    def get_diagnostic_summary(self) -> dict:
+        """Snelle gezondheidscheck-samenvatting (v0.63.91, gevraagd:
+        "zijn er nog zaken om de integratie te verbeteren, bijvoorbeeld
+        de diagnostiek gedetailleerder maken" - concreet ontstaan uit
+        een eerdere sessie waarin 150+ diagnostiek-velden handmatig
+        moesten worden doorlopen om te zien wat aandacht verdient).
+
+        Verzamelt een korte lijst "aandachtspunten" op basis van
+        bestaande, al berekende signalen (geen nieuwe metingen) - puur
+        informatief, ter oriëntatie bij een diagnostiek-export, stuurt
+        niets aan.
+        """
+        aandachtspunten = []
+
+        if (
+            self.measurement_quality is not None
+            and self.measurement_quality != "goed"
+        ):
+            aandachtspunten.append(
+                f"Sensor-gezondheid: {self.measurement_quality} "
+                f"({self.sensor_health_score}%, "
+                f"{len(self.energy_balance_error_history)} metingen)."
+            )
+
+        possibly_defective = [
+            device.get("friendly_name") or entity_id
+            for entity_id, device in self.nilm_confirmed_devices.items()
+            if device.get("anomaly_detected")
+        ]
+        if possibly_defective:
+            aandachtspunten.append(
+                f"{len(possibly_defective)} apparaat/apparaten mogelijk "
+                f"defect: {', '.join(possibly_defective)}."
+            )
+
+        duplicate_pairs = self.get_nilm_duplicate_pairs()
+        if duplicate_pairs:
+            aandachtspunten.append(
+                f"{len(duplicate_pairs)} waarschijnlijke NILM-duplicaat"
+                f"paar/paren gevonden (zie 'waarschijnlijke_duplicaten')."
+            )
+
+        recent_shortfalls = sum(1 for r in self.reserve_daily_records if r["shortfall"])
+        if recent_shortfalls > 0:
+            aandachtspunten.append(
+                f"{recent_shortfalls} onverwachte tekort-dag(en) in de "
+                f"laatste {len(self.reserve_daily_records)} dagen."
+            )
+
+        if self.sluipverbruik_detected:
+            aandachtspunten.append(
+                "Sluipverbruik-detectie staat aan: structurele stijging "
+                "in het dagelijkse basisverbruik."
+            )
+
+        if self.last_error:
+            aandachtspunten.append(f"Laatste fout: {self.last_error}")
+
+        return {
+            "status": "aandacht_gewenst" if aandachtspunten else "nominaal",
+            "aandachtspunten": aandachtspunten,
+        }
+
     def _describe_nilm_trend(self, device: dict) -> str:
         """A lighter-weight, more granular trend label than
         `anomaly_detected` (which only fires on a *sustained* CUSUM
@@ -6385,8 +6542,9 @@ class EnergyManagementSystemCoordinator:
         )
 
     def _update_advisory_readiness(self, now: datetime) -> None:
-        """Readiness assessment for the eight advisory-only modules
-        (v0.63.40) - reported: "kunnen we een advies afgeven wanneer
+        """Readiness assessment for the ten advisory-only modules
+        (v0.63.40, uitgebreid met extra-dip-marge/temperatuur-regressie
+        in v0.63.91) - reported: "kunnen we een advies afgeven wanneer
         betrouwbaar genoeg om er werkelijk iets mee te doen?"
 
         Important, deliberate honesty distinction kept throughout: for
@@ -6577,6 +6735,49 @@ class EnergyManagementSystemCoordinator:
                     "status": "bijna_klaar",
                     "reden": f"{mature_devices}/{total_devices} bevestigde apparaten volledig volgroeid.",
                 }
+
+        # 9. Extra-dip-laadmarge (v0.63.87) - genuine maturity signal:
+        # `_compute_trend_summary` zelf vereist minimaal 3 punten voor
+        # een zinvolle trendlijn.
+        margin_samples = len(self.extra_dip_margin_history)
+        if margin_samples >= 3:
+            readiness["extra_dip_marge"] = {
+                "status": "klaar",
+                "reden": f"{margin_samples} dagsamples - trend beschikbaar.",
+            }
+        elif margin_samples > 0:
+            readiness["extra_dip_marge"] = {
+                "status": "onvoldoende_data",
+                "reden": f"{margin_samples}/3 dagsamples - nog geen trend.",
+            }
+        else:
+            readiness["extra_dip_marge"] = {
+                "status": "onvoldoende_data",
+                "reden": (
+                    "Nog geen enkele dag met een berekende marge (vereist "
+                    "een weinig-zon-dag buiten het hoofdblok)."
+                ),
+            }
+
+        # 10. Temperatuur-verbruik-regressie (v0.63.88) - genuine
+        # maturity signal: TEMP_CONSUMPTION_MIN_SAMPLES nodig voordat
+        # er überhaupt een voorspelling wordt gedaan.
+        temp_samples = len(self.temp_consumption_history)
+        if temp_samples >= TEMP_CONSUMPTION_MIN_SAMPLES:
+            readiness["temperatuur_regressie"] = {
+                "status": "klaar",
+                "reden": f"{temp_samples} (temperatuur, verbruik)-paren geleerd.",
+            }
+        elif temp_samples > 0:
+            readiness["temperatuur_regressie"] = {
+                "status": "onvoldoende_data",
+                "reden": f"{temp_samples}/{TEMP_CONSUMPTION_MIN_SAMPLES} nachten verzameld.",
+            }
+        else:
+            readiness["temperatuur_regressie"] = {
+                "status": "onvoldoende_data",
+                "reden": "Nog geen enkele nacht met een gemeten (temperatuur, verbruik)-paar.",
+            }
 
         self.advisory_readiness = readiness
 

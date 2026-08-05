@@ -257,6 +257,7 @@ async def async_get_config_entry_diagnostics(
 
     diagnostics: dict[str, Any] = {
         "config": config,
+        "diagnostic_summary": coordinator.get_diagnostic_summary(),
         "learning_health": _build_learning_health(
             coordinator, solar_tracker, datetime.now()
         ),
@@ -492,6 +493,7 @@ async def async_get_config_entry_diagnostics(
             "nilm_confirmed_devices": coordinator.nilm_confirmed_devices,
             "nilm_rejected_entities": coordinator.nilm_rejected_entities,
             "nilm_devices_table": coordinator.get_nilm_devices_table(),
+            "nilm_duplicate_pairs": coordinator.get_nilm_duplicate_pairs(),
             "advisory_readiness": coordinator.advisory_readiness,
             "living_room_current_temp_c": coordinator.living_room_current_temp_c,
             "living_room_current_humidity_percent": (

@@ -5929,3 +5929,82 @@ in `test_nilm_devices_table.py` - bevestigt dat "mogelijk defect" en
 "aanhoudend stijgend" nog steeds getoond worden, maar zonder een
 misleidend percentage wanneer de laatste-dag-afwijking niet positief
 is.
+
+## v0.63.91 — vier verbeteringen na de diagnostiek-review
+
+Gevraagd: "zijn er nog zaken om de integratie te verbeteren, dus
+bijvoorbeeld de diagnostiek gedetailleerder maken" — bevestigd: "allemaal,
+integratie moet alleen maar beter kunnen worden".
+
+### 1. Snelle gezondheidscheck-samenvatting
+
+Nieuwe `get_diagnostic_summary()`, toegevoegd bovenaan elke
+diagnostiek-export (`diagnostic_summary`). Verzamelt een korte lijst
+"aandachtspunten" uit bestaande signalen: sensor-gezondheid (indien
+niet "goed"), mogelijk-defecte NILM-apparaten (`anomaly_detected`),
+NILM-duplicaten, recente tekort-dagen, sluipverbruik-detectie, laatste
+fout. `{"status": "nominaal"}` als niets opvalt. Voorkomt een
+handmatige doorloop van 150+ velden bij een toekomstige review.
+
+### 2. NILM-duplicaatdetectie
+
+**Aanleiding**: tijdens de v0.63.90-diagnostiek-review bleken 5
+"Eetkamer lamp"-sensoren een identieke vermogensgeschiedenis te delen -
+vermoedelijk hetzelfde fysieke circuit onder meerdere HA-entiteiten.
+
+**Fix**: nieuwe `get_nilm_duplicate_pairs()` - vergelijkt elk paar
+bevestigde apparaten op hun `daily_avg_history` over de gedeelde dagen.
+Binnen een tolerantie van 2% (`NILM_DUPLICATE_TOLERANCE_FRACTION`) en
+met minimaal 3 gedeelde dagen (`NILM_DUPLICATE_MIN_SHARED_DAYS`) geldt
+een paar als waarschijnlijk duplicaat. Puur informatief. Blootgesteld
+via de bestaande NILM-sensor (`waarschijnlijke_duplicaten`) en
+diagnostiek.
+
+**Getest** (7 tests, `test_nilm_duplicate_detection.py`): identieke
+geschiedenis gemarkeerd; kleine meetruis binnen tolerantie ook
+gemarkeerd; wezenlijk verschillende geschiedenis niet; te weinig
+gedeelde dagen niet; 3 onderling identieke apparaten leveren 3 paren
+op; vergelijking gebruikt alleen de meest recente gedeelde dagen bij
+ongelijke geschiedenislengte.
+
+### 3. Advies-gereedheid uitgebreid naar 10 modules
+
+De bestaande "Advies-gereedheid"-sensor beoordeelde 8 modules; de
+nieuwe extra-dip-marge (v0.63.87) en temperatuur-regressie (v0.63.88)
+hadden nog geen status. Zelfde patroon als de bestaande modules met een
+genuine maturiteitssignaal. Sensor hernoemd naar "Advies-gereedheid (10
+modules)" (unique_id ongewijzigd, dus geen entity_id-migratie nodig).
+
+**Getest** (4 nieuwe tests + 1 bijgewerkt in `test_advisory_readiness.py`).
+
+### 4. Shortfall/excess-tracking samengevoegd tot één atomische structuur
+
+**Aanleiding**: tijdens dezelfde diagnostiek-review leken
+`reserve_shortfall_history` (5 items) en `reserve_shortfall_dates` (1
+datum) uit sync - bleek geen actieve bug (de code voegt ze altijd
+samen toe), maar wel een structuur die gevoelig is voor toekomstige,
+per-ongeluk-uit-sync-lopende uitbreidingen.
+
+**Fix**: de vier losse lijsten (`reserve_shortfall_history`/`_dates`,
+`reserve_excess_history`/`_dates`) vervangen door één
+`reserve_daily_records`-lijst (dicts met datum + shortfall + excess
+samen, altijd atomisch toegevoegd in `_update_shortfall_detection`).
+De vier oude namen bestaan nog als afgeleide, read-only properties
+(behouden exact dezelfde semantiek: `_dates` bevat één datum per dag,
+niet alleen True-dagen) voor volledige achterwaartse compatibiliteit.
+
+**Restore-subtiliteit, opgelost**: `ReserveShortfallSensor` en
+`ReserveExcessSensor` herstellen elk hun eigen helft van de data, in
+een volgorde die HA niet garandeert. Nieuwe
+`_merge_reserve_daily_records()` in `sensor.py` merget beide
+restore-acties correct samen op datum, ongeacht restorevolgorde, zonder
+dat de een de al herstelde data van de ander overschrijft.
+
+**Getest** (6 nieuwe tests, `test_reserve_daily_records_refactor.py`):
+afgeleide properties kloppen; atomische toevoeging; leervenster-
+afkapping; merge-functie default't het andere veld correct bij eerste
+restore; merge overschrijft niet bij tweede restore; merge werkt
+identiek ongeacht restorevolgorde. Bestaande diagnostiek-test
+bijgewerkt naar de nieuwe structuur.
+
+**Volledige testsuite**: 487 tests, allemaal groen.

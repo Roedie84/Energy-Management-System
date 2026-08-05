@@ -515,6 +515,71 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Vier verbeteringen na de diagnostiek-review (v0.63.91)
+
+Op de vraag "zijn er nog zaken om de integratie te verbeteren, dus
+bijvoorbeeld de diagnostiek gedetailleerder maken" — vier concrete
+verbeteringen, alle vier gebouwd ("integratie moet alleen maar beter
+kunnen worden").
+
+### 1. Snelle gezondheidscheck-samenvatting
+
+Nieuwe `get_diagnostic_summary()`, bovenaan elke diagnostiek-export
+(`diagnostic_summary`). Verzamelt een korte lijst "aandachtspunten" uit
+bestaande, al berekende signalen (sensor-gezondheid, mogelijk-defecte
+NILM-apparaten, NILM-duplicaten, recente tekort-dagen, sluipverbruik,
+laatste fout) — `{"status": "nominaal"}` als niets opvalt, anders een
+concrete lijst. Voorkomt dat een toekomstige review weer 150+ velden
+handmatig moet doorlopen.
+
+### 2. NILM-duplicaatdetectie
+
+Naar aanleiding van de 5 "Eetkamer lamp"-sensoren die een identieke
+vermogensgeschiedenis bleken te delen. Nieuwe
+`get_nilm_duplicate_pairs()`: vergelijkt elk paar bevestigde apparaten
+op hun `daily_avg_history` over de gedeelde dagen — binnen een kleine
+tolerantie (`NILM_DUPLICATE_TOLERANCE_FRACTION`, 2%) en met genoeg
+gedeelde dagen (`NILM_DUPLICATE_MIN_SHARED_DAYS`, 3) geldt een paar als
+waarschijnlijk duplicaat. Puur informatief — de gebruiker beslist zelf
+of/welk apparaat af te wijzen. Blootgesteld via de bestaande NILM-
+sensor (`waarschijnlijke_duplicaten`) en diagnostiek.
+
+### 3. Advies-gereedheid uitgebreid naar 10 modules
+
+De bestaande "Advies-gereedheid"-sensor beoordeelde tot nu toe 8
+modules; de nieuwe extra-dip-marge (v0.63.87) en temperatuur-regressie
+(v0.63.88) hadden nog geen gereedheidsstatus. Zelfde patroon als de
+overige modules met een genuine data-maturiteitssignaal: `klaar` zodra
+er genoeg samples zijn (3 voor de marge-trend, `TEMP_CONSUMPTION_MIN_
+SAMPLES` voor de temperatuur-regressie), anders `onvoldoende_data`.
+Sensor hernoemd naar "Advies-gereedheid (10 modules)".
+
+### 4. Shortfall/excess-tracking samengevoegd tot één atomische structuur
+
+De vier losse lijsten (`reserve_shortfall_history`/`_dates`,
+`reserve_excess_history`/`_dates`) — die tijdens de diagnostiek-review
+een schijnbare desynchronisatie leken te tonen (bleek uiteindelijk geen
+actieve bug, wel een structuur die gevoelig is voor toekomstige,
+per-ongeluk-uit-sync-lopende uitbreidingen) — zijn vervangen door één
+`reserve_daily_records`-lijst (dicts met datum + shortfall + excess
+samen, altijd atomisch toegevoegd). De vier oude namen bestaan nog als
+afgeleide, read-only properties voor volledige achterwaartse
+compatibiliteit met bestaande sensoren/diagnostiek-attributen.
+
+**Restore-subtiliteit**: twee aparte sensoren (`ReserveShortfallSensor`,
+`ReserveExcessSensor`) herstellen elk hun eigen helft van de data, in
+een volgorde die HA niet garandeert. Nieuwe
+`_merge_reserve_daily_records()`-hulpfunctie in `sensor.py` merget
+beide herstelacties correct samen (op datum), ongeacht welke sensor
+als eerste herstelt — zonder dat de een de al herstelde data van de
+ander overschrijft.
+
+**Getest**: 6 nieuwe tests voor de refactor (afgeleide properties,
+atomische toevoeging, leervenster-afkapping, en drie voor de merge-
+functie inclusief beide restore-volgordes), 9 voor de gezondheidscheck-
+samenvatting, 7 voor de NILM-duplicaatdetectie, 4 voor de uitgebreide
+advies-gereedheid.
+
 ## NILM-trendlabel: misleidend percentage naast "stijgend" (v0.63.90)
 
 Gevonden tijdens een grondige analyse van een aangeleverd diagnostiek-
