@@ -326,6 +326,31 @@ meting. Valt terug op de live meting als er geen
 `solar_forecast_sensor_entity` is geconfigureerd (ongewijzigd gedrag
 in dat geval).
 
+**Fundamenteel gat gevonden en gefixt: manual-modus combineert géén
+zon (v0.63.72):** gerapporteerd — de uitlegtekst toonde "actief
+bijgekocht op 293W" naast "zonoverschot (1707W) wordt eerst benut",
+samen precies 2000W (het doelvermogen). Bevestigd met de gebruiker:
+manual-modus op deze Zendure is **niet** zon-bewust — een commando van
+293W laadt de accu ook daadwerkelijk maar met 293W **totaal**; het
+zonoverschot van 1707W wordt dan gewoon apart teruggeleverd, niet
+vastgelegd. De oude aanpak (alleen het net-gat commanderen, in de
+veronderstelling dat de accu daar vanzelf het zonoverschot bovenop zou
+leggen) was dus feitelijk **slechter dan niets doen** — smart-modus
+zou dat zonoverschot namelijk wél hebben vastgelegd.
+
+Ook bevestigd: commandeer je in plaats daarvan het **volle
+doelvermogen** (2000W), dan combineert de Zendure zon en net wél
+automatisch tot dat totaal (1707W zon + 293W net). `manual`-modus
+commandeert daarom voortaan altijd het volle doelvermogen zodra er
+enige winstgevende netaankoop gerechtvaardigd is — nooit alleen het
+gat. Dit pad wordt hierdoor uitsluitend bereikt wanneer het verwachte
+zonoverschot ontoereikend is om het doel te dekken (vooral najaar/
+winter, of vroeg/laat op de dag) — dekt de zon het doel al volledig,
+dan gaat het via de `arbitrage_solar_capture`-route naar `smart`
+zonder enige netaankoop. De geschatte, daadwerkelijke net-portie
+(`last_arbitrage_grid_power_w`) blijft beschikbaar als informatief
+cijfer, los van het gecommandeerde totaal.
+
 Zet **nooit** de winter-guard-vlag (`_grid_charged_today`) — dat
 mechanisme bestaat om te voorkomen dat noodzakelijk gekochte energie
 diezelfde dag met verlies wordt terugverkocht; arbitrage-laden koopt

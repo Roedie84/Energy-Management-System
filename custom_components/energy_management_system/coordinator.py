@@ -2864,12 +2864,35 @@ class EnergyManagementSystemCoordinator:
         plain P1-following default).
 
         Deliberately solar-first (reported: 'tijdens goedkope uren
-        vooral zonne-energie blijft opslaan'): if the fallback mode
-        would be OPTION_SMART (`should_postpone_charging=False`), only
-        tops up the *gap* between the desired charge rate and whatever
-        PV surplus is expected - solar alone already gets captured by
-        that mode's own P1-following, so only the shortfall needs an
-        explicit manual command.
+        vooral zonne-energie blijft opslaan'): only actively buys from
+        the grid when the expected PV surplus falls short of the
+        desired charge rate - solar alone already gets captured by
+        smart mode's own P1-following whenever it's enough on its own
+        (see `_arbitrage_wants_smart_over_postpone` below).
+
+        v0.63.72, reported/confirmed with the person ("regelt de
+        zendure zelf dat het PV overschot wordt opgeslagen in de smart
+        mode" / testing manual at a partial power target): manual mode
+        on this hardware is NOT solar-aware - commanding a manual
+        charge power is the *exact total* the battery charges at,
+        confirmed NOT combined with any live solar surplus on top.
+        Previously this commanded just the *gap* (target - solar
+        surplus, e.g. 293W when solar covered 1707W of a 2000W target)
+        under the wrong assumption that the hardware would add solar on
+        top to reach the full target - in reality that 1707W of solar
+        was being wasted (exported instead of stored) while the battery
+        only actually charged at 293W total, worse than doing nothing
+        (plain smart mode would have captured that 1707W on its own).
+        Confirmed the fix: commanding the *full* target power instead
+        does correctly result in the hardware sourcing solar first
+        (1707W) and grid for the remainder (293W) to reach that
+        commanded total - so this now always commands the full target
+        whenever any grid purchase is justified at all, never just the
+        gap. This branch is therefore only ever reached when expected
+        solar falls short of the target (mostly autumn/winter, or
+        early/late in the day even in summer) - once solar alone
+        covers the full target, `_arbitrage_wants_smart_over_postpone`
+        already redirects to smart mode instead, further down.
 
         v0.63.71, requested ("hij kijkt naar het live PV opbrengst en
         niet naar de verwachtte zon"): the solar-surplus side of this
@@ -2968,7 +2991,13 @@ class EnergyManagementSystemCoordinator:
             # no active grid purchase needed either way.
             return None
 
-        return grid_power_w
+        # v0.63.72: command the FULL target, not just the grid gap -
+        # confirmed this hardware combines solar + grid automatically to
+        # reach whatever total is commanded in manual mode, so this is
+        # what actually achieves "solar first, grid tops up the rest".
+        # last_arbitrage_grid_power_w above remains the informational
+        # estimate of how much of this will actually come from the grid.
+        return target_power_w
 
     def _is_emergency_low_battery(self) -> bool:
         """Is the battery critically low right now, AND is little solar
@@ -6599,13 +6628,19 @@ class EnergyManagementSystemCoordinator:
                 if self.last_arbitrage_solar_surplus_w is not None
                 else "0W"
             )
+            grid_txt = (
+                f"{self.last_arbitrage_grid_power_w:.0f}W"
+                if self.last_arbitrage_grid_power_w is not None
+                else "onbekend"
+            )
             parts.append(
                 f"Arbitrage-laden: er komt later vandaag een duurder "
-                f"kwartier, dus wordt er nu actief bijgekocht op "
-                f"{power_txt} - geschatte nettowinst na laad/ontlaad-"
-                f"verlies: {margin_txt}. Verwacht zonoverschot ({solar_txt}) "
-                f"wordt eerst benut; alleen het gat wordt van het net "
-                f"gekocht."
+                f"kwartier, dus wordt de accu nu op het volle "
+                f"{power_txt} gecommandeerd - geschatte nettowinst na "
+                f"laad/ontlaad-verlies: {margin_txt}. De Zendure combineert "
+                f"zon en net automatisch tot dat totaal: verwacht "
+                f"zonoverschot ({solar_txt}) plus naar schatting {grid_txt} "
+                f"van het net."
             )
 
         elif reason == "arbitrage_solar_capture":

@@ -99,6 +99,30 @@ def test_arbitrage_charges_when_profitable_and_enabled(make_coordinator, hass):
     assert coordinator.last_arbitrage_margin_eur_per_kwh > 0.03
 
 
+def test_reported_scenario_small_grid_gap_still_commands_full_target(
+    make_coordinator, hass
+):
+    """v0.63.72, exact reported field scenario: 1707W solar surplus,
+    2000W target, leaving only a 293W grid gap. Confirmed with the
+    person that commanding just that 293W gap (the old behaviour)
+    resulted in the battery charging at ONLY 293W total - wasting the
+    1707W of solar instead of combining it, worse than doing nothing.
+    Must command the full 2000W target instead."""
+    coordinator = _make_ready_coordinator(
+        make_coordinator, hass, pv_power_sensor_entity="sensor.pv"
+    )
+    # 1707W solar surplus (household load 0W, P1 shows a 1707W export).
+    hass.states.set("sensor.p1", "-1707")
+    hass.states.set("sensor.pv", "1707")
+
+    with_now(coordinator, DAY0.replace(hour=13, minute=0))
+    asyncio.run(coordinator._async_update_locked())
+
+    assert coordinator.last_reason == "arbitrage_charging"
+    assert coordinator.last_charge_power_applied == -2000.0
+    assert coordinator.last_arbitrage_grid_power_w == 293.0
+
+
 def test_no_arbitrage_when_margin_too_small(make_coordinator, hass):
     """Same-ish prices all day (tiny spread) - the round-trip loss eats
     any theoretical margin, shouldn't trigger."""
@@ -207,7 +231,15 @@ def test_solar_surplus_fully_covers_target_and_smart_mode_would_capture_it(
     assert coordinator._arbitrage_wants_smart_over_postpone is False
 
 
-def test_solar_surplus_partially_covers_only_buys_the_gap(make_coordinator, hass):
+def test_solar_surplus_partially_covers_the_full_target_is_still_commanded(
+    make_coordinator, hass
+):
+    """v0.63.72, confirmed with the person: manual mode on this hardware
+    is NOT solar-aware - commanding just the grid gap (the old
+    behaviour) resulted in the battery charging at ONLY that gap total,
+    wasting the solar surplus instead of combining it. Confirmed the
+    fix: commanding the FULL target results in the hardware correctly
+    sourcing solar first and grid for the remainder."""
     coordinator = _make_ready_coordinator(
         make_coordinator, hass, pv_power_sensor_entity="sensor.pv"
     )
@@ -219,8 +251,11 @@ def test_solar_surplus_partially_covers_only_buys_the_gap(make_coordinator, hass
     asyncio.run(coordinator._async_update_locked())
 
     assert coordinator.last_reason == "arbitrage_charging"
-    # 2000W target - 800W solar surplus = 1200W from the grid
-    assert coordinator.last_charge_power_applied == -1200.0
+    # Commands the full 2000W target, not just the 1200W grid gap - the
+    # hardware combines the 800W solar + 1200W grid to reach it.
+    assert coordinator.last_charge_power_applied == -2000.0
+    # The grid-only estimate is still tracked, just no longer commanded.
+    assert coordinator.last_arbitrage_grid_power_w == 1200.0
 
 
 def test_arbitrage_does_not_set_grid_charged_today_flag(make_coordinator, hass):

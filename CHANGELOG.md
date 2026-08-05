@@ -5091,3 +5091,57 @@ regressietest (een gedempte live PV-meting mag de beslissing niet meer
 omslaan zolang de Solcast-voorspelling een comfortabel overschot
 toont); en de terugval-naar-live-meting blijft exact werken zoals
 voorheen wanneer er geen voorspellingssensor is geconfigureerd.
+
+## v0.63.72 — fundamenteel gat gevonden: manual-modus combineert geen zon
+
+**Gerapporteerd:** "Tevens is de som in vermogens welke hier aangegeven
+wordt 2000W [...] Dit klopt opzich alleen regelt de zendure zelf dat
+het PV overschot wordt opgeslagen in de smart mode" — de uitlegtekst
+toonde "actief bijgekocht op 293W" naast "zonoverschot (1707W) wordt
+eerst benut", samen precies het doelvermogen (2000W). De gebruiker
+vermoedde terecht dat hier een aanname in zat die niet klopte.
+
+**Bevestigd via twee gerichte vragen:**
+1. Manual-modus commanderen op 293W laadt de accu ook daadwerkelijk
+   met **maar 293W totaal** — het zonoverschot (1707W) wordt dan
+   gewoon apart teruggeleverd, niet vastgelegd. Manual-modus op deze
+   Zendure is dus **niet zon-bewust**.
+2. Manual-modus commanderen op het **volle** doelvermogen (2000W)
+   resulteert wél in 1707W zon + 293W net = 2000W totaal — de accu
+   combineert zon en net dan vanzelf tot het gecommandeerde totaal.
+
+**Impact van de oude aanpak**: sinds v0.63.15 (het allereerste
+arbitrage-laden) werd steeds alleen het net-gat gecommandeerd, in de
+veronderstelling dat de accu daar vanzelf het zonoverschot bovenop zou
+leggen. In werkelijkheid werd daarmee het grootste deel van het
+zonoverschot **verspild** (apart teruggeleverd) terwijl de accu maar
+een fractie van het beoogde vermogen daadwerkelijk laadde — feitelijk
+**slechter dan niets doen**, want gewone smart-modus zou dat
+zonoverschot wél hebben vastgelegd.
+
+**Fix**: `_get_arbitrage_charge_power()` commandeert nu altijd het
+**volle** doelvermogen zodra er enige winstgevende netaankoop
+gerechtvaardigd is — nooit meer alleen het gat. `last_arbitrage_grid_
+power_w` blijft bestaan als informatieve schatting van het werkelijke
+net-aandeel, los van het gecommandeerde totaal. Bevestigd (en door de
+gebruiker expliciet benoemd): dit pad wordt hierdoor alleen bereikt
+wanneer het verwachte zonoverschot ontoereikend is om het doel te
+dekken — vooral najaar/winter, of vroeg/laat op de dag; dekt de zon
+het doel al volledig, dan gaat het via `arbitrage_solar_capture` naar
+`smart` zonder enige netaankoop, zoals al het geval was.
+
+**Financiële tracking gecontroleerd, geen aanpassing nodig**: de
+kostenbasis-tracking (`_update_battery_cost_basis_and_savings`) leest
+de **werkelijke** verandering in beschikbare accu-energie (niet het
+gecommandeerde vermogen), en de directe-kosten-tracking
+(`_update_financial_tracking`) rekent `arbitrage_charging` sowieso al
+niet mee. Beide dus ongewijzigd correct.
+
+**Uitlegtekst bijgewerkt**: toont nu expliciet dat het volle vermogen
+wordt gecommandeerd en dat de Zendure zon+net automatisch combineert,
+met het geschatte net-aandeel als aparte, informatieve waarde.
+
+**Getest**: bestaande tests bijgewerkt naar het gecorrigeerde gedrag
+(2 tests) + 1 nieuwe permanente test die exact het gerapporteerde
+veldscenario natrekt (1707W zon, 293W net-gat, 2000W doel) en
+bevestigt dat het volle doelvermogen wordt gecommandeerd, niet het gat.

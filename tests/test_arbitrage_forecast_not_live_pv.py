@@ -161,6 +161,8 @@ def test_arbitrage_falls_back_to_live_reading_without_forecast(make_coordinator,
         entries, now, should_postpone_charging=False
     )
 
-    # 2000W target - 800W live solar surplus = 1200W from the grid.
-    assert result == 1200.0
+    # v0.63.72: commands the full 2000W target (hardware combines solar
+    # + grid automatically), not just the 1200W grid gap.
+    assert result == 2000.0
     assert coordinator.last_arbitrage_solar_surplus_w == 800.0
+    assert coordinator.last_arbitrage_grid_power_w == 1200.0
