@@ -307,6 +307,22 @@ er daadwerkelijk stroom wordt getrokken, schakelt het systeem over naar
 normaal laden en blijft het gewoon aan tot de lading (of het goedkope
 blok) voorbij is.
 
+**Zelflerende voltooiingsdrempel (v0.63.46):** gerapporteerd — het
+standaard-verbruik van de fietsladers bleek in de praktijk rond 2W te
+liggen, terwijl de vaste drempel (`FIETSLADERS_COMPLETE_THRESHOLD_W` =
+20W) een gok was die daar niet bij paste. Elke meting die tijdens een
+testpoging wordt gedaan terwijl er nog geen sprake is van bevestigde
+activiteit, is een echte stand-by-meting — die worden bijgehouden
+(laatste 20, `IDLE_POWER_HISTORY_LENGTH`). Zodra er minstens
+`LEARNED_THRESHOLD_MIN_SAMPLES` (5) zijn verzameld, wordt de
+voltooiingsdrempel automatisch afgeleid als de mediaan van die
+stand-by-metingen plus een veiligheidsmarge
+(`LEARNED_THRESHOLD_MARGIN_W` = 5W) — bij 2W stand-by dus een geleerde
+drempel van ~7W in plaats van de gegokte 20W. Zolang er nog onvoldoende
+metingen zijn, blijft de vaste drempel gewoon gelden (geen regressie).
+Zichtbaar als `idle_power_history_w` en
+`learned_completion_threshold_w` op de status-sensoren.
+
 | Veld | Drempel | Betekenis |
 |---|---|---|
 | `steelstofzuiger_switch_entity` / `steelstofzuiger_power_sensor_entity` | 15W (`APPLIANCE_RUNNING_POWER_THRESHOLD_W`) | Steelstofzuiger-lader |
@@ -730,9 +746,18 @@ Ontwikkelaarshulpmiddelen → Acties (of een eigen script/knop):
   voorgesteld); verwijdert 'm ook uit de bevestigde lijst als je van
   gedachten verandert.
 
-`sensor.nilm_onbevestigde_kandidaten` toont het aantal + de volledige
-lijst (met naam en huidig vermogen) als attribuut, zodat je weet welke
-`entity_id`'s je aan de services moet meegeven.
+`sensor.nilm_onbevestigde_kandidaten` toont het echte totaal-aantal
+als state, met een **begrensd voorbeeld** (standaard de eerste
+`NILM_SENSOR_ATTRIBUTE_PREVIEW_LIMIT` = 20, alfabetisch) als attribuut
+— niet de volledige lijst. Dat is bewust (v0.63.45, gerapporteerd): met
+de brede detectie kan de volledige kandidatenlijst het 16KB-limiet voor
+Home Assistant-attributen overschrijden (met name met de
+Zendure-integratie's eigen granulaire per-pack-vermogenssensoren), wat
+HA er dan stilzwijgend toe brengt het hele attribuut niet meer op te
+slaan. De volledige lijst blijft wel beschikbaar via de
+diagnostiek-export (Instellingen → Apparaten → Energy Management
+System → Diagnostische gegevens downloaden), die niet aan die limiet
+gebonden is.
 
 ### Bevestigen/negeren via het dashboard (v0.63.41/.43)
 
@@ -812,6 +837,15 @@ De sensor toont het aantal modules met status `klaar`, met de volledige
 uitsplitsing (status + reden per module) als attribuut. Geen
 `RestoreEntity` — elke tick opnieuw berekend uit de actuele staat van
 elke module.
+
+**Dashboard-tabblad "Advies" (v0.63.44)**: apart tabblad met een
+volledige tabel van alle acht modules (naam, status, reden), de
+legenda van de twee categorieën, en directe links naar elke module's
+onderliggende sensor om verder in te zoomen. **Let op**: gereedheid
+zegt iets over hoe betrouwbaar het cijfer zelf is — niet over of het
+veilig is om ergens op te sturen. Alle acht blijven, ongeacht hun
+status, uitsluitend adviserend; geen van deze modules stuurt ooit een
+commando of wordt in een accubeslissing meegewogen.
 
 ## Diagnostiek
 

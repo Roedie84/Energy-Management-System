@@ -12,7 +12,14 @@ from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 
-from .const import DEFAULT_NAME, DOMAIN, LEARNING_HISTORY_DAYS
+from .const import (
+    DEFAULT_NAME,
+    DOMAIN,
+    LEARNING_HISTORY_DAYS,
+    NILM_SENSOR_ATTRIBUTE_PREVIEW_LIMIT,
+    APPLIANCE_RUNNING_POWER_THRESHOLD_W,
+    FIETSLADERS_COMPLETE_THRESHOLD_W,
+)
 
 ATTR_PREDICTED_KWH = "predicted_kwh"
 ATTR_ACTUAL_KWH = "actual_kwh"
@@ -654,6 +661,15 @@ class SteelstofzuigerStatusSensor(_CoordinatorDiagnosticSensor):
             "learned_duration_minutes": (
                 self._coordinator.learned_steelstofzuiger_duration_minutes
             ),
+            "idle_power_history_w": (
+                self._coordinator._steelstofzuiger_idle_power_history
+            ),
+            "learned_completion_threshold_w": (
+                self._coordinator._get_learned_completion_threshold_w(
+                    "_steelstofzuiger_idle_power_history",
+                    APPLIANCE_RUNNING_POWER_THRESHOLD_W,
+                )
+            ),
         }
 
 
@@ -679,6 +695,15 @@ class FietsladersStatusSensor(_CoordinatorDiagnosticSensor):
             ),
             "learned_duration_minutes": (
                 self._coordinator.learned_fietsladers_duration_minutes
+            ),
+            "idle_power_history_w": (
+                self._coordinator._fietsladers_idle_power_history
+            ),
+            "learned_completion_threshold_w": (
+                self._coordinator._get_learned_completion_threshold_w(
+                    "_fietsladers_idle_power_history",
+                    FIETSLADERS_COMPLETE_THRESHOLD_W,
+                )
             ),
         }
 
@@ -1337,13 +1362,40 @@ class NilmUnconfirmedCandidatesSensor(SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict:
+        """Bounded preview (v0.63.45) - the raw full dict can exceed
+        Home Assistant's 16KB per-attribute recorder limit with the
+        broad discovery scope (reported), which silently drops the
+        attribute entirely rather than truncating it. Shows the first
+        NILM_SENSOR_ATTRIBUTE_PREVIEW_LIMIT candidates (sorted
+        alphabetically, same order as the dashboard slots), plus the
+        true total count and a pointer to diagnostics for the rest -
+        the discovery/confirm/reject logic itself isn't limited by
+        this, only what this one sensor's attribute exposes.
+        """
+        all_candidates = self._coordinator.nilm_unconfirmed_candidates
+        preview_ids = sorted(all_candidates.keys())[
+            :NILM_SENSOR_ATTRIBUTE_PREVIEW_LIMIT
+        ]
+        preview = {eid: all_candidates[eid] for eid in preview_ids}
+        truncated = len(all_candidates) > len(preview)
         return {
-            "kandidaten": self._coordinator.nilm_unconfirmed_candidates,
+            "kandidaten": preview,
+            "totaal_aantal": len(all_candidates),
             "note": (
                 "Bevestig een kandidaat met de service "
                 "energy_management_system.confirm_nilm_device "
                 "(entity_id als parameter), of negeer 'm permanent met "
                 "energy_management_system.reject_nilm_device."
+                + (
+                    f" Dit attribuut toont een voorbeeld van de eerste "
+                    f"{NILM_SENSOR_ATTRIBUTE_PREVIEW_LIMIT} (van "
+                    f"{len(all_candidates)} totaal) - de volledige lijst "
+                    f"staat in de diagnostiek-export (Instellingen → "
+                    f"Apparaten → Energy Management System → "
+                    f"Diagnostische gegevens downloaden)."
+                    if truncated
+                    else ""
+                )
             ),
         }
 

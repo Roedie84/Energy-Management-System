@@ -4252,3 +4252,108 @@ expliciet zo benoemd in de README.
 **Getest** (2 nieuwe permanente tests in `test_nilm_dashboard_buttons.py`):
 de knopnaam bevat de kandidaatnaam + vermogen; een lege sleuf toont
 "(leeg)".
+
+## v0.63.44 — nieuw dashboard-tabblad "Advies" voor de acht adviesmodules
+
+**Gerapporteerd, met screenshot:** `sensor.advies_gereedheid_8_modules`
+toont "0" zonder context — en gevraagd om beter te kunnen zien welke
+module geschikt is voor "actieve bijsturing", het liefst op een apart
+tabblad met uitgebreidere gegevens.
+
+**Belangrijke nuance eerst expliciet herbevestigd**: gereedheid zegt
+iets over hoe betrouwbaar het cijfer zelf is — niet over of het veilig
+is om ergens op te sturen. Alle acht modules blijven, ongeacht hun
+status, uitsluitend adviserend. Dit staat nu ook zo op het nieuwe
+tabblad zelf, niet alleen in de README.
+
+**Nieuw tabblad "Advies"** (puur dashboard-YAML, geen codewijziging):
+
+- Introkaart met de expliciete "geen van deze stuurt iets aan"-herinnering.
+- Legenda-kaart die de twee categorieën uitlegt (echte data-volwassenheid
+  vs. structureel beschikbaar zonder nauwkeurigheids-tracking).
+- Volledige tabel (Jinja-template, itereert over de acht modules) met
+  naam, status (met icoon) en reden per module — leesbaar in één
+  overzicht in plaats van acht losse regels tussen alle andere kaarten.
+- Drill-down-kaart met directe links naar elke module's eigen sensor.
+
+**Testsuite bijgewerkt**: `test_dashboard_yaml_is_valid` verwachtte
+exact 5 tabbladen, nu 6.
+
+## v0.63.45 — NILM-kandidatenattribuut begrensd (HA 16KB recorder-limiet)
+
+**Gerapporteerd, met HA-logmelding:** `homeassistant.components.recorder.
+db_schema` waarschuwde dat de attributen van
+`sensor.nilm_onbevestigde_kandidaten` de maximale 16384 bytes per
+attribuut overschreden — HA slaat het attribuut dan stilzwijgend
+helemaal niet meer op (geen fout, maar wel verlies van
+geschiedenis/debug-informatie voor dat attribuut).
+
+**Root cause:** de bewust brede detectie ("alle sensoren met een
+vermogens-eenheid") kan, met name via de Zendure-integratie's eigen
+granulaire per-pack-vermogenssensoren (zoals eerder gezien: "AB3000",
+"accu_*"), tientallen tot honderden kandidaten opleveren. Het volledige
+`nilm_unconfirmed_candidates`-dict (entity_id, naam, vermogen, eerst-
+gezien per kandidaat) als rauw attribuut opslaan groeit dan voorbij de
+16KB-grens.
+
+**Fix:** `NilmUnconfirmedCandidatesSensor` toont nu een **begrensd
+voorbeeld** (standaard de eerste 20, alfabetisch gesorteerd — dezelfde
+volgorde als de dashboard-sleuven) in plaats van het volledige dict, met
+een apart `totaal_aantal`-attribuut dat wél het echte aantal toont, en
+een verwijzing naar de diagnostiek-export (niet aan de 16KB-limiet
+gebonden) voor de volledige lijst. De onderliggende
+detectie/bevestigen/negeren-functionaliteit zelf is door deze cap niet
+beperkt — alleen wat dit ene sensor-attribuut laat zien.
+
+`NilmConfirmedDevicesSensor` bewust **niet** aangepast: die lijst is
+door de gebruiker zelf samengesteld (via bevestigen), in de praktijk
+veel kleiner, en het volledige attribuut is nodig voor de
+`RestoreEntity`-herstelfunctie na een herstart.
+
+**Getest** (5 nieuwe permanente tests in `test_nilm_attribute_size_cap.py`):
+de state toont altijd het echte totaal, ook ver boven de limiet; het
+voorbeeld wordt begrensd tot de limiet zodra die wordt overschreden
+(met verwijzing naar diagnostiek); onder de limiet wordt alles getoond
+(geen onnodige verwijzing); het voorbeeld is consistent met de
+dashboard-sleufvolgorde; en een regressie-test die met 500 kandidaten
+bevestigt dat de geserialiseerde attribuutgrootte ruim onder de
+16KB-grens blijft.
+
+## v0.63.46 — zelflerende voltooiingsdrempel (was een gegokte vaste waarde)
+
+**Gerapporteerd:** het standaard-verbruik van de fietsladers ligt in de
+praktijk rond 2W, ruim onder de vaste, gegokte drempel van 20W
+(`FIETSLADERS_COMPLETE_THRESHOLD_W`) — met de vraag of het systeem dit
+zelf kan leren in plaats van op een gegokte constante te vertrouwen.
+
+**Fix: `_get_learned_completion_threshold_w()` + `_record_idle_power_
+sample()`.** Elke meting die tijdens een testpoging (polling, v0.63.38)
+wordt gedaan terwijl er nog geen bevestigde activiteit is, is een
+echte stand-by-meting — deze worden bijgehouden in een begrensde
+geschiedenis (`IDLE_POWER_HISTORY_LENGTH` = 20 metingen) per apparaat.
+Zodra er minstens `LEARNED_THRESHOLD_MIN_SAMPLES` (5) zijn verzameld,
+wordt de voltooiingsdrempel automatisch afgeleid als de mediaan van die
+stand-by-metingen plus een veiligheidsmarge
+(`LEARNED_THRESHOLD_MARGIN_W` = 5W, een onderbouwde maar niet
+empirisch-per-installatie-geverifieerde keuze — expliciet zo benoemd
+in de code-documentatie). Bij 2W stand-by dus een geleerde drempel van
+~7W in plaats van de gegokte 20W. Valt terug op de vaste,
+geconfigureerde drempel zolang er nog onvoldoende metingen zijn — geen
+regressie voor een verse installatie.
+
+**Toegepast op zowel de "is dit genuine actief"-check als de
+"aanhoudend laag vermogen = klaar"-check** — beide gebruikten al
+dezelfde drempel, en gebruiken nu dezelfde geleerde waarde.
+
+**Zichtbaar gemaakt**: nieuwe attributen `idle_power_history_w` en
+`learned_completion_threshold_w` op zowel de steelstofzuiger- als de
+fietsladers-statussensor, en in de diagnostiek-export.
+
+**Getest** (5 nieuwe permanente tests in
+`test_learned_completion_threshold.py`): valt terug op de vaste drempel
+zonder genoeg metingen; leert een veel lagere drempel uit waargenomen
+stand-by-metingen (2W → geleerde drempel 7W); de geschiedenis blijft
+begrensd tot 20 metingen; metingen tijdens de testpoging worden
+daadwerkelijk vastgelegd; en echte laadstroom (honderden watts) wordt
+nog steeds correct herkend tegen de nieuwe, veel lagere geleerde
+drempel.

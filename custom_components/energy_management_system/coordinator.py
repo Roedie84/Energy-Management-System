@@ -81,6 +81,9 @@ from .const import (
     CONF_FIETSLADERS_POWER_SENSOR,
     STEELSTOFZUIGER_COMPLETE_SUSTAINED_MINUTES,
     SCHEDULED_CHARGE_POLL_OFF_MINUTES,
+    IDLE_POWER_HISTORY_LENGTH,
+    LEARNED_THRESHOLD_MIN_SAMPLES,
+    LEARNED_THRESHOLD_MARGIN_W,
     NILM_CUSUM_SLACK_FRACTION,
     NILM_CUSUM_ALARM_THRESHOLD,
     APPLIANCE_CYCLE_COMPLETE_SUSTAINED_MINUTES,
@@ -289,6 +292,7 @@ class EnergyManagementSystemCoordinator:
         self._steelstofzuiger_below_threshold_since: datetime | None = None
         self._steelstofzuiger_ever_active_this_session: bool = False
         self._steelstofzuiger_next_poll_at: datetime | None = None
+        self._steelstofzuiger_idle_power_history: list[float] = []
         self.steelstofzuiger_charge_duration_history: list[float] = []
         self.last_steelstofzuiger_action: str | None = None
         self._fietsladers_complete_today: bool = False
@@ -297,6 +301,7 @@ class EnergyManagementSystemCoordinator:
         self._fietsladers_below_threshold_since: datetime | None = None
         self._fietsladers_ever_active_this_session: bool = False
         self._fietsladers_next_poll_at: datetime | None = None
+        self._fietsladers_idle_power_history: list[float] = []
         self.fietsladers_charge_duration_history: list[float] = []
         self.last_fietsladers_action: str | None = None
 
@@ -1344,6 +1349,7 @@ class EnergyManagementSystemCoordinator:
         last_action_attr: str,
         ever_active_this_session_attr: str,
         next_poll_attr: str,
+        idle_history_attr: str,
         notify_title: str | None = None,
         notify_message: str | None = None,
         override_attr: str | None = None,
@@ -1352,7 +1358,7 @@ class EnergyManagementSystemCoordinator:
         only v0.63.12) for any appliance that should charge only during
         today's cheapest price block, year-round, and switch itself off
         once charging is genuinely complete (power draw sustained below
-        `complete_threshold_w` for STEELSTOFZUIGER_COMPLETE_SUSTAINED_MINUTES
+        the completion threshold for STEELSTOFZUIGER_COMPLETE_SUSTAINED_MINUTES
         - a brief dip in a charging curve shouldn't be mistaken for
         "done", same principle as the Quooker's sustained-active check,
         just inverted).
@@ -1396,6 +1402,17 @@ class EnergyManagementSystemCoordinator:
         suggestion. `charge_started_attr` is only set once genuine
         activity is actually confirmed, so the learned duration reflects
         real charging time, not time spent polling.
+
+        `idle_history_attr` (v0.63.46): reported - the fixed
+        `complete_threshold_w` guess doesn't reflect the appliance's
+        real standby draw (observed 2W for the e-bike chargers, vs. the
+        20W guess). Every power reading taken while the appliance is
+        still believed idle (before genuine activity is confirmed this
+        session) is a real idle/standby sample - once
+        LEARNED_THRESHOLD_MIN_SAMPLES have accumulated, the completion
+        threshold is derived from their median plus a safety margin
+        (LEARNED_THRESHOLD_MARGIN_W) instead of the fixed guess. Falls
+        back to `complete_threshold_w` until enough samples exist.
         """
         if not switch_entity:
             return
@@ -1410,6 +1427,9 @@ class EnergyManagementSystemCoordinator:
         power_w = self._read_sensor_float(power_entity) if power_entity else None
         switch_state = self.hass.states.get(switch_entity)
         is_on = switch_state is not None and switch_state.state == "on"
+        effective_threshold_w = self._get_learned_completion_threshold_w(
+            idle_history_attr, complete_threshold_w
+        )
 
         complete_today = getattr(self, complete_today_attr)
         should_charge = is_currently_cheapest_block and not complete_today
@@ -1449,10 +1469,19 @@ class EnergyManagementSystemCoordinator:
             setattr(self, last_action_attr, "test_aan")
             return
 
-        # Already on - register genuine activity, regardless of what
-        # happens below (a tick that crosses the threshold always
-        # counts, even the very tick this evaluates).
-        if power_entity and power_w is not None and power_w >= complete_threshold_w:
+        # Already on - a reading taken while still idle (before genuine
+        # activity is confirmed) is a real idle/standby sample, feeding
+        # the self-learned threshold. Recorded using *this* tick's
+        # effective threshold (computed from *previous* ticks' learned
+        # data), so a tick can't influence its own classification.
+        if not ever_active and power_entity and power_w is not None:
+            if power_w < effective_threshold_w:
+                self._record_idle_power_sample(idle_history_attr, power_w)
+
+        # Register genuine activity, regardless of what happens below -
+        # a tick that crosses the threshold always counts, even the
+        # very tick this evaluates.
+        if power_entity and power_w is not None and power_w >= effective_threshold_w:
             if not ever_active:
                 # Genuine charging just confirmed - start the duration
                 # timer now, not from whenever polling first began.
@@ -1477,7 +1506,7 @@ class EnergyManagementSystemCoordinator:
             return
 
         # Genuinely charging - watch for completion (sustained low power).
-        if power_entity and power_w is not None and power_w < complete_threshold_w:
+        if power_entity and power_w is not None and power_w < effective_threshold_w:
             since = getattr(self, below_threshold_since_attr)
             if since is None:
                 since = now
@@ -1534,6 +1563,30 @@ class EnergyManagementSystemCoordinator:
             setattr(self, duration_history_attr, history[-LEARNING_HISTORY_DAYS:])
         setattr(self, charge_started_attr, None)
         setattr(self, below_threshold_since_attr, None)
+
+    def _get_learned_completion_threshold_w(
+        self, idle_history_attr: str, fallback_w: float
+    ) -> float:
+        """Self-learned completion threshold (v0.63.46) - reported: the
+        fixed guess (e.g. 20W for the e-bike chargers) doesn't reflect
+        the appliance's real standby draw (observed 2W). Derives a
+        threshold from the median of actually-observed idle/standby
+        power readings plus a safety margin, once enough samples exist
+        (LEARNED_THRESHOLD_MIN_SAMPLES); falls back to the configured
+        fixed threshold otherwise. The margin
+        (LEARNED_THRESHOLD_MARGIN_W, 5W) is a heuristic choice, not
+        empirically validated per installation.
+        """
+        history = getattr(self, idle_history_attr, [])
+        if len(history) < LEARNED_THRESHOLD_MIN_SAMPLES:
+            return fallback_w
+        idle_baseline_w = statistics.median(history)
+        return idle_baseline_w + LEARNED_THRESHOLD_MARGIN_W
+
+    def _record_idle_power_sample(self, idle_history_attr: str, power_w: float) -> None:
+        history = getattr(self, idle_history_attr, [])
+        history = history + [power_w]
+        setattr(self, idle_history_attr, history[-IDLE_POWER_HISTORY_LENGTH:])
 
     async def _async_set_switch(self, entity_id: str, turn_on: bool) -> None:
         """Turn a switch entity on/off, unless in learning_only mode.
@@ -5955,6 +6008,7 @@ class EnergyManagementSystemCoordinator:
             last_action_attr="last_steelstofzuiger_action",
             ever_active_this_session_attr="_steelstofzuiger_ever_active_this_session",
             next_poll_attr="_steelstofzuiger_next_poll_at",
+            idle_history_attr="_steelstofzuiger_idle_power_history",
             notify_title="🧹 Steelstofzuiger opgeladen",
             notify_message="De steelstofzuiger is klaar met laden en de lader is uitgeschakeld.",
             override_attr="steelstofzuiger_override",
@@ -5973,6 +6027,7 @@ class EnergyManagementSystemCoordinator:
             last_action_attr="last_fietsladers_action",
             ever_active_this_session_attr="_fietsladers_ever_active_this_session",
             next_poll_attr="_fietsladers_next_poll_at",
+            idle_history_attr="_fietsladers_idle_power_history",
             notify_title="🚲 Fietsen opgeladen",
             notify_message="De fietsladers zijn uitgeschakeld omdat de accu's vol zijn.",
             override_attr="fietsladers_override",

@@ -901,6 +901,87 @@ views:
               - entity: button.woonkamer_energy_management_system_nilm_kandidaat_8_bevestigen
               - entity: button.woonkamer_energy_management_system_nilm_kandidaat_8_negeren
 
+  - title: Advies
+    path: advies
+    icon: mdi:clipboard-check-outline
+    cards:
+      - type: custom:mushroom-title-card
+        title: Advies-gereedheid
+        subtitle: >-
+          Acht modules zijn uitsluitend adviserend — geen ervan stuurt
+          ooit een commando of weegt mee in een accubeslissing, ook niet
+          als de status hieronder "klaar" toont. Gereedheid zegt iets
+          over hoe betrouwbaar het cijfer zelf is, niet over of het
+          veilig is om ergens op te sturen.
+
+      - type: markdown
+        title: Legenda
+        content: |
+          **Twee categorieën, niet één schaal:**
+
+          - ✅ `klaar` / 🟡 `bijna_klaar` / ⏳ `onvoldoende_data` / ⚠️
+            `kwaliteit_te_laag` / ⚪ `niet_geconfigureerd` — deze vijf
+            statussen gelden voor modules met een échte
+            data-volwassenheid-signaal (genoeg verzamelde metingen,
+            of een aantoonbaar geconvergeerd filter).
+          - 🔵 `structureel_beschikbaar` — geldt voor de drie modules
+            zonder mechanisme dat een voorspelling ooit tegen de
+            werkelijkheid legt (Weather Ensemble, MPC, Digital Twin).
+            Werkt en berekent prima, maar "klaar" zou een niet-verdiende
+            claim van bewezen nauwkeurigheid zijn.
+
+      - type: markdown
+        title: Alle acht modules
+        content: |
+          {% set modules = state_attr('sensor.woonkamer_energy_management_system_advies_gereedheid_8_modules', 'modules') or {} %}
+          {% set namen = {
+            'kirchhoff': 'Kirchhoff energiebalans-validatie',
+            'sluipverbruik': 'CUSUM sluipverbruik-detectie',
+            'weather_ensemble': 'Weather Ensemble',
+            'mpc': 'MPC-adviesmotor',
+            'monte_carlo': 'Monte Carlo',
+            'kalman': 'Kalman filtering',
+            'digital_twin': 'Digital Twin',
+            'nilm': 'NILM apparaat-detectie'
+          } %}
+          {% set iconen = {
+            'klaar': '✅',
+            'bijna_klaar': '🟡',
+            'onvoldoende_data': '⏳',
+            'kwaliteit_te_laag': '⚠️',
+            'niet_geconfigureerd': '⚪',
+            'structureel_beschikbaar': '🔵'
+          } %}
+
+          | Module | Status | Reden |
+          |---|---|---|
+          {% for key, naam in namen.items() -%}
+          {%- set m = modules.get(key, {}) -%}
+          | {{ naam }} | {{ iconen.get(m.get('status'), '?') }} {{ m.get('status', 'onbekend') }} | {{ m.get('reden', '—') }} |
+          {% endfor %}
+
+      - type: entities
+        title: Onderliggende sensoren (drill-down)
+        entities:
+          - entity: sensor.woonkamer_energy_management_system_sensor_health_score
+            name: Kirchhoff — sensor-gezondheidsscore
+          - entity: sensor.woonkamer_energy_management_system_sluipverbruik_detectie
+            name: Sluipverbruik-detectie
+          - entity: sensor.woonkamer_energy_management_system_weather_ensemble_bewolkingsgraad
+            name: Weather Ensemble
+          - entity: sensor.woonkamer_energy_management_system_mpc_advies_prijsarbitrage_plan
+            name: MPC-adviesmotor
+          - entity: sensor.woonkamer_energy_management_system_monte_carlo_risico_tekortkans
+            name: Monte Carlo
+          - entity: sensor.woonkamer_energy_management_system_kalman_filtering_soc_pv_verbruik
+            name: Kalman filtering
+          - entity: sensor.woonkamer_energy_management_system_digital_twin_gesimuleerde_soc_winst
+            name: Digital Twin
+          - entity: sensor.woonkamer_energy_management_system_nilm_bevestigde_apparaten
+            name: NILM apparaat-detectie
+          - entity: sensor.woonkamer_energy_management_system_advies_gereedheid_8_modules
+            name: Advies-gereedheid (samenvatting)
+
   - title: Geschiedenis
     path: geschiedenis
     icon: mdi:history

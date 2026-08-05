@@ -22,7 +22,11 @@ from typing import Any
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
-from .const import DOMAIN
+from .const import (
+    DOMAIN,
+    APPLIANCE_RUNNING_POWER_THRESHOLD_W,
+    FIETSLADERS_COMPLETE_THRESHOLD_W,
+)
 
 # Domains that are inherently relevant to an EMS, regardless of naming.
 # "light" is included to help correlate lighting usage with occupancy
@@ -303,12 +307,30 @@ async def async_get_config_entry_diagnostics(
             "learned_steelstofzuiger_duration_minutes": (
                 coordinator.learned_steelstofzuiger_duration_minutes
             ),
+            "steelstofzuiger_idle_power_history_w": (
+                coordinator._steelstofzuiger_idle_power_history
+            ),
+            "steelstofzuiger_learned_completion_threshold_w": (
+                coordinator._get_learned_completion_threshold_w(
+                    "_steelstofzuiger_idle_power_history",
+                    APPLIANCE_RUNNING_POWER_THRESHOLD_W,
+                )
+            ),
             "last_fietsladers_action": coordinator.last_fietsladers_action,
             "fietsladers_charge_duration_history": (
                 coordinator.fietsladers_charge_duration_history
             ),
             "learned_fietsladers_duration_minutes": (
                 coordinator.learned_fietsladers_duration_minutes
+            ),
+            "fietsladers_idle_power_history_w": (
+                coordinator._fietsladers_idle_power_history
+            ),
+            "fietsladers_learned_completion_threshold_w": (
+                coordinator._get_learned_completion_threshold_w(
+                    "_fietsladers_idle_power_history",
+                    FIETSLADERS_COMPLETE_THRESHOLD_W,
+                )
             ),
             "washing_machine_usage_hours_with_data": len(
                 coordinator.washing_machine_usage_hourly_history

@@ -243,6 +243,19 @@ STEELSTOFZUIGER_COMPLETE_SUSTAINED_MINUTES = 2
 # needed for that half of the cycle.
 SCHEDULED_CHARGE_POLL_OFF_MINUTES = 15
 
+# Self-learned completion threshold for scheduled-charge appliances
+# (v0.63.46). Reported: the fixed FIETSLADERS_COMPLETE_THRESHOLD_W
+# guess (20W) doesn't reflect the real standby draw (observed 2W) -
+# instead of assuming a fixed threshold, learn the actual idle/standby
+# power from readings taken during the poll-test window (switch on,
+# nothing genuinely charging yet - see _async_update_scheduled_charge_
+# appliance), and derive a threshold from it with a safety margin.
+# Falls back to the configured fixed threshold until enough idle
+# samples have been collected.
+IDLE_POWER_HISTORY_LENGTH = 20
+LEARNED_THRESHOLD_MIN_SAMPLES = 5
+LEARNED_THRESHOLD_MARGIN_W = 5.0
+
 # NILM-achtige apparaat-auto-detectie (v0.63.39). Geen "echte" NILM
 # (blinde disaggregatie van één geaggregeerd vermogenssignaal, een
 # onderzoeksmatig vraagstuk zonder trainingsdata) - ontdekt bestaande
@@ -263,6 +276,18 @@ NILM_CUSUM_ALARM_THRESHOLD = 1.0
 # for a typical household's realistic number of newly-discovered power
 # sensors at once.
 NILM_DASHBOARD_SLOT_COUNT = 8
+
+# NILM sensor attribute size cap (v0.63.45). Reported: with the broad
+# "any W/kW sensor" discovery scope, the full unconfirmed-candidates
+# dict can exceed Home Assistant's 16KB per-attribute recorder limit
+# (particularly likely with e.g. the Zendure integration's own
+# granular per-pack power sensors) - the recorder then silently drops
+# the attribute entirely rather than truncating it, so a bounded
+# preview is needed instead of the raw full dict. The functional
+# discovery/confirm/reject logic itself is NOT limited by this - only
+# what the sensor's own state attribute exposes. The full list remains
+# available via diagnostics (not subject to the recorder's limit).
+NILM_SENSOR_ATTRIBUTE_PREVIEW_LIMIT = 20
 
 # Markov-achtige RUSTEND/ACTIEF/KLAAR-toestandsmachine voor vaatwasser/
 # wasmachine (v0.63.32, "Optie 1" - geen fase-detectie, daarvoor
