@@ -233,9 +233,13 @@ integratie ook **actief bijkopen** tijdens een goedkoop kwartier, puur
 omdat er later diezelfde dag een bekend duurder kwartier aankomt — ook
 als de bestaande reserve al genoeg is om te overbruggen ("genoeg om te
 overbruggen" en "winstgevend om nu meer te kopen" zijn onafhankelijke
-vragen). Staat achter een eigen schakelaar,
-`switch.arbitrage_laden` — **standaard uit**, bewust opt-in omdat dit
-nieuw, echt-geld-gedrag is.
+vragen). Staat achter een eigen schakelaar, `switch.arbitrage_laden` —
+**standaard aan** (v0.63.61, gevraagd "moet naar herstart standaard
+aan staan"; vóór v0.63.61 stond dit bewust uit als opt-in). Zet je 'm
+zelf uit, dan blijft-ie na een herstart gewoon uit, net als elke andere
+schakelaar in deze integratie — de standaardwaarde geldt alleen bij een
+verse installatie of als er nog geen eerdere status is om te
+herstellen.
 
 Alleen actief als de projectie, ná laad/ontlaad-verlies, een minimale
 marge overhoudt:
@@ -903,7 +907,7 @@ geschatte percentage.
 
 Beschikbaar als `tabel`-attribuut op `sensor.nilm_bevestigde_apparaten`
 (lijst met `naam`/`huidig_vermogen_w`/`trend` per apparaat, alfabetisch
-gesorteerd), weergegeven als een echte markdown-tabel.
+gesorteerd).
 
 **Echte oorzaak van de eerdere onleesbaarheid gevonden (v0.63.53):**
 niet de tabelopmaak zelf (v0.63.52's omzetting naar een lopende lijst
@@ -911,9 +915,32 @@ loste het verkeerde probleem op) — de kaart zat in een grid-layout met
 een **vaste hoogte** (`grid_options: rows: 5`) die te krap was voor het
 aantal apparaatrijen, waardoor de tabel inklapte/overlapte. Vergeleken
 met de wél goed werkende tabel op het "Advies"-tabblad (die geen vaste
-hoogte heeft) en teruggezet naar een echte tabel, nu met
-`grid_options: rows: auto` zodat de kaart automatisch meegroeit met
-het aantal bevestigde apparaten.
+hoogte heeft) en teruggezet naar een echte tabel, met
+`grid_options: rows: auto`.
+
+**Definitief teruggezet naar een lopende lijst (v0.63.62):**
+gerapporteerd, met screenshot — ook mét de hoogte-fix bleef de tabel
+op een smal scherm onleesbaar, omdat de apparaatnamen (bijv. "Airco
+Woonkamer Compressor geschat energieverbruik") veel langer zijn dan de
+korte modulenamen op de Advies-tabel, en een 3-koloms-tabel daar op
+smalle schermen alsnog op vastloopt. Elke rij toont nu weer
+"**Naam** — vermogen — trend" als los lijstitem, wat ongeacht de
+naamlengte gewoon natuurlijk meebuigt (woordafbreking) in plaats van in
+een vaste kolombreedte te knijpen.
+
+**Kaart losgetrokken uit de gedeelde grid-wrapper (v0.63.63):**
+gerapporteerd, met vergelijkingsscreenshot van de wél-goed-werkende
+Advies-tab — de apparatentabel zat genest in dezelfde `type: grid`-
+kaart als de NILM-sensorenlijst en de sleufknoppen. Die hele wrapper
+werd door Home Assistant's Sections-layout als één enkel item
+behandeld en kreeg daardoor zelf een smalle breedte toegewezen,
+ongeacht wat de kinderen daarbinnen als "columns: 12" opgaven (dat
+regelt alleen hun onderlinge verdeling binnen die al-smalle kaart, niet
+de breedte van de kaart zelf op de pagina). Op de Advies-tab staat
+"Alle acht modules" juist als **eigen, losstaande kaart** direct in de
+tabblad-lijst, zonder gedeelde wrapper — en krijgt daardoor zijn volle,
+onafhankelijke breedte. De apparatentabel is nu op exact dezelfde
+manier losgetrokken tot een eigen, top-level kaart.
 
 **Puur informatief** — nergens meegewogen in accubeslissingen, zoals
 afgesproken.

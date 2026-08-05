@@ -293,7 +293,13 @@ class EnergyManagementSystemCoordinator:
         # all go silent just because this one specific suggestion isn't
         # wanted. Defaults on (unchanged behaviour) until turned off.
         self.appliance_ready_notifications_enabled: bool = True
-        self.arbitrage_charging_enabled: bool = False
+        # Default ON (v0.63.61, requested "moet naar herstart standaard
+        # aan staan") - only used for a fresh install or if there's no
+        # prior restored state; ArbitrageChargingSwitch.async_added_to_
+        # hass still overrides this from the restored state otherwise,
+        # so turning it off yourself still stays off across a restart,
+        # same as every other switch in this integration.
+        self.arbitrage_charging_enabled: bool = True
         self.last_arbitrage_margin_eur_per_kwh: float | None = None
         self.last_arbitrage_solar_surplus_w: float | None = None
         self.last_arbitrage_grid_power_w: float | None = None

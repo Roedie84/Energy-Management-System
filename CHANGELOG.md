@@ -4766,3 +4766,75 @@ zonder `should_postpone_charging`); en een end-to-end-test die
 bevestigt dat de volledige beslisboom bij die vlag daadwerkelijk
 `select.select_option` met `option: smart` aanroept, met reden
 `arbitrage_solar_capture` — niet `manual`.
+
+## v0.63.61 — arbitrage-laden staat nu standaard aan
+
+**Gevraagd:** "Arbitrage moet naar herstart standaard aan staan".
+
+**Fix**: de coordinator's standaardwaarde voor `arbitrage_charging_
+enabled` gaat van `False` naar `True`. Dit raakt alleen een verse
+installatie of het allereerste moment vóórdat er ooit een status is
+hersteld — `ArbitrageChargingSwitch.async_added_to_hass()` overschrijft
+deze standaardwaarde nog steeds met de eerder opgeslagen status zodra
+die bestaat, dus zet je de schakelaar zelf uit, dan blijft die na een
+herstart gewoon uit, exact zoals elke andere schakelaar in deze
+integratie zich gedraagt.
+
+**Getest** (1 nieuwe permanente test): een verse coordinator (geen
+eerdere herstelde status) heeft `arbitrage_charging_enabled == True`.
+Volledige testsuite gecontroleerd op impliciete aannames over de oude
+standaardwaarde — geen gevonden, alle bestaande tests zetten de vlag
+al expliciet naar de gewenste waarde voor dat scenario.
+
+## v0.63.62 — apparatenoverzicht definitief teruggezet naar een lopende lijst
+
+**Gerapporteerd, met screenshot:** "sorry dat ik het zeg maar de
+weergave is nog steeds waardeloos" — ook ná v0.63.53's hoogte-fix
+(`grid_options: rows: auto`) bleef de tabel op een smal scherm
+onleesbaar: alleen de "Apparaat"-kolom was zichtbaar, met lange, over
+meerdere regels afgebroken apparaatnamen.
+
+**Root cause, ditmaal definitief**: niet de hoogte (die was al
+gefixt), maar de **breedte**. De NILM-apparaatnamen (bijv. "Airco
+Woonkamer Compressor geschat energieverbruik") zijn veel langer dan de
+korte, vaste modulenamen op de wél-goed-werkende Advies-tabel — een
+3-koloms-tabel met zulke lange labels in de eerste kolom loopt op een
+smal scherm alsnog vast, hoogte-fix of niet.
+
+**Fix**: definitief terug naar een lopende lijst (zoals kortstondig al
+geprobeerd in v0.63.52, toen nog om de verkeerde reden teruggedraaid).
+Elke rij toont "**Naam** — vermogen — trend" als los markdown-
+lijstitem — dat buigt bij een lange naam gewoon natuurlijk mee
+(woordafbreking) in plaats van in een vaste kolombreedte te knijpen,
+ongeacht hoe lang de apparaatnaam is.
+
+**Geen Python-wijzigingen** — puur dashboard-YAML. Handmatig
+gerenderd met de exacte lange namen uit het gerapporteerde screenshot
+voordat dit werd uitgeleverd.
+
+## v0.63.63 — apparatentabel als eigen kaart, losgetrokken uit de gedeelde grid-wrapper
+
+**Gerapporteerd, met vergelijkingsscreenshot** van de wél-goed-werkende
+Advies-tab: "volgens mij moet de tabblad opbouw gelijk zijn aan deze".
+
+**Root cause, bevestigd door de twee tabbladen te vergelijken:** op de
+Advies-tab staat "Alle acht modules" als een **eigen, losstaande kaart**
+direct in de tabblad-lijst (geen gedeelde wrapper) en krijgt daardoor
+zijn volle, onafhankelijke breedte in Home Assistant's Sections-layout.
+Op de Apparaten-tab zat de apparatentabel echter genest in dezelfde
+`type: grid`-kaart als de NILM-sensorenlijst, de instructietekst, de
+"Bevestigen/negeren"-kop en alle 16 sleufknoppen. Die hele wrapper werd
+door de Sections-layout als **één enkel item** behandeld en kreeg
+daardoor zelf een smalle breedte — de "columns: 12" die de kinderen
+daarbinnen opgaven regelt alleen hun onderlinge verdeling binnen die
+al-smalle kaart, niet de breedte van de kaart zelf op de pagina.
+
+**Fix**: de apparatentabel is losgetrokken tot een eigen, top-level
+kaart in de tabblad-lijst — exact hetzelfde patroon als de Advies-tab's
+"Alle acht modules". De resterende NILM-onderdelen (sensorenlijst,
+sleufknoppen) blijven in hun eigen, kleinere grid-wrappers staan, nu
+gescheiden van de tabel.
+
+**Geen Python-wijzigingen** — puur dashboard-YAML herstructurering.
+Gevalideerd (YAML correct, template rendert, kaart aantoonbaar als
+top-level item aanwezig) voordat dit werd uitgeleverd.

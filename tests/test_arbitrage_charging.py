@@ -67,6 +67,16 @@ def test_no_arbitrage_when_disabled(make_coordinator, hass):
     assert coordinator.last_reason != "arbitrage_charging"
 
 
+def test_arbitrage_charging_defaults_to_enabled(make_coordinator, hass):
+    """v0.63.61, requested ('moet naar herstart standaard aan staan') -
+    a fresh coordinator (no prior restored state, e.g. a first-ever
+    install or a restart before ArbitrageChargingSwitch.async_added_to_
+    hass ever ran) should default to enabled, not disabled."""
+    coordinator = make_coordinator({})
+
+    assert coordinator.arbitrage_charging_enabled is True
+
+
 def test_arbitrage_charges_when_profitable_and_enabled(make_coordinator, hass):
     coordinator = _make_ready_coordinator(make_coordinator, hass)
     coordinator.arbitrage_charging_enabled = True
