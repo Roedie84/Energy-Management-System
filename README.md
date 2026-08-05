@@ -357,6 +357,62 @@ onderdeel van deze integratie) en herstart. Controleer de `source`-
 entity-ID's in dat bestand tegen je eigen installatie — een verkeerde
 naam faalt stil (de meter blijft dan voor altijd op 0 staan).
 
+## Wat bespaart de accu (kostprijs-model)
+
+Naast `discharge_value_expensive_quarters`/`charge_cost_grid_charging`
+(directe waarde van expliciete verkoop-/koopacties, bewust **niet**
+"besparing" genoemd omdat dat een onverifieerbaar tegenfeitelijk
+scenario zou impliceren) bestaat er een tweede, wél als besparing te
+noemen metriek: `sensor.battery_savings_cost_basis_model`.
+
+Dit gebruikt een **gewogen-gemiddelde-kostprijs-model**: elke kWh die de
+accu in gaat (ongeacht bron — netladen óf zon-overschot) wordt
+gewaardeerd tegen de actuele dynamische prijs op dat moment. Elke kWh
+die eruit gaat — verkocht tijdens een duur kwartier, óf simpelweg
+gebruikt om 0 op de meter te houden — realiseert het verschil tussen de
+actuele prijs en die kostprijs.
+
+Dit is uitdrukkelijk **wél** geldig als "besparing" (in tegenstelling
+tot de sensoren hierboven): het gebruikt uitsluitend prijzen die de
+integratie zelf heeft waargenomen op het exacte moment van laden/
+ontladen, geen hypothetisch "zonder accu"-scenario.
+
+**Vereist een salderen-contract** (teruglevering tegen hetzelfde
+dynamische tarief als inkoop) om correct te zijn: dan heeft
+zon-energie die de accu in gaat (in plaats van terug te leveren)
+exact dezelfde opportuniteitskosten als het inkopen van diezelfde
+energie op dat moment — waardoor zon-geladen en net-geladen energie in
+één model passen, zonder ze apart te hoeven bijhouden (wat sowieso niet
+kan: de accu is één gedeelde pool, geen partijen per bron). Zodra
+salderen stopt, moet deze aanname worden herzien.
+
+Kan net als de onderliggende werkelijkheid ook **dalen** (een verkoop
+onder de kostprijs realiseert een verlies) — gebruikt daarom
+`state_class: total`, niet `total_increasing`. Bewuste vereenvoudiging:
+onderscheidt niet tussen "ontlading die nuttig verbruik dekte" en
+"ontlading verloren aan zelfontlading" — beide zien er in de
+`available_kwh`-data identiek uit.
+
+**Zonneplan's Zonnebonus** (v0.63.25, criteria bevestigd via
+webonderzoek — niet aangenomen): bovenop de kale marktprijs geldt een
+vaste terugleverpremie van €0,02/kWh voor elke kWh die daadwerkelijk
+wordt teruggeleverd, óók vanuit een accu. De aparte 10%-bonus die
+Zonneplan erbovenop geeft, geldt echter **niet** voor teruglevering
+vanuit een thuisbatterij — die wordt hier dan ook nooit meegerekend.
+
+Het model onderscheidt daarom **echte netto-teruglevering** (het deel
+van een ontlading dat boven het actuele huisverbruik uitkomt — krijgt de
+€0,02/kWh) van **puur eigen-verbruik-dekken** (geen teruglevering, dus
+ook geen premie, alleen de vermeden inkoopprijs telt). Benaderd door het
+gemiddelde ontlaadtempo over de verstreken tijd te vergelijken met het
+live gecorrigeerde huisverbruik — vereist dus wel
+`consumption_power_sensor_entity` om dit onderscheid te kunnen maken;
+zonder die sensor telt de hele ontlading als "geen teruglevering" (dus
+geen premie, conservatieve onderschatting). Nog niet toegepast aan de
+laadkant (de vraag of zon-geladen energie tegen de gederfde
+teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
+worden) — een mogelijke vervolgstap.
+
 ## Diagnostiek
 
 "Instellingen → Apparaten & Diensten → Energy Management System → drie

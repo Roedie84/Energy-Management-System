@@ -8,6 +8,8 @@
 #   jouw installatie, pas ze aan - check zelf via Ontwikkelaarshulpmiddelen.
 #   Een verkeerde source-naam levert geen fout op, maar laat de meter
 #   stilzwijgend voor altijd op 0 staan (geen update komt ooit binnen).
+#   Geldt met name voor de nieuwe "battery_savings"-meters (v0.63.24) -
+#   die entity-ID is een inschatting, controleer 'm expliciet.
 # - Na toevoegen: Ontwikkelaarshulpmiddelen -> YAML -> Configuratie controleren,
 #   en dan Home Assistant herstarten (utility_meter kan niet via "YAML herladen"
 #   worden bijgewerkt, een volledige herstart is nodig bij nieuwe meters).
@@ -43,4 +45,25 @@ utility_meter:
   ems_charge_cost_monthly:
     source: sensor.woonkamer_energy_management_system_charge_cost_grid_charging
     name: "EMS Netlaadkosten - deze maand"
+    cycle: monthly
+
+  # "Wat bespaart de accu" - kostprijs-gebaseerd model (v0.63.24). Dekt
+  # zowel koop-goedkoop-verkoop-duur-arbitrage als PV-zelfverbruik met
+  # dezelfde berekening (geldig onder salderen: teruglevering betaalt
+  # dan hetzelfde dynamische tarief als inkoop). Kan net als de
+  # bronsensor zelf ook dalen (bij een verlies-realisatie), dat is geen
+  # fout in de meter.
+  ems_battery_savings_daily:
+    source: sensor.woonkamer_energy_management_system_battery_savings_cost_basis_model
+    name: "EMS Accubesparing - vandaag"
+    cycle: daily
+
+  ems_battery_savings_weekly:
+    source: sensor.woonkamer_energy_management_system_battery_savings_cost_basis_model
+    name: "EMS Accubesparing - deze week"
+    cycle: weekly
+
+  ems_battery_savings_monthly:
+    source: sensor.woonkamer_energy_management_system_battery_savings_cost_basis_model
+    name: "EMS Accubesparing - deze maand"
     cycle: monthly

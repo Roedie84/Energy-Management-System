@@ -322,6 +322,25 @@ views:
       - type: custom:mushroom-title-card
         title: Financieel
 
+      - type: custom:mushroom-template-card
+        primary: >-
+          € {{
+          states('sensor.woonkamer_energy_management_system_battery_savings_cost_basis_model')
+          }}
+        secondary: >-
+          Accubesparing (kostprijs-model) — huidige kostprijs: € {{
+          state_attr('sensor.woonkamer_energy_management_system_battery_savings_cost_basis_model',
+          'cost_basis_eur_per_kwh') }}/kWh
+        icon: mdi:piggy-bank-outline
+        icon_color: >-
+          {{ 'green' if
+          states('sensor.woonkamer_energy_management_system_battery_savings_cost_basis_model')
+          | float(0) >= 0 else 'red' }}
+        entity: >-
+          sensor.woonkamer_energy_management_system_battery_savings_cost_basis_model
+        tap_action:
+          action: more-info
+
       - type: grid
         columns: 2
         square: false
@@ -387,6 +406,35 @@ views:
             icon: mdi:calendar-month
             icon_color: red
             entity: sensor.ems_netlaadkosten_deze_maand
+
+      - type: grid
+        columns: 3
+        square: false
+        cards:
+          - type: custom:mushroom-template-card
+            primary: "€ {{ states('sensor.ems_accubesparing_vandaag') }}"
+            secondary: Accubesparing — vandaag
+            icon: mdi:calendar-today
+            icon_color: >-
+              {{ 'green' if states('sensor.ems_accubesparing_vandaag') |
+              float(0) >= 0 else 'red' }}
+            entity: sensor.ems_accubesparing_vandaag
+          - type: custom:mushroom-template-card
+            primary: "€ {{ states('sensor.ems_accubesparing_deze_week') }}"
+            secondary: Accubesparing — deze week
+            icon: mdi:calendar-week
+            icon_color: >-
+              {{ 'green' if states('sensor.ems_accubesparing_deze_week') |
+              float(0) >= 0 else 'red' }}
+            entity: sensor.ems_accubesparing_deze_week
+          - type: custom:mushroom-template-card
+            primary: "€ {{ states('sensor.ems_accubesparing_deze_maand') }}"
+            secondary: Accubesparing — deze maand
+            icon: mdi:calendar-month
+            icon_color: >-
+              {{ 'green' if states('sensor.ems_accubesparing_deze_maand') |
+              float(0) >= 0 else 'red' }}
+            entity: sensor.ems_accubesparing_deze_maand
 
       - type: grid
         columns: 2

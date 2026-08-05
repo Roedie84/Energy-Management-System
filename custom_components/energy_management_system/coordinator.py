@@ -123,6 +123,9 @@ from .const import (
     SOLAR_RAMP_STEPS,
     GRID_IMPORT_SHORTFALL_THRESHOLD_W,
     MAX_HOUR_TRACKING_GAP_MINUTES,
+    MIN_COST_BASIS_DELTA_KWH,
+    FEEDIN_PREMIUM_EUR_PER_KWH,
+    FEEDIN_PREMIUM_EUR_PER_KWH,
     MIN_ARBITRAGE_MARGIN_EUR_PER_KWH,
     MIN_ARBITRAGE_GRID_POWER_W,
     SHORTFALL_MARGIN_BONUS_PER_RECENT_DAY,
@@ -311,6 +314,25 @@ class EnergyManagementSystemCoordinator:
         # (what would have happened without this integration).
         self.total_discharge_value_eur: float = 0.0
         self.total_charge_cost_eur: float = 0.0
+        # Battery cost-basis tracking (v0.63.24): a weighted-average
+        # EUR/kWh cost basis for whatever energy currently sits in the
+        # battery, updated on every charge (at the current dynamic price,
+        # regardless of source - see below) and realised as savings on
+        # every discharge (sold, or used to avoid an import). Valid under
+        # a salderen (net-metering) contract, where feed-in pays the
+        # same dynamic rate as import - so PV routed into the battery
+        # instead of exported has exactly the same opportunity cost as
+        # buying that energy from the grid at that moment. This equates
+        # PV-charged and grid-charged energy into one model instead of
+        # needing to track them separately (which isn't physically
+        # possible anyway - the battery is one shared pool, not
+        # per-source lots). Revisit this assumption if/when salderen
+        # ends (currently contracted until 2026-12-31).
+        self.battery_cost_basis_eur_per_kwh: float | None = None
+        self._last_available_kwh_for_cost_basis: float | None = None
+        self.total_battery_savings_eur: float = 0.0
+        self.total_feedin_premium_eur: float = 0.0
+        self._last_cost_basis_calc_time: datetime | None = None
         self.last_charge_power_applied: float | None = None
         self.last_current_price_per_kwh: float | None = None
         self.last_projection_available_kwh: float | None = None
@@ -3523,6 +3545,14 @@ class EnergyManagementSystemCoordinator:
         tracks the direct monetary value of energy discharged during
         expensive quarters, and the direct cost of energy force-charged
         from the grid during a low-solar cheap block.
+
+        v0.63.25: the discharge value now also includes the Zonneplan
+        feed-in premium (`FEEDIN_PREMIUM_EUR_PER_KWH`) for whatever
+        portion of the discharge is genuine net export - same
+        export-vs-covers-load split as
+        `_update_battery_cost_basis_and_savings`, kept consistent so
+        this sensor's "directe waarde" claim is actually accurate, not
+        just an approximation that ignores the premium entirely.
         """
         elapsed_hours = 0.0
         if self._last_value_calc_time is not None:
@@ -3540,9 +3570,19 @@ class EnergyManagementSystemCoordinator:
 
         if reason == "expensive_quarter" and discharge_power_w:
             energy_kwh = (discharge_power_w / 1000) * elapsed_hours
-            value_eur = energy_kwh * current_price
+
+            export_kwh = 0.0
+            discharge_rate_kw = discharge_power_w / 1000
+            household_load_w = self._read_corrected_consumption_power()
+            if household_load_w is not None:
+                export_rate_kw = max(0.0, discharge_rate_kw - household_load_w / 1000)
+                export_kwh = min(energy_kwh, export_rate_kw * elapsed_hours)
+
+            feedin_premium_eur = export_kwh * FEEDIN_PREMIUM_EUR_PER_KWH
+            value_eur = energy_kwh * current_price + feedin_premium_eur
             self.total_discharge_value_eur += value_eur
             self.current_month_discharge_value_eur += value_eur
+            self.total_feedin_premium_eur += feedin_premium_eur
         elif (
             reason in ("grid_charging_low_solar", "emergency_low_battery")
             and charge_power_w
@@ -3551,6 +3591,128 @@ class EnergyManagementSystemCoordinator:
             cost_eur = energy_kwh * current_price
             self.total_charge_cost_eur += cost_eur
             self.current_month_charge_cost_eur += cost_eur
+
+    def _update_battery_cost_basis_and_savings(
+        self, now: datetime, entries: list[PriceEntry]
+    ) -> None:
+        """Track a weighted-average EUR/kWh cost basis for whatever
+        energy currently sits in the battery, and realise savings/
+        earnings whenever that energy leaves - regardless of *why* it
+        left (an explicit sell during expensive_quarter, or simply
+        covering household load to avoid an import during smart/
+        smart_discharging/emergency_low_battery/etc).
+
+        Unlike `_update_financial_tracking` above (which deliberately
+        avoids a "total savings" figure, since that needs an unverifiable
+        counterfactual), this IS defensible: it only uses prices this
+        integration actually observed at the exact moments energy
+        entered and left the battery - not a hypothetical "what if there
+        were no battery" scenario. reported: "wat bespaart de batterij" -
+        both buy-low-sell-high arbitrage AND PV self-consumption should
+        count, using one unified mechanism rather than two.
+
+        Requires a salderen (net-metering) contract to be valid: under
+        salderen, feed-in pays the same dynamic rate as import, so PV
+        routed into the battery instead of exported has exactly the same
+        opportunity cost as buying that energy from the grid at that
+        moment - equating PV-charged and grid-charged energy into one
+        cost basis, without needing to track per-source lots (which
+        isn't physically possible anyway - the battery is one shared
+        pool). Revisit if/when salderen ends.
+
+        v0.63.25: on the discharge side, also splits out how much of the
+        discharge was genuine net export to the grid (vs. just covering
+        household load) - confirmed via web search that Zonneplan pays a
+        fixed EUR/kWh feed-in premium (`FEEDIN_PREMIUM_EUR_PER_KWH`) on
+        top of the market price for every kWh actually fed back,
+        including from a battery (only the separate 10% "Zonnebonus"
+        excludes battery-sourced feed-in, which this integration never
+        claims anyway). Covering household load isn't feed-in at all, so
+        gets no premium - only the value of the avoided import. The
+        export portion is approximated as (discharge rate - household
+        load) over this tick's interval, using the live corrected
+        consumption reading; deliberately doesn't yet apply on the
+        *charging* side (the opportunity-cost-of-diverted-PV question),
+        a further refinement if wanted.
+
+        Deliberately doesn't try to distinguish "discharge that covered
+        useful load/sale" from "discharge lost to internal battery
+        self-discharge/standby losses" - both show up identically as an
+        available_kwh decrease. A small simplification; self-discharge
+        is typically a minor fraction of total throughput.
+        """
+        available_entity = self.config.get(CONF_AVAILABLE_ENERGY_SENSOR)
+        if not available_entity:
+            return
+        available_kwh = self._read_sensor_float(available_entity)
+        if available_kwh is None:
+            return
+
+        elapsed_hours = 0.0
+        if self._last_cost_basis_calc_time is not None:
+            elapsed_hours = max(
+                (now - self._last_cost_basis_calc_time).total_seconds() / 3600, 0
+            )
+        self._last_cost_basis_calc_time = now
+
+        if self._last_available_kwh_for_cost_basis is None:
+            self._last_available_kwh_for_cost_basis = available_kwh
+            return
+
+        delta_kwh = available_kwh - self._last_available_kwh_for_cost_basis
+        self._last_available_kwh_for_cost_basis = available_kwh
+
+        if abs(delta_kwh) < MIN_COST_BASIS_DELTA_KWH:
+            return
+
+        current_price = self._get_current_price_per_kwh(entries, now)
+        if current_price is None:
+            return
+
+        if delta_kwh > 0:
+            # Charged (from any source) - fold into the weighted-average
+            # cost basis at today's price.
+            if self.battery_cost_basis_eur_per_kwh is None:
+                self.battery_cost_basis_eur_per_kwh = current_price
+            else:
+                # Weight by whatever was already stored before this
+                # charge - approximated by the available_kwh just before
+                # this delta (available_kwh - delta_kwh).
+                previous_kwh = max(0.0, available_kwh - delta_kwh)
+                total_kwh = previous_kwh + delta_kwh
+                self.battery_cost_basis_eur_per_kwh = (
+                    self.battery_cost_basis_eur_per_kwh * previous_kwh
+                    + current_price * delta_kwh
+                ) / total_kwh
+        else:
+            # Discharged (sold, or used to cover load and avoid an
+            # import) - realise the difference between today's price and
+            # what this energy originally cost, if a cost basis exists
+            # yet. Pre-existing energy with an unknown origin (e.g. right
+            # after a fresh install) is skipped rather than guessed at.
+            if self.battery_cost_basis_eur_per_kwh is not None:
+                discharged_kwh = -delta_kwh
+
+                export_kwh = 0.0
+                if elapsed_hours > 0:
+                    discharge_rate_kw = discharged_kwh / elapsed_hours
+                    household_load_w = self._read_corrected_consumption_power()
+                    if household_load_w is not None:
+                        export_rate_kw = max(
+                            0.0, discharge_rate_kw - household_load_w / 1000
+                        )
+                        export_kwh = min(
+                            discharged_kwh, export_rate_kw * elapsed_hours
+                        )
+
+                feedin_premium_eur = export_kwh * FEEDIN_PREMIUM_EUR_PER_KWH
+                savings_eur = (
+                    discharged_kwh
+                    * (current_price - self.battery_cost_basis_eur_per_kwh)
+                    + feedin_premium_eur
+                )
+                self.total_battery_savings_eur += savings_eur
+                self.total_feedin_premium_eur += feedin_premium_eur
 
     def _cheapest_block_range(
         self, entries: list[PriceEntry], now: datetime
@@ -4154,6 +4316,7 @@ class EnergyManagementSystemCoordinator:
         should_postpone_charging = self._should_postpone_charging(
             entries, now, cheap_block_start
         )
+        self._update_battery_cost_basis_and_savings(now, entries)
 
         # Pause consumption-related learning during vacation mode, so the
         # unusually low readings don't pollute the learned "normal"

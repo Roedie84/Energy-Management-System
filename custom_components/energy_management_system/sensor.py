@@ -52,6 +52,7 @@ async def async_setup_entry(
         BatteryProtectionSensor(coordinator, entry.entry_id),
         DischargeValueSensor(coordinator, entry.entry_id),
         ChargeCostSensor(coordinator, entry.entry_id),
+        BatterySavingsSensor(coordinator, entry.entry_id),
         ReserveShortfallSensor(coordinator, entry.entry_id),
         ReserveExcessSensor(coordinator, entry.entry_id),
         LearnedBatteryEfficiencySensor(coordinator, entry.entry_id),
@@ -741,6 +742,94 @@ class ChargeCostSensor(SensorEntity, RestoreEntity):
         if last_state is not None:
             try:
                 self._coordinator.total_charge_cost_eur = float(last_state.state)
+            except (TypeError, ValueError):
+                pass
+
+
+class BatterySavingsSensor(SensorEntity, RestoreEntity):
+    """Cumulative EUR realised by the battery, using a weighted-average
+    cost-basis model (v0.63.24): every kWh that enters the battery is
+    valued at the dynamic price at that moment (regardless of source -
+    valid under a salderen/net-metering contract, where PV routed into
+    the battery instead of exported has the same opportunity cost as
+    buying that energy from the grid right then). Every kWh that leaves
+    - sold during an expensive quarter, or simply used to cover
+    household load and avoid an import - realises the difference between
+    today's price and its original cost basis.
+
+    v0.63.25: also includes Zonneplan's fixed EUR/kWh feed-in premium
+    (confirmed via web search) for the portion of a discharge that's
+    genuine net export to the grid - not the portion that just covers
+    household load, which isn't feed-in at all.
+
+    Unlike DischargeValueSensor/ChargeCostSensor above (deliberately NOT
+    called "savings", since a counterfactual can't be verified), this one
+    genuinely can be called savings: it only uses prices this integration
+    actually observed at the moments energy entered and left the
+    battery, not a hypothetical "no battery" scenario. Can decrease as
+    well as increase (a discharge below cost basis realises a loss), so
+    uses `state_class: total` rather than `total_increasing`.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Battery savings (cost-basis model)"
+    _attr_icon = "mdi:piggy-bank-outline"
+    _attr_native_unit_of_measurement = "€"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_state_class = "total"
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_battery_savings"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def native_value(self) -> float:
+        return round(self._coordinator.total_battery_savings_eur, 4)
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        basis = self._coordinator.battery_cost_basis_eur_per_kwh
+        return {
+            "cost_basis_eur_per_kwh": round(basis, 4) if basis is not None else None,
+            "total_feedin_premium_eur": round(
+                self._coordinator.total_feedin_premium_eur, 4
+            ),
+            "note": (
+                "Geldig zolang salderen actief is (contract tot en met "
+                "2026-12-31) - teruglevering betaalt dan hetzelfde "
+                "dynamische tarief als inkoop, dus zon-geladen en "
+                "net-geladen energie krijgen dezelfde kostprijs. Bevat "
+                "de Zonneplan-terugleverpremie (€0,02/kWh) op het deel "
+                "van een ontlading dat echt teruggeleverd wordt (niet "
+                "op het deel dat alleen eigen verbruik dekt) - de "
+                "aparte 10%-Zonnebonus geldt niet voor accu-teruglevering "
+                "en wordt hier dan ook nooit meegerekend."
+            ),
+        }
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if last_state is None:
+            return
+        try:
+            self._coordinator.total_battery_savings_eur = float(last_state.state)
+        except (TypeError, ValueError):
+            pass
+        basis = last_state.attributes.get("cost_basis_eur_per_kwh")
+        if basis is not None:
+            try:
+                self._coordinator.battery_cost_basis_eur_per_kwh = float(basis)
+            except (TypeError, ValueError):
+                pass
+        premium = last_state.attributes.get("total_feedin_premium_eur")
+        if premium is not None:
+            try:
+                self._coordinator.total_feedin_premium_eur = float(premium)
             except (TypeError, ValueError):
                 pass
 

@@ -380,6 +380,17 @@ async def async_get_config_entry_diagnostics(
                 coordinator.total_discharge_value_eur, 4
             ),
             "total_charge_cost_eur": round(coordinator.total_charge_cost_eur, 4),
+            "total_battery_savings_eur": round(
+                coordinator.total_battery_savings_eur, 4
+            ),
+            "battery_cost_basis_eur_per_kwh": (
+                round(coordinator.battery_cost_basis_eur_per_kwh, 4)
+                if coordinator.battery_cost_basis_eur_per_kwh is not None
+                else None
+            ),
+            "total_feedin_premium_eur": round(
+                coordinator.total_feedin_premium_eur, 4
+            ),
             "learned_battery_efficiency_percent": (
                 coordinator.learned_battery_efficiency_percent
             ),

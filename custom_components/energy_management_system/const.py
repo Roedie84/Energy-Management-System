@@ -238,6 +238,22 @@ SOLAR_RAMP_STEPS = 10
 # that day turned out too optimistic. Set above typical sensor noise.
 GRID_IMPORT_SHORTFALL_THRESHOLD_W = 100.0
 
+# Battery cost-basis tracking (v0.63.24): the smallest available_kwh
+# change (kWh) between ticks that counts as a genuine charge/discharge
+# event, rather than sensor noise/rounding jitter - below this, the
+# weighted-average cost basis isn't updated and no savings are realised.
+MIN_COST_BASIS_DELTA_KWH = 0.01
+
+# Zonneplan's "Zonnebonus" (v0.63.25, confirmed via web search - not
+# assumed): a fixed EUR/kWh premium on top of the day-ahead market price
+# for every kWh genuinely fed back to the grid, on top of/outside your
+# saldeerbereik. Unconditional (unlike the separate 10% bonus on top of
+# that, which explicitly excludes feed-in sourced from a home battery -
+# irrelevant here since we never apply it). Only applies to the portion
+# of a discharge that's genuine net export - not the portion that
+# simply covers household load (no feed-in happens there at all).
+FEEDIN_PREMIUM_EUR_PER_KWH = 0.02
+
 # In-progress hourly-bucket tracking (v0.63.16) restores across a
 # restart, but only within this gap - a longer gap (real outage, not a
 # quick update-restart) makes the accumulated partial-hour energy

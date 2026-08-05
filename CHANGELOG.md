@@ -3446,3 +3446,135 @@ betekenis.
 **Niet gewijzigd:** de historische vermelding van de oude tekst in dit
 CHANGELOG-bestand zelf (v0.30.0-sectie) - dat is een citaat van hoe de
 tekst destijds daadwerkelijk luidde, geen actuele documentatie.
+
+## v0.63.24 — "wat bespaart de accu": kostprijs-gebaseerd besparingsmodel
+
+**Aanleiding:** de bestaande financiële sensoren
+(`discharge_value_expensive_quarters`/`charge_cost_grid_charging`) meten
+alleen de directe waarde van expliciete koop-/verkoopacties — niet wat
+de accu in bredere zin "bespaart", zoals ook de waarde van 0-op-de-meter
+houden met zon- of goedkoop-net-geladen energie tijdens een duurder
+moment, zonder dat er iets expliciet is "verkocht".
+
+**Kernidee, mogelijk gemaakt door het salderen-contract (tot en met
+2026-12-31):** onder salderen betaalt teruglevering hetzelfde dynamische
+tarief als inkoop — dus zon die de accu in gaat (in plaats van terug te
+leveren) heeft exact dezelfde opportuniteitskosten als het inkopen van
+diezelfde energie op dat moment. Dat maakt één uniform model mogelijk:
+elke kWh die de accu in gaat wordt gewaardeerd tegen de actuele
+dynamische prijs (ongeacht bron), en elke kWh die eruit gaat — verkocht
+óf gebruikt om een import te voorkomen — realiseert het verschil met die
+kostprijs. Geen aparte boekhouding per bron nodig (en ook niet mogelijk:
+de accu is één gedeelde pool, geen partijen per herkomst).
+
+**Nieuw: `_update_battery_cost_basis_and_savings()`.** Draait elke tick,
+onvoorwaardelijk en vroeg (net als de andere trackers), en leest de
+verandering in `available_kwh` sinds de vorige tick:
+- **Toename** (laden, ongeacht bron) → gewogen-gemiddelde kostprijs
+  bijwerken tegen de actuele prijs.
+- **Afname** (ontladen, verkocht of verbruik-dekkend) → verschil tussen
+  actuele prijs en kostprijs realiseren als besparing/verdiensten.
+- Kleine schommelingen (< `MIN_COST_BASIS_DELTA_KWH` = 0,01 kWh) worden
+  genegeerd als sensorruis.
+- Ontlading vóórdat er ooit een kostprijs is vastgesteld (bijv. vlak na
+  installatie) wordt overgeslagen in plaats van geraden.
+
+**Nieuwe sensor:** `sensor.battery_savings_cost_basis_model` — in
+tegenstelling tot de bestaande sensoren mag deze wél "besparing" heten:
+hij gebruikt uitsluitend prijzen die daadwerkelijk zijn waargenomen op
+het moment van laden/ontladen, geen hypothetisch scenario. Kan net als
+de werkelijkheid ook dalen (verlies bij verkoop onder kostprijs), dus
+`state_class: total`, niet `total_increasing`. Toont de actuele
+kostprijs per kWh als attribuut.
+
+**Nieuwe Utility Meter-regels** toegevoegd aan `utility_meter_ems.yaml`
+(dag/week/maand), plus een nieuwe koptekst-kaart en dag/week/maand-rij
+op het Financieel-dashboard.
+
+**Bewuste vereenvoudiging:** onderscheidt niet tussen "ontlading die
+nuttig verbruik dekte" en "ontlading verloren aan interne
+zelfontlading" — beide zien er in de `available_kwh`-data identiek uit.
+Zelfontlading is doorgaans een klein deel van de totale doorstroom.
+
+**Getest** (8 nieuwe permanente tests in `test_battery_savings.py`):
+eerste tick zaait alleen; laden zet de kostprijs op de actuele prijs;
+meerdere ladingen werken het gewogen gemiddelde correct bij; ontladen
+realiseert het juiste verschil; ontladen zonder bekende kostprijs wordt
+overgeslagen; kleine schommelingen worden genegeerd; een verlies-
+realisatie (verkoop onder kostprijs) werkt en levert een negatief getal
+op; en zonder geconfigureerde `available_energy_sensor_entity` gebeurt
+er niets.
+
+## v0.63.25 — Zonneplan Zonnebonus verrekend in het besparingsmodel
+
+**Gevraagd:** of het v0.63.24-besparingsmodel al rekening hield met de
+Zonneplan Zonnebonus en de bijbehorende criteria. Dat was niet het
+geval — en na webonderzoek (niet aangenomen) bleek dit relevant.
+
+**Gevonden, bevestigd via meerdere onafhankelijke bronnen:**
+- Bovenop de kale marktprijs geldt een **vaste terugleverpremie van
+  €0,02/kWh**, voor elke kWh die daadwerkelijk wordt teruggeleverd —
+  ook vanuit een accu, ook buiten je saldeerbereik.
+- Daarbovenop een **aparte 10%-bonus**, met voorwaarden (alleen
+  overdag, niet bij bijna-negatieve prijzen, max. 7.500 kWh/jaar) —
+  maar cruciaal: **"Geen bonus over teruglevering vanuit een
+  thuisbatterij."** Die 10% geldt dus nooit voor onze accu.
+
+**Wat dit onthulde:** de vaste €0,02/kWh-premie zat nergens in het
+model — bij een daadwerkelijke verkoop werd de opbrengst dus met
+€0,02/kWh onderschat. Bovendien maakte het model geen onderscheid
+tussen ontlading die daadwerkelijk het net op gaat (waar de premie voor
+geldt) en ontlading die alleen eigen verbruik dekt (geen teruglevering,
+dus ook geen premie).
+
+**Fix, na expliciete keuze van de gebruiker voor de precieze variant
+boven een simpele benadering:** `_update_battery_cost_basis_and_savings()`
+splitst een ontlading nu per tick in een export- en een
+verbruik-dekkend deel, door het gemiddelde ontlaadtempo (uit de
+`available_kwh`-daling gedeeld door de verstreken tijd) te vergelijken
+met het live gecorrigeerde huisverbruik. Alleen het deel dat daarboven
+uitkomt (`FEEDIN_PREMIUM_EUR_PER_KWH` = €0,02) telt als echte
+teruglevering. De 10%-bonus wordt bewust **nooit** toegepast (geldt
+sowieso niet voor accu-teruglevering).
+
+**Bewust beperkt tot de ontladingskant** (zoals gevraagd) — de laadkant
+(zou zon-geladen energie tegen de gederfde teruglever-waarde
+gewaardeerd moeten worden in plaats van de marktprijs?) blijft
+ongewijzigd, een mogelijke vervolgstap.
+
+**Nieuw:** `total_feedin_premium_eur` (cumulatief, apart bijgehouden en
+zichtbaar als attribuut op `sensor.battery_savings_cost_basis_model` en
+in de diagnostiek) — laat zien hoeveel van de totale besparing specifiek
+uit de terugleverpremie komt.
+
+**Getest** (2 nieuwe permanente tests in `test_battery_savings.py`, met
+een correct geconfigureerde `battery_power_sensor_entity` om het
+werkelijke huisverbruik correct te reconstrueren uit de P1-meterstand):
+de premie wordt correct toegepast op alleen het exportdeel van een
+ontlading, en blijft terecht op nul wanneer een ontlading uitsluitend
+eigen verbruik dekt.
+
+## v0.63.26 — feed-in-premie ook consistent op discharge_value_expensive_quarters
+
+**Opschoning + aanvulling op v0.63.25:** tijdens het narekenen bleek
+`_update_financial_tracking()` (de bestaande
+`discharge_value_expensive_quarters`-sensor) de nieuwe
+export-vs-verbruik-dekkend-splitsing nog niet te gebruiken — die telde
+nog steeds puur `vermogen × marktprijs`, zonder de €0,02/kWh
+Zonneplan-terugleverpremie. Voor een sensor die zich presenteert als
+"directe waarde van verkoop" is dat een reële onderschatting bij een
+daadwerkelijke export. Nu consistent met het kostprijsmodel: dezelfde
+per-tick-splitsing (ontlaadtempo vs. live gecorrigeerd huisverbruik)
+bepaalt welk deel premie krijgt.
+
+**Ook opgeruimd:** een tijdens het ontwikkelen ontstane dubbele,
+overbodige implementatie (een eenvoudigere P1-teken-gebaseerde
+premie-detectie naast de al aanwezige, preciezere tick-interne
+rate-vergelijking) — verwijderd ten gunste van de bestaande, betere
+aanpak.
+
+**Getest** (1 nieuwe permanente test): reproduceert exact hetzelfde
+scenario als de bestaande kostprijsmodel-tests (200W huisverbruik,
+1000W ontlading → 800W echte export), en bevestigt dat
+`discharge_value_expensive_quarters` nu ook €0,016 premie meerekent op
+die 0,8 kWh export.
