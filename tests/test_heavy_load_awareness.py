@@ -219,7 +219,7 @@ def test_correction_ratio_still_capped_when_heavy_load_confirmed(make_coordinato
     coordinator = make_coordinator({})
     coordinator.hourly_consumption_profile[20] = [0.3]
     coordinator._recent_consumption_readings_kw = [50.0]  # implausible glitch
-    coordinator.last_heavy_load_source = "quooker"
+    coordinator.last_heavy_load_source = "airco"
 
     ratio = coordinator._get_smoothed_consumption_correction_ratio(20)
 
@@ -228,6 +228,40 @@ def test_correction_ratio_still_capped_when_heavy_load_confirmed(make_coordinato
     )
 
     assert ratio == MAX_CONSUMPTION_CORRECTION_RATIO
+
+
+def test_short_duration_appliances_do_not_bypass_the_median(make_coordinator):
+    """v0.63.78, reported ("Basisverbruik ... schiet tussen ca. 16:00 en
+    17:00 omhoog door koken etc."): oven/kookplaat/vaatwasser/
+    wasmachine/Quooker are all inherently short-duration - a confirmed
+    cooking session must NOT bypass the median smoothing, unlike airco/
+    slaapkamer (which can genuinely run for hours). Trusting a live
+    cooking reading directly to scale an entire multi-hour bridging
+    estimate massively overstated the deficit for an event that's over
+    within the hour."""
+    coordinator = make_coordinator({})
+    coordinator.hourly_consumption_profile[16] = [0.3]  # learned ~300W for hour 16
+    # A brief low reading followed by one high reading just now (active
+    # cooking) - median of these 4 stays low.
+    coordinator._recent_consumption_readings_kw = [0.3, 0.3, 0.3, 3.0]
+
+    for source in ("oven", "kookplaat", "vaatwasser", "wasmachine", "quooker"):
+        coordinator.last_heavy_load_source = source
+        ratio = coordinator._get_smoothed_consumption_correction_ratio(16)
+        assert ratio == 1.0, f"{source} should not bypass the median smoothing"
+
+
+def test_sustained_appliances_still_bypass_the_median(make_coordinator):
+    """Confirms airco/slaapkamer still get the immediate-trust
+    behaviour, unaffected by the v0.63.78 fix."""
+    coordinator = make_coordinator({})
+    coordinator.hourly_consumption_profile[16] = [0.3]
+    coordinator._recent_consumption_readings_kw = [0.3, 0.3, 0.3, 3.0]
+
+    for source in ("airco", "slaapkamer"):
+        coordinator.last_heavy_load_source = source
+        ratio = coordinator._get_smoothed_consumption_correction_ratio(16)
+        assert ratio > 1.0, f"{source} should still bypass the median smoothing"
 
 
 def test_heavy_load_source_wired_into_full_update_tick(make_coordinator, hass):

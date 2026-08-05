@@ -226,191 +226,71 @@ Plus een vaste "onbeschermde nasleep"-marge van 15%
 neemt de Zendure's eigen smart-modus het over, buiten onze reserve-
 bescherming om — deze marge compenseert dat structurele blinde vlek.
 
-### Winstgevend bijkopen tijdens een goedkoop moment (standaard actief, geen schakelaar)
+### Zonoverschot vastleggen tijdens "laden uitstellen"
 
-Naast "genoeg reserve aanhouden" en "verkopen wat er al is", kan de
-integratie ook **actief bijkopen** tijdens een goedkoop kwartier, puur
-omdat er later diezelfde dag een bekend duurder kwartier aankomt.
+**Geschiedenis (afgerond, v0.63.15 t/m .76)**: dit was ooit een
+"arbitrage-laden"-mechanisme dat actief bijkocht van het net tijdens
+een goedkoop kwartier, puur omdat er later diezelfde dag een bekend
+duurder kwartier aankwam en dat na laad/ontlaad-verlies winstgevend
+was. Na verschillende praktijkrapporten — een onjuiste aanname over
+hoe manual-modus zon en net combineert (v0.63.72 loste dat eerst op),
+gevolgd door herhaalde meldingen dat de accu bij een ontoereikende
+reserve alsnog grotendeels van het net bleef bijladen in plaats van
+puur op smart te draaien — is **definitief besloten (v0.63.77) het
+hele mechanisme te verwijderen**. Expliciet bevestigd: voor deze
+accu-capaciteit wordt gekochte energie in de praktijk toch nooit met
+winst doorverkocht — het dient sowieso gewoon als overbrugging voor de
+nacht, wat de hele winst-framing overbodig maakte. Zelfs bij een
+écht ontoereikende reserve koopt dit mechanisme niet meer actief bij;
+`should_force_charge` (weinig zon verwacht tijdens het goedkope blok)
+en `_is_emergency_low_battery` (kritiek lage SoC) blijven als de enige,
+aparte vangnetten over, via hun eigen criteria.
 
-**Belangrijke voorwaarde (v0.63.73, expliciet gesteld):** "Als er
-voldoende capaciteit is voor overbruggen van de nacht, en er 's avonds
-dure kwartier prijzen zijn mag de accu NIET manual gaan bijladen,
-alleen op smart om de zonne energie welke wordt teruggeleverd op te
-slaan. Is er te weinig om de nacht te overbruggen dan mag hij manual
-bijladen." Dit draait de oorspronkelijke v0.63.15-aanname ("genoeg om
-te overbruggen" en "winstgevend om nu meer te kopen" zijn onafhankelijke
-vragen, dus altijd bijkopen als het loont) volledig om: een actieve
-netaankoop puur voor winst, terwijl er al genoeg reserve is, mag
-voortaan **nooit** meer — ongeacht hoe gunstig de marge is. Is de
-reserve wél genoeg om de nacht te overbruggen (`should_postpone_
-charging = True`), dan wordt uitsluitend het al aanwezige zonoverschot
-via smart-modus vastgelegd (v0.63.60's mechanisme, nu het enige dat
-deze aftakking nog doet) — nooit een echte netaankoop. Is de reserve
-juist ontoereikend (`should_postpone_charging = False`), dan geldt de
-winst-marge-logica hieronder gewoon zoals voorheen, zowel vóór het
-goedkope blok (i.p.v. laden uitstellen) als er middenin (i.p.v. gewoon
-P1-volgend blijven staan).
+**Wat overblijft**: uitsluitend het voorkomen dat al aanwezig
+zonoverschot verloren gaat. Zodra "laden uitstellen"
+(`smart_discharging`) van toepassing zou zijn — er is al genoeg reserve
+om de nacht te overbruggen — maar er is op dat moment ook zonoverschot,
+dan gaat de accu toch in `smart`-modus in plaats van
+`smart_discharging` (reden: `arbitrage_solar_capture`). Dat is nodig
+omdat `smart_discharging` uitsluitend het huishoudverbruik dekt en
+niet bijlaadt vanuit een zonoverschot (bevestigd, v0.63.59) — zonder
+deze uitzondering zou dat overschot gewoon worden teruggeleverd in
+plaats van vastgelegd. Geen netaankoop, nooit — puur het niet laten
+liggen van zon die er al is.
 
-**Geen aparte aan/uit-schakelaar meer (v0.63.65, gevraagd "ik denk dat
-arbitrage er helemaal uit kan"):** dit is nu standaardgedrag. Er was
-geen zinnige "uit"-stand denkbaar zodra je begrijpt wat het doet — de
-winst-marge-check hieronder beschermt al tegen inkopen wanneer het niet
-lonend is. `switch.arbitrage_laden` bestond t/m v0.63.64; die
-schakelaar en de bijbehorende `arbitrage_charging_enabled`-vlag zijn nu
-volledig verwijderd.
+Gebruikt de Solcast-gebaseerde verwachte PV-productie voor dit exacte
+half-uur (`_get_expected_pv_power_w`, v0.63.71, gecorrigeerd met de
+al geleerde bias per uur) in plaats van de live, ogenblikkelijke
+PV-meting — een voorbijtrekkende wolk beïnvloedt zo het half-uur-
+gemiddelde nauwelijks. Valt terug op de live meting als er geen
+`solar_forecast_sensor_entity` is geconfigureerd.
 
-Alleen actief als de projectie, ná laad/ontlaad-verlies, een minimale
-marge overhoudt:
+### Kookpiek blies de "diepste tekort"-berekening op (v0.63.78)
 
-```
-netto_eur_per_kwh = (geleerd_rendement × beste_resterende_verkoopprijs_vandaag)
-                    − huidige_prijs
-```
+Gerapporteerd: "Het basis verbruik schiet tussen ca. 16:00 en 17:00
+omhoog door koken etc." — de "Basisverbruik"/"Diepste tekort
+onderweg"-cijfers in de uitlegtekst-tabel kunnen flink oplopen als de
+berekening toevallig samenvalt met een actieve kookpiek.
 
-Moet minimaal `MIN_ARBITRAGE_MARGIN_EUR_PER_KWH` (3 cent/kWh) opleveren
-— een buffer tegen onzekerheid in de prijsvoorspelling en de
-rendementsschatting.
+**Root cause**: de live-verbruikscorrectie
+(`_get_smoothed_consumption_correction_ratio`) heeft een bewuste
+uitzondering — is een **bevestigde** zware verbruiker (vaatwasser,
+wasmachine, Quooker, airco, oven, kookplaat) actief, dan wordt de
+mediaan-demping overgeslagen en de laatste, ongefilterde meting direct
+vertrouwd (geen ambiguïteit meer om tegen te beschermen). Terecht voor
+airco (kan uren aanhouden), maar **niet** voor de inherent kortdurende
+apparaten: een kooksessie duurt doorgaans ruim onder het uur. Die
+ogenblikkelijke, hoge meting werd vervolgens gebruikt om de **hele
+resterende periode** (vaak 15+ uur tot het volgende goedkope blok) mee
+op te schalen — voor een gebeurtenis die allang voorbij is tegen de
+tijd dat de nacht daadwerkelijk aanbreekt.
 
-**Zon-prioriteit** (expliciet gevraagd: "tijdens goedkope uren vooral
-zonne-energie blijft opslaan"): het gewenste laadvermogen
-(`manual_charge_power`) wordt eerst verminderd met het **live
-zonoverschot** (PV-productie minus werkelijk huishoudverbruik, met
-`pv_power_sensor_entity` geconfigureerd) — alleen het overblijvende gat
-wordt daadwerkelijk van het net gekocht. Is het zonoverschot al groter
-dan het gewenste vermogen, **en zou de accu anders in de gewone
-`smart`-modus terechtkomen**, dan gebeurt er niets: die modus vangt de
-zon toch al zelf op via P1-volgend laden, geen reden om dat te
-verstoren met een geforceerde manual-modus.
-
-**Uitzondering, gevonden n.a.v. een gerapporteerd geval (v0.63.59/.60):**
-"accu wordt weer ingesteld op smart_discharging terwijl ik juist wil
-doorladen" — de zon-prioriteit-aanname hierboven ging er stilzwijgend
-van uit dat de terugval-modus altijd `smart` zou zijn. Zou de accu bij
-het uitblijven van arbitrage in plaats daarvan `smart_discharging`
-("laden uitstellen") ingaan, dan klopt die aanname niet — die modus
-dekt alleen het huishoudverbruik en laadt (bevestigd met de gebruiker)
-juist **niet** bij vanuit een zonoverschot.
-
-v0.63.59 loste dit eerst op door in dat geval het volle gewenste
-laadvermogen via **manual**-modus in te kopen — teruggekoppeld dat dit
-de verkeerde modus was ("moet naar smart niet naar manual"): er is
-namelijk helemaal geen actieve netaankoop nodig (het zonoverschot dekt
-het doelvermogen al volledig), dus manual-modus afdwingen was zwaarder
-dan nodig. v0.63.60 schakelt in dit specifieke geval in plaats daarvan
-gewoon over naar de gewone **`smart`**-modus (reden:
-`arbitrage_solar_capture`) — die vangt het zonoverschot vanzelf op via
-P1-volgend laden, precies zoals ze dat altijd al doet wanneer er geen
-sprake is van "laden uitstellen". Geen handmatig commando, geen
-expliciete netaankoop — dit voorkomt alleen dat `smart_discharging`
-gratis zon zou laten liggen.
-
-**Twee vervolggaten gevonden en gefixt (v0.63.67):** gerapporteerd,
-met screenshots — "Verwachting zegt nog steeds smart discharge" en de
-uitlegtekst toonde "Onbekende reden: arbitrage_solar_capture". Bij het
-introduceren van deze reden in v0.63.60 was vergeten om 'm ook toe te
-voegen aan (1) `REASON_TO_MODE` — waardoor "Verwachte modus (logica)"
-bleef hangen op de vorige tick's waarde (vaak `smart_discharging`) in
-plaats van correct naar `smart` te resolven, en (2) de
-uitlegtekst-generator — waardoor die terugviel op de generieke
-"onbekende reden"-tekst in plaats van een echte uitleg. Beide nu
-aangevuld.
-
-**Derde plek gevonden (v0.63.70):** gerapporteerd, met screenshots —
-"Zie nu alleen in het verwachtte schema nog smart_discharging staan op
-dit tijdstip". Het "Overzicht komende uren"-schema (`last_timeline`/
-`last_transitions`) heeft zijn eigen, aparte override voor de huidige
-tijdslot (zodat die altijd matcht met de live beslissing) — maar die
-kende alleen `live_is_expensive`/`live_should_postpone_charging`, niet
-de nieuwere `arbitrage_solar_capture`-override. Nu opgelost: het
-schema evalueert dezelfde zon-overschot-check vroeg in de tick (puur
-voor de projectie; de echte beslissing later in de tick berekent 'm
-gewoon opnieuw), en gebruikt dat om de huidige rij correct op `smart`
-te zetten in plaats van `smart_discharging`.
-
-**Vierde plek gevonden (v0.63.75):** gerapporteerd, met screenshots —
-het "Overzicht komende uren" toonde `smart` voor het huidige tijdslot,
-terwijl "Verwachte modus (logica)" tegelijkertijd `manual`
-(`arbitrage_charging`) liet zien. Een écht winstgevende netaankoop
-(v0.63.73's "reserve ontoereikend, marge winstgevend"-geval) is noch
-`is_expensive` (dat is de aparte `expensive_quarter`-reden), noch
-`should_postpone_charging` — de override-logica had hier helemaal geen
-signaal voor en viel stilzwijgend terug op `smart`. Nu opgelost: dezelfde
-vroege arbitrage-evaluatie (al aanwezig sinds v0.63.70) levert nu ook
-een `live_is_arbitrage_charging`-signaal, dat de huidige rij correct op
-`manual` zet wanneer dat de daadwerkelijke beslissing is.
-
-**Voor alle duidelijkheid**: de daadwerkelijke beslissing zelf
-(`manual`/`arbitrage_charging`) was in het gerapporteerde geval
-inhoudelijk gewoon correct volgens de v0.63.73-regel — de reserve was op
-dat moment ontoereikend om de nacht te overbruggen, dus mocht er
-volgens je eigen regel actief bijgeladen worden. Het was uitsluitend het
-"Overzicht komende uren"-schema dat een inconsistent beeld gaf.
-
-**Capaciteitstabel nu altijd zichtbaar, niet alleen vóór het goedkope
-blok (v0.63.76):** gevraagd — "in de tekst card wil ik daarom ook altijd
-de tabel zien, wat de verwachtingen zijn qua capaciteit". Root cause:
-de "diepste-tekort"-tabel (Periode/Basisverbruik/Verwachte zon/Diepste
-tekort/Veiligheidsmarge) werd tot dan toe alleen berekend **binnen**
-`_should_postpone_charging`'s eigen, smalle scope (`nu < cheap_block_
-start`). Zodra dat moment voorbij was — of er simpelweg geen naderend
-goedkoop blok was — nam die functie een vroege `return` zonder de tabel
-aan te raken, waardoor 'm gewoon de oude (vaak lege) waarde bleef tonen,
-zelfs als bijvoorbeeld `arbitrage_charging` de daadwerkelijke, actuele
-beslissing was.
-
-Losgekoppeld in een aparte, **onvoorwaardelijke** berekening
-(`_update_needed_kwh_breakdown_for_display`) die elke tick draait,
-ongeacht reden of timing — gebruikt `cheap_block_start` als eindpunt
-zodra die zinvol in de toekomst ligt, en valt anders terug op een
-generieke vooruitblik van 24 uur, zodat er altijd iets zinvols te tonen
-is. De beslissingslogica van `_should_postpone_charging` zelf is
-ongewijzigd gebleven — dit raakt uitsluitend wat er in de uitlegtekst
-wordt getoond.
-
-**Live PV-ruis vervangen door de Solcast-verwachting (v0.63.71):**
-gerapporteerd, met screenshots en een eigen vermoeden dat bleek te
-kloppen — de modus wisselde binnen 7 minuten van `smart` naar `manual`
-omdat een voorbijtrekkende wolk de live PV-meting liet duiken (2668W →
-1707W), en de zon-overschot-berekening las tot dan toe de **live,
-ogenblikkelijke** PV-sensor rechtstreeks. Nu leest die berekening in
-plaats daarvan de **Solcast-voorspelling** voor exact dit half-uur
-(`_get_expected_pv_power_w`), gecorrigeerd met de al bestaande, per uur
-geleerde Solcast-biascorrectie — een kortstondige wolk beïnvloedt het
-half-uur-gemiddelde nauwelijks, in tegenstelling tot de ogenblikkelijke
-meting. Valt terug op de live meting als er geen
-`solar_forecast_sensor_entity` is geconfigureerd (ongewijzigd gedrag
-in dat geval).
-
-**Fundamenteel gat gevonden en gefixt: manual-modus combineert géén
-zon (v0.63.72):** gerapporteerd — de uitlegtekst toonde "actief
-bijgekocht op 293W" naast "zonoverschot (1707W) wordt eerst benut",
-samen precies 2000W (het doelvermogen). Bevestigd met de gebruiker:
-manual-modus op deze Zendure is **niet** zon-bewust — een commando van
-293W laadt de accu ook daadwerkelijk maar met 293W **totaal**; het
-zonoverschot van 1707W wordt dan gewoon apart teruggeleverd, niet
-vastgelegd. De oude aanpak (alleen het net-gat commanderen, in de
-veronderstelling dat de accu daar vanzelf het zonoverschot bovenop zou
-leggen) was dus feitelijk **slechter dan niets doen** — smart-modus
-zou dat zonoverschot namelijk wél hebben vastgelegd.
-
-Ook bevestigd: commandeer je in plaats daarvan het **volle
-doelvermogen** (2000W), dan combineert de Zendure zon en net wél
-automatisch tot dat totaal (1707W zon + 293W net). `manual`-modus
-commandeert daarom voortaan altijd het volle doelvermogen zodra er
-enige winstgevende netaankoop gerechtvaardigd is — nooit alleen het
-gat. Dit pad wordt hierdoor uitsluitend bereikt wanneer het verwachte
-zonoverschot ontoereikend is om het doel te dekken (vooral najaar/
-winter, of vroeg/laat op de dag) — dekt de zon het doel al volledig,
-dan gaat het via de `arbitrage_solar_capture`-route naar `smart`
-zonder enige netaankoop. De geschatte, daadwerkelijke net-portie
-(`last_arbitrage_grid_power_w`) blijft beschikbaar als informatief
-cijfer, los van het gecommandeerde totaal.
-
-Zet **nooit** de winter-guard-vlag (`_grid_charged_today`) — dat
-mechanisme bestaat om te voorkomen dat noodzakelijk gekochte energie
-diezelfde dag met verlies wordt terugverkocht; arbitrage-laden koopt
-juist *omdat* er een winstgevende verkoop aankomt, dus zou die vlag de
-hele functie tegenwerken.
+**Fix**: een nieuwe constante `SUSTAINED_HEAVY_LOAD_SOURCES` (`airco`,
+`slaapkamer`) bepaalt nu welke bevestigde verbruikers de mediaan-demping
+nog mogen overslaan. Vaatwasser, wasmachine, Quooker, oven en kookplaat
+vallen voortaan terug op dezelfde mediaan-gedempte route als een
+onbevestigde meting — een kortstondige piek beïnvloedt de meerurige
+schatting daardoor niet meer onevenredig.
 
 ## Grootverbruiker-bevestiging
 

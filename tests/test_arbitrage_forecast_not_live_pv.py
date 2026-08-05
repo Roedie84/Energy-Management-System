@@ -100,11 +100,11 @@ def test_get_expected_pv_power_none_without_forecast_sensor(make_coordinator, ha
     assert result is None
 
 
-def test_arbitrage_uses_forecast_not_live_reading(make_coordinator, hass):
-    """The core regression: a live PV dip must NOT flip the decision
-    when the Solcast forecast still shows a comfortable surplus."""
-    forecast = make_price_forecast(DAY0, _price_fn_cheap_now_expensive_later)
-    hass.states.set("sensor.price", "0", {"forecast": forecast})
+def test_solar_capture_uses_forecast_not_live_reading(make_coordinator, hass):
+    """The core regression, now applied to the surviving solar-capture
+    signal (v0.63.77 removed the grid-purchase mechanism entirely): a
+    live PV dip must NOT flip the signal when the Solcast forecast
+    still shows a comfortable surplus."""
     coordinator = make_coordinator(_base_config())
     coordinator.learned_efficiency_history = [88.2] * 7
 
@@ -114,55 +114,37 @@ def test_arbitrage_uses_forecast_not_live_reading(make_coordinator, hass):
     # 100W export on the P1 meter (200W load - 300W live PV = -100W).
     hass.states.set("sensor.pv", "300")
     hass.states.set("sensor.p1", "-100")
-    hass.states.set("sensor.available_energy", "8.0")
     # ...but the Solcast forecast for this exact half-hour still expects
-    # a healthy 2.5kW - comfortably above the 2000W target, since a
-    # brief cloud doesn't change the half-hour's average estimate.
+    # a healthy 2.5kW - comfortably above household load, since a brief
+    # cloud doesn't change the half-hour's average estimate.
     hass.states.set(
         "sensor.solcast",
         "0",
         {"detailedForecast": _detailed_forecast_at(now, pv_estimate_kw=2.5)},
     )
 
-    with_now(coordinator, now)
-    entries = coordinator._get_forecast_entries()
-    coordinator.last_current_price_per_kwh = 0.217
-
-    result = coordinator._get_arbitrage_charge_power(
-        entries, now, should_postpone_charging=False
+    result = coordinator._should_capture_solar_instead_of_postponing(
+        now, should_postpone_charging=True
     )
 
-    # Forecast (2500W) - true household load (200W) = 2300W surplus,
-    # comfortably above the 2000W target - no grid purchase needed,
-    # unlike what the noisy, dipped live reading (300W, only a 0W
-    # surplus once corrected) would have implied.
-    assert result is None
+    assert result is True
     assert coordinator.last_arbitrage_solar_surplus_w == 2300.0
 
 
-def test_arbitrage_falls_back_to_live_reading_without_forecast(make_coordinator, hass):
+def test_solar_capture_falls_back_to_live_reading_without_forecast(
+    make_coordinator, hass
+):
     """No solar forecast sensor configured at all - must still fall
     back to the live reading, exactly like before this change."""
-    forecast = make_price_forecast(DAY0, _price_fn_cheap_now_expensive_later)
-    hass.states.set("sensor.price", "0", {"forecast": forecast})
-    hass.states.set("sensor.p1", "-800")
-    hass.states.set("sensor.available_energy", "8.0")
     coordinator = make_coordinator(_base_config(solar_forecast_sensor_entity=None))
-    coordinator.learned_efficiency_history = [88.2] * 7
 
     now = DAY0.replace(hour=15, minute=30)
-    hass.states.set("sensor.pv", "800")  # 800W surplus, target is 2000W
+    hass.states.set("sensor.pv", "800")
+    hass.states.set("sensor.p1", "-800")
 
-    with_now(coordinator, now)
-    entries = coordinator._get_forecast_entries()
-    coordinator.last_current_price_per_kwh = 0.217
-
-    result = coordinator._get_arbitrage_charge_power(
-        entries, now, should_postpone_charging=False
+    result = coordinator._should_capture_solar_instead_of_postponing(
+        now, should_postpone_charging=True
     )
 
-    # v0.63.72: commands the full 2000W target (hardware combines solar
-    # + grid automatically), not just the 1200W grid gap.
-    assert result == 2000.0
+    assert result is True
     assert coordinator.last_arbitrage_solar_surplus_w == 800.0
-    assert coordinator.last_arbitrage_grid_power_w == 1200.0

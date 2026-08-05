@@ -248,7 +248,6 @@ def test_arbitrage_solar_capture_has_a_real_explanation(make_coordinator):
     coordinator = make_coordinator({})
     coordinator.last_reason = "arbitrage_solar_capture"
     coordinator.last_arbitrage_solar_surplus_w = 1033.0
-    coordinator.last_arbitrage_margin_eur_per_kwh = 0.1728
 
     text = coordinator._build_explanation()
 

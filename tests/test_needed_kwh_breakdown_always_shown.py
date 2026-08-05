@@ -30,7 +30,11 @@ def with_now(coordinator, when: datetime) -> None:
     coord_mod.dt_util.now = lambda: when
 
 
-def test_breakdown_populated_when_arbitrage_charging_fires(make_coordinator, hass):
+def test_breakdown_populated_even_with_insufficient_reserve(make_coordinator, hass):
+    """v0.63.77 removed the arbitrage_charging mechanism entirely, so a
+    genuinely low reserve now just falls through to default_smart - but
+    the breakdown table must still be populated and shown regardless of
+    which reason ends up firing."""
     forecast = make_price_forecast(DAY0, _price_fn_cheap_now_expensive_later)
     hass.states.set("sensor.price", "0", {"forecast": forecast})
     hass.states.set("sensor.p1", "200")
@@ -54,7 +58,7 @@ def test_breakdown_populated_when_arbitrage_charging_fires(make_coordinator, has
     with_now(coordinator, DAY0.replace(hour=15, minute=30))
     asyncio.run(coordinator._async_update_locked())
 
-    assert coordinator.last_reason == "arbitrage_charging"
+    assert coordinator.last_reason == "default_smart"
     assert coordinator.last_needed_kwh_breakdown != {}
     assert "Onderdeel" in coordinator.last_explanation
 

@@ -58,7 +58,7 @@ MODE_CHANGE_EMOJI = {
     "emergency_low_battery": "🚨",
     "negative_price": "🎁⬆️",
     "discharging_window": "⏳",
-    "arbitrage_charging": "📈⬆️",
+    "arbitrage_solar_capture": "☀️",
     "default_smart": "🤖",
     "no_forecast_data": "⚠️",
 }
@@ -321,6 +321,18 @@ FIETSLADERS_COMPLETE_THRESHOLD_W = 20.0
 # count (thermostat satisfied / unit switched off).
 AIRCO_ACTIVE_HVAC_ACTIONS = {"heating", "cooling"}
 
+# v0.63.78, reported ("Basisverbruik ... schiet tussen ca. 16:00 en
+# 17:00 omhoog door koken etc."): of the confirmed-heavy-load sources
+# in _get_confirmed_heavy_load_source, only these two represent a
+# genuinely *sustained*, potentially multi-hour elevated consumption
+# level worth trusting immediately (bypassing the median smoothing) to
+# scale an entire remaining bridging-period estimate. The others
+# (oven, kookplaat, vaatwasser, wasmachine, quooker) are all inherently
+# short-duration - trusting their live reading directly for a
+# multi-hour projection would overstate it for an event that's over
+# within the hour.
+SUSTAINED_HEAVY_LOAD_SOURCES = {"airco", "slaapkamer"}
+
 # Living-room-temperature airco activation predictor (v0.63.55,
 # requested): "wanneer ik de airco aanzet" - a genuine anticipatory
 # indicator, not just a live correlation. Uses the same "queue an
@@ -435,12 +447,14 @@ ENERGY_BALANCE_ERROR_BAD_THRESHOLD_W = 300.0
 MEASUREMENT_QUALITY_GOOD_THRESHOLD = 80
 MEASUREMENT_QUALITY_DEGRADED_THRESHOLD = 50
 
-# Arbitrage charging (v0.63.15): buy from the grid during a cheap
-# quarter specifically because a known, more expensive quarter is still
-# coming later today - only worthwhile if the projected net return
-# clears this minimum margin (EUR/kWh) after round-trip losses, as a
-# buffer against price-forecast/efficiency-estimate uncertainty.
-MIN_ARBITRAGE_MARGIN_EUR_PER_KWH = 0.03
+# v0.63.15-.76: "arbitrage-laden" used to actively buy from the grid
+# during a cheap quarter for a known, later, more expensive quarter -
+# removed entirely in v0.63.77, final confirmed decision after several
+# real-world reports. The battery never actively buys from the grid for
+# this reason any more, only captures live solar surplus that would
+# otherwise be wasted during smart_discharging - the margin/grid-power
+# thresholds that used to gate the (now-removed) grid-purchase decision
+# are no longer needed.
 
 # MPC (Model Predictive Control) advisory engine (v0.63.33). Advisory
 # ONLY - computes a projected charge/discharge plan over the available
@@ -503,10 +517,6 @@ KALMAN_LOAD_MEASUREMENT_NOISE_W2 = 2500.0
 # duplicate) - documented plainly wherever the result is shown.
 DIGITAL_TWIN_HORIZON_HOURS = 48
 
-# Below this, forcing manual mode just to top up a trickle isn't worth
-# disrupting the Zendure's own solar-following smart mode for.
-MIN_ARBITRAGE_GRID_POWER_W = 100.0
-
 # For each of the last LEARNING_HISTORY_DAYS days that had a detected
 # shortfall, add this many extra percentage points to the dynamic
 # discharge reserve margin - self-correcting if the reserve estimate has
@@ -566,7 +576,6 @@ REASON_TO_MODE = {
     "emergency_low_battery": OPTION_MANUAL,
     "grid_charging_low_solar": OPTION_MANUAL,
     "discharging_window": OPTION_SMART_DISCHARGING,
-    "arbitrage_charging": OPTION_MANUAL,
     "arbitrage_solar_capture": OPTION_SMART,
     "default_smart": OPTION_SMART,
 }

@@ -5311,3 +5311,75 @@ naderend goedkoop blok; gebruikt `cheap_block_start` wanneer die wél
 zinvol in de toekomst ligt; valt terug wanneer `cheap_block_start` al
 gepasseerd is; en de "Periode"-tekst blijft consistent met het
 daadwerkelijk gebruikte eindpunt.
+
+## v0.63.77 — arbitrage-laden definitief en volledig verwijderd
+
+**Aanleiding:** meerdere gerapporteerde velscenario's ("Manueel laden
+mag nooit als er later tegen dure uren wordt ontladen, dit gebeurt nu
+met de nieuwste versie" en "Winst gevende marge achter wege laten,
+gewoon smart opladen") — de v0.63.73-uitzondering ("bij ontoereikende
+reserve mag manual") bleef in de praktijk regelmatig grotendeels van
+het net bijladen, wat niet meer gewenst was.
+
+**Definitieve, expliciet bevestigde beslissing**: het hele
+"actief bijkopen van het net omdat er later een winstgevend duurder
+kwartier komt"-mechanisme (arbitrage-laden, sinds v0.63.15) is volledig
+verwijderd — óók voor het geval waarin de reserve écht ontoereikend is.
+Reden, door de gebruiker zelf benoemd: voor deze accu-capaciteit wordt
+gekochte energie in de praktijk toch nooit met winst doorverkocht — het
+dient sowieso als overbrugging voor de nacht, wat de hele
+winst-framing overbodig maakte. Bevestigd: `should_force_charge`
+(weinig zon tijdens het goedkope blok) en `_is_emergency_low_battery`
+(kritiek lage SoC) blijven als enige, aparte vangnetten over.
+
+**Fix**: `_get_arbitrage_charge_power()` (marge-berekening,
+netaankoop-logica) volledig verwijderd, vervangen door de veel
+eenvoudigere `_should_capture_solar_instead_of_postponing()` — die doet
+nog maar één ding: voorkomen dat al aanwezig zonoverschot verloren gaat
+tijdens "laden uitstellen" (`smart_discharging` dekt alleen
+huishoudverbruik, laadt niet bij vanuit zon). Geen netaankoop meer,
+onder geen enkele omstandigheid.
+
+**Opgeruimd**: `MIN_ARBITRAGE_MARGIN_EUR_PER_KWH`,
+`MIN_ARBITRAGE_GRID_POWER_W`, `last_arbitrage_margin_eur_per_kwh`,
+`last_arbitrage_grid_power_w`, `_arbitrage_wants_smart_over_postpone`,
+`_get_best_remaining_sell_price_today_eur` (nu ongebruikt), de
+`arbitrage_charging`-reden uit `REASON_TO_MODE` en de emoji-mapping, de
+bijbehorende uitlegtekst-tak, het `live_is_arbitrage_charging`-signaal
+in de schema-projectie, en de diagnostiek-velden.
+
+**Testsuite herzien**: `test_arbitrage_charging.py` volledig herschreven
+(8 tests, gericht op het overblijvende zon-vastleggen-gedrag);
+`test_arbitrage_forecast_not_live_pv.py` bijgewerkt (Solcast-voorkeur
+geldt nu voor het zon-vastleggen-signaal, niet meer voor een
+netaankoop); `test_schedule_solar_capture_override.py` en
+`test_needed_kwh_breakdown_always_shown.py` bijgewerkt naar het nieuwe
+gedrag (arbitrage_charging kan niet meer voorkomen).
+
+## v0.63.78 — kookpiek blies de "diepste tekort"-berekening op
+
+**Gerapporteerd:** "Het basis verbruik schiet tussen ca. 16:00 en 17:00
+omhoog door koken etc." — de "Basisverbruik"/"Diepste tekort
+onderweg"-cijfers konden flink oplopen als de berekening samenviel met
+een actieve kookpiek.
+
+**Root cause**: `_get_smoothed_consumption_correction_ratio()` slaat de
+mediaan-demping bewust over zodra een **bevestigde** zware verbruiker
+actief is (`last_heavy_load_source`), en vertrouwt dan de laatste,
+ongefilterde meting direct — terecht voor airco (kan uren aanhouden),
+maar deze uitzondering gold voor **alle** apparaten uit die lijst,
+inclusief de inherent kortdurende: oven, kookplaat, vaatwasser,
+wasmachine, Quooker. Een kooksessie (ruim onder het uur) werd zo
+gebruikt om de **hele resterende periode** (vaak 15+ uur) mee op te
+schalen — voor een gebeurtenis die allang voorbij is tegen de tijd dat
+de nacht daadwerkelijk aanbreekt.
+
+**Fix**: nieuwe constante `SUSTAINED_HEAVY_LOAD_SOURCES` (`airco`,
+`slaapkamer`) — alleen deze twee mogen de mediaan-demping nog
+overslaan. De kortdurende apparaten vallen nu terug op dezelfde
+mediaan-gedempte route als een onbevestigde meting.
+
+**Getest** (2 nieuwe permanente tests in `test_heavy_load_awareness.py`,
+1 bestaande test aangepast): oven/kookplaat/vaatwasser/wasmachine/
+Quooker slaan de demping niet meer over; airco/slaapkamer blijven dat
+wel doen.
