@@ -794,6 +794,21 @@ PV-nauwkeurigheids-tracker): na elke update-cyclus — inclusief bij een
 vroege terugkeer in een van de vele beslistakken, of zelfs bij een
 onverwachte fout — worden alle geregistreerde knoppen actief ververst.
 
+**Dashboard-kaarten omgezet naar sjabloonkaarten (v0.63.49):**
+ondanks v0.63.47/.48 bleef de knoptekst op het dashboard toch
+"Energy Man..." tonen — vermoedelijk cachet Home Assistant's
+entity-registry de weergavenaam bij de eerste registratie, en pakt een
+herstart die verandering niet automatisch op (een bekend knelpunt bij
+het wijzigen van `has_entity_name`/`name` op een al-bestaande
+entiteit). In plaats van te vertrouwen op hóe Home Assistant de
+entiteitsnaam zelf berekent, tonen de 16 dashboardkaarten nu de tekst
+via een eigen sjabloon (`custom:mushroom-template-card`, hetzelfde
+patroon dat verder overal in dit dashboard al wordt gebruikt) dat
+rechtstreeks uit de al-correct-verversende attributen
+(`kandidaat_naam`, `kandidaat_vermogen_w`) leest — volledig los van
+entity-naam-caching. Tikken op een kaart roept de knop nog steeds aan
+via een `tap_action`-service-call.
+
 **Verwacht bij brede detectie**: met "alle sensoren met een
 vermogens-eenheid" als detectiebereik kunnen ook granulaire
 deelmetingen van je eigen Zendure-accu verschijnen als kandidaat (bijv.

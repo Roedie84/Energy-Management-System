@@ -4429,3 +4429,36 @@ daadwerkelijk getest kan worden.
 bij toevoeging; een knop meldt zich correct af bij verwijdering; de
 coordinator meldt luisteraars ook bij een vroege `return`; en ook na
 een onverwachte uitzondering.
+
+## v0.63.49 — dashboard-kaarten omgezet naar sjabloonkaarten (naam bleef "Energy Man...")
+
+**Gerapporteerd, opnieuw met screenshots, na v0.63.47/.48:** "nog niet
+duidelijk" — de knoppen toonden nog steeds "Energy Man..." ondanks dat
+`has_entity_name` uit stond en het verversen (bevestigd) correct werkte.
+
+**Vermoedelijke root cause**: Home Assistant's entity-registry cachet
+de weergavenaam (`original_name`) doorgaans bij de eerste registratie
+van een entiteit. Omdat de `unique_id` van deze knoppen ongewijzigd
+bleef tussen versies, herkende Home Assistant ze als "dezelfde"
+entiteiten en pakte de codewijziging (has_entity_name uit) niet
+automatisch op via een gewone herstart — een bekend knelpunt bij het
+wijzigen van entity-naamgedrag op een al-bestaande entiteit, dat
+normaliter een handmatige stap (verwijderen/opnieuw toevoegen, of de
+naam-override in de entiteit-instellingen wissen) vereist.
+
+**Fix, die dit knelpunt volledig omzeilt**: in plaats van te
+vertrouwen op hóe Home Assistant de entiteitsnaam zelf berekent en
+cachet, tonen de 16 dashboardkaarten nu de tekst via een eigen
+sjabloon — omgezet van `custom:mushroom-entity-card` naar
+`custom:mushroom-template-card` (hetzelfde patroon dat al overal elders
+in dit dashboard wordt gebruikt). De kaarttekst wordt nu rechtstreeks
+via Jinja (`state_attr(..., 'kandidaat_naam')` /
+`state_attr(..., 'kandidaat_vermogen_w')`) uit de attributen gelezen —
+die worden al sinds v0.63.48 correct ververst, en zijn nooit onderhevig
+geweest aan entity-naam-caching (attributen zijn losse data, geen
+"naam"). Tikken op een kaart roept de knop nog steeds aan, nu via een
+expliciete `tap_action: call-service, service: button.press`.
+
+**Geen Python-wijzigingen** — puur dashboard-YAML. Handmatig
+gerenderd en gevalideerd (16 kaarten, geen duplicaten, correcte
+tekstopbouw) voordat dit werd uitgeleverd.
