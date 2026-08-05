@@ -332,24 +332,26 @@ def test_slot_sibling_shows_the_shifted_candidate_right_after_a_press(
     )
 
 
-def test_confirm_button_has_a_stable_object_id_regardless_of_name(
+def test_confirm_button_has_a_stable_entity_id_regardless_of_name(
     make_coordinator, hass
 ):
-    """v0.63.74, reported ('kan niet beoordelen afwijzen etc van nieuwe
-    apparaten' - nothing rendered under 'Bevestigen / negeren' at all):
-    without an explicit object_id, Home Assistant would derive the
-    entity_id from this entity's DYNAMIC `name` property at first
-    registration, producing an unpredictable entity_id that never
-    matched what the bundled dashboard hardcodes. The suggested_object_id
-    must be stable and based purely on the fixed slot number, never on
-    whatever candidate currently occupies it.
+    """v0.63.74/.79, reported ('kan niet beoordelen afwijzen etc van
+    nieuwe apparaten' - nothing rendered under 'Bevestigen / negeren' at
+    all, twice: v0.63.74's _attr_suggested_object_id fix turned out to
+    not be a real Home Assistant attribute): without an explicit,
+    directly-set entity_id, Home Assistant would derive the entity_id
+    from this entity's DYNAMIC `name` property at first registration,
+    producing an unpredictable entity_id that never matched what the
+    bundled dashboard hardcodes. entity_id must be stable and based
+    purely on the fixed slot number, never on whatever candidate
+    currently occupies it.
     """
     from custom_components.energy_management_system.button import (
         NilmConfirmCandidateButton,
     )
 
     coordinator = make_coordinator({})
-    # Populate slot 0 with a real candidate - the object_id must NOT
+    # Populate slot 0 with a real candidate - the entity_id must NOT
     # reflect this at all.
     hass.states.set(
         "sensor.koelkast",
@@ -361,12 +363,14 @@ def test_confirm_button_has_a_stable_object_id_regardless_of_name(
     )
     button = NilmConfirmCandidateButton(coordinator, "entry1", slot=0)
 
-    assert button._attr_suggested_object_id == "nilm_kandidaat_1_bevestigen"
-    # The dynamic name may show the candidate, but the object_id must not.
-    assert "koelkast" not in button._attr_suggested_object_id.lower()
+    assert button.entity_id == (
+        "button.woonkamer_energy_management_system_nilm_kandidaat_1_bevestigen"
+    )
+    # The dynamic name may show the candidate, but the entity_id must not.
+    assert "koelkast" not in button.entity_id.lower()
 
 
-def test_reject_button_has_a_stable_object_id(make_coordinator, hass):
+def test_reject_button_has_a_stable_entity_id(make_coordinator, hass):
     from custom_components.energy_management_system.button import (
         NilmRejectCandidateButton,
     )
@@ -374,13 +378,15 @@ def test_reject_button_has_a_stable_object_id(make_coordinator, hass):
     coordinator = make_coordinator({})
     button = NilmRejectCandidateButton(coordinator, "entry1", slot=2)
 
-    assert button._attr_suggested_object_id == "nilm_kandidaat_3_negeren"
+    assert button.entity_id == (
+        "button.woonkamer_energy_management_system_nilm_kandidaat_3_negeren"
+    )
 
 
-def test_all_16_slot_object_ids_are_unique_and_match_the_dashboard(
+def test_all_16_slot_entity_ids_are_unique_and_match_the_dashboard(
     make_coordinator, hass
 ):
-    """Confirms the object_ids exactly match what the bundled dashboard
+    """Confirms the entity_ids exactly match what the bundled dashboard
     YAML hardcodes (button.woonkamer_energy_management_system_
     nilm_kandidaat_N_bevestigen/negeren)."""
     import asyncio as aio
@@ -401,13 +407,20 @@ def test_all_16_slot_object_ids_are_unique_and_match_the_dashboard(
 
     aio.run(async_setup_entry(hass, _FakeEntry(), fake_add_entities))
 
-    object_ids = [
-        e._attr_suggested_object_id
+    entity_ids = [
+        e.entity_id
         for e in added
-        if getattr(e, "_attr_suggested_object_id", None) is not None
+        if getattr(e, "entity_id", None) is not None
+        and "nilm_kandidaat" in e.entity_id
     ]
 
-    assert len(object_ids) == len(set(object_ids)) == 16
+    assert len(entity_ids) == len(set(entity_ids)) == 16
     for slot in range(1, 9):
-        assert f"nilm_kandidaat_{slot}_bevestigen" in object_ids
-        assert f"nilm_kandidaat_{slot}_negeren" in object_ids
+        assert (
+            f"button.woonkamer_energy_management_system_nilm_kandidaat_"
+            f"{slot}_bevestigen" in entity_ids
+        )
+        assert (
+            f"button.woonkamer_energy_management_system_nilm_kandidaat_"
+            f"{slot}_negeren" in entity_ids
+        )

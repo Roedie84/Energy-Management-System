@@ -914,6 +914,33 @@ knop-entiteiten (of het hele apparaat) verwijderen, en herstart HA
 daarna — ze worden dan opnieuw aangemaakt met de correcte, stabiele
 entity_id.
 
+**Correctie: de v0.63.74-fix werkte niet (v0.63.79).** Gerapporteerd:
+na de handmatige verwijder-en-herstart-stap bleef "Bevestigen /
+negeren" alsnog leeg. Root cause: `_attr_suggested_object_id` blijkt
+**geen bestaand Home Assistant-attribuut** te zijn — nagetrokken tegen
+de officiële developer-documentatie
+(https://developers.home-assistant.io/docs/core/entity) en de
+broncode: het enige vergelijkbare, intern mechanisme
+(`internal_integration_suggested_object_id`) is expliciet gedocumenteerd
+als "only handled internally, never to be used by integrations".
+Home Assistant negeerde het attribuut dus gewoon volledig en bleef de
+entity_id afleiden van de dynamische naam, exact als voorheen.
+
+**Echte fix**: `self.entity_id` wordt nu rechtstreeks als
+instantie-attribuut gezet in `__init__`, vóórdat de entiteit ooit aan
+hass wordt toegevoegd — dit is een genuine, gerespecteerde
+override (`entity_id` is een gewoon, instelbaar attribuut op `Entity`;
+Home Assistant genereert er alleen automatisch één als de integratie
+nog niets heeft ingesteld). Matcht daarbij exact de
+`woonkamer_energy_management_system_`-prefix die het dashboard al voor
+elke andere entiteit hardcodeert (die daar normaal automatisch ontstaat
+via `has_entity_name` + de geconfigureerde apparaatnaam) — voor deze 16
+knoppen expliciet uitgeschreven, omdat ze bewust geen `has_entity_name`
+gebruiken (v0.63.47).
+
+De eerder beschreven migratiestap (verwijderen + herstarten) blijft
+nodig en ongewijzigd van toepassing.
+
 **Verwacht bij brede detectie**: met "alle sensoren met een
 vermogens-eenheid" als detectiebereik kunnen ook granulaire
 deelmetingen van je eigen Zendure-accu verschijnen als kandidaat (bijv.

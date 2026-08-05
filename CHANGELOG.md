@@ -5383,3 +5383,45 @@ mediaan-gedempte route als een onbevestigde meting.
 1 bestaande test aangepast): oven/kookplaat/vaatwasser/wasmachine/
 Quooker slaan de demping niet meer over; airco/slaapkamer blijven dat
 wel doen.
+
+## v0.63.79 — de v0.63.74-fix werkte niet: `_attr_suggested_object_id` bestaat niet
+
+**Gerapporteerd**: na de handmatige verwijder-en-herstart-migratiestap
+uit v0.63.74 bleef "Bevestigen / negeren" alsnog volledig leeg —
+"Niet geholpen".
+
+**Root cause, nagetrokken tegen de officiële Home Assistant
+developer-documentatie en broncode** (niet zomaar opnieuw aangenomen):
+`_attr_suggested_object_id`, de fix uit v0.63.74, blijkt **geen
+bestaand Home Assistant-attribuut** te zijn. Een fout van mijn kant —
+ik had de API verkeerd onthouden. De officiële "Registry properties"-
+tabel op https://developers.home-assistant.io/docs/core/entity noemt
+alleen `device_info`, `entity_category`,
+`entity_registry_enabled_default`, `entity_registry_visible_default`
+en `unique_id`. Het enige vergelijkbare mechanisme in de broncode
+(`internal_integration_suggested_object_id`) is expliciet
+gedocumenteerd als "only handled internally, never to be used by
+integrations". Home Assistant negeerde het gezette attribuut dus
+simpelweg volledig, en bleef de entity_id afleiden van de dynamische
+naam — exact het oorspronkelijke probleem, ongewijzigd.
+
+**Echte fix**: `self.entity_id` wordt nu rechtstreeks als
+instantie-attribuut gezet in `_NilmSlotButton.__init__`, vóórdat de
+entiteit ooit aan hass wordt toegevoegd. Dit is een genuine,
+gerespecteerde override — `entity_id` is een gewoon, instelbaar
+attribuut op `Entity`; Home Assistant genereert er alleen automatisch
+één als de integratie zelf nog niets heeft ingesteld. De volledige
+entity_id (inclusief de `woonkamer_energy_management_system_`-prefix
+die het dashboard al voor elke andere entiteit hardcodeert) wordt nu
+expliciet uitgeschreven.
+
+**De migratiestap uit v0.63.74 blijft nodig**: bestaande, verkeerd
+benoemde knop-entiteiten moeten nog steeds eenmalig handmatig worden
+verwijderd (Instellingen → Apparaten & Diensten → Energy Management
+System → apparaat → de 16 knop-entiteiten), gevolgd door een
+HA-herstart — pas dan registreren ze zich opnieuw met de nu wél
+correcte, expliciet gezette entity_id.
+
+**Getest**: de 3 bestaande tests uit v0.63.74 herschreven om
+`entity_id` te controleren in plaats van het niet-bestaande
+`_attr_suggested_object_id` — alle drie slagen nu tegen de echte fix.

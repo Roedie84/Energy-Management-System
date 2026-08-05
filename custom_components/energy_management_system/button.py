@@ -105,11 +105,27 @@ class _NilmSlotButton(ButtonEntity):
     in that slot the very first time, or "sleuf-n-leeg" if none yet) -
     not the stable `nilm_kandidaat_N_bevestigen/negeren` id the bundled
     dashboard hardcodes, so every dashboard reference to these buttons
-    silently pointed at a non-existent entity. Fixed by setting an
-    explicit `_attr_suggested_object_id` derived purely from the fixed
-    slot number and suffix, never from the dynamic candidate name, so
-    the entity_id is stable and predictable regardless of what's
-    currently in the slot.
+    silently pointed at a non-existent entity.
+
+    v0.63.74 first tried to fix this with `_attr_suggested_object_id` -
+    reported back that deleting the entities and restarting still
+    didn't help. Verified against Home Assistant's own developer docs
+    (https://developers.home-assistant.io/docs/core/entity) and source:
+    `_attr_suggested_object_id` is not a real, public Entity attribute
+    at all (a mistaken assumption on Claude's part) - the actual
+    internal mechanism (`internal_integration_suggested_object_id`) is
+    explicitly documented as "only handled internally, never to be used
+    by integrations". v0.63.79 fixes this properly by setting
+    `self.entity_id` directly in `__init__`, before the entity is ever
+    added to hass - this IS a genuine, respected override (Entity's
+    `entity_id` is a plain settable attribute; Home Assistant only
+    auto-generates one when the integration hasn't already set it).
+    Matches the exact "woonkamer_energy_management_system_..." prefix
+    the bundled dashboard already hardcodes for every other entity in
+    this integration (which normally arises automatically through
+    `has_entity_name` + the device's own configured name) - since these
+    16 buttons deliberately don't use `has_entity_name`, that prefix has
+    to be spelled out explicitly here instead.
     """
 
     def __init__(
@@ -123,12 +139,17 @@ class _NilmSlotButton(ButtonEntity):
         self._coordinator = coordinator
         self._slot = slot
         self._attr_unique_id = f"{entry_id}_nilm_slot_{slot}_{unique_suffix}"
-        # v0.63.74: a separate, Dutch object_id suffix matching what the
-        # bundled dashboard hardcodes (nilm_kandidaat_N_bevestigen/
-        # negeren) - kept independent from unique_suffix (English,
-        # confirm/reject) so unique_id's naming stays as it always was.
-        self._attr_suggested_object_id = (
-            f"nilm_kandidaat_{slot + 1}_{object_id_suffix}"
+        # v0.63.79: set entity_id directly - a genuine, respected
+        # override, unlike the non-existent _attr_suggested_object_id
+        # tried in v0.63.74. Matches the "woonkamer_energy_management_
+        # system_..." prefix the bundled dashboard already hardcodes for
+        # every other entity (there arising automatically through
+        # has_entity_name + the device's configured name); spelled out
+        # explicitly here since these buttons deliberately don't use
+        # has_entity_name (v0.63.47).
+        self.entity_id = (
+            f"button.woonkamer_energy_management_system_nilm_kandidaat_"
+            f"{slot + 1}_{object_id_suffix}"
         )
         self._attr_device_info = {
             "identifiers": {(DOMAIN, entry_id)},
