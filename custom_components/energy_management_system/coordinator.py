@@ -85,6 +85,9 @@ from .const import (
     CONF_STEELSTOFZUIGER_POWER_SENSOR,
     CONF_FIETSLADERS_SWITCH,
     CONF_FIETSLADERS_POWER_SENSOR,
+    CONF_WATER_ACTIVE_USAGE_SENSOR,
+    CONF_WATER_DAILY_TOTAL_SENSOR,
+    CONF_WATER_TOTAL_USAGE_SENSOR,
     STEELSTOFZUIGER_COMPLETE_SUSTAINED_MINUTES,
     SCHEDULED_CHARGE_POLL_OFF_MINUTES,
     IDLE_POWER_HISTORY_LENGTH,
@@ -95,6 +98,11 @@ from .const import (
     NILM_TREND_RISING_THRESHOLD_PERCENT,
     NILM_TREND_FALLING_THRESHOLD_PERCENT,
     APPLIANCE_CYCLE_COMPLETE_SUSTAINED_MINUTES,
+    WATER_USAGE_ACTIVE_THRESHOLD_L_PER_MIN,
+    WATER_SESSION_COMPLETE_SUSTAINED_MINUTES,
+    WATER_SESSION_HISTORY_LENGTH,
+    WATER_SOFTENER_NIGHT_WINDOW_START_HOUR,
+    WATER_SOFTENER_NIGHT_WINDOW_END_HOUR,
     FIETSLADERS_COMPLETE_THRESHOLD_W,
     QUOOKER_SUSTAINED_MINUTES,
     AIRCO_ACTIVE_HVAC_ACTIONS,
@@ -333,6 +341,18 @@ class EnergyManagementSystemCoordinator:
         self._fietsladers_next_poll_at: datetime | None = None
         self._fietsladers_idle_power_history: list[float] = []
         self.fietsladers_charge_duration_history: list[float] = []
+
+        # Water-tabblad (v0.63.85) - puur informatief, stuurt nooit iets
+        # aan en beïnvloedt de accu-beslissing op geen enkele manier.
+        self._water_usage_state: str = "rustend"
+        self._water_session_started_at: datetime | None = None
+        self._water_below_threshold_since: datetime | None = None
+        self._water_session_start_total_m3: float | None = None
+        self._water_last_daily_total: float | None = None
+        self.water_daily_total_l: float | None = None
+        self.water_daily_history: list[float] = []
+        self.water_session_history: list[dict] = []
+        self.water_softener_last_regeneration: datetime | None = None
         self.last_fietsladers_action: str | None = None
 
         # -- Optional appliance awareness (informational only) --
@@ -4592,6 +4612,142 @@ class EnergyManagementSystemCoordinator:
                     notification_id=f"ems_{state_attr}_cycle_done",
                 )
 
+    def _update_water_tracking(self, now: datetime) -> None:
+        """Water-tabblad (v0.63.85, gevraagd: "Meldingen/tracking zoals
+        bij vaatwasser/wasmachine" - herzien naar "geen meldingen alleen
+        een watertabblad met relevante info"). Puur informatief - stuurt
+        nooit iets aan (geen accu-beslissing hangt hiervan af), en
+        verstuurt bewust geen meldingen (expliciet zo gevraagd), in
+        tegenstelling tot de vaatwasser/wasmachine-tracking waar dit op
+        is gebaseerd.
+
+        Twee onafhankelijke onderdelen:
+
+        1. Dagelijks totaal + geschiedenis (voor trend): volgt de
+           geconfigureerde "vandaag"-sensor (die zelf om middernacht
+           reset, zoals bevestigd in de aangeleverde entiteitenlijst -
+           `last_reset`/`next_reset`-attributen). Zodra de uitlezing
+           lager is dan de vorige (de sensor is net gereset), wordt de
+           laatst bekende waarde gearchiveerd als "gisteren se totaal".
+           Geen eigen reset-logica nodig - leunt op de brondata.
+
+        2. Losse gebruiksmomenten (RUSTEND/ACTIEF-toestandsmachine op
+           het live debiet, zelfde principe als
+           `_update_appliance_state_machine` maar met een eigen, lagere
+           drempel en kortere afrondingsmarge - v0.63.85's eigen
+           constanten, WATER_USAGE_ACTIVE_THRESHOLD_L_PER_MIN/
+           WATER_SESSION_COMPLETE_SUSTAINED_MINUTES). Bewust een lage
+           drempel: de gebruiker wil juist volledig inzicht, inclusief
+           kleinere kranen en de nachtelijke waterontharder-regeneratie
+           (een relatief kort, herkenbaar patroon, ongeveer 1x per 2
+           weken). Als een totaal-verbruiksensor is geconfigureerd, wordt
+           het volume per gebruiksmoment geschat via het verschil in die
+           teller tussen start en einde (nauwkeuriger dan het live debiet
+           over de 5-minuten-tick-resolutie zelf te integreren).
+
+        v0.63.86, gevraagd ("wanneer hij zijn werk heeft gedaan en
+        hoelang dat geleden is"): elk afgerond gebruiksmoment dat
+        start binnen WATER_SOFTENER_NIGHT_WINDOW_START_HOUR/_END_HOUR
+        (standaard middernacht-6u) wordt gemarkeerd als
+        `waarschijnlijk_waterontharder` en bijgewerkt in
+        `water_softener_last_regeneration` - er is geen betrouwbare
+        manier om dit puur op debiet/duur te onderscheiden van ander
+        gebruik (verschilt per merk/model, geen trainingsdata), maar
+        niemand doucht of vult structureel een bad midden in de nacht,
+        dus tijdstip alleen is hier al een betrouwbare indicator.
+        """
+        daily_entity = self.config.get(CONF_WATER_DAILY_TOTAL_SENSOR)
+        if daily_entity:
+            daily_total = self._read_sensor_float(daily_entity)
+            if daily_total is not None:
+                if (
+                    self._water_last_daily_total is not None
+                    and daily_total < self._water_last_daily_total - 0.01
+                ):
+                    self.water_daily_history.append(
+                        round(self._water_last_daily_total, 2)
+                    )
+                    self.water_daily_history = self.water_daily_history[
+                        -LEARNING_HISTORY_DAYS:
+                    ]
+                self._water_last_daily_total = daily_total
+                self.water_daily_total_l = round(daily_total, 2)
+
+        active_entity = self.config.get(CONF_WATER_ACTIVE_USAGE_SENSOR)
+        if not active_entity:
+            return
+        flow_l_per_min = self._read_sensor_float(active_entity)
+        if flow_l_per_min is None:
+            return
+
+        total_entity = self.config.get(CONF_WATER_TOTAL_USAGE_SENSOR)
+
+        if flow_l_per_min >= WATER_USAGE_ACTIVE_THRESHOLD_L_PER_MIN:
+            self._water_below_threshold_since = None
+            if self._water_usage_state != "actief":
+                self._water_session_started_at = now
+                self._water_usage_state = "actief"
+                if total_entity:
+                    self._water_session_start_total_m3 = self._read_sensor_float(
+                        total_entity
+                    )
+            return
+
+        if self._water_usage_state != "actief":
+            return
+
+        if self._water_below_threshold_since is None:
+            self._water_below_threshold_since = now
+            return
+
+        elapsed_minutes = (
+            now - self._water_below_threshold_since
+        ).total_seconds() / 60
+        if elapsed_minutes < WATER_SESSION_COMPLETE_SUSTAINED_MINUTES:
+            return
+
+        started_at = self._water_session_started_at
+        duration_minutes = None
+        if started_at is not None:
+            # Trek de aanhoudend-lage staart eraf - dat was geen
+            # daadwerkelijk gebruik, slechts de bevestigingsmarge.
+            duration_minutes = max(
+                0.0,
+                (now - started_at).total_seconds() / 60
+                - WATER_SESSION_COMPLETE_SUSTAINED_MINUTES,
+            )
+
+        liters = None
+        if total_entity and self._water_session_start_total_m3 is not None:
+            end_total_m3 = self._read_sensor_float(total_entity)
+            if end_total_m3 is not None:
+                liters = max(0.0, (end_total_m3 - self._water_session_start_total_m3) * 1000)
+
+        if duration_minutes is not None and duration_minutes > 0:
+            is_waterontharder = started_at is not None and (
+                WATER_SOFTENER_NIGHT_WINDOW_START_HOUR
+                <= started_at.hour
+                < WATER_SOFTENER_NIGHT_WINDOW_END_HOUR
+            )
+            self.water_session_history.append(
+                {
+                    "gestart": started_at.isoformat() if started_at else None,
+                    "duur_minuten": round(duration_minutes, 1),
+                    "liter": round(liters, 1) if liters is not None else None,
+                    "waarschijnlijk_waterontharder": is_waterontharder,
+                }
+            )
+            self.water_session_history = self.water_session_history[
+                -WATER_SESSION_HISTORY_LENGTH:
+            ]
+            if is_waterontharder:
+                self.water_softener_last_regeneration = started_at
+
+        self._water_usage_state = "rustend"
+        self._water_below_threshold_since = None
+        self._water_session_started_at = None
+        self._water_session_start_total_m3 = None
+
     def _compute_mpc_plan(self, now: datetime, entries: list[PriceEntry]) -> None:
         """MPC (Model Predictive Control) advisory engine (v0.63.33).
 
@@ -6867,6 +7023,7 @@ class EnergyManagementSystemCoordinator:
         self._check_monthly_rollover(now)
         self._update_appliance_usage_tracking(now)
         self._update_quooker_tracking(now)
+        self._update_water_tracking(now)
         self.last_heavy_load_source = self._get_confirmed_heavy_load_source(now)
         self._track_recent_consumption_reading(now)
         self._update_living_room_airco_prediction(now)

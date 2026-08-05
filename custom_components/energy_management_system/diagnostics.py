@@ -272,6 +272,12 @@ async def async_get_config_entry_diagnostics(
                 coordinator.last_arbitrage_solar_surplus_w
             ),
             "learning_only": coordinator.learning_only,
+            "water_daily_total_l": coordinator.water_daily_total_l,
+            "water_daily_history": coordinator.water_daily_history,
+            "water_session_history": coordinator.water_session_history,
+            "water_softener_last_regeneration": _iso(
+                coordinator.water_softener_last_regeneration
+            ),
             "last_reason": coordinator.last_reason,
             "last_explanation": coordinator.last_explanation,
             "last_current_price_per_kwh": coordinator.last_current_price_per_kwh,

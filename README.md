@@ -515,6 +515,66 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Water-tabblad (v0.63.85)
+
+Gevraagd: "Meldingen/tracking zoals bij vaatwasser/wasmachine" —
+herzien na verduidelijking naar "geen meldingen alleen een watertabblad
+met relevante info". Puur informatief: stuurt niets aan en heeft geen
+enkele invloed op de accu-beslissing.
+
+Twee onafhankelijke onderdelen:
+
+1. **Dagelijks verbruik + geschiedenis** — volgt de geconfigureerde
+   "vandaag"-sensor rechtstreeks (die zelf om middernacht reset, zoals
+   bevestigd via de aangeleverde `last_reset`/`next_reset`-attributen).
+   Zodra die sensor zelf reset (de uitlezing daalt t.o.v. de vorige
+   meting), wordt de laatst bekende waarde gearchiveerd als "gisteren se
+   totaal" — geen eigen reset-logica nodig, leunt op de brondata zelf.
+2. **Losse gebruiksmomenten** — een RUSTEND/ACTIEF-toestandsmachine op
+   het live debiet, hetzelfde principe als de vaatwasser/wasmachine-
+   detectie (`_update_appliance_state_machine`), maar met eigen,
+   lagere drempel (1 L/min — bewust laag: de gebruiker wil juist
+   volledig inzicht, inclusief kleinere kranen en de nachtelijke
+   waterontharder-regeneratie, een relatief kort, herkenbaar patroon
+   van ongeveer 1x per 2 weken) en een kortere afrondingsmarge (2 min
+   i.p.v. 5 — watergebruik heeft geen tussentijdse stille fases zoals
+   een wasprogramma). Geschat volume per moment via het verschil in de
+   optionele totaal-verbruiksensor tussen start en einde (nauwkeuriger
+   dan het live debiet over de 5-minuten-tick-resolutie zelf
+   integreren).
+
+Configuratie: `water_active_usage_sensor_entity` (live debiet, L/min),
+`water_daily_total_sensor_entity` (dagelijks totaal, reset zichzelf),
+`water_total_usage_sensor_entity` (optioneel, all-time totaal, voor
+volume-schatting per moment) — alle drie optioneel, niets wordt
+bijgehouden zonder configuratie.
+
+`sensor.woonkamer_energy_management_system_waterverbruik` toont het
+live debiet als state, met als attributen: vandaag-totaal, gemiddelde
+over de laatste dagen, trend-percentage, dag-geschiedenis, en de
+recente gebruiksmomenten (nieuwste eerst). RestoreEntity — de
+geschiedenis overleeft een herstart.
+
+### Waterontharder-regeneratie herkennen (v0.63.86)
+
+Gevraagd: "wanneer hij zijn werk heeft gedaan en hoelang dat geleden
+is". Er is geen betrouwbare manier om de regeneratie puur op basis van
+debiet of duur te onderscheiden van ander watergebruik — dat verschilt
+per merk/model, en er is geen trainingsdata voor. In plaats daarvan:
+elk afgerond gebruiksmoment dat **start binnen een nachtelijk venster**
+(standaard middernacht–6 uur, `WATER_SOFTENER_NIGHT_WINDOW_START_HOUR`/
+`_END_HOUR`) wordt aangemerkt als de waterontharder — niemand doucht of
+vult structureel een bad midden in de nacht, dus tijdstip alleen is al
+een betrouwbare indicator.
+
+Elk gebruiksmoment in `recente_gebruiksmomenten` krijgt een
+`waarschijnlijk_waterontharder`-vlag; het tijdstip van de laatst
+herkende regeneratie staat apart in `waterontharder_laatste_regeneratie`
+(ISO-tijdstip) op dezelfde sensor. Het dashboard toont dit als "Laatste
+regeneratie: [datum/tijd] ([X] geleden)" via HA's eigen
+`relative_time()`-functie, plus een 🧂-markering bij het betreffende
+moment in de gebruiksmomenten-tabel.
+
 ## Sensor-gezondheid (energiebalans-validatie)
 
 Optioneel, actief zodra zowel `available_energy_sensor_entity` als

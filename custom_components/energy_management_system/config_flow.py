@@ -41,6 +41,9 @@ from .const import (
     CONF_FIETSLADERS_SWITCH,
     CONF_FIETSLADERS_POWER_SENSOR,
     CONF_APPLIANCE_NOTIFY_SERVICE,
+    CONF_WATER_ACTIVE_USAGE_SENSOR,
+    CONF_WATER_DAILY_TOTAL_SENSOR,
+    CONF_WATER_TOTAL_USAGE_SENSOR,
     CONF_MANUAL_DISCHARGE_POWER,
     CONF_BATTERY_TOTAL_CAPACITY_SENSOR,
     CONF_BATTERY_MIN_SOC_NUMBER,
@@ -242,6 +245,18 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
             vol.Optional(
                 CONF_FIETSLADERS_POWER_SENSOR,
                 default=defaults.get(CONF_FIETSLADERS_POWER_SENSOR),
+            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            vol.Optional(
+                CONF_WATER_ACTIVE_USAGE_SENSOR,
+                default=defaults.get(CONF_WATER_ACTIVE_USAGE_SENSOR),
+            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            vol.Optional(
+                CONF_WATER_DAILY_TOTAL_SENSOR,
+                default=defaults.get(CONF_WATER_DAILY_TOTAL_SENSOR),
+            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            vol.Optional(
+                CONF_WATER_TOTAL_USAGE_SENSOR,
+                default=defaults.get(CONF_WATER_TOTAL_USAGE_SENSOR),
             ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
             vol.Optional(
                 CONF_APPLIANCE_NOTIFY_SERVICE,

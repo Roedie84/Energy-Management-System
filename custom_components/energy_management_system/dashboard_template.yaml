@@ -1198,3 +1198,100 @@ views:
             name: Verbruiksprofiel (huidig uur, W)
           - entity: sensor.energy_management_system_pv_forecast_accuracy
             name: PV-voorspelling afwijking (%)
+
+  - title: Water
+    path: water
+    icon: mdi:water
+    cards:
+      - type: custom:mushroom-title-card
+        title: Waterverbruik
+        subtitle: >-
+          Puur informatief - stuurt niets aan en heeft geen invloed op
+          de accu-beslissing.
+
+      - type: grid
+        columns: 2
+        square: false
+        cards:
+          - type: custom:mushroom-template-card
+            primary: Huidig debiet
+            secondary: >-
+              {{ states('sensor.woonkamer_energy_management_system_waterverbruik')
+              }} L/min
+            icon: mdi:water-pump
+            icon_color: >-
+              {{ 'blue' if states('sensor.woonkamer_energy_management_system_waterverbruik')
+              | float(0) > 1 else 'grey' }}
+          - type: custom:mushroom-template-card
+            primary: Vandaag
+            secondary: >-
+              {{ state_attr('sensor.woonkamer_energy_management_system_waterverbruik',
+              'vandaag_liter') }} L
+            icon: mdi:cup-water
+            icon_color: blue
+
+      - type: markdown
+        title: Trend
+        content: >-
+          {% set attrs =
+          state_attr('sensor.woonkamer_energy_management_system_waterverbruik',
+          'vandaag_liter') %} {% set gemiddeld =
+          state_attr('sensor.woonkamer_energy_management_system_waterverbruik',
+          'gemiddeld_liter_per_dag') %} {% set trend =
+          state_attr('sensor.woonkamer_energy_management_system_waterverbruik',
+          'trend_procent') %}
+
+          {% if gemiddeld is none %}
+          Nog niet genoeg dagen geschiedenis voor een gemiddelde.
+          {% else %}
+          Gemiddeld **{{ gemiddeld }} L/dag** over de laatste dagen.
+          {% if trend is not none %}
+          Vandaag zit je {{ trend | abs }}% {{ 'boven' if trend > 0 else 'onder' }} dat gemiddelde.
+          {% endif %}
+          {% endif %}
+
+      - type: markdown
+        title: Waterontharder
+        content: >-
+          {% set laatste =
+          state_attr('sensor.woonkamer_energy_management_system_waterverbruik',
+          'waterontharder_laatste_regeneratie') %}
+          {% if laatste is none %}
+          Nog geen regeneratie herkend (verschijnt automatisch zodra er
+          een gebruiksmoment start tussen middernacht en 6 uur 's
+          ochtends).
+          {% else %}
+          Laatste regeneratie: **{{ as_timestamp(laatste) | timestamp_custom('%a %d-%m %H:%M') }}**
+          ({{ relative_time(as_datetime(laatste)) }} geleden).
+          {% endif %}
+
+      - type: markdown
+        title: Recente gebruiksmomenten (nieuwste eerst)
+        content: >-
+          {% set sessies =
+          state_attr('sensor.woonkamer_energy_management_system_waterverbruik',
+          'recente_gebruiksmomenten') or [] %}
+          {% if sessies | length == 0 %}
+          Nog geen gebruiksmomenten geregistreerd.
+          {% else %}
+          | Gestart | Duur | Volume | |
+
+          |---|---|---|---|
+
+          {%- for s in sessies %}
+
+          | {{ as_timestamp(s.gestart) | timestamp_custom('%a %H:%M') if s.gestart else 'onbekend' }} | {{ s.duur_minuten }} min | {{ (s.liter ~ ' L') if s.liter is not none else '—' }} | {{ '🧂' if s.waarschijnlijk_waterontharder else '' }} |
+          {%- endfor %}
+          {% endif %}
+
+      - type: markdown
+        title: Dag-geschiedenis (liter/dag)
+        content: |
+          {% set history = state_attr('sensor.woonkamer_energy_management_system_waterverbruik', 'geschiedenis_liter_per_dag') or [] %}
+          {% if history | length == 0 %}
+          Nog geen volledige dagen geschiedenis.
+          {% else %}
+          {% for l in history %}
+          - {{ l }} L
+          {% endfor %}
+          {% endif %}

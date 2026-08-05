@@ -5586,3 +5586,97 @@ het was). Andere Grid-kaarten in de overige tabbladen bleken dit al
 eerder correct te hebben ingesteld; alleen deze twee ontbraken nog.
 
 **Geen codewijziging nodig** — uitsluitend een dashboard-YAML-fix.
+
+## v0.63.85 — nieuw Water-tabblad (verbruik, trend, gebruiksmomenten)
+
+**Gevraagd**: "Meldingen/tracking zoals bij vaatwasser/wasmachine" —
+na verduidelijking herzien naar "geen meldingen alleen een watertabblad
+met relevante info". Puur informatief, stuurt niets aan en heeft geen
+invloed op de accu-beslissing.
+
+**Nieuw**:
+1. **Dagelijks verbruik + geschiedenis** — volgt de "vandaag"-sensor
+   rechtstreeks; archiveert automatisch bij zijn eigen middernacht-reset
+   (gedetecteerd via een dalende uitlezing, geen eigen reset-logica
+   nodig).
+2. **Losse gebruiksmomenten** — RUSTEND/ACTIEF-toestandsmachine op het
+   live debiet (`_update_water_tracking`), zelfde principe als de
+   vaatwasser/wasmachine-detectie maar met eigen constanten:
+   `WATER_USAGE_ACTIVE_THRESHOLD_L_PER_MIN` (1 L/min, bewust laag voor
+   volledig inzicht inclusief de nachtelijke waterontharder-
+   regeneratie) en `WATER_SESSION_COMPLETE_SUSTAINED_MINUTES` (2 min,
+   korter dan de vaatwasser/wasmachine-marge). Geschat volume per
+   moment via de optionele totaal-verbruiksensor.
+
+**Nieuwe configuratie-opties**: `water_active_usage_sensor_entity`,
+`water_daily_total_sensor_entity`, `water_total_usage_sensor_entity`
+— alle drie optioneel.
+
+**Nieuwe sensor**: `WaterUsageSensor`
+(`sensor.woonkamer_energy_management_system_waterverbruik`) — live
+debiet als state; vandaag-totaal, gemiddelde, trend-procent,
+dag-geschiedenis en recente gebruiksmomenten als attributen.
+RestoreEntity.
+
+**Nieuw dashboardtabblad "Water"** — met de inmiddels bekende, correcte
+Grid-kaart-instellingen (`columns`/`square` expliciet gezet) om
+hetzelfde breedteprobleem als eerder te vermijden.
+
+**Testinfrastructuur-fix, terzijde**: tijdens het bouwen bleek een
+markdown-lijst-kaart plotseling alles op één regel te renderen ondanks
+een exact kloppend template — root cause: `dashboard_template.yaml`
+(waar de test tegen valideert) was niet opnieuw gesynchroniseerd na een
+losse bewerking aan `dashboards/energy_management_system_dashboard.yaml`.
+Geen echte Jinja/YAML-bug; wél een waardevolle herinnering om na élke
+dashboard-bewerking te synchroniseren en te valideren — wat voortaan
+consequent gebeurt. Testdata voor de NILM-apparatentabel en het nieuwe
+Water-tabblad toegevoegd aan `test_dashboard_tables.py` zodat toekomstige
+lijst-/tabel-kaarten ook echt met gevulde data worden doorgetest, niet
+alleen het lege pad.
+
+**Getest** (9 nieuwe permanente tests in `test_water_tracking.py`):
+dagelijks totaal wordt gevolgd; archivering bij reset; geschiedenis
+begrensd tot het leervenster; sessie wordt correct gedetecteerd en
+gelogd (inclusief volume-schatting); een korte onderbreking beëindigt
+de sessie niet; te lage flow start nooit een sessie; niets gebeurt
+zonder geconfigureerde sensoren; en de sensor toont/herstelt zijn data
+correct.
+
+## v0.63.86 — waterontharder-regeneratie herkennen (wanneer + hoelang geleden)
+
+**Gevraagd**: "Voor de waterontharder zou ik willen zien wanneer hij
+zijn werk heeft gedaan en hoelang dat geleden is."
+
+**Aanpak**: er is geen betrouwbare manier om dit puur op debiet of duur
+te onderscheiden van ander watergebruik (verschilt per merk/model, geen
+trainingsdata). In plaats daarvan: elk afgerond gebruiksmoment dat
+start binnen een nachtelijk venster (standaard middernacht–6 uur,
+nieuwe constanten `WATER_SOFTENER_NIGHT_WINDOW_START_HOUR`/`_END_HOUR`)
+wordt aangemerkt als de waterontharder — niemand doucht of vult
+structureel een bad midden in de nacht, dus tijdstip alleen is al een
+betrouwbare indicator.
+
+**Coordinator**: `_update_water_tracking()` markeert elk gelogd
+gebruiksmoment met `waarschijnlijk_waterontharder` en houdt
+`water_softener_last_regeneration` bij (het tijdstip van de laatst
+herkende regeneratie).
+
+**Sensor**: nieuw attribuut `waterontharder_laatste_regeneratie`
+(ISO-tijdstip) op `WaterUsageSensor`, met RestoreEntity-herstel.
+
+**Diagnostiek** uitgebreid met hetzelfde veld.
+
+**Dashboard**: nieuwe "Waterontharder"-kaart op het Water-tabblad —
+toont wanneer de laatste regeneratie was én hoelang geleden (via HA's
+eigen `relative_time()`-functie), plus een 🧂-markering bij het
+betreffende moment in de gebruiksmomenten-tabel.
+
+**Testinfrastructuur uitgebreid**: fake `as_datetime`/`relative_time`-
+implementaties toegevoegd aan de dashboard-render-test, met echte
+testdata (niet alleen het lege pad) voor de nieuwe kaart en de
+uitgebreide tabel.
+
+**Getest** (4 nieuwe permanente tests in `test_water_tracking.py`):
+een nachtelijk gebruiksmoment wordt correct als waterontharder
+gemarkeerd; een overdag-gebruiksmoment (bijv. douche) niet; de sensor
+toont het tijdstip correct; en herstelt het na een herstart.

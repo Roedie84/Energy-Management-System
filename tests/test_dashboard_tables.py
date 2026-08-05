@@ -128,6 +128,43 @@ def _fake_state_attr(entity, attr):
             "sensor.woonkamer_energy_management_system_explanation",
             "effective_expensive_quarters_count",
         ): 8,
+        (
+            "sensor.woonkamer_energy_management_system_waterverbruik",
+            "vandaag_liter",
+        ): 220.0,
+        (
+            "sensor.woonkamer_energy_management_system_waterverbruik",
+            "gemiddeld_liter_per_dag",
+        ): 190.0,
+        (
+            "sensor.woonkamer_energy_management_system_waterverbruik",
+            "trend_procent",
+        ): 15.8,
+        (
+            "sensor.woonkamer_energy_management_system_waterverbruik",
+            "geschiedenis_liter_per_dag",
+        ): [180.0, 200.0, 190.0],
+        (
+            "sensor.woonkamer_energy_management_system_waterverbruik",
+            "waterontharder_laatste_regeneratie",
+        ): "2026-08-01T03:00:00+00:00",
+        (
+            "sensor.woonkamer_energy_management_system_waterverbruik",
+            "recente_gebruiksmomenten",
+        ): [
+            {
+                "gestart": "2026-08-05T07:12:00+00:00",
+                "duur_minuten": 6.5,
+                "liter": 48.0,
+                "waarschijnlijk_waterontharder": False,
+            },
+            {
+                "gestart": "2026-08-01T03:00:00+00:00",
+                "duur_minuten": 42.0,
+                "liter": None,
+                "waarschijnlijk_waterontharder": True,
+            },
+        ],
     }
     return fake_data.get((entity, attr))
 
@@ -144,6 +181,20 @@ def _timestamp_custom(value, fmt):
     from datetime import datetime, timezone
 
     return datetime.fromtimestamp(value, tz=timezone.utc).strftime(fmt)
+
+
+def _as_datetime(value):
+    from datetime import datetime
+
+    if isinstance(value, str):
+        return datetime.fromisoformat(value)
+    return value
+
+
+def _relative_time(value):
+    """Minimal fake of HA's relative_time() - exact wording doesn't
+    matter here, just that it doesn't error and produces something."""
+    return "3 dagen"
 
 
 def _iter_all_cards(data):
@@ -164,6 +215,8 @@ def _render_markdown_cards():
     env = Environment()
     env.globals["as_timestamp"] = _as_timestamp
     env.filters["timestamp_custom"] = _timestamp_custom
+    env.globals["as_datetime"] = _as_datetime
+    env.globals["relative_time"] = _relative_time
     rendered = {}
     for i, card in enumerate(_iter_all_cards(data)):
         if card.get("type") == "markdown":
@@ -177,7 +230,7 @@ def _render_markdown_cards():
 def test_dashboard_yaml_is_valid():
     with open(DASHBOARD_PATH) as f:
         data = yaml.safe_load(f)
-    assert len(data["views"]) == 7
+    assert len(data["views"]) == 8
 
 
 def test_markdown_tables_have_no_blank_lines_between_rows():

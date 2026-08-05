@@ -42,6 +42,14 @@ CONF_FIETSLADERS_SWITCH = "fietsladers_switch_entity"
 CONF_FIETSLADERS_POWER_SENSOR = "fietsladers_power_sensor_entity"
 CONF_APPLIANCE_NOTIFY_SERVICE = "appliance_notify_service"
 
+# Water-tabblad (v0.63.85, gevraagd: "Meldingen/tracking zoals bij
+# vaatwasser/wasmachine" - herzien naar "geen meldingen alleen een
+# watertabblad met relevante info"). Puur informatief, stuurt nooit
+# iets aan en beïnvloedt de accu-beslissing op geen enkele manier.
+CONF_WATER_ACTIVE_USAGE_SENSOR = "water_active_usage_sensor_entity"
+CONF_WATER_DAILY_TOTAL_SENSOR = "water_daily_total_sensor_entity"
+CONF_WATER_TOTAL_USAGE_SENSOR = "water_total_usage_sensor_entity"
+
 # Emoji shown in the mode/power-change notification title (v0.63.8), one
 # per possible coordinator.last_reason value - see _maybe_notify_mode_change.
 # Maps the final coordinator.last_reason (decided only after headroom/
@@ -316,6 +324,40 @@ NILM_SENSOR_ATTRIBUTE_PREVIEW_LIMIT = 20
 # een korte lading opladen - een te korte marge zou een cyclus
 # halverwege ten onrechte als "klaar" kunnen markeren.
 APPLIANCE_CYCLE_COMPLETE_SUSTAINED_MINUTES = 5
+
+# Water-tabblad (v0.63.85). Bewust een lage drempel - de gebruiker wil
+# juist volledig inzicht ("wat het verbruikt"), inclusief kleinere
+# kranen en de nachtelijke waterontharder-regeneratie (een relatief kort,
+# herkenbaar debiet-patroon, ongeveer 1x per 2 weken). Ruis (een kortere
+# stroomonderbreking tijdens dezelfde douche/bad-sessie) wordt opgevangen
+# door WATER_SESSION_COMPLETE_SUSTAINED_MINUTES hieronder, net als bij de
+# vaatwasser/wasmachine-detectie.
+WATER_USAGE_ACTIVE_THRESHOLD_L_PER_MIN = 1.0
+
+# Hoeveel minuten het debiet aanhoudend onder de drempel moet blijven
+# voordat een gebruiksmoment als afgerond wordt beschouwd - korter dan
+# de vaatwasser/wasmachine-marge (5 min): watergebruik heeft doorgaans
+# geen tussentijdse stille fases zoals een wasprogramma, dus een kortere
+# marge onderscheidt losse momenten (kraan, toilet, douche) beter van
+# elkaar in plaats van ze onterecht samen te voegen.
+WATER_SESSION_COMPLETE_SUSTAINED_MINUTES = 2
+
+# Hoeveel recente, afgeronde gebruiksmomenten getoond worden op het
+# Water-tabblad (Onderdeel/Waarde-achtige lijst, nieuwste eerst).
+WATER_SESSION_HISTORY_LENGTH = 20
+
+# Waterontharder-regeneratie herkennen (v0.63.86, gevraagd: "wanneer
+# hij zijn werk heeft gedaan en hoelang dat geleden is"). Er is geen
+# betrouwbare manier om dit te onderscheiden van ander gebruik puur op
+# basis van debiet/duur (dat verschilt per merk/model, en er is geen
+# trainingsdata voor). In plaats daarvan: elk gebruiksmoment dat
+# start binnen dit nachtelijke venster wordt aangemerkt als de
+# waterontharder - niemand doucht of vult een bad structureel midden
+# in de nacht, dus tijdstip alleen is hier al een betrouwbare
+# indicator. Bewust een ruim venster (middernacht tot 6 uur) zodat een
+# regeneratie op een net-iets-ander tijdstip niet gemist wordt.
+WATER_SOFTENER_NIGHT_WINDOW_START_HOUR = 0
+WATER_SOFTENER_NIGHT_WINDOW_END_HOUR = 6
 
 # The e-bike chargers draw more standby power than the generic
 # APPLIANCE_RUNNING_POWER_THRESHOLD_W (15W) would allow for a clean

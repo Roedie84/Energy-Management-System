@@ -3,6 +3,7 @@
 """
 from __future__ import annotations
 
+import statistics
 from datetime import date, datetime, timedelta
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
@@ -18,6 +19,7 @@ from .const import (
     LEARNING_HISTORY_DAYS,
     NILM_SENSOR_ATTRIBUTE_PREVIEW_LIMIT,
     APPLIANCE_RUNNING_POWER_THRESHOLD_W,
+    CONF_WATER_ACTIVE_USAGE_SENSOR,
     FIETSLADERS_COMPLETE_THRESHOLD_W,
 )
 
@@ -74,6 +76,7 @@ async def async_setup_entry(
         AdvisoryReadinessSensor(coordinator, entry.entry_id),
         LivingRoomAircoPredictionSensor(coordinator, entry.entry_id),
         ClimateForecastSensor(coordinator, entry.entry_id),
+        WaterUsageSensor(coordinator, entry.entry_id),
         ReserveShortfallSensor(coordinator, entry.entry_id),
         ReserveExcessSensor(coordinator, entry.entry_id),
         LearnedBatteryEfficiencySensor(coordinator, entry.entry_id),
@@ -1757,6 +1760,94 @@ class ClimateForecastSensor(SensorEntity, RestoreEntity):
             self._coordinator.climate_rate_history = {
                 str(k): [float(v) for v in vals] for k, vals in raw_cells.items()
             }
+
+
+class WaterUsageSensor(SensorEntity, RestoreEntity):
+    """Water-tabblad (v0.63.85, gevraagd: "Meldingen/tracking zoals bij
+    vaatwasser/wasmachine" - herzien naar "geen meldingen alleen een
+    watertabblad met relevante info"). Puur informatief, stuurt nooit
+    iets aan en beïnvloedt de accu-beslissing op geen enkele manier.
+
+    Toont het huidige debiet (live) als state, en als attributen: het
+    dagelijkse totaal, een geschiedenis van eerdere dagen (voor trend),
+    en een lijst van recente, losse gebruiksmomenten (start, duur,
+    geschat volume) - inclusief bijvoorbeeld de nachtelijke
+    waterontharder-regeneratie (herkenbaar aan tijdstip, v0.63.86 - zie
+    `_update_water_tracking`'s docstring). Het tijdstip van de laatst
+    herkende regeneratie is apart als attribuut beschikbaar, zodat het
+    dashboard eenvoudig kan tonen wanneer en hoe lang geleden dat was
+    (via HA's eigen `relative_time()`-functie).
+
+    Wél een RestoreEntity - de dag-geschiedenis en recente
+    gebruiksmomenten moeten een herstart overleven, net als de andere
+    leer-/trackinggeschiedenissen in deze integratie.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Waterverbruik"
+    _attr_icon = "mdi:water"
+    _attr_native_unit_of_measurement = "L/min"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_water_usage"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def native_value(self) -> float | None:
+        active_entity = self._coordinator.config.get(CONF_WATER_ACTIVE_USAGE_SENSOR)
+        if not active_entity:
+            return None
+        return self._coordinator._read_sensor_float(active_entity)
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        history = self._coordinator.water_daily_history
+        gemiddeld_l = round(statistics.median(history), 1) if history else None
+        vandaag_l = self._coordinator.water_daily_total_l
+        trend = None
+        if vandaag_l is not None and gemiddeld_l is not None and gemiddeld_l > 0:
+            trend = round(100 * (vandaag_l - gemiddeld_l) / gemiddeld_l, 1)
+        last_regen = self._coordinator.water_softener_last_regeneration
+        return {
+            "vandaag_liter": vandaag_l,
+            "gemiddeld_liter_per_dag": gemiddeld_l,
+            "trend_procent": trend,
+            "geschiedenis_liter_per_dag": history,
+            "recente_gebruiksmomenten": list(
+                reversed(self._coordinator.water_session_history)
+            ),
+            "waterontharder_laatste_regeneratie": (
+                last_regen.isoformat() if last_regen is not None else None
+            ),
+        }
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if last_state is None:
+            return
+        raw_history = last_state.attributes.get("geschiedenis_liter_per_dag")
+        if isinstance(raw_history, list):
+            self._coordinator.water_daily_history = [float(v) for v in raw_history]
+        raw_sessions = last_state.attributes.get("recente_gebruiksmomenten")
+        if isinstance(raw_sessions, list):
+            self._coordinator.water_session_history = list(reversed(raw_sessions))
+        raw_vandaag = last_state.attributes.get("vandaag_liter")
+        if raw_vandaag is not None:
+            self._coordinator.water_daily_total_l = float(raw_vandaag)
+        raw_regen = last_state.attributes.get("waterontharder_laatste_regeneratie")
+        if raw_regen:
+            try:
+                self._coordinator.water_softener_last_regeneration = (
+                    datetime.fromisoformat(raw_regen)
+                )
+            except (TypeError, ValueError):
+                pass
 
 
 class ReserveShortfallSensor(SensorEntity, RestoreEntity):
