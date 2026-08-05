@@ -268,7 +268,6 @@ async def async_get_config_entry_diagnostics(
             "appliance_ready_notifications_enabled": (
                 coordinator.appliance_ready_notifications_enabled
             ),
-            "arbitrage_charging_enabled": coordinator.arbitrage_charging_enabled,
             "last_arbitrage_margin_eur_per_kwh": (
                 coordinator.last_arbitrage_margin_eur_per_kwh
             ),

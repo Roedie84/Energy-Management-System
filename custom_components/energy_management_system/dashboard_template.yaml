@@ -295,13 +295,6 @@ views:
             grid_options:
               columns: 4
               rows: 1
-          - type: custom:mushroom-entity-card
-            entity: switch.woonkamer_energy_management_system_arbitrage_laden
-            name: Arbitrage-laden
-            icon: mdi:chart-line
-            grid_options:
-              columns: 4
-              rows: 1
 
       - type: grid
         cards:

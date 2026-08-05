@@ -4838,3 +4838,119 @@ gescheiden van de tabel.
 **Geen Python-wijzigingen** — puur dashboard-YAML herstructurering.
 Gevalideerd (YAML correct, template rendert, kaart aantoonbaar als
 top-level item aanwezig) voordat dit werd uitgeleverd.
+
+## v0.63.64 — persistentie-gat gevonden: zelflerende voltooiingsdrempel overleefde geen herstart
+
+**Gevraagd:** een controle of alle vandaag toegevoegde, zelflerende
+data daadwerkelijk een herstart overleeft.
+
+**Gat gevonden bij het nalopen**: `SteelstofzuigerStatusSensor` en
+`FietsladersStatusSensor` erfden alleen over van de niet-herstellende
+diagnostiek-basisklasse (`_CoordinatorDiagnosticSensor`), geen
+`RestoreEntity`. Dat betekende dat zowel `idle_power_history_w` (de
+stand-by-metingen achter de zelflerende voltooiingsdrempel, v0.63.46 —
+vandaag toegevoegd) als `duration_history_minutes` (de geleerde
+laadduur, al langer bestaand) bij elke Home Assistant-herstart
+stilzwijgend terugvielen naar een lege lijst. Het leerproces begon dus
+telkens weer bij nul.
+
+**Alles daarbuiten gecontroleerd en in orde bevonden**: de
+airco-verwachting-sensor, de klimaat-projectie-sensor, de
+"Vaatwasser/wasmachine-meldingen"-schakelaar en de
+"Arbitrage-laden"-schakelaar zijn allemaal correct `RestoreEntity` en
+herstellen hun geleerde data/status bij het opstarten. De
+NILM-apparatentabel heeft geen eigen opslag nodig — die leunt op de
+al bestaande, wél opgeslagen bevestigde-apparatenlijst.
+
+**Fix**: beide status-sensoren zijn nu ook `RestoreEntity` en
+herstellen zowel `idle_power_history_w` als `duration_history_minutes`
+bij het opstarten.
+
+**Getest** (5 nieuwe permanente tests in
+`test_appliance_learning_persistence.py`): beide histories worden voor
+beide apparaten correct hersteld uit een eerdere status; en een verse
+installatie (geen eerdere status) crasht niet en laat de net
+geïnitialiseerde lege geschiedenis met rust.
+
+## v0.63.65 — arbitrage-laden is nu standaardgedrag, geen aparte schakelaar meer
+
+**Aanleiding:** een gerapporteerde snelle wisseling tussen `manual` en
+`smart_discharging` (elke 15-30 sec i.p.v. de bedoelde 5 minuten) in
+een diagnostiek-export leidde tot een bredere discussie over hoe
+arbitrage-laden zou moeten werken. Uiteindelijk: "ik denk dat arbitrage
+er helemaal uit kan" — in plaats van een apart, opt-in mechanisme met
+een eigen schakelaar, moet het gewoon **standaardgedrag** zijn: tijdens
+een goedkoop moment blijft de accu doorladen richting vol (net als
+zonoverschot), tenzij er geen winstgevend duur moment later vandaag is.
+
+**Bevestigd bij het narekken van de beslisboom**: de arbitrage-check
+stond al vóór zowel de "laden uitstellen"- als de gewone
+"smart"-aftakking. Het enige dat nodig was: de aan/uit-schakelaar
+verwijderen zodat de winst-marge-check (die al bestond en beschermt
+tegen onnodig inkopen) altijd meedraait, zonder handmatige activering.
+
+**Verwijderd**: `switch.arbitrage_laden` (`ArbitrageChargingSwitch`),
+de `arbitrage_charging_enabled`-vlag en bijbehorende setter op de
+coordinator, het diagnostiek-veld, en de dashboardkaart. De
+onderliggende winst-marge-logica (`_get_arbitrage_charge_power`,
+inclusief de zon-prioriteit en de v0.63.60-fix voor het
+smart-vs-manual-onderscheid) blijft ongewijzigd — die draait nu gewoon
+altijd.
+
+**Getest**: bestaande arbitrage-tests aangepast (verwijderde,
+overbodige `arbitrage_charging_enabled = True`-regels opgeschoond) +
+2 vervangende tests: bevestigt dat er geen winstgevende arbitrage
+optreedt zonder een profijtelijke marge (zonder dat daar een schakelaar
+voor nodig is), en bevestigt dat de `ArbitrageChargingSwitch`-klasse
+niet meer bestaat.
+
+## v0.63.66 — bevestigde NILM-apparaten opgeslagen via eigen Store (16KB-limiet)
+
+**Gerapporteerd (recorder-log):** "State attributes for
+sensor...nilm_bevestigde_apparaten exceed maximum size of 16384 bytes.
+This can cause database performance issues; Attributes will not be
+stored" — bij 59 bevestigde apparaten (elk met een eigen geleerde
+CUSUM-geschiedenis) plus de recent toegevoegde `tabel`-attribuut, groeit
+dit ruim voorbij de 16KB die Home Assistant's recorder per
+entiteit-attribuut toestaat.
+
+**Bewust géén simpele afkapping** (zoals bij de kandidatenlijst,
+v0.63.45): die lijst is user-curated en bedoeld om maandenlang op te
+bouwen — een preview-afkapping op het HA-attribuut zou daadwerkelijk
+data laten verdwijnen bij een herstart, omdat de `RestoreEntity` tot nu
+toe DIT attribuut als bron van waarheid gebruikte.
+
+**Fix, structureel**: een eigen `Store` (`homeassistant.helpers.
+storage.Store`, een los JSON-bestand onder `.storage/` — hetzelfde
+mechanisme dat Home Assistant's eigen `restore_state` gebruikt) is nu
+de bron van waarheid voor bevestigde apparaten + genegeerde entiteiten.
+Volledig los van de recorder's staat-geschiedenis-database en zijn
+grootte-limiet — geen enkel plafond meer. Wordt geladen tijdens
+`coordinator.async_setup()` (vóór de eerste tick), en opgeslagen na elke
+bevestiging/negering en na elke dagelijkse CUSUM-afronding.
+
+**Sensor-attribuut nu puur cosmetisch begrensd**: `apparaten`/`tabel`
+tonen een voorbeeld van de eerste 20 (net als de kandidatenlijst), met
+het werkelijke totaal en een verwijzing naar de diagnostiek-export voor
+de volledige lijst — maar dit is nu alleen nog om de recorder-melding
+te voorkomen, niet meer de bron voor wat bij een herstart wordt
+teruggehaald.
+
+**Automatische, eenmalige migratie** voor bestaande installaties: is de
+nieuwe Store nog leeg (nooit eerder geschreven), dan valt de sensor
+terug op zijn eigen oude, herstelde HA-status en slaat die meteen op in
+de nieuwe Store — die terugval-route is daarna nooit meer nodig.
+
+**Testomgeving uitgebreid**: een minimale, functionele nep-`Store` toegevoegd
+aan de testharnas (backing-dict leeft op de `FakeHass`-instantie, dus
+vanzelf per test gereset).
+
+**Getest** (11 nieuwe permanente tests in
+`test_nilm_confirmed_devices_persistence.py`): attribuut-begrenzing
+(`apparaten`/`tabel`) bij veel apparaten, met correct totaal en
+diagnostiek-verwijzing; klein blijft onafgekapt; bevestigen/negeren/
+dagelijkse-CUSUM-afronding slaan daadwerkelijk op in de Store; laden
+uit de Store vult de coordinator-status correct; laden bij een lege
+Store laat bestaande status met rust; en de eenmalige migratie werkt
+correct in beide richtingen (valt terug wanneer de Store leeg is, wint
+niet wanneer de Store al data heeft).

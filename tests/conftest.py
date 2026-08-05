@@ -136,6 +136,35 @@ def _install_ha_mocks() -> None:
     helpers_restore.RestoreEntity = RestoreEntity
     sys.modules["homeassistant.helpers.restore_state"] = helpers_restore
 
+    helpers_storage = types.ModuleType("homeassistant.helpers.storage")
+
+    class Store:
+        """Minimal in-memory fake of HA's Store helper (JSON-file-
+        backed persistence, separate from the recorder's state-history
+        database and its 16KB attribute limit). Backing dict lives on
+        the hass instance itself, so it's naturally reset between tests
+        (a fresh FakeHass is created per test) without needing its own
+        explicit teardown."""
+
+        def __init__(self, hass, version, key):
+            self.hass = hass
+            self.version = version
+            self.key = key
+            if not hasattr(hass, "_fake_store_backing"):
+                hass._fake_store_backing = {}
+
+        async def async_load(self):
+            return self.hass._fake_store_backing.get(self.key)
+
+        async def async_save(self, data):
+            self.hass._fake_store_backing[self.key] = data
+
+        async def async_remove(self):
+            self.hass._fake_store_backing.pop(self.key, None)
+
+    helpers_storage.Store = Store
+    sys.modules["homeassistant.helpers.storage"] = helpers_storage
+
     helpers_selector = types.ModuleType("homeassistant.helpers.selector")
 
     class _SelectorConfigStub:

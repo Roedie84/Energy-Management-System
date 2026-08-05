@@ -49,8 +49,10 @@ from homeassistant.helpers.event import (
     async_track_time_interval,
 )
 from homeassistant.util import dt as dt_util
+from homeassistant.helpers.storage import Store
 
 from .const import (
+    DOMAIN,
     CHEAP_BLOCK_THRESHOLD_MARGIN_FRACTION,
     CHEAP_BLOCK_STABILITY_MARGIN_FRACTION,
     CONF_AVAILABLE_ENERGY_SENSOR,
@@ -293,13 +295,10 @@ class EnergyManagementSystemCoordinator:
         # all go silent just because this one specific suggestion isn't
         # wanted. Defaults on (unchanged behaviour) until turned off.
         self.appliance_ready_notifications_enabled: bool = True
-        # Default ON (v0.63.61, requested "moet naar herstart standaard
-        # aan staan") - only used for a fresh install or if there's no
-        # prior restored state; ArbitrageChargingSwitch.async_added_to_
-        # hass still overrides this from the restored state otherwise,
-        # so turning it off yourself still stays off across a restart,
-        # same as every other switch in this integration.
-        self.arbitrage_charging_enabled: bool = True
+        # v0.63.65, requested ("ik denk dat arbitrage er helemaal uit
+        # kan"): the arbitrage-charging opt-in switch is removed - the
+        # profitable-margin check below is now always active, standard
+        # behaviour rather than something requiring a separate toggle.
         self.last_arbitrage_margin_eur_per_kwh: float | None = None
         self.last_arbitrage_solar_surplus_w: float | None = None
         self.last_arbitrage_grid_power_w: float | None = None
@@ -518,6 +517,24 @@ class EnergyManagementSystemCoordinator:
         self.nilm_unconfirmed_candidates: dict[str, dict] = {}
         self.nilm_confirmed_devices: dict[str, dict] = {}
         self.nilm_rejected_entities: list[str] = []
+        # v0.63.66, reported: "State attributes ... exceed maximum size
+        # of 16384 bytes" - with enough confirmed devices (each with its
+        # own learned CUSUM history), nilm_confirmed_devices grew past
+        # the recorder's per-entity attribute limit. The confirmed
+        # devices list is user-curated and meant to persist for months,
+        # so it can't just be truncated like the unconfirmed-candidates
+        # preview (v0.63.45) without losing real data. Persisted instead
+        # via a dedicated Store (a JSON file under .storage/, the same
+        # mechanism restore_state itself uses) - entirely separate from
+        # the recorder's state-history database and its size limit, so
+        # there's no size ceiling here at all. The sensor's own exposed
+        # attributes are still bounded for display (see
+        # NilmConfirmedDevicesSensor), but that's now purely cosmetic -
+        # the Store, not the entity's restored state, is the source of
+        # truth for what actually gets restored on the next restart.
+        self._nilm_confirmed_devices_store = Store(
+            hass, version=1, key=f"{DOMAIN}_nilm_confirmed_devices"
+        )
         # Advisory readiness assessment (v0.63.40).
         self.advisory_readiness: dict[str, dict] = {}
         # Living-room-temperature airco activation predictor (v0.63.55).
@@ -652,6 +669,7 @@ class EnergyManagementSystemCoordinator:
         everything else has caught up.
         """
         await self.async_bootstrap_night_consumption_from_history()
+        await self._async_load_nilm_confirmed_devices_store()
         self._unsub_interval = async_track_time_interval(
             self.hass,
             self._handle_interval,
@@ -873,10 +891,6 @@ class EnergyManagementSystemCoordinator:
 
     async def async_set_appliance_ready_notifications_enabled(self, value: bool) -> None:
         self.appliance_ready_notifications_enabled = value
-        await self.async_update()
-
-    async def async_set_arbitrage_charging_enabled(self, value: bool) -> None:
-        self.arbitrage_charging_enabled = value
         await self.async_update()
 
     async def async_set_learning_only(self, value: bool) -> None:
@@ -2801,10 +2815,22 @@ class EnergyManagementSystemCoordinator:
         today and buying now is profitable even after round-trip losses
         (reported: 'nu tegen 21 ct niet laden en dan vanavond wat meer
         tegen dure uren ontladen' - the margin was being left on the
-        table). Returns None if arbitrage charging is disabled, not
-        profitable right now, or no active grid purchase is actually
-        needed (see `_arbitrage_wants_smart_over_postpone` below for
-        that last case, v0.63.60).
+        table). Returns None if not profitable right now, or no active
+        grid purchase is actually needed (see
+        `_arbitrage_wants_smart_over_postpone` below for that last case,
+        v0.63.60).
+
+        v0.63.65, requested ('ik denk dat arbitrage er helemaal uit
+        kan'): this is now standard, always-active behaviour - not
+        gated behind a separate opt-in switch. There was never a
+        specific need for a toggle here: the margin check below already
+        guards against buying when it isn't worth it, so there's no
+        real "off" state that makes sense once the person understood
+        what it does - just "charge toward full whenever it's cheap now
+        and a known, sufficiently more expensive quarter is still coming
+        today", which the tree already applies both ahead of the cheap
+        block (in place of postponing) and during it (in place of the
+        plain P1-following default).
 
         Deliberately solar-first (reported: 'tijdens goedkope uren
         vooral zonne-energie blijft opslaan'): if the fallback mode
@@ -2840,8 +2866,6 @@ class EnergyManagementSystemCoordinator:
         """
         self._arbitrage_wants_smart_over_postpone = False
 
-        if not self.arbitrage_charging_enabled:
-            return None
         if self.last_current_price_per_kwh is None:
             return None
 
@@ -5161,6 +5185,11 @@ class EnergyManagementSystemCoordinator:
         can shift right after any confirm/reject (the next candidate
         moves in), every registered NILM button needs to refresh right
         away, not just the one that was pressed.
+
+        Also persists to the dedicated Store (v0.63.66) - fire-and-
+        forget, since this method itself isn't async and every caller
+        (button presses, services) already triggers its own
+        async_update() right after anyway.
         """
         candidate = self.nilm_unconfirmed_candidates.pop(entity_id, None)
         if candidate is None:
@@ -5178,6 +5207,7 @@ class EnergyManagementSystemCoordinator:
             "_check_date": None,
         }
         self._notify_listeners()
+        self.hass.async_create_task(self._async_save_nilm_confirmed_devices_store())
         return True
 
     def reject_nilm_device(self, entity_id: str) -> bool:
@@ -5186,14 +5216,47 @@ class EnergyManagementSystemCoordinator:
         confirmed earlier and the person changed their mind.
 
         Notifies listeners immediately - see `confirm_nilm_device`'s
-        docstring for why (v0.63.50).
+        docstring for why (v0.63.50). Also persists to the dedicated
+        Store (v0.63.66) - see `confirm_nilm_device`'s docstring.
         """
         self.nilm_unconfirmed_candidates.pop(entity_id, None)
         self.nilm_confirmed_devices.pop(entity_id, None)
         if entity_id not in self.nilm_rejected_entities:
             self.nilm_rejected_entities.append(entity_id)
         self._notify_listeners()
+        self.hass.async_create_task(self._async_save_nilm_confirmed_devices_store())
         return True
+
+    async def _async_load_nilm_confirmed_devices_store(self) -> None:
+        """Loads confirmed NILM devices + rejected entities from the
+        dedicated Store (v0.63.66) - see the `_nilm_confirmed_devices_
+        store` init comment for why this exists separately from the
+        entity's own restored HA state. Leaves existing in-memory state
+        untouched if the Store is empty (e.g. a genuinely fresh install,
+        or an existing install upgrading before this Store has ever been
+        written - `NilmConfirmedDevicesSensor.async_added_to_hass`
+        handles that one-time migration from the entity's restored
+        state instead).
+        """
+        stored = await self._nilm_confirmed_devices_store.async_load()
+        if not isinstance(stored, dict):
+            return
+        devices = stored.get("nilm_confirmed_devices")
+        if isinstance(devices, dict):
+            self.nilm_confirmed_devices = devices
+        rejected = stored.get("nilm_rejected_entities")
+        if isinstance(rejected, list):
+            self.nilm_rejected_entities = rejected
+
+    async def _async_save_nilm_confirmed_devices_store(self) -> None:
+        """Persists confirmed NILM devices + rejected entities to the
+        dedicated Store (v0.63.66)."""
+        await self._nilm_confirmed_devices_store.async_save(
+            {
+                "nilm_confirmed_devices": self.nilm_confirmed_devices,
+                "nilm_rejected_entities": self.nilm_rejected_entities,
+            }
+        )
 
     def get_nilm_devices_table(self) -> list[dict]:
         """Simple 3-column overview (naam, huidig vermogen, trend) of
@@ -5262,6 +5325,7 @@ class EnergyManagementSystemCoordinator:
         percentage-based (device power levels vary too much for one
         fixed Watt slack/threshold to make sense across all of them).
         """
+        any_finalized = False
         for entity_id, device in self.nilm_confirmed_devices.items():
             power_w = self._read_sensor_float(entity_id)
 
@@ -5270,6 +5334,7 @@ class EnergyManagementSystemCoordinator:
                 if check_date is not None and device.get("_today_count", 0) > 0:
                     daily_avg_w = device["_today_sum"] / device["_today_count"]
                     self._finalize_nilm_device_day(entity_id, device, daily_avg_w)
+                    any_finalized = True
                 device["_today_sum"] = 0.0
                 device["_today_count"] = 0
                 device["_check_date"] = now.date()
@@ -5277,6 +5342,13 @@ class EnergyManagementSystemCoordinator:
             if power_w is not None:
                 device["_today_sum"] = device.get("_today_sum", 0.0) + power_w
                 device["_today_count"] = device.get("_today_count", 0) + 1
+
+        if any_finalized:
+            # v0.63.66: persist the newly-learned daily history/CUSUM
+            # state to the dedicated Store, not just kept in memory.
+            self.hass.async_create_task(
+                self._async_save_nilm_confirmed_devices_store()
+            )
 
     def _finalize_nilm_device_day(
         self, entity_id: str, device: dict, daily_avg_w: float

@@ -638,10 +638,18 @@ class BatteryProtectionSensor(_CoordinatorDiagnosticSensor):
         return {"soc_percent": self._coordinator.last_soc_percent}
 
 
-class SteelstofzuigerStatusSensor(_CoordinatorDiagnosticSensor):
+class SteelstofzuigerStatusSensor(_CoordinatorDiagnosticSensor, RestoreEntity):
     """Status of the steelstofzuiger charge-during-cheapest-block control
     (v0.63.12) - None/unavailable if `steelstofzuiger_switch_entity`
     isn't configured.
+
+    RestoreEntity (v0.63.64, gap found while auditing today's changes
+    for persistence) - `idle_power_history_w` (the self-learned
+    completion threshold's underlying samples, v0.63.46) and
+    `duration_history_minutes` (the learned charge duration, pre-
+    existing) were both being silently reset to empty on every restart,
+    since this sensor previously only extended the non-restoring
+    diagnostic base class.
     """
 
     _attr_name = "Steelstofzuiger status"
@@ -674,10 +682,28 @@ class SteelstofzuigerStatusSensor(_CoordinatorDiagnosticSensor):
             ),
         }
 
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if last_state is None:
+            return
+        idle_history = last_state.attributes.get("idle_power_history_w")
+        if isinstance(idle_history, list):
+            self._coordinator._steelstofzuiger_idle_power_history = [
+                float(v) for v in idle_history
+            ]
+        duration_history = last_state.attributes.get("duration_history_minutes")
+        if isinstance(duration_history, list):
+            self._coordinator.steelstofzuiger_charge_duration_history = [
+                float(v) for v in duration_history
+            ]
 
-class FietsladersStatusSensor(_CoordinatorDiagnosticSensor):
+
+class FietsladersStatusSensor(_CoordinatorDiagnosticSensor, RestoreEntity):
     """Mirror of SteelstofzuigerStatusSensor, for the e-bike chargers
-    (v0.63.13)."""
+    (v0.63.13). RestoreEntity (v0.63.64) - see SteelstofzuigerStatusSensor's
+    docstring for why.
+    """
 
     _attr_name = "Fietsladers status"
     _attr_icon = "mdi:bike"
@@ -708,6 +734,22 @@ class FietsladersStatusSensor(_CoordinatorDiagnosticSensor):
                 )
             ),
         }
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if last_state is None:
+            return
+        idle_history = last_state.attributes.get("idle_power_history_w")
+        if isinstance(idle_history, list):
+            self._coordinator._fietsladers_idle_power_history = [
+                float(v) for v in idle_history
+            ]
+        duration_history = last_state.attributes.get("duration_history_minutes")
+        if isinstance(duration_history, list):
+            self._coordinator.fietsladers_charge_duration_history = [
+                float(v) for v in duration_history
+            ]
 
 
 class DischargeValueSensor(SensorEntity, RestoreEntity):
@@ -1410,9 +1452,23 @@ class NilmConfirmedDevicesSensor(SensorEntity, RestoreEntity):
     Watt threshold). Purely informational, never influences any
     battery decision.
 
-    Is a RestoreEntity - the confirmed list and each device's learned
-    history are meant to build up over weeks; a restart shouldn't reset
-    that (unlike the unconfirmed-candidates list above).
+    v0.63.66, reported: "State attributes ... exceed maximum size of
+    16384 bytes" - with enough confirmed devices (each with its own
+    learned CUSUM history, plus the v0.63.51 `tabel` attribute), this
+    grew past the recorder's per-entity attribute limit. Unlike the
+    unconfirmed-candidates preview (v0.63.45), this data can't just be
+    truncated in the entity's own restored state without losing real,
+    months-in-the-making data - so persistence now goes through a
+    dedicated Store (`coordinator._nilm_confirmed_devices_store`, a
+    JSON file under .storage/, entirely separate from the recorder's
+    size-limited state-history database) instead. The bounded preview
+    below is now purely cosmetic (avoids the recorder warning and a
+    huge history entry) - it no longer has to carry the full data for
+    restore purposes.
+
+    Still a RestoreEntity, but only as a one-time migration path for
+    installs upgrading from before the Store existed - see
+    `async_added_to_hass`.
     """
 
     _attr_has_entity_name = True
@@ -1434,29 +1490,70 @@ class NilmConfirmedDevicesSensor(SensorEntity, RestoreEntity):
 
     @property
     def extra_state_attributes(self) -> dict:
+        all_devices = self._coordinator.nilm_confirmed_devices
+        preview_ids = sorted(
+            all_devices.keys(),
+            key=lambda eid: all_devices[eid].get("friendly_name") or eid,
+        )[:NILM_SENSOR_ATTRIBUTE_PREVIEW_LIMIT]
+        preview = {eid: all_devices[eid] for eid in preview_ids}
+        truncated = len(all_devices) > len(preview)
+
         anomalies = [
             data["friendly_name"]
-            for data in self._coordinator.nilm_confirmed_devices.values()
+            for data in all_devices.values()
             if data.get("anomaly_detected")
-        ]
+        ][:NILM_SENSOR_ATTRIBUTE_PREVIEW_LIMIT]
+
+        tabel = self._coordinator.get_nilm_devices_table()
+
         return {
-            "apparaten": self._coordinator.nilm_confirmed_devices,
+            "apparaten": preview,
+            "tabel": tabel[:NILM_SENSOR_ATTRIBUTE_PREVIEW_LIMIT],
             "mogelijke_defecten": anomalies,
-            "rejected_entities": self._coordinator.nilm_rejected_entities,
-            "tabel": self._coordinator.get_nilm_devices_table(),
+            "rejected_entities": self._coordinator.nilm_rejected_entities[
+                :NILM_SENSOR_ATTRIBUTE_PREVIEW_LIMIT
+            ],
+            "totaal_aantal": len(all_devices),
+            "note": (
+                "De volledige, opgeslagen apparatenlijst leeft in een "
+                "aparte Store (niet in dit attribuut) en gaat nooit "
+                "verloren bij een herstart, ongeacht wat hieronder wordt "
+                "getoond."
+                + (
+                    f" Dit attribuut toont slechts een voorbeeld van de "
+                    f"eerste {NILM_SENSOR_ATTRIBUTE_PREVIEW_LIMIT} (van "
+                    f"{len(all_devices)} totaal) - de volledige lijst "
+                    f"staat in de diagnostiek-export (Instellingen → "
+                    f"Apparaten → Energy Management System → "
+                    f"Diagnostische gegevens downloaden)."
+                    if truncated
+                    else ""
+                )
+            ),
         }
 
     async def async_added_to_hass(self) -> None:
+        """One-time migration path (v0.63.66) for installs upgrading
+        from before the dedicated Store existed. The Store is loaded
+        much earlier, during `coordinator.async_setup()` - by the time
+        this runs, `nilm_confirmed_devices` is already populated from it
+        if it had anything. Only falls back to this entity's own
+        restored HA state if the Store was genuinely empty, then
+        immediately persists that into the Store so this fallback is
+        never needed again on a subsequent restart.
+        """
         await super().async_added_to_hass()
         last_state = await self.async_get_last_state()
-        if last_state is None:
-            return
-        raw_rejected = last_state.attributes.get("rejected_entities")
-        if isinstance(raw_rejected, list):
-            self._coordinator.nilm_rejected_entities = list(raw_rejected)
-        raw_devices = last_state.attributes.get("apparaten")
-        if isinstance(raw_devices, dict):
-            self._coordinator.nilm_confirmed_devices = dict(raw_devices)
+        if last_state is not None:
+            if not self._coordinator.nilm_confirmed_devices:
+                raw_devices = last_state.attributes.get("apparaten")
+                if isinstance(raw_devices, dict) and raw_devices:
+                    self._coordinator.nilm_confirmed_devices = dict(raw_devices)
+            if not self._coordinator.nilm_rejected_entities:
+                raw_rejected = last_state.attributes.get("rejected_entities")
+                if isinstance(raw_rejected, list) and raw_rejected:
+                    self._coordinator.nilm_rejected_entities = list(raw_rejected)
+        await self._coordinator._async_save_nilm_confirmed_devices_store()
 
 
 class AdvisoryReadinessSensor(SensorEntity):

@@ -57,9 +57,21 @@ def _make_ready_coordinator(make_coordinator, hass, **config_overrides):
     return coordinator
 
 
-def test_no_arbitrage_when_disabled(make_coordinator, hass):
-    coordinator = _make_ready_coordinator(make_coordinator, hass)
-    coordinator.arbitrage_charging_enabled = False
+def test_no_arbitrage_without_a_profitable_margin_and_no_switch_needed(
+    make_coordinator, hass
+):
+    """v0.63.65, requested ('ik denk dat arbitrage er helemaal uit
+    kan'): there's no separate enable/disable switch any more - the
+    margin check itself is what decides whether this fires, always
+    active by default. A flat/no-margin price shape should still not
+    trigger arbitrage, with no switch involved at all."""
+    coordinator = make_coordinator(
+        _base_config(price_sensor_entity="sensor.price")
+    )
+    forecast = make_price_forecast(DAY0, lambda hour, minute: 2_500_000)
+    hass.states.set("sensor.price", "0", {"forecast": forecast})
+    hass.states.set("sensor.p1", "200")
+    hass.states.set("sensor.available_energy", "8.0")
 
     with_now(coordinator, DAY0.replace(hour=13, minute=0))
     asyncio.run(coordinator._async_update_locked())
@@ -67,19 +79,17 @@ def test_no_arbitrage_when_disabled(make_coordinator, hass):
     assert coordinator.last_reason != "arbitrage_charging"
 
 
-def test_arbitrage_charging_defaults_to_enabled(make_coordinator, hass):
-    """v0.63.61, requested ('moet naar herstart standaard aan staan') -
-    a fresh coordinator (no prior restored state, e.g. a first-ever
-    install or a restart before ArbitrageChargingSwitch.async_added_to_
-    hass ever ran) should default to enabled, not disabled."""
-    coordinator = make_coordinator({})
+def test_no_switch_entity_exists_any_more(make_coordinator, hass):
+    """v0.63.65, requested ('ik denk dat arbitrage er helemaal uit
+    kan') - the ArbitrageChargingSwitch entity has been removed
+    entirely; this is standard behaviour now, not a toggle."""
+    from custom_components.energy_management_system import switch as switch_mod
 
-    assert coordinator.arbitrage_charging_enabled is True
+    assert not hasattr(switch_mod, "ArbitrageChargingSwitch")
 
 
 def test_arbitrage_charges_when_profitable_and_enabled(make_coordinator, hass):
     coordinator = _make_ready_coordinator(make_coordinator, hass)
-    coordinator.arbitrage_charging_enabled = True
 
     with_now(coordinator, DAY0.replace(hour=13, minute=0))
     asyncio.run(coordinator._async_update_locked())
@@ -102,7 +112,6 @@ def test_no_arbitrage_when_margin_too_small(make_coordinator, hass):
 
     coordinator = make_coordinator(_base_config())
     coordinator.learned_efficiency_history = [88.2] * 7
-    coordinator.arbitrage_charging_enabled = True
 
     with_now(coordinator, DAY0.replace(hour=13, minute=0))
     asyncio.run(coordinator._async_update_locked())
@@ -123,7 +132,6 @@ def test_solar_surplus_fully_covers_target_no_grid_purchase(make_coordinator, ha
     # solar, the P1 meter would show a ~2300W export.
     hass.states.set("sensor.p1", "-2300")
     hass.states.set("sensor.pv", "2500")  # comfortably above the 2000W target
-    coordinator.arbitrage_charging_enabled = True
 
     with_now(coordinator, DAY0.replace(hour=13, minute=0))
     asyncio.run(coordinator._async_update_locked())
@@ -160,7 +168,6 @@ def test_solar_surplus_fully_covers_target_but_would_otherwise_be_wasted(
     )
     hass.states.set("sensor.p1", "-2300")
     hass.states.set("sensor.pv", "2500")  # comfortably above the 2000W target
-    coordinator.arbitrage_charging_enabled = True
 
     with_now(coordinator, DAY0.replace(hour=13, minute=0))
     entries = coordinator._get_forecast_entries()
@@ -186,7 +193,6 @@ def test_solar_surplus_fully_covers_target_and_smart_mode_would_capture_it(
     )
     hass.states.set("sensor.p1", "-2300")
     hass.states.set("sensor.pv", "2500")
-    coordinator.arbitrage_charging_enabled = True
 
     with_now(coordinator, DAY0.replace(hour=13, minute=0))
     entries = coordinator._get_forecast_entries()
@@ -208,7 +214,6 @@ def test_solar_surplus_partially_covers_only_buys_the_gap(make_coordinator, hass
     # Zero baseline consumption + 800W solar -> P1 shows an 800W export.
     hass.states.set("sensor.p1", "-800")
     hass.states.set("sensor.pv", "800")  # 800W surplus, target is 2000W
-    coordinator.arbitrage_charging_enabled = True
 
     with_now(coordinator, DAY0.replace(hour=13, minute=0))
     asyncio.run(coordinator._async_update_locked())
@@ -222,7 +227,6 @@ def test_arbitrage_does_not_set_grid_charged_today_flag(make_coordinator, hass):
     """Must not trigger the winter guard - that would suppress the very
     sale this purchase was made for."""
     coordinator = _make_ready_coordinator(make_coordinator, hass)
-    coordinator.arbitrage_charging_enabled = True
 
     with_now(coordinator, DAY0.replace(hour=13, minute=0))
     asyncio.run(coordinator._async_update_locked())
@@ -239,7 +243,6 @@ def test_arbitrage_overrides_postpone_charging(make_coordinator, hass):
     are independent questions."""
     coordinator = _make_ready_coordinator(make_coordinator, hass)
     coordinator.hourly_consumption_profile = {h: [0.3] for h in range(24)}
-    coordinator.arbitrage_charging_enabled = True
 
     with_now(coordinator, DAY0.replace(hour=13, minute=0))
     asyncio.run(coordinator._async_update_locked())
@@ -263,7 +266,6 @@ def test_solar_capture_signal_switches_to_smart_not_manual(make_coordinator, has
     covered by the unit tests above).
     """
     coordinator = _make_ready_coordinator(make_coordinator, hass)
-    coordinator.arbitrage_charging_enabled = True
 
     def fake_should_postpone(entries, now, cheap_block_start):
         return True
@@ -290,7 +292,6 @@ def test_no_arbitrage_without_more_price_data_today(make_coordinator, hass):
     day with nothing left to compare against) - must not crash, must
     not trigger."""
     coordinator = _make_ready_coordinator(make_coordinator, hass)
-    coordinator.arbitrage_charging_enabled = True
 
     with_now(coordinator, DAY0.replace(hour=23, minute=59))
     asyncio.run(coordinator._async_update_locked())

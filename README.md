@@ -226,20 +226,23 @@ Plus een vaste "onbeschermde nasleep"-marge van 15%
 neemt de Zendure's eigen smart-modus het over, buiten onze reserve-
 bescherming om — deze marge compenseert dat structurele blinde vlek.
 
-### Arbitrage-laden (optioneel, standaard uit)
+### Winstgevend bijkopen tijdens een goedkoop moment (standaard actief, geen schakelaar)
 
-Naast "genoeg reserve aanhouden" en "verkopen wat er al is", kan de
-integratie ook **actief bijkopen** tijdens een goedkoop kwartier, puur
-omdat er later diezelfde dag een bekend duurder kwartier aankomt — ook
-als de bestaande reserve al genoeg is om te overbruggen ("genoeg om te
+Naast "genoeg reserve aanhouden" en "verkopen wat er al is", koopt de
+integratie ook **actief bij** tijdens een goedkoop kwartier, puur omdat
+er later diezelfde dag een bekend duurder kwartier aankomt — ook als de
+bestaande reserve al genoeg is om te overbruggen ("genoeg om te
 overbruggen" en "winstgevend om nu meer te kopen" zijn onafhankelijke
-vragen). Staat achter een eigen schakelaar, `switch.arbitrage_laden` —
-**standaard aan** (v0.63.61, gevraagd "moet naar herstart standaard
-aan staan"; vóór v0.63.61 stond dit bewust uit als opt-in). Zet je 'm
-zelf uit, dan blijft-ie na een herstart gewoon uit, net als elke andere
-schakelaar in deze integratie — de standaardwaarde geldt alleen bij een
-verse installatie of als er nog geen eerdere status is om te
-herstellen.
+vragen), en zowel vóór het goedkope blok (i.p.v. laden uitstellen) als
+er middenin (i.p.v. gewoon P1-volgend blijven staan).
+
+**Geen aparte aan/uit-schakelaar meer (v0.63.65, gevraagd "ik denk dat
+arbitrage er helemaal uit kan"):** dit is nu standaardgedrag. Er was
+geen zinnige "uit"-stand denkbaar zodra je begrijpt wat het doet — de
+winst-marge-check hieronder beschermt al tegen inkopen wanneer het niet
+lonend is. `switch.arbitrage_laden` bestond t/m v0.63.64; die
+schakelaar en de bijbehorende `arbitrage_charging_enabled`-vlag zijn nu
+volledig verwijderd.
 
 Alleen actief als de projectie, ná laad/ontlaad-verlies, een minimale
 marge overhoudt:
@@ -358,6 +361,15 @@ drempel van ~7W in plaats van de gegokte 20W. Zolang er nog onvoldoende
 metingen zijn, blijft de vaste drempel gewoon gelden (geen regressie).
 Zichtbaar als `idle_power_history_w` en
 `learned_completion_threshold_w` op de status-sensoren.
+
+**Persistentie-gat gevonden en gefixt (v0.63.64):** gerapporteerd,
+tijdens een controle of vandaag toegevoegde data een herstart
+overleeft — `SteelstofzuigerStatusSensor`/`FietsladersStatusSensor`
+waren géén `RestoreEntity`, waardoor zowel `idle_power_history_w`
+(hierboven) als de al langer bestaande `duration_history_minutes`
+(geleerde laadduur) bij elke herstart stilzwijgend terugvielen naar
+leeg. Beide sensoren zijn nu wél `RestoreEntity` en herstellen beide
+histories bij het opstarten.
 
 | Veld | Drempel | Betekenis |
 |---|---|---|
@@ -888,9 +900,30 @@ werken door vervuilde filters. Stuurt een melding via
 
 `sensor.nilm_bevestigde_apparaten` toont het aantal bevestigde apparaten
 + per apparaat de geleerde geschiedenis en of er een afwijking is
-gedetecteerd, als attributen. Wél een `RestoreEntity` (in tegenstelling
-tot de kandidatenlijst) — die geschiedenis moet wekenlang opbouwen, dat
-mag een herstart niet resetten.
+gedetecteerd, als attributen.
+
+**Opslag via een aparte Store, niet via het HA-entiteit-attribuut
+(v0.63.66):** gerapporteerd — "State attributes ... exceed maximum
+size of 16384 bytes" — bij genoeg bevestigde apparaten (elk met een
+eigen geleerde CUSUM-geschiedenis, plus de `tabel`-attribuut) groeide
+dit ruim voorbij de 16KB-limiet die Home Assistant's recorder per
+entiteit-attribuut hanteert. In tegenstelling tot de
+kandidatenlijst-preview (v0.63.45) is deze data gebruikerscuratie en
+bedoeld om maandenlang op te bouwen — die kon niet zomaar afgekapt
+worden zonder daadwerkelijk data te verliezen. In plaats daarvan gaat
+de opslag nu via een eigen `Store` (een los JSON-bestand onder
+`.storage/`, hetzelfde mechanisme dat Home Assistant's eigen
+`restore_state` gebruikt) — volledig los van de recorder's
+staat-geschiedenis-database en zijn grootte-limiet, dus geen enkele
+plafond meer. Het `apparaten`/`tabel`-attribuut op de sensor zelf toont
+nog altijd een begrensd voorbeeld (net als de kandidatenlijst) — maar
+dat is nu puur cosmetisch, niet meer de bron van waarheid voor wat
+daadwerkelijk hersteld wordt bij een herstart.
+
+Bestaande installaties migreren automatisch, eenmalig: als de nieuwe
+Store leeg blijkt (nog nooit geschreven), valt de sensor terug op zijn
+eigen, oude herstelde HA-status, en slaat die meteen op in de nieuwe
+Store zodat die terugval-route nooit meer nodig is.
 
 ### Overzichtstabel: naam, huidig vermogen, trend (v0.63.51/.52)
 
