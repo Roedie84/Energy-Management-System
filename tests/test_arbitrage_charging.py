@@ -270,19 +270,78 @@ def test_arbitrage_does_not_set_grid_charged_today_flag(make_coordinator, hass):
     assert coordinator._grid_charged_today is False
 
 
-def test_arbitrage_overrides_postpone_charging(make_coordinator, hass):
-    """Reported scenario: there's already enough available energy to
-    bridge to the cheap block (which would otherwise mean
-    smart_discharging/postpone) - arbitrage should still fire when
-    profitable, since 'enough to bridge' and 'profitable to buy more'
-    are independent questions."""
+def test_no_arbitrage_when_enough_reserve_to_bridge_the_night(make_coordinator, hass):
+    """v0.63.73, explicitly stated: 'Als er voldoende capaciteit is voor
+    overbruggen van de nacht ... mag de accu NIET manual gaan
+    bijladen, alleen op smart'. This reverses the old v0.63.15 premise
+    (previously tested by this same test under a different name/
+    docstring: 'enough to bridge' and 'profitable to buy more' are
+    independent questions, buy anyway) - a real grid purchase for
+    profit alone, while there's already enough reserve, is no longer
+    allowed at all, no matter how favourable the margin.
+
+    Uses the same should_postpone_charging monkeypatch technique
+    established in test_schedule_solar_capture_override.py - found
+    there that this fixture's price/reserve combination doesn't
+    reliably produce should_postpone_charging=True on its own through
+    the real reserve calculation.
+    """
     coordinator = _make_ready_coordinator(make_coordinator, hass)
-    coordinator.hourly_consumption_profile = {h: [0.3] for h in range(24)}
+
+    def fake_should_postpone(entries, now, cheap_block_start):
+        return True
+
+    coordinator._should_postpone_charging = fake_should_postpone
+
+    with_now(coordinator, DAY0.replace(hour=13, minute=0))
+    asyncio.run(coordinator._async_update_locked())
+
+    assert coordinator.last_reason != "arbitrage_charging"
+
+
+def test_arbitrage_still_fires_when_reserve_is_genuinely_insufficient(
+    make_coordinator, hass
+):
+    """The other half of the same rule: 'Is er te weinig om de nacht te
+    overbruggen dan mag hij manual bijladen' - when
+    should_postpone_charging is False (genuinely not enough reserve)
+    and the margin is profitable, arbitrage charging must still fire
+    normally."""
+    coordinator = _make_ready_coordinator(make_coordinator, hass)
+
+    def fake_should_postpone(entries, now, cheap_block_start):
+        return False
+
+    coordinator._should_postpone_charging = fake_should_postpone
 
     with_now(coordinator, DAY0.replace(hour=13, minute=0))
     asyncio.run(coordinator._async_update_locked())
 
     assert coordinator.last_reason == "arbitrage_charging"
+
+
+def test_solar_still_captured_via_smart_when_reserve_is_sufficient(
+    make_coordinator, hass
+):
+    """Even though a grid purchase is no longer allowed when reserve is
+    sufficient, existing solar surplus should still be captured via
+    smart mode instead of wasted by smart_discharging - the
+    v0.63.60 behaviour, now the only thing this branch ever does."""
+    coordinator = _make_ready_coordinator(
+        make_coordinator, hass, pv_power_sensor_entity="sensor.pv"
+    )
+    hass.states.set("sensor.p1", "-800")
+    hass.states.set("sensor.pv", "800")
+
+    def fake_should_postpone(entries, now, cheap_block_start):
+        return True
+
+    coordinator._should_postpone_charging = fake_should_postpone
+
+    with_now(coordinator, DAY0.replace(hour=13, minute=0))
+    asyncio.run(coordinator._async_update_locked())
+
+    assert coordinator.last_reason == "arbitrage_solar_capture"
 
 
 def test_solar_capture_signal_switches_to_smart_not_manual(make_coordinator, hass):

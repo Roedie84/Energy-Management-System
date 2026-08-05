@@ -5145,3 +5145,43 @@ met het geschatte net-aandeel als aparte, informatieve waarde.
 (2 tests) + 1 nieuwe permanente test die exact het gerapporteerde
 veldscenario natrekt (1707W zon, 293W net-gat, 2000W doel) en
 bevestigt dat het volle doelvermogen wordt gecommandeerd, niet het gat.
+
+## v0.63.73 — actief bijkopen mag alleen nog als de reserve écht ontoereikend is
+
+**Gerapporteerd:** "Hij sprint toch weer naar manual" — gevolgd door
+een expliciete, duidelijke regel: "Als er voldoende capaciteit is voor
+overbruggen van de nacht, en er 's avonds dure kwartier prijzen zijn
+mag de accu NIET manual gaan bijladen, alleen op smart om de zonne
+energie welke wordt teruggeleverd op te slaan. Is er te weinig om de
+nacht te overbruggen dan mag hij manual bijladen."
+
+**Dit draait de oorspronkelijke v0.63.15-aanname volledig om**: tot nu
+toe werd er altijd actief bijgekocht zodra de winst-marge het toeliet,
+**ongeacht** of de bestaande reserve al genoeg was ("genoeg om te
+overbruggen" en "winstgevend om nu meer te kopen" waren bewust
+onafhankelijke vragen). Vanaf nu geldt: is de reserve al voldoende om
+de nacht te overbruggen, dan is een actieve netaankoop puur voor winst
+niet meer toegestaan, hoe gunstig de marge ook is.
+
+**Fix**: `_get_arbitrage_charge_power()` controleert `should_postpone_
+charging` nu als allereerste, bepalende voorwaarde:
+- **Voldoende reserve** (`should_postpone_charging = True`): nooit een
+  echte netaankoop meer. Alleen het al aanwezige zonoverschot wordt via
+  smart-modus vastgelegd (het bestaande v0.63.60-mechanisme,
+  `arbitrage_solar_capture`) — nooit meer `arbitrage_charging`/manual.
+- **Ontoereikende reserve** (`should_postpone_charging = False`): de
+  winst-marge-logica (inclusief de v0.63.71-Solcast-verwachting en de
+  v0.63.72-volledig-doelvermogen-fix) werkt exact zoals voorheen.
+
+**Dode code opgeruimd**: een onbereikbare `if should_postpone_charging`
+-check verderop in de functie (nu altijd al door de nieuwe, vroege
+check afgehandeld) is verwijderd.
+
+**Getest** (3 bijgewerkte/nieuwe permanente tests in
+`test_arbitrage_charging.py`, met de al gevestigde `_should_postpone_
+charging`-monkeypatch-techniek om dit betrouwbaar te forceren, in
+plaats van op een toevallig scenario te vertrouwen): geen arbitrage-
+netaankoop meer bij voldoende reserve, ongeacht de marge; arbitrage
+vuurt nog gewoon bij een echt ontoereikende reserve; en het aanwezige
+zonoverschot wordt bij voldoende reserve nog steeds via smart-modus
+vastgelegd in plaats van verspild.

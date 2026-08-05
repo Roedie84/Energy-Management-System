@@ -228,13 +228,28 @@ bescherming om — deze marge compenseert dat structurele blinde vlek.
 
 ### Winstgevend bijkopen tijdens een goedkoop moment (standaard actief, geen schakelaar)
 
-Naast "genoeg reserve aanhouden" en "verkopen wat er al is", koopt de
-integratie ook **actief bij** tijdens een goedkoop kwartier, puur omdat
-er later diezelfde dag een bekend duurder kwartier aankomt — ook als de
-bestaande reserve al genoeg is om te overbruggen ("genoeg om te
-overbruggen" en "winstgevend om nu meer te kopen" zijn onafhankelijke
-vragen), en zowel vóór het goedkope blok (i.p.v. laden uitstellen) als
-er middenin (i.p.v. gewoon P1-volgend blijven staan).
+Naast "genoeg reserve aanhouden" en "verkopen wat er al is", kan de
+integratie ook **actief bijkopen** tijdens een goedkoop kwartier, puur
+omdat er later diezelfde dag een bekend duurder kwartier aankomt.
+
+**Belangrijke voorwaarde (v0.63.73, expliciet gesteld):** "Als er
+voldoende capaciteit is voor overbruggen van de nacht, en er 's avonds
+dure kwartier prijzen zijn mag de accu NIET manual gaan bijladen,
+alleen op smart om de zonne energie welke wordt teruggeleverd op te
+slaan. Is er te weinig om de nacht te overbruggen dan mag hij manual
+bijladen." Dit draait de oorspronkelijke v0.63.15-aanname ("genoeg om
+te overbruggen" en "winstgevend om nu meer te kopen" zijn onafhankelijke
+vragen, dus altijd bijkopen als het loont) volledig om: een actieve
+netaankoop puur voor winst, terwijl er al genoeg reserve is, mag
+voortaan **nooit** meer — ongeacht hoe gunstig de marge is. Is de
+reserve wél genoeg om de nacht te overbruggen (`should_postpone_
+charging = True`), dan wordt uitsluitend het al aanwezige zonoverschot
+via smart-modus vastgelegd (v0.63.60's mechanisme, nu het enige dat
+deze aftakking nog doet) — nooit een echte netaankoop. Is de reserve
+juist ontoereikend (`should_postpone_charging = False`), dan geldt de
+winst-marge-logica hieronder gewoon zoals voorheen, zowel vóór het
+goedkope blok (i.p.v. laden uitstellen) als er middenin (i.p.v. gewoon
+P1-volgend blijven staan).
 
 **Geen aparte aan/uit-schakelaar meer (v0.63.65, gevraagd "ik denk dat
 arbitrage er helemaal uit kan"):** dit is nu standaardgedrag. Er was

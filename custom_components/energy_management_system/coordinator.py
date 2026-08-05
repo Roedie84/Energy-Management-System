@@ -2843,32 +2843,36 @@ class EnergyManagementSystemCoordinator:
     ) -> float | None:
         """How much to actively buy from the grid right now, purely
         because a known, more expensive quarter is still coming later
-        today and buying now is profitable even after round-trip losses
-        (reported: 'nu tegen 21 ct niet laden en dan vanavond wat meer
-        tegen dure uren ontladen' - the margin was being left on the
-        table). Returns None if not profitable right now, or no active
-        grid purchase is actually needed (see
-        `_arbitrage_wants_smart_over_postpone` below for that last case,
-        v0.63.60).
+        today and buying now is profitable even after round-trip losses.
+        Returns None if not profitable, if there's already enough
+        reserve to bridge the night (see v0.63.73 below), or if no
+        active grid purchase is actually needed (see
+        `_arbitrage_wants_smart_over_postpone` below).
 
-        v0.63.65, requested ('ik denk dat arbitrage er helemaal uit
-        kan'): this is now standard, always-active behaviour - not
-        gated behind a separate opt-in switch. There was never a
-        specific need for a toggle here: the margin check below already
-        guards against buying when it isn't worth it, so there's no
-        real "off" state that makes sense once the person understood
-        what it does - just "charge toward full whenever it's cheap now
-        and a known, sufficiently more expensive quarter is still coming
-        today", which the tree already applies both ahead of the cheap
-        block (in place of postponing) and during it (in place of the
-        plain P1-following default).
+        v0.63.73, requested and stated explicitly: "Als er voldoende
+        capaciteit is voor overbruggen van de nacht, en er 's avonds
+        dure kwartier prijzen zijn mag de accu NIET manual gaan
+        bijladen, alleen op smart om de zonne energie welke wordt
+        teruggeleverd op te slaan. Is er te weinig om de nacht te
+        overbruggen dan mag hij manual bijladen." This reverses the
+        original v0.63.15 premise ("genoeg om te overbruggen" and
+        "winstgevend om nu meer te kopen" are independent questions,
+        buy anyway if profitable) - a real grid purchase for profit
+        alone, while there's already enough reserve, is no longer
+        allowed at all. `should_postpone_charging` (True = already
+        enough to bridge to the next cheap block) now gates the entire
+        active-buying branch: whenever it's True, this function only
+        ever considers capturing already-available solar surplus via
+        smart mode (`_arbitrage_wants_smart_over_postpone`), never an
+        actual grid purchase, regardless of margin. Only when it's
+        False (genuinely not enough reserve) does the profitable-margin
+        grid-purchase logic below even run.
 
         Deliberately solar-first (reported: 'tijdens goedkope uren
         vooral zonne-energie blijft opslaan'): only actively buys from
         the grid when the expected PV surplus falls short of the
         desired charge rate - solar alone already gets captured by
-        smart mode's own P1-following whenever it's enough on its own
-        (see `_arbitrage_wants_smart_over_postpone` below).
+        smart mode's own P1-following whenever it's enough on its own.
 
         v0.63.72, reported/confirmed with the person ("regelt de
         zendure zelf dat het PV overschot wordt opgeslagen in de smart
@@ -2886,17 +2890,13 @@ class EnergyManagementSystemCoordinator:
         Confirmed the fix: commanding the *full* target power instead
         does correctly result in the hardware sourcing solar first
         (1707W) and grid for the remainder (293W) to reach that
-        commanded total - so this now always commands the full target
-        whenever any grid purchase is justified at all, never just the
-        gap. This branch is therefore only ever reached when expected
-        solar falls short of the target (mostly autumn/winter, or
-        early/late in the day even in summer) - once solar alone
-        covers the full target, `_arbitrage_wants_smart_over_postpone`
-        already redirects to smart mode instead, further down.
+        commanded total - so whenever a genuine grid purchase is
+        justified at all, this commands the full target, never just the
+        gap.
 
         v0.63.71, requested ("hij kijkt naar het live PV opbrengst en
         niet naar de verwachtte zon"): the solar-surplus side of this
-        now prefers the Solcast-based expected PV power for this exact
+        prefers the Solcast-based expected PV power for this exact
         moment (`_get_expected_pv_power_w`, bias-corrected using the
         already-learned per-hour ratio) over the raw live PV reading,
         which a passing cloud could momentarily dip - flip-flopping
@@ -2905,30 +2905,47 @@ class EnergyManagementSystemCoordinator:
         the live reading if no solar forecast sensor is configured.
 
         v0.63.59/.60, reported ('accu wordt weer ingesteld op
-        smart_discharging terwijl ik juist wil doorladen'): that
-        solar-first assumption silently broke down whenever the
-        fallback would instead be OPTION_SMART_DISCHARGING
-        (`should_postpone_charging=True`) - confirmed with the person
-        that mode covers household load only and does NOT charge from
-        surplus solar, so a large solar surplus that would fully cover
-        the desired rate was being left completely unused instead of
-        captured.
-
-        v0.63.59 first fixed this by forcing a manual charge at the
-        full target rate - reported back that this was the wrong mode
-        (should be `smart`, not `manual`): there's no actual grid
-        purchase needed here (solar alone covers the target), so
-        forcing manual mode was heavier-handed than necessary. v0.63.60
-        instead sets `self._arbitrage_wants_smart_over_postpone = True`
-        and returns None - the caller uses this signal to apply
-        OPTION_SMART instead of OPTION_SMART_DISCHARGING, letting that
-        mode's own P1-following capture the solar naturally, exactly
-        like it already does whenever should_postpone_charging is
-        False. No manual command, no explicit grid purchase - this
-        only ever stops smart_discharging from discarding solar that
-        smart mode would have captured anyway.
+        smart_discharging terwijl ik juist wil doorladen'): a solar
+        surplus that would otherwise be wasted by smart_discharging
+        (which covers household load only, doesn't charge from surplus
+        solar - confirmed with the person) instead sets
+        `self._arbitrage_wants_smart_over_postpone = True` and returns
+        None - the caller uses this signal to apply OPTION_SMART
+        instead of OPTION_SMART_DISCHARGING, letting that mode's own
+        P1-following capture the solar naturally. No manual command, no
+        explicit grid purchase - this only ever stops smart_discharging
+        from discarding solar that smart mode would have captured
+        anyway.
         """
         self._arbitrage_wants_smart_over_postpone = False
+
+        pv_entity = self.config.get(CONF_PV_POWER_SENSOR)
+        # v0.63.71: prefer the Solcast-based expected PV power for this
+        # exact moment over the raw live reading, which a passing cloud
+        # can momentarily dip and flip-flop this decision every few
+        # minutes. Falls back to the live reading if no solar forecast
+        # sensor is configured (or "now" falls outside all known
+        # forecast intervals).
+        expected_pv_power_w = self._get_expected_pv_power_w(now)
+        if expected_pv_power_w is not None:
+            pv_power_w = expected_pv_power_w
+        else:
+            pv_power_w = self._read_sensor_float(pv_entity) if pv_entity else None
+        household_load_w = self._read_corrected_consumption_power()
+        solar_surplus_w = 0.0
+        if pv_power_w is not None and household_load_w is not None:
+            solar_surplus_w = max(0.0, pv_power_w - household_load_w)
+        self.last_arbitrage_solar_surplus_w = round(solar_surplus_w, 1)
+
+        if should_postpone_charging:
+            # v0.63.73: already enough reserve to bridge the night -
+            # never an active grid purchase here, no matter how
+            # profitable a later quarter would make that. Only capture
+            # solar that's already there, same principle as v0.63.60,
+            # now the only thing this branch ever does.
+            if solar_surplus_w > 0:
+                self._arbitrage_wants_smart_over_postpone = True
+            return None
 
         if self.last_current_price_per_kwh is None:
             return None
@@ -2958,37 +2975,14 @@ class EnergyManagementSystemCoordinator:
             self.config.get(CONF_MANUAL_CHARGE_POWER, DEFAULT_MANUAL_CHARGE_POWER)
         )
 
-        pv_entity = self.config.get(CONF_PV_POWER_SENSOR)
-        # v0.63.71, requested ("hij kijkt naar het live PV opbrengst en
-        # niet naar de verwachtte zon"): prefer the Solcast-based
-        # expected PV power for this exact moment over the raw live
-        # reading, which a passing cloud can momentarily dip and
-        # flip-flop this decision every few minutes. Falls back to the
-        # live reading if no solar forecast sensor is configured (or
-        # "now" falls outside all known forecast intervals).
-        expected_pv_power_w = self._get_expected_pv_power_w(now)
-        if expected_pv_power_w is not None:
-            pv_power_w = expected_pv_power_w
-        else:
-            pv_power_w = self._read_sensor_float(pv_entity) if pv_entity else None
-        household_load_w = self._read_corrected_consumption_power()
-        solar_surplus_w = 0.0
-        if pv_power_w is not None and household_load_w is not None:
-            solar_surplus_w = max(0.0, pv_power_w - household_load_w)
-        self.last_arbitrage_solar_surplus_w = round(solar_surplus_w, 1)
-
         grid_power_w = max(0.0, target_power_w - solar_surplus_w)
         self.last_arbitrage_grid_power_w = round(grid_power_w, 1)
         if grid_power_w < MIN_ARBITRAGE_GRID_POWER_W:
-            if should_postpone_charging:
-                # The fallback here would be smart_discharging, which
-                # doesn't capture solar surplus at all - signal the
-                # caller to use plain smart mode instead, rather than
-                # forcing a manual command for energy that mode would
-                # capture on its own anyway.
-                self._arbitrage_wants_smart_over_postpone = True
             # Solar surplus already covers (most of) the desired rate -
-            # no active grid purchase needed either way.
+            # no active grid purchase needed. should_postpone_charging
+            # is always False here (handled by its own early return
+            # above), so the tree's own default_smart already applies
+            # and already captures this solar - no extra signal needed.
             return None
 
         # v0.63.72: command the FULL target, not just the grid gap -
