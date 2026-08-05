@@ -39,6 +39,7 @@ import asyncio
 import logging
 import math
 import statistics
+import random
 from datetime import date, datetime, timedelta
 
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
@@ -71,6 +72,7 @@ from .const import (
     CONF_WASHING_MACHINE_READY_SENSOR,
     CONF_QUOOKER_POWER_SENSOR,
     CONF_AIRCO_CLIMATE_ENTITY,
+    CONF_SLAAPKAMER_CLIMATE_ENTITY,
     CONF_OVEN_STATE_SENSOR,
     CONF_KOOKPLAAT_STATE_SENSOR,
     CONF_STEELSTOFZUIGER_SWITCH,
@@ -78,6 +80,7 @@ from .const import (
     CONF_FIETSLADERS_SWITCH,
     CONF_FIETSLADERS_POWER_SENSOR,
     STEELSTOFZUIGER_COMPLETE_SUSTAINED_MINUTES,
+    APPLIANCE_CYCLE_COMPLETE_SUSTAINED_MINUTES,
     FIETSLADERS_COMPLETE_THRESHOLD_W,
     QUOOKER_SUSTAINED_MINUTES,
     AIRCO_ACTIVE_HVAC_ACTIONS,
@@ -121,6 +124,13 @@ from .const import (
     CUSUM_REFERENCE_EXCLUDE_RECENT_DAYS,
     CUSUM_SLACK_KW,
     CUSUM_ALARM_THRESHOLD_KW,
+    CONF_KNMI_WEATHER_ENTITY,
+    CONF_OPENWEATHERMAP_WEATHER_ENTITY,
+    WEATHER_ENSEMBLE_CLEAR_THRESHOLD_PERCENT,
+    WEATHER_ENSEMBLE_OVERCAST_THRESHOLD_PERCENT,
+    WEATHER_ENSEMBLE_UNDERPERFORM_RATIO,
+    WEATHER_ENSEMBLE_OVERPERFORM_RATIO,
+    WEATHER_ENSEMBLE_MIN_SOLCAST_KW,
     LOW_SOLAR_RELATIVE_FRACTION,
     EXPENSIVE_PRICE_THRESHOLD_FRACTION,
     EXPENSIVE_PRICE_THRESHOLD_FRACTION_LOW_SOLAR,
@@ -138,6 +148,16 @@ from .const import (
     FEEDIN_PREMIUM_EUR_PER_KWH,
     FEEDIN_PREMIUM_EUR_PER_KWH,
     MIN_ARBITRAGE_MARGIN_EUR_PER_KWH,
+    MPC_HORIZON_HOURS,
+    MPC_MIN_MARGIN_EUR_PER_KWH,
+    MONTE_CARLO_SIMULATIONS,
+    MONTE_CARLO_MAX_HOURS,
+    KALMAN_SOC_PROCESS_NOISE_KWH2,
+    KALMAN_SOC_MEASUREMENT_NOISE_KWH2,
+    KALMAN_PV_PROCESS_NOISE_W2,
+    KALMAN_PV_MEASUREMENT_NOISE_W2,
+    KALMAN_LOAD_PROCESS_NOISE_W2,
+    KALMAN_LOAD_MEASUREMENT_NOISE_W2,
     MIN_ARBITRAGE_GRID_POWER_W,
     SHORTFALL_MARGIN_BONUS_PER_RECENT_DAY,
     EMERGENCY_LOW_BATTERY_KWH_THRESHOLD,
@@ -188,6 +208,41 @@ class _ChronologicalValueTracker:
                 pass
             self._idx += 1
         return self._current
+
+
+class _KalmanFilter1D:
+    """Minimal scalar Kalman filter (v0.63.35) - no external dependency
+    (numpy), appropriate for smoothing a single noisy live measurement
+    over time with no explicit dynamics model beyond "the true value
+    drifts a bit between updates" (process noise Q) and "the sensor
+    reading is noisy" (measurement noise R). Advisory-only smoothing,
+    used to display a filtered estimate alongside the raw reading -
+    never fed into any decision.
+
+    Standard scalar Kalman update:
+        predict: P = P + Q
+        update:  K = P / (P + R)
+                 x = x + K * (measurement - x)
+                 P = (1 - K) * P
+    """
+
+    def __init__(self, process_noise: float, measurement_noise: float) -> None:
+        self.process_noise = process_noise
+        self.measurement_noise = measurement_noise
+        self.estimate: float | None = None
+        self.uncertainty: float = process_noise
+
+    def update(self, measurement: float) -> float:
+        if self.estimate is None:
+            self.estimate = measurement
+            self.uncertainty = self.measurement_noise
+            return self.estimate
+
+        predicted_uncertainty = self.uncertainty + self.process_noise
+        gain = predicted_uncertainty / (predicted_uncertainty + self.measurement_noise)
+        self.estimate = self.estimate + gain * (measurement - self.estimate)
+        self.uncertainty = (1 - gain) * predicted_uncertainty
+        return self.estimate
 
 
 class EnergyManagementSystemCoordinator:
@@ -359,6 +414,54 @@ class EnergyManagementSystemCoordinator:
         self.sluipverbruik_detected: bool = False
         self.sluipverbruik_estimated_drift_w: float | None = None
         self.sluipverbruik_reference_w: float | None = None
+        # Weather ensemble cross-check (v0.63.30).
+        self.weather_ensemble_cloud_cover_percent: float | None = None
+        self.weather_ensemble_sources_used: list[str] = []
+        self.weather_ensemble_label: str | None = None
+        self.weather_ensemble_disagreement: str | None = None
+        # Vaatwasser/wasmachine RUSTEND/ACTIEF/KLAAR-toestandsmachine
+        # (v0.63.32).
+        self._dishwasher_state: str = "rustend"
+        self._dishwasher_cycle_started_at: datetime | None = None
+        self._dishwasher_below_threshold_since: datetime | None = None
+        self.dishwasher_cycle_duration_history: list[float] = []
+        self._washing_machine_state: str = "rustend"
+        self._washing_machine_cycle_started_at: datetime | None = None
+        self._washing_machine_below_threshold_since: datetime | None = None
+        self.washing_machine_cycle_duration_history: list[float] = []
+        # MPC advisory engine (v0.63.33) - see coordinator method
+        # docstring for the "advisory only, never controls" guarantee.
+        self.mpc_planned_actions: list[dict] = []
+        self.mpc_projected_total_profit_eur: float | None = None
+        self.mpc_horizon_quarters_used: int = 0
+        self.mpc_last_computed_at: datetime | None = None
+        self.mpc_note: str | None = None
+        # Monte Carlo advisory engine (v0.63.34).
+        self.monte_carlo_median_deficit_kwh: float | None = None
+        self.monte_carlo_p90_deficit_kwh: float | None = None
+        self.monte_carlo_p10_deficit_kwh: float | None = None
+        self.monte_carlo_shortfall_probability_percent: float | None = None
+        self.monte_carlo_simulations_run: int = 0
+        self.monte_carlo_hours_simulated: int = 0
+        self.monte_carlo_note: str | None = None
+        # Kalman filtering advisory engine (v0.63.35) - see
+        # _KalmanFilter1D and _update_kalman_filters() for the "advisory
+        # only, never fed into decisions" guarantee.
+        self._kalman_soc = _KalmanFilter1D(
+            KALMAN_SOC_PROCESS_NOISE_KWH2, KALMAN_SOC_MEASUREMENT_NOISE_KWH2
+        )
+        self._kalman_pv = _KalmanFilter1D(
+            KALMAN_PV_PROCESS_NOISE_W2, KALMAN_PV_MEASUREMENT_NOISE_W2
+        )
+        self._kalman_load = _KalmanFilter1D(
+            KALMAN_LOAD_PROCESS_NOISE_W2, KALMAN_LOAD_MEASUREMENT_NOISE_W2
+        )
+        self.kalman_soc_filtered_kwh: float | None = None
+        self.kalman_soc_raw_kwh: float | None = None
+        self.kalman_pv_filtered_w: float | None = None
+        self.kalman_pv_raw_w: float | None = None
+        self.kalman_load_filtered_w: float | None = None
+        self.kalman_load_raw_w: float | None = None
         self._last_cost_basis_calc_time: datetime | None = None
         self.last_charge_power_applied: float | None = None
         self.last_current_price_per_kwh: float | None = None
@@ -710,6 +813,21 @@ class EnergyManagementSystemCoordinator:
             return None
         return statistics.median(self.fietsladers_charge_duration_history)
 
+    @property
+    def learned_dishwasher_cycle_duration_minutes(self) -> float | None:
+        """Median cycle duration (minutes) from the RUSTEND/ACTIEF/KLAAR
+        state machine (v0.63.32) - informational, and used for the
+        rough "how far along" progress estimate on the sensor."""
+        if not self.dishwasher_cycle_duration_history:
+            return None
+        return statistics.median(self.dishwasher_cycle_duration_history)
+
+    @property
+    def learned_washing_machine_cycle_duration_minutes(self) -> float | None:
+        if not self.washing_machine_cycle_duration_history:
+            return None
+        return statistics.median(self.washing_machine_cycle_duration_history)
+
     # -- Forecast parsing -------------------------------------------------
 
     def _parse_forecast_datetime(self, value) -> datetime | None:
@@ -915,19 +1033,10 @@ class EnergyManagementSystemCoordinator:
         minimum SoC) could ever physically sustain. None if the two
         entities needed for this aren't configured/available.
         """
-        total_capacity_entity = self.config.get(CONF_BATTERY_TOTAL_CAPACITY_SENSOR)
-        min_soc_entity = self.config.get(CONF_BATTERY_MIN_SOC_NUMBER)
-        if not total_capacity_entity or not min_soc_entity:
+        usable_capacity_kwh = self._max_usable_battery_capacity_kwh()
+        if usable_capacity_kwh is None:
             return None
 
-        total_capacity_kwh = self._read_sensor_float(total_capacity_entity)
-        min_soc_percent = self._read_sensor_float(min_soc_entity)
-        if total_capacity_kwh is None or min_soc_percent is None:
-            return None
-
-        usable_capacity_kwh = total_capacity_kwh * max(
-            0.0, 1 - min_soc_percent / 100
-        )
         base_power = self.config.get(
             CONF_MANUAL_DISCHARGE_POWER, DEFAULT_MANUAL_DISCHARGE_POWER
         )
@@ -1494,6 +1603,14 @@ class EnergyManagementSystemCoordinator:
                 hvac_action = state.attributes.get("hvac_action")
                 if hvac_action in AIRCO_ACTIVE_HVAC_ACTIONS:
                     return "airco"
+
+        slaapkamer_entity = self.config.get(CONF_SLAAPKAMER_CLIMATE_ENTITY)
+        if slaapkamer_entity:
+            state = self.hass.states.get(slaapkamer_entity)
+            if state is not None:
+                hvac_action = state.attributes.get("hvac_action")
+                if hvac_action in AIRCO_ACTIVE_HVAC_ACTIONS:
+                    return "slaapkamer"
 
         oven_entity = self.config.get(CONF_OVEN_STATE_SENSOR)
         if oven_entity:
@@ -3997,6 +4114,608 @@ class EnergyManagementSystemCoordinator:
                     notification_id="ems_sluipverbruik_detected",
                 )
 
+    def _update_weather_ensemble_check(self, now: datetime) -> None:
+        """Weather ensemble cross-check (v0.63.30): compares live PV
+        output against what Solcast's own forecast predicts for right
+        now, alongside live cloud_coverage readings from independent
+        weather sources (KNMI/OpenWeatherMap) - read from their HA
+        `weather` entities, not a new API integration.
+
+        Deliberately informational only, not wired into any decision:
+        a genuine multi-source kWh yield ensemble would need panel
+        orientation/tilt/kWp specs this integration doesn't collect, so
+        this doesn't try to produce an alternate yield estimate. What it
+        *can* honestly do: flag when live PV underperformance doesn't
+        match what independent weather sources say the sky is doing
+        right now (e.g. Solcast/the PV reading is low despite
+        weather.knmi/weather.openweathermap both reporting clear skies -
+        worth a look, could be a panel/inverter issue rather than
+        weather) or the reverse (overperforming despite reported heavy
+        cloud, less concerning but still worth noting for calibration).
+        """
+        knmi_entity = self.config.get(CONF_KNMI_WEATHER_ENTITY)
+        owm_entity = self.config.get(CONF_OPENWEATHERMAP_WEATHER_ENTITY)
+        source_entities = [e for e in (knmi_entity, owm_entity) if e]
+        if not source_entities:
+            return
+
+        cloud_readings: list[float] = []
+        sources_used: list[str] = []
+        for entity_id in source_entities:
+            state = self.hass.states.get(entity_id)
+            if state is None:
+                continue
+            cloud_pct = state.attributes.get("cloud_coverage")
+            if cloud_pct is None:
+                continue
+            try:
+                cloud_readings.append(float(cloud_pct))
+                sources_used.append(entity_id)
+            except (TypeError, ValueError):
+                continue
+
+        if not cloud_readings:
+            self.weather_ensemble_cloud_cover_percent = None
+            self.weather_ensemble_sources_used = []
+            self.weather_ensemble_label = None
+            self.weather_ensemble_disagreement = None
+            return
+
+        avg_cloud_pct = sum(cloud_readings) / len(cloud_readings)
+        self.weather_ensemble_cloud_cover_percent = round(avg_cloud_pct, 1)
+        self.weather_ensemble_sources_used = sources_used
+
+        if avg_cloud_pct < WEATHER_ENSEMBLE_CLEAR_THRESHOLD_PERCENT:
+            self.weather_ensemble_label = "helder"
+        elif avg_cloud_pct > WEATHER_ENSEMBLE_OVERCAST_THRESHOLD_PERCENT:
+            self.weather_ensemble_label = "bewolkt"
+        else:
+            self.weather_ensemble_label = "half bewolkt"
+
+        self.weather_ensemble_disagreement = None
+        pv_entity = self.config.get(CONF_PV_POWER_SENSOR)
+        if not pv_entity:
+            return
+        live_pv_w = self._read_sensor_float(pv_entity)
+        if live_pv_w is None:
+            return
+
+        solcast_kw = None
+        for start, end, kwh in self._get_pv_forecast_entries():
+            if start <= now < end:
+                interval_hours = (end - start).total_seconds() / 3600
+                if interval_hours > 0:
+                    solcast_kw = kwh / interval_hours
+                break
+        if solcast_kw is None or solcast_kw < WEATHER_ENSEMBLE_MIN_SOLCAST_KW:
+            # Too close to zero (night, or Solcast itself predicts
+            # almost nothing) - a ratio here would be noise, not signal.
+            return
+
+        ratio = (live_pv_w / 1000) / solcast_kw
+        if (
+            ratio < WEATHER_ENSEMBLE_UNDERPERFORM_RATIO
+            and avg_cloud_pct < WEATHER_ENSEMBLE_CLEAR_THRESHOLD_PERCENT
+        ):
+            self.weather_ensemble_disagreement = (
+                "PV presteert fors onder de Solcast-voorspelling, terwijl "
+                "KNMI/OpenWeatherMap juist heldere lucht melden - "
+                "mogelijk een paneel- of omvormer-kwestie, niet het weer."
+            )
+        elif (
+            ratio > WEATHER_ENSEMBLE_OVERPERFORM_RATIO
+            and avg_cloud_pct > WEATHER_ENSEMBLE_OVERCAST_THRESHOLD_PERCENT
+        ):
+            self.weather_ensemble_disagreement = (
+                "PV presteert beter dan de Solcast-voorspelling, terwijl "
+                "KNMI/OpenWeatherMap juist zware bewolking melden - geen "
+                "probleem, maar wijkt af van wat verwacht werd."
+            )
+
+    def _update_appliance_state_machine(
+        self,
+        now: datetime,
+        power_entity: str | None,
+        state_attr: str,
+        cycle_started_attr: str,
+        below_threshold_since_attr: str,
+        duration_history_attr: str,
+        notify_title: str | None = None,
+    ) -> None:
+        """RUSTEND/ACTIEF/KLAAR-toestandsmachine (v0.63.32, "Optie 1" na
+        overleg) - een eenvoudiger alternatief voor echte Markov-
+        fasedetectie (vullen/wassen/spoelen/centrifugeren), die
+        merk/model-specifieke vermogenspatronen zou vereisen waar geen
+        trainingsdata voor is. Alleen aan/uit, geen fases.
+
+        RUSTEND -> ACTIEF: vermogen komt boven
+        APPLIANCE_RUNNING_POWER_THRESHOLD_W.
+        ACTIEF -> KLAAR: vermogen blijft
+        APPLIANCE_CYCLE_COMPLETE_SUSTAINED_MINUTES aanhoudend onder die
+        drempel - dezelfde aanhoudend-laag-bevestigt-klaar-logica als de
+        steelstofzuiger/fietsladers (v0.63.12/.13), maar met een ruimere
+        marge (5 min i.p.v. 2) omdat een cyclus tussentijdse stille fases
+        kan hebben (vullen, weken) die een kortere marge ten onrechte als
+        "klaar" zou kunnen aanmerken.
+        KLAAR -> ACTIEF: een nieuwe cyclus start direct door, zonder
+        eerst terug naar RUSTEND te hoeven.
+
+        Bij het afsluiten van een cyclus wordt de duur toegevoegd aan
+        `duration_history_attr` (mediaan, LEARNING_HISTORY_DAYS-venster,
+        zelfde uitschieter-resistente aanpak als elders) en - als
+        geconfigureerd - een melding gestuurd.
+        """
+        if not power_entity:
+            return
+        power_w = self._read_sensor_float(power_entity)
+        if power_w is None:
+            return
+
+        current_state = getattr(self, state_attr)
+
+        if power_w >= APPLIANCE_RUNNING_POWER_THRESHOLD_W:
+            setattr(self, below_threshold_since_attr, None)
+            if current_state != "actief":
+                setattr(self, cycle_started_attr, now)
+                setattr(self, state_attr, "actief")
+            return
+
+        if current_state != "actief":
+            return
+
+        since = getattr(self, below_threshold_since_attr)
+        if since is None:
+            setattr(self, below_threshold_since_attr, now)
+            return
+
+        elapsed_minutes = (now - since).total_seconds() / 60
+        if elapsed_minutes < APPLIANCE_CYCLE_COMPLETE_SUSTAINED_MINUTES:
+            return
+
+        started_at = getattr(self, cycle_started_attr)
+        duration_minutes = None
+        if started_at is not None:
+            duration_minutes = (now - started_at).total_seconds() / 60
+            if duration_minutes > 0:
+                history = getattr(self, duration_history_attr)
+                history.append(round(duration_minutes, 1))
+                setattr(self, duration_history_attr, history[-LEARNING_HISTORY_DAYS:])
+
+        setattr(self, state_attr, "klaar")
+        setattr(self, below_threshold_since_attr, None)
+        setattr(self, cycle_started_attr, None)
+
+        if notify_title:
+            notify_service = self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE)
+            if notify_service:
+                duration_txt = (
+                    f"ongeveer {duration_minutes:.0f} minuten"
+                    if duration_minutes is not None
+                    else "onbekende tijd"
+                )
+                self._dispatch_notification(
+                    notify_service=notify_service,
+                    title=notify_title,
+                    message=f"Klaar na {duration_txt}.",
+                    notification_id=f"ems_{state_attr}_cycle_done",
+                )
+
+    def _compute_mpc_plan(self, now: datetime, entries: list[PriceEntry]) -> None:
+        """MPC (Model Predictive Control) advisory engine (v0.63.33).
+
+        ADVISORY ONLY - confirmed explicitly before building this: never
+        sends a device command, never overrides `_async_apply_manual`/
+        `_async_apply_operation` or any part of the existing, tested
+        decision tree. Purely computes and exposes a projected
+        charge/discharge plan for comparison.
+
+        Algorithm: greedy interval pairing over the full available price
+        forecast horizon (today + tomorrow, up to MPC_HORIZON_HOURS).
+        Repeatedly matches the single cheapest remaining quarter with the
+        single priciest remaining quarter and allocates a charge/
+        discharge chunk between them (bounded by physical charge/
+        discharge rate and remaining battery headroom), as long as the
+        pair clears MPC_MIN_MARGIN_EUR_PER_KWH after efficiency losses.
+        Stops as soon as the best remaining pair doesn't clear the
+        margin - correct termination, since quarters are pre-sorted by
+        price and no later pair could be more profitable than the
+        current best remaining one.
+
+        This is a well-established good heuristic for the storage-
+        arbitrage problem, not a true linear-programming solve (no
+        scipy/pulp dependency added, to keep a HACS integration
+        lightweight) - individually inspectable allocation steps
+        instead of an opaque solver's output.
+
+        Deliberately PURE price arbitrage: does not model household
+        consumption or PV production, and does not subtract the reserve
+        the real decision tree protects for overnight bridging (that
+        protection is that engine's job, already tested). This plan's
+        projected profit is therefore a theoretical upper bound on
+        arbitrage opportunity, not a literal recommendation - `mpc_note`
+        states this plainly whenever a plan is produced.
+
+        Requires `battery_total_capacity_sensor_entity` and
+        `battery_min_soc_number_entity` (same fields as the v0.63.27
+        capacity-aware "dure kwartieren" count) to know how much charge
+        headroom exists - without them, no charge/discharge pairs can
+        be evaluated (there's no way to know how much more could ever
+        be stored), so the plan comes back empty with an explanatory
+        note rather than a silently wrong guess.
+        """
+        self.mpc_last_computed_at = now
+        self.mpc_planned_actions = []
+        self.mpc_projected_total_profit_eur = None
+        self.mpc_horizon_quarters_used = 0
+
+        available_entity = self.config.get(CONF_AVAILABLE_ENERGY_SENSOR)
+        if not available_entity:
+            self.mpc_note = (
+                "Geen available_energy_sensor_entity geconfigureerd - "
+                "MPC kan geen plan berekenen zonder te weten hoeveel "
+                "energie er nu beschikbaar is."
+            )
+            return
+        available_kwh = self._read_sensor_float(available_entity)
+        if available_kwh is None:
+            self.mpc_note = "Beschikbare-energie-sensor niet uitleesbaar."
+            return
+
+        usable_capacity_kwh = self._max_usable_battery_capacity_kwh()
+        if usable_capacity_kwh is None:
+            self.mpc_note = (
+                "Geen battery_total_capacity_sensor_entity/"
+                "battery_min_soc_number_entity geconfigureerd - MPC kan "
+                "niet bepalen hoeveel laadruimte er in totaal is, dus "
+                "wordt er geen plan berekend (in plaats van te gokken)."
+            )
+            return
+
+        horizon_end = now + timedelta(hours=MPC_HORIZON_HOURS)
+        horizon_entries = [
+            e for e in entries if e[0] >= now and e[0] < horizon_end
+        ]
+        if not horizon_entries:
+            self.mpc_note = "Geen prijsdata binnen de horizon."
+            return
+
+        base_charge_power_w = abs(
+            self.config.get(CONF_MANUAL_CHARGE_POWER, DEFAULT_MANUAL_CHARGE_POWER)
+        )
+        base_discharge_power_w = self.config.get(
+            CONF_MANUAL_DISCHARGE_POWER, DEFAULT_MANUAL_DISCHARGE_POWER
+        )
+        efficiency_percent = self.learned_battery_efficiency_percent
+        if efficiency_percent is None:
+            efficiency_percent = float(
+                self.config.get(
+                    CONF_BATTERY_ROUND_TRIP_EFFICIENCY,
+                    DEFAULT_BATTERY_ROUND_TRIP_EFFICIENCY_PERCENT,
+                )
+            )
+        efficiency = efficiency_percent / 100
+
+        quarters = []
+        for start, end, raw_price in horizon_entries:
+            interval_hours = (end - start).total_seconds() / 3600
+            if interval_hours <= 0:
+                continue
+            quarters.append(
+                {
+                    "start": start,
+                    "end": end,
+                    "price": raw_price / PRICE_SCALE_FACTOR,
+                    "charge_remaining_kwh": (base_charge_power_w / 1000)
+                    * interval_hours,
+                    "discharge_remaining_kwh": (base_discharge_power_w / 1000)
+                    * interval_hours,
+                    "net_charge_kwh": 0.0,
+                    "net_discharge_kwh": 0.0,
+                }
+            )
+        self.mpc_horizon_quarters_used = len(quarters)
+        if not quarters:
+            self.mpc_note = "Geen bruikbare kwartieren binnen de horizon."
+            return
+
+        cheap_order = sorted(range(len(quarters)), key=lambda i: quarters[i]["price"])
+        expensive_order = sorted(
+            range(len(quarters)), key=lambda i: -quarters[i]["price"]
+        )
+
+        remaining_headroom_kwh = max(0.0, usable_capacity_kwh - available_kwh)
+        total_profit = 0.0
+        ci, ei = 0, 0
+        epsilon = 1e-6
+
+        while (
+            ci < len(cheap_order)
+            and ei < len(expensive_order)
+            and remaining_headroom_kwh > epsilon
+        ):
+            cheap_idx = cheap_order[ci]
+            expensive_idx = expensive_order[ei]
+            if cheap_idx == expensive_idx:
+                # Same quarter can't be both a buy and a sell - try the
+                # next-best on whichever side has more candidates left,
+                # simplest correct tie-break: advance the cheap pointer.
+                ci += 1
+                continue
+
+            cheap_q = quarters[cheap_idx]
+            expensive_q = quarters[expensive_idx]
+            margin = (efficiency * expensive_q["price"]) - cheap_q["price"]
+            if margin < MPC_MIN_MARGIN_EUR_PER_KWH:
+                # Sorted by price - no remaining pair can do better.
+                break
+
+            chunk_kwh = min(
+                remaining_headroom_kwh,
+                cheap_q["charge_remaining_kwh"],
+                expensive_q["discharge_remaining_kwh"] / efficiency
+                if efficiency > 0
+                else 0.0,
+            )
+            if chunk_kwh <= epsilon:
+                if cheap_q["charge_remaining_kwh"] <= epsilon:
+                    ci += 1
+                if expensive_q["discharge_remaining_kwh"] <= epsilon:
+                    ei += 1
+                continue
+
+            cheap_q["charge_remaining_kwh"] -= chunk_kwh
+            cheap_q["net_charge_kwh"] += chunk_kwh
+            discharge_chunk_kwh = chunk_kwh * efficiency
+            expensive_q["discharge_remaining_kwh"] -= discharge_chunk_kwh
+            expensive_q["net_discharge_kwh"] += discharge_chunk_kwh
+            remaining_headroom_kwh -= chunk_kwh
+
+            total_profit += (
+                discharge_chunk_kwh * expensive_q["price"]
+                - chunk_kwh * cheap_q["price"]
+            )
+
+            if cheap_q["charge_remaining_kwh"] <= epsilon:
+                ci += 1
+            if expensive_q["discharge_remaining_kwh"] <= epsilon:
+                ei += 1
+
+        actions = []
+        for q in quarters:
+            if q["net_charge_kwh"] > epsilon:
+                actions.append(
+                    {
+                        "start": q["start"].isoformat(),
+                        "end": q["end"].isoformat(),
+                        "action": "laden",
+                        "price_eur_per_kwh": round(q["price"], 4),
+                        "energy_kwh": round(q["net_charge_kwh"], 4),
+                    }
+                )
+            elif q["net_discharge_kwh"] > epsilon:
+                actions.append(
+                    {
+                        "start": q["start"].isoformat(),
+                        "end": q["end"].isoformat(),
+                        "action": "ontladen",
+                        "price_eur_per_kwh": round(q["price"], 4),
+                        "energy_kwh": round(q["net_discharge_kwh"], 4),
+                    }
+                )
+        actions.sort(key=lambda a: a["start"])
+
+        self.mpc_planned_actions = actions
+        self.mpc_projected_total_profit_eur = round(total_profit, 4)
+        self.mpc_note = (
+            "Adviserend, puur prijsarbitrage - stuurt nooit een commando "
+            "en overschrijft nooit de bestaande beslisboom. Houdt geen "
+            "rekening met huishoudverbruik, PV-opwek, of de "
+            "nachtreserve die de echte beslisboom apart beschermt; dit "
+            "is een theoretisch maximum aan arbitrage-winst, geen "
+            "letterlijke aanbeveling."
+        )
+
+    def _max_usable_battery_capacity_kwh(self) -> float | None:
+        """Live-read usable battery capacity (kWh) = total capacity minus
+        the Zendure's own hardware minimum SoC - shared calculation
+        between the v0.63.27 capacity-aware "dure kwartieren" count and
+        the MPC advisory engine (v0.63.33). None if either entity isn't
+        configured/available.
+        """
+        total_capacity_entity = self.config.get(CONF_BATTERY_TOTAL_CAPACITY_SENSOR)
+        min_soc_entity = self.config.get(CONF_BATTERY_MIN_SOC_NUMBER)
+        if not total_capacity_entity or not min_soc_entity:
+            return None
+        total_capacity_kwh = self._read_sensor_float(total_capacity_entity)
+        min_soc_percent = self._read_sensor_float(min_soc_entity)
+        if total_capacity_kwh is None or min_soc_percent is None:
+            return None
+        return total_capacity_kwh * max(0.0, 1 - min_soc_percent / 100)
+
+    def _run_monte_carlo_simulation(
+        self, now: datetime, cheap_block_start: datetime | None
+    ) -> None:
+        """Monte Carlo advisory engine (v0.63.34).
+
+        ADVISORY ONLY - confirmed explicitly for the whole batch of
+        MPC/Monte Carlo/Kalman/Digital Twin/Database additions before
+        building any of them: never sends a device command, never
+        overrides the existing decision tree's own worst-case-deficit
+        calculation (`_estimate_worst_case_deficit_kwh`) or the reserve
+        margin it feeds. Purely computes and exposes a probability
+        distribution for comparison.
+
+        Bootstrap-resamples the same empirical history this integration
+        already collects and trusts elsewhere - `hourly_consumption_profile`
+        (per-hour daily consumption samples) and `pv_hourly_bias_history`
+        (per-hour Solcast actual-vs-forecast ratio samples) - instead of
+        inventing a new, unvalidated probability distribution (e.g. a
+        Gaussian with a guessed standard deviation). Runs
+        MONTE_CARLO_SIMULATIONS (1000) randomised trajectories of the
+        exact same hour-by-hour "diepste tekort" walk the deterministic
+        calculation does, each trajectory drawing one random historical
+        sample per hour (with replacement) instead of using the median,
+        producing a spread of plausible outcomes instead of one number.
+
+        Deliberately doesn't invent occupancy or weather randomness on
+        top - the PV bias history already implicitly reflects weather
+        variability (that's *why* the actual/forecast ratio varies day
+        to day), and there's no occupancy model in this integration (see
+        the "waarom niet" discussion for the Occupancy Engine) to sample
+        from.
+
+        Horizon capped at MONTE_CARLO_MAX_HOURS (48) purely for
+        performance - 1000 simulations x more hours than that would
+        start to add meaningfully to a single 5-minute tick's compute
+        time for no real accuracy gain (the deterministic reserve
+        calculation already only looks as far as the next cheap block
+        anyway).
+        """
+        self.monte_carlo_median_deficit_kwh = None
+        self.monte_carlo_p90_deficit_kwh = None
+        self.monte_carlo_p10_deficit_kwh = None
+        self.monte_carlo_shortfall_probability_percent = None
+        self.monte_carlo_simulations_run = 0
+        self.monte_carlo_hours_simulated = 0
+
+        if cheap_block_start is None or cheap_block_start <= now:
+            self.monte_carlo_note = (
+                "Geen (toekomstig) goedkoopste blok bekend om naartoe te "
+                "simuleren."
+            )
+            return
+
+        efficiency_percent = self.learned_battery_efficiency_percent
+        if efficiency_percent is None:
+            efficiency_percent = float(
+                self.config.get(
+                    CONF_BATTERY_ROUND_TRIP_EFFICIENCY,
+                    DEFAULT_BATTERY_ROUND_TRIP_EFFICIENCY_PERCENT,
+                )
+            )
+        efficiency_factor = efficiency_percent / 100
+
+        segments = []
+        cursor = now
+        while cursor < cheap_block_start:
+            hour_end = cursor.replace(
+                minute=0, second=0, microsecond=0
+            ) + timedelta(hours=1)
+            segment_end = min(hour_end, cheap_block_start)
+            fraction_hours = (segment_end - cursor).total_seconds() / 3600
+            pv_base_kwh = self._estimate_pv_kwh_for_period(cursor, segment_end)
+            segments.append((cursor.hour, fraction_hours, pv_base_kwh))
+            cursor = segment_end
+            if len(segments) >= MONTE_CARLO_MAX_HOURS:
+                break
+
+        if not segments:
+            self.monte_carlo_note = "Geen kwartieren tussen nu en het goedkoopste blok."
+            return
+        self.monte_carlo_hours_simulated = len(segments)
+
+        deepest_deficits = []
+        for _ in range(MONTE_CARLO_SIMULATIONS):
+            cumulative_deficit = 0.0
+            max_deficit = 0.0
+            for hour, fraction_hours, pv_base_kwh in segments:
+                samples = self.hourly_consumption_profile.get(hour)
+                if samples:
+                    consumption_kw = random.choice(samples)
+                else:
+                    consumption_kw = self.learned_hourly_avg_kw(hour) or 0.0
+                consumption_kwh = consumption_kw * fraction_hours
+
+                bias_samples = self.pv_hourly_bias_history.get(hour)
+                if bias_samples:
+                    bias = random.choice(bias_samples)
+                else:
+                    bias = self.learned_pv_hourly_ratio(hour)
+                    if bias is None:
+                        bias = 1.0
+                pv_kwh = pv_base_kwh * bias * efficiency_factor
+
+                cumulative_deficit = max(
+                    0.0, cumulative_deficit + consumption_kwh - pv_kwh
+                )
+                max_deficit = max(max_deficit, cumulative_deficit)
+            deepest_deficits.append(max_deficit)
+
+        deepest_deficits.sort()
+        n = len(deepest_deficits)
+        self.monte_carlo_simulations_run = n
+        self.monte_carlo_median_deficit_kwh = round(deepest_deficits[n // 2], 3)
+        self.monte_carlo_p90_deficit_kwh = round(
+            deepest_deficits[min(n - 1, int(n * 0.9))], 3
+        )
+        self.monte_carlo_p10_deficit_kwh = round(
+            deepest_deficits[min(n - 1, int(n * 0.1))], 3
+        )
+
+        available_entity = self.config.get(CONF_AVAILABLE_ENERGY_SENSOR)
+        available_kwh = (
+            self._read_sensor_float(available_entity) if available_entity else None
+        )
+        if available_kwh is not None:
+            shortfall_count = sum(1 for d in deepest_deficits if d > available_kwh)
+            self.monte_carlo_shortfall_probability_percent = round(
+                100 * shortfall_count / n, 1
+            )
+
+        self.monte_carlo_note = (
+            "Adviserend - vergelijkt het bestaande, deterministieke "
+            "diepste-tekort-cijfer (mediaan-gebaseerd) met een "
+            "kansverdeling uit 1000 gesimuleerde trajecten, elk "
+            "getrokken uit de al bestaande, geleerde verbruiks- en "
+            "PV-voorspellingsfout-geschiedenis. Stuurt nooit een "
+            "commando en past de werkelijke reserve-marge niet aan."
+        )
+
+    def _update_kalman_filters(self) -> None:
+        """Kalman filtering advisory engine (v0.63.35).
+
+        ADVISORY ONLY - confirmed for the whole MPC/Monte Carlo/Kalman/
+        Digital Twin/Database batch before building any of them: purely
+        computes and exposes a smoothed estimate of three live,
+        naturally noisy signals (available_kwh/SoC, live PV power, live
+        household load) alongside their raw sensor readings, for
+        comparison. Never fed into `_get_dynamic_discharge_reserve_kwh`,
+        `_read_corrected_consumption_power`, or any other calculation
+        the actual decision tree relies on - those keep using their own
+        already-tested smoothing (e.g. the median-based consumption
+        correction, v0.59.0/v0.62.0).
+
+        Uses a minimal scalar Kalman filter per signal (see
+        `_KalmanFilter1D`) rather than the fixed-window median smoothing
+        used elsewhere - a genuinely different technique, weighting the
+        previous estimate against the new measurement by their relative
+        uncertainty (the Kalman gain) instead of a fixed sample window.
+        Process/measurement noise values are heuristic, documented
+        defaults (see const.py) - not empirically characterised against
+        this specific installation's actual sensor noise, since that
+        data doesn't exist.
+        """
+        available_entity = self.config.get(CONF_AVAILABLE_ENERGY_SENSOR)
+        if available_entity:
+            raw_kwh = self._read_sensor_float(available_entity)
+            if raw_kwh is not None:
+                self.kalman_soc_raw_kwh = raw_kwh
+                self.kalman_soc_filtered_kwh = round(
+                    self._kalman_soc.update(raw_kwh), 4
+                )
+
+        pv_entity = self.config.get(CONF_PV_POWER_SENSOR)
+        if pv_entity:
+            raw_pv_w = self._read_sensor_float(pv_entity)
+            if raw_pv_w is not None:
+                self.kalman_pv_raw_w = raw_pv_w
+                self.kalman_pv_filtered_w = round(self._kalman_pv.update(raw_pv_w), 1)
+
+        load_w = self._read_corrected_consumption_power()
+        if load_w is not None:
+            self.kalman_load_raw_w = load_w
+            self.kalman_load_filtered_w = round(self._kalman_load.update(load_w), 1)
+
     def _cheapest_block_range(
         self, entries: list[PriceEntry], now: datetime
     ) -> tuple[datetime | None, datetime | None]:
@@ -4602,6 +5321,28 @@ class EnergyManagementSystemCoordinator:
         self._update_battery_cost_basis_and_savings(now, entries)
         self._update_energy_balance_validation(now)
         self._update_anomaly_detection(now)
+        self._update_weather_ensemble_check(now)
+        self._update_appliance_state_machine(
+            now,
+            power_entity=self.config.get(CONF_DISHWASHER_POWER_SENSOR),
+            state_attr="_dishwasher_state",
+            cycle_started_attr="_dishwasher_cycle_started_at",
+            below_threshold_since_attr="_dishwasher_below_threshold_since",
+            duration_history_attr="dishwasher_cycle_duration_history",
+            notify_title="🍽️ Vaatwasser klaar",
+        )
+        self._update_appliance_state_machine(
+            now,
+            power_entity=self.config.get(CONF_WASHING_MACHINE_POWER_SENSOR),
+            state_attr="_washing_machine_state",
+            cycle_started_attr="_washing_machine_cycle_started_at",
+            below_threshold_since_attr="_washing_machine_below_threshold_since",
+            duration_history_attr="washing_machine_cycle_duration_history",
+            notify_title="🧺 Wasmachine klaar",
+        )
+        self._compute_mpc_plan(now, entries)
+        self._run_monte_carlo_simulation(now, cheap_block_start)
+        self._update_kalman_filters()
 
         # Pause consumption-related learning during vacation mode, so the
         # unusually low readings don't pollute the learned "normal"

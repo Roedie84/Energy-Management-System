@@ -15,6 +15,8 @@ CONF_BATTERY_MIN_SOC_NUMBER = "battery_min_soc_number_entity"
 CONF_MANUAL_CHARGE_POWER = "manual_charge_power"
 CONF_NEGATIVE_PRICE_CHARGE_POWER = "negative_price_charge_power"
 CONF_SOLAR_POWER_LIMIT_ENTITY = "solar_power_limit_entity"
+CONF_KNMI_WEATHER_ENTITY = "knmi_weather_entity"
+CONF_OPENWEATHERMAP_WEATHER_ENTITY = "openweathermap_weather_entity"
 CONF_BATTERY_ROUND_TRIP_EFFICIENCY = "battery_round_trip_efficiency_percent"
 CONF_VACATION_CONSUMPTION_REDUCTION_PERCENT = "vacation_consumption_reduction_percent"
 
@@ -27,6 +29,7 @@ CONF_WASHING_MACHINE_POWER_SENSOR = "washing_machine_power_sensor_entity"
 CONF_WASHING_MACHINE_READY_SENSOR = "washing_machine_ready_sensor_entity"
 CONF_QUOOKER_POWER_SENSOR = "quooker_power_sensor_entity"
 CONF_AIRCO_CLIMATE_ENTITY = "airco_climate_entity"
+CONF_SLAAPKAMER_CLIMATE_ENTITY = "slaapkamer_climate_entity"
 CONF_OVEN_STATE_SENSOR = "oven_state_sensor_entity"
 CONF_KOOKPLAAT_STATE_SENSOR = "kookplaat_state_sensor_entity"
 CONF_STEELSTOFZUIGER_SWITCH = "steelstofzuiger_switch_entity"
@@ -86,6 +89,20 @@ CUSUM_MIN_HISTORY_FOR_REFERENCE = 10
 CUSUM_REFERENCE_EXCLUDE_RECENT_DAYS = 5
 CUSUM_SLACK_KW = 0.02
 CUSUM_ALARM_THRESHOLD_KW = 0.15
+
+# Weather ensemble cross-check (v0.63.30): compares live PV output
+# against Solcast's own forecast for right now (already computable from
+# existing data) alongside live cloud_coverage readings from independent
+# weather sources (KNMI/OpenWeatherMap, read from their HA `weather`
+# entities - not a new API integration, just entities the person already
+# has). A pure informational cross-check, not wired into any decision:
+# building a genuine multi-source kWh yield ensemble would need panel
+# orientation/tilt/kWp specs this integration doesn't collect.
+WEATHER_ENSEMBLE_CLEAR_THRESHOLD_PERCENT = 30.0
+WEATHER_ENSEMBLE_OVERCAST_THRESHOLD_PERCENT = 70.0
+WEATHER_ENSEMBLE_UNDERPERFORM_RATIO = 0.5
+WEATHER_ENSEMBLE_OVERPERFORM_RATIO = 1.3
+WEATHER_ENSEMBLE_MIN_SOLCAST_KW = 0.2
 DEFAULT_MIN_SOC_PERCENT = 15.0
 # Discharge power tapers linearly to 0 over this many percentage points
 # above the configured minimum SoC (e.g. min=15%, band=15 -> full power
@@ -214,6 +231,15 @@ QUOOKER_SUSTAINED_MINUTES = 2
 # scheduled-charge appliance (v0.63.13).
 STEELSTOFZUIGER_COMPLETE_SUSTAINED_MINUTES = 2
 
+# Markov-achtige RUSTEND/ACTIEF/KLAAR-toestandsmachine voor vaatwasser/
+# wasmachine (v0.63.32, "Optie 1" - geen fase-detectie, daarvoor
+# ontbreekt trainingsdata per merk/model). Ruimere marge dan de
+# steelstofzuiger/fietsladers-detectie (2 min), want een cyclus kan
+# tussentijds stille fases hebben (vullen, weken) die langer duren dan
+# een korte lading opladen - een te korte marge zou een cyclus
+# halverwege ten onrechte als "klaar" kunnen markeren.
+APPLIANCE_CYCLE_COMPLETE_SUSTAINED_MINUTES = 5
+
 # The e-bike chargers draw more standby power than the generic
 # APPLIANCE_RUNNING_POWER_THRESHOLD_W (15W) would allow for a clean
 # "done" signal (reported: 20W is the right cutoff for this specific
@@ -293,6 +319,55 @@ MEASUREMENT_QUALITY_DEGRADED_THRESHOLD = 50
 # clears this minimum margin (EUR/kWh) after round-trip losses, as a
 # buffer against price-forecast/efficiency-estimate uncertainty.
 MIN_ARBITRAGE_MARGIN_EUR_PER_KWH = 0.03
+
+# MPC (Model Predictive Control) advisory engine (v0.63.33). Advisory
+# ONLY - computes a projected charge/discharge plan over the available
+# price forecast horizon and exposes it for comparison, but NEVER sends
+# a device command and NEVER overrides the existing, battle-tested
+# decision tree (confirmed explicitly before building this).
+#
+# Algorithm: greedy interval pairing over the full forecast horizon
+# (today + tomorrow, whatever's available) - sort quarters by price,
+# repeatedly match the cheapest remaining quarter with the priciest
+# remaining quarter and allocate a charge/discharge chunk between them
+# (bounded by physical rate and remaining capacity headroom) as long as
+# it clears MPC_MIN_MARGIN_EUR_PER_KWH after efficiency losses. This is
+# a well-known good heuristic for the storage-arbitrage problem, not a
+# true linear-programming solve - no new dependency (e.g. scipy) is
+# introduced for a HACS integration to stay lightweight, and the
+# heuristic's steps stay individually inspectable, unlike an opaque
+# solver's output.
+MPC_HORIZON_HOURS = 48
+MPC_MIN_MARGIN_EUR_PER_KWH = 0.03
+
+# Monte Carlo advisory engine (v0.63.34). Advisory ONLY - never sends a
+# device command, never overrides the existing decision tree. Bootstrap-
+# resamples the empirical distributions already collected for
+# consumption (hourly_consumption_profile) and PV forecast bias
+# (pv_hourly_bias_history) to run many randomised trajectories of the
+# same "diepste tekort" walk the deterministic reserve calculation
+# already does (_estimate_worst_case_deficit_kwh), producing a
+# probability distribution instead of a single point estimate.
+MONTE_CARLO_SIMULATIONS = 1000
+MONTE_CARLO_MAX_HOURS = 48
+
+# Kalman filtering advisory engine (v0.63.35). Advisory ONLY - a smoothed
+# estimate shown alongside the raw sensor reading, never fed into any
+# decision (which keep using their own already-tested smoothing, e.g.
+# the median-based consumption correction). Process noise (Q, how much
+# the true value is expected to drift between 5-minute ticks) and
+# measurement noise (R, how noisy the raw sensor reading is believed to
+# be) are heuristic, documented defaults per signal - not empirically
+# characterised against real sensor noise data, since that data doesn't
+# exist for this installation. A higher Q relative to R makes the
+# filter track changes faster (trusts new measurements more); a higher
+# R relative to Q makes it smoother but slower to react.
+KALMAN_SOC_PROCESS_NOISE_KWH2 = 0.0004  # available_kwh drifts modestly tick to tick
+KALMAN_SOC_MEASUREMENT_NOISE_KWH2 = 0.0009
+KALMAN_PV_PROCESS_NOISE_W2 = 2500.0  # live PV can swing quickly (clouds)
+KALMAN_PV_MEASUREMENT_NOISE_W2 = 10000.0
+KALMAN_LOAD_PROCESS_NOISE_W2 = 400.0
+KALMAN_LOAD_MEASUREMENT_NOISE_W2 = 2500.0
 
 # Below this, forcing manual mode just to top up a trickle isn't worth
 # disrupting the Zendure's own solar-following smart mode for.

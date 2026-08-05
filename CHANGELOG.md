@@ -3716,3 +3716,233 @@ accumuleren niet; gepauzeerd tijdens vakantiemodus; de laagste meting
 binnen één dag wordt correct bijgehouden; zonder verbruikssensor
 gebeurt er niets; en de melding wordt precies één keer verstuurd, niet
 elke dag opnieuw.
+
+## v0.63.30 — Weather Ensemble (fase 3): bewolkingsgraad-tegencheck, geen kWh-ensemble
+
+**Aanleiding:** vervolg op de architectuur-wishlist (v0.63.28/.29).
+Vooraf de haalbaarheid eerlijk doorgenomen: KNMI en OpenWeatherMap
+geven algemeen weer (bewolkingsgraad), geen kant-en-klare PV-opbrengst
+zoals Solcast — een écht vergelijkbare kWh-schatting zou
+paneelgegevens (oriëntatie, hellingshoek, wattpiek) vereisen die deze
+integratie niet verzamelt. In overleg gekozen voor een eerlijker,
+kleiner afgebakende versie: een bewolkingsgraad-tegencheck in plaats van
+een vervangende opbrengstvoorspelling.
+
+**Nieuw: `_update_weather_ensemble_check()`.** Leest live
+`cloud_coverage`-attributen van de geconfigureerde `weather`-entiteiten
+(KNMI/OpenWeatherMap — bestaande HA-integraties, geen nieuwe
+API-koppeling nodig) en middelt ze. Vergelijkt daarnaast, als
+`pv_power_sensor_entity` is geconfigureerd, het live PV-vermogen met
+wat Solcast voor **dit exacte moment** voorspelt (hergebruikt de
+bestaande `_get_pv_forecast_entries()`). Presteert de PV fors onder de
+Solcast-voorspelling terwijl beide weerbronnen heldere lucht melden, dan
+wijst dat eerder op een paneel-/omvormer-kwestie dan op het weer — en
+wordt als zodanig gesignaleerd (en omgekeerd, als minder urgente
+kalibratie-notitie).
+
+**Nieuwe configuratievelden:** `knmi_weather_entity`,
+`openweathermap_weather_entity` (beide optioneel, `weather`-domein).
+
+**Nieuwe sensor:** `sensor.weather_ensemble_bewolkingsgraad` — gemiddelde
+bewolkingsgraad + label (helder/half bewolkt/bewolkt) + het
+onenigheid-signaal als attribuut. Geen `RestoreEntity` — een live
+tegencheck, geen cumulatieve teller.
+
+**Bewust puur informatief:** niet verweven in enige beslissing van de
+integratie, zoals afgesproken.
+
+**Getest** (9 nieuwe permanente tests in `test_weather_ensemble.py`):
+middeling over beide bronnen; alle drie labels correct toegepast; werkt
+met slechts één geconfigureerde bron; niets zonder bronnen; een
+ontbrekend `cloud_coverage`-attribuut wordt overgeslagen (niet als 0
+geteld); onderpresteren-bij-heldere-lucht wordt gesignaleerd;
+onderpresteren-bij-bewolking wordt terecht **niet** gesignaleerd
+(consistent, geen onenigheid); en geen tegencheck zonder PV-sensor.
+
+## v0.63.31 — climate.slaapkamer toegevoegd aan de grootverbruiker-detectie
+
+**Gevraagd:** een tweede climate-entiteit (`climate.slaapkamer`) naast
+de bestaande airco laten meetellen voor grootverbruiker-bevestiging.
+
+**Fix:** nieuw, onafhankelijk configuratieveld
+`slaapkamer_climate_entity`, met exact dezelfde `hvac_action`-gebaseerde
+detectie als de bestaande airco (heating/cooling =
+`AIRCO_ACTIVE_HVAC_ACTIONS`). Los van elkaar: een idle airco maskeert
+geen actieve slaapkamer-eenheid en andersom.
+
+**Getest** (3 nieuwe permanente tests in `test_heavy_load_awareness.py`):
+verwarmen wordt bevestigd, idle niet, en beide climate-entiteiten werken
+onafhankelijk van elkaar.
+
+## v0.63.32 — Markov States "Optie 1": vaatwasser/wasmachine RUSTEND/ACTIEF/KLAAR
+
+**Aanleiding:** vervolg op de architectuur-wishlist (fase 4/5). Vooraf de
+haalbaarheid van echte Markov-fasedetectie (vullen/wassen/spoelen/
+centrifugeren apart herkennen) eerlijk doorgenomen: dat vereist
+merk/model-specifieke vermogenspatronen waar geen trainingsdata voor
+is. In overleg gekozen voor "Optie 1": geen fase-detectie, wel een
+eenvoudige, robuuste RUSTEND/ACTIEF/KLAAR-toestandsmachine met geleerde
+cyclusduur.
+
+**Nieuw: `_update_appliance_state_machine()`**, gedeeld tussen vaatwasser
+en wasmachine. RUSTEND→ACTIEF bij vermogen boven de bekende
+apparaat-actief-drempel (15W). ACTIEF→KLAAR bij
+`APPLIANCE_CYCLE_COMPLETE_SUSTAINED_MINUTES` (5 minuten, bewust ruimer
+dan de 2 minuten van de steelstofzuiger/fietsladers) aanhoudend
+daaronder — een cyclus kan tussentijdse stille fases hebben (vullen,
+weken) die een kortere marge ten onrechte als "klaar" zou markeren.
+KLAAR→ACTIEF start een nieuwe cyclus direct door.
+
+Leert de cyclusduur (mediaan over de laatste 7 cycli) en toont een
+grove voortgangsschatting zolang een cyclus loopt. Stuurt een melding
+via `appliance_notify_service` zodra een cyclus klaar is.
+
+**Nieuwe sensoren:** `sensor.vaatwasser_cyclus_status`,
+`sensor.wasmachine_cyclus_status` — beide `RestoreEntity` (de geleerde
+cyclusduur-geschiedenis moet een herstart overleven, zelfde patroon als
+de scheduled-charge-apparaten).
+
+**Dashboard:** twee nieuwe kaarten op de "Apparaten"-pagina, naast de
+bestaande steelstofzuiger/fietsladers-statuskaarten.
+
+**Getest** (8 nieuwe permanente tests in `test_appliance_cycle_state.py`):
+start in rustend; correcte overgang naar actief; een korte pauze
+onderbreekt de cyclus niet ten onrechte; aanhoudend laag vermogen rondt
+de cyclus af en leert de duur; een nieuwe cyclus start direct door
+vanuit klaar; vaatwasser en wasmachine lopen onafhankelijk van elkaar;
+niets zonder geconfigureerde sensor; en de melding wordt correct
+verstuurd bij voltooiing.
+
+## v0.63.33 — MPC-adviesmotor (prijsarbitrage-plan), uitsluitend adviserend
+
+**Aanleiding:** vervolg op de architectuur-wishlist. Vooraf expliciet
+bevestigd dat MPC **niet** de accu mag aansturen — puur adviserend naast
+de bestaande, beproefde beslisboom, om precies de reden die eerder is
+toegelicht: de resultaten van MPC/Monte Carlo/Kalman/Digital Twin/
+Database-laag zijn niet tegen echte data te verifiëren zoals de rest
+van deze integratie dat wel is (elke eerdere feature is getoetst tegen
+screenshots/diagnostiek-exports). Zonder die feedback-loop worden deze
+vijf uitsluitend informatief gebouwd, nooit sturend.
+
+**Nieuw: `_compute_mpc_plan()`.** Greedy interval-pairing-algoritme over
+de beschikbare prijsvoorspellingshorizon (vandaag + morgen, tot 48 uur):
+koppelt herhaaldelijk het goedkoopste nog-niet-toegewezen kwartier aan
+het duurste nog-niet-toegewezen kwartier, wijst daar een laad-/
+ontlaadhoeveelheid tussen toe (begrensd door fysiek tempo + resterende
+accu-headroom), zolang het paar de minimale marge (3 cent/kWh, na
+rendementsverlies) overhoudt. Stopt zodra het best overgebleven paar
+niet meer rendabel is — correct, want vooraf op prijs gesorteerd. Een
+bekende, goede heuristiek voor voorraad-arbitrage, bewust geen
+lineaire-programmering-solver (geen scipy/pulp-afhankelijkheid, blijft
+een lichte HACS-integratie, en elke stap blijft individueel
+controleerbaar).
+
+Hergebruikt de v0.63.27-capaciteitsvelden
+(`battery_total_capacity_sensor_entity` +
+`battery_min_soc_number_entity`) — de onderliggende
+capaciteitsberekening is uitgefactored naar een gedeelde
+`_max_usable_battery_capacity_kwh()`, gebruikt door zowel de "dure
+kwartieren"-telling als MPC.
+
+**Bewust pure prijsarbitrage**: geen huishoudverbruik/PV-modellering,
+geen nachtreserve-aftrek (dat blijft het werk van de echte beslisboom).
+De geprojecteerde winst is een theoretisch maximum, geen letterlijke
+aanbeveling — expliciet vermeld in het `note`-attribuut.
+
+**Nieuwe sensor:** `sensor.mpc_advies_prijsarbitrage_plan` — geprojecteerde
+winst (€) als state, volledig geplande schema als attribuut. Geen
+`RestoreEntity` (elke tick een vers plan, geen hersteld verouderd
+plan).
+
+**Getest** (6 nieuwe permanente tests in `test_mpc_advisory.py`, incl.
+een expliciete test die bevestigt dat er nooit een `hass.services`-call
+wordt gedaan): geen plan zonder capaciteitssensoren; correcte
+laden/ontladen-koppeling bij een duidelijke prijsvorm; geen paren bij
+een te kleine marge (vlakke prijsdag); correcte begrenzing door
+resterende headroom; nooit een device-commando; en het `note`-attribuut
+vermeldt altijd expliciet het adviserende karakter.
+
+## v0.63.34 — Monte Carlo-adviesmotor (tekortkans), uitsluitend adviserend
+
+**Aanleiding:** vervolg op de architectuur-wishlist, tweede van de vijf
+zwaardere technieken (MPC/Monte Carlo/Kalman/Digital Twin/Database-laag)
+die vooraf expliciet als uitsluitend adviserend zijn afgesproken — stuurt
+nooit een commando, past de werkelijke reserve-marge niet aan.
+
+**Nieuw: `_run_monte_carlo_simulation()`.** Vult het bestaande,
+deterministieke diepste-tekort-cijfer (mediaan-gebaseerd) aan met een
+kansverdeling: 1000 gesimuleerde trajecten over dezelfde uur-voor-uur
+diepste-tekort-berekening als `_estimate_worst_case_deficit_kwh`, elk
+getrokken uit de al bestaande, geleerde geschiedenis
+(`hourly_consumption_profile` voor verbruik,
+`pv_hourly_bias_history` voor de Solcast-voorspellingsfout) via
+bootstrap-resampling — geen aangenomen verdeling (Gauss-curve met een
+gegokte standaardafwijking), maar de daadwerkelijk waargenomen
+steekproeven zelf.
+
+**Bewust geen aparte weer-/bezettingsruis**: de PV-bias-geschiedenis
+weerspiegelt al impliciet weersvariatie, en er is geen bezettingsmodel
+in deze integratie om uit te putten.
+
+**Prestaties**: horizon begrensd op 48 uur; in de praktijk ~15ms voor
+een realistisch 14-uursscenario met 1000 simulaties — verwaarloosbaar
+binnen een 5-minuten-tick.
+
+**Nieuwe sensor:** `sensor.monte_carlo_risico_tekortkans` — percentage
+simulaties waarin het gesimuleerde tekort de daadwerkelijk beschikbare
+energie overschreed, met mediaan/p10/p90 als attributen. Geen
+`RestoreEntity` (elke tick een verse batch).
+
+**Getest** (10 nieuwe permanente tests in `test_monte_carlo_advisory.py`,
+incl. een expliciete test die bevestigt dat er nooit een
+`hass.services`-call wordt gedaan): geen simulatie zonder
+(toekomstig) goedkoopste blok; draait altijd de volle 1000 simulaties;
+identieke historische samples geven nul spreiding (mediaan=p10=p90);
+echte variantie in de geschiedenis geeft een reële spreiding; de
+tekortkans wordt correct berekend tegen de beschikbare energie; geen
+tekortkans zonder geconfigureerde sensor; horizon correct begrensd op
+48 uur; nette fallback zonder geschiedenis; en nooit een
+device-commando.
+
+## v0.63.35 — Kalman filtering (SoC/PV/verbruik), uitsluitend adviserend
+
+**Aanleiding:** vervolg op de architectuur-wishlist, derde van de vijf
+zwaardere technieken die vooraf expliciet als uitsluitend adviserend
+zijn afgesproken.
+
+**Nieuw: `_KalmanFilter1D`** — een minimaal, afhankelijkheidsvrij
+scalair Kalman-filter (geen numpy, blijft een lichte HACS-integratie):
+elke update weegt de vorige schatting tegen de nieuwe meting af op basis
+van hun relatieve onzekerheid (de Kalman-gain), berekend uit proces-ruis
+(Q, verwachte drift van de werkelijke waarde tussen ticks) en meet-ruis
+(R, hoe onbetrouwbaar de ruwe sensorwaarde wordt geacht). Een principieel
+andere techniek dan de mediaan-gebaseerde gladstrijking die de rest van
+de integratie al gebruikt.
+
+**`_update_kalman_filters()`** past dit toe op drie live signalen:
+beschikbare energie/SoC, live PV-vermogen, live huishoudverbruik
+(hergebruikt `_read_corrected_consumption_power`). Proces-/meetruis-
+parameters zijn onderbouwde standaardwaarden per signaal, niet
+empirisch bepaald voor deze specifieke installatie — dat is expliciet
+zo benoemd in zowel de code-documentatie als de sensor-attributen.
+
+**Nooit meegenomen in enige beslissing** — de gefilterde schattingen
+staan volledig los van `_get_dynamic_discharge_reserve_kwh`,
+`_read_corrected_consumption_power`, of enige andere berekening die de
+echte beslisboom gebruikt.
+
+**Nieuwe sensor:** `sensor.kalman_filtering_soc_pv_verbruik` — toont
+"actief"/"geen data", met de gefilterde én ruwe waarde voor alle drie
+signalen als attributen. Geen `RestoreEntity` (elk filter herstelt
+zichzelf binnen enkele ticks vanaf de eerstvolgende live meting).
+
+**Getest** (9 nieuwe permanente tests in `test_kalman_filtering.py`,
+incl. een expliciete test die bevestigt dat er nooit een
+`hass.services`-call wordt gedaan): eerste meting zaait de schatting
+exact; convergentie naar de werkelijke waarde ondanks ruis; een plotse
+uitschieter wordt gedempt, niet direct overgenomen; hogere meetruis
+reageert trager dan lagere; onzekerheid krimpt naarmate er meer
+metingen binnenkomen; correcte koppeling aan SoC/PV/verbruik in de
+coordinator; nette omgang met ontbrekende sensoren; nooit een
+device-commando; en het filter behoudt zijn state over meerdere ticks
+(geen reset per tick).

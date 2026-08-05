@@ -17,6 +17,8 @@ from .const import (
     CONF_MANUAL_CHARGE_POWER,
     CONF_NEGATIVE_PRICE_CHARGE_POWER,
     CONF_SOLAR_POWER_LIMIT_ENTITY,
+    CONF_KNMI_WEATHER_ENTITY,
+    CONF_OPENWEATHERMAP_WEATHER_ENTITY,
     CONF_BATTERY_ROUND_TRIP_EFFICIENCY,
     DEFAULT_BATTERY_ROUND_TRIP_EFFICIENCY_PERCENT,
     CONF_VACATION_CONSUMPTION_REDUCTION_PERCENT,
@@ -27,6 +29,7 @@ from .const import (
     CONF_WASHING_MACHINE_READY_SENSOR,
     CONF_QUOOKER_POWER_SENSOR,
     CONF_AIRCO_CLIMATE_ENTITY,
+    CONF_SLAAPKAMER_CLIMATE_ENTITY,
     CONF_OVEN_STATE_SENSOR,
     CONF_KOOKPLAAT_STATE_SENSOR,
     CONF_STEELSTOFZUIGER_SWITCH,
@@ -131,6 +134,14 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
                 default=defaults.get(CONF_SOLAR_POWER_LIMIT_ENTITY),
             ): selector.EntitySelector(selector.EntitySelectorConfig(domain="number")),
             vol.Optional(
+                CONF_KNMI_WEATHER_ENTITY,
+                default=defaults.get(CONF_KNMI_WEATHER_ENTITY),
+            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="weather")),
+            vol.Optional(
+                CONF_OPENWEATHERMAP_WEATHER_ENTITY,
+                default=defaults.get(CONF_OPENWEATHERMAP_WEATHER_ENTITY),
+            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="weather")),
+            vol.Optional(
                 CONF_BATTERY_ROUND_TRIP_EFFICIENCY,
                 default=defaults.get(
                     CONF_BATTERY_ROUND_TRIP_EFFICIENCY,
@@ -179,6 +190,12 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
             vol.Optional(
                 CONF_AIRCO_CLIMATE_ENTITY,
                 default=defaults.get(CONF_AIRCO_CLIMATE_ENTITY),
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="climate")
+            ),
+            vol.Optional(
+                CONF_SLAAPKAMER_CLIMATE_ENTITY,
+                default=defaults.get(CONF_SLAAPKAMER_CLIMATE_ENTITY),
             ): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="climate")
             ),

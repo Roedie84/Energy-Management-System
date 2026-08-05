@@ -20,6 +20,7 @@ def _base_config(**overrides):
         "washing_machine_power_sensor_entity": "sensor.wasmachine_vermogen",
         "quooker_power_sensor_entity": "sensor.quooker_vermogen",
         "airco_climate_entity": "climate.woonkamer_airco",
+        "slaapkamer_climate_entity": "climate.slaapkamer",
         "oven_state_sensor_entity": "sensor.oven_operation_state",
         "kookplaat_state_sensor_entity": "sensor.kookplaat_operation_state",
     }
@@ -64,6 +65,37 @@ def test_airco_idle_is_not_confirmed(make_coordinator, hass):
     )
 
     assert coordinator._get_confirmed_heavy_load_source(DAY0) is None
+
+
+def test_slaapkamer_heating_is_confirmed(make_coordinator, hass):
+    coordinator = make_coordinator(_base_config())
+    hass.states.set(
+        "climate.slaapkamer", "heat", {"hvac_action": "heating"}
+    )
+
+    assert coordinator._get_confirmed_heavy_load_source(DAY0) == "slaapkamer"
+
+
+def test_slaapkamer_idle_is_not_confirmed(make_coordinator, hass):
+    coordinator = make_coordinator(_base_config())
+    hass.states.set(
+        "climate.slaapkamer", "heat", {"hvac_action": "idle"}
+    )
+
+    assert coordinator._get_confirmed_heavy_load_source(DAY0) is None
+
+
+def test_airco_and_slaapkamer_are_independent(make_coordinator, hass):
+    """Airco idle shouldn't mask a genuinely active slaapkamer unit."""
+    coordinator = make_coordinator(_base_config())
+    hass.states.set(
+        "climate.woonkamer_airco", "heat", {"hvac_action": "idle"}
+    )
+    hass.states.set(
+        "climate.slaapkamer", "heat", {"hvac_action": "cooling"}
+    )
+
+    assert coordinator._get_confirmed_heavy_load_source(DAY0) == "slaapkamer"
 
 
 def test_quooker_brief_tap_is_not_confirmed(make_coordinator, hass):

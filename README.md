@@ -93,6 +93,7 @@ specifieke functionaliteit bij.
 | `washing_machine_power_sensor_entity` / `washing_machine_ready_sensor_entity` | vermogen / binary | Wasmachine: idem |
 | `quooker_power_sensor_entity` | vermogen | Quooker: bevestigd na 2 minuten aanhoudend gebruik |
 | `airco_climate_entity` | climate | Airco: bevestigd via `hvac_action` (heating/cooling) |
+| `slaapkamer_climate_entity` | climate | Slaapkamer-klimaatregeling: zelfde detectie als airco (v0.63.31) |
 | `oven_state_sensor_entity` / `kookplaat_state_sensor_entity` | sensor | Home Connect `operation_state` (bevestigd bij `Run`) |
 | `appliance_notify_service` | tekst | Notify-service voor apparaat-klaar-meldingen én accumodus-wijziging-meldingen (leeg = pop-up in HA) |
 
@@ -488,6 +489,158 @@ je 'm gaat negeren.
 `sensor.sluipverbruik_detectie` toont "normaal" of "gedetecteerd", met
 het geschatte verschil (W), de referentiewaarde, en de ruwe
 CUSUM-accumulator als attributen.
+
+## Weather ensemble (bewolkingsgraad-tegencheck)
+
+Optioneel, actief zodra `knmi_weather_entity` en/of
+`openweathermap_weather_entity` zijn geconfigureerd (v0.63.30) — geen
+nieuwe API-koppelingen, alleen HA `weather`-entiteiten die je
+waarschijnlijk al hebt via de KNMI- en/of OpenWeatherMap-integraties.
+
+**Bewust géén vervangende PV-opbrengstschatting.** KNMI/OpenWeatherMap
+geven algemeen weer (bewolkingsgraad), geen kant-en-klare kWh-opbrengst
+zoals Solcast — om die twee eerlijk te combineren zijn paneelgegevens
+nodig (oriëntatie, hellingshoek, wattpiek) die deze integratie niet
+verzamelt. In plaats daarvan een directer verifieerbare vergelijking:
+
+- **`sensor.weather_ensemble_bewolkingsgraad`**: het gemiddelde van de
+  live `cloud_coverage`-attributen van de geconfigureerde bronnen, met
+  een label (helder <30% / half bewolkt / bewolkt >70%).
+- **Onenigheid-signaal**: vergelijkt je live PV-vermogen met wat
+  Solcast voor **dit exacte moment** voorspelt. Presteert de PV fors
+  onder de Solcast-voorspelling terwijl KNMI/OpenWeatherMap juist
+  heldere lucht melden, dan wijst dat eerder op een paneel- of
+  omvormer-kwestie dan op het weer — en wordt als zodanig gemeld.
+  Andersom (beter dan verwacht ondanks gemelde zware bewolking) wordt
+  ook gesignaleerd, als minder urgente kalibratie-notitie.
+
+Puur informatief — niet verweven in enige beslissing van de
+integratie.
+
+## Vaatwasser/wasmachine-cyclusstatus (RUSTEND/ACTIEF/KLAAR)
+
+Optioneel, actief zodra `dishwasher_power_sensor_entity` en/of
+`washing_machine_power_sensor_entity` zijn geconfigureerd (v0.63.32) —
+al bestaande sensoren, geen nieuwe koppeling nodig.
+
+**Bewust geen echte fase-detectie** (vullen/wassen/spoelen/
+centrifugeren apart herkennen) — dat vereist merk/model-specifieke
+vermogenspatronen waar geen trainingsdata voor is; een verkeerd model
+zou minder betrouwbaar zijn dan geen model. In plaats daarvan een
+eenvoudige, robuuste toestandsmachine:
+
+- **RUSTEND → ACTIEF**: vermogen komt boven de bekende
+  apparaat-actief-drempel (15W).
+- **ACTIEF → KLAAR**: vermogen blijft
+  `APPLIANCE_CYCLE_COMPLETE_SUSTAINED_MINUTES` (5 minuten) aanhoudend
+  daaronder — dezelfde aanhoudend-laag-bevestigt-klaar-logica als de
+  steelstofzuiger/fietsladers (v0.63.12/.13), maar met een ruimere marge:
+  een cyclus kan tussentijdse stille fases hebben (vullen, weken) die
+  een kortere marge ten onrechte als "klaar" zou kunnen aanmerken.
+- **KLAAR → ACTIEF**: een nieuwe cyclus start direct door.
+
+Leert de cyclusduur (mediaan over de laatste 7 cycli, dezelfde
+uitschieter-resistente aanpak als elders) en toont een grove
+voortgangsschatting (huidige duur ÷ geleerde duur) zolang een cyclus
+actief is. Stuurt een melding via `appliance_notify_service` zodra een
+cyclus klaar is.
+
+`sensor.vaatwasser_cyclus_status` / `sensor.wasmachine_cyclus_status`
+tonen "rustend"/"actief"/"klaar", met de geleerde duur, geschatte
+voortgang, en de ruwe cyclusduur-geschiedenis als attributen.
+
+## MPC-adviesmotor (prijsarbitrage-plan)
+
+**Uitsluitend adviserend** — stuurt nooit een commando naar de Zendure
+en overschrijft nooit de bestaande, beproefde beslisboom. Vereist
+`battery_total_capacity_sensor_entity` + `battery_min_soc_number_entity`
+(dezelfde velden als de v0.63.27 capaciteit-bewuste "dure
+kwartieren"-telling) om te weten hoeveel laadruimte er in totaal is —
+zonder die twee: leeg plan met een duidelijke reden, geen giswerk.
+
+**Algoritme: greedy interval pairing** over de beschikbare
+prijsvoorspellingshorizon (vandaag + morgen, tot `MPC_HORIZON_HOURS` =
+48 uur). Koppelt herhaaldelijk het goedkoopste nog-niet-toegewezen
+kwartier aan het duurste nog-niet-toegewezen kwartier en wijst daar een
+laad-/ontlaadhoeveelheid tussen toe (begrensd door het fysieke
+laad-/ontlaadtempo en de resterende accu-headroom), zolang het paar
+`MPC_MIN_MARGIN_EUR_PER_KWH` (3 cent/kWh) na rendementsverlies
+overhoudt. Stopt zodra het best overgebleven paar niet meer rendabel
+is — correct afbreekpunt, want de kwartieren zijn vooraf op prijs
+gesorteerd, dus geen later paar kan nog winstgevender zijn.
+
+Een bewezen goede heuristiek voor het voorraad-arbitrageprobleem, geen
+echte lineaire-programmering-oplossing (geen scipy/pulp-afhankelijkheid
+toegevoegd, om een HACS-integratie licht te houden) — elke
+toewijzingsstap blijft individueel controleerbaar, in tegenstelling tot
+de uitvoer van een ondoorzichtige solver.
+
+**Bewust pure prijsarbitrage**: modelleert geen huishoudverbruik of
+PV-opwek, en trekt niet de nachtreserve af die de echte beslisboom apart
+beschermt. De geprojecteerde winst is dus een theoretisch maximum aan
+arbitrage-kans, geen letterlijke aanbeveling — `sensor.mpc_advies`'s
+`note`-attribuut vermeldt dit expliciet.
+
+`sensor.mpc_advies_prijsarbitrage_plan` toont de geprojecteerde totale
+winst (€), met het volledige geplande schema (per kwartier: laden/
+ontladen, prijs, energie) als attribuut. Geen `RestoreEntity` — elke
+tick wordt een vers plan berekend op basis van live voorspellingsdata;
+een hersteld verouderd plan zou misleidend zijn.
+
+## Monte Carlo-adviesmotor (tekortkans)
+
+**Uitsluitend adviserend** — stuurt nooit een commando en past de
+werkelijke reserve-marge niet aan. Vult het bestaande, deterministieke
+diepste-tekort-cijfer (mediaan-gebaseerd, zie "Reserve & veiligheid"
+hierboven) aan met een **kansverdeling**: 1000 gesimuleerde trajecten
+over dezelfde uur-voor-uur diepste-tekort-berekening, elk getrokken uit
+de al bestaande, geleerde geschiedenis.
+
+**Bootstrap-resampling, geen aangenomen verdeling**: elk gesimuleerd
+traject trekt willekeurig (met teruglegging) uit de daadwerkelijk
+waargenomen dagelijkse steekproeven per uur —
+`hourly_consumption_profile` voor verbruik, `pv_hourly_bias_history`
+voor de Solcast-voorspellingsfout — in plaats van een aangenomen
+verdeling (bijv. een Gauss-curve met een gegokte standaardafwijking) te
+verzinnen. Geen aparte weer-/bezettingsruis toegevoegd: de
+PV-bias-geschiedenis weerspiegelt al impliciet weersvariatie (dat is
+precies *waarom* die ratio van dag tot dag verschilt), en er is geen
+bezettingsmodel in deze integratie om uit te putten.
+
+Horizon begrensd op `MONTE_CARLO_MAX_HOURS` (48 uur) puur voor
+prestaties — 1000 simulaties over meer uren zou merkbaar bijdragen aan
+de rekentijd van een enkele 5-minuten-tick zonder echte nauwkeurigheids-
+winst (in de praktijk ~15ms voor een realistisch 14-uursscenario).
+
+`sensor.monte_carlo_risico_tekortkans` toont het percentage simulaties
+waarin het gesimuleerde tekort de daadwerkelijk beschikbare energie
+overschreed, met de mediaan/p10/p90 van het diepste tekort (kWh) als
+attributen. Geen `RestoreEntity` — elke tick een verse simulatiebatch.
+
+## Kalman filtering (SoC/PV/verbruik)
+
+**Uitsluitend adviserend** — een gladgestreken schatting naast de ruwe
+sensorwaarde, nooit meegenomen in enige beslissing. Die blijven hun
+eigen, al beproefde gladstrijkmethode gebruiken (bijv. de
+mediaan-gebaseerde verbruikscorrectie, v0.59.0/v0.62.0).
+
+Gebruikt een minimaal, afhankelijkheidsvrij scalair Kalman-filter (geen
+numpy nodig) per signaal — beschikbare energie/SoC, live PV-vermogen,
+live huishoudverbruik — een principieel andere techniek dan de
+mediaan-gebaseerde gladstrijking elders: weegt de vorige schatting
+tegen de nieuwe meting af op basis van hun relatieve onzekerheid (de
+Kalman-gain), in plaats van een vast steekproefvenster.
+
+Proces-ruis (hoeveel de werkelijke waarde naar verwachting tussen twee
+ticks verschuift) en meet-ruis (hoe onbetrouwbaar de ruwe sensorwaarde
+wordt geacht) zijn onderbouwde standaardwaarden per signaal — **niet**
+empirisch bepaald voor jouw specifieke sensoren, aangezien die data er
+niet is.
+
+`sensor.kalman_filtering_soc_pv_verbruik` toont "actief"/"geen data",
+met de gefilterde én ruwe waarde voor alle drie signalen als
+attributen. Geen `RestoreEntity` — elk filter herstelt zichzelf
+natuurlijk binnen enkele ticks vanaf de eerstvolgende live meting.
 
 ## Diagnostiek
 

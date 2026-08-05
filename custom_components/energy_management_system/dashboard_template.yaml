@@ -323,6 +323,14 @@ views:
                 name: Sensor-gezondheidsscore (energiebalans-check)
               - entity: sensor.woonkamer_energy_management_system_sluipverbruik_detectie
                 name: Sluipverbruik-detectie
+              - entity: sensor.woonkamer_energy_management_system_weather_ensemble_bewolkingsgraad
+                name: Weather ensemble (bewolkingsgraad)
+              - entity: sensor.woonkamer_energy_management_system_mpc_advies_prijsarbitrage_plan
+                name: MPC advies (prijsarbitrage-plan, adviserend)
+              - entity: sensor.woonkamer_energy_management_system_monte_carlo_risico_tekortkans
+                name: Monte Carlo risico (tekortkans, adviserend)
+              - entity: sensor.woonkamer_energy_management_system_kalman_filtering_soc_pv_verbruik
+                name: Kalman filtering (SoC/PV/verbruik, adviserend)
 
   - title: Financieel
     path: financieel
@@ -802,6 +810,34 @@ views:
             icon_color: green
             entity: >-
               sensor.woonkamer_energy_management_system_fietsladers_status
+          - type: custom:mushroom-template-card
+            primary: >-
+              {{ states('sensor.woonkamer_energy_management_system_vaatwasser_cyclus_status') }}
+            secondary: >-
+              Vaatwasser-cyclus ({{
+              state_attr('sensor.woonkamer_energy_management_system_vaatwasser_cyclus_status', 'geleerde_cyclusduur_minuten')
+              | round(0) if state_attr('sensor.woonkamer_energy_management_system_vaatwasser_cyclus_status', 'geleerde_cyclusduur_minuten')
+              is not none else '?' }} min geleerd{{ ', ' ~
+              (state_attr('sensor.woonkamer_energy_management_system_vaatwasser_cyclus_status', 'geschatte_voortgang_procent') | round(0) | string ~ '%')
+              if state_attr('sensor.woonkamer_energy_management_system_vaatwasser_cyclus_status', 'geschatte_voortgang_procent') is not none else '' }})
+            icon: mdi:dishwasher
+            icon_color: purple
+            entity: >-
+              sensor.woonkamer_energy_management_system_vaatwasser_cyclus_status
+          - type: custom:mushroom-template-card
+            primary: >-
+              {{ states('sensor.woonkamer_energy_management_system_wasmachine_cyclus_status') }}
+            secondary: >-
+              Wasmachine-cyclus ({{
+              state_attr('sensor.woonkamer_energy_management_system_wasmachine_cyclus_status', 'geleerde_cyclusduur_minuten')
+              | round(0) if state_attr('sensor.woonkamer_energy_management_system_wasmachine_cyclus_status', 'geleerde_cyclusduur_minuten')
+              is not none else '?' }} min geleerd{{ ', ' ~
+              (state_attr('sensor.woonkamer_energy_management_system_wasmachine_cyclus_status', 'geschatte_voortgang_procent') | round(0) | string ~ '%')
+              if state_attr('sensor.woonkamer_energy_management_system_wasmachine_cyclus_status', 'geschatte_voortgang_procent') is not none else '' }})
+            icon: mdi:washing-machine
+            icon_color: purple
+            entity: >-
+              sensor.woonkamer_energy_management_system_wasmachine_cyclus_status
 
       - type: entities
         title: Laatste meldingen

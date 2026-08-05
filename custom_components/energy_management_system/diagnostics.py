@@ -404,6 +404,51 @@ async def async_get_config_entry_diagnostics(
             "sluipverbruik_reference_w": coordinator.sluipverbruik_reference_w,
             "cusum_accumulator_kw": round(coordinator.cusum_accumulator_kw, 4),
             "baseline_load_history": coordinator.baseline_load_history,
+            "weather_ensemble_cloud_cover_percent": (
+                coordinator.weather_ensemble_cloud_cover_percent
+            ),
+            "weather_ensemble_sources_used": coordinator.weather_ensemble_sources_used,
+            "weather_ensemble_label": coordinator.weather_ensemble_label,
+            "weather_ensemble_disagreement": (
+                coordinator.weather_ensemble_disagreement
+            ),
+            "dishwasher_state": coordinator._dishwasher_state,
+            "dishwasher_cycle_duration_history": (
+                coordinator.dishwasher_cycle_duration_history
+            ),
+            "learned_dishwasher_cycle_duration_minutes": (
+                coordinator.learned_dishwasher_cycle_duration_minutes
+            ),
+            "washing_machine_state": coordinator._washing_machine_state,
+            "washing_machine_cycle_duration_history": (
+                coordinator.washing_machine_cycle_duration_history
+            ),
+            "learned_washing_machine_cycle_duration_minutes": (
+                coordinator.learned_washing_machine_cycle_duration_minutes
+            ),
+            "mpc_planned_actions": coordinator.mpc_planned_actions,
+            "mpc_projected_total_profit_eur": (
+                coordinator.mpc_projected_total_profit_eur
+            ),
+            "mpc_horizon_quarters_used": coordinator.mpc_horizon_quarters_used,
+            "mpc_note": coordinator.mpc_note,
+            "monte_carlo_median_deficit_kwh": (
+                coordinator.monte_carlo_median_deficit_kwh
+            ),
+            "monte_carlo_p90_deficit_kwh": coordinator.monte_carlo_p90_deficit_kwh,
+            "monte_carlo_p10_deficit_kwh": coordinator.monte_carlo_p10_deficit_kwh,
+            "monte_carlo_shortfall_probability_percent": (
+                coordinator.monte_carlo_shortfall_probability_percent
+            ),
+            "monte_carlo_simulations_run": coordinator.monte_carlo_simulations_run,
+            "monte_carlo_hours_simulated": coordinator.monte_carlo_hours_simulated,
+            "monte_carlo_note": coordinator.monte_carlo_note,
+            "kalman_soc_filtered_kwh": coordinator.kalman_soc_filtered_kwh,
+            "kalman_soc_raw_kwh": coordinator.kalman_soc_raw_kwh,
+            "kalman_pv_filtered_w": coordinator.kalman_pv_filtered_w,
+            "kalman_pv_raw_w": coordinator.kalman_pv_raw_w,
+            "kalman_load_filtered_w": coordinator.kalman_load_filtered_w,
+            "kalman_load_raw_w": coordinator.kalman_load_raw_w,
             "total_feedin_premium_eur": round(
                 coordinator.total_feedin_premium_eur, 4
             ),

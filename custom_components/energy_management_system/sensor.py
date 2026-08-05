@@ -55,6 +55,12 @@ async def async_setup_entry(
         BatterySavingsSensor(coordinator, entry.entry_id),
         EnergyBalanceHealthSensor(coordinator, entry.entry_id),
         SluipverbruikSensor(coordinator, entry.entry_id),
+        WeatherEnsembleSensor(coordinator, entry.entry_id),
+        DishwasherCycleStateSensor(coordinator, entry.entry_id),
+        WashingMachineCycleStateSensor(coordinator, entry.entry_id),
+        MpcAdvisorySensor(coordinator, entry.entry_id),
+        MonteCarloAdvisorySensor(coordinator, entry.entry_id),
+        KalmanFilterAdvisorySensor(coordinator, entry.entry_id),
         ReserveShortfallSensor(coordinator, entry.entry_id),
         ReserveExcessSensor(coordinator, entry.entry_id),
         LearnedBatteryEfficiencySensor(coordinator, entry.entry_id),
@@ -952,6 +958,298 @@ class SluipverbruikSensor(SensorEntity, RestoreEntity):
         except (TypeError, ValueError):
             pass
         self._coordinator.sluipverbruik_detected = last_state.state == "gedetecteerd"
+
+
+class WeatherEnsembleSensor(SensorEntity):
+    """Weather ensemble cross-check (v0.63.30): live cloud_coverage from
+    independent weather sources (KNMI/OpenWeatherMap, read from HA
+    `weather` entities the person already has - not a new API
+    integration), alongside a flag for when live PV output disagrees
+    with what those sources say the sky is doing.
+
+    Deliberately not a genuine multi-source kWh yield ensemble - that
+    would need panel orientation/tilt/kWp specs this integration doesn't
+    collect. Not a RestoreEntity - a live cross-check, not a cumulative
+    total.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Weather ensemble (bewolkingsgraad)"
+    _attr_icon = "mdi:weather-partly-cloudy"
+    _attr_native_unit_of_measurement = "%"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_weather_ensemble"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def native_value(self) -> float | None:
+        return self._coordinator.weather_ensemble_cloud_cover_percent
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return {
+            "label": self._coordinator.weather_ensemble_label,
+            "sources_used": self._coordinator.weather_ensemble_sources_used,
+            "disagreement": self._coordinator.weather_ensemble_disagreement,
+            "note": (
+                "Live bewolkingsgraad van KNMI/OpenWeatherMap, geen "
+                "vervangende kWh-opbrengstschatting - daarvoor zijn "
+                "paneelgegevens (oriëntatie/hellingshoek/wattpiek) nodig "
+                "die deze integratie niet verzamelt. 'disagreement' "
+                "vergelijkt live PV-vermogen met de Solcast-voorspelling "
+                "voor dit moment, naast wat de bewolkingsgraad zegt."
+            ),
+        }
+
+
+class _ApplianceCycleStateSensor(SensorEntity, RestoreEntity):
+    """Shared base for the dishwasher/washing-machine RUSTEND/ACTIEF/
+    KLAAR state (v0.63.32, "Optie 1" na overleg - geen fase-detectie).
+    Restores the learned cycle-duration history across a restart, same
+    as the scheduled-charge appliances (v0.63.12).
+    """
+
+    _state_attr = ""
+    _duration_history_attr = ""
+    _learned_duration_property = ""
+
+    def __init__(self, coordinator, entry_id: str, unique_suffix: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_{unique_suffix}"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def native_value(self) -> str:
+        return getattr(self._coordinator, self._state_attr)
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        history = getattr(self._coordinator, self._duration_history_attr)
+        learned = getattr(self._coordinator, self._learned_duration_property)
+        progress_percent = None
+        if self.native_value == "actief" and learned:
+            started_attr = self._state_attr.replace("_state", "_cycle_started_at")
+            started_at = getattr(self._coordinator, started_attr, None)
+            if started_at is not None:
+                from homeassistant.util import dt as dt_util
+
+                elapsed_min = (dt_util.now() - started_at).total_seconds() / 60
+                progress_percent = round(min(100, 100 * elapsed_min / learned), 0)
+        return {
+            "geleerde_cyclusduur_minuten": (
+                round(learned, 1) if learned is not None else None
+            ),
+            "geschatte_voortgang_procent": progress_percent,
+            "cyclusduur_geschiedenis": history,
+        }
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if last_state is None:
+            return
+        raw_history = last_state.attributes.get("cyclusduur_geschiedenis")
+        if isinstance(raw_history, list):
+            try:
+                setattr(
+                    self._coordinator,
+                    self._duration_history_attr,
+                    [float(v) for v in raw_history],
+                )
+            except (TypeError, ValueError):
+                pass
+        if last_state.state in ("rustend", "actief", "klaar"):
+            setattr(self._coordinator, self._state_attr, last_state.state)
+
+
+class DishwasherCycleStateSensor(_ApplianceCycleStateSensor):
+    """RUSTEND/ACTIEF/KLAAR voor de vaatwasser."""
+
+    _attr_has_entity_name = True
+    _attr_name = "Vaatwasser cyclus-status"
+    _attr_icon = "mdi:dishwasher"
+    _state_attr = "_dishwasher_state"
+    _duration_history_attr = "dishwasher_cycle_duration_history"
+    _learned_duration_property = "learned_dishwasher_cycle_duration_minutes"
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        super().__init__(coordinator, entry_id, "dishwasher_cycle_state")
+
+
+class WashingMachineCycleStateSensor(_ApplianceCycleStateSensor):
+    """RUSTEND/ACTIEF/KLAAR voor de wasmachine."""
+
+    _attr_has_entity_name = True
+    _attr_name = "Wasmachine cyclus-status"
+    _attr_icon = "mdi:washing-machine"
+    _state_attr = "_washing_machine_state"
+    _duration_history_attr = "washing_machine_cycle_duration_history"
+    _learned_duration_property = "learned_washing_machine_cycle_duration_minutes"
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        super().__init__(coordinator, entry_id, "washing_machine_cycle_state")
+
+
+class MpcAdvisorySensor(SensorEntity):
+    """MPC (Model Predictive Control) advisory engine (v0.63.33).
+
+    ADVISORY ONLY - never sends a device command, never overrides the
+    existing decision tree (confirmed explicitly before building this).
+    Shows a projected charge/discharge plan (greedy interval pairing
+    over the available price forecast horizon, pure arbitrage - no
+    household load/PV/reserve modelling) for comparison only.
+
+    Not a RestoreEntity - a fresh plan is computed every tick from live
+    forecast data; a restored stale plan would be actively misleading.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "MPC advies (prijsarbitrage-plan)"
+    _attr_icon = "mdi:chart-timeline-variant"
+    _attr_native_unit_of_measurement = "€"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_mpc_advisory"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def native_value(self) -> float | None:
+        return self._coordinator.mpc_projected_total_profit_eur
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return {
+            "geplande_acties": self._coordinator.mpc_planned_actions,
+            "aantal_kwartieren_in_horizon": (
+                self._coordinator.mpc_horizon_quarters_used
+            ),
+            "laatst_berekend": (
+                self._coordinator.mpc_last_computed_at.isoformat()
+                if self._coordinator.mpc_last_computed_at
+                else None
+            ),
+            "note": self._coordinator.mpc_note,
+        }
+
+
+class MonteCarloAdvisorySensor(SensorEntity):
+    """Monte Carlo advisory engine (v0.63.34).
+
+    ADVISORY ONLY - never sends a device command, never overrides the
+    existing deterministic worst-case-deficit calculation or reserve
+    margin. Bootstrap-resamples the already-collected empirical history
+    (hourly_consumption_profile, pv_hourly_bias_history) to run 1000
+    randomised trajectories of the same hour-by-hour "diepste tekort"
+    walk, producing a probability distribution for comparison.
+
+    Not a RestoreEntity - a fresh batch of simulations is run every
+    tick from live forecast/history data; a restored stale distribution
+    would be actively misleading.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Monte Carlo risico (tekortkans)"
+    _attr_icon = "mdi:dice-multiple-outline"
+    _attr_native_unit_of_measurement = "%"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_monte_carlo_advisory"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def native_value(self) -> float | None:
+        return self._coordinator.monte_carlo_shortfall_probability_percent
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return {
+            "mediaan_diepste_tekort_kwh": (
+                self._coordinator.monte_carlo_median_deficit_kwh
+            ),
+            "p90_diepste_tekort_kwh": self._coordinator.monte_carlo_p90_deficit_kwh,
+            "p10_diepste_tekort_kwh": self._coordinator.monte_carlo_p10_deficit_kwh,
+            "aantal_simulaties": self._coordinator.monte_carlo_simulations_run,
+            "uren_gesimuleerd": self._coordinator.monte_carlo_hours_simulated,
+            "note": self._coordinator.monte_carlo_note,
+        }
+
+
+class KalmanFilterAdvisorySensor(SensorEntity):
+    """Kalman filtering advisory engine (v0.63.35).
+
+    ADVISORY ONLY - a smoothed estimate of three live, naturally noisy
+    signals (available_kwh/SoC, live PV power, live household load)
+    shown alongside their raw sensor readings, never fed into any
+    decision (which keep using their own already-tested smoothing).
+
+    Not a RestoreEntity - each filter's internal state (estimate,
+    uncertainty) already persists naturally in the coordinator instance
+    across ticks; restoring it across a full HA restart would resume
+    filtering from a stale point rather than cleanly re-seeding from the
+    next live reading, and the smoothing converges again within a few
+    ticks regardless.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Kalman filtering (SoC/PV/verbruik)"
+    _attr_icon = "mdi:chart-bell-curve-cumulative"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_kalman_filtering"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def native_value(self) -> str:
+        return (
+            "actief"
+            if self._coordinator.kalman_soc_filtered_kwh is not None
+            or self._coordinator.kalman_pv_filtered_w is not None
+            or self._coordinator.kalman_load_filtered_w is not None
+            else "geen data"
+        )
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return {
+            "soc_gefilterd_kwh": self._coordinator.kalman_soc_filtered_kwh,
+            "soc_ruw_kwh": self._coordinator.kalman_soc_raw_kwh,
+            "pv_gefilterd_w": self._coordinator.kalman_pv_filtered_w,
+            "pv_ruw_w": self._coordinator.kalman_pv_raw_w,
+            "verbruik_gefilterd_w": self._coordinator.kalman_load_filtered_w,
+            "verbruik_ruw_w": self._coordinator.kalman_load_raw_w,
+            "note": (
+                "Adviserend - een gladgestreken schatting naast de "
+                "ruwe sensorwaarde, nooit meegenomen in enige "
+                "beslissing (die gebruiken hun eigen, al beproefde "
+                "gladstrijkmethode). Proces-/meetruis-parameters zijn "
+                "onderbouwde standaardwaarden, niet empirisch bepaald "
+                "voor deze specifieke installatie."
+            ),
+        }
 
 
 class ReserveShortfallSensor(SensorEntity, RestoreEntity):
