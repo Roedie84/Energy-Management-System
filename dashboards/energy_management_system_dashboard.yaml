@@ -7,15 +7,6 @@ views:
     sections:
       - type: grid
         cards:
-          - type: custom:mushroom-title-card
-            title: Energy Management System
-            subtitle: >-
-              {{ state_attr('sensor.energy_management_system_last_decision_reason',
-              'friendly_name') }}: {{
-              states('sensor.energy_management_system_last_decision_reason') }}
-            grid_options:
-              columns: 12
-              rows: 1
           - type: custom:mushroom-template-card
             primary: "{{ states('sensor.woonkamer_energy_management_system_system_status') }}"
             secondary: >-
@@ -42,6 +33,21 @@ views:
               columns: 12
               rows: 1
           - type: markdown
+            content: >-
+              {% set punten =
+              state_attr('sensor.woonkamer_energy_management_system_system_status',
+              'aandachtspunten') or [] %}
+              {% if punten | length > 0 %}
+              **⚠️ Aandachtspunten:**
+
+              {% for punt in punten %}
+              - {{ punt }}
+              {% endfor %}
+              {% endif %}
+            grid_options:
+              columns: 12
+              rows: auto
+          - type: markdown
             content: |
               {% set updated = state_attr('sensor.woonkamer_energy_management_system_explanation', 'last_successful_update') %}{% set fm = state_attr('sensor.woonkamer_energy_management_system_explanation', 'force_manual') %}{% set mode = state_attr('sensor.woonkamer_energy_management_system_explanation', 'expected_mode') %}{% set price = state_attr('sensor.woonkamer_energy_management_system_explanation', 'current_price_per_kwh') %}{% set threshold = state_attr('sensor.woonkamer_energy_management_system_explanation', 'expensive_price_threshold') %}{% set count = state_attr('sensor.woonkamer_energy_management_system_explanation', 'effective_expensive_quarters_count') %}| — | — |
               |---|---|
@@ -57,35 +63,33 @@ views:
       - type: grid
         cards:
           - type: heading
-            heading: Accu & rendement
+            heading: Accu, rendement & live cijfers
             grid_options:
               columns: 12
               rows: 1
-          - type: gauge
+          - type: custom:mushroom-template-card
+            primary: "{{ states('sensor.solarflow_2400_ac_electric_level') }}%"
+            secondary: Accu SoC
+            icon: mdi:battery-charging-medium
+            icon_color: >-
+              {% set v = states('sensor.solarflow_2400_ac_electric_level') | float(0) %}
+              {% if v >= 40 %}green{% elif v >= 20 %}yellow{% else %}red{% endif %}
             entity: sensor.solarflow_2400_ac_electric_level
-            name: Accu SoC
-            min: 0
-            max: 100
-            severity:
-              green: 40
-              yellow: 20
-              red: 0
             grid_options:
               columns: 6
-              rows: 2
-          - type: gauge
-            entity: >-
-              sensor.woonkamer_energy_management_system_learned_battery_efficiency
-            name: Geleerd rendement
-            min: 50
-            max: 100
-            severity:
-              green: 75
-              yellow: 60
-              red: 0
+              rows: 1
+          - type: custom:mushroom-template-card
+            primary: >-
+              {{ states('sensor.woonkamer_energy_management_system_learned_battery_efficiency') }}%
+            secondary: Geleerd rendement
+            icon: mdi:battery-sync-outline
+            icon_color: >-
+              {% set v = states('sensor.woonkamer_energy_management_system_learned_battery_efficiency') | float(0) %}
+              {% if v >= 75 %}green{% elif v >= 60 %}yellow{% else %}red{% endif %}
+            entity: sensor.woonkamer_energy_management_system_learned_battery_efficiency
             grid_options:
               columns: 6
-              rows: 2
+              rows: 1
           - type: markdown
             content: >
               {%- set history =
@@ -108,14 +112,6 @@ views:
               Nog niet genoeg metingen voor een trend
 
               {%- endif %}
-            grid_options:
-              columns: 12
-              rows: 2
-
-      - type: grid
-        cards:
-          - type: heading
-            heading: Live cijfers
             grid_options:
               columns: 12
               rows: 1
@@ -218,7 +214,7 @@ views:
               **resterende** tijd toont.
             grid_options:
               columns: 12
-              rows: 3
+              rows: auto
           - type: custom:mushroom-template-card
             primary: "{{ states('number.solaredge_i1_active_power_limit') }}%"
             secondary: Zonnepaneel-vermogenslimiet (bij negatieve prijs)
@@ -314,7 +310,7 @@ views:
       - type: grid
         cards:
           - type: heading
-            heading: Actuele beslissing (detail)
+            heading: Kernbeslissing (detail)
             grid_options:
               columns: 12
               rows: 1
@@ -338,16 +334,26 @@ views:
                 name: Sensor-gezondheidsscore (energiebalans-check)
               - entity: sensor.woonkamer_energy_management_system_sluipverbruik_detectie
                 name: Sluipverbruik-detectie
+
+      - type: grid
+        cards:
+          - type: heading
+            heading: Advies-modules (detail, adviserend)
+            grid_options:
+              columns: 12
+              rows: 1
+          - type: entities
+            entities:
               - entity: sensor.woonkamer_energy_management_system_weather_ensemble_bewolkingsgraad
                 name: Weather ensemble (bewolkingsgraad)
               - entity: sensor.woonkamer_energy_management_system_mpc_advies_prijsarbitrage_plan
-                name: MPC advies (prijsarbitrage-plan, adviserend)
+                name: MPC advies (prijsarbitrage-plan)
               - entity: sensor.woonkamer_energy_management_system_monte_carlo_risico_tekortkans
-                name: Monte Carlo risico (tekortkans, adviserend)
+                name: Monte Carlo risico (tekortkans)
               - entity: sensor.woonkamer_energy_management_system_kalman_filtering_soc_pv_verbruik
-                name: Kalman filtering (SoC/PV/verbruik, adviserend)
+                name: Kalman filtering (SoC/PV/verbruik)
               - entity: sensor.woonkamer_energy_management_system_digital_twin_gesimuleerde_soc_winst
-                name: Digital Twin (gesimuleerde SoC/winst, adviserend)
+                name: Digital Twin (gesimuleerde SoC/winst)
               - entity: sensor.woonkamer_energy_management_system_advies_gereedheid_8_modules
                 name: Advies-gereedheid (8 adviesmodules)
 
@@ -553,16 +559,15 @@ views:
         columns: 2
         square: false
         cards:
-          - type: gauge
-            entity: >-
-              sensor.woonkamer_energy_management_system_learned_battery_efficiency
-            name: Geleerd accu-rendement
-            min: 50
-            max: 100
-            severity:
-              green: 75
-              yellow: 60
-              red: 0
+          - type: custom:mushroom-template-card
+            primary: >-
+              {{ states('sensor.woonkamer_energy_management_system_learned_battery_efficiency') }}%
+            secondary: Geleerd accu-rendement
+            icon: mdi:battery-sync-outline
+            icon_color: >-
+              {% set v = states('sensor.woonkamer_energy_management_system_learned_battery_efficiency') | float(0) %}
+              {% if v >= 75 %}green{% elif v >= 60 %}yellow{% else %}red{% endif %}
+            entity: sensor.woonkamer_energy_management_system_learned_battery_efficiency
           - type: custom:mushroom-template-card
             primary: >-
               {{ states('sensor.energy_management_system_pv_forecast_accuracy')
