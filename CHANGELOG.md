@@ -6405,3 +6405,19 @@ export i.p.v. import, grote hiaten na herstart), en het degradatie-
 model dat correct clampt op 80% i.p.v. door te extrapoleren.
 
 **Volledige testsuite**: 568 tests, allemaal groen.
+
+## v0.63.102 — Airco-verwachting-tegel toonde temperatuur i.p.v. kans
+
+**Gerapporteerd, met screenshot**: de "Airco-verwachting"-tegel op het
+Klimaat-tabblad toonde als hoofdwaarde een temperatuur (identiek aan
+de "Woonkamertemperatuur (live)"-tegel ernaast), terwijl de kans-op-
+airco-binnen-1-uur alleen in de kleinere subtekst stond.
+
+**Verklaring**: `LivingRoomAircoPredictionSensor.native_value` is
+bewust de temperatuur-bucket die wordt bijgehouden (voor HA-
+statistieken/grafieken), met de voorspelling als apart attribuut - een
+geldige technische keuze, maar verwarrend als dashboardweergave.
+
+**Fix**: alleen de dashboardkaart in `dashboard_template.yaml`
+aangepast (de sensor zelf ongewijzigd) - primary toont nu de kans-
+procent, secondary toont de temperatuur waarbij die kans hoort.

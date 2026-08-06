@@ -515,6 +515,25 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Airco-verwachting-tegel toonde temperatuur i.p.v. kans (v0.63.102)
+
+Gerapporteerd met screenshot: de "Airco-verwachting"-tegel op het
+Klimaat-tabblad toonde als hoofdwaarde een temperatuur (23,2°C —
+identiek aan de losstaande "Woonkamertemperatuur (live)"-tegel
+ernaast), terwijl de kans-op-airco-binnen-1-uur (het eigenlijke doel
+van deze tegel) alleen in de kleinere subtekst stond.
+
+**Verklaring**: de onderliggende sensor se `native_value` is bewust de
+temperatuur-bucket die wordt bijgehouden (voor HA-statistieken/
+grafieken), met de voorspelling als apart attribuut — een geldige
+technische keuze, maar verwarrend als dashboardweergave: een tegel die
+"Airco-verwachting" heet, hoort de verwachting zelf prominent te tonen.
+
+**Fix**: alleen de dashboardkaart aangepast (de sensor zelf blijft
+ongewijzigd, dient nog steeds hetzelfde doel) — primary toont nu de
+kans-procent (of "onvoldoende data" als die nog ontbreekt), secondary
+toont de temperatuur waarbij die kans hoort.
+
 ## Vijf klassieke EMS-kengetallen toegevoegd (v0.63.101)
 
 Gevraagd: "heb je nog zaken voor een typisch EMS welke we kunnen
