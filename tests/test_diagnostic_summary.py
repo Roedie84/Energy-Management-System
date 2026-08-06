@@ -69,6 +69,12 @@ def test_flags_possibly_defective_nilm_devices(make_coordinator, hass):
 
 
 def test_flags_nilm_duplicates(make_coordinator, hass):
+    """v0.63.116, gevraagd: "de melding duplicaten zie ik niet als een
+    melding welke systeem status niet naar ok kan brengen."
+
+    Duplicaatparen blijven gemeld, maar als INFORMATIEVE observatie -
+    ze mogen de status niet meer naar "aandacht_gewenst" brengen.
+    """
     coordinator = make_coordinator({})
     history = [1.0, 1.0, 1.0, 1.0]
     coordinator.nilm_confirmed_devices = {
@@ -86,8 +92,9 @@ def test_flags_nilm_duplicates(make_coordinator, hass):
 
     summary = coordinator.get_diagnostic_summary()
 
-    assert summary["status"] == "aandacht_gewenst"
-    assert any("duplicaat" in p.lower() for p in summary["aandachtspunten"])
+    assert summary["status"] == "nominaal"
+    assert any("duplicaat" in p.lower() for p in summary["informatief"])
+    assert not any("duplicaat" in p.lower() for p in summary["aandachtspunten"])
 
 
 def test_flags_recent_shortfall_days(make_coordinator, hass):

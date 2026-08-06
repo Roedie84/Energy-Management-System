@@ -119,6 +119,7 @@ def test_setup_registers_all_slot_buttons(make_coordinator, hass):
     from custom_components.energy_management_system.const import (
         DOMAIN,
         NILM_DASHBOARD_SLOT_COUNT,
+        NILM_DUPLICATE_DASHBOARD_SLOT_COUNT,
     )
 
     coordinator = make_coordinator({})
@@ -134,8 +135,13 @@ def test_setup_registers_all_slot_buttons(make_coordinator, hass):
 
     aio.run(async_setup_entry(hass, _FakeEntry(), fake_add_entities))
 
-    # 1 test-notification button + (confirm+reject) x N slots.
-    assert len(added) == 1 + 2 * NILM_DASHBOARD_SLOT_COUNT
+    # 1 test-notification button + (confirm+reject) x N kandidaat-slots
+    # + (bevestigen+negeren) x N duplicaat-slots (v0.63.118).
+    assert len(added) == (
+        1
+        + 2 * NILM_DASHBOARD_SLOT_COUNT
+        + 2 * NILM_DUPLICATE_DASHBOARD_SLOT_COUNT
+    )
 
 
 def test_button_name_shows_the_candidate_directly(make_coordinator, hass):

@@ -515,6 +515,266 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Duplicaatparen kunnen nu ook beoordeeld worden (v0.63.118)
+
+**Gevraagd**: "NILM apparaten kan ik bevestigen danwel negeren, dit kan
+nog niet met de waarschijnlijke duplicaten - kun je hiervoor een zelfde
+optie maken zodat ik ook dit kan afwijzen, en dit dan ook daadwerkelijk
+niet meer terug komt als mogelijk duplicaat?"
+
+De duplicaat-detectie (v0.63.91) was tot nu toe een doodlopende straat:
+hij meldde paren, maar er was geen enkele manier om er iets mee te doen.
+Het dashboard verwees naar de `reject_nilm_device`-service, maar dat
+sluit een heel apparaat uit — niet hetzelfde als zeggen "deze twee zijn
+geen duplicaat van elkaar". Een bewust geaccepteerd paar bleef dus
+eeuwig terugkomen.
+
+### Twee acties, spiegelbeeld van confirm/reject
+
+- **✅ Bevestigen** — het is echt hetzelfde signaal. Het tweede apparaat
+  van het paar wordt permanent uitgesloten (via het bestaande
+  `reject_nilm_device`, dus inclusief zwarte lijst), zodat hetzelfde
+  verbruik niet dubbel geteld blijft worden. De knop zet de naam van het
+  apparaat dat verdwijnt **in zijn eigen label** — daar hoort niets te
+  raden te zijn.
+- **❌ Negeren** — het is geen duplicaat. Het paar verdwijnt permanent
+  uit de suggesties; beide apparaten blijven gewoon bevestigd en worden
+  gewoon verder gevolgd.
+
+### Hoe het permanent blijft
+
+Beoordeelde paren worden opgeslagen als richting-onafhankelijke sleutel
+(`"<a>|<b>"`, alfabetisch gesorteerd) in `nilm_dismissed_duplicate_
+pairs`, en gaan mee door **dezelfde Store** als de bevestigde/afgewezen
+apparaten — inclusief de laadvolgorde-borging uit v0.63.115. De
+richting-onafhankelijkheid is bewust: zonder dat zou een paar alsnog
+terugkomen zodra de detectie de volgorde omdraait, bijvoorbeeld na een
+hernoeming die de alfabetische sortering verandert.
+
+Een beoordeling wordt bewust **niet** opgeruimd als een van beide
+apparaten tijdelijk uit de bevestigde lijst verdwijnt. De gebruiker
+heeft een oordeel gegeven; dat moet blijven gelden, ook als het apparaat
+later opnieuw bevestigd wordt.
+
+### Waar je het vindt
+
+- **Apparaten-tabblad**: onder de duplicatenlijst staat nu "Duplicaatpaar
+  beoordelen" met dezelfde twee tegels als bij losse kandidaten. Eén
+  sleuf, om dezelfde reden als bij de kandidaten (v0.63.46): een paar
+  toont twee namen naast elkaar, dus de breedte is hier nog schaarser.
+  Zodra je een paar beoordeelt, schuift het volgende automatisch in
+  beeld.
+- **Services**: `dismiss_nilm_duplicate_pair` en
+  `confirm_nilm_duplicate_pair` (beide met `entity_id_1` +
+  `entity_id_2`), voor automatiseringen of om er meerdere snel
+  achter elkaar weg te werken.
+- **Diagnostiek + sensorattribuut**: `afgewezen_duplicaatparen` toont
+  hoeveel paren al beoordeeld zijn, zodat een verdwenen suggestie
+  herkenbaar een keuze is en niet iets dat stilletjes wegviel.
+
+### Herbruikte lessen
+
+De nieuwe knoppen volgen bewust exact het patroon van de
+kandidaat-knoppen, inclusief alles wat daar met vallen en opstaan is
+geleerd: `has_entity_name` uit met een expliciete `entity_id`
+(v0.63.47/.79), registratie als coordinator-listener omdat een
+`ButtonEntity` niet pollt (v0.63.48), en — belangrijk — het **getoonde**
+paar wordt vastgelegd bij weergave, zodat een druk nooit op een
+inmiddels verschoven sleuf landt (v0.63.107). Deze knoppen zijn nieuw,
+dus geen `_v2`/`_v3`-suffix nodig: er is geen bestaande registry-entry om
+mee te botsen.
+
+### Getest
+
+Nieuw `tests/test_nilm_duplicate_pair_judgement.py`, 21 tests: detectie
+vóór beoordeling, afwijzen verwijdert het paar maar houdt beide
+apparaten bevestigd, richting-onafhankelijkheid, dubbel drukken is een
+no-op, opslag in de Store, **niet terugkomen na een herstart**, **vijf
+herstarts achter elkaar**, andere paren blijven ongemoeid, bevestigen
+sluit het tweede apparaat uit én voorkomt herontdekking, beide
+knoplabels noemen de juiste namen, lege sleuven, de v0.63.107-borging op
+beide knoppen, vaste entity_ids en de dashboardverwijzing.
+
+**Volledige testsuite**: 665 tests, allemaal groen.
+
+## Einde saldering ingebouwd + laadkant financieel rechtgetrokken (v0.63.117)
+
+**Gevraagd**: "Als de accu terug levert aan mijn woning bespaart dit
+inkopen, als de accu laadt beperkt dit opbrengst van terug levering PV
+energie. Zit dit ook in alle kosten/financiele berekeningen zo
+verwerkt?" — gevolgd door: "Alles oppakken en integreren dat vanaf
+01-01-2027 saldering niet meer geldt."
+
+### Wat er mis was
+
+Ontladen was goed verwerkt: elke daling van de accu-inhoud realiseerde
+al het verschil tussen de actuele prijs en de kostprijs, ongeacht of dat
+nu verkoop was of gewoon huisverbruik dekken.
+
+De laadkant niet. Elke geladen kWh werd tegen de kale inkoopprijs
+geboekt, ook als het PV-overschot betrof dat anders was teruggeleverd.
+Daardoor werd de teruglever­premie van €0,02/kWh bij export wél
+bijgeteld, maar bij het opofferen van export nooit afgetrokken — een
+structurele overschatting die altijd dezelfde kant op werkte. Dit stond
+sinds v0.63.25 als bekende beperking in de docstring, maar was nooit
+afgemaakt.
+
+Daarbovenop rustte het hele model op één onuitgesproken aanname:
+**teruglevering is evenveel waard als inkoop**. Dat klopt exact zolang
+salderen geldt, en helemaal niet meer daarna.
+
+### Het nieuwe model: bron in, bestemming uit
+
+Elke kWh die de accu **ingaat** krijgt de kostprijs van zijn **bron**:
+
+| Bron | Kostprijs |
+|---|---|
+| Netinkoop | de inkoopprijs (incl. belasting) |
+| PV-overschot | de gederfde teruglevering |
+
+Elke kWh die de accu **uitgaat** krijgt de waarde van zijn
+**bestemming**:
+
+| Bestemming | Opbrengst |
+|---|---|
+| Eigen huisverbruik | de vermeden inkoopprijs |
+| Teruglevering aan het net | het teruglevertarief |
+
+De splitsing gebeurt met twee spiegelbeeldige helpers:
+`_split_charge_pv_vs_grid` (PV-opwek minus huisverbruik, begrensd op wat
+er werkelijk geladen is) en het al bestaande
+`_split_discharge_export_vs_load`. Ontbreekt de PV- of verbruikssensor,
+dan wordt alles als netinkoop geteld — bewust de conservatieve kant,
+want dat houdt de kostprijs hoog en overschat de besparing dus niet.
+
+### De saldering-overgang
+
+`_get_feedin_value_per_kwh` bepaalt wat één teruggeleverde kWh op dit
+moment waard is:
+
+- **Zolang salderen geldt**: de inkoopprijs plus de premie. Alles valt
+  samen zoals voorheen, dus historische cijfers blijven vergelijkbaar.
+- **Daarna**: het kale marktarief zonder energiebelasting (uit hetzelfde
+  forecast-attribuut, `price_tax_excluded`), plus de premie, minus
+  eventuele terugleverkosten.
+
+Ontbreekt dat attribuut na saldering, dan wordt er **niet teruggevallen
+op de inkoopprijs** — dat is precies de aanname die dan niet meer klopt.
+In plaats daarvan verschijnt er een echt aandachtspunt in de
+diagnostiek.
+
+### Waarom dit zoveel uitmaakt — met getallen
+
+Bij een inkoopprijs van €0,30/kWh en een kaal marktarief van €0,09/kWh:
+
+| | Salderen actief | Na saldering |
+|---|---|---|
+| Terugleverwaarde | €0,32/kWh | €0,11/kWh |
+| Spread inkoop − teruglevering | −€0,02 | **+€0,19** |
+| PV → accu → eigen verbruik | **−€0,02/kWh** | **+€0,19/kWh** |
+
+Onder saldering *kost* PV opslaan voor eigen gebruik dus geld (je loopt
+de premie mis en krijgt er niets voor terug — de winst zit puur in
+tijd-arbitrage tussen goedkope en dure kwartieren). Na saldering levert
+exact dezelfde handeling €0,19/kWh op. Dat is geen nuance maar een
+omkering.
+
+### Configuratie (drie nieuwe velden)
+
+- `salderen_end_date` — laatste dag dat salderen geldt, standaard
+  `2026-12-31`. Configureerbaar en niet hard ingebakken, omdat politiek
+  uitstel al meermaals is voorgekomen; een verkeerde ingebakken datum zou
+  stilzwijgend élk financieel getal scheeftrekken. Bij een onleesbare
+  datum wordt teruggevallen op "salderen actief" (bestaand gedrag
+  behouden in plaats van ongemerkt omschakelen).
+- `feedin_price_attribute` — welk attribuut het teruglevertarief
+  benadert, standaard `price_tax_excluded`.
+- `feedin_cost_eur_per_kwh` — vaste terugleverkosten per kWh, standaard
+  0. Niet te raden, dus leeg gelaten tot je eigen contract bekend is.
+
+### Ook aangepast
+
+- **Tegenfeitelijke KPI**: rekende import en export tegen hetzelfde
+  tarief af. Dat trok de vergelijking na saldering scheef in het voordeel
+  van "geen accu", want het tegenfeitelijke scenario exporteert per
+  definitie méér. Nu aparte tarieven per richting via
+  `_grid_flow_cost_eur`.
+- **Zichtbaarheid**: regime, terugleverwaarde, kWh geladen uit PV vs.
+  net, kWh ontladen naar het net en de cumulatief gederfde teruglevering
+  staan nu op het Financieel-tabblad en in de diagnostiek-export.
+
+### Getest
+
+`tests/test_salderen_end_financial_model.py`, 23 tests: de datumgrens
+(laatste dag vs. dag erna vs. ongeldige datum), de terugleverwaarde in
+beide regimes inclusief negatieve waarden, beide splitsingen met en
+zonder sensoren, de kostprijsvorming per bron, de opbrengst per
+bestemming, de richtingsafhankelijke netstroomkosten, en — belangrijk —
+dat het exportgedrag onder saldering **exact de oude formule** oplevert.
+Plus twee dashboardborgingen.
+
+**Volledige testsuite**: 644 tests, allemaal groen.
+
+### Wat bewust nog niet is aangepast
+
+De **beslislogica** is ongemoeid gelaten. Die beslist nu nog puur op
+prijsdrempels en weet niets van het bovenstaande verschil. Zodra
+saldering vervalt, verandert de optimale strategie echt: zonoverschot
+opslaan wordt dan op zichzelf al €0,19/kWh waard, ook zonder enig
+prijsverschil tussen kwartieren. `_should_capture_solar_instead_of_
+postponing` en de prijs-prioriteit zouden daar iets mee moeten. Dat
+raakt de mechanismen die eerder expliciet ongewijzigd moesten blijven,
+dus dat is een aparte, bewuste beslissing — niet iets om er stilletjes
+bij te doen.
+
+## Duplicaten-melding telt niet meer mee voor de systeemstatus (v0.63.116)
+
+**Gevraagd**: "de melding duplicaten zie ik niet als een melding welke
+systeem status niet naar ok kan brengen."
+
+Terecht. Waarschijnlijke NILM-duplicaatparen zijn een **observatie over
+de Home Assistant-installatie** (twee entiteiten die hetzelfde fysieke
+signaal meten), niet iets dat mis is met deze integratie of met de
+accu-aansturing. Het is bovendien een permanente toestand die bewust zo
+gelaten kan worden — 18 duplicaatparen die er morgen ook nog zijn. Zolang
+zo'n melding meetelde, bleef de systeemstatus voor altijd op "Aandacht
+gewenst" staan, waarmee die status precies zijn nut verliest: hij zegt
+dan niets meer over of er echt iets aan de hand is.
+
+**Wijziging**: `get_diagnostic_summary()` kent nu twee categorieën in
+plaats van één:
+
+- **`aandachtspunten`** — zaken die actie of aandacht verdienen. Deze
+  brengen de systeemstatus naar "Aandacht gewenst", precies zoals
+  voorheen.
+- **`informatief`** — observaties die het vermelden waard zijn maar niets
+  zeggen over de gezondheid van de integratie. Blijven volledig
+  zichtbaar, maar laten de status op "OK".
+
+De duplicaten-melding is de eerste bewoner van die tweede categorie.
+Onderdrukken was nadrukkelijk niet de bedoeling — alleen
+herclassificeren.
+
+**Zichtbaarheid blijft intact, op drie plekken**:
+- Statussensor: nieuw attribuut `informatief` naast `aandachtspunten`.
+- Overzicht-tabblad: een eigen blok "ℹ️ Ter info (geen invloed op de
+  status)" onder de aandachtspunten.
+- Live-tabblad: informatieve regels krijgen "Ter info:" in plaats van
+  "Let op:", zodat ze niet als probleem lezen. Voorheen verdwenen ze uit
+  het verhaal zodra er verder niets aan de hand was (het verhaal stopte
+  bij status "nominaal") — dat is nu ook opgelost.
+
+**Getest**: nieuw `tests/test_diagnostic_informational_category.py`, 9
+tests: duplicaten alleen houden de status op OK; ze worden nog steeds
+gemeld; end-to-end op de statussensor; een écht aandachtspunt (mogelijk
+defect apparaat) brengt de status nog wél omlaag; een actieve fout wint
+nog steeds; en de drie varianten van het Live-verhaal ("Let op",
+"Ter info", beide, geen van beide). De bestaande test
+`test_flags_nilm_duplicates` is meebewogen naar het nieuwe, bedoelde
+gedrag.
+
+**Volledige testsuite**: 621 tests, allemaal groen.
+
 ## NILM-keuzes overleefden geen herstart: de Store werd bij élke herstart afgekapt op 20 (v0.63.115)
 
 **Gerapporteerd** (ná de knop-race-fix van v0.63.107): "Keuzes voor NILM
