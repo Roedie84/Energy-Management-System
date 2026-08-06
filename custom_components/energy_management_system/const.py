@@ -377,13 +377,26 @@ BATTERY_CYCLES_TO_80_PERCENT_CAPACITY = 4000
 
 # Structurele NILM-uitsluitingspatronen (v0.63.89, gevraagd: "alles
 # waar fase 1 bij staat mag sowieso uitgesloten worden net als
-# solaredge en zendure entiteiten"). Substring-match (kleine letters)
+# solaredge en zendure entiteiten"; uitgebreid in v0.63.103, gerapporteerd:
+# "elke keer terug krijg onbevestigde kandidaten na herstart" - bleek de
+# batterij zelf onder de merknaam "SolarFlow" (niet "zendure") te
+# verschijnen in entity-namen, plus Solcast-voorspellingssensoren en
+# gespiegelde accu-signalen ("... (omgekeerd)") die als losse
+# "apparaten" werden voorgesteld). Substring-match (kleine letters)
 # tegen zowel de entity_id als de friendly_name - anders dan
 # `_nilm_excluded_entity_ids()` (exacte match tegen specifiek
 # geconfigureerde entiteiten), dit is een structurele, patroon-
 # gebaseerde uitsluiting die geen losse afwijzing per sub-fase-sensor
 # of accu-/omvormer-signaal meer vereist.
-NILM_PATTERN_EXCLUDED_KEYWORDS = ("fase 1", "fase_1", "solaredge", "zendure")
+NILM_PATTERN_EXCLUDED_KEYWORDS = (
+    "fase 1",
+    "fase_1",
+    "solaredge",
+    "zendure",
+    "solarflow",
+    "solcast",
+    "(omgekeerd)",
+)
 
 # NILM-duplicaatdetectie (v0.63.91, gevraagd na een diagnostiek-review
 # waarbij 5 "Eetkamer lamp"-sensoren identieke vermogensgeschiedenis

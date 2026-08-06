@@ -6040,16 +6040,31 @@ class EnergyManagementSystemCoordinator:
         haystack = f"{entity_id} {friendly_name}".lower()
         return any(keyword in haystack for keyword in NILM_PATTERN_EXCLUDED_KEYWORDS)
 
+    @staticmethod
+    def _is_own_integration_entity(entity_id: str) -> bool:
+        """True als deze entity_id bij deze integratie zelf hoort
+        (v0.63.103, gerapporteerd: "elke keer terug krijg onbevestigde
+        kandidaten na herstart" - deze integratie stelde inmiddels ook
+        haar EIGEN, afgeleide sensoren voor als NILM-kandidaat, bijv.
+        "Hourly consumption profile", "Piekvermogen"). Elke entity_id
+        van deze integratie volgt het patroon
+        sensor.<apparaat>_energy_management_system_<naam>, dus DOMAIN
+        als substring is een betrouwbare, generieke uitsluiting die
+        geen onderhoud per nieuwe sensor vereist.
+        """
+        return f"_{DOMAIN}_" in entity_id or entity_id.endswith(f"_{DOMAIN}")
+
     def _prune_nilm_pattern_excluded_entries(self) -> None:
         """Ruimt entiteiten op die al als kandidaat, bevestigd of
         afgewezen stonden vóórdat het naampatroon werd ingesteld
         (v0.63.89) - anders zou een structurele uitsluiting alleen
         NIEUW ontdekte entiteiten raken, niet wat er al in de lijsten
-        stond.
+        stond. v0.63.103: ruimt nu ook eigen-integratie-sensoren op
+        (zie `_is_own_integration_entity`).
         """
         for entity_id in list(self.nilm_unconfirmed_candidates.keys()):
             candidate = self.nilm_unconfirmed_candidates[entity_id]
-            if self._is_nilm_pattern_excluded(
+            if self._is_own_integration_entity(entity_id) or self._is_nilm_pattern_excluded(
                 entity_id, candidate.get("friendly_name", entity_id)
             ):
                 del self.nilm_unconfirmed_candidates[entity_id]
@@ -6057,7 +6072,7 @@ class EnergyManagementSystemCoordinator:
         removed_confirmed = False
         for entity_id in list(self.nilm_confirmed_devices.keys()):
             device = self.nilm_confirmed_devices[entity_id]
-            if self._is_nilm_pattern_excluded(
+            if self._is_own_integration_entity(entity_id) or self._is_nilm_pattern_excluded(
                 entity_id, device.get("friendly_name", entity_id)
             ):
                 del self.nilm_confirmed_devices[entity_id]
@@ -6070,7 +6085,8 @@ class EnergyManagementSystemCoordinator:
         pruned_rejected = [
             entity_id
             for entity_id in self.nilm_rejected_entities
-            if not self._is_nilm_pattern_excluded(entity_id, entity_id)
+            if not self._is_own_integration_entity(entity_id)
+            and not self._is_nilm_pattern_excluded(entity_id, entity_id)
         ]
         rejected_changed = len(pruned_rejected) != len(self.nilm_rejected_entities)
         self.nilm_rejected_entities = pruned_rejected
@@ -6113,6 +6129,8 @@ class EnergyManagementSystemCoordinator:
         for state in self.hass.states.async_all():
             entity_id = getattr(state, "entity_id", None)
             if not entity_id or not entity_id.startswith("sensor."):
+                continue
+            if self._is_own_integration_entity(entity_id):
                 continue
             if entity_id in excluded:
                 continue
