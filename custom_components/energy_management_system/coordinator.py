@@ -589,6 +589,16 @@ class EnergyManagementSystemCoordinator:
         self._nilm_confirmed_devices_store = Store(
             hass, version=1, key=f"{DOMAIN}_nilm_confirmed_devices"
         )
+        # v0.63.115: expliciet bijhouden of de Store al van schijf is
+        # gelezen, en of daar echte data in stond. Zonder deze twee
+        # vlaggen moest `NilmConfirmedDevicesSensor.async_added_to_hass`
+        # raden ("zijn de lijsten leeg? dan zal de Store wel leeg zijn
+        # geweest") - en dat raden was structureel fout, omdat de
+        # platforms in `async_setup_entry` werden opgezet VOORDAT de
+        # Store werd geladen. Zie `_async_load_nilm_confirmed_devices_
+        # store`'s docstring voor de volledige root cause.
+        self._nilm_store_loaded = False
+        self._nilm_store_had_data = False
         # Advisory readiness assessment (v0.63.40).
         self.advisory_readiness: dict[str, dict] = {}
         # Living-room-temperature airco activation predictor (v0.63.55).
@@ -846,7 +856,11 @@ class EnergyManagementSystemCoordinator:
         everything else has caught up.
         """
         await self.async_bootstrap_night_consumption_from_history()
-        await self._async_load_nilm_confirmed_devices_store()
+        # v0.63.115: normaal al geladen in `async_setup_entry`, vóór de
+        # platforms werden opgezet. Blijft hier staan als vangnet (o.a.
+        # voor herladen van opties en voor tests die de coordinator
+        # los opzetten); de load zelf is idempotent.
+        await self.async_load_persisted_nilm_state()
         self._unsub_interval = async_track_time_interval(
             self.hass,
             self._handle_interval,
@@ -6259,6 +6273,28 @@ class EnergyManagementSystemCoordinator:
         self.hass.async_create_task(self._async_save_nilm_confirmed_devices_store())
         return True
 
+    @property
+    def nilm_store_had_data(self) -> bool:
+        """True zodra de Store van schijf is gelezen én daar echte
+        bevestigde/afgewezen NILM-data in stond (v0.63.115). Dit is het
+        enige betrouwbare signaal dat de Store de bron van waarheid is;
+        "de lijsten in het geheugen zijn leeg" is dat NIET (die zijn óók
+        leeg als de Store simpelweg nog niet gelezen is).
+        """
+        return self._nilm_store_had_data
+
+    async def async_load_persisted_nilm_state(self) -> None:
+        """Publieke ingang om de NILM-Store te laden (v0.63.115).
+
+        Wordt in `async_setup_entry` aangeroepen VÓÓR
+        `async_forward_entry_setups`, zodat de Store gegarandeerd
+        gelezen is voordat `NilmConfirmedDevicesSensor.
+        async_added_to_hass` draait. Zie
+        `_async_load_nilm_confirmed_devices_store` voor waarom die
+        volgorde cruciaal is.
+        """
+        await self._async_load_nilm_confirmed_devices_store()
+
     async def _async_load_nilm_confirmed_devices_store(self) -> None:
         """Loads confirmed NILM devices + rejected entities from the
         dedicated Store (v0.63.66) - see the `_nilm_confirmed_devices_
@@ -6269,16 +6305,54 @@ class EnergyManagementSystemCoordinator:
         written - `NilmConfirmedDevicesSensor.async_added_to_hass`
         handles that one-time migration from the entity's restored
         state instead).
+
+        v0.63.115, gerapporteerd (na v0.63.107): "keuzes voor NILM
+        apparaten worden nog steeds niet opgeslagen, de onbevestigde
+        lijst blijft terug komen na een herstart". ECHTE root cause,
+        los van de knop-race van v0.63.107:
+
+        `async_setup_entry` deed `async_forward_entry_setups(...)`
+        VOORDAT `coordinator.async_setup()` (en dus deze load) draaide.
+        Daardoor liep `NilmConfirmedDevicesSensor.async_added_to_hass`
+        altijd met een nog volledig LEGE `nilm_confirmed_devices` /
+        `nilm_rejected_entities`. Die methode gebruikte "leeg" als
+        bewijs dat de Store leeg was, viel dus bij ELKE herstart terug
+        op de eenmalig-bedoelde migratiepad vanuit de eigen herstelde
+        entiteit-state - en die attributen zijn met opzet AFGEKAPT op
+        NILM_SENSOR_ATTRIBUTE_PREVIEW_LIMIT (20). Vervolgens schreef
+        die methode dat afgekapte resultaat meteen terug naar de Store,
+        waarmee de volledige, goede inhoud werd OVERSCHREVEN. Pas
+        daarna las deze load de zojuist verminkte Store terug.
+
+        Netto per herstart: bevestigde apparaten hard afgekapt op 20
+        (de gebruiker zag exact 20), en afgewezen entiteiten óók op 20 -
+        alles daarboven kwam terug als "onbevestigde kandidaat". Precies
+        het gerapporteerde beeld.
+
+        Deze load is nu idempotent (een tweede aanroep leest niet
+        opnieuw over verser geheugen heen) en registreert expliciet of
+        er echte data in de Store stond, zodat het migratiepad in de
+        sensor niet meer hoeft te gissen.
         """
+        if self._nilm_store_loaded:
+            # Al gelezen (de load draait nu zowel vóór platform-setup
+            # als vanuit async_setup) - niet nogmaals over geheugen
+            # heen lezen dat inmiddels verser kan zijn.
+            return
         stored = await self._nilm_confirmed_devices_store.async_load()
+        self._nilm_store_loaded = True
         if not isinstance(stored, dict):
             return
         devices = stored.get("nilm_confirmed_devices")
         if isinstance(devices, dict):
             self.nilm_confirmed_devices = devices
+            if devices:
+                self._nilm_store_had_data = True
         rejected = stored.get("nilm_rejected_entities")
         if isinstance(rejected, list):
             self.nilm_rejected_entities = rejected
+            if rejected:
+                self._nilm_store_had_data = True
 
     async def _async_save_nilm_confirmed_devices_store(self) -> None:
         """Persists confirmed NILM devices + rejected entities to the

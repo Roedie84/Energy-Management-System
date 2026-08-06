@@ -81,6 +81,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN][entry.entry_id] = coordinator
     hass.data[DOMAIN][f"{entry.entry_id}_solar_tracker"] = solar_tracker
 
+    # v0.63.115: de opgeslagen NILM-staat MOET geladen zijn voordat de
+    # platforms worden opgezet. `NilmConfirmedDevicesSensor.
+    # async_added_to_hass` heeft een migratiepad vanuit de eigen
+    # herstelde entiteit-state, en die entiteit-attributen zijn met
+    # opzet afgekapt op 20 items. Draaide platform-setup eerst (zoals
+    # tot en met v0.63.114), dan zag die migratie altijd lege lijsten,
+    # sloeg elke herstart opnieuw toe, en overschreef de volledige
+    # Store met een afgekapte kopie - waardoor bevestigde apparaten én
+    # afgewezen entiteiten permanent op 20 bleven steken en de rest bij
+    # elke herstart terugkwam als "onbevestigde kandidaat". Zie
+    # `_async_load_nilm_confirmed_devices_store`'s docstring.
+    await coordinator.async_load_persisted_nilm_state()
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     await coordinator.async_setup()
     await solar_tracker.async_setup()

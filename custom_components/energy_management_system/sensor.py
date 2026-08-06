@@ -1566,25 +1566,57 @@ class NilmConfirmedDevicesSensor(SensorEntity, RestoreEntity):
     async def async_added_to_hass(self) -> None:
         """One-time migration path (v0.63.66) for installs upgrading
         from before the dedicated Store existed. The Store is loaded
-        much earlier, during `coordinator.async_setup()` - by the time
-        this runs, `nilm_confirmed_devices` is already populated from it
-        if it had anything. Only falls back to this entity's own
-        restored HA state if the Store was genuinely empty, then
-        immediately persists that into the Store so this fallback is
-        never needed again on a subsequent restart.
+        before the platforms are set up (v0.63.115) - by the time this
+        runs, `nilm_confirmed_devices` is already populated from it if
+        it had anything. Only falls back to this entity's own restored
+        HA state if the Store was genuinely empty, then immediately
+        persists that into the Store so this fallback is never needed
+        again on a subsequent restart.
+
+        v0.63.115, gerapporteerd: "keuzes voor NILM apparaten worden
+        nog steeds niet opgeslagen, de onbevestigde lijst blijft terug
+        komen na een herstart". Deze methode was de plek waar de data
+        daadwerkelijk verminkt werd. Drie dingen zijn hier veranderd,
+        elk afzonderlijk genoeg om herhaling te voorkomen:
+
+        1. Het migratiepad draait alleen nog als de Store aantoonbaar
+           NIETS bevatte (`coordinator.nilm_store_had_data`), niet meer
+           als de lijsten in het geheugen "toevallig leeg" zijn - die
+           waren namelijk altijd leeg, omdat de platforms vóór de
+           Store-load werden opgezet.
+        2. Afgewezen entiteiten worden nu SAMENGEVOEGD (union) in
+           plaats van vervangen, zodat een afgekapt attribuut nooit
+           meer entries kan wégnemen.
+        3. Er wordt alleen naar de Store geschreven als de migratie
+           daadwerkelijk iets heeft hersteld. Een onvoorwaardelijke
+           schrijfactie hier was precies wat de volledige Store
+           overschreef met een kopie van maximaal
+           NILM_SENSOR_ATTRIBUTE_PREVIEW_LIMIT (20) items.
         """
         await super().async_added_to_hass()
+        if self._coordinator.nilm_store_had_data:
+            # De Store is de bron van waarheid en is al ingeladen -
+            # deze entiteit-state (bewust afgekapt voor weergave) mag
+            # er onder geen beding overheen.
+            return
+
         last_state = await self.async_get_last_state()
+        migrated = False
         if last_state is not None:
             if not self._coordinator.nilm_confirmed_devices:
                 raw_devices = last_state.attributes.get("apparaten")
                 if isinstance(raw_devices, dict) and raw_devices:
                     self._coordinator.nilm_confirmed_devices = dict(raw_devices)
-            if not self._coordinator.nilm_rejected_entities:
-                raw_rejected = last_state.attributes.get("rejected_entities")
-                if isinstance(raw_rejected, list) and raw_rejected:
-                    self._coordinator.nilm_rejected_entities = list(raw_rejected)
-        await self._coordinator._async_save_nilm_confirmed_devices_store()
+                    migrated = True
+            raw_rejected = last_state.attributes.get("rejected_entities")
+            if isinstance(raw_rejected, list) and raw_rejected:
+                existing = self._coordinator.nilm_rejected_entities
+                added = [eid for eid in raw_rejected if eid not in existing]
+                if added:
+                    self._coordinator.nilm_rejected_entities = existing + added
+                    migrated = True
+        if migrated:
+            await self._coordinator._async_save_nilm_confirmed_devices_store()
 
 
 class AdvisoryReadinessSensor(SensorEntity):
