@@ -515,6 +515,38 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Zonoverschot-schatting gebruikte trage i.p.v. live correctie (v0.63.104)
+
+Gerapporteerd met screenshot: "dit komt niet overeen met de
+werkelijkheid 55W, het overschot is veel groter op dit moment."
+
+**Root cause, gevonden door twee PV-schattingsfuncties te vergelijken**:
+deze codebase heeft AL een mechanisme dat Solcast's eigen live
+"resterend vandaag"-sensor gebruikt om de voorspelling real-time bij
+te stellen op basis van daadwerkelijk waargenomen omstandigheden
+(`_get_pv_remaining_correction_ratio`) — en dat wordt AL correct
+gebruikt in de tekortberekening (`_estimate_pv_kwh_for_period`). Maar
+`_get_expected_pv_power_w` — specifiek gebruikt voor de "moet ik nu
+zonoverschot vangen"-beslissing waar dit rapport over gaat — gebruikte
+uitsluitend de trage, over VEEL dagen langetermijn-geleerde
+uur-bias-ratio, zonder deze live correctie. Op een dag die zonniger is
+dan het langetermijngemiddelde voor dat uur, gaf dit stelselmatig een
+te lage verwachting — precies het gerapporteerde symptoom.
+
+**Fix**: `_get_expected_pv_power_w` probeert nu, in volgorde van
+voorkeur, eerst de live "resterend vandaag"-correctieratio (als
+`solar_remaining_today_sensor_entity` is geconfigureerd), en valt pas
+terug op de trage geleerde uur-ratio als die live correctie niet
+beschikbaar is — exact dezelfde prioriteitsvolgorde die de
+tekortberekening elders al hanteerde. Geen nieuwe configuratie nodig
+als je die sensor al had ingevuld; zonder die sensor blijft het oude
+gedrag ongewijzigd (geen regressie).
+
+**Getest**: nieuwe test bevestigt dat de live correctie voorrang
+krijgt boven de langetermijn-geleerde ratio wanneer beide beschikbaar
+zijn, en dat zonder geconfigureerde live-sensor het bestaande,
+geleerde-ratio-gedrag ongewijzigd blijft.
+
 ## NILM: eigen sensoren + SolarFlow/Solcast bleven als kandidaat terugkomen (v0.63.103)
 
 Gerapporteerd: "elke keer terug krijg onbevestigde kandidaten na

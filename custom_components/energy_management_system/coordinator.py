@@ -2656,10 +2656,26 @@ class EnergyManagementSystemCoordinator:
     def _get_expected_pv_power_w(self, now: datetime) -> float | None:
         """Expected PV power (W) for this exact moment, from the Solcast
         `detailedForecast` (v0.63.71, requested: "hij kijkt naar het
-        live PV opbrengst en niet naar de verwachtte zon"). Corrected by
-        the already-learned per-hour Solcast bias ratio
-        (`learned_pv_hourly_ratio`) - Solcast's raw estimate is
-        systematically off for this specific installation.
+        live PV opbrengst en niet naar de verwachtte zon"). Corrected by,
+        in order of preference: (1) the live "remaining PV today"
+        real-time correction ratio (v0.63.104, see
+        `_get_pv_remaining_correction_ratio`'s docstring - reflects
+        Solcast's own actually-observed-conditions adjustment for
+        TODAY specifically), falling back to (2) the slower,
+        long-term-learned per-hour Solcast bias ratio
+        (`learned_pv_hourly_ratio`) if today's live correction isn't
+        available.
+
+        v0.63.104, gerapporteerd: "dit komt niet overeen met de
+        werkelijkheid... het overschot is veel groter op dit moment" -
+        deze functie gebruikte tot dan toe UITSLUITEND de trage,
+        langetermijn-geleerde ratio, terwijl de tekortberekening
+        elders (`_estimate_pv_kwh_for_period`) AL de veel actuelere,
+        vandaag-specifieke live-correctie gebruikte - een inconsistentie
+        tussen twee PV-schattingsfuncties in dezelfde codebase.  Op een
+        dag die zonniger is dan het langetermijngemiddelde voor dit
+        uur, gaf de oude aanpak stelselmatig een te lage verwachting -
+        precies het gerapporteerde symptoom.
 
         Reported: a passing cloud momentarily dipping the *live* PV
         reading was flip-flopping the arbitrage/solar-capture decision
@@ -2679,8 +2695,16 @@ class EnergyManagementSystemCoordinator:
                 if duration_hours <= 0:
                     return None
                 raw_kw = kwh / duration_hours
-                bias_ratio = self.learned_pv_hourly_ratio(now.hour)
-                corrected_kw = raw_kw * bias_ratio if bias_ratio is not None else raw_kw
+                remaining_ratio = self._get_pv_remaining_correction_ratio(
+                    now, pv_entries
+                )
+                if remaining_ratio is not None:
+                    corrected_kw = raw_kw * remaining_ratio
+                else:
+                    bias_ratio = self.learned_pv_hourly_ratio(now.hour)
+                    corrected_kw = (
+                        raw_kw * bias_ratio if bias_ratio is not None else raw_kw
+                    )
                 return max(0.0, corrected_kw * 1000)
         return None
 

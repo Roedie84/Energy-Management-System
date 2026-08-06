@@ -6459,3 +6459,34 @@ uitsluitingen; bestaande, al-bevestigde eigen-integratie-entiteiten
 worden met terugwerkende kracht opgeruimd.
 
 **Volledige testsuite**: 574 tests, allemaal groen.
+
+## v0.63.104 — zonoverschot-schatting gebruikte trage i.p.v. live correctie
+
+**Gerapporteerd, met screenshot**: "dit komt niet overeen met de
+werkelijkheid 55W, het overschot is veel groter op dit moment."
+
+**Root cause, gevonden door twee PV-schattingsfuncties in dezelfde
+codebase te vergelijken**: `_estimate_pv_kwh_for_period` (gebruikt in
+de tekortberekening) gebruikt AL Solcast's eigen live "resterend
+vandaag"-sensor om de voorspelling real-time bij te stellen op basis
+van daadwerkelijk waargenomen omstandigheden
+(`_get_pv_remaining_correction_ratio`). Maar `_get_expected_pv_power_w`
+- specifiek gebruikt voor de "moet ik nu zonoverschot vangen"-
+beslissing waar dit rapport over gaat - gebruikte uitsluitend de
+trage, langetermijn-geleerde uur-bias-ratio, zonder deze live
+correctie. Op een dag zonniger dan het langetermijngemiddelde voor dat
+uur, gaf dit stelselmatig een te lage verwachting.
+
+**Fix**: `_get_expected_pv_power_w` probeert nu eerst de live
+"resterend vandaag"-correctieratio, valt pas terug op de trage
+geleerde uur-ratio als die niet beschikbaar is - dezelfde
+prioriteitsvolgorde die elders al gold. Zonder geconfigureerde
+`solar_remaining_today_sensor_entity` blijft het oude gedrag
+ongewijzigd (geen regressie).
+
+**Getest** (2 nieuwe tests in `test_arbitrage_forecast_not_live_pv.py`):
+live correctie krijgt voorrang boven de geleerde ratio wanneer beide
+beschikbaar zijn; zonder geconfigureerde live-sensor blijft het
+bestaande gedrag ongewijzigd.
+
+**Volledige testsuite**: 576 tests, allemaal groen.
