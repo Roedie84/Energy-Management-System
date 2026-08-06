@@ -21,6 +21,12 @@ from datetime import datetime, timedelta, timezone
 
 DAY0 = datetime(2026, 8, 6, 12, 0, tzinfo=timezone.utc)
 
+# v1.1.6: de check wacht op ENERGY_BALANCE_MIN_INTERVAL_MINUTES voordat
+# hij oordeelt - de sensor stapt in hele SoC-procenten, en over een kort
+# interval meet je dan de resolutie in plaats van de sensoren. De
+# scenario's hieronder gebruiken daarom realistische, langere intervallen.
+STAP = 35  # minuten, ruim boven het minimum
+
 
 def _config():
     return {
@@ -63,14 +69,14 @@ def test_the_catch_up_jump_is_not_counted_as_a_huge_error(
     now = DAY0
     _tick(c, hass, now, 6.5, 2000)
 
-    # Twee ticks stilstand, dan de inhaalslag. 2000 W gedurende 15
-    # minuten is 0,5 kWh. (Langer dan MAX_HOUR_TRACKING_GAP_MINUTES
-    # stilstaan wordt sowieso overgeslagen - zie de laatste test.)
-    for _ in range(2):
+    # Zeven ticks stilstand, dan de inhaalslag. 2000 W gedurende 40
+    # minuten is 1,3333 kWh. Zonder de correctie zou die sprong over
+    # één tick worden gerekend en een absurd tempo opleveren.
+    for _ in range(7):
         now += timedelta(minutes=5)
         _tick(c, hass, now, 6.5, 2000)
     now += timedelta(minutes=5)
-    _tick(c, hass, now, 6.0, 2000)
+    _tick(c, hass, now, 6.5 - 1.3333, 2000)
 
     assert len(c.energy_balance_error_history) == 1
     assert c.energy_balance_error_history[0] < 100
@@ -86,21 +92,23 @@ def test_a_genuine_mismatch_is_still_flagged(make_coordinator, hass):
     now = DAY0
     _tick(c, hass, now, 6.5, 0)
 
-    now += timedelta(minutes=6)
+    now += timedelta(minutes=STAP)
     _tick(c, hass, now, 5.5, 0)  # 1 kWh weg terwijl de accu niets doet
 
     assert len(c.energy_balance_error_history) == 1
-    assert c.energy_balance_error_history[0] > 5000
+    # 1 kWh over 35 minuten is ~1714 W, terwijl de accu 0 W meldt.
+    assert c.energy_balance_error_history[0] > 1000
 
 
 def test_a_matching_movement_is_a_good_sample(make_coordinator, hass):
-    """1000 W ontladen gedurende 6 minuten is precies 0,1 kWh."""
+    """1000 W ontladen gedurende 35 minuten is 0,5833 kWh."""
     c = make_coordinator(_config())
     now = DAY0
     _tick(c, hass, now, 6.5, 1000)
 
-    now += timedelta(minutes=6)
-    _tick(c, hass, now, 6.4, 1000)
+    now += timedelta(minutes=STAP)
+    # 1000 W gedurende 35 minuten = 0,5833 kWh.
+    _tick(c, hass, now, 6.5 - 0.5833, 1000)
 
     assert len(c.energy_balance_error_history) == 1
     assert c.energy_balance_error_history[0] < 50
@@ -125,10 +133,10 @@ def test_the_measured_power_is_averaged_over_the_interval(
     now = DAY0
     _tick(c, hass, now, 6.5, 2000)
 
-    now += timedelta(minutes=6)
+    now += timedelta(minutes=STAP)
     _tick(c, hass, now, 6.5, 0)  # geen beweging: alleen vermogen verzamelen
 
-    now += timedelta(minutes=6)
+    now += timedelta(minutes=STAP)
     _tick(c, hass, now, 6.3, 0)
 
     assert len(c.energy_balance_error_history) == 1
@@ -143,7 +151,7 @@ def test_an_unavailable_sensor_is_still_a_bad_sample(make_coordinator, hass):
     _tick(c, hass, DAY0, 6.5, 1000)
 
     hass.states.set("sensor.battery_power", "unavailable")
-    c._update_energy_balance_validation(DAY0 + timedelta(minutes=6))
+    c._update_energy_balance_validation(DAY0 + timedelta(minutes=STAP))
 
     assert c.energy_balance_error_history == [None]
 
@@ -157,3 +165,82 @@ def test_a_long_stall_is_not_attributed_to_one_rate(make_coordinator, hass):
     _tick(c, hass, DAY0 + timedelta(hours=3), 5.0, 1000)
 
     assert c.energy_balance_error_history == []
+
+
+# --- v1.1.6: kwantisatieruis -----------------------------------------
+
+
+def test_a_single_quantisation_step_over_a_short_interval_is_ignored(
+    make_coordinator, hass
+):
+    """De kern van de tweede melding ("waarom nog steeds een slechte
+    score?").
+
+    De beschikbare-energiesensor stapt in hele SoC-procenten: bij ~7,7
+    kWh is dat ~0,077 kWh per stap. Over vijf minuten komt zo'n stap
+    neer op ~920 W afgeleid vermogen, terwijl de drempel op 300 W ligt.
+    De check mat dan niet de sensoren maar de RESOLUTIE van de sensor
+    gedeeld door een kort interval.
+    """
+    c = make_coordinator(_config())
+    _tick(c, hass, DAY0, 7.6896, 0)
+
+    _tick(c, hass, DAY0 + timedelta(minutes=5), 7.6896 - 0.077, 0)
+
+    assert c.energy_balance_error_history == []
+
+
+def test_the_same_step_over_a_long_interval_is_within_tolerance(
+    make_coordinator, hass
+):
+    """Over 35 minuten komt diezelfde stap uit op ~130 W - ruim binnen
+    de drempel. Wachten lost het probleem dus echt op in plaats van het
+    te verbergen."""
+    c = make_coordinator(_config())
+    _tick(c, hass, DAY0, 7.6896, 0)
+
+    _tick(c, hass, DAY0 + timedelta(minutes=35), 7.6896 - 0.077, 0)
+
+    assert len(c.energy_balance_error_history) == 1
+    assert c.energy_balance_error_history[0] < 300
+
+
+def test_history_from_an_older_method_is_discarded(make_coordinator, hass):
+    """Tussen v1.1.2 en v1.1.6 is de meetmethode twee keer wezenlijk
+    veranderd. Oude metingen zeggen niets over de huidige manier van
+    meten, maar bleven wel in het venster van twintig hangen en drukten
+    de score omlaag zonder dat er iets mis was."""
+    import asyncio
+
+    from custom_components.energy_management_system.const import (
+        ENERGY_BALANCE_METHOD_VERSION,
+    )
+
+    c = make_coordinator(_config())
+    c.energy_balance_error_history = [15330.1, 2014.7, 1174.7]
+    c.sensor_health_score = 20.0
+    c.measurement_quality = "slecht"
+    c.energy_balance_method_version = ENERGY_BALANCE_METHOD_VERSION - 1
+
+    c._discard_history_from_an_older_method()
+
+    assert c.energy_balance_error_history == []
+    assert c.sensor_health_score is None
+    assert c.energy_balance_method_version == ENERGY_BALANCE_METHOD_VERSION
+    assert asyncio is not None
+
+
+def test_history_from_the_current_method_is_kept(make_coordinator, hass):
+    """Alleen wissen bij een echte methodewijziging - anders zou elke
+    herstart de meting terugzetten."""
+    from custom_components.energy_management_system.const import (
+        ENERGY_BALANCE_METHOD_VERSION,
+    )
+
+    c = make_coordinator(_config())
+    c.energy_balance_error_history = [12.0, 15.0]
+    c.energy_balance_method_version = ENERGY_BALANCE_METHOD_VERSION
+
+    c._discard_history_from_an_older_method()
+
+    assert c.energy_balance_error_history == [12.0, 15.0]
