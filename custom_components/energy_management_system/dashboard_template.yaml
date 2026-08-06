@@ -2,7 +2,6 @@ title: Energy Management System
 views:
   - title: Overzicht
     path: overzicht
-    icon: mdi:home-lightning-bolt
     type: sections
     sections:
       - type: grid
@@ -69,31 +68,6 @@ views:
             grid_options:
               columns: 12
               rows: auto
-
-      - type: grid
-        cards:
-          - type: heading
-            heading: Accu-koeling
-            grid_options:
-              columns: 12
-              rows: 1
-          - type: custom:mushroom-template-card
-            primary: >-
-              {% set s = 'sensor.woonkamer_energy_management_system_accu_koeling' %}
-              {% set accu = state_attr(s, 'accu_c') %}{% set buiten = state_attr(s, 'buiten_c') %}
-              {{ states(s) | capitalize }}{% if accu is not none %} — {{ accu }}°C (buiten {{ buiten }}°C){% endif %}
-            secondary: >-
-              {{ state_attr('sensor.woonkamer_energy_management_system_accu_koeling', 'reden') or 'nog geen beoordeling' }}
-            icon: mdi:fan
-            icon_color: >-
-              {% set st = states('sensor.woonkamer_energy_management_system_accu_koeling') %}
-              {% if st == 'koelt' %}blue{% elif st == 'uit' %}grey{% else %}orange{% endif %}
-            entity: sensor.woonkamer_energy_management_system_accu_koeling
-            tap_action:
-              action: more-info
-            grid_options:
-              columns: 12
-              rows: 2
 
       - type: grid
         cards:
@@ -188,6 +162,20 @@ views:
             icon_color: blue
             entity: >-
               sensor.woonkamer_energy_management_system_current_price_used_by_integration
+            grid_options:
+              columns: 6
+              rows: 1
+          - type: custom:mushroom-template-card
+            primary: >-
+              {% set s = 'sensor.woonkamer_energy_management_system_accu_koeling' %}{% set accu = state_attr(s, 'accu_c') %}{{ (accu ~ ' °C') if accu is not none else states(s) }}
+            secondary: >-
+              {% set s = 'sensor.woonkamer_energy_management_system_accu_koeling' %}{% set st = states(s) %}Accu-koeling: {{ st }}
+            icon: mdi:fan
+            icon_color: >-
+              {% set st = states('sensor.woonkamer_energy_management_system_accu_koeling') %}{% if st == 'koelt' %}blue{% elif st == 'uit' %}grey{% else %}orange{% endif %}
+            entity: sensor.woonkamer_energy_management_system_accu_koeling
+            tap_action:
+              action: more-info
             grid_options:
               columns: 6
               rows: 1
@@ -392,9 +380,52 @@ views:
               - entity: sensor.woonkamer_energy_management_system_advies_gereedheid_8_modules
                 name: Advies-gereedheid (8 adviesmodules)
 
+  - title: Accumodules
+    path: accumodules
+    cards:
+      - type: custom:mushroom-title-card
+        title: Gezondheid per accumodule
+
+      - type: markdown
+        content: |
+          {% set s = 'sensor.woonkamer_energy_management_system_accu_modulegezondheid' %}{% set mods = state_attr(s, 'modules') or [] %}{% if mods | length == 0 %}Nog geen accumodules geconfigureerd — vul de vijf lijstvelden in bij Configureren (volgorde bepaalt het modulenummer).{% else %}| Module | Celdelta | Temp | SoC | Vermogen | Dagen |
+          |---|---|---|---|---|---|
+          {% for m in mods %}| **{{ m.get('module') }}** | {{ '%.3f V' | format(m.get('cel_delta_v')) if m.get('cel_delta_v') is not none else '—' }} | {{ '%.1f °C' | format(m.get('temperatuur_c')) if m.get('temperatuur_c') is not none else '—' }} | {{ '%.0f%%' | format(m.get('soc_percent')) if m.get('soc_percent') is not none else '—' }} | {{ '%.0f W' | format(m.get('vermogen_w')) if m.get('vermogen_w') is not none else '—' }} | {{ m.get('dagen_geleerd') }} |
+          {% endfor %}{% endif %}
+
+      - type: markdown
+        title: Afwijking t.o.v. de andere modules
+        content: |
+          {% set s = 'sensor.woonkamer_energy_management_system_accu_modulegezondheid' %}{% set mods = state_attr(s, 'modules') or [] %}{% if mods | length < 2 %}Minimaal twee modules nodig om onderling te vergelijken.{% else %}Elke module tegen het gemiddelde van de ánderen. Rond nul is goed; een waarde die over weken oploopt is het signaal.
+
+          | Module | Celdelta | Temperatuur | SoC |
+          |---|---|---|---|
+          {% for m in mods %}| **{{ m.get('module') }}** | {{ '%+.3f V' | format(m.get('cel_delta_afwijking_v')) if m.get('cel_delta_afwijking_v') is not none else '—' }} | {{ '%+.1f °C' | format(m.get('temperatuur_afwijking_c')) if m.get('temperatuur_afwijking_c') is not none else '—' }} | {{ '%+.1f%%' | format(m.get('soc_afwijking_percent')) if m.get('soc_afwijking_percent') is not none else '—' }} |
+          {% endfor %}{% endif %}
+
+      - type: markdown
+        title: Onderlinge spreiding
+        content: |
+          {% set sp = state_attr('sensor.woonkamer_energy_management_system_accu_modulegezondheid', 'spreiding') or {} %}| Grootheid | Hoogste − laagste |
+          |---|---|
+          | Celspanningsverschil | {{ '%.3f V' | format(sp.get('cel_delta_v')) if sp.get('cel_delta_v') is not none else '—' }} |
+          | Celtemperatuur | {{ '%.1f °C' | format(sp.get('temperatuur_c')) if sp.get('temperatuur_c') is not none else '—' }} |
+          | SoC | {{ '%.1f%%' | format(sp.get('soc_percent')) if sp.get('soc_percent') is not none else '—' }} |
+
+      - type: markdown
+        title: Bevindingen
+        content: |
+          {% set s = 'sensor.woonkamer_energy_management_system_accu_modulegezondheid' %}{% set mods = state_attr(s, 'modules') or [] %}{% set ns = namespace(gevonden=false) %}{% for m in mods %}{% if m.get('waarschuwingen') or m.get('drift_op') %}{% set ns.gevonden = true %}
+          - **Module {{ m.get('module') }}**: {{ m.get('waarschuwingen') | join(', ') }}{% if m.get('drift_op') %}{% if m.get('waarschuwingen') %}; {% endif %}aanhoudende drift op {{ m.get('drift_op') | join(', ') }}{% endif %}
+          {% endif %}{% endfor %}{% if not ns.gevonden %}Geen bijzonderheden — alle modules lopen in de pas.{% endif %}
+
+      - type: markdown
+        title: Hoe dit werkt
+        content: >-
+          {{ state_attr('sensor.woonkamer_energy_management_system_accu_modulegezondheid', 'note') }}
+
   - title: Financieel
     path: financieel
-    icon: mdi:cash-multiple
     cards:
       - type: custom:mushroom-title-card
         title: Financieel
@@ -598,7 +629,6 @@ views:
 
   - title: Zelflerend
     path: zelflerend
-    icon: mdi:school-outline
     cards:
       - type: custom:mushroom-title-card
         title: Zelflerend
@@ -825,7 +855,6 @@ views:
 
   - title: Apparaten
     path: apparaten
-    icon: mdi:devices
     cards:
       - type: custom:mushroom-title-card
         title: Apparaten
@@ -1079,7 +1108,6 @@ views:
 
   - title: Advies
     path: advies
-    icon: mdi:clipboard-check-outline
     cards:
       - type: custom:mushroom-title-card
         title: Advies-gereedheid
@@ -1196,7 +1224,6 @@ views:
 
   - title: Klimaat
     path: klimaat
-    icon: mdi:home-thermometer-outline
     cards:
       - type: custom:mushroom-title-card
         title: Klimaat — woonkamertemperatuur-projectie
@@ -1318,7 +1345,6 @@ views:
 
   - title: Geschiedenis
     path: geschiedenis
-    icon: mdi:history
     cards:
       - type: custom:mushroom-title-card
         title: Geschiedenis
@@ -1396,7 +1422,6 @@ views:
 
   - title: Water
     path: water
-    icon: mdi:water
     cards:
       - type: custom:mushroom-title-card
         title: Waterverbruik
@@ -1493,7 +1518,6 @@ views:
 
   - title: Live
     path: live
-    icon: mdi:text-box-outline
     cards:
       - type: custom:mushroom-title-card
         title: Wat doet de integratie nu
@@ -1524,7 +1548,6 @@ views:
 
   - title: EMS-KPI's
     path: ems-kpis
-    icon: mdi:chart-box-outline
     cards:
       - type: custom:mushroom-title-card
         title: Klassieke EMS-kengetallen

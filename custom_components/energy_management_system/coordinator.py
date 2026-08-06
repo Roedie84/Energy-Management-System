@@ -201,6 +201,25 @@ from .const import (
     SOLAR_RAMP_STEPS,
     GRID_IMPORT_SHORTFALL_THRESHOLD_W,
     BATTERY_COOLING_FAN_UNAVAILABLE_STATES,
+    BATTERY_MODULE_CELL_DELTA_ATTENTION_V,
+    BATTERY_MODULE_CELL_DELTA_SERIOUS_V,
+    BATTERY_MODULE_CUSUM_SLACK_C,
+    BATTERY_MODULE_CUSUM_SLACK_PERCENT,
+    BATTERY_MODULE_CUSUM_SLACK_V,
+    BATTERY_MODULE_CUSUM_THRESHOLD_C,
+    BATTERY_MODULE_CUSUM_THRESHOLD_PERCENT,
+    BATTERY_MODULE_CUSUM_THRESHOLD_V,
+    BATTERY_MODULE_HISTORY_DAYS,
+    BATTERY_MODULE_MIN_SAMPLES_PER_DAY,
+    BATTERY_MODULE_SOC_BUCKET_SIZE_PERCENT,
+    BATTERY_MODULE_SOC_SPREAD_ATTENTION_PERCENT,
+    BATTERY_MODULE_TEMPERATURE_ATTENTION_C,
+    BATTERY_MODULE_TEMPERATURE_SPREAD_ATTENTION_C,
+    CONF_BATTERY_MODULE_CELL_VOLTAGE_MAX_SENSORS,
+    CONF_BATTERY_MODULE_CELL_VOLTAGE_MIN_SENSORS,
+    CONF_BATTERY_MODULE_POWER_SENSORS,
+    CONF_BATTERY_MODULE_SOC_SENSORS,
+    CONF_BATTERY_MODULE_TEMPERATURE_SENSORS,
     BATTERY_COOLING_HISTORY_LENGTH,
     BATTERY_COOLING_OFF_ABSOLUTE_C,
     BATTERY_COOLING_OFF_DELTA_C,
@@ -416,6 +435,13 @@ class EnergyManagementSystemCoordinator:
         self.battery_cooling_state: dict = {}
         self.battery_cooling_last_change: datetime | None = None
         self.battery_cooling_history: list[dict] = []
+
+        # Accu-modulegezondheid (v0.63.123). Per module een dict met
+        # geleerde dag-historie en CUSUM-status per grootheid.
+        self.battery_module_health: dict[str, dict] = {}
+        self.battery_module_live: list[dict] = []
+        self.battery_module_spread: dict = {}
+        self._battery_module_day_key: date | None = None
 
         # -- Optional appliance awareness (informational only) --
         # Per hour-of-day, a rolling history of samples (1.0 = was
@@ -5196,6 +5222,307 @@ class EnergyManagementSystemCoordinator:
         )
         self._notify_listeners()
 
+    def _read_battery_modules(self) -> list[dict]:
+        """Leest per accumodule de beschikbare metingen (v0.63.123).
+
+        De volgorde van de geconfigureerde lijsten bepaalt het
+        modulenummer: de eerste entiteit in elke lijst hoort bij module
+        1. Lijsten mogen van verschillende lengte zijn (bijv. wel
+        celspanningen maar geen vermogen per module); ontbrekende
+        metingen worden None.
+
+        Levert altijd één dict per module op, ook als een enkele meting
+        wegvalt - een tijdelijk onbereikbare sensor mag niet de hele
+        module uit de weergave laten verdwijnen.
+        """
+        max_v = self.config.get(CONF_BATTERY_MODULE_CELL_VOLTAGE_MAX_SENSORS) or []
+        min_v = self.config.get(CONF_BATTERY_MODULE_CELL_VOLTAGE_MIN_SENSORS) or []
+        temps = self.config.get(CONF_BATTERY_MODULE_TEMPERATURE_SENSORS) or []
+        socs = self.config.get(CONF_BATTERY_MODULE_SOC_SENSORS) or []
+        powers = self.config.get(CONF_BATTERY_MODULE_POWER_SENSORS) or []
+
+        aantal = max(len(max_v), len(min_v), len(temps), len(socs), len(powers))
+        modules = []
+        for index in range(aantal):
+            def lees(lijst):
+                if index >= len(lijst):
+                    return None
+                return self._read_sensor_float(lijst[index])
+
+            cel_max = lees(max_v)
+            cel_min = lees(min_v)
+            delta_v = None
+            if cel_max is not None and cel_min is not None:
+                delta_v = round(cel_max - cel_min, 4)
+            modules.append(
+                {
+                    "module": index + 1,
+                    "cel_max_v": cel_max,
+                    "cel_min_v": cel_min,
+                    "cel_delta_v": delta_v,
+                    "temperatuur_c": lees(temps),
+                    "soc_percent": lees(socs),
+                    "vermogen_w": lees(powers),
+                }
+            )
+        return modules
+
+    @staticmethod
+    def _deviation_from_peers(waarden: list, index: int) -> float | None:
+        """Afwijking van één module t.o.v. het gemiddelde van de ANDERE
+        modules (v0.63.123).
+
+        Bewust t.o.v. de andere modules en niet t.o.v. het gemiddelde
+        inclusief zichzelf: bij drie modules trekt een uitschieter het
+        gemiddelde waar hij zelf in zit met zich mee, waardoor zijn
+        eigen afwijking structureel wordt onderschat (met n modules
+        wordt de afwijking met factor (n-1)/n afgezwakt). Uitsluiten van
+        zichzelf maakt de maat scherp en onafhankelijk van het aantal
+        modules.
+
+        Deze differentiële vergelijking is het hart van de
+        modulebewaking: alle modules staan onder identieke
+        omstandigheden (zelfde SoC, zelfde omgevingstemperatuur, zelfde
+        belasting), dus alles wat ze gemeenschappelijk hebben valt weg
+        en wat overblijft is een eigenschap van díe module. Dat maakt
+        het ook ongevoelig voor de sterke SoC-afhankelijkheid van het
+        celspanningsverschil bij LFP.
+        """
+        eigen = waarden[index]
+        if eigen is None:
+            return None
+        anderen = [
+            w for i, w in enumerate(waarden) if i != index and w is not None
+        ]
+        if not anderen:
+            return None
+        return eigen - (sum(anderen) / len(anderen))
+
+    def _update_battery_module_health(self, now: datetime) -> None:
+        """Verzamelt per module de live metingen en de afwijking t.o.v.
+        de andere modules, en rondt aan het einde van de dag een
+        mediaan-dagwaarde af per grootheid (v0.63.123).
+
+        Mediaan en niet gemiddelde, consistent met de rest van dit
+        project: één laadpiek of een moment met direct zonlicht op één
+        module mag een dagwaarde niet verslepen.
+        """
+        modules = self._read_battery_modules()
+        if not modules:
+            self.battery_module_live = []
+            return
+
+        deltas = [m["cel_delta_v"] for m in modules]
+        temps = [m["temperatuur_c"] for m in modules]
+        socs = [m["soc_percent"] for m in modules]
+        powers = [m["vermogen_w"] for m in modules]
+
+        for index, module in enumerate(modules):
+            module["cel_delta_afwijking_v"] = self._deviation_from_peers(deltas, index)
+            module["temperatuur_afwijking_c"] = self._deviation_from_peers(temps, index)
+            module["soc_afwijking_percent"] = self._deviation_from_peers(socs, index)
+            module["vermogen_afwijking_w"] = self._deviation_from_peers(powers, index)
+        self.battery_module_live = modules
+
+        day_key = now.date()
+        if self._battery_module_day_key is None:
+            self._battery_module_day_key = day_key
+        elif day_key != self._battery_module_day_key:
+            self._finalize_battery_module_day()
+            self._battery_module_day_key = day_key
+
+        geldige_socs = [s for s in socs if s is not None]
+        bucket = None
+        if geldige_socs:
+            gemiddelde_soc = sum(geldige_socs) / len(geldige_socs)
+            bucket = str(
+                int(gemiddelde_soc // BATTERY_MODULE_SOC_BUCKET_SIZE_PERCENT)
+                * BATTERY_MODULE_SOC_BUCKET_SIZE_PERCENT
+            )
+
+        for module in modules:
+            sleutel = str(module["module"])
+            staat = self.battery_module_health.setdefault(
+                sleutel,
+                {
+                    "dag_metingen": {},
+                    "geschiedenis": {},
+                    "cusum": {},
+                    "soc_buckets": {},
+                    "waarschuwingen": [],
+                },
+            )
+            metingen = staat["dag_metingen"]
+            for veld, waarde in (
+                ("cel_delta_afwijking_v", module["cel_delta_afwijking_v"]),
+                ("temperatuur_afwijking_c", module["temperatuur_afwijking_c"]),
+                ("soc_afwijking_percent", module["soc_afwijking_percent"]),
+                ("cel_delta_v", module["cel_delta_v"]),
+                ("temperatuur_c", module["temperatuur_c"]),
+            ):
+                if waarde is not None:
+                    metingen.setdefault(veld, []).append(waarde)
+
+            # Absolute celdelta per SoC-bucket, puur ter referentie: bij
+            # LFP hoort de delta aan de uiteinden hoger te liggen, dus
+            # zonder die opsplitsing is een absolute waarde niet met
+            # zichzelf over de tijd te vergelijken.
+            if bucket is not None and module["cel_delta_v"] is not None:
+                buckets = staat["soc_buckets"].setdefault(bucket, [])
+                buckets.append(module["cel_delta_v"])
+                staat["soc_buckets"][bucket] = buckets[-200:]
+
+        self._evaluate_battery_module_warnings(modules)
+
+    def _finalize_battery_module_day(self) -> None:
+        """Sluit de dag af: mediaan per grootheid de geschiedenis in, en
+        de CUSUM-drift bijwerken (v0.63.123)."""
+        for staat in self.battery_module_health.values():
+            metingen = staat.get("dag_metingen", {})
+            for veld, waarden in metingen.items():
+                if len(waarden) < BATTERY_MODULE_MIN_SAMPLES_PER_DAY:
+                    continue
+                mediaan = statistics.median(waarden)
+                geschiedenis = staat["geschiedenis"].setdefault(veld, [])
+                geschiedenis.append(round(mediaan, 4))
+                staat["geschiedenis"][veld] = geschiedenis[
+                    -BATTERY_MODULE_HISTORY_DAYS:
+                ]
+                self._update_battery_module_cusum(staat, veld, mediaan)
+            staat["dag_metingen"] = {}
+
+    @staticmethod
+    def _battery_module_cusum_parameters(veld: str) -> tuple[float, float] | None:
+        if veld == "cel_delta_afwijking_v":
+            return BATTERY_MODULE_CUSUM_SLACK_V, BATTERY_MODULE_CUSUM_THRESHOLD_V
+        if veld == "temperatuur_afwijking_c":
+            return BATTERY_MODULE_CUSUM_SLACK_C, BATTERY_MODULE_CUSUM_THRESHOLD_C
+        if veld == "soc_afwijking_percent":
+            return (
+                BATTERY_MODULE_CUSUM_SLACK_PERCENT,
+                BATTERY_MODULE_CUSUM_THRESHOLD_PERCENT,
+            )
+        return None
+
+    def _update_battery_module_cusum(
+        self, staat: dict, veld: str, dagwaarde: float
+    ) -> None:
+        """Klassieke eenzijdige CUSUM op de dagelijkse afwijking
+        (v0.63.123).
+
+        Alleen op de AFWIJKINGS-grootheden, niet op de absolute waarden:
+        die laatste hangen sterk van SoC en seizoen af en zouden een
+        stroom van valse alarmen geven. Alleen positieve drift telt -
+        een module die het juist béter doet dan de rest is geen
+        probleem.
+        """
+        parameters = self._battery_module_cusum_parameters(veld)
+        if parameters is None:
+            return
+        slack, drempel = parameters
+
+        geschiedenis = staat["geschiedenis"].get(veld, [])
+        if len(geschiedenis) < CUSUM_MIN_HISTORY_FOR_REFERENCE:
+            return
+        if len(geschiedenis) > CUSUM_REFERENCE_EXCLUDE_RECENT_DAYS:
+            referentie_reeks = geschiedenis[:-CUSUM_REFERENCE_EXCLUDE_RECENT_DAYS]
+        else:
+            referentie_reeks = geschiedenis
+        if not referentie_reeks:
+            return
+        referentie = statistics.median(referentie_reeks)
+
+        cusum = staat["cusum"].setdefault(
+            veld,
+            {"accumulator": 0.0, "referentie": None, "drift": False, "streak": 0},
+        )
+        cusum["referentie"] = round(referentie, 4)
+
+        bijdrage = (dagwaarde - referentie) - slack
+        cusum["accumulator"] = max(0.0, cusum["accumulator"] + max(0.0, bijdrage))
+
+        if dagwaarde <= referentie:
+            cusum["streak"] = cusum.get("streak", 0) + 1
+        else:
+            cusum["streak"] = 0
+        if cusum["accumulator"] > 0 and cusum["streak"] >= NILM_CUSUM_RESET_STREAK_DAYS:
+            cusum["accumulator"] = 0.0
+            cusum["drift"] = False
+
+        if cusum["accumulator"] > drempel:
+            cusum["drift"] = True
+        cusum["accumulator"] = round(cusum["accumulator"], 4)
+
+    def _evaluate_battery_module_warnings(self, modules: list[dict]) -> None:
+        """Directe, absolute controles per module (v0.63.123).
+
+        Los van de langzame CUSUM-drift: sommige dingen zijn nú relevant
+        en hoeven niet op een trend van weken te wachten.
+        """
+        deltas = [m["cel_delta_v"] for m in modules if m["cel_delta_v"] is not None]
+        temps = [m["temperatuur_c"] for m in modules if m["temperatuur_c"] is not None]
+        socs = [m["soc_percent"] for m in modules if m["soc_percent"] is not None]
+
+        for module in modules:
+            sleutel = str(module["module"])
+            staat = self.battery_module_health.setdefault(
+                sleutel,
+                {
+                    "dag_metingen": {},
+                    "geschiedenis": {},
+                    "cusum": {},
+                    "soc_buckets": {},
+                    "waarschuwingen": [],
+                },
+            )
+            waarschuwingen = []
+            delta = module["cel_delta_v"]
+            if delta is not None:
+                if delta >= BATTERY_MODULE_CELL_DELTA_SERIOUS_V:
+                    waarschuwingen.append(
+                        f"celspanningsverschil {delta:.3f} V - fors uit balans"
+                    )
+                elif delta >= BATTERY_MODULE_CELL_DELTA_ATTENTION_V:
+                    waarschuwingen.append(
+                        f"celspanningsverschil {delta:.3f} V - hoger dan gebruikelijk"
+                    )
+            temperatuur = module["temperatuur_c"]
+            if (
+                temperatuur is not None
+                and temperatuur >= BATTERY_MODULE_TEMPERATURE_ATTENTION_C
+            ):
+                waarschuwingen.append(f"celtemperatuur {temperatuur:.1f} °C")
+            staat["waarschuwingen"] = waarschuwingen
+
+        self.battery_module_spread = {
+            "cel_delta_v": round(max(deltas) - min(deltas), 4) if deltas else None,
+            "temperatuur_c": round(max(temps) - min(temps), 1) if temps else None,
+            "soc_percent": round(max(socs) - min(socs), 1) if socs else None,
+        }
+
+    def get_battery_module_table(self) -> list[dict]:
+        """Overzicht per module voor het dashboard (v0.63.123) - live
+        waarden plus de status van de drift-detectie."""
+        tabel = []
+        for module in self.battery_module_live:
+            staat = self.battery_module_health.get(str(module["module"]), {})
+            cusum = staat.get("cusum", {})
+            drift = [
+                veld for veld, waarde in cusum.items() if waarde.get("drift")
+            ]
+            tabel.append(
+                {
+                    **module,
+                    "waarschuwingen": staat.get("waarschuwingen", []),
+                    "drift_op": drift,
+                    "dagen_geleerd": max(
+                        (len(v) for v in staat.get("geschiedenis", {}).values()),
+                        default=0,
+                    ),
+                }
+            )
+        return tabel
+
     def _update_peak_power_tracking(self, now: datetime) -> None:
         """Piekvermogen-tracking voor capaciteitstarieven (v0.63.101,
         gevraagd: "zaken voor een typisch EMS welke we kunnen
@@ -7407,6 +7734,43 @@ class EnergyManagementSystemCoordinator:
         # aparte `informatief`-lijst: nog steeds zichtbaar in
         # diagnostiek en op het dashboard, maar telt niet mee voor de
         # status.
+        # v0.63.123: accu-modulegezondheid. Absolute waarschuwingen zijn
+        # echte aandachtspunten; een aanhoudende drift t.o.v. de andere
+        # modules ook - dat is juist het signaal dat maanden eerder komt
+        # dan een merkbaar capaciteitsverlies.
+        for module in self.get_battery_module_table():
+            nummer = module.get("module")
+            for waarschuwing in module.get("waarschuwingen", []):
+                aandachtspunten.append(f"Accumodule {nummer}: {waarschuwing}.")
+            if module.get("drift_op"):
+                velden = ", ".join(module["drift_op"])
+                aandachtspunten.append(
+                    f"Accumodule {nummer} loopt aanhoudend uit de pas met de "
+                    f"andere modules ({velden}) - dit is een trend over "
+                    "meerdere dagen, geen momentopname."
+                )
+
+        spreiding = self.battery_module_spread or {}
+        temp_spreiding = spreiding.get("temperatuur_c")
+        if (
+            temp_spreiding is not None
+            and temp_spreiding >= BATTERY_MODULE_TEMPERATURE_SPREAD_ATTENTION_C
+        ):
+            aandachtspunten.append(
+                f"Accumodules verschillen {temp_spreiding:.1f} °C in "
+                "celtemperatuur - bij gelijke belasting wijst dat op een "
+                "module met hogere inwendige weerstand."
+            )
+        soc_spreiding = spreiding.get("soc_percent")
+        if (
+            soc_spreiding is not None
+            and soc_spreiding >= BATTERY_MODULE_SOC_SPREAD_ATTENTION_PERCENT
+        ):
+            aandachtspunten.append(
+                f"Accumodules verschillen {soc_spreiding:.1f}% in SoC - een "
+                "module komt niet meer mee met de rest."
+            )
+
         duplicate_pairs = self.get_nilm_duplicate_pairs()
         if duplicate_pairs:
             informatief.append(
@@ -9640,6 +10004,7 @@ class EnergyManagementSystemCoordinator:
         self._update_quooker_tracking(now)
         self._update_water_tracking(now)
         self._update_peak_power_tracking(now)
+        self._update_battery_module_health(now)
         await self._async_apply_battery_cooling()
         self._update_feedin_regime(now, entries)
         self._update_counterfactual_savings(now, entries)

@@ -920,3 +920,71 @@ BATTERY_COOLING_FAN_UNAVAILABLE_STATES = {"unknown", "unavailable", None}
 # Hoeveel aan/uit-schakelingen van de koelventilator bewaard blijven
 # voor het dashboard/de diagnostiek.
 BATTERY_COOLING_HISTORY_LENGTH = 20
+
+# --- Accu-modulegezondheid (v0.63.123) -------------------------------
+# Per accumodule zijn er metingen beschikbaar die iets zeggen over de
+# gezondheid van dat specifieke pakket: hoogste/laagste celspanning,
+# hoogste celtemperatuur, SoC en vermogen.
+#
+# Bewust LIJSTEN in plaats van losse velden per module: de volgorde
+# bepaalt het modulenummer (eerste entiteit = module 1). Dat schaalt naar
+# elk aantal modules zonder dat de configuratie per uitbreiding moet
+# worden aangepast - een SolarFlow 2400 AC heeft er drie, maar dat is
+# geen aanname die hier hoort te staan.
+CONF_BATTERY_MODULE_CELL_VOLTAGE_MAX_SENSORS = (
+    "battery_module_cell_voltage_max_sensor_entities"
+)
+CONF_BATTERY_MODULE_CELL_VOLTAGE_MIN_SENSORS = (
+    "battery_module_cell_voltage_min_sensor_entities"
+)
+CONF_BATTERY_MODULE_TEMPERATURE_SENSORS = (
+    "battery_module_temperature_sensor_entities"
+)
+CONF_BATTERY_MODULE_SOC_SENSORS = "battery_module_soc_sensor_entities"
+CONF_BATTERY_MODULE_POWER_SENSORS = "battery_module_power_sensor_entities"
+
+# Celspanningsverschil (hoogste - laagste) binnen één module. Bij LFP is
+# dit dé standaardindicator voor balans/veroudering: loopt het verschil
+# structureel op, dan blijft er een cel achter. Absolute drempels zijn
+# HEURISTIEK, geen fabrieksspecificatie - een gezond, gebalanceerd pakket
+# blijft er in het vlakke midden ruim onder, en aanhoudende waarden
+# hierboven verdienen aandacht (niet: zijn direct gevaarlijk).
+BATTERY_MODULE_CELL_DELTA_ATTENTION_V = 0.10
+BATTERY_MODULE_CELL_DELTA_SERIOUS_V = 0.20
+
+# Absolute celtemperatuur waarboven het vermelden waard is.
+BATTERY_MODULE_TEMPERATURE_ATTENTION_C = 40.0
+
+# Onderlinge spreiding tussen modules. Diagnostisch sterker dan welke
+# absolute waarde ook: de modules draaien onder identieke
+# omstandigheden, dus een structureel verschil is een eigenschap van die
+# ene module en niet van het weer, de SoC of de belasting.
+BATTERY_MODULE_TEMPERATURE_SPREAD_ATTENTION_C = 5.0
+BATTERY_MODULE_SOC_SPREAD_ATTENTION_PERCENT = 10.0
+
+# LFP heeft een vlakke spanningscurve in het midden en steile uiteinden,
+# waardoor het celspanningsverschil sterk SoC-afhankelijk is. De
+# DIFFERENTIELE vergelijking (module t.o.v. het gemiddelde van alle
+# modules op hetzelfde moment) heeft daar geen last van - alle modules
+# zitten immers op vrijwel dezelfde SoC. De absolute delta wordt daarom
+# per SoC-bucket bijgehouden, puur voor weergave/referentie.
+BATTERY_MODULE_SOC_BUCKET_SIZE_PERCENT = 10
+
+# Minimaal aantal metingen op een dag voordat die dag als geldig
+# datapunt telt - anders zou een herstart vlak voor middernacht een
+# dagwaarde op basis van twee metingen in de leergeschiedenis zetten.
+BATTERY_MODULE_MIN_SAMPLES_PER_DAY = 20
+
+# CUSUM-drift op de dagelijkse mediaan van de afwijking t.o.v. de andere
+# modules. Slack = de normale, onschuldige ruis die genegeerd wordt;
+# alleen wat daarboven uitkomt telt op. Drempel = waar het een melding
+# wordt. Per grootheid apart, want de eenheden verschillen.
+BATTERY_MODULE_CUSUM_SLACK_V = 0.005
+BATTERY_MODULE_CUSUM_THRESHOLD_V = 0.05
+BATTERY_MODULE_CUSUM_SLACK_C = 0.5
+BATTERY_MODULE_CUSUM_THRESHOLD_C = 5.0
+BATTERY_MODULE_CUSUM_SLACK_PERCENT = 0.5
+BATTERY_MODULE_CUSUM_THRESHOLD_PERCENT = 5.0
+
+# Hoeveel dagen geleerde geschiedenis per module/grootheid.
+BATTERY_MODULE_HISTORY_DAYS = 60

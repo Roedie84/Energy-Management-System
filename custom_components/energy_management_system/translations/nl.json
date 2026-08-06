@@ -52,7 +52,12 @@
           "appliance_notify_service": "Notify-service voor apparaat- en accumodus-meldingen (leeg = pop-up in HA)",
           "battery_temperature_sensor_entity": "Accutemperatuur-sensor (optioneel, koelventilator)",
           "battery_cooling_fan_switch_entity": "Schakelaar accu-koelventilator (optioneel)",
-          "battery_cooling_outdoor_sensor_entity": "Buitentemperatuur voor accu-koeling (optioneel, leeg = gebruik bestaande buitentemperatuur)"
+          "battery_cooling_outdoor_sensor_entity": "Buitentemperatuur voor accu-koeling (optioneel, leeg = gebruik bestaande buitentemperatuur)",
+          "battery_module_cell_voltage_max_sensor_entities": "Hoogste celspanning per accumodule (optioneel, volgorde = modulenummer)",
+          "battery_module_cell_voltage_min_sensor_entities": "Laagste celspanning per accumodule (optioneel, zelfde volgorde)",
+          "battery_module_temperature_sensor_entities": "Hoogste celtemperatuur per accumodule (optioneel, zelfde volgorde)",
+          "battery_module_soc_sensor_entities": "SoC per accumodule (optioneel, zelfde volgorde)",
+          "battery_module_power_sensor_entities": "Vermogen per accumodule (optioneel, zelfde volgorde)"
         }
       }
     },
@@ -112,7 +117,12 @@
           "appliance_notify_service": "Notify-service voor apparaat- en accumodus-meldingen (leeg = pop-up in HA)",
           "battery_temperature_sensor_entity": "Accutemperatuur-sensor (optioneel, koelventilator)",
           "battery_cooling_fan_switch_entity": "Schakelaar accu-koelventilator (optioneel)",
-          "battery_cooling_outdoor_sensor_entity": "Buitentemperatuur voor accu-koeling (optioneel, leeg = gebruik bestaande buitentemperatuur)"
+          "battery_cooling_outdoor_sensor_entity": "Buitentemperatuur voor accu-koeling (optioneel, leeg = gebruik bestaande buitentemperatuur)",
+          "battery_module_cell_voltage_max_sensor_entities": "Hoogste celspanning per accumodule (optioneel, volgorde = modulenummer)",
+          "battery_module_cell_voltage_min_sensor_entities": "Laagste celspanning per accumodule (optioneel, zelfde volgorde)",
+          "battery_module_temperature_sensor_entities": "Hoogste celtemperatuur per accumodule (optioneel, zelfde volgorde)",
+          "battery_module_soc_sensor_entities": "SoC per accumodule (optioneel, zelfde volgorde)",
+          "battery_module_power_sensor_entities": "Vermogen per accumodule (optioneel, zelfde volgorde)"
         }
       }
     }

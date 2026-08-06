@@ -65,6 +65,7 @@ async def async_setup_entry(
         ChargeCostSensor(coordinator, entry.entry_id),
         BatterySavingsSensor(coordinator, entry.entry_id),
         BatteryCoolingSensor(coordinator, entry.entry_id),
+        BatteryModuleHealthSensor(coordinator, entry.entry_id),
         EnergyBalanceHealthSensor(coordinator, entry.entry_id),
         SluipverbruikSensor(coordinator, entry.entry_id),
         WeatherEnsembleSensor(coordinator, entry.entry_id),
@@ -3276,3 +3277,67 @@ class BatteryCoolingSensor(SensorEntity):
         state["laatste_wijziging"] = laatste.isoformat() if laatste else None
         state["geschiedenis"] = self._coordinator.battery_cooling_history[-10:]
         return state
+
+
+class BatteryModuleHealthSensor(SensorEntity):
+    """Gezondheid per accumodule (v0.63.123).
+
+    Anders dan `battery_estimated_capacity_percent` (een LINEAIRE
+    schatting afgeleid uit cyclustelling, geen meting) rust deze sensor
+    volledig op werkelijke metingen per module: celspanningsverschil,
+    celtemperatuur, SoC en vermogen.
+
+    De kern is de DIFFERENTIELE vergelijking - elke module tegen het
+    gemiddelde van de andere. Alle modules draaien onder identieke
+    omstandigheden, dus alles wat ze gemeenschappelijk hebben (SoC,
+    omgevingstemperatuur, belasting) valt weg en wat overblijft is een
+    eigenschap van die ene module. Dat lost meteen het lastigste
+    probleem op: bij LFP is het celspanningsverschil sterk
+    SoC-afhankelijk, wat een absolute waarde onvergelijkbaar maakt over
+    de tijd.
+
+    De toestand is het aantal modules dat aandacht verdient, zodat een
+    "0" op het dashboard meteen zegt dat alles in orde is.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Accu-modulegezondheid"
+    _attr_icon = "mdi:battery-heart-variant"
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_battery_module_health"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def native_value(self) -> int:
+        tabel = self._coordinator.get_battery_module_table()
+        return sum(
+            1 for m in tabel if m.get("waarschuwingen") or m.get("drift_op")
+        )
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        tabel = self._coordinator.get_battery_module_table()
+        return {
+            "modules": tabel,
+            "aantal_modules": len(tabel),
+            "spreiding": self._coordinator.battery_module_spread,
+            "note": (
+                "Elke module wordt vergeleken met het gemiddelde van de "
+                "ANDERE modules op hetzelfde moment. Omdat ze onder "
+                "identieke omstandigheden draaien (zelfde SoC, zelfde "
+                "omgeving, zelfde belasting) valt alles wat ze delen weg "
+                "en blijft alleen over wat eigen is aan die module. De "
+                "dagelijkse mediaan van die afwijking gaat door een "
+                "CUSUM-drifttest, die pas aanslaat bij een AANHOUDENDE "
+                "afwijking - niet bij een enkele afwijkende dag. "
+                "Celspanningsverschil is bij LFP sterk SoC-afhankelijk "
+                "(vlak in het midden, steil aan de uiteinden), daarom "
+                "wordt de absolute waarde per SoC-bucket bewaard en de "
+                "trendbewaking op de differentiële waarde gedaan."
+            ),
+        }

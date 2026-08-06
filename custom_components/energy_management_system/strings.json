@@ -52,7 +52,12 @@
           "appliance_notify_service": "Notify service for appliance and battery-mode notifications (empty = HA popup)",
           "battery_temperature_sensor_entity": "Battery temperature sensor (optional, cooling fan)",
           "battery_cooling_fan_switch_entity": "Battery cooling fan switch (optional)",
-          "battery_cooling_outdoor_sensor_entity": "Outdoor temperature for battery cooling (optional, empty = reuse existing outdoor temperature)"
+          "battery_cooling_outdoor_sensor_entity": "Outdoor temperature for battery cooling (optional, empty = reuse existing outdoor temperature)",
+          "battery_module_cell_voltage_max_sensor_entities": "Highest cell voltage per battery module (optional, order = module number)",
+          "battery_module_cell_voltage_min_sensor_entities": "Lowest cell voltage per battery module (optional, same order)",
+          "battery_module_temperature_sensor_entities": "Highest cell temperature per battery module (optional, same order)",
+          "battery_module_soc_sensor_entities": "SoC per battery module (optional, same order)",
+          "battery_module_power_sensor_entities": "Power per battery module (optional, same order)"
         }
       }
     },
@@ -112,7 +117,12 @@
           "appliance_notify_service": "Notify service for appliance and battery-mode notifications (empty = HA popup)",
           "battery_temperature_sensor_entity": "Battery temperature sensor (optional, cooling fan)",
           "battery_cooling_fan_switch_entity": "Battery cooling fan switch (optional)",
-          "battery_cooling_outdoor_sensor_entity": "Outdoor temperature for battery cooling (optional, empty = reuse existing outdoor temperature)"
+          "battery_cooling_outdoor_sensor_entity": "Outdoor temperature for battery cooling (optional, empty = reuse existing outdoor temperature)",
+          "battery_module_cell_voltage_max_sensor_entities": "Highest cell voltage per battery module (optional, order = module number)",
+          "battery_module_cell_voltage_min_sensor_entities": "Lowest cell voltage per battery module (optional, same order)",
+          "battery_module_temperature_sensor_entities": "Highest cell temperature per battery module (optional, same order)",
+          "battery_module_soc_sensor_entities": "SoC per battery module (optional, same order)",
+          "battery_module_power_sensor_entities": "Power per battery module (optional, same order)"
         }
       }
     }

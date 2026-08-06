@@ -316,6 +316,9 @@ async def async_get_config_entry_diagnostics(
                 coordinator.last_arbitrage_solar_surplus_w
             ),
             "learning_only": coordinator.learning_only,
+            "battery_module_live": coordinator.battery_module_live,
+            "battery_module_health": coordinator.battery_module_health,
+            "battery_module_spread": coordinator.battery_module_spread,
             "battery_cooling_state": coordinator.battery_cooling_state,
             "battery_cooling_history": coordinator.battery_cooling_history,
             "water_daily_total_l": coordinator.water_daily_total_l,

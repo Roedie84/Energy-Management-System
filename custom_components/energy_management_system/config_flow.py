@@ -33,6 +33,11 @@ from .const import (
     CONF_AIRCO_CLIMATE_ENTITY,
     CONF_SLAAPKAMER_CLIMATE_ENTITY,
     CONF_BATTERY_COOLING_FAN_SWITCH,
+    CONF_BATTERY_MODULE_CELL_VOLTAGE_MAX_SENSORS,
+    CONF_BATTERY_MODULE_CELL_VOLTAGE_MIN_SENSORS,
+    CONF_BATTERY_MODULE_POWER_SENSORS,
+    CONF_BATTERY_MODULE_SOC_SENSORS,
+    CONF_BATTERY_MODULE_TEMPERATURE_SENSORS,
     CONF_BATTERY_COOLING_OUTDOOR_SENSOR,
     CONF_BATTERY_TEMPERATURE_SENSOR,
     CONF_LIVING_ROOM_TEMPERATURE_SENSOR,
@@ -254,6 +259,36 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
                 default=defaults.get(CONF_SLAAPKAMER_CLIMATE_ENTITY),
             ): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="climate")
+            ),
+            vol.Optional(
+                CONF_BATTERY_MODULE_CELL_VOLTAGE_MAX_SENSORS,
+                default=defaults.get(CONF_BATTERY_MODULE_CELL_VOLTAGE_MAX_SENSORS, []),
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="sensor", multiple=True)
+            ),
+            vol.Optional(
+                CONF_BATTERY_MODULE_CELL_VOLTAGE_MIN_SENSORS,
+                default=defaults.get(CONF_BATTERY_MODULE_CELL_VOLTAGE_MIN_SENSORS, []),
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="sensor", multiple=True)
+            ),
+            vol.Optional(
+                CONF_BATTERY_MODULE_TEMPERATURE_SENSORS,
+                default=defaults.get(CONF_BATTERY_MODULE_TEMPERATURE_SENSORS, []),
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="sensor", multiple=True)
+            ),
+            vol.Optional(
+                CONF_BATTERY_MODULE_SOC_SENSORS,
+                default=defaults.get(CONF_BATTERY_MODULE_SOC_SENSORS, []),
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="sensor", multiple=True)
+            ),
+            vol.Optional(
+                CONF_BATTERY_MODULE_POWER_SENSORS,
+                default=defaults.get(CONF_BATTERY_MODULE_POWER_SENSORS, []),
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="sensor", multiple=True)
             ),
             vol.Optional(
                 CONF_BATTERY_TEMPERATURE_SENSOR,
