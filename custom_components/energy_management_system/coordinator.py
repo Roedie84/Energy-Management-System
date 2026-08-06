@@ -375,6 +375,20 @@ class EnergyManagementSystemCoordinator:
         self._water_session_started_at: datetime | None = None
         self._water_below_threshold_since: datetime | None = None
         self._water_session_start_total_m3: float | None = None
+        # v0.63.119: liters per sessie worden nu primair bepaald door
+        # het DEBIET te integreren (L/min x verstreken minuten), in
+        # plaats van uitsluitend het verschil van de cumulatieve
+        # meterstand te nemen. Zie `_process_water_flow_sample`.
+        self._water_session_liters_integrated: float = 0.0
+        self._water_last_flow_l_per_min: float | None = None
+        self._water_last_flow_sample_at: datetime | None = None
+        # Losstaande dagteller: `water_session_history` bewaart maar de
+        # laatste WATER_SESSION_HISTORY_LENGTH momenten voor weergave,
+        # dus dáárop optellen levert structureel een te laag "verklaard"
+        # dagtotaal op zodra er meer momenten op een dag zijn.
+        self.water_sessions_today_l: float = 0.0
+        self.water_sessions_today_count: int = 0
+        self._water_sessions_day_key: date | None = None
         self._water_last_daily_total: float | None = None
         self.water_daily_total_l: float | None = None
         self.water_daily_history: list[float] = []
@@ -650,6 +664,11 @@ class EnergyManagementSystemCoordinator:
         self.climate_live_outdoor_temp_c: float | None = None
         self._climate_forecast_last_fetch: datetime | None = None
         self._climate_cached_forecast: list[tuple] | None = None
+        # v0.63.120: de reden waarom de buitentemperatuur-voorspelling
+        # ontbreekt, apart bewaard. De fetch is gethrottled (1x per 30
+        # min), dus `climate_forecast_note` mocht daar niet meer de
+        # enige drager van zijn - zie `_recompute_climate_trajectory`.
+        self._climate_forecast_fetch_note: str | None = None
         self.climate_forecast_bias_history: list[float] = []
         # -- Uitschieter-filter achtertuinsensor (v0.63.96) --
         self._backyard_temp_last_accepted_c: float | None = None
@@ -5650,14 +5669,55 @@ class EnergyManagementSystemCoordinator:
         Puur de toestandsmachine zelf - leest geen entiteiten, ontvangt
         de meting + tijdstip als parameter, zodat dezelfde logica
         identiek werkt vanuit beide aanroeppunten.
+
+        v0.63.119, gerapporteerd (derde keer): "dagtotaal (85 L) is een
+        stuk hoger dan wat de geregistreerde gebruiksmomenten van
+        vandaag verklaren (5 L)". De liters per moment kwamen tot nu toe
+        uitsluitend uit het VERSCHIL van de cumulatieve meterstand
+        tussen start en einde. Dat is zo nauwkeurig als de resolutie van
+        die meter: bij een stand in m3 met twee decimalen is de kleinste
+        waarneembare stap 10 liter, dus elke kraan-, toilet- of
+        handen-was-stoot komt uit op precies 0,0 L. De momenten werden
+        dan wel gelogd, maar met een volume van nul - en dan verklaart
+        de som ervan inderdaad vrijwel niets van het dagtotaal.
+
+        De liters worden nu primair bepaald door het DEBIET te
+        integreren: bij elke meting wordt het vorige debiet
+        vermenigvuldigd met de sindsdien verstreken tijd en opgeteld.
+        Dat werkt op de resolutie van de debietsensor zelf (L/min) en is
+        dus ongevoelig voor de stapgrootte van de meterstand. De
+        meterstand-methode blijft als kruiscontrole behouden en wordt
+        apart meegelogd, zodat een afwijking tussen beide zichtbaar is
+        in plaats van stilzwijgend.
+
+        Een te groot gat tussen twee metingen (bijv. na een herstart)
+        wordt niet geïntegreerd - anders zou een achtergebleven debiet
+        urenlang worden doorgerekend.
         """
         total_entity = self.config.get(CONF_WATER_TOTAL_USAGE_SENSOR)
+
+        # --- debiet integreren over het interval sinds de vorige meting ---
+        if (
+            self._water_usage_state == "actief"
+            and self._water_last_flow_l_per_min is not None
+            and self._water_last_flow_sample_at is not None
+        ):
+            gap_minutes = (
+                now - self._water_last_flow_sample_at
+            ).total_seconds() / 60
+            if 0 < gap_minutes <= MAX_HOUR_TRACKING_GAP_MINUTES:
+                self._water_session_liters_integrated += (
+                    self._water_last_flow_l_per_min * gap_minutes
+                )
+        self._water_last_flow_l_per_min = flow_l_per_min
+        self._water_last_flow_sample_at = now
 
         if flow_l_per_min >= WATER_USAGE_ACTIVE_THRESHOLD_L_PER_MIN:
             self._water_below_threshold_since = None
             if self._water_usage_state != "actief":
                 self._water_session_started_at = now
                 self._water_usage_state = "actief"
+                self._water_session_liters_integrated = 0.0
                 if total_entity:
                     self._water_session_start_total_m3 = self._read_sensor_float(
                         total_entity
@@ -5688,11 +5748,22 @@ class EnergyManagementSystemCoordinator:
                 - WATER_SESSION_COMPLETE_SUSTAINED_MINUTES,
             )
 
-        liters = None
+        meter_liters = None
         if total_entity and self._water_session_start_total_m3 is not None:
             end_total_m3 = self._read_sensor_float(total_entity)
             if end_total_m3 is not None:
-                liters = max(0.0, (end_total_m3 - self._water_session_start_total_m3) * 1000)
+                meter_liters = max(
+                    0.0,
+                    (end_total_m3 - self._water_session_start_total_m3) * 1000,
+                )
+
+        # v0.63.119: het geïntegreerde debiet is leidend (ongevoelig
+        # voor de stapgrootte van de meterstand); de meterstand blijft
+        # als kruiscontrole beschikbaar. Zonder debietgeschiedenis valt
+        # het terug op de meterstand, zodat er nooit minder informatie
+        # is dan voorheen.
+        integrated_liters = round(self._water_session_liters_integrated, 2)
+        liters = integrated_liters if integrated_liters > 0 else meter_liters
 
         if duration_minutes is not None and duration_minutes > 0:
             is_waterontharder = started_at is not None and (
@@ -5705,12 +5776,16 @@ class EnergyManagementSystemCoordinator:
                     "gestart": started_at.isoformat() if started_at else None,
                     "duur_minuten": round(duration_minutes, 1),
                     "liter": round(liters, 1) if liters is not None else None,
+                    "liter_uit_meterstand": (
+                        round(meter_liters, 1) if meter_liters is not None else None
+                    ),
                     "waarschijnlijk_waterontharder": is_waterontharder,
                 }
             )
             self.water_session_history = self.water_session_history[
                 -WATER_SESSION_HISTORY_LENGTH:
             ]
+            self._record_water_session_for_today(started_at, liters)
             if is_waterontharder:
                 self.water_softener_last_regeneration = started_at
 
@@ -5718,6 +5793,34 @@ class EnergyManagementSystemCoordinator:
         self._water_below_threshold_since = None
         self._water_session_started_at = None
         self._water_session_start_total_m3 = None
+        self._water_session_liters_integrated = 0.0
+
+    def _record_water_session_for_today(
+        self, started_at: datetime | None, liters: float | None
+    ) -> None:
+        """Losstaande dagteller voor afgeronde gebruiksmomenten
+        (v0.63.119).
+
+        `water_session_history` bewaart bewust maar de laatste
+        WATER_SESSION_HISTORY_LENGTH momenten (weergave op het
+        Water-tabblad). De diagnostiek-check telde daar de liters van
+        vandaag uit op, waardoor het "verklaarde" dagtotaal structureel
+        te laag uitviel zodra er méér momenten op een dag waren dan die
+        lijst lang is - onafhankelijk van of de detectie zelf goed
+        werkte. Deze teller loopt buiten dat venster om.
+        """
+        if started_at is None:
+            return
+        day_key = dt_util.as_local(started_at).date()
+        if self._water_sessions_day_key != day_key:
+            self._water_sessions_day_key = day_key
+            self.water_sessions_today_l = 0.0
+            self.water_sessions_today_count = 0
+        self.water_sessions_today_count += 1
+        if liters is not None:
+            self.water_sessions_today_l = round(
+                self.water_sessions_today_l + liters, 2
+            )
 
     @callback
     def _handle_water_flow_change(self, event) -> None:
@@ -5735,7 +5838,18 @@ class EnergyManagementSystemCoordinator:
             flow_l_per_min = float(new_state.state)
         except (TypeError, ValueError):
             return
-        now = new_state.last_changed or dt_util.now()
+        # v0.63.119: `last_changed` levert Home Assistant ALTIJD in UTC
+        # aan, terwijl de tick-aanroep lokale tijd doorgeeft. Zonder
+        # omrekening kreeg een sessie die via de listener startte een
+        # UTC-tijdstip mee, met twee concrete gevolgen: (1) een moment
+        # tussen middernacht en 02:00 lokaal werd opgeslagen met de
+        # datum van GISTEREN en telde dus niet mee voor "vandaag", en
+        # (2) het waterontharder-venster (0-6 uur) verschoof mee, zodat
+        # een douche om 07:30 lokaal (05:30 UTC) onterecht als
+        # waterontharder-regeneratie werd aangemerkt en een spoeling om
+        # 01:15 lokaal juist niet. Zelfde soort fout als de
+        # achtertuinsensor-tijdzonebug uit v0.63.93.
+        now = dt_util.as_local(new_state.last_changed or dt_util.now())
         self._process_water_flow_sample(flow_l_per_min, now)
 
     def _update_water_tracking(self, now: datetime) -> None:
@@ -7064,17 +7178,28 @@ class EnergyManagementSystemCoordinator:
             self.water_daily_total_l is not None and self.water_daily_total_l >= 20
         ):
             today_str = dt_util.now().date().isoformat()
+            # v0.63.119: primair de losstaande dagteller gebruiken -
+            # die wordt niet begrensd door de weergavelijst van 20
+            # momenten. De optelling over `water_session_history`
+            # blijft als terugval voor een verse start (teller nog leeg
+            # terwijl er wel al historie is, bijv. net na een herstart).
             sessions_today_liters = 0.0
-            for session in self.water_session_history:
-                gestart = session.get("gestart")
-                liter = session.get("liter")
-                if not gestart or liter is None:
-                    continue
-                try:
-                    if gestart[:10] == today_str:
-                        sessions_today_liters += liter
-                except (TypeError, IndexError):
-                    continue
+            if (
+                self._water_sessions_day_key is not None
+                and self._water_sessions_day_key.isoformat() == today_str
+            ):
+                sessions_today_liters = self.water_sessions_today_l
+            else:
+                for session in self.water_session_history:
+                    gestart = session.get("gestart")
+                    liter = session.get("liter")
+                    if not gestart or liter is None:
+                        continue
+                    try:
+                        if gestart[:10] == today_str:
+                            sessions_today_liters += liter
+                    except (TypeError, IndexError):
+                        continue
             if sessions_today_liters < self.water_daily_total_l * 0.3:
                 aandachtspunten.append(
                     f"Waterverbruik: dagtotaal ({self.water_daily_total_l:.0f} L) "
@@ -7960,22 +8085,29 @@ class EnergyManagementSystemCoordinator:
         )
         if not weather_entity:
             self._climate_cached_forecast = None
-            self.climate_forecast_note = (
+            # v0.63.120: de reden wordt nu OOK in een eigen veld
+            # bewaard, zodat `_recompute_climate_trajectory` hem elke
+            # tick opnieuw kan tonen - deze fetch draait immers maar
+            # eens per 30 minuten.
+            self._climate_forecast_fetch_note = (
                 "Geen knmi_weather_entity/openweathermap_weather_entity "
                 "geconfigureerd - geen buitentemperatuur-voorspelling "
                 "beschikbaar om de projectie op te baseren."
             )
+            self.climate_forecast_note = self._climate_forecast_fetch_note
             return
 
         forecast = await self._async_fetch_hourly_outdoor_forecast(weather_entity)
         if not forecast:
             self._climate_cached_forecast = None
-            self.climate_forecast_note = (
+            self._climate_forecast_fetch_note = (
                 "Kon geen uurlijkse buitentemperatuur-voorspelling ophalen "
                 f"bij {weather_entity}."
             )
+            self.climate_forecast_note = self._climate_forecast_fetch_note
             return
         self._climate_cached_forecast = forecast
+        self._climate_forecast_fetch_note = None
 
         # v0.63.95: bias-sample - vergelijk de eerstvolgende voorspelde
         # waarde met de actuele achtertuinsensor-meting op ditzelfde
@@ -8009,15 +8141,46 @@ class EnergyManagementSystemCoordinator:
 
         temp_c = self.living_room_current_temp_c
         if temp_c is None:
-            self.climate_forecast_note = (
-                "Geen living_room_temperature_sensor_entity geconfigureerd "
-                "of niet uitleesbaar."
-            )
+            # v0.63.120, gerapporteerd met screenshot van een INGEVULD
+            # configuratieveld: "Maar ze staan wel ingevuld?" - de oude
+            # tekst gooide "niet geconfigureerd" en "niet uitleesbaar"
+            # op één hoop, waardoor een tijdelijk onbereikbare sensor
+            # eruitzag als een configuratiefout. Nu twee losse,
+            # accurate meldingen, met de entity_id erbij zodat direct
+            # te zien is WELKE sensor het betreft.
+            temp_entity = self.config.get(CONF_LIVING_ROOM_TEMPERATURE_SENSOR)
+            if not temp_entity:
+                self.climate_forecast_note = (
+                    "Geen woonkamertemperatuur-sensor geconfigureerd - vul "
+                    "'living_room_temperature_sensor_entity' in bij "
+                    "Configureren om de projectie te activeren."
+                )
+            else:
+                self.climate_forecast_note = (
+                    f"Woonkamertemperatuur-sensor {temp_entity} is "
+                    "geconfigureerd maar op dit moment niet uitleesbaar "
+                    "(status 'unknown'/'unavailable' of geen getal). De "
+                    "projectie start automatisch zodra de sensor weer "
+                    "een waarde geeft."
+                )
             return
 
         if not self._climate_cached_forecast:
-            # climate_forecast_note is already set by the fetch step
-            # above with the specific reason (no entity / fetch failed).
+            # v0.63.120: de reden NIET meer overlaten aan wat de fetch
+            # ooit heeft achtergelaten. Die draait maar eens per 30
+            # minuten, dus op alle tussenliggende ticks bleef hier de
+            # melding van een VORIGE situatie staan - concreet: nadat
+            # de temperatuursensor eenmalig kort onbereikbaar was
+            # (bijv. tijdens het opstarten), bleef "geen
+            # living_room_temperature_sensor_entity geconfigureerd of
+            # niet uitleesbaar" eeuwig staan, ook toen die sensor
+            # allang weer prima werkte en de werkelijke oorzaak de
+            # ontbrekende buitentemperatuur-voorspelling was. Een
+            # verkeerde diagnose die de zoekrichting compleet verlegt.
+            self.climate_forecast_note = self._climate_forecast_fetch_note or (
+                "Nog geen buitentemperatuur-voorspelling opgehaald - de "
+                "projectie verschijnt zodra die beschikbaar is."
+            )
             return
 
         shutter_state = self.climate_shutter_state or "onbekend"

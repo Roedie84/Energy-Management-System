@@ -317,6 +317,11 @@ async def async_get_config_entry_diagnostics(
             ),
             "learning_only": coordinator.learning_only,
             "water_daily_total_l": coordinator.water_daily_total_l,
+            # v0.63.119: losstaande dagteller, niet begrensd door de
+            # weergavelijst van 20 momenten - dit is wat de
+            # "verklaart maar X L"-check nu gebruikt.
+            "water_sessions_today_l": coordinator.water_sessions_today_l,
+            "water_sessions_today_count": coordinator.water_sessions_today_count,
             "water_daily_history": coordinator.water_daily_history,
             "water_session_history": coordinator.water_session_history,
             "water_softener_last_regeneration": _iso(
