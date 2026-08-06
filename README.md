@@ -515,6 +515,65 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Gauge-kaarten vervangen door compacte tegels (v0.63.114)
+
+Vervolg op v0.63.113: "De gauge kaarten zijn ook veel te groot dit
+mogen wat mij betreft de zelfde kaarten worden als de live cijfers."
+
+**Fix**: alle drie de `type: gauge`-kaarten in het bundled dashboard
+(Accu SoC en Geleerd rendement op het Overzicht-tabblad; Geleerd
+accu-rendement op het Zelflerend-tabblad, waar 'ie al inconsistent
+naast een mushroom-template-card stond) vervangen door dezelfde
+compacte `mushroom-template-card`-stijl als de "Live cijfers"-tegels.
+Kleurindicatie (groen/geel/rood) blijft behouden, nu via `icon_color`
+in plaats van de gauge se `severity`-instelling, met dezelfde
+drempelwaarden als voorheen.
+
+## Overzicht-tabblad herzien: balans + compactheid (v0.63.113)
+
+Gerapporteerd met screenshot: "het past niet meer op 1 pagina en vele
+lege ruimte." Het Overzicht-tabblad gebruikt HA's "sections"-layout,
+die nieuwe kaartblokken automatisch in de kortste kolom plaatst
+(masonry-gedrag) — de eerste kolom (uitgebreide beslistabel + -tekst)
+was veel langer dan de andere, wat de scheve verdeling en lege ruimte
+veroorzaakte. Gevraagd om zowel de kolommen beter in balans te
+brengen als het geheel compacter te maken.
+
+**Compacter**:
+- De aparte titelkaart ("Energy Management System" + laatste
+  beslisreden) verwijderd — overlapte al met de tabnaam en de
+  uitgebreide uitlegtekst eronder.
+- Het "Modus & besluit"-uitlegblok van een vaste `rows: 3` (moest
+  scrollen) naar `rows: auto` (past zich aan de inhoud aan).
+- "Accu & rendement" en "Live cijfers" samengevoegd tot één sectie
+  ("Accu, rendement & live cijfers") — één heading in plaats van twee.
+
+**Beter gebalanceerd**:
+- De lange "Actuele beslissing (detail)"-kaart (15 regels in één
+  entities-kaart) gesplitst in twee kleinere, thematische kaarten:
+  "Kernbeslissing (detail)" (9 direct relevante regels) en
+  "Advies-modules (detail, adviserend)" (de 6 adviserende modules) —
+  kleinere blokken verdelen natuurlijker over de masonry-kolommen dan
+  één lang blok.
+
+Resultaat: van 4/3/4/6/7/2 kaarten per sectie naar 3/8/7/8/2/2 - een
+veel gelijkmatiger verdeling, zonder functionaliteit te verliezen.
+
+## Systeemstatus-tegel toonde aantal aandachtspunten zonder de inhoud (v0.63.112)
+
+Gerapporteerd, met screenshot: "De update van de integratie is leuk,
+maar waar is aandacht voor vereist?" — de v0.63.109-fix toonde het
+aantal aandachtspunten ("5 aandachtspunt(en)") in de subtekst van de
+systeemstatus-tegel, maar niet WAT die aandachtspunten daadwerkelijk
+zijn — de gebruiker moest daarvoor apart naar het Live-tabblad of
+diagnostiek.
+
+**Fix**: nieuwe markdown-kaart direct onder de systeemstatus-tegel op
+het Overzicht-tabblad, die de volledige aandachtspunten-lijst toont
+zodra die niet leeg is (leeg = geen kaart, geen ruis). Hergebruikt het
+al bestaande `aandachtspunten`-attribuut op de sensor zelf — geen
+nieuwe berekening nodig.
+
 ## Werkelijk huishoudverbruik toegevoegd + "Huidig verbruik" verduidelijkt (v0.63.111)
 
 Vervolg op v0.63.110's naamgevingsfix: "Kun je ergens wel toevoegen wat

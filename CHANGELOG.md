@@ -6681,3 +6681,60 @@ berekening klopt bij export met PV-dekking; `None` zonder leesbare
 P1-sensor.
 
 **Volledige testsuite**: 601 tests, allemaal groen.
+
+## v0.63.112 — systeemstatus-tegel toonde aantal aandachtspunten zonder de inhoud
+
+**Gerapporteerd, met screenshot**: "De update van de integratie is
+leuk, maar waar is aandacht voor vereist?" - v0.63.109 toonde het
+aantal ("5 aandachtspunt(en)"), maar niet de inhoud.
+
+**Fix**: nieuwe markdown-kaart direct onder de systeemstatus-tegel op
+het Overzicht-tabblad in `dashboard_template.yaml`, toont de volledige
+lijst zodra die niet leeg is. Hergebruikt het bestaande
+`aandachtspunten`-attribuut, geen nieuwe berekening.
+
+**Volledige testsuite**: 601 tests, allemaal groen (puur dashboard-
+wijziging, geen nieuw Python-gedrag).
+
+## v0.63.113 — Overzicht-tabblad herzien: balans + compactheid
+
+**Gerapporteerd, met screenshot**: "het past niet meer op 1 pagina en
+vele lege ruimte." Gevraagd: kolommen beter in balans + compacter -
+"allebei".
+
+**Root cause**: HA's "sections"-layout (masonry-gedrag) plaatst nieuwe
+kaartblokken in de kortste kolom op dat moment. De eerste kolom
+(uitgebreide beslistabel + -tekst) was veel langer dan de rest,
+resulterend in scheve verdeling en lege ruimte onderin de kortere
+kolommen.
+
+**Compacter**: titelkaart verwijderd (overlapte met tabnaam +
+uitlegtekst), "Modus & besluit"-uitlegblok van vaste `rows: 3` (moest
+scrollen) naar `rows: auto`, "Accu & rendement" + "Live cijfers"
+samengevoegd tot één sectie.
+
+**Beter gebalanceerd**: de lange "Actuele beslissing (detail)"-kaart
+(15 regels) gesplitst in "Kernbeslissing (detail)" (9 regels) en
+"Advies-modules (detail, adviserend)" (6 regels) - kleinere blokken
+verdelen natuurlijker over de masonry-kolommen.
+
+**Resultaat**: van 4/3/4/6/7/2 naar 3/8/7/8/2/2 kaarten per sectie -
+veel gelijkmatiger, zonder functionaliteit te verliezen.
+
+**Volledige testsuite**: 601 tests, allemaal groen (puur dashboard-
+herstructurering, geen Python-wijzigingen).
+
+## v0.63.114 — gauge-kaarten vervangen door compacte tegels
+
+**Gevraagd**: "De gauge kaarten zijn ook veel te groot dit mogen wat
+mij betreft de zelfde kaarten worden als de live cijfers."
+
+**Fix**: alle drie de `type: gauge`-kaarten (Accu SoC + Geleerd
+rendement op Overzicht; Geleerd accu-rendement op Zelflerend, waar het
+al inconsistent naast een mushroom-template-card stond) vervangen door
+`mushroom-template-card`, consistent met de "Live cijfers"-tegels.
+Kleurindicatie behouden via `icon_color`, dezelfde drempels als de
+oude `severity`-instelling.
+
+**Volledige testsuite**: 601 tests, allemaal groen (puur dashboard-
+wijziging).

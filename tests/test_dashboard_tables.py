@@ -231,6 +231,13 @@ def _fake_state_attr(entity, attr):
                 "gedeelde_dagen": 20,
             },
         ],
+        (
+            "sensor.woonkamer_energy_management_system_system_status",
+            "aandachtspunten",
+        ): [
+            "51 apparaat/apparaten mogelijk defect: CV-ketel Vermogen.",
+            "18 waarschijnlijke NILM-duplicaatpaar/paren gevonden.",
+        ],
     }
     return fake_data.get((entity, attr))
 
