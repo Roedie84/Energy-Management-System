@@ -148,3 +148,60 @@ def test_solar_capture_falls_back_to_live_reading_without_forecast(
 
     assert result is True
     assert coordinator.last_arbitrage_solar_surplus_w == 800.0
+
+
+def test_get_expected_pv_power_prefers_live_remaining_correction(
+    make_coordinator, hass
+):
+    """v0.63.104, gerapporteerd: "dit komt niet overeen met de
+    werkelijkheid... het overschot is veel groter op dit moment" - de
+    functie gebruikte tot dan toe uitsluitend de trage, langetermijn-
+    geleerde ratio, terwijl de tekortberekening elders al de veel
+    actuelere, vandaag-specifieke live-correctie gebruikte. Op een dag
+    die zonniger is dan gemiddeld, moet de live-correctie nu voorrang
+    krijgen boven de trage geleerde ratio."""
+    coordinator = make_coordinator(
+        _base_config(solar_remaining_today_sensor_entity="sensor.solcast_remaining")
+    )
+    now = DAY0.replace(hour=13, minute=10)
+    hass.states.set(
+        "sensor.solcast",
+        "0",
+        {"detailedForecast": _detailed_forecast_at(now, pv_estimate_kw=2.0)},
+    )
+    # Trage, langetermijn-geleerde ratio zegt: nauwelijks meer dan de
+    # ruwe voorspelling (1.05x).
+    coordinator.pv_hourly_bias_history[13] = [1.05, 1.05, 1.05]
+    # Solcast's eigen live "resterend vandaag"-sensor - gebaseerd op
+    # daadwerkelijk waargenomen omstandigheden - impliceert een veel
+    # hogere ratio (3.0x): de forecast-entries vanaf nu tot einde dag
+    # sommeren tot 1.667 kWh (0.667 kWh restant van het huidige
+    # interval + 1.0 kWh van het volgende), dus een live-sensorwaarde
+    # van 5.0 geeft ratio 5.0/1.667 = 3.0.
+    hass.states.set("sensor.solcast_remaining", "5.0")
+
+    result = coordinator._get_expected_pv_power_w(now)
+
+    # Live-correctie (3.0x) moet voorrang krijgen boven de geleerde
+    # ratio (1.05x) - 2000W * 3.0 = 6000W, niet 2000W * 1.05 = 2100W.
+    assert round(result, 1) == 6000.0
+
+
+def test_get_expected_pv_power_falls_back_to_learned_bias_without_live_sensor(
+    make_coordinator, hass
+):
+    """Without a configured 'remaining today' sensor, the function must
+    still fall back to the pre-existing learned-ratio behaviour -
+    no regression for installations without that sensor."""
+    coordinator = make_coordinator(_base_config())  # no remaining-today sensor
+    now = DAY0.replace(hour=13, minute=10)
+    hass.states.set(
+        "sensor.solcast",
+        "0",
+        {"detailedForecast": _detailed_forecast_at(now, pv_estimate_kw=2.0)},
+    )
+    coordinator.pv_hourly_bias_history[13] = [1.2, 1.2, 1.2]
+
+    result = coordinator._get_expected_pv_power_w(now)
+
+    assert result == 2400.0
