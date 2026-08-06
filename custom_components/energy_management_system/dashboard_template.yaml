@@ -1141,11 +1141,12 @@ views:
             icon_color: orange
           - type: custom:mushroom-template-card
             primary: >-
-              {{ states('sensor.woonkamer_energy_management_system_airco_verwachting_woonkamertemperatuur') }} °C
+              {% set kans = state_attr('sensor.woonkamer_energy_management_system_airco_verwachting_woonkamertemperatuur', 'kans_airco_binnen_1_uur_procent') %}
+              {{ (kans | string ~ '%') if kans is not none else 'onvoldoende data' }}
             secondary: >-
-              Airco-verwachting — kans binnen 1 uur: {{
-              state_attr('sensor.woonkamer_energy_management_system_airco_verwachting_woonkamertemperatuur', 'kans_airco_binnen_1_uur_procent')
-              }}%
+              Airco-verwachting binnen 1 uur (bij {{
+              states('sensor.woonkamer_energy_management_system_airco_verwachting_woonkamertemperatuur')
+              }} °C)
             icon: mdi:thermometer-lines
             icon_color: purple
 
