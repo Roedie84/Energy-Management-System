@@ -515,6 +515,101 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## NILM-alarm lost zichzelf voortaan live op (v0.63.100)
+
+Vervolgvraag na v0.63.99: "kan dit soort zaken eerder in diagnostiek
+worden opgevangen, het mooiste zou natuurlijk iets in de integratie
+zijn wel dit live zelf in Home Assistant oplost?"
+
+**Aanleiding**: het v0.63.99-plafond voorkomt toekomstige uitschieter-
+gestuurde alarmen, maar een al opgebouwde, verouderde accumulator
+bouwt via de normale, kleine dagelijkse afbouw extreem traag af —
+doorgerekend voor het gerapporteerde CV-ketel-scenario: **bijna 90
+dagen**. Te traag om "live" te noemen.
+
+### Auto-reset bij aanhoudende terugkeer naar normaal
+
+Nieuwe constante `NILM_CUSUM_RESET_STREAK_DAYS` (5). Zodra een
+apparaat dit aantal opeenvolgende dagen een **genuine** terugkeer naar
+normaal laat zien (de dagwaarde zelf op of onder de referentie — niet
+slechts "iets minder ver boven de marge"), wordt de accumulator direct
+volledig gereset in plaats van traag te laten wegebben. Bewust
+meerdere dagen vereist (niet na 1 dag al resetten), zodat een
+kortstondige dip het alarm niet onterecht meteen wegneemt terwijl het
+onderliggende probleem nog speelt. Een dag die de streak onderbreekt
+(weer boven de referentie) reset de teller naar 0 — vereist dus
+daadwerkelijk aaneengesloten dagen.
+
+### Meer context in de diagnostiek-samenvatting
+
+Een apparaat dat al een paar dagen op rij normaliseert (op weg naar
+auto-reset) toont dat nu expliciet in `get_diagnostic_summary()` —
+"X dag(en) op rij weer normaal - herstelt vanzelf over nog Y dag(en)
+als dit aanhoudt" — in plaats van alleen een kale "mogelijk defect"-
+melding zonder aan te geven of het een vers, actief probleem is of al
+bezig met zelfherstel.
+
+**Getest** (3 nieuwe tests voor de auto-reset in
+`test_nilm_cusum_outlier_cap.py`, 2 nieuwe voor de diagnostiek-context
+in `test_diagnostic_summary.py`): reset na aanhoudende terugkeer naar
+normaal; de streak-teller reset correct bij een onderbreking; geen
+onbedoelde reset zonder actief alarm; herstelvoortgang wordt getoond
+bij een lopende streak; geen melding zonder streak.
+
+## Drie verbeteringen naar aanleiding van het Live-tabblad (v0.63.99)
+
+Het nieuwe Live-tabblad (v0.63.97) leverde meteen concrete input op: 51
+onbevestigde NILM-kandidaten, 18 waarschijnlijke duplicaatparen, en 6
+aanhoudend "mogelijk defect"-apparaten. Op verzoek ("de integratie moet
+eigenlijk met de minuut beter worden") alle drie opgepakt.
+
+### 1 & 2. Zichtbaarheid voor onbevestigde kandidaten en duplicaten
+
+Beide datasets bestonden al (`kandidaten`-attribuut,
+`waarschijnlijke_duplicaten`), maar stonden nergens op het dashboard —
+alleen bereikbaar via diagnostiek. Twee nieuwe markdown-tabellen op het
+Apparaten-tabblad:
+- **Onbevestigde NILM-kandidaten** (voorbeeld van max 20 van het
+  totaal, met naam + huidig vermogen) — voor efficiëntere, holistische
+  beoordeling in plaats van één-voor-één via de bevestig/negeer-kaart.
+- **Waarschijnlijke NILM-duplicaten** — elk paar met gedeelde-dagen-
+  telling, plus een concrete verwijzing naar de juiste service
+  (`reject_nilm_device`, permanent uitsluiten — niet
+  `unconfirm_nilm_device`, die laat een apparaat juist terugkomen).
+
+### 3. CUSUM-uitschieter-plafond
+
+**Root cause, gevonden via herberekening van de bestaande formule**:
+een geïsoleerde uitschieterdag (bijv. een eenmalige 45W-meting tegen
+een referentie van 6,2W — mogelijk extra warmwaterverbruik) leverde
+zonder plafond een **ongeplafonneerde** bijdrage van >6 aan de CUSUM-
+accumulator in één klap — ver boven de alarmdrempel (1,0) — en liet
+het alarm daardoor langdurig afgaan, ook al was het structurele
+gemiddelde over de hele periode maar +2,4%.
+
+**Fix**: nieuwe constante `NILM_CUSUM_MAX_DAILY_CONTRIBUTION` (0,5) —
+begrenst hoeveel één enkele dag maximaal aan de accumulator mag
+bijdragen. Een structurele, aanhoudende afwijking (die dag na dag
+boven de marge blijft) bouwt de accumulator nog steeds normaal op en
+laat het alarm terecht afgaan; een eenmalige uitschieter niet meer in
+zijn eentje. Alleen de positieve kant is begrensd — een dag met
+ongewoon lage meting (die de accumulator omlaag trekt) blijft
+ongeplafonneerd, want dat kan nooit de oorzaak van een onterecht alarm
+zijn.
+
+**Let op voor bestaande installaties**: deze fix corrigeert de
+berekening voor toekomstige dagen, maar herberekent de **al
+opgeslagen** accumulator-waarde niet met terugwerkende kracht. Een
+apparaat dat nu al "mogelijk defect" toont vanwege een oude uitschieter
+zal dus nog enkele dagen nodig hebben om via de normale afbouw
+(dagen onder de marge) vanzelf weer onder de alarmdrempel te zakken -
+of gebruik `unconfirm_nilm_device` voor een meteen schone lei.
+
+**Getest** (3 nieuwe tests, `test_nilm_cusum_outlier_cap.py`): een
+enkele geïsoleerde uitschieter triggert het alarm niet meer; een
+structurele, aanhoudende afwijking triggert het nog steeds terecht;
+een negatieve afwijking blijft ongeplafonneerd.
+
 ## Water-sessiedetectie: live event-driven i.p.v. tick-gebaseerd (v0.63.98)
 
 Gerapporteerd met screenshot + aangeleverde ruwe sensorgeschiedenis:

@@ -210,6 +210,27 @@ def _fake_state_attr(entity, attr):
                 "betrouwbaarheid_streng": "betrouwbaar",
             },
         ],
+        (
+            "sensor.woonkamer_energy_management_system_nilm_onbevestigde_kandidaten",
+            "kandidaten",
+        ): {
+            "sensor.a": {"friendly_name": "IPTV Vermogen", "current_power_w": 3.0},
+            "sensor.b": {"friendly_name": "Koelkast schuur", "current_power_w": 70.1},
+        },
+        (
+            "sensor.woonkamer_energy_management_system_nilm_onbevestigde_kandidaten",
+            "totaal_aantal",
+        ): 51,
+        (
+            "sensor.woonkamer_energy_management_system_nilm_bevestigde_apparaten",
+            "waarschijnlijke_duplicaten",
+        ): [
+            {
+                "apparaat_1": "Eetkamer lamp 1 Power",
+                "apparaat_2": "Eetkamer lamp 2 Power",
+                "gedeelde_dagen": 20,
+            },
+        ],
     }
     return fake_data.get((entity, attr))
 

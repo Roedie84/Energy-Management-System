@@ -114,3 +114,40 @@ def test_multiple_issues_all_listed(make_coordinator, hass):
     summary = coordinator.get_diagnostic_summary()
 
     assert len(summary["aandachtspunten"]) == 2
+
+
+def test_shows_recovery_progress_for_a_normalizing_device(make_coordinator, hass):
+    """v0.63.100, gevraagd: "kan dit eerder in diagnostiek worden
+    opgevangen" - een apparaat dat alweer een paar dagen normaal
+    gedrag laat zien (op weg naar auto-reset) moet die context tonen,
+    niet alleen een kale "mogelijk defect"-melding."""
+    coordinator = make_coordinator({})
+    coordinator.nilm_confirmed_devices = {
+        "sensor.a": {
+            "friendly_name": "CV-ketel Vermogen",
+            "anomaly_detected": True,
+            "_normal_streak_days": 2,
+        },
+    }
+
+    summary = coordinator.get_diagnostic_summary()
+
+    assert any(
+        "2 dag(en) op rij weer normaal" in p for p in summary["aandachtspunten"]
+    )
+    assert any("nog 3 dag(en)" in p for p in summary["aandachtspunten"])
+
+
+def test_no_recovery_note_without_a_streak(make_coordinator, hass):
+    coordinator = make_coordinator({})
+    coordinator.nilm_confirmed_devices = {
+        "sensor.a": {
+            "friendly_name": "CV-ketel Vermogen",
+            "anomaly_detected": True,
+            "_normal_streak_days": 0,
+        },
+    }
+
+    summary = coordinator.get_diagnostic_summary()
+
+    assert not any("weer normaal" in p for p in summary["aandachtspunten"])

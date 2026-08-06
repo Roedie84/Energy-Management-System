@@ -323,6 +323,39 @@ LEARNED_THRESHOLD_MARGIN_W = 5.0
 NILM_CUSUM_SLACK_FRACTION = 0.10
 NILM_CUSUM_ALARM_THRESHOLD = 1.0
 
+# Maximale bijdrage die ÉÉN dag aan de CUSUM-accumulator mag leveren
+# (v0.63.99, gevraagd tijdens een diagnostiek-review: CV-ketel en 5
+# "Eetkamer lamp"-sensoren bleven aanhoudend "mogelijk defect" tonen).
+# Gevonden: een enkele, geïsoleerde uitschieterdag (bijv. 45W tegen een
+# referentie van 6,2W, mogelijk een eenmalige gebeurtenis zoals extra
+# warmwaterverbruik) leverde zonder plafond een ONGEPLAFONNEERDE
+# bijdrage van >6 in één klap - ver boven de alarmdrempel (1,0) - en
+# liet het alarm daardoor langdurig afgaan, ook al was het structurele
+# gemiddelde over de hele periode maar +2,4%. Dit plafond zorgt dat een
+# geïsoleerde uitschieter maximaal de helft van de alarmdrempel in één
+# klap kan bijdragen - een structurele, aanhoudende afwijking (die dag
+# na dag boven de marge blijft) bouwt de accumulator nog steeds normaal
+# op en laat het alarm terecht afgaan; een eenmalige uitschieter niet
+# meer in zijn eentje.
+NILM_CUSUM_MAX_DAILY_CONTRIBUTION = 0.5
+
+# Auto-reset bij aanhoudende terugkeer naar normaal gedrag (v0.63.100,
+# gevraagd: "kan dit live zelf oplossen" - het plafond hierboven
+# voorkomt toekomstige uitschieter-gestuurde alarmen, maar een al
+# opgebouwde, verouderde accumulator (van vóór het plafond, of van een
+# structurele periode die inmiddels echt voorbij is) bouwt via de
+# normale, kleine dagelijkse afbouw extreem traag af - doorgerekend
+# voor het gerapporteerde CV-ketel-scenario zou dat bijna 90 dagen
+# duren. Zodra een apparaat dit aantal opeenvolgende dagen ACHTEREEN
+# een genuine terugkeer naar normaal laat zien (dagwaarde op of onder
+# de referentie, niet slechts "iets minder ver boven de marge" - dus
+# vóór het NILM_CUSUM_MAX_DAILY_CONTRIBUTION-plafond wordt toegepast),
+# wordt de accumulator direct volledig gereset in plaats van traag te
+# laten wegebben. Bewust een paar dagen vereist (niet na 1 dag al
+# resetten) om te voorkomen dat een kortstondige dip het alarm
+# onterecht meteen wegneemt terwijl het probleem zelf nog speelt.
+NILM_CUSUM_RESET_STREAK_DAYS = 5
+
 # Structurele NILM-uitsluitingspatronen (v0.63.89, gevraagd: "alles
 # waar fase 1 bij staat mag sowieso uitgesloten worden net als
 # solaredge en zendure entiteiten"). Substring-match (kleine letters)

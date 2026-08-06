@@ -95,6 +95,8 @@ from .const import (
     LEARNED_THRESHOLD_MARGIN_W,
     NILM_CUSUM_SLACK_FRACTION,
     NILM_CUSUM_ALARM_THRESHOLD,
+    NILM_CUSUM_MAX_DAILY_CONTRIBUTION,
+    NILM_CUSUM_RESET_STREAK_DAYS,
     NILM_PATTERN_EXCLUDED_KEYWORDS,
     NILM_DUPLICATE_MIN_SHARED_DAYS,
     NILM_DUPLICATE_TOLERANCE_FRACTION,
@@ -5972,6 +5974,25 @@ class EnergyManagementSystemCoordinator:
                 f"{len(possibly_defective)} apparaat/apparaten mogelijk "
                 f"defect: {', '.join(possibly_defective)}."
             )
+            # v0.63.100, gevraagd: "kan dit eerder in diagnostiek worden
+            # opgevangen" - context of het gedrag inmiddels alweer aan
+            # het normaliseren is (op weg naar de auto-reset,
+            # NILM_CUSUM_RESET_STREAK_DAYS), zodat direct duidelijk is
+            # of een alarm vers/actief is of al bezig met zelfherstel -
+            # zonder dat de gebruiker zelf de ruwe CUSUM-waarden hoeft
+            # te interpreteren.
+            for entity_id, device in self.nilm_confirmed_devices.items():
+                if not device.get("anomaly_detected"):
+                    continue
+                streak = device.get("_normal_streak_days", 0)
+                if streak > 0:
+                    naam = device.get("friendly_name") or entity_id
+                    resterend = max(0, NILM_CUSUM_RESET_STREAK_DAYS - streak)
+                    aandachtspunten.append(
+                        f"{naam}: {streak} dag(en) op rij weer normaal - "
+                        f"herstelt vanzelf over nog {resterend} dag(en) "
+                        "als dit aanhoudt."
+                    )
 
         duplicate_pairs = self.get_nilm_duplicate_pairs()
         if duplicate_pairs:
@@ -6233,9 +6254,45 @@ class EnergyManagementSystemCoordinator:
             return
         device["reference_avg_w"] = round(reference_avg_w, 2)
 
+        # v0.63.100: auto-reset bij aanhoudende, genuine terugkeer naar
+        # normaal gedrag - zie NILM_CUSUM_RESET_STREAK_DAYS's docstring.
+        # Bewust vóór het v0.63.99-plafond gemeten (de RUWE dagwaarde
+        # t.o.v. de referentie, niet de al-geplafonneerde bijdrage) -
+        # "normaal" betekent hier echt op of onder de referentie, niet
+        # slechts "iets minder ver boven de marge".
+        if daily_avg_w <= reference_avg_w:
+            device["_normal_streak_days"] = device.get("_normal_streak_days", 0) + 1
+        else:
+            device["_normal_streak_days"] = 0
+
+        if (
+            device.get("cusum_accumulator", 0.0) > 0
+            and device["_normal_streak_days"] >= NILM_CUSUM_RESET_STREAK_DAYS
+        ):
+            device["cusum_accumulator"] = 0.0
+            device["anomaly_detected"] = False
+            device["estimated_drift_percent"] = None
+            _LOGGER.debug(
+                "NILM CUSUM auto-reset voor %s: %d opeenvolgende dagen "
+                "terug op/onder referentie (%.2fW)",
+                entity_id,
+                device["_normal_streak_days"],
+                reference_avg_w,
+            )
+            return
+
         deviation_fraction = (
             (daily_avg_w - reference_avg_w) / reference_avg_w
             - NILM_CUSUM_SLACK_FRACTION
+        )
+        # v0.63.99: begrens de bijdrage van één enkele dag, zodat een
+        # geïsoleerde uitschieter (zie de constante's docstring) het
+        # alarm niet in zijn eentje kan laten afgaan - alleen negatieve
+        # kant (te lage waarden) blijft ongeplafonneerd, want die trekt
+        # de accumulator juist omlaag (nooit de oorzaak van een
+        # onterecht alarm).
+        deviation_fraction = min(
+            deviation_fraction, NILM_CUSUM_MAX_DAILY_CONTRIBUTION
         )
         device["cusum_accumulator"] = max(
             0.0, device.get("cusum_accumulator", 0.0) + deviation_fraction

@@ -884,6 +884,33 @@ views:
           {% endfor %}
           {% endif %}
 
+      - type: markdown
+        title: Onbevestigde NILM-kandidaten (voorbeeld, max 20 van totaal)
+        content: |
+          {% set kandidaten = state_attr('sensor.woonkamer_energy_management_system_nilm_onbevestigde_kandidaten', 'kandidaten') or {} %}
+          {% set totaal = state_attr('sensor.woonkamer_energy_management_system_nilm_onbevestigde_kandidaten', 'totaal_aantal') or 0 %}
+          {% if kandidaten | length == 0 %}
+          Geen onbevestigde kandidaten.
+          {% else %}
+          Toont {{ kandidaten | length }} van {{ totaal }} totaal - de volledige lijst staat in de diagnostiek-export.
+          {% for entity_id, info in kandidaten.items() %}
+          - **{{ info.friendly_name or entity_id }}** — {{ (info.current_power_w | round(1) | string ~ ' W') if info.current_power_w is not none else '—' }}
+          {% endfor %}
+          {% endif %}
+
+      - type: markdown
+        title: Waarschijnlijke NILM-duplicaten
+        content: |
+          {% set paren = state_attr('sensor.woonkamer_energy_management_system_nilm_bevestigde_apparaten', 'waarschijnlijke_duplicaten') or [] %}
+          {% if paren | length == 0 %}
+          Geen waarschijnlijke duplicaten gevonden onder de bevestigde apparaten.
+          {% else %}
+          Deze paren delen een (bijna) identieke vermogensgeschiedenis - vermoedelijk hetzelfde fysieke signaal onder twee HA-entiteiten. Overweeg er één permanent uit te sluiten via de `reject_nilm_device`-service (Ontwikkelaarshulpmiddelen → Acties).
+          {% for paar in paren %}
+          - **{{ paar.apparaat_1 }}** ↔ **{{ paar.apparaat_2 }}** ({{ paar.gedeelde_dagen }} gedeelde dagen)
+          {% endfor %}
+          {% endif %}
+
       - type: grid
         columns: 1
         square: false
