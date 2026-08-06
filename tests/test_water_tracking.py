@@ -87,7 +87,13 @@ def test_session_detected_and_logged(make_coordinator, hass):
     assert coordinator._water_usage_state == "rustend"
     assert len(coordinator.water_session_history) == 1
     session = coordinator.water_session_history[0]
-    assert session["liter"] == 45.0
+    # v0.63.119: de liters komen nu primair uit het GEINTEGREERDE
+    # debiet, niet meer uit het verschil van de meterstand. Hier stroomt
+    # 8 L/min gedurende 6 minuten = 48 L; de meterstand rapporteert 45 L
+    # (zijn eigen afronding). Beide worden vastgelegd, zodat een
+    # afwijking zichtbaar is in plaats van stilzwijgend.
+    assert session["liter"] == 48.0
+    assert session["liter_uit_meterstand"] == 45.0
     assert session["duur_minuten"] > 0
 
 

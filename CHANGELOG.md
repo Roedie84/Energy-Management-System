@@ -6929,3 +6929,75 @@ druk niet op een verschoven sleuf landt (v0.63.107).
 tests, waaronder niet-terugkomen na één en na vijf herstarts.
 
 **Volledige testsuite**: 665 tests, allemaal groen.
+
+## v0.63.119 — Waterverbruik: drie oorzaken waarom momenten het dagtotaal niet verklaarden
+
+**Gerapporteerd (derde keer)**: "dagtotaal (85 L) is een stuk hoger dan
+wat de geregistreerde gebruiksmomenten van vandaag verklaren (5 L)".
+
+De eerdere aanname (er worden stoten gemist) bleek niet de kern: de
+momenten werden grotendeels wél gedetecteerd, maar hun volume kwam op
+nul uit. Drie afzonderlijke, elk aantoonbare oorzaken:
+
+1. **Meterstand-resolutie**. Liters kwamen uitsluitend uit het verschil
+   van de cumulatieve meterstand. Bij m3 met twee decimalen is de
+   kleinste stap 10 L, dus elke korte stoot kwam uit op 0,0 L. Nu wordt
+   het DEBIET geïntegreerd (L/min x verstreken minuten), ongevoelig voor
+   de stapgrootte van de meter. Een te groot gat (herstart) wordt niet
+   meegerekend. De meterstand blijft als kruiscontrole in
+   `liter_uit_meterstand`.
+2. **Weergavevenster als rekenbasis**. De check telde op uit
+   `water_session_history`, die maar 20 momenten bewaart - meer momenten
+   op een dag gaf structureel een te laag "verklaard" totaal, los van de
+   detectie. Nu een losstaande dagteller (`water_sessions_today_l` /
+   `_count`), met de oude optelling als terugval na een herstart.
+3. **Tijdzone**. `last_changed` komt in UTC binnen terwijl de tick lokale
+   tijd doorgeeft. Gevolg: een moment tussen middernacht en 02:00 lokaal
+   kreeg de datum van gisteren (telde niet mee voor vandaag), en het
+   waterontharder-venster (0-6 uur) schoof twee uur mee (ochtenddouche
+   onterecht als regeneratie, nachtelijke spoeling juist niet). Zelfde
+   soort fout als de achtertuinsensor-tijdzonebug uit v0.63.93. Nu
+   `dt_util.as_local()`.
+
+**Getest**: nieuw `tests/test_water_session_volume_accounting.py`, 10
+tests waarvan er 9 aantoonbaar falen op v0.63.118. Twee bestaande tests
+legden de oude meterstand-methode vast en zijn meebewogen naar de nieuwe
+bedoeling (controleren nu beide waarden).
+
+**Volledige testsuite**: 675 tests, allemaal groen.
+
+## v0.63.120 — Klimaat-projectie meldde een verkeerde reden
+
+**Gerapporteerd** met screenshot van het ingevulde configuratiescherm:
+"Maar ze staan wel ingevuld?" Het Klimaat-tabblad meldde "Geen
+living_room_temperature_sensor_entity geconfigureerd of niet
+uitleesbaar", terwijl die sensor wél was gekoppeld en een actuele waarde
+gaf.
+
+**Root cause**: `_recompute_climate_trajectory` liet de reden bij een
+ontbrekende buitenvoorspelling over aan wat de FETCH ooit in
+`climate_forecast_note` had achtergelaten ("already set by the fetch
+step above"). Maar die fetch is gethrottled op eens per 30 minuten en
+draait op tussenliggende ticks helemaal niet. Gevolg: was de
+temperatuursensor eenmalig kort onbereikbaar (normaal vlak na een
+herstart), dan bleef die sensor-melding daarna permanent staan - ook toen
+de sensor allang weer werkte en de werkelijke oorzaak de ontbrekende
+buitentemperatuur-voorspelling was. Een onjuiste diagnose die de
+zoekrichting verlegt.
+
+**Tweede probleem**: "niet geconfigureerd" en "niet uitleesbaar" zaten in
+één zin, terwijl dat twee totaal verschillende situaties zijn (de een
+vraagt actie, de ander lost zichzelf op).
+
+**Fix**: de reden voor een ontbrekende buitenvoorspelling wordt apart
+bewaard (`_climate_forecast_fetch_note`) en elke tick opnieuw getoond;
+bij een geslaagde fetch gewist. Drie losse, accurate meldingen: niet
+geconfigureerd (verwijst naar Configureren), geconfigureerd maar nu niet
+uitleesbaar (noemt de entity_id, meldt dat het vanzelf herstelt), en nog
+geen buitenvoorspelling.
+
+**Getest**: nieuw `tests/test_climate_projection_note_accuracy.py`, 8
+tests waarvan er 6 aantoonbaar falen op v0.63.119, inclusief de exact
+gerapporteerde tick-volgorde.
+
+**Volledige testsuite**: 683 tests, allemaal groen.

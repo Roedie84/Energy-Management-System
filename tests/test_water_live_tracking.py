@@ -70,7 +70,10 @@ def test_event_listener_catches_a_brief_burst_the_tick_would_miss(
     assert coordinator._water_usage_state == "rustend"
     assert len(coordinator.water_session_history) == 1
     session = coordinator.water_session_history[0]
-    assert session["liter"] == 3.0
+    # v0.63.119: geintegreerd debiet is leidend - 8 L/min gedurende 20
+    # seconden is 2,67 L, afgerond 2,7. De meterstand meldt 3 L (eigen resolutie).
+    assert session["liter"] == 2.7
+    assert session["liter_uit_meterstand"] == 3.0
 
 
 def test_tick_still_finalizes_a_session_without_any_further_events(

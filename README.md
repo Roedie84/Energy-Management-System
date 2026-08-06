@@ -515,6 +515,161 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Klimaat-projectie wees naar een configuratieveld dat allang goed stond (v0.63.120)
+
+**Gerapporteerd**, met screenshot van het ingevulde configuratiescherm:
+"Maar ze staan wel ingevuld?"
+
+Het Klimaat-tabblad meldde *"Geen living_room_temperature_sensor_entity
+geconfigureerd of niet uitleesbaar"*, terwijl die sensor wél was
+gekoppeld én een actuele waarde gaf (23,46 °C, twee seconden oud). De
+melding was simpelweg onwaar — en stuurde de zoekrichting compleet de
+verkeerde kant op.
+
+### Root cause: een verouderde melding
+
+`_recompute_climate_trajectory` liet de reden bij een ontbrekende
+buitentemperatuur-voorspelling over aan wat de **fetch** ooit in
+`climate_forecast_note` had achtergelaten. In de code stond dat ook zo
+toegelicht: *"climate_forecast_note is already set by the fetch step
+above"*.
+
+Die aanname klopt niet. De fetch is bewust **gethrottled op eens per 30
+minuten** (het is een echte service-call, v0.63.58). Op alle
+tussenliggende ticks draait hij helemaal niet — en blijft in dat veld
+dus de melding staan van een situatie die allang voorbij is.
+
+De keten die dat opleverde:
+
+1. Vlak na een herstart is de temperatuursensor kort onbereikbaar —
+   volstrekt normaal terwijl het apparaat verbinding maakt.
+2. Die tick zet de melding "sensor niet geconfigureerd of niet
+   uitleesbaar".
+3. Vijf minuten later werkt de sensor prima, maar de
+   buitentemperatuur-voorspelling ontbreekt nog. De functie valt uit op
+   de vroege return en laat de melding **ongemoeid**.
+4. De fetch die de melding had moeten corrigeren, draait pas over 30
+   minuten — en zet 'm alleen als hij zélf faalt.
+
+Resultaat: een permanent onjuiste diagnose, die naar een
+configuratiescherm wijst waar niets mis is.
+
+### Tweede probleem in dezelfde tekst
+
+"Niet geconfigureerd" en "niet uitleesbaar" zaten in één zin. Dat zijn
+twee totaal verschillende situaties: de eerste vraagt om actie van de
+gebruiker, de tweede lost zichzelf op. Ze op één hoop gooien maakte een
+tijdelijke storing niet te onderscheiden van een configuratiefout.
+
+### Fix
+
+- De reden waarom de buitenvoorspelling ontbreekt wordt nu apart bewaard
+  (`_climate_forecast_fetch_note`) en bij **elke** tick opnieuw getoond,
+  in plaats van te vertrouwen op wat er toevallig nog in het gedeelde
+  meldingsveld stond. Bij een geslaagde fetch wordt die reden gewist, zodat
+  een opgeloste storing niet blijft hangen.
+- Drie losse, accurate meldingen in plaats van één:
+  - sensor niet geconfigureerd → verwijst naar Configureren;
+  - sensor geconfigureerd maar nu niet uitleesbaar → **noemt de
+    entity_id** en meldt dat het vanzelf herstelt;
+  - nog geen buitenvoorspelling → noemt dát als reden.
+
+### Getest
+
+Nieuw `tests/test_climate_projection_note_accuracy.py`, 8 tests waarvan
+er **6 aantoonbaar falen op v0.63.119**, inclusief de exact
+gerapporteerde volgorde (tick 1 sensor onbereikbaar → tick 2 sensor
+werkt weer): de melding van tick 1 mag in tick 2 niet blijven staan.
+Verder: de ontbrekende weerentiteit wordt als échte reden genoemd, niet
+geconfigureerd krijgt een eigen tekst, niet-uitleesbaar noemt de
+entity_id en suggereert géén configuratiefout, een geslaagde fetch wist
+de oude reden, en end-to-end herstelt de projectie volledig zodra alles
+beschikbaar is.
+
+**Volledige testsuite**: 683 tests, allemaal groen.
+
+## Waterverbruik: drie oorzaken waarom gebruiksmomenten het dagtotaal niet verklaarden (v0.63.119)
+
+**Gerapporteerd (derde keer)**: "Waterverbruik: dagtotaal (85 L) is een
+stuk hoger dan wat de geregistreerde gebruiksmomenten van vandaag
+verklaren (5 L) - mogelijk worden nog steeds stoten gemist."
+
+De eerdere aanname was dat er stoten gemist werden. Dat bleek niet de
+kern: de momenten werden grotendeels wél gedetecteerd, maar hun volume
+kwam op nul uit. Drie afzonderlijke oorzaken, elk apart aantoonbaar.
+
+### Oorzaak 1 — de meterstand is te grof voor korte stoten
+
+De liters per moment kwamen uitsluitend uit het verschil van de
+**cumulatieve meterstand** tussen start en einde. Dat is zo nauwkeurig
+als de resolutie van die meter. Bij een stand in m³ met twee decimalen
+is de kleinste waarneembare stap 10 liter — dus handen wassen, een
+toiletspoeling of een korte kraanstoot komt uit op precies 0,0 L. De
+momenten stonden netjes in de lijst, met volume nul.
+
+**Fix**: de liters worden nu bepaald door het **debiet te integreren**
+(L/min × verstreken minuten, opgeteld bij elke meting). Dat werkt op de
+resolutie van de debietsensor zelf en is dus ongevoelig voor de
+stapgrootte van de meterstand. Een te groot gat tussen twee metingen
+(bijvoorbeeld na een herstart) wordt niet meegerekend, zodat een
+achtergebleven debiet niet urenlang wordt doorgerekend.
+
+De meterstand-methode verdwijnt niet: die blijft als kruiscontrole in
+`liter_uit_meterstand` staan, zodat een afwijking tussen beide zichtbaar
+is in plaats van stilzwijgend.
+
+### Oorzaak 2 — het weergavevenster werd als rekenbasis gebruikt
+
+De diagnostiek-check telde de liters van vandaag op uit
+`water_session_history`. Die lijst bewaart met opzet maar de laatste
+20 momenten (weergave op het Water-tabblad). Zodra er meer momenten op
+een dag zijn, valt de rest er stilletjes uit en is het "verklaarde"
+dagtotaal structureel te laag — volledig los van de vraag of de detectie
+zelf goed werkte.
+
+**Fix**: een losstaande dagteller (`water_sessions_today_l` /
+`_count`) die buiten dat venster om loopt. De check gebruikt die nu, met
+de oude optelling als terugval vlak na een herstart.
+
+### Oorzaak 3 — tijdzone
+
+`new_state.last_changed` levert Home Assistant **altijd in UTC** aan,
+terwijl de 5-minuten-tick lokale tijd doorgeeft. Een moment dat via de
+listener startte kreeg dus een UTC-tijdstip mee. Twee concrete gevolgen:
+
+- Een moment tussen middernacht en 02:00 lokaal werd opgeslagen met de
+  datum van **gisteren** en telde daardoor niet mee voor "vandaag".
+- Het waterontharder-venster (0–6 uur) schoof twee uur mee: een douche
+  om 07:30 lokaal (05:30 UTC) werd onterecht als regeneratie aangemerkt,
+  terwijl een spoeling om 01:15 lokaal juist buiten het venster viel.
+
+Zelfde soort fout als de achtertuinsensor-tijdzonebug uit v0.63.93.
+
+**Fix**: `dt_util.as_local()` op het binnenkomende tijdstip.
+
+### Getest
+
+Nieuw `tests/test_water_session_volume_accounting.py`, 10 tests, waarvan
+er **9 aantoonbaar falen op v0.63.118**:
+
+- een korte stoot levert echte liters op ondanks een grove meterstand;
+- twaalf kleine stoten tellen samen op tot 72 L in plaats van bijna nul;
+- de meterstand blijft als kruiscontrole vastgelegd;
+- een groot gat wordt niet geïntegreerd;
+- de dagteller wordt niet begrensd door de weergavelijst (35 momenten);
+- de dagteller reset op een nieuwe dag;
+- het listener-tijdstip wordt naar lokale tijd omgerekend;
+- een ochtenddouche is géén waterontharder;
+- een nachtelijke regeneratie wordt juist wél herkend;
+- en end-to-end: het aandachtspunt verdwijnt zodra de momenten het
+  dagtotaal verklaren.
+
+Twee bestaande tests legden de oude meterstand-methode vast en zijn
+meebewogen naar de nieuwe bedoeling — ze controleren nu beide waarden
+(geïntegreerd én uit de meterstand).
+
+**Volledige testsuite**: 675 tests, allemaal groen.
+
 ## Duplicaatparen kunnen nu ook beoordeeld worden (v0.63.118)
 
 **Gevraagd**: "NILM apparaten kan ik bevestigen danwel negeren, dit kan
