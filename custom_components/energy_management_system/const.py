@@ -713,6 +713,15 @@ MAX_HOUR_TRACKING_GAP_MINUTES = 20
 # per-tick errors feeds a 0-100 sensor_health_score.
 ENERGY_BALANCE_ERROR_HISTORY_LENGTH = 20
 ENERGY_BALANCE_ERROR_BAD_THRESHOLD_W = 300.0
+# v0.63.121, twee keer waargenomen in de praktijk: "slecht (0.0%, 1
+# metingen)" en "verminderd (50.0%, 2 metingen)". Bij zo weinig
+# metingen zegt dat percentage niets - één ongelukkige meting maakt het
+# meteen 0% of 50%, en dat trok de systeemstatus onterecht omlaag. Het
+# venster loopt vlak na elke herstart onvermijdelijk door die fase
+# heen. Onder deze drempel wordt er dus GEEN oordeel geveld (score en
+# label blijven leeg) in plaats van een oordeel dat toevallig klopt.
+MEASUREMENT_QUALITY_MIN_SAMPLES = 10
+
 MEASUREMENT_QUALITY_GOOD_THRESHOLD = 80
 MEASUREMENT_QUALITY_DEGRADED_THRESHOLD = 50
 
@@ -865,3 +874,49 @@ REASON_TO_MODE = {
     "arbitrage_solar_capture": OPTION_SMART,
     "default_smart": OPTION_SMART,
 }
+
+# --- Accu-koeling (v0.63.122) ---------------------------------------
+# Overgenomen uit een losse HA-automatisering ("Accu: Temperatuurbeheer
+# Thuisaccu (Buiten) - PRO v9") die de gebruiker zelf had uitgewerkt en
+# getuned. Tot v0.63.121 stond die bewust BUITEN deze integratie om de
+# complexiteit te beperken; op verzoek alsnog geïntegreerd - "het heeft
+# mijn inziens toch met de accu te maken", en dat klopt: het is de enige
+# aansturing die direct met de accu samenhangt.
+#
+# De drempels hieronder zijn EXACT die van de automatisering. Er zit
+# bewust hysterese tussen aan- en uitschakelen (delta 5 vs 2, accu 35 vs
+# 33, vermogen 500 vs 300): zonder die marge zou de ventilator rond een
+# enkele drempel blijven pendelen.
+CONF_BATTERY_TEMPERATURE_SENSOR = "battery_temperature_sensor_entity"
+CONF_BATTERY_COOLING_FAN_SWITCH = "battery_cooling_fan_switch_entity"
+# Optioneel: een eigen buitentemperatuursensor specifiek voor deze
+# vergelijking. Leeg laten betekent terugvallen op de al bestaande
+# live-buitentemperatuur (achtertuinsensor, anders de weerentiteit).
+CONF_BATTERY_COOLING_OUTDOOR_SENSOR = "battery_cooling_outdoor_sensor_entity"
+
+# AANZETTEN zodra één van deze vier waar is:
+#   1. accu staat meer dan 5°C boven buiten
+BATTERY_COOLING_ON_DELTA_C = 5.0
+#   2. accu is absoluut te warm
+BATTERY_COOLING_ON_ABSOLUTE_C = 35.0
+#   3. noemenswaardig laden/ontladen én accu al 2°C boven buiten
+BATTERY_COOLING_ON_POWER_W = 500.0
+BATTERY_COOLING_ON_POWER_DELTA_C = 2.0
+#   4. zwaar laden/ontladen én accu al boven 30°C
+BATTERY_COOLING_ON_HIGH_POWER_W = 1500.0
+BATTERY_COOLING_ON_HIGH_POWER_TEMP_C = 30.0
+
+# UITZETTEN alleen als ALLE drie tegelijk gelden - één voorwaarde die
+# terugvalt is niet genoeg, anders slaat de ventilator af terwijl er nog
+# een andere reden is om te blijven koelen.
+BATTERY_COOLING_OFF_DELTA_C = 2.0
+BATTERY_COOLING_OFF_POWER_W = 300.0
+BATTERY_COOLING_OFF_ABSOLUTE_C = 33.0
+
+# Toestanden waarin de ventilatorschakelaar niets zinnigs zegt - dan
+# wordt er niet geschakeld (niet gokken op "hij zal wel uit staan").
+BATTERY_COOLING_FAN_UNAVAILABLE_STATES = {"unknown", "unavailable", None}
+
+# Hoeveel aan/uit-schakelingen van de koelventilator bewaard blijven
+# voor het dashboard/de diagnostiek.
+BATTERY_COOLING_HISTORY_LENGTH = 20

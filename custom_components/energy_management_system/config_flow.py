@@ -32,6 +32,9 @@ from .const import (
     CONF_QUOOKER_POWER_SENSOR,
     CONF_AIRCO_CLIMATE_ENTITY,
     CONF_SLAAPKAMER_CLIMATE_ENTITY,
+    CONF_BATTERY_COOLING_FAN_SWITCH,
+    CONF_BATTERY_COOLING_OUTDOOR_SENSOR,
+    CONF_BATTERY_TEMPERATURE_SENSOR,
     CONF_LIVING_ROOM_TEMPERATURE_SENSOR,
     CONF_LIVING_ROOM_HUMIDITY_SENSOR,
     CONF_LIVING_ROOM_SHUTTER_ENTITY_1,
@@ -252,6 +255,18 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
             ): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="climate")
             ),
+            vol.Optional(
+                CONF_BATTERY_TEMPERATURE_SENSOR,
+                default=defaults.get(CONF_BATTERY_TEMPERATURE_SENSOR),
+            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            vol.Optional(
+                CONF_BATTERY_COOLING_FAN_SWITCH,
+                default=defaults.get(CONF_BATTERY_COOLING_FAN_SWITCH),
+            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="switch")),
+            vol.Optional(
+                CONF_BATTERY_COOLING_OUTDOOR_SENSOR,
+                default=defaults.get(CONF_BATTERY_COOLING_OUTDOOR_SENSOR),
+            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
             vol.Optional(
                 CONF_LIVING_ROOM_TEMPERATURE_SENSOR,
                 default=defaults.get(CONF_LIVING_ROOM_TEMPERATURE_SENSOR),

@@ -200,7 +200,22 @@ from .const import (
     SOLAR_RAMP_DURATION_SECONDS,
     SOLAR_RAMP_STEPS,
     GRID_IMPORT_SHORTFALL_THRESHOLD_W,
+    BATTERY_COOLING_FAN_UNAVAILABLE_STATES,
+    BATTERY_COOLING_HISTORY_LENGTH,
+    BATTERY_COOLING_OFF_ABSOLUTE_C,
+    BATTERY_COOLING_OFF_DELTA_C,
+    BATTERY_COOLING_OFF_POWER_W,
+    BATTERY_COOLING_ON_ABSOLUTE_C,
+    BATTERY_COOLING_ON_DELTA_C,
+    BATTERY_COOLING_ON_HIGH_POWER_TEMP_C,
+    BATTERY_COOLING_ON_HIGH_POWER_W,
+    BATTERY_COOLING_ON_POWER_DELTA_C,
+    BATTERY_COOLING_ON_POWER_W,
+    CONF_BATTERY_COOLING_FAN_SWITCH,
+    CONF_BATTERY_COOLING_OUTDOOR_SENSOR,
+    CONF_BATTERY_TEMPERATURE_SENSOR,
     MAX_HOUR_TRACKING_GAP_MINUTES,
+    MEASUREMENT_QUALITY_MIN_SAMPLES,
     ENERGY_BALANCE_ERROR_HISTORY_LENGTH,
     ENERGY_BALANCE_ERROR_BAD_THRESHOLD_W,
     MEASUREMENT_QUALITY_GOOD_THRESHOLD,
@@ -395,6 +410,12 @@ class EnergyManagementSystemCoordinator:
         self.water_session_history: list[dict] = []
         self.water_softener_last_regeneration: datetime | None = None
         self.last_fietsladers_action: str | None = None
+
+        # Accu-koeling (v0.63.122) - overgenomen uit een losse
+        # HA-automatisering, zie const.py.
+        self.battery_cooling_state: dict = {}
+        self.battery_cooling_last_change: datetime | None = None
+        self.battery_cooling_history: list[dict] = []
 
         # -- Optional appliance awareness (informational only) --
         # Per hour-of-day, a rolling history of samples (1.0 = was
@@ -821,6 +842,7 @@ class EnergyManagementSystemCoordinator:
         self._unsub_interval = None
         self._unsub_state = None
         self._unsub_water_state = None
+        self._unsub_battery_cooling_state = None
 
     def register_listener(self, callback_fn) -> None:
         """Register a callback (e.g. entity.async_write_ha_state) to
@@ -927,6 +949,24 @@ class EnergyManagementSystemCoordinator:
         if water_active_entity:
             self._unsub_water_state = async_track_state_change_event(
                 self.hass, [water_active_entity], self._handle_water_flow_change
+            )
+        # v0.63.122: accu-koeling reageert live, niet alleen op de
+        # 5-minuten-tick. De vervangen automatisering draaide elke 2
+        # minuten én op elke sensorwijziging; met alleen de tick zou de
+        # ventilator merkbaar trager reageren dan de gebruiker gewend is,
+        # juist bij een plotselinge belastingpiek.
+        cooling_entities = [
+            entity
+            for entity in (
+                self.config.get(CONF_BATTERY_TEMPERATURE_SENSOR),
+                self.config.get(CONF_BATTERY_COOLING_OUTDOOR_SENSOR),
+                self.config.get(CONF_BATTERY_POWER_SENSOR),
+            )
+            if entity
+        ]
+        if cooling_entities and self.config.get(CONF_BATTERY_COOLING_FAN_SWITCH):
+            self._unsub_battery_cooling_state = async_track_state_change_event(
+                self.hass, cooling_entities, self._handle_battery_cooling_change
             )
         if self.hass.state == CoreState.running:
             # Home Assistant is already fully up (e.g. this integration
@@ -1120,6 +1160,8 @@ class EnergyManagementSystemCoordinator:
             self._unsub_state()
         if self._unsub_water_state:
             self._unsub_water_state()
+        if self._unsub_battery_cooling_state:
+            self._unsub_battery_cooling_state()
 
     @callback
     def _handle_interval(self, _now) -> None:
@@ -4921,6 +4963,239 @@ class EnergyManagementSystemCoordinator:
             1,
         )
 
+    def _read_battery_cooling_inputs(self) -> tuple | None:
+        """Leest de drie metingen die de koelbeslissing nodig heeft:
+        (accutemperatuur, buitentemperatuur, |accuvermogen|) - v0.63.122.
+
+        Geeft None terug zodra één ervan ontbreekt of onleesbaar is.
+
+        **Bewuste afwijking van de oorspronkelijke automatisering.** Die
+        gebruikte `states(...)|float(0)`, waardoor een onbeschikbare
+        sensor stilzwijgend als 0 werd gelezen. Dat is hier gevaarlijk:
+        valt de BUITENsensor weg, dan wordt buiten 0°C, is de delta
+        ineens gelijk aan de volledige accutemperatuur, en springt de
+        ventilator aan op basis van een meting die er niet is. Andersom
+        levert een weggevallen ACCUsensor 0°C op, waardoor er juist
+        nooit meer gekoeld wordt. Bij ontbrekende data verandert deze
+        integratie de schakelaar daarom niet - de bestaande stand blijft
+        staan, wat in beide richtingen de veilige keuze is.
+        """
+        temp_entity = self.config.get(CONF_BATTERY_TEMPERATURE_SENSOR)
+        if not temp_entity:
+            return None
+        accu_c = self._read_sensor_float(temp_entity)
+        if accu_c is None:
+            return None
+
+        outdoor_entity = self.config.get(CONF_BATTERY_COOLING_OUTDOOR_SENSOR)
+        if outdoor_entity:
+            buiten_c = self._read_sensor_float(outdoor_entity)
+        else:
+            # Geen eigen sensor opgegeven: hergebruik de al bestaande
+            # live-buitentemperatuur (achtertuinsensor met uitschieter-
+            # filter, anders de weerentiteit).
+            buiten_c = self.climate_live_outdoor_temp_c
+        if buiten_c is None:
+            return None
+
+        vermogen_w = self._read_corrected_battery_power()
+        if vermogen_w is None:
+            return None
+        return accu_c, buiten_c, abs(vermogen_w)
+
+    @staticmethod
+    def _battery_cooling_should_turn_on(
+        accu_c: float, buiten_c: float, vermogen_w: float
+    ) -> str | None:
+        """Welke van de vier aanzet-redenen geldt op dit moment, of None
+        (v0.63.122). Geeft de reden terug in plaats van alleen True/
+        False, zodat de melding en het dashboard kunnen tonen WAAROM er
+        gekoeld wordt - bij vier mogelijke oorzaken is "aan" alleen niet
+        genoeg om iets van te leren.
+        """
+        delta_c = accu_c - buiten_c
+        if delta_c > BATTERY_COOLING_ON_DELTA_C:
+            return (
+                f"accu staat {delta_c:.1f}°C boven buiten "
+                f"(meer dan {BATTERY_COOLING_ON_DELTA_C:.0f}°C)"
+            )
+        if accu_c > BATTERY_COOLING_ON_ABSOLUTE_C:
+            return (
+                f"accu is {accu_c:.1f}°C, boven de absolute grens van "
+                f"{BATTERY_COOLING_ON_ABSOLUTE_C:.0f}°C"
+            )
+        if (
+            vermogen_w > BATTERY_COOLING_ON_POWER_W
+            and delta_c > BATTERY_COOLING_ON_POWER_DELTA_C
+        ):
+            return (
+                f"{vermogen_w:.0f}W door de accu en al {delta_c:.1f}°C "
+                "boven buiten"
+            )
+        if (
+            vermogen_w > BATTERY_COOLING_ON_HIGH_POWER_W
+            and accu_c > BATTERY_COOLING_ON_HIGH_POWER_TEMP_C
+        ):
+            return (
+                f"zwaar belast ({vermogen_w:.0f}W) bij {accu_c:.1f}°C"
+            )
+        return None
+
+    @staticmethod
+    def _battery_cooling_should_turn_off(
+        accu_c: float, buiten_c: float, vermogen_w: float
+    ) -> bool:
+        """Uitschakelen mag alleen als ALLE drie voorwaarden tegelijk
+        gelden (v0.63.122) - één die terugvalt is niet genoeg, anders
+        slaat de ventilator af terwijl een andere reden om te koelen nog
+        staat. De drempels liggen bewust lager dan die voor aanzetten
+        (hysterese), zodat er niet rond één grens gependeld wordt.
+        """
+        delta_c = accu_c - buiten_c
+        return (
+            delta_c < BATTERY_COOLING_OFF_DELTA_C
+            and vermogen_w < BATTERY_COOLING_OFF_POWER_W
+            and accu_c < BATTERY_COOLING_OFF_ABSOLUTE_C
+        )
+
+    def evaluate_battery_cooling(self) -> dict:
+        """Bepaalt wat er met de koelventilator zou moeten gebeuren -
+        puur rekenwerk, schakelt zelf niets (v0.63.122).
+
+        Apart gehouden van het daadwerkelijk schakelen zodat de beslissing
+        los te testen is en het dashboard hem kan tonen zonder iets in
+        gang te zetten.
+        """
+        resultaat = {
+            "actie": None,
+            "reden": None,
+            "accu_c": None,
+            "buiten_c": None,
+            "vermogen_w": None,
+            "ventilator_aan": None,
+        }
+        fan_entity = self.config.get(CONF_BATTERY_COOLING_FAN_SWITCH)
+        if not fan_entity:
+            resultaat["reden"] = "Geen ventilatorschakelaar geconfigureerd."
+            return resultaat
+
+        metingen = self._read_battery_cooling_inputs()
+        if metingen is None:
+            resultaat["reden"] = (
+                "Accutemperatuur, buitentemperatuur of accuvermogen is nu "
+                "niet uitleesbaar - de ventilator wordt met rust gelaten."
+            )
+            return resultaat
+
+        accu_c, buiten_c, vermogen_w = metingen
+        resultaat.update(
+            {
+                "accu_c": round(accu_c, 1),
+                "buiten_c": round(buiten_c, 1),
+                "vermogen_w": round(vermogen_w, 0),
+                "delta_c": round(accu_c - buiten_c, 1),
+            }
+        )
+
+        fan_state = self.hass.states.get(fan_entity)
+        huidige = getattr(fan_state, "state", None)
+        if huidige in BATTERY_COOLING_FAN_UNAVAILABLE_STATES:
+            resultaat["reden"] = (
+                f"Ventilatorschakelaar {fan_entity} is niet uitleesbaar."
+            )
+            return resultaat
+        aan = huidige == "on"
+        resultaat["ventilator_aan"] = aan
+
+        if not aan:
+            reden = self._battery_cooling_should_turn_on(
+                accu_c, buiten_c, vermogen_w
+            )
+            if reden:
+                resultaat["actie"] = "aan"
+                resultaat["reden"] = reden
+            else:
+                resultaat["reden"] = "Koeling niet nodig."
+            return resultaat
+
+        if self._battery_cooling_should_turn_off(accu_c, buiten_c, vermogen_w):
+            resultaat["actie"] = "uit"
+            resultaat["reden"] = (
+                f"accu {accu_c:.1f}°C, nog maar "
+                f"{accu_c - buiten_c:.1f}°C boven buiten en "
+                f"{vermogen_w:.0f}W belasting"
+            )
+        else:
+            resultaat["reden"] = "Blijft koelen."
+        return resultaat
+
+    async def _async_apply_battery_cooling(self) -> None:
+        """Voert de uitkomst van `evaluate_battery_cooling` uit
+        (v0.63.122).
+
+        Respecteert `learning_only` en `force_manual` net als elke andere
+        aansturing in deze integratie: staat er één van beide aan, dan
+        rekent hij wél door (zodat het dashboard blijft kloppen) maar
+        raakt hij de schakelaar niet aan.
+        """
+        besluit = self.evaluate_battery_cooling()
+        self.battery_cooling_state = besluit
+        if besluit["actie"] is None:
+            return
+        if self.learning_only or self.force_manual:
+            besluit["reden"] = (
+                f"{besluit['reden']} (niet uitgevoerd: "
+                f"{'learning only' if self.learning_only else 'force manual'} "
+                "staat aan)"
+            )
+            return
+
+        fan_entity = self.config.get(CONF_BATTERY_COOLING_FAN_SWITCH)
+        service = "turn_on" if besluit["actie"] == "aan" else "turn_off"
+        try:
+            await self.hass.services.async_call(
+                "switch", service, {"entity_id": fan_entity}, blocking=True
+            )
+        except Exception as err:  # noqa: BLE001 - achtergrondtaak
+            _LOGGER.warning(
+                "Kon de accu-koelventilator (%s) niet %s: %s",
+                fan_entity,
+                service,
+                err,
+            )
+            return
+
+        self.battery_cooling_last_change = dt_util.now()
+        self.battery_cooling_history.append(
+            {
+                "moment": self.battery_cooling_last_change.isoformat(),
+                "actie": besluit["actie"],
+                "reden": besluit["reden"],
+                "accu_c": besluit["accu_c"],
+                "buiten_c": besluit["buiten_c"],
+                "vermogen_w": besluit["vermogen_w"],
+            }
+        )
+        self.battery_cooling_history = self.battery_cooling_history[
+            -BATTERY_COOLING_HISTORY_LENGTH:
+        ]
+
+        titel = (
+            "🔋 Accu: koeling AAN" if besluit["actie"] == "aan"
+            else "🔋 Accu: koeling UIT"
+        )
+        self._dispatch_notification(
+            notify_service=self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE),
+            title=titel,
+            message=(
+                f"Accu {besluit['accu_c']}°C, buiten {besluit['buiten_c']}°C, "
+                f"delta {besluit['delta_c']}°C, vermogen "
+                f"{besluit['vermogen_w']:.0f}W — {besluit['reden']}."
+            ),
+            notification_id="ems_battery_cooling",
+        )
+        self._notify_listeners()
+
     def _update_peak_power_tracking(self, now: datetime) -> None:
         """Piekvermogen-tracking voor capaciteitstarieven (v0.63.101,
         gevraagd: "zaken voor een typisch EMS welke we kunnen
@@ -5333,7 +5608,13 @@ class EnergyManagementSystemCoordinator:
         ]
 
         total = len(self.energy_balance_error_history)
-        if total == 0:
+        if total < MEASUREMENT_QUALITY_MIN_SAMPLES:
+            # v0.63.121: pas oordelen zodra er genoeg metingen zijn -
+            # zie MEASUREMENT_QUALITY_MIN_SAMPLES. Vlak na een herstart
+            # is het venster leeg, en één afwijkende meting leverde dan
+            # "slecht (0.0%, 1 metingen)" op: statistisch betekenisloos,
+            # maar het bracht de systeemstatus wel op "Aandacht
+            # gewenst".
             self.sensor_health_score = None
             self.measurement_quality = None
             return
@@ -5821,6 +6102,23 @@ class EnergyManagementSystemCoordinator:
             self.water_sessions_today_l = round(
                 self.water_sessions_today_l + liters, 2
             )
+
+    @callback
+    def _handle_battery_cooling_change(self, event) -> None:
+        """Live-evaluatie van de accu-koeling bij elke wijziging van de
+        accutemperatuur, buitentemperatuur of het accuvermogen
+        (v0.63.122).
+
+        De vervangen automatisering had een eigen trigger op vermogen
+        boven 500W gedurende 20 seconden. Die "for: 20s"-vertraging is
+        hier niet nagebouwd: deze handler draait bij elke wijziging, en
+        de hysterese in de uitschakelvoorwaarden voorkomt al dat een
+        korte piek de ventilator laat pendelen. Wél een echte
+        gedragswijziging, dus expliciet vermeld.
+        """
+        if event.data.get("new_state") is None:
+            return
+        self.hass.async_create_task(self._async_apply_battery_cooling())
 
     @callback
     def _handle_water_flow_change(self, event) -> None:
@@ -7184,29 +7482,67 @@ class EnergyManagementSystemCoordinator:
             # blijft als terugval voor een verse start (teller nog leeg
             # terwijl er wel al historie is, bijv. net na een herstart).
             sessions_today_liters = 0.0
+            sessions_today_count = 0
             if (
                 self._water_sessions_day_key is not None
                 and self._water_sessions_day_key.isoformat() == today_str
             ):
                 sessions_today_liters = self.water_sessions_today_l
+                sessions_today_count = self.water_sessions_today_count
             else:
+                # v0.63.121: de datum wordt nu uit de tijdstempel
+                # GEPARSED en naar lokale tijd omgerekend, in plaats van
+                # de eerste tien tekens als datum te lezen. Momenten die
+                # vóór v0.63.119 door de listener zijn vastgelegd staan
+                # namelijk in UTC in de geschiedenis (zichtbaar in een
+                # diagnostiek-export: dezelfde lijst bevatte zowel
+                # "+02:00" als "+00:00"), en een UTC-tijdstempel tussen
+                # middernacht en 02:00 lokaal levert bij een simpele
+                # tekstvergelijking de datum van GISTEREN op. Die oude
+                # momenten blijven in de geschiedenis staan, dus zonder
+                # deze omrekening blijft die scheefheid bestaan.
                 for session in self.water_session_history:
                     gestart = session.get("gestart")
                     liter = session.get("liter")
-                    if not gestart or liter is None:
+                    if not gestart:
                         continue
-                    try:
-                        if gestart[:10] == today_str:
-                            sessions_today_liters += liter
-                    except (TypeError, IndexError):
+                    moment = dt_util.parse_datetime(gestart)
+                    if moment is None:
                         continue
+                    if dt_util.as_local(moment).date().isoformat() != today_str:
+                        continue
+                    sessions_today_count += 1
+                    if liter is not None:
+                        sessions_today_liters += liter
             if sessions_today_liters < self.water_daily_total_l * 0.3:
+                # v0.63.121: het aantal momenten erbij, plus een
+                # richtinggevende conclusie. "Mogelijk worden stoten
+                # gemist" was een gok die twee keer de verkeerde kant op
+                # wees; het aantal momenten onderscheidt de twee
+                # mogelijke oorzaken juist meteen van elkaar - weinig
+                # momenten betekent dat de detectie ze mist, veel
+                # momenten met weinig liters betekent dat de
+                # VOLUMEBEPALING tekortschiet.
+                if sessions_today_count <= 5:
+                    duiding = (
+                        f"er zijn maar {sessions_today_count} "
+                        "gebruiksmoment(en) herkend, dus de detectie zelf "
+                        "mist waarschijnlijk stoten (staat de debietsensor "
+                        "wel live bij te werken?)"
+                    )
+                else:
+                    duiding = (
+                        f"er zijn wél {sessions_today_count} "
+                        "gebruiksmomenten herkend, dus de detectie werkt - "
+                        "het volume per moment valt te laag uit (vergelijk "
+                        "'liter' met 'liter_uit_meterstand' in de "
+                        "sessiegeschiedenis)"
+                    )
                 aandachtspunten.append(
                     f"Waterverbruik: dagtotaal ({self.water_daily_total_l:.0f} L) "
                     f"is een stuk hoger dan wat de geregistreerde "
                     f"gebruiksmomenten van vandaag verklaren "
-                    f"({sessions_today_liters:.0f} L) - mogelijk worden nog "
-                    "steeds stoten gemist."
+                    f"({sessions_today_liters:.0f} L) - {duiding}."
                 )
 
         # v0.63.117: het salderingsregime zichtbaar maken. Informatief,
@@ -7608,7 +7944,15 @@ class EnergyManagementSystemCoordinator:
         humidity_percent = (
             self._read_sensor_float(humidity_entity) if humidity_entity else None
         )
-        self.living_room_current_humidity_percent = humidity_percent
+        # v0.63.121, gezien in een diagnostiek-export:
+        # 45.9213256835938%. Exact dezelfde klacht die in v0.63.92 voor
+        # de TEMPERATUUR werd opgelost ("absurd veel decimalen"), maar
+        # de luchtvochtigheid ernaast bleef toen ongemoeid - dezelfde
+        # sensor, dezelfde hoge precisie, dus hetzelfde probleem. Hier
+        # op 1 decimaal, consistent met elke andere weergave.
+        self.living_room_current_humidity_percent = (
+            round(humidity_percent, 1) if humidity_percent is not None else None
+        )
 
         bucket_key = str(
             round(temp_c / LIVING_ROOM_TEMP_BUCKET_SIZE_C) * LIVING_ROOM_TEMP_BUCKET_SIZE_C
@@ -9296,6 +9640,7 @@ class EnergyManagementSystemCoordinator:
         self._update_quooker_tracking(now)
         self._update_water_tracking(now)
         self._update_peak_power_tracking(now)
+        await self._async_apply_battery_cooling()
         self._update_feedin_regime(now, entries)
         self._update_counterfactual_savings(now, entries)
         self._update_self_sufficiency_tracking(now)

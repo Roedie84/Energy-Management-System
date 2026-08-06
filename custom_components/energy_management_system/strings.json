@@ -49,7 +49,10 @@
           "steelstofzuiger_power_sensor_entity": "Stick vacuum power sensor (optional, detects when charging is complete)",
           "fietsladers_switch_entity": "E-bike chargers switch (optional, charges automatically during the cheapest block)",
           "fietsladers_power_sensor_entity": "E-bike chargers power sensor (optional, detects when batteries are full)",
-          "appliance_notify_service": "Notify service for appliance and battery-mode notifications (empty = HA popup)"
+          "appliance_notify_service": "Notify service for appliance and battery-mode notifications (empty = HA popup)",
+          "battery_temperature_sensor_entity": "Battery temperature sensor (optional, cooling fan)",
+          "battery_cooling_fan_switch_entity": "Battery cooling fan switch (optional)",
+          "battery_cooling_outdoor_sensor_entity": "Outdoor temperature for battery cooling (optional, empty = reuse existing outdoor temperature)"
         }
       }
     },
@@ -106,7 +109,10 @@
           "steelstofzuiger_power_sensor_entity": "Stick vacuum power sensor (optional, detects when charging is complete)",
           "fietsladers_switch_entity": "E-bike chargers switch (optional, charges automatically during the cheapest block)",
           "fietsladers_power_sensor_entity": "E-bike chargers power sensor (optional, detects when batteries are full)",
-          "appliance_notify_service": "Notify service for appliance and battery-mode notifications (empty = HA popup)"
+          "appliance_notify_service": "Notify service for appliance and battery-mode notifications (empty = HA popup)",
+          "battery_temperature_sensor_entity": "Battery temperature sensor (optional, cooling fan)",
+          "battery_cooling_fan_switch_entity": "Battery cooling fan switch (optional)",
+          "battery_cooling_outdoor_sensor_entity": "Outdoor temperature for battery cooling (optional, empty = reuse existing outdoor temperature)"
         }
       }
     }

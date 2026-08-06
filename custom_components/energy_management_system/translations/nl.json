@@ -23,15 +23,15 @@
           "battery_power_sensor_entity": "Accu vermogen sensor (voor correctie huishoudverbruik: positief=ontladen, negatief=laden)",
           "pv_power_sensor_entity": "Live PV-productievermogen sensor (voor nog nauwkeurigere verbruikscorrectie)",
           "invert_battery_power_sign": "Teken omdraaien accu-vermogen (aan = negatief betekent ontladen)",
-          "solar_today_forecast_sensor_entity": "Solcast PV-voorspelling sensor (vandaag) \u2014 voor uur-voor-uur opbrengst-schatting",
+          "solar_today_forecast_sensor_entity": "Solcast PV-voorspelling sensor (vandaag) — voor uur-voor-uur opbrengst-schatting",
           "solar_remaining_today_sensor_entity": "Solcast resterende voorspelling vandaag sensor (aflopend, voor realtime correctie)",
           "solar_extended_forecast_sensor_entities": "Solcast dag+3, dag+4, etc. sensoren (in volgorde, voor meerdaagse lage-zon-detectie)",
           "negative_price_charge_power": "Laadvermogen bij negatieve prijs (W, negatief = laden)",
           "solar_power_limit_entity": "Zonnepaneel-vermogenslimiet slider (bv. number.solaredge_i1_active_power_limit)",
           "knmi_weather_entity": "KNMI weather-entiteit (optioneel, bewolkingsgraad-tegencheck)",
           "openweathermap_weather_entity": "OpenWeatherMap weather-entiteit (optioneel, bewolkingsgraad-tegencheck)",
-          "battery_round_trip_efficiency_percent": "Accu-rendement (%) \u2014 voor de PV-aftrek in de reserve-berekening",
-          "vacation_consumption_reduction_percent": "Vakantie-verbruiksreductie (%) \u2014 hoeveel lager dan normaal tijdens vakantiemodus",
+          "battery_round_trip_efficiency_percent": "Accu-rendement (%) — voor de PV-aftrek in de reserve-berekening",
+          "vacation_consumption_reduction_percent": "Vakantie-verbruiksreductie (%) — hoeveel lager dan normaal tijdens vakantiemodus",
           "dishwasher_power_sensor_entity": "Vaatwasser vermogen-sensor (optioneel)",
           "dishwasher_ready_sensor_entity": "Vaatwasser \"klaar om te starten\"-sensor (optioneel)",
           "washing_machine_power_sensor_entity": "Wasmachine vermogen-sensor (optioneel)",
@@ -49,7 +49,10 @@
           "steelstofzuiger_power_sensor_entity": "Steelstofzuiger vermogen-sensor (optioneel, detecteert einde lading)",
           "fietsladers_switch_entity": "Fietsladers schakelaar (optioneel, laadt automatisch in het goedkoopste blok)",
           "fietsladers_power_sensor_entity": "Fietsladers vermogen-sensor (optioneel, detecteert volle accu's)",
-          "appliance_notify_service": "Notify-service voor apparaat- en accumodus-meldingen (leeg = pop-up in HA)"
+          "appliance_notify_service": "Notify-service voor apparaat- en accumodus-meldingen (leeg = pop-up in HA)",
+          "battery_temperature_sensor_entity": "Accutemperatuur-sensor (optioneel, koelventilator)",
+          "battery_cooling_fan_switch_entity": "Schakelaar accu-koelventilator (optioneel)",
+          "battery_cooling_outdoor_sensor_entity": "Buitentemperatuur voor accu-koeling (optioneel, leeg = gebruik bestaande buitentemperatuur)"
         }
       }
     },
@@ -80,15 +83,15 @@
           "battery_power_sensor_entity": "Accu vermogen sensor (voor correctie huishoudverbruik: positief=ontladen, negatief=laden)",
           "pv_power_sensor_entity": "Live PV-productievermogen sensor (voor nog nauwkeurigere verbruikscorrectie)",
           "invert_battery_power_sign": "Teken omdraaien accu-vermogen (aan = negatief betekent ontladen)",
-          "solar_today_forecast_sensor_entity": "Solcast PV-voorspelling sensor (vandaag) \u2014 voor uur-voor-uur opbrengst-schatting",
+          "solar_today_forecast_sensor_entity": "Solcast PV-voorspelling sensor (vandaag) — voor uur-voor-uur opbrengst-schatting",
           "solar_remaining_today_sensor_entity": "Solcast resterende voorspelling vandaag sensor (aflopend, voor realtime correctie)",
           "solar_extended_forecast_sensor_entities": "Solcast dag+3, dag+4, etc. sensoren (in volgorde, voor meerdaagse lage-zon-detectie)",
           "negative_price_charge_power": "Laadvermogen bij negatieve prijs (W, negatief = laden)",
           "solar_power_limit_entity": "Zonnepaneel-vermogenslimiet slider (bv. number.solaredge_i1_active_power_limit)",
           "knmi_weather_entity": "KNMI weather-entiteit (optioneel, bewolkingsgraad-tegencheck)",
           "openweathermap_weather_entity": "OpenWeatherMap weather-entiteit (optioneel, bewolkingsgraad-tegencheck)",
-          "battery_round_trip_efficiency_percent": "Accu-rendement (%) \u2014 voor de PV-aftrek in de reserve-berekening",
-          "vacation_consumption_reduction_percent": "Vakantie-verbruiksreductie (%) \u2014 hoeveel lager dan normaal tijdens vakantiemodus",
+          "battery_round_trip_efficiency_percent": "Accu-rendement (%) — voor de PV-aftrek in de reserve-berekening",
+          "vacation_consumption_reduction_percent": "Vakantie-verbruiksreductie (%) — hoeveel lager dan normaal tijdens vakantiemodus",
           "dishwasher_power_sensor_entity": "Vaatwasser vermogen-sensor (optioneel)",
           "dishwasher_ready_sensor_entity": "Vaatwasser \"klaar om te starten\"-sensor (optioneel)",
           "washing_machine_power_sensor_entity": "Wasmachine vermogen-sensor (optioneel)",
@@ -106,7 +109,10 @@
           "steelstofzuiger_power_sensor_entity": "Steelstofzuiger vermogen-sensor (optioneel, detecteert einde lading)",
           "fietsladers_switch_entity": "Fietsladers schakelaar (optioneel, laadt automatisch in het goedkoopste blok)",
           "fietsladers_power_sensor_entity": "Fietsladers vermogen-sensor (optioneel, detecteert volle accu's)",
-          "appliance_notify_service": "Notify-service voor apparaat- en accumodus-meldingen (leeg = pop-up in HA)"
+          "appliance_notify_service": "Notify-service voor apparaat- en accumodus-meldingen (leeg = pop-up in HA)",
+          "battery_temperature_sensor_entity": "Accutemperatuur-sensor (optioneel, koelventilator)",
+          "battery_cooling_fan_switch_entity": "Schakelaar accu-koelventilator (optioneel)",
+          "battery_cooling_outdoor_sensor_entity": "Buitentemperatuur voor accu-koeling (optioneel, leeg = gebruik bestaande buitentemperatuur)"
         }
       }
     }

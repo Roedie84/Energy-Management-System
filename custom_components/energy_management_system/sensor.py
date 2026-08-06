@@ -64,6 +64,7 @@ async def async_setup_entry(
         DischargeValueSensor(coordinator, entry.entry_id),
         ChargeCostSensor(coordinator, entry.entry_id),
         BatterySavingsSensor(coordinator, entry.entry_id),
+        BatteryCoolingSensor(coordinator, entry.entry_id),
         EnergyBalanceHealthSensor(coordinator, entry.entry_id),
         SluipverbruikSensor(coordinator, entry.entry_id),
         WeatherEnsembleSensor(coordinator, entry.entry_id),
@@ -3235,3 +3236,43 @@ class UpcomingTimelineSensor(_CoordinatorDiagnosticSensor):
         return {
             "transitions": self._coordinator.last_transitions,
         }
+
+
+class BatteryCoolingSensor(SensorEntity):
+    """Accu-koelventilator: huidige stand + waarom (v0.63.122).
+
+    Overgenomen uit een losse HA-automatisering die de gebruiker zelf had
+    getuned. Deze sensor toont niet alleen of de ventilator aan staat,
+    maar ook WELKE van de vier aanzet-redenen geldt - met vier mogelijke
+    oorzaken zegt "aan" alleen te weinig om iets van te leren, en dat is
+    precies wat de losse automatisering ook al met een melding probeerde
+    op te lossen.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Accu-koeling"
+    _attr_icon = "mdi:fan"
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_battery_cooling"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def native_value(self) -> str:
+        state = self._coordinator.battery_cooling_state or {}
+        aan = state.get("ventilator_aan")
+        if aan is None:
+            return "niet actief"
+        return "koelt" if aan else "uit"
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        state = dict(self._coordinator.battery_cooling_state or {})
+        laatste = self._coordinator.battery_cooling_last_change
+        state["laatste_wijziging"] = laatste.isoformat() if laatste else None
+        state["geschiedenis"] = self._coordinator.battery_cooling_history[-10:]
+        return state
