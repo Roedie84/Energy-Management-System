@@ -259,6 +259,47 @@ async def async_get_config_entry_diagnostics(
         "config": config,
         "diagnostic_summary": coordinator.get_diagnostic_summary(),
         "live_narrative": coordinator.get_live_narrative(datetime.now()),
+        "ems_kpis": {
+            "peak_power_today_w": coordinator.peak_power_today_w,
+            "peak_power_current_month_w": coordinator.peak_power_current_month_w,
+            "peak_power_previous_month_w": coordinator.peak_power_previous_month_w,
+            "peak_power_all_time_w": coordinator.peak_power_all_time_w,
+            "peak_power_all_time_date": coordinator.peak_power_all_time_date,
+            "peak_power_daily_history": coordinator.peak_power_daily_history,
+            "actual_cost_today_eur": coordinator.actual_cost_today_eur,
+            "counterfactual_cost_today_eur": coordinator.counterfactual_cost_today_eur,
+            "actual_cost_current_month_eur": coordinator.actual_cost_current_month_eur,
+            "counterfactual_cost_current_month_eur": (
+                coordinator.counterfactual_cost_current_month_eur
+            ),
+            "actual_cost_all_time_eur": coordinator.actual_cost_all_time_eur,
+            "counterfactual_cost_all_time_eur": (
+                coordinator.counterfactual_cost_all_time_eur
+            ),
+            "self_consumption_ratio_percent": (
+                coordinator.self_consumption_ratio_percent
+            ),
+            "self_sufficiency_ratio_percent": (
+                coordinator.self_sufficiency_ratio_percent
+            ),
+            "pv_production_today_kwh": coordinator.pv_production_today_kwh,
+            "pv_export_today_kwh": coordinator.pv_export_today_kwh,
+            "gross_consumption_today_kwh": coordinator.gross_consumption_today_kwh,
+            "grid_import_today_kwh": coordinator.grid_import_today_kwh,
+            "battery_cumulative_discharged_kwh": (
+                coordinator.battery_cumulative_discharged_kwh
+            ),
+            "battery_estimated_full_cycles": (
+                coordinator.battery_estimated_full_cycles
+            ),
+            "battery_estimated_capacity_percent": (
+                coordinator.battery_estimated_capacity_percent
+            ),
+            "co2_emitted_today_kg": coordinator.co2_emitted_today_kg,
+            "last_co2_intensity_g_per_kwh": (
+                coordinator.last_co2_intensity_g_per_kwh
+            ),
+        },
         "learning_health": _build_learning_health(
             coordinator, solar_tracker, datetime.now()
         ),

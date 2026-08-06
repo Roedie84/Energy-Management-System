@@ -79,6 +79,11 @@ async def async_setup_entry(
         LivingRoomAircoPredictionSensor(coordinator, entry.entry_id),
         ClimateForecastSensor(coordinator, entry.entry_id),
         WaterUsageSensor(coordinator, entry.entry_id),
+        PeakPowerSensor(coordinator, entry.entry_id),
+        CounterfactualSavingsSensor(coordinator, entry.entry_id),
+        SelfSufficiencySensor(coordinator, entry.entry_id),
+        BatteryHealthSensor(coordinator, entry.entry_id),
+        CO2IntensitySensor(coordinator, entry.entry_id),
         ModelTrendInsightSensor(coordinator, entry.entry_id),
         LiveNarrativeSensor(coordinator, entry.entry_id),
         ReserveShortfallSensor(coordinator, entry.entry_id),
@@ -1787,6 +1792,313 @@ class ClimateForecastSensor(SensorEntity, RestoreEntity):
             self._coordinator.climate_forecast_bias_history = [
                 float(v) for v in raw_bias_history
             ]
+
+
+class CO2IntensitySensor(SensorEntity):
+    """CO2-intensiteit van het net (v0.63.101, gevraagd: "zaken voor
+    een typisch EMS welke we kunnen toevoegen"). Puur informatief,
+    stuurt niets aan. Alleen actief als een CO2-intensiteit-entiteit is
+    geconfigureerd (bijv. ElectricityMaps, CO2 Signal).
+
+    State = geschatte uitstoot vandaag (kg) van geïmporteerde energie.
+    Niet een RestoreEntity - een "vandaag"-metriek, zelfde afweging als
+    de zelfvoorzieningsratio-sensor.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "CO2-uitstoot vandaag"
+    _attr_icon = "mdi:molecule-co2"
+    _attr_native_unit_of_measurement = "kg"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_co2_intensity"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def native_value(self) -> float:
+        return round(self._coordinator.co2_emitted_today_kg, 2)
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return {
+            "huidige_intensiteit_g_per_kwh": (
+                self._coordinator.last_co2_intensity_g_per_kwh
+            ),
+            "note": (
+                "Alleen de CO2-uitstoot van geïmporteerde energie - "
+                "energie die zelf via PV/accu wordt gedekt importeert "
+                "niets en stoot dus niets uit voor deze rekening."
+            ),
+        }
+
+
+class BatteryHealthSensor(SensorEntity, RestoreEntity):
+    """Accu-gezondheid: cyclus-telling en geschatte capaciteits-
+    degradatie (v0.63.101, gevraagd: "zaken voor een typisch EMS welke
+    we kunnen toevoegen"). Puur informatief, stuurt niets aan.
+
+    State = geschat aantal volledige cycli. BEWUST EN DUIDELIJK een
+    ruwe schatting, geen gemeten waarde - zie
+    `BATTERY_CYCLES_TO_80_PERCENT_CAPACITY`'s docstring in const.py.
+    RestoreEntity - de cumulatieve ontladen energie is een levenslange
+    teller, moet een herstart overleven.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Accu-gezondheid (geschat)"
+    _attr_icon = "mdi:battery-heart-variant"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_battery_health"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def native_value(self) -> float | None:
+        return self._coordinator.battery_estimated_full_cycles
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return {
+            "cumulatief_ontladen_kwh": round(
+                self._coordinator.battery_cumulative_discharged_kwh, 2
+            ),
+            "geschatte_resterende_capaciteit_procent": (
+                self._coordinator.battery_estimated_capacity_percent
+            ),
+            "note": (
+                "Ruwe schatting, GEEN gemeten waarde - deze integratie kan "
+                "de werkelijke accucapaciteit niet meten. Lineair model op "
+                "basis van cyclusaantal, aangenomen 80% capaciteit na "
+                "4000 volledige cycli (representatief voor LFP-chemie, "
+                "kan afwijken van de daadwerkelijke celspecificaties)."
+            ),
+        }
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if last_state is None:
+            return
+        raw = last_state.attributes.get("cumulatief_ontladen_kwh")
+        if raw is not None:
+            self._coordinator.battery_cumulative_discharged_kwh = float(raw)
+
+
+class SelfSufficiencySensor(SensorEntity):
+    """Zelfconsumptie-/zelfvoorzieningsratio (v0.63.101, gevraagd:
+    "zaken voor een typisch EMS welke we kunnen toevoegen" - klassieke
+    EMS-KPI's). Puur informatief, stuurt niets aan.
+
+    State = zelfvoorzieningsratio vandaag (%); zelfconsumptie staat als
+    apart attribuut. Niet een RestoreEntity - een "vandaag"-metriek die
+    toch elke dag weer bij 0 begint; een herstart halverwege de dag
+    kost hooguit een beetje precisie voor die ene dag.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Zelfvoorzieningsratio"
+    _attr_icon = "mdi:home-battery-outline"
+    _attr_native_unit_of_measurement = "%"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_self_sufficiency"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def native_value(self) -> float | None:
+        return self._coordinator.self_sufficiency_ratio_percent
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        c = self._coordinator
+        return {
+            "zelfconsumptie_procent": c.self_consumption_ratio_percent,
+            "pv_productie_vandaag_kwh": round(c.pv_production_today_kwh, 2),
+            "pv_export_vandaag_kwh": round(c.pv_export_today_kwh, 2),
+            "bruto_verbruik_vandaag_kwh": round(c.gross_consumption_today_kwh, 2),
+            "net_import_vandaag_kwh": round(c.grid_import_today_kwh, 2),
+            "note": (
+                "Zelfconsumptie = welk deel van de eigen PV-productie zelf "
+                "verbruikt wordt (niet geëxporteerd). Zelfvoorziening = "
+                "welk deel van het totale verbruik gedekt wordt door eigen "
+                "bronnen (PV + accu), niet geïmporteerd van het net."
+            ),
+        }
+
+
+class CounterfactualSavingsSensor(SensorEntity, RestoreEntity):
+    """Tegenfeitelijke besparingsvergelijking (v0.63.101, gevraagd:
+    "als je dit systeem niet had, had je deze maand €X betaald; nu
+    betaalde je €Y"). Puur informatief, stuurt niets aan.
+
+    State = geschatte besparing vandaag (tegenfeitelijke kosten minus
+    werkelijke kosten). RestoreEntity - maand/all-time-totalen moeten
+    een herstart overleven.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Besparing t.o.v. zonder accu-sturing"
+    _attr_icon = "mdi:cash-check"
+    _attr_native_unit_of_measurement = "EUR"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_counterfactual_savings"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def native_value(self) -> float:
+        return round(
+            self._coordinator.counterfactual_cost_today_eur
+            - self._coordinator.actual_cost_today_eur,
+            2,
+        )
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        c = self._coordinator
+        return {
+            "werkelijke_kosten_vandaag_eur": round(c.actual_cost_today_eur, 2),
+            "tegenfeitelijke_kosten_vandaag_eur": round(
+                c.counterfactual_cost_today_eur, 2
+            ),
+            "werkelijke_kosten_deze_maand_eur": round(
+                c.actual_cost_current_month_eur, 2
+            ),
+            "tegenfeitelijke_kosten_deze_maand_eur": round(
+                c.counterfactual_cost_current_month_eur, 2
+            ),
+            "besparing_deze_maand_eur": round(
+                c.counterfactual_cost_current_month_eur
+                - c.actual_cost_current_month_eur,
+                2,
+            ),
+            "werkelijke_kosten_all_time_eur": round(c.actual_cost_all_time_eur, 2),
+            "tegenfeitelijke_kosten_all_time_eur": round(
+                c.counterfactual_cost_all_time_eur, 2
+            ),
+            "besparing_all_time_eur": round(
+                c.counterfactual_cost_all_time_eur - c.actual_cost_all_time_eur, 2
+            ),
+            "note": (
+                "Tegenfeitelijk scenario: zelfde PV-opbrengst als nu, maar "
+                "geen accu-sturing (accu-vermogen bij de netmeter-aflezing "
+                "opgeteld) - beide scenario's tegen dezelfde dynamische "
+                "prijs afgerekend."
+            ),
+        }
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if last_state is None:
+            return
+        attrs = last_state.attributes
+        c = self._coordinator
+        mapping = {
+            "werkelijke_kosten_vandaag_eur": "actual_cost_today_eur",
+            "tegenfeitelijke_kosten_vandaag_eur": "counterfactual_cost_today_eur",
+            "werkelijke_kosten_deze_maand_eur": "actual_cost_current_month_eur",
+            "tegenfeitelijke_kosten_deze_maand_eur": (
+                "counterfactual_cost_current_month_eur"
+            ),
+            "werkelijke_kosten_all_time_eur": "actual_cost_all_time_eur",
+            "tegenfeitelijke_kosten_all_time_eur": (
+                "counterfactual_cost_all_time_eur"
+            ),
+        }
+        for attr_name, coordinator_field in mapping.items():
+            raw = attrs.get(attr_name)
+            if raw is not None:
+                setattr(c, coordinator_field, float(raw))
+
+
+class PeakPowerSensor(SensorEntity, RestoreEntity):
+    """Piekvermogen-tracking voor capaciteitstarieven (v0.63.101,
+    gevraagd: "zaken voor een typisch EMS welke we kunnen toevoegen").
+
+    Nederlandse netbeheerders stappen steeds meer over op tarieven
+    gebaseerd op het hoogste piekvermogen (kW) i.p.v. alleen kWh - deze
+    sensor houdt het hoogste gemeten netto-netimport-vermogen bij op
+    drie niveaus (vandaag, deze maand, all-time). Puur informatief,
+    stuurt niets aan.
+
+    RestoreEntity - all-time/maand-records moeten een herstart
+    overleven.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Piekvermogen"
+    _attr_icon = "mdi:chart-bell-curve"
+    _attr_native_unit_of_measurement = "W"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_peak_power"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def native_value(self) -> float:
+        return round(self._coordinator.peak_power_today_w, 1)
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return {
+            "deze_maand_w": round(self._coordinator.peak_power_current_month_w, 1),
+            "vorige_maand_w": (
+                round(self._coordinator.peak_power_previous_month_w, 1)
+                if self._coordinator.peak_power_previous_month_w is not None
+                else None
+            ),
+            "all_time_w": round(self._coordinator.peak_power_all_time_w, 1),
+            "all_time_datum": self._coordinator.peak_power_all_time_date,
+            "dag_geschiedenis": self._coordinator.peak_power_daily_history,
+        }
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if last_state is None:
+            return
+        attrs = last_state.attributes
+        raw_month = attrs.get("deze_maand_w")
+        if raw_month is not None:
+            self._coordinator.peak_power_current_month_w = float(raw_month)
+        raw_prev_month = attrs.get("vorige_maand_w")
+        if raw_prev_month is not None:
+            self._coordinator.peak_power_previous_month_w = float(raw_prev_month)
+        raw_all_time = attrs.get("all_time_w")
+        if raw_all_time is not None:
+            self._coordinator.peak_power_all_time_w = float(raw_all_time)
+        raw_all_time_date = attrs.get("all_time_datum")
+        if raw_all_time_date:
+            self._coordinator.peak_power_all_time_date = raw_all_time_date
+        raw_history = attrs.get("dag_geschiedenis")
+        if isinstance(raw_history, list):
+            self._coordinator.peak_power_daily_history = raw_history
 
 
 class WaterUsageSensor(SensorEntity, RestoreEntity):

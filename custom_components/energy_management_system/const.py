@@ -25,6 +25,13 @@ CONF_OPENWEATHERMAP_WEATHER_ENTITY = "openweathermap_weather_entity"
 # configuratie blijft alles exact zoals voorheen (weerentiteit als
 # enige bron, geen bias-correctie).
 CONF_BACKYARD_TEMPERATURE_SENSOR = "backyard_temperature_sensor_entity"
+
+# CO2-intensiteit van het net (v0.63.101, gevraagd: "zaken voor een
+# typisch EMS welke we kunnen toevoegen"). Optioneel - een externe
+# entiteit zoals ElectricityMaps of CO2 Signal die de actuele
+# CO2-intensiteit van het net rapporteert (g CO2/kWh). Zonder
+# configuratie blijft alles exact zoals voorheen.
+CONF_CO2_INTENSITY_SENSOR = "co2_intensity_sensor_entity"
 CONF_BATTERY_ROUND_TRIP_EFFICIENCY = "battery_round_trip_efficiency_percent"
 CONF_VACATION_CONSUMPTION_REDUCTION_PERCENT = "vacation_consumption_reduction_percent"
 
@@ -355,6 +362,18 @@ NILM_CUSUM_MAX_DAILY_CONTRIBUTION = 0.5
 # resetten) om te voorkomen dat een kortstondige dip het alarm
 # onterecht meteen wegneemt terwijl het probleem zelf nog speelt.
 NILM_CUSUM_RESET_STREAK_DAYS = 5
+
+# Accu-gezondheid over de lange termijn: cyclus-telling en geschatte
+# capaciteitsdegradatie (v0.63.101, gevraagd: "zaken voor een typisch
+# EMS welke we kunnen toevoegen"). Bewust en duidelijk een RUWE
+# SCHATTING, geen gemeten waarde - deze integratie heeft geen manier om
+# de werkelijke accucapaciteit te meten, alleen een generiek,
+# lineair model op basis van het aantal volledige cycli. Standaard-
+# aanname (4000 cycli tot 80% capaciteit) is representatief voor
+# LFP-chemie (zoals de Zendure SolarFlow-serie), maar KAN afwijken van
+# de daadwerkelijke cel-specificaties - vandaar altijd nadrukkelijk
+# gelabeld als schatting in de UI.
+BATTERY_CYCLES_TO_80_PERCENT_CAPACITY = 4000
 
 # Structurele NILM-uitsluitingspatronen (v0.63.89, gevraagd: "alles
 # waar fase 1 bij staat mag sowieso uitgesloten worden net als

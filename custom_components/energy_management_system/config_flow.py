@@ -20,6 +20,7 @@ from .const import (
     CONF_KNMI_WEATHER_ENTITY,
     CONF_OPENWEATHERMAP_WEATHER_ENTITY,
     CONF_BACKYARD_TEMPERATURE_SENSOR,
+    CONF_CO2_INTENSITY_SENSOR,
     CONF_BATTERY_ROUND_TRIP_EFFICIENCY,
     DEFAULT_BATTERY_ROUND_TRIP_EFFICIENCY_PERCENT,
     CONF_VACATION_CONSUMPTION_REDUCTION_PERCENT,
@@ -152,6 +153,10 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
             vol.Optional(
                 CONF_BACKYARD_TEMPERATURE_SENSOR,
                 default=defaults.get(CONF_BACKYARD_TEMPERATURE_SENSOR),
+            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            vol.Optional(
+                CONF_CO2_INTENSITY_SENSOR,
+                default=defaults.get(CONF_CO2_INTENSITY_SENSOR),
             ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
             vol.Optional(
                 CONF_BATTERY_ROUND_TRIP_EFFICIENCY,

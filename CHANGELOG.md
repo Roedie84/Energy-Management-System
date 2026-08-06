@@ -6355,3 +6355,53 @@ onbedoelde reset zonder actief alarm; herstelvoortgang getoond bij
 lopende streak; geen melding zonder streak.
 
 **Volledige testsuite**: 533 tests, allemaal groen.
+
+## v0.63.101 — vijf klassieke EMS-kengetallen toegevoegd
+
+**Gevraagd**: "heb je nog zaken voor een typisch EMS welke we kunnen
+toevoegen?" - bevestigd: "ik zou ze allemaal wel willen integreren".
+Nieuw dashboardtabblad "EMS-KPI's" bundelt alle vijf.
+
+### 1. Piekvermogen-tracking (capaciteitstarief)
+
+Nieuwe `_update_peak_power_tracking` + `PeakPowerSensor`. Houdt het
+hoogste gemeten netto-netimport-vermogen bij op drie niveaus (vandaag/
+maand/all-time), op basis van de RUWE P1-meter-aflezing (niet de
+gecorrigeerde huishoudverbruik-schatting - een capaciteitstarief
+rekent af op wat het net zelf ziet). RestoreEntity.
+
+### 2. Tegenfeitelijke besparingsvergelijking
+
+Nieuwe `_update_counterfactual_savings` + `CounterfactualSavingsSensor`.
+Reconstrueert per tick wat de netmeter zonder accu-sturing zou hebben
+getoond (P1 + accu-vermogen, zelfde PV), rekent beide scenario's tegen
+dezelfde dynamische prijs af. RestoreEntity.
+
+### 3. Zelfconsumptie-/zelfvoorzieningsratio
+
+Nieuwe `_update_self_sufficiency_tracking` + `SelfSufficiencySensor`.
+Zelfconsumptie = deel van eigen PV-productie zelf verbruikt (niet
+geëxporteerd). Zelfvoorziening = deel van totaal verbruik gedekt door
+eigen bronnen (niet geïmporteerd).
+
+### 4. Accu-gezondheid over de lange termijn
+
+Nieuwe `_update_battery_cycle_tracking` + `BatteryHealthSensor` +
+constante `BATTERY_CYCLES_TO_80_PERCENT_CAPACITY` (4000). Cyclus-
+telling (cumulatieve ontladen energie / capaciteit) + een lineair
+gemodelleerde, NADRUKKELIJK als schatting gelabelde capaciteits-
+degradatie - geen gemeten waarde. RestoreEntity (levenslange teller).
+
+### 5. CO2-intensiteit van het net
+
+Nieuwe optionele config `co2_intensity_sensor_entity`,
+`_update_co2_tracking` + `CO2IntensitySensor`. Uitstoot van
+geïmporteerde energie (huidige intensiteit × geïmporteerde kWh).
+
+**Getest** (35 nieuwe tests: 7 piekvermogen, 7 tegenfeitelijke
+besparing, 7 zelfvoorziening, 9 accu-gezondheid, 5 CO2): elke feature
+apart, inclusief dag/maand-rollover, randgevallen (geen sensor,
+export i.p.v. import, grote hiaten na herstart), en het degradatie-
+model dat correct clampt op 80% i.p.v. door te extrapoleren.
+
+**Volledige testsuite**: 568 tests, allemaal groen.

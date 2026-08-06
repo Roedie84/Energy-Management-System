@@ -515,6 +515,70 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Vijf klassieke EMS-kengetallen toegevoegd (v0.63.101)
+
+Gevraagd: "heb je nog zaken voor een typisch EMS welke we kunnen
+toevoegen?" — vijf metrics die gebruikelijk zijn in professionele
+energiemanagementsystemen, alle vijf gebouwd ("ze allemaal wel willen
+integreren"). Nieuw dashboardtabblad "EMS-KPI's" bundelt ze.
+
+### 1. Piekvermogen-tracking (capaciteitstarief)
+
+Nederlandse netbeheerders stappen steeds meer over op tarieven
+gebaseerd op het hoogste piekvermogen (kW), niet alleen kWh. Nieuwe
+`_update_peak_power_tracking`: houdt het hoogste gemeten netto-
+netimport-vermogen bij op drie niveaus (vandaag/maand/all-time).
+Bewust de RUWE P1-meter-aflezing, niet de elders gebruikte
+"gecorrigeerde" huishoudverbruik-schatting — een capaciteitstarief
+wordt afgerekend op wat het net zelf ziet. Nieuwe `PeakPowerSensor`
+(RestoreEntity, all-time/maand-records overleven een herstart).
+
+### 2. Tegenfeitelijke besparingsvergelijking
+
+"Als je dit systeem niet had, had je deze maand €X betaald; nu
+betaalde je €Y." Reconstrueert per tick wat de netmeter zou hebben
+getoond zónder de accu (zelfde PV-opbrengst, geen accu-sturing:
+P1 + accu-vermogen), en rekent beide scenario's tegen dezelfde
+dynamische prijs af. Bewust deze specifieke tegenfeitelijke situatie
+(niet een vaag "vs. een vast tarief" — dat zou een aparte, losse
+aanname vereisen die niet uit bestaande sensoren is af te leiden).
+Nieuwe `CounterfactualSavingsSensor` (RestoreEntity).
+
+### 3. Zelfconsumptie-/zelfvoorzieningsratio
+
+Klassieke EMS-KPI's: welk deel van de eigen PV-productie wordt zelf
+verbruikt (zelfconsumptie), en welk deel van het totale verbruik wordt
+gedekt door eigen bronnen i.p.v. het net (zelfvoorziening). Nieuwe
+`_update_self_sufficiency_tracking`, afgeleid uit cumulatieve
+dag-kWh's (PV-productie, PV-export, bruto-verbruik, net-import).
+Nieuwe `SelfSufficiencySensor`.
+
+### 4. Accu-gezondheid over de lange termijn
+
+Cyclus-telling (cumulatieve ontladen energie / accucapaciteit) en een
+geschatte capaciteitsdegradatie. **Bewust en nadrukkelijk een ruwe
+schatting, geen gemeten waarde** — deze integratie kan de werkelijke
+accucapaciteit niet meten. Lineair model: 80% capaciteit na 4000
+volledige cycli (representatief voor LFP-chemie zoals de Zendure
+SolarFlow-serie, kan afwijken van de daadwerkelijke celspecificaties).
+Nieuwe `BatteryHealthSensor` (RestoreEntity — de cumulatieve teller is
+levenslang).
+
+### 5. CO2-intensiteit van het net
+
+Optioneel — nieuwe config `co2_intensity_sensor_entity` (bijv.
+ElectricityMaps, CO2 Signal). Houdt de geschatte uitstoot bij van
+geïmporteerde energie (huidige intensiteit × geïmporteerde kWh) — niet
+van totaal verbruik, energie die zelf via PV/accu wordt gedekt
+importeert niets. Nieuwe `CO2IntensitySensor`.
+
+**Getest** (35 nieuwe tests over 5 testbestanden): elke feature apart
+getest inclusief dag/maand-rollover, randgevallen (geen sensor
+geconfigureerd, export i.p.v. import, grote hiaten na een herstart),
+en voor de accu-gezondheid specifiek: het degradatiemodel clampt
+correct op 80% i.p.v. door te extrapoleren voorbij het gemodelleerde
+bereik.
+
 ## NILM-alarm lost zichzelf voortaan live op (v0.63.100)
 
 Vervolgvraag na v0.63.99: "kan dit soort zaken eerder in diagnostiek

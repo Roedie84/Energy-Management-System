@@ -97,6 +97,7 @@ from .const import (
     NILM_CUSUM_ALARM_THRESHOLD,
     NILM_CUSUM_MAX_DAILY_CONTRIBUTION,
     NILM_CUSUM_RESET_STREAK_DAYS,
+    BATTERY_CYCLES_TO_80_PERCENT_CAPACITY,
     NILM_PATTERN_EXCLUDED_KEYWORDS,
     NILM_DUPLICATE_MIN_SHARED_DAYS,
     NILM_DUPLICATE_TOLERANCE_FRACTION,
@@ -172,6 +173,7 @@ from .const import (
     CONF_KNMI_WEATHER_ENTITY,
     CONF_OPENWEATHERMAP_WEATHER_ENTITY,
     CONF_BACKYARD_TEMPERATURE_SENSOR,
+    CONF_CO2_INTENSITY_SENSOR,
     WEATHER_ENSEMBLE_CLEAR_THRESHOLD_PERCENT,
     WEATHER_ENSEMBLE_OVERCAST_THRESHOLD_PERCENT,
     WEATHER_ENSEMBLE_UNDERPERFORM_RATIO,
@@ -634,6 +636,65 @@ class EnergyManagementSystemCoordinator:
         self.current_month_shortfall_days: int = 0
         self.current_month_excess_days: int = 0
         self.current_month_days_tracked: int = 0
+
+        # -- Piekvermogen-tracking (capaciteitstarief, v0.63.101) --
+        # Nederlandse netbeheerders stappen steeds meer over op
+        # tarieven gebaseerd op het hoogste piekvermogen (kW) i.p.v.
+        # alleen kWh. Bewust op de gecorrigeerde consumptie-sensor
+        # (netto netimport), niet op los batterij-/PV-vermogen.
+        self.peak_power_today_w: float = 0.0
+        self.peak_power_current_month_w: float = 0.0
+        self.peak_power_previous_month_w: float | None = None
+        self.peak_power_all_time_w: float = 0.0
+        self.peak_power_all_time_date: str | None = None
+        self.peak_power_daily_history: list[dict] = []
+        self._peak_power_day_key: date | None = None
+        self._peak_power_month_key: int | None = None
+
+        # -- Tegenfeitelijke besparingsvergelijking (v0.63.101) --
+        # "Als je dit systeem niet had, had je deze maand €X betaald;
+        # nu betaalde je €Y." Bewust een specifieke tegenfeitelijke
+        # situatie ("zelfde PV-opbrengst, maar geen accu-sturing") in
+        # plaats van een vage "gemiddelde besparing" - reconstrueert
+        # wat de P1-meter zou hebben getoond zonder de accu erbij
+        # (P1 + accu-vermogen), en rekent dat tegen dezelfde prijs af.
+        self.actual_cost_today_eur: float = 0.0
+        self.counterfactual_cost_today_eur: float = 0.0
+        self.actual_cost_current_month_eur: float = 0.0
+        self.counterfactual_cost_current_month_eur: float = 0.0
+        self.actual_cost_all_time_eur: float = 0.0
+        self.counterfactual_cost_all_time_eur: float = 0.0
+        self._counterfactual_last_sample: datetime | None = None
+        self._counterfactual_day_key: date | None = None
+        self._counterfactual_month_key: int | None = None
+
+        # -- Zelfconsumptie-/zelfvoorzieningsratio (v0.63.101) --
+        # Klassieke EMS-KPI's: welk deel van de eigen PV-productie wordt
+        # zelf verbruikt (zelfconsumptie), en welk deel van het totale
+        # verbruik wordt gedekt door eigen bronnen i.p.v. het net
+        # (zelfvoorziening). Bijgehouden als cumulatieve kWh (vandaag),
+        # de ratio's zelf worden er telkens live uit afgeleid.
+        self.pv_production_today_kwh: float = 0.0
+        self.pv_export_today_kwh: float = 0.0
+        self.gross_consumption_today_kwh: float = 0.0
+        self.grid_import_today_kwh: float = 0.0
+        self._self_sufficiency_last_sample: datetime | None = None
+        self._self_sufficiency_day_key: date | None = None
+
+        # -- Accu-gezondheid: cyclus-telling (v0.63.101) --
+        # Cumulatieve ontladen energie (kWh) - een "volledige cyclus" =
+        # cumulatieve ontladen energie / accucapaciteit. Puur op basis
+        # van ontladen (niet laden) energie, de gangbare conventie voor
+        # cyclus-telling.
+        self.battery_cumulative_discharged_kwh: float = 0.0
+        self._battery_cycle_last_available_kwh: float | None = None
+        self._battery_cycle_last_sample: datetime | None = None
+
+        # -- CO2-intensiteit van het net (v0.63.101) --
+        self.co2_emitted_today_kg: float = 0.0
+        self.last_co2_intensity_g_per_kwh: float | None = None
+        self._co2_last_sample: datetime | None = None
+        self._co2_day_key: date | None = None
         self.previous_month_discharge_value_eur: float | None = None
         self.previous_month_charge_cost_eur: float | None = None
         self.previous_month_shortfall_days: int | None = None
@@ -4288,6 +4349,341 @@ class EnergyManagementSystemCoordinator:
             if start <= now < end:
                 return price / PRICE_SCALE_FACTOR
         return None
+
+    def _update_counterfactual_savings(self, now: datetime) -> None:
+        """Tegenfeitelijke besparingsvergelijking (v0.63.101, gevraagd:
+        "als je dit systeem niet had, had je deze maand €X betaald; nu
+        betaalde je €Y").
+
+        Reconstrueert per tick wat de netmeter zou hebben getoond
+        ZONDER de accu erbij (dezelfde PV-opbrengst als nu, maar geen
+        accu-sturing) - `p1_power + battery_power`, zelfde teken-
+        conventie als `_read_corrected_consumption_power`. Rekent
+        zowel de werkelijke als de tegenfeitelijke netstroom af tegen
+        dezelfde, actuele dynamische prijs, en houdt het cumulatieve
+        verschil bij op drie niveaus (vandaag, deze maand, all-time).
+
+        Bewust een specifieke tegenfeitelijke situatie ("zelfde PV,
+        geen accu-sturing") in plaats van een vage "gemiddelde
+        besparing t.o.v. een vast tarief" - dat laatste zou een aparte,
+        losse aanname over een vast tarief vereisen die niet uit
+        bestaande sensoren is af te leiden. Puur informatief, stuurt
+        niets aan.
+        """
+        p1_entity = self.config.get(CONF_CONSUMPTION_POWER_SENSOR)
+        if not p1_entity:
+            return
+        p1_power_w = self._read_sensor_float(p1_entity)
+        if p1_power_w is None:
+            return
+        price_per_kwh = self.last_current_price_per_kwh
+        if price_per_kwh is None:
+            return
+
+        battery_power_w = 0.0
+        battery_entity = self.config.get(CONF_BATTERY_POWER_SENSOR)
+        if battery_entity:
+            raw_battery = self._read_sensor_float(battery_entity)
+            if raw_battery is not None:
+                battery_power_w = raw_battery
+                if self.config.get(CONF_INVERT_BATTERY_POWER_SIGN, False):
+                    battery_power_w = -battery_power_w
+
+        counterfactual_power_w = p1_power_w + battery_power_w
+
+        today_key = now.date()
+        if self._counterfactual_day_key != today_key:
+            self._counterfactual_day_key = today_key
+            self.actual_cost_today_eur = 0.0
+            self.counterfactual_cost_today_eur = 0.0
+
+        month_key = now.year * 100 + now.month
+        if self._counterfactual_month_key is None:
+            self._counterfactual_month_key = month_key
+        elif month_key != self._counterfactual_month_key:
+            self.actual_cost_current_month_eur = 0.0
+            self.counterfactual_cost_current_month_eur = 0.0
+            self._counterfactual_month_key = month_key
+
+        if self._counterfactual_last_sample is None:
+            self._counterfactual_last_sample = now
+            return
+        elapsed_hours = max(
+            (now - self._counterfactual_last_sample).total_seconds() / 3600, 0
+        )
+        self._counterfactual_last_sample = now
+        if elapsed_hours <= 0 or elapsed_hours > 1:
+            # Grote hiaat (bijv. na een herstart) - niet met een
+            # verouderd vermogen een uur lang doorrekenen.
+            return
+
+        actual_cost_eur = (p1_power_w / 1000) * elapsed_hours * price_per_kwh
+        counterfactual_cost_eur = (
+            (counterfactual_power_w / 1000) * elapsed_hours * price_per_kwh
+        )
+
+        self.actual_cost_today_eur += actual_cost_eur
+        self.counterfactual_cost_today_eur += counterfactual_cost_eur
+        self.actual_cost_current_month_eur += actual_cost_eur
+        self.counterfactual_cost_current_month_eur += counterfactual_cost_eur
+        self.actual_cost_all_time_eur += actual_cost_eur
+        self.counterfactual_cost_all_time_eur += counterfactual_cost_eur
+
+    def _update_co2_tracking(self, now: datetime) -> None:
+        """CO2-intensiteit van het net (v0.63.101, gevraagd: "zaken
+        voor een typisch EMS welke we kunnen toevoegen"). Optioneel -
+        alleen actief als een CO2-intensiteit-entiteit is geconfigureerd
+        (bijv. ElectricityMaps, CO2 Signal). Houdt de geschatte
+        uitstoot bij van geïmporteerde energie (g CO2/kWh op dat moment
+        × geïmporteerde kWh), niet van totaal verbruik - energie die
+        zelf via PV/accu wordt gedekt, importeert niets en stoot dus
+        niets uit voor deze rekening. Puur informatief, stuurt niets
+        aan.
+        """
+        co2_entity = self.config.get(CONF_CO2_INTENSITY_SENSOR)
+        if not co2_entity:
+            return
+        co2_g_per_kwh = self._read_sensor_float(co2_entity)
+        if co2_g_per_kwh is None:
+            return
+        self.last_co2_intensity_g_per_kwh = co2_g_per_kwh
+
+        p1_entity = self.config.get(CONF_CONSUMPTION_POWER_SENSOR)
+        if not p1_entity:
+            return
+        p1_power_w = self._read_sensor_float(p1_entity)
+        if p1_power_w is None:
+            return
+
+        today_key = now.date()
+        if self._co2_day_key != today_key:
+            self._co2_day_key = today_key
+            self.co2_emitted_today_kg = 0.0
+
+        if self._co2_last_sample is None:
+            self._co2_last_sample = now
+            return
+        elapsed_hours = max(
+            (now - self._co2_last_sample).total_seconds() / 3600, 0
+        )
+        self._co2_last_sample = now
+        if elapsed_hours <= 0 or elapsed_hours > 1:
+            return
+
+        import_kwh = (max(0.0, p1_power_w) / 1000) * elapsed_hours
+        self.co2_emitted_today_kg += (import_kwh * co2_g_per_kwh) / 1000
+
+    def _update_battery_cycle_tracking(self, now: datetime) -> None:
+        """Accu-gezondheid: cyclus-telling en geschatte capaciteits-
+        degradatie (v0.63.101, gevraagd: "zaken voor een typisch EMS
+        welke we kunnen toevoegen").
+
+        Houdt de cumulatieve ONTLADEN energie (kWh) bij - de gangbare
+        conventie voor cyclus-telling (niet laden, om dubbeltelling via
+        rendementsverlies te vermijden). Eén "volledige cyclus" =
+        cumulatieve ontladen energie / accucapaciteit.
+
+        BEWUST EN DUIDELIJK een ruwe schatting, geen gemeten waarde -
+        zie `BATTERY_CYCLES_TO_80_PERCENT_CAPACITY`'s docstring. Puur
+        informatief, stuurt niets aan.
+        """
+        battery_entity = self.config.get(CONF_BATTERY_POWER_SENSOR)
+        if not battery_entity:
+            return
+        raw_battery = self._read_sensor_float(battery_entity)
+        if raw_battery is None:
+            return
+        battery_power_w = raw_battery
+        if self.config.get(CONF_INVERT_BATTERY_POWER_SIGN, False):
+            battery_power_w = -battery_power_w
+
+        if self._battery_cycle_last_sample is None:
+            self._battery_cycle_last_sample = now
+            return
+        elapsed_hours = max(
+            (now - self._battery_cycle_last_sample).total_seconds() / 3600, 0
+        )
+        self._battery_cycle_last_sample = now
+        if elapsed_hours <= 0 or elapsed_hours > 1:
+            return
+
+        if battery_power_w > 0:  # ontladen (conventie: positief = ontladen)
+            self.battery_cumulative_discharged_kwh += (
+                battery_power_w / 1000
+            ) * elapsed_hours
+
+    @property
+    def battery_estimated_full_cycles(self) -> float | None:
+        capacity_entity = self.config.get(CONF_BATTERY_TOTAL_CAPACITY_SENSOR)
+        if not capacity_entity:
+            return None
+        capacity_kwh = self._read_sensor_float(capacity_entity)
+        if capacity_kwh is None or capacity_kwh <= 0:
+            return None
+        return round(self.battery_cumulative_discharged_kwh / capacity_kwh, 1)
+
+    @property
+    def battery_estimated_capacity_percent(self) -> float | None:
+        """Ruwe, LINEAIRE schatting - geen gemeten waarde. Zie
+        `BATTERY_CYCLES_TO_80_PERCENT_CAPACITY`'s docstring in const.py
+        voor de aannames en beperkingen hiervan."""
+        cycles = self.battery_estimated_full_cycles
+        if cycles is None:
+            return None
+        degraded_fraction = min(
+            1.0, cycles / BATTERY_CYCLES_TO_80_PERCENT_CAPACITY
+        )
+        return round(100 - degraded_fraction * 20, 1)
+
+    def _update_self_sufficiency_tracking(self, now: datetime) -> None:
+        """Zelfconsumptie-/zelfvoorzieningsratio (v0.63.101, gevraagd:
+        "zaken voor een typisch EMS welke we kunnen toevoegen" -
+        klassieke EMS-KPI's).
+
+        - Zelfconsumptie: welk deel van de eigen PV-productie wordt
+          zelf verbruikt, niet geëxporteerd naar het net.
+          (pv_productie - pv_export) / pv_productie.
+        - Zelfvoorziening: welk deel van het totale (bruto)verbruik
+          wordt gedekt door eigen bronnen (PV + accu), niet
+          geïmporteerd van het net.
+          (bruto_verbruik - import) / bruto_verbruik.
+
+        Bruto-verbruik is de gereconstrueerde "wat had ik verbruikt
+        zonder PV/accu"-schatting (dezelfde formule als
+        `_read_corrected_consumption_power`), niet de kale P1-aflezing.
+        PV-export is het deel van de P1-aflezing dat negatief is
+        (exporteren) - ongeacht of dat overschot via de accu ging of
+        rechtstreeks, telt het net het pas als "geëxporteerd" zodra het
+        de aansluiting daadwerkelijk verlaat. Puur informatief, stuurt
+        niets aan.
+        """
+        p1_entity = self.config.get(CONF_CONSUMPTION_POWER_SENSOR)
+        if not p1_entity:
+            return
+        p1_power_w = self._read_sensor_float(p1_entity)
+        if p1_power_w is None:
+            return
+
+        today_key = now.date()
+        if self._self_sufficiency_day_key != today_key:
+            self._self_sufficiency_day_key = today_key
+            self.pv_production_today_kwh = 0.0
+            self.pv_export_today_kwh = 0.0
+            self.gross_consumption_today_kwh = 0.0
+            self.grid_import_today_kwh = 0.0
+
+        if self._self_sufficiency_last_sample is None:
+            self._self_sufficiency_last_sample = now
+            return
+        elapsed_hours = max(
+            (now - self._self_sufficiency_last_sample).total_seconds() / 3600, 0
+        )
+        self._self_sufficiency_last_sample = now
+        if elapsed_hours <= 0 or elapsed_hours > 1:
+            return
+
+        pv_power_w = 0.0
+        pv_entity = self.config.get(CONF_PV_POWER_SENSOR)
+        if pv_entity:
+            raw_pv = self._read_sensor_float(pv_entity)
+            if raw_pv is not None:
+                pv_power_w = raw_pv
+
+        gross_power_w = self._read_corrected_consumption_power()
+        if gross_power_w is None:
+            gross_power_w = p1_power_w
+
+        self.pv_production_today_kwh += (pv_power_w / 1000) * elapsed_hours
+        self.pv_export_today_kwh += (
+            max(0.0, -p1_power_w) / 1000
+        ) * elapsed_hours
+        self.gross_consumption_today_kwh += (gross_power_w / 1000) * elapsed_hours
+        self.grid_import_today_kwh += (
+            max(0.0, p1_power_w) / 1000
+        ) * elapsed_hours
+
+    @property
+    def self_consumption_ratio_percent(self) -> float | None:
+        if self.pv_production_today_kwh <= 0:
+            return None
+        return round(
+            100
+            * (self.pv_production_today_kwh - self.pv_export_today_kwh)
+            / self.pv_production_today_kwh,
+            1,
+        )
+
+    @property
+    def self_sufficiency_ratio_percent(self) -> float | None:
+        if self.gross_consumption_today_kwh <= 0:
+            return None
+        return round(
+            100
+            * (self.gross_consumption_today_kwh - self.grid_import_today_kwh)
+            / self.gross_consumption_today_kwh,
+            1,
+        )
+
+    def _update_peak_power_tracking(self, now: datetime) -> None:
+        """Piekvermogen-tracking voor capaciteitstarieven (v0.63.101,
+        gevraagd: "zaken voor een typisch EMS welke we kunnen
+        toevoegen" - Nederlandse netbeheerders stappen steeds meer over
+        op tarieven gebaseerd op het hoogste piekvermogen (kW) i.p.v.
+        alleen kWh, dus tijdig weten wanneer je richting een nieuw
+        record gaat kan direct geld schelen).
+
+        Houdt het hoogste gemeten netto-netimport-vermogen bij, op drie
+        niveaus tegelijk (vandaag, deze maand, all-time) - puur
+        informatief, stuurt niets aan. Bewust de RUWE P1/netmeter-
+        aflezing (`CONF_CONSUMPTION_POWER_SENSOR` rechtstreeks), niet
+        de elders gebruikte "gecorrigeerde" huishoudverbruik-schatting
+        (`_read_corrected_consumption_power`, die batterij-/PV-bijdrage
+        terugtelt om het WERKELIJKE huishoudverbruik te benaderen) - een
+        capaciteitstarief wordt namelijk afgerekend op wat de netmeter
+        zelf ziet, niet op het onderliggende huishoudverbruik. Als de
+        accu op dit moment ontlaadt om het huishouden te dekken, ziet
+        het net minder (of geen) import, en dát telt voor deze piek.
+        """
+        power_w = self._read_sensor_float(
+            self.config.get(CONF_CONSUMPTION_POWER_SENSOR)
+        )
+        if power_w is None or power_w <= 0:
+            # Negatief/nul = geen netimport (exporteren of PV dekt alles) -
+            # geen piek om bij te houden op dit moment.
+            return
+
+        today_key = now.date()
+        if self._peak_power_day_key != today_key:
+            if self._peak_power_day_key is not None and self.peak_power_today_w > 0:
+                self.peak_power_daily_history.append(
+                    {
+                        "date": self._peak_power_day_key.isoformat(),
+                        "peak_w": round(self.peak_power_today_w, 1),
+                    }
+                )
+                self.peak_power_daily_history = self.peak_power_daily_history[
+                    -LEARNING_HISTORY_DAYS:
+                ]
+            self._peak_power_day_key = today_key
+            self.peak_power_today_w = 0.0
+
+        month_key = now.year * 100 + now.month
+        if self._peak_power_month_key is None:
+            self._peak_power_month_key = month_key
+        elif month_key != self._peak_power_month_key:
+            self.peak_power_previous_month_w = round(
+                self.peak_power_current_month_w, 1
+            )
+            self.peak_power_current_month_w = 0.0
+            self._peak_power_month_key = month_key
+
+        if power_w > self.peak_power_today_w:
+            self.peak_power_today_w = power_w
+        if power_w > self.peak_power_current_month_w:
+            self.peak_power_current_month_w = power_w
+        if power_w > self.peak_power_all_time_w:
+            self.peak_power_all_time_w = power_w
+            self.peak_power_all_time_date = now.date().isoformat()
 
     def _check_monthly_rollover(self, now: datetime) -> None:
         """Detect a new calendar month starting, snapshotting the current
@@ -7992,6 +8388,11 @@ class EnergyManagementSystemCoordinator:
         self._update_appliance_usage_tracking(now)
         self._update_quooker_tracking(now)
         self._update_water_tracking(now)
+        self._update_peak_power_tracking(now)
+        self._update_counterfactual_savings(now)
+        self._update_self_sufficiency_tracking(now)
+        self._update_battery_cycle_tracking(now)
+        self._update_co2_tracking(now)
         self.last_heavy_load_source = self._get_confirmed_heavy_load_source(now)
         self._track_recent_consumption_reading(now)
         self._update_living_room_airco_prediction(now)
