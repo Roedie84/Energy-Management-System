@@ -97,6 +97,7 @@ from .const import (
     NILM_CUSUM_ALARM_THRESHOLD,
     NILM_CUSUM_MAX_DAILY_CONTRIBUTION,
     NILM_CUSUM_RESET_STREAK_DAYS,
+    NILM_CANDIDATE_COUNT_ATTENTION_THRESHOLD,
     BATTERY_CYCLES_TO_80_PERCENT_CAPACITY,
     NILM_PATTERN_EXCLUDED_KEYWORDS,
     NILM_DUPLICATE_MIN_SHARED_DAYS,
@@ -6378,6 +6379,101 @@ class EnergyManagementSystemCoordinator:
                     )
         return pairs
 
+    def get_missing_optional_features(self) -> list[dict]:
+        """Overzicht van optionele, niet-verplichte sensoren die nog
+        niet zijn geconfigureerd, met wat elk ontgrendelt (v0.63.105,
+        gevraagd: "kun je een melding ergens op een geschikt dashboard
+        plaatsen wanneer er 1 ontbreekt" - dit project heeft inmiddels
+        veel optionele verbeteringen opgebouwd, elk pas actief zodra de
+        bijbehorende entiteit is ingevuld, en dat is makkelijk te
+        missen zonder een overzicht).
+
+        Bewust een CURATED lijst (niet elke config-key) - alleen
+        optionele sensoren die een zichtbare functie ontgrendelen,
+        geen kernvereisten (prijs/accu/PV/verbruik/SoC, zonder welke de
+        integratie sowieso niet zinvol kan draaien) en geen
+        randfunctionaliteit zonder duidelijke gebruikerswaarde.
+        """
+        checks = [
+            (
+                CONF_BACKYARD_TEMPERATURE_SENSOR,
+                "Achtertuin-temperatuursensor",
+                "Nauwkeurigere live buitentemperatuur + geleerde "
+                "bias-correctie op de weersvoorspelling (uitschieter-"
+                "filter incluis).",
+            ),
+            (
+                CONF_SOLAR_REMAINING_TODAY_SENSOR,
+                "Solcast 'resterend vandaag'-sensor",
+                "Live-gecorrigeerde zonverwachting i.p.v. een trage, "
+                "langetermijn-gemiddelde schatting.",
+            ),
+            (
+                CONF_CO2_INTENSITY_SENSOR,
+                "CO2-intensiteit-sensor",
+                "CO2-uitstoot-tracking op het EMS-KPI's-tabblad.",
+            ),
+            (
+                CONF_BATTERY_TOTAL_CAPACITY_SENSOR,
+                "Accu-totaalcapaciteit-sensor",
+                "Accu-gezondheid: cyclus-telling en geschatte "
+                "capaciteitsdegradatie.",
+            ),
+            (
+                CONF_LIVING_ROOM_TEMPERATURE_SENSOR,
+                "Woonkamertemperatuursensor",
+                "Het hele Klimaat-tabblad (temperatuurprojectie, "
+                "airco-verwachting).",
+            ),
+            (
+                CONF_WATER_ACTIVE_USAGE_SENSOR,
+                "Waterdebiet-sensor",
+                "Het hele Water-tabblad (live debiet, gebruiksmomenten, "
+                "waterontharder-detectie).",
+            ),
+            (
+                CONF_APPLIANCE_NOTIFY_SERVICE,
+                "Meldingsservice voor apparaten",
+                "Meldingen bij vaatwasser/wasmachine klaar en NILM-"
+                "anomalieën (mogelijk defecte apparaten).",
+            ),
+            (
+                CONF_DISHWASHER_POWER_SENSOR,
+                "Vaatwasser-vermogensensor",
+                "Vaatwasser-tracking (cyclusduur, klaar-melding, "
+                "gebruikspatroon).",
+            ),
+            (
+                CONF_WASHING_MACHINE_POWER_SENSOR,
+                "Wasmachine-vermogensensor",
+                "Wasmachine-tracking (cyclusduur, klaar-melding, "
+                "gebruikspatroon).",
+            ),
+        ]
+
+        missing = [
+            {"naam": naam, "ontgrendelt": ontgrendelt}
+            for key, naam, ontgrendelt in checks
+            if not self.config.get(key)
+        ]
+
+        # KNMI/OpenWeatherMap: één van beide is genoeg, dus een aparte
+        # OR-check in plaats van de generieke lijst hierboven.
+        if not self.config.get(CONF_KNMI_WEATHER_ENTITY) and not self.config.get(
+            CONF_OPENWEATHERMAP_WEATHER_ENTITY
+        ):
+            missing.append(
+                {
+                    "naam": "Weerentiteit (KNMI of OpenWeatherMap)",
+                    "ontgrendelt": (
+                        "De buitentemperatuur-voorspelling voor de "
+                        "Klimaat-projectie."
+                    ),
+                }
+            )
+
+        return missing
+
     def get_diagnostic_summary(self) -> dict:
         """Snelle gezondheidscheck-samenvatting (v0.63.91, gevraagd:
         "zijn er nog zaken om de integratie te verbeteren, bijvoorbeeld
@@ -6451,6 +6547,75 @@ class EnergyManagementSystemCoordinator:
                 "Sluipverbruik-detectie staat aan: structurele stijging "
                 "in het dagelijkse basisverbruik."
             )
+
+        # v0.63.108, gevraagd: "kun je zien te detecteren in de
+        # diagnose" - drie proactieve checks, elk direct terug te
+        # voeren op een concreet gerapporteerd patroon uit deze en de
+        # vorige sessie, zodat toekomstige vergelijkbare situaties
+        # zichtbaar worden zonder dat de gebruiker ze eerst zelf hoeft
+        # op te merken/rapporteren.
+
+        # 1. Klimaat-projectie zonder ENKELE geleerde cel, ondanks dat
+        # er al enige tijd is verstreken sinds de eerste opstart -
+        # verklaart waarom "Korte termijn" en "Betrouwbaar" er
+        # identiek uitzien (niets te onderscheiden zolang geen enkele
+        # cel data heeft) zonder dat dit een regressie is.
+        if self.config.get(CONF_LIVING_ROOM_TEMPERATURE_SENSOR):
+            any_cell_with_data = any(
+                len(history) > 0 for history in self.climate_rate_history.values()
+            )
+            if not any_cell_with_data and self.first_seen_date is not None:
+                days_running = (dt_util.now().date() - self.first_seen_date).days
+                if days_running >= 2:
+                    aandachtspunten.append(
+                        "Klimaat-projectie: nog geen enkele geleerde cel na "
+                        f"{days_running} dagen - 'Korte termijn' en "
+                        "'Betrouwbaar' tonen daardoor nog exact dezelfde, "
+                        "bevroren temperatuur (geen bug, gewoon nog niets "
+                        "om te onderscheiden)."
+                    )
+
+        # 2. Ongewoon groot aantal onbevestigde NILM-kandidaten - kan
+        # duiden op een nog ontbrekend structureel uitsluitingspatroon
+        # (zoals eerder SolarFlow/Solcast/fase 2-3/P1 meter bleken te
+        # zijn) i.p.v. losse, individuele beoordeling.
+        candidate_count = len(self.nilm_unconfirmed_candidates)
+        if candidate_count >= NILM_CANDIDATE_COUNT_ATTENTION_THRESHOLD:
+            aandachtspunten.append(
+                f"{candidate_count} onbevestigde NILM-kandidaten - "
+                "overweeg de patroon-uitsluiting te herzien in plaats "
+                "van elk apparaat apart te beoordelen."
+            )
+
+        # 3. Waterverbruik: dagtotaal een stuk hoger dan wat de
+        # geregistreerde gebruiksmomenten van vandaag bij elkaar
+        # optellen - een resterend signaal dat er nog steeds
+        # verbruiksstoten gemist worden, ook na de v0.63.98-fix (event-
+        # driven detectie), bijv. als de listener om wat voor reden dan
+        # ook niet actief is.
+        if self.config.get(CONF_WATER_DAILY_TOTAL_SENSOR) and (
+            self.water_daily_total_l is not None and self.water_daily_total_l >= 20
+        ):
+            today_str = dt_util.now().date().isoformat()
+            sessions_today_liters = 0.0
+            for session in self.water_session_history:
+                gestart = session.get("gestart")
+                liter = session.get("liter")
+                if not gestart or liter is None:
+                    continue
+                try:
+                    if gestart[:10] == today_str:
+                        sessions_today_liters += liter
+                except (TypeError, IndexError):
+                    continue
+            if sessions_today_liters < self.water_daily_total_l * 0.3:
+                aandachtspunten.append(
+                    f"Waterverbruik: dagtotaal ({self.water_daily_total_l:.0f} L) "
+                    f"is een stuk hoger dan wat de geregistreerde "
+                    f"gebruiksmomenten van vandaag verklaren "
+                    f"({sessions_today_liters:.0f} L) - mogelijk worden nog "
+                    "steeds stoten gemist."
+                )
 
         if self.last_error:
             aandachtspunten.append(f"Laatste fout: {self.last_error}")
@@ -7806,6 +7971,18 @@ class EnergyManagementSystemCoordinator:
         actively working, or an explanation of what's wrong otherwise -
         so you don't have to check the Home Assistant logs yourself to
         notice something is off.
+
+        v0.63.109, gevraagd: "misschien iets van een self-diagnose
+        toevoegen zodat ik ook in de button relevante en dus systeem
+        status ok niet klopt eigenlijk kan zien" - tot dan toe puur een
+        TECHNISCHE health-check (crash/vastlopen), die "OK" toonde
+        zelfs als `get_diagnostic_summary()` wél degelijk
+        aandachtspunten had (bijv. 51 onbevestigde NILM-kandidaten,
+        een mogelijk defect apparaat). Nu een derde, tussenliggende
+        status: technisch prima draaiend, maar met inhoudelijke
+        aandachtspunten - bewust apart van "Fout"/"Mogelijk
+        vastgelopen" (die zijn ernstiger: de integratie zelf werkt dan
+        niet correct, i.p.v. gewoon iets om even naar te kijken).
         """
         if (
             self.last_error_time is not None
@@ -7820,6 +7997,22 @@ class EnergyManagementSystemCoordinator:
             stale_after = timedelta(minutes=UPDATE_INTERVAL_MINUTES * 3)
             if dt_util.now() - self.last_successful_update > stale_after:
                 return "Mogelijk vastgelopen"
+
+        # v0.63.109: negeer specifiek het "Laatste fout"-aandachtspunt
+        # hier - dat wordt al preciezer, tijdgevoelig afgedekt door de
+        # "Fout"-check hierboven (die onderscheid maakt tussen een
+        # RECENTE/actieve fout en een allang herstelde). Zonder dit
+        # zou een oude, allang herstelde fout die enkel nog als
+        # historisch "laatste fout"-veld blijft staan, hier onterecht
+        # "Aandacht gewenst" tonen terwijl de integratie zelf allang
+        # weer prima draait.
+        overige_aandachtspunten = [
+            p
+            for p in self.get_diagnostic_summary()["aandachtspunten"]
+            if not p.startswith("Laatste fout:")
+        ]
+        if overige_aandachtspunten:
+            return "Aandacht gewenst"
 
         return "OK"
 

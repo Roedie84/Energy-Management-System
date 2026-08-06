@@ -258,6 +258,7 @@ async def async_get_config_entry_diagnostics(
     diagnostics: dict[str, Any] = {
         "config": config,
         "diagnostic_summary": coordinator.get_diagnostic_summary(),
+        "missing_optional_features": coordinator.get_missing_optional_features(),
         "live_narrative": coordinator.get_live_narrative(datetime.now()),
         "ems_kpis": {
             "peak_power_today_w": coordinator.peak_power_today_w,

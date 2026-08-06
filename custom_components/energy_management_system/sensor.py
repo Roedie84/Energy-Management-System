@@ -84,6 +84,8 @@ async def async_setup_entry(
         SelfSufficiencySensor(coordinator, entry.entry_id),
         BatteryHealthSensor(coordinator, entry.entry_id),
         CO2IntensitySensor(coordinator, entry.entry_id),
+        MissingOptionalFeaturesSensor(coordinator, entry.entry_id),
+        HouseholdConsumptionSensor(coordinator, entry.entry_id),
         ModelTrendInsightSensor(coordinator, entry.entry_id),
         LiveNarrativeSensor(coordinator, entry.entry_id),
         ReserveShortfallSensor(coordinator, entry.entry_id),
@@ -376,6 +378,8 @@ class SystemStatusSensor(_CoordinatorDiagnosticSensor):
             return "mdi:check-circle-outline"
         if status == "Fout":
             return "mdi:alert-circle-outline"
+        if status == "Aandacht gewenst":
+            return "mdi:alert-outline"
         return "mdi:help-circle-outline"
 
     @property
@@ -392,6 +396,14 @@ class SystemStatusSensor(_CoordinatorDiagnosticSensor):
                 if self._coordinator.last_successful_update
                 else None
             ),
+            # v0.63.109, gevraagd: "systeem status ok niet klopt
+            # eigenlijk kan zien" - de volledige aandachtspunten-lijst
+            # rechtstreeks op deze sensor, zodat "Aandacht gewenst" ook
+            # meteen laat zien WAT er aandacht verdient, zonder apart
+            # naar het Live-tabblad of diagnostiek te hoeven.
+            "aandachtspunten": self._coordinator.get_diagnostic_summary()[
+                "aandachtspunten"
+            ],
         }
 
 
@@ -1794,6 +1806,88 @@ class ClimateForecastSensor(SensorEntity, RestoreEntity):
             ]
 
 
+class HouseholdConsumptionSensor(SensorEntity):
+    """Werkelijk huishoudverbruik (v0.63.111, gevraagd na een
+    naamgevingsverwarring rond de bestaande "Huidig verbruik"-tegel op
+    het Overzicht-tabblad, die in werkelijkheid de RUWE P1-meter-
+    aflezing toont - netto netimport/export, kan negatief zijn bij
+    exporteren, en is dus NIET hetzelfde als het werkelijke
+    huishoudverbruik).
+
+    Hergebruikt `_read_corrected_consumption_power()` (dezelfde
+    formule als HA's eigen Energiedashboard: P1 + accu + PV, met
+    dezelfde teken-conventie/inversie-instelling als elders in deze
+    integratie) - altijd >= 0, het daadwerkelijke vermogen dat het
+    huishouden op dit moment verbruikt, ongeacht of dat via het net,
+    de accu of PV wordt gedekt. Puur informatief, stuurt niets aan.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Huishoudverbruik (werkelijk)"
+    _attr_icon = "mdi:home-lightning-bolt-outline"
+    _attr_native_unit_of_measurement = "W"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_household_consumption"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def native_value(self) -> float | None:
+        power_w = self._coordinator._read_corrected_consumption_power()
+        return round(power_w, 1) if power_w is not None else None
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return {
+            "note": (
+                "Werkelijk verbruik (P1 + accu + PV samen, dezelfde "
+                "formule als HA's eigen Energiedashboard) - altijd >= 0, "
+                "in tegenstelling tot de kale P1-meter-aflezing die "
+                "negatief kan zijn bij exporteren."
+            ),
+        }
+
+
+class MissingOptionalFeaturesSensor(SensorEntity):
+    """Overzicht van optionele, niet-geconfigureerde sensoren (v0.63.105,
+    gevraagd: "kun je een melding ergens op een geschikt dashboard
+    plaatsen wanneer er 1 ontbreekt"). Puur informatief, stuurt niets
+    aan.
+
+    State = aantal ontbrekende optionele functies. Niet een
+    RestoreEntity - recomputed vers elke tick uit de huidige config,
+    net als de Advies-gereedheid-sensor.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Optionele functies nog niet geconfigureerd"
+    _attr_icon = "mdi:puzzle-outline"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_missing_optional_features"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def native_value(self) -> int:
+        return len(self._coordinator.get_missing_optional_features())
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return {
+            "ontbrekend": self._coordinator.get_missing_optional_features(),
+        }
+
+
 class CO2IntensitySensor(SensorEntity):
     """CO2-intensiteit van het net (v0.63.101, gevraagd: "zaken voor
     een typisch EMS welke we kunnen toevoegen"). Puur informatief,
@@ -2042,12 +2136,25 @@ class PeakPowerSensor(SensorEntity, RestoreEntity):
     drie niveaus (vandaag, deze maand, all-time). Puur informatief,
     stuurt niets aan.
 
+    v0.63.110, gerapporteerd met screenshot: "Piekvermogen verbruik
+    klopt niet, het standaard energie dashboard van Home Assistant
+    zelf geeft aan dat het huidige verbruik al 247W is" - bleek geen
+    bug: HA's eigen "Stroomverbruik" berekent het TOTALE
+    huishoudverbruik (P1 + accu + PV samen, dezelfde formule als
+    `_read_corrected_consumption_power`), terwijl deze sensor bewust
+    alleen de NETIMPORT via de P1-meter volgt (relevant voor
+    capaciteitstarief - dat wordt afgerekend op wat het net zelf ziet,
+    niet op het onderliggende huishoudverbruik). Die kan legitiem veel
+    lager zijn als de accu/zon het grootste deel van het verbruik
+    dekt. Naam en beschrijving verduidelijkt om dit verschil expliciet
+    te maken, zodat dit niet als bug oogt.
+
     RestoreEntity - all-time/maand-records moeten een herstart
     overleven.
     """
 
     _attr_has_entity_name = True
-    _attr_name = "Piekvermogen"
+    _attr_name = "Piekvermogen (netimport)"
     _attr_icon = "mdi:chart-bell-curve"
     _attr_native_unit_of_measurement = "W"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
@@ -2076,6 +2183,12 @@ class PeakPowerSensor(SensorEntity, RestoreEntity):
             "all_time_w": round(self._coordinator.peak_power_all_time_w, 1),
             "all_time_datum": self._coordinator.peak_power_all_time_date,
             "dag_geschiedenis": self._coordinator.peak_power_daily_history,
+            "note": (
+                "Volgt de netimport via de P1-meter, niet het totale "
+                "huishoudverbruik - kan lager zijn dan wat het HA-"
+                "energiedashboard toont als de accu/zon een deel van "
+                "het verbruik dekt."
+            ),
         }
 
     async def async_added_to_hass(self) -> None:

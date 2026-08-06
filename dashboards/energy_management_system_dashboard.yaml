@@ -23,13 +23,18 @@ views:
               state_attr('sensor.woonkamer_energy_management_system_system_status',
               'last_successful_update') %}
               {{ as_timestamp(t) | timestamp_custom('%a %H:%M:%S') if t else 'nog geen succesvolle update' }}
+              {% set punten = state_attr('sensor.woonkamer_energy_management_system_system_status', 'aandachtspunten') or [] %}
+              {% if punten | length > 0 %} — {{ punten | length }} aandachtspunt(en){% endif %}
             icon: >-
-              {{ 'mdi:check-circle-outline' if
-              states('sensor.woonkamer_energy_management_system_system_status') == 'OK' else
-              'mdi:alert-circle-outline' }}
+              {% set status = states('sensor.woonkamer_energy_management_system_system_status') %}
+              {% if status == 'OK' %}mdi:check-circle-outline
+              {%- elif status == 'Aandacht gewenst' %}mdi:alert-outline
+              {%- else %}mdi:alert-circle-outline{% endif %}
             icon_color: >-
-              {{ 'green' if states('sensor.woonkamer_energy_management_system_system_status')
-              == 'OK' else 'red' }}
+              {% set status = states('sensor.woonkamer_energy_management_system_system_status') %}
+              {% if status == 'OK' %}green
+              {%- elif status == 'Aandacht gewenst' %}orange
+              {%- else %}red{% endif %}
             entity: sensor.woonkamer_energy_management_system_system_status
             tap_action:
               action: more-info
@@ -125,10 +130,20 @@ views:
               rows: 1
           - type: custom:mushroom-template-card
             primary: "{{ states('sensor.hw_p1_vermogen') }} W"
-            secondary: Huidig verbruik
-            icon: mdi:home-lightning-bolt-outline
+            secondary: Netstroom, P1 (kan negatief zijn bij export)
+            icon: mdi:transmission-tower
             icon_color: orange
             entity: sensor.hw_p1_vermogen
+            grid_options:
+              columns: 6
+              rows: 1
+          - type: custom:mushroom-template-card
+            primary: >-
+              {{ states('sensor.woonkamer_energy_management_system_huishoudverbruik_werkelijk') }} W
+            secondary: Werkelijk huishoudverbruik
+            icon: mdi:home-lightning-bolt-outline
+            icon_color: amber
+            entity: sensor.woonkamer_energy_management_system_huishoudverbruik_werkelijk
             grid_options:
               columns: 6
               rows: 1
@@ -1396,6 +1411,20 @@ views:
           state_attr('sensor.woonkamer_energy_management_system_wat_doet_de_integratie_nu',
           'verhaal') or 'Nog geen data verwerkt.' }}
 
+      - type: markdown
+        content: >-
+          {% set ontbrekend =
+          state_attr('sensor.woonkamer_energy_management_system_optionele_functies_nog_niet_geconfigureerd',
+          'ontbrekend') or [] %}
+          {% if ontbrekend | length > 0 %}
+          **💡 {{ ontbrekend | length }} optionele functie(s) nog niet
+          geconfigureerd:**
+
+          {% for item in ontbrekend %}
+          - **{{ item.naam }}** — ontgrendelt: {{ item.ontgrendelt }}
+          {% endfor %}
+          {% endif %}
+
   - title: EMS-KPI's
     path: ems-kpis
     icon: mdi:chart-box-outline
@@ -1405,6 +1434,11 @@ views:
         subtitle: >-
           Vijf aanvullende metrics, gebruikelijk in professionele
           energiemanagementsystemen - puur informatief, sturen niets aan.
+          Piekvermogen volgt bewust alleen de netimport via de P1-meter
+          (relevant voor capaciteitstarief), niet het totale
+          huishoudverbruik dat het HA-energiedashboard toont - kan dus
+          legitiem lager zijn als de accu/zon een deel van het verbruik
+          dekt.
 
       - type: grid
         columns: 2
@@ -1413,13 +1447,13 @@ views:
           - type: custom:mushroom-template-card
             primary: >-
               {{ states('sensor.woonkamer_energy_management_system_piekvermogen') }} W
-            secondary: Piekvermogen vandaag
+            secondary: Piekvermogen vandaag (netimport)
             icon: mdi:chart-bell-curve
             icon_color: red
           - type: custom:mushroom-template-card
             primary: >-
               {{ state_attr('sensor.woonkamer_energy_management_system_piekvermogen', 'deze_maand_w') }} W
-            secondary: Piekvermogen deze maand
+            secondary: Piekvermogen deze maand (netimport)
             icon: mdi:chart-bell-curve
             icon_color: orange
           - type: custom:mushroom-template-card

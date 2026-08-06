@@ -363,6 +363,14 @@ NILM_CUSUM_MAX_DAILY_CONTRIBUTION = 0.5
 # onterecht meteen wegneemt terwijl het probleem zelf nog speelt.
 NILM_CUSUM_RESET_STREAK_DAYS = 5
 
+# Drempel voor de "ongewoon veel onbevestigde kandidaten"-aandachtspunt
+# in de diagnostiek-samenvatting (v0.63.108, gevraagd: "kun je zien te
+# detecteren in de diagnose" - naar aanleiding van 51 onbevestigde
+# kandidaten die eerder deze sessie een reeks structurele
+# uitsluitingspatronen bleek te missen). Bewust een aantal, geen
+# poging tot precisie - puur een signaal om even naar te kijken.
+NILM_CANDIDATE_COUNT_ATTENTION_THRESHOLD = 15
+
 # Accu-gezondheid over de lange termijn: cyclus-telling en geschatte
 # capaciteitsdegradatie (v0.63.101, gevraagd: "zaken voor een typisch
 # EMS welke we kunnen toevoegen"). Bewust en duidelijk een RUWE
@@ -382,19 +390,30 @@ BATTERY_CYCLES_TO_80_PERCENT_CAPACITY = 4000
 # batterij zelf onder de merknaam "SolarFlow" (niet "zendure") te
 # verschijnen in entity-namen, plus Solcast-voorspellingssensoren en
 # gespiegelde accu-signalen ("... (omgekeerd)") die als losse
-# "apparaten" werden voorgesteld). Substring-match (kleine letters)
-# tegen zowel de entity_id als de friendly_name - anders dan
-# `_nilm_excluded_entity_ids()` (exacte match tegen specifiek
-# geconfigureerde entiteiten), dit is een structurele, patroon-
-# gebaseerde uitsluiting die geen losse afwijzing per sub-fase-sensor
-# of accu-/omvormer-signaal meer vereist.
+# "apparaten" werden voorgesteld; verder uitgebreid in v0.63.106,
+# gerapporteerd: "Solar Production entiteiten en P1 meter vermogen
+# mogen sowieso uitgesloten worden" - "fase 1" bleek niet "fase 2"/
+# "fase 3" te dekken (P1 meter Vermogen fase 3 glipte erdoor), en een
+# ANDERE zon-voorspellingsintegratie ("Solar production forecast",
+# andere naamgeving dan "solcast") werd nog niet herkend). Substring-
+# match (kleine letters) tegen zowel de entity_id als de friendly_name
+# - anders dan `_nilm_excluded_entity_ids()` (exacte match tegen
+# specifiek geconfigureerde entiteiten), dit is een structurele,
+# patroon-gebaseerde uitsluiting die geen losse afwijzing per sub-
+# fase-sensor of accu-/omvormer-signaal meer vereist.
 NILM_PATTERN_EXCLUDED_KEYWORDS = (
     "fase 1",
     "fase_1",
+    "fase 2",
+    "fase_2",
+    "fase 3",
+    "fase_3",
     "solaredge",
     "zendure",
     "solarflow",
     "solcast",
+    "solar production",
+    "p1 meter",
     "(omgekeerd)",
 )
 

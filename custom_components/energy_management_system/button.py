@@ -201,6 +201,30 @@ class _NilmSlotButton(ButtonEntity):
             "identifiers": {(DOMAIN, entry_id)},
             "name": DEFAULT_NAME,
         }
+        # v0.63.107, gerapporteerd: "keuzes welke ik reeds gemaakt heb
+        # [werden] niet opgeslagen en na een herstart dus weer terug
+        # kwamen" - specifiek apparaten die al via de knop waren
+        # bevestigd/afgewezen. Root cause: `async_press()` vroeg de
+        # sleuf-inhoud OPNIEUW op op het moment van drukken, in plaats
+        # van het entity_id te gebruiken dat op het scherm werd
+        # getoond. Als er tussen het TONEN van de knop en het DRUKKEN
+        # een coordinator-tick plaatsvond die de sleuf-inhoud liet
+        # verschuiven (bijv. een nieuw ontdekte kandidaat die
+        # alfabetisch eerder komt dan `get_nilm_candidate_at_slot`'s
+        # sortering), bevestigde/wees de gebruiker in werkelijkheid een
+        # ANDER apparaat af dan wat ze zagen - en het apparaat dat ze
+        # écht bedoelden bleef gewoon in de lijst staan, dus kwam het
+        # na een herstart "terug". Nu vastgelegd zodra het voor weergave
+        # wordt opgevraagd (`_slot_label`/`extra_state_attributes`,
+        # beide door HA aangeroepen vlak vóór elke state-schrijving),
+        # en `async_press()` gebruikt exact diezelfde, vastgelegde
+        # waarde - nooit een verse opvraag op het moment van drukken.
+        self._last_displayed_entity_id: str | None = None
+
+    def _resolve_and_cache_slot_entity_id(self) -> str | None:
+        entity_id = self._coordinator.get_nilm_candidate_at_slot(self._slot)
+        self._last_displayed_entity_id = entity_id
+        return entity_id
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
@@ -211,7 +235,7 @@ class _NilmSlotButton(ButtonEntity):
         await super().async_will_remove_from_hass()
 
     def _slot_label(self) -> str:
-        entity_id = self._coordinator.get_nilm_candidate_at_slot(self._slot)
+        entity_id = self._resolve_and_cache_slot_entity_id()
         if entity_id is None:
             return f"Sleuf {self._slot + 1} (leeg)"
         candidate = self._coordinator.nilm_unconfirmed_candidates.get(entity_id, {})
@@ -222,7 +246,7 @@ class _NilmSlotButton(ButtonEntity):
 
     @property
     def extra_state_attributes(self) -> dict:
-        entity_id = self._coordinator.get_nilm_candidate_at_slot(self._slot)
+        entity_id = self._resolve_and_cache_slot_entity_id()
         if entity_id is None:
             return {"kandidaat_entity_id": None, "kandidaat_naam": None}
         candidate = self._coordinator.nilm_unconfirmed_candidates.get(entity_id, {})
@@ -246,7 +270,17 @@ class NilmConfirmCandidateButton(_NilmSlotButton):
         return f"✅ {self._slot_label()}"
 
     async def async_press(self) -> None:
-        entity_id = self._coordinator.get_nilm_candidate_at_slot(self._slot)
+        # v0.63.107: gebruik het entity_id dat op het scherm werd
+        # getoond (vastgelegd in `_last_displayed_entity_id`), niet een
+        # verse opvraag op het moment van drukken - zie
+        # `_NilmSlotButton.__init__`'s docstring voor de volledige
+        # toelichting. Terugval op een verse opvraag alleen als er om
+        # wat voor reden dan ook nog nooit iets is vastgelegd (zou
+        # normaal niet voorkomen, aangezien HA de state altijd eerst
+        # schrijft/toont voordat een knop gedrukt kan worden).
+        entity_id = self._last_displayed_entity_id
+        if entity_id is None:
+            entity_id = self._resolve_and_cache_slot_entity_id()
         if entity_id is not None:
             self._coordinator.confirm_nilm_device(entity_id)
 
@@ -264,6 +298,10 @@ class NilmRejectCandidateButton(_NilmSlotButton):
         return f"❌ {self._slot_label()}"
 
     async def async_press(self) -> None:
-        entity_id = self._coordinator.get_nilm_candidate_at_slot(self._slot)
+        # v0.63.107: zie NilmConfirmCandidateButton.async_press's
+        # commentaar - zelfde fix, zelfde reden.
+        entity_id = self._last_displayed_entity_id
+        if entity_id is None:
+            entity_id = self._resolve_and_cache_slot_entity_id()
         if entity_id is not None:
             self._coordinator.reject_nilm_device(entity_id)
