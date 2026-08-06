@@ -1130,3 +1130,18 @@ PERSISTED_DATETIME_FIELDS = (
 # per minuut. Zonder vertraging zou dat onnodig veel schrijfacties naar
 # de SD-kaart/SSD opleveren.
 PERSISTED_STATE_SAVE_DELAY_SECONDS = 30
+
+# Minimale ABSOLUTE afwijking voordat iets überhaupt een uitschieter kan
+# zijn (v1.0.6, gerapporteerd: "Uitschieter genegeerd: 24.3°C wijkt te
+# snel af van 24.7°C").
+#
+# De snelheidstoets alleen is onbruikbaar op korte intervallen: bij een
+# tick van 5 minuten komt 0,4 °C neer op 4,8 °C/uur en overschrijdt
+# daarmee BACKYARD_TEMP_MAX_PLAUSIBLE_RATE_C_PER_HOUR - terwijl 0,4 °C
+# gewoon meetruis is. Hoe korter het interval, hoe absurder: over één
+# minuut is zelfs 0,07 °C al "te snel". Een zonneflits herken je aan een
+# GROTE sprong in korte tijd, dus beide voorwaarden moeten gelden.
+#
+# 1,5 °C is ruim boven de ruis van een typische buitensensor en ruim
+# onder de sprong die direct zonlicht op de behuizing veroorzaakt.
+BACKYARD_TEMP_SPIKE_MIN_DEVIATION_C = 1.5

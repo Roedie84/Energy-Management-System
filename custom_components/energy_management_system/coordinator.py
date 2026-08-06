@@ -130,6 +130,7 @@ from .const import (
     CLIMATE_FORECAST_BIAS_MIN_SAMPLES,
     BACKYARD_TEMP_MAX_PLAUSIBLE_RATE_C_PER_HOUR,
     BACKYARD_TEMP_SPIKE_CONFIRM_MINUTES,
+    BACKYARD_TEMP_SPIKE_MIN_DEVIATION_C,
     BACKYARD_TEMP_SPIKE_TOLERANCE_C,
     HOME_CONNECT_ACTIVE_STATES,
     CONF_APPLIANCE_NOTIFY_SERVICE,
@@ -8870,16 +8871,31 @@ class EnergyManagementSystemCoordinator:
             (now - self._backyard_temp_last_accepted_at).total_seconds() / 3600,
             1 / 3600,  # avoid a division by ~0 on two ticks in the same second
         )
-        implied_rate = (
-            abs(raw_temp - self._backyard_temp_last_accepted_c) / elapsed_hours
-        )
+        deviation_c = abs(raw_temp - self._backyard_temp_last_accepted_c)
+        implied_rate = deviation_c / elapsed_hours
 
-        if implied_rate <= BACKYARD_TEMP_MAX_PLAUSIBLE_RATE_C_PER_HOUR:
+        # v1.0.6: een uitschieter moet aan TWEE voorwaarden voldoen - een
+        # onwaarschijnlijk tempo én een noemenswaardige sprong. Op de
+        # snelheidstoets alléén was 0,4 °C tussen twee ticks van 5
+        # minuten al "4,8 °C/uur" en dus verdacht, terwijl dat gewoon
+        # meetruis is. Hoe korter het interval, hoe erger: over één
+        # minuut haalde zelfs 0,07 °C de drempel. Het gevolg was een
+        # filter dat heen en weer sloeg tussen twee normale waarden
+        # (gerapporteerd: "net was het andersom") en daarmee een
+        # verouderde waarde vasthield zonder dat er iets aan de hand was.
+        if (
+            deviation_c < BACKYARD_TEMP_SPIKE_MIN_DEVIATION_C
+            or implied_rate <= BACKYARD_TEMP_MAX_PLAUSIBLE_RATE_C_PER_HOUR
+        ):
             # Plausible change - accept directly, no spike suspected.
             self._backyard_temp_last_accepted_c = raw_temp
             self._backyard_temp_last_accepted_at = now
             self._backyard_temp_spike_candidate_c = None
             self._backyard_temp_spike_since = None
+            # v1.0.6: de melding hoort te verdwijnen zodra er weer een
+            # normale waarde binnenkomt - anders blijft een opgeloste
+            # uitschieter op het dashboard staan.
+            self.last_backyard_spike_filtered_note = None
             return raw_temp
 
         # Implausibly fast change - a suspected artifact (e.g. direct

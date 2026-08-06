@@ -7590,3 +7590,34 @@ adviserend?"
 borging dat een elfde module zonder dashboardlabel de suite laat falen.
 
 **Volledige testsuite**: 856 tests, allemaal groen.
+
+## v1.0.6 — Uitschieter-filter sloeg aan op gewone meetruis
+
+**Gerapporteerd**: "Uitschieter genegeerd: 24.3°C wijkt te snel af van
+24.7°C ... Net was het andersom."
+
+**Root cause**: het filter toetste alleen op TEMPO (afwijking gedeeld
+door verstreken tijd, grens 4 °C/uur). Op korte intervallen is die deler
+minuscuul: bij een tick van vijf minuten mocht de temperatuur maar
+0,33 °C veranderen, over één minuut zelfs maar 0,07 °C. Elke normale
+sensorruis haalde die drempel, waardoor het filter heen en weer sloeg
+tussen twee volstrekt normale waarden en ondertussen een verouderde
+waarde vasthield.
+
+**Niet 60 minuten**: bij afwijzing wordt het tijdstip van de laatst
+geaccepteerde meting niet bijgewerkt, dus de noemer groeit en het tempo
+zakt vanzelf onder de grens - meestal binnen één of twee ticks. Het
+bevestigingsvenster van 45 minuten werd zelden gehaald. Maar in die
+tussentijd stond er wel een oude waarde, bij elke kleine schommeling
+opnieuw.
+
+**Fix**: een uitschieter moet nu aan TWEE voorwaarden voldoen - een
+onwaarschijnlijk tempo én een afwijking van minstens
+`BACKYARD_TEMP_SPIKE_MIN_DEVIATION_C` (1,5 °C). Ruim boven de ruis van
+een buitensensor, ruim onder een zonneflits. Daarnaast wordt de melding
+gewist zodra er weer een normale waarde binnenkomt.
+
+**Getest**: nieuw `tests/test_backyard_spike_filter_noise_floor.py`,
+9 tests waarvan er 6 aantoonbaar falen op v1.0.5.
+
+**Volledige testsuite**: 865 tests, allemaal groen.

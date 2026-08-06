@@ -515,6 +515,71 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Uitschieter-filter sloeg aan op gewone meetruis (v1.0.6)
+
+**Gerapporteerd**: *"Uitschieter genegeerd: 24.3°C wijkt te snel af van
+24.7°C ... Net was het andersom, betekent dit dan dat er ca. 60 minuten
+geen correcte waarde wordt geïnterpreteerd?"*
+
+Scherp gezien: 0,4 °C is geen zonneflits.
+
+### Root cause
+
+Het filter toetste alleen op **tempo**: de afwijking gedeeld door de tijd
+sinds de laatste geaccepteerde meting, tegen een grens van 4 °C per uur.
+Die toets is op korte intervallen onbruikbaar, want de deler is dan
+minuscuul:
+
+| Interval | 0,4 °C komt neer op | Oordeel |
+|---|---|---|
+| 1 min | 24,0 °C/uur | geweigerd |
+| 5 min | 4,8 °C/uur | geweigerd |
+| 6 min | 4,0 °C/uur | net geaccepteerd |
+
+Omgekeerd: op een tick van vijf minuten mocht de temperatuur maar
+**0,33 °C** veranderen, en over één minuut zelfs maar 0,07 °C. Elke
+normale sensorruis haalde die drempel.
+
+Het gevolg was precies wat er gemeld werd: het filter sloeg heen en weer
+tussen twee volstrekt normale waarden — 24,7 wordt geweigerd ten opzichte
+van 24,3, daarna 24,3 ten opzichte van 24,7 — en hield ondertussen een
+verouderde waarde vast.
+
+### Was het echt 60 minuten mis?
+
+Niet zo lang, maar wel structureel verkeerd. Bij afwijzing wordt het
+tijdstip van de laatst geaccepteerde meting **niet** bijgewerkt, dus de
+noemer groeit en het impliciete tempo daalt vanzelf onder de grens —
+meestal binnen één of twee ticks. Het bevestigingsvenster van 45 minuten
+werd dus zelden gehaald. Maar in die tussentijd stond er wél een oude
+waarde, en dat herhaalde zich bij elke kleine schommeling.
+
+### Fix: twee voorwaarden in plaats van één
+
+Een zonneflits herken je aan een **grote sprong in korte tijd**. Alleen
+"kort" toetsen is niet genoeg. Er geldt nu ook een ondergrens van
+1,5 °C: ruim boven de ruis van een buitensensor, ruim onder de sprong die
+direct zonlicht op de behuizing veroorzaakt. Pas als beide voorwaarden
+gelden, is het een verdachte meting.
+
+Meegenomen: de melding wordt nu gewist zodra er weer een normale waarde
+binnenkomt. Voorheen bleef een opgeloste uitschieter op het dashboard
+staan.
+
+### Getest
+
+Nieuw `tests/test_backyard_spike_filter_noise_floor.py`, 9 tests waarvan
+er **6 aantoonbaar falen op v1.0.5**: het gerapporteerde geval wordt
+geaccepteerd, er wordt niet meer heen en weer geslagen, zelfs een
+interval van één minuut is in orde, een echte zonneflits van 8 °C wordt
+nog steeds genegeerd, een aanhoudende verandering komt er na het venster
+alsnog doorheen (het filter bevriest niets permanent), een grote maar
+trage verandering van 8 °C over een halve dag gaat er gewoon door, de
+melding verdwijnt weer, en de fix zelf — beide voorwaarden moeten in de
+code staan.
+
+**Volledige testsuite**: 865 tests, allemaal groen.
+
 ## Twee onzichtbare modules, en een onjuiste claim (v1.0.5)
 
 **Gevraagd**: "welke modules werken daadwerkelijk mee of blijven
