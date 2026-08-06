@@ -515,6 +515,133 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Accu-koeling verplaatst naar de live-cijfers (v0.63.124)
+
+**Gevraagd**: de accu-koeling een andere plek geven op het dashboard,
+als tegel binnen "Accu, rendement & live cijfers".
+
+Als eigen sectie zette de masonry-layout de koeling linksboven, waar hij
+een volle kolombreedte innam voor één regel informatie — en daarmee de
+kerncijfers naar rechts duwde. Nu een halve-breedte tegel (6 kolommen,
+net als de tegels ernaast) achter "Huidige prijs", met de
+accutemperatuur als hoofdwaarde en de koelstatus eronder. De volledige
+toelichting, de reden en de laatste tien schakelmomenten blijven
+bereikbaar via de tegel zelf.
+
+Een test borgt de plaatsing: "Accu-koeling" mag geen eigen sectiekop
+meer zijn, en er moet precies één koeltegel van 6 kolommen in de
+live-cijfers-sectie staan.
+
+**Volledige testsuite**: 743 tests, allemaal groen.
+
+## Accu-modulegezondheid + tabbladnamen zichtbaar (v0.63.123)
+
+**Gevraagd**: "Zit hier nog relevante info tussen om de gezondheid van
+de accus te monitoren?" bij een screenshot met per module hoogste/laagste
+celspanning, hoogste celtemperatuur, SoC, stroom, vermogen en
+pakspanning. En: "Zou je bij de tabbladen ook de namen willen laten zien
+zodat het helder blijft en niet alleen icoontjes zichtbaar zijn?"
+
+### Tabbladnamen
+
+Home Assistant toont **uitsluitend het icoon** zodra een view er een
+heeft — de titel verdwijnt dan volledig uit de tabbalk. De tien
+view-iconen zijn daarom verwijderd; alle tabbladen tonen nu hun naam.
+Een test borgt dat: elke view moet een titel hebben en mag géén icoon
+hebben.
+
+### Wat er in die metingen zat
+
+Veel, en van een heel ander kaliber dan wat er al was.
+`battery_estimated_capacity_percent` is een **lineaire schatting** uit
+cyclustelling — geen meting. Dit zijn wél metingen.
+
+Het waardevolst is het **celspanningsverschil** (hoogste min laagste)
+per module: bij LFP dé standaardindicator voor balans en veroudering.
+Loopt dat verschil structureel op, dan blijft er een cel achter, en dat
+is doorgaans het eerste signaal — ruim voordat je het aan de capaciteit
+merkt.
+
+### Het lastige probleem, en hoe het is opgelost
+
+Bij LFP is dat celspanningsverschil **sterk SoC-afhankelijk**: vlak in
+het midden, steil aan de uiteinden. Een absolute waarde is daardoor niet
+met zichzelf over de tijd te vergelijken — dezelfde module geeft bij 95%
+een heel andere delta dan bij 50%, zonder dat er iets mis is.
+
+De oplossing is een **differentiële vergelijking**: elke module tegen het
+gemiddelde van de **andere** modules op hetzelfde moment. Alle modules
+draaien onder identieke omstandigheden — zelfde SoC, zelfde
+omgevingstemperatuur, zelfde belasting — dus alles wat ze gemeenschappelijk
+hebben valt weg, en wat overblijft is een eigenschap van díe module. De
+SoC-afhankelijkheid verdwijnt daarmee volledig uit de vergelijking.
+
+Bewust tegen de *andere* modules en niet tegen het gemiddelde inclusief
+zichzelf: bij drie modules trekt een uitschieter het gemiddelde waar hij
+zelf in zit met zich mee, waardoor zijn eigen afwijking met factor
+(n−1)/n wordt onderschat. Uitsluiten van zichzelf maakt de maat scherp
+en onafhankelijk van het aantal modules. Er is een test die precies dat
+verschil vastlegt (+14,0 °C in plaats van +9,3 °C).
+
+### Wat er bewaakt wordt
+
+Per module, per dag de **mediaan** (niet het gemiddelde — één laadpiek
+of een moment met zon op één module mag een dagwaarde niet verslepen)
+van drie afwijkingen: celspanningsverschil, celtemperatuur en SoC.
+Daarop draait een **CUSUM-drifttest**, hetzelfde mechanisme als bij de
+NILM-apparaatbewaking, inclusief het zelfherstel uit v0.63.100: keert
+een module vijf dagen op rij terug naar normaal, dan wist de detectie
+zichzelf. Dat is precies gebouwd voor langzame, aanhoudende drift.
+
+Daarnaast directe, absolute controles die niet op een trend van weken
+hoeven te wachten: celspanningsverschil boven 0,10 V (aandacht) of
+0,20 V (fors uit balans), celtemperatuur boven 40 °C, onderlinge
+temperatuurspreiding boven 5 °C ("wijst op een module met hogere
+inwendige weerstand") en SoC-spreiding boven 10 %. Die drempels zijn
+**heuristiek, geen fabrieksspecificatie** — dat staat ook zo in
+`const.py`.
+
+De absolute celdelta wordt per SoC-bucket van 10 % bewaard, puur ter
+referentie: zo is wél te zien hoe de delta zich bij 90 % verhoudt tot
+die bij 40 %, zonder dat die twee ooit met elkaar vergeleken worden.
+
+### Configuratie: vijf lijsten in plaats van twaalf velden
+
+Vijf optionele lijstvelden (hoogste celspanning, laagste celspanning,
+celtemperatuur, SoC, vermogen). **De volgorde bepaalt het
+modulenummer** — de eerste entiteit in elke lijst is module 1. Dat
+schaalt naar elk aantal modules zonder dat de configuratie bij een
+uitbreiding moet worden aangepast. Lijsten mogen verschillend lang zijn
+(bijvoorbeeld wel celspanningen, geen vermogen per module), en één
+weggevallen sensor laat de module niet uit de weergave verdwijnen.
+
+### Zichtbaarheid
+
+Nieuw tabblad **Accumodules** met vier tabellen: live waarden per module,
+de afwijking ten opzichte van de andere modules, de onderlinge
+spreiding, en de bevindingen. Plus een sensor
+**Accu-modulegezondheid** waarvan de waarde het aantal modules is dat
+aandacht verdient — een "0" zegt dan meteen dat alles in orde is. Alles
+staat ook in de diagnostiek-export.
+
+### Getest
+
+Nieuw `tests/test_battery_module_health.py`, 27 tests: uitlezen en
+afleiden, ontbrekende sensoren, ongelijke lijstlengtes, de differentiële
+berekening inclusief het uitsluiten van de module zelf, dat de
+SoC-afhankelijkheid daadwerkelijk wegvalt, alle absolute drempels
+(inclusief net-onder/net-boven), de spreidingsmeldingen, dagafronding
+met mediaan, het verwerpen van een dag met te weinig metingen, drift die
+wordt gedetecteerd, stabiele modules die nooit driften, drift die
+zichzelf herstelt, SoC-bucketing, de sensorweergave, en de twee
+dashboardborgingen.
+
+Op de screenshot-situatie zelf (0,01 / 0,01 / 0,00 V, 28 / 27 / 26 °C,
+49 / 48 / 47 %) komt er geen enkele melding uit — er is een aparte test
+die dat vastlegt.
+
+**Volledige testsuite**: 742 tests, allemaal groen.
+
 ## Accu-koeling geïntegreerd (v0.63.122)
 
 **Gevraagd**: "Integreren zodat ik dit niet meer als losse

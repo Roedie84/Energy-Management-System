@@ -7098,3 +7098,69 @@ blijven - dan wordt de al gebruikte live-buitentemperatuur hergebruikt.
 
 **Na installatie**: velden invullen en de eigen automatisering
 UITZETTEN, anders sturen beide dezelfde schakelaar aan.
+
+## v0.63.123 — Accu-modulegezondheid + tabbladnamen zichtbaar
+
+**Gevraagd**: of er in de per-module metingen (hoogste/laagste
+celspanning, celtemperatuur, SoC, stroom, vermogen) nog relevante info
+zat om de accugezondheid te monitoren - plus: tabbladnamen tonen in
+plaats van alleen icoontjes.
+
+**Tabbladen**: Home Assistant toont uitsluitend het icoon zodra een view
+er een heeft; de titel verdwijnt dan volledig. De tien view-iconen zijn
+verwijderd, alle tabbladen tonen nu hun naam. Een test borgt dat elke
+view een titel heeft en géén icoon.
+
+**Accu-modulegezondheid**: anders dan
+`battery_estimated_capacity_percent` (een lineaire schatting uit
+cyclustelling) rust dit volledig op werkelijke metingen.
+
+Kern is een DIFFERENTIELE vergelijking: elke module tegen het gemiddelde
+van de ANDERE modules op hetzelfde moment. Alle modules draaien onder
+identieke omstandigheden, dus alles wat ze delen valt weg en wat
+overblijft is eigen aan die module. Dat lost meteen op dat het
+celspanningsverschil bij LFP sterk SoC-afhankelijk is (vlak in het
+midden, steil aan de uiteinden) en een absolute waarde dus niet over de
+tijd met zichzelf te vergelijken is. Bewust tegen de ANDERE modules en
+niet inclusief zichzelf: anders wordt de eigen afwijking met factor
+(n-1)/n onderschat.
+
+Bewaakt: dagelijkse MEDIAAN van drie afwijkingen (celspanningsverschil,
+celtemperatuur, SoC) door een CUSUM-drifttest - zelfde mechanisme als de
+NILM-bewaking, inclusief het zelfherstel uit v0.63.100. Daarnaast directe
+absolute controles (celdelta >0,10 / >0,20 V, celtemperatuur >40 °C,
+temperatuurspreiding >5 °C, SoC-spreiding >10 %); die drempels zijn
+heuristiek, geen fabrieksspecificatie. Absolute celdelta wordt per
+SoC-bucket van 10% bewaard, puur ter referentie.
+
+**Configuratie**: vijf optionele LIJSTvelden; de volgorde bepaalt het
+modulenummer. Schaalt naar elk aantal modules, lijsten mogen ongelijk
+lang zijn, en één weggevallen sensor laat de module niet verdwijnen.
+
+**Zichtbaarheid**: nieuw tabblad "Accumodules" met vier tabellen (live,
+afwijking, spreiding, bevindingen), sensor "Accu-modulegezondheid"
+(waarde = aantal modules dat aandacht verdient), en alles in de
+diagnostiek-export.
+
+**Getest**: nieuw `tests/test_battery_module_health.py`, 27 tests,
+waaronder dat de screenshot-situatie zelf geen enkele melding oplevert.
+
+**Volledige testsuite**: 742 tests, allemaal groen.
+
+## v0.63.124 — Accu-koeling verplaatst naar de live-cijfers
+
+**Gevraagd**: de accu-koeling als tegel binnen "Accu, rendement & live
+cijfers" in plaats van een eigen sectie.
+
+Als eigen sectie zette de masonry-layout de koeling linksboven, waar hij
+een volle kolombreedte innam voor één regel informatie en de kerncijfers
+naar rechts duwde. Nu een halve-breedte tegel (6 kolommen, gelijk aan de
+tegels ernaast) achter "Huidige prijs": accutemperatuur als hoofdwaarde,
+koelstatus eronder. Reden en schakelgeschiedenis blijven bereikbaar via
+de tegel.
+
+**Getest**: extra test in `test_battery_cooling_control.py` die borgt dat
+"Accu-koeling" geen eigen sectiekop meer is en dat er precies één
+koeltegel van 6 kolommen in de live-cijfers-sectie staat.
+
+**Volledige testsuite**: 743 tests, allemaal groen.

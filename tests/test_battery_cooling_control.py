@@ -302,3 +302,46 @@ def test_sensor_reports_the_current_state(make_coordinator, hass):
 
     assert sensor.native_value == "koelt"
     assert sensor.extra_state_attributes["accu_c"] == 36.0
+
+
+def test_cooling_tile_sits_in_the_live_figures_section():
+    """v0.63.124, gevraagd: de accu-koeling verplaatsen naar de tegels
+    van 'Accu, rendement & live cijfers' in plaats van een eigen sectie.
+
+    Als eigen sectie zette de masonry-layout hem linksboven, waar hij
+    een volle kolombreedte innam voor één regel informatie.
+    """
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+    import yaml
+
+    data = yaml.safe_load(
+        (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
+    )
+    overzicht = data["views"][0]
+
+    koppen = [
+        card.get("heading")
+        for sectie in overzicht["sections"]
+        for card in sectie.get("cards", [])
+        if card.get("type") == "heading"
+    ]
+    assert "Accu-koeling" not in koppen, "staat nog als eigen sectie"
+
+    doelsectie = next(
+        sectie
+        for sectie in overzicht["sections"]
+        if any(
+            card.get("heading") == "Accu, rendement & live cijfers"
+            for card in sectie.get("cards", [])
+        )
+    )
+    koeltegels = [
+        card
+        for card in doelsectie["cards"]
+        if "accu_koeling" in str(card.get("entity", ""))
+    ]
+    assert len(koeltegels) == 1
+    # Halve breedte, net als de andere tegels ernaast.
+    assert koeltegels[0]["grid_options"]["columns"] == 6
