@@ -22,6 +22,8 @@ from custom_components.energy_management_system.sensor import (
 )
 
 NOW = datetime(2026, 8, 6, 12, 0, tzinfo=timezone.utc)
+# v0.63.129: NL-zomertijd, voor de water-tests onderaan.
+LOCAL = timezone(timedelta(hours=2))
 
 
 def _add_duplicate_pair(coordinator):
@@ -135,3 +137,66 @@ def test_error_status_still_wins_over_informational(make_coordinator, hass):
     coordinator.last_successful_update = NOW - timedelta(minutes=30)
 
     assert coordinator.system_status == "Fout"
+
+
+# --- v0.63.129: waterdekking is ook informatief --------------------
+
+
+def _water_coordinator(make_coordinator, hass):
+    from custom_components.energy_management_system.const import (
+        CONF_WATER_DAILY_TOTAL_SENSOR,
+    )
+
+    coordinator = make_coordinator(
+        {CONF_WATER_DAILY_TOTAL_SENSOR: "sensor.water_daily"}
+    )
+    coordinator.water_daily_total_l = 103.0
+    coordinator.water_session_history = [
+        {"gestart": "2026-08-06T08:00:00+02:00", "liter": 27.0}
+    ]
+    return coordinator
+
+
+def test_water_coverage_alone_keeps_the_status_ok(make_coordinator, hass):
+    """Gevraagd: "dit mag geen aandachtspunt zijn, ik ben me er van
+    bewust." Het is een observatie over de dekking van de
+    waterdetectie, niet iets dat mis is met de integratie - en het kan
+    dagen aanhouden zonder dat er iets te doen valt."""
+    from custom_components.energy_management_system import coordinator as mod
+
+    origineel = mod.dt_util.now
+    mod.dt_util.now = lambda: datetime(2026, 8, 6, 12, 0, tzinfo=LOCAL)
+    try:
+        coordinator = _water_coordinator(make_coordinator, hass)
+        coordinator.last_error = None
+        coordinator.last_error_time = None
+        coordinator.last_successful_update = None
+
+        samenvatting = coordinator.get_diagnostic_summary()
+
+        assert not any("Waterverbruik" in p for p in samenvatting["aandachtspunten"])
+        assert any("Waterverbruik" in p for p in samenvatting["informatief"])
+        assert coordinator.system_status == "OK"
+    finally:
+        mod.dt_util.now = origineel
+
+
+def test_water_finding_is_still_reported(make_coordinator, hass):
+    """Onderdrukken is niet de bedoeling - alleen herclassificeren, net
+    als bij de NILM-duplicaten."""
+    from custom_components.energy_management_system import coordinator as mod
+
+    origineel = mod.dt_util.now
+    mod.dt_util.now = lambda: datetime(2026, 8, 6, 12, 0, tzinfo=LOCAL)
+    try:
+        coordinator = _water_coordinator(make_coordinator, hass)
+
+        melding = next(
+            p
+            for p in coordinator.get_diagnostic_summary()["informatief"]
+            if "Waterverbruik" in p
+        )
+        assert "103 L" in melding
+        assert "27 L" in melding
+    finally:
+        mod.dt_util.now = origineel

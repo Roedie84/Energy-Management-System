@@ -120,7 +120,7 @@ def test_few_sessions_points_at_the_detection(make_coordinator, hass, _fixed_now
 
     melding = next(
         p
-        for p in coordinator.get_diagnostic_summary()["aandachtspunten"]
+        for p in coordinator.get_diagnostic_summary()["informatief"]
         if "Waterverbruik" in p
     )
 
@@ -138,7 +138,7 @@ def test_many_sessions_points_at_the_volume(make_coordinator, hass, _fixed_now):
 
     melding = next(
         p
-        for p in coordinator.get_diagnostic_summary()["aandachtspunten"]
+        for p in coordinator.get_diagnostic_summary()["informatief"]
         if "Waterverbruik" in p
     )
 
@@ -156,7 +156,7 @@ def test_unparseable_timestamp_is_skipped_not_crashing(
         {"gestart": None, "liter": 5.0},
     ]
 
-    punten = coordinator.get_diagnostic_summary()["aandachtspunten"]
+    punten = coordinator.get_diagnostic_summary()["informatief"]
 
     assert any("Waterverbruik" in p for p in punten)
 

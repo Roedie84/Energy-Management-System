@@ -515,6 +515,167 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Grootste verbruiker altijd zichtbaar op de visual (v0.63.130)
+
+**Gerapporteerd**: "In de visual is nu de zwaarste bron nog niet
+zichtbaar, mijn inziens is er altijd een zwaarste bron ook al zou die
+maar 10 W zijn."
+
+Klopt, en de oorzaak was een verkeerd gekozen bron van mijn kant. Het vak
+toonde `heavy_load_source`, en dat is een **beslislogica-signaal**: het
+geeft alleen iets terug als een specifiek zwaar apparaat aantoonbaar
+draait (vaatwasser, wasmachine, Quooker, airco, oven, kookplaat). Het
+bestaat om de mediaan-voorzichtigheid van de verbruikscorrectie over te
+slaan als er geen twijfel meer is, en hoort dus juist mééstal leeg te
+zijn. Het label beloofde iets anders dan het attribuut betekende.
+
+**Nu een eigen berekening**: van alle bevestigde NILM-apparaten — dat
+zijn precies de apparaten met een eigen vermogensmeting — degene die op
+dit moment het meeste trekt, met de waarde erbij: "Televisie (120 W)".
+
+Twee dingen worden bewust overgeslagen. **Negatieve waarden**, want onder
+de bevestigde apparaten zitten ook productie-entiteiten (een
+omvormerkanaal dat −4 W teruglevert is geen verbruiker). En **precies
+0 W**, want "grootste verbruiker: 0 W" is geen informatie. Zijn er
+helemaal geen gemeten apparaten actief, dan valt hij terug op het
+zwaar-apparaat-signaal, en anders staat er eerlijk "geen gemeten apparaat
+actief" — nooit meer een leeg vak.
+
+**Bewuste beperking**: dit ziet alleen apparaten die zelf hun vermogen
+meten. Is de werkelijk grootste verbruiker een apparaat zonder meting,
+dan staat die er niet bij. Het is de grootste *bekende* verbruiker, en
+het label op de tekening is daarom aangepast van "ZWAARSTE BRON" naar
+"GROOTSTE VERBRUIKER" — tekening en inhoud moeten hetzelfde zeggen.
+
+**Getest**: nieuw `tests/test_largest_known_consumer.py`, 12 tests: de
+hoogste wint, een kleine verbruiker van 10 W telt gewoon mee (de kern van
+de melding), productie-entiteiten en 0 W worden overgeslagen, onleesbare
+sensoren ook, de terugval op het zwaar-apparaat-signaal, dat een concreet
+gemeten apparaat wint van dat categorielabel, dat er nóóit None uit komt
+(een leeg vak was precies de klacht), en twee borgingen dat kaart en
+tekening het nieuwe attribuut respectievelijk label gebruiken.
+
+**Volledige testsuite**: 789 tests, allemaal groen.
+
+## Waterdekking telt niet meer mee voor de systeemstatus (v0.63.129)
+
+**Gevraagd**: "En dit mag geen aandachtspunt zijn, ik ben me er van
+bewust" — over de melding dat het waterdagtotaal hoger is dan wat de
+herkende gebruiksmomenten verklaren.
+
+Terecht, en dezelfde redenering als bij de NILM-duplicaten in v0.63.116:
+dit is een **observatie over de dekking van de waterdetectie**, niet iets
+dat mis is met de integratie of met de accu-aansturing. Het kan bovendien
+dagen aanhouden zonder dat er iets te doen valt — en zolang het meetelde,
+bleef de systeemstatus permanent op "Aandacht gewenst" staan en verloor
+die precies zijn signaalwaarde.
+
+De melding verhuist naar `informatief`: onverkort zichtbaar, inclusief de
+richtinggevende duiding uit v0.63.121, maar de status blijft "OK".
+Onderdrukken was hier nadrukkelijk niet de bedoeling — als de dekking
+ooit ineens veel slechter wordt, wil je dat nog steeds kunnen zien.
+
+Daarmee zijn er nu twee bewoners van de informatieve categorie:
+NILM-duplicaten en waterdekking. Beide delen hetzelfde kenmerk — een
+permanente, bewust geaccepteerde toestand waar geen actie tegenover
+staat.
+
+**Getest**: twee extra tests in
+`test_diagnostic_informational_category.py` (de status blijft OK met
+alleen deze melding; de melding blijft volledig bestaan inclusief beide
+getallen). Vier bestaande tests die de oude categorie vastlegden, zijn
+meebewogen.
+
+**Volledige testsuite**: 777 tests, allemaal groen.
+
+## Ook de netpijl wijst beide kanten op (v0.63.128)
+
+**Gerapporteerd**: "Dit geldt ook voor 'NET' (de pijl suggereert één
+richting terwijl de accu beide kanten op gaat)."
+
+Klopt, en het was in de screenshot zelfs zichtbaar: de netstroom stond op
+**−826 W**, dus er werd op dat moment teruggeleverd terwijl de pijl naar
+het huis wees. Het net is net zo goed tweerichtingsverkeer als de accu —
+importeren én terugleveren. Nu een dubbele pijlpunt.
+
+**De zonnepijl blijft bewust enkelzijdig.** De zon produceert alleen; een
+dubbele pijl zou daar juist onjuist zijn. Er staat nu een test op die dat
+onderscheid vastlegt, zodat "consistentie" later geen reden wordt om er
+alsnog een dubbele pijl van te maken.
+
+Bij het maken van de nieuwe pijlpunten zijn die van het net iets kleiner
+gezet (14 in plaats van 18 eenheden): de opening tussen de vakken Huis en
+Net is 40 pixels tegen 60 bij de accu, dus twee punten op ware grootte
+zouden elkaar daar weer raken.
+
+Extra borging: een test controleert dat **elke** marker in de tekening
+`markerUnits="userSpaceOnUse"` heeft. Zonder dat schalen pijlpunten mee
+met de lijndikte — precies de valkuil uit v0.63.127 die een dubbele pijl
+in een zandloper veranderde.
+
+**Volledige testsuite**: 775 tests, allemaal groen.
+
+## Accuvermogen zichtbaar + leesbare tijdnotatie (v0.63.127)
+
+**Gerapporteerd** bij de nieuwe grafische kaart: "Vermogen naar/van accu
+is niet inzichtelijk en de datum notatie is niet duidelijk."
+
+Beide zijn bij de **bron** opgelost, niet op het dashboard. Een
+`state-label` op een picture-elements-kaart toont de ruwe attribuutwaarde
+en heeft geen sjabloonmogelijkheid — er is dus geen dashboardtruc die dit
+kan oplossen.
+
+### Accuvermogen met richting
+
+De pijl tussen huis en accu had geen waarde. Nieuw attribuut
+`accu_vermogen_weergave` dat niet alleen het getal maar ook de
+**richting** geeft: "laden 597 W", "ontladen 800 W" of "rust".
+
+Een kaal getal helpt hier niet: het teken alleen zegt niets zonder te
+weten welke conventie de sensor aanhoudt, en op een schematische kaart is
+juist "laden of ontladen" wat je wilt weten. De waarde komt uit
+`_read_corrected_battery_power` — dezelfde bron als de beslislogica,
+inclusief de teken-omkering, zodat kaart en besluit nooit iets anders
+kunnen beweren. Onder 25 W heet het "rust": een stilstaande accu
+schommelt altijd een paar watt, en "laden 3 W" suggereert een richting
+die er niet is.
+
+### Tijdnotatie
+
+`2026-08-06T12:48:28.434441+02:00` werd `do 6 aug 12:48`, via het nieuwe
+attribuut `last_successful_update_short` (op zowel de statussensor als de
+uitlegsensor). De ruwe ISO-waarde blijft ook gewoon staan voor wie ermee
+wil rekenen.
+
+### En de pijl zelf
+
+De enkele pijl omlaag suggereerde permanent ontladen. Nu een dubbele
+pijlpunt, want de accu gaat beide kanten op; de richting staat in het
+label ernaast.
+
+Daarbij kwam een echte SVG-valkuil boven water: markers schalen
+standaard mee met de **lijndikte**, dus bij `stroke-width: 6` werd een
+pijlpunt van 10 eenheden er één van 60. Bij de dubbele pijl raakten de
+twee punten elkaar en werd het een zandloper. Opgelost met
+`markerUnits="userSpaceOnUse"`, wat de maten absoluut maakt — ook de
+twee horizontale pijlen zijn daarmee netter geworden.
+
+### Getest
+
+Nieuw `tests/test_display_formatting.py`, 12 tests: de ISO-tijdstempel
+wordt leesbaar, microseconden en tijdzone-offset verdwijnen, UTC-invoer
+wordt lokaal getoond, None blijft None, en een rondgang van 370 dagen om
+te bewijzen dat geen enkele maand of weekdag een IndexError geeft. Voor
+het vermogen: laden, ontladen, rust net onder de drempel, richting net
+erboven, ontbrekende sensor, en dat de teken-omkering dezelfde is als in
+de beslislogica.
+
+Plus drie tests in `test_overview_picture_card.py`: het vermogen staat op
+de kaart, de kaart gebruikt het geformatteerde tijdattribuut (en niet
+meer het ruwe), en de accupijl wijst beide kanten op.
+
+**Volledige testsuite**: 772 tests, allemaal groen.
+
 ## Grafische kaart naar een eigen tabblad "Visueel" (v0.63.126)
 
 **Gevraagd**: "Ik wil een extra tabblad voor hetgeen je net gemaakt

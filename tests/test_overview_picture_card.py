@@ -212,3 +212,61 @@ def test_panel_card_has_no_grid_options():
     """`grid_options` hoort bij een sections-view en doet niets in een
     panel-view - laten staan zou alleen verwarren."""
     assert "grid_options" not in _kaart()
+
+
+# --- v0.63.127: leesbaarheid van twee waarden -----------------------
+
+
+def test_battery_power_is_on_the_card():
+    """Gerapporteerd: "Vermogen naar/van accu is niet inzichtelijk" - de
+    pijl tussen huis en accu had geen waarde."""
+    attributen = [e.get("attribute") for e in _kaart()["elements"]]
+    assert "accu_vermogen_weergave" in attributen
+
+
+def test_timestamp_uses_the_readable_attribute():
+    """Gerapporteerd: "de datum notatie is niet duidelijk" - er stond een
+    ruwe ISO-tijdstempel. Een state-label kan niet formatteren, dus de
+    kaart moet het al-geformatteerde attribuut gebruiken."""
+    attributen = [e.get("attribute") for e in _kaart()["elements"]]
+    assert "last_successful_update_short" in attributen
+    assert "last_successful_update" not in attributen
+
+
+def test_battery_arrow_points_both_ways():
+    """Een enkele pijl suggereerde permanent ontladen, terwijl de accu
+    beide kanten op gaat."""
+    svg = SVG.read_text()
+    assert 'marker-start="url(#pijlAccuOmhoog)"' in svg
+    assert 'id="pijlAccuOmhoog"' in svg
+
+
+def test_grid_arrow_points_both_ways():
+    """v0.63.128: het net is óók tweerichtingsverkeer - importeren én
+    terugleveren. De netstroom kan negatief zijn (export), dus een pijl
+    die alleen naar het huis wijst is onjuist."""
+    svg = SVG.read_text()
+    assert 'marker-start="url(#pijlNetTerug)"' in svg
+    assert 'id="pijlNetTerug"' in svg
+
+
+def test_solar_arrow_stays_one_directional():
+    """Bewust géén dubbele pijl: de zon produceert alleen. Een dubbele
+    pijl zou hier juist onjuist zijn."""
+    svg = SVG.read_text()
+    zonlijn = next(r for r in svg.split("\n") if "url(#pijlZon)" in r)
+
+    assert "marker-end" in zonlijn
+    assert "marker-start" not in zonlijn
+    assert "pijlZonTerug" not in svg
+
+
+def test_arrow_markers_do_not_scale_with_line_width():
+    """v0.63.127: zonder `markerUnits="userSpaceOnUse"` schaalt een
+    pijlpunt mee met de lijndikte - bij stroke-width 6 werd een punt van
+    10 eenheden er één van 60, en raakten de twee punten van een dubbele
+    pijl elkaar (zandloper in plaats van pijl)."""
+    svg = SVG.read_text()
+    for regel in svg.split("\n"):
+        if "<marker" in regel:
+            assert 'markerUnits="userSpaceOnUse"' in regel, regel.strip()

@@ -280,11 +280,14 @@ def test_flags_water_total_much_higher_than_recorded_sessions(make_coordinator, 
 
     summary = coordinator.get_diagnostic_summary()
 
-    # v0.63.121: de melding noemt nu ook het AANTAL herkende momenten en
-    # trekt daaruit een richtinggevende conclusie - bij weinig momenten
-    # wijst hij naar de detectie, bij veel momenten naar de
-    # volumebepaling. "Mogelijk worden stoten gemist" was een gok.
-    melding = next(p for p in summary["aandachtspunten"] if "Waterverbruik" in p)
+    # v0.63.121: de melding noemt het AANTAL herkende momenten en trekt
+    # daaruit een richtinggevende conclusie - bij weinig momenten wijst
+    # hij naar de detectie, bij veel momenten naar de volumebepaling.
+    # v0.63.129: verhuisd naar `informatief` - het is een observatie over
+    # de dekking van de waterdetectie, niet iets dat de systeemstatus
+    # omlaag hoort te trekken.
+    assert not any("Waterverbruik" in p for p in summary["aandachtspunten"])
+    melding = next(p for p in summary["informatief"] if "Waterverbruik" in p)
     assert "gebruiksmoment" in melding
     assert "detectie" in melding
 

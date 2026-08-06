@@ -7220,3 +7220,104 @@ picture-elements-kaart er niet meer staat als dat de drie kernsecties er
 nog zijn.
 
 **Volledige testsuite**: 758 tests, allemaal groen.
+
+## v0.63.127 — Accuvermogen zichtbaar + leesbare tijdnotatie
+
+**Gerapporteerd** bij de grafische kaart: "Vermogen naar/van accu is niet
+inzichtelijk en de datum notatie is niet duidelijk."
+
+Beide bij de BRON opgelost: een `state-label` op een
+picture-elements-kaart toont de ruwe attribuutwaarde en kan niet
+formatteren, dus een dashboardoplossing bestaat niet.
+
+- **`accu_vermogen_weergave`**: geeft de RICHTING mee ("laden 597 W",
+  "ontladen 800 W", "rust"). Leest `_read_corrected_battery_power`,
+  dezelfde bron inclusief teken-omkering als de beslislogica, zodat kaart
+  en besluit nooit iets anders beweren. Onder
+  `MIN_BATTERY_POWER_IDLE_W` (25 W) heet het "rust".
+- **`last_successful_update_short`** (statussensor én uitlegsensor):
+  `2026-08-06T12:48:28.434441+02:00` wordt `do 6 aug 12:48`. De ruwe
+  ISO-waarde blijft beschikbaar.
+- **Dubbele pijlpunt** tussen huis en accu; de enkele pijl suggereerde
+  permanent ontladen.
+
+**SVG-valkuil onderweg**: markers schalen standaard mee met de
+lijndikte, dus bij `stroke-width: 6` werd een pijlpunt van 10 eenheden er
+één van 60 - bij de dubbele pijl raakten de punten elkaar (zandloper).
+Opgelost met `markerUnits="userSpaceOnUse"`.
+
+**Getest**: nieuw `tests/test_display_formatting.py` (12 tests, inclusief
+een rondgang van 370 dagen tegen IndexErrors op maanden/weekdagen) plus
+drie tests in `test_overview_picture_card.py`.
+
+**Volledige testsuite**: 772 tests, allemaal groen.
+
+## v0.63.128 — Ook de netpijl wijst beide kanten op
+
+**Gerapporteerd**: "Dit geldt ook voor 'NET' (de pijl suggereert één
+richting)." Terecht - in de screenshot stond de netstroom op -826 W, dus
+er werd teruggeleverd terwijl de pijl naar het huis wees. Het net is net
+zo goed tweerichtingsverkeer als de accu.
+
+- Dubbele pijlpunt tussen Huis en Net (`pijlNetTerug`).
+- De ZON-pijl blijft bewust enkelzijdig - de zon produceert alleen. Een
+  test legt dat onderscheid vast, zodat "consistentie" later geen reden
+  wordt om daar alsnog een dubbele pijl van te maken.
+- Netpijlpunten iets kleiner (14 i.p.v. 18 eenheden): de opening tussen
+  Huis en Net is 40 px tegen 60 px bij de accu, dus op ware grootte
+  zouden de twee punten elkaar daar weer raken.
+- Extra test: élke marker in de tekening moet
+  `markerUnits="userSpaceOnUse"` hebben - zonder dat schalen pijlpunten
+  mee met de lijndikte (de valkuil uit v0.63.127).
+
+**Volledige testsuite**: 775 tests, allemaal groen.
+
+## v0.63.129 — Waterdekking telt niet meer mee voor de systeemstatus
+
+**Gevraagd**: "En dit mag geen aandachtspunt zijn, ik ben me er van
+bewust" - over de melding dat het waterdagtotaal hoger is dan wat de
+herkende gebruiksmomenten verklaren.
+
+Zelfde redenering als bij de NILM-duplicaten (v0.63.116): het is een
+observatie over de DEKKING van de waterdetectie, niet iets dat mis is met
+de integratie. Het kan dagen aanhouden zonder dat er iets te doen valt,
+waardoor de systeemstatus permanent op "Aandacht gewenst" bleef staan en
+zijn signaalwaarde verloor.
+
+Verhuisd naar `informatief`: onverkort zichtbaar inclusief de
+richtinggevende duiding uit v0.63.121, maar de status blijft "OK".
+Onderdrukken was niet de bedoeling - wordt de dekking ooit veel
+slechter, dan wil je dat nog steeds zien.
+
+**Getest**: twee extra tests in
+`test_diagnostic_informational_category.py`; vier bestaande tests die de
+oude categorie vastlegden zijn meebewogen.
+
+**Volledige testsuite**: 777 tests, allemaal groen.
+
+## v0.63.130 — Grootste verbruiker altijd zichtbaar op de visual
+
+**Gerapporteerd**: "In de visual is nu de zwaarste bron nog niet
+zichtbaar, mijn inziens is er altijd een zwaarste bron ook al zou die
+maar 10 W zijn."
+
+**Oorzaak**: het vak toonde `heavy_load_source`, een BESLISLOGICA-signaal
+dat alleen iets teruggeeft als een specifiek zwaar apparaat aantoonbaar
+draait. Het bestaat om de mediaan-voorzichtigheid van de
+verbruikscorrectie over te slaan en hoort meestal leeg te zijn - het
+label beloofde iets anders dan het attribuut betekende.
+
+**Nieuw**: `get_largest_known_consumer()` / attribuut
+`grootste_verbruiker` - van alle bevestigde NILM-apparaten degene met het
+hoogste verbruik nu, inclusief waarde ("Televisie (120 W)"). Negatieve
+waarden worden overgeslagen (productie-entiteiten zijn geen verbruikers),
+0 W ook. Valt terug op het zwaar-apparaat-signaal, en anders "geen
+gemeten apparaat actief" - nooit meer een leeg vak.
+
+**Bewuste beperking**: alleen apparaten die zelf hun vermogen meten. Het
+label op de tekening is daarom "GROOTSTE VERBRUIKER" geworden in plaats
+van "ZWAARSTE BRON".
+
+**Getest**: nieuw `tests/test_largest_known_consumer.py`, 12 tests.
+
+**Volledige testsuite**: 789 tests, allemaal groen.
