@@ -515,6 +515,130 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## NILM-keuzes overleefden geen herstart: de Store werd bij élke herstart afgekapt op 20 (v0.63.115)
+
+**Gerapporteerd** (ná de knop-race-fix van v0.63.107): "Keuzes voor NILM
+apparaten worden nog steeds niet opgeslagen, de onbevestigde lijst
+blijft terug komen na een herstart."
+
+Screenshot bij de melding: **23 onbevestigde kandidaten** en **exact 20
+bevestigde apparaten**. Dat getal 20 was de doorslaggevende aanwijzing —
+het is precies `NILM_SENSOR_ATTRIBUTE_PREVIEW_LIMIT`.
+
+### Root cause — een andere dan v0.63.107
+
+v0.63.107 loste een echte bug op (de knop legde het getoonde entity_id
+niet vast, dus een keuze kon op het verkeerde apparaat landen), maar dat
+was niet de oorzaak van het verdwijnen. De echte oorzaak zat in de
+opstartvolgorde in `async_setup_entry`:
+
+```python
+await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)  # platforms EERST
+await coordinator.async_setup()                                          # Store-load PAS DAARNA
+```
+
+De keten die daaruit volgde, bij élke herstart:
+
+1. De platforms werden opgezet vóórdat de NILM-Store van schijf was
+   gelezen. `NilmConfirmedDevicesSensor.async_added_to_hass` draaide dus
+   altijd met een nog volledig **lege** `nilm_confirmed_devices` en
+   `nilm_rejected_entities`.
+2. Die methode gebruikte "de lijsten zijn leeg" als bewijs dat de Store
+   leeg was. Dat gokje was structureel fout. Gevolg: het
+   **eenmalig bedoelde** migratiepad (voor installaties van vóór de
+   Store, v0.63.66) sloeg bij iedere herstart opnieuw toe.
+3. Dat migratiepad leest uit de eigen herstelde entiteit-state — en die
+   attributen (`apparaten`, `rejected_entities`) zijn met opzet
+   **afgekapt op 20 items**, omdat de recorder een limiet van 16 KB per
+   attribuut heeft (v0.63.45/.66).
+4. Vervolgens schreef die methode het resultaat **onvoorwaardelijk**
+   terug naar de Store — en overschreef daarmee de volledige, goede
+   inhoud met de afgekapte kopie.
+5. Pas dáárna las `coordinator.async_setup()` de zojuist verminkte Store
+   terug.
+
+Netto per herstart: bevestigde apparaten hard afgekapt op 20, afgewezen
+entiteiten óók op 20. Alles daarboven verdween — de bevestigde apparaten
+inclusief hun maandenlang opgebouwde CUSUM-geschiedenis, en de afgewezen
+entiteiten kwamen terug als "onbevestigde kandidaat". Precies het
+gerapporteerde beeld.
+
+Het effect was bovendien **progressief**: elke herstart kapte opnieuw af,
+dus de lijst kon nooit boven de 20 uitkomen, hoeveel de gebruiker ook
+beoordeelde.
+
+### Waarom de bestaande test dit niet ving
+
+`test_nilm_confirmed_devices_persistence.py` bevatte al een test met de
+naam `test_sensor_does_not_migrate_when_store_already_has_data`. Die
+zette de Store-inhoud **handmatig** in het geheugen en controleerde dan
+het gedrag — precies de toestand die in productie nooit bereikt werd. De
+test bevestigde dus de *bedoelde* volgorde, niet de *werkelijke*. Een
+klassieke blinde vlek: het gedrag klopte, de bedrading niet.
+
+### Bewijs vóór de fix
+
+De echte productievolgorde nagebootst tegen de v0.63.114-code, met 60
+bevestigde apparaten en 55 afgewezen entiteiten in de Store:
+
+```
+AssertionError: assert 20 == 60
+```
+
+Van 60 bevestigde apparaten bleven er na één herstart 20 over. Exact wat
+het dashboard toonde.
+
+### Fix — drie lagen, elk afzonderlijk voldoende
+
+1. **Volgorde omgedraaid** (`__init__.py`): de Store wordt nu geladen
+   vóór `async_forward_entry_setups`, via de nieuwe publieke
+   `coordinator.async_load_persisted_nilm_state()`. De load in
+   `async_setup()` blijft staan als vangnet en is idempotent gemaakt
+   (een tweede aanroep leest nooit meer over verser geheugen heen).
+2. **Niet meer gissen** (`coordinator.py`): twee expliciete vlaggen
+   (`_nilm_store_loaded`, `_nilm_store_had_data`) en de publieke property
+   `nilm_store_had_data`. Het migratiepad kijkt nu naar of de Store
+   aantoonbaar leeg wás, niet naar of het geheugen toevallig leeg is.
+3. **Migratie kan geen data meer wegnemen** (`sensor.py`): het pad slaat
+   volledig over zodra de Store data had; afgewezen entiteiten worden
+   **samengevoegd** (union) in plaats van vervangen; en er wordt alleen
+   naar de Store geschreven als de migratie daadwerkelijk iets heeft
+   hersteld. Die onvoorwaardelijke schrijfactie was het schadelijke deel.
+
+### Getest
+
+Nieuw testbestand `tests/test_nilm_restart_persistence_truncation.py`,
+11 tests — alle elf falen aantoonbaar op v0.63.114:
+
+- bevestigde apparaten voorbij de afkap-grens overleven een herstart;
+- afgewezen entiteiten voorbij de grens overleven een herstart;
+- een afgewezen entiteit duikt na een herstart niet opnieuw op als
+  kandidaat (end-to-end, inclusief discovery-scan);
+- een gevulde Store wordt nooit overschreven door de herstelde state;
+- geleerde CUSUM-geschiedenis blijft intact voor apparaten voorbij de
+  grens;
+- **vijf herstarts achter elkaar** nemen niets weg (het progressieve
+  karakter);
+- het echte eenmalige migratiepad (lege Store, wél herstelde state)
+  werkt nog steeds;
+- de Store-load is idempotent;
+- de `nilm_store_had_data`-vlag klopt in beide richtingen;
+- de afgewezen-lijst kan tijdens migratie alleen groeien;
+- **structurele borging van de volgorde zelf**: een AST-vrije
+  bronvolgorde-check op `__init__.py`, zodat het omdraaien van die twee
+  regels nooit ongemerkt kan terugkeren.
+
+**Volledige testsuite**: 612 tests, allemaal groen.
+
+### Wat dit voor bestaande data betekent
+
+Eerlijk: wat al weg is, is weg. De Store bevat op dit moment nog maar 20
+bevestigde apparaten en maximaal 20 afgewezen entiteiten; de rest is bij
+eerdere herstarts overschreven en is niet te reconstrueren. De 23
+kandidaten die nu getoond worden moeten dus één keer opnieuw beoordeeld
+worden. Vanaf deze versie blijft die beoordeling wél staan, ook boven de
+20 en ook over meerdere herstarts heen.
+
 ## Gauge-kaarten vervangen door compacte tegels (v0.63.114)
 
 Vervolg op v0.63.113: "De gauge kaarten zijn ook veel te groot dit

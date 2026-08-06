@@ -6738,3 +6738,56 @@ oude `severity`-instelling.
 
 **Volledige testsuite**: 601 tests, allemaal groen (puur dashboard-
 wijziging).
+
+## v0.63.115 — NILM-keuzes overleefden geen herstart (Store werd afgekapt op 20)
+
+**Gerapporteerd** (ná v0.63.107): "Keuzes voor NILM apparaten worden nog
+steeds niet opgeslagen, de onbevestigde lijst blijft terug komen na een
+herstart." Dashboard toonde 23 kandidaten en exact 20 bevestigde
+apparaten — dat getal 20 is precies
+`NILM_SENSOR_ATTRIBUTE_PREVIEW_LIMIT`.
+
+**Root cause** (een andere dan v0.63.107): `async_setup_entry` riep
+`async_forward_entry_setups()` aan vóór `coordinator.async_setup()`, en
+dus vóór de NILM-Store-load. Daardoor draaide
+`NilmConfirmedDevicesSensor.async_added_to_hass` altijd met lege lijsten,
+concludeerde daaruit ten onrechte dat de Store leeg was, en viel bij élke
+herstart terug op het eenmalig bedoelde migratiepad vanuit de eigen
+herstelde entiteit-state. Die attributen zijn met opzet afgekapt op 20
+items (recorder-limiet, v0.63.45/.66). Vervolgens schreef die methode het
+afgekapte resultaat onvoorwaardelijk terug naar de Store en overschreef
+zo de volledige inhoud. Pas daarna las de coordinator de verminkte Store
+terug. Effect was progressief: de lijsten konden nooit boven 20 uitkomen.
+
+**Bewijs**: productievolgorde nagebootst tegen v0.63.114-code met 60
+bevestigde apparaten in de Store → `assert 20 == 60` na één herstart.
+
+**Waarom niet eerder gevangen**: de bestaande test
+`test_sensor_does_not_migrate_when_store_already_has_data` zette de
+Store-inhoud handmatig in het geheugen — precies de toestand die in
+productie nooit werd bereikt. De test controleerde het bedoelde gedrag,
+niet de werkelijke bedrading.
+
+**Fix** (drie lagen, elk afzonderlijk voldoende):
+- `__init__.py`: Store laden vóór platform-setup, via de nieuwe publieke
+  `coordinator.async_load_persisted_nilm_state()`. De load in
+  `async_setup()` blijft als vangnet en is idempotent gemaakt.
+- `coordinator.py`: expliciete vlaggen `_nilm_store_loaded` /
+  `_nilm_store_had_data` + publieke property `nilm_store_had_data`, zodat
+  het migratiepad niet meer hoeft te gissen op "geheugen is leeg".
+- `sensor.py`: migratiepad wordt volledig overgeslagen zodra de Store
+  data had; afgewezen entiteiten worden samengevoegd (union) in plaats
+  van vervangen; en er wordt alleen naar de Store geschreven als er
+  daadwerkelijk iets is hersteld.
+
+**Getest**: nieuw `tests/test_nilm_restart_persistence_truncation.py`,
+11 tests (alle elf falen op v0.63.114), inclusief vijf opeenvolgende
+herstarts, behoud van geleerde CUSUM-geschiedenis, end-to-end
+discovery-scan na herstart, en een structurele bronvolgorde-check op
+`__init__.py` zodat de volgorde niet ongemerkt kan terugdraaien.
+
+**Volledige testsuite**: 612 tests, allemaal groen.
+
+**Let op**: reeds verloren data is niet te reconstrueren — de 23 huidige
+kandidaten moeten één keer opnieuw beoordeeld worden. Daarna blijft het
+staan.
