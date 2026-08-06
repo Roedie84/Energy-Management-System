@@ -6197,3 +6197,86 @@ geaccepteerd na het bevestigingsvenster; geen filter-activiteit zonder
 geconfigureerde achtertuinsensor.
 
 **Volledige testsuite**: 503 tests, allemaal groen.
+
+## v0.63.97 — nieuw "Live"-tabblad: lopend verhaal over wat de integratie doet
+
+**Gevraagd**: "een tabblad wat live vertelt wat de gehele integratie
+doet, dit om mijzelf ook bewuster te maken wat er gebeurt op alle
+vlakken en mogelijk weer extra input aan jou kan geven." Op verzoek
+server-side gegenereerd (niet losse dashboard-teksten aan elkaar
+geplakt) voor een écht vloeiend verhaal - kost meer bouwtijd, expliciet
+zo gekozen.
+
+**Nieuwe `get_live_narrative(now)`** combineert bestaande state uit
+meerdere onderdelen tot één lopend verhaal, elk met een eigen, apart
+testbare deelfunctie:
+- `_narrate_battery_decision` - hergebruikt de al bestaande, rijke
+  `last_explanation` als kernalinea.
+- `_narrate_appliances` - lopende vaatwasser/wasmachine-cyclus + duur.
+- `_narrate_water` - actief waterverbruik, of het dagtotaal.
+- `_narrate_nilm` - openstaande kandidaten + mogelijk defecte
+  apparaten.
+- `_narrate_climate` - klimaat-projectie-status of verwachte
+  temperatuur.
+- `_narrate_attention` - aandachtspunten uit de bestaande
+  gezondheidscheck-samenvatting (v0.63.91).
+
+Puur informatief/samenvattend - berekent zelf niets nieuws, stuurt
+niets aan.
+
+**Nieuwe sensor** `LiveNarrativeSensor` - state afgekapt op 255 tekens
+(HA's limiet), volledige tekst in het `verhaal`-attribuut. Niet een
+RestoreEntity. Toegevoegd aan diagnostiek.
+
+**Nieuw dashboardtabblad "Live"** (negende tabblad).
+
+**Getest** (16 nieuwe tests: 14 voor de verhaal-generator,
+2 voor de sensor): elk onderdeel apart getest, inclusief correcte
+grammatica bij 1 vs. meerdere NILM-kandidaten, stilte wanneer een
+onderdeel niets te melden heeft, en de 255-tekens-afkapping.
+
+**Volledige testsuite**: 519 tests, allemaal groen.
+
+## v0.63.98 — water-sessiedetectie: live event-driven i.p.v. tick-gebaseerd
+
+**Gerapporteerd, met screenshot + ruwe sensorgeschiedenis (CSV)**: "in
+de tabel ontbreekt mijn inziens data" - het dagtotaal (60,87L) klopte,
+maar "Recente gebruiksmomenten" toonde slechts 1 sessie terwijl de
+ruwe geschiedenis 64 losse verbruiksstoten liet zien.
+
+**Root cause, bevestigd via analyse van de aangeleverde CSV**: de
+sessiedetectie las het live debiet uitsluitend op de gewone
+5-minuten-tick. Verbruiksstoten duren vaak maar 15-90 seconden (handen
+wassen, toilet doorspoelen) - een steekproef elke 5 minuten heeft
+simpelweg te weinig kans om zo'n kort venster te raken. Het dagtotaal
+bleef correct omdat dat van een aparte, cumulatieve tellersensor komt.
+
+**Bredere relevantie, op verzoek onderzocht**: apparaat-tracking
+(vaatwasser/wasmachine, uren lang) en NILM (dagelijkse gemiddelden)
+zijn veel minder gevoelig - die lopen lang genoeg dat een 5-minuten-
+tick ze sowieso vangt. Alleen water is uniek kwetsbaar.
+
+**Ontwerpafweging, "Wat gebeurt er als we naar live tikken gaan?"**:
+géén pure event-driven oplossing. Analyse van de ruwe geschiedenis
+liet gaten tot bijna 7 uur zien tussen sensor-updates zolang het
+debiet stil op 0 staat - een pure event-driven afronding zou een
+sessie soms uren kunnen laten vastzitten, wachtend op een event dat
+niet komt.
+
+**Fix**: sessielogica uit `_update_water_tracking` geëxtraheerd naar
+een nieuwe, gedeelde `_process_water_flow_sample(flow, now)`, nu
+aangeroepen vanuit twee plekken:
+1. Nieuwe **live listener** `_handle_water_flow_change`
+   (`async_track_state_change_event` op de watersensor,
+   geregistreerd in `async_setup`, opgeruimd in `async_unload`) -
+   reageert direct op élke wijziging.
+2. De bestaande **5-minuten-tick** blijft draaien als vangnet voor de
+   *afronding* van een sessie.
+
+**Getest** (6 nieuwe tests, `test_water_live_tracking.py`): een stoot
+van 20 seconden (het exacte scenario uit het rapport) correct
+gedetecteerd via de listener; de tick rondt een sessie alsnog af
+zonder verdere events; ongeldige/lege state-waarden veilig genegeerd;
+listener alleen geregistreerd met geconfigureerde watersensor.
+
+**Volledige testsuite**: 525 tests, allemaal groen.

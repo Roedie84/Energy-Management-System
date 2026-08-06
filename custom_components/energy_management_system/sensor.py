@@ -12,6 +12,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
+from homeassistant.util import dt as dt_util
 
 from .const import (
     DEFAULT_NAME,
@@ -79,6 +80,7 @@ async def async_setup_entry(
         ClimateForecastSensor(coordinator, entry.entry_id),
         WaterUsageSensor(coordinator, entry.entry_id),
         ModelTrendInsightSensor(coordinator, entry.entry_id),
+        LiveNarrativeSensor(coordinator, entry.entry_id),
         ReserveShortfallSensor(coordinator, entry.entry_id),
         ReserveExcessSensor(coordinator, entry.entry_id),
         LearnedBatteryEfficiencySensor(coordinator, entry.entry_id),
@@ -1873,6 +1875,47 @@ class WaterUsageSensor(SensorEntity, RestoreEntity):
                 )
             except (TypeError, ValueError):
                 pass
+
+
+class LiveNarrativeSensor(SensorEntity):
+    """Lopend, samenhangend verhaal in gewone taal (v0.63.97, gevraagd:
+    "een tabblad wat live vertelt wat de gehele integratie doet... om
+    mijzelf bewuster te maken wat er gebeurt op alle vlakken en
+    mogelijk weer extra input aan jou kan geven").
+
+    Combineert bestaande state van meerdere onderdelen (accu-beslissing,
+    apparaten, water, NILM, klimaat, aandachtspunten) tot één lopend
+    verhaal - zie `get_live_narrative`. Puur informatief/samenvattend,
+    stuurt niets aan.
+
+    Niet een RestoreEntity - recomputed vers elke tick uit levende
+    state, net als de Advies-gereedheid-sensor.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Wat doet de integratie nu"
+    _attr_icon = "mdi:text-box-outline"
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_live_narrative"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def native_value(self) -> str:
+        narrative = self._coordinator.get_live_narrative(dt_util.now())
+        # HA-sensorstatussen zijn begrensd tot 255 tekens - de volledige
+        # tekst staat altijd in het "verhaal"-attribuut hieronder.
+        return narrative[:255]
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return {
+            "verhaal": self._coordinator.get_live_narrative(dt_util.now()),
+        }
 
 
 class ModelTrendInsightSensor(SensorEntity, RestoreEntity):

@@ -515,6 +515,95 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Water-sessiedetectie: live event-driven i.p.v. tick-gebaseerd (v0.63.98)
+
+Gerapporteerd met screenshot + aangeleverde ruwe sensorgeschiedenis:
+"in de tabel ontbreekt mijn inziens data" — het dagtotaal (60,87L)
+klopte, maar "Recente gebruiksmomenten" toonde slechts 1 sessie terwijl
+de ruwe geschiedenis 64 losse verbruiksstoten liet zien.
+
+**Root cause**: de oorspronkelijke sessiedetectie las het live debiet
+uitsluitend op de gewone 5-minuten-tick. Analyse van de aangeleverde
+ruwe geschiedenis liet zien dat verbruiksstoten vaak maar 15-90
+seconden duren (handen wassen, toilet doorspoelen) — een steekproef
+elke 5 minuten heeft simpelweg te weinig kans om zo'n kort venster te
+raken, dus werden vrijwel alle stoten volledig gemist. Het dagtotaal
+bleef wél correct, omdat dat van een aparte, cumulatieve tellersensor
+komt (nooit iets mist, ongeacht timing).
+
+**Bredere relevantie, op verzoek onderzocht**: apparaat-tracking
+(vaatwasser/wasmachine, uren lang) en NILM (dagelijkse gemiddelden)
+zijn veel minder gevoelig voor dit probleem — die lopen lang genoeg dat
+een 5-minuten-tick ze sowieso vangt. Alleen water is uniek kwetsbaar
+door de extreem korte, losse stoten.
+
+**Gekozen aanpak, na afweging** ("Wat gebeurt er als we naar live
+tikken gaan?"): een hybride, geen pure event-driven oplossing. Onderzoek
+van de ruwe sensorgeschiedenis liet gaten tot bijna 7 uur zien tussen
+updates zolang het debiet stil op 0 staat — de sensor "hartslag"-t niet
+betrouwbaar bij rust. Een pure event-driven afronding zou daardoor een
+sessie soms uren kunnen laten "vastzitten".
+
+**Fix**: nieuwe, gedeelde `_process_water_flow_sample(flow, now)` —
+dezelfde toestandsmachine als voorheen, nu aangeroepen vanuit twee
+plekken:
+1. **Live listener** (`_handle_water_flow_change`, nieuw
+   `async_track_state_change_event` op de watersensor) — reageert
+   direct op élke wijziging, vangt zo vrijwel elke stoot nauwkeurig
+   (start + volume), ongeacht duur.
+2. **De bestaande 5-minuten-tick** (`_update_water_tracking`) — blijft
+   als vangnet draaien voor de *afronding* van een sessie, zodat niets
+   vast kan blijven staan wachtend op een event dat mogelijk uren niet
+   komt.
+
+**Getest** (6 nieuwe tests, `test_water_live_tracking.py`): een
+stoot van 20 seconden (het exacte scenario uit het rapport) wordt via
+de listener correct gedetecteerd; de tick rondt een sessie alsnog af
+als er geen verdere events meer binnenkomen; ongeldige/lege state-
+waarden worden veilig genegeerd; de listener wordt alleen geregistreerd
+als er een watersensor is geconfigureerd.
+
+## Nieuw "Live"-tabblad: lopend verhaal over wat de integratie doet (v0.63.97)
+
+Gevraagd: "een tabblad wat live vertelt wat de gehele integratie doet,
+dit om mijzelf ook bewuster te maken wat er gebeurt op alle vlakken en
+mogelijk weer extra input aan jou kan geven." Op verzoek server-side
+gegenereerd (niet losse dashboard-teksten aan elkaar geplakt) voor een
+écht vloeiend verhaal.
+
+**Ontwerp**: nieuwe `get_live_narrative(now)` combineert bestaande
+state uit meerdere onderdelen tot één lopend verhaal, elk met een
+eigen, apart testbare deelfunctie:
+- `_narrate_battery_decision` — hergebruikt de al bestaande, rijke
+  `last_explanation` als kernalinea (geen tekst dupliceren).
+- `_narrate_appliances` — meldt een lopende vaatwasser/wasmachine-
+  cyclus, met hoelang al.
+- `_narrate_water` — actief waterverbruik, of anders het dagtotaal.
+- `_narrate_nilm` — openstaande onbeoordeelde kandidaten en mogelijk
+  defecte apparaten.
+- `_narrate_climate` — de klimaat-projectie-status of verwachte
+  temperatuur over een uur.
+- `_narrate_attention` — sluit af met eventuele aandachtspunten uit de
+  bestaande gezondheidscheck-samenvatting (v0.63.91).
+
+Puur informatief/samenvattend — herformuleert en combineert bestaande
+state, berekent zelf niets nieuws en stuurt niets aan.
+
+**Nieuwe sensor** `LiveNarrativeSensor`
+(`sensor.woonkamer_energy_management_system_wat_doet_de_integratie_nu`) —
+state afgekapt op 255 tekens (HA's limiet), het volledige verhaal staat
+altijd in het `verhaal`-attribuut. Niet een RestoreEntity — elke tick
+vers herberekend uit levende state, net als de Advies-gereedheid-
+sensor. Toegevoegd aan diagnostiek.
+
+**Nieuw dashboardtabblad "Live"** — toont het volledige verhaal in
+gewone tekst.
+
+**Getest**: 14 tests voor de verhaal-generator zelf (elk onderdeel
+apart, inclusief correcte grammatica bij 1 vs. meerdere NILM-
+kandidaten), 2 voor de sensor (afkapping + volledige tekst als
+attribuut).
+
 ## Uitschieter-filter voor de achtertuinsensor (v0.63.96)
 
 Gerapporteerd met grafiek: de nieuwe achtertuinsensor (v0.63.95) kan 's

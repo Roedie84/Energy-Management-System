@@ -34,6 +34,7 @@ KNOWN_FRAMEWORK_OR_ATTRIBUTE_CALLS = {
     "async_added_to_hass",
     "_unsub_interval",
     "_unsub_state",
+    "_unsub_water_state",
     "_unsub_compare",
     "_unsub_capture",
     "_abort_if_unique_id_configured",

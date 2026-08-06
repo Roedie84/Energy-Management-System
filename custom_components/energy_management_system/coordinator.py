@@ -698,6 +698,7 @@ class EnergyManagementSystemCoordinator:
         self._lock = asyncio.Lock()
         self._unsub_interval = None
         self._unsub_state = None
+        self._unsub_water_state = None
 
     def register_listener(self, callback_fn) -> None:
         """Register a callback (e.g. entity.async_write_ha_state) to
@@ -790,6 +791,17 @@ class EnergyManagementSystemCoordinator:
         self._unsub_state = async_track_state_change_event(
             self.hass, self.tracked_entities, self._handle_state_change
         )
+        # v0.63.98, gevraagd: "Wat gebeurt er als we naar live tikken
+        # gaan?" - een aparte, live listener specifiek voor het
+        # waterdebiet, los van de gewone 5-minuten-tick (zie
+        # `_process_water_flow_sample`'s docstring voor de volledige
+        # aanleiding/toelichting). Alleen relevant/mogelijk als er een
+        # watersensor is geconfigureerd.
+        water_active_entity = self.config.get(CONF_WATER_ACTIVE_USAGE_SENSOR)
+        if water_active_entity:
+            self._unsub_water_state = async_track_state_change_event(
+                self.hass, [water_active_entity], self._handle_water_flow_change
+            )
         if self.hass.state == CoreState.running:
             # Home Assistant is already fully up (e.g. this integration
             # was just installed/reloaded, not a cold boot) - safe to
@@ -980,6 +992,8 @@ class EnergyManagementSystemCoordinator:
             self._unsub_interval()
         if self._unsub_state:
             self._unsub_state()
+        if self._unsub_water_state:
+            self._unsub_water_state()
 
     @callback
     def _handle_interval(self, _now) -> None:
@@ -4882,74 +4896,41 @@ class EnergyManagementSystemCoordinator:
                     notification_id=f"ems_{state_attr}_cycle_done",
                 )
 
-    def _update_water_tracking(self, now: datetime) -> None:
-        """Water-tabblad (v0.63.85, gevraagd: "Meldingen/tracking zoals
-        bij vaatwasser/wasmachine" - herzien naar "geen meldingen alleen
-        een watertabblad met relevante info"). Puur informatief - stuurt
-        nooit iets aan (geen accu-beslissing hangt hiervan af), en
-        verstuurt bewust geen meldingen (expliciet zo gevraagd), in
-        tegenstelling tot de vaatwasser/wasmachine-tracking waar dit op
-        is gebaseerd.
+    def _process_water_flow_sample(
+        self, flow_l_per_min: float, now: datetime
+    ) -> None:
+        """Water-sessie-toestandsmachine (v0.63.85, herontworpen in
+        v0.63.98 - gerapporteerd met ruwe geschiedenis: "in de tabel
+        ontbreekt data" - van de 64 losse verbruiksstoten in de
+        geschiedenis werd er maar 1 als sessie gelogd).
 
-        Twee onafhankelijke onderdelen:
+        Root cause: de oorspronkelijke, puur tick-gebaseerde detectie
+        (elke 5 minuten het live debiet uitlezen) miste vrijwel alle
+        korte stoten (vaak maar 15-90 seconden, bijv. handen wassen,
+        toilet doorspoelen) - een 5-minuten-steekproef heeft simpelweg
+        te weinig kans om zo'n kort venster te raken.
 
-        1. Dagelijks totaal + geschiedenis (voor trend): volgt de
-           geconfigureerde "vandaag"-sensor (die zelf om middernacht
-           reset, zoals bevestigd in de aangeleverde entiteitenlijst -
-           `last_reset`/`next_reset`-attributen). Zodra de uitlezing
-           lager is dan de vorige (de sensor is net gereset), wordt de
-           laatst bekende waarde gearchiveerd als "gisteren se totaal".
-           Geen eigen reset-logica nodig - leunt op de brondata.
+        Nu event-driven aangeroepen (v0.63.98,
+        `_handle_water_flow_change`): een aparte listener
+        (`async_track_state_change_event`) reageert direct op élke
+        wijziging van de watersensor zelf, in plaats van te wachten op
+        de volgende 5-minuten-tick - vangt zo vrijwel elke stoot,
+        ongeacht hoe kort.
 
-        2. Losse gebruiksmomenten (RUSTEND/ACTIEF-toestandsmachine op
-           het live debiet, zelfde principe als
-           `_update_appliance_state_machine` maar met een eigen, lagere
-           drempel en kortere afrondingsmarge - v0.63.85's eigen
-           constanten, WATER_USAGE_ACTIVE_THRESHOLD_L_PER_MIN/
-           WATER_SESSION_COMPLETE_SUSTAINED_MINUTES). Bewust een lage
-           drempel: de gebruiker wil juist volledig inzicht, inclusief
-           kleinere kranen en de nachtelijke waterontharder-regeneratie
-           (een relatief kort, herkenbaar patroon, ongeveer 1x per 2
-           weken). Als een totaal-verbruiksensor is geconfigureerd, wordt
-           het volume per gebruiksmoment geschat via het verschil in die
-           teller tussen start en einde (nauwkeuriger dan het live debiet
-           over de 5-minuten-tick-resolutie zelf te integreren).
+        Bewust géén pure event-driven aanpak voor de AFRONDING van een
+        sessie: onderzoek van de ruwe sensorgeschiedenis liet gaten tot
+        bijna 7 uur zien tussen updates zolang het debiet stil op 0
+        staat - de sensor "hartslag"-t niet betrouwbaar bij rust. Deze
+        functie wordt daarom zowel vanuit de listener (reactief, bij
+        elke wijziging) ALS vanuit de gewone 5-minuten-tick
+        (`_update_water_tracking`, als vangnet) aangeroepen met de dan
+        actuele meting - zo kan een sessie nooit "vast blijven staan"
+        wachtend op een event dat misschien uren niet komt.
 
-        v0.63.86, gevraagd ("wanneer hij zijn werk heeft gedaan en
-        hoelang dat geleden is"): elk afgerond gebruiksmoment dat
-        start binnen WATER_SOFTENER_NIGHT_WINDOW_START_HOUR/_END_HOUR
-        (standaard middernacht-6u) wordt gemarkeerd als
-        `waarschijnlijk_waterontharder` en bijgewerkt in
-        `water_softener_last_regeneration` - er is geen betrouwbare
-        manier om dit puur op debiet/duur te onderscheiden van ander
-        gebruik (verschilt per merk/model, geen trainingsdata), maar
-        niemand doucht of vult structureel een bad midden in de nacht,
-        dus tijdstip alleen is hier al een betrouwbare indicator.
+        Puur de toestandsmachine zelf - leest geen entiteiten, ontvangt
+        de meting + tijdstip als parameter, zodat dezelfde logica
+        identiek werkt vanuit beide aanroeppunten.
         """
-        daily_entity = self.config.get(CONF_WATER_DAILY_TOTAL_SENSOR)
-        if daily_entity:
-            daily_total = self._read_sensor_float(daily_entity)
-            if daily_total is not None:
-                if (
-                    self._water_last_daily_total is not None
-                    and daily_total < self._water_last_daily_total - 0.01
-                ):
-                    self.water_daily_history.append(
-                        round(self._water_last_daily_total, 2)
-                    )
-                    self.water_daily_history = self.water_daily_history[
-                        -LEARNING_HISTORY_DAYS:
-                    ]
-                self._water_last_daily_total = daily_total
-                self.water_daily_total_l = round(daily_total, 2)
-
-        active_entity = self.config.get(CONF_WATER_ACTIVE_USAGE_SENSOR)
-        if not active_entity:
-            return
-        flow_l_per_min = self._read_sensor_float(active_entity)
-        if flow_l_per_min is None:
-            return
-
         total_entity = self.config.get(CONF_WATER_TOTAL_USAGE_SENSOR)
 
         if flow_l_per_min >= WATER_USAGE_ACTIVE_THRESHOLD_L_PER_MIN:
@@ -5017,6 +4998,87 @@ class EnergyManagementSystemCoordinator:
         self._water_below_threshold_since = None
         self._water_session_started_at = None
         self._water_session_start_total_m3 = None
+
+    @callback
+    def _handle_water_flow_change(self, event) -> None:
+        """Live, event-driven water-sessie-detectie (v0.63.98,
+        gevraagd: "Wat gebeurt er als we naar live tikken gaan?").
+        Reageert direct op élke wijziging van de watersensor zelf, in
+        plaats van te wachten op de volgende 5-minuten-tick - zie
+        `_process_water_flow_sample`'s docstring voor de volledige
+        toelichting/aanleiding.
+        """
+        new_state = event.data.get("new_state")
+        if new_state is None:
+            return
+        try:
+            flow_l_per_min = float(new_state.state)
+        except (TypeError, ValueError):
+            return
+        now = new_state.last_changed or dt_util.now()
+        self._process_water_flow_sample(flow_l_per_min, now)
+
+    def _update_water_tracking(self, now: datetime) -> None:
+        """Water-tabblad (v0.63.85, gevraagd: "Meldingen/tracking zoals
+        bij vaatwasser/wasmachine" - herzien naar "geen meldingen alleen
+        een watertabblad met relevante info"). Puur informatief - stuurt
+        nooit iets aan (geen accu-beslissing hangt hiervan af), en
+        verstuurt bewust geen meldingen (expliciet zo gevraagd), in
+        tegenstelling tot de vaatwasser/wasmachine-tracking waar dit op
+        is gebaseerd.
+
+        Twee onafhankelijke onderdelen:
+
+        1. Dagelijks totaal + geschiedenis (voor trend): volgt de
+           geconfigureerde "vandaag"-sensor (die zelf om middernacht
+           reset, zoals bevestigd in de aangeleverde entiteitenlijst -
+           `last_reset`/`next_reset`-attributen). Zodra de uitlezing
+           lager is dan de vorige (de sensor is net gereset), wordt de
+           laatst bekende waarde gearchiveerd als "gisteren se totaal".
+           Geen eigen reset-logica nodig - leunt op de brondata.
+
+        2. Losse gebruiksmomenten: v0.63.98, deze tick roept nog wel
+           `_process_water_flow_sample` aan met de huidige meting -
+           puur als vangnet (zie die functie's docstring). De
+           daadwerkelijke, fijnmazige detectie gebeurt inmiddels
+           live, event-driven via `_handle_water_flow_change`.
+
+        v0.63.86, gevraagd ("wanneer hij zijn werk heeft gedaan en
+        hoelang dat geleden is"): elk afgerond gebruiksmoment dat
+        start binnen WATER_SOFTENER_NIGHT_WINDOW_START_HOUR/_END_HOUR
+        (standaard middernacht-6u) wordt gemarkeerd als
+        `waarschijnlijk_waterontharder` en bijgewerkt in
+        `water_softener_last_regeneration` - er is geen betrouwbare
+        manier om dit puur op debiet/duur te onderscheiden van ander
+        gebruik (verschilt per merk/model, geen trainingsdata), maar
+        niemand doucht of vult structureel een bad midden in de nacht,
+        dus tijdstip alleen is hier al een betrouwbare indicator.
+        """
+        daily_entity = self.config.get(CONF_WATER_DAILY_TOTAL_SENSOR)
+        if daily_entity:
+            daily_total = self._read_sensor_float(daily_entity)
+            if daily_total is not None:
+                if (
+                    self._water_last_daily_total is not None
+                    and daily_total < self._water_last_daily_total - 0.01
+                ):
+                    self.water_daily_history.append(
+                        round(self._water_last_daily_total, 2)
+                    )
+                    self.water_daily_history = self.water_daily_history[
+                        -LEARNING_HISTORY_DAYS:
+                    ]
+                self._water_last_daily_total = daily_total
+                self.water_daily_total_l = round(daily_total, 2)
+
+        active_entity = self.config.get(CONF_WATER_ACTIVE_USAGE_SENSOR)
+        if not active_entity:
+            return
+        flow_l_per_min = self._read_sensor_float(active_entity)
+        if flow_l_per_min is None:
+            return
+
+        self._process_water_flow_sample(flow_l_per_min, now)
 
     def _compute_mpc_plan(self, now: datetime, entries: list[PriceEntry]) -> None:
         """MPC (Model Predictive Control) advisory engine (v0.63.33).
@@ -5938,6 +6000,132 @@ class EnergyManagementSystemCoordinator:
             "status": "aandacht_gewenst" if aandachtspunten else "nominaal",
             "aandachtspunten": aandachtspunten,
         }
+
+    def get_live_narrative(self, now: datetime) -> str:
+        """Lopend, samenhangend verhaal in gewone taal over wat de
+        integratie op dit moment doet en waarom - over alle onderdelen
+        heen (v0.63.97, gevraagd: "een tabblad wat live vertelt wat de
+        gehele integratie doet... om mijzelf bewuster te maken wat er
+        gebeurt op alle vlakken en mogelijk weer extra input aan jou
+        kan geven").
+
+        Puur informatief/samenvattend - herformuleert en combineert
+        bestaande state uit meerdere onderdelen tot lopende tekst,
+        berekent zelf niets nieuws en stuurt niets aan. Elk onderdeel
+        (accu, apparaten, water, NILM, klimaat, aandachtspunten) heeft
+        een eigen, apart testbare deelfunctie - samengevoegd tot één
+        verhaal, in plaats van één grote, moeilijk te onderhouden
+        tekstblok.
+        """
+        paragraphs = [self._narrate_battery_decision()]
+
+        appliance_bit = self._narrate_appliances(now)
+        if appliance_bit:
+            paragraphs.append(appliance_bit)
+
+        water_bit = self._narrate_water(now)
+        if water_bit:
+            paragraphs.append(water_bit)
+
+        nilm_bit = self._narrate_nilm()
+        if nilm_bit:
+            paragraphs.append(nilm_bit)
+
+        climate_bit = self._narrate_climate()
+        if climate_bit:
+            paragraphs.append(climate_bit)
+
+        attention_bit = self._narrate_attention()
+        if attention_bit:
+            paragraphs.append(attention_bit)
+
+        return " ".join(paragraphs)
+
+    def _narrate_battery_decision(self) -> str:
+        """Kern van het verhaal: hergebruikt de al bestaande, uitgebreide
+        `last_explanation` (per beslisreden opgebouwd, zie de grote
+        if/elif-keten verderop) - geen tekst dupliceren, gewoon
+        hergebruiken als eerste alinea."""
+        return self.last_explanation or "Nog geen data verwerkt."
+
+    def _narrate_appliances(self, now: datetime) -> str | None:
+        """Meldt welke gevolgde apparaten op dit moment een cyclus
+        draaien, met hoelang al."""
+        bits = []
+        if self._dishwasher_state == "actief" and self._dishwasher_cycle_started_at:
+            minutes = int(
+                (now - self._dishwasher_cycle_started_at).total_seconds() / 60
+            )
+            bits.append(f"de vaatwasser draait al {minutes} minuten")
+        if (
+            self._washing_machine_state == "actief"
+            and self._washing_machine_cycle_started_at
+        ):
+            minutes = int(
+                (now - self._washing_machine_cycle_started_at).total_seconds() / 60
+            )
+            bits.append(f"de wasmachine draait al {minutes} minuten")
+        if not bits:
+            return None
+        return "Ondertussen " + " en ".join(bits) + "."
+
+    def _narrate_water(self, now: datetime) -> str | None:
+        """Meldt actief waterverbruik of, bij rust, het dagtotaal."""
+        if self._water_usage_state == "actief" and self._water_session_started_at:
+            minutes = int(
+                (now - self._water_session_started_at).total_seconds() / 60
+            )
+            return f"Er loopt water sinds {minutes} minuten geleden."
+        if self.water_daily_total_l is not None:
+            return f"Vandaag is er tot nu toe {self.water_daily_total_l:.0f} L water verbruikt."
+        return None
+
+    def _narrate_nilm(self) -> str | None:
+        """Meldt openstaande NILM-kandidaten of recent gevonden
+        mogelijke defecten - alleen als er iets te melden is."""
+        bits = []
+        candidate_count = len(self.nilm_unconfirmed_candidates)
+        if candidate_count > 0:
+            bits.append(
+                f"er {'staat' if candidate_count == 1 else 'staan'} "
+                f"{candidate_count} nog onbeoordeelde NILM-"
+                f"{'kandidaat' if candidate_count == 1 else 'kandidaten'}"
+            )
+        defective = [
+            d.get("friendly_name")
+            for d in self.nilm_confirmed_devices.values()
+            if d.get("anomaly_detected")
+        ]
+        if defective:
+            bits.append(
+                f"{len(defective)} apparaat/apparaten tonen mogelijk defect "
+                f"gedrag ({', '.join(defective)})"
+            )
+        if not bits:
+            return None
+        return "Verder " + " en ".join(bits) + "."
+
+    def _narrate_climate(self) -> str | None:
+        """Meldt de klimaat-projectie-status, als die iets te melden
+        heeft (bijv. nog niet genoeg data)."""
+        if self.climate_forecast_note:
+            return self.climate_forecast_note
+        if self.climate_forecast_trajectory:
+            eerste = self.climate_forecast_trajectory[0]
+            return (
+                f"De woonkamer wordt over een uur rond de "
+                f"{eerste.get('kort_termijn_temp_c')}°C verwacht."
+            )
+        return None
+
+    def _narrate_attention(self) -> str | None:
+        """Sluit af met eventuele aandachtspunten uit de
+        gezondheidscheck-samenvatting (v0.63.91) - hergebruikt, niet
+        opnieuw berekend."""
+        summary = self.get_diagnostic_summary()
+        if summary["status"] == "nominaal":
+            return None
+        return "Let op: " + " ".join(summary["aandachtspunten"])
 
     def _describe_nilm_trend(self, device: dict) -> str:
         """A lighter-weight, more granular trend label than

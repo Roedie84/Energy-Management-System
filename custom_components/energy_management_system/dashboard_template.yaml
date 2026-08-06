@@ -1350,3 +1350,20 @@ views:
           - {{ l }} L
           {% endfor %}
           {% endif %}
+
+  - title: Live
+    path: live
+    icon: mdi:text-box-outline
+    cards:
+      - type: custom:mushroom-title-card
+        title: Wat doet de integratie nu
+        subtitle: >-
+          Een lopend verhaal in gewone taal, samengesteld uit alle
+          onderdelen (accu, apparaten, water, NILM, klimaat) - puur
+          informatief, stuurt niets aan. Ververst elke tick vanzelf.
+
+      - type: markdown
+        content: >-
+          {{
+          state_attr('sensor.woonkamer_energy_management_system_wat_doet_de_integratie_nu',
+          'verhaal') or 'Nog geen data verwerkt.' }}

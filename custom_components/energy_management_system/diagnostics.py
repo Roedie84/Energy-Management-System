@@ -258,6 +258,7 @@ async def async_get_config_entry_diagnostics(
     diagnostics: dict[str, Any] = {
         "config": config,
         "diagnostic_summary": coordinator.get_diagnostic_summary(),
+        "live_narrative": coordinator.get_live_narrative(datetime.now()),
         "learning_health": _build_learning_health(
             coordinator, solar_tracker, datetime.now()
         ),
