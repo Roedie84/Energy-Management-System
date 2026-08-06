@@ -2384,6 +2384,13 @@ class WaterUsageSensor(SensorEntity, RestoreEntity):
         raw_sessions = last_state.attributes.get("recente_gebruiksmomenten")
         if isinstance(raw_sessions, list):
             self._coordinator.water_session_history = list(reversed(raw_sessions))
+            # v0.63.132: de dagteller is een gewoon geheugenveld en staat
+            # na een herstart op nul, terwijl de geschiedenis hierboven
+            # wél is hersteld. Zonder deze herbouw valt de
+            # diagnostiek-check terug op de optelling over de
+            # weergavelijst van 20 - precies wat die teller moest
+            # vervangen.
+            self._coordinator.rebuild_water_session_day_counter()
         raw_vandaag = last_state.attributes.get("vandaag_liter")
         if raw_vandaag is not None:
             self._coordinator.water_daily_total_l = float(raw_vandaag)

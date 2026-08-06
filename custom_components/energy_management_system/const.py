@@ -994,3 +994,10 @@ BATTERY_MODULE_HISTORY_DAYS = 60
 # watt, en dan "laden 3 W" tonen suggereert een richting die er niet is.
 # Puur cosmetisch; raakt geen enkele beslissing.
 MIN_BATTERY_POWER_IDLE_W = 25.0
+
+# Hoeveel het geïntegreerde debiet van de meterstand mag afwijken
+# voordat de volumebepaling als verdacht geldt (v0.63.132). Ruim
+# genomen: de meterstand heeft zelf een resolutie van ongeveer een liter,
+# dus bij korte stoten is een verschil van tientallen procenten normaal
+# zonder dat er iets mis is.
+WATER_VOLUME_AGREEMENT_TOLERANCE = 0.25

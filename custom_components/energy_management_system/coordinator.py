@@ -236,6 +236,7 @@ from .const import (
     CONF_BATTERY_TEMPERATURE_SENSOR,
     MAX_HOUR_TRACKING_GAP_MINUTES,
     MEASUREMENT_QUALITY_MIN_SAMPLES,
+    WATER_VOLUME_AGREEMENT_TOLERANCE,
     ENERGY_BALANCE_ERROR_HISTORY_LENGTH,
     ENERGY_BALANCE_ERROR_BAD_THRESHOLD_W,
     MEASUREMENT_QUALITY_GOOD_THRESHOLD,
@@ -6453,6 +6454,78 @@ class EnergyManagementSystemCoordinator:
         self._water_session_start_total_m3 = None
         self._water_session_liters_integrated = 0.0
 
+    def rebuild_water_session_day_counter(self) -> None:
+        """Herbouwt de dagteller uit de herstelde sessiegeschiedenis
+        (v0.63.132).
+
+        `water_sessions_today_l/_count` zijn gewone geheugenvelden en
+        worden dus bij elke herstart nul, terwijl
+        `water_session_history` wél wordt hersteld. In een
+        diagnostiek-export was dat direct zichtbaar: zes momenten van
+        vandaag in de geschiedenis, maar de teller op 0. De
+        diagnostiek-check viel daardoor terug op de optelling over de
+        weergavelijst - precies het gedrag dat die teller in v0.63.119
+        moest vervangen.
+
+        Wordt aangeroepen zodra de watersensor zijn geschiedenis heeft
+        teruggezet. Geen extra opslag nodig: de gegevens zijn er al.
+        """
+        vandaag = dt_util.now().date()
+        totaal = 0.0
+        aantal = 0
+        for sessie in self.water_session_history:
+            gestart = sessie.get("gestart")
+            if not gestart:
+                continue
+            moment = dt_util.parse_datetime(gestart)
+            if moment is None or dt_util.as_local(moment).date() != vandaag:
+                continue
+            aantal += 1
+            liter = sessie.get("liter")
+            if liter is not None:
+                totaal += liter
+        if aantal == 0:
+            return
+        self._water_sessions_day_key = vandaag
+        self.water_sessions_today_l = round(totaal, 2)
+        self.water_sessions_today_count = aantal
+
+    def _water_volume_matches_the_meter(self) -> bool | None:
+        """Komt het geïntegreerde debiet overeen met wat de meterstand
+        zegt? (v0.63.132)
+
+        True = de volumebepaling is aantoonbaar goed, dus een tekort in
+        het dagtotaal komt door GEMISTE momenten. False = de volumes
+        zelf kloppen niet. None = er is (nog) geen moment waarin beide
+        methodes een waarde gaven, dus niets te vergelijken.
+
+        Dit vervangt de telling-als-proxy uit v0.63.121. Die trok haar
+        conclusie uit "veel of weinig momenten", een drempel die niets
+        met de werkelijke oorzaak te maken had - bij zes momenten sloeg
+        hij om naar "de volumebepaling schiet tekort", terwijl dezelfde
+        export liet zien dat geïntegreerd 12,2 L en meterstand 12,0 L
+        opleverden. Die twee getallen zijn het echte bewijs, dus daar
+        hoort de conclusie op te rusten.
+        """
+        vandaag = dt_util.now().date()
+        geintegreerd = 0.0
+        gemeten = 0.0
+        for sessie in self.water_session_history:
+            gestart = sessie.get("gestart")
+            liter = sessie.get("liter")
+            meterstand = sessie.get("liter_uit_meterstand")
+            if not gestart or liter is None or meterstand is None:
+                continue
+            moment = dt_util.parse_datetime(gestart)
+            if moment is None or dt_util.as_local(moment).date() != vandaag:
+                continue
+            geintegreerd += liter
+            gemeten += meterstand
+        if gemeten <= 0:
+            return None
+        afwijking = abs(geintegreerd - gemeten) / gemeten
+        return afwijking <= WATER_VOLUME_AGREEMENT_TOLERANCE
+
     def _record_water_session_for_today(
         self, started_at: datetime | None, liters: float | None
     ) -> None:
@@ -7988,20 +8061,35 @@ class EnergyManagementSystemCoordinator:
                 # momenten betekent dat de detectie ze mist, veel
                 # momenten met weinig liters betekent dat de
                 # VOLUMEBEPALING tekortschiet.
-                if sessions_today_count <= 5:
+                # v0.63.132: de conclusie rust nu op BEWIJS in plaats
+                # van op een telling-drempel. Komt het geïntegreerde
+                # debiet overeen met de meterstand, dan is de
+                # volumebepaling aantoonbaar goed en zit het tekort dus
+                # in gemiste momenten. Zie
+                # `_water_volume_matches_the_meter`.
+                volume_klopt = self._water_volume_matches_the_meter()
+                if volume_klopt is True:
                     duiding = (
-                        f"er zijn maar {sessions_today_count} "
-                        "gebruiksmoment(en) herkend, dus de detectie zelf "
-                        "mist waarschijnlijk stoten (staat de debietsensor "
-                        "wel live bij te werken?)"
+                        f"de {sessions_today_count} herkende moment(en) "
+                        "kloppen qua volume (geïntegreerd debiet en "
+                        "meterstand komen overeen), dus er worden "
+                        "gebruiksmomenten gemist - de debietsensor pikt "
+                        "waarschijnlijk niet elke stoot op"
+                    )
+                elif volume_klopt is False:
+                    duiding = (
+                        f"de {sessions_today_count} herkende moment(en) "
+                        "meten onderling verschillend (geïntegreerd debiet "
+                        "wijkt af van de meterstand), dus de volumebepaling "
+                        "is hier de zwakke schakel"
                     )
                 else:
                     duiding = (
-                        f"er zijn wél {sessions_today_count} "
-                        "gebruiksmomenten herkend, dus de detectie werkt - "
-                        "het volume per moment valt te laag uit (vergelijk "
-                        "'liter' met 'liter_uit_meterstand' in de "
-                        "sessiegeschiedenis)"
+                        f"er zijn {sessions_today_count} moment(en) herkend, "
+                        "maar nog geen enkel moment waarin zowel het debiet "
+                        "als de meterstand een waarde gaf - zonder die "
+                        "vergelijking is niet te zeggen of er momenten "
+                        "gemist worden of dat de volumes te laag uitvallen"
                     )
                 # v0.63.129, gevraagd: "dit mag geen aandachtspunt zijn,
                 # ik ben me er van bewust". Terecht: dit is een

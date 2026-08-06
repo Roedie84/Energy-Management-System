@@ -391,7 +391,14 @@ views:
     panel: true
     cards:
       - type: picture-elements
-        image: /local/energy_management_system_overview.svg
+        # v0.63.131: de ?v= is GEEN opsmuk maar noodzakelijk.
+        # /local/ serveert een statisch bestand onder een vaste naam,
+        # dus browsers (en de HA-app) blijven de oude tekening tonen
+        # terwijl de waarden er live overheen komen - gerapporteerd als
+        # "richtingen van de stromen nog niet geupdate?". De
+        # versiesleutel dwingt een verse ophaal af. Een test bewaakt
+        # dat deze waarde gelijk blijft aan de versie in manifest.json.
+        image: /local/energy_management_system_overview.svg?v=0.63.132
         elements:
           - type: state-label
             entity: sensor.woonkamer_energy_management_system_system_status
