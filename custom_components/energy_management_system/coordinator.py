@@ -204,6 +204,14 @@ from .const import (
     BATTERY_COOLING_FAN_UNAVAILABLE_STATES,
     BATTERY_MODULE_CELL_DELTA_ATTENTION_V,
     DIGITAL_TWIN_ACCURACY_GOOD_FRACTION,
+    CLIMATE_RATE_NEIGHBOUR_BUCKETS,
+    KALMAN_DIVERGENCE_HISTORY_LENGTH,
+    POST_SALDEREN_DISCHARGE_OVERSHOOT_W,
+    POST_SALDEREN_MIN_SURPLUS_TO_CAPTURE_W,
+    POST_SALDEREN_MIN_USEFUL_DISCHARGE_W,
+    KALMAN_DIVERGENCE_MEANINGFUL_PERCENT,
+    KALMAN_DIVERGENCE_MIN_SAMPLES,
+    KALMAN_DIVERGENCE_NEGLIGIBLE_PERCENT,
     WEATHER_ENSEMBLE_AGREEMENT_GOOD_PERCENT,
     WEATHER_ENSEMBLE_AGREEMENT_HISTORY_LENGTH,
     WEATHER_ENSEMBLE_AGREEMENT_MIN_SAMPLES,
@@ -647,6 +655,9 @@ class EnergyManagementSystemCoordinator:
         # Kalman filtering advisory engine (v0.63.35) - see
         # _KalmanFilter1D and _update_kalman_filters() for the "advisory
         # only, never fed into decisions" guarantee.
+        # v1.0.7: per signaal de afwijking tussen ruw en gefilterd,
+        # om te kunnen beantwoorden of filteren hier iets oplevert.
+        self.kalman_divergence_history: dict[str, list[list]] = {}
         self._kalman_soc = _KalmanFilter1D(
             KALMAN_SOC_PROCESS_NOISE_KWH2, KALMAN_SOC_MEASUREMENT_NOISE_KWH2
         )
@@ -743,6 +754,9 @@ class EnergyManagementSystemCoordinator:
         self.climate_shutter_state: str | None = None
         self.climate_airco_state: str | None = None
         self.climate_live_outdoor_temp_c: float | None = None
+        # v1.1.1: welke entiteit de live buitentemperatuur levert -
+        # achtertuinsensor of weerentiteit. Zie `_get_live_outdoor_temp_c`.
+        self.climate_live_outdoor_source: str | None = None
         self._climate_forecast_last_fetch: datetime | None = None
         self._climate_cached_forecast: list[tuple] | None = None
         # v0.63.120: de reden waarom de buitentemperatuur-voorspelling
@@ -3465,6 +3479,90 @@ class EnergyManagementSystemCoordinator:
         self.last_arbitrage_solar_surplus_w = round(solar_surplus_w, 1)
 
         return solar_surplus_w > 0
+
+    def should_capture_surplus_over_selling(self, now: datetime) -> bool:
+        """Na saldering: is er genoeg zonoverschot om opvangen te
+        verkiezen boven verkopen? (v1.1.0)
+
+        Zolang salderen geldt: ALTIJD False - er verandert dan niets.
+        Onder saldering is exporteren en zelf verbruiken even veel waard,
+        dus valt er niets te kiezen en zou dit alleen bestaande, beproefde
+        logica verstoren.
+
+        Daarna wél. Een kWh zonoverschot die je nu exporteert levert het
+        lage teruglevertarief op; diezelfde kWh opgeslagen en later zelf
+        verbruikt bespaart de volle inkoopprijs. Dat verschil is groter
+        dan wat het duurste kwartier van de dag aan extra opbrengst kan
+        geven, want dat kwartier wordt óók tegen het lage tarief
+        afgerekend zodra het geëxporteerd wordt.
+
+        Gebruikt dezelfde overschot-bepaling als
+        `_should_capture_solar_instead_of_postponing`: bij voorkeur de
+        Solcast-verwachting voor dit moment (bias-gecorrigeerd), zodat een
+        overdrijvende wolk de beslissing niet elke paar minuten laat
+        omslaan.
+        """
+        if self._is_salderen_active(now):
+            return False
+
+        expected_pv_power_w = self._get_expected_pv_power_w(now)
+        if expected_pv_power_w is not None:
+            pv_power_w = expected_pv_power_w
+        else:
+            pv_entity = self.config.get(CONF_PV_POWER_SENSOR)
+            pv_power_w = self._read_sensor_float(pv_entity) if pv_entity else None
+        household_load_w = self._read_corrected_consumption_power()
+        if pv_power_w is None or household_load_w is None:
+            return False
+
+        surplus_w = pv_power_w - household_load_w
+        return surplus_w >= POST_SALDEREN_MIN_SURPLUS_TO_CAPTURE_W
+
+    def cap_discharge_to_own_consumption(
+        self, now: datetime, discharge_power_w: float | None
+    ) -> float | None:
+        """Na saldering: begrens geforceerd ontladen tot ongeveer het
+        eigen huisverbruik (v1.1.0).
+
+        Zolang salderen geldt: het vermogen komt ONGEWIJZIGD terug.
+
+        Daarna is doorschieten verliesgevend. Ontladen tot het niveau van
+        het huisverbruik vermijdt inkoop tegen de volle, belaste prijs;
+        alles daarboven gaat het net op en levert alleen het lage
+        teruglevertarief. Die kWh had beter in de accu kunnen blijven om
+        later inkoop te vermijden.
+
+        Een kleine marge (`POST_SALDEREN_DISCHARGE_OVERSHOOT_W`) blijft
+        toegestaan: precies op het verbruik mikken zou door meetruis en
+        de reactietijd van de omvormer voortdurend een beetje export of
+        import opleveren, en dat zou de aansturing onrustig maken zonder
+        iets op te lossen.
+
+        Geeft None terug als er zo weinig over blijft dat ontladen geen
+        zin meer heeft - de omvormer-verliezen wegen dan zwaarder dan de
+        vermeden inkoop. De aanroeper behandelt None hetzelfde als een te
+        lage SoC: niet forceren, de accu zijn eigen slimme modus laten
+        draaien.
+        """
+        if discharge_power_w is None or self._is_salderen_active(now):
+            return discharge_power_w
+
+        household_load_w = self._read_corrected_consumption_power()
+        if household_load_w is None:
+            # Zonder verbruiksmeting valt er niets te begrenzen - dan
+            # liever het bestaande gedrag aanhouden dan gokken.
+            return discharge_power_w
+
+        # De drempel geldt voor het EIGEN VERBRUIK, niet voor het
+        # begrensde totaal. Zou hij op het totaal gelden, dan haalt de
+        # overschrijdingsmarge in zijn eentje de drempel al - en dan zou
+        # er bij nul eigen verbruik alsnog puur geëxporteerd worden,
+        # precies wat deze begrenzing moet voorkomen.
+        if household_load_w < POST_SALDEREN_MIN_USEFUL_DISCHARGE_W:
+            return None
+
+        maximum_w = household_load_w + POST_SALDEREN_DISCHARGE_OVERSHOOT_W
+        return round(min(discharge_power_w, maximum_w), 1)
 
     def _is_emergency_low_battery(self) -> bool:
         """Is the battery critically low right now, AND is little solar
@@ -7193,6 +7291,107 @@ class EnergyManagementSystemCoordinator:
             self.kalman_load_raw_w = load_w
             self.kalman_load_filtered_w = round(self._kalman_load.update(load_w), 1)
 
+        # v1.0.7: hoeveel scheelt filteren eigenlijk?
+        self._record_kalman_divergence(
+            "soc", self.kalman_soc_raw_kwh, self.kalman_soc_filtered_kwh
+        )
+        self._record_kalman_divergence(
+            "pv", self.kalman_pv_raw_w, self.kalman_pv_filtered_w
+        )
+        self._record_kalman_divergence(
+            "load", self.kalman_load_raw_w, self.kalman_load_filtered_w
+        )
+
+    def _record_kalman_divergence(
+        self, signaal: str, ruw: float | None, gefilterd: float | None
+    ) -> None:
+        """Legt per meting het paar (|verschil|, |ruwe waarde|) vast
+        (v1.0.7).
+
+        Beide worden bewaard omdat een absoluut verschil zonder
+        schaal niets zegt: 50 W afwijking op een PV-vermogen van 3000 W
+        is verwaarloosbaar, dezelfde 50 W op een huisverbruik van 200 W
+        is fors. De verhouding wordt pas bij het oordeel berekend, over
+        de sommen - niet per meting, want dan zou een moment met bijna
+        nul opwek een absurde verhouding opleveren die het gemiddelde
+        volledig zou domineren.
+        """
+        if ruw is None or gefilterd is None:
+            return
+        reeks = self.kalman_divergence_history.setdefault(signaal, [])
+        reeks.append([round(abs(ruw - gefilterd), 4), round(abs(ruw), 4)])
+        self.kalman_divergence_history[signaal] = reeks[
+            -KALMAN_DIVERGENCE_HISTORY_LENGTH:
+        ]
+
+    def get_kalman_divergence_status(self) -> dict:
+        """Beantwoordt per signaal: levert filteren hier iets op?
+        (v1.0.7)
+
+        Puur informatief. Er wordt niets mee gestuurd - dat was juist de
+        vraag die hieronder ligt, en die beantwoord je met een cijfer en
+        niet met een aanname.
+        """
+        resultaat = {}
+        for signaal, reeks in sorted(self.kalman_divergence_history.items()):
+            aantal = len(reeks)
+            if aantal < KALMAN_DIVERGENCE_MIN_SAMPLES:
+                resultaat[signaal] = {
+                    "status": "onvoldoende_data",
+                    "reden": (
+                        f"{aantal}/{KALMAN_DIVERGENCE_MIN_SAMPLES} metingen "
+                        "verzameld."
+                    ),
+                    "aantal_metingen": aantal,
+                }
+                continue
+
+            som_verschil = sum(paar[0] for paar in reeks)
+            som_ruw = sum(paar[1] for paar in reeks)
+            gemiddeld_verschil = round(som_verschil / aantal, 4)
+            if som_ruw <= 0:
+                resultaat[signaal] = {
+                    "status": "onvoldoende_data",
+                    "reden": (
+                        "Het signaal stond over deze hele periode op nul - "
+                        "niets om een verhouding tegen te leggen."
+                    ),
+                    "aantal_metingen": aantal,
+                }
+                continue
+
+            percentage = round(100 * som_verschil / som_ruw, 2)
+            if percentage < KALMAN_DIVERGENCE_NEGLIGIBLE_PERCENT:
+                status = "verwaarloosbaar"
+                duiding = (
+                    "gefilterd en ruw liggen praktisch gelijk - filteren "
+                    "zou hier niets veranderen"
+                )
+            elif percentage < KALMAN_DIVERGENCE_MEANINGFUL_PERCENT:
+                status = "klein"
+                duiding = (
+                    "een merkbaar maar bescheiden verschil - waarschijnlijk "
+                    "niet de moeite van het risico waard"
+                )
+            else:
+                status = "noemenswaardig"
+                duiding = (
+                    "een fors verschil; hier zou filteren iets kunnen "
+                    "opleveren, maar alleen asymmetrisch toegepast (zie "
+                    "README)"
+                )
+            resultaat[signaal] = {
+                "status": status,
+                "reden": (
+                    f"Gemiddeld {gemiddeld_verschil} verschil, {percentage}% "
+                    f"van de signaalgrootte over {aantal} metingen - {duiding}."
+                ),
+                "gemiddeld_verschil": gemiddeld_verschil,
+                "percentage_van_signaal": percentage,
+                "aantal_metingen": aantal,
+            }
+        return resultaat
+
     def _run_digital_twin_simulation(self, now: datetime) -> None:
         """Digital Twin advisory engine (v0.63.36).
 
@@ -8948,10 +9147,18 @@ class EnergyManagementSystemCoordinator:
         Ensemble-entiteiten, v0.63.30) als er geen achtertuinsensor is
         geconfigureerd of niet uitleesbaar is.
         """
+        # v1.1.1, gerapporteerd: "We hebben mijn buitentemperatuur
+        # sensor toegevoegd maar die zie ik niet terug?" - de sensor werd
+        # wél degelijk gebruikt, maar het dashboardlabel noemde nog
+        # hardgecodeerd "KNMI/OpenWeatherMap" uit de tijd vóór v0.63.95.
+        # Welke bron de waarde levert wordt nu vastgelegd, zodat het
+        # label dat kan tonen in plaats van het te beweren.
+        self.climate_live_outdoor_source = None
         backyard_entity = self.config.get(CONF_BACKYARD_TEMPERATURE_SENSOR)
         if backyard_entity:
             filtered_temp = self._get_filtered_backyard_temp_c(now)
             if filtered_temp is not None:
+                self.climate_live_outdoor_source = backyard_entity
                 return filtered_temp
 
         for entity_id in (
@@ -8966,9 +9173,11 @@ class EnergyManagementSystemCoordinator:
             temp = state.attributes.get("temperature")
             if temp is not None:
                 try:
-                    return float(temp)
+                    waarde = float(temp)
                 except (TypeError, ValueError):
                     continue
+                self.climate_live_outdoor_source = entity_id
+                return waarde
         return None
 
     @staticmethod
@@ -9088,6 +9297,80 @@ class EnergyManagementSystemCoordinator:
             "betrouwbaarheid": betrouwbaarheid,
             "voldoende_data": sample_count >= CLIMATE_RATE_MIN_SAMPLES,
         }
+
+    def get_climate_rate_indicative(
+        self, outdoor_bucket: str, shutter_state: str, airco_state: str
+    ) -> dict:
+        """Geleerd tempo voor de INDICATIEVE reeks, met terugval op een
+        grovere samenvatting als deze exacte cel nog te weinig data heeft
+        (v1.1.2).
+
+        `get_climate_rate` blijft ongewijzigd en streng - die voedt de
+        "betrouwbaar"-reeks, en daar is exactheid juist het punt.
+
+        Zie CLIMATE_RATE_NEIGHBOUR_BUCKETS in const.py voor de volgorde
+        van terugvallen en waarom die zo is gekozen. Elke stap meldt
+        welke basis is gebruikt, zodat op het dashboard te zien blijft
+        hoe hard de schatting is - een terugval verzwijgen zou de
+        indicatie geloofwaardiger laten lijken dan ze is.
+        """
+        exact = self.get_climate_rate(outdoor_bucket, shutter_state, airco_state)
+        if exact["voldoende_data"]:
+            return {**exact, "basis": "exact"}
+
+        try:
+            bucket_waarde = float(outdoor_bucket)
+        except (TypeError, ValueError):
+            bucket_waarde = None
+
+        def _samenvatting(sleutels: list[str], basis: str) -> dict | None:
+            metingen: list[float] = []
+            for sleutel in sleutels:
+                metingen.extend(self.climate_rate_history.get(sleutel, []))
+            if len(metingen) < CLIMATE_RATE_MIN_SAMPLES:
+                return None
+            return {
+                "key": exact["key"],
+                "sample_count": len(metingen),
+                "rate_c_per_hour": round(statistics.median(metingen), 3),
+                "betrouwbaarheid": "indicatief",
+                "voldoende_data": True,
+                "basis": basis,
+            }
+
+        # 2. Naburige buitentemperatuur, zelfde rolluik + airco.
+        if bucket_waarde is not None:
+            buren = []
+            for stap in range(1, CLIMATE_RATE_NEIGHBOUR_BUCKETS + 1):
+                for richting in (-1, 1):
+                    naburig = bucket_waarde + richting * stap * OUTDOOR_TEMP_BUCKET_SIZE_C
+                    buren.append(
+                        self._climate_rate_key(
+                            str(naburig), shutter_state, airco_state
+                        )
+                    )
+            resultaat = _samenvatting(
+                [exact["key"], *buren], "naburige_buitentemperatuur"
+            )
+            if resultaat is not None:
+                return resultaat
+
+        # 3. Zelfde buitentemperatuur, elke rolluik-/airco-stand.
+        zelfde_bucket = [
+            sleutel
+            for sleutel in self.climate_rate_history
+            if sleutel.split("|")[0] == outdoor_bucket
+        ]
+        resultaat = _samenvatting(zelfde_bucket, "zelfde_buitentemperatuur")
+        if resultaat is not None:
+            return resultaat
+
+        # 4. Alles wat er is.
+        resultaat = _samenvatting(list(self.climate_rate_history), "algemeen")
+        if resultaat is not None:
+            return resultaat
+
+        return {**exact, "basis": "geen"}
 
     async def _async_fetch_hourly_outdoor_forecast(
         self, entity_id: str
@@ -9323,11 +9606,22 @@ class EnergyManagementSystemCoordinator:
         ]:
             outdoor_temp_c = raw_outdoor_temp_c + bias_c
             outdoor_bucket = self._outdoor_temp_bucket(outdoor_temp_c)
+            # v1.1.2: de twee reeksen gebruiken nu elk hun eigen bron.
+            # De strenge reeks blijft uitsluitend op deze exacte cel
+            # rekenen - dat is haar bestaansreden. De indicatieve reeks
+            # mag terugvallen op een grovere samenvatting, want anders
+            # bevriest ze maandenlang op vrijwel elk uur van de projectie
+            # (252 mogelijke cellen, en de projectie loopt langs telkens
+            # een ander buitentemperatuur-vakje).
             rate = self.get_climate_rate(outdoor_bucket, shutter_state, airco_state)
+            indicatief = self.get_climate_rate_indicative(
+                outdoor_bucket, shutter_state, airco_state
+            )
             rate_value = rate["rate_c_per_hour"]
+            indicatief_value = indicatief["rate_c_per_hour"]
 
-            if rate["betrouwbaarheid"] in ("indicatief", "betrouwbaar") and rate_value is not None:
-                kort_termijn_temp = kort_termijn_temp + rate_value
+            if indicatief["voldoende_data"] and indicatief_value is not None:
+                kort_termijn_temp = kort_termijn_temp + indicatief_value
             if rate["betrouwbaarheid"] == "betrouwbaar" and rate_value is not None:
                 betrouwbaar_temp = betrouwbaar_temp + rate_value
 
@@ -9354,7 +9648,12 @@ class EnergyManagementSystemCoordinator:
                     # ≥15-drempel echt gehaald is, anders altijd
                     # "onvoldoende_data" (nooit "indicatief" daar, dat
                     # zou alsnog de verkeerde indruk wekken).
-                    "betrouwbaarheid": rate["betrouwbaarheid"],
+                    "betrouwbaarheid": indicatief["betrouwbaarheid"],
+                    # v1.1.2: waarop de indicatieve schatting rust -
+                    # exact deze cel, of een grovere samenvatting. Een
+                    # terugval verzwijgen zou de indicatie
+                    # geloofwaardiger laten lijken dan ze is.
+                    "basis": indicatief["basis"],
                     "betrouwbaarheid_streng": (
                         "betrouwbaar"
                         if rate["betrouwbaarheid"] == "betrouwbaar"
@@ -10241,6 +10540,26 @@ class EnergyManagementSystemCoordinator:
             if self.last_soc_percent is not None:
                 parts.append(f"Huidige accu-SoC: {self.last_soc_percent:.0f}%.")
 
+        elif reason == "post_salderen_solar_capture":
+            parts.append(
+                "Dit kwartier is duur, maar er is op dit moment "
+                "zonoverschot. Nu de saldering is beëindigd levert "
+                "terugleveren alleen nog het lage teruglevertarief op, "
+                "terwijl diezelfde zon opgeslagen later de volle "
+                "inkoopprijs bespaart. De Zendure staat daarom op 'smart' "
+                "om het overschot op te vangen in plaats van te verkopen."
+            )
+
+        elif reason == "expensive_quarter_no_own_load":
+            parts.append(
+                "Dit kwartier is duur genoeg om te ontladen, maar er is nu "
+                "te weinig eigen verbruik om dat zinvol te doen. Nu de "
+                "saldering is beëindigd zou het overschot tegen het lage "
+                "teruglevertarief het net op gaan, terwijl diezelfde "
+                "energie in de accu later de volle inkoopprijs kan "
+                "besparen - dus blijft de accu gespaard."
+            )
+
         elif reason == "expensive_quarter_soc_protected":
             if self.last_price_priority_held_off:
                 parts.append(
@@ -10821,11 +11140,51 @@ class EnergyManagementSystemCoordinator:
         self.last_expensive_tier = expensive_tier
 
         if is_expensive:
+            # v1.1.0, WIJZIGING 1 - alleen actief na saldering. Is er op
+            # dit moment noemenswaardig zonoverschot, dan is opvangen
+            # meer waard dan verkopen: opgeslagen zon vermijdt later
+            # inkoop tegen de volle, belaste prijs, terwijl verkopen nu
+            # slechts het lage teruglevertarief oplevert - ook in het
+            # duurste kwartier van de dag, want ook dat wordt tegen dat
+            # lage tarief afgerekend. Zolang salderen geldt geeft
+            # `should_capture_surplus_over_selling` altijd False terug en
+            # verandert er hier dus letterlijk niets.
+            if self.should_capture_surplus_over_selling(now):
+                await self._async_apply_operation(OPTION_SMART)
+                self.last_reason = "post_salderen_solar_capture"
+                self._update_financial_tracking(
+                    now, entries, self.last_reason, None, None
+                )
+                self._update_shortfall_detection(
+                    now,
+                    self.last_reason,
+                    self.last_available_kwh,
+                    self.last_needed_kwh_to_bridge,
+                )
+                self._finish_decision_tick(now)
+                return
+
             discharge_power = self.config.get(
                 CONF_MANUAL_DISCHARGE_POWER, DEFAULT_MANUAL_DISCHARGE_POWER
             )
             scaled_power = self._get_soc_scaled_discharge_power(
                 discharge_power, now, cheap_block_start, entries
+            )
+            # v1.1.0, WIJZIGING 2 - alleen actief na saldering. Begrens
+            # het ontlaadvermogen tot ongeveer het eigen verbruik: alles
+            # daarboven gaat het net op tegen het lage teruglevertarief,
+            # terwijl diezelfde kWh in de accu later de volle inkoopprijs
+            # had kunnen vermijden. Blijft er te weinig over om zinvol te
+            # ontladen, dan komt None terug en valt dit hieronder in
+            # dezelfde tak als een te lage SoC.
+            # Onderscheid bewaren: viel het vermogen weg door een lage
+            # SoC, of doordat er te weinig eigen verbruik is om zinvol op
+            # te ontladen? De uitkomst is dezelfde, de reden niet - en op
+            # het dashboard is dat verschil juist het interessante.
+            soc_allowed_power = scaled_power
+            scaled_power = self.cap_discharge_to_own_consumption(now, scaled_power)
+            capped_away_by_own_load = (
+                soc_allowed_power is not None and scaled_power is None
             )
             if scaled_power is None and self._is_emergency_low_battery():
                 # SoC too low to discharge - and critically low, not just
@@ -10848,8 +11207,16 @@ class EnergyManagementSystemCoordinator:
             if scaled_power is None:
                 # SoC too low to justify forced export - protect the
                 # battery and let the Zendure's own smart mode take over.
+                # v1.1.0: kan na saldering óók betekenen dat er te weinig
+                # eigen verbruik is om zinvol op te ontladen (zie
+                # `cap_discharge_to_own_consumption`); de uitkomst is
+                # dezelfde, maar de reden verschilt en hoort dat te laten
+                # zien.
                 await self._async_apply_operation(OPTION_SMART)
-                self.last_reason = "expensive_quarter_soc_protected"
+                if capped_away_by_own_load:
+                    self.last_reason = "expensive_quarter_no_own_load"
+                else:
+                    self.last_reason = "expensive_quarter_soc_protected"
             else:
                 await self._async_apply_manual(scaled_power)
                 self.last_reason = "expensive_quarter"

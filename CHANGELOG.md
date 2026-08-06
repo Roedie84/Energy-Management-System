@@ -7621,3 +7621,132 @@ gewist zodra er weer een normale waarde binnenkomt.
 9 tests waarvan er 6 aantoonbaar falen op v1.0.5.
 
 **Volledige testsuite**: 865 tests, allemaal groen.
+
+## v1.0.7 — Kalman: meten of filteren hier eigenlijk iets oplevert
+
+**Gevraagd**: doen we actief iets met de Kalman-filters, en wat zou het
+betekenen als wel? Antwoord op het eerste: nee, geverifieerd - geen van
+de drie gefilterde waarden wordt in een beslispad gelezen.
+
+**Probleem met de bestaande status**: "alle 3 filters geconvergeerd" zei
+alleen dat de interne onzekerheid was uitgezakt, niet dat de gefilterde
+waarde BETER is dan de ruwe. Er was geen cijfer dat "heeft filteren hier
+zin?" kon beantwoorden.
+
+**Nieuw**: per signaal wordt bij elke meting het paar (verschil,
+signaalgrootte) vastgelegd; het oordeel volgt uit de verhouding
+(<1% verwaarloosbaar, <5% klein, daarboven noemenswaardig).
+
+Twee ontwerpkeuzes: de verhouding wordt over de SOMMEN genomen (per
+meting delen zou één moment met bijna nul opwek het gemiddelde laten
+domineren), en beide getallen worden bewaard (50 W op 10 kW PV is
+verwaarloosbaar, dezelfde 50 W op 200 W huisverbruik is fors). Vijftig
+metingen per signaal nodig; gaat mee in de toestandspersistentie van
+v1.0.4.
+
+**Blijft volledig adviserend**: een test controleert dat de meting
+nergens een commando raakt.
+
+**Getest**: nieuw `tests/test_kalman_divergence.py`, 12 tests.
+
+**Volledige testsuite**: 877 tests, allemaal groen.
+
+## v1.1.0 — Beslislogica na het einde van saldering
+
+**Gevraagd**: wijziging 1 en 2 uit de eerdere afweging, met de
+uitdrukkelijke voorwaarde dat het pas vanaf 01-01-2027 geldt.
+
+**Volledig achter `_is_salderen_active(now)`** - dezelfde poort als het
+financiële model uit v0.63.117. Tot en met 31-12-2026 verandert er
+letterlijk niets; alle 877 bestaande tests (die met data in 2026 draaien,
+dus met saldering actief) slagen ongewijzigd.
+
+**Wijziging 1**: is er tijdens een duur kwartier noemenswaardig
+zonoverschot (>=150 W), dan gaat de accu naar `smart` om dat op te vangen
+in plaats van te verkopen. Opgeslagen zon vermijdt later inkoop tegen de
+volle prijs; verkopen levert alleen het lage teruglevertarief - ook in
+het duurste kwartier.
+
+**Wijziging 2**: geforceerd ontladen wordt afgetopt op het huisverbruik
+plus 150 W marge. Alles daarboven gaat tegen het lage tarief het net op,
+terwijl diezelfde kWh later de volle inkoopprijs had kunnen vermijden.
+
+Een test bracht een fout in de eerste opzet aan het licht: de ondergrens
+voor "zinvol ontladen" stond op het begrensde totaal, waardoor de marge
+in zijn eentje die grens al haalde en er bij nul eigen verbruik alsnog
+150 W puur geëxporteerd zou worden. De grens geldt nu op het EIGEN
+VERBRUIK.
+
+**Nieuwe beslissingsredenen** met eigen uitleg:
+`post_salderen_solar_capture` en `expensive_quarter_no_own_load`. Die
+tweede is bewust onderscheiden van `expensive_quarter_soc_protected` -
+zelfde uitkomst, heel andere situatie.
+
+**Bewust niet aangepast**: de reserveberekening (energiebrug-check en
+dynamische ontlaadreserve), conform de eerdere afspraak.
+
+**Uitproberen**: zet de salderingsdatum tijdelijk in het verleden.
+
+**Getest**: nieuw `tests/test_post_salderen_decision_logic.py`, 17 tests.
+
+**Volledige testsuite**: 894 tests, allemaal groen.
+
+## v1.1.1 — Het label noemde de verkeerde temperatuurbron
+
+**Gerapporteerd**: "We hebben mijn buitentemperatuur sensor toegevoegd
+maar die zie ik niet terug?"
+
+De sensor werd wél gebruikt: `_get_live_outdoor_temp_c` verkiest de
+achtertuinsensor sinds v0.63.95 boven de weerentiteit, en de
+configuratie-export bevestigde dat hij netjes was ingevuld. Alleen het
+dashboardlabel stond nog hardgecodeerd als "Buitentemperatuur (live,
+KNMI/OpenWeatherMap)" uit de tijd daarvóór - het beweerde dus iets anders
+dan de code deed. Zelfde soort fout als de verouderde legenda in v1.0.5.
+
+**Fix**: niet een nieuw hardgecodeerd label (dat loopt over een jaar
+opnieuw achter), maar `climate_live_outdoor_source` - de entiteit die de
+waarde daadwerkelijk leverde. De tegel toont die naam en wisselt mee als
+de bron wisselt.
+
+**Ook toegevoegd**: uitleg op het Klimaat-tabblad dat live-meting en
+uurvoorspelling bewust uit verschillende bronnen komen. De
+achtertuinsensor kan geen voorspelling leveren; het verschil tussen beide
+wordt als geleerde bias-correctie over de hele voorspelling toegepast.
+
+**Getest**: nieuw `tests/test_outdoor_temperature_source.py`, 8 tests,
+waaronder dat de bron bij elke uitlezing opnieuw wordt bepaald.
+
+**Volledige testsuite**: 902 tests, allemaal groen.
+
+## v1.1.2 — "Korte termijn" bevroor maandenlang
+
+**Gevraagd**: "Maar korte termijn zou toch op relatief korte termijn een
+indicatie geven?"
+
+**Rekensom**: het klimaatmodel leert per cel (buitentemperatuur x
+rolluikstand x airco-status) = 252 mogelijke cellen. In de echte export
+na vijf dagen: 6 cellen met enige data, 1 met de vereiste 5 metingen. De
+projectie loopt 24 uur vooruit langs telkens een ander
+buitentemperatuur-vakje, dus vrijwel elk uur bevroor - niet omdat er
+niets geleerd was, maar omdat het geleerde net niet bij dat uur paste.
+
+**Fix**: de indicatieve reeks valt nu terug, van dichtbij naar ver:
+exacte cel -> naburige buitentemperatuur (zelfde rolluik/airco) ->
+zelfde buitentemperatuur (elke stand) -> alle metingen. Stap 2 gaat
+bewust vóór stap 3: de rolluikstand bepaalt hoeveel zon er binnenvalt en
+weegt zwaarder dan twee graden verschil buiten.
+
+De STRENGE reeks blijft exact zoals hij was - een test borgt dat
+"betrouwbaar" nooit op een samenvatting rust. De drempel van vijf
+metingen geldt ook voor de samenvatting, en zonder enige data bevriest de
+reeks alsnog.
+
+**Getoetst aan de echte celdata**: van één bruikbaar uur naar een
+volledige kolom met indicaties.
+
+**Eerlijkheid**: nieuwe kolom "Gebaseerd op" toont per uur of de
+schatting op deze combinatie rust of op een grovere samenvatting.
+
+**Getest**: nieuw `tests/test_climate_rate_fallback.py`, 10 tests.
+
+**Volledige testsuite**: 912 tests, allemaal groen.

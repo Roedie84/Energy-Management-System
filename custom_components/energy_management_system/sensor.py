@@ -1429,13 +1429,23 @@ class KalmanFilterAdvisorySensor(SensorEntity):
             "pv_ruw_w": self._coordinator.kalman_pv_raw_w,
             "verbruik_gefilterd_w": self._coordinator.kalman_load_filtered_w,
             "verbruik_ruw_w": self._coordinator.kalman_load_raw_w,
+            # v1.0.7: levert filteren hier eigenlijk iets op? "Alle
+            # filters geconvergeerd" zei alleen dat de onzekerheid was
+            # uitgezakt, niet dat de gefilterde waarde beter is.
+            "levert_filteren_iets_op": (
+                self._coordinator.get_kalman_divergence_status()
+            ),
             "note": (
                 "Adviserend - een gladgestreken schatting naast de "
                 "ruwe sensorwaarde, nooit meegenomen in enige "
                 "beslissing (die gebruiken hun eigen, al beproefde "
                 "gladstrijkmethode). Proces-/meetruis-parameters zijn "
                 "onderbouwde standaardwaarden, niet empirisch bepaald "
-                "voor deze specifieke installatie."
+                "voor deze specifieke installatie. "
+                "'levert_filteren_iets_op' meet per signaal hoeveel "
+                "gefilterd van ruw afwijkt, als percentage van de "
+                "signaalgrootte - is dat verwaarloosbaar, dan valt er met "
+                "filteren niets te winnen."
             ),
         }
 
@@ -1896,6 +1906,12 @@ class ClimateForecastSensor(SensorEntity, RestoreEntity):
     def extra_state_attributes(self) -> dict:
         return {
             "buitentemperatuur_live_c": self._coordinator.climate_live_outdoor_temp_c,
+            # v1.1.1: welke entiteit die waarde levert. Het dashboard
+            # noemde hardgecodeerd "KNMI/OpenWeatherMap", ook nadat de
+            # achtertuinsensor in v0.63.95 de voorkeursbron werd.
+            "buitentemperatuur_bron": (
+                self._coordinator.climate_live_outdoor_source
+            ),
             "rolluikstand": self._coordinator.climate_shutter_state,
             "airco_status": self._coordinator.climate_airco_state,
             "traject": self._coordinator.climate_forecast_trajectory,

@@ -398,7 +398,7 @@ views:
         # "richtingen van de stromen nog niet geupdate?". De
         # versiesleutel dwingt een verse ophaal af. Een test bewaakt
         # dat deze waarde gelijk blijft aan de versie in manifest.json.
-        image: /local/energy_management_system_overview.svg?v=1.0.6
+        image: /local/energy_management_system_overview.svg?v=1.1.2
         elements:
           - type: state-label
             entity: sensor.woonkamer_energy_management_system_system_status
@@ -1644,6 +1644,18 @@ views:
           voorspelling zelf gebeurt om prestatieredenen maar eens per
           30 minuten.
 
+
+          **Twee verschillende bronnen, bewust.** De LIVE
+          buitentemperatuur komt bij voorkeur van je eigen
+          achtertuinsensor — een meting op je eigen erf is nauwkeuriger
+          dan een regionale schatting. Welke bron dat op dit moment is,
+          staat in de tegel hiernaast. De VOORSPELLING per uur kan die
+          sensor niet leveren en komt daarom van KNMI/OpenWeatherMap.
+          Het verschil tussen die twee wordt bijgehouden als geleerde
+          bias-correctie (de tegel hieronder) en over de hele
+          voorspelling toegepast, zodat een structurele afwijking van de
+          weerentiteit wordt rechtgetrokken.
+
       - type: grid
         columns: 2
         square: false
@@ -1657,7 +1669,8 @@ views:
           - type: custom:mushroom-template-card
             primary: >-
               {{ state_attr('sensor.woonkamer_energy_management_system_klimaat_projectie_woonkamertemperatuur', 'buitentemperatuur_live_c') }} °C
-            secondary: Buitentemperatuur (live, KNMI/OpenWeatherMap)
+            secondary: >-
+              {% set bron = state_attr('sensor.woonkamer_energy_management_system_klimaat_projectie_woonkamertemperatuur', 'buitentemperatuur_bron') %}Buitentemperatuur (live{% if bron %} — {{ state_attr(bron, 'friendly_name') or bron }}{% endif %})
             icon: mdi:thermometer-lines
             icon_color: cyan
           - type: custom:mushroom-template-card
@@ -1711,6 +1724,17 @@ views:
           (temperatuur blijft ongewijzigd t.o.v. het vorige uur, in
           plaats van te gokken).
 
+
+          De kolom **Gebaseerd op** laat zien hoe hard de indicatie is.
+          "deze combinatie" betekent dat er genoeg metingen zijn voor
+          precies deze buitentemperatuur, rolluikstand en airco-stand.
+          Staat er iets anders, dan is teruggevallen op een grovere
+          samenvatting — nodig omdat er 252 mogelijke combinaties zijn en
+          de projectie 24 uur vooruit langs telkens een ander
+          buitentemperatuur-vakje loopt. Zonder die terugval zou de
+          indicatieve reeks maandenlang op vrijwel elk uur bevriezen. De
+          betrouwbare tabel hiernaast valt bewust nóóit terug.
+
       - type: markdown
         title: Korte termijn (indicatief)
         content: |
@@ -1718,11 +1742,12 @@ views:
           {% if traject | length == 0 %}
           Nog geen projectie beschikbaar - {{ state_attr('sensor.woonkamer_energy_management_system_klimaat_projectie_woonkamertemperatuur', 'note') or 'onbekende reden' }}.
           {% else %}
-          | Uur | Buiten (°C) | Woonkamer (°C) | Betrouwbaarheid |
-          |---|---|---|---|
+          | Uur | Buiten (°C) | Woonkamer (°C) | Betrouwbaarheid | Gebaseerd op |
+          |---|---|---|---|---|
           {% for rij in traject -%}
           {%- set icoon = {'betrouwbaar': '✅', 'indicatief': '🟡', 'onvoldoende_data': '⚪'}.get(rij.betrouwbaarheid, '?') -%}
-          | {{ rij.tijd[11:16] }} | {{ rij.buitentemp_voorspeld_c }} | {{ rij.kort_termijn_temp_c }} | {{ icoon }} {{ rij.betrouwbaarheid }} |
+          {%- set basis = {'exact': 'deze combinatie', 'naburige_buitentemperatuur': 'naburige buitentemp', 'zelfde_buitentemperatuur': 'zelfde buitentemp, andere stand', 'algemeen': 'alle metingen', 'geen': '—'}.get(rij.basis, '—') -%}
+          | {{ rij.tijd[11:16] }} | {{ rij.buitentemp_voorspeld_c }} | {{ rij.kort_termijn_temp_c }} | {{ icoon }} {{ rij.betrouwbaarheid }} | {{ basis }} |
           {% endfor %}
           {% endif %}
         grid_options:

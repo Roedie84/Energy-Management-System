@@ -1081,6 +1081,7 @@ PERSISTED_PLAIN_FIELDS = (
     "washing_machine_usage_hourly_history",
     "living_room_temp_bucket_humidity",
     "battery_cooling_history",
+    "kalman_divergence_history",
     # Cumulatieve financiële en KPI-tellers
     "actual_cost_today_eur",
     "actual_cost_current_month_eur",
@@ -1145,3 +1146,81 @@ PERSISTED_STATE_SAVE_DELAY_SECONDS = 30
 # 1,5 °C is ruim boven de ruis van een typische buitensensor en ruim
 # onder de sprong die direct zonlicht op de behuizing veroorzaakt.
 BACKYARD_TEMP_SPIKE_MIN_DEVIATION_C = 1.5
+
+# --- Kalman: levert filteren hier eigenlijk iets op? (v1.0.7) --------
+# Gevraagd n.a.v. "Kalman filtering — klaar — alle 3 filters
+# geconvergeerd": doen we hier actief iets mee, en wat zou het
+# betekenen als wel?
+#
+# "Geconvergeerd" zegt alleen dat de interne onzekerheid van het filter
+# is uitgezakt - niet dat de gefilterde waarde BETER is dan de ruwe. Er
+# was geen enkel cijfer dat die vraag kon beantwoorden. Deze meting
+# levert dat cijfer: hoeveel wijkt gefilterd af van ruw, over tijd?
+#
+# Is die afwijking verwaarloosbaar, dan is filteren zinloos en is de
+# discussie klaar. Is ze groot, dan pas is de vervolgvraag interessant -
+# en dan nog uitsluitend asymmetrisch (zie README), want een
+# achterlopende SoC-schatting die MEER energie voorspiegelt dan er is,
+# is precies het faalpatroon waar de tekort-reserve tegen beschermt.
+KALMAN_DIVERGENCE_HISTORY_LENGTH = 500
+KALMAN_DIVERGENCE_MIN_SAMPLES = 50
+
+# Onder dit percentage van de typische signaalgrootte is het verschil
+# tussen ruw en gefilterd te klein om er iets aan te hebben.
+KALMAN_DIVERGENCE_NEGLIGIBLE_PERCENT = 1.0
+KALMAN_DIVERGENCE_MEANINGFUL_PERCENT = 5.0
+
+# --- Beslislogica na het einde van saldering (v1.1.0) ----------------
+# Tot en met de salderingsdatum verandert er NIETS: alle logica hieronder
+# hangt achter `_is_salderen_active(now)` en is tot die tijd volledig
+# inert. Dat is bewust, en er zijn tests die het vastleggen.
+#
+# Waarom het daarna wél moet veranderen: onder saldering levert een
+# teruggeleverde kWh evenveel op als een ingekochte kost, dus is het om
+# het even of je energie exporteert of zelf verbruikt. Daarna niet meer -
+# exporteren levert het lage teruglevertarief op, terwijl diezelfde kWh
+# thuis de volle (belaste) inkoopprijs bespaart. Dat verschil is de kern
+# van alle keuzes hieronder.
+
+# Hoeveel het huisverbruik hoogstens overschreden mag worden bij
+# geforceerd ontladen na saldering. Precies op het verbruik mikken zou
+# door meetruis en de vertraging van de omvormer steeds een beetje
+# export of import opleveren; een kleine marge houdt de aansturing rustig
+# zonder structureel te exporteren.
+POST_SALDEREN_DISCHARGE_OVERSHOOT_W = 150.0
+
+# Onder dit vermogen heeft geforceerd ontladen geen zin meer: de
+# omvormer-verliezen wegen dan zwaarder dan de vermeden inkoop, en de
+# accu leegtrekken voor een handvol watts kost meer dan het oplevert.
+POST_SALDEREN_MIN_USEFUL_DISCHARGE_W = 100.0
+
+# Minimaal zonoverschot voordat opvangen voorrang krijgt op verkopen.
+# Ruim boven meetruis: bij een paar watt zou de beslissing heen en weer
+# gaan tussen opvangen en ontladen.
+POST_SALDEREN_MIN_SURPLUS_TO_CAPTURE_W = 150.0
+
+# --- Klimaat: terugval voor de indicatieve reeks (v1.1.2) -----------
+# Gerapporteerd: "Maar korte termijn zou toch op relatief korte termijn
+# een indicatie geven?" Terecht - "indicatief" belooft juist snel iets,
+# en dat gebeurde niet.
+#
+# Oorzaak: de celruimte is buitentemperatuur x rolluikstand x
+# airco-status = 252 mogelijke cellen. Na vijf dagen draaien hadden er
+# zes enige data en haalde er precies één de drempel van vijf metingen.
+# De projectie loopt 24 uur vooruit langs telkens een ander
+# buitentemperatuur-vakje, dus vrijwel elk uur viel terug op "bevriezen".
+#
+# De STRENGE reeks ("betrouwbaar") blijft exact zoals hij was - dat is
+# juist zijn bestaansreden. De INDICATIEVE reeks mag terugvallen op een
+# grovere samenvatting, want "indicatief" betekent nu eenmaal niet
+# "bewezen voor precies deze combinatie".
+#
+# Volgorde van terugvallen, van dichtbij naar ver:
+#   1. exact deze cel
+#   2. naburige buitentemperatuur (+/- 1 bucket), zelfde rolluik + airco
+#   3. zelfde buitentemperatuur, elke rolluik-/airco-stand
+#   4. alles
+# Stap 2 gaat bewust vóór stap 3: de rolluikstand bepaalt hoeveel zon er
+# binnenvalt en heeft daarmee meer invloed op de opwarmsnelheid dan twee
+# graden verschil buiten.
+CLIMATE_RATE_NEIGHBOUR_BUCKETS = 1

@@ -515,6 +515,309 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## "Korte termijn" bevroor maandenlang (v1.1.2)
+
+**Gevraagd**: *"Maar korte termijn zou toch op relatief korte termijn een
+indicatie geven?"*
+
+Terecht — dat is precies wat "indicatief" hoort te betekenen, en het
+gebeurde niet.
+
+### De rekensom
+
+Het klimaatmodel leert per cel: **buitentemperatuur × rolluikstand ×
+airco-status**. Met buckets van 2 °C tussen −5 en 35 zijn dat 21
+buitentemperaturen × 4 rolluikstanden × 3 airco-standen = **252 mogelijke
+cellen**.
+
+In de echte export na vijf dagen draaien:
+
+| | |
+|---|---|
+| Cellen met enige data | 6 |
+| Cellen met ≥5 metingen (de indicatief-drempel) | **1** |
+
+En de projectie loopt 24 uur vooruit langs **telkens een ander**
+buitentemperatuur-vakje. Vrijwel elk uur viel dus terug op bevriezen —
+niet omdat er niets geleerd was, maar omdat het geleerde net niet bij dát
+uur paste.
+
+### De fix: terugvallen op een grovere samenvatting
+
+De **strenge** reeks blijft exact zoals hij was. Dat is zijn
+bestaansreden: "betrouwbaar" mag nooit op een samenvatting rusten, en
+daar staat een test op.
+
+De **indicatieve** reeks valt nu terug, van dichtbij naar ver:
+
+1. exact deze cel;
+2. naburige buitentemperatuur (±2 °C), zelfde rolluik- en airco-stand;
+3. zelfde buitentemperatuur, elke stand;
+4. alle metingen samen.
+
+Stap 2 gaat bewust vóór stap 3: de rolluikstand bepaalt hoeveel zon er
+binnenvalt en heeft daarmee meer invloed op de opwarmsnelheid dan twee
+graden verschil buiten. Er is een test die die volgorde vastlegt.
+
+De drempel van vijf metingen geldt ook voor de samenvatting — terugvallen
+mag geen sluiproute worden om die te omzeilen. En is er echt nog nergens
+iets gemeten, dan bevriest de reeks alsnog; er wordt niets verzonnen.
+
+### Getoetst aan de echte data
+
+Met jouw huidige zes cellen, voor rolluiken dicht en airco uit:
+
+| Buitentemp | Streng | Indicatief (nieuw) |
+|---|---|---|
+| 12 °C | onvoldoende_data | indicatief (alle metingen) |
+| 16 °C | onvoldoende_data | indicatief (naburige buitentemp) |
+| 18 °C | indicatief | indicatief (deze combinatie) |
+| 24 °C | onvoldoende_data | indicatief (alle metingen) |
+
+Van één bruikbaar uur naar een volledige kolom.
+
+### Eerlijk blijven over hoe hard het is
+
+Er staat een extra kolom **Gebaseerd op** in de korte-termijntabel. Die
+laat per uur zien of de schatting op precies deze combinatie rust of op
+een grovere samenvatting. Een terugval verzwijgen zou de indicatie
+geloofwaardiger laten lijken dan ze is — en dat is precies wat de
+tweedeling tussen "indicatief" en "betrouwbaar" moet voorkomen.
+
+### Getest
+
+Nieuw `tests/test_climate_rate_fallback.py`, 10 tests: de strenge reeks
+blijft ongewijzigd, een exacte cel wint, terugval naar een buur-bucket,
+buren gaan vóór de bucket-brede samenvatting, terugval naar zelfde
+bucket, terugval naar alles, zonder enige data wordt niets verzonnen, de
+minimumdrempel geldt ook voor de samenvatting, verspreide cellen tellen
+samen op tot een bruikbare indicatie, en end-to-end: de korte-termijnreeks
+beweegt terwijl de betrouwbare bevroren blijft.
+
+**Volledige testsuite**: 912 tests, allemaal groen.
+
+## Het label noemde de verkeerde temperatuurbron (v1.1.1)
+
+**Gerapporteerd** met screenshot: *"We hebben mijn buitentemperatuur
+sensor toegevoegd maar die zie ik niet terug?"*
+
+Je zág hem wel — de tegel toonde gewoon de verkeerde naam erbij.
+
+### Wat er aan de hand was
+
+De achtertuinsensor is sinds v0.63.95 de **voorkeursbron** voor de live
+buitentemperatuur: een meting op je eigen erf is nauwkeuriger dan een
+regionale schatting. De weerentiteit is alleen nog de terugval. Dat werkt
+ook zo — geverifieerd in de configuratie-export: de sensor stond netjes
+ingevuld en werd gebruikt.
+
+Maar het dashboardlabel stond er nog hardgecodeerd als
+*"Buitentemperatuur (live, KNMI/OpenWeatherMap)"*, uit de tijd vóór
+v0.63.95. Het beweerde dus iets anders dan de code deed.
+
+Dezelfde soort fout als de verouderde legenda in v1.0.5 en de
+vastgeroeste klimaatmelding in v0.63.120: de code veranderde, de tekst
+ernaast bleef staan.
+
+### De fix is niet een nieuw label
+
+Een nieuwe hardgecodeerde tekst zou over een jaar opnieuw achterlopen.
+`_get_live_outdoor_temp_c` legt nu vast wélke entiteit de waarde
+daadwerkelijk leverde, en de tegel toont die naam. Wisselt de bron
+(bijvoorbeeld doordat de achtertuinsensor even wegvalt), dan wisselt het
+label mee.
+
+### En de verwarring erachter
+
+Die kwam voort uit iets dat nergens uitgelegd stond: **live-meting en
+uurvoorspelling komen uit verschillende bronnen, en dat is bewust.** Je
+achtertuinsensor kan geen voorspelling voor over zes uur leveren, dus die
+komt van KNMI/OpenWeatherMap. Het verschil tussen die twee wordt
+bijgehouden als geleerde bias-correctie (bij jou +0,4 °C) en over de hele
+voorspelling toegepast, zodat een structurele afwijking van de
+weerentiteit wordt rechtgetrokken.
+
+Die uitleg staat nu op het Klimaat-tabblad.
+
+### Getest
+
+Nieuw `tests/test_outdoor_temperature_source.py`, 8 tests: de
+achtertuinsensor krijgt voorrang, terugval naar KNMI, dan naar
+OpenWeatherMap, zonder bron blijft het leeg, de bron wordt **opnieuw
+bepaald** bij elke uitlezing (blijft hij op de achtertuinsensor staan
+nadat die wegvalt, dan toont het label opnieuw iets onwaars), de bron
+staat op de sensor, het dashboard codeert geen bron meer hard, en de
+uitleg maakt het onderscheid tussen live en voorspelling.
+
+**Volledige testsuite**: 902 tests, allemaal groen.
+
+## Beslislogica na het einde van saldering (v1.1.0)
+
+**Gevraagd**: de aansturing laten meebewegen met het verschil dat na
+saldering ontstaat — maar uitdrukkelijk: *"In acht houden dat dit pas
+vanaf 01-01-2027 geldt, ik weet niet of dit zo ingebouwd kan worden dat
+het systeem dan pas anders gaat denken."*
+
+Dat kan, en het is precies zo gebouwd. Alles hangt achter
+`_is_salderen_active(now)`, dezelfde poort die het financiële model uit
+v0.63.117 al gebruikt. **Tot en met 31 december 2026 verandert er
+letterlijk niets.**
+
+Het sterkste bewijs daarvoor: alle 877 bestaande tests slagen ongewijzigd.
+Die draaien allemaal met data in 2026, dus met saldering actief — als er
+ook maar iets aan het huidige gedrag was veranderd, hadden ze dat
+gemeld.
+
+### Waarom het daarna wél moet veranderen
+
+Onder saldering levert een teruggeleverde kWh evenveel op als een
+ingekochte kost. Exporteren of zelf verbruiken is dan om het even. Daarna
+niet meer: exporteren levert het lage teruglevertarief, terwijl diezelfde
+kWh thuis de volle, belaste inkoopprijs bespaart. Bij €0,30 inkoop en
+€0,11 teruglevering scheelt dat €0,19 per kWh — meer dan het duurste
+kwartier van de dag ooit aan extra opbrengst kan geven.
+
+### Wijziging 1: zonoverschot krijgt voorrang op verkopen
+
+Is er tijdens een duur kwartier noemenswaardig zonoverschot, dan gaat de
+accu naar `smart` om dat op te vangen in plaats van te verkopen.
+Opgeslagen zon vermijdt later inkoop tegen de volle prijs; nu verkopen
+levert alleen het lage tarief — ook in het duurste kwartier, want ook dat
+wordt tegen dat lage tarief afgerekend.
+
+Dezelfde overschot-bepaling als het bestaande
+`_should_capture_solar_instead_of_postponing`: bij voorkeur de
+bias-gecorrigeerde Solcast-verwachting, zodat een overdrijvende wolk de
+beslissing niet elke paar minuten laat omslaan. Onder 150 W gebeurt er
+niets — bij een paar watt zou de keuze heen en weer gaan.
+
+### Wijziging 2: ontladen begrensd tot het eigen verbruik
+
+Geforceerd ontladen wordt afgetopt op het huisverbruik plus een kleine
+marge. Alles daarboven gaat het net op tegen het lage tarief, terwijl
+diezelfde kWh in de accu later de volle inkoopprijs had kunnen vermijden.
+
+Die marge van 150 W is er met opzet: precies op het verbruik mikken zou
+door meetruis en de reactietijd van de omvormer voortdurend een beetje
+export of import opleveren, en dat maakt de aansturing onrustig zonder
+iets op te lossen.
+
+Een test bracht hier een fout in mijn eerste opzet aan het licht. De
+ondergrens voor "zinvol ontladen" stond op het begrensde totaal, maar dan
+haalt de marge in zijn eentje die grens al — bij nul eigen verbruik zou
+er alsnog 150 W puur geëxporteerd worden, precies wat deze begrenzing
+moet voorkomen. De grens geldt nu op het **eigen verbruik**.
+
+### Wat je op het dashboard ziet
+
+Twee nieuwe beslissingsredenen, elk met een eigen uitleg:
+`post_salderen_solar_capture` en `expensive_quarter_no_own_load`. Die
+tweede is bewust onderscheiden van het bestaande
+`expensive_quarter_soc_protected`: de uitkomst is dezelfde (niet
+forceren), maar "de accu is te leeg" en "er is te weinig eigen verbruik"
+zijn heel verschillende situaties, en juist dat verschil wil je kunnen
+zien.
+
+### Wat bewust NIET is aangepast
+
+De **reserveberekening**. Na saldering wordt energie vasthouden
+waardevoller, dus je zou meer willen reserveren — maar dat raakt de
+energiebrug-check en de dynamische ontlaadreserve, de twee mechanismen
+die eerder expliciet ongewijzigd moesten blijven. Die blijven dus zoals
+ze zijn.
+
+### Alvast uitproberen
+
+Zet de salderingsdatum tijdelijk op een dag in het verleden. Het systeem
+schakelt dan meteen om en je ziet het gedrag in de praktijk, zonder tot
+januari te wachten. Terugzetten herstelt alles.
+
+### Getest
+
+Nieuw `tests/test_post_salderen_decision_logic.py`, 17 tests. De
+belangrijkste groep gaat over inertheid: niets verandert tijdens
+saldering, ook niet op 31 december, wél de dag erna, en een uitgestelde
+einddatum stelt het gedrag zonder meer mee uit. Verder: overschot krijgt
+voorrang, geen overschot verandert niets, een straaltje is niet genoeg,
+onleesbare sensoren laten de bestaande logica met rust, ontladen wordt
+afgetopt, een bescheiden ontlading blijft ongemoeid, te weinig eigen
+verbruik betekent niet forceren, de drempel geldt op het eigen verbruik,
+zonder verbruikssensor verandert er niets, None blijft None, beide nieuwe
+redenen hebben een uitleg, en beide wijzigingen hangen aantoonbaar achter
+dezelfde poort.
+
+**Volledige testsuite**: 894 tests, allemaal groen.
+
+## Kalman: meten of filteren hier eigenlijk iets oplevert (v1.0.7)
+
+**Gevraagd** bij "Kalman filtering — klaar — alle 3 filters
+geconvergeerd": *"Doen we hier actief iets mee? En wat zou het betekenen
+als we hier actief iets mee gaan doen?"*
+
+Antwoord op het eerste: nee, geverifieerd. `kalman_soc_filtered_kwh` en
+de twee andere worden nergens in een beslispad gelezen.
+
+### "Geconvergeerd" betekende minder dan het leek
+
+Die status zei alleen dat de interne onzekerheid van elk filter was
+uitgezakt — **niet** dat de gefilterde waarde beter is dan de ruwe. Dat
+is een wezenlijk verschil met de Digital Twin, waar "klaar" inmiddels
+"aantoonbaar nauwkeurig" betekent. Er was geen enkel cijfer dat de vraag
+"heeft filteren hier zin?" kon beantwoorden.
+
+### Nu wel: de divergentiemeting
+
+Per signaal wordt bij elke meting het paar (verschil, signaalgrootte)
+vastgelegd. Het oordeel volgt uit de verhouding daartussen: onder 1 % is
+het verschil verwaarloosbaar, tussen 1 en 5 % klein, daarboven
+noemenswaardig.
+
+Twee ontwerpkeuzes:
+
+**De verhouding wordt over de sommen genomen, niet per meting.** Zou je
+per meting delen, dan levert één moment met bijna nul opwek een absurde
+verhouding op die het gemiddelde volledig domineert. Er is een test die
+dat vastlegt.
+
+**Beide getallen worden bewaard, niet alleen het verschil.** 50 W
+afwijking op 10 kW PV is verwaarloosbaar; dezelfde 50 W op 200 W
+huisverbruik is fors. Een absolute drempel zou dat verschil missen.
+
+Vijftig metingen per signaal zijn nodig voor een oordeel, en de meting
+gaat mee in de toestandspersistentie uit v1.0.4 — zonder dat zou elke
+herstart de telling terugzetten.
+
+### Wat het antwoord straks betekent
+
+Is het verschil **verwaarloosbaar**, dan is de discussie klaar: filteren
+zou niets veranderen en het risico is dus per definitie niet de moeite
+waard.
+
+Is het **noemenswaardig**, dan pas is de vervolgvraag interessant — en
+dan nog uitsluitend **asymmetrisch**. Voor de accu-inhoud zou dat
+betekenen: alleen de laagste van ruw en gefilterd gebruiken. Een
+achterlopende schatting kan dan nooit méér energie voorspiegelen dan er
+is, alleen minder. Dat is precies het faalpatroon waar de
+diepste-tekort-reserve en de energiebrug-marge tegen beschermen, en het
+is de enige richting waarin lag onschadelijk is.
+
+Voor het huisverbruik zou ik het sowieso niet doen: die correctie
+gebruikt bewust een mediaan omdat oven- en Quooker-pieken anders de
+meer-uurs reserveschatting opblazen. Dat is beproefde logica.
+
+### Getest
+
+Nieuw `tests/test_kalman_divergence.py`, 12 tests: het paar wordt
+vastgelegd, ontbrekende waarden overgeslagen, de historie begrensd, geen
+oordeel onder de drempel, een klein verschil heet verwaarloosbaar en een
+groot noemenswaardig, dezelfde absolute afwijking wordt naar schaal
+verschillend beoordeeld, een signaal dat op nul stond geeft geen
+oordeel, de verhouding wordt over de sommen genomen, de meting blijft
+adviserend (raakt nergens een commando), staat op de sensor, en overleeft
+een herstart.
+
+**Volledige testsuite**: 877 tests, allemaal groen.
+
 ## Uitschieter-filter sloeg aan op gewone meetruis (v1.0.6)
 
 **Gerapporteerd**: *"Uitschieter genegeerd: 24.3°C wijkt te snel af van
