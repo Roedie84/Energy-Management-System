@@ -7750,3 +7750,42 @@ schatting op deze combinatie rust of op een grovere samenvatting.
 **Getest**: nieuw `tests/test_climate_rate_fallback.py`, 10 tests.
 
 **Volledige testsuite**: 912 tests, allemaal groen.
+
+## v1.1.3 — Sensor-gezondheid stond op 21% door een trage sensor
+
+**Gevraagd**: "Kun je uitzoeken waarom de sensor gezondheid zo laag is?
+Of komt dit door een recente herstart?" Geen herstart - de grafiek besloeg
+een hele dag.
+
+**Aanwijzing**: de foutwaarden herhaalden zich verdacht exact (2019,1 /
+2020,3 / 2020,9 / 2025,6 W, en 1111,1 / 1112,9 W). Ruis ziet er niet zo
+uit.
+
+**Root cause**: de beschikbare-energiesensor werkt veel trager bij dan de
+tick van vijf minuten. Stond hij stil, dan kwam het AFGELEIDE
+accuvermogen op 0 uit terwijl de accu werkelijk ~2000 W leverde - en dan
+is de "fout" precies gelijk aan dat accuvermogen. Geen sensorstoring maar
+een verschil in meetfrequentie, dat wel als slechte meting werd geteld.
+Het spiegelbeeld volgde daarna: de opgespaarde sprong in één tick, goed
+voor de 15330 W die ook in de reeks stond.
+
+**Twee correcties**:
+- Er wordt alleen nog geregistreerd als de sensor daadwerkelijk beweegt
+  (`ENERGY_BALANCE_MIN_DELTA_KWH`), en dan over het werkelijke interval
+  sinds die vorige beweging. Stilstand is geen slechte meting maar géén
+  meting.
+- Het gemeten vermogen wordt over datzelfde venster gemiddeld; het
+  afgeleide tempo is immers ook een gemiddelde. Een momentopname
+  ernaastleggen was op zichzelf al een bron van schijnfouten.
+
+Onderweg bleek een dubbel startblok in de functie te staan waardoor de
+eerste vermogensmeting na elke herstart wegviel - ook opgeruimd.
+
+**Getoetst**: de gerapporteerde situatie nagebootst (sensor beweegt eens
+per kwartier, accu op 2000 W): oude logica 12 metingen waarvan 8 fout,
+nieuwe logica 4 metingen met fout 0.
+
+**Getest**: nieuw `tests/test_energy_balance_stale_sensor.py`, 7 tests.
+Twee bestaande tests die de oude aanname vastlegden zijn meebewogen.
+
+**Volledige testsuite**: 919 tests, allemaal groen.

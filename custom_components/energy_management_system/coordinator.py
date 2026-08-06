@@ -255,6 +255,7 @@ from .const import (
     CONF_BATTERY_COOLING_OUTDOOR_SENSOR,
     CONF_BATTERY_TEMPERATURE_SENSOR,
     MAX_HOUR_TRACKING_GAP_MINUTES,
+    ENERGY_BALANCE_MIN_DELTA_KWH,
     MEASUREMENT_QUALITY_MIN_SAMPLES,
     PERSISTED_DATE_FIELDS,
     PERSISTED_DATETIME_FIELDS,
@@ -607,6 +608,9 @@ class EnergyManagementSystemCoordinator:
         # Kirchhoff energy-balance validation (v0.63.28).
         self._last_balance_check_time: datetime | None = None
         self._last_balance_check_available_kwh: float | None = None
+        # v1.1.3: accuvermogen-metingen sinds de laatste beweging van de
+        # energiesensor, om over het juiste venster te kunnen middelen.
+        self._balance_power_samples: list[float] = []
         self.last_energy_balance_error_w: float | None = None
         self.energy_balance_error_history: list[float | None] = []
         self.sensor_health_score: float | None = None
@@ -6077,16 +6081,6 @@ class EnergyManagementSystemCoordinator:
         available_kwh = self._read_sensor_float(available_entity)
         measured_battery_power_w = self._read_corrected_battery_power()
 
-        if self._last_balance_check_time is None:
-            self._last_balance_check_time = now
-            self._last_balance_check_available_kwh = available_kwh
-            return
-
-        elapsed_hours = (now - self._last_balance_check_time).total_seconds() / 3600
-        prev_kwh = self._last_balance_check_available_kwh
-        self._last_balance_check_time = now
-        self._last_balance_check_available_kwh = available_kwh
-
         if available_kwh is None or measured_battery_power_w is None:
             # A missing reading is itself a health-relevant event (a
             # stale/unavailable sensor) - record it as a "bad" sample
@@ -6094,18 +6088,65 @@ class EnergyManagementSystemCoordinator:
             self._record_balance_sample(None)
             return
 
-        if elapsed_hours <= 0 or elapsed_hours > MAX_HOUR_TRACKING_GAP_MINUTES / 60:
-            # No baseline yet, or too large a gap (restart etc.) to
-            # attribute reliably to a single rate - skip this sample
-            # rather than record a misleading spike.
+        # v1.1.3, gerapporteerd: "Kun je uitzoeken waarom de sensor
+        # gezondheid zo laag is?" - score 21%, en de foutwaarden
+        # herhaalden zich verdacht exact (2019/2020/2020/2025 W, en
+        # 1111/1112 W).
+        #
+        # Root cause: de beschikbare-energiesensor werkt VEEL trager bij
+        # dan de tick van vijf minuten. Stond hij stil, dan was het
+        # afgeleide accuvermogen 0 terwijl de accu werkelijk ~2000 W
+        # leverde - en dan is de "fout" precies gelijk aan het
+        # accuvermogen. Dat is geen sensorstoring maar een verschil in
+        # meetfrequentie, en het werd toch als slechte meting geteld.
+        # Daarna volgde het spiegelbeeld: de opgespaarde sprong kwam in
+        # één tick binnen en leverde een absurde 15330 W op.
+        #
+        # De check meet nu wat hij hoort te meten: KLOPT DE BEWEGING als
+        # de sensor beweegt. Staat hij stil, dan is er niets te
+        # controleren - dat is geen slechte meting maar geen meting.
+        self._balance_power_samples.append(measured_battery_power_w)
+        self._balance_power_samples = self._balance_power_samples[-240:]
+
+        if self._last_balance_check_time is None:
+            self._last_balance_check_time = now
+            self._last_balance_check_available_kwh = available_kwh
             return
 
+        prev_kwh = self._last_balance_check_available_kwh
         if prev_kwh is None:
+            self._last_balance_check_time = now
+            self._last_balance_check_available_kwh = available_kwh
             return
 
         delta_kwh = available_kwh - prev_kwh
+        if abs(delta_kwh) < ENERGY_BALANCE_MIN_DELTA_KWH:
+            # De sensor is niet (noemenswaardig) bewogen - niets te
+            # toetsen. Het accuvermogen blijft ondertussen wél
+            # verzameld, zodat er straks over het juiste venster wordt
+            # vergeleken.
+            return
+
+        elapsed_hours = (now - self._last_balance_check_time).total_seconds() / 3600
+        self._last_balance_check_time = now
+        self._last_balance_check_available_kwh = available_kwh
+        vermogen_metingen = self._balance_power_samples
+        self._balance_power_samples = []
+
+        if elapsed_hours <= 0 or elapsed_hours > MAX_HOUR_TRACKING_GAP_MINUTES / 60:
+            # Te groot gat (herstart, of een sensor die uren stilstond)
+            # om betrouwbaar aan één tempo toe te schrijven.
+            return
+        if not vermogen_metingen:
+            return
+
+        # Het afgeleide tempo is een GEMIDDELDE over het interval, dus
+        # daar hoort het gemiddelde gemeten vermogen naast - niet de
+        # momentopname van nu. Die twee vergelijken was op zichzelf al
+        # een bron van schijnfouten zodra het interval langer werd.
+        gemiddeld_gemeten_w = sum(vermogen_metingen) / len(vermogen_metingen)
         implied_battery_power_w = -(delta_kwh / elapsed_hours) * 1000
-        error_w = implied_battery_power_w - measured_battery_power_w
+        error_w = implied_battery_power_w - gemiddeld_gemeten_w
         self.last_energy_balance_error_w = round(error_w, 1)
         self._record_balance_sample(abs(error_w))
 

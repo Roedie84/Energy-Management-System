@@ -515,6 +515,90 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Sensor-gezondheid stond op 21% door een trage sensor (v1.1.3)
+
+**Gevraagd**: *"Kun je uitzoeken waarom de sensor gezondheid zo laag is?
+Of komt dit door een recente herstart?"*
+
+Geen herstart. De grafiek besloeg een hele dag met wilde uitslagen tussen
+0 en 100%.
+
+### Het patroon verried het
+
+De foutwaarden in de diagnostiek-export herhaalden zich verdacht exact:
+
+```
+2019,1 · 2020,3 · 2020,9 · 2025,6 W      en      1111,1 · 1112,9 W
+```
+
+Ruis ziet er niet zo uit. Dat zijn bijna dezelfde getallen, keer op keer.
+
+### Root cause
+
+De Kirchhoff-check vergelijkt het gemeten accuvermogen met wat de
+*verandering* van de beschikbare-energiesensor impliceert. Maar die
+sensor werkt veel trager bij dan de tick van vijf minuten.
+
+Stond hij stil, dan kwam het afgeleide vermogen op **0** uit terwijl de
+accu werkelijk ~2000 W leverde — en dan is de "fout" precies gelijk aan
+het accuvermogen. Vandaar die herhaalde 2020 W. Geen sensorstoring, maar
+een verschil in meetfrequentie, dat wel als slechte meting werd geteld.
+
+Daarna volgde het spiegelbeeld: de opgespaarde sprong kwam in één tick
+binnen, goed voor de **15330 W** die ook in de reeks stond.
+
+Zo werd een gezond systeem afgestraft voor iets dat het niet kon meten.
+
+### Twee correcties
+
+**De check kijkt nu alleen als er iets te kijken valt.** Beweegt de
+sensor niet, dan wordt er geen meting geregistreerd. Dat is geen slechte
+meting — dat is géén meting. Beweegt hij wel, dan wordt gerekend over het
+werkelijke interval sinds de vorige beweging, waardoor de inhaalsprong
+vanzelf klopt.
+
+**Het gemeten vermogen wordt over datzelfde venster gemiddeld.** Het
+afgeleide tempo is per definitie een gemiddelde over het interval; daar
+hoort geen momentopname naast. Die vergelijking was op zichzelf al een
+bron van schijnfouten zodra het interval langer werd.
+
+Onderweg bleek er nog een dubbele startblok in de functie te staan,
+waardoor de eerste vermogensmeting na elke herstart wegviel. Ook
+opgeruimd.
+
+### Getoetst
+
+Jouw situatie nagebootst — sensor die eens per kwartier beweegt, accu op
+2000 W:
+
+| | Oude logica | Nieuw |
+|---|---|---|
+| Geregistreerde metingen | 12 | 4 |
+| Waarvan "fout" | 8 × ~2000 W + inhaalpiek | **0** |
+
+### Wat een échte storing nog steeds oplevert
+
+De check verliest zijn tanden niet. Beweegt de sensor 1 kWh terwijl de
+accu niets doet, dan volgt nog steeds een fout van boven de 5000 W. En
+een sensor die op `unavailable` valt telt onverminderd als slechte
+meting — dat is wél een gezondheidssignaal en moet onderscheiden blijven
+van een sensor die gewoon traag is.
+
+### Getest
+
+Nieuw `tests/test_energy_balance_stale_sensor.py`, 7 tests: een
+stilstaande sensor registreert niets, de inhaalsprong telt niet als
+enorme fout, een echte afwijking wordt nog steeds gevangen, een kloppende
+beweging is een goede meting, het vermogen wordt over het juiste venster
+gemiddeld, een wegvallende sensor blijft een slechte meting, en een
+urenlange stilstand wordt niet aan één tempo toegeschreven.
+
+Twee bestaande tests legden de oude aanname vast dat een onveranderde
+sensor een góéde meting is; die zijn meebewogen naar bewegingen die
+kloppen met het gemeten vermogen.
+
+**Volledige testsuite**: 919 tests, allemaal groen.
+
 ## "Korte termijn" bevroor maandenlang (v1.1.2)
 
 **Gevraagd**: *"Maar korte termijn zou toch op relatief korte termijn een

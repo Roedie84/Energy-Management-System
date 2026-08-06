@@ -1224,3 +1224,14 @@ POST_SALDEREN_MIN_SURPLUS_TO_CAPTURE_W = 150.0
 # binnenvalt en heeft daarmee meer invloed op de opwarmsnelheid dan twee
 # graden verschil buiten.
 CLIMATE_RATE_NEIGHBOUR_BUCKETS = 1
+
+# Minimale beweging van de beschikbare-energiesensor voordat de
+# Kirchhoff-balanscheck iets te toetsen heeft (v1.1.3).
+#
+# Die sensor werkt veel trager bij dan de tick van vijf minuten. Stond
+# hij stil, dan kwam het afgeleide accuvermogen op 0 uit terwijl de accu
+# werkelijk vermogen leverde - en werd precies dat vermogen als "fout"
+# geteld. Dat is geen sensorstoring maar een verschil in meetfrequentie.
+# Staat de sensor stil, dan is er niets te controleren: geen slechte
+# meting, maar géén meting.
+ENERGY_BALANCE_MIN_DELTA_KWH = 0.005
