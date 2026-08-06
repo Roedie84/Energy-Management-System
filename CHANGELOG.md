@@ -7001,3 +7001,100 @@ tests waarvan er 6 aantoonbaar falen op v0.63.119, inclusief de exact
 gerapporteerde tick-volgorde.
 
 **Volledige testsuite**: 683 tests, allemaal groen.
+
+## v0.63.121 — Vier verbeteringen uit een diagnostiek-review
+
+**Gevraagd**: "Graag analyseren en waar mogelijk verbeteringen
+doorvoeren", bij een verse diagnostiek-export van v0.63.120.
+
+Uit die export bleek eerst dat de klimaat-projectie inmiddels werkt
+(24-uurs traject, geleerde bias 0,3 °C), alle vijf leercheks op OK
+staan, er geen ontbrekende optionele sensoren meer zijn en er geen
+fouten zijn. Vier verbeterpunten:
+
+1. **Luchtvochtigheid niet afgerond**
+   (`living_room_current_humidity_percent: 45.9213256835938`) - dezelfde
+   klacht die in v0.63.92 voor de temperatuur werd opgelost, maar de
+   luchtvochtigheid ernaast bleef ongemoeid. Nu ook op 1 decimaal.
+2. **Oude UTC-tijdstempels trokken de watertelling scheef.** De
+   sessiegeschiedenis bevatte zowel "+02:00" als "+00:00" (litteken van
+   de tijdzonebug uit v0.63.119; die entries blijven bewaard). De
+   "verklaart maar X L"-check las de eerste tien tekens als datum, wat
+   voor een UTC-tijdstempel tussen middernacht en 02:00 lokaal de datum
+   van gisteren oplevert. Nu wordt de tijdstempel geparsed en naar
+   lokale tijd omgerekend.
+3. **De waterwaarschuwing gokte.** "Mogelijk worden stoten gemist" wees
+   twee keer de verkeerde kant op. De melding noemt nu het AANTAL
+   herkende momenten en trekt de bijbehorende conclusie: weinig momenten
+   wijst naar de detectie, veel momenten met weinig liters naar de
+   volumebepaling.
+4. **Sensor-gezondheid oordeelde op één of twee metingen** ("slecht
+   (0.0%, 1 metingen)", "verminderd (50.0%, 2 metingen)") en trok
+   daarmee de systeemstatus omlaag, terwijl het venster na elke herstart
+   onvermijdelijk door die fase loopt. Nieuwe
+   `MEASUREMENT_QUALITY_MIN_SAMPLES` (10): onder die drempel geen
+   oordeel. Een echte storing overleeft tien metingen moeiteloos.
+
+**Getest**: nieuw `tests/test_diagnostics_review_improvements.py`, 11
+tests waarvan er 7 aantoonbaar falen op de vorige versie. Vier bestaande
+tests in `test_energy_balance_validation.py` rekenden met 1-4 metingen en
+zijn opgehoogd tot boven de drempel; de water-assertie in
+`test_diagnostic_summary.py` is meebewogen naar de nieuwe formulering.
+
+**Volledige testsuite**: 694 tests, allemaal groen.
+
+**Niet op te lossen met deze export**: het waterverschil zelf (85 L vs
+5 L). Alle vier opgeslagen momenten dateren van vóór v0.63.119 (geen
+`liter_uit_meterstand`) en `water_sessions_today_count` stond op 0 - de
+nieuwe volumebepaling had nog geen kans gehad.
+
+## v0.63.122 — Accu-koeling geïntegreerd
+
+**Gevraagd**: "Integreren zodat ik dit niet meer als losse
+automatisering hoef te doen, het heeft mijn inziens toch met de accu te
+maken." De koelventilator stond sinds het begin bewust buiten deze
+integratie; die afspraak is op verzoek herzien.
+
+**Overgenomen**: de automatisering "Accu: Temperatuurbeheer Thuisaccu
+(Buiten) - PRO v9", met EXACT dezelfde zes drempels als constanten in
+`const.py`. Aanzetten bij één van vier redenen (delta >5°C; accu >35°C;
+>500W én delta >2°C; >1500W én accu >30°C), uitzetten alleen als alle
+drie tegelijk gelden (delta <2°C, vermogen <300W, accu <33°C). De marge
+ertussen is bewuste hysterese.
+
+**Twee bewuste afwijkingen**:
+- **Geen `float(0)`-terugval.** De automatisering las sensoren met
+  `states(...)|float(0)`; een weggevallen buitensensor werd dan 0°C,
+  waardoor de delta gelijk werd aan de hele accutemperatuur en de
+  ventilator aansloeg op een meting die er niet was (en andersom: een
+  weggevallen accusensor betekende nooit meer koelen). Bij ontbrekende
+  of onleesbare data wordt de schakelaar nu met rust gelaten - ook als
+  de ventilatorschakelaar zelf onleesbaar is.
+- **Geen 20-seconden-vertraging** op de vermogenstrigger; de evaluatie
+  draait bij elke wijziging en de hysterese vangt korte pieken al af.
+
+**Reactiesnelheid**: eigen state-listener op accutemperatuur,
+buitentemperatuur en accuvermogen (zelfde patroon als de live
+waterdetectie uit v0.63.98), naast de gewone tick - alleen de
+5-minuten-tick zou merkbaar trager zijn dan de vervangen automatisering.
+
+**Ingebed**: `force_manual` en `learning only` blokkeren het schakelen
+(de beslissing wordt wél doorgerekend en getoond); meldingen lopen via
+de bestaande `_dispatch_notification`; er wordt niet geschakeld als de
+ventilator al goed staat.
+
+**Zichtbaarheid**: nieuwe sensor "Accu-koeling" met stand + welke van de
+vier redenen geldt + de laatste tien schakelmomenten, een tegel op het
+Overzicht-tabblad, en `battery_cooling_state`/`battery_cooling_history`
+in de diagnostiek.
+
+**Configuratie**: drie nieuwe optionele velden (accutemperatuur-sensor,
+ventilatorschakelaar, eigen buitentemperatuursensor). De laatste mag leeg
+blijven - dan wordt de al gebruikte live-buitentemperatuur hergebruikt.
+
+**Getest**: nieuw `tests/test_battery_cooling_control.py`, 21 tests.
+
+**Volledige testsuite**: 715 tests, allemaal groen.
+
+**Na installatie**: velden invullen en de eigen automatisering
+UITZETTEN, anders sturen beide dezelfde schakelaar aan.

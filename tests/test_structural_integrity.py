@@ -35,6 +35,9 @@ KNOWN_FRAMEWORK_OR_ATTRIBUTE_CALLS = {
     "_unsub_interval",
     "_unsub_state",
     "_unsub_water_state",
+    # v0.63.122: callable attribuut (unsubscribe van de accu-koeling-
+    # listener), geen methode - zelfde soort als _unsub_water_state.
+    "_unsub_battery_cooling_state",
     "_unsub_compare",
     "_unsub_capture",
     "_abort_if_unique_id_configured",

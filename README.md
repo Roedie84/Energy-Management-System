@@ -515,6 +515,199 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Accu-koeling geïntegreerd (v0.63.122)
+
+**Gevraagd**: "Integreren zodat ik dit niet meer als losse
+automatisering hoef te doen, het heeft mijn inziens toch met de accu te
+maken."
+
+Terechte heroverweging. De koelventilator stond sinds het begin bewust
+**buiten** deze integratie om de complexiteit te beperken, maar het is
+wel de enige aansturing in huis die direct met de accu samenhangt — en
+hij gebruikt gegevens (accuvermogen, buitentemperatuur) die hier toch al
+binnenkomen. De automatisering "Accu: Temperatuurbeheer Thuisaccu
+(Buiten) - PRO v9" is nu één-op-één overgenomen.
+
+### Drempels ongewijzigd
+
+Alle zes de drempels zijn **exact** die van de automatisering, als
+constanten in `const.py`. Aanzetten zodra één van vier redenen geldt:
+
+| # | Voorwaarde |
+|---|---|
+| 1 | accu staat meer dan **5 °C** boven buiten |
+| 2 | accu boven **35 °C** absoluut |
+| 3 | meer dan **500 W** door de accu én al **2 °C** boven buiten |
+| 4 | meer dan **1500 W** door de accu én boven **30 °C** |
+
+Uitzetten alleen als **alle drie** tegelijk gelden: delta onder 2 °C,
+vermogen onder 300 W, accu onder 33 °C. De marge tussen aan en uit is
+bewuste hysterese — zonder die ruimte zou de ventilator rond één grens
+blijven pendelen. Er is een aparte test die precies dat vastlegt: bij
+een delta van 3 °C blijft staan wat er staat, in beide richtingen.
+
+### Twee bewuste afwijkingen
+
+**1. Geen `float(0)`-terugval.** De automatisering las sensoren met
+`states(...)|float(0)`, waardoor een onbeschikbare sensor stilzwijgend
+als 0 werd gelezen. Dat is in beide richtingen gevaarlijk: valt de
+*buitensensor* weg, dan wordt buiten 0 °C, is de delta ineens gelijk aan
+de volledige accutemperatuur en slaat de ventilator aan op een meting
+die er niet is. Valt de *accusensor* weg, dan wordt de accu 0 °C en
+wordt er juist nooit meer gekoeld. Deze integratie laat de schakelaar
+bij ontbrekende data met rust — de bestaande stand blijft staan, wat in
+beide gevallen de veilige keuze is. Datzelfde geldt als de
+ventilatorschakelaar zelf onleesbaar is: dan wordt er niet gegokt op
+"hij zal wel uit staan".
+
+**2. Geen 20-seconden-vertraging.** De aparte trigger op "vermogen boven
+500 W gedurende 20 seconden" is niet nagebouwd. De evaluatie draait bij
+elke wijziging, en de hysterese in de uitschakelvoorwaarden voorkomt al
+dat een korte piek de ventilator laat pendelen.
+
+### Even snel als voorheen
+
+De automatisering draaide elke 2 minuten plus op elke sensorwijziging.
+Alleen meeliften op de 5-minuten-tick zou merkbaar trager reageren, juist
+bij een plotselinge belastingpiek. Er is daarom een **eigen
+state-listener** op de accutemperatuur, de buitentemperatuur en het
+accuvermogen — hetzelfde patroon als de live waterdetectie uit v0.63.98.
+
+### Ingebed in wat er al was
+
+- **`force_manual` en `learning only`** blokkeren het schakelen, net als
+  bij elke andere aansturing. De beslissing wordt wél doorgerekend en
+  getoond, zodat het dashboard blijft kloppen — met de reden erbij dat er
+  niet is uitgevoerd.
+- **Meldingen** lopen via de bestaande `_dispatch_notification`, dus via
+  de al geconfigureerde notify-service. Geen apart mobiel-apparaat meer
+  hard in een automatisering.
+- **Niet elke tick opnieuw schakelen**: staat de ventilator al goed, dan
+  wordt er geen service-call gedaan.
+
+### Zichtbaarheid
+
+Nieuwe sensor **Accu-koeling** met de stand én **welke van de vier
+redenen** geldt — met vier mogelijke oorzaken zegt "aan" alleen te weinig
+om iets van te leren. Plus de laatste tien schakelmomenten, een tegel op
+het Overzicht-tabblad, en `battery_cooling_state` /
+`battery_cooling_history` in de diagnostiek-export.
+
+### Configuratie
+
+Drie nieuwe optionele velden: accutemperatuur-sensor,
+ventilatorschakelaar, en een eigen buitentemperatuursensor. Die laatste
+mag leeg blijven — dan valt hij terug op de buitentemperatuur die de
+integratie al gebruikt (achtertuinsensor met uitschieterfilter, anders de
+weerentiteit). Zolang de eerste twee niet zijn ingevuld, gebeurt er
+niets.
+
+### Getest
+
+Nieuw `tests/test_battery_cooling_control.py`, 21 tests: elk van de vier
+aanzet-redenen apart, uitzetten alleen bij alle drie de voorwaarden,
+twee gevallen waarin doorgekoeld moet worden terwijl één voorwaarde al
+is teruggevallen, de hysterese in beide richtingen, alle drie de
+onleesbare-sensor-gevallen, het daadwerkelijke schakelen plus
+geschiedenis, `force_manual` en `learning only`, geen overbodige
+service-call, de terugval op de bestaande buitentemperatuur, en de
+sensorweergave.
+
+**Volledige testsuite**: 715 tests, allemaal groen.
+
+### Na installatie
+
+Vul de drie velden in bij **Configureren** en **zet daarna je eigen
+automatisering uit** — anders sturen ze allebei dezelfde schakelaar aan.
+
+## Vier verbeteringen uit een diagnostiek-review (v0.63.121)
+
+**Gevraagd**: "Graag analyseren en waar mogelijk verbeteringen
+doorvoeren", bij een verse diagnostiek-export van v0.63.120.
+
+Eerst het goede nieuws uit die export: de klimaat-projectie werkt
+(24-uurs traject, geleerde bias 0,3 °C), alle vijf de leercheks staan op
+OK na vijf dagen, er zijn geen ontbrekende optionele sensoren meer, er
+staat geen enkele fout, en de duplicaten-melding is inderdaad uit de
+statusbepaling verdwenen. Vier dingen vielen wél op.
+
+### 1. Luchtvochtigheid met veertien decimalen
+
+`living_room_current_humidity_percent: 45.9213256835938`. Exact dezelfde
+klacht die in v0.63.92 voor de *temperatuur* werd opgelost ("absurd veel
+decimalen"), maar de luchtvochtigheid die er direct naast wordt
+uitgelezen bleef toen ongemoeid — zelfde sensor, zelfde hoge precisie,
+zelfde probleem. Nu ook op 1 decimaal.
+
+### 2. Oude tijdstempels in UTC bleven de watertelling scheeftrekken
+
+De sessiegeschiedenis in de export bevatte tijdstempels met **zowel
+`+02:00` als `+00:00`**. Dat is het litteken van de tijdzonebug uit
+v0.63.119: momenten die vóór die fix door de listener zijn vastgelegd
+staan in UTC, en die entries blijven gewoon in de geschiedenis staan.
+
+De "verklaart maar X L"-check las de eerste tien tekens van de
+tijdstempel als datum. Voor een UTC-tijdstempel tussen middernacht en
+02:00 lokaal levert dat de datum van **gisteren** op — dus die momenten
+telden niet mee voor vandaag, en de waarschuwing sloeg ten onrechte aan.
+De datum wordt nu geparsed en naar lokale tijd omgerekend, waarmee ook
+de oude, al opgeslagen entries alsnog goed meetellen.
+
+### 3. De waterwaarschuwing gokte in plaats van te diagnosticeren
+
+"Mogelijk worden nog steeds stoten gemist" — een gok die twee keer de
+verkeerde kant op wees. Het **aantal** herkende momenten onderscheidt de
+twee mogelijke oorzaken juist meteen van elkaar:
+
+- weinig momenten → de detectie mist stoten;
+- veel momenten met weinig liters → de detectie werkt, maar de
+  volumebepaling schiet tekort (en dan is `liter` naast
+  `liter_uit_meterstand` precies het paar getallen dat het uitwijst).
+
+De melding noemt nu het aantal en trekt de bijbehorende conclusie.
+
+### 4. Sensor-gezondheid oordeelde op één of twee metingen
+
+Twee keer waargenomen: "slecht (0,0%, 1 metingen)" en "verminderd
+(50,0%, 2 metingen)". Bij zo weinig metingen zegt dat percentage niets —
+één ongelukkige meting maakt het meteen 0% of 50% — maar het bracht de
+systeemstatus wél op "Aandacht gewenst". En het venster loopt na élke
+herstart onvermijdelijk door die fase heen.
+
+Onder `MEASUREMENT_QUALITY_MIN_SAMPLES` (10) wordt er nu **geen oordeel**
+geveld: score en label blijven leeg tot er genoeg metingen zijn. Een
+échte storing wordt daardoor niet verborgen — die overleeft tien
+metingen moeiteloos.
+
+### Getest
+
+Nieuw `tests/test_diagnostics_review_improvements.py`, 11 tests waarvan
+er **7 aantoonbaar falen op de vorige versie**: afronding van
+luchtvochtigheid (en dat een ontbrekende sensor gewoon leeg blijft), een
+in UTC opgeslagen moment dat alsnog voor vandaag telt, beide varianten
+van de nieuwe waterdiagnose, een onleesbare tijdstempel die wordt
+overgeslagen in plaats van te crashen, geen oordeel bij één meting en
+vlak onder de drempel, wél een oordeel precies óp de drempel, en de twee
+kanten van het praktische gevolg: één slechte meting verlaagt de
+systeemstatus niet meer, een echt slechte sensor nog steeds wel.
+
+Vier bestaande tests in `test_energy_balance_validation.py` rekenden met
+1 tot 4 metingen; die zijn opgehoogd tot boven de drempel, zodat ze de
+rekenregel blijven controleren in plaats van de drempel. De
+water-assertie in `test_diagnostic_summary.py` is meebewogen naar de
+nieuwe formulering.
+
+**Volledige testsuite**: 694 tests, allemaal groen.
+
+### Wat de export nog niet kon uitwijzen
+
+Het waterverschil zelf (85 L dagtotaal versus 5 L verklaard) is met deze
+export níet op te lossen: alle vier de opgeslagen momenten dateren van
+vóór v0.63.119 — te zien aan het ontbrekende `liter_uit_meterstand` — en
+`water_sessions_today_count` stond nog op 0. De nieuwe volumebepaling
+had simpelweg nog geen kans gehad. Een export na een volle dag draaien
+wijst met de nieuwe, scherpere melding meteen de richting aan.
+
 ## Klimaat-projectie wees naar een configuratieveld dat allang goed stond (v0.63.120)
 
 **Gerapporteerd**, met screenshot van het ingevulde configuratiescherm:

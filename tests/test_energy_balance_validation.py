@@ -8,7 +8,25 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from custom_components.energy_management_system.const import (
+    MEASUREMENT_QUALITY_MIN_SAMPLES,
+)
+
 DAY0 = datetime(2026, 8, 4, tzinfo=timezone.utc)
+
+
+def _fill_window(coordinator, waarde):
+    """Vult het venster tot net onder de minimumdrempel (v0.63.121).
+
+    Sinds v0.63.121 wordt er pas een oordeel geveld vanaf
+    MEASUREMENT_QUALITY_MIN_SAMPLES metingen - anders leverde één
+    afwijkende meting meteen "slecht (0.0%, 1 metingen)" op. De tests
+    hieronder controleren de REKENREGEL, niet die drempel, dus vullen ze
+    het venster eerst met metingen van het gewenste soort.
+    """
+    coordinator.energy_balance_error_history = [waarde] * (
+        MEASUREMENT_QUALITY_MIN_SAMPLES - 1
+    )
 
 
 def _base_config(**overrides):
@@ -40,6 +58,7 @@ def test_consistent_readings_score_perfectly(make_coordinator, hass):
 
     coordinator = make_coordinator(_base_config())
     coordinator._update_energy_balance_validation(DAY0)
+    _fill_window(coordinator, 0.0)
 
     later = DAY0 + timedelta(minutes=6)
     hass.states.set("sensor.available_energy", "2.9")  # -0.1 kWh over 0.1h = -1000W
@@ -58,6 +77,7 @@ def test_large_mismatch_is_flagged(make_coordinator, hass):
 
     coordinator = make_coordinator(_base_config())
     coordinator._update_energy_balance_validation(DAY0)
+    _fill_window(coordinator, 99999.0)
 
     later = DAY0 + timedelta(minutes=6)
     hass.states.set("sensor.available_energy", "2.0")  # -1.0 kWh over 0.1h = -10000W implied
@@ -74,6 +94,7 @@ def test_missing_sensor_reading_counts_as_a_bad_sample(make_coordinator, hass):
 
     coordinator = make_coordinator(_base_config())
     coordinator._update_energy_balance_validation(DAY0)
+    _fill_window(coordinator, 99999.0)
 
     # Battery power sensor goes unavailable.
     hass.states.set("sensor.battery_power", "unavailable")
@@ -108,17 +129,23 @@ def test_health_score_averages_over_a_rolling_window(make_coordinator, hass):
     now = DAY0
     coordinator._update_energy_balance_validation(now)
 
-    # 3 good ticks (available_kwh unchanged, battery power 0 - error ~0).
-    for _ in range(3):
+    # 15 goede ticks (available_kwh onveranderd, accuvermogen 0 - fout
+    # ~0). Ruim boven MEASUREMENT_QUALITY_MIN_SAMPLES, zodat deze test
+    # de REKENREGEL van het schuivende venster controleert en niet de
+    # minimumdrempel van v0.63.121.
+    for _ in range(15):
         now = now + timedelta(minutes=6)
         coordinator._update_energy_balance_validation(now)
 
-    # 1 bad tick (a big, unexplained drop).
-    now = now + timedelta(minutes=6)
-    hass.states.set("sensor.available_energy", "3.0")
-    coordinator._update_energy_balance_validation(now)
+    # 5 slechte ticks (telkens een grote, onverklaarde daling).
+    beschikbaar = 5.0
+    for _ in range(5):
+        now = now + timedelta(minutes=6)
+        beschikbaar -= 2.0
+        hass.states.set("sensor.available_energy", f"{beschikbaar}")
+        coordinator._update_energy_balance_validation(now)
 
-    # 3 good, 1 bad out of 4 samples -> 75%.
+    # 15 goed, 5 slecht op 20 metingen -> 75%.
     assert coordinator.sensor_health_score == pytest.approx(75.0)
     assert coordinator.measurement_quality == "verminderd"
 

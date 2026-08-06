@@ -280,9 +280,13 @@ def test_flags_water_total_much_higher_than_recorded_sessions(make_coordinator, 
 
     summary = coordinator.get_diagnostic_summary()
 
-    assert any(
-        "Waterverbruik" in p and "mogelijk" in p for p in summary["aandachtspunten"]
-    )
+    # v0.63.121: de melding noemt nu ook het AANTAL herkende momenten en
+    # trekt daaruit een richtinggevende conclusie - bij weinig momenten
+    # wijst hij naar de detectie, bij veel momenten naar de
+    # volumebepaling. "Mogelijk worden stoten gemist" was een gok.
+    melding = next(p for p in summary["aandachtspunten"] if "Waterverbruik" in p)
+    assert "gebruiksmoment" in melding
+    assert "detectie" in melding
 
 
 def test_no_water_flag_when_sessions_explain_the_total(make_coordinator, hass):
