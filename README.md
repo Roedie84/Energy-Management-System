@@ -515,6 +515,224 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Werkelijk huishoudverbruik toegevoegd + "Huidig verbruik" verduidelijkt (v0.63.111)
+
+Vervolg op v0.63.110's naamgevingsfix: "Kun je ergens wel toevoegen wat
+mijn actuele huisverbruik is... Huidig verbruik heeft hier misschien
+ook een verkeerde naamgeving?" — de bestaande "Huidig verbruik"-tegel
+op het Overzicht-tabblad toonde de kale P1-meter-aflezing (-24,0W in
+het gerapporteerde screenshot) — negatief bij export, dus niet het
+werkelijke huishoudverbruik (dat nooit negatief kan zijn).
+
+**Nieuwe sensor** `HouseholdConsumptionSensor` — hergebruikt
+`_read_corrected_consumption_power()` (dezelfde formule als HA's eigen
+Energiedashboard: P1 + accu + PV, met dezelfde teken-conventie/
+inversie-instelling als elders in deze integratie). Altijd ≥ 0, het
+daadwerkelijke vermogen dat het huishouden nu verbruikt, ongeacht of
+dat via het net, de accu of PV wordt gedekt.
+
+**Dashboard**: de bestaande P1-tegel hernoemd naar "Netstroom, P1 (kan
+negatief zijn bij export)" — behoudt zijn functie, maar de naam liegt
+niet meer. Nieuwe tegel ernaast toont het werkelijke huishoudverbruik.
+
+**Getest** (2 nieuwe tests): de berekening klopt in een export-
+scenario (P1 negatief, PV dekt het verbruik); geeft `None` netjes
+terug zonder leesbare P1-sensor.
+
+## Piekvermogen verduidelijkt: netimport, niet totaal huishoudverbruik (v0.63.110)
+
+Gerapporteerd, met twee screenshots (EMS-KPI's-tabblad naast HA's
+eigen Energiedashboard): "Piekvermogen verbruik klopt niet, het
+standaard energie dashboard van Home Assistant zelf geeft aan dat het
+huidige verbruik al 247W is" (tegenover een geregistreerde piek van
+107W).
+
+**Uitgezocht, bleek geen bug**: HA's eigen "Stroomverbruik" berekent
+het TOTALE huishoudverbruik (P1 + accu + PV samen — dezelfde formule
+als `_read_corrected_consumption_power` elders in deze integratie).
+Piekvermogen volgt bewust alleen de NETIMPORT via de P1-meter
+(relevant voor capaciteitstarief — dat wordt afgerekend op wat het net
+zelf ziet, niet op het onderliggende huishoudverbruik). Die kan
+legitiem veel lager zijn zodra de accu/zon een deel van het verbruik
+dekt — precies wat hier gebeurde.
+
+**Fix**: geen gedragswijziging, uitsluitend verduidelijking. Sensor
+hernoemd naar "Piekvermogen (netimport)", een `note`-attribuut
+toegevoegd die het verschil expliciet uitlegt, en de dashboardkaart
+(titel + beide tegel-labels) aangepast om dit onderscheid meteen
+zichtbaar te maken in plaats van dat het als bug oogt.
+
+## Systeemstatus-tegel toonde "OK" ondanks inhoudelijke aandachtspunten (v0.63.109)
+
+Gevraagd, met screenshot van de groene "OK"-status: "misschien iets
+van een self-diagnose toevoegen zodat ik ook in de button relevante
+en dus systeem status ok niet klopt eigenlijk kan zien."
+
+**Root cause**: `system_status` was tot dan toe puur een TECHNISCHE
+health-check (is er een recente crash, of is de integratie
+vastgelopen?) — die toonde "OK" ook als `get_diagnostic_summary()` wél
+degelijk inhoudelijke aandachtspunten had (bijv. veel onbevestigde
+NILM-kandidaten, een mogelijk defect apparaat).
+
+**Fix**: een derde, tussenliggende status "Aandacht gewenst" — bewust
+apart van "Fout"/"Mogelijk vastgelopen" (die blijven ernstiger: de
+integratie werkt dan zelf niet correct). Alleen wanneer de integratie
+technisch prima draait maar er inhoudelijke aandachtspunten zijn.
+
+**Subtiliteit, opgelost**: een oude, allang herstelde fout die enkel
+nog als historisch "laatste fout"-veld blijft staan (zelf al een
+aandachtspunt in `get_diagnostic_summary()`) mag niet op zichzelf
+"Aandacht gewenst" triggeren — dat wordt al preciezer, tijdgevoelig
+afgedekt door de bestaande "Fout"-check. Die ene aandachtspunt wordt
+daarom specifiek genegeerd bij het bepalen van "Aandacht gewenst".
+
+**Zichtbaarheid**: de volledige aandachtspunten-lijst staat nu als
+attribuut op de systeemstatus-sensor zelf. De dashboardkaart (exact
+degene uit de screenshot) toont nu drie kleuren i.p.v. twee — groen
+(OK), oranje (Aandacht gewenst), rood (Fout/Mogelijk vastgelopen) —
+plus het aantal aandachtspunten in de subtekst.
+
+**Getest** (3 nieuwe tests): "Aandacht gewenst" verschijnt zodra er
+aandachtspunten zijn, ook bij een verder technisch gezonde integratie;
+een oude, herstelde fout triggert dit niet op zichzelf; een actieve
+fout blijft correct "Fout" tonen, niet gedegradeerd naar "Aandacht
+gewenst".
+
+## Drie proactieve checks toegevoegd aan de diagnostiek-samenvatting (v0.63.108)
+
+Gevraagd: "ik denk dat je vele zaken welke ik vandaag en gister heb
+aangedragen moet zien te detecteren in de diagnose, kun je dit
+herzien?" — drie nieuwe checks in `get_diagnostic_summary()`, elk
+direct terug te voeren op een concreet patroon dat deze en de vorige
+sessie naar boven kwam, zodat vergelijkbare situaties in het vervolg
+zichtbaar worden zonder dat de gebruiker ze eerst zelf hoeft te
+melden.
+
+**1. Klimaat-projectie zonder enkele geleerde cel, ondanks tijd**
+Als `living_room_temperature_sensor_entity` is geconfigureerd, er
+al minstens 2 dagen zijn verstreken sinds de eerste opstart
+(`first_seen_date`), en nog géén enkele cel in `climate_rate_history`
+data heeft — een expliciete melding die uitlegt waarom "Korte termijn"
+en "Betrouwbaar" er identiek uitzien (niets te onderscheiden zolang
+geen cel data heeft), precies de vraag die vandaag opkwam.
+
+**2. Ongewoon groot aantal onbevestigde NILM-kandidaten**
+Vanaf `NILM_CANDIDATE_COUNT_ATTENTION_THRESHOLD` (15) onbevestigde
+kandidaten — een signaal om de patroon-uitsluiting te herzien in
+plaats van elk apparaat apart te beoordelen, naar aanleiding van de
+51 kandidaten die eerder deze sessie een reeks ontbrekende
+structurele patronen (SolarFlow/Solcast/fase 2-3/P1 meter) bleken te
+verklaren.
+
+**3. Waterverbruik: dagtotaal veel hoger dan geregistreerde sessies**
+Als het dagtotaal (≥20L) een stuk hoger is dan wat de gebruiks-
+momenten van vandaag bij elkaar optellen (<30%) — een resterend
+signaal dat er mogelijk nog steeds stoten worden gemist, ook na de
+v0.63.98-fix (bijv. als de live listener om wat voor reden dan ook
+niet actief is).
+
+**Terzijde, testinfrastructuur**: bij het testen van deze datum-
+gevoelige checks bleek dat 18 andere testbestanden `dt_util.now`
+globaal monkeypatchen zonder het na afloop te herstellen - een
+bestaand patroon in deze testsuite. De nieuwe tests zijn zelf
+expliciet gepatcht (niet afhankelijk van de systeemklok) én ruimen
+zichzelf netjes op met een lokale, autouse fixture, om niet zelf ook
+bij te dragen aan datzelfde probleem voor tests die hierna draaien.
+
+**Getest** (8 nieuwe tests, `test_diagnostic_summary.py`): elke check
+apart voor zowel het wel-als-niet-triggeren, inclusief het randgeval
+"te vroeg om data te verwachten" voor de klimaat-check.
+
+## NILM-knop: bevestigde/afgewezen keuzes konden op het verkeerde apparaat landen (v0.63.107)
+
+Gevraagd, na de v0.63.103/.106-fixes: "heb je ook gekeken waarom
+keuzes welke ik reeds gemaakt heb niet werden opgeslagen en na een
+herstart dus weer terug kwamen?" — een expliciet gecontroleerde,
+scherpere vraag dan de eerdere patroon-gaten (die verklaren alleen
+waarom *nieuw ontdekte* entiteiten bleven verschijnen, niet waarom
+*al bevestigde/afgewezen* apparaten terugkwamen).
+
+**Root cause, gevonden door de knop-implementatie (`button.py`)
+opnieuw grondig te bekijken, niet de opslag zelf** (die was al
+eerder deze sessie met echte diagnostiekdata bevestigd correct te
+werken): `NilmConfirmCandidateButton`/`NilmRejectCandidateButton`'s
+`async_press()` vroeg de sleuf-inhoud **opnieuw** op het moment van
+drukken (`get_nilm_candidate_at_slot(self._slot)`), in plaats van het
+entity_id te gebruiken dat op het scherm werd getoond. Als er tussen
+het TONEN van de knop en het DRUKKEN een coordinator-tick plaatsvond
+die de sleuf-inhoud liet verschuiven (bijv. een nieuw ontdekte
+kandidaat die alfabetisch eerder komt in de sortering) — bevestigde/
+wees de gebruiker in werkelijkheid een ANDER apparaat af dan wat ze
+zagen. Het apparaat dat ze écht bedoelden bleef gewoon in de lijst
+staan, en kwam dus na een herstart terug — niet omdat de opslag
+faalde, maar omdat de afwijzing nooit voor het juiste apparaat
+gebeurde.
+
+**Fix**: het entity_id wordt nu vastgelegd (`_last_displayed_
+entity_id`) zodra het voor weergave wordt opgevraagd
+(`_slot_label`/`extra_state_attributes`, beide door HA aangeroepen
+vlak vóór elke state-schrijving) — en `async_press()` gebruikt exact
+diezelfde, vastgelegde waarde, nooit een verse opvraag op het moment
+van drukken. Veilige terugval op een verse opvraag voor het
+onwaarschijnlijke geval dat er nog nooit iets is vastgelegd.
+
+**Getest** (3 nieuwe tests, `test_nilm_dashboard_buttons.py`):
+reproduceert het exacte scenario (sleuf-inhoud verschuift tussen tonen
+en drukken) en bevestigt dat het GETOONDE apparaat wordt bevestigd/
+afgewezen, niet het verschoven apparaat — voor zowel bevestigen als
+afwijzen, plus de terugval-veiligheidsnet-test.
+
+## NILM: fase 2/3 en een tweede zon-voorspellingsintegratie glipten erdoor (v0.63.106)
+
+Gerapporteerd, met screenshot: "Solar Production entiteiten en P1
+meter vermogen mogen sowieso uitgesloten worden." Twee nieuwe gaten in
+de bestaande patroonuitsluiting (v0.63.89/.103) gevonden:
+
+1. **Alleen "fase 1" stond in het patroon**, niet "fase 2"/"fase 3" —
+   "P1 meter Vermogen fase 3" glipte er daardoor doorheen.
+2. **Een andere zon-voorspellingsintegratie** ("Solar production
+   forecast", andere naamgeving dan "solcast") werd nog niet herkend.
+
+**Fix**: `NILM_PATTERN_EXCLUDED_KEYWORDS` uitgebreid met "fase 2",
+"fase_2", "fase 3", "fase_3", "solar production", en "p1 meter".
+
+**Getest** (3 nieuwe tests): P1-meter-fase-3 en de nieuwe zon-
+voorspellingsintegratie worden nooit meer kandidaat; fase 2 wordt ook
+correct uitgesloten.
+
+## Overzicht van ontbrekende optionele functies (v0.63.105)
+
+Gevraagd: "er zijn natuurlijk meerdere entiteiten welke ik manueel
+moet invullen, kun je een melding ergens op een geschikt dashboard
+plaatsen wanneer er 1 ontbreekt?" — dit project heeft inmiddels veel
+optionele verbeteringen opgebouwd, elk pas actief zodra de bijbehorende
+entiteit is ingevuld, makkelijk te missen zonder overzicht.
+
+**Nieuwe `get_missing_optional_features()`** — een curated lijst van
+negen optionele, niet-verplichte sensoren die een zichtbare functie
+ontgrendelen (achtertuinsensor, Solcast-live-correctie, CO2-
+intensiteit, accu-capaciteit, woonkamertemperatuur, water, meldings-
+service, vaatwasser/wasmachine-vermogen, plus een KNMI-of-
+OpenWeatherMap-check waarbij één van beide voldoende is). Bewust geen
+volledige lijst van elke config-key — alleen kernvereisten
+(prijs/accu/PV/verbruik/SoC) blijven buiten beschouwing, die zijn
+sowieso nodig om de integratie te laten draaien, geen "optionele
+verbetering".
+
+**Nieuwe sensor** `MissingOptionalFeaturesSensor` — state is het
+aantal ontbrekende functies, met de volledige lijst (naam + wat het
+ontgrendelt) als attribuut. Niet een RestoreEntity, recomputed vers
+uit de huidige config.
+
+**Nieuwe waarschuwingskaart op het Live-tabblad** — verschijnt alleen
+als er daadwerkelijk iets ontbreekt, direct onder het lopende verhaal.
+Ook toegevoegd aan diagnostiek.
+
+**Getest** (6 nieuwe tests): alles ontbreekt zonder configuratie; een
+geconfigureerde sensor verdwijnt uit de lijst; de KNMI/OpenWeatherMap-
+OR-check werkt in beide richtingen; elke melding heeft een naam en
+uitleg; een volledig geconfigureerde installatie geeft een lege lijst.
+
 ## Zonoverschot-schatting gebruikte trage i.p.v. live correctie (v0.63.104)
 
 Gerapporteerd met screenshot: "dit komt niet overeen met de

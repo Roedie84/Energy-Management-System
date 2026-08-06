@@ -3,6 +3,25 @@ nog zaken om de integratie te verbeteren, bijvoorbeeld de diagnostiek
 gedetailleerder maken"). Puur informatief, hergebruikt bestaande,
 al berekende signalen - geen nieuwe metingen.
 """
+import pytest
+from datetime import datetime, timezone
+
+
+@pytest.fixture(autouse=True)
+def _restore_dt_util_now():
+    """v0.63.108: enkele tests in dit bestand zetten `dt_util.now`
+    tijdelijk vast op een bekende datum (nodig voor de nieuwe, datum-
+    gevoelige diagnostiek-checks). Zonder herstel zou dat blijven
+    hangen voor tests die hierna draaien - een bestaand patroon
+    elders in deze testsuite (18 andere bestanden doen hetzelfde
+    zonder opruiming), maar dat is geen reden om zelf ook bij te
+    dragen aan hetzelfde probleem."""
+    from custom_components.energy_management_system import coordinator as coord_mod
+
+    original = coord_mod.dt_util.now
+    yield
+    coord_mod.dt_util.now = original
+
 
 
 def test_nominal_when_nothing_stands_out(make_coordinator, hass):
@@ -151,3 +170,141 @@ def test_no_recovery_note_without_a_streak(make_coordinator, hass):
     summary = coordinator.get_diagnostic_summary()
 
     assert not any("weer normaal" in p for p in summary["aandachtspunten"])
+
+
+def test_flags_climate_projection_with_no_learned_cells_after_days(
+    make_coordinator, hass
+):
+    """v0.63.108, gevraagd: "kun je zien te detecteren in de diagnose"
+    - verklaart waarom Korte termijn/Betrouwbaar er identiek uitzien
+    zonder dat het een bug is."""
+    from datetime import date, timedelta
+    from custom_components.energy_management_system import coordinator as coord_mod
+
+    fixed_now = datetime(2026, 8, 6, 12, tzinfo=timezone.utc)
+    coord_mod.dt_util.now = lambda: fixed_now
+
+    coordinator = make_coordinator(
+        {"living_room_temperature_sensor_entity": "sensor.living_room_temp"}
+    )
+    coordinator.first_seen_date = fixed_now.date() - timedelta(days=3)
+    coordinator.climate_rate_history = {}
+
+    summary = coordinator.get_diagnostic_summary()
+
+    assert any(
+        "Klimaat-projectie" in p and "nog geen enkele geleerde cel" in p
+        for p in summary["aandachtspunten"]
+    )
+
+
+def test_no_climate_flag_with_some_learned_data(make_coordinator, hass):
+    from datetime import timedelta
+    from custom_components.energy_management_system import coordinator as coord_mod
+
+    fixed_now = datetime(2026, 8, 6, 12, tzinfo=timezone.utc)
+    coord_mod.dt_util.now = lambda: fixed_now
+
+    coordinator = make_coordinator(
+        {"living_room_temperature_sensor_entity": "sensor.living_room_temp"}
+    )
+    coordinator.first_seen_date = fixed_now.date() - timedelta(days=3)
+    coordinator.climate_rate_history = {"20|beide_dicht|uit": [0.5]}
+
+    summary = coordinator.get_diagnostic_summary()
+
+    assert not any("Klimaat-projectie" in p for p in summary["aandachtspunten"])
+
+
+def test_no_climate_flag_too_early_to_expect_data(make_coordinator, hass):
+    from custom_components.energy_management_system import coordinator as coord_mod
+
+    fixed_now = datetime(2026, 8, 6, 12, tzinfo=timezone.utc)
+    coord_mod.dt_util.now = lambda: fixed_now
+
+    coordinator = make_coordinator(
+        {"living_room_temperature_sensor_entity": "sensor.living_room_temp"}
+    )
+    coordinator.first_seen_date = fixed_now.date()  # started today
+    coordinator.climate_rate_history = {}
+
+    summary = coordinator.get_diagnostic_summary()
+
+    assert not any("Klimaat-projectie" in p for p in summary["aandachtspunten"])
+
+
+def test_flags_large_number_of_unconfirmed_nilm_candidates(make_coordinator, hass):
+    coordinator = make_coordinator({})
+    coordinator.nilm_unconfirmed_candidates = {
+        f"sensor.device_{i}": {"friendly_name": f"Device {i}"} for i in range(20)
+    }
+
+    summary = coordinator.get_diagnostic_summary()
+
+    assert any("20 onbevestigde NILM-kandidaten" in p for p in summary["aandachtspunten"])
+
+
+def test_no_flag_for_a_small_number_of_candidates(make_coordinator, hass):
+    coordinator = make_coordinator({})
+    coordinator.nilm_unconfirmed_candidates = {
+        "sensor.a": {"friendly_name": "A"},
+        "sensor.b": {"friendly_name": "B"},
+    }
+
+    summary = coordinator.get_diagnostic_summary()
+
+    assert not any("onbevestigde NILM-kandidaten" in p for p in summary["aandachtspunten"])
+
+
+def test_flags_water_total_much_higher_than_recorded_sessions(make_coordinator, hass):
+    from custom_components.energy_management_system import coordinator as coord_mod
+
+    fixed_now = datetime(2026, 8, 6, 12, tzinfo=timezone.utc)
+    coord_mod.dt_util.now = lambda: fixed_now
+
+    coordinator = make_coordinator(
+        {"water_daily_total_sensor_entity": "sensor.water_daily"}
+    )
+    coordinator.water_daily_total_l = 60.0
+    today = fixed_now.date().isoformat()
+    coordinator.water_session_history = [
+        {"gestart": f"{today}T08:00:00+00:00", "liter": 1.0},
+    ]
+
+    summary = coordinator.get_diagnostic_summary()
+
+    assert any(
+        "Waterverbruik" in p and "mogelijk" in p for p in summary["aandachtspunten"]
+    )
+
+
+def test_no_water_flag_when_sessions_explain_the_total(make_coordinator, hass):
+    from custom_components.energy_management_system import coordinator as coord_mod
+
+    fixed_now = datetime(2026, 8, 6, 12, tzinfo=timezone.utc)
+    coord_mod.dt_util.now = lambda: fixed_now
+
+    coordinator = make_coordinator(
+        {"water_daily_total_sensor_entity": "sensor.water_daily"}
+    )
+    coordinator.water_daily_total_l = 60.0
+    today = fixed_now.date().isoformat()
+    coordinator.water_session_history = [
+        {"gestart": f"{today}T08:00:00+00:00", "liter": 50.0},
+    ]
+
+    summary = coordinator.get_diagnostic_summary()
+
+    assert not any("Waterverbruik" in p for p in summary["aandachtspunten"])
+
+
+def test_no_water_flag_for_a_small_daily_total(make_coordinator, hass):
+    coordinator = make_coordinator(
+        {"water_daily_total_sensor_entity": "sensor.water_daily"}
+    )
+    coordinator.water_daily_total_l = 5.0  # below the 20L threshold
+    coordinator.water_session_history = []
+
+    summary = coordinator.get_diagnostic_summary()
+
+    assert not any("Waterverbruik" in p for p in summary["aandachtspunten"])

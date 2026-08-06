@@ -453,3 +453,91 @@ def test_all_slot_entity_ids_are_unique_and_match_the_dashboard(
             f"button.woonkamer_energy_management_system_nilm_kandidaat_"
             f"{slot}_negeren" in entity_ids
         )
+
+
+def test_press_confirms_the_displayed_candidate_not_a_shifted_one(
+    make_coordinator, hass
+):
+    """v0.63.107, gerapporteerd: 'keuzes welke ik reeds gemaakt heb
+    [werden] niet opgeslagen en na een herstart dus weer terug
+    kwamen'. Root cause reproduced here: if the slot's content shifts
+    (a new, alphabetically-earlier candidate appears) between when the
+    button was displayed and when it's actually pressed, the press
+    must still act on the candidate the user SAW, not whatever
+    currently occupies the slot."""
+    from custom_components.energy_management_system.button import (
+        NilmConfirmCandidateButton,
+    )
+
+    coordinator = make_coordinator({})
+    _seed_two_candidates(hass, coordinator)  # A-apparaat, B-apparaat
+
+    button = NilmConfirmCandidateButton(coordinator, "entry1", slot=0)
+    # User sees the button with "A-apparaat" displayed.
+    assert "A-apparaat" in button.name
+
+    # Before the press actually lands, a new candidate is discovered
+    # that sorts alphabetically before "A-apparaat" - shifting slot 0.
+    hass.states.set(
+        "sensor.0_nieuw_apparaat",
+        "10",
+        {"unit_of_measurement": "W", "friendly_name": "0-nieuw-apparaat"},
+    )
+    coordinator._update_nilm_discovery(DAY0)
+    # Confirm the slot really did shift (sanity check on the bug's
+    # premise, not the fix itself).
+    assert coordinator.get_nilm_candidate_at_slot(0) == "sensor.0_nieuw_apparaat"
+
+    asyncio.run(button.async_press())
+
+    # The user's intended target (A-apparaat, what they actually saw)
+    # must be confirmed - not the newly-shifted-in candidate.
+    assert "sensor.a_apparaat" in coordinator.nilm_confirmed_devices
+    assert "sensor.0_nieuw_apparaat" not in coordinator.nilm_confirmed_devices
+
+
+def test_reject_press_also_uses_the_displayed_candidate(make_coordinator, hass):
+    """Same fix, reject side."""
+    from custom_components.energy_management_system.button import (
+        NilmRejectCandidateButton,
+    )
+
+    coordinator = make_coordinator({})
+    _seed_two_candidates(hass, coordinator)
+
+    button = NilmRejectCandidateButton(coordinator, "entry1", slot=0)
+    assert "A-apparaat" in button.name
+
+    hass.states.set(
+        "sensor.0_nieuw_apparaat",
+        "10",
+        {"unit_of_measurement": "W", "friendly_name": "0-nieuw-apparaat"},
+    )
+    coordinator._update_nilm_discovery(DAY0)
+    assert coordinator.get_nilm_candidate_at_slot(0) == "sensor.0_nieuw_apparaat"
+
+    asyncio.run(button.async_press())
+
+    assert "sensor.a_apparaat" in coordinator.nilm_rejected_entities
+    assert "sensor.0_nieuw_apparaat" not in coordinator.nilm_rejected_entities
+
+
+def test_press_without_ever_displaying_falls_back_to_a_fresh_lookup(
+    make_coordinator, hass
+):
+    """Edge case safety net: if async_press somehow runs before the
+    slot's content was ever displayed/cached, it must still work via
+    a fresh lookup rather than silently doing nothing."""
+    from custom_components.energy_management_system.button import (
+        NilmConfirmCandidateButton,
+    )
+
+    coordinator = make_coordinator({})
+    _seed_two_candidates(hass, coordinator)
+
+    button = NilmConfirmCandidateButton(coordinator, "entry1", slot=0)
+    # Deliberately never access .name/.extra_state_attributes first.
+
+    asyncio.run(button.async_press())
+
+    assert "sensor.a_apparaat" in coordinator.nilm_confirmed_devices

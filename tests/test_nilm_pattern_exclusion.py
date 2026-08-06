@@ -245,3 +245,53 @@ def test_own_integration_entity_pruned_from_existing_confirmed_devices(
         "sensor.woonkamer_energy_management_system_piekvermogen"
         not in coordinator.nilm_confirmed_devices
     )
+
+
+def test_p1_meter_phase_3_never_becomes_a_candidate(make_coordinator, hass):
+    """v0.63.106, gerapporteerd: 'P1 meter vermogen mogen sowieso
+    uitgesloten worden' - fase 3 glipte er eerder doorheen (alleen
+    'fase 1' stond in het patroon, niet fase 2/3)."""
+    hass.states.set(
+        "sensor.p1_meter_vermogen_fase_3",
+        "74.0",
+        {"unit_of_measurement": "W", "friendly_name": "P1 meter Vermogen fase 3"},
+    )
+    coordinator = make_coordinator({})
+
+    coordinator._update_nilm_discovery(DAY0)
+
+    assert coordinator.nilm_unconfirmed_candidates == {}
+
+
+def test_solar_production_forecast_entity_never_becomes_a_candidate(
+    make_coordinator, hass
+):
+    """v0.63.106, gerapporteerd: 'Solar Production entiteiten... mogen
+    sowieso uitgesloten worden' - een andere zon-voorspellingsintegratie
+    dan Solcast, met eigen naamgeving."""
+    hass.states.set(
+        "sensor.solar_production_forecast_estimated_power_production_in_1_hour",
+        "811.0",
+        {
+            "unit_of_measurement": "W",
+            "friendly_name": "Solar production forecast Estimated power production - in 1 hour",
+        },
+    )
+    coordinator = make_coordinator({})
+
+    coordinator._update_nilm_discovery(DAY0)
+
+    assert coordinator.nilm_unconfirmed_candidates == {}
+
+
+def test_fase_2_entity_also_excluded(make_coordinator, hass):
+    hass.states.set(
+        "sensor.iets_fase_2",
+        "5.0",
+        {"unit_of_measurement": "W", "friendly_name": "Iets Vermogen fase 2"},
+    )
+    coordinator = make_coordinator({})
+
+    coordinator._update_nilm_discovery(DAY0)
+
+    assert coordinator.nilm_unconfirmed_candidates == {}
