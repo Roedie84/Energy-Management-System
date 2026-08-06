@@ -63,6 +63,11 @@
     },
     "abort": {
       "already_configured": "This integration is already configured."
+    },
+    "error": {
+      "invalid_date": "Not a valid date. Use the format YYYY-MM-DD, for example 2026-12-31.",
+      "invalid_number": "Not a valid number.",
+      "negative_cost": "Feed-in costs cannot be negative."
     }
   },
   "options": {
@@ -125,6 +130,11 @@
           "battery_module_power_sensor_entities": "Power per battery module (optional, same order)"
         }
       }
+    },
+    "error": {
+      "invalid_date": "Not a valid date. Use the format YYYY-MM-DD, for example 2026-12-31.",
+      "invalid_number": "Not a valid number.",
+      "negative_cost": "Feed-in costs cannot be negative."
     }
   }
 }

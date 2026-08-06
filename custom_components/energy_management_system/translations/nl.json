@@ -63,6 +63,11 @@
     },
     "abort": {
       "already_configured": "Deze integratie is al geconfigureerd."
+    },
+    "error": {
+      "invalid_date": "Geen geldige datum. Gebruik de vorm JJJJ-MM-DD, bijvoorbeeld 2026-12-31.",
+      "invalid_number": "Geen geldig getal.",
+      "negative_cost": "Terugleverkosten kunnen niet negatief zijn."
     }
   },
   "options": {
@@ -125,6 +130,11 @@
           "battery_module_power_sensor_entities": "Vermogen per accumodule (optioneel, zelfde volgorde)"
         }
       }
+    },
+    "error": {
+      "invalid_date": "Geen geldige datum. Gebruik de vorm JJJJ-MM-DD, bijvoorbeeld 2026-12-31.",
+      "invalid_number": "Geen geldig getal.",
+      "negative_cost": "Terugleverkosten kunnen niet negatief zijn."
     }
   }
 }

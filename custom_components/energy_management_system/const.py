@@ -1073,6 +1073,7 @@ PERSISTED_PLAIN_FIELDS = (
     # Geleerde/opgebouwde geschiedenis
     "battery_module_health",
     "energy_balance_error_history",
+    "energy_balance_method_version",
     "mode_change_log",
     "discharge_floor_events",
     "dishwasher_cycle_duration_history",
@@ -1254,3 +1255,35 @@ SENSOR_CADENCE_MIN_SAMPLES = 30
 # de tick - niet fout, maar wel iets waar afgeleide tempo's rekening mee
 # moeten houden.
 SENSOR_CADENCE_SLOW_PERCENT = 40.0
+
+# --- Kirchhoff: minimuminterval tegen kwantisatieruis (v1.1.6) ------
+# Gerapporteerd na de fix van v1.1.3: score nog steeds 20%. De
+# resterende fouten lagen rond 880-1175 W, en dat bleek geen toeval.
+#
+# De beschikbare-energiesensor stapt in hele SoC-procenten. Bij ~7,7 kWh
+# is dat ~0,077 kWh per stap. Zo'n stap over een interval van vijf
+# minuten komt neer op ~920 W afgeleid vermogen - terwijl de drempel op
+# 300 W ligt. De meting werd dus niet begrensd door de sensoren maar door
+# de RESOLUTIE van de sensor gedeeld door een kort interval.
+#
+# v1.1.3 loste het stilstandsprobleem op, maar liet een beweging van
+# 0,005 kWh al meetellen: ver onder één stap. Daardoor werd feitelijk
+# elke stap meteen afgerekend, met de kwantisatieruis als uitkomst.
+#
+# Oplossing: hetzelfde principe als het klimaat-tempo, dat al over een
+# anker van ~1 uur meet met exact deze redenering ("een tempo uit
+# tick-tot-tick-verschillen is numeriek instabiel"). Over 30 minuten komt
+# diezelfde stap uit op ~155 W en valt hij ruim binnen de drempel.
+ENERGY_BALANCE_MIN_INTERVAL_MINUTES = 30
+
+# Eigen bovengrens, los van MAX_HOUR_TRACKING_GAP_MINUTES (20 min): die
+# is bedoeld voor energie-integratie en zou hier - lager dan het
+# minimum - betekenen dat er nooit meer iets gemeten wordt.
+ENERGY_BALANCE_MAX_INTERVAL_MINUTES = 120
+
+# De meetmethode is tussen v1.1.2 en v1.1.6 twee keer wezenlijk
+# veranderd. Oude metingen zijn met een andere methode tot stand gekomen
+# en zeggen niets over de huidige; ze blijven anders in het venster van
+# 20 hangen en drukken de score omlaag zonder dat er iets mis is. Bij een
+# verandering van dit nummer wordt de geschiedenis eenmalig gewist.
+ENERGY_BALANCE_METHOD_VERSION = 3

@@ -515,6 +515,158 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Sensor-gezondheid: het was de resolutie, niet de sensoren (v1.1.6)
+
+**Gevraagd**: *"Waarom nog steeds een slechte score?"* — 20%, ondanks de
+fix van v1.1.3.
+
+### Wat de foutreeks verried
+
+De resterende fouten lagen rond **880, 976, 1003, 1123 en 1175 W**. Weer
+geen ruis, weer een patroon.
+
+Je beschikbare-energiesensor stapt in hele **SoC-procenten**. Bij ~7,7
+kWh is dat ~0,077 kWh per stap:
+
+| Interval | Eén stap komt neer op |
+|---|---|
+| 5 min | **920 W** |
+| 10 min | 460 W |
+| 30 min | 155 W |
+
+De drempel ligt op 300 W. Elke enkele stap over één tick was dus
+automatisch een "slechte meting" — de check mat niet je sensoren maar de
+**resolutie van de sensor gedeeld door een kort interval**.
+
+v1.1.3 loste het stilstandsprobleem op, maar liet een beweging van 0,005
+kWh al meetellen: ver onder één stap. Daardoor werd feitelijk elke stap
+meteen afgerekend, met de kwantisatieruis als uitkomst.
+
+### De fix: wachten tot het interval lang genoeg is
+
+Er wordt nu pas geoordeeld na **30 minuten**. Diezelfde stap komt dan uit
+op ~155 W en valt ruim binnen de drempel.
+
+Dat is exact het principe dat het klimaat-tempo al toepaste — meten over
+een anker van ongeveer een uur, met in de code de reden erbij: *"een
+tempo uit tick-tot-tick-verschillen is numeriek instabiel voor een
+langzaam bewegende grootheid"*. Diezelfde redenering gold hier net zo
+goed; ze was alleen nooit toegepast.
+
+Er is ook een eigen bovengrens van twee uur gekomen. De bestaande grens
+van twintig minuten is bedoeld voor energie-integratie en zou hier — lager
+dan het nieuwe minimum — betekenen dat er nooit meer iets gemeten wordt.
+
+### Oude metingen tellen niet meer mee
+
+De meetmethode is tussen v1.1.2 en v1.1.6 twee keer wezenlijk veranderd,
+en de foutreeks wordt sinds v1.0.4 bewaard. Er stonden dus nog metingen
+in van de oude methode — waaronder die 15330 W — die het venster van
+twintig blijven vullen en de score omlaag drukken zonder dat er iets mis
+is.
+
+De methode heeft nu een versienummer. Verandert dat, dan wordt de reeks
+eenmalig gewist en begint de meting schoon. **Na installatie staat de
+score dus even op leeg**, tot er tien nieuwe metingen zijn — en die komen
+nu langzamer binnen, wat terecht is.
+
+### Getest
+
+Vier tests erbij in `test_energy_balance_stale_sensor.py`: één
+kwantisatiestap over vijf minuten wordt genegeerd, dezelfde stap over 35
+minuten valt binnen de drempel, geschiedenis van een oudere methode wordt
+gewist, en geschiedenis van de huidige methode blijft staan (anders zou
+elke herstart de meting terugzetten).
+
+Zes bestaande tests rekenden met intervallen van vijf of zes minuten —
+precies het scenario dat nu bewust wordt overgeslagen. Die zijn
+meebewogen naar realistische intervallen, met de energiehoeveelheden
+meegeschaald.
+
+**Volledige testsuite**: 942 tests, allemaal groen.
+
+## Integratie-brede review: twee stille problemen (v1.1.5)
+
+**Gevraagd**: *"Kun je nu eens de hele integratie nakijken of je nog
+zaken ziet welke bij nader inzien niet goed/anders/beter kunnen?"*
+
+Systematisch nagelopen: ongebruikte constanten, dode methodes, brede
+except-clausules, achtergebleven TODO's, en de plekken waar
+gelijktijdigheid iets kan verstoren. Twee echte vondsten — allebei
+**stil**: ze geven geen fout en geen melding, maar doen wel iets anders
+dan bedoeld.
+
+### 1. De koelventilator kon dubbel schakelen
+
+De accu-koeling draait op **twee** plekken: binnen de gewone tick, en
+sinds v0.63.122 ook vanuit een eigen live listener. De tick loopt binnen
+het bestaande slot, de listener niet.
+
+Die twee kunnen elkaar kruisen op de `await` van de service-aanroep:
+beide lezen "ventilator staat uit", beide schakelen hem aan. Resultaat:
+een dubbele melding op je telefoon en een dubbele regel in de
+schakelgeschiedenis — precies wat de "niet opnieuw schakelen als hij al
+goed staat"-controle moest voorkomen.
+
+De koeling heeft nu een eigen slot. Bewust een tweede slot en niet het
+bestaande: dat wordt de hele tick lang vastgehouden, en de listener
+daarop laten wachten zou de live-reactie die in v0.63.122 juist is
+ingebouwd weer tenietdoen.
+
+Bewezen door het slot tijdelijk te verwijderen: `assert 2 == 1` — twee
+schakelingen waar er één hoort.
+
+### 2. De configuratie werd nergens gecontroleerd
+
+In de config-flow werd `errors` netjes aangemaakt en dan **nooit
+gevuld**. Elk veld ging ongecontroleerd door.
+
+Voor de meeste velden geeft Home Assistant zelf een keuzelijst of
+entiteitkiezer, dus daar valt weinig fout te doen. Maar de
+**salderingsdatum is vrije tekst** — en die stuurt sinds v1.1.0 óók de
+beslislogica. Een typefout als `31-12-2026` viel stilzwijgend terug op
+"salderen actief". Verdedigbaar als noodgreep, maar niet als je geen
+enkel signaal krijgt dat je invoer niet is aangekomen: het gedrag na
+saldering zou dan gewoon nooit aangaan.
+
+Datum en terugleverkosten worden nu gecontroleerd, in beide flows, met
+vertaalde foutmeldingen. Bij een fout komt het formulier terug **met je
+ingevulde waarden**, zodat alleen het foute veld hoeft te worden
+aangepast.
+
+### Wat er goed bleek
+
+Om ook dat te melden: geen dode methodes (232 gecontroleerd), geen
+ongebruikte constanten, geen achtergebleven TODO's, en alle acht brede
+except-clausules hebben een expliciete onderbouwing waarom ze breed
+moeten zijn. De hoofdupdate zelf is al met een slot beschermd — de
+koeling was de enige die eromheen liep.
+
+### Eén ding dat ik bewust laat staan
+
+`coordinator.py` is 11.559 regels. Dat is veel, en opsplitsen is
+verleidelijk. Maar de beslislogica hangt sterk samen en er zit geen
+duidelijke breuklijn in; een opsplitsing zou vooral verplaatsen zonder
+te vereenvoudigen, met een groot risico op precies het soort
+"verplaatste methode"-regressie waar `test_structural_integrity.py` ooit
+voor is gebouwd. Als je dit wilt, is het een eigen project met een eigen
+plan — niet iets om er even bij te doen.
+
+### Getest
+
+Nieuw `tests/test_review_findings.py`, 9 tests: de koeling schakelt niet
+dubbel bij gelijktijdige aanroep, en werkt nog gewoon bij één aanroep;
+vier soorten foute datums worden afgewezen en een geldige geaccepteerd;
+leeg laten mag; terugleverkosten moeten een getal zijn en mogen niet
+negatief; elke foutcode heeft een vertaling in alle drie de
+taalbestanden; en het formulier komt terug met de ingevulde waarden.
+
+De concurrency-test doet dat met een nep-service die de schakelaar
+daadwerkelijk omzet en onderweg de gebeurtenislus vrijgeeft — zonder die
+twee dingen zou hij de nepversie toetsen in plaats van de code.
+
+**Volledige testsuite**: 938 tests, allemaal groen.
+
 ## Audit op dezelfde foutklasse, en betere diagnostiek (v1.1.4)
 
 **Gevraagd**: *"Had je dit eerder kunnen afvangen als de diagnostiek

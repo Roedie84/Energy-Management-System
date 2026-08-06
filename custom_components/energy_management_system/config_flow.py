@@ -1,6 +1,8 @@
 """Config flow for Energy Management System."""
 from __future__ import annotations
 
+from datetime import date
+
 import voluptuous as vol
 
 from homeassistant import config_entries
@@ -86,6 +88,39 @@ from .const import (
     DOMAIN,
     PRICE_ATTRIBUTE_OPTIONS,
 )
+
+
+def _validate_input(user_input: dict) -> dict[str, str]:
+    """Controleert de vrije-tekstvelden (v1.1.5).
+
+    Tot nu toe werd `errors` wel aangemaakt maar nooit gevuld: elk veld
+    ging ongecontroleerd door. Voor de meeste velden geeft Home Assistant
+    zelf al een keuzelijst of entiteitkiezer, maar de salderingsdatum is
+    vrije tekst - en die stuurt sinds v1.1.0 óók de beslislogica.
+
+    Een typefout daarin ("31-12-2026", "2026-13-01") viel stilzwijgend
+    terug op "salderen actief". Verdedigbaar als noodgreep, maar niet als
+    de gebruiker geen enkel signaal krijgt dat zijn invoer niet is
+    aangekomen: het gedrag na saldering zou dan gewoon nooit aangaan.
+    """
+    errors: dict[str, str] = {}
+
+    einddatum = user_input.get(CONF_SALDEREN_END_DATE)
+    if einddatum:
+        try:
+            date.fromisoformat(str(einddatum))
+        except (TypeError, ValueError):
+            errors[CONF_SALDEREN_END_DATE] = "invalid_date"
+
+    kosten = user_input.get(CONF_FEEDIN_COST_EUR_PER_KWH)
+    if kosten not in (None, ""):
+        try:
+            if float(kosten) < 0:
+                errors[CONF_FEEDIN_COST_EUR_PER_KWH] = "negative_cost"
+        except (TypeError, ValueError):
+            errors[CONF_FEEDIN_COST_EUR_PER_KWH] = "invalid_number"
+
+    return errors
 
 
 def _schema(defaults: dict | None = None) -> vol.Schema:
@@ -447,9 +482,17 @@ class EnergyManagementSystemConfigFlow(config_entries.ConfigFlow, domain=DOMAIN)
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            await self.async_set_unique_id(DOMAIN)
-            self._abort_if_unique_id_configured()
-            return self.async_create_entry(title=DEFAULT_NAME, data=user_input)
+            errors = _validate_input(user_input)
+            if not errors:
+                await self.async_set_unique_id(DOMAIN)
+                self._abort_if_unique_id_configured()
+                return self.async_create_entry(title=DEFAULT_NAME, data=user_input)
+            # Bij een fout het formulier opnieuw tonen MET de ingevulde
+            # waarden, zodat alleen het foute veld hoeft te worden
+            # aangepast in plaats van alles opnieuw.
+            return self.async_show_form(
+                step_id="user", data_schema=_schema(user_input), errors=errors
+            )
 
         return self.async_show_form(step_id="user", data_schema=_schema(), errors=errors)
 
@@ -468,7 +511,12 @@ class EnergyManagementSystemOptionsFlow(config_entries.OptionsFlow):
         self, user_input: dict | None = None
     ) -> config_entries.FlowResult:
         if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
+            errors = _validate_input(user_input)
+            if not errors:
+                return self.async_create_entry(title="", data=user_input)
+            return self.async_show_form(
+                step_id="init", data_schema=_schema(user_input), errors=errors
+            )
 
         current = {**self.config_entry.data, **self.config_entry.options}
         return self.async_show_form(step_id="init", data_schema=_schema(current))

@@ -255,7 +255,10 @@ from .const import (
     CONF_BATTERY_COOLING_OUTDOOR_SENSOR,
     CONF_BATTERY_TEMPERATURE_SENSOR,
     MAX_HOUR_TRACKING_GAP_MINUTES,
+    ENERGY_BALANCE_MAX_INTERVAL_MINUTES,
+    ENERGY_BALANCE_METHOD_VERSION,
     ENERGY_BALANCE_MIN_DELTA_KWH,
+    ENERGY_BALANCE_MIN_INTERVAL_MINUTES,
     SENSOR_CADENCE_HISTORY_LENGTH,
     SENSOR_CADENCE_MIN_SAMPLES,
     SENSOR_CADENCE_SLOW_PERCENT,
@@ -614,6 +617,10 @@ class EnergyManagementSystemCoordinator:
         # v1.1.3: accuvermogen-metingen sinds de laatste beweging van de
         # energiesensor, om over het juiste venster te kunnen middelen.
         self._balance_power_samples: list[float] = []
+        # v1.1.6: met welke meetmethode de bewaarde foutreeks tot stand
+        # is gekomen. Verandert de methode, dan wordt die reeks eenmalig
+        # gewist - zie ENERGY_BALANCE_METHOD_VERSION.
+        self.energy_balance_method_version: int = ENERGY_BALANCE_METHOD_VERSION
         # v1.1.4: hoe vaak elke bronsensor daadwerkelijk beweegt t.o.v.
         # de tick. Zie SENSOR_CADENCE_* in const.py.
         self.sensor_cadence: dict[str, dict] = {}
@@ -923,6 +930,15 @@ class EnergyManagementSystemCoordinator:
         self._last_value_calc_time: datetime | None = None
 
         self._lock = asyncio.Lock()
+        # v1.1.5: eigen slot voor de accu-koeling. Die draait op TWEE
+        # plekken - binnen de gewone tick (dus binnen `_lock`) en vanuit
+        # een eigen live listener daarbuiten. Zonder dit slot kunnen die
+        # twee elkaar overlappen op de `await` van de service-aanroep:
+        # beide lezen dan "ventilator staat uit", beide schakelen hem
+        # aan, en dat levert een dubbele melding en een dubbele regel in
+        # de schakelgeschiedenis op. Precies wat de "niet opnieuw
+        # schakelen als hij al goed staat"-controle moest voorkomen.
+        self._cooling_lock = asyncio.Lock()
         self._unsub_interval = None
         self._unsub_state = None
         self._unsub_water_state = None
@@ -5309,6 +5325,12 @@ class EnergyManagementSystemCoordinator:
         rekent hij wél door (zodat het dashboard blijft kloppen) maar
         raakt hij de schakelaar niet aan.
         """
+        # v1.1.5: het slot voorkomt dat de tick en de live listener
+        # elkaar overlappen; zie `_cooling_lock` in __init__.
+        async with self._cooling_lock:
+            await self._async_apply_battery_cooling_locked()
+
+    async def _async_apply_battery_cooling_locked(self) -> None:
         besluit = self.evaluate_battery_cooling()
         self.battery_cooling_state = besluit
         if besluit["actie"] is None:
@@ -6149,13 +6171,25 @@ class EnergyManagementSystemCoordinator:
             # vergeleken.
             return
 
-        elapsed_hours = (now - self._last_balance_check_time).total_seconds() / 3600
+        elapsed_minutes = (now - self._last_balance_check_time).total_seconds() / 60
+
+        # v1.1.6: wacht tot er genoeg tijd voorbij is. De sensor stapt in
+        # hele SoC-procenten (~0,077 kWh); over vijf minuten is één zo'n
+        # stap al ~920 W afgeleid vermogen, ruim boven de drempel van
+        # 300 W. Dan meet de check niet de sensoren maar de RESOLUTIE van
+        # de sensor gedeeld door een kort interval. Over 30 minuten komt
+        # diezelfde stap uit op ~155 W. Zelfde redenering als bij het
+        # klimaat-tempo, dat al over een anker van ~1 uur meet.
+        if elapsed_minutes < ENERGY_BALANCE_MIN_INTERVAL_MINUTES:
+            return
+
+        elapsed_hours = elapsed_minutes / 60
         self._last_balance_check_time = now
         self._last_balance_check_available_kwh = available_kwh
         vermogen_metingen = self._balance_power_samples
         self._balance_power_samples = []
 
-        if elapsed_hours <= 0 or elapsed_hours > MAX_HOUR_TRACKING_GAP_MINUTES / 60:
+        if elapsed_minutes > ENERGY_BALANCE_MAX_INTERVAL_MINUTES:
             # Te groot gat (herstart, of een sensor die uren stilstond)
             # om betrouwbaar aan één tempo toe te schrijven.
             return
@@ -7928,6 +7962,23 @@ class EnergyManagementSystemCoordinator:
             if moment is not None:
                 setattr(self, veld, moment)
 
+    def _discard_history_from_an_older_method(self) -> None:
+        """Wist de balansgeschiedenis als die met een oudere meetmethode
+        is opgebouwd (v1.1.6).
+
+        Tussen v1.1.2 en v1.1.6 is die methode twee keer wezenlijk
+        veranderd. Oude metingen zeggen niets over de huidige manier van
+        meten, maar blijven wel in het venster van twintig hangen en
+        drukken de score omlaag zonder dat er iets mis is - precies de
+        vraag die dit opriep ("waarom nog steeds een slechte score?").
+        """
+        if self.energy_balance_method_version == ENERGY_BALANCE_METHOD_VERSION:
+            return
+        self.energy_balance_error_history = []
+        self.sensor_health_score = None
+        self.measurement_quality = None
+        self.energy_balance_method_version = ENERGY_BALANCE_METHOD_VERSION
+
     async def async_load_persisted_state(self) -> None:
         """Laadt de opgebouwde toestand uit de Store (v1.0.4).
 
@@ -7945,6 +7996,7 @@ class EnergyManagementSystemCoordinator:
         self._state_store_loaded = True
         if isinstance(stored, dict):
             self._apply_persisted_state(stored)
+        self._discard_history_from_an_older_method()
 
     def schedule_persisted_state_save(self) -> None:
         """Plant een vertraagde opslag (v1.0.4).

@@ -7825,3 +7825,74 @@ al begrensd tegen grote hiaten) en blijven ongewijzigd.
 `tests/test_sensor_cadence.py` (6 tests).
 
 **Volledige testsuite**: 929 tests, allemaal groen.
+
+## v1.1.5 — Integratie-brede review: twee stille problemen
+
+**Gevraagd**: de hele integratie nakijken op zaken die beter kunnen.
+Nagelopen: ongebruikte constanten, dode methodes, brede
+except-clausules, achtergebleven TODO's, en gelijktijdigheid. Twee echte
+vondsten, allebei stil (geen fout, geen melding, wel ander gedrag dan
+bedoeld):
+
+1. **De koelventilator kon dubbel schakelen.** De koeling draait binnen
+   de tick (dus binnen het bestaande slot) én sinds v0.63.122 vanuit een
+   eigen live listener daarbuiten. Die konden elkaar kruisen op de
+   `await` van de service-aanroep: beide lezen "uit", beide schakelen
+   aan - dubbele melding, dubbele regel in de geschiedenis. Nu een eigen
+   slot; bewust niet het bestaande, want dat wordt de hele tick
+   vastgehouden en zou de live-reactie tenietdoen. Bewezen door het slot
+   tijdelijk te verwijderen: `assert 2 == 1`.
+2. **De configuratie werd nergens gecontroleerd.** `errors` werd
+   aangemaakt maar nooit gevuld. De salderingsdatum is vrije tekst en
+   stuurt sinds v1.1.0 de beslislogica; een typefout viel stilzwijgend
+   terug op "salderen actief" zonder enig signaal. Datum en
+   terugleverkosten worden nu gevalideerd in beide flows, met vertaalde
+   foutmeldingen, en het formulier komt terug met de ingevulde waarden.
+
+**Wat goed bleek**: geen dode methodes (232 gecontroleerd), geen
+ongebruikte constanten, geen TODO's, en alle acht brede
+except-clausules hebben een expliciete onderbouwing. De hoofdupdate was
+al met een slot beschermd.
+
+**Bewust ongewijzigd**: `coordinator.py` (11.559 regels). Opsplitsen zou
+vooral verplaatsen zonder te vereenvoudigen, met risico op precies de
+"verplaatste methode"-regressie waar `test_structural_integrity.py` voor
+is gebouwd. Eigen project met eigen plan.
+
+**Getest**: nieuw `tests/test_review_findings.py`, 9 tests.
+
+**Volledige testsuite**: 938 tests, allemaal groen.
+
+## v1.1.6 — Sensor-gezondheid: het was de resolutie, niet de sensoren
+
+**Gevraagd**: "Waarom nog steeds een slechte score?" - 20%, ondanks de
+fix van v1.1.3.
+
+**Aanwijzing**: de resterende fouten lagen rond 880-1175 W. Weer een
+patroon, geen ruis.
+
+**Root cause**: de beschikbare-energiesensor stapt in hele
+SoC-procenten (~0,077 kWh bij 7,7 kWh). Over vijf minuten is één zo'n
+stap ~920 W afgeleid vermogen, terwijl de drempel op 300 W ligt. Elke
+enkele stap over één tick was dus automatisch een "slechte meting" - de
+check mat de RESOLUTIE van de sensor gedeeld door een kort interval, niet
+de sensoren zelf. v1.1.3 loste het stilstandsprobleem op maar liet een
+beweging van 0,005 kWh al meetellen, ver onder één stap.
+
+**Fix**: pas oordelen na `ENERGY_BALANCE_MIN_INTERVAL_MINUTES` (30). Die
+stap komt dan uit op ~155 W. Zelfde principe als het klimaat-tempo, dat
+al over een anker van ~1 uur meet met exact deze redenering. Eigen
+bovengrens van 2 uur, omdat de bestaande 20-minutengrens (bedoeld voor
+energie-integratie) lager is dan het nieuwe minimum.
+
+**Oude metingen**: de methode is sinds v1.1.2 twee keer wezenlijk
+veranderd en de reeks wordt sinds v1.0.4 bewaard, dus er stonden nog
+metingen van de oude methode in (waaronder 15330 W) die de score omlaag
+drukten. `ENERGY_BALANCE_METHOD_VERSION` wist de reeks eenmalig bij een
+methodewijziging. De score staat na installatie dus even op leeg.
+
+**Getest**: vier tests erbij in `test_energy_balance_stale_sensor.py`.
+Zes bestaande tests rekenden met intervallen van 5-6 minuten - precies
+het scenario dat nu bewust wordt overgeslagen - en zijn meebewogen.
+
+**Volledige testsuite**: 942 tests, allemaal groen.

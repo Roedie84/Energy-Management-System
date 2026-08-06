@@ -398,7 +398,7 @@ views:
         # "richtingen van de stromen nog niet geupdate?". De
         # versiesleutel dwingt een verse ophaal af. Een test bewaakt
         # dat deze waarde gelijk blijft aan de versie in manifest.json.
-        image: /local/energy_management_system_overview.svg?v=1.1.4
+        image: /local/energy_management_system_overview.svg?v=1.1.6
         elements:
           - type: state-label
             entity: sensor.woonkamer_energy_management_system_system_status
