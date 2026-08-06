@@ -17,6 +17,14 @@ CONF_NEGATIVE_PRICE_CHARGE_POWER = "negative_price_charge_power"
 CONF_SOLAR_POWER_LIMIT_ENTITY = "solar_power_limit_entity"
 CONF_KNMI_WEATHER_ENTITY = "knmi_weather_entity"
 CONF_OPENWEATHERMAP_WEATHER_ENTITY = "openweathermap_weather_entity"
+
+# Achtertuin-temperatuursensor (v0.63.95, gevraagd: "zijn er zaken
+# waardoor ik de voorspelling kan verbeteren" - de gebruiker heeft een
+# eigen fysieke buitentemperatuursensor, nauwkeuriger voor de eigen
+# locatie dan een regionale weerentiteit). Optioneel - zonder
+# configuratie blijft alles exact zoals voorheen (weerentiteit als
+# enige bron, geen bias-correctie).
+CONF_BACKYARD_TEMPERATURE_SENSOR = "backyard_temperature_sensor_entity"
 CONF_BATTERY_ROUND_TRIP_EFFICIENCY = "battery_round_trip_efficiency_percent"
 CONF_VACATION_CONSUMPTION_REDUCTION_PERCENT = "vacation_consumption_reduction_percent"
 
@@ -489,6 +497,40 @@ CLIMATE_RATE_MIN_SAMPLES = 5
 CLIMATE_RATE_RELIABLE_SAMPLES = 15
 CLIMATE_FORECAST_HORIZON_HOURS = 24
 CLIMATE_FORECAST_FETCH_INTERVAL_MINUTES = 30
+
+# Geleerde bias-correctie op de weersvoorspelling (v0.63.95, gevraagd:
+# "zijn er zaken waardoor ik de voorspelling kan verbeteren" - de
+# gebruiker heeft een eigen achtertuin-temperatuursensor). Elke keer
+# dat de uurlijkse voorspelling ververst wordt (om de
+# CLIMATE_FORECAST_FETCH_INTERVAL_MINUTES), wordt de eerste
+# (dichtstbijzijnde) voorspelde waarde vergeleken met de actuele
+# achtertuinsensor-meting op datzelfde moment - dat verschil (°C,
+# additief, niet procentueel: temperatuur kent geen natuurlijke
+# nulpuntschaal waarop een percentage zinvol is) wordt bijgehouden in
+# een rollend venster en toegepast op de HELE 24-uurs-voorspelling,
+# niet alleen het startpunt - corrigeert zo systematisch voor een
+# structurele afwijking van de geconfigureerde weerbron/locatie.
+CLIMATE_FORECAST_BIAS_HISTORY_LENGTH = 100
+CLIMATE_FORECAST_BIAS_MIN_SAMPLES = 5
+
+# Uitschieter-filter voor de achtertuinsensor (v0.63.96, gerapporteerd
+# met grafiek: de sensor kan 's ochtends kort in direct zonlicht
+# hangen, wat een plotselinge, kortstondige sprong in de gemeten
+# temperatuur veroorzaakt - de behuizing warmt zelf op, los van de
+# werkelijke luchttemperatuur). Een sprong die de plausibele
+# afkoel/opwarm-snelheid van buitenlucht ver overschrijdt, wordt pas
+# vertrouwd als hij minstens dit aantal minuten aanhoudt - een
+# kortstondige zonneflits zakt vanzelf weer terug voordat dit venster
+# verstrijkt en wordt dan genegeerd; een echte, aanhoudende
+# temperatuurverandering (bijv. een koufront) wordt na dit venster
+# alsnog geaccepteerd.
+BACKYARD_TEMP_MAX_PLAUSIBLE_RATE_C_PER_HOUR = 4.0
+BACKYARD_TEMP_SPIKE_CONFIRM_MINUTES = 45
+# Marge waarbinnen een nieuwe uitschietende meting als "dezelfde
+# uitschieter" telt (i.p.v. een compleet nieuwe, aparte gebeurtenis) -
+# zodat kleine meetruis tijdens het wachten op bevestiging de teller
+# niet steeds laat resetten.
+BACKYARD_TEMP_SPIKE_TOLERANCE_C = 1.0
 
 # Home Connect's BSH.Common.EnumType.OperationState, lowercased as HA
 # exposes it. Only 'run' means the appliance is actually drawing power

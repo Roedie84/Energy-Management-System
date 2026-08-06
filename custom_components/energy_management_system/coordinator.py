@@ -122,6 +122,11 @@ from .const import (
     CLIMATE_RATE_RELIABLE_SAMPLES,
     CLIMATE_FORECAST_HORIZON_HOURS,
     CLIMATE_FORECAST_FETCH_INTERVAL_MINUTES,
+    CLIMATE_FORECAST_BIAS_HISTORY_LENGTH,
+    CLIMATE_FORECAST_BIAS_MIN_SAMPLES,
+    BACKYARD_TEMP_MAX_PLAUSIBLE_RATE_C_PER_HOUR,
+    BACKYARD_TEMP_SPIKE_CONFIRM_MINUTES,
+    BACKYARD_TEMP_SPIKE_TOLERANCE_C,
     HOME_CONNECT_ACTIVE_STATES,
     CONF_APPLIANCE_NOTIFY_SERVICE,
     MODE_CHANGE_EMOJI,
@@ -164,6 +169,7 @@ from .const import (
     CUSUM_ALARM_THRESHOLD_KW,
     CONF_KNMI_WEATHER_ENTITY,
     CONF_OPENWEATHERMAP_WEATHER_ENTITY,
+    CONF_BACKYARD_TEMPERATURE_SENSOR,
     WEATHER_ENSEMBLE_CLEAR_THRESHOLD_PERCENT,
     WEATHER_ENSEMBLE_OVERCAST_THRESHOLD_PERCENT,
     WEATHER_ENSEMBLE_UNDERPERFORM_RATIO,
@@ -600,6 +606,13 @@ class EnergyManagementSystemCoordinator:
         self.climate_live_outdoor_temp_c: float | None = None
         self._climate_forecast_last_fetch: datetime | None = None
         self._climate_cached_forecast: list[tuple] | None = None
+        self.climate_forecast_bias_history: list[float] = []
+        # -- Uitschieter-filter achtertuinsensor (v0.63.96) --
+        self._backyard_temp_last_accepted_c: float | None = None
+        self._backyard_temp_last_accepted_at: datetime | None = None
+        self._backyard_temp_spike_candidate_c: float | None = None
+        self._backyard_temp_spike_since: datetime | None = None
+        self.last_backyard_spike_filtered_note: str | None = None
         self._listeners: list = []
         self._last_cost_basis_calc_time: datetime | None = None
         self.last_charge_power_applied: float | None = None
@@ -735,6 +748,24 @@ class EnergyManagementSystemCoordinator:
         """Eén datum per dag - parallel aan `reserve_excess_history`,
         zelfde semantiek als `reserve_shortfall_dates` hierboven."""
         return [r["date"] for r in self.reserve_daily_records]
+
+    @property
+    def climate_forecast_learned_bias_c(self) -> float | None:
+        """Geleerde bias-correctie (°C, additief) op de uurlijkse
+        weersvoorspelling (v0.63.95), gebaseerd op vergelijking met de
+        achtertuinsensor. Positief = voorspelling was te laag (de
+        achtertuin was warmer dan voorspeld); negatief = voorspelling
+        was te hoog. None zolang er nog niet genoeg samples zijn
+        (`CLIMATE_FORECAST_BIAS_MIN_SAMPLES`) - een bias uit te weinig
+        samples is zelf onbetrouwbaar.
+        """
+        if len(self.climate_forecast_bias_history) < CLIMATE_FORECAST_BIAS_MIN_SAMPLES:
+            return None
+        return round(
+            sum(self.climate_forecast_bias_history)
+            / len(self.climate_forecast_bias_history),
+            1,
+        )
 
     async def async_setup(self) -> None:
         """Start listening for updates and run once immediately - unless
@@ -2113,7 +2144,7 @@ class EnergyManagementSystemCoordinator:
             # nog niets aan): buitentemperatuur meesamplen tijdens
             # hetzelfde venster als het verbruik, voor de latere
             # temperatuur-vs-verbruik-regressie.
-            outdoor_temp_c = self._get_live_outdoor_temp_c()
+            outdoor_temp_c = self._get_live_outdoor_temp_c(now)
             if outdoor_temp_c is not None:
                 self._window_temp_samples.append(outdoor_temp_c)
             self._window_last_sample = now
@@ -6213,13 +6244,110 @@ class EnergyManagementSystemCoordinator:
             return "koelen"
         return "uit"
 
-    def _get_live_outdoor_temp_c(self) -> float | None:
-        """Live buitentemperatuur, van welke geconfigureerde
-        weerentiteit dan ook beschikbaar is (KNMI eerst, dan
-        OpenWeatherMap) - v0.63.56. Hergebruikt de al geconfigureerde
-        Weather Ensemble-entiteiten (v0.63.30), geen nieuwe koppeling
-        nodig.
+    def _get_filtered_backyard_temp_c(self, now: datetime) -> float | None:
+        """Uitschieter-gefilterde achtertuinsensor-meting (v0.63.96,
+        gerapporteerd met grafiek: de sensor kan 's ochtends kort in
+        direct zonlicht hangen, wat een plotselinge, kortstondige
+        sprong veroorzaakt die niets met de werkelijke luchttemperatuur
+        te maken heeft - de behuizing warmt zelf op).
+
+        Een sprong die de plausibele afkoel/opwarm-snelheid van
+        buitenlucht (`BACKYARD_TEMP_MAX_PLAUSIBLE_RATE_C_PER_HOUR`) ver
+        overschrijdt, wordt niet meteen vertrouwd - de vorige,
+        geaccepteerde waarde blijft gelden totdat de nieuwe waarde
+        minstens `BACKYARD_TEMP_SPIKE_CONFIRM_MINUTES` aanhoudt (binnen
+        een kleine tolerantiemarge, `BACKYARD_TEMP_SPIKE_TOLERANCE_C`,
+        zodat kleine meetruis de teller niet steeds laat resetten). Een
+        kortstondige zonneflits zakt vanzelf terug voordat dit venster
+        verstrijkt en wordt dan genegeerd; een echte, aanhoudende
+        verandering (bijv. een koufront) wordt na dit venster alsnog
+        geaccepteerd - dit filtert dus ruis, het bevriest de meting
+        niet permanent.
         """
+        backyard_entity = self.config.get(CONF_BACKYARD_TEMPERATURE_SENSOR)
+        if not backyard_entity:
+            return None
+        raw_temp = self._read_sensor_float(backyard_entity)
+        if raw_temp is None:
+            return None
+
+        if self._backyard_temp_last_accepted_c is None:
+            self._backyard_temp_last_accepted_c = raw_temp
+            self._backyard_temp_last_accepted_at = now
+            return raw_temp
+
+        elapsed_hours = max(
+            (now - self._backyard_temp_last_accepted_at).total_seconds() / 3600,
+            1 / 3600,  # avoid a division by ~0 on two ticks in the same second
+        )
+        implied_rate = (
+            abs(raw_temp - self._backyard_temp_last_accepted_c) / elapsed_hours
+        )
+
+        if implied_rate <= BACKYARD_TEMP_MAX_PLAUSIBLE_RATE_C_PER_HOUR:
+            # Plausible change - accept directly, no spike suspected.
+            self._backyard_temp_last_accepted_c = raw_temp
+            self._backyard_temp_last_accepted_at = now
+            self._backyard_temp_spike_candidate_c = None
+            self._backyard_temp_spike_since = None
+            return raw_temp
+
+        # Implausibly fast change - a suspected artifact (e.g. direct
+        # sun hitting the sensor). Track it, but keep returning the
+        # last trusted value until/unless it's confirmed sustained.
+        if (
+            self._backyard_temp_spike_candidate_c is not None
+            and abs(raw_temp - self._backyard_temp_spike_candidate_c)
+            <= BACKYARD_TEMP_SPIKE_TOLERANCE_C
+        ):
+            sustained_minutes = (
+                now - self._backyard_temp_spike_since
+            ).total_seconds() / 60
+            if sustained_minutes >= BACKYARD_TEMP_SPIKE_CONFIRM_MINUTES:
+                # Sustained long enough - treat as a genuine change,
+                # not a transient artifact.
+                self._backyard_temp_last_accepted_c = raw_temp
+                self._backyard_temp_last_accepted_at = now
+                self._backyard_temp_spike_candidate_c = None
+                self._backyard_temp_spike_since = None
+                self.last_backyard_spike_filtered_note = None
+                return raw_temp
+        else:
+            # A new (or first) spike candidate - start the confirmation
+            # window.
+            self._backyard_temp_spike_candidate_c = raw_temp
+            self._backyard_temp_spike_since = now
+
+        self.last_backyard_spike_filtered_note = (
+            f"Uitschieter genegeerd: {raw_temp}°C wijkt te snel af van "
+            f"{self._backyard_temp_last_accepted_c}°C (mogelijk kortstondig "
+            "direct zonlicht op de sensor) - wordt pas vertrouwd als dit "
+            f"{BACKYARD_TEMP_SPIKE_CONFIRM_MINUTES} minuten aanhoudt."
+        )
+        return self._backyard_temp_last_accepted_c
+
+    def _get_live_outdoor_temp_c(self, now: datetime) -> float | None:
+        """Live buitentemperatuur (v0.63.56, uitgebreid in v0.63.95/.96).
+
+        Voorkeursbron: een geconfigureerde eigen achtertuin-
+        temperatuursensor (`CONF_BACKYARD_TEMPERATURE_SENSOR`) - een
+        fysieke, lokale meting is nauwkeuriger voor de eigen locatie
+        dan een regionale weerentiteit-schatting (gevraagd na een
+        eerdere sessie waarin de weerentiteit een significante
+        afwijking bleek te hebben). Loopt door `_get_filtered_
+        backyard_temp_c` (v0.63.96) om kortstondige uitschieters
+        (bijv. direct zonlicht op de sensor 's ochtends) eruit te
+        filteren. Valt terug op de weerentiteiten (KNMI eerst, dan
+        OpenWeatherMap - hergebruikt de al geconfigureerde Weather
+        Ensemble-entiteiten, v0.63.30) als er geen achtertuinsensor is
+        geconfigureerd of niet uitleesbaar is.
+        """
+        backyard_entity = self.config.get(CONF_BACKYARD_TEMPERATURE_SENSOR)
+        if backyard_entity:
+            filtered_temp = self._get_filtered_backyard_temp_c(now)
+            if filtered_temp is not None:
+                return filtered_temp
+
         for entity_id in (
             self.config.get(CONF_KNMI_WEATHER_ENTITY),
             self.config.get(CONF_OPENWEATHERMAP_WEATHER_ENTITY),
@@ -6274,7 +6402,7 @@ class EnergyManagementSystemCoordinator:
         """
         temp_entity = self.config.get(CONF_LIVING_ROOM_TEMPERATURE_SENSOR)
         temp_c = self._read_sensor_float(temp_entity) if temp_entity else None
-        outdoor_temp_c = self._get_live_outdoor_temp_c()
+        outdoor_temp_c = self._get_live_outdoor_temp_c(now)
         shutter_state = self._get_shutter_state_label()
         airco_state = self._get_current_airco_state_label()
         self.climate_shutter_state = shutter_state
@@ -6492,6 +6620,24 @@ class EnergyManagementSystemCoordinator:
             return
         self._climate_cached_forecast = forecast
 
+        # v0.63.95: bias-sample - vergelijk de eerstvolgende voorspelde
+        # waarde met de actuele achtertuinsensor-meting op ditzelfde
+        # moment. Alleen relevant/mogelijk als er een achtertuinsensor
+        # is geconfigureerd (anders zou dit de weerentiteit tegen
+        # zichzelf vergelijken, zinloos). Loopt door het uitschieter-
+        # filter (v0.63.96) - anders zou een kortstondige zonneflits op
+        # de sensor de bias-leerhistorie kunnen vervuilen.
+        backyard_entity = self.config.get(CONF_BACKYARD_TEMPERATURE_SENSOR)
+        if backyard_entity and forecast:
+            backyard_temp = self._get_filtered_backyard_temp_c(now)
+            if backyard_temp is not None:
+                _, nearest_forecast_temp = forecast[0]
+                deviation_c = backyard_temp - nearest_forecast_temp
+                self.climate_forecast_bias_history.append(round(deviation_c, 2))
+                self.climate_forecast_bias_history = self.climate_forecast_bias_history[
+                    -CLIMATE_FORECAST_BIAS_HISTORY_LENGTH:
+                ]
+
     def _recompute_climate_trajectory(self, now: datetime) -> None:
         """Re-walks the 24-hour projection from the CURRENT
         live-measured living room temperature, using whichever outdoor
@@ -6520,12 +6666,18 @@ class EnergyManagementSystemCoordinator:
         shutter_state = self.climate_shutter_state or "onbekend"
         airco_state = self.climate_airco_state or "onbekend"
 
+        # v0.63.95: geleerde bias-correctie op de HELE voorspelling
+        # (niet alleen het startpunt), gebaseerd op de achtertuinsensor
+        # - zie `climate_forecast_learned_bias_c`'s docstring.
+        bias_c = self.climate_forecast_learned_bias_c or 0.0
+
         kort_termijn_temp = temp_c
         betrouwbaar_temp = temp_c
         trajectory = []
-        for hour_dt, outdoor_temp_c in self._climate_cached_forecast[
+        for hour_dt, raw_outdoor_temp_c in self._climate_cached_forecast[
             :CLIMATE_FORECAST_HORIZON_HOURS
         ]:
+            outdoor_temp_c = raw_outdoor_temp_c + bias_c
             outdoor_bucket = self._outdoor_temp_bucket(outdoor_temp_c)
             rate = self.get_climate_rate(outdoor_bucket, shutter_state, airco_state)
             rate_value = rate["rate_c_per_hour"]

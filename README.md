@@ -515,6 +515,102 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Uitschieter-filter voor de achtertuinsensor (v0.63.96)
+
+Gerapporteerd met grafiek: de nieuwe achtertuinsensor (v0.63.95) kan 's
+ochtends kort in direct zonlicht hangen, wat een plotselinge,
+kortstondige sprong in de gemeten temperatuur veroorzaakt — de
+sensorbehuizing warmt zelf op, los van de werkelijke luchttemperatuur.
+Zonder filtering zou dit zowel het live-anker als de bias-leer-
+geschiedenis (v0.63.95) kunnen vervuilen.
+
+**Ontwerp**: een sprong die de plausibele afkoel/opwarm-snelheid van
+buitenlucht (`BACKYARD_TEMP_MAX_PLAUSIBLE_RATE_C_PER_HOUR`, 4°C/uur)
+ver overschrijdt, wordt niet meteen vertrouwd — de vorige,
+geaccepteerde waarde blijft gelden totdat de nieuwe waarde minstens
+`BACKYARD_TEMP_SPIKE_CONFIRM_MINUTES` (45 min) aanhoudt (binnen een
+kleine tolerantiemarge, `BACKYARD_TEMP_SPIKE_TOLERANCE_C`, zodat kleine
+meetruis tijdens het wachten de teller niet steeds laat resetten). Een
+kortstondige zonneflits zakt vanzelf terug voordat dit venster
+verstrijkt en wordt dan genegeerd; een echte, aanhoudende verandering
+(bijv. een koufront) wordt na dit venster alsnog geaccepteerd — dit
+filtert dus ruis, het bevriest de meting niet permanent.
+
+Nieuwe, gedeelde `_get_filtered_backyard_temp_c(now)` — zowel het
+live-anker (`_get_live_outdoor_temp_c`) als de bias-sample-berekening
+(v0.63.95) lopen nu door dit filter, zodat beide mechanismen
+consistent beschermd zijn tegen dezelfde soort uitschieters.
+
+**Bewust géén RestoreEntity** voor de filter-state zelf (vergelijkbaar
+met `sensor_health_score` eerder deze sessie) — de tijdschalen hier
+zijn kort (minuten tot ~45 min), dus een reset bij herstart is een
+verwaarloosbaar, kortstondig verlies, niet de moeite van extra
+complexiteit waard.
+
+**Zichtbaarheid**: nieuwe waarschuwingskaart op het dashboard, alleen
+zichtbaar wanneer een uitschieter daadwerkelijk wordt genegeerd. Nieuw
+attribuut `achtertuinsensor_uitschieter_genegeerd` op de klimaat-
+projectie-sensor. Toegevoegd aan diagnostiek.
+
+**Getest** (5 nieuwe tests): eerste meting wordt direct geaccepteerd;
+een plausibele, geleidelijke verandering wordt direct geaccepteerd;
+een kortstondige zonneflits wordt genegeerd (en de vorige waarde blijft
+gelden) totdat die zelf weer terugzakt; een aanhoudende verandering
+wordt na het bevestigingsvenster alsnog geaccepteerd; geen filter-
+activiteit zonder geconfigureerde achtertuinsensor.
+
+## Achtertuinsensor + geleerde bias-correctie voor de klimaat-projectie (v0.63.95)
+
+Gevraagd: "zijn er zaken waardoor ik de voorspelling kan verbeteren,
+door bijvoorbeeld correlaties? Ik heb ook een temperatuursensor in
+mijn achtertuin hangen." Combinatie van twee complementaire
+verbeteringen, beide gebouwd.
+
+### 1. Achtertuinsensor als voorkeursbron voor de live temperatuur
+
+`_get_live_outdoor_temp_c()` gebruikt nu, indien geconfigureerd
+(`backyard_temperature_sensor_entity`), eerst de eigen fysieke
+achtertuinsensor — een lokale meting is nauwkeuriger voor de eigen
+locatie dan een regionale weerentiteit-schatting (relevant na de
+v0.63.93-ervaring, waar de weerentiteit een significante afwijking
+bleek te hebben). Valt terug op KNMI/OpenWeatherMap als er geen
+achtertuinsensor is geconfigureerd of niet uitleesbaar is — volledig
+optioneel, geen breaking change.
+
+### 2. Geleerde bias-correctie op de hele 24-uurs-voorspelling
+
+De 24-uurs-*projectie* blijft noodzakelijkerwijs van de weerentiteit
+komen (een fysieke sensor kan de toekomst niet voorspellen), maar de
+**nauwkeurigheid** van die voorspelling kan wél systematisch worden
+gecorrigeerd. Elke keer dat de voorspelling ververst wordt (maximaal
+1x per `CLIMATE_FORECAST_FETCH_INTERVAL_MINUTES`, 30 min), wordt de
+eerstvolgende voorspelde waarde vergeleken met de actuele
+achtertuinsensor-meting op datzelfde moment. Dat verschil (°C,
+additief — temperatuur kent geen natuurlijke nulpuntschaal waarop een
+percentage zinvol zou zijn, dus bewust geen procentuele correctie
+zoals bij de zonvoorspelling) wordt bijgehouden in een rollend venster
+(`CLIMATE_FORECAST_BIAS_HISTORY_LENGTH`, 100 samples) en toegepast op
+**elk uur** van de projectie, niet alleen het startpunt — corrigeert zo
+systematisch voor een structurele afwijking van de geconfigureerde
+weerbron/locatie. Vereist minimaal 5 samples
+(`CLIMATE_FORECAST_BIAS_MIN_SAMPLES`) voordat de correctie actief
+wordt; een bias uit te weinig samples is zelf onbetrouwbaar.
+
+**Zichtbaarheid**: nieuwe dashboardtegel toont de huidige geleerde
+bias + het aantal samples waarop die is gebaseerd. Nieuwe attributen
+op de bestaande klimaat-projectie-sensor (`voorspelling_bias_c`,
+`voorspelling_bias_geschiedenis`) — RestoreEntity, overleeft een
+herstart. Toegevoegd aan diagnostiek.
+
+**Getest** (14 nieuwe tests, `test_climate_tab.py`): achtertuinsensor
+krijgt voorrang boven de weerentiteiten; correcte terugval zonder
+achtertuinsensor-meting; geen bias-sample zonder geconfigureerde
+sensor; geleerde bias is `None` bij te weinig samples; gemiddelde-
+berekening klopt; geschiedenis wordt afgekapt tot het maximum; en de
+correctie werkt daadwerkelijk door op de héle trajectory (niet alleen
+het startpunt) — inclusief welke geleerde rate-cel per uur wordt
+opgezocht.
+
 ## Twee klimaat-tabellen toonden dezelfde betrouwbaarheid (v0.63.94)
 
 Gerapporteerd met screenshot: "de 2 tabellen lijken hetzelfde weer te

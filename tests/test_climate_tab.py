@@ -95,7 +95,7 @@ def test_reads_live_outdoor_temp_from_knmi(make_coordinator, hass):
     hass.states.set("weather.knmi", "sunny", {"temperature": 8.5})
     coordinator = make_coordinator(_base_config())
 
-    assert coordinator._get_live_outdoor_temp_c() == 8.5
+    assert coordinator._get_live_outdoor_temp_c(DAY0) == 8.5
 
 
 def test_falls_back_to_openweathermap(make_coordinator, hass):
@@ -104,7 +104,31 @@ def test_falls_back_to_openweathermap(make_coordinator, hass):
         {"openweathermap_weather_entity": "weather.owm"}
     )
 
-    assert coordinator._get_live_outdoor_temp_c() == 9.5
+    assert coordinator._get_live_outdoor_temp_c(DAY0) == 9.5
+
+
+def test_backyard_sensor_preferred_over_weather_entities(make_coordinator, hass):
+    """v0.63.95, gevraagd: "zijn er zaken waardoor ik de voorspelling
+    kan verbeteren" - een eigen achtertuinsensor is nauwkeuriger voor
+    de eigen locatie dan een regionale weerentiteit-schatting, en moet
+    daarom als voorkeursbron gelden."""
+    hass.states.set("weather.knmi", "sunny", {"temperature": 23.0})
+    hass.states.set("sensor.achtertuin_temp", "15.3")
+    coordinator = make_coordinator(
+        _base_config(backyard_temperature_sensor_entity="sensor.achtertuin_temp")
+    )
+
+    assert coordinator._get_live_outdoor_temp_c(DAY0) == 15.3
+
+
+def test_falls_back_to_weather_entity_without_backyard_reading(make_coordinator, hass):
+    hass.states.set("weather.knmi", "sunny", {"temperature": 23.0})
+    coordinator = make_coordinator(
+        _base_config(backyard_temperature_sensor_entity="sensor.achtertuin_temp")
+    )
+    # backyard sensor not set up at all - should fall through cleanly
+
+    assert coordinator._get_live_outdoor_temp_c(DAY0) == 23.0
 
 
 def test_first_tick_only_seeds(make_coordinator, hass):
@@ -539,3 +563,216 @@ def test_live_temperature_rounded_to_one_decimal(make_coordinator, hass):
     coordinator._update_living_room_airco_prediction(DAY0)
 
     assert coordinator.living_room_current_temp_c == 24.1
+
+
+def test_bias_sample_recorded_when_backyard_sensor_configured(make_coordinator, hass):
+    """v0.63.95, gevraagd: "zijn er zaken waardoor ik de voorspelling
+    kan verbeteren, door bijvoorbeeld correlaties" - elke verse
+    voorspelling wordt vergeleken met de actuele achtertuinsensor-
+    meting, en het verschil wordt bijgehouden."""
+    hass.states.set("sensor.achtertuin_temp", "15.3")
+    coordinator = make_coordinator(
+        _base_config(backyard_temperature_sensor_entity="sensor.achtertuin_temp")
+    )
+    hass.services.set_response(
+        "weather",
+        "get_forecasts",
+        {
+            "weather.knmi": {
+                "forecast": [
+                    {"datetime": "2026-04-01T13:00:00+00:00", "temperature": 23.0},
+                ]
+            }
+        },
+    )
+
+    asyncio.run(coordinator._async_maybe_refresh_outdoor_forecast(DAY0))
+
+    assert coordinator.climate_forecast_bias_history == [-7.7]  # 15.3 - 23.0
+
+
+def test_no_bias_sample_without_backyard_sensor(make_coordinator, hass):
+    coordinator = make_coordinator(_base_config())
+    hass.services.set_response(
+        "weather",
+        "get_forecasts",
+        {
+            "weather.knmi": {
+                "forecast": [
+                    {"datetime": "2026-04-01T13:00:00+00:00", "temperature": 23.0},
+                ]
+            }
+        },
+    )
+
+    asyncio.run(coordinator._async_maybe_refresh_outdoor_forecast(DAY0))
+
+    assert coordinator.climate_forecast_bias_history == []
+
+
+def test_learned_bias_none_without_enough_samples(make_coordinator, hass):
+    coordinator = make_coordinator(_base_config())
+    coordinator.climate_forecast_bias_history = [-7.7, -6.5]  # fewer than min
+
+    assert coordinator.climate_forecast_learned_bias_c is None
+
+
+def test_learned_bias_is_the_average_deviation(make_coordinator, hass):
+    coordinator = make_coordinator(_base_config())
+    coordinator.climate_forecast_bias_history = [-7.0, -8.0, -7.5, -8.5, -7.0]
+
+    assert coordinator.climate_forecast_learned_bias_c == -7.6
+
+
+def test_bias_history_capped_at_max_length(make_coordinator, hass):
+    from custom_components.energy_management_system.const import (
+        CLIMATE_FORECAST_BIAS_HISTORY_LENGTH,
+    )
+
+    hass.states.set("sensor.achtertuin_temp", "15.0")
+    coordinator = make_coordinator(
+        _base_config(backyard_temperature_sensor_entity="sensor.achtertuin_temp")
+    )
+    hass.services.set_response(
+        "weather",
+        "get_forecasts",
+        {
+            "weather.knmi": {
+                "forecast": [
+                    {"datetime": "2026-04-01T13:00:00+00:00", "temperature": 20.0},
+                ]
+            }
+        },
+    )
+
+    now = DAY0
+    for _ in range(CLIMATE_FORECAST_BIAS_HISTORY_LENGTH + 5):
+        asyncio.run(coordinator._async_maybe_refresh_outdoor_forecast(now))
+        now += timedelta(minutes=31)  # past the fetch throttle each time
+
+    assert len(coordinator.climate_forecast_bias_history) == (
+        CLIMATE_FORECAST_BIAS_HISTORY_LENGTH
+    )
+
+
+def test_bias_correction_applied_across_the_whole_trajectory(make_coordinator, hass):
+    """The learned bias must shift EVERY hour's outdoor temperature in
+    the projection, not just the starting point - so it also affects
+    which learned rate cell gets looked up for each hour."""
+    _seed_common(hass, temp="19.0", outdoor="10.0", shutter1="closed", shutter2="closed")
+    coordinator = make_coordinator(_base_config())
+    coordinator.climate_forecast_bias_history = [5.0] * 5  # learned +5C bias
+    coordinator.climate_shutter_state = "beide_dicht"
+    coordinator.climate_airco_state = "uit"
+    coordinator.living_room_current_temp_c = 19.0
+
+    hass.services.set_response(
+        "weather",
+        "get_forecasts",
+        {
+            "weather.knmi": {
+                "forecast": [
+                    {"datetime": "2026-04-01T13:00:00+00:00", "temperature": 10.0},
+                ]
+            }
+        },
+    )
+
+    asyncio.run(coordinator._async_update_climate_forecast(DAY0))
+
+    trajectory = coordinator.climate_forecast_trajectory
+    # 10.0 raw + 5.0 learned bias = 15.0 corrected
+    assert trajectory[0]["buitentemp_voorspeld_c"] == 15.0
+
+
+def test_backyard_spike_filter_first_reading_accepted_immediately(
+    make_coordinator, hass
+):
+    hass.states.set("sensor.achtertuin_temp", "15.3")
+    coordinator = make_coordinator(
+        _base_config(backyard_temperature_sensor_entity="sensor.achtertuin_temp")
+    )
+
+    assert coordinator._get_filtered_backyard_temp_c(DAY0) == 15.3
+
+
+def test_backyard_spike_filter_plausible_change_accepted(make_coordinator, hass):
+    """A normal, gradual temperature change (well within the plausible
+    rate) must be accepted immediately, not treated as a spike."""
+    hass.states.set("sensor.achtertuin_temp", "15.0")
+    coordinator = make_coordinator(
+        _base_config(backyard_temperature_sensor_entity="sensor.achtertuin_temp")
+    )
+    coordinator._get_filtered_backyard_temp_c(DAY0)
+
+    hass.states.set("sensor.achtertuin_temp", "16.0")  # +1C over 1 hour - plausible
+    result = coordinator._get_filtered_backyard_temp_c(DAY0 + timedelta(hours=1))
+
+    assert result == 16.0
+
+
+def test_backyard_spike_filter_ignores_a_brief_sun_glare_spike(make_coordinator, hass):
+    """v0.63.96, reported with a graph: the sensor briefly sits in
+    direct morning sun, causing a sharp, implausible jump that later
+    reverts. The filter must keep returning the last trusted value
+    while the spike hasn't been sustained long enough to confirm."""
+    hass.states.set("sensor.achtertuin_temp", "12.0")
+    coordinator = make_coordinator(
+        _base_config(backyard_temperature_sensor_entity="sensor.achtertuin_temp")
+    )
+    coordinator._get_filtered_backyard_temp_c(DAY0)
+
+    # A sharp jump 5 minutes later - way beyond the plausible rate.
+    hass.states.set("sensor.achtertuin_temp", "20.0")
+    result = coordinator._get_filtered_backyard_temp_c(
+        DAY0 + timedelta(minutes=5)
+    )
+
+    assert result == 12.0  # still the last trusted value
+    assert coordinator.last_backyard_spike_filtered_note is not None
+
+    # Brief spike reverts back down shortly after (sun moved on).
+    hass.states.set("sensor.achtertuin_temp", "12.2")
+    result = coordinator._get_filtered_backyard_temp_c(
+        DAY0 + timedelta(minutes=10)
+    )
+
+    assert result == 12.2  # plausible change from 12.0, accepted directly
+
+
+def test_backyard_spike_filter_confirms_a_sustained_change(make_coordinator, hass):
+    """A jump that persists for the full confirmation window must
+    eventually be trusted as a genuine change (e.g. a cold front),
+    not dismissed forever as noise."""
+    hass.states.set("sensor.achtertuin_temp", "12.0")
+    coordinator = make_coordinator(
+        _base_config(backyard_temperature_sensor_entity="sensor.achtertuin_temp")
+    )
+    coordinator._get_filtered_backyard_temp_c(DAY0)
+
+    hass.states.set("sensor.achtertuin_temp", "20.0")
+    # First suspicious reading - not yet trusted.
+    result = coordinator._get_filtered_backyard_temp_c(
+        DAY0 + timedelta(minutes=5)
+    )
+    assert result == 12.0
+
+    # Same elevated reading, still within the confirmation window.
+    result = coordinator._get_filtered_backyard_temp_c(
+        DAY0 + timedelta(minutes=30)
+    )
+    assert result == 12.0
+
+    # Same elevated reading, now past the confirmation window.
+    result = coordinator._get_filtered_backyard_temp_c(
+        DAY0 + timedelta(minutes=50)
+    )
+    assert result == 20.0
+
+
+def test_backyard_spike_filter_returns_none_without_sensor_configured(
+    make_coordinator, hass
+):
+    coordinator = make_coordinator({})
+
+    assert coordinator._get_filtered_backyard_temp_c(DAY0) is None

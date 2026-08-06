@@ -1758,6 +1758,16 @@ class ClimateForecastSensor(SensorEntity, RestoreEntity):
             "traject": self._coordinator.climate_forecast_trajectory,
             "geleerde_cellen": self._coordinator.climate_rate_history,
             "note": self._coordinator.climate_forecast_note,
+            # v0.63.95, gevraagd: "zijn er zaken waardoor ik de
+            # voorspelling kan verbeteren" - geleerde bias-correctie op
+            # de weersvoorspelling t.o.v. de achtertuinsensor.
+            "voorspelling_bias_c": self._coordinator.climate_forecast_learned_bias_c,
+            "achtertuinsensor_uitschieter_genegeerd": (
+                self._coordinator.last_backyard_spike_filtered_note
+            ),
+            "voorspelling_bias_geschiedenis": (
+                self._coordinator.climate_forecast_bias_history
+            ),
         }
 
     async def async_added_to_hass(self) -> None:
@@ -1770,6 +1780,11 @@ class ClimateForecastSensor(SensorEntity, RestoreEntity):
             self._coordinator.climate_rate_history = {
                 str(k): [float(v) for v in vals] for k, vals in raw_cells.items()
             }
+        raw_bias_history = last_state.attributes.get("voorspelling_bias_geschiedenis")
+        if isinstance(raw_bias_history, list):
+            self._coordinator.climate_forecast_bias_history = [
+                float(v) for v in raw_bias_history
+            ]
 
 
 class WaterUsageSensor(SensorEntity, RestoreEntity):
