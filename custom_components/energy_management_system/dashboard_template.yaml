@@ -1149,8 +1149,8 @@ views:
           | Uur | Buiten (°C) | Woonkamer (°C) | Betrouwbaarheid |
           |---|---|---|---|
           {% for rij in traject -%}
-          {%- set icoon = {'betrouwbaar': '✅', 'indicatief': '🟡', 'onvoldoende_data': '⚪'}.get(rij.betrouwbaarheid, '?') -%}
-          | {{ rij.tijd[11:16] }} | {{ rij.buitentemp_voorspeld_c }} | {{ rij.betrouwbaar_temp_c }} | {{ icoon }} {{ rij.betrouwbaarheid }} |
+          {%- set icoon = {'betrouwbaar': '✅', 'onvoldoende_data': '⚪'}.get(rij.betrouwbaarheid_streng, '?') -%}
+          | {{ rij.tijd[11:16] }} | {{ rij.buitentemp_voorspeld_c }} | {{ rij.betrouwbaar_temp_c }} | {{ icoon }} {{ rij.betrouwbaarheid_streng }} |
           {% endfor %}
           {% endif %}
         grid_options:

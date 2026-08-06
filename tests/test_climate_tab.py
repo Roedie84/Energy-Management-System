@@ -369,6 +369,48 @@ def test_forecast_projection_reaches_betrouwbaar_tier_with_enough_samples(
     assert trajectory[0]["betrouwbaar_temp_c"] == 19.5
     assert trajectory[0]["kort_termijn_temp_c"] == 19.5
     assert trajectory[0]["betrouwbaarheid"] == "betrouwbaar"
+    assert trajectory[0]["betrouwbaarheid_streng"] == "betrouwbaar"
+
+
+def test_indicatief_cell_shows_onvoldoende_data_in_the_strict_field(
+    make_coordinator, hass
+):
+    """v0.63.94, reported with a screenshot: 'de 2 tabellen lijken
+    hetzelfde weer te geven' - both dashboard tables read the same
+    single 'betrouwbaarheid' field, so a cell with only 8 samples
+    (enough for the lenient 'indicatief' tier, ≥5, but not the strict
+    'betrouwbaar' tier, ≥15) showed "indicatief" in BOTH tables,
+    including the one that promises ≥15 measurements. The new
+    'betrouwbaarheid_streng' field must show 'onvoldoende_data' here -
+    never 'indicatief', which would still give the wrong impression in
+    the strict table."""
+    _seed_common(hass, temp="19.0", outdoor="10.0", shutter1="closed", shutter2="closed")
+    coordinator = make_coordinator(_base_config())
+    hass.states.set("climate.woonkamer_airco", "heat", {"hvac_action": "idle"})
+
+    key = coordinator._climate_rate_key("10.0", "beide_dicht", "uit")
+    coordinator.climate_rate_history[key] = [0.5] * 8  # indicatief, not betrouwbaar
+    coordinator.climate_shutter_state = "beide_dicht"
+    coordinator.climate_airco_state = "uit"
+    coordinator.living_room_current_temp_c = 19.0
+
+    hass.services.set_response(
+        "weather",
+        "get_forecasts",
+        {
+            "weather.knmi": {
+                "forecast": [
+                    {"datetime": "2026-04-01T13:00:00+00:00", "temperature": 10.0},
+                ]
+            }
+        },
+    )
+
+    asyncio.run(coordinator._async_update_climate_forecast(DAY0))
+
+    trajectory = coordinator.climate_forecast_trajectory
+    assert trajectory[0]["betrouwbaarheid"] == "indicatief"
+    assert trajectory[0]["betrouwbaarheid_streng"] == "onvoldoende_data"
 
 
 def test_forecast_projection_carries_forward_when_insufficient_data(

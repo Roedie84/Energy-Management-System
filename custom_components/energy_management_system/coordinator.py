@@ -6541,7 +6541,29 @@ class EnergyManagementSystemCoordinator:
                     "buitentemp_voorspeld_c": round(outdoor_temp_c, 1),
                     "kort_termijn_temp_c": round(kort_termijn_temp, 1),
                     "betrouwbaar_temp_c": round(betrouwbaar_temp, 1),
+                    # v0.63.94, gerapporteerd met screenshot: "de 2
+                    # tabellen lijken hetzelfde weer te geven" - beide
+                    # dashboardtabellen lazen tot nu toe hetzelfde,
+                    # ene "betrouwbaarheid"-veld (het niveau voor de
+                    # SOEPELE kort_termijn-drempel, ≥5 metingen), ook
+                    # in de tabel die specifiek ≥15 metingen belooft.
+                    # Een cel met bijv. 8 metingen toonde daardoor
+                    # "indicatief" in BEIDE tabellen, terwijl de
+                    # strengere tabel daar "onvoldoende_data" hoort te
+                    # tonen (8 < 15). Nu twee aparte velden: het
+                    # bestaande "betrouwbaarheid" blijft ongewijzigd
+                    # (voor de kort-termijn-tabel), en een nieuw
+                    # "betrouwbaarheid_streng" specifiek voor de
+                    # betrouwbare-tabel - alleen "betrouwbaar" als de
+                    # ≥15-drempel echt gehaald is, anders altijd
+                    # "onvoldoende_data" (nooit "indicatief" daar, dat
+                    # zou alsnog de verkeerde indruk wekken).
                     "betrouwbaarheid": rate["betrouwbaarheid"],
+                    "betrouwbaarheid_streng": (
+                        "betrouwbaar"
+                        if rate["betrouwbaarheid"] == "betrouwbaar"
+                        else "onvoldoende_data"
+                    ),
                     "aantal_metingen": rate["sample_count"],
                 }
             )

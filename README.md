@@ -515,6 +515,31 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Twee klimaat-tabellen toonden dezelfde betrouwbaarheid (v0.63.94)
+
+Gerapporteerd met screenshot: "de 2 tabellen lijken hetzelfde weer te
+geven." De "Woonkamer (°C)"-kolom verschilde inderdaad al correct
+tussen de twee tabellen, maar de "Betrouwbaarheid"-kolom niet — beide
+lazen hetzelfde, enkele `betrouwbaarheid`-veld (het niveau voor de
+soepele "kort termijn"-drempel, ≥5 metingen). Een cel met bijv. 8
+metingen toonde daardoor `🟡 indicatief` in **beide** tabellen — ook in
+de tabel die specifiek ≥15 metingen belooft, terwijl die daar
+`⚪ onvoldoende_data` had moeten tonen (8 < 15).
+
+**Fix**: nieuw, apart veld `betrouwbaarheid_streng` per traject-rij —
+alleen `betrouwbaar` als de ≥15-drempel écht gehaald is, anders altijd
+`onvoldoende_data` (nooit `indicatief`, dat zou in de strenge tabel
+alsnog de verkeerde indruk wekken). De "Betrouwbaar"-tabel gebruikt nu
+dit nieuwe veld; de "Korte termijn"-tabel blijft ongewijzigd het
+bestaande `betrouwbaarheid`-veld gebruiken.
+
+**Getest**: nieuwe test bevestigt dat een cel met 8 metingen
+(indicatief, niet betrouwbaar) `betrouwbaarheid_streng` op
+`onvoldoende_data` zet. Testdata voor de klimaat-projectietabellen
+toegevoegd aan de dashboard-render-test (voorheen werd alleen het lege
+pad getest) — bevestigt nu ook zichtbaar dat beide tabellen bij
+dezelfde onderliggende rij een andere betrouwbaarheidsstatus tonen.
+
 ## Buitentemperatuur-voorspelling klopte niet + tijdzone-bug blootgelegd (v0.63.93)
 
 Gerapporteerd: "de temperature verwachting van KNMI klopt niet in de

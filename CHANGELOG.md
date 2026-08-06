@@ -6071,3 +6071,38 @@ weerintegratie.
 (`test_fetch_forecast_converts_datetimes_to_local_time`) - bevestigt
 via een spy op `dt_util.as_local` dat de tijdzone-conversie
 daadwerkelijk wordt aangeroepen voor elke geparste voorspellings-entry.
+
+## v0.63.94 — twee klimaat-tabellen toonden dezelfde betrouwbaarheid
+
+**Gerapporteerd, met screenshot**: "de 2 tabellen lijken hetzelfde weer
+te geven." De "Woonkamer (°C)"-kolom verschilde al correct tussen
+"Korte termijn (indicatief)" en "Betrouwbaar (≥15 metingen per cel)",
+maar de "Betrouwbaarheid"-kolom niet.
+
+**Root cause**: beide dashboardtabellen lazen hetzelfde, enkele
+`betrouwbaarheid`-veld per traject-rij - het niveau voor de soepele
+"kort termijn"-drempel (≥5 metingen). Een cel met bijv. 8 metingen
+toonde daardoor `🟡 indicatief` in **beide** tabellen, ook in de tabel
+die specifiek ≥15 metingen belooft, terwijl die daar
+`⚪ onvoldoende_data` had moeten tonen.
+
+**Fix**: nieuw, apart veld `betrouwbaarheid_streng` toegevoegd aan
+elke traject-rij in `_recompute_climate_trajectory` - alleen
+`betrouwbaar` als de ≥15-drempel écht gehaald is, anders altijd
+`onvoldoende_data` (nooit `indicatief`). De "Betrouwbaar"-tabel in
+`dashboard_template.yaml` gebruikt nu dit nieuwe veld; de "Korte
+termijn"-tabel blijft het bestaande `betrouwbaarheid`-veld gebruiken.
+
+**Testinfrastructuur, terzijde**: de dashboard-render-test had nog
+geen testdata voor de klimaat-projectietabellen - beide tabellen
+werden dus alleen in hun lege-staat getest. Testdata toegevoegd,
+waardoor nu ook zichtbaar bevestigd wordt dat beide tabellen bij
+dezelfde onderliggende rij daadwerkelijk een andere betrouwbaarheids-
+status tonen.
+
+**Getest**: nieuwe test
+(`test_indicatief_cell_shows_onvoldoende_data_in_the_strict_field`) in
+`test_climate_tab.py` - bevestigt dat een cel met 8 metingen (genoeg
+voor "indicatief", niet voor "betrouwbaar") `betrouwbaarheid_streng`
+op `onvoldoende_data` zet, terwijl het bestaande `betrouwbaarheid`-veld
+ongewijzigd `indicatief` blijft tonen.

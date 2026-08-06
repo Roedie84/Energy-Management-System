@@ -189,6 +189,27 @@ def _fake_state_attr(entity, attr):
             "sensor.woonkamer_energy_management_system_model_en_parameternauwkeurigheid",
             "temperatuur_regressie_note",
         ): "Voorspeld 5.2 kWh bij -3.0°C, werkelijk 5.5 kWh (afwijking +5.8%).",
+        (
+            "sensor.woonkamer_energy_management_system_klimaat_projectie_woonkamertemperatuur",
+            "traject",
+        ): [
+            {
+                "tijd": "2026-08-06T08:00:00+02:00",
+                "buitentemp_voorspeld_c": 17.1,
+                "kort_termijn_temp_c": 23.8,
+                "betrouwbaar_temp_c": 23.9,
+                "betrouwbaarheid": "indicatief",
+                "betrouwbaarheid_streng": "onvoldoende_data",
+            },
+            {
+                "tijd": "2026-08-06T09:00:00+02:00",
+                "buitentemp_voorspeld_c": 18.6,
+                "kort_termijn_temp_c": 23.6,
+                "betrouwbaar_temp_c": 23.9,
+                "betrouwbaarheid": "betrouwbaar",
+                "betrouwbaarheid_streng": "betrouwbaar",
+            },
+        ],
     }
     return fake_data.get((entity, attr))
 
