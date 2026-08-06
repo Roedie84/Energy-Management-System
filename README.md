@@ -515,6 +515,44 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## NILM: eigen sensoren + SolarFlow/Solcast bleven als kandidaat terugkomen (v0.63.103)
+
+Gerapporteerd: "elke keer terug krijg onbevestigde kandidaten na
+herstart", met een concrete lijst — daarin bleken twee echte,
+structurele bugs te zitten.
+
+**Bug 1 — de integratie ontdekte haar eigen sensoren als NILM-
+kandidaat.** "Energy Management System Hourly consumption profile" en
+"Energy Management System Piekvermogen" (v0.63.101) rapporteren zelf
+ook in Watt en werden daardoor voorgesteld als "apparaat" — de
+discovery-scan had geen check tegen de eigen entiteiten van deze
+integratie.
+
+**Fix**: nieuwe `_is_own_integration_entity()` — elke entity_id van
+deze integratie volgt het patroon
+`sensor.<apparaat>_energy_management_system_<naam>`, dus `DOMAIN` als
+substring is een betrouwbare, generieke uitsluiting die geen
+onderhoud per nieuwe sensor vereist. Toegepast in zowel de discovery-
+scan als de terugwerkende opruimfunctie.
+
+**Bug 2 — "SolarFlow" stond niet in de naampatroon-uitsluiting.**
+De batterij verschijnt in entity-namen onder de merknaam "SolarFlow"
+("SolarFlow 2400 AC PV1 Solar Power" etc.), niet onder "zendure" —
+alleen dat laatste stond in `NILM_PATTERN_EXCLUDED_KEYWORDS`. Solcast-
+voorspellingssensoren (geen echte apparaten, maar rapporteren ook in
+W) en gespiegelde accu-signalen ("... (omgekeerd)") hadden hetzelfde
+probleem.
+
+**Fix**: `NILM_PATTERN_EXCLUDED_KEYWORDS` uitgebreid met "solarflow",
+"solcast" en "(omgekeerd)".
+
+**Getest** (6 nieuwe tests): SolarFlow/Solcast/gespiegelde-accu-
+entiteiten worden nooit meer kandidaat; eigen-integratie-sensoren
+worden nooit kandidaat; een legitiem apparaat (bijv. een tv) blijft
+gewoon gevonden worden naast deze uitsluitingen; bestaande, al-
+bevestigde eigen-integratie-entiteiten worden met terugwerkende kracht
+opgeruimd.
+
 ## Airco-verwachting-tegel toonde temperatuur i.p.v. kans (v0.63.102)
 
 Gerapporteerd met screenshot: de "Airco-verwachting"-tegel op het

@@ -6421,3 +6421,41 @@ geldige technische keuze, maar verwarrend als dashboardweergave.
 **Fix**: alleen de dashboardkaart in `dashboard_template.yaml`
 aangepast (de sensor zelf ongewijzigd) - primary toont nu de kans-
 procent, secondary toont de temperatuur waarbij die kans hoort.
+
+## v0.63.103 — NILM: eigen sensoren + SolarFlow/Solcast bleven als kandidaat terugkomen
+
+**Gerapporteerd**: "elke keer terug krijg onbevestigde kandidaten na
+herstart", met een concrete lijst van 19 entiteiten - daaruit bleken
+twee structurele bugs.
+
+**Bug 1 - eigen-integratie-sensoren als NILM-kandidaat**: "Energy
+Management System Hourly consumption profile" en "Energy Management
+System Piekvermogen" (v0.63.101) rapporteren zelf ook in Watt en
+werden voorgesteld als "apparaat" - geen check tegen de eigen
+entiteiten van deze integratie.
+
+**Fix**: nieuwe `_is_own_integration_entity()` in coordinator.py - elke
+entity_id van deze integratie volgt het patroon
+`sensor.<apparaat>_energy_management_system_<naam>`, dus `DOMAIN` als
+substring is een betrouwbare, generieke uitsluiting. Toegepast in
+zowel `_update_nilm_discovery` als `_prune_nilm_pattern_excluded_entries`
+(terugwerkende opruiming van al-ontdekte eigen sensoren).
+
+**Bug 2 - ontbrekende naampatronen**: de batterij verschijnt onder de
+merknaam "SolarFlow" (niet "zendure") in entity-namen ("SolarFlow 2400
+AC PV1 Solar Power" etc.) - alleen "zendure" stond in
+`NILM_PATTERN_EXCLUDED_KEYWORDS`. Solcast-voorspellingssensoren en
+gespiegelde accu-signalen ("... (omgekeerd)") hadden hetzelfde
+probleem.
+
+**Fix**: `NILM_PATTERN_EXCLUDED_KEYWORDS` uitgebreid met "solarflow",
+"solcast", "(omgekeerd)".
+
+**Getest** (6 nieuwe tests in `test_nilm_pattern_exclusion.py`):
+SolarFlow/Solcast/gespiegelde-accu-entiteiten worden nooit meer
+kandidaat; eigen-integratie-sensoren worden nooit kandidaat; een
+legitiem apparaat blijft gewoon gevonden worden naast deze
+uitsluitingen; bestaande, al-bevestigde eigen-integratie-entiteiten
+worden met terugwerkende kracht opgeruimd.
+
+**Volledige testsuite**: 574 tests, allemaal groen.
