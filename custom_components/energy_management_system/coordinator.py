@@ -6081,7 +6081,15 @@ class EnergyManagementSystemCoordinator:
         temp_c = self._read_sensor_float(temp_entity)
         if temp_c is None:
             return
-        self.living_room_current_temp_c = temp_c
+        # v0.63.92, gerapporteerd met screenshot: de live
+        # woonkamertemperatuur toonde absurd veel decimalen
+        # (24.1230773925781°C) op het dashboard, in tegenstelling tot
+        # de buitentemperatuur (die al afgerond binnenkomt via de
+        # weerentiteit). De onderliggende temperatuursensor rapporteert
+        # zelf met hoge precisie (bijv. een Zigbee-sensor); hier
+        # afronden op 1 decimaal, consistent met hoe elke andere
+        # temperatuurweergave in deze integratie wordt getoond.
+        self.living_room_current_temp_c = round(temp_c, 1)
 
         humidity_entity = self.config.get(CONF_LIVING_ROOM_HUMIDITY_SENSOR)
         humidity_percent = (
@@ -6388,6 +6396,19 @@ class EnergyManagementSystemCoordinator:
             parsed_when = dt_util.parse_datetime(when) if isinstance(when, str) else when
             if parsed_when is None:
                 continue
+            # v0.63.93, gerapporteerd: "de temperature verwachting van
+            # KNMI klopt niet in de tabellen" - bleek uiteindelijk twee
+            # aparte dingen: (1) KNMI's eigen brondata week af van de
+            # live meting (opgelost door over te stappen op een
+            # nauwkeurigere weerentiteit), en (2) deze weerentiteit
+            # rapporteert in UTC (+00:00) i.p.v. lokale tijd (+02:00
+            # zoals KNMI toevallig deed) - zonder conversie zou de
+            # getoonde "Uur"-kolom 2 uur achterlopen op de werkelijke
+            # lokale tijd. Altijd expliciet naar lokale tijd converteren
+            # bij het parsen, ongeacht welke tijdzone de brondata zelf
+            # gebruikt - laat dit niet toevallig kloppen doordat één
+            # specifieke bron nu net lokale tijd gebruikt.
+            parsed_when = dt_util.as_local(parsed_when)
             try:
                 entries.append((parsed_when, float(temp)))
             except (TypeError, ValueError):

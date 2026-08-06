@@ -515,6 +515,60 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Buitentemperatuur-voorspelling klopte niet + tijdzone-bug blootgelegd (v0.63.93)
+
+Gerapporteerd: "de temperature verwachting van KNMI klopt niet in de
+tabellen, het is nu 15.3 graden en in de tabellen wordt 23
+weergegeven". Uitgezocht met een live `weather.get_forecasts`-aanroep
+op de daadwerkelijke KNMI-entiteit (`weather.knmi_thuis`) — bleek geen
+verwerkingsfout in deze integratie: de ruwe KNMI-data zelf toonde al
+23°C voor het eerstvolgende uur, tegenover een live meting van 15,3°C
+— een sprong die weerkundig niet klopt. Root cause: de brondata van
+deze specifieke KNMI-integratie zelf, niet mijn code.
+
+**Oplossing, op initiatief van de gebruiker**: overgestapt naar een
+nauwkeurigere weerentiteit (`weather.forecast_thuis`), waarvan de
+eerste voorspelling (15,9°C) wél goed aansloot bij de live meting.
+
+**Tijdens het vergelijken een échte, latente bug blootgelegd**: de
+nieuwe bron rapporteert tijdstippen in UTC (`+00:00`), terwijl KNMI
+toevallig al in lokale tijd (`+02:00`) rapporteerde. De code zette de
+ontvangen tijdstempel nergens expliciet om naar lokale tijd
+(`hour_dt.isoformat()` rechtstreeks op de geparste waarde) — dit werkte
+dus tot nu toe alleen "toevallig" goed omdat KNMI zelf al lokale tijd
+gebruikte. Met de nieuwe, UTC-gebaseerde bron zou de "Uur"-kolom op het
+dashboard 2 uur hebben achtergelopen op de werkelijke lokale tijd.
+
+**Fix**: `dt_util.as_local()` toegepast direct na het parsen, in
+`_async_fetch_hourly_outdoor_forecast` — ongeacht welke tijdzone de
+brondata zelf gebruikt, dus niet langer afhankelijk van toeval bij een
+specifieke weerintegratie.
+
+**Getest**: nieuwe test bevestigt dat de tijdzone-conversie
+daadwerkelijk wordt aangeroepen voor elke geparste voorspellings-
+entry.
+
+## Woonkamertemperatuur: absurd veel decimalen op het dashboard (v0.63.92)
+
+Gerapporteerd met screenshot: de live woonkamertemperatuur toonde
+`24.1230773925781 °C` op het Klimaat-tabblad, in twee losse tegels
+tegelijk ("Woonkamertemperatuur (live)" en "Airco-verwachting").
+
+**Root cause**: `living_room_current_temp_c` wordt nergens afgerond bij
+toewijzing (`_update_living_room_airco_prediction`) — de onderliggende
+temperatuursensor rapporteert zelf met hoge precisie (bijv. een
+Zigbee-sensor). De buitentemperatuur toonde wél netjes afgerond, omdat
+die via de weerentiteit binnenkomt (die zelf al op 1 decimaal
+rapporteert). Beide dashboardtegels bleken bij nader inzien dezelfde
+onderliggende, ongeronde coordinator-waarde te lezen — één root cause,
+niet twee losse problemen.
+
+**Fix**: afgerond op 1 decimaal bij toewijzing, consistent met elke
+andere temperatuurweergave in deze integratie.
+
+**Getest**: nieuwe test bevestigt dat een sensorwaarde met 13 decimalen
+correct wordt afgerond naar 1 decimaal.
+
 ## Vier verbeteringen na de diagnostiek-review (v0.63.91)
 
 Op de vraag "zijn er nog zaken om de integratie te verbeteren, dus

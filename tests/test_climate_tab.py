@@ -195,6 +195,50 @@ def test_fetch_forecast_returns_none_without_a_service_response(make_coordinator
     assert result is None
 
 
+def test_fetch_forecast_converts_datetimes_to_local_time(make_coordinator, hass):
+    """v0.63.93, reported: switching to a UTC-timestamped weather
+    entity (weather.forecast_thuis) instead of one that happened to
+    already report local time (weather.knmi_thuis) would have exposed
+    a 2-hour display offset if the fetch didn't explicitly convert to
+    local time. Verifies the conversion call actually happens for
+    every parsed forecast entry, regardless of which timezone the
+    source data uses - not something that should only work by
+    coincidence for one specific weather integration."""
+    from custom_components.energy_management_system import coordinator as coord_mod
+
+    coordinator = make_coordinator(_base_config())
+    hass.services.set_response(
+        "weather",
+        "get_forecasts",
+        {
+            "weather.knmi": {
+                "forecast": [
+                    {"datetime": "2026-08-06T05:00:00+00:00", "temperature": 15.9},
+                    {"datetime": "2026-08-06T06:00:00+00:00", "temperature": 17.1},
+                ]
+            }
+        },
+    )
+
+    calls = []
+    original_as_local = coord_mod.dt_util.as_local
+
+    def spy_as_local(value):
+        calls.append(value)
+        return original_as_local(value)
+
+    coord_mod.dt_util.as_local = spy_as_local
+    try:
+        result = asyncio.run(
+            coordinator._async_fetch_hourly_outdoor_forecast("weather.knmi")
+        )
+    finally:
+        coord_mod.dt_util.as_local = original_as_local
+
+    assert len(calls) == 2
+    assert len(result) == 2
+
+
 def test_fetch_forecast_parses_a_valid_response(make_coordinator, hass):
     coordinator = make_coordinator(_base_config())
     hass.services.set_response(
@@ -435,3 +479,21 @@ def test_trajectory_re_anchors_to_a_new_measurement_within_the_fetch_throttle(
     assert len(hass.services.calls) == fetch_call_count_before
     # ...but the trajectory re-anchored to the new measurement anyway.
     assert coordinator.climate_forecast_trajectory[0]["kort_termijn_temp_c"] == 21.0
+
+
+def test_live_temperature_rounded_to_one_decimal(make_coordinator, hass):
+    """v0.63.92, reported with a screenshot: the live living-room
+    temperature displayed with excessive precision
+    (24.1230773925781°C) on the dashboard, unlike the outdoor
+    temperature (already rounded via the weather entity). The
+    underlying sensor itself reports at high precision (e.g. a Zigbee
+    sensor) - must be rounded to 1 decimal, consistent with every
+    other temperature display in this integration."""
+    hass.states.set("sensor.living_room_temp", "24.1230773925781")
+    coordinator = make_coordinator(
+        {"living_room_temperature_sensor_entity": "sensor.living_room_temp"}
+    )
+
+    coordinator._update_living_room_airco_prediction(DAY0)
+
+    assert coordinator.living_room_current_temp_c == 24.1

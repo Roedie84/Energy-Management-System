@@ -6008,3 +6008,66 @@ identiek ongeacht restorevolgorde. Bestaande diagnostiek-test
 bijgewerkt naar de nieuwe structuur.
 
 **Volledige testsuite**: 487 tests, allemaal groen.
+
+## v0.63.92 — woonkamertemperatuur: absurd veel decimalen op het dashboard
+
+**Gerapporteerd, met screenshot**: de live woonkamertemperatuur toonde
+`24.1230773925781 °C` op het Klimaat-tabblad — in twee losse tegels
+tegelijk ("Woonkamertemperatuur (live)" en de primaire waarde van
+"Airco-verwachting").
+
+**Root cause**: `living_room_current_temp_c` (toegewezen in
+`_update_living_room_airco_prediction`) werd nergens afgerond - de
+onderliggende temperatuursensor rapporteert zelf met hoge precisie
+(bijv. een Zigbee-sensor). De buitentemperatuur toonde wél netjes
+afgerond, simpelweg omdat die via de weerentiteit binnenkomt (die zelf
+al op 1 decimaal rapporteert) - geen aparte afronding nodig geweest
+daar. Beide dashboardtegels lazen bij nader inzien dezelfde
+onderliggende, ongeronde coordinator-waarde - één root cause, niet
+twee losse bugs.
+
+**Fix**: `round(temp_c, 1)` bij toewijzing, consistent met elke andere
+temperatuurweergave in deze integratie.
+
+**Getest**: nieuwe test in `test_climate_tab.py` - bevestigt dat een
+sensorwaarde met 13 decimalen correct wordt afgerond naar 1 decimaal.
+
+## v0.63.93 — buitentemperatuur-voorspelling klopte niet + tijdzone-bug blootgelegd
+
+**Gerapporteerd**: "de temperature verwachting van KNMI klopt niet in
+de tabellen, het is nu 15.3 graden en in de tabellen wordt 23
+weergegeven."
+
+**Uitgezocht met een live `weather.get_forecasts`-aanroep** op de
+daadwerkelijke KNMI-entiteit (`weather.knmi_thuis`, opgezocht via
+Ontwikkelaarshulpmiddelen) - bleek **geen verwerkingsfout in deze
+integratie**: de ruwe KNMI-brondata toonde zelf al 23°C voor het
+eerstvolgende uur, tegenover een live meting van 15,3°C - een sprong
+die weerkundig niet plausibel is. Root cause bevestigd te liggen bij de
+brondata van deze specifieke KNMI-integratie, niet in de verwerking
+hier.
+
+**Oplossing, op initiatief van de gebruiker**: overgestapt naar een
+nauwkeurigere weerentiteit (`weather.forecast_thuis`), waarvan de
+eerste voorspelling (15,9°C) wél goed aansloot bij de live meting.
+
+**Tijdens het vergelijken van beide bronnen een échte, latente bug
+blootgelegd**: `weather.forecast_thuis` rapporteert tijdstippen in UTC
+(`+00:00`), terwijl `weather.knmi_thuis` toevallig al in lokale tijd
+(`+02:00`) rapporteerde. `_async_fetch_hourly_outdoor_forecast` zette
+de ontvangen tijdstempel nergens expliciet om naar lokale tijd
+(`hour_dt.isoformat()` rechtstreeks op de geparste waarde) - dit werkte
+dus tot nu toe alleen "toevallig" goed doordat KNMI zelf al lokale tijd
+gebruikte. Met de nieuwe, UTC-gebaseerde bron zou de "Uur"-kolom op het
+Klimaat-tabblad 2 uur hebben achtergelopen op de werkelijke lokale
+tijd.
+
+**Fix**: `dt_util.as_local()` toegepast direct na het parsen van elke
+voorspellings-entry, ongeacht welke tijdzone de brondata zelf
+gebruikt - niet langer afhankelijk van toeval bij een specifieke
+weerintegratie.
+
+**Getest**: nieuwe test in `test_climate_tab.py`
+(`test_fetch_forecast_converts_datetimes_to_local_time`) - bevestigt
+via een spy op `dt_util.as_local` dat de tijdzone-conversie
+daadwerkelijk wordt aangeroepen voor elke geparste voorspellings-entry.
