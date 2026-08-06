@@ -316,6 +316,14 @@ async def async_get_config_entry_diagnostics(
                 coordinator.last_arbitrage_solar_surplus_w
             ),
             "learning_only": coordinator.learning_only,
+            "persisted_state_snapshot": coordinator._collect_persisted_state(),
+            "weather_ensemble_agreement": (
+                coordinator.get_weather_ensemble_agreement_status()
+            ),
+            "digital_twin_accuracy": coordinator.get_digital_twin_accuracy_status(),
+            "digital_twin_accuracy_history": (
+                coordinator.digital_twin_accuracy_history
+            ),
             "battery_module_live": coordinator.battery_module_live,
             "battery_module_health": coordinator.battery_module_health,
             "battery_module_spread": coordinator.battery_module_spread,

@@ -1001,3 +1001,132 @@ MIN_BATTERY_POWER_IDLE_W = 25.0
 # dus bij korte stoten is een verschil van tientallen procenten normaal
 # zonder dat er iets mis is.
 WATER_VOLUME_AGREEMENT_TOLERANCE = 0.25
+
+# --- Digital Twin: nauwkeurigheidsmeting (v1.0.1) --------------------
+# Tot nu toe stond bij de Digital Twin "nauwkeurigheid t.o.v. het
+# daadwerkelijke resultaat wordt niet bijgehouden" - eerlijk, maar het
+# kan wél: de twin voorspelt een SoC, en die is later gewoon na te meten.
+#
+# Techniek: dezelfde "leg een voorspelling vast, controleer 'm later"
+# aanpak als de zonvoorspelling-tracker. Er wordt niet bij elke tick een
+# voorspelling weggeschreven - dat zou binnen een dag honderden sterk
+# overlappende metingen opleveren die allemaal vrijwel hetzelfde zeggen.
+DIGITAL_TWIN_ACCURACY_HORIZON_HOURS = 6
+DIGITAL_TWIN_ACCURACY_QUEUE_INTERVAL_MINUTES = 60
+
+# Een voorspelling die door een herstart of hiaat pas veel te laat wordt
+# afgerekend, zegt niets meer over het moment waarvoor ze bedoeld was.
+DIGITAL_TWIN_ACCURACY_MAX_LATE_MINUTES = 45
+
+# Hoeveel afgeronde vergelijkingen bewaard blijven, en hoeveel er nodig
+# zijn voordat er een oordeel wordt geveld. Zelfde principe als
+# MEASUREMENT_QUALITY_MIN_SAMPLES: liever geen oordeel dan een oordeel
+# op twee metingen.
+DIGITAL_TWIN_ACCURACY_HISTORY_LENGTH = 60
+DIGITAL_TWIN_ACCURACY_MIN_SAMPLES = 8
+
+# De gemiddelde absolute fout wordt afgezet tegen de BRUIKBARE
+# accucapaciteit, niet tegen een vast aantal kWh - een fout van 1 kWh
+# betekent iets heel anders bij een accu van 2 kWh dan bij een van 7,5.
+DIGITAL_TWIN_ACCURACY_GOOD_FRACTION = 0.10
+DIGITAL_TWIN_ACCURACY_USABLE_FRACTION = 0.20
+
+# --- Weather Ensemble: overeenstemmingsmeting (v1.0.2) ---------------
+# De ensemble meldt de ACTUELE bewolking, geen voorspelling - "hoe
+# nauwkeurig is de voorspelling" is hier dus de verkeerde vraag. Wat wél
+# te meten valt: zegt de ensemble iets dat klopt met wat de panelen
+# werkelijk doen? Elke geldige waarneming (overdag, met een zinvolle
+# Solcast-verwachting) wordt geclassificeerd als "eens" of "oneens", en
+# daarvan wordt het slagingspercentage bijgehouden.
+#
+# Hergebruikt exact dezelfde drempels als de bestaande
+# onenigheids-signalering - één definitie, geen tweede die ernaast kan
+# gaan lopen.
+WEATHER_ENSEMBLE_AGREEMENT_HISTORY_LENGTH = 200
+WEATHER_ENSEMBLE_AGREEMENT_MIN_SAMPLES = 20
+
+# Boven dit percentage overeenstemming heet de ensemble betrouwbaar,
+# daaronder tot de tweede drempel bruikbaar. Ruim genomen: bewolking en
+# PV-opbrengst hangen samen maar zijn niet hetzelfde, dus perfecte
+# overeenstemming hoort niet verwacht te worden.
+WEATHER_ENSEMBLE_AGREEMENT_GOOD_PERCENT = 80.0
+WEATHER_ENSEMBLE_AGREEMENT_USABLE_PERCENT = 60.0
+
+# --- Volledige toestandspersistentie (v1.0.4) ------------------------
+# Gevraagd: "algeheel geen verliezen na een herstart". Een inventarisatie
+# van alle 286 attributen in de coordinator liet zien dat het overgrote
+# deel elke tick opnieuw wordt berekend (last_*, projecties, live
+# metingen) - dat verliezen is onschadelijk. Maar een deel is echt
+# OPGEBOUWD, en dat verdween tot v1.0.3 bij elke herstart.
+#
+# Bewust één gedeelde Store in plaats van tientallen losse
+# RestoreEntity-paden. Twee lessen uit dit project komen daarin samen:
+# entiteit-attributen hebben een recorder-limiet van 16 KB (v0.63.66),
+# en de laadvolgorde moet vóór platform-setup liggen (v0.63.115).
+#
+# Bewust een EXPLICIETE lijst en niet "alles opslaan": een per-tick
+# berekende waarde terugzetten zou een verouderde momentopname tonen
+# alsof die actueel is, wat erger is dan hem opnieuw laten berekenen.
+
+# Gewone JSON-waarden (getallen, lijsten, dicts).
+PERSISTED_PLAIN_FIELDS = (
+    # Geleerde/opgebouwde geschiedenis
+    "battery_module_health",
+    "energy_balance_error_history",
+    "mode_change_log",
+    "discharge_floor_events",
+    "dishwasher_cycle_duration_history",
+    "dishwasher_usage_hourly_history",
+    "washing_machine_cycle_duration_history",
+    "washing_machine_usage_hourly_history",
+    "living_room_temp_bucket_humidity",
+    "battery_cooling_history",
+    # Cumulatieve financiële en KPI-tellers
+    "actual_cost_today_eur",
+    "actual_cost_current_month_eur",
+    "actual_cost_all_time_eur",
+    "counterfactual_cost_today_eur",
+    "counterfactual_cost_current_month_eur",
+    "counterfactual_cost_all_time_eur",
+    "charge_pv_kwh_total",
+    "charge_grid_kwh_total",
+    "discharge_export_kwh_total",
+    "forgone_feedin_eur_total",
+    "co2_emitted_today_kg",
+    "pv_production_today_kwh",
+    "pv_export_today_kwh",
+    "gross_consumption_today_kwh",
+    "grid_import_today_kwh",
+    "peak_power_today_w",
+    "water_sessions_today_l",
+    "water_sessions_today_count",
+)
+
+# Datum-sleutels van de dag/maand-rollovers. Zonder deze zouden de
+# "vandaag"-tellers hierboven wél terugkomen maar bij de eerstvolgende
+# tick meteen worden gewist, omdat de coordinator dan denkt dat er een
+# nieuwe dag is begonnen - dan was het terugzetten zinloos geweest.
+PERSISTED_DATE_FIELDS = (
+    "_water_sessions_day_key",
+    "_battery_module_day_key",
+    "_peak_power_day_key",
+    "_counterfactual_day_key",
+    "_self_sufficiency_day_key",
+    "_co2_day_key",
+)
+
+PERSISTED_INT_FIELDS = (
+    "_peak_power_month_key",
+    "_counterfactual_month_key",
+    "_summary_month_key",
+)
+
+PERSISTED_DATETIME_FIELDS = (
+    "battery_cooling_last_change",
+)
+
+# De opslag wordt vertraagd weggeschreven: een tick kan meerdere velden
+# raken, en bij een live listener (water, accu-koeling) zelfs meermaals
+# per minuut. Zonder vertraging zou dat onnodig veel schrijfacties naar
+# de SD-kaart/SSD opleveren.
+PERSISTED_STATE_SAVE_DELAY_SECONDS = 30

@@ -152,6 +152,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # afgewezen entiteiten permanent op 20 bleven steken en de rest bij
     # elke herstart terugkwam als "onbevestigde kandidaat". Zie
     # `_async_load_nilm_confirmed_devices_store`'s docstring.
+    # v1.0.4: alle opgebouwde toestand terugzetten voordat de platforms
+    # draaien - zelfde volgorde-eis als de NILM-store (v0.63.115).
+    await coordinator.async_load_persisted_state()
     await coordinator.async_load_persisted_nilm_state()
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     await coordinator.async_setup()

@@ -515,6 +515,401 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Twee onzichtbare modules, en een onjuiste claim (v1.0.5)
+
+**Gevraagd**: "welke modules werken daadwerkelijk mee of blijven
+adviserend?"
+
+Bij het nalopen daarvan kwamen drie dingen boven water.
+
+### 1. Er waren tien modules, het dashboard toonde er acht
+
+`extra_dip_marge` en `temperatuur_regressie` (toegevoegd in v0.63.91)
+stonden niet in de hardcoded namenlijst van het Advies-tabblad. Ze
+bestonden, werden berekend, kregen een gereedheidsstatus — en waren
+nergens te zien. Op drie plekken stond bovendien "acht" waar het er tien
+zijn.
+
+### 2. De belangrijkste vondst: één module is níét adviserend
+
+Boven de tabel stond: *"Tien modules zijn uitsluitend adviserend — geen
+ervan stuurt ooit een commando of weegt mee in een accubeslissing."*
+
+Dat klopt voor negen. Niet voor de **extra-dip-laadmarge**. Die roept
+`_async_apply_manual(charge_power)` aan en zet een eigen beslissingsreden
+(`grid_charging_low_solar_extra_dip`) — het is een volwaardig
+laadmechanisme. Op een weinig-zon-dag buiten het goedkope blok vergelijkt
+het het huidige tarief met de beste resterende prijs van vandaag,
+gecorrigeerd voor het geleerde accu-rendement; is de marge groot genoeg,
+dan wordt er bijgeladen.
+
+Bij een integratie die de accu aanstuurt is dat precies het soort
+onwaarheid dat er niet mag staan. De tekst zegt nu "negen van de tien",
+met een aparte alinea over de uitzondering, en de module is in de tabel
+gemarkeerd met ⚡ en "(stuurt aan)".
+
+Belangrijk verschil dat er ook bij staat: de gereedheidsstatus van die
+module zegt alleen hoeveel marge-geschiedenis er is opgebouwd. **Het
+mechanisme zelf werkt vanaf dag één**, ongeacht wat die status toont.
+
+### 3. De negen andere zijn geverifieerd adviserend
+
+Niet aangenomen maar nagelopen: van elke module is het uitkomstveld
+getraceerd. MPC, Monte Carlo, Digital Twin, Kalman en Weather Ensemble
+worden nergens buiten hun eigen berekening en weergave gelezen. De
+temperatuur-regressie gebruikt haar voorspelling uitsluitend om haar
+eigen voorspelfout te meten. Kirchhoff en sluipverbruik komen alleen in
+de diagnostiek-samenvatting terecht. NILM raakt geen enkele
+accubeslissing.
+
+### Getest
+
+Zes tests erbij in `test_advisory_readiness.py`: elke gereedheidsmodule
+moet een label op het dashboard hebben (en omgekeerd geen label zonder
+module), de aantallen in de teksten moeten kloppen met het werkelijke
+aantal, de kale telwaarde moet uitleggen waar hij vandaan komt, de
+aansturende module moet aantoonbaar een commando sturen, de negen
+adviserende mogen hun uitkomst nergens in een commando-pad laten
+meewegen, en het dashboard moet expliciet benoemen welke module wél
+aanstuurt.
+
+Die eerste twee zijn de eigenlijke borging: een elfde module zonder
+label laat de suite nu falen in plaats van stilzwijgend onzichtbaar te
+blijven.
+
+**Volledige testsuite**: 856 tests, allemaal groen.
+
+## Geen verliezen meer na een herstart (v1.0.4)
+
+**Gevraagd**: "kijk naar de gehele integratie welke waardes eventueel
+verloren gaan na een herstart, ik wil algeheel geen verliezen".
+
+### De inventarisatie
+
+Alle **286 attributen** van de coordinator doorgelopen en gesplitst in
+twee soorten. Het overgrote deel wordt elke tick opnieuw berekend —
+projecties, live metingen, `last_*`-waarden. Die verliezen is
+onschadelijk; sterker nog, ze terugzetten zou schadelijk zijn, want dan
+staat er een verouderde momentopname alsof die actueel is.
+
+Maar een deel is echt **opgebouwd**, en dat verdween tot nu toe bij elke
+herstart:
+
+| Wat | Waarom het pijn deed |
+|---|---|
+| `battery_module_health` | maandenlange leergeschiedenis + CUSUM-status van de accumodules |
+| `mode_change_log` | het hele Geschiedenis-tabblad begon leeg |
+| `actual_cost_*` / `counterfactual_cost_*` | cumulatieve besparingscijfers, ook all-time |
+| `charge_pv_kwh_total` en de drie andere splitsingstellers | de bron/bestemming-boekhouding uit v0.63.117 |
+| vaatwasser- en wasmachine-leergeschiedenis | cyclusduur en gebruiksuren |
+| `energy_balance_error_history` | ~50 minuten blind na elke herstart |
+| dag-KPI's (piekvermogen, CO2, PV, netimport) | begonnen midden op de dag opnieuw |
+
+### Eén Store, geen tientallen losse herstelpaden
+
+Twee eerder geleerde lessen komen hier samen. Entiteit-attributen hebben
+een recorder-limiet van 16 KB (v0.63.66) — `battery_module_health` alleen
+al zou daar overheen groeien. En de laadvolgorde moet vóór platform-setup
+liggen (v0.63.115), anders draaien entiteiten met een eigen herstelpad
+eerder en handelen ze op verkeerde aannames.
+
+Daarom één gedeelde Store met een **expliciete lijst** van velden. Niet
+"alles opslaan": dat zou precies de per-tick waarden meenemen die je juist
+níét terug wilt.
+
+De opslag gaat vertraagd (30 seconden): één tick raakt meerdere velden,
+en de live listeners voor water en accu-koeling kunnen meermaals per
+minuut vuren. Zonder die bundeling zou dat onnodig veel schrijfacties naar
+je SD-kaart of SSD opleveren. Bij het afsluiten wordt hard weggeschreven,
+want een geplande opslag die nog niet is uitgevoerd zou alsnog verloren
+gaan.
+
+### De datum-sleutels zijn niet optioneel
+
+De dag- en maandsleutels (`_peak_power_day_key` en vijf andere) gaan
+mee, en worden bij het laden terug omgezet naar echte `date`-objecten.
+Zouden ze als tekst terugkomen, dan is de vergelijking met `now.date()`
+altijd ongelijk en springen de dagtellers bij de eerstvolgende tick
+alsnog op nul — dan was het terugzetten zinloos geweest. Daar zit een
+aparte test op.
+
+### Zodat dit niet opnieuw kan ontstaan
+
+De inventarisatie hierboven was handwerk. Een test herhaalt hem nu bij
+elke run: elk publiek veld dat op naam opgebouwde toestand is (eindigend
+op `_history`, `_total`, of beginnend met `total_`) moet óf in de
+Store-lijst staan, óf ergens door een RestoreEntity worden teruggezet.
+Voldoet er één niet, dan faalt de suite — in plaats van dat het pas
+opvalt als iemand na een herstart zijn gegevens kwijt is.
+
+Er is één uitzondering (`was_bootstrapped_from_history`, een vlag en geen
+geschiedenis), en een tweede test controleert dat die uitzondering nog
+bestaat — een naam die na een hernoeming blijft staan zou stilzwijgend
+een echt veld kunnen gaan afdekken.
+
+De volledige momentopname staat ook in de diagnostiek-export, zodat je
+kunt zien wat er precies bewaard wordt.
+
+### Getest
+
+Nieuw `tests/test_state_persistence.py`, 17 tests: maandenlange
+modulegezondheid overleeft, cumulatieve financiële totalen overleven,
+apparaat-leergeschiedenis overleeft, het mode-logboek overleeft, **elk**
+veld in de lijst rondreist zonder verlies, datum-sleutels komen terug als
+datums en niet als tekst, dagtellers worden niet alsnog gewist bij de
+eerstvolgende tick, een onleesbare datum laat het opstarten niet
+crashen, ontbrekende sleutels behouden hun beginwaarde, laden is
+idempotent, een lege Store zet niets op nul, er wordt ook tijdens
+normaal draaien opgeslagen (juist een onverwachte herstart is het geval
+dat telt), de laadvolgorde ligt vóór platform-setup, afsluiten schrijft
+hard weg, per-tick waarden staan bewust níét in de lijst, plus de twee
+borgingstests hierboven.
+
+**Volledige testsuite**: 848 tests, allemaal groen.
+
+## Legenda liep achter op de code (v1.0.3)
+
+**Gerapporteerd** met een screenshot van het Advies-tabblad.
+
+De statustabel klopte (die leest de live waarden), maar de **legenda
+eronder** is vaste dashboardtekst en beweerde nog:
+
+> 🔵 `structureel_beschikbaar` — geldt voor de drie modules zonder
+> mechanisme dat een voorspelling ooit tegen de werkelijkheid legt
+> (Weather Ensemble, MPC, Digital Twin).
+
+Sinds v1.0.1 en v1.0.2 klopt dat niet meer: die twee meten zichzelf
+inmiddels wel. Precies dezelfde soort fout als de verouderde docstrings
+in v0.63.117 en de vastgeroeste klimaatmelding in v0.63.120 — de code
+veranderde, de uitleg ernaast niet.
+
+### Wat er nu staat
+
+De categorie wordt uitgelegd als "er is wél een uitkomst, maar niets om
+die tegen af te zetten", met twee gevallen:
+
+- **MPC**, per ontwerp — een theoretisch optimum dat met opzet niet
+  wordt uitgevoerd;
+- **Digital Twin**, maar alleen als de accucapaciteit onbekend is. Dan is
+  de afwijking in kWh wel gemeten, maar valt niet te zeggen of dat veel
+  of weinig is.
+
+Dat laatste is bewust genoemd. "Geldt nog voor één module: MPC" zou
+korter en mooier klinken, maar de twin kán daar wel degelijk in
+belanden — en dan zou de legenda opnieuw iets beweren dat niet klopt.
+
+Daaronder staat kort dat Weather Ensemble en Digital Twin daar tot v1.0.0
+structureel bij hoorden en nu door de gewone vijf statussen klimmen, met
+een aanloopperiode.
+
+### Nu bewaakt
+
+Vier tests koppelen de legenda aan de werkelijkheid: de oude bewering
+mag er niet meer staan, MPC moet er mét reden in blijven (anders wordt
+"consistentie" later een argument om er alsnog een meting bij te
+verzinnen die niets meet), de twin-uitzondering moet genoemd worden, en
+— als gedragsbewijs achter de tekst — Weather Ensemble moet
+daadwerkelijk "klaar" kúnnen bereiken, iets wat vóór v1.0.2 onmogelijk
+was.
+
+De legendatekst wordt daarbij eerst tot één doorlopende regel
+samengevouwen: de YAML-bron breekt zinnen over meerdere regels af, en een
+letterlijke zoekopdracht zou anders stuklopen op een regelafbreking die
+niets met de inhoud te maken heeft.
+
+**Volledige testsuite**: 831 tests, allemaal groen.
+
+## Weather Ensemble meet nu of hij het bij het rechte eind heeft (v1.0.2)
+
+Van de acht adviesmodules stonden er nog twee op het vage "structureel
+beschikbaar — nauwkeurigheid wordt niet bijgehouden". Voor één daarvan
+kan dat wél.
+
+### De vraag was verkeerd gesteld
+
+Bij Weather Ensemble stond "nauwkeurigheid t.o.v. de werkelijkheid wordt
+niet bijgehouden". Maar de ensemble doet helemaal geen voorspelling: hij
+meldt de **actuele** bewolkingsgraad van KNMI en OpenWeatherMap. "Hoe
+nauwkeurig is de voorspelling" past daar niet op.
+
+De vraag die er wél toe doet: **zegt die melding iets dat klopt met wat
+mijn eigen panelen doen?** En dat werd al berekend — de
+onenigheids-signalering vergelijkt per moment het live PV-vermogen met
+de Solcast-verwachting en zet dat naast de bewolking. Alleen werd die
+uitkomst nooit over tijd bijgehouden.
+
+### Wat er nu gebeurt
+
+Elke geldige waarneming — overdag, met een zinvolle Solcast-verwachting
+— wordt geclassificeerd als "eens" of "oneens". Oneens zijn precies de
+twee gevallen die de bestaande signalering ook meldt: heldere lucht
+terwijl de PV fors onderpresteert, of zware bewolking terwijl de PV juist
+overpresteert. Alles daartussen spreekt elkaar niet tegen en telt als
+eens.
+
+Dat gebeurt bewust **op dezelfde plek en met dezelfde drempels** als die
+signalering, niet in een eigen berekening ernaast — twee losse
+berekeningen zouden uit de pas kunnen gaan lopen en tegenstrijdige dingen
+beweren. Er is een test die vastlegt dat de meting die constanten
+daadwerkelijk hergebruikt.
+
+Boven 80 % overeenstemming heet het "klaar", tot 60 % "bijna_klaar",
+daaronder "kwaliteit_te_laag". Ruim genomen: bewolking en PV-opbrengst
+hangen samen maar zijn niet hetzelfde, dus perfecte overeenstemming hoort
+niet verwacht te worden. Slaan de bronnen er structureel naast, dan
+blijkt dat nu — in plaats van dat het verstopt blijft achter "structureel
+beschikbaar".
+
+De sensor is daarvoor een RestoreEntity geworden. De bewolkingsgraad zelf
+is een momentopname, maar er zijn twintig waarnemingen **bij daglicht**
+nodig voor een oordeel, en die komen alleen binnen als de zon schijnt.
+Zonder herstel zou elke herstart die telling terugzetten.
+
+### En MPC blijft staan zoals het staat
+
+Dat is nu de enige module zonder nauwkeurigheidsmeting, en dat blijft zo.
+Het MPC-plan is een **theoretisch optimum dat met opzet niet wordt
+uitgevoerd** — er is geen werkelijkheid om het tegen af te zetten. Er
+staat een test op die tekst, zodat "consistentie" later geen reden wordt
+om er alsnog een meting bij te verzinnen die niets meet.
+
+### Getest
+
+Nieuw `tests/test_weather_ensemble_agreement.py`, 13 tests: alle vier de
+combinaties van bewolking en opbrengst, het middengebied dat elkaar niet
+tegenspreekt, de begrensde historie, geen oordeel onder de drempel, de
+drie oordeelsniveaus, de inbedding in de adviesmodule, het hergebruik van
+de bestaande drempels, en het herstel over een herstart heen.
+
+**Volledige testsuite**: 827 tests, allemaal groen.
+
+## Digital Twin meet nu zijn eigen nauwkeurigheid (v1.0.1)
+
+**Gerapporteerd**: de adviesmodule meldde *"Digital Twin — structureel
+beschikbaar — Simuleert over 34.8 uur, nauwkeurigheid t.o.v. het
+daadwerkelijke resultaat wordt niet bijgehouden."*
+
+Die tekst was eerlijk, maar onnodig: de twin voorspelt een **SoC**, en
+die is later gewoon na te meten.
+
+### Hoe het werkt
+
+Dezelfde "leg een voorspelling vast, controleer 'm later"-techniek als de
+zonvoorspelling-tracker. Elk uur wordt vastgelegd welke accu-inhoud de
+twin **zes uur vooruit** verwacht. Zodra dat moment is bereikt, wordt de
+werkelijke meting ernaast gelegd en de afwijking bewaard.
+
+Vier ontwerpkeuzes die er echt toe doen:
+
+- **Niet elke tick vastleggen.** Dat zou binnen een dag honderden sterk
+  overlappende voorspellingen opleveren die vrijwel hetzelfde zeggen —
+  het gemiddelde zou dan vooral meten hoe vaak er gemeten is.
+- **Te late voorspellingen weggooien.** Komt een voorspelling door een
+  herstart pas driekwartier te laat aan de beurt, dan zegt ze niets meer
+  over het moment waarvoor ze bedoeld was. Alsnog afrekenen zou een fout
+  meten die niets met de modelkwaliteit te maken heeft.
+- **Geen oordeel onder acht vergelijkingen.** Zelfde principe als de
+  sensor-gezondheidsdrempel uit v0.63.121.
+- **De fout wordt afgezet tegen de bruikbare accucapaciteit**, niet tegen
+  een vast aantal kWh. Een afwijking van 0,5 kWh is prima bij een accu
+  van 10 kWh en te veel bij een van 2 — een vaste drempel zou dat
+  verschil missen. Er is een test die precies dat vastlegt.
+
+Het oordeel wordt "klaar" onder 10 % afwijking, "bijna_klaar" tot 20 %,
+en daarboven "kwaliteit_te_laag". De adviesmodule toont dat nu in plaats
+van het vage "structureel beschikbaar", mét de simulatieduur ernaast.
+
+### Persistentie is hier geen luxe
+
+Er zijn acht vergelijkingen nodig, per uur vastgelegd met een horizon van
+zes uur. Zonder herstel zou elke herstart de meting op nul zetten en zou
+het oordeel bij frequent herstarten **nooit** verschijnen — precies de
+fout die de NILM-persistentie in v0.63.115 zo lang verborgen hield. De
+nieuwe sensor is daarom een RestoreEntity die zowel de afgeronde
+vergelijkingen als de openstaande voorspellingen terugzet.
+
+### Waarom MPC dit bewust niet krijgt
+
+Bij MPC staat dezelfde zin, en die blijft staan. Het MPC-plan is een
+**theoretisch optimum dat met opzet niet wordt uitgevoerd** — er valt dus
+niets tegen af te rekenen. Er is een test die die tekst vastlegt, zodat
+"consistentie" later geen reden wordt om er alsnog een meting bij te
+verzinnen die niets meet.
+
+### Getest
+
+Nieuw `tests/test_digital_twin_accuracy.py`, 17 tests: vastleggen op de
+juiste horizon, niet opnieuw binnen het interval, wél erna, niets zonder
+tijdlijn, niets bij een te korte tijdlijn, afrekenen tegen de
+werkelijkheid, niet te vroeg afrekenen, een veel te late voorspelling
+weggooien, geen nepfout bij een onleesbare sensor, geen oordeel onder de
+drempel, een kleine fout als "klaar" en een grote als
+"kwaliteit_te_laag", dat dezelfde fout bij een kleine accu wél en bij een
+grote níet doorslaat, eerlijk zijn zonder bekende capaciteit, de
+inbedding in de adviesmodule, het herstel over een herstart heen, en dat
+MPC bewust ongemoeid blijft.
+
+**Volledige testsuite**: 814 tests, allemaal groen.
+
+## Versienummering en automatische releases (v1.0.0)
+
+**Gerapporteerd**: "Nu zie ik met de update telkens een code als
+48eb9da. Ik zou daar vanaf nu graag V.1.00 of iets dergelijks zien welke
+daarna automatisch ophoogt."
+
+### Waarom die hash er stond
+
+`48eb9da` is een Git-commit-hash. HACS toont die als **terugval** zodra
+een repository geen GitHub-releases heeft — er viel simpelweg geen
+versienummer te tonen. Het was dus geen verkeerde instelling in de
+integratie of in HACS.
+
+Deze repository had wel drie workflows (HACS-validatie, hassfest, tests)
+maar geen enkele die een release aanmaakte, terwijl het versienummer in
+`manifest.json` netjes bij elke wijziging werd opgehoogd. Dat nummer
+kwam alleen nooit in GitHub terecht.
+
+### De oplossing: releases uit manifest.json
+
+Nieuwe workflow `.github/workflows/release.yml`. Bij elke push naar
+`main`:
+
+1. leest het versienummer uit `manifest.json`;
+2. stopt als die tag al bestaat — dus geen dubbele releases bij een push
+   die de versie niet verandert;
+3. draait de **volledige testsuite**, want een release zonder groene
+   tests zou de hele borging van dit project omzeilen;
+4. haalt de bijbehorende sectie uit `CHANGELOG.md` als release-notitie;
+5. maakt tag `v<versie>` plus GitHub-release aan.
+
+`manifest.json` blijft daarmee de enige bron van waarheid — er komt geen
+tweede nummering naast die uit de pas kan lopen. Elke versieverhoging
+wordt vanzelf een release die HACS toont, zonder handwerk.
+
+### Nummering: 1.0.0
+
+Van `0.63.132` naar `1.0.0`. De opbouw blijft `major.minor.patch` en
+niet iets als "V.1.00": HACS sorteert releases op versienummer, en een
+afwijkend formaat maakt "welke is nieuwer" onbetrouwbaar. Een test
+bewaakt dat het versienummer precies drie cijferdelen houdt.
+
+Vanaf hier hoogt de patch bij elke wijziging op (1.0.1, 1.0.2, ...);
+`minor` bij een nieuwe functie, `major` bij iets dat je installatie
+raakt.
+
+### Eenmalig in GitHub
+
+De workflow draait pas ná het pushen van deze versie. Verschijnt er geen
+release, kijk dan onder **Settings → Actions → General** of workflows
+schrijfrechten hebben ("Read and write permissions") — zonder dat mag de
+actie geen tag aanmaken.
+
+Zodra de eerste release er staat, schakelt HACS over van commit-modus
+naar release-modus. Mogelijk moet je de integratie in HACS één keer
+opnieuw downloaden voordat hij dat oppikt.
+
+**Volledige testsuite**: 797 tests, allemaal groen.
+
 ## Diagnostiek-review: dagteller en een verkeerde waterconclusie (v0.63.132)
 
 **Gevraagd**: "Algehele controle aub" bij een verse export van v0.63.130.

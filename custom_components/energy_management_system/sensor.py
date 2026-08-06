@@ -66,6 +66,7 @@ async def async_setup_entry(
         BatterySavingsSensor(coordinator, entry.entry_id),
         BatteryCoolingSensor(coordinator, entry.entry_id),
         BatteryModuleHealthSensor(coordinator, entry.entry_id),
+        DigitalTwinAccuracySensor(coordinator, entry.entry_id),
         EnergyBalanceHealthSensor(coordinator, entry.entry_id),
         SluipverbruikSensor(coordinator, entry.entry_id),
         WeatherEnsembleSensor(coordinator, entry.entry_id),
@@ -1119,7 +1120,7 @@ class SluipverbruikSensor(SensorEntity, RestoreEntity):
         self._coordinator.sluipverbruik_detected = last_state.state == "gedetecteerd"
 
 
-class WeatherEnsembleSensor(SensorEntity):
+class WeatherEnsembleSensor(SensorEntity, RestoreEntity):
     """Weather ensemble cross-check (v0.63.30): live cloud_coverage from
     independent weather sources (KNMI/OpenWeatherMap, read from HA
     `weather` entities the person already has - not a new API
@@ -1128,8 +1129,15 @@ class WeatherEnsembleSensor(SensorEntity):
 
     Deliberately not a genuine multi-source kWh yield ensemble - that
     would need panel orientation/tilt/kWp specs this integration doesn't
-    collect. Not a RestoreEntity - a live cross-check, not a cumulative
-    total.
+    collect.
+
+    v1.0.2: WEL een RestoreEntity geworden. De bewolkingsgraad zelf is
+    een momentopname, maar de overeenstemmingsgeschiedenis eronder is
+    dat niet: er zijn twintig waarnemingen BIJ DAGLICHT nodig voordat er
+    een oordeel volgt, en die worden alleen verzameld als de zon schijnt
+    en Solcast iets noemenswaardigs verwacht. Zonder herstel zou elke
+    herstart die telling terugzetten - dezelfde fout die de
+    NILM-persistentie in v0.63.115 zo lang verborgen hield.
     """
 
     _attr_has_entity_name = True
@@ -1156,15 +1164,36 @@ class WeatherEnsembleSensor(SensorEntity):
             "label": self._coordinator.weather_ensemble_label,
             "sources_used": self._coordinator.weather_ensemble_sources_used,
             "disagreement": self._coordinator.weather_ensemble_disagreement,
+            # v1.0.2: hoe vaak deze bronnen het eens blijken met wat de
+            # panelen werkelijk doen.
+            **self._coordinator.get_weather_ensemble_agreement_status(),
+            "overeenstemming_historie": (
+                self._coordinator.weather_ensemble_agreement_history
+            ),
             "note": (
                 "Live bewolkingsgraad van KNMI/OpenWeatherMap, geen "
                 "vervangende kWh-opbrengstschatting - daarvoor zijn "
                 "paneelgegevens (oriëntatie/hellingshoek/wattpiek) nodig "
                 "die deze integratie niet verzamelt. 'disagreement' "
                 "vergelijkt live PV-vermogen met de Solcast-voorspelling "
-                "voor dit moment, naast wat de bewolkingsgraad zegt."
+                "voor dit moment, naast wat de bewolkingsgraad zegt. "
+                "'overeenstemming_percent' houdt bij hoe vaak die twee het "
+                "eens waren - de vraag 'hoe nauwkeurig is de voorspelling' "
+                "past hier niet, want dit is een actuele meting en geen "
+                "verwachting."
             ),
         }
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if last_state is None:
+            return
+        historie = last_state.attributes.get("overeenstemming_historie")
+        if isinstance(historie, list) and historie:
+            self._coordinator.weather_ensemble_agreement_history = [
+                bool(waarde) for waarde in historie
+            ]
 
 
 class _ApplianceCycleStateSensor(SensorEntity, RestoreEntity):
@@ -3370,3 +3399,80 @@ class BatteryModuleHealthSensor(SensorEntity):
                 "trendbewaking op de differentiële waarde gedaan."
             ),
         }
+
+
+class DigitalTwinAccuracySensor(SensorEntity, RestoreEntity):
+    """Gemeten nauwkeurigheid van de Digital Twin (v1.0.1).
+
+    Tot v1.0.0 stond er bij deze module "nauwkeurigheid t.o.v. het
+    daadwerkelijke resultaat wordt niet bijgehouden". Eerlijk, maar het
+    kan wél: de twin voorspelt een SoC, en die is later gewoon na te
+    meten. Dezelfde "leg een voorspelling vast, controleer 'm later"-
+    techniek als de zonvoorspelling-tracker.
+
+    RestoreEntity, en dat is hier geen luxe: er zijn acht afgeronde
+    vergelijkingen nodig voordat er een oordeel volgt, en die worden per
+    uur vastgelegd met een horizon van zes uur. Zonder herstel zou elke
+    herstart de meting terugzetten naar nul en zou het oordeel bij
+    frequent herstarten nooit verschijnen - precies de fout die de
+    NILM-persistentie in v0.63.115 zo lang verborgen hield.
+
+    De toestand is de gemiddelde absolute afwijking in kWh, of leeg
+    zolang er te weinig vergelijkingen zijn.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Digital Twin nauwkeurigheid"
+    _attr_icon = "mdi:target-variant"
+    _attr_native_unit_of_measurement = "kWh"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_digital_twin_accuracy"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def native_value(self) -> float | None:
+        return self._coordinator.digital_twin_accuracy_mae_kwh
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        status = self._coordinator.get_digital_twin_accuracy_status()
+        return {
+            **status,
+            "openstaande_voorspellingen": len(
+                self._coordinator._digital_twin_pending
+            ),
+            "vergelijkingen": self._coordinator.digital_twin_accuracy_history[-10:],
+            # Volledige lijsten voor het herstel na een herstart - de
+            # "vergelijkingen" hierboven zijn slechts een voorbeeld voor
+            # weergave.
+            "volledige_historie": self._coordinator.digital_twin_accuracy_history,
+            "openstaand": self._coordinator._digital_twin_pending,
+            "note": (
+                "De twin voorspelt de accu-inhoud een aantal uur vooruit; "
+                "op dat moment wordt de voorspelling tegen de werkelijke "
+                "meting gehouden. Een voorspelling die door een herstart "
+                "te laat aan de beurt komt wordt weggegooid in plaats van "
+                "alsnog afgerekend - die zou een fout meten die niets met "
+                "het model te maken heeft. De afwijking wordt afgezet "
+                "tegen de bruikbare accucapaciteit, want 1 kWh betekent "
+                "iets anders bij een kleine dan bij een grote accu."
+            ),
+        }
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if last_state is None:
+            return
+        historie = last_state.attributes.get("volledige_historie")
+        if isinstance(historie, list) and historie:
+            self._coordinator.digital_twin_accuracy_history = list(historie)
+        openstaand = last_state.attributes.get("openstaand")
+        if isinstance(openstaand, list) and openstaand:
+            self._coordinator._digital_twin_pending = list(openstaand)

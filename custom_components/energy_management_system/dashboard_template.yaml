@@ -380,7 +380,7 @@ views:
               - entity: sensor.woonkamer_energy_management_system_digital_twin_gesimuleerde_soc_winst
                 name: Digital Twin (gesimuleerde SoC/winst)
               - entity: sensor.woonkamer_energy_management_system_advies_gereedheid_8_modules
-                name: Advies-gereedheid (8 adviesmodules)
+                name: Advies-gereedheid (aantal 'klaar' van 10)
 
   - title: Visueel
     path: visueel
@@ -398,7 +398,7 @@ views:
         # "richtingen van de stromen nog niet geupdate?". De
         # versiesleutel dwingt een verse ophaal af. Een test bewaakt
         # dat deze waarde gelijk blijft aan de versie in manifest.json.
-        image: /local/energy_management_system_overview.svg?v=0.63.132
+        image: /local/energy_management_system_overview.svg?v=1.0.5
         elements:
           - type: state-label
             entity: sensor.woonkamer_energy_management_system_system_status
@@ -1493,11 +1493,20 @@ views:
       - type: custom:mushroom-title-card
         title: Advies-gereedheid
         subtitle: >-
-          Acht modules zijn uitsluitend adviserend — geen ervan stuurt
-          ooit een commando of weegt mee in een accubeslissing, ook niet
-          als de status hieronder "klaar" toont. Gereedheid zegt iets
-          over hoe betrouwbaar het cijfer zelf is, niet over of het
+          **Negen van de tien zijn uitsluitend adviserend** — die sturen
+          nooit een commando en wegen niet mee in een accubeslissing, ook
+          niet als de status hieronder "klaar" toont. Gereedheid zegt
+          iets over hoe betrouwbaar het cijfer zelf is, niet over of het
           veilig is om ergens op te sturen.
+
+          **Eén uitzondering: de Extra-dip-laadmarge (⚡) stuurt wél
+          aan.** Op een weinig-zon-dag buiten het goedkope blok vergelijkt
+          die het huidige tarief met de beste resterende prijs van
+          vandaag, gecorrigeerd voor het geleerde accu-rendement; is de
+          marge groot genoeg, dan wordt er daadwerkelijk bijgeladen. Zijn
+          gereedheidsstatus zegt alleen iets over hoeveel
+          marge-geschiedenis er is opgebouwd — het mechanisme zelf werkt
+          vanaf dag één.
 
       - type: markdown
         title: Legenda
@@ -1509,14 +1518,26 @@ views:
             statussen gelden voor modules met een échte
             data-volwassenheid-signaal (genoeg verzamelde metingen,
             of een aantoonbaar geconvergeerd filter).
-          - 🔵 `structureel_beschikbaar` — geldt voor de drie modules
-            zonder mechanisme dat een voorspelling ooit tegen de
-            werkelijkheid legt (Weather Ensemble, MPC, Digital Twin).
-            Werkt en berekent prima, maar "klaar" zou een niet-verdiende
-            claim van bewezen nauwkeurigheid zijn.
+          - 🔵 `structureel_beschikbaar` — er is wél een uitkomst, maar
+            niets om die tegen af te zetten. Werkt en berekent prima,
+            maar "klaar" zou een niet-verdiende claim van bewezen
+            nauwkeurigheid zijn. Geldt voor **MPC** (per ontwerp: dat
+            plan is een theoretisch optimum dat met opzet niet wordt
+            uitgevoerd), en soms voor **Digital Twin** — namelijk als de
+            accucapaciteit onbekend is, want dan is de gemeten afwijking
+            in kWh wel bekend maar valt niet te zeggen of dat veel of
+            weinig is.
+
+          Weather Ensemble en Digital Twin stonden hier tot v1.0.0
+          structureel bij. Die meten zichzelf inmiddels wél: de twin
+          vergelijkt zijn voorspelde accu-inhoud met de werkelijke meting
+          zes uur later, en de ensemble houdt bij hoe vaak zijn
+          bewolkingsmelding klopt met wat de panelen werkelijk doen.
+          Beide klimmen daardoor door de gewone vijf statussen hierboven
+          — met een aanloopperiode voordat er genoeg waarnemingen zijn.
 
       - type: markdown
-        title: Alle acht modules
+        title: Alle tien modules
         content: |
           {% set modules = state_attr('sensor.woonkamer_energy_management_system_advies_gereedheid_8_modules', 'modules') or {} %}
           {% set namen = {
@@ -1527,7 +1548,9 @@ views:
             'monte_carlo': 'Monte Carlo',
             'kalman': 'Kalman filtering',
             'digital_twin': 'Digital Twin',
-            'nilm': 'NILM apparaat-detectie'
+            'nilm': 'NILM apparaat-detectie',
+            'extra_dip_marge': '⚡ Extra-dip-laadmarge (stuurt aan)',
+            'temperatuur_regressie': 'Temperatuur-consumptie-regressie'
           } %}
           {% set iconen = {
             'klaar': '✅',

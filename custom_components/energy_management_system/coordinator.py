@@ -202,6 +202,17 @@ from .const import (
     GRID_IMPORT_SHORTFALL_THRESHOLD_W,
     BATTERY_COOLING_FAN_UNAVAILABLE_STATES,
     BATTERY_MODULE_CELL_DELTA_ATTENTION_V,
+    DIGITAL_TWIN_ACCURACY_GOOD_FRACTION,
+    WEATHER_ENSEMBLE_AGREEMENT_GOOD_PERCENT,
+    WEATHER_ENSEMBLE_AGREEMENT_HISTORY_LENGTH,
+    WEATHER_ENSEMBLE_AGREEMENT_MIN_SAMPLES,
+    WEATHER_ENSEMBLE_AGREEMENT_USABLE_PERCENT,
+    DIGITAL_TWIN_ACCURACY_HISTORY_LENGTH,
+    DIGITAL_TWIN_ACCURACY_HORIZON_HOURS,
+    DIGITAL_TWIN_ACCURACY_MAX_LATE_MINUTES,
+    DIGITAL_TWIN_ACCURACY_MIN_SAMPLES,
+    DIGITAL_TWIN_ACCURACY_QUEUE_INTERVAL_MINUTES,
+    DIGITAL_TWIN_ACCURACY_USABLE_FRACTION,
     MIN_BATTERY_POWER_IDLE_W,
     BATTERY_MODULE_CELL_DELTA_SERIOUS_V,
     BATTERY_MODULE_CUSUM_SLACK_C,
@@ -236,6 +247,11 @@ from .const import (
     CONF_BATTERY_TEMPERATURE_SENSOR,
     MAX_HOUR_TRACKING_GAP_MINUTES,
     MEASUREMENT_QUALITY_MIN_SAMPLES,
+    PERSISTED_DATE_FIELDS,
+    PERSISTED_DATETIME_FIELDS,
+    PERSISTED_INT_FIELDS,
+    PERSISTED_PLAIN_FIELDS,
+    PERSISTED_STATE_SAVE_DELAY_SECONDS,
     WATER_VOLUME_AGREEMENT_TOLERANCE,
     ENERGY_BALANCE_ERROR_HISTORY_LENGTH,
     ENERGY_BALANCE_ERROR_BAD_THRESHOLD_W,
@@ -599,6 +615,9 @@ class EnergyManagementSystemCoordinator:
         self.weather_ensemble_sources_used: list[str] = []
         self.weather_ensemble_label: str | None = None
         self.weather_ensemble_disagreement: str | None = None
+        # v1.0.2: bijhouden hoe vaak de ensemble het eens is met wat de
+        # panelen werkelijk doen.
+        self.weather_ensemble_agreement_history: list[bool] = []
         # Vaatwasser/wasmachine RUSTEND/ACTIEF/KLAAR-toestandsmachine
         # (v0.63.32).
         self._dishwasher_state: str = "rustend"
@@ -646,6 +665,12 @@ class EnergyManagementSystemCoordinator:
         self.digital_twin_trajectory: list[dict] = []
         self.digital_twin_projected_profit_eur: float | None = None
         self.digital_twin_final_soc_kwh: float | None = None
+        # v1.0.1: nauwkeurigheidsmeting. `_digital_twin_pending` bevat
+        # voorspellingen die nog op hun afrekenmoment wachten;
+        # `digital_twin_accuracy_history` de afgeronde vergelijkingen.
+        self._digital_twin_pending: list[dict] = []
+        self._digital_twin_last_queued: datetime | None = None
+        self.digital_twin_accuracy_history: list[dict] = []
         self.digital_twin_hours_simulated: int = 0
         self.digital_twin_note: str | None = None
         # NILM-achtige apparaat-auto-detectie (v0.63.39).
@@ -681,6 +706,12 @@ class EnergyManagementSystemCoordinator:
         self._nilm_confirmed_devices_store = Store(
             hass, version=1, key=f"{DOMAIN}_nilm_confirmed_devices"
         )
+        # v1.0.4: één gedeelde Store voor alle opgebouwde
+        # coordinator-toestand die anders bij elke herstart verdween.
+        # Zie PERSISTED_PLAIN_FIELDS in const.py voor het waarom van een
+        # expliciete lijst.
+        self._state_store = Store(hass, version=1, key=f"{DOMAIN}_state")
+        self._state_store_loaded = False
         # v0.63.115: expliciet bijhouden of de Store al van schijf is
         # gelezen, en of daar echte data in stond. Zonder deze twee
         # vlaggen moest `NilmConfirmedDevicesSensor.async_added_to_hass`
@@ -1190,6 +1221,9 @@ class EnergyManagementSystemCoordinator:
             self._unsub_water_state()
         if self._unsub_battery_cooling_state:
             self._unsub_battery_cooling_state()
+        # v1.0.4: een geplande, nog niet uitgevoerde opslag zou bij een
+        # herstart alsnog verloren gaan - dus hier hard wegschrijven.
+        await self.async_save_persisted_state_now()
 
     @callback
     def _handle_interval(self, _now) -> None:
@@ -6187,6 +6221,15 @@ class EnergyManagementSystemCoordinator:
             return
 
         ratio = (live_pv_w / 1000) / solcast_kw
+
+        # v1.0.2: leg vast of de ensemble het op dit moment EENS is met
+        # wat de panelen doen. Bewust hier, waar de ratio toch al
+        # berekend is en alle voorwaarden (overdag, zinvolle
+        # Solcast-verwachting) al zijn afgevinkt - een tweede,
+        # zelfstandige berekening zou uit de pas kunnen gaan lopen met de
+        # onenigheids-signalering hieronder.
+        self._record_weather_ensemble_agreement(avg_cloud_pct, ratio)
+
         if (
             ratio < WEATHER_ENSEMBLE_UNDERPERFORM_RATIO
             and avg_cloud_pct < WEATHER_ENSEMBLE_CLEAR_THRESHOLD_PERCENT
@@ -6205,6 +6248,77 @@ class EnergyManagementSystemCoordinator:
                 "KNMI/OpenWeatherMap juist zware bewolking melden - geen "
                 "probleem, maar wijkt af van wat verwacht werd."
             )
+
+    def _record_weather_ensemble_agreement(
+        self, avg_cloud_pct: float, ratio: float
+    ) -> None:
+        """Legt vast of de ensemble het eens is met de werkelijke
+        PV-prestatie (v1.0.2).
+
+        "Nauwkeurigheid van de voorspelling" is hier de verkeerde vraag:
+        de ensemble meldt de ACTUELE bewolking, niet een verwachting. De
+        vraag die er wél toe doet is of die melding iets zegt dat klopt
+        met de eigen panelen.
+
+        Oneens = precies de twee gevallen die de onenigheids-signalering
+        hieronder ook meldt: heldere lucht terwijl de PV fors
+        onderpresteert, of zware bewolking terwijl de PV juist
+        overpresteert. Alles daartussen telt als eens. Dezelfde
+        drempels, één definitie.
+        """
+        oneens = (
+            ratio < WEATHER_ENSEMBLE_UNDERPERFORM_RATIO
+            and avg_cloud_pct < WEATHER_ENSEMBLE_CLEAR_THRESHOLD_PERCENT
+        ) or (
+            ratio > WEATHER_ENSEMBLE_OVERPERFORM_RATIO
+            and avg_cloud_pct > WEATHER_ENSEMBLE_OVERCAST_THRESHOLD_PERCENT
+        )
+        self.weather_ensemble_agreement_history.append(not oneens)
+        self.weather_ensemble_agreement_history = (
+            self.weather_ensemble_agreement_history[
+                -WEATHER_ENSEMBLE_AGREEMENT_HISTORY_LENGTH:
+            ]
+        )
+
+    @property
+    def weather_ensemble_agreement_percent(self) -> float | None:
+        """Percentage waarnemingen waarin de ensemble het eens was met de
+        werkelijke PV-prestatie (v1.0.2). None zolang er te weinig
+        waarnemingen zijn."""
+        historie = self.weather_ensemble_agreement_history
+        if len(historie) < WEATHER_ENSEMBLE_AGREEMENT_MIN_SAMPLES:
+            return None
+        return round(100 * sum(1 for eens in historie if eens) / len(historie), 1)
+
+    def get_weather_ensemble_agreement_status(self) -> dict:
+        """Vertaalt de overeenstemming naar een oordeel (v1.0.2)."""
+        aantal = len(self.weather_ensemble_agreement_history)
+        percentage = self.weather_ensemble_agreement_percent
+        if percentage is None:
+            return {
+                "status": "onvoldoende_data",
+                "reden": (
+                    f"{aantal}/{WEATHER_ENSEMBLE_AGREEMENT_MIN_SAMPLES} "
+                    "waarnemingen bij daglicht verzameld."
+                ),
+                "overeenstemming_percent": None,
+                "aantal_waarnemingen": aantal,
+            }
+        if percentage >= WEATHER_ENSEMBLE_AGREEMENT_GOOD_PERCENT:
+            status = "klaar"
+        elif percentage >= WEATHER_ENSEMBLE_AGREEMENT_USABLE_PERCENT:
+            status = "bijna_klaar"
+        else:
+            status = "kwaliteit_te_laag"
+        return {
+            "status": status,
+            "reden": (
+                f"Komt in {percentage}% van {aantal} waarnemingen overeen met "
+                "wat de panelen werkelijk deden."
+            ),
+            "overeenstemming_percent": percentage,
+            "aantal_waarnemingen": aantal,
+        }
 
     def _update_appliance_state_machine(
         self,
@@ -7183,6 +7297,11 @@ class EnergyManagementSystemCoordinator:
         self.digital_twin_projected_profit_eur = round(total_profit_eur, 4)
         self.digital_twin_final_soc_kwh = round(soc_kwh, 3)
         self.digital_twin_hours_simulated = round(hours_simulated, 1)
+        # v1.0.1: nauwkeurigheidsmeting - leg vast wat er verwacht wordt
+        # en reken eerdere voorspellingen af waarvan het moment is
+        # bereikt.
+        self._resolve_digital_twin_predictions(now)
+        self._queue_digital_twin_prediction(now)
         self.digital_twin_note = (
             "Adviserend - simuleert wat de bestaande, regelgebaseerde "
             "logica (dezelfde tijdlijn als 'Overzicht komende uren') aan "
@@ -7427,6 +7546,87 @@ class EnergyManagementSystemCoordinator:
         leeg als de Store simpelweg nog niet gelezen is).
         """
         return self._nilm_store_had_data
+
+    def _collect_persisted_state(self) -> dict:
+        """Bouwt de op te slaan momentopname (v1.0.4).
+
+        Datums en tijdstippen gaan als ISO-tekst naar de opslag: de
+        JSON-laag kan ze weliswaar wegschrijven, maar zou ze als tekst
+        terugleveren, waardoor een vergelijking met `date.today()`
+        stilzwijgend altijd ongelijk zou zijn - en dan zouden de
+        dagtellers bij elke tick opnieuw op nul springen.
+        """
+        data = {veld: getattr(self, veld, None) for veld in PERSISTED_PLAIN_FIELDS}
+        for veld in PERSISTED_INT_FIELDS:
+            data[veld] = getattr(self, veld, None)
+        for veld in PERSISTED_DATE_FIELDS + PERSISTED_DATETIME_FIELDS:
+            waarde = getattr(self, veld, None)
+            data[veld] = waarde.isoformat() if waarde is not None else None
+        return data
+
+    def _apply_persisted_state(self, stored: dict) -> None:
+        """Zet een opgeslagen momentopname terug (v1.0.4).
+
+        Ontbrekende sleutels worden overgeslagen in plaats van op None
+        gezet: een opslagbestand van een oudere versie kent nieuwe velden
+        nog niet, en die mogen dan niet hun beginwaarde kwijtraken.
+        Onleesbare datums worden genegeerd - liever een teller die één
+        dag opnieuw begint dan een crash bij het opstarten.
+        """
+        for veld in PERSISTED_PLAIN_FIELDS + PERSISTED_INT_FIELDS:
+            if veld in stored and stored[veld] is not None:
+                setattr(self, veld, stored[veld])
+        for veld in PERSISTED_DATE_FIELDS:
+            rauw = stored.get(veld)
+            if not rauw:
+                continue
+            try:
+                setattr(self, veld, date.fromisoformat(str(rauw)))
+            except (TypeError, ValueError):
+                continue
+        for veld in PERSISTED_DATETIME_FIELDS:
+            rauw = stored.get(veld)
+            if not rauw:
+                continue
+            moment = dt_util.parse_datetime(str(rauw))
+            if moment is not None:
+                setattr(self, veld, moment)
+
+    async def async_load_persisted_state(self) -> None:
+        """Laadt de opgebouwde toestand uit de Store (v1.0.4).
+
+        Wordt in `async_setup_entry` aangeroepen VÓÓR de platforms, om
+        dezelfde reden als de NILM-store in v0.63.115: entiteiten met een
+        eigen herstelpad draaien anders eerder en kunnen dan op verkeerde
+        aannames handelen.
+
+        Idempotent - een tweede aanroep leest niet opnieuw over verser
+        geheugen heen.
+        """
+        if self._state_store_loaded:
+            return
+        stored = await self._state_store.async_load()
+        self._state_store_loaded = True
+        if isinstance(stored, dict):
+            self._apply_persisted_state(stored)
+
+    def schedule_persisted_state_save(self) -> None:
+        """Plant een vertraagde opslag (v1.0.4).
+
+        Vertraagd omdat één tick meerdere velden raakt en de live
+        listeners (water, accu-koeling) zelfs meermaals per minuut
+        kunnen vuren - zonder vertraging zou dat onnodig veel
+        schrijfacties naar de SD-kaart of SSD opleveren.
+        """
+        self._state_store.async_delay_save(
+            self._collect_persisted_state, PERSISTED_STATE_SAVE_DELAY_SECONDS
+        )
+
+    async def async_save_persisted_state_now(self) -> None:
+        """Schrijft direct weg, zonder vertraging (v1.0.4) - gebruikt bij
+        het afsluiten, want een geplande opslag die nog niet is
+        uitgevoerd zou bij een herstart alsnog verloren gaan."""
+        await self._state_store.async_save(self._collect_persisted_state())
 
     async def async_load_persisted_nilm_state(self) -> None:
         """Publieke ingang om de NILM-Store te laden (v0.63.115).
@@ -9164,6 +9364,166 @@ class EnergyManagementSystemCoordinator:
             "Stuurt nooit een commando."
         )
 
+    def _queue_digital_twin_prediction(self, now: datetime) -> None:
+        """Legt de voorspelde SoC over
+        DIGITAL_TWIN_ACCURACY_HORIZON_HOURS vast, om later tegen de
+        werkelijkheid te houden (v1.0.1).
+
+        Dezelfde techniek als de zonvoorspelling-tracker: vastleggen wat
+        er verwacht wordt, en pas oordelen als het moment daar is.
+
+        Bewust NIET elke tick: dat zou binnen een dag honderden sterk
+        overlappende voorspellingen opleveren die vrijwel hetzelfde
+        zeggen, waardoor het gemiddelde vooral zou meten hoe vaak er
+        gemeten is. Eens per
+        DIGITAL_TWIN_ACCURACY_QUEUE_INTERVAL_MINUTES.
+        """
+        if not self.digital_twin_trajectory:
+            return
+        if (
+            self._digital_twin_last_queued is not None
+            and (now - self._digital_twin_last_queued).total_seconds() / 60
+            < DIGITAL_TWIN_ACCURACY_QUEUE_INTERVAL_MINUTES
+        ):
+            return
+
+        doelmoment = now + timedelta(hours=DIGITAL_TWIN_ACCURACY_HORIZON_HOURS)
+        beste = None
+        for punt in self.digital_twin_trajectory:
+            start = dt_util.parse_datetime(punt["start"])
+            if start is None:
+                continue
+            if beste is None or abs((start - doelmoment).total_seconds()) < abs(
+                (beste[0] - doelmoment).total_seconds()
+            ):
+                beste = (start, punt["soc_kwh"])
+        if beste is None:
+            return
+
+        # Reikt de tijdlijn niet ver genoeg, dan bestaat er geen
+        # voorspelling OVER die horizon - dan liever niets vastleggen dan
+        # een punt van veel dichterbij als zodanig afrekenen.
+        if abs((beste[0] - doelmoment).total_seconds()) / 60 > 60:
+            return
+
+        self._digital_twin_last_queued = now
+        self._digital_twin_pending.append(
+            {
+                "voorspeld_op": now.isoformat(),
+                "afrekenen_op": beste[0].isoformat(),
+                "voorspelde_soc_kwh": beste[1],
+            }
+        )
+        self._digital_twin_pending = self._digital_twin_pending[
+            -DIGITAL_TWIN_ACCURACY_HISTORY_LENGTH:
+        ]
+
+    def _resolve_digital_twin_predictions(self, now: datetime) -> None:
+        """Rekent vastgelegde voorspellingen af zodra hun moment bereikt
+        is (v1.0.1).
+
+        Een voorspelling die door een herstart of hiaat pas veel te laat
+        aan de beurt komt wordt weggegooid in plaats van alsnog
+        beoordeeld: die zegt niets meer over het moment waarvoor ze
+        bedoeld was, en zou de meting vervuilen met een fout die niets
+        met de modelkwaliteit te maken heeft.
+        """
+        available_entity = self.config.get(CONF_AVAILABLE_ENERGY_SENSOR)
+        if not available_entity or not self._digital_twin_pending:
+            return
+        werkelijk_kwh = self._read_sensor_float(available_entity)
+
+        openstaand = []
+        for voorspelling in self._digital_twin_pending:
+            moment = dt_util.parse_datetime(voorspelling["afrekenen_op"])
+            if moment is None:
+                continue
+            if now < moment:
+                openstaand.append(voorspelling)
+                continue
+            te_laat_minuten = (now - moment).total_seconds() / 60
+            if (
+                te_laat_minuten > DIGITAL_TWIN_ACCURACY_MAX_LATE_MINUTES
+                or werkelijk_kwh is None
+            ):
+                continue
+
+            fout_kwh = abs(werkelijk_kwh - voorspelling["voorspelde_soc_kwh"])
+            self.digital_twin_accuracy_history.append(
+                {
+                    "moment": voorspelling["afrekenen_op"],
+                    "voorspeld_kwh": round(voorspelling["voorspelde_soc_kwh"], 3),
+                    "werkelijk_kwh": round(werkelijk_kwh, 3),
+                    "fout_kwh": round(fout_kwh, 3),
+                }
+            )
+        self._digital_twin_pending = openstaand
+        self.digital_twin_accuracy_history = self.digital_twin_accuracy_history[
+            -DIGITAL_TWIN_ACCURACY_HISTORY_LENGTH:
+        ]
+
+    @property
+    def digital_twin_accuracy_mae_kwh(self) -> float | None:
+        """Gemiddelde absolute fout van de twin-voorspelling (v1.0.1).
+        None zolang er te weinig vergelijkingen zijn - liever geen getal
+        dan een getal op twee metingen."""
+        if len(self.digital_twin_accuracy_history) < DIGITAL_TWIN_ACCURACY_MIN_SAMPLES:
+            return None
+        fouten = [r["fout_kwh"] for r in self.digital_twin_accuracy_history]
+        return round(sum(fouten) / len(fouten), 3)
+
+    def get_digital_twin_accuracy_status(self) -> dict:
+        """Vertaalt de gemeten fout naar een oordeel (v1.0.1).
+
+        De fout wordt afgezet tegen de BRUIKBARE accucapaciteit en niet
+        tegen een vast aantal kWh: een afwijking van 1 kWh betekent iets
+        heel anders bij een accu van 2 kWh dan bij een van 7,5.
+        """
+        aantal = len(self.digital_twin_accuracy_history)
+        mae = self.digital_twin_accuracy_mae_kwh
+        if mae is None:
+            return {
+                "status": "onvoldoende_data",
+                "reden": (
+                    f"{aantal}/{DIGITAL_TWIN_ACCURACY_MIN_SAMPLES} afgeronde "
+                    f"vergelijkingen over {DIGITAL_TWIN_ACCURACY_HORIZON_HOURS} "
+                    "uur vooruit."
+                ),
+                "gemiddelde_fout_kwh": None,
+                "aantal_vergelijkingen": aantal,
+            }
+
+        capaciteit = self._max_usable_battery_capacity_kwh()
+        if not capaciteit:
+            return {
+                "status": "structureel_beschikbaar",
+                "reden": (
+                    f"Gemiddelde afwijking {mae} kWh over {aantal} "
+                    "vergelijkingen - zonder bekende accucapaciteit is niet "
+                    "te zeggen of dat veel of weinig is."
+                ),
+                "gemiddelde_fout_kwh": mae,
+                "aantal_vergelijkingen": aantal,
+            }
+
+        fractie = mae / capaciteit
+        if fractie <= DIGITAL_TWIN_ACCURACY_GOOD_FRACTION:
+            status = "klaar"
+        elif fractie <= DIGITAL_TWIN_ACCURACY_USABLE_FRACTION:
+            status = "bijna_klaar"
+        else:
+            status = "kwaliteit_te_laag"
+        return {
+            "status": status,
+            "reden": (
+                f"Gemiddelde afwijking {mae} kWh ({fractie * 100:.0f}% van de "
+                f"bruikbare capaciteit) over {aantal} vergelijkingen, "
+                f"{DIGITAL_TWIN_ACCURACY_HORIZON_HOURS} uur vooruit."
+            ),
+            "gemiddelde_fout_kwh": mae,
+            "aantal_vergelijkingen": aantal,
+        }
+
     def _update_advisory_readiness(self, now: datetime) -> None:
         """Readiness assessment for the ten advisory-only modules
         (v0.63.40, uitgebreid met extra-dip-marge/temperatuur-regressie
@@ -9233,11 +9593,16 @@ class EnergyManagementSystemCoordinator:
 
         # 3. Weather Ensemble - no accuracy tracking exists.
         if self.weather_ensemble_sources_used:
+            # v1.0.2: "nauwkeurigheid van de voorspelling" was hier de
+            # verkeerde vraag - de ensemble meldt de ACTUELE bewolking,
+            # geen verwachting. Wat wél te meten valt is of die melding
+            # klopt met wat de panelen werkelijk doen.
+            overeenstemming = self.get_weather_ensemble_agreement_status()
             readiness["weather_ensemble"] = {
-                "status": "structureel_beschikbaar",
+                "status": overeenstemming["status"],
                 "reden": (
-                    f"{len(self.weather_ensemble_sources_used)} bron(nen) actief - "
-                    "nauwkeurigheid t.o.v. de werkelijkheid wordt niet bijgehouden."
+                    f"{len(self.weather_ensemble_sources_used)} bron(nen) "
+                    f"actief. {overeenstemming['reden']}"
                 ),
             }
         else:
@@ -9319,13 +9684,18 @@ class EnergyManagementSystemCoordinator:
                 "reden": f"{len(converged)}/{active_filters} filters geconvergeerd.",
             }
 
-        # 7. Digital Twin - no accuracy tracking exists, same caveat as MPC.
+        # 7. Digital Twin - v1.0.1: nauwkeurigheid wordt nu WEL
+        # bijgehouden. Anders dan bij MPC is dat hier zinvol: de twin
+        # voorspelt een SoC die later gewoon na te meten is, terwijl het
+        # MPC-plan een theoretisch optimum is dat bewust NIET wordt
+        # uitgevoerd - daar valt niets tegen af te rekenen.
         if self.digital_twin_trajectory:
+            nauwkeurigheid = self.get_digital_twin_accuracy_status()
             readiness["digital_twin"] = {
-                "status": "structureel_beschikbaar",
+                "status": nauwkeurigheid["status"],
                 "reden": (
-                    f"Simuleert over {self.digital_twin_hours_simulated} uur - "
-                    "nauwkeurigheid t.o.v. het daadwerkelijke resultaat wordt niet bijgehouden."
+                    f"Simuleert over {self.digital_twin_hours_simulated} uur. "
+                    + nauwkeurigheid["reden"]
                 ),
             }
         else:
@@ -10205,6 +10575,7 @@ class EnergyManagementSystemCoordinator:
         self._update_water_tracking(now)
         self._update_peak_power_tracking(now)
         self._update_battery_module_health(now)
+        self.schedule_persisted_state_save()
         await self._async_apply_battery_cooling()
         self._update_feedin_regime(now, entries)
         self._update_counterfactual_savings(now, entries)
