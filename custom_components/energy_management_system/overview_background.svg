@@ -1,0 +1,164 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" width="1600" height="900" font-family="Roboto, Helvetica, Arial, sans-serif">
+  <!--
+    Achtergrondtekening voor de picture-elements-kaart op het
+    Overzicht-tabblad (v0.63.125).
+
+    BELANGRIJK bij het aanpassen: de posities van de entiteiten in
+    dashboard_template.yaml zijn PERCENTAGES van deze afbeelding. Wordt
+    hier iets verschoven, dan moeten die percentages mee. De ankerpunten
+    staan daarom in commentaar bij elk vak vermeld.
+
+    Bewust geen tekst met live waarden in de SVG zelf - dat is precies
+    wat de picture-elements-kaart eroverheen legt. Hier staan alleen de
+    vaste vormen en labels.
+  -->
+
+  <defs>
+    <linearGradient id="achtergrond" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#151a21"/>
+      <stop offset="100%" stop-color="#0d1116"/>
+    </linearGradient>
+    <linearGradient id="zonKleur" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f9d423"/>
+      <stop offset="100%" stop-color="#f39c12"/>
+    </linearGradient>
+    <linearGradient id="accuKleur" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#2ecc71"/>
+      <stop offset="100%" stop-color="#16a085"/>
+    </linearGradient>
+    <linearGradient id="netKleur" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#5dade2"/>
+      <stop offset="100%" stop-color="#2874a6"/>
+    </linearGradient>
+    <filter id="gloed" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="6" result="vervaagd"/>
+      <feMerge>
+        <feMergeNode in="vervaagd"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect width="1600" height="900" fill="url(#achtergrond)"/>
+
+  <!-- ======================= KOPBALK ======================= -->
+  <rect x="40" y="28" width="1520" height="96" rx="16" fill="#1b2430" stroke="#2c3a4a" stroke-width="2"/>
+  <text x="70" y="66" fill="#8fa3b8" font-size="20" letter-spacing="3">ENERGY MANAGEMENT SYSTEM</text>
+  <!-- anker systeemstatus: x 70..600, y 78..108 -->
+  <text x="1530" y="66" fill="#8fa3b8" font-size="18" text-anchor="end">STATUS</text>
+
+  <!-- ======================= ZON ======================= -->
+  <rect x="40" y="156" width="420" height="300" rx="16" fill="#161d26" stroke="#2c3a4a" stroke-width="2"/>
+  <text x="70" y="192" fill="#f9d423" font-size="22" letter-spacing="2">ZON</text>
+  <circle cx="150" cy="290" r="46" fill="url(#zonKleur)" filter="url(#gloed)"/>
+  <g stroke="#f9d423" stroke-width="5" stroke-linecap="round" opacity="0.85">
+    <line x1="150" y1="212" x2="150" y2="232"/>
+    <line x1="150" y1="348" x2="150" y2="368"/>
+    <line x1="72" y1="290" x2="92" y2="290"/>
+    <line x1="208" y1="290" x2="228" y2="290"/>
+    <line x1="95" y1="235" x2="109" y2="249"/>
+    <line x1="191" y1="331" x2="205" y2="345"/>
+    <line x1="205" y1="235" x2="191" y2="249"/>
+    <line x1="109" y1="331" x2="95" y2="345"/>
+  </g>
+  <!-- anker opwek nu: x 240..440, y 250..282 -->
+  <!-- anker bewolking: x 240..440, y 316..348 -->
+  <text x="240" y="246" fill="#6b7c90" font-size="15">OPWEK NU</text>
+  <text x="240" y="312" fill="#6b7c90" font-size="15">BEWOLKING</text>
+  <text x="70" y="418" fill="#6b7c90" font-size="15">RESTERENDE ZON VANDAAG</text>
+
+  <!-- ======================= HUIS ======================= -->
+  <rect x="500" y="156" width="600" height="300" rx="16" fill="#161d26" stroke="#3a4a5e" stroke-width="2"/>
+  <text x="530" y="192" fill="#e8eef5" font-size="22" letter-spacing="2">HUIS</text>
+  <path d="M 800 216 L 906 306 L 906 402 L 694 402 L 694 306 Z" fill="#20303f" stroke="#4a6076" stroke-width="3"/>
+  <path d="M 800 216 L 930 320 L 906 320 L 800 234 L 694 320 L 670 320 Z" fill="#2a3c4e" stroke="#4a6076" stroke-width="2"/>
+  <rect x="770" y="340" width="60" height="62" rx="4" fill="#f9d423" opacity="0.22"/>
+  <!-- anker huisverbruik: x 530..690, y 300..340 -->
+  <!-- anker zwaarste verbruiker: x 916..1090, y 300..332 -->
+  <text x="530" y="286" fill="#6b7c90" font-size="15">VERBRUIK NU</text>
+  <text x="916" y="286" fill="#6b7c90" font-size="15">ZWAARSTE BRON</text>
+
+  <!-- ======================= NET ======================= -->
+  <rect x="1140" y="156" width="420" height="300" rx="16" fill="#161d26" stroke="#2c3a4a" stroke-width="2"/>
+  <text x="1170" y="192" fill="#5dade2" font-size="22" letter-spacing="2">NET</text>
+  <g stroke="#5dade2" stroke-width="6" fill="none" opacity="0.9">
+    <line x1="1250" y1="230" x2="1250" y2="368"/>
+    <line x1="1196" y1="258" x2="1304" y2="258"/>
+    <line x1="1206" y1="296" x2="1294" y2="296"/>
+    <path d="M 1250 230 L 1214 258" stroke-width="4"/>
+    <path d="M 1250 230 L 1286 258" stroke-width="4"/>
+  </g>
+  <!-- anker netstroom: x 1330..1540, y 250..282 -->
+  <!-- anker prijs: x 1330..1540, y 316..348 -->
+  <text x="1330" y="246" fill="#6b7c90" font-size="15">NETSTROOM P1</text>
+  <text x="1330" y="312" fill="#6b7c90" font-size="15">PRIJS NU</text>
+  <text x="1170" y="418" fill="#6b7c90" font-size="15">DREMPEL DUUR</text>
+
+  <!-- ======================= STROOMPIJLEN ======================= -->
+  <g opacity="0.55">
+    <path d="M 468 306 L 494 306" stroke="#f9d423" stroke-width="6" marker-end="url(#pijlZon)"/>
+    <path d="M 1132 306 L 1106 306" stroke="#5dade2" stroke-width="6" marker-end="url(#pijlNet)"/>
+    <path d="M 800 462 L 800 506" stroke="#2ecc71" stroke-width="6" marker-end="url(#pijlAccu)"/>
+  </g>
+  <defs>
+    <marker id="pijlZon" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#f9d423"/>
+    </marker>
+    <marker id="pijlNet" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#5dade2"/>
+    </marker>
+    <marker id="pijlAccu" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#2ecc71"/>
+    </marker>
+  </defs>
+
+  <!-- ======================= ACCU ======================= -->
+  <rect x="500" y="516" width="600" height="344" rx="16" fill="#161d26" stroke="#2f4a3c" stroke-width="2"/>
+  <text x="530" y="552" fill="#2ecc71" font-size="22" letter-spacing="2">THUISACCU</text>
+
+  <!-- accu-omhulsel: x 530..790, y 580..660 -->
+  <rect x="530" y="580" width="260" height="80" rx="10" fill="#101820" stroke="#2ecc71" stroke-width="3"/>
+  <rect x="790" y="606" width="14" height="28" rx="3" fill="#2ecc71"/>
+  <!-- vulbalk wordt door de kaart overlapt; hier alleen de segmenten -->
+  <g fill="#2ecc71" opacity="0.16">
+    <rect x="540" y="590" width="58" height="60" rx="5"/>
+    <rect x="604" y="590" width="58" height="60" rx="5"/>
+    <rect x="668" y="590" width="58" height="60" rx="5"/>
+    <rect x="732" y="590" width="48" height="60" rx="5"/>
+  </g>
+  <!-- anker soc: x 830..1000, y 596..636 -->
+  <text x="830" y="586" fill="#6b7c90" font-size="15">LADING</text>
+
+  <!-- anker beschikbare energie: x 530..760, y 700..736 -->
+  <!-- anker rendement: x 800..1000, y 700..736 -->
+  <text x="530" y="694" fill="#6b7c90" font-size="15">BESCHIKBARE ENERGIE</text>
+  <text x="800" y="694" fill="#6b7c90" font-size="15">GELEERD RENDEMENT</text>
+
+  <!-- anker koeling: x 530..1070, y 782..818 -->
+  <line x1="530" y1="756" x2="1070" y2="756" stroke="#2c3a4a" stroke-width="2"/>
+  <text x="530" y="784" fill="#6b7c90" font-size="15">KOELING</text>
+
+  <!-- ======================= BESLUIT ======================= -->
+  <rect x="40" y="516" width="420" height="344" rx="16" fill="#161d26" stroke="#3d3550" stroke-width="2"/>
+  <text x="70" y="552" fill="#b39ddb" font-size="22" letter-spacing="2">BESLUIT</text>
+  <!-- anker modus: x 70..430, y 586..628 -->
+  <!-- anker dure kwartieren: x 70..430, y 668..704 -->
+  <!-- anker force manual: x 70..430, y 748..784 -->
+  <!-- anker vakantiemodus: x 70..430, y 812..848 -->
+  <text x="70" y="580" fill="#6b7c90" font-size="15">VERWACHTE MODUS</text>
+  <text x="70" y="662" fill="#6b7c90" font-size="15">DURE KWARTIEREN VANDAAG</text>
+  <text x="70" y="742" fill="#6b7c90" font-size="15">FORCE MANUAL</text>
+  <text x="70" y="806" fill="#6b7c90" font-size="15">VAKANTIEMODUS</text>
+
+  <!-- ======================= BEWAKING ======================= -->
+  <rect x="1140" y="516" width="420" height="344" rx="16" fill="#161d26" stroke="#4a3f2c" stroke-width="2"/>
+  <text x="1170" y="552" fill="#f0b429" font-size="22" letter-spacing="2">BEWAKING</text>
+  <!-- anker sensorgezondheid: x 1170..1530, y 586..622 -->
+  <!-- anker sluipverbruik: x 1170..1530, y 666..702 -->
+  <!-- anker modulegezondheid: x 1170..1530, y 746..782 -->
+  <!-- anker laatste update: x 1170..1530, y 812..844 -->
+  <text x="1170" y="580" fill="#6b7c90" font-size="15">SENSOR-GEZONDHEID</text>
+  <text x="1170" y="660" fill="#6b7c90" font-size="15">SLUIPVERBRUIK</text>
+  <text x="1170" y="740" fill="#6b7c90" font-size="15">ACCUMODULES MET AANDACHT</text>
+  <text x="1170" y="806" fill="#6b7c90" font-size="15">LAATSTE UPDATE</text>
+</svg>

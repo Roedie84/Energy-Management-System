@@ -19,6 +19,11 @@ PLATFORMS = ["switch", "sensor", "button"]
 _LOGGER = logging.getLogger(__name__)
 
 DASHBOARD_FILENAME = "energy_management_system_dashboard.yaml"
+# v0.63.125: de achtergrondtekening voor de picture-elements-kaart. Moet
+# onder `www/` staan, want dat is de enige map die Home Assistant als
+# statische bestanden serveert (bereikbaar als /local/<naam>).
+BACKGROUND_SOURCE_FILENAME = "overview_background.svg"
+BACKGROUND_TARGET_PATH = "www/energy_management_system_overview.svg"
 
 SERVICE_CONFIRM_NILM_DEVICE = "confirm_nilm_device"
 SERVICE_REJECT_NILM_DEVICE = "reject_nilm_device"
@@ -79,6 +84,51 @@ def _copy_dashboard_template(hass: HomeAssistant) -> None:
         )
 
 
+def _copy_overview_background(hass: HomeAssistant) -> None:
+    """Zet de achtergrondtekening klaar onder `www/` (v0.63.125).
+
+    Home Assistant serveert alleen `<config>/www/` als statische map, via
+    de URL `/local/`. De picture-elements-kaart verwijst daarheen, dus
+    zonder deze kopie zou de kaart een gebroken afbeelding tonen terwijl
+    alle waarden er wél overheen staan - verwarrender dan een lege kaart.
+
+    Maakt `www/` aan als die nog niet bestaat. LET OP: Home Assistant
+    registreert die map alleen bij het opstarten, dus als `www/` hier
+    voor het eerst wordt aangemaakt, is één extra herstart nodig voordat
+    de afbeelding daadwerkelijk geserveerd wordt. Dat staat ook in de
+    README.
+
+    Blokkerende bestandsoperatie - alleen aanroepen via
+    hass.async_add_executor_job.
+    """
+    source = Path(__file__).parent / BACKGROUND_SOURCE_FILENAME
+    if not source.exists():
+        _LOGGER.debug(
+            "Achtergrondtekening niet gevonden op %s - overgeslagen", source
+        )
+        return
+
+    destination = Path(hass.config.path(BACKGROUND_TARGET_PATH))
+    try:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, destination)
+        _LOGGER.info(
+            "Achtergrondtekening voor het dashboard gekopieerd naar %s "
+            "(bereikbaar als /local/%s)",
+            destination,
+            destination.name,
+        )
+    except OSError as err:
+        _LOGGER.warning(
+            "Kon de achtergrondtekening niet naar %s kopiëren: %s. De "
+            "picture-elements-kaart toont dan een gebroken afbeelding; "
+            "kopieer dashboards/%s handmatig naar www/.",
+            destination,
+            err,
+            BACKGROUND_SOURCE_FILENAME,
+        )
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Energy Management System from a config entry."""
     config = {**entry.data, **entry.options}
@@ -107,6 +157,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await coordinator.async_setup()
     await solar_tracker.async_setup()
     await hass.async_add_executor_job(_copy_dashboard_template, hass)
+    await hass.async_add_executor_job(_copy_overview_background, hass)
 
     entry.async_on_unload(entry.add_update_listener(async_update_options))
     _async_register_nilm_services(hass)
