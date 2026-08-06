@@ -123,26 +123,31 @@ def test_stale_gap_after_a_restart_is_not_counted_as_an_error(make_coordinator, 
 
 def test_health_score_averages_over_a_rolling_window(make_coordinator, hass):
     hass.states.set("sensor.available_energy", "5.0")
-    hass.states.set("sensor.battery_power", "0")
+    # v1.1.3: het vermogen bij de eerste meting telt mee in het eerste
+    # venster (het is het vermogen aan het begin van dat interval), dus
+    # hier meteen op de waarde zetten die de rest van de test aanhoudt.
+    hass.states.set("sensor.battery_power", "1000")
 
     coordinator = make_coordinator(_base_config())
     now = DAY0
     coordinator._update_energy_balance_validation(now)
 
-    # 15 goede ticks (available_kwh onveranderd, accuvermogen 0 - fout
-    # ~0). Ruim boven MEASUREMENT_QUALITY_MIN_SAMPLES, zodat deze test
-    # de REKENREGEL van het schuivende venster controleert en niet de
-    # minimumdrempel van v0.63.121.
+    # v1.1.3: een onveranderde sensor levert nu GEEN meting meer op -
+    # dat is geen goede meting maar geen meting. Goede ticks moeten dus
+    # een beweging tonen die klopt met het gemeten vermogen: 1000 W
+    # ontladen gedurende 6 minuten is precies 0,1 kWh.
+    beschikbaar = 5.0
     for _ in range(15):
         now = now + timedelta(minutes=6)
+        beschikbaar -= 0.1
+        hass.states.set("sensor.available_energy", f"{beschikbaar:.4f}")
         coordinator._update_energy_balance_validation(now)
 
-    # 5 slechte ticks (telkens een grote, onverklaarde daling).
-    beschikbaar = 5.0
+    # 5 slechte ticks (telkens een veel grotere, onverklaarde daling).
     for _ in range(5):
         now = now + timedelta(minutes=6)
         beschikbaar -= 2.0
-        hass.states.set("sensor.available_energy", f"{beschikbaar}")
+        hass.states.set("sensor.available_energy", f"{beschikbaar:.4f}")
         coordinator._update_energy_balance_validation(now)
 
     # 15 goed, 5 slecht op 20 metingen -> 75%.
