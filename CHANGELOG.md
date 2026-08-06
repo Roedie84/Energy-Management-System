@@ -7164,3 +7164,59 @@ de tegel.
 koeltegel van 6 kolommen in de live-cijfers-sectie staat.
 
 **Volledige testsuite**: 743 tests, allemaal groen.
+
+## v0.63.125 — Grafische overzichtskaart met entiteiten in een afbeelding
+
+**Gevraagd**: één grote kaart met alle gegevens per subcategorie
+verwerkt in een afbeelding, eerst voor tabblad 1.
+
+**Gebouwd als `picture-elements`** (kernkaart van Home Assistant, geen
+HACS-afhankelijkheid): een meegeleverde SVG-achtergrond met daarop
+absoluut gepositioneerde `state-label`- en `state-icon`-elementen.
+
+**Indeling** — zes zones als energieschema: Zon (opwek, bewolking,
+resterend vandaag), Huis (verbruik, zwaarste bron), Net (P1, prijs,
+drempel), Thuisaccu (lading, beschikbare energie, rendement, koeling),
+Besluit (modus, dure kwartieren, force manual, vakantiemodus) en
+Bewaking (sensor-gezondheid, sluipverbruik, accumodules, laatste
+update). Force manual en vakantiemodus zijn direct schakelbaar; de rest
+klikt door naar de details.
+
+**Achtergrond wordt automatisch klaargezet**: Home Assistant serveert
+alleen `<config>/www/` (als `/local/`), dus de integratie kopieert de SVG
+daarheen bij elke start - zelfde patroon als het dashboard zelf. Bestond
+`www/` nog niet, dan is één extra herstart nodig voordat de map ook
+daadwerkelijk geserveerd wordt.
+
+**Bewaakte valkuil**: de posities zijn percentages van de afbeelding, dus
+tekening en kaart kunnen stil uit elkaar lopen. De SVG documenteert elk
+ankerpunt in commentaar en een test controleert dat bij elk anker ook
+echt een element in de buurt staat.
+
+**Getest**: nieuw `tests/test_overview_picture_card.py`, 13 tests,
+waaronder dat de bestaande kaarten blijven bestaan - de grafische kaart
+komt erbij, niet in plaats van.
+
+**Volledige testsuite**: 756 tests, allemaal groen.
+
+## v0.63.126 — Grafische kaart naar een eigen tabblad "Visueel"
+
+**Gevraagd**: "Ik wil een extra tabblad voor hetgeen je net gemaakt
+hebt."
+
+De picture-elements-kaart stond boven aan Overzicht en duwde de
+werkkaarten naar beneden. Nu een eigen tabblad "Visueel", direct na
+Overzicht.
+
+Uitgevoerd als panel-view (`panel: true`): de ene kaart vult de volle
+breedte en hoogte, wat de tekening op een groot scherm pas tot zijn
+recht laat komen - in een gewone view blijft hij in een kolom hangen.
+Een panel-view mag exact één kaart bevatten; een test borgt dat.
+`grid_options` is verwijderd (hoort bij een sections-view, doet hier
+niets).
+
+Overzicht is verder onaangeroerd. Een test controleert zowel dat de
+picture-elements-kaart er niet meer staat als dat de drie kernsecties er
+nog zijn.
+
+**Volledige testsuite**: 758 tests, allemaal groen.

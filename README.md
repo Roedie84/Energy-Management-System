@@ -515,6 +515,104 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Grafische kaart naar een eigen tabblad "Visueel" (v0.63.126)
+
+**Gevraagd**: "Ik wil een extra tabblad voor hetgeen je net gemaakt
+hebt."
+
+De picture-elements-kaart stond boven aan Overzicht, waar hij de
+werkkaarten naar beneden duwde. Nu een eigen tabblad **Visueel**, direct
+na Overzicht.
+
+Uitgevoerd als **panel-view** (`panel: true`) in plaats van een gewone
+kaartenlijst. Dat is precies waar een panel-view voor bedoeld is: de ene
+kaart vult de volle breedte en hoogte van het scherm, wat de tekening op
+een groot scherm pas echt tot zijn recht laat komen. In een gewone view
+zou hij in een kolom blijven hangen. Een panel-view mag exact één kaart
+bevatten — een test borgt dat.
+
+`grid_options` is van de kaart verwijderd: die hoort bij een
+sections-view en doet in een panel-view niets, dus laten staan zou alleen
+verwarren.
+
+Overzicht is verder onaangeroerd: alle tabellen, tegels en schakelaars
+staan er nog precies zo. De grafische kaart is een toevoeging, geen
+vervanging — en daar zit nu ook een test op, die controleert dat de
+picture-elements-kaart níet meer op Overzicht staat én dat de drie
+kernsecties er nog zijn.
+
+**Volgorde**: het tabblad staat na Overzicht, zodat Overzicht de
+landingspagina blijft. Wil je Visueel als eerste (bijvoorbeeld voor een
+wandpaneel), dan is dat één regel verplaatsen — zeg het maar.
+
+**Volledige testsuite**: 758 tests, allemaal groen.
+
+## Grafische overzichtskaart: entiteiten in een afbeelding (v0.63.125)
+
+**Gevraagd**: "een grote afbeelding waarin alle gegevens zijn
+opgenomen... 1 grote card met alle gegevens in verwerkt per
+subcategorie", eerst voor tabblad 1.
+
+Gebouwd als **`picture-elements`** — een kernkaart van Home Assistant,
+dus geen HACS-afhankelijkheid erbij. Een SVG-achtergrond met daarop
+absoluut gepositioneerde `state-label`- en `state-icon`-elementen.
+
+### Indeling: zes zones, als energieschema
+
+De tekening is geen decoratie maar een schema: bovenin de drie bronnen
+en verbruikers met stroompijlen ertussen, onderin de logica en bewaking.
+
+| Zone | Wat erin staat |
+|---|---|
+| **Zon** | opwek nu, bewolkingsgraad, resterende zon vandaag |
+| **Huis** | werkelijk huisverbruik, zwaarste verbruiker |
+| **Net** | netstroom P1, prijs nu, drempel duur |
+| **Thuisaccu** | lading, beschikbare energie, geleerd rendement, koeling |
+| **Besluit** | verwachte modus, dure kwartieren, force manual, vakantiemodus |
+| **Bewaking** | sensor-gezondheid, sluipverbruik, accumodules, laatste update |
+
+Force manual en vakantiemodus zijn direct schakelbaar vanaf de kaart;
+alle andere elementen klikken door naar de details.
+
+### De achtergrond wordt automatisch klaargezet
+
+Home Assistant serveert alleen `<config>/www/` als statische map (via
+`/local/`). De integratie kopieert de SVG daar bij elke start naartoe,
+net zoals ze het dashboard zelf al kopieerde — je hoeft dus niets
+handmatig te plaatsen.
+
+**Bestond `www/` nog niet, dan is één extra herstart nodig**: Home
+Assistant registreert die map alleen bij het opstarten, dus de eerste
+keer wordt de map wel aangemaakt maar nog niet geserveerd. Zie je een
+gebroken afbeelding met de waarden er wél overheen, herstart dan
+nogmaals.
+
+### De valkuil, en hoe die bewaakt wordt
+
+De posities zijn **percentages van de afbeelding**. Verandert de SVG
+zonder dat de percentages meebewegen, dan staan de waarden ernaast
+zonder dat er iets stukgaat — precies het soort fout dat pas opvalt als
+je ernaar kijkt. De SVG documenteert daarom elk ankerpunt in commentaar
+(`anker soc: x 830..1000, y 596..636`), en een test controleert dat bij
+**elk** anker ook echt een element in de buurt staat. Lopen tekening en
+kaart uiteen, dan faalt de testsuite.
+
+### Getest
+
+Nieuw `tests/test_overview_picture_card.py`, 13 tests: de achtergrond
+wordt meegeleverd en is geldige XML, repo-kopie en meegeleverde kopie
+zijn identiek, de kaart wijst naar `/local/`, de integratie kopieert
+naar `www/` via een executor (blokkerende bestandsoperatie), elk element
+valt binnen 0-100%, alle zes de zones bestaan én zijn gevuld, elk
+gedocumenteerd anker heeft een element in de buurt, elk label heeft een
+expliciete kleur en schaduw (het HA-thema is niet gegarandeerd leesbaar
+op een eigen achtergrond), labels breken niet af, alles is klikbaar,
+geen twee elementen op dezelfde plek, en — belangrijk — de bestaande
+kaarten staan er nog: de grafische kaart komt **erbij**, niet in plaats
+van. De tabellen en schakelaars blijven nodig voor het echte werk.
+
+**Volledige testsuite**: 756 tests, allemaal groen.
+
 ## Accu-koeling verplaatst naar de live-cijfers (v0.63.124)
 
 **Gevraagd**: de accu-koeling een andere plek geven op het dashboard,
