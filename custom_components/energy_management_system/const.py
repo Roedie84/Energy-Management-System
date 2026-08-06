@@ -1235,3 +1235,22 @@ CLIMATE_RATE_NEIGHBOUR_BUCKETS = 1
 # Staat de sensor stil, dan is er niets te controleren: geen slechte
 # meting, maar géén meting.
 ENERGY_BALANCE_MIN_DELTA_KWH = 0.005
+
+# --- Meetfrequentie van bronsensoren (v1.1.4) ------------------------
+# Gevraagd: "Had je dit eerder kunnen afvangen als de diagnostiek beter
+# was?" Ja. De export toonde de UITKOMST (sensor-gezondheid 21%, een
+# reeks foutwaarden) maar nergens hoe vaak elke bronsensor eigenlijk
+# bijwerkt. Precies dat getal maakte het verschil tussen "de sensoren
+# spreken elkaar tegen" en "de sensoren meten op een ander tempo" - en
+# alleen de tweede was waar.
+#
+# Wordt nu per sensor bijgehouden: hoeveel ticks er zijn geweest en bij
+# hoeveel daarvan de waarde daadwerkelijk veranderde. Een sensor die bij
+# 10% van de ticks beweegt, is meteen herkenbaar als traag.
+SENSOR_CADENCE_HISTORY_LENGTH = 300
+SENSOR_CADENCE_MIN_SAMPLES = 30
+
+# Onder dit percentage bewegingen heet een sensor traag ten opzichte van
+# de tick - niet fout, maar wel iets waar afgeleide tempo's rekening mee
+# moeten houden.
+SENSOR_CADENCE_SLOW_PERCENT = 40.0

@@ -7789,3 +7789,39 @@ nieuwe logica 4 metingen met fout 0.
 Twee bestaande tests die de oude aanname vastlegden zijn meebewogen.
 
 **Volledige testsuite**: 919 tests, allemaal groen.
+
+## v1.1.4 — Audit op dezelfde foutklasse, en betere diagnostiek
+
+**Gevraagd**: "Had je dit eerder kunnen afvangen als de diagnostiek beter
+was, en zitten er elders meer van dit soort zaken?"
+
+**Diagnostiek**: ja. De export toonde de uitkomst (gezondheid 21%, een
+reeks foutwaarden) maar nergens hoe vaak elke bronsensor bijwerkte -
+precies het getal dat "sensoren spreken elkaar tegen" onderscheidt van
+"sensoren meten op een ander tempo". Nieuw: een meetfrequentie-rapport
+per bronsensor (percentage metingen waarbij de waarde verandert), in de
+diagnostiek-export en als INFORMATIEVE regel op het dashboard - traag is
+geen storing.
+
+**Audit**: alle plekken die een tempo afleiden uit het verschil van een
+niveaumeting zijn nagelopen. Kirchhoff (v1.1.3) en het
+achtertuin-uitschieterfilter (v1.0.6) waren al opgelost; het
+klimaat-tempo bleek al veilig (meet over een anker van ~1 uur, met de
+reden gedocumenteerd). Eén nieuwe treffer:
+
+**De kostprijs-/besparingsboekhouding** berekende het ontlaadtempo over
+de tick in plaats van over de werkelijke beweging van de sensor. Bij vier
+stille ticks gevolgd door een sprong kwam het tempo tot vijf keer te hoog
+uit - en dat tempo bepaalt hoeveel van een ontlading als EXPORT wordt
+geboekt. Bij 500 W huisverbruik en 500 W werkelijke ontlading: oud 0,167
+kWh "export", nieuw 0,000. Er ging niets het net op, en toch werd er
+terugleverpremie geboekt. Na saldering zou dat nog zwaarder wegen.
+
+De vier plekken die vermogen x tijd = energie rekenen zijn een andere
+zaak (een stilstaande meting is daar een redelijke benadering, en ze zijn
+al begrensd tegen grote hiaten) en blijven ongewijzigd.
+
+**Getest**: nieuw `tests/test_cost_basis_stale_sensor.py` (4 tests) en
+`tests/test_sensor_cadence.py` (6 tests).
+
+**Volledige testsuite**: 929 tests, allemaal groen.

@@ -515,6 +515,84 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Audit op dezelfde foutklasse, en betere diagnostiek (v1.1.4)
+
+**Gevraagd**: *"Had je dit eerder kunnen afvangen als de diagnostiek
+beter was, en zitten er elders meer van dit soort zaken die verstoringen
+kunnen geven?"*
+
+Twee eerlijke antwoorden: ja, en ja.
+
+### Kon de diagnostiek dit eerder afvangen?
+
+Ja. De export toonde de **uitkomst** — sensor-gezondheid 21%, een reeks
+foutwaarden — maar nergens hoe vaak elke bronsensor eigenlijk bijwerkte.
+En precies dat getal onderscheidt "de sensoren spreken elkaar tegen" van
+"de sensoren meten op een ander tempo". Alleen het tweede was waar.
+
+Ik vond het uiteindelijk door de foutwaarden met de hand te bekijken en
+op te merken dat ze zich herhaalden. Dat had niet nodig moeten zijn.
+
+Er is nu een **meetfrequentie-rapport**: per bronsensor bij hoeveel
+procent van de metingen de waarde daadwerkelijk verandert. Een sensor die
+bij 20% beweegt is meteen herkenbaar als traag. Dat staat in de
+diagnostiek-export en als informatieve regel op het dashboard — geen
+aandachtspunt, want traag is geen storing, maar wel iets om te weten.
+
+### Zitten er meer van?
+
+De foutklasse is scherp te omschrijven: **een tempo afleiden uit het
+verschil van een niveaumeting, gedeeld door een aangenomen interval.**
+Alle plekken die dat doen zijn nagelopen:
+
+| Plek | Oordeel |
+|---|---|
+| Kirchhoff-balanscheck | opgelost in v1.1.3 |
+| Achtertuin-uitschieterfilter | opgelost in v1.0.6 |
+| Klimaat-tempo (°C/uur) | **al veilig** — meet over een anker van ~1 uur, met de reden expliciet gedocumenteerd |
+| Kostprijs/besparing | **nieuwe treffer** |
+
+De vier plekken die *vermogen × tijd = energie* rekenen zijn een andere
+zaak: daar is een stilstaande meting een redelijke benadering, en ze zijn
+al begrensd tegen grote hiaten. Die blijven zoals ze zijn.
+
+### De nieuwe treffer: de financiële splitsing
+
+De kostprijs- en besparingsboekhouding berekende het ontlaadtempo over de
+tick van vijf minuten in plaats van over de werkelijke beweging van de
+sensor. Stond die vier ticks stil en sprong hij daarna, dan was de
+opgebouwde energie over ~25 minuten ontstaan terwijl er met vijf werd
+gerekend.
+
+Dat tempo bepaalt hoeveel van een ontlading als **export** wordt geboekt
+— het deel boven het huisverbruik. Concreet, bij 500 W huisverbruik en
+een accu die werkelijk 500 W ontlaadt:
+
+| | Afgeleid tempo | Geboekt als export |
+|---|---|---|
+| Oud (5 min) | 2500 W | 0,167 kWh |
+| Nieuw (werkelijk 25 min) | 500 W | **0,000 kWh** |
+
+Er ging niets het net op, en toch werd er export geboekt — met
+bijbehorende terugleverpremie. Na saldering zou dat de waardering van die
+kWh nog verder scheeftrekken, want dan verschillen export en eigen
+verbruik €0,19.
+
+### Getest
+
+Nieuw `tests/test_cost_basis_stale_sensor.py`, 4 tests: een stille tick
+boekt niets, het interval loopt sinds de laatste beweging, échte export
+wordt nog steeds geboekt, en het tijdijkpunt blijft staan zolang de sensor
+stilstaat (zou dat meeschuiven, dan was de fix zinloos).
+
+Nieuw `tests/test_sensor_cadence.py`, 6 tests: een sensor die de tick
+volgt, een trage sensor wordt herkend, geen oordeel onder de drempel, een
+trage sensor is informatief en geen aandachtspunt, het venster blijft
+recent (anders verbergt een maandgemiddelde een recente verslechtering),
+en het getal staat in de export.
+
+**Volledige testsuite**: 929 tests, allemaal groen.
+
 ## Sensor-gezondheid stond op 21% door een trage sensor (v1.1.3)
 
 **Gevraagd**: *"Kun je uitzoeken waarom de sensor gezondheid zo laag is?

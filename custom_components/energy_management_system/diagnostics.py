@@ -317,6 +317,7 @@ async def async_get_config_entry_diagnostics(
             ),
             "learning_only": coordinator.learning_only,
             "persisted_state_snapshot": coordinator._collect_persisted_state(),
+            "sensor_cadence": coordinator.get_sensor_cadence_report(),
             "kalman_divergence": coordinator.get_kalman_divergence_status(),
             "weather_ensemble_agreement": (
                 coordinator.get_weather_ensemble_agreement_status()

@@ -256,6 +256,9 @@ from .const import (
     CONF_BATTERY_TEMPERATURE_SENSOR,
     MAX_HOUR_TRACKING_GAP_MINUTES,
     ENERGY_BALANCE_MIN_DELTA_KWH,
+    SENSOR_CADENCE_HISTORY_LENGTH,
+    SENSOR_CADENCE_MIN_SAMPLES,
+    SENSOR_CADENCE_SLOW_PERCENT,
     MEASUREMENT_QUALITY_MIN_SAMPLES,
     PERSISTED_DATE_FIELDS,
     PERSISTED_DATETIME_FIELDS,
@@ -611,6 +614,9 @@ class EnergyManagementSystemCoordinator:
         # v1.1.3: accuvermogen-metingen sinds de laatste beweging van de
         # energiesensor, om over het juiste venster te kunnen middelen.
         self._balance_power_samples: list[float] = []
+        # v1.1.4: hoe vaak elke bronsensor daadwerkelijk beweegt t.o.v.
+        # de tick. Zie SENSOR_CADENCE_* in const.py.
+        self.sensor_cadence: dict[str, dict] = {}
         self.last_energy_balance_error_w: float | None = None
         self.energy_balance_error_history: list[float | None] = []
         self.sensor_health_score: float | None = None
@@ -5942,22 +5948,38 @@ class EnergyManagementSystemCoordinator:
         if available_kwh is None:
             return
 
+        # v1.1.4: `elapsed_hours` wordt gemeten sinds de vorige
+        # BEWEGING van de sensor, niet sinds de vorige tick. Dat is
+        # dezelfde fout als in de Kirchhoff-balanscheck (v1.1.3): de
+        # beschikbare-energiesensor werkt trager bij dan de tick van vijf
+        # minuten, dus als hij vier ticks stilstaat en dan springt, is de
+        # opgebouwde energie over ~25 minuten ontstaan terwijl er met
+        # ~5 minuten werd gerekend. Het afgeleide ontlaadtempo kwam
+        # daardoor tot vijf keer te hoog uit, en dat tempo bepaalt hoeveel
+        # van een ontlading als EXPORT wordt geboekt - met een te hoog
+        # tempo lijkt er veel meer het net op te gaan dan werkelijk het
+        # geval is. Dat verschoof de terugleverpremie en, na saldering,
+        # de hele waardering van die kWh.
+        if self._last_available_kwh_for_cost_basis is None:
+            self._last_available_kwh_for_cost_basis = available_kwh
+            self._last_cost_basis_calc_time = now
+            return
+
+        delta_kwh = available_kwh - self._last_available_kwh_for_cost_basis
+
+        if abs(delta_kwh) < MIN_COST_BASIS_DELTA_KWH:
+            # Sensor stond stil - niets geboekt, en het ijkpunt in tijd
+            # blijft staan zodat de eerstvolgende sprong over het
+            # WERKELIJKE interval wordt gerekend.
+            return
+
         elapsed_hours = 0.0
         if self._last_cost_basis_calc_time is not None:
             elapsed_hours = max(
                 (now - self._last_cost_basis_calc_time).total_seconds() / 3600, 0
             )
         self._last_cost_basis_calc_time = now
-
-        if self._last_available_kwh_for_cost_basis is None:
-            self._last_available_kwh_for_cost_basis = available_kwh
-            return
-
-        delta_kwh = available_kwh - self._last_available_kwh_for_cost_basis
         self._last_available_kwh_for_cost_basis = available_kwh
-
-        if abs(delta_kwh) < MIN_COST_BASIS_DELTA_KWH:
-            return
 
         current_price = self._get_current_price_per_kwh(entries, now)
         if current_price is None:
@@ -6149,6 +6171,79 @@ class EnergyManagementSystemCoordinator:
         error_w = implied_battery_power_w - gemiddeld_gemeten_w
         self.last_energy_balance_error_w = round(error_w, 1)
         self._record_balance_sample(abs(error_w))
+
+    def _track_sensor_cadence(self, entity_id: str | None) -> None:
+        """Houdt bij hoe vaak een bronsensor daadwerkelijk van waarde
+        verandert, ten opzichte van de tick (v1.1.4).
+
+        Dit is het getal dat bij de vorige storing ontbrak. De
+        diagnostiek toonde wél dat de sensor-gezondheid op 21% stond en
+        wélke foutwaarden dat opleverde, maar nergens dat de
+        beschikbare-energiesensor maar bij een fractie van de ticks
+        bewoog. Zonder dat getal is "de sensoren spreken elkaar tegen"
+        niet te onderscheiden van "de sensoren meten op een ander tempo".
+        """
+        if not entity_id:
+            return
+        state = self.hass.states.get(entity_id)
+        huidige = getattr(state, "state", None)
+        gegevens = self.sensor_cadence.setdefault(
+            entity_id, {"ticks": 0, "wijzigingen": 0, "laatste": None}
+        )
+        gegevens["ticks"] += 1
+        if huidige != gegevens["laatste"]:
+            if gegevens["laatste"] is not None:
+                gegevens["wijzigingen"] += 1
+            gegevens["laatste"] = huidige
+        # Begrensd venster, zodat het percentage het RECENTE gedrag
+        # weerspiegelt en niet een gemiddelde over maanden.
+        if gegevens["ticks"] > SENSOR_CADENCE_HISTORY_LENGTH:
+            verhouding = gegevens["wijzigingen"] / gegevens["ticks"]
+            gegevens["ticks"] = SENSOR_CADENCE_HISTORY_LENGTH // 2
+            gegevens["wijzigingen"] = round(verhouding * gegevens["ticks"])
+
+    def _update_sensor_cadence_tracking(self) -> None:
+        """Volgt de bronsensoren waarvan een AFGELEID tempo wordt
+        berekend (v1.1.4) - dat is precies de groep waar een trage
+        sensor tot schijnfouten leidt."""
+        for sleutel in (
+            CONF_AVAILABLE_ENERGY_SENSOR,
+            CONF_BATTERY_POWER_SENSOR,
+            CONF_PV_POWER_SENSOR,
+            CONF_CONSUMPTION_POWER_SENSOR,
+        ):
+            self._track_sensor_cadence(self.config.get(sleutel))
+
+    def get_sensor_cadence_report(self) -> dict:
+        """Per sensor: bij hoeveel procent van de ticks bewoog hij?
+        (v1.1.4)"""
+        rapport = {}
+        for entity_id, gegevens in sorted(self.sensor_cadence.items()):
+            ticks = gegevens["ticks"]
+            if ticks < SENSOR_CADENCE_MIN_SAMPLES:
+                rapport[entity_id] = {
+                    "status": "onvoldoende_data",
+                    "reden": f"{ticks}/{SENSOR_CADENCE_MIN_SAMPLES} ticks.",
+                }
+                continue
+            percentage = round(100 * gegevens["wijzigingen"] / ticks, 1)
+            traag = percentage < SENSOR_CADENCE_SLOW_PERCENT
+            rapport[entity_id] = {
+                "status": "traag" if traag else "volgt_de_tick",
+                "beweegt_percent": percentage,
+                "ticks": ticks,
+                "reden": (
+                    f"Beweegt bij {percentage}% van de ticks"
+                    + (
+                        " - trager dan de tick, dus afgeleide tempo's "
+                        "moeten over de werkelijke beweging worden "
+                        "gerekend en niet per tick."
+                        if traag
+                        else "."
+                    )
+                ),
+            }
+        return rapport
 
     def _record_balance_sample(self, abs_error_w: float | None) -> None:
         """Append one sample (or None for a missing-sensor tick) to the
@@ -8385,6 +8480,19 @@ class EnergyManagementSystemCoordinator:
                 f"Accumodules verschillen {soc_spreiding:.1f}% in SoC - een "
                 "module komt niet meer mee met de rest."
             )
+
+        # v1.1.4: een trage bronsensor is geen storing, maar wel iets
+        # om te weten - afgeleide tempo's moeten er rekening mee houden,
+        # en het scheelde eerder een middag zoeken naar een "slechte"
+        # sensor die gewoon traag was. Informatief, geen aandachtspunt.
+        for entity_id, gegevens in self.get_sensor_cadence_report().items():
+            if gegevens.get("status") == "traag":
+                informatief.append(
+                    f"{entity_id} beweegt maar bij "
+                    f"{gegevens['beweegt_percent']}% van de metingen - "
+                    "trager dan de 5-minutencyclus. Afgeleide waarden "
+                    "worden daarom over de werkelijke beweging gerekend."
+                )
 
         duplicate_pairs = self.get_nilm_duplicate_pairs()
         if duplicate_pairs:
@@ -10951,6 +11059,7 @@ class EnergyManagementSystemCoordinator:
         self._update_water_tracking(now)
         self._update_peak_power_tracking(now)
         self._update_battery_module_health(now)
+        self._update_sensor_cadence_tracking()
         self.schedule_persisted_state_save()
         await self._async_apply_battery_cooling()
         self._update_feedin_regime(now, entries)
