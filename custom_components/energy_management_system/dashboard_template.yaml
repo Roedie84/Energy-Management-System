@@ -37,10 +37,20 @@ views:
               {% set punten =
               state_attr('sensor.woonkamer_energy_management_system_system_status',
               'aandachtspunten') or [] %}
+              {% set info =
+              state_attr('sensor.woonkamer_energy_management_system_system_status',
+              'informatief') or [] %}
               {% if punten | length > 0 %}
               **⚠️ Aandachtspunten:**
 
               {% for punt in punten %}
+              - {{ punt }}
+              {% endfor %}
+              {% endif %}
+              {% if info | length > 0 %}
+              **ℹ️ Ter info (geen invloed op de status):**
+
+              {% for punt in info %}
               - {{ punt }}
               {% endfor %}
               {% endif %}
@@ -363,6 +373,19 @@ views:
     cards:
       - type: custom:mushroom-title-card
         title: Financieel
+
+      - type: markdown
+        content: |
+          {% set s = 'sensor.woonkamer_energy_management_system_battery_savings_cost_basis_model' %}{% set actief = state_attr(s, 'salderen_actief') %}{% set tw = state_attr(s, 'teruglever_waarde_eur_per_kwh') %}{% set pv = state_attr(s, 'geladen_uit_pv_kwh') %}{% set net = state_attr(s, 'geladen_uit_net_kwh') %}{% set exp = state_attr(s, 'ontladen_naar_net_kwh') %}{% set derf = state_attr(s, 'gederfde_teruglevering_eur') %}### {{ '🔁 Saldering actief' if actief else '⚡ Saldering beëindigd' }}
+          | — | — |
+          |---|---|
+          | 💶 **Terugleverwaarde** | {{ '€%.4f/kWh' | format(tw) if tw is not none else 'onbekend' }} |
+          | ☀️ **Geladen uit PV** | {{ '%.1f kWh' | format(pv) if pv is not none else '—' }} |
+          | 🔌 **Geladen uit net** | {{ '%.1f kWh' | format(net) if net is not none else '—' }} |
+          | ↩️ **Ontladen naar net** | {{ '%.1f kWh' | format(exp) if exp is not none else '—' }} |
+          | 📉 **Gederfde teruglevering** | {{ '€%.2f' | format(derf) if derf is not none else '—' }} |
+
+          {% if actief %}Zolang salderen geldt is teruglevering evenveel waard als inkoop. PV in de accu stoppen voor eigen gebruik levert dan niets extra op — de winst komt puur uit het prijsverschil tussen goedkope en dure kwartieren.{% else %}Saldering is beëindigd: teruglevering levert nu veel minder op dan inkoop kost. Elke kWh PV die je zelf verbruikt in plaats van teruglevert is nu het verschil waard — opslaan is daardoor aanzienlijk aantrekkelijker geworden dan voorheen.{% endif %}
 
       - type: custom:mushroom-template-card
         primary: >-
@@ -925,11 +948,55 @@ views:
           {% if paren | length == 0 %}
           Geen waarschijnlijke duplicaten gevonden onder de bevestigde apparaten.
           {% else %}
-          Deze paren delen een (bijna) identieke vermogensgeschiedenis - vermoedelijk hetzelfde fysieke signaal onder twee HA-entiteiten. Overweeg er één permanent uit te sluiten via de `reject_nilm_device`-service (Ontwikkelaarshulpmiddelen → Acties).
+          Deze paren delen een (bijna) identieke vermogensgeschiedenis - vermoedelijk hetzelfde fysieke signaal onder twee HA-entiteiten. Beoordeel ze hieronder: ✅ = het is inderdaad een duplicaat (sluit het genoemde apparaat permanent uit), ❌ = geen duplicaat (het paar verdwijnt en komt nooit meer terug).
           {% for paar in paren %}
           - **{{ paar.apparaat_1 }}** ↔ **{{ paar.apparaat_2 }}** ({{ paar.gedeelde_dagen }} gedeelde dagen)
           {% endfor %}
           {% endif %}
+
+      - type: grid
+        columns: 1
+        square: false
+        cards:
+          - type: heading
+            heading: Duplicaatpaar beoordelen
+            grid_options:
+              columns: 12
+              rows: 1
+          - type: custom:mushroom-template-card
+            primary: >-
+              {{ state_attr('button.woonkamer_energy_management_system_nilm_duplicaat_1_bevestigen', 'friendly_name') }}
+            secondary: >-
+              {% set d = state_attr('button.woonkamer_energy_management_system_nilm_duplicaat_1_bevestigen', 'gedeelde_dagen') %}
+              {{ (d ~ ' gedeelde dagen — tik om te bevestigen') if d is not none else 'niets te beoordelen' }}
+            icon: mdi:content-duplicate
+            icon_color: orange
+            entity: button.woonkamer_energy_management_system_nilm_duplicaat_1_bevestigen
+            tap_action:
+              action: perform-action
+              perform_action: button.press
+              target:
+                entity_id: button.woonkamer_energy_management_system_nilm_duplicaat_1_bevestigen
+            grid_options:
+              columns: 12
+              rows: 1
+          - type: custom:mushroom-template-card
+            primary: >-
+              {{ state_attr('button.woonkamer_energy_management_system_nilm_duplicaat_1_negeren', 'friendly_name') }}
+            secondary: >-
+              {% set d = state_attr('button.woonkamer_energy_management_system_nilm_duplicaat_1_negeren', 'gedeelde_dagen') %}
+              {{ 'Tik om dit paar permanent af te wijzen' if d is not none else 'niets te beoordelen' }}
+            icon: mdi:close-circle-outline
+            icon_color: red
+            entity: button.woonkamer_energy_management_system_nilm_duplicaat_1_negeren
+            tap_action:
+              action: perform-action
+              perform_action: button.press
+              target:
+                entity_id: button.woonkamer_energy_management_system_nilm_duplicaat_1_negeren
+            grid_options:
+              columns: 12
+              rows: 1
 
       - type: grid
         columns: 1

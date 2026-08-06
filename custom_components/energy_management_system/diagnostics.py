@@ -473,6 +473,19 @@ async def async_get_config_entry_diagnostics(
                 coordinator.energy_balance_error_history
             ),
             "sensor_health_score": coordinator.sensor_health_score,
+            # v0.63.117 - salderingsregime en teruglever-waardering.
+            "salderen_active": coordinator.salderen_active,
+            "salderen_end_date": coordinator.config.get("salderen_end_date"),
+            "current_feedin_value_eur_per_kwh": (
+                coordinator.current_feedin_value_eur_per_kwh
+            ),
+            "feedin_import_spread_eur_per_kwh": (
+                coordinator.feedin_import_spread_eur_per_kwh
+            ),
+            "charge_pv_kwh_total": coordinator.charge_pv_kwh_total,
+            "charge_grid_kwh_total": coordinator.charge_grid_kwh_total,
+            "discharge_export_kwh_total": coordinator.discharge_export_kwh_total,
+            "forgone_feedin_eur_total": coordinator.forgone_feedin_eur_total,
             "measurement_quality": coordinator.measurement_quality,
             "sluipverbruik_detected": coordinator.sluipverbruik_detected,
             "sluipverbruik_estimated_drift_w": (
@@ -535,6 +548,9 @@ async def async_get_config_entry_diagnostics(
             "nilm_unconfirmed_candidates": coordinator.nilm_unconfirmed_candidates,
             "nilm_confirmed_devices": coordinator.nilm_confirmed_devices,
             "nilm_rejected_entities": coordinator.nilm_rejected_entities,
+            "nilm_dismissed_duplicate_pairs": (
+                coordinator.nilm_dismissed_duplicate_pairs
+            ),
             "nilm_devices_table": coordinator.get_nilm_devices_table(),
             "nilm_duplicate_pairs": coordinator.get_nilm_duplicate_pairs(),
             "advisory_readiness": coordinator.advisory_readiness,

@@ -23,7 +23,17 @@ DASHBOARD_FILENAME = "energy_management_system_dashboard.yaml"
 SERVICE_CONFIRM_NILM_DEVICE = "confirm_nilm_device"
 SERVICE_REJECT_NILM_DEVICE = "reject_nilm_device"
 SERVICE_UNCONFIRM_NILM_DEVICE = "unconfirm_nilm_device"
+# v0.63.118: duplicaatparen beoordelen, spiegelbeeld van confirm/reject
+# voor losse apparaten.
+SERVICE_DISMISS_NILM_DUPLICATE = "dismiss_nilm_duplicate_pair"
+SERVICE_CONFIRM_NILM_DUPLICATE = "confirm_nilm_duplicate_pair"
 NILM_SERVICE_SCHEMA = vol.Schema({vol.Required("entity_id"): cv.entity_id})
+NILM_DUPLICATE_SERVICE_SCHEMA = vol.Schema(
+    {
+        vol.Required("entity_id_1"): cv.entity_id,
+        vol.Required("entity_id_2"): cv.entity_id,
+    }
+)
 
 
 def _copy_dashboard_template(hass: HomeAssistant) -> None:
@@ -151,8 +161,39 @@ def _async_register_nilm_services(hass: HomeAssistant) -> None:
                 entity_id,
             )
 
+    async def _handle_dismiss_duplicate(call: ServiceCall) -> None:
+        entity_1 = call.data["entity_id_1"]
+        entity_2 = call.data["entity_id_2"]
+        for coordinator in _iter_coordinators():
+            coordinator.dismiss_nilm_duplicate_pair(entity_1, entity_2)
+
+    async def _handle_confirm_duplicate(call: ServiceCall) -> None:
+        entity_1 = call.data["entity_id_1"]
+        entity_2 = call.data["entity_id_2"]
+        handled_anywhere = False
+        for coordinator in _iter_coordinators():
+            if coordinator.confirm_nilm_duplicate_pair(entity_1, entity_2):
+                handled_anywhere = True
+        if not handled_anywhere:
+            _LOGGER.warning(
+                "confirm_nilm_duplicate_pair: %s is not a confirmed NILM device",
+                entity_2,
+            )
+
     hass.services.async_register(
         DOMAIN, SERVICE_CONFIRM_NILM_DEVICE, _handle_confirm, schema=NILM_SERVICE_SCHEMA
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_DISMISS_NILM_DUPLICATE,
+        _handle_dismiss_duplicate,
+        schema=NILM_DUPLICATE_SERVICE_SCHEMA,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_CONFIRM_NILM_DUPLICATE,
+        _handle_confirm_duplicate,
+        schema=NILM_DUPLICATE_SERVICE_SCHEMA,
     )
     hass.services.async_register(
         DOMAIN, SERVICE_REJECT_NILM_DEVICE, _handle_reject, schema=NILM_SERVICE_SCHEMA

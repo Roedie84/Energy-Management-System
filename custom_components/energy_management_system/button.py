@@ -12,6 +12,7 @@ from .const import (
     DEFAULT_NAME,
     DOMAIN,
     NILM_DASHBOARD_SLOT_COUNT,
+    NILM_DUPLICATE_DASHBOARD_SLOT_COUNT,
 )
 
 
@@ -23,6 +24,11 @@ async def async_setup_entry(
     for slot in range(NILM_DASHBOARD_SLOT_COUNT):
         entities.append(NilmConfirmCandidateButton(coordinator, entry.entry_id, slot))
         entities.append(NilmRejectCandidateButton(coordinator, entry.entry_id, slot))
+    # v0.63.118: dezelfde bevestigen/negeren-structuur voor
+    # waarschijnlijke duplicaatparen.
+    for slot in range(NILM_DUPLICATE_DASHBOARD_SLOT_COUNT):
+        entities.append(NilmConfirmDuplicateButton(coordinator, entry.entry_id, slot))
+        entities.append(NilmDismissDuplicateButton(coordinator, entry.entry_id, slot))
     async_add_entities(entities)
 
 
@@ -305,3 +311,138 @@ class NilmRejectCandidateButton(_NilmSlotButton):
             entity_id = self._resolve_and_cache_slot_entity_id()
         if entity_id is not None:
             self._coordinator.reject_nilm_device(entity_id)
+
+
+class _NilmDuplicateSlotButton(ButtonEntity):
+    """Gedeelde basis voor de bevestigen/negeren-knoppen bij
+    waarschijnlijke duplicaatparen (v0.63.118, gevraagd: "NILM
+    apparaten kan ik bevestigen danwel negeren, dit kan nog niet met de
+    waarschijnlijke duplicaten - kun je hiervoor een zelfde optie maken
+    zodat ik ook dit kan afwijzen, en dit dan ook daadwerkelijk niet
+    meer terug komt als mogelijk duplicaat?").
+
+    Volgt bewust exact hetzelfde patroon als `_NilmSlotButton`, inclusief
+    de lessen die daar met vallen en opstaan zijn geleerd:
+
+    - `has_entity_name` UIT en een expliciete, vaste `entity_id` in
+      `__init__` (v0.63.47/.79) - de `name` is dynamisch (hij toont het
+      huidige paar), dus Home Assistant zou er anders een
+      onvoorspelbare entity_id uit afleiden die het gebundelde
+      dashboard niet kan aanspreken.
+    - Registreert zich als coordinator-listener (v0.63.48) - een
+      `ButtonEntity` pollt niet, dus zonder push zou de sleuf bevroren
+      blijven op wat er bij de opstart toevallig in stond.
+    - Legt het GETOONDE paar vast zodra het voor weergave wordt
+      opgevraagd, en `async_press()` gebruikt exact die vastgelegde
+      waarde (v0.63.107) - anders kan een coordinator-tick tussen zien
+      en drukken de sleuf laten verschuiven, en beoordeelt de gebruiker
+      een ander paar dan op het scherm stond.
+
+    Deze knoppen zijn nieuw, dus er is geen bestaande registry-entry om
+    mee te botsen: geen `_v2`/`_v3`-suffix nodig (v0.63.80/.81).
+    """
+
+    def __init__(
+        self,
+        coordinator,
+        entry_id: str,
+        slot: int,
+        unique_suffix: str,
+        object_id_suffix: str,
+    ) -> None:
+        self._coordinator = coordinator
+        self._slot = slot
+        self._attr_unique_id = f"{entry_id}_nilm_duplicate_{slot}_{unique_suffix}"
+        self.entity_id = (
+            f"button.woonkamer_energy_management_system_nilm_duplicaat_"
+            f"{slot + 1}_{object_id_suffix}"
+        )
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+        self._last_displayed_pair: dict | None = None
+
+    def _resolve_and_cache_slot_pair(self) -> dict | None:
+        pair = self._coordinator.get_nilm_duplicate_pair_at_slot(self._slot)
+        self._last_displayed_pair = pair
+        return pair
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        self._coordinator.register_listener(self.async_write_ha_state)
+
+    async def async_will_remove_from_hass(self) -> None:
+        self._coordinator.unregister_listener(self.async_write_ha_state)
+        await super().async_will_remove_from_hass()
+
+    def _pair_for_press(self) -> dict | None:
+        pair = self._last_displayed_pair
+        if pair is None:
+            pair = self._resolve_and_cache_slot_pair()
+        return pair
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        pair = self._resolve_and_cache_slot_pair()
+        if pair is None:
+            return {"paar_entity_id_1": None, "paar_entity_id_2": None}
+        return {
+            "paar_entity_id_1": pair.get("entity_id_1"),
+            "paar_entity_id_2": pair.get("entity_id_2"),
+            "paar_naam_1": pair.get("apparaat_1"),
+            "paar_naam_2": pair.get("apparaat_2"),
+            "gedeelde_dagen": pair.get("gedeelde_dagen"),
+        }
+
+
+class NilmConfirmDuplicateButton(_NilmDuplicateSlotButton):
+    """Bevestigt dat het paar hetzelfde signaal meet en sluit meteen het
+    tweede apparaat permanent uit - het label toont welk apparaat dat
+    is, zodat er niets te raden valt."""
+
+    _attr_icon = "mdi:content-duplicate"
+
+    def __init__(self, coordinator, entry_id: str, slot: int) -> None:
+        super().__init__(coordinator, entry_id, slot, "confirm", "bevestigen")
+
+    @property
+    def name(self) -> str:
+        pair = self._resolve_and_cache_slot_pair()
+        if pair is None:
+            return f"Duplicaat-sleuf {self._slot + 1} (leeg)"
+        return f"✅ Duplicaat — sluit '{pair.get('apparaat_2')}' uit"
+
+    async def async_press(self) -> None:
+        pair = self._pair_for_press()
+        if pair is not None:
+            self._coordinator.confirm_nilm_duplicate_pair(
+                pair["entity_id_1"], pair["entity_id_2"]
+            )
+
+
+class NilmDismissDuplicateButton(_NilmDuplicateSlotButton):
+    """Markeert het paar als "geen duplicaat" - beide apparaten blijven
+    gewoon bestaan, alleen de suggestie verdwijnt, permanent."""
+
+    _attr_icon = "mdi:close-circle-outline"
+
+    def __init__(self, coordinator, entry_id: str, slot: int) -> None:
+        super().__init__(coordinator, entry_id, slot, "dismiss", "negeren")
+
+    @property
+    def name(self) -> str:
+        pair = self._resolve_and_cache_slot_pair()
+        if pair is None:
+            return f"Duplicaat-sleuf {self._slot + 1} (leeg)"
+        return (
+            f"❌ Geen duplicaat — '{pair.get('apparaat_1')}' + "
+            f"'{pair.get('apparaat_2')}'"
+        )
+
+    async def async_press(self) -> None:
+        pair = self._pair_for_press()
+        if pair is not None:
+            self._coordinator.dismiss_nilm_duplicate_pair(
+                pair["entity_id_1"], pair["entity_id_2"]
+            )

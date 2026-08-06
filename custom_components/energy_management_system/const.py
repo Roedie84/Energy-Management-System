@@ -452,6 +452,12 @@ NILM_TREND_FALLING_THRESHOLD_PERCENT = 5.0
 # before - only the number of simultaneously visible slots changed.
 NILM_DASHBOARD_SLOT_COUNT = 1
 
+# v0.63.118: hetzelfde sleuf-principe voor waarschijnlijke
+# duplicaatparen. Eén sleuf, om dezelfde reden als hierboven: een paar
+# toont TWEE apparaatnamen naast elkaar, dus de beschikbare breedte is
+# hier nog schaarser dan bij een losse kandidaat.
+NILM_DUPLICATE_DASHBOARD_SLOT_COUNT = 1
+
 # NILM sensor attribute size cap (v0.63.45). Reported: with the broad
 # "any W/kW sensor" discovery scope, the full unconfirmed-candidates
 # dict can exceed Home Assistant's 16KB per-attribute recorder limit
@@ -659,6 +665,38 @@ MIN_COST_BASIS_DELTA_KWH = 0.01
 # of a discharge that's genuine net export - not the portion that
 # simply covers household load (no feed-in happens there at all).
 FEEDIN_PREMIUM_EUR_PER_KWH = 0.02
+
+# --- Einde salderen (v0.63.117) ---
+# Tot en met de salderingsdatum levert een teruggeleverde kWh exact
+# hetzelfde op als een ingekochte kWh kost (de teruglevering wordt
+# weggestreept tegen de inkoop, inclusief energiebelasting en BTW).
+# Daarna vervalt dat: teruglevering wordt dan afgerekend tegen een
+# apart, veel lager teruglevertarief - de energiebelasting krijg je er
+# niet meer via de saldering "terug". Dat verandert de economie van de
+# accu fundamenteel: PV-energie in de accu stoppen kost dan niet langer
+# de volle inkoopprijs aan gederfde teruglevering, maar slechts het
+# lage teruglevertarief - waardoor opslaan juist veel aantrekkelijker
+# wordt dan onder saldering.
+#
+# `CONF_SALDEREN_END_DATE` is de LAATSTE dag waarop salderen nog geldt
+# (ISO-datum). Configureerbaar, niet hard ingebakken, omdat politiek
+# uitstel/vervroeging in het verleden al meerdere keren is voorgekomen.
+CONF_SALDEREN_END_DATE = "salderen_end_date"
+DEFAULT_SALDEREN_END_DATE = "2026-12-31"
+
+# Welk attribuut van de prijssensor het teruglevertarief NA saldering
+# benadert. Standaard de kale marktprijs zonder energiebelasting
+# (`price_tax_excluded`) - dat is precies het deel dat je na saldering
+# nog vergoed krijgt, terwijl inkoop wél belast blijft.
+CONF_FEEDIN_PRICE_ATTRIBUTE = "feedin_price_attribute"
+DEFAULT_FEEDIN_PRICE_ATTRIBUTE = PRICE_ATTRIBUTE_EXCL_TAX
+
+# Vaste terugleverkosten per teruggeleverde kWh (EUR/kWh), na saldering
+# door veel leveranciers in rekening gebracht. Wordt van de
+# terugleverwaarde afgetrokken. Standaard 0 - de gebruiker vult in wat
+# het eigen contract zegt, dit is niet te raden.
+CONF_FEEDIN_COST_EUR_PER_KWH = "feedin_cost_eur_per_kwh"
+DEFAULT_FEEDIN_COST_EUR_PER_KWH = 0.0
 
 # In-progress hourly-bucket tracking (v0.63.16) restores across a
 # restart, but only within this gap - a longer gap (real outage, not a

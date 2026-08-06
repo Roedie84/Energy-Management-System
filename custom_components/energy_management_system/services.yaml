@@ -49,3 +49,53 @@ unconfirm_nilm_device:
       selector:
         entity:
           domain: sensor
+
+dismiss_nilm_duplicate_pair:
+  name: Duplicaatpaar afwijzen (geen duplicaat)
+  description: >-
+    Markeer twee bevestigde NILM-apparaten als "geen duplicaat van
+    elkaar". Het paar verdwijnt uit de lijst met waarschijnlijke
+    duplicaten en komt daar nooit meer terug. Beide apparaten blijven
+    gewoon bevestigd en worden gewoon verder gevolgd - alleen de
+    suggestie verdwijnt. De volgorde van de twee entiteiten maakt niet
+    uit.
+  fields:
+    entity_id_1:
+      name: Eerste entiteit
+      description: De entity_id van het eerste apparaat van het paar.
+      required: true
+      selector:
+        entity:
+          domain: sensor
+    entity_id_2:
+      name: Tweede entiteit
+      description: De entity_id van het tweede apparaat van het paar.
+      required: true
+      selector:
+        entity:
+          domain: sensor
+
+confirm_nilm_duplicate_pair:
+  name: Duplicaatpaar bevestigen (tweede apparaat uitsluiten)
+  description: >-
+    Bevestig dat twee apparaten hetzelfde fysieke signaal meten. De
+    TWEEDE opgegeven entiteit wordt permanent uitgesloten van NILM
+    (zoals "negeren" bij een los apparaat), zodat hetzelfde verbruik
+    niet dubbel geteld blijft worden. Het eerste apparaat blijft
+    ongewijzigd bevestigd. Let op welke van de twee je als tweede
+    invult - dat is degene die verdwijnt.
+  fields:
+    entity_id_1:
+      name: Apparaat dat blijft
+      description: De entity_id van het apparaat dat bevestigd blijft.
+      required: true
+      selector:
+        entity:
+          domain: sensor
+    entity_id_2:
+      name: Apparaat dat wordt uitgesloten
+      description: De entity_id van het apparaat dat permanent wordt uitgesloten.
+      required: true
+      selector:
+        entity:
+          domain: sensor

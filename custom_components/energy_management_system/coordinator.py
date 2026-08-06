@@ -147,7 +147,10 @@ from .const import (
     CONF_MANUAL_POWER_NUMBER,
     CONF_MIN_SOC_PERCENT,
     CONF_OPERATION_SELECT,
+    CONF_FEEDIN_COST_EUR_PER_KWH,
+    CONF_FEEDIN_PRICE_ATTRIBUTE,
     CONF_PRICE_ATTRIBUTE,
+    CONF_SALDEREN_END_DATE,
     CONF_PRICE_SENSOR,
     CONF_PV_POWER_SENSOR,
     CONF_SOC_SENSOR,
@@ -160,7 +163,10 @@ from .const import (
     DEFAULT_MANUAL_CHARGE_POWER,
     DEFAULT_MANUAL_DISCHARGE_POWER,
     DEFAULT_MIN_SOC_PERCENT,
+    DEFAULT_FEEDIN_COST_EUR_PER_KWH,
+    DEFAULT_FEEDIN_PRICE_ATTRIBUTE,
     DEFAULT_PRICE_ATTRIBUTE,
+    DEFAULT_SALDEREN_END_DATE,
     ENERGY_BRIDGE_SAFETY_MARGIN,
     DYNAMIC_DISCHARGE_RESERVE_MARGIN,
     EXTENDED_LOW_SOLAR_MARGIN_BONUS_PER_DAY,
@@ -498,6 +504,18 @@ class EnergyManagementSystemCoordinator:
         self._last_available_kwh_for_cost_basis: float | None = None
         self.total_battery_savings_eur: float = 0.0
         self.total_feedin_premium_eur: float = 0.0
+        # v0.63.117: bron-/bestemmingssplitsing van de accu-doorvoer,
+        # nodig zodra teruglevering en inkoop niet meer hetzelfde tarief
+        # hebben (einde saldering). Ook los informatief: het maakt
+        # zichtbaar hoeveel van de lading eigen PV-overschot was en
+        # hoeveel netinkoop.
+        self.salderen_active: bool = True
+        self.current_feedin_value_eur_per_kwh: float | None = None
+        self.feedin_import_spread_eur_per_kwh: float | None = None
+        self.charge_pv_kwh_total: float = 0.0
+        self.charge_grid_kwh_total: float = 0.0
+        self.discharge_export_kwh_total: float = 0.0
+        self.forgone_feedin_eur_total: float = 0.0
         # Kirchhoff energy-balance validation (v0.63.28).
         self._last_balance_check_time: datetime | None = None
         self._last_balance_check_available_kwh: float | None = None
@@ -571,6 +589,17 @@ class EnergyManagementSystemCoordinator:
         self.nilm_unconfirmed_candidates: dict[str, dict] = {}
         self.nilm_confirmed_devices: dict[str, dict] = {}
         self.nilm_rejected_entities: list[str] = []
+        # v0.63.118, gevraagd: "kun je hiervoor een zelfde optie maken
+        # zodat ik ook dit kan afwijzen, en dit dan ook daadwerkelijk
+        # niet meer terug komt als mogelijk duplicaat?" - paren die de
+        # gebruiker heeft beoordeeld als "geen duplicaat". Opgeslagen
+        # als richting-onafhankelijke sleutel ("<a>|<b>", alfabetisch
+        # gesorteerd), zodat een omgedraaid paar niet alsnog terugkomt.
+        # Bewust NIET opgeruimd als een van beide entiteiten tijdelijk
+        # uit de bevestigde lijst verdwijnt: de gebruiker heeft een
+        # oordeel gegeven en dat moet blijven gelden, ook als het
+        # apparaat later opnieuw wordt bevestigd.
+        self.nilm_dismissed_duplicate_pairs: list[str] = []
         # v0.63.66, reported: "State attributes ... exceed maximum size
         # of 16384 bytes" - with enough confirmed devices (each with its
         # own learned CUSUM history), nilm_confirmed_devices grew past
@@ -1168,8 +1197,18 @@ class EnergyManagementSystemCoordinator:
             return dt_util.parse_datetime(value)
         return None
 
-    def _get_forecast_entries(self) -> list[PriceEntry]:
-        """Read and parse the raw forecast attribute into (start, end, price) tuples."""
+    def _get_forecast_entries(
+        self, price_key_override: str | None = None
+    ) -> list[PriceEntry]:
+        """Read and parse the raw forecast attribute into (start, end, price) tuples.
+
+        v0.63.117: `price_key_override` laat dezelfde parser een TWEEDE
+        prijsreeks uit hetzelfde forecast-attribuut halen - concreet de
+        kale marktprijs (`price_tax_excluded`) naast de normale
+        inkoopprijs (`price_tax_included`). Na het einde van de
+        saldering is dat het tarief waartegen teruglevering wordt
+        afgerekend; zie `_get_feedin_value_per_kwh`.
+        """
         state = self.hass.states.get(self.config[CONF_PRICE_SENSOR])
         if state is None:
             return []
@@ -1178,7 +1217,9 @@ class EnergyManagementSystemCoordinator:
         if not forecast:
             return []
 
-        price_key = self.config.get(CONF_PRICE_ATTRIBUTE, DEFAULT_PRICE_ATTRIBUTE)
+        price_key = price_key_override or self.config.get(
+            CONF_PRICE_ATTRIBUTE, DEFAULT_PRICE_ATTRIBUTE
+        )
         entries: list[PriceEntry] = []
 
         for item in forecast:
@@ -4389,7 +4430,191 @@ class EnergyManagementSystemCoordinator:
                 return price / PRICE_SCALE_FACTOR
         return None
 
-    def _update_counterfactual_savings(self, now: datetime) -> None:
+    def _is_salderen_active(self, now: datetime) -> bool:
+        """Geldt de salderingsregeling op dit moment nog? (v0.63.117)
+
+        Salderen geldt tot en met `CONF_SALDEREN_END_DATE` (standaard
+        2026-12-31); vanaf de dag erna niet meer. Configureerbaar in
+        plaats van hard ingebakken, omdat politiek uitstel in het
+        verleden al meermaals is voorgekomen - een verkeerd ingebakken
+        datum zou stilzwijgend elk financieel getal in deze integratie
+        scheeftrekken.
+
+        Bij een onleesbare/ongeldige datum wordt bewust teruggevallen
+        op "salderen actief". Dat is de conservatieve kant: het houdt
+        het bestaande, bekende gedrag aan in plaats van ongemerkt over
+        te schakelen op een heel ander waarderingsmodel door een typefout.
+        """
+        raw = self.config.get(CONF_SALDEREN_END_DATE, DEFAULT_SALDEREN_END_DATE)
+        try:
+            end_date = date.fromisoformat(str(raw))
+        except (TypeError, ValueError):
+            return True
+        return now.date() <= end_date
+
+    def _salderen_days_remaining(self) -> int | None:
+        """Aantal dagen dat salderen nog geldt, of None bij een
+        ongeldige/onleesbare datum (v0.63.117)."""
+        raw = self.config.get(CONF_SALDEREN_END_DATE, DEFAULT_SALDEREN_END_DATE)
+        try:
+            end_date = date.fromisoformat(str(raw))
+        except (TypeError, ValueError):
+            return None
+        return (end_date - dt_util.now().date()).days
+
+    def _get_feedin_value_per_kwh(
+        self, entries: list[PriceEntry], now: datetime
+    ) -> float | None:
+        """Wat één daadwerkelijk teruggeleverde kWh op dit moment
+        opbrengt (€/kWh) - het hart van de saldering-overgang
+        (v0.63.117).
+
+        **Zolang salderen geldt**: teruglevering wordt weggestreept
+        tegen inkoop, dus een teruggeleverde kWh is exact de
+        inkoopprijs waard (inclusief energiebelasting en BTW), plus de
+        vaste Zonneplan-terugleverpremie.
+
+        **Na saldering**: dat wegstrepen vervalt. Je krijgt alleen nog
+        het kale teruglevertarief - benaderd met de marktprijs zónder
+        energiebelasting uit hetzelfde forecast-attribuut
+        (`CONF_FEEDIN_PRICE_ATTRIBUTE`) - plus de premie, minus
+        eventuele terugleverkosten (`CONF_FEEDIN_COST_EUR_PER_KWH`).
+        Inkoop blijft wél belast, dus er ontstaat een flink gat tussen
+        "kWh niet inkopen" en "kWh terugleveren". Precies dat gat maakt
+        thuisopslag na saldering waardevoller.
+
+        Kan onder nul uitkomen (negatieve marktprijs plus
+        terugleverkosten) - dat wordt bewust NIET afgekapt op nul: bij
+        een negatief terugleversaldo kóst terugleveren geld, en dat is
+        een reëel signaal dat de financiële weergave hoort mee te nemen.
+        """
+        if self._is_salderen_active(now):
+            import_price = self._get_current_price_per_kwh(entries, now)
+            if import_price is None:
+                return None
+            return import_price + FEEDIN_PREMIUM_EUR_PER_KWH
+
+        feedin_key = self.config.get(
+            CONF_FEEDIN_PRICE_ATTRIBUTE, DEFAULT_FEEDIN_PRICE_ATTRIBUTE
+        )
+        feedin_entries = self._get_forecast_entries(price_key_override=feedin_key)
+        market_price = self._get_current_price_per_kwh(feedin_entries, now)
+        if market_price is None:
+            # Het teruglever-attribuut ontbreekt op deze prijssensor -
+            # niet gissen met de inkoopprijs (dat is precies de
+            # aanname die na saldering niet meer klopt en de besparing
+            # fors zou overschatten).
+            return None
+        feedin_cost = float(
+            self.config.get(
+                CONF_FEEDIN_COST_EUR_PER_KWH, DEFAULT_FEEDIN_COST_EUR_PER_KWH
+            )
+            or 0.0
+        )
+        return market_price + FEEDIN_PREMIUM_EUR_PER_KWH - feedin_cost
+
+    def _split_discharge_export_vs_load(
+        self, discharged_kwh: float, elapsed_hours: float
+    ) -> tuple[float, float]:
+        """Splitst een ontlading in (export_kwh, huisverbruik_kwh)
+        (v0.63.117 - uitgetrokken uit twee plekken die exact dezelfde
+        berekening dupliceerden, zodat ze niet uiteen kunnen lopen).
+
+        Het deel dat het huisverbruik dekt is géén teruglevering: daar
+        wordt inkoop mee vermeden. Alleen wat daarboven uitkomt gaat
+        werkelijk het net op. Zonder verbruikssensor kan dat onderscheid
+        niet gemaakt worden - dan wordt alles als huisverbruik geteld,
+        de conservatieve kant (geen premie, geen terugleverwaarde).
+        """
+        if discharged_kwh <= 0 or elapsed_hours <= 0:
+            return 0.0, max(0.0, discharged_kwh)
+        household_load_w = self._read_corrected_consumption_power()
+        if household_load_w is None:
+            return 0.0, discharged_kwh
+        discharge_rate_kw = discharged_kwh / elapsed_hours
+        export_rate_kw = max(0.0, discharge_rate_kw - household_load_w / 1000)
+        export_kwh = min(discharged_kwh, export_rate_kw * elapsed_hours)
+        return export_kwh, discharged_kwh - export_kwh
+
+    def _split_charge_pv_vs_grid(
+        self, charged_kwh: float, elapsed_hours: float
+    ) -> tuple[float, float]:
+        """Splitst een lading in (pv_overschot_kwh, net_kwh) - v0.63.117.
+
+        Spiegelbeeld van `_split_discharge_export_vs_load`, en het
+        ontbrekende stuk waardoor de besparing tot nu toe systematisch
+        werd overschat: PV-overschot dat in de accu gaat, zou anders
+        zijn teruggeleverd. Die gederfde teruglevering (inclusief de
+        premie) is de werkelijke kostprijs van die kWh - niet de kale
+        inkoopprijs.
+
+        PV-overschot = opwek minus huisverbruik, begrensd op wat er
+        werkelijk geladen is. Zonder PV-sensor óf zonder verbruikssensor
+        is dat onderscheid niet te maken; dan wordt alles als
+        net-inkoop geteld. Dat is hier de conservatieve kant: het houdt
+        de kostprijs op de (hogere) inkoopprijs en overschat de
+        besparing dus niet.
+        """
+        if charged_kwh <= 0 or elapsed_hours <= 0:
+            return 0.0, max(0.0, charged_kwh)
+        pv_entity = self.config.get(CONF_PV_POWER_SENSOR)
+        if not pv_entity:
+            return 0.0, charged_kwh
+        pv_power_w = self._read_sensor_float(pv_entity)
+        household_load_w = self._read_corrected_consumption_power()
+        if pv_power_w is None or household_load_w is None:
+            return 0.0, charged_kwh
+        surplus_kw = max(0.0, (pv_power_w - household_load_w) / 1000)
+        pv_kwh = min(charged_kwh, surplus_kw * elapsed_hours)
+        return pv_kwh, charged_kwh - pv_kwh
+
+    @staticmethod
+    def _grid_flow_cost_eur(
+        power_w: float,
+        elapsed_hours: float,
+        import_price_eur_per_kwh: float,
+        feedin_value_eur_per_kwh: float,
+    ) -> float:
+        """Kosten (positief) of opbrengst (negatief) van een netstroom
+        over dit interval, met APARTE tarieven voor inkoop en
+        teruglevering (v0.63.117).
+
+        Positief vermogen = import (kost de inkoopprijs), negatief =
+        export (levert de terugleverwaarde op). Onder saldering zijn
+        die twee vrijwel gelijk; daarna niet meer, en dan is één tarief
+        voor beide richtingen niet houdbaar.
+        """
+        kwh = (power_w / 1000) * elapsed_hours
+        if kwh >= 0:
+            return kwh * import_price_eur_per_kwh
+        return kwh * feedin_value_eur_per_kwh
+
+    def _update_feedin_regime(self, now: datetime, entries: list[PriceEntry]) -> None:
+        """Houdt het huidige salderingsregime en de actuele
+        terugleverwaarde bij voor weergave/diagnostiek (v0.63.117).
+        Berekent zelf niets nieuws - leest alleen dezelfde helpers uit
+        die de financiële boekingen ook gebruiken, zodat wat op het
+        dashboard staat gegarandeerd hetzelfde is als waarmee gerekend
+        wordt.
+        """
+        self.salderen_active = self._is_salderen_active(now)
+        self.current_feedin_value_eur_per_kwh = self._get_feedin_value_per_kwh(
+            entries, now
+        )
+        import_price = self._get_current_price_per_kwh(entries, now)
+        if (
+            import_price is not None
+            and self.current_feedin_value_eur_per_kwh is not None
+        ):
+            self.feedin_import_spread_eur_per_kwh = round(
+                import_price - self.current_feedin_value_eur_per_kwh, 4
+            )
+        else:
+            self.feedin_import_spread_eur_per_kwh = None
+
+    def _update_counterfactual_savings(
+        self, now: datetime, entries: list[PriceEntry] | None = None
+    ) -> None:
         """Tegenfeitelijke besparingsvergelijking (v0.63.101, gevraagd:
         "als je dit systeem niet had, had je deze maand €X betaald; nu
         betaalde je €Y").
@@ -4456,9 +4681,23 @@ class EnergyManagementSystemCoordinator:
             # verouderd vermogen een uur lang doorrekenen.
             return
 
-        actual_cost_eur = (p1_power_w / 1000) * elapsed_hours * price_per_kwh
-        counterfactual_cost_eur = (
-            (counterfactual_power_w / 1000) * elapsed_hours * price_per_kwh
+        # v0.63.117: import en export worden niet langer tegen dezelfde
+        # prijs afgerekend. Onder saldering zijn ze (op de premie na)
+        # wél gelijk, dus verandert er nu praktisch niets; na saldering
+        # levert een teruggeleverde kWh veel minder op dan een
+        # ingekochte kWh kost, en zou één tarief voor beide de
+        # vergelijking fors scheeftrekken - juist in het voordeel van
+        # "geen accu", omdat het tegenfeitelijke scenario per definitie
+        # méér exporteert.
+        feedin_value = self._get_feedin_value_per_kwh(entries or [], now)
+        if feedin_value is None:
+            feedin_value = price_per_kwh
+
+        actual_cost_eur = self._grid_flow_cost_eur(
+            p1_power_w, elapsed_hours, price_per_kwh, feedin_value
+        )
+        counterfactual_cost_eur = self._grid_flow_cost_eur(
+            counterfactual_power_w, elapsed_hours, price_per_kwh, feedin_value
         )
 
         self.actual_cost_today_eur += actual_cost_eur
@@ -4799,15 +5038,20 @@ class EnergyManagementSystemCoordinator:
         if reason == "expensive_quarter" and discharge_power_w:
             energy_kwh = (discharge_power_w / 1000) * elapsed_hours
 
-            export_kwh = 0.0
-            discharge_rate_kw = discharge_power_w / 1000
-            household_load_w = self._read_corrected_consumption_power()
-            if household_load_w is not None:
-                export_rate_kw = max(0.0, discharge_rate_kw - household_load_w / 1000)
-                export_kwh = min(energy_kwh, export_rate_kw * elapsed_hours)
+            export_kwh, load_kwh = self._split_discharge_export_vs_load(
+                energy_kwh, elapsed_hours
+            )
+            # v0.63.117: het geëxporteerde deel wordt gewaardeerd tegen
+            # de werkelijke terugleverwaarde (onder saldering de
+            # inkoopprijs plus premie; daarna het lage teruglevertarief),
+            # het huisverbruik-deel tegen de vermeden inkoopprijs.
+            feedin_value = self._get_feedin_value_per_kwh(entries, now)
+            if feedin_value is None:
+                export_kwh, load_kwh = 0.0, energy_kwh
+                feedin_value = current_price
 
             feedin_premium_eur = export_kwh * FEEDIN_PREMIUM_EUR_PER_KWH
-            value_eur = energy_kwh * current_price + feedin_premium_eur
+            value_eur = load_kwh * current_price + export_kwh * feedin_value
             self.total_discharge_value_eur += value_eur
             self.current_month_discharge_value_eur += value_eur
             self.total_feedin_premium_eur += feedin_premium_eur
@@ -4844,16 +5088,7 @@ class EnergyManagementSystemCoordinator:
         both buy-low-sell-high arbitrage AND PV self-consumption should
         count, using one unified mechanism rather than two.
 
-        Requires a salderen (net-metering) contract to be valid: under
-        salderen, feed-in pays the same dynamic rate as import, so PV
-        routed into the battery instead of exported has exactly the same
-        opportunity cost as buying that energy from the grid at that
-        moment - equating PV-charged and grid-charged energy into one
-        cost basis, without needing to track per-source lots (which
-        isn't physically possible anyway - the battery is one shared
-        pool). Revisit if/when salderen ends.
-
-        v0.63.25: on the discharge side, also splits out how much of the
+        v0.63.25: on the discharge side, splits out how much of the
         discharge was genuine net export to the grid (vs. just covering
         household load) - confirmed via web search that Zonneplan pays a
         fixed EUR/kWh feed-in premium (`FEEDIN_PREMIUM_EUR_PER_KWH`) on
@@ -4861,12 +5096,29 @@ class EnergyManagementSystemCoordinator:
         including from a battery (only the separate 10% "Zonnebonus"
         excludes battery-sourced feed-in, which this integration never
         claims anyway). Covering household load isn't feed-in at all, so
-        gets no premium - only the value of the avoided import. The
-        export portion is approximated as (discharge rate - household
-        load) over this tick's interval, using the live corrected
-        consumption reading; deliberately doesn't yet apply on the
-        *charging* side (the opportunity-cost-of-diverted-PV question),
-        a further refinement if wanted.
+        gets no premium - only the value of the avoided import.
+
+        v0.63.117 - TWEE wijzigingen, want deze docstring beschreef tot
+        nu toe twee aannames die niet (meer) houdbaar zijn:
+
+        1. **De laadkant is nu symmetrisch.** Tot v0.63.116 werd ELKE
+           geladen kWh tegen de kale inkoopprijs geboekt, ook als het
+           PV-overschot betrof dat anders was teruggeleverd. De premie
+           werd bij export dus wél bijgeteld maar bij het opofferen van
+           export nooit afgetrokken - een structurele, altijd
+           dezelfde kant op werkende overschatting van de besparing.
+           De lading wordt nu gesplitst in PV-overschot en net-inkoop
+           (`_split_charge_pv_vs_grid`), elk tegen het juiste tarief.
+
+        2. **Saldering is niet langer een vaste aanname.** Zolang
+           salderen geldt, is teruglevering exact de inkoopprijs waard
+           en valt alles samen zoals voorheen. Daarna niet meer: dan
+           bepaalt `_get_feedin_value_per_kwh` een apart, veel lager
+           teruglevertarief. De kostprijs hangt daardoor af van de
+           BRON (PV-overschot vs. net) en de opbrengst van de
+           BESTEMMING (huisverbruik vs. export). Per-bron-lots blijven
+           onnodig: de accu is één gedeelde pool en alles loopt via
+           dezelfde gewogen kostprijs.
 
         Deliberately doesn't try to distinguish "discharge that covered
         useful load/sale" from "discharge lost to internal battery
@@ -4903,10 +5155,34 @@ class EnergyManagementSystemCoordinator:
             return
 
         if delta_kwh > 0:
-            # Charged (from any source) - fold into the weighted-average
-            # cost basis at today's price.
+            # Geladen. v0.63.117: de kostprijs hangt af van de BRON.
+            # Net-inkoop kost de inkoopprijs. PV-overschot kost de
+            # gederfde teruglevering - onder saldering gelijk aan de
+            # inkoopprijs plus de premie, daarna alleen nog het lage
+            # teruglevertarief. Voorheen werd alles tegen de kale
+            # inkoopprijs geboekt, waardoor de premie op PV-overschot
+            # nooit werd afgetrokken terwijl die bij export wél werd
+            # bijgeteld: een structurele, eenzijdige overschatting van
+            # de besparing.
+            pv_kwh, grid_kwh = self._split_charge_pv_vs_grid(
+                delta_kwh, elapsed_hours
+            )
+            feedin_value = self._get_feedin_value_per_kwh(entries, now)
+            if feedin_value is None:
+                # Geen betrouwbare terugleverwaarde - alles tegen de
+                # inkoopprijs boeken, de conservatieve kant (hogere
+                # kostprijs, dus geen overschatte besparing).
+                pv_kwh, grid_kwh = 0.0, delta_kwh
+                feedin_value = current_price
+
+            charge_cost_eur = grid_kwh * current_price + pv_kwh * feedin_value
+            self.charge_pv_kwh_total += pv_kwh
+            self.charge_grid_kwh_total += grid_kwh
+            self.forgone_feedin_eur_total += pv_kwh * feedin_value
+
+            effective_charge_price = charge_cost_eur / delta_kwh
             if self.battery_cost_basis_eur_per_kwh is None:
-                self.battery_cost_basis_eur_per_kwh = current_price
+                self.battery_cost_basis_eur_per_kwh = effective_charge_price
             else:
                 # Weight by whatever was already stored before this
                 # charge - approximated by the available_kwh just before
@@ -4915,37 +5191,44 @@ class EnergyManagementSystemCoordinator:
                 total_kwh = previous_kwh + delta_kwh
                 self.battery_cost_basis_eur_per_kwh = (
                     self.battery_cost_basis_eur_per_kwh * previous_kwh
-                    + current_price * delta_kwh
+                    + charge_cost_eur
                 ) / total_kwh
         else:
             # Discharged (sold, or used to cover load and avoid an
-            # import) - realise the difference between today's price and
-            # what this energy originally cost, if a cost basis exists
-            # yet. Pre-existing energy with an unknown origin (e.g. right
-            # after a fresh install) is skipped rather than guessed at.
+            # import) - realise the difference between what this energy
+            # is worth right now and what it originally cost, if a cost
+            # basis exists yet. Pre-existing energy with an unknown
+            # origin (e.g. right after a fresh install) is skipped
+            # rather than guessed at.
+            #
+            # v0.63.117: de opbrengst hangt af van de BESTEMMING. Het
+            # deel dat huisverbruik dekt vermijdt inkoop en is dus de
+            # (belaste) inkoopprijs waard. Het deel dat werkelijk het
+            # net op gaat levert de terugleverwaarde op - onder
+            # saldering gelijk aan de inkoopprijs plus premie (identiek
+            # aan het oude gedrag), daarna fors lager.
             if self.battery_cost_basis_eur_per_kwh is not None:
                 discharged_kwh = -delta_kwh
 
-                export_kwh = 0.0
-                if elapsed_hours > 0:
-                    discharge_rate_kw = discharged_kwh / elapsed_hours
-                    household_load_w = self._read_corrected_consumption_power()
-                    if household_load_w is not None:
-                        export_rate_kw = max(
-                            0.0, discharge_rate_kw - household_load_w / 1000
-                        )
-                        export_kwh = min(
-                            discharged_kwh, export_rate_kw * elapsed_hours
-                        )
+                export_kwh, load_kwh = self._split_discharge_export_vs_load(
+                    discharged_kwh, elapsed_hours
+                )
+                feedin_value = self._get_feedin_value_per_kwh(entries, now)
+                if feedin_value is None:
+                    # Geen betrouwbare terugleverwaarde - alles
+                    # waarderen als vermeden inkoop, zonder premie.
+                    export_kwh, load_kwh = 0.0, discharged_kwh
+                    feedin_value = current_price
 
+                revenue_eur = load_kwh * current_price + export_kwh * feedin_value
                 feedin_premium_eur = export_kwh * FEEDIN_PREMIUM_EUR_PER_KWH
                 savings_eur = (
-                    discharged_kwh
-                    * (current_price - self.battery_cost_basis_eur_per_kwh)
-                    + feedin_premium_eur
+                    revenue_eur
+                    - discharged_kwh * self.battery_cost_basis_eur_per_kwh
                 )
                 self.total_battery_savings_eur += savings_eur
                 self.total_feedin_premium_eur += feedin_premium_eur
+                self.discharge_export_kwh_total += export_kwh
 
     def _update_energy_balance_validation(self, now: datetime) -> None:
         """Kirchhoff-style internal-consistency check (v0.63.28): cross-
@@ -6353,6 +6636,14 @@ class EnergyManagementSystemCoordinator:
             self.nilm_rejected_entities = rejected
             if rejected:
                 self._nilm_store_had_data = True
+        # v0.63.118: beoordeelde duplicaatparen horen bij dezelfde
+        # door de gebruiker gecureerde staat en gaan door dezelfde
+        # Store - inclusief de volgorde-borging van v0.63.115.
+        dismissed = stored.get("nilm_dismissed_duplicate_pairs")
+        if isinstance(dismissed, list):
+            self.nilm_dismissed_duplicate_pairs = dismissed
+            if dismissed:
+                self._nilm_store_had_data = True
 
     async def _async_save_nilm_confirmed_devices_store(self) -> None:
         """Persists confirmed NILM devices + rejected entities to the
@@ -6361,6 +6652,9 @@ class EnergyManagementSystemCoordinator:
             {
                 "nilm_confirmed_devices": self.nilm_confirmed_devices,
                 "nilm_rejected_entities": self.nilm_rejected_entities,
+                "nilm_dismissed_duplicate_pairs": (
+                    self.nilm_dismissed_duplicate_pairs
+                ),
             }
         )
 
@@ -6400,10 +6694,16 @@ class EnergyManagementSystemCoordinator:
         genoeg gedeelde dagen zijn, `NILM_DUPLICATE_MIN_SHARED_DAYS`),
         is dat een sterke aanwijzing dat beide entiteiten hetzelfde
         onderliggende signaal meten. Puur informatief - stuurt niets
-        aan, beslist niets automatisch (de gebruiker kiest zelf of/welk
-        apparaat af te wijzen via `reject_nilm_device`).
+        aan, beslist niets automatisch.
+
+        v0.63.118: paren die de gebruiker heeft beoordeeld als "geen
+        duplicaat" worden overgeslagen (`nilm_dismissed_duplicate_
+        pairs`). Zonder dat bleef een bewust geaccepteerd paar elke
+        keer opnieuw opduiken zonder enige manier om het weg te
+        krijgen - precies de aanleiding voor deze wijziging.
         """
         entities = sorted(self.nilm_confirmed_devices.keys())
+        dismissed = set(self.nilm_dismissed_duplicate_pairs)
         pairs = []
         for i, entity_a in enumerate(entities):
             history_a = self.nilm_confirmed_devices[entity_a].get(
@@ -6412,6 +6712,8 @@ class EnergyManagementSystemCoordinator:
             if len(history_a) < NILM_DUPLICATE_MIN_SHARED_DAYS:
                 continue
             for entity_b in entities[i + 1 :]:
+                if self._duplicate_pair_key(entity_a, entity_b) in dismissed:
+                    continue
                 history_b = self.nilm_confirmed_devices[entity_b].get(
                     "daily_avg_history"
                 ) or []
@@ -6452,6 +6754,73 @@ class EnergyManagementSystemCoordinator:
                         }
                     )
         return pairs
+
+    @staticmethod
+    def _duplicate_pair_key(entity_a: str, entity_b: str) -> str:
+        """Richting-onafhankelijke sleutel voor een duplicaatpaar
+        (v0.63.118). Alfabetisch gesorteerd, zodat (A,B) en (B,A)
+        dezelfde sleutel opleveren - anders zou een beoordeeld paar
+        alsnog terugkomen zodra de detectie de volgorde omdraait
+        (bijvoorbeeld na een hernoeming die de sortering verandert).
+        """
+        first, second = sorted([entity_a, entity_b])
+        return f"{first}|{second}"
+
+    def get_nilm_duplicate_pair_at_slot(self, slot_index: int) -> dict | None:
+        """Welk duplicaatpaar op dit moment dashboard-sleuf
+        `slot_index` bezet (v0.63.118) - zelfde sleuf-principe als
+        `get_nilm_candidate_at_slot`, om dezelfde reden: een statisch
+        Lovelace-dashboard kan geen lijst van onbekende lengte met
+        knoppen renderen. Volgorde is die van
+        `get_nilm_duplicate_pairs()`, die zelf al deterministisch
+        alfabetisch sorteert.
+        """
+        pairs = self.get_nilm_duplicate_pairs()
+        if slot_index < 0 or slot_index >= len(pairs):
+            return None
+        return pairs[slot_index]
+
+    def dismiss_nilm_duplicate_pair(self, entity_a: str, entity_b: str) -> bool:
+        """Markeert een paar als "geen duplicaat" - het verdwijnt uit
+        de lijst en komt nooit meer terug (v0.63.118, gevraagd: "dit
+        dan ook daadwerkelijk niet meer terug komt als mogelijk
+        duplicaat").
+
+        Beide apparaten blijven gewoon bevestigd en getrackt; alleen de
+        duplicaat-suggestie over dit specifieke paar verdwijnt. Geeft
+        False terug als het paar al beoordeeld was, zodat een dubbele
+        druk geen tweede opslag veroorzaakt.
+        """
+        key = self._duplicate_pair_key(entity_a, entity_b)
+        if key in self.nilm_dismissed_duplicate_pairs:
+            return False
+        self.nilm_dismissed_duplicate_pairs.append(key)
+        self._notify_listeners()
+        self.hass.async_create_task(self._async_save_nilm_confirmed_devices_store())
+        return True
+
+    def confirm_nilm_duplicate_pair(self, entity_a: str, entity_b: str) -> bool:
+        """Bevestigt dat een paar écht hetzelfde fysieke signaal meet,
+        en handelt daar meteen naar (v0.63.118).
+
+        De zinvolle actie bij een bevestigd duplicaat is er één van de
+        twee permanent uitsluiten - anders blijft hetzelfde verbruik
+        dubbel geteld worden in elke NILM-weergave. Uitgesloten wordt
+        `entity_b`: de alfabetisch tweede van het paar, precies zoals
+        het paar wordt getoond. De knop zet die naam ook in zijn eigen
+        label, zodat vooraf zichtbaar is WELK apparaat verdwijnt -
+        raden hoort hier niet bij.
+
+        Hergebruikt bewust `reject_nilm_device`, zodat het uitgesloten
+        apparaat ook echt op de zwarte lijst komt en niet bij de
+        volgende scan terugkeert als verse kandidaat. Het paar
+        verdwijnt daarmee vanzelf uit `get_nilm_duplicate_pairs()`
+        (een van beide is geen bevestigd apparaat meer), dus een aparte
+        registratie is niet nodig.
+        """
+        if entity_b not in self.nilm_confirmed_devices:
+            return False
+        return self.reject_nilm_device(entity_b)
 
     def get_missing_optional_features(self) -> list[dict]:
         """Overzicht van optionele, niet-verplichte sensoren die nog
@@ -6559,8 +6928,20 @@ class EnergyManagementSystemCoordinator:
         bestaande, al berekende signalen (geen nieuwe metingen) - puur
         informatief, ter oriëntatie bij een diagnostiek-export, stuurt
         niets aan.
+
+        v0.63.116: twee categorieën in plaats van één.
+        `aandachtspunten` zijn zaken die daadwerkelijk actie of
+        aandacht verdienen en die de systeemstatus naar "Aandacht
+        gewenst" mogen brengen. `informatief` zijn observaties die
+        weliswaar het vermelden waard zijn, maar niets zeggen over de
+        gezondheid van deze integratie - die blijven zichtbaar maar
+        laten de status op "OK" staan. Zonder dat onderscheid zou een
+        permanente, bewust geaccepteerde observatie de status voor
+        altijd op "Aandacht gewenst" zetten, waarmee het signaal zijn
+        waarde verliest.
         """
         aandachtspunten = []
+        informatief = []
 
         if (
             self.measurement_quality is not None
@@ -6602,9 +6983,21 @@ class EnergyManagementSystemCoordinator:
                         "als dit aanhoudt."
                     )
 
+        # v0.63.116, gevraagd: "de melding duplicaten zie ik niet als
+        # een melding welke systeem status niet naar ok kan brengen".
+        # Terecht: waarschijnlijke duplicaatparen zijn een OBSERVATIE
+        # over de HA-installatie (twee entiteiten die hetzelfde fysieke
+        # signaal meten), niet iets dat mis is met deze integratie of
+        # met de accu-aansturing. Bovendien is het een permanente
+        # toestand die de gebruiker bewust zo kan laten - dan zou de
+        # systeemstatus voor altijd op "Aandacht gewenst" blijven staan
+        # en daarmee waardeloos worden als signaal. Gaat daarom naar de
+        # aparte `informatief`-lijst: nog steeds zichtbaar in
+        # diagnostiek en op het dashboard, maar telt niet mee voor de
+        # status.
         duplicate_pairs = self.get_nilm_duplicate_pairs()
         if duplicate_pairs:
-            aandachtspunten.append(
+            informatief.append(
                 f"{len(duplicate_pairs)} waarschijnlijke NILM-duplicaat"
                 f"paar/paren gevonden (zie 'waarschijnlijke_duplicaten')."
             )
@@ -6691,12 +7084,41 @@ class EnergyManagementSystemCoordinator:
                     "steeds stoten gemist."
                 )
 
+        # v0.63.117: het salderingsregime zichtbaar maken. Informatief,
+        # niet als aandachtspunt - het is geen storing, maar het
+        # verandert wel de betekenis van elk financieel getal, dus het
+        # hoort niet stil te gebeuren.
+        if not self.salderen_active:
+            informatief.append(
+                "Salderen is vervallen: teruglevering wordt nu apart "
+                "(lager) gewaardeerd dan inkoop. PV-energie opslaan is "
+                "daardoor voordeliger geworden; de beslislogica is "
+                "hier nog niet op geherkalibreerd."
+            )
+            if self.current_feedin_value_eur_per_kwh is None:
+                aandachtspunten.append(
+                    "Salderen is vervallen, maar er is geen teruglever"
+                    "tarief beschikbaar op de prijssensor - de financiële "
+                    "cijfers vallen nu terug op de inkoopprijs en "
+                    "overschatten daardoor de opbrengst van teruglevering."
+                )
+        elif self._salderen_days_remaining() is not None and (
+            self._salderen_days_remaining() <= 60
+        ):
+            informatief.append(
+                f"Salderen stopt over {self._salderen_days_remaining()} "
+                "dag(en) - daarna wordt teruglevering apart gewaardeerd. "
+                "Controleer het teruglevertarief en de terugleverkosten "
+                "in de instellingen."
+            )
+
         if self.last_error:
             aandachtspunten.append(f"Laatste fout: {self.last_error}")
 
         return {
             "status": "aandacht_gewenst" if aandachtspunten else "nominaal",
             "aandachtspunten": aandachtspunten,
+            "informatief": informatief,
         }
 
     def get_live_narrative(self, now: datetime) -> str:
@@ -6819,11 +7241,24 @@ class EnergyManagementSystemCoordinator:
     def _narrate_attention(self) -> str | None:
         """Sluit af met eventuele aandachtspunten uit de
         gezondheidscheck-samenvatting (v0.63.91) - hergebruikt, niet
-        opnieuw berekend."""
+        opnieuw berekend.
+
+        v0.63.116: informatieve observaties (die de status niet naar
+        "Aandacht gewenst" brengen) krijgen hier een eigen, duidelijk
+        andere formulering - "Ter info" i.p.v. "Let op" - zodat ze
+        zichtbaar blijven zonder als probleem te lezen. Zonder dit
+        zouden ze uit het Live-verhaal verdwijnen zodra er verder niets
+        aan de hand is.
+        """
         summary = self.get_diagnostic_summary()
-        if summary["status"] == "nominaal":
+        delen = []
+        if summary["aandachtspunten"]:
+            delen.append("Let op: " + " ".join(summary["aandachtspunten"]))
+        if summary["informatief"]:
+            delen.append("Ter info: " + " ".join(summary["informatief"]))
+        if not delen:
             return None
-        return "Let op: " + " ".join(summary["aandachtspunten"])
+        return " ".join(delen)
 
     def _describe_nilm_trend(self, device: dict) -> str:
         """A lighter-weight, more granular trend label than
@@ -8698,7 +9133,8 @@ class EnergyManagementSystemCoordinator:
         self._update_quooker_tracking(now)
         self._update_water_tracking(now)
         self._update_peak_power_tracking(now)
-        self._update_counterfactual_savings(now)
+        self._update_feedin_regime(now, entries)
+        self._update_counterfactual_savings(now, entries)
         self._update_self_sufficiency_tracking(now)
         self._update_battery_cycle_tracking(now)
         self._update_co2_tracking(now)

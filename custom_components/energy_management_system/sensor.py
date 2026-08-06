@@ -404,6 +404,14 @@ class SystemStatusSensor(_CoordinatorDiagnosticSensor):
             "aandachtspunten": self._coordinator.get_diagnostic_summary()[
                 "aandachtspunten"
             ],
+            # v0.63.116: observaties die bewust GEEN invloed hebben op
+            # de systeemstatus (bijv. waarschijnlijke NILM-duplicaten -
+            # een eigenschap van de HA-installatie, niet van deze
+            # integratie). Apart attribuut zodat het dashboard ze
+            # anders kan tonen dan echte aandachtspunten.
+            "informatief": self._coordinator.get_diagnostic_summary()[
+                "informatief"
+            ],
         }
 
 
@@ -859,14 +867,20 @@ class ChargeCostSensor(SensorEntity, RestoreEntity):
 
 class BatterySavingsSensor(SensorEntity, RestoreEntity):
     """Cumulative EUR realised by the battery, using a weighted-average
-    cost-basis model (v0.63.24): every kWh that enters the battery is
-    valued at the dynamic price at that moment (regardless of source -
-    valid under a salderen/net-metering contract, where PV routed into
-    the battery instead of exported has the same opportunity cost as
-    buying that energy from the grid right then). Every kWh that leaves
-    - sold during an expensive quarter, or simply used to cover
-    household load and avoid an import - realises the difference between
-    today's price and its original cost basis.
+    cost-basis model (v0.63.24). Every kWh that enters the battery is
+    valued at the cost of its SOURCE, and every kWh that leaves at the
+    value of its DESTINATION.
+
+    v0.63.117: source/destination now genuinely matter. Until v0.63.116
+    every charged kWh was booked at the plain import price, which was
+    only defensible while salderen made feed-in worth exactly the import
+    price - and even then it silently ignored the feed-in premium on
+    diverted PV, overstating savings. Now: grid-charged energy costs the
+    import price, PV surplus costs the forgone feed-in; discharge that
+    covers household load is worth the avoided import price, discharge
+    that genuinely exports is worth the feed-in tariff. Under salderen
+    those collapse back together, so the historical figures stay
+    comparable.
 
     v0.63.25: also includes Zonneplan's fixed EUR/kWh feed-in premium
     (confirmed via web search) for the portion of a discharge that's
@@ -909,16 +923,34 @@ class BatterySavingsSensor(SensorEntity, RestoreEntity):
             "total_feedin_premium_eur": round(
                 self._coordinator.total_feedin_premium_eur, 4
             ),
+            # v0.63.117: bron-/bestemmingssplitsing, nodig zodra
+            # teruglevering en inkoop niet meer hetzelfde tarief hebben.
+            "salderen_actief": self._coordinator.salderen_active,
+            "teruglever_waarde_eur_per_kwh": (
+                round(self._coordinator.current_feedin_value_eur_per_kwh, 4)
+                if self._coordinator.current_feedin_value_eur_per_kwh is not None
+                else None
+            ),
+            "geladen_uit_pv_kwh": round(self._coordinator.charge_pv_kwh_total, 3),
+            "geladen_uit_net_kwh": round(self._coordinator.charge_grid_kwh_total, 3),
+            "ontladen_naar_net_kwh": round(
+                self._coordinator.discharge_export_kwh_total, 3
+            ),
+            "gederfde_teruglevering_eur": round(
+                self._coordinator.forgone_feedin_eur_total, 4
+            ),
             "note": (
-                "Geldig zolang salderen actief is (contract tot en met "
-                "2026-12-31) - teruglevering betaalt dan hetzelfde "
-                "dynamische tarief als inkoop, dus zon-geladen en "
-                "net-geladen energie krijgen dezelfde kostprijs. Bevat "
-                "de Zonneplan-terugleverpremie (€0,02/kWh) op het deel "
-                "van een ontlading dat echt teruggeleverd wordt (niet "
-                "op het deel dat alleen eigen verbruik dekt) - de "
-                "aparte 10%-Zonnebonus geldt niet voor accu-teruglevering "
-                "en wordt hier dan ook nooit meegerekend."
+                "Elke kWh die de accu ingaat krijgt de kostprijs van zijn "
+                "BRON: netinkoop de inkoopprijs, PV-overschot de gederfde "
+                "teruglevering. Elke kWh die eruit gaat krijgt de waarde "
+                "van zijn BESTEMMING: eigen verbruik de vermeden "
+                "inkoopprijs, teruglevering het teruglevertarief. Zolang "
+                "salderen geldt zijn die twee vrijwel gelijk (inkoop = "
+                "teruglevering); daarna loopt het uiteen en wordt "
+                "PV-energie opslaan juist voordeliger. Bevat de "
+                "Zonneplan-terugleverpremie (€0,02/kWh) op werkelijk "
+                "teruggeleverde kWh - de aparte 10%-Zonnebonus geldt niet "
+                "voor accu-teruglevering en wordt nooit meegerekend."
             ),
         }
 
@@ -1544,6 +1576,13 @@ class NilmConfirmedDevicesSensor(SensorEntity, RestoreEntity):
                 :NILM_SENSOR_ATTRIBUTE_PREVIEW_LIMIT
             ],
             "totaal_aantal": len(all_devices),
+            # v0.63.118: aantal paren dat de gebruiker al heeft
+            # beoordeeld als "geen duplicaat" - zodat zichtbaar is dat
+            # een verdwenen suggestie een bewuste keuze was en niet
+            # stilletjes wegviel.
+            "afgewezen_duplicaatparen": len(
+                self._coordinator.nilm_dismissed_duplicate_pairs
+            ),
             "waarschijnlijke_duplicaten": self._coordinator.get_nilm_duplicate_pairs(),
             "note": (
                 "De volledige, opgeslagen apparatenlijst leeft in een "

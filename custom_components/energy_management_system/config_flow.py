@@ -52,7 +52,10 @@ from .const import (
     CONF_MANUAL_POWER_NUMBER,
     CONF_MIN_SOC_PERCENT,
     CONF_OPERATION_SELECT,
+    CONF_FEEDIN_COST_EUR_PER_KWH,
+    CONF_FEEDIN_PRICE_ATTRIBUTE,
     CONF_PRICE_ATTRIBUTE,
+    CONF_SALDEREN_END_DATE,
     CONF_PRICE_SENSOR,
     CONF_PV_POWER_SENSOR,
     CONF_SOC_SENSOR,
@@ -68,7 +71,10 @@ from .const import (
     DEFAULT_MANUAL_DISCHARGE_POWER,
     DEFAULT_MIN_SOC_PERCENT,
     DEFAULT_NAME,
+    DEFAULT_FEEDIN_COST_EUR_PER_KWH,
+    DEFAULT_FEEDIN_PRICE_ATTRIBUTE,
     DEFAULT_PRICE_ATTRIBUTE,
+    DEFAULT_SALDEREN_END_DATE,
     DOMAIN,
     PRICE_ATTRIBUTE_OPTIONS,
 )
@@ -89,6 +95,36 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
                 selector.SelectSelectorConfig(
                     options=PRICE_ATTRIBUTE_OPTIONS,
                     mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            ),
+            # v0.63.117 - einde saldering. Laatste dag dat salderen
+            # nog geldt; vanaf de dag erna wordt teruglevering apart
+            # (en veel lager) gewaardeerd in alle financiele getallen.
+            vol.Optional(
+                CONF_SALDEREN_END_DATE,
+                default=defaults.get(
+                    CONF_SALDEREN_END_DATE, DEFAULT_SALDEREN_END_DATE
+                ),
+            ): selector.TextSelector(),
+            vol.Optional(
+                CONF_FEEDIN_PRICE_ATTRIBUTE,
+                default=defaults.get(
+                    CONF_FEEDIN_PRICE_ATTRIBUTE, DEFAULT_FEEDIN_PRICE_ATTRIBUTE
+                ),
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=PRICE_ATTRIBUTE_OPTIONS,
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            ),
+            vol.Optional(
+                CONF_FEEDIN_COST_EUR_PER_KWH,
+                default=defaults.get(
+                    CONF_FEEDIN_COST_EUR_PER_KWH, DEFAULT_FEEDIN_COST_EUR_PER_KWH
+                ),
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=0, max=1, step=0.001, mode=selector.NumberSelectorMode.BOX
                 )
             ),
             vol.Required(
