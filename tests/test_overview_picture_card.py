@@ -296,3 +296,39 @@ def test_arrow_markers_do_not_scale_with_line_width():
     for regel in svg.split("\n"):
         if "<marker" in regel:
             assert 'markerUnits="userSpaceOnUse"' in regel, regel.strip()
+
+
+# --- v1.0.0: releaseborging ----------------------------------------
+
+
+def test_release_workflow_exists_and_reads_the_manifest():
+    """v1.0.0, gerapporteerd: "Nu zie ik met de update telkens een code
+    als 48eb9da."
+
+    HACS toont de commit-hash zodra een repository geen GitHub-releases
+    heeft - dat is de terugval. Deze workflow maakt van elke
+    versieverhoging in manifest.json automatisch een tag + release, zodat
+    HACS een echt versienummer kan tonen.
+    """
+    workflow = PAKKET.parent.parent / ".github" / "workflows" / "release.yml"
+    assert workflow.exists(), "geen release-workflow - HACS toont dan een hash"
+
+    inhoud = workflow.read_text()
+    # Het versienummer in manifest.json blijft de enige bron van
+    # waarheid; de workflow mag er geen eigen nummering naast zetten.
+    assert "manifest.json" in inhoud
+    assert "softprops/action-gh-release" in inhoud
+    # Een release zonder groene testsuite zou de hele borging van dit
+    # project omzeilen.
+    assert "pytest" in inhoud
+
+
+def test_version_is_a_plain_three_part_number():
+    """HACS sorteert releases op versienummer; een afwijkend formaat
+    (datums, achtervoegsels) maakt "welke is nieuwer" onbetrouwbaar."""
+    import json
+    import re
+
+    versie = json.loads((PAKKET / "manifest.json").read_text())["version"]
+
+    assert re.fullmatch(r"\d+\.\d+\.\d+", versie), versie

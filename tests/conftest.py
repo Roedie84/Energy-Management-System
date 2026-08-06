@@ -162,6 +162,13 @@ def _install_ha_mocks() -> None:
         async def async_remove(self):
             self.hass._fake_store_backing.pop(self.key, None)
 
+        def async_delay_save(self, data_func, delay=0):
+            """v1.0.4: HA schrijft hier vertraagd weg om schrijfacties te
+            bundelen. In tests wordt meteen geschreven - het uitstel is
+            een prestatie-eigenschap, geen gedrag dat getest hoeft te
+            worden, en wachten zou elke test trager maken."""
+            self.hass._fake_store_backing[self.key] = data_func()
+
     helpers_storage.Store = Store
     sys.modules["homeassistant.helpers.storage"] = helpers_storage
 
