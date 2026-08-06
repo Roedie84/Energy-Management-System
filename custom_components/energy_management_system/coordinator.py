@@ -202,6 +202,7 @@ from .const import (
     GRID_IMPORT_SHORTFALL_THRESHOLD_W,
     BATTERY_COOLING_FAN_UNAVAILABLE_STATES,
     BATTERY_MODULE_CELL_DELTA_ATTENTION_V,
+    MIN_BATTERY_POWER_IDLE_W,
     BATTERY_MODULE_CELL_DELTA_SERIOUS_V,
     BATTERY_MODULE_CUSUM_SLACK_C,
     BATTERY_MODULE_CUSUM_SLACK_PERCENT,
@@ -5500,6 +5501,55 @@ class EnergyManagementSystemCoordinator:
             "soc_percent": round(max(socs) - min(socs), 1) if socs else None,
         }
 
+    def get_battery_power_display(self) -> str:
+        """Accuvermogen als leesbare tekst met RICHTING (v0.63.127,
+        gerapporteerd: "Vermogen naar/van accu is niet inzichtelijk").
+
+        Een kaal getal uit de vermogenssensor helpt niet: het teken
+        alleen zegt niets zonder te weten welke conventie die sensor
+        aanhoudt, en op een schematische kaart is "laden" of "ontladen"
+        precies de informatie die je zoekt. Gebruikt
+        `_read_corrected_battery_power` (positief = ontladen), dezelfde
+        bron als de beslislogica, zodat kaart en besluit nooit iets
+        anders kunnen beweren.
+
+        Onder MIN_BATTERY_POWER_IDLE_W wordt het "rust" genoemd in plaats
+        van een richting te suggereren die er niet is - een accu die
+        stilstaat schommelt altijd een paar watt.
+        """
+        vermogen_w = self._read_corrected_battery_power()
+        if vermogen_w is None:
+            return "onbekend"
+        if abs(vermogen_w) < MIN_BATTERY_POWER_IDLE_W:
+            return "rust"
+        richting = "ontladen" if vermogen_w > 0 else "laden"
+        return f"{richting} {abs(vermogen_w):.0f} W"
+
+    @staticmethod
+    def format_moment_short(moment: datetime | None) -> str | None:
+        """Kort, leesbaar tijdstip (v0.63.127, gerapporteerd: "de datum
+        notatie is niet duidelijk").
+
+        Een `state-label` op een picture-elements-kaart toont de ruwe
+        attribuutwaarde en kan niet formatteren - er is geen sjabloon
+        beschikbaar. De opmaak hoort dus hier te gebeuren, bij de bron,
+        in plaats van op het dashboard. Levert bijvoorbeeld
+        "wo 6 aug 12:48" op in plaats van
+        "2026-08-06T12:48:28.434441+02:00".
+        """
+        if moment is None:
+            return None
+        lokaal = dt_util.as_local(moment)
+        dagen = ["ma", "di", "wo", "do", "vr", "za", "zo"]
+        maanden = [
+            "jan", "feb", "mrt", "apr", "mei", "jun",
+            "jul", "aug", "sep", "okt", "nov", "dec",
+        ]
+        return (
+            f"{dagen[lokaal.weekday()]} {lokaal.day} "
+            f"{maanden[lokaal.month - 1]} {lokaal:%H:%M}"
+        )
+
     def get_battery_module_table(self) -> list[dict]:
         """Overzicht per module voor het dashboard (v0.63.123) - live
         waarden plus de status van de drift-detectie."""
@@ -7419,6 +7469,57 @@ class EnergyManagementSystemCoordinator:
             )
         return rows
 
+    def get_largest_known_consumer(self) -> str:
+        """Welk bekend apparaat op dit moment het meeste verbruikt
+        (v0.63.130, gerapporteerd: "in de visual is nu de zwaarste bron
+        nog niet zichtbaar, mijn inziens is er altijd een zwaarste bron
+        ook al zou die maar 10 W zijn").
+
+        Terecht, en de oorzaak was een verkeerd gekozen bron: de kaart
+        toonde `heavy_load_source`, en dat is een BESLISLOGICA-signaal.
+        Dat geeft alleen iets terug als een specifiek zwaar apparaat
+        (vaatwasser, wasmachine, Quooker, airco, oven, kookplaat)
+        aantoonbaar draait, want het dient om de mediaan-voorzichtigheid
+        van de verbruikscorrectie over te slaan. Het hoort dus meestal
+        leeg te zijn - het label beloofde iets anders dan het attribuut
+        betekende.
+
+        Deze functie beantwoordt de werkelijke vraag: van alle apparaten
+        met een eigen vermogensmeting (de bevestigde NILM-apparaten,
+        v0.63.39) degene met het hoogste verbruik nu.
+
+        Negatieve waarden worden overgeslagen: onder de bevestigde
+        apparaten zitten ook productie-entiteiten (bijv. een
+        omvormerkanaal dat -4 W teruglevert), en die zijn geen
+        verbruiker. Hetzelfde geldt voor precies 0 W - "grootste
+        verbruiker: 0 W" is geen informatie.
+
+        Valt terug op het zwaar-apparaat-signaal als er geen enkel
+        NILM-apparaat een bruikbare meting geeft, zodat een draaiende
+        vaatwasser zonder bevestigde NILM-apparaten alsnog zichtbaar is.
+
+        BEPERKING, bewust: dit ziet alleen apparaten die zelf hun
+        vermogen meten. Is de werkelijk grootste verbruiker een apparaat
+        zonder meting, dan staat die er niet bij - het is "de grootste
+        BEKENDE verbruiker", niet "de grootste verbruiker".
+        """
+        beste_naam = None
+        beste_vermogen = 0.0
+        for rij in self.get_nilm_devices_table():
+            vermogen = rij.get("huidig_vermogen_w")
+            if vermogen is None or vermogen <= 0:
+                continue
+            if vermogen > beste_vermogen:
+                beste_vermogen = vermogen
+                beste_naam = rij["naam"]
+
+        if beste_naam is not None:
+            return f"{beste_naam} ({beste_vermogen:.0f} W)"
+
+        if self.last_heavy_load_source:
+            return str(self.last_heavy_load_source)
+        return "geen gemeten apparaat actief"
+
     def get_nilm_duplicate_pairs(self) -> list[dict]:
         """Waarschijnlijke duplicaten onder bevestigde NILM-apparaten
         (v0.63.91, gevonden tijdens een diagnostiek-review: 5
@@ -7902,7 +8003,18 @@ class EnergyManagementSystemCoordinator:
                         "'liter' met 'liter_uit_meterstand' in de "
                         "sessiegeschiedenis)"
                     )
-                aandachtspunten.append(
+                # v0.63.129, gevraagd: "dit mag geen aandachtspunt zijn,
+                # ik ben me er van bewust". Terecht: dit is een
+                # OBSERVATIE over de dekking van de waterdetectie, niet
+                # iets dat mis is met de integratie of de accu-
+                # aansturing. Het is bovendien een toestand die dagen
+                # kan aanhouden zonder dat er iets te doen valt - dan
+                # zou de systeemstatus permanent op "Aandacht gewenst"
+                # blijven staan en zijn signaalwaarde verliezen, net als
+                # bij de NILM-duplicaten in v0.63.116. Gaat daarom naar
+                # `informatief`: onverkort zichtbaar, telt niet mee voor
+                # de status.
+                informatief.append(
                     f"Waterverbruik: dagtotaal ({self.water_daily_total_l:.0f} L) "
                     f"is een stuk hoger dan wat de geregistreerde "
                     f"gebruiksmomenten van vandaag verklaren "

@@ -398,6 +398,15 @@ class SystemStatusSensor(_CoordinatorDiagnosticSensor):
                 if self._coordinator.last_successful_update
                 else None
             ),
+            # v0.63.127, gerapporteerd: "de datum notatie is niet
+            # duidelijk" - de ruwe ISO-tijdstempel stond onleesbaar op de
+            # grafische kaart. Een state-label kan niet formatteren, dus
+            # dat hoort hier te gebeuren.
+            "last_successful_update_short": (
+                self._coordinator.format_moment_short(
+                    self._coordinator.last_successful_update
+                )
+            ),
             # v0.63.109, gevraagd: "systeem status ok niet klopt
             # eigenlijk kan zien" - de volledige aandachtspunten-lijst
             # rechtstreeks op deze sensor, zodat "Aandacht gewenst" ook
@@ -558,6 +567,19 @@ class ExplanationSensor(_CoordinatorDiagnosticSensor):
                 if self._coordinator.last_successful_update
                 else None
             ),
+            # v0.63.127: kant-en-klaar geformatteerd, omdat een
+            # state-label op de picture-elements-kaart de ruwe waarde
+            # toont en niet kan formatteren.
+            "last_successful_update_short": (
+                self._coordinator.format_moment_short(
+                    self._coordinator.last_successful_update
+                )
+            ),
+            "accu_vermogen_weergave": self._coordinator.get_battery_power_display(),
+            # v0.63.130: de grootste BEKENDE verbruiker nu. Apart van
+            # `heavy_load_source`, dat een beslislogica-signaal is en
+            # meestal leeg hoort te zijn.
+            "grootste_verbruiker": self._coordinator.get_largest_known_consumer(),
             "force_manual": self._coordinator.force_manual,
             "expected_mode": self._coordinator.last_expected_mode,
             "current_price_per_kwh": self._coordinator.last_current_price_per_kwh,

@@ -74,9 +74,9 @@
   <path d="M 800 216 L 930 320 L 906 320 L 800 234 L 694 320 L 670 320 Z" fill="#2a3c4e" stroke="#4a6076" stroke-width="2"/>
   <rect x="770" y="340" width="60" height="62" rx="4" fill="#f9d423" opacity="0.22"/>
   <!-- anker huisverbruik: x 530..690, y 300..340 -->
-  <!-- anker zwaarste verbruiker: x 916..1090, y 300..332 -->
+  <!-- anker grootste verbruiker: x 916..1090, y 300..332 -->
   <text x="530" y="286" fill="#6b7c90" font-size="15">VERBRUIK NU</text>
-  <text x="916" y="286" fill="#6b7c90" font-size="15">ZWAARSTE BRON</text>
+  <text x="916" y="286" fill="#6b7c90" font-size="15">GROOTSTE VERBRUIKER</text>
 
   <!-- ======================= NET ======================= -->
   <rect x="1140" y="156" width="420" height="300" rx="16" fill="#161d26" stroke="#2c3a4a" stroke-width="2"/>
@@ -96,21 +96,45 @@
 
   <!-- ======================= STROOMPIJLEN ======================= -->
   <g opacity="0.55">
-    <path d="M 468 306 L 494 306" stroke="#f9d423" stroke-width="6" marker-end="url(#pijlZon)"/>
-    <path d="M 1132 306 L 1106 306" stroke="#5dade2" stroke-width="6" marker-end="url(#pijlNet)"/>
-    <path d="M 800 462 L 800 506" stroke="#2ecc71" stroke-width="6" marker-end="url(#pijlAccu)"/>
+    <path d="M 462 306 L 480 306" stroke="#f9d423" stroke-width="6" marker-end="url(#pijlZon)"/>
+    <!-- v0.63.128: ook het net is tweerichtingsverkeer - importeren én
+         terugleveren. Een enkele pijl naar het huis suggereerde
+         permanent import, terwijl de netstroom net zo goed negatief kan
+         zijn (export). De ZON-pijl blijft bewust enkelzijdig: die
+         produceert alleen. -->
+    <path d="M 1134 306 L 1106 306" stroke="#5dade2" stroke-width="6"
+          marker-start="url(#pijlNetTerug)" marker-end="url(#pijlNet)"/>
+    <!-- v0.63.127: dubbele pijlpunt. De accu gaat beide kanten op, en
+         een enkele pijl suggereerde permanent ontladen. De RICHTING
+         staat in het label ernaast ("laden"/"ontladen"/"rust"). -->
+    <path d="M 800 462 L 800 510" stroke="#2ecc71" stroke-width="6"
+          marker-start="url(#pijlAccuOmhoog)" marker-end="url(#pijlAccu)"/>
   </g>
   <defs>
-    <marker id="pijlZon" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
-      <path d="M0,0 L10,5 L0,10 Z" fill="#f9d423"/>
+    <!-- markerUnits="userSpaceOnUse" is hier essentieel: standaard
+         schalen markers mee met de LIJNDIKTE, waardoor een pijlpunt bij
+         stroke-width 6 zes keer zo groot werd als bedoeld. Met de dubbele
+         accupijl leverde dat twee pijlpunten op die elkaar raakten - een
+         zandloper in plaats van een pijl. -->
+    <marker id="pijlZon" markerUnits="userSpaceOnUse" markerWidth="18" markerHeight="18" refX="16" refY="9" orient="auto">
+      <path d="M0,0 L18,9 L0,18 Z" fill="#f9d423"/>
     </marker>
-    <marker id="pijlNet" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
-      <path d="M0,0 L10,5 L0,10 Z" fill="#5dade2"/>
+    <marker id="pijlNet" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" refX="12" refY="7" orient="auto">
+      <path d="M0,0 L14,7 L0,14 Z" fill="#5dade2"/>
     </marker>
-    <marker id="pijlAccu" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
-      <path d="M0,0 L10,5 L0,10 Z" fill="#2ecc71"/>
+    <marker id="pijlNetTerug" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" refX="2" refY="7" orient="auto">
+      <path d="M14,0 L0,7 L14,14 Z" fill="#5dade2"/>
+    </marker>
+    <marker id="pijlAccu" markerUnits="userSpaceOnUse" markerWidth="18" markerHeight="18" refX="16" refY="9" orient="auto">
+      <path d="M0,0 L18,9 L0,18 Z" fill="#2ecc71"/>
+    </marker>
+    <marker id="pijlAccuOmhoog" markerUnits="userSpaceOnUse" markerWidth="18" markerHeight="18" refX="2" refY="9" orient="auto">
+      <path d="M18,0 L0,9 L18,18 Z" fill="#2ecc71"/>
     </marker>
   </defs>
+
+  <!-- anker accuvermogen: x 840..1100, y 468..502 -->
+  <text x="840" y="478" fill="#6b7c90" font-size="15">ACCUVERMOGEN</text>
 
   <!-- ======================= ACCU ======================= -->
   <rect x="500" y="516" width="600" height="344" rx="16" fill="#161d26" stroke="#2f4a3c" stroke-width="2"/>

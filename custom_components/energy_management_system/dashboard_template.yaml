@@ -465,7 +465,7 @@ views:
               text-shadow: 0 1px 3px rgba(0,0,0,0.85)
           - type: state-label
             entity: sensor.woonkamer_energy_management_system_explanation
-            attribute: heavy_load_source
+            attribute: grootste_verbruiker
             tap_action:
               action: more-info
             style:
@@ -521,6 +521,21 @@ views:
               font-size: 24px
               font-weight: 600
               color: '#c8d4e0'
+              white-space: nowrap
+              pointer-events: auto
+              text-shadow: 0 1px 3px rgba(0,0,0,0.85)
+          - type: state-label
+            entity: sensor.woonkamer_energy_management_system_explanation
+            attribute: accu_vermogen_weergave
+            tap_action:
+              action: more-info
+            style:
+              top: 54.0%
+              left: 52.5%
+              transform: translate(0, -50%)
+              font-size: 28px
+              font-weight: 700
+              color: '#2ecc71'
               white-space: nowrap
               pointer-events: auto
               text-shadow: 0 1px 3px rgba(0,0,0,0.85)
@@ -725,7 +740,7 @@ views:
               text-shadow: 0 1px 3px rgba(0,0,0,0.85)
           - type: state-label
             entity: sensor.woonkamer_energy_management_system_system_status
-            attribute: last_successful_update
+            attribute: last_successful_update_short
             tap_action:
               action: more-info
             style:

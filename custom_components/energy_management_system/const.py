@@ -988,3 +988,9 @@ BATTERY_MODULE_CUSUM_THRESHOLD_PERCENT = 5.0
 
 # Hoeveel dagen geleerde geschiedenis per module/grootheid.
 BATTERY_MODULE_HISTORY_DAYS = 60
+
+# Onder dit vermogen wordt de accu als "in rust" beschouwd voor de
+# WEERGAVE (v0.63.127) - een stilstaande accu schommelt altijd een paar
+# watt, en dan "laden 3 W" tonen suggereert een richting die er niet is.
+# Puur cosmetisch; raakt geen enkele beslissing.
+MIN_BATTERY_POWER_IDLE_W = 25.0
