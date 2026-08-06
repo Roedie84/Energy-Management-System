@@ -515,6 +515,133 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Diagnostiek-review: dagteller en een verkeerde waterconclusie (v0.63.132)
+
+**Gevraagd**: "Algehele controle aub" bij een verse export van v0.63.130.
+
+### Eerst wat er goed staat
+
+Status **nominaal**, geen enkel aandachtspunt, geen fouten. Alle vijf de
+leercheks op OK na vijf dagen. De accu-modulebewaking draait en meet:
+drie modules, celdelta's van 0,03 / 0,01 / 0,00 V, temperaturen 30/29/28
+°C, SoC 62/63/61 % — netjes in balans, geen waarschuwingen, de
+SoC-bucketing vult zich. De koeling werkt (30,0 °C accu, 23,2 °C buiten,
+delta 6,8 °C, "blijft koelen"). De bron/bestemming-splitsing van
+v0.63.117 boekt inmiddels echt: 0,086 kWh uit PV geladen, €0,0128
+gederfde teruglevering. Sensor-gezondheid staat op leeg omdat er pas één
+meting is sinds de herstart — de drempel uit v0.63.121 doet precies zijn
+werk.
+
+Twee dingen klopten niet.
+
+### 1. De dagteller overleefde de herstart niet
+
+In de export stonden **zes watermomenten van vandaag** in de
+geschiedenis, terwijl `water_sessions_today_count` op **0** stond.
+
+`water_sessions_today_l/_count` zijn gewone geheugenvelden en worden bij
+elke herstart nul, terwijl `water_session_history` wél wordt hersteld.
+De diagnostiek-check viel daardoor terug op de optelling over de
+weergavelijst van 20 momenten — precies het gedrag dat die teller in
+v0.63.119 moest vervangen.
+
+Opgelost door de teller bij het herstellen van de geschiedenis opnieuw
+op te bouwen. Geen extra opslag nodig: de gegevens waren er al.
+
+### 2. De conclusie in de watermelding was omgekeerd
+
+De melding zei: *"er zijn wél 6 gebruiksmomenten herkend, dus de
+detectie werkt — het volume per moment valt te laag uit."*
+
+Dat is aantoonbaar onjuist. Diezelfde export bevat het bewijs:
+
+| Moment | Geïntegreerd debiet | Meterstand |
+|---|---|---|
+| 12:08 | 12,2 L | 12,0 L |
+| 12:57 | 0,5 L | 1,0 L |
+
+De volumebepaling klopt dus juist uitstekend. Het tekort zit in **gemiste
+momenten**, niet in te lage volumes.
+
+De oorzaak was de heuristiek uit v0.63.121: die trok haar conclusie uit
+"veel of weinig momenten", met een drempel op vijf. Bij zes momenten
+sloeg hij om naar de verkeerde verklaring. Die drempel had niets met de
+werkelijke oorzaak te maken — het was een proxy waar echt bewijs
+voorhanden is.
+
+De conclusie rust nu op dat bewijs: het geïntegreerde debiet wordt
+vergeleken met de meterstand over de momenten waar beide een waarde
+gaven. Komen ze overeen (binnen 25 %, ruim genomen omdat de meterstand
+zelf ongeveer een liter resolutie heeft), dan is de volumebepaling
+bevestigd en worden er momenten gemist. Wijken ze af, dan is de
+volumebepaling de zwakke schakel. Is er nog geen enkel moment met beide
+waarden, dan zegt de melding dat eerlijk in plaats van te gokken.
+
+Tegen de echte exportdata gedraaid levert dat nu op: *"de 6 herkende
+moment(en) kloppen qua volume — er worden gebruiksmomenten gemist, de
+debietsensor pikt waarschijnlijk niet elke stoot op."* Dat is de juiste
+diagnose.
+
+### Getest
+
+Vier nieuwe tests in `test_water_session_volume_accounting.py` (herbouw
+uit herstelde historie, andere dagen worden genegeerd, een lege dag zet
+de dagsleutel niet, en de sensor roept de herbouw ook echt aan) en drie
+in `test_diagnostics_review_improvements.py` (overeenkomende volumes →
+gemiste momenten, afwijkende volumes → volumebepaling, geen
+vergelijkingsmateriaal → geen conclusie). Twee bestaande tests die de
+oude telling-drempel vastlegden zijn meebewogen.
+
+**Volledige testsuite**: 791 tests, allemaal groen.
+
+## Achtergrondtekening bleef in de cache hangen (v0.63.131)
+
+**Gerapporteerd**, met screenshot waarop de nieuwe waarden ("laden
+390 W") wél zichtbaar waren maar de oude, enkelzijdige pijlen nog stonden:
+"Afbeelding (richtingen van de stromen) nog niet geupdate?"
+
+### Root cause
+
+Een picture-elements-kaart bestaat uit twee heel verschillende soorten
+inhoud, en die verversen niet op dezelfde manier:
+
+- de **entiteitswaarden** komen live over de websocket binnen — altijd
+  actueel;
+- de **achtergrond** is een statisch bestand dat via `/local/` wordt
+  geserveerd onder een **vaste bestandsnaam**.
+
+Browsers en de Home Assistant-app cachen dat bestand. De integratie
+schrijft bij elke start netjes de nieuwe SVG naar `www/`, maar de client
+vraagt hem niet opnieuw op — de naam is immers ongewijzigd. Resultaat:
+nieuwe cijfers op een oude tekening, precies wat op de screenshot te zien
+was. Niets stukgaan, geen foutmelding, alleen een stille inconsistentie.
+
+Dat is geen incident maar een structureel probleem: het zou zich bij
+élke volgende wijziging aan de tekening opnieuw voordoen.
+
+### Fix
+
+De kaart verwijst nu naar
+`/local/energy_management_system_overview.svg?v=0.63.131`. De
+versiesleutel maakt de URL uniek per release en dwingt zo een verse
+ophaal af.
+
+Die sleutel handmatig bijhouden zou natuurlijk precies zo'n ding zijn dat
+je één keer vergeet. Er is daarom een test die hem **hard koppelt aan
+`manifest.json`**: wordt de versie opgehoogd zonder de sleutel bij te
+werken, dan faalt de testsuite voordat er iets uitgaat. Dat is
+geverifieerd door de versie tijdelijk op 0.63.999 te zetten — de test
+sloeg aan.
+
+### Eenmalig nog even zelf verversen
+
+Deze fix werkt vanaf de volgende keer. De nu al gecachte afbeelding
+verdwijnt niet vanzelf uit je browser: doe één keer een harde vernieuwing
+(Ctrl+Shift+R, of in de mobiele app de app-cache wissen). Daarna regelt
+de versiesleutel het.
+
+**Volledige testsuite**: 790 tests, allemaal groen.
+
 ## Grootste verbruiker altijd zichtbaar op de visual (v0.63.130)
 
 **Gerapporteerd**: "In de visual is nu de zwaarste bron nog niet

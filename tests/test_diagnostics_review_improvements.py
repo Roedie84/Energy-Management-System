@@ -111,11 +111,65 @@ def test_utc_stored_session_still_counts_for_today(
     assert not any("Waterverbruik" in p for p in punten)
 
 
-def test_few_sessions_points_at_the_detection(make_coordinator, hass, _fixed_now):
+def test_matching_volumes_point_at_missed_sessions(
+    make_coordinator, hass, _fixed_now
+):
+    """v0.63.132: de conclusie rust op BEWIJS. Komt het geïntegreerde
+    debiet overeen met de meterstand, dan klopt de volumebepaling en
+    zitten de gemiste liters dus in gemiste momenten."""
+    coordinator = _water_coordinator(make_coordinator, 85.0)
+    coordinator.water_session_history = [
+        {
+            "gestart": "2026-08-06T08:00:00+02:00",
+            "liter": 12.2,
+            "liter_uit_meterstand": 12.0,
+        },
+        {
+            "gestart": "2026-08-06T09:00:00+02:00",
+            "liter": 9.6,
+            "liter_uit_meterstand": 10.0,
+        },
+    ]
+
+    melding = next(
+        p
+        for p in coordinator.get_diagnostic_summary()["informatief"]
+        if "Waterverbruik" in p
+    )
+
+    assert "gemist" in melding
+    assert "komen overeen" in melding
+
+
+def test_diverging_volumes_point_at_the_volume_determination(
+    make_coordinator, hass, _fixed_now
+):
+    """Wijkt het geïntegreerde debiet af van de meterstand, dan is de
+    volumebepaling de zwakke schakel."""
+    coordinator = _water_coordinator(make_coordinator, 85.0)
+    coordinator.water_session_history = [
+        {
+            "gestart": "2026-08-06T08:00:00+02:00",
+            "liter": 1.0,
+            "liter_uit_meterstand": 12.0,
+        },
+    ]
+
+    melding = next(
+        p
+        for p in coordinator.get_diagnostic_summary()["informatief"]
+        if "Waterverbruik" in p
+    )
+
+    assert "volumebepaling" in melding
+
+
+def test_without_comparison_data_it_says_so(make_coordinator, hass, _fixed_now):
+    """Geen enkel moment met beide waarden: dan hoort er geen conclusie
+    uit te komen, maar een eerlijke "nog niet te zeggen"."""
     coordinator = _water_coordinator(make_coordinator, 85.0)
     coordinator.water_session_history = [
         {"gestart": "2026-08-06T08:00:00+02:00", "liter": 2.0},
-        {"gestart": "2026-08-06T09:00:00+02:00", "liter": 3.0},
     ]
 
     melding = next(
@@ -124,27 +178,7 @@ def test_few_sessions_points_at_the_detection(make_coordinator, hass, _fixed_now
         if "Waterverbruik" in p
     )
 
-    assert "2 gebruiksmoment" in melding
-    assert "detectie" in melding
-
-
-def test_many_sessions_points_at_the_volume(make_coordinator, hass, _fixed_now):
-    """Veel momenten met weinig liters betekent iets heel anders: de
-    detectie werkt, de volumebepaling niet."""
-    coordinator = _water_coordinator(make_coordinator, 85.0)
-    coordinator.water_session_history = [
-        {"gestart": f"2026-08-06T0{u}:00:00+02:00", "liter": 0.5} for u in range(8)
-    ]
-
-    melding = next(
-        p
-        for p in coordinator.get_diagnostic_summary()["informatief"]
-        if "Waterverbruik" in p
-    )
-
-    assert "8 gebruiksmomenten" in melding
-    assert "volume" in melding
-    assert "liter_uit_meterstand" in melding
+    assert "niet te zeggen" in melding
 
 
 def test_unparseable_timestamp_is_skipped_not_crashing(

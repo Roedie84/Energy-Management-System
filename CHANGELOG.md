@@ -7321,3 +7321,67 @@ van "ZWAARSTE BRON".
 **Getest**: nieuw `tests/test_largest_known_consumer.py`, 12 tests.
 
 **Volledige testsuite**: 789 tests, allemaal groen.
+
+## v0.63.131 — Achtergrondtekening bleef in de cache hangen
+
+**Gerapporteerd**: "Afbeelding (richtingen van de stromen) nog niet
+geupdate?" - op de screenshot stonden de nieuwe waarden ("laden 390 W")
+naast de oude, enkelzijdige pijlen.
+
+**Root cause**: een picture-elements-kaart heeft twee soorten inhoud die
+niet op dezelfde manier verversen. De entiteitswaarden komen live over de
+websocket; de achtergrond is een statisch bestand onder een VASTE naam
+via `/local/`. Browsers en de HA-app cachen dat. De integratie schreef de
+nieuwe SVG wel netjes naar `www/`, maar de client vroeg hem niet opnieuw
+op. Geen fout, geen melding - alleen nieuwe cijfers op een oude tekening.
+Structureel probleem: zou zich bij elke volgende wijziging herhalen.
+
+**Fix**: versiesleutel in de URL
+(`...overview.svg?v=0.63.131`), plus een test die die sleutel hard
+koppelt aan `manifest.json` - een versieverhoging zonder bijgewerkte
+sleutel laat de testsuite falen. Geverifieerd door de versie tijdelijk op
+0.63.999 te zetten.
+
+**Eenmalig**: de al gecachte afbeelding verdwijnt niet vanzelf; één harde
+vernieuwing (Ctrl+Shift+R of app-cache wissen) is nog nodig.
+
+**Volledige testsuite**: 790 tests, allemaal groen.
+
+## v0.63.132 — Diagnostiek-review: dagteller en een verkeerde waterconclusie
+
+**Gevraagd**: "Algehele controle aub" bij een verse export van v0.63.130.
+
+Uit die export: status nominaal, geen aandachtspunten, geen fouten, alle
+vijf leercheks op OK, accu-modulebewaking draait en meet (celdelta's
+0,03/0,01/0,00 V, temperaturen 30/29/28 °C, netjes in balans), koeling
+werkt, de bron/bestemming-splitsing boekt inmiddels echt. Twee
+verbeterpunten:
+
+1. **Dagteller overleefde de herstart niet.** Zes watermomenten van
+   vandaag in de geschiedenis terwijl `water_sessions_today_count` op 0
+   stond: die velden zijn gewoon geheugen en worden bij elke herstart
+   nul, terwijl `water_session_history` wél wordt hersteld. De check viel
+   daardoor terug op de optelling over de weergavelijst van 20 - precies
+   wat die teller in v0.63.119 moest vervangen. Opgelost door de teller
+   bij het herstellen van de geschiedenis te herbouwen; geen extra
+   opslag nodig.
+2. **De waterconclusie was omgekeerd.** De melding zei "detectie werkt,
+   volume te laag", terwijl dezelfde export liet zien dat geïntegreerd
+   12,2 L en meterstand 12,0 L opleverden. De heuristiek uit v0.63.121
+   trok haar conclusie uit een telling-drempel (meer/minder dan vijf
+   momenten) die niets met de werkelijke oorzaak te maken had. Nu wordt
+   het geïntegreerde debiet vergeleken met de meterstand over de
+   momenten waar beide een waarde gaven: komen ze overeen (binnen
+   `WATER_VOLUME_AGREEMENT_TOLERANCE`, 25%), dan worden er momenten
+   gemist; wijken ze af, dan is de volumebepaling de zwakke schakel; is
+   er geen vergelijkingsmateriaal, dan zegt de melding dat eerlijk.
+
+Tegen de echte exportdata gedraaid geeft de nieuwe logica: "de 6 herkende
+moment(en) kloppen qua volume - er worden gebruiksmomenten gemist."
+
+**Getest**: vier nieuwe tests in
+`test_water_session_volume_accounting.py` en drie in
+`test_diagnostics_review_improvements.py`; twee bestaande tests
+meebewogen.
+
+**Volledige testsuite**: 795 tests, allemaal groen.

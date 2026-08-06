@@ -69,7 +69,33 @@ def test_repository_and_shipped_background_are_identical():
 def test_card_points_at_the_shipped_background():
     """Home Assistant serveert alleen `www/` (als /local/). Wijst de
     kaart ergens anders heen, dan laadt de afbeelding nooit."""
-    assert _kaart()["image"] == "/local/energy_management_system_overview.svg"
+    assert _kaart()["image"].startswith(
+        "/local/energy_management_system_overview.svg"
+    )
+
+
+def test_image_url_carries_the_current_version_as_cache_key():
+    """v0.63.131, gerapporteerd: "Afbeelding (richtingen van de stromen)
+    nog niet geupdate?" - de waarden waren wél bij, de tekening niet.
+
+    Root cause: /local/ serveert een statisch bestand onder een VASTE
+    naam. De entiteitswaarden komen live over de websocket binnen, maar
+    de achtergrond blijft uit de browsercache komen - dus nieuwe cijfers
+    op een oude tekening. De versiesleutel in de URL dwingt een verse
+    ophaal af bij elke release.
+
+    Deze test koppelt die sleutel hard aan manifest.json: wordt de versie
+    opgehoogd zonder de sleutel bij te werken, dan faalt de testsuite
+    voordat er een release uitgaat.
+    """
+    import json
+
+    versie = json.loads((PAKKET / "manifest.json").read_text())["version"]
+
+    assert _kaart()["image"].endswith(f"?v={versie}"), (
+        "de cache-sleutel loopt achter op manifest.json - dan blijft de "
+        "oude tekening in beeld na een update"
+    )
 
 
 def test_integration_copies_the_background_into_www():

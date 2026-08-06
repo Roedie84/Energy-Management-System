@@ -278,3 +278,69 @@ def test_attention_point_disappears_once_sessions_explain_the_total(
     punten = coordinator.get_diagnostic_summary()["aandachtspunten"]
     assert not any("Waterverbruik" in p for p in punten)
     assert dt_now is not None
+
+
+# --- v0.63.132: dagteller overleeft een herstart -------------------
+
+
+def test_day_counter_is_rebuilt_from_restored_history(make_coordinator, hass):
+    """In een diagnostiek-export stonden zes momenten van vandaag in de
+    geschiedenis terwijl `water_sessions_today_count` op 0 stond: de
+    teller is een gewoon geheugenveld en wordt bij elke herstart nul,
+    terwijl de geschiedenis wél wordt hersteld. De check viel daardoor
+    terug op de optelling over de weergavelijst - precies wat die teller
+    moest vervangen.
+    """
+    coordinator = make_coordinator(_config())
+    vandaag = dt_util.now().date().isoformat()
+    coordinator.water_session_history = [
+        {"gestart": f"{vandaag}T08:00:00+02:00", "liter": 12.2},
+        {"gestart": f"{vandaag}T09:00:00+02:00", "liter": 9.6},
+        {"gestart": f"{vandaag}T12:00:00+02:00", "liter": 0.5},
+    ]
+
+    coordinator.rebuild_water_session_day_counter()
+
+    assert coordinator.water_sessions_today_count == 3
+    assert coordinator.water_sessions_today_l == 22.3
+
+
+def test_rebuild_ignores_other_days(make_coordinator, hass):
+    coordinator = make_coordinator(_config())
+    vandaag = dt_util.now().date()
+    gisteren = (vandaag - timedelta(days=1)).isoformat()
+    coordinator.water_session_history = [
+        {"gestart": f"{gisteren}T22:00:00+02:00", "liter": 40.0},
+        {"gestart": f"{vandaag.isoformat()}T09:00:00+02:00", "liter": 5.0},
+    ]
+
+    coordinator.rebuild_water_session_day_counter()
+
+    assert coordinator.water_sessions_today_count == 1
+    assert coordinator.water_sessions_today_l == 5.0
+
+
+def test_rebuild_leaves_an_empty_day_alone(make_coordinator, hass):
+    """Zonder momenten van vandaag mag de dagsleutel niet op vandaag
+    worden gezet - anders zou een lege teller de terugval op de
+    geschiedenis blokkeren."""
+    coordinator = make_coordinator(_config())
+    coordinator.water_session_history = []
+
+    coordinator.rebuild_water_session_day_counter()
+
+    assert coordinator._water_sessions_day_key is None
+
+
+def test_sensor_triggers_the_rebuild_on_restore():
+    """De herbouw moet ook echt aangeroepen worden waar de geschiedenis
+    wordt teruggezet."""
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    bron = (Path(pkg.__file__).parent / "sensor.py").read_text()
+    herstel = bron.index("water_session_history = list(reversed(raw_sessions))")
+    vervolg = bron[herstel : herstel + 600]
+
+    assert "rebuild_water_session_day_counter" in vervolg

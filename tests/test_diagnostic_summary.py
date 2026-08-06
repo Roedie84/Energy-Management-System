@@ -289,7 +289,9 @@ def test_flags_water_total_much_higher_than_recorded_sessions(make_coordinator, 
     assert not any("Waterverbruik" in p for p in summary["aandachtspunten"])
     melding = next(p for p in summary["informatief"] if "Waterverbruik" in p)
     assert "gebruiksmoment" in melding
-    assert "detectie" in melding
+    # v0.63.132: zonder vergelijkingsmateriaal (geen enkel moment met
+    # zowel debiet als meterstand) hoort er geen conclusie te staan.
+    assert "niet te zeggen" in melding
 
 
 def test_no_water_flag_when_sessions_explain_the_total(make_coordinator, hass):
