@@ -1518,7 +1518,11 @@ NOTIFICATION_TYPES: tuple[tuple[str, str, str, bool, int], ...] = (
 )
 
 # Hoeveel verzendmomenten bewaard blijven voor het tabblad.
-NOTIFICATION_HISTORY_LENGTH = 50
+# Hoeveel verzendmomenten bewaard blijven. Verhoogd in v1.6.3: met
+# tweeëntwintig soorten en herstelmeldingen erbij was vijftig krap - een
+# drukke dag vulde de lijst en duwde de melding waar je naar zocht er
+# alweer uit.
+NOTIFICATION_HISTORY_LENGTH = 200
 
 # --- Eén betrouwbaarheidsschaal (v1.3.0) -----------------------------
 # Gevraagd: "ik wil dit eigenlijk voor vele data welke wordt gecreeerd,

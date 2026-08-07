@@ -515,6 +515,100 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Dashboard wees de verkeerde kant op (v1.6.4)
+
+**Gerapporteerd**: het Financieel-tabblad toonde *"Geen
+Zonneplan-kostensensoren gevonden"*.
+
+Dat klopte niet. In de diagnostiek-export staan ze gewoon, mét waarden:
+`electricity_delivery_costs_today` op €0,033,
+`electricity_production_costs_today` op €0,163, plus de maand- en
+jaarvarianten.
+
+### De echte oorzaak lag ergens anders
+
+Het dashboard las
+`sensor.woonkamer_energy_management_system_tegenfeitelijke_besparing` —
+een entiteit die niet bestaat. Die sensor heet **"Besparing t.o.v. zonder
+accu-sturing"** en heeft dus een heel andere entity_id.
+
+`state_attr` op een niet-bestaande entiteit geeft stilzwijgend `None`, en
+mijn sjabloon toonde daarop zijn terugvaltekst. Het resultaat was een
+melding over Zonneplan terwijl het probleem bij mijn eigen entiteitnaam
+lag — het vervelendste soort fout, want het dashboard wijst je de
+verkeerde kant op.
+
+Ik had die naam bij het bouwen geraden in plaats van opgezocht.
+
+### Nu bewaakt
+
+Een test controleert dat élke
+`sensor.woonkamer_energy_management_system_X` in het dashboard
+correspondeert met een sensor die daadwerkelijk zo heet, door de
+`_attr_name`-waarden te slugificeren zoals Home Assistant dat doet.
+
+Die test vond meteen twee andere verwijzingen: `advies_gereedheid_8_modules`
+en `piekvermogen`. Die blijken **correct** — Home Assistant kent de
+entity_id toe bij de eerste aanmaak en laat die daarna ongemoeid, ook als
+de weergavenaam verandert. De eerste heette ooit "(8 modules)", de tweede
+alleen "Piekvermogen".
+
+Ze staan daarom op een expliciete uitzonderingenlijst mét die reden. Wie
+daar iets aan toevoegt, moet kunnen aantonen dat het om zo'n historische
+naam gaat en niet om een typefout.
+
+### Getest
+
+Nieuw `tests/test_dashboard_entity_references.py`, 3 tests: elke verwezen
+sensornaam bestaat, de besparingssensor wordt correct aangeroepen, en het
+Zonneplan-blok leest de juiste entiteit.
+
+**Volledige testsuite**: 1114 tests, allemaal groen.
+
+## Meldingsgeschiedenis werd onbruikbaar zonder het bericht (v1.6.3)
+
+**Gerapporteerd**: *"Hoelang blijft dit melding venster bestaan, en kan
+het iets duidelijker? Nu was er een sensor niet uitleesbaar maar kan in
+de gecreeerde tabel niet zien om welke het ging."*
+
+```
+7 Aug 10:10   ✅ Sensor is weer uitleesbaar
+7 Aug 09:50   ⚠️ Sensor niet uitleesbaar
+```
+
+Precies het probleem: de **titel** zegt dát er een sensor wegviel, het
+**bericht** zegt welke. En alleen de titel werd bewaard — waardoor de
+geschiedenis onbruikbaar was voor precies het geval waarvoor je hem
+opzoekt.
+
+### Drie aanpassingen
+
+**Het bericht wordt nu meebewaard** en getoond, dus je ziet
+`sensor.zendure_manager_available_kwh geeft op dit moment geen waarde`
+in plaats van alleen "Sensor niet uitleesbaar".
+
+**Langer bewaard**: van 50 naar 200 meldingen. Met tweeëntwintig soorten
+en herstelmeldingen erbij was vijftig krap — een drukke dag vulde de lijst
+en duwde de melding waar je naar zocht er alweer uit. De tabel toont er
+dertig in plaats van vijftien.
+
+**De vraag "hoelang blijft dit staan" wordt beantwoord**, want dat stond
+nergens. Meldingen verdwijnen **niet na een bepaalde tijd** — alleen als
+er tweehonderd nieuwere bijkomen. Dat staat nu boven de tabel, samen met
+hoeveel er op dat moment in staan.
+
+Meldingen van vóór deze versie hebben geen bewaard bericht; die tonen dat
+eerlijk in plaats van een lege regel.
+
+### Getest
+
+Vier tests erbij: de geschiedenis bewaart het bericht (met de entity_id
+erin), de herstelmelding ook, de lengte is toereikend voor een drukke dag
+(minstens vijf per soort), en het dashboard toont zowel het bericht als
+de uitleg over de bewaartermijn.
+
+**Volledige testsuite**: 1111 tests, allemaal groen.
+
 ## Herstelmeldingen (v1.6.2)
 
 **Gerapporteerd**: *"Er is nu een melding verstuurd dat een sensor niet

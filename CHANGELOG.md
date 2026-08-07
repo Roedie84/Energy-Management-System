@@ -8340,3 +8340,58 @@ precies die zes. De rest stond aan door eigen keuze.
 **Getest**: nieuw `tests/test_recovery_notifications.py`, 11 tests.
 
 **Volledige testsuite**: 1107 tests, allemaal groen.
+
+## v1.6.3 — Meldingsgeschiedenis werd onbruikbaar zonder het bericht
+
+**Gerapporteerd**: "Nu was er een sensor niet uitleesbaar maar kan in de
+gecreeerde tabel niet zien om welke het ging" - plus de vraag hoelang het
+venster blijft bestaan.
+
+De titel zegt DAT er een sensor wegviel, het bericht zegt WELKE. Alleen
+de titel werd bewaard, waardoor de geschiedenis onbruikbaar was voor
+precies het geval waarvoor je hem opzoekt.
+
+**Drie aanpassingen**:
+- Het bericht wordt meebewaard en getoond (dus de entity_id is zichtbaar).
+- Van 50 naar 200 bewaarde meldingen; de tabel toont er 30 in plaats van
+  15. Met tweeëntwintig soorten en herstelmeldingen was vijftig krap.
+- Boven de tabel staat nu dat meldingen NIET na een bepaalde tijd
+  verdwijnen, alleen als er 200 nieuwere bijkomen - die vraag stond
+  nergens beantwoord.
+
+Meldingen van vóór deze versie hebben geen bewaard bericht en tonen dat
+eerlijk.
+
+**Getest**: vier tests erbij in `test_recovery_notifications.py`.
+
+**Volledige testsuite**: 1111 tests, allemaal groen.
+
+## v1.6.4 — Dashboard wees de verkeerde kant op
+
+**Gerapporteerd**: het Financieel-tabblad toonde "Geen
+Zonneplan-kostensensoren gevonden", terwijl die sensoren er wél waren en
+waarden gaven (delivery_costs_today €0,033, production_costs_today
+€0,163, plus maand- en jaarvarianten).
+
+**Echte oorzaak**: het dashboard las
+`..._tegenfeitelijke_besparing`, maar die sensor heet "Besparing t.o.v.
+zonder accu-sturing" en heeft dus een andere entity_id. `state_attr` op
+een niet-bestaande entiteit geeft stilzwijgend None, waarop het sjabloon
+zijn terugvaltekst toonde - een melding over Zonneplan terwijl het
+probleem bij de eigen entiteitnaam lag. De naam was bij het bouwen
+geraden in plaats van opgezocht.
+
+**Nu bewaakt**: een test controleert dat elke
+`sensor.woonkamer_energy_management_system_X` in het dashboard
+correspondeert met een bestaande sensornaam, via dezelfde slugificatie
+die Home Assistant gebruikt.
+
+Die test vond meteen twee andere verwijzingen die WÉL correct blijken:
+HA kent de entity_id toe bij de eerste aanmaak en laat die ongemoeid bij
+een hernoeming ("Advies-gereedheid (10 modules)" heette ooit "(8
+modules)", "Piekvermogen (netimport)" ooit alleen "Piekvermogen"). Die
+staan op een expliciete uitzonderingenlijst mét reden.
+
+**Getest**: nieuw `tests/test_dashboard_entity_references.py`, 3 tests.
+
+**Volledige testsuite**: 1114 tests, allemaal groen.

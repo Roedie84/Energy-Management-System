@@ -429,7 +429,9 @@ class SystemStatusSensor(_CoordinatorDiagnosticSensor):
                 "informatief"
             ],
             # v1.2.0: voor het Meldingen-tabblad.
-            "meldingen_historie": self._coordinator.notification_history[-15:],
+            # v1.6.3: dertig in plaats van vijftien, en mét het
+            # bericht - de titel alleen zegt niet WELKE sensor wegviel.
+            "meldingen_historie": self._coordinator.notification_history[-30:],
         }
 
 

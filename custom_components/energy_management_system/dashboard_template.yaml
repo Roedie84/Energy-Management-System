@@ -398,7 +398,7 @@ views:
         # "richtingen van de stromen nog niet geupdate?". De
         # versiesleutel dwingt een verse ophaal af. Een test bewaakt
         # dat deze waarde gelijk blijft aan de versie in manifest.json.
-        image: /local/energy_management_system_overview.svg?v=1.6.2
+        image: /local/energy_management_system_overview.svg?v=1.6.4
         elements:
           - type: state-label
             entity: sensor.woonkamer_energy_management_system_system_status
@@ -1090,9 +1090,12 @@ views:
 
       - type: markdown
         content: |
-          {% set hist = state_attr('sensor.woonkamer_energy_management_system_system_status', 'meldingen_historie') or [] %}{% if hist | length == 0 %}Nog geen meldingen verstuurd.{% else %}| Moment | Melding |
-          |---|---|
-          {% for m in hist | reverse %}| {{ as_timestamp(m.moment) | timestamp_custom('%-d %b %H:%M') }} | {{ m.titel }} |
+          {% set hist = state_attr('sensor.woonkamer_energy_management_system_system_status', 'meldingen_historie') or [] %}{% if hist | length == 0 %}Nog geen meldingen verstuurd.{% else %}De laatste {{ hist | length }} meldingen, nieuwste bovenaan. Er worden er 200 bewaard; ze verdwijnen alleen als er nieuwere bijkomen, niet na een bepaalde tijd.
+
+          {% for m in hist | reverse %}**{{ as_timestamp(m.moment) | timestamp_custom('%-d %b %H:%M') }} · {{ m.titel }}**
+
+          {{ m.bericht if m.bericht is defined and m.bericht else '_(bericht niet bewaard — melding van vóór v1.6.3)_' }}
+
           {% endfor %}{% endif %}
 
   - title: Betrouwbaarheid
@@ -1393,7 +1396,7 @@ views:
       - type: markdown
         title: Werkelijke afrekening (Zonneplan)
         content: |
-          {% set e = 'sensor.woonkamer_energy_management_system_tegenfeitelijke_besparing' %}{% set z = state_attr(e, 'zonneplan_vergelijking') %}{% if z is none or z.get('status') == 'niet_geconfigureerd' %}Geen Zonneplan-kostensensoren gevonden. Veel daarvan staan standaard uit in Home Assistant — schakel ze in bij Instellingen → Apparaten & services → Zonneplan → entiteiten, dan verschijnt hier de vergelijking met je werkelijke afrekening.{% else %}| Post | Bedrag |
+          {% set e = 'sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing' %}{% set z = state_attr(e, 'zonneplan_vergelijking') %}{% if z is none or z.get('status') == 'niet_geconfigureerd' %}Geen Zonneplan-kostensensoren gevonden. Veel daarvan staan standaard uit in Home Assistant — schakel ze in bij Instellingen → Apparaten & services → Zonneplan → entiteiten, dan verschijnt hier de vergelijking met je werkelijke afrekening.{% else %}| Post | Bedrag |
           |---|---|
           | 🔌 Afname vandaag (Zonneplan) | {{ z.get('zonneplan_afname_vandaag_eur') }} € |
           | ☀️ Teruglevering vandaag (Zonneplan) | {{ z.get('zonneplan_teruglevering_vandaag_eur') }} € |

@@ -2565,6 +2565,7 @@ class EnergyManagementSystemCoordinator:
                     "moment": dt_util.now().isoformat(),
                     "soort": f"{kind}_hersteld",
                     "titel": titel,
+                    "bericht": bericht,
                 }
             )
             # Het dempingsvenster van de PROBLEEMmelding wordt gewist,
@@ -3294,6 +3295,12 @@ class EnergyManagementSystemCoordinator:
                     "moment": now.isoformat(),
                     "soort": kind,
                     "titel": title,
+                    # v1.6.3, gerapporteerd: "kan in de gecreeerde tabel
+                    # niet zien om welke het ging" - de titel zegt DAT er
+                    # een sensor wegviel, het bericht zegt WELKE. Alleen
+                    # de titel bewaren maakt de geschiedenis onbruikbaar
+                    # voor precies het geval waarvoor je hem opzoekt.
+                    "bericht": message,
                 }
             )
             self.notification_history = self.notification_history[
