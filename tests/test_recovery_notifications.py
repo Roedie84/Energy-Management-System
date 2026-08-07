@@ -202,3 +202,63 @@ def test_the_active_conditions_survive_a_restart(make_coordinator, hass):
     asyncio.run(verse.async_load_persisted_state())
 
     assert verse.notification_active_conditions == ["sensor_unavailable"]
+
+
+# --- v1.6.3: de geschiedenis moet bruikbaar zijn ---------------------
+
+
+def test_the_history_stores_the_message_not_just_the_title(
+    make_coordinator, hass
+):
+    """Gerapporteerd: "kan in de gecreeerde tabel niet zien om welke het
+    ging".
+
+    De titel zegt DAT er een sensor wegviel, het bericht zegt WELKE.
+    Alleen de titel bewaren maakt de geschiedenis onbruikbaar voor
+    precies het geval waarvoor je hem opzoekt.
+    """
+    c = _coordinator(make_coordinator, hass)
+    hass.states.set("sensor.beschikbaar", "unavailable")
+
+    _ronde(c)
+
+    regel = next(m for m in c.notification_history if "niet uitleesbaar" in m["titel"])
+    assert "sensor.beschikbaar" in regel["bericht"]
+
+
+def test_the_recovery_also_stores_its_message(make_coordinator, hass):
+    c = _coordinator(make_coordinator, hass)
+    hass.states.set("sensor.beschikbaar", "unavailable")
+    _ronde(c)
+    hass.states.set("sensor.beschikbaar", "6.5")
+    _ronde(c, NOW + timedelta(minutes=5))
+
+    regel = next(
+        m for m in c.notification_history if "weer uitleesbaar" in m["titel"]
+    )
+    assert regel["bericht"]
+
+
+def test_the_history_is_long_enough_for_a_busy_day(make_coordinator, hass):
+    """Met tweeëntwintig soorten en herstelmeldingen erbij was vijftig
+    krap: een drukke dag vulde de lijst en duwde de melding waar je naar
+    zocht er alweer uit."""
+    from custom_components.energy_management_system.const import (
+        NOTIFICATION_HISTORY_LENGTH,
+        NOTIFICATION_TYPES,
+    )
+
+    assert NOTIFICATION_HISTORY_LENGTH >= len(NOTIFICATION_TYPES) * 5
+
+
+def test_the_dashboard_shows_the_message():
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    yaml_tekst = (
+        Path(pkg.__file__).parent / "dashboard_template.yaml"
+    ).read_text()
+
+    assert "m.bericht" in yaml_tekst
+    assert "niet na een bepaalde tijd" in yaml_tekst
