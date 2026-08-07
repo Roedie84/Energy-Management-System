@@ -320,3 +320,115 @@ def test_the_master_switch_is_on_the_tab():
     ).read_text()
 
     assert "meldingen_hoofdschakelaar" in yaml_tekst
+
+
+# --- v1.5.1: de laatste drie meldingen ------------------------------
+
+
+def _met_klok(c, uur, dag=7):
+    """Draait de meldingsronde op een gegeven tijdstip.
+
+    De ronde leest onderweg de prijsvoorspelling; zonder die stub loopt
+    hij op een ontbrekende sensor stuk voordat de samenvattingen aan de
+    beurt zijn.
+    """
+    c._get_forecast_entries = lambda: []
+    from datetime import datetime, timezone
+
+    from custom_components.energy_management_system import coordinator as mod
+
+    moment = datetime(2026, 8, dag, uur, 0, tzinfo=timezone.utc)
+    origineel = mod.dt_util.now
+    try:
+        mod.dt_util.now = lambda: moment
+        c._evaluate_new_notifications(moment)
+    finally:
+        mod.dt_util.now = origineel
+
+
+def _titels(c):
+    return [m["titel"] for m in c.notification_history]
+
+
+def test_the_daily_summary_only_fires_in_the_evening(make_coordinator, hass):
+    c = _coordinator(make_coordinator)
+    c.set_notification_enabled("daily_summary", True)
+
+    _met_klok(c, uur=14)
+    assert not any("Dagoverzicht" in t for t in _titels(c))
+
+    _met_klok(c, uur=22)
+    assert any("Dagoverzicht" in t for t in _titels(c))
+
+
+def test_the_daily_summary_reports_the_saving(make_coordinator, hass):
+    c = _coordinator(make_coordinator)
+    c.set_notification_enabled("daily_summary", True)
+    c.actual_cost_today_eur = 1.20
+    c.counterfactual_cost_today_eur = 3.50
+    c.pv_production_today_kwh = 14.2
+
+    _met_klok(c, uur=22)
+
+    assert any("Dagoverzicht" in t for t in _titels(c))
+
+
+def test_the_monthly_summary_only_fires_on_the_first(make_coordinator, hass):
+    c = _coordinator(make_coordinator)
+    c.set_notification_enabled("monthly_summary", True)
+
+    _met_klok(c, uur=10, dag=15)
+    assert not any("Maandoverzicht" in t for t in _titels(c))
+
+    _met_klok(c, uur=10, dag=1)
+    assert any("Maandoverzicht" in t for t in _titels(c))
+
+
+def test_only_the_transition_to_ready_is_reported(make_coordinator, hass):
+    """Zonder de vergelijking met de vorige stand zou elke tick opnieuw
+    melden dat een module klaar is - binnen een dag waardeloos."""
+    c = _coordinator(make_coordinator)
+    c.set_notification_enabled("module_became_ready", True)
+    c.previously_ready_modules = ["kalman"]
+    c.advisory_readiness = {
+        "kalman": {"status": "klaar"},
+        "nilm": {"status": "klaar"},
+    }
+
+    _met_klok(c, uur=12)
+    eerste = [t for t in _titels(c) if "klaar met leren" in t]
+    assert len(eerste) == 1
+
+    # Tweede ronde: niets veranderd, dus geen nieuwe melding.
+    c.notification_last_sent.clear()
+    _met_klok(c, uur=12)
+    assert len([t for t in _titels(c) if "klaar met leren" in t]) == 1
+
+
+def test_the_first_run_does_not_announce_everything(make_coordinator, hass):
+    """Bij een verse installatie is alles "nieuw klaar" - dan hoort er
+    geen melding te komen met de hele lijst."""
+    c = _coordinator(make_coordinator)
+    c.set_notification_enabled("module_became_ready", True)
+    c.previously_ready_modules = []
+    c.advisory_readiness = {"kalman": {"status": "klaar"}}
+
+    _met_klok(c, uur=12)
+
+    assert not any("klaar met leren" in t for t in _titels(c))
+    # De stand wordt wél onthouden, zodat een volgende module wél meldt.
+    assert c.previously_ready_modules == ["kalman"]
+
+
+def test_the_ready_list_survives_a_restart(make_coordinator, hass):
+    """Zonder bewaren zou elke herstart de overgang opnieuw melden."""
+    import asyncio
+
+    bron = _coordinator(make_coordinator)
+    bron.previously_ready_modules = ["kalman", "nilm"]
+    asyncio.run(bron.async_save_persisted_state_now())
+
+    verse = _coordinator(make_coordinator)
+    asyncio.run(verse.async_load_persisted_state())
+
+    assert verse.previously_ready_modules == ["kalman", "nilm"]
