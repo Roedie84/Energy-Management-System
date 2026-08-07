@@ -27,12 +27,20 @@ from custom_components.energy_management_system.const import (
 FASE = "sensor.zon_fase"
 
 
+def _met_zonvoorspelling(c):
+    """v1.8.1: het profiel meldt "niet geconfigureerd" zonder
+    zonvoorspelling, want dan valt niet te bepalen of een dag helder
+    genoeg was. Deze tests gaan over het gedrag DAARNA."""
+    c._get_pv_forecast_entries = lambda: [("x", "y", 1.0)]
+    return c
+
+
 def _coordinator(make_coordinator, hass):
     c = make_coordinator(
         {CONF_PV_POWER_SENSOR: "sensor.pv", CONF_SUN_PHASE_SENSOR: FASE}
     )
     hass.states.set(FASE, "day")
-    return c
+    return _met_zonvoorspelling(c)
 
 
 def _meting(c, hass, azimut, pv_w, verwacht_w, moment):
@@ -268,7 +276,7 @@ def _met_opgave(make_coordinator, hass, azimut, helling=None):
         config[CONF_PV_ACTUAL_TILT_DEGREES] = helling
     c = make_coordinator(config)
     hass.states.set(FASE, "day")
-    return c
+    return _met_zonvoorspelling(c)
 
 
 def test_a_matching_orientation_is_confirmed(make_coordinator, hass):
@@ -343,3 +351,21 @@ def test_the_deviation_wraps_around_north(make_coordinator, hass):
     c.pv_peak_azimuth_history = [10.0] * 8
 
     assert c.get_pv_installation_profile()["afwijking_graden"] == 20.0
+
+
+def test_without_a_solar_forecast_it_says_so(make_coordinator, hass):
+    """v1.8.1: zonder zonvoorspelling wordt er nooit een dag afgesloten,
+    want dan valt niet te bepalen of hij helder genoeg was. De teller
+    bleef dan op "0/5 heldere dagen" staan zonder uit te leggen waarom -
+    en wie geen Solcast heeft zou eeuwig wachten op een profiel dat nooit
+    komt."""
+    from custom_components.energy_management_system.const import (
+        RELIABILITY_NOT_CONFIGURED,
+    )
+
+    c = make_coordinator({CONF_PV_POWER_SENSOR: "sensor.pv"})
+
+    profiel = c.get_pv_installation_profile()
+
+    assert profiel["betrouwbaarheid"] == RELIABILITY_NOT_CONFIGURED
+    assert "zonvoorspelling" in profiel["reden"]
