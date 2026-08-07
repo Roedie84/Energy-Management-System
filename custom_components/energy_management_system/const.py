@@ -1099,6 +1099,10 @@ PERSISTED_PLAIN_FIELDS = (
     # v1.8.0: dagtotalen stroom en gas. Zonder bewaren zou er nooit een
     # week-, maand- of jaarcijfer ontstaan.
     "daily_cost_history",
+    # v1.8.2: welke sensor hoe vaak wegviel. Zonder bewaren zou de
+    # melding na een herstart weer generiek worden, terwijl de
+    # foutreeks zelf wél bewaard blijft.
+    "balance_missing_by_entity",
     "pv_azimuth_performance",
     # Meldingen (v1.2.0): de aan/uit-standen zijn een gebruikerskeuze en
     # mogen bij een herstart niet terugspringen naar de standaard. De

@@ -515,6 +515,96 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Aandachtspunt noemt nu wélke sensor wegviel (v1.8.2)
+
+**Gerapporteerd**: *"Sensor-gezondheid: verminderd (55.0%)... doordat een
+sensor 9 van de 20 keer geen waarde gaf. Maar kan niet ingrijpen, dit
+omdat ik niet weet om welke sensor het gaat."*
+
+Precies dezelfde omissie als bij de herstelmelding twee versies terug: de
+melding zegt dát er iets is, maar niet waar je moet zijn.
+
+### Wat er ontbrak
+
+Bij een ontbrekende meting werd alleen een `None` in de foutreeks
+gezet — de naam van de sensor ging verloren. Het aandachtspunt kon dus
+wel het aantal noemen, maar niet de bron.
+
+Er wordt nu per sensor geteld hoe vaak die geen waarde gaf. De melding
+luidt bij jouw situatie:
+
+> Sensor-gezondheid: verminderd (55,0%). Niet door onnauwkeurige metingen
+> — alle 11 vergelijkingen vielen binnen de marge — maar doordat een
+> sensor 9 van de 20 keer geen waarde gaf:
+> `sensor.zendure_manager_available_kwh` (9x).
+
+Bij meerdere sensoren staat de grootste veroorzaker vooraan, want daar
+zit de meeste winst.
+
+### Twee kleinere dingen die opvielen
+
+De telling gaat mee in de opslag. De foutreeks zelf wordt al bewaard, dus
+zonder de namen erbij zou de melding na een herstart weer generiek
+worden — terwijl het cijfer bleef staan.
+
+En bij een lege geschiedenis ontbrak de sleutel `uitval_per_sensor`
+helemaal, waar hij verder altijd bestaat. Een aanroeper mag niet hoeven
+raden of een veld er is; dat is nu consistent.
+
+### Getest
+
+Vijf tests erbij: de ontbrekende sensor wordt bij naam genoemd, meerdere
+sensoren worden allemaal genoemd, de grootste veroorzaker staat vooraan,
+zonder uitval blijft de lijst leeg, en de telling overleeft een herstart.
+
+**Volledige testsuite**: 1163 tests, allemaal groen.
+
+## Controle: draait alles nog na alle wijzigingen? (v1.8.1)
+
+**Gevraagd**: *"kun je kijken of alles op alle tabbladen nog actief wordt
+bijgestuurd na alle aanpassingen welke we hebben gedaan."*
+
+Terechte controle na veertien versies op één dag.
+
+### Wat er is nagelopen
+
+**Veertien tabbladen, 132 kaarten.** Elke `state_attr`-aanroep uit het
+dashboard — 104 stuks — is vergeleken met wat de sensoren werkelijk
+teruggeven. Daarna elke sensor geïnstantieerd en zijn attributen
+opgevraagd, en een volledige tick gedraaid om te zien of de waarden ook
+echt bewegen.
+
+Resultaat: meetfrequentie vult zich (4 sensoren), Kalman-divergentie
+(3 signalen), Zonneplan-totaal rekent, dagkosten-ijkpunt staat, en het
+betrouwbaarheidsoverzicht levert 13 regels. Alle twaalf nieuwe
+mechanismen worden daadwerkelijk aangeroepen.
+
+### Twee vals alarm
+
+Negen sensoren gaven een fout bij het opvragen van attributen — die
+hébben er simpelweg geen. En `PvForecastAccuracySensor` leek stuk, maar
+die krijgt een *tracker* mee in plaats van de coordinator; mijn
+controlescript gaf het verkeerde argument.
+
+### Eén echte vondst
+
+Het **PV-installatieprofiel** vult zich niet zonder zonvoorspelling. Dat
+is correct gedrag — zonder verwachting valt niet te bepalen of een dag
+helder genoeg was — maar de melding zei dat niet. Er stond alleen
+"0/5 heldere dagen verzameld", en wie geen Solcast heeft zou eeuwig
+wachten op een profiel dat nooit komt.
+
+Dat staat er nu expliciet: *"Geen zonvoorspelling geconfigureerd. Zonder
+die verwachting valt niet te bepalen of een dag helder genoeg was."*
+
+### Getest
+
+Eén test erbij, plus vijf bestaande tests die de zonvoorspelling nu
+meestubben — die gingen over het gedrag ná die drempel en liepen er
+anders op stuk.
+
+**Volledige testsuite**: 1158 tests, allemaal groen.
+
 ## Week-, maand- en jaarcijfers plus trends (v1.8.0)
 
 **Gevraagd**: *"Graag ook voor gas, week, maand en jaar cijfers. Voor

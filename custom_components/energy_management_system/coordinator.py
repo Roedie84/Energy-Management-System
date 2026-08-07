@@ -689,6 +689,9 @@ class EnergyManagementSystemCoordinator:
         # v1.1.3: accuvermogen-metingen sinds de laatste beweging van de
         # energiesensor, om over het juiste venster te kunnen middelen.
         self._balance_power_samples: list[float] = []
+        # v1.8.2: hoe vaak elke sensor geen waarde gaf, zodat het
+        # aandachtspunt kan zeggen WELKE sensor eruit ligt.
+        self.balance_missing_by_entity: dict[str, int] = {}
         # v1.1.6: met welke meetmethode de bewaarde foutreeks tot stand
         # is gekomen. Verandert de methode, dan wordt die reeks eenmalig
         # gewist - zie ENERGY_BALANCE_METHOD_VERSION.
@@ -2782,6 +2785,20 @@ class EnergyManagementSystemCoordinator:
             len(dagen), PV_GEOMETRY_MIN_DAYS, PV_GEOMETRY_RELIABLE_DAYS,
             "heldere dagen",
         )
+        # v1.8.1: zonder zonvoorspelling valt niet te bepalen of een dag
+        # helder genoeg was, en wordt er dus nooit een dag afgesloten. De
+        # teller blijft dan op 0/5 staan zonder uit te leggen waarom -
+        # wie geen Solcast heeft zou eeuwig wachten op een profiel dat
+        # nooit komt.
+        if not self._get_pv_forecast_entries():
+            oordeel = {
+                "niveau": RELIABILITY_NOT_CONFIGURED,
+                "reden": (
+                    "Geen zonvoorspelling geconfigureerd. Zonder die "
+                    "verwachting valt niet te bepalen of een dag helder "
+                    "genoeg was, en wordt er dus geen oriëntatie afgeleid."
+                ),
+            }
         profiel: dict = {
             "betrouwbaarheid": oordeel["niveau"],
             "reden": oordeel["reden"],
@@ -7479,6 +7496,21 @@ class EnergyManagementSystemCoordinator:
             # A missing reading is itself a health-relevant event (a
             # stale/unavailable sensor) - record it as a "bad" sample
             # rather than silently skipping.
+            #
+            # v1.8.2, gerapporteerd: "Maar kan niet ingrijpen, dit omdat
+            # ik niet weet om welke sensor het gaat." Het aandachtspunt
+            # meldde wél dat er negen keer geen waarde was, maar niet van
+            # wie - en dan valt er niets te doen. Welke sensor ontbrak
+            # wordt daarom geteld.
+            for naam, waarde in (
+                (available_entity, available_kwh),
+                (self.config.get(CONF_BATTERY_POWER_SENSOR),
+                 measured_battery_power_w),
+            ):
+                if naam and waarde is None:
+                    self.balance_missing_by_entity[naam] = (
+                        self.balance_missing_by_entity.get(naam, 0) + 1
+                    )
             self._record_balance_sample(None)
             return
 
@@ -7757,6 +7789,9 @@ class EnergyManagementSystemCoordinator:
                 "totaal": 0,
                 "vergelijkingen": 0,
                 "uitval": 0,
+                # Dezelfde sleutels als hieronder: een aanroeper mag niet
+                # hoeven raden of dit veld er is.
+                "uitval_per_sensor": {},
                 "nauwkeurigheid_percent": None,
                 "beschikbaarheid_percent": None,
                 "hoofdoorzaak": None,
@@ -7787,6 +7822,13 @@ class EnergyManagementSystemCoordinator:
             "totaal": totaal,
             "vergelijkingen": len(echte),
             "uitval": uitval,
+            # v1.8.2: wélke sensor, gesorteerd op hoe vaak.
+            "uitval_per_sensor": dict(
+                sorted(
+                    self.balance_missing_by_entity.items(),
+                    key=lambda kv: -kv[1],
+                )
+            ),
             "nauwkeurigheid_percent": nauwkeurigheid,
             "beschikbaarheid_percent": beschikbaarheid,
             "hoofdoorzaak": hoofdoorzaak,
@@ -10147,7 +10189,19 @@ class EnergyManagementSystemCoordinator:
                     f"metingen - alle {uitsplitsing['vergelijkingen']} "
                     "vergelijkingen vielen binnen de marge - maar doordat een "
                     f"sensor {uitsplitsing['uitval']} van de "
-                    f"{uitsplitsing['totaal']} keer geen waarde gaf."
+                    f"{uitsplitsing['totaal']} keer geen waarde gaf"
+                    + (
+                        ": "
+                        + ", ".join(
+                            f"{eid} ({aantal}x)"
+                            for eid, aantal in uitsplitsing[
+                                "uitval_per_sensor"
+                            ].items()
+                        )
+                        + "."
+                        if uitsplitsing["uitval_per_sensor"]
+                        else "."
+                    )
                 )
             else:
                 aandachtspunten.append(

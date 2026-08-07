@@ -8530,3 +8530,48 @@ kolom leeg in plaats van nul (nul suggereert dat er niets verbruikt is).
 **Getest**: nieuw `tests/test_energy_cost_trends.py`, 14 tests.
 
 **Volledige testsuite**: 1157 tests, allemaal groen.
+
+## v1.8.1 — Controle: draait alles nog na alle wijzigingen?
+
+**Gevraagd**: controleren of alles op alle tabbladen nog actief wordt
+bijgestuurd, na veertien versies op één dag.
+
+**Nagelopen**: 14 tabbladen, 132 kaarten, 104 `state_attr`-aanroepen
+vergeleken met wat de sensoren teruggeven; elke sensor geïnstantieerd; een
+volledige tick gedraaid. Alle twaalf nieuwe mechanismen worden
+aangeroepen en de waarden bewegen.
+
+**Twee vals alarm**: negen sensoren "faalden" omdat ze simpelweg geen
+attributen hebben, en `PvForecastAccuracySensor` krijgt een tracker mee
+in plaats van de coordinator (fout in het controlescript, niet in de
+code).
+
+**Eén echte vondst**: het PV-installatieprofiel vult zich niet zonder
+zonvoorspelling - correct gedrag, want zonder verwachting valt niet te
+bepalen of een dag helder genoeg was, maar de melding zei dat niet. Er
+stond alleen "0/5 heldere dagen", en wie geen Solcast heeft zou eeuwig
+wachten. Staat er nu expliciet bij.
+
+**Getest**: één test erbij; vijf bestaande tests stubben nu de
+zonvoorspelling mee.
+
+**Volledige testsuite**: 1158 tests, allemaal groen.
+
+## v1.8.2 — Aandachtspunt noemt nu wélke sensor wegviel
+
+**Gerapporteerd**: "doordat een sensor 9 van de 20 keer geen waarde gaf.
+Maar kan niet ingrijpen, dit omdat ik niet weet om welke sensor het
+gaat." Dezelfde omissie als bij de herstelmelding in v1.6.6.
+
+Bij een ontbrekende meting werd alleen een `None` in de foutreeks gezet;
+de naam ging verloren. Nu wordt per sensor geteld hoe vaak die geen
+waarde gaf, en de melding noemt ze - grootste veroorzaker vooraan.
+
+**Twee kleinere dingen**: de telling gaat mee in de opslag (de foutreeks
+blijft immers ook bewaard, dus zonder namen zou de melding na een
+herstart weer generiek worden), en bij een lege geschiedenis ontbrak de
+sleutel `uitval_per_sensor` waar hij verder altijd bestaat.
+
+**Getest**: vijf tests erbij in `test_sensor_health_breakdown.py`.
+
+**Volledige testsuite**: 1163 tests, allemaal groen.
