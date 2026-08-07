@@ -2257,6 +2257,8 @@ class CounterfactualSavingsSensor(SensorEntity, RestoreEntity):
             # eigen berekening. De entiteiten worden automatisch
             # gevonden - geen configuratie nodig.
             "zonneplan_vergelijking": c.get_zonneplan_cost_comparison(),
+            # v1.8.0: week/maand/jaar en trends voor stroom én gas.
+            "energiekosten_overzicht": c.get_energy_cost_overview(),
             "werkelijke_kosten_vandaag_eur": round(c.actual_cost_today_eur, 2),
             "tegenfeitelijke_kosten_vandaag_eur": round(
                 c.counterfactual_cost_today_eur, 2

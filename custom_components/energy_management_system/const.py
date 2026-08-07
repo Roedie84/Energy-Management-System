@@ -1096,6 +1096,9 @@ PERSISTED_PLAIN_FIELDS = (
     # betrouwbare). Zonder bewaren zou die telling na elke herstart
     # opnieuw beginnen en nooit iets opleveren.
     "pv_peak_azimuth_history",
+    # v1.8.0: dagtotalen stroom en gas. Zonder bewaren zou er nooit een
+    # week-, maand- of jaarcijfer ontstaan.
+    "daily_cost_history",
     "pv_azimuth_performance",
     # Meldingen (v1.2.0): de aan/uit-standen zijn een gebruikerskeuze en
     # mogen bij een herstart niet terugspringen naar de standaard. De
@@ -1803,6 +1806,18 @@ ZONNEPLAN_COST_CANDIDATES = {
         "afname_gemiddelde_prijs_per_kwh_vandaag",
         "electricity_delivery_average_price_today",
     ),
+    # v1.7.0: gas. Zonneplan levert bij deze installatie ook gas, en
+    # zonder die post zijn de energiekosten maar half zichtbaar.
+    #
+    # LET OP: voor gas bestaat alleen een DAGtotaal, geen maand- of
+    # jaarvariant zoals bij stroom. Dat is geen omissie hier maar een
+    # beperking van de integratie zelf, en het hoort zichtbaar te zijn
+    # in plaats van weggemoffeld.
+    "gas_vandaag": (
+        "gas_delivery_costs_today",
+        "gas_afname_vandaag",
+        "gasleveringskosten_vandaag",
+    ),
     "gemiddelde_teruglverprijs_vandaag": (
         "teruglevering_gemiddelde_prijs_per_kwh_vandaag",
         "electricity_production_average_price_today",
@@ -1864,3 +1879,43 @@ NOTIFICATION_RECOVERY_KINDS = {
         "overbruggen.",
     ),
 }
+
+# --- Aanlooptijd na een herstart (v1.6.6) ----------------------------
+# Gerapporteerd: "Het uitvallen komt door een herstart (start relatief
+# traag op), misschien deze melding iets vertragen?"
+#
+# Terecht. Sensoren zijn na een herstart even weg omdat de bijbehorende
+# integratie nog aan het opstarten is - dat is normaal, geen storing. Een
+# melding sturen over iets dat binnen een minuut vanzelf goed komt,
+# leert je die meldingen te negeren, en dan mis je de keer dat het wél
+# echt misgaat.
+#
+# Alleen meldingen die over de BESCHIKBAARHEID van iets gaan wachten;
+# een prijspiek of een apparaat dat klaar is heeft hier niets mee te
+# maken.
+STARTUP_GRACE_SECONDS = 180
+STARTUP_GRACE_KINDS = ("sensor_unavailable", "integration_error")
+
+# --- Dagkosten-geschiedenis en trends (v1.8.0) -----------------------
+# Gevraagd: "Graag ook voor gas, week, maand en jaar cijfers. Voor zowel
+# gas als electra wil ik ook een soort dagelijkse/wekelijkse trend zien.
+# Iets als meer verbruikt dan gister, minder verbruikt dan vorige week.
+# Dit wil ik dan in % zien."
+#
+# Zonneplan levert voor gas alleen een DAGtotaal - geen maand of jaar,
+# anders dan bij stroom. Die worden hier dus zelf opgebouwd uit de
+# dagtotalen.
+#
+# BELANGRIJK ONTWERPPUNT: trends rusten uitsluitend op VOLTOOIDE dagen.
+# "Vandaag tot nu toe" vergelijken met een volledige gisteren geeft de
+# hele dag een negatieve trend die om middernacht vanzelf verdwijnt -
+# om 10:00 sta je op een derde van je dagverbruik en dat leest als "65%
+# minder", terwijl er niets aan de hand is. Zo'n cijfer is erger dan
+# geen cijfer, want je gaat er conclusies aan verbinden.
+#
+# Vandaag wordt daarom apart getoond, zonder trend.
+DAILY_COST_HISTORY_DAYS = 400
+
+# Onder dit bedrag zegt een procentuele verandering niets: van 2 cent
+# naar 4 cent is "+100%" en dat is pure ruis.
+COST_TREND_MIN_EUR = 0.20

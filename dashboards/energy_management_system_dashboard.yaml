@@ -398,7 +398,7 @@ views:
         # "richtingen van de stromen nog niet geupdate?". De
         # versiesleutel dwingt een verse ophaal af. Een test bewaakt
         # dat deze waarde gelijk blijft aan de versie in manifest.json.
-        image: /local/energy_management_system_overview.svg?v=1.6.4
+        image: /local/energy_management_system_overview.svg?v=1.8.0
         elements:
           - type: state-label
             entity: sensor.woonkamer_energy_management_system_system_status
@@ -1394,15 +1394,49 @@ views:
           {%- endif %}
 
       - type: markdown
+        title: Energiekosten — week, maand, jaar en trend
+        content: |
+          {% set e = 'sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing' %}
+          {% set o = state_attr(e, 'energiekosten_overzicht') %}
+          {% if o is none %}Nog geen gegevens.{% else %}
+          {% set nu = o.get('vandaag_tot_nu_toe') or {} %}
+          **Vandaag tot nu toe:** stroom {{ nu.get('stroom_eur') if nu.get('stroom_eur') is not none else '—' }} € · gas {{ nu.get('gas_eur') if nu.get('gas_eur') is not none else '—' }} €
+
+
+          {% if o.get('voltooide_dagen', 0) == 0 %}Er zijn nog geen voltooide dagen. Week-, maand- en jaarcijfers verschijnen zodra er dagen zijn afgesloten.{% else %}
+          | | Stroom | Gas |
+          |---|---|---|
+          {% for label, sleutel in [('7 dagen', 'week'), ('30 dagen', 'maand'), ('365 dagen', 'jaar')] %}| {{ label }} | {{ o.stroom.get(sleutel) if o.stroom.get(sleutel) is not none else '—' }} € | {{ o.gas.get(sleutel) if o.gas.get(sleutel) is not none else '—' }} € |
+          {% endfor %}
+
+
+          **Trends** (alleen voltooide dagen)
+
+          | | Stroom | Gas |
+          |---|---|---|
+          | Gisteren t.o.v. eergisteren | {% if o.stroom.get('dagtrend_procent') is not none %}{{ '📈' if o.stroom.dagtrend_procent > 0 else '📉' }} {{ o.stroom.dagtrend_procent }}%{% else %}—{% endif %} | {% if o.gas.get('dagtrend_procent') is not none %}{{ '📈' if o.gas.dagtrend_procent > 0 else '📉' }} {{ o.gas.dagtrend_procent }}%{% else %}—{% endif %} |
+          | Deze week t.o.v. vorige | {% if o.stroom.get('weektrend_procent') is not none %}{{ '📈' if o.stroom.weektrend_procent > 0 else '📉' }} {{ o.stroom.weektrend_procent }}%{% else %}—{% endif %} | {% if o.gas.get('weektrend_procent') is not none %}{{ '📈' if o.gas.weektrend_procent > 0 else '📉' }} {{ o.gas.weektrend_procent }}%{% else %}—{% endif %} |
+
+
+          📈 betekent duurder dan de vorige periode, 📉 goedkoper.
+
+
+          {{ o.get('note') }}
+          {% endif %}{% endif %}
+
+      - type: markdown
         title: Werkelijke afrekening (Zonneplan)
         content: |
           {% set e = 'sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing' %}{% set z = state_attr(e, 'zonneplan_vergelijking') %}{% if z is none or z.get('status') == 'niet_geconfigureerd' %}Geen Zonneplan-kostensensoren gevonden. Veel daarvan staan standaard uit in Home Assistant — schakel ze in bij Instellingen → Apparaten & services → Zonneplan → entiteiten, dan verschijnt hier de vergelijking met je werkelijke afrekening.{% else %}| Post | Bedrag |
           |---|---|
-          | 🔌 Afname vandaag (Zonneplan) | {{ z.get('zonneplan_afname_vandaag_eur') }} € |
-          | ☀️ Teruglevering vandaag (Zonneplan) | {{ z.get('zonneplan_teruglevering_vandaag_eur') }} € |
-          | 💶 Netto volgens Zonneplan | {{ z.get('zonneplan_netto_eur') }} € |
-          | 🧮 Eigen berekening | {{ z.get('eigen_berekening_eur') }} € |
+          | 🔌 Stroom afname vandaag | {{ z.get('zonneplan_afname_vandaag_eur') | round(2) }} € |
+          | ☀️ Stroom teruglevering vandaag | {{ z.get('zonneplan_teruglevering_vandaag_eur') | round(2) }} € |
+          | 💶 Stroom netto volgens Zonneplan | {{ z.get('zonneplan_netto_eur') }} € |
+          | 🧮 Eigen berekening stroom | {{ z.get('eigen_berekening_eur') }} € |
           | 📏 Verschil | {{ z.get('verschil_eur') }} € |
+          {% if z.get('zonneplan_gas_vandaag_eur') is not none %}| 🔥 Gas vandaag | {{ z.get('zonneplan_gas_vandaag_eur') | round(2) }} € |
+          | **🏠 Totale energiekosten vandaag** | **{{ z.get('totale_energiekosten_vandaag_eur') }} €** |
+          {% endif %}
 
 
           {{ z.get('reden') }}
@@ -1421,6 +1455,14 @@ views:
           staat. De accu-boekhouding en vooral de **tegenfeitelijke
           besparing** hierboven ("wat had je betaald zonder accu") kunnen
           hiermee dus niet worden bevestigd. Dat blijft een eigen model.
+
+
+          **Gas wordt alleen getóónd, niet getoetst.** Deze integratie
+          berekent niets aan gas, dus er valt niets naast te leggen. Het
+          staat er om je totale energiekosten zichtbaar te maken in plaats
+          van alleen de stroomhelft. Zonneplan levert voor gas bovendien
+          alleen een dagtotaal — geen maand- of jaarcijfer zoals bij
+          stroom.
 
 
           De drempels zijn ruim, want de kostensensor van Zonneplan werkt
@@ -2365,19 +2407,31 @@ views:
       - type: markdown
         title: Recente gebruiksmomenten (nieuwste eerst)
         content: >-
-          {% set sessies =
+          {% set alles =
           state_attr('sensor.woonkamer_energy_management_system_waterverbruik',
           'recente_gebruiksmomenten') or [] %}
-          {% if sessies | length == 0 %}
+          {% set dag = now().strftime('%Y-%m-%d') %}
+          {% set ns = namespace(vandaag=[]) %}
+          {% for s in alles %}
+          {%- if s.gestart and dag in s.gestart %}
+          {%- set ns.vandaag = ns.vandaag + [s] %}
+          {%- endif %}
+          {%- endfor %}
+          {% set vandaag = ns.vandaag %}
+          {% if alles | length == 0 %}
           Nog geen gebruiksmomenten geregistreerd.
+          {% elif vandaag | length == 0 %}
+          Nog geen gebruiksmomenten vandaag. ({{ alles | length }} eerdere momenten bewaard, zie de diagnostiek-export voor de volledige lijst.)
           {% else %}
+          {{ vandaag | length }} moment(en) vandaag. Oudere momenten staan in de diagnostiek-export.
+
           | Gestart | Duur | Volume | |
 
           |---|---|---|---|
 
-          {%- for s in sessies %}
+          {%- for s in vandaag %}
 
-          | {{ as_timestamp(s.gestart) | timestamp_custom('%a %H:%M') if s.gestart else 'onbekend' }} | {{ s.duur_minuten }} min | {{ (s.liter ~ ' L') if s.liter is not none else '—' }} | {{ '🧂' if s.waarschijnlijk_waterontharder else '' }} |
+          | {{ as_timestamp(s.gestart) | timestamp_custom('%H:%M') if s.gestart else 'onbekend' }} | {{ s.duur_minuten }} min | {{ (s.liter ~ ' L') if s.liter is not none else '—' }} | {{ '🧂' if s.waarschijnlijk_waterontharder else '' }} |
           {%- endfor %}
           {% endif %}
 
@@ -2388,8 +2442,11 @@ views:
           {% if history | length == 0 %}
           Nog geen volledige dagen geschiedenis.
           {% else %}
-          {% for l in history %}
-          - {{ l }} L
+          De laatste {{ [history | length, 7] | min }} afgesloten dagen, nieuwste eerst.
+
+          | Dag | Verbruik |
+          |---|---|
+          {% for l in history[-7:] | reverse %}| {{ (now().timestamp() - (loop.index * 86400)) | timestamp_custom('%a %-d %b') }} | {{ l }} L |
           {% endfor %}
           {% endif %}
 

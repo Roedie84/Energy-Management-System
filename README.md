@@ -515,6 +515,293 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Week-, maand- en jaarcijfers plus trends (v1.8.0)
+
+**Gevraagd**: *"Graag ook voor gas, week, maand en jaar cijfers. Voor
+zowel gas als electra wil ik ook een soort dagelijkse/wekelijkse trend
+zien. Iets als meer verbruikt dan gister, minder verbruikt dan vorige
+week. Dit wil ik dan in % zien."*
+
+### Gas: zelf opgebouwd
+
+Zonneplan levert voor gas alleen een **dagtotaal** — geen maand of jaar,
+anders dan bij stroom. Die dagtotalen worden nu bij elke dagwissel
+vastgelegd, en daaruit volgen de week-, maand- en jaarcijfers.
+
+Één detail dat makkelijk misgaat: de teller springt om middernacht terug
+naar nul, dus de waarde moet vlak vóór de wissel worden vastgelegd. Ná de
+wissel is de vorige dag niet meer op te vragen. Daar staat een test op.
+
+### Het ontwerppunt dat er echt toe doet
+
+Trends rusten uitsluitend op **voltooide dagen**.
+
+"Vandaag tot nu toe" vergelijken met een volledige gisteren geeft de hele
+dag een negatieve trend die om middernacht vanzelf verdwijnt:
+
+| Tijdstip | Verbruikt van je dagtotaal | Naïeve trend |
+|---|---|---|
+| 10:00 | 35% | −65% |
+| 18:00 | 75% | −25% |
+| 23:00 | 98% | −2% |
+
+Altijd negatief, altijd betekenisloos. En je zou er conclusies aan
+verbinden. Daarom: **gisteren tegen eergisteren**, en **de laatste zeven
+dagen tegen de zeven daarvoor**. Vandaag staat er wel bij, maar zonder
+trend — met de reden erbij op het tabblad.
+
+### Kleine bedragen krijgen geen percentage
+
+Van 2 naar 4 cent is "+100%", en dat is ruis. Onder de twintig cent
+verschijnt er geen trend.
+
+### Op het tabblad
+
+Een tabel met stroom en gas naast elkaar voor 7, 30 en 365 dagen, en
+daaronder de twee trends met 📈 voor duurder en 📉 voor goedkoper.
+
+Zonder gas bij dezelfde leverancier blijft die kolom leeg in plaats van
+nul te tonen — nul suggereert dat er niets verbruikt is.
+
+### Getest
+
+Nieuw `tests/test_energy_cost_trends.py`, 14 tests: week/maand/jaar voor
+beide, gastotalen uit dagwaarden, ontbrekend gas geeft geen nul, de
+dagtrend vergelijkt twee volledige dagen, een goedkopere dag geeft een
+negatief percentage, de weektrend vergelijkt twee volle weken, geen
+weektrend vóór veertien dagen, een klein bedrag geeft geen percentage,
+gas en stroom worden apart getrend, vandaag heeft geen trend, de
+toelichting legt uit waarom, een dag wordt bij de wissel afgesloten, de
+waarde van vóór middernacht blijft behouden, en de geschiedenis overleeft
+een herstart.
+
+**Volledige testsuite**: 1157 tests, allemaal groen.
+
+## Gas meegenomen in het financiële overzicht (v1.7.0)
+
+**Gevraagd**: *"Zonneplan levert ook gas aan mij, dit graag meenemen in
+het financiele gedeelte."*
+
+Zonder die post waren de energiekosten maar half zichtbaar.
+
+### Wat het oplevert
+
+Met de werkelijke cijfers uit de export:
+
+| Post | Bedrag |
+|---|---|
+| Stroom afname | 0,04 € |
+| Stroom teruglevering | −0,19 € |
+| **Stroom netto** | **−0,16 €** |
+| Gas | 0,13 € |
+| **Totale energiekosten vandaag** | **−0,03 €** |
+
+Op stroom verdiende je 16 cent, op gas ging 13 cent uit. Netto sta je op
+drie cent in de plus — een heel ander beeld dan de −0,16 € die je zonder
+de gaspost zag.
+
+De gasentiteit wordt automatisch gevonden, net als de rest: geen
+configuratie.
+
+### Twee dingen die eerlijk moeten blijven
+
+**Gas wordt alleen getóónd, niet getoetst.** Deze integratie berekent
+niets aan gas, dus er valt niets naast te leggen zoals bij stroom. Het
+staat er om je totale energiekosten zichtbaar te maken. Een test legt
+vast dat gas het oordeel over de stroomberekening niet beïnvloedt — ook
+niet als het bedrag groot is.
+
+**Voor gas bestaat alleen een dagtotaal.** Geen maand- of jaarvariant
+zoals bij stroom. Dat is een beperking van de Zonneplan-integratie zelf,
+en het staat op het tabblad in plaats van dat de post er stilzwijgend
+ontbreekt bij een maandoverzicht.
+
+Heb je geen gas bij dezelfde leverancier, dan verdwijnen die regels
+gewoon — een regel met "None €" is erger dan geen regel.
+
+### Getest
+
+Zes tests erbij: gas wordt automatisch gevonden, het totaal telt gas bij
+netto stroom op, gas beïnvloedt het stroomoordeel niet (ook niet bij een
+groot bedrag), zonder gas is het totaal gewoon de stroom, het dashboard
+verbergt de regels als er geen gas is, en het benoemt dat gas niet
+getoetst wordt en alleen als dagtotaal bestaat.
+
+**Volledige testsuite**: 1143 tests, allemaal groen.
+
+## Watertabellen groeiden ongelimiteerd (v1.6.7)
+
+**Gevraagd**: *"Voorkomen dat de tabellen te groot worden, recente
+gebruiksmomenten alleen vandaag tonen, daggeschiedenis alleen laatste 7
+dagen."*
+
+Op de screenshot stonden twintig gebruiksmomenten over twee dagen, en een
+kale opsomming van dagtotalen zonder datum.
+
+### Gebruiksmomenten: alleen vandaag
+
+De tabel toont nu uitsluitend de momenten van vandaag, met alleen de tijd
+in plaats van dag én tijd — die dag is nu immers bekend. Erboven staat
+hoeveel het er zijn.
+
+Is er vandaag nog niets gemeten, dan staat dat er expliciet, mét hoeveel
+eerdere momenten er bewaard zijn. Een lege tabel zonder uitleg zou lijken
+alsof de detectie stuk is.
+
+### Daggeschiedenis: zeven dagen, mét datum
+
+Van een kale lijst getallen naar een tabel met de dag erbij. `441 L` zegt
+weinig als je niet weet wanneer dat was — en juist die uitschieter viel
+eerder op.
+
+### Drie pogingen voor het filteren
+
+Home Assistant kent Jinja-uitbreidingen die kale Jinja niet heeft. Zowel
+`selectattr('gestart', 'search', ...)` als de `match`-variant liepen stuk
+in de bestaande opmaaktest, die de sjablonen echt rendert. Uiteindelijk
+een gewone lus met een namespace — werkt in beide omgevingen.
+
+Onderweg bleek de testhulp `now()` niet te kennen, waardoor élk sjabloon
+dat die functie gebruikt stilzwijgend niet werd gecontroleerd. Dat is nu
+gestubd, dus die kaarten worden voortaan wél getoetst.
+
+En de bestaande opmaaktest deed precies zijn werk: hij las de kopie in
+`custom_components`, die ik nog niet had bijgewerkt. Dat is exact waarom
+die kopie er is.
+
+### Getest
+
+Nieuw `tests/test_water_tab_filtering.py`, 8 tests: alleen de momenten
+van vandaag, een expliciete melding als er vandaag niets was, onderscheid
+met een lege geschiedenis, een sessie zonder starttijd laat de kaart niet
+crashen, zeven dagen getoond van twintig bewaard, de daggeschiedenis
+heeft datums, een lege geschiedenis zegt dat, en een borging tegen
+Jinja-uitbreidingen die alleen in Home Assistant bestaan.
+
+**Volledige testsuite**: 1137 tests, allemaal groen.
+
+## Herstelmelding noemt de sensor, en wacht na een herstart (v1.6.6)
+
+**Gerapporteerd**: *"Ik doelde vooral op dat '✅ Sensor is weer
+uitleesbaar' niet aangeeft welke sensor weer uitleesbaar is. Nu wist ik
+het omdat het er maar 1 is."* En: *"Het uitvallen komt door een herstart
+(start relatief traag op), misschien deze melding iets vertragen?"*
+
+### De herstelmelding was generiek
+
+De probleemmelding noemde de entity_id netjes —
+`sensor.zendure_manager_available_kwh geeft op dit moment geen waarde` —
+maar het herstel zei alleen *"Alle geconfigureerde sensoren geven weer
+een waarde"*. Waar dat over ging moest je zelf onthouden.
+
+Welke sensoren wegvielen wordt nu bijgehouden, zodat de herstelmelding
+dezelfde namen noemt. Daarna wordt die lijst gewist — anders zou een
+volgende herstelmelding de sensoren van de vórige storing opsommen.
+
+### Aanlooptijd van drie minuten
+
+Sensoren zijn na een herstart even weg omdat hun integratie nog aan het
+opstarten is. Dat is normaal, geen storing. Een melding sturen over iets
+dat vanzelf goed komt, leert je die meldingen te negeren — en dan mis je
+de keer dat het wél echt misgaat.
+
+Alleen **beschikbaarheidsmeldingen** wachten: sensor weg en integratie
+vastgelopen. Een prijspiek of een apparaat dat klaar is heeft niets met
+opstarten te maken, en zou onnodig vertraagd worden.
+
+Drie minuten, en daarna komt de melding gewoon — de aanlooptijd mag een
+echte storing niet verbergen. Er staat een test op beide kanten. Wordt
+een melding uitgesteld, dan is dat op het tabblad te zien met de reden en
+de resterende tijd.
+
+### Wat de meldingen ondertussen lieten zien
+
+De drie uitvallen tussen 09:50 en 10:22 betroffen **de hele
+Zendure-koppeling**, niet één sensor: zowel `available_kwh` als
+`batterij_vermogen` haperden. Passend bij herstarts, en met deze
+aanlooptijd verdwijnen ze uit je meldingen.
+
+### Getest
+
+Vijf tests erbij: de herstelmelding noemt de sensor, de namen worden
+daarna gewist, vlak na een herstart komt er geen melding, ná de
+aanlooptijd wél, andere meldingen worden niet vertraagd, en de reden
+legt het uitstel uit.
+
+**Volledige testsuite**: 1128 tests, allemaal groen.
+
+## Gezondheidsscore verborg de echte oorzaak (v1.6.5)
+
+**Gevraagd**: een algehele controle van een verse export (v1.6.4).
+
+### Wat er goed staat
+
+De **Zonneplan-vergelijking werkt**, en meteen goed: alle zes
+kostensensoren automatisch gevonden, en de uitkomst is **−0,19 € eigen
+berekening tegen −0,16 € bij Zonneplan**. Drie cent verschil op een dag
+waarop je netto verdiende. Dat is een sterke bevestiging dat de
+prijsafhandeling klopt.
+
+De **weerbronmeting** loopt: 12 van de 20 waarnemingen per bron. Nog een
+paar uur zonlicht en er staat een oordeel.
+
+### De vondst: 65% zei het verkeerde
+
+Het aandachtspunt meldde *"Sensor-gezondheid: verminderd (65,0%, 20
+metingen)"*. Dat leest als "je metingen zijn onnauwkeurig".
+
+Maar de foutreeks vertelt iets anders:
+
+| | |
+|---|---|
+| Werkelijke vergelijkingen | 13 |
+| Waarvan boven de drempel | **0** |
+| Foutmarge | 47 tot 141 W (drempel 300) |
+| Sensor gaf geen waarde | **7 keer** |
+
+Alle dertien vergelijkingen zijn uitstekend. De hele daling naar 65% komt
+door zeven momenten waarop de sensor wegviel — precies de storing waarvan
+je vanochtend de melding kreeg.
+
+Dat zijn twee volstrekt verschillende problemen met heel verschillende
+oplossingen, en ze werden tot één cijfer samengeknepen. Je zou gaan
+zoeken naar een meetfout die er niet is.
+
+### De score is nu uitgesplitst
+
+**Nauwkeurigheid** (hoeveel vergelijkingen binnen de marge vielen) en
+**beschikbaarheid** (hoe vaak er überhaupt iets te vergelijken viel)
+worden apart berekend, en de melding noemt de grootste veroorzaker.
+
+Tegen jouw echte reeks levert dat op:
+
+> Sensor-gezondheid: verminderd (65,0%). Niet door onnauwkeurige metingen
+> — alle 13 vergelijkingen vielen binnen de marge — maar doordat een
+> sensor 7 van de 20 keer geen waarde gaf.
+
+De gecombineerde score blijft bestaan, want die zegt wél hoe bruikbaar de
+check als geheel is. Alleen de dúiding is nu correct.
+
+### Nog open aandachtspunt
+
+Twee apparaten met drift: **IPTV Vermogen** en **Koelkast schuur
+Vermogen**. Klopt dat hogere verbruik, gebruik dan
+`accept_nilm_device_drift` — dat ijkt het als nieuw normaal zonder de
+leergeschiedenis weg te gooien.
+
+### Getest
+
+Nieuw `tests/test_sensor_health_breakdown.py`, 9 tests, waaronder de
+echte reeks uit de export: die wordt aan uitval toegeschreven en de
+melding zegt dat ook. Verder: echte onnauwkeurigheid wordt wél als
+zodanig benoemd (de correctie mag het echte probleem niet verbergen), bij
+beide problemen tegelijk wordt de grootste genoemd, een perfecte
+geschiedenis heeft geen oorzaak, alleen uitval geeft geen
+nauwkeurigheidsoordeel, een lege geschiedenis zegt niets, en de
+uitsplitsing staat in het overzicht en de export.
+
+**Volledige testsuite**: 1123 tests, allemaal groen.
+
 ## Dashboard wees de verkeerde kant op (v1.6.4)
 
 **Gerapporteerd**: het Financieel-tabblad toonde *"Geen

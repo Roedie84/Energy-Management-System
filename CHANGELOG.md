@@ -8395,3 +8395,138 @@ staan op een expliciete uitzonderingenlijst mét reden.
 **Getest**: nieuw `tests/test_dashboard_entity_references.py`, 3 tests.
 
 **Volledige testsuite**: 1114 tests, allemaal groen.
+
+## v1.6.5 — Gezondheidsscore verborg de echte oorzaak
+
+**Gevraagd**: algehele controle van een verse export (v1.6.4).
+
+**Goed nieuws**: de Zonneplan-vergelijking werkt - alle zes
+kostensensoren automatisch gevonden, en -0,19 € eigen berekening tegen
+-0,16 € bij Zonneplan. Drie cent verschil, sterke bevestiging dat de
+prijsafhandeling klopt. De weerbronmeting staat op 12 van de 20
+waarnemingen per bron.
+
+**De vondst**: het aandachtspunt meldde "Sensor-gezondheid: verminderd
+(65,0%, 20 metingen)" - wat leest als onnauwkeurige metingen. Maar van de
+20 waren er 13 echte vergelijkingen, ALLEMAAL binnen de marge (47-141 W,
+drempel 300); de daling kwam volledig door 7 momenten waarop de sensor
+wegviel. Twee verschillende problemen met verschillende oplossingen,
+samengeknepen tot één cijfer.
+
+**Nu uitgesplitst** in nauwkeurigheid en beschikbaarheid, met de grootste
+veroorzaker in de melding: "Niet door onnauwkeurige metingen - alle 13
+vergelijkingen vielen binnen de marge - maar doordat een sensor 7 van de
+20 keer geen waarde gaf." De gecombineerde score blijft bestaan; alleen
+de duiding is nu correct.
+
+**Getest**: nieuw `tests/test_sensor_health_breakdown.py`, 9 tests,
+waaronder de echte reeks uit de export.
+
+**Volledige testsuite**: 1123 tests, allemaal groen.
+
+## v1.6.6 — Herstelmelding noemt de sensor, en wacht na een herstart
+
+**Gerapporteerd**: "'Sensor is weer uitleesbaar' geeft niet aan welke
+sensor" en "Het uitvallen komt door een herstart (start relatief traag
+op), misschien deze melding iets vertragen?"
+
+**Herstelmelding noemt nu de sensor**: de probleemmelding gaf de
+entity_id wél, het herstel zei alleen "alle geconfigureerde sensoren
+geven weer een waarde". Welke sensoren wegvielen wordt nu bijgehouden en
+in de herstelmelding genoemd; daarna wordt die lijst gewist, anders zou
+een volgende melding de sensoren van de vorige storing opsommen.
+
+**Aanlooptijd van drie minuten** (`STARTUP_GRACE_SECONDS`) voor
+beschikbaarheidsmeldingen. Sensoren zijn na een herstart even weg omdat
+hun integratie nog opstart - dat is normaal. Een melding over iets dat
+vanzelf goed komt, leert je die meldingen te negeren. Alleen
+`sensor_unavailable` en `integration_error` wachten; een prijspiek of
+apparaat-klaar heeft niets met opstarten te maken. Na de aanlooptijd komt
+de melding gewoon - een echte storing mag niet verborgen blijven.
+
+**Getest**: vijf tests erbij in `test_recovery_notifications.py`.
+
+**Volledige testsuite**: 1128 tests, allemaal groen.
+
+## v1.6.7 — Watertabellen groeiden ongelimiteerd
+
+**Gevraagd**: gebruiksmomenten alleen vandaag tonen, daggeschiedenis
+alleen de laatste 7 dagen.
+
+- **Gebruiksmomenten**: alleen die van vandaag, met alleen de tijd (de
+  dag is nu bekend). Erboven het aantal. Is er vandaag niets gemeten, dan
+  staat dat er expliciet mét hoeveel eerdere momenten bewaard zijn - een
+  lege tabel zonder uitleg zou lijken alsof de detectie stuk is.
+- **Daggeschiedenis**: zeven dagen, en nu als tabel MET datum. "441 L"
+  zegt weinig als je niet weet wanneer dat was.
+
+**Drie pogingen voor het filteren**: `selectattr(..., 'search', ...)` en
+de `match`-variant zijn Home Assistant-uitbreidingen die kale Jinja niet
+kent, en liepen stuk in de bestaande opmaaktest (die de sjablonen echt
+rendert). Uiteindelijk een gewone lus met namespace.
+
+Onderweg bleek de testhulp `now()` niet te kennen, waardoor elk sjabloon
+met die functie stilzwijgend niet werd gecontroleerd - nu gestubd. En de
+opmaaktest las de kopie in `custom_components` die nog niet bijgewerkt
+was; precies waarom die kopie er is.
+
+**Getest**: nieuw `tests/test_water_tab_filtering.py`, 8 tests.
+
+**Volledige testsuite**: 1137 tests, allemaal groen.
+
+## v1.7.0 — Gas meegenomen in het financiële overzicht
+
+**Gevraagd**: "Zonneplan levert ook gas aan mij, dit graag meenemen in
+het financiele gedeelte." Zonder die post waren de energiekosten maar
+half zichtbaar.
+
+Met de echte cijfers uit de export: stroom netto -0,16 € (afname 0,04,
+teruglevering 0,19), gas 0,13 €, totale energiekosten vandaag -0,03 €.
+Een heel ander beeld dan alleen de stroomhelft.
+
+De gasentiteit wordt automatisch gevonden, net als de rest.
+
+**Twee dingen die eerlijk blijven**:
+- Gas wordt alleen GETOOND, niet getoetst - deze integratie berekent er
+  niets aan, dus er valt niets naast te leggen. Een test legt vast dat
+  gas het oordeel over de stroomberekening niet beïnvloedt, ook niet bij
+  een groot bedrag.
+- Voor gas bestaat alleen een DAGtotaal, geen maand- of jaarvariant zoals
+  bij stroom. Beperking van de Zonneplan-integratie zelf; staat op het
+  tabblad in plaats van stilzwijgend te ontbreken.
+
+Zonder gas bij dezelfde leverancier verdwijnen de regels - "None €" is
+erger dan geen regel.
+
+**Getest**: zes tests erbij in `test_zonneplan_cost_comparison.py`.
+
+**Volledige testsuite**: 1143 tests, allemaal groen.
+
+## v1.8.0 — Week-, maand- en jaarcijfers plus trends
+
+**Gevraagd**: week/maand/jaar voor gas, en voor zowel gas als stroom een
+dagelijkse en wekelijkse trend in procenten.
+
+**Gas zelf opgebouwd**: Zonneplan levert alleen een dagtotaal. Die worden
+nu bij elke dagwissel vastgelegd; daaruit volgen week, maand en jaar. De
+teller springt om middernacht naar nul, dus de waarde wordt vlak VÓÓR de
+wissel vastgelegd - na de wissel is de vorige dag niet meer op te vragen.
+
+**Trends alleen op VOLTOOIDE dagen.** "Vandaag tot nu toe" vergelijken
+met een volledige gisteren geeft de hele dag een negatieve trend die om
+middernacht vanzelf verdwijnt (om 10:00 sta je op een derde van je
+dagverbruik = "-65%"). Altijd negatief, altijd betekenisloos, en je zou
+er conclusies aan verbinden. Dus: gisteren tegen eergisteren, en de
+laatste zeven dagen tegen de zeven daarvoor. Vandaag staat er wel bij,
+zonder trend.
+
+**Geen percentage onder 20 cent** - van 2 naar 4 cent is "+100%" en dat
+is ruis.
+
+**Op het tabblad**: stroom en gas naast elkaar voor 7/30/365 dagen, plus
+de twee trends met 📈 duurder en 📉 goedkoper. Zonder gas blijft die
+kolom leeg in plaats van nul (nul suggereert dat er niets verbruikt is).
+
+**Getest**: nieuw `tests/test_energy_cost_trends.py`, 14 tests.
+
+**Volledige testsuite**: 1157 tests, allemaal groen.

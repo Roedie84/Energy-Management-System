@@ -270,10 +270,14 @@ from .const import (
     MEASUREMENT_QUALITY_MIN_SAMPLES,
     NOTIFICATION_HISTORY_LENGTH,
     NOTIFICATION_RECOVERY_KINDS,
+    STARTUP_GRACE_KINDS,
+    STARTUP_GRACE_SECONDS,
     CONF_SUN_ELEVATION_SENSOR,
     CONF_SUN_PHASE_SENSOR,
     CONF_PV_ACTUAL_AZIMUTH_DEGREES,
     CONF_PV_ACTUAL_TILT_DEGREES,
+    COST_TREND_MIN_EUR,
+    DAILY_COST_HISTORY_DAYS,
     LOW_SOLAR_BORDERLINE_MARGIN,
     ZONNEPLAN_COST_CANDIDATES,
     ZONNEPLAN_COST_MISMATCH_EUR,
@@ -525,6 +529,18 @@ class EnergyManagementSystemCoordinator:
         # v1.6.2: welke toestandsmeldingen op dit moment "actief" zijn,
         # zodat er een herstelmelding kan volgen zodra ze overgaan.
         self.notification_active_conditions: list[str] = []
+        # v1.6.6: wanneer deze coordinator is gestart, om vlak na een
+        # herstart geen meldingen te sturen over sensoren die nog aan
+        # het opkomen zijn.
+        self._started_at: datetime | None = None
+        # Welke sensoren precies wegvielen, zodat de HERSTELmelding kan
+        # zeggen welke er weer terug is.
+        self._unavailable_entities: list[str] = []
+        # v1.8.0: dagtotalen stroom en gas, om week-, maand- en
+        # jaarcijfers en trends op te kunnen bouwen. Zonneplan levert
+        # voor gas namelijk alleen een dagtotaal.
+        self.daily_cost_history: list[dict] = []
+        self._daily_cost_day_key: date | None = None
 
         # Accu-modulegezondheid (v0.63.123). Per module een dict met
         # geleerde dag-historie en CUSUM-status per grootheid.
@@ -2234,6 +2250,21 @@ class EnergyManagementSystemCoordinator:
             # toevoegt en het register vergeet bij te werken.
             return True, "onbekende soort - doorgelaten"
 
+        # v1.6.6: vlak na een herstart zijn sensoren nog aan het
+        # opkomen. Een melding over iets dat binnen een minuut vanzelf
+        # goed komt, leert je die meldingen te negeren - en dan mis je
+        # de keer dat het wél echt misgaat. Alleen
+        # beschikbaarheidsmeldingen wachten; een prijspiek heeft hier
+        # niets mee te maken.
+        if kind in STARTUP_GRACE_KINDS and self._started_at is not None:
+            sinds_start = (now - self._started_at).total_seconds()
+            if sinds_start < STARTUP_GRACE_SECONDS:
+                return (
+                    False,
+                    f"aanlooptijd na herstart - nog "
+                    f"{STARTUP_GRACE_SECONDS - sinds_start:.0f} seconden",
+                )
+
         if not self.notifications_master_enabled:
             return False, "hoofdschakelaar staat uit"
         if not self.notification_enabled.get(kind, definitie[3]):
@@ -2424,6 +2455,10 @@ class EnergyManagementSystemCoordinator:
             if entity_id and self._read_sensor_float(entity_id) is None
         ]
         if ontbrekend:
+            # v1.6.6: onthouden WELKE, zodat de herstelmelding dat ook
+            # kan noemen. Gerapporteerd: "Sensor is weer uitleesbaar"
+            # gaf niet aan om welke sensor het ging.
+            self._unavailable_entities = ontbrekend
             stuur(
                 "sensor_unavailable",
                 "⚠️ Sensor niet uitleesbaar",
@@ -2544,6 +2579,14 @@ class EnergyManagementSystemCoordinator:
         ]
         for kind in opgelost:
             titel, bericht = NOTIFICATION_RECOVERY_KINDS[kind]
+            # v1.6.6: bij de sensor-herstelmelding noemen WELKE sensor
+            # terug is. "Alle geconfigureerde sensoren geven weer een
+            # waarde" is waar, maar zegt niets als je wilt weten wat er
+            # aan de hand was.
+            if kind == "sensor_unavailable" and self._unavailable_entities:
+                namen = ", ".join(self._unavailable_entities)
+                bericht = f"{namen} geeft weer een waarde."
+                self._unavailable_entities = []
             # Schakelaar respecteren, dempingsvenster niet: daarom hier
             # zelf toetsen in plaats van via `_dispatch_notification`.
             definitie = self.notification_definition(kind)
@@ -2929,10 +2972,17 @@ class EnergyManagementSystemCoordinator:
         teruglevering = self._read_sensor_float(
             entiteiten.get("teruglevering_vandaag", "")
         )
+        # v1.7.0: gas staat los van de stroomvergelijking. Het is een
+        # eigen post die deze integratie niet berekent en dus ook niet
+        # kan toetsen - het wordt alleen GETOOND, zodat de totale
+        # energiekosten zichtbaar zijn in plaats van alleen de helft.
+        gas = self._read_sensor_float(entiteiten.get("gas_vandaag", ""))
+
         resultaat: dict = {
             "gevonden_entiteiten": entiteiten,
             "zonneplan_afname_vandaag_eur": afname,
             "zonneplan_teruglevering_vandaag_eur": teruglevering,
+            "zonneplan_gas_vandaag_eur": gas,
             "eigen_berekening_eur": round(self.actual_cost_today_eur, 2),
             "wat_dit_toetst": (
                 "Alleen de prijsafhandeling over de P1-meter. Zonneplan "
@@ -2954,6 +3004,11 @@ class EnergyManagementSystemCoordinator:
         # Zonneplan splitst afname en teruglevering; onze eigen
         # berekening is het netto bedrag.
         werkelijk = afname - (teruglevering or 0.0)
+        # Totale energiekosten van vandaag: stroom netto plus gas. Gas
+        # kent geen teruglevering, dus dat is een enkelvoudige optelling.
+        resultaat["totale_energiekosten_vandaag_eur"] = round(
+            werkelijk + (gas or 0.0), 2
+        )
         verschil = self.actual_cost_today_eur - werkelijk
         resultaat["zonneplan_netto_eur"] = round(werkelijk, 2)
         resultaat["verschil_eur"] = round(verschil, 2)
@@ -2984,6 +3039,125 @@ class EnergyManagementSystemCoordinator:
                 "prijsattribuut en de terugleverinstellingen."
             )
         return resultaat
+
+    def _update_daily_cost_history(self, now: datetime) -> None:
+        """Sluit de vorige dag af zodra er een nieuwe begint (v1.8.0).
+
+        Zonneplan levert voor gas alleen een dagtotaal - geen maand of
+        jaar, anders dan bij stroom. Die worden hier opgebouwd uit de
+        dagtotalen, en dat levert meteen de basis voor de trends.
+
+        De waarden worden vlak vóór de dagwissel vastgelegd: de
+        Zonneplan-teller loopt gedurende de dag op en springt om
+        middernacht terug naar nul, dus na de wissel is de vorige dag
+        niet meer op te vragen.
+        """
+        vandaag = now.date()
+        if self._daily_cost_day_key is None:
+            self._daily_cost_day_key = vandaag
+            return
+        if self._daily_cost_day_key == vandaag:
+            # Zelfde dag: de lopende stand onthouden, zodat er bij de
+            # wissel een verse waarde klaarstaat.
+            self._laatste_dagstand = self._huidige_dagkosten()
+            return
+
+        stand = getattr(self, "_laatste_dagstand", None) or self._huidige_dagkosten()
+        self.daily_cost_history.append(
+            {
+                "datum": self._daily_cost_day_key.isoformat(),
+                "stroom_eur": stand["stroom_eur"],
+                "gas_eur": stand["gas_eur"],
+            }
+        )
+        self.daily_cost_history = self.daily_cost_history[-DAILY_COST_HISTORY_DAYS:]
+        self._daily_cost_day_key = vandaag
+        self._laatste_dagstand = None
+        self.schedule_persisted_state_save()
+
+    def _huidige_dagkosten(self) -> dict:
+        """Stroom- en gaskosten van vandaag tot nu toe (v1.8.0)."""
+        vergelijking = self.get_zonneplan_cost_comparison()
+        stroom = vergelijking.get("zonneplan_netto_eur")
+        if stroom is None:
+            # Zonder Zonneplan-sensoren de eigen berekening gebruiken -
+            # die meet dezelfde P1-meter.
+            stroom = round(self.actual_cost_today_eur, 2)
+        return {
+            "stroom_eur": stroom,
+            "gas_eur": vergelijking.get("zonneplan_gas_vandaag_eur"),
+        }
+
+    @staticmethod
+    def _procentuele_verandering(nieuw: float, oud: float) -> float | None:
+        """Verandering in procenten, of None als het niets zegt.
+
+        Onder COST_TREND_MIN_EUR is een percentage pure ruis: van 2 cent
+        naar 4 cent is "+100%".
+        """
+        if abs(oud) < COST_TREND_MIN_EUR:
+            return None
+        return round(100 * (nieuw - oud) / abs(oud), 1)
+
+    def _som(self, dagen: list[dict], sleutel: str) -> float | None:
+        waarden = [d[sleutel] for d in dagen if d.get(sleutel) is not None]
+        return round(sum(waarden), 2) if waarden else None
+
+    def get_energy_cost_overview(self) -> dict:
+        """Week-, maand- en jaarcijfers plus trends (v1.8.0).
+
+        Trends rusten uitsluitend op VOLTOOIDE dagen. "Vandaag tot nu
+        toe" vergelijken met een volledige gisteren geeft de hele dag een
+        negatieve trend die om middernacht vanzelf verdwijnt - om 10:00
+        sta je op een derde van je dagverbruik en dat leest als "65%
+        minder", terwijl er niets aan de hand is. Zo'n cijfer is erger
+        dan geen cijfer, want je gaat er conclusies aan verbinden.
+
+        Vandaag staat er wel bij, maar zonder trend.
+        """
+        historie = self.daily_cost_history
+        nu = self._huidige_dagkosten()
+
+        overzicht: dict = {
+            "vandaag_tot_nu_toe": nu,
+            "voltooide_dagen": len(historie),
+            "note": (
+                "Trends vergelijken alleen VOLTOOIDE dagen. 'Vandaag tot nu "
+                "toe' heeft bewust geen trend: halverwege de dag vergelijken "
+                "met een volledige gisteren zou altijd een min opleveren die "
+                "om middernacht vanzelf verdwijnt."
+            ),
+        }
+
+        for naam, sleutel in (("stroom", "stroom_eur"), ("gas", "gas_eur")):
+            blok: dict = {}
+            blok["week"] = self._som(historie[-7:], sleutel)
+            blok["maand"] = self._som(historie[-30:], sleutel)
+            blok["jaar"] = self._som(historie[-365:], sleutel)
+
+            # Dagtrend: gisteren tegen eergisteren - twee volledige dagen.
+            if len(historie) >= 2:
+                gisteren = historie[-1].get(sleutel)
+                eergisteren = historie[-2].get(sleutel)
+                if gisteren is not None and eergisteren is not None:
+                    blok["gisteren"] = gisteren
+                    blok["eergisteren"] = eergisteren
+                    blok["dagtrend_procent"] = self._procentuele_verandering(
+                        gisteren, eergisteren
+                    )
+
+            # Weektrend: de laatste zeven dagen tegen de zeven daarvoor.
+            if len(historie) >= 14:
+                deze = self._som(historie[-7:], sleutel)
+                vorige = self._som(historie[-14:-7], sleutel)
+                if deze is not None and vorige is not None:
+                    blok["vorige_week"] = vorige
+                    blok["weektrend_procent"] = self._procentuele_verandering(
+                        deze, vorige
+                    )
+
+            overzicht[naam] = blok
+        return overzicht
 
     def get_solar_forecast_health(self) -> dict:
         """Klopt de zonvoorspelling nog, of is er iets veranderd aan de
@@ -3119,14 +3293,19 @@ class EnergyManagementSystemCoordinator:
             )
 
         # --- metingen ---
+        uitsplitsing = self.get_sensor_health_breakdown()
         voeg_toe(
             "Metingen",
             "Sensor-gezondheid (Kirchhoff)",
             {
                 "niveau": self.normalise_reliability(self.measurement_quality),
                 "reden": (
-                    f"{len(self.energy_balance_error_history)} geldige "
-                    "vergelijkingen."
+                    f"{uitsplitsing['vergelijkingen']} vergelijkingen, "
+                    f"{uitsplitsing['nauwkeurigheid_percent']}% binnen de "
+                    f"marge; sensor {uitsplitsing['uitval']}x niet "
+                    "uitleesbaar."
+                    if uitsplitsing["vergelijkingen"]
+                    else "Nog geen geldige vergelijkingen."
                 ),
             },
             self.sensor_health_score,
@@ -7552,6 +7731,67 @@ class EnergyManagementSystemCoordinator:
             }
         return rapport
 
+    def get_sensor_health_breakdown(self) -> dict:
+        """Splitst de gezondheidsscore in NAUWKEURIGHEID en
+        BESCHIKBAARHEID (v1.6.5).
+
+        In een echte export stond de score op 65% ("verminderd"),
+        terwijl alle dertien werkelijke vergelijkingen prima waren -
+        47 tot 141 W, ruim onder de drempel van 300. De hele daling kwam
+        door zeven momenten waarop de sensor even wegviel.
+
+        Dat zijn twee volstrekt verschillende problemen. "Verminderd"
+        leest als "je metingen zijn onnauwkeurig", en dan ga je zoeken
+        naar een meetfout die er niet is. Terwijl het werkelijke
+        probleem - een sensor die wegvalt - een heel andere oplossing
+        vraagt.
+
+        De gecombineerde score blijft bestaan (die zegt hoe bruikbaar de
+        check als geheel is), maar wordt nu uitgesplitst zodat de
+        oorzaak meteen zichtbaar is.
+        """
+        historie = self.energy_balance_error_history
+        totaal = len(historie)
+        if totaal == 0:
+            return {
+                "totaal": 0,
+                "vergelijkingen": 0,
+                "uitval": 0,
+                "nauwkeurigheid_percent": None,
+                "beschikbaarheid_percent": None,
+                "hoofdoorzaak": None,
+            }
+
+        echte = [x for x in historie if x is not None]
+        uitval = totaal - len(echte)
+        goed = sum(1 for x in echte if x <= ENERGY_BALANCE_ERROR_BAD_THRESHOLD_W)
+
+        nauwkeurigheid = round(100 * goed / len(echte), 1) if echte else None
+        beschikbaarheid = round(100 * len(echte) / totaal, 1)
+
+        # Welke van de twee trekt de score het meest omlaag? Dat bepaalt
+        # waar je moet gaan zoeken.
+        if nauwkeurigheid is None:
+            hoofdoorzaak = "uitval"
+        elif uitval == 0:
+            hoofdoorzaak = "nauwkeurigheid" if nauwkeurigheid < 100 else None
+        elif nauwkeurigheid >= 100:
+            hoofdoorzaak = "uitval"
+        else:
+            hoofdoorzaak = (
+                "uitval" if (100 - beschikbaarheid) > (100 - nauwkeurigheid)
+                else "nauwkeurigheid"
+            )
+
+        return {
+            "totaal": totaal,
+            "vergelijkingen": len(echte),
+            "uitval": uitval,
+            "nauwkeurigheid_percent": nauwkeurigheid,
+            "beschikbaarheid_percent": beschikbaarheid,
+            "hoofdoorzaak": hoofdoorzaak,
+        }
+
     def _record_balance_sample(self, abs_error_w: float | None) -> None:
         """Append one sample (or None for a missing-sensor tick) to the
         rolling window and recompute the health score/quality label.
@@ -9434,6 +9674,10 @@ class EnergyManagementSystemCoordinator:
         Idempotent - een tweede aanroep leest niet opnieuw over verser
         geheugen heen.
         """
+        # v1.6.6: dit is het vroegste punt in de opstart dat de
+        # coordinator bereikt, dus hier begint de aanlooptijd.
+        if self._started_at is None:
+            self._started_at = dt_util.now()
         if self._state_store_loaded:
             return
         stored = await self._state_store.async_load()
@@ -9892,11 +10136,27 @@ class EnergyManagementSystemCoordinator:
             self.measurement_quality is not None
             and self.measurement_quality != "goed"
         ):
-            aandachtspunten.append(
-                f"Sensor-gezondheid: {self.measurement_quality} "
-                f"({self.sensor_health_score}%, "
-                f"{len(self.energy_balance_error_history)} metingen)."
-            )
+            uitsplitsing = self.get_sensor_health_breakdown()
+            if uitsplitsing["hoofdoorzaak"] == "uitval":
+                # v1.6.5: onderscheid maken tussen "de metingen zijn
+                # onnauwkeurig" en "de sensor viel weg". Zonder dat ga je
+                # zoeken naar een meetfout die er niet is.
+                aandachtspunten.append(
+                    f"Sensor-gezondheid: {self.measurement_quality} "
+                    f"({self.sensor_health_score}%). Niet door onnauwkeurige "
+                    f"metingen - alle {uitsplitsing['vergelijkingen']} "
+                    "vergelijkingen vielen binnen de marge - maar doordat een "
+                    f"sensor {uitsplitsing['uitval']} van de "
+                    f"{uitsplitsing['totaal']} keer geen waarde gaf."
+                )
+            else:
+                aandachtspunten.append(
+                    f"Sensor-gezondheid: {self.measurement_quality} "
+                    f"({self.sensor_health_score}%, "
+                    f"{uitsplitsing['vergelijkingen']} vergelijkingen). "
+                    f"{uitsplitsing['nauwkeurigheid_percent']}% viel binnen "
+                    "de marge."
+                )
 
         possibly_defective = [
             device.get("friendly_name") or entity_id
@@ -12679,6 +12939,12 @@ class EnergyManagementSystemCoordinator:
         self._update_peak_power_tracking(now)
         self._update_battery_module_health(now)
         self._update_sensor_cadence_tracking()
+        if self._started_at is None:
+            # Vangnet: draait de coordinator zonder dat de opslag is
+            # geladen (bijvoorbeeld in een test), dan begint de
+            # aanlooptijd hier alsnog.
+            self._started_at = now
+        self._update_daily_cost_history(now)
         self._update_pv_geometry_learning(now)
         self._evaluate_new_notifications(now)
         self.schedule_persisted_state_save()
