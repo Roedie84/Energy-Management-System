@@ -138,3 +138,102 @@ def test_it_is_in_the_diagnostics_export():
     bron = (Path(pkg.__file__).parent / "diagnostics.py").read_text()
 
     assert "sensor_health_breakdown" in bron
+
+
+# --- v1.8.2: welke sensor viel weg? ---------------------------------
+
+
+def _met_uitval(make_coordinator, hass, ontbrekend):
+    from datetime import datetime, timezone
+
+    from custom_components.energy_management_system.const import (
+        CONF_AVAILABLE_ENERGY_SENSOR,
+        CONF_BATTERY_POWER_SENSOR,
+    )
+
+    c = make_coordinator(
+        {
+            CONF_AVAILABLE_ENERGY_SENSOR: "sensor.beschikbaar",
+            CONF_BATTERY_POWER_SENSOR: "sensor.accu_w",
+        }
+    )
+    now = datetime(2026, 8, 7, 12, 0, tzinfo=timezone.utc)
+    for entity_id, waarde in (
+        ("sensor.beschikbaar", "6.5"),
+        ("sensor.accu_w", "500"),
+    ):
+        hass.states.set(entity_id, "unavailable" if entity_id in ontbrekend else waarde)
+    for _ in range(9):
+        c._update_energy_balance_validation(now)
+    return c
+
+
+def test_the_missing_sensor_is_named(make_coordinator, hass):
+    """Gerapporteerd: "Maar kan niet ingrijpen, dit omdat ik niet weet om
+    welke sensor het gaat."
+
+    Het aandachtspunt meldde wél dat er negen keer geen waarde was, maar
+    niet van wie - en dan valt er niets te doen.
+    """
+    c = _met_uitval(make_coordinator, hass, {"sensor.beschikbaar"})
+    c.energy_balance_error_history = [50.0] * 11 + [None] * 9
+    c.sensor_health_score = 55.0
+    c.measurement_quality = "verminderd"
+
+    melding = next(
+        p
+        for p in c.get_diagnostic_summary()["aandachtspunten"]
+        if "gezondheid" in p
+    )
+
+    assert "sensor.beschikbaar (9x)" in melding
+
+
+def test_multiple_sensors_are_all_named(make_coordinator, hass):
+    c = _met_uitval(
+        make_coordinator, hass, {"sensor.beschikbaar", "sensor.accu_w"}
+    )
+
+    uitsplitsing = c.get_sensor_health_breakdown()
+
+    assert set(uitsplitsing["uitval_per_sensor"]) == {
+        "sensor.beschikbaar",
+        "sensor.accu_w",
+    }
+
+
+def test_the_worst_offender_comes_first(make_coordinator, hass):
+    """Bij meerdere sensoren wil je weten waar de meeste winst zit."""
+    c = _met_uitval(make_coordinator, hass, {"sensor.beschikbaar"})
+    c.balance_missing_by_entity = {"sensor.a": 2, "sensor.b": 15}
+
+    eerste = next(iter(c.get_sensor_health_breakdown()["uitval_per_sensor"]))
+
+    assert eerste == "sensor.b"
+
+
+def test_no_dropouts_gives_an_empty_map(make_coordinator, hass):
+    c = _met_uitval(make_coordinator, hass, set())
+
+    assert c.get_sensor_health_breakdown()["uitval_per_sensor"] == {}
+
+
+def test_the_counts_survive_a_restart(make_coordinator, hass):
+    """De foutreeks blijft bewaard, dus de namen erbij moeten dat ook -
+    anders wordt de melding na een herstart weer generiek."""
+    import asyncio
+
+    from custom_components.energy_management_system.const import (
+        PERSISTED_PLAIN_FIELDS,
+    )
+
+    assert "balance_missing_by_entity" in PERSISTED_PLAIN_FIELDS
+
+    bron = make_coordinator({})
+    bron.balance_missing_by_entity = {"sensor.x": 4}
+    asyncio.run(bron.async_save_persisted_state_now())
+
+    verse = make_coordinator({})
+    asyncio.run(verse.async_load_persisted_state())
+
+    assert verse.balance_missing_by_entity == {"sensor.x": 4}
