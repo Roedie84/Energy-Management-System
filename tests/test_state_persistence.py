@@ -66,6 +66,15 @@ def _vul_alles(c):
     c._peak_power_month_key = 202608
     c._counterfactual_month_key = 202608
     c._summary_month_key = 202608
+    # v1.1.8: een opslag die door de HUIDIGE versie is geschreven bevat
+    # dit nummer. Ontbreekt het, dan is de opslag van vóór v1.1.6 en
+    # hoort de balansreeks juist gewist te worden - zie
+    # test_an_old_store_clears_the_balance_history.
+    from custom_components.energy_management_system.const import (
+        ENERGY_BALANCE_METHOD_VERSION,
+    )
+
+    c.energy_balance_method_version = ENERGY_BALANCE_METHOD_VERSION
     c.battery_cooling_last_change = NOW
 
 
@@ -397,3 +406,44 @@ def test_the_exception_list_stays_honest():
     bestaand = _opgebouwde_velden()
     for veld in GEEN_OPGEBOUWDE_TOESTAND:
         assert veld in bestaand, f"uitzondering '{veld}' bestaat niet meer"
+
+
+def test_an_old_store_clears_the_balance_history(make_coordinator, hass):
+    """v1.1.8: het wismechanisme uit v1.1.6 kon nooit afgaan.
+
+    Het versieveld begon op de HUIDIGE waarde, dus de vergelijking was
+    altijd gelijk zodra de opslag dat veld nog niet kende - precies het
+    geval waarvoor het bedoeld was. In een echte export stond de
+    balansreeks daardoor nog vol metingen van de oude meetmethode.
+    """
+    import asyncio
+
+    bron = make_coordinator({})
+    bron.energy_balance_error_history = [15330.1, 2014.7]
+    # Opslag van vóór v1.1.6: het versieveld ontbreekt.
+    bron.energy_balance_method_version = None
+    asyncio.run(bron.async_save_persisted_state_now())
+
+    verse = make_coordinator({})
+    asyncio.run(verse.async_load_persisted_state())
+
+    assert verse.energy_balance_error_history == []
+
+
+def test_a_current_store_keeps_the_balance_history(make_coordinator, hass):
+    """Anders zou elke herstart de meting terugzetten."""
+    import asyncio
+
+    from custom_components.energy_management_system.const import (
+        ENERGY_BALANCE_METHOD_VERSION,
+    )
+
+    bron = make_coordinator({})
+    bron.energy_balance_error_history = [45.0, 80.0]
+    bron.energy_balance_method_version = ENERGY_BALANCE_METHOD_VERSION
+    asyncio.run(bron.async_save_persisted_state_now())
+
+    verse = make_coordinator({})
+    asyncio.run(verse.async_load_persisted_state())
+
+    assert verse.energy_balance_error_history == [45.0, 80.0]
