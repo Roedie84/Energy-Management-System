@@ -8148,3 +8148,28 @@ bestaande "geen hellingshoek"-test accepteert nu
 `opgegeven_hellingshoek` - dat is een ingevulde waarde, geen schatting.
 
 **Volledige testsuite**: 1045 tests, allemaal groen.
+
+## v1.4.2 — Configuratieformulier was niet meer te verzenden
+
+**Gerapporteerd** met screenshot: twee velden toonden "expected float" en
+het formulier liet zich niet opslaan. Dat waren de PV-oriëntatie en
+hellingshoek uit v1.4.1.
+
+**Oorzaak**: beide zijn optioneel en mogen leeg blijven, maar een leeg
+optioneel veld krijgt `None` als standaard - en een `NumberSelector`
+wijst dat af. Alle bestaande getalvelden in deze flow hebben een concrete
+standaard en liepen daar nooit tegenaan. Erger: zolang de validatie
+klaagt is het HELE formulier geblokkeerd, dus ook alle andere
+instellingen op dat scherm.
+
+**Fix**: tekstvelden met controle in `_validate_input` (bestaat sinds
+v1.1.5). Leeg = geen ijkpunt; een ingevulde waarde wordt op bereik
+gecontroleerd en meteen naar een getal omgezet. Een komma als
+decimaalteken wordt geaccepteerd.
+
+**Borging**: een test scant het formulier op optionele
+NumberSelector-velden zonder terugvalwaarde.
+
+**Getest**: vijf tests erbij in `test_review_findings.py`.
+
+**Volledige testsuite**: 1050 tests, allemaal groen.

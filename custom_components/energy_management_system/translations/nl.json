@@ -71,7 +71,8 @@
     "error": {
       "invalid_date": "Geen geldige datum. Gebruik de vorm JJJJ-MM-DD, bijvoorbeeld 2026-12-31.",
       "invalid_number": "Geen geldig getal.",
-      "negative_cost": "Terugleverkosten kunnen niet negatief zijn."
+      "negative_cost": "Terugleverkosten kunnen niet negatief zijn.",
+      "out_of_range": "Waarde valt buiten het toegestane bereik."
     }
   },
   "options": {
@@ -142,7 +143,8 @@
     "error": {
       "invalid_date": "Geen geldige datum. Gebruik de vorm JJJJ-MM-DD, bijvoorbeeld 2026-12-31.",
       "invalid_number": "Geen geldig getal.",
-      "negative_cost": "Terugleverkosten kunnen niet negatief zijn."
+      "negative_cost": "Terugleverkosten kunnen niet negatief zijn.",
+      "out_of_range": "Waarde valt buiten het toegestane bereik."
     }
   }
 }

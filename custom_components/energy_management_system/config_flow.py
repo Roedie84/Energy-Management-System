@@ -124,6 +124,27 @@ def _validate_input(user_input: dict) -> dict[str, str]:
         except (TypeError, ValueError):
             errors[CONF_FEEDIN_COST_EUR_PER_KWH] = "invalid_number"
 
+    for veld, minimum, maximum in (
+        (CONF_PV_ACTUAL_AZIMUTH_DEGREES, 0, 360),
+        (CONF_PV_ACTUAL_TILT_DEGREES, 0, 90),
+    ):
+        rauw = user_input.get(veld)
+        if rauw in (None, ""):
+            # Leeg laten mag: dan is er simpelweg geen ijkpunt.
+            user_input.pop(veld, None)
+            continue
+        try:
+            waarde = float(str(rauw).replace(",", "."))
+        except (TypeError, ValueError):
+            errors[veld] = "invalid_number"
+            continue
+        if not minimum <= waarde <= maximum:
+            errors[veld] = "out_of_range"
+            continue
+        # Meteen als getal opslaan, zodat de coordinator er niet later
+        # alsnog een tekst uit krijgt.
+        user_input[veld] = waarde
+
     return errors
 
 
@@ -329,24 +350,21 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
             ): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="sensor", multiple=True)
             ),
+            # v1.4.2: TEKSTvelden, geen NumberSelector. Deze twee mogen
+            # leeg blijven, en dan is de standaardwaarde None - wat een
+            # NumberSelector afwijst met "expected float", waardoor het
+            # hele formulier niet meer te verzenden was. Bestaande
+            # getalvelden in deze flow hebben allemaal een concrete
+            # standaard en lopen daar dus niet tegenaan. De waarde wordt
+            # in `_validate_input` gecontroleerd en omgezet.
             vol.Optional(
                 CONF_PV_ACTUAL_AZIMUTH_DEGREES,
-                default=defaults.get(CONF_PV_ACTUAL_AZIMUTH_DEGREES),
-            ): selector.NumberSelector(
-                selector.NumberSelectorConfig(
-                    min=0, max=360, step=1, mode="box",
-                    unit_of_measurement="°",
-                )
-            ),
+                default=defaults.get(CONF_PV_ACTUAL_AZIMUTH_DEGREES, ""),
+            ): selector.TextSelector(),
             vol.Optional(
                 CONF_PV_ACTUAL_TILT_DEGREES,
-                default=defaults.get(CONF_PV_ACTUAL_TILT_DEGREES),
-            ): selector.NumberSelector(
-                selector.NumberSelectorConfig(
-                    min=0, max=90, step=1, mode="box",
-                    unit_of_measurement="°",
-                )
-            ),
+                default=defaults.get(CONF_PV_ACTUAL_TILT_DEGREES, ""),
+            ): selector.TextSelector(),
             vol.Optional(
                 CONF_SUN_ELEVATION_SENSOR,
                 default=defaults.get(CONF_SUN_ELEVATION_SENSOR),

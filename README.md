@@ -515,6 +515,57 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Configuratieformulier was niet meer te verzenden (v1.4.2)
+
+**Gerapporteerd** met screenshot: twee velden toonden **"expected
+float"** en het formulier liet zich niet meer opslaan.
+
+Dat waren de PV-oriëntatie en hellingshoek uit v1.4.1 — een fout die ik
+er de vorige versie zelf in heb gezet.
+
+### Wat er misging
+
+Beide velden zijn optioneel: leeg laten hoort te mogen, want niet
+iedereen weet welke kant zijn panelen op liggen. Maar een leeg optioneel
+veld krijgt `None` als standaardwaarde, en een `NumberSelector` wijst dat
+af.
+
+Alle bestaande getalvelden in dit formulier hebben een concrete
+standaard — `feedin_cost` valt terug op nul, en zo verder — en liepen
+daar dus nooit tegenaan. Deze twee waren de eerste die écht leeg mochten
+blijven.
+
+Het vervelende is dat het niet alleen die twee velden trof: zolang de
+validatie klaagt, is het **hele formulier** geblokkeerd. Alle andere
+instellingen op dat scherm waren daardoor ook niet op te slaan.
+
+### De fix
+
+Het worden tekstvelden, met de controle in de validatie die er sinds
+v1.1.5 toch al is. Leeg laten betekent gewoon "geen ijkpunt". Een
+ingevulde waarde wordt gecontroleerd op bereik en meteen naar een getal
+omgezet, zodat de coordinator er later geen tekst uit krijgt.
+
+Een komma als decimaalteken wordt geaccepteerd — op een Nederlands
+toetsenbord ligt die meer voor de hand dan een punt.
+
+### Borging tegen herhaling
+
+Een test scant het formulier op optionele `NumberSelector`-velden zonder
+terugvalwaarde. Zo'n veld blokkeert het hele formulier zodra het leeg
+blijft, en dat is precies het soort fout dat je pas merkt als iemand het
+probeert op te slaan.
+
+### Getest
+
+Vijf tests erbij in `test_review_findings.py`: lege velden worden
+geaccepteerd en verdwijnen uit de configuratie, een geldige waarde wordt
+een getal, een komma-decimaal werkt, onzin en waarden buiten bereik
+worden afgewezen, en de borging tegen optionele NumberSelectors zonder
+terugval.
+
+**Volledige testsuite**: 1050 tests, allemaal groen.
+
 ## Opgegeven PV-oriëntatie als ijkpunt (v1.4.1)
 
 **Aanleiding**: een luchtfoto en een camerabeeld van de opstelling. Die
