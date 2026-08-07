@@ -515,6 +515,78 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Diagnostiek werd een dagrapport (v1.9.0)
+
+**Gevraagd**: *"Ik wil nu elke dag met je het diagnostiek file delen, is
+deze voldoende gevuld zodat je elke dag kunt verbeteren? Of kan het
+diagnostiek gedeelte nog uitgebreider?"*
+
+### Wat er al goed was
+
+198 coordinator-velden, alle betrouwbaarheidsoordelen, 25 regels in het
+overzicht, en per onderwerp een bewaarde reeks: klimaatbias (57),
+energiebalans (20), watersessies (20), moduswijzigingen (30), NILM (38
+apparaten). Daar viel goed op te sturen — de meeste vondsten van vandaag
+kwamen rechtstreeks uit die exports.
+
+### Wat ontbrak: een momentopname is geen dag
+
+De export toonde de **huidige** stand. Wat er om 03:00 gebeurde was
+onzichtbaar tenzij het toevallig in een bewaarde reeks stond. Concreet
+gemist bij de analyses van vandaag:
+
+- op welke **tijdstippen** de sensoruitvallen zaten — alleen het aantal
+  was bekend
+- hoe de **SoC over de dag** verliep, en of de reserve knelde
+- of een **beslissing uitpakte** zoals verwacht
+
+### Twee nieuwe lagen
+
+**Beslislogboek per tick** — 600 regels, ongeveer twee dagen. Per regel:
+tijdstip, modus, reden, SoC, beschikbare kWh, prijs, PV-vermogen,
+huisverbruik, accuvermogen en de overbruggingsbehoefte. Compacte
+sleutels en afgeronde waarden, want een leesbare export is meer waard dan
+een volledige die niemand doorkomt.
+
+**Dagsamenvatting** — 30 dagen. Per dag: aantal ticks, laagste en hoogste
+SoC, welke beslissingen hoe vaak (grootste eerst, want dat tekent het
+karakter van de dag), fouten, sensoruitval per sensor, kosten, opwek,
+verbruik en netimport.
+
+Die eerste laat zien wát er binnen een dag gebeurde, de tweede of iets
+**structureel** is.
+
+### Omvang
+
+Het logboek kost ongeveer 110 kB, de dagrapporten 9 kB. Jouw export gaat
+daarmee van ~280 kB naar ongeveer 400 kB. Gezien de uitdrukkelijke
+toestemming ruim bemeten.
+
+Het beslislogboek gaat bewust **niet** mee in de opslag: een momentopname
+van twee dagen heeft na een herstart weinig waarde, en het zou de opslag
+met honderden regels per herstart belasten. De dagrapporten wél — dertig
+dagen patronen zijn waardeloos als ze bij elke herstart verdwijnen.
+
+### Onderweg
+
+Twee veldnamen had ik verzonnen (`last_operation_mode`,
+`last_price_per_kwh` in plaats van `last_expected_mode` en
+`last_current_price_per_kwh`); 51 tests vielen daarop om. En de
+borgingstest uit v1.0.4 ving meteen dat `daily_report_history` niet
+persistent was — precies waarvoor die bestaat.
+
+### Getest
+
+Nieuw `tests/test_daily_diagnostics.py`, 14 tests: elke tick wordt
+gelogd, het logboek is begrensd en houdt de nieuwste, ontbrekende waarden
+laten het niet crashen, een dag wordt bij de wissel samengevat, de
+beslissingen worden geteld met de grootste vooraan, het SoC-bereik wordt
+bijgehouden, fouten geteld, sensoruitval per sensor opgenomen, de
+geschiedenis begrensd, de dagrapporten overleven een herstart, het
+logboek bewust niet, en beide staan in de export.
+
+**Volledige testsuite**: 1177 tests, allemaal groen.
+
 ## Aandachtspunt noemt nu wélke sensor wegviel (v1.8.2)
 
 **Gerapporteerd**: *"Sensor-gezondheid: verminderd (55.0%)... doordat een

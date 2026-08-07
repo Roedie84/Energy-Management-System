@@ -8575,3 +8575,39 @@ sleutel `uitval_per_sensor` waar hij verder altijd bestaat.
 **Getest**: vijf tests erbij in `test_sensor_health_breakdown.py`.
 
 **Volledige testsuite**: 1163 tests, allemaal groen.
+
+## v1.9.0 — Diagnostiek werd een dagrapport
+
+**Gevraagd**: is de diagnostiek voldoende gevuld om er dagelijks mee te
+kunnen verbeteren, of kan het uitgebreider?
+
+**Wat ontbrak**: de export toonde de HUIDIGE stand. Wat er om 03:00
+gebeurde was onzichtbaar tenzij het toevallig in een bewaarde reeks
+stond. Bij de analyses van vandaag miste ik daardoor: op welke
+tijdstippen de sensoruitvallen zaten, hoe de SoC over de dag verliep, en
+of een beslissing uitpakte zoals verwacht.
+
+**Twee nieuwe lagen**:
+- **Beslislogboek** per tick, 600 regels (~2 dagen): tijdstip, modus,
+  reden, SoC, kWh, prijs, PV, huisverbruik, accuvermogen,
+  overbruggingsbehoefte. Compacte sleutels - een leesbare export is meer
+  waard dan een volledige die niemand doorkomt.
+- **Dagsamenvatting**, 30 dagen: ticks, SoC min/max, welke beslissingen
+  hoe vaak (grootste eerst), fouten, sensoruitval per sensor, kosten,
+  opwek, verbruik, netimport.
+
+De eerste toont wat er binnen een dag gebeurde, de tweede of iets
+structureel is.
+
+**Omvang**: logboek ~110 kB, dagrapporten ~9 kB; de export gaat van ~280
+naar ~400 kB. Het beslislogboek gaat bewust NIET mee in de opslag (een
+momentopname van twee dagen heeft na een herstart weinig waarde en zou de
+opslag met honderden regels per herstart belasten); de dagrapporten wél.
+
+**Onderweg**: twee verzonnen veldnamen kostten 51 falende tests, en de
+borgingstest uit v1.0.4 ving direct dat `daily_report_history` niet
+persistent was.
+
+**Getest**: nieuw `tests/test_daily_diagnostics.py`, 14 tests.
+
+**Volledige testsuite**: 1177 tests, allemaal groen.

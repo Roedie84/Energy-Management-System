@@ -278,6 +278,8 @@ from .const import (
     CONF_PV_ACTUAL_TILT_DEGREES,
     COST_TREND_MIN_EUR,
     DAILY_COST_HISTORY_DAYS,
+    DAILY_REPORT_HISTORY_DAYS,
+    DECISION_LOG_LENGTH,
     LOW_SOLAR_BORDERLINE_MARGIN,
     ZONNEPLAN_COST_CANDIDATES,
     ZONNEPLAN_COST_MISMATCH_EUR,
@@ -540,6 +542,11 @@ class EnergyManagementSystemCoordinator:
         # jaarcijfers en trends op te kunnen bouwen. Zonneplan levert
         # voor gas namelijk alleen een dagtotaal.
         self.daily_cost_history: list[dict] = []
+        # v1.9.0: het verloop BINNEN de dag, en de samenvatting per dag.
+        self.decision_log: list[dict] = []
+        self.daily_report_history: list[dict] = []
+        self._daily_report_day_key: date | None = None
+        self._daily_report_counters: dict = {}
         self._daily_cost_day_key: date | None = None
 
         # Accu-modulegezondheid (v0.63.123). Per module een dict met
@@ -3175,6 +3182,121 @@ class EnergyManagementSystemCoordinator:
 
             overzicht[naam] = blok
         return overzicht
+
+    def _record_decision_log(self, now: datetime) -> None:
+        """Legt elke tick het verloop vast (v1.9.0).
+
+        De export toonde tot nu toe alleen de HUIDIGE stand. Wat er om
+        03:00 gebeurde was onzichtbaar tenzij het toevallig in een
+        bewaarde reeks stond - en dan mis je precies de context die een
+        diagnose mogelijk maakt: op welk moment een sensor wegviel, hoe
+        de SoC verliep, of een beslissing uitpakte zoals verwacht.
+
+        Bewust compacte sleutels en afgeronde waarden: dit groeit tot
+        zeshonderd regels, en een leesbare export is meer waard dan een
+        volledige die niemand doorkomt.
+        """
+        regel = {
+            "t": now.isoformat(timespec="minutes"),
+            "modus": self.last_expected_mode,
+            "reden": self.last_reason,
+            "soc": self.last_soc_percent,
+            "kwh": (
+                round(self.last_available_kwh, 2)
+                if self.last_available_kwh is not None
+                else None
+            ),
+            "prijs": (
+                round(self.last_current_price_per_kwh, 4)
+                if self.last_current_price_per_kwh is not None
+                else None
+            ),
+            "pv_w": self._read_sensor_float(self.config.get(CONF_PV_POWER_SENSOR)),
+            "huis_w": self._read_corrected_consumption_power(),
+            "accu_w": self._read_corrected_battery_power(),
+            "nodig_kwh": (
+                round(self.last_needed_kwh_to_bridge, 2)
+                if self.last_needed_kwh_to_bridge is not None
+                else None
+            ),
+        }
+        self.decision_log.append(regel)
+        self.decision_log = self.decision_log[-DECISION_LOG_LENGTH:]
+
+    def _update_daily_report(self, now: datetime) -> None:
+        """Telt de dag mee en sluit hem af bij de wissel (v1.9.0).
+
+        Waar het beslislogboek het verloop binnen één dag laat zien, laat
+        dit patronen over dagen heen zien: wordt die sensoruitval erger,
+        blijft de reserve knellen, neemt het aantal moduswissels toe?
+        """
+        vandaag = now.date()
+        if self._daily_report_day_key is None:
+            self._daily_report_day_key = vandaag
+            self._daily_report_counters = self._nieuwe_dagteller()
+
+        tellers = self._daily_report_counters
+        if self._daily_report_day_key != vandaag:
+            self.daily_report_history.append(
+                self._sluit_dagrapport_af(self._daily_report_day_key, tellers)
+            )
+            self.daily_report_history = self.daily_report_history[
+                -DAILY_REPORT_HISTORY_DAYS:
+            ]
+            self._daily_report_day_key = vandaag
+            self._daily_report_counters = self._nieuwe_dagteller()
+            tellers = self._daily_report_counters
+            self.schedule_persisted_state_save()
+
+        tellers["ticks"] += 1
+        soc = self.last_soc_percent
+        if soc is not None:
+            tellers["soc_min"] = min(tellers["soc_min"], soc) if tellers[
+                "soc_min"
+            ] is not None else soc
+            tellers["soc_max"] = max(tellers["soc_max"], soc) if tellers[
+                "soc_max"
+            ] is not None else soc
+        reden = self.last_reason
+        if reden:
+            tellers["redenen"][reden] = tellers["redenen"].get(reden, 0) + 1
+        if self.last_error:
+            tellers["fouten"] += 1
+
+    @staticmethod
+    def _nieuwe_dagteller() -> dict:
+        return {
+            "ticks": 0,
+            "soc_min": None,
+            "soc_max": None,
+            "redenen": {},
+            "fouten": 0,
+        }
+
+    def _sluit_dagrapport_af(self, dag: date, tellers: dict) -> dict:
+        """Vat één dag samen (v1.9.0)."""
+        uitsplitsing = self.get_sensor_health_breakdown()
+        return {
+            "datum": dag.isoformat(),
+            "ticks": tellers["ticks"],
+            "soc_min_procent": tellers["soc_min"],
+            "soc_max_procent": tellers["soc_max"],
+            # Welke beslissingen hoe vaak - grootste eerst, want dat
+            # tekent het karakter van de dag.
+            "redenen": dict(
+                sorted(tellers["redenen"].items(), key=lambda kv: -kv[1])
+            ),
+            "fouten": tellers["fouten"],
+            "sensor_uitval": uitsplitsing.get("uitval"),
+            "sensor_uitval_per_sensor": uitsplitsing.get("uitval_per_sensor"),
+            "kosten": self._huidige_dagkosten(),
+            "pv_kwh": round(self.pv_production_today_kwh, 2),
+            "verbruik_kwh": round(self.gross_consumption_today_kwh, 2),
+            "netimport_kwh": round(self.grid_import_today_kwh, 2),
+            "reserve_tekort_dagen": len(
+                [d for d in (self.reserve_shortfall_history or []) if d]
+            ),
+        }
 
     def get_solar_forecast_health(self) -> dict:
         """Klopt de zonvoorspelling nog, of is er iets veranderd aan de
@@ -12999,6 +13121,8 @@ class EnergyManagementSystemCoordinator:
             # aanlooptijd hier alsnog.
             self._started_at = now
         self._update_daily_cost_history(now)
+        self._record_decision_log(now)
+        self._update_daily_report(now)
         self._update_pv_geometry_learning(now)
         self._evaluate_new_notifications(now)
         self.schedule_persisted_state_save()

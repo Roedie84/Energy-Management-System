@@ -1099,6 +1099,11 @@ PERSISTED_PLAIN_FIELDS = (
     # v1.8.0: dagtotalen stroom en gas. Zonder bewaren zou er nooit een
     # week-, maand- of jaarcijfer ontstaan.
     "daily_cost_history",
+    # v1.9.0: de dagsamenvattingen. Het beslislogboek bewust NIET: dat
+    # is een momentopname van twee dagen die na een herstart weinig
+    # waarde meer heeft, en het zou de opslag met honderden regels per
+    # herstart belasten.
+    "daily_report_history",
     # v1.8.2: welke sensor hoe vaak wegviel. Zonder bewaren zou de
     # melding na een herstart weer generiek worden, terwijl de
     # foutreeks zelf wél bewaard blijft.
@@ -1923,3 +1928,22 @@ DAILY_COST_HISTORY_DAYS = 400
 # Onder dit bedrag zegt een procentuele verandering niets: van 2 cent
 # naar 4 cent is "+100%" en dat is pure ruis.
 COST_TREND_MIN_EUR = 0.20
+
+# --- Dagrapportage voor diagnostiek (v1.9.0) -------------------------
+# Gevraagd: "Ik wil nu elke dag met je het diagnostiek file delen, is
+# deze voldoende gevuld zodat je elke dag kunt verbeteren?"
+#
+# De export toonde tot nu toe de HUIDIGE stand. Wat er om 03:00 gebeurde
+# was alleen zichtbaar als het toevallig in een bewaarde reeks stond. Bij
+# de analyses van vandaag miste ik daardoor: op welke tijdstippen de
+# sensoruitvallen zaten, hoe de SoC over de dag verliep, en of een
+# beslissing uitpakte zoals verwacht.
+#
+# Twee lagen:
+#  - een BESLISLOGBOEK per tick: het verloop binnen de dag
+#  - een DAGSAMENVATTING: om patronen over dagen heen te zien
+#
+# Ruim bemeten; de gebruiker gaf expliciet aan dat bestandsgrootte geen
+# bezwaar is.
+DECISION_LOG_LENGTH = 600          # ~2 dagen bij een tick van 5 minuten
+DAILY_REPORT_HISTORY_DAYS = 30

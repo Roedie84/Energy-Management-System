@@ -321,6 +321,12 @@ async def async_get_config_entry_diagnostics(
             "weather_ensemble_spread_percent": (
                 coordinator.weather_ensemble_spread_percent
             ),
+            # v1.9.0: het verloop binnen de dag en de patronen erover
+            # heen. Zonder deze twee is een export een momentopname en
+            # valt er weinig uit af te leiden over wat er 's nachts
+            # gebeurde.
+            "decision_log": coordinator.decision_log,
+            "daily_report_history": coordinator.daily_report_history,
             "energy_cost_overview": coordinator.get_energy_cost_overview(),
             "daily_cost_history": coordinator.daily_cost_history,
             "sensor_health_breakdown": coordinator.get_sensor_health_breakdown(),
