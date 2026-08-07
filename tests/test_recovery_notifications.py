@@ -262,3 +262,110 @@ def test_the_dashboard_shows_the_message():
 
     assert "m.bericht" in yaml_tekst
     assert "niet na een bepaalde tijd" in yaml_tekst
+
+
+# --- v1.6.6: welke sensor, en aanlooptijd na een herstart ------------
+
+
+def test_the_recovery_names_the_sensor(make_coordinator, hass):
+    """Gerapporteerd: "Ik doelde vooral op dat '✅ Sensor is weer
+    uitleesbaar' niet aangeeft welke sensor weer uitleesbaar is. Nu wist
+    ik het omdat het er maar 1 is."
+
+    De probleemmelding noemde de entity_id wél; de herstelmelding bleef
+    generiek.
+    """
+    c = _coordinator(make_coordinator, hass)
+    c._started_at = NOW - timedelta(hours=1)
+
+    hass.states.set("sensor.beschikbaar", "unavailable")
+    _ronde(c)
+    hass.states.set("sensor.beschikbaar", "6.5")
+    _ronde(c, NOW + timedelta(minutes=5))
+
+    herstel = next(
+        m for m in c.notification_history if "weer uitleesbaar" in m["titel"]
+    )
+    assert "sensor.beschikbaar" in herstel["bericht"]
+
+
+def test_the_names_are_cleared_after_the_recovery(make_coordinator, hass):
+    """Anders zou een volgende herstelmelding de sensoren van de vórige
+    storing noemen."""
+    c = _coordinator(make_coordinator, hass)
+    c._started_at = NOW - timedelta(hours=1)
+
+    hass.states.set("sensor.beschikbaar", "unavailable")
+    _ronde(c)
+    hass.states.set("sensor.beschikbaar", "6.5")
+    _ronde(c, NOW + timedelta(minutes=5))
+
+    assert c._unavailable_entities == []
+
+
+# --- aanlooptijd -----------------------------------------------------
+
+
+def test_no_unavailability_alert_right_after_a_restart(
+    make_coordinator, hass
+):
+    """Gerapporteerd: "Het uitvallen komt door een herstart (start
+    relatief traag op), misschien deze melding iets vertragen?"
+
+    Een melding over iets dat binnen een minuut vanzelf goed komt, leert
+    je die meldingen te negeren - en dan mis je de keer dat het wél echt
+    misgaat.
+    """
+    c = _coordinator(make_coordinator, hass)
+    c._started_at = NOW
+    hass.states.set("sensor.beschikbaar", "unavailable")
+
+    _ronde(c, NOW + timedelta(seconds=30))
+
+    assert not any("niet uitleesbaar" in t for t in _titels(c))
+
+
+def test_the_alert_does_arrive_after_the_grace_period(
+    make_coordinator, hass
+):
+    """De aanlooptijd mag een echte storing niet verbergen."""
+    from custom_components.energy_management_system.const import (
+        STARTUP_GRACE_SECONDS,
+    )
+
+    c = _coordinator(make_coordinator, hass)
+    c._started_at = NOW
+    hass.states.set("sensor.beschikbaar", "unavailable")
+
+    _ronde(c, NOW + timedelta(seconds=STARTUP_GRACE_SECONDS + 10))
+
+    assert any("niet uitleesbaar" in t for t in _titels(c))
+
+
+def test_other_notifications_are_not_delayed(make_coordinator, hass):
+    """Alleen beschikbaarheidsmeldingen wachten; een prijspiek of een
+    apparaat dat klaar is heeft niets met opstarten te maken."""
+    from custom_components.energy_management_system.const import (
+        STARTUP_GRACE_KINDS,
+    )
+
+    c = _coordinator(make_coordinator, hass)
+    c._started_at = NOW
+
+    toegestaan, _ = c.is_notification_allowed("mode_change", NOW)
+
+    assert toegestaan is True
+    assert "mode_change" not in STARTUP_GRACE_KINDS
+
+
+def test_the_reason_explains_the_delay(make_coordinator, hass):
+    """Zodat op het tabblad te zien is waarom een melding uitbleef."""
+    c = _coordinator(make_coordinator, hass)
+    c._started_at = NOW
+
+    toegestaan, reden = c.is_notification_allowed(
+        "sensor_unavailable", NOW + timedelta(seconds=10)
+    )
+
+    assert toegestaan is False
+    assert "aanlooptijd" in reden

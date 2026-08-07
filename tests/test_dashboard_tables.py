@@ -10,6 +10,7 @@ table - Markdown requires every table row on its own, consecutive
 line). This uses the exact same two-step pipeline Home Assistant does
 (YAML parse, then Jinja render) to catch either failure mode.
 """
+from datetime import datetime
 import re
 from pathlib import Path
 
@@ -286,6 +287,11 @@ def _render_markdown_cards():
         data = yaml.safe_load(f)
 
     env = Environment()
+    # v1.6.7: `now()` is een Home Assistant-hulpfunctie die Jinja zelf
+    # niet kent. Zonder deze stub loopt elk sjabloon dat hem gebruikt
+    # stuk op "now is undefined" - en dan toetst deze test de opmaak van
+    # die kaart helemaal niet meer.
+    env.globals["now"] = lambda: datetime(2026, 8, 7, 12, 0)
     env.globals["as_timestamp"] = _as_timestamp
     env.filters["timestamp_custom"] = _timestamp_custom
     env.globals["as_datetime"] = _as_datetime
