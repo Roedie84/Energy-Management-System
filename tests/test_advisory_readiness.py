@@ -278,7 +278,12 @@ def _legenda_tekst():
     data = yaml.safe_load(
         (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
     )
+    # v1.3.0: het Betrouwbaarheid-tabblad heeft óók een kaart met de
+    # titel "Legenda". Alleen op titel zoeken pakt dan de verkeerde, dus
+    # eerst het juiste tabblad opzoeken.
     for view in data["views"]:
+        if view.get("title") != "Advies":
+            continue
         for card in view.get("cards") or []:
             if card.get("title") == "Legenda":
                 return " ".join(card["content"].split())
