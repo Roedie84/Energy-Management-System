@@ -252,3 +252,90 @@ def test_the_dashboard_explains_the_limitation():
 
     assert "Wat dit níét toetst" in plat
     assert "weten niet eens dat er een accu staat" in plat
+
+
+# --- v1.7.0: gas -----------------------------------------------------
+
+GAS = "sensor.zonneplan_gas_delivery_costs_today"
+
+
+def test_gas_is_found_automatically(make_coordinator, hass):
+    """Gevraagd: "Zonneplan levert ook gas aan mij, dit graag meenemen in
+    het financiele gedeelte." Zonder configuratie, net als de rest."""
+    c = _coordinator(make_coordinator)
+    hass.states.set(GAS, "0.1304714")
+
+    assert c.find_zonneplan_cost_entities()["gas_vandaag"] == GAS
+
+
+def test_the_total_adds_gas_to_net_electricity(make_coordinator, hass):
+    """Zonder gas zijn de energiekosten maar half zichtbaar."""
+    c = _coordinator(make_coordinator)
+    hass.states.set(AFNAME, "3.00")
+    hass.states.set(TERUG, "0.50")
+    hass.states.set(GAS, "1.20")
+    c.actual_cost_today_eur = 2.45
+
+    vergelijking = c.get_zonneplan_cost_comparison()
+
+    assert vergelijking["zonneplan_netto_eur"] == 2.5
+    assert vergelijking["zonneplan_gas_vandaag_eur"] == 1.2
+    assert vergelijking["totale_energiekosten_vandaag_eur"] == 3.7
+
+
+def test_gas_does_not_affect_the_electricity_verdict(make_coordinator, hass):
+    """Gas staat los: deze integratie berekent er niets aan, dus het mag
+    het oordeel over de stroomberekening niet beïnvloeden."""
+    c = _coordinator(make_coordinator)
+    hass.states.set(AFNAME, "3.00")
+    hass.states.set(TERUG, "0.50")
+    hass.states.set(GAS, "50.00")
+    c.actual_cost_today_eur = 2.45
+
+    vergelijking = c.get_zonneplan_cost_comparison()
+
+    assert vergelijking["status"] == RELIABILITY_RELIABLE
+    assert vergelijking["verschil_eur"] == -0.05
+
+
+def test_without_gas_the_total_is_just_electricity(make_coordinator, hass):
+    """Niet iedereen heeft gas bij dezelfde leverancier."""
+    c = _coordinator(make_coordinator)
+    hass.states.set(AFNAME, "3.00")
+    hass.states.set(TERUG, "0.50")
+    c.actual_cost_today_eur = 2.45
+
+    vergelijking = c.get_zonneplan_cost_comparison()
+
+    assert vergelijking["zonneplan_gas_vandaag_eur"] is None
+    assert vergelijking["totale_energiekosten_vandaag_eur"] == 2.5
+
+
+def test_the_dashboard_hides_gas_when_there_is_none():
+    """Een regel met "None €" is erger dan geen regel."""
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    yaml_tekst = (
+        Path(pkg.__file__).parent / "dashboard_template.yaml"
+    ).read_text()
+
+    assert "if z.get('zonneplan_gas_vandaag_eur') is not none" in yaml_tekst
+
+
+def test_the_dashboard_says_gas_is_not_verified():
+    """Gas wordt alleen getoond, niet getoetst - deze integratie
+    berekent er niets aan. Dat verzwijgen zou suggereren dat het
+    gecontroleerd is."""
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    yaml_tekst = (
+        Path(pkg.__file__).parent / "dashboard_template.yaml"
+    ).read_text()
+    plat = " ".join(yaml_tekst.split())
+
+    assert "Gas wordt alleen getóónd, niet getoetst" in plat
+    assert "alleen een dagtotaal" in plat
