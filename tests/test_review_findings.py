@@ -181,3 +181,105 @@ def test_the_form_is_redisplayed_with_the_entered_values():
     bron = (Path(pkg.__file__).parent / "config_flow.py").read_text()
 
     assert bron.count("data_schema=_schema(user_input)") == 2
+
+
+# --- v1.4.2: optionele getalvelden blokkeerden het formulier ---------
+
+
+def test_empty_optional_number_fields_are_accepted():
+    """Gerapporteerd met screenshot: twee velden toonden "expected
+    float" en het formulier was niet meer te verzenden.
+
+    Een `NumberSelector` met `default=None` - wat een optioneel veld
+    oplevert zodra het leeg blijft - wijst die None af. Alle bestaande
+    getalvelden in deze flow hebben een concrete standaard en liepen daar
+    dus niet tegenaan; deze twee mogen juist leeg blijven.
+    """
+    from custom_components.energy_management_system.config_flow import (
+        _validate_input,
+    )
+    from custom_components.energy_management_system.const import (
+        CONF_PV_ACTUAL_AZIMUTH_DEGREES,
+        CONF_PV_ACTUAL_TILT_DEGREES,
+    )
+
+    invoer = {
+        CONF_PV_ACTUAL_AZIMUTH_DEGREES: "",
+        CONF_PV_ACTUAL_TILT_DEGREES: "",
+    }
+
+    assert _validate_input(invoer) == {}
+    # Leeg betekent "geen ijkpunt" - het veld hoort dan niet als lege
+    # tekst in de configuratie te blijven staan.
+    assert CONF_PV_ACTUAL_AZIMUTH_DEGREES not in invoer
+
+
+def test_a_valid_orientation_becomes_a_number():
+    """Anders krijgt de coordinator later alsnog een tekst binnen."""
+    from custom_components.energy_management_system.config_flow import (
+        _validate_input,
+    )
+    from custom_components.energy_management_system.const import (
+        CONF_PV_ACTUAL_AZIMUTH_DEGREES,
+    )
+
+    invoer = {CONF_PV_ACTUAL_AZIMUTH_DEGREES: "200"}
+
+    assert _validate_input(invoer) == {}
+    assert invoer[CONF_PV_ACTUAL_AZIMUTH_DEGREES] == 200.0
+
+
+def test_a_comma_decimal_is_accepted():
+    """Op een Nederlands toetsenbord ligt een komma meer voor de hand."""
+    from custom_components.energy_management_system.config_flow import (
+        _validate_input,
+    )
+    from custom_components.energy_management_system.const import (
+        CONF_PV_ACTUAL_TILT_DEGREES,
+    )
+
+    invoer = {CONF_PV_ACTUAL_TILT_DEGREES: "12,5"}
+
+    assert _validate_input(invoer) == {}
+    assert invoer[CONF_PV_ACTUAL_TILT_DEGREES] == 12.5
+
+
+def test_nonsense_and_out_of_range_are_rejected():
+    from custom_components.energy_management_system.config_flow import (
+        _validate_input,
+    )
+    from custom_components.energy_management_system.const import (
+        CONF_PV_ACTUAL_AZIMUTH_DEGREES,
+        CONF_PV_ACTUAL_TILT_DEGREES,
+    )
+
+    assert CONF_PV_ACTUAL_AZIMUTH_DEGREES in _validate_input(
+        {CONF_PV_ACTUAL_AZIMUTH_DEGREES: "zuidwest"}
+    )
+    assert CONF_PV_ACTUAL_AZIMUTH_DEGREES in _validate_input(
+        {CONF_PV_ACTUAL_AZIMUTH_DEGREES: "400"}
+    )
+    assert CONF_PV_ACTUAL_TILT_DEGREES in _validate_input(
+        {CONF_PV_ACTUAL_TILT_DEGREES: "120"}
+    )
+
+
+def test_no_optional_number_selector_without_a_default():
+    """Borging tegen herhaling: een NumberSelector op een veld dat leeg
+    mag blijven, blokkeert het hele formulier."""
+    import re
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    bron = (Path(pkg.__file__).parent / "config_flow.py").read_text()
+    for blok in re.finditer(
+        r"vol\.Optional\(\s*(\w+),\s*default=([^)]*?)\),\s*\):\s*selector\.NumberSelector",
+        bron,
+        re.S,
+    ):
+        veld, standaard = blok.group(1), blok.group(2)
+        assert "," in standaard, (
+            f"{veld}: optioneel NumberSelector zonder terugvalwaarde - "
+            "levert 'expected float' zodra het veld leeg blijft"
+        )
