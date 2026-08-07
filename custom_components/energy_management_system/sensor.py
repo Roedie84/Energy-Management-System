@@ -1182,6 +1182,12 @@ class WeatherEnsembleSensor(SensorEntity, RestoreEntity):
             "spreiding_percent": (
                 self._coordinator.weather_ensemble_spread_percent
             ),
+            # v1.5.2: hoe vaak elke bron afzonderlijk klopt met wat de
+            # panelen doen. Het gemiddelde meten zegt niets over WELKE
+            # bron deugt.
+            "betrouwbaarheid_per_bron": (
+                self._coordinator.get_weather_source_reliability()
+            ),
             "disagreement": self._coordinator.weather_ensemble_disagreement,
             # v1.0.2: hoe vaak deze bronnen het eens blijken met wat de
             # panelen werkelijk doen.

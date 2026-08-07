@@ -8173,3 +8173,79 @@ NumberSelector-velden zonder terugvalwaarde.
 **Getest**: vijf tests erbij in `test_review_findings.py`.
 
 **Volledige testsuite**: 1050 tests, allemaal groen.
+
+## v1.5.0 — De integratie bewaakt haar eigen zonvoorspelling
+
+**Gevraagd**: "Neem je dit zelf mee in een diagnostiek, zodat je dit zelf
+detecteert wanneer dit niet correct is" - handmatig parameters bewaken is
+wat de integratie zelf hoort te doen.
+
+**Zelfcontrole**: de geleerde bias haalt de systematische afwijking eruit
+(-11,6% bij deze installatie); wat overblijft hoort dagruis te zijn. In
+de laatste export -10,3% tegen -11,6%, dus de correctie werkt. Blijven de
+recente dagen structureel aan één kant hangen, dan is er iets veranderd:
+vervuiling, uitgevallen streng, uitgegroeide boom. Alleen de laatste vijf
+dagen tellen (anders middelt een lange goede geschiedenis een
+verslechtering weg), en afwijking naar boven telt ook mee.
+
+**Weinig-zon-marge**: 15,4 kWh verwacht tegen 21,8 typisch = 71%, vlak op
+de grens - dat was nergens te zien. Staat nu in de diagnostiek inclusief
+of het een grensgeval is, met DEZELFDE fractie als de beslissing zelf
+gebruikt (een tweede berekening zou uit de pas kunnen lopen).
+
+**Negen meldingen bleken nooit verstuurd** te worden ondanks hun
+schakelaar. Zes zijn aangesloten: zonopbrengst wijkt af, weinig-zon-dag,
+uitzonderlijk duur kwartier, goedkoop blok begint bijna, lage accustand
+voor de piek, sensor niet uitleesbaar. Een test dwingt de lijst af; dag-
+en maandoverzicht en "module is klaar" staan er bewust nog als
+uitzondering in.
+
+**Getest**: nieuw `tests/test_solar_forecast_health.py`, 11 tests.
+
+**Volledige testsuite**: 1061 tests, allemaal groen.
+
+## v1.5.1 — De laatste drie meldingen aangesloten
+
+Van de eenentwintig soorten uit v1.2.0 stonden er nog drie op de
+uitzonderingenlijst. Die zijn nu aangesloten en de uitzondering is uit de
+test verwijderd: alle eenentwintig worden daadwerkelijk verstuurd.
+
+- **Dagoverzicht** (na 22:00): opwek, verbruik, netimport en wat de accu
+  scheelde ten opzichte van dezelfde dag zonder accu.
+- **Maandoverzicht** (op de eerste van de maand): dezelfde vergelijking
+  over de hele maand.
+- **Adviesmodule is klaar**: alleen de OVERGANG naar klaar wordt gemeld,
+  door de huidige stand met de vorige te vergelijken. Zonder dat zou elke
+  tick opnieuw melden. Bij een verse installatie is alles in één klap
+  "nieuw klaar" - dan volgt geen melding maar een stille registratie van
+  de uitgangssituatie. De lijst wordt bewaard, anders meldt elke herstart
+  dezelfde overgang opnieuw.
+
+**Getest**: zes tests erbij in `test_notifications.py`.
+
+**Volledige testsuite**: 1067 tests, allemaal groen.
+
+## v1.5.2 — Betrouwbaarheid per weerbron
+
+**Gerapporteerd**: de twee weerbronnen liepen 70 procentpunt uiteen
+(forecast_thuis 12%, openweathermap 83%), waarbij OpenWeatherMap het bij
+het juiste eind leek te hebben. De melding uit v1.1.8 deed zijn werk,
+maar zegt alleen DAT ze uiteenlopen, niet WELKE deugt.
+
+**Nu**: de bestaande toets (klopt de gemelde bewolking met wat de panelen
+doen) wordt ook per bron afzonderlijk gedaan, met exact dezelfde
+drempels. Een test dwingt af dat het één definitie blijft.
+
+**Bewust meten en niet wegen**, expliciet gevraagd omdat één dag niets
+zegt: twintig waarnemingen bij daglicht per bron voor een oordeel, en pas
+vergelijken als BEIDE die drempel halen (anders zou een bron met drie
+waarnemingen "de beste" kunnen heten). Het gemiddelde blijft ongewogen -
+een bron die deze week beter is kan volgende week slechter zijn.
+
+Blijkt één bron structureel >20 procentpunt beter, dan volgt een
+informatieve regel met het advies de andere uit de configuratie te halen.
+Keuze van de gebruiker, niet van de integratie.
+
+**Getest**: nieuw `tests/test_weather_source_reliability.py`, 11 tests.
+
+**Volledige testsuite**: 1078 tests, allemaal groen.

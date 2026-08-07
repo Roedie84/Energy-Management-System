@@ -515,6 +515,176 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Betrouwbaarheid per weerbron (v1.5.2)
+
+**Gerapporteerd**: *"Weerbronnen lopen 70 procentpunt uiteen over de
+bewolking (weather.forecast_thuis: 12%, weather.openweathermap: 83%)...
+Openweathermap lijkt het bij het juiste eind te hebben."*
+
+De melding uit v1.1.8 deed precies zijn werk. Maar hij zegt alleen dát ze
+uiteenlopen, niet **welke** deugt.
+
+### Wat er nu gemeten wordt
+
+Er bestond al een meting die vergelijkt of de gemelde bewolking klopt met
+wat de panelen werkelijk doen. Die stond alleen op het **gemiddelde** —
+en een gemiddelde van 12% en 83% zegt niets over welke van de twee ernaast
+zit.
+
+Dezelfde toets, met exact dezelfde drempels, wordt nu ook **per bron**
+gedaan. Een test dwingt af dat het één definitie blijft: twee
+berekeningen naast elkaar zouden tegenstrijdige uitkomsten kunnen geven
+over dezelfde waarneming.
+
+### Bewust meten en niet meteen wegen
+
+Dat was de vraag erbij: *"Gezien het nu op 1 dag natuurlijk niet
+betrouwbaar is."* Precies.
+
+Er zijn twintig waarnemingen bij daglicht per bron nodig voordat er een
+oordeel volgt, en er wordt pas vergeleken als **beide** bronnen die
+drempel hebben gehaald — anders zou een bron met drie waarnemingen "de
+beste" kunnen heten.
+
+Het gemiddelde blijft daarbij een **ongewogen** gemiddelde. Een bron die
+deze week beter is, kan volgende week slechter zijn; automatisch gaan
+wegen op basis van een paar dagen zou hetzelfde soort overhaaste conclusie
+zijn als waar deze hele meting tegen beschermt. Daar staat een test op.
+
+Blijkt één bron structureel meer dan 20 procentpunt beter, dan verschijnt
+dat als informatieve regel met het advies de andere uit de configuratie te
+halen. Jouw keuze, niet die van de integratie.
+
+### Waar je het ziet
+
+Per bron een regel in het betrouwbaarheidsoverzicht, plus de volledige
+uitsplitsing op de weerensemble-sensor en in de diagnostiek-export.
+
+### Getest
+
+Nieuw `tests/test_weather_source_reliability.py`, 11 tests: elke bron
+wordt apart beoordeeld (met de gerapporteerde 12%-tegen-83%-situatie),
+geen oordeel op één dag, twee goede bronnen worden allebei betrouwbaar
+genoemd, dezelfde drempels als de ensemble, een duidelijk betere bron
+wordt genoemd, vergelijkbare bronnen krijgen geen advies, geen
+vergelijking tot beide genoeg hebben, het is informatief en geen
+aandachtspunt, er wordt niets automatisch gewogen, elke bron staat in het
+overzicht, en de meting overleeft een herstart.
+
+**Volledige testsuite**: 1078 tests, allemaal groen.
+
+## De laatste drie meldingen aangesloten (v1.5.1)
+
+Van de eenentwintig soorten uit v1.2.0 stonden er nog drie op de
+uitzonderingenlijst. Die zijn nu ook echt aangesloten, en de uitzondering
+is uit de test verwijderd — alle eenentwintig worden daadwerkelijk
+verstuurd.
+
+### Dagoverzicht
+
+Na 22:00, met de dag op een rij: opwek, verbruik, netimport, en wat de
+accu heeft gescheeld ten opzichte van dezelfde dag zonder accu.
+
+### Maandoverzicht
+
+Op de eerste van de maand, met dezelfde vergelijking over de hele maand.
+
+### Adviesmodule is klaar met leren
+
+Deze had de meeste zorg nodig. Alleen de **overgang** naar "klaar" wordt
+gemeld, door de huidige stand te vergelijken met de vorige. Zonder dat
+zou elke tick opnieuw melden dat een module klaar is — binnen een dag
+waardeloos.
+
+Twee dingen die daarbij misgaan als je er niet op let. Bij een **verse
+installatie** is elke module in één klap "nieuw klaar"; dan hoort er geen
+melding te komen met de hele lijst, alleen een stille registratie van de
+uitgangssituatie. En de lijst moet **bewaard blijven**, anders meldt elke
+herstart dezelfde overgang opnieuw. Beide hebben een eigen test.
+
+### Getest
+
+Zes tests erbij in `test_notifications.py`: het dagoverzicht komt alleen
+'s avonds, het rapporteert de besparing, het maandoverzicht alleen op de
+eerste, alleen de overgang naar klaar wordt gemeld (twee rondes achter
+elkaar geeft één melding), de eerste ronde kondigt niet alles aan maar
+onthoudt de stand wel, en die stand overleeft een herstart.
+
+De testhulp stubt onderweg de prijsvoorspelling — zonder dat loopt de
+meldingsronde stuk op een ontbrekende sensor voordat de samenvattingen
+aan de beurt zijn.
+
+**Volledige testsuite**: 1067 tests, allemaal groen.
+
+## De integratie bewaakt haar eigen zonvoorspelling (v1.5.0)
+
+**Gevraagd**: *"Neem je dit zelf mee in een diagnostiek, zodat je dit
+zelf detecteert wanneer dit niet correct is"* — nadat ik had uitgelegd
+hoe je `last_deviation_percent` handmatig naast `learned_bias_percent`
+legt.
+
+Terecht: parameters handmatig bewaken is precies wat de integratie zelf
+hoort te doen.
+
+### Wat er nu zelf wordt gecontroleerd
+
+De geleerde bias haalt de systematische afwijking eruit — bij jou −11,6%,
+omdat Solcast structureel iets te optimistisch is over jouw installatie.
+Wat daarna overblijft hoort **dagruis** te zijn, rond nul. In de laatste
+export was dat −10,3% tegen −11,6%: dicht bij elkaar, dus de correctie
+werkt.
+
+Blijven de recente dagen structureel aan één kant van die bias hangen,
+dan is er iets veranderd aan de installatie zelf: vervuiling, een
+uitgevallen streng, of een boom die is uitgegroeid. Dat is precies het
+soort langzame verslechtering dat je met het blote oog mist.
+
+Twee ontwerpkeuzes: alleen de **laatste vijf dagen** tellen, zodat een
+verslechtering niet wordt weggemiddeld door een lange goede
+geschiedenis. En ook een afwijking naar bóven telt mee — structureel
+beter dan verwacht betekent evengoed dat de geleerde bias niet meer
+klopt.
+
+### Hoe dicht zit vandaag bij de weinig-zon-grens?
+
+Bij die vraag van vanochtend bleek 15,4 kWh verwacht tegen 21,8 kWh op
+een typische dag: **71%**, vlak op de grens. Dat was nergens te zien,
+waardoor niet te beoordelen viel of het uitblijven van extra-dip-laden
+terecht was of dat de drempel te laks stond.
+
+Die verhouding staat nu in de diagnostiek, inclusief of het een
+grensgeval is. Bewust met **dezelfde fractie** die de beslissing zelf
+gebruikt — een eigen tweede drempelberekening zou precies het risico
+geven dat overzicht en beslissing uit elkaar lopen. Daar staat een test
+op.
+
+### Negen meldingen hadden een schakelaar maar werden nooit verstuurd
+
+Bij het aansluiten hiervan bleek dat van de eenentwintig soorten uit
+v1.2.0 er **negen** wel een schakelaar hadden maar nergens werden
+verzonden. Een schakelaar voor een melding die nooit komt is erger dan
+geen schakelaar.
+
+Zes daarvan zijn nu aangesloten: zonopbrengst wijkt structureel af,
+weinig-zon-dag herkend, uitzonderlijk duur kwartier, goedkoopste blok
+begint bijna, lage accustand vlak voor de piek, en sensor niet
+uitleesbaar. Er is een test die de lijst afdwingt; dag- en
+maandoverzicht plus "module is klaar" staan er bewust nog als
+uitzondering in, want die volgen nog.
+
+### Getest
+
+Nieuw `tests/test_solar_forecast_health.py`, 11 tests: een stabiele
+correctie wordt als werkend gemeld (met de echte cijfers uit de export),
+structurele drift naar beneden én naar boven wordt gesignaleerd, alleen
+recente dagen tellen, geen oordeel onder de drempel, zonder tracker
+"niet geconfigureerd", het staat in het betrouwbaarheidsoverzicht, de
+marge toont hoe dicht vandaag bij de grens zat, zonder voorspelling geen
+marge, de marge gebruikt dezelfde fractie als de beslissing, en elke
+meldingssoort wordt daadwerkelijk verstuurd.
+
+**Volledige testsuite**: 1061 tests, allemaal groen.
+
 ## Configuratieformulier was niet meer te verzenden (v1.4.2)
 
 **Gerapporteerd** met screenshot: twee velden toonden **"expected

@@ -273,7 +273,10 @@ from .const import (
     CONF_SUN_PHASE_SENSOR,
     CONF_PV_ACTUAL_AZIMUTH_DEGREES,
     CONF_PV_ACTUAL_TILT_DEGREES,
+    LOW_SOLAR_BORDERLINE_MARGIN,
     PV_GEOMETRY_AZIMUTH_BUCKET_DEGREES,
+    SOLAR_BIAS_DRIFT_ATTENTION_PERCENT,
+    SOLAR_BIAS_DRIFT_MIN_DAYS,
     PV_ORIENTATION_MISMATCH_DEGREES,
     PV_SHALLOW_TILT_DEGREES,
     PV_SHALLOW_TILT_EXTRA_TOLERANCE_DEGREES,
@@ -292,6 +295,8 @@ from .const import (
     RELIABILITY_LABELS,
     RELIABILITY_NOT_CONFIGURED,
     RELIABILITY_RELIABLE,
+    RELIABILITY_UNRELIABLE,
+    WEATHER_ENSEMBLE_AGREEMENT_USABLE_PERCENT,
     NOTIFICATION_TYPES,
     PERSISTED_DATE_FIELDS,
     PERSISTED_DATETIME_FIELDS,
@@ -510,6 +515,9 @@ class EnergyManagementSystemCoordinator:
         self.notification_last_sent: dict[str, str] = {}
         self.notification_history: list[dict] = []
         self.notification_suppressed_count: dict[str, int] = {}
+        # v1.5.1: welke adviesmodules al "klaar" waren, om de OVERGANG
+        # naar klaar te kunnen melden in plaats van elke tick opnieuw.
+        self.previously_ready_modules: list[str] = []
 
         # Accu-modulegezondheid (v0.63.123). Per module een dict met
         # geleerde dag-historie en CUSUM-status per grootheid.
@@ -694,6 +702,9 @@ class EnergyManagementSystemCoordinator:
         # v1.1.8: wat elke bron afzonderlijk meldde, en hoe ver ze
         # uiteenliepen.
         self.weather_ensemble_readings: dict[str, float] = {}
+        # v1.5.2: overeenstemming PER BRON, niet alleen over het
+        # gemiddelde. Zie `_record_weather_ensemble_agreement`.
+        self.weather_source_agreement: dict[str, list[bool]] = {}
         self.weather_ensemble_spread_percent: float | None = None
         # Vaatwasser/wasmachine RUSTEND/ACTIEF/KLAAR-toestandsmachine
         # (v0.63.32).
@@ -2245,6 +2256,11 @@ class EnergyManagementSystemCoordinator:
         functie hoeft daar niets voor te doen.
         """
         notify = self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE)
+        # De coordinator bewaart deze twee al als `last_*`; ze hier
+        # opnieuw laten doorgeven zou een tweede waarheid opleveren die
+        # uit de pas kan lopen met wat de beslislogica gebruikte.
+        cheap_block_start = self.last_cheap_block_start
+        discharge_start = self.last_discharge_start
 
         def stuur(kind: str, titel: str, bericht: str) -> None:
             self._dispatch_notification(
@@ -2307,6 +2323,147 @@ class EnergyManagementSystemCoordinator:
                 "⚠️ Energy Management System liep vast",
                 f"Laatste fout: {self.last_error}. De accu blijft op de "
                 "laatst ingestelde modus staan tot dit is opgelost.",
+            )
+
+        # --- zon: klopt de voorspelling nog? ---
+        gezondheid = self.get_solar_forecast_health()
+        if gezondheid["status"] == RELIABILITY_UNRELIABLE:
+            stuur(
+                "solar_underperforming",
+                "☀️ Zonopbrengst wijkt structureel af",
+                gezondheid["reden"],
+            )
+
+        marge = self.get_low_solar_margin()
+        if marge.get("verhouding") is not None and self._is_low_solar_expected():
+            stuur(
+                "low_solar_day",
+                "🌥️ Weinig-zon-dag herkend",
+                f"Vandaag wordt {marge['verwacht_kwh']} kWh verwacht, tegen "
+                f"{marge['typisch_kwh']} kWh op een typische dag "
+                f"({marge['verhouding'] * 100:.0f}%). Er wordt daarom buiten "
+                "het goedkope blok bijgeladen als de prijsmarge dat "
+                "rechtvaardigt.",
+            )
+
+        # --- prijzen: piek en goedkoop blok ---
+        if entries:
+            vandaag = [e for e in entries if e[0].date() == now.date()]
+            if vandaag:
+                prijzen = [e[2] for e in vandaag]
+                piek = max(prijzen)
+                mediaan = statistics.median(prijzen)
+                if mediaan > 0 and piek > mediaan * 2.5:
+                    duurste = max(vandaag, key=lambda e: e[2])
+                    stuur(
+                        "exceptional_peak_price",
+                        "💸 Uitzonderlijk duur kwartier vandaag",
+                        f"Om {duurste[0]:%H:%M} kost stroom "
+                        f"{piek:.4f} €/kWh, ruim het dubbele van de "
+                        f"mediaan van vandaag ({mediaan:.4f} €/kWh).",
+                    )
+
+        if cheap_block_start is not None:
+            minuten_tot = (cheap_block_start - now).total_seconds() / 60
+            if 0 < minuten_tot <= 15:
+                stuur(
+                    "cheap_block_soon",
+                    "⏰ Goedkoopste blok begint bijna",
+                    f"Om {cheap_block_start:%H:%M} begint het goedkoopste "
+                    "blok van vandaag - een goed moment voor apparaten die "
+                    "kunnen wachten.",
+                )
+
+        # --- accu vlak voor de piek ---
+        soc_nu = self.last_soc_percent
+        if (
+            soc_nu is not None
+            and soc_nu < 30
+            and discharge_start is not None
+            and 0 < (discharge_start - now).total_seconds() / 3600 <= 3
+        ):
+            stuur(
+                "low_soc_before_peak",
+                "🔋 Lage accustand vlak voor de avondpiek",
+                f"De accu staat op {soc_nu:.0f}% en om "
+                f"{discharge_start:%H:%M} begint het duurste blok.",
+            )
+
+        # --- sensor valt weg ---
+        ontbrekend = [
+            entity_id
+            for entity_id in (
+                self.config.get(CONF_AVAILABLE_ENERGY_SENSOR),
+                self.config.get(CONF_BATTERY_POWER_SENSOR),
+                self.config.get(CONF_CONSUMPTION_POWER_SENSOR),
+                self.config.get(CONF_PV_POWER_SENSOR),
+            )
+            if entity_id and self._read_sensor_float(entity_id) is None
+        ]
+        if ontbrekend:
+            stuur(
+                "sensor_unavailable",
+                "⚠️ Sensor niet uitleesbaar",
+                f"{', '.join(ontbrekend)} geeft op dit moment geen waarde. "
+                "De aansturing valt terug op voorzichtige aannames zolang "
+                "dat duurt.",
+            )
+
+        # --- een adviesmodule is klaar met leren ---
+        nu_klaar = sorted(
+            sleutel
+            for sleutel, gegevens in (self.advisory_readiness or {}).items()
+            if self.normalise_reliability(gegevens.get("status"))
+            == RELIABILITY_RELIABLE
+        )
+        nieuw_klaar = [
+            sleutel
+            for sleutel in nu_klaar
+            if sleutel not in self.previously_ready_modules
+        ]
+        # Alleen de OVERGANG melden. Zonder deze vergelijking zou elke
+        # tick opnieuw melden dat een module klaar is, wat de melding
+        # binnen een dag waardeloos maakt.
+        if nieuw_klaar and self.previously_ready_modules:
+            stuur(
+                "module_became_ready",
+                "✅ Adviesmodule is klaar met leren",
+                f"{', '.join(nieuw_klaar)} heeft genoeg data verzameld om "
+                "betrouwbaar te zijn. Te zien op het "
+                "Betrouwbaarheid-tabblad.",
+            )
+        if nu_klaar != self.previously_ready_modules:
+            self.previously_ready_modules = nu_klaar
+            self.schedule_persisted_state_save()
+
+        # --- samenvattingen ---
+        if now.hour >= 22:
+            bespaard = (
+                self.counterfactual_cost_today_eur - self.actual_cost_today_eur
+            )
+            stuur(
+                "daily_summary",
+                "📊 Dagoverzicht",
+                f"Vandaag: {self.pv_production_today_kwh:.1f} kWh opgewekt, "
+                f"{self.gross_consumption_today_kwh:.1f} kWh verbruikt, "
+                f"{self.grid_import_today_kwh:.1f} kWh van het net. "
+                f"Kosten {self.actual_cost_today_eur:.2f} € tegenover "
+                f"{self.counterfactual_cost_today_eur:.2f} € zonder accu - "
+                f"dat scheelt {bespaard:.2f} €.",
+            )
+
+        if now.day == 1 and now.hour >= 9:
+            maand_bespaard = (
+                self.counterfactual_cost_current_month_eur
+                - self.actual_cost_current_month_eur
+            )
+            stuur(
+                "monthly_summary",
+                "📅 Maandoverzicht",
+                f"De afgelopen maand kostte {self.actual_cost_current_month_eur:.2f} € "
+                f"tegenover {self.counterfactual_cost_current_month_eur:.2f} € "
+                f"zonder accu - een verschil van {maand_bespaard:.2f} €. "
+                "Zie het Financieel-tabblad voor de opbouw.",
             )
 
         profiel = self.get_pv_installation_profile()
@@ -2597,6 +2754,105 @@ class EnergyManagementSystemCoordinator:
         index = int((azimut % 360 + 22.5) // 45) % 8
         return richtingen[index]
 
+    def get_solar_forecast_health(self) -> dict:
+        """Klopt de zonvoorspelling nog, of is er iets veranderd aan de
+        installatie? (v1.5.0)
+
+        De geleerde bias haalt de systematische afwijking eruit. Wat
+        daarna overblijft hoort dagruis te zijn, rond nul. Blijven de
+        recente dagen structureel aan één kant van die bias hangen, dan
+        is er iets veranderd aan de installatie zelf - vervuiling, een
+        uitgevallen streng, of een boom die is uitgegroeid.
+
+        Dit werd tot v1.4.2 handmatig vergeleken
+        (`last_deviation_percent` naast `learned_bias_percent`). Dat
+        soort langzame verslechtering mis je met het blote oog, dus hoort
+        de integratie het zelf te signaleren.
+        """
+        tracker = self.solar_tracker
+        if tracker is None or not getattr(tracker, "deviation_history", None):
+            return {
+                "status": RELIABILITY_NOT_CONFIGURED,
+                "reden": "Nog geen zonvoorspelling-geschiedenis.",
+                "drift_percent": None,
+            }
+
+        recent = tracker.deviation_history[-SOLAR_BIAS_DRIFT_MIN_DAYS:]
+        if len(recent) < SOLAR_BIAS_DRIFT_MIN_DAYS:
+            return {
+                "status": RELIABILITY_INSUFFICIENT,
+                "reden": (
+                    f"{len(recent)}/{SOLAR_BIAS_DRIFT_MIN_DAYS} dagen "
+                    "verzameld."
+                ),
+                "drift_percent": None,
+            }
+
+        geleerd = getattr(tracker, "learned_bias_percent", None) or 0.0
+        recente_mediaan = statistics.median(recent)
+        drift = recente_mediaan - geleerd
+
+        if abs(drift) <= SOLAR_BIAS_DRIFT_ATTENTION_PERCENT:
+            status = RELIABILITY_RELIABLE
+            reden = (
+                f"Recente afwijking ({recente_mediaan:.1f}%) ligt dicht bij "
+                f"de geleerde bias ({geleerd:.1f}%) - de correctie werkt."
+            )
+        else:
+            status = RELIABILITY_UNRELIABLE
+            richting = "lager" if drift < 0 else "hoger"
+            reden = (
+                f"De laatste {len(recent)} dagen liggen structureel "
+                f"{abs(drift):.0f} procentpunt {richting} dan de geleerde "
+                f"bias ({geleerd:.1f}%). Dat wijst op een verandering aan de "
+                "installatie: vervuiling, een uitgevallen streng, of "
+                "beschaduwing die is toegenomen."
+            )
+        return {
+            "status": status,
+            "reden": reden,
+            "drift_percent": round(drift, 1),
+            "recente_afwijking_percent": round(recente_mediaan, 1),
+            "geleerde_bias_percent": round(geleerd, 1),
+            "dagen": len(recent),
+        }
+
+    def get_low_solar_margin(self) -> dict:
+        """Hoe dicht zit vandaag bij de weinig-zon-drempel? (v1.5.0)
+
+        Vandaag zat op ongeveer 70% van de typische opbrengst, vlak op de
+        grens - en dat was nergens te zien. Daardoor viel niet te
+        beoordelen of het uitblijven van extra-dip-laden terecht was, of
+        dat de drempel te laks stond.
+        """
+        tracker = self.solar_tracker
+        verwacht = getattr(tracker, "pending_predicted_kwh", None) if tracker else None
+        typisch = (
+            getattr(tracker, "learned_typical_forecast_kwh", None)
+            if tracker
+            else None
+        )
+        if not verwacht or not typisch:
+            return {"verhouding": None, "grensgeval": None}
+
+        verhouding = verwacht / typisch
+        # Dezelfde fractie die `_is_forecast_value_low` gebruikt, zodat
+        # dit overzicht en de beslissing niet uit elkaar kunnen lopen.
+        grens_verhouding = self._get_low_solar_relative_fraction()
+        drempel = typisch * grens_verhouding if grens_verhouding else None
+        grensgeval = None
+        if grens_verhouding is not None:
+            grensgeval = (
+                abs(verhouding - grens_verhouding) <= LOW_SOLAR_BORDERLINE_MARGIN
+            )
+        return {
+            "verwacht_kwh": round(verwacht, 2),
+            "typisch_kwh": round(typisch, 2),
+            "verhouding": round(verhouding, 2),
+            "drempel_kwh": round(drempel, 2) if drempel else None,
+            "grensgeval": grensgeval,
+        }
+
     def get_reliability_overview(self) -> list[dict]:
         """Alle betrouwbaarheidsoordelen op één plek, in één taal
         (v1.3.0).
@@ -2693,6 +2949,23 @@ class EnergyManagementSystemCoordinator:
             ),
         )
         profiel = self.get_pv_installation_profile()
+        for entity_id, gegevens in self.get_weather_source_reliability().items():
+            if entity_id.startswith("_"):
+                continue
+            voeg_toe(
+                "Metingen",
+                f"Weerbron {entity_id}",
+                {"niveau": gegevens["status"], "reden": gegevens["reden"]},
+                gegevens.get("overeenstemming_percent"),
+            )
+
+        gezondheid = self.get_solar_forecast_health()
+        voeg_toe(
+            "Metingen",
+            "Zonvoorspelling (klopt de correctie nog?)",
+            {"niveau": gezondheid["status"], "reden": gezondheid["reden"]},
+            gezondheid.get("drift_percent"),
+        )
         voeg_toe(
             "Geleerde waarden",
             "PV-installatieprofiel (oriëntatie)",
@@ -7322,6 +7595,28 @@ class EnergyManagementSystemCoordinator:
             ]
         )
 
+        # v1.5.2, gerapporteerd: de twee bronnen liepen 70 procentpunt
+        # uiteen (12% tegen 83%), waarbij OpenWeatherMap het bij het
+        # juiste eind leek te hebben. Het gemiddelde meten zegt dan
+        # niets over WELKE bron deugt - dus wordt dezelfde toets nu ook
+        # per bron afzonderlijk gedaan, met exact dezelfde drempels.
+        #
+        # Bewust meten en niet meteen wegen: één dag zegt niets, en een
+        # bron die vandaag beter is kan morgen slechter zijn.
+        for entity_id, eigen_pct in self.weather_ensemble_readings.items():
+            bron_oneens = (
+                ratio < WEATHER_ENSEMBLE_UNDERPERFORM_RATIO
+                and eigen_pct < WEATHER_ENSEMBLE_CLEAR_THRESHOLD_PERCENT
+            ) or (
+                ratio > WEATHER_ENSEMBLE_OVERPERFORM_RATIO
+                and eigen_pct > WEATHER_ENSEMBLE_OVERCAST_THRESHOLD_PERCENT
+            )
+            reeks = self.weather_source_agreement.setdefault(entity_id, [])
+            reeks.append(not bron_oneens)
+            self.weather_source_agreement[entity_id] = reeks[
+                -WEATHER_ENSEMBLE_AGREEMENT_HISTORY_LENGTH:
+            ]
+
     @property
     def weather_ensemble_agreement_percent(self) -> float | None:
         """Percentage waarnemingen waarin de ensemble het eens was met de
@@ -7331,6 +7626,75 @@ class EnergyManagementSystemCoordinator:
         if len(historie) < WEATHER_ENSEMBLE_AGREEMENT_MIN_SAMPLES:
             return None
         return round(100 * sum(1 for eens in historie if eens) / len(historie), 1)
+
+    def get_weather_source_reliability(self) -> dict:
+        """Hoe vaak klopt ELKE bron afzonderlijk met wat de panelen doen?
+        (v1.5.2)
+
+        Het gemiddelde meten zegt niets over welke bron deugt. Bij een
+        spreiding van 70 procentpunt - 12% tegen 83% - is precies dat de
+        vraag die je wilt beantwoorden.
+
+        Puur informatief. Er wordt bewust nog niet gewogen: één of twee
+        dagen zeggen niets, en een bron die deze week beter is kan
+        volgende week slechter zijn. Eerst genoeg meten, dan pas
+        eventueel besluiten.
+        """
+        rapport = {}
+        for entity_id, reeks in sorted(self.weather_source_agreement.items()):
+            aantal = len(reeks)
+            if aantal < WEATHER_ENSEMBLE_AGREEMENT_MIN_SAMPLES:
+                rapport[entity_id] = {
+                    "status": RELIABILITY_INSUFFICIENT,
+                    "reden": (
+                        f"{aantal}/{WEATHER_ENSEMBLE_AGREEMENT_MIN_SAMPLES} "
+                        "waarnemingen bij daglicht."
+                    ),
+                    "overeenstemming_percent": None,
+                    "aantal_waarnemingen": aantal,
+                }
+                continue
+            percentage = round(100 * sum(1 for e in reeks if e) / aantal, 1)
+            if percentage >= WEATHER_ENSEMBLE_AGREEMENT_GOOD_PERCENT:
+                status = RELIABILITY_RELIABLE
+            elif percentage >= WEATHER_ENSEMBLE_AGREEMENT_USABLE_PERCENT:
+                status = RELIABILITY_INDICATIVE
+            else:
+                status = RELIABILITY_UNRELIABLE
+            rapport[entity_id] = {
+                "status": status,
+                "reden": (
+                    f"Komt in {percentage}% van {aantal} waarnemingen overeen "
+                    "met wat de panelen deden."
+                ),
+                "overeenstemming_percent": percentage,
+                "aantal_waarnemingen": aantal,
+            }
+
+        # Alleen vergelijken als beide bronnen genoeg gemeten hebben -
+        # anders zou een bron met drie waarnemingen "de beste" kunnen
+        # heten.
+        beoordeeld = {
+            eid: g["overeenstemming_percent"]
+            for eid, g in rapport.items()
+            if g["overeenstemming_percent"] is not None
+        }
+        if len(beoordeeld) > 1:
+            beste = max(beoordeeld, key=beoordeeld.get)
+            slechtste = min(beoordeeld, key=beoordeeld.get)
+            verschil = beoordeeld[beste] - beoordeeld[slechtste]
+            rapport["_vergelijking"] = {
+                "beste_bron": beste,
+                "slechtste_bron": slechtste,
+                "verschil_procentpunt": round(verschil, 1),
+                "advies": (
+                    f"{beste} klopt structureel vaker. Overweeg "
+                    f"{slechtste} uit de configuratie te halen."
+                    if verschil >= 20
+                    else "Beide bronnen presteren vergelijkbaar."
+                ),
+            }
+        return rapport
 
     def get_weather_ensemble_agreement_status(self) -> dict:
         """Vertaalt de overeenstemming naar een oordeel (v1.0.2)."""
@@ -9395,6 +9759,13 @@ class EnergyManagementSystemCoordinator:
         # gemiddelde weinig. Informatief - het is geen storing van deze
         # integratie, maar wel de verklaring als de gerapporteerde
         # bewolking niet klopt met wat je buiten ziet.
+        vergelijking = self.get_weather_source_reliability().get("_vergelijking")
+        if vergelijking and vergelijking["verschil_procentpunt"] >= 20:
+            informatief.append(
+                f"Weerbronnen verschillen structureel in betrouwbaarheid: "
+                f"{vergelijking['advies']}"
+            )
+
         spreiding = self.weather_ensemble_spread_percent
         if spreiding is not None and spreiding >= WEATHER_ENSEMBLE_SPREAD_ATTENTION_PERCENT:
             metingen = ", ".join(

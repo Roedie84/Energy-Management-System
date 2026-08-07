@@ -1087,6 +1087,10 @@ PERSISTED_PLAIN_FIELDS = (
     # Vijf flitsen zijn nodig voordat die iets doet; zonder bewaren zou
     # die telling na elke herstart opnieuw beginnen.
     "backyard_sun_exposure_azimuths",
+    # v1.5.2: twintig waarnemingen bij daglicht per bron voordat er iets
+    # te zeggen valt. Zonder bewaren zou die telling na elke herstart
+    # opnieuw beginnen.
+    "weather_source_agreement",
     # v1.4.0: het PV-installatieprofiel bouwt over WEKEN op (vijf
     # heldere dagen voor een eerste schatting, twintig voor een
     # betrouwbare). Zonder bewaren zou die telling na elke herstart
@@ -1102,6 +1106,10 @@ PERSISTED_PLAIN_FIELDS = (
     "notification_last_sent",
     "notification_history",
     "notifications_master_enabled",
+    # v1.5.1: welke modules al klaar waren, zodat alleen de OVERGANG
+    # wordt gemeld. Zonder bewaren zou elke herstart die overgang
+    # opnieuw melden.
+    "previously_ready_modules",
     # Cumulatieve financiële en KPI-tellers
     "actual_cost_today_eur",
     "actual_cost_current_month_eur",
@@ -1710,3 +1718,24 @@ PV_ORIENTATION_MISMATCH_DEGREES = 25.0
 # de hand is.
 PV_SHALLOW_TILT_DEGREES = 20.0
 PV_SHALLOW_TILT_EXTRA_TOLERANCE_DEGREES = 15.0
+
+# --- Zelfcontrole op de zonvoorspelling (v1.5.0) ---------------------
+# Gevraagd: "Neem je dit zelf mee in een diagnostiek, zodat je dit zelf
+# detecteert wanneer dit niet correct is" - naar aanleiding van het
+# handmatig vergelijken van `last_deviation_percent` met
+# `learned_bias_percent`.
+#
+# De geleerde bias haalt de systematische afwijking eruit. Wat daarna
+# overblijft hoort dagruis te zijn, rond nul. Blijven de recente dagen
+# structureel aan één kant van die bias hangen, dan is er iets veranderd
+# aan de installatie zelf: vervuiling, een uitgevallen streng, of een
+# boom die is uitgegroeid. Dat is precies het soort langzame
+# verslechtering dat je met het blote oog mist.
+SOLAR_BIAS_DRIFT_MIN_DAYS = 5
+SOLAR_BIAS_DRIFT_ATTENTION_PERCENT = 15.0
+
+# Hoe dicht een dag bij de weinig-zon-drempel mag liggen voordat het het
+# vermelden waard is. Vandaag zat op ~70% van typisch, vlak op de grens -
+# en dat was nergens te zien, waardoor niet te beoordelen viel of het
+# uitblijven van extra-dip-laden terecht was.
+LOW_SOLAR_BORDERLINE_MARGIN = 0.10

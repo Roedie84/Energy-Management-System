@@ -321,6 +321,11 @@ async def async_get_config_entry_diagnostics(
             "weather_ensemble_spread_percent": (
                 coordinator.weather_ensemble_spread_percent
             ),
+            "weather_source_reliability": (
+                coordinator.get_weather_source_reliability()
+            ),
+            "solar_forecast_health": coordinator.get_solar_forecast_health(),
+            "low_solar_margin": coordinator.get_low_solar_margin(),
             "pv_installation_profile": coordinator.get_pv_installation_profile(),
             "pv_peak_azimuth_history": coordinator.pv_peak_azimuth_history,
             "reliability_overview": coordinator.get_reliability_overview(),
