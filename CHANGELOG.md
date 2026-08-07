@@ -8249,3 +8249,94 @@ Keuze van de gebruiker, niet van de integratie.
 **Getest**: nieuw `tests/test_weather_source_reliability.py`, 11 tests.
 
 **Volledige testsuite**: 1078 tests, allemaal groen.
+
+## v1.6.0 — Werkelijke afrekening van Zonneplan op het Financieel-tabblad
+
+**Gevraagd**: het financiële tabblad uitbreiden met Zonneplan-waarden,
+met de eis dat de entiteiten AUTOMATISCH gevonden worden zonder
+handmatige configuratie.
+
+**Geen configuratieveld erbij**: de al ingevulde prijssensor verraadt het
+voorvoegsel (`sensor.zonneplan_`), de rest wordt daaruit afgeleid. Twee
+valkuilen: de integratie levert entity_id's in twee talen door elkaar
+(`electricity_delivery_costs_today` naast
+`elektriciteitsleveringskosten_deze_maand`), dus er worden per waarde
+meerdere kandidaten geprobeerd; en veel van deze sensoren staan standaard
+uit in HA, dus een ontbrekende sensor levert uitleg op in plaats van een
+foutmelding. Getoetst tegen 58 echte entiteitnamen: alle zes doelen
+gevonden. Een test borgt dat er geen configuratieveld is bijgekomen.
+
+**Wat het oplevert**: de eigen kostenberekening naast wat Zonneplan
+werkelijk afrekent - voor geld wat de Kirchhoff-check voor energie is.
+Loopt het uiteen, dan klopt er iets niet in de prijsafhandeling
+(prijsattribuut, netbeheerkosten, terugleveraanname). Zonneplan splitst
+afname en teruglevering; die worden eerst verrekend tot het netto bedrag.
+
+**Ruime, schaalgevoelige drempel**: 50 cent of 15%, wat het grootst is.
+De kostensensor werkt maar eens per uur bij. Bij 100 euro is 50 cent
+verwaarloosbaar, bij 2 euro niet - een vaste drempel zou het aan één kant
+fout doen.
+
+**Nieuwe melding** `cost_mismatch`, standaard uit, met schakelaar op het
+Meldingen-tabblad.
+
+**Getest**: nieuw `tests/test_zonneplan_cost_comparison.py`, 14 tests.
+
+**Volledige testsuite**: 1092 tests, allemaal groen.
+
+## v1.6.1 — Aangescherpt wat de Zonneplan-vergelijking bewijst
+
+**Opgemerkt**: "Let wel op dat zonneplan financieel niets over de accu
+kan zeggen, hun kunnen niet zien wat accu verbruik, naar woning en pv
+naar woning etc is." Klopt - en het legde een zwakte bloot in de
+presentatie, niet in de vergelijking zelf.
+
+**De vergelijking is geldig om precies die reden**:
+`actual_cost_today_eur` wordt berekend uit `p1_power_w`, dezelfde meter
+die Zonneplan afrekent. Twee metingen van hetzelfde punt. Zou onze
+berekening uit accu- of PV-vermogen komen, dan zou ze niets betekenen -
+daar staat nu een test op.
+
+**Maar de tekst suggereerde te veel**: op het Financieel-tabblad staat de
+tegenfeitelijke besparing vlak boven deze vergelijking, en zonder uitleg
+lijkt het alsof Zonneplan dát bevestigt. Dat kan niet - "wat had je
+betaald zonder accu" bestaat in hun wereld niet, en ook de
+accu-boekhouding (kostprijs per kWh, splitsing zon/net) blijft
+ongetoetst. Staat nu expliciet in de code, de melding, op het tabblad en
+als apart diagnostiekveld.
+
+**Getest**: vier tests erbij in `test_zonneplan_cost_comparison.py`.
+
+**Volledige testsuite**: 1096 tests, allemaal groen.
+
+## v1.6.2 — Herstelmeldingen
+
+**Gerapporteerd**: "Er is nu een melding verstuurd dat een sensor niet
+uitleesbaar is, maar er komt geen melding wanneer de sensor weer
+uitleesbaar is."
+
+Zonder herstelmelding blijf je in het ongewisse: is het opgelost, of is
+de melding gewoon gedempt? Bij een venster van twee uur is dat niet uit
+elkaar te houden - en dat is precies waardoor mensen meldingen gaan
+negeren.
+
+**Zeven soorten** krijgen een herstelmelding: sensor weer uitleesbaar,
+integratie draait weer, kosten kloppen weer, zonopbrengst op niveau,
+PV-oriëntatie komt overeen, accumodules lopen gelijk, accu haalt de nacht
+weer. Meldingen die een GEBEURTENIS beschrijven horen er bewust niet bij
+(apparaat klaar, goedkoop blok, dagoverzicht) - daar valt niets aan te
+herstellen. Een test legt dat onderscheid vast.
+
+**Drie keuzes**: dezelfde schakelaar (wie de melding uitzet wil ook het
+herstel niet), het dempingsvenster wordt omzeild (anders verdwijnt een
+snel opgelost probleem stilzwijgend), en na een herstel wordt de demping
+van de probleemmelding gewist zodat een terugkerend probleem meteen weer
+meldt.
+
+**Niet mis**: de screenshot toonde 21 van 22 meldingen aan, terwijl er
+zes standaard aan horen te staan. Nagemeten op een verse installatie:
+precies die zes. De rest stond aan door eigen keuze.
+
+**Getest**: nieuw `tests/test_recovery_notifications.py`, 11 tests.
+
+**Volledige testsuite**: 1107 tests, allemaal groen.

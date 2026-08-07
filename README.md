@@ -515,6 +515,171 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Herstelmeldingen (v1.6.2)
+
+**Gerapporteerd**: *"Er is nu een melding verstuurd dat een sensor niet
+uitleesbaar is, maar er komt geen melding wanneer de sensor weer
+uitleesbaar is."*
+
+Terecht, en het geldt breder dan die ene.
+
+### Waarom dit ertoe doet
+
+Zonder herstelmelding blijf je in het ongewisse: is het opgelost, of is
+de melding gewoon **gedempt**? Bij een dempingsvenster van twee uur is
+dat niet uit elkaar te houden. En dat is precies het soort onzekerheid
+waardoor mensen meldingen gaan negeren — wat de hele functie waardeloos
+maakt.
+
+### Zeven soorten krijgen een herstelmelding
+
+Sensor weer uitleesbaar, integratie draait weer, kostenberekening klopt
+weer, zonopbrengst weer op niveau, PV-oriëntatie komt weer overeen,
+accumodules lopen weer gelijk, accu haalt de nacht weer.
+
+Meldingen die een **gebeurtenis** beschrijven horen er bewust niet bij —
+apparaat klaar, goedkoop blok begint, dagoverzicht. Daar valt niets aan
+te herstellen. Een test legt dat onderscheid vast.
+
+### Drie keuzes die het bruikbaar maken
+
+**Dezelfde schakelaar.** Wie "sensor valt weg" uitzet, krijgt ook het
+herstel niet. Dat is wat je verwacht als je een melding uitschakelt.
+
+**Het dempingsvenster wordt omzeild.** Een probleem dat vijf minuten na
+de melding is opgelost zou anders stilzwijgend verdwijnen — en juist dan
+wil je het horen.
+
+**Na een herstel wordt de demping van de probleemmelding gewist.** Komt
+hetzelfde probleem terug, dan meldt hij meteen weer in plaats van pas na
+twee uur.
+
+### Wat er niet mis bleek
+
+De screenshot toonde 21 van 22 meldingen ingeschakeld, terwijl er zes
+standaard aan horen te staan. Nagemeten op een verse installatie: precies
+die zes. De rest stond dus aan door eigen keuze — geen bug.
+
+### Getest
+
+Nieuw `tests/test_recovery_notifications.py`, 11 tests: een herstelde
+sensor wordt gemeld, de herstelmelding negeert het dempingsvenster, geen
+herstel zonder probleem, niet herhaald, een uitgeschakelde melding krijgt
+geen herstel, de hoofdschakelaar blokkeert ook herstelmeldingen, een
+terugkerend probleem meldt meteen weer, alleen toestandsmeldingen hebben
+een herstel, elke herstelsoort bestaat echt, elke heeft titel en tekst,
+en de actieve toestanden overleven een herstart — anders zou een
+herstart als "opgelost" gelden voor een probleem dat nog speelt.
+
+**Volledige testsuite**: 1107 tests, allemaal groen.
+
+## Aangescherpt wat de Zonneplan-vergelijking bewijst (v1.6.1)
+
+**Opgemerkt**: *"Let wel op dat zonneplan financieel niets over de accu
+kan zeggen, hun kunnen niet zien wat accu verbruik, naar woning en pv
+naar woning etc is."*
+
+Klopt volledig — en het legde een zwakte bloot in hóé ik het presenteerde,
+niet in de vergelijking zelf.
+
+### De vergelijking is geldig, om precies deze reden
+
+Zonneplan ziet uitsluitend de P1-meter. Wat erachter gebeurt — accu naar
+woning, PV naar woning, PV naar accu — is voor hen onzichtbaar; ze weten
+niet eens dat er een accu staat.
+
+Juist daarom klopt de vergelijking. `actual_cost_today_eur` wordt
+berekend uit `p1_power_w`: **precies dezelfde meter** die Zonneplan
+afrekent. Twee metingen van hetzelfde punt. Zou onze berekening uit
+accu- of PV-vermogen komen, dan zou de vergelijking niets betekenen — en
+daar staat nu een test op.
+
+### Maar de tekst suggereerde te veel
+
+Ik noemde het "voor geld wat de Kirchhoff-check voor energie is", zonder
+te zeggen wat er buiten valt. En op het Financieel-tabblad staat de
+**tegenfeitelijke besparing** vlak boven deze vergelijking — dan kan
+iemand makkelijk denken dat Zonneplan dát bevestigt.
+
+Dat kan het niet. "Wat had je betaald zonder accu" bestaat in hun wereld
+niet. Ook de accu-boekhouding zelf — de kostprijs per kWh, de splitsing
+tussen zon en net — blijft ongetoetst.
+
+Dat staat nu expliciet in de code, in de melding, op het tabblad en als
+apart veld in de diagnostiek. Een vergelijking geloofwaardiger laten
+lijken dan ze is, is erger dan geen vergelijking.
+
+### Getest
+
+Vier tests erbij: beide kanten meten aantoonbaar dezelfde meter (via de
+code zelf), de uitleg noemt wat er níét onder valt, het oordeel noemt de
+P1-reikwijdte, en het dashboard legt de beperking uit.
+
+**Volledige testsuite**: 1096 tests, allemaal groen.
+
+## Werkelijke afrekening van Zonneplan op het Financieel-tabblad (v1.6.0)
+
+**Gevraagd**: het financiële tabblad uitbreiden met waarden uit de
+Zonneplan-integratie — met de uitdrukkelijke eis: *"Ik wil de entiteiten
+niet zelf invullen, deze moeten automatisch uit de zonneplan integratie
+gehaald worden zonder manuele config."*
+
+### Geen enkel configuratieveld erbij
+
+De prijssensor was al ingevuld, en die verraadt het voorvoegsel: uit
+`sensor.zonneplan_current_quarter_hourly_electricity_tariff` volgt
+`sensor.zonneplan_`. De rest wordt daaruit afgeleid.
+
+Twee valkuilen bepaalden de opzet. De integratie levert entity_id's in
+**twee talen door elkaar** —
+`sensor.zonneplan_electricity_delivery_costs_today` naast
+`sensor.zonneplan_elektriciteitsleveringskosten_deze_maand`, afhankelijk
+van wanneer de entiteit is aangemaakt. Er worden daarom per waarde
+meerdere kandidaten geprobeerd. En veel van deze sensoren **staan
+standaard uit** in Home Assistant, dus een ontbrekende sensor is normaal
+en levert een uitleg op in plaats van een foutmelding.
+
+Getoetst tegen de 58 echte entiteitnamen uit een diagnostiek-export: alle
+zes doelen gevonden, zonder configuratie. Er staat ook een test op dat er
+géén configuratieveld is bijgekomen — dat zou de eis stilzwijgend
+omzeilen.
+
+### Wat het oplevert
+
+Onze eigen kostenberekening naast wat Zonneplan **werkelijk afrekent**.
+Dat is voor geld wat de Kirchhoff-check voor energie is: twee
+onafhankelijke bronnen die hetzelfde zouden moeten zeggen.
+
+Loopt het uiteen, dan klopt er iets niet in de prijsafhandeling — een
+verkeerd prijsattribuut, vergeten netbeheerkosten, of een aanname over
+teruglevering die niet meer geldt. Precies het soort fout dat je maanden
+niet opmerkt omdat er nergens een tweede bron tegenover staat.
+
+Zonneplan splitst afname en teruglevering; onze berekening is het netto
+bedrag, dus die twee worden eerst verrekend.
+
+### Ruime drempels, met opzet
+
+Vijftig cent of 15% van het bedrag, wat het grootst is. De kostensensor
+werkt maar ongeveer eens per uur bij en rekent sommige posten anders toe,
+dus een deel van het verschil is normaal. Een **schaalgevoelige** drempel
+is hier nodig: bij honderd euro is vijftig cent verwaarloosbaar, bij twee
+euro niet. Een vaste drempel zou het aan één van beide kanten fout doen.
+
+### Getest
+
+Nieuw `tests/test_zonneplan_cost_comparison.py`, 14 tests: het
+voorvoegsel komt uit de prijssensor, beide taalvarianten worden gevonden,
+een uitgeschakelde sensor wordt overgeslagen, een andere leverancier
+vindt niets, kloppende kosten worden bevestigd, een groot verschil
+gesignaleerd, de drempel schaalt mee met het bedrag, zonder sensoren
+volgt uitleg in plaats van een fout, sensoren zonder waarde geven
+"onvoldoende data", teruglevering wordt afgetrokken, het staat in het
+betrouwbaarheidsoverzicht en op de financiële sensor, en er is géén
+configuratieveld bijgekomen.
+
+**Volledige testsuite**: 1092 tests, allemaal groen.
+
 ## Betrouwbaarheid per weerbron (v1.5.2)
 
 **Gerapporteerd**: *"Weerbronnen lopen 70 procentpunt uiteen over de

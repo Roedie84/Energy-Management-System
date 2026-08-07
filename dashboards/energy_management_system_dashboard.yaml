@@ -398,7 +398,7 @@ views:
         # "richtingen van de stromen nog niet geupdate?". De
         # versiesleutel dwingt een verse ophaal af. Een test bewaakt
         # dat deze waarde gelijk blijft aan de versie in manifest.json.
-        image: /local/energy_management_system_overview.svg?v=1.5.2
+        image: /local/energy_management_system_overview.svg?v=1.6.2
         elements:
           - type: state-label
             entity: sensor.woonkamer_energy_management_system_system_status
@@ -1072,6 +1072,19 @@ views:
         hold_action:
           action: more-info
 
+      - type: custom:mushroom-template-card
+        primary: Kostenberekening wijkt af van de afrekening
+        secondary: >-
+          {% set e = 'switch.woonkamer_energy_management_system_melding_cost_mismatch' %}{% set last = state_attr(e, 'laatst_verstuurd') %}{{ 'AAN' if is_state(e, 'on') else 'uit' }} · demping 720 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom('%-d %b %H:%M') }}{% endif %}
+        icon: mdi:bell-outline
+        icon_color: >-
+          {{ 'green' if is_state('switch.woonkamer_energy_management_system_melding_cost_mismatch', 'on') else 'grey' }}
+        entity: switch.woonkamer_energy_management_system_melding_cost_mismatch
+        tap_action:
+          action: toggle
+        hold_action:
+          action: more-info
+
       - type: custom:mushroom-title-card
         title: Laatst verstuurd
 
@@ -1376,6 +1389,39 @@ views:
           eerste maandwisseling.
 
           {%- endif %}
+
+      - type: markdown
+        title: Werkelijke afrekening (Zonneplan)
+        content: |
+          {% set e = 'sensor.woonkamer_energy_management_system_tegenfeitelijke_besparing' %}{% set z = state_attr(e, 'zonneplan_vergelijking') %}{% if z is none or z.get('status') == 'niet_geconfigureerd' %}Geen Zonneplan-kostensensoren gevonden. Veel daarvan staan standaard uit in Home Assistant — schakel ze in bij Instellingen → Apparaten & services → Zonneplan → entiteiten, dan verschijnt hier de vergelijking met je werkelijke afrekening.{% else %}| Post | Bedrag |
+          |---|---|
+          | 🔌 Afname vandaag (Zonneplan) | {{ z.get('zonneplan_afname_vandaag_eur') }} € |
+          | ☀️ Teruglevering vandaag (Zonneplan) | {{ z.get('zonneplan_teruglevering_vandaag_eur') }} € |
+          | 💶 Netto volgens Zonneplan | {{ z.get('zonneplan_netto_eur') }} € |
+          | 🧮 Eigen berekening | {{ z.get('eigen_berekening_eur') }} € |
+          | 📏 Verschil | {{ z.get('verschil_eur') }} € |
+
+
+          {{ z.get('reden') }}
+
+
+          **Wat dit wél toetst.** Beide getallen meten dezelfde P1-meter:
+          onze berekening uit netvermogen × prijs, en Zonneplans factuur
+          over datzelfde net. Lopen ze uiteen, dan zit de fout in de
+          prijsafhandeling — een verkeerd prijsattribuut, vergeten
+          netbeheerkosten, of een terugleveraanname die niet meer geldt.
+
+
+          **Wat dit níét toetst.** Zonneplan ziet alleen de meter; wat
+          erachter gebeurt — accu naar woning, PV naar woning, PV naar accu
+          — is voor hen onzichtbaar. Ze weten niet eens dat er een accu
+          staat. De accu-boekhouding en vooral de **tegenfeitelijke
+          besparing** hierboven ("wat had je betaald zonder accu") kunnen
+          hiermee dus niet worden bevestigd. Dat blijft een eigen model.
+
+
+          De drempels zijn ruim, want de kostensensor van Zonneplan werkt
+          maar ongeveer eens per uur bij.{% endif %}
 
   - title: Zelflerend
     path: zelflerend

@@ -321,6 +321,9 @@ async def async_get_config_entry_diagnostics(
             "weather_ensemble_spread_percent": (
                 coordinator.weather_ensemble_spread_percent
             ),
+            "zonneplan_cost_comparison": (
+                coordinator.get_zonneplan_cost_comparison()
+            ),
             "weather_source_reliability": (
                 coordinator.get_weather_source_reliability()
             ),

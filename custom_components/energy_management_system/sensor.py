@@ -2251,6 +2251,10 @@ class CounterfactualSavingsSensor(SensorEntity, RestoreEntity):
     def extra_state_attributes(self) -> dict:
         c = self._coordinator
         return {
+            # v1.6.0: de werkelijke afrekening van Zonneplan naast onze
+            # eigen berekening. De entiteiten worden automatisch
+            # gevonden - geen configuratie nodig.
+            "zonneplan_vergelijking": c.get_zonneplan_cost_comparison(),
             "werkelijke_kosten_vandaag_eur": round(c.actual_cost_today_eur, 2),
             "tegenfeitelijke_kosten_vandaag_eur": round(
                 c.counterfactual_cost_today_eur, 2

@@ -269,11 +269,15 @@ from .const import (
     SENSOR_CADENCE_SLOW_PERCENT,
     MEASUREMENT_QUALITY_MIN_SAMPLES,
     NOTIFICATION_HISTORY_LENGTH,
+    NOTIFICATION_RECOVERY_KINDS,
     CONF_SUN_ELEVATION_SENSOR,
     CONF_SUN_PHASE_SENSOR,
     CONF_PV_ACTUAL_AZIMUTH_DEGREES,
     CONF_PV_ACTUAL_TILT_DEGREES,
     LOW_SOLAR_BORDERLINE_MARGIN,
+    ZONNEPLAN_COST_CANDIDATES,
+    ZONNEPLAN_COST_MISMATCH_EUR,
+    ZONNEPLAN_COST_MISMATCH_FRACTION,
     PV_GEOMETRY_AZIMUTH_BUCKET_DEGREES,
     SOLAR_BIAS_DRIFT_ATTENTION_PERCENT,
     SOLAR_BIAS_DRIFT_MIN_DAYS,
@@ -518,6 +522,9 @@ class EnergyManagementSystemCoordinator:
         # v1.5.1: welke adviesmodules al "klaar" waren, om de OVERGANG
         # naar klaar te kunnen melden in plaats van elke tick opnieuw.
         self.previously_ready_modules: list[str] = []
+        # v1.6.2: welke toestandsmeldingen op dit moment "actief" zijn,
+        # zodat er een herstelmelding kan volgen zodra ze overgaan.
+        self.notification_active_conditions: list[str] = []
 
         # Accu-modulegezondheid (v0.63.123). Per module een dict met
         # geleerde dag-historie en CUSUM-status per grootheid.
@@ -2262,7 +2269,14 @@ class EnergyManagementSystemCoordinator:
         cheap_block_start = self.last_cheap_block_start
         discharge_start = self.last_discharge_start
 
+        # v1.6.2: welke TOESTAND-meldingen deze ronde afgingen. Wat er
+        # vorige ronde in stond en nu niet meer, is opgelost - en dat
+        # verdient een herstelmelding.
+        actief_nu: list[str] = []
+
         def stuur(kind: str, titel: str, bericht: str) -> None:
+            if kind in NOTIFICATION_RECOVERY_KINDS:
+                actief_nu.append(kind)
             self._dispatch_notification(
                 notify_service=notify,
                 title=titel,
@@ -2323,6 +2337,15 @@ class EnergyManagementSystemCoordinator:
                 "⚠️ Energy Management System liep vast",
                 f"Laatste fout: {self.last_error}. De accu blijft op de "
                 "laatst ingestelde modus staan tot dit is opgelost.",
+            )
+
+        # --- geld: klopt onze berekening met de afrekening? ---
+        kosten = self.get_zonneplan_cost_comparison()
+        if kosten["status"] == RELIABILITY_UNRELIABLE:
+            stuur(
+                "cost_mismatch",
+                "💶 Kostenberekening wijkt af van Zonneplan",
+                kosten["reden"],
             )
 
         # --- zon: klopt de voorspelling nog? ---
@@ -2492,6 +2515,69 @@ class EnergyManagementSystemCoordinator:
                 "aanhoudend af van de andere modules. Zie het tabblad "
                 "Accumodules voor de details.",
             )
+
+        self._dispatch_recovery_notifications(actief_nu)
+
+    def _dispatch_recovery_notifications(self, actief_nu: list[str]) -> None:
+        """Meldt wat er is opgelost (v1.6.2).
+
+        Gerapporteerd: "Er is nu een melding verstuurd dat een sensor
+        niet uitleesbaar is, maar er komt geen melding wanneer de sensor
+        weer uitleesbaar is."
+
+        Zonder herstelmelding blijf je in het ongewisse: is het
+        opgelost, of is de melding gewoon gedempt? Dat is precies het
+        soort onzekerheid waardoor mensen meldingen gaan negeren.
+
+        Twee keuzes die hier belangrijk zijn. De herstelmelding gebruikt
+        DEZELFDE soort als de probleemmelding, dus wie "sensor valt weg"
+        heeft uitgezet krijgt ook het herstel niet - dat is wat je
+        verwacht als je een melding uitzet. En het dempingsvenster wordt
+        bewust OMZEILD: een probleem dat tien minuten na de melding is
+        opgelost zou anders stilzwijgend verdwijnen, en juist dan wil je
+        het horen.
+        """
+        opgelost = [
+            kind
+            for kind in self.notification_active_conditions
+            if kind not in actief_nu
+        ]
+        for kind in opgelost:
+            titel, bericht = NOTIFICATION_RECOVERY_KINDS[kind]
+            # Schakelaar respecteren, dempingsvenster niet: daarom hier
+            # zelf toetsen in plaats van via `_dispatch_notification`.
+            definitie = self.notification_definition(kind)
+            if not self.notifications_master_enabled:
+                continue
+            if not self.notification_enabled.get(
+                kind, definitie[3] if definitie else False
+            ):
+                continue
+            self._dispatch_notification(
+                notify_service=self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE),
+                title=titel,
+                message=bericht,
+                notification_id=f"ems_{kind}_hersteld",
+                kind=None,
+            )
+            self.notification_history.append(
+                {
+                    "moment": dt_util.now().isoformat(),
+                    "soort": f"{kind}_hersteld",
+                    "titel": titel,
+                }
+            )
+            # Het dempingsvenster van de PROBLEEMmelding wordt gewist,
+            # zodat een terugkerend probleem meteen weer gemeld wordt in
+            # plaats van pas na het venster.
+            self.notification_last_sent.pop(kind, None)
+
+        if opgelost or actief_nu != self.notification_active_conditions:
+            self.notification_active_conditions = sorted(actief_nu)
+            self.notification_history = self.notification_history[
+                -NOTIFICATION_HISTORY_LENGTH:
+            ]
+            self.schedule_persisted_state_save()
 
     @staticmethod
     def normalise_reliability(status: str | None) -> str:
@@ -2754,6 +2840,150 @@ class EnergyManagementSystemCoordinator:
         index = int((azimut % 360 + 22.5) // 45) % 8
         return richtingen[index]
 
+    def _zonneplan_prefix(self) -> str | None:
+        """Leidt het entiteit-voorvoegsel af uit de al geconfigureerde
+        prijssensor (v1.6.0).
+
+        Geen extra configuratie nodig: wie de prijssensor heeft
+        ingevuld, heeft de integratie draaien. Uit
+        `sensor.zonneplan_current_quarter_hourly_electricity_tariff`
+        volgt `sensor.zonneplan_`.
+        """
+        prijs_entity = self.config.get(CONF_PRICE_SENSOR)
+        if not prijs_entity or "zonneplan" not in prijs_entity.lower():
+            return None
+        # Alles tot en met "zonneplan" plus het scheidingsteken.
+        index = prijs_entity.lower().index("zonneplan")
+        return prijs_entity[: index + len("zonneplan")] + "_"
+
+    def find_zonneplan_cost_entities(self) -> dict[str, str]:
+        """Zoekt de kostensensoren van Zonneplan zelf op (v1.6.0).
+
+        Gevraagd: geen handmatige configuratie. De entity_id's komen in
+        TWEE talen door elkaar voor - `electricity_delivery_costs_today`
+        naast `elektriciteitsleveringskosten_deze_maand` - afhankelijk
+        van wanneer de entiteit is aangemaakt. Er wordt daarom per
+        waarde een lijst kandidaten geprobeerd.
+
+        Alleen entiteiten die er zijn EN een getal geven tellen mee: veel
+        van deze sensoren staan standaard uit in Home Assistant, en een
+        entiteit die bestaat maar `unavailable` is, is net zo onbruikbaar
+        als een die niet bestaat.
+        """
+        voorvoegsel = self._zonneplan_prefix()
+        if not voorvoegsel:
+            return {}
+
+        gevonden: dict[str, str] = {}
+        for doel, achtervoegsels in ZONNEPLAN_COST_CANDIDATES.items():
+            for achtervoegsel in achtervoegsels:
+                entity_id = f"{voorvoegsel}{achtervoegsel}"
+                if self._read_sensor_float(entity_id) is not None:
+                    gevonden[doel] = entity_id
+                    break
+        return gevonden
+
+    def get_zonneplan_cost_comparison(self) -> dict:
+        """Vergelijkt onze eigen kostenberekening met wat Zonneplan
+        werkelijk afrekent (v1.6.0).
+
+        WAT DIT WEL EN NIET TOETST (v1.6.1, aangescherpt nadat werd
+        opgemerkt dat Zonneplan niets over de accu kan zeggen):
+
+        Zonneplan ziet uitsluitend de P1-meter. Wat er ACHTER die meter
+        gebeurt - accu naar woning, PV naar woning, PV naar accu - is
+        voor hen onzichtbaar; ze weten niet eens dat er een accu staat.
+
+        Juist daarom is deze vergelijking geldig: `actual_cost_today_eur`
+        wordt berekend uit `p1_power_w`, precies dezelfde meter die
+        Zonneplan afrekent. Twee metingen van hetzelfde punt, dus als ze
+        uiteenlopen zit de fout in de PRIJSAFHANDELING - een verkeerd
+        prijsattribuut, vergeten netbeheerkosten, een terugleveraanname
+        die niet meer geldt.
+
+        Wat hier NIET mee getoetst wordt is de accu-boekhouding zelf: de
+        kostprijs per kWh in de accu, de splitsing tussen zon en net, en
+        vooral de TEGENFEITELIJKE besparing ("wat had je betaald zonder
+        accu"). Dat laatste bestaat in Zonneplans wereld niet en blijft
+        dus een onbevestigd model. Deze check dekt dat niet af, en het
+        zou misleidend zijn om te suggereren van wel.
+
+        Bewust ruime drempels: de kostensensor van Zonneplan werkt maar
+        ongeveer eens per uur bij en rekent sommige posten anders toe,
+        dus een deel van het verschil is normaal en geen fout.
+        """
+        entiteiten = self.find_zonneplan_cost_entities()
+        if not entiteiten:
+            return {
+                "status": RELIABILITY_NOT_CONFIGURED,
+                "reden": (
+                    "Geen Zonneplan-kostensensoren gevonden. Veel daarvan "
+                    "staan standaard uit in Home Assistant - inschakelen "
+                    "maakt deze vergelijking mogelijk."
+                ),
+                "gevonden_entiteiten": {},
+            }
+
+        afname = self._read_sensor_float(entiteiten.get("afname_vandaag", ""))
+        teruglevering = self._read_sensor_float(
+            entiteiten.get("teruglevering_vandaag", "")
+        )
+        resultaat: dict = {
+            "gevonden_entiteiten": entiteiten,
+            "zonneplan_afname_vandaag_eur": afname,
+            "zonneplan_teruglevering_vandaag_eur": teruglevering,
+            "eigen_berekening_eur": round(self.actual_cost_today_eur, 2),
+            "wat_dit_toetst": (
+                "Alleen de prijsafhandeling over de P1-meter. Zonneplan "
+                "ziet niet wat er achter de meter gebeurt (accu naar "
+                "woning, PV naar woning, PV naar accu) en kan de "
+                "accu-boekhouding of de tegenfeitelijke besparing dus niet "
+                "bevestigen."
+            ),
+        }
+
+        if afname is None:
+            resultaat["status"] = RELIABILITY_INSUFFICIENT
+            resultaat["reden"] = (
+                "Wel Zonneplan-sensoren gevonden, maar nog geen "
+                "afnamekosten van vandaag."
+            )
+            return resultaat
+
+        # Zonneplan splitst afname en teruglevering; onze eigen
+        # berekening is het netto bedrag.
+        werkelijk = afname - (teruglevering or 0.0)
+        verschil = self.actual_cost_today_eur - werkelijk
+        resultaat["zonneplan_netto_eur"] = round(werkelijk, 2)
+        resultaat["verschil_eur"] = round(verschil, 2)
+
+        drempel = max(
+            ZONNEPLAN_COST_MISMATCH_EUR,
+            abs(werkelijk) * ZONNEPLAN_COST_MISMATCH_FRACTION,
+        )
+        if abs(verschil) <= drempel:
+            resultaat["status"] = RELIABILITY_RELIABLE
+            resultaat["reden"] = (
+                f"Netkosten: eigen berekening "
+                f"{self.actual_cost_today_eur:.2f} € tegen "
+                f"{werkelijk:.2f} € bij Zonneplan - dat komt overeen. "
+                "Beide meten dezelfde P1-meter, dus dit toetst de "
+                "prijsafhandeling, niet de accu-boekhouding of de "
+                "tegenfeitelijke besparing."
+            )
+        else:
+            richting = "hoger" if verschil > 0 else "lager"
+            resultaat["status"] = RELIABILITY_UNRELIABLE
+            resultaat["reden"] = (
+                f"Netkosten: eigen berekening "
+                f"{self.actual_cost_today_eur:.2f} € is {abs(verschil):.2f} € "
+                f"{richting} dan de {werkelijk:.2f} € die Zonneplan "
+                "afrekent. Beide meten dezelfde P1-meter, dus het verschil "
+                "zit in de prijsafhandeling - controleer het "
+                "prijsattribuut en de terugleverinstellingen."
+            )
+        return resultaat
+
     def get_solar_forecast_health(self) -> dict:
         """Klopt de zonvoorspelling nog, of is er iets veranderd aan de
         installatie? (v1.5.0)
@@ -2958,6 +3188,14 @@ class EnergyManagementSystemCoordinator:
                 {"niveau": gegevens["status"], "reden": gegevens["reden"]},
                 gegevens.get("overeenstemming_percent"),
             )
+
+        kosten = self.get_zonneplan_cost_comparison()
+        voeg_toe(
+            "Metingen",
+            "Kosten t.o.v. Zonneplan-afrekening",
+            {"niveau": kosten["status"], "reden": kosten["reden"]},
+            kosten.get("verschil_eur"),
+        )
 
         gezondheid = self.get_solar_forecast_health()
         voeg_toe(

@@ -1110,6 +1110,10 @@ PERSISTED_PLAIN_FIELDS = (
     # wordt gemeld. Zonder bewaren zou elke herstart die overgang
     # opnieuw melden.
     "previously_ready_modules",
+    # v1.6.2: welke toestandsmeldingen actief zijn. Zonder bewaren zou
+    # een herstart als "opgelost" gelden en meteen een herstelmelding
+    # sturen voor een probleem dat nog gewoon speelt.
+    "notification_active_conditions",
     # Cumulatieve financiële en KPI-tellers
     "actual_cost_today_eur",
     "actual_cost_current_month_eur",
@@ -1490,6 +1494,14 @@ NOTIFICATION_TYPES: tuple[tuple[str, str, str, bool, int], ...] = (
         1440,
     ),
     (
+        "cost_mismatch",
+        "Kostenberekening wijkt af van de afrekening",
+        "Wanneer de eigen kostenberekening structureel afwijkt van wat "
+        "Zonneplan werkelijk in rekening brengt.",
+        False,
+        720,
+    ),
+    (
         "daily_summary",
         "Dagoverzicht",
         "Een samenvatting van de dag: besparing, opbrengst, verbruik.",
@@ -1739,3 +1751,112 @@ SOLAR_BIAS_DRIFT_ATTENTION_PERCENT = 15.0
 # en dat was nergens te zien, waardoor niet te beoordelen viel of het
 # uitblijven van extra-dip-laden terecht was.
 LOW_SOLAR_BORDERLINE_MARGIN = 0.10
+
+# --- Zonneplan-kostensensoren automatisch vinden (v1.6.0) ------------
+# Gevraagd: "Ik wil de entiteiten niet zelf invullen, deze moeten
+# automatisch uit de zonneplan integratie gehaald worden zonder manuele
+# config."
+#
+# Dat kan, want de prijssensor is al geconfigureerd en die verraadt het
+# voorvoegsel. De rest wordt daaruit afgeleid.
+#
+# Twee valkuilen die de opzet bepalen:
+#
+# 1. De integratie levert entity_id's in TWEE talen door elkaar -
+#    `sensor.zonneplan_electricity_delivery_costs_today` naast
+#    `sensor.zonneplan_elektriciteitsleveringskosten_deze_maand`. Welke
+#    je krijgt hangt af van wanneer de entiteit is aangemaakt en welke
+#    taal er toen actief was. Er moeten dus meerdere kandidaten per
+#    waarde geprobeerd worden.
+# 2. Veel van deze sensoren staan STANDAARD UIT in Home Assistant. Een
+#    ontbrekende sensor is dus normaal en mag nooit een foutmelding
+#    opleveren - hooguit een regel die zegt dat er meer mogelijk is als
+#    je hem inschakelt.
+#
+# Per doel een lijst kandidaat-achtervoegsels, in volgorde van voorkeur.
+ZONNEPLAN_COST_CANDIDATES = {
+    "afname_vandaag": (
+        "electricity_delivery_costs_today",
+        "afname_vandaag",
+        "elektriciteitsleveringskosten_vandaag",
+    ),
+    "teruglevering_vandaag": (
+        "electricity_production_costs_today",
+        "teruglevering_vandaag",
+        "elektriciteitsproductiekosten_vandaag",
+    ),
+    "afname_deze_maand": (
+        "elektriciteitsleveringskosten_deze_maand",
+        "electricity_delivery_costs_this_month",
+        "afname_deze_maand",
+    ),
+    "teruglevering_deze_maand": (
+        "elektriciteitsproductiekosten_deze_maand",
+        "electricity_production_costs_this_month",
+        "teruglevering_deze_maand",
+    ),
+    "gemiddelde_afnameprijs_vandaag": (
+        "afname_gemiddelde_prijs_per_kwh_vandaag",
+        "electricity_delivery_average_price_today",
+    ),
+    "gemiddelde_teruglverprijs_vandaag": (
+        "teruglevering_gemiddelde_prijs_per_kwh_vandaag",
+        "electricity_production_average_price_today",
+    ),
+}
+
+# Vanaf welk verschil tussen onze eigen berekening en de werkelijke
+# afrekening het het melden waard is. Ruim: de kostensensor werkt maar
+# eens per uur bij en telt netbeheerkosten anders mee, dus een deel van
+# het verschil is normaal.
+ZONNEPLAN_COST_MISMATCH_EUR = 0.50
+ZONNEPLAN_COST_MISMATCH_FRACTION = 0.15
+
+# --- Herstelmeldingen (v1.6.2) ---------------------------------------
+# Gerapporteerd: "Er is nu een melding verstuurd dat een sensor niet
+# uitleesbaar is, maar er komt geen melding wanneer de sensor weer
+# uitleesbaar is."
+#
+# Terecht, en het geldt breder dan die ene. Sommige meldingen beschrijven
+# een TOESTAND die aanhoudt - een sensor die wegvalt, kosten die
+# uiteenlopen, een module die uit de pas loopt. Zonder herstelmelding
+# blijf je in het ongewisse: is het opgelost, of is de melding gewoon
+# gedempt? Dat is precies het soort onzekerheid waardoor mensen
+# meldingen gaan negeren.
+#
+# Meldingen die een GEBEURTENIS beschrijven (apparaat klaar, goedkoop
+# blok begint, dagoverzicht) horen hier bewust niet bij: daar valt niets
+# aan te herstellen.
+NOTIFICATION_RECOVERY_KINDS = {
+    "sensor_unavailable": (
+        "✅ Sensor is weer uitleesbaar",
+        "Alle geconfigureerde sensoren geven weer een waarde.",
+    ),
+    "integration_error": (
+        "✅ Integratie draait weer",
+        "De fout is verholpen; de aansturing werkt weer normaal.",
+    ),
+    "cost_mismatch": (
+        "✅ Kostenberekening klopt weer",
+        "De eigen berekening en de Zonneplan-afrekening liggen weer "
+        "dicht bij elkaar.",
+    ),
+    "solar_underperforming": (
+        "✅ Zonopbrengst is weer op niveau",
+        "De opbrengst ligt weer in lijn met de voorspelling.",
+    ),
+    "pv_orientation_mismatch": (
+        "✅ PV-oriëntatie komt weer overeen",
+        "De afgeleide piekrichting ligt weer binnen de tolerantie van de "
+        "opgegeven waarde.",
+    ),
+    "battery_module_drift": (
+        "✅ Accumodules lopen weer gelijk",
+        "Geen enkele module wijkt nog structureel af van de andere.",
+    ),
+    "battery_wont_last_night": (
+        "✅ Accu haalt de nacht weer",
+        "Er is weer genoeg opgeslagen om tot het goedkope blok te "
+        "overbruggen.",
+    ),
+}
