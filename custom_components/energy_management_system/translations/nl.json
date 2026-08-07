@@ -57,7 +57,11 @@
           "battery_module_cell_voltage_min_sensor_entities": "Laagste celspanning per accumodule (optioneel, zelfde volgorde)",
           "battery_module_temperature_sensor_entities": "Hoogste celtemperatuur per accumodule (optioneel, zelfde volgorde)",
           "battery_module_soc_sensor_entities": "SoC per accumodule (optioneel, zelfde volgorde)",
-          "battery_module_power_sensor_entities": "Vermogen per accumodule (optioneel, zelfde volgorde)"
+          "battery_module_power_sensor_entities": "Vermogen per accumodule (optioneel, zelfde volgorde)",
+          "sun_elevation_sensor_entity": "Zonshoogte-sensor (optioneel, valt terug op sun.sun)",
+          "sun_phase_sensor_entity": "Zonfase-sensor (optioneel, dag/nacht/schemering)",
+          "pv_actual_azimuth_degrees": "Werkelijke PV-oriëntatie in graden (optioneel; 180 = zuid, 270 = west)",
+          "pv_actual_tilt_degrees": "Werkelijke hellingshoek in graden (optioneel; 0 = plat)"
         }
       }
     },
@@ -127,7 +131,11 @@
           "battery_module_cell_voltage_min_sensor_entities": "Laagste celspanning per accumodule (optioneel, zelfde volgorde)",
           "battery_module_temperature_sensor_entities": "Hoogste celtemperatuur per accumodule (optioneel, zelfde volgorde)",
           "battery_module_soc_sensor_entities": "SoC per accumodule (optioneel, zelfde volgorde)",
-          "battery_module_power_sensor_entities": "Vermogen per accumodule (optioneel, zelfde volgorde)"
+          "battery_module_power_sensor_entities": "Vermogen per accumodule (optioneel, zelfde volgorde)",
+          "sun_elevation_sensor_entity": "Zonshoogte-sensor (optioneel, valt terug op sun.sun)",
+          "sun_phase_sensor_entity": "Zonfase-sensor (optioneel, dag/nacht/schemering)",
+          "pv_actual_azimuth_degrees": "Werkelijke PV-oriëntatie in graden (optioneel; 180 = zuid, 270 = west)",
+          "pv_actual_tilt_degrees": "Werkelijke hellingshoek in graden (optioneel; 0 = plat)"
         }
       }
     },

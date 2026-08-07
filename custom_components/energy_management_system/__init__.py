@@ -28,6 +28,9 @@ BACKGROUND_TARGET_PATH = "www/energy_management_system_overview.svg"
 SERVICE_CONFIRM_NILM_DEVICE = "confirm_nilm_device"
 SERVICE_REJECT_NILM_DEVICE = "reject_nilm_device"
 SERVICE_UNCONFIRM_NILM_DEVICE = "unconfirm_nilm_device"
+# v1.1.7: drift accepteren als nieuw normaal, zonder de leergeschiedenis
+# weg te gooien.
+SERVICE_ACCEPT_NILM_DRIFT = "accept_nilm_device_drift"
 # v0.63.118: duplicaatparen beoordelen, spiegelbeeld van confirm/reject
 # voor losse apparaten.
 SERVICE_DISMISS_NILM_DUPLICATE = "dismiss_nilm_duplicate_pair"
@@ -234,8 +237,26 @@ def _async_register_nilm_services(hass: HomeAssistant) -> None:
                 entity_2,
             )
 
+    async def _handle_accept_drift(call: ServiceCall) -> None:
+        entity_id = call.data["entity_id"]
+        geaccepteerd = False
+        for coordinator in _iter_coordinators():
+            if coordinator.accept_nilm_device_drift(entity_id):
+                geaccepteerd = True
+        if not geaccepteerd:
+            _LOGGER.warning(
+                "accept_nilm_device_drift: %s is geen bevestigd NILM-apparaat",
+                entity_id,
+            )
+
     hass.services.async_register(
         DOMAIN, SERVICE_CONFIRM_NILM_DEVICE, _handle_confirm, schema=NILM_SERVICE_SCHEMA
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_ACCEPT_NILM_DRIFT,
+        _handle_accept_drift,
+        schema=NILM_SERVICE_SCHEMA,
     )
     hass.services.async_register(
         DOMAIN,

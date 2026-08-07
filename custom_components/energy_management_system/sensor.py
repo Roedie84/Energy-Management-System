@@ -15,6 +15,8 @@ from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    RELIABILITY_LABELS,
+    RELIABILITY_RELIABLE,
     DEFAULT_NAME,
     DOMAIN,
     LEARNING_HISTORY_DAYS,
@@ -67,6 +69,8 @@ async def async_setup_entry(
         BatteryCoolingSensor(coordinator, entry.entry_id),
         BatteryModuleHealthSensor(coordinator, entry.entry_id),
         DigitalTwinAccuracySensor(coordinator, entry.entry_id),
+        ReliabilityOverviewSensor(coordinator, entry.entry_id),
+        PvInstallationProfileSensor(coordinator, entry.entry_id),
         EnergyBalanceHealthSensor(coordinator, entry.entry_id),
         SluipverbruikSensor(coordinator, entry.entry_id),
         WeatherEnsembleSensor(coordinator, entry.entry_id),
@@ -424,6 +428,8 @@ class SystemStatusSensor(_CoordinatorDiagnosticSensor):
             "informatief": self._coordinator.get_diagnostic_summary()[
                 "informatief"
             ],
+            # v1.2.0: voor het Meldingen-tabblad.
+            "meldingen_historie": self._coordinator.notification_history[-15:],
         }
 
 
@@ -1162,7 +1168,20 @@ class WeatherEnsembleSensor(SensorEntity, RestoreEntity):
     def extra_state_attributes(self) -> dict:
         return {
             "label": self._coordinator.weather_ensemble_label,
+            # v1.3.0: het kale label ("helder") zei niets over hoeveel
+            # waarde je eraan moet hechten. Gerapporteerd bij 25,4%
+            # terwijl het buiten dichtbewolkt was: beide bronnen waren
+            # het met elkaar eens en allebei oneens met de werkelijkheid.
+            "label_met_betrouwbaarheid": (
+                self._label_met_betrouwbaarheid()
+            ),
             "sources_used": self._coordinator.weather_ensemble_sources_used,
+            # v1.1.8: het gemiddelde alleen verbergt een meningsverschil
+            # - 0% en 51% geeft hetzelfde cijfer als twee keer 25%.
+            "metingen_per_bron": self._coordinator.weather_ensemble_readings,
+            "spreiding_percent": (
+                self._coordinator.weather_ensemble_spread_percent
+            ),
             "disagreement": self._coordinator.weather_ensemble_disagreement,
             # v1.0.2: hoe vaak deze bronnen het eens blijken met wat de
             # panelen werkelijk doen.
@@ -1183,6 +1202,16 @@ class WeatherEnsembleSensor(SensorEntity, RestoreEntity):
                 "verwachting."
             ),
         }
+
+    def _label_met_betrouwbaarheid(self) -> str | None:
+        label = self._coordinator.weather_ensemble_label
+        if label is None:
+            return None
+        status = self._coordinator.get_weather_ensemble_agreement_status()
+        percentage = status.get("overeenstemming_percent")
+        if percentage is None:
+            return f"{label} (betrouwbaarheid nog onbekend)"
+        return f"{label} (bronnen kloppen in {percentage:.0f}% van de gevallen)"
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
@@ -1911,6 +1940,11 @@ class ClimateForecastSensor(SensorEntity, RestoreEntity):
             # achtertuinsensor in v0.63.95 de voorkeursbron werd.
             "buitentemperatuur_bron": (
                 self._coordinator.climate_live_outdoor_source
+            ),
+            # v1.3.1: waar de achtertuinsensor blijkt bloot te staan aan
+            # direct zonlicht, geleerd uit eerdere flitsen.
+            "achtertuin_zon_blootstelling_azimut": (
+                self._coordinator.backyard_sun_exposure_azimuths
             ),
             "rolluikstand": self._coordinator.climate_shutter_state,
             "airco_status": self._coordinator.climate_airco_state,
@@ -3492,3 +3526,124 @@ class DigitalTwinAccuracySensor(SensorEntity, RestoreEntity):
         openstaand = last_state.attributes.get("openstaand")
         if isinstance(openstaand, list) and openstaand:
             self._coordinator._digital_twin_pending = list(openstaand)
+
+
+class ReliabilityOverviewSensor(SensorEntity):
+    """Alle betrouwbaarheidsoordelen op één plek, in één taal (v1.3.0).
+
+    Gevraagd: "hoe betrouwbaar is de gegenereerde data" - voor alle
+    gegenereerde data, niet alleen de bewolkingsgraad.
+
+    Er bestonden vijf woordenlijsten naast elkaar voor in wezen dezelfde
+    vraag. Deze sensor zet ze allemaal om naar één schaal en vult de
+    geleerde waarden aan die tot v1.2.0 helemaal geen oordeel hadden -
+    zoals het accu-rendement, dat wél meerekent in de
+    extra-dip-laadbeslissing maar nergens liet zien of het op zeven of op
+    zeventig metingen rustte.
+
+    De toestand is het aantal regels dat "betrouwbaar" is, zodat in één
+    getal te zien is hoe ver de integratie is ingeleerd.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Betrouwbaarheid gegenereerde data"
+    _attr_icon = "mdi:shield-check-outline"
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_reliability_overview"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def native_value(self) -> int:
+        return sum(
+            1
+            for rij in self._coordinator.get_reliability_overview()
+            if rij["niveau"] == RELIABILITY_RELIABLE
+        )
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        rijen = self._coordinator.get_reliability_overview()
+        per_niveau: dict[str, int] = {}
+        for rij in rijen:
+            per_niveau[rij["niveau"]] = per_niveau.get(rij["niveau"], 0) + 1
+        return {
+            "regels": rijen,
+            "totaal": len(rijen),
+            "per_niveau": per_niveau,
+            "schaal": {
+                niveau: uitleg for niveau, (_, uitleg) in RELIABILITY_LABELS.items()
+            },
+            "note": (
+                "Deze schaal meet DATA-RIJPHEID, behalve waar een echte "
+                "nauwkeurigheidsmeting bestaat (Digital Twin, "
+                "weerensemble, sensor-gezondheid) - daar telt die meting. "
+                "Veel metingen betekent dus niet automatisch dat een "
+                "waarde klopt, alleen dat er genoeg is verzameld om er "
+                "iets van te vinden. 'Niet toetsbaar' betekent dat er "
+                "principieel niets is om tegen af te zetten; wachten "
+                "maakt dat niet beter."
+            ),
+        }
+
+
+class PvInstallationProfileSensor(SensorEntity):
+    """Wat de zon verraadt over hoe de panelen liggen (v1.4.0).
+
+    Gevraagd: "kun je nu ook zelf een berekening maken voor de
+    verwachtte azimuth en andere relevante informatie hoe mijn PV
+    installatie geinstalleerd ligt".
+
+    Het vermogen piekt wanneer de zon recht voor de panelen staat, dus
+    de zon-azimut op dat moment is een directe schatting van de
+    paneelrichting. En de verhouding tussen werkelijke en verwachte
+    opbrengst per windrichting laat zien waar er beschaduwing zit -
+    een boom, een schoorsteen, een dakkapel.
+
+    Bewust GEEN hellingshoek: die vraagt maanden aan seizoensvariatie of
+    aannames over instraling die deze integratie niet kan controleren.
+    Een getal geven dat er zomaar vijftien graden naast zit is erger dan
+    geen getal.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "PV-installatieprofiel"
+    _attr_icon = "mdi:solar-panel-large"
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_pv_installation_profile"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def native_value(self) -> str:
+        profiel = self._coordinator.get_pv_installation_profile()
+        azimut = profiel.get("geschatte_azimut")
+        if azimut is None:
+            return "nog niet bepaald"
+        return f"{azimut:.0f}° ({profiel.get('windrichting')})"
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        profiel = self._coordinator.get_pv_installation_profile()
+        return {
+            **profiel,
+            "note": (
+                "De oriëntatie wordt afgeleid uit waar de zon stond op het "
+                "moment van de dagpiek, gemiddeld over dagen die helder "
+                "genoeg waren - op een dag met wisselende bewolking ligt "
+                "de piek waar het toevallig opklaarde. De "
+                "beschaduwingskaart vergelijkt per windrichting de "
+                "werkelijke opbrengst met de Solcast-verwachting; een "
+                "richting die structureel achterblijft verraadt een "
+                "obstakel. Hellingshoek wordt bewust niet geschat - "
+                "daarvoor is deze data niet toereikend."
+            ),
+        }

@@ -35,6 +35,10 @@ from .const import (
     CONF_AIRCO_CLIMATE_ENTITY,
     CONF_SLAAPKAMER_CLIMATE_ENTITY,
     CONF_BATTERY_COOLING_FAN_SWITCH,
+    CONF_PV_ACTUAL_AZIMUTH_DEGREES,
+    CONF_PV_ACTUAL_TILT_DEGREES,
+    CONF_SUN_ELEVATION_SENSOR,
+    CONF_SUN_PHASE_SENSOR,
     CONF_BATTERY_MODULE_CELL_VOLTAGE_MAX_SENSORS,
     CONF_BATTERY_MODULE_CELL_VOLTAGE_MIN_SENSORS,
     CONF_BATTERY_MODULE_POWER_SENSORS,
@@ -325,6 +329,32 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
             ): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="sensor", multiple=True)
             ),
+            vol.Optional(
+                CONF_PV_ACTUAL_AZIMUTH_DEGREES,
+                default=defaults.get(CONF_PV_ACTUAL_AZIMUTH_DEGREES),
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=0, max=360, step=1, mode="box",
+                    unit_of_measurement="°",
+                )
+            ),
+            vol.Optional(
+                CONF_PV_ACTUAL_TILT_DEGREES,
+                default=defaults.get(CONF_PV_ACTUAL_TILT_DEGREES),
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=0, max=90, step=1, mode="box",
+                    unit_of_measurement="°",
+                )
+            ),
+            vol.Optional(
+                CONF_SUN_ELEVATION_SENSOR,
+                default=defaults.get(CONF_SUN_ELEVATION_SENSOR),
+            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            vol.Optional(
+                CONF_SUN_PHASE_SENSOR,
+                default=defaults.get(CONF_SUN_PHASE_SENSOR),
+            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
             vol.Optional(
                 CONF_BATTERY_TEMPERATURE_SENSOR,
                 default=defaults.get(CONF_BATTERY_TEMPERATURE_SENSOR),

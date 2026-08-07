@@ -317,6 +317,20 @@ async def async_get_config_entry_diagnostics(
             ),
             "learning_only": coordinator.learning_only,
             "persisted_state_snapshot": coordinator._collect_persisted_state(),
+            "weather_ensemble_readings": coordinator.weather_ensemble_readings,
+            "weather_ensemble_spread_percent": (
+                coordinator.weather_ensemble_spread_percent
+            ),
+            "pv_installation_profile": coordinator.get_pv_installation_profile(),
+            "pv_peak_azimuth_history": coordinator.pv_peak_azimuth_history,
+            "reliability_overview": coordinator.get_reliability_overview(),
+            "sun_elevation_degrees": coordinator.get_sun_elevation_degrees(),
+            "is_daylight": coordinator.is_daylight_now(),
+            "notifications": coordinator.get_notification_overview(),
+            "notification_history": coordinator.notification_history,
+            "notifications_master_enabled": (
+                coordinator.notifications_master_enabled
+            ),
             "sensor_cadence": coordinator.get_sensor_cadence_report(),
             "kalman_divergence": coordinator.get_kalman_divergence_status(),
             "weather_ensemble_agreement": (

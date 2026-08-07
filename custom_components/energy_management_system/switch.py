@@ -7,7 +7,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 
-from .const import DEFAULT_NAME, DOMAIN
+from .const import NOTIFICATION_TYPES, DEFAULT_NAME, DOMAIN
 
 
 async def async_setup_entry(
@@ -22,6 +22,18 @@ async def async_setup_entry(
             SteelstofzuigerOverrideSwitch(coordinator, entry_id=entry.entry_id),
             FietsladersOverrideSwitch(coordinator, entry_id=entry.entry_id),
             ApplianceReadyNotificationsSwitch(coordinator, entry_id=entry.entry_id),
+            # v1.2.0: hoofdschakelaar plus één schakelaar per soort
+            # melding. De standen worden bewaard in de gedeelde Store
+            # (v1.0.4), niet in de entiteit-state - anders zou een
+            # gebruikerskeuze bij een herstart terugspringen naar de
+            # standaard.
+            NotificationsMasterSwitch(coordinator, entry_id=entry.entry_id),
+            *[
+                NotificationTypeSwitch(
+                    coordinator, entry_id=entry.entry_id, kind=sleutel, label=label
+                )
+                for sleutel, label, _, _, _ in NOTIFICATION_TYPES
+            ],
         ]
     )
 
@@ -251,3 +263,133 @@ class ApplianceReadyNotificationsSwitch(SwitchEntity, RestoreEntity):
     async def async_turn_off(self, **kwargs) -> None:
         await self._coordinator.async_set_appliance_ready_notifications_enabled(False)
         self.async_write_ha_state()
+
+
+class NotificationsMasterSwitch(SwitchEntity):
+    """Hoofdschakelaar voor alle meldingen (v1.2.0).
+
+    Handig om alles in één keer stil te zetten, bijvoorbeeld als je een
+    weekend weg bent, zonder twintig schakelaars los te hoeven omzetten
+    en achteraf te moeten onthouden welke aan stonden.
+
+    Geen RestoreEntity: de stand gaat mee in de gedeelde Store, samen
+    met de standen van de losse meldingen. Twee bewaarplekken naast
+    elkaar zouden na een herstart uit elkaar kunnen lopen.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Meldingen (hoofdschakelaar)"
+    _attr_icon = "mdi:bell-ring-outline"
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_notifications_master"
+        self.entity_id = (
+            "switch.woonkamer_energy_management_system_meldingen_hoofdschakelaar"
+        )
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        self._coordinator.register_listener(self.async_write_ha_state)
+
+    async def async_will_remove_from_hass(self) -> None:
+        self._coordinator.unregister_listener(self.async_write_ha_state)
+        await super().async_will_remove_from_hass()
+
+    @property
+    def is_on(self) -> bool:
+        return self._coordinator.notifications_master_enabled
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        overzicht = self._coordinator.get_notification_overview()
+        return {
+            "aantal_soorten": len(overzicht),
+            "aantal_ingeschakeld": sum(
+                1 for m in overzicht if m["ingeschakeld"]
+            ),
+            "note": (
+                "Staat deze uit, dan gaat er geen enkele melding meer uit, "
+                "ongeacht de losse schakelaars. Die behouden hun eigen "
+                "stand, zodat je na het aanzetten weer precies hebt wat je "
+                "had."
+            ),
+        }
+
+    async def async_turn_on(self, **kwargs) -> None:
+        self._coordinator.notifications_master_enabled = True
+        self._coordinator.schedule_persisted_state_save()
+        self._coordinator._notify_listeners()
+
+    async def async_turn_off(self, **kwargs) -> None:
+        self._coordinator.notifications_master_enabled = False
+        self._coordinator.schedule_persisted_state_save()
+        self._coordinator._notify_listeners()
+
+
+class NotificationTypeSwitch(SwitchEntity):
+    """Aan/uit voor één soort melding (v1.2.0).
+
+    Gevraagd: "zoveel mogelijk relevante meldingen toevoegen, let wel
+    dat ze op het tabblad uit te schakelen zijn."
+
+    Alleen de zes bestaande soorten staan standaard aan; alles wat in
+    v1.2.0 is toegevoegd begint uit. Twintig meldingen die zichzelf
+    aanzetten is een garantie dat er binnen een week niets meer van
+    gelezen wordt - en dan is de hele functie waardeloos.
+    """
+
+    _attr_has_entity_name = True
+    _attr_icon = "mdi:bell-outline"
+
+    def __init__(self, coordinator, entry_id: str, kind: str, label: str) -> None:
+        self._coordinator = coordinator
+        self._kind = kind
+        self._attr_name = f"Melding: {label}"
+        self._attr_unique_id = f"{entry_id}_notification_{kind}"
+        self.entity_id = (
+            f"switch.woonkamer_energy_management_system_melding_{kind}"
+        )
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        self._coordinator.register_listener(self.async_write_ha_state)
+
+    async def async_will_remove_from_hass(self) -> None:
+        self._coordinator.unregister_listener(self.async_write_ha_state)
+        await super().async_will_remove_from_hass()
+
+    @property
+    def is_on(self) -> bool:
+        definitie = self._coordinator.notification_definition(self._kind)
+        standaard = definitie[3] if definitie else False
+        return self._coordinator.notification_enabled.get(self._kind, standaard)
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        definitie = self._coordinator.notification_definition(self._kind) or ()
+        return {
+            "soort": self._kind,
+            "uitleg": definitie[2] if definitie else None,
+            "dempingsvenster_minuten": definitie[4] if definitie else None,
+            "laatst_verstuurd": self._coordinator.notification_last_sent.get(
+                self._kind
+            ),
+            "onderdrukt_sinds_laatste": (
+                self._coordinator.notification_suppressed_count.get(self._kind, 0)
+            ),
+        }
+
+    async def async_turn_on(self, **kwargs) -> None:
+        self._coordinator.set_notification_enabled(self._kind, True)
+
+    async def async_turn_off(self, **kwargs) -> None:
+        self._coordinator.set_notification_enabled(self._kind, False)

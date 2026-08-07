@@ -99,3 +99,22 @@ confirm_nilm_duplicate_pair:
       selector:
         entity:
           domain: sensor
+
+accept_nilm_device_drift:
+  name: Drift accepteren als nieuw normaal
+  description: >-
+    Voor een apparaat dat als "mogelijk defect" is gemarkeerd terwijl het
+    hogere verbruik gewoon klopt - bijvoorbeeld een koelkast die in de
+    zomer harder werkt, of een apparaat dat blijvend meer is gaan
+    gebruiken. Het apparaat blijft bevestigd en wordt gewoon verder
+    gevolgd; alleen de referentie wordt opnieuw verankerd op het recente
+    niveau en de melding verdwijnt. Anders dan "Verwijder bevestigd
+    NILM-apparaat" blijft de leergeschiedenis grotendeels behouden.
+  fields:
+    entity_id:
+      name: Entiteit
+      description: De entity_id van het apparaat waarvan de drift klopt.
+      required: true
+      selector:
+        entity:
+          domain: sensor

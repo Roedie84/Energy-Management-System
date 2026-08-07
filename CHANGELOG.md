@@ -7896,3 +7896,255 @@ Zes bestaande tests rekenden met intervallen van 5-6 minuten - precies
 het scenario dat nu bewust wordt overgeslagen - en zijn meebewogen.
 
 **Volledige testsuite**: 942 tests, allemaal groen.
+
+## v1.1.7 — Drift accepteren als nieuw normaal
+
+**Gevraagd**: "1 apparaat/apparaten mogelijk defect: Koelkast schuur
+Vermogen. Hoe kan dit als acceptabel worden gezien?" Antwoord: dat kon
+niet, en dat was een gat.
+
+**Probleem**: de drift-detectie herstelt zichzelf alleen als het verbruik
+vijf dagen op rij TERUGKEERT naar het oude niveau. Blijft het hoger -
+omdat het apparaat werkelijk meer gebruikt, of omdat een koelkast het in
+de zomer zwaarder heeft - dan blijft de melding weken staan. De enige
+uitwegen waren `unconfirm_nilm_device` (wist de hele leergeschiedenis) en
+`reject_nilm_device` (haalt het apparaat eruit); beide buiten proportie.
+
+**Nieuw**: `accept_nilm_device_drift`. Het apparaat blijft bevestigd en
+gevolgd; de referentie wordt opnieuw verankerd op het recente niveau en
+het alarm verdwijnt. De oudste dagen verdwijnen uit de geschiedenis zodat
+de mediaan meteen het nieuwe normaal weerspiegelt. Bewust NIET alles
+wissen: dan zou er tien dagen geen referentie zijn en kon een échte
+verslechtering ongemerkt blijven. Een test legt vast dat een verdere
+stijging daarna weer een alarm geeft.
+
+**Ook aangepast**: het aandachtspunt noemt nu zelf de vraag ("klopt het
+hogere verbruik?") en de actie - dat was het eigenlijke probleem, er
+stond wel wat er aan de hand was maar niet wat de uitweg is.
+
+**Getest**: nieuw `tests/test_accept_nilm_drift.py`, 9 tests.
+
+**Volledige testsuite**: 951 tests, allemaal groen.
+
+## v1.1.8 — Weerbronnen apart zichtbaar + wismechanisme werkte niet
+
+**Gerapporteerd**: "Weather ensemble 25,4% terwijl het zo goed als
+volledig bewolkt is."
+
+**Het gemiddelde verborg het meningsverschil.** Twee bronnen die 0% en
+51% melden geven precies hetzelfde gemiddelde als twee keer 25%, terwijl
+het eerste geval betekent dat er iets mis is met een bron. De
+afzonderlijke waarden waren nergens zichtbaar, ook niet in de
+diagnostiek. Nu per bron vastgelegd, plus de spreiding; bij meer dan 40
+procentpunt verschil een informatieve melding met beide waarden.
+Informatief en geen aandachtspunt - het is geen storing van deze
+integratie.
+
+**Een fix die nooit werkte.** In dezelfde export stond
+`energy_balance_method_version` op 3, terwijl het wismechanisme uit
+v1.1.6 juist bedoeld was voor een opslag die dat veld nog niet kende. Het
+veld begon in de code al op de huidige waarde, dus de vergelijking was
+altijd onwaar - precies in het geval waarvoor het gemaakt was. Begint nu
+op None ("onbekend"), zodat een oude opslag wél wordt herkend.
+
+**Goed nieuws uit dezelfde export**: sensor-gezondheid staat op 100%
+(alle twintig metingen tussen 46 en 247 W, ruim onder de drempel van
+300) - de fix van v1.1.6 werkt. En het meetfrequentie-rapport bevestigt
+de diagnose: `zendure_manager_available_kwh` beweegt bij 29,9% van de
+metingen, `solaredge_i1_ac_power` bij 13,4%, terwijl accuvermogen en P1
+de tick wél volgen (99,5% en 91,8%).
+
+**Getest**: nieuw `tests/test_weather_ensemble_spread.py` (9 tests) plus
+twee tests in `test_state_persistence.py`.
+
+**Volledige testsuite**: 962 tests, allemaal groen.
+
+## v1.1.9 — De meetfrequentie mat vooral hoeveel uur het nacht was
+
+**Aangekaart**: "sensor.solaredge_i1_ac_power beweegt maar bij 13,8% van
+de metingen" - met terechte twijfel of dat klopt. Het klopte niet, en het
+is de meting uit v1.1.4 zelf.
+
+**Vertekening**: de teller telde élke tick mee, ook momenten waarop de
+sensor terecht stilstaat. Het PV-vermogen is 's nachts per definitie nul.
+Over ~16 uur meten: 26 wijzigingen op 194 metingen = 13,4%, terwijl
+diezelfde 26 wijzigingen op ~98 dagmetingen 27% is - één wijziging per
+~19 minuten. De conclusie klopte (trager dan de tick, passend bij de
+SolarEdge-cloud die per kwartier pollt), het getal suggereerde meer dan
+twee keer zo traag. Hetzelfde gold voor de beschikbare energie bij een
+stilstaande accu.
+
+**Correctie**: alleen meten op momenten waarop de sensor kán bewegen -
+de PV-sensor bij opwek, de energiesensor als de accu laadt of ontlaadt.
+Netvermogen en accuvermogen onvoorwaardelijk, want die fluctueren altijd.
+Een test legt vast dat een sensor die tijdens ACTIEVE momenten nauwelijks
+beweegt nog steeds als traag geldt.
+
+**Waarom dit ertoe doet**: dit cijfer verklaarde de 21%-gezondheidsstoring
+en onderbouwt de keuze om afgeleide tempo's over de werkelijke beweging te
+rekenen. Een systematisch te pessimistische maat stuurt een volgende
+diagnose de verkeerde kant op.
+
+**Getest**: vier tests erbij in `test_sensor_cadence.py`; bestaande tests
+meebewogen naar een actieve accu.
+
+**Volledige testsuite**: 966 tests, allemaal groen.
+
+## v1.2.0 — Meldingen-tabblad met een schakelaar per melding
+
+**Gevraagd**: een tabblad waar meldingen los aan/uit te zetten zijn, en
+zoveel mogelijk relevante meldingen toevoegen.
+
+**Was**: zeven meldingen aan één configuratieveld - alles aan of alles
+uit.
+
+**Nu**: twintig soorten, elk met een eigen schakelaar, plus een
+hoofdschakelaar. Nieuw onder meer: accu haalt de nacht niet, accu vol
+terwijl de zon schijnt, negatieve prijzen vandaag, integratie loopt vast,
+accumodule loopt uit de pas, dag- en maandoverzicht.
+
+Twee ontwerpkeuzes: alleen de zes bestaande soorten staan standaard AAN
+(al het nieuwe begint uit - twintig meldingen die zichzelf aanzetten
+zorgen ervoor dat er binnen een week niets meer van gelezen wordt), en
+elke soort heeft een eigen dempingsvenster (5 min tot 24 uur). Onderdrukte
+meldingen worden geteld en getoond.
+
+**Borging**: de controle zit in de gedeelde verzendfunctie, niet op elke
+aanroepplek. Twee tests: elke aanroep moet een soort meegeven, en elke
+gebruikte soort moet in het register bestaan. Een onbekende soort wordt
+bewust doorgelaten - beter een melding te veel dan een stille regressie.
+
+**Persistentie**: standen én verzendmomenten gaan mee in de opslag van
+v1.0.4; zonder dat laatste zou het dempingsvenster na elke herstart
+opnieuw beginnen.
+
+**Getest**: nieuw `tests/test_notifications.py`, 20 tests.
+
+**Volledige testsuite**: 986 tests, allemaal groen.
+
+## v1.3.0 — Eén betrouwbaarheidsschaal voor alle gegenereerde data
+
+**Gevraagd**: "hoe betrouwbaar is de gegenereerde data" - voor alles wat
+de integratie berekent, plus: kan de sun-integratie helpen?
+
+**Probleem**: vijf woordenlijsten naast elkaar voor dezelfde vraag
+(adviesmodules, sensor-gezondheid, klimaatprojectie, Kalman-divergentie,
+meetfrequentie), en 40 van de 56 sensoren zonder enige aanduiding -
+waaronder het geleerde accu-rendement, dat wél meerekent in de
+extra-dip-laadbeslissing.
+
+**Eén schaal**, zes niveaus: niet_geconfigureerd, onvoldoende_data,
+indicatief, betrouwbaar, onbetrouwbaar, niet_toetsbaar. Alleen de
+middelste drie vormen een ladder; de twee buitenstaanders staan er
+bewust buiten omdat ze niet met wachten beter worden. Bewust een
+VERTALING en geen hernoeming, zodat bestaande automatiseringen en tests
+blijven werken.
+
+**Onderscheid dat ertoe doet**: de meeste regels meten DATA-RIJPHEID.
+Waar een echte nauwkeurigheidsmeting bestaat (Digital Twin,
+weerensemble, sensor-gezondheid) telt díe. Staat expliciet op het
+tabblad.
+
+**Nieuw tabblad "Betrouwbaarheid"** met alles op één plek, plus een
+sensor waarvan de toestand het aantal betrouwbare regels is. Het
+bewolkingslabel toont nu zijn eigen betrouwbaarheid.
+
+**Zonnestand repareert een blinde vlek uit v1.1.9**: daar bepaalde de
+PV-sensor zélf of hij mocht bewegen, waardoor een vastgelopen koppeling
+midden op de dag onzichtbaar bleef. Nu bepaalt de zonnestand dat -
+fase-sensor, dan hoogte, dan `sun.sun` als vangnet. Twee nieuwe
+configuratievelden.
+
+**Getest**: nieuw `tests/test_reliability_scale.py` (17 tests) en
+`tests/test_sun_daylight_gate.py` (10 tests).
+
+**Volledige testsuite**: 1013 tests, allemaal groen.
+
+## v1.3.1 — Uitschieter-filter weet nu of de zon wel schijnt
+
+Het filter op de achtertuinsensor bestaat expliciet voor "kortstondig
+direct zonlicht op de sensor", maar wist niet of de zon überhaupt scheen.
+Een sprong om drie uur 's nachts kreeg dezelfde behandeling, inclusief de
+melding dat het mogelijk zonlicht was - aantoonbaar onjuist, en 45
+minuten wachten voor iets dat vrijwel zeker echt weer was.
+
+**Twee aanpassingen**:
+- Staat de zon onder de horizon, dan gaat het wachtvenster van 45 naar 10
+  minuten en zegt de melding eerlijk waarom. Niet nul, want een
+  langsrijdende auto kan ook een sprong geven.
+- De blootstellingsrichting wordt GELEERD: zodra een uitschieter niet
+  aanhoudt was het een echte flits, en dan wordt onthouden uit welke
+  richting de zon toen kwam. Na vijf waarnemingen geldt buiten die
+  richting het korte venster. Bewust geleerd en niet gevraagd - de
+  meeste mensen weten niet uit welke windrichting hun sensorbehuizing
+  zon vangt.
+
+**Detail dat makkelijk misgaat**: de afstand tussen windrichtingen is
+cirkelvormig (350° en 10° liggen 20 graden uit elkaar, niet 340). Zonder
+die correctie zou een sensor op het noorden nooit herkend worden.
+
+**Getest**: nieuw `tests/test_backyard_spike_sun_aware.py`, 12 tests.
+
+**Volledige testsuite**: 1025 tests, allemaal groen.
+
+## v1.4.0 — PV-installatieprofiel afgeleid uit de zonnestand
+
+**Gevraagd**: een berekening van de azimut en andere informatie over hoe
+de PV-installatie ligt.
+
+**Oriëntatie**: het vermogen piekt wanneer de zon recht voor de panelen
+staat, dus de zon-azimut op dat moment schat de paneelrichting; mediaan
+over meerdere dagen. Alleen dagen die minstens 70% van de
+Solcast-verwachting haalden tellen mee - op een dag met wisselende
+bewolking ligt de piek waar het toevallig opklaarde. Uit de spreiding
+van de dagelijkse piekrichtingen volgt of er meerdere dakvlakken zijn
+(>40 graden = waarschijnlijk oost/west).
+
+**Beschaduwing**: per vakje van 10 graden azimut de verhouding
+werkelijk/verwacht. Onder 60% structureel = obstakel. Vakjes met minder
+dan twintig metingen krijgen geen oordeel, en momenten met een
+verwachting onder 200 W tellen niet mee (anders zou vroeg in de ochtend
+alles als beschaduwd gelden).
+
+**Bewust NIET**: de hellingshoek. Die vraagt maanden aan
+seizoensvariatie of oncontroleerbare aannames; een getal dat er vijftien
+graden naast zit is erger dan geen getal. Een test legt vast dat het
+profiel geen hellingshoek bevat.
+
+**Zichtbaar** op het Zelflerend-tabblad, als eigen sensor, en in het
+betrouwbaarheidsoverzicht. Vijf heldere dagen voor een eerste schatting,
+twintig voor "betrouwbaar"; het profiel gaat mee in de opslag.
+
+**Getest**: nieuw `tests/test_pv_installation_profile.py`, 14 tests.
+
+**Volledige testsuite**: 1039 tests, allemaal groen.
+
+## v1.4.1 — Opgegeven PV-oriëntatie als ijkpunt
+
+**Aanleiding**: luchtfoto en camerabeeld van de opstelling. Die
+corrigeerden mijn eerste schatting: ik leidde de oriëntatie af uit de
+DAKNOK (~235° WZW), maar de panelen liggen op een plat dak op een schans,
+los van de nok - eerder 190-210°, zuid tot zuid-zuidwest.
+
+**Twee nieuwe velden**: werkelijke oriëntatie en hellingshoek. De
+integratie vergelijkt haar eigen afleiding daarmee en meldt afwijkingen.
+Verschuift de afgeleide piekrichting later terwijl de panelen niet zijn
+verplaatst, dan wijst dat op iets fysieks (uitgegroeide boom, vervuiling,
+uitgevallen streng) - met een eigen melding, uit te zetten op het
+Meldingen-tabblad.
+
+**Hellingshoek wordt nog steeds niet geschat**, maar bepaalt wél de
+tolerantie als je hem invult. Bij een flauwe helling is de
+opbrengstcurve breder en ligt het piekmoment minder scherp vast; onder 20
+graden wordt de tolerantie opgerekt van 25 naar 40 graden. Anders zou een
+vlakke opstelling voortdurend "afwijkend" melden terwijl er niets aan de
+hand is.
+
+**Geen oordeel bij een zwakke schatting**: zolang de afleiding op
+"onvoldoende data" staat komt er geen afwijkingsoordeel.
+
+**Getest**: zes tests erbij in `test_pv_installation_profile.py`. De
+bestaande "geen hellingshoek"-test accepteert nu
+`opgegeven_hellingshoek` - dat is een ingevulde waarde, geen schatting.
+
+**Volledige testsuite**: 1045 tests, allemaal groen.

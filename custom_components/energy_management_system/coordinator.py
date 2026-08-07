@@ -129,7 +129,11 @@ from .const import (
     CLIMATE_FORECAST_BIAS_HISTORY_LENGTH,
     CLIMATE_FORECAST_BIAS_MIN_SAMPLES,
     BACKYARD_TEMP_MAX_PLAUSIBLE_RATE_C_PER_HOUR,
+    BACKYARD_SUN_EXPOSURE_HISTORY_LENGTH,
+    BACKYARD_SUN_EXPOSURE_MARGIN_DEGREES,
+    BACKYARD_SUN_EXPOSURE_MIN_SAMPLES,
     BACKYARD_TEMP_SPIKE_CONFIRM_MINUTES,
+    BACKYARD_TEMP_SPIKE_CONFIRM_MINUTES_NO_SUN,
     BACKYARD_TEMP_SPIKE_MIN_DEVIATION_C,
     BACKYARD_TEMP_SPIKE_TOLERANCE_C,
     HOME_CONNECT_ACTIVE_STATES,
@@ -213,6 +217,7 @@ from .const import (
     KALMAN_DIVERGENCE_MIN_SAMPLES,
     KALMAN_DIVERGENCE_NEGLIGIBLE_PERCENT,
     WEATHER_ENSEMBLE_AGREEMENT_GOOD_PERCENT,
+    WEATHER_ENSEMBLE_SPREAD_ATTENTION_PERCENT,
     WEATHER_ENSEMBLE_AGREEMENT_HISTORY_LENGTH,
     WEATHER_ENSEMBLE_AGREEMENT_MIN_SAMPLES,
     WEATHER_ENSEMBLE_AGREEMENT_USABLE_PERCENT,
@@ -263,6 +268,31 @@ from .const import (
     SENSOR_CADENCE_MIN_SAMPLES,
     SENSOR_CADENCE_SLOW_PERCENT,
     MEASUREMENT_QUALITY_MIN_SAMPLES,
+    NOTIFICATION_HISTORY_LENGTH,
+    CONF_SUN_ELEVATION_SENSOR,
+    CONF_SUN_PHASE_SENSOR,
+    CONF_PV_ACTUAL_AZIMUTH_DEGREES,
+    CONF_PV_ACTUAL_TILT_DEGREES,
+    PV_GEOMETRY_AZIMUTH_BUCKET_DEGREES,
+    PV_ORIENTATION_MISMATCH_DEGREES,
+    PV_SHALLOW_TILT_DEGREES,
+    PV_SHALLOW_TILT_EXTRA_TOLERANCE_DEGREES,
+    PV_GEOMETRY_BUCKET_MIN_SAMPLES,
+    PV_GEOMETRY_HISTORY_DAYS,
+    PV_GEOMETRY_MIN_CLEARNESS_RATIO,
+    PV_GEOMETRY_MIN_DAYS,
+    PV_GEOMETRY_MULTI_ORIENTATION_SPREAD_DEGREES,
+    PV_GEOMETRY_RELIABLE_DAYS,
+    PV_GEOMETRY_SHADING_RATIO,
+    RELIABILITY_ALIASES,
+    SUN_DAYLIGHT_MIN_ELEVATION_DEGREES,
+    SUN_FALLBACK_ENTITY,
+    RELIABILITY_INDICATIVE,
+    RELIABILITY_INSUFFICIENT,
+    RELIABILITY_LABELS,
+    RELIABILITY_NOT_CONFIGURED,
+    RELIABILITY_RELIABLE,
+    NOTIFICATION_TYPES,
     PERSISTED_DATE_FIELDS,
     PERSISTED_DATETIME_FIELDS,
     PERSISTED_INT_FIELDS,
@@ -470,6 +500,17 @@ class EnergyManagementSystemCoordinator:
         self.battery_cooling_last_change: datetime | None = None
         self.battery_cooling_history: list[dict] = []
 
+        # Meldingen (v1.2.0). Per soort een aan/uit-stand, het laatste
+        # verzendmoment (voor het dempingsvenster) en een korte
+        # geschiedenis voor het tabblad.
+        self.notifications_master_enabled: bool = True
+        self.notification_enabled: dict[str, bool] = {
+            sleutel: standaard for sleutel, _, _, standaard, _ in NOTIFICATION_TYPES
+        }
+        self.notification_last_sent: dict[str, str] = {}
+        self.notification_history: list[dict] = []
+        self.notification_suppressed_count: dict[str, int] = {}
+
         # Accu-modulegezondheid (v0.63.123). Per module een dict met
         # geleerde dag-historie en CUSUM-status per grootheid.
         self.battery_module_health: dict[str, dict] = {}
@@ -620,7 +661,13 @@ class EnergyManagementSystemCoordinator:
         # v1.1.6: met welke meetmethode de bewaarde foutreeks tot stand
         # is gekomen. Verandert de methode, dan wordt die reeks eenmalig
         # gewist - zie ENERGY_BALANCE_METHOD_VERSION.
-        self.energy_balance_method_version: int = ENERGY_BALANCE_METHOD_VERSION
+        # v1.1.8: begint bewust op None ("onbekend") en NIET op de
+        # huidige versie. Stond hier meteen het huidige nummer, dan is
+        # de vergelijking in `_discard_history_from_an_older_method`
+        # altijd gelijk zodra de opslag dat veld nog niet kende - precies
+        # het geval waarvoor het bedoeld was. Het wismechanisme uit
+        # v1.1.6 kon daardoor nooit afgaan.
+        self.energy_balance_method_version: int | None = None
         # v1.1.4: hoe vaak elke bronsensor daadwerkelijk beweegt t.o.v.
         # de tick. Zie SENSOR_CADENCE_* in const.py.
         self.sensor_cadence: dict[str, dict] = {}
@@ -644,6 +691,10 @@ class EnergyManagementSystemCoordinator:
         # v1.0.2: bijhouden hoe vaak de ensemble het eens is met wat de
         # panelen werkelijk doen.
         self.weather_ensemble_agreement_history: list[bool] = []
+        # v1.1.8: wat elke bron afzonderlijk meldde, en hoe ver ze
+        # uiteenliepen.
+        self.weather_ensemble_readings: dict[str, float] = {}
+        self.weather_ensemble_spread_percent: float | None = None
         # Vaatwasser/wasmachine RUSTEND/ACTIEF/KLAAR-toestandsmachine
         # (v0.63.32).
         self._dishwasher_state: str = "rustend"
@@ -787,6 +838,19 @@ class EnergyManagementSystemCoordinator:
         self._backyard_temp_last_accepted_at: datetime | None = None
         self._backyard_temp_spike_candidate_c: float | None = None
         self._backyard_temp_spike_since: datetime | None = None
+        # v1.3.1: uit welke richting de zon kwam toen er eerder flitsen
+        # optraden. De integratie weet niet waar de sensor hangt, dus dat
+        # wordt geleerd in plaats van gevraagd.
+        self.backyard_sun_exposure_azimuths: list[float] = []
+        # PV-installatieprofiel (v1.4.0): de zon-azimut bij de dagpiek,
+        # per dag, plus de verhouding werkelijk/verwacht per
+        # azimut-vakje voor de beschaduwingskaart.
+        self.pv_peak_azimuth_history: list[float] = []
+        self.pv_azimuth_performance: dict[str, list[float]] = {}
+        self._pv_geometry_day_key: date | None = None
+        self._pv_geometry_day_peak_w: float = 0.0
+        self._pv_geometry_day_peak_azimuth: float | None = None
+        self._pv_geometry_day_expected_peak_w: float = 0.0
         self.last_backyard_spike_filtered_note: str | None = None
         self._listeners: list = []
         self._last_cost_basis_calc_time: datetime | None = None
@@ -1845,6 +1909,7 @@ class EnergyManagementSystemCoordinator:
             title=f"Goedkoop moment voor de {appliance_label}",
             message=message,
             notification_id=f"ems_{appliance_label}_ready",
+            kind="appliance_cheap_moment",
         )
 
     async def _async_update_scheduled_charge_appliance(
@@ -2045,6 +2110,7 @@ class EnergyManagementSystemCoordinator:
                             title=notify_title,
                             message=notify_message,
                             notification_id=f"ems_{last_action_attr}_complete",
+            kind="appliance_ready",
                         )
                 return
         else:
@@ -2123,12 +2189,569 @@ class EnergyManagementSystemCoordinator:
             blocking=True,
         )
 
+    @staticmethod
+    def notification_definition(kind: str) -> tuple | None:
+        for definitie in NOTIFICATION_TYPES:
+            if definitie[0] == kind:
+                return definitie
+        return None
+
+    def is_notification_allowed(self, kind: str, now: datetime) -> tuple[bool, str]:
+        """Mag deze melding nu verstuurd worden? (v1.2.0)
+
+        Geeft (toegestaan, reden) terug - de reden ook bij een weigering,
+        zodat op het tabblad te zien is waarom een melding uitbleef in
+        plaats van dat hij stilzwijgend verdwijnt.
+
+        Drie horden, in deze volgorde: de hoofdschakelaar, de schakelaar
+        van de melding zelf, en het dempingsvenster. Die laatste bestaat
+        omdat vooral modus-wijzigingen en sluipverbruik anders meerdere
+        keren per uur kunnen afgaan - en een melding die je wegswipet is
+        erger dan geen melding.
+        """
+        definitie = self.notification_definition(kind)
+        if definitie is None:
+            # Onbekende soort: doorlaten. Beter een melding te veel dan
+            # een stille regressie zodra iemand een nieuwe soort
+            # toevoegt en het register vergeet bij te werken.
+            return True, "onbekende soort - doorgelaten"
+
+        if not self.notifications_master_enabled:
+            return False, "hoofdschakelaar staat uit"
+        if not self.notification_enabled.get(kind, definitie[3]):
+            return False, "deze melding staat uit"
+
+        venster_minuten = definitie[4]
+        laatste = self.notification_last_sent.get(kind)
+        if laatste and venster_minuten:
+            moment = dt_util.parse_datetime(laatste)
+            if moment is not None:
+                verstreken = (now - moment).total_seconds() / 60
+                if verstreken < venster_minuten:
+                    return (
+                        False,
+                        f"gedempt - nog {venster_minuten - verstreken:.0f} "
+                        "minuten tot de volgende toegestaan is",
+                    )
+        return True, "toegestaan"
+
+    def _evaluate_new_notifications(self, now: datetime) -> None:
+        """De meldingen die in v1.2.0 zijn toegevoegd (v1.2.0).
+
+        Allemaal gebaseerd op waarden die de coordinator toch al
+        berekent - er wordt hier niets extra gemeten. Elke melding gaat
+        via `_dispatch_notification` met zijn eigen soort, dus de
+        schakelaar en het dempingsvenster gelden automatisch; deze
+        functie hoeft daar niets voor te doen.
+        """
+        notify = self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE)
+
+        def stuur(kind: str, titel: str, bericht: str) -> None:
+            self._dispatch_notification(
+                notify_service=notify,
+                title=titel,
+                message=bericht,
+                notification_id=f"ems_{kind}",
+                kind=kind,
+            )
+
+        # --- accu en energie ---
+        beschikbaar = self.last_available_kwh
+        nodig = self.last_needed_kwh_to_bridge
+        if beschikbaar is not None and nodig is not None and nodig > 0:
+            if beschikbaar < nodig:
+                stuur(
+                    "battery_wont_last_night",
+                    "🔋 Accu haalt de nacht waarschijnlijk niet",
+                    f"Er is {beschikbaar:.2f} kWh beschikbaar, terwijl er "
+                    f"{nodig:.2f} kWh nodig is om tot het goedkope blok te "
+                    "overbruggen. Er wordt zo nodig bijgeladen.",
+                )
+
+        soc = self.last_soc_percent
+        pv_w = self._read_sensor_float(self.config.get(CONF_PV_POWER_SENSOR))
+        verbruik_w = self._read_corrected_consumption_power()
+        if (
+            soc is not None
+            and soc >= 99
+            and pv_w is not None
+            and verbruik_w is not None
+            and pv_w - verbruik_w > 500
+        ):
+            stuur(
+                "battery_full_with_sun",
+                "☀️ Accu vol en de zon schijnt nog",
+                f"Er is ongeveer {pv_w - verbruik_w:.0f} W zonoverschot dat "
+                "niet meer opgeslagen kan worden. Een goed moment om een "
+                "apparaat aan te zetten.",
+            )
+
+        # --- prijzen ---
+        entries = self._get_forecast_entries()
+        if entries:
+            vandaag = [e for e in entries if e[0].date() == now.date()]
+            negatief = [e for e in vandaag if e[2] < 0]
+            if negatief:
+                eerste = min(negatief, key=lambda e: e[0])
+                stuur(
+                    "negative_prices",
+                    "⚡ Negatieve prijzen vandaag",
+                    f"{len(negatief)} kwartier(en) met een negatieve prijs, "
+                    f"vanaf {eerste[0]:%H:%M}. Verbruiken levert dan geld op.",
+                )
+
+        # --- systeem ---
+        if self.last_error:
+            stuur(
+                "integration_error",
+                "⚠️ Energy Management System liep vast",
+                f"Laatste fout: {self.last_error}. De accu blijft op de "
+                "laatst ingestelde modus staan tot dit is opgelost.",
+            )
+
+        profiel = self.get_pv_installation_profile()
+        if profiel.get("wijkt_af"):
+            stuur(
+                "pv_orientation_mismatch",
+                "☀️ PV-oriëntatie wijkt af van wat is opgegeven",
+                f"De afgeleide piekrichting is {profiel['geschatte_azimut']}° "
+                f"({profiel['windrichting']}), terwijl "
+                f"{profiel['opgegeven_azimut']}° is opgegeven - een verschil "
+                f"van {profiel['afwijking_graden']}°. Verandert dit terwijl "
+                "de panelen niet zijn verplaatst, dan kan het wijzen op "
+                "beschaduwing, vervuiling of een uitgevallen streng.",
+            )
+
+        modules_met_drift = [
+            nummer
+            for nummer, gegevens in (self.battery_module_health or {}).items()
+            if any(v.get("drift") for v in (gegevens.get("cusum") or {}).values())
+        ]
+        if modules_met_drift:
+            stuur(
+                "battery_module_drift",
+                "🔋 Accumodule loopt uit de pas",
+                f"Module {', '.join(sorted(modules_met_drift))} wijkt "
+                "aanhoudend af van de andere modules. Zie het tabblad "
+                "Accumodules voor de details.",
+            )
+
+    @staticmethod
+    def normalise_reliability(status: str | None) -> str:
+        """Vertaalt een van de oude woordenlijsten naar de schaal
+        (v1.3.0).
+
+        Bewust een vertaling en geen hernoeming: de interne sleutels
+        blijven zoals ze zijn, zodat bestaande automatiseringen en tests
+        blijven werken. Wat de gebruiker ziet is voortaan wél overal
+        hetzelfde.
+        """
+        if status is None:
+            return RELIABILITY_NOT_CONFIGURED
+        return RELIABILITY_ALIASES.get(status, RELIABILITY_INSUFFICIENT)
+
+    @staticmethod
+    def reliability_from_samples(
+        aantal: int | None,
+        minimum: int,
+        betrouwbaar_vanaf: int,
+        eenheid: str = "metingen",
+    ) -> dict:
+        """Standaardoordeel voor een geleerde waarde, op basis van
+        hoeveel er is verzameld (v1.3.0).
+
+        Verreweg de meeste gegenereerde getallen in deze integratie
+        worden op dezelfde manier opgebouwd: verzamel waarnemingen, en
+        naarmate er meer zijn wordt het cijfer harder. Eén gedeelde
+        functie zorgt dat ze allemaal dezelfde grenzen en dezelfde
+        formulering krijgen - in plaats van dat elke sensor zijn eigen
+        drempel en eigen woorden verzint, wat precies is hoe er vijf
+        woordenlijsten naast elkaar konden ontstaan.
+
+        Let op: dit meet DATA-RIJPHEID, niet aangetoonde nauwkeurigheid.
+        Een waarde met veel metingen kan nog steeds systematisch fout
+        zijn. Waar dat wél te toetsen valt - de Digital Twin, de
+        weerensemble - hoort een eigen meting te gelden, en die
+        overschrijft dit oordeel.
+        """
+        if aantal is None:
+            return {
+                "niveau": RELIABILITY_NOT_CONFIGURED,
+                "reden": "Nog niet beschikbaar.",
+                "aantal": None,
+                "waarop_gebaseerd": eenheid,
+            }
+        if aantal < minimum:
+            niveau = RELIABILITY_INSUFFICIENT
+            reden = f"{aantal}/{minimum} {eenheid} verzameld."
+        elif aantal < betrouwbaar_vanaf:
+            niveau = RELIABILITY_INDICATIVE
+            reden = (
+                f"{aantal} {eenheid} - bruikbaar als richting, "
+                f"betrouwbaar vanaf {betrouwbaar_vanaf}."
+            )
+        else:
+            niveau = RELIABILITY_RELIABLE
+            reden = f"{aantal} {eenheid} verzameld."
+        return {
+            "niveau": niveau,
+            "reden": reden,
+            "aantal": aantal,
+            "waarop_gebaseerd": eenheid,
+        }
+
+    @staticmethod
+    def reliability_label(niveau: str) -> str:
+        label, _ = RELIABILITY_LABELS.get(niveau, ("?", ""))
+        return label
+
+    def _update_pv_geometry_learning(self, now: datetime) -> None:
+        """Verzamelt waar de zon stond bij de dagpiek, en hoe de
+        opbrengst zich per windrichting verhoudt tot de verwachting
+        (v1.4.0).
+
+        Twee losse dingen uit dezelfde meting:
+
+        - De **piekrichting**: het vermogen piekt wanneer de zon recht
+          voor de panelen staat, dus de zon-azimut op dat moment is een
+          directe schatting van de paneelrichting.
+        - De **beschaduwingskaart**: per azimut-vakje de verhouding
+          tussen werkelijke en verwachte opbrengst. Een vakje dat
+          structureel laag scoort verraadt een boom, schoorsteen of
+          dakkapel in die richting.
+
+        Alleen bij daglicht, en de dagpiek telt alleen mee als de dag
+        helder genoeg was - op een dag met wisselende bewolking ligt de
+        piek waar het toevallig opklaarde, en dat zegt niets over de
+        daklijn.
+        """
+        if self.is_daylight_now() is not True:
+            return
+        azimut = self.get_sun_azimuth_degrees()
+        pv_entity = self.config.get(CONF_PV_POWER_SENSOR)
+        pv_w = self._read_sensor_float(pv_entity) if pv_entity else None
+        if azimut is None or pv_w is None:
+            return
+
+        # `_get_expected_pv_power_w` levert de bias-gecorrigeerde
+        # Solcast-verwachting voor dit moment - dezelfde bron die de
+        # zonoverschot-logica gebruikt, zodat beide hetzelfde beeld
+        # hebben.
+        verwacht_w = self._get_expected_pv_power_w(now)
+
+        # --- dagpiek bijhouden ---
+        dag = now.date()
+        if self._pv_geometry_day_key != dag:
+            self._finalize_pv_geometry_day()
+            self._pv_geometry_day_key = dag
+            self._pv_geometry_day_peak_w = 0.0
+            self._pv_geometry_day_peak_azimuth = None
+            self._pv_geometry_day_expected_peak_w = 0.0
+
+        if pv_w > self._pv_geometry_day_peak_w:
+            self._pv_geometry_day_peak_w = pv_w
+            self._pv_geometry_day_peak_azimuth = azimut
+        if verwacht_w is not None:
+            self._pv_geometry_day_expected_peak_w = max(
+                self._pv_geometry_day_expected_peak_w, verwacht_w
+            )
+
+        # --- prestatie per windrichting ---
+        if verwacht_w and verwacht_w > 200:
+            vak = str(
+                int(azimut // PV_GEOMETRY_AZIMUTH_BUCKET_DEGREES)
+                * PV_GEOMETRY_AZIMUTH_BUCKET_DEGREES
+            )
+            reeks = self.pv_azimuth_performance.setdefault(vak, [])
+            reeks.append(round(pv_w / verwacht_w, 3))
+            self.pv_azimuth_performance[vak] = reeks[-200:]
+
+    def _finalize_pv_geometry_day(self) -> None:
+        """Sluit de dag af en bewaart de piekrichting, mits de dag
+        helder genoeg was (v1.4.0)."""
+        piek = self._pv_geometry_day_peak_w
+        verwacht = self._pv_geometry_day_expected_peak_w
+        azimut = self._pv_geometry_day_peak_azimuth
+        if azimut is None or piek <= 0 or verwacht <= 0:
+            return
+        if piek / verwacht < PV_GEOMETRY_MIN_CLEARNESS_RATIO:
+            # Te bewolkt: de piek lag waar het toevallig opklaarde.
+            return
+        self.pv_peak_azimuth_history.append(round(azimut, 1))
+        self.pv_peak_azimuth_history = self.pv_peak_azimuth_history[
+            -PV_GEOMETRY_HISTORY_DAYS:
+        ]
+
+    def get_pv_installation_profile(self) -> dict:
+        """Wat er over de opstelling te zeggen valt (v1.4.0).
+
+        Bewust GEEN hellingshoek. Die vraagt maanden aan
+        seizoensvariatie of aannames over instraling die niet te
+        controleren zijn, en een getal geven dat er zomaar vijftien
+        graden naast zit is erger dan geen getal.
+        """
+        dagen = self.pv_peak_azimuth_history
+        oordeel = self.reliability_from_samples(
+            len(dagen), PV_GEOMETRY_MIN_DAYS, PV_GEOMETRY_RELIABLE_DAYS,
+            "heldere dagen",
+        )
+        profiel: dict = {
+            "betrouwbaarheid": oordeel["niveau"],
+            "reden": oordeel["reden"],
+            "aantal_heldere_dagen": len(dagen),
+            "geschatte_azimut": None,
+            "windrichting": None,
+            "spreiding_graden": None,
+            "waarschijnlijk_meerdere_dakvlakken": None,
+            "beschaduwing": [],
+        }
+
+        if dagen:
+            profiel["geschatte_azimut"] = round(statistics.median(dagen), 1)
+            profiel["windrichting"] = self._azimuth_to_compass(
+                profiel["geschatte_azimut"]
+            )
+            if len(dagen) > 2:
+                spreiding = round(max(dagen) - min(dagen), 1)
+                profiel["spreiding_graden"] = spreiding
+                # Bij één dakvlak liggen de dagelijkse pieken dicht bij
+                # elkaar; een brede spreiding wijst op meer dan één
+                # richting (of op veel beschaduwing rond het middaguur).
+                profiel["waarschijnlijk_meerdere_dakvlakken"] = (
+                    spreiding > PV_GEOMETRY_MULTI_ORIENTATION_SPREAD_DEGREES
+                )
+
+        # v1.4.1: vergelijken met wat de gebruiker zelf heeft opgegeven.
+        opgegeven = self.config.get(CONF_PV_ACTUAL_AZIMUTH_DEGREES)
+        helling = self.config.get(CONF_PV_ACTUAL_TILT_DEGREES)
+        profiel["opgegeven_azimut"] = opgegeven
+        profiel["opgegeven_hellingshoek"] = helling
+        profiel["tolerantie_graden"] = self._pv_orientation_tolerance(helling)
+        profiel["afwijking_graden"] = None
+        profiel["wijkt_af"] = None
+
+        if opgegeven is not None and profiel["geschatte_azimut"] is not None:
+            afwijking = self._azimuth_distance(
+                float(opgegeven), profiel["geschatte_azimut"]
+            )
+            profiel["afwijking_graden"] = round(afwijking, 1)
+            # Alleen oordelen als de schatting zelf al iets waard is -
+            # bij "onvoldoende_data" zegt een afwijking niets.
+            if profiel["betrouwbaarheid"] in (
+                RELIABILITY_INDICATIVE,
+                RELIABILITY_RELIABLE,
+            ):
+                profiel["wijkt_af"] = afwijking > profiel["tolerantie_graden"]
+
+        for vak, waarden in sorted(
+            self.pv_azimuth_performance.items(), key=lambda kv: float(kv[0])
+        ):
+            if len(waarden) < PV_GEOMETRY_BUCKET_MIN_SAMPLES:
+                continue
+            verhouding = round(statistics.median(waarden), 2)
+            if verhouding < PV_GEOMETRY_SHADING_RATIO:
+                profiel["beschaduwing"].append(
+                    {
+                        "azimut": float(vak),
+                        "windrichting": self._azimuth_to_compass(float(vak)),
+                        "verhouding": verhouding,
+                        "metingen": len(waarden),
+                    }
+                )
+        return profiel
+
+    @staticmethod
+    def _azimuth_distance(a: float, b: float) -> float:
+        """Cirkelvormig verschil tussen twee windrichtingen (v1.4.1).
+
+        350° en 10° liggen twintig graden uit elkaar, niet 340. Zonder
+        die correctie zou een opstelling die rond het noorden ligt altijd
+        als sterk afwijkend gelden.
+        """
+        verschil = abs(a - b) % 360
+        return min(verschil, 360 - verschil)
+
+    @staticmethod
+    def _pv_orientation_tolerance(helling: float | None) -> float:
+        """Hoeveel afwijking normaal is, gegeven de hellingshoek
+        (v1.4.1).
+
+        Bij een FLAUWE helling is de opbrengstcurve veel breder en ligt
+        het piekmoment minder scherp vast: het schommelt dan per dag
+        sterk. Een vlakke opstelling zou anders voortdurend "afwijkend"
+        melden terwijl er niets aan de hand is - de methode is daar
+        gewoon minder scherp, en dat hoort in de tolerantie te zitten in
+        plaats van in een verkeerde conclusie.
+        """
+        tolerantie = PV_ORIENTATION_MISMATCH_DEGREES
+        if helling is not None and helling < PV_SHALLOW_TILT_DEGREES:
+            tolerantie += PV_SHALLOW_TILT_EXTRA_TOLERANCE_DEGREES
+        return tolerantie
+
+    @staticmethod
+    def _azimuth_to_compass(azimut: float) -> str:
+        richtingen = [
+            "noord", "noordoost", "oost", "zuidoost",
+            "zuid", "zuidwest", "west", "noordwest",
+        ]
+        index = int((azimut % 360 + 22.5) // 45) % 8
+        return richtingen[index]
+
+    def get_reliability_overview(self) -> list[dict]:
+        """Alle betrouwbaarheidsoordelen op één plek, in één taal
+        (v1.3.0).
+
+        Verzamelt wat er verspreid over de integratie al werd bepaald en
+        zet het om naar de gedeelde schaal, aangevuld met de geleerde
+        waarden die tot nu toe helemaal geen oordeel hadden.
+        """
+        rijen: list[dict] = []
+
+        def voeg_toe(groep: str, naam: str, oordeel: dict, waarde=None) -> None:
+            niveau = oordeel.get("niveau", RELIABILITY_INSUFFICIENT)
+            rijen.append(
+                {
+                    "groep": groep,
+                    "naam": naam,
+                    "niveau": niveau,
+                    "label": self.reliability_label(niveau),
+                    "reden": oordeel.get("reden"),
+                    "waarde": waarde,
+                }
+            )
+
+        # --- adviesmodules (bestonden al, nu in dezelfde taal) ---
+        for sleutel, gegevens in (self.advisory_readiness or {}).items():
+            voeg_toe(
+                "Adviesmodules",
+                sleutel,
+                {
+                    "niveau": self.normalise_reliability(gegevens.get("status")),
+                    "reden": gegevens.get("reden"),
+                },
+            )
+
+        # --- metingen ---
+        voeg_toe(
+            "Metingen",
+            "Sensor-gezondheid (Kirchhoff)",
+            {
+                "niveau": self.normalise_reliability(self.measurement_quality),
+                "reden": (
+                    f"{len(self.energy_balance_error_history)} geldige "
+                    "vergelijkingen."
+                ),
+            },
+            self.sensor_health_score,
+        )
+        for entity_id, gegevens in self.get_sensor_cadence_report().items():
+            voeg_toe(
+                "Metingen",
+                f"Meetfrequentie {entity_id}",
+                {
+                    "niveau": self.normalise_reliability(gegevens.get("status")),
+                    "reden": gegevens.get("reden"),
+                },
+                gegevens.get("beweegt_percent"),
+            )
+
+        # --- geleerde waarden die tot v1.2.0 geen oordeel hadden ---
+        voeg_toe(
+            "Geleerde waarden",
+            "Accu-rendement",
+            self.reliability_from_samples(
+                len(self.learned_efficiency_history or []), 5, 20, "laadcycli"
+            ),
+            # LET OP: `learned_battery_efficiency_percent` geeft ondanks
+            # de naam een FRACTIE terug (0,85), geen percentage. Hier
+            # omgerekend voor de weergave; de naam zelf laat ik met rust
+            # omdat er op meerdere plekken op wordt gerekend.
+            round(self.learned_battery_efficiency_percent * 100, 1)
+            if self.learned_battery_efficiency_percent is not None
+            else None,
+        )
+        voeg_toe(
+            "Geleerde waarden",
+            "Nachtverbruik",
+            self.reliability_from_samples(
+                len(self.night_consumption_history or []), 3, 14, "nachten"
+            ),
+            self.learned_night_consumption_kw,
+        )
+        voeg_toe(
+            "Geleerde waarden",
+            "Uurlijks verbruiksprofiel",
+            self.reliability_from_samples(
+                sum(
+                    1
+                    for waarden in (self.hourly_consumption_profile or {}).values()
+                    if waarden
+                ),
+                12,
+                24,
+                "uren met data",
+            ),
+        )
+        profiel = self.get_pv_installation_profile()
+        voeg_toe(
+            "Geleerde waarden",
+            "PV-installatieprofiel (oriëntatie)",
+            {"niveau": profiel["betrouwbaarheid"], "reden": profiel["reden"]},
+            profiel["windrichting"],
+        )
+        voeg_toe(
+            "Geleerde waarden",
+            "PV-voorspelling bias",
+            self.reliability_from_samples(
+                len(self.solar_tracker.deviation_history)
+                if self.solar_tracker
+                else None,
+                3,
+                14,
+                "dagen",
+            ),
+        )
+        voeg_toe(
+            "Geleerde waarden",
+            "Ontlaadreserve (shortfall/excess)",
+            self.reliability_from_samples(
+                len(self.reserve_shortfall_history or []), 3, 14, "dagen"
+            ),
+        )
+
+        return rijen
+
+    def get_notification_overview(self) -> list[dict]:
+        """Alles wat het meldingen-tabblad nodig heeft (v1.2.0)."""
+        overzicht = []
+        for sleutel, label, uitleg, standaard, venster in NOTIFICATION_TYPES:
+            overzicht.append(
+                {
+                    "sleutel": sleutel,
+                    "label": label,
+                    "uitleg": uitleg,
+                    "ingeschakeld": self.notification_enabled.get(sleutel, standaard),
+                    "dempingsvenster_minuten": venster,
+                    "laatst_verstuurd": self.notification_last_sent.get(sleutel),
+                    "onderdrukt_sinds_laatste": (
+                        self.notification_suppressed_count.get(sleutel, 0)
+                    ),
+                }
+            )
+        return overzicht
+
+    def set_notification_enabled(self, kind: str, ingeschakeld: bool) -> None:
+        self.notification_enabled[kind] = bool(ingeschakeld)
+        self._notify_listeners()
+        self.schedule_persisted_state_save()
+
     def _dispatch_notification(
         self,
         notify_service: str | None,
         title: str,
         message: str,
         notification_id: str,
+        kind: str | None = None,
     ) -> None:
         """Shared notification dispatch, used for both the appliance-ready
         suggestion (v0.47.0) and the mode/power-change notification
@@ -2136,7 +2759,36 @@ class EnergyManagementSystemCoordinator:
         config option, so nothing extra needs to be set up for either.
         Falls back to a persistent notification in the HA UI if no
         notify service is configured.
+
+        v1.2.0: `kind` verwijst naar een soort uit NOTIFICATION_TYPES.
+        De controle op schakelaar en dempingsvenster gebeurt HIER, in de
+        gedeelde verzendfunctie, en niet op elke aanroepplek. Zo kan geen
+        enkele melding de schakelaar omzeilen - ook een melding die er
+        later bijkomt niet, zolang hij deze functie gebruikt. Er is een
+        test die vastlegt dat elke aanroep een `kind` meegeeft.
         """
+        now = dt_util.now()
+        if kind is not None:
+            toegestaan, reden = self.is_notification_allowed(kind, now)
+            if not toegestaan:
+                self.notification_suppressed_count[kind] = (
+                    self.notification_suppressed_count.get(kind, 0) + 1
+                )
+                _LOGGER.debug("Melding %s niet verstuurd: %s", kind, reden)
+                return
+            self.notification_last_sent[kind] = now.isoformat()
+            self.notification_suppressed_count[kind] = 0
+            self.notification_history.append(
+                {
+                    "moment": now.isoformat(),
+                    "soort": kind,
+                    "titel": title,
+                }
+            )
+            self.notification_history = self.notification_history[
+                -NOTIFICATION_HISTORY_LENGTH:
+            ]
+            self.schedule_persisted_state_save()
         service_domain, _, service_name = (
             notify_service or "persistent_notification.create"
         ).partition(".")
@@ -5386,6 +6038,7 @@ class EnergyManagementSystemCoordinator:
                 f"{besluit['vermogen_w']:.0f}W — {besluit['reden']}."
             ),
             notification_id="ems_battery_cooling",
+            kind="battery_cooling",
         )
         self._notify_listeners()
 
@@ -6206,6 +6859,103 @@ class EnergyManagementSystemCoordinator:
         self.last_energy_balance_error_w = round(error_w, 1)
         self._record_balance_sample(abs(error_w))
 
+    def get_sun_elevation_degrees(self) -> float | None:
+        """Actuele zonshoogte in graden (v1.3.0).
+
+        Voorkeursvolgorde: een eigen geconfigureerde sensor, dan het
+        `elevation`-attribuut van `sun.sun`. Die laatste zit standaard in
+        Home Assistant en vereist geen opzet, dus er is altijd een
+        vangnet - zelfde opzet als de achtertuinsensor voor de
+        buitentemperatuur, en om dezelfde reden: valt de eigen bron weg,
+        dan stopt de meting niet stilzwijgend.
+        """
+        eigen = self.config.get(CONF_SUN_ELEVATION_SENSOR)
+        if eigen:
+            waarde = self._read_sensor_float(eigen)
+            if waarde is not None:
+                return waarde
+
+        state = self.hass.states.get(SUN_FALLBACK_ENTITY)
+        if state is None:
+            return None
+        try:
+            return float(state.attributes.get("elevation"))
+        except (TypeError, ValueError):
+            return None
+
+    def is_daylight_now(self) -> bool | None:
+        """Staat de zon boven de horizon? (v1.3.0)
+
+        Bij voorkeur via de fase-sensor: die geeft een schone opsomming
+        (night / astronomical_twilight / nautical_twilight /
+        civil_twilight / day), waardoor er geen eigen drempel gekozen
+        hoeft te worden. Anders via de zonshoogte, en als laatste via
+        `sun.sun`.
+
+        None betekent "niet vast te stellen" - dan hoort de aanroeper
+        terug te vallen op zijn oude gedrag in plaats van te gokken.
+        """
+        fase_entity = self.config.get(CONF_SUN_PHASE_SENSOR)
+        if fase_entity:
+            state = self.hass.states.get(fase_entity)
+            fase = getattr(state, "state", None)
+            if fase in ("day", "night", "astronomical_twilight",
+                        "nautical_twilight", "civil_twilight"):
+                return fase == "day"
+
+        hoogte = self.get_sun_elevation_degrees()
+        if hoogte is not None:
+            return hoogte >= SUN_DAYLIGHT_MIN_ELEVATION_DEGREES
+
+        state = self.hass.states.get(SUN_FALLBACK_ENTITY)
+        if state is not None and state.state in ("above_horizon", "below_horizon"):
+            return state.state == "above_horizon"
+        return None
+
+    def _sensor_can_move_now(self, sleutel: str) -> bool:
+        """Kán deze sensor op dit moment überhaupt veranderen?
+        (v1.1.9)
+
+        Zonder deze vraag telt de meetfrequentie ook de momenten mee
+        waarop een sensor terecht stilstaat, en dat vertekent het cijfer
+        zwaar. Het PV-vermogen is 's nachts per definitie constant nul:
+        over ruim zestien uur meten kwam de PV-sensor daardoor op 13,4%
+        uit, terwijl hij overdag bij 27% van de metingen bewoog - één
+        wijziging per ~19 minuten. Dat is nog steeds trager dan de
+        vijf-minutencyclus, maar minder dan de helft van wat het cijfer
+        suggereerde.
+
+        Hetzelfde geldt voor de beschikbare energie: staat de accu stil,
+        dan hóórt die waarde niet te bewegen.
+        """
+        if sleutel == CONF_PV_POWER_SENSOR:
+            # v1.3.0: de ZONNESTAND bepaalt of de PV-sensor zou moeten
+            # bewegen, niet de sensor zelf. In v1.1.9 werd daarvoor de
+            # eigen waarde gebruikt, en dat gaf een blinde vlek: hangt de
+            # koppeling er midden op de dag uit, dan is de waarde 0,
+            # concludeert de code "geen zon dus terecht stil", en blijft
+            # de storing volledig onzichtbaar. Precies het soort stille
+            # uitval dat deze meting moest opsporen.
+            daglicht = self.is_daylight_now()
+            if daglicht is not None:
+                return daglicht
+            # Geen zonnestand beschikbaar: terugvallen op het gedrag van
+            # v1.1.9 in plaats van te gokken.
+            pv_entity = self.config.get(CONF_PV_POWER_SENSOR)
+            waarde = self._read_sensor_float(pv_entity) if pv_entity else None
+            return waarde is not None and waarde > 0
+
+        if sleutel == CONF_AVAILABLE_ENERGY_SENSOR:
+            vermogen = self._read_corrected_battery_power()
+            return (
+                vermogen is not None
+                and abs(vermogen) >= MIN_BATTERY_POWER_IDLE_W
+            )
+
+        # Netvermogen en accuvermogen fluctueren altijd - daar is
+        # stilstand wél een signaal.
+        return True
+
     def _track_sensor_cadence(self, entity_id: str | None) -> None:
         """Houdt bij hoe vaak een bronsensor daadwerkelijk van waarde
         verandert, ten opzichte van de tick (v1.1.4).
@@ -6246,6 +6996,11 @@ class EnergyManagementSystemCoordinator:
             CONF_PV_POWER_SENSOR,
             CONF_CONSUMPTION_POWER_SENSOR,
         ):
+            # v1.1.9: sla momenten over waarop de sensor terecht
+            # stilstaat - anders meet het cijfer vooral hoeveel uur het
+            # nacht was. Zie `_sensor_can_move_now`.
+            if not self._sensor_can_move_now(sleutel):
+                continue
             self._track_sensor_cadence(self.config.get(sleutel))
 
     def get_sensor_cadence_report(self) -> dict:
@@ -6409,6 +7164,7 @@ class EnergyManagementSystemCoordinator:
                         f"op een aanhoudende trend, niet één losse nacht."
                     ),
                     notification_id="ems_sluipverbruik_detected",
+                    kind="sluipverbruik",
                 )
 
     def _update_weather_ensemble_check(self, now: datetime) -> None:
@@ -6454,6 +7210,8 @@ class EnergyManagementSystemCoordinator:
         if not cloud_readings:
             self.weather_ensemble_cloud_cover_percent = None
             self.weather_ensemble_sources_used = []
+            self.weather_ensemble_readings = {}
+            self.weather_ensemble_spread_percent = None
             self.weather_ensemble_label = None
             self.weather_ensemble_disagreement = None
             return
@@ -6461,6 +7219,21 @@ class EnergyManagementSystemCoordinator:
         avg_cloud_pct = sum(cloud_readings) / len(cloud_readings)
         self.weather_ensemble_cloud_cover_percent = round(avg_cloud_pct, 1)
         self.weather_ensemble_sources_used = sources_used
+        # v1.1.8, gerapporteerd: "25,4% terwijl het zo goed als volledig
+        # bewolkt is". Het gemiddelde alleen kan een groot
+        # meningsverschil tussen de bronnen volledig verbergen - 0% en
+        # 51% geeft precies hetzelfde cijfer als twee keer 25%. De
+        # afzonderlijke waarden waren nergens zichtbaar, ook niet in de
+        # diagnostiek, waardoor niet te zien was WELKE bron ernaast zat.
+        self.weather_ensemble_readings = {
+            entity_id: round(waarde, 1)
+            for entity_id, waarde in zip(sources_used, cloud_readings)
+        }
+        self.weather_ensemble_spread_percent = (
+            round(max(cloud_readings) - min(cloud_readings), 1)
+            if len(cloud_readings) > 1
+            else None
+        )
 
         if avg_cloud_pct < WEATHER_ENSEMBLE_CLEAR_THRESHOLD_PERCENT:
             self.weather_ensemble_label = "helder"
@@ -6675,6 +7448,7 @@ class EnergyManagementSystemCoordinator:
                     title=notify_title,
                     message=f"Klaar na {duration_txt}.",
                     notification_id=f"ems_{state_attr}_cycle_done",
+            kind="appliance_ready",
                 )
 
     def _process_water_flow_sample(
@@ -7882,6 +8656,63 @@ class EnergyManagementSystemCoordinator:
         self.hass.async_create_task(self._async_save_nilm_confirmed_devices_store())
         return True
 
+    def accept_nilm_device_drift(self, entity_id: str) -> bool:
+        """Accepteert het huidige verbruiksniveau als het nieuwe normaal
+        (v1.1.7, gevraagd: "1 apparaat mogelijk defect: Koelkast schuur.
+        Hoe kan dit als acceptabel worden gezien?").
+
+        Tot nu toe was er geen nette uitweg. De drift-detectie herstelt
+        zichzelf alleen als het verbruik vijf dagen op rij TERUGKEERT naar
+        het oude niveau (`NILM_CUSUM_RESET_STREAK_DAYS`). Doet het dat
+        niet - omdat het apparaat werkelijk structureel meer is gaan
+        gebruiken, of gewoon omdat het zomer is en een koelkast dan
+        harder werkt - dan blijft de melding weken staan tot de mediaan
+        van de geschiedenis vanzelf is meegekropen.
+
+        De enige alternatieven waren bot: `unconfirm_nilm_device` wist
+        de hele leergeschiedenis, en `reject_nilm_device` haalt het
+        apparaat er helemaal uit. Beide gooien maanden aan opgebouwde
+        kennis weg voor iets wat eigenlijk "ja, dit klopt, ga verder"
+        is.
+
+        Wat deze actie doet: het apparaat blijft bevestigd en blijft
+        gevolgd, maar de referentie wordt opnieuw verankerd op het
+        RECENTE niveau. De oudste dagen verdwijnen uit de geschiedenis,
+        zodat de mediaan meteen het nieuwe normaal weerspiegelt in plaats
+        van er dertig dagen over te doen. Het alarm en de opgebouwde
+        CUSUM-som worden gewist.
+
+        Bewust NIET de hele geschiedenis wissen: dan zou er tien dagen
+        lang geen referentie zijn en kon een échte verslechtering in die
+        periode ongemerkt blijven.
+        """
+        device = self.nilm_confirmed_devices.get(entity_id)
+        if device is None:
+            return False
+
+        history = device.get("daily_avg_history") or []
+        if history:
+            device["daily_avg_history"] = history[-CUSUM_MIN_HISTORY_FOR_REFERENCE:]
+        device["cusum_accumulator"] = 0.0
+        device["anomaly_detected"] = False
+        device["estimated_drift_percent"] = None
+        device["_normal_streak_days"] = 0
+        device["drift_accepted_at"] = dt_util.now().isoformat()
+        # De referentie zelf wordt bij de eerstvolgende dagafronding
+        # opnieuw berekend uit de ingekorte geschiedenis; hem hier al
+        # zetten zou een tweede, afwijkende berekening introduceren.
+        device["reference_avg_w"] = None
+
+        self._notify_listeners()
+        self.hass.async_create_task(self._async_save_nilm_confirmed_devices_store())
+        _LOGGER.info(
+            "Drift van %s geaccepteerd als nieuw normaal - referentie wordt "
+            "opnieuw opgebouwd uit de laatste %d dagen",
+            entity_id,
+            CUSUM_MIN_HISTORY_FOR_REFERENCE,
+        )
+        return True
+
     def unconfirm_nilm_device(self, entity_id: str) -> bool:
         """Removes a confirmed device and its entire learned CUSUM
         history (baseline, drift state, daily averages) so it can be
@@ -7974,6 +8805,10 @@ class EnergyManagementSystemCoordinator:
         """
         if self.energy_balance_method_version == ENERGY_BALANCE_METHOD_VERSION:
             return
+        # None betekent: opslag van vóór v1.1.6, of een verse
+        # installatie. In het eerste geval hoort de reeks gewist te
+        # worden, in het tweede is er niets om te wissen - dus
+        # onvoorwaardelijk doorgaan is in beide gevallen juist.
         self.energy_balance_error_history = []
         self.sensor_health_score = None
         self.measurement_quality = None
@@ -8460,9 +9295,19 @@ class EnergyManagementSystemCoordinator:
             if device.get("anomaly_detected")
         ]
         if possibly_defective:
+            # v1.1.7, gevraagd: "Hoe kan dit als acceptabel worden
+            # gezien?" - de melding zei wél wat er aan de hand was, maar
+            # niet wat je ermee kunt. Zonder die aanwijzing waren de
+            # enige zichtbare uitwegen het apparaat verwijderen of zijn
+            # hele leergeschiedenis wissen, en dat is voor een koelkast
+            # die 's zomers harder werkt volstrekt buiten proportie.
             aandachtspunten.append(
                 f"{len(possibly_defective)} apparaat/apparaten mogelijk "
-                f"defect: {', '.join(possibly_defective)}."
+                f"defect: {', '.join(possibly_defective)}. Klopt het "
+                "hogere verbruik (bijvoorbeeld een koelkast die het in "
+                "de zomer zwaarder heeft)? Gebruik dan de actie "
+                "'accept_nilm_device_drift' om dit als het nieuwe "
+                "normaal te ijken - de leergeschiedenis blijft behouden."
             )
             # v0.63.100, gevraagd: "kan dit eerder in diagnostiek worden
             # opgevangen" - context of het gedrag inmiddels alweer aan
@@ -8545,6 +9390,23 @@ class EnergyManagementSystemCoordinator:
                     "trager dan de 5-minutencyclus. Afgeleide waarden "
                     "worden daarom over de werkelijke beweging gerekend."
                 )
+
+        # v1.1.8: lopen de weerbronnen ver uiteen, dan zegt het
+        # gemiddelde weinig. Informatief - het is geen storing van deze
+        # integratie, maar wel de verklaring als de gerapporteerde
+        # bewolking niet klopt met wat je buiten ziet.
+        spreiding = self.weather_ensemble_spread_percent
+        if spreiding is not None and spreiding >= WEATHER_ENSEMBLE_SPREAD_ATTENTION_PERCENT:
+            metingen = ", ".join(
+                f"{eid}: {waarde:.0f}%"
+                for eid, waarde in self.weather_ensemble_readings.items()
+            )
+            informatief.append(
+                f"Weerbronnen lopen {spreiding:.0f} procentpunt uiteen over de "
+                f"bewolking ({metingen}). Het gemiddelde "
+                f"({self.weather_ensemble_cloud_cover_percent}%) zegt dan "
+                "weinig - controleer welke bron klopt met wat je buiten ziet."
+            )
 
         duplicate_pairs = self.get_nilm_duplicate_pairs()
         if duplicate_pairs:
@@ -9057,6 +9919,7 @@ class EnergyManagementSystemCoordinator:
                             f"Gebaseerd op een aanhoudende trend, niet één losse dag."
                         ),
                         notification_id=f"ems_nilm_anomaly_{entity_id}",
+                        kind="device_drift",
                     )
 
     def _update_living_room_airco_prediction(self, now: datetime) -> None:
@@ -9235,6 +10098,72 @@ class EnergyManagementSystemCoordinator:
             return "koelen"
         return "uit"
 
+    def get_sun_azimuth_degrees(self) -> float | None:
+        """Actuele azimut van de zon in graden (v1.3.1)."""
+        state = self.hass.states.get(SUN_FALLBACK_ENTITY)
+        if state is not None:
+            try:
+                return float(state.attributes.get("azimuth"))
+            except (TypeError, ValueError):
+                pass
+        return None
+
+    def _sun_could_hit_the_backyard_sensor(self) -> tuple[bool, str]:
+        """Kan de zon op dit moment op de achtertuinsensor schijnen?
+        (v1.3.1)
+
+        Geeft (mogelijk, reden) terug. De reden gaat mee in de melding,
+        zodat er niet langer "mogelijk direct zonlicht" staat op een
+        moment dat de zon aantoonbaar onder de horizon staat.
+
+        De blootstellingsrichting wordt GELEERD uit de azimut waarbij
+        eerdere flitsen optraden. De integratie weet niet waar die sensor
+        hangt, en ernaar vragen zou een configuratieveld opleveren dat
+        moeilijk goed in te vullen is - de meeste mensen weten niet uit
+        welke windrichting hun sensorbehuizing zon vangt.
+        """
+        daglicht = self.is_daylight_now()
+        if daglicht is False:
+            return False, "de zon staat onder de horizon"
+        if daglicht is None:
+            # Zonnestand onbekend: het oude gedrag aanhouden in plaats
+            # van te gokken.
+            return True, "mogelijk kortstondig direct zonlicht op de sensor"
+
+        azimut = self.get_sun_azimuth_degrees()
+        geleerd = self.backyard_sun_exposure_azimuths
+        if azimut is None or len(geleerd) < BACKYARD_SUN_EXPOSURE_MIN_SAMPLES:
+            return True, "mogelijk kortstondig direct zonlicht op de sensor"
+
+        # Cirkelvormig verschil: 350 en 10 graden liggen 20 graden uit
+        # elkaar, niet 340.
+        def afstand(a: float, b: float) -> float:
+            verschil = abs(a - b) % 360
+            return min(verschil, 360 - verschil)
+
+        dichtstbij = min(afstand(azimut, eerder) for eerder in geleerd)
+        if dichtstbij > BACKYARD_SUN_EXPOSURE_MARGIN_DEGREES:
+            return (
+                False,
+                f"de zon staat op {azimut:.0f}°, ver buiten de richting "
+                "waaruit deze sensor eerder flitsen liet zien",
+            )
+        return True, "mogelijk kortstondig direct zonlicht op de sensor"
+
+    def _record_backyard_sun_exposure(self) -> None:
+        """Onthoudt uit welke richting de zon kwam bij een flits
+        (v1.3.1) - alleen bij daglicht, want anders zegt de azimut
+        niets."""
+        if self.is_daylight_now() is not True:
+            return
+        azimut = self.get_sun_azimuth_degrees()
+        if azimut is None:
+            return
+        self.backyard_sun_exposure_azimuths.append(round(azimut, 1))
+        self.backyard_sun_exposure_azimuths = self.backyard_sun_exposure_azimuths[
+            -BACKYARD_SUN_EXPOSURE_HISTORY_LENGTH:
+        ]
+
     def _get_filtered_backyard_temp_c(self, now: datetime) -> float | None:
         """Uitschieter-gefilterde achtertuinsensor-meting (v0.63.96,
         gerapporteerd met grafiek: de sensor kan 's ochtends kort in
@@ -9309,7 +10238,13 @@ class EnergyManagementSystemCoordinator:
             sustained_minutes = (
                 now - self._backyard_temp_spike_since
             ).total_seconds() / 60
-            if sustained_minutes >= BACKYARD_TEMP_SPIKE_CONFIRM_MINUTES:
+            mogelijk_zon, _ = self._sun_could_hit_the_backyard_sensor()
+            vereist = (
+                BACKYARD_TEMP_SPIKE_CONFIRM_MINUTES
+                if mogelijk_zon
+                else BACKYARD_TEMP_SPIKE_CONFIRM_MINUTES_NO_SUN
+            )
+            if sustained_minutes >= vereist:
                 # Sustained long enough - treat as a genuine change,
                 # not a transient artifact.
                 self._backyard_temp_last_accepted_c = raw_temp
@@ -9321,14 +10256,29 @@ class EnergyManagementSystemCoordinator:
         else:
             # A new (or first) spike candidate - start the confirmation
             # window.
+            if self._backyard_temp_spike_candidate_c is not None:
+                # De vorige kandidaat hield niet aan en was dus een echte
+                # kortstondige flits. Onthoud uit welke richting de zon
+                # toen kwam - zo leert de integratie waar deze sensor
+                # blootstaat, zonder dat iemand dat hoeft in te vullen.
+                self._record_backyard_sun_exposure()
             self._backyard_temp_spike_candidate_c = raw_temp
             self._backyard_temp_spike_since = now
 
+        # v1.3.1: hoe lang er gewacht wordt hangt af van de zonnestand.
+        # Kan de zon er niet op schijnen, dan is dit geen zonneflits en
+        # is 45 minuten wachten onnodig lang voor iets dat vrijwel zeker
+        # echt weer is.
+        mogelijk_zon, zon_reden = self._sun_could_hit_the_backyard_sensor()
+        venster = (
+            BACKYARD_TEMP_SPIKE_CONFIRM_MINUTES
+            if mogelijk_zon
+            else BACKYARD_TEMP_SPIKE_CONFIRM_MINUTES_NO_SUN
+        )
         self.last_backyard_spike_filtered_note = (
             f"Uitschieter genegeerd: {raw_temp}°C wijkt te snel af van "
-            f"{self._backyard_temp_last_accepted_c}°C (mogelijk kortstondig "
-            "direct zonlicht op de sensor) - wordt pas vertrouwd als dit "
-            f"{BACKYARD_TEMP_SPIKE_CONFIRM_MINUTES} minuten aanhoudt."
+            f"{self._backyard_temp_last_accepted_c}°C ({zon_reden}) - "
+            f"wordt vertrouwd als dit {venster} minuten aanhoudt."
         )
         return self._backyard_temp_last_accepted_c
 
@@ -10693,6 +11643,7 @@ class EnergyManagementSystemCoordinator:
             title=title,
             message=message,
             notification_id="ems_mode_change",
+            kind="mode_change",
         )
 
     def _build_explanation(self) -> str:
@@ -11112,6 +12063,8 @@ class EnergyManagementSystemCoordinator:
         self._update_peak_power_tracking(now)
         self._update_battery_module_health(now)
         self._update_sensor_cadence_tracking()
+        self._update_pv_geometry_learning(now)
+        self._evaluate_new_notifications(now)
         self.schedule_persisted_state_save()
         await self._async_apply_battery_cooling()
         self._update_feedin_regime(now, entries)

@@ -1083,6 +1083,25 @@ PERSISTED_PLAIN_FIELDS = (
     "living_room_temp_bucket_humidity",
     "battery_cooling_history",
     "kalman_divergence_history",
+    # v1.3.1: de geleerde blootstellingsrichting van de achtertuinsensor.
+    # Vijf flitsen zijn nodig voordat die iets doet; zonder bewaren zou
+    # die telling na elke herstart opnieuw beginnen.
+    "backyard_sun_exposure_azimuths",
+    # v1.4.0: het PV-installatieprofiel bouwt over WEKEN op (vijf
+    # heldere dagen voor een eerste schatting, twintig voor een
+    # betrouwbare). Zonder bewaren zou die telling na elke herstart
+    # opnieuw beginnen en nooit iets opleveren.
+    "pv_peak_azimuth_history",
+    "pv_azimuth_performance",
+    # Meldingen (v1.2.0): de aan/uit-standen zijn een gebruikerskeuze en
+    # mogen bij een herstart niet terugspringen naar de standaard. De
+    # verzendmomenten horen er ook bij, anders zou het dempingsvenster na
+    # elke herstart opnieuw beginnen en kon dezelfde melding alsnog
+    # meteen weer afgaan.
+    "notification_enabled",
+    "notification_last_sent",
+    "notification_history",
+    "notifications_master_enabled",
     # Cumulatieve financiële en KPI-tellers
     "actual_cost_today_eur",
     "actual_cost_current_month_eur",
@@ -1287,3 +1306,407 @@ ENERGY_BALANCE_MAX_INTERVAL_MINUTES = 120
 # 20 hangen en drukken de score omlaag zonder dat er iets mis is. Bij een
 # verandering van dit nummer wordt de geschiedenis eenmalig gewist.
 ENERGY_BALANCE_METHOD_VERSION = 3
+
+# Vanaf hoeveel procentpunt verschil tussen de weerbronnen het
+# gemiddelde te weinig zegt om op te varen (v1.1.8). Twee bronnen die
+# 0% en 51% melden geven precies hetzelfde gemiddelde als twee keer 25%,
+# terwijl het eerste geval betekent dat er iets mis is met een bron.
+WEATHER_ENSEMBLE_SPREAD_ATTENTION_PERCENT = 40.0
+
+# --- Meldingen: register en schakelaars (v1.2.0) --------------------
+# Gevraagd: "Ik wil nog een tabblad waar ik meldingen in en uit kan
+# schakelen, dus je mag meerdere meldingen maken voor mijn iPhone, echter
+# wil ik ze wel aan/uit kunnen zetten" - en daarna: "zoveel mogelijk
+# relevante meldingen toevoegen".
+#
+# Tot nu toe hingen alle zeven bestaande meldingen aan één configuratie-
+# veld: alles aan of alles uit. Elke melding krijgt nu een eigen
+# schakelaar.
+#
+# Twee ontwerpkeuzes die het verschil maken tussen bruikbaar en
+# wegswipen:
+#
+# 1. ALLEEN de bestaande zeven staan standaard AAN. Al het nieuwe begint
+#    UIT. Twintig meldingen die zichzelf aanzetten is een garantie dat er
+#    binnen een week niets meer van gelezen wordt - en dan is de hele
+#    functie waardeloos.
+# 2. Elke melding heeft een eigen DEMPINGSVENSTER. Vooral modus-
+#    wijzigingen en sluipverbruik kunnen anders meerdere keren per uur
+#    afgaan.
+#
+# Velden per melding: sleutel, label, uitleg, standaard aan/uit,
+# dempingsvenster in minuten.
+NOTIFICATION_TYPES: tuple[tuple[str, str, str, bool, int], ...] = (
+    # --- bestaand gedrag, blijft standaard aan ---
+    (
+        "appliance_cheap_moment",
+        "Goedkoop moment voor vaatwasser/wasmachine",
+        "Wanneer een goedkoop prijsblok begint en het apparaat klaarstaat.",
+        True,
+        60,
+    ),
+    (
+        "appliance_ready",
+        "Apparaat klaar",
+        "Wanneer de vaatwasser of wasmachine zijn cyclus heeft afgerond.",
+        True,
+        5,
+    ),
+    (
+        "battery_cooling",
+        "Accu-koeling aan/uit",
+        "Wanneer de koelventilator van de thuisaccu schakelt.",
+        True,
+        15,
+    ),
+    (
+        "sluipverbruik",
+        "Mogelijk sluipverbruik",
+        "Wanneer het basisverbruik structureel is opgelopen.",
+        True,
+        720,
+    ),
+    (
+        "device_drift",
+        "Mogelijk defect apparaat",
+        "Wanneer een bevestigd NILM-apparaat aanhoudend meer verbruikt.",
+        True,
+        1440,
+    ),
+    (
+        "mode_change",
+        "Modus gewijzigd",
+        "Wanneer de accu van bedrijfsmodus wisselt. Kan bij wisselende "
+        "prijzen meerdere keren per dag afgaan.",
+        True,
+        30,
+    ),
+    # --- nieuw, standaard uit ---
+    (
+        "battery_wont_last_night",
+        "Accu haalt de nacht niet",
+        "Wanneer de verwachte overnachtingsbehoefte groter is dan wat er "
+        "in de accu zit.",
+        False,
+        180,
+    ),
+    (
+        "battery_full_with_sun",
+        "Accu vol terwijl de zon nog schijnt",
+        "Zonoverschot dat niet meer opgeslagen kan worden - een moment om "
+        "een apparaat aan te zetten.",
+        False,
+        120,
+    ),
+    (
+        "low_soc_before_peak",
+        "Lage accustand vlak voor de avondpiek",
+        "Wanneer er weinig in de accu zit terwijl het duurste blok "
+        "eraan komt.",
+        False,
+        180,
+    ),
+    (
+        "cheap_block_soon",
+        "Goedkoopste blok begint bijna",
+        "Een kwartier voordat het goedkoopste blok van vandaag begint.",
+        False,
+        120,
+    ),
+    (
+        "negative_prices",
+        "Negatieve prijzen op komst",
+        "Wanneer er vandaag kwartieren met een negatieve prijs zijn.",
+        False,
+        720,
+    ),
+    (
+        "exceptional_peak_price",
+        "Uitzonderlijk duur kwartier vandaag",
+        "Wanneer de dagpiek ver boven het gebruikelijke ligt.",
+        False,
+        720,
+    ),
+    (
+        "solar_underperforming",
+        "Zonopbrengst blijft achter",
+        "Wanneer de opbrengst structureel onder de voorspelling blijft - "
+        "kan op vervuiling of een storing wijzen.",
+        False,
+        360,
+    ),
+    (
+        "low_solar_day",
+        "Weinig-zon-dag herkend",
+        "Zodat duidelijk is waarom er buiten het goedkope blok wordt "
+        "bijgeladen.",
+        False,
+        720,
+    ),
+    (
+        "sensor_unavailable",
+        "Sensor valt weg",
+        "Wanneer een geconfigureerde sensor onbereikbaar wordt.",
+        False,
+        120,
+    ),
+    (
+        "integration_error",
+        "Integratie loopt vast",
+        "Wanneer er een fout optreedt die de aansturing kan blokkeren.",
+        False,
+        60,
+    ),
+    (
+        "battery_module_drift",
+        "Accumodule loopt uit de pas",
+        "Wanneer een van de accumodules structureel afwijkt van de andere.",
+        False,
+        1440,
+    ),
+    (
+        "module_became_ready",
+        "Adviesmodule is klaar",
+        "Wanneer een module genoeg data heeft verzameld om betrouwbaar te "
+        "zijn.",
+        False,
+        1440,
+    ),
+    (
+        "pv_orientation_mismatch",
+        "PV-oriëntatie wijkt af van de opgegeven waarde",
+        "Wanneer de afgeleide piekrichting structureel afwijkt van wat je "
+        "hebt ingevuld - kan wijzen op beschaduwing, vervuiling of een "
+        "uitgevallen streng.",
+        False,
+        1440,
+    ),
+    (
+        "daily_summary",
+        "Dagoverzicht",
+        "Een samenvatting van de dag: besparing, opbrengst, verbruik.",
+        False,
+        720,
+    ),
+    (
+        "monthly_summary",
+        "Maandoverzicht",
+        "Een samenvatting aan het begin van een nieuwe maand.",
+        False,
+        1440,
+    ),
+)
+
+# Hoeveel verzendmomenten bewaard blijven voor het tabblad.
+NOTIFICATION_HISTORY_LENGTH = 50
+
+# --- Eén betrouwbaarheidsschaal (v1.3.0) -----------------------------
+# Gevraagd: "ik wil dit eigenlijk voor vele data welke wordt gecreeerd,
+# hoe betrouwbaar is de gegenereerde data".
+#
+# Een inventarisatie liet zien dat er VIJF woordenlijsten naast elkaar
+# bestonden voor in wezen dezelfde vraag: klaar/bijna_klaar/... voor de
+# adviesmodules, goed/verminderd/slecht voor de sensor-gezondheid,
+# betrouwbaar/indicatief voor de klimaatprojectie,
+# verwaarloosbaar/klein/noemenswaardig voor de Kalman-divergentie, en
+# volgt_de_tick/traag voor de meetfrequentie. Daardoor was in één
+# oogopslag niet te zien waar je op kon varen.
+#
+# Zes niveaus. Vier daarvan vormen een oplopende ladder; de andere twee
+# staan er bewust buiten omdat ze iets anders zeggen dan "meer of minder
+# rijp".
+RELIABILITY_NOT_CONFIGURED = "niet_geconfigureerd"
+RELIABILITY_INSUFFICIENT = "onvoldoende_data"
+RELIABILITY_INDICATIVE = "indicatief"
+RELIABILITY_RELIABLE = "betrouwbaar"
+RELIABILITY_UNRELIABLE = "onbetrouwbaar"
+RELIABILITY_UNVERIFIABLE = "niet_toetsbaar"
+
+# De ladder, van laag naar hoog. `niet_geconfigureerd` en
+# `niet_toetsbaar` staan hier bewust NIET in: het eerste betekent "er is
+# niets", het tweede "er valt principieel niets tegen af te zetten". Ze
+# op de ladder zetten zou suggereren dat ze met wachten beter worden, en
+# dat is precies de verwarring die het oude "structureel_beschikbaar"
+# opriep.
+RELIABILITY_LADDER = (
+    RELIABILITY_INSUFFICIENT,
+    RELIABILITY_INDICATIVE,
+    RELIABILITY_RELIABLE,
+)
+
+RELIABILITY_LABELS = {
+    RELIABILITY_NOT_CONFIGURED: (
+        "⚪ niet geconfigureerd",
+        "De benodigde sensor of instelling ontbreekt - er wordt niets "
+        "berekend.",
+    ),
+    RELIABILITY_INSUFFICIENT: (
+        "⏳ onvoldoende data",
+        "Wordt nog verzameld. Er staat wel een getal, maar daar valt nog "
+        "niet op te varen.",
+    ),
+    RELIABILITY_INDICATIVE: (
+        "🟡 indicatief",
+        "Bruikbaar als richting, maar nog niet genoeg onderbouwd om op te "
+        "sturen.",
+    ),
+    RELIABILITY_RELIABLE: (
+        "✅ betrouwbaar",
+        "Genoeg data verzameld, of aantoonbaar nauwkeurig gebleken.",
+    ),
+    RELIABILITY_UNRELIABLE: (
+        "⚠️ onbetrouwbaar",
+        "Wél gemeten, en te ver naast de werkelijkheid gebleken. Niet op "
+        "sturen.",
+    ),
+    RELIABILITY_UNVERIFIABLE: (
+        "🔵 niet toetsbaar",
+        "Werkt en rekent, maar er is geen werkelijkheid om het tegen af te "
+        "zetten. Wachten maakt dit niet beter.",
+    ),
+}
+
+# Vertaling van de oude woordenlijsten naar de schaal. Bewust een
+# vertaling en geen hernoeming: de interne sleutels blijven zoals ze
+# zijn, zodat bestaande dashboards, automatiseringen en tests blijven
+# werken. Wat de gebruiker ziet is voortaan wél overal hetzelfde.
+RELIABILITY_ALIASES = {
+    # adviesmodules
+    "klaar": RELIABILITY_RELIABLE,
+    "bijna_klaar": RELIABILITY_INDICATIVE,
+    "onvoldoende_data": RELIABILITY_INSUFFICIENT,
+    "kwaliteit_te_laag": RELIABILITY_UNRELIABLE,
+    "structureel_beschikbaar": RELIABILITY_UNVERIFIABLE,
+    "niet_geconfigureerd": RELIABILITY_NOT_CONFIGURED,
+    # sensor-gezondheid
+    "goed": RELIABILITY_RELIABLE,
+    "verminderd": RELIABILITY_INDICATIVE,
+    "slecht": RELIABILITY_UNRELIABLE,
+    # klimaatprojectie
+    "betrouwbaar": RELIABILITY_RELIABLE,
+    "indicatief": RELIABILITY_INDICATIVE,
+    # Kalman-divergentie: dit is GEEN kwaliteitsoordeel over een getal
+    # maar een meting of filteren iets zou opleveren. "Verwaarloosbaar"
+    # betekent hier dat er niets te winnen valt, niet dat de data slecht
+    # is - vandaar niet_toetsbaar in plaats van een ladderniveau.
+    "verwaarloosbaar": RELIABILITY_UNVERIFIABLE,
+    "klein": RELIABILITY_UNVERIFIABLE,
+    "noemenswaardig": RELIABILITY_UNVERIFIABLE,
+    # meetfrequentie
+    "volgt_de_tick": RELIABILITY_RELIABLE,
+    "traag": RELIABILITY_INDICATIVE,
+}
+
+# --- Zonnestand (v1.3.0) ---------------------------------------------
+# Gevraagd: "Ik heb de sun integratie in HA, kan dit nog helpen bij
+# verbeteringen?"
+#
+# De belangrijkste toepassing repareert een fout uit v1.1.9. Daar wordt
+# de meetfrequentie van de PV-sensor overgeslagen als die op nul staat,
+# omdat de nacht het cijfer vertekende. Maar dat gebruikt de sensor ZELF
+# als criterium: hangt de SolarEdge-koppeling er midden op de dag uit,
+# dan is de waarde 0, concludeert de code "geen zon dus terecht stil",
+# en blijft de storing volledig onzichtbaar.
+#
+# Met de zonnestand klopt het wel: staat de zon boven de horizon, dan
+# HOORT die sensor te bewegen, en een storing valt meteen op.
+CONF_SUN_ELEVATION_SENSOR = "sun_elevation_sensor_entity"
+CONF_SUN_PHASE_SENSOR = "sun_phase_sensor_entity"
+
+# Boven deze hoogte gaat er noemenswaardig zonlicht op de panelen vallen.
+# Bewust laag: het gaat er niet om of er veel opbrengst is, maar of de
+# sensor überhaupt zou moeten bewegen.
+SUN_DAYLIGHT_MIN_ELEVATION_DEGREES = 3.0
+
+# `sun.sun` als vangnet wanneer er geen eigen sensor is geconfigureerd -
+# die entiteit zit standaard in Home Assistant en vereist geen opzet.
+SUN_FALLBACK_ENTITY = "sun.sun"
+
+# --- Uitschieter-filter en de zonnestand (v1.3.1) --------------------
+# Het filter op de achtertuinsensor bestaat expliciet voor "kortstondig
+# direct zonlicht op de sensor". Tot nu toe wist het niet of de zon
+# überhaupt scheen: een temperatuursprong om drie uur 's nachts kreeg
+# dezelfde behandeling, inclusief de melding dat het mogelijk zonlicht
+# was. Dat is aantoonbaar onjuist, en het kostte 45 minuten wachten voor
+# een verandering die vrijwel zeker echt weer was.
+#
+# Staat de zon onder de horizon, dan kan een sprong geen zonneflits zijn.
+# Voorzichtig blijven is nog steeds verstandig - een langsrijdende auto,
+# een openslaande deur - maar veel korter.
+BACKYARD_TEMP_SPIKE_CONFIRM_MINUTES_NO_SUN = 10
+
+# Als de zon wél schijnt maar ver buiten de richting staat waarin deze
+# sensor eerder flitsen liet zien, is een sprong ook minder verdacht.
+# De blootstellingsrichting wordt GELEERD uit waar de flitsen vandaan
+# kwamen - de integratie weet immers niet waar de sensor hangt, en dat
+# vragen zou een configuratieveld opleveren dat niemand goed invult.
+BACKYARD_SUN_EXPOSURE_MIN_SAMPLES = 5
+BACKYARD_SUN_EXPOSURE_MARGIN_DEGREES = 45.0
+BACKYARD_SUN_EXPOSURE_HISTORY_LENGTH = 40
+
+# --- PV-installatieprofiel (v1.4.0) ----------------------------------
+# Gevraagd: "kun je nu ook zelf een berekening maken voor de verwachtte
+# azimuth en andere relevante informatie hoe mijn PV installatie
+# geinstalleerd ligt".
+#
+# Dat kan, want de zon vertelt het. Het vermogen piekt op het moment dat
+# de zon recht voor de panelen staat, dus de zon-azimut bij de dagpiek
+# is een directe schatting van de paneelrichting. En de verhouding
+# tussen werkelijke en verwachte opbrengst per windrichting laat zien
+# waar er beschaduwing is.
+#
+# HELLINGSHOEK is bewust NIET afgeleid. Dat vraagt maanden aan
+# seizoensvariatie of aannames over instraling die deze integratie niet
+# kan controleren, en een getal geven dat er zomaar 15 graden naast zit
+# is erger dan geen getal.
+
+# Alleen dagen meetellen waarop de opbrengst dicht genoeg bij de
+# verwachting lag. Op een dag met wisselende bewolking ligt de piek waar
+# het toevallig opklaarde, en dat zegt niets over de daklijn.
+PV_GEOMETRY_MIN_CLEARNESS_RATIO = 0.7
+
+# Vakjes van 10 graden azimut voor de beschaduwingskaart. Fijner maakt
+# de vakjes te dun bezet; grover verbergt een smalle schoorsteenschaduw.
+PV_GEOMETRY_AZIMUTH_BUCKET_DEGREES = 10
+
+# Onder deze verhouding werkelijk/verwacht heet een windrichting
+# structureel beschaduwd. Ruim genomen: Solcast weet niets van jouw
+# specifieke daklijn, dus een deel van de afwijking is normaal.
+PV_GEOMETRY_SHADING_RATIO = 0.6
+PV_GEOMETRY_BUCKET_MIN_SAMPLES = 20
+
+# Hoeveel dagen piekrichting bewaard blijven, en hoeveel er nodig zijn
+# voor een uitspraak.
+PV_GEOMETRY_HISTORY_DAYS = 60
+PV_GEOMETRY_MIN_DAYS = 5
+PV_GEOMETRY_RELIABLE_DAYS = 20
+
+# Boven deze spreiding in de gevonden piekrichtingen is er waarschijnlijk
+# meer dan één dakvlak - bij één vlak liggen de dagelijkse pieken dicht
+# bij elkaar.
+PV_GEOMETRY_MULTI_ORIENTATION_SPREAD_DEGREES = 40.0
+
+# --- Opgegeven PV-oriëntatie als ijkpunt (v1.4.1) --------------------
+# De afgeleide oriëntatie is pas nuttig als je hem ergens tegen kunt
+# houden. Wie zelf weet welke kant zijn panelen op liggen, kan dat hier
+# invullen; de integratie meldt dan wanneer haar eigen afleiding daarvan
+# afwijkt.
+#
+# Dat is meer dan een controle op de methode. Verschuift de afgeleide
+# piekrichting later weg van de opgegeven waarde terwijl die niet is
+# veranderd, dan wijst dat op iets fysieks: een boom die is uitgegroeid,
+# vervuiling op een deel van het vlak, of een uitgevallen streng.
+CONF_PV_ACTUAL_AZIMUTH_DEGREES = "pv_actual_azimuth_degrees"
+CONF_PV_ACTUAL_TILT_DEGREES = "pv_actual_tilt_degrees"
+
+# Vanaf hoeveel graden verschil het het melden waard is. Bewust ruim:
+# een luchtfoto-schatting van de eigenaar heeft zelf ook speling.
+PV_ORIENTATION_MISMATCH_DEGREES = 25.0
+
+# Bij een FLAUWE hellingshoek is de opbrengstcurve veel breder en ligt
+# het piekmoment minder scherp vast - het schommelt dan per dag sterk.
+# Onder deze hoek wordt de tolerantie daarom opgerekt, anders zou een
+# vlakke opstelling voortdurend "afwijkend" melden terwijl er niets aan
+# de hand is.
+PV_SHALLOW_TILT_DEGREES = 20.0
+PV_SHALLOW_TILT_EXTRA_TOLERANCE_DEGREES = 15.0
