@@ -309,7 +309,7 @@ def _render_markdown_cards():
 def test_dashboard_yaml_is_valid():
     with open(DASHBOARD_PATH) as f:
         data = yaml.safe_load(f)
-    assert len(data["views"]) == 15
+    assert len(data["views"]) == 10
 
 
 def test_markdown_tables_have_no_blank_lines_between_rows():
@@ -350,3 +350,120 @@ def test_markdown_tables_have_a_header_and_separator_on_their_own_lines():
                 f"'{title}': separator row not immediately preceded by a "
                 f"header row on its own line"
             )
+
+
+# --- v1.10.1: samengevoegde tabbladen -------------------------------
+
+
+def test_no_view_is_empty():
+    """Bij het samenvoegen van tabbladen (15 naar 10) is een leeg
+    tabblad het teken dat er kaarten zijn kwijtgeraakt."""
+    data = yaml.safe_load(
+        (Path(__file__).parent.parent
+         / "custom_components/energy_management_system"
+         / "dashboard_template.yaml").read_text()
+    )
+
+    for view in data["views"]:
+        aantal = len(view.get("cards") or [])
+        for sectie in view.get("sections") or []:
+            aantal += len(sectie.get("cards") or [])
+        assert aantal > 0, view["title"]
+
+
+def test_the_merged_views_kept_their_content():
+    """Elk samengevoegd tabblad moet de inhoud van álle bronnen bevatten
+    - een kop zonder kaarten eronder betekent dat er iets is
+    weggevallen."""
+    data = yaml.safe_load(
+        (Path(__file__).parent.parent
+         / "custom_components/energy_management_system"
+         / "dashboard_template.yaml").read_text()
+    )
+    views = {v["title"]: v for v in data["views"]}
+
+    # v1.10.2: vijf overbodige koppen verwijderd (een kop die hetzelfde
+    # zegt als de kaart eronder, of als de tabbladnaam zelf).
+    verwacht = {
+        "Kwaliteit": 13,
+        "Financieel": 16,
+        "Verloop": 9,
+        "Klimaat & water": 10,
+    }
+    for titel, minimum in verwacht.items():
+        assert titel in views, titel
+        assert len(views[titel]["cards"]) >= minimum, titel
+
+
+def test_the_overview_kept_its_sections_layout():
+    """Overzicht gebruikt `type: sections`; bij een herindeling is dat
+    makkelijk te verliezen, en dan valt de hele indeling weg."""
+    data = yaml.safe_load(
+        (Path(__file__).parent.parent
+         / "custom_components/energy_management_system"
+         / "dashboard_template.yaml").read_text()
+    )
+    overzicht = next(v for v in data["views"] if v["title"] == "Overzicht")
+
+    assert overzicht.get("type") == "sections"
+    assert len(overzicht.get("sections") or []) >= 5
+
+
+def test_the_visual_view_is_still_a_panel():
+    data = yaml.safe_load(
+        (Path(__file__).parent.parent
+         / "custom_components/energy_management_system"
+         / "dashboard_template.yaml").read_text()
+    )
+    visueel = next(v for v in data["views"] if v["title"] == "Visueel")
+
+    assert visueel.get("panel") is True
+
+
+def test_no_heading_repeats_the_one_below_it():
+    """v1.10.2: na het samenvoegen stonden er koppen die hetzelfde zeiden
+    als de kaart eronder - "Betrouwbaarheid" boven "Hoe hard is dit
+    cijfer?", "GACS" boven "GACS-zelfbeoordeling". Dat kost ruimte zonder
+    iets toe te voegen.
+    """
+    data = yaml.safe_load(
+        (Path(__file__).parent.parent
+         / "custom_components/energy_management_system"
+         / "dashboard_template.yaml").read_text()
+    )
+
+    for view in data["views"]:
+        kaarten = view.get("cards") or []
+        for eerste, tweede in zip(kaarten, kaarten[1:]):
+            if not (
+                "title-card" in str(eerste.get("type"))
+                and "title-card" in str(tweede.get("type"))
+            ):
+                continue
+            kop = (eerste.get("title") or "").lower()
+            volgende = (tweede.get("title") or "").lower()
+            assert not volgende.startswith(kop), (
+                f"{view['title']}: kop '{eerste.get('title')}' herhaalt "
+                f"zich in '{tweede.get('title')}'"
+            )
+
+
+def test_no_heading_repeats_the_view_title():
+    """Een kop "Financieel" bovenaan het tabblad Financieel voegt niets
+    toe - de tabbladnaam staat er al."""
+    data = yaml.safe_load(
+        (Path(__file__).parent.parent
+         / "custom_components/energy_management_system"
+         / "dashboard_template.yaml").read_text()
+    )
+
+    for view in data["views"]:
+        kaarten = view.get("cards") or []
+        if not kaarten:
+            continue
+        eerste = kaarten[0]
+        if "title-card" not in str(eerste.get("type")):
+            continue
+        assert (eerste.get("title") or "").lower() != view["title"].lower(), (
+            view["title"]
+        )

@@ -281,11 +281,17 @@ def _legenda_tekst():
     # v1.3.0: het Betrouwbaarheid-tabblad heeft óók een kaart met de
     # titel "Legenda". Alleen op titel zoeken pakt dan de verkeerde, dus
     # eerst het juiste tabblad opzoeken.
+    # v1.10.1: het Advies-tabblad is samengevoegd in "Kwaliteit". Daar
+    # staan nu twee kaarten met de titel "Legenda" - die van de
+    # betrouwbaarheidsschaal en die van de adviesmodules - dus zoeken op
+    # titel alleen is niet genoeg; de inhoud onderscheidt ze.
     for view in data["views"]:
-        if view.get("title") != "Advies":
+        if view.get("title") != "Kwaliteit":
             continue
         for card in view.get("cards") or []:
-            if card.get("title") == "Legenda":
+            if card.get("title") == "Legenda" and "MPC" in card.get(
+                "content", ""
+            ):
                 return " ".join(card["content"].split())
     raise AssertionError("geen legenda-kaart gevonden op het Advies-tabblad")
 

@@ -185,4 +185,4 @@ def test_the_tab_exists():
         (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
     )
 
-    assert "GACS" in [v["title"] for v in data["views"]]
+    assert "Kwaliteit" in [v["title"] for v in data["views"]]
