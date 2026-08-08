@@ -9414,3 +9414,86 @@ deze tabellen juist het nut is.
 **Getest**: twee tests erbij in `test_detail_table_keys.py`.
 
 **Volledige testsuite**: 1328 tests, allemaal groen.
+
+## v1.14.7 — NILM-beoordeling was onbereikbaar geworden
+
+**Gevraagd**: waar NILM-apparaten en mogelijke duplicaten te beoordelen
+zijn. Antwoord: nergens - bij het opruimen van het Apparaten-tabblad in
+v1.12.0 zijn de knoppen verdwenen.
+
+**Erger dan een weggevallen tabel**: zonder die knoppen kan een kandidaat
+niet worden bevestigd of afgewezen en blijft een gemeld duplicaat staan.
+De detectie draait wel (de export meldt twee duplicaatparen) maar je kunt
+er niets mee.
+
+**Terug op de detailpagina**: kaart "Te beoordelen" met de huidige
+kandidaat (naam en vermogen) en de gevonden duplicaatparen, plus de vier
+knoppen. Een knop "bevestigen" zonder te tonen wát je bevestigt is niet
+te gebruiken.
+
+**Bijna de verkeerde entity_id's gebruikt**: de weergavenamen zijn
+dynamisch (ze tonen de kandidaat), dus daar zijn ze niet uit af te
+leiden. `button.py` legt ze expliciet vast om de "_2"-deduplicatie uit
+v0.63.81 te voorkomen: `nilm_kandidaat_1_*` en `nilm_duplicaat_1_*`. Een
+test bewaakt dat het dashboard geen zelfbedachte varianten gebruikt.
+
+**Getest**: drie tests erbij in `test_detail_table_keys.py`.
+
+**Volledige testsuite**: 1331 tests, allemaal groen.
+
+## v1.14.8 — Alle 24 verdwenen sensoren terug
+
+**Gevraagd**: alles terugzetten wat er qua dashboards is verwijderd,
+zodat de informatie weer volledig is.
+
+**Eerst gemeten**: een blanco herstel zou ook de zeven tabbladen, de
+doorklik en de kortere labels terugdraaien. Dus uitgezocht wat er echt
+ontbrak: van de 55 sensoren stonden er 24 nergens - beslissing en
+planning (7), adviesmodules (7), apparaatstatussen (5), zon en klimaat
+(3), overig (2). Veel meer dan de drie die opvielen.
+
+**Terug op de verborgen tabbladen** waar ze thuishoren; Overzicht blijft
+de samenvatting met doorklik. Van 85 naar 138 kaarten.
+
+**Grenzen meebewogen**: maximum per tabblad van 10 naar 20 kaarten -
+ruimer, niet weg.
+
+**Twee tests deden hun werk**: de regel uit v1.13.1 (meerdere koppen ->
+`sections`) sloeg aan op Financieel, dat door de nieuwe kop "Overig" twee
+koppen in masonry kreeg. En de eis dat elke kop een ondertitel heeft,
+dwong uit te leggen wat er in elke nieuwe sectie staat.
+
+**Nu bewaakt**: een test controleert dat ELKE sensor ergens op het
+dashboard staat, zodat een volgende opruimronde niet stilletjes
+informatie laat verdwijnen.
+
+**Volledige testsuite**: 1332 tests, allemaal groen.
+
+## v1.14.9 — Volledige analyse vóór installatie
+
+**Gevraagd**: een volledige analyse voor het installeren.
+
+**In orde**: alle bestanden parsen, 1334 tests groen, en het dashboard is
+sluitend - 0 van 55 sensoren zonder plek, geen dode sensorverwijzingen,
+geen dode navigatiepaden, geen onbereikbare subviews, eerste view is geen
+subview, NILM-knoppen bereikbaar, 7/7 schakelaars en 22/22
+meldingsschakelaars op het dashboard.
+
+**Eén echte fout**: de sensor-gezondheidsmelding zei "Niet door
+onnauwkeurige metingen - alle 14 vergelijkingen vielen binnen de marge"
+terwijl de nauwkeurigheid op 78,6% stond (drie metingen boven de drempel:
+368, 798, 593 W). De tekst uit v1.6.5 nam aan dat bij uitval als
+hoofdoorzaak álle metingen goed waren - het kan allebei tegelijk. Nu:
+"Vooral doordat een sensor 6 van de 20 keer geen waarde gaf (11 van de 14
+vergelijkingen vielen binnen de marge)".
+
+**Eén terechte nieuwe waarschuwing**: accumodule 1 met celdelta 0,190 V.
+De vergelijking is differentieel (module t.o.v. het gemiddelde van de
+andere op hetzelfde moment), dus SoC- en temperatuurinvloeden vallen weg.
+Module 1 wijkt +0,17 V af waar de andere op 0,03 en 0,01 V zitten - het
+opvolgen waard.
+
+**Getest**: twee tests erbij; één oudere test toetst nu de strekking in
+plaats van de exacte formulering.
+
+**Volledige testsuite**: 1334 tests, allemaal groen.

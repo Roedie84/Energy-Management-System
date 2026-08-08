@@ -515,6 +515,175 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Volledige analyse vóór installatie (v1.14.9)
+
+**Gevraagd**: een volledige analyse voor het installeren.
+
+### Wat er in orde is
+
+Alle Python-, YAML- en JSON-bestanden parsen. 1334 tests groen. En het
+dashboard is sluitend:
+
+| Controle | Uitkomst |
+|---|---|
+| Sensoren zonder plek op het dashboard | 0 van 55 |
+| Verwijzingen naar niet-bestaande sensoren | 0 |
+| Navigatiepaden die nergens heen gaan | 0 |
+| Verborgen tabbladen zonder ingang | 0 |
+| Eerste view is geen subview | ✅ |
+| NILM-knoppen bereikbaar | ✅ |
+| Schakelaars op het dashboard | 7 van 7 |
+| Meldingsschakelaars | 22 van 22 |
+
+### Eén echte fout: de melding sprak zichzelf tegen
+
+De sensor-gezondheid meldde:
+
+> *"Niet door onnauwkeurige metingen — alle 14 vergelijkingen vielen
+> binnen de marge"*
+
+Terwijl de nauwkeurigheid op **78,6%** stond. Drie metingen zaten er ruim
+boven de drempel van 300 W: 368, 798 en 593 W.
+
+Mijn tekst uit v1.6.5 nam aan dat bij uitval als hoofdoorzaak álle
+metingen goed waren. Dat hoeft niet: het kan allebei tegelijk. De melding
+zegt nu *"Vooral doordat een sensor 6 van de 20 keer geen waarde gaf (11
+van de 14 vergelijkingen vielen binnen de marge)"*.
+
+Een melding die zichzelf tegenspreekt maakt álle meldingen verdacht — je
+weet niet meer welk deel je kunt geloven.
+
+### Eén terechte nieuwe waarschuwing
+
+**Accumodule 1: celspanningsverschil 0,190 V.** Bij 100% SoC lopen
+celspanningen natuurlijk verder uiteen, en module 1 is 4 °C warmer dan
+module 3.
+
+Maar de vergelijking is **differentieel** — module tegen het gemiddelde
+van de andere twee op hetzelfde moment — dus SoC- en
+temperatuurinvloeden vallen weg. Module 1 wijkt +0,17 V af waar de
+andere op 0,03 en 0,01 V zitten. Die waarschuwing is terecht en het
+opvolgen waard.
+
+### Getest
+
+Twee tests erbij: de melding spreekt de cijfers niet tegen, en bij écht
+alle metingen binnen de marge staat dat er nog steeds. Eén oudere test
+eiste de exacte oude formulering; die toetst nu de strekking.
+
+**Volledige testsuite**: 1334 tests, allemaal groen.
+
+## Alle 24 verdwenen sensoren terug (v1.14.8)
+
+**Gevraagd**: *"Misschien alles wat we vanmorgen hebben verwijderd qua
+dashboards maar weer terug zetten? Zodat de informatie toch weer volledig
+is."*
+
+### Eerst gemeten in plaats van teruggedraaid
+
+Een blanco herstel zou ook de zeven tabbladen, de doorklik en de kortere
+labels terugdraaien — en daar was je juist tevreden over. Dus eerst
+uitgezocht wélke informatie ontbrak: van de **55 sensoren** stonden er
+**24 nergens** op het dashboard.
+
+Veel meer dan de drie die je zelf opmerkte:
+
+| Groep | Aantal |
+|---|---|
+| Beslissing en planning | 7 |
+| Adviesmodules | 7 |
+| Apparaten (cyclus + status) | 5 |
+| Zon en klimaat | 3 |
+| Overig | 2 |
+
+Een sensor die de integratie wél berekent maar die je nergens ziet, is
+verspilde moeite: hij kost rekentijd en levert niets op.
+
+### Terug op de verborgen tabbladen
+
+- **Systeem** — vaatwasser, wasmachine, steelstofzuiger, fietsladers,
+  NILM-kandidaten
+- **Verloop** — laatste reden, komend schema, gesimuleerde actie,
+  goedkoopste blok, ontlaadvenster, energie-check, accubescherming
+- **Kwaliteit** — de zeven adviesmodules met hun gereedheid
+- **Financieel** — piekvermogen, geleerd nachtverbruik
+- **Details** — PV-installatieprofiel, voorspelbias, airco-verwachting
+
+Overzicht blijft de samenvatting met doorklik. Van 85 naar **138
+kaarten** — bijna terug op het oude niveau, maar met de structuur van
+vandaag.
+
+### De grenzen zijn meebewogen
+
+Het maximum per tabblad gaat van 10 naar 20 kaarten. Ruimer, niet weg:
+hij hoort nu bij "details achter een tik" in plaats van "alleen
+samenvattingen".
+
+### Twee tests deden hun werk
+
+De regel uit v1.13.1 — een tabblad met meerdere koppen moet `sections`
+gebruiken — sloeg meteen aan op Financieel, dat door de nieuwe kop
+"Overig" twee koppen kreeg in een masonry-indeling. Precies de fout die
+op Systeem zichtbaar werd. Omgezet.
+
+En de eis dat elke kop een ondertitel heeft, dwong me uit te leggen wát
+er in elke nieuwe sectie staat.
+
+### Nu bewaakt
+
+Een test controleert dat **élke sensor** ergens op het dashboard staat.
+Dat vangt het bij de bron: een volgende opruimronde kan niet stilletjes
+informatie laten verdwijnen.
+
+**Volledige testsuite**: 1332 tests, allemaal groen.
+
+## NILM-beoordeling was onbereikbaar geworden (v1.14.7)
+
+**Gevraagd**: *"Waar kan ik nu Nilm apparaten beoordelen, net als
+mogelijke duplicaties?"*
+
+Nergens — en dat is een echt gemis. Bij het opruimen van het
+Apparaten-tabblad in v1.12.0 zijn de knoppen verdwenen.
+
+### Waarom dat erger is dan een weggevallen tabel
+
+Zonder die knoppen kan een herkende kandidaat niet worden **bevestigd of
+afgewezen**, en blijft een gemeld duplicaat staan. De detectie draait dan
+wel — je export meldt twee waarschijnlijke duplicaatparen — maar je kunt
+er niets mee.
+
+Een ontbrekende tabel kost je informatie; een ontbrekende knop kost je de
+mogelijkheid om te handelen.
+
+### Terug op de detailpagina
+
+Een kaart **"Te beoordelen"** met de huidige kandidaat (naam en vermogen)
+en de gevonden duplicaatparen, en daaronder de vier knoppen: kandidaat
+bevestigen of negeren, duplicaat bevestigen of afwijzen.
+
+Een knop "bevestigen" zonder te tonen wát je bevestigt is niet te
+gebruiken, dus die gegevens staan erboven.
+
+### Bijna de verkeerde entity_id's gebruikt
+
+Mijn eerste poging leidde de entity_id's af uit de weergavenaam. Dat kan
+niet: die namen zijn **dynamisch** — ze tonen de kandidaat, dus ze
+veranderen mee.
+
+`button.py` legt de entity_id's expliciet vast, juist om de
+"_2"-deduplicatie te voorkomen die in v0.63.81 werd gemeld. Ze heten
+`nilm_kandidaat_1_*` en `nilm_duplicaat_1_*`, niet wat ik ervan maakte.
+Er staat nu een test op dat het dashboard geen zelfbedachte varianten
+gebruikt.
+
+### Getest
+
+Drie tests erbij: de vier knoppen staan op het dashboard, de
+entity_id's komen overeen met wat `button.py` vastlegt, en de kandidaat
+en duplicaten worden getoond.
+
+**Volledige testsuite**: 1331 tests, allemaal groen.
+
 ## Uurvoorspelling woonkamertemperatuur terug (v1.14.6)
 
 **Gemeld**: *"Ik mis nu ook de uur temperatuur voorspelling van de

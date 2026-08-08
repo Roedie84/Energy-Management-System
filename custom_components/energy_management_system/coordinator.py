@@ -11230,13 +11230,33 @@ class EnergyManagementSystemCoordinator:
                 # v1.6.5: onderscheid maken tussen "de metingen zijn
                 # onnauwkeurig" en "de sensor viel weg". Zonder dat ga je
                 # zoeken naar een meetfout die er niet is.
+                # v1.14.9: NIET beweren dat alle vergelijkingen goed
+                # waren. In een export stond 78,6% nauwkeurigheid terwijl
+                # de melding zei "alle 14 vielen binnen de marge" - drie
+                # zaten er ruim boven (368, 798, 593 W). De melding sprak
+                # zichzelf tegen, en dan weet je niet meer wat je moet
+                # geloven.
+                buiten = uitsplitsing["vergelijkingen"] - round(
+                    uitsplitsing["vergelijkingen"]
+                    * (uitsplitsing["nauwkeurigheid_percent"] or 0)
+                    / 100
+                )
+                marge_tekst = (
+                    f"alle {uitsplitsing['vergelijkingen']} vergelijkingen "
+                    "vielen binnen de marge"
+                    if buiten == 0
+                    else (
+                        f"{uitsplitsing['vergelijkingen'] - buiten} van de "
+                        f"{uitsplitsing['vergelijkingen']} vergelijkingen "
+                        "vielen binnen de marge"
+                    )
+                )
                 aandachtspunten.append(
                     f"Sensor-gezondheid: {self.measurement_quality} "
-                    f"({self.sensor_health_score}%). Niet door onnauwkeurige "
-                    f"metingen - alle {uitsplitsing['vergelijkingen']} "
-                    "vergelijkingen vielen binnen de marge - maar doordat een "
+                    f"({self.sensor_health_score}%). Vooral doordat een "
                     f"sensor {uitsplitsing['uitval']} van de "
-                    f"{uitsplitsing['totaal']} keer geen waarde gaf"
+                    f"{uitsplitsing['totaal']} keer geen waarde gaf "
+                    f"({marge_tekst})"
                     + (
                         ": "
                         + ", ".join(

@@ -501,7 +501,7 @@ views:
         # "richtingen van de stromen nog niet geupdate?". De
         # versiesleutel dwingt een verse ophaal af. Een test bewaakt
         # dat deze waarde gelijk blijft aan de versie in manifest.json.
-        image: /local/energy_management_system_overview.svg?v=1.14.6
+        image: /local/energy_management_system_overview.svg?v=1.14.9
         elements:
           - type: state-label
             entity: sensor.woonkamer_energy_management_system_system_status
@@ -1239,6 +1239,45 @@ views:
         tap_action:
           action: more-info
 
+      - type: custom:mushroom-title-card
+        title: Adviesmodules
+        subtitle: De tien modules en hun gereedheid
+      - type: custom:mushroom-entity-card
+        entity: sensor.woonkamer_energy_management_system_advies_gereedheid_10_modules
+        name: Gereedheid
+        tap_action:
+          action: more-info
+      - type: custom:mushroom-entity-card
+        entity: sensor.woonkamer_energy_management_system_mpc_advies_prijsarbitrage_plan
+        name: MPC-advies
+        tap_action:
+          action: more-info
+      - type: custom:mushroom-entity-card
+        entity: sensor.woonkamer_energy_management_system_monte_carlo_risico_tekortkans
+        name: Monte Carlo
+        tap_action:
+          action: more-info
+      - type: custom:mushroom-entity-card
+        entity: sensor.woonkamer_energy_management_system_digital_twin_gesimuleerde_soc_winst
+        name: Digital Twin
+        tap_action:
+          action: more-info
+      - type: custom:mushroom-entity-card
+        entity: sensor.woonkamer_energy_management_system_digital_twin_nauwkeurigheid
+        name: Twin-nauwkeurigheid
+        tap_action:
+          action: more-info
+      - type: custom:mushroom-entity-card
+        entity: sensor.woonkamer_energy_management_system_kalman_filtering_soc_pv_verbruik
+        name: Kalman-filtering
+        tap_action:
+          action: more-info
+      - type: custom:mushroom-entity-card
+        entity: sensor.woonkamer_energy_management_system_model_en_parameternauwkeurigheid
+        name: Modelnauwkeurigheid
+        tap_action:
+          action: more-info
+
   - title: Systeem
     path: systeem
     subview: true
@@ -1333,311 +1372,363 @@ views:
               action: navigate
               navigation_path: /energy-management-system/details
 
+      - type: grid
+        cards:
+          - type: custom:mushroom-title-card
+            title: Apparaten in detail
+            subtitle: Cyclusstatus per apparaat en openstaande kandidaten
+          - type: custom:mushroom-entity-card
+            entity: sensor.woonkamer_energy_management_system_vaatwasser_cyclus_status
+            name: Vaatwasser
+            tap_action:
+              action: more-info
+          - type: custom:mushroom-entity-card
+            entity: sensor.woonkamer_energy_management_system_wasmachine_cyclus_status
+            name: Wasmachine
+            tap_action:
+              action: more-info
+          - type: custom:mushroom-entity-card
+            entity: sensor.woonkamer_energy_management_system_steelstofzuiger_status
+            name: Steelstofzuiger
+            tap_action:
+              action: more-info
+          - type: custom:mushroom-entity-card
+            entity: sensor.woonkamer_energy_management_system_fietsladers_status
+            name: Fietsladers
+            tap_action:
+              action: more-info
+          - type: custom:mushroom-entity-card
+            entity: sensor.woonkamer_energy_management_system_nilm_onbevestigde_kandidaten
+            name: Kandidaten
+            tap_action:
+              action: more-info
+
   - title: Financieel
     path: financieel
     subview: true
-    cards:
-      - type: custom:mushroom-template-card
-        primary: >-
-          € {{
-          states('sensor.woonkamer_energy_management_system_battery_savings_cost_basis_model')
-          }}
-        secondary: >-
-          Kostprijs € {{
-          state_attr('sensor.woonkamer_energy_management_system_battery_savings_cost_basis_model',
-          'cost_basis_eur_per_kwh') }}/kWh
-        icon: mdi:piggy-bank-outline
-        icon_color: >-
-          {{ 'green' if
-          states('sensor.woonkamer_energy_management_system_battery_savings_cost_basis_model')
-          | float(0) >= 0 else 'red' }}
-        entity: >-
-          sensor.woonkamer_energy_management_system_battery_savings_cost_basis_model
-        tap_action:
-          action: more-info
-
+    type: sections
+    sections:
       - type: grid
-        columns: 2
-        square: false
         cards:
           - type: custom:mushroom-template-card
             primary: >-
               € {{
-              states('sensor.woonkamer_energy_management_system_discharge_value_expensive_quarters')
+              states('sensor.woonkamer_energy_management_system_battery_savings_cost_basis_model')
               }}
-            secondary: Waarde ontladen
-            icon: mdi:cash-plus
-            icon_color: green
-            entity: >-
-              sensor.woonkamer_energy_management_system_discharge_value_expensive_quarters
-            tap_action:
-              action: more-info
-          - type: custom:mushroom-template-card
-            primary: >-
-              € {{
-              states('sensor.woonkamer_energy_management_system_charge_cost_grid_charging')
-              }}
-            secondary: Netlaadkosten
-            icon: mdi:cash-minus
-            icon_color: red
-            entity: >-
-              sensor.woonkamer_energy_management_system_charge_cost_grid_charging
-
-            tap_action:
-              action: more-info
-      - type: grid
-        columns: 3
-        square: false
-        cards:
-          - type: custom:mushroom-template-card
-            primary: "€ {{ states('sensor.ems_ontlaadwaarde_vandaag') }}"
-            secondary: Vandaag
-            icon: mdi:calendar-today
-            icon_color: green
-            entity: sensor.ems_ontlaadwaarde_vandaag
-            tap_action:
-              action: more-info
-          - type: custom:mushroom-template-card
-            primary: "€ {{ states('sensor.ems_ontlaadwaarde_deze_week') }}"
-            secondary: Deze week
-            icon: mdi:calendar-week
-            icon_color: green
-            entity: sensor.ems_ontlaadwaarde_deze_week
-            tap_action:
-              action: more-info
-          - type: custom:mushroom-template-card
-            primary: "€ {{ states('sensor.ems_ontlaadwaarde_deze_maand') }}"
-            secondary: Deze maand
-            icon: mdi:calendar-month
-            icon_color: green
-            entity: sensor.ems_ontlaadwaarde_deze_maand
-            tap_action:
-              action: more-info
-          - type: custom:mushroom-template-card
-            primary: "€ {{ states('sensor.ems_netlaadkosten_vandaag') }}"
-            secondary: Vandaag
-            icon: mdi:calendar-today
-            icon_color: red
-            entity: sensor.ems_netlaadkosten_vandaag
-            tap_action:
-              action: more-info
-          - type: custom:mushroom-template-card
-            primary: "€ {{ states('sensor.ems_netlaadkosten_deze_week') }}"
-            secondary: Deze week
-            icon: mdi:calendar-week
-            icon_color: red
-            entity: sensor.ems_netlaadkosten_deze_week
-            tap_action:
-              action: more-info
-          - type: custom:mushroom-template-card
-            primary: "€ {{ states('sensor.ems_netlaadkosten_deze_maand') }}"
-            secondary: Deze maand
-            icon: mdi:calendar-month
-            icon_color: red
-            entity: sensor.ems_netlaadkosten_deze_maand
-
-            tap_action:
-              action: more-info
-      - type: grid
-        columns: 3
-        square: false
-        cards:
-          - type: custom:mushroom-template-card
-            primary: "€ {{ states('sensor.ems_accubesparing_vandaag') }}"
-            secondary: Besparing vandaag
-            icon: mdi:calendar-today
-            icon_color: >-
-              {{ 'green' if states('sensor.ems_accubesparing_vandaag') |
-              float(0) >= 0 else 'red' }}
-            entity: sensor.ems_accubesparing_vandaag
-            tap_action:
-              action: more-info
-          - type: custom:mushroom-template-card
-            primary: "€ {{ states('sensor.ems_accubesparing_deze_week') }}"
-            secondary: Besparing deze week
-            icon: mdi:calendar-week
-            icon_color: >-
-              {{ 'green' if states('sensor.ems_accubesparing_deze_week') |
-              float(0) >= 0 else 'red' }}
-            entity: sensor.ems_accubesparing_deze_week
-            tap_action:
-              action: more-info
-          - type: custom:mushroom-template-card
-            primary: "€ {{ states('sensor.ems_accubesparing_deze_maand') }}"
-            secondary: Besparing deze maand
-            icon: mdi:calendar-month
-            icon_color: >-
-              {{ 'green' if states('sensor.ems_accubesparing_deze_maand') |
-              float(0) >= 0 else 'red' }}
-            entity: sensor.ems_accubesparing_deze_maand
-
-            tap_action:
-              action: more-info
-      - type: grid
-        columns: 2
-        square: false
-        cards:
-          - type: custom:mushroom-template-card
-            primary: >-
-              {{
-              states('sensor.woonkamer_energy_management_system_reserve_shortfall_days')
-              }}
-            secondary: Netimport-dagen (7d)
-            icon: mdi:alert-outline
-            icon_color: >-
-              {{ 'red' if
-              states('sensor.woonkamer_energy_management_system_reserve_shortfall_days')
-              | int(0) > 0 else 'grey' }}
-            entity: >-
-              sensor.woonkamer_energy_management_system_reserve_shortfall_days
-            tap_action:
-              action: more-info
-          - type: custom:mushroom-template-card
-            primary: >-
-              {{
-              states('sensor.woonkamer_energy_management_system_reserve_excess_days')
-              }}
-            secondary: Overschot-dagen (7d)
-            icon: mdi:trending-up
-            icon_color: >-
-              {{ 'amber' if
-              states('sensor.woonkamer_energy_management_system_reserve_excess_days')
-              | int(0) > 0 else 'grey' }}
-            entity: >-
-              sensor.woonkamer_energy_management_system_reserve_excess_days
-
-            tap_action:
-              action: more-info
-      - type: custom:mushroom-template-card
-        primary: >-
-          {% set o = state_attr('sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing', 'energiekosten_overzicht') or {} %}{{ (o.get('stroom') or {}).get('week', '—') }} € stroom deze week
-        secondary: >-
-          {% set o = state_attr('sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing', 'energiekosten_overzicht') or {} %}{% set st = o.get('stroom') or {} %}{% set g = o.get('gas') or {} %}Gas {{ g.get('week', '—') }} €. {% if st.get('weektrend_procent') is not none %}Week {{ '📈' if st.weektrend_procent > 0 else '📉' }} {{ st.weektrend_procent }}%{% else %}Trend na 14 voltooide dagen.{% endif %}
-        multiline_secondary: true
-        icon: mdi:chart-line
-        icon_color: blue
-        entity: sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing
-        tap_action:
-          action: navigate
-          navigation_path: /energy-management-system/details
-      - type: custom:mushroom-template-card
-        primary: >-
-          {% set z = state_attr('sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing', 'zonneplan_vergelijking') or {} %}{{ z.get('totale_energiekosten_vandaag_eur', '—') }} € vandaag
-        secondary: >-
-          {% set z = state_attr('sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing', 'zonneplan_vergelijking') or {} %}Stroom {{ z.get('zonneplan_netto_eur', '—') }} € · gas {{ z.get('zonneplan_gas_vandaag_eur', '—') }} €. {{ 'Eigen berekening klopt met Zonneplan.' if z.get('status') == 'betrouwbaar' else (z.get('reden','')[:70] ~ '…') }}
-        multiline_secondary: true
-        icon: mdi:cash-multiple
-        icon_color: green
-        entity: sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing
-        tap_action:
-          action: navigate
-          navigation_path: /energy-management-system/details
-      - type: custom:mushroom-title-card
-        title: EMS-KPI's
-
-      - type: grid
-        columns: 2
-        square: false
-        cards:
-          - type: custom:mushroom-template-card
-            primary: >-
-              {{ states('sensor.woonkamer_energy_management_system_piekvermogen') }} W
-            secondary: Piek vandaag
-            icon: mdi:chart-bell-curve
-            icon_color: red
-            entity: sensor.woonkamer_energy_management_system_piekvermogen
-            tap_action:
-              action: more-info
-          - type: custom:mushroom-template-card
-            primary: >-
-              {{ state_attr('sensor.woonkamer_energy_management_system_piekvermogen', 'deze_maand_w') }} W
-            secondary: Piek deze maand
-            icon: mdi:chart-bell-curve
-            icon_color: orange
-            entity: sensor.woonkamer_energy_management_system_piekvermogen
-            tap_action:
-              action: more-info
-          - type: custom:mushroom-template-card
-            primary: >-
-              {{ state_attr('sensor.woonkamer_energy_management_system_piekvermogen', 'all_time_w') }} W
             secondary: >-
-              All-time piek ({{
-              state_attr('sensor.woonkamer_energy_management_system_piekvermogen', 'all_time_datum')
-              or 'onbekend' }})
-            icon: mdi:trophy-outline
-            icon_color: amber
-            entity: sensor.woonkamer_energy_management_system_piekvermogen
+              Kostprijs € {{
+              state_attr('sensor.woonkamer_energy_management_system_battery_savings_cost_basis_model',
+              'cost_basis_eur_per_kwh') }}/kWh
+            icon: mdi:piggy-bank-outline
+            icon_color: >-
+              {{ 'green' if
+              states('sensor.woonkamer_energy_management_system_battery_savings_cost_basis_model')
+              | float(0) >= 0 else 'red' }}
+            entity: >-
+              sensor.woonkamer_energy_management_system_battery_savings_cost_basis_model
             tap_action:
               action: more-info
+
+          - type: grid
+            columns: 2
+            square: false
+            cards:
+              - type: custom:mushroom-template-card
+                primary: >-
+                  € {{
+                  states('sensor.woonkamer_energy_management_system_discharge_value_expensive_quarters')
+                  }}
+                secondary: Waarde ontladen
+                icon: mdi:cash-plus
+                icon_color: green
+                entity: >-
+                  sensor.woonkamer_energy_management_system_discharge_value_expensive_quarters
+                tap_action:
+                  action: more-info
+              - type: custom:mushroom-template-card
+                primary: >-
+                  € {{
+                  states('sensor.woonkamer_energy_management_system_charge_cost_grid_charging')
+                  }}
+                secondary: Netlaadkosten
+                icon: mdi:cash-minus
+                icon_color: red
+                entity: >-
+                  sensor.woonkamer_energy_management_system_charge_cost_grid_charging
+
+                tap_action:
+                  action: more-info
+          - type: grid
+            columns: 3
+            square: false
+            cards:
+              - type: custom:mushroom-template-card
+                primary: "€ {{ states('sensor.ems_ontlaadwaarde_vandaag') }}"
+                secondary: Vandaag
+                icon: mdi:calendar-today
+                icon_color: green
+                entity: sensor.ems_ontlaadwaarde_vandaag
+                tap_action:
+                  action: more-info
+              - type: custom:mushroom-template-card
+                primary: "€ {{ states('sensor.ems_ontlaadwaarde_deze_week') }}"
+                secondary: Deze week
+                icon: mdi:calendar-week
+                icon_color: green
+                entity: sensor.ems_ontlaadwaarde_deze_week
+                tap_action:
+                  action: more-info
+              - type: custom:mushroom-template-card
+                primary: "€ {{ states('sensor.ems_ontlaadwaarde_deze_maand') }}"
+                secondary: Deze maand
+                icon: mdi:calendar-month
+                icon_color: green
+                entity: sensor.ems_ontlaadwaarde_deze_maand
+                tap_action:
+                  action: more-info
+              - type: custom:mushroom-template-card
+                primary: "€ {{ states('sensor.ems_netlaadkosten_vandaag') }}"
+                secondary: Vandaag
+                icon: mdi:calendar-today
+                icon_color: red
+                entity: sensor.ems_netlaadkosten_vandaag
+                tap_action:
+                  action: more-info
+              - type: custom:mushroom-template-card
+                primary: "€ {{ states('sensor.ems_netlaadkosten_deze_week') }}"
+                secondary: Deze week
+                icon: mdi:calendar-week
+                icon_color: red
+                entity: sensor.ems_netlaadkosten_deze_week
+                tap_action:
+                  action: more-info
+              - type: custom:mushroom-template-card
+                primary: "€ {{ states('sensor.ems_netlaadkosten_deze_maand') }}"
+                secondary: Deze maand
+                icon: mdi:calendar-month
+                icon_color: red
+                entity: sensor.ems_netlaadkosten_deze_maand
+
+                tap_action:
+                  action: more-info
+          - type: grid
+            columns: 3
+            square: false
+            cards:
+              - type: custom:mushroom-template-card
+                primary: "€ {{ states('sensor.ems_accubesparing_vandaag') }}"
+                secondary: Besparing vandaag
+                icon: mdi:calendar-today
+                icon_color: >-
+                  {{ 'green' if states('sensor.ems_accubesparing_vandaag') |
+                  float(0) >= 0 else 'red' }}
+                entity: sensor.ems_accubesparing_vandaag
+                tap_action:
+                  action: more-info
+              - type: custom:mushroom-template-card
+                primary: "€ {{ states('sensor.ems_accubesparing_deze_week') }}"
+                secondary: Besparing deze week
+                icon: mdi:calendar-week
+                icon_color: >-
+                  {{ 'green' if states('sensor.ems_accubesparing_deze_week') |
+                  float(0) >= 0 else 'red' }}
+                entity: sensor.ems_accubesparing_deze_week
+                tap_action:
+                  action: more-info
+              - type: custom:mushroom-template-card
+                primary: "€ {{ states('sensor.ems_accubesparing_deze_maand') }}"
+                secondary: Besparing deze maand
+                icon: mdi:calendar-month
+                icon_color: >-
+                  {{ 'green' if states('sensor.ems_accubesparing_deze_maand') |
+                  float(0) >= 0 else 'red' }}
+                entity: sensor.ems_accubesparing_deze_maand
+
+                tap_action:
+                  action: more-info
+          - type: grid
+            columns: 2
+            square: false
+            cards:
+              - type: custom:mushroom-template-card
+                primary: >-
+                  {{
+                  states('sensor.woonkamer_energy_management_system_reserve_shortfall_days')
+                  }}
+                secondary: Netimport-dagen (7d)
+                icon: mdi:alert-outline
+                icon_color: >-
+                  {{ 'red' if
+                  states('sensor.woonkamer_energy_management_system_reserve_shortfall_days')
+                  | int(0) > 0 else 'grey' }}
+                entity: >-
+                  sensor.woonkamer_energy_management_system_reserve_shortfall_days
+                tap_action:
+                  action: more-info
+              - type: custom:mushroom-template-card
+                primary: >-
+                  {{
+                  states('sensor.woonkamer_energy_management_system_reserve_excess_days')
+                  }}
+                secondary: Overschot-dagen (7d)
+                icon: mdi:trending-up
+                icon_color: >-
+                  {{ 'amber' if
+                  states('sensor.woonkamer_energy_management_system_reserve_excess_days')
+                  | int(0) > 0 else 'grey' }}
+                entity: >-
+                  sensor.woonkamer_energy_management_system_reserve_excess_days
+
+                tap_action:
+                  action: more-info
           - type: custom:mushroom-template-card
             primary: >-
-              €{{ states('sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing') }}
-            secondary: Besparing vandaag
-            icon: mdi:cash-check
-            icon_color: green
-
+              {% set o = state_attr('sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing', 'energiekosten_overzicht') or {} %}{{ (o.get('stroom') or {}).get('week', '—') }} € stroom deze week
+            secondary: >-
+              {% set o = state_attr('sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing', 'energiekosten_overzicht') or {} %}{% set st = o.get('stroom') or {} %}{% set g = o.get('gas') or {} %}Gas {{ g.get('week', '—') }} €. {% if st.get('weektrend_procent') is not none %}Week {{ '📈' if st.weektrend_procent > 0 else '📉' }} {{ st.weektrend_procent }}%{% else %}Trend na 14 voltooide dagen.{% endif %}
+            multiline_secondary: true
+            icon: mdi:chart-line
+            icon_color: blue
             entity: sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing
             tap_action:
+              action: navigate
+              navigation_path: /energy-management-system/details
+          - type: custom:mushroom-template-card
+            primary: >-
+              {% set z = state_attr('sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing', 'zonneplan_vergelijking') or {} %}{{ z.get('totale_energiekosten_vandaag_eur', '—') }} € vandaag
+            secondary: >-
+              {% set z = state_attr('sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing', 'zonneplan_vergelijking') or {} %}Stroom {{ z.get('zonneplan_netto_eur', '—') }} € · gas {{ z.get('zonneplan_gas_vandaag_eur', '—') }} €. {{ 'Eigen berekening klopt met Zonneplan.' if z.get('status') == 'betrouwbaar' else (z.get('reden','')[:70] ~ '…') }}
+            multiline_secondary: true
+            icon: mdi:cash-multiple
+            icon_color: green
+            entity: sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing
+            tap_action:
+              action: navigate
+              navigation_path: /energy-management-system/details
+      - type: grid
+        cards:
+          - type: custom:mushroom-title-card
+            title: EMS-KPI's
+
+          - type: grid
+            columns: 2
+            square: false
+            cards:
+              - type: custom:mushroom-template-card
+                primary: >-
+                  {{ states('sensor.woonkamer_energy_management_system_piekvermogen') }} W
+                secondary: Piek vandaag
+                icon: mdi:chart-bell-curve
+                icon_color: red
+                entity: sensor.woonkamer_energy_management_system_piekvermogen
+                tap_action:
+                  action: more-info
+              - type: custom:mushroom-template-card
+                primary: >-
+                  {{ state_attr('sensor.woonkamer_energy_management_system_piekvermogen', 'deze_maand_w') }} W
+                secondary: Piek deze maand
+                icon: mdi:chart-bell-curve
+                icon_color: orange
+                entity: sensor.woonkamer_energy_management_system_piekvermogen
+                tap_action:
+                  action: more-info
+              - type: custom:mushroom-template-card
+                primary: >-
+                  {{ state_attr('sensor.woonkamer_energy_management_system_piekvermogen', 'all_time_w') }} W
+                secondary: >-
+                  All-time piek ({{
+                  state_attr('sensor.woonkamer_energy_management_system_piekvermogen', 'all_time_datum')
+                  or 'onbekend' }})
+                icon: mdi:trophy-outline
+                icon_color: amber
+                entity: sensor.woonkamer_energy_management_system_piekvermogen
+                tap_action:
+                  action: more-info
+              - type: custom:mushroom-template-card
+                primary: >-
+                  €{{ states('sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing') }}
+                secondary: Besparing vandaag
+                icon: mdi:cash-check
+                icon_color: green
+
+                entity: sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing
+                tap_action:
+                  action: more-info
+          - type: grid
+            columns: 2
+            square: false
+            cards:
+              - type: custom:mushroom-template-card
+                primary: >-
+                  {{ states('sensor.woonkamer_energy_management_system_zelfvoorzieningsratio') }}%
+                secondary: Zelfvoorziening
+                icon: mdi:home-battery-outline
+                icon_color: blue
+                entity: sensor.woonkamer_energy_management_system_zelfvoorzieningsratio
+                tap_action:
+                  action: more-info
+              - type: custom:mushroom-template-card
+                primary: >-
+                  {{ state_attr('sensor.woonkamer_energy_management_system_zelfvoorzieningsratio', 'zelfconsumptie_procent') }}%
+                secondary: Zelfconsumptie
+                icon: mdi:solar-power-variant
+                icon_color: yellow
+
+                entity: sensor.woonkamer_energy_management_system_zelfvoorzieningsratio
+                tap_action:
+                  action: more-info
+          - type: grid
+            columns: 2
+            square: false
+            cards:
+              - type: custom:mushroom-template-card
+                primary: >-
+                  {{ states('sensor.woonkamer_energy_management_system_accu_gezondheid_geschat') }} cycli
+                secondary: Volledige cycli
+                icon: mdi:battery-heart-variant
+                icon_color: purple
+                entity: sensor.woonkamer_energy_management_system_accu_gezondheid_geschat
+                tap_action:
+                  action: more-info
+              - type: custom:mushroom-template-card
+                primary: >-
+                  {{ state_attr('sensor.woonkamer_energy_management_system_accu_gezondheid_geschat', 'geschatte_resterende_capaciteit_procent') }}%
+                secondary: Resterende capaciteit
+                icon: mdi:battery-alert-variant-outline
+                icon_color: deep-purple
+
+                entity: sensor.woonkamer_energy_management_system_accu_gezondheid_geschat
+                tap_action:
+                  action: more-info
+          - type: custom:mushroom-template-card
+            primary: >-
+              {{ states('sensor.woonkamer_energy_management_system_co2_uitstoot_vandaag') }} kg CO2
+            secondary: >-
+              Uitstoot vandaag · {{
+              state_attr('sensor.woonkamer_energy_management_system_co2_uitstoot_vandaag', 'huidige_intensiteit_g_per_kwh')
+              or '?' }} g/kWh
+            icon: mdi:molecule-co2
+            icon_color: grey
+
+            entity: sensor.woonkamer_energy_management_system_co2_uitstoot_vandaag
+            tap_action:
               action: more-info
       - type: grid
-        columns: 2
-        square: false
         cards:
-          - type: custom:mushroom-template-card
-            primary: >-
-              {{ states('sensor.woonkamer_energy_management_system_zelfvoorzieningsratio') }}%
-            secondary: Zelfvoorziening
-            icon: mdi:home-battery-outline
-            icon_color: blue
-            entity: sensor.woonkamer_energy_management_system_zelfvoorzieningsratio
+          - type: custom:mushroom-title-card
+            title: Overig
+            subtitle: Piekvermogen en geleerd nachtverbruik
+          - type: custom:mushroom-entity-card
+            entity: sensor.woonkamer_energy_management_system_piekvermogen_netimport
+            name: Piekvermogen
             tap_action:
               action: more-info
-          - type: custom:mushroom-template-card
-            primary: >-
-              {{ state_attr('sensor.woonkamer_energy_management_system_zelfvoorzieningsratio', 'zelfconsumptie_procent') }}%
-            secondary: Zelfconsumptie
-            icon: mdi:solar-power-variant
-            icon_color: yellow
+          - type: custom:mushroom-entity-card
+            entity: sensor.woonkamer_energy_management_system_learned_night_consumption
+            name: Nachtverbruik
+            tap_action:
+              action: more-info
 
-            entity: sensor.woonkamer_energy_management_system_zelfvoorzieningsratio
-            tap_action:
-              action: more-info
-      - type: grid
-        columns: 2
-        square: false
-        cards:
-          - type: custom:mushroom-template-card
-            primary: >-
-              {{ states('sensor.woonkamer_energy_management_system_accu_gezondheid_geschat') }} cycli
-            secondary: Volledige cycli
-            icon: mdi:battery-heart-variant
-            icon_color: purple
-            entity: sensor.woonkamer_energy_management_system_accu_gezondheid_geschat
-            tap_action:
-              action: more-info
-          - type: custom:mushroom-template-card
-            primary: >-
-              {{ state_attr('sensor.woonkamer_energy_management_system_accu_gezondheid_geschat', 'geschatte_resterende_capaciteit_procent') }}%
-            secondary: Resterende capaciteit
-            icon: mdi:battery-alert-variant-outline
-            icon_color: deep-purple
-
-            entity: sensor.woonkamer_energy_management_system_accu_gezondheid_geschat
-            tap_action:
-              action: more-info
-      - type: custom:mushroom-template-card
-        primary: >-
-          {{ states('sensor.woonkamer_energy_management_system_co2_uitstoot_vandaag') }} kg CO2
-        secondary: >-
-          Uitstoot vandaag · {{
-          state_attr('sensor.woonkamer_energy_management_system_co2_uitstoot_vandaag', 'huidige_intensiteit_g_per_kwh')
-          or '?' }} g/kWh
-        icon: mdi:molecule-co2
-        icon_color: grey
-
-        entity: sensor.woonkamer_energy_management_system_co2_uitstoot_vandaag
-        tap_action:
-          action: more-info
   - title: Verloop
     path: verloop
     subview: true
@@ -1707,6 +1798,47 @@ views:
                 name: Verbruiksprofiel (huidig uur, W)
               - entity: sensor.energy_management_system_pv_forecast_accuracy
                 name: PV-voorspelling afwijking (%)
+      - type: grid
+        cards:
+          - type: custom:mushroom-title-card
+            title: Beslissing en planning
+            subtitle: Wat de aansturing nu doet en wat er gepland staat
+          - type: custom:mushroom-entity-card
+            entity: sensor.woonkamer_energy_management_system_last_decision_reason
+            name: Laatste reden
+            tap_action:
+              action: more-info
+          - type: custom:mushroom-entity-card
+            entity: sensor.woonkamer_energy_management_system_upcoming_schedule
+            name: Komend schema
+            tap_action:
+              action: more-info
+          - type: custom:mushroom-entity-card
+            entity: sensor.woonkamer_energy_management_system_simulated_action
+            name: Gesimuleerde actie
+            tap_action:
+              action: more-info
+          - type: custom:mushroom-entity-card
+            entity: sensor.woonkamer_energy_management_system_cheapest_block_start
+            name: Goedkoopste blok
+            tap_action:
+              action: more-info
+          - type: custom:mushroom-entity-card
+            entity: sensor.woonkamer_energy_management_system_discharge_window_start
+            name: Ontlaadvenster
+            tap_action:
+              action: more-info
+          - type: custom:mushroom-entity-card
+            entity: sensor.woonkamer_energy_management_system_energy_bridge_check
+            name: Energie-check
+            tap_action:
+              action: more-info
+          - type: custom:mushroom-entity-card
+            entity: sensor.woonkamer_energy_management_system_battery_protection
+            name: Accubescherming
+            tap_action:
+              action: more-info
+
   - title: Details
     path: details
     subview: true
@@ -1763,6 +1895,30 @@ views:
               {% endfor %}{% endif %}
 
           - type: markdown
+            title: Te beoordelen
+            content: |
+              {% set k = state_attr('sensor.woonkamer_energy_management_system_nilm_bevestigde_apparaten', 'kandidaat_naam') %}{% if k %}**Nieuw apparaat herkend:** {{ k }} ({{ state_attr('sensor.woonkamer_energy_management_system_nilm_bevestigde_apparaten', 'kandidaat_vermogen_w') }} W){% else %}Geen kandidaat op dit moment.{% endif %}
+
+              {% set paren = state_attr('sensor.woonkamer_energy_management_system_nilm_bevestigde_apparaten', 'waarschijnlijke_duplicaten') or [] %}{% if paren | length > 0 %}**Mogelijke duplicaten:** {{ paren | length }}
+
+              {% for pr in paren %}- {{ pr.get('apparaat_1') }} ↔ {{ pr.get('apparaat_2') }}
+              {% endfor %}{% endif %}
+            grid_options:
+              columns: 12
+              rows: auto
+
+          - type: entities
+            title: Beoordelen
+            entities:
+              - entity: button.woonkamer_energy_management_system_nilm_kandidaat_1_bevestigen
+              - entity: button.woonkamer_energy_management_system_nilm_kandidaat_1_negeren
+              - entity: button.woonkamer_energy_management_system_nilm_duplicaat_1_bevestigen
+              - entity: button.woonkamer_energy_management_system_nilm_duplicaat_1_negeren
+            grid_options:
+              columns: 12
+              rows: auto
+
+          - type: markdown
             title: Herkende apparaten
             content: |
               {% set t = state_attr('sensor.woonkamer_energy_management_system_nilm_bevestigde_apparaten', 'tabel') or [] %}{% if t | length == 0 %}Nog geen apparaten herkend.{% else %}{{ state_attr('sensor.woonkamer_energy_management_system_nilm_bevestigde_apparaten', 'totaal_aantal') }} apparaten herkend; hieronder de eerste {{ t | length }}.
@@ -1796,3 +1952,22 @@ views:
               |---|---|---|
               {% for s in ns.v %}| {{ as_timestamp(s.gestart) | timestamp_custom('%H:%M') }} | {{ s.duur_minuten }} min | {{ s.liter }} L |
               {% endfor %}{% endif %}
+
+          - type: custom:mushroom-title-card
+            title: Zon en klimaat
+            subtitle: Installatieprofiel, voorspelbias en airco
+          - type: custom:mushroom-entity-card
+            entity: sensor.woonkamer_energy_management_system_pv_installatieprofiel
+            name: PV-installatieprofiel
+            tap_action:
+              action: more-info
+          - type: custom:mushroom-entity-card
+            entity: sensor.woonkamer_energy_management_system_pv_hourly_forecast_bias
+            name: PV-voorspelling bias
+            tap_action:
+              action: more-info
+          - type: custom:mushroom-entity-card
+            entity: sensor.woonkamer_energy_management_system_airco_verwachting_woonkamertemperatuur
+            name: Airco-verwachting
+            tap_action:
+              action: more-info
