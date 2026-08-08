@@ -55,7 +55,11 @@ def test_the_message_says_it_is_not_an_accuracy_problem(
         if "gezondheid" in p
     )
 
-    assert "Niet door onnauwkeurige metingen" in melding
+    # v1.14.9: de formulering is aangepast omdat "Niet door
+    # onnauwkeurige metingen" onjuist was zodra er wél metingen buiten
+    # de marge vielen. De strekking blijft: uitval is de hoofdoorzaak,
+    # en de nauwkeurigheid staat er eerlijk bij.
+    assert "Vooral doordat een sensor" in melding
     assert "13 vergelijkingen" in melding
     assert "7 van de 20" in melding
 
@@ -237,3 +241,49 @@ def test_the_counts_survive_a_restart(make_coordinator, hass):
     asyncio.run(verse.async_load_persisted_state())
 
     assert verse.balance_missing_by_entity == {"sensor.x": 4}
+
+
+def test_the_message_does_not_contradict_the_numbers(make_coordinator, hass):
+    """v1.14.9: in een export stond 78,6% nauwkeurigheid terwijl de
+    melding zei "alle 14 vergelijkingen vielen binnen de marge" - drie
+    zaten er ruim boven (368, 798, 593 W).
+
+    Een melding die zichzelf tegenspreekt maakt alle meldingen
+    verdacht: je weet niet meer welk deel je kunt geloven.
+    """
+    c = make_coordinator({})
+    c.energy_balance_error_history = (
+        [97.0, 80.4, 43.2, 110.5, 51.1, 4.5, 14.5]
+        + [None] * 6
+        + [195.6, 86.1, 368.2, 35.8, 248.0, 797.8, 593.1]
+    )
+    c.balance_missing_by_entity = {"sensor.zendure": 8}
+    c.sensor_health_score = 55.0
+    c.measurement_quality = "verminderd"
+
+    melding = next(
+        p
+        for p in c.get_diagnostic_summary()["aandachtspunten"]
+        if "gezondheid" in p
+    )
+
+    assert "alle 14" not in melding
+    assert "11 van de 14" in melding
+
+
+def test_a_perfect_accuracy_still_says_all(make_coordinator, hass):
+    """Bij écht alle metingen binnen de marge moet dat er ook staan -
+    de correctie mag niet doorslaan naar omslachtig."""
+    c = make_coordinator({})
+    c.energy_balance_error_history = [50.0] * 14 + [None] * 6
+    c.balance_missing_by_entity = {"sensor.zendure": 6}
+    c.sensor_health_score = 70.0
+    c.measurement_quality = "verminderd"
+
+    melding = next(
+        p
+        for p in c.get_diagnostic_summary()["aandachtspunten"]
+        if "gezondheid" in p
+    )
+
+    assert "alle 14 vergelijkingen" in melding
