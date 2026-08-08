@@ -287,3 +287,71 @@ def test_a_perfect_accuracy_still_says_all(make_coordinator, hass):
     )
 
     assert "alle 14 vergelijkingen" in melding
+
+
+# --- v1.15.0: het oordeel overleeft een herstart --------------------
+
+
+def test_the_quality_is_recomputed_from_the_history(make_coordinator, hass):
+    """Gemeld in een export: `sensor_health_score` en
+    `measurement_quality` stonden op None terwijl de foutreeks van
+    twintig metingen wél was hersteld.
+
+    De reeks wordt bewaard, het daaruit afgeleide oordeel niet - en dat
+    werd alleen berekend bij een NIEUWE meting. Na een herstart was er
+    dus wel data maar geen oordeel, en verdween het aandachtspunt terwijl
+    het probleem gewoon doorliep. Precies het omgekeerde van wat je wilt.
+    """
+    c = make_coordinator({})
+    c.energy_balance_error_history = (
+        [97.0, 80.4, 43.2, 110.5, 51.1, 4.5, 14.5]
+        + [None] * 6
+        + [195.6, 86.1, 368.2, 35.8, 248.0, 797.8, 593.1]
+    )
+    assert c.sensor_health_score is None
+
+    c._recompute_measurement_quality()
+
+    assert c.sensor_health_score == 55.0
+    assert c.measurement_quality == "verminderd"
+
+
+def test_the_attention_point_returns_after_a_restart(make_coordinator, hass):
+    """Het gevolg dat ertoe doet: de melding hoort terug te komen."""
+    c = make_coordinator({})
+    c.energy_balance_error_history = [50.0] * 11 + [None] * 9
+    c.balance_missing_by_entity = {"sensor.zendure": 9}
+
+    c._recompute_measurement_quality()
+
+    assert any(
+        "gezondheid" in p for p in c.get_diagnostic_summary()["aandachtspunten"]
+    )
+
+
+def test_too_few_samples_gives_no_verdict(make_coordinator, hass):
+    """Onder de minimumdrempel hoort er geen oordeel te staan - ook niet
+    na herberekening."""
+    from custom_components.energy_management_system.const import (
+        MEASUREMENT_QUALITY_MIN_SAMPLES,
+    )
+
+    c = make_coordinator({})
+    c.energy_balance_error_history = [50.0] * (MEASUREMENT_QUALITY_MIN_SAMPLES - 1)
+
+    c._recompute_measurement_quality()
+
+    assert c.sensor_health_score is None
+
+
+def test_it_runs_after_loading_the_stored_state():
+    """Herberekenen is beter dan het oordeel bewaren: dan kan het nooit
+    uit de pas lopen met de reeks waarop het rust."""
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    start = bron.index("self._state_store_loaded = True")
+
+    assert "_recompute_measurement_quality()" in bron[start : start + 500]
