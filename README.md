@@ -515,6 +515,72 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Zelfevaluatie: de integratie beoordeelt haar eigen instellingen (v1.14.0)
+
+**Gevraagd**: *"Kun je een mechanisme bedenken waardoor de integratie
+zichzelf verbetert? Dus tips geeft welke verbetermogelijkheden er zijn?"*
+
+### Eerst de afbakening
+
+Zichzelf herschrijven kan ze niet. En automatisch bijstellen wíl je niet:
+de reserveberekening is eerder expliciet afgeschermd, en een systeem dat
+ongevraagd zijn eigen veiligheidsmarges verlaagt is precies wat er mis
+kan gaan.
+
+Wat wél kan — en waar alle data al voor ligt — is **achteraf toetsen of
+een keuze goed uitpakte**. Dat is meetbaar, geen giswerk.
+
+### Vier dingen die worden nagerekend
+
+**Staat de nachtreserve te ruim?** Er wordt per dag bijgehouden of de
+reserve tekortschoot of juist over was. Dertig dagen overschot en nul
+tekorten betekent: die energie had in het dure blok verkocht kunnen
+worden. Omgekeerd, bij meer dan 20% tekort-dagen, moet er tegen de
+ochtendprijs worden bijgekocht.
+
+**Wordt de accu wel benut?** Blijft de laagste stand over veertien dagen
+boven de 40%, dan ligt er capaciteit stil — mogelijk staat de minimale
+SoC hoger dan nodig.
+
+**Verzamelen er modules eeuwig zonder resultaat?** Een module die na
+dertig dagen nog op "onvoldoende data" staat, wacht waarschijnlijk op een
+sensor die er niet is.
+
+**Is er variatie in de beslissingen?** Komen er in veertien dagen maar
+één of twee redenen voor, dan zijn de prijsverschillen te klein om op te
+sturen — of staat een drempel zo dat er zelden iets verandert.
+
+### Elk voorstel noemt zijn bewijs
+
+> *"In 30 dagen was er 30x energie over aan het eind van de nacht en geen
+> enkele keer tekort."*
+
+Zodat je het kunt narekenen vóór je iets verandert. Er staat ook bij
+wanneer je moet oppassen: een zachte periode vertekent, dus controleer
+eerst of die dagen representatief waren.
+
+Een voorstel zonder bewijs is een mening; bewijs zonder voorstel laat je
+met de vraag zitten wat je ermee moet. Daar staat een test op.
+
+### Waar het verschijnt
+
+De bevindingen komen in dezelfde lijst als de bestaande
+configuratie-adviezen — voor jou is het onderscheid tussen "je mist een
+sensor" en "je instelling pakt slecht uit" niet interessant; beide zijn
+verbetermogelijkheden. Te zien op de detailpagina en in de
+diagnostiek-export.
+
+### Getest
+
+Nieuw `tests/test_self_evaluation.py`, 12 tests: een te ruime reserve
+wordt gemeld, een te krappe ook, een gezonde balans zegt niets, te weinig
+dagen geeft geen oordeel, een onbenutte accu wordt gemeld en een goed
+benutte niet, weinig variatie wordt gesignaleerd, elk bevinding heeft
+bewijs én voorstel, er wordt **niets automatisch gewijzigd**, de
+bevindingen komen in de adviezenlijst, en het staat in de export.
+
+**Volledige testsuite**: 1311 tests, allemaal groen.
+
 ## Labels op Financieel pasten niet (v1.13.2)
 
 **Gemeld**: *"Op dit tabblad zijn alle teksten ook niet goed zichtbaar,

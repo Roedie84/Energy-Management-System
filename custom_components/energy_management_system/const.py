@@ -2156,3 +2156,29 @@ NILM_DRIFT_MIN_REFERENCE_W = 5.0
 # apparaat van 10 W dat 30% meer verbruikt is 3 watt - dat is geen
 # beginnend defect maar ruis.
 NILM_DRIFT_MIN_ABSOLUTE_W = 5.0
+
+# --- Zelfevaluatie (v1.14.0) -----------------------------------------
+# Gevraagd: "Kun je een mechanisme bedenken waardoor de integratie
+# zichzelf verbetert? Dus tips geeft welke verbetermogelijkheden er
+# zijn."
+#
+# Wat WEL kan: achteraf toetsen of een keuze goed uitpakte. De integratie
+# bewaart per dag of de reserve tekortschoot of juist ruim was, welke
+# beslissingen zijn genomen, en wat dat kostte. Daaruit valt af te leiden
+# of een instelling structureel verkeerd staat - dat is meetbaar, geen
+# giswerk.
+#
+# Wat NIET gebeurt: zelf ingrijpen. De reserveberekening is eerder
+# expliciet afgeschermd, en een systeem dat ongevraagd zijn eigen
+# veiligheidsmarges verlaagt is precies wat je niet wilt. Voorstellen
+# ja, uitvoeren nee.
+SELF_EVAL_MIN_DAYS = 14
+
+# Bij hoeveel overschot-dagen zonder één tekort de reserve structureel te
+# ruim staat. Bewust hoog: één rustige week zegt niets, en te snel
+# adviseren de marge te verlagen is gevaarlijker dan te laat.
+SELF_EVAL_RESERVE_TOO_WIDE_RATIO = 0.9
+
+# Een adviesmodule die na zoveel dagen nog niets heeft opgeleverd, doet
+# vermoedelijk niets - of mist een sensor die niemand heeft opgemerkt.
+SELF_EVAL_IDLE_MODULE_DAYS = 30

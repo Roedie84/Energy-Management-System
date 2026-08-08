@@ -9228,3 +9228,33 @@ nu 22 tekens. Twee tests erbij: één dat er daadwerkelijk in grids wordt
 gekeken, en één op de sjabloonlabels.
 
 **Volledige testsuite**: 1299 tests, allemaal groen.
+
+## v1.14.0 — Zelfevaluatie: de integratie beoordeelt haar eigen instellingen
+
+**Gevraagd**: een mechanisme waarmee de integratie zichzelf verbetert en
+tips geeft.
+
+**Afbakening**: zichzelf herschrijven kan niet, en automatisch bijstellen
+wil je niet - de reserveberekening is eerder expliciet afgeschermd. Wat
+wel kan is ACHTERAF TOETSEN of een keuze goed uitpakte, met de eigen
+meetgeschiedenis als bewijs.
+
+**Vier dingen worden nagerekend**:
+- Staat de nachtreserve te ruim (30 dagen overschot, nul tekorten = die
+  energie had verkocht kunnen worden) of te krap (>20% tekort-dagen)?
+- Wordt de accu benut, of blijft de laagste stand boven 40%?
+- Verzamelen modules na 30 dagen nog steeds zonder resultaat?
+- Is er variatie in de beslissingen, of staat een drempel zo dat er
+  zelden iets verandert?
+
+**Elk voorstel noemt zijn bewijs** ("In 30 dagen was er 30x energie over
+en geen enkele keer tekort") plus waar je op moet letten - een zachte
+periode vertekent. Een test legt vast dat elke bevinding bewijs én
+voorstel heeft, en dat er NIETS automatisch wordt gewijzigd.
+
+De bevindingen komen in dezelfde lijst als de configuratie-adviezen; voor
+de gebruiker is dat onderscheid niet interessant.
+
+**Getest**: nieuw `tests/test_self_evaluation.py`, 12 tests.
+
+**Volledige testsuite**: 1311 tests, allemaal groen.

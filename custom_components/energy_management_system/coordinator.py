@@ -280,6 +280,9 @@ from .const import (
     SENSOR_STARTUP_GRACE_MINUTES,
     SENSOR_UNAVAILABLE_CONFIRM_MINUTES,
     STALLED_SERIES_CONSTANT_IS_NORMAL,
+    SELF_EVAL_IDLE_MODULE_DAYS,
+    SELF_EVAL_MIN_DAYS,
+    SELF_EVAL_RESERVE_TOO_WIDE_RATIO,
     STALLED_SERIES_MIN_SAMPLES,
     STARTUP_GRACE_KINDS,
     STARTUP_GRACE_SECONDS,
@@ -3692,6 +3695,144 @@ class EnergyManagementSystemCoordinator:
                 )
         return waarschuwingen
 
+    def get_self_evaluation(self) -> list[dict]:
+        """Toetst achteraf of de eigen instellingen goed uitpakken
+        (v1.14.0).
+
+        Gevraagd: een mechanisme waarmee de integratie zichzelf
+        verbetert. Zichzelf herschrijven kan ze niet, maar wél
+        beoordelen of een keuze goed uitviel - met de eigen
+        meetgeschiedenis als bewijs.
+
+        Nadrukkelijk VOORSTELLEN, geen ingrepen. De reserveberekening is
+        eerder expliciet afgeschermd, en een systeem dat ongevraagd zijn
+        eigen veiligheidsmarges verlaagt is precies wat je niet wilt.
+        Elk voorstel noemt daarom waarop het rust, zodat je het kunt
+        narekenen voor je iets verandert.
+        """
+        bevindingen: list[dict] = []
+
+        # --- 1. Staat de nachtreserve te ruim of te krap? ---
+        tekorten = self.reserve_shortfall_history or []
+        overschotten = self.reserve_excess_history or []
+        dagen = min(len(tekorten), len(overschotten))
+        if dagen >= SELF_EVAL_MIN_DAYS:
+            n_tekort = sum(1 for x in tekorten[-dagen:] if x)
+            n_over = sum(1 for x in overschotten[-dagen:] if x)
+            if n_tekort == 0 and n_over / dagen >= SELF_EVAL_RESERVE_TOO_WIDE_RATIO:
+                bevindingen.append(
+                    {
+                        "onderwerp": "Nachtreserve staat ruim",
+                        "bewijs": (
+                            f"In {dagen} dagen was er {n_over}x energie over "
+                            "aan het eind van de nacht en geen enkele keer "
+                            "tekort."
+                        ),
+                        "voorstel": (
+                            "Er wordt structureel meer bewaard dan nodig; die "
+                            "energie had in het dure blok verkocht kunnen "
+                            "worden. Een lagere veiligheidsmarge levert meer "
+                            "op - maar controleer eerst of die dagen "
+                            "representatief waren, want een zachte periode "
+                            "vertekent."
+                        ),
+                    }
+                )
+            elif n_tekort / dagen > 0.2:
+                bevindingen.append(
+                    {
+                        "onderwerp": "Nachtreserve staat krap",
+                        "bewijs": (
+                            f"In {dagen} dagen kwam de reserve {n_tekort}x "
+                            "tekort."
+                        ),
+                        "voorstel": (
+                            "Bij een tekort moet er tegen de ochtendprijs "
+                            "worden bijgekocht. Een ruimere marge kost "
+                            "opbrengst in het dure blok, maar voorkomt die "
+                            "inkoop."
+                        ),
+                    }
+                )
+
+        # --- 2. Adviesmodules die nooit iets doen ---
+        stil = [
+            sleutel
+            for sleutel, gegevens in (self.advisory_readiness or {}).items()
+            if self.normalise_reliability(gegevens.get("status"))
+            == RELIABILITY_INSUFFICIENT
+            and len(self.daily_report_history or []) >= SELF_EVAL_IDLE_MODULE_DAYS
+        ]
+        if stil:
+            bevindingen.append(
+                {
+                    "onderwerp": "Modules verzamelen al lang zonder resultaat",
+                    "bewijs": (
+                        f"{', '.join(stil)} staat na "
+                        f"{len(self.daily_report_history)} dagen nog op "
+                        "onvoldoende data."
+                    ),
+                    "voorstel": (
+                        "Dat wijst op een ontbrekende sensor of een "
+                        "voorwaarde die zich nooit voordoet. Kijk op het "
+                        "Kwaliteit-tabblad waarop de module wacht - anders "
+                        "verzamelt hij eeuwig zonder ooit iets te zeggen."
+                    ),
+                }
+            )
+
+        # --- 3. Kwam de accu ooit echt leeg? ---
+        rapporten = self.daily_report_history or []
+        if len(rapporten) >= SELF_EVAL_MIN_DAYS:
+            minima = [
+                r["soc_min_procent"]
+                for r in rapporten
+                if r.get("soc_min_procent") is not None
+            ]
+            if minima and min(minima) > 40:
+                bevindingen.append(
+                    {
+                        "onderwerp": "De accu wordt nooit diep ontladen",
+                        "bewijs": (
+                            f"De laagste stand in {len(minima)} dagen was "
+                            f"{min(minima):.0f}%."
+                        ),
+                        "voorstel": (
+                            "Er blijft capaciteit ongebruikt. Dat kan kloppen "
+                            "als de accu ruim bemeten is, maar controleer of "
+                            "de minimale SoC-instelling niet hoger staat dan "
+                            "nodig - elke procent die niet wordt gebruikt, "
+                            "levert niets op."
+                        ),
+                    }
+                )
+
+        # --- 4. Beslissingen die nooit voorkomen ---
+        if len(rapporten) >= SELF_EVAL_MIN_DAYS:
+            gezien: set[str] = set()
+            for rapport in rapporten:
+                gezien |= set((rapport.get("redenen") or {}).keys())
+            if gezien and len(gezien) <= 2:
+                bevindingen.append(
+                    {
+                        "onderwerp": "Weinig variatie in de beslissingen",
+                        "bewijs": (
+                            f"In {len(rapporten)} dagen zijn er maar "
+                            f"{len(gezien)} verschillende redenen "
+                            f"voorgekomen: {', '.join(sorted(gezien))}."
+                        ),
+                        "voorstel": (
+                            "Weinig variatie kan betekenen dat de "
+                            "prijsverschillen te klein zijn om op te sturen, "
+                            "of dat een drempel zo staat dat er zelden iets "
+                            "verandert. Het Verloop-tabblad laat zien of dat "
+                            "aan de prijzen ligt of aan de instelling."
+                        ),
+                    }
+                )
+
+        return bevindingen
+
     def get_improvement_suggestions(self) -> list[dict]:
         """Concrete verbetermogelijkheden, afgeleid uit wat er al gemeten
         wordt (v1.10.0).
@@ -3815,6 +3956,20 @@ class EnergyManagementSystemCoordinator:
                         "Die bron uit de configuratie halen maakt het "
                         "gemiddelde betrouwbaarder."
                     ),
+                }
+            )
+
+        # v1.14.0: de zelfevaluatie levert bevindingen op basis van de
+        # eigen meetgeschiedenis. Die horen in dezelfde lijst als de
+        # configuratie-adviezen - voor de gebruiker is het onderscheid
+        # tussen "je mist een sensor" en "je instelling pakt slecht uit"
+        # niet interessant; beide zijn verbetermogelijkheden.
+        for bevinding in self.get_self_evaluation():
+            adviezen.append(
+                {
+                    "onderwerp": bevinding["onderwerp"],
+                    "waarneming": bevinding["bewijs"],
+                    "advies": bevinding["voorstel"],
                 }
             )
 
