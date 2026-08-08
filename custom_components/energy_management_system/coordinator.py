@@ -271,6 +271,9 @@ from .const import (
     MEASUREMENT_QUALITY_MIN_SAMPLES,
     NOTIFICATION_HISTORY_LENGTH,
     NOTIFICATION_RECOVERY_KINDS,
+    GACS_EFFICIENCY_ADVICE_PERCENT,
+    GACS_REQUIREMENTS,
+    GACS_SELF_CONSUMPTION_ADVICE_PERCENT,
     PLAUSIBILITY_RULES,
     STARTUP_GRACE_KINDS,
     STARTUP_GRACE_SECONDS,
@@ -3445,6 +3448,233 @@ class EnergyManagementSystemCoordinator:
                     }
                 )
         return waarschuwingen
+
+    def get_improvement_suggestions(self) -> list[dict]:
+        """Concrete verbetermogelijkheden, afgeleid uit wat er al gemeten
+        wordt (v1.10.0).
+
+        Dit vult de derde GACS-eis in: de beheerder informeren over
+        verbetermogelijkheden. Dat is voor de meeste systemen de zwakste
+        eis, en dat gold ook hier - de meldingen zeiden vooral WAT er is,
+        niet wat je eraan kunt doen.
+
+        Bewust terughoudend: een lijst met twintig adviezen leest
+        niemand, en dan is juist deze eis niet ingevuld. Alleen wat
+        aantoonbaar uit de eigen metingen volgt, met het cijfer erbij
+        zodat je het kunt narekenen.
+        """
+        adviezen: list[dict] = []
+
+        rendement = self.learned_battery_efficiency_percent
+        if rendement is not None and rendement < GACS_EFFICIENCY_ADVICE_PERCENT:
+            adviezen.append(
+                {
+                    "onderwerp": "Accu-rendement",
+                    "waarneming": f"Retourrendement {rendement:.1f}%.",
+                    "advies": (
+                        "Onder de 85% gaat er relatief veel verloren bij "
+                        "laden en ontladen. Een lager laadvermogen "
+                        "verkleint dat verlies; het loont om te kijken of "
+                        "de accu vaak op vol vermogen laadt terwijl er "
+                        "meer tijd beschikbaar is."
+                    ),
+                }
+            )
+
+        zelfconsumptie = self.self_consumption_ratio_percent
+        if (
+            zelfconsumptie is not None
+            and zelfconsumptie < GACS_SELF_CONSUMPTION_ADVICE_PERCENT
+        ):
+            adviezen.append(
+                {
+                    "onderwerp": "Zelfconsumptie",
+                    "waarneming": f"{zelfconsumptie:.0f}% van de opwek zelf verbruikt.",
+                    "advies": (
+                        "De rest gaat het net op tegen het teruglevertarief. "
+                        "Apparaten verplaatsen naar de uren met overschot "
+                        "levert meer op dan terugleveren - het "
+                        "Apparaten-tabblad laat zien wanneer je "
+                        "grootverbruikers draaien."
+                    ),
+                }
+            )
+
+        profiel = self.get_pv_installation_profile()
+        for schaduw in profiel.get("beschaduwing") or []:
+            adviezen.append(
+                {
+                    "onderwerp": "Beschaduwing zonnepanelen",
+                    "waarneming": (
+                        f"Richting {schaduw['windrichting']} "
+                        f"({schaduw['azimut']:.0f}°) haalt "
+                        f"{schaduw['verhouding'] * 100:.0f}% van de "
+                        "verwachting."
+                    ),
+                    "advies": (
+                        "Structureel achterblijven in één windrichting wijst "
+                        "op een obstakel: een boom, schoorsteen of dakkapel. "
+                        "Snoeien of een paneel verplaatsen kan hier "
+                        "rendement opleveren."
+                    ),
+                }
+            )
+
+        for entity_id, gegevens in self.get_sensor_cadence_report().items():
+            if gegevens.get("status") == "traag":
+                adviezen.append(
+                    {
+                        "onderwerp": "Trage meting",
+                        "waarneming": (
+                            f"{entity_id} beweegt bij "
+                            f"{gegevens['beweegt_percent']}% van de metingen."
+                        ),
+                        "advies": (
+                            "Een snellere pollfrequentie in de bijbehorende "
+                            "integratie maakt de aansturing scherper; nu "
+                            "worden afgeleide waarden over een langer "
+                            "venster berekend om ruis te vermijden."
+                        ),
+                    }
+                )
+
+        defect = [
+            gegevens.get("friendly_name") or entity_id
+            for entity_id, gegevens in self.nilm_confirmed_devices.items()
+            if gegevens.get("anomaly_detected")
+        ]
+        if defect:
+            adviezen.append(
+                {
+                    "onderwerp": "Apparaat verbruikt meer dan normaal",
+                    "waarneming": f"{', '.join(defect)}.",
+                    "advies": (
+                        "Aanhoudend hoger verbruik wijst op slijtage of "
+                        "vervuiling - denk aan condensorroosters van een "
+                        "koelkast of een deurrubber dat niet meer sluit. "
+                        "Klopt het hogere verbruik, gebruik dan "
+                        "'accept_nilm_device_drift' om opnieuw te ijken."
+                    ),
+                }
+            )
+
+        bronnen = self.get_weather_source_reliability().get("_vergelijking")
+        if bronnen and bronnen["verschil_procentpunt"] >= 20:
+            adviezen.append(
+                {
+                    "onderwerp": "Weerbron",
+                    "waarneming": (
+                        f"{bronnen['slechtste_bron']} presteert "
+                        f"{bronnen['verschil_procentpunt']:.0f} procentpunt "
+                        "slechter."
+                    ),
+                    "advies": (
+                        "Die bron uit de configuratie halen maakt het "
+                        "gemiddelde betrouwbaarder."
+                    ),
+                }
+            )
+
+        if self.pv_production_source != "meterstand":
+            adviezen.append(
+                {
+                    "onderwerp": "PV-dagopwek",
+                    "waarneming": "Wordt geïntegreerd uit het vermogen.",
+                    "advies": (
+                        "Een cumulatieve kWh-meter van de omvormer "
+                        "instellen geeft een exacte dagopwek; integreren "
+                        "onderschat structureel omdat pieken tussen twee "
+                        "metingen wegvallen."
+                    ),
+                }
+            )
+
+        return adviezen
+
+    def get_gacs_assessment(self) -> dict:
+        """Zelfbeoordeling tegen de vier functionele GACS-eisen
+        (v1.10.0).
+
+        Nadrukkelijk GEEN nalevingsbewijs: voor een woning geldt de
+        verplichting niet - die geldt voor utiliteitsgebouwen zonder
+        woonfunctie boven 290 kW verwarmings- of koelvermogen. Dit is een
+        spiegel: hoe verhoudt deze integratie zich tot wat het Besluit
+        Bouwwerken Leefomgeving functioneel eist?
+        """
+        adviezen = self.get_improvement_suggestions()
+        overzicht = self.get_reliability_overview()
+        betrouwbaar = sum(
+            1 for r in overzicht if r["niveau"] == RELIABILITY_RELIABLE
+        )
+
+        invulling = {
+            "monitoring": {
+                "status": RELIABILITY_RELIABLE,
+                "hoe": (
+                    "Elke vijf minuten worden verbruik, opwek, accustand en "
+                    "prijs gemeten; de accu wordt op basis daarvan "
+                    "aangestuurd. Het beslislogboek legt elke tick vast."
+                ),
+            },
+            "efficiency": {
+                "status": (
+                    RELIABILITY_RELIABLE
+                    if betrouwbaar >= 5
+                    else RELIABILITY_INDICATIVE
+                ),
+                "hoe": (
+                    f"{betrouwbaar} van de {len(overzicht)} gemeten "
+                    "grootheden zijn als betrouwbaar beoordeeld. De "
+                    "Kirchhoff-balanscheck toetst of de metingen onderling "
+                    "kloppen, en drift-detectie spoort verliezen op bij "
+                    "apparaten, accumodules en de zonvoorspelling."
+                ),
+            },
+            "advies": {
+                "status": (
+                    RELIABILITY_RELIABLE if adviezen else RELIABILITY_INDICATIVE
+                ),
+                "hoe": (
+                    f"{len(adviezen)} concrete verbetermogelijkheid(en) "
+                    "afgeleid uit de eigen metingen."
+                    if adviezen
+                    else (
+                        "Op dit moment geen verbetermogelijkheden gevonden - "
+                        "dat kan betekenen dat alles goed staat, of dat er "
+                        "nog te weinig is gemeten."
+                    )
+                ),
+            },
+            "interoperabiliteit": {
+                "status": RELIABILITY_RELIABLE,
+                "hoe": (
+                    "Werkt samen met thuisaccu, omvormer, slimme meter, "
+                    "prijsleverancier, weerdiensten en klimaatinstallatie - "
+                    "van verschillende fabrikanten, via Home Assistant."
+                ),
+            },
+        }
+
+        return {
+            "van_toepassing": False,
+            "toelichting": (
+                "De GACS-verplichting geldt niet voor woningen. Zij geldt "
+                "voor utiliteitsgebouwen zonder woonfunctie met een "
+                "verwarmings- of koelinstallatie boven 290 kW (vanaf 2030: "
+                "70 kW). Deze beoordeling is een spiegel, geen "
+                "nalevingsbewijs."
+            ),
+            "eisen": [
+                {
+                    "sleutel": sleutel,
+                    "eis": titel,
+                    "uitleg": uitleg,
+                    **invulling[sleutel],
+                }
+                for sleutel, titel, uitleg in GACS_REQUIREMENTS
+            ],
+            "verbetermogelijkheden": adviezen,
+        }
 
     def get_solar_forecast_health(self) -> dict:
         """Klopt de zonvoorspelling nog, of is er iets veranderd aan de

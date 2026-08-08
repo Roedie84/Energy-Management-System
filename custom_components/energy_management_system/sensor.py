@@ -70,6 +70,7 @@ async def async_setup_entry(
         BatteryModuleHealthSensor(coordinator, entry.entry_id),
         DigitalTwinAccuracySensor(coordinator, entry.entry_id),
         ReliabilityOverviewSensor(coordinator, entry.entry_id),
+        GacsAssessmentSensor(coordinator, entry.entry_id),
         PvInstallationProfileSensor(coordinator, entry.entry_id),
         EnergyBalanceHealthSensor(coordinator, entry.entry_id),
         SluipverbruikSensor(coordinator, entry.entry_id),
@@ -3659,5 +3660,51 @@ class PvInstallationProfileSensor(SensorEntity):
                 "richting die structureel achterblijft verraadt een "
                 "obstakel. Hellingshoek wordt bewust niet geschat - "
                 "daarvoor is deze data niet toereikend."
+            ),
+        }
+
+
+class GacsAssessmentSensor(SensorEntity):
+    """Zelfbeoordeling tegen de vier functionele GACS-eisen (v1.10.0).
+
+    Nadrukkelijk GEEN nalevingsbewijs. De GACS-verplichting geldt voor
+    utiliteitsgebouwen zonder woonfunctie met een verwarmings- of
+    koelinstallatie boven 290 kW - een woning valt daar per definitie
+    buiten.
+
+    Wat dit wél is: een spiegel. De vier eisen uit het Besluit Bouwwerken
+    Leefomgeving beschrijven wat een gebouwautomatiseringssysteem moet
+    kunnen, en die eisen zijn even zinnig voor een woning. De derde -
+    de beheerder informeren over verbetermogelijkheden - was hier het
+    zwakst ingevuld, en dat is precies wat deze sensor toevoegt.
+
+    De toestand is het aantal verbetermogelijkheden.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "GACS-zelfbeoordeling"
+    _attr_icon = "mdi:clipboard-check-outline"
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_gacs_assessment"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def native_value(self) -> int:
+        return len(self._coordinator.get_improvement_suggestions())
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return {
+            **self._coordinator.get_gacs_assessment(),
+            "note": (
+                "De vier eisen komen uit het Besluit Bouwwerken "
+                "Leefomgeving (art. 3.145/3.146). Voor woningen geldt geen "
+                "verplichting; dit is een zelfbeoordeling om te zien waar "
+                "een systeem sterk en zwak staat."
             ),
         }

@@ -8767,3 +8767,32 @@ SVG-kopie in sync, elke dienst geregistreerd, geen print/breakpoint.
 **Getest**: nieuw `tests/test_release_readiness.py`, 7 tests.
 
 **Volledige testsuite**: 1221 tests, allemaal groen.
+
+## v1.10.0 — GACS-tabblad: de vier eisen als spiegel
+
+**Gevraagd**: een GACS-tabblad om van te leren voor het bedrijfsleven.
+
+**Eerst het belangrijkste**: de GACS-verplichting geldt NIET voor
+woningen. Zij geldt voor utiliteitsgebouwen zonder woonfunctie met een
+verwarmings- of koelinstallatie boven 290 kW (vanaf 2030: 70 kW). Dat
+staat bovenaan het tabblad en in de sensor, met een test dat het er
+blijft staan.
+
+**Wat het wel is**: een spiegel langs de vier functionele eisen uit het
+Besluit Bouwwerken Leefomgeving. Drie daarvan waren al ingevuld
+(monitoring, efficiëntie toetsen, interoperabiliteit); de derde -
+de beheerder informeren over VERBETERMOGELIJKHEDEN - was het zwakst.
+
+**Zeven soorten advies**, afgeleid uit de eigen metingen, met het cijfer
+erbij: accu-rendement onder 85%, lage zelfconsumptie, beschaduwing per
+windrichting, trage sensoren, driftende apparaten, een structureel
+slechtere weerbron, en geïntegreerde in plaats van gemeten PV-opwek.
+Bewust terughoudend - twintig adviezen leest niemand.
+
+**Eerlijk over de eigen score**: zonder adviezen geldt de derde eis niet
+als volledig ingevuld; dan staat er dat het óf goed staat óf dat er te
+weinig is gemeten.
+
+**Getest**: nieuw `tests/test_gacs_assessment.py`, 12 tests.
+
+**Volledige testsuite**: 1233 tests, allemaal groen.

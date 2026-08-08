@@ -515,6 +515,82 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## GACS-tabblad: de vier eisen als spiegel (v1.10.0)
+
+**Gevraagd**: *"Ja graag uitwerken, met een nieuw tabblad voor GACS zodat
+ik hier in het bedrijfsleven van kan leren."*
+
+### Eerst het belangrijkste: dit geldt niet voor een woning
+
+Een gebouwautomatiserings- en controlesysteem is sinds 1 januari 2026
+verplicht voor **utiliteitsgebouwen zonder woonfunctie** met een
+verwarmings- of koelinstallatie boven **290 kW** — vanaf 2030 boven 70
+kW. Een woonhuis valt daar per definitie buiten, en 290 kW is een orde
+van grootte hoger dan een woning.
+
+Dat staat bovenaan het tabblad en in de sensor, en er is een test op dat
+het er blijft staan. Suggereren dat een woning aan een
+utiliteitsverplichting voldoet zou ronduit misleidend zijn.
+
+### Waarom het tabblad er dan toch is
+
+De vier functionele eisen uit het Besluit Bouwwerken Leefomgeving
+beschrijven wat zo'n systeem moet kunnen, en die eisen zijn net zo zinnig
+voor een woning:
+
+| Eis | Stand |
+|---|---|
+| Verbruik permanent volgen, analyseren én bijsturen | ✅ |
+| Efficiëntie toetsen en rendementsverliezen opsporen | ✅ |
+| **Beheerder informeren over verbetermogelijkheden** | **was het zwakst** |
+| Communiceren en samenwerken met andere bouwsystemen | ✅ |
+
+Opvallend is hoe laag RVO een energiemanagementsysteem inschat: *"de kans
+is klein dat zo'n combinatie voldoet"*, vooral omdat analyseren en
+communiceren met andere fabrikanten meestal ontbreken. Hier is juist het
+analyseren het sterkste deel.
+
+### De derde eis was het gat
+
+De meldingen zeiden vooral **wat** er is, niet **wat je eraan kunt doen**.
+Dat hebben we vandaag drie keer los opgelost — bij de drift-acceptatie,
+de wegvallende sensor, het bewolkingslabel. Nu is het structureel.
+
+Zeven soorten advies, allemaal afgeleid uit wat er al gemeten wordt, met
+het cijfer erbij zodat je het kunt narekenen. Bij de huidige stand levert
+dat er vier op:
+
+- **Accu-rendement 82,9%** — onder 85% gaat er veel verloren; kijk of de
+  accu vaak op vol vermogen laadt terwijl er meer tijd is
+- **Zelfconsumptie 54%** — de rest gaat het net op tegen het lage tarief;
+  apparaten verplaatsen naar de overschot-uren levert meer op
+- **IPTV en koelkast verbruiken meer dan normaal** — denk aan
+  condensorroosters of een deurrubber
+- **PV-dagopwek wordt geïntegreerd** — een kWh-meter instellen geeft een
+  exacte waarde
+
+Bewust terughoudend: een lijst met twintig adviezen leest niemand, en dan
+is juist deze eis niet ingevuld.
+
+### Eerlijk blijven over de eigen score
+
+Zonder adviezen kan de derde eis **niet** als volledig ingevuld gelden —
+dat zou de beoordeling mooier maken dan ze is. Dan staat er dat het
+óf goed staat óf dat er te weinig is gemeten, met een verwijzing naar het
+Betrouwbaarheid-tabblad om te zien welke van de twee.
+
+### Getest
+
+Nieuw `tests/test_gacs_assessment.py`, 12 tests: de beoordeling meldt dat
+de verplichting niet geldt, alle vier de eisen zijn gedekt, elke eis legt
+uit hoe eraan wordt voldaan, een laag rendement geeft advies en een goed
+rendement niet, lage zelfconsumptie, een driftend apparaat en
+geïntegreerde PV geven advies, elk advies heeft een waarneming én een
+handeling, de derde eis weerspiegelt de werkelijkheid, monitoring en
+interoperabiliteit staan structureel vast, en het tabblad bestaat.
+
+**Volledige testsuite**: 1233 tests, allemaal groen.
+
 ## Laatste controle vóór installatie (v1.9.6)
 
 **Gevraagd**: alles nog één keer volledig beoordelen zodat er geen

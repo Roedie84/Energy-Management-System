@@ -2037,3 +2037,49 @@ PLAUSIBILITY_RULES = (
     ("_eur", -100000.0, 100000.0, "bedrag"),
     ("_w", -100000.0, 100000.0, "vermogen"),
 )
+
+# --- GACS-zelfbeoordeling (v1.10.0) ----------------------------------
+# Gevraagd naar aanleiding van de RVO-pagina over het
+# Gebouwautomatiserings- en controlesysteem: "Ja graag uitwerken, met een
+# nieuw tabblad voor GACS zodat ik hier in het bedrijfsleven van kan
+# leren."
+#
+# BELANGRIJK: voor een woning geldt de GACS-verplichting NIET. Die geldt
+# voor utiliteitsgebouwen zonder woonfunctie boven 290 kW verwarmings- of
+# koelvermogen. Dit tabblad is dus geen nalevingsbewijs maar een spiegel:
+# hoe verhoudt deze integratie zich tot de vier functionele eisen uit het
+# Besluit Bouwwerken Leefomgeving?
+#
+# Die vier eisen, letterlijk uit de wettekst samengevat:
+GACS_REQUIREMENTS = (
+    (
+        "monitoring",
+        "Verbruik permanent controleren, bijhouden, analyseren én bijsturen",
+        "Het systeem moet het energieverbruik continu volgen en er ook "
+        "daadwerkelijk op kunnen ingrijpen.",
+    ),
+    (
+        "efficiency",
+        "Energie-efficiëntie toetsen en rendementsverliezen opsporen",
+        "Niet alleen meten wat er gebeurt, maar ook beoordelen of het goed "
+        "gaat en verliezen herkennen.",
+    ),
+    (
+        "advies",
+        "De beheerder informeren over verbetermogelijkheden",
+        "De zwakste eis voor de meeste systemen: melden dát er iets is, is "
+        "iets anders dan vertellen wat je eraan kunt doen.",
+    ),
+    (
+        "interoperabiliteit",
+        "Communiceren en samenwerken met andere bouwsystemen",
+        "Met opslag, zonnepanelen, laadpalen en installaties van andere "
+        "fabrikanten.",
+    ),
+)
+
+# Drempels waarboven een verbetervoorstel de moeite waard is. Bewust
+# terughoudend: een lijst met twintig adviezen leest niemand, en dan is
+# juist de eis waar dit voor bedoeld is niet ingevuld.
+GACS_EFFICIENCY_ADVICE_PERCENT = 85.0
+GACS_SELF_CONSUMPTION_ADVICE_PERCENT = 60.0

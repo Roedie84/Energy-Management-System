@@ -398,7 +398,7 @@ views:
         # "richtingen van de stromen nog niet geupdate?". De
         # versiesleutel dwingt een verse ophaal af. Een test bewaakt
         # dat deze waarde gelijk blijft aan de versie in manifest.json.
-        image: /local/energy_management_system_overview.svg?v=1.9.6
+        image: /local/energy_management_system_overview.svg?v=1.10.0
         elements:
           - type: state-label
             entity: sensor.woonkamer_energy_management_system_system_status
@@ -1143,6 +1143,70 @@ views:
         icon: mdi:shield-check-outline
         icon_color: green
         entity: sensor.woonkamer_energy_management_system_betrouwbaarheid_gegenereerde_data
+        tap_action:
+          action: more-info
+
+  - title: GACS
+    path: gacs
+    cards:
+      - type: custom:mushroom-title-card
+        title: GACS-zelfbeoordeling
+        subtitle: Gemeten langs de vier functionele eisen
+
+      - type: markdown
+        content: |
+          **Voor deze woning geldt geen verplichting.** Een
+          gebouwautomatiserings- en controlesysteem is vanaf 1 januari 2026
+          verplicht voor *utiliteitsgebouwen* zonder woonfunctie, met een
+          verwarmings- of koelinstallatie boven 290 kW. Vanaf 2030 zakt die
+          grens naar 70 kW. Een woonhuis valt daar per definitie buiten.
+
+
+          Waarom dit tabblad er dan toch is: de vier functionele eisen uit
+          het Besluit Bouwwerken Leefomgeving beschrijven wat zo'n systeem
+          moet kunnen, en die eisen zijn net zo zinnig voor een woning. Het
+          is een spiegel, geen nalevingsbewijs.
+
+
+          Opvallend: RVO schat een energiemanagementsysteem laag in — "de
+          kans is klein dat zo'n combinatie voldoet aan de GACS-eisen",
+          vooral omdat analyseren en communiceren met andere fabrikanten
+          meestal ontbreekt. Hier is juist het analyseren het sterkste deel.
+
+      - type: markdown
+        title: De vier eisen
+        content: |
+          {% set eisen = state_attr('sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling', 'eisen') or [] %}{% if eisen | length == 0 %}Nog geen beoordeling beschikbaar.{% else %}{% set iconen = {'betrouwbaar': '✅', 'indicatief': '🟡', 'onvoldoende_data': '⏳', 'onbetrouwbaar': '⚠️', 'niet_toetsbaar': '🔵', 'niet_geconfigureerd': '⚪'} %}{% for e in eisen %}
+          **{{ iconen.get(e.status, '?') }} {{ e.eis }}**
+
+          _{{ e.uitleg }}_
+
+          {{ e.hoe }}
+
+          {% endfor %}{% endif %}
+
+      - type: markdown
+        title: Verbetermogelijkheden
+        content: |
+          {% set adviezen = state_attr('sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling', 'verbetermogelijkheden') or [] %}{% if adviezen | length == 0 %}Geen verbetermogelijkheden gevonden. Dat kan betekenen dat alles goed staat, of dat er nog te weinig is gemeten — kijk op het Betrouwbaarheid-tabblad welke van de twee.{% else %}Dit is de derde GACS-eis: niet alleen melden dát er iets is, maar ook wat je eraan kunt doen.
+
+          {% for a in adviezen %}
+          **{{ a.onderwerp }}**
+
+          Waargenomen: {{ a.waarneming }}
+
+          {{ a.advies }}
+
+          {% endfor %}{% endif %}
+
+      - type: custom:mushroom-template-card
+        primary: >-
+          {{ states('sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling') }} verbetermogelijkheid(en)
+        secondary: Tik voor de volledige beoordeling
+        icon: mdi:clipboard-check-outline
+        icon_color: >-
+          {{ 'orange' if states('sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling') | int(0) > 0 else 'green' }}
+        entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
         tap_action:
           action: more-info
 
