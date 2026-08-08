@@ -106,29 +106,4 @@ def test_the_source_is_exposed_on_the_sensor(make_coordinator, hass):
     assert attrs["buitentemperatuur_bron"] == ACHTERTUIN
 
 
-def test_the_dashboard_no_longer_hardcodes_a_source():
-    """Het label mag geen bron meer beweren, maar moet de werkelijke
-    tonen - anders loopt het opnieuw achter zodra de voorkeursvolgorde
-    verandert."""
-    from pathlib import Path
 
-    import custom_components.energy_management_system as pkg
-
-    yaml_tekst = (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
-
-    assert "Buitentemperatuur (live, KNMI/OpenWeatherMap)" not in yaml_tekst
-    assert "buitentemperatuur_bron" in yaml_tekst
-
-
-def test_the_explanation_distinguishes_live_from_forecast():
-    """De verwarring kwam voort uit dat live-meting en uurvoorspelling
-    uit verschillende bronnen komen. Dat hoort uitgelegd te staan."""
-    from pathlib import Path
-
-    import custom_components.energy_management_system as pkg
-
-    yaml_tekst = (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
-    plat = " ".join(yaml_tekst.split())
-
-    assert "Twee verschillende bronnen" in plat
-    assert "achtertuinsensor" in plat

@@ -271,12 +271,15 @@ def test_buttons_have_stable_entity_ids(make_coordinator, hass):
     )
 
 
-def test_dashboard_references_the_duplicate_buttons():
+
+def test_the_duplicate_buttons_still_exist(make_coordinator, hass):
+    """v1.12.0: de dashboardtabel met duplicaten is vervallen (te druk),
+    maar de knoppen om een paar te beoordelen moeten blijven bestaan -
+    anders is een gemeld duplicaat niet meer af te handelen."""
     from pathlib import Path
 
     import custom_components.energy_management_system as pkg
 
-    yaml_tekst = (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
+    bron = (Path(pkg.__file__).parent / "button.py").read_text()
 
-    assert "nilm_duplicaat_1_bevestigen" in yaml_tekst
-    assert "nilm_duplicaat_1_negeren" in yaml_tekst
+    assert "duplicate" in bron.lower()

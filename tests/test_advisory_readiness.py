@@ -1,12 +1,12 @@
-"""Advisory readiness assessment (v0.63.40): "kunnen we een advies
-afgeven wanneer betrouwbaar genoeg om er werkelijk iets mee te doen?"
+"""Adviesmodule-gereedheid.
 
-Deliberate honesty distinction: modules with a genuine data-maturity
-signal (Kirchhoff, sluipverbruik, Monte Carlo, Kalman, NILM) get a real
-readiness status ("klaar"/"bijna_klaar"/"onvoldoende_data"). Modules
-with no mechanism comparing past predictions to what actually happened
-(Weather Ensemble, MPC, Digital Twin) get "structureel_beschikbaar"
-instead - never a false claim of proven accuracy.
+v1.12.0: de dashboardtabellen met de tien modules en de legenda zijn
+vervallen. Op verzoek toont het Kwaliteit-tabblad nog één zin; de
+onderbouwing zit in de sensorattributen en de diagnostiek-export.
+
+De tests die de TABEL lazen zijn daarom omgezet naar de onderliggende
+data: dat is wat er werkelijk toe doet, en het blijft gelden ongeacht
+hoe het dashboard het toont.
 """
 from datetime import datetime, timezone
 
@@ -296,39 +296,7 @@ def _legenda_tekst():
     raise AssertionError("geen legenda-kaart gevonden op het Advies-tabblad")
 
 
-def test_legend_does_not_claim_weather_ensemble_is_unmeasured(
-    make_coordinator, hass
-):
-    """De legenda noemde tot v1.0.2 nog "de drie modules zonder
-    mechanisme dat een voorspelling ooit tegen de werkelijkheid legt
-    (Weather Ensemble, MPC, Digital Twin)". Twee daarvan meten zichzelf
-    inmiddels wél - de tekst was achtergebleven bij de code.
-    """
-    tekst = _legenda_tekst()
 
-    assert "drie modules" not in tekst
-    assert "(Weather Ensemble, MPC, Digital Twin)" not in tekst
-
-
-def test_legend_still_explains_why_mpc_cannot_be_measured():
-    """MPC hoort er wél te blijven staan, mét de reden - anders wordt
-    "consistentie" later een argument om er alsnog een meting bij te
-    verzinnen die niets meet."""
-    tekst = _legenda_tekst()
-
-    assert "MPC" in tekst
-    assert "niet wordt uitgevoerd" in tekst
-
-
-def test_legend_mentions_the_digital_twin_fallback():
-    """De twin kan nog steeds in deze categorie belanden: met een
-    gemeten afwijking maar zonder bekende accucapaciteit valt niet te
-    zeggen of die afwijking veel of weinig is. Dat hoort er eerlijk in
-    te staan in plaats van "geldt nog voor één module"."""
-    tekst = _legenda_tekst()
-
-    assert "Digital Twin" in tekst
-    assert "accucapaciteit onbekend" in tekst
 
 
 def test_weather_ensemble_can_reach_ready_now(make_coordinator, hass):
@@ -361,79 +329,8 @@ def _dashboard_modulelabels():
     return set(re.findall(r"'([a-z_]+)':", blok))
 
 
-def test_every_readiness_module_is_shown_on_the_dashboard(
-    make_coordinator, hass
-):
-    """Gerapporteerd via een screenshot: de kaart zei "8 adviesmodules"
-    terwijl er er tien zijn. `extra_dip_marge` en
-    `temperatuur_regressie` werden nergens getoond - ze bestonden, werden
-    berekend, maar vielen buiten de hardcoded namenlijst.
-
-    Deze test laat de suite falen zodra er een module bijkomt zonder
-    label, in plaats van dat die stilzwijgend onzichtbaar blijft.
-    """
-    coordinator = make_coordinator({})
-    coordinator._update_advisory_readiness(DAY0)
-
-    ontbreekt = set(coordinator.advisory_readiness) - _dashboard_modulelabels()
-
-    assert not ontbreekt, (
-        "deze adviesmodules worden nergens getoond - voeg een label toe "
-        f"aan de namen-dict op het Advies-tabblad: {sorted(ontbreekt)}"
-    )
 
 
-def test_no_label_without_a_matching_module(make_coordinator, hass):
-    """Andersom net zo: een label voor een module die niet meer bestaat
-    zou een lege regel met "onbekend" opleveren."""
-    coordinator = make_coordinator({})
-    coordinator._update_advisory_readiness(DAY0)
-
-    overbodig = _dashboard_modulelabels() - set(coordinator.advisory_readiness)
-
-    assert not overbodig, sorted(overbodig)
-
-
-def test_dashboard_counts_match_the_actual_number(make_coordinator, hass):
-    """De teksten noemden "acht" op drie plekken terwijl het er tien
-    zijn. Het getal hoort te kloppen met de code, niet met wat er ooit
-    waar was."""
-    from pathlib import Path
-
-    import custom_components.energy_management_system as pkg
-
-    coordinator = make_coordinator({})
-    coordinator._update_advisory_readiness(DAY0)
-    aantal = len(coordinator.advisory_readiness)
-    assert aantal == 10
-
-    yaml_tekst = (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
-    assert "Alle tien modules" in yaml_tekst
-    # v1.0.5: de tekst zegt niet langer dat álle tien adviserend zijn -
-    # zie test_dashboard_states_which_module_acts.
-    assert "van de tien" in " ".join(yaml_tekst.split())
-    assert "acht modules" not in yaml_tekst.lower()
-
-
-def test_readiness_count_row_explains_its_number(make_coordinator, hass):
-    """De waarde is een kaal getal ("1"). Zonder uitleg is niet te zien
-    dat het om "aantal klaar van tien" gaat."""
-    from pathlib import Path
-
-    import custom_components.energy_management_system as pkg
-
-    yaml_tekst = (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
-
-    assert "aantal 'klaar' van 10" in yaml_tekst
-
-
-# --- v1.0.5: welke modules sturen daadwerkelijk aan? ----------------
-
-# De enige module in de gereedheidslijst die géén advies geeft maar
-# werkelijk een laadcommando stuurt. Bewust een expliciete verzameling:
-# komt er ooit een tweede bij, dan hoort iemand deze regel te wijzigen
-# en daarmee bewust te bevestigen dat het dashboard dat ook vermeldt.
-AANSTURENDE_MODULES = {"extra_dip_marge"}
 
 
 def test_the_acting_module_actually_sends_a_command():
@@ -485,28 +382,64 @@ def test_advisory_modules_never_reach_the_decision_tree():
             assert "_async_apply" not in regel, f"{module}: {regel}"
 
 
-def test_dashboard_states_which_module_acts():
-    """Het tabblad claimde dat alle tien uitsluitend adviserend zijn.
-    Dat klopte niet voor de extra-dip-laadmarge - en juist bij een
-    integratie die de accu aanstuurt is dat het soort onwaarheid dat je
-    niet wilt hebben staan."""
-    from pathlib import Path
-
-    import custom_components.energy_management_system as pkg
-
-    yaml_tekst = (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
-    plat = " ".join(yaml_tekst.split())
-
-    assert "Negen van de tien zijn uitsluitend adviserend" in plat
-    assert "Extra-dip-laadmarge (⚡) stuurt wél aan" in plat
-    assert "Tien modules zijn uitsluitend adviserend" not in plat
 
 
-def test_the_acting_module_is_marked_in_the_table():
-    from pathlib import Path
 
-    import custom_components.energy_management_system as pkg
+# --- v1.12.0: dezelfde garanties, nu op de data ---------------------
 
-    yaml_tekst = (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
 
-    assert "⚡ Extra-dip-laadmarge (stuurt aan)" in yaml_tekst
+def test_every_module_appears_in_the_reliability_overview(
+    make_coordinator, hass
+):
+    """De dashboardtabel is vervallen, maar elke adviesmodule hoort nog
+    steeds vindbaar te zijn - nu in het betrouwbaarheidsoverzicht, dat
+    ook de bron is voor de samenvattende zin."""
+    c = make_coordinator({})
+    c._update_advisory_readiness(DAY0)
+
+    namen = {r["naam"] for r in c.get_reliability_overview()}
+
+    for sleutel in c.advisory_readiness:
+        assert sleutel in namen, sleutel
+
+
+def test_the_summary_sentence_covers_the_learned_values(
+    make_coordinator, hass
+):
+    """Eén zin in plaats van een tabel: die moet wél het totaal
+    noemen, anders weet je niet hoeveel er nog verzamelt."""
+    c = make_coordinator({})
+    c._update_advisory_readiness(DAY0)
+
+    zin = c.get_topic_summaries()["zelflerend"]["zin"]
+
+    assert "geleerde waarden" in zin
+    assert "verzamelt nog" in zin
+
+
+def test_mpc_is_still_marked_as_unverifiable(make_coordinator, hass):
+    """De legenda legde uit waarom MPC niet te meten valt. Die tekst is
+    vervallen, maar het oordeel zelf moet blijven staan."""
+    from custom_components.energy_management_system.const import (
+        RELIABILITY_UNVERIFIABLE,
+    )
+
+    c = make_coordinator({})
+    c.mpc_horizon_quarters_used = 96
+    c._update_advisory_readiness(DAY0)
+
+    rij = next(r for r in c.get_reliability_overview() if r["naam"] == "mpc")
+
+    assert rij["niveau"] == RELIABILITY_UNVERIFIABLE
+
+
+def test_the_readiness_count_is_still_available(make_coordinator, hass):
+    """v1.12.0: de detailsectie op Overzicht is vervallen - een
+    landingspagina hoort de conclusie te tonen, niet twee uitklaplijsten
+    met onderliggende sensoren. Het cijfer zelf moet wel beschikbaar
+    blijven."""
+    c = make_coordinator({})
+    c._update_advisory_readiness(DAY0)
+
+    assert c.advisory_readiness
+    assert "geleerde waarden" in c.get_topic_summaries()["zelflerend"]["zin"]

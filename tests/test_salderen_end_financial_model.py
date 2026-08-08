@@ -372,23 +372,6 @@ def test_missing_feedin_tariff_after_salderen_is_a_real_attention_point(
     assert any("teruglevertarief" in p for p in summary["aandachtspunten"])
 
 
-def test_dashboard_shows_the_salderen_regime():
-    """Het regime en de terugleverwaarde moeten op het Financieel-
-    tabblad zichtbaar zijn (v0.63.117) - anders verandert de economie
-    onder water zonder dat er iets van te zien is.
-    """
-    from pathlib import Path
-
-    import custom_components.energy_management_system as pkg
-
-    yaml_tekst = (
-        Path(pkg.__file__).parent / "dashboard_template.yaml"
-    ).read_text()
-
-    assert "salderen_actief" in yaml_tekst
-    assert "teruglever_waarde_eur_per_kwh" in yaml_tekst
-    assert "gederfde_teruglevering_eur" in yaml_tekst
-
 
 def test_dashboard_template_matches_the_repository_dashboard():
     """De twee dashboardbestanden moeten identiek blijven."""

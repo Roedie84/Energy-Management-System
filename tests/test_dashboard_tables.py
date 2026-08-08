@@ -382,13 +382,15 @@ def test_the_merged_views_kept_their_content():
     )
     views = {v["title"]: v for v in data["views"]}
 
-    # v1.10.2: vijf overbodige koppen verwijderd (een kop die hetzelfde
-    # zegt als de kaart eronder, of als de tabbladnaam zelf).
+    # v1.12.0: de grote tabellen zijn vervangen door één samenvattende
+    # zin per onderwerp; details staan in de sensorattributen en de
+    # diagnostiek-export. De aantallen zijn daarom veel lager, maar geen
+    # enkel tabblad mag leeg raken.
     verwacht = {
-        "Kwaliteit": 13,
-        "Financieel": 16,
-        "Verloop": 9,
-        "Klimaat & water": 10,
+        "Kwaliteit": 4,
+        "Financieel": 10,
+        "Verloop": 6,
+        "Klimaat & water": 2,
     }
     for titel, minimum in verwacht.items():
         assert titel in views, titel
@@ -406,7 +408,11 @@ def test_the_overview_kept_its_sections_layout():
     overzicht = next(v for v in data["views"] if v["title"] == "Overzicht")
 
     assert overzicht.get("type") == "sections"
-    assert len(overzicht.get("sections") or []) >= 5
+    # v1.12.1: van zes naar drie secties. De twee detailsecties
+    # ("Kernbeslissing", "Advies-modules") zijn vervallen omdat je op een
+    # landingspagina niet wilt scrollen, en de statuskaart zit nu in de
+    # eerste sectie in plaats van in een eigen sectie erboven.
+    assert len(overzicht.get("sections") or []) >= 3
 
 
 def test_the_visual_view_is_still_a_panel():
