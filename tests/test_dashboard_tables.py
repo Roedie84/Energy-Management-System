@@ -309,7 +309,12 @@ def _render_markdown_cards():
 def test_dashboard_yaml_is_valid():
     with open(DASHBOARD_PATH) as f:
         data = yaml.safe_load(f)
-    assert len(data["views"]) == 7
+        # v1.13.0: alleen Overzicht staat nog in de tabbalk; de rest is
+    # bereikbaar via de tegels in "Meer bekijken". Gevraagd omdat de
+    # tabbladen standaard niet zichtbaar hoefden te zijn.
+    zichtbaar = [v for v in data["views"] if not v.get("subview")]
+    assert [v["title"] for v in zichtbaar] == ["Overzicht"]
+    assert len(data["views"]) == 8
 
 
 def test_markdown_tables_have_no_blank_lines_between_rows():
@@ -391,14 +396,22 @@ def test_the_merged_views_kept_their_content():
     # tabblad voor één zin is verspilling. Samengevoegd tot "Systeem",
     # met per onderwerp een kop die zegt wat je ziet.
     verwacht = {
-        "Kwaliteit": 4,
+        # v1.12.8: de verbetermogelijkheden en de uitleg zijn naar de
+        # detailpagina verhuisd; er blijven drie samenvattingstegels.
+        "Kwaliteit": 3,
         "Financieel": 10,
         "Verloop": 6,
         "Systeem": 8,
     }
     for titel, minimum in verwacht.items():
         assert titel in views, titel
-        assert len(views[titel]["cards"]) >= minimum, titel
+        # v1.13.1: Systeem en Verloop gebruiken nu `type: sections` zodat
+        # elke kop bij zijn eigen kaarten blijft; die hebben geen
+        # `cards` op viewniveau.
+        kaarten = list(views[titel].get("cards") or [])
+        for sectie in views[titel].get("sections") or []:
+            kaarten += sectie.get("cards") or []
+        assert len(kaarten) >= minimum, titel
 
 
 def test_the_overview_kept_its_sections_layout():
@@ -468,6 +481,10 @@ def test_no_heading_repeats_the_view_title():
     )
 
     for view in data["views"]:
+        # De subview heeft geen tabbladnaam op het scherm, dus daar is
+        # een kop met dezelfde naam juist wél nodig.
+        if view.get("subview"):
+            continue
         kaarten = view.get("cards") or []
         if not kaarten:
             continue

@@ -319,7 +319,7 @@ def test_cooling_tile_sits_in_the_live_figures_section():
     data = yaml.safe_load(
         (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
     )
-    overzicht = data["views"][0]
+    overzicht = next(v for v in data["views"] if v["title"] == "Overzicht")
 
     koppen = [
         card.get("heading")

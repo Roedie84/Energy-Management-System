@@ -201,7 +201,7 @@ def test_the_original_overview_is_untouched():
     houdt zijn tabellen en schakelaars - die blijven nodig voor het
     echte werk."""
     data = yaml.safe_load(DASHBOARD.read_text())
-    overzicht = data["views"][0]
+    overzicht = next(v for v in data["views"] if v["title"] == "Overzicht")
 
     assert overzicht["title"] == "Overzicht"
     koppen = [

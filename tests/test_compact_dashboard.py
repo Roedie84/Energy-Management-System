@@ -20,7 +20,15 @@ PAKKET = Path(pkg.__file__).parent
 
 
 def _views():
-    return yaml.safe_load((PAKKET / "dashboard_template.yaml").read_text())["views"]
+    """Alle tabbladen behalve de detailpagina.
+
+    v1.13.0: sinds alle tabbladen subviews zijn (ze staan niet meer in de
+    tabbalk, je komt er via een tegel op Overzicht) kan er niet meer op
+    `subview` gefilterd worden. Alleen "Details" is uitgezonderd: die
+    bevat juist de tabellen die elders zijn weggehaald.
+    """
+    alle = yaml.safe_load((PAKKET / "dashboard_template.yaml").read_text())["views"]
+    return [v for v in alle if v["title"] != "Details"]
 
 
 def _kaarten(view):
@@ -187,8 +195,12 @@ def test_the_attention_card_is_a_count_not_a_wall():
         plat = str(kaart)
         assert "for punt in punten" not in plat
         assert "aandachtspunt(en)" in plat
-        # Aanklikbaar, anders is "tik voor details" een loze verwijzing.
-        assert kaart.get("tap_action", {}).get("action") == "more-info"
+        # v1.12.7: navigeert naar de detailpagina in plaats van
+        # more-info te openen. Home Assistant toont in more-info alleen
+        # geschiedenis en logboek - geen attributen - dus "tik voor
+        # details" leverde niets op.
+        assert kaart.get("tap_action", {}).get("action") == "navigate"
+        assert "details" in kaart["tap_action"]["navigation_path"]
 
 
 def test_the_overview_has_no_detail_sections():
@@ -297,3 +309,45 @@ def test_the_financial_tab_uses_tiles_not_tables():
     tekens = sum(len(k.get("content") or "") for k in _kaarten(financieel))
 
     assert tekens == 0, f"{tekens} tekens tabeltekst op Financieel"
+
+
+# --- v1.13.1: koppen blijven bij hun kaarten -------------------------
+
+
+def test_tabs_with_several_headings_use_sections():
+    """Gemeld: "De zelflerend titel staat nog niet correct op de
+    pagina."
+
+    De standaard masonry-indeling verdeelt kaarten over kolommen zonder
+    te weten welke kop erbij hoort. Op Systeem stond "Zelflerend" links
+    en de bijbehorende kaart rechts, onder een andere kop.
+
+    `type: sections` houdt elk groepje bij elkaar.
+    """
+    alle = yaml.safe_load((PAKKET / "dashboard_template.yaml").read_text())
+
+    for view in alle["views"]:
+        kaarten = view.get("cards") or []
+        koppen = [k for k in kaarten if "title-card" in str(k.get("type"))]
+        assert len(koppen) <= 1, (
+            f"{view['title']}: {len(koppen)} koppen in een masonry-indeling "
+            "- gebruik `type: sections` zodat elke kop bij zijn kaarten "
+            "blijft"
+        )
+
+
+def test_no_section_is_only_a_heading():
+    """Een sectie met alleen een kop en geen kaarten toont een titel
+    zonder inhoud."""
+    alle = yaml.safe_load((PAKKET / "dashboard_template.yaml").read_text())
+
+    for view in alle["views"]:
+        for sectie in view.get("sections") or []:
+            kaarten = sectie.get("cards") or []
+            inhoud = [
+                k
+                for k in kaarten
+                if k.get("type") != "heading"
+                and "title-card" not in str(k.get("type"))
+            ]
+            assert inhoud, f"{view['title']}: sectie zonder inhoud"

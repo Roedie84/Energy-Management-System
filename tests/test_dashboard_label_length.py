@@ -25,9 +25,17 @@ MAX_TEKENS = {4: 15, 6: 22, 12: 48}
 
 
 def _kaarten(view):
+    """Alle kaarten, ook die binnen een grid.
+
+    v1.13.2: die werden overgeslagen, waardoor twaalf te lange labels op
+    Financieel onopgemerkt bleven - "Besparing t.o.v. zonder
+    accu-sturing (vandaag)" is 46 tekens.
+    """
     k = list(view.get("cards") or [])
     for sectie in view.get("sections") or []:
         k += sectie.get("cards") or []
+    for kaart in list(k):
+        k += kaart.get("cards") or []
     return k
 
 
@@ -43,8 +51,11 @@ def test_no_label_is_cut_off():
                 # Sjablonen overslaan: die berekenen hun eigen tekst.
                 if not isinstance(label, str) or "{" in label:
                     continue
-                kolommen = (kaart.get("grid_options") or {}).get("columns", 12)
-                grens = MAX_TEKENS.get(kolommen, 48)
+                # Zonder expliciete breedte staat een kaart in een grid,
+                # en die zijn standaard smal - uitgaan van de volle
+                # breedte was juist de fout.
+                kolommen = (kaart.get("grid_options") or {}).get("columns", 6)
+                grens = MAX_TEKENS.get(kolommen, 22)
                 if len(label) > grens:
                     te_lang.append(
                         f"{view['title']}: '{label}' ({len(label)} tekens, "
@@ -105,3 +116,32 @@ def test_the_full_explanation_is_still_reachable():
     assert tegels
     for tegel in tegels:
         assert tegel.get("tap_action"), tegel.get("secondary")
+
+
+def test_cards_inside_grids_are_checked_too():
+    """v1.13.2: de test keek alleen naar kaarten met een expliciete
+    kolombreedte. Kaarten binnen een grid hebben die niet en vielen dus
+    buiten de controle - twaalf te lange labels op Financieel bleven
+    daardoor staan tot ze op een screenshot opvielen.
+
+    Deze test legt vast dat er daadwerkelijk in de grids wordt gekeken.
+    """
+    data = yaml.safe_load((PAKKET / "dashboard_template.yaml").read_text())
+    financieel = next(v for v in data["views"] if v["title"] == "Financieel")
+
+    op_viewniveau = len(financieel.get("cards") or [])
+    met_grids = len(_kaarten(financieel))
+
+    assert met_grids > op_viewniveau, (
+        "de helper kijkt niet in de grid-kaarten"
+    )
+
+
+def test_dynamic_labels_are_short_too():
+    """Sjabloonlabels worden niet automatisch getoetst - ze berekenen
+    hun eigen tekst - maar kunnen net zo goed te lang uitvallen. Deze
+    twee waren 60+ tekens."""
+    yaml_tekst = (PAKKET / "dashboard_template.yaml").read_text()
+
+    assert "Accubesparing (kostprijs-model)" not in yaml_tekst
+    assert "Uitstoot vandaag (huidige intensiteit" not in yaml_tekst
