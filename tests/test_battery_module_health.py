@@ -260,7 +260,11 @@ def test_large_temperature_spread_becomes_an_attention_point(
     coordinator._update_battery_module_health(DAY0)
 
     punten = coordinator.get_diagnostic_summary()["aandachtspunten"]
-    assert any("inwendige weerstand" in p for p in punten)
+    # v1.15.8: de duiding ("inwendige weerstand" of "plaatsing") vraagt
+    # om vermogens per module, en die zet deze opstelling niet. Het
+    # temperatuurverschil zelf blijft wel gemeld - dat is de kern van
+    # deze test.
+    assert any("celtemperatuur" in p for p in punten)
 
 
 def test_large_soc_spread_becomes_an_attention_point(make_coordinator, hass):
