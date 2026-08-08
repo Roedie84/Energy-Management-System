@@ -3661,6 +3661,25 @@ class EnergyManagementSystemCoordinator:
 
         return samenvatting
 
+    def _module_temperature_spread_at_rest(self) -> float | None:
+        """Het temperatuurverschil tussen modules in rust (v1.16.4).
+
+        Externe warmte - een omvormer erboven - werkt dag en nacht door;
+        eigen verlies alleen onder belasting. Blijft het verschil in rust
+        even groot, dan komt het van buiten.
+
+        Gebruikt de dagelijkse geschiedenis, die op rustige momenten
+        wordt vastgelegd.
+        """
+        laatste: list[float] = []
+        for staat in (self.battery_module_health or {}).values():
+            reeks = (staat.get("geschiedenis") or {}).get("temperatuur_c") or []
+            if reeks and reeks[-1] is not None:
+                laatste.append(reeks[-1])
+        if len(laatste) < 2:
+            return None
+        return max(laatste) - min(laatste)
+
     def get_stalled_series_report(self) -> list[dict]:
         """Zoekt geleerde reeksen die niet meer veranderen (v1.11.1).
 
@@ -11518,12 +11537,45 @@ class EnergyManagementSystemCoordinator:
                 gemiddeld = sum(vermogens) / len(vermogens)
                 eigen = warmste.get("vermogen_w")
                 if eigen is not None and eigen < gemiddeld:
-                    duiding = (
-                        f" Module {warmste['module']} is de warmste én "
-                        f"levert het minste ({eigen:.0f} W tegen "
-                        f"{gemiddeld:.0f} W gemiddeld) - dat past bij een "
-                        "hogere inwendige weerstand."
-                    )
+                    # v1.16.4, gemeld: "Ik vermoed dat de accu 1 direct
+                    # onder de omvormer zit."
+                    #
+                    # Dat is een derde verklaring die ik in v1.15.8 niet
+                    # meenam, en ze keert het beeld om: een warmere cel
+                    # heeft juist LAGERE inwendige weerstand, dus minder
+                    # vermogen bij hogere temperatuur past eerder bij een
+                    # BMS dat terugregelt om de cel te beschermen. Dan is
+                    # de warmte de OORZAAK van het lagere vermogen, niet
+                    # het gevolg van een zwakke module.
+                    #
+                    # Het onderscheid zit in het RUSTVERSCHIL. Externe
+                    # warmte werkt dag en nacht; eigen verlies alleen
+                    # onder belasting. Groeit het verschil met de
+                    # belasting, dan ligt het aan de module.
+                    rust = self._module_temperature_spread_at_rest()
+                    if rust is not None and rust >= temp_spreiding * 0.6:
+                        duiding = (
+                            f" Module {warmste['module']} is de warmste én "
+                            f"levert het minste ({eigen:.0f} W tegen "
+                            f"{gemiddeld:.0f} W gemiddeld). In rust "
+                            f"verschillen ze al {rust:.1f} °C, dus dit komt "
+                            "waarschijnlijk van buiten - staat er iets warms "
+                            "boven of naast, zoals de omvormer?"
+                        )
+                    else:
+                        duiding = (
+                            f" Module {warmste['module']} is de warmste én "
+                            f"levert het minste ({eigen:.0f} W tegen "
+                            f"{gemiddeld:.0f} W gemiddeld)"
+                            + (
+                                f", terwijl ze in rust maar {rust:.1f} °C "
+                                "verschillen"
+                                if rust is not None
+                                else ""
+                            )
+                            + " - dat past bij een hogere inwendige "
+                            "weerstand."
+                        )
                 else:
                     duiding = (
                         f" Module {warmste['module']} is de warmste maar "

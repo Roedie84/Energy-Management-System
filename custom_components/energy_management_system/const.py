@@ -1070,6 +1070,21 @@ WEATHER_ENSEMBLE_AGREEMENT_USABLE_PERCENT = 60.0
 
 # Gewone JSON-waarden (getallen, lijsten, dicts).
 PERSISTED_PLAIN_FIELDS = (
+    # v1.16.5, gemeld: "Vandaag: 0.0 kWh opgewekt" terwijl de omvormer
+    # 15,5 kWh had geproduceerd.
+    #
+    # De dagsleutel en `pv_production_today_kwh` werden wél bewaard, maar
+    # het IJKPUNT van de kWh-meter niet. Na een herstart klopt de
+    # dagsleutel dus - geen dagwissel, geen reset - maar
+    # `_pv_energy_meter_day_start` is None, waarna
+    # `_verwerk_pv_meterstand` opnieuw ijkt op de huidige meterstand. De
+    # opwek wordt dan meterstand min huidige stand = 0,0, en dat
+    # overschrijft de bewaarde waarde.
+    #
+    # Zonder ijkpunt is een cumulatieve meter waardeloos: je weet niet
+    # meer waar de dag begon.
+    "_pv_energy_meter_day_start",
+    "_pv_energy_meter_last",
     # Geleerde/opgebouwde geschiedenis
     "battery_module_health",
     "energy_balance_error_history",

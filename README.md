@@ -515,6 +515,169 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Samenhangcontrole na een dag met 25 versies (v1.16.6)
+
+**Gevraagd**: *"We hebben vandaag zoveel gewijzigd, waardoor ik angst heb
+dat veel niet meer samen werkt, kun je dit checken."*
+
+Terechte zorg. Groene tests zeggen dat elk onderdeel apart klopt, niet
+dat ze samen nog werken. Dus heb ik de **ketens** doorgetrokken.
+
+### Wat er is nagelopen
+
+| Controle | Uitkomst |
+|---|---|
+| Volledige dag: 64 ticks van een kwartier | 0 fouten |
+| Alle 14 diagnostiekmethodes | alle 14 geven een geldig resultaat |
+| Alle 23 aanroepen die de export doet | alle 23 werken |
+| 197 attributen die de export uitleest | alle 197 bestaan |
+| Sensoren zonder plek op het dashboard | 0 van 55 |
+| Onbekende attributen in sjablonen | 0 |
+| Dode navigatiepaden en subviews | 0 |
+| Diensten gedocumenteerd vs geregistreerd | 6 en 6 |
+
+Die dagsimulatie is de belangrijkste: een fout die pas na tientallen
+ticks opduikt — een teller die overloopt, een reeks die vol raakt — vind
+je met losse tests niet.
+
+### De aansturing is niet geraakt
+
+Dit is wat je zorg wegneemt. De **reserveberekening** en de
+**planningsprojectie** blijken **letterlijk identiek aan v0.63.114** —
+byte voor byte, over honderden versies heen.
+
+Alles van vandaag zat in weergave, meldingen en diagnostiek. Er kan
+vannacht niets anders schakelen dan je gewend bent.
+
+### Eén vals alarm van mijn kant
+
+Mijn controle meldde eerst dat zes diensten niet geregistreerd waren,
+waaronder `accept_nilm_device_drift` die jij gebruikt. Dat bleek mijn
+zoekpatroon: de dienstnaam staat op de regel ná `async_register`. Alle
+zes zijn correct geregistreerd.
+
+### Nu blijvend bewaakt
+
+Nieuw `tests/test_end_to_end_coherence.py`, 6 tests: een volledige dag
+ticks, elke diagnostiekmethode, elke export-aanroep, elk uitgelezen
+attribuut, de aanwezigheid van de drie beslisfuncties, en alle
+geregistreerde diensten.
+
+Die draaien voortaan bij elke wijziging mee, zodat deze vraag niet
+opnieuw handmatig beantwoord hoeft te worden.
+
+**Volledige testsuite**: 1407 tests, allemaal groen.
+
+## "0.0 kWh opgewekt" na een herstart (v1.16.5)
+
+**Gemeld**: *"Hier gaat nog wat mis, met opgewekt… Vandaag: 0.0 kWh
+opgewekt"* — in het dagoverzicht van 22:00, terwijl de omvormer die dag
+15,5 kWh had geproduceerd.
+
+### De ontbrekende schakel
+
+Drie dingen horen bij elkaar bewaard te worden. Twee waren dat:
+
+| | |
+|---|---|
+| dagsleutel | bewaard ✅ |
+| `pv_production_today_kwh` | bewaard ✅ |
+| **ijkpunt van de kWh-meter** | **niet bewaard** ❌ |
+
+Na een herstart klopt de dagsleutel, dus er is geen dagwissel en geen
+reset. Maar `_pv_energy_meter_day_start` is leeg, waarna de meterroute
+opnieuw ijkt op de **huidige** stand. De opwek wordt dan meterstand min
+huidige stand — bijna nul — en dat overschrijft de bewaarde waarde.
+
+Bij meerdere herstarts op een dag blijft alleen de opwek sinds de laatste
+over. Jij hebt vandaag vaak geïnstalleerd, dus dat verklaart de 0,0.
+
+Zonder ijkpunt is een cumulatieve meter waardeloos: je weet niet meer
+waar de dag begon.
+
+### Getoetst met de werkelijke getallen
+
+Twee metingen na een herstart: **16,4 kWh** met bewaard ijkpunt tegen
+**0,9 kWh** zonder.
+
+### Twee keer de verkeerde diagnose gesteld
+
+Eerst dacht ik dat de **dagsleutel** niet bewaard werd. Die stond al in
+`PERSISTED_DATE_FIELDS` — ik had alleen `PERSISTED_PLAIN_FIELDS`
+bekeken, terwijl er vijf van die lijsten zijn.
+
+Mijn "reparatie" zette het veld in de verkeerde lijst en zette de
+dagsleutel om naar tekst, waardoor elf tests omvielen: die lijst doet de
+datumconversie al zelf. Volledig teruggedraaid tot het bestand
+letterlijk identiek was aan v1.16.3, en toen pas alle vijf lijsten
+nagelopen.
+
+Dat is de tweede keer vandaag dat een halve inventarisatie tot een
+verkeerde conclusie leidde.
+
+### Getest
+
+Nieuw `tests/test_pv_meter_persistence.py`, 6 tests: het ijkpunt en de
+laatste stand worden bewaard, de opwek overleeft een herstart, zonder
+ijkpunt begint hij opnieuw (zodat de reden vastligt), de dagsleutel wordt
+óók bewaard, en een echte dagwissel ijkt nog steeds opnieuw.
+
+**Volledige testsuite**: 1401 tests, allemaal groen.
+
+## Warmte kan de oorzaak zijn in plaats van het gevolg (v1.16.4)
+
+**Gemeld**: *"Ik vermoed dat de accu 1 direct onder de omvormer zit."*
+
+Dat is een derde verklaring die ik in v1.15.8 niet meenam, en ze **keert
+het beeld om**.
+
+### Waarom mijn redenering te snel was
+
+Ik concludeerde: warmste module levert het minste, dus hogere inwendige
+weerstand. Maar een warmere accucel heeft juist **lagere** inwendige
+weerstand.
+
+Minder vermogen bij hogere temperatuur past dus eerder bij een BMS dat
+terugregelt om de cel te beschermen. Dan is de warmte de **oorzaak** van
+het lagere vermogen, niet het gevolg van een zwakke module.
+
+Een omvormer erboven levert precies dat scenario.
+
+### Het rustverschil maakt het onderscheid
+
+Externe warmte werkt dag en nacht door; eigen verlies alleen onder
+belasting.
+
+| | Module 1 | Module 3 | Verschil |
+|---|---|---|---|
+| In rust | 26 °C | 24 °C | **2 °C** |
+| Onder belasting | 32 °C | 27 °C | **5 °C** |
+
+Bij jou **groeit** het verschil met de belasting. Dat pleit tegen de
+omvormer als enige verklaring — al past die 2 °C basisverschil er wel bij.
+
+Waarschijnlijk allebei: een warmere plek plus iets meer eigen verlies.
+Twee dagen data, dus dat is een vermoeden, geen conclusie.
+
+### Wat de melding nu doet
+
+Is het rustverschil minstens 60% van het belaste verschil, dan zegt ze:
+*"In rust verschillen ze al 5,0 °C, dus dit komt waarschijnlijk van
+buiten — staat er iets warms boven of naast, zoals de omvormer?"*
+
+Anders: *"terwijl ze in rust maar 2,0 °C verschillen — dat past bij een
+hogere inwendige weerstand."*
+
+Zonder rustmeting doet ze er geen uitspraak over. Dat is beter dan
+gokken.
+
+### Getest
+
+Drie tests erbij: een groot rustverschil wijst naar buiten, een klein
+naar de module, en zonder rustdata blijft de bewoording voorzichtig.
+
+**Volledige testsuite**: 1395 tests, allemaal groen.
+
 ## De export zag het dashboard niet (v1.16.3)
 
 **Gevraagd**: *"Had je alles afgevangen met een betere diagnose file?"*

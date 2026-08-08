@@ -9868,3 +9868,80 @@ de export, geen tekortkoming.
 **Getest**: nieuw `tests/test_dashboard_health_export.py`, 7 tests.
 
 **Volledige testsuite**: 1392 tests, allemaal groen.
+
+## v1.16.4 — Warmte kan de oorzaak zijn in plaats van het gevolg
+
+**Gemeld**: het vermoeden dat accumodule 1 direct onder de omvormer zit.
+
+**Dat keert het beeld om**: in v1.15.8 concludeerde ik "warmste levert
+het minste, dus hogere inwendige weerstand". Maar een warmere accucel
+heeft juist LAGERE inwendige weerstand - minder vermogen bij hogere
+temperatuur past eerder bij een BMS dat terugregelt om de cel te
+beschermen. Dan is de warmte de oorzaak van het lagere vermogen, niet het
+gevolg van een zwakke module.
+
+**Het rustverschil maakt het onderscheid**: externe warmte werkt dag en
+nacht, eigen verlies alleen onder belasting. Bij deze installatie: 2 °C
+in rust tegen 5 °C onder belasting - het verschil groeit dus met de
+belasting, wat tegen de omvormer als enige verklaring pleit (al past die
+2 °C basisverschil er wel bij).
+
+**De melding**: bij een rustverschil van minstens 60% van het belaste
+verschil wijst ze naar buiten ("staat er iets warms boven of naast, zoals
+de omvormer?"), anders naar de module. Zonder rustmeting doet ze er geen
+uitspraak over.
+
+**Getest**: drie tests erbij in `test_module_temperature_warning.py`.
+
+**Volledige testsuite**: 1395 tests, allemaal groen.
+
+## v1.16.5 — "0.0 kWh opgewekt" na een herstart
+
+**Gemeld**: het dagoverzicht van 22:00 meldde 0,0 kWh opgewekt terwijl de
+omvormer 15,5 kWh had geproduceerd.
+
+**De ontbrekende schakel**: de dagsleutel en `pv_production_today_kwh`
+werden wél bewaard, het IJKPUNT van de kWh-meter niet. Na een herstart
+klopt de dagsleutel dus (geen dagwissel, geen reset), maar
+`_pv_energy_meter_day_start` is leeg - waarna de meterroute opnieuw ijkt
+op de huidige stand. De opwek wordt dan bijna nul, en dat overschrijft de
+bewaarde waarde. Bij meerdere herstarts op een dag blijft alleen de opwek
+sinds de laatste over.
+
+**Getoetst**: twee metingen na een herstart geven 16,4 kWh met bewaard
+ijkpunt tegen 0,9 kWh zonder.
+
+**Twee keer de verkeerde diagnose**: eerst dacht ik dat de dagsleutel
+niet bewaard werd - die stond al in PERSISTED_DATE_FIELDS, ik had alleen
+PERSISTED_PLAIN_FIELDS bekeken terwijl er vijf lijsten zijn. Die
+"reparatie" zette het veld in de verkeerde lijst en de dagsleutel om naar
+tekst, waardoor elf tests omvielen. Volledig teruggedraaid tot het
+bestand identiek was aan v1.16.3.
+
+**Getest**: nieuw `tests/test_pv_meter_persistence.py`, 6 tests.
+
+**Volledige testsuite**: 1401 tests, allemaal groen.
+
+## v1.16.6 — Samenhangcontrole na een dag met 25 versies
+
+**Gevraagd**: controleren of alles na de vele wijzigingen nog samenwerkt.
+
+**Ketens doorgetrokken** in plaats van alleen losse tests: een volledige
+dag van 64 ticks (0 fouten), alle 14 diagnostiekmethodes, alle 23
+export-aanroepen, 197 uitgelezen attributen, 0 sensoren zonder plek op
+het dashboard, 0 onbekende attributen, 0 dode navigatiepaden, 6 van 6
+diensten geregistreerd.
+
+**De aansturing is niet geraakt**: de reserveberekening
+(`_get_dynamic_discharge_reserve_kwh`) en de planningsprojectie
+(`_build_forecast_timeline`) zijn byte voor byte identiek aan v0.63.114.
+Alles van vandaag zat in weergave, meldingen en diagnostiek.
+
+**Eén vals alarm**: mijn controle meldde zes niet-geregistreerde
+diensten; dat bleek het zoekpatroon (de naam staat op de regel ná
+`async_register`). Alle zes zijn correct geregistreerd.
+
+**Getest**: nieuw `tests/test_end_to_end_coherence.py`, 6 tests die
+voortaan bij elke wijziging meedraaien.
+
+**Volledige testsuite**: 1407 tests, allemaal groen.
