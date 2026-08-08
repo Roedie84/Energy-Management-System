@@ -107,3 +107,81 @@ def test_missing_power_still_reports_the_spread(make_coordinator, hass):
 
     assert "5.0 °C" in melding
     assert "inwendige weerstand" not in melding
+
+
+# --- v1.16.4: externe warmte of eigen verlies -----------------------
+
+
+def _met_rust(c, temperaturen):
+    c.battery_module_health = {
+        str(m): {"geschiedenis": {"temperatuur_c": [t]}}
+        for m, t in temperaturen.items()
+    }
+    return c
+
+
+def test_a_large_rest_spread_points_outward(make_coordinator, hass):
+    """Gemeld: "Ik vermoed dat de accu 1 direct onder de omvormer zit."
+
+    Dat is een derde verklaring die v1.15.8 niet meenam, en ze keert het
+    beeld om: een warmere cel heeft juist LAGERE inwendige weerstand, dus
+    minder vermogen bij hogere temperatuur past eerder bij een BMS dat
+    terugregelt om de cel te beschermen. Dan is de warmte de OORZAAK van
+    het lagere vermogen, niet het gevolg van een zwakke module.
+    """
+    c = _met_modules(
+        make_coordinator,
+        [
+            {"module": 1, "temperatuur_c": 32.0, "vermogen_w": 442.0},
+            {"module": 2, "temperatuur_c": 29.0, "vermogen_w": 562.0},
+            {"module": 3, "temperatuur_c": 27.0, "vermogen_w": 602.0},
+        ],
+        5.0,
+    )
+    _met_rust(c, {1: 30.0, 2: 26.0, 3: 25.0})
+
+    melding = _melding(c)
+
+    assert "In rust verschillen ze al" in melding
+    assert "omvormer" in melding
+    assert "inwendige weerstand" not in melding
+
+
+def test_a_small_rest_spread_points_at_the_module(make_coordinator, hass):
+    """Externe warmte werkt dag en nacht; eigen verlies alleen onder
+    belasting. Groeit het verschil met de belasting, dan ligt het aan de
+    module."""
+    c = _met_modules(
+        make_coordinator,
+        [
+            {"module": 1, "temperatuur_c": 32.0, "vermogen_w": 442.0},
+            {"module": 2, "temperatuur_c": 29.0, "vermogen_w": 562.0},
+            {"module": 3, "temperatuur_c": 27.0, "vermogen_w": 602.0},
+        ],
+        5.0,
+    )
+    _met_rust(c, {1: 26.0, 2: 25.0, 3: 24.0})
+
+    melding = _melding(c)
+
+    assert "in rust maar 2.0 °C" in melding
+    assert "inwendige weerstand" in melding
+
+
+def test_without_rest_data_the_wording_stays_careful(make_coordinator, hass):
+    """Zonder rustmeting valt het onderscheid niet te maken; dan mag de
+    melding er ook geen uitspraak over doen."""
+    c = _met_modules(
+        make_coordinator,
+        [
+            {"module": 1, "temperatuur_c": 32.0, "vermogen_w": 442.0},
+            {"module": 2, "temperatuur_c": 27.0, "vermogen_w": 602.0},
+        ],
+        5.0,
+    )
+    c.battery_module_health = {}
+
+    melding = _melding(c)
+
+    assert "In rust" not in melding
+    assert "inwendige weerstand" in melding
