@@ -398,7 +398,7 @@ views:
         # "richtingen van de stromen nog niet geupdate?". De
         # versiesleutel dwingt een verse ophaal af. Een test bewaakt
         # dat deze waarde gelijk blijft aan de versie in manifest.json.
-        image: /local/energy_management_system_overview.svg?v=1.10.0
+        image: /local/energy_management_system_overview.svg?v=1.10.2
         elements:
           - type: state-label
             entity: sensor.woonkamer_energy_management_system_system_status
@@ -764,10 +764,6 @@ views:
   - title: Meldingen
     path: meldingen
     cards:
-      - type: custom:mushroom-title-card
-        title: Meldingen
-        subtitle: Elke melding los aan of uit te zetten
-
       - type: markdown
         content: |
           Meldingen gaan naar de notify-service die bij Configureren is
@@ -1098,8 +1094,8 @@ views:
 
           {% endfor %}{% endif %}
 
-  - title: Betrouwbaarheid
-    path: betrouwbaarheid
+  - title: Kwaliteit
+    path: kwaliteit
     cards:
       - type: custom:mushroom-title-card
         title: Hoe hard is dit cijfer?
@@ -1146,9 +1142,142 @@ views:
         tap_action:
           action: more-info
 
-  - title: GACS
-    path: gacs
-    cards:
+      - type: custom:mushroom-title-card
+        title: Advies-gereedheid
+        subtitle: >-
+          **Negen van de tien zijn uitsluitend adviserend** — die sturen
+          nooit een commando en wegen niet mee in een accubeslissing, ook
+          niet als de status hieronder "klaar" toont. Gereedheid zegt
+          iets over hoe betrouwbaar het cijfer zelf is, niet over of het
+          veilig is om ergens op te sturen.
+
+          **Eén uitzondering: de Extra-dip-laadmarge (⚡) stuurt wél
+          aan.** Op een weinig-zon-dag buiten het goedkope blok vergelijkt
+          die het huidige tarief met de beste resterende prijs van
+          vandaag, gecorrigeerd voor het geleerde accu-rendement; is de
+          marge groot genoeg, dan wordt er daadwerkelijk bijgeladen. Zijn
+          gereedheidsstatus zegt alleen iets over hoeveel
+          marge-geschiedenis er is opgebouwd — het mechanisme zelf werkt
+          vanaf dag één.
+
+      - type: markdown
+        title: Legenda
+        content: |
+          **Twee categorieën, niet één schaal:**
+
+          - ✅ `klaar` / 🟡 `bijna_klaar` / ⏳ `onvoldoende_data` / ⚠️
+            `kwaliteit_te_laag` / ⚪ `niet_geconfigureerd` — deze vijf
+            statussen gelden voor modules met een échte
+            data-volwassenheid-signaal (genoeg verzamelde metingen,
+            of een aantoonbaar geconvergeerd filter).
+          - 🔵 `structureel_beschikbaar` — er is wél een uitkomst, maar
+            niets om die tegen af te zetten. Werkt en berekent prima,
+            maar "klaar" zou een niet-verdiende claim van bewezen
+            nauwkeurigheid zijn. Geldt voor **MPC** (per ontwerp: dat
+            plan is een theoretisch optimum dat met opzet niet wordt
+            uitgevoerd), en soms voor **Digital Twin** — namelijk als de
+            accucapaciteit onbekend is, want dan is de gemeten afwijking
+            in kWh wel bekend maar valt niet te zeggen of dat veel of
+            weinig is.
+
+          Weather Ensemble en Digital Twin stonden hier tot v1.0.0
+          structureel bij. Die meten zichzelf inmiddels wél: de twin
+          vergelijkt zijn voorspelde accu-inhoud met de werkelijke meting
+          zes uur later, en de ensemble houdt bij hoe vaak zijn
+          bewolkingsmelding klopt met wat de panelen werkelijk doen.
+          Beide klimmen daardoor door de gewone vijf statussen hierboven
+          — met een aanloopperiode voordat er genoeg waarnemingen zijn.
+
+      - type: markdown
+        title: Alle tien modules
+        content: |
+          {% set modules = state_attr('sensor.woonkamer_energy_management_system_advies_gereedheid_8_modules', 'modules') or {} %}
+          {% set namen = {
+            'kirchhoff': 'Kirchhoff energiebalans-validatie',
+            'sluipverbruik': 'CUSUM sluipverbruik-detectie',
+            'weather_ensemble': 'Weather Ensemble',
+            'mpc': 'MPC-adviesmotor',
+            'monte_carlo': 'Monte Carlo',
+            'kalman': 'Kalman filtering',
+            'digital_twin': 'Digital Twin',
+            'nilm': 'NILM apparaat-detectie',
+            'extra_dip_marge': '⚡ Extra-dip-laadmarge (stuurt aan)',
+            'temperatuur_regressie': 'Temperatuur-consumptie-regressie'
+          } %}
+          {% set iconen = {
+            'klaar': '✅',
+            'bijna_klaar': '🟡',
+            'onvoldoende_data': '⏳',
+            'kwaliteit_te_laag': '⚠️',
+            'niet_geconfigureerd': '⚪',
+            'structureel_beschikbaar': '🔵'
+          } %}
+
+          | Module | Status | Reden |
+          |---|---|---|
+          {% for key, naam in namen.items() -%}
+          {%- set m = modules.get(key, {}) -%}
+          | {{ naam }} | {{ iconen.get(m.get('status'), '?') }} {{ m.get('status', 'onbekend') }} | {{ m.get('reden', '—') }} |
+          {% endfor %}
+
+      - type: entities
+        title: Onderliggende sensoren (drill-down)
+        entities:
+          - entity: sensor.woonkamer_energy_management_system_sensor_health_score
+            name: Kirchhoff — sensor-gezondheidsscore
+          - entity: sensor.woonkamer_energy_management_system_sluipverbruik_detectie
+            name: Sluipverbruik-detectie
+          - entity: sensor.woonkamer_energy_management_system_weather_ensemble_bewolkingsgraad
+            name: Weather Ensemble
+          - entity: sensor.woonkamer_energy_management_system_mpc_advies_prijsarbitrage_plan
+            name: MPC-adviesmotor
+          - entity: sensor.woonkamer_energy_management_system_monte_carlo_risico_tekortkans
+            name: Monte Carlo
+          - entity: sensor.woonkamer_energy_management_system_kalman_filtering_soc_pv_verbruik
+            name: Kalman filtering
+          - entity: sensor.woonkamer_energy_management_system_digital_twin_gesimuleerde_soc_winst
+            name: Digital Twin
+          - entity: sensor.woonkamer_energy_management_system_nilm_bevestigde_apparaten
+            name: NILM apparaat-detectie
+          - entity: sensor.woonkamer_energy_management_system_advies_gereedheid_8_modules
+            name: Advies-gereedheid (samenvatting)
+          - entity: sensor.woonkamer_energy_management_system_model_en_parameternauwkeurigheid
+            name: Model- en parameternauwkeurigheid
+
+      - type: markdown
+        title: Model- en parameternauwkeurigheid — trends
+        content: >-
+          {% set attrs =
+          state_attr('sensor.woonkamer_energy_management_system_model_en_parameternauwkeurigheid',
+          'zon_voorspelling_spreiding_trend') %} {% set marge_trend =
+          state_attr('sensor.woonkamer_energy_management_system_model_en_parameternauwkeurigheid',
+          'extra_dip_marge_trend') %} {% set temp_trend =
+          state_attr('sensor.woonkamer_energy_management_system_model_en_parameternauwkeurigheid',
+          'temperatuur_regressie_nauwkeurigheid_trend') %}
+
+          **Zonvoorspelling-spreiding** ({{
+          state_attr('sensor.woonkamer_energy_management_system_model_en_parameternauwkeurigheid',
+          'zon_voorspelling_spreiding_procent') }}%): {% if attrs %}{{ attrs.richting
+          }}{% if attrs.verschil_procent is not none %} ({{ attrs.verschil_procent }}%
+          over het venster){% endif %}{% else %}nog niet genoeg geschiedenis{% endif
+          %}
+
+          **Extra-dip-laadmarge** ({{
+          state_attr('sensor.woonkamer_energy_management_system_model_en_parameternauwkeurigheid',
+          'extra_dip_marge_eur_per_kwh') }} €/kWh): {% if marge_trend %}{{
+          marge_trend.richting }}{% if marge_trend.verschil_procent is not none %} ({{
+          marge_trend.verschil_procent }}% over het venster){% endif %}{% else %}nog
+          niet genoeg geschiedenis{% endif %}
+
+          **Temperatuur-regressie-nauwkeurigheid**: {% if temp_trend %}afwijking is
+          {{ temp_trend.richting }} ({{ temp_trend.verschil_procent }}% over het
+          venster - dalend = wordt nauwkeuriger){% else %}nog niet genoeg
+          geschiedenis{% endif %}
+
+          {{
+          state_attr('sensor.woonkamer_energy_management_system_model_en_parameternauwkeurigheid',
+          'temperatuur_regressie_note') or '' }}
+
       - type: custom:mushroom-title-card
         title: GACS-zelfbeoordeling
         subtitle: Gemeten langs de vier functionele eisen
@@ -1257,9 +1386,6 @@ views:
   - title: Financieel
     path: financieel
     cards:
-      - type: custom:mushroom-title-card
-        title: Financieel
-
       - type: markdown
         content: |
           {% set s = 'sensor.woonkamer_energy_management_system_battery_savings_cost_basis_model' %}{% set actief = state_attr(s, 'salderen_actief') %}{% set tw = state_attr(s, 'teruglever_waarde_eur_per_kwh') %}{% set pv = state_attr(s, 'geladen_uit_pv_kwh') %}{% set net = state_attr(s, 'geladen_uit_net_kwh') %}{% set exp = state_attr(s, 'ontladen_naar_net_kwh') %}{% set derf = state_attr(s, 'gederfde_teruglevering_eur') %}### {{ '🔁 Saldering actief' if actief else '⚡ Saldering beëindigd' }}
@@ -1532,12 +1658,124 @@ views:
           De drempels zijn ruim, want de kostensensor van Zonneplan werkt
           maar ongeveer eens per uur bij.{% endif %}
 
+      - type: custom:mushroom-title-card
+        title: EMS-KPI's
+
+      - type: custom:mushroom-title-card
+        title: Klassieke EMS-kengetallen
+        subtitle: >-
+          Vijf aanvullende metrics, gebruikelijk in professionele
+          energiemanagementsystemen - puur informatief, sturen niets aan.
+          Piekvermogen volgt bewust alleen de netimport via de P1-meter
+          (relevant voor capaciteitstarief), niet het totale
+          huishoudverbruik dat het HA-energiedashboard toont - kan dus
+          legitiem lager zijn als de accu/zon een deel van het verbruik
+          dekt.
+
+      - type: grid
+        columns: 2
+        square: false
+        cards:
+          - type: custom:mushroom-template-card
+            primary: >-
+              {{ states('sensor.woonkamer_energy_management_system_piekvermogen') }} W
+            secondary: Piekvermogen vandaag (netimport)
+            icon: mdi:chart-bell-curve
+            icon_color: red
+          - type: custom:mushroom-template-card
+            primary: >-
+              {{ state_attr('sensor.woonkamer_energy_management_system_piekvermogen', 'deze_maand_w') }} W
+            secondary: Piekvermogen deze maand (netimport)
+            icon: mdi:chart-bell-curve
+            icon_color: orange
+          - type: custom:mushroom-template-card
+            primary: >-
+              {{ state_attr('sensor.woonkamer_energy_management_system_piekvermogen', 'all_time_w') }} W
+            secondary: >-
+              All-time piek ({{
+              state_attr('sensor.woonkamer_energy_management_system_piekvermogen', 'all_time_datum')
+              or 'onbekend' }})
+            icon: mdi:trophy-outline
+            icon_color: amber
+          - type: custom:mushroom-template-card
+            primary: >-
+              €{{ states('sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing') }}
+            secondary: Besparing t.o.v. zonder accu-sturing (vandaag)
+            icon: mdi:cash-check
+            icon_color: green
+
+      - type: markdown
+        content: |
+          **Tegenfeitelijke vergelijking (deze maand):** werkelijke kosten
+          €{{ state_attr('sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing', 'werkelijke_kosten_deze_maand_eur') }}
+          vs. tegenfeitelijk (zelfde PV, geen accu-sturing)
+          €{{ state_attr('sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing', 'tegenfeitelijke_kosten_deze_maand_eur') }}
+          → besparing €{{ state_attr('sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing', 'besparing_deze_maand_eur') }}.
+
+          **All-time:** €{{ state_attr('sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing', 'besparing_all_time_eur') }}
+          totale geschatte besparing sinds installatie.
+
+      - type: grid
+        columns: 2
+        square: false
+        cards:
+          - type: custom:mushroom-template-card
+            primary: >-
+              {{ states('sensor.woonkamer_energy_management_system_zelfvoorzieningsratio') }}%
+            secondary: Zelfvoorzieningsratio vandaag
+            icon: mdi:home-battery-outline
+            icon_color: blue
+          - type: custom:mushroom-template-card
+            primary: >-
+              {{ state_attr('sensor.woonkamer_energy_management_system_zelfvoorzieningsratio', 'zelfconsumptie_procent') }}%
+            secondary: Zelfconsumptieratio vandaag
+            icon: mdi:solar-power-variant
+            icon_color: yellow
+
+      - type: markdown
+        content: |
+          **Vandaag:** {{ state_attr('sensor.woonkamer_energy_management_system_zelfvoorzieningsratio', 'pv_productie_vandaag_kwh') }} kWh
+          PV-productie, waarvan {{ state_attr('sensor.woonkamer_energy_management_system_zelfvoorzieningsratio', 'pv_export_vandaag_kwh') }} kWh
+          geëxporteerd. Bruto verbruik {{ state_attr('sensor.woonkamer_energy_management_system_zelfvoorzieningsratio', 'bruto_verbruik_vandaag_kwh') }} kWh,
+          waarvan {{ state_attr('sensor.woonkamer_energy_management_system_zelfvoorzieningsratio', 'net_import_vandaag_kwh') }} kWh
+          geïmporteerd.
+
+      - type: grid
+        columns: 2
+        square: false
+        cards:
+          - type: custom:mushroom-template-card
+            primary: >-
+              {{ states('sensor.woonkamer_energy_management_system_accu_gezondheid_geschat') }} cycli
+            secondary: Geschat aantal volledige cycli
+            icon: mdi:battery-heart-variant
+            icon_color: purple
+          - type: custom:mushroom-template-card
+            primary: >-
+              {{ state_attr('sensor.woonkamer_energy_management_system_accu_gezondheid_geschat', 'geschatte_resterende_capaciteit_procent') }}%
+            secondary: Geschatte resterende capaciteit
+            icon: mdi:battery-alert-variant-outline
+            icon_color: deep-purple
+
+      - type: markdown
+        content: >-
+          ⚠️ {{
+          state_attr('sensor.woonkamer_energy_management_system_accu_gezondheid_geschat',
+          'note') }}
+
+      - type: custom:mushroom-template-card
+        primary: >-
+          {{ states('sensor.woonkamer_energy_management_system_co2_uitstoot_vandaag') }} kg CO2
+        secondary: >-
+          Uitstoot vandaag (huidige intensiteit: {{
+          state_attr('sensor.woonkamer_energy_management_system_co2_uitstoot_vandaag', 'huidige_intensiteit_g_per_kwh')
+          or 'onbekend' }} g/kWh)
+        icon: mdi:molecule-co2
+        icon_color: grey
+
   - title: Zelflerend
     path: zelflerend
     cards:
-      - type: custom:mushroom-title-card
-        title: Zelflerend
-
       - type: grid
         columns: 2
         square: false
@@ -1791,13 +2029,6 @@ views:
   - title: Apparaten
     path: apparaten
     cards:
-      - type: custom:mushroom-title-card
-        title: Apparaten
-        subtitle: >-
-          Vaatwasser/wasmachine: informatief (geen aansturing).
-          Steelstofzuiger/fietsladers: automatisch aangestuurd tijdens
-          het goedkoopste blok.
-
       - type: grid
         columns: 2
         square: false
@@ -2041,147 +2272,8 @@ views:
               columns: 12
               rows: 1
 
-  - title: Advies
-    path: advies
-    cards:
-      - type: custom:mushroom-title-card
-        title: Advies-gereedheid
-        subtitle: >-
-          **Negen van de tien zijn uitsluitend adviserend** — die sturen
-          nooit een commando en wegen niet mee in een accubeslissing, ook
-          niet als de status hieronder "klaar" toont. Gereedheid zegt
-          iets over hoe betrouwbaar het cijfer zelf is, niet over of het
-          veilig is om ergens op te sturen.
-
-          **Eén uitzondering: de Extra-dip-laadmarge (⚡) stuurt wél
-          aan.** Op een weinig-zon-dag buiten het goedkope blok vergelijkt
-          die het huidige tarief met de beste resterende prijs van
-          vandaag, gecorrigeerd voor het geleerde accu-rendement; is de
-          marge groot genoeg, dan wordt er daadwerkelijk bijgeladen. Zijn
-          gereedheidsstatus zegt alleen iets over hoeveel
-          marge-geschiedenis er is opgebouwd — het mechanisme zelf werkt
-          vanaf dag één.
-
-      - type: markdown
-        title: Legenda
-        content: |
-          **Twee categorieën, niet één schaal:**
-
-          - ✅ `klaar` / 🟡 `bijna_klaar` / ⏳ `onvoldoende_data` / ⚠️
-            `kwaliteit_te_laag` / ⚪ `niet_geconfigureerd` — deze vijf
-            statussen gelden voor modules met een échte
-            data-volwassenheid-signaal (genoeg verzamelde metingen,
-            of een aantoonbaar geconvergeerd filter).
-          - 🔵 `structureel_beschikbaar` — er is wél een uitkomst, maar
-            niets om die tegen af te zetten. Werkt en berekent prima,
-            maar "klaar" zou een niet-verdiende claim van bewezen
-            nauwkeurigheid zijn. Geldt voor **MPC** (per ontwerp: dat
-            plan is een theoretisch optimum dat met opzet niet wordt
-            uitgevoerd), en soms voor **Digital Twin** — namelijk als de
-            accucapaciteit onbekend is, want dan is de gemeten afwijking
-            in kWh wel bekend maar valt niet te zeggen of dat veel of
-            weinig is.
-
-          Weather Ensemble en Digital Twin stonden hier tot v1.0.0
-          structureel bij. Die meten zichzelf inmiddels wél: de twin
-          vergelijkt zijn voorspelde accu-inhoud met de werkelijke meting
-          zes uur later, en de ensemble houdt bij hoe vaak zijn
-          bewolkingsmelding klopt met wat de panelen werkelijk doen.
-          Beide klimmen daardoor door de gewone vijf statussen hierboven
-          — met een aanloopperiode voordat er genoeg waarnemingen zijn.
-
-      - type: markdown
-        title: Alle tien modules
-        content: |
-          {% set modules = state_attr('sensor.woonkamer_energy_management_system_advies_gereedheid_8_modules', 'modules') or {} %}
-          {% set namen = {
-            'kirchhoff': 'Kirchhoff energiebalans-validatie',
-            'sluipverbruik': 'CUSUM sluipverbruik-detectie',
-            'weather_ensemble': 'Weather Ensemble',
-            'mpc': 'MPC-adviesmotor',
-            'monte_carlo': 'Monte Carlo',
-            'kalman': 'Kalman filtering',
-            'digital_twin': 'Digital Twin',
-            'nilm': 'NILM apparaat-detectie',
-            'extra_dip_marge': '⚡ Extra-dip-laadmarge (stuurt aan)',
-            'temperatuur_regressie': 'Temperatuur-consumptie-regressie'
-          } %}
-          {% set iconen = {
-            'klaar': '✅',
-            'bijna_klaar': '🟡',
-            'onvoldoende_data': '⏳',
-            'kwaliteit_te_laag': '⚠️',
-            'niet_geconfigureerd': '⚪',
-            'structureel_beschikbaar': '🔵'
-          } %}
-
-          | Module | Status | Reden |
-          |---|---|---|
-          {% for key, naam in namen.items() -%}
-          {%- set m = modules.get(key, {}) -%}
-          | {{ naam }} | {{ iconen.get(m.get('status'), '?') }} {{ m.get('status', 'onbekend') }} | {{ m.get('reden', '—') }} |
-          {% endfor %}
-
-      - type: entities
-        title: Onderliggende sensoren (drill-down)
-        entities:
-          - entity: sensor.woonkamer_energy_management_system_sensor_health_score
-            name: Kirchhoff — sensor-gezondheidsscore
-          - entity: sensor.woonkamer_energy_management_system_sluipverbruik_detectie
-            name: Sluipverbruik-detectie
-          - entity: sensor.woonkamer_energy_management_system_weather_ensemble_bewolkingsgraad
-            name: Weather Ensemble
-          - entity: sensor.woonkamer_energy_management_system_mpc_advies_prijsarbitrage_plan
-            name: MPC-adviesmotor
-          - entity: sensor.woonkamer_energy_management_system_monte_carlo_risico_tekortkans
-            name: Monte Carlo
-          - entity: sensor.woonkamer_energy_management_system_kalman_filtering_soc_pv_verbruik
-            name: Kalman filtering
-          - entity: sensor.woonkamer_energy_management_system_digital_twin_gesimuleerde_soc_winst
-            name: Digital Twin
-          - entity: sensor.woonkamer_energy_management_system_nilm_bevestigde_apparaten
-            name: NILM apparaat-detectie
-          - entity: sensor.woonkamer_energy_management_system_advies_gereedheid_8_modules
-            name: Advies-gereedheid (samenvatting)
-          - entity: sensor.woonkamer_energy_management_system_model_en_parameternauwkeurigheid
-            name: Model- en parameternauwkeurigheid
-
-      - type: markdown
-        title: Model- en parameternauwkeurigheid — trends
-        content: >-
-          {% set attrs =
-          state_attr('sensor.woonkamer_energy_management_system_model_en_parameternauwkeurigheid',
-          'zon_voorspelling_spreiding_trend') %} {% set marge_trend =
-          state_attr('sensor.woonkamer_energy_management_system_model_en_parameternauwkeurigheid',
-          'extra_dip_marge_trend') %} {% set temp_trend =
-          state_attr('sensor.woonkamer_energy_management_system_model_en_parameternauwkeurigheid',
-          'temperatuur_regressie_nauwkeurigheid_trend') %}
-
-          **Zonvoorspelling-spreiding** ({{
-          state_attr('sensor.woonkamer_energy_management_system_model_en_parameternauwkeurigheid',
-          'zon_voorspelling_spreiding_procent') }}%): {% if attrs %}{{ attrs.richting
-          }}{% if attrs.verschil_procent is not none %} ({{ attrs.verschil_procent }}%
-          over het venster){% endif %}{% else %}nog niet genoeg geschiedenis{% endif
-          %}
-
-          **Extra-dip-laadmarge** ({{
-          state_attr('sensor.woonkamer_energy_management_system_model_en_parameternauwkeurigheid',
-          'extra_dip_marge_eur_per_kwh') }} €/kWh): {% if marge_trend %}{{
-          marge_trend.richting }}{% if marge_trend.verschil_procent is not none %} ({{
-          marge_trend.verschil_procent }}% over het venster){% endif %}{% else %}nog
-          niet genoeg geschiedenis{% endif %}
-
-          **Temperatuur-regressie-nauwkeurigheid**: {% if temp_trend %}afwijking is
-          {{ temp_trend.richting }} ({{ temp_trend.verschil_procent }}% over het
-          venster - dalend = wordt nauwkeuriger){% else %}nog niet genoeg
-          geschiedenis{% endif %}
-
-          {{
-          state_attr('sensor.woonkamer_energy_management_system_model_en_parameternauwkeurigheid',
-          'temperatuur_regressie_note') or '' }}
-
-  - title: Klimaat
-    path: klimaat
+  - title: Klimaat & water
+    path: klimaat-water
     cards:
       - type: custom:mushroom-title-card
         title: Klimaat — woonkamertemperatuur-projectie
@@ -2326,86 +2418,6 @@ views:
           columns: 12
           rows: auto
 
-  - title: Geschiedenis
-    path: geschiedenis
-    cards:
-      - type: custom:mushroom-title-card
-        title: Geschiedenis
-
-      - type: markdown
-        title: Overgangen energie-check (logboek, laatste 10)
-        content: >
-          | Tijdstip | Beslissing | Beschikbaar | Benodigd | Doel-goedkoop-blok |
-
-          |---|---|---|---|---|
-
-          {%- for entry in
-          (state_attr('sensor.energy_management_system_energy_bridge_check',
-          'transition_log') or []) | reverse | list %}
-
-          {%- if loop.index0 < 10 %}
-
-          | {{ as_timestamp(entry.get('at')) | timestamp_custom('%a %H:%M') if
-          entry.get('at') else 'onbekend' }} | {{ entry.get('decision', 'onbekend') }}
-          | {{ entry.get('available_kwh', 'onbekend') }} kWh | {{
-          entry.get('needed_kwh', 'onbekend') }} kWh | {{
-          (as_timestamp(entry.get('cheap_block_start')) |
-          timestamp_custom('%a %H:%M')) if entry.get('cheap_block_start') else
-          'onbekend' }} |
-
-          {%- endif %}
-
-          {%- endfor %}
-      - type: markdown
-        title: Overzicht komende uren (verwacht schema)
-        content: >
-          | Van | Tot | Modus | Prijsrange |
-
-          |---|---|---|---|
-
-          {%- for block in
-          state_attr('sensor.energy_management_system_upcoming_schedule',
-          'transitions') | default([]) %}
-
-          | {{ as_timestamp(block.get('start')) | timestamp_custom('%a %H:%M') if
-          block.get('start') else 'onbekend' }} | {{
-          as_timestamp(block.get('end')) | timestamp_custom('%a %H:%M') if
-          block.get('end') else 'onbekend' }} | {{ block.get('mode', 'onbekend')
-          }} | {{ '%.4f'|format(block.get('min_price_per_kwh', 0)) }} - {{
-          '%.4f'|format(block.get('max_price_per_kwh', 0)) }} €/kWh |
-
-          {%- endfor %}
-      - type: history-graph
-        title: Verwachte vs. werkelijke modus over tijd
-        hours_to_show: 48
-        entities:
-          - entity: sensor.energy_management_system_expected_operation_mode
-            name: Verwacht
-          - entity: select.zendure_manager_operation
-            name: Werkelijk
-      - type: history-graph
-        title: SoC & verbruik over tijd
-        hours_to_show: 48
-        entities:
-          - entity: sensor.solarflow_2400_ac_electric_level
-            name: SoC (%)
-          - entity: sensor.solarflow_2400_ac_available_kwh
-            name: Beschikbare kWh
-          - entity: sensor.hw_p1_vermogen
-            name: Verbruik (W)
-      - type: history-graph
-        title: Verbruiksprofiel (hele dag) & voorspelling-afwijking over tijd
-        hours_to_show: 168
-        entities:
-          - entity: >-
-              sensor.woonkamer_energy_management_system_hourly_consumption_profile
-            name: Verbruiksprofiel (huidig uur, W)
-          - entity: sensor.energy_management_system_pv_forecast_accuracy
-            name: PV-voorspelling afwijking (%)
-
-  - title: Water
-    path: water
-    cards:
       - type: custom:mushroom-title-card
         title: Waterverbruik
         subtitle: >-
@@ -2514,9 +2526,12 @@ views:
           {% endfor %}
           {% endif %}
 
-  - title: Live
-    path: live
+  - title: Verloop
+    path: verloop
     cards:
+      - type: custom:mushroom-title-card
+        title: Live
+
       - type: custom:mushroom-title-card
         title: Wat doet de integratie nu
         subtitle: >-
@@ -2544,117 +2559,77 @@ views:
           {% endfor %}
           {% endif %}
 
-  - title: EMS-KPI's
-    path: ems-kpis
-    cards:
       - type: custom:mushroom-title-card
-        title: Klassieke EMS-kengetallen
-        subtitle: >-
-          Vijf aanvullende metrics, gebruikelijk in professionele
-          energiemanagementsystemen - puur informatief, sturen niets aan.
-          Piekvermogen volgt bewust alleen de netimport via de P1-meter
-          (relevant voor capaciteitstarief), niet het totale
-          huishoudverbruik dat het HA-energiedashboard toont - kan dus
-          legitiem lager zijn als de accu/zon een deel van het verbruik
-          dekt.
-
-      - type: grid
-        columns: 2
-        square: false
-        cards:
-          - type: custom:mushroom-template-card
-            primary: >-
-              {{ states('sensor.woonkamer_energy_management_system_piekvermogen') }} W
-            secondary: Piekvermogen vandaag (netimport)
-            icon: mdi:chart-bell-curve
-            icon_color: red
-          - type: custom:mushroom-template-card
-            primary: >-
-              {{ state_attr('sensor.woonkamer_energy_management_system_piekvermogen', 'deze_maand_w') }} W
-            secondary: Piekvermogen deze maand (netimport)
-            icon: mdi:chart-bell-curve
-            icon_color: orange
-          - type: custom:mushroom-template-card
-            primary: >-
-              {{ state_attr('sensor.woonkamer_energy_management_system_piekvermogen', 'all_time_w') }} W
-            secondary: >-
-              All-time piek ({{
-              state_attr('sensor.woonkamer_energy_management_system_piekvermogen', 'all_time_datum')
-              or 'onbekend' }})
-            icon: mdi:trophy-outline
-            icon_color: amber
-          - type: custom:mushroom-template-card
-            primary: >-
-              €{{ states('sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing') }}
-            secondary: Besparing t.o.v. zonder accu-sturing (vandaag)
-            icon: mdi:cash-check
-            icon_color: green
+        title: Geschiedenis
 
       - type: markdown
-        content: |
-          **Tegenfeitelijke vergelijking (deze maand):** werkelijke kosten
-          €{{ state_attr('sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing', 'werkelijke_kosten_deze_maand_eur') }}
-          vs. tegenfeitelijk (zelfde PV, geen accu-sturing)
-          €{{ state_attr('sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing', 'tegenfeitelijke_kosten_deze_maand_eur') }}
-          → besparing €{{ state_attr('sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing', 'besparing_deze_maand_eur') }}.
+        title: Overgangen energie-check (logboek, laatste 10)
+        content: >
+          | Tijdstip | Beslissing | Beschikbaar | Benodigd | Doel-goedkoop-blok |
 
-          **All-time:** €{{ state_attr('sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing', 'besparing_all_time_eur') }}
-          totale geschatte besparing sinds installatie.
+          |---|---|---|---|---|
 
-      - type: grid
-        columns: 2
-        square: false
-        cards:
-          - type: custom:mushroom-template-card
-            primary: >-
-              {{ states('sensor.woonkamer_energy_management_system_zelfvoorzieningsratio') }}%
-            secondary: Zelfvoorzieningsratio vandaag
-            icon: mdi:home-battery-outline
-            icon_color: blue
-          - type: custom:mushroom-template-card
-            primary: >-
-              {{ state_attr('sensor.woonkamer_energy_management_system_zelfvoorzieningsratio', 'zelfconsumptie_procent') }}%
-            secondary: Zelfconsumptieratio vandaag
-            icon: mdi:solar-power-variant
-            icon_color: yellow
+          {%- for entry in
+          (state_attr('sensor.energy_management_system_energy_bridge_check',
+          'transition_log') or []) | reverse | list %}
 
+          {%- if loop.index0 < 10 %}
+
+          | {{ as_timestamp(entry.get('at')) | timestamp_custom('%a %H:%M') if
+          entry.get('at') else 'onbekend' }} | {{ entry.get('decision', 'onbekend') }}
+          | {{ entry.get('available_kwh', 'onbekend') }} kWh | {{
+          entry.get('needed_kwh', 'onbekend') }} kWh | {{
+          (as_timestamp(entry.get('cheap_block_start')) |
+          timestamp_custom('%a %H:%M')) if entry.get('cheap_block_start') else
+          'onbekend' }} |
+
+          {%- endif %}
+
+          {%- endfor %}
       - type: markdown
-        content: |
-          **Vandaag:** {{ state_attr('sensor.woonkamer_energy_management_system_zelfvoorzieningsratio', 'pv_productie_vandaag_kwh') }} kWh
-          PV-productie, waarvan {{ state_attr('sensor.woonkamer_energy_management_system_zelfvoorzieningsratio', 'pv_export_vandaag_kwh') }} kWh
-          geëxporteerd. Bruto verbruik {{ state_attr('sensor.woonkamer_energy_management_system_zelfvoorzieningsratio', 'bruto_verbruik_vandaag_kwh') }} kWh,
-          waarvan {{ state_attr('sensor.woonkamer_energy_management_system_zelfvoorzieningsratio', 'net_import_vandaag_kwh') }} kWh
-          geïmporteerd.
+        title: Overzicht komende uren (verwacht schema)
+        content: >
+          | Van | Tot | Modus | Prijsrange |
 
-      - type: grid
-        columns: 2
-        square: false
-        cards:
-          - type: custom:mushroom-template-card
-            primary: >-
-              {{ states('sensor.woonkamer_energy_management_system_accu_gezondheid_geschat') }} cycli
-            secondary: Geschat aantal volledige cycli
-            icon: mdi:battery-heart-variant
-            icon_color: purple
-          - type: custom:mushroom-template-card
-            primary: >-
-              {{ state_attr('sensor.woonkamer_energy_management_system_accu_gezondheid_geschat', 'geschatte_resterende_capaciteit_procent') }}%
-            secondary: Geschatte resterende capaciteit
-            icon: mdi:battery-alert-variant-outline
-            icon_color: deep-purple
+          |---|---|---|---|
 
-      - type: markdown
-        content: >-
-          ⚠️ {{
-          state_attr('sensor.woonkamer_energy_management_system_accu_gezondheid_geschat',
-          'note') }}
+          {%- for block in
+          state_attr('sensor.energy_management_system_upcoming_schedule',
+          'transitions') | default([]) %}
 
-      - type: custom:mushroom-template-card
-        primary: >-
-          {{ states('sensor.woonkamer_energy_management_system_co2_uitstoot_vandaag') }} kg CO2
-        secondary: >-
-          Uitstoot vandaag (huidige intensiteit: {{
-          state_attr('sensor.woonkamer_energy_management_system_co2_uitstoot_vandaag', 'huidige_intensiteit_g_per_kwh')
-          or 'onbekend' }} g/kWh)
-        icon: mdi:molecule-co2
-        icon_color: grey
+          | {{ as_timestamp(block.get('start')) | timestamp_custom('%a %H:%M') if
+          block.get('start') else 'onbekend' }} | {{
+          as_timestamp(block.get('end')) | timestamp_custom('%a %H:%M') if
+          block.get('end') else 'onbekend' }} | {{ block.get('mode', 'onbekend')
+          }} | {{ '%.4f'|format(block.get('min_price_per_kwh', 0)) }} - {{
+          '%.4f'|format(block.get('max_price_per_kwh', 0)) }} €/kWh |
+
+          {%- endfor %}
+      - type: history-graph
+        title: Verwachte vs. werkelijke modus over tijd
+        hours_to_show: 48
+        entities:
+          - entity: sensor.energy_management_system_expected_operation_mode
+            name: Verwacht
+          - entity: select.zendure_manager_operation
+            name: Werkelijk
+      - type: history-graph
+        title: SoC & verbruik over tijd
+        hours_to_show: 48
+        entities:
+          - entity: sensor.solarflow_2400_ac_electric_level
+            name: SoC (%)
+          - entity: sensor.solarflow_2400_ac_available_kwh
+            name: Beschikbare kWh
+          - entity: sensor.hw_p1_vermogen
+            name: Verbruik (W)
+      - type: history-graph
+        title: Verbruiksprofiel (hele dag) & voorspelling-afwijking over tijd
+        hours_to_show: 168
+        entities:
+          - entity: >-
+              sensor.woonkamer_energy_management_system_hourly_consumption_profile
+            name: Verbruiksprofiel (huidig uur, W)
+          - entity: sensor.energy_management_system_pv_forecast_accuracy
+            name: PV-voorspelling afwijking (%)
+

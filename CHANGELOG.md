@@ -8796,3 +8796,55 @@ weinig is gemeten.
 **Getest**: nieuw `tests/test_gacs_assessment.py`, 12 tests.
 
 **Volledige testsuite**: 1233 tests, allemaal groen.
+
+## v1.10.1 — Van vijftien naar tien tabbladen
+
+**Gevraagd**: tabbladen logisch samenvoegen; vijftien was te veel.
+
+**Samengevoegd**: Betrouwbaarheid + Advies + GACS -> **Kwaliteit**;
+Financieel + EMS-KPI's -> **Financieel**; Live + Geschiedenis ->
+**Verloop**; Klimaat + Water -> **Klimaat & water**. Alle 141 kaarten
+behouden, plus vier kopjes zodat binnen een samengevoegd tabblad
+zichtbaar blijft waar een onderwerp begint.
+
+**Bewust niet samengevoegd**: Meldingen (27 kaarten waarvan 22
+schakelaars - een instellingenpagina) en Accumodules (thuisaccu, tegenover
+Apparaten voor NILM-huishoudapparaten).
+
+**Bijna misgegaan**: de eerste aanpak las de YAML in en schreef hem
+opnieuw weg, wat alle aanhalingstekens in de Jinja-sjablonen verdubbelde
+(`z.get('...')` werd `z.get(''...'')`). Een bestaande test ving dat.
+Hersteld uit de laatst opgeleverde zip en tekstueel opnieuw gedaan.
+
+**Nu bewaakt**: vier tests - geen leeg tabblad, elk samengevoegd tabblad
+bevat de inhoud van al zijn bronnen, Overzicht behoudt `sections`, Visueel
+blijft panel. Drie bestaande tests zochten op oude tabbladnamen; op
+Kwaliteit staan nu twee kaarten met de titel "Legenda", dus die worden op
+inhoud onderscheiden.
+
+**Volledige testsuite**: 1237 tests, allemaal groen.
+
+## v1.10.2 — Overbodige koppen uit de tabbladen
+
+**Gevraagd**: irrelevante informatie uit de tabbladen halen, behalve uit
+Overzicht.
+
+**Eerst gemeten**: van alle entiteitverwijzingen kwamen er drie op
+meerdere niet-Overzicht-tabbladen voor, en die bleken geen duplicatie
+(NILM staat op Kwaliteit als adviesmodule en op Apparaten als
+apparaatlijst - twee invalshoeken). Geen kaarten die naar niet-bestaande
+sensoren wijzen.
+
+**Wat wel overbodig was**: tien koppen. Vier herhaalden de kaart eronder
+("Betrouwbaarheid" boven "Hoe hard is dit cijfer?", "GACS" boven
+"GACS-zelfbeoordeling", "Advies" boven "Advies-gereedheid", "Water" boven
+"Waterverbruik"), en vijf tabbladen begonnen met een kop gelijk aan de
+tabbladnaam zelf. Geen enkele kaart met inhoud verwijderd.
+
+**De tests vonden er meer dan ik**: zelf vijf gevonden, de twee daarna
+geschreven borgingstests vonden er nog vijf bij.
+
+**Getest**: twee tests erbij in `test_dashboard_tables.py` - geen kop
+herhaalt de kop eronder, geen kop is gelijk aan de tabbladnaam.
+
+**Volledige testsuite**: 1239 tests, allemaal groen.

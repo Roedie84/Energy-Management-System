@@ -515,6 +515,108 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Overbodige koppen uit de tabbladen (v1.10.2)
+
+**Gevraagd**: *"Kun je nog eens kijken naar de dashboards, en irrelevante
+informatie uit tabbladen halen behalve uit Overzicht."*
+
+### Eerst gemeten wat er dubbel stond
+
+Van alle entiteitverwijzingen kwamen er maar **drie** op meerdere
+niet-Overzicht-tabbladen voor, en die bleken bij inspectie geen
+duplicatie: NILM staat op Kwaliteit als *adviesmodule* en op Apparaten
+als *apparaatlijst* — twee verschillende invalshoeken op dezelfde sensor.
+
+Ook geen kaarten die naar niet-bestaande sensoren wijzen. Twee
+verdachten (`washing_machine_typical_usage_hours` en
+`..._last_notification`) bleken dynamisch aangemaakt per apparaat en dus
+correct.
+
+### Wat er wél overbodig was: tien koppen
+
+De samenvoeging van v1.10.1 leverde koppen op die hetzelfde zeiden als
+de kaart eronder — "Betrouwbaarheid" boven "Hoe hard is dit cijfer?",
+"GACS" boven "GACS-zelfbeoordeling", "Advies" boven "Advies-gereedheid",
+"Water" boven "Waterverbruik".
+
+En vijf tabbladen begonnen met een kop die gelijk was aan de
+tabbladnaam zelf: Financieel, Meldingen, Zelflerend, Apparaten, Klimaat.
+De naam staat al bovenaan het scherm.
+
+Tien koppen weg, geen enkele kaart met inhoud verwijderd.
+
+### De tests vonden er meer dan ik
+
+Ik had er zelf vijf gevonden. De twee borgingstests die ik daarna schreef
+vonden er nog **vijf bij** — Advies, Water, Meldingen, Zelflerend,
+Apparaten. Dat is precies waarom zo'n regel als test beter werkt dan als
+handmatige controle.
+
+### Getest
+
+Twee tests erbij in `test_dashboard_tables.py`: geen kop mag herhalen wat
+de kop eronder zegt, en geen kop mag gelijk zijn aan de tabbladnaam. De
+verwachte kaartaantallen per samengevoegd tabblad zijn meebewogen.
+
+**Volledige testsuite**: 1239 tests, allemaal groen.
+
+## Van vijftien naar tien tabbladen (v1.10.1)
+
+**Gevraagd**: *"Is het mogelijk om tabbladen logisch samen te voegen, ik
+krijg er nu wel heel veel."*
+
+Terecht — vijftien is te veel om nog te overzien.
+
+### De samenvoeging
+
+| Nieuw | Uit | Waarom |
+|---|---|---|
+| **Kwaliteit** | Betrouwbaarheid + Advies + GACS | Alle drie beantwoorden "hoe goed werkt dit systeem" |
+| **Financieel** | Financieel + EMS-KPI's | Allebei prestatiecijfers in euro's en kWh |
+| **Verloop** | Live + Geschiedenis | Wat gebeurt er nu, en wat gebeurde er |
+| **Klimaat & water** | Klimaat + Water | Beide informatieve huismonitoring |
+
+Onveranderd: Overzicht, Visueel, Meldingen, Apparaten, Accumodules,
+Zelflerend.
+
+Alle 141 kaarten zijn behouden; er kwamen vier kopjes bij zodat binnen een
+samengevoegd tabblad zichtbaar blijft waar het ene onderwerp ophoudt en
+het volgende begint.
+
+### Twee dingen bewust niet samengevoegd
+
+**Meldingen** heeft 27 kaarten waarvan 22 schakelaars — dat is een
+instellingenpagina, geen informatiepagina. En **Accumodules** blijft
+apart van Apparaten: het eerste gaat over de thuisaccu, het tweede over
+NILM-huishoudapparaten. Die combineren leest verwarrend.
+
+### Bijna misgegaan
+
+Mijn eerste aanpak las de YAML in en schreef hem opnieuw weg. Dat werkte
+functioneel, maar verdubbelde alle aanhalingstekens in de
+Jinja-sjablonen — `z.get('...')` werd `z.get(''...'')`. Een bestaande test
+ving dat meteen.
+
+Hersteld uit de laatst opgeleverde zip en opnieuw gedaan, ditmaal
+**tekstueel**: de blokken verplaatsen zonder de YAML te herschrijven. Dat
+laat de sjablonen letterlijk intact.
+
+### Nu bewaakt
+
+Vier tests erbij: geen enkel tabblad is leeg (het teken dat er kaarten
+zijn kwijtgeraakt), elk samengevoegd tabblad bevat de inhoud van al zijn
+bronnen, Overzicht behoudt zijn `sections`-indeling, en Visueel blijft een
+panel-weergave. Die laatste twee zijn eigenschappen die bij een
+herindeling makkelijk sneuvelen.
+
+Drie bestaande tests zochten op de oude tabbladnamen. Eén daarvan vroeg
+extra zorg: op Kwaliteit staan nu **twee** kaarten met de titel
+"Legenda" — die van de betrouwbaarheidsschaal en die van de
+adviesmodules. Zoeken op titel alleen pakt dan de verkeerde, dus de
+inhoud onderscheidt ze.
+
+**Volledige testsuite**: 1237 tests, allemaal groen.
+
 ## GACS-tabblad: de vier eisen als spiegel (v1.10.0)
 
 **Gevraagd**: *"Ja graag uitwerken, met een nieuw tabblad voor GACS zodat
