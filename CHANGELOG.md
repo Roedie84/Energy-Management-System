@@ -9258,3 +9258,25 @@ de gebruiker is dat onderscheid niet interessant.
 **Getest**: nieuw `tests/test_self_evaluation.py`, 12 tests.
 
 **Volledige testsuite**: 1311 tests, allemaal groen.
+
+## v1.14.1 — Alleen de detailpagina was nog zichtbaar
+
+**Gemeld**: "Zie nu alleen maar een details tabblad meer?"
+
+**Oorzaak**: Home Assistant opent altijd de EERSTE view. In v1.12.7 kwam
+"Details" vóór Overzicht te staan - toen ongemerkt, want er was nog een
+tabbalk. Sinds v1.13.0 is Overzicht de enige zichtbare view, en een
+subview toont geen tabbalk: je opende het dashboard, kwam op Details
+terecht en kon nergens heen.
+
+Details staat nu achteraan; Overzicht opent weer als eerste.
+
+**Nu bewaakt**: twee tests - de eerste view mag geen subview zijn, en het
+is Overzicht. Een subview vooraan maakt het hele dashboard onbereikbaar,
+en dat merk je pas bij het openen.
+
+**Onderweg**: drie tests zochten de detailpagina op als "de eerste
+subview"; sinds alles subview is was dat Visueel geworden. Die zoeken nu
+op naam.
+
+**Volledige testsuite**: 1313 tests, allemaal groen.

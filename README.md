@@ -515,6 +515,37 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Alleen de detailpagina was nog zichtbaar (v1.14.1)
+
+**Gemeld**: *"Zie nu alleen maar een details tabblad meer?"*
+
+### De oorzaak
+
+Home Assistant opent altijd de **eerste** view uit het bestand. In
+v1.12.7 zette ik "Details" vóór Overzicht, wat toen niet opviel omdat er
+nog een tabbalk was om op door te klikken.
+
+Sinds v1.13.0 is Overzicht de enige zichtbare view. En een subview toont
+géén tabbalk — dus je opende het dashboard, kwam op Details terecht, en
+had geen enkele manier om ergens anders heen te gaan. Het leek daardoor
+uit één losse detailpagina te bestaan.
+
+Details staat nu achteraan; Overzicht opent weer als eerste.
+
+### Nu bewaakt
+
+Twee tests: de eerste view mag **geen subview** zijn, en het is Overzicht.
+Die eerste vangt precies deze fout — een subview vooraan maakt het hele
+dashboard onbereikbaar, en dat merk je pas als je het opent.
+
+### Onderweg
+
+Drie tests zochten de detailpagina op als "de eerste subview". Sinds
+v1.13.0 alles subview is, was dat Visueel geworden. Die zoeken nu op
+naam.
+
+**Volledige testsuite**: 1313 tests, allemaal groen.
+
 ## Zelfevaluatie: de integratie beoordeelt haar eigen instellingen (v1.14.0)
 
 **Gevraagd**: *"Kun je een mechanisme bedenken waardoor de integratie

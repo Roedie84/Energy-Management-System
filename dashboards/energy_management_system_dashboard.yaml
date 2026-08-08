@@ -1,66 +1,5 @@
 title: Energy Management System
 views:
-  - title: Details
-    path: details
-    subview: true
-    cards:
-      - type: custom:mushroom-title-card
-        title: Details
-        subtitle: De onderbouwing achter de samenvattingen
-
-      - type: markdown
-        title: Aandachtspunten
-        content: |
-          {% set p = state_attr('sensor.woonkamer_energy_management_system_system_status', 'aandachtspunten') or [] %}{% if p | length == 0 %}✅ Geen aandachtspunten.{% else %}{% for punt in p %}- {{ punt }}
-          {% endfor %}{% endif %}
-
-
-          {% set i = state_attr('sensor.woonkamer_energy_management_system_system_status', 'informatief') or [] %}{% if i | length > 0 %}**Ter info** (geen invloed op de status):
-
-          {% for punt in i %}- {{ punt }}
-          {% endfor %}{% endif %}
-
-      - type: markdown
-        title: Betrouwbaarheid per grootheid
-        content: |
-          {% set rijen = state_attr('sensor.woonkamer_energy_management_system_betrouwbaarheid_gegenereerde_data', 'regels') or [] %}{% if rijen | length == 0 %}Nog geen gegevens.{% else %}| Groep | Waarde | Niveau | Toelichting |
-          |---|---|---|---|
-          {% for r in rijen %}| {{ r.get('groep') }} | {{ r.get('naam') }}{% if r.get('waarde') is not none %} ({{ r.get('waarde') }}){% endif %} | {{ r.get('label') }} | {{ r.get('reden') or '—' }} |
-          {% endfor %}{% endif %}
-
-      - type: markdown
-        title: Verbetermogelijkheden
-        content: |
-          {% set a = state_attr('sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling', 'verbetermogelijkheden') or [] %}{% if a | length == 0 %}Geen verbetermogelijkheden gevonden.{% else %}{% for x in a %}**{{ x.onderwerp }}** — {{ x.waarneming }}
-
-          {{ x.advies }}
-
-          {% endfor %}{% endif %}
-
-      - type: markdown
-        title: Accumodules
-        content: |
-          {% set m = state_attr('sensor.woonkamer_energy_management_system_accu_modulegezondheid', 'modules') or [] %}{% if m | length == 0 %}Geen accumodule-sensoren geconfigureerd.{% else %}| Module | Celdelta | Temp | SoC | Vermogen |
-          |---|---|---|---|---|
-          {% for x in m %}| {{ loop.index }} | {{ x.get('cel_delta_v') }} V | {{ x.get('temperatuur_c') }} °C | {{ x.get('soc_percent') }}% | {{ x.get('vermogen_w') }} W |
-          {% endfor %}{% endif %}
-
-      - type: markdown
-        title: Herkende apparaten
-        content: |
-          {% set t = state_attr('sensor.woonkamer_energy_management_system_nilm_bevestigde_apparaten', 'tabel') or [] %}{% if t | length == 0 %}Nog geen apparaten herkend.{% else %}| Apparaat | Gemiddeld | Referentie | Afwijking |
-          |---|---|---|---|
-          {% for x in t %}| {{ x.get('naam') }} | {{ x.get('gemiddeld_w') }} W | {{ x.get('referentie_w') }} W | {{ x.get('drift_procent') }}% |
-          {% endfor %}{% endif %}
-
-      - type: markdown
-        title: Waterverbruik vandaag
-        content: |
-          {% set alles = state_attr('sensor.woonkamer_energy_management_system_waterverbruik', 'recente_gebruiksmomenten') or [] %}{% set dag = now().strftime('%Y-%m-%d') %}{% set ns = namespace(v=[]) %}{% for s in alles %}{%- if s.gestart and dag in s.gestart %}{%- set ns.v = ns.v + [s] %}{%- endif %}{%- endfor %}{% if ns.v | length == 0 %}Nog geen gebruiksmomenten vandaag.{% else %}| Gestart | Duur | Volume |
-          |---|---|---|
-          {% for s in ns.v %}| {{ as_timestamp(s.gestart) | timestamp_custom('%H:%M') }} | {{ s.duur_minuten }} min | {{ s.liter }} L |
-          {% endfor %}{% endif %}
-
   - title: Overzicht
     path: overzicht
     type: sections
@@ -438,7 +377,7 @@ views:
         # "richtingen van de stromen nog niet geupdate?". De
         # versiesleutel dwingt een verse ophaal af. Een test bewaakt
         # dat deze waarde gelijk blijft aan de versie in manifest.json.
-        image: /local/energy_management_system_overview.svg?v=1.14.0
+        image: /local/energy_management_system_overview.svg?v=1.14.1
         elements:
           - type: state-label
             entity: sensor.woonkamer_energy_management_system_system_status
@@ -1644,4 +1583,64 @@ views:
                 name: Verbruiksprofiel (huidig uur, W)
               - entity: sensor.energy_management_system_pv_forecast_accuracy
                 name: PV-voorspelling afwijking (%)
+  - title: Details
+    path: details
+    subview: true
+    cards:
+      - type: custom:mushroom-title-card
+        title: Details
+        subtitle: De onderbouwing achter de samenvattingen
+
+      - type: markdown
+        title: Aandachtspunten
+        content: |
+          {% set p = state_attr('sensor.woonkamer_energy_management_system_system_status', 'aandachtspunten') or [] %}{% if p | length == 0 %}✅ Geen aandachtspunten.{% else %}{% for punt in p %}- {{ punt }}
+          {% endfor %}{% endif %}
+
+
+          {% set i = state_attr('sensor.woonkamer_energy_management_system_system_status', 'informatief') or [] %}{% if i | length > 0 %}**Ter info** (geen invloed op de status):
+
+          {% for punt in i %}- {{ punt }}
+          {% endfor %}{% endif %}
+
+      - type: markdown
+        title: Betrouwbaarheid per grootheid
+        content: |
+          {% set rijen = state_attr('sensor.woonkamer_energy_management_system_betrouwbaarheid_gegenereerde_data', 'regels') or [] %}{% if rijen | length == 0 %}Nog geen gegevens.{% else %}| Groep | Waarde | Niveau | Toelichting |
+          |---|---|---|---|
+          {% for r in rijen %}| {{ r.get('groep') }} | {{ r.get('naam') }}{% if r.get('waarde') is not none %} ({{ r.get('waarde') }}){% endif %} | {{ r.get('label') }} | {{ r.get('reden') or '—' }} |
+          {% endfor %}{% endif %}
+
+      - type: markdown
+        title: Verbetermogelijkheden
+        content: |
+          {% set a = state_attr('sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling', 'verbetermogelijkheden') or [] %}{% if a | length == 0 %}Geen verbetermogelijkheden gevonden.{% else %}{% for x in a %}**{{ x.onderwerp }}** — {{ x.waarneming }}
+
+          {{ x.advies }}
+
+          {% endfor %}{% endif %}
+
+      - type: markdown
+        title: Accumodules
+        content: |
+          {% set m = state_attr('sensor.woonkamer_energy_management_system_accu_modulegezondheid', 'modules') or [] %}{% if m | length == 0 %}Geen accumodule-sensoren geconfigureerd.{% else %}| Module | Celdelta | Temp | SoC | Vermogen |
+          |---|---|---|---|---|
+          {% for x in m %}| {{ loop.index }} | {{ x.get('cel_delta_v') }} V | {{ x.get('temperatuur_c') }} °C | {{ x.get('soc_percent') }}% | {{ x.get('vermogen_w') }} W |
+          {% endfor %}{% endif %}
+
+      - type: markdown
+        title: Herkende apparaten
+        content: |
+          {% set t = state_attr('sensor.woonkamer_energy_management_system_nilm_bevestigde_apparaten', 'tabel') or [] %}{% if t | length == 0 %}Nog geen apparaten herkend.{% else %}| Apparaat | Gemiddeld | Referentie | Afwijking |
+          |---|---|---|---|
+          {% for x in t %}| {{ x.get('naam') }} | {{ x.get('gemiddeld_w') }} W | {{ x.get('referentie_w') }} W | {{ x.get('drift_procent') }}% |
+          {% endfor %}{% endif %}
+
+      - type: markdown
+        title: Waterverbruik vandaag
+        content: |
+          {% set alles = state_attr('sensor.woonkamer_energy_management_system_waterverbruik', 'recente_gebruiksmomenten') or [] %}{% set dag = now().strftime('%Y-%m-%d') %}{% set ns = namespace(v=[]) %}{% for s in alles %}{%- if s.gestart and dag in s.gestart %}{%- set ns.v = ns.v + [s] %}{%- endif %}{%- endfor %}{% if ns.v | length == 0 %}Nog geen gebruiksmomenten vandaag.{% else %}| Gestart | Duur | Volume |
+          |---|---|---|
+          {% for s in ns.v %}| {{ as_timestamp(s.gestart) | timestamp_custom('%H:%M') }} | {{ s.duur_minuten }} min | {{ s.liter }} L |
+          {% endfor %}{% endif %}
 
