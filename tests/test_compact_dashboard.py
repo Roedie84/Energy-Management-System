@@ -427,7 +427,22 @@ def test_every_sensor_appears_somewhere_on_the_dashboard():
     )
     dashboard = (PAKKET / "dashboard_template.yaml").read_text()
 
-    ontbreekt = sorted(n for n in namen if slug(n) not in dashboard)
+    # Home Assistant kent de entity_id toe bij de EERSTE aanmaak en laat
+    # die daarna ongemoeid, ook als de weergavenaam verandert. Deze
+    # sensoren heten inmiddels anders dan hun entity_id - dezelfde
+    # uitzondering die in v1.6.4 al is vastgelegd voor
+    # `test_dashboard_entity_references`.
+    HISTORISCH = {
+        "Piekvermogen (netimport)": "piekvermogen",
+        "Advies-gereedheid (10 modules)": "advies_gereedheid_8_modules",
+    }
+
+    ontbreekt = sorted(
+        n
+        for n in namen
+        if slug(n) not in dashboard
+        and HISTORISCH.get(n, slug(n)) not in dashboard
+    )
 
     assert not ontbreekt, (
         f"{len(ontbreekt)} sensoren staan nergens op het dashboard: "

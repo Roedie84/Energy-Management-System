@@ -105,3 +105,31 @@ def test_the_zonneplan_block_reads_the_right_sensor():
     blok = yaml_tekst[max(0, start - 400) : start + 200]
 
     assert "besparing_t_o_v_zonder_accu_sturing" in blok
+
+
+# --- v1.15.3: kaarten die netjes falen ------------------------------
+
+
+def test_no_entity_card_uses_a_renamed_sensor():
+    """Gemeld met screenshot: twee kaarten toonden "Entiteit niet
+    gevonden".
+
+    Ik had de entity_id's afgeleid uit de huidige weergavenaam, terwijl
+    Home Assistant die vastlegt bij de EERSTE aanmaak. `Piekvermogen
+    (netimport)` heet nog steeds `..._piekvermogen` - dat stond sinds
+    v1.6.4 al als historische naam in dit bestand, maar bij het
+    terugzetten van de 24 sensoren heb ik die lijst niet geraadpleegd.
+    """
+    yaml_tekst = (PAKKET / "dashboard_template.yaml").read_text()
+
+    for fout in ("piekvermogen_netimport", "advies_gereedheid_10_modules"):
+        assert fout not in yaml_tekst, (
+            f"{fout} volgt de weergavenaam in plaats van de entity_id"
+        )
+
+
+def test_the_historical_ids_are_used_instead():
+    yaml_tekst = (PAKKET / "dashboard_template.yaml").read_text()
+
+    assert "_piekvermogen\n" in yaml_tekst or "_piekvermogen'" in yaml_tekst
+    assert "advies_gereedheid_8_modules" in yaml_tekst
