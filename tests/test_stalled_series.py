@@ -174,3 +174,53 @@ def test_dunder_fields_are_still_skipped(make_coordinator, hass):
 
     for regel in c.get_stalled_series_report():
         assert not regel["reeks"].startswith("_")
+
+
+# --- v1.15.4: werkbuffers zijn geen meetreeksen ---------------------
+
+
+def test_a_working_buffer_is_not_reported(make_coordinator, hass):
+    """Gemeld: "balance_power_samples staat al 27 metingen op -0.0."
+
+    Dat is een werkbuffer die accuvermogens verzamelt tussen twee
+    balanscontroles en zichzelf daarna leegt - geen geleerde reeks.
+    27x -0,0 W betekent daar gewoon dat de accu stilstond, wat 's nachts
+    bij een volle accu volstrekt normaal is.
+
+    Deze meldingen kwamen binnen door de correctie van v1.14.3, waarin
+    underscore-velden werden meegenomen om
+    `_steelstofzuiger_idle_power_history` te vinden.
+    """
+    c = make_coordinator({})
+    c._balance_power_samples = [-0.0] * 27
+
+    reeksen = {r["reeks"] for r in c.get_stalled_series_report()}
+
+    assert "balance_power_samples" not in reeksen
+
+
+def test_real_series_are_still_found(make_coordinator, hass):
+    """De uitsluiting mag de detectie niet uithollen."""
+    c = make_coordinator({})
+    c._balance_power_samples = [-0.0] * 27
+    c._steelstofzuiger_idle_power_history = [0.0] * 10
+    c.learned_efficiency_history = [82.9] * 12
+
+    reeksen = {r["reeks"] for r in c.get_stalled_series_report()}
+
+    assert "steelstofzuiger_idle_power_history" in reeksen
+    assert "learned_efficiency_history" in reeksen
+
+
+def test_the_distinction_is_in_the_name():
+    """Een reeks die iets LEERT heet `_history` of `_records`; een buffer
+    heet `_samples` of `_buffer`. Dat onderscheid staat in de naamgeving
+    en is daarmee te controleren zonder elke reeks apart te kennen."""
+    from custom_components.energy_management_system.const import (
+        STALLED_SERIES_WORKING_BUFFERS,
+    )
+
+    for fragment in STALLED_SERIES_WORKING_BUFFERS:
+        assert fragment.startswith("_")
+        assert "history" not in fragment
+        assert "records" not in fragment
