@@ -515,6 +515,106 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Meer informatie terug op het beginscherm (v1.14.5)
+
+**Gemeld**: *"Ik wil toch weer meer informatie op de dashboard, wel met
+doorklikken naar onzichtbare tabbladen. Ik mis teveel om nu goed te
+kunnen beoordelen."*
+
+Terecht. Het opruimen is te ver gegaan.
+
+### Wat er misging in mijn aanpak
+
+In v1.12.0 haalde ik de tabellen weg en verving ze door één zin per
+onderwerp. Goed idee. Maar die zinnen belandden op **vier verschillende
+verborgen tabbladen** — en in v1.13.0 werden die ook nog uit de tabbalk
+gehaald.
+
+Het gevolg: je moest klikken om te weten óf er iets aan de hand was. Dat
+is precies de verkeerde kant op. De **conclusie** hoort op het
+beginscherm, het **detail** achter een tik.
+
+En de aandachtspunten waren teruggebracht tot een telling. "4
+aandachtspunten" zegt niet wát er is, dus moest je alsnog doorklikken om
+te weten of er iets van je verwacht werd.
+
+### Wat er nu op Overzicht staat
+
+**Nieuwe sectie "Status per onderwerp"** met zeven tegels: accumodules,
+apparaten, zelflerend, financieel, klimaat, water en meetkwaliteit. Elk
+met de conclusie in één regel, groen/oranje/rood, en een tik naar de
+detailpagina.
+
+> *"Alle 3 modules lopen gelijk; grootste celspreiding 0,04 V."*
+> *"1 van de 38 apparaten verbruikt meer dan normaal: Koelkast schuur."*
+
+**Aandachtspunten weer uitgeschreven**, met de informatieve regels erbij.
+
+Overzicht gaat van 24 naar 40 kaarten. Dat is meer dan v1.12.1, maar de
+opbouw is anders: alles is een korte regel met doorklik, geen tabel.
+
+### De grens blijft bestaan
+
+De tekstlimiet per tabblad gaat van 800 naar 1400 tekens — ruimer, niet
+weg. Het gaat om **genoeg**, niet om alles: zonder grens wordt het
+opnieuw een muur tekst, en dat was het oorspronkelijke probleem.
+
+### Getest
+
+Drie tests aangepast of erbij: de aandachtspunten staan uitgeschreven
+inclusief de informatieve regels, Overzicht toont een status per
+onderwerp voor alle zeven, en die tegels klikken nog door — meer
+informatie op het beginscherm mag de doorklik niet vervangen.
+
+**Volledige testsuite**: 1326 tests, allemaal groen.
+
+## Detailpagina paste niet op het scherm (v1.14.4)
+
+**Gemeld**: *"Uitbreiding betrouwbaarheid is niet meer goed te zien,
+uitlijning niet goed."* — met een screenshot waarop de kolom "Niveau"
+afbrak op *"Ni…"* en de toelichting helemaal wegviel.
+
+### De pagina stond in masonry
+
+Die verdeelt kaarten over drie kolommen. Een tabel met vier kolommen
+krijgt dan een derde van het scherm, en wat niet past verdwijnt achter de
+rand.
+
+De pagina staat nu op **één kolom**, zodat elke tabel de volle breedte
+heeft.
+
+### En de betrouwbaarheidstabel is een lijst geworden
+
+Vier kolommen passen sowieso niet op een telefoon. Het is nu een
+gegroepeerde opsomming: de groepsnaam als kop, daaronder per regel het
+niveau, de naam met eventuele waarde, en de toelichting eronder.
+
+Dat schaalt mee met elke breedte, en de groep staat één keer boven zijn
+regels in plaats van in elke rij herhaald.
+
+### Over de apparatentabel
+
+Die stond nog op "None" omdat je v1.14.1 draait; de correctie zit in
+v1.14.2. Na installatie zie je daar het huidige vermogen en de trend.
+
+### Onderweg misgegaan
+
+Mijn eerste poging voegde `grid_options` toe achter elke kaart, en bij de
+laatste belandde dat binnen de sjabloontekst — YAML kapot. Hersteld uit
+de laatste zip en opnieuw gedaan met `max_columns: 1` op viewniveau, wat
+sowieso netter is dan per kaart.
+
+Daarna moesten drie testhelpers leren dat de kaarten nu in secties zitten
+in plaats van op viewniveau; zeven tests vielen daarop om.
+
+### Getest
+
+Drie tests erbij: de detailpagina is één kolom, geen enkele detailtabel
+heeft meer dan drie kolommen, en de omgezette lijst toont nog steeds alle
+vijf de velden.
+
+**Volledige testsuite**: 1324 tests, allemaal groen.
+
 ## Stilstaande reeksen werden niet gevonden (v1.14.3)
 
 **Gevraagd**: *"Tevens kijken of er meer zaken zijn die nu niet correct

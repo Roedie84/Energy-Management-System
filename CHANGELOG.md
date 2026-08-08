@@ -9331,3 +9331,59 @@ KPI-sectie. Zelfconsumptie 76,8% - sinds v1.9.2 weer plausibel.
 **Getest**: drie tests erbij in `test_stalled_series.py`.
 
 **Volledige testsuite**: 1321 tests, allemaal groen.
+
+## v1.14.4 — Detailpagina paste niet op het scherm
+
+**Gemeld**: de betrouwbaarheidstabel brak af op "Ni…" en de toelichting
+viel weg.
+
+**Oorzaak**: de detailpagina stond in masonry, die kaarten over drie
+kolommen verdeelt. Een tabel met vier kolommen kreeg een derde van het
+scherm. Nu `type: sections` met `max_columns: 1`, zodat elke tabel de
+volle breedte heeft.
+
+**Betrouwbaarheidstabel is een lijst geworden**: vier kolommen passen
+sowieso niet op een telefoon. Nu een gegroepeerde opsomming met de groep
+als kop, daaronder niveau, naam, waarde en toelichting - schaalt mee met
+elke breedte.
+
+**Apparatentabel**: stond nog op "None" omdat v1.14.1 draaide; de
+correctie zit in v1.14.2.
+
+**Onderweg misgegaan**: de eerste poging voegde `grid_options` toe achter
+elke kaart, wat bij de laatste binnen de sjabloontekst belandde (YAML
+kapot). Hersteld uit de laatste zip. Daarna moesten drie testhelpers
+leren dat de kaarten in secties zitten - zeven tests vielen daarop om.
+
+**Getest**: drie tests erbij in `test_detail_table_keys.py`.
+
+**Volledige testsuite**: 1324 tests, allemaal groen.
+
+## v1.14.5 — Meer informatie terug op het beginscherm
+
+**Gemeld**: meer informatie op het dashboard gewenst, met doorklikken
+naar de verborgen tabbladen; er viel te weinig te beoordelen.
+
+**Wat er misging**: in v1.12.0 werden tabellen vervangen door één zin per
+onderwerp - goed idee, maar die zinnen belandden op vier verschillende
+verborgen tabbladen, die in v1.13.0 ook nog uit de tabbalk gingen. Je
+moest dus klikken om te weten ÓF er iets aan de hand was. En de
+aandachtspunten waren een telling geworden: "4 aandachtspunten" zegt niet
+wat er is.
+
+**Nu op Overzicht**: nieuwe sectie "Status per onderwerp" met zeven
+tegels (accumodules, apparaten, zelflerend, financieel, klimaat, water,
+meetkwaliteit), elk met de conclusie in één regel, kleurcode en een tik
+naar de detailpagina. Aandachtspunten weer uitgeschreven inclusief de
+informatieve regels.
+
+Van 24 naar 40 kaarten, maar anders opgebouwd: korte regels met
+doorklik, geen tabellen.
+
+**De grens blijft**: tekstlimiet per tabblad van 800 naar 1400 tekens -
+ruimer, niet weg. Zonder grens wordt het opnieuw een muur tekst.
+
+**Getest**: drie tests aangepast of toegevoegd in
+`test_compact_dashboard.py`.
+
+**Volledige testsuite**: 1326 tests, allemaal groen.
