@@ -2135,6 +2135,17 @@ STALLED_SERIES_MIN_SAMPLES = 8
 # Bewust een expliciete lijst: wie hier iets aan toevoegt moet kunnen
 # uitleggen waarom stilstand daar te verwachten is, in plaats van dat het
 # stilzwijgend meeglipt.
+# Werkbuffers die zichzelf legen zijn GEEN geleerde reeksen. In v1.14.3
+# zijn underscore-velden meegenomen om
+# `_steelstofzuiger_idle_power_history` te vinden; daarmee kwamen ook de
+# buffers binnen. `_balance_power_samples` verzamelt accuvermogens tussen
+# twee balanscontroles en wordt daarna geleegd - 27x -0,0 W betekent
+# daar gewoon "de accu stond stil", geen gestopte meting.
+#
+# Herkenbaar aan de naam: een reeks die iets LEERT heet `_history` of
+# `_records`; een buffer heet `_samples` of `_buffer`.
+STALLED_SERIES_WORKING_BUFFERS = ("_samples", "_buffer", "_queue")
+
 STALLED_SERIES_CONSTANT_IS_NORMAL = (
     # v1.14.3: zonder "_w", want de interne velden heten
     # `_steelstofzuiger_idle_power_history`. Het fragment moet op de

@@ -9608,3 +9608,52 @@ gevonden", zodat je nog ziet waar de kaart over gaat.
 plus de uitzondering toegevoegd aan de test uit v1.14.8.
 
 **Volledige testsuite**: 1353 tests, allemaal groen.
+
+## v1.15.4 — "balance_power_samples staat op -0.0" was vals alarm
+
+**Gemeld**: "0,0???" bij de melding dat `balance_power_samples` al 27
+metingen op -0.0 staat.
+
+**Geen echte waarschuwing**: `_balance_power_samples` is een WERKBUFFER
+die accuvermogens verzamelt tussen twee balanscontroles en zichzelf
+daarna leegt. 27x -0,0 W betekent dat de accu stilstond - 's nachts bij
+een volle accu normaal. De -0.0 komt van een vermogensmeter die met een
+teken de richting aangeeft.
+
+**Ontstaan door v1.14.3**: daar werden underscore-velden meegenomen om
+`_steelstofzuiger_idle_power_history` te vinden, en daarmee kwamen ook de
+werkbuffers binnen.
+
+**Onderscheid zit in de naam**: een reeks die LEERT heet `_history` of
+`_records`, een buffer heet `_samples` of `_buffer`. Een test bewaakt dat
+de uitzonderingsfragmenten geen "history" of "records" bevatten, zodat
+ze niet per ongeluk echte reeksen uitsluiten.
+
+**Getest**: drie tests erbij in `test_stalled_series.py`.
+
+**Volledige testsuite**: 1356 tests, allemaal groen.
+
+## v1.15.5 — "unknown kW" bij het nachtverbruik
+
+**Gemeld**: piekvermogen toonde 2128 W, nachtverbruik "unknown kW".
+
+**Twee fouten in één kaart**:
+- De sensor rapporteert WATT (hij rekent de intern geleerde kW al om). Ik
+  nam de eenheid over uit `learned_night_consumption_kw` en zette er "kW"
+  achter - het getal zou duizend keer verkeerd lezen zodra het
+  verschijnt.
+- Een kale "unknown" leest als een storing, terwijl het bij een geleerde
+  waarde meestal "nog niet genoeg verzameld" betekent. Nu "nog niet
+  geleerd" respectievelijk "nog niet gemeten".
+
+**Alleen bij geleerde waarden**: bij live meetwaarden (accustand,
+netstroom) is een lege toestand juist wél een signaal. Die houden hun
+kale weergave.
+
+Mijn eerste poging paste de terugval op alle zestien kaarten toe; dat
+brak de YAML én zou echte storingen hebben verdoezeld. Hersteld uit de
+laatste zip en beperkt tot de twee geleerde waarden.
+
+**Getest**: twee tests erbij in `test_dashboard_entity_references.py`.
+
+**Volledige testsuite**: 1358 tests, allemaal groen.

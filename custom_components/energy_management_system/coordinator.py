@@ -280,6 +280,7 @@ from .const import (
     SENSOR_STARTUP_GRACE_MINUTES,
     SENSOR_UNAVAILABLE_CONFIRM_MINUTES,
     STALLED_SERIES_CONSTANT_IS_NORMAL,
+    STALLED_SERIES_WORKING_BUFFERS,
     SELF_EVAL_IDLE_MODULE_DAYS,
     SELF_EVAL_MIN_DAYS,
     SELF_EVAL_RESERVE_TOO_WIDE_RATIO,
@@ -3621,6 +3622,14 @@ class EnergyManagementSystemCoordinator:
             # naamgeving zegt niets over of een reeks het bewaken waard
             # is; wat telt is of het een meetreeks is.
             if naam.startswith("__") or not isinstance(waarde, list):
+                continue
+            # v1.15.4: werkbuffers overslaan. Sinds v1.14.3 worden
+            # underscore-velden meegenomen, en daarmee kwamen ook de
+            # buffers binnen die zichzelf na elk gebruik legen. Een
+            # constante waarde zegt daar niets over een gestopte meting.
+            if any(
+                fragment in naam for fragment in STALLED_SERIES_WORKING_BUFFERS
+            ):
                 continue
             getallen = [
                 x for x in waarde if isinstance(x, (int, float))

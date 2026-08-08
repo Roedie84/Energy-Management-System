@@ -501,7 +501,7 @@ views:
         # "richtingen van de stromen nog niet geupdate?". De
         # versiesleutel dwingt een verse ophaal af. Een test bewaakt
         # dat deze waarde gelijk blijft aan de versie in manifest.json.
-        image: /local/energy_management_system_overview.svg?v=1.15.3
+        image: /local/energy_management_system_overview.svg?v=1.15.5
         elements:
           - type: state-label
             entity: sensor.woonkamer_energy_management_system_system_status
@@ -1616,7 +1616,7 @@ views:
             cards:
               - type: custom:mushroom-template-card
                 primary: >-
-                  {{ states('sensor.woonkamer_energy_management_system_piekvermogen') }} W
+                  {% set v = states('sensor.woonkamer_energy_management_system_piekvermogen') %}{{ v ~ ' W' if v not in ['unknown','unavailable',''] else 'nog niet gemeten' }}
                 secondary: Piek vandaag
                 icon: mdi:chart-bell-curve
                 icon_color: red
@@ -1728,7 +1728,7 @@ views:
               action: more-info
           - type: custom:mushroom-template-card
             primary: >-
-              {{ states('sensor.woonkamer_energy_management_system_learned_night_consumption') }} kW
+              {% set v = states('sensor.woonkamer_energy_management_system_learned_night_consumption') %}{{ v ~ ' W' if v not in ['unknown','unavailable',''] else 'nog niet geleerd' }}
             secondary: Nachtverbruik
             icon: mdi:weather-night
             entity: sensor.woonkamer_energy_management_system_learned_night_consumption

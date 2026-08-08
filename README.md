@@ -515,6 +515,84 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## "unknown kW" bij het nachtverbruik (v1.15.5)
+
+**Gemeld** met screenshot: het piekvermogen toonde netjes 2128 W, maar
+het nachtverbruik stond op *"unknown kW"*.
+
+### Twee fouten in één kaart
+
+**De eenheid klopte niet.** De sensor rapporteert **watt** — hij rekent
+de intern geleerde kW al om. Ik nam de eenheid over uit de
+coordinator-eigenschap `learned_night_consumption_kw` en zette er "kW"
+achter, waardoor het getal duizend keer verkeerd zou lezen zodra het
+verschijnt.
+
+**En een kale "unknown" leest als een storing.** Bij een geleerde waarde
+betekent het meestal "nog niet genoeg verzameld". Die twee zien er
+identiek uit als je de rauwe toestand toont, en dan ga je zoeken naar een
+probleem dat er niet is.
+
+De kaart zegt nu *"nog niet geleerd"* respectievelijk *"nog niet
+gemeten"*.
+
+### Waarom alleen bij geleerde waarden
+
+Bij **live meetwaarden** — accustand, netstroom, prijs — is een lege
+toestand juist wél een signaal: dan is de sensor weg. Die houden hun kale
+weergave, want daar wil je zien dat er iets mis is.
+
+Mijn eerste poging paste de terugval op álle zestien kaarten toe. Dat
+brak niet alleen de YAML (te lange regels binnen hun context), maar zou
+ook echte storingen hebben verdoezeld. Hersteld uit de laatste zip en
+beperkt tot de twee geleerde waarden.
+
+### Getest
+
+Twee tests erbij: geleerde waarden leggen een lege toestand uit, en het
+nachtverbruik gebruikt watt in plaats van kW.
+
+**Volledige testsuite**: 1358 tests, allemaal groen.
+
+## "balance_power_samples staat op −0.0" was vals alarm (v1.15.4)
+
+**Gemeld**: *"0,0???"* — bij de melding dat `balance_power_samples` al 27
+metingen op −0.0 staat.
+
+### Terechte vraag, en het is geen echte waarschuwing
+
+`_balance_power_samples` is een **werkbuffer**: hij verzamelt
+accuvermogens tussen twee balanscontroles en wordt daarna geleegd. Geen
+geleerde reeks.
+
+27 keer −0,0 W betekent daar simpelweg dat de accu stilstond — 's nachts
+bij een volle accu volstrekt normaal. En de `−0.0` komt van een
+vermogensmeter die met een teken de richting aangeeft.
+
+### Ontstaan door de correctie van gisteren
+
+In v1.14.3 nam ik underscore-velden mee in de detectie, om
+`_steelstofzuiger_idle_power_history` te vinden die daardoor werd gemist.
+Terecht — maar daarmee kwamen ook alle werkbuffers binnen.
+
+Twee correcties op rij die elk een nieuw geval blootleggen; dat is
+vandaag vaker gebeurd.
+
+### Het onderscheid zit in de naam
+
+Een reeks die iets **leert** heet `_history` of `_records`; een buffer
+heet `_samples` of `_buffer`. Dat is te controleren zonder elke reeks
+apart te kennen, en er staat een test op dat die fragmenten geen
+"history" of "records" bevatten — anders sluit de uitzondering per
+ongeluk echte reeksen uit.
+
+### Getest
+
+Drie tests erbij: een werkbuffer wordt niet gemeld, echte reeksen nog
+steeds wél, en het naamonderscheid blijft zuiver.
+
+**Volledige testsuite**: 1356 tests, allemaal groen.
+
 ## Drie kaarten wezen naar hernoemde sensoren (v1.15.3)
 
 **Gemeld** met screenshot: twee kaarten onder "Overig" toonden *"Entiteit
