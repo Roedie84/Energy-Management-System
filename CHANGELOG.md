@@ -9528,3 +9528,29 @@ geïntegreerd.
 **Getest**: vier tests erbij in `test_sensor_health_breakdown.py`.
 
 **Volledige testsuite**: 1338 tests, allemaal groen.
+
+## v1.15.1 — "expected str" bij het bewerken van de configuratie
+
+**Gemeld**: bij het openen van de configuratie toonden de PV-oriëntatie
+en hellingshoek "expected str"; het formulier liet zich niet verzenden.
+
+**Het spiegelbeeld van v1.4.2**: toen gaf een leeg NumberSelector
+"expected float", dus werden het tekstvelden. Maar `_validate_input`
+slaat een ingevulde waarde op als GETAL (200.0) zodat de coordinator
+ermee kan rekenen, en bij heropenen geeft HA die waarde terug als
+standaard van het veld. Een tekstveld weigert dan met "expected str".
+Beide keren blokkeerde dat het HELE formulier.
+
+**Oplossing**: opslaan als getal blijft juist, alleen de weergave wordt
+tekst (hele getallen zonder decimaal - "200" leest prettiger dan
+"200.0").
+
+**Waarom het twee keer kon**: er was geen test die de volledige
+heen-en-terugweg afliep (invullen -> opslaan -> heropenen -> opnieuw
+opslaan). Elke stap apart was getest, de overgang ertussen niet. Die
+test is er nu, plus een scan die vastlegt dat een TextSelector zijn
+standaard nooit rechtstreeks uit de opslag haalt.
+
+**Getest**: nieuw `tests/test_config_flow_roundtrip.py`, 7 tests.
+
+**Volledige testsuite**: 1345 tests, allemaal groen.

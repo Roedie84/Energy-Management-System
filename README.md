@@ -515,6 +515,50 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## "expected str" bij het bewerken van de configuratie (v1.15.1)
+
+**Gemeld** met screenshot: bij het openen van de configuratie toonden de
+PV-oriëntatie en hellingshoek *"expected str"*, en het formulier liet
+zich niet verzenden.
+
+### Het spiegelbeeld van v1.4.2
+
+Toen gaf een leeg `NumberSelector` *"expected float"*, dus maakte ik er
+tekstvelden van. Maar `_validate_input` slaat een ingevulde waarde op als
+**getal** — 200.0 — zodat de coordinator ermee kan rekenen. En bij het
+heropenen geeft Home Assistant die opgeslagen waarde terug als
+standaardwaarde van het veld.
+
+Een tekstveld dat een getal aangeboden krijgt, weigert. *"expected str"*.
+
+Dezelfde fout, andere kant op. En beide keren blokkeerde het het **hele
+formulier**, dus ook alle andere instellingen erop.
+
+### De oplossing
+
+Opslaan als getal blijft juist; alleen de **weergave** wordt tekst. Hele
+getallen zonder decimaal, want "200" leest prettiger dan "200.0".
+
+### Waarom dit twee keer kon gebeuren
+
+Er was geen test die de volledige heen-en-terugweg afliep: invullen →
+opslaan → heropenen → opnieuw opslaan. Elke stap apart was getest, de
+overgang ertussen niet.
+
+Die test is er nu, plus een scan die vastlegt dat een `TextSelector`
+zijn standaardwaarde nooit rechtstreeks uit de opslag haalt — daar kan
+immers een getal in staan.
+
+### Getest
+
+Nieuw `tests/test_config_flow_roundtrip.py`, 7 tests: een opgeslagen
+waarde wordt als tekst getoond, de heen-en-terugweg is stabiel, een
+decimaal overleeft die weg, hele getallen verliezen hun decimaal, leeg
+blijft leeg, de helper geeft altijd tekst terug, en elk tekstveld
+bewerkt zijn standaardwaarde.
+
+**Volledige testsuite**: 1345 tests, allemaal groen.
+
 ## Gezondheidsoordeel verdween na een herstart (v1.15.0)
 
 **Gevraagd**: een volledige analyse van een verse export (v1.14.9).

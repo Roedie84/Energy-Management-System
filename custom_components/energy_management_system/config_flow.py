@@ -95,6 +95,25 @@ from .const import (
 )
 
 
+def _as_text(waarde) -> str:
+    """Toont een opgeslagen getal als tekst in een TextSelector
+    (v1.15.1).
+
+    Home Assistant geeft de opgeslagen waarde terug als standaardwaarde
+    van het veld. Staat daar een getal en is het veld een tekstveld, dan
+    weigert het formulier met "expected str" - en dan is het HELE
+    formulier geblokkeerd, ook alle andere instellingen erop.
+
+    Hele getallen zonder decimaal, want "200" leest prettiger dan
+    "200.0".
+    """
+    if waarde in (None, ""):
+        return ""
+    if isinstance(waarde, float) and waarde.is_integer():
+        return str(int(waarde))
+    return str(waarde)
+
+
 def _validate_input(user_input: dict) -> dict[str, str]:
     """Controleert de vrije-tekstvelden (v1.1.5).
 
@@ -362,13 +381,23 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
                 CONF_PV_ENERGY_SENSOR,
                 default=defaults.get(CONF_PV_ENERGY_SENSOR),
             ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            # v1.15.1: de standaardwaarde als TEKST teruggeven. In
+            # v1.4.2 zijn dit tekstvelden geworden omdat een leeg
+            # NumberSelector "expected float" gaf. Maar `_validate_input`
+            # slaat een ingevulde waarde op als GETAL (200.0), en bij het
+            # heropenen van het formulier kreeg het tekstveld dat getal
+            # terug - "expected str", precies het spiegelbeeld van de
+            # oorspronkelijke fout.
+            #
+            # Opslaan als getal blijft juist: de coordinator rekent
+            # ermee. Alleen de weergave moet tekst zijn.
             vol.Optional(
                 CONF_PV_ACTUAL_AZIMUTH_DEGREES,
-                default=defaults.get(CONF_PV_ACTUAL_AZIMUTH_DEGREES, ""),
+                default=_as_text(defaults.get(CONF_PV_ACTUAL_AZIMUTH_DEGREES)),
             ): selector.TextSelector(),
             vol.Optional(
                 CONF_PV_ACTUAL_TILT_DEGREES,
-                default=defaults.get(CONF_PV_ACTUAL_TILT_DEGREES, ""),
+                default=_as_text(defaults.get(CONF_PV_ACTUAL_TILT_DEGREES)),
             ): selector.TextSelector(),
             vol.Optional(
                 CONF_SUN_ELEVATION_SENSOR,
