@@ -515,6 +515,260 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Labels op Financieel pasten niet (v1.13.2)
+
+**Gemeld**: *"Op dit tabblad zijn alle teksten ook niet goed zichtbaar,
+net als op de landingspagina, graag dit op alle tabbladen herzien."*
+
+### Waarom de test dit had moeten vangen
+
+In v1.12.6 heb ik een test gebouwd die labels toetst aan de breedte van
+hun tegel. Die keek alleen naar kaarten met een **expliciete**
+kolombreedte — en kaarten binnen een `grid` hebben die niet.
+
+Precies waar het misging: op Financieel zit bijna alles in grids. Twaalf
+te lange labels bleven daardoor onopgemerkt tot ze op een screenshot
+opvielen.
+
+Erger nog: de test ging bij een ontbrekende breedte uit van de **volle**
+breedte (48 tekens), terwijl kaarten in een grid juist smal zijn. De
+aanname stond dus precies verkeerd om.
+
+### Wat er afgekapt werd
+
+| Label | Tekens |
+|---|---|
+| Besparing t.o.v. zonder accu-sturing (vandaag) | 46 |
+| Onverwachte netimport-dagen (laatste 7) | 39 |
+| Piekvermogen deze maand (netimport) | 35 |
+| Geschatte resterende capaciteit | 31 |
+
+Twaalf labels ingekort, plus twee **sjabloonlabels** die hun tekst
+dynamisch opbouwen en daarom nooit werden getoetst: *"Accubesparing
+(kostprijs-model) — huidige kostprijs: € …/kWh"* en *"Uitstoot vandaag
+(huidige intensiteit: … g/kWh)"*.
+
+### Nu bewaakt
+
+De helper kijkt nu ook ín grids — 44 labels in plaats van een handvol —
+en gaat bij een ontbrekende breedte uit van **smal** in plaats van breed.
+Het langste label is nu 22 tekens, precies de grens.
+
+Twee tests erbij: één die vastlegt dat er daadwerkelijk in de grids wordt
+gekeken (anders zou de helper stilletjes terug kunnen vallen), en één op
+de twee sjabloonlabels.
+
+### Getest
+
+**Volledige testsuite**: 1299 tests, allemaal groen.
+
+## Koppen raakten los van hun kaarten (v1.13.1)
+
+**Gemeld**: *"De zelflerend titel staat nog niet correct op de pagina."*
+Met een screenshot waarop "Zelflerend" onderaan de linkerkolom stond,
+terwijl de bijbehorende kaart bovenaan de rechterkolom hing — onder een
+andere kop.
+
+### De oorzaak
+
+Het Systeem-tabblad gebruikte de standaard **masonry**-indeling. Die
+verdeelt kaarten over kolommen op basis van hoogte, zonder te weten dat
+een kop bij de kaart eronder hoort. Bij vier koppen op één tabblad gaat
+dat gegarandeerd mis.
+
+Met `type: sections` blijft elk groepje bij elkaar, hoe de kolommen ook
+vallen.
+
+### Verloop had hetzelfde probleem
+
+Drie koppen, acht kaarten. Ook omgezet — daar was het nog niet opgevallen
+omdat de grafieken toevallig gunstig uitvielen.
+
+Onderweg bleek "Live" een kop **zonder eigen kaart**: de live-uitleg zat
+in de groep erna. Samengevoegd, want een kop zonder inhoud toont een
+titel waar niets onder staat.
+
+### Nu bewaakt
+
+Twee tests: een tabblad met meer dan één kop moet `type: sections`
+gebruiken, en geen enkele sectie mag alleen uit een kop bestaan.
+
+Die eerste vangt het probleem bij de bron. Voeg je later een derde kop
+toe aan een masonry-tabblad, dan faalt hij meteen in plaats van dat je
+het pas op een screenshot ziet.
+
+### Getest
+
+Twee tests erbij in `test_compact_dashboard.py`; één bestaande test las
+`view["cards"]` en moest leren dat secties ook kaarten bevatten.
+
+**Volledige testsuite**: 1295 tests, allemaal groen.
+
+## Alleen Overzicht in de tabbalk (v1.13.0)
+
+**Gevraagd**: *"De tabbladen moeten standaard niet zichtbaar zijn, ik wil
+het alleen zien als ik daadwerkelijk op 'meer info' klik. Een popup zou
+ook kunnen."*
+
+### Alles is een subview geworden
+
+Visueel, Meldingen, Kwaliteit, Systeem, Financieel en Verloop staan niet
+meer in de tabbalk. Je opent het dashboard en ziet één scherm.
+
+### Met een sectie "Meer bekijken"
+
+Zes tegels onderaan Overzicht, elk met een regel die zegt waar je
+terechtkomt:
+
+- **Systeem** — accu en apparaten
+- **Financieel** — kosten en besparing
+- **Verloop** — wat er gebeurde
+- **Kwaliteit** — betrouwbaarheid
+- **Meldingen** — aan/uit en historie
+- **Visueel** — plattegrond
+
+Zonder die tegels zouden de pagina's alleen via de URL te vinden zijn, en
+dus praktisch onbereikbaar. Er staat nu een test op dat **elke verborgen
+pagina een ingang heeft**, en een tweede dat geen enkele tegel naar een
+niet-bestaande pagina wijst.
+
+### Over de popup
+
+Dat kan met `browser_mod`, maar dat is een extra installatie via HACS.
+Subviews zijn ingebouwd en werken op elk apparaat, dus die keuze leek me
+beter — zeker omdat het gedrag hetzelfde is: je ziet het pas als je
+erom vraagt.
+
+### Onderweg
+
+De testhelper filterde op `subview` om de detailpagina uit te sluiten.
+Nu álle tabbladen subviews zijn, viel daarmee bijna alles buiten de
+controle; die filtert nu op naam.
+
+En mijn eigen labeltest uit v1.12.6 ving meteen vier te lange
+ondertitels op de nieuwe tegels — "Aan- en uitzetten, en de
+geschiedenis" is 37 tekens waar er 22 passen.
+
+### Getest
+
+Nieuw `tests/test_navigation.py`, 5 tests: alleen Overzicht is zichtbaar,
+elke verborgen pagina is bereikbaar, de navigatiesectie bestaat, elke
+tegel zegt waar hij heen gaat, en geen enkel pad wijst nergens heen.
+
+**Volledige testsuite**: 1290 tests, allemaal groen.
+
+## Het doorklik-principe voor élke kaart (v1.12.8)
+
+**Gevraagd**: *"Graag voor alle cards doen die dit principe moeten
+hanteren."*
+
+### Negen tegels deden nog niets
+
+Binnen de grid-kaarten op Financieel zaten tegels met losse bedragen —
+ontlaadwaarde, netlaadkosten, accubesparing — die geen `tap_action`
+hadden. Je kon erop tikken en er gebeurde niets.
+
+Die tonen één getal, dus daar is **more-info** het juiste detail: de
+grafiek van dat bedrag over tijd. Niet de detailpagina; die zou je juist
+weghalen van wat je wilt zien.
+
+### Twee keer hetzelfde
+
+De verbetermogelijkheden stonden zowel op Kwaliteit als op de
+detailpagina. Nu alleen op de detailpagina, waar de GACS-tegel heen
+wijst. Ook de uitleg bovenaan Kwaliteit is weg — die was in v1.12.4 al
+bedoeld te verdwijnen maar bleek er nog te staan.
+
+Kwaliteit houdt drie tegels over: betrouwbaarheid, zelflerende waarden,
+GACS.
+
+### Drie soorten volgen het principe bewust niet
+
+| Soort | Waarom |
+|---|---|
+| Schakelaars | tikken **schakelt**; navigeren zou verhinderen waar ze voor zijn |
+| Grafieken | die **zijn** al het detail |
+| Markdown | ondersteunt geen `tap_action` in Home Assistant |
+
+Die uitzonderingen staan nu als lijst in een test. Komt er een vierde
+soort bij zonder doorklik, dan faalt hij — en moet iemand uitleggen
+waarom dat terecht is.
+
+### De regel, samengevat
+
+- **Samenvatting** → detailpagina
+- **Meetwaarde** → eigen geschiedenis
+- **Schakelaar** → schakelt
+- **Grafiek** → is het detail
+
+### Onderweg
+
+Mijn eerste poging verwijderde de verbetermogelijkheden van de
+*detailpagina* in plaats van van Kwaliteit — die kaart staat eerder in
+het bestand. De test die controleert of de detailpagina compleet is, ving
+dat meteen.
+
+### Getest
+
+Drie tests erbij: élke tegel overal is aanklikbaar, de uitzonderingen
+zijn een expliciete lijst, en niets staat twee keer.
+
+**Volledige testsuite**: 1287 tests, allemaal groen.
+
+## "Tik voor details" leverde niets op (v1.12.7)
+
+**Gemeld**: *"Bij een tik zie ik nog geen details?"* — met een screenshot
+van de standaard more-info van Home Assistant: geschiedenis, een balkje,
+en "Geen activiteit gevonden".
+
+### De oorzaak
+
+Home Assistant toont in more-info **geen attributen**. Alleen de
+toestand, de geschiedenis en het logboek.
+
+Sinds v1.12.4 was elke tegel aanklikbaar, en in v1.12.0 haalde ik alle
+tabellen weg met het argument dat de onderbouwing "in de attributen
+blijft". Dat klopte technisch — de gegevens zaten er wel degelijk in —
+maar er was geen manier om ze te zíén. De belofte was dus loos.
+
+### Een verborgen detailpagina
+
+Een **subview** staat niet in de tabbalk maar is bereikbaar via navigate.
+Zo blijven de tabbladen summier én is het detail één tik weg — zonder
+dat de tabbalk weer voller wordt, wat in v1.12.2 juist is teruggebracht.
+
+Daarop staat alles wat is weggehaald: de volledige aandachtspunten met de
+informatieve regels, de betrouwbaarheidstabel per grootheid, de
+verbetermogelijkheden, de accumodules met celdelta en temperatuur, de
+herkende apparaten met hun drift, en de watersessies van vandaag.
+
+Negen samenvattingstegels wijzen er nu heen.
+
+### Wat bewust more-info houdt
+
+Tegels met een **losse meetwaarde** — accustand, netstroom, prijs. Daar
+is de grafiek in more-info juist wél het nuttige detail; die zou je
+kwijtraken door naar een tabel te navigeren.
+
+Het onderscheid is dus: een **samenvatting** leidt naar de detailpagina,
+een **meetwaarde** naar zijn eigen geschiedenis.
+
+### Zes tests moesten mee
+
+Twee namen aan dat `views[0]` het Overzicht is — de subview staat er nu
+vóór. Drie pasten de compactheidsregels ook op de detailpagina toe,
+terwijl die juist de tabellen hóórt te bevatten. En één eiste `more-info`
+op de statuskaart.
+
+### Getest
+
+Nieuw `tests/test_detail_subview.py`, 6 tests: de pagina is een subview,
+staat niet in de tabbalk, bevat de zes weggehaalde onderdelen, toont de
+aandachtspunten volledig, de samenvattingstegels navigeren erheen, en de
+meetwaardetegels houden more-info.
+
+**Volledige testsuite**: 1287 tests, allemaal groen.
+
 ## Labels pasten niet in de tegels (v1.12.6)
 
 **Gemeld**: *"De rendement card is wel volledig leesbaar, de rest niet,

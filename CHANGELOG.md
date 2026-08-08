@@ -9090,3 +9090,141 @@ gaat. Plus een test dat het inkorten de betekenis niet wegnam.
 **Getest**: nieuw `tests/test_dashboard_label_length.py`, 4 tests.
 
 **Volledige testsuite**: 1281 tests, allemaal groen.
+
+## v1.12.7 — "Tik voor details" leverde niets op
+
+**Gemeld**: bij een tik verschijnen geen details - met screenshot van de
+standaard more-info van Home Assistant.
+
+**Oorzaak**: HA toont in more-info geen ATTRIBUTEN, alleen toestand,
+geschiedenis en logboek. Sinds v1.12.4 was elke tegel aanklikbaar en in
+v1.12.0 verdwenen de tabellen met het argument dat de onderbouwing "in de
+attributen blijft" - technisch waar, maar niet te zien. De belofte was
+loos.
+
+**Nu een SUBVIEW "Details"**: staat niet in de tabbalk (die is in v1.12.2
+juist teruggebracht van tien naar zeven) maar is bereikbaar via navigate.
+Daarop alles wat is weggehaald: volledige aandachtspunten inclusief
+informatieve regels, betrouwbaarheidstabel per grootheid,
+verbetermogelijkheden, accumodules, herkende apparaten met drift, en de
+watersessies van vandaag. Negen samenvattingstegels wijzen erheen.
+
+**Meetwaardetegels houden more-info**: daar is de grafiek juist het
+nuttige detail. Onderscheid: samenvatting -> detailpagina, meetwaarde ->
+eigen geschiedenis.
+
+**Zes tests moesten mee**: twee namen aan dat views[0] Overzicht is, drie
+pasten de compactheidsregels op de detailpagina toe, en één eiste
+more-info op de statuskaart.
+
+**Getest**: nieuw `tests/test_detail_subview.py`, 6 tests.
+
+**Volledige testsuite**: 1287 tests, allemaal groen.
+
+## v1.12.8 — Het doorklik-principe voor élke kaart
+
+**Gevraagd**: het principe toepassen op alle kaarten die het moeten
+hanteren.
+
+**Negen tegels deden niets**: binnen de grid-kaarten op Financieel zaten
+tegels met losse bedragen zonder tap_action. Die tonen één getal, dus
+more-info is daar het juiste detail (de grafiek van dat bedrag) - niet de
+detailpagina.
+
+**Twee keer hetzelfde**: de verbetermogelijkheden stonden zowel op
+Kwaliteit als op de detailpagina; nu alleen daar. Ook de uitleg bovenaan
+Kwaliteit is weg (was in v1.12.4 al bedoeld te verdwijnen). Kwaliteit
+houdt drie tegels.
+
+**Drie soorten volgen het principe bewust niet**: schakelaars (tikken
+schakelt), grafieken (die zijn het detail) en markdown (ondersteunt geen
+tap_action in HA). Die uitzonderingen staan als expliciete lijst in een
+test; een vierde soort laat hem falen.
+
+**De regel**: samenvatting -> detailpagina, meetwaarde -> eigen
+geschiedenis, schakelaar -> schakelt, grafiek -> is het detail.
+
+**Onderweg**: de eerste poging verwijderde de verbetermogelijkheden van
+de DETAILPAGINA in plaats van van Kwaliteit - de test die de
+detailpagina bewaakt ving dat.
+
+**Getest**: drie tests erbij in `test_detail_subview.py`.
+
+**Volledige testsuite**: 1287 tests, allemaal groen.
+
+## v1.13.0 — Alleen Overzicht in de tabbalk
+
+**Gevraagd**: de tabbladen standaard niet zichtbaar; alleen zien na
+klikken op "meer info". Een popup zou ook kunnen.
+
+**Alles is een subview**: Visueel, Meldingen, Kwaliteit, Systeem,
+Financieel en Verloop staan niet meer in de tabbalk. Je opent het
+dashboard en ziet één scherm.
+
+**Sectie "Meer bekijken"** onderaan Overzicht met zes tegels, elk met een
+regel die zegt waar je terechtkomt. Zonder die tegels zouden de pagina's
+alleen via de URL te vinden zijn. Een test bewaakt dat elke verborgen
+pagina een ingang heeft, en een tweede dat geen tegel naar een
+niet-bestaande pagina wijst.
+
+**Over de popup**: dat kan met browser_mod, maar dat is een extra
+installatie via HACS. Subviews zijn ingebouwd en werken overal, met
+hetzelfde gedrag: je ziet het pas als je erom vraagt.
+
+**Onderweg**: de testhelper filterde op `subview` om de detailpagina uit
+te sluiten; nu alles subview is viel daarmee bijna alles buiten de
+controle (filtert nu op naam). En de labeltest uit v1.12.6 ving vier te
+lange ondertitels op de nieuwe tegels.
+
+**Getest**: nieuw `tests/test_navigation.py`, 5 tests.
+
+**Volledige testsuite**: 1290 tests, allemaal groen.
+
+## v1.13.1 — Koppen raakten los van hun kaarten
+
+**Gemeld**: de "Zelflerend"-titel stond onderaan de linkerkolom terwijl
+de bijbehorende kaart bovenaan de rechterkolom hing, onder een andere
+kop.
+
+**Oorzaak**: het Systeem-tabblad gebruikte de standaard
+masonry-indeling, die kaarten over kolommen verdeelt op basis van hoogte
+zonder te weten dat een kop bij de kaart eronder hoort. Bij vier koppen
+gaat dat gegarandeerd mis. Omgezet naar `type: sections`.
+
+**Verloop had hetzelfde probleem** (drie koppen, acht kaarten); ook
+omgezet. Onderweg bleek "Live" een kop zonder eigen kaart - samengevoegd,
+want een kop zonder inhoud toont een titel waar niets onder staat.
+
+**Nu bewaakt**: een tabblad met meer dan één kop moet `type: sections`
+gebruiken, en geen sectie mag alleen uit een kop bestaan. Die eerste
+vangt het probleem bij de bron in plaats van op een screenshot.
+
+**Getest**: twee tests erbij in `test_compact_dashboard.py`; één
+bestaande test las `view["cards"]` en moest leren dat secties ook kaarten
+bevatten.
+
+**Volledige testsuite**: 1295 tests, allemaal groen.
+
+## v1.13.2 — Labels op Financieel pasten niet
+
+**Gemeld**: op het Financieel-tabblad zijn de teksten niet goed
+zichtbaar, net als eerder op de landingspagina.
+
+**Waarom de test dit miste**: de labeltest uit v1.12.6 keek alleen naar
+kaarten met een EXPLICIETE kolombreedte, en kaarten binnen een grid
+hebben die niet - op Financieel zit bijna alles in grids. Bovendien ging
+de test bij een ontbrekende breedte uit van de VOLLE breedte (48 tekens),
+terwijl grid-kaarten juist smal zijn. De aanname stond precies verkeerd
+om.
+
+**Afgekapt**: "Besparing t.o.v. zonder accu-sturing (vandaag)" (46),
+"Onverwachte netimport-dagen (laatste 7)" (39), "Piekvermogen deze maand
+(netimport)" (35). Twaalf labels ingekort, plus twee sjabloonlabels die
+hun tekst dynamisch opbouwen en daarom nooit werden getoetst.
+
+**Nu bewaakt**: de helper kijkt ook in grids (44 labels in plaats van een
+handvol) en gaat bij een ontbrekende breedte uit van smal. Langste label
+nu 22 tekens. Twee tests erbij: één dat er daadwerkelijk in grids wordt
+gekeken, en één op de sjabloonlabels.
+
+**Volledige testsuite**: 1299 tests, allemaal groen.
