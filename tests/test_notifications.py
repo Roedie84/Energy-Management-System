@@ -48,12 +48,18 @@ def test_an_enabled_notification_is_sent(make_coordinator, hass):
 
 
 def test_a_disabled_notification_is_not_sent(make_coordinator, hass):
+    """v1.12.5: uitzetten stopt de melding naar de telefoon, maar hij
+    blijft wél in de geschiedenis staan - gevraagd omdat uitzetten
+    anders hetzelfde is als weggooien."""
     c = _coordinator(make_coordinator)
     c.set_notification_enabled("mode_change", False)
 
     _stuur(c)
 
-    assert c.notification_history == []
+    assert hass.services.calls == []
+    regel = c.notification_history[-1]
+    assert regel["verstuurd"] is False
+    assert "staat uit" in regel["reden_niet_verstuurd"]
 
 
 def test_the_master_switch_blocks_everything(make_coordinator, hass):
@@ -65,7 +71,10 @@ def test_the_master_switch_blocks_everything(make_coordinator, hass):
     for kind, _, _, _, _ in NOTIFICATION_TYPES:
         _stuur(c, kind)
 
-    assert c.notification_history == []
+    # v1.12.5: niets naar de telefoon, alles wél nalees baar.
+    assert hass.services.calls == []
+    assert len(c.notification_history) == len(NOTIFICATION_TYPES)
+    assert all(m["verstuurd"] is False for m in c.notification_history)
 
 
 def test_the_master_switch_leaves_individual_choices_intact(

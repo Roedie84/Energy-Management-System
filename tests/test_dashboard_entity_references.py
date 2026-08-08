@@ -99,7 +99,9 @@ def test_the_zonneplan_block_reads_the_right_sensor():
     blok een andere entiteit, dan meldt het ten onrechte dat er geen
     Zonneplan-sensoren zijn."""
     yaml_tekst = (PAKKET / "dashboard_template.yaml").read_text()
-    start = yaml_tekst.index("Werkelijke afrekening (Zonneplan)")
-    blok = yaml_tekst[start : start + 900]
+    # v1.12.4: de tabel is een tegel geworden; het attribuut
+    # `zonneplan_vergelijking` hangt nog steeds aan dezelfde sensor.
+    start = yaml_tekst.index("zonneplan_vergelijking")
+    blok = yaml_tekst[max(0, start - 400) : start + 200]
 
     assert "besparing_t_o_v_zonder_accu_sturing" in blok

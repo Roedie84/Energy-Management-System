@@ -171,17 +171,24 @@ def test_the_attention_card_is_a_count_not_a_wall():
     met een verwijzing. De inhoud zelf komt als melding binnen - dat was
     het uitgangspunt."""
     overzicht = next(v for v in _views() if v["title"] == "Overzicht")
+    # v1.12.3: het is een template-card geworden in plaats van markdown,
+    # zodat hij aanklikbaar is - de tekst verwees naar "de statuskaart"
+    # terwijl die in v1.12.1 was weggehaald. De inhoud zit nu in
+    # `primary`/`secondary` in plaats van in `content`.
     kaarten = [
         k
         for sectie in overzicht["sections"]
         for k in sectie.get("cards") or []
-        if "aandachtspunten" in (k.get("content") or "")
+        if "aandachtspunten" in str(k)
     ]
 
     assert kaarten, "geen aandachtspunten-kaart gevonden"
     for kaart in kaarten:
-        assert "for punt in punten" not in kaart["content"]
-        assert "aandachtspunt(en)" in kaart["content"]
+        plat = str(kaart)
+        assert "for punt in punten" not in plat
+        assert "aandachtspunt(en)" in plat
+        # Aanklikbaar, anders is "tik voor details" een loze verwijzing.
+        assert kaart.get("tap_action", {}).get("action") == "more-info"
 
 
 def test_the_overview_has_no_detail_sections():
@@ -242,3 +249,51 @@ def test_each_heading_explains_what_it_shows():
     for kaart in _kaarten(systeem):
         if "title-card" in str(kaart.get("type")):
             assert kaart.get("subtitle"), kaart.get("title")
+
+
+# --- v1.12.4: het principe overal ------------------------------------
+
+
+def test_every_tile_can_be_opened():
+    """Gemeld: "Misschien dit nu voor alles toepassen (dus sumiere
+    informatie op de dashboards) en wanneer meer informatie gewenst is
+    dit door middel van op de card klikken zichtbaar maken?"
+
+    Dat werkt alleen als élke tegel ook echt te openen is. Een kaart die
+    de conclusie toont maar niet doorklikt, laat je met de vraag zitten
+    zonder een manier om hem te beantwoorden.
+    """
+    for view in _views():
+        if view["title"] in ("Visueel", "Meldingen"):
+            continue
+        for kaart in _kaarten(view):
+            if "template-card" not in str(kaart.get("type")):
+                continue
+            if not kaart.get("entity"):
+                continue
+            assert kaart.get("tap_action"), (
+                f"{view['title']}: tegel '{str(kaart.get('primary'))[:40]}' "
+                "toont een conclusie maar is niet aanklikbaar"
+            )
+
+
+def test_no_tab_is_a_wall_of_text():
+    """De tabbladen moeten leesbaar blijven zonder te scrollen. Meldingen
+    is uitgezonderd: dat is een bedieningspaneel met tweeëntwintig
+    schakelaars."""
+    for view in _views():
+        if view["title"] == "Meldingen":
+            continue
+        tekens = sum(len(k.get("content") or "") for k in _kaarten(view))
+        assert tekens < 800, f"{view['title']}: {tekens} tekens tekst"
+
+
+def test_the_financial_tab_uses_tiles_not_tables():
+    """De drie grote tabellen (afrekening, week/maand/jaar,
+    maandoverzicht) waren samen ruim 4000 tekens - het laatste bastion
+    van de oude opzet."""
+    financieel = next(v for v in _views() if v["title"] == "Financieel")
+
+    tekens = sum(len(k.get("content") or "") for k in _kaarten(financieel))
+
+    assert tekens == 0, f"{tekens} tekens tabeltekst op Financieel"
