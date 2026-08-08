@@ -8611,3 +8611,159 @@ persistent was.
 **Getest**: nieuw `tests/test_daily_diagnostics.py`, 14 tests.
 
 **Volledige testsuite**: 1177 tests, allemaal groen.
+
+## v1.9.1 — PV-dagopwek was structureel te laag
+
+**Gemeld**: "Dagrapport geeft aan opwek 12.9 kWh terwijl mijn PV
+installatie zegt 13.5 kWh" - 4,4%, te veel voor ruis.
+
+**Oorzaak**: de dagopwek werd geïntegreerd (vermogen x tijd, elke tick),
+wat aanneemt dat het vermogen die vijf minuten constant was. Uit het
+meetfrequentie-rapport van v1.1.9 bleek al dat de SolarEdge-sensor maar
+eens per 15-20 minuten bijwerkt; een verouderde waarde wordt dus over
+drie ticks bevroren en pieken daartussen vallen weg. De omvormer meet
+continu en telt ze wél mee. Een methodefout, en eenzijdig: hij mist
+alleen naar boven.
+
+**Oplossing**: nieuw optioneel veld `CONF_PV_ENERGY_SENSOR` voor een
+cumulatieve kWh-meter (bij deze installatie
+`sensor.solaredge_i1_ac_energy`, 22.633 kWh). Het dagverschil daarvan is
+exact ongeacht onze leesfrequentie. Integreren blijft de terugval, en het
+betrouwbaarheidsoverzicht meldt welke bron actief is - met bij
+integreren de uitleg dat het onderschat en hoe je dat oplost.
+
+**Twee valkuilen afgevangen**: een teller kan bij een herstart van de
+omvormer terugvallen (opnieuw ijken, en behouden wat er al stond), en de
+meterstand loopt door over middernacht (nieuw ijkpunt bij de dagreset).
+
+**Getest**: nieuw `tests/test_pv_production_from_meter.py`, 7 tests.
+
+**Volledige testsuite**: 1184 tests, allemaal groen.
+
+## v1.9.2 — Vier gemelde punten
+
+1. **Zelfconsumptie op -244,6%.** `pv_export_today_kwh` telt alles wat de
+   P1-meter het net op ziet gaan; bij een thuisaccu die 's ochtends
+   verkoopt komt dat deels uit de ACCU. De formule nam aan dat alle
+   export zon was, en zodra die de dagopwek overstijgt wordt de uitkomst
+   negatief. De export wordt nu begrensd op de dagopwek - de enige
+   verdedigbare aanname zonder aparte meting per bron.
+2. **"Avondpiek" om 07:15.** Het dagdeel was hardgecodeerd omdat het
+   duurste blok daar meestal ligt. Volgt nu uit het werkelijke tijdstip.
+3. **Waterontharder: 3,1 L om 00:28 was geen regeneratie.** Het
+   tijdvenster alleen is geen bewijs - 's nachts wordt er ook
+   doorgespoeld. Nieuwe ondergrens `WATER_SOFTENER_MIN_LITERS` (10 L),
+   de waarde die de gebruiker uit ervaring noemde.
+4. **Weerbronnen: de meting spreekt de indruk tegen.** Over 180
+   waarnemingen: forecast_thuis 82,8%, openweathermap 79,4% - drie
+   procentpunt in het voordeel van de bron die er volgens losse momenten
+   "altijd naast zat". Die momenten waren allemaal tijdens bewolking en
+   dus niet representatief. Er werd alleen gemeld BIJ een groot verschil,
+   waardoor stilte dubbelzinnig was; nu wordt ook gemeld dát ze
+   vergelijkbaar presteren, mét percentages.
+
+**Getest**: nieuw `tests/test_reported_issues_1_9_2.py`, 10 tests.
+
+**Volledige testsuite**: 1194 tests, allemaal groen.
+
+## v1.9.3 — Meldingsruis rond drempels
+
+**Gevraagd**: de melding rond middernacht nakijken.
+
+**Middernachtmelding**: om 00:02 "kostenberekening wijkt 1,53 € af", om
+00:04 "klopt weer". Geen rekenfout - onze dagteller springt om 00:00 naar
+nul, die van Zonneplan een paar minuten later. De vergelijking slaat het
+eerste half uur na middernacht nu over, met die reden erbij.
+
+**Zelfde patroon bij de nachtreserve**: "Accu haalt de nacht niet" ging
+diezelfde nacht zeven keer af, met tekorten van 0,01 tot 0,21 kWh, telkens
+gevolgd door "haalt de nacht weer". Vijf van de zes binnen 1% van de
+drempel - geruis, geen waarschuwing. De schatting van de
+overbruggingsbehoefte is zelf onnauwkeuriger dan dat, en de accu laadt
+sowieso bij. Nu pas melden bij minstens 0,5 kWh of 10% van de behoefte,
+zodat de drempel meeschaalt.
+
+**Getest**: nieuw `tests/test_notification_noise.py`, 6 tests.
+
+**Volledige testsuite**: 1200 tests, allemaal groen.
+
+## v1.9.4 — Volledige diagnostiek-controle
+
+**Gevraagd**: het hele diagnostiekbestand nakijken vóór installatie.
+
+**Twee echte vondsten**:
+- **Accu-rendement stond op 8290%** terwijl `learning_health` in dezelfde
+  export 82,9 meldde. In v1.3.0 stond hier een x100 op basis van een
+  testwaarde van 0,85, maar de eigenschap geeft wel degelijk een
+  percentage. De test die dat vastlegde gebruikte dezelfde verkeerde
+  aanname en bevestigde de fout dus in plaats van hem te vangen. Er staat
+  nu ook een test op dat het rendement nooit boven 100% komt.
+- **Gaskosten met zeven decimalen** (0,0466657 €) in het
+  kostenoverzicht; afgerond op centen, met behoud van `None` als er geen
+  gas is.
+
+**Eén vals alarm**: de accumodules leken leeg, maar dat was mijn
+leescommando (`celdelta_v` in plaats van `cel_delta_v`). Alle drie
+leveren gewoon.
+
+**Wat goed staat**: vijf leercheks op OK, geen fouten, 38 NILM-apparaten,
+Zonneplan-vergelijking op 2 cent, beslislogboek en dagrapport draaien.
+
+**Kalman-vraag beantwoord** na 500 metingen: SoC 0,82% (verwaarloosbaar),
+PV 9,4%, huisverbruik 25,4%. Voor de accu-inhoud - het enige signaal dat
+de beslislogica raakt - valt er niets te winnen.
+
+**Getest**: nieuw `tests/test_review_1_9_4.py`, 4 tests.
+
+**Volledige testsuite**: 1204 tests, allemaal groen.
+
+## v1.9.5 — De integratie controleert zichzelf op onmogelijke waarden
+
+**Gevraagd**: of de diagnostiek zo was nagekeken dat er niets meer uit te
+herleiden viel. Eerlijke antwoord: nee - ~200 velden, waarvan er
+handmatig veertig echt waren bekeken.
+
+Het rendement van 8290% viel pas op toen de HELE betrouwbaarheidslijst
+werd uitgeprint; de zelfconsumptie van -244,6% kwam alleen boven water
+doordat de gebruiker hem meldde. Zo'n fout hoort niet af te hangen van of
+iemand toevallig goed kijkt.
+
+**Nu**: elke tick worden alle numerieke velden getoetst aan wat fysiek
+mogelijk is (rendement 0-100%, aandeel 0-100, SoC niet boven 100).
+Overschrijding is een rekenfout en wordt als aandachtspunt gemeld.
+Getoetst tegen beide fouten van vandaag: allebei zouden ze automatisch
+gevonden zijn.
+
+De SPECIFIEKSTE regel wint (`_ratio_percent` voor `_percent`), anders
+zou een aandeel de ruime percentagegrenzen krijgen. Grenzen bewust ruim:
+het doel is fouten vangen, niet commentaar op een uitzonderlijke dag -
+een negatieve inkoop/teruglever-spreiding geeft geen alarm.
+
+**Wat dit niet is**: het vangt onmogelijke waarden, geen verkeerde. Een
+rendement van 45% is plausibel maar kan nog steeds fout zijn.
+
+**Getest**: nieuw `tests/test_plausibility_scan.py`, 10 tests.
+
+**Volledige testsuite**: 1214 tests, allemaal groen.
+
+## v1.9.6 — Laatste controle vóór installatie
+
+**Gevraagd**: alles nog één keer volledig beoordelen op onvolkomenheden.
+
+**Goed**: alle .py/.yaml/.json parsen, 1214 tests groen, versie en
+cachesleutel lopen gelijk, elk nieuw onderdeel wordt aangeroepen, geen
+debug-restanten.
+
+**Eén vondst**: acht configuratievelden hadden geen Nederlands label en
+toonden dus de kale sleutel in het formulier (achtertuinsensor, drie
+watersensoren, salderingsdatum, terugleverkosten, prijsattribuut,
+CO2-intensiteit). Aangevuld in alle drie de taalbestanden.
+
+**Zeven controles draaien nu automatisch** in plaats van als handwerk:
+Nederlands label per configuratieveld, complete Engelse vertaling,
+versie/cachesleutel/CHANGELOG gelijk, dashboardkopie in sync,
+SVG-kopie in sync, elke dienst geregistreerd, geen print/breakpoint.
+
+**Getest**: nieuw `tests/test_release_readiness.py`, 7 tests.
+
+**Volledige testsuite**: 1221 tests, allemaal groen.

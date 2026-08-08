@@ -61,7 +61,16 @@
           "sun_elevation_sensor_entity": "Sun elevation sensor (optional, falls back to sun.sun)",
           "sun_phase_sensor_entity": "Sun phase sensor (optional, day/night/twilight)",
           "pv_actual_azimuth_degrees": "Actual PV azimuth in degrees (optional; 180 = south, 270 = west)",
-          "pv_actual_tilt_degrees": "Actual tilt in degrees (optional; 0 = flat)"
+          "pv_actual_tilt_degrees": "Actual tilt in degrees (optional; 0 = flat)",
+          "pv_energy_sensor_entity": "PV energy meter in kWh (optional, more accurate than integrating)",
+          "backyard_temperature_sensor_entity": "Backyard temperature sensor (optional, more accurate than the weather entity)",
+          "co2_intensity_sensor_entity": "Grid CO2 intensity in g/kWh (optional)",
+          "water_active_usage_sensor_entity": "Water flow rate in L/min (optional)",
+          "water_daily_total_sensor_entity": "Water usage today in litres (optional)",
+          "water_total_usage_sensor_entity": "Water meter reading in litres (optional)",
+          "salderen_end_date": "End date of net metering (YYYY-MM-DD, default 2026-12-31)",
+          "feedin_price_attribute": "Price attribute for feed-in",
+          "feedin_cost_eur_per_kwh": "Feed-in costs in €/kWh (0 if you don't pay them)"
         }
       }
     },
@@ -136,7 +145,16 @@
           "sun_elevation_sensor_entity": "Sun elevation sensor (optional, falls back to sun.sun)",
           "sun_phase_sensor_entity": "Sun phase sensor (optional, day/night/twilight)",
           "pv_actual_azimuth_degrees": "Actual PV azimuth in degrees (optional; 180 = south, 270 = west)",
-          "pv_actual_tilt_degrees": "Actual tilt in degrees (optional; 0 = flat)"
+          "pv_actual_tilt_degrees": "Actual tilt in degrees (optional; 0 = flat)",
+          "pv_energy_sensor_entity": "PV energy meter in kWh (optional, more accurate than integrating)",
+          "backyard_temperature_sensor_entity": "Backyard temperature sensor (optional, more accurate than the weather entity)",
+          "co2_intensity_sensor_entity": "Grid CO2 intensity in g/kWh (optional)",
+          "water_active_usage_sensor_entity": "Water flow rate in L/min (optional)",
+          "water_daily_total_sensor_entity": "Water usage today in litres (optional)",
+          "water_total_usage_sensor_entity": "Water meter reading in litres (optional)",
+          "salderen_end_date": "End date of net metering (YYYY-MM-DD, default 2026-12-31)",
+          "feedin_price_attribute": "Price attribute for feed-in",
+          "feedin_cost_eur_per_kwh": "Feed-in costs in €/kWh (0 if you don't pay them)"
         }
       }
     },

@@ -109,6 +109,7 @@ from .const import (
     WATER_SESSION_COMPLETE_SUSTAINED_MINUTES,
     WATER_SESSION_HISTORY_LENGTH,
     WATER_SOFTENER_NIGHT_WINDOW_START_HOUR,
+    WATER_SOFTENER_MIN_LITERS,
     WATER_SOFTENER_NIGHT_WINDOW_END_HOUR,
     FIETSLADERS_COMPLETE_THRESHOLD_W,
     QUOOKER_SUSTAINED_MINUTES,
@@ -270,12 +271,17 @@ from .const import (
     MEASUREMENT_QUALITY_MIN_SAMPLES,
     NOTIFICATION_HISTORY_LENGTH,
     NOTIFICATION_RECOVERY_KINDS,
+    PLAUSIBILITY_RULES,
     STARTUP_GRACE_KINDS,
     STARTUP_GRACE_SECONDS,
     CONF_SUN_ELEVATION_SENSOR,
     CONF_SUN_PHASE_SENSOR,
     CONF_PV_ACTUAL_AZIMUTH_DEGREES,
+    CONF_PV_ENERGY_SENSOR,
+    PV_ENERGY_METER_RESET_TOLERANCE_KWH,
     CONF_PV_ACTUAL_TILT_DEGREES,
+    BATTERY_NIGHT_SHORTFALL_MIN_FRACTION,
+    BATTERY_NIGHT_SHORTFALL_MIN_KWH,
     COST_TREND_MIN_EUR,
     DAILY_COST_HISTORY_DAYS,
     DAILY_REPORT_HISTORY_DAYS,
@@ -283,6 +289,7 @@ from .const import (
     LOW_SOLAR_BORDERLINE_MARGIN,
     ZONNEPLAN_COST_CANDIDATES,
     ZONNEPLAN_COST_MISMATCH_EUR,
+    ZONNEPLAN_ROLLOVER_GRACE_MINUTES,
     ZONNEPLAN_COST_MISMATCH_FRACTION,
     PV_GEOMETRY_AZIMUTH_BUCKET_DEGREES,
     SOLAR_BIAS_DRIFT_ATTENTION_PERCENT,
@@ -544,6 +551,11 @@ class EnergyManagementSystemCoordinator:
         self.daily_cost_history: list[dict] = []
         # v1.9.0: het verloop BINNEN de dag, en de samenvatting per dag.
         self.decision_log: list[dict] = []
+        # v1.9.1: dagopwek uit de cumulatieve meterstand in plaats van
+        # geintegreerd vermogen. Zie CONF_PV_ENERGY_SENSOR.
+        self._pv_energy_meter_day_start: float | None = None
+        self._pv_energy_meter_last: float | None = None
+        self.pv_production_source: str = "geïntegreerd vermogen"
         self.daily_report_history: list[dict] = []
         self._daily_report_day_key: date | None = None
         self._daily_report_counters: dict = {}
@@ -2330,7 +2342,19 @@ class EnergyManagementSystemCoordinator:
         beschikbaar = self.last_available_kwh
         nodig = self.last_needed_kwh_to_bridge
         if beschikbaar is not None and nodig is not None and nodig > 0:
-            if beschikbaar < nodig:
+            # v1.9.3: pas melden bij een ECHT gat. In één nacht ging deze
+            # melding zeven keer af met tekorten van 0,01 tot 0,21 kWh,
+            # telkens gevolgd door "haalt de nacht weer" binnen enkele
+            # minuten. De schatting van de overbruggingsbehoefte heeft
+            # zelf een onnauwkeurigheid van enkele procenten, dus een
+            # tekort van 0,01 kWh zegt niets - en de accu laadt sowieso
+            # bij als het nodig is.
+            tekort = nodig - beschikbaar
+            drempel = max(
+                BATTERY_NIGHT_SHORTFALL_MIN_KWH,
+                nodig * BATTERY_NIGHT_SHORTFALL_MIN_FRACTION,
+            )
+            if tekort >= drempel:
                 stuur(
                     "battery_wont_last_night",
                     "🔋 Accu haalt de nacht waarschijnlijk niet",
@@ -2448,7 +2472,12 @@ class EnergyManagementSystemCoordinator:
         ):
             stuur(
                 "low_soc_before_peak",
-                "🔋 Lage accustand vlak voor de avondpiek",
+                # v1.9.2, gemeld: deze melding kwam om 05:47 met de tekst
+                # "avondpiek", terwijl het duurste blok om 07:15 begon.
+                # Het duurste blok ligt meestal 's avonds, maar niet
+                # altijd - en dan liegt het label. Het dagdeel volgt nu
+                # uit de werkelijke tijd.
+                f"🔋 Lage accustand vlak voor de {self._dagdeel(discharge_start)}piek",
                 f"De accu staat op {soc_nu:.0f}% en om "
                 f"{discharge_start:%H:%M} begint het duurste blok.",
             )
@@ -2872,6 +2901,25 @@ class EnergyManagementSystemCoordinator:
         return profiel
 
     @staticmethod
+    def _dagdeel(moment: datetime) -> str:
+        """Nacht, ochtend, middag of avond, uit het werkelijke tijdstip
+        (v1.9.2).
+
+        Meldingen die een dagdeel noemen moeten dat afleiden in plaats
+        van aannemen. Het duurste blok ligt meestal 's avonds, maar bij
+        deze installatie lag het om 07:15 - en dan is "avondpiek" gewoon
+        onjuist.
+        """
+        uur = moment.hour
+        if uur < 6:
+            return "nacht"
+        if uur < 12:
+            return "ochtend"
+        if uur < 18:
+            return "middag"
+        return "avond"
+
+    @staticmethod
     def _azimuth_distance(a: float, b: float) -> float:
         """Cirkelvormig verschil tussen twee windrichtingen (v1.4.1).
 
@@ -3037,6 +3085,22 @@ class EnergyManagementSystemCoordinator:
         resultaat["zonneplan_netto_eur"] = round(werkelijk, 2)
         resultaat["verschil_eur"] = round(verschil, 2)
 
+        # v1.9.3: vlak na middernacht rollen de twee dagtellers niet op
+        # hetzelfde moment - de onze om 00:00, die van Zonneplan een paar
+        # minuten later. Zolang ze niet gelijk staan is elke vergelijking
+        # betekenisloos, en een melding die zichzelf binnen twee minuten
+        # intrekt leert je meldingen te negeren.
+        nu = dt_util.now()
+        minuten_na_middernacht = nu.hour * 60 + nu.minute
+        if minuten_na_middernacht < ZONNEPLAN_ROLLOVER_GRACE_MINUTES:
+            resultaat["status"] = RELIABILITY_INSUFFICIENT
+            resultaat["reden"] = (
+                "Vlak na middernacht: de dagtellers van deze integratie en "
+                "van Zonneplan rollen niet op hetzelfde moment, dus een "
+                "vergelijking zegt nu niets."
+            )
+            return resultaat
+
         drempel = max(
             ZONNEPLAN_COST_MISMATCH_EUR,
             abs(werkelijk) * ZONNEPLAN_COST_MISMATCH_FRACTION,
@@ -3107,9 +3171,13 @@ class EnergyManagementSystemCoordinator:
             # Zonder Zonneplan-sensoren de eigen berekening gebruiken -
             # die meet dezelfde P1-meter.
             stroom = round(self.actual_cost_today_eur, 2)
+        gas = vergelijking.get("zonneplan_gas_vandaag_eur")
         return {
             "stroom_eur": stroom,
-            "gas_eur": vergelijking.get("zonneplan_gas_vandaag_eur"),
+            # v1.9.4: afronden. De rauwe Zonneplan-waarde heeft zeven
+            # decimalen (0,0466657 €), en dat is in een kostenoverzicht
+            # alleen maar ruis.
+            "gas_eur": round(gas, 2) if gas is not None else None,
         }
 
     @staticmethod
@@ -3182,6 +3250,40 @@ class EnergyManagementSystemCoordinator:
 
             overzicht[naam] = blok
         return overzicht
+
+    def _verwerk_pv_meterstand(self, meter_kwh: float) -> None:
+        """Leidt de dagopwek af uit de cumulatieve meterstand (v1.9.1).
+
+        Een meterstand hoort te stijgen. Daalt hij, dan is de omvormer
+        herstart of de teller teruggezet; het verschil is dan
+        betekenisloos en de dag wordt opnieuw geijkt in plaats van een
+        negatieve opwek te boeken.
+        """
+        self.pv_production_source = "meterstand"
+        if self._pv_energy_meter_day_start is None:
+            self._pv_energy_meter_day_start = meter_kwh
+            self._pv_energy_meter_last = meter_kwh
+            return
+
+        vorige = self._pv_energy_meter_last
+        if (
+            vorige is not None
+            and meter_kwh < vorige - PV_ENERGY_METER_RESET_TOLERANCE_KWH
+        ):
+            # Teller teruggezet: opnieuw ijken vanaf hier, en wat er tot
+            # nu toe stond behouden in plaats van weggooien.
+            self._pv_energy_meter_day_start = meter_kwh - (
+                self.pv_production_today_kwh
+            )
+        self._pv_energy_meter_last = meter_kwh
+        self.pv_production_today_kwh = round(
+            max(0.0, meter_kwh - self._pv_energy_meter_day_start), 3
+        )
+
+    def _reset_pv_energy_meter_day(self) -> None:
+        """Nieuwe dag: opnieuw ijken op de huidige meterstand
+        (v1.9.1)."""
+        self._pv_energy_meter_day_start = self._pv_energy_meter_last
 
     def _record_decision_log(self, now: datetime) -> None:
         """Legt elke tick het verloop vast (v1.9.0).
@@ -3291,12 +3393,58 @@ class EnergyManagementSystemCoordinator:
             "sensor_uitval_per_sensor": uitsplitsing.get("uitval_per_sensor"),
             "kosten": self._huidige_dagkosten(),
             "pv_kwh": round(self.pv_production_today_kwh, 2),
+            "pv_bron": self.pv_production_source,
             "verbruik_kwh": round(self.gross_consumption_today_kwh, 2),
             "netimport_kwh": round(self.grid_import_today_kwh, 2),
             "reserve_tekort_dagen": len(
                 [d for d in (self.reserve_shortfall_history or []) if d]
             ),
         }
+
+    def get_plausibility_warnings(self) -> list[dict]:
+        """Zoekt eigen waarden die fysiek onmogelijk zijn (v1.9.5).
+
+        Gevraagd of de diagnostiek zo was nagekeken dat er niets meer uit
+        te herleiden viel. Het eerlijke antwoord was nee: de export heeft
+        ~200 velden en er waren er handmatig veertig bekeken. Het
+        accu-rendement van 8290% viel pas op toen de HELE lijst werd
+        uitgeprint.
+
+        Zo'n fout hoort de integratie zelf te vinden. Een rendement boven
+        100%, een aandeel buiten 0-100, een negatieve energiehoeveelheid
+        waar dat niet kan - dat zijn geen ongebruikelijke waarden maar
+        onmogelijke, en die wijzen altijd op een rekenfout.
+
+        Bewust ruime grenzen: het doel is fouten vangen, niet
+        commentaar leveren op een uitzonderlijke dag.
+        """
+        waarschuwingen: list[dict] = []
+        for naam, waarde in sorted(vars(self).items()):
+            if naam.startswith("_") or isinstance(waarde, bool):
+                continue
+            if not isinstance(waarde, (int, float)):
+                continue
+            # De SPECIFIEKSTE regel wint: "_ratio_percent" gaat voor
+            # "_percent", anders zou een aandeel de ruime
+            # percentage-grenzen krijgen en glipt 8290% er alsnog door.
+            passend = [
+                regel for regel in PLAUSIBILITY_RULES if regel[0] in naam
+            ]
+            if not passend:
+                continue
+            fragment, minimum, maximum, omschrijving = max(
+                passend, key=lambda r: len(r[0])
+            )
+            if not minimum <= waarde <= maximum:
+                waarschuwingen.append(
+                    {
+                        "veld": naam,
+                        "waarde": waarde,
+                        "verwacht": f"{minimum} tot {maximum}",
+                        "soort": omschrijving,
+                    }
+                )
+        return waarschuwingen
 
     def get_solar_forecast_health(self) -> dict:
         """Klopt de zonvoorspelling nog, of is er iets veranderd aan de
@@ -3432,6 +3580,30 @@ class EnergyManagementSystemCoordinator:
             )
 
         # --- metingen ---
+        voeg_toe(
+            "Metingen",
+            "PV-dagopwek",
+            {
+                "niveau": (
+                    RELIABILITY_RELIABLE
+                    if self.pv_production_source == "meterstand"
+                    else RELIABILITY_INDICATIVE
+                ),
+                "reden": (
+                    "Uit de cumulatieve meterstand van de omvormer - telt "
+                    "ook tussen de metingen door."
+                    if self.pv_production_source == "meterstand"
+                    else (
+                        "Geïntegreerd uit het vermogen. Onderschat "
+                        "structureel, want pieken tussen twee metingen "
+                        "vallen weg. Stel een PV-energiemeter in kWh in "
+                        "bij Configureren voor een exacte waarde."
+                    )
+                ),
+            },
+            round(self.pv_production_today_kwh, 2),
+        )
+
         uitsplitsing = self.get_sensor_health_breakdown()
         voeg_toe(
             "Metingen",
@@ -3467,13 +3639,12 @@ class EnergyManagementSystemCoordinator:
             self.reliability_from_samples(
                 len(self.learned_efficiency_history or []), 5, 20, "laadcycli"
             ),
-            # LET OP: `learned_battery_efficiency_percent` geeft ondanks
-            # de naam een FRACTIE terug (0,85), geen percentage. Hier
-            # omgerekend voor de weergave; de naam zelf laat ik met rust
-            # omdat er op meerdere plekken op wordt gerekend.
-            round(self.learned_battery_efficiency_percent * 100, 1)
-            if self.learned_battery_efficiency_percent is not None
-            else None,
+            # v1.9.4: NIET omrekenen. In v1.3.0 stond hier een
+            # vermenigvuldiging met 100, op basis van een testwaarde van
+            # 0,85 - maar de eigenschap geeft wel degelijk een
+            # percentage. Het overzicht toonde daardoor 8290% terwijl
+            # `learning_health` in dezelfde export 82,9 meldde.
+            self.learned_battery_efficiency_percent,
         )
         voeg_toe(
             "Geleerde waarden",
@@ -6582,6 +6753,10 @@ class EnergyManagementSystemCoordinator:
         if self._self_sufficiency_day_key != today_key:
             self._self_sufficiency_day_key = today_key
             self.pv_production_today_kwh = 0.0
+            # v1.9.1: de meterstand loopt door over de dagwissel heen,
+            # dus het ijkpunt moet mee - anders telt de opwek van
+            # gisteren vanaf middernacht gewoon door.
+            self._reset_pv_energy_meter_day()
             self.pv_export_today_kwh = 0.0
             self.gross_consumption_today_kwh = 0.0
             self.grid_import_today_kwh = 0.0
@@ -6607,7 +6782,19 @@ class EnergyManagementSystemCoordinator:
         if gross_power_w is None:
             gross_power_w = p1_power_w
 
-        self.pv_production_today_kwh += (pv_power_w / 1000) * elapsed_hours
+        # v1.9.1: bij voorkeur uit de cumulatieve meterstand van de
+        # omvormer. Integreren onderschat structureel, want het neemt aan
+        # dat het vermogen tussen twee metingen constant was - terwijl de
+        # SolarEdge-sensor maar eens per 15-20 minuten bijwerkt en pieken
+        # daartussen dus wegvallen. De meterstand telt gewoon door.
+        meter_kwh = self._read_sensor_float(
+            self.config.get(CONF_PV_ENERGY_SENSOR)
+        )
+        if meter_kwh is not None:
+            self._verwerk_pv_meterstand(meter_kwh)
+        else:
+            self.pv_production_source = "geïntegreerd vermogen"
+            self.pv_production_today_kwh += (pv_power_w / 1000) * elapsed_hours
         self.pv_export_today_kwh += (
             max(0.0, -p1_power_w) / 1000
         ) * elapsed_hours
@@ -6618,14 +6805,30 @@ class EnergyManagementSystemCoordinator:
 
     @property
     def self_consumption_ratio_percent(self) -> float | None:
-        if self.pv_production_today_kwh <= 0:
+        """Welk deel van de opgewekte zon is zelf verbruikt? (v1.9.2)
+
+        Gemeld: "zelfconsumptie klopt niet -200". Bij deze installatie
+        stond hij op -244,6%, en dat is per definitie onmogelijk: een
+        aandeel ligt tussen 0 en 100%.
+
+        Oorzaak: `pv_export_today_kwh` telt ALLES wat de P1-meter het net
+        op ziet gaan. Bij een thuisaccu die 's ochtends verkoopt komt dat
+        deels uit de ACCU - energie die gisteren is geladen. De formule
+        nam aan dat alle export zon was, en zodra de export de dagopwek
+        overstijgt wordt de uitkomst negatief.
+
+        De zon die het net op gaat kan nooit meer zijn dan wat er die dag
+        is opgewekt; het meerdere komt uit de accu. Daarom wordt de
+        export daarop begrensd. Dat is geen truc om de uitkomst mooi te
+        maken maar de enige verdedigbare aanname zonder aparte meting per
+        bron: de accu kan niet meer zon exporteren dan er die dag scheen.
+        """
+        opwek = self.pv_production_today_kwh
+        if opwek <= 0:
             return None
-        return round(
-            100
-            * (self.pv_production_today_kwh - self.pv_export_today_kwh)
-            / self.pv_production_today_kwh,
-            1,
-        )
+        # Alleen het deel van de export dat ZON kan zijn geweest.
+        zon_export = min(self.pv_export_today_kwh, opwek)
+        return round(100 * (opwek - zon_export) / opwek, 1)
 
     @property
     def self_sufficiency_ratio_percent(self) -> float | None:
@@ -8599,6 +8802,11 @@ class EnergyManagementSystemCoordinator:
                 WATER_SOFTENER_NIGHT_WINDOW_START_HOUR
                 <= started_at.hour
                 < WATER_SOFTENER_NIGHT_WINDOW_END_HOUR
+                # v1.9.2: het tijdvenster alleen is geen bewijs - 's
+                # nachts wordt er ook doorgespoeld of een glas water
+                # getapt. Een regeneratie gebruikt ruim tien liter; dat
+                # volume is de onderscheidende eigenschap.
+                and (liters or 0) >= WATER_SOFTENER_MIN_LITERS
             )
             self.water_session_history.append(
                 {
@@ -10334,6 +10542,16 @@ class EnergyManagementSystemCoordinator:
                     "de marge."
                 )
 
+        # v1.9.5: een fysiek onmogelijke waarde is altijd een rekenfout
+        # en hoort niet stilzwijgend in een export te blijven staan.
+        for waarschuwing in self.get_plausibility_warnings():
+            aandachtspunten.append(
+                f"Onmogelijke waarde: {waarschuwing['veld']} = "
+                f"{waarschuwing['waarde']} ({waarschuwing['soort']}, "
+                f"verwacht {waarschuwing['verwacht']}). Dit wijst op een "
+                "rekenfout in de integratie."
+            )
+
         possibly_defective = [
             device.get("friendly_name") or entity_id
             for entity_id, device in self.nilm_confirmed_devices.items()
@@ -10440,12 +10658,31 @@ class EnergyManagementSystemCoordinator:
         # gemiddelde weinig. Informatief - het is geen storing van deze
         # integratie, maar wel de verklaring als de gerapporteerde
         # bewolking niet klopt met wat je buiten ziet.
-        vergelijking = self.get_weather_source_reliability().get("_vergelijking")
-        if vergelijking and vergelijking["verschil_procentpunt"] >= 20:
-            informatief.append(
-                f"Weerbronnen verschillen structureel in betrouwbaarheid: "
-                f"{vergelijking['advies']}"
+        # v1.9.2: ook melden als de bronnen VERGELIJKBAAR presteren. Een
+        # sterke indruk op basis van losse momenten ("die ene zit er
+        # altijd naast") verdient een cijfer om tegen te houden, niet
+        # alleen wanneer er een verschil is. Zonder die regel is stilte
+        # dubbelzinnig: geen verschil, of nog niet genoeg gemeten?
+        bronnen = self.get_weather_source_reliability()
+        vergelijking = bronnen.get("_vergelijking")
+        if vergelijking:
+            percentages = ", ".join(
+                f"{eid}: {g['overeenstemming_percent']}%"
+                for eid, g in bronnen.items()
+                if not eid.startswith("_")
+                and g.get("overeenstemming_percent") is not None
             )
+            if vergelijking["verschil_procentpunt"] >= 20:
+                informatief.append(
+                    "Weerbronnen verschillen structureel in betrouwbaarheid "
+                    f"({percentages}). {vergelijking['advies']}"
+                )
+            else:
+                informatief.append(
+                    f"Weerbronnen presteren vergelijkbaar ({percentages}) - "
+                    "een groot verschil op één moment zegt dus weinig over "
+                    "welke bron beter is."
+                )
 
         spreiding = self.weather_ensemble_spread_percent
         if spreiding is not None and spreiding >= WEATHER_ENSEMBLE_SPREAD_ATTENTION_PERCENT:

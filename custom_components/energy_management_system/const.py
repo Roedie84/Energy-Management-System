@@ -1947,3 +1947,93 @@ COST_TREND_MIN_EUR = 0.20
 # bezwaar is.
 DECISION_LOG_LENGTH = 600          # ~2 dagen bij een tick van 5 minuten
 DAILY_REPORT_HISTORY_DAYS = 30
+
+# --- PV-opwek uit de meterstand (v1.9.1) -----------------------------
+# Gemeld: "Dagrapport geeft aan opwek 12.9 kWh terwijl mijn PV
+# installatie zegt 13.5 kWh" - 4,4% verschil, te veel voor ruis.
+#
+# Oorzaak: de dagopwek werd geINTEGREERD uit het vermogen (vermogen x
+# tijd, elke tick). Dat neemt aan dat het vermogen tussen twee metingen
+# constant was. De SolarEdge-vermogenssensor werkt maar eens per 15-20
+# minuten bij (blijkt uit het meetfrequentie-rapport), dus een
+# verouderde waarde wordt over drie ticks bevroren - en pieken tussen de
+# metingen door vallen weg. De omvormer meet continu en telt ze wél mee,
+# vandaar de structurele onderschatting.
+#
+# Oplossing: als er een cumulatieve energiemeter beschikbaar is, het
+# DAGVERSCHIL daarvan gebruiken. Die telt tussen onze metingen door
+# gewoon door. Integreren blijft de terugval voor wie zo'n meter niet
+# heeft.
+CONF_PV_ENERGY_SENSOR = "pv_energy_sensor_entity"
+
+# Een meterstand hoort te stijgen. Daalt hij, dan is de omvormer
+# herstart of de teller teruggezet; dan is het verschil betekenisloos en
+# wordt de dag opnieuw geijkt in plaats van een negatieve opwek te
+# boeken.
+PV_ENERGY_METER_RESET_TOLERANCE_KWH = 0.01
+
+# Minimaal volume voordat een nachtelijk gebruiksmoment een regeneratie
+# van de waterontharder kan zijn (v1.9.2).
+#
+# Gemeld: "Was geen regeneratie van die zie ruim >10 liter zijn." Een
+# moment van 3,1 liter om 00:28 werd als regeneratie aangemerkt, puur
+# omdat het binnen het nachtvenster viel. Maar 's nachts wordt er ook
+# gewoon doorgespoeld of een glas water getapt, en dat is geen
+# regeneratie.
+#
+# Het tijdvenster alleen is dus geen bewijs; het volume is de
+# onderscheidende eigenschap. Bewust op 10 liter: dat is de ondergrens
+# die de gebruiker uit ervaring noemde, en ruim boven normaal nachtelijk
+# gebruik.
+WATER_SOFTENER_MIN_LITERS = 10.0
+
+# Hoe lang na middernacht de kostenvergelijking wordt overgeslagen
+# (v1.9.3). Gemeld: om 00:02 kwam "eigen berekening is 1,53 € hoger dan
+# Zonneplan", en om 00:04 alweer "klopt weer".
+#
+# Geen rekenfout: onze dagteller springt om 00:00 naar nul, die van
+# Zonneplan een paar minuten later. Zolang de twee niet gelijk staan is
+# elke vergelijking betekenisloos - en een melding die zichzelf binnen
+# twee minuten intrekt, leert je meldingen te negeren.
+#
+# Ruim genomen, want de kostensensor werkt maar ongeveer per uur bij.
+ZONNEPLAN_ROLLOVER_GRACE_MINUTES = 30
+
+# Hoeveel tekort er moet zijn voordat "accu haalt de nacht niet" afgaat
+# (v1.9.3). In één nacht ging die melding zeven keer af, telkens gevolgd
+# door "haalt de nacht weer" binnen enkele minuten. De tekorten:
+# 0,21 - 0,03 - 0,01 - 0,09 - 0,03 - 0,06 kWh. Vijf van de zes binnen 1%
+# van de drempel.
+#
+# Dat is geen waarschuwing maar geruis rond een grens. De schatting van
+# de overbruggingsbehoefte heeft zelf een onnauwkeurigheid van enkele
+# procenten, dus een tekort van 0,01 kWh zegt niets. Er moet een echt
+# gat zijn voordat het het melden waard is - en de accu laadt sowieso
+# bij als het nodig is, dus de melding is informatief en niet urgent.
+BATTERY_NIGHT_SHORTFALL_MIN_KWH = 0.5
+BATTERY_NIGHT_SHORTFALL_MIN_FRACTION = 0.10
+
+# --- Plausibiliteitsscan op de eigen waarden (v1.9.5) ----------------
+# Gevraagd: "Heb je de diagnostiek nu zo goed nagekeken dat daar niets
+# meer uit te herleiden valt?" Eerlijke antwoord: nee. De export heeft
+# ~200 velden en er zijn er handmatig veertig echt bekeken.
+#
+# Het rendement van 8290% viel pas op toen de HELE lijst werd uitgeprint
+# in plaats van alleen de statussen. Zo'n fout - een getal dat fysiek
+# onmogelijk is - hoort de integratie zelf te vinden, niet iemand die
+# toevallig goed kijkt.
+#
+# Per veldsoort een bereik dat niet overschreden KAN worden zonder dat er
+# iets mis is. Bewust ruim: het gaat om onmogelijke waarden, niet om
+# ongebruikelijke.
+PLAUSIBILITY_RULES = (
+    # (naamfragment, minimum, maximum, omschrijving)
+    ("_percent", -100.0, 200.0, "percentage"),
+    ("_procent", -100.0, 200.0, "percentage"),
+    ("_ratio_percent", 0.0, 100.0, "aandeel"),
+    ("efficiency_percent", 0.0, 100.0, "rendement"),
+    ("_soc_percent", 0.0, 100.0, "laadtoestand"),
+    ("_kwh", -1000.0, 10000.0, "energie"),
+    ("_eur", -100000.0, 100000.0, "bedrag"),
+    ("_w", -100000.0, 100000.0, "vermogen"),
+)

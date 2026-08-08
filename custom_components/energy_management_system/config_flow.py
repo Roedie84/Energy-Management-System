@@ -36,6 +36,7 @@ from .const import (
     CONF_SLAAPKAMER_CLIMATE_ENTITY,
     CONF_BATTERY_COOLING_FAN_SWITCH,
     CONF_PV_ACTUAL_AZIMUTH_DEGREES,
+    CONF_PV_ENERGY_SENSOR,
     CONF_PV_ACTUAL_TILT_DEGREES,
     CONF_SUN_ELEVATION_SENSOR,
     CONF_SUN_PHASE_SENSOR,
@@ -357,6 +358,10 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
             # getalvelden in deze flow hebben allemaal een concrete
             # standaard en lopen daar dus niet tegenaan. De waarde wordt
             # in `_validate_input` gecontroleerd en omgezet.
+            vol.Optional(
+                CONF_PV_ENERGY_SENSOR,
+                default=defaults.get(CONF_PV_ENERGY_SENSOR),
+            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
             vol.Optional(
                 CONF_PV_ACTUAL_AZIMUTH_DEGREES,
                 default=defaults.get(CONF_PV_ACTUAL_AZIMUTH_DEGREES, ""),

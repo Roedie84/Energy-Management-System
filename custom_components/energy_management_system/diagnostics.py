@@ -329,6 +329,7 @@ async def async_get_config_entry_diagnostics(
             "daily_report_history": coordinator.daily_report_history,
             "energy_cost_overview": coordinator.get_energy_cost_overview(),
             "daily_cost_history": coordinator.daily_cost_history,
+            "plausibility_warnings": coordinator.get_plausibility_warnings(),
             "sensor_health_breakdown": coordinator.get_sensor_health_breakdown(),
             "zonneplan_cost_comparison": (
                 coordinator.get_zonneplan_cost_comparison()
