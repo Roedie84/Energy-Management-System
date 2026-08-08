@@ -9497,3 +9497,34 @@ opvolgen waard.
 plaats van de exacte formulering.
 
 **Volledige testsuite**: 1334 tests, allemaal groen.
+
+## v1.15.0 — Gezondheidsoordeel verdween na een herstart
+
+**Gevraagd**: volledige analyse van een verse export (v1.14.9).
+
+**De vondst**: `sensor_health_score` en `measurement_quality` stonden op
+None terwijl de foutreeks van twintig metingen wél was hersteld. De reeks
+wordt bewaard, het daaruit afgeleide oordeel niet - en dat werd alleen
+berekend bij een NIEUWE meting. Na een herstart was er dus wel data maar
+geen oordeel, en verdween het aandachtspunt terwijl het probleem
+doorliep: de melding weg, het probleem niet.
+
+Het oordeel wordt nu herberekend uit de reeks zodra de opgeslagen
+toestand is geladen. Herberekenen in plaats van bewaren, zodat het nooit
+uit de pas kan lopen met de gegevens waarop het rust.
+
+**Verder in orde**: de correctie uit v1.14.9 werkt (geen
+zelftegensprekende meldingen), vijf leercheks op OK, accu-rendement
+86,9%, Zonneplan-vergelijking op 10 cent, zelfconsumptie 74,4%,
+zelfvoorziening 95,2%. De stilstaande-reeks-detectie vindt nu wél de
+ruststroom van de steelstofzuiger.
+
+**Twee observaties, geen fouten**: vandaag kostte de accu 47 cent (met
+-0,61 €, zonder -1,08 €) terwijl de maand 52 cent voordeel laat zien - op
+een dag met 15,5 kWh opwek kan opslaan ongunstiger zijn dan terugleveren.
+En de PV-energiemeter is nog niet ingesteld, dus de dagopwek wordt nog
+geïntegreerd.
+
+**Getest**: vier tests erbij in `test_sensor_health_breakdown.py`.
+
+**Volledige testsuite**: 1338 tests, allemaal groen.

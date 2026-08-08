@@ -8876,6 +8876,43 @@ class EnergyManagementSystemCoordinator:
             "hoofdoorzaak": hoofdoorzaak,
         }
 
+    def _recompute_measurement_quality(self) -> None:
+        """Herberekent score en label uit de bestaande foutreeks
+        (v1.15.0).
+
+        Gemeld in een export: `sensor_health_score` en
+        `measurement_quality` stonden op None terwijl de foutreeks van
+        twintig metingen wél was hersteld. De reeks wordt bewaard, het
+        daaruit afgeleide oordeel niet - en dat werd alleen berekend bij
+        een NIEUWE meting.
+
+        Gevolg: na een herstart was er wel data maar geen oordeel, en
+        verdween het aandachtspunt over de sensor-gezondheid ten
+        onrechte. Precies het omgekeerde van wat je wilt: het probleem
+        bleef bestaan, alleen de melding niet.
+
+        Het oordeel bewaren zou ook kunnen, maar herberekenen is beter:
+        dan kan het nooit uit de pas lopen met de reeks waarop het rust.
+        """
+        historie = self.energy_balance_error_history
+        total = len(historie)
+        if total < MEASUREMENT_QUALITY_MIN_SAMPLES:
+            self.sensor_health_score = None
+            self.measurement_quality = None
+            return
+        good = sum(
+            1
+            for x in historie
+            if x is not None and x <= ENERGY_BALANCE_ERROR_BAD_THRESHOLD_W
+        )
+        self.sensor_health_score = round(100 * good / total, 1)
+        if self.sensor_health_score >= MEASUREMENT_QUALITY_GOOD_THRESHOLD:
+            self.measurement_quality = "goed"
+        elif self.sensor_health_score >= MEASUREMENT_QUALITY_DEGRADED_THRESHOLD:
+            self.measurement_quality = "verminderd"
+        else:
+            self.measurement_quality = "slecht"
+
     def _record_balance_sample(self, abs_error_w: float | None) -> None:
         """Append one sample (or None for a missing-sensor tick) to the
         rolling window and recompute the health score/quality label.
@@ -10771,6 +10808,11 @@ class EnergyManagementSystemCoordinator:
             return
         stored = await self._state_store.async_load()
         self._state_store_loaded = True
+        # v1.15.0: het oordeel over de meetkwaliteit volgt uit de
+        # herstelde foutreeks. Zonder deze aanroep blijft het None tot
+        # de eerste nieuwe meting, en verdwijnt het aandachtspunt na een
+        # herstart terwijl het probleem gewoon doorloopt.
+        self._recompute_measurement_quality()
         if isinstance(stored, dict):
             self._apply_persisted_state(stored)
         self._discard_history_from_an_older_method()

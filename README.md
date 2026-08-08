@@ -515,6 +515,57 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Gezondheidsoordeel verdween na een herstart (v1.15.0)
+
+**Gevraagd**: een volledige analyse van een verse export (v1.14.9).
+
+### De vondst
+
+`sensor_health_score` en `measurement_quality` stonden op **None**,
+terwijl de foutreeks van twintig metingen wél was hersteld — en de
+uitsplitsing daaruit gewoon 78,6% nauwkeurigheid berekende.
+
+De oorzaak: de **reeks** wordt bewaard, het daaruit afgeleide **oordeel**
+niet. En dat werd alleen berekend bij een *nieuwe* meting.
+
+Gevolg: na een herstart was er wel data maar geen oordeel, en verdween
+het aandachtspunt over de sensor-gezondheid uit de lijst — terwijl het
+probleem gewoon doorliep. Precies het omgekeerde van wat je wilt: de
+melding weg, het probleem niet.
+
+Het oordeel wordt nu herberekend uit de reeks zodra de opgeslagen
+toestand is geladen. Herberekenen in plaats van bewaren, want dan kan het
+nooit uit de pas lopen met de gegevens waarop het rust.
+
+### Wat er verder in orde is
+
+De correctie uit v1.14.9 werkt: geen zelftegensprekende meldingen meer.
+Alle vijf leercheks op OK, accu-rendement inmiddels 86,9%. De
+Zonneplan-vergelijking op 10 cent verschil, zelfconsumptie 74,4%,
+zelfvoorziening 95,2%. De stilstaande-reeks-detectie vindt nu wél de
+ruststroom van de steelstofzuiger — en merkt terecht op dat een constante
+daar te verwachten is.
+
+### Twee observaties, geen fouten
+
+**Vandaag kostte de accu geld.** Met accu −0,61 €, zonder accu zou het
+−1,08 € zijn geweest: 47 cent nadeel. Op een dag met 15,5 kWh opwek kan
+opslaan ongunstiger uitpakken dan direct terugleveren. Over de maand
+staat het wél positief: −3,96 tegen −3,44, dus 52 cent voordeel.
+
+**De PV-energiemeter is nog niet ingesteld.** `pv_production_source`
+staat op "geïntegreerd vermogen", wat structureel onderschat. Het veld
+staat klaar bij Configureren.
+
+### Getest
+
+Vier tests erbij: het oordeel wordt herberekend uit de geschiedenis, het
+aandachtspunt komt terug na een herstart, te weinig metingen geeft nog
+steeds geen oordeel, en de herberekening draait daadwerkelijk na het
+laden.
+
+**Volledige testsuite**: 1338 tests, allemaal groen.
+
 ## Volledige analyse vóór installatie (v1.14.9)
 
 **Gevraagd**: een volledige analyse voor het installeren.
