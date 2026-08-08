@@ -164,14 +164,19 @@ def test_learned_efficiency_reports_its_maturity(make_coordinator, hass):
     """Het rendement rekent mee in de extra-dip-laadbeslissing, maar liet
     nergens zien of het op zeven of op zeventig metingen rustte."""
     c = make_coordinator({})
-    c.learned_efficiency_history = [0.85] * 8
+    # v1.9.4: `learned_battery_efficiency_percent` geeft een PERCENTAGE,
+    # geen fractie. Deze test gebruikte 0,85 als geschiedenis en
+    # verwachtte 85.0 terug - waaruit ik in v1.3.0 ten onrechte
+    # concludeerde dat er x100 moest. In een echte export stond daardoor
+    # 8290% waar `learning_health` 82,9 meldde.
+    c.learned_efficiency_history = [82.9] * 8
 
     rij = next(
         r for r in c.get_reliability_overview() if r["naam"] == "Accu-rendement"
     )
 
     assert rij["niveau"] == RELIABILITY_INDICATIVE
-    assert rij["waarde"] == 85.0
+    assert rij["waarde"] == 82.9
 
 
 def test_every_row_has_a_readable_label(make_coordinator, hass):
