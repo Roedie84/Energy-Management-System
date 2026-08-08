@@ -8959,3 +8959,26 @@ plaats van de eerste te overschrijven - de nieuwe test ving dat.
 **Getest**: drie tests erbij in `test_compact_dashboard.py`.
 
 **Volledige testsuite**: 1256 tests, allemaal groen.
+
+## v1.12.2 — Van tien naar zeven tabbladen
+
+**Gemeld**: sommige tabbladen zijn na het opruimen zo leeg dat ze beter
+samengevoegd kunnen worden, met een titel die aangeeft wat ze tonen.
+
+**Nieuw tabblad "Systeem"** uit Accumodules (1 kaart), Apparaten (1),
+Zelflerend (1) en Klimaat & water (2). Elk onderwerp krijgt een kop met
+ondertitel die zegt wat je ziet - zonder tabbladnaam is dat anders niet
+meer af te leiden.
+
+**Stand**: Overzicht 24, Meldingen 26, Financieel 13, Systeem 9, Verloop
+8, Kwaliteit 5, Visueel 1. Van vijftien tabbladen en 145 kaarten naar
+zeven en 86.
+
+**Nu bewaakt**: geen tabblad houdt minder dan drie kaarten over (Visueel
+uitgezonderd - één schermvullende plattegrond), elk onderwerp op Systeem
+heeft een kop, en elke kop heeft een ondertitel. Die eerste voorkomt dat
+een volgende opruimronde opnieuw lege tabbladen achterlaat.
+
+**Getest**: drie tests erbij in `test_compact_dashboard.py`.
+
+**Volledige testsuite**: 1256 tests, allemaal groen.

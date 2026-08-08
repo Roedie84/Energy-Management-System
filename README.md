@@ -515,6 +515,59 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Van tien naar zeven tabbladen (v1.12.2)
+
+**Gemeld**: *"Sommige tabbladen zijn nu zo leeg dat het beter is deze
+samen te voegen op 1 tabblad, en dan met een titel aangeven wat deze
+toont."*
+
+Terecht — het opruimen van v1.12.0 was zo grondig dat er tabbladen
+overbleven met één kaart. Ernaartoe klikken om één regel te lezen kost
+meer aandacht dan het oplevert.
+
+### Nieuw tabblad "Systeem"
+
+| Samengevoegd | Had |
+|---|---|
+| Accumodules | 1 kaart |
+| Apparaten | 1 kaart |
+| Zelflerend | 1 kaart |
+| Klimaat & water | 2 kaarten |
+
+Elk onderwerp krijgt een kop die zegt **wat je ziet** — zonder
+tabbladnaam is dat anders niet meer af te leiden:
+
+- *Accumodules — celspreiding en onderlinge afwijking*
+- *Apparaten — herkende huishoudapparaten en hun verbruik*
+- *Zelflerend — waarden die de integratie zelf leert*
+- *Klimaat & water — woonkamertemperatuur en waterverbruik*
+
+### De stand
+
+| Tabblad | Kaarten |
+|---|---|
+| Overzicht | 24 |
+| Meldingen | 26 |
+| Financieel | 13 |
+| Systeem | 9 |
+| Verloop | 8 |
+| Kwaliteit | 5 |
+| Visueel | 1 |
+
+Van vijftien tabbladen en 145 kaarten naar **zeven en 86**.
+
+### Nu bewaakt
+
+Drie tests erbij: geen tabblad houdt minder dan drie kaarten over
+(Visueel uitgezonderd, dat is één schermvullende plattegrond), elk
+onderwerp op Systeem heeft een eigen kop, en elke kop heeft een
+ondertitel die uitlegt wat je ziet.
+
+Die eerste voorkomt dat een volgende opruimronde opnieuw lege tabbladen
+achterlaat — precies wat er nu gebeurde.
+
+**Volledige testsuite**: 1256 tests, allemaal groen.
+
 ## Overzicht past nu op één scherm (v1.12.1)
 
 **Gemeld**: *"Tevens het overzichts dashboard herzien: Ik wil eigenlijk
