@@ -174,15 +174,18 @@ def test_the_overview_has_little_prose():
     assert tekens < 1600, f"{tekens} tekens tekst op de landingspagina"
 
 
-def test_the_attention_card_is_a_count_not_a_wall():
-    """De aandachtspunten stonden volledig uitgeschreven; nu een telling
-    met een verwijzing. De inhoud zelf komt als melding binnen - dat was
-    het uitgangspunt."""
+def test_the_attention_points_are_readable_on_the_overview():
+    """v1.14.5, gemeld: "Ik wil toch weer meer informatie op de
+    dashboard... Ik mis teveel om nu goed te kunnen beoordelen."
+
+    In v1.12.1 werden de aandachtspunten teruggebracht tot een telling.
+    Dat bleek te ver: een getal zegt niet WAT er aan de hand is, dus moest
+    je alsnog doorklikken om te weten of er iets van je verwacht werd.
+
+    Ze staan nu weer uitgeschreven, met de informatieve regels erbij en
+    de doorklik naar de details intact.
+    """
     overzicht = next(v for v in _views() if v["title"] == "Overzicht")
-    # v1.12.3: het is een template-card geworden in plaats van markdown,
-    # zodat hij aanklikbaar is - de tekst verwees naar "de statuskaart"
-    # terwijl die in v1.12.1 was weggehaald. De inhoud zit nu in
-    # `primary`/`secondary` in plaats van in `content`.
     kaarten = [
         k
         for sectie in overzicht["sections"]
@@ -191,16 +194,10 @@ def test_the_attention_card_is_a_count_not_a_wall():
     ]
 
     assert kaarten, "geen aandachtspunten-kaart gevonden"
-    for kaart in kaarten:
-        plat = str(kaart)
-        assert "for punt in punten" not in plat
-        assert "aandachtspunt(en)" in plat
-        # v1.12.7: navigeert naar de detailpagina in plaats van
-        # more-info te openen. Home Assistant toont in more-info alleen
-        # geschiedenis en logboek - geen attributen - dus "tik voor
-        # details" leverde niets op.
-        assert kaart.get("tap_action", {}).get("action") == "navigate"
-        assert "details" in kaart["tap_action"]["navigation_path"]
+    uitgeschreven = [k for k in kaarten if "for punt in p" in str(k)]
+    assert uitgeschreven, "de punten staan niet uitgeschreven"
+    assert any("informatief" in str(k) for k in uitgeschreven)
+
 
 
 def test_the_overview_has_no_detail_sections():
@@ -297,7 +294,11 @@ def test_no_tab_is_a_wall_of_text():
         if view["title"] == "Meldingen":
             continue
         tekens = sum(len(k.get("content") or "") for k in _kaarten(view))
-        assert tekens < 800, f"{view['title']}: {tekens} tekens tekst"
+        # v1.14.5: van 800 naar 1400. Bewust ruimer: met alleen
+        # samenvattingen viel er te weinig te beoordelen. De grens blijft
+        # bestaan zodat een tabblad niet opnieuw een muur tekst wordt -
+        # het gaat om genoeg, niet om alles.
+        assert tekens < 1400, f"{view['title']}: {tekens} tekens tekst"
 
 
 def test_the_financial_tab_uses_tiles_not_tables():
@@ -351,3 +352,47 @@ def test_no_section_is_only_a_heading():
                 and "title-card" not in str(k.get("type"))
             ]
             assert inhoud, f"{view['title']}: sectie zonder inhoud"
+
+
+def test_the_overview_shows_a_status_per_topic():
+    """v1.14.5: de statuszinnen stonden op vier verschillende verborgen
+    tabbladen, waardoor je moest klikken om te weten óf er iets aan de
+    hand was - precies de verkeerde kant op. De conclusie hoort op het
+    beginscherm, het detail achter een tik."""
+    overzicht = next(v for v in _views() if v["title"] == "Overzicht")
+    kaarten = [
+        k for sectie in overzicht["sections"] for k in sectie.get("cards") or []
+    ]
+
+    koppen = [k.get("heading") for k in kaarten if k.get("type") == "heading"]
+    assert "Status per onderwerp" in koppen
+
+    onderwerpen = {
+        "accumodules",
+        "apparaten",
+        "zelflerend",
+        "financieel",
+        "klimaat",
+        "water",
+        "kwaliteit",
+    }
+    for onderwerp in onderwerpen:
+        assert any(
+            f"'{onderwerp}'" in str(k) and "samenvattingen" in str(k)
+            for k in kaarten
+        ), onderwerp
+
+
+def test_the_status_tiles_still_drill_down():
+    """Meer informatie op het beginscherm mag de doorklik niet
+    vervangen: de zin is de conclusie, de onderbouwing blijft één tik
+    weg."""
+    overzicht = next(v for v in _views() if v["title"] == "Overzicht")
+
+    for sectie in overzicht["sections"]:
+        for kaart in sectie.get("cards") or []:
+            if "samenvattingen" not in str(kaart):
+                continue
+            actie = kaart.get("tap_action") or {}
+            assert actie.get("action") == "navigate", kaart.get("primary")
+            assert actie.get("navigation_path", "").endswith("/details")

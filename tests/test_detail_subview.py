@@ -56,7 +56,10 @@ def test_only_the_overview_is_in_the_tab_bar():
 def test_it_contains_the_removed_tables():
     """Het opruimen mocht geen informatie kosten, alleen ruimte."""
     detail = _detail()
-    titels = {k.get("title") for k in detail["cards"]}
+    kaarten = list(detail.get("cards") or [])
+    for sectie in detail.get("sections") or []:
+        kaarten += sectie.get("cards") or []
+    titels = {k.get("title") for k in kaarten}
 
     for onderdeel in (
         "Aandachtspunten",
@@ -72,7 +75,10 @@ def test_it_contains_the_removed_tables():
 def test_the_attention_points_are_listed_in_full():
     """Op Overzicht staat alleen een telling; hier hoort de hele lijst."""
     detail = _detail()
-    kaart = next(k for k in detail["cards"] if k.get("title") == "Aandachtspunten")
+    kaarten = list(detail.get("cards") or [])
+    for sectie in detail.get("sections") or []:
+        kaarten += sectie.get("cards") or []
+    kaart = next(k for k in kaarten if k.get("title") == "Aandachtspunten")
 
     assert "for punt in p" in kaart["content"]
     assert "informatief" in kaart["content"]

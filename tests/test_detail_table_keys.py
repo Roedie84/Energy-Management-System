@@ -24,7 +24,10 @@ PAKKET = Path(pkg.__file__).parent
 def _detailkaarten():
     data = yaml.safe_load((PAKKET / "dashboard_template.yaml").read_text())
     detail = next(v for v in data["views"] if v["title"] == "Details")
-    return detail["cards"]
+    kaarten = list(detail.get("cards") or [])
+    for sectie in detail.get("sections") or []:
+        kaarten += sectie.get("cards") or []
+    return kaarten
 
 
 def _sleutels_uit(inhoud: str) -> set[str]:
@@ -101,3 +104,50 @@ def test_the_device_table_says_how_many_there_are():
     )
 
     assert "totaal_aantal" in kaart["content"]
+
+
+# --- v1.14.4: leesbaar bij elke breedte -----------------------------
+
+
+def test_the_detail_page_is_one_column():
+    """Gemeld: "uitlijning niet goed" - met een screenshot waarop de
+    betrouwbaarheidstabel afbrak op "Ni…" waar "Niveau" hoort te staan.
+
+    De pagina stond in masonry, waardoor brede tabellen in een smalle
+    kolom werden geperst. Eén kolom geeft elke tabel de volle breedte.
+    """
+    data = yaml.safe_load((PAKKET / "dashboard_template.yaml").read_text())
+    detail = next(v for v in data["views"] if v["title"] == "Details")
+
+    assert detail.get("type") == "sections"
+    assert detail.get("max_columns") == 1
+
+
+def test_no_detail_table_has_more_than_three_columns():
+    """Vier kolommen passen niet op een telefoon. De
+    betrouwbaarheidslijst is daarom een gegroepeerde opsomming geworden
+    in plaats van een tabel."""
+    for kaart in _detailkaarten():
+        inhoud = kaart.get("content") or ""
+        for regel in inhoud.splitlines():
+            kaal = regel.strip()
+            if not kaal.startswith("|") or "---" in kaal:
+                continue
+            kolommen = kaal.count("|") - 1
+            assert kolommen <= 3, (
+                f"{kaart.get('title')}: {kolommen} kolommen - past niet op "
+                "een smal scherm"
+            )
+
+
+def test_the_reliability_list_still_shows_everything():
+    """Het omzetten van tabel naar lijst mag geen informatie kosten."""
+    kaart = next(
+        k
+        for k in _detailkaarten()
+        if k.get("title") == "Betrouwbaarheid per grootheid"
+    )
+    inhoud = kaart["content"]
+
+    for veld in ("groep", "label", "naam", "waarde", "reden"):
+        assert f"'{veld}'" in inhoud, veld
