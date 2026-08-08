@@ -177,3 +177,58 @@ def test_the_night_consumption_uses_watt():
 
     assert "' W'" in kaart
     assert "kW" not in kaart
+
+
+# --- v1.15.6: sensoren van vóór de apparaatnaam ---------------------
+
+# Deze entiteiten zijn aangemaakt voordat het apparaat "Woonkamer" heette.
+# Home Assistant legt de entity_id vast bij de EERSTE aanmaak, dus ze
+# missen dat voorvoegsel - te zien in een dashboard van v0.63.114.
+#
+# Bewust een expliciete lijst: wie hier iets aan toevoegt moet kunnen
+# aantonen dat de entiteit echt zonder voorvoegsel bestaat, in plaats van
+# dat het een typefout verbergt.
+ZONDER_VOORVOEGSEL = {
+    "battery_protection",
+    "cheapest_block_start",
+    "discharge_window_start",
+    "effective_expensive_quarters",
+    "energy_bridge_check",
+    "expected_operation_mode",
+    "last_decision_reason",
+    "learned_night_consumption",
+    "pv_forecast_accuracy",
+    "simulated_action",
+    "upcoming_schedule",
+}
+
+
+def test_the_old_sensors_have_no_device_prefix():
+    """Gemeld met screenshot: zeven kaarten onder "Beslissing en
+    planning" toonden "Entiteit niet gevonden".
+
+    Ik had de entity_id's afgeleid uit de weergavenaam met het
+    `woonkamer_`-voorvoegsel ervoor. Maar deze sensoren bestaan al langer
+    dan die apparaatnaam, en hun entity_id is bij de eerste aanmaak
+    vastgelegd zonder dat voorvoegsel.
+    """
+    yaml_tekst = (PAKKET / "dashboard_template.yaml").read_text()
+
+    fout = sorted(
+        eid
+        for eid in ZONDER_VOORVOEGSEL
+        if f"sensor.woonkamer_energy_management_system_{eid}" in yaml_tekst
+    )
+
+    assert not fout, (
+        f"deze sensoren bestaan zonder `woonkamer_`-voorvoegsel: {fout}"
+    )
+
+
+def test_they_are_actually_referenced():
+    """De correctie moet de kaarten ook echt bereiken; anders staan er
+    straks geen fouten maar ook geen gegevens."""
+    yaml_tekst = (PAKKET / "dashboard_template.yaml").read_text()
+
+    for eid in ("last_decision_reason", "upcoming_schedule", "battery_protection"):
+        assert f"sensor.energy_management_system_{eid}" in yaml_tekst, eid
