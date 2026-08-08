@@ -3700,6 +3700,8 @@ class GacsAssessmentSensor(SensorEntity):
     @property
     def extra_state_attributes(self) -> dict:
         return {
+            # v1.12.0: één zin per onderwerp voor de compacte tabbladen.
+            "samenvattingen": self._coordinator.get_topic_summaries(),
             **self._coordinator.get_gacs_assessment(),
             "note": (
                 "De vier eisen komen uit het Besluit Bouwwerken "

@@ -515,6 +515,256 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Overzicht past nu op één scherm (v1.12.1)
+
+**Gemeld**: *"Tevens het overzichts dashboard herzien: Ik wil eigenlijk
+niet hoeven scrollen. Het info veld bijvoorbeeld, mag nu wel weg, omdat
+de info nu bekend is."*
+
+De screenshot liet zien wat het probleem was: de aandachtspunten-kaart
+was uitgegroeid tot een blok van vijftien regels waarin vijf apparaten,
+twee weerbronnen en een waterverklaring achter elkaar stonden.
+
+### Van 31 naar 24 kaarten, van ~2700 naar 751 tekens
+
+| Weg | Waarom |
+|---|---|
+| Uitleg over de kwartiertelling | die uitleg is inmiddels bekend |
+| Lang statusblok (1234 tekens) | herhaalde wat de tegels ernaast al tonen |
+| Aandachtspunten uitgeschreven | nu een telling; de inhoud komt als melding |
+| Sectie "Kernbeslissing (detail)" | uitklaplijst met onderliggende sensoren |
+| Sectie "Advies-modules (detail)" | idem |
+
+De aandachtspunten-kaart is nu één regel: *"⚠️ 3 aandachtspunt(en) —
+hiervan krijg je een melding. Tik op de statuskaart voor de details."*
+
+Dat sluit aan bij wat je eerder aangaf: liever een melding bij een
+probleem dan een muur informatie die je moet doorlezen.
+
+### Wat bleef
+
+De tegels met accustand, rendement, netstroom, prijs en modus — dat is
+waar je op een landingspagina naar kijkt. En de besturingssectie met de
+schakelaars, want dat is het enige tabblad waar je iets *doet*.
+
+### Twee keer misgegaan onderweg
+
+Mijn eerste knip liep één regel te ver door, waardoor twee secties
+samenvloeiden. Hersteld uit de laatst opgeleverde zip en opnieuw gedaan,
+ditmaal met de inspringing als grens in plaats van een tekstpatroon.
+
+En mijn vervanging van de aandachtspunten-kaart voegde een tweede kaart
+toe in plaats van de eerste te overschrijven — de nieuwe test vond die
+meteen.
+
+### Getest
+
+Drie tests erbij: de landingspagina heeft minder dan 1600 tekens tekst,
+de aandachtspunten-kaart is een telling en geen uitgeschreven lijst, en
+er staan geen detailsecties meer op.
+
+**Volledige testsuite**: 1256 tests, allemaal groen.
+
+## Dashboards opgeruimd: conclusie in plaats van tabel (v1.12.0)
+
+**Gemeld**: *"Ik vind de dashboards veel te druk, het is zoveel dat het
+niet meer overzichtelijk is. Graag opruimen. Het de meeste info
+(tabellen) graag in een zin weergeven of het betrouwbaar is of niet. Ik
+zie liever iets verschijnen in meldingen als het niet correct is."*
+
+Terecht, en het legt een patroon bloot: er is de hele tijd informatie
+bijgekomen zonder dat er ooit iets áfging.
+
+### Van 145 naar 90 kaarten
+
+| Tabblad | Was | Nu |
+|---|---|---|
+| Kwaliteit | 13 | 4 |
+| Accumodules | 6 | 1 |
+| Zelflerend | 8 | 1 |
+| Apparaten | 8 | 1 |
+| Klimaat & water | 10 | 2 |
+| Verloop | 8 | 6 |
+| Financieel | 16 | 10 |
+
+Elk onderwerp toont nu **één zin met de conclusie**:
+
+- *"Alle 3 modules lopen gelijk; grootste celspreiding 0,05 V."*
+- *"2 van de 38 apparaten verbruikt meer dan normaal: IPTV, Koelkast schuur."*
+- *"4 gebruiksmoment(en) vandaag, 82 liter."*
+
+Bij een probleem staat er **wát** er mis is, niet alleen dát er iets is —
+anders moet je alsnog gaan zoeken, en dat was precies het probleem.
+
+### Er gaat niets verloren
+
+De onderbouwing blijft volledig beschikbaar: tik op een kaart voor alle
+attributen, of pak de diagnostiek-export. De tabellen staan niet meer
+standaard open, dat is het verschil.
+
+### Wat bewust bleef staan
+
+**Financieel** houdt zijn tabellen: daar *zijn* de bedragen de inhoud.
+Week-, maand- en jaarcijfers naast elkaar is precies wat je van dat
+tabblad verwacht; die in een zin persen zou informatie kosten in plaats
+van ruis besparen. De lange toelichting bij de Zonneplan-vergelijking is
+wel teruggebracht van ~25 naar 4 regels.
+
+**Meldingen** blijft ongewijzigd — dat is een bedieningspaneel, geen
+informatiepagina. En **Overzicht** is de landingspagina.
+
+Op Apparaten, Zelflerend en Klimaat & water bleven de grafieken staan:
+die tonen verloop, en dat vang je niet in een zin.
+
+### De opruiming raakte twintig tests
+
+Die bewaakten tabellen die nu niet meer bestaan. Waar de onderliggende
+garantie nog geldt, zijn ze omgezet naar de **data** in plaats van de
+weergave — elke adviesmodule moet nog steeds in het
+betrouwbaarheidsoverzicht staan, de duplicaatknoppen moeten blijven
+bestaan, de watersessies moeten in de export blijven. Dat is wat er
+werkelijk toe doet en het blijft gelden ongeacht hoe het dashboard het
+toont.
+
+Tests die puur over verdwenen sjablonen gingen, zijn verwijderd in plaats
+van uitgeschakeld: een uitgezette test die blijft staan is verwarrender
+dan geen test.
+
+### Nu bewaakt
+
+Nieuw `tests/test_compact_dashboard.py`, 9 tests: geen tabellen van meer
+dan drie regels buiten Overzicht, Meldingen en Financieel; opgeruimde
+tabbladen blijven onder de tien kaarten; geen tabblad raakt leeg; elke
+samenvatting heeft een zin én een niveau; een zin is echt een zin (geen
+tabel of opsomming); de zwakste schakel bepaalt het niveau; een probleem
+wordt bij naam genoemd; het detail staat nog in de export; en de zinnen
+zitten op een sensor.
+
+**Volledige testsuite**: 1253 tests, allemaal groen.
+
+## Stilstaande geleerde waarden opsporen (v1.11.1)
+
+**Gevraagd**: *"kijken naar alle waarden welke gegenereerd worden en
+mogelijk niet goed werken doordat ze lang stilstaan of juist al zo
+betrouwbaar zijn dat ze niet meer wijzigen."*
+
+Dat is precies het onderscheid dat nergens te maken viel.
+
+### Wat de export liet zien
+
+Van alle geleerde reeksen stond er één volledig stil:
+`steelstofzuiger_idle_power_history_w`, acht keer 0,0 W.
+
+Dat is volstrekt plausibel — een lader die niets doet verbruikt niets.
+Maar het is **niet te onderscheiden** van een meting die stilletjes is
+gestopt. Beide zien er in de export exact hetzelfde uit.
+
+De andere reeksen bewegen gezond: klimaatbias 43 unieke waarden op 100,
+energiebalans 14 op 14, accu-rendement 7 op 7.
+
+### De oplossing is niet oordelen maar melden
+
+Er wordt nu gezocht naar reeksen die niet meer veranderen, met het
+**aantal metingen** erbij — acht identieke waarden zegt weinig, tachtig
+identieke waarden bij een grootheid die hoort te fluctueren zegt veel.
+
+En er is onderscheid tussen twee soorten:
+
+| Soort | Voorbeeld | Oordeel |
+|---|---|---|
+| Constante waarde is **normaal** | ruststroom van een lader, laadduur | geen melding |
+| Grootheid **hoort te fluctueren** | accu-rendement, nachtverbruik | informatieve regel |
+
+Die eerste categorie is een expliciete lijst met twee fragmenten. Wie
+daar iets aan toevoegt moet kunnen uitleggen waarom stilstand daar te
+verwachten is, in plaats van dat het stilzwijgend meeglipt — daar staat
+een test op.
+
+Lijsten van `True`/`False` tellen niet mee: die "staan stil" per
+definitie vaak en zijn geen meetreeks.
+
+### Eén ding dat geen bug bleek
+
+De export toont nog een waterontharder-regeneratie van 00:28 met 3,1
+liter — precies het geval dat v1.9.2 afwijst. Nagekeken: die detectie
+gebruikt wél de nieuwe volumedrempel. Het is een registratie van vóór de
+update.
+
+### Getest
+
+Nieuw `tests/test_stalled_series.py`, 9 tests: een constante ruststroom
+is verwacht, een constante geleerde waarde is verdacht, alleen de
+verdachte worden gemeld, een fluctuerende reeks niet, een korte reeks
+krijgt geen oordeel, het aantal metingen staat erbij, booleans tellen
+niet mee, de uitzonderingenlijst blijft klein en expliciet, en het staat
+in de export.
+
+**Volledige testsuite**: 1257 tests, allemaal groen.
+
+## Opstart telt niet meer mee, melding pas bij echte uitval (v1.11.0)
+
+**Gemeld**: *"sensor.zendure_manager_available_kwh heeft langer nodig om
+op te starten... Ik wil dat na een herstart niet mee telt in analyses van
+sensor kwaliteit en de melding ook pas laten komen als hij ECHT
+onbeschikbaar zou zijn."*
+
+De export bevestigde het precies:
+
+| | |
+|---|---|
+| Score | 70% ("verminderd") |
+| Werkelijke vergelijkingen | 14, **allemaal binnen de marge** (4–110 W) |
+| Ontbrekende metingen | 6, **aaneengesloten aan het eind** |
+
+Die zes stonden niet verspreid maar op een rij — de opstartperiode. De
+Zendure-integratie had nog geen waarde toen deze coordinator al draaide.
+
+### Tijdens de opstart wordt er niets geregistreerd
+
+Niet als goede meting en niet als slechte. **Geen meting is eerlijker dan
+een slechte meting** — en als "goed" tellen zou een echte storing vlak na
+een herstart verbergen.
+
+Tien minuten, ruimer dan de drie minuten voor meldingen. De reden: de
+gezondheidsscore kijkt terug over twintig metingen, dus daar weegt een
+verkeerde registratie veel langer door dan bij een melding die eenmalig
+afgaat. Daar staat een test op.
+
+### De melding komt pas bij aanhoudende uitval
+
+Vijftien minuten onbeschikbaar voordat er iets afgaat, gemeten vanaf het
+**eerste** moment dat de sensor wegviel — niet vanaf de laatste tick. Komt
+hij tussendoor terug, dan begint de teller opnieuw; anders zou een korte
+hapering later alsnog als lange uitval gelden.
+
+Een enkele gemiste uitlezing komt voor bij elke cloudgebonden integratie.
+Daarover melden leert je meldingen te negeren, en dan mis je de keer dat
+het wél echt misgaat.
+
+### Onderweg
+
+Acht bestaande tests gingen ervan uit dat één ontbrekende meting meteen
+meldt — die aanname is nu bewust veranderd, dus ze simuleren aanhoudende
+uitval.
+
+En de nieuwe tests faalden eerst op iets subtielers:
+`_dispatch_notification` gebruikt intern de echte klok voor het
+dempingsvenster, terwijl de test een eigen tijdstip hanteerde. Het
+verschil daartussen viel binnen de aanlooptijd, waardoor de melding
+terecht werd geweigerd. Opgelost door de klok te bevriezen.
+
+### Getest
+
+Nieuw `tests/test_startup_and_real_outage.py`, 9 tests: tijdens de
+opstart wordt niets geregistreerd, daarna weer wel, de aanlooptijd is
+ruimer dan die voor meldingen, zonder starttijd verandert er niets, een
+enkele gemiste uitlezing wordt niet gemeld, aanhoudende uitval wél (met
+de sensornaam en de duur), een herstelde sensor wist de teller, de teller
+loopt vanaf het eerste gemis, en een beschikbare sensor wordt nooit
+gemarkeerd.
+
+**Volledige testsuite**: 1248 tests, allemaal groen.
+
 ## Overbodige koppen uit de tabbladen (v1.10.2)
 
 **Gevraagd**: *"Kun je nog eens kijken naar de dashboards, en irrelevante

@@ -2083,3 +2083,59 @@ GACS_REQUIREMENTS = (
 # juist de eis waar dit voor bedoeld is niet ingevuld.
 GACS_EFFICIENCY_ADVICE_PERCENT = 85.0
 GACS_SELF_CONSUMPTION_ADVICE_PERCENT = 60.0
+
+# --- Aanlooptijd en aanhoudende uitval (v1.11.0) ---------------------
+# Gemeld: "sensor.zendure_manager_available_kwh heeft langer nodig om op
+# te starten... Ik wil dat na een herstart niet mee telt in analyses van
+# sensor kwaliteit en de melding ook pas laten komen als hij ECHT
+# onbeschikbaar zou zijn."
+#
+# In een export stond de score op 70% ("verminderd") terwijl alle
+# veertien werkelijke vergelijkingen binnen de marge vielen; de zes
+# `None`-waarden stonden aaneengesloten aan het eind van de reeks - de
+# opstartperiode. De Zendure-integratie had simpelweg nog geen waarde
+# toen deze coordinator al draaide.
+#
+# Tijdens de aanloop wordt er nu HELEMAAL niets geregistreerd: niet als
+# goede meting en niet als slechte. Geen meting is eerlijker dan een
+# slechte meting, en het alternatief - als "goed" tellen - zou een echte
+# storing vlak na een herstart verbergen.
+#
+# Ruimer dan de melddrempel van drie minuten: de score kijkt terug over
+# twintig metingen, dus daar weegt een verkeerde registratie veel langer
+# door.
+SENSOR_STARTUP_GRACE_MINUTES = 10
+
+# Hoe lang een sensor onbeschikbaar moet blijven voordat het een echte
+# storing heet. Een enkele gemiste uitlezing is normaal; pas als het
+# aanhoudt is er iets aan de hand.
+SENSOR_UNAVAILABLE_CONFIRM_MINUTES = 15
+
+# --- Stilstaande geleerde waarden opsporen (v1.11.1) -----------------
+# Gevraagd: "kijken naar alle waarden welke gegenereerd worden en
+# mogelijk niet goed werken doordat ze lang stilstaan of juist al zo
+# betrouwbaar zijn dat ze niet meer wijzigen."
+#
+# Dat is precies het onderscheid dat nergens te maken viel. In een export
+# stond `steelstofzuiger_idle_power_history_w` op acht keer 0,0 - een
+# ruststroom van nul is volstrekt plausibel, maar het is niet te
+# onderscheiden van een meting die stilletjes is gestopt. Beide zien er
+# in de export identiek uit.
+#
+# De oplossing is niet oordelen maar MELDEN dat het niet te beoordelen
+# is, met het aantal metingen erbij: acht identieke waarden zegt weinig,
+# tachtig identieke waarden bij een grootheid die hoort te fluctueren
+# zegt veel.
+STALLED_SERIES_MIN_SAMPLES = 8
+
+# Reeksen waarvan een constante waarde NORMAAL is: ruststroom van een
+# lader die niets doet, een teller die alleen bij een gebeurtenis
+# beweegt. Die horen niet als verdacht gemeld te worden.
+#
+# Bewust een expliciete lijst: wie hier iets aan toevoegt moet kunnen
+# uitleggen waarom stilstand daar te verwachten is, in plaats van dat het
+# stilzwijgend meeglipt.
+STALLED_SERIES_CONSTANT_IS_NORMAL = (
+    "idle_power_history_w",
+    "charge_duration_history",
+)

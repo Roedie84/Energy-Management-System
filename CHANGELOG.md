@@ -8848,3 +8848,114 @@ geschreven borgingstests vonden er nog vijf bij.
 herhaalt de kop eronder, geen kop is gelijk aan de tabbladnaam.
 
 **Volledige testsuite**: 1239 tests, allemaal groen.
+
+## v1.11.0 — Opstart telt niet meer mee, melding pas bij echte uitval
+
+**Gemeld**: de beschikbare-energiesensor van de Zendure heeft langer
+nodig om op te starten; die uitval mag niet meetellen in de
+kwaliteitsanalyse, en de melding pas als de sensor ECHT weg is.
+
+**De export bevestigde het**: score 70% ("verminderd") terwijl alle
+veertien werkelijke vergelijkingen binnen de marge vielen (4-110 W). De
+zes ontbrekende metingen stonden aaneengesloten aan het eind van de reeks
+- de opstartperiode.
+
+**Tijdens de opstart wordt er niets geregistreerd** (10 minuten): niet
+als goede meting en niet als slechte. Geen meting is eerlijker dan een
+slechte meting, en als "goed" tellen zou een echte storing vlak na een
+herstart verbergen. Ruimer dan de 3 minuten voor meldingen, omdat de
+score over twintig metingen terugkijkt.
+
+**De melding komt pas na 15 minuten aanhoudende uitval**, gemeten vanaf
+het EERSTE gemis. Komt de sensor tussendoor terug, dan begint de teller
+opnieuw. Een enkele gemiste uitlezing komt voor bij elke cloudgebonden
+integratie.
+
+**Onderweg**: acht bestaande tests gingen uit van directe melding en
+simuleren nu aanhoudende uitval. De nieuwe tests faalden eerst omdat
+`_dispatch_notification` intern de echte klok gebruikt terwijl de test
+een eigen tijdstip hanteerde - opgelost door de klok te bevriezen.
+
+**Getest**: nieuw `tests/test_startup_and_real_outage.py`, 9 tests.
+
+**Volledige testsuite**: 1248 tests, allemaal groen.
+
+## v1.11.1 — Stilstaande geleerde waarden opsporen
+
+**Gevraagd**: welke gegenereerde waarden werken mogelijk niet goed doordat
+ze lang stilstaan, of zijn juist al zo betrouwbaar dat ze niet meer
+wijzigen?
+
+**Wat de export liet zien**: één reeks stond volledig stil,
+`steelstofzuiger_idle_power_history_w` op acht keer 0,0 W. Plausibel (een
+lader die niets doet verbruikt niets) maar niet te onderscheiden van een
+meting die is gestopt - beide zien er identiek uit. De andere reeksen
+bewegen gezond.
+
+**Nu**: reeksen die niet meer veranderen worden opgespoord, met het
+aantal metingen erbij. Onderscheid tussen reeksen waar een constante
+waarde NORMAAL is (ruststroom, laadduur - geen melding) en grootheden die
+horen te fluctueren (accu-rendement, nachtverbruik - informatieve regel).
+De uitzonderingenlijst is expliciet en klein; een test bewaakt dat.
+Booleans tellen niet mee.
+
+**Geen bug**: de regeneratie van 00:28 in de export is een registratie
+van vóór v1.9.2; de detectie gebruikt wél de nieuwe volumedrempel.
+
+**Getest**: nieuw `tests/test_stalled_series.py`, 9 tests.
+
+**Volledige testsuite**: 1257 tests, allemaal groen.
+
+## v1.12.0 — Dashboards opgeruimd: conclusie in plaats van tabel
+
+**Gemeld**: de dashboards zijn te druk; tabellen graag als één zin over
+betrouwbaarheid, en liever een melding bij een probleem dan al die info.
+
+**Van 145 naar 90 kaarten.** Elk onderwerp toont nu één zin met de
+conclusie ("Alle 3 modules lopen gelijk", "2 van de 38 apparaten
+verbruikt meer dan normaal: IPTV, Koelkast schuur"). Bij een probleem
+staat WAT er mis is, niet alleen dat er iets is.
+
+**Er gaat niets verloren**: de onderbouwing blijft in de
+sensorattributen (tik op een kaart) en de diagnostiek-export. De
+tabellen staan alleen niet meer standaard open.
+
+**Bewust behouden**: Financieel houdt zijn tabellen - daar ZIJN de
+bedragen de inhoud, en die in een zin persen zou informatie kosten in
+plaats van ruis besparen (de lange Zonneplan-toelichting is wel van ~25
+naar 4 regels terug). Meldingen blijft een bedieningspaneel, Overzicht de
+landingspagina. Grafieken bleven staan: verloop vang je niet in een zin.
+
+**Twintig tests geraakt**: waar de onderliggende garantie nog geldt, zijn
+ze omgezet naar de DATA in plaats van de weergave (elke adviesmodule in
+het betrouwbaarheidsoverzicht, duplicaatknoppen bestaan, watersessies in
+de export). Tests over verdwenen sjablonen zijn verwijderd, niet
+uitgeschakeld.
+
+**Getest**: nieuw `tests/test_compact_dashboard.py`, 9 tests.
+
+**Volledige testsuite**: 1253 tests, allemaal groen.
+
+## v1.12.1 — Overzicht past nu op één scherm
+
+**Gemeld**: niet hoeven scrollen op het overzichtsdashboard; het infoveld
+over de kwartiertelling mag weg omdat die uitleg bekend is.
+
+**Van 31 naar 24 kaarten, van ~2700 naar 751 tekens tekst.** Verwijderd:
+de uitleg over de kwartiertelling, een lang statusblok dat herhaalde wat
+de tegels ernaast al tonen, en de twee detailsecties ("Kernbeslissing",
+"Advies-modules") met uitklaplijsten van onderliggende sensoren.
+
+**Aandachtspunten in één regel**: "⚠️ 3 aandachtspunt(en) — hiervan krijg
+je een melding. Tik op de statuskaart voor de details." Dat sluit aan bij
+het eerdere uitgangspunt: liever een melding dan een muur informatie.
+
+**Twee keer misgegaan onderweg**: de eerste knip liep één regel te ver
+door waardoor twee secties samenvloeiden (hersteld uit de laatst
+opgeleverde zip, opnieuw gedaan met inspringing als grens), en de
+vervanging van de aandachtspunten-kaart voegde een tweede kaart toe in
+plaats van de eerste te overschrijven - de nieuwe test ving dat.
+
+**Getest**: drie tests erbij in `test_compact_dashboard.py`.
+
+**Volledige testsuite**: 1256 tests, allemaal groen.

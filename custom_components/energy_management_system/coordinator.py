@@ -275,6 +275,10 @@ from .const import (
     GACS_REQUIREMENTS,
     GACS_SELF_CONSUMPTION_ADVICE_PERCENT,
     PLAUSIBILITY_RULES,
+    SENSOR_STARTUP_GRACE_MINUTES,
+    SENSOR_UNAVAILABLE_CONFIRM_MINUTES,
+    STALLED_SERIES_CONSTANT_IS_NORMAL,
+    STALLED_SERIES_MIN_SAMPLES,
     STARTUP_GRACE_KINDS,
     STARTUP_GRACE_SECONDS,
     CONF_SUN_ELEVATION_SENSOR,
@@ -316,6 +320,7 @@ from .const import (
     RELIABILITY_NOT_CONFIGURED,
     RELIABILITY_RELIABLE,
     RELIABILITY_UNRELIABLE,
+    RELIABILITY_UNVERIFIABLE,
     WEATHER_ENSEMBLE_AGREEMENT_USABLE_PERCENT,
     NOTIFICATION_TYPES,
     PERSISTED_DATE_FIELDS,
@@ -714,6 +719,9 @@ class EnergyManagementSystemCoordinator:
         # v1.8.2: hoe vaak elke sensor geen waarde gaf, zodat het
         # aandachtspunt kan zeggen WELKE sensor eruit ligt.
         self.balance_missing_by_entity: dict[str, int] = {}
+        # v1.11.0: sinds wanneer elke sensor onbeschikbaar is, om echte
+        # uitval te onderscheiden van een enkele gemiste uitlezing.
+        self._sensor_unavailable_since: dict[str, datetime] = {}
         # v1.1.6: met welke meetmethode de bewaarde foutreeks tot stand
         # is gekomen. Verandert de methode, dan wordt die reeks eenmalig
         # gewist - zie ENERGY_BALANCE_METHOD_VERSION.
@@ -2486,6 +2494,21 @@ class EnergyManagementSystemCoordinator:
             )
 
         # --- sensor valt weg ---
+        # v1.11.0: eerst bijhouden SINDS WANNEER elke sensor weg is, en
+        # pas melden als dat aanhoudt. Een enkele gemiste uitlezing komt
+        # voor bij elke cloudgebonden integratie - daarover melden leert
+        # je meldingen te negeren.
+        for entity_id in (
+            self.config.get(CONF_AVAILABLE_ENERGY_SENSOR),
+            self.config.get(CONF_BATTERY_POWER_SENSOR),
+            self.config.get(CONF_CONSUMPTION_POWER_SENSOR),
+            self.config.get(CONF_PV_POWER_SENSOR),
+        ):
+            if entity_id:
+                self._track_sensor_availability(
+                    now, entity_id, self._read_sensor_float(entity_id) is not None
+                )
+
         ontbrekend = [
             entity_id
             for entity_id in (
@@ -2494,7 +2517,7 @@ class EnergyManagementSystemCoordinator:
                 self.config.get(CONF_CONSUMPTION_POWER_SENSOR),
                 self.config.get(CONF_PV_POWER_SENSOR),
             )
-            if entity_id and self._read_sensor_float(entity_id) is None
+            if entity_id and self.is_sensor_genuinely_unavailable(now, entity_id)
         ]
         if ontbrekend:
             # v1.6.6: onthouden WELKE, zodat de herstelmelding dat ook
@@ -2504,7 +2527,8 @@ class EnergyManagementSystemCoordinator:
             stuur(
                 "sensor_unavailable",
                 "⚠️ Sensor niet uitleesbaar",
-                f"{', '.join(ontbrekend)} geeft op dit moment geen waarde. "
+                f"{', '.join(ontbrekend)} geeft al minstens "
+                f"{SENSOR_UNAVAILABLE_CONFIRM_MINUTES} minuten geen waarde. "
                 "De aansturing valt terug op voorzichtige aannames zolang "
                 "dat duurt.",
             )
@@ -3403,6 +3427,223 @@ class EnergyManagementSystemCoordinator:
                 [d for d in (self.reserve_shortfall_history or []) if d]
             ),
         }
+
+    def get_topic_summaries(self) -> dict:
+        """Eén zin per onderwerp: klopt het, of vraagt het aandacht?
+        (v1.12.0)
+
+        Gemeld: "Ik vind de dashboards veel te druk... Het de meeste info
+        (tabellen) graag in een zin weergeven of het betrouwbaar is of
+        niet. Ik zie liever iets verschijnen in meldingen als het niet
+        correct is."
+
+        Terecht. Er was steeds informatie bijgekomen zonder dat er ooit
+        iets afging - tien tabbladen met grote tabellen die je alleen
+        leest als je toch al vermoedt dat er iets mis is. En dan is een
+        melding het juiste kanaal, niet een tabel.
+
+        Elke zin geeft de conclusie, niet de onderbouwing. Die
+        onderbouwing blijft volledig beschikbaar: in de attributen van de
+        sensoren (tik op een kaart) en in de diagnostiek-export. Er gaat
+        dus niets verloren; het staat alleen niet meer standaard open.
+        """
+        overzicht = self.get_reliability_overview()
+        per_naam = {r["naam"]: r for r in overzicht}
+
+        def niveau_van(*namen: str) -> str:
+            """Het laagste niveau van de genoemde regels - de zwakste
+            schakel bepaalt of je op een onderwerp kunt varen."""
+            rangorde = [
+                RELIABILITY_UNRELIABLE,
+                RELIABILITY_INSUFFICIENT,
+                RELIABILITY_NOT_CONFIGURED,
+                RELIABILITY_INDICATIVE,
+                RELIABILITY_UNVERIFIABLE,
+                RELIABILITY_RELIABLE,
+            ]
+            gevonden = [
+                per_naam[n]["niveau"] for n in namen if n in per_naam
+            ]
+            if not gevonden:
+                return RELIABILITY_INSUFFICIENT
+            return min(gevonden, key=rangorde.index)
+
+        samenvatting: dict = {}
+
+        # --- accumodules ---
+        modules = self.battery_module_live or []
+        deltas = [
+            m["cel_delta_v"] for m in modules if m.get("cel_delta_v") is not None
+        ]
+        if not modules:
+            samenvatting["accumodules"] = {
+                "niveau": RELIABILITY_NOT_CONFIGURED,
+                "zin": "Geen accumodule-sensoren geconfigureerd.",
+            }
+        else:
+            grootste = max(deltas) if deltas else None
+            afwijkend = [
+                m for m in modules
+                if abs(m.get("cel_delta_afwijking_v") or 0) > 0.05
+            ]
+            samenvatting["accumodules"] = {
+                "niveau": (
+                    RELIABILITY_UNRELIABLE if afwijkend else RELIABILITY_RELIABLE
+                ),
+                "zin": (
+                    f"{len(afwijkend)} van de {len(modules)} modules wijkt af "
+                    "van de andere - zie de meldingen."
+                    if afwijkend
+                    else (
+                        f"Alle {len(modules)} modules lopen gelijk"
+                        + (
+                            f"; grootste celspreiding {grootste:.2f} V."
+                            if grootste is not None
+                            else "."
+                        )
+                    )
+                ),
+            }
+
+        # --- apparaten (NILM) ---
+        bevestigd = len(self.nilm_confirmed_devices or {})
+        drift = [
+            g.get("friendly_name") or e
+            for e, g in (self.nilm_confirmed_devices or {}).items()
+            if g.get("anomaly_detected")
+        ]
+        samenvatting["apparaten"] = {
+            "niveau": RELIABILITY_UNRELIABLE if drift else RELIABILITY_RELIABLE,
+            "zin": (
+                f"{len(drift)} van de {bevestigd} apparaten verbruikt meer dan "
+                f"normaal: {', '.join(drift)}."
+                if drift
+                else f"{bevestigd} apparaten herkend, geen afwijkend verbruik."
+            ),
+        }
+
+        # --- zelflerend ---
+        lerend = [
+            r for r in overzicht if r["groep"] == "Geleerde waarden"
+        ]
+        klaar = [r for r in lerend if r["niveau"] == RELIABILITY_RELIABLE]
+        samenvatting["zelflerend"] = {
+            "niveau": niveau_van(*[r["naam"] for r in lerend]),
+            "zin": (
+                f"{len(klaar)} van de {len(lerend)} geleerde waarden is "
+                "betrouwbaar; de rest verzamelt nog."
+            ),
+        }
+
+        # --- financieel ---
+        kosten = self.get_zonneplan_cost_comparison()
+        samenvatting["financieel"] = {
+            "niveau": kosten.get("status", RELIABILITY_INSUFFICIENT),
+            "zin": kosten.get("reden", "Nog geen vergelijking beschikbaar."),
+        }
+
+        # --- klimaat ---
+        cellen = len(self.climate_rate_history or {})
+        samenvatting["klimaat"] = {
+            "niveau": (
+                RELIABILITY_RELIABLE if cellen >= 10 else RELIABILITY_INDICATIVE
+            ),
+            "zin": (
+                f"{cellen} situaties geleerd voor de "
+                "woonkamertemperatuur-projectie."
+            ),
+        }
+
+        # --- water ---
+        samenvatting["water"] = {
+            "niveau": RELIABILITY_RELIABLE,
+            "zin": (
+                f"{self.water_sessions_today_count or 0} gebruiksmoment(en) "
+                f"vandaag, {self.water_daily_total_l or 0:.0f} liter."
+            ),
+        }
+
+        # --- kwaliteit (het geheel) ---
+        betrouwbaar = sum(
+            1 for r in overzicht if r["niveau"] == RELIABILITY_RELIABLE
+        )
+        onbetrouwbaar = [
+            r for r in overzicht if r["niveau"] == RELIABILITY_UNRELIABLE
+        ]
+        samenvatting["kwaliteit"] = {
+            "niveau": (
+                RELIABILITY_UNRELIABLE if onbetrouwbaar else RELIABILITY_RELIABLE
+            ),
+            "zin": (
+                f"{len(onbetrouwbaar)} van de {len(overzicht)} gemeten "
+                "grootheden is onbetrouwbaar: "
+                + ", ".join(r["naam"] for r in onbetrouwbaar)
+                + "."
+                if onbetrouwbaar
+                else (
+                    f"{betrouwbaar} van de {len(overzicht)} gemeten "
+                    "grootheden is betrouwbaar, geen enkele onbetrouwbaar."
+                )
+            ),
+        }
+
+        return samenvatting
+
+    def get_stalled_series_report(self) -> list[dict]:
+        """Zoekt geleerde reeksen die niet meer veranderen (v1.11.1).
+
+        Gevraagd: welke gegenereerde waarden werken mogelijk niet goed
+        doordat ze lang stilstaan, of zijn juist al zo betrouwbaar dat ze
+        niet meer wijzigen?
+
+        Dat is precies het onderscheid dat nergens te maken viel. In een
+        export stond de ruststroom van de steelstofzuiger op acht keer
+        0,0. Dat is volstrekt plausibel - een lader die niets doet
+        verbruikt niets - maar het is niet te onderscheiden van een
+        meting die stilletjes is gestopt. Beide zien er identiek uit.
+
+        Er wordt daarom niet geoordeeld maar GEMELD dat het niet te
+        beoordelen is, met het aantal metingen erbij. Acht identieke
+        waarden zegt weinig; tachtig identieke waarden bij een grootheid
+        die hoort te fluctueren zegt veel.
+        """
+        rapport: list[dict] = []
+        for naam, waarde in sorted(vars(self).items()):
+            if naam.startswith("_") or not isinstance(waarde, list):
+                continue
+            getallen = [
+                x for x in waarde if isinstance(x, (int, float))
+                and not isinstance(x, bool)
+            ]
+            if len(getallen) < STALLED_SERIES_MIN_SAMPLES:
+                continue
+            uniek = len(set(getallen))
+            if uniek > 1:
+                continue
+
+            # Voor sommige reeksen is een constante waarde normaal.
+            verwacht = any(
+                fragment in naam for fragment in STALLED_SERIES_CONSTANT_IS_NORMAL
+            )
+            rapport.append(
+                {
+                    "reeks": naam,
+                    "metingen": len(getallen),
+                    "waarde": getallen[0],
+                    "constante_is_normaal": verwacht,
+                    "duiding": (
+                        "Een constante waarde is hier te verwachten; dit is "
+                        "geen aanwijzing dat er iets mis is."
+                        if verwacht
+                        else (
+                            "Deze grootheid hoort te fluctueren. Blijft ze "
+                            "identiek, dan kan de meting zijn gestopt - "
+                            "controleer of de bronsensor nog bijwerkt."
+                        )
+                    ),
+                }
+            )
+        return rapport
 
     def get_plausibility_warnings(self) -> list[dict]:
         """Zoekt eigen waarden die fysiek onmogelijk zijn (v1.9.5).
@@ -8057,6 +8298,13 @@ class EnergyManagementSystemCoordinator:
             # meldde wél dat er negen keer geen waarde was, maar niet van
             # wie - en dan valt er niets te doen. Welke sensor ontbrak
             # wordt daarom geteld.
+            # v1.11.0: tijdens de aanloopperiode HELEMAAL niets
+            # registreren - niet als goede meting en niet als slechte.
+            # Geen meting is eerlijker dan een slechte meting, en als
+            # "goed" tellen zou een echte storing vlak na een herstart
+            # verbergen.
+            if self.is_within_startup_grace(now):
+                return
             for naam, waarde in (
                 (available_entity, available_kwh),
                 (self.config.get(CONF_BATTERY_POWER_SENSOR),
@@ -8317,6 +8565,47 @@ class EnergyManagementSystemCoordinator:
                 ),
             }
         return rapport
+
+    def is_within_startup_grace(self, now: datetime) -> bool:
+        """Draait de integratie nog in haar aanloopperiode? (v1.11.0)
+
+        Gemeld: de beschikbare-energiesensor van de Zendure heeft langer
+        nodig om op te starten dan deze coordinator. In een export stond
+        de score op 70% terwijl alle veertien werkelijke vergelijkingen
+        binnen de marge vielen - de zes ontbrekende metingen stonden
+        aaneengesloten aan het eind van de reeks, precies de
+        opstartperiode.
+        """
+        if self._started_at is None:
+            return False
+        verstreken = (now - self._started_at).total_seconds() / 60
+        return verstreken < SENSOR_STARTUP_GRACE_MINUTES
+
+    def _track_sensor_availability(
+        self, now: datetime, entity_id: str, beschikbaar: bool
+    ) -> None:
+        """Houdt bij sinds wanneer een sensor weg is (v1.11.0)."""
+        if beschikbaar:
+            self._sensor_unavailable_since.pop(entity_id, None)
+        elif entity_id not in self._sensor_unavailable_since:
+            self._sensor_unavailable_since[entity_id] = now
+
+    def is_sensor_genuinely_unavailable(
+        self, now: datetime, entity_id: str
+    ) -> bool:
+        """Is deze sensor ECHT weg, of mist er even één uitlezing?
+        (v1.11.0)
+
+        Gevraagd: "de melding ook pas laten komen als hij ECHT
+        onbeschikbaar zou zijn". Een enkele gemiste uitlezing komt voor
+        bij elke cloudgebonden integratie; pas als het aanhoudt is er
+        iets aan de hand.
+        """
+        sinds = self._sensor_unavailable_since.get(entity_id)
+        if sinds is None:
+            return False
+        weg_minuten = (now - sinds).total_seconds() / 60
+        return weg_minuten >= SENSOR_UNAVAILABLE_CONFIRM_MINUTES
 
     def get_sensor_health_breakdown(self) -> dict:
         """Splitst de gezondheidsscore in NAUWKEURIGHEID en
@@ -10771,6 +11060,17 @@ class EnergyManagementSystemCoordinator:
                     f"{uitsplitsing['nauwkeurigheid_percent']}% viel binnen "
                     "de marge."
                 )
+
+        # v1.11.1: een reeks die niet meer verandert kan betekenen dat de
+        # waarde klopt of dat de meting is gestopt. Informatief, want het
+        # is geen storing maar iets om te controleren.
+        for stil in self.get_stalled_series_report():
+            if stil["constante_is_normaal"]:
+                continue
+            informatief.append(
+                f"{stil['reeks']} staat al {stil['metingen']} metingen op "
+                f"{stil['waarde']}. {stil['duiding']}"
+            )
 
         # v1.9.5: een fysiek onmogelijke waarde is altijd een rekenfout
         # en hoort niet stilzwijgend in een export te blijven staan.
