@@ -128,3 +128,49 @@ def test_it_is_in_the_diagnostics_export():
     bron = (Path(pkg.__file__).parent / "diagnostics.py").read_text()
 
     assert "stalled_series" in bron
+
+
+# --- v1.14.3: interne velden werden overgeslagen --------------------
+
+
+def test_underscore_fields_are_checked(make_coordinator, hass):
+    """In een export stond `_steelstofzuiger_idle_power_history` op tien
+    identieke waarden terwijl het rapport leeg bleef - precies de reeks
+    waarvoor deze controle is gemaakt.
+
+    De detectie sloeg alles over dat met een underscore begon. Interne
+    naamgeving zegt niets over of een reeks het bewaken waard is; wat
+    telt is of het een meetreeks is.
+    """
+    c = make_coordinator({})
+    c._steelstofzuiger_idle_power_history = [0.0] * 10
+
+    reeksen = {r["reeks"] for r in c.get_stalled_series_report()}
+
+    assert "steelstofzuiger_idle_power_history" in reeksen
+
+
+def test_the_exception_matches_the_internal_name(make_coordinator, hass):
+    """Het fragment moet op de ECHTE veldnaam passen. Het stond op
+    "idle_power_history_w", maar dat achtervoegsel wordt pas in de
+    export toegevoegd - waardoor een verwachte constante toch als
+    verdacht gold."""
+    c = make_coordinator({})
+    c._steelstofzuiger_idle_power_history = [0.0] * 10
+
+    regel = next(
+        r
+        for r in c.get_stalled_series_report()
+        if "steelstofzuiger" in r["reeks"]
+    )
+
+    assert regel["constante_is_normaal"] is True
+
+
+def test_dunder_fields_are_still_skipped(make_coordinator, hass):
+    """Python-interne velden (`__dict__` en dergelijke) zijn geen
+    meetreeksen."""
+    c = make_coordinator({})
+
+    for regel in c.get_stalled_series_report():
+        assert not regel["reeks"].startswith("_")
