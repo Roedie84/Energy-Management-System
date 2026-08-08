@@ -144,7 +144,15 @@ def test_no_detail_table_has_more_than_three_columns():
             kaal = regel.strip()
             if "---" in kaal or kaal.count("|") < 2:
                 continue
-            kolommen = kaal.count("|") - 1
+            # v1.16.0: Jinja-FILTERS gebruiken ook een pipe
+            # (`{{ x | timestamp_custom(...) }}`). Die meetellen als
+            # kolom gaf een tabel van vier kolommen een score van zeven.
+            # Eerst de expressies eruit, dan tellen.
+            zonder_jinja = re.sub(r"\{\{.*?\}\}", "X", kaal)
+            zonder_jinja = re.sub(r"\{%.*?%\}", "", zonder_jinja)
+            if zonder_jinja.count("|") < 2:
+                continue
+            kolommen = zonder_jinja.count("|") - 1
             assert kolommen <= 6, (
                 f"{kaart.get('title')}: {kolommen} kolommen - past niet op "
                 "een smal scherm"
