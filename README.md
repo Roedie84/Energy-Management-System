@@ -515,6 +515,187 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Systematische controle: vier kaarten met interne codes (v1.16.2)
+
+**Gevraagd**: *"Vooral kijken of er nog meer zaken gerepareerd dienen te
+worden, ik baal dat er zoveel kapot is nu."*
+
+Terecht. In plaats van te wachten tot je iets ziet, heb ik alle
+**zeventien** kaarten nagelopen die een rauwe sensortoestand tonen.
+
+### Vier gevallen gevonden
+
+| Kaart | Wat er stond |
+|---|---|
+| Laatste reden | `expensive_quarter` |
+| Steelstofzuiger | `wacht_op_goedkoop_blok` |
+| Fietsladers | `wacht_op_goedkoop_blok` |
+| Kandidaten | `0` — een getal zonder context |
+
+Dat zijn interne codes. Prima als waarde in de logica, waar erop wordt
+vergeleken, maar op een Nederlands dashboard zeggen ze niets. Precies de
+fout die bij de energie-check in v1.15.9 al opdook.
+
+Er staat nu *"duur kwartier"*, *"wacht op goedkoop blok"* en *"geen
+nieuwe kandidaten"*.
+
+### De codes zelf blijven ongewijzigd
+
+Vertalen gebeurt in de **weergave**, niet in de sensor. De logica
+vergelijkt op `expensive_quarter`; dat aanpassen zou elke vergelijking
+breken. Er staat een test op dat die waarden onveranderd blijven.
+
+### Wat wél in orde was
+
+De andere dertien kaarten kloppen: MPC-advies, Monte Carlo en Digital
+Twin hebben een eenheid (€, %, kWh), en het PV-installatieprofiel geeft
+zelf al *"nog niet bepaald"* terug.
+
+### Nu bewaakt
+
+Een test controleert dat **elke** beslisreden uit `coordinator.py` een
+vertaling heeft — dertien op dit moment. Voeg je er later een toe zonder
+label, dan faalt hij, want anders staat er alsnog
+`expensive_quarter_soc_protected` op je scherm.
+
+Plus een test dat de vertalingen zelf leesbaar zijn: geen underscores, en
+niet gelijk aan de code.
+
+### Getest
+
+Nieuw `tests/test_internal_codes_translated.py`, 6 tests.
+
+**Volledige testsuite**: 1385 tests, allemaal groen.
+
+## "PV-voorspelling bias: Onbekend" was geen storing (v1.16.1)
+
+**Gevraagd**: *"Bias ook kapot?"*
+
+### Nee — die sensor toont het huidige uur
+
+`PV hourly forecast bias` geeft de bias voor **dit uur**. Buiten de
+daglichturen is die er niet, en dat is correct gedrag.
+
+Je export laat zien dat er wel degelijk geleerd is: **vijftien uren**
+hebben een bias, van 6:00 (0,53) tot 20:00 (0,29). Rond 21:00 hoort daar
+niets te staan.
+
+Maar "Onbekend" zegt dat niet, zeker niet naast een kaart die wél een
+waarde toont. De kaart meldt nu *"buiten daglichturen"* met daarbij
+*"15 uren geleerd"* — dan zie je meteen dat er niets kapot is.
+
+### Nog een verzonnen attribuutnaam
+
+Ik vroeg `profiel` op; het attribuut heet `profile_confident`. Een
+sjabloon dat een niet-bestaand attribuut opvraagt geeft stilzwijgend
+niets terug — de kaart ziet er dan correct uit terwijl de telling
+ontbreekt.
+
+Dat is vandaag de derde keer dat een verzonnen naam een kaart stil liet
+falen: eerst de apparatentabel, toen de entity_id's zonder voorvoegsel,
+nu dit.
+
+### Nu bewaakt
+
+Een test controleert dat **elk attribuut** dat het dashboard opvraagt
+ergens in de code wordt aangeboden.
+
+Die sloeg meteen aan op zeven attributen — maar die bleken te bestaan in
+`switch.py`, `button.py` en `coordinator.py`. Alleen in `sensor.py`
+kijken was te smal; attributen komen niet alleen van sensoren.
+
+### Getest
+
+Drie tests erbij: de bias legt uit waarom hij leeg is, de kaart gebruikt
+een bestaand attribuut, en geen enkel opgevraagd attribuut is verzonnen.
+
+**Volledige testsuite**: 1379 tests, allemaal groen.
+
+## "Komend schema" toonde een getal (v1.16.0)
+
+**Gemeld**: *"Die komend schema is inderdaad ook raar."*
+
+### Wat er stond
+
+De tegel toonde de **toestand** van die sensor, en dat is het *aantal*
+geplande kwartieren. "96" zegt niets over wat je accu gaat doen.
+
+De bruikbare informatie zat in het attribuut `transitions`: de
+opeenvolgende blokken met begintijd, eindtijd, modus en prijsbereik.
+
+### Wat er nu staat
+
+Op Overzicht: *"3 blok(ken) gepland — Nu smart tot 17:15, daarna
+smart_discharging"*. Dus wat de accu nú doet en tot wanneer.
+
+Op de detailpagina de volledige tabel: van, tot, modus en de hoogste
+prijs in dat blok. Het verloop over de dag laat zich niet in een tegel
+vangen, dus die tik leidt daarheen.
+
+### Nog een blinde vlek in een eigen test
+
+De kolomtest uit v1.14.6 telde **Jinja-filterpipes** mee als
+tabelkolommen. `{{ x | timestamp_custom(...) }}` bevat een pipe, dus een
+tabel van vier kolommen scoorde zeven — en faalde ten onrechte.
+
+Nu worden de Jinja-expressies eerst verwijderd voordat er geteld wordt.
+Dat is de tweede keer dat deze test op zijn eigen telling struikelde; de
+vorige keer sloeg hij juist niet aan waar het wél moest.
+
+### Getest
+
+Drie tests erbij: de tegel toont blokken in plaats van een aantal, hij
+noemt de huidige modus, en het volledige schema staat op de detailpagina
+met alle vier de velden.
+
+**Volledige testsuite**: 1376 tests, allemaal groen.
+
+## Drie kaarten toonden een rauwe sensortoestand (v1.15.9)
+
+**Gemeld** met screenshot: *"Gesimuleerde actie: Onbekend"*,
+*"Energie-check: Onbekend"* en *"Accubescherming: 1600.0"*.
+
+### Drie problemen, één oorzaak
+
+De sensortoestand werd ongewijzigd getoond.
+
+| Kaart | Wat er stond | Wat er mis was |
+|---|---|---|
+| Gesimuleerde actie | Onbekend | leest als storing; de simulatie draait gewoon niet |
+| Energie-check | Onbekend | idem — en de waarden zijn Engels: `enough_to_postpone` |
+| Accubescherming | 1600.0 | 1600 wát? Het zijn watt |
+
+### Wat er nu staat
+
+- *"simulatie draait niet"*
+- *"genoeg om uit te stellen"* / *"bijladen nodig"* / *"nog niet
+  beoordeeld"*
+- *"1600 W ontlaadgrens"* / *"geen grens actief"*
+
+De sensoren zelf blijven ongewijzigd — daar wordt elders op gerekend, en
+`enough_to_postpone` is een prima interne waarde. Alleen de weergave
+vertaalt.
+
+"Goedkoopste blok: over 12 uur" klopte overigens wel: dat is een
+tijdstempel, en Home Assistant toont die relatief.
+
+### Onderweg misgegaan
+
+Mijn eerste poging zocht de kaarten op regelnummer en knipte te veel weg
+— achttien tests vielen om. Hersteld uit de laatste zip en opnieuw
+gedaan met de kaarttekst als anker. Dat is de vierde keer vandaag dat een
+knip op positie misging waar een knip op inhoud had gewerkt.
+
+### Getest
+
+Nieuw `tests/test_raw_states_on_dashboard.py`, 5 tests: de simulatie legt
+uit dat ze niet draait, de energie-check is vertaald, de accubescherming
+heeft een eenheid, geen enkele kaart toont een Engelse toestand (alleen
+als vergelijking), en de drie zijn template-cards — een entity-card kan
+niet vertalen.
+
+**Volledige testsuite**: 1373 tests, allemaal groen.
+
 ## Temperatuurverschil: twee verklaringen, één conclusie (v1.15.8)
 
 **Uit een verse export**: *"Accumodules verschillen 5,0 °C in

@@ -9736,3 +9736,108 @@ vergelijking dat wegneemt klopte maar ten dele.
 **Getest**: nieuw `tests/test_module_temperature_warning.py`, 4 tests.
 
 **Volledige testsuite**: 1368 tests, allemaal groen.
+
+## v1.15.9 — Drie kaarten toonden een rauwe sensortoestand
+
+**Gemeld**: "Gesimuleerde actie: Onbekend", "Energie-check: Onbekend" en
+"Accubescherming: 1600.0".
+
+**Eén oorzaak**: de sensortoestand werd ongewijzigd getoond. "Onbekend"
+leest als storing terwijl de simulatie gewoon niet draait; de
+energie-check levert Engelse waarden (`enough_to_postpone`); en "1600.0"
+is een getal zonder eenheid.
+
+**Nu**: "simulatie draait niet", "genoeg om uit te stellen" / "bijladen
+nodig" / "nog niet beoordeeld", en "1600 W ontlaadgrens" / "geen grens
+actief". De sensoren zelf blijven ongewijzigd - daar wordt elders op
+gerekend; alleen de weergave vertaalt.
+
+"Goedkoopste blok: over 12 uur" klopte wel: dat is een tijdstempel dat HA
+relatief toont.
+
+**Onderweg**: de eerste poging zocht de kaarten op regelnummer en knipte
+te veel weg (achttien falende tests). Hersteld uit de laatste zip en
+opnieuw gedaan met de kaarttekst als anker.
+
+**Getest**: nieuw `tests/test_raw_states_on_dashboard.py`, 5 tests,
+waaronder een borging dat geen kaart een Engelse toestand toont.
+
+**Volledige testsuite**: 1373 tests, allemaal groen.
+
+## v1.16.0 — "Komend schema" toonde een getal
+
+**Gemeld**: het komende schema was "raar".
+
+**Oorzaak**: de tegel toonde de TOESTAND van de sensor, en dat is het
+aantal geplande kwartieren - "96" zegt niets. De bruikbare informatie zat
+in het attribuut `transitions`: de blokken met begintijd, eindtijd, modus
+en prijsbereik.
+
+**Nu**: op Overzicht "3 blok(ken) gepland — Nu smart tot 17:15, daarna
+smart_discharging". Op de detailpagina de volledige tabel (van, tot,
+modus, hoogste prijs); het verloop over de dag laat zich niet in een
+tegel vangen, dus de tik leidt daarheen.
+
+**Blinde vlek in een eigen test**: de kolomtest uit v1.14.6 telde
+Jinja-filterpipes mee als tabelkolommen (`{{ x | timestamp_custom(...) }}`),
+waardoor een tabel van vier kolommen op zeven uitkwam. Nu worden de
+Jinja-expressies eerst verwijderd. Tweede keer dat deze test op zijn
+eigen telling struikelde.
+
+**Getest**: drie tests erbij in `test_raw_states_on_dashboard.py`.
+
+**Volledige testsuite**: 1376 tests, allemaal groen.
+
+## v1.16.1 — "PV-voorspelling bias: Onbekend" was geen storing
+
+**Gevraagd**: "Bias ook kapot?"
+
+**Nee**: die sensor toont de bias voor HET HUIDIGE UUR, en buiten de
+daglichturen is die er niet. De export laat zien dat er vijftien uren
+zijn geleerd, van 6:00 (0,53) tot 20:00 (0,29). De kaart meldt nu
+"buiten daglichturen" met "15 uren geleerd" erbij.
+
+**Nog een verzonnen attribuutnaam**: ik vroeg `profiel` op, het heet
+`profile_confident`. Een sjabloon dat een niet-bestaand attribuut
+opvraagt geeft stilzwijgend niets terug - de kaart ziet er correct uit
+terwijl de telling ontbreekt. Derde keer vandaag dat een verzonnen naam
+een kaart stil liet falen.
+
+**Nu bewaakt**: een test controleert dat elk opgevraagd attribuut ergens
+in de code wordt aangeboden. Die sloeg meteen aan op zeven attributen die
+wél bestaan - in switch.py, button.py en coordinator.py. Alleen in
+sensor.py kijken was te smal.
+
+**Getest**: drie tests erbij in `test_raw_states_on_dashboard.py`.
+
+**Volledige testsuite**: 1379 tests, allemaal groen.
+
+## v1.16.2 — Systematische controle: vier kaarten met interne codes
+
+**Gevraagd**: kijken of er nog meer gerepareerd moet worden.
+
+**Alle zeventien kaarten nagelopen** die een rauwe sensortoestand tonen.
+Vier gevallen: "Laatste reden: expensive_quarter", "Steelstofzuiger:
+wacht_op_goedkoop_blok", "Fietsladers: idem", en "Kandidaten: 0" (een
+getal zonder context).
+
+Interne codes zijn prima als waarde in de logica, maar zeggen niets op
+een Nederlands dashboard - dezelfde fout als bij de energie-check in
+v1.15.9. Nu "duur kwartier", "wacht op goedkoop blok" en "geen nieuwe
+kandidaten".
+
+**De codes zelf blijven ongewijzigd**: vertalen gebeurt in de WEERGAVE.
+De logica vergelijkt op `expensive_quarter`; dat aanpassen zou elke
+vergelijking breken. Een test bewaakt dat.
+
+**Wel in orde**: de andere dertien kaarten - MPC-advies, Monte Carlo en
+Digital Twin hebben een eenheid, en het PV-installatieprofiel geeft zelf
+al "nog niet bepaald" terug.
+
+**Nu bewaakt**: elke beslisreden uit coordinator.py moet een vertaling
+hebben (dertien nu); een nieuwe zonder label laat de test falen. Plus een
+test dat de vertalingen leesbaar zijn (geen underscores).
+
+**Getest**: nieuw `tests/test_internal_codes_translated.py`, 6 tests.
+
+**Volledige testsuite**: 1385 tests, allemaal groen.

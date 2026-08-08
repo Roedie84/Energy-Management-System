@@ -2197,3 +2197,37 @@ SELF_EVAL_RESERVE_TOO_WIDE_RATIO = 0.9
 # Een adviesmodule die na zoveel dagen nog niets heeft opgeleverd, doet
 # vermoedelijk niets - of mist een sensor die niemand heeft opgemerkt.
 SELF_EVAL_IDLE_MODULE_DAYS = 30
+
+# --- Interne codes leesbaar maken (v1.16.2) --------------------------
+# Gevraagd na een reeks kapotte kaarten: "Vooral kijken of er nog meer
+# zaken gerepareerd dienen te worden."
+#
+# Bij een systematische controle bleken drie sensoren interne codes te
+# tonen: "expensive_quarter", "wacht_op_goedkoop_blok". Prima als waarde
+# in de logica - daar wordt op vergeleken - maar op een Nederlands
+# dashboard zegt het niets.
+#
+# Dezelfde fout als bij de energie-check (v1.15.9), die
+# "enough_to_postpone" toonde. Vertalen gebeurt in de WEERGAVE, niet in
+# de sensor: de codes blijven de interne waarheid.
+DECISION_REASON_LABELS = {
+    "arbitrage_solar_capture": "zonoverschot opvangen",
+    "default_smart": "standaard slim laden",
+    "discharging_window": "ontladen in duur blok",
+    "emergency_low_battery": "noodladen bij lage accu",
+    "expensive_quarter": "duur kwartier",
+    "expensive_quarter_no_own_load": "duur kwartier, geen eigen verbruik",
+    "expensive_quarter_soc_protected": "duur kwartier, accu beschermd",
+    "force_manual": "handmatig overschreven",
+    "grid_charging_low_solar": "bijladen bij weinig zon",
+    "grid_charging_low_solar_extra_dip": "bijladen bij extra prijsdip",
+    "negative_price": "negatieve prijs",
+    "no_forecast_data": "geen prijsvoorspelling",
+    "post_salderen_solar_capture": "zon opvangen na saldering",
+}
+
+APPLIANCE_STATE_LABELS = {
+    "wacht_op_goedkoop_blok": "wacht op goedkoop blok",
+    "voltooid_vandaag": "vandaag al geladen",
+    "aan_het_laden": "aan het laden",
+}

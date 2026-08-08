@@ -504,7 +504,7 @@ views:
         # "richtingen van de stromen nog niet geupdate?". De
         # versiesleutel dwingt een verse ophaal af. Een test bewaakt
         # dat deze waarde gelijk blijft aan de versie in manifest.json.
-        image: /local/energy_management_system_overview.svg?v=1.15.8
+        image: /local/energy_management_system_overview.svg?v=1.16.2
         elements:
           - type: state-label
             entity: sensor.woonkamer_energy_management_system_system_status
@@ -1390,21 +1390,31 @@ views:
             name: Wasmachine
             tap_action:
               action: more-info
-          - type: custom:mushroom-entity-card
+          - type: custom:mushroom-template-card
+            primary: >-
+              {% set m = {'wacht_op_goedkoop_blok': 'wacht op goedkoop blok', 'voltooid_vandaag': 'vandaag al geladen', 'aan_het_laden': 'aan het laden'} %}{% set v = states('sensor.woonkamer_energy_management_system_steelstofzuiger_status') %}{{ m.get(v, v if v not in ['unknown','unavailable',''] else 'geen status') }}
+            secondary: Steelstofzuiger
+            icon: mdi:vacuum
             entity: sensor.woonkamer_energy_management_system_steelstofzuiger_status
-            name: Steelstofzuiger
             tap_action:
               action: more-info
-          - type: custom:mushroom-entity-card
+          - type: custom:mushroom-template-card
+            primary: >-
+              {% set m = {'wacht_op_goedkoop_blok': 'wacht op goedkoop blok', 'voltooid_vandaag': 'vandaag al geladen', 'aan_het_laden': 'aan het laden'} %}{% set v = states('sensor.woonkamer_energy_management_system_fietsladers_status') %}{{ m.get(v, v if v not in ['unknown','unavailable',''] else 'geen status') }}
+            secondary: Fietsladers
+            icon: mdi:bike
             entity: sensor.woonkamer_energy_management_system_fietsladers_status
-            name: Fietsladers
             tap_action:
               action: more-info
-          - type: custom:mushroom-entity-card
+          - type: custom:mushroom-template-card
+            primary: >-
+              {% set v = states('sensor.woonkamer_energy_management_system_nilm_onbevestigde_kandidaten') | int(-1) %}{{ 'geen nieuwe kandidaten' if v == 0 else (v ~ ' te beoordelen' if v > 0 else 'onbekend') }}
+            secondary: NILM-kandidaten
+            icon: mdi:help-circle-outline
             entity: sensor.woonkamer_energy_management_system_nilm_onbevestigde_kandidaten
-            name: Kandidaten
             tap_action:
-              action: more-info
+              action: navigate
+              navigation_path: /energy-management-system/details
 
   - title: Financieel
     path: financieel
@@ -1812,19 +1822,31 @@ views:
           - type: custom:mushroom-title-card
             title: Beslissing en planning
             subtitle: Wat de aansturing nu doet en wat er gepland staat
-          - type: custom:mushroom-entity-card
+          - type: custom:mushroom-template-card
+            primary: >-
+              {% set m = {'arbitrage_solar_capture': 'zonoverschot opvangen', 'default_smart': 'standaard slim laden', 'discharging_window': 'ontladen in duur blok', 'emergency_low_battery': 'noodladen bij lage accu', 'expensive_quarter': 'duur kwartier', 'expensive_quarter_no_own_load': 'duur kwartier, geen eigen verbruik', 'expensive_quarter_soc_protected': 'duur kwartier, accu beschermd', 'force_manual': 'handmatig overschreven', 'grid_charging_low_solar': 'bijladen bij weinig zon', 'grid_charging_low_solar_extra_dip': 'bijladen bij extra prijsdip', 'negative_price': 'negatieve prijs', 'no_forecast_data': 'geen prijsvoorspelling', 'post_salderen_solar_capture': 'zon opvangen na saldering'} %}{% set v = states('sensor.energy_management_system_last_decision_reason') %}{{ m.get(v, v if v not in ['unknown','unavailable',''] else 'nog geen beslissing') }}
+            secondary: Laatste reden
+            icon: mdi:comment-question-outline
             entity: sensor.energy_management_system_last_decision_reason
-            name: Laatste reden
             tap_action:
               action: more-info
-          - type: custom:mushroom-entity-card
+          - type: custom:mushroom-template-card
+            primary: >-
+              {% set t = state_attr('sensor.energy_management_system_upcoming_schedule', 'transitions') or [] %}{% if t | length == 0 %}nog geen schema{% else %}{{ t | length }} blok(ken) gepland{% endif %}
+            secondary: >-
+              {% set t = state_attr('sensor.energy_management_system_upcoming_schedule', 'transitions') or [] %}{% if t | length > 0 %}Nu {{ t[0].get('mode') }} tot {{ as_timestamp(t[0].get('end')) | timestamp_custom('%H:%M') if t[0].get('end') else '?' }}{% if t | length > 1 %}, daarna {{ t[1].get('mode') }}{% endif %}{% else %}Komend schema{% endif %}
+            multiline_secondary: true
+            icon: mdi:calendar-clock
             entity: sensor.energy_management_system_upcoming_schedule
-            name: Komend schema
             tap_action:
-              action: more-info
-          - type: custom:mushroom-entity-card
+              action: navigate
+              navigation_path: /energy-management-system/details
+          - type: custom:mushroom-template-card
+            primary: >-
+              {% set v = states('sensor.energy_management_system_simulated_action') %}{{ v if v not in ['unknown','unavailable',''] else 'simulatie draait niet' }}
+            secondary: Gesimuleerde actie
+            icon: mdi:flask-outline
             entity: sensor.energy_management_system_simulated_action
-            name: Gesimuleerde actie
             tap_action:
               action: more-info
           - type: custom:mushroom-entity-card
@@ -1837,14 +1859,20 @@ views:
             name: Ontlaadvenster
             tap_action:
               action: more-info
-          - type: custom:mushroom-entity-card
+          - type: custom:mushroom-template-card
+            primary: >-
+              {% set v = states('sensor.energy_management_system_energy_bridge_check') %}{{ 'genoeg om uit te stellen' if v == 'enough_to_postpone' else ('bijladen nodig' if v == 'top_up_needed' else 'nog niet beoordeeld') }}
+            secondary: Energie-check
+            icon: mdi:clock-check-outline
             entity: sensor.energy_management_system_energy_bridge_check
-            name: Energie-check
             tap_action:
               action: more-info
-          - type: custom:mushroom-entity-card
+          - type: custom:mushroom-template-card
+            primary: >-
+              {% set v = states('sensor.energy_management_system_battery_protection') %}{{ v ~ ' W ontlaadgrens' if v not in ['unknown','unavailable',''] else 'geen grens actief' }}
+            secondary: Accubescherming
+            icon: mdi:battery-lock
             entity: sensor.energy_management_system_battery_protection
-            name: Accubescherming
             tap_action:
               action: more-info
 
@@ -1955,6 +1983,14 @@ views:
               rows: auto
 
           - type: markdown
+            title: Komend schema
+            content: |
+              {% set t = state_attr('sensor.energy_management_system_upcoming_schedule', 'transitions') or [] %}{% if t | length == 0 %}Nog geen schema berekend.{% else %}| Van | Tot | Modus | Prijs |
+              |---|---|---|---|
+              {% for b in t %}| {{ as_timestamp(b.get('start')) | timestamp_custom('%H:%M') if b.get('start') else '?' }} | {{ as_timestamp(b.get('end')) | timestamp_custom('%H:%M') if b.get('end') else '?' }} | {{ b.get('mode') }} | {{ '%.3f'|format(b.get('max_price_per_kwh')) if b.get('max_price_per_kwh') is not none else '—' }} €/kWh |
+              {% endfor %}{% endif %}
+
+          - type: markdown
             title: Waterverbruik vandaag
             content: |
               {% set alles = state_attr('sensor.woonkamer_energy_management_system_waterverbruik', 'recente_gebruiksmomenten') or [] %}{% set dag = now().strftime('%Y-%m-%d') %}{% set ns = namespace(v=[]) %}{% for s in alles %}{%- if s.gestart and dag in s.gestart %}{%- set ns.v = ns.v + [s] %}{%- endif %}{%- endfor %}{% if ns.v | length == 0 %}Nog geen gebruiksmomenten vandaag.{% else %}| Gestart | Duur | Volume |
@@ -1970,9 +2006,13 @@ views:
             name: PV-installatieprofiel
             tap_action:
               action: more-info
-          - type: custom:mushroom-entity-card
+          - type: custom:mushroom-template-card
+            primary: >-
+              {% set v = states('sensor.woonkamer_energy_management_system_pv_hourly_forecast_bias') %}{{ v if v not in ['unknown','unavailable',''] else 'buiten daglichturen' }}
+            secondary: >-
+              {% set p = state_attr('sensor.woonkamer_energy_management_system_pv_hourly_forecast_bias', 'profile_confident') or {} %}PV-voorspelling bias{% if p | length > 0 %} · {{ p | length }} uren geleerd{% endif %}
+            icon: mdi:weather-partly-cloudy
             entity: sensor.woonkamer_energy_management_system_pv_hourly_forecast_bias
-            name: PV-voorspelling bias
             tap_action:
               action: more-info
           - type: custom:mushroom-entity-card
