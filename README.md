@@ -515,6 +515,55 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Acht sensoren bestaan zonder apparaatvoorvoegsel (v1.15.6)
+
+**Gemeld** met screenshot: zeven kaarten onder "Beslissing en planning"
+toonden *"Entiteit niet gevonden"*.
+
+### De oorzaak
+
+Deze sensoren bestaan al langer dan de apparaatnaam "Woonkamer". Home
+Assistant legt de entity_id vast bij de **eerste** aanmaak, dus ze heten
+`sensor.energy_management_system_last_decision_reason` — **zonder** dat
+voorvoegsel.
+
+Ik had ze afgeleid uit de weergavenaam mét voorvoegsel, want dat is het
+patroon van alle nieuwere sensoren.
+
+### Gevonden door de oude versie te raadplegen
+
+In een dashboard van v0.63.114 staan ze nog, en daar is het verschil
+direct zichtbaar. Elf sensoren zonder voorvoegsel, waarvan er zeven op
+mijn nieuwe kaarten stonden.
+
+Plus een achtste: **`learned_night_consumption`**. Dat was de "unknown"
+uit v1.15.5 — geen ontbrekende geleerde waarde dus, maar hetzelfde
+voorvoegselprobleem. De uitleg "nog niet geleerd" die ik toen toevoegde
+was correct van vorm maar verkeerd van oorzaak.
+
+### Waarom mijn test dit niet ving
+
+De test uit v1.14.8 controleert of élke sensor ergens op het dashboard
+staat — maar die zoekt op de **naam**, niet op de volledige entity_id.
+`learned_night_consumption` stond er dus in, alleen met het verkeerde
+voorvoegsel ervoor.
+
+Dat is de derde keer vandaag dat een test dezelfde aanname maakte als de
+code die hij moest controleren.
+
+### Nu bewaakt
+
+Een expliciete lijst van de elf sensoren zonder voorvoegsel, met een test
+die faalt zodra er eentje mét voorvoegsel wordt aangeroepen. Wie daar iets
+aan toevoegt, moet kunnen aantonen dat die entiteit echt zo bestaat.
+
+### Getest
+
+Twee tests erbij: geen enkele oude sensor krijgt het voorvoegsel, en de
+gecorrigeerde verwijzingen bereiken de kaarten ook echt.
+
+**Volledige testsuite**: 1360 tests, allemaal groen.
+
 ## "unknown kW" bij het nachtverbruik (v1.15.5)
 
 **Gemeld** met screenshot: het piekvermogen toonde netjes 2128 W, maar

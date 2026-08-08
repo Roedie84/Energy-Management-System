@@ -501,7 +501,7 @@ views:
         # "richtingen van de stromen nog niet geupdate?". De
         # versiesleutel dwingt een verse ophaal af. Een test bewaakt
         # dat deze waarde gelijk blijft aan de versie in manifest.json.
-        image: /local/energy_management_system_overview.svg?v=1.15.5
+        image: /local/energy_management_system_overview.svg?v=1.15.6
         elements:
           - type: state-label
             entity: sensor.woonkamer_energy_management_system_system_status
@@ -1728,10 +1728,10 @@ views:
               action: more-info
           - type: custom:mushroom-template-card
             primary: >-
-              {% set v = states('sensor.woonkamer_energy_management_system_learned_night_consumption') %}{{ v ~ ' W' if v not in ['unknown','unavailable',''] else 'nog niet geleerd' }}
+              {% set v = states('sensor.energy_management_system_learned_night_consumption') %}{{ v ~ ' W' if v not in ['unknown','unavailable',''] else 'nog niet geleerd' }}
             secondary: Nachtverbruik
             icon: mdi:weather-night
-            entity: sensor.woonkamer_energy_management_system_learned_night_consumption
+            entity: sensor.energy_management_system_learned_night_consumption
             tap_action:
               action: more-info
 
@@ -1810,37 +1810,37 @@ views:
             title: Beslissing en planning
             subtitle: Wat de aansturing nu doet en wat er gepland staat
           - type: custom:mushroom-entity-card
-            entity: sensor.woonkamer_energy_management_system_last_decision_reason
+            entity: sensor.energy_management_system_last_decision_reason
             name: Laatste reden
             tap_action:
               action: more-info
           - type: custom:mushroom-entity-card
-            entity: sensor.woonkamer_energy_management_system_upcoming_schedule
+            entity: sensor.energy_management_system_upcoming_schedule
             name: Komend schema
             tap_action:
               action: more-info
           - type: custom:mushroom-entity-card
-            entity: sensor.woonkamer_energy_management_system_simulated_action
+            entity: sensor.energy_management_system_simulated_action
             name: Gesimuleerde actie
             tap_action:
               action: more-info
           - type: custom:mushroom-entity-card
-            entity: sensor.woonkamer_energy_management_system_cheapest_block_start
+            entity: sensor.energy_management_system_cheapest_block_start
             name: Goedkoopste blok
             tap_action:
               action: more-info
           - type: custom:mushroom-entity-card
-            entity: sensor.woonkamer_energy_management_system_discharge_window_start
+            entity: sensor.energy_management_system_discharge_window_start
             name: Ontlaadvenster
             tap_action:
               action: more-info
           - type: custom:mushroom-entity-card
-            entity: sensor.woonkamer_energy_management_system_energy_bridge_check
+            entity: sensor.energy_management_system_energy_bridge_check
             name: Energie-check
             tap_action:
               action: more-info
           - type: custom:mushroom-entity-card
-            entity: sensor.woonkamer_energy_management_system_battery_protection
+            entity: sensor.energy_management_system_battery_protection
             name: Accubescherming
             tap_action:
               action: more-info

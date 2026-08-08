@@ -9657,3 +9657,30 @@ laatste zip en beperkt tot de twee geleerde waarden.
 **Getest**: twee tests erbij in `test_dashboard_entity_references.py`.
 
 **Volledige testsuite**: 1358 tests, allemaal groen.
+
+## v1.15.6 — Acht sensoren bestaan zonder apparaatvoorvoegsel
+
+**Gemeld**: zeven kaarten onder "Beslissing en planning" toonden
+"Entiteit niet gevonden".
+
+**Oorzaak**: deze sensoren bestaan al langer dan de apparaatnaam
+"Woonkamer". HA legt de entity_id vast bij de EERSTE aanmaak, dus ze
+heten `sensor.energy_management_system_*` zonder voorvoegsel. Ik had ze
+afgeleid uit de weergavenaam mét voorvoegsel - het patroon van alle
+nieuwere sensoren.
+
+**Gevonden via het dashboard van v0.63.114**, waar ze nog staan: elf
+sensoren zonder voorvoegsel, waarvan zeven op de nieuwe kaarten. Plus een
+achtste: `learned_night_consumption` - dat was de "unknown" uit v1.15.5,
+dus geen ontbrekende geleerde waarde maar hetzelfde voorvoegselprobleem.
+
+**Waarom de test dit miste**: die uit v1.14.8 zoekt op de NAAM, niet op
+de volledige entity_id. Derde keer vandaag dat een test dezelfde aanname
+maakte als de code die hij moest controleren.
+
+**Nu bewaakt**: expliciete lijst van de elf sensoren zonder voorvoegsel,
+met een test die faalt zodra er eentje mét voorvoegsel wordt aangeroepen.
+
+**Getest**: twee tests erbij in `test_dashboard_entity_references.py`.
+
+**Volledige testsuite**: 1360 tests, allemaal groen.
