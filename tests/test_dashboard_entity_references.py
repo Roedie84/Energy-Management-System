@@ -133,3 +133,47 @@ def test_the_historical_ids_are_used_instead():
 
     assert "_piekvermogen\n" in yaml_tekst or "_piekvermogen'" in yaml_tekst
     assert "advies_gereedheid_8_modules" in yaml_tekst
+
+
+# --- v1.15.5: eenheden en onbekende waarden -------------------------
+
+
+def test_learned_values_explain_an_empty_state():
+    """Gemeld: "unknown kW" op de nachtverbruik-kaart.
+
+    Bij een GELEERDE waarde betekent een lege toestand meestal "nog niet
+    genoeg verzameld", niet "kapot". Die twee zien er identiek uit als je
+    de kale toestand toont, en dan ga je zoeken naar een storing die er
+    niet is.
+
+    Bij LIVE meetwaarden (accustand, netstroom) is een lege toestand wél
+    een signaal - die houden hun kale weergave, want daar wil je juist
+    zien dat er iets mis is.
+    """
+    yaml_tekst = (PAKKET / "dashboard_template.yaml").read_text()
+
+    for eid, terugval in (
+        ("learned_night_consumption", "nog niet geleerd"),
+        ("piekvermogen", "nog niet gemeten"),
+    ):
+        index = yaml_tekst.index(f"_{eid}')")
+        omgeving = yaml_tekst[max(0, index - 300) : index + 300]
+        assert terugval in omgeving, eid
+
+
+
+def test_the_night_consumption_uses_watt():
+    """De sensor rekent kW al om naar W; nog een keer omrekenen of een
+    verkeerde eenheid tonen maakt het getal onbruikbaar."""
+    bron = (PAKKET / "sensor.py").read_text()
+    start = bron.index("class LearnedNightConsumptionSensor")
+    blok = bron[start : start + 600]
+
+    assert '_attr_native_unit_of_measurement = "W"' in blok
+
+    yaml_tekst = (PAKKET / "dashboard_template.yaml").read_text()
+    kaart_start = yaml_tekst.index("secondary: Nachtverbruik")
+    kaart = yaml_tekst[max(0, kaart_start - 400) : kaart_start]
+
+    assert "' W'" in kaart
+    assert "kW" not in kaart
