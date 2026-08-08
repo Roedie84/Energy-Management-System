@@ -13119,7 +13119,25 @@ class EnergyManagementSystemCoordinator:
                 "status": "onvoldoende_data",
                 "reden": f"{sample_count}/{ENERGY_BALANCE_ERROR_HISTORY_LENGTH} metingen verzameld.",
             }
-        elif (self.sensor_health_score or 0) >= MEASUREMENT_QUALITY_GOOD_THRESHOLD:
+        elif self.sensor_health_score is None:
+            # v1.15.2, gemeld: "onbetrouwbaar kirchhoff - Score None%".
+            # `(None or 0)` viel terug op nul, waarmee een ONTBREKEND
+            # oordeel dezelfde tak in ging als een SLECHT oordeel. Dat
+            # zijn twee verschillende dingen: geen score betekent dat er
+            # nog niet genoeg te vergelijken viel, niet dat de sensoren
+            # elkaar tegenspreken.
+            #
+            # Zo'n melding is erger dan geen melding: hij stuurt je op
+            # zoek naar een sensorprobleem dat er niet is.
+            readiness["kirchhoff"] = {
+                "status": "onvoldoende_data",
+                "reden": (
+                    f"{sample_count} metingen verzameld, maar nog geen "
+                    "geldige vergelijkingen - de accusensor gaf te vaak "
+                    "geen waarde."
+                ),
+            }
+        elif self.sensor_health_score >= MEASUREMENT_QUALITY_GOOD_THRESHOLD:
             readiness["kirchhoff"] = {
                 "status": "klaar",
                 "reden": f"Score {self.sensor_health_score}% over {sample_count} metingen.",

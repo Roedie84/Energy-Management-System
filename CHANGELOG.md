@@ -9554,3 +9554,57 @@ standaard nooit rechtstreeks uit de opslag haalt.
 **Getest**: nieuw `tests/test_config_flow_roundtrip.py`, 7 tests.
 
 **Volledige testsuite**: 1345 tests, allemaal groen.
+
+## v1.15.2 — "Score None%" — ontbrekend oordeel als slecht oordeel
+
+**Gemeld**: "⚠️ onbetrouwbaar kirchhoff — Score None% - sensoren zelf
+lijken inconsistent." Twee dingen die niet samengaan.
+
+**Oorzaak**: `(self.sensor_health_score or 0)` viel bij None terug op
+nul, waardoor een ONTBREKEND oordeel dezelfde tak in ging als een SLECHT
+oordeel - nul is immers lager dan elke drempel. Geen score betekent dat
+er nog niet genoeg te vergelijken viel, niet dat de metingen elkaar
+tegenspreken. Zo'n melding stuurt je op zoek naar een sensorprobleem dat
+er niet is.
+
+De reden noemt nu de werkelijke oorzaak: de accusensor gaf te vaak geen
+waarde.
+
+**Waarom het nu pas opviel**: in v1.15.0 wordt het oordeel herberekend na
+een herstart. Daarvóór was de score ook None, maar viel de beoordeling
+nog in "onvoldoende data" omdat de reeks zelf leeg was. Nu die wél wordt
+hersteld, komt hij verder - en belandde in de verkeerde tak.
+
+**Getest**: nieuw `tests/test_readiness_none_score.py`, 6 tests,
+waaronder een borging dat geen enkele reden ooit "None%" bevat.
+
+**Volledige testsuite**: 1351 tests, allemaal groen.
+
+## v1.15.3 — Drie kaarten wezen naar hernoemde sensoren
+
+**Gemeld**: twee kaarten onder "Overig" toonden "Entiteit niet
+gevonden".
+
+**Oorzaak**: Home Assistant kent de entity_id toe bij de EERSTE aanmaak
+en laat die ongemoeid bij een hernoeming. Dat was in v1.6.4 al
+vastgesteld en vastgelegd (`Piekvermogen (netimport)` ->
+`..._piekvermogen`, `Advies-gereedheid (10 modules)` ->
+`..._advies_gereedheid_8_modules`). Bij het terugzetten van de 24
+sensoren in v1.14.8 leidde ik ze opnieuw af uit de huidige naam, zonder
+die lijst te raadplegen.
+
+De test uit v1.14.8 sloeg niet aan omdat die óók op de weergavenaam
+zoekt - dezelfde verkeerde aanname aan beide kanten, dus de fout
+bevestigde zichzelf.
+
+**Drie gevallen**: piekvermogen, nachtverbruik en (gevonden door de
+nieuwe test) advies-gereedheid.
+
+**Kaarten falen nu netjes**: de twee onder "Overig" zijn template-cards
+geworden - die tonen "onbekend" in plaats van alleen "Entiteit niet
+gevonden", zodat je nog ziet waar de kaart over gaat.
+
+**Getest**: twee tests erbij in `test_dashboard_entity_references.py`,
+plus de uitzondering toegevoegd aan de test uit v1.14.8.
+
+**Volledige testsuite**: 1353 tests, allemaal groen.

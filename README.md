@@ -515,6 +515,91 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Drie kaarten wezen naar hernoemde sensoren (v1.15.3)
+
+**Gemeld** met screenshot: twee kaarten onder "Overig" toonden *"Entiteit
+niet gevonden"*.
+
+### Ik had mijn eigen uitzonderingenlijst genegeerd
+
+Home Assistant kent de entity_id toe bij de **eerste** aanmaak en laat
+die daarna ongemoeid, ook als de weergavenaam verandert. Dat had ik in
+**v1.6.4** al vastgesteld en vastgelegd: `Piekvermogen (netimport)` heet
+nog steeds `..._piekvermogen`, en `Advies-gereedheid (10 modules)` heet
+`..._advies_gereedheid_8_modules`.
+
+Bij het terugzetten van de 24 sensoren in v1.14.8 leidde ik de
+entity_id's opnieuw af uit de huidige naam — zonder die lijst te
+raadplegen.
+
+De test die ik toen schreef ("elke sensor staat ergens op het dashboard")
+sloeg niet aan, want die zoekt óók op de weergavenaam. Dezelfde verkeerde
+aanname aan beide kanten, dus de fout bevestigde zichzelf.
+
+### Drie gevallen, waarvan één die ik zelf niet zag
+
+Piekvermogen en nachtverbruik stonden op je screenshot. De nieuwe test
+vond meteen een derde: de advies-gereedheid op het Kwaliteit-tabblad.
+
+### Kaarten falen nu netjes
+
+De twee kaarten onder "Overig" zijn template-cards geworden. Een
+entity-card met een verkeerde entity_id toont alleen "Entiteit niet
+gevonden"; een template-card toont dan "onbekend" en blijft leesbaar —
+je ziet nog wél waar de kaart over gaat.
+
+### Getest
+
+Twee tests erbij: geen enkele kaart volgt een hernoemde weergavenaam, en
+de historische entity_id's worden daadwerkelijk gebruikt. Plus de
+uitzondering toegevoegd aan de test uit v1.14.8, zodat die niet langer
+dezelfde verkeerde aanname maakt.
+
+**Volledige testsuite**: 1353 tests, allemaal groen.
+
+## "Score None%" — ontbrekend oordeel als slecht oordeel (v1.15.2)
+
+**Gemeld** met screenshot:
+
+> ⚠️ onbetrouwbaar **kirchhoff**
+> Score None% - sensoren zelf lijken inconsistent.
+
+Twee dingen die niet samengaan: er is geen score, en tegelijk luidt het
+oordeel dat de sensoren elkaar tegenspreken.
+
+### De oorzaak
+
+`(self.sensor_health_score or 0)` viel bij `None` terug op **nul**.
+Daarmee ging een **ontbrekend** oordeel dezelfde tak in als een **slecht**
+oordeel — en nul is nu eenmaal lager dan elke drempel.
+
+Dat zijn verschillende dingen. Geen score betekent dat er nog niet genoeg
+te vergelijken viel; niet dat de metingen elkaar tegenspreken.
+
+Zo'n melding is erger dan geen melding: hij stuurt je op zoek naar een
+sensorprobleem dat er niet is. Bij jou is de werkelijke oorzaak dat de
+accusensor te vaak geen waarde gaf — en dat staat nu ook in de reden,
+zodat duidelijk is waar het aan ligt.
+
+### Waarom het nu pas opviel
+
+In v1.15.0 werd het oordeel herberekend na een herstart. Daarvóór was de
+score na een herstart óók `None`, maar dan viel de hele
+gereedheidsbeoordeling nog in de tak "onvoldoende data" omdat de reeks
+zelf ook leeg was. Nu de reeks wél wordt hersteld, komt hij verder — en
+belandde hij in de verkeerde tak.
+
+Een correctie die een tweede fout blootlegt; dat is de derde keer vandaag.
+
+### Getest
+
+Nieuw `tests/test_readiness_none_score.py`, 6 tests: een ontbrekende
+score heet niet onbetrouwbaar, de reden legt uit wat er mist, een echt
+lage score wordt nog steeds gemeld, een goede score is klaar, te weinig
+metingen gaat voor, en geen enkele reden bevat ooit "None%".
+
+**Volledige testsuite**: 1351 tests, allemaal groen.
+
 ## "expected str" bij het bewerken van de configuratie (v1.15.1)
 
 **Gemeld** met screenshot: bij het openen van de configuratie toonden de
