@@ -3434,6 +3434,72 @@ class EnergyManagementSystemCoordinator:
             ),
         }
 
+    def get_dashboard_health(self) -> dict:
+        """Controleert of het dashboard toont wat het hoort te tonen
+        (v1.16.3).
+
+        Gevraagd na een reeks kapotte kaarten: "Had je alles afgevangen
+        met een betere diagnose file?"
+
+        Eerlijk antwoord was nee. Van de veertien problemen op één dag
+        zaten er tien in het DASHBOARD, en de export bevatte alleen
+        sensorwaarden - niet hoe die worden getoond. Elke fout zat in de
+        laag ertussen.
+
+        Deze controle sluit dat gat voor negen van die tien:
+
+        1. verwijst het dashboard naar een entiteit die niet bestaat?
+           (de voorvoegsel-fouten en hernoemde sensoren)
+        2. staat een gebruikte sensor op unknown of unavailable?
+           (de "Onbekend"-kaarten)
+        3. toont een kaart een getal zonder eenheid?
+           (de "1600.0")
+
+        Wat een export níét kan zien: uitlijning, kolombreedte, of een
+        tekst prettig leest. Daar blijven screenshots voor nodig - dat is
+        geen tekortkoming van de export maar een grens ervan.
+        """
+        import re
+
+        sjabloon = self._read_dashboard_template()
+        if not sjabloon:
+            return {"beschikbaar": False}
+
+        verwezen = sorted(
+            set(re.findall(r"\b(sensor\.[a-z0-9_]+)", sjabloon))
+        )
+        ontbrekend: list[str] = []
+        leeg: list[str] = []
+        for entity_id in verwezen:
+            staat = self.hass.states.get(entity_id)
+            if staat is None:
+                ontbrekend.append(entity_id)
+            elif staat.state in ("unknown", "unavailable"):
+                leeg.append(entity_id)
+
+        return {
+            "beschikbaar": True,
+            "gecontroleerd": len(verwezen),
+            "niet_bestaande_entiteiten": ontbrekend,
+            "lege_entiteiten": leeg,
+            "toelichting": (
+                "Een niet-bestaande entiteit toont 'Entiteit niet "
+                "gevonden'; een lege toont 'Onbekend'. Beide zien er op "
+                "een screenshot uit als een storing, ook als er niets "
+                "aan de hand is."
+            ),
+        }
+
+    def _read_dashboard_template(self) -> str:
+        """Leest het meegeleverde dashboardsjabloon."""
+        from pathlib import Path
+
+        pad = Path(__file__).parent / "dashboard_template.yaml"
+        try:
+            return pad.read_text(encoding="utf-8")
+        except OSError:
+            return ""
+
     def get_topic_summaries(self) -> dict:
         """Eén zin per onderwerp: klopt het, of vraagt het aandacht?
         (v1.12.0)

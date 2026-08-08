@@ -336,6 +336,11 @@ async def async_get_config_entry_diagnostics(
             # daadwerkelijk wordt gebruikt of dat er nog wordt
             # geïntegreerd.
             "pv_production_source": coordinator.pv_production_source,
+            # v1.16.3: controleert of het dashboard naar bestaande,
+            # gevulde entiteiten verwijst. Tien van de veertien
+            # problemen op één dag zaten in die laag, en die was in de
+            # export niet zichtbaar.
+            "dashboard_health": coordinator.get_dashboard_health(),
             "stalled_series": coordinator.get_stalled_series_report(),
             "plausibility_warnings": coordinator.get_plausibility_warnings(),
             "sensor_health_breakdown": coordinator.get_sensor_health_breakdown(),

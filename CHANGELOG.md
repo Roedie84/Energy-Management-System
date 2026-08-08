@@ -9841,3 +9841,30 @@ test dat de vertalingen leesbaar zijn (geen underscores).
 **Getest**: nieuw `tests/test_internal_codes_translated.py`, 6 tests.
 
 **Volledige testsuite**: 1385 tests, allemaal groen.
+
+## v1.16.3 — De export zag het dashboard niet
+
+**Gevraagd**: "Had je alles afgevangen met een betere diagnose file?"
+Eerlijk antwoord: nee, grotendeels niet.
+
+**Waarom**: van de veertien problemen op één dag zaten er tien in het
+DASHBOARD en vier in de coordinator. De export bevatte alleen
+sensorwaarden, niet hoe die worden getoond - elke fout zat in de laag
+ertussen en was alleen op een screenshot te zien.
+
+**Nu in de export**: `dashboard_health` controleert of elke entiteit waar
+het dashboard naar verwijst bestaat (vangt voorvoegsel-fouten en
+hernoemde sensoren) en of ze niet op unknown/unavailable staat (vangt de
+"Onbekend"-kaarten). 66 entiteiten gecontroleerd; negen van de tien
+dashboardfouten van vandaag zouden hierin zichtbaar zijn geweest.
+
+Twee aparte lijsten, bewust: "Onbekend" kan normaal zijn (PV-bias buiten
+daglichturen), "Entiteit niet gevonden" nooit.
+
+**Wat een export niet kan zien**: uitlijning, kolombreedte, of een tekst
+prettig leest. Daar blijven screenshots voor nodig - dat is een grens van
+de export, geen tekortkoming.
+
+**Getest**: nieuw `tests/test_dashboard_health_export.py`, 7 tests.
+
+**Volledige testsuite**: 1392 tests, allemaal groen.

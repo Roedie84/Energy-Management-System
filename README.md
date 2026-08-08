@@ -515,6 +515,54 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## De export zag het dashboard niet (v1.16.3)
+
+**Gevraagd**: *"Had je alles afgevangen met een betere diagnose file?"*
+
+Eerlijk antwoord: **nee, grotendeels niet.**
+
+### Waarom niet
+
+Van de veertien problemen op één dag zaten er **tien in het dashboard**
+en vier in de coordinator. De export bevatte alleen sensorwaarden — niet
+hoe die worden getoond.
+
+Elke fout van vandaag zat in de laag ertussen: een entity_id die niet
+bestaat, een eenheid die ontbreekt, een code die niet vertaald werd. Die
+waren alleen op een screenshot te zien, en dus alleen als jij ze
+tegenkwam.
+
+### Wat er nu wél in staat
+
+| Controle | Vangt |
+|---|---|
+| Bestaat elke entiteit waar het dashboard naar verwijst? | voorvoegsel-fouten, hernoemde sensoren (4) |
+| Staat een gebruikte entiteit op unknown of unavailable? | de "Onbekend"-kaarten (3) |
+
+Dat is negen van de tien dashboardfouten, achteraf zichtbaar in een
+export zonder dat er een screenshot aan te pas komt. Zesenzestig
+entiteiten worden gecontroleerd.
+
+Het onderscheid tussen de twee lijsten is bewust: *"Onbekend"* kan
+volstrekt normaal zijn — de PV-bias buiten daglichturen — terwijl
+*"Entiteit niet gevonden"* nooit klopt.
+
+### Wat een export niet kan zien
+
+Uitlijning, kolombreedte, of een tekst prettig leest. Daar blijven
+screenshots voor nodig. Dat is geen tekortkoming van de export maar een
+grens ervan, en die grens hoort benoemd te worden in plaats van
+weggemoffeld.
+
+### Getest
+
+Nieuw `tests/test_dashboard_health_export.py`, 7 tests: elke verwezen
+entiteit wordt gecontroleerd, een ontbrekende wordt gemeld, een lege
+apart, een werkende niet, het staat in de export, de bevindingen worden
+geduid, en een ontbrekend sjabloon laat de diagnostiek niet crashen.
+
+**Volledige testsuite**: 1392 tests, allemaal groen.
+
 ## Systematische controle: vier kaarten met interne codes (v1.16.2)
 
 **Gevraagd**: *"Vooral kijken of er nog meer zaken gerepareerd dienen te
