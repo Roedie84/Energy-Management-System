@@ -70,7 +70,12 @@ def test_the_trimmed_tabs_are_small():
     for view in _views():
         if view["title"] in ("Overzicht", "Meldingen", "Financieel"):
             continue
-        assert len(_kaarten(view)) <= 10, view["title"]
+        # v1.14.8: van 10 naar 20. De 24 ontbrekende sensoren zijn op
+        # verzoek teruggezet op de verborgen tabbladen; de grens blijft
+        # bestaan zodat een tabblad niet opnieuw onoverzichtelijk wordt,
+        # maar hij hoort bij "details achter een tik", niet bij
+        # "alleen samenvattingen".
+        assert len(_kaarten(view)) <= 20, view["title"]
 
 
 def test_every_tab_still_says_something():
@@ -396,3 +401,35 @@ def test_the_status_tiles_still_drill_down():
             actie = kaart.get("tap_action") or {}
             assert actie.get("action") == "navigate", kaart.get("primary")
             assert actie.get("navigation_path", "").endswith("/details")
+
+
+def test_every_sensor_appears_somewhere_on_the_dashboard():
+    """v1.14.8, gevraagd: "Misschien alles wat we vanmorgen hebben
+    verwijderd qua dashboards maar weer terug zetten?"
+
+    Bij het opruimen bleken 24 van de 55 sensoren nergens meer te staan -
+    veel meer dan de drie die opvielen. Een sensor die de integratie wel
+    berekent maar die je nergens ziet, is verspilde moeite: hij kost
+    rekentijd en levert niets op.
+
+    Deze test vangt dat bij de bron, zodat een volgende opruimronde niet
+    stilletjes informatie laat verdwijnen.
+    """
+    import re
+    import unicodedata
+
+    def slug(naam: str) -> str:
+        tekst = unicodedata.normalize("NFKD", naam).encode("ascii", "ignore").decode()
+        return re.sub(r"[^a-z0-9]+", "_", tekst.lower()).strip("_")
+
+    namen = re.findall(
+        r'_attr_name = "([^"]+)"', (PAKKET / "sensor.py").read_text()
+    )
+    dashboard = (PAKKET / "dashboard_template.yaml").read_text()
+
+    ontbreekt = sorted(n for n in namen if slug(n) not in dashboard)
+
+    assert not ontbreekt, (
+        f"{len(ontbreekt)} sensoren staan nergens op het dashboard: "
+        f"{ontbreekt}"
+    )

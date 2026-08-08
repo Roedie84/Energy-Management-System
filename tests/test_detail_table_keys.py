@@ -203,3 +203,54 @@ def test_the_climate_projection_explains_the_two_columns():
 
     assert "naburige situaties" in kaart["content"]
     assert "Basis" in kaart["content"]
+
+
+# --- v1.14.7: beoordelen moet mogelijk blijven ----------------------
+
+
+def test_the_nilm_buttons_are_on_the_dashboard():
+    """Gevraagd: "Waar kan ik nu Nilm apparaten beoordelen, net als
+    mogelijke duplicaties?"
+
+    Bij het opruimen van het Apparaten-tabblad zijn de knoppen
+    verdwenen. Zonder die knoppen kan een kandidaat niet worden
+    bevestigd of afgewezen en blijft een gemeld duplicaat staan - de
+    detectie draait dan wel, maar je kunt er niets mee.
+    """
+    yaml_tekst = (PAKKET / "dashboard_template.yaml").read_text()
+
+    for knop in (
+        "nilm_kandidaat_1_bevestigen",
+        "nilm_kandidaat_1_negeren",
+        "nilm_duplicaat_1_bevestigen",
+        "nilm_duplicaat_1_negeren",
+    ):
+        assert knop in yaml_tekst, knop
+
+
+def test_the_button_ids_match_the_code():
+    """De weergavenamen zijn dynamisch (ze tonen de kandidaat), dus de
+    entity_id's zijn daar niet uit af te leiden. `button.py` legt ze
+    expliciet vast - juist om de "_2"-deduplicatie uit v0.63.81 te
+    voorkomen. Die twee moeten gelijk blijven.
+    """
+    bron = (PAKKET / "button.py").read_text()
+    yaml_tekst = (PAKKET / "dashboard_template.yaml").read_text()
+
+    assert "nilm_kandidaat_" in bron
+    assert "nilm_duplicaat_" in bron
+    # Geen zelfbedachte varianten in het dashboard.
+    assert "nilm_slot_1_" not in yaml_tekst
+
+
+def test_the_candidate_and_duplicates_are_shown():
+    """Een knop "bevestigen" zonder te tonen wát je bevestigt, is niet
+    te gebruiken."""
+    kaart = next(
+        k for k in _detailkaarten() if k.get("title") == "Te beoordelen"
+    )
+    inhoud = kaart["content"]
+
+    assert "kandidaat_naam" in inhoud
+    assert "waarschijnlijke_duplicaten" in inhoud
+    assert "apparaat_1" in inhoud and "apparaat_2" in inhoud
