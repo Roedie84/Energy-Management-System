@@ -331,6 +331,11 @@ async def async_get_config_entry_diagnostics(
             "daily_cost_history": coordinator.daily_cost_history,
             "self_evaluation": coordinator.get_self_evaluation(),
             "gacs_assessment": coordinator.get_gacs_assessment(),
+            # v1.14.3: de bron van de dagopwek. Zonder dit veld is in
+            # een export niet na te gaan of de kWh-meter uit v1.9.1
+            # daadwerkelijk wordt gebruikt of dat er nog wordt
+            # geïntegreerd.
+            "pv_production_source": coordinator.pv_production_source,
             "stalled_series": coordinator.get_stalled_series_report(),
             "plausibility_warnings": coordinator.get_plausibility_warnings(),
             "sensor_health_breakdown": coordinator.get_sensor_health_breakdown(),

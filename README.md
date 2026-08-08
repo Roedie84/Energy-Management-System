@@ -515,6 +515,91 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Stilstaande reeksen werden niet gevonden (v1.14.3)
+
+**Gevraagd**: *"Tevens kijken of er meer zaken zijn die nu niet correct
+meer lopen"* — bij een verse export.
+
+### Eerst het goede nieuws
+
+De drift-drempel uit v1.12.3 werkt: van **vijf** apparaten "mogelijk
+defect" naar **één**, en dat is de koelkast in de schuur die er echt
+uitspringt. De aanlooptijd uit v1.11.0 doet ook zijn werk — de
+sensor-gezondheid staat niet meer in de aandachtspunten.
+
+### Twee vondsten
+
+**De stilstaande-reeks-detectie vond niets**, terwijl
+`_steelstofzuiger_idle_power_history` op tien identieke waarden stond —
+precies de reeks waarvoor die controle in v1.11.1 is gemaakt.
+
+De oorzaak: ik sloeg alles over dat met een **underscore** begint. Maar
+de echte velden heten intern `_steelstofzuiger_idle_power_history`; in de
+export wordt de underscore weggehaald en `_w` toegevoegd. Ik keek dus
+naar namen die alleen in de export bestaan.
+
+Interne naamgeving zegt niets over of een reeks het bewaken waard is.
+
+En toen hij eenmaal werd gevonden, gold hij als **verdacht** — want de
+uitzonderingslijst stond op `idle_power_history_w`, met dat
+export-achtervoegsel dat intern niet bestaat. Twee keer dezelfde fout,
+op twee plekken.
+
+**`pv_production_source` stond niet in de export.** Daardoor is niet na
+te gaan of de kWh-meter uit v1.9.1 daadwerkelijk wordt gebruikt of dat er
+nog wordt geïntegreerd. Toegevoegd.
+
+### Eén vals alarm van mijn kant
+
+De PV-velden leken te ontbreken, maar die staan in de KPI-sectie in
+plaats van bij de coordinator — mijn leescommando keek op het verkeerde
+niveau. Zelfconsumptie staat op 76,8%, en dat is sinds v1.9.2 weer een
+plausibel getal.
+
+### Getest
+
+Drie tests erbij: velden met een underscore worden meegenomen, de
+uitzondering past op de interne naam, en Python-interne velden worden
+nog steeds overgeslagen.
+
+**Volledige testsuite**: 1321 tests, allemaal groen.
+
+## Apparatentabel toonde overal "None" (v1.14.2)
+
+**Gemeld**: *"Moet deze data nog opbouwen?"* — met een screenshot van 38
+apparaten met "None W" en "None%" in elke kolom.
+
+### Nee, de data was er wel
+
+Het sjabloon vroeg sleutels op die niet bestaan: `gemiddeld_w`,
+`referentie_w` en `drift_procent`. De tabel levert `naam`,
+`huidig_vermogen_w` en `trend` — die had ik bij het bouwen van de
+detailpagina verzonnen in plaats van opgezocht.
+
+Een sjabloon dat een niet-bestaande sleutel opvraagt geeft stilzwijgend
+`None`. Dat is het verraderlijke: de tabel ziet er compleet uit, met alle
+38 apparaten netjes op een rij, en het lijkt alsof de meting nog moet
+opstarten.
+
+### Beter dan wat er stond
+
+De echte kolommen zeggen ook meer: het **huidige** vermogen en een
+beschrijving van de trend, in plaats van drie getallen waarvan er twee
+alleen bij drift interessant zijn. Er staat nu ook bij hoeveel apparaten
+er in totaal zijn, want de tabel toont er maar een deel.
+
+### Nu bewaakt
+
+Vijf tests die per detailtabel de opgevraagde sleutels vergelijken met
+wat de bron werkelijk levert. Dat werkt voor de apparatentabel, de
+accumodules, het betrouwbaarheidsoverzicht en de watersessies.
+
+De andere drie bleken correct — bij de accumodules kwam dat doordat de
+tabel `**module` uitklapt, dus die sleutels bestaan wel degelijk. Zonder
+te controleren had ik daar onnodig aan zitten sleutelen.
+
+**Volledige testsuite**: 1318 tests, allemaal groen.
+
 ## Alleen de detailpagina was nog zichtbaar (v1.14.1)
 
 **Gemeld**: *"Zie nu alleen maar een details tabblad meer?"*

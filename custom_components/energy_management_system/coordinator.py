@@ -3614,7 +3614,13 @@ class EnergyManagementSystemCoordinator:
         """
         rapport: list[dict] = []
         for naam, waarde in sorted(vars(self).items()):
-            if naam.startswith("_") or not isinstance(waarde, list):
+            # v1.14.3: velden met een underscore NIET overslaan. In een
+            # export stond `_steelstofzuiger_idle_power_history` op tien
+            # identieke waarden terwijl het rapport leeg bleef - precies
+            # de reeks waarvoor deze controle is gemaakt. Interne
+            # naamgeving zegt niets over of een reeks het bewaken waard
+            # is; wat telt is of het een meetreeks is.
+            if naam.startswith("__") or not isinstance(waarde, list):
                 continue
             getallen = [
                 x for x in waarde if isinstance(x, (int, float))
@@ -3628,11 +3634,12 @@ class EnergyManagementSystemCoordinator:
 
             # Voor sommige reeksen is een constante waarde normaal.
             verwacht = any(
-                fragment in naam for fragment in STALLED_SERIES_CONSTANT_IS_NORMAL
+                fragment in naam.lstrip("_")
+                for fragment in STALLED_SERIES_CONSTANT_IS_NORMAL
             )
             rapport.append(
                 {
-                    "reeks": naam,
+                    "reeks": naam.lstrip("_"),
                     "metingen": len(getallen),
                     "waarde": getallen[0],
                     "constante_is_normaal": verwacht,

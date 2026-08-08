@@ -2136,7 +2136,11 @@ STALLED_SERIES_MIN_SAMPLES = 8
 # uitleggen waarom stilstand daar te verwachten is, in plaats van dat het
 # stilzwijgend meeglipt.
 STALLED_SERIES_CONSTANT_IS_NORMAL = (
-    "idle_power_history_w",
+    # v1.14.3: zonder "_w", want de interne velden heten
+    # `_steelstofzuiger_idle_power_history`. Het fragment moet op de
+    # ECHTE naam passen, niet op de naam zoals die in de export staat -
+    # daar wordt "_w" pas toegevoegd.
+    "idle_power_history",
     "charge_duration_history",
 )
 

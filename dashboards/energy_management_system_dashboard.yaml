@@ -377,7 +377,7 @@ views:
         # "richtingen van de stromen nog niet geupdate?". De
         # versiesleutel dwingt een verse ophaal af. Een test bewaakt
         # dat deze waarde gelijk blijft aan de versie in manifest.json.
-        image: /local/energy_management_system_overview.svg?v=1.14.1
+        image: /local/energy_management_system_overview.svg?v=1.14.3
         elements:
           - type: state-label
             entity: sensor.woonkamer_energy_management_system_system_status
@@ -1631,9 +1631,11 @@ views:
       - type: markdown
         title: Herkende apparaten
         content: |
-          {% set t = state_attr('sensor.woonkamer_energy_management_system_nilm_bevestigde_apparaten', 'tabel') or [] %}{% if t | length == 0 %}Nog geen apparaten herkend.{% else %}| Apparaat | Gemiddeld | Referentie | Afwijking |
-          |---|---|---|---|
-          {% for x in t %}| {{ x.get('naam') }} | {{ x.get('gemiddeld_w') }} W | {{ x.get('referentie_w') }} W | {{ x.get('drift_procent') }}% |
+          {% set t = state_attr('sensor.woonkamer_energy_management_system_nilm_bevestigde_apparaten', 'tabel') or [] %}{% if t | length == 0 %}Nog geen apparaten herkend.{% else %}{{ state_attr('sensor.woonkamer_energy_management_system_nilm_bevestigde_apparaten', 'totaal_aantal') }} apparaten herkend; hieronder de eerste {{ t | length }}.
+
+          | Apparaat | Nu | Trend |
+          |---|---|---|
+          {% for x in t %}| {{ x.get('naam') }} | {{ x.get('huidig_vermogen_w') if x.get('huidig_vermogen_w') is not none else '—' }} W | {{ x.get('trend') or '—' }} |
           {% endfor %}{% endif %}
 
       - type: markdown

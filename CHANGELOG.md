@@ -9280,3 +9280,54 @@ subview"; sinds alles subview is was dat Visueel geworden. Die zoeken nu
 op naam.
 
 **Volledige testsuite**: 1313 tests, allemaal groen.
+
+## v1.14.2 — Apparatentabel toonde overal "None"
+
+**Gemeld**: "Moet deze data nog opbouwen?" met screenshot van 38
+apparaten met "None W" in elke kolom.
+
+**Nee**: het sjabloon vroeg sleutels op die niet bestaan (`gemiddeld_w`,
+`referentie_w`, `drift_procent`); de tabel levert `naam`,
+`huidig_vermogen_w` en `trend`. Die had ik bij het bouwen van de
+detailpagina verzonnen in plaats van opgezocht.
+
+Een sjabloon dat een niet-bestaande sleutel opvraagt geeft stilzwijgend
+`None` - de tabel ziet er compleet uit en het lijkt alsof de meting nog
+moet opstarten.
+
+**De echte kolommen zeggen ook meer**: huidig vermogen plus een
+trendbeschrijving, met het totaal aantal apparaten erbij (de tabel toont
+er maar een deel).
+
+**Nu bewaakt**: vijf tests die per detailtabel de opgevraagde sleutels
+vergelijken met wat de bron levert. De andere drie tabellen bleken
+correct - bij de accumodules doordat de tabel `**module` uitklapt.
+
+**Volledige testsuite**: 1318 tests, allemaal groen.
+
+## v1.14.3 — Stilstaande reeksen werden niet gevonden
+
+**Gevraagd**: kijken of er meer zaken niet correct lopen, bij een verse
+export.
+
+**Goed nieuws**: de drift-drempel uit v1.12.3 werkt (van vijf apparaten
+"mogelijk defect" naar één), en de aanlooptijd uit v1.11.0 haalde de
+sensor-gezondheid uit de aandachtspunten.
+
+**Twee vondsten**:
+- De stilstaande-reeks-detectie vond niets terwijl
+  `_steelstofzuiger_idle_power_history` op tien identieke waarden stond.
+  Oorzaak: alles met een underscore werd overgeslagen, maar de echte
+  velden heten zo - in de export wordt de underscore weggehaald en "_w"
+  toegevoegd. En toen hij eenmaal werd gevonden gold hij als VERDACHT,
+  want de uitzonderingslijst stond op `idle_power_history_w` met dat
+  export-achtervoegsel. Twee keer dezelfde fout op twee plekken.
+- `pv_production_source` stond niet in de export, waardoor niet na te
+  gaan is of de kWh-meter uit v1.9.1 wordt gebruikt. Toegevoegd.
+
+**Eén vals alarm**: de PV-velden leken te ontbreken maar staan in de
+KPI-sectie. Zelfconsumptie 76,8% - sinds v1.9.2 weer plausibel.
+
+**Getest**: drie tests erbij in `test_stalled_series.py`.
+
+**Volledige testsuite**: 1321 tests, allemaal groen.
