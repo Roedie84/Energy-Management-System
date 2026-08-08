@@ -501,7 +501,7 @@ views:
         # "richtingen van de stromen nog niet geupdate?". De
         # versiesleutel dwingt een verse ophaal af. Een test bewaakt
         # dat deze waarde gelijk blijft aan de versie in manifest.json.
-        image: /local/energy_management_system_overview.svg?v=1.14.5
+        image: /local/energy_management_system_overview.svg?v=1.14.6
         elements:
           - type: state-label
             entity: sensor.woonkamer_energy_management_system_system_status
@@ -1771,6 +1771,23 @@ views:
               |---|---|---|
               {% for x in t %}| {{ x.get('naam') }} | {{ x.get('huidig_vermogen_w') if x.get('huidig_vermogen_w') is not none else '—' }} W | {{ x.get('trend') or '—' }} |
               {% endfor %}{% endif %}
+
+          - type: markdown
+            title: Woonkamertemperatuur per uur
+            content: |
+              {% set t = state_attr('sensor.woonkamer_energy_management_system_klimaat_projectie_woonkamertemperatuur', 'traject') or [] %}{% if t | length == 0 %}Nog geen projectie beschikbaar - de integratie leert per combinatie van buitentemperatuur, rolluikstand en airco.
+              {% else %}| Uur | Snel | Betrouwbaar | Buiten | Basis | Metingen |
+              |---|---|---|---|---|---|
+              {% for u in t %}| {{ u.get('tijd') }} | {{ u.get('kort_termijn_temp_c') if u.get('kort_termijn_temp_c') is not none else '—' }} °C | {{ u.get('betrouwbaar_temp_c') if u.get('betrouwbaar_temp_c') is not none else '—' }} °C | {{ u.get('buitentemp_voorspeld_c') if u.get('buitentemp_voorspeld_c') is not none else '—' }} °C | {{ u.get('basis') or '—' }} | {{ u.get('aantal_metingen') if u.get('aantal_metingen') is not none else '—' }} |
+              {% endfor %}{% endif %}
+
+              **Snel** valt terug op naburige situaties zodra de exacte
+              combinatie te dun bezet is; **Betrouwbaar** komt pas bij genoeg
+              metingen in precies die situatie. De kolom Basis zegt waarop de
+              snelle schatting rust.
+            grid_options:
+              columns: 12
+              rows: auto
 
           - type: markdown
             title: Waterverbruik vandaag

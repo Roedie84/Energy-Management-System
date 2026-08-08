@@ -515,6 +515,58 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Uurvoorspelling woonkamertemperatuur terug (v1.14.6)
+
+**Gemeld**: *"Ik mis nu ook de uur temperatuur voorspelling van de
+woonkamer?"* — en daarna: *"Snelle voorspelling en lange termijn zoals
+origineel"*.
+
+Die was met het opruimen van het Klimaat-tabblad gesneuveld. Terecht
+gemist: een verloop per uur laat zich niet in één samenvattende zin
+vangen, want juist het verloop is de informatie.
+
+### Beide reeksen terug
+
+De twee kolommen meten iets anders, en één ervan weglaten maakt de tabel
+waardeloos:
+
+- **Snel** valt terug op naburige situaties zodra de exacte combinatie
+  van buitentemperatuur, rolluikstand en airco te dun bezet is — de
+  terugval uit v1.1.2, die voorkwam dat de projectie na vijf dagen
+  bevroor op één cel.
+- **Betrouwbaar** komt pas bij genoeg metingen in precies die situatie.
+
+Plus de voorspelde buitentemperatuur, de kolom **Basis** die zegt waarop
+de snelle schatting rust, en het aantal metingen. Met een regel uitleg
+eronder, want "Snel" naast "Betrouwbaar" is zonder toelichting niet te
+interpreteren.
+
+Op de detailpagina, bij de andere tabellen.
+
+### Een blinde vlek in mijn eigen test
+
+De test uit v1.14.4 verbood meer dan drie kolommen in detailtabellen. Die
+sloeg niet aan op deze tabel met zes — en dat bleek geen toeval.
+
+Hij keek of een regel **begint** met `|`. Maar tabelrijen in deze
+sjablonen beginnen met een Jinja-tag: `{% for u in t %}| ...`. Daardoor
+werd vrijwel geen enkele rij gecontroleerd; de accumodule-tabel met zes
+kolommen glipte er al die tijd door.
+
+Nu telt hij de pipes ongeacht waarmee de regel begint. De grens is zes in
+plaats van drie: de detailpagina staat sinds v1.14.4 op één kolom, dus een
+tabel krijgt de volle breedte. Op een telefoon blijft dat krap, maar de
+alternatieven zijn informatie weglaten of omzetten naar een lijst — en bij
+deze tabellen is de kolomvergelijking juist het nut.
+
+### Getest
+
+Twee tests erbij: de projectie toont alle vijf de velden, en de uitleg
+bij de twee kolommen staat erbij. Plus de gedichte blinde vlek in de
+kolomtest.
+
+**Volledige testsuite**: 1328 tests, allemaal groen.
+
 ## Meer informatie terug op het beginscherm (v1.14.5)
 
 **Gemeld**: *"Ik wil toch weer meer informatie op de dashboard, wel met

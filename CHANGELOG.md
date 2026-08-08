@@ -9387,3 +9387,30 @@ ruimer, niet weg. Zonder grens wordt het opnieuw een muur tekst.
 `test_compact_dashboard.py`.
 
 **Volledige testsuite**: 1326 tests, allemaal groen.
+
+## v1.14.6 — Uurvoorspelling woonkamertemperatuur terug
+
+**Gemeld**: de uurvoorspelling van de woonkamertemperatuur werd gemist;
+daarna: "Snelle voorspelling en lange termijn zoals origineel".
+
+Die was met het opruimen van het Klimaat-tabblad gesneuveld. Een verloop
+per uur laat zich niet in één zin vangen - juist het verloop is de
+informatie.
+
+**Beide reeksen terug**: `kort_termijn_temp_c` (valt terug op naburige
+situaties zodra de exacte cel te dun bezet is - de terugval uit v1.1.2)
+en `betrouwbaar_temp_c` (pas bij genoeg metingen in precies die
+situatie). Plus buitentemperatuur, de kolom Basis en het aantal metingen,
+met een regel uitleg eronder.
+
+**Blinde vlek in de eigen test**: de kolomtest uit v1.14.4 keek of een
+regel BEGINT met "|", maar tabelrijen beginnen met een Jinja-tag
+("{% for u in t %}| ..."). Daardoor werd vrijwel geen rij gecontroleerd -
+de accumodule-tabel met zes kolommen glipte er al die tijd door. Nu telt
+hij de pipes ongeacht het begin; grens van drie naar zes, omdat de
+detailpagina sinds v1.14.4 op één kolom staat en de kolomvergelijking bij
+deze tabellen juist het nut is.
+
+**Getest**: twee tests erbij in `test_detail_table_keys.py`.
+
+**Volledige testsuite**: 1328 tests, allemaal groen.
