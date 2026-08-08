@@ -21,6 +21,7 @@ from custom_components.energy_management_system.const import (
 PRIJS = "sensor.zonneplan_current_quarter_hourly_electricity_tariff"
 AFNAME = "sensor.zonneplan_electricity_delivery_costs_today"
 TERUG = "sensor.zonneplan_electricity_production_costs_today"
+GAS = "sensor.zonneplan_gas_delivery_costs_today"
 
 
 def _coordinator(make_coordinator, prijs_entity=PRIJS):
@@ -237,30 +238,6 @@ def test_the_verdict_mentions_the_p1_scope(make_coordinator, hass):
     assert "P1-meter" in c.get_zonneplan_cost_comparison()["reden"]
 
 
-def test_the_dashboard_explains_the_limitation():
-    """Op het tabblad staat de tegenfeitelijke besparing vlak boven deze
-    vergelijking - zonder uitleg zou iemand kunnen denken dat Zonneplan
-    dát bevestigt."""
-    from pathlib import Path
-
-    import custom_components.energy_management_system as pkg
-
-    yaml_tekst = (
-        Path(pkg.__file__).parent / "dashboard_template.yaml"
-    ).read_text()
-    plat = " ".join(yaml_tekst.split())
-
-    # v1.12.0: de uitleg is ingekort van ~25 naar 4 regels (dashboard
-    # was te druk). De STREKKING moet blijven: dat de accu-boekhouding
-    # en de tegenfeitelijke besparing hier niet mee bevestigd worden.
-    assert "niet de accu-boekhouding" in plat
-    assert "tegenfeitelijke besparing" in plat
-
-
-# --- v1.7.0: gas -----------------------------------------------------
-
-GAS = "sensor.zonneplan_gas_delivery_costs_today"
-
 
 def test_gas_is_found_automatically(make_coordinator, hass):
     """Gevraagd: "Zonneplan levert ook gas aan mij, dit graag meenemen in
@@ -314,30 +291,33 @@ def test_without_gas_the_total_is_just_electricity(make_coordinator, hass):
     assert vergelijking["totale_energiekosten_vandaag_eur"] == 2.5
 
 
-def test_the_dashboard_hides_gas_when_there_is_none():
-    """Een regel met "None €" is erger dan geen regel."""
-    from pathlib import Path
-
-    import custom_components.energy_management_system as pkg
-
-    yaml_tekst = (
-        Path(pkg.__file__).parent / "dashboard_template.yaml"
-    ).read_text()
-
-    assert "if z.get('zonneplan_gas_vandaag_eur') is not none" in yaml_tekst
 
 
-def test_the_dashboard_says_gas_is_not_verified():
-    """Gas wordt alleen getoond, niet getoetst - deze integratie
-    berekent er niets aan. Dat verzwijgen zou suggereren dat het
-    gecontroleerd is."""
-    from pathlib import Path
 
-    import custom_components.energy_management_system as pkg
+def test_the_limitation_is_stated_in_the_verdict(make_coordinator, hass):
+    """v1.12.4: de uitleg stond op het dashboard in een tabel met
+    toelichting. Die is een tegel geworden, dus de beperking moet in het
+    OORDEEL zelf staan - dat is toch wat je ziet als je doorklikt.
 
-    yaml_tekst = (
-        Path(pkg.__file__).parent / "dashboard_template.yaml"
-    ).read_text()
-    plat = " ".join(yaml_tekst.split())
+    Verzwijgen dat de accu-boekhouding en de tegenfeitelijke besparing
+    hier niet mee bevestigd worden, zou de vergelijking geloofwaardiger
+    laten lijken dan ze is.
+    """
+    c = _coordinator(make_coordinator)
+    hass.states.set(AFNAME, "3.00")
+    hass.states.set(TERUG, "0.50")
+    c.actual_cost_today_eur = 2.45
 
-    assert "Gas wordt alleen getoond, niet" in plat
+    vergelijking = c.get_zonneplan_cost_comparison()
+
+    assert "niet de accu-boekhouding" in vergelijking["reden"]
+    assert "tegenfeitelijke besparing" in vergelijking["reden"]
+    assert "achter de meter" in vergelijking["wat_dit_toetst"]
+
+
+def test_the_tile_hides_gas_when_there_is_none(make_coordinator, hass):
+    """Een tegel met "None €" is erger dan een tegel zonder gasregel."""
+    c = _coordinator(make_coordinator)
+    hass.states.set(AFNAME, "3.00")
+
+    assert c.get_zonneplan_cost_comparison()["zonneplan_gas_vandaag_eur"] is None
