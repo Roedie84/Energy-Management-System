@@ -32,6 +32,19 @@ def _coordinator(make_coordinator, hass):
     return c
 
 
+def _weg_sinds(c, entity_id, moment):
+    """v1.11.0: de melding komt pas bij AANHOUDENDE uitval, dus de
+    sensor moet al een tijd weg zijn. Een enkele gemiste uitlezing komt
+    voor bij elke cloudgebonden integratie en is geen storing."""
+    from custom_components.energy_management_system.const import (
+        SENSOR_UNAVAILABLE_CONFIRM_MINUTES,
+    )
+
+    c._sensor_unavailable_since[entity_id] = moment - timedelta(
+        minutes=SENSOR_UNAVAILABLE_CONFIRM_MINUTES + 1
+    )
+
+
 def _ronde(c, moment=NOW):
     from custom_components.energy_management_system import coordinator as mod
 
@@ -55,6 +68,7 @@ def test_a_recovered_sensor_is_reported(make_coordinator, hass):
 
     # Sensor weg: probleemmelding.
     hass.states.set("sensor.beschikbaar", "unavailable")
+    _weg_sinds(c, "sensor.beschikbaar", NOW)
     _ronde(c)
     assert any("niet uitleesbaar" in t for t in _titels(c))
 
@@ -73,6 +87,8 @@ def test_the_recovery_ignores_the_throttle(make_coordinator, hass):
                    if k == "sensor_unavailable")
 
     hass.states.set("sensor.beschikbaar", "unavailable")
+
+    _weg_sinds(c, "sensor.beschikbaar", NOW)
     _ronde(c)
     hass.states.set("sensor.beschikbaar", "6.5")
     _ronde(c, NOW + timedelta(minutes=1))
@@ -95,6 +111,7 @@ def test_no_repeated_recovery(make_coordinator, hass):
     """Eenmaal hersteld is hersteld."""
     c = _coordinator(make_coordinator, hass)
     hass.states.set("sensor.beschikbaar", "unavailable")
+    _weg_sinds(c, "sensor.beschikbaar", NOW)
     _ronde(c)
     hass.states.set("sensor.beschikbaar", "6.5")
     _ronde(c, NOW + timedelta(minutes=5))
@@ -111,6 +128,7 @@ def test_a_disabled_notification_gets_no_recovery(make_coordinator, hass):
     wat je verwacht als je een melding uitschakelt."""
     c = _coordinator(make_coordinator, hass)
     hass.states.set("sensor.beschikbaar", "unavailable")
+    _weg_sinds(c, "sensor.beschikbaar", NOW)
     _ronde(c)
     c.set_notification_enabled("sensor_unavailable", False)
 
@@ -123,6 +141,7 @@ def test_a_disabled_notification_gets_no_recovery(make_coordinator, hass):
 def test_the_master_switch_blocks_recoveries_too(make_coordinator, hass):
     c = _coordinator(make_coordinator, hass)
     hass.states.set("sensor.beschikbaar", "unavailable")
+    _weg_sinds(c, "sensor.beschikbaar", NOW)
     _ronde(c)
     c.notifications_master_enabled = False
 
@@ -142,10 +161,13 @@ def test_a_returning_problem_is_reported_immediately(make_coordinator, hass):
     c = _coordinator(make_coordinator, hass)
 
     hass.states.set("sensor.beschikbaar", "unavailable")
+
+    _weg_sinds(c, "sensor.beschikbaar", NOW)
     _ronde(c)
     hass.states.set("sensor.beschikbaar", "6.5")
     _ronde(c, NOW + timedelta(minutes=5))
     hass.states.set("sensor.beschikbaar", "unavailable")
+    _weg_sinds(c, "sensor.beschikbaar", NOW)
     _ronde(c, NOW + timedelta(minutes=10))
 
     assert len([t for t in _titels(c) if "niet uitleesbaar" in t]) == 2
@@ -219,6 +241,7 @@ def test_the_history_stores_the_message_not_just_the_title(
     """
     c = _coordinator(make_coordinator, hass)
     hass.states.set("sensor.beschikbaar", "unavailable")
+    _weg_sinds(c, "sensor.beschikbaar", NOW)
 
     _ronde(c)
 
@@ -229,6 +252,7 @@ def test_the_history_stores_the_message_not_just_the_title(
 def test_the_recovery_also_stores_its_message(make_coordinator, hass):
     c = _coordinator(make_coordinator, hass)
     hass.states.set("sensor.beschikbaar", "unavailable")
+    _weg_sinds(c, "sensor.beschikbaar", NOW)
     _ronde(c)
     hass.states.set("sensor.beschikbaar", "6.5")
     _ronde(c, NOW + timedelta(minutes=5))
@@ -279,6 +303,8 @@ def test_the_recovery_names_the_sensor(make_coordinator, hass):
     c._started_at = NOW - timedelta(hours=1)
 
     hass.states.set("sensor.beschikbaar", "unavailable")
+
+    _weg_sinds(c, "sensor.beschikbaar", NOW)
     _ronde(c)
     hass.states.set("sensor.beschikbaar", "6.5")
     _ronde(c, NOW + timedelta(minutes=5))
@@ -296,6 +322,8 @@ def test_the_names_are_cleared_after_the_recovery(make_coordinator, hass):
     c._started_at = NOW - timedelta(hours=1)
 
     hass.states.set("sensor.beschikbaar", "unavailable")
+
+    _weg_sinds(c, "sensor.beschikbaar", NOW)
     _ronde(c)
     hass.states.set("sensor.beschikbaar", "6.5")
     _ronde(c, NOW + timedelta(minutes=5))
@@ -319,6 +347,7 @@ def test_no_unavailability_alert_right_after_a_restart(
     c = _coordinator(make_coordinator, hass)
     c._started_at = NOW
     hass.states.set("sensor.beschikbaar", "unavailable")
+    _weg_sinds(c, "sensor.beschikbaar", NOW)
 
     _ronde(c, NOW + timedelta(seconds=30))
 
@@ -336,6 +365,7 @@ def test_the_alert_does_arrive_after_the_grace_period(
     c = _coordinator(make_coordinator, hass)
     c._started_at = NOW
     hass.states.set("sensor.beschikbaar", "unavailable")
+    _weg_sinds(c, "sensor.beschikbaar", NOW)
 
     _ronde(c, NOW + timedelta(seconds=STARTUP_GRACE_SECONDS + 10))
 

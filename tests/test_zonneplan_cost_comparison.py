@@ -250,8 +250,11 @@ def test_the_dashboard_explains_the_limitation():
     ).read_text()
     plat = " ".join(yaml_tekst.split())
 
-    assert "Wat dit níét toetst" in plat
-    assert "weten niet eens dat er een accu staat" in plat
+    # v1.12.0: de uitleg is ingekort van ~25 naar 4 regels (dashboard
+    # was te druk). De STREKKING moet blijven: dat de accu-boekhouding
+    # en de tegenfeitelijke besparing hier niet mee bevestigd worden.
+    assert "niet de accu-boekhouding" in plat
+    assert "tegenfeitelijke besparing" in plat
 
 
 # --- v1.7.0: gas -----------------------------------------------------
@@ -337,5 +340,4 @@ def test_the_dashboard_says_gas_is_not_verified():
     ).read_text()
     plat = " ".join(yaml_tekst.split())
 
-    assert "Gas wordt alleen getóónd, niet getoetst" in plat
-    assert "alleen een dagtotaal" in plat
+    assert "Gas wordt alleen getoond, niet" in plat
