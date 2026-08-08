@@ -2139,3 +2139,20 @@ STALLED_SERIES_CONSTANT_IS_NORMAL = (
     "idle_power_history_w",
     "charge_duration_history",
 )
+
+# --- Ondergrens voor drift-detectie (v1.12.3) ------------------------
+# In een export stonden vijf van de 38 apparaten als "mogelijk defect",
+# waaronder een televisie met referentie 0,79 W en een diepvries met
+# 0,85 W. De gemelde drift van -24% en -15% komt daar neer op een
+# verschil van 0,19 respectievelijk 0,13 watt.
+#
+# Een PROCENTUELE drempel is bij zulke kleine vermogens betekenisloos:
+# meetruis van een tiende watt is al vijftien procent. Vijf meldingen
+# waarvan er drie over tienden van watts gaan, leert je ze te negeren -
+# en dan mis je de koelkast die echt stukgaat.
+NILM_DRIFT_MIN_REFERENCE_W = 5.0
+
+# Daarnaast moet het ABSOLUTE verschil de moeite waard zijn. Een
+# apparaat van 10 W dat 30% meer verbruikt is 3 watt - dat is geen
+# beginnend defect maar ruis.
+NILM_DRIFT_MIN_ABSOLUTE_W = 5.0

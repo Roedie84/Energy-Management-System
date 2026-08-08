@@ -8982,3 +8982,111 @@ een volgende opruimronde opnieuw lege tabbladen achterlaat.
 **Getest**: drie tests erbij in `test_compact_dashboard.py`.
 
 **Volledige testsuite**: 1256 tests, allemaal groen.
+
+## v1.12.3 — Statuskaart terug, en drift-meldingen over tienden van watts
+
+**Gemeld**: "Welke status kaart?" - de aandachtspunten-kaart verwees naar
+een statuskaart die in v1.12.1 was weggehaald, en een markdown-kaart is
+niet aanklikbaar. De kaart is nu zelf de ingang (template-card met
+tap_action); een test controleert dat.
+
+**Vijf apparaten "mogelijk defect", waarvan vier onzin**: televisie 0,79 W
+(-24% = 0,19 W), diepvries 0,85 W (-15% = 0,13 W), IPTV 2,49 W (+15% =
+0,37 W), oplader 2,84 W (+47% = 1,33 W). Alleen de koelkast schuur (8,3
+-> 67,7 W) was echt iets.
+
+Een procentuele drempel is bij zulke vermogens betekenisloos - meetruis
+van een tiende watt is al 15%. Twee ondergrenzen nu: referentie >= 5 W EN
+verschil >= 5 W. Beide nodig: een apparaat van 200 W dat 2 watt meer
+trekt is evenmin een defect. Getoetst tegen de echte cijfers: van vijf
+meldingen naar één; een koelkast van 80 naar 110 W blijft melden.
+
+**Onderweg**: drie CUSUM-tests draaiden op 6,2 W en vielen onder de
+nieuwe drempel; opgeschaald naar 62 W. Daarbij schaalden per ongeluk ook
+de CUSUM-waarden mee (geen watts) - twee tests vingen dat.
+
+**Getest**: nieuw `tests/test_nilm_drift_thresholds.py`, 7 tests.
+
+**Volledige testsuite**: 1266 tests, allemaal groen.
+
+## v1.12.4 — Overal hetzelfde: conclusie op de kaart, detail door te tikken
+
+**Gemeld**: het principe van summiere informatie met doorklikken voor
+detail overal toepassen.
+
+**Elke tegel is te openen**: 21 kaarten toonden een conclusie zonder
+tap_action - dat laat je met de vraag zitten zonder manier om hem te
+beantwoorden. Een test bewaakt dat nu.
+
+**Financieel was het laatste bastion**: drie tabellen van samen ruim 4000
+tekens, nu twee tegels ("-0,03 € vandaag — stroom -0,16 €, gas 0,13 €.
+Eigen berekening klopt met Zonneplan."). Het maandoverzicht verviel; die
+cijfers stonden al in de tweede tegel. Alle bedragen blijven in de
+attributen.
+
+**Nog twee toelichtingen weg**: de uitleg bovenaan Kwaliteit was zelf de
+langste tekst op dat tabblad geworden, en de rendementsregel op Overzicht
+stond pal naast de rendementstegel.
+
+**Stand**: 85 kaarten, ~2000 tekens tekst waarvan de helft op Meldingen
+(een bedieningspaneel). Was 145 kaarten.
+
+**Vier tests moesten mee**: die bewaakten de Zonneplan-tabel. De
+beperking ("dit toetst niet de accu-boekhouding") staat nu in het OORDEEL
+zelf - dat is wat je ziet bij doorklikken.
+
+**Getest**: drie tests erbij in `test_compact_dashboard.py`.
+
+**Volledige testsuite**: 1265 tests, allemaal groen.
+
+## v1.12.5 — Uitgezette meldingen blijven nalees baar
+
+**Gevraagd**: een uitgezette melding moet niet meer naar de telefoon,
+maar wel zichtbaar blijven in de geschiedenis.
+
+**Was**: een geblokkeerde melding sloeg de geschiedenis over, dus
+uitzetten was hetzelfde als weggooien.
+
+**Nu**: de schakelaar bepaalt alleen of de telefoon rinkelt. Vastleggen
+gebeurt altijd, met 🔕 in de tabel en de reden erbij ("deze melding staat
+uit" / "hoofdschakelaar staat uit"). Zonder markering zou het lijken
+alsof de schakelaar niets doet.
+
+**Demping werkt bewust anders**: dat venster bestaat om HERHALING te
+voorkomen, en die alsnog vastleggen zou de geschiedenis volschrijven met
+dubbele regels. Hetzelfde voor de aanlooptijd na een herstart. Het
+onderscheid: een keuze van de gebruiker wordt vastgelegd, een
+timingregel niet.
+
+**Onderweg**: twee bestaande tests eisten een lege geschiedenis bij een
+uitgeschakelde melding - precies de aanname die nu omkeert.
+
+**Getest**: nieuw `tests/test_notification_history_when_disabled.py`, 9
+tests.
+
+**Volledige testsuite**: 1277 tests, allemaal groen.
+
+## v1.12.6 — Labels pasten niet in de tegels
+
+**Gemeld**: de rendementskaart is leesbaar, de rest niet. Die stond op
+volle breedte (12 kolommen), de rest op de halve (6) - waar ongeveer 22
+tekens in passen.
+
+**Afgekapt**: "Grootverbruiker bevestigd actief (omzeilt
+mediaan-vertraging)" (61), "Boven prijsdrempel (hele dag,
+capaciteit-begrensd)" (50), "Netstroom, P1 (kan negatief zijn bij
+export)" (44). Je zag "Netstroom, P1 (kan n…" - dat maakt de tegel
+onbruikbaar zonder erop te klikken.
+
+**Negen labels ingekort**; de uitleg tussen haakjes staat toch in de
+attributen en elke tegel is sinds v1.12.4 aanklikbaar. De
+besturingssectie van 4 naar 6 kolommen, met kortere namen
+("Steelstofzuiger", "Fietsladers", "Apparaatmeldingen").
+
+**Nu bewaakt**: een test rekent per kaart uit hoeveel tekens er passen
+bij zijn kolombreedte (15/22/48) en faalt op elk label dat eroverheen
+gaat. Plus een test dat het inkorten de betekenis niet wegnam.
+
+**Getest**: nieuw `tests/test_dashboard_label_length.py`, 4 tests.
+
+**Volledige testsuite**: 1281 tests, allemaal groen.

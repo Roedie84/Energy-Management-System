@@ -515,6 +515,234 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Labels pasten niet in de tegels (v1.12.6)
+
+**Gemeld**: *"De rendement card is wel volledig leesbaar, de rest niet,
+graag optimaliseren."*
+
+Precies de goede waarneming: die ene kaart stond op **volle breedte**, de
+rest op de halve.
+
+### Wat er afgekapt werd
+
+| Label | Tekens |
+|---|---|
+| Grootverbruiker bevestigd actief (omzeilt mediaan-vertraging) | 61 |
+| Boven prijsdrempel (hele dag, capaciteit-begrensd) | 50 |
+| Zonnepaneel-vermogenslimiet (bij negatieve prijs) | 49 |
+| Netstroom, P1 (kan negatief zijn bij export) | 44 |
+| Werkelijke modus (Zendure — alleen weergave) | 44 |
+
+Een tegel op zes kolommen toont er ongeveer 22. Je zag dus *"Netstroom,
+P1 (kan n…"* — je weet dát er iets staat maar niet wát, en dan is de
+tegel onbruikbaar zonder erop te klikken.
+
+### Negen labels ingekort, besturing verbreed
+
+De uitleg tussen haakjes is eruit; die staat toch in de attributen, en
+elke tegel is sinds v1.12.4 aanklikbaar.
+
+De besturingssectie stond op vier kolommen — te smal voor
+"Steelstofzuiger overrule" en "Vaatwasser/wasmachine-meldingen". Nu zes
+kolommen, en die namen zijn "Steelstofzuiger", "Fietsladers" en
+"Apparaatmeldingen" geworden.
+
+### Nu bewaakt
+
+Een test rekent per kaart uit hoeveel tekens er passen bij zijn
+kolombreedte (15 bij vier, 22 bij zes, 48 bij twaalf) en faalt op elk
+label dat eroverheen gaat. Sjablonen worden overgeslagen: die berekenen
+hun eigen tekst.
+
+Plus een test dat het inkorten de betekenis niet heeft weggenomen — "PV-
+limiet" moet herkenbaar blijven — en dat de volledige uitleg bereikbaar
+blijft doordat elke tegel doorklikt.
+
+### Getest
+
+Nieuw `tests/test_dashboard_label_length.py`, 4 tests.
+
+**Volledige testsuite**: 1281 tests, allemaal groen.
+
+## Uitgezette meldingen blijven nalees baar (v1.12.5)
+
+**Gevraagd**: *"Als ik door een button een melding uitzet moet hij niet
+meer naar mijn iPhone, maar nog wel zichtbaar zijn in [de
+geschiedenis]."*
+
+Terecht onderscheid, en het was er niet.
+
+### Uitzetten was hetzelfde als weggooien
+
+Een geblokkeerde melding sloeg de geschiedenis over. Zette je een soort
+uit, dan verdween hij compleet — ook uit de lijst die je juist gebruikt
+om achteraf te kijken wat er gebeurde.
+
+Nu bepaalt de schakelaar alleen of je **telefoon rinkelt**. Vastleggen
+gebeurt altijd, met een 🔕 in de tabel en de reden erbij: *"deze melding
+staat uit"* of *"hoofdschakelaar staat uit"*.
+
+Zonder die markering zou het lijken alsof de schakelaar niets doet.
+
+### Demping werkt bewust anders
+
+Het dempingsvenster bestaat juist om **herhaling** te voorkomen. Die
+herhaling dan alsnog vastleggen zou de geschiedenis volschrijven met
+dubbele regels — precies waar hij onbruikbaar van wordt.
+
+Hetzelfde geldt voor de aanlooptijd na een herstart: die gaat over
+timing, niet over een keuze van jou.
+
+Het onderscheid is dus: **een keuze van de gebruiker** wordt vastgelegd,
+**een timingregel** niet.
+
+### Onderweg
+
+Twee bestaande tests eisten een lege geschiedenis bij een uitgeschakelde
+melding — precies de aanname die nu omkeert. Die controleren nu dat er
+niets naar de telefoon gaat én dat de regel wél in de geschiedenis staat.
+
+### Getest
+
+Nieuw `tests/test_notification_history_when_disabled.py`, 9 tests: een
+uitgezette melding wordt vastgelegd maar niet verstuurd, de reden staat
+erbij, de hoofdschakelaar gedraagt zich hetzelfde, een verstuurde melding
+wordt als verstuurd gemarkeerd, een gedempte herhaling wordt níét
+vastgelegd, de aanlooptijd evenmin, de tabel markeert het, en het geldt
+voor alle tweeëntwintig soorten.
+
+**Volledige testsuite**: 1277 tests, allemaal groen.
+
+## Overal hetzelfde: conclusie op de kaart, detail door te tikken (v1.12.4)
+
+**Gemeld**: *"Misschien dit nu voor alles toepassen (dus sumiere
+informatie op de dashboards/tabbladen) en wanneer meer informatie gewenst
+is dit door middel van op de card klikken zichtbaar maken?"*
+
+Dat is het principe dat er al half in zat. Nu overal.
+
+### Elke tegel is te openen
+
+Eenentwintig kaarten toonden een conclusie zonder dat je erop kon
+klikken. Dat laat je met de vraag zitten zonder een manier om hem te
+beantwoorden — precies wat er bij de statuskaart misging.
+
+Er staat nu een test op dat élke tegel met een entiteit een `tap_action`
+heeft.
+
+### Financieel was het laatste bastion
+
+Drie tabellen van samen **ruim 4000 tekens**: de Zonneplan-afrekening,
+week/maand/jaar met trends, en het maandoverzicht.
+
+Nu twee tegels:
+
+- *"−0,03 € vandaag — stroom −0,16 €, gas 0,13 €. Eigen berekening klopt
+  met Zonneplan."*
+- *"−1,53 € stroom deze week — gas 0,23 €. Week 📉 −12%"*
+
+Het maandoverzicht verviel: die cijfers stonden al in de tweede tegel.
+Alle onderliggende bedragen blijven in de attributen.
+
+### Nog twee toelichtingen weg
+
+De uitleg bovenaan Kwaliteit ("alleen de conclusie per onderwerp…") was
+zelf de langste tekst op dat tabblad geworden. En de rendementsregel op
+Overzicht stond pal naast de rendementstegel.
+
+### De stand
+
+| Tabblad | Kaarten | Tekst |
+|---|---|---|
+| Overzicht | 24 | 0 |
+| Meldingen | 26 | 1217 |
+| Financieel | 12 | **0** |
+| Systeem | 9 | 0 |
+| Verloop | 8 | 493 |
+| Kwaliteit | 5 | 293 |
+| Visueel | 1 | 0 |
+
+Van 145 kaarten en duizenden tekens naar **85 kaarten en 2000 tekens**,
+waarvan de helft op het Meldingen-tabblad — een bedieningspaneel, geen
+leespagina.
+
+### Vier tests moesten mee
+
+Die bewaakten de Zonneplan-tabel. De garantie geldt nog, alleen ergens
+anders: de beperking ("dit toetst niet de accu-boekhouding") staat nu in
+het **oordeel zelf**, want dat is wat je ziet als je doorklikt. Verzwijgen
+zou de vergelijking geloofwaardiger laten lijken dan ze is.
+
+### Getest
+
+Drie tests erbij: elke tegel is aanklikbaar, geen tabblad heeft meer dan
+800 tekens tekst, en Financieel gebruikt tegels in plaats van tabellen.
+
+**Volledige testsuite**: 1265 tests, allemaal groen.
+
+## Statuskaart terug, en drift-meldingen over tienden van watts (v1.12.3)
+
+**Gemeld**: *"Welke status kaart?"* — plus een nieuwe diagnostiek.
+
+### De verwijzing klopte niet
+
+De aandachtspunten-kaart zei *"Tik op de statuskaart voor de details"*,
+maar die kaart had ik in v1.12.1 zelf weggehaald. En een markdown-kaart
+is niet aanklikbaar, dus de verwijzing wees nergens heen.
+
+Nu is de kaart zélf de ingang: een tegel die je kunt aantikken voor alle
+details, met de eerste regel van het aandachtspunt er al in. De test
+controleert nu ook dat hij een `tap_action` heeft — anders is "tik voor
+details" opnieuw een loze belofte.
+
+### Vijf apparaten "mogelijk defect", waarvan vier onzin
+
+De export toonde vijf van de 38 apparaten als afwijkend:
+
+| Apparaat | Referentie | Drift | Werkelijk verschil |
+|---|---|---|---|
+| Televisie | 0,79 W | −24,2% | **0,19 W** |
+| Diepvries | 0,85 W | −15,4% | **0,13 W** |
+| IPTV | 2,49 W | +14,9% | **0,37 W** |
+| Oplader tablet | 2,84 W | +46,8% | **1,33 W** |
+| Koelkast schuur | 8,30 W | +716% | 59,4 W |
+
+Alleen die laatste is echt iets. Een **procentuele** drempel is bij zulke
+kleine vermogens betekenisloos — meetruis van een tiende watt is al
+vijftien procent.
+
+Er gelden nu twee ondergrenzen: het apparaat moet minstens 5 W
+verbruiken, **en** het verschil moet minstens 5 W zijn. Beide zijn nodig:
+een apparaat van 200 W dat 2 watt meer trekt is evenmin een beginnend
+defect.
+
+Getoetst tegen je echte cijfers: van vijf meldingen naar één. Een
+koelkast die van 80 naar 110 W gaat, blijft gewoon melden.
+
+### Waarom dit ertoe doet
+
+Vijf meldingen waarvan er vier over tienden van watts gaan, leert je die
+meldingen te negeren — en dan mis je de keer dat er echt iets stukgaat.
+Dat is hetzelfde patroon als bij de nachtreserve (v1.9.3) en de
+sensoruitval (v1.11.0).
+
+### Onderweg
+
+Drie bestaande CUSUM-tests draaiden op 6,2 W en vielen daarmee onder de
+nieuwe drempel. Die zijn opgeschaald naar 62 W — een realistisch
+apparaat. Daarbij schaalde ik per ongeluk ook de CUSUM-waarden mee, die
+geen watts zijn; twee tests vingen dat.
+
+### Getest
+
+Nieuw `tests/test_nilm_drift_thresholds.py`, 7 tests: een klein apparaat
+triggert niet, een klein percentage op een klein apparaat evenmin, een
+echt apparaat wél, een grote sprong op een bescheiden apparaat ook, een
+groot apparaat met een kleine verandering blijft stil, de drempels zijn
+vastgelegd, en de vijf echte gevallen leveren nog één melding op.
+
+**Volledige testsuite**: 1266 tests, allemaal groen.
+
 ## Van tien naar zeven tabbladen (v1.12.2)
 
 **Gemeld**: *"Sommige tabbladen zijn nu zo leeg dat het beter is deze

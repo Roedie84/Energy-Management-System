@@ -95,6 +95,8 @@ from .const import (
     LEARNED_THRESHOLD_MARGIN_W,
     NILM_CUSUM_SLACK_FRACTION,
     NILM_CUSUM_ALARM_THRESHOLD,
+    NILM_DRIFT_MIN_ABSOLUTE_W,
+    NILM_DRIFT_MIN_REFERENCE_W,
     NILM_CUSUM_MAX_DAILY_CONTRIBUTION,
     NILM_CUSUM_RESET_STREAK_DAYS,
     NILM_CANDIDATE_COUNT_ATTENTION_THRESHOLD,
@@ -4240,33 +4242,67 @@ class EnergyManagementSystemCoordinator:
         test die vastlegt dat elke aanroep een `kind` meegeeft.
         """
         now = dt_util.now()
+        toegestaan = True
         if kind is not None:
             toegestaan, reden = self.is_notification_allowed(kind, now)
+
+            # v1.12.5, gevraagd: "Als ik door een button een melding
+            # uitzet moet hij niet meer naar mijn iPhone, maar nog wel
+            # zichtbaar zijn in [de geschiedenis]."
+            #
+            # Terecht onderscheid: de schakelaar bepaalt of je telefoon
+            # rinkelt, niet of het wordt vastgelegd. Tot nu toe sloeg een
+            # geblokkeerde melding de geschiedenis over, waardoor je een
+            # uitgezette soort ook niet meer kon nalezen - en dan is
+            # uitzetten hetzelfde als weggooien.
+            #
+            # Het DEMPINGSVENSTER werkt wel anders: dat bestaat juist om
+            # herhaling te voorkomen, en die herhaling dan alsnog in de
+            # geschiedenis zetten zou hem volschrijven met dubbele
+            # regels.
+            # De dempingsreden begint met "gedempt"; de aanlooptijd na
+            # een herstart telt hier ook als demping, want ook dat gaat
+            # over TIMING en niet over een keuze van de gebruiker.
+            gedempt = any(
+                woord in (reden or "")
+                for woord in ("gedempt", "aanlooptijd")
+            )
             if not toegestaan:
                 self.notification_suppressed_count[kind] = (
                     self.notification_suppressed_count.get(kind, 0) + 1
                 )
                 _LOGGER.debug("Melding %s niet verstuurd: %s", kind, reden)
+            else:
+                self.notification_last_sent[kind] = now.isoformat()
+                self.notification_suppressed_count[kind] = 0
+
+            if toegestaan or not gedempt:
+                self.notification_history.append(
+                    {
+                        "moment": now.isoformat(),
+                        "soort": kind,
+                        "titel": title,
+                        # v1.6.3, gerapporteerd: "kan in de gecreeerde
+                        # tabel niet zien om welke het ging" - de titel
+                        # zegt DAT er een sensor wegviel, het bericht
+                        # zegt WELKE. Alleen de titel bewaren maakt de
+                        # geschiedenis onbruikbaar voor precies het geval
+                        # waarvoor je hem opzoekt.
+                        "bericht": message,
+                        # v1.12.5: zichtbaar maken dat deze niet naar de
+                        # telefoon ging, anders lijkt het alsof de
+                        # schakelaar niets doet.
+                        "verstuurd": toegestaan,
+                        "reden_niet_verstuurd": None if toegestaan else reden,
+                    }
+                )
+                self.notification_history = self.notification_history[
+                    -NOTIFICATION_HISTORY_LENGTH:
+                ]
+                self.schedule_persisted_state_save()
+
+            if not toegestaan:
                 return
-            self.notification_last_sent[kind] = now.isoformat()
-            self.notification_suppressed_count[kind] = 0
-            self.notification_history.append(
-                {
-                    "moment": now.isoformat(),
-                    "soort": kind,
-                    "titel": title,
-                    # v1.6.3, gerapporteerd: "kan in de gecreeerde tabel
-                    # niet zien om welke het ging" - de titel zegt DAT er
-                    # een sensor wegviel, het bericht zegt WELKE. Alleen
-                    # de titel bewaren maakt de geschiedenis onbruikbaar
-                    # voor precies het geval waarvoor je hem opzoekt.
-                    "bericht": message,
-                }
-            )
-            self.notification_history = self.notification_history[
-                -NOTIFICATION_HISTORY_LENGTH:
-            ]
-            self.schedule_persisted_state_save()
         service_domain, _, service_name = (
             notify_service or "persistent_notification.create"
         ).partition(".")
@@ -11718,8 +11754,21 @@ class EnergyManagementSystemCoordinator:
         )
 
         was_detected = device.get("anomaly_detected", False)
+        # v1.12.3: een PROCENTUELE drempel is bij kleine vermogens
+        # betekenisloos. In een export stond een televisie met
+        # referentie 0,79 W als "mogelijk defect" bij -24% drift - dat is
+        # 0,19 watt verschil, oftewel meetruis. Vijf meldingen waarvan
+        # drie over tienden van watts gaan, leert je ze te negeren, en
+        # dan mis je de koelkast die echt stukgaat.
+        #
+        # Twee ondergrenzen: het apparaat moet noemenswaardig verbruiken
+        # ÉN het verschil moet in absolute zin de moeite waard zijn.
+        groot_genoeg = reference_avg_w >= NILM_DRIFT_MIN_REFERENCE_W
+        verschil_w = abs(daily_avg_w - reference_avg_w)
         device["anomaly_detected"] = (
             device["cusum_accumulator"] >= NILM_CUSUM_ALARM_THRESHOLD
+            and groot_genoeg
+            and verschil_w >= NILM_DRIFT_MIN_ABSOLUTE_W
         )
         if device["anomaly_detected"]:
             device["estimated_drift_percent"] = round(
