@@ -25,7 +25,9 @@ def _data():
 
 
 def _detail():
-    return next(v for v in _data()["views"] if v.get("subview"))
+    """v1.14.1: op naam zoeken, niet op "de eerste subview". Sinds alle
+    tabbladen subviews zijn (v1.13.0) is dat Visueel geworden."""
+    return next(v for v in _data()["views"] if v["title"] == "Details")
 
 
 # --- de pagina bestaat en is verborgen -------------------------------

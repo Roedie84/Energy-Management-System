@@ -93,3 +93,30 @@ def test_no_navigation_path_points_nowhere():
     dood = sorted(_navigatiedoelen() - paden)
 
     assert not dood, f"navigeert naar niet-bestaande pagina's: {dood}"
+
+
+# --- v1.14.1: de eerste view bepaalt wat je ziet --------------------
+
+
+def test_the_first_view_is_not_a_subview():
+    """Gemeld: "Zie nu alleen maar een details tabblad meer?"
+
+    Home Assistant opent altijd de EERSTE view. Stond daar een subview,
+    dan zag je alleen die pagina - zonder tabbalk, want subviews tonen
+    die niet. Het dashboard leek daardoor uit één losse detailpagina te
+    bestaan.
+
+    In v1.12.7 kwam Details vóór Overzicht in het bestand te staan; toen
+    Overzicht in v1.13.0 als enige zichtbare view overbleef, werd dat
+    zichtbaar.
+    """
+    eerste = _data()["views"][0]
+
+    assert not eerste.get("subview"), (
+        f"'{eerste['title']}' is een subview maar staat vooraan - Home "
+        "Assistant opent die en toont dan geen tabbalk"
+    )
+
+
+def test_the_overview_opens_first():
+    assert _data()["views"][0]["title"] == "Overzicht"
