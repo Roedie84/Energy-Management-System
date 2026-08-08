@@ -9684,3 +9684,55 @@ met een test die faalt zodra er eentje mét voorvoegsel wordt aangeroepen.
 **Getest**: twee tests erbij in `test_dashboard_entity_references.py`.
 
 **Volledige testsuite**: 1360 tests, allemaal groen.
+
+## v1.15.7 — "-34,6%" was 7 procentpunt
+
+**Gemeld**: tegel toont 86,9% geleerd rendement, de regel eronder
+"vorige meting was 94,0% (-34,6%)".
+
+**Twee dingen door elkaar**: de kaart vergeleek twee LOSSE laadcycli
+(94,0 -> 59,4) terwijl de tegel de MEDIAAN toont (86,9%). Daardoor leek
+die -34,6 op de 86,9% te slaan. En "%" achter een verschil leest als een
+procentuele daling, terwijl het PROCENTPUNTEN zijn.
+
+**Waarom ze mogen verschillen**: de mediaan bestaat omdat één laadcyclus
+sterk kan afwijken (v0.63.10) - anders zou een enkele meting de
+veiligheidsmarge van de reserveberekening verschuiven. Maar dat verschil
+tonen zonder uit te leggen waarom maakt het onbruikbaar.
+
+De regel zegt nu: "Laatste laadcyclus 59,4%, daarvoor 94,0% (-34,6
+procentpunt). De tegel hierboven toont de mediaan over 8 cycli - één
+afwijkende cyclus telt daar bewust nauwelijks in mee."
+
+**In de code stond het al goed** (weerbronnen, bias-drift); alleen het
+dashboard liep achter.
+
+**Getest**: nieuw `tests/test_percentage_points.py`, 4 tests.
+
+**Volledige testsuite**: 1364 tests, allemaal groen.
+
+## v1.15.8 — Temperatuurverschil: twee verklaringen, één conclusie
+
+**Uit een export**: "Accumodules verschillen 5,0 °C in celtemperatuur -
+bij gelijke belasting wijst dat op een module met hogere inwendige
+weerstand."
+
+**Te stellig**: er zijn twee even goede verklaringen - hogere inwendige
+weerstand, of plaatsing (bovenaan de stapel, tegen een muur). Die tweede
+kan de integratie niet zien, maar werd ook niet genoemd.
+
+**Het vermogen maakt het onderscheid**: bij deze installatie is de
+warmste module ook de zwakste (32 °C bij 542 W tegen 27 °C bij 602 W) -
+dat past bij hogere inwendige weerstand. Levert de warmste evenveel of
+meer, dan meldt de integratie nu dat het eerder aan de plaatsing ligt.
+Zonder vermogenssensoren vervalt de duiding en blijft alleen het
+temperatuurverschil staan.
+
+**Celdelta-waarschuwing is weg**: module 1 stond op 0,19 V bij 100% SoC,
+nu op 0,02 V bij 77%. Die spreiding was dus grotendeels
+ladingsafhankelijk; mijn eerdere uitspraak dat de differentiële
+vergelijking dat wegneemt klopte maar ten dele.
+
+**Getest**: nieuw `tests/test_module_temperature_warning.py`, 4 tests.
+
+**Volledige testsuite**: 1368 tests, allemaal groen.

@@ -11425,10 +11425,49 @@ class EnergyManagementSystemCoordinator:
             temp_spreiding is not None
             and temp_spreiding >= BATTERY_MODULE_TEMPERATURE_SPREAD_ATTENTION_C
         ):
+            # v1.15.8: de melding trok één conclusie terwijl er twee
+            # even goede verklaringen zijn. Bij deze installatie is de
+            # warmste module ook de zwakste (32 °C bij 542 W tegen 27 °C
+            # bij 602 W), wat inderdaad bij hogere inwendige weerstand
+            # past. Maar een module die bovenaan de stapel of tegen een
+            # muur staat, wordt óók warmer - en dát kan de integratie
+            # niet zien.
+            #
+            # Het VERMOGEN erbij zetten maakt het onderscheid wél
+            # mogelijk: levert de warmste module ook minder, dan wijst
+            # het op de accu; levert hij evenveel, dan eerder op de
+            # plaatsing.
+            warmste = max(
+                (m for m in self.battery_module_live
+                 if m.get("temperatuur_c") is not None),
+                key=lambda m: m["temperatuur_c"],
+                default=None,
+            )
+            vermogens = [
+                m["vermogen_w"] for m in self.battery_module_live
+                if m.get("vermogen_w") is not None
+            ]
+            duiding = ""
+            if warmste and len(vermogens) > 1:
+                gemiddeld = sum(vermogens) / len(vermogens)
+                eigen = warmste.get("vermogen_w")
+                if eigen is not None and eigen < gemiddeld:
+                    duiding = (
+                        f" Module {warmste['module']} is de warmste én "
+                        f"levert het minste ({eigen:.0f} W tegen "
+                        f"{gemiddeld:.0f} W gemiddeld) - dat past bij een "
+                        "hogere inwendige weerstand."
+                    )
+                else:
+                    duiding = (
+                        f" Module {warmste['module']} is de warmste maar "
+                        "levert niet minder - dan ligt het eerder aan de "
+                        "plaatsing (bovenaan de stapel, tegen een muur) "
+                        "dan aan de module zelf."
+                    )
             aandachtspunten.append(
                 f"Accumodules verschillen {temp_spreiding:.1f} °C in "
-                "celtemperatuur - bij gelijke belasting wijst dat op een "
-                "module met hogere inwendige weerstand."
+                f"celtemperatuur.{duiding}"
             )
         soc_spreiding = spreiding.get("soc_percent")
         if (

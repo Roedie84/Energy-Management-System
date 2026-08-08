@@ -76,14 +76,17 @@ views:
 
               {%- if history|length >= 2 %}
 
-              {%- set previous = history[-2] %}
+              {%- set laatste = history[-1] %}
 
-              {%- set current = history[-1] %}
+              {%- set vorige = history[-2] %}
 
-              {%- set diff = current - previous %}
+              {%- set verschil = laatste - vorige %}
 
-              Rendement {{ '↑' if diff > 0 else ('↓' if diff < 0 else '→') }} vorige
-              meting was {{ previous }}% ({{ '%+.1f'|format(diff) }}%)
+              Laatste laadcyclus {{ '%.1f'|format(laatste) }}%, daarvoor
+              {{ '%.1f'|format(vorige) }}% ({{ '%+.1f'|format(verschil) }} procentpunt).
+              De tegel hierboven toont de mediaan over
+              {{ history|length }} cycli - één afwijkende cyclus telt daar
+              bewust nauwelijks in mee.
 
               {%- else %}
 
@@ -501,7 +504,7 @@ views:
         # "richtingen van de stromen nog niet geupdate?". De
         # versiesleutel dwingt een verse ophaal af. Een test bewaakt
         # dat deze waarde gelijk blijft aan de versie in manifest.json.
-        image: /local/energy_management_system_overview.svg?v=1.15.6
+        image: /local/energy_management_system_overview.svg?v=1.15.8
         elements:
           - type: state-label
             entity: sensor.woonkamer_energy_management_system_system_status

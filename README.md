@@ -515,6 +515,100 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Temperatuurverschil: twee verklaringen, één conclusie (v1.15.8)
+
+**Uit een verse export**: *"Accumodules verschillen 5,0 °C in
+celtemperatuur — bij gelijke belasting wijst dat op een module met hogere
+inwendige weerstand."*
+
+### De melding was te stellig
+
+Er zijn twee even goede verklaringen voor een warmere module:
+
+1. **hogere inwendige weerstand** — meer verlies als warmte
+2. **plaatsing** — bovenaan de stapel, tegen een muur, in de zon
+
+De tweede kan de integratie niet zien. Toch werd alleen de eerste
+genoemd, wat je op zoek stuurt naar een defecte module die er misschien
+niet is.
+
+### Het vermogen maakt het onderscheid
+
+| Module | Temperatuur | Vermogen |
+|---|---|---|
+| 1 | 32 °C | **542 W** |
+| 2 | 29 °C | 562 W |
+| 3 | 27 °C | 602 W |
+
+De **warmste** module levert het **minste**. Dat past bij hogere
+inwendige weerstand: meer verlies als warmte, minder vermogen naar
+buiten. Bij jou wijst het dus wél op de module.
+
+Levert de warmste module evenveel of meer, dan zegt de melding nu dat het
+eerder aan de plaatsing ligt. Zonder vermogenssensoren vervalt de duiding
+en blijft alleen het temperatuurverschil staan.
+
+### En de celdelta-waarschuwing is weg
+
+Vanochtend stond module 1 op 0,19 V celspreiding bij 100% SoC; nu op 0,02
+V bij 77%. Die spreiding was dus grotendeels ladingsafhankelijk — bovenin
+de laadcurve lopen celspanningen sterker uiteen.
+
+Ik heb toen gezegd dat de differentiële vergelijking dat wegneemt. Dat
+klopt maar ten dele: module 1 spreidt nog steeds het meest (0,02 tegen
+0,00), maar in absolute zin veel kleiner dan het toen leek.
+
+### Getest
+
+Nieuw `tests/test_module_temperature_warning.py`, 4 tests: warmste én
+zwakste wijst op de module, warmste maar niet zwakste op de plaatsing,
+een kleine spreiding geeft geen melding, en zonder vermogenssensoren
+blijft het temperatuurverschil gemeld.
+
+**Volledige testsuite**: 1368 tests, allemaal groen.
+
+## "−34,6%" was 7 procentpunt (v1.15.7)
+
+**Gemeld** met screenshot: de tegel toont **86,9%** geleerd rendement,
+de regel eronder *"vorige meting was 94,0% (−34,6%)"*.
+
+### Twee dingen door elkaar
+
+De kaart vergeleek twee **losse laadcycli**: 94,0% en daarna 59,4%. De
+tegel ernaast toont de **mediaan** over alle cycli — 86,9%.
+
+Daardoor leek die −34,6 op de 86,9% te slaan, en dat klopt niet: het is
+het verschil tussen twee individuele metingen.
+
+En "%" achter een verschil leest als een procentuele daling, terwijl het
+**procentpunten** zijn.
+
+### Waarom die twee getallen mogen verschillen
+
+De mediaan bestaat juist omdat één laadcyclus sterk kan afwijken — dat is
+in v0.63.10 zo gekozen, omdat een enkele meting anders de veiligheidsmarge
+van de reserveberekening zou verschuiven.
+
+Maar dat verschil tonen zónder uit te leggen waarom, maakt het
+onbruikbaar: je weet niet welk getal je moet geloven.
+
+De regel zegt nu: *"Laatste laadcyclus 59,4%, daarvoor 94,0% (−34,6
+procentpunt). De tegel hierboven toont de mediaan over 8 cycli — één
+afwijkende cyclus telt daar bewust nauwelijks in mee."*
+
+### In de code stond het al goed
+
+Voor de weerbronnen en de bias-drift werd "procentpunt" al correct
+gebruikt. Alleen het dashboard liep daarop achter.
+
+### Getest
+
+Nieuw `tests/test_percentage_points.py`, 4 tests: een verschil heet
+procentpunt, de kaart zegt wát hij vergelijkt, hij legt uit waarom de
+tegel afwijkt, en de code gebruikt de term consequent.
+
+**Volledige testsuite**: 1364 tests, allemaal groen.
+
 ## Acht sensoren bestaan zonder apparaatvoorvoegsel (v1.15.6)
 
 **Gemeld** met screenshot: zeven kaarten onder "Beslissing en planning"
