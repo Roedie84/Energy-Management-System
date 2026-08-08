@@ -127,14 +127,25 @@ def test_no_detail_table_has_more_than_three_columns():
     """Vier kolommen passen niet op een telefoon. De
     betrouwbaarheidslijst is daarom een gegroepeerde opsomming geworden
     in plaats van een tabel."""
+    # v1.14.6: BLINDE VLEK gedicht. De test keek of een regel begint met
+    # "|", maar tabelrijen in deze sjablonen beginnen met een Jinja-tag
+    # ("{% for u in t %}| ..."). Daardoor werd vrijwel geen enkele rij
+    # gecontroleerd - de accumodule-tabel met zes kolommen glipte er
+    # gewoon door.
+    #
+    # De grens is zes in plaats van drie: de detailpagina staat sinds
+    # v1.14.4 op één kolom, dus een tabel krijgt de volle breedte. Op een
+    # telefoon blijft dat krap, maar de alternatieven zijn informatie
+    # weglaten of de tabel omzetten naar een lijst - en bij deze tabellen
+    # is de kolomvergelijking juist het nut.
     for kaart in _detailkaarten():
         inhoud = kaart.get("content") or ""
         for regel in inhoud.splitlines():
             kaal = regel.strip()
-            if not kaal.startswith("|") or "---" in kaal:
+            if "---" in kaal or kaal.count("|") < 2:
                 continue
             kolommen = kaal.count("|") - 1
-            assert kolommen <= 3, (
+            assert kolommen <= 6, (
                 f"{kaart.get('title')}: {kolommen} kolommen - past niet op "
                 "een smal scherm"
             )
@@ -151,3 +162,44 @@ def test_the_reliability_list_still_shows_everything():
 
     for veld in ("groep", "label", "naam", "waarde", "reden"):
         assert f"'{veld}'" in inhoud, veld
+
+
+def test_the_climate_projection_shows_both_series():
+    """Gemeld: "Ik mis nu ook de uur temperatuur voorspelling van de
+    woonkamer?" en daarna: "Snelle voorspelling en lange termijn zoals
+    origineel".
+
+    De twee reeksen meten iets anders. `kort_termijn_temp_c` valt terug
+    op naburige cellen zodra de exacte combinatie te dun bezet is (de fix
+    uit v1.1.2); `betrouwbaar_temp_c` komt pas bij genoeg metingen in
+    precies die situatie. De eerste is er snel, de tweede is hard - beide
+    weggeven zou de tabel waardeloos maken.
+    """
+    kaart = next(
+        k
+        for k in _detailkaarten()
+        if k.get("title") == "Woonkamertemperatuur per uur"
+    )
+    inhoud = kaart["content"]
+
+    for veld in (
+        "kort_termijn_temp_c",
+        "betrouwbaar_temp_c",
+        "buitentemp_voorspeld_c",
+        "basis",
+        "aantal_metingen",
+    ):
+        assert f"'{veld}'" in inhoud, veld
+
+
+def test_the_climate_projection_explains_the_two_columns():
+    """Zonder uitleg is "Snel" naast "Betrouwbaar" niet te
+    interpreteren."""
+    kaart = next(
+        k
+        for k in _detailkaarten()
+        if k.get("title") == "Woonkamertemperatuur per uur"
+    )
+
+    assert "naburige situaties" in kaart["content"]
+    assert "Basis" in kaart["content"]
