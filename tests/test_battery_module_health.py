@@ -454,7 +454,7 @@ def test_attention_threshold_matches_the_constant(make_coordinator, hass):
     assert coordinator.get_battery_module_table()[0]["waarschuwingen"] != []
 
 
-def test_dashboard_has_a_battery_modules_tab():
+def test_dashboard_shows_the_battery_modules():
     from pathlib import Path
 
     import custom_components.energy_management_system as pkg
@@ -465,7 +465,11 @@ def test_dashboard_has_a_battery_modules_tab():
     )
     titels = [v["title"] for v in data["views"]]
 
-    assert "Accumodules" in titels
+    # v1.12.2: samengevoegd tot het tabblad "Systeem", met een kop
+    # "Accumodules" erboven.
+    plat = (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
+    assert "Systeem" in titels
+    assert "title: Accumodules" in plat
 
 
 def test_every_tab_shows_its_name_not_just_an_icon():

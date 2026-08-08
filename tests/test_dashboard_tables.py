@@ -309,7 +309,7 @@ def _render_markdown_cards():
 def test_dashboard_yaml_is_valid():
     with open(DASHBOARD_PATH) as f:
         data = yaml.safe_load(f)
-    assert len(data["views"]) == 10
+    assert len(data["views"]) == 7
 
 
 def test_markdown_tables_have_no_blank_lines_between_rows():
@@ -386,11 +386,15 @@ def test_the_merged_views_kept_their_content():
     # zin per onderwerp; details staan in de sensorattributen en de
     # diagnostiek-export. De aantallen zijn daarom veel lager, maar geen
     # enkel tabblad mag leeg raken.
+    # v1.12.2: Accumodules, Apparaten, Zelflerend en Klimaat & water
+    # hadden na het opruimen elk nog maar één of twee kaarten - een
+    # tabblad voor één zin is verspilling. Samengevoegd tot "Systeem",
+    # met per onderwerp een kop die zegt wat je ziet.
     verwacht = {
         "Kwaliteit": 4,
         "Financieel": 10,
         "Verloop": 6,
-        "Klimaat & water": 2,
+        "Systeem": 8,
     }
     for titel, minimum in verwacht.items():
         assert titel in views, titel

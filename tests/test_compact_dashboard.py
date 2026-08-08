@@ -197,3 +197,48 @@ def test_the_overview_has_no_detail_sections():
     ]
 
     assert not any("detail" in k.lower() for k in koppen), koppen
+
+
+# --- v1.12.2: geen tabbladen voor één kaart -------------------------
+
+
+def test_no_tab_is_too_thin():
+    """Gemeld: "Sommige tabbladen zijn nu zo leeg dat het beter is deze
+    samen te voegen op 1 tabblad."
+
+    Na het opruimen hielden Accumodules, Apparaten en Zelflerend elk nog
+    één kaart over. Een tabblad voor één zin kost meer aandacht dan het
+    oplevert - je moet ernaartoe klikken om één regel te lezen.
+
+    Visueel is uitgezonderd: dat is één schermvullende plattegrond.
+    """
+    for view in _views():
+        if view["title"] == "Visueel":
+            continue
+        assert len(_kaarten(view)) >= 3, (
+            f"{view['title']}: {len(_kaarten(view))} kaart(en) - hoort "
+            "samengevoegd te worden"
+        )
+
+
+def test_the_merged_tab_labels_each_topic():
+    """Zonder tabbladnaam is niet meer af te leiden waar een zin over
+    gaat, dus elk onderwerp krijgt een kop."""
+    systeem = next(v for v in _views() if v["title"] == "Systeem")
+    koppen = [
+        k.get("title")
+        for k in _kaarten(systeem)
+        if "title-card" in str(k.get("type"))
+    ]
+
+    for onderwerp in ("Accumodules", "Apparaten", "Zelflerend"):
+        assert onderwerp in koppen, onderwerp
+
+
+def test_each_heading_explains_what_it_shows():
+    """Een kop "Zelflerend" alleen zegt nog niet wát je ziet."""
+    systeem = next(v for v in _views() if v["title"] == "Systeem")
+
+    for kaart in _kaarten(systeem):
+        if "title-card" in str(kaart.get("type")):
+            assert kaart.get("subtitle"), kaart.get("title")
