@@ -515,6 +515,67 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Slapen is geen afwezigheid (v1.20.0)
+
+**Gemeld**: *"Als de overloop sensor als laatste beweging heeft
+gedetecteerd 's avonds/'s nachts zijn we wel thuis maar slapen we."*
+
+Scherp gezien. Zonder dat kenmerk ziet stilte er hetzelfde uit, terwijl
+**"niemand thuis" en "iedereen slaapt" tegengestelde situaties zijn**:
+bij afwezigheid mag alles uit, bij slapen moet de nachtreserve juist
+kloppen en loopt het basisverbruik gewoon door.
+
+### De volgorde is het bewijs
+
+Bewoog de overloop als **laatste** en daarna niets meer, dan is iemand
+naar boven gegaan. Bewoog er daarna nog iets beneden, dan is die persoon
+weer op.
+
+Een realistische nacht:
+
+| Tijd | Wat er gebeurt | Status |
+|---|---|---|
+| 22:30 | beweging woonkamer | thuis |
+| 23:00 | beweging overloop | thuis |
+| 23:30 | een uur stil | thuis |
+| 04:30 | zes uur stil | **slaapt** |
+| 07:30 | weer beneden | thuis |
+| 09:30 | stil, overdag | weg |
+
+Die laatste regel is de borging: overdag loop je ook langs de overloop,
+dus buiten 20:00–05:00 markeert hij geen bedtijd.
+
+### Instelbaar, want ik weet niet welke sensor dat is
+
+Een overloop, een trap, een slaapkamer — dat verschilt per huis. Bij
+Configureren staat nu *"Slaapsensor"*.
+
+### En het leert je bedtijd
+
+Bij elke overgang wordt het tijdstip bewaard; na een paar nachten toont
+de kaart je typische bedtijd. Dat overleeft een herstart — een bestaande
+borgingstest ving dat ik dat vergeten was.
+
+### Onderweg
+
+Mijn nieuwe kaart had vijf `if` en vier `endif`. Dat kwam er doorheen tot
+de tabeltests erop aansloegen — met een foutmelding die niet naar de
+oorzaak wees.
+
+Er staat nu een test op die élk sjabloon door Jinja zelf laat parsen. Dat
+is directer dan haakjes tellen en vangt ook andere syntaxfouten, meteen
+met de naam van de kaart erbij.
+
+### Getest
+
+Zeven tests erbij: slapen is geen afwezigheid, beweging beneden erna
+betekent toch wakker, de overloop overdag telt niet, na een etmaal stilte
+is het weer afwezigheid, bedtijden worden geleerd, zonder slaapsensor
+zegt de kaart dat, en de geschiedenis overleeft een herstart. Plus de
+Jinja-controle op alle sjablonen.
+
+**Volledige testsuite**: 1576 tests, allemaal groen.
+
 ## Nachtvenster waterontharder instelbaar (v1.19.6)
 
 **Gemeld**: *"Dit was overdag, ik weet dat de waterontharder het meestal

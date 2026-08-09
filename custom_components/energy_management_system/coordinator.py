@@ -292,6 +292,9 @@ from .const import (
     GACS_SELF_CONSUMPTION_ADVICE_PERCENT,
     PLAUSIBILITY_RULES,
     PRESENCE_ABSENCE_AFTER_MINUTES,
+    PRESENCE_BEDTIME_EARLIEST_HOUR,
+    PRESENCE_BEDTIME_LATEST_HOUR,
+    PRESENCE_SLEEP_WINDOW_HOURS,
     PRESENCE_HISTORY_WEEKS,
     PRESENCE_MIN_OBSERVATIONS,
     SENSOR_STARTUP_GRACE_MINUTES,
@@ -309,6 +312,7 @@ from .const import (
     CONF_SUN_ELEVATION_SENSOR,
     CONF_SUN_PHASE_SENSOR,
     CONF_PV_ACTUAL_AZIMUTH_DEGREES,
+    CONF_PRESENCE_BEDTIME_SENSOR,
     CONF_PRESENCE_MOTION_SENSORS,
     CONF_PV_ENERGY_SENSOR,
     PV_ENERGY_METER_RESET_TOLERANCE_KWH,
@@ -559,6 +563,9 @@ class EnergyManagementSystemCoordinator:
         # "ik had nu ook ergens een melding verwacht dat het systeem niet
         # correct functioneert."
         self.internal_failures: dict[str, str] = {}
+        # v1.20.0: wanneer de slaapsensor als laatste bewoog.
+        self.last_bedtime_motion_at: datetime | None = None
+        self.bedtime_history: list[str] = []
         self.water_softener_last_regeneration: datetime | None = None
         self.last_fietsladers_action: str | None = None
 
@@ -4205,16 +4212,47 @@ class EnergyManagementSystemCoordinator:
 
         if beweging_nu:
             self.last_motion_at = now
+
+        # v1.20.0, gemeld: "Als de overloop sensor als laatste beweging
+        # heeft gedetecteerd 's avonds/'s nachts zijn we wel thuis maar
+        # slapen we."
+        #
+        # Zonder dat kenmerk ziet stilte er hetzelfde uit, terwijl
+        # "niemand thuis" en "iedereen slaapt" tegengestelde situaties
+        # zijn: bij afwezigheid mag alles uit, bij slapen moet de
+        # nachtreserve juist kloppen en loopt het basisverbruik door.
+        slaapsensor = self.config.get(CONF_PRESENCE_BEDTIME_SENSOR)
+        if slaapsensor:
+            staat = self.hass.states.get(slaapsensor)
+            actief = staat is not None and str(staat.state).lower() in (
+                "on",
+                "true",
+            )
+            # Overdag loop je ook langs de overloop; alleen 's avonds en
+            # 's nachts markeert het naar bed gaan.
+            in_venster = (
+                now.hour >= PRESENCE_BEDTIME_EARLIEST_HOUR
+                or now.hour < PRESENCE_BEDTIME_LATEST_HOUR
+            )
+            if actief and in_venster:
+                self.last_bedtime_motion_at = now
+                sleutel = now.strftime("%H:%M")
+                if not self.bedtime_history or self.bedtime_history[-1] != sleutel:
+                    self.bedtime_history.append(sleutel)
+                    self.bedtime_history = self.bedtime_history[-30:]
         vorige = self.presence_state
         if self.last_motion_at is None:
             self.presence_state = "onbekend"
         else:
             stil_minuten = (now - self.last_motion_at).total_seconds() / 60
-            self.presence_state = (
-                "thuis"
-                if stil_minuten < PRESENCE_ABSENCE_AFTER_MINUTES
-                else "weg"
-            )
+            if stil_minuten < PRESENCE_ABSENCE_AFTER_MINUTES:
+                self.presence_state = "thuis"
+            elif self._slaapt_waarschijnlijk(now):
+                # Was de slaapsensor de LAATSTE beweging, dan is de
+                # stilte die erop volgt geen afwezigheid maar een nacht.
+                self.presence_state = "slaapt"
+            else:
+                self.presence_state = "weg"
 
         # Leren: per kwartier van de week bijhouden hoe vaak er iemand
         # thuis was. Een week is de natuurlijke cyclus - werkdagen
@@ -4235,6 +4273,22 @@ class EnergyManagementSystemCoordinator:
 
         if vorige != self.presence_state:
             self.schedule_persisted_state_save()
+
+    def _slaapt_waarschijnlijk(self, now: datetime) -> bool:
+        """Was de slaapsensor de laatste beweging? (v1.20.0)
+
+        De volgorde is het bewijs: bewoog de overloop als laatste en
+        daarna niets meer, dan is iemand naar boven gegaan. Bewoog er
+        daarna nog iets beneden, dan niet.
+        """
+        if self.last_bedtime_motion_at is None or self.last_motion_at is None:
+            return False
+        # De slaapsensor telt zelf ook mee als beweging, dus gelijk is
+        # goed; alleen LATERE beweging elders telt als "toch nog op".
+        if self.last_motion_at > self.last_bedtime_motion_at:
+            return False
+        uren = (now - self.last_bedtime_motion_at).total_seconds() / 3600
+        return 0 <= uren <= PRESENCE_SLEEP_WINDOW_HOURS
 
     def get_presence_overview(self) -> dict:
         """Wat is er geleerd over aanwezigheid? (v1.18.2)"""
@@ -4270,6 +4324,16 @@ class EnergyManagementSystemCoordinator:
             "nu": nu,
             "minuten_zonder_beweging": stil_minuten,
             "halfuren_geleerd": len(geleerd),
+            # v1.20.0: slapen is geen afwezigheid.
+            "slaapsensor_ingesteld": bool(
+                self.config.get(CONF_PRESENCE_BEDTIME_SENSOR)
+            ),
+            "typische_bedtijd": (
+                sorted(self.bedtime_history)[len(self.bedtime_history) // 2]
+                if self.bedtime_history
+                else None
+            ),
+            "bedtijden_geleerd": len(self.bedtime_history),
             "typisch_thuis_percentage": (
                 round(sum(geleerd.values()) / len(geleerd), 0) if geleerd else None
             ),

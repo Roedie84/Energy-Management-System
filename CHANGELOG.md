@@ -10542,3 +10542,36 @@ uit maandenlange data afleiden.
 **Getest**: vier tests erbij in `test_water_source_attribution.py`.
 
 **Volledige testsuite**: 1568 tests, allemaal groen.
+
+## v1.20.0 — Slapen is geen afwezigheid
+
+**Gemeld**: als de overloopsensor 's avonds de laatste beweging is, is er
+wel iemand thuis maar wordt er geslapen.
+
+**Scherp gezien**: zonder dat kenmerk ziet stilte er hetzelfde uit,
+terwijl "niemand thuis" en "iedereen slaapt" tegengestelde situaties zijn
+- bij afwezigheid mag alles uit, bij slapen moet de nachtreserve juist
+kloppen en loopt het basisverbruik door.
+
+**De volgorde is het bewijs**: bewoog de slaapsensor als LAATSTE en
+daarna niets meer, dan is iemand naar boven. Bewoog er daarna nog iets
+beneden, dan is die persoon weer op. Buiten 20:00-05:00 telt de sensor
+niet, want overdag loop je er ook langs.
+
+**Instelbaar**: een overloop, trap of slaapkamer verschilt per huis.
+Nieuw veld "Slaapsensor" bij Configureren.
+
+**En het leert de bedtijd**: bij elke overgang wordt het tijdstip
+bewaard; na een paar nachten toont de kaart de typische bedtijd. Een
+bestaande borgingstest ving dat dit eerst niet werd bewaard.
+
+**Onderweg**: de nieuwe kaart had vijf `if` en vier `endif`; dat kwam er
+doorheen tot de tabeltests erop aansloegen, met een foutmelding die niet
+naar de oorzaak wees. Er staat nu een test op die elk sjabloon door Jinja
+zelf laat parsen - directer dan haakjes tellen, en met de naam van de
+kaart erbij.
+
+**Getest**: zeven tests erbij in `test_presence_detection.py`, plus de
+Jinja-controle in `test_dashboard_tables.py`.
+
+**Volledige testsuite**: 1576 tests, allemaal groen.

@@ -1102,6 +1102,9 @@ PERSISTED_PLAIN_FIELDS = (
     # v1.18.2: het weekprofiel van aanwezigheid. Zonder bewaren zou elke
     # herstart het leren opnieuw laten beginnen.
     "presence_week_profile",
+    # v1.20.0: wanneer er doorgaans naar bed wordt gegaan. Zonder
+    # bewaren begint het leren na elke herstart opnieuw.
+    "bedtime_history",
     "battery_cooling_history",
     "kalman_divergence_history",
     # v1.3.1: de geleerde blootstellingsrichting van de achtertuinsensor.
@@ -2407,3 +2410,26 @@ PRESENCE_MIN_OBSERVATIONS = 3
 # de integratie niet.
 CONF_WATER_SOFTENER_START_HOUR = "water_softener_start_hour"
 CONF_WATER_SOFTENER_END_HOUR = "water_softener_end_hour"
+
+# --- Slapen herkennen (v1.20.0) --------------------------------------
+# Gemeld: "Als de overloop sensor als laatste beweging heeft gedetecteerd
+# 's avonds/'s nachts zijn we wel thuis maar slapen we."
+#
+# Scherp onderscheid. Zonder dat kenmerk ziet stilte er hetzelfde uit,
+# terwijl "niemand thuis" en "iedereen slaapt" tegengestelde situaties
+# zijn: bij afwezigheid mag alles uit, bij slapen moet de nachtreserve
+# juist kloppen en loopt het basisverbruik gewoon door.
+#
+# Welke sensor de overgang markeert, weet alleen de bewoner - een
+# overloop, een trap, een slaapkamer. Vandaar instelbaar.
+CONF_PRESENCE_BEDTIME_SENSOR = "presence_bedtime_sensor_entity"
+
+# Buiten deze uren telt de overloop niet als naar bed gaan; overdag loop
+# je er ook langs.
+PRESENCE_BEDTIME_EARLIEST_HOUR = 20
+PRESENCE_BEDTIME_LATEST_HOUR = 5
+
+# Hoe lang na de laatste beweging op de slaapsensor het als slapen
+# geldt. Ruim, want een nacht duurt langer dan de gewone
+# afwezigheidsdrempel.
+PRESENCE_SLEEP_WINDOW_HOURS = 12

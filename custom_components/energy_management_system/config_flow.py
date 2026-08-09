@@ -37,6 +37,7 @@ from .const import (
     CONF_SLAAPKAMER_CLIMATE_ENTITY,
     CONF_BATTERY_COOLING_FAN_SWITCH,
     CONF_PV_ACTUAL_AZIMUTH_DEGREES,
+    CONF_PRESENCE_BEDTIME_SENSOR,
     CONF_PRESENCE_MOTION_SENSORS,
     CONF_WATER_SOFTENER_END_HOUR,
     CONF_WATER_SOFTENER_START_HOUR,
@@ -555,6 +556,16 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
                 default=defaults.get(CONF_WATER_SOFTENER_END_HOUR, 6),
             ): selector.NumberSelector(
                 selector.NumberSelectorConfig(min=1, max=24, step=1, mode="box")
+            ),
+            # v1.20.0: welke sensor markeert naar bed gaan - een
+            # overloop, een trap, een slaapkamer. Is die de LAATSTE
+            # beweging 's avonds, dan is de stilte erna geen
+            # afwezigheid maar een nacht.
+            vol.Optional(
+                CONF_PRESENCE_BEDTIME_SENSOR,
+                default=defaults.get(CONF_PRESENCE_BEDTIME_SENSOR),
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="binary_sensor")
             ),
             vol.Optional(
                 CONF_PRESENCE_MOTION_SENSORS,

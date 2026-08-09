@@ -513,7 +513,7 @@ views:
   panel: true
   cards:
   - type: picture-elements
-    image: /local/energy_management_system_overview.svg?v=1.19.6
+    image: /local/energy_management_system_overview.svg?v=1.20.0
     elements:
     - type: state-label
       entity: sensor.woonkamer_energy_management_system_system_status
@@ -2059,10 +2059,13 @@ views:
       content: '{% set p = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''aanwezigheid'') or {} %}{% if not p.get(''beschikbaar'') %}{{ p.get(''reden'', ''Nog geen gegevens.'') }}{% else %}Op dit moment: **{{ p.nu or ''onbekend'' }}**{% if p.minuten_zonder_beweging is not none %} ({{ p.minuten_zonder_beweging }} minuten zonder beweging){% endif %}. Gebaseerd op {{ p.sensoren }} sensor(en).
 
 
-        {% if p.halfuren_geleerd > 0 %}Er zijn **{{ p.halfuren_geleerd }} halfuren** van de week geleerd; gemiddeld is er {{ p.typisch_thuis_percentage }}% van de tijd iemand thuis.{% else %}Nog te weinig waarnemingen voor een weekpatroon.{% endif %}{% endif %}
+        {% if p.halfuren_geleerd > 0 %}Er zijn **{{ p.halfuren_geleerd }} halfuren** van de week geleerd; gemiddeld is er {{ p.typisch_thuis_percentage }}% van de tijd iemand thuis.{% else %}Nog te weinig waarnemingen voor een weekpatroon.{% endif %}
 
 
-        _Er wordt per halfuur van de week bijgehouden hoe vaak er iemand thuis was. Werkdagen verschillen van het weekend, en ''s ochtends van ''s avonds - vandaar de week als cyclus. Alleen sensoren die je zelf hebt gekozen tellen mee: buitensensoren slaan aan op voorbijgangers._'
+        {% if p.slaapsensor_ingesteld %}**Slapen wordt herkend.** Is de slaapsensor de laatste beweging ''s avonds, dan geldt de stilte erna als slapen en niet als afwezigheid.{% if p.bedtijden_geleerd > 0 %} Typische bedtijd: **{{ p.typische_bedtijd }}** (uit {{ p.bedtijden_geleerd }} waarnemingen).{% endif %}{% else %}_Geen slaapsensor ingesteld. Zonder die sensor telt een nacht als afwezigheid, terwijl ''niemand thuis'' en ''iedereen slaapt'' tegengestelde situaties zijn: bij afwezigheid mag alles uit, bij slapen moet de nachtreserve juist kloppen._{% endif %}
+
+
+        _Er wordt per halfuur van de week bijgehouden hoe vaak er iemand thuis was. Werkdagen verschillen van het weekend, en ''s ochtends van ''s avonds. Alleen sensoren die je zelf hebt gekozen tellen mee: buitensensoren slaan aan op voorbijgangers._{% endif %}'
       grid_options:
         columns: 12
         rows: auto

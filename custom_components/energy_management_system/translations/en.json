@@ -74,7 +74,8 @@
           "battery_state_sensor_entity": "Battery operation state sensor (optional, more reliable than the power sign)",
           "presence_motion_sensor_entities": "Indoor motion sensors (optional, for presence detection)",
           "water_softener_start_hour": "Water softener: first hour of the regeneration window",
-          "water_softener_end_hour": "Water softener: last hour of the regeneration window"
+          "water_softener_end_hour": "Water softener: last hour of the regeneration window",
+          "presence_bedtime_sensor_entity": "Bedtime sensor (optional): landing or stairs - last motion at night means asleep"
         }
       }
     },
@@ -162,7 +163,8 @@
           "battery_state_sensor_entity": "Battery operation state sensor (optional, more reliable than the power sign)",
           "presence_motion_sensor_entities": "Indoor motion sensors (optional, for presence detection)",
           "water_softener_start_hour": "Water softener: first hour of the regeneration window",
-          "water_softener_end_hour": "Water softener: last hour of the regeneration window"
+          "water_softener_end_hour": "Water softener: last hour of the regeneration window",
+          "presence_bedtime_sensor_entity": "Bedtime sensor (optional): landing or stairs - last motion at night means asleep"
         }
       }
     },
