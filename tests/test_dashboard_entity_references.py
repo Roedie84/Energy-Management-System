@@ -63,6 +63,10 @@ def test_every_referenced_sensor_name_exists():
     HISTORISCHE_ENTITY_IDS = {
         "advies_gereedheid_8_modules",
         "piekvermogen",
+        # v1.17.6: hernoemd naar "Airco-verwachting (kans binnen 1 uur)"
+        # omdat de sensor een percentage geeft, geen temperatuur. De
+        # entity_id blijft die van de eerste aanmaak.
+        "airco_verwachting_woonkamertemperatuur",
     }
 
     # Sensoren met een dynamische naam (per apparaat, per module) staan
