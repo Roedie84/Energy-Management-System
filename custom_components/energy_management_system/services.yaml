@@ -1,27 +1,22 @@
 confirm_nilm_device:
   name: Bevestig NILM-apparaat
-  description: >-
-    Bevestig dat een automatisch ontdekte vermogen-sensor daadwerkelijk
-    een apparaat is dat je wilt volgen. Start vanaf dat moment de
-    verbruik-drift-detectie (mogelijk defect) voor dit apparaat.
+  description: Bevestig dat een automatisch ontdekte vermogen-sensor daadwerkelijk
+    een apparaat is dat je wilt volgen. Start vanaf dat moment de verbruik-drift-detectie
+    (mogelijk defect) voor dit apparaat.
   fields:
     entity_id:
       name: Entiteit
-      description: >-
-        De entity_id van de ontdekte vermogen-sensor (zie
-        sensor.woonkamer_energy_management_system_nilm_onbevestigde_kandidaten
+      description: De entity_id van de ontdekte vermogen-sensor (zie sensor.woonkamer_energy_management_system_nilm_onbevestigde_kandidaten
         voor de lijst).
       required: true
       selector:
         entity:
           domain: sensor
-
 reject_nilm_device:
   name: Negeer NILM-apparaat
-  description: >-
-    Negeer een automatisch ontdekte vermogen-sensor permanent - wordt
-    nooit meer voorgesteld. Verwijdert 'm ook uit de bevestigde lijst
-    als je van gedachten bent veranderd.
+  description: Negeer een automatisch ontdekte vermogen-sensor permanent - wordt nooit
+    meer voorgesteld. Verwijdert 'm ook uit de bevestigde lijst als je van gedachten
+    bent veranderd.
   fields:
     entity_id:
       name: Entiteit
@@ -30,17 +25,14 @@ reject_nilm_device:
       selector:
         entity:
           domain: sensor
-
 unconfirm_nilm_device:
   name: Verwijder bevestigd NILM-apparaat (opnieuw beoordelen)
-  description: >-
-    Verwijder een bevestigd apparaat inclusief zijn volledige geleerde
-    geschiedenis (basislijn, drift-status, dagelijkse gemiddelden) -
-    bijvoorbeeld omdat het apparaat zelf is vervangen of gerepareerd en
-    de oude basislijn niet meer klopt. In tegenstelling tot negeren
-    wordt het apparaat NIET permanent geblokkeerd: bij de eerstvolgende
-    scan verschijnt het gewoon weer als nieuwe, onbevestigde kandidaat,
-    zodat je 'm met een verse basislijn opnieuw kunt bevestigen.
+  description: 'Verwijder een bevestigd apparaat inclusief zijn volledige geleerde
+    geschiedenis (basislijn, drift-status, dagelijkse gemiddelden) - bijvoorbeeld
+    omdat het apparaat zelf is vervangen of gerepareerd en de oude basislijn niet
+    meer klopt. In tegenstelling tot negeren wordt het apparaat NIET permanent geblokkeerd:
+    bij de eerstvolgende scan verschijnt het gewoon weer als nieuwe, onbevestigde
+    kandidaat, zodat je ''m met een verse basislijn opnieuw kunt bevestigen.'
   fields:
     entity_id:
       name: Entiteit
@@ -49,15 +41,12 @@ unconfirm_nilm_device:
       selector:
         entity:
           domain: sensor
-
 dismiss_nilm_duplicate_pair:
   name: Duplicaatpaar afwijzen (geen duplicaat)
-  description: >-
-    Markeer twee bevestigde NILM-apparaten als "geen duplicaat van
-    elkaar". Het paar verdwijnt uit de lijst met waarschijnlijke
-    duplicaten en komt daar nooit meer terug. Beide apparaten blijven
-    gewoon bevestigd en worden gewoon verder gevolgd - alleen de
-    suggestie verdwijnt. De volgorde van de twee entiteiten maakt niet
+  description: Markeer twee bevestigde NILM-apparaten als "geen duplicaat van elkaar".
+    Het paar verdwijnt uit de lijst met waarschijnlijke duplicaten en komt daar nooit
+    meer terug. Beide apparaten blijven gewoon bevestigd en worden gewoon verder gevolgd
+    - alleen de suggestie verdwijnt. De volgorde van de twee entiteiten maakt niet
     uit.
   fields:
     entity_id_1:
@@ -74,16 +63,13 @@ dismiss_nilm_duplicate_pair:
       selector:
         entity:
           domain: sensor
-
 confirm_nilm_duplicate_pair:
   name: Duplicaatpaar bevestigen (tweede apparaat uitsluiten)
-  description: >-
-    Bevestig dat twee apparaten hetzelfde fysieke signaal meten. De
-    TWEEDE opgegeven entiteit wordt permanent uitgesloten van NILM
-    (zoals "negeren" bij een los apparaat), zodat hetzelfde verbruik
-    niet dubbel geteld blijft worden. Het eerste apparaat blijft
-    ongewijzigd bevestigd. Let op welke van de twee je als tweede
-    invult - dat is degene die verdwijnt.
+  description: Bevestig dat twee apparaten hetzelfde fysieke signaal meten. De TWEEDE
+    opgegeven entiteit wordt permanent uitgesloten van NILM (zoals "negeren" bij een
+    los apparaat), zodat hetzelfde verbruik niet dubbel geteld blijft worden. Het
+    eerste apparaat blijft ongewijzigd bevestigd. Let op welke van de twee je als
+    tweede invult - dat is degene die verdwijnt.
   fields:
     entity_id_1:
       name: Apparaat dat blijft
@@ -99,16 +85,13 @@ confirm_nilm_duplicate_pair:
       selector:
         entity:
           domain: sensor
-
 accept_nilm_device_drift:
   name: Drift accepteren als nieuw normaal
-  description: >-
-    Voor een apparaat dat als "mogelijk defect" is gemarkeerd terwijl het
-    hogere verbruik gewoon klopt - bijvoorbeeld een koelkast die in de
-    zomer harder werkt, of een apparaat dat blijvend meer is gaan
-    gebruiken. Het apparaat blijft bevestigd en wordt gewoon verder
-    gevolgd; alleen de referentie wordt opnieuw verankerd op het recente
-    niveau en de melding verdwijnt. Anders dan "Verwijder bevestigd
+  description: Voor een apparaat dat als "mogelijk defect" is gemarkeerd terwijl het
+    hogere verbruik gewoon klopt - bijvoorbeeld een koelkast die in de zomer harder
+    werkt, of een apparaat dat blijvend meer is gaan gebruiken. Het apparaat blijft
+    bevestigd en wordt gewoon verder gevolgd; alleen de referentie wordt opnieuw verankerd
+    op het recente niveau en de melding verdwijnt. Anders dan "Verwijder bevestigd
     NILM-apparaat" blijft de leergeschiedenis grotendeels behouden.
   fields:
     entity_id:
@@ -118,3 +101,21 @@ accept_nilm_device_drift:
       selector:
         entity:
           domain: sensor
+confirm_water_source:
+  name: Bevestig waterbron
+  description: Bevestigt waar de laatste watersessie heen ging, zodat de integratie
+    het patroon leert herkennen.
+  fields:
+    bron:
+      name: Bron
+      required: true
+      description: toilet, douche, keuken, vaatwasser, wasmachine of waterontharder
+      selector:
+        select:
+          options:
+          - toilet
+          - douche
+          - keuken
+          - vaatwasser
+          - wasmachine
+          - waterontharder

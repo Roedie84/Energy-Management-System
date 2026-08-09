@@ -342,6 +342,28 @@ async def async_get_config_entry_diagnostics(
             # export niet zichtbaar.
             # v1.17.2: hoe betrouwbaar de PV-voorspelling per dag is,
             # niet alleen de gemiddelde bias.
+            # v1.18.2, gevraagd: "Alles wat je gebouwd hebt vandaag moet
+            # in de diagnostiek herleidbaar zijn zodat we na delen van de
+            # diagnostiek eventueel kunnen corrigeren."
+            #
+            # Zeven onderdelen van vandaag stonden er nog niet in. Zonder
+            # die velden is een gemeld probleem alleen op een screenshot
+            # te zien, en dat is precies wat er vandaag telkens misging.
+            "topic_summaries": coordinator.get_topic_summaries(),
+            "presence_overview": coordinator.get_presence_overview(),
+            "expansion_advice": coordinator.get_expansion_advice(),
+            "presence_week_profile": coordinator.presence_week_profile,
+            "water_source_profiles": coordinator.water_source_profiles,
+            "water_source_overview": coordinator.get_water_source_overview(),
+            "living_room_temp_bucket_direction": (
+                coordinator.living_room_temp_bucket_direction
+            ),
+            "battery_discharge_today_kwh": (
+                coordinator.battery_discharge_today_kwh
+            ),
+            "battery_module_rest_spread_c": (
+                coordinator._module_temperature_spread_at_rest()
+            ),
             "pv_forecast_quality": coordinator.get_pv_forecast_quality(),
             # v1.17.8: wordt de voorspelling ook echt gecorrigeerd, of
             # alleen gemeten?

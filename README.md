@@ -515,6 +515,237 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Uitbreidingsadvies op basis van meetdata (v1.19.0)
+
+**Gevraagd**: *"Is het mogelijk dat je een advies uitbrengt om mijn accu
+uit te breiden? Nu heb ik 1 2400AC omvormer met 3 accumodules. Wat als ik
+er 1 omvormer met 1 accu bij koop... Het vermogen kan dan omhoog (ca 50%)
+en is het dan rendabel?"*
+
+### De kernvraag: knelt vermogen of capaciteit?
+
+Dat bepaalt of een tweede omvormer of een extra module het juiste
+antwoord is — en dat is uit je eigen meetgegevens te beantwoorden.
+
+| | |
+|---|---|
+| Hoogste geleerde uurverbruik | **644 W** |
+| Ontlaadvermogen | 1600 W |
+| Benutting | **40%** |
+| Dagverbruik | 7,7 kWh |
+| Bruikbare capaciteit | 7,3 kWh |
+| Tekort-nachten | 2 van 5 |
+
+**Het vermogen knelt niet.** Op geen enkel uur wordt meer dan 40% van wat
+de accu al kan leveren gebruikt. Meer vermogen levert dan niets op — er
+is niets om sneller mee te ontladen.
+
+**De capaciteit knelt wel**, licht: je verbruikt net iets meer per dag
+dan er bruikbaar in zit, en twee van de vijf nachten kwam de reserve
+tekort.
+
+### Dus: een module, geen omvormer
+
+Een vierde module aan de bestaande omvormer helpt. Een tweede omvormer
+voegt vermogen toe dat ongebruikt blijft.
+
+### Wat het niet is
+
+Geen koopadvies. Prijzen, garantie en de levensduur van de bestaande
+modules wegen mee, en die kent de integratie niet. Wat ze wél kan, is
+laten zien wat er in de praktijk beperkt.
+
+En het voorbehoud staat er expliciet bij: dit rust op negen dagen in
+augustus. In de winter is er nauwelijks zon om mee te laden maar zijn de
+prijsverschillen groter — dat kan beide kanten op.
+
+### Het beweegt mee
+
+De analyse zit in de integratie, niet in dit antwoord. Verandert je
+verbruik of komt er een warmtepomp bij, dan verandert het advies mee.
+
+### Getest
+
+Nieuw `tests/test_expansion_advice.py`, 10 tests: het gerapporteerde
+geval met de echte cijfers, een vermogensgebonden huis krijgt wél een
+omvormer geadviseerd, beide knelpunten samen, geen knelpunt raadt niets
+aan, de beperkingen staan erbij, en te weinig geschiedenis zegt dat.
+
+**Volledige testsuite**: 1536 tests, allemaal groen.
+
+## Alles herleidbaar, plus aanwezigheidsdetectie (v1.18.2)
+
+**Gevraagd**: *"Alles wat je gebouwd hebt vandaag moet in de diagnostiek
+herleidbaar zijn zodat we na delen van de diagnostiek eventueel kunnen
+corrigeren."* En: *"Ook zijn er meerdere bewegingssensoren in huis
+aanwezig, ik wil dat je daarmee analyseert of er iemand thuis is of
+niet."*
+
+### Zeven onderdelen ontbraken in de export
+
+Nagelopen wat er vandaag is gebouwd. Deze stonden er nog niet in:
+statuszinnen, geleerde waterbronnen, het waterbron-overzicht, de
+airco-richting, de accu-ontlading van vandaag, en het rustverschil tussen
+de accumodules.
+
+Dat is precies het gat dat vandaag telkens pijn deed: tien van de
+veertien problemen zaten in een laag die de export niet toonde, dus je
+moest ze zelf op een screenshot ontdekken.
+
+Er staat nu een test met **één lijst van alles van deze dag**, zodat een
+gemist onderdeel meteen opvalt in plaats van pas als je ernaar vraagt.
+
+### Aanwezigheid uit bewegingssensoren
+
+Er zijn twintig bewegingsachtige entiteiten in je installatie — maar
+meerdere hangen **buiten**: deurbel, tuin, schuur. Die slaan aan als er
+iemand langsloopt en zeggen niets over of er iemand thuis is.
+
+Daarom een **instelbare lijst** in plaats van automatische herkenning.
+Welke sensor binnen hangt, weet alleen jij. Bij Configureren staat nu
+*"Bewegingssensoren binnenshuis"*, waar je er meerdere kunt kiezen.
+
+### Wat het doet
+
+Beweging op een van de gekozen sensoren betekent *thuis*. Blijft het
+langer dan **45 minuten** stil, dan geldt het huis als leeg — ruim
+genomen, want stilzitten op de bank of slapen is geen afwezigheid, en een
+korte drempel zou 's nachts elk uur "niemand thuis" melden.
+
+### En het leert
+
+Per **halfuur van de week** wordt bijgehouden hoe vaak er iemand thuis
+was. Een week is de natuurlijke cyclus: werkdagen verschillen van het
+weekend, 's ochtends van 's avonds.
+
+Begrensd op zes weken, zodat oude gewoontes niet eeuwig blijven
+meewegen — dezelfde keuze als bij de airco-bins. En onder de drie
+waarnemingen per halfuur wordt er geen uitspraak gedaan; twee weken zegt
+nog niets over een vast patroon.
+
+Ook **afwezigheid** wordt geleerd. Weten wanneer je er níét bent, is even
+bruikbaar als weten wanneer wel.
+
+### Getest
+
+Twee nieuwe bestanden: `test_presence_detection.py` (15 tests) en
+`test_diagnostics_completeness.py` (4 tests, waaronder de lijst met alles
+van vandaag en een controle dat de export serialiseerbaar blijft — een
+niet-serialiseerbaar veld laat de hele export mislukken, dezelfde les als
+bij de dagsleutel in v1.16.5).
+
+**Volledige testsuite**: 1526 tests, allemaal groen.
+
+## Airco-verwachting werkt ook in de winter (v1.18.1)
+
+**Gevraagd**: *"Werkt het airco-voorspellingsmechanisme ook in de winter
+(dus bij te koude temperaturen)?"*
+
+**Ja.** De bins zijn temperatuurbins van 1 °C en dus richtingsneutraal,
+en `AIRCO_ACTIVE_HVAC_ACTIONS` bevat zowel `heating` als `cooling`. Bij
+18 °C leert hij wanneer je gaat stoken, bij 26 °C wanneer je gaat koelen.
+
+### Maar er ontbrak iets
+
+De **richting** werd niet bewaard. En dat is geen detail: *"60% kans dat
+de airco aangaat"* betekent iets heel anders bij 18 dan bij 26 graden.
+Dat zijn tegengestelde acties met een tegengesteld gevolg voor je
+verbruik — de één stookt, de ander koelt.
+
+Nu wordt per bin bijgehouden wat er gebeurde, en staat er een kolom
+**Richting** in de tabel:
+
+| Temperatuur | Kans | Richting | Waarnemingen |
+|---|---|---|---|
+| 18 °C | 80% | verwarmen | 10 |
+| 22 °C | 0% | — | 20 |
+| 26 °C | 70% | koelen | 10 |
+
+De richting wordt meebewaard over herstarts; zonder dat zou hij na elke
+herstart onbekend zijn.
+
+### Bins van vóór deze versie
+
+Die hebben nog geen richting en tonen een streepje. Dat loopt niet stuk —
+er staat een test op — en vult zich vanzelf zodra de airco weer aangaat.
+
+### Getest
+
+Vijf tests erbij: beide hvac-acties tellen mee, een koude bin leert
+precies als een warme, de richting wordt vastgelegd, ontbrekende richting
+blijft leeg, en de kaart toont de kolom.
+
+**Volledige testsuite**: 1507 tests, allemaal groen.
+
+## Waterontharder-drempel en waterverbruik toewijzen (v1.18.0)
+
+**Gemeld**: *"Ik weet zeker dat de waterontharder nog niet heeft
+geregenereerd, misschien de drempel anders leggen?"* — plus het voorstel
+om waterverbruik aan een bron toe te wijzen.
+
+### De drempel stond veel te laag
+
+Tien liter. Dat haalt een wc-spoeling plus een kraan al. Een echte
+regeneratie spoelt de harslaag met pekel en spoelt na: **50 tot 200 liter
+over 20 tot 60 minuten**.
+
+In je eigen geschiedenis staan sessies van 12,8 L in 2,5 minuten en 8,0 L
+in 4,5 minuten — gewoon huishoudelijk verbruik dat tegen de oude drempel
+aan zat.
+
+Nu **40 liter én 15 minuten**, allebei nodig. Volume alleen is niet
+genoeg: een snelle sessie van veertig liter is eerder een bad of een
+lekkage.
+
+### Waar ging het water heen?
+
+Jouw voorstel, met de signalen die er al waren:
+
+| Signaal | Toewijzing |
+|---|---|
+| Vaatwasser draait | vaatwasser |
+| Wasmachine draait | wasmachine |
+| CV-ketel actief, langer dan 3 min | douche |
+| CV-ketel actief, korter | handen wassen of tandenpoetsen |
+| Quooker actief | keuken |
+| Niets aan, ~6 L in ~40 sec | toilet |
+| Geen van beide | onbekend — gokken is erger |
+
+De volgorde loopt van **specifiek naar algemeen**: een draaiende
+vaatwasser is een hardere aanwijzing dan een volumepatroon.
+
+### De CV-ketel hoefde niet geconfigureerd te worden
+
+Je vroeg: *"CV ketel kan toch op basis van het vermogen dat je al
+weet?"* — klopt. Die staat al bij je bevestigde NILM-apparaten
+(`sensor.cv_ketel_vermogen`). Dat scheelt een instelling die fout
+ingevuld kan worden.
+
+### Bevestigen en leren
+
+De actie `confirm_water_source` bevestigt waar de laatste sessie heen
+ging. Per bron worden volume en duur bewaard.
+
+Dat doet ertoe: **jouw wc kan 4,5 of 9 liter spoelen.** Na drie
+bevestigingen gebruikt de integratie jouw eigen patroon met de
+werkelijke spreiding, in plaats van de algemene vuistregel van 6 liter.
+De zekerheid gaat dan van *"mogelijk"* naar *"geleerd"*.
+
+Twee bevestigingen zijn niet genoeg — daar valt nog niets over spreiding
+te zeggen.
+
+### Getest
+
+Nieuw `tests/test_water_source_attribution.py`, 16 tests: de vier
+apparaten claimen hun water, het duuronderscheid tussen douchen en
+tandenpoetsen, de ketel komt uit de bevestigde apparaten, een spoeling
+wordt herkend aan zijn volume, een lange sessie niet, een onherkende
+sessie zegt dat, bevestigen legt het patroon vast, het geleerde patroon
+wint van de vuistregel, en de nieuwe ontharder-drempel vraagt beide
+criteria.
+
+**Volledige testsuite**: 1502 tests, allemaal groen.
+
 ## Ja, de PV-voorspelling wordt echt gecorrigeerd (v1.17.8)
 
 **Gevraagd**: *"Wordt de PV-verwachting nu wel daadwerkelijk gecorrigeerd

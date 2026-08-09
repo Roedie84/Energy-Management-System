@@ -496,13 +496,24 @@ views:
       grid_options:
         columns: 12
         rows: auto
+    - type: custom:mushroom-template-card
+      primary: Aanwezigheid
+      secondary: Is er iemand thuis
+      icon: mdi:home-account
+      icon_color: blue
+      tap_action:
+        action: navigate
+        navigation_path: /energy-management-system/detail-aanwezigheid
+      grid_options:
+        columns: 12
+        rows: auto
 - title: Visueel
   path: visueel
   subview: true
   panel: true
   cards:
   - type: picture-elements
-    image: /local/energy_management_system_overview.svg?v=1.17.8
+    image: /local/energy_management_system_overview.svg?v=1.19.0
     elements:
     - type: state-label
       entity: sensor.woonkamer_energy_management_system_system_status
@@ -1250,6 +1261,32 @@ views:
         {% endfor %}{% endif %}
 
         '
+    - type: markdown
+      title: Loont uitbreiden?
+      content: '{% set e = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''uitbreidingsadvies'') or {} %}{% if not e.get(''beschikbaar'') %}{{ e.get(''reden'',''Nog geen gegevens.'') }}{% else %}| | |
+
+        |---|---|
+
+        | Hoogste uurverbruik | {{ e.hoogste_uurverbruik_w }} W |
+
+        | Ontlaadvermogen | {{ e.ontlaadvermogen_w }} W |
+
+        | Benutting | {{ e.vermogensbenutting_procent }}% |
+
+        | Dagverbruik | {{ e.dagverbruik_kwh }} kWh |
+
+        | Bruikbare capaciteit | {{ e.bruikbare_capaciteit_kwh }} kWh |
+
+        | Tekort-nachten | {{ e.tekort_nachten }} |
+
+
+        **{{ e.advies }}**
+
+
+        _{{ e.voorbehoud }}_{% endif %}'
+      grid_options:
+        columns: 12
+        rows: auto
 - title: Water
   path: detail-water
   subview: true
@@ -1296,6 +1333,24 @@ views:
         {% endfor %}{% endif %}
 
         '
+    - type: markdown
+      title: Waar ging het water heen?
+      content: '{% set s = state_attr(''sensor.woonkamer_energy_management_system_waterverbruik'', ''recente_gebruiksmomenten'') or [] %}{% set dag = now().strftime(''%Y-%m-%d'') %}{% set ns = namespace(v=[]) %}{% for x in s %}{%- if x.gestart and dag in x.gestart %}{% set ns.v = ns.v + [x] %}{%- endif %}{%- endfor %}{% if ns.v | length == 0 %}Nog geen gebruiksmomenten vandaag.{% else %}| Tijd | Liter | Bron | Zekerheid |
+
+        |---|---|---|---|
+
+        {% for x in ns.v %}| {{ as_timestamp(x.gestart) | timestamp_custom(''%H:%M'') }} | {{ x.liter }} L | {{ x.bron or ''?'' }} | {{ x.zekerheid or '''' }} |
+
+        {% endfor %}{% endif %}
+
+
+        **Hoe dit werkt.** Draait de vaatwasser of wasmachine, dan gaat het water daarheen. Maakt de CV-ketel warm water, dan is het douchen (langer dan 3 minuten) of handen wassen. Is de Quooker actief, dan is het de keuken. Staat er niets aan, dan blijft het volumepatroon over - een wc-spoeling is opvallend constant.
+
+
+        _Klopt een toewijzing niet? Roep de actie `confirm_water_source` aan met de juiste bron. Na een paar bevestigingen herkent de integratie jouw eigen patroon in plaats van een vuistregel._'
+      grid_options:
+        columns: 12
+        rows: auto
 - title: Klimaat
   path: detail-klimaat
   subview: true
@@ -1355,13 +1410,16 @@ views:
         Zo leert de integratie van jouw gedrag: bij welke temperatuur grijp je in? Per bin worden de laatste 20 waarnemingen bewaard, zodat het meebeweegt met het seizoen.
 
 
-        {% set h = state_attr(''sensor.woonkamer_energy_management_system_airco_verwachting_woonkamertemperatuur'', ''geleerde_buckets'') or {} %}{% if h %}| Temperatuur | Kans | Waarnemingen |
+        {% set h = state_attr(''sensor.woonkamer_energy_management_system_airco_verwachting_woonkamertemperatuur'', ''geleerde_buckets'') or {} %}{% if h %}| Temperatuur | Kans | Richting | Waarnemingen |
 
-        |---|---|---|
+        |---|---|---|---|
 
-        {% for b, g in h.items() %}| {{ b }} °C | {{ g.probability_percent }}% | {{ g.sample_count }} |
+        {% for b, g in h.items() %}| {{ b }} °C | {{ g.probability_percent }}% | {{ g.richting or ''—'' }} | {{ g.sample_count }} |
 
-        {% endfor %}{% else %}_Nog geen bins met genoeg waarnemingen._{% endif %}'
+        {% endfor %}{% else %}_Nog geen bins met genoeg waarnemingen._{% endif %}
+
+
+        _Dit werkt het hele jaar: de bins zijn richtingsneutraal en zowel verwarmen als koelen telt als ''aan''. Bij 18 °C leert hij dus wanneer je gaat stoken, bij 26 °C wanneer je gaat koelen - vandaar de kolom Richting, want dat zijn tegengestelde acties met een tegengesteld gevolg voor je verbruik._'
       grid_options:
         columns: 12
         rows: auto
@@ -1985,3 +2043,26 @@ views:
         name: Verbruiksprofiel (huidig uur, W)
       - entity: sensor.energy_management_system_pv_forecast_accuracy
         name: PV-voorspelling afwijking (%)
+- title: Aanwezigheid
+  path: detail-aanwezigheid
+  subview: true
+  type: sections
+  max_columns: 1
+  sections:
+  - type: grid
+    cards:
+    - type: custom:mushroom-title-card
+      title: Aanwezigheid
+      subtitle: Uit de bewegingssensoren binnenshuis
+    - type: markdown
+      title: Is er iemand thuis?
+      content: '{% set p = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''aanwezigheid'') or {} %}{% if not p.get(''beschikbaar'') %}{{ p.get(''reden'', ''Nog geen gegevens.'') }}{% else %}Op dit moment: **{{ p.nu or ''onbekend'' }}**{% if p.minuten_zonder_beweging is not none %} ({{ p.minuten_zonder_beweging }} minuten zonder beweging){% endif %}. Gebaseerd op {{ p.sensoren }} sensor(en).
+
+
+        {% if p.halfuren_geleerd > 0 %}Er zijn **{{ p.halfuren_geleerd }} halfuren** van de week geleerd; gemiddeld is er {{ p.typisch_thuis_percentage }}% van de tijd iemand thuis.{% else %}Nog te weinig waarnemingen voor een weekpatroon.{% endif %}{% endif %}
+
+
+        _Er wordt per halfuur van de week bijgehouden hoe vaak er iemand thuis was. Werkdagen verschillen van het weekend, en ''s ochtends van ''s avonds - vandaar de week als cyclus. Alleen sensoren die je zelf hebt gekozen tellen mee: buitensensoren slaan aan op voorbijgangers._'
+      grid_options:
+        columns: 12
+        rows: auto

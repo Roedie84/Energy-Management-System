@@ -3746,6 +3746,8 @@ class GacsAssessmentSensor(SensorEntity):
             # v1.17.2: voorspelkwaliteit voor de PV-detailpagina.
             "pv_voorspelkwaliteit": self._coordinator.get_pv_forecast_quality(),
             "pv_correctie": self._coordinator.get_pv_correction_status(),
+            "aanwezigheid": self._coordinator.get_presence_overview(),
+            "uitbreidingsadvies": self._coordinator.get_expansion_advice(),
             **self._coordinator.get_gacs_assessment(),
             "note": (
                 "De vier eisen komen uit het Besluit Bouwwerken "

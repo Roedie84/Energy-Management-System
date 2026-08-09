@@ -37,6 +37,7 @@ from .const import (
     CONF_SLAAPKAMER_CLIMATE_ENTITY,
     CONF_BATTERY_COOLING_FAN_SWITCH,
     CONF_PV_ACTUAL_AZIMUTH_DEGREES,
+    CONF_PRESENCE_MOTION_SENSORS,
     CONF_PV_ENERGY_SENSOR,
     CONF_PV_ACTUAL_TILT_DEGREES,
     CONF_SUN_ELEVATION_SENSOR,
@@ -532,6 +533,16 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
             # betrouwbaarder dan het teken van de vermogenssensor, dat
             # afhangt van de omkering hieronder. Optioneel: zonder deze
             # sensor blijft de tekenmethode de terugval.
+            # v1.18.2: welke bewegingssensoren BINNEN hangen. Bewust een
+            # keuze en geen automatische herkenning - buitensensoren
+            # (deurbel, tuin) slaan aan op voorbijgangers en zeggen niets
+            # over of er iemand thuis is.
+            vol.Optional(
+                CONF_PRESENCE_MOTION_SENSORS,
+                default=defaults.get(CONF_PRESENCE_MOTION_SENSORS, []),
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="binary_sensor", multiple=True)
+            ),
             vol.Optional(
                 CONF_BATTERY_STATE_SENSOR,
                 default=defaults.get(CONF_BATTERY_STATE_SENSOR),

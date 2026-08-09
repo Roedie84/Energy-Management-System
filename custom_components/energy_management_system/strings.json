@@ -71,7 +71,8 @@
           "salderen_end_date": "End date of net metering (YYYY-MM-DD, default 2026-12-31)",
           "feedin_price_attribute": "Price attribute for feed-in",
           "feedin_cost_eur_per_kwh": "Feed-in costs in €/kWh (0 if you don't pay them)",
-          "battery_state_sensor_entity": "Battery operation state sensor (optional, more reliable than the power sign)"
+          "battery_state_sensor_entity": "Battery operation state sensor (optional, more reliable than the power sign)",
+          "presence_motion_sensor_entities": "Indoor motion sensors (optional, for presence detection)"
         }
       }
     },
@@ -156,7 +157,8 @@
           "salderen_end_date": "End date of net metering (YYYY-MM-DD, default 2026-12-31)",
           "feedin_price_attribute": "Price attribute for feed-in",
           "feedin_cost_eur_per_kwh": "Feed-in costs in €/kWh (0 if you don't pay them)",
-          "battery_state_sensor_entity": "Battery operation state sensor (optional, more reliable than the power sign)"
+          "battery_state_sensor_entity": "Battery operation state sensor (optional, more reliable than the power sign)",
+          "presence_motion_sensor_entities": "Indoor motion sensors (optional, for presence detection)"
         }
       }
     },

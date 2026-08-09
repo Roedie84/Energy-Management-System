@@ -10266,3 +10266,111 @@ eigen correctie, en de sterkste en zwakste.
 **Getest**: nieuw `tests/test_pv_correction_applied.py`, 10 tests.
 
 **Volledige testsuite**: 1486 tests, allemaal groen.
+
+## v1.18.0 — Waterontharder-drempel en waterverbruik toewijzen
+
+**Gemeld**: de waterontharder had niet geregenereerd terwijl dat wel werd
+gemeld; plus het voorstel om waterverbruik aan een bron toe te wijzen.
+
+**Drempel stond te laag**: tien liter haalt een wc-spoeling plus een
+kraan al. Een echte regeneratie spoelt 50 tot 200 liter over 20 tot 60
+minuten. Nu 40 liter EN 15 minuten, allebei nodig - een snelle sessie van
+veertig liter is eerder een bad of een lekkage.
+
+**Waterverbruik toewijzen**: vaatwasser draait -> vaatwasser; wasmachine
+-> wasmachine; CV-ketel actief en langer dan 3 minuten -> douche, korter
+-> handen wassen; Quooker -> keuken; niets aan en ~6 L in ~40 sec ->
+toilet; anders onbekend (gokken is erger). Volgorde van specifiek naar
+algemeen.
+
+**CV-ketel uit de bevestigde NILM-apparaten** in plaats van een eigen
+configuratieveld - gevraagd: "CV ketel kan toch op basis van het vermogen
+dat je al weet?"
+
+**Bevestigen en leren**: de actie `confirm_water_source` legt vast waar
+de laatste sessie heen ging. Per bron worden volume en duur bewaard; na
+drie bevestigingen gebruikt de integratie jouw eigen patroon met de
+werkelijke spreiding in plaats van de vuistregel. Twee bevestigingen zijn
+niet genoeg om iets over spreiding te zeggen.
+
+**Getest**: nieuw `tests/test_water_source_attribution.py`, 16 tests.
+
+**Volledige testsuite**: 1502 tests, allemaal groen.
+
+## v1.18.1 — Airco-verwachting werkt ook in de winter
+
+**Gevraagd**: werkt het airco-voorspellingsmechanisme ook bij koude
+temperaturen?
+
+**Ja**: de bins zijn temperatuurbins van 1 °C en dus richtingsneutraal,
+en AIRCO_ACTIVE_HVAC_ACTIONS bevat zowel "heating" als "cooling". Bij 18
+°C leert hij wanneer je gaat stoken, bij 26 °C wanneer je gaat koelen.
+
+**Maar de RICHTING werd niet bewaard**, en dat is geen detail: "60% kans
+dat de airco aangaat" betekent iets heel anders bij 18 dan bij 26 graden
+- tegengestelde acties met een tegengesteld gevolg voor het verbruik. Nu
+wordt per bin bijgehouden wat er gebeurde, met een kolom Richting in de
+tabel. De richting wordt meebewaard over herstarts.
+
+**Bins van vóór deze versie** hebben nog geen richting en tonen een
+streepje; dat loopt niet stuk en vult zich vanzelf.
+
+**Getest**: vijf tests erbij in `test_airco_expectation.py`.
+
+**Volledige testsuite**: 1507 tests, allemaal groen.
+
+## v1.18.2 — Alles herleidbaar, plus aanwezigheidsdetectie
+
+**Gevraagd**: alles van vandaag herleidbaar in de diagnostiek, en
+aanwezigheidsdetectie via de bewegingssensoren.
+
+**Zeven onderdelen ontbraken in de export**: statuszinnen, geleerde
+waterbronnen, waterbron-overzicht, airco-richting, accu-ontlading vandaag
+en het rustverschil tussen de accumodules. Dat is het gat dat vandaag
+telkens pijn deed - tien van de veertien problemen zaten in een laag die
+de export niet toonde. Er staat nu een test met één lijst van alles van
+deze dag.
+
+**Aanwezigheid uit bewegingssensoren**: instelbare lijst, geen
+automatische herkenning - van de twintig bewegingsachtige entiteiten
+hangen er meerdere buiten (deurbel, tuin, schuur) en die slaan aan op
+voorbijgangers. Nieuw configuratieveld "Bewegingssensoren binnenshuis",
+meerdere te kiezen.
+
+Beweging betekent thuis; langer dan 45 minuten stil betekent weg - ruim
+genomen, want stilzitten of slapen is geen afwezigheid.
+
+**En het leert**: per halfuur van de week hoe vaak er iemand thuis was.
+Begrensd op zes weken zodat oude gewoontes niet blijven meewegen; onder
+drie waarnemingen geen uitspraak. Afwezigheid wordt net zo goed geleerd
+als aanwezigheid.
+
+**Getest**: nieuw `test_presence_detection.py` (15 tests) en
+`test_diagnostics_completeness.py` (4 tests).
+
+**Volledige testsuite**: 1526 tests, allemaal groen.
+
+## v1.19.0 — Uitbreidingsadvies op basis van meetdata
+
+**Gevraagd**: advies over het uitbreiden van de accu - een tweede
+omvormer met modules erbij, waarmee het vermogen ~50% omhoog kan.
+
+**De kernvraag**: knelt het VERMOGEN of de CAPACITEIT? Dat bepaalt of een
+tweede omvormer of een extra module het juiste antwoord is, en het is uit
+de eigen meetgegevens te beantwoorden.
+
+Bij deze installatie: hoogste geleerde uurverbruik 644 W tegen 1600 W
+ontlaadvermogen (40% benutting) - het vermogen knelt dus niet. Maar 7,7
+kWh dagverbruik tegen 7,3 kWh bruikbare capaciteit, en twee tekort-
+nachten van de vijf - de capaciteit wel.
+
+**Advies**: een extra module aan de bestaande omvormer; een tweede
+omvormer voegt vermogen toe dat ongebruikt blijft.
+
+**Geen koopadvies**: prijzen, garantie en de levensduur van de bestaande
+modules kent de integratie niet. Het voorbehoud staat er expliciet bij -
+negen dagen in augustus is geen jaar.
+
+**Getest**: nieuw `tests/test_expansion_advice.py`, 10 tests.
+
+**Volledige testsuite**: 1536 tests, allemaal groen.

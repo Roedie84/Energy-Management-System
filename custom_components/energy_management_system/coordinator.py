@@ -112,7 +112,16 @@ from .const import (
     APPLIANCE_CYCLE_COMPLETE_SUSTAINED_MINUTES,
     WATER_USAGE_ACTIVE_THRESHOLD_L_PER_MIN,
     WATER_SESSION_COMPLETE_SUSTAINED_MINUTES,
+    WATER_BOILER_ACTIVE_W,
+    WATER_BOILER_NAME_HINTS,
     WATER_SESSION_HISTORY_LENGTH,
+    WATER_SHOWER_MIN_DURATION_MINUTES,
+    WATER_SOFTENER_MIN_DURATION_MINUTES,
+    WATER_SOURCE_HISTORY_LENGTH,
+    WATER_SOURCE_MATCH_WINDOW_MINUTES,
+    WATER_TOILET_MAX_DURATION_MINUTES,
+    WATER_TOILET_TOLERANCE_LITERS,
+    WATER_TOILET_TYPICAL_LITERS,
     WATER_SOFTENER_NIGHT_WINDOW_START_HOUR,
     WATER_SOFTENER_MIN_LITERS,
     WATER_SOFTENER_NIGHT_WINDOW_END_HOUR,
@@ -280,6 +289,9 @@ from .const import (
     GACS_REQUIREMENTS,
     GACS_SELF_CONSUMPTION_ADVICE_PERCENT,
     PLAUSIBILITY_RULES,
+    PRESENCE_ABSENCE_AFTER_MINUTES,
+    PRESENCE_HISTORY_WEEKS,
+    PRESENCE_MIN_OBSERVATIONS,
     SENSOR_STARTUP_GRACE_MINUTES,
     SENSOR_UNAVAILABLE_CONFIRM_MINUTES,
     STALLED_SERIES_CONSTANT_IS_NORMAL,
@@ -295,6 +307,7 @@ from .const import (
     CONF_SUN_ELEVATION_SENSOR,
     CONF_SUN_PHASE_SENSOR,
     CONF_PV_ACTUAL_AZIMUTH_DEGREES,
+    CONF_PRESENCE_MOTION_SENSORS,
     CONF_PV_ENERGY_SENSOR,
     PV_ENERGY_METER_RESET_TOLERANCE_KWH,
     CONF_PV_ACTUAL_TILT_DEGREES,
@@ -532,6 +545,14 @@ class EnergyManagementSystemCoordinator:
         self.water_daily_total_l: float | None = None
         self.water_daily_history: list[float] = []
         self.water_session_history: list[dict] = []
+        # v1.18.0: per bevestigde bron het geleerde volume- en
+        # duurpatroon.
+        self.water_source_profiles: dict[str, dict] = {}
+        # v1.18.2: aanwezigheid uit bewegingssensoren.
+        self.last_motion_at: datetime | None = None
+        self.presence_state: str | None = None
+        # Per kwartier van de week: [aantal keer thuis, totaal].
+        self.presence_week_profile: dict[str, list[int]] = {}
         self.water_softener_last_regeneration: datetime | None = None
         self.last_fietsladers_action: str | None = None
 
@@ -885,6 +906,9 @@ class EnergyManagementSystemCoordinator:
         # Living-room-temperature airco activation predictor (v0.63.55).
         self.living_room_temp_bucket_history: dict[str, list[bool]] = {}
         self.living_room_temp_bucket_humidity: dict[str, list[float]] = {}
+        # v1.18.1: verwarmen of koelen per bin - bij 18 °C betekent
+        # "airco aan" iets anders dan bij 26 °C.
+        self.living_room_temp_bucket_direction: dict[str, list[str]] = {}
         self._temp_prediction_pending: list[dict] = []
         self.living_room_current_temp_c: float | None = None
         self.living_room_current_humidity_percent: float | None = None
@@ -3907,6 +3931,399 @@ class EnergyManagementSystemCoordinator:
                 if geleerd or bias is not None
                 else "Nog niets geleerd; de voorspelling wordt ongewijzigd "
                 "gebruikt."
+            ),
+        }
+
+    def _boiler_power_w(self) -> float | None:
+        """Vermogen van de CV-ketel uit de bevestigde NILM-apparaten
+        (v1.18.0).
+
+        Gevraagd: "CV ketel kan toch op basis van het vermogen dat je al
+        weet?" - klopt. De ketel staat al bij de bevestigde apparaten
+        (`sensor.cv_ketel_vermogen`), dus een apart configuratieveld zou
+        alleen maar fout ingevuld kunnen worden.
+        """
+        for entity_id, gegevens in (self.nilm_confirmed_devices or {}).items():
+            naam = str(gegevens.get("friendly_name") or entity_id).lower()
+            if any(hint in naam for hint in WATER_BOILER_NAME_HINTS):
+                return self._read_sensor_float(entity_id)
+        return None
+
+    def classify_water_session(
+        self, liters: float | None, duur_minuten: float | None
+    ) -> dict:
+        """Waar ging dit water heen? (v1.18.0)
+
+        Gevraagd: "Tevens is het volgens mij mogelijk om te detecteren
+        waar water voor is gebruikt. Vaatwasser aan = water naar
+        vaatwasser... Ketel aan en waterverbruik langer dan 3 minuten is
+        douchen, korter dan 3 minuten is tandenpoetsen."
+
+        Dezelfde gedachte als NILM: een apparaat dat toevallig samenvalt
+        met waterverbruik zegt waarschijnlijk waar dat water heen ging.
+        En net als bij NILM is een vermoeden geen zekerheid - vandaar de
+        zekerheid erbij, en een bevestig-knop om ervan te leren.
+
+        De vololgorde is van SPECIFIEK naar algemeen: een draaiende
+        vaatwasser is een hardere aanwijzing dan een volumepatroon.
+        """
+        vaatwasser = self._read_sensor_float(
+            self.config.get(CONF_DISHWASHER_POWER_SENSOR)
+        )
+        wasmachine = self._read_sensor_float(
+            self.config.get(CONF_WASHING_MACHINE_POWER_SENSOR)
+        )
+        quooker = self._read_sensor_float(
+            self.config.get(CONF_QUOOKER_POWER_SENSOR)
+        )
+        ketel = self._boiler_power_w()
+
+        if vaatwasser is not None and vaatwasser > 10:
+            return {
+                "bron": "vaatwasser",
+                "zekerheid": "waarschijnlijk",
+                "reden": f"De vaatwasser draait ({vaatwasser:.0f} W).",
+            }
+        if wasmachine is not None and wasmachine > 10:
+            return {
+                "bron": "wasmachine",
+                "zekerheid": "waarschijnlijk",
+                "reden": f"De wasmachine draait ({wasmachine:.0f} W).",
+            }
+        if ketel is not None and ketel > WATER_BOILER_ACTIVE_W:
+            if duur_minuten is not None and (
+                duur_minuten >= WATER_SHOWER_MIN_DURATION_MINUTES
+            ):
+                return {
+                    "bron": "douche",
+                    "zekerheid": "waarschijnlijk",
+                    "reden": (
+                        f"De ketel maakt warm water ({ketel:.0f} W) en het "
+                        f"tappen duurde {duur_minuten:.1f} minuten."
+                    ),
+                }
+            return {
+                "bron": "warm water kort",
+                "zekerheid": "mogelijk",
+                "reden": (
+                    f"De ketel maakt warm water ({ketel:.0f} W) maar het "
+                    "tappen was kort - handen wassen of tandenpoetsen."
+                ),
+            }
+        if quooker is not None and quooker > 10:
+            return {
+                "bron": "keuken",
+                "zekerheid": "mogelijk",
+                "reden": f"De Quooker is actief ({quooker:.0f} W).",
+            }
+
+        # Geen apparaat actief: dan blijft het volumepatroon over.
+        #
+        # v1.18.0: eerst kijken naar wat er BEVESTIGD is. Een geleerd
+        # patroon uit jouw eigen huis is scherper dan een algemene
+        # vuistregel - jouw wc kan 4,5 of 9 liter spoelen.
+        if liters is not None and duur_minuten is not None:
+            for bron, gegevens in (self.water_source_profiles or {}).items():
+                bevestigde_liters = gegevens.get("liters") or []
+                if len(bevestigde_liters) < 3:
+                    continue
+                typisch = statistics.median(bevestigde_liters)
+                spreiding = (
+                    statistics.pstdev(bevestigde_liters)
+                    if len(bevestigde_liters) > 1
+                    else 0.5
+                )
+                marge = max(0.5, 2 * spreiding)
+                if abs(liters - typisch) <= marge:
+                    return {
+                        "bron": bron,
+                        "zekerheid": "geleerd",
+                        "reden": (
+                            f"{liters:.1f} liter past bij het geleerde patroon "
+                            f"van {bron} ({typisch:.1f} liter, uit "
+                            f"{len(bevestigde_liters)} bevestigingen)."
+                        ),
+                    }
+
+        # Zonder bevestigingen valt het terug op de vuistregel: een
+        # wc-spoeling is opvallend constant - dat is juist wat hem
+        # herkenbaar maakt.
+        if (
+            liters is not None
+            and duur_minuten is not None
+            and abs(liters - WATER_TOILET_TYPICAL_LITERS)
+            <= WATER_TOILET_TOLERANCE_LITERS
+            and duur_minuten <= WATER_TOILET_MAX_DURATION_MINUTES
+        ):
+            return {
+                "bron": "toilet",
+                "zekerheid": "mogelijk",
+                "reden": (
+                    f"{liters:.1f} liter in {duur_minuten:.1f} minuten, zonder "
+                    "apparaat dat aanstond - dat past bij een spoeling."
+                ),
+            }
+        return {
+            "bron": None,
+            "zekerheid": "onbekend",
+            "reden": "Geen apparaat actief en geen herkenbaar patroon.",
+        }
+
+    def confirm_water_source(self, bron: str) -> None:
+        """Bevestigt waar de laatste watersessie heen ging (v1.18.0).
+
+        Gevraagd: "Misschien is er een mechanisme te bedenken zodat ik
+        ook daadwerkelijk kan bevestigen dat bijvoorbeeld de wc is
+        doorgespoeld, en je daarvan leert?"
+
+        Precies zoals bij NILM: het vermoeden is een startpunt, jouw
+        bevestiging maakt er een feit van. Per bron worden volume en duur
+        bewaard, zodat het patroon scherper wordt naarmate je vaker
+        bevestigt.
+
+        Een wc-spoeling van 6,2 liter in 40 seconden hoort na een paar
+        bevestigingen betrouwbaarder herkend te worden dan met de vaste
+        marge waarmee het begint.
+        """
+        if not self.water_session_history:
+            return
+        sessie = self.water_session_history[-1]
+        sessie["bron"] = bron
+        sessie["zekerheid"] = "bevestigd"
+        sessie["reden"] = "Door jou bevestigd."
+
+        geschiedenis = self.water_source_profiles.setdefault(
+            bron, {"liters": [], "duur_minuten": []}
+        )
+        if sessie.get("liter") is not None:
+            geschiedenis["liters"].append(sessie["liter"])
+            geschiedenis["liters"] = geschiedenis["liters"][
+                -WATER_SOURCE_HISTORY_LENGTH:
+            ]
+        if sessie.get("duur_minuten") is not None:
+            geschiedenis["duur_minuten"].append(sessie["duur_minuten"])
+            geschiedenis["duur_minuten"] = geschiedenis["duur_minuten"][
+                -WATER_SOURCE_HISTORY_LENGTH:
+            ]
+        self.schedule_persisted_state_save()
+
+    def get_water_source_overview(self) -> dict:
+        """Wat is er geleerd over de waterbronnen? (v1.18.0)"""
+        overzicht = {}
+        for bron, gegevens in (self.water_source_profiles or {}).items():
+            liters = gegevens.get("liters") or []
+            duren = gegevens.get("duur_minuten") or []
+            if not liters and not duren:
+                continue
+            overzicht[bron] = {
+                "bevestigingen": max(len(liters), len(duren)),
+                "typisch_liter": (
+                    round(statistics.median(liters), 1) if liters else None
+                ),
+                "typisch_minuten": (
+                    round(statistics.median(duren), 1) if duren else None
+                ),
+            }
+        return overzicht
+
+    def _update_presence(self, now: datetime) -> None:
+        """Is er iemand thuis? (v1.18.2)
+
+        Gevraagd: "Ook zijn er meerdere bewegingssensoren in huis
+        aanwezig, ik wil dat je daarmee analyseert of er iemand thuis is
+        of niet. Ook daar kun je van leren lijkt me."
+
+        Bewust een INSTELBARE lijst en geen automatische herkenning: van
+        de twintig bewegingsachtige entiteiten in deze installatie hangen
+        er meerdere buiten (deurbel, tuin, schuur). Die slaan aan als de
+        kat langsloopt en zeggen niets over aanwezigheid. Welke sensor
+        binnen hangt, weet alleen de bewoner.
+        """
+        sensoren = self.config.get(CONF_PRESENCE_MOTION_SENSORS) or []
+        if isinstance(sensoren, str):
+            sensoren = [sensoren]
+        if not sensoren:
+            self.presence_state = None
+            return
+
+        beweging_nu = False
+        for entity_id in sensoren:
+            staat = self.hass.states.get(entity_id)
+            if staat is not None and str(staat.state).lower() in ("on", "true"):
+                beweging_nu = True
+                break
+
+        if beweging_nu:
+            self.last_motion_at = now
+        vorige = self.presence_state
+        if self.last_motion_at is None:
+            self.presence_state = "onbekend"
+        else:
+            stil_minuten = (now - self.last_motion_at).total_seconds() / 60
+            self.presence_state = (
+                "thuis"
+                if stil_minuten < PRESENCE_ABSENCE_AFTER_MINUTES
+                else "weg"
+            )
+
+        # Leren: per kwartier van de week bijhouden hoe vaak er iemand
+        # thuis was. Een week is de natuurlijke cyclus - werkdagen
+        # verschillen van het weekend, ochtend van avond.
+        if self.presence_state in ("thuis", "weg"):
+            sleutel = f"{now.weekday()}-{now.hour:02d}{'30' if now.minute >= 30 else '00'}"
+            teller = self.presence_week_profile.setdefault(sleutel, [0, 0])
+            teller[1] += 1
+            if self.presence_state == "thuis":
+                teller[0] += 1
+            # Begrensd houden: zes weken aan halfuren is genoeg om een
+            # patroon te zien zonder dat oude gewoontes blijven hangen.
+            maximum = PRESENCE_HISTORY_WEEKS * 2
+            if teller[1] > maximum:
+                verhouding = teller[0] / teller[1]
+                teller[1] = maximum
+                teller[0] = round(verhouding * maximum)
+
+        if vorige != self.presence_state:
+            self.schedule_persisted_state_save()
+
+    def get_presence_overview(self) -> dict:
+        """Wat is er geleerd over aanwezigheid? (v1.18.2)"""
+        sensoren = self.config.get(CONF_PRESENCE_MOTION_SENSORS) or []
+        if isinstance(sensoren, str):
+            sensoren = [sensoren]
+        if not sensoren:
+            return {
+                "beschikbaar": False,
+                "reden": (
+                    "Geen bewegingssensoren gekozen. Kies bij Configureren "
+                    "welke sensoren BINNEN hangen - buitensensoren slaan aan "
+                    "op voorbijgangers en zeggen niets over aanwezigheid."
+                ),
+            }
+
+        geleerd = {
+            sleutel: round(100 * aan / totaal, 0)
+            for sleutel, (aan, totaal) in self.presence_week_profile.items()
+            if totaal >= PRESENCE_MIN_OBSERVATIONS
+        }
+        nu = self.presence_state
+        stil_minuten = (
+            None
+            if self.last_motion_at is None
+            else round(
+                (dt_util.now() - self.last_motion_at).total_seconds() / 60, 1
+            )
+        )
+        return {
+            "beschikbaar": True,
+            "sensoren": len(sensoren),
+            "nu": nu,
+            "minuten_zonder_beweging": stil_minuten,
+            "halfuren_geleerd": len(geleerd),
+            "typisch_thuis_percentage": (
+                round(sum(geleerd.values()) / len(geleerd), 0) if geleerd else None
+            ),
+            "profiel": geleerd,
+        }
+
+    def get_expansion_advice(self) -> dict:
+        """Loont het om de accu uit te breiden? (v1.19.0)
+
+        Gevraagd: "Is het mogelijk dat je een advies uitbrengt om mijn
+        accu uit te breiden? Nu heb ik 1 2400AC omvormer met 3
+        accumodules. Wat als ik er 1 omvormer met 1 accu bij koop... Het
+        vermogen kan dan omhoog (ca 50%) en is het dan rendabel?"
+
+        De kernvraag is welke van twee dingen knelt: het VERMOGEN of de
+        CAPACITEIT. Dat is uit de eigen meetgegevens te beantwoorden, en
+        het antwoord bepaalt of een tweede omvormer of een extra module
+        het juiste antwoord is.
+
+        Nadrukkelijk geen koopadvies: prijzen, garantie en de
+        levensduur van de bestaande modules wegen mee, en die kent deze
+        integratie niet. Wat ze wel kan, is laten zien wat er in de
+        praktijk beperkt.
+        """
+        profiel = self.hourly_consumption_profile or {}
+        uren = [(int(u), v) for u, v in profiel.items() if v is not None]
+        if len(uren) < 12:
+            return {
+                "beschikbaar": False,
+                "reden": (
+                    "Nog te weinig verbruiksgeschiedenis om te beoordelen wat "
+                    "er knelt."
+                ),
+            }
+
+        ontlaadvermogen = abs(self.config.get(CONF_MANUAL_DISCHARGE_POWER) or 0)
+        piek_w = max(v for _, v in uren) * 1000
+        dagverbruik = sum(v for _, v in uren)
+
+        capaciteit = self._read_sensor_float(
+            self.config.get(CONF_BATTERY_TOTAL_CAPACITY_SENSOR)
+        )
+        min_soc = self.config.get(CONF_MIN_SOC_PERCENT) or 0
+        bruikbaar = (
+            capaciteit * (100 - min_soc) / 100 if capaciteit else None
+        )
+
+        tekorten = [x for x in (self.reserve_shortfall_history or []) if x]
+        dagen = len(self.reserve_shortfall_history or [])
+
+        # Knelt het vermogen? Alleen als het verbruik er tegenaan loopt.
+        vermogen_knelt = (
+            ontlaadvermogen > 0 and piek_w > 0.8 * ontlaadvermogen
+        )
+        # Knelt de capaciteit? Als de accu de nacht niet haalt.
+        capaciteit_knelt = bool(tekorten) or (
+            bruikbaar is not None and dagverbruik > bruikbaar
+        )
+
+        if vermogen_knelt and capaciteit_knelt:
+            advies = (
+                "Zowel het vermogen als de capaciteit loopt tegen de grens. "
+                "Een tweede omvormer mét eigen modules lost allebei op."
+            )
+        elif vermogen_knelt:
+            advies = (
+                "Het vermogen loopt tegen de grens maar de capaciteit niet. "
+                "Een tweede omvormer helpt; extra modules zonder omvormer "
+                "niet."
+            )
+        elif capaciteit_knelt:
+            advies = (
+                "De capaciteit loopt tegen de grens, het vermogen niet. Een "
+                "extra module aan de bestaande omvormer helpt dan; een "
+                "tweede omvormer voegt vermogen toe dat ongebruikt blijft."
+            )
+        else:
+            advies = (
+                "Noch het vermogen noch de capaciteit loopt tegen de grens. "
+                "Uitbreiden levert op dit moment weinig op."
+            )
+
+        return {
+            "beschikbaar": True,
+            "hoogste_uurverbruik_w": round(piek_w),
+            "ontlaadvermogen_w": round(ontlaadvermogen),
+            "vermogensbenutting_procent": (
+                round(100 * piek_w / ontlaadvermogen) if ontlaadvermogen else None
+            ),
+            "dagverbruik_kwh": round(dagverbruik, 1),
+            "bruikbare_capaciteit_kwh": (
+                round(bruikbaar, 1) if bruikbaar is not None else None
+            ),
+            "tekort_nachten": f"{len(tekorten)} van {dagen}",
+            "vermogen_knelt": vermogen_knelt,
+            "capaciteit_knelt": capaciteit_knelt,
+            "advies": advies,
+            "voorbehoud": (
+                "Dit rust op gemeten dagen, niet op een heel jaar. In de "
+                "winter is er nauwelijks zon om mee te laden maar zijn de "
+                "prijsverschillen groter - dat kan beide kanten op. En "
+                "prijzen, garantie en de levensduur van de bestaande "
+                "modules wegen mee in een aankoop; die kent deze "
+                "integratie niet."
             ),
         }
 
@@ -9941,9 +10358,26 @@ class EnergyManagementSystemCoordinator:
                 < WATER_SOFTENER_NIGHT_WINDOW_END_HOUR
                 # v1.9.2: het tijdvenster alleen is geen bewijs - 's
                 # nachts wordt er ook doorgespoeld of een glas water
-                # getapt. Een regeneratie gebruikt ruim tien liter; dat
-                # volume is de onderscheidende eigenschap.
-                and (liters or 0) >= WATER_SOFTENER_MIN_LITERS
+                # getapt.
+                #
+                # v1.18.0, gemeld: "Ik weet zeker dat de waterontharder
+                # nog niet heeft geregenereerd, misschien de drempel
+                # anders leggen?" De drempel stond op tien liter, en dat
+                # haalt een wc-spoeling plus een kraan al. Een echte
+                # regeneratie spoelt de harslaag met pekel en spoelt na:
+                # typisch 50 tot 200 liter, over 20 tot 60 minuten.
+                #
+                # Nu allebei nodig, want volume alleen is niet genoeg:
+                # een snelle sessie van veertig liter is eerder een bad
+                # of een lekkage dan een regeneratie.
+                #
+                # Zonder volumemeting valt de eerste eis weg: dan is de
+                # duur het enige bewijs dat er is, en die alleen laten
+                # tellen is beter dan de detectie helemaal stilzetten
+                # voor wie geen meterstand heeft.
+                and (liters is None or liters >= WATER_SOFTENER_MIN_LITERS)
+                and (duration_minutes or 0)
+                >= WATER_SOFTENER_MIN_DURATION_MINUTES
             )
             self.water_session_history.append(
                 {
@@ -9954,6 +10388,9 @@ class EnergyManagementSystemCoordinator:
                         round(meter_liters, 1) if meter_liters is not None else None
                     ),
                     "waarschijnlijk_waterontharder": is_waterontharder,
+                    # v1.18.0: waar ging dit water heen? Een vermoeden,
+                    # met de reden erbij zodat je het kunt beoordelen.
+                    **self.classify_water_session(liters, duration_minutes),
                 }
             )
             self.water_session_history = self.water_session_history[
@@ -12539,8 +12976,23 @@ class EnergyManagementSystemCoordinator:
         # airco is active on this tick - a queued observation from any
         # earlier tick (as long as its deadline hasn't passed yet) counts.
         if airco_active_now:
+            # v1.18.1, gevraagd: "Werkt het airco-voorspellingsmechanisme
+            # ook in de winter (dus bij te koude temperaturen)?"
+            #
+            # Ja: de bins zijn richtingsneutraal en
+            # AIRCO_ACTIVE_HVAC_ACTIONS bevat zowel "heating" als
+            # "cooling". Bij 18 °C leert hij dus verwarmen, bij 26 °C
+            # koelen.
+            #
+            # Maar de RICHTING werd niet bewaard, terwijl dat twee
+            # tegengestelde acties zijn: "60% kans dat de airco aangaat"
+            # betekent iets heel anders bij 18 dan bij 26 graden. Nu
+            # wordt per bin bijgehouden wat er gebeurde.
+            richting = self.climate_airco_state
             for pending in self._temp_prediction_pending:
                 pending["airco_seen_active"] = True
+                if richting in ("verwarmen", "koelen"):
+                    pending["airco_richting"] = richting
 
         # Finalise anything whose lookahead window has now elapsed.
         still_pending = []
@@ -12550,6 +13002,15 @@ class EnergyManagementSystemCoordinator:
                     pending["bucket"], []
                 )
                 history.append(pending["airco_seen_active"])
+                richting = pending.get("airco_richting")
+                if richting:
+                    richtingen = self.living_room_temp_bucket_direction.setdefault(
+                        pending["bucket"], []
+                    )
+                    richtingen.append(richting)
+                    self.living_room_temp_bucket_direction[pending["bucket"]] = (
+                        richtingen[-AIRCO_PREDICTION_HISTORY_LENGTH:]
+                    )
                 self.living_room_temp_bucket_history[pending["bucket"]] = history[
                     -AIRCO_PREDICTION_HISTORY_LENGTH:
                 ]
@@ -12584,10 +13045,19 @@ class EnergyManagementSystemCoordinator:
         history = self.living_room_temp_bucket_history.get(bucket_key, [])
         humidity_history = self.living_room_temp_bucket_humidity.get(bucket_key, [])
         sample_count = len(history)
+        # v1.18.1: welke kant op? Bij 18 °C betekent "airco aan"
+        # verwarmen, bij 26 °C koelen - twee tegengestelde acties met een
+        # tegengesteld gevolg voor het verbruik.
+        richtingen = self.living_room_temp_bucket_direction.get(bucket_key, [])
+        overheersend = None
+        if richtingen:
+            overheersend = max(set(richtingen), key=richtingen.count)
+
         result = {
             "bucket": bucket_key,
             "sample_count": sample_count,
             "probability_percent": None,
+            "richting": overheersend,
             "gemiddelde_luchtvochtigheid_percent": (
                 round(sum(humidity_history) / len(humidity_history), 1)
                 if humidity_history
@@ -14625,6 +15095,8 @@ class EnergyManagementSystemCoordinator:
         self._update_appliance_usage_tracking(now)
         self._update_quooker_tracking(now)
         self._update_water_tracking(now)
+        # v1.18.2: aanwezigheid uit de gekozen bewegingssensoren.
+        self._update_presence(now)
         self._update_peak_power_tracking(now)
         self._update_battery_module_health(now)
         self._update_sensor_cadence_tracking()

@@ -270,6 +270,26 @@ def _async_register_nilm_services(hass: HomeAssistant) -> None:
         _handle_confirm_duplicate,
         schema=NILM_DUPLICATE_SERVICE_SCHEMA,
     )
+    async def _handle_confirm_water_source(call: ServiceCall) -> None:
+        """v1.18.0, gevraagd: "Misschien is er een mechanisme te
+        bedenken zodat ik ook daadwerkelijk kan bevestigen dat
+        bijvoorbeeld de wc is doorgespoeld, en je daarvan leert?"
+
+        Dezelfde opzet als de NILM-bevestiging: het vermoeden is een
+        startpunt, de bevestiging maakt er een feit van.
+        """
+        bron = call.data["bron"]
+        for gegevens in hass.data.get(DOMAIN, {}).values():
+            coordinator = (gegevens or {}).get("coordinator")
+            if coordinator is not None:
+                coordinator.confirm_water_source(bron)
+
+    hass.services.async_register(
+        DOMAIN,
+        "confirm_water_source",
+        _handle_confirm_water_source,
+        schema=vol.Schema({vol.Required("bron"): cv.string}),
+    )
     hass.services.async_register(
         DOMAIN, SERVICE_REJECT_NILM_DEVICE, _handle_reject, schema=NILM_SERVICE_SCHEMA
     )

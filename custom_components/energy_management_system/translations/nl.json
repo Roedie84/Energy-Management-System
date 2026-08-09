@@ -71,7 +71,8 @@
           "salderen_end_date": "Einddatum saldering (JJJJ-MM-DD, standaard 2026-12-31)",
           "feedin_price_attribute": "Prijsattribuut voor teruglevering",
           "feedin_cost_eur_per_kwh": "Terugleverkosten in €/kWh (0 als je die niet betaalt)",
-          "battery_state_sensor_entity": "Werkstand-sensor van de accu (optioneel, betrouwbaarder dan het vermogensteken)"
+          "battery_state_sensor_entity": "Werkstand-sensor van de accu (optioneel, betrouwbaarder dan het vermogensteken)",
+          "presence_motion_sensor_entities": "Bewegingssensoren binnenshuis (optioneel, voor aanwezigheidsdetectie)"
         }
       }
     },
@@ -156,7 +157,8 @@
           "salderen_end_date": "Einddatum saldering (JJJJ-MM-DD, standaard 2026-12-31)",
           "feedin_price_attribute": "Prijsattribuut voor teruglevering",
           "feedin_cost_eur_per_kwh": "Terugleverkosten in €/kWh (0 als je die niet betaalt)",
-          "battery_state_sensor_entity": "Werkstand-sensor van de accu (optioneel, betrouwbaarder dan het vermogensteken)"
+          "battery_state_sensor_entity": "Werkstand-sensor van de accu (optioneel, betrouwbaarder dan het vermogensteken)",
+          "presence_motion_sensor_entities": "Bewegingssensoren binnenshuis (optioneel, voor aanwezigheidsdetectie)"
         }
       }
     },

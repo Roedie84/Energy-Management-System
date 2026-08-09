@@ -1096,6 +1096,12 @@ PERSISTED_PLAIN_FIELDS = (
     "washing_machine_cycle_duration_history",
     "washing_machine_usage_hourly_history",
     "living_room_temp_bucket_humidity",
+    # v1.18.1: verwarmen of koelen per bin. Zonder bewaren zou na elke
+    # herstart onbekend zijn welke kant de airco op ging.
+    "living_room_temp_bucket_direction",
+    # v1.18.2: het weekprofiel van aanwezigheid. Zonder bewaren zou elke
+    # herstart het leren opnieuw laten beginnen.
+    "presence_week_profile",
     "battery_cooling_history",
     "kalman_divergence_history",
     # v1.3.1: de geleerde blootstellingsrichting van de achtertuinsensor.
@@ -2294,3 +2300,91 @@ CONF_BATTERY_STATE_SENSOR = "battery_state_sensor_entity"
 # lijst in plaats van één vergelijking.
 BATTERY_STATE_DISCHARGING = ("ontladen", "discharging", "discharge")
 BATTERY_STATE_CHARGING = ("laden", "charging", "charge")
+
+# --- Waterontharder: realistische drempel (v1.18.0) ------------------
+# Gemeld: "Ik weet zeker dat de waterontharder nog niet heeft
+# geregenereerd, misschien de drempel anders leggen?"
+#
+# De drempel stond op 10 liter. Een echte regeneratie spoelt de harslaag
+# met pekel en spoelt na: typisch 50 tot 200 liter, over 20 tot 60
+# minuten. Tien liter haalt een wc-spoeling plus een kraan al.
+#
+# In de bewaarde geschiedenis staan sessies van 12,8 L in 2,5 minuten en
+# 8,0 L in 4,5 minuten - duidelijk huishoudelijk verbruik dat tegen de
+# oude drempel aan zat.
+#
+# Twee eisen samen, want volume alleen is niet genoeg: een regeneratie
+# is óók traag. Een snelle sessie van 40 liter is eerder een bad of een
+# lekkage.
+WATER_SOFTENER_MIN_LITERS = 40.0
+WATER_SOFTENER_MIN_DURATION_MINUTES = 15.0
+
+# --- Waterverbruik toewijzen aan een bron (v1.18.0) ------------------
+# Gevraagd: "Tevens is het volgens mij mogelijk om te detecteren waar
+# water voor is gebruikt. Vaatwasser aan = water naar vaatwasser,
+# wasmachine aan = water naar wasmachine. Ketel aan en waterverbruik
+# langer dan 3 minuten is douchen, korter dan 3 minuten is
+# tandenpoetsen. Quooker aan + waterverbruik is keuken."
+#
+# Dezelfde gedachte als NILM: een signaal dat toevallig samenvalt met
+# waterverbruik zegt waarschijnlijk waar dat water heen ging. En net als
+# bij NILM is een vermoeden geen zekerheid, dus komt er een
+# bevestig/verwerp-mechanisme bij.
+# De CV-ketel hoeft niet apart geconfigureerd te worden: die staat al
+# bij de bevestigde NILM-apparaten (`sensor.cv_ketel_vermogen`,
+# referentie 6,3 W). Gevraagd: "CV ketel kan toch op basis van het
+# vermogen dat je al weet?" - klopt, en dat scheelt een instelling die
+# fout ingevuld kan worden.
+#
+# Herkend aan de naam, want de entity_id verschilt per installatie.
+WATER_BOILER_NAME_HINTS = ("cv-ketel", "cv ketel", "ketel", "boiler")
+
+# Boven dit vermogen doet de ketel echt iets. De referentie in ruststand
+# is een paar watt; warm water vragen tilt hem naar honderden.
+WATER_BOILER_ACTIVE_W = 50.0
+
+# Hoe lang een apparaat vóór of tijdens een watersessie actief moet zijn
+# geweest om als bron te gelden. Een vaatwasser die tien minuten eerder
+# aansloeg, vult nu.
+WATER_SOURCE_MATCH_WINDOW_MINUTES = 10
+
+# Ketel aan: langer dan dit is douchen, korter is tandenpoetsen of
+# handen wassen.
+WATER_SHOWER_MIN_DURATION_MINUTES = 3.0
+
+# Een wc-spoeling is opvallend constant van volume - dat is juist wat
+# hem herkenbaar maakt. De marge is ruim genoeg voor een spaarknop en
+# voor verschillende reservoirs.
+WATER_TOILET_TYPICAL_LITERS = 6.0
+WATER_TOILET_TOLERANCE_LITERS = 2.5
+WATER_TOILET_MAX_DURATION_MINUTES = 2.0
+
+# Bevestigde toewijzingen per bron, voor het leren. Kort venster: het
+# gaat om herkennen, niet om een archief.
+WATER_SOURCE_HISTORY_LENGTH = 30
+
+# --- Aanwezigheid uit bewegingssensoren (v1.18.2) --------------------
+# Gevraagd: "Ook zijn er meerdere bewegingssensoren in huis aanwezig, ik
+# wil dat je daarmee analyseert of er iemand thuis is of niet. Ook daar
+# kun je van leren lijkt me."
+#
+# Bewust een instelbare lijst en geen automatische herkenning: van de
+# twintig bewegingsachtige entiteiten in deze installatie zijn er
+# meerdere BUITEN (deurbel, tuin, schuur). Die slaan aan als de kat
+# langsloopt en zeggen niets over of er iemand thuis is. Welke sensor
+# binnen hangt, weet alleen de bewoner.
+CONF_PRESENCE_MOTION_SENSORS = "presence_motion_sensor_entities"
+
+# Na hoeveel minuten zonder beweging het huis als leeg geldt. Ruim
+# genomen: stilzitten op de bank of slapen is geen afwezigheid, en een
+# te korte drempel zou 's nachts elk uur "niemand thuis" melden.
+PRESENCE_ABSENCE_AFTER_MINUTES = 45
+
+# Per kwartier van de week wordt bijgehouden hoe vaak er iemand thuis
+# was. Een week is de natuurlijke cyclus: werkdagen verschillen van het
+# weekend, en 's ochtends van 's avonds.
+PRESENCE_HISTORY_WEEKS = 6
+
+# Onder dit aantal waarnemingen per kwartier geen uitspraak doen - twee
+# weken zegt nog niets over een vast patroon.
+PRESENCE_MIN_OBSERVATIONS = 3
