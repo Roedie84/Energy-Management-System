@@ -10515,3 +10515,30 @@ adviesmodules verzamelen nog.
 **Getest**: twee tests erbij in `test_expansion_advice.py`.
 
 **Volledige testsuite**: 1564 tests, allemaal groen.
+
+## v1.19.6 — Nachtvenster waterontharder instelbaar
+
+**Gemeld**: de ontharder draait meestal tussen 02:00 en 05:00; de sessie
+van 114 liter overdag was iets anders.
+
+**Correctie op de eigen analyse**: die sessie (114 L in 17,2 min om
+10:26) voldoet aan beide drempels, en ik stond op het punt het
+nachtvenster te laten vallen omdat er volumegestuurde ontharders
+bestaan. Dat zou verkeerd zijn geweest - het was een bad of de tuin (6,6
+L/min is een kraan op vol debiet), en zonder venster was dat als
+regeneratie geteld.
+
+Het venster is dus het onderscheidende kenmerk, niet het volume.
+
+**Nu instelbaar**: het stond vast op 00:00-06:00 terwijl deze ontharder
+tussen 02:00 en 05:00 draait; een bad om 23:30 of 05:30 viel binnen dat
+venster. Met 2 en 5 ingevuld valt zo'n sessie er niet meer in. Standaard
+blijft 00:00-06:00.
+
+**Waarom instelbaar en niet slimmer**: de bewoner weet wanneer zijn
+ontharder draait, de integratie niet - sneller en betrouwbaarder dan het
+uit maandenlange data afleiden.
+
+**Getest**: vier tests erbij in `test_water_source_attribution.py`.
+
+**Volledige testsuite**: 1568 tests, allemaal groen.

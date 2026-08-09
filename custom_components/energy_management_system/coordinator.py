@@ -74,6 +74,8 @@ from .const import (
     CONF_DISHWASHER_POWER_SENSOR,
     CONF_DISHWASHER_READY_SENSOR,
     CONF_WASHING_MACHINE_POWER_SENSOR,
+    CONF_WATER_SOFTENER_END_HOUR,
+    CONF_WATER_SOFTENER_START_HOUR,
     CONF_WASHING_MACHINE_READY_SENSOR,
     CONF_QUOOKER_POWER_SENSOR,
     CONF_AIRCO_CLIMATE_ENTITY,
@@ -10440,9 +10442,22 @@ class EnergyManagementSystemCoordinator:
 
         if duration_minutes is not None and duration_minutes > 0:
             is_waterontharder = started_at is not None and (
-                WATER_SOFTENER_NIGHT_WINDOW_START_HOUR
+                # v1.19.6: instelbaar. De bewoner weet wanneer zijn
+                # ontharder draait; bij deze installatie tussen 02:00 en
+                # 05:00, terwijl de standaard 00:00-06:00 is. Hoe smaller
+                # het venster, hoe kleiner de kans dat een nachtelijk bad
+                # als regeneratie telt.
+                (
+                    self.config.get(CONF_WATER_SOFTENER_START_HOUR)
+                    if self.config.get(CONF_WATER_SOFTENER_START_HOUR) is not None
+                    else WATER_SOFTENER_NIGHT_WINDOW_START_HOUR
+                )
                 <= started_at.hour
-                < WATER_SOFTENER_NIGHT_WINDOW_END_HOUR
+                < (
+                    self.config.get(CONF_WATER_SOFTENER_END_HOUR)
+                    if self.config.get(CONF_WATER_SOFTENER_END_HOUR) is not None
+                    else WATER_SOFTENER_NIGHT_WINDOW_END_HOUR
+                )
                 # v1.9.2: het tijdvenster alleen is geen bewijs - 's
                 # nachts wordt er ook doorgespoeld of een glas water
                 # getapt.

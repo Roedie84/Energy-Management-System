@@ -72,7 +72,9 @@
           "feedin_price_attribute": "Prijsattribuut voor teruglevering",
           "feedin_cost_eur_per_kwh": "Terugleverkosten in €/kWh (0 als je die niet betaalt)",
           "battery_state_sensor_entity": "Werkstand-sensor van de accu (optioneel, betrouwbaarder dan het vermogensteken)",
-          "presence_motion_sensor_entities": "Bewegingssensoren binnenshuis (optioneel, voor aanwezigheidsdetectie)"
+          "presence_motion_sensor_entities": "Bewegingssensoren binnenshuis (optioneel, voor aanwezigheidsdetectie)",
+          "water_softener_start_hour": "Waterontharder: eerste uur van het regeneratievenster",
+          "water_softener_end_hour": "Waterontharder: laatste uur van het regeneratievenster"
         }
       }
     },
@@ -158,7 +160,9 @@
           "feedin_price_attribute": "Prijsattribuut voor teruglevering",
           "feedin_cost_eur_per_kwh": "Terugleverkosten in €/kWh (0 als je die niet betaalt)",
           "battery_state_sensor_entity": "Werkstand-sensor van de accu (optioneel, betrouwbaarder dan het vermogensteken)",
-          "presence_motion_sensor_entities": "Bewegingssensoren binnenshuis (optioneel, voor aanwezigheidsdetectie)"
+          "presence_motion_sensor_entities": "Bewegingssensoren binnenshuis (optioneel, voor aanwezigheidsdetectie)",
+          "water_softener_start_hour": "Waterontharder: eerste uur van het regeneratievenster",
+          "water_softener_end_hour": "Waterontharder: laatste uur van het regeneratievenster"
         }
       }
     },

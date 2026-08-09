@@ -2388,3 +2388,22 @@ PRESENCE_HISTORY_WEEKS = 6
 # Onder dit aantal waarnemingen per kwartier geen uitspraak doen - twee
 # weken zegt nog niets over een vast patroon.
 PRESENCE_MIN_OBSERVATIONS = 3
+
+# --- Nachtvenster van de waterontharder instelbaar (v1.19.6) --------
+# Gemeld: "Dit was overdag, ik weet dat de waterontharder het meestal
+# tussen 02:00 en 05:00 doet."
+#
+# Belangrijke correctie: ik stond op het punt het nachtvenster te laten
+# vallen, omdat een sessie van 114 liter in 17 minuten om 10:26 aan alle
+# volume- en duureisen voldeed. Die kwam niet van de ontharder maar van
+# een bad of de tuin - en zonder venster was dat als regeneratie geteld.
+#
+# Het venster is dus juist WEL het onderscheidende kenmerk. Wat wel
+# beter kan: het staat vast op 00:00-06:00, terwijl deze ontharder
+# tussen 02:00 en 05:00 draait. Een bad om 23:30 valt nu binnen het
+# venster, met de werkelijke tijden erbuiten.
+#
+# Instelbaar dus, want de bewoner weet wanneer zijn ontharder draait en
+# de integratie niet.
+CONF_WATER_SOFTENER_START_HOUR = "water_softener_start_hour"
+CONF_WATER_SOFTENER_END_HOUR = "water_softener_end_hour"

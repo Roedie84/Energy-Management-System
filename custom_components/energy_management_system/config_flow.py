@@ -38,6 +38,8 @@ from .const import (
     CONF_BATTERY_COOLING_FAN_SWITCH,
     CONF_PV_ACTUAL_AZIMUTH_DEGREES,
     CONF_PRESENCE_MOTION_SENSORS,
+    CONF_WATER_SOFTENER_END_HOUR,
+    CONF_WATER_SOFTENER_START_HOUR,
     CONF_PV_ENERGY_SENSOR,
     CONF_PV_ACTUAL_TILT_DEGREES,
     CONF_SUN_ELEVATION_SENSOR,
@@ -537,6 +539,23 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
             # keuze en geen automatische herkenning - buitensensoren
             # (deurbel, tuin) slaan aan op voorbijgangers en zeggen niets
             # over of er iemand thuis is.
+            # v1.19.6: wanneer draait de waterontharder? De bewoner
+            # weet dat, de integratie niet. Hoe smaller het venster, hoe
+            # kleiner de kans dat een nachtelijk bad als regeneratie
+            # telt - een sessie van 114 liter in 17 minuten voldoet
+            # namelijk aan alle volume- en duureisen.
+            vol.Optional(
+                CONF_WATER_SOFTENER_START_HOUR,
+                default=defaults.get(CONF_WATER_SOFTENER_START_HOUR, 0),
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(min=0, max=23, step=1, mode="box")
+            ),
+            vol.Optional(
+                CONF_WATER_SOFTENER_END_HOUR,
+                default=defaults.get(CONF_WATER_SOFTENER_END_HOUR, 6),
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(min=1, max=24, step=1, mode="box")
+            ),
             vol.Optional(
                 CONF_PRESENCE_MOTION_SENSORS,
                 default=defaults.get(CONF_PRESENCE_MOTION_SENSORS, []),

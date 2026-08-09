@@ -515,6 +515,51 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Nachtvenster waterontharder instelbaar (v1.19.6)
+
+**Gemeld**: *"Dit was overdag, ik weet dat de waterontharder het meestal
+tussen 02:00 en 05:00 doet."*
+
+### Een correctie op mijn eigen analyse
+
+In je export stond een sessie van **114 liter in 17,2 minuten** om 10:26.
+Die voldoet aan beide nieuwe drempels — 40 liter en 15 minuten — en ik
+stond op het punt het nachtvenster te laten **vallen**, omdat er
+ontharders bestaan die op volume regenereren in plaats van op tijd.
+
+Jouw opmerking laat zien dat dat verkeerd was. Die 114 liter kwam van een
+bad of de tuin; 6,6 liter per minuut is een kraan op vol debiet. Zonder
+venster was dat als regeneratie geteld — precies het valse alarm dat we
+gisteren juist hebben weggehaald.
+
+**Het venster is dus het onderscheidende kenmerk**, niet het volume.
+
+### Wat wel beter kan
+
+Het stond vast op 00:00–06:00, terwijl jouw ontharder tussen 02:00 en
+05:00 draait. Een bad om 23:30 of 05:30 viel binnen dat venster, met de
+werkelijke tijden erbuiten.
+
+Nu instelbaar bij Configureren: *"Waterontharder: eerste/laatste uur van
+het regeneratievenster"*. Met 2 en 5 ingevuld valt een sessie om 05:30
+er niet meer in.
+
+De standaard blijft 00:00–06:00, dus wie niets instelt houdt het oude
+gedrag.
+
+### Waarom instelbaar en niet slimmer
+
+De bewoner weet wanneer zijn ontharder draait; de integratie niet. Dat is
+sneller en betrouwbaarder dan het uit maandenlange data afleiden.
+
+### Getest
+
+Vier tests erbij: het venster is instelbaar, de standaard dekt nog de
+nacht, de coordinator leest de instelling, en het gerapporteerde bad
+haalt beide drempels maar wordt op het tijdstip afgewezen.
+
+**Volledige testsuite**: 1568 tests, allemaal groen.
+
 ## De export wees de fout zelf aan (v1.19.5)
 
 Je verse export levert eindelijk JSON op, en `internal_failures` doet

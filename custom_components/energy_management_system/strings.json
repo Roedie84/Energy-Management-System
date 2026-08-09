@@ -72,7 +72,9 @@
           "feedin_price_attribute": "Price attribute for feed-in",
           "feedin_cost_eur_per_kwh": "Feed-in costs in €/kWh (0 if you don't pay them)",
           "battery_state_sensor_entity": "Battery operation state sensor (optional, more reliable than the power sign)",
-          "presence_motion_sensor_entities": "Indoor motion sensors (optional, for presence detection)"
+          "presence_motion_sensor_entities": "Indoor motion sensors (optional, for presence detection)",
+          "water_softener_start_hour": "Water softener: first hour of the regeneration window",
+          "water_softener_end_hour": "Water softener: last hour of the regeneration window"
         }
       }
     },
@@ -158,7 +160,9 @@
           "feedin_price_attribute": "Price attribute for feed-in",
           "feedin_cost_eur_per_kwh": "Feed-in costs in €/kWh (0 if you don't pay them)",
           "battery_state_sensor_entity": "Battery operation state sensor (optional, more reliable than the power sign)",
-          "presence_motion_sensor_entities": "Indoor motion sensors (optional, for presence detection)"
+          "presence_motion_sensor_entities": "Indoor motion sensors (optional, for presence detection)",
+          "water_softener_start_hour": "Water softener: first hour of the regeneration window",
+          "water_softener_end_hour": "Water softener: last hour of the regeneration window"
         }
       }
     },
