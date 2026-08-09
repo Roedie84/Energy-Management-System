@@ -515,6 +515,57 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## De export wees de fout zelf aan (v1.19.5)
+
+Je verse export levert eindelijk JSON op, en `internal_failures` doet
+precies waarvoor het gebouwd is:
+
+> `"uitbreidingsadvies": "TypeError: unsupported operand type(s) for +:
+> 'int' and 'list'"`
+
+### De fout
+
+`hourly_consumption_profile` is `dict[int, list[float]]` — per uur de
+**losse metingen**, niet het gemiddelde. Het uitbreidingsadvies gebruikte
+hem alsof er kant-en-klare getallen in stonden, waardoor `sum()` lijsten
+probeerde op te tellen.
+
+Er bestond al een methode die dat omrekent, `learned_hourly_avg_kw()`, en
+de export gebruikt hem ook. Die had ik meteen moeten nemen.
+
+**Waarom het niet eerder opviel:** mijn tests zetten het profiel met
+kant-en-klare getallen, en toetsten daarmee iets dat in productie niet
+bestaat. Die opstelling gebruikt nu dezelfde structuur als de
+werkelijkheid.
+
+Met je echte cijfers verandert de uitkomst nauwelijks: piek 497 W tegen
+1600 W ontlaadvermogen (31% benutting), 7,5 kWh dagverbruik tegen 7,3 kWh
+bruikbaar. De conclusie blijft: een module, geen omvormer.
+
+### En de attributencontrole werkte ook
+
+Die uit v1.19.2 wees twee ontbrekende attributen aan:
+`kandidaat_naam` en `kandidaat_vermogen_w` op de NILM-sensor.
+
+Ze bestaan wél — maar op de **knop**, niet op de sensor. De kaart "Te
+beoordelen" las de verkeerde entiteit, en toonde daardoor stilletjes
+niets. Nu gecorrigeerd.
+
+### De zeven lege entiteiten
+
+Die zijn in orde: `simulated_action` (simulatie draait niet),
+`energy_bridge_check` (nog niet beoordeeld), `sensor_health_score` (te
+weinig metingen), en de adviesmodules die nog verzamelen. Precies waarom
+de export lege en niet-bestaande entiteiten apart houdt — het eerste kan
+normaal zijn, het tweede nooit.
+
+### Getest
+
+Twee tests erbij: het advies gebruikt de omrekenmethode, en het werkt met
+de echte datastructuur.
+
+**Volledige testsuite**: 1564 tests, allemaal groen.
+
 ## De export gaf een 500, en meldde dat niet (v1.19.4)
 
 **Gemeld**: een `500 Internal Server Error` bij het downloaden, en *"ik

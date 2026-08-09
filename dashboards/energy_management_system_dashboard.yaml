@@ -513,7 +513,7 @@ views:
   panel: true
   cards:
   - type: picture-elements
-    image: /local/energy_management_system_overview.svg?v=1.19.4
+    image: /local/energy_management_system_overview.svg?v=1.19.5
     elements:
     - type: state-label
       entity: sensor.woonkamer_energy_management_system_system_status
@@ -1454,7 +1454,7 @@ views:
         navigation_path: /energy-management-system/detail-apparaten
     - type: markdown
       title: Te beoordelen
-      content: '{% set k = state_attr(''sensor.woonkamer_energy_management_system_nilm_bevestigde_apparaten'', ''kandidaat_naam'') %}{% if k %}**Nieuw apparaat herkend:** {{ k }} ({{ state_attr(''sensor.woonkamer_energy_management_system_nilm_bevestigde_apparaten'', ''kandidaat_vermogen_w'') }} W){% else %}Geen kandidaat op dit moment.{% endif %}
+      content: '{% set k = state_attr(''button.woonkamer_energy_management_system_nilm_kandidaat_1_bevestigen'', ''kandidaat_naam'') %}{% if k %}**Nieuw apparaat herkend:** {{ k }} ({{ state_attr(''button.woonkamer_energy_management_system_nilm_kandidaat_1_bevestigen'', ''kandidaat_vermogen_w'') }} W){% else %}Geen kandidaat op dit moment.{% endif %}
 
 
         {% set paren = state_attr(''sensor.woonkamer_energy_management_system_nilm_bevestigde_apparaten'', ''waarschijnlijke_duplicaten'') or [] %}{% if paren | length > 0 %}**Mogelijke duplicaten:** {{ paren | length }}

@@ -10484,3 +10484,34 @@ Ook in de export onder `internal_failures`.
 **Getest**: nieuw `tests/test_export_never_500s.py`, 11 tests.
 
 **Volledige testsuite**: 1562 tests, allemaal groen.
+
+## v1.19.5 — De export wees de fout zelf aan
+
+De verse export levert JSON op en `internal_failures` bevat:
+"uitbreidingsadvies": "TypeError: unsupported operand type(s) for +:
+'int' and 'list'".
+
+**De fout**: `hourly_consumption_profile` is `dict[int, list[float]]` -
+per uur de LOSSE metingen, niet het gemiddelde. Het uitbreidingsadvies
+gebruikte hem alsof er getallen in stonden. `learned_hourly_avg_kw()`
+doet die omrekening al en wordt ook door de export gebruikt.
+
+**Waarom het niet eerder opviel**: de tests zetten het profiel met
+kant-en-klare getallen en toetsten iets dat in productie niet bestaat. Die
+opstelling gebruikt nu dezelfde structuur als de werkelijkheid.
+
+Met de echte cijfers verandert de uitkomst nauwelijks: piek 497 W tegen
+1600 W (31% benutting), 7,5 kWh dagverbruik tegen 7,3 kWh bruikbaar. De
+conclusie blijft: een module, geen omvormer.
+
+**De attributencontrole uit v1.19.2 werkte ook**: `kandidaat_naam` en
+`kandidaat_vermogen_w` bestaan op de KNOP, niet op de sensor. De kaart
+"Te beoordelen" las de verkeerde entiteit en toonde stilletjes niets.
+
+**De zeven lege entiteiten zijn in orde**: simulatie draait niet,
+energie-check nog niet beoordeeld, gezondheidsscore te weinig metingen,
+adviesmodules verzamelen nog.
+
+**Getest**: twee tests erbij in `test_expansion_advice.py`.
+
+**Volledige testsuite**: 1564 tests, allemaal groen.

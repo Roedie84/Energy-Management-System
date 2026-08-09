@@ -4292,8 +4292,21 @@ class EnergyManagementSystemCoordinator:
         integratie niet. Wat ze wel kan, is laten zien wat er in de
         praktijk beperkt.
         """
-        profiel = self.hourly_consumption_profile or {}
-        uren = [(int(u), v) for u, v in profiel.items() if v is not None]
+        # v1.19.5, gevonden via `internal_failures` uit de export:
+        # "TypeError: unsupported operand type(s) for +: 'int' and 'list'".
+        #
+        # `hourly_consumption_profile` is `dict[int, list[float]]` - per
+        # uur de losse metingen, niet het gemiddelde. Ik gebruikte hem
+        # alsof er kant-en-klare getallen in stonden, waardoor `sum()`
+        # lijsten probeerde op te tellen.
+        #
+        # `learned_hourly_avg_kw()` doet de omrekening al, en wordt ook
+        # door de export gebruikt. Die had ik meteen moeten nemen.
+        uren = [
+            (uur, self.learned_hourly_avg_kw(uur))
+            for uur in range(24)
+        ]
+        uren = [(uur, waarde) for uur, waarde in uren if waarde is not None]
         if len(uren) < 12:
             return {
                 "beschikbaar": False,
