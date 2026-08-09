@@ -344,4 +344,7 @@ def test_cooling_tile_sits_in_the_live_figures_section():
     ]
     assert len(koeltegels) == 1
     # Halve breedte, net als de andere tegels ernaast.
-    assert koeltegels[0]["grid_options"]["columns"] == 6
+    # v1.17.3: volle sectiebreedte. Secties staan al naast elkaar (drie
+    # op een breed scherm), dus binnen een sectie nog eens opdelen maakte
+    # de tegels een negende van het scherm - te smal voor hun tekst.
+    assert koeltegels[0]["grid_options"]["columns"] == 12

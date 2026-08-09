@@ -21,7 +21,10 @@ PAKKET = Path(pkg.__file__).parent
 
 # Vuistregel uit de praktijk: een mushroom-tegel toont ongeveer 22
 # tekens per label bij zes kolommen, en het dubbele bij twaalf.
-MAX_TEKENS = {4: 15, 6: 22, 12: 48}
+# v1.17.3: bij volle sectiebreedte (12) past aanzienlijk meer, omdat de
+# secties zelf al naast elkaar staan - een sectie is ongeveer een derde
+# van het scherm, niet het hele scherm. Vandaar 34 en niet 48.
+MAX_TEKENS = {4: 15, 6: 22, 12: 34}
 
 
 def _kaarten(view):
@@ -148,3 +151,95 @@ def test_dynamic_labels_are_short_too():
 
     assert "Accubesparing (kostprijs-model)" not in yaml_tekst
     assert "Uitstoot vandaag (huidige intensiteit" not in yaml_tekst
+
+
+# --- v1.17.3: geen dubbele opdeling ---------------------------------
+
+
+def test_overview_tiles_use_the_full_section_width():
+    """Gemeld: "Veel niet leesbaar, graag volledige breedte per card (in
+    acht houden dat er 3 secties zijn in de breedte)."
+
+    Home Assistant zet secties naast elkaar - op een breed scherm drie.
+    Elke sectie is dus ongeveer een derde van het scherm. Daarbinnen
+    stonden de tegels op 4 van de 12 kolommen, wat neerkomt op een
+    NEGENDE van het scherm. Daar past "Accumodules" niet in, laat staan
+    de statuszin eronder.
+
+    De drie kolommen die je ziet zijn de secties zelf; binnen een sectie
+    nog eens opdelen is dubbelop.
+    """
+    data = yaml.safe_load((PAKKET / "dashboard_template.yaml").read_text())
+    overzicht = next(v for v in data["views"] if v["title"] == "Overzicht")
+
+    for sectie in overzicht["sections"]:
+        for kaart in sectie.get("cards") or []:
+            if kaart.get("type") == "heading" or "title-card" in str(
+                kaart.get("type")
+            ):
+                continue
+            kolommen = (kaart.get("grid_options") or {}).get("columns")
+            assert kolommen == 12, (
+                f"{kaart.get('secondary') or kaart.get('name')}: {kolommen} "
+                "kolommen binnen een sectie - dat is een negende scherm"
+            )
+
+
+def test_the_status_sentences_may_wrap_again():
+    """In v1.17.2 zijn ze op één regel gezet omdat de tegels smal waren.
+    Met volle sectiebreedte is er ruimte, en een afgekapte zin zegt
+    niets."""
+    data = yaml.safe_load((PAKKET / "dashboard_template.yaml").read_text())
+    overzicht = next(v for v in data["views"] if v["title"] == "Overzicht")
+
+    statustegels = [
+        k
+        for s in overzicht["sections"]
+        for k in s.get("cards") or []
+        if "samenvattingen" in str(k)
+    ]
+
+    assert statustegels
+    for tegel in statustegels:
+        assert tegel.get("multiline_secondary") is True
+
+
+# --- v1.17.4: geen lege iconen --------------------------------------
+
+
+def test_every_card_has_an_icon():
+    """Gemeld met screenshot: de Airco-verwachting toonde een lege
+    blauwe cirkel.
+
+    De sensor heeft wél een icoon (`_attr_icon = "mdi:thermometer-lines"`)
+    maar een mushroom-kaart neemt dat niet over als het veld `icon`
+    ontbreekt - dan blijft er een lege cirkel staan. Dertien kaarten
+    hadden dat.
+    """
+    data = yaml.safe_load((PAKKET / "dashboard_template.yaml").read_text())
+
+    zonder = []
+    for view in data["views"]:
+        for kaart in _kaarten(view):
+            soort = str(kaart.get("type", ""))
+            if "entity-card" not in soort and "template-card" not in soort:
+                continue
+            if not kaart.get("icon"):
+                zonder.append(
+                    f"{view['title']}: "
+                    f"{kaart.get('name') or str(kaart.get('primary'))[:40]}"
+                )
+
+    assert not zonder, zonder
+
+
+def test_the_icons_are_mdi():
+    """Een icoonnaam zonder `mdi:` rendert niet."""
+    data = yaml.safe_load((PAKKET / "dashboard_template.yaml").read_text())
+
+    for view in data["views"]:
+        for kaart in _kaarten(view):
+            icoon = kaart.get("icon")
+            if not isinstance(icoon, str) or "{" in icoon:
+                continue
+            assert icoon.startswith("mdi:"), f"{view['title']}: {icoon}"
