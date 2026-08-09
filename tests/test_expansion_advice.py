@@ -39,7 +39,13 @@ def _coordinator(make_coordinator, hass, profiel=None, tekorten=True,
         }
     )
     hass.states.set("sensor.cap", capaciteit)
-    c.hourly_consumption_profile = dict(profiel or ECHT_PROFIEL)
+    # v1.19.5: `hourly_consumption_profile` bevat per uur de LOSSE
+    # metingen, niet het gemiddelde - dat was precies de fout die de
+    # export aanwees. De testopstelling moet dezelfde structuur
+    # gebruiken, anders toetst ze iets dat in productie niet bestaat.
+    c.hourly_consumption_profile = {
+        uur: [waarde] * 3 for uur, waarde in (profiel or ECHT_PROFIEL).items()
+    }
     c.reserve_daily_records = [
         {"date": f"2026-08-0{d}", "shortfall": tekorten and d >= 7, "excess": False}
         for d in range(4, 9)
@@ -172,3 +178,45 @@ def test_it_is_on_the_battery_page():
 
     assert "vermogensbenutting_procent" in kaart["content"]
     assert "voorbehoud" in kaart["content"]
+
+
+# --- v1.19.5: de fout die de export zelf aanwees --------------------
+
+
+def test_it_uses_the_averaging_method(make_coordinator, hass):
+    """Uit `internal_failures` in een export: "TypeError: unsupported
+    operand type(s) for +: 'int' and 'list'".
+
+    `hourly_consumption_profile` is `dict[int, list[float]]` - per uur de
+    LOSSE metingen, niet het gemiddelde. Het advies gebruikte hem alsof
+    er kant-en-klare getallen in stonden, waardoor `sum()` lijsten
+    probeerde op te tellen.
+
+    `learned_hourly_avg_kw()` doet die omrekening al en wordt ook door de
+    export gebruikt.
+    """
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    start = bron.index("def get_expansion_advice")
+    blok = bron[start : start + 2000]
+
+    assert "learned_hourly_avg_kw" in blok
+    assert "self.hourly_consumption_profile or {}" not in blok
+
+
+def test_it_survives_the_real_structure(make_coordinator, hass):
+    """De testopstelling gebruikte kant-en-klare getallen en toetste
+    daarmee iets dat in productie niet bestaat - precies waarom deze
+    fout niet eerder opviel."""
+    c = _coordinator(make_coordinator, hass)
+
+    for uur, waarden in c.hourly_consumption_profile.items():
+        assert isinstance(waarden, list), uur
+
+    advies = c.get_expansion_advice()
+
+    assert advies["beschikbaar"] is True
+    assert advies["dagverbruik_kwh"] > 0
