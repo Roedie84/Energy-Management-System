@@ -106,3 +106,91 @@ def test_a_missing_template_does_not_crash(make_coordinator, hass):
     c._read_dashboard_template = lambda: ""
 
     assert c.get_dashboard_health() == {"beschikbaar": False}
+
+
+# --- v1.19.2: ontbrekende ATTRIBUTEN -------------------------------
+
+
+def _gacs(hass, attributen):
+    hass.states.set(
+        "sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling",
+        "0",
+        attributen,
+    )
+
+
+def test_a_missing_attribute_is_reported(make_coordinator, hass):
+    """Gemeld: kaarten die "Nog geen gegevens" tonen terwijl de entiteit
+    gewoon bestaat.
+
+    De controle keek alleen of de ENTITEIT er was, niet of het ATTRIBUUT
+    dat de kaart opvraagt bestaat - en juist daar zat het probleem. Een
+    sjabloon dat een ontbrekend attribuut opvraagt krijgt None en toont
+    zijn vangnettekst; op het scherm is dat niet te onderscheiden van
+    "nog niets geleerd".
+    """
+    c = make_coordinator({})
+    _gacs(hass, {})
+
+    ontbrekend = c.get_dashboard_health()["ontbrekende_attributen"]
+
+    assert any("samenvattingen" in x for x in ontbrekend)
+    assert any("pv_voorspelkwaliteit" in x for x in ontbrekend)
+
+
+def test_present_attributes_are_not_reported(make_coordinator, hass):
+    c = make_coordinator({})
+    _gacs(
+        hass,
+        {
+            "samenvattingen": {},
+            "pv_voorspelkwaliteit": {},
+            "pv_correctie": {},
+            "aanwezigheid": {},
+            "uitbreidingsadvies": {},
+            "verbetermogelijkheden": [],
+        },
+    )
+
+    ontbrekend = c.get_dashboard_health()["ontbrekende_attributen"]
+
+    assert not [x for x in ontbrekend if "gacs" in x]
+
+
+def test_a_missing_entity_is_not_double_reported(make_coordinator, hass):
+    """Bestaat de entiteit niet, dan is dat de melding - niet twintig
+    ontbrekende attributen erbovenop."""
+    c = make_coordinator({})
+
+    rapport = c.get_dashboard_health()
+
+    for regel in rapport["ontbrekende_attributen"]:
+        entity_id = regel.split(" ->")[0]
+        assert entity_id not in rapport["niet_bestaande_entiteiten"]
+
+
+def test_the_doubled_quotes_are_handled(make_coordinator, hass):
+    """Het sjabloon is met `yaml.dump` weggeschreven (v1.17.1), waardoor
+    aanhalingstekens op schijf verdubbeld staan. Zonder normaliseren
+    vindt de zoekactie niets - precies waar deze controle bij de eerste
+    poging op stukliep."""
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    start = bron.index("def get_dashboard_health")
+    blok = bron[start : start + 3000]
+
+    assert 'replace("\'\'", "\'")' in blok
+
+
+def test_the_explanation_names_the_hardest_case(make_coordinator, hass):
+    """Een ontbrekend attribuut is lastiger te herkennen dan een
+    ontbrekende entiteit; dat hoort in de duiding te staan."""
+    c = make_coordinator({})
+
+    toelichting = c.get_dashboard_health()["toelichting"]
+
+    assert "ATTRIBUUT" in toelichting
+    assert "vangnettekst" in toelichting

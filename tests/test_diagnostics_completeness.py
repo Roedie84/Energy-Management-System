@@ -99,3 +99,56 @@ def test_the_export_is_serialisable(make_coordinator, hass):
         "get_dashboard_health",
     ):
         json.dumps(getattr(c, naam)(), default=str)
+
+
+# --- v1.19.3: één fout mag de export niet slopen --------------------
+
+
+def test_every_call_is_shielded():
+    """Gemeld: "De diagnostiek blijft nu een text file, wordt geen json,
+    dit suggereert dat daar nu ook iets fout gaat?"
+
+    Terechte conclusie. De export was één grote dict-expressie: gooit
+    één aanroep een fout, dan mislukt het HELE bestand en krijg je een
+    foutpagina in plaats van JSON.
+
+    Dat is precies het verkeerde moment om te falen - de export is het
+    gereedschap dat je nodig hebt WANNEER er iets stuk is. Dezelfde vorm
+    als het attributenblok in v1.19.1, en dezelfde oplossing.
+    """
+    import re
+
+    bron = _export_bron()
+
+    # Geen kale aanroepen meer buiten de afscherming.
+    kaal = re.findall(r"(?<!_veilig\(\")coordinator\.get_\w+\(\)", bron)
+
+    assert not kaal, kaal
+    assert "_veilig" in bron
+
+
+def test_a_broken_part_does_not_break_the_rest(make_coordinator, hass):
+    c = make_coordinator({})
+
+    def stuk():
+        raise KeyError("gesimuleerd")
+
+    c.get_topic_summaries = stuk
+
+    def veilig(functie):
+        try:
+            return functie()
+        except Exception as fout:  # noqa: BLE001
+            return {"fout": f"{type(fout).__name__}: {fout}"}
+
+    assert veilig(c.get_topic_summaries) == {"fout": "KeyError: 'gesimuleerd'"}
+    assert veilig(c.get_dashboard_health)["beschikbaar"] is True
+
+
+def test_the_failure_is_recorded_not_swallowed():
+    """Een stil weggevallen onderdeel is erger dan een zichtbare fout:
+    dan denk je dat er niets te melden was."""
+    bron = _export_bron()
+
+    assert "_LOGGER.exception" in bron
+    assert '"fout"' in bron
