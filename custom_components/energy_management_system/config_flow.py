@@ -12,6 +12,7 @@ from homeassistant.helpers import selector
 from .const import (
     CONF_AVAILABLE_ENERGY_SENSOR,
     CONF_BATTERY_POWER_SENSOR,
+    CONF_BATTERY_STATE_SENSOR,
     CONF_CONSUMPTION_POWER_SENSOR,
     CONF_EXPENSIVE_QUARTERS_COUNT,
     CONF_INVERT_BATTERY_POWER_SIGN,
@@ -526,6 +527,14 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
             vol.Optional(
                 CONF_BATTERY_POWER_SENSOR,
                 default=defaults.get(CONF_BATTERY_POWER_SENSOR),
+            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            # v1.16.9: de werkstand van de accu ("Laden"/"Ontladen") is
+            # betrouwbaarder dan het teken van de vermogenssensor, dat
+            # afhangt van de omkering hieronder. Optioneel: zonder deze
+            # sensor blijft de tekenmethode de terugval.
+            vol.Optional(
+                CONF_BATTERY_STATE_SENSOR,
+                default=defaults.get(CONF_BATTERY_STATE_SENSOR),
             ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
             vol.Optional(
                 CONF_INVERT_BATTERY_POWER_SIGN,

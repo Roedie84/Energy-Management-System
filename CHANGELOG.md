@@ -9945,3 +9945,91 @@ diensten; dat bleek het zoekpatroon (de naam staat op de regel ná
 voortaan bij elke wijziging meedraaien.
 
 **Volledige testsuite**: 1407 tests, allemaal groen.
+
+## v1.16.7 — Waterontharder was onzichtbaar geworden
+
+**Gevraagd**: waar te zien of de waterontharder heeft geregenereerd.
+Antwoord: nergens - bij het opruimen van v1.12.0 is die informatie
+volledig van het dashboard verdwenen (nul verwijzingen naar
+`waterontharder_laatste_regeneratie` of de regeneratievlag).
+
+De detectie draaide wel, inclusief de volumedrempel uit v1.9.2, maar het
+resultaat was niet te zien - en dat is precies waarvoor die detectie is
+gebouwd.
+
+**Nu op de detailpagina**: de laatste regeneratie met hoe lang geleden,
+hoeveel recente gebruiksmomenten er een waren, en waaraan ze worden
+herkend (nachtelijke sessie van minstens 10 liter). Die laatste regel is
+nodig om te beoordelen of een gemiste regeneratie aan de ontharder ligt
+of aan de drempel.
+
+**Onderweg**: de eerste versie rekende het aantal dagen uit met
+`as_timestamp`, wat twee bestaande tabeltests brak (de testrenderer geeft
+daar een datetime door waar een getal wordt verwacht). Vervangen door
+`relative_time`.
+
+**Getest**: drie tests erbij in `test_water_tab_filtering.py`.
+
+**Volledige testsuite**: 1410 tests, allemaal groen.
+
+## v1.16.8 — Diepe analyse: twee vondsten en één correctie
+
+**Gevraagd**: diepe analyse van de export voor installatie. Alle 206
+coordinator-velden nagelopen, KPI's onderling getoetst, geschiedenissen
+op patronen bekeken.
+
+**Vondst 1 - zelfconsumptie 0,0%**: bij 0,215 kWh opwek en 0,56 kWh
+export. Rekenkundig juist (de begrenzing uit v1.9.2 kapt de export op de
+dagopwek) maar het leest als "geen enkele zon zelf gebruikt". De accu
+verkocht 's nachts meer dan de zon die ochtend opwekte. Onder een halve
+kWh geen uitspraak meer.
+
+**Vondst 2 - twee tekort-nachten op rij**: tekorten op 7 én 8 augustus.
+De zelfevaluatie uit v1.14.0 wacht op veertien dagen; voor een
+VERHOUDING is dat verdedigbaar, maar twee op rij is een patroon - dan is
+er twee nachten achtereen tegen de ochtendprijs bijgekocht. Die melding
+wacht nu niet meer op de dagendrempel.
+
+**Correctie op gisteren**: ik noemde de celspreiding van module 1
+"grotendeels ladingsafhankelijk". Te geruststellend: 0,190 V bij 100%,
+0,020 V bij 77%, en nu weer 0,190 V bij 12% SoC - met gelijke
+temperaturen (23/23/23). Hoog aan beide uiteinden past bij een cel met
+afwijkende capaciteit.
+
+**Twee valse alarmen**: `reserve_shortfall_dates` en `_excess_dates`
+bevatten dezelfde datums, maar de docstring zegt dat het ALLE dagen zijn
+(de vlaggen staan in de `_history`-lijsten). En
+`gross_consumption_today_kwh` las ik uit de verkeerde sectie.
+
+**Getest**: nieuw `tests/test_deep_analysis_findings.py`, 8 tests.
+
+**Volledige testsuite**: 1418 tests, allemaal groen.
+
+## v1.16.9 — Zon via de accu telt nu als zelfconsumptie
+
+**Gemeld**: zon die via de accu in huis wordt gebruikt is nog steeds
+zelfconsumptie, alleen niet rechtstreeks.
+
+**Terecht**: de begrenzing uit v1.9.2 kapte de export op de dagopwek,
+maar nam nog steeds aan dat export ZON is zolang er die dag genoeg
+scheen. Op de ochtend van 9 augustus gaf dat 0% bij 0,215 kWh opwek en
+0,56 kWh export - terwijl die export uit de accu kwam.
+
+**Nieuwe volgorde**: wat de accu heeft ONTLADEN kan geen zon-export van
+vandaag zijn (die energie is eerder geladen), dus dat wordt eerst van de
+export afgetrokken. Zon die rechtstreeks het net op gaat verlaagt de
+verhouding nog steeds - het is geen truc die alles op 100% zet.
+
+**De werkstand in plaats van een teken**: gemeld dat er geen tekenfout in
+mocht sluipen, met de suggestie
+`sensor.zendure_manager_operation_state`. Bij deze installatie staat
+`invert_battery_power_sign` op True en was niet uit de export vast te
+stellen of dat klopt. De werkstandsensor ("Laden"/"Ontladen"/"Inactief")
+is nu de eerste keus, met het vermogensteken als terugval.
+
+**Nieuw configuratieveld**: "Werkstand-sensor van de accu".
+
+**Getest**: nieuw `tests/test_battery_state_and_self_consumption.py`, 12
+tests.
+
+**Volledige testsuite**: 1430 tests, allemaal groen.

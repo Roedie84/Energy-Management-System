@@ -2246,3 +2246,51 @@ APPLIANCE_STATE_LABELS = {
     "voltooid_vandaag": "vandaag al geladen",
     "aan_het_laden": "aan het laden",
 }
+
+# --- Ondergrens voor de zelfconsumptie (v1.16.8) ---------------------
+# Uit een ochtendexport: opwek 0,215 kWh, export 0,56 kWh, zelfconsumptie
+# 0,0%. Rekenkundig klopt dat - de begrenzing uit v1.9.2 kapt de export
+# op de dagopwek, dus (0,215 - 0,215) / 0,215 = 0 - maar inhoudelijk is
+# het misleidend: het suggereert dat er niets van de zon zelf wordt
+# gebruikt.
+#
+# De werkelijkheid is dat de accu vannacht meer verkocht dan de zon die
+# ochtend opwekte. Over een fractie van een kilowattuur valt geen zinnig
+# aandeel te berekenen; het antwoord hoort dan "nog niet te zeggen" te
+# zijn in plaats van een getal dat als slecht nieuws leest.
+#
+# Een halve kilowattuur is ruwweg een half uur zon op een heldere dag -
+# genoeg om de verhouding betekenis te geven.
+SELF_CONSUMPTION_MIN_PRODUCTION_KWH = 0.5
+
+# --- Opeenvolgende tekorten (v1.16.8) --------------------------------
+# Uit een export: tekorten op 7 en 8 augustus, twee dagen achter elkaar.
+# De zelfevaluatie uit v1.14.0 zag dat niet, want die vraagt veertien
+# dagen voordat ze iets zegt.
+#
+# Dat is verdedigbaar voor een VERHOUDING - vijf dagen zegt weinig over
+# of de marge structureel te krap staat. Maar twee opeenvolgende
+# tekorten is een patroon, geen ruis: het betekent dat er twee nachten
+# op rij tegen de ochtendprijs is bijgekocht. Daar wil je nu van weten,
+# niet over negen dagen.
+RESERVE_CONSECUTIVE_SHORTFALL_ALERT = 2
+
+# --- Werkstand van de accu (v1.16.9) ---------------------------------
+# Gemeld: "Er is nog een betere weg,
+# sensor.zendure_manager_operation_state" - met een screenshot waarop
+# die sensor "Laden", "Ontladen" en "Inactief" toont.
+#
+# Dat is inderdaad beter dan het TEKEN van een vermogenssensor
+# interpreteren. Bij deze installatie staat `invert_battery_power_sign`
+# op True, en of dat klopt is uit een export niet vast te stellen -
+# `measured_battery_power_w` stond op None. Een tekenfout zou laden als
+# ontladen tellen, en dat werkt door in de zelfconsumptie.
+#
+# De accu zegt zelf wat hij doet. Geen interpretatie nodig.
+CONF_BATTERY_STATE_SENSOR = "battery_state_sensor_entity"
+
+# Waarden die "ontladen" betekenen. Zendure levert Nederlandse labels,
+# maar een andere merk of taalinstelling kan afwijken - vandaar een
+# lijst in plaats van één vergelijking.
+BATTERY_STATE_DISCHARGING = ("ontladen", "discharging", "discharge")
+BATTERY_STATE_CHARGING = ("laden", "charging", "charge")

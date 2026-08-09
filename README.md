@@ -515,6 +515,193 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Zon via de accu telt nu als zelfconsumptie (v1.16.9)
+
+**Gemeld**: *"Als de accu alleen door PV of gedeeltelijk door PV is
+geladen, blijft het toch zelfconsumptie, alleen niet direct uit PV maar
+dan vanuit de accu?"*
+
+Volkomen terecht, en mijn correctie van v1.9.2 was maar de helft.
+
+### Wat er mis was
+
+De begrenzing kapte de export op de dagopwek, maar ging er nog steeds van
+uit dat export **zon** is zolang er die dag genoeg scheen. Bij een
+thuisaccu klopt dat niet.
+
+Op de ochtend van 9 augustus: opwek 0,215 kWh, export 0,56 kWh →
+**0% zelfconsumptie**. Terwijl die export uit de accu kwam en de zon juist
+volledig naar het huis ging. De werkelijkheid was bijna 100%.
+
+### De nieuwe volgorde
+
+Wat de accu heeft **ontladen** kan geen zon-export van vandaag zijn — die
+energie is eerder geladen. Die wordt daarom eerst van de export
+afgetrokken. Blijft er dan nog export over, dan is dat zon die
+rechtstreeks het net op ging.
+
+| Situatie | Opwek | Export | Accu | Zelfconsumptie |
+|---|---|---|---|---|
+| Accu verkoopt overdag | 15,5 | 6,0 | 4,0 | **87,1%** |
+| Zon via accu in huis | 15,5 | 4,0 | 4,0 | **100%** |
+| Direct geëxporteerd | 15,5 | 4,0 | 0,0 | 74,2% |
+
+Die laatste regel is belangrijk: de correctie is geen truc die alles op
+100% zet. Zon die rechtstreeks het net op gaat verlaagt de verhouding nog
+steeds.
+
+### De werkstand in plaats van een teken
+
+**Gemeld**: *"De accu laadt nu op, sensor.zendure_manager_power = −500W
+ik weet niet welke entiteit jij gebruikt? Gaat vooral om dat dit goed
+gaat en er geen foutje in sluipt."* En daarna: *"Er is nog een betere
+weg, sensor.zendure_manager_operation_state"*.
+
+Die zorg was terecht. Ik gebruik `sensor.zendure_batterij_vermogen`, en
+bij deze installatie staat **`invert_battery_power_sign` op True**. Of
+dat klopt viel uit een export niet vast te stellen —
+`measured_battery_power_w` stond op None. Een tekenfout zou laden als
+ontladen tellen, en dat werkt rechtstreeks door in de zelfconsumptie.
+
+De werkstandsensor zegt het zonder interpretatie: *Laden*, *Ontladen*,
+*Inactief*. Die is nu de eerste keus, met het vermogensteken als terugval
+voor wie hem niet heeft.
+
+**Nieuw configuratieveld**: *Werkstand-sensor van de accu*. Bij deze
+installatie in te vullen met `sensor.zendure_manager_operation_state`.
+
+### Getest
+
+Nieuw `tests/test_battery_state_and_self_consumption.py`, 12 tests:
+Nederlandse en Engelse labels, de werkstand wint van een verkeerd teken,
+terugval zonder statussensor, accu-export telt niet als zon-export, zon
+via de accu telt als zelf verbruikt, directe export verlaagt de
+verhouding nog steeds, de uitkomst blijft altijd tussen 0 en 100%, en de
+dagteller reset.
+
+**Volledige testsuite**: 1430 tests, allemaal groen.
+
+## Diepe analyse: twee vondsten en één correctie (v1.16.8)
+
+**Gevraagd**: eerst een diepe analyse van de export voordat er
+geïnstalleerd wordt.
+
+Alle 206 coordinator-velden nagelopen, de KPI's onderling getoetst, en de
+geschiedenissen op patronen bekeken. Wat de ingebouwde controles níét
+zagen:
+
+### 1. Zelfconsumptie 0,0% bij vrijwel geen opwek
+
+| | |
+|---|---|
+| opwek vandaag | 0,215 kWh |
+| export vandaag | 0,56 kWh |
+| zelfconsumptie | **0,0%** |
+
+Rekenkundig klopt dat — de begrenzing uit v1.9.2 kapt de export op de
+dagopwek — maar het leest als *"geen enkele zon zelf gebruikt"*. De
+werkelijke oorzaak is dat de accu 's nachts meer verkocht dan de zon die
+ochtend opwekte.
+
+Over een fractie van een kilowattuur valt geen zinnig aandeel te
+berekenen. Onder een halve kWh doet de integratie er nu geen uitspraak
+meer over.
+
+### 2. Twee tekort-nachten op rij bleven onopgemerkt
+
+De reservegeschiedenis toont tekorten op **7 én 8 augustus** —
+achtereenvolgend. De zelfevaluatie uit v1.14.0 zag dat niet: die wacht op
+veertien dagen.
+
+Voor een *verhouding* is dat verdedigbaar; vijf dagen zegt weinig over of
+de marge structureel te krap staat. Maar twee tekorten op rij is een
+patroon: er is dan twee nachten achtereen tegen de ochtendprijs
+bijgekocht. Dat wil je nu weten, niet over negen dagen.
+
+Die melding wacht nu niet meer op de dagendrempel.
+
+### Correctie op mijn eigen conclusie van gisteren
+
+Ik noemde de celspreiding van module 1 "grotendeels ladingsafhankelijk".
+Dat was te geruststellend:
+
+| SoC | Celdelta module 1 |
+|---|---|
+| 100% | 0,190 V |
+| 77% | 0,020 V |
+| **12%** | **0,190 V** |
+
+Hoog aan **beide** uiteinden, laag in het midden — en de temperaturen zijn
+nu gelijk (23/23/23), dus warmte verklaart het niet. Dat patroon past bij
+een cel met afwijkende **capaciteit**, die aan beide kanten van de
+laadcurve uit de pas loopt.
+
+### Twee valse alarmen van mijn kant
+
+De `reserve_shortfall_dates` en `reserve_excess_dates` bevatten dezelfde
+vijf datums, wat op een bug leek. De docstring zegt echter expliciet dat
+dit *alle* dagen zijn; de vlaggen staan in de bijbehorende
+`_history`-lijsten.
+
+En ik las `gross_consumption_today_kwh` als `None` uit de verkeerde
+sectie, waardoor de zelfvoorziening van 99% verdacht leek. Die klopt.
+
+### Getest
+
+Nieuw `tests/test_deep_analysis_findings.py`, 8 tests: geen verhouding
+onder de drempel, een normale dag wel, de drempel blijft bescheiden,
+opeenvolgende tekorten worden meteen gemeld, één tekort niet, oude
+tekorten niet, en het wacht niet op veertien dagen.
+
+**Volledige testsuite**: 1418 tests, allemaal groen.
+
+## Waterontharder was onzichtbaar geworden (v1.16.7)
+
+**Gevraagd**: *"Waar zie ik of de waterontharder het nu heeft gedaan of
+niet?"*
+
+Nergens — en dat is een gemis dat ik gisteren niet had opgemerkt.
+
+### De detectie draaide wel
+
+Bij het opruimen van v1.12.0 is de waterontharder-informatie volledig van
+het dashboard verdwenen: **nul verwijzingen** naar
+`waterontharder_laatste_regeneratie` of de regeneratievlag per sessie.
+
+De detectie zelf werkt gewoon, inclusief de volumedrempel uit v1.9.2. Maar
+het resultaat was niet te zien, en dat is precies waarvoor die detectie is
+gebouwd.
+
+### Wat de kaart nu toont
+
+Op de detailpagina: de laatste regeneratie met hoe lang geleden, hoeveel
+van de recente gebruiksmomenten er een waren, en waaraan ze worden
+herkend — een nachtelijke sessie van minstens tien liter.
+
+Die laatste regel is nodig om te kunnen beoordelen of een gemiste
+regeneratie aan de ontharder ligt of aan de drempel.
+
+### Het antwoord op de vraag zelf
+
+De laatste regeneratie staat op **8 augustus 00:28**. Vannacht was er wel
+een sessie om 02:52, maar die was 2,3 liter — ruim onder de drempel, dus
+geen regeneratie.
+
+### Onderweg
+
+Mijn eerste versie rekende het aantal dagen zelf uit met `as_timestamp`.
+Dat brak twee bestaande tabeltests, omdat de testrenderer daar een
+datetime doorgeeft waar een getal wordt verwacht. Vervangen door
+`relative_time`, dat Home Assistant zelf levert.
+
+### Getest
+
+Drie tests erbij: de status staat op het dashboard, hij zegt het als er
+nog niets is waargenomen, en hij legt uit hoe een regeneratie wordt
+herkend.
+
+**Volledige testsuite**: 1410 tests, allemaal groen.
+
 ## Samenhangcontrole na een dag met 25 versies (v1.16.6)
 
 **Gevraagd**: *"We hebben vandaag zoveel gewijzigd, waardoor ik angst heb

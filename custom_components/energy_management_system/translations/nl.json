@@ -70,7 +70,8 @@
           "water_total_usage_sensor_entity": "Watermeterstand in liter (optioneel)",
           "salderen_end_date": "Einddatum saldering (JJJJ-MM-DD, standaard 2026-12-31)",
           "feedin_price_attribute": "Prijsattribuut voor teruglevering",
-          "feedin_cost_eur_per_kwh": "Terugleverkosten in €/kWh (0 als je die niet betaalt)"
+          "feedin_cost_eur_per_kwh": "Terugleverkosten in €/kWh (0 als je die niet betaalt)",
+          "battery_state_sensor_entity": "Werkstand-sensor van de accu (optioneel, betrouwbaarder dan het vermogensteken)"
         }
       }
     },
@@ -154,7 +155,8 @@
           "water_total_usage_sensor_entity": "Watermeterstand in liter (optioneel)",
           "salderen_end_date": "Einddatum saldering (JJJJ-MM-DD, standaard 2026-12-31)",
           "feedin_price_attribute": "Prijsattribuut voor teruglevering",
-          "feedin_cost_eur_per_kwh": "Terugleverkosten in €/kWh (0 als je die niet betaalt)"
+          "feedin_cost_eur_per_kwh": "Terugleverkosten in €/kWh (0 als je die niet betaalt)",
+          "battery_state_sensor_entity": "Werkstand-sensor van de accu (optioneel, betrouwbaarder dan het vermogensteken)"
         }
       }
     },

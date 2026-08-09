@@ -56,7 +56,10 @@ from .const import (
     CHEAP_BLOCK_THRESHOLD_MARGIN_FRACTION,
     CHEAP_BLOCK_STABILITY_MARGIN_FRACTION,
     CONF_AVAILABLE_ENERGY_SENSOR,
+    BATTERY_STATE_CHARGING,
+    BATTERY_STATE_DISCHARGING,
     CONF_BATTERY_POWER_SENSOR,
+    CONF_BATTERY_STATE_SENSOR,
     CONF_CONSUMPTION_POWER_SENSOR,
     CONF_EXPENSIVE_QUARTERS_COUNT,
     CONF_INVERT_BATTERY_POWER_SIGN,
@@ -281,6 +284,8 @@ from .const import (
     SENSOR_UNAVAILABLE_CONFIRM_MINUTES,
     STALLED_SERIES_CONSTANT_IS_NORMAL,
     STALLED_SERIES_WORKING_BUFFERS,
+    RESERVE_CONSECUTIVE_SHORTFALL_ALERT,
+    SELF_CONSUMPTION_MIN_PRODUCTION_KWH,
     SELF_EVAL_IDLE_MODULE_DAYS,
     SELF_EVAL_MIN_DAYS,
     SELF_EVAL_RESERVE_TOO_WIDE_RATIO,
@@ -984,6 +989,10 @@ class EnergyManagementSystemCoordinator:
         # de ratio's zelf worden er telkens live uit afgeleid.
         self.pv_production_today_kwh: float = 0.0
         self.pv_export_today_kwh: float = 0.0
+        # v1.16.9: hoeveel de accu vandaag heeft ONTLADEN. Nodig om
+        # export toe te wijzen: wat de accu levert kan geen zon-export
+        # zijn, ook niet als het diezelfde dag scheen.
+        self.battery_discharge_today_kwh: float = 0.0
         self.gross_consumption_today_kwh: float = 0.0
         self.grid_import_today_kwh: float = 0.0
         self._self_sufficiency_last_sample: datetime | None = None
@@ -1734,6 +1743,46 @@ class EnergyManagementSystemCoordinator:
         if unit == "mwh":
             return value * 1000
         return value
+
+    def is_battery_discharging(self) -> bool | None:
+        """Ontlaadt de accu op dit moment? (v1.16.9)
+
+        Gemeld: "Er is nog een betere weg,
+        sensor.zendure_manager_operation_state" - die sensor toont
+        "Laden", "Ontladen" of "Inactief".
+
+        Dat is betrouwbaarder dan het TEKEN van een vermogenssensor
+        interpreteren. Bij deze installatie staat
+        `invert_battery_power_sign` op True, en of dat klopt is uit een
+        export niet vast te stellen. Een tekenfout zou laden als
+        ontladen tellen, wat rechtstreeks doorwerkt in de
+        zelfconsumptie.
+
+        Zonder statussensor valt de code terug op het vermogen - dat
+        werkte al, en het alternatief zou zijn dat de meting helemaal
+        stopt voor wie die sensor niet heeft.
+
+        Geeft None als geen van beide beschikbaar is.
+        """
+        entity_id = self.config.get(CONF_BATTERY_STATE_SENSOR)
+        if entity_id:
+            staat = self.hass.states.get(entity_id)
+            if staat is not None and staat.state not in (
+                "unknown",
+                "unavailable",
+            ):
+                waarde = str(staat.state).strip().lower()
+                if any(w in waarde for w in BATTERY_STATE_DISCHARGING):
+                    return True
+                if any(w in waarde for w in BATTERY_STATE_CHARGING):
+                    return False
+                # "Inactief" of iets onbekends: niet ontladen.
+                return False
+
+        vermogen = self._read_corrected_battery_power()
+        if vermogen is None:
+            return None
+        return vermogen > 0
 
     def _read_corrected_battery_power(self) -> float | None:
         """Battery power (W), sign-corrected: positive = discharging,
@@ -3855,6 +3904,35 @@ class EnergyManagementSystemCoordinator:
                         ),
                     }
                 )
+
+        # --- 1b. Opeenvolgende tekorten (v1.16.8) ---
+        # Deze kijkt NIET naar SELF_EVAL_MIN_DAYS. Een verhouding heeft
+        # veertien dagen nodig om iets te betekenen, maar twee tekorten
+        # op rij is een patroon dat je meteen wilt weten: dan is er twee
+        # nachten achtereen tegen de ochtendprijs bijgekocht.
+        recent = list(tekorten)
+        op_rij = 0
+        for waarde in reversed(recent):
+            if waarde:
+                op_rij += 1
+            else:
+                break
+        if op_rij >= RESERVE_CONSECUTIVE_SHORTFALL_ALERT:
+            bevindingen.append(
+                {
+                    "onderwerp": "Reserve kwam meerdere nachten achtereen tekort",
+                    "bewijs": (
+                        f"De laatste {op_rij} nachten kwam de reserve tekort."
+                    ),
+                    "voorstel": (
+                        "Twee of meer op rij is geen toeval: er is dan "
+                        "telkens tegen de ochtendprijs bijgekocht. Kijk of "
+                        "het nachtverbruik is gestegen of de zonopbrengst "
+                        "tegenviel - de veiligheidsmarge staat mogelijk te "
+                        "krap voor de huidige omstandigheden."
+                    ),
+                }
+            )
 
         # --- 2. Adviesmodules die nooit iets doen ---
         stil = [
@@ -7516,6 +7594,7 @@ class EnergyManagementSystemCoordinator:
         if self._self_sufficiency_day_key != today_key:
             self._self_sufficiency_day_key = today_key
             self.pv_production_today_kwh = 0.0
+            self.battery_discharge_today_kwh = 0.0
             # v1.9.1: de meterstand loopt door over de dagwissel heen,
             # dus het ijkpunt moet mee - anders telt de opwek van
             # gisteren vanaf middernacht gewoon door.
@@ -7561,6 +7640,14 @@ class EnergyManagementSystemCoordinator:
         self.pv_export_today_kwh += (
             max(0.0, -p1_power_w) / 1000
         ) * elapsed_hours
+        # v1.16.9: de werkstand bepaalt OF er ontladen wordt, het
+        # vermogen HOEVEEL. Zo kan een verkeerd ingestelde
+        # tekenomkering het laden niet als ontladen laten meetellen.
+        accu_w = self._read_corrected_battery_power()
+        if accu_w is not None and self.is_battery_discharging():
+            self.battery_discharge_today_kwh += (
+                abs(accu_w) / 1000
+            ) * elapsed_hours
         self.gross_consumption_today_kwh += (gross_power_w / 1000) * elapsed_hours
         self.grid_import_today_kwh += (
             max(0.0, p1_power_w) / 1000
@@ -7587,10 +7674,31 @@ class EnergyManagementSystemCoordinator:
         bron: de accu kan niet meer zon exporteren dan er die dag scheen.
         """
         opwek = self.pv_production_today_kwh
-        if opwek <= 0:
+        # v1.16.8: onder een halve kWh geen uitspraak doen - over een
+        # fractie van een kilowattuur valt geen zinnig aandeel te
+        # berekenen.
+        if opwek < SELF_CONSUMPTION_MIN_PRODUCTION_KWH:
             return None
-        # Alleen het deel van de export dat ZON kan zijn geweest.
-        zon_export = min(self.pv_export_today_kwh, opwek)
+
+        # v1.16.9, gemeld: "Als de accu alleen door PV of gedeeltelijk
+        # door PV is geladen, blijft het toch zelfconsumptie, alleen niet
+        # direct uit PV maar dan vanuit de accu?"
+        #
+        # Klopt, en de oude aanname deed dat verkeerd. Die begrensde de
+        # export op de dagopwek en nam de rest als zon-export - alsof
+        # export altijd zon is tot het bewijs van het tegendeel.
+        #
+        # In een ochtendexport gaf dat 0,0% bij 0,215 kWh opwek en 0,56
+        # kWh export, terwijl er in werkelijkheid bijna niets van die zon
+        # het net op ging: de accu verkocht wat er 's nachts in zat.
+        #
+        # Wat de ACCU levert kan geen zon-export zijn, ook niet als het
+        # diezelfde dag scheen - die energie is eerder opgeslagen en telt
+        # als zelfconsumptie zodra ze in huis wordt gebruikt. Daarom
+        # eerst de accu-ontlading van de export aftrekken; wat overblijft
+        # is zon die rechtstreeks het net op ging.
+        accu_export = min(self.battery_discharge_today_kwh, self.pv_export_today_kwh)
+        zon_export = min(max(0.0, self.pv_export_today_kwh - accu_export), opwek)
         return round(100 * (opwek - zon_export) / opwek, 1)
 
     @property

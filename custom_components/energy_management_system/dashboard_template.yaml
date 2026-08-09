@@ -504,7 +504,7 @@ views:
         # "richtingen van de stromen nog niet geupdate?". De
         # versiesleutel dwingt een verse ophaal af. Een test bewaakt
         # dat deze waarde gelijk blijft aan de versie in manifest.json.
-        image: /local/energy_management_system_overview.svg?v=1.16.6
+        image: /local/energy_management_system_overview.svg?v=1.16.9
         elements:
           - type: state-label
             entity: sensor.woonkamer_energy_management_system_system_status
@@ -1989,6 +1989,18 @@ views:
               |---|---|---|---|
               {% for b in t %}| {{ as_timestamp(b.get('start')) | timestamp_custom('%H:%M') if b.get('start') else '?' }} | {{ as_timestamp(b.get('end')) | timestamp_custom('%H:%M') if b.get('end') else '?' }} | {{ b.get('mode') }} | {{ '%.3f'|format(b.get('max_price_per_kwh')) if b.get('max_price_per_kwh') is not none else '—' }} €/kWh |
               {% endfor %}{% endif %}
+
+          - type: markdown
+            title: Waterontharder
+            content: |
+              {% set r = state_attr('sensor.woonkamer_energy_management_system_waterverbruik', 'waterontharder_laatste_regeneratie') %}{% if r %}Laatste regeneratie: **{{ as_timestamp(r) | timestamp_custom('%-d %b %H:%M') }}** ({{ relative_time(as_datetime(r)) }} geleden).{% else %}Nog geen regeneratie waargenomen.{% endif %}
+
+              {% set s = state_attr('sensor.woonkamer_energy_management_system_waterverbruik', 'recente_gebruiksmomenten') or [] %}{% set ns = namespace(n=0) %}{% for x in s %}{%- if x.waarschijnlijk_waterontharder %}{% set ns.n = ns.n + 1 %}{%- endif %}{%- endfor %}{{ ns.n }} van de laatste {{ s | length }} gebruiksmomenten was een regeneratie.
+
+              _Herkend aan een nachtelijke sessie van minstens 10 liter (de volumedrempel uit v1.9.2 voorkomt dat een kleine tap onterecht meetelt)._
+            grid_options:
+              columns: 12
+              rows: auto
 
           - type: markdown
             title: Waterverbruik vandaag
