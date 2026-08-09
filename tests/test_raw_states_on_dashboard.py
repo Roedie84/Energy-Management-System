@@ -125,8 +125,13 @@ def test_the_schedule_tile_names_the_current_mode():
 def test_the_full_schedule_is_on_the_detail_page():
     """Het verloop over de dag laat zich niet in een tegel vangen."""
     data = yaml.safe_load((PAKKET / "dashboard_template.yaml").read_text())
-    detail = next(v for v in data["views"] if v["title"] == "Details")
-    kaarten = [k for s in detail["sections"] for k in s.get("cards") or []]
+    kaarten = [
+        k
+        for v in data["views"]
+        if str(v.get("path", "")).startswith("detail-")
+        for s in v.get("sections") or []
+        for k in s.get("cards") or []
+    ]
 
     kaart = next(k for k in kaarten if k.get("title") == "Komend schema")
 

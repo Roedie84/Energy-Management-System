@@ -210,4 +210,4 @@ def test_the_tab_exists_and_shows_the_scale():
     )
     titels = [v["title"] for v in data["views"]]
 
-    assert "Kwaliteit" in titels
+    assert "Meetkwaliteit" in titels
