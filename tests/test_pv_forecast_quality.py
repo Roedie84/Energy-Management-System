@@ -153,3 +153,74 @@ def test_it_is_on_the_pv_page():
 
     for veld in ("bias_procent", "gemiddelde_fout_procent", "slechtste_dag_procent"):
         assert veld in kaart["content"], veld
+
+
+# --- v1.17.5: de PV-tegel op Overzicht ------------------------------
+
+
+def test_there_is_a_pv_topic_summary(make_coordinator, hass):
+    """Gemeld: "Ook mis ik een PV tegel, welke ik kan aanklikken voor
+    alle PV gerelateerde info."
+
+    Er was wél een PV-pagina, maar `get_topic_summaries()` maakte geen
+    samenvatting voor zon - en zonder samenvatting geen tegel om op te
+    klikken.
+    """
+    c = make_coordinator({})
+    c.pv_production_today_kwh = 15.5
+    c.solar_tracker = _Tracker(ECHT)
+
+    zon = c.get_topic_summaries()["zon"]
+
+    assert "15.5 kWh opgewekt" in zon["zin"]
+    assert "15% naast" in zon["zin"]
+
+
+def test_the_level_follows_the_forecast_quality(make_coordinator, hass):
+    """Een tegel die altijd groen is, zegt niets."""
+    from custom_components.energy_management_system.const import (
+        RELIABILITY_INDICATIVE,
+        RELIABILITY_RELIABLE,
+        RELIABILITY_UNRELIABLE,
+    )
+
+    for afwijkingen, verwacht in (
+        ([3.0, -4.0, 2.0, -5.0, 1.0, -2.0], RELIABILITY_RELIABLE),
+        (ECHT, RELIABILITY_INDICATIVE),
+        ([40.0, -35.0, 30.0, -45.0, 25.0], RELIABILITY_UNRELIABLE),
+    ):
+        c = make_coordinator({})
+        c.solar_tracker = _Tracker(afwijkingen)
+        assert c.get_topic_summaries()["zon"]["niveau"] == verwacht
+
+
+def test_without_history_it_still_shows_production(make_coordinator, hass):
+    """De opwek van vandaag is er altijd, ook zonder voltooide dagen om
+    de voorspelling mee te toetsen."""
+    c = make_coordinator({})
+    c.pv_production_today_kwh = 4.2
+    c.solar_tracker = _Tracker([])
+
+    zon = c.get_topic_summaries()["zon"]
+
+    assert "4.2 kWh opgewekt" in zon["zin"]
+    assert "Nog geen voltooide dagen" in zon["zin"]
+
+
+def test_the_tile_is_on_the_overview_and_leads_to_the_pv_page():
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+    import yaml
+
+    data = yaml.safe_load(
+        (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
+    )
+    overzicht = next(v for v in data["views"] if v["title"] == "Overzicht")
+    kaarten = [k for s in overzicht["sections"] for k in s.get("cards") or []]
+
+    tegel = next(k for k in kaarten if k.get("primary") == "PV / zon")
+
+    assert "'zon'" in str(tegel)
+    assert tegel["tap_action"]["navigation_path"].endswith("detail-zon")
+    assert tegel["icon"] == "mdi:solar-power"
