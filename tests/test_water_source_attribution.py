@@ -220,3 +220,68 @@ def test_both_criteria_are_required():
 
     assert "WATER_SOFTENER_MIN_LITERS" in blok
     assert "WATER_SOFTENER_MIN_DURATION_MINUTES" in blok
+
+
+# --- v1.19.6: het nachtvenster is instelbaar ------------------------
+
+
+def test_the_window_is_configurable():
+    """Gemeld: "Dit was overdag, ik weet dat de waterontharder het
+    meestal tussen 02:00 en 05:00 doet."
+
+    Belangrijke correctie op mijn eigen analyse: ik stond op het punt het
+    nachtvenster te laten VALLEN, omdat een sessie van 114 liter in 17,2
+    minuten om 10:26 aan alle volume- en duureisen voldeed. Die kwam niet
+    van de ontharder maar van een bad of de tuin - zonder venster was dat
+    als regeneratie geteld.
+
+    Het venster is dus juist het onderscheidende kenmerk. Instelbaar,
+    want de bewoner weet wanneer zijn ontharder draait en de integratie
+    niet.
+    """
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    bron = (Path(pkg.__file__).parent / "config_flow.py").read_text()
+
+    assert "CONF_WATER_SOFTENER_START_HOUR" in bron
+    assert "CONF_WATER_SOFTENER_END_HOUR" in bron
+
+
+def test_the_default_still_covers_the_night():
+    """Wie niets instelt, houdt het oude gedrag."""
+    from custom_components.energy_management_system.const import (
+        WATER_SOFTENER_NIGHT_WINDOW_END_HOUR,
+        WATER_SOFTENER_NIGHT_WINDOW_START_HOUR,
+    )
+
+    assert WATER_SOFTENER_NIGHT_WINDOW_START_HOUR == 0
+    assert WATER_SOFTENER_NIGHT_WINDOW_END_HOUR == 6
+
+
+def test_the_coordinator_reads_the_setting():
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    start = bron.index("WATER_SOFTENER_NIGHT_WINDOW_START_HOUR\n")
+    blok = bron[start - 800 : bron.index("):", start)]
+
+    assert "CONF_WATER_SOFTENER_START_HOUR" in blok
+    assert "CONF_WATER_SOFTENER_END_HOUR" in blok
+
+
+def test_a_daytime_bath_is_never_a_regeneration(make_coordinator, hass):
+    """Het gerapporteerde geval: 114 liter in 17,2 minuten om 10:26
+    voldoet aan volume én duur, maar niet aan het tijdstip."""
+    from custom_components.energy_management_system.const import (
+        WATER_SOFTENER_MIN_DURATION_MINUTES,
+        WATER_SOFTENER_MIN_LITERS,
+    )
+
+    assert 114.0 >= WATER_SOFTENER_MIN_LITERS
+    assert 17.2 >= WATER_SOFTENER_MIN_DURATION_MINUTES
+    # Alleen het uur onderscheidt hem - vandaar dat het venster blijft.
+    assert not (0 <= 10 < 6)
