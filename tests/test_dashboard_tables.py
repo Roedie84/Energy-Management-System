@@ -318,7 +318,8 @@ def test_dashboard_yaml_is_valid():
     # onderwerp-pagina's, dus 7 tabbladen + 7 detailpagina's.
     # v1.17.1: 3 zichtbare (Overzicht, Visueel, Meldingen) + 12
     # onderwerp-pagina's.
-    assert len(data["views"]) == 15
+    # v1.18.2: plus de aanwezigheidspagina.
+    assert len(data["views"]) == 16
 
 
 def test_markdown_tables_have_no_blank_lines_between_rows():

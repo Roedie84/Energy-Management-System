@@ -192,14 +192,19 @@ def test_sensor_restores_history_after_restart(make_coordinator, hass):
 def test_night_session_marked_as_softener(make_coordinator, hass):
     """A completed usage session starting within the night window must
     be marked as the water softener and update the 'last regeneration'
-    timestamp."""
+    timestamp.
+
+    v1.18.0: de drempel vraagt nu 40 liter EN 15 minuten. Tien minuten
+    op 5 L/min is vijftig liter maar te kort - een echte regeneratie
+    duurt twintig tot zestig minuten. Vandaar 25 minuten.
+    """
     coordinator = make_coordinator(_base_config())
 
     now = DAY0.replace(hour=3, minute=0)  # well within the night window
     hass.states.set("sensor.water_active", "5.0")
     coordinator._update_water_tracking(now)
 
-    now += timedelta(minutes=10)
+    now += timedelta(minutes=25)
     hass.states.set("sensor.water_active", "0.0")
     coordinator._update_water_tracking(now)
 
