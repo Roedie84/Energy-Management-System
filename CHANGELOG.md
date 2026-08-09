@@ -10033,3 +10033,92 @@ is nu de eerste keus, met het vermogensteken als terugval.
 tests.
 
 **Volledige testsuite**: 1430 tests, allemaal groen.
+
+## v1.17.0 — Eén detailpagina per onderwerp
+
+**Gemeld**: de detailpagina bevat zoveel dat het niet overzichtelijk is;
+verzoek om aparte pagina's per facet.
+
+**Terecht**: de verzamelpagina telde zestien kaarten en bijna 6000
+tekens - niet overzichtelijker dan de tabbladen die er in v1.12.0 voor
+waren opgeruimd. Het probleem was verplaatst, niet opgelost.
+
+**Zeven pagina's**: Accu, Apparaten, Klimaat, Water, Planning, Zon en
+Meetkwaliteit. Elke pagina houdt hooguit zes kaarten en 2500 tekens; een
+test bewaakt dat de indeling niet stilaan weer te grof wordt.
+
+**Zeventien tegels omgeleid** naar hun eigen onderwerp. Een tegel die op
+de verkeerde pagina uitkomt is erger dan geen doorklik - dan zoek je op
+de verkeerde plek. Een test controleert de koppeling per onderwerp.
+
+**Niets kwijtgeraakt**: alle zestien kaarten verdeeld; tests bewaken dat
+de tien inhoudelijke kaarten er nog zijn en dat elke pagina een ingang
+heeft.
+
+**Onderweg**: negentien tests zochten naar één pagina "Details". Die
+helpers kijken nu naar het pad-voorvoegsel `detail-`. Twee aannames
+moesten mee: een detailpagina mág klein zijn (dat is het doel) en het pad
+heet niet meer `/details`.
+
+**Getest**: nieuw `tests/test_detail_pages_per_topic.py`, 8 tests.
+
+**Volledige testsuite**: 1438 tests, allemaal groen.
+
+## v1.17.1 — Twaalf pagina's, elk één onderwerp
+
+**Gemeld**: liever meer subviews met specifiekere informatie - PV = PV,
+accu = accu, water = water.
+
+**De opsplitsing van v1.17.0 was te grof**: de tabbladen Systeem,
+Financieel, Verloop en Kwaliteit telden 11 tot 16 kaarten met onderwerpen
+door elkaar. Op Systeem stonden accu, apparaten, klimaat én water samen.
+
+**Nu twaalf pagina's**: PV/zon, Accu, Water, Klimaat, Apparaten,
+Vaatwasser & wasmachine, Planning, Kosten, Besparing, Adviesmodules,
+Meetkwaliteit en Verloop. Alle 59 kaarten verdeeld op INHOUD, niet op
+herkomst.
+
+**Zichtbaar blijven**: Overzicht, Visueel en Meldingen. De rest is
+subview, bereikbaar via de statustegels en "Meer bekijken". Twee
+pagina's raakten tijdens het herbouwen hun ingang kwijt en zijn
+hersteld.
+
+**Bekende valkuil opnieuw geraakt**: het dashboard is via `yaml.dump`
+herschreven, wat aanhalingstekens in Jinja verdubbelt - precies waarom in
+v1.10.1 een YAML-ronde werd vermeden. Na parsing is de Jinja identiek,
+maar tests die op de ruwe tekst zochten faalden; die lezen nu via de
+geparste kaarten.
+
+**Niets kwijtgeraakt**: 55 sensoren geplaatst, geen dode navigatiepaden,
+geen onbereikbare pagina's, 143 kaarten.
+
+**Getest**: drie tests erbij in `test_detail_pages_per_topic.py`.
+
+**Volledige testsuite**: 1441 tests, allemaal groen.
+
+## v1.17.2 — Compactere landingspagina en PV-voorspelkwaliteit
+
+**Gemeld**: veel lege vlakken op de landingspagina, en de wens om meer
+analyseparameters te zien - bijvoorbeeld hoe goed de PV-voorspelling is.
+
+**Het wit**: vier van de vijf secties hadden een oneven aantal tegels op
+halve breedte (gat rechtsonder), en de statustegels stonden op
+multiline_secondary met een hele zin. Besturing, Status per onderwerp en
+Meer bekijken staan nu op vier kolommen (drie per rij), met ingekorte
+labels.
+
+**PV-voorspelkwaliteit**: er werd alleen de BIAS getoond (-11,6%). Nu ook
+de gemiddelde absolute fout (15,2%), mediaan (10,4%), spreiding (14,3%),
+beste en slechtste dag (4,5% / 37,2%) en het aantal dagen binnen 10% en
+20%. Bias en fout zijn verschillende dingen: wie alleen de bias ziet
+denkt dat corrigeren het oplost, maar dan blijft de spreiding over. Met
+een duiding erbij, want "15,2%" is een getal zonder schaal.
+
+**Twee eigen tests moesten mee**: de regel "geen tabellen buiten
+Overzicht" stamt uit v1.12.0 toen alles op één niveau stond;
+detailpagina's zijn juist bedoeld voor tabellen. En de labeltest sloeg
+terecht aan op de smallere tegels (15 in plaats van 22 tekens).
+
+**Getest**: nieuw `tests/test_pv_forecast_quality.py`, 13 tests.
+
+**Volledige testsuite**: 1454 tests, allemaal groen.

@@ -1,2034 +1,1925 @@
 title: Energy Management System
 views:
-  - title: Overzicht
-    path: overzicht
-    type: sections
-    sections:
-
-
-      - type: grid
-        cards:
-          - type: custom:mushroom-template-card
-            primary: >-
-              {% set p = state_attr('sensor.woonkamer_energy_management_system_system_status', 'aandachtspunten') or [] %}{{ '✅ Geen aandachtspunten' if p | length == 0 else '⚠️ ' ~ p | length ~ ' aandachtspunt(en)' }}
-            secondary: >-
-              {% set p = state_attr('sensor.woonkamer_energy_management_system_system_status', 'aandachtspunten') or [] %}{{ 'Alles in orde.' if p | length == 0 else (p[0].split('.')[0] ~ '. Tik voor alle details.') }}
-            multiline_secondary: true
-            icon: >-
-              {% set p = state_attr('sensor.woonkamer_energy_management_system_system_status', 'aandachtspunten') or [] %}{{ 'mdi:check-circle-outline' if p | length == 0 else 'mdi:alert-outline' }}
-            icon_color: >-
-              {% set p = state_attr('sensor.woonkamer_energy_management_system_system_status', 'aandachtspunten') or [] %}{{ 'green' if p | length == 0 else 'orange' }}
-            entity: sensor.woonkamer_energy_management_system_system_status
-            tap_action:
-              action: navigate
-              navigation_path: /energy-management-system/details
-            grid_options:
-              columns: 12
-              rows: auto
-          - type: markdown
-            content: >-
-              {% set p = state_attr('sensor.woonkamer_energy_management_system_system_status', 'aandachtspunten') or [] %}{% set i = state_attr('sensor.woonkamer_energy_management_system_system_status', 'informatief') or [] %}{% if p | length == 0 and i | length == 0 %}✅ Geen aandachtspunten.{% else %}{% for punt in p %}⚠️ {{ punt }}
-
-              {% endfor %}{% for punt in i %}ℹ️ {{ punt }}
-
-              {% endfor %}{% endif %}
-            grid_options:
-              columns: 12
-              rows: auto
-
-          - type: heading
-            heading: Accu, rendement & live cijfers
-            grid_options:
-              columns: 12
-              rows: 1
-          - type: custom:mushroom-template-card
-            primary: "{{ states('sensor.solarflow_2400_ac_electric_level') }}%"
-            secondary: Accu SoC
-            icon: mdi:battery-charging-medium
-            icon_color: >-
-              {% set v = states('sensor.solarflow_2400_ac_electric_level') | float(0) %}
-              {% if v >= 40 %}green{% elif v >= 20 %}yellow{% else %}red{% endif %}
-            entity: sensor.solarflow_2400_ac_electric_level
-            grid_options:
-              columns: 6
-              rows: 1
-            tap_action:
-              action: more-info
-          - type: custom:mushroom-template-card
-            primary: >-
-              {{ states('sensor.woonkamer_energy_management_system_learned_battery_efficiency') }}%
-            secondary: Geleerd rendement
-            icon: mdi:battery-sync-outline
-            icon_color: >-
-              {% set v = states('sensor.woonkamer_energy_management_system_learned_battery_efficiency') | float(0) %}
-              {% if v >= 75 %}green{% elif v >= 60 %}yellow{% else %}red{% endif %}
-            entity: sensor.woonkamer_energy_management_system_learned_battery_efficiency
-            grid_options:
-              columns: 6
-              rows: 1
-            tap_action:
-              action: more-info
-          - type: markdown
-            content: >
-              {%- set history =
-              state_attr('sensor.woonkamer_energy_management_system_learned_battery_efficiency',
-              'history') or [] %}
-
-              {%- if history|length >= 2 %}
-
-              {%- set laatste = history[-1] %}
-
-              {%- set vorige = history[-2] %}
-
-              {%- set verschil = laatste - vorige %}
-
-              Laatste laadcyclus {{ '%.1f'|format(laatste) }}%, daarvoor
-              {{ '%.1f'|format(vorige) }}% ({{ '%+.1f'|format(verschil) }} procentpunt).
-              De tegel hierboven toont de mediaan over
-              {{ history|length }} cycli - één afwijkende cyclus telt daar
-              bewust nauwelijks in mee.
-
-              {%- else %}
-
-              Nog niet genoeg metingen voor een trend
-
-              {%- endif %}
-            grid_options:
-              columns: 12
-              rows: 1
-          - type: custom:mushroom-template-card
-            primary: "{{ states('sensor.solarflow_2400_ac_available_kwh') }} kWh"
-            secondary: Beschikbare energie
-            icon: mdi:battery-high
-            icon_color: green
-            entity: sensor.solarflow_2400_ac_available_kwh
-            grid_options:
-              columns: 6
-              rows: 1
-            tap_action:
-              action: more-info
-          - type: custom:mushroom-template-card
-            primary: "{{ states('sensor.hw_p1_vermogen') }} W"
-            secondary: Netstroom (P1)
-            icon: mdi:transmission-tower
-            icon_color: orange
-            entity: sensor.hw_p1_vermogen
-            grid_options:
-              columns: 6
-              rows: 1
-            tap_action:
-              action: more-info
-          - type: custom:mushroom-template-card
-            primary: >-
-              {{ states('sensor.woonkamer_energy_management_system_huishoudverbruik_werkelijk') }} W
-            secondary: Huishoudverbruik
-            icon: mdi:home-lightning-bolt-outline
-            icon_color: amber
-            entity: sensor.woonkamer_energy_management_system_huishoudverbruik_werkelijk
-            grid_options:
-              columns: 6
-              rows: 1
-            tap_action:
-              action: more-info
-          - type: custom:mushroom-template-card
-            primary: >-
-              {{
-              states('sensor.woonkamer_energy_management_system_current_price_used_by_integration')
-              }} €/kWh
-            secondary: Huidige prijs
-            icon: mdi:cash-sync
-            icon_color: blue
-            entity: >-
-              sensor.woonkamer_energy_management_system_current_price_used_by_integration
-            grid_options:
-              columns: 6
-              rows: 1
-            tap_action:
-              action: more-info
-          - type: custom:mushroom-template-card
-            primary: >-
-              {% set s = 'sensor.woonkamer_energy_management_system_accu_koeling' %}{% set accu = state_attr(s, 'accu_c') %}{{ (accu ~ ' °C') if accu is not none else states(s) }}
-            secondary: >-
-              {% set s = 'sensor.woonkamer_energy_management_system_accu_koeling' %}{% set st = states(s) %}Accu-koeling: {{ st }}
-            icon: mdi:fan
-            icon_color: >-
-              {% set st = states('sensor.woonkamer_energy_management_system_accu_koeling') %}{% if st == 'koelt' %}blue{% elif st == 'uit' %}grey{% else %}orange{% endif %}
-            entity: sensor.woonkamer_energy_management_system_accu_koeling
-            tap_action:
-              action: more-info
-            grid_options:
-              columns: 6
-              rows: 1
-
-      - type: grid
-        cards:
-          - type: heading
-            heading: Modus & besluit
-            grid_options:
-              columns: 12
-              rows: 1
-          - type: custom:mushroom-template-card
-            primary: "{{ states('select.zendure_manager_operation') }}"
-            secondary: Werkelijke modus
-            icon: mdi:battery-sync
-            icon_color: cyan
-            entity: select.zendure_manager_operation
-            tap_action:
-              action: none
-            hold_action:
-              action: none
-            grid_options:
-              columns: 6
-              rows: 1
-          - type: custom:mushroom-template-card
-            primary: >-
-              {{
-              states('sensor.energy_management_system_expected_operation_mode')
-              }}
-            secondary: Verwachte modus
-            icon: mdi:brain
-            icon_color: purple
-            entity: sensor.energy_management_system_expected_operation_mode
-            grid_options:
-              columns: 6
-              rows: 1
-            tap_action:
-              action: more-info
-          - type: custom:mushroom-template-card
-            primary: >-
-              {{
-              states('sensor.energy_management_system_effective_expensive_quarters')
-              }} kwartieren
-            secondary: Boven prijsdrempel
-            icon: mdi:chart-bell-curve
-            icon_color: red
-            entity: sensor.energy_management_system_effective_expensive_quarters
-            grid_options:
-              columns: 6
-              rows: 1
-            tap_action:
-              action: more-info
-          - type: custom:mushroom-template-card
-            primary: "{{ states('number.solaredge_i1_active_power_limit') }}%"
-            secondary: PV-limiet
-            icon: mdi:solar-power-variant
-            icon_color: amber
-            entity: number.solaredge_i1_active_power_limit
-            tap_action:
-              action: none
-            hold_action:
-              action: none
-            grid_options:
-              columns: 6
-              rows: 1
-          - type: custom:mushroom-template-card
-            primary: >-
-              {% set source = state_attr('sensor.woonkamer_energy_management_system_explanation', 'heavy_load_source') %}
-              {{ {'vaatwasser': 'Vaatwasser', 'wasmachine': 'Wasmachine', 'quooker': 'Quooker', 'airco': 'Airco', 'oven': 'Oven', 'kookplaat': 'Kookplaat'}.get(source, 'Geen') }}
-            secondary: Grootverbruiker actief
-            icon: >-
-              {{ 'mdi:lightning-bolt' if
-              state_attr('sensor.woonkamer_energy_management_system_explanation', 'heavy_load_source')
-              else 'mdi:lightning-bolt-outline' }}
-            icon_color: >-
-              {{ 'orange' if
-              state_attr('sensor.woonkamer_energy_management_system_explanation', 'heavy_load_source')
-              else 'grey' }}
-            entity: sensor.woonkamer_energy_management_system_explanation
-            tap_action:
-              action: none
-            hold_action:
-              action: none
-            grid_options:
-              columns: 6
-              rows: 1
-
-      - type: grid
-        cards:
-          - type: heading
-            heading: Besturing
-            grid_options:
-              columns: 12
-              rows: 1
-          - type: custom:mushroom-entity-card
-            entity: switch.energy_management_system_force_manual
-            name: Force manual
-            icon: mdi:hand-back-right
-            grid_options:
-              columns: 6
-              rows: 1
-          - type: custom:mushroom-entity-card
-            entity: switch.energy_management_system_learning_only_no_control
-            name: Learning only
-            icon: mdi:school-outline
-            grid_options:
-              columns: 6
-              rows: 1
-          - type: custom:mushroom-entity-card
-            entity: switch.woonkamer_energy_management_system_vacation_mode
-            name: Vakantiemodus
-            icon: mdi:bag-suitcase-outline
-            grid_options:
-              columns: 6
-              rows: 1
-          - type: custom:mushroom-entity-card
-            entity: button.woonkamer_energy_management_system_test_notificatie_versturen
-            name: Testmelding
-            icon: mdi:bell-ring-outline
-            grid_options:
-              columns: 6
-              rows: 1
-          - type: custom:mushroom-entity-card
-            entity: switch.woonkamer_energy_management_system_steelstofzuiger_overrule
-            name: Steelstofzuiger
-            icon: mdi:hand-back-right-outline
-            grid_options:
-              columns: 6
-              rows: 1
-          - type: custom:mushroom-entity-card
-            entity: switch.woonkamer_energy_management_system_fietsladers_overrule
-            name: Fietsladers
-            icon: mdi:hand-back-right-outline
-            grid_options:
-              columns: 6
-              rows: 1
-          - type: custom:mushroom-entity-card
-            entity: switch.woonkamer_energy_management_system_vaatwasser_wasmachine_meldingen
-            name: Apparaatmeldingen
-            icon: mdi:bell-outline
-            grid_options:
-              columns: 6
-              rows: 1
-
-      - type: grid
-        cards:
-          - type: heading
-            heading: Status per onderwerp
-            grid_options:
-              columns: 12
-              rows: 1
-          - type: custom:mushroom-template-card
-            primary: Accumodules
-            secondary: >-
-              {% set s = (state_attr('sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling', 'samenvattingen') or {}).get('accumodules') or {} %}{{ s.get('zin', 'Nog geen gegevens.') }}
-            multiline_secondary: true
-            icon: mdi:battery-heart-variant
-            icon_color: >-
-              {% set n = ((state_attr('sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling', 'samenvattingen') or {}).get('accumodules') or {}).get('niveau') %}{{ 'red' if n == 'onbetrouwbaar' else ('green' if n == 'betrouwbaar' else 'orange') }}
-            entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
-            tap_action:
-              action: navigate
-              navigation_path: /energy-management-system/details
-            grid_options:
-              columns: 6
-              rows: auto
-          - type: custom:mushroom-template-card
-            primary: Apparaten
-            secondary: >-
-              {% set s = (state_attr('sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling', 'samenvattingen') or {}).get('apparaten') or {} %}{{ s.get('zin', 'Nog geen gegevens.') }}
-            multiline_secondary: true
-            icon: mdi:power-plug
-            icon_color: >-
-              {% set n = ((state_attr('sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling', 'samenvattingen') or {}).get('apparaten') or {}).get('niveau') %}{{ 'red' if n == 'onbetrouwbaar' else ('green' if n == 'betrouwbaar' else 'orange') }}
-            entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
-            tap_action:
-              action: navigate
-              navigation_path: /energy-management-system/details
-            grid_options:
-              columns: 6
-              rows: auto
-          - type: custom:mushroom-template-card
-            primary: Zelflerend
-            secondary: >-
-              {% set s = (state_attr('sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling', 'samenvattingen') or {}).get('zelflerend') or {} %}{{ s.get('zin', 'Nog geen gegevens.') }}
-            multiline_secondary: true
-            icon: mdi:school-outline
-            icon_color: >-
-              {% set n = ((state_attr('sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling', 'samenvattingen') or {}).get('zelflerend') or {}).get('niveau') %}{{ 'red' if n == 'onbetrouwbaar' else ('green' if n == 'betrouwbaar' else 'orange') }}
-            entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
-            tap_action:
-              action: navigate
-              navigation_path: /energy-management-system/details
-            grid_options:
-              columns: 6
-              rows: auto
-          - type: custom:mushroom-template-card
-            primary: Financieel
-            secondary: >-
-              {% set s = (state_attr('sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling', 'samenvattingen') or {}).get('financieel') or {} %}{{ s.get('zin', 'Nog geen gegevens.') }}
-            multiline_secondary: true
-            icon: mdi:cash-multiple
-            icon_color: >-
-              {% set n = ((state_attr('sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling', 'samenvattingen') or {}).get('financieel') or {}).get('niveau') %}{{ 'red' if n == 'onbetrouwbaar' else ('green' if n == 'betrouwbaar' else 'orange') }}
-            entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
-            tap_action:
-              action: navigate
-              navigation_path: /energy-management-system/details
-            grid_options:
-              columns: 6
-              rows: auto
-          - type: custom:mushroom-template-card
-            primary: Klimaat
-            secondary: >-
-              {% set s = (state_attr('sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling', 'samenvattingen') or {}).get('klimaat') or {} %}{{ s.get('zin', 'Nog geen gegevens.') }}
-            multiline_secondary: true
-            icon: mdi:home-thermometer
-            icon_color: >-
-              {% set n = ((state_attr('sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling', 'samenvattingen') or {}).get('klimaat') or {}).get('niveau') %}{{ 'red' if n == 'onbetrouwbaar' else ('green' if n == 'betrouwbaar' else 'orange') }}
-            entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
-            tap_action:
-              action: navigate
-              navigation_path: /energy-management-system/details
-            grid_options:
-              columns: 6
-              rows: auto
-          - type: custom:mushroom-template-card
-            primary: Water
-            secondary: >-
-              {% set s = (state_attr('sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling', 'samenvattingen') or {}).get('water') or {} %}{{ s.get('zin', 'Nog geen gegevens.') }}
-            multiline_secondary: true
-            icon: mdi:water
-            icon_color: >-
-              {% set n = ((state_attr('sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling', 'samenvattingen') or {}).get('water') or {}).get('niveau') %}{{ 'red' if n == 'onbetrouwbaar' else ('green' if n == 'betrouwbaar' else 'orange') }}
-            entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
-            tap_action:
-              action: navigate
-              navigation_path: /energy-management-system/details
-            grid_options:
-              columns: 6
-              rows: auto
-          - type: custom:mushroom-template-card
-            primary: Meetkwaliteit
-            secondary: >-
-              {% set s = (state_attr('sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling', 'samenvattingen') or {}).get('kwaliteit') or {} %}{{ s.get('zin', 'Nog geen gegevens.') }}
-            multiline_secondary: true
-            icon: mdi:shield-check-outline
-            icon_color: >-
-              {% set n = ((state_attr('sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling', 'samenvattingen') or {}).get('kwaliteit') or {}).get('niveau') %}{{ 'red' if n == 'onbetrouwbaar' else ('green' if n == 'betrouwbaar' else 'orange') }}
-            entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
-            tap_action:
-              action: navigate
-              navigation_path: /energy-management-system/details
-            grid_options:
-              columns: 6
-              rows: auto
-
-      - type: grid
-        cards:
-          - type: heading
-            heading: Meer bekijken
-            grid_options:
-              columns: 12
-              rows: 1
-          - type: custom:mushroom-template-card
-            primary: Systeem
-            secondary: Accu en apparaten
-            icon: mdi:home-analytics
-            icon_color: blue
-            tap_action:
-              action: navigate
-              navigation_path: /energy-management-system/systeem
-            grid_options:
-              columns: 6
-              rows: auto
-          - type: custom:mushroom-template-card
-            primary: Financieel
-            secondary: Kosten en besparing
-            icon: mdi:cash-multiple
-            icon_color: blue
-            tap_action:
-              action: navigate
-              navigation_path: /energy-management-system/financieel
-            grid_options:
-              columns: 6
-              rows: auto
-          - type: custom:mushroom-template-card
-            primary: Verloop
-            secondary: Wat er gebeurde
-            icon: mdi:chart-timeline-variant
-            icon_color: blue
-            tap_action:
-              action: navigate
-              navigation_path: /energy-management-system/verloop
-            grid_options:
-              columns: 6
-              rows: auto
-          - type: custom:mushroom-template-card
-            primary: Kwaliteit
-            secondary: Betrouwbaarheid
-            icon: mdi:shield-check-outline
-            icon_color: blue
-            tap_action:
-              action: navigate
-              navigation_path: /energy-management-system/kwaliteit
-            grid_options:
-              columns: 6
-              rows: auto
-          - type: custom:mushroom-template-card
-            primary: Meldingen
-            secondary: Aan/uit en historie
-            icon: mdi:bell-outline
-            icon_color: blue
-            tap_action:
-              action: navigate
-              navigation_path: /energy-management-system/meldingen
-            grid_options:
-              columns: 6
-              rows: auto
-          - type: custom:mushroom-template-card
-            primary: Visueel
-            secondary: Plattegrond
-            icon: mdi:floor-plan
-            icon_color: blue
-            tap_action:
-              action: navigate
-              navigation_path: /energy-management-system/visueel
-            grid_options:
-              columns: 6
-              rows: auto
-
-  - title: Visueel
-    path: visueel
-    subview: true
-    # panel: true laat deze ene kaart de volledige breedte en hoogte
-    # vullen - precies waar een panel-view voor bedoeld is en de enige
-    # manier om de tekening op een groot scherm echt tot zijn recht te
-    # laten komen. Een panel-view mag exact één kaart bevatten.
-    panel: true
+- title: Overzicht
+  path: overzicht
+  type: sections
+  sections:
+  - type: grid
     cards:
-      - type: picture-elements
-        # v0.63.131: de ?v= is GEEN opsmuk maar noodzakelijk.
-        # /local/ serveert een statisch bestand onder een vaste naam,
-        # dus browsers (en de HA-app) blijven de oude tekening tonen
-        # terwijl de waarden er live overheen komen - gerapporteerd als
-        # "richtingen van de stromen nog niet geupdate?". De
-        # versiesleutel dwingt een verse ophaal af. Een test bewaakt
-        # dat deze waarde gelijk blijft aan de versie in manifest.json.
-        image: /local/energy_management_system_overview.svg?v=1.16.9
-        elements:
-          - type: state-label
-            entity: sensor.woonkamer_energy_management_system_system_status
-            tap_action:
-              action: more-info
-            style:
-              top: 10.33%
-              left: 4.38%
-              transform: translate(0, -50%)
-              font-size: 34px
-              font-weight: 700
-              color: '#ffffff'
-              white-space: nowrap
-              pointer-events: auto
-              text-shadow: 0 1px 3px rgba(0,0,0,0.85)
-          - type: state-label
-            entity: sensor.solaredge_i1_ac_power
-            tap_action:
-              action: more-info
-            style:
-              top: 29.56%
-              left: 15.0%
-              transform: translate(0, -50%)
-              font-size: 32px
-              font-weight: 600
-              color: '#f9d423'
-              white-space: nowrap
-              pointer-events: auto
-              text-shadow: 0 1px 3px rgba(0,0,0,0.85)
-          - type: state-label
-            entity: sensor.woonkamer_energy_management_system_weather_ensemble_bewolkingsgraad
-            tap_action:
-              action: more-info
-            style:
-              top: 36.89%
-              left: 15.0%
-              transform: translate(0, -50%)
-              font-size: 24px
-              font-weight: 600
-              color: '#c8d4e0'
-              white-space: nowrap
-              pointer-events: auto
-              text-shadow: 0 1px 3px rgba(0,0,0,0.85)
-          - type: state-label
-            entity: sensor.solcast_pv_forecast_resterende_voorspelling_vandaag
-            tap_action:
-              action: more-info
-            style:
-              top: 48.89%
-              left: 4.38%
-              transform: translate(0, -50%)
-              font-size: 26px
-              font-weight: 600
-              color: '#f0c040'
-              white-space: nowrap
-              pointer-events: auto
-              text-shadow: 0 1px 3px rgba(0,0,0,0.85)
-          - type: state-label
-            entity: sensor.woonkamer_energy_management_system_huishoudverbruik_werkelijk
-            tap_action:
-              action: more-info
-            style:
-              top: 35.11%
-              left: 33.12%
-              transform: translate(0, -50%)
-              font-size: 34px
-              font-weight: 600
-              color: '#ffffff'
-              white-space: nowrap
-              pointer-events: auto
-              text-shadow: 0 1px 3px rgba(0,0,0,0.85)
-          - type: state-label
-            entity: sensor.woonkamer_energy_management_system_explanation
-            attribute: grootste_verbruiker
-            tap_action:
-              action: more-info
-            style:
-              top: 34.67%
-              left: 57.25%
-              transform: translate(0, -50%)
-              font-size: 20px
-              font-weight: 600
-              color: '#c8d4e0'
-              white-space: nowrap
-              pointer-events: auto
-              text-shadow: 0 1px 3px rgba(0,0,0,0.85)
-          - type: state-label
-            entity: sensor.hw_p1_vermogen
-            tap_action:
-              action: more-info
-            style:
-              top: 29.56%
-              left: 83.12%
-              transform: translate(0, -50%)
-              font-size: 32px
-              font-weight: 600
-              color: '#5dade2'
-              white-space: nowrap
-              pointer-events: auto
-              text-shadow: 0 1px 3px rgba(0,0,0,0.85)
-          - type: state-label
-            entity: sensor.woonkamer_energy_management_system_explanation
-            attribute: current_price_per_kwh
-            suffix: ' €/kWh'
-            tap_action:
-              action: more-info
-            style:
-              top: 36.89%
-              left: 83.12%
-              transform: translate(0, -50%)
-              font-size: 24px
-              font-weight: 600
-              color: '#c8d4e0'
-              white-space: nowrap
-              pointer-events: auto
-              text-shadow: 0 1px 3px rgba(0,0,0,0.85)
-          - type: state-label
-            entity: sensor.woonkamer_energy_management_system_explanation
-            attribute: expensive_price_threshold
-            suffix: ' €/kWh'
-            tap_action:
-              action: more-info
-            style:
-              top: 48.89%
-              left: 73.12%
-              transform: translate(0, -50%)
-              font-size: 24px
-              font-weight: 600
-              color: '#c8d4e0'
-              white-space: nowrap
-              pointer-events: auto
-              text-shadow: 0 1px 3px rgba(0,0,0,0.85)
-          - type: state-label
-            entity: sensor.woonkamer_energy_management_system_explanation
-            attribute: accu_vermogen_weergave
-            tap_action:
-              action: more-info
-            style:
-              top: 54.0%
-              left: 52.5%
-              transform: translate(0, -50%)
-              font-size: 28px
-              font-weight: 700
-              color: '#2ecc71'
-              white-space: nowrap
-              pointer-events: auto
-              text-shadow: 0 1px 3px rgba(0,0,0,0.85)
-          - type: state-label
-            entity: sensor.solarflow_2400_ac_electric_level
-            tap_action:
-              action: more-info
-            style:
-              top: 68.44%
-              left: 51.88%
-              transform: translate(0, -50%)
-              font-size: 42px
-              font-weight: 700
-              color: '#2ecc71'
-              white-space: nowrap
-              pointer-events: auto
-              text-shadow: 0 1px 3px rgba(0,0,0,0.85)
-          - type: state-label
-            entity: sensor.solarflow_2400_ac_available_kwh
-            tap_action:
-              action: more-info
-            style:
-              top: 79.78%
-              left: 33.12%
-              transform: translate(0, -50%)
-              font-size: 30px
-              font-weight: 600
-              color: '#e8eef5'
-              white-space: nowrap
-              pointer-events: auto
-              text-shadow: 0 1px 3px rgba(0,0,0,0.85)
-          - type: state-label
-            entity: sensor.woonkamer_energy_management_system_learned_battery_efficiency
-            tap_action:
-              action: more-info
-            style:
-              top: 79.78%
-              left: 50.0%
-              transform: translate(0, -50%)
-              font-size: 30px
-              font-weight: 600
-              color: '#e8eef5'
-              white-space: nowrap
-              pointer-events: auto
-              text-shadow: 0 1px 3px rgba(0,0,0,0.85)
-          - type: state-icon
-            entity: sensor.woonkamer_energy_management_system_accu_koeling
-            tap_action:
-              action: toggle
-            style:
-              top: 88.89%
-              left: 34.75%
-              transform: translate(-50%, -50%)
-              --mdc-icon-size: 28px
-          - type: state-label
-            entity: sensor.woonkamer_energy_management_system_accu_koeling
-            tap_action:
-              action: more-info
-            style:
-              top: 88.89%
-              left: 36.56%
-              transform: translate(0, -50%)
-              font-size: 26px
-              font-weight: 600
-              color: '#9ad7f5'
-              white-space: nowrap
-              pointer-events: auto
-              text-shadow: 0 1px 3px rgba(0,0,0,0.85)
-          - type: state-label
-            entity: sensor.woonkamer_energy_management_system_accu_koeling
-            attribute: accu_c
-            suffix: ' °C'
-            tap_action:
-              action: more-info
-            style:
-              top: 88.89%
-              left: 49.38%
-              transform: translate(0, -50%)
-              font-size: 24px
-              font-weight: 600
-              color: '#c8d4e0'
-              white-space: nowrap
-              pointer-events: auto
-              text-shadow: 0 1px 3px rgba(0,0,0,0.85)
-          - type: state-label
-            entity: sensor.woonkamer_energy_management_system_explanation
-            attribute: expected_mode
-            tap_action:
-              action: more-info
-            style:
-              top: 67.33%
-              left: 4.38%
-              transform: translate(0, -50%)
-              font-size: 32px
-              font-weight: 700
-              color: '#b39ddb'
-              white-space: nowrap
-              pointer-events: auto
-              text-shadow: 0 1px 3px rgba(0,0,0,0.85)
-          - type: state-label
-            entity: sensor.woonkamer_energy_management_system_explanation
-            attribute: effective_expensive_quarters_count
-            tap_action:
-              action: more-info
-            style:
-              top: 76.22%
-              left: 4.38%
-              transform: translate(0, -50%)
-              font-size: 30px
-              font-weight: 600
-              color: '#e8eef5'
-              white-space: nowrap
-              pointer-events: auto
-              text-shadow: 0 1px 3px rgba(0,0,0,0.85)
-          - type: state-icon
-            entity: switch.energy_management_system_force_manual
-            tap_action:
-              action: toggle
-            style:
-              top: 85.11%
-              left: 5.75%
-              transform: translate(-50%, -50%)
-              --mdc-icon-size: 28px
-          - type: state-label
-            entity: switch.energy_management_system_force_manual
-            tap_action:
-              action: more-info
-            style:
-              top: 85.11%
-              left: 7.81%
-              transform: translate(0, -50%)
-              font-size: 26px
-              font-weight: 600
-              color: '#c8d4e0'
-              white-space: nowrap
-              pointer-events: auto
-              text-shadow: 0 1px 3px rgba(0,0,0,0.85)
-          - type: state-icon
-            entity: switch.woonkamer_energy_management_system_vacation_mode
-            tap_action:
-              action: toggle
-            style:
-              top: 92.22%
-              left: 5.75%
-              transform: translate(-50%, -50%)
-              --mdc-icon-size: 28px
-          - type: state-label
-            entity: switch.woonkamer_energy_management_system_vacation_mode
-            tap_action:
-              action: more-info
-            style:
-              top: 92.22%
-              left: 7.81%
-              transform: translate(0, -50%)
-              font-size: 26px
-              font-weight: 600
-              color: '#c8d4e0'
-              white-space: nowrap
-              pointer-events: auto
-              text-shadow: 0 1px 3px rgba(0,0,0,0.85)
-          - type: state-label
-            entity: sensor.woonkamer_energy_management_system_sensor_health_score
-            tap_action:
-              action: more-info
-            style:
-              top: 67.11%
-              left: 73.12%
-              transform: translate(0, -50%)
-              font-size: 30px
-              font-weight: 600
-              color: '#f0b429'
-              white-space: nowrap
-              pointer-events: auto
-              text-shadow: 0 1px 3px rgba(0,0,0,0.85)
-          - type: state-label
-            entity: sensor.woonkamer_energy_management_system_sluipverbruik_detectie
-            tap_action:
-              action: more-info
-            style:
-              top: 76.0%
-              left: 73.12%
-              transform: translate(0, -50%)
-              font-size: 26px
-              font-weight: 600
-              color: '#c8d4e0'
-              white-space: nowrap
-              pointer-events: auto
-              text-shadow: 0 1px 3px rgba(0,0,0,0.85)
-          - type: state-label
-            entity: sensor.woonkamer_energy_management_system_accu_modulegezondheid
-            tap_action:
-              action: more-info
-            style:
-              top: 84.89%
-              left: 73.12%
-              transform: translate(0, -50%)
-              font-size: 30px
-              font-weight: 600
-              color: '#e8eef5'
-              white-space: nowrap
-              pointer-events: auto
-              text-shadow: 0 1px 3px rgba(0,0,0,0.85)
-          - type: state-label
-            entity: sensor.woonkamer_energy_management_system_system_status
-            attribute: last_successful_update_short
-            tap_action:
-              action: more-info
-            style:
-              top: 92.0%
-              left: 73.12%
-              transform: translate(0, -50%)
-              font-size: 18px
-              font-weight: 600
-              color: '#8fa3b8'
-              white-space: nowrap
-              pointer-events: auto
-              text-shadow: 0 1px 3px rgba(0,0,0,0.85)
+    - type: custom:mushroom-template-card
+      primary: '{% set p = state_attr(''sensor.woonkamer_energy_management_system_system_status'', ''aandachtspunten'') or [] %}{{ ''✅ Geen aandachtspunten'' if p | length == 0 else ''⚠️ '' ~ p | length ~ '' aandachtspunt(en)'' }}'
+      secondary: '{% set p = state_attr(''sensor.woonkamer_energy_management_system_system_status'', ''aandachtspunten'') or [] %}{{ ''Alles in orde.'' if p | length == 0 else (p[0].split(''.'')[0] ~ ''. Tik voor alle details.'') }}'
+      multiline_secondary: true
+      icon: '{% set p = state_attr(''sensor.woonkamer_energy_management_system_system_status'', ''aandachtspunten'') or [] %}{{ ''mdi:check-circle-outline'' if p | length == 0 else ''mdi:alert-outline'' }}'
+      icon_color: '{% set p = state_attr(''sensor.woonkamer_energy_management_system_system_status'', ''aandachtspunten'') or [] %}{{ ''green'' if p | length == 0 else ''orange'' }}'
+      entity: sensor.woonkamer_energy_management_system_system_status
+      tap_action:
+        action: navigate
+        navigation_path: /energy-management-system/detail-kwaliteit
+      grid_options:
+        columns: 12
+        rows: auto
+    - type: markdown
+      content: '{% set p = state_attr(''sensor.woonkamer_energy_management_system_system_status'', ''aandachtspunten'') or [] %}{% set i = state_attr(''sensor.woonkamer_energy_management_system_system_status'', ''informatief'') or [] %}{% if p | length == 0 and i | length == 0 %}✅ Geen aandachtspunten.{% else %}{% for punt in p %}⚠️ {{ punt }}
 
-  - title: Meldingen
-    path: meldingen
-    subview: true
+        {% endfor %}{% for punt in i %}ℹ️ {{ punt }}
+
+        {% endfor %}{% endif %}'
+      grid_options:
+        columns: 12
+        rows: auto
+    - type: heading
+      heading: Accu, rendement & live cijfers
+      grid_options:
+        columns: 12
+        rows: 1
+    - type: custom:mushroom-template-card
+      primary: '{{ states(''sensor.solarflow_2400_ac_electric_level'') }}%'
+      secondary: Accu SoC
+      icon: mdi:battery-charging-medium
+      icon_color: '{% set v = states(''sensor.solarflow_2400_ac_electric_level'') | float(0) %} {% if v >= 40 %}green{% elif v >= 20 %}yellow{% else %}red{% endif %}'
+      entity: sensor.solarflow_2400_ac_electric_level
+      grid_options:
+        columns: 6
+        rows: 1
+      tap_action:
+        action: more-info
+    - type: custom:mushroom-template-card
+      primary: '{{ states(''sensor.woonkamer_energy_management_system_learned_battery_efficiency'') }}%'
+      secondary: Geleerd rendement
+      icon: mdi:battery-sync-outline
+      icon_color: '{% set v = states(''sensor.woonkamer_energy_management_system_learned_battery_efficiency'') | float(0) %} {% if v >= 75 %}green{% elif v >= 60 %}yellow{% else %}red{% endif %}'
+      entity: sensor.woonkamer_energy_management_system_learned_battery_efficiency
+      grid_options:
+        columns: 6
+        rows: 1
+      tap_action:
+        action: more-info
+    - type: markdown
+      content: '{%- set history = state_attr(''sensor.woonkamer_energy_management_system_learned_battery_efficiency'', ''history'') or [] %}
+
+        {%- if history|length >= 2 %}
+
+        {%- set laatste = history[-1] %}
+
+        {%- set vorige = history[-2] %}
+
+        {%- set verschil = laatste - vorige %}
+
+        Laatste laadcyclus {{ ''%.1f''|format(laatste) }}%, daarvoor {{ ''%.1f''|format(vorige) }}% ({{ ''%+.1f''|format(verschil) }} procentpunt). De tegel hierboven toont de mediaan over {{ history|length }} cycli - één afwijkende cyclus telt daar bewust nauwelijks in mee.
+
+        {%- else %}
+
+        Nog niet genoeg metingen voor een trend
+
+        {%- endif %}
+
+        '
+      grid_options:
+        columns: 12
+        rows: 1
+    - type: custom:mushroom-template-card
+      primary: '{{ states(''sensor.solarflow_2400_ac_available_kwh'') }} kWh'
+      secondary: Beschikbare energie
+      icon: mdi:battery-high
+      icon_color: green
+      entity: sensor.solarflow_2400_ac_available_kwh
+      grid_options:
+        columns: 6
+        rows: 1
+      tap_action:
+        action: more-info
+    - type: custom:mushroom-template-card
+      primary: '{{ states(''sensor.hw_p1_vermogen'') }} W'
+      secondary: Netstroom (P1)
+      icon: mdi:transmission-tower
+      icon_color: orange
+      entity: sensor.hw_p1_vermogen
+      grid_options:
+        columns: 6
+        rows: 1
+      tap_action:
+        action: more-info
+    - type: custom:mushroom-template-card
+      primary: '{{ states(''sensor.woonkamer_energy_management_system_huishoudverbruik_werkelijk'') }} W'
+      secondary: Huishoudverbruik
+      icon: mdi:home-lightning-bolt-outline
+      icon_color: amber
+      entity: sensor.woonkamer_energy_management_system_huishoudverbruik_werkelijk
+      grid_options:
+        columns: 6
+        rows: 1
+      tap_action:
+        action: more-info
+    - type: custom:mushroom-template-card
+      primary: '{{ states(''sensor.woonkamer_energy_management_system_current_price_used_by_integration'') }} €/kWh'
+      secondary: Huidige prijs
+      icon: mdi:cash-sync
+      icon_color: blue
+      entity: sensor.woonkamer_energy_management_system_current_price_used_by_integration
+      grid_options:
+        columns: 6
+        rows: 1
+      tap_action:
+        action: more-info
+    - type: custom:mushroom-template-card
+      primary: '{% set s = ''sensor.woonkamer_energy_management_system_accu_koeling'' %}{% set accu = state_attr(s, ''accu_c'') %}{{ (accu ~ '' °C'') if accu is not none else states(s) }}'
+      secondary: '{% set s = ''sensor.woonkamer_energy_management_system_accu_koeling'' %}{% set st = states(s) %}Accu-koeling: {{ st }}'
+      icon: mdi:fan
+      icon_color: '{% set st = states(''sensor.woonkamer_energy_management_system_accu_koeling'') %}{% if st == ''koelt'' %}blue{% elif st == ''uit'' %}grey{% else %}orange{% endif %}'
+      entity: sensor.woonkamer_energy_management_system_accu_koeling
+      tap_action:
+        action: more-info
+      grid_options:
+        columns: 6
+        rows: 1
+  - type: grid
     cards:
-      - type: markdown
-        content: |
-          Meldingen gaan naar de notify-service die bij Configureren is
-          ingesteld. Is die er niet, dan verschijnen ze als melding in
-          Home Assistant zelf.
-
-
-          **Alleen de zes meldingen die er al waren staan standaard aan.**
-          Alles wat later is toegevoegd begint uit — twintig meldingen die
-          zichzelf aanzetten is een garantie dat je er binnen een week
-          niets meer van leest.
-
-
-          Elke melding heeft een eigen **dempingsvenster**: binnen die tijd
-          gaat dezelfde melding niet nog een keer af. Bij modus-wijzigingen
-          en sluipverbruik is dat het verschil tussen bruikbaar en
-          wegswipen. Tik op een melding om te schakelen, houd vast voor de
-          details.
-
-      - type: custom:mushroom-template-card
-        primary: >-
-          {{ 'Alle meldingen AAN' if is_state('switch.woonkamer_energy_management_system_meldingen_hoofdschakelaar', 'on') else 'Alle meldingen UIT' }}
-        secondary: >-
-          {% set e = 'switch.woonkamer_energy_management_system_meldingen_hoofdschakelaar' %}Hoofdschakelaar · {{ state_attr(e, 'aantal_ingeschakeld') }} van {{ state_attr(e, 'aantal_soorten') }} soorten ingeschakeld
-        icon: mdi:bell-ring-outline
-        icon_color: >-
-          {{ 'blue' if is_state('switch.woonkamer_energy_management_system_meldingen_hoofdschakelaar', 'on') else 'red' }}
-        entity: switch.woonkamer_energy_management_system_meldingen_hoofdschakelaar
-        tap_action:
-          action: toggle
-
-      - type: custom:mushroom-template-card
-        primary: Goedkoop moment voor vaatwasser/wasmachine
-        secondary: >-
-          {% set e = 'switch.woonkamer_energy_management_system_melding_appliance_cheap_moment' %}{% set last = state_attr(e, 'laatst_verstuurd') %}{{ 'AAN' if is_state(e, 'on') else 'uit' }} · demping 60 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom('%-d %b %H:%M') }}{% endif %}
-        icon: mdi:bell-outline
-        icon_color: >-
-          {{ 'green' if is_state('switch.woonkamer_energy_management_system_melding_appliance_cheap_moment', 'on') else 'grey' }}
-        entity: switch.woonkamer_energy_management_system_melding_appliance_cheap_moment
-        tap_action:
-          action: toggle
-        hold_action:
-          action: more-info
-
-      - type: custom:mushroom-template-card
-        primary: Apparaat klaar
-        secondary: >-
-          {% set e = 'switch.woonkamer_energy_management_system_melding_appliance_ready' %}{% set last = state_attr(e, 'laatst_verstuurd') %}{{ 'AAN' if is_state(e, 'on') else 'uit' }} · demping 5 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom('%-d %b %H:%M') }}{% endif %}
-        icon: mdi:bell-outline
-        icon_color: >-
-          {{ 'green' if is_state('switch.woonkamer_energy_management_system_melding_appliance_ready', 'on') else 'grey' }}
-        entity: switch.woonkamer_energy_management_system_melding_appliance_ready
-        tap_action:
-          action: toggle
-        hold_action:
-          action: more-info
-
-      - type: custom:mushroom-template-card
-        primary: Accu-koeling aan/uit
-        secondary: >-
-          {% set e = 'switch.woonkamer_energy_management_system_melding_battery_cooling' %}{% set last = state_attr(e, 'laatst_verstuurd') %}{{ 'AAN' if is_state(e, 'on') else 'uit' }} · demping 15 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom('%-d %b %H:%M') }}{% endif %}
-        icon: mdi:bell-outline
-        icon_color: >-
-          {{ 'green' if is_state('switch.woonkamer_energy_management_system_melding_battery_cooling', 'on') else 'grey' }}
-        entity: switch.woonkamer_energy_management_system_melding_battery_cooling
-        tap_action:
-          action: toggle
-        hold_action:
-          action: more-info
-
-      - type: custom:mushroom-template-card
-        primary: Mogelijk sluipverbruik
-        secondary: >-
-          {% set e = 'switch.woonkamer_energy_management_system_melding_sluipverbruik' %}{% set last = state_attr(e, 'laatst_verstuurd') %}{{ 'AAN' if is_state(e, 'on') else 'uit' }} · demping 720 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom('%-d %b %H:%M') }}{% endif %}
-        icon: mdi:bell-outline
-        icon_color: >-
-          {{ 'green' if is_state('switch.woonkamer_energy_management_system_melding_sluipverbruik', 'on') else 'grey' }}
-        entity: switch.woonkamer_energy_management_system_melding_sluipverbruik
-        tap_action:
-          action: toggle
-        hold_action:
-          action: more-info
-
-      - type: custom:mushroom-template-card
-        primary: Mogelijk defect apparaat
-        secondary: >-
-          {% set e = 'switch.woonkamer_energy_management_system_melding_device_drift' %}{% set last = state_attr(e, 'laatst_verstuurd') %}{{ 'AAN' if is_state(e, 'on') else 'uit' }} · demping 1440 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom('%-d %b %H:%M') }}{% endif %}
-        icon: mdi:bell-outline
-        icon_color: >-
-          {{ 'green' if is_state('switch.woonkamer_energy_management_system_melding_device_drift', 'on') else 'grey' }}
-        entity: switch.woonkamer_energy_management_system_melding_device_drift
-        tap_action:
-          action: toggle
-        hold_action:
-          action: more-info
-
-      - type: custom:mushroom-template-card
-        primary: Modus gewijzigd
-        secondary: >-
-          {% set e = 'switch.woonkamer_energy_management_system_melding_mode_change' %}{% set last = state_attr(e, 'laatst_verstuurd') %}{{ 'AAN' if is_state(e, 'on') else 'uit' }} · demping 30 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom('%-d %b %H:%M') }}{% endif %}
-        icon: mdi:bell-outline
-        icon_color: >-
-          {{ 'green' if is_state('switch.woonkamer_energy_management_system_melding_mode_change', 'on') else 'grey' }}
-        entity: switch.woonkamer_energy_management_system_melding_mode_change
-        tap_action:
-          action: toggle
-        hold_action:
-          action: more-info
-
-      - type: custom:mushroom-template-card
-        primary: Accu haalt de nacht niet
-        secondary: >-
-          {% set e = 'switch.woonkamer_energy_management_system_melding_battery_wont_last_night' %}{% set last = state_attr(e, 'laatst_verstuurd') %}{{ 'AAN' if is_state(e, 'on') else 'uit' }} · demping 180 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom('%-d %b %H:%M') }}{% endif %}
-        icon: mdi:bell-outline
-        icon_color: >-
-          {{ 'green' if is_state('switch.woonkamer_energy_management_system_melding_battery_wont_last_night', 'on') else 'grey' }}
-        entity: switch.woonkamer_energy_management_system_melding_battery_wont_last_night
-        tap_action:
-          action: toggle
-        hold_action:
-          action: more-info
-
-      - type: custom:mushroom-template-card
-        primary: Accu vol terwijl de zon nog schijnt
-        secondary: >-
-          {% set e = 'switch.woonkamer_energy_management_system_melding_battery_full_with_sun' %}{% set last = state_attr(e, 'laatst_verstuurd') %}{{ 'AAN' if is_state(e, 'on') else 'uit' }} · demping 120 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom('%-d %b %H:%M') }}{% endif %}
-        icon: mdi:bell-outline
-        icon_color: >-
-          {{ 'green' if is_state('switch.woonkamer_energy_management_system_melding_battery_full_with_sun', 'on') else 'grey' }}
-        entity: switch.woonkamer_energy_management_system_melding_battery_full_with_sun
-        tap_action:
-          action: toggle
-        hold_action:
-          action: more-info
-
-      - type: custom:mushroom-template-card
-        primary: Lage accustand vlak voor de avondpiek
-        secondary: >-
-          {% set e = 'switch.woonkamer_energy_management_system_melding_low_soc_before_peak' %}{% set last = state_attr(e, 'laatst_verstuurd') %}{{ 'AAN' if is_state(e, 'on') else 'uit' }} · demping 180 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom('%-d %b %H:%M') }}{% endif %}
-        icon: mdi:bell-outline
-        icon_color: >-
-          {{ 'green' if is_state('switch.woonkamer_energy_management_system_melding_low_soc_before_peak', 'on') else 'grey' }}
-        entity: switch.woonkamer_energy_management_system_melding_low_soc_before_peak
-        tap_action:
-          action: toggle
-        hold_action:
-          action: more-info
-
-      - type: custom:mushroom-template-card
-        primary: Goedkoopste blok begint bijna
-        secondary: >-
-          {% set e = 'switch.woonkamer_energy_management_system_melding_cheap_block_soon' %}{% set last = state_attr(e, 'laatst_verstuurd') %}{{ 'AAN' if is_state(e, 'on') else 'uit' }} · demping 120 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom('%-d %b %H:%M') }}{% endif %}
-        icon: mdi:bell-outline
-        icon_color: >-
-          {{ 'green' if is_state('switch.woonkamer_energy_management_system_melding_cheap_block_soon', 'on') else 'grey' }}
-        entity: switch.woonkamer_energy_management_system_melding_cheap_block_soon
-        tap_action:
-          action: toggle
-        hold_action:
-          action: more-info
-
-      - type: custom:mushroom-template-card
-        primary: Negatieve prijzen op komst
-        secondary: >-
-          {% set e = 'switch.woonkamer_energy_management_system_melding_negative_prices' %}{% set last = state_attr(e, 'laatst_verstuurd') %}{{ 'AAN' if is_state(e, 'on') else 'uit' }} · demping 720 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom('%-d %b %H:%M') }}{% endif %}
-        icon: mdi:bell-outline
-        icon_color: >-
-          {{ 'green' if is_state('switch.woonkamer_energy_management_system_melding_negative_prices', 'on') else 'grey' }}
-        entity: switch.woonkamer_energy_management_system_melding_negative_prices
-        tap_action:
-          action: toggle
-        hold_action:
-          action: more-info
-
-      - type: custom:mushroom-template-card
-        primary: Uitzonderlijk duur kwartier vandaag
-        secondary: >-
-          {% set e = 'switch.woonkamer_energy_management_system_melding_exceptional_peak_price' %}{% set last = state_attr(e, 'laatst_verstuurd') %}{{ 'AAN' if is_state(e, 'on') else 'uit' }} · demping 720 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom('%-d %b %H:%M') }}{% endif %}
-        icon: mdi:bell-outline
-        icon_color: >-
-          {{ 'green' if is_state('switch.woonkamer_energy_management_system_melding_exceptional_peak_price', 'on') else 'grey' }}
-        entity: switch.woonkamer_energy_management_system_melding_exceptional_peak_price
-        tap_action:
-          action: toggle
-        hold_action:
-          action: more-info
-
-      - type: custom:mushroom-template-card
-        primary: Zonopbrengst blijft achter
-        secondary: >-
-          {% set e = 'switch.woonkamer_energy_management_system_melding_solar_underperforming' %}{% set last = state_attr(e, 'laatst_verstuurd') %}{{ 'AAN' if is_state(e, 'on') else 'uit' }} · demping 360 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom('%-d %b %H:%M') }}{% endif %}
-        icon: mdi:bell-outline
-        icon_color: >-
-          {{ 'green' if is_state('switch.woonkamer_energy_management_system_melding_solar_underperforming', 'on') else 'grey' }}
-        entity: switch.woonkamer_energy_management_system_melding_solar_underperforming
-        tap_action:
-          action: toggle
-        hold_action:
-          action: more-info
-
-      - type: custom:mushroom-template-card
-        primary: Weinig-zon-dag herkend
-        secondary: >-
-          {% set e = 'switch.woonkamer_energy_management_system_melding_low_solar_day' %}{% set last = state_attr(e, 'laatst_verstuurd') %}{{ 'AAN' if is_state(e, 'on') else 'uit' }} · demping 720 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom('%-d %b %H:%M') }}{% endif %}
-        icon: mdi:bell-outline
-        icon_color: >-
-          {{ 'green' if is_state('switch.woonkamer_energy_management_system_melding_low_solar_day', 'on') else 'grey' }}
-        entity: switch.woonkamer_energy_management_system_melding_low_solar_day
-        tap_action:
-          action: toggle
-        hold_action:
-          action: more-info
-
-      - type: custom:mushroom-template-card
-        primary: Sensor valt weg
-        secondary: >-
-          {% set e = 'switch.woonkamer_energy_management_system_melding_sensor_unavailable' %}{% set last = state_attr(e, 'laatst_verstuurd') %}{{ 'AAN' if is_state(e, 'on') else 'uit' }} · demping 120 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom('%-d %b %H:%M') }}{% endif %}
-        icon: mdi:bell-outline
-        icon_color: >-
-          {{ 'green' if is_state('switch.woonkamer_energy_management_system_melding_sensor_unavailable', 'on') else 'grey' }}
-        entity: switch.woonkamer_energy_management_system_melding_sensor_unavailable
-        tap_action:
-          action: toggle
-        hold_action:
-          action: more-info
-
-      - type: custom:mushroom-template-card
-        primary: Integratie loopt vast
-        secondary: >-
-          {% set e = 'switch.woonkamer_energy_management_system_melding_integration_error' %}{% set last = state_attr(e, 'laatst_verstuurd') %}{{ 'AAN' if is_state(e, 'on') else 'uit' }} · demping 60 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom('%-d %b %H:%M') }}{% endif %}
-        icon: mdi:bell-outline
-        icon_color: >-
-          {{ 'green' if is_state('switch.woonkamer_energy_management_system_melding_integration_error', 'on') else 'grey' }}
-        entity: switch.woonkamer_energy_management_system_melding_integration_error
-        tap_action:
-          action: toggle
-        hold_action:
-          action: more-info
-
-      - type: custom:mushroom-template-card
-        primary: Accumodule loopt uit de pas
-        secondary: >-
-          {% set e = 'switch.woonkamer_energy_management_system_melding_battery_module_drift' %}{% set last = state_attr(e, 'laatst_verstuurd') %}{{ 'AAN' if is_state(e, 'on') else 'uit' }} · demping 1440 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom('%-d %b %H:%M') }}{% endif %}
-        icon: mdi:bell-outline
-        icon_color: >-
-          {{ 'green' if is_state('switch.woonkamer_energy_management_system_melding_battery_module_drift', 'on') else 'grey' }}
-        entity: switch.woonkamer_energy_management_system_melding_battery_module_drift
-        tap_action:
-          action: toggle
-        hold_action:
-          action: more-info
-
-      - type: custom:mushroom-template-card
-        primary: Adviesmodule is klaar
-        secondary: >-
-          {% set e = 'switch.woonkamer_energy_management_system_melding_module_became_ready' %}{% set last = state_attr(e, 'laatst_verstuurd') %}{{ 'AAN' if is_state(e, 'on') else 'uit' }} · demping 1440 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom('%-d %b %H:%M') }}{% endif %}
-        icon: mdi:bell-outline
-        icon_color: >-
-          {{ 'green' if is_state('switch.woonkamer_energy_management_system_melding_module_became_ready', 'on') else 'grey' }}
-        entity: switch.woonkamer_energy_management_system_melding_module_became_ready
-        tap_action:
-          action: toggle
-        hold_action:
-          action: more-info
-
-      - type: custom:mushroom-template-card
-        primary: Dagoverzicht
-        secondary: >-
-          {% set e = 'switch.woonkamer_energy_management_system_melding_daily_summary' %}{% set last = state_attr(e, 'laatst_verstuurd') %}{{ 'AAN' if is_state(e, 'on') else 'uit' }} · demping 720 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom('%-d %b %H:%M') }}{% endif %}
-        icon: mdi:bell-outline
-        icon_color: >-
-          {{ 'green' if is_state('switch.woonkamer_energy_management_system_melding_daily_summary', 'on') else 'grey' }}
-        entity: switch.woonkamer_energy_management_system_melding_daily_summary
-        tap_action:
-          action: toggle
-        hold_action:
-          action: more-info
-
-      - type: custom:mushroom-template-card
-        primary: Maandoverzicht
-        secondary: >-
-          {% set e = 'switch.woonkamer_energy_management_system_melding_monthly_summary' %}{% set last = state_attr(e, 'laatst_verstuurd') %}{{ 'AAN' if is_state(e, 'on') else 'uit' }} · demping 1440 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom('%-d %b %H:%M') }}{% endif %}
-        icon: mdi:bell-outline
-        icon_color: >-
-          {{ 'green' if is_state('switch.woonkamer_energy_management_system_melding_monthly_summary', 'on') else 'grey' }}
-        entity: switch.woonkamer_energy_management_system_melding_monthly_summary
-        tap_action:
-          action: toggle
-        hold_action:
-          action: more-info
-
-      - type: custom:mushroom-template-card
-        primary: PV-oriëntatie wijkt af van de opgegeven waarde
-        secondary: >-
-          {% set e = 'switch.woonkamer_energy_management_system_melding_pv_orientation_mismatch' %}{% set last = state_attr(e, 'laatst_verstuurd') %}{{ 'AAN' if is_state(e, 'on') else 'uit' }} · demping 1440 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom('%-d %b %H:%M') }}{% endif %}
-        icon: mdi:bell-outline
-        icon_color: >-
-          {{ 'green' if is_state('switch.woonkamer_energy_management_system_melding_pv_orientation_mismatch', 'on') else 'grey' }}
-        entity: switch.woonkamer_energy_management_system_melding_pv_orientation_mismatch
-        tap_action:
-          action: toggle
-        hold_action:
-          action: more-info
-
-      - type: custom:mushroom-template-card
-        primary: Kostenberekening wijkt af van de afrekening
-        secondary: >-
-          {% set e = 'switch.woonkamer_energy_management_system_melding_cost_mismatch' %}{% set last = state_attr(e, 'laatst_verstuurd') %}{{ 'AAN' if is_state(e, 'on') else 'uit' }} · demping 720 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom('%-d %b %H:%M') }}{% endif %}
-        icon: mdi:bell-outline
-        icon_color: >-
-          {{ 'green' if is_state('switch.woonkamer_energy_management_system_melding_cost_mismatch', 'on') else 'grey' }}
-        entity: switch.woonkamer_energy_management_system_melding_cost_mismatch
-        tap_action:
-          action: toggle
-        hold_action:
-          action: more-info
-
-      - type: custom:mushroom-title-card
-        title: Laatst verstuurd
-
-      - type: markdown
-        content: |
-          {% set hist = state_attr('sensor.woonkamer_energy_management_system_system_status', 'meldingen_historie') or [] %}{% if hist | length == 0 %}Nog geen meldingen verstuurd.{% else %}De laatste {{ hist | length }} meldingen, nieuwste bovenaan. Er worden er 200 bewaard; ze verdwijnen alleen als er nieuwere bijkomen, niet na een bepaalde tijd. 🔕 = wel vastgelegd, niet naar je telefoon gestuurd.
-
-          {% for m in hist | reverse %}**{{ as_timestamp(m.moment) | timestamp_custom('%-d %b %H:%M') }} · {{ m.titel }}**{% if m.verstuurd is defined and not m.verstuurd %} 🔕{% endif %}
-
-          {{ m.bericht if m.bericht is defined and m.bericht else '_(bericht niet bewaard — melding van vóór v1.6.3)_' }}
-
-          {% endfor %}{% endif %}
-
-  - title: Kwaliteit
-    path: kwaliteit
-    subview: true
+    - type: heading
+      heading: Modus & besluit
+      grid_options:
+        columns: 12
+        rows: 1
+    - type: custom:mushroom-template-card
+      primary: '{{ states(''select.zendure_manager_operation'') }}'
+      secondary: Werkelijke modus
+      icon: mdi:battery-sync
+      icon_color: cyan
+      entity: select.zendure_manager_operation
+      tap_action:
+        action: none
+      hold_action:
+        action: none
+      grid_options:
+        columns: 6
+        rows: 1
+    - type: custom:mushroom-template-card
+      primary: '{{ states(''sensor.energy_management_system_expected_operation_mode'') }}'
+      secondary: Verwachte modus
+      icon: mdi:brain
+      icon_color: purple
+      entity: sensor.energy_management_system_expected_operation_mode
+      grid_options:
+        columns: 6
+        rows: 1
+      tap_action:
+        action: more-info
+    - type: custom:mushroom-template-card
+      primary: '{{ states(''sensor.energy_management_system_effective_expensive_quarters'') }} kwartieren'
+      secondary: Boven prijsdrempel
+      icon: mdi:chart-bell-curve
+      icon_color: red
+      entity: sensor.energy_management_system_effective_expensive_quarters
+      grid_options:
+        columns: 6
+        rows: 1
+      tap_action:
+        action: more-info
+    - type: custom:mushroom-template-card
+      primary: '{{ states(''number.solaredge_i1_active_power_limit'') }}%'
+      secondary: PV-limiet
+      icon: mdi:solar-power-variant
+      icon_color: amber
+      entity: number.solaredge_i1_active_power_limit
+      tap_action:
+        action: none
+      hold_action:
+        action: none
+      grid_options:
+        columns: 6
+        rows: 1
+    - type: custom:mushroom-template-card
+      primary: '{% set source = state_attr(''sensor.woonkamer_energy_management_system_explanation'', ''heavy_load_source'') %} {{ {''vaatwasser'': ''Vaatwasser'', ''wasmachine'': ''Wasmachine'', ''quooker'': ''Quooker'', ''airco'': ''Airco'', ''oven'': ''Oven'', ''kookplaat'': ''Kookplaat''}.get(source, ''Geen'') }}'
+      secondary: Grootverbruiker actief
+      icon: '{{ ''mdi:lightning-bolt'' if state_attr(''sensor.woonkamer_energy_management_system_explanation'', ''heavy_load_source'') else ''mdi:lightning-bolt-outline'' }}'
+      icon_color: '{{ ''orange'' if state_attr(''sensor.woonkamer_energy_management_system_explanation'', ''heavy_load_source'') else ''grey'' }}'
+      entity: sensor.woonkamer_energy_management_system_explanation
+      tap_action:
+        action: none
+      hold_action:
+        action: none
+      grid_options:
+        columns: 6
+        rows: 1
+  - type: grid
     cards:
+    - type: heading
+      heading: Besturing
+      grid_options:
+        columns: 12
+        rows: 1
+    - type: custom:mushroom-entity-card
+      entity: switch.energy_management_system_force_manual
+      name: Force manual
+      icon: mdi:hand-back-right
+      grid_options:
+        columns: 4
+        rows: 1
+    - type: custom:mushroom-entity-card
+      entity: switch.energy_management_system_learning_only_no_control
+      name: Learning only
+      icon: mdi:school-outline
+      grid_options:
+        columns: 4
+        rows: 1
+    - type: custom:mushroom-entity-card
+      entity: switch.woonkamer_energy_management_system_vacation_mode
+      name: Vakantiemodus
+      icon: mdi:bag-suitcase-outline
+      grid_options:
+        columns: 4
+        rows: 1
+    - type: custom:mushroom-entity-card
+      entity: button.woonkamer_energy_management_system_test_notificatie_versturen
+      name: Testmelding
+      icon: mdi:bell-ring-outline
+      grid_options:
+        columns: 4
+        rows: 1
+    - type: custom:mushroom-entity-card
+      entity: switch.woonkamer_energy_management_system_steelstofzuiger_overrule
+      name: Stofzuiger
+      icon: mdi:hand-back-right-outline
+      grid_options:
+        columns: 4
+        rows: 1
+    - type: custom:mushroom-entity-card
+      entity: switch.woonkamer_energy_management_system_fietsladers_overrule
+      name: Fietsladers
+      icon: mdi:hand-back-right-outline
+      grid_options:
+        columns: 4
+        rows: 1
+    - type: custom:mushroom-entity-card
+      entity: switch.woonkamer_energy_management_system_vaatwasser_wasmachine_meldingen
+      name: Apparaten
+      icon: mdi:bell-outline
+      grid_options:
+        columns: 4
+        rows: 1
+  - type: grid
+    cards:
+    - type: heading
+      heading: Status per onderwerp
+      grid_options:
+        columns: 12
+        rows: 1
+    - type: custom:mushroom-template-card
+      primary: Accumodules
+      secondary: '{% set s = (state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''samenvattingen'') or {}).get(''accumodules'') or {} %}{{ s.get(''zin'', ''Nog geen gegevens.'') }}'
+      multiline_secondary: false
+      icon: mdi:battery-heart-variant
+      icon_color: '{% set n = ((state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''samenvattingen'') or {}).get(''accumodules'') or {}).get(''niveau'') %}{{ ''red'' if n == ''onbetrouwbaar'' else (''green'' if n == ''betrouwbaar'' else ''orange'') }}'
+      entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
+      tap_action:
+        action: navigate
+        navigation_path: /energy-management-system/detail-accu
+      grid_options:
+        columns: 4
+        rows: auto
+    - type: custom:mushroom-template-card
+      primary: Apparaten
+      secondary: '{% set s = (state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''samenvattingen'') or {}).get(''apparaten'') or {} %}{{ s.get(''zin'', ''Nog geen gegevens.'') }}'
+      multiline_secondary: false
+      icon: mdi:power-plug
+      icon_color: '{% set n = ((state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''samenvattingen'') or {}).get(''apparaten'') or {}).get(''niveau'') %}{{ ''red'' if n == ''onbetrouwbaar'' else (''green'' if n == ''betrouwbaar'' else ''orange'') }}'
+      entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
+      tap_action:
+        action: navigate
+        navigation_path: /energy-management-system/detail-apparaten
+      grid_options:
+        columns: 4
+        rows: auto
+    - type: custom:mushroom-template-card
+      primary: Zelflerend
+      secondary: '{% set s = (state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''samenvattingen'') or {}).get(''zelflerend'') or {} %}{{ s.get(''zin'', ''Nog geen gegevens.'') }}'
+      multiline_secondary: false
+      icon: mdi:school-outline
+      icon_color: '{% set n = ((state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''samenvattingen'') or {}).get(''zelflerend'') or {}).get(''niveau'') %}{{ ''red'' if n == ''onbetrouwbaar'' else (''green'' if n == ''betrouwbaar'' else ''orange'') }}'
+      entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
+      tap_action:
+        action: navigate
+        navigation_path: /energy-management-system/detail-advies
+      grid_options:
+        columns: 4
+        rows: auto
+    - type: custom:mushroom-template-card
+      primary: Financieel
+      secondary: '{% set s = (state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''samenvattingen'') or {}).get(''financieel'') or {} %}{{ s.get(''zin'', ''Nog geen gegevens.'') }}'
+      multiline_secondary: false
+      icon: mdi:cash-multiple
+      icon_color: '{% set n = ((state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''samenvattingen'') or {}).get(''financieel'') or {}).get(''niveau'') %}{{ ''red'' if n == ''onbetrouwbaar'' else (''green'' if n == ''betrouwbaar'' else ''orange'') }}'
+      entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
+      tap_action:
+        action: navigate
+        navigation_path: /energy-management-system/detail-kosten
+      grid_options:
+        columns: 4
+        rows: auto
+    - type: custom:mushroom-template-card
+      primary: Klimaat
+      secondary: '{% set s = (state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''samenvattingen'') or {}).get(''klimaat'') or {} %}{{ s.get(''zin'', ''Nog geen gegevens.'') }}'
+      multiline_secondary: false
+      icon: mdi:home-thermometer
+      icon_color: '{% set n = ((state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''samenvattingen'') or {}).get(''klimaat'') or {}).get(''niveau'') %}{{ ''red'' if n == ''onbetrouwbaar'' else (''green'' if n == ''betrouwbaar'' else ''orange'') }}'
+      entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
+      tap_action:
+        action: navigate
+        navigation_path: /energy-management-system/detail-klimaat
+      grid_options:
+        columns: 4
+        rows: auto
+    - type: custom:mushroom-template-card
+      primary: Water
+      secondary: '{% set s = (state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''samenvattingen'') or {}).get(''water'') or {} %}{{ s.get(''zin'', ''Nog geen gegevens.'') }}'
+      multiline_secondary: false
+      icon: mdi:water
+      icon_color: '{% set n = ((state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''samenvattingen'') or {}).get(''water'') or {}).get(''niveau'') %}{{ ''red'' if n == ''onbetrouwbaar'' else (''green'' if n == ''betrouwbaar'' else ''orange'') }}'
+      entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
+      tap_action:
+        action: navigate
+        navigation_path: /energy-management-system/detail-water
+      grid_options:
+        columns: 4
+        rows: auto
+    - type: custom:mushroom-template-card
+      primary: Meetkwaliteit
+      secondary: '{% set s = (state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''samenvattingen'') or {}).get(''kwaliteit'') or {} %}{{ s.get(''zin'', ''Nog geen gegevens.'') }}'
+      multiline_secondary: false
+      icon: mdi:shield-check-outline
+      icon_color: '{% set n = ((state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''samenvattingen'') or {}).get(''kwaliteit'') or {}).get(''niveau'') %}{{ ''red'' if n == ''onbetrouwbaar'' else (''green'' if n == ''betrouwbaar'' else ''orange'') }}'
+      entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
+      tap_action:
+        action: navigate
+        navigation_path: /energy-management-system/detail-kwaliteit
+      grid_options:
+        columns: 4
+        rows: auto
+  - type: grid
+    cards:
+    - type: heading
+      heading: Meer bekijken
+      grid_options:
+        columns: 12
+        rows: 1
+    - type: custom:mushroom-template-card
+      primary: Systeem
+      secondary: Accu
+      icon: mdi:home-analytics
+      icon_color: blue
+      tap_action:
+        action: navigate
+        navigation_path: /energy-management-system/detail-verloop
+      grid_options:
+        columns: 4
+        rows: auto
+    - type: custom:mushroom-template-card
+      primary: Financieel
+      secondary: Kosten
+      icon: mdi:cash-multiple
+      icon_color: blue
+      tap_action:
+        action: navigate
+        navigation_path: /energy-management-system/detail-verloop
+      grid_options:
+        columns: 4
+        rows: auto
+    - type: custom:mushroom-template-card
+      primary: Verloop
+      secondary: Verloop
+      icon: mdi:chart-timeline-variant
+      icon_color: blue
+      tap_action:
+        action: navigate
+        navigation_path: /energy-management-system/detail-verloop
+      grid_options:
+        columns: 4
+        rows: auto
+    - type: custom:mushroom-template-card
+      primary: Kwaliteit
+      secondary: Kwaliteit
+      icon: mdi:shield-check-outline
+      icon_color: blue
+      tap_action:
+        action: navigate
+        navigation_path: /energy-management-system/detail-verloop
+      grid_options:
+        columns: 4
+        rows: auto
+    - type: custom:mushroom-template-card
+      primary: Meldingen
+      secondary: Meldingen
+      icon: mdi:bell-outline
+      icon_color: blue
+      tap_action:
+        action: navigate
+        navigation_path: /energy-management-system/meldingen
+      grid_options:
+        columns: 4
+        rows: auto
+    - type: custom:mushroom-template-card
+      primary: Visueel
+      secondary: Plattegrond
+      icon: mdi:floor-plan
+      icon_color: blue
+      tap_action:
+        action: navigate
+        navigation_path: /energy-management-system/visueel
+      grid_options:
+        columns: 4
+        rows: auto
+    - type: custom:mushroom-template-card
+      primary: Besparing
+      secondary: Opbrengst
+      icon: mdi:piggy-bank-outline
+      icon_color: blue
+      tap_action:
+        action: navigate
+        navigation_path: /energy-management-system/detail-besparing
+      grid_options:
+        columns: 4
+        rows: auto
+    - type: custom:mushroom-template-card
+      primary: Witgoed
+      secondary: Witgoed
+      icon: mdi:washing-machine
+      icon_color: blue
+      tap_action:
+        action: navigate
+        navigation_path: /energy-management-system/detail-witgoed
+      grid_options:
+        columns: 4
+        rows: auto
+    - type: custom:mushroom-template-card
+      primary: PV / zon
+      secondary: Opwek
+      icon: mdi:solar-power
+      icon_color: blue
+      tap_action:
+        action: navigate
+        navigation_path: /energy-management-system/detail-zon
+      grid_options:
+        columns: 4
+        rows: auto
+    - type: custom:mushroom-template-card
+      primary: Planning
+      secondary: Planning
+      icon: mdi:calendar-clock
+      icon_color: blue
+      tap_action:
+        action: navigate
+        navigation_path: /energy-management-system/detail-planning
+      grid_options:
+        columns: 4
+        rows: auto
+    - type: custom:mushroom-template-card
+      primary: Apparaten
+      secondary: Beoordelen
+      icon: mdi:power-plug
+      icon_color: blue
+      tap_action:
+        action: navigate
+        navigation_path: /energy-management-system/detail-apparaten
+      grid_options:
+        columns: 4
+        rows: auto
+- title: Visueel
+  path: visueel
+  subview: true
+  panel: true
+  cards:
+  - type: picture-elements
+    image: /local/energy_management_system_overview.svg?v=1.17.2
+    elements:
+    - type: state-label
+      entity: sensor.woonkamer_energy_management_system_system_status
+      tap_action:
+        action: more-info
+      style:
+        top: 10.33%
+        left: 4.38%
+        transform: translate(0, -50%)
+        font-size: 34px
+        font-weight: 700
+        color: '#ffffff'
+        white-space: nowrap
+        pointer-events: auto
+        text-shadow: 0 1px 3px rgba(0,0,0,0.85)
+    - type: state-label
+      entity: sensor.solaredge_i1_ac_power
+      tap_action:
+        action: more-info
+      style:
+        top: 29.56%
+        left: 15.0%
+        transform: translate(0, -50%)
+        font-size: 32px
+        font-weight: 600
+        color: '#f9d423'
+        white-space: nowrap
+        pointer-events: auto
+        text-shadow: 0 1px 3px rgba(0,0,0,0.85)
+    - type: state-label
+      entity: sensor.woonkamer_energy_management_system_weather_ensemble_bewolkingsgraad
+      tap_action:
+        action: more-info
+      style:
+        top: 36.89%
+        left: 15.0%
+        transform: translate(0, -50%)
+        font-size: 24px
+        font-weight: 600
+        color: '#c8d4e0'
+        white-space: nowrap
+        pointer-events: auto
+        text-shadow: 0 1px 3px rgba(0,0,0,0.85)
+    - type: state-label
+      entity: sensor.solcast_pv_forecast_resterende_voorspelling_vandaag
+      tap_action:
+        action: more-info
+      style:
+        top: 48.89%
+        left: 4.38%
+        transform: translate(0, -50%)
+        font-size: 26px
+        font-weight: 600
+        color: '#f0c040'
+        white-space: nowrap
+        pointer-events: auto
+        text-shadow: 0 1px 3px rgba(0,0,0,0.85)
+    - type: state-label
+      entity: sensor.woonkamer_energy_management_system_huishoudverbruik_werkelijk
+      tap_action:
+        action: more-info
+      style:
+        top: 35.11%
+        left: 33.12%
+        transform: translate(0, -50%)
+        font-size: 34px
+        font-weight: 600
+        color: '#ffffff'
+        white-space: nowrap
+        pointer-events: auto
+        text-shadow: 0 1px 3px rgba(0,0,0,0.85)
+    - type: state-label
+      entity: sensor.woonkamer_energy_management_system_explanation
+      attribute: grootste_verbruiker
+      tap_action:
+        action: more-info
+      style:
+        top: 34.67%
+        left: 57.25%
+        transform: translate(0, -50%)
+        font-size: 20px
+        font-weight: 600
+        color: '#c8d4e0'
+        white-space: nowrap
+        pointer-events: auto
+        text-shadow: 0 1px 3px rgba(0,0,0,0.85)
+    - type: state-label
+      entity: sensor.hw_p1_vermogen
+      tap_action:
+        action: more-info
+      style:
+        top: 29.56%
+        left: 83.12%
+        transform: translate(0, -50%)
+        font-size: 32px
+        font-weight: 600
+        color: '#5dade2'
+        white-space: nowrap
+        pointer-events: auto
+        text-shadow: 0 1px 3px rgba(0,0,0,0.85)
+    - type: state-label
+      entity: sensor.woonkamer_energy_management_system_explanation
+      attribute: current_price_per_kwh
+      suffix: ' €/kWh'
+      tap_action:
+        action: more-info
+      style:
+        top: 36.89%
+        left: 83.12%
+        transform: translate(0, -50%)
+        font-size: 24px
+        font-weight: 600
+        color: '#c8d4e0'
+        white-space: nowrap
+        pointer-events: auto
+        text-shadow: 0 1px 3px rgba(0,0,0,0.85)
+    - type: state-label
+      entity: sensor.woonkamer_energy_management_system_explanation
+      attribute: expensive_price_threshold
+      suffix: ' €/kWh'
+      tap_action:
+        action: more-info
+      style:
+        top: 48.89%
+        left: 73.12%
+        transform: translate(0, -50%)
+        font-size: 24px
+        font-weight: 600
+        color: '#c8d4e0'
+        white-space: nowrap
+        pointer-events: auto
+        text-shadow: 0 1px 3px rgba(0,0,0,0.85)
+    - type: state-label
+      entity: sensor.woonkamer_energy_management_system_explanation
+      attribute: accu_vermogen_weergave
+      tap_action:
+        action: more-info
+      style:
+        top: 54.0%
+        left: 52.5%
+        transform: translate(0, -50%)
+        font-size: 28px
+        font-weight: 700
+        color: '#2ecc71'
+        white-space: nowrap
+        pointer-events: auto
+        text-shadow: 0 1px 3px rgba(0,0,0,0.85)
+    - type: state-label
+      entity: sensor.solarflow_2400_ac_electric_level
+      tap_action:
+        action: more-info
+      style:
+        top: 68.44%
+        left: 51.88%
+        transform: translate(0, -50%)
+        font-size: 42px
+        font-weight: 700
+        color: '#2ecc71'
+        white-space: nowrap
+        pointer-events: auto
+        text-shadow: 0 1px 3px rgba(0,0,0,0.85)
+    - type: state-label
+      entity: sensor.solarflow_2400_ac_available_kwh
+      tap_action:
+        action: more-info
+      style:
+        top: 79.78%
+        left: 33.12%
+        transform: translate(0, -50%)
+        font-size: 30px
+        font-weight: 600
+        color: '#e8eef5'
+        white-space: nowrap
+        pointer-events: auto
+        text-shadow: 0 1px 3px rgba(0,0,0,0.85)
+    - type: state-label
+      entity: sensor.woonkamer_energy_management_system_learned_battery_efficiency
+      tap_action:
+        action: more-info
+      style:
+        top: 79.78%
+        left: 50.0%
+        transform: translate(0, -50%)
+        font-size: 30px
+        font-weight: 600
+        color: '#e8eef5'
+        white-space: nowrap
+        pointer-events: auto
+        text-shadow: 0 1px 3px rgba(0,0,0,0.85)
+    - type: state-icon
+      entity: sensor.woonkamer_energy_management_system_accu_koeling
+      tap_action:
+        action: toggle
+      style:
+        top: 88.89%
+        left: 34.75%
+        transform: translate(-50%, -50%)
+        --mdc-icon-size: 28px
+    - type: state-label
+      entity: sensor.woonkamer_energy_management_system_accu_koeling
+      tap_action:
+        action: more-info
+      style:
+        top: 88.89%
+        left: 36.56%
+        transform: translate(0, -50%)
+        font-size: 26px
+        font-weight: 600
+        color: '#9ad7f5'
+        white-space: nowrap
+        pointer-events: auto
+        text-shadow: 0 1px 3px rgba(0,0,0,0.85)
+    - type: state-label
+      entity: sensor.woonkamer_energy_management_system_accu_koeling
+      attribute: accu_c
+      suffix: ' °C'
+      tap_action:
+        action: more-info
+      style:
+        top: 88.89%
+        left: 49.38%
+        transform: translate(0, -50%)
+        font-size: 24px
+        font-weight: 600
+        color: '#c8d4e0'
+        white-space: nowrap
+        pointer-events: auto
+        text-shadow: 0 1px 3px rgba(0,0,0,0.85)
+    - type: state-label
+      entity: sensor.woonkamer_energy_management_system_explanation
+      attribute: expected_mode
+      tap_action:
+        action: more-info
+      style:
+        top: 67.33%
+        left: 4.38%
+        transform: translate(0, -50%)
+        font-size: 32px
+        font-weight: 700
+        color: '#b39ddb'
+        white-space: nowrap
+        pointer-events: auto
+        text-shadow: 0 1px 3px rgba(0,0,0,0.85)
+    - type: state-label
+      entity: sensor.woonkamer_energy_management_system_explanation
+      attribute: effective_expensive_quarters_count
+      tap_action:
+        action: more-info
+      style:
+        top: 76.22%
+        left: 4.38%
+        transform: translate(0, -50%)
+        font-size: 30px
+        font-weight: 600
+        color: '#e8eef5'
+        white-space: nowrap
+        pointer-events: auto
+        text-shadow: 0 1px 3px rgba(0,0,0,0.85)
+    - type: state-icon
+      entity: switch.energy_management_system_force_manual
+      tap_action:
+        action: toggle
+      style:
+        top: 85.11%
+        left: 5.75%
+        transform: translate(-50%, -50%)
+        --mdc-icon-size: 28px
+    - type: state-label
+      entity: switch.energy_management_system_force_manual
+      tap_action:
+        action: more-info
+      style:
+        top: 85.11%
+        left: 7.81%
+        transform: translate(0, -50%)
+        font-size: 26px
+        font-weight: 600
+        color: '#c8d4e0'
+        white-space: nowrap
+        pointer-events: auto
+        text-shadow: 0 1px 3px rgba(0,0,0,0.85)
+    - type: state-icon
+      entity: switch.woonkamer_energy_management_system_vacation_mode
+      tap_action:
+        action: toggle
+      style:
+        top: 92.22%
+        left: 5.75%
+        transform: translate(-50%, -50%)
+        --mdc-icon-size: 28px
+    - type: state-label
+      entity: switch.woonkamer_energy_management_system_vacation_mode
+      tap_action:
+        action: more-info
+      style:
+        top: 92.22%
+        left: 7.81%
+        transform: translate(0, -50%)
+        font-size: 26px
+        font-weight: 600
+        color: '#c8d4e0'
+        white-space: nowrap
+        pointer-events: auto
+        text-shadow: 0 1px 3px rgba(0,0,0,0.85)
+    - type: state-label
+      entity: sensor.woonkamer_energy_management_system_sensor_health_score
+      tap_action:
+        action: more-info
+      style:
+        top: 67.11%
+        left: 73.12%
+        transform: translate(0, -50%)
+        font-size: 30px
+        font-weight: 600
+        color: '#f0b429'
+        white-space: nowrap
+        pointer-events: auto
+        text-shadow: 0 1px 3px rgba(0,0,0,0.85)
+    - type: state-label
+      entity: sensor.woonkamer_energy_management_system_sluipverbruik_detectie
+      tap_action:
+        action: more-info
+      style:
+        top: 76.0%
+        left: 73.12%
+        transform: translate(0, -50%)
+        font-size: 26px
+        font-weight: 600
+        color: '#c8d4e0'
+        white-space: nowrap
+        pointer-events: auto
+        text-shadow: 0 1px 3px rgba(0,0,0,0.85)
+    - type: state-label
+      entity: sensor.woonkamer_energy_management_system_accu_modulegezondheid
+      tap_action:
+        action: more-info
+      style:
+        top: 84.89%
+        left: 73.12%
+        transform: translate(0, -50%)
+        font-size: 30px
+        font-weight: 600
+        color: '#e8eef5'
+        white-space: nowrap
+        pointer-events: auto
+        text-shadow: 0 1px 3px rgba(0,0,0,0.85)
+    - type: state-label
+      entity: sensor.woonkamer_energy_management_system_system_status
+      attribute: last_successful_update_short
+      tap_action:
+        action: more-info
+      style:
+        top: 92.0%
+        left: 73.12%
+        transform: translate(0, -50%)
+        font-size: 18px
+        font-weight: 600
+        color: '#8fa3b8'
+        white-space: nowrap
+        pointer-events: auto
+        text-shadow: 0 1px 3px rgba(0,0,0,0.85)
+- title: Meldingen
+  path: meldingen
+  subview: true
+  cards:
+  - type: markdown
+    content: 'Meldingen gaan naar de notify-service die bij Configureren is
+
+      ingesteld. Is die er niet, dan verschijnen ze als melding in
+
+      Home Assistant zelf.
+
+
+
+      **Alleen de zes meldingen die er al waren staan standaard aan.**
+
+      Alles wat later is toegevoegd begint uit — twintig meldingen die
+
+      zichzelf aanzetten is een garantie dat je er binnen een week
+
+      niets meer van leest.
+
+
+
+      Elke melding heeft een eigen **dempingsvenster**: binnen die tijd
+
+      gaat dezelfde melding niet nog een keer af. Bij modus-wijzigingen
+
+      en sluipverbruik is dat het verschil tussen bruikbaar en
+
+      wegswipen. Tik op een melding om te schakelen, houd vast voor de
+
+      details.
+
+      '
+  - type: custom:mushroom-template-card
+    primary: '{{ ''Alle meldingen AAN'' if is_state(''switch.woonkamer_energy_management_system_meldingen_hoofdschakelaar'', ''on'') else ''Alle meldingen UIT'' }}'
+    secondary: '{% set e = ''switch.woonkamer_energy_management_system_meldingen_hoofdschakelaar'' %}Hoofdschakelaar · {{ state_attr(e, ''aantal_ingeschakeld'') }} van {{ state_attr(e, ''aantal_soorten'') }} soorten ingeschakeld'
+    icon: mdi:bell-ring-outline
+    icon_color: '{{ ''blue'' if is_state(''switch.woonkamer_energy_management_system_meldingen_hoofdschakelaar'', ''on'') else ''red'' }}'
+    entity: switch.woonkamer_energy_management_system_meldingen_hoofdschakelaar
+    tap_action:
+      action: toggle
+  - type: custom:mushroom-template-card
+    primary: Goedkoop moment voor vaatwasser/wasmachine
+    secondary: '{% set e = ''switch.woonkamer_energy_management_system_melding_appliance_cheap_moment'' %}{% set last = state_attr(e, ''laatst_verstuurd'') %}{{ ''AAN'' if is_state(e, ''on'') else ''uit'' }} · demping 60 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom(''%-d %b %H:%M'') }}{% endif %}'
+    icon: mdi:bell-outline
+    icon_color: '{{ ''green'' if is_state(''switch.woonkamer_energy_management_system_melding_appliance_cheap_moment'', ''on'') else ''grey'' }}'
+    entity: switch.woonkamer_energy_management_system_melding_appliance_cheap_moment
+    tap_action:
+      action: toggle
+    hold_action:
+      action: more-info
+  - type: custom:mushroom-template-card
+    primary: Apparaat klaar
+    secondary: '{% set e = ''switch.woonkamer_energy_management_system_melding_appliance_ready'' %}{% set last = state_attr(e, ''laatst_verstuurd'') %}{{ ''AAN'' if is_state(e, ''on'') else ''uit'' }} · demping 5 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom(''%-d %b %H:%M'') }}{% endif %}'
+    icon: mdi:bell-outline
+    icon_color: '{{ ''green'' if is_state(''switch.woonkamer_energy_management_system_melding_appliance_ready'', ''on'') else ''grey'' }}'
+    entity: switch.woonkamer_energy_management_system_melding_appliance_ready
+    tap_action:
+      action: toggle
+    hold_action:
+      action: more-info
+  - type: custom:mushroom-template-card
+    primary: Accu-koeling aan/uit
+    secondary: '{% set e = ''switch.woonkamer_energy_management_system_melding_battery_cooling'' %}{% set last = state_attr(e, ''laatst_verstuurd'') %}{{ ''AAN'' if is_state(e, ''on'') else ''uit'' }} · demping 15 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom(''%-d %b %H:%M'') }}{% endif %}'
+    icon: mdi:bell-outline
+    icon_color: '{{ ''green'' if is_state(''switch.woonkamer_energy_management_system_melding_battery_cooling'', ''on'') else ''grey'' }}'
+    entity: switch.woonkamer_energy_management_system_melding_battery_cooling
+    tap_action:
+      action: toggle
+    hold_action:
+      action: more-info
+  - type: custom:mushroom-template-card
+    primary: Mogelijk sluipverbruik
+    secondary: '{% set e = ''switch.woonkamer_energy_management_system_melding_sluipverbruik'' %}{% set last = state_attr(e, ''laatst_verstuurd'') %}{{ ''AAN'' if is_state(e, ''on'') else ''uit'' }} · demping 720 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom(''%-d %b %H:%M'') }}{% endif %}'
+    icon: mdi:bell-outline
+    icon_color: '{{ ''green'' if is_state(''switch.woonkamer_energy_management_system_melding_sluipverbruik'', ''on'') else ''grey'' }}'
+    entity: switch.woonkamer_energy_management_system_melding_sluipverbruik
+    tap_action:
+      action: toggle
+    hold_action:
+      action: more-info
+  - type: custom:mushroom-template-card
+    primary: Mogelijk defect apparaat
+    secondary: '{% set e = ''switch.woonkamer_energy_management_system_melding_device_drift'' %}{% set last = state_attr(e, ''laatst_verstuurd'') %}{{ ''AAN'' if is_state(e, ''on'') else ''uit'' }} · demping 1440 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom(''%-d %b %H:%M'') }}{% endif %}'
+    icon: mdi:bell-outline
+    icon_color: '{{ ''green'' if is_state(''switch.woonkamer_energy_management_system_melding_device_drift'', ''on'') else ''grey'' }}'
+    entity: switch.woonkamer_energy_management_system_melding_device_drift
+    tap_action:
+      action: toggle
+    hold_action:
+      action: more-info
+  - type: custom:mushroom-template-card
+    primary: Modus gewijzigd
+    secondary: '{% set e = ''switch.woonkamer_energy_management_system_melding_mode_change'' %}{% set last = state_attr(e, ''laatst_verstuurd'') %}{{ ''AAN'' if is_state(e, ''on'') else ''uit'' }} · demping 30 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom(''%-d %b %H:%M'') }}{% endif %}'
+    icon: mdi:bell-outline
+    icon_color: '{{ ''green'' if is_state(''switch.woonkamer_energy_management_system_melding_mode_change'', ''on'') else ''grey'' }}'
+    entity: switch.woonkamer_energy_management_system_melding_mode_change
+    tap_action:
+      action: toggle
+    hold_action:
+      action: more-info
+  - type: custom:mushroom-template-card
+    primary: Accu haalt de nacht niet
+    secondary: '{% set e = ''switch.woonkamer_energy_management_system_melding_battery_wont_last_night'' %}{% set last = state_attr(e, ''laatst_verstuurd'') %}{{ ''AAN'' if is_state(e, ''on'') else ''uit'' }} · demping 180 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom(''%-d %b %H:%M'') }}{% endif %}'
+    icon: mdi:bell-outline
+    icon_color: '{{ ''green'' if is_state(''switch.woonkamer_energy_management_system_melding_battery_wont_last_night'', ''on'') else ''grey'' }}'
+    entity: switch.woonkamer_energy_management_system_melding_battery_wont_last_night
+    tap_action:
+      action: toggle
+    hold_action:
+      action: more-info
+  - type: custom:mushroom-template-card
+    primary: Accu vol terwijl de zon nog schijnt
+    secondary: '{% set e = ''switch.woonkamer_energy_management_system_melding_battery_full_with_sun'' %}{% set last = state_attr(e, ''laatst_verstuurd'') %}{{ ''AAN'' if is_state(e, ''on'') else ''uit'' }} · demping 120 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom(''%-d %b %H:%M'') }}{% endif %}'
+    icon: mdi:bell-outline
+    icon_color: '{{ ''green'' if is_state(''switch.woonkamer_energy_management_system_melding_battery_full_with_sun'', ''on'') else ''grey'' }}'
+    entity: switch.woonkamer_energy_management_system_melding_battery_full_with_sun
+    tap_action:
+      action: toggle
+    hold_action:
+      action: more-info
+  - type: custom:mushroom-template-card
+    primary: Lage accustand vlak voor de avondpiek
+    secondary: '{% set e = ''switch.woonkamer_energy_management_system_melding_low_soc_before_peak'' %}{% set last = state_attr(e, ''laatst_verstuurd'') %}{{ ''AAN'' if is_state(e, ''on'') else ''uit'' }} · demping 180 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom(''%-d %b %H:%M'') }}{% endif %}'
+    icon: mdi:bell-outline
+    icon_color: '{{ ''green'' if is_state(''switch.woonkamer_energy_management_system_melding_low_soc_before_peak'', ''on'') else ''grey'' }}'
+    entity: switch.woonkamer_energy_management_system_melding_low_soc_before_peak
+    tap_action:
+      action: toggle
+    hold_action:
+      action: more-info
+  - type: custom:mushroom-template-card
+    primary: Goedkoopste blok begint bijna
+    secondary: '{% set e = ''switch.woonkamer_energy_management_system_melding_cheap_block_soon'' %}{% set last = state_attr(e, ''laatst_verstuurd'') %}{{ ''AAN'' if is_state(e, ''on'') else ''uit'' }} · demping 120 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom(''%-d %b %H:%M'') }}{% endif %}'
+    icon: mdi:bell-outline
+    icon_color: '{{ ''green'' if is_state(''switch.woonkamer_energy_management_system_melding_cheap_block_soon'', ''on'') else ''grey'' }}'
+    entity: switch.woonkamer_energy_management_system_melding_cheap_block_soon
+    tap_action:
+      action: toggle
+    hold_action:
+      action: more-info
+  - type: custom:mushroom-template-card
+    primary: Negatieve prijzen op komst
+    secondary: '{% set e = ''switch.woonkamer_energy_management_system_melding_negative_prices'' %}{% set last = state_attr(e, ''laatst_verstuurd'') %}{{ ''AAN'' if is_state(e, ''on'') else ''uit'' }} · demping 720 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom(''%-d %b %H:%M'') }}{% endif %}'
+    icon: mdi:bell-outline
+    icon_color: '{{ ''green'' if is_state(''switch.woonkamer_energy_management_system_melding_negative_prices'', ''on'') else ''grey'' }}'
+    entity: switch.woonkamer_energy_management_system_melding_negative_prices
+    tap_action:
+      action: toggle
+    hold_action:
+      action: more-info
+  - type: custom:mushroom-template-card
+    primary: Uitzonderlijk duur kwartier vandaag
+    secondary: '{% set e = ''switch.woonkamer_energy_management_system_melding_exceptional_peak_price'' %}{% set last = state_attr(e, ''laatst_verstuurd'') %}{{ ''AAN'' if is_state(e, ''on'') else ''uit'' }} · demping 720 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom(''%-d %b %H:%M'') }}{% endif %}'
+    icon: mdi:bell-outline
+    icon_color: '{{ ''green'' if is_state(''switch.woonkamer_energy_management_system_melding_exceptional_peak_price'', ''on'') else ''grey'' }}'
+    entity: switch.woonkamer_energy_management_system_melding_exceptional_peak_price
+    tap_action:
+      action: toggle
+    hold_action:
+      action: more-info
+  - type: custom:mushroom-template-card
+    primary: Zonopbrengst blijft achter
+    secondary: '{% set e = ''switch.woonkamer_energy_management_system_melding_solar_underperforming'' %}{% set last = state_attr(e, ''laatst_verstuurd'') %}{{ ''AAN'' if is_state(e, ''on'') else ''uit'' }} · demping 360 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom(''%-d %b %H:%M'') }}{% endif %}'
+    icon: mdi:bell-outline
+    icon_color: '{{ ''green'' if is_state(''switch.woonkamer_energy_management_system_melding_solar_underperforming'', ''on'') else ''grey'' }}'
+    entity: switch.woonkamer_energy_management_system_melding_solar_underperforming
+    tap_action:
+      action: toggle
+    hold_action:
+      action: more-info
+  - type: custom:mushroom-template-card
+    primary: Weinig-zon-dag herkend
+    secondary: '{% set e = ''switch.woonkamer_energy_management_system_melding_low_solar_day'' %}{% set last = state_attr(e, ''laatst_verstuurd'') %}{{ ''AAN'' if is_state(e, ''on'') else ''uit'' }} · demping 720 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom(''%-d %b %H:%M'') }}{% endif %}'
+    icon: mdi:bell-outline
+    icon_color: '{{ ''green'' if is_state(''switch.woonkamer_energy_management_system_melding_low_solar_day'', ''on'') else ''grey'' }}'
+    entity: switch.woonkamer_energy_management_system_melding_low_solar_day
+    tap_action:
+      action: toggle
+    hold_action:
+      action: more-info
+  - type: custom:mushroom-template-card
+    primary: Sensor valt weg
+    secondary: '{% set e = ''switch.woonkamer_energy_management_system_melding_sensor_unavailable'' %}{% set last = state_attr(e, ''laatst_verstuurd'') %}{{ ''AAN'' if is_state(e, ''on'') else ''uit'' }} · demping 120 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom(''%-d %b %H:%M'') }}{% endif %}'
+    icon: mdi:bell-outline
+    icon_color: '{{ ''green'' if is_state(''switch.woonkamer_energy_management_system_melding_sensor_unavailable'', ''on'') else ''grey'' }}'
+    entity: switch.woonkamer_energy_management_system_melding_sensor_unavailable
+    tap_action:
+      action: toggle
+    hold_action:
+      action: more-info
+  - type: custom:mushroom-template-card
+    primary: Integratie loopt vast
+    secondary: '{% set e = ''switch.woonkamer_energy_management_system_melding_integration_error'' %}{% set last = state_attr(e, ''laatst_verstuurd'') %}{{ ''AAN'' if is_state(e, ''on'') else ''uit'' }} · demping 60 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom(''%-d %b %H:%M'') }}{% endif %}'
+    icon: mdi:bell-outline
+    icon_color: '{{ ''green'' if is_state(''switch.woonkamer_energy_management_system_melding_integration_error'', ''on'') else ''grey'' }}'
+    entity: switch.woonkamer_energy_management_system_melding_integration_error
+    tap_action:
+      action: toggle
+    hold_action:
+      action: more-info
+  - type: custom:mushroom-template-card
+    primary: Accumodule loopt uit de pas
+    secondary: '{% set e = ''switch.woonkamer_energy_management_system_melding_battery_module_drift'' %}{% set last = state_attr(e, ''laatst_verstuurd'') %}{{ ''AAN'' if is_state(e, ''on'') else ''uit'' }} · demping 1440 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom(''%-d %b %H:%M'') }}{% endif %}'
+    icon: mdi:bell-outline
+    icon_color: '{{ ''green'' if is_state(''switch.woonkamer_energy_management_system_melding_battery_module_drift'', ''on'') else ''grey'' }}'
+    entity: switch.woonkamer_energy_management_system_melding_battery_module_drift
+    tap_action:
+      action: toggle
+    hold_action:
+      action: more-info
+  - type: custom:mushroom-template-card
+    primary: Adviesmodule is klaar
+    secondary: '{% set e = ''switch.woonkamer_energy_management_system_melding_module_became_ready'' %}{% set last = state_attr(e, ''laatst_verstuurd'') %}{{ ''AAN'' if is_state(e, ''on'') else ''uit'' }} · demping 1440 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom(''%-d %b %H:%M'') }}{% endif %}'
+    icon: mdi:bell-outline
+    icon_color: '{{ ''green'' if is_state(''switch.woonkamer_energy_management_system_melding_module_became_ready'', ''on'') else ''grey'' }}'
+    entity: switch.woonkamer_energy_management_system_melding_module_became_ready
+    tap_action:
+      action: toggle
+    hold_action:
+      action: more-info
+  - type: custom:mushroom-template-card
+    primary: Dagoverzicht
+    secondary: '{% set e = ''switch.woonkamer_energy_management_system_melding_daily_summary'' %}{% set last = state_attr(e, ''laatst_verstuurd'') %}{{ ''AAN'' if is_state(e, ''on'') else ''uit'' }} · demping 720 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom(''%-d %b %H:%M'') }}{% endif %}'
+    icon: mdi:bell-outline
+    icon_color: '{{ ''green'' if is_state(''switch.woonkamer_energy_management_system_melding_daily_summary'', ''on'') else ''grey'' }}'
+    entity: switch.woonkamer_energy_management_system_melding_daily_summary
+    tap_action:
+      action: toggle
+    hold_action:
+      action: more-info
+  - type: custom:mushroom-template-card
+    primary: Maandoverzicht
+    secondary: '{% set e = ''switch.woonkamer_energy_management_system_melding_monthly_summary'' %}{% set last = state_attr(e, ''laatst_verstuurd'') %}{{ ''AAN'' if is_state(e, ''on'') else ''uit'' }} · demping 1440 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom(''%-d %b %H:%M'') }}{% endif %}'
+    icon: mdi:bell-outline
+    icon_color: '{{ ''green'' if is_state(''switch.woonkamer_energy_management_system_melding_monthly_summary'', ''on'') else ''grey'' }}'
+    entity: switch.woonkamer_energy_management_system_melding_monthly_summary
+    tap_action:
+      action: toggle
+    hold_action:
+      action: more-info
+  - type: custom:mushroom-template-card
+    primary: PV-oriëntatie wijkt af van de opgegeven waarde
+    secondary: '{% set e = ''switch.woonkamer_energy_management_system_melding_pv_orientation_mismatch'' %}{% set last = state_attr(e, ''laatst_verstuurd'') %}{{ ''AAN'' if is_state(e, ''on'') else ''uit'' }} · demping 1440 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom(''%-d %b %H:%M'') }}{% endif %}'
+    icon: mdi:bell-outline
+    icon_color: '{{ ''green'' if is_state(''switch.woonkamer_energy_management_system_melding_pv_orientation_mismatch'', ''on'') else ''grey'' }}'
+    entity: switch.woonkamer_energy_management_system_melding_pv_orientation_mismatch
+    tap_action:
+      action: toggle
+    hold_action:
+      action: more-info
+  - type: custom:mushroom-template-card
+    primary: Kostenberekening wijkt af van de afrekening
+    secondary: '{% set e = ''switch.woonkamer_energy_management_system_melding_cost_mismatch'' %}{% set last = state_attr(e, ''laatst_verstuurd'') %}{{ ''AAN'' if is_state(e, ''on'') else ''uit'' }} · demping 720 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom(''%-d %b %H:%M'') }}{% endif %}'
+    icon: mdi:bell-outline
+    icon_color: '{{ ''green'' if is_state(''switch.woonkamer_energy_management_system_melding_cost_mismatch'', ''on'') else ''grey'' }}'
+    entity: switch.woonkamer_energy_management_system_melding_cost_mismatch
+    tap_action:
+      action: toggle
+    hold_action:
+      action: more-info
+  - type: custom:mushroom-title-card
+    title: Laatst verstuurd
+  - type: markdown
+    content: '{% set hist = state_attr(''sensor.woonkamer_energy_management_system_system_status'', ''meldingen_historie'') or [] %}{% if hist | length == 0 %}Nog geen meldingen verstuurd.{% else %}De laatste {{ hist | length }} meldingen, nieuwste bovenaan. Er worden er 200 bewaard; ze verdwijnen alleen als er nieuwere bijkomen, niet na een bepaalde tijd. 🔕 = wel vastgelegd, niet naar je telefoon gestuurd.
+
+
+      {% for m in hist | reverse %}**{{ as_timestamp(m.moment) | timestamp_custom(''%-d %b %H:%M'') }} · {{ m.titel }}**{% if m.verstuurd is defined and not m.verstuurd %} 🔕{% endif %}
+
+
+      {{ m.bericht if m.bericht is defined and m.bericht else ''_(bericht niet bewaard — melding van vóór v1.6.3)_'' }}
+
+
+      {% endfor %}{% endif %}
+
+      '
+- title: PV / zon
+  path: detail-zon
+  subview: true
+  type: sections
+  max_columns: 1
+  sections:
+  - type: grid
+    cards:
+    - type: custom:mushroom-title-card
+      title: PV / zon
+      subtitle: Opwek, installatieprofiel en voorspelnauwkeurigheid
+    - type: custom:mushroom-entity-card
+      entity: sensor.woonkamer_energy_management_system_pv_installatieprofiel
+      name: PV-installatieprofiel
+      tap_action:
+        action: navigate
+        navigation_path: /energy-management-system/detail-zon
+    - type: custom:mushroom-template-card
+      primary: '{% set v = states(''sensor.woonkamer_energy_management_system_pv_hourly_forecast_bias'') %}{{ v if v not in [''unknown'',''unavailable'',''''] else ''buiten daglichturen'' }}'
+      secondary: '{% set p = state_attr(''sensor.woonkamer_energy_management_system_pv_hourly_forecast_bias'', ''profile_confident'') or {} %}PV-voorspelling bias{% if p | length > 0 %} · {{ p | length }} uren geleerd{% endif %}'
+      icon: mdi:weather-partly-cloudy
+      entity: sensor.woonkamer_energy_management_system_pv_hourly_forecast_bias
+      tap_action:
+        action: more-info
+    - type: markdown
+      title: Hoe goed is de PV-voorspelling?
+      content: '{% set q = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''pv_voorspelkwaliteit'') or {} %}{% if not q.get(''beschikbaar'') %}{{ q.get(''reden'', ''Nog geen gegevens.'') }}{% else %}Over **{{ q.dagen }} voltooide dagen**:
+
+
+        | Maat | Waarde | Wat het zegt |
+
+        |---|---|---|
+
+        | Bias | {{ q.bias_procent }}% | structureel te hoog of te laag |
+
+        | Gemiddelde fout | {{ q.gemiddelde_fout_procent }}% | hoe ver een dag er gemiddeld naast zit |
+
+        | Mediaan fout | {{ q.mediaan_fout_procent }}% | de typische dag |
+
+        | Spreiding | {{ q.spreiding_procent }}% | hoe wisselvallig |
+
+        | Beste dag | {{ q.beste_dag_procent }}% | |
+
+        | Slechtste dag | {{ q.slechtste_dag_procent }}% | |
+
+        | Binnen 10% | {{ q.dagen_binnen_10_procent }} van {{ q.dagen }} | |
+
+        | Binnen 20% | {{ q.dagen_binnen_20_procent }} van {{ q.dagen }} | |
+
+
+        {{ q.duiding }}
+
+
+        _Bias en fout zijn verschillende dingen: de bias zegt de RICHTING, de fout de GROOTTE. Corrigeer je de bias, dan blijft de spreiding over._{% endif %}'
+      grid_options:
+        columns: 12
+        rows: auto
+- title: Accu
+  path: detail-accu
+  subview: true
+  type: sections
+  max_columns: 1
+  sections:
+  - type: grid
+    cards:
+    - type: custom:mushroom-title-card
+      title: Accu
+      subtitle: Celspreiding, temperatuur en vermogen per module
+    - type: custom:mushroom-template-card
+      primary: Gezondheid accumodules
+      secondary: '{% set s = (state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''samenvattingen'') or {}).get(''accumodules'') or {} %}{{ s.get(''zin'', ''Nog geen gegevens.'') }}'
+      multiline_secondary: true
+      icon: mdi:information-outline
+      icon_color: '{% set n = ((state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''samenvattingen'') or {}).get(''accumodules'') or {}).get(''niveau'') %}{{ ''red'' if n == ''onbetrouwbaar'' else (''green'' if n == ''betrouwbaar'' else ''orange'') }}'
+      entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
+      tap_action:
+        action: navigate
+        navigation_path: /energy-management-system/detail-accu
+    - type: markdown
+      title: Accumodules
+      content: '{% set m = state_attr(''sensor.woonkamer_energy_management_system_accu_modulegezondheid'', ''modules'') or [] %}{% if m | length == 0 %}Geen accumodule-sensoren geconfigureerd.{% else %}| Module | Celdelta | Temp | SoC | Vermogen |
+
+        |---|---|---|---|---|
+
+        {% for x in m %}| {{ loop.index }} | {{ x.get(''cel_delta_v'') }} V | {{ x.get(''temperatuur_c'') }} °C | {{ x.get(''soc_percent'') }}% | {{ x.get(''vermogen_w'') }} W |
+
+        {% endfor %}{% endif %}
+
+        '
+- title: Water
+  path: detail-water
+  subview: true
+  type: sections
+  max_columns: 1
+  sections:
+  - type: grid
+    cards:
+    - type: custom:mushroom-title-card
+      title: Water
+      subtitle: Verbruik en waterontharder
+    - type: custom:mushroom-template-card
+      primary: Waterverbruik vandaag
+      secondary: '{% set s = (state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''samenvattingen'') or {}).get(''water'') or {} %}{{ s.get(''zin'', ''Nog geen gegevens.'') }}'
+      multiline_secondary: true
+      icon: mdi:information-outline
+      icon_color: '{% set n = ((state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''samenvattingen'') or {}).get(''water'') or {}).get(''niveau'') %}{{ ''red'' if n == ''onbetrouwbaar'' else (''green'' if n == ''betrouwbaar'' else ''orange'') }}'
+      entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
+      tap_action:
+        action: navigate
+        navigation_path: /energy-management-system/detail-water
+    - type: markdown
+      title: Waterontharder
+      content: '{% set r = state_attr(''sensor.woonkamer_energy_management_system_waterverbruik'', ''waterontharder_laatste_regeneratie'') %}{% if r %}Laatste regeneratie: **{{ as_timestamp(r) | timestamp_custom(''%-d %b %H:%M'') }}** ({{ relative_time(as_datetime(r)) }} geleden).{% else %}Nog geen regeneratie waargenomen.{% endif %}
+
+
+        {% set s = state_attr(''sensor.woonkamer_energy_management_system_waterverbruik'', ''recente_gebruiksmomenten'') or [] %}{% set ns = namespace(n=0) %}{% for x in s %}{%- if x.waarschijnlijk_waterontharder %}{% set ns.n = ns.n + 1 %}{%- endif %}{%- endfor %}{{ ns.n }} van de laatste {{ s | length }} gebruiksmomenten was een regeneratie.
+
+
+        _Herkend aan een nachtelijke sessie van minstens 10 liter (de volumedrempel uit v1.9.2 voorkomt dat een kleine tap onterecht meetelt)._
+
+        '
+      grid_options:
+        columns: 12
+        rows: auto
+    - type: markdown
+      title: Waterverbruik vandaag
+      content: '{% set alles = state_attr(''sensor.woonkamer_energy_management_system_waterverbruik'', ''recente_gebruiksmomenten'') or [] %}{% set dag = now().strftime(''%Y-%m-%d'') %}{% set ns = namespace(v=[]) %}{% for s in alles %}{%- if s.gestart and dag in s.gestart %}{%- set ns.v = ns.v + [s] %}{%- endif %}{%- endfor %}{% if ns.v | length == 0 %}Nog geen gebruiksmomenten vandaag.{% else %}| Gestart | Duur | Volume |
+
+        |---|---|---|
+
+        {% for s in ns.v %}| {{ as_timestamp(s.gestart) | timestamp_custom(''%H:%M'') }} | {{ s.duur_minuten }} min | {{ s.liter }} L |
+
+        {% endfor %}{% endif %}
+
+        '
+- title: Klimaat
+  path: detail-klimaat
+  subview: true
+  type: sections
+  max_columns: 1
+  sections:
+  - type: grid
+    cards:
+    - type: custom:mushroom-title-card
+      title: Klimaat
+      subtitle: Woonkamertemperatuur en airco-verwachting
+    - type: custom:mushroom-template-card
+      primary: Klimaatmodel
+      secondary: '{% set s = (state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''samenvattingen'') or {}).get(''klimaat'') or {} %}{{ s.get(''zin'', ''Nog geen gegevens.'') }}'
+      multiline_secondary: true
+      icon: mdi:information-outline
+      icon_color: '{% set n = ((state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''samenvattingen'') or {}).get(''klimaat'') or {}).get(''niveau'') %}{{ ''red'' if n == ''onbetrouwbaar'' else (''green'' if n == ''betrouwbaar'' else ''orange'') }}'
+      entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
+      tap_action:
+        action: navigate
+        navigation_path: /energy-management-system/detail-klimaat
+    - type: markdown
+      title: Woonkamertemperatuur per uur
+      content: '{% set t = state_attr(''sensor.woonkamer_energy_management_system_klimaat_projectie_woonkamertemperatuur'', ''traject'') or [] %}{% if t | length == 0 %}Nog geen projectie beschikbaar - de integratie leert per combinatie van buitentemperatuur, rolluikstand en airco.
+
+        {% else %}| Uur | Snel | Betrouwbaar | Buiten | Basis | Metingen |
+
+        |---|---|---|---|---|---|
+
+        {% for u in t %}| {{ u.get(''tijd'') }} | {{ u.get(''kort_termijn_temp_c'') if u.get(''kort_termijn_temp_c'') is not none else ''—'' }} °C | {{ u.get(''betrouwbaar_temp_c'') if u.get(''betrouwbaar_temp_c'') is not none else ''—'' }} °C | {{ u.get(''buitentemp_voorspeld_c'') if u.get(''buitentemp_voorspeld_c'') is not none else ''—'' }} °C | {{ u.get(''basis'') or ''—'' }} | {{ u.get(''aantal_metingen'') if u.get(''aantal_metingen'') is not none else ''—'' }} |
+
+        {% endfor %}{% endif %}
+
+
+        **Snel** valt terug op naburige situaties zodra de exacte
+
+        combinatie te dun bezet is; **Betrouwbaar** komt pas bij genoeg
+
+        metingen in precies die situatie. De kolom Basis zegt waarop de
+
+        snelle schatting rust.
+
+        '
+      grid_options:
+        columns: 12
+        rows: auto
+    - type: custom:mushroom-entity-card
+      entity: sensor.woonkamer_energy_management_system_airco_verwachting_woonkamertemperatuur
+      name: Airco-verwachting
+      tap_action:
+        action: more-info
+- title: Apparaten
+  path: detail-apparaten
+  subview: true
+  type: sections
+  max_columns: 1
+  sections:
+  - type: grid
+    cards:
+    - type: custom:mushroom-title-card
+      title: Apparaten
+      subtitle: Herkende apparaten en wat er te beoordelen valt
+    - type: custom:mushroom-template-card
+      primary: Herkende apparaten
+      secondary: '{% set s = (state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''samenvattingen'') or {}).get(''apparaten'') or {} %}{{ s.get(''zin'', ''Nog geen gegevens.'') }}'
+      multiline_secondary: true
+      icon: mdi:information-outline
+      icon_color: '{% set n = ((state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''samenvattingen'') or {}).get(''apparaten'') or {}).get(''niveau'') %}{{ ''red'' if n == ''onbetrouwbaar'' else (''green'' if n == ''betrouwbaar'' else ''orange'') }}'
+      entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
+      tap_action:
+        action: navigate
+        navigation_path: /energy-management-system/detail-apparaten
+    - type: custom:mushroom-template-card
+      primary: '{% set v = states(''sensor.woonkamer_energy_management_system_nilm_onbevestigde_kandidaten'') | int(-1) %}{{ ''geen nieuwe kandidaten'' if v == 0 else (v ~ '' te beoordelen'' if v > 0 else ''onbekend'') }}'
+      secondary: NILM-kandidaten
+      icon: mdi:help-circle-outline
+      entity: sensor.woonkamer_energy_management_system_nilm_onbevestigde_kandidaten
+      tap_action:
+        action: navigate
+        navigation_path: /energy-management-system/detail-apparaten
+    - type: markdown
+      title: Te beoordelen
+      content: '{% set k = state_attr(''sensor.woonkamer_energy_management_system_nilm_bevestigde_apparaten'', ''kandidaat_naam'') %}{% if k %}**Nieuw apparaat herkend:** {{ k }} ({{ state_attr(''sensor.woonkamer_energy_management_system_nilm_bevestigde_apparaten'', ''kandidaat_vermogen_w'') }} W){% else %}Geen kandidaat op dit moment.{% endif %}
+
+
+        {% set paren = state_attr(''sensor.woonkamer_energy_management_system_nilm_bevestigde_apparaten'', ''waarschijnlijke_duplicaten'') or [] %}{% if paren | length > 0 %}**Mogelijke duplicaten:** {{ paren | length }}
+
+
+        {% for pr in paren %}- {{ pr.get(''apparaat_1'') }} ↔ {{ pr.get(''apparaat_2'') }}
+
+        {% endfor %}{% endif %}
+
+        '
+      grid_options:
+        columns: 12
+        rows: auto
+    - type: entities
+      title: Beoordelen
+      entities:
+      - entity: button.woonkamer_energy_management_system_nilm_kandidaat_1_bevestigen
+      - entity: button.woonkamer_energy_management_system_nilm_kandidaat_1_negeren
+      - entity: button.woonkamer_energy_management_system_nilm_duplicaat_1_bevestigen
+      - entity: button.woonkamer_energy_management_system_nilm_duplicaat_1_negeren
+      grid_options:
+        columns: 12
+        rows: auto
+    - type: markdown
+      title: Herkende apparaten
+      content: '{% set t = state_attr(''sensor.woonkamer_energy_management_system_nilm_bevestigde_apparaten'', ''tabel'') or [] %}{% if t | length == 0 %}Nog geen apparaten herkend.{% else %}{{ state_attr(''sensor.woonkamer_energy_management_system_nilm_bevestigde_apparaten'', ''totaal_aantal'') }} apparaten herkend; hieronder de eerste {{ t | length }}.
+
+
+        | Apparaat | Nu | Trend |
+
+        |---|---|---|
+
+        {% for x in t %}| {{ x.get(''naam'') }} | {{ x.get(''huidig_vermogen_w'') if x.get(''huidig_vermogen_w'') is not none else ''—'' }} W | {{ x.get(''trend'') or ''—'' }} |
+
+        {% endfor %}{% endif %}
+
+        '
+- title: Vaatwasser & wasmachine
+  path: detail-witgoed
+  subview: true
+  type: sections
+  max_columns: 1
+  sections:
+  - type: grid
+    cards:
+    - type: custom:mushroom-title-card
+      title: Vaatwasser & wasmachine
+      subtitle: Cyclusstatus per apparaat
+    - type: custom:mushroom-entity-card
+      entity: sensor.woonkamer_energy_management_system_vaatwasser_cyclus_status
+      name: Vaatwasser
+      tap_action:
+        action: more-info
+    - type: custom:mushroom-entity-card
+      entity: sensor.woonkamer_energy_management_system_wasmachine_cyclus_status
+      name: Wasmachine
+      tap_action:
+        action: more-info
+    - type: custom:mushroom-template-card
+      primary: '{% set m = {''wacht_op_goedkoop_blok'': ''wacht op goedkoop blok'', ''voltooid_vandaag'': ''vandaag al geladen'', ''aan_het_laden'': ''aan het laden''} %}{% set v = states(''sensor.woonkamer_energy_management_system_steelstofzuiger_status'') %}{{ m.get(v, v if v not in [''unknown'',''unavailable'',''''] else ''geen status'') }}'
+      secondary: Steelstofzuiger
+      icon: mdi:vacuum
+      entity: sensor.woonkamer_energy_management_system_steelstofzuiger_status
+      tap_action:
+        action: more-info
+    - type: custom:mushroom-template-card
+      primary: '{% set m = {''wacht_op_goedkoop_blok'': ''wacht op goedkoop blok'', ''voltooid_vandaag'': ''vandaag al geladen'', ''aan_het_laden'': ''aan het laden''} %}{% set v = states(''sensor.woonkamer_energy_management_system_fietsladers_status'') %}{{ m.get(v, v if v not in [''unknown'',''unavailable'',''''] else ''geen status'') }}'
+      secondary: Fietsladers
+      icon: mdi:bike
+      entity: sensor.woonkamer_energy_management_system_fietsladers_status
+      tap_action:
+        action: more-info
+- title: Planning
+  path: detail-planning
+  subview: true
+  type: sections
+  max_columns: 1
+  sections:
+  - type: grid
+    cards:
+    - type: custom:mushroom-title-card
+      title: Planning
+      subtitle: Wat de aansturing nu doet en straks gaat doen
+    - type: custom:mushroom-template-card
+      primary: '{% set m = {''arbitrage_solar_capture'': ''zonoverschot opvangen'', ''default_smart'': ''standaard slim laden'', ''discharging_window'': ''ontladen in duur blok'', ''emergency_low_battery'': ''noodladen bij lage accu'', ''expensive_quarter'': ''duur kwartier'', ''expensive_quarter_no_own_load'': ''duur kwartier, geen eigen verbruik'', ''expensive_quarter_soc_protected'': ''duur kwartier, accu beschermd'', ''force_manual'': ''handmatig overschreven'', ''grid_charging_low_solar'': ''bijladen bij weinig zon'', ''grid_charging_low_solar_extra_dip'': ''bijladen bij extra prijsdip'', ''negative_price'': ''negatieve prijs'', ''no_forecast_data'': ''geen prijsvoorspelling'', ''post_salderen_solar_capture'': ''zon opvangen na saldering''} %}{% set v = states(''sensor.energy_management_system_last_decision_reason'') %}{{ m.get(v, v if v not in [''unknown'',''unavailable'',''''] else ''nog geen beslissing'') }}'
+      secondary: Laatste reden
+      icon: mdi:comment-question-outline
+      entity: sensor.energy_management_system_last_decision_reason
+      tap_action:
+        action: more-info
+    - type: custom:mushroom-template-card
+      primary: '{% set t = state_attr(''sensor.energy_management_system_upcoming_schedule'', ''transitions'') or [] %}{% if t | length == 0 %}nog geen schema{% else %}{{ t | length }} blok(ken) gepland{% endif %}'
+      secondary: '{% set t = state_attr(''sensor.energy_management_system_upcoming_schedule'', ''transitions'') or [] %}{% if t | length > 0 %}Nu {{ t[0].get(''mode'') }} tot {{ as_timestamp(t[0].get(''end'')) | timestamp_custom(''%H:%M'') if t[0].get(''end'') else ''?'' }}{% if t | length > 1 %}, daarna {{ t[1].get(''mode'') }}{% endif %}{% else %}Komend schema{% endif %}'
+      multiline_secondary: true
+      icon: mdi:calendar-clock
+      entity: sensor.energy_management_system_upcoming_schedule
+      tap_action:
+        action: navigate
+        navigation_path: /energy-management-system/detail-planning
+    - type: custom:mushroom-template-card
+      primary: '{% set v = states(''sensor.energy_management_system_simulated_action'') %}{{ v if v not in [''unknown'',''unavailable'',''''] else ''simulatie draait niet'' }}'
+      secondary: Gesimuleerde actie
+      icon: mdi:flask-outline
+      entity: sensor.energy_management_system_simulated_action
+      tap_action:
+        action: more-info
+    - type: custom:mushroom-entity-card
+      entity: sensor.energy_management_system_cheapest_block_start
+      name: Goedkoopste blok
+      tap_action:
+        action: more-info
+    - type: custom:mushroom-entity-card
+      entity: sensor.energy_management_system_discharge_window_start
+      name: Ontlaadvenster
+      tap_action:
+        action: more-info
+    - type: custom:mushroom-template-card
+      primary: '{% set v = states(''sensor.energy_management_system_energy_bridge_check'') %}{{ ''genoeg om uit te stellen'' if v == ''enough_to_postpone'' else (''bijladen nodig'' if v == ''top_up_needed'' else ''nog niet beoordeeld'') }}'
+      secondary: Energie-check
+      icon: mdi:clock-check-outline
+      entity: sensor.energy_management_system_energy_bridge_check
+      tap_action:
+        action: more-info
+    - type: custom:mushroom-template-card
+      primary: '{% set v = states(''sensor.energy_management_system_battery_protection'') %}{{ v ~ '' W ontlaadgrens'' if v not in [''unknown'',''unavailable'',''''] else ''geen grens actief'' }}'
+      secondary: Accubescherming
+      icon: mdi:battery-lock
+      entity: sensor.energy_management_system_battery_protection
+      tap_action:
+        action: more-info
+    - type: markdown
+      title: Komend schema
+      content: '{% set t = state_attr(''sensor.energy_management_system_upcoming_schedule'', ''transitions'') or [] %}{% if t | length == 0 %}Nog geen schema berekend.{% else %}| Van | Tot | Modus | Prijs |
+
+        |---|---|---|---|
+
+        {% for b in t %}| {{ as_timestamp(b.get(''start'')) | timestamp_custom(''%H:%M'') if b.get(''start'') else ''?'' }} | {{ as_timestamp(b.get(''end'')) | timestamp_custom(''%H:%M'') if b.get(''end'') else ''?'' }} | {{ b.get(''mode'') }} | {{ ''%.3f''|format(b.get(''max_price_per_kwh'')) if b.get(''max_price_per_kwh'') is not none else ''—'' }} €/kWh |
+
+        {% endfor %}{% endif %}
+
+        '
+- title: Kosten
+  path: detail-kosten
+  subview: true
+  type: sections
+  max_columns: 1
+  sections:
+  - type: grid
+    cards:
+    - type: custom:mushroom-title-card
+      title: Kosten
+      subtitle: Vandaag, week en maand, en de Zonneplan-vergelijking
+    - type: grid
+      columns: 3
+      square: false
+      cards:
       - type: custom:mushroom-template-card
-        primary: Betrouwbaarheid van de metingen
-        secondary: >-
-          {% set s = (state_attr('sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling', 'samenvattingen') or {}).get('kwaliteit') or {} %}{{ s.get('zin', 'Nog geen gegevens.') }}
-        multiline_secondary: true
-        icon: mdi:information-outline
-        icon_color: >-
-          {% set n = ((state_attr('sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling', 'samenvattingen') or {}).get('kwaliteit') or {}).get('niveau') %}{{ 'red' if n == 'onbetrouwbaar' else ('green' if n == 'betrouwbaar' else 'orange') }}
-        entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
+        primary: € {{ states('sensor.ems_ontlaadwaarde_vandaag') }}
+        secondary: Vandaag
+        icon: mdi:calendar-today
+        icon_color: green
+        entity: sensor.ems_ontlaadwaarde_vandaag
         tap_action:
-          action: navigate
-          navigation_path: /energy-management-system/details
-
+          action: more-info
       - type: custom:mushroom-template-card
-        primary: Zelflerende waarden
-        secondary: >-
-          {% set s = (state_attr('sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling', 'samenvattingen') or {}).get('zelflerend') or {} %}{{ s.get('zin', 'Nog geen gegevens.') }}
-        multiline_secondary: true
-        icon: mdi:information-outline
-        icon_color: >-
-          {% set n = ((state_attr('sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling', 'samenvattingen') or {}).get('zelflerend') or {}).get('niveau') %}{{ 'red' if n == 'onbetrouwbaar' else ('green' if n == 'betrouwbaar' else 'orange') }}
-        entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
+        primary: € {{ states('sensor.ems_ontlaadwaarde_deze_week') }}
+        secondary: Deze week
+        icon: mdi:calendar-week
+        icon_color: green
+        entity: sensor.ems_ontlaadwaarde_deze_week
         tap_action:
-          action: navigate
-          navigation_path: /energy-management-system/details
-
+          action: more-info
       - type: custom:mushroom-template-card
-        primary: GACS-zelfbeoordeling
-        secondary: >-
-          {{ states('sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling') }} verbetermogelijkheid(en) · geen verplichting voor woningen
-        icon: mdi:clipboard-check-outline
-        icon_color: >-
-          {{ 'orange' if states('sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling') | int(0) > 0 else 'green' }}
-        entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
+        primary: € {{ states('sensor.ems_ontlaadwaarde_deze_maand') }}
+        secondary: Deze maand
+        icon: mdi:calendar-month
+        icon_color: green
+        entity: sensor.ems_ontlaadwaarde_deze_maand
         tap_action:
           action: more-info
-
-      - type: custom:mushroom-title-card
-        title: Adviesmodules
-        subtitle: De tien modules en hun gereedheid
-      - type: custom:mushroom-entity-card
-        entity: sensor.woonkamer_energy_management_system_advies_gereedheid_8_modules
-        name: Gereedheid
+      - type: custom:mushroom-template-card
+        primary: € {{ states('sensor.ems_netlaadkosten_vandaag') }}
+        secondary: Vandaag
+        icon: mdi:calendar-today
+        icon_color: red
+        entity: sensor.ems_netlaadkosten_vandaag
         tap_action:
           action: more-info
-      - type: custom:mushroom-entity-card
-        entity: sensor.woonkamer_energy_management_system_mpc_advies_prijsarbitrage_plan
-        name: MPC-advies
+      - type: custom:mushroom-template-card
+        primary: € {{ states('sensor.ems_netlaadkosten_deze_week') }}
+        secondary: Deze week
+        icon: mdi:calendar-week
+        icon_color: red
+        entity: sensor.ems_netlaadkosten_deze_week
         tap_action:
           action: more-info
-      - type: custom:mushroom-entity-card
-        entity: sensor.woonkamer_energy_management_system_monte_carlo_risico_tekortkans
-        name: Monte Carlo
+      - type: custom:mushroom-template-card
+        primary: € {{ states('sensor.ems_netlaadkosten_deze_maand') }}
+        secondary: Deze maand
+        icon: mdi:calendar-month
+        icon_color: red
+        entity: sensor.ems_netlaadkosten_deze_maand
         tap_action:
           action: more-info
-      - type: custom:mushroom-entity-card
-        entity: sensor.woonkamer_energy_management_system_digital_twin_gesimuleerde_soc_winst
-        name: Digital Twin
+    - type: custom:mushroom-template-card
+      primary: '{% set o = state_attr(''sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing'', ''energiekosten_overzicht'') or {} %}{{ (o.get(''stroom'') or {}).get(''week'', ''—'') }} € stroom deze week'
+      secondary: '{% set o = state_attr(''sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing'', ''energiekosten_overzicht'') or {} %}{% set st = o.get(''stroom'') or {} %}{% set g = o.get(''gas'') or {} %}Gas {{ g.get(''week'', ''—'') }} €. {% if st.get(''weektrend_procent'') is not none %}Week {{ ''📈'' if st.weektrend_procent > 0 else ''📉'' }} {{ st.weektrend_procent }}%{% else %}Trend na 14 voltooide dagen.{% endif %}'
+      multiline_secondary: true
+      icon: mdi:chart-line
+      icon_color: blue
+      entity: sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing
+      tap_action:
+        action: navigate
+        navigation_path: /energy-management-system/detail-kosten
+    - type: custom:mushroom-template-card
+      primary: '{% set z = state_attr(''sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing'', ''zonneplan_vergelijking'') or {} %}{{ z.get(''totale_energiekosten_vandaag_eur'', ''—'') }} € vandaag'
+      secondary: '{% set z = state_attr(''sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing'', ''zonneplan_vergelijking'') or {} %}Stroom {{ z.get(''zonneplan_netto_eur'', ''—'') }} € · gas {{ z.get(''zonneplan_gas_vandaag_eur'', ''—'') }} €. {{ ''Eigen berekening klopt met Zonneplan.'' if z.get(''status'') == ''betrouwbaar'' else (z.get(''reden'','''')[:70] ~ ''…'') }}'
+      multiline_secondary: true
+      icon: mdi:cash-multiple
+      icon_color: green
+      entity: sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing
+      tap_action:
+        action: navigate
+        navigation_path: /energy-management-system/detail-kosten
+    - type: grid
+      columns: 2
+      square: false
+      cards:
+      - type: custom:mushroom-template-card
+        primary: '{% set v = states(''sensor.woonkamer_energy_management_system_piekvermogen'') %}{{ v ~ '' W'' if v not in [''unknown'',''unavailable'',''''] else ''nog niet gemeten'' }}'
+        secondary: Piek vandaag
+        icon: mdi:chart-bell-curve
+        icon_color: red
+        entity: sensor.woonkamer_energy_management_system_piekvermogen
         tap_action:
           action: more-info
-      - type: custom:mushroom-entity-card
-        entity: sensor.woonkamer_energy_management_system_digital_twin_nauwkeurigheid
-        name: Twin-nauwkeurigheid
+      - type: custom:mushroom-template-card
+        primary: '{{ state_attr(''sensor.woonkamer_energy_management_system_piekvermogen'', ''deze_maand_w'') }} W'
+        secondary: Piek deze maand
+        icon: mdi:chart-bell-curve
+        icon_color: orange
+        entity: sensor.woonkamer_energy_management_system_piekvermogen
         tap_action:
           action: more-info
-      - type: custom:mushroom-entity-card
-        entity: sensor.woonkamer_energy_management_system_kalman_filtering_soc_pv_verbruik
-        name: Kalman-filtering
+      - type: custom:mushroom-template-card
+        primary: '{{ state_attr(''sensor.woonkamer_energy_management_system_piekvermogen'', ''all_time_w'') }} W'
+        secondary: All-time piek ({{ state_attr('sensor.woonkamer_energy_management_system_piekvermogen', 'all_time_datum') or 'onbekend' }})
+        icon: mdi:trophy-outline
+        icon_color: amber
+        entity: sensor.woonkamer_energy_management_system_piekvermogen
         tap_action:
           action: more-info
-      - type: custom:mushroom-entity-card
-        entity: sensor.woonkamer_energy_management_system_model_en_parameternauwkeurigheid
-        name: Modelnauwkeurigheid
+      - type: custom:mushroom-template-card
+        primary: €{{ states('sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing') }}
+        secondary: Besparing vandaag
+        icon: mdi:cash-check
+        icon_color: green
+        entity: sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing
         tap_action:
           action: more-info
+- title: Besparing
+  path: detail-besparing
+  subview: true
+  type: sections
+  max_columns: 1
+  sections:
+  - type: grid
+    cards:
+    - type: custom:mushroom-title-card
+      title: Besparing
+      subtitle: Wat de accu oplevert, plus CO2 en cycli
+    - type: custom:mushroom-template-card
+      primary: € {{ states('sensor.woonkamer_energy_management_system_battery_savings_cost_basis_model') }}
+      secondary: Kostprijs € {{ state_attr('sensor.woonkamer_energy_management_system_battery_savings_cost_basis_model', 'cost_basis_eur_per_kwh') }}/kWh
+      icon: mdi:piggy-bank-outline
+      icon_color: '{{ ''green'' if states(''sensor.woonkamer_energy_management_system_battery_savings_cost_basis_model'') | float(0) >= 0 else ''red'' }}'
+      entity: sensor.woonkamer_energy_management_system_battery_savings_cost_basis_model
+      tap_action:
+        action: more-info
+    - type: grid
+      columns: 3
+      square: false
+      cards:
+      - type: custom:mushroom-template-card
+        primary: € {{ states('sensor.ems_accubesparing_vandaag') }}
+        secondary: Besparing vandaag
+        icon: mdi:calendar-today
+        icon_color: '{{ ''green'' if states(''sensor.ems_accubesparing_vandaag'') | float(0) >= 0 else ''red'' }}'
+        entity: sensor.ems_accubesparing_vandaag
+        tap_action:
+          action: more-info
+      - type: custom:mushroom-template-card
+        primary: € {{ states('sensor.ems_accubesparing_deze_week') }}
+        secondary: Besparing deze week
+        icon: mdi:calendar-week
+        icon_color: '{{ ''green'' if states(''sensor.ems_accubesparing_deze_week'') | float(0) >= 0 else ''red'' }}'
+        entity: sensor.ems_accubesparing_deze_week
+        tap_action:
+          action: more-info
+      - type: custom:mushroom-template-card
+        primary: € {{ states('sensor.ems_accubesparing_deze_maand') }}
+        secondary: Besparing deze maand
+        icon: mdi:calendar-month
+        icon_color: '{{ ''green'' if states(''sensor.ems_accubesparing_deze_maand'') | float(0) >= 0 else ''red'' }}'
+        entity: sensor.ems_accubesparing_deze_maand
+        tap_action:
+          action: more-info
+    - type: grid
+      columns: 2
+      square: false
+      cards:
+      - type: custom:mushroom-template-card
+        primary: '{{ states(''sensor.woonkamer_energy_management_system_zelfvoorzieningsratio'') }}%'
+        secondary: Zelfvoorziening
+        icon: mdi:home-battery-outline
+        icon_color: blue
+        entity: sensor.woonkamer_energy_management_system_zelfvoorzieningsratio
+        tap_action:
+          action: more-info
+      - type: custom:mushroom-template-card
+        primary: '{{ state_attr(''sensor.woonkamer_energy_management_system_zelfvoorzieningsratio'', ''zelfconsumptie_procent'') }}%'
+        secondary: Zelfconsumptie
+        icon: mdi:solar-power-variant
+        icon_color: yellow
+        entity: sensor.woonkamer_energy_management_system_zelfvoorzieningsratio
+        tap_action:
+          action: more-info
+    - type: grid
+      columns: 2
+      square: false
+      cards:
+      - type: custom:mushroom-template-card
+        primary: '{{ states(''sensor.woonkamer_energy_management_system_accu_gezondheid_geschat'') }} cycli'
+        secondary: Volledige cycli
+        icon: mdi:battery-heart-variant
+        icon_color: purple
+        entity: sensor.woonkamer_energy_management_system_accu_gezondheid_geschat
+        tap_action:
+          action: more-info
+      - type: custom:mushroom-template-card
+        primary: '{{ state_attr(''sensor.woonkamer_energy_management_system_accu_gezondheid_geschat'', ''geschatte_resterende_capaciteit_procent'') }}%'
+        secondary: Resterende capaciteit
+        icon: mdi:battery-alert-variant-outline
+        icon_color: deep-purple
+        entity: sensor.woonkamer_energy_management_system_accu_gezondheid_geschat
+        tap_action:
+          action: more-info
+    - type: custom:mushroom-template-card
+      primary: '{{ states(''sensor.woonkamer_energy_management_system_co2_uitstoot_vandaag'') }} kg CO2'
+      secondary: Uitstoot vandaag · {{ state_attr('sensor.woonkamer_energy_management_system_co2_uitstoot_vandaag', 'huidige_intensiteit_g_per_kwh') or '?' }} g/kWh
+      icon: mdi:molecule-co2
+      icon_color: grey
+      entity: sensor.woonkamer_energy_management_system_co2_uitstoot_vandaag
+      tap_action:
+        action: more-info
+    - type: custom:mushroom-template-card
+      primary: '{{ states(''sensor.woonkamer_energy_management_system_piekvermogen'') }} W'
+      secondary: Piekvermogen
+      icon: mdi:chart-bell-curve
+      entity: sensor.woonkamer_energy_management_system_piekvermogen
+      tap_action:
+        action: more-info
+    - type: custom:mushroom-template-card
+      primary: '{% set v = states(''sensor.energy_management_system_learned_night_consumption'') %}{{ v ~ '' W'' if v not in [''unknown'',''unavailable'',''''] else ''nog niet geleerd'' }}'
+      secondary: Nachtverbruik
+      icon: mdi:weather-night
+      entity: sensor.energy_management_system_learned_night_consumption
+      tap_action:
+        action: more-info
+- title: Adviesmodules
+  path: detail-advies
+  subview: true
+  type: sections
+  max_columns: 1
+  sections:
+  - type: grid
+    cards:
+    - type: custom:mushroom-title-card
+      title: Adviesmodules
+      subtitle: MPC, Monte Carlo, Digital Twin en Kalman
+    - type: custom:mushroom-template-card
+      primary: Zelflerende waarden
+      secondary: '{% set s = (state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''samenvattingen'') or {}).get(''zelflerend'') or {} %}{{ s.get(''zin'', ''Nog geen gegevens.'') }}'
+      multiline_secondary: true
+      icon: mdi:information-outline
+      icon_color: '{% set n = ((state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''samenvattingen'') or {}).get(''zelflerend'') or {}).get(''niveau'') %}{{ ''red'' if n == ''onbetrouwbaar'' else (''green'' if n == ''betrouwbaar'' else ''orange'') }}'
+      entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
+      tap_action:
+        action: navigate
+        navigation_path: /energy-management-system/detail-advies
+    - type: custom:mushroom-entity-card
+      entity: sensor.woonkamer_energy_management_system_advies_gereedheid_8_modules
+      name: Gereedheid
+      tap_action:
+        action: more-info
+    - type: custom:mushroom-entity-card
+      entity: sensor.woonkamer_energy_management_system_mpc_advies_prijsarbitrage_plan
+      name: MPC-advies
+      tap_action:
+        action: more-info
+    - type: custom:mushroom-entity-card
+      entity: sensor.woonkamer_energy_management_system_monte_carlo_risico_tekortkans
+      name: Monte Carlo
+      tap_action:
+        action: more-info
+    - type: custom:mushroom-entity-card
+      entity: sensor.woonkamer_energy_management_system_digital_twin_gesimuleerde_soc_winst
+      name: Digital Twin
+      tap_action:
+        action: more-info
+    - type: custom:mushroom-entity-card
+      entity: sensor.woonkamer_energy_management_system_digital_twin_nauwkeurigheid
+      name: Twin-nauwkeurigheid
+      tap_action:
+        action: more-info
+    - type: custom:mushroom-entity-card
+      entity: sensor.woonkamer_energy_management_system_kalman_filtering_soc_pv_verbruik
+      name: Kalman-filtering
+      tap_action:
+        action: more-info
+    - type: custom:mushroom-entity-card
+      entity: sensor.woonkamer_energy_management_system_model_en_parameternauwkeurigheid
+      name: Modelnauwkeurigheid
+      tap_action:
+        action: more-info
+    - type: custom:mushroom-template-card
+      primary: Zelflerende waarden
+      secondary: '{% set s = (state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''samenvattingen'') or {}).get(''zelflerend'') or {} %}{{ s.get(''zin'', ''Nog geen gegevens.'') }}'
+      multiline_secondary: true
+      icon: mdi:information-outline
+      icon_color: '{% set n = ((state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''samenvattingen'') or {}).get(''zelflerend'') or {}).get(''niveau'') %}{{ ''red'' if n == ''onbetrouwbaar'' else (''green'' if n == ''betrouwbaar'' else ''orange'') }}'
+      entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
+      tap_action:
+        action: navigate
+        navigation_path: /energy-management-system/detail-advies
+- title: Meetkwaliteit
+  path: detail-kwaliteit
+  subview: true
+  type: sections
+  max_columns: 1
+  sections:
+  - type: grid
+    cards:
+    - type: custom:mushroom-title-card
+      title: Meetkwaliteit
+      subtitle: Aandachtspunten en betrouwbaarheid per grootheid
+    - type: custom:mushroom-template-card
+      primary: Betrouwbaarheid van de metingen
+      secondary: '{% set s = (state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''samenvattingen'') or {}).get(''kwaliteit'') or {} %}{{ s.get(''zin'', ''Nog geen gegevens.'') }}'
+      multiline_secondary: true
+      icon: mdi:information-outline
+      icon_color: '{% set n = ((state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''samenvattingen'') or {}).get(''kwaliteit'') or {}).get(''niveau'') %}{{ ''red'' if n == ''onbetrouwbaar'' else (''green'' if n == ''betrouwbaar'' else ''orange'') }}'
+      entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
+      tap_action:
+        action: navigate
+        navigation_path: /energy-management-system/detail-kwaliteit
+    - type: custom:mushroom-template-card
+      primary: GACS-zelfbeoordeling
+      secondary: '{{ states(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'') }} verbetermogelijkheid(en) · geen verplichting voor woningen'
+      icon: mdi:clipboard-check-outline
+      icon_color: '{{ ''orange'' if states(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'') | int(0) > 0 else ''green'' }}'
+      entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
+      tap_action:
+        action: more-info
+    - type: markdown
+      title: Aandachtspunten
+      content: '{% set p = state_attr(''sensor.woonkamer_energy_management_system_system_status'', ''aandachtspunten'') or [] %}{% if p | length == 0 %}✅ Geen aandachtspunten.{% else %}{% for punt in p %}- {{ punt }}
 
-  - title: Systeem
-    path: systeem
-    subview: true
-    type: sections
-    sections:
-      - type: grid
-        cards:
-          - type: custom:mushroom-title-card
-            title: Accumodules
-            subtitle: Celspreiding en onderlinge afwijking
-
-          - type: custom:mushroom-template-card
-            primary: Gezondheid accumodules
-            secondary: >-
-              {% set s = (state_attr('sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling', 'samenvattingen') or {}).get('accumodules') or {} %}{{ s.get('zin', 'Nog geen gegevens.') }}
-            multiline_secondary: true
-            icon: mdi:information-outline
-            icon_color: >-
-              {% set n = ((state_attr('sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling', 'samenvattingen') or {}).get('accumodules') or {}).get('niveau') %}{{ 'red' if n == 'onbetrouwbaar' else ('green' if n == 'betrouwbaar' else 'orange') }}
-            entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
-            tap_action:
-              action: navigate
-              navigation_path: /energy-management-system/details
-
-      - type: grid
-        cards:
-          - type: custom:mushroom-title-card
-            title: Apparaten
-            subtitle: Herkende huishoudapparaten en hun verbruik
-
-          - type: custom:mushroom-template-card
-            primary: Herkende apparaten
-            secondary: >-
-              {% set s = (state_attr('sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling', 'samenvattingen') or {}).get('apparaten') or {} %}{{ s.get('zin', 'Nog geen gegevens.') }}
-            multiline_secondary: true
-            icon: mdi:information-outline
-            icon_color: >-
-              {% set n = ((state_attr('sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling', 'samenvattingen') or {}).get('apparaten') or {}).get('niveau') %}{{ 'red' if n == 'onbetrouwbaar' else ('green' if n == 'betrouwbaar' else 'orange') }}
-            entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
-            tap_action:
-              action: navigate
-              navigation_path: /energy-management-system/details
-
-      - type: grid
-        cards:
-          - type: custom:mushroom-title-card
-            title: Zelflerend
-            subtitle: Waarden die de integratie zelf leert
-
-          - type: custom:mushroom-template-card
-            primary: Zelflerende waarden
-            secondary: >-
-              {% set s = (state_attr('sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling', 'samenvattingen') or {}).get('zelflerend') or {} %}{{ s.get('zin', 'Nog geen gegevens.') }}
-            multiline_secondary: true
-            icon: mdi:information-outline
-            icon_color: >-
-              {% set n = ((state_attr('sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling', 'samenvattingen') or {}).get('zelflerend') or {}).get('niveau') %}{{ 'red' if n == 'onbetrouwbaar' else ('green' if n == 'betrouwbaar' else 'orange') }}
-            entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
-            tap_action:
-              action: navigate
-              navigation_path: /energy-management-system/details
-
-      - type: grid
-        cards:
-          - type: custom:mushroom-title-card
-            title: Klimaat & water
-            subtitle: Woonkamertemperatuur en waterverbruik
-
-          - type: custom:mushroom-template-card
-            primary: Klimaatmodel
-            secondary: >-
-              {% set s = (state_attr('sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling', 'samenvattingen') or {}).get('klimaat') or {} %}{{ s.get('zin', 'Nog geen gegevens.') }}
-            multiline_secondary: true
-            icon: mdi:information-outline
-            icon_color: >-
-              {% set n = ((state_attr('sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling', 'samenvattingen') or {}).get('klimaat') or {}).get('niveau') %}{{ 'red' if n == 'onbetrouwbaar' else ('green' if n == 'betrouwbaar' else 'orange') }}
-            entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
-            tap_action:
-              action: navigate
-              navigation_path: /energy-management-system/details
-
-          - type: custom:mushroom-template-card
-            primary: Waterverbruik vandaag
-            secondary: >-
-              {% set s = (state_attr('sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling', 'samenvattingen') or {}).get('water') or {} %}{{ s.get('zin', 'Nog geen gegevens.') }}
-            multiline_secondary: true
-            icon: mdi:information-outline
-            icon_color: >-
-              {% set n = ((state_attr('sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling', 'samenvattingen') or {}).get('water') or {}).get('niveau') %}{{ 'red' if n == 'onbetrouwbaar' else ('green' if n == 'betrouwbaar' else 'orange') }}
-            entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
-            tap_action:
-              action: navigate
-              navigation_path: /energy-management-system/details
-
-      - type: grid
-        cards:
-          - type: custom:mushroom-title-card
-            title: Apparaten in detail
-            subtitle: Cyclusstatus per apparaat en openstaande kandidaten
-          - type: custom:mushroom-entity-card
-            entity: sensor.woonkamer_energy_management_system_vaatwasser_cyclus_status
-            name: Vaatwasser
-            tap_action:
-              action: more-info
-          - type: custom:mushroom-entity-card
-            entity: sensor.woonkamer_energy_management_system_wasmachine_cyclus_status
-            name: Wasmachine
-            tap_action:
-              action: more-info
-          - type: custom:mushroom-template-card
-            primary: >-
-              {% set m = {'wacht_op_goedkoop_blok': 'wacht op goedkoop blok', 'voltooid_vandaag': 'vandaag al geladen', 'aan_het_laden': 'aan het laden'} %}{% set v = states('sensor.woonkamer_energy_management_system_steelstofzuiger_status') %}{{ m.get(v, v if v not in ['unknown','unavailable',''] else 'geen status') }}
-            secondary: Steelstofzuiger
-            icon: mdi:vacuum
-            entity: sensor.woonkamer_energy_management_system_steelstofzuiger_status
-            tap_action:
-              action: more-info
-          - type: custom:mushroom-template-card
-            primary: >-
-              {% set m = {'wacht_op_goedkoop_blok': 'wacht op goedkoop blok', 'voltooid_vandaag': 'vandaag al geladen', 'aan_het_laden': 'aan het laden'} %}{% set v = states('sensor.woonkamer_energy_management_system_fietsladers_status') %}{{ m.get(v, v if v not in ['unknown','unavailable',''] else 'geen status') }}
-            secondary: Fietsladers
-            icon: mdi:bike
-            entity: sensor.woonkamer_energy_management_system_fietsladers_status
-            tap_action:
-              action: more-info
-          - type: custom:mushroom-template-card
-            primary: >-
-              {% set v = states('sensor.woonkamer_energy_management_system_nilm_onbevestigde_kandidaten') | int(-1) %}{{ 'geen nieuwe kandidaten' if v == 0 else (v ~ ' te beoordelen' if v > 0 else 'onbekend') }}
-            secondary: NILM-kandidaten
-            icon: mdi:help-circle-outline
-            entity: sensor.woonkamer_energy_management_system_nilm_onbevestigde_kandidaten
-            tap_action:
-              action: navigate
-              navigation_path: /energy-management-system/details
-
-  - title: Financieel
-    path: financieel
-    subview: true
-    type: sections
-    sections:
-      - type: grid
-        cards:
-          - type: custom:mushroom-template-card
-            primary: >-
-              € {{
-              states('sensor.woonkamer_energy_management_system_battery_savings_cost_basis_model')
-              }}
-            secondary: >-
-              Kostprijs € {{
-              state_attr('sensor.woonkamer_energy_management_system_battery_savings_cost_basis_model',
-              'cost_basis_eur_per_kwh') }}/kWh
-            icon: mdi:piggy-bank-outline
-            icon_color: >-
-              {{ 'green' if
-              states('sensor.woonkamer_energy_management_system_battery_savings_cost_basis_model')
-              | float(0) >= 0 else 'red' }}
-            entity: >-
-              sensor.woonkamer_energy_management_system_battery_savings_cost_basis_model
-            tap_action:
-              action: more-info
-
-          - type: grid
-            columns: 2
-            square: false
-            cards:
-              - type: custom:mushroom-template-card
-                primary: >-
-                  € {{
-                  states('sensor.woonkamer_energy_management_system_discharge_value_expensive_quarters')
-                  }}
-                secondary: Waarde ontladen
-                icon: mdi:cash-plus
-                icon_color: green
-                entity: >-
-                  sensor.woonkamer_energy_management_system_discharge_value_expensive_quarters
-                tap_action:
-                  action: more-info
-              - type: custom:mushroom-template-card
-                primary: >-
-                  € {{
-                  states('sensor.woonkamer_energy_management_system_charge_cost_grid_charging')
-                  }}
-                secondary: Netlaadkosten
-                icon: mdi:cash-minus
-                icon_color: red
-                entity: >-
-                  sensor.woonkamer_energy_management_system_charge_cost_grid_charging
-
-                tap_action:
-                  action: more-info
-          - type: grid
-            columns: 3
-            square: false
-            cards:
-              - type: custom:mushroom-template-card
-                primary: "€ {{ states('sensor.ems_ontlaadwaarde_vandaag') }}"
-                secondary: Vandaag
-                icon: mdi:calendar-today
-                icon_color: green
-                entity: sensor.ems_ontlaadwaarde_vandaag
-                tap_action:
-                  action: more-info
-              - type: custom:mushroom-template-card
-                primary: "€ {{ states('sensor.ems_ontlaadwaarde_deze_week') }}"
-                secondary: Deze week
-                icon: mdi:calendar-week
-                icon_color: green
-                entity: sensor.ems_ontlaadwaarde_deze_week
-                tap_action:
-                  action: more-info
-              - type: custom:mushroom-template-card
-                primary: "€ {{ states('sensor.ems_ontlaadwaarde_deze_maand') }}"
-                secondary: Deze maand
-                icon: mdi:calendar-month
-                icon_color: green
-                entity: sensor.ems_ontlaadwaarde_deze_maand
-                tap_action:
-                  action: more-info
-              - type: custom:mushroom-template-card
-                primary: "€ {{ states('sensor.ems_netlaadkosten_vandaag') }}"
-                secondary: Vandaag
-                icon: mdi:calendar-today
-                icon_color: red
-                entity: sensor.ems_netlaadkosten_vandaag
-                tap_action:
-                  action: more-info
-              - type: custom:mushroom-template-card
-                primary: "€ {{ states('sensor.ems_netlaadkosten_deze_week') }}"
-                secondary: Deze week
-                icon: mdi:calendar-week
-                icon_color: red
-                entity: sensor.ems_netlaadkosten_deze_week
-                tap_action:
-                  action: more-info
-              - type: custom:mushroom-template-card
-                primary: "€ {{ states('sensor.ems_netlaadkosten_deze_maand') }}"
-                secondary: Deze maand
-                icon: mdi:calendar-month
-                icon_color: red
-                entity: sensor.ems_netlaadkosten_deze_maand
-
-                tap_action:
-                  action: more-info
-          - type: grid
-            columns: 3
-            square: false
-            cards:
-              - type: custom:mushroom-template-card
-                primary: "€ {{ states('sensor.ems_accubesparing_vandaag') }}"
-                secondary: Besparing vandaag
-                icon: mdi:calendar-today
-                icon_color: >-
-                  {{ 'green' if states('sensor.ems_accubesparing_vandaag') |
-                  float(0) >= 0 else 'red' }}
-                entity: sensor.ems_accubesparing_vandaag
-                tap_action:
-                  action: more-info
-              - type: custom:mushroom-template-card
-                primary: "€ {{ states('sensor.ems_accubesparing_deze_week') }}"
-                secondary: Besparing deze week
-                icon: mdi:calendar-week
-                icon_color: >-
-                  {{ 'green' if states('sensor.ems_accubesparing_deze_week') |
-                  float(0) >= 0 else 'red' }}
-                entity: sensor.ems_accubesparing_deze_week
-                tap_action:
-                  action: more-info
-              - type: custom:mushroom-template-card
-                primary: "€ {{ states('sensor.ems_accubesparing_deze_maand') }}"
-                secondary: Besparing deze maand
-                icon: mdi:calendar-month
-                icon_color: >-
-                  {{ 'green' if states('sensor.ems_accubesparing_deze_maand') |
-                  float(0) >= 0 else 'red' }}
-                entity: sensor.ems_accubesparing_deze_maand
-
-                tap_action:
-                  action: more-info
-          - type: grid
-            columns: 2
-            square: false
-            cards:
-              - type: custom:mushroom-template-card
-                primary: >-
-                  {{
-                  states('sensor.woonkamer_energy_management_system_reserve_shortfall_days')
-                  }}
-                secondary: Netimport-dagen (7d)
-                icon: mdi:alert-outline
-                icon_color: >-
-                  {{ 'red' if
-                  states('sensor.woonkamer_energy_management_system_reserve_shortfall_days')
-                  | int(0) > 0 else 'grey' }}
-                entity: >-
-                  sensor.woonkamer_energy_management_system_reserve_shortfall_days
-                tap_action:
-                  action: more-info
-              - type: custom:mushroom-template-card
-                primary: >-
-                  {{
-                  states('sensor.woonkamer_energy_management_system_reserve_excess_days')
-                  }}
-                secondary: Overschot-dagen (7d)
-                icon: mdi:trending-up
-                icon_color: >-
-                  {{ 'amber' if
-                  states('sensor.woonkamer_energy_management_system_reserve_excess_days')
-                  | int(0) > 0 else 'grey' }}
-                entity: >-
-                  sensor.woonkamer_energy_management_system_reserve_excess_days
-
-                tap_action:
-                  action: more-info
-          - type: custom:mushroom-template-card
-            primary: >-
-              {% set o = state_attr('sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing', 'energiekosten_overzicht') or {} %}{{ (o.get('stroom') or {}).get('week', '—') }} € stroom deze week
-            secondary: >-
-              {% set o = state_attr('sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing', 'energiekosten_overzicht') or {} %}{% set st = o.get('stroom') or {} %}{% set g = o.get('gas') or {} %}Gas {{ g.get('week', '—') }} €. {% if st.get('weektrend_procent') is not none %}Week {{ '📈' if st.weektrend_procent > 0 else '📉' }} {{ st.weektrend_procent }}%{% else %}Trend na 14 voltooide dagen.{% endif %}
-            multiline_secondary: true
-            icon: mdi:chart-line
-            icon_color: blue
-            entity: sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing
-            tap_action:
-              action: navigate
-              navigation_path: /energy-management-system/details
-          - type: custom:mushroom-template-card
-            primary: >-
-              {% set z = state_attr('sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing', 'zonneplan_vergelijking') or {} %}{{ z.get('totale_energiekosten_vandaag_eur', '—') }} € vandaag
-            secondary: >-
-              {% set z = state_attr('sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing', 'zonneplan_vergelijking') or {} %}Stroom {{ z.get('zonneplan_netto_eur', '—') }} € · gas {{ z.get('zonneplan_gas_vandaag_eur', '—') }} €. {{ 'Eigen berekening klopt met Zonneplan.' if z.get('status') == 'betrouwbaar' else (z.get('reden','')[:70] ~ '…') }}
-            multiline_secondary: true
-            icon: mdi:cash-multiple
-            icon_color: green
-            entity: sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing
-            tap_action:
-              action: navigate
-              navigation_path: /energy-management-system/details
-      - type: grid
-        cards:
-          - type: custom:mushroom-title-card
-            title: EMS-KPI's
-
-          - type: grid
-            columns: 2
-            square: false
-            cards:
-              - type: custom:mushroom-template-card
-                primary: >-
-                  {% set v = states('sensor.woonkamer_energy_management_system_piekvermogen') %}{{ v ~ ' W' if v not in ['unknown','unavailable',''] else 'nog niet gemeten' }}
-                secondary: Piek vandaag
-                icon: mdi:chart-bell-curve
-                icon_color: red
-                entity: sensor.woonkamer_energy_management_system_piekvermogen
-                tap_action:
-                  action: more-info
-              - type: custom:mushroom-template-card
-                primary: >-
-                  {{ state_attr('sensor.woonkamer_energy_management_system_piekvermogen', 'deze_maand_w') }} W
-                secondary: Piek deze maand
-                icon: mdi:chart-bell-curve
-                icon_color: orange
-                entity: sensor.woonkamer_energy_management_system_piekvermogen
-                tap_action:
-                  action: more-info
-              - type: custom:mushroom-template-card
-                primary: >-
-                  {{ state_attr('sensor.woonkamer_energy_management_system_piekvermogen', 'all_time_w') }} W
-                secondary: >-
-                  All-time piek ({{
-                  state_attr('sensor.woonkamer_energy_management_system_piekvermogen', 'all_time_datum')
-                  or 'onbekend' }})
-                icon: mdi:trophy-outline
-                icon_color: amber
-                entity: sensor.woonkamer_energy_management_system_piekvermogen
-                tap_action:
-                  action: more-info
-              - type: custom:mushroom-template-card
-                primary: >-
-                  €{{ states('sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing') }}
-                secondary: Besparing vandaag
-                icon: mdi:cash-check
-                icon_color: green
-
-                entity: sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing
-                tap_action:
-                  action: more-info
-          - type: grid
-            columns: 2
-            square: false
-            cards:
-              - type: custom:mushroom-template-card
-                primary: >-
-                  {{ states('sensor.woonkamer_energy_management_system_zelfvoorzieningsratio') }}%
-                secondary: Zelfvoorziening
-                icon: mdi:home-battery-outline
-                icon_color: blue
-                entity: sensor.woonkamer_energy_management_system_zelfvoorzieningsratio
-                tap_action:
-                  action: more-info
-              - type: custom:mushroom-template-card
-                primary: >-
-                  {{ state_attr('sensor.woonkamer_energy_management_system_zelfvoorzieningsratio', 'zelfconsumptie_procent') }}%
-                secondary: Zelfconsumptie
-                icon: mdi:solar-power-variant
-                icon_color: yellow
-
-                entity: sensor.woonkamer_energy_management_system_zelfvoorzieningsratio
-                tap_action:
-                  action: more-info
-          - type: grid
-            columns: 2
-            square: false
-            cards:
-              - type: custom:mushroom-template-card
-                primary: >-
-                  {{ states('sensor.woonkamer_energy_management_system_accu_gezondheid_geschat') }} cycli
-                secondary: Volledige cycli
-                icon: mdi:battery-heart-variant
-                icon_color: purple
-                entity: sensor.woonkamer_energy_management_system_accu_gezondheid_geschat
-                tap_action:
-                  action: more-info
-              - type: custom:mushroom-template-card
-                primary: >-
-                  {{ state_attr('sensor.woonkamer_energy_management_system_accu_gezondheid_geschat', 'geschatte_resterende_capaciteit_procent') }}%
-                secondary: Resterende capaciteit
-                icon: mdi:battery-alert-variant-outline
-                icon_color: deep-purple
-
-                entity: sensor.woonkamer_energy_management_system_accu_gezondheid_geschat
-                tap_action:
-                  action: more-info
-          - type: custom:mushroom-template-card
-            primary: >-
-              {{ states('sensor.woonkamer_energy_management_system_co2_uitstoot_vandaag') }} kg CO2
-            secondary: >-
-              Uitstoot vandaag · {{
-              state_attr('sensor.woonkamer_energy_management_system_co2_uitstoot_vandaag', 'huidige_intensiteit_g_per_kwh')
-              or '?' }} g/kWh
-            icon: mdi:molecule-co2
-            icon_color: grey
-
-            entity: sensor.woonkamer_energy_management_system_co2_uitstoot_vandaag
-            tap_action:
-              action: more-info
-      - type: grid
-        cards:
-          - type: custom:mushroom-title-card
-            title: Overig
-            subtitle: Piekvermogen en geleerd nachtverbruik
-          - type: custom:mushroom-template-card
-            primary: >-
-              {{ states('sensor.woonkamer_energy_management_system_piekvermogen') }} W
-            secondary: Piekvermogen
-            icon: mdi:chart-bell-curve
-            entity: sensor.woonkamer_energy_management_system_piekvermogen
-            tap_action:
-              action: more-info
-          - type: custom:mushroom-template-card
-            primary: >-
-              {% set v = states('sensor.energy_management_system_learned_night_consumption') %}{{ v ~ ' W' if v not in ['unknown','unavailable',''] else 'nog niet geleerd' }}
-            secondary: Nachtverbruik
-            icon: mdi:weather-night
-            entity: sensor.energy_management_system_learned_night_consumption
-            tap_action:
-              action: more-info
-
-  - title: Verloop
-    path: verloop
-    subview: true
-    type: sections
-    sections:
-      - type: grid
-        cards:
-          - type: custom:mushroom-title-card
-            title: Live
-
-          - type: custom:mushroom-title-card
-            title: Wat doet de integratie nu
-            subtitle: >-
-              Een lopend verhaal in gewone taal, samengesteld uit alle
-              onderdelen (accu, apparaten, water, NILM, klimaat) - puur
-              informatief, stuurt niets aan. Ververst elke tick vanzelf.
-
-          - type: markdown
-            content: >-
-              {{
-              state_attr('sensor.woonkamer_energy_management_system_wat_doet_de_integratie_nu',
-              'verhaal') or 'Nog geen data verwerkt.' }}
-
-          - type: markdown
-            content: >-
-              {% set ontbrekend =
-              state_attr('sensor.woonkamer_energy_management_system_optionele_functies_nog_niet_geconfigureerd',
-              'ontbrekend') or [] %}
-              {% if ontbrekend | length > 0 %}
-              **💡 {{ ontbrekend | length }} optionele functie(s) nog niet
-              geconfigureerd:**
-
-              {% for item in ontbrekend %}
-              - **{{ item.naam }}** — ontgrendelt: {{ item.ontgrendelt }}
-              {% endfor %}
-              {% endif %}
-
-      - type: grid
-        cards:
-          - type: custom:mushroom-title-card
-            title: Geschiedenis
-
-          - type: history-graph
-            title: Verwachte vs. werkelijke modus over tijd
-            hours_to_show: 48
-            entities:
-              - entity: sensor.energy_management_system_expected_operation_mode
-                name: Verwacht
-              - entity: select.zendure_manager_operation
-                name: Werkelijk
-          - type: history-graph
-            title: SoC & verbruik over tijd
-            hours_to_show: 48
-            entities:
-              - entity: sensor.solarflow_2400_ac_electric_level
-                name: SoC (%)
-              - entity: sensor.solarflow_2400_ac_available_kwh
-                name: Beschikbare kWh
-              - entity: sensor.hw_p1_vermogen
-                name: Verbruik (W)
-          - type: history-graph
-            title: Verbruiksprofiel (hele dag) & voorspelling-afwijking over tijd
-            hours_to_show: 168
-            entities:
-              - entity: >-
-                  sensor.woonkamer_energy_management_system_hourly_consumption_profile
-                name: Verbruiksprofiel (huidig uur, W)
-              - entity: sensor.energy_management_system_pv_forecast_accuracy
-                name: PV-voorspelling afwijking (%)
-      - type: grid
-        cards:
-          - type: custom:mushroom-title-card
-            title: Beslissing en planning
-            subtitle: Wat de aansturing nu doet en wat er gepland staat
-          - type: custom:mushroom-template-card
-            primary: >-
-              {% set m = {'arbitrage_solar_capture': 'zonoverschot opvangen', 'default_smart': 'standaard slim laden', 'discharging_window': 'ontladen in duur blok', 'emergency_low_battery': 'noodladen bij lage accu', 'expensive_quarter': 'duur kwartier', 'expensive_quarter_no_own_load': 'duur kwartier, geen eigen verbruik', 'expensive_quarter_soc_protected': 'duur kwartier, accu beschermd', 'force_manual': 'handmatig overschreven', 'grid_charging_low_solar': 'bijladen bij weinig zon', 'grid_charging_low_solar_extra_dip': 'bijladen bij extra prijsdip', 'negative_price': 'negatieve prijs', 'no_forecast_data': 'geen prijsvoorspelling', 'post_salderen_solar_capture': 'zon opvangen na saldering'} %}{% set v = states('sensor.energy_management_system_last_decision_reason') %}{{ m.get(v, v if v not in ['unknown','unavailable',''] else 'nog geen beslissing') }}
-            secondary: Laatste reden
-            icon: mdi:comment-question-outline
-            entity: sensor.energy_management_system_last_decision_reason
-            tap_action:
-              action: more-info
-          - type: custom:mushroom-template-card
-            primary: >-
-              {% set t = state_attr('sensor.energy_management_system_upcoming_schedule', 'transitions') or [] %}{% if t | length == 0 %}nog geen schema{% else %}{{ t | length }} blok(ken) gepland{% endif %}
-            secondary: >-
-              {% set t = state_attr('sensor.energy_management_system_upcoming_schedule', 'transitions') or [] %}{% if t | length > 0 %}Nu {{ t[0].get('mode') }} tot {{ as_timestamp(t[0].get('end')) | timestamp_custom('%H:%M') if t[0].get('end') else '?' }}{% if t | length > 1 %}, daarna {{ t[1].get('mode') }}{% endif %}{% else %}Komend schema{% endif %}
-            multiline_secondary: true
-            icon: mdi:calendar-clock
-            entity: sensor.energy_management_system_upcoming_schedule
-            tap_action:
-              action: navigate
-              navigation_path: /energy-management-system/details
-          - type: custom:mushroom-template-card
-            primary: >-
-              {% set v = states('sensor.energy_management_system_simulated_action') %}{{ v if v not in ['unknown','unavailable',''] else 'simulatie draait niet' }}
-            secondary: Gesimuleerde actie
-            icon: mdi:flask-outline
-            entity: sensor.energy_management_system_simulated_action
-            tap_action:
-              action: more-info
-          - type: custom:mushroom-entity-card
-            entity: sensor.energy_management_system_cheapest_block_start
-            name: Goedkoopste blok
-            tap_action:
-              action: more-info
-          - type: custom:mushroom-entity-card
-            entity: sensor.energy_management_system_discharge_window_start
-            name: Ontlaadvenster
-            tap_action:
-              action: more-info
-          - type: custom:mushroom-template-card
-            primary: >-
-              {% set v = states('sensor.energy_management_system_energy_bridge_check') %}{{ 'genoeg om uit te stellen' if v == 'enough_to_postpone' else ('bijladen nodig' if v == 'top_up_needed' else 'nog niet beoordeeld') }}
-            secondary: Energie-check
-            icon: mdi:clock-check-outline
-            entity: sensor.energy_management_system_energy_bridge_check
-            tap_action:
-              action: more-info
-          - type: custom:mushroom-template-card
-            primary: >-
-              {% set v = states('sensor.energy_management_system_battery_protection') %}{{ v ~ ' W ontlaadgrens' if v not in ['unknown','unavailable',''] else 'geen grens actief' }}
-            secondary: Accubescherming
-            icon: mdi:battery-lock
-            entity: sensor.energy_management_system_battery_protection
-            tap_action:
-              action: more-info
-
-  - title: Details
-    path: details
-    subview: true
-    type: sections
-    max_columns: 1
-    sections:
-      - type: grid
-        column_span: 1
-        cards:
-          - type: custom:mushroom-title-card
-            title: Details
-            subtitle: De onderbouwing achter de samenvattingen
-
-          - type: markdown
-            title: Aandachtspunten
-            content: |
-              {% set p = state_attr('sensor.woonkamer_energy_management_system_system_status', 'aandachtspunten') or [] %}{% if p | length == 0 %}✅ Geen aandachtspunten.{% else %}{% for punt in p %}- {{ punt }}
-              {% endfor %}{% endif %}
+        {% endfor %}{% endif %}
 
 
-              {% set i = state_attr('sensor.woonkamer_energy_management_system_system_status', 'informatief') or [] %}{% if i | length > 0 %}**Ter info** (geen invloed op de status):
 
-              {% for punt in i %}- {{ punt }}
-              {% endfor %}{% endif %}
+        {% set i = state_attr(''sensor.woonkamer_energy_management_system_system_status'', ''informatief'') or [] %}{% if i | length > 0 %}**Ter info** (geen invloed op de status):
 
-          - type: markdown
-            title: Betrouwbaarheid per grootheid
-            content: |
-              {% set rijen = state_attr('sensor.woonkamer_energy_management_system_betrouwbaarheid_gegenereerde_data', 'regels') or [] %}{% if rijen | length == 0 %}Nog geen gegevens.{% else %}{% set ns = namespace(groep='') %}{% for r in rijen %}{% if r.get('groep') != ns.groep %}{% set ns.groep = r.get('groep') %}
 
-              **{{ ns.groep }}**
-              {% endif %}
+        {% for punt in i %}- {{ punt }}
 
-              {{ r.get('label') }} **{{ r.get('naam') }}**{% if r.get('waarde') is not none %} — {{ r.get('waarde') }}{% endif %}  
-              {{ r.get('reden') or '' }}
+        {% endfor %}{% endif %}
 
-              {% endfor %}{% endif %}
+        '
+    - type: markdown
+      title: Betrouwbaarheid per grootheid
+      content: "{% set rijen = state_attr('sensor.woonkamer_energy_management_system_betrouwbaarheid_gegenereerde_data', 'regels') or [] %}{% if rijen | length == 0 %}Nog geen gegevens.{% else %}{% set ns = namespace(groep='') %}{% for r in rijen %}{% if r.get('groep') != ns.groep %}{% set ns.groep = r.get('groep') %}\n\n**{{ ns.groep }}**\n{% endif %}\n\n{{ r.get('label') }} **{{ r.get('naam') }}**{% if r.get('waarde') is not none %} — {{ r.get('waarde') }}{% endif %}  \n{{ r.get('reden') or '' }}\n\n{% endfor %}{% endif %}\n"
+    - type: markdown
+      title: Verbetermogelijkheden
+      content: '{% set a = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''verbetermogelijkheden'') or [] %}{% if a | length == 0 %}Geen verbetermogelijkheden gevonden.{% else %}{% for x in a %}**{{ x.onderwerp }}** — {{ x.waarneming }}
 
-          - type: markdown
-            title: Verbetermogelijkheden
-            content: |
-              {% set a = state_attr('sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling', 'verbetermogelijkheden') or [] %}{% if a | length == 0 %}Geen verbetermogelijkheden gevonden.{% else %}{% for x in a %}**{{ x.onderwerp }}** — {{ x.waarneming }}
 
-              {{ x.advies }}
+        {{ x.advies }}
 
-              {% endfor %}{% endif %}
 
-          - type: markdown
-            title: Accumodules
-            content: |
-              {% set m = state_attr('sensor.woonkamer_energy_management_system_accu_modulegezondheid', 'modules') or [] %}{% if m | length == 0 %}Geen accumodule-sensoren geconfigureerd.{% else %}| Module | Celdelta | Temp | SoC | Vermogen |
-              |---|---|---|---|---|
-              {% for x in m %}| {{ loop.index }} | {{ x.get('cel_delta_v') }} V | {{ x.get('temperatuur_c') }} °C | {{ x.get('soc_percent') }}% | {{ x.get('vermogen_w') }} W |
-              {% endfor %}{% endif %}
+        {% endfor %}{% endif %}
 
-          - type: markdown
-            title: Te beoordelen
-            content: |
-              {% set k = state_attr('sensor.woonkamer_energy_management_system_nilm_bevestigde_apparaten', 'kandidaat_naam') %}{% if k %}**Nieuw apparaat herkend:** {{ k }} ({{ state_attr('sensor.woonkamer_energy_management_system_nilm_bevestigde_apparaten', 'kandidaat_vermogen_w') }} W){% else %}Geen kandidaat op dit moment.{% endif %}
+        '
+- title: Verloop
+  path: detail-verloop
+  subview: true
+  type: sections
+  max_columns: 1
+  sections:
+  - type: grid
+    cards:
+    - type: custom:mushroom-title-card
+      title: Verloop
+      subtitle: Grafieken en de live-uitleg over tijd
+    - type: grid
+      columns: 2
+      square: false
+      cards:
+      - type: custom:mushroom-template-card
+        primary: € {{ states('sensor.woonkamer_energy_management_system_discharge_value_expensive_quarters') }}
+        secondary: Waarde ontladen
+        icon: mdi:cash-plus
+        icon_color: green
+        entity: sensor.woonkamer_energy_management_system_discharge_value_expensive_quarters
+        tap_action:
+          action: more-info
+      - type: custom:mushroom-template-card
+        primary: € {{ states('sensor.woonkamer_energy_management_system_charge_cost_grid_charging') }}
+        secondary: Netlaadkosten
+        icon: mdi:cash-minus
+        icon_color: red
+        entity: sensor.woonkamer_energy_management_system_charge_cost_grid_charging
+        tap_action:
+          action: more-info
+    - type: grid
+      columns: 2
+      square: false
+      cards:
+      - type: custom:mushroom-template-card
+        primary: '{{ states(''sensor.woonkamer_energy_management_system_reserve_shortfall_days'') }}'
+        secondary: Netimport-dagen (7d)
+        icon: mdi:alert-outline
+        icon_color: '{{ ''red'' if states(''sensor.woonkamer_energy_management_system_reserve_shortfall_days'') | int(0) > 0 else ''grey'' }}'
+        entity: sensor.woonkamer_energy_management_system_reserve_shortfall_days
+        tap_action:
+          action: more-info
+      - type: custom:mushroom-template-card
+        primary: '{{ states(''sensor.woonkamer_energy_management_system_reserve_excess_days'') }}'
+        secondary: Overschot-dagen (7d)
+        icon: mdi:trending-up
+        icon_color: '{{ ''amber'' if states(''sensor.woonkamer_energy_management_system_reserve_excess_days'') | int(0) > 0 else ''grey'' }}'
+        entity: sensor.woonkamer_energy_management_system_reserve_excess_days
+        tap_action:
+          action: more-info
+    - type: markdown
+      content: '{{ state_attr(''sensor.woonkamer_energy_management_system_wat_doet_de_integratie_nu'', ''verhaal'') or ''Nog geen data verwerkt.'' }}'
+    - type: markdown
+      content: '{% set ontbrekend = state_attr(''sensor.woonkamer_energy_management_system_optionele_functies_nog_niet_geconfigureerd'', ''ontbrekend'') or [] %} {% if ontbrekend | length > 0 %} **💡 {{ ontbrekend | length }} optionele functie(s) nog niet geconfigureerd:**
 
-              {% set paren = state_attr('sensor.woonkamer_energy_management_system_nilm_bevestigde_apparaten', 'waarschijnlijke_duplicaten') or [] %}{% if paren | length > 0 %}**Mogelijke duplicaten:** {{ paren | length }}
-
-              {% for pr in paren %}- {{ pr.get('apparaat_1') }} ↔ {{ pr.get('apparaat_2') }}
-              {% endfor %}{% endif %}
-            grid_options:
-              columns: 12
-              rows: auto
-
-          - type: entities
-            title: Beoordelen
-            entities:
-              - entity: button.woonkamer_energy_management_system_nilm_kandidaat_1_bevestigen
-              - entity: button.woonkamer_energy_management_system_nilm_kandidaat_1_negeren
-              - entity: button.woonkamer_energy_management_system_nilm_duplicaat_1_bevestigen
-              - entity: button.woonkamer_energy_management_system_nilm_duplicaat_1_negeren
-            grid_options:
-              columns: 12
-              rows: auto
-
-          - type: markdown
-            title: Herkende apparaten
-            content: |
-              {% set t = state_attr('sensor.woonkamer_energy_management_system_nilm_bevestigde_apparaten', 'tabel') or [] %}{% if t | length == 0 %}Nog geen apparaten herkend.{% else %}{{ state_attr('sensor.woonkamer_energy_management_system_nilm_bevestigde_apparaten', 'totaal_aantal') }} apparaten herkend; hieronder de eerste {{ t | length }}.
-
-              | Apparaat | Nu | Trend |
-              |---|---|---|
-              {% for x in t %}| {{ x.get('naam') }} | {{ x.get('huidig_vermogen_w') if x.get('huidig_vermogen_w') is not none else '—' }} W | {{ x.get('trend') or '—' }} |
-              {% endfor %}{% endif %}
-
-          - type: markdown
-            title: Woonkamertemperatuur per uur
-            content: |
-              {% set t = state_attr('sensor.woonkamer_energy_management_system_klimaat_projectie_woonkamertemperatuur', 'traject') or [] %}{% if t | length == 0 %}Nog geen projectie beschikbaar - de integratie leert per combinatie van buitentemperatuur, rolluikstand en airco.
-              {% else %}| Uur | Snel | Betrouwbaar | Buiten | Basis | Metingen |
-              |---|---|---|---|---|---|
-              {% for u in t %}| {{ u.get('tijd') }} | {{ u.get('kort_termijn_temp_c') if u.get('kort_termijn_temp_c') is not none else '—' }} °C | {{ u.get('betrouwbaar_temp_c') if u.get('betrouwbaar_temp_c') is not none else '—' }} °C | {{ u.get('buitentemp_voorspeld_c') if u.get('buitentemp_voorspeld_c') is not none else '—' }} °C | {{ u.get('basis') or '—' }} | {{ u.get('aantal_metingen') if u.get('aantal_metingen') is not none else '—' }} |
-              {% endfor %}{% endif %}
-
-              **Snel** valt terug op naburige situaties zodra de exacte
-              combinatie te dun bezet is; **Betrouwbaar** komt pas bij genoeg
-              metingen in precies die situatie. De kolom Basis zegt waarop de
-              snelle schatting rust.
-            grid_options:
-              columns: 12
-              rows: auto
-
-          - type: markdown
-            title: Komend schema
-            content: |
-              {% set t = state_attr('sensor.energy_management_system_upcoming_schedule', 'transitions') or [] %}{% if t | length == 0 %}Nog geen schema berekend.{% else %}| Van | Tot | Modus | Prijs |
-              |---|---|---|---|
-              {% for b in t %}| {{ as_timestamp(b.get('start')) | timestamp_custom('%H:%M') if b.get('start') else '?' }} | {{ as_timestamp(b.get('end')) | timestamp_custom('%H:%M') if b.get('end') else '?' }} | {{ b.get('mode') }} | {{ '%.3f'|format(b.get('max_price_per_kwh')) if b.get('max_price_per_kwh') is not none else '—' }} €/kWh |
-              {% endfor %}{% endif %}
-
-          - type: markdown
-            title: Waterontharder
-            content: |
-              {% set r = state_attr('sensor.woonkamer_energy_management_system_waterverbruik', 'waterontharder_laatste_regeneratie') %}{% if r %}Laatste regeneratie: **{{ as_timestamp(r) | timestamp_custom('%-d %b %H:%M') }}** ({{ relative_time(as_datetime(r)) }} geleden).{% else %}Nog geen regeneratie waargenomen.{% endif %}
-
-              {% set s = state_attr('sensor.woonkamer_energy_management_system_waterverbruik', 'recente_gebruiksmomenten') or [] %}{% set ns = namespace(n=0) %}{% for x in s %}{%- if x.waarschijnlijk_waterontharder %}{% set ns.n = ns.n + 1 %}{%- endif %}{%- endfor %}{{ ns.n }} van de laatste {{ s | length }} gebruiksmomenten was een regeneratie.
-
-              _Herkend aan een nachtelijke sessie van minstens 10 liter (de volumedrempel uit v1.9.2 voorkomt dat een kleine tap onterecht meetelt)._
-            grid_options:
-              columns: 12
-              rows: auto
-
-          - type: markdown
-            title: Waterverbruik vandaag
-            content: |
-              {% set alles = state_attr('sensor.woonkamer_energy_management_system_waterverbruik', 'recente_gebruiksmomenten') or [] %}{% set dag = now().strftime('%Y-%m-%d') %}{% set ns = namespace(v=[]) %}{% for s in alles %}{%- if s.gestart and dag in s.gestart %}{%- set ns.v = ns.v + [s] %}{%- endif %}{%- endfor %}{% if ns.v | length == 0 %}Nog geen gebruiksmomenten vandaag.{% else %}| Gestart | Duur | Volume |
-              |---|---|---|
-              {% for s in ns.v %}| {{ as_timestamp(s.gestart) | timestamp_custom('%H:%M') }} | {{ s.duur_minuten }} min | {{ s.liter }} L |
-              {% endfor %}{% endif %}
-
-          - type: custom:mushroom-title-card
-            title: Zon en klimaat
-            subtitle: Installatieprofiel, voorspelbias en airco
-          - type: custom:mushroom-entity-card
-            entity: sensor.woonkamer_energy_management_system_pv_installatieprofiel
-            name: PV-installatieprofiel
-            tap_action:
-              action: more-info
-          - type: custom:mushroom-template-card
-            primary: >-
-              {% set v = states('sensor.woonkamer_energy_management_system_pv_hourly_forecast_bias') %}{{ v if v not in ['unknown','unavailable',''] else 'buiten daglichturen' }}
-            secondary: >-
-              {% set p = state_attr('sensor.woonkamer_energy_management_system_pv_hourly_forecast_bias', 'profile_confident') or {} %}PV-voorspelling bias{% if p | length > 0 %} · {{ p | length }} uren geleerd{% endif %}
-            icon: mdi:weather-partly-cloudy
-            entity: sensor.woonkamer_energy_management_system_pv_hourly_forecast_bias
-            tap_action:
-              action: more-info
-          - type: custom:mushroom-entity-card
-            entity: sensor.woonkamer_energy_management_system_airco_verwachting_woonkamertemperatuur
-            name: Airco-verwachting
-            tap_action:
-              action: more-info
+        {% for item in ontbrekend %} - **{{ item.naam }}** — ontgrendelt: {{ item.ontgrendelt }} {% endfor %} {% endif %}'
+    - type: history-graph
+      title: Verwachte vs. werkelijke modus over tijd
+      hours_to_show: 48
+      entities:
+      - entity: sensor.energy_management_system_expected_operation_mode
+        name: Verwacht
+      - entity: select.zendure_manager_operation
+        name: Werkelijk
+    - type: history-graph
+      title: SoC & verbruik over tijd
+      hours_to_show: 48
+      entities:
+      - entity: sensor.solarflow_2400_ac_electric_level
+        name: SoC (%)
+      - entity: sensor.solarflow_2400_ac_available_kwh
+        name: Beschikbare kWh
+      - entity: sensor.hw_p1_vermogen
+        name: Verbruik (W)
+    - type: history-graph
+      title: Verbruiksprofiel (hele dag) & voorspelling-afwijking over tijd
+      hours_to_show: 168
+      entities:
+      - entity: sensor.woonkamer_energy_management_system_hourly_consumption_profile
+        name: Verbruiksprofiel (huidig uur, W)
+      - entity: sensor.energy_management_system_pv_forecast_accuracy
+        name: PV-voorspelling afwijking (%)

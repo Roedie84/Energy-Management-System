@@ -515,6 +515,190 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Compactere landingspagina en PV-voorspelkwaliteit (v1.17.2)
+
+**Gemeld**: *"Tevens de landingspagina beter sorteren, veel lege vlakken
+dus veel scrollwerk. Ook wil ik meer analyse parameters zien, bijvoorbeeld
+hoe goed is de voorspellende PV opwek."*
+
+### Waar het wit vandaan kwam
+
+Vier van de vijf secties hadden een **oneven** aantal tegels op halve
+breedte, wat telkens een gat rechtsonder gaf. En de statustegels stonden
+op `multiline_secondary` met een hele zin erin — naast een tegel van één
+regel geeft dat een hoog vak met veel wit eronder.
+
+Besturing, Status per onderwerp en Meer bekijken staan nu op **vier
+kolommen**: drie per rij in plaats van twee. De labels zijn navenant
+ingekort — "Accu en apparaten" werd "Accu", "Vaatwasser, wasmachine"
+werd "Witgoed".
+
+### Hoe goed is de PV-voorspelling?
+
+Er werd alleen de geleerde **bias** getoond: −11,6%. Die zegt of Solcast
+structureel te hoog of te laag zit, maar niets over hoe betrouwbaar een
+losse dag is.
+
+Uit dezelfde gegevens viel al veel meer af te leiden:
+
+| Maat | Waarde | Wat het zegt |
+|---|---|---|
+| Bias | −11,6% | structureel te hoog |
+| Gemiddelde fout | **15,2%** | hoe ver een dag er gemiddeld naast zit |
+| Mediaan fout | 10,4% | de typische dag |
+| Spreiding | 14,3% | hoe wisselvallig |
+| Slechtste dag | 37,2% | |
+| Binnen 10% | 2 van 7 dagen | |
+| Binnen 20% | 5 van 7 dagen | |
+
+**Bias en fout zijn verschillende dingen.** Wie alleen de bias ziet,
+denkt dat corrigeren het probleem oplost — maar dan blijft die spreiding
+van 14,3% over. Dat is wat telt als de reserveberekening op deze
+voorspelling vertrouwt.
+
+Er staat ook een duiding bij, want "15,2%" is een getal zonder schaal:
+*"Bruikbaar als richting, maar reken op speling: bij een voorspelling van
+20 kWh is dat al enkele kilowattuur."*
+
+Te zien op de PV-pagina en in de diagnostiek-export.
+
+### Twee eigen tests moesten mee
+
+De regel "geen tabellen buiten Overzicht" stamt uit v1.12.0, toen alles
+op één niveau stond en elke tabel meteen in beeld kwam. Detailpagina's
+zijn juist **bedoeld** voor tabellen — dat is wat er achter de doorklik
+hoort te zitten.
+
+En de labeltest sloeg terecht aan op de smallere tegels: op vier kolommen
+passen vijftien tekens in plaats van tweeëntwintig.
+
+### Getest
+
+Nieuw `tests/test_pv_forecast_quality.py`, 13 tests: bias en fout zijn
+gescheiden, de slechtste dag wordt getoond, dagen binnen een marge worden
+geteld, de duiding past bij de kwaliteit, te weinig dagen zegt dat, geen
+tracker geeft geen fout, en het staat in de export én op de PV-pagina.
+
+**Volledige testsuite**: 1454 tests, allemaal groen.
+
+## Twaalf pagina's, elk één onderwerp (v1.17.1)
+
+**Gemeld**: *"Wat mij betreft meer subviews, dan maar meer, maar
+specifiekere info waar ik naar wil kijken, PV = PV, accu = accu, water =
+water etc."*
+
+De opsplitsing van v1.17.0 was nog te grof: de vier tabbladen Systeem,
+Financieel, Verloop en Kwaliteit telden **11 tot 16 kaarten** met
+onderwerpen door elkaar. Op Systeem stonden accu, apparaten, klimaat én
+water op één pagina.
+
+### Nu twaalf pagina's
+
+| Pagina | Kaarten |
+|---|---|
+| PV / zon | 3 |
+| Accu | 3 |
+| Water | 4 |
+| Klimaat | 4 |
+| Apparaten | 6 |
+| Vaatwasser & wasmachine | 5 |
+| Planning | 9 |
+| Kosten | 5 |
+| Besparing | 8 |
+| Adviesmodules | 10 |
+| Meetkwaliteit | 6 |
+| Verloop | 8 |
+
+Alle 59 kaarten uit de gemengde tabbladen zijn verdeeld op **inhoud**,
+niet op herkomst — een waterkaart die op Systeem stond, hoort nu bij
+Water.
+
+### Wat er zichtbaar blijft
+
+Alleen Overzicht, plus Visueel en Meldingen. De twaalf onderwerp-pagina's
+zijn subviews, bereikbaar via de statustegels en de sectie "Meer
+bekijken".
+
+Elke tegel wijst naar zijn eigen onderwerp, en er staat een test op dat
+geen enkele pagina zonder ingang blijft — twee raakten dat tijdens het
+herbouwen kwijt en zijn hersteld.
+
+### Een bekende valkuil opnieuw geraakt
+
+Het dashboard is via `yaml.dump` herschreven, en dat verdubbelt
+aanhalingstekens in Jinja op schijf. Dat is precies waarom in **v1.10.1**
+een YAML-ronde juist werd vermeden.
+
+Na parsing is de Jinja identiek — Home Assistant leest het correct —
+maar tests die op de rúwe tekst zochten, faalden. Die lezen nu via de
+geparste kaarten, en er staat een test op dat er geen verdubbeling
+binnen een naam ontstaat.
+
+### Niets kwijtgeraakt
+
+Alle 55 sensoren hebben een plek, geen dode navigatiepaden, geen
+onbereikbare pagina's, 143 kaarten in totaal.
+
+### Getest
+
+Drie tests erbij: elke pagina dekt één onderwerp, de gemengde tabbladen
+zijn weg, en de Jinja overleeft de YAML-herschrijving.
+
+**Volledige testsuite**: 1441 tests, allemaal groen.
+
+## Eén detailpagina per onderwerp (v1.17.0)
+
+**Gemeld**: *"Op de tabbladen staat zoveel in dat het nog niet
+overzichtelijk wordt. Kun je specifieke tabbladen maken voor alle
+facetten? Dus meer info accu bijvoorbeeld toont alleen info over de
+accu."*
+
+Terecht. De verzamelpagina telde **zestien kaarten en bijna 6000
+tekens** — niet overzichtelijker dan de tabbladen die er in v1.12.0 voor
+waren opgeruimd. Het probleem was alleen verplaatst.
+
+### Zeven pagina's in plaats van één
+
+| Pagina | Inhoud |
+|---|---|
+| **Accu** | celspreiding, temperatuur en vermogen per module |
+| **Apparaten** | herkende apparaten, kandidaten en beoordeelknoppen |
+| **Klimaat** | woonkamertemperatuur per uur |
+| **Water** | verbruik en waterontharder |
+| **Planning** | wat de aansturing de komende uren gaat doen |
+| **Zon** | installatieprofiel en voorspelnauwkeurigheid |
+| **Meetkwaliteit** | aandachtspunten en betrouwbaarheid per grootheid |
+
+Elke pagina houdt hooguit zes kaarten en 2500 tekens — daar staat een
+test op, zodat de indeling niet stilaan weer te grof wordt.
+
+### Elke tegel wijst naar zijn eigen onderwerp
+
+Zeventien tegels zijn omgeleid. Een accu-tegel komt op de accupagina uit,
+een watertegel op de waterpagina. Er staat een test op dat dit klopt: een
+tegel die op de verkeerde pagina uitkomt is erger dan geen doorklik, want
+dan zoek je op de verkeerde plek.
+
+### Niets kwijtgeraakt
+
+Alle zestien kaarten zijn verdeeld, geen enkele is blijven liggen. Een
+test controleert dat de tien inhoudelijke kaarten er nog zijn, en een
+tweede dat elke pagina een ingang heeft.
+
+### Onderweg
+
+Negentien tests zochten naar één pagina "Details". Die helpers kijken nu
+naar het pad-voorvoegsel `detail-` en verzamelen de kaarten over alle
+pagina's. Twee aannames moesten ook mee: een detailpagina mág nu klein
+zijn — dat is juist het doel — en het navigatiepad heet niet meer
+`/details`.
+
+### Getest
+
+Nieuw `tests/test_detail_pages_per_topic.py`, 8 tests.
+
+**Volledige testsuite**: 1438 tests, allemaal groen.
+
 ## Zon via de accu telt nu als zelfconsumptie (v1.16.9)
 
 **Gemeld**: *"Als de accu alleen door PV of gedeeltelijk door PV is

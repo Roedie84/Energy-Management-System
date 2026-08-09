@@ -3702,6 +3702,8 @@ class GacsAssessmentSensor(SensorEntity):
         return {
             # v1.12.0: één zin per onderwerp voor de compacte tabbladen.
             "samenvattingen": self._coordinator.get_topic_summaries(),
+            # v1.17.2: voorspelkwaliteit voor de PV-detailpagina.
+            "pv_voorspelkwaliteit": self._coordinator.get_pv_forecast_quality(),
             **self._coordinator.get_gacs_assessment(),
             "note": (
                 "De vier eisen komen uit het Besluit Bouwwerken "

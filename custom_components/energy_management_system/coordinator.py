@@ -3729,6 +3729,89 @@ class EnergyManagementSystemCoordinator:
             return None
         return max(laatste) - min(laatste)
 
+    def get_pv_forecast_quality(self) -> dict:
+        """Hoe goed voorspelt Solcast de dagopwek? (v1.17.2)
+
+        Gevraagd: "Ook wil ik meer analyse parameters zien, bijvoorbeeld
+        hoe goed is de voorspellende PV opwek."
+
+        Er werd alleen de geleerde BIAS getoond - de gemiddelde
+        afwijking. Die zegt of de voorspelling structureel te hoog of te
+        laag zit, maar niet hoe betrouwbaar een losse dag is.
+
+        Bij deze installatie: bias -11,6%, maar de gemiddelde ABSOLUTE
+        fout is 15,2% en de slechtste dag zat er 37,2% naast. Corrigeer
+        je de bias, dan blijft die spreiding over - en dat is wat je
+        moet weten als de reserveberekening op deze voorspelling
+        vertrouwt.
+        """
+        tracker = self.solar_tracker
+        afwijkingen = [
+            x for x in (getattr(tracker, "deviation_history", None) or [])
+            if x is not None
+        ]
+        if not afwijkingen:
+            return {
+                "beschikbaar": False,
+                "reden": "Nog geen voltooide dagen om mee te vergelijken.",
+            }
+
+        absoluut = [abs(x) for x in afwijkingen]
+        binnen_10 = sum(1 for x in absoluut if x <= 10)
+        binnen_20 = sum(1 for x in absoluut if x <= 20)
+        n = len(afwijkingen)
+
+        return {
+            "beschikbaar": True,
+            "dagen": n,
+            # De bias zegt de RICHTING: structureel te hoog of te laag.
+            "bias_procent": round(statistics.mean(afwijkingen), 1),
+            # De absolute fout zegt de GROOTTE, ongeacht richting. Die
+            # blijft over als je de bias corrigeert.
+            "gemiddelde_fout_procent": round(statistics.mean(absoluut), 1),
+            "mediaan_fout_procent": round(statistics.median(absoluut), 1),
+            "slechtste_dag_procent": round(max(absoluut), 1),
+            "beste_dag_procent": round(min(absoluut), 1),
+            "spreiding_procent": (
+                round(statistics.pstdev(afwijkingen), 1) if n > 1 else None
+            ),
+            "dagen_binnen_10_procent": binnen_10,
+            "dagen_binnen_20_procent": binnen_20,
+            "duiding": self._duid_pv_voorspelkwaliteit(
+                statistics.mean(absoluut), n
+            ),
+        }
+
+    @staticmethod
+    def _duid_pv_voorspelkwaliteit(gemiddelde_fout: float, dagen: int) -> str:
+        """Wat betekent die foutmarge in de praktijk?
+
+        Zonder duiding is "15,2%" een getal zonder schaal. Het gaat erom
+        of je erop kunt plannen: bij 20 kWh voorspelling betekent 15%
+        drie kilowattuur speling, en dat is meer dan een halve
+        accucyclus.
+        """
+        if dagen < 5:
+            return (
+                f"Nog maar {dagen} dagen vergeleken - te weinig om iets "
+                "over de betrouwbaarheid te zeggen."
+            )
+        if gemiddelde_fout <= 10:
+            return (
+                "De voorspelling is bruikbaar om op te plannen; de "
+                "dagelijkse afwijking blijft klein."
+            )
+        if gemiddelde_fout <= 20:
+            return (
+                "Bruikbaar als richting, maar reken op speling: bij een "
+                "voorspelling van 20 kWh is dat al enkele kilowattuur."
+            )
+        return (
+            "De voorspelling wijkt zo sterk af dat plannen erop riskant "
+            "is - de reserveberekening houdt daar rekening mee, maar een "
+            "ruimere marge is dan verstandiger."
+        )
+
     def get_stalled_series_report(self) -> list[dict]:
         """Zoekt geleerde reeksen die niet meer veranderen (v1.11.1).
 

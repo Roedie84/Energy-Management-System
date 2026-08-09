@@ -340,6 +340,9 @@ async def async_get_config_entry_diagnostics(
             # gevulde entiteiten verwijst. Tien van de veertien
             # problemen op één dag zaten in die laag, en die was in de
             # export niet zichtbaar.
+            # v1.17.2: hoe betrouwbaar de PV-voorspelling per dag is,
+            # niet alleen de gemiddelde bias.
+            "pv_forecast_quality": coordinator.get_pv_forecast_quality(),
             "dashboard_health": coordinator.get_dashboard_health(),
             "stalled_series": coordinator.get_stalled_series_report(),
             "plausibility_warnings": coordinator.get_plausibility_warnings(),
