@@ -228,7 +228,17 @@ def _met_slaapsensor(make_coordinator, hass):
 
 
 def _alleen(hass, actief=None):
-    for naam in ("binary_sensor.woonkamer", "binary_sensor.overloop"):
+    """Zet één sensor aan en de rest uit.
+
+    v1.20.1: ook `binary_sensor.gang` meenemen. Die stond er niet in,
+    waardoor tests die hem aanzetten stilzwijgend niets deden - de
+    opstelling zette hem meteen weer uit.
+    """
+    for naam in (
+        "binary_sensor.gang",
+        "binary_sensor.woonkamer",
+        "binary_sensor.overloop",
+    ):
         hass.states.set(naam, "on" if naam == actief else "off")
 
 
@@ -320,3 +330,188 @@ def test_the_bedtime_history_survives_a_restart():
             bewaard |= set(getattr(C, naam))
 
     assert "bedtime_history" in bewaard
+
+
+# --- v1.20.1: sneller, met bron, tv en vakantiemelding --------------
+
+from custom_components.energy_management_system.const import (  # noqa: E402
+    CONF_PRESENCE_TV_ENTITY,
+    PRESENCE_ABSENCE_AFTER_MINUTES_FAST,
+    PRESENCE_INTRUSION_COOLDOWN_MINUTES,
+)
+
+TV = "remote.samsung_qn85ba_55"
+
+
+def _met_tv(make_coordinator, hass):
+    c = make_coordinator(
+        {
+            CONF_PRESENCE_MOTION_SENSORS: SENSOREN,
+            CONF_PRESENCE_TV_ENTITY: TV,
+        }
+    )
+    for naam in SENSOREN:
+        hass.states.set(naam, "off")
+    hass.states.set(TV, "off")
+    return c
+
+
+# --- sneller ---------------------------------------------------------
+
+
+def test_absence_is_seen_much_faster_with_a_tv(make_coordinator, hass):
+    """Gemeld: "We zijn net 25 minuten namelijk niet thuis geweest" -
+    terwijl het systeem "thuis" bleef melden.
+
+    Dat klopte met de oude drempel: 25 minuten is korter dan 45. Die 45
+    stond er om stilzitten op de bank niet als afwezigheid te tellen, en
+    juist dat vangt de tv nu op.
+    """
+    c = _met_tv(make_coordinator, hass)
+
+    assert c._afwezigheidsdrempel_minuten() == PRESENCE_ABSENCE_AFTER_MINUTES_FAST
+    assert PRESENCE_ABSENCE_AFTER_MINUTES_FAST <= 15
+
+
+def test_twelve_quiet_minutes_now_means_away(make_coordinator, hass):
+    c = _met_tv(make_coordinator, hass)
+    hass.states.set("binary_sensor.gang", "on")
+    c._update_presence(NU)
+    hass.states.set("binary_sensor.gang", "off")
+
+    c._update_presence(NU + timedelta(minutes=12))
+
+    assert c.presence_state == "weg"
+
+
+def test_without_a_tv_the_threshold_stays_generous(make_coordinator, hass):
+    """Zonder tv zou tien minuten 's avonds telkens "niemand thuis"
+    melden."""
+    c = _coordinator(make_coordinator, hass)
+
+    assert c._afwezigheidsdrempel_minuten() == PRESENCE_ABSENCE_AFTER_MINUTES
+
+
+# --- de televisie ----------------------------------------------------
+
+
+def test_the_tv_counts_as_present(make_coordinator, hass):
+    c = _met_tv(make_coordinator, hass)
+    hass.states.set("binary_sensor.gang", "on")
+    c._update_presence(NU)
+    hass.states.set("binary_sensor.gang", "off")
+    hass.states.set(TV, "on")
+
+    c._update_presence(NU + timedelta(minutes=40))
+
+    assert c.presence_state == "thuis"
+
+
+def test_a_playing_media_player_also_counts(make_coordinator, hass):
+    """Een media_player meldt "playing", geen "on"."""
+    c = _met_tv(make_coordinator, hass)
+    hass.states.set(TV, "playing")
+
+    assert c._tv_staat_aan() is True
+
+
+# --- welke sensor zag als laatste beweging ---------------------------
+
+
+def test_every_moving_sensor_is_recorded(make_coordinator, hass):
+    """Gevraagd: "Ook wil ik een tabel met welke sensor als laatst
+    gedetecteerd heeft."
+
+    Niet stoppen bij de eerste treffer, anders mist de tabel de rest.
+    """
+    c = _met_tv(make_coordinator, hass)
+    for naam in SENSOREN:
+        hass.states.set(naam, "on")
+
+    c._update_presence(NU)
+
+    assert set(c.presence_last_seen) == set(SENSOREN)
+
+
+def test_the_table_is_sorted_most_recent_first(make_coordinator, hass):
+    c = _met_tv(make_coordinator, hass)
+    _alleen(hass, "binary_sensor.woonkamer")
+    c._update_presence(NU)
+    hass.states.set("binary_sensor.woonkamer", "off")
+    hass.states.set("binary_sensor.gang", "on")
+    c._update_presence(NU + timedelta(minutes=5))
+
+    tabel = c.get_presence_overview()["laatst_gezien"]
+
+    assert tabel[0]["naam"].endswith("gang") or "gang" in tabel[0]["naam"]
+
+
+def test_a_missing_name_falls_back_to_the_entity_id(make_coordinator, hass):
+    """Niet elke toestand heeft een naam; de entity_id is dan nog altijd
+    bruikbaarder dan een foutmelding."""
+    c = _met_tv(make_coordinator, hass)
+
+    assert c._entiteitsnaam("binary_sensor.bestaat_niet") == (
+        "binary_sensor.bestaat_niet"
+    )
+
+
+# --- vakantiestand ---------------------------------------------------
+
+
+def test_motion_during_vacation_sends_an_alert(make_coordinator, hass):
+    c = _met_tv(make_coordinator, hass)
+    c.vacation_mode = True
+    _alleen(hass, "binary_sensor.gang")
+
+    c._update_presence(NU)
+
+    assert c._last_intrusion_alert_at == NU
+
+
+def test_no_alert_without_vacation_mode(make_coordinator, hass):
+    c = _met_tv(make_coordinator, hass)
+    c.vacation_mode = False
+    _alleen(hass, "binary_sensor.gang")
+
+    c._update_presence(NU)
+
+    assert c._last_intrusion_alert_at is None
+
+
+def test_the_alert_is_rate_limited(make_coordinator, hass):
+    """Zonder rem levert één passage door een gang tientallen berichten
+    op, en dan zet je de melding uit - precies wanneer je hem wilt
+    hebben."""
+    c = _met_tv(make_coordinator, hass)
+    c.vacation_mode = True
+    _alleen(hass, "binary_sensor.gang")
+    c._update_presence(NU)
+
+    c._update_presence(NU + timedelta(minutes=2))
+
+    assert c._last_intrusion_alert_at == NU
+
+
+def test_a_later_alert_is_sent_again(make_coordinator, hass):
+    c = _met_tv(make_coordinator, hass)
+    c.vacation_mode = True
+    _alleen(hass, "binary_sensor.gang")
+    c._update_presence(NU)
+    later = NU + timedelta(minutes=PRESENCE_INTRUSION_COOLDOWN_MINUTES + 1)
+
+    c._update_presence(later)
+
+    assert c._last_intrusion_alert_at == later
+
+
+def test_the_alert_has_a_switch():
+    """Elke melding hoort uitschakelbaar te zijn."""
+    from custom_components.energy_management_system.const import (
+        NOTIFICATION_TYPES,
+    )
+
+    soorten = {k: (aan, demping) for k, _, _, aan, demping in NOTIFICATION_TYPES}
+
+    assert "vakantie_beweging" in soorten
+    assert soorten["vakantie_beweging"][1] == PRESENCE_INTRUSION_COOLDOWN_MINUTES

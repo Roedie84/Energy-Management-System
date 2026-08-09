@@ -150,10 +150,19 @@ def test_different_kinds_do_not_throttle_each_other(make_coordinator, hass):
 
 def test_only_the_pre_existing_kinds_default_to_on():
     """Twintig meldingen die zichzelf aanzetten is een garantie dat er
-    binnen een week niets meer van gelezen wordt."""
+    binnen een week niets meer van gelezen wordt.
+
+    v1.20.1: `vakantie_beweging` staat er wél standaard bij, en dat is
+    geen uitzondering op de regel maar een gevolg ervan. Deze melding
+    vuurt alléén als de vakantiestand aan staat - een bewuste handeling.
+    Stond hij standaard uit, dan zet je de vakantiestand aan, gebeurt er
+    niets, en vraag je je af waarom. De ruis die deze regel wil
+    voorkomen kan hier niet ontstaan.
+    """
     standaard_aan = {k for k, _, _, aan, _ in NOTIFICATION_TYPES if aan}
 
     assert standaard_aan == {
+        "vakantie_beweging",
         "appliance_cheap_moment",
         "appliance_ready",
         "battery_cooling",
