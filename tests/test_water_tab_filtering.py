@@ -44,3 +44,54 @@ def test_the_underlying_sessions_are_still_recorded(make_coordinator, hass):
     bron = (Path(pkg.__file__).parent / "diagnostics.py").read_text()
 
     assert "water_session_history" in bron
+
+
+# --- v1.16.7: de waterontharder was onzichtbaar ---------------------
+
+
+def test_the_softener_status_is_on_the_dashboard():
+    """Gevraagd: "Waar zie ik of de waterontharder het nu heeft gedaan of
+    niet?"
+
+    Nergens. Bij het opruimen van v1.12.0 is die informatie volledig van
+    het dashboard verdwenen. De detectie draaide wel - de volumedrempel
+    uit v1.9.2 doet zijn werk - maar het resultaat was niet te zien, en
+    dat is precies waarvoor die detectie is gebouwd.
+    """
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    yaml_tekst = (
+        Path(pkg.__file__).parent / "dashboard_template.yaml"
+    ).read_text()
+
+    assert "waterontharder_laatste_regeneratie" in yaml_tekst
+    assert "waarschijnlijk_waterontharder" in yaml_tekst
+
+
+def test_it_says_when_nothing_was_seen_yet():
+    """Een lege kaart zou lijken alsof de detectie stuk is."""
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    yaml_tekst = (
+        Path(pkg.__file__).parent / "dashboard_template.yaml"
+    ).read_text()
+
+    assert "Nog geen regeneratie waargenomen" in yaml_tekst
+
+
+def test_it_explains_how_a_regeneration_is_recognised():
+    """Zonder uitleg is niet te beoordelen of een gemiste regeneratie
+    aan de ontharder ligt of aan de drempel."""
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    yaml_tekst = (
+        Path(pkg.__file__).parent / "dashboard_template.yaml"
+    ).read_text()
+
+    assert "minstens 10 liter" in yaml_tekst
