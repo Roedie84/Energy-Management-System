@@ -500,3 +500,33 @@ def test_no_heading_repeats_the_view_title():
         assert (eerste.get("title") or "").lower() != view["title"].lower(), (
             view["title"]
         )
+
+
+def test_every_template_is_valid_jinja():
+    """v1.20.0: een kaart met vijf `if` en vier `endif` kwam er
+    doorheen; pas de tabeltests sloegen erop aan, met een foutmelding die
+    niet naar de oorzaak wees.
+
+    Jinja zelf laten oordelen is directer dan haakjes tellen, en vangt
+    ook andere syntaxfouten.
+    """
+    import jinja2
+
+    data = yaml.safe_load(DASHBOARD_PATH.read_text())
+    omgeving = jinja2.Environment()
+
+    for view in data["views"]:
+        kaarten = list(view.get("cards") or [])
+        for sectie in view.get("sections") or []:
+            kaarten += sectie.get("cards") or []
+        for kaart in kaarten:
+            for veld in ("content", "primary", "secondary", "icon_color"):
+                waarde = kaart.get(veld)
+                if not isinstance(waarde, str) or "{%" not in waarde:
+                    continue
+                try:
+                    omgeving.parse(waarde)
+                except jinja2.TemplateSyntaxError as fout:
+                    raise AssertionError(
+                        f"{view['title']} / {kaart.get('title') or veld}: {fout}"
+                    ) from fout

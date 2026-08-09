@@ -201,3 +201,122 @@ def test_the_config_field_allows_multiple():
     start = bron.index("CONF_PRESENCE_MOTION_SENSORS,\n                default")
 
     assert "multiple=True" in bron[start : start + 400]
+
+
+# --- v1.20.0: slapen is geen afwezigheid ----------------------------
+
+from custom_components.energy_management_system.const import (  # noqa: E402
+    CONF_PRESENCE_BEDTIME_SENSOR,
+)
+
+AVOND = datetime(2026, 8, 10, 22, 30, tzinfo=timezone.utc)
+
+
+def _met_slaapsensor(make_coordinator, hass):
+    c = make_coordinator(
+        {
+            CONF_PRESENCE_MOTION_SENSORS: [
+                "binary_sensor.woonkamer",
+                "binary_sensor.overloop",
+            ],
+            CONF_PRESENCE_BEDTIME_SENSOR: "binary_sensor.overloop",
+        }
+    )
+    for naam in ("binary_sensor.woonkamer", "binary_sensor.overloop"):
+        hass.states.set(naam, "off")
+    return c
+
+
+def _alleen(hass, actief=None):
+    for naam in ("binary_sensor.woonkamer", "binary_sensor.overloop"):
+        hass.states.set(naam, "on" if naam == actief else "off")
+
+
+def test_sleeping_is_not_absence(make_coordinator, hass):
+    """Gemeld: "Als de overloop sensor als laatste beweging heeft
+    gedetecteerd 's avonds/'s nachts zijn we wel thuis maar slapen we."
+
+    Zonder dat kenmerk ziet stilte er hetzelfde uit, terwijl "niemand
+    thuis" en "iedereen slaapt" tegengestelde situaties zijn: bij
+    afwezigheid mag alles uit, bij slapen moet de nachtreserve juist
+    kloppen.
+    """
+    c = _met_slaapsensor(make_coordinator, hass)
+    _alleen(hass, "binary_sensor.overloop")
+    c._update_presence(AVOND)
+    _alleen(hass)
+
+    c._update_presence(AVOND + timedelta(hours=6))
+
+    assert c.presence_state == "slaapt"
+
+
+def test_motion_downstairs_after_bedtime_means_awake(make_coordinator, hass):
+    """De volgorde is het bewijs: bewoog er daarna nog iets beneden, dan
+    is iemand toch weer op."""
+    c = _met_slaapsensor(make_coordinator, hass)
+    _alleen(hass, "binary_sensor.overloop")
+    c._update_presence(AVOND)
+    _alleen(hass, "binary_sensor.woonkamer")
+    c._update_presence(AVOND + timedelta(minutes=10))
+    _alleen(hass)
+
+    c._update_presence(AVOND + timedelta(hours=6))
+
+    assert c.presence_state == "weg"
+
+
+def test_the_landing_during_the_day_is_not_bedtime(make_coordinator, hass):
+    """Overdag loop je er ook langs."""
+    c = _met_slaapsensor(make_coordinator, hass)
+    middag = AVOND.replace(hour=14)
+    _alleen(hass, "binary_sensor.overloop")
+
+    c._update_presence(middag)
+    _alleen(hass)
+    c._update_presence(middag + timedelta(hours=2))
+
+    assert c.presence_state == "weg"
+
+
+def test_sleeping_ends_after_a_long_time(make_coordinator, hass):
+    """Na een etmaal stilte is het geen nacht meer maar afwezigheid."""
+    c = _met_slaapsensor(make_coordinator, hass)
+    _alleen(hass, "binary_sensor.overloop")
+    c._update_presence(AVOND)
+    _alleen(hass)
+
+    c._update_presence(AVOND + timedelta(hours=20))
+
+    assert c.presence_state == "weg"
+
+
+def test_bedtimes_are_learned(make_coordinator, hass):
+    """Wanneer je doorgaans naar bed gaat, is bruikbaar om op te
+    plannen."""
+    c = _met_slaapsensor(make_coordinator, hass)
+    _alleen(hass, "binary_sensor.overloop")
+
+    c._update_presence(AVOND)
+
+    assert c.bedtime_history == ["22:30"]
+    assert c.get_presence_overview()["typische_bedtijd"] == "22:30"
+
+
+def test_without_a_bedtime_sensor_it_says_so(make_coordinator, hass):
+    """Zonder die sensor telt een nacht als afwezigheid; dat hoort
+    zichtbaar te zijn."""
+    c = _coordinator(make_coordinator, hass)
+
+    assert c.get_presence_overview()["slaapsensor_ingesteld"] is False
+
+
+def test_the_bedtime_history_survives_a_restart():
+    import custom_components.energy_management_system.const as C
+
+    bewaard = set()
+    for naam in dir(C):
+        if naam.startswith("PERSISTED_") and isinstance(getattr(C, naam), tuple):
+            bewaard |= set(getattr(C, naam))
+
+    assert "bedtime_history" in bewaard
