@@ -3684,6 +3684,40 @@ class EnergyManagementSystemCoordinator:
             ),
         }
 
+        # --- zon (v1.17.5) ---
+        # Gemeld: "Ook mis ik een PV tegel, welke ik kan aanklikken voor
+        # alle PV gerelateerde info." Er was wél een PV-pagina, maar geen
+        # samenvatting - dus geen tegel om op te klikken.
+        kwaliteit_pv = self.get_pv_forecast_quality()
+        opwek = self.pv_production_today_kwh
+        if not kwaliteit_pv.get("beschikbaar"):
+            samenvatting["zon"] = {
+                "niveau": RELIABILITY_INSUFFICIENT,
+                "zin": (
+                    f"{opwek:.1f} kWh opgewekt vandaag. "
+                    "Nog geen voltooide dagen om de voorspelling mee te "
+                    "toetsen."
+                ),
+            }
+        else:
+            fout = kwaliteit_pv["gemiddelde_fout_procent"]
+            samenvatting["zon"] = {
+                "niveau": (
+                    RELIABILITY_RELIABLE
+                    if fout <= 10
+                    else (
+                        RELIABILITY_INDICATIVE
+                        if fout <= 20
+                        else RELIABILITY_UNRELIABLE
+                    )
+                ),
+                "zin": (
+                    f"{opwek:.1f} kWh opgewekt vandaag. De voorspelling "
+                    f"zit er over {kwaliteit_pv['dagen']} dagen gemiddeld "
+                    f"{fout:.0f}% naast."
+                ),
+            }
+
         # --- kwaliteit (het geheel) ---
         betrouwbaar = sum(
             1 for r in overzicht if r["niveau"] == RELIABILITY_RELIABLE

@@ -10122,3 +10122,70 @@ terecht aan op de smallere tegels (15 in plaats van 22 tekens).
 **Getest**: nieuw `tests/test_pv_forecast_quality.py`, 13 tests.
 
 **Volledige testsuite**: 1454 tests, allemaal groen.
+
+## v1.17.3 — Tegels op volle sectiebreedte
+
+**Gemeld**: veel labels onleesbaar afgekapt, met de opmerking dat er drie
+secties in de breedte staan.
+
+**Dubbel opgedeeld**: Home Assistant zet secties naast elkaar (drie op
+een breed scherm), dus elke sectie is ongeveer een derde van het scherm.
+Daarbinnen stonden de tegels op 4 van de 12 kolommen - effectief een
+NEGENDE van het scherm. Daar past "Accumodules" niet in.
+
+De drie kolommen die je ziet zijn de secties zelf; binnen een sectie nog
+eens opdelen is dubbelop - precies wat er in v1.17.2 gebeurde bij het
+weghalen van wit.
+
+**Nu volle sectiebreedte** voor elke tegel, met verlengde labels ("Accu
+en apparaten" in plaats van "Accu") en statuszinnen die weer mogen
+doorlopen. De labeltest gaat van 48 naar 34 tekens voor volle breedte,
+omdat een sectie een derde van het scherm is.
+
+**Getest**: twee tests erbij in `test_dashboard_label_length.py`; één
+bestaande test legde de halve breedte van de koeltegel vast en is
+bijgesteld.
+
+**Volledige testsuite**: 1456 tests, allemaal groen.
+
+## v1.17.4 — Dertien kaarten zonder icoon
+
+**Gemeld**: de Airco-verwachting toonde een lege blauwe cirkel.
+
+**Oorzaak**: de sensor heeft wél een icoon (`_attr_icon`), maar een
+mushroom-kaart neemt dat niet over als het veld `icon` op de kaart
+ontbreekt. Dertien kaarten hadden dat - ontstaan bij het herverdelen van
+v1.17.1, waar entity-cards zijn verplaatst die nooit een eigen icoon
+hadden (op de oude tabbladen stonden ze in een lijst, waar het niet
+opviel).
+
+**Nu allemaal voorzien** van een passend icoon per onderwerp; de sensoren
+zelf blijven ongewijzigd.
+
+**Nu bewaakt**: élke entity- of template-kaart heeft een icoon, en elk
+icoon begint met `mdi:` - een naam zonder dat voorvoegsel rendert niet en
+dat zie je pas op het scherm.
+
+**Volledige testsuite**: 1458 tests, allemaal groen.
+
+## v1.17.5 — PV-tegel op Overzicht
+
+**Gemeld**: er ontbreekt een PV-tegel om op te klikken voor alle
+PV-informatie.
+
+**Terecht**: er was wél een PV-pagina sinds v1.17.1, maar
+`get_topic_summaries()` maakte geen samenvatting voor zon - en zonder
+samenvatting geen tegel. De pagina was alleen via "Meer bekijken" te
+vinden.
+
+**De tegel toont** de opwek van vandaag plus de betrouwbaarheid van de
+voorspelling ("15,5 kWh opgewekt vandaag. De voorspelling zit er over 7
+dagen gemiddeld 15% naast."). De kleur volgt die kwaliteit: groen onder
+10% gemiddelde fout, oranje tot 20%, rood daarboven.
+
+**Vooraan geplaatst**: de zon is de bron van alles wat daarna gebeurt.
+Zonder voltooide dagen toont hij nog steeds de opwek, met de reden erbij.
+
+**Getest**: vier tests erbij in `test_pv_forecast_quality.py`.
+
+**Volledige testsuite**: 1462 tests, allemaal groen.

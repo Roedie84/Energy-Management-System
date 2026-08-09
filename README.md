@@ -515,6 +515,120 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## PV-tegel op Overzicht (v1.17.5)
+
+**Gemeld**: *"Ook mis ik een PV tegel, welke ik kan aanklikken voor alle
+PV gerelateerde info."*
+
+Terecht: er was wél een PV-pagina sinds v1.17.1, maar
+`get_topic_summaries()` maakte geen samenvatting voor zon — en zonder
+samenvatting geen tegel om op te klikken. De pagina was alleen via "Meer
+bekijken" te vinden.
+
+### Wat de tegel toont
+
+> *"15,5 kWh opgewekt vandaag. De voorspelling zit er over 7 dagen
+> gemiddeld 15% naast."*
+
+De opwek van vandaag plus de betrouwbaarheid van de voorspelling — de
+maatstaf uit v1.17.2. De kleur volgt die kwaliteit: groen onder 10%
+gemiddelde fout, oranje tot 20%, rood daarboven.
+
+Een tegel die altijd groen is zegt niets, dus daar staat een test op met
+alle drie de gevallen.
+
+### Vooraan geplaatst
+
+De zon is de bron van alles wat er daarna gebeurt — laden, ontladen,
+terugleveren. Daarom staat de tegel bovenaan "Status per onderwerp", vóór
+de accu.
+
+Zonder voltooide dagen toont hij nog steeds de opwek, met de reden erbij
+dat de voorspelling nog niet te toetsen valt.
+
+### Getest
+
+Vier tests erbij: er is een zon-samenvatting, het niveau volgt de
+voorspelkwaliteit, zonder geschiedenis blijft de opwek zichtbaar, en de
+tegel staat op Overzicht met een doorklik naar de PV-pagina.
+
+**Volledige testsuite**: 1462 tests, allemaal groen.
+
+## Dertien kaarten zonder icoon (v1.17.4)
+
+**Gemeld** met screenshot: de Airco-verwachting toonde een **lege blauwe
+cirkel** naast de tekst.
+
+### De sensor heeft wél een icoon
+
+`_attr_icon = "mdi:thermometer-lines"` staat gewoon in de code. Maar een
+mushroom-kaart neemt dat niet over als het veld `icon` op de kaart
+ontbreekt — dan blijft er een lege cirkel staan.
+
+Dertien kaarten hadden dat, en die zijn ontstaan bij het herverdelen van
+v1.17.1: de entity-cards die ik toen verplaatste hadden nooit een eigen
+icoon, wat op de oude tabbladen niet opviel omdat ze daar in een lijst
+stonden.
+
+### Nu allemaal voorzien
+
+Per onderwerp een passend icoon: een vaatwasser voor de vaatwasser, een
+zonnepaneel voor het PV-profiel, dobbelstenen voor Monte Carlo. De
+sensoren zelf blijven ongewijzigd.
+
+### Nu bewaakt
+
+Twee tests: élke entity- of template-kaart heeft een icoon, en elk icoon
+begint met `mdi:` — een naam zonder dat voorvoegsel rendert niet, en dat
+zie je pas op het scherm.
+
+**Volledige testsuite**: 1458 tests, allemaal groen.
+
+## Tegels op volle sectiebreedte (v1.17.3)
+
+**Gemeld**: *"Veel niet leesbaar, graag volledige breedte per card (in
+acht houden dat er 3 secties zijn in de breedte)."*
+
+Met een screenshot waarop *"Accumodules"* was afgekapt tot *"Accu…"* en
+de rechterhelft van het scherm leeg bleef.
+
+### Dubbel opgedeeld
+
+Home Assistant zet secties **naast elkaar** — op een breed scherm drie.
+Elke sectie is dus ongeveer een derde van het scherm.
+
+Daarbinnen zette ik de tegels op 4 van de 12 kolommen. Effectief: een
+**negende** van het scherm per tegel. Daar past "Accumodules" niet in,
+laat staan de statuszin eronder.
+
+De drie kolommen die je ziet zíjn de secties. Binnen een sectie nog eens
+opdelen is dubbelop — en dat is precies wat ik in v1.17.2 deed toen ik
+juist wit probeerde weg te halen.
+
+### Nu volle sectiebreedte
+
+Elke tegel gebruikt de hele sectie. De labels zijn weer verlengd tot wat
+ze eigenlijk moeten zeggen — "Accu en apparaten" in plaats van "Accu",
+"Opbrengst, CO2 en cycli" in plaats van "Opbrengst" — en de statuszinnen
+mogen weer over meerdere regels.
+
+De labeltest gaat van 48 naar **34 tekens** voor volle breedte: een
+sectie is een derde van het scherm, niet het hele scherm.
+
+### Nu bewaakt
+
+Een test die faalt zodra een tegel op Overzicht minder dan de volle
+sectiebreedte krijgt, met de reden erbij. Plus een tweede dat de
+statuszinnen mogen doorlopen — die had ik in v1.17.2 op één regel gezet
+vanwege de smalle tegels, en een afgekapte zin zegt niets.
+
+### Getest
+
+Twee tests erbij in `test_dashboard_label_length.py`; één bestaande test
+legde de halve breedte van de koeltegel vast en is bijgesteld.
+
+**Volledige testsuite**: 1456 tests, allemaal groen.
+
 ## Compactere landingspagina en PV-voorspelkwaliteit (v1.17.2)
 
 **Gemeld**: *"Tevens de landingspagina beter sorteren, veel lege vlakken
