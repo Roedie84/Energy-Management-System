@@ -513,7 +513,7 @@ views:
   panel: true
   cards:
   - type: picture-elements
-    image: /local/energy_management_system_overview.svg?v=1.20.0
+    image: /local/energy_management_system_overview.svg?v=1.20.1
     elements:
     - type: state-label
       entity: sensor.woonkamer_energy_management_system_system_status
@@ -917,6 +917,16 @@ views:
     entity: switch.woonkamer_energy_management_system_meldingen_hoofdschakelaar
     tap_action:
       action: toggle
+  - type: custom:mushroom-template-card
+    primary: Beweging tijdens vakantiestand
+    secondary: '{% set e = ''switch.woonkamer_energy_management_system_melding_vakantie_beweging'' %}{% set last = state_attr(e, ''laatst_verstuurd'') %}{{ ''AAN'' if is_state(e, ''on'') else ''uit'' }} · demping 5 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom(''%-d %b %H:%M'') }}{% endif %}'
+    icon: mdi:motion-sensor-off
+    icon_color: '{{ ''green'' if is_state(''switch.woonkamer_energy_management_system_melding_vakantie_beweging'', ''on'') else ''grey'' }}'
+    entity: switch.woonkamer_energy_management_system_melding_vakantie_beweging
+    tap_action:
+      action: toggle
+    hold_action:
+      action: more-info
   - type: custom:mushroom-template-card
     primary: Goedkoop moment voor vaatwasser/wasmachine
     secondary: '{% set e = ''switch.woonkamer_energy_management_system_melding_appliance_cheap_moment'' %}{% set last = state_attr(e, ''laatst_verstuurd'') %}{{ ''AAN'' if is_state(e, ''on'') else ''uit'' }} · demping 60 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom(''%-d %b %H:%M'') }}{% endif %}'
@@ -2066,6 +2076,21 @@ views:
 
 
         _Er wordt per halfuur van de week bijgehouden hoe vaak er iemand thuis was. Werkdagen verschillen van het weekend, en ''s ochtends van ''s avonds. Alleen sensoren die je zelf hebt gekozen tellen mee: buitensensoren slaan aan op voorbijgangers._{% endif %}'
+      grid_options:
+        columns: 12
+        rows: auto
+    - type: markdown
+      title: Welke sensor zag als laatste beweging?
+      content: '{% set p = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''aanwezigheid'') or {} %}{% set l = p.get(''laatst_gezien'') or [] %}{% if l | length == 0 %}Nog geen beweging waargenomen.{% else %}| Sensor | Laatst gezien | Geleden |
+
+        |---|---|---|
+
+        {% for r in l %}| {{ r.naam }} | {{ as_timestamp(r.tijd) | timestamp_custom(''%H:%M'') }} | {{ r.minuten_geleden }} min |
+
+        {% endfor %}{% endif %}
+
+
+        _De bovenste is de meest recente. Staat er een sensor bovenaan die je niet verwacht - een gang, de schuur - dan verklaart dat waarom het systeem ''thuis'' meldt terwijl er niemand is._'
       grid_options:
         columns: 12
         rows: auto

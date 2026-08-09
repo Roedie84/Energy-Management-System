@@ -1385,6 +1385,21 @@ WEATHER_ENSEMBLE_SPREAD_ATTENTION_PERCENT = 40.0
 # Velden per melding: sleutel, label, uitleg, standaard aan/uit,
 # dempingsvenster in minuten.
 NOTIFICATION_TYPES: tuple[tuple[str, str, str, bool, int], ...] = (
+    # v1.20.1, gevraagd: "Als de vakantieknop actief is moeten er
+    # meldingen bij beweging worden gestuurd (maximaal 1 per 5 minuten,
+    # welke sensor beweging heeft gedetecteerd)."
+    #
+    # De demping staat op 5 minuten zoals gevraagd. Zonder die rem
+    # levert één passage door een gang tientallen berichten op, en dan
+    # zet je de melding uit - precies wanneer je hem wilt hebben.
+    (
+        "vakantie_beweging",
+        "Beweging tijdens vakantiestand",
+        "Wanneer een bewegingssensor afgaat terwijl de vakantiestand aan "
+        "staat.",
+        True,
+        5,
+    ),
     # --- bestaand gedrag, blijft standaard aan ---
     (
         "appliance_cheap_moment",
@@ -2433,3 +2448,29 @@ PRESENCE_BEDTIME_LATEST_HOUR = 5
 # geldt. Ruim, want een nacht duurt langer dan de gewone
 # afwezigheidsdrempel.
 PRESENCE_SLEEP_WINDOW_HOURS = 12
+
+# --- Aanwezigheid: sneller en met bron (v1.20.1) ---------------------
+# Gevraagd: "Ik wil sneller zien of er iemand wel of niet aanwezig is.
+# Ook wil ik een tabel met welke sensor als laatst gedetecteerd heeft.
+# Als de vakantieknop actief is moeten er meldingen bij beweging worden
+# gestuurd (maximaal 1 per 5 minuten, welke sensor beweging heeft
+# gedetecteerd). Als de televisie aan is, kan dit ook als aanwezig
+# worden gekenmerkt."
+#
+# De drempel van 45 minuten was gekozen om stilzitten op de bank niet
+# als afwezigheid te tellen. Met de tv als extra signaal is die reden
+# grotendeels weg: wie stil op de bank zit, kijkt meestal tv. Daarom nu
+# een veel kortere drempel.
+PRESENCE_ABSENCE_AFTER_MINUTES_FAST = 10
+
+# Hoeveel bewegingen er per sensor worden onthouden voor de tabel.
+PRESENCE_LAST_SEEN_LENGTH = 12
+
+# Tv aan telt als aanwezig - ongeacht hoe lang er niemand langs een
+# sensor liep.
+CONF_PRESENCE_TV_ENTITY = "presence_tv_entity"
+
+# Bij vakantiestand: melding bij beweging, maar hoogstens één per vijf
+# minuten. Zonder die rem levert een sensor in een gang tientallen
+# berichten op bij één passage.
+PRESENCE_INTRUSION_COOLDOWN_MINUTES = 5

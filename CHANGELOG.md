@@ -10575,3 +10575,31 @@ kaart erbij.
 Jinja-controle in `test_dashboard_tables.py`.
 
 **Volledige testsuite**: 1576 tests, allemaal groen.
+
+## v1.20.1 — Aanwezigheid: sneller, met bron, tv en vakantiemelding
+
+**Gemeld**: 25 minuten van huis, terwijl de kaart "thuis" bleef tonen.
+Dat klopte met de oude drempel van 45 minuten, die er stond om stilzitten
+op de bank niet als afwezigheid te tellen.
+
+**De televisie lost dat op**: tv aan telt nu als aanwezig, waarmee de
+reden voor die ruime drempel vervalt. Van 45 naar 10 minuten zodra er een
+tv-entiteit is ingesteld; zonder tv blijft hij op 45.
+
+**Tabel met laatst gedetecteerde sensor**: per sensor het laatste moment
+en hoe lang geleden, nieuwste bovenaan. Onderweg bleek de detectie te
+stoppen bij de eerste sensor die bewoog; voor deze tabel moeten ze
+allemaal worden vastgelegd.
+
+**Melding bij beweging tijdens vakantie**: met sensornaam en tijdstip,
+demping vijf minuten. Staat als enige nieuwe melding standaard aan - geen
+uitzondering op de regel maar een gevolg ervan, want hij vuurt alleen als
+de vakantiestand aan staat.
+
+**Onderweg**: een testhulpje kende `binary_sensor.gang` niet, waardoor
+tests die hem aanzetten stilzwijgend niets deden. En de naamopzoeking
+ging stuk op een toestand zonder `name`.
+
+**Getest**: dertien tests erbij in `test_presence_detection.py`.
+
+**Volledige testsuite**: 1589 tests, allemaal groen.

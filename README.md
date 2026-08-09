@@ -515,6 +515,65 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Aanwezigheid: sneller, met bron, tv en vakantiemelding (v1.20.1)
+
+**Gemeld**: *"We zijn net 25 minuten namelijk niet thuis geweest"* —
+terwijl de kaart *"thuis"* bleef tonen.
+
+Dat klopte met de oude drempel: **25 minuten is korter dan 45**. Die 45
+stond er om stilzitten op de bank niet als afwezigheid te tellen.
+
+### De televisie lost dat op
+
+Je gaf `remote.samsung_qn85ba_55` door. Tv aan telt nu als aanwezig — en
+daarmee vervalt de reden voor die ruime drempel: wie stil op de bank zit,
+kijkt meestal tv.
+
+De drempel gaat daarom van **45 naar 10 minuten** zodra er een
+tv-entiteit is ingesteld. Zonder tv blijft hij op 45, anders zou hij
+'s avonds telkens "niemand thuis" melden.
+
+### Welke sensor zag als laatste beweging
+
+Nieuwe tabel op de aanwezigheidspagina: per sensor het laatste moment en
+hoe lang geleden, nieuwste bovenaan.
+
+Dat is precies het gereedschap voor je vraag. Staat er een sensor bovenaan
+die je niet verwacht — een gang, de schuur — dan verklaart dat waarom het
+systeem "thuis" meldde terwijl er niemand was.
+
+Onderweg bleek de detectie te stoppen bij de **eerste** sensor die
+bewoog; voor deze tabel moeten ze allemaal worden vastgelegd.
+
+### Melding bij beweging tijdens vakantie
+
+Nieuwe melding *"Beweging tijdens vakantiestand"*, met de sensornaam en
+het tijdstip erin. Demping op vijf minuten, zoals gevraagd — zonder die
+rem levert één passage door een gang tientallen berichten op, en dan zet
+je de melding uit precies wanneer je hem wilt hebben.
+
+Deze staat als enige nieuwe melding **standaard aan**, en dat is geen
+uitzondering op de regel maar een gevolg ervan: hij vuurt alleen als jij
+de vakantiestand aanzet. Stond hij uit, dan zou je die stand aanzetten en
+niets horen.
+
+### Onderweg
+
+Een testhulpje zette drie sensoren op "uit" maar kende `binary_sensor.gang`
+niet, waardoor tests die hem aanzetten stilzwijgend niets deden. En de
+naamopzoeking ging stuk op een toestand zonder `name`; die valt nu terug
+op de entity_id.
+
+### Getest
+
+Dertien tests erbij: de drempel is kort met tv en ruim zonder, twaalf
+stille minuten betekent nu weg, de tv telt mee (ook "playing"), elke
+bewegende sensor wordt vastgelegd, de tabel staat op volgorde, een
+ontbrekende naam valt terug, de vakantiemelding vuurt alleen in
+vakantiestand, wordt gedempt, en vuurt daarna opnieuw.
+
+**Volledige testsuite**: 1589 tests, allemaal groen.
+
 ## Slapen is geen afwezigheid (v1.20.0)
 
 **Gemeld**: *"Als de overloop sensor als laatste beweging heeft

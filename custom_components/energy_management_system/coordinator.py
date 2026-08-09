@@ -292,6 +292,9 @@ from .const import (
     GACS_SELF_CONSUMPTION_ADVICE_PERCENT,
     PLAUSIBILITY_RULES,
     PRESENCE_ABSENCE_AFTER_MINUTES,
+    PRESENCE_ABSENCE_AFTER_MINUTES_FAST,
+    PRESENCE_INTRUSION_COOLDOWN_MINUTES,
+    PRESENCE_LAST_SEEN_LENGTH,
     PRESENCE_BEDTIME_EARLIEST_HOUR,
     PRESENCE_BEDTIME_LATEST_HOUR,
     PRESENCE_SLEEP_WINDOW_HOURS,
@@ -314,6 +317,7 @@ from .const import (
     CONF_PV_ACTUAL_AZIMUTH_DEGREES,
     CONF_PRESENCE_BEDTIME_SENSOR,
     CONF_PRESENCE_MOTION_SENSORS,
+    CONF_PRESENCE_TV_ENTITY,
     CONF_PV_ENERGY_SENSOR,
     PV_ENERGY_METER_RESET_TOLERANCE_KWH,
     CONF_PV_ACTUAL_TILT_DEGREES,
@@ -566,6 +570,9 @@ class EnergyManagementSystemCoordinator:
         # v1.20.0: wanneer de slaapsensor als laatste bewoog.
         self.last_bedtime_motion_at: datetime | None = None
         self.bedtime_history: list[str] = []
+        # v1.20.1: welke sensor wanneer als laatste bewoog.
+        self.presence_last_seen: dict[str, str] = {}
+        self._last_intrusion_alert_at: datetime | None = None
         self.water_softener_last_regeneration: datetime | None = None
         self.last_fietsladers_action: str | None = None
 
@@ -4203,15 +4210,28 @@ class EnergyManagementSystemCoordinator:
             self.presence_state = None
             return
 
+        # v1.20.1: niet stoppen bij de eerste treffer - voor de tabel
+        # moet elke sensor die nu beweegt worden vastgelegd.
         beweging_nu = False
+        bewegende_sensoren: list[str] = []
         for entity_id in sensoren:
             staat = self.hass.states.get(entity_id)
             if staat is not None and str(staat.state).lower() in ("on", "true"):
                 beweging_nu = True
-                break
+                bewegende_sensoren.append(entity_id)
+                self.presence_last_seen[entity_id] = now.isoformat()
+
+        # Alleen de laatste bewegingen onthouden; dit is een overzicht,
+        # geen archief.
+        if len(self.presence_last_seen) > PRESENCE_LAST_SEEN_LENGTH:
+            bewaard = sorted(
+                self.presence_last_seen.items(), key=lambda x: x[1], reverse=True
+            )[:PRESENCE_LAST_SEEN_LENGTH]
+            self.presence_last_seen = dict(bewaard)
 
         if beweging_nu:
             self.last_motion_at = now
+            self._meld_beweging_bij_vakantie(now, bewegende_sensoren)
 
         # v1.20.0, gemeld: "Als de overloop sensor als laatste beweging
         # heeft gedetecteerd 's avonds/'s nachts zijn we wel thuis maar
@@ -4245,7 +4265,13 @@ class EnergyManagementSystemCoordinator:
             self.presence_state = "onbekend"
         else:
             stil_minuten = (now - self.last_motion_at).total_seconds() / 60
-            if stil_minuten < PRESENCE_ABSENCE_AFTER_MINUTES:
+            # v1.20.1: de tv telt als aanwezig. Wie stil op de bank zit,
+            # kijkt meestal tv - en juist daarvoor stond de drempel op
+            # 45 minuten. Met dit signaal erbij mag die veel korter, dus
+            # zie je sneller dat er niemand is.
+            if self._tv_staat_aan():
+                self.presence_state = "thuis"
+            elif stil_minuten < self._afwezigheidsdrempel_minuten():
                 self.presence_state = "thuis"
             elif self._slaapt_waarschijnlijk(now):
                 # Was de slaapsensor de LAATSTE beweging, dan is de
@@ -4273,6 +4299,77 @@ class EnergyManagementSystemCoordinator:
 
         if vorige != self.presence_state:
             self.schedule_persisted_state_save()
+
+    def _entiteitsnaam(self, entity_id: str) -> str:
+        """Leesbare naam, met de entity_id als terugval (v1.20.1).
+
+        Niet elke toestand heeft een `name`; dan is de entity_id nog
+        altijd bruikbaarder dan een foutmelding.
+        """
+        staat = self.hass.states.get(entity_id)
+        naam = getattr(staat, "name", None) if staat is not None else None
+        if not naam and staat is not None:
+            naam = (staat.attributes or {}).get("friendly_name")
+        return str(naam or entity_id)
+
+    def _tv_staat_aan(self) -> bool:
+        """Staat de televisie aan? (v1.20.1)
+
+        Gevraagd: "Als de televisie aan is, kan dit ook als aanwezig
+        worden gekenmerkt." Klopt - en het maakt de rest sneller: de
+        drempel van 45 minuten bestond juist om stilzitten op de bank
+        niet als afwezigheid te tellen.
+        """
+        entity_id = self.config.get(CONF_PRESENCE_TV_ENTITY)
+        if not entity_id:
+            return False
+        staat = self.hass.states.get(entity_id)
+        if staat is None:
+            return False
+        return str(staat.state).lower() in ("on", "playing", "paused", "true")
+
+    def _afwezigheidsdrempel_minuten(self) -> float:
+        """Hoe lang stilte mag duren voor het afwezigheid heet.
+
+        Met een tv-entiteit erbij kan dat veel korter: dan wordt
+        stilzitten al door de tv opgevangen. Zonder tv blijft de ruime
+        drempel nodig, anders meldt hij 's avonds telkens dat er niemand
+        is.
+        """
+        if self.config.get(CONF_PRESENCE_TV_ENTITY):
+            return PRESENCE_ABSENCE_AFTER_MINUTES_FAST
+        return PRESENCE_ABSENCE_AFTER_MINUTES
+
+    def _meld_beweging_bij_vakantie(
+        self, now: datetime, sensoren: list[str]
+    ) -> None:
+        """Beweging tijdens de vakantiestand (v1.20.1).
+
+        Gevraagd: "Als de vakantieknop actief is moeten er meldingen bij
+        beweging worden gestuurd (maximaal 1 per 5 minuten, welke sensor
+        beweging heeft gedetecteerd)."
+
+        Die rem is nodig: zonder cooldown levert één passage door een
+        gang tientallen berichten op, en dan zet je de melding uit -
+        precies wanneer je hem wilt hebben.
+        """
+        if not self.vacation_mode or not sensoren:
+            return
+        if self._last_intrusion_alert_at is not None:
+            verstreken = (
+                now - self._last_intrusion_alert_at
+            ).total_seconds() / 60
+            if verstreken < PRESENCE_INTRUSION_COOLDOWN_MINUTES:
+                return
+        self._last_intrusion_alert_at = now
+        namen = ", ".join(self._entiteitsnaam(x) for x in sensoren)
+        self._dispatch_notification(
+            self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE),
+            "Beweging tijdens vakantiestand",
+            f"Beweging gedetecteerd door: {namen}.",
+            "ems_vakantie_beweging",
+            kind="vakantie_beweging",
+        )
 
     def _slaapt_waarschijnlijk(self, now: datetime) -> bool:
         """Was de slaapsensor de laatste beweging? (v1.20.0)
@@ -4334,6 +4431,32 @@ class EnergyManagementSystemCoordinator:
                 else None
             ),
             "bedtijden_geleerd": len(self.bedtime_history),
+            # v1.20.1: welke sensor als laatste bewoog - gevraagd omdat
+            # het systeem "thuis" meldde terwijl er 25 minuten niemand
+            # was.
+            "tv_telt_mee": bool(self.config.get(CONF_PRESENCE_TV_ENTITY)),
+            "tv_staat_aan": self._tv_staat_aan(),
+            "afwezig_na_minuten": self._afwezigheidsdrempel_minuten(),
+            "laatst_gezien": [
+                {
+                    "naam": self._entiteitsnaam(eid),
+                    "tijd": tijd,
+                    "minuten_geleden": round(
+                        (
+                            dt_util.now() - dt_util.parse_datetime(tijd)
+                        ).total_seconds()
+                        / 60,
+                        1,
+                    )
+                    if dt_util.parse_datetime(tijd)
+                    else None,
+                }
+                for eid, tijd in sorted(
+                    self.presence_last_seen.items(),
+                    key=lambda x: x[1],
+                    reverse=True,
+                )
+            ],
             "typisch_thuis_percentage": (
                 round(sum(geleerd.values()) / len(geleerd), 0) if geleerd else None
             ),

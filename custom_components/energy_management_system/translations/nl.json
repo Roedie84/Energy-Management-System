@@ -75,7 +75,8 @@
           "presence_motion_sensor_entities": "Bewegingssensoren binnenshuis (optioneel, voor aanwezigheidsdetectie)",
           "water_softener_start_hour": "Waterontharder: eerste uur van het regeneratievenster",
           "water_softener_end_hour": "Waterontharder: laatste uur van het regeneratievenster",
-          "presence_bedtime_sensor_entity": "Slaapsensor (optioneel): overloop of trap - laatste beweging 's avonds betekent slapen"
+          "presence_bedtime_sensor_entity": "Slaapsensor (optioneel): overloop of trap - laatste beweging 's avonds betekent slapen",
+          "presence_tv_entity": "Televisie (optioneel): tv aan telt als iemand thuis"
         }
       }
     },
@@ -164,7 +165,8 @@
           "presence_motion_sensor_entities": "Bewegingssensoren binnenshuis (optioneel, voor aanwezigheidsdetectie)",
           "water_softener_start_hour": "Waterontharder: eerste uur van het regeneratievenster",
           "water_softener_end_hour": "Waterontharder: laatste uur van het regeneratievenster",
-          "presence_bedtime_sensor_entity": "Slaapsensor (optioneel): overloop of trap - laatste beweging 's avonds betekent slapen"
+          "presence_bedtime_sensor_entity": "Slaapsensor (optioneel): overloop of trap - laatste beweging 's avonds betekent slapen",
+          "presence_tv_entity": "Televisie (optioneel): tv aan telt als iemand thuis"
         }
       }
     },

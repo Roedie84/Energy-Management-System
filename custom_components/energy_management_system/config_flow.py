@@ -39,6 +39,7 @@ from .const import (
     CONF_PV_ACTUAL_AZIMUTH_DEGREES,
     CONF_PRESENCE_BEDTIME_SENSOR,
     CONF_PRESENCE_MOTION_SENSORS,
+    CONF_PRESENCE_TV_ENTITY,
     CONF_WATER_SOFTENER_END_HOUR,
     CONF_WATER_SOFTENER_START_HOUR,
     CONF_PV_ENERGY_SENSOR,
@@ -561,6 +562,18 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
             # overloop, een trap, een slaapkamer. Is die de LAATSTE
             # beweging 's avonds, dan is de stilte erna geen
             # afwezigheid maar een nacht.
+            # v1.20.1: tv aan telt als aanwezig. Daarmee kan de
+            # afwezigheidsdrempel van 45 naar 10 minuten - die 45 stond
+            # er juist om stilzitten op de bank niet als afwezigheid te
+            # tellen, en dat vangt de tv nu op.
+            vol.Optional(
+                CONF_PRESENCE_TV_ENTITY,
+                default=defaults.get(CONF_PRESENCE_TV_ENTITY),
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(
+                    domain=["media_player", "remote", "binary_sensor", "switch"]
+                )
+            ),
             vol.Optional(
                 CONF_PRESENCE_BEDTIME_SENSOR,
                 default=defaults.get(CONF_PRESENCE_BEDTIME_SENSOR),
