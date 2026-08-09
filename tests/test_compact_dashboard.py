@@ -321,7 +321,11 @@ def test_no_tab_is_a_wall_of_text():
         # samenvattingen viel er te weinig te beoordelen. De grens blijft
         # bestaan zodat een tabblad niet opnieuw een muur tekst wordt -
         # het gaat om genoeg, niet om alles.
-        assert tekens < 1400, f"{view['title']}: {tekens} tekens tekst"
+        # v1.17.6: detailpagina's mogen meer tekst hebben - daar staat
+        # juist de onderbouwing. De grens geldt voor wat je bij het
+        # OPENEN ziet.
+        grens = 2500 if str(view.get("path", "")).startswith("detail-") else 1400
+        assert tekens < grens, f"{view['title']}: {tekens} tekens tekst"
 
 
 def test_the_financial_tab_uses_tiles_not_tables():
@@ -456,6 +460,9 @@ def test_every_sensor_appears_somewhere_on_the_dashboard():
     # `test_dashboard_entity_references`.
     HISTORISCH = {
         "Piekvermogen (netimport)": "piekvermogen",
+        "Airco-verwachting (kans binnen 1 uur)": (
+            "airco_verwachting_woonkamertemperatuur"
+        ),
         "Advies-gereedheid (10 modules)": "advies_gereedheid_8_modules",
     }
 
