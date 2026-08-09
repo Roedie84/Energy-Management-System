@@ -237,17 +237,27 @@ def test_morning_shower_is_not_mistaken_for_the_water_softener(
 
 def test_night_regeneration_is_still_recognised(make_coordinator, hass):
     """01:15 lokaal (23:15 UTC) moet juist WEL als regeneratie tellen -
-    voorheen viel dit er buiten."""
+    voorheen viel dit er buiten.
+
+    v1.18.0: de drempel is van 10 naar 40 liter EN 15 minuten gegaan.
+    Deze opstelling gebruikte 6 L/min gedurende 2 minuten - twaalf liter
+    in een paar minuten, wat eerder een bad of een kraan is dan een
+    regeneratie. Nu een realistische spoeling: ruim een half uur, tegen
+    de 100 liter.
+    """
     coordinator = make_coordinator(_config())
     hass.states.set("sensor.water_total", "10.000")
 
     utc_start = datetime(2026, 8, 5, 23, 15, tzinfo=timezone.utc)
-    coordinator._handle_water_flow_change(_FakeEvent(_FakeNewState("6.0", utc_start)))
+    coordinator._handle_water_flow_change(_FakeEvent(_FakeNewState("3.0", utc_start)))
+    # De meterstand moet meelopen, anders is het volume nul en telt
+    # alleen de duur - een regeneratie vraagt allebei.
+    hass.states.set("sensor.water_total", "10.100")
     coordinator._handle_water_flow_change(
-        _FakeEvent(_FakeNewState("0.0", utc_start + timedelta(minutes=2)))
+        _FakeEvent(_FakeNewState("0.0", utc_start + timedelta(minutes=35)))
     )
     coordinator._handle_water_flow_change(
-        _FakeEvent(_FakeNewState("0.0", utc_start + timedelta(minutes=5)))
+        _FakeEvent(_FakeNewState("0.0", utc_start + timedelta(minutes=38)))
     )
 
     sessie = coordinator.water_session_history[-1]

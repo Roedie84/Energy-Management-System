@@ -106,14 +106,31 @@ def test_a_small_night_session_is_not_a_regeneration(make_coordinator, hass):
 
     bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
     start = bron.index("WATER_SOFTENER_NIGHT_WINDOW_START_HOUR\n")
-    blok = bron[start : start + 600]
+    # v1.18.0: niet op een vast aantal tekens zoeken - het
+    # toelichtingsblok groeit mee met elke correctie en schoof de
+    # constante er twee keer uit. Zoeken tot het einde van de
+    # if-voorwaarde is stabiel.
+    einde = bron.index("):", start)
+    blok = bron[start:einde]
 
     assert "WATER_SOFTENER_MIN_LITERS" in blok
+    assert "WATER_SOFTENER_MIN_DURATION_MINUTES" in blok
 
 
 def test_the_threshold_matches_a_real_regeneration():
-    """De gebruiker noemde uit ervaring "ruim >10 liter"."""
-    assert WATER_SOFTENER_MIN_LITERS >= 10.0
+    """v1.18.0, gemeld: "Ik weet zeker dat de waterontharder nog niet
+    heeft geregenereerd, misschien de drempel anders leggen?"
+
+    Tien liter haalt een wc-spoeling plus een kraan al. Een echte
+    regeneratie spoelt de harslaag met pekel en spoelt na: 50 tot 200
+    liter over 20 tot 60 minuten.
+    """
+    from custom_components.energy_management_system.const import (
+        WATER_SOFTENER_MIN_DURATION_MINUTES,
+    )
+
+    assert WATER_SOFTENER_MIN_LITERS >= 40.0
+    assert WATER_SOFTENER_MIN_DURATION_MINUTES >= 15.0
 
 
 # --- 4. weerbronnen --------------------------------------------------
