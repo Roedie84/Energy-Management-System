@@ -24,10 +24,26 @@ def _data():
     return yaml.safe_load((PAKKET / "dashboard_template.yaml").read_text())
 
 
-def _detail():
-    """v1.14.1: op naam zoeken, niet op "de eerste subview". Sinds alle
-    tabbladen subviews zijn (v1.13.0) is dat Visueel geworden."""
-    return next(v for v in _data()["views"] if v["title"] == "Details")
+def _detailpaginas():
+    """Alle detailpagina's (v1.17.0).
+
+    De verzamelpagina "Details" telde zestien kaarten en bijna 6000
+    tekens - niet overzichtelijker dan de tabbladen die ervoor waren
+    opgeruimd; het probleem was alleen verplaatst. Nu één pagina per
+    onderwerp, met `detail-` als voorvoegsel in het pad.
+    """
+    return [
+        v for v in _data()["views"] if str(v.get("path", "")).startswith("detail-")
+    ]
+
+
+def _detailkaarten_alle():
+    kaarten = []
+    for view in _detailpaginas():
+        kaarten += list(view.get("cards") or [])
+        for sectie in view.get("sections") or []:
+            kaarten += sectie.get("cards") or []
+    return kaarten
 
 
 # --- de pagina bestaat en is verborgen -------------------------------
@@ -36,10 +52,13 @@ def _detail():
 def test_the_detail_page_is_a_subview():
     """Een gewoon tabblad zou de tabbalk weer voller maken - precies wat
     er in v1.12.2 is teruggebracht van tien naar zeven."""
-    detail = _detail()
+    kaarten = _detailkaarten_alle()
 
-    assert detail["title"] == "Details"
-    assert detail["path"] == "details"
+    paginas = _detailpaginas()
+
+    assert len(paginas) == 12
+    for pagina in paginas:
+        assert pagina.get("subview") is True, pagina["title"]
 
 
 def test_only_the_overview_is_in_the_tab_bar():
@@ -55,10 +74,7 @@ def test_only_the_overview_is_in_the_tab_bar():
 
 def test_it_contains_the_removed_tables():
     """Het opruimen mocht geen informatie kosten, alleen ruimte."""
-    detail = _detail()
-    kaarten = list(detail.get("cards") or [])
-    for sectie in detail.get("sections") or []:
-        kaarten += sectie.get("cards") or []
+    kaarten = _detailkaarten_alle()
     titels = {k.get("title") for k in kaarten}
 
     for onderdeel in (
@@ -74,11 +90,8 @@ def test_it_contains_the_removed_tables():
 
 def test_the_attention_points_are_listed_in_full():
     """Op Overzicht staat alleen een telling; hier hoort de hele lijst."""
-    detail = _detail()
-    kaarten = list(detail.get("cards") or [])
-    for sectie in detail.get("sections") or []:
-        kaarten += sectie.get("cards") or []
-    kaart = next(k for k in kaarten if k.get("title") == "Aandachtspunten")
+    kaarten = _detailkaarten_alle()
+    kaart = next(k for k in _detailkaarten_alle() if k.get("title") == "Aandachtspunten")
 
     assert "for punt in p" in kaart["content"]
     assert "informatief" in kaart["content"]
@@ -107,7 +120,12 @@ def test_summary_tiles_navigate_to_the_detail_page():
                 continue
             actie = kaart.get("tap_action") or {}
             assert actie.get("action") == "navigate", kaart.get("primary")
-            assert actie.get("navigation_path", "").endswith("/details")
+            # v1.17.0: elke tegel wijst naar ZIJN eigen onderwerp-pagina
+            # in plaats van naar één verzamelpagina.
+            pad = actie.get("navigation_path", "")
+            assert "/detail-" in pad or pad.endswith(
+                ("/financieel", "/kwaliteit", "/systeem", "/verloop")
+            ), pad
             gevonden += 1
 
     assert gevonden >= 5, f"maar {gevonden} tegels wijzen naar de details"
@@ -199,11 +217,18 @@ def test_the_exceptions_are_deliberate():
 
 
 def test_nothing_is_shown_twice():
-    """De verbetermogelijkheden stonden zowel op Kwaliteit als op de
-    detailpagina. Twee keer hetzelfde tonen is precies wat er wordt
-    opgeruimd."""
-    data = _data()
-    kwaliteit = next(v for v in data["views"] if v["title"] == "Kwaliteit")
-    titels = {k.get("title") for k in kwaliteit.get("cards") or []}
+    """v1.17.1: de verbetermogelijkheden stonden zowel op het
+    Kwaliteit-tabblad als op de detailpagina. Sinds de opsplitsing is er
+    per onderwerp nog één pagina, dus de controle is: geen enkele
+    kaarttitel komt twee keer voor over alle detailpagina's heen."""
+    titels = [
+        k.get("title")
+        for k in _detailkaarten_alle()
+        if k.get("title") and "title-card" not in str(k.get("type"))
+    ]
 
-    assert "Verbetermogelijkheden" not in titels
+    dubbel = sorted({t for t in titels if titels.count(t) > 1})
+
+    assert not dubbel, dubbel
+
+

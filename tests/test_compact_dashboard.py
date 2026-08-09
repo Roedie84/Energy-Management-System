@@ -53,7 +53,14 @@ def test_no_large_tables_outside_the_overview():
         # een zin persen zou informatie kosten in plaats van ruis
         # besparen. Overzicht is de landingspagina, Meldingen een
         # bedieningspaneel.
-        if view["title"] in ("Overzicht", "Meldingen", "Financieel"):
+        # v1.17.2: detailpagina's zijn juist BEDOELD voor tabellen -
+        # dat is wat er achter de doorklik hoort te zitten. Deze regel
+        # stamt uit v1.12.0, toen alles op één niveau stond en elke
+        # tabel dus meteen in beeld kwam.
+        if view["title"] in (
+            "Overzicht",
+            "Meldingen",
+        ) or str(view.get("path", "")).startswith("detail-"):
             continue
         for kaart in _kaarten(view):
             inhoud = kaart.get("content") or ""
@@ -68,7 +75,14 @@ def test_the_trimmed_tabs_are_small():
     """Het doel was overzicht. Een tabblad met twintig kaarten haalt dat
     niet, hoe compact de kaarten ook zijn."""
     for view in _views():
-        if view["title"] in ("Overzicht", "Meldingen", "Financieel"):
+        # v1.17.2: detailpagina's zijn juist BEDOELD voor tabellen -
+        # dat is wat er achter de doorklik hoort te zitten. Deze regel
+        # stamt uit v1.12.0, toen alles op één niveau stond en elke
+        # tabel dus meteen in beeld kwam.
+        if view["title"] in (
+            "Overzicht",
+            "Meldingen",
+        ) or str(view.get("path", "")).startswith("detail-"):
             continue
         # v1.14.8: van 10 naar 20. De 24 ontbrekende sensoren zijn op
         # verzoek teruggezet op de verborgen tabbladen; de grens blijft
@@ -234,7 +248,13 @@ def test_no_tab_is_too_thin():
     Visueel is uitgezonderd: dat is één schermvullende plattegrond.
     """
     for view in _views():
-        if view["title"] == "Visueel":
+        # v1.17.0: detailpagina's mogen juist klein zijn - één onderwerp
+        # per pagina was het doel. De regel geldt voor de TABBLADEN, waar
+        # een pagina met één kaart betekent dat je ernaartoe klikt voor
+        # één regel.
+        if view["title"] == "Visueel" or str(view.get("path", "")).startswith(
+            "detail-"
+        ):
             continue
         assert len(_kaarten(view)) >= 3, (
             f"{view['title']}: {len(_kaarten(view))} kaart(en) - hoort "
@@ -242,23 +262,21 @@ def test_no_tab_is_too_thin():
         )
 
 
-def test_the_merged_tab_labels_each_topic():
-    """Zonder tabbladnaam is niet meer af te leiden waar een zin over
-    gaat, dus elk onderwerp krijgt een kop."""
-    systeem = next(v for v in _views() if v["title"] == "Systeem")
-    koppen = [
-        k.get("title")
-        for k in _kaarten(systeem)
-        if "title-card" in str(k.get("type"))
-    ]
+def test_each_topic_has_its_own_page():
+    """v1.17.1: het samengevoegde tabblad "Systeem" met koppen per
+    onderwerp is vervangen door een pagina PER onderwerp. De garantie is
+    dezelfde - elk onderwerp is apart vindbaar - maar nu als eigen
+    pagina in plaats van een kop op een gedeeld tabblad."""
+    titels = {v["title"] for v in _views()}
 
-    for onderwerp in ("Accumodules", "Apparaten", "Zelflerend"):
-        assert onderwerp in koppen, onderwerp
+    for onderwerp in ("Accu", "Apparaten", "Water", "Klimaat"):
+        assert onderwerp in titels, onderwerp
+
 
 
 def test_each_heading_explains_what_it_shows():
     """Een kop "Zelflerend" alleen zegt nog niet wát je ziet."""
-    systeem = next(v for v in _views() if v["title"] == "Systeem")
+    systeem = next(v for v in _views() if v["title"] == "Apparaten")
 
     for kaart in _kaarten(systeem):
         if "title-card" in str(kaart.get("type")):
@@ -310,7 +328,8 @@ def test_the_financial_tab_uses_tiles_not_tables():
     """De drie grote tabellen (afrekening, week/maand/jaar,
     maandoverzicht) waren samen ruim 4000 tekens - het laatste bastion
     van de oude opzet."""
-    financieel = next(v for v in _views() if v["title"] == "Financieel")
+    # v1.17.1: "Financieel" heet nu "Kosten".
+    financieel = next(v for v in _views() if v["title"] == "Kosten")
 
     tekens = sum(len(k.get("content") or "") for k in _kaarten(financieel))
 
@@ -400,7 +419,10 @@ def test_the_status_tiles_still_drill_down():
                 continue
             actie = kaart.get("tap_action") or {}
             assert actie.get("action") == "navigate", kaart.get("primary")
-            assert actie.get("navigation_path", "").endswith("/details")
+            # v1.17.0: elke tegel wijst naar zijn eigen onderwerp-pagina.
+            assert "/detail-" in actie.get("navigation_path", ""), kaart.get(
+                "primary"
+            )
 
 
 def test_every_sensor_appears_somewhere_on_the_dashboard():

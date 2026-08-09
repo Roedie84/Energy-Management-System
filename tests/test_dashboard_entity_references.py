@@ -152,13 +152,29 @@ def test_learned_values_explain_an_empty_state():
     """
     yaml_tekst = (PAKKET / "dashboard_template.yaml").read_text()
 
+    # v1.17.1: het dashboard is herschreven via `yaml.dump`, waardoor
+    # aanhalingstekens in Jinja verdubbeld op schijf staan ('' in plaats
+    # van '). Na parsing is de Jinja identiek - Home Assistant leest het
+    # correct - maar op de RUWE tekst zoeken werkt niet meer. Daarom via
+    # de geparste kaarten.
+    import yaml as _yaml
+
+    data = _yaml.safe_load(yaml_tekst)
+    kaarten = []
+    for view in data["views"]:
+        kaarten += list(view.get("cards") or [])
+        for sectie in view.get("sections") or []:
+            kaarten += sectie.get("cards") or []
+        for kaart in list(kaarten):
+            kaarten += kaart.get("cards") or []
+
     for eid, terugval in (
         ("learned_night_consumption", "nog niet geleerd"),
         ("piekvermogen", "nog niet gemeten"),
     ):
-        index = yaml_tekst.index(f"_{eid}')")
-        omgeving = yaml_tekst[max(0, index - 300) : index + 300]
-        assert terugval in omgeving, eid
+        passend = [k for k in kaarten if eid in str(k.get("entity", ""))]
+        assert passend, eid
+        assert any(terugval in str(k) for k in passend), eid
 
 
 

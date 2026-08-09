@@ -314,7 +314,11 @@ def test_dashboard_yaml_is_valid():
     # tabbladen standaard niet zichtbaar hoefden te zijn.
     zichtbaar = [v for v in data["views"] if not v.get("subview")]
     assert [v["title"] for v in zichtbaar] == ["Overzicht"]
-    assert len(data["views"]) == 8
+    # v1.17.0: de verzamelpagina "Details" is opgesplitst in zeven
+    # onderwerp-pagina's, dus 7 tabbladen + 7 detailpagina's.
+    # v1.17.1: 3 zichtbare (Overzicht, Visueel, Meldingen) + 12
+    # onderwerp-pagina's.
+    assert len(data["views"]) == 15
 
 
 def test_markdown_tables_have_no_blank_lines_between_rows():
@@ -396,12 +400,13 @@ def test_the_merged_views_kept_their_content():
     # tabblad voor één zin is verspilling. Samengevoegd tot "Systeem",
     # met per onderwerp een kop die zegt wat je ziet.
     verwacht = {
-        # v1.12.8: de verbetermogelijkheden en de uitleg zijn naar de
-        # detailpagina verhuisd; er blijven drie samenvattingstegels.
-        "Kwaliteit": 3,
-        "Financieel": 10,
-        "Verloop": 6,
-        "Systeem": 8,
+        # v1.17.1: de vier gemengde tabbladen zijn opgesplitst in
+        # onderwerp-pagina's. De inhoud is verdeeld, niet verdwenen -
+        # deze controle bewaakt dat elke pagina gevuld blijft.
+        "Meetkwaliteit": 3,
+        "Kosten": 3,
+        "Verloop": 5,
+        "Accu": 2,
     }
     for titel, minimum in verwacht.items():
         assert titel in views, titel

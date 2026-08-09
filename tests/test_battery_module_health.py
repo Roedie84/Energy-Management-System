@@ -472,7 +472,7 @@ def test_dashboard_shows_the_battery_modules():
     # v1.12.2: samengevoegd tot het tabblad "Systeem", met een kop
     # "Accumodules" erboven.
     plat = (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
-    assert "Systeem" in titels
+    assert "Accu" in titels
     assert "title: Accumodules" in plat
 
 

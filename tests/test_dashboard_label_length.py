@@ -81,7 +81,10 @@ def test_the_control_tiles_are_wide_enough():
         if kaart.get("type") == "heading":
             continue
         kolommen = (kaart.get("grid_options") or {}).get("columns", 12)
-        assert kolommen >= 6, kaart.get("name")
+        # v1.17.2: de besturingstegels staan op vier kolommen (drie per
+        # rij) om het scrollen te beperken; de namen zijn navenant
+        # ingekort.
+        assert kolommen >= 4, kaart.get("name")
 
 
 def test_shortening_did_not_lose_the_meaning():
@@ -127,7 +130,7 @@ def test_cards_inside_grids_are_checked_too():
     Deze test legt vast dat er daadwerkelijk in de grids wordt gekeken.
     """
     data = yaml.safe_load((PAKKET / "dashboard_template.yaml").read_text())
-    financieel = next(v for v in data["views"] if v["title"] == "Financieel")
+    financieel = next(v for v in data["views"] if v["title"] == "Kosten")
 
     op_viewniveau = len(financieel.get("cards") or [])
     met_grids = len(_kaarten(financieel))

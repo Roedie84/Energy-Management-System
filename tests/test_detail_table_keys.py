@@ -23,10 +23,15 @@ PAKKET = Path(pkg.__file__).parent
 
 def _detailkaarten():
     data = yaml.safe_load((PAKKET / "dashboard_template.yaml").read_text())
-    detail = next(v for v in data["views"] if v["title"] == "Details")
-    kaarten = list(detail.get("cards") or [])
-    for sectie in detail.get("sections") or []:
-        kaarten += sectie.get("cards") or []
+    kaarten = []
+    # v1.17.0: de verzamelpagina is opgesplitst in zeven
+    # onderwerp-pagina's; de kaarten staan er nog allemaal, verspreid.
+    for view in data["views"]:
+        if not str(view.get("path", "")).startswith("detail-"):
+            continue
+        kaarten += list(view.get("cards") or [])
+        for sectie in view.get("sections") or []:
+            kaarten += sectie.get("cards") or []
     return kaarten
 
 
@@ -117,10 +122,16 @@ def test_the_detail_page_is_one_column():
     kolom werden geperst. Eén kolom geeft elke tabel de volle breedte.
     """
     data = yaml.safe_load((PAKKET / "dashboard_template.yaml").read_text())
-    detail = next(v for v in data["views"] if v["title"] == "Details")
+    # v1.17.0: geldt voor élke detailpagina, niet meer voor één
+    # verzamelpagina.
+    paginas = [
+        v for v in data["views"] if str(v.get("path", "")).startswith("detail-")
+    ]
+    assert paginas
 
-    assert detail.get("type") == "sections"
-    assert detail.get("max_columns") == 1
+    for pagina in paginas:
+        assert pagina.get("type") == "sections", pagina["title"]
+        assert pagina.get("max_columns") == 1, pagina["title"]
 
 
 def test_no_detail_table_has_more_than_three_columns():
@@ -153,6 +164,8 @@ def test_no_detail_table_has_more_than_three_columns():
             if zonder_jinja.count("|") < 2:
                 continue
             kolommen = zonder_jinja.count("|") - 1
+            # v1.17.2: de PV-kwaliteitstabel heeft drie kolommen maar
+            # tien regels; het gaat om het AANTAL KOLOMMEN, niet regels.
             assert kolommen <= 6, (
                 f"{kaart.get('title')}: {kolommen} kolommen - past niet op "
                 "een smal scherm"
