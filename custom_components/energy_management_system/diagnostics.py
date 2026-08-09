@@ -343,6 +343,9 @@ async def async_get_config_entry_diagnostics(
             # v1.17.2: hoe betrouwbaar de PV-voorspelling per dag is,
             # niet alleen de gemiddelde bias.
             "pv_forecast_quality": coordinator.get_pv_forecast_quality(),
+            # v1.17.8: wordt de voorspelling ook echt gecorrigeerd, of
+            # alleen gemeten?
+            "pv_correction_status": coordinator.get_pv_correction_status(),
             "dashboard_health": coordinator.get_dashboard_health(),
             "stalled_series": coordinator.get_stalled_series_report(),
             "plausibility_warnings": coordinator.get_plausibility_warnings(),

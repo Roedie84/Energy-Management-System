@@ -515,6 +515,160 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Ja, de PV-voorspelling wordt echt gecorrigeerd (v1.17.8)
+
+**Gevraagd**: *"Wordt de PV-verwachting nu wel daadwerkelijk gecorrigeerd
+of?"*
+
+Terechte vraag — een systeem kan makkelijk iets meten zonder er iets mee
+te doen. Het antwoord is **ja, op drie niveaus**, maar dat was nergens te
+zien.
+
+### De volgorde
+
+1. **Vandaag, resterende uren** — geschaald op wat er tot nu toe
+   werkelijk is opgewekt tegenover de voorspelling
+2. **Toekomstige uren** — de per uur geleerde verhouding
+3. **Alleen als die er voor dat uur nog niet is** — het daggemiddelde
+
+Die volgorde doet ertoe, en dat wordt zichtbaar in je eigen cijfers:
+
+| Uur | Correctie |
+|---|---|
+| 06:00 | × 0,53 (−47%) |
+| 10:00 | × 1,03 (+3%) |
+| 13:00 | × 0,75 (−25%) |
+| 20:00 | × 0,29 (−71%) |
+
+Vijftien uren hebben een eigen geleerde correctie. Eén daggemiddelde van
+−11,6% zou dat verschil volledig wegpoetsen — 's ochtends en 's avonds
+zit Solcast er veel verder naast dan rond het middaguur.
+
+### Waar het gebeurt
+
+In `_get_expected_pv_kwh`, de functie die de voorspelling levert aan de
+**reserveberekening**. Het is dus geen weergave maar invoer voor de
+beslissing hoeveel er 's nachts bewaard moet blijven.
+
+Er staan nu drie tests op de code zelf: de uurcorrectie wordt
+vermenigvuldigd, de dagbias is de terugval, en de resterende uren van
+vandaag worden herschaald. Die falen zodra iemand de toepassing eruit
+haalt en alleen de meting laat staan.
+
+### Nu zichtbaar
+
+Op de PV-pagina staat de hele keten uitgeschreven, met het aantal uren
+dat een eigen correctie heeft en de sterkste en zwakste. Plus de zin die
+je vraag direct beantwoordt: *"De correctie wordt toegepast op de
+voorspelling die de reserveberekening gebruikt, niet alleen getoond."*
+
+### Getest
+
+Nieuw `tests/test_pv_correction_applied.py`, 10 tests.
+
+**Volledige testsuite**: 1486 tests, allemaal groen.
+
+## Tijdstempel en een vlakke kolom in de klimaattabel (v1.17.7)
+
+**Gemeld**: *"Tevens de tijdsaanduiding incorrect in deze tabel"* — met
+een screenshot waarop elke rij `2026-08-09T11:00:00+02:00` toonde.
+
+### De tijd
+
+Dat is de rauwe ISO-tijdstempel; alleen het uur is nodig. De kolom was
+daardoor breder dan de rest van de tabel samen. Nu `11:00`.
+
+Ik heb meteen alle andere tabellen gecontroleerd op hetzelfde patroon —
+geen tweede geval, en er staat nu een test op die dat blijft bewaken.
+
+### En iets dat me opviel bij het kijken
+
+De kolom **Betrouwbaar** stond op **alle** uren op 22,0 °C, terwijl het
+buiten van 26,7 naar 31,1 °C liep. Dat ziet eruit als een fout.
+
+Dat is het niet: bij te weinig metingen in precies die situatie houdt de
+projectie bewust de huidige temperatuur aan. Liever geen verandering
+voorspellen dan een verkeerde — dat is in v1.1.2 zo gekozen.
+
+Maar uit de tabel was dat niet af te lezen. Er staat nu een regel onder
+die uitlegt wanneer die kolom vlak blijft, en de kolom **Metingen** laat
+zien waarom een uur op de terugval valt.
+
+Op het moment van je export waren er 17 geleerde situaties, waarvan de
+meeste met één tot zes metingen — te dun voor de strenge kolom. Dat wordt
+vanzelf beter naarmate er meer combinaties langskomen.
+
+### Getest
+
+Nieuw `tests/test_climate_table_time.py`, 7 tests: alleen het uur wordt
+getoond, geen rauwe tijdstempel meer, een ontbrekende tijd breekt de rij
+niet, geen enkele andere kaart toont een rauwe tijdstempel, de vlakke
+kolom wordt uitgelegd, het aantal metingen is zichtbaar, en beide reeksen
+staan er nog.
+
+**Volledige testsuite**: 1476 tests, allemaal groen.
+
+## Airco-verwachting gaf een temperatuur (v1.17.6)
+
+**Gemeld**: *"Wat zegt dit nu? Ik dacht dat hier de verwachting in % of
+de airco aan zou gaan of niet. Ik zet de airco altijd zelf aan en ook
+daar kan van geleerd worden toch, in combinatie met de verwachte
+temperatuur etc."*
+
+### Dat mechanisme bestond al
+
+Sinds **v0.63.55** doet de integratie precies wat je beschrijft: elke
+temperatuurmeting van de woonkamer gaat in een bin van 1 °C en krijgt een
+uur de tijd. Zet je de airco in dat uur aan, dan telt die waarneming als
+*ja* voor die bin. Per bin worden de laatste twintig waarnemingen
+bewaard, zodat het meebeweegt met het seizoen.
+
+**Maar de sensor gaf de huidige woonkamertemperatuur terug** — 22,0 °C,
+hetzelfde getal dat de temperatuursensor al toont. De kans zat in een
+attribuut dat nergens in beeld kwam.
+
+### Nu de kans zelf
+
+De sensor heet nu *"Airco-verwachting (kans binnen 1 uur)"* en geeft een
+percentage. Een voorbeeld van hoe dat eruitziet zodra er genoeg
+waarnemingen zijn:
+
+| Temperatuur | Kans | Waarnemingen |
+|---|---|---|
+| 22 °C | 0% | 20 |
+| 25 °C | 10% | 20 |
+| 26 °C | 70% | 10 |
+| 27 °C | 90% | 10 |
+
+Dát is de vraag die je stelde: bij welke temperatuur grijp je in.
+
+### Alle bins zichtbaar
+
+Op de Klimaat-pagina staat nu de hele tabel, niet alleen de huidige bin —
+plus uitleg over hoe het leert. Zonder die uitleg is niet te beoordelen
+waarom een bin op 0% staat.
+
+In jouw huidige gegevens staat alles op 0%, ook 26 °C. Dat klopt: je hebt
+de airco bij die temperaturen de laatste twintig waarnemingen niet
+aangezet. Zodra dat wel gebeurt, loopt de kans op.
+
+### Een bekend patroon opnieuw
+
+Het hernoemen brak twee tests, omdat Home Assistant de entity_id
+vasthoudt bij de **eerste** aanmaak — `airco_verwachting_woonkamer-
+temperatuur` blijft. Dezelfde regel als bij `piekvermogen` in v1.6.4, en
+die uitzonderingenlijst bestond al; hij is nu aangevuld.
+
+### Getest
+
+Nieuw `tests/test_airco_expectation.py`, 7 tests: de kans loopt op met de
+temperatuur, de sensor geeft een percentage in plaats van een
+temperatuur, de naam zegt wat het is, alle bins zijn zichtbaar, de kaart
+toont ze met uitleg, en 0% is een echt antwoord in plaats van een
+ontbrekende meting.
+
+**Volledige testsuite**: 1469 tests, allemaal groen.
+
 ## PV-tegel op Overzicht (v1.17.5)
 
 **Gemeld**: *"Ook mis ik een PV tegel, welke ik kan aanklikken voor alle

@@ -502,7 +502,7 @@ views:
   panel: true
   cards:
   - type: picture-elements
-    image: /local/energy_management_system_overview.svg?v=1.17.5
+    image: /local/energy_management_system_overview.svg?v=1.17.8
     elements:
     - type: state-label
       entity: sensor.woonkamer_energy_management_system_system_status
@@ -1199,6 +1199,25 @@ views:
       grid_options:
         columns: 12
         rows: auto
+    - type: markdown
+      title: Wordt de voorspelling gecorrigeerd?
+      content: '{% set c = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''pv_correctie'') or {} %}{% if not c.get(''actief'') %}Nog niets geleerd; de voorspelling wordt ongewijzigd gebruikt.{% else %}**Ja** — op drie niveaus, in deze volgorde:
+
+
+        {% for stap in c.volgorde %}{{ loop.index }}. {{ stap }}
+
+        {% endfor %}
+
+        Er zijn **{{ c.uren_met_eigen_correctie }} uren** met een eigen geleerde correctie; voor de overige uren geldt het daggemiddelde van {{ c.daggemiddelde_bias_procent }}%.
+
+
+        {% if c.sterkste_correctie %}De correctie verschilt sterk per uur: om {{ c.sterkste_correctie.uur }}:00 wordt de voorspelling met {{ c.sterkste_correctie.factor }} vermenigvuldigd, om {{ c.zwakste_correctie.uur }}:00 met {{ c.zwakste_correctie.factor }}. Eén daggemiddelde zou dat verschil wegpoetsen.{% endif %}
+
+
+        _{{ c.toelichting }}_{% endif %}'
+      grid_options:
+        columns: 12
+        rows: auto
 - title: Accu
   path: detail-accu
   subview: true
@@ -1300,35 +1319,52 @@ views:
         navigation_path: /energy-management-system/detail-klimaat
     - type: markdown
       title: Woonkamertemperatuur per uur
-      content: '{% set t = state_attr(''sensor.woonkamer_energy_management_system_klimaat_projectie_woonkamertemperatuur'', ''traject'') or [] %}{% if t | length == 0 %}Nog geen projectie beschikbaar - de integratie leert per combinatie van buitentemperatuur, rolluikstand en airco.
-
-        {% else %}| Uur | Snel | Betrouwbaar | Buiten | Basis | Metingen |
+      content: '{% set t = state_attr(''sensor.woonkamer_energy_management_system_klimaat_projectie_woonkamertemperatuur'', ''traject'') or [] %}{% if t | length == 0 %}Nog geen projectie beschikbaar - de integratie leert per combinatie van buitentemperatuur, rolluikstand en airco.{% else %}| Uur | Snel | Betrouwbaar | Buiten | Basis | Metingen |
 
         |---|---|---|---|---|---|
 
-        {% for u in t %}| {{ u.get(''tijd'') }} | {{ u.get(''kort_termijn_temp_c'') if u.get(''kort_termijn_temp_c'') is not none else ''—'' }} °C | {{ u.get(''betrouwbaar_temp_c'') if u.get(''betrouwbaar_temp_c'') is not none else ''—'' }} °C | {{ u.get(''buitentemp_voorspeld_c'') if u.get(''buitentemp_voorspeld_c'') is not none else ''—'' }} °C | {{ u.get(''basis'') or ''—'' }} | {{ u.get(''aantal_metingen'') if u.get(''aantal_metingen'') is not none else ''—'' }} |
+        {% for u in t %}| {{ as_timestamp(u.get(''tijd'')) | timestamp_custom(''%H:%M'') if u.get(''tijd'') else ''?'' }} | {{ u.get(''kort_termijn_temp_c'') if u.get(''kort_termijn_temp_c'') is not none else ''—'' }} °C | {{ u.get(''betrouwbaar_temp_c'') if u.get(''betrouwbaar_temp_c'') is not none else ''—'' }} °C | {{ u.get(''buitentemp_voorspeld_c'') if u.get(''buitentemp_voorspeld_c'') is not none else ''—'' }} °C | {{ u.get(''basis'') or ''—'' }} | {{ u.get(''aantal_metingen'') if u.get(''aantal_metingen'') is not none else ''—'' }} |
 
         {% endfor %}{% endif %}
 
 
-        **Snel** valt terug op naburige situaties zodra de exacte
+        **Snel** valt terug op naburige situaties zodra de exacte combinatie te dun bezet is; **Betrouwbaar** komt pas bij genoeg metingen in precies die situatie.
 
-        combinatie te dun bezet is; **Betrouwbaar** komt pas bij genoeg
 
-        metingen in precies die situatie. De kolom Basis zegt waarop de
-
-        snelle schatting rust.
-
-        '
+        _Staat de kolom Betrouwbaar op alle uren gelijk, dan is er voor die situaties nog geen geleerde verandersnelheid en wordt bewust de huidige temperatuur aangehouden - liever geen verandering voorspellen dan een verkeerde._'
       grid_options:
         columns: 12
         rows: auto
-    - type: custom:mushroom-entity-card
+    - type: custom:mushroom-template-card
+      primary: '{% set v = states(''sensor.woonkamer_energy_management_system_airco_verwachting_woonkamertemperatuur'') %}{{ v ~ ''% kans dat de airco aangaat'' if v not in [''unknown'',''unavailable'',''''] else ''nog niet genoeg waarnemingen'' }}'
+      secondary: '{% set n = state_attr(''sensor.woonkamer_energy_management_system_airco_verwachting_woonkamertemperatuur'', ''aantal_metingen_deze_bucket'') %}{% set b = state_attr(''sensor.woonkamer_energy_management_system_airco_verwachting_woonkamertemperatuur'', ''huidige_bucket'') %}Binnen 1 uur, bij {{ b }} °C · geleerd uit {{ n or 0 }} waarnemingen'
+      multiline_secondary: true
+      icon: mdi:air-conditioner
+      icon_color: '{% set v = states(''sensor.woonkamer_energy_management_system_airco_verwachting_woonkamertemperatuur'') | float(-1) %}{{ ''red'' if v >= 60 else (''orange'' if v >= 25 else ''green'') }}'
       entity: sensor.woonkamer_energy_management_system_airco_verwachting_woonkamertemperatuur
-      name: Airco-verwachting
       tap_action:
         action: more-info
-      icon: mdi:thermometer-lines
+      grid_options:
+        columns: 12
+        rows: auto
+    - type: markdown
+      title: Hoe de airco-verwachting werkt
+      content: 'Elke temperatuurmeting van de woonkamer gaat in een bin van 1 °C en krijgt een uur de tijd. Zet je de airco in dat uur aan, dan telt die waarneming als **ja** voor die bin.
+
+
+        Zo leert de integratie van jouw gedrag: bij welke temperatuur grijp je in? Per bin worden de laatste 20 waarnemingen bewaard, zodat het meebeweegt met het seizoen.
+
+
+        {% set h = state_attr(''sensor.woonkamer_energy_management_system_airco_verwachting_woonkamertemperatuur'', ''geleerde_buckets'') or {} %}{% if h %}| Temperatuur | Kans | Waarnemingen |
+
+        |---|---|---|
+
+        {% for b, g in h.items() %}| {{ b }} °C | {{ g.probability_percent }}% | {{ g.sample_count }} |
+
+        {% endfor %}{% else %}_Nog geen bins met genoeg waarnemingen._{% endif %}'
+      grid_options:
+        columns: 12
+        rows: auto
 - title: Apparaten
   path: detail-apparaten
   subview: true

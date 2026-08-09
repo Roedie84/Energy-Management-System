@@ -3846,6 +3846,70 @@ class EnergyManagementSystemCoordinator:
             "ruimere marge is dan verstandiger."
         )
 
+    def get_pv_correction_status(self) -> dict:
+        """Wordt de PV-voorspelling daadwerkelijk gecorrigeerd?
+        (v1.17.8)
+
+        Gevraagd: "Wordt de PV-verwachting nu wel daadwerkelijk
+        gecorrigeerd of?"
+
+        Ja, en op drie niveaus - maar dat was nergens te zien. Een
+        systeem kan makkelijk iets meten zonder er iets mee te doen, en
+        dan is die vraag volstrekt terecht.
+
+        De volgorde is: eerst de dagcorrectie voor de resterende uren van
+        vandaag, dan de per-uur geleerde verhouding, en pas als die er
+        voor dat uur niet is de daggemiddelde bias.
+
+        Die volgorde doet ertoe. Bij deze installatie loopt de
+        uurcorrectie van 0,53 om 6:00 tot 1,03 om 10:00 en 0,29 om
+        20:00. Eén daggemiddelde van -11,6% zou dat verschil wegpoetsen.
+        """
+        tracker = self.solar_tracker
+        bias = getattr(tracker, "learned_bias_percent", None)
+        uurcorrecties = {
+            uur: self.learned_pv_hourly_ratio(uur) for uur in range(24)
+        }
+        geleerd = {u: r for u, r in uurcorrecties.items() if r is not None}
+
+        return {
+            "actief": bool(geleerd) or bias is not None,
+            "uren_met_eigen_correctie": len(geleerd),
+            "daggemiddelde_bias_procent": (
+                round(bias, 1) if bias is not None else None
+            ),
+            "sterkste_correctie": (
+                {
+                    "uur": min(geleerd, key=lambda u: geleerd[u]),
+                    "factor": round(min(geleerd.values()), 3),
+                }
+                if geleerd
+                else None
+            ),
+            "zwakste_correctie": (
+                {
+                    "uur": max(geleerd, key=lambda u: geleerd[u]),
+                    "factor": round(max(geleerd.values()), 3),
+                }
+                if geleerd
+                else None
+            ),
+            "volgorde": [
+                "Vandaag, resterende uren: geschaald op wat er tot nu toe "
+                "werkelijk is opgewekt tegenover de voorspelling.",
+                "Toekomstige uren: de per uur geleerde verhouding.",
+                "Alleen als die er voor dat uur nog niet is: het "
+                "daggemiddelde.",
+            ],
+            "toelichting": (
+                "De correctie wordt toegepast op de voorspelling die de "
+                "reserveberekening gebruikt, niet alleen getoond."
+                if geleerd or bias is not None
+                else "Nog niets geleerd; de voorspelling wordt ongewijzigd "
+                "gebruikt."
+            ),
+        }
+
     def get_stalled_series_report(self) -> list[dict]:
         """Zoekt geleerde reeksen die niet meer veranderen (v1.11.1).
 

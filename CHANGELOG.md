@@ -10189,3 +10189,80 @@ Zonder voltooide dagen toont hij nog steeds de opwek, met de reden erbij.
 **Getest**: vier tests erbij in `test_pv_forecast_quality.py`.
 
 **Volledige testsuite**: 1462 tests, allemaal groen.
+
+## v1.17.6 — Airco-verwachting gaf een temperatuur
+
+**Gemeld**: de kaart toonde 22,0 °C terwijl er een kans in procenten werd
+verwacht, met de opmerking dat er van eigen airco-gebruik geleerd kan
+worden.
+
+**Dat mechanisme bestond al** sinds v0.63.55: elke temperatuurmeting gaat
+in een bin van 1 °C en krijgt een uur de tijd; gaat de airco in dat uur
+aan, dan telt die waarneming als "ja". Per bin de laatste 20
+waarnemingen, zodat het meebeweegt met het seizoen.
+
+**Maar de sensor gaf de HUIDIGE woonkamertemperatuur terug** - hetzelfde
+getal dat de temperatuursensor al toont. De kans zat in een attribuut dat
+nergens in beeld kwam.
+
+**Nu**: sensor heet "Airco-verwachting (kans binnen 1 uur)" en geeft een
+percentage. Op de Klimaat-pagina staat de hele tabel met alle geleerde
+bins plus uitleg over het mechanisme - zonder die uitleg is niet te
+beoordelen waarom een bin op 0% staat.
+
+**Bekend patroon opnieuw**: het hernoemen brak twee tests omdat HA de
+entity_id vasthoudt bij de eerste aanmaak
+(`airco_verwachting_woonkamertemperatuur`). Dezelfde regel als bij
+`piekvermogen` in v1.6.4; de uitzonderingenlijst is aangevuld.
+
+**Getest**: nieuw `tests/test_airco_expectation.py`, 7 tests.
+
+**Volledige testsuite**: 1469 tests, allemaal groen.
+
+## v1.17.7 — Tijdstempel en een vlakke kolom in de klimaattabel
+
+**Gemeld**: de tijdsaanduiding in de klimaattabel was incorrect - elke
+rij toonde de rauwe ISO-tijdstempel (`2026-08-09T11:00:00+02:00`),
+waardoor die kolom breder was dan de rest van de tabel samen. Nu alleen
+het uur.
+
+Alle andere tabellen gecontroleerd op hetzelfde patroon: geen tweede
+geval, met een test die dat blijft bewaken.
+
+**Opgemerkt bij het kijken**: de kolom "Betrouwbaar" stond op alle uren
+op 22,0 °C terwijl het buiten van 26,7 naar 31,1 liep. Dat is bewust
+gedrag (bij te weinig metingen wordt de huidige temperatuur aangehouden -
+liever geen verandering voorspellen dan een verkeerde, v1.1.2) maar het
+was uit de tabel niet af te lezen. Er staat nu een regel onder die dat
+uitlegt, en de kolom Metingen laat zien waarom een uur op de terugval
+valt.
+
+**Getest**: nieuw `tests/test_climate_table_time.py`, 7 tests.
+
+**Volledige testsuite**: 1476 tests, allemaal groen.
+
+## v1.17.8 — Ja, de PV-voorspelling wordt echt gecorrigeerd
+
+**Gevraagd**: wordt de PV-verwachting daadwerkelijk gecorrigeerd?
+
+**Ja, op drie niveaus**, maar dat was nergens te zien: (1) vandaag worden
+de resterende uren geschaald op wat er tot nu toe werkelijk is opgewekt,
+(2) toekomstige uren krijgen de per uur geleerde verhouding, (3) alleen
+als die er voor dat uur niet is geldt het daggemiddelde.
+
+**Die volgorde doet ertoe**: bij deze installatie loopt de uurcorrectie
+van x0,53 om 6:00 via x1,03 om 10:00 tot x0,29 om 20:00. Vijftien uren
+hebben een eigen correctie; één daggemiddelde van -11,6% zou dat verschil
+wegpoetsen.
+
+**Waar het gebeurt**: in `_get_expected_pv_kwh`, de functie die de
+voorspelling levert aan de RESERVEBEREKENING - dus invoer voor de
+beslissing, geen weergave. Drie tests op de code zelf falen zodra iemand
+de toepassing eruit haalt en alleen de meting laat staan.
+
+**Nu zichtbaar** op de PV-pagina: de hele keten, het aantal uren met een
+eigen correctie, en de sterkste en zwakste.
+
+**Getest**: nieuw `tests/test_pv_correction_applied.py`, 10 tests.
+
+**Volledige testsuite**: 1486 tests, allemaal groen.

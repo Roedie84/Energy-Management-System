@@ -1831,9 +1831,14 @@ class LivingRoomAircoPredictionSensor(SensorEntity, RestoreEntity):
     """
 
     _attr_has_entity_name = True
-    _attr_name = "Airco-verwachting (woonkamertemperatuur)"
-    _attr_icon = "mdi:thermometer-lines"
-    _attr_native_unit_of_measurement = "°C"
+    # v1.17.6: de naam suggereerde een temperatuur en de sensor gaf er
+    # ook een - namelijk de huidige woonkamertemperatuur, wat de
+    # temperatuursensor al toont. Nu de KANS dat de airco binnen een uur
+    # aangaat, wat het leermechanisme uit v0.63.55 al die tijd al
+    # berekende.
+    _attr_name = "Airco-verwachting (kans binnen 1 uur)"
+    _attr_icon = "mdi:air-conditioner"
+    _attr_native_unit_of_measurement = "%"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(self, coordinator, entry_id: str) -> None:
@@ -1846,7 +1851,34 @@ class LivingRoomAircoPredictionSensor(SensorEntity, RestoreEntity):
 
     @property
     def native_value(self) -> float | None:
-        return self._coordinator.living_room_current_temp_c
+        """De KANS dat de airco binnen een uur aangaat (v1.17.6).
+
+        Gemeld: "Wat zegt dit nu? Ik dacht dat hier de verwachting in %
+        of de airco aan zou gaan of niet."
+
+        Terecht: de sensor heet "Airco-verwachting" maar gaf de huidige
+        woonkamertemperatuur terug - hetzelfde getal dat de
+        temperatuursensor al toont. De verwachting zat in het attribuut
+        `probability_percent` en werd nergens getoond.
+
+        Het leermechanisme uit v0.63.55 doet precies wat er gevraagd
+        werd: elke temperatuurmeting wordt in een bin van 1°C gezet en
+        krijgt een uur de tijd; gaat de airco in dat uur aan, dan telt
+        die waarneming als "ja" voor die bin. Alleen kwam het antwoord
+        niet in beeld.
+        """
+        temp_c = self._coordinator.living_room_current_temp_c
+        if temp_c is None:
+            return None
+        from .const import LIVING_ROOM_TEMP_BUCKET_SIZE_C
+
+        bucket_key = str(
+            round(temp_c / LIVING_ROOM_TEMP_BUCKET_SIZE_C)
+            * LIVING_ROOM_TEMP_BUCKET_SIZE_C
+        )
+        return self._coordinator.get_airco_activation_probability(bucket_key)[
+            "probability_percent"
+        ]
 
     @property
     def extra_state_attributes(self) -> dict:
@@ -1873,6 +1905,15 @@ class LivingRoomAircoPredictionSensor(SensorEntity, RestoreEntity):
             ),
             "huidige_bucket": bucket_key,
             "kans_airco_binnen_1_uur_procent": current["probability_percent"],
+            # v1.17.6: alle geleerde bins, zodat zichtbaar is BIJ WELKE
+            # temperatuur je ingrijpt - niet alleen de huidige.
+            "geleerde_buckets": {
+                sleutel: self._coordinator.get_airco_activation_probability(sleutel)
+                for sleutel in sorted(
+                    self._coordinator.living_room_temp_bucket_history,
+                    key=lambda x: float(x),
+                )
+            },
             "aantal_metingen_deze_bucket": current["sample_count"],
             "voldoende_data": current["voldoende_data"],
             "alle_buckets": self._coordinator.living_room_temp_bucket_history,
@@ -3704,6 +3745,7 @@ class GacsAssessmentSensor(SensorEntity):
             "samenvattingen": self._coordinator.get_topic_summaries(),
             # v1.17.2: voorspelkwaliteit voor de PV-detailpagina.
             "pv_voorspelkwaliteit": self._coordinator.get_pv_forecast_quality(),
+            "pv_correctie": self._coordinator.get_pv_correction_status(),
             **self._coordinator.get_gacs_assessment(),
             "note": (
                 "De vier eisen komen uit het Besluit Bouwwerken "
