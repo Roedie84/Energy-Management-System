@@ -3,6 +3,8 @@
 """
 from __future__ import annotations
 
+import logging
+
 import statistics
 from datetime import date, datetime, timedelta
 
@@ -25,6 +27,8 @@ from .const import (
     CONF_WATER_ACTIVE_USAGE_SENSOR,
     FIETSLADERS_COMPLETE_THRESHOLD_W,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 ATTR_PREDICTED_KWH = "predicted_kwh"
 ATTR_ACTUAL_KWH = "actual_kwh"
@@ -3740,15 +3744,55 @@ class GacsAssessmentSensor(SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict:
+        """Alle samenvattingen, elk apart afgeschermd (v1.19.1).
+
+        Gemeld: alle acht tegels onder "Status per onderwerp" toonden
+        tegelijk "Nog geen gegevens" - wat niet kan, want ze lezen
+        verschillende onderwerpen.
+
+        De oorzaak zat in de vorm: dit blok was één dict-expressie. Gooit
+        één van de aanroepen een fout, dan mislukt het HELE blok en heeft
+        Home Assistant geen enkel attribuut meer. Alle tegels vallen dan
+        tegelijk terug op hun vangnettekst.
+
+        Vandaag zijn er vijf aanroepen aan dit blok toegevoegd; elke
+        toevoeging vergrootte de kans dat álles wegvalt op een fout in
+        één onderdeel. Nu wordt elk deel apart opgehaald: wat werkt komt
+        door, en wat faalt levert een leesbare foutmelding op in plaats
+        van stilte.
+        """
+        attributen: dict = {}
+        for sleutel, functie in (
+            ("samenvattingen", self._coordinator.get_topic_summaries),
+            ("pv_voorspelkwaliteit", self._coordinator.get_pv_forecast_quality),
+            ("pv_correctie", self._coordinator.get_pv_correction_status),
+            ("aanwezigheid", self._coordinator.get_presence_overview),
+            ("uitbreidingsadvies", self._coordinator.get_expansion_advice),
+        ):
+            try:
+                attributen[sleutel] = functie()
+            except Exception as fout:  # noqa: BLE001
+                # Bewust breed: welke fout het ook is, de andere
+                # onderdelen horen gewoon door te komen. En de fout hoort
+                # zichtbaar te zijn, niet alleen in het logboek.
+                _LOGGER.exception("Kon %s niet berekenen", sleutel)
+                attributen[sleutel] = {"fout": f"{type(fout).__name__}: {fout}"}
+                # v1.19.4: ook vastleggen, zodat het als aandachtspunt
+                # verschijnt. Afschermen zonder melden laat een storing
+                # stil doorlopen.
+                self._coordinator.internal_failures[sleutel] = (
+                    f"{type(fout).__name__}: {fout}"
+                )
+        try:
+            attributen.update(self._coordinator.get_gacs_assessment())
+        except Exception as fout:  # noqa: BLE001
+            _LOGGER.exception("Kon de GACS-beoordeling niet berekenen")
+            attributen["gacs_fout"] = f"{type(fout).__name__}: {fout}"
+            self._coordinator.internal_failures["gacs_beoordeling"] = (
+                f"{type(fout).__name__}: {fout}"
+            )
         return {
-            # v1.12.0: één zin per onderwerp voor de compacte tabbladen.
-            "samenvattingen": self._coordinator.get_topic_summaries(),
-            # v1.17.2: voorspelkwaliteit voor de PV-detailpagina.
-            "pv_voorspelkwaliteit": self._coordinator.get_pv_forecast_quality(),
-            "pv_correctie": self._coordinator.get_pv_correction_status(),
-            "aanwezigheid": self._coordinator.get_presence_overview(),
-            "uitbreidingsadvies": self._coordinator.get_expansion_advice(),
-            **self._coordinator.get_gacs_assessment(),
+            **attributen,
             "note": (
                 "De vier eisen komen uit het Besluit Bouwwerken "
                 "Leefomgeving (art. 3.145/3.146). Voor woningen geldt geen "

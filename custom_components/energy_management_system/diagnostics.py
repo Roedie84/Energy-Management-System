@@ -16,6 +16,7 @@ cameras, locks, or media players.
 """
 from __future__ import annotations
 
+import logging
 from datetime import date, datetime
 from typing import Any
 
@@ -27,6 +28,8 @@ from .const import (
     APPLIANCE_RUNNING_POWER_THRESHOLD_W,
     FIETSLADERS_COMPLETE_THRESHOLD_W,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 # Domains that are inherently relevant to an EMS, regardless of naming.
 # "light" is included to help correlate lighting usage with occupancy
@@ -255,10 +258,28 @@ async def async_get_config_entry_diagnostics(
 
     config = {**entry.data, **entry.options}
 
+    # v1.19.3, gemeld: "De diagnostiek blijft nu een text file, wordt
+    # geen json, dit suggereert dat daar nu ook iets fout gaat?"
+    #
+    # Terechte conclusie. Deze functie was één grote dict-expressie:
+    # gooit één aanroep een fout, dan mislukt de HELE export en krijg je
+    # een foutpagina in plaats van een bestand.
+    #
+    # Dat is precies het verkeerde moment om te falen - de export is het
+    # gereedschap dat je nodig hebt WANNEER er iets stuk is. Dezelfde
+    # vorm als het attributenblok in v1.19.1, en dezelfde oplossing: elk
+    # onderdeel apart, en een fout wordt zichtbaar in plaats van fataal.
+    def _veilig(naam: str, functie):
+        try:
+            return functie()
+        except Exception as fout:  # noqa: BLE001
+            _LOGGER.exception("Diagnostiek: %s kon niet worden opgehaald", naam)
+            return {"fout": f"{type(fout).__name__}: {fout}"}
+
     diagnostics: dict[str, Any] = {
         "config": config,
-        "diagnostic_summary": coordinator.get_diagnostic_summary(),
-        "missing_optional_features": coordinator.get_missing_optional_features(),
+        "diagnostic_summary": _veilig("get_diagnostic_summary", coordinator.get_diagnostic_summary),
+        "missing_optional_features": _veilig("get_missing_optional_features", coordinator.get_missing_optional_features),
         "live_narrative": coordinator.get_live_narrative(datetime.now()),
         "ems_kpis": {
             "peak_power_today_w": coordinator.peak_power_today_w,
@@ -327,10 +348,10 @@ async def async_get_config_entry_diagnostics(
             # gebeurde.
             "decision_log": coordinator.decision_log,
             "daily_report_history": coordinator.daily_report_history,
-            "energy_cost_overview": coordinator.get_energy_cost_overview(),
+            "energy_cost_overview": _veilig("get_energy_cost_overview", coordinator.get_energy_cost_overview),
             "daily_cost_history": coordinator.daily_cost_history,
-            "self_evaluation": coordinator.get_self_evaluation(),
-            "gacs_assessment": coordinator.get_gacs_assessment(),
+            "self_evaluation": _veilig("get_self_evaluation", coordinator.get_self_evaluation),
+            "gacs_assessment": _veilig("get_gacs_assessment", coordinator.get_gacs_assessment),
             # v1.14.3: de bron van de dagopwek. Zonder dit veld is in
             # een export niet na te gaan of de kWh-meter uit v1.9.1
             # daadwerkelijk wordt gebruikt of dat er nog wordt
@@ -349,12 +370,14 @@ async def async_get_config_entry_diagnostics(
             # Zeven onderdelen van vandaag stonden er nog niet in. Zonder
             # die velden is een gemeld probleem alleen op een screenshot
             # te zien, en dat is precies wat er vandaag telkens misging.
-            "topic_summaries": coordinator.get_topic_summaries(),
-            "presence_overview": coordinator.get_presence_overview(),
-            "expansion_advice": coordinator.get_expansion_advice(),
+            "topic_summaries": _veilig("get_topic_summaries", coordinator.get_topic_summaries),
+            "presence_overview": _veilig("get_presence_overview", coordinator.get_presence_overview),
+            # v1.19.4: onderdelen die zichzelf niet konden berekenen.
+            "internal_failures": coordinator.internal_failures,
+            "expansion_advice": _veilig("get_expansion_advice", coordinator.get_expansion_advice),
             "presence_week_profile": coordinator.presence_week_profile,
             "water_source_profiles": coordinator.water_source_profiles,
-            "water_source_overview": coordinator.get_water_source_overview(),
+            "water_source_overview": _veilig("get_water_source_overview", coordinator.get_water_source_overview),
             "living_room_temp_bucket_direction": (
                 coordinator.living_room_temp_bucket_direction
             ),
@@ -362,40 +385,40 @@ async def async_get_config_entry_diagnostics(
                 coordinator.battery_discharge_today_kwh
             ),
             "battery_module_rest_spread_c": (
-                coordinator._module_temperature_spread_at_rest()
+                _veilig("module_rest_spread", coordinator._module_temperature_spread_at_rest)
             ),
-            "pv_forecast_quality": coordinator.get_pv_forecast_quality(),
+            "pv_forecast_quality": _veilig("get_pv_forecast_quality", coordinator.get_pv_forecast_quality),
             # v1.17.8: wordt de voorspelling ook echt gecorrigeerd, of
             # alleen gemeten?
-            "pv_correction_status": coordinator.get_pv_correction_status(),
-            "dashboard_health": coordinator.get_dashboard_health(),
-            "stalled_series": coordinator.get_stalled_series_report(),
-            "plausibility_warnings": coordinator.get_plausibility_warnings(),
-            "sensor_health_breakdown": coordinator.get_sensor_health_breakdown(),
+            "pv_correction_status": _veilig("get_pv_correction_status", coordinator.get_pv_correction_status),
+            "dashboard_health": _veilig("get_dashboard_health", coordinator.get_dashboard_health),
+            "stalled_series": _veilig("get_stalled_series_report", coordinator.get_stalled_series_report),
+            "plausibility_warnings": _veilig("get_plausibility_warnings", coordinator.get_plausibility_warnings),
+            "sensor_health_breakdown": _veilig("get_sensor_health_breakdown", coordinator.get_sensor_health_breakdown),
             "zonneplan_cost_comparison": (
-                coordinator.get_zonneplan_cost_comparison()
+                _veilig("get_zonneplan_cost_comparison", coordinator.get_zonneplan_cost_comparison)
             ),
             "weather_source_reliability": (
-                coordinator.get_weather_source_reliability()
+                _veilig("get_weather_source_reliability", coordinator.get_weather_source_reliability)
             ),
-            "solar_forecast_health": coordinator.get_solar_forecast_health(),
-            "low_solar_margin": coordinator.get_low_solar_margin(),
-            "pv_installation_profile": coordinator.get_pv_installation_profile(),
+            "solar_forecast_health": _veilig("get_solar_forecast_health", coordinator.get_solar_forecast_health),
+            "low_solar_margin": _veilig("get_low_solar_margin", coordinator.get_low_solar_margin),
+            "pv_installation_profile": _veilig("get_pv_installation_profile", coordinator.get_pv_installation_profile),
             "pv_peak_azimuth_history": coordinator.pv_peak_azimuth_history,
-            "reliability_overview": coordinator.get_reliability_overview(),
-            "sun_elevation_degrees": coordinator.get_sun_elevation_degrees(),
+            "reliability_overview": _veilig("get_reliability_overview", coordinator.get_reliability_overview),
+            "sun_elevation_degrees": _veilig("get_sun_elevation_degrees", coordinator.get_sun_elevation_degrees),
             "is_daylight": coordinator.is_daylight_now(),
-            "notifications": coordinator.get_notification_overview(),
+            "notifications": _veilig("get_notification_overview", coordinator.get_notification_overview),
             "notification_history": coordinator.notification_history,
             "notifications_master_enabled": (
                 coordinator.notifications_master_enabled
             ),
-            "sensor_cadence": coordinator.get_sensor_cadence_report(),
-            "kalman_divergence": coordinator.get_kalman_divergence_status(),
+            "sensor_cadence": _veilig("get_sensor_cadence_report", coordinator.get_sensor_cadence_report),
+            "kalman_divergence": _veilig("get_kalman_divergence_status", coordinator.get_kalman_divergence_status),
             "weather_ensemble_agreement": (
-                coordinator.get_weather_ensemble_agreement_status()
+                _veilig("get_weather_ensemble_agreement_status", coordinator.get_weather_ensemble_agreement_status)
             ),
-            "digital_twin_accuracy": coordinator.get_digital_twin_accuracy_status(),
+            "digital_twin_accuracy": _veilig("get_digital_twin_accuracy_status", coordinator.get_digital_twin_accuracy_status),
             "digital_twin_accuracy_history": (
                 coordinator.digital_twin_accuracy_history
             ),
@@ -644,8 +667,8 @@ async def async_get_config_entry_diagnostics(
             "nilm_dismissed_duplicate_pairs": (
                 coordinator.nilm_dismissed_duplicate_pairs
             ),
-            "nilm_devices_table": coordinator.get_nilm_devices_table(),
-            "nilm_duplicate_pairs": coordinator.get_nilm_duplicate_pairs(),
+            "nilm_devices_table": _veilig("get_nilm_devices_table", coordinator.get_nilm_devices_table),
+            "nilm_duplicate_pairs": _veilig("get_nilm_duplicate_pairs", coordinator.get_nilm_duplicate_pairs),
             "advisory_readiness": coordinator.advisory_readiness,
             "living_room_current_temp_c": coordinator.living_room_current_temp_c,
             "living_room_current_humidity_percent": (
@@ -732,4 +755,35 @@ async def async_get_config_entry_diagnostics(
         "entities": _scan_relevant_entities(hass, already_configured),
     }
 
-    return diagnostics
+    # v1.19.4, gemeld: de download gaf een "500 Internal Server Error".
+    #
+    # De afscherming van v1.19.3 ving fouten in de AANROEPEN, maar Home
+    # Assistant serialiseert het resultaat pas daarna. Zit er ergens een
+    # waarde in die JSON niet aankan - een datum, een set, een object -
+    # dan mislukt dat alsnog, en dan krijg je een foutpagina in plaats
+    # van een bestand.
+    #
+    # Dat is niet vooraf uit te sluiten: er gaan meer dan tweehonderd
+    # velden doorheen, en één ervan hoeft maar een verkeerd type te
+    # hebben. Daarom nu een laatste stap die alles wat JSON niet kent
+    # omzet naar tekst. Liever een leesbare tekenreeks dan geen bestand.
+    return _json_veilig(diagnostics)
+
+
+def _json_veilig(waarde: Any) -> Any:
+    """Maakt een waarde gegarandeerd serialiseerbaar (v1.19.4).
+
+    Bekende typen blijven zichzelf; al het overige wordt tekst. De
+    diagnostiek is het gereedschap dat je nodig hebt WANNEER er iets
+    stuk is - dan mag hij niet zelf omvallen op een type dat niemand
+    had voorzien.
+    """
+    if waarde is None or isinstance(waarde, (bool, int, float, str)):
+        return waarde
+    if isinstance(waarde, (datetime, date)):
+        return waarde.isoformat()
+    if isinstance(waarde, dict):
+        return {str(sleutel): _json_veilig(x) for sleutel, x in waarde.items()}
+    if isinstance(waarde, (list, tuple, set)):
+        return [_json_veilig(x) for x in waarde]
+    return str(waarde)

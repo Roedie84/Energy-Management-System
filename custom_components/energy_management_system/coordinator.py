@@ -553,6 +553,10 @@ class EnergyManagementSystemCoordinator:
         self.presence_state: str | None = None
         # Per kwartier van de week: [aantal keer thuis, totaal].
         self.presence_week_profile: dict[str, list[int]] = {}
+        # v1.19.4: onderdelen die zichzelf niet konden berekenen. Gemeld:
+        # "ik had nu ook ergens een melding verwacht dat het systeem niet
+        # correct functioneert."
+        self.internal_failures: dict[str, str] = {}
         self.water_softener_last_regeneration: datetime | None = None
         self.last_fietsladers_action: str | None = None
 
@@ -3550,16 +3554,45 @@ class EnergyManagementSystemCoordinator:
             elif staat.state in ("unknown", "unavailable"):
                 leeg.append(entity_id)
 
+        # v1.19.2, gemeld: kaarten die "Nog geen gegevens" tonen terwijl
+        # de entiteit gewoon bestaat. De controle keek alleen of de
+        # ENTITEIT er was, niet of het ATTRIBUUT dat de kaart opvraagt
+        # bestaat - en juist daar zat het probleem.
+        #
+        # Een sjabloon dat een ontbrekend attribuut opvraagt krijgt None
+        # en toont zijn vangnettekst. Op het scherm is dat niet te
+        # onderscheiden van "nog niets geleerd".
+        # Let op: het sjabloon is met `yaml.dump` weggeschreven (v1.17.1),
+        # waardoor aanhalingstekens op schijf verdubbeld staan ('' in
+        # plaats van '). Eerst normaliseren, anders vindt de zoekactie
+        # niets - precies waar deze controle bij de eerste poging op
+        # stukliep.
+        genormaliseerd = sjabloon.replace("''", "'")
+        gemiste_attributen: list[str] = []
+        for entity_id, attribuut in set(
+            re.findall(
+                r"state_attr\(\s*'(sensor\.[a-z0-9_]+)'\s*,\s*'([a-z0-9_]+)'",
+                genormaliseerd,
+            )
+        ):
+            staat = self.hass.states.get(entity_id)
+            if staat is None:
+                continue
+            if attribuut not in (staat.attributes or {}):
+                gemiste_attributen.append(f"{entity_id} -> {attribuut}")
+
         return {
             "beschikbaar": True,
             "gecontroleerd": len(verwezen),
             "niet_bestaande_entiteiten": ontbrekend,
             "lege_entiteiten": leeg,
+            "ontbrekende_attributen": sorted(gemiste_attributen),
             "toelichting": (
                 "Een niet-bestaande entiteit toont 'Entiteit niet "
-                "gevonden'; een lege toont 'Onbekend'. Beide zien er op "
-                "een screenshot uit als een storing, ook als er niets "
-                "aan de hand is."
+                "gevonden'; een lege toont 'Onbekend'. Een ontbrekend "
+                "ATTRIBUUT is het lastigst: de kaart toont dan zijn "
+                "vangnettekst, wat op het scherm niet te onderscheiden "
+                "is van 'nog niets geleerd'."
             ),
         }
 
@@ -3712,7 +3745,22 @@ class EnergyManagementSystemCoordinator:
         # Gemeld: "Ook mis ik een PV tegel, welke ik kan aanklikken voor
         # alle PV gerelateerde info." Er was wél een PV-pagina, maar geen
         # samenvatting - dus geen tegel om op te klikken.
-        kwaliteit_pv = self.get_pv_forecast_quality()
+        # v1.19.1: afgeschermd. Deze aanroep is in v1.17.5 toegevoegd,
+        # en daarmee werd één functie het zwakke punt voor ALLE acht
+        # samenvattingen: faalt hij, dan valt de hele lijst weg en tonen
+        # alle tegels tegelijk "Nog geen gegevens".
+        #
+        # Precies dat werd gemeld, en het is niet te herleiden zonder de
+        # onderliggende fout - vandaar dat die nu in de zin belandt in
+        # plaats van in het niets.
+        try:
+            kwaliteit_pv = self.get_pv_forecast_quality()
+        except Exception as fout:  # noqa: BLE001
+            _LOGGER.exception("Kon de PV-voorspelkwaliteit niet berekenen")
+            kwaliteit_pv = {
+                "beschikbaar": False,
+                "reden": f"Kon niet berekenen: {type(fout).__name__}",
+            }
         opwek = self.pv_production_today_kwh
         if not kwaliteit_pv.get("beschikbaar"):
             samenvatting["zon"] = {
@@ -4502,6 +4550,32 @@ class EnergyManagementSystemCoordinator:
                         ),
                     }
                 )
+
+        # --- 0. Werkt de integratie zelf nog? (v1.19.4) ---
+        # Gemeld: "ik had nu ook ergens een melding verwacht dat het
+        # systeem niet correct functioneert."
+        #
+        # Terecht. Er zijn vandaag onderdelen afgeschermd zodat één fout
+        # niet alles meesleept - maar afschermen zonder melden betekent
+        # dat een storing stil doorloopt. Dat is precies de fout die het
+        # afschermen moest voorkomen, één laag hoger.
+        if self.internal_failures:
+            namen = ", ".join(sorted(self.internal_failures))
+            bevindingen.append(
+                {
+                    "onderwerp": "Onderdelen van de integratie falen",
+                    "bewijs": (
+                        f"{len(self.internal_failures)} onderde(e)l(en) kon "
+                        f"zichzelf niet berekenen: {namen}."
+                    ),
+                    "voorstel": (
+                        "De bijbehorende kaarten tonen hun vangnettekst, wat "
+                        "op het scherm lijkt op 'nog niets geleerd'. De "
+                        "werkelijke fout staat in de diagnostiek-export en "
+                        "in het Home Assistant-logboek."
+                    ),
+                }
+            )
 
         # --- 1b. Opeenvolgende tekorten (v1.16.8) ---
         # Deze kijkt NIET naar SELF_EVAL_MIN_DAYS. Een verhouding heeft

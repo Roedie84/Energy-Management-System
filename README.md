@@ -515,6 +515,204 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## De export gaf een 500, en meldde dat niet (v1.19.4)
+
+**Gemeld**: een `500 Internal Server Error` bij het downloaden, en *"ik
+had nu ook ergens een melding verwacht dat het systeem niet correct
+functioneert"*.
+
+Allebei terecht, en het zijn twee verschillende gaten.
+
+### De afscherming zat op de verkeerde plek
+
+v1.19.3 ving fouten in de **aanroepen**. Maar Home Assistant
+serialiseert het resultaat pas dáárna. Zit er ergens een waarde in die
+JSON niet aankan — een datum, een set, een object — dan mislukt dat
+alsnog en krijg je een foutpagina.
+
+Dat is niet vooraf uit te sluiten: er gaan ruim tweehonderd velden
+doorheen, en één ervan hoeft maar een onverwacht type te hebben. Ik heb
+lang gezocht naar wélk veld dat is en het niet kunnen vinden — daarom nu
+een laatste stap die alles wat JSON niet kent omzet naar tekst.
+
+Liever een leesbare tekenreeks dan geen bestand.
+
+### Afschermen zonder melden is stil falen
+
+Dit is de scherpste van je twee opmerkingen. Ik heb vandaag onderdelen
+afgeschermd zodat één fout niet alles meesleept — maar daarmee liep een
+storing **stil** door. Dat is precies de fout die het afschermen moest
+voorkomen, één laag hoger.
+
+Een gefaald onderdeel wordt nu vastgelegd en verschijnt als
+aandachtspunt: *"1 onderdeel kon zichzelf niet berekenen:
+pv_voorspelkwaliteit."* Met de uitleg erbij dat de bijbehorende kaart
+zijn vangnettekst toont — wat op het scherm lijkt op "nog niets
+geleerd", en precies waarom je het twee keer moest melden.
+
+De fouten staan ook in de export onder `internal_failures`.
+
+### Getest
+
+Nieuw `tests/test_export_never_500s.py`, 11 tests: datums, sets en
+onbekende objecten worden tekst, geneste waarden ook, normale waarden
+blijven zichzelf, niet-tekstsleutels worden tekst, de hele export gaat
+er doorheen, een fout wordt vastgelegd én gemeld, en een gezond systeem
+meldt niets.
+
+**Volledige testsuite**: 1562 tests, allemaal groen.
+
+## De export kon zelf omvallen (v1.19.3)
+
+**Gemeld**: *"De diagnostiek blijft nu een text file, wordt geen json,
+dit suggereert dat daar nu ook iets fout gaat?"*
+
+Terechte conclusie. Home Assistant levert een JSON-bestand; krijg je
+platte tekst, dan is de generatie vastgelopen en zie je de foutpagina.
+
+### Dezelfde vorm als gisteren
+
+De exportfunctie was **één grote dict-expressie** met dertig aanroepen.
+Gooit er één een fout, dan mislukt het hele bestand.
+
+Dat is precies het verkeerde moment om te falen: de export is het
+gereedschap dat je nodig hebt **wanneer** er iets stuk is. Vandaag heb ik
+er zeven aanroepen aan toegevoegd, en elke toevoeging vergrootte de kans
+dat het geheel omvalt.
+
+Zelfde patroon als het attributenblok in v1.19.1, en dezelfde oplossing:
+elk onderdeel apart, en een fout wordt zichtbaar in plaats van fataal.
+
+### Wat er nu gebeurt bij een fout
+
+Het onderdeel krijgt `{"fout": "KeyError: ..."}` en de rest komt gewoon
+door. De fout gaat ook naar het logboek. Een stil weggevallen onderdeel
+is erger dan een zichtbare fout — dan denk je dat er niets te melden
+was.
+
+### Wat ik níét kon vaststellen
+
+Wélke aanroep het bij jou liet vastlopen. In mijn test met jouw echte
+toestand slagen alle dertig, dus het zit in iets dat alleen in een
+draaiende Home Assistant optreedt.
+
+Met deze versie levert de export wel gewoon JSON op, met de fout erin —
+dan zie ik het meteen.
+
+### Onderweg
+
+`import logging` belandde weer op de verkeerde plek: één regel na `from
+__future__` zonder lege regel ertussen. Derde keer vandaag dat dit
+misgaat; ik had de eerdere les moeten toepassen.
+
+### Getest
+
+Drie tests erbij: elke aanroep is afgeschermd, een kapot onderdeel laat
+de rest staan, en de fout wordt vastgelegd in plaats van ingeslikt.
+
+**Volledige testsuite**: 1551 tests, allemaal groen.
+
+## De export zag ontbrekende attributen niet (v1.19.2)
+
+**Gemeld**: *"Graag overal nakijken, ook op dit scherm geen gegevens"* —
+met een screenshot van de PV-pagina waarop twee kaarten leeg bleven.
+
+### Het beeld was verhelderend
+
+Op datzelfde scherm **werkte** de bias-tegel: *"0.933 · 15 uren
+geleerd"*. Die leest een andere sensor. De twee lege kaarten lezen
+allebei de **GACS-sensor** — dezelfde sensor als de acht blanco
+statustegels.
+
+Eén gemeenschappelijke oorzaak dus, en de correctie van v1.19.1 pakt die
+aan: elk attribuut wordt nu apart opgehaald, zodat één fout niet alles
+meesleept.
+
+### Maar de export had dit moeten aanwijzen
+
+De dashboardcontrole uit v1.16.3 keek of elke **entiteit** bestaat. Dat
+was hier niet het probleem: de sensor bestond, alleen zijn **attributen**
+ontbraken.
+
+Een sjabloon dat een ontbrekend attribuut opvraagt krijgt `None` en toont
+zijn vangnettekst. Op het scherm is dat niet te onderscheiden van "nog
+niets geleerd" — precies waarom je twee keer moest melden dat er niets
+stond.
+
+De controle kijkt nu ook naar attributen. Bij een lege GACS-sensor meldt
+hij die zes bij naam.
+
+### Onderweg
+
+De eerste versie vond niets, omdat het sjabloon met `yaml.dump` is
+weggeschreven en aanhalingstekens daardoor verdubbeld op schijf staan.
+Dat is de derde keer dat die keuze uit v1.17.1 iets breekt; de zoekactie
+normaliseert nu eerst, en er staat een test op.
+
+### Getest
+
+Vijf tests erbij: een ontbrekend attribuut wordt gemeld, aanwezige niet,
+een ontbrekende entiteit wordt niet dubbel gemeld, de verdubbelde
+aanhalingstekens worden afgehandeld, en de duiding noemt het lastigste
+geval.
+
+**Volledige testsuite**: 1548 tests, allemaal groen.
+
+## Eén fout maakte alle acht tegels blanco (v1.19.1)
+
+**Gemeld**: *"Nergens geen gegevens meer? Dit is toch niet mogelijk?"* —
+met een screenshot waarop alle acht tegels onder "Status per onderwerp"
+tegelijk *"Nog geen gegevens"* toonden.
+
+Terecht: acht onderwerpen die verschillende dingen lezen, kunnen niet
+allemaal tegelijk leeg zijn. Dat wijst op één gemeenschappelijke
+oorzaak.
+
+### Twee keer dezelfde vorm
+
+**Het attributenblok was één dict-expressie.** Gooit één van de aanroepen
+een fout, dan mislukt het hele blok en heeft Home Assistant **geen enkel
+attribuut** meer. Alle tegels vallen dan tegelijk terug op hun
+vangnettekst.
+
+**En de samenvattingen hangen aan één functie.** Sinds v1.17.5 roept
+`get_topic_summaries` intern `get_pv_forecast_quality` aan voor de
+zon-samenvatting. Faalt die, dan valt de hele lijst van acht weg — ook
+water, klimaat en accumodules, die er niets mee te maken hebben.
+
+### Mijn eigen schuld
+
+Ik heb vandaag **vijf aanroepen** aan dat blok toegevoegd:
+voorspelkwaliteit, PV-correctie, aanwezigheid, uitbreidingsadvies en de
+statuszinnen. Elke toevoeging vergrootte de kans dat álles wegvalt op een
+fout in één onderdeel — zonder dat ik dat risico heb afgedekt.
+
+### Nu apart afgeschermd
+
+Elk deel wordt los opgehaald: wat werkt komt door, wat faalt levert een
+**leesbare foutmelding** op in plaats van stilte. Een gefaald onderdeel
+toont nu `{"fout": "KeyError: ..."}` en de fout gaat naar het logboek.
+
+Stil terugvallen is erger dan een foutmelding: dan zoek je in de
+verkeerde hoek — precies wat hier gebeurde.
+
+### Nu bewaakt
+
+Zeven tests: één kapotte aanroep laat de rest staan, de fout is
+zichtbaar, een kapotte GACS-beoordeling is te overleven, alle acht
+onderwerpen overleven een PV-fout, het zon-onderwerp zegt nog steeds iets
+zinnigs, elk onderwerp houdt een zin én een niveau, en het blok wordt
+stapsgewijs opgebouwd — terugvallen op één dict-expressie zou de fout
+terugbrengen.
+
+### Onderweg
+
+Bij het toevoegen van de logger belandde `import logging` eerst midden in
+een importblok en daarna vóór `from __future__ import annotations`, wat
+Python niet toestaat. Twee keer hersteld.
+
+**Volledige testsuite**: 1543 tests, allemaal groen.
+
 ## Uitbreidingsadvies op basis van meetdata (v1.19.0)
 
 **Gevraagd**: *"Is het mogelijk dat je een advies uitbrengt om mijn accu

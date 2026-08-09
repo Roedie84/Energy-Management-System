@@ -10374,3 +10374,113 @@ negen dagen in augustus is geen jaar.
 **Getest**: nieuw `tests/test_expansion_advice.py`, 10 tests.
 
 **Volledige testsuite**: 1536 tests, allemaal groen.
+
+## v1.19.1 — Eén fout maakte alle acht tegels blanco
+
+**Gemeld**: alle acht tegels onder "Status per onderwerp" toonden
+tegelijk "Nog geen gegevens" - wat niet kan, want ze lezen verschillende
+onderwerpen.
+
+**Twee keer dezelfde vorm**:
+- Het attributenblok van de GACS-sensor was één dict-expressie. Gooit één
+  aanroep een fout, dan mislukt het HELE blok en heeft HA geen enkel
+  attribuut meer.
+- `get_topic_summaries` roept sinds v1.17.5 intern
+  `get_pv_forecast_quality` aan voor de zon-samenvatting. Faalt die, dan
+  valt de hele lijst van acht weg - ook water en klimaat, die er niets
+  mee te maken hebben.
+
+**Eigen schuld**: er zijn vandaag vijf aanroepen aan dat blok toegevoegd
+zonder dat risico af te dekken.
+
+**Nu apart afgeschermd**: elk deel wordt los opgehaald; wat werkt komt
+door, wat faalt levert een leesbare foutmelding op in plaats van stilte.
+Stil terugvallen is erger dan een foutmelding - dan zoek je in de
+verkeerde hoek.
+
+**Onderweg**: `import logging` belandde eerst midden in een importblok en
+daarna vóór `from __future__ import annotations`; twee keer hersteld.
+
+**Getest**: nieuw `tests/test_attribute_isolation.py`, 7 tests.
+
+**Volledige testsuite**: 1543 tests, allemaal groen.
+
+## v1.19.2 — De export zag ontbrekende attributen niet
+
+**Gemeld**: ook op de PV-pagina bleven twee kaarten leeg.
+
+**Verhelderend beeld**: op datzelfde scherm werkte de bias-tegel (0.933,
+15 uren geleerd) - die leest een andere sensor. De twee lege kaarten
+lezen allebei de GACS-sensor, dezelfde als de acht blanco statustegels.
+Eén gemeenschappelijke oorzaak, aangepakt in v1.19.1.
+
+**Maar de export had dit moeten aanwijzen**: de dashboardcontrole uit
+v1.16.3 keek of elke ENTITEIT bestaat. Dat was hier niet het probleem -
+de sensor bestond, zijn ATTRIBUTEN ontbraken. Een sjabloon dat een
+ontbrekend attribuut opvraagt krijgt None en toont zijn vangnettekst; op
+het scherm niet te onderscheiden van "nog niets geleerd".
+
+De controle kijkt nu ook naar attributen en meldt ze bij naam.
+
+**Onderweg**: de eerste versie vond niets omdat het sjabloon met
+`yaml.dump` is weggeschreven en aanhalingstekens verdubbeld op schijf
+staan - derde keer dat die keuze uit v1.17.1 iets breekt. De zoekactie
+normaliseert nu eerst.
+
+**Getest**: vijf tests erbij in `test_dashboard_health_export.py`.
+
+**Volledige testsuite**: 1548 tests, allemaal groen.
+
+## v1.19.3 — De export kon zelf omvallen
+
+**Gemeld**: de diagnostiek levert een tekstbestand op in plaats van JSON.
+
+**Terechte conclusie**: de exportfunctie was één grote dict-expressie met
+dertig aanroepen. Gooit er één een fout, dan mislukt het hele bestand en
+krijg je een foutpagina.
+
+Dat is het verkeerde moment om te falen - de export is het gereedschap
+dat je nodig hebt WANNEER er iets stuk is. Vandaag zijn er zeven
+aanroepen aan toegevoegd; elke toevoeging vergrootte de kans dat het
+geheel omvalt. Zelfde patroon als het attributenblok in v1.19.1, en
+dezelfde oplossing.
+
+**Nu**: elk onderdeel apart; een fout levert {"fout": "..."} op en de
+rest komt door. De fout gaat ook naar het logboek - een stil weggevallen
+onderdeel is erger dan een zichtbare fout.
+
+**Niet vastgesteld**: welke aanroep het in de praktijk liet vastlopen. In
+een test met de echte toestand slagen alle dertig, dus het zit in iets
+dat alleen in een draaiende Home Assistant optreedt. Met deze versie komt
+de fout in het bestand te staan.
+
+**Onderweg**: `import logging` belandde weer op de verkeerde plek -
+derde keer vandaag.
+
+**Getest**: drie tests erbij in `test_diagnostics_completeness.py`.
+
+**Volledige testsuite**: 1551 tests, allemaal groen.
+
+## v1.19.4 — De export gaf een 500, en meldde dat niet
+
+**Gemeld**: een 500 Internal Server Error bij het downloaden, plus de
+opmerking dat er geen melding kwam dat het systeem niet correct
+functioneert.
+
+**De afscherming zat op de verkeerde plek**: v1.19.3 ving fouten in de
+AANROEPEN, maar HA serialiseert het resultaat pas daarna. Een waarde die
+JSON niet aankan laat het alsnog mislukken. Welk veld dat was is niet te
+achterhalen gebleken; nu gaat de hele export door een laatste stap die
+alles wat JSON niet kent omzet naar tekst. Liever een leesbare
+tekenreeks dan geen bestand.
+
+**Afschermen zonder melden is stil falen**: onderdelen zijn vandaag
+afgeschermd zodat één fout niet alles meesleept, maar daarmee liep een
+storing stil door - precies de fout die het afschermen moest voorkomen,
+één laag hoger. Een gefaald onderdeel wordt nu vastgelegd en verschijnt
+als aandachtspunt, met de uitleg dat de kaart zijn vangnettekst toont.
+Ook in de export onder `internal_failures`.
+
+**Getest**: nieuw `tests/test_export_never_500s.py`, 11 tests.
+
+**Volledige testsuite**: 1562 tests, allemaal groen.
