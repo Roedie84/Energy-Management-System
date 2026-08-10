@@ -14,6 +14,29 @@ from datetime import datetime, timedelta, timezone
 DAY0 = datetime(2026, 8, 4, tzinfo=timezone.utc)
 
 
+
+def _vul_dag(coordinator, hass, entity_id, watt, dag, metingen=None):
+    """Simuleert een volle dag aan metingen (v1.21.3).
+
+    Sinds v1.21.3 vraagt een dagoordeel minstens NILM_MIN_SAMPLES_FOR_DAY
+    metingen. Dat kwam voort uit een echte melding: met vijf metingen -
+    een kwartier na een herstart - meldde de diepvries "-98,8% drift,
+    mogelijk defect", terwijl de compressor in dat kwartier gewoon niet
+    draaide.
+
+    Een test die met twee metingen een dag afsluit, toetst dus iets dat
+    in productie niet meer voorkomt.
+    """
+    from custom_components.energy_management_system.const import (
+        NILM_MIN_SAMPLES_FOR_DAY,
+    )
+
+    hass.states.set(entity_id, str(watt))
+    for n in range(metingen or NILM_MIN_SAMPLES_FOR_DAY):
+        coordinator._update_nilm_confirmed_devices(
+            dag + timedelta(minutes=5 * n)
+        )
+
 def test_discovers_a_power_sensor(make_coordinator, hass):
     hass.states.set(
         "sensor.koelkast_vermogen",
@@ -129,9 +152,17 @@ def test_daily_average_tracked_for_confirmed_device(make_coordinator, hass):
     coordinator._update_nilm_discovery(DAY0)
     coordinator.confirm_nilm_device("sensor.koelkast_vermogen")
 
-    coordinator._update_nilm_confirmed_devices(DAY0.replace(hour=10))
-    hass.states.set("sensor.koelkast_vermogen", "100")
-    coordinator._update_nilm_confirmed_devices(DAY0.replace(hour=11))
+    # v1.21.3: een halve dag aan metingen, want met minder wordt de dag
+    # bewust niet meer afgerond - twee metingen zeggen niets over een
+    # apparaat dat in cycli werkt.
+    _vul_dag(coordinator, hass, "sensor.koelkast_vermogen", 80, DAY0)
+    _vul_dag(
+        coordinator,
+        hass,
+        "sensor.koelkast_vermogen",
+        100,
+        DAY0 + timedelta(hours=10),
+    )
 
     day2 = DAY0 + timedelta(days=1)
     coordinator._update_nilm_confirmed_devices(day2)
@@ -152,16 +183,17 @@ def test_sustained_drift_flags_a_possible_defect(make_coordinator, hass):
     device = coordinator.nilm_confirmed_devices["sensor.koelkast_vermogen"]
 
     # 15 stable days at 80W.
+    # v1.21.3: elke dag een halve dag aan metingen; met één meting per
+    # dag wordt de dag bewust niet meer afgerond.
     for i in range(15):
         day = DAY0 + timedelta(days=i)
-        coordinator._update_nilm_confirmed_devices(day.replace(hour=12))
+        _vul_dag(coordinator, hass, "sensor.koelkast_vermogen", 80, day)
 
     # Then a sustained jump to 130W (well above the 10% slack) for
     # several days.
-    hass.states.set("sensor.koelkast_vermogen", "130")
     for i in range(15, 22):
         day = DAY0 + timedelta(days=i)
-        coordinator._update_nilm_confirmed_devices(day.replace(hour=12))
+        _vul_dag(coordinator, hass, "sensor.koelkast_vermogen", 130, day)
 
     assert device["anomaly_detected"] is True
     assert device["estimated_drift_percent"] > 0

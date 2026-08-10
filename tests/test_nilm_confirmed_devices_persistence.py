@@ -219,8 +219,12 @@ def test_finalizing_a_device_day_saves_to_the_store(make_coordinator, hass):
         "anomaly_detected": False,
         "estimated_drift_percent": None,
         "reference_avg_w": None,
-        "_today_sum": 50.0,
-        "_today_count": 5,
+        # v1.21.3: een dag wordt pas afgerond bij genoeg metingen. Vijf
+        # metingen is een kwartier - precies het geval waarin de
+        # diepvries "-98,8% drift" meldde terwijl de compressor even
+        # niet draaide.
+        "_today_sum": 5000.0,
+        "_today_count": 100,
         "_check_date": DAY0.date(),
     }
 
