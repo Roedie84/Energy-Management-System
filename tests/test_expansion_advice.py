@@ -220,3 +220,42 @@ def test_it_survives_the_real_structure(make_coordinator, hass):
 
     assert advies["beschikbaar"] is True
     assert advies["dagverbruik_kwh"] > 0
+
+
+# --- v1.20.4: het gemeten piekvermogen telt mee ---------------------
+
+
+def test_a_measured_peak_above_the_inverter_counts(make_coordinator, hass):
+    """Gevonden bij het volledig doorlichten van de diagnostiek: het
+    hoogste geleerde UUR is 497 W, maar het gemeten piekvermogen 2199 W
+    - ruim boven het ontlaadvermogen van 1600 W.
+
+    Een uurgemiddelde verbergt dat: koken of een oven trekt minuten lang
+    veel, en dat verdwijnt in het gemiddelde. Zo'n piek vraagt geen
+    capaciteit, maar wél vermogen.
+    """
+    c = _coordinator(make_coordinator, hass)
+    c.peak_power_all_time_w = 2199.0
+
+    advies = c.get_expansion_advice()
+
+    assert advies["gemeten_piekvermogen_w"] == 2199
+    assert advies["vermogen_knelt"] is True
+
+
+def test_a_modest_peak_does_not_trigger_it(make_coordinator, hass):
+    """Onder het ontlaadvermogen is er niets aan de hand."""
+    c = _coordinator(make_coordinator, hass)
+    c.peak_power_all_time_w = 900.0
+
+    advies = c.get_expansion_advice()
+
+    assert advies["vermogen_knelt"] is False
+
+
+def test_without_a_peak_measurement_it_still_works(make_coordinator, hass):
+    """Een verse installatie heeft nog geen piek gemeten."""
+    c = _coordinator(make_coordinator, hass)
+    c.peak_power_all_time_w = None
+
+    assert c.get_expansion_advice()["beschikbaar"] is True
