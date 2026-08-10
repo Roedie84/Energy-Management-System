@@ -3864,6 +3864,10 @@ class GacsAssessmentSensor(SensorEntity):
             ("aanwezigheid", self._coordinator.get_presence_overview),
             ("uitbreidingsadvies", self._coordinator.get_expansion_advice),
             ("weerbronnen", self._coordinator.get_weather_source_overview),
+            ("zon_uitstelplan", lambda: self._coordinator.last_solar_defer_plan),
+            ("kwartierplanning", self._coordinator.get_quarter_plan),
+            ("verkooptoets", lambda: self._coordinator.last_sell_check),
+            ("kwartier_samenvatting", self._coordinator.get_quarter_plan_summary),
         ):
             try:
                 attributen[sleutel] = functie()

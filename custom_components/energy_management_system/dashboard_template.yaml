@@ -518,13 +518,35 @@ views:
       grid_options:
         columns: 12
         rows: auto
+    - type: custom:mushroom-template-card
+      primary: Kwartierplanning
+      secondary: Prijs, zon en SoC vooruit
+      icon: mdi:table-clock
+      icon_color: blue
+      tap_action:
+        action: navigate
+        navigation_path: /energy-management-system/detail-kwartier
+      grid_options:
+        columns: 12
+        rows: auto
+    - type: custom:mushroom-template-card
+      primary: Planning-samenvatting
+      secondary: Verwachte opbrengst
+      icon: mdi:cash-clock
+      icon_color: blue
+      tap_action:
+        action: navigate
+        navigation_path: /energy-management-system/detail-planning-samenvatting
+      grid_options:
+        columns: 12
+        rows: auto
 - title: Visueel
   path: visueel
   subview: true
   panel: true
   cards:
   - type: picture-elements
-    image: /local/energy_management_system_overview.svg?v=1.21.5
+    image: /local/energy_management_system_overview.svg?v=1.23.4
     elements:
     - type: state-label
       entity: sensor.woonkamer_energy_management_system_system_status
@@ -934,6 +956,36 @@ views:
     icon: mdi:motion-sensor-off
     icon_color: '{{ ''green'' if is_state(''switch.woonkamer_energy_management_system_melding_vakantie_beweging'', ''on'') else ''grey'' }}'
     entity: switch.woonkamer_energy_management_system_melding_vakantie_beweging
+    tap_action:
+      action: toggle
+    hold_action:
+      action: more-info
+  - type: custom:mushroom-template-card
+    primary: Accu haalt de nacht niet
+    secondary: '{% set e = ''switch.woonkamer_energy_management_system_melding_plan_tekort'' %}{% set last = state_attr(e, ''laatst_verstuurd'') %}{{ ''AAN'' if is_state(e, ''on'') else ''uit'' }} · demping 60 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom(''%-d %b %H:%M'') }}{% endif %}'
+    icon: mdi:battery-alert-variant
+    icon_color: '{{ ''green'' if is_state(''switch.woonkamer_energy_management_system_melding_plan_tekort'', ''on'') else ''grey'' }}'
+    entity: switch.woonkamer_energy_management_system_melding_plan_tekort
+    tap_action:
+      action: toggle
+    hold_action:
+      action: more-info
+  - type: custom:mushroom-template-card
+    primary: Zon opvangen uitgesteld
+    secondary: '{% set e = ''switch.woonkamer_energy_management_system_melding_plan_uitstel'' %}{% set last = state_attr(e, ''laatst_verstuurd'') %}{{ ''AAN'' if is_state(e, ''on'') else ''uit'' }} · demping 30 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom(''%-d %b %H:%M'') }}{% endif %}'
+    icon: mdi:clock-fast
+    icon_color: '{{ ''green'' if is_state(''switch.woonkamer_energy_management_system_melding_plan_uitstel'', ''on'') else ''grey'' }}'
+    entity: switch.woonkamer_energy_management_system_melding_plan_uitstel
+    tap_action:
+      action: toggle
+    hold_action:
+      action: more-info
+  - type: custom:mushroom-template-card
+    primary: Verkopen geblokkeerd
+    secondary: '{% set e = ''switch.woonkamer_energy_management_system_melding_plan_verkoop_geblokkeerd'' %}{% set last = state_attr(e, ''laatst_verstuurd'') %}{{ ''AAN'' if is_state(e, ''on'') else ''uit'' }} · demping 120 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom(''%-d %b %H:%M'') }}{% endif %}'
+    icon: mdi:cash-remove
+    icon_color: '{{ ''green'' if is_state(''switch.woonkamer_energy_management_system_melding_plan_verkoop_geblokkeerd'', ''on'') else ''grey'' }}'
+    entity: switch.woonkamer_energy_management_system_melding_plan_verkoop_geblokkeerd
     tap_action:
       action: toggle
     hold_action:
@@ -1641,6 +1693,31 @@ views:
         {% endfor %}{% endif %}
 
         '
+    - type: markdown
+      title: Zon opvangen uitstellen?
+      content: '{% set p = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''zon_uitstelplan'') or {} %}{% if p.get(''uitstellen'') %}**Ja, tot {{ p.omslag_uur }}:00.**
+
+
+        | | |
+
+        |---|---|
+
+        | Nog te vullen | {{ p.ruimte_kwh }} kWh |
+
+        | Prijsverschil | {{ p.prijsverschil_ct }} ct |
+
+        | Geschatte winst | {{ p.geschatte_winst_eur }} EUR |
+
+        | Vol uiterlijk | {{ p.vol_uiterlijk }} |
+
+
+        {{ p.reden }}{% else %}**Nee.** {{ p.get(''reden'', ''Nog geen plan berekend.'') }}{% endif %}
+
+
+        _De accu neemt een vast aantal kilowattuur op; wélke dat zijn bepaalt wat je exporteert. Vroeg laden slurpt de dure ochtendzon op en laat de goedkope middagzon over voor het net - laat laden doet het omgekeerd. Zelfde eind-SoC, hogere opbrengst._'
+      grid_options:
+        columns: 12
+        rows: auto
 - title: Kosten
   path: detail-kosten
   subview: true
@@ -2150,6 +2227,93 @@ views:
 
 
         _Middelen van twee bronnen die het fundamenteel oneens zijn, geeft een getal dat bij geen van beide past. Vanaf 25 procentpunt verschil wint daarom de bron die het aantoonbaar vaker bij het rechte eind heeft._'
+      grid_options:
+        columns: 12
+        rows: auto
+- title: Kwartierplanning
+  path: detail-kwartier
+  subview: true
+  type: sections
+  max_columns: 1
+  sections:
+  - type: grid
+    cards:
+    - type: custom:mushroom-title-card
+      title: Kwartierplanning
+      subtitle: Verwachte prijs, zon, modus en SoC per kwartier
+    - type: markdown
+      title: Wat de aansturing van plan is
+      content: '{% set p = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''kwartierplanning'') or [] %}{% if p | length == 0 %}Nog geen planning beschikbaar - hiervoor zijn prijsgegevens en een accustand nodig.{% else %}| Tijd | ct | Zon | Modus | SoC | Totaal |
+
+        |---|---|---|---|---|---|
+
+        {% for r in p %}{% set k = ''<span style="color:#e05252">'' if r.gewijzigd else '''' %}{% set s = ''</span>'' if r.gewijzigd else '''' %}| {{ k }}{{ r.van }}{{ s }} | {{ k }}{{ r.prijs_ct }}{{ s }} | {{ k }}{{ r.zon_kwh }}{{ s }} | {{ k }}{{ r.modus }}{{ s }}{% if r.gewijzigd %} <sub>was {{ r.eerst_voorspeld }}</sub>{% endif %}{% if r.tekort %} **!**{% endif %} | {{ k }}{{ r.soc_procent }}%{{ s }} | {{ k }}{{ r.cumulatief_eur }}{{ s }} |
+
+        {% endfor %}{% endif %}
+
+
+        _**!** = de accu kan in dat kwartier niets meer leveren en het huis hangt aan het net. **Rood** = van plan veranderd sinds de eerste voorspelling. Voorbije kwartieren verdwijnen; er wordt negen uur vooruit gekeken._'
+      grid_options:
+        columns: 12
+        rows: auto
+- title: Planning-samenvatting
+  path: detail-planning-samenvatting
+  subview: true
+  type: sections
+  max_columns: 1
+  sections:
+  - type: grid
+    cards:
+    - type: custom:mushroom-title-card
+      title: Planning-samenvatting
+      subtitle: Verwachte opbrengst en of verkopen mag
+    - type: markdown
+      title: Verwachting voor de rest van de dag
+      content: '{% set s = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''kwartier_samenvatting'') or {} %}{% if not s.get(''beschikbaar'') %}{{ s.get(''reden'',''Nog geen planning.'') }}{% else %}| | |
+
+        |---|---|
+
+        | Verwachte zon | {{ s.zon_kwh }} kWh |
+
+        | Verwacht verbruik | {{ s.verbruik_kwh }} kWh |
+
+        | Verwachte teruglevering | {{ s.export_kwh }} kWh |
+
+        | Verwachte import | {{ s.import_kwh }} kWh |
+
+        | **Verwachte opbrengst** | **{{ s.verwachte_opbrengst_eur }} EUR** |
+
+        | Waarvan uit verkoop | {{ s.opbrengst_uit_verkoop_eur }} EUR ({{ s.verkoopkwartieren }} kwartieren) |
+
+        | SoC laagste / hoogste | {{ s.laagste_soc_procent }}% / {{ s.hoogste_soc_procent }}% |
+
+        | SoC aan het eind | {{ s.eind_soc_procent }}% |
+
+        | Kwartieren in goedkoop blok | {{ s.kwartieren_in_goedkoop_blok }} |
+
+        | Gewijzigd sinds eerste plan | {{ s.gewijzigde_kwartieren }} |
+
+        | **Kwartieren met tekort** | **{{ s.tekort_kwartieren }}** |
+
+        | Harde ondergrens accu | {{ s.min_soc_procent_hard }}% |
+
+
+        Modi: {% for m, n in s.modi.items() %}{{ m }} {{ n }}x{% if not loop.last %} · {% endif %}{% endfor %}{% endif %}
+
+
+        _Kwartieren met tekort zijn het belangrijkste signaal: dan levert de accu niets meer en betaalt het huis de kale netprijs. Nul hoort de norm te zijn._
+
+
+        _Let op de laagste SoC: die laat zien hoe diep de accu volgens dit plan zakt. Blijft die ver boven je reserve, dan is er ruimte; komt hij eronder, dan is het plan te gretig._'
+      grid_options:
+        columns: 12
+        rows: auto
+    - type: markdown
+      title: Mag de accu nu verkopen?
+      content: '{% set v = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''verkooptoets'') or {} %}{% if v.get(''mag_verkopen'') %}**Ja.** {{ v.reden }}{% else %}**Nee.** {{ v.get(''reden'', ''Nog niet beoordeeld.'') }}{% endif %}
+
+
+        _De woning gaat voor. Op een zonarme dag (onder 5 kWh verwacht) wordt er niet verkocht: wat er is, is voor de woning, en wat ontbreekt wordt in het goedkope blok bijgeladen. Op andere dagen moet er na de verkoop nog genoeg overblijven om het huis te voeden tot dat blok, met marge - verkopen gaat op 1600 W terwijl het huis er 300 trekt, dus de accu leegt vijf keer zo snel als hij verbruikt wordt._'
       grid_options:
         columns: 12
         rows: auto

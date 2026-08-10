@@ -1389,6 +1389,33 @@ WEATHER_ENSEMBLE_SPREAD_ATTENTION_PERCENT = 40.0
 # Velden per melding: sleutel, label, uitleg, standaard aan/uit,
 # dempingsvenster in minuten.
 NOTIFICATION_TYPES: tuple[tuple[str, str, str, bool, int], ...] = (
+    # v1.23.4: meldingen over de planning. Alleen wat er werkelijk toe
+    # doet - elke moduswissel zou tientallen berichten per dag opleveren,
+    # en dan zet je ze uit precies wanneer je ze nodig hebt.
+    (
+        "plan_tekort",
+        "Accu haalt de nacht mogelijk niet",
+        "Wanneer de kwartierplanning voorziet dat de accu leegraakt en de "
+        "woning aan het net komt te hangen.",
+        True,
+        60,
+    ),
+    (
+        "plan_uitstel",
+        "Zon opvangen uitgesteld",
+        "Wanneer de accu bewust later gaat laden omdat de zon straks "
+        "goedkoper is, of wanneer dat weer stopt.",
+        False,
+        30,
+    ),
+    (
+        "plan_verkoop_geblokkeerd",
+        "Verkopen geblokkeerd voor de woning",
+        "Wanneer er niet verkocht wordt omdat de eigen woning die energie "
+        "nodig heeft.",
+        False,
+        120,
+    ),
     # v1.20.1, gevraagd: "Als de vakantieknop actief is moeten er
     # meldingen bij beweging worden gestuurd (maximaal 1 per 5 minuten,
     # welke sensor beweging heeft gedetecteerd)."
@@ -2254,6 +2281,8 @@ SELF_EVAL_IDLE_MODULE_DAYS = 30
 # "enough_to_postpone" toonde. Vertalen gebeurt in de WEERGAVE, niet in
 # de sensor: de codes blijven de interne waarheid.
 DECISION_REASON_LABELS = {
+    # v1.22.0: zon opvangen bewust uitgesteld naar een goedkoper uur.
+    "solar_capture_deferred": "Zon opvangen uitgesteld (betere prijs nu)",
     "arbitrage_solar_capture": "zonoverschot opvangen",
     "default_smart": "standaard slim laden",
     "discharging_window": "ontladen in duur blok",
@@ -2639,3 +2668,117 @@ CONF_POWER_LIMITS_INTENTIONAL = "power_limits_intentional"
 # over een apparaat dat in cycli werkt. Bij vijf minuten per tick zijn
 # dat ruim acht uur.
 NILM_MIN_SAMPLES_FOR_DAY = 100
+
+# --- Zonopvang uitstellen naar goedkope uren (v1.22.0) ---------------
+# Gevraagd: "Ik had dus beter mijn inziens tot 11:30 smart_discharge
+# kunnen doen? Dan had in de uren daarvoor mij meer geld opgeleverd, dan
+# terugleveren toen de accu vol was na ca. 13:15 tegen 13,6 ct."
+#
+# Klopt, en de simulatie op 10 augustus bevestigt het. Het mechanisme:
+# de accu neemt een vast aantal kilowattuur op; WELKE dat zijn bepaalt
+# welke je exporteert. Laadt hij vroeg, dan slurpt hij de dure
+# ochtendzon op (26,8 ct) en exporteer je de goedkope middagzon (13,6
+# ct). Laadt hij laat, dan andersom.
+#
+# Zelfde eind-SoC, zelfde totale export, andere prijzen. Over 4,45 kWh
+# met 13 ct verschil is dat ongeveer een halve euro per dag.
+#
+# Gesimuleerde uitkomst (netto opbrengst over 09:54-18:34):
+#   nu (altijd smart) : 1,657 EUR
+#   omslag 11:00      : 1,884 EUR   (+0,23)
+#   omslag 13:00      : 2,152 EUR   (+0,49)  <- optimum
+#   omslag 15:00      : 2,053 EUR   (+0,40, maar accu niet meer vol)
+#
+# Let op de klif: bij 15:00 is er te weinig zon over, moet er 0,86 kWh
+# worden bijgekocht en eindigt de accu op 6,13 in plaats van 7,30 kWh.
+# Het optimum ligt vlak vóór die rand - en de PV-voorspelling zit
+# gemiddeld 15% naast. Vandaar een marge.
+
+# Gevraagd: "Ik denk dat we rekening moeten houden met ca. 25%, een
+# soort kans zodat we zeker weten dat de accu rond 16:00 zo goed als vol
+# is?"
+#
+# Dat is sterker dan een marge tot zonsondergang, en wel hierom: door de
+# accu al om 16:00 vol te willen hebben, wordt de late middagzon het
+# VANGNET in plaats van onderdeel van het plan. Valt de middag tegen,
+# dan is er nog een paar uur zon over om het gat te dichten.
+#
+# De 25% komt daar bovenop: er moet een kwart meer overschot worden
+# verwacht dan er ruimte is. Samen dekt dat de gemeten voorspelfout van
+# gemiddeld 15% ruim.
+SOLAR_DEFER_SAFETY_FACTOR = 1.25
+
+# De accu hoort rond dit uur zo goed als vol te zijn. Wat er daarna nog
+# aan zon komt, is marge - niet iets waar het plan op steunt.
+SOLAR_DEFER_TARGET_FULL_HOUR = 16
+
+# Onder dit prijsverschil tussen nu en het geplande opvangmoment is het
+# de moeite niet: het risico op een tegenvallende middag weegt dan
+# zwaarder dan de winst.
+SOLAR_DEFER_MIN_PRICE_GAIN_EUR = 0.05
+
+# Niet uitstellen als de accu al bijna leeg is - dan is vullen
+# belangrijker dan optimaliseren.
+SOLAR_DEFER_MIN_SOC_PERCENT = 25.0
+
+# Uitstellen kan alleen zolang er nog zon komt; na dit uur heeft het
+# geen zin meer om te wachten.
+SOLAR_DEFER_LATEST_HOUR = 15
+
+# --- Geen verkoop op zonarme dagen (v1.23.0) -------------------------
+# Gevraagd: "Let wel, het belangrijkste blijft dat de accu genoeg heeft
+# voor de nacht ofwel mijn eigen woning van energie te voorzien." En op
+# de vraag of er in de winter überhaupt verkocht mag worden: "dan alleen
+# laden en indien nodig bijladen, en de eigen woning voeden, punt."
+#
+# Doorgerekend op een winterdag met 5 kWh zon tegen 7,4 kWh verbruik:
+# de accu verkocht 's ochtends tot nul en stond daarna drie uur leeg
+# terwijl het huis 25 tot 33 ct per kWh uit het net betaalde.
+#
+# De reserve deed wél zijn werk - die bewaarde 1,20 kWh voor de vier uur
+# tot het goedkope blok. Maar verkopen gaat op 1600 W terwijl het huis
+# 300 W trekt: ruim vijf keer zo snel. Binnen een uur stond de accu op
+# de bodem, en daar bleef hij.
+#
+# Onder deze dagopbrengst wordt er dus niet verkocht. Wat er is, is voor
+# de woning; wat ontbreekt wordt in het goedkope blok bijgeladen.
+SOLAR_POOR_DAY_KWH = 5.0
+
+# Ook als de dag zelf genoeg zon geeft, moet er ná de verkoop nog genoeg
+# overblijven om de woning te voeden tot het volgende goedkope blok -
+# mét deze marge. Anders staat de accu straks leeg terwijl het huis aan
+# het net hangt.
+SELL_RESERVE_SAFETY_FACTOR = 1.5
+
+# --- Kwartierplanning: vooruitkijken en wijzigingen (v1.23.2) --------
+# Gevraagd: "De kwartierplanning pagina moet eigenlijk vooruitkijken
+# zoveel prijzen er zijn, dus waarschijnlijk max. 36 regels. Als
+# kwartieren inmiddels voorbij zijn hoeft het niet meer getoond te
+# worden, als de waarde later door extra verbruik of iets dergelijks
+# verandert (smart_discharge naar smart) bijvoorbeeld, wil ik dat de
+# tekst rood gearceerd wordt."
+#
+# Negen uur vooruit is genoeg om te zien wat er komt zonder dat de tabel
+# onleesbaar wordt. Voorbije kwartieren vallen er vanzelf uit.
+QUARTER_PLAN_MAX_ROWS = 36
+
+# Wat er als eerste voor een kwartier werd voorspeld, wordt onthouden.
+# Verandert de modus daarna, dan is dat zichtbaar - juist die
+# wijzigingen zeggen iets over hoe betrouwbaar de planning is.
+QUARTER_PLAN_SNAPSHOT_LENGTH = 200
+
+# --- Meldingen over planningswijzigingen (v1.23.4) -------------------
+# Gevraagd: "Tevens wil ik voor belangrijke beslissingen/wijzigingen in
+# de planning graag een bericht op mijn telefoon en in het
+# meldingen overzicht. Wel moeten meldingen op telefoon uit te schakelen
+# zijn."
+#
+# Alleen melden wat er werkelijk toe doet. Elke moduswissel zou
+# tientallen berichten per dag opleveren, en dan zet je ze uit -
+# precies wanneer je ze nodig hebt.
+#
+# Deze drie zijn het waard:
+#   - de accu haalt de nacht niet (tekortkwartieren in de planning)
+#   - het zonopvang-uitstelplan gaat aan of uit
+#   - verkopen wordt geblokkeerd omdat de woning voorgaat
+PLAN_CHANGE_MIN_QUARTERS = 1

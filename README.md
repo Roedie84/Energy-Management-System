@@ -515,6 +515,470 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Meldingen bij planningswijzigingen (v1.23.4)
+
+**Gevraagd**: *"Voor alle wijzigingen graag ook de diagnostiek
+optimaliseren, tevens wil ik voor belangrijke beslissingen/wijzigingen in
+de planning graag een bericht op mijn telefoon en in het
+meldingenoverzicht. Wel moeten meldingen op telefoon uit te schakelen
+zijn."*
+
+### Twee gaten in de export gedicht
+
+Van alles wat er de laatste versies bij kwam, ontbraken er twee: de
+**werkelijke minimum-SoC** en de **eerste voorspelling per kwartier**.
+Zonder die twee is niet na te gaan waarom een SoC-percentage is wat het
+is, of waarom een kwartier als gewijzigd geldt.
+
+### Drie meldingen, elk apart uit te zetten
+
+| Melding | Standaard | Demping |
+|---|---|---|
+| **Accu haalt de nacht mogelijk niet** | **aan** | 60 min |
+| Zon opvangen uitgesteld | uit | 30 min |
+| Verkopen geblokkeerd voor de woning | uit | 120 min |
+
+Alleen de eerste staat standaard aan, en om dezelfde reden als de
+vakantiemelding: die vuurt alleen als er werkelijk iets misgaat. De twee
+andere zijn informatief en kunnen ruis worden — die zet je zelf aan als
+je ze wilt volgen.
+
+Elke melding heeft een schakelaar op de Meldingen-pagina, dus je kunt ze
+los van elkaar uitzetten zonder de rest te verliezen.
+
+### Alleen bij een overgang
+
+Niet elke tick, maar alleen als er iets **verandert**. Getoetst: eerste
+keer één melding, tweede keer nul. Anders levert één situatie tientallen
+berichten per dag op, en dan zet je ze uit precies wanneer je ze nodig
+hebt.
+
+De melding noemt de cijfers zelf:
+
+> *"De planning voorziet 35 kwartieren waarin de accu niets meer kan
+> leveren en de woning aan het net hangt. Laagste stand: 0%."*
+
+Zonder cijfers dwingt een melding tot doorklikken, en dan is hij
+nutteloos op een telefoon.
+
+### Afgeschermd
+
+Het versturen zit in een `try` — dit is een melding, en die mag de
+aansturing nooit laten vallen. Er staat een test op dat die afscherming
+blijft.
+
+### Getest
+
+Nieuw `tests/test_plan_notifications.py`, 9 tests: een tekort wordt
+gemeld, alleen bij een wijziging, een gezond plan meldt niets, het
+bericht noemt de cijfers, alle drie zijn uitschakelbaar, alleen de
+tekortmelding staat standaard aan, elk heeft een schakelaar, het
+versturen is afgeschermd, en de nieuwe velden staan in de export.
+
+**Volledige testsuite**: 1725 tests, allemaal groen.
+
+## De minimum-SoC stond verkeerd (v1.23.3)
+
+**Gemeld**: *"Laagste SoC kan nooit 0% zijn, minimale SoC van mijn accu
+is 10%."* En daarna: *"Nee er is 1 harde begrenzing van 10% verder
+nergens."*
+
+### 0,43 kWh die niet bestond
+
+De configuratie stond op **15%** terwijl je accu op **10%** staat:
+
+| | Bruikbaar |
+|---|---|
+| Ingesteld (15%) | 7,31 kWh |
+| Werkelijk (10%) | **7,74 kWh** |
+
+Dat verschil zat in **élke** berekening: de reserve hield te veel achter,
+het uitbreidingsadvies zag een kleinere accu, de SoC-percentages op het
+dashboard klopten niet, en tekort-nachten werden eerder gemeld dan nodig.
+
+### De omvormer wist het zelf
+
+`number.solarflow_2400_ac_min_soc` stond al geconfigureerd — maar werd op
+**één** plek gebruikt, terwijl het handmatige getal **vijf** berekeningen
+bepaalde. Nu andersom: de gemeten waarde gaat voor, het ingestelde getal
+is de terugval.
+
+Een onwaarschijnlijke meting (boven 100% of negatief) wordt genegeerd; de
+sensor mag de berekening niet omgooien.
+
+### En 0% is nu een waarschuwing
+
+Je opmerking legde ook bloot dat mijn planning de accu tot nul liet
+zakken zonder dat te melden. Nul procent van de bruikbare capaciteit
+betekent dat de accu op zijn harde ondergrens staat en je huis
+**volledig aan het net hangt** — dat is geen gewone regel in een tabel.
+
+Zulke kwartieren krijgen nu een **!** in de tabel, en de samenvatting
+telt ze onder *"Kwartieren met tekort"*. Dat is het belangrijkste
+signaal om te bewaken: nul hoort de norm te zijn.
+
+De harde ondergrens staat er ook bij, zodat zichtbaar is waar de
+berekening op rust.
+
+### Getest
+
+Nieuw `tests/test_effective_min_soc.py`, 8 tests: de gemeten waarde
+wint, zonder meting valt het terug, een onwaarschijnlijke waarde wordt
+genegeerd, de bruikbare capaciteit groeit naar 7,74 kWh, alle
+berekeningen gebruiken hem, tekortkwartieren worden gemarkeerd, en de
+samenvatting toont de ondergrens.
+
+**Volledige testsuite**: 1716 tests, allemaal groen.
+
+## Vooruitkijken en wijzigingen markeren (v1.23.2)
+
+**Gevraagd**: *"De kwartierplanning pagina moet eigenlijk vooruitkijken
+zoveel prijzen er zijn, dus waarschijnlijk max. 36 regels... als de
+waarde later door extra verbruik of iets dergelijks verandert
+(smart_discharge naar smart) bijvoorbeeld, wil ik dat de tekst rood
+gearceerd wordt."*
+
+### Rood bij een wijziging
+
+De integratie onthoudt nu wat er **als eerste** voor elk kwartier werd
+voorspeld. Verandert de modus later, dan kleurt die regel rood en staat
+erbij wat er eerst stond:
+
+> 09:15 · manual (verkopen) <sub>was smart_discharging</sub>
+
+Juist die wijzigingen zeggen iets over hoe betrouwbaar de planning is.
+Een kwartier dat omspringt betekent dat er onderweg iets anders liep dan
+verwacht — extra verbruik, tegenvallende zon, of een accu die sneller
+leegliep.
+
+De samenvatting telt ze: **Gewijzigd sinds eerste plan**. Veel
+wijzigingen betekent dat de planning onrustig is.
+
+Getoetst: eerste plan nul wijzigingen; daarna de accu op 0,3 kWh gezet en
+zes kwartieren sprongen van *manual* naar *smart* — allemaal gemarkeerd.
+
+### Negen uur vooruit, voorbije kwartieren weg
+
+Maximaal 36 regels. Voorbije kwartieren verdwijnen vanzelf.
+
+### De samenvatting kreeg een eigen pagina
+
+Met alle kolommen liep de kwartierpagina over de leesbaarheidsgrens. De
+samenvatting en de verkooptoets staan nu op *Planning-samenvatting*.
+
+En de tabel ging van negen naar **zes kolommen** — een bestaande test
+sloeg terecht aan dat negen niet op een smal scherm past. Prijs, modus en
+SoC zijn waar het om draait; de opbrengst per kwartier zit in het lopende
+totaal.
+
+### Onderweg
+
+Mijn eerste poging overschreef de kolommen van v1.23.1 in plaats van ze
+aan te vullen — de tabel raakte drie kolommen kwijt zonder dat een test
+dat ving. De rij is daarna in één keer opnieuw opgebouwd.
+
+### Getest
+
+Zeven tests erbij: de tabel is begrensd op 36, een gewijzigd kwartier
+wordt gemarkeerd, een ongewijzigd niet, de samenvatting telt ze,
+voorbije kwartieren verdwijnen, de geschiedenis blijft begrensd, en de
+kaart markeert in rood.
+
+**Volledige testsuite**: 1708 tests, allemaal groen.
+
+## Kwartierplanning volledig te bewaken (v1.23.1)
+
+**Gevraagd**: *"Op de kwartierplanning pagina wil ik in het overzicht ook
+verwachte PV, verwachte winst etc zien, ik wil dit graag volledig kunnen
+bewaken totdat we meer data hebben."*
+
+Terecht bij een mechanisme dat nog nauwelijks ervaring heeft: een tabel
+van 96 regels laat de details zien, maar niet of het gehéél klopt.
+
+### Samenvatting boven de tabel
+
+| | |
+|---|---|
+| Verwachte zon | 6,0 kWh |
+| Verwacht verbruik | 5,4 kWh |
+| Verwachte teruglevering | 9,3 kWh |
+| Verwachte import | 1,7 kWh |
+| **Verwachte opbrengst** | **€2,67** |
+| Waarvan uit verkoop | €3,30 (23 kwartieren) |
+| SoC laagste / hoogste | **0%** / 90% |
+| SoC aan het eind | 0% |
+| Kwartieren in goedkoop blok | 24 |
+
+Dat is een voorbeeld uit een test — en het laat meteen zien waarvoor deze
+kaart bedoeld is. **Laagste SoC 0%** is precies het signaal dat je wilt
+zien: zakt de accu volgens het plan tot nul, dan is het te gretig.
+
+### Drie kolommen erbij in de tabel
+
+Per kwartier nu ook: **Net** (negatief bij teruglevering, positief bij
+import), **EUR** voor dat kwartier, en een lopend **Totaal**. Zo is te
+volgen waar de winst vandaan komt in plaats van alleen wat er onder de
+streep uitkomt.
+
+Er staat een test op dat het cumulatief de som van de losse kwartieren
+is — anders klopt de eindwaarde niet.
+
+### Onderweg, voor de derde keer
+
+Mijn eigen test pakte de verkeerde kaart, omdat er nu drie
+markdown-kaarten op die pagina staan. Die zoekt nu op de tabellus zelf in
+plaats van op een veld dat ook elders voorkomt.
+
+### Getest
+
+Acht tests erbij: elke regel heeft zijn opbrengst, het cumulatief telt
+op, verkopen levert op en importeren kost, de samenvatting bevat wat er
+gevraagd is, de laagste SoC blijft binnen grenzen, alle kwartieren worden
+geteld, en zonder planning is er geen samenvatting.
+
+**Volledige testsuite**: 1701 tests, allemaal groen.
+
+## De woning gaat voor verkopen (v1.23.0)
+
+**Gevraagd**: *"Hij moet actief kijken of verkoop van energie mogelijk is
+(dus is er nog genoeg voor mijn woning)."* En over de winter: *"dan
+alleen laden en indien nodig bijladen, en de eigen woning voeden,
+punt."*
+
+### Wat een winterdag liet zien
+
+Doorgerekend met 5 kWh zon tegen 7,4 kWh verbruik:
+
+| Tijd | ct | Modus | SoC |
+|---|---|---|---|
+| 07:00 | 33,7 | manual | 10% |
+| 08:00 | 33,3 | smart | **2%** |
+| 09:00 | 30,5 | smart | **0%** |
+| 10:00 | 24,9 | smart | 1% |
+| 11:00 | 16,4 | laden | 17% |
+
+De accu verkocht 's ochtends tot nul en stond daarna **drie uur leeg**
+terwijl het huis 25 tot 33 ct per kWh uit het net betaalde.
+
+### De reserve deed wél zijn werk
+
+Die bewaarde 1,20 kWh voor de vier uur tot het goedkope blok — dat klopt.
+Het probleem zat in de **snelheid**: verkopen gaat op 1600 W terwijl het
+huis 300 W trekt, ruim vijf keer zo snel. Binnen een uur stond de accu op
+de bodem, en daar bleef hij.
+
+De toets was passief (*"blijft er genoeg over?"*), niet actief (*"kan ik
+dit verkopen zonder mijn woning aan het net te leggen?"*).
+
+### Twee remmen
+
+**Zonarme dag.** Onder 5 kWh verwachte opbrengst wordt er niet verkocht —
+ook niet met een volle accu, want die energie is voor de nacht en er komt
+te weinig zon om hem opnieuw te vullen. Alleen laden, bijladen in het
+goedkope blok, en de woning voeden.
+
+**Anders: de woning eerst.** Er moet ná de verkoop genoeg overblijven om
+het huis te voeden tot het goedkope blok, met **anderhalf keer** marge —
+voor een koude avond of een onverwachte wasmachine. Zon die vóór dat blok
+nog komt, telt mee.
+
+### Twee dingen die níét blokkeren
+
+Zonder Solcast-sensor geeft de schatting 0,0 terug, en dat zou élke dag
+als zonarm bestempelen. Zonder accusensor valt er niets te toetsen. In
+beide gevallen blijft het beproefde gedrag met de bestaande reserve
+gelden — blokkeren zou zo'n installatie stilzetten.
+
+### Getoetst
+
+| Situatie | Uitkomst |
+|---|---|
+| Winterdag 3,5 kWh, accu 3,0 | **niet verkopen** |
+| Winterdag 3,5 kWh, accu 7,0 | **niet verkopen** |
+| Zomerdag 22 kWh, accu 3,0 | verkopen, 1,20 kWh vrij |
+| Zomerdag 22 kWh, accu 1,0 | **niet verkopen** |
+
+### Getest
+
+Nieuw `tests/test_sell_only_when_possible.py`, 10 tests.
+
+**Volledige testsuite**: 1693 tests, allemaal groen.
+
+## Kwartierplanning op het dashboard (v1.22.2)
+
+**Gemeld**: *"Ik mis alleen de manual export tegen dure prijzen in de
+voorbeeldtabel... wanneer de accu van het net geladen is mag er niet op
+manual ontladen worden."* En: *"Ik wil ergens op een dashboard deze
+verwachting per kwartier (dus ook SoC in procenten) zodat ik dit kan
+monitoren."*
+
+### Mijn tabel was onvolledig
+
+Die simuleerde alleen `smart` en `smart_discharging`. De
+**manual-verkoop** in dure kwartieren ontbrak volledig — terwijl dat
+juist de stand is die geld oplevert.
+
+De regel zelf zit al sinds langer in de code en werkt precies zoals
+afgesproken: verkopen mag alleen als de accu die dag **niet van het net
+is geladen**. Anders zou je dezelfde stroom met verlies terugverkopen.
+
+Een planning die dat weglaat belooft iets anders dan de aansturing doet,
+en dat is erger dan geen planning.
+
+### De nieuwe pagina
+
+*Kwartierplanning*, bereikbaar via "Meer bekijken". Per kwartier: tijd,
+prijs in centen, verwachte zon, verwacht verbruik, de modus en de **SoC
+in procenten**.
+
+Alle vier de modi zitten erin, inclusief het uitstelplan uit v1.22.0.
+
+Getoetst met een dag waarin de ochtend duur is en de middag goedkoop:
+
+| | Verkoopkwartieren |
+|---|---|
+| Accu alleen met zon geladen | **22** |
+| Accu van het net geladen | **0** |
+
+### Eén ding dat mijn test verkeerd had
+
+Ik toetste dat een lege accu niet verkoopt. Maar die vult zich tussendoor
+met zon, en mag dán wél verkopen in een duur kwartier — dat is juist de
+bedoeling. De code had gelijk, de test niet. Er staat nu ook een test op
+het omgekeerde geval.
+
+### Wat dit betekent voor morgen
+
+Stuur de Zonneplan-prijzen, dan maak ik de planning per kwartier met de
+echte cijfers. Dan zie je precies wanneer er verkocht wordt, wanneer er
+wordt opgevangen, en waar de SoC doorheen loopt.
+
+### Getest
+
+Nieuw `tests/test_quarter_plan.py`, 13 tests.
+
+**Volledige testsuite**: 1683 tests, allemaal groen.
+
+## Kwartierprijzen ontbraken in de export (v1.22.1)
+
+**Gevraagd**: *"De nieuwe kwartierprijzen van Zonneplan zijn toch al
+bekend?"*
+
+Ja — en de integratie gebruikt ze ook. Maar de **export** toonde ze niet.
+
+### Wat er wél stond
+
+`upcoming_transitions`: samengevoegde blokken per modus, met alleen een
+min- en maxprijs. Voor de hele dag van 11 augustus waren dat drie
+regels:
+
+| Van | Tot | Modus | Prijs |
+|---|---|---|---|
+| 10:45 | 19:45 | smart | 0,1267 – 0,3505 |
+| 19:45 | 21:30 | manual | 0,3636 – 0,3807 |
+| 21:30 | 00:00 | smart | 0,3095 – 0,3569 |
+
+Negen uur samengevat als "ergens tussen 12,7 en 35,1 ct". Daarmee valt
+niet na te gaan **wanneer** de prijs hoog is — en dat is nu juist waar
+het uitstelplan uit v1.22.0 volledig op stuurt.
+
+Daarom moest ik voor de tabel van morgen het prijsverloop van 10
+augustus als benadering nemen. Dat is precies het soort gissen dat de
+diagnostiek zou moeten wegnemen.
+
+### Nu wel
+
+`price_forecast_quarters` bevat elk kwartierblok met start, eind en
+prijs. Afgeschermd zoals de rest van de export: zonder prijssensor gooit
+de onderliggende functie een `KeyError`, en dat mag het hele bestand niet
+meeslepen — de les van v1.19.3.
+
+### Wat dit voor je vraag betekent
+
+Stuur een verse export, dan maak ik de uurtabel voor morgen opnieuw met
+de **echte** kwartierprijzen in plaats van een geschaalde benadering.
+Het verschil van €0,26 kan dan omhoog of omlaag: de vorm van de dag
+bepaalt alles bij deze afweging.
+
+### Getest
+
+Drie tests erbij: de kwartierprijzen staan in de export, ze zijn
+afgeschermd, en zonder prijssensor loopt het niet vast.
+
+**Volledige testsuite**: 1670 tests, allemaal groen.
+
+## Zonopvang uitstellen naar een goedkoper uur (v1.22.0)
+
+**Gevraagd** na een dag waarop de accu 's ochtends vol liep bij hoge
+prijzen: *"Ik had dus beter mijn inziens tot 11:30 smart_discharge kunnen
+doen? Dan had in de uren daarvoor mij meer geld opgeleverd."*
+
+### Ik zat er eerst naast
+
+Mijn eerste simulatie liet geen enkel verschil zien — maar die telde
+alleen **importkosten** en vergat de **teruglever-opbrengst**. Precies
+waar de arbitrage zit.
+
+Met opbrengst erbij, op de werkelijke dag van 10 augustus:
+
+| Omslag | Netto opbrengst | Verschil |
+|---|---|---|
+| Nu (altijd smart) | € 1,657 | — |
+| 11:00 | € 1,884 | +0,23 |
+| **13:00** | **€ 2,152** | **+0,49** |
+| 15:00 | € 2,053 | +0,40, accu niet vol |
+
+### Het mechanisme
+
+De accu neemt een vast aantal kilowattuur op. **Wélke** dat zijn bepaalt
+welke je exporteert. Laadt hij vroeg, dan slurpt hij de dure ochtendzon
+op (26,8 ct) en exporteer je de goedkope middagzon (13,6 ct). Laadt hij
+laat, dan andersom.
+
+Zelfde eind-SoC, zelfde totale export — andere prijzen. Over 4,45 kWh met
+13 ct verschil is dat ongeveer een halve euro per dag.
+
+### De deadline is het vangnet
+
+Op jouw voorstel wordt gerekend tot **16:00**, niet tot zonsondergang.
+Daardoor wordt de late middagzon marge in plaats van onderdeel van het
+plan: valt de middag tegen, dan is er nog een paar uur zon om het gat te
+dichten — en anders nog altijd het goedkoopste nachtblok.
+
+Daar bovenop **25% extra** overschot dan er ruimte is. Samen dekt dat de
+gemeten voorspelfout van gemiddeld 15% ruim.
+
+Die marge doet ertoe: bij omslag 15:00 levert het nog steeds €0,40 op,
+maar eindigt de accu op 6,13 in plaats van 7,30 kWh. Het optimum ligt
+vlak vóór die klif.
+
+### Vier remmen
+
+Niet uitstellen bij: te weinig zon, minder dan 5 ct prijsverschil, een
+accu onder 25%, of na 16:00. Elke weigering noemt zijn reden op de
+Planning-pagina, zodat een stille moduswissel niet onverklaarbaar blijft.
+
+### Nagerekend op je eigen dag
+
+| Moment | Accu | Advies |
+|---|---|---|
+| 10:00 | 2,85 kWh | wachten tot 12:00 → +€0,39 |
+| 11:00 | 4,30 kWh | wachten tot 13:00 → +€0,25 |
+| 12:00 | 5,60 kWh | wachten tot 14:00 → +€0,07 |
+
+Het plan schuift netjes mee: hoe voller de accu, hoe minder er te winnen
+valt.
+
+### Getest
+
+Nieuw `tests/test_solar_capture_deferral.py`, 12 tests: een zonnige
+ochtend stelt uit, het plan legt zichzelf uit, te weinig zon en een klein
+prijsverschil remmen, een bijna lege of volle accu doet niets, na de
+deadline stopt het, ontbrekende gegevens vallen terug op het beproefde
+gedrag, en de reden heeft een Nederlandse vertaling.
+
+**Volledige testsuite**: 1667 tests, allemaal groen.
+
 ## "Nachtverbruik" was het ontlaadvenster (v1.21.5)
 
 **Gemeld**: *"Tevens een nachtverbruik van 400W? Mijns inziens moet dit

@@ -374,6 +374,26 @@ async def async_get_config_entry_diagnostics(
             "presence_overview": _veilig("get_presence_overview", coordinator.get_presence_overview),
             # v1.19.4: onderdelen die zichzelf niet konden berekenen.
             "internal_failures": coordinator.internal_failures,
+            # v1.22.0: het uitstelplan voor zonopvang.
+            "solar_defer_plan": coordinator.last_solar_defer_plan,
+            # v1.23.0: mag er verkocht worden, en waarom wel of niet?
+            "sell_check": coordinator.last_sell_check,
+            # v1.23.4: de werkelijke ondergrens waarop alles rust, en de
+            # eerste voorspelling per kwartier. Zonder die twee is niet
+            # na te gaan waarom een SoC-percentage is wat het is, of
+            # waarom een kwartier als gewijzigd geldt.
+            "effective_min_soc_percent": _veilig(
+                "effective_min_soc_percent",
+                coordinator.effective_min_soc_percent,
+            ),
+            "quarter_plan_first_seen": coordinator.quarter_plan_first_seen,
+            "quarter_plan_summary": _veilig(
+                "quarter_plan_summary", coordinator.get_quarter_plan_summary
+            ),
+            # v1.22.2: de verwachte planning per kwartier, met SoC.
+            "quarter_plan": _veilig(
+                "quarter_plan", coordinator.get_quarter_plan
+            ),
             # v1.21.0: welke koelapparaten een temperatuurmarge krijgen.
             "cooling_temperature_margins": {
                 gegevens.get("friendly_name") or entity_id: {
@@ -733,6 +753,27 @@ async def async_get_config_entry_diagnostics(
                 coordinator.was_bootstrapped_from_history
             ),
             "upcoming_transitions": coordinator.last_transitions,
+            # v1.22.1: de losse kwartierprijzen, niet alleen de
+            # samengevoegde blokken met min en max.
+            #
+            # Bij het narekenen van het uitstelplan bleek dit een gat:
+            # de integratie kent de prijzen tot morgen middernacht, maar
+            # de export toonde voor een hele dag maar drie blokken met
+            # "0,1267 - 0,3505". Daarmee valt niet na te gaan WANNEER de
+            # prijs hoog is, en dat is nu juist waar het plan op stuurt.
+            "price_forecast_quarters": _veilig(
+                "price_forecast_quarters",
+                lambda: [
+                    {
+                        "start": _iso(start),
+                        "end": _iso(einde),
+                        "price_per_kwh": round(prijs, 5),
+                    }
+                    for start, einde, prijs in (
+                        coordinator._get_forecast_entries() or []
+                    )
+                ],
+            ),
         },
     }
 

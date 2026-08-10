@@ -300,7 +300,10 @@ from .const import (
     GACS_EFFICIENCY_ADVICE_PERCENT,
     GACS_REQUIREMENTS,
     GACS_SELF_CONSUMPTION_ADVICE_PERCENT,
+    PLAN_CHANGE_MIN_QUARTERS,
     PLAUSIBILITY_RULES,
+    QUARTER_PLAN_MAX_ROWS,
+    QUARTER_PLAN_SNAPSHOT_LENGTH,
     PRESENCE_ABSENCE_AFTER_MINUTES,
     PRESENCE_ABSENCE_AFTER_MINUTES_FAST,
     PRESENCE_INTRUSION_COOLDOWN_MINUTES,
@@ -350,6 +353,13 @@ from .const import (
     SOLARFLOW_MAX_GRID_POWER_W,
     SOLARFLOW_MAX_MODULES,
     SOLAR_BIAS_DRIFT_MIN_DAYS,
+    SOLAR_POOR_DAY_KWH,
+    SOLAR_DEFER_LATEST_HOUR,
+    SOLAR_DEFER_MIN_PRICE_GAIN_EUR,
+    SOLAR_DEFER_MIN_SOC_PERCENT,
+    SELL_RESERVE_SAFETY_FACTOR,
+    SOLAR_DEFER_SAFETY_FACTOR,
+    SOLAR_DEFER_TARGET_FULL_HOUR,
     PV_ORIENTATION_MISMATCH_DEGREES,
     PV_SHALLOW_TILT_DEGREES,
     PV_SHALLOW_TILT_EXTRA_TOLERANCE_DEGREES,
@@ -516,6 +526,16 @@ class EnergyManagementSystemCoordinator:
         # Only the live solar-surplus tracking remains, purely to avoid
         # wasting solar that's already there during smart_discharging.
         self.last_arbitrage_solar_surplus_w: float | None = None
+        # v1.22.0: het laatste uitstelplan voor de zonopvang.
+        self.last_solar_defer_plan: dict = {}
+        # v1.23.0: waarom er wel of niet verkocht mag worden.
+        self.last_sell_check: dict = {}
+        # v1.23.2: wat er als EERSTE voor elk kwartier werd voorspeld,
+        # zodat latere wijzigingen zichtbaar worden.
+        self.quarter_plan_first_seen: dict[str, str] = {}
+        # v1.23.4: wat er als laatste is gemeld, zodat er alleen bij een
+        # WIJZIGING een bericht gaat en niet elke tick opnieuw.
+        self._last_plan_alert: dict[str, str] = {}
         # If True: compute and learn everything as normal, but never send
         # commands to the Zendure entities. Set via a dedicated switch.
         self.learning_only: bool = False
@@ -4487,6 +4507,33 @@ class EnergyManagementSystemCoordinator:
             return 0.0
         return verschil * COOLING_DRIFT_PERCENT_PER_DEGREE
 
+    def effective_min_soc_percent(self) -> float:
+        """De minimum-SoC die de accu WERKELIJK aanhoudt (v1.23.3).
+
+        Gemeld: "Laagste SoC kan nooit 0% zijn, minimale SoC van mijn
+        accu is 10%." En daarna: "Nee er is 1 harde begrenzing van 10%
+        verder nergens."
+
+        De configuratie stond op 15% terwijl de accu op 10% staat. Dat
+        maakte 0,43 kWh onbruikbaar in elke berekening: de reserve hield
+        te veel achter, het uitbreidingsadvies zag een kleinere accu, de
+        SoC-percentages klopten niet en tekort-nachten werden eerder
+        gemeld dan nodig.
+
+        De omvormer weet het zelf - `number.solarflow_2400_ac_min_soc`
+        stond al geconfigureerd maar werd op één plek gebruikt, terwijl
+        het handmatige getal de berekeningen bepaalde. Nu andersom: de
+        gemeten waarde gaat voor, het ingestelde getal is de terugval.
+        """
+        entity_id = self.config.get(CONF_BATTERY_MIN_SOC_NUMBER)
+        if entity_id:
+            gemeten = self._read_sensor_float(entity_id)
+            if gemeten is not None and 0 <= gemeten <= 100:
+                return float(gemeten)
+        return float(
+            self.config.get(CONF_MIN_SOC_PERCENT, DEFAULT_MIN_SOC_PERCENT) or 0
+        )
+
     def _entiteitsnaam(self, entity_id: str) -> str:
         """Leesbare naam, met de entity_id als terugval (v1.20.1).
 
@@ -4724,7 +4771,7 @@ class EnergyManagementSystemCoordinator:
         capaciteit = self._read_sensor_float(
             self.config.get(CONF_BATTERY_TOTAL_CAPACITY_SENSOR)
         )
-        min_soc = self.config.get(CONF_MIN_SOC_PERCENT) or 0
+        min_soc = self.effective_min_soc_percent()
         bruikbaar = (
             capaciteit * (100 - min_soc) / 100 if capaciteit else None
         )
@@ -7165,6 +7212,549 @@ class EnergyManagementSystemCoordinator:
 
         return needed_kwh * margin
 
+    def get_quarter_plan(self, now: datetime | None = None) -> list[dict]:
+        """Verwachte planning per kwartier (v1.22.2).
+
+        Gevraagd: "Tevens wil ik ergens op een dashboard deze
+        verwachting per kwartier (dus ook SoC in procenten) zodat ik dit
+        kan monitoren en we eventueel kunnen corrigeren."
+
+        Loopt de bekende prijsblokken langs en projecteert per kwartier
+        de prijs, de verwachte zon, het verwachte verbruik, de modus en
+        de resulterende SoC.
+
+        Alle vier de modi zitten erin, inclusief de regel die eerder is
+        afgesproken: verkopen op `manual` mag alleen als de accu die dag
+        NIET van het net is geladen. Zonder die regel zou de tabel iets
+        beloven wat de aansturing niet doet - en dat is erger dan geen
+        tabel.
+        """
+        now = now or dt_util.now()
+        entries = self._get_forecast_entries()
+        if not entries:
+            return []
+
+        capaciteit = self._read_sensor_float(
+            self.config.get(CONF_BATTERY_TOTAL_CAPACITY_SENSOR)
+        )
+        beschikbaar = self.last_available_kwh
+        if capaciteit is None or beschikbaar is None:
+            return []
+        min_soc = self.effective_min_soc_percent()
+        bruikbaar = capaciteit * (100 - min_soc) / 100
+        soc = min(beschikbaar, bruikbaar)
+
+        ontlaad_w = abs(self.config.get(CONF_MANUAL_DISCHARGE_POWER) or 0)
+        drempel = self.last_expensive_price_threshold
+        van_net_geladen = self._grid_charged_today
+        uitstelplan = self.last_solar_defer_plan or {}
+        omslag = uitstelplan.get("omslag_uur")
+
+        lo = min((p for _, _, p in entries), default=0.0)
+        hi = max((p for _, _, p in entries), default=0.0)
+        blok_drempel = lo + (hi - lo) * CHEAP_BLOCK_THRESHOLD_MARGIN_FRACTION
+
+        plan = []
+        loper = 0.0
+        for start, einde, prijs in entries:
+            # Voorbije kwartieren tonen niets nuttigs meer.
+            if einde <= now:
+                continue
+            # v1.23.2: negen uur vooruit is genoeg om te zien wat er
+            # komt zonder dat de tabel onleesbaar wordt.
+            if len(plan) >= QUARTER_PLAN_MAX_ROWS:
+                break
+            duur = (einde - start).total_seconds() / 3600
+            if duur <= 0:
+                continue
+            zon = self._estimate_pv_kwh_for_period(start, einde)
+            verbruik = self._estimate_consumption_kwh_for_period(start, einde)
+            in_blok = prijs <= blok_drempel
+
+            duur_kwh = ontlaad_w / 1000 * duur
+            duur_kwartier = (
+                drempel is not None and prijs >= drempel and not van_net_geladen
+            )
+            uitstellen = (
+                uitstelplan.get("uitstellen")
+                and omslag is not None
+                and start.hour < omslag
+                and start.date() == now.date()
+            )
+
+            # Alleen verkopen als er wat te verkopen valt. Een bijna
+            # lege accu die in dure kwartieren op manual gaat, levert
+            # een planning op die niets doet - en tussentijds groeit de
+            # SoC weer aan door zon, waardoor hij alsnog zou verkopen.
+            # v1.23.3: bijhouden of de accu in dit kwartier niets meer
+            # kan leveren. Gemeld: "Laagste SoC kan nooit 0% zijn."
+            #
+            # Klopt: 0% van de BRUIKBARE capaciteit betekent dat de accu
+            # op zijn harde ondergrens staat en het huis volledig aan
+            # het net hangt. Dat is geen gewone regel in de tabel maar
+            # een waarschuwing.
+            tekort = False
+            if duur_kwartier and soc >= duur_kwh * 0.5:
+                modus = "manual (verkopen)"
+                uit = min(soc, duur_kwh)
+                soc -= uit
+                net = round(-(uit - verbruik + zon), 3)
+            elif uitstellen:
+                modus = "smart_discharging"
+                uit = min(soc, verbruik)
+                soc -= uit
+                if uit < verbruik - zon:
+                    tekort = True
+                net = round(-(zon - (verbruik - uit)), 3)
+            else:
+                modus = "smart"
+                over = max(0.0, zon - verbruik)
+                naar = min(over, bruikbaar - soc)
+                soc += naar
+                nodig = max(0.0, verbruik - zon)
+                uit = min(soc, nodig)
+                soc -= uit
+                if uit < nodig:
+                    tekort = True
+                net = round(-(over - naar) + (nodig - uit), 3)
+
+            # v1.23.1: ook de opbrengst per kwartier, zodat het plan te
+            # bewaken is zolang er nog weinig ervaring mee is.
+            #
+            # `net_kwh` is negatief bij teruglevering en positief bij
+            # import. De opbrengst volgt daaruit: teruglevering levert
+            # geld op, import kost geld.
+            opbrengst = -net * prijs
+            loper += opbrengst
+
+            # v1.23.2: is dit kwartier van plan veranderd sinds de
+            # eerste voorspelling? Juist die wijzigingen zeggen iets
+            # over hoe betrouwbaar de planning is - een kwartier dat van
+            # smart_discharging naar smart springt, betekent dat er
+            # onderweg iets anders liep dan verwacht.
+            sleutel = start.isoformat()
+            eerder = self.quarter_plan_first_seen.get(sleutel)
+            if eerder is None:
+                self.quarter_plan_first_seen[sleutel] = modus
+                if len(self.quarter_plan_first_seen) > QUARTER_PLAN_SNAPSHOT_LENGTH:
+                    oudste = sorted(self.quarter_plan_first_seen)[
+                        : -QUARTER_PLAN_SNAPSHOT_LENGTH
+                    ]
+                    for k in oudste:
+                        self.quarter_plan_first_seen.pop(k, None)
+            gewijzigd = eerder is not None and eerder != modus
+
+            plan.append(
+                {
+                    "gewijzigd": gewijzigd,
+                    "eerst_voorspeld": eerder,
+                    "tekort": tekort,
+                    "van": start.strftime("%H:%M"),
+                    "tot": einde.strftime("%H:%M"),
+                    "prijs_ct": round(prijs * 100, 1),
+                    "zon_kwh": round(zon, 3),
+                    "verbruik_kwh": round(verbruik, 3),
+                    "modus": modus,
+                    "soc_kwh": round(soc, 2),
+                    "soc_procent": round(100 * soc / bruikbaar) if bruikbaar else None,
+                    "net_kwh": net,
+                    "opbrengst_eur": round(opbrengst, 4),
+                    "cumulatief_eur": round(loper, 3),
+                    "in_goedkoop_blok": in_blok,
+                }
+            )
+        return plan
+
+    def _meld_planningswijzigingen(self, now: datetime) -> None:
+        """Bericht bij belangrijke wijzigingen in de planning (v1.23.4).
+
+        Gevraagd: "voor belangrijke beslissingen/wijzigingen in de
+        planning graag een bericht op mijn telefoon en in het
+        meldingenoverzicht."
+
+        Alleen bij een OVERGANG, niet elke tick. Anders levert één
+        situatie tientallen berichten per dag op, en dan zet je ze uit -
+        precies wanneer je ze nodig hebt.
+
+        Elk van de drie is apart uitschakelbaar; de bestaande
+        meldingsschakelaars regelen dat al.
+        """
+        samenvatting = self.get_quarter_plan_summary(now)
+        if not samenvatting.get("beschikbaar"):
+            return
+
+        def _meld(soort: str, sleutel: str, titel: str, tekst: str) -> None:
+            if self._last_plan_alert.get(soort) == sleutel:
+                return
+            self._last_plan_alert[soort] = sleutel
+            self._dispatch_notification(
+                self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE),
+                titel,
+                tekst,
+                f"ems_{soort}",
+                kind=soort,
+            )
+
+        tekorten = samenvatting.get("tekort_kwartieren") or 0
+        if tekorten >= PLAN_CHANGE_MIN_QUARTERS:
+            _meld(
+                "plan_tekort",
+                f"tekort:{tekorten}",
+                "Accu haalt de nacht mogelijk niet",
+                (
+                    f"De planning voorziet {tekorten} kwartier(en) waarin de "
+                    "accu niets meer kan leveren en de woning aan het net "
+                    f"hangt. Laagste stand: "
+                    f"{samenvatting.get('laagste_soc_procent')}%."
+                ),
+            )
+        else:
+            self._last_plan_alert.pop("plan_tekort", None)
+
+        plan = self.last_solar_defer_plan or {}
+        uitstel_sleutel = (
+            f"uit:{plan.get('omslag_uur')}" if plan.get("uitstellen") else "nee"
+        )
+        if plan.get("uitstellen"):
+            _meld(
+                "plan_uitstel",
+                uitstel_sleutel,
+                "Zon opvangen uitgesteld",
+                plan.get("reden", ""),
+            )
+        else:
+            self._last_plan_alert.pop("plan_uitstel", None)
+
+        verkoop = self.last_sell_check or {}
+        if verkoop and not verkoop.get("mag_verkopen"):
+            _meld(
+                "plan_verkoop_geblokkeerd",
+                str(verkoop.get("reden"))[:60],
+                "Verkopen geblokkeerd voor de woning",
+                verkoop.get("reden", ""),
+            )
+        else:
+            self._last_plan_alert.pop("plan_verkoop_geblokkeerd", None)
+
+    def get_quarter_plan_summary(self, now: datetime | None = None) -> dict:
+        """Samenvatting van de kwartierplanning (v1.23.1).
+
+        Gevraagd: "Op de kwartierplanning pagina wil ik in het overzicht
+        ook verwachte PV, verwachte winst etc zien, ik wil dit graag
+        volledig kunnen bewaken totdat we meer data hebben."
+
+        Terecht bij een mechanisme dat nog nauwelijks ervaring heeft: een
+        tabel van 96 regels laat de details zien maar niet of het geheel
+        klopt.
+        """
+        plan = self.get_quarter_plan(now)
+        if not plan:
+            return {"beschikbaar": False, "reden": "Nog geen planning."}
+
+        per_modus: dict[str, int] = {}
+        for r in plan:
+            per_modus[r["modus"]] = per_modus.get(r["modus"], 0) + 1
+
+        socs = [r["soc_procent"] for r in plan if r["soc_procent"] is not None]
+        verkoop = [r for r in plan if "manual" in r["modus"]]
+        blok = [r for r in plan if r.get("in_goedkoop_blok")]
+
+        return {
+            "beschikbaar": True,
+            "kwartieren": len(plan),
+            "zon_kwh": round(sum(r["zon_kwh"] for r in plan), 2),
+            "verbruik_kwh": round(sum(r["verbruik_kwh"] for r in plan), 2),
+            "import_kwh": round(
+                sum(r["net_kwh"] for r in plan if r["net_kwh"] > 0), 2
+            ),
+            "export_kwh": round(
+                sum(-r["net_kwh"] for r in plan if r["net_kwh"] < 0), 2
+            ),
+            "verwachte_opbrengst_eur": round(plan[-1]["cumulatief_eur"], 2),
+            "opbrengst_uit_verkoop_eur": round(
+                sum(r["opbrengst_eur"] for r in verkoop), 2
+            ),
+            "verkoopkwartieren": len(verkoop),
+            "kwartieren_in_goedkoop_blok": len(blok),
+            # v1.23.2: hoeveel kwartieren zijn sinds de eerste
+            # voorspelling van plan veranderd? Veel wijzigingen betekent
+            # dat de planning onrustig is.
+            "gewijzigde_kwartieren": len(
+                [r for r in plan if r.get("gewijzigd")]
+            ),
+            # v1.23.3: kwartieren waarin de accu niets meer kan leveren
+            # en het huis dus aan het net hangt. Dit is de belangrijkste
+            # regel om te bewaken.
+            "tekort_kwartieren": len([r for r in plan if r.get("tekort")]),
+            "min_soc_procent_hard": self.effective_min_soc_percent(),
+            "laagste_soc_procent": min(socs) if socs else None,
+            "hoogste_soc_procent": max(socs) if socs else None,
+            "eind_soc_procent": socs[-1] if socs else None,
+            "modi": per_modus,
+        }
+
+    def _price_at_hour(self, now: datetime, uur: int) -> float | None:
+        """Gemiddelde prijs in een uur later vandaag (v1.22.0).
+
+        De prijsreeks bestaat uit kwartierblokken; een uur is dus het
+        gemiddelde van maximaal vier ervan. Zonder gegevens voor dat uur
+        None, zodat de aanroeper niet op een verzonnen getal plant.
+        """
+        entries = self._get_forecast_entries()
+        if not entries:
+            return None
+        start = now.replace(hour=uur, minute=0, second=0, microsecond=0)
+        einde = start + timedelta(hours=1)
+        prijzen = [
+            prijs
+            for blok_start, blok_eind, prijs in entries
+            if blok_start < einde and blok_eind > start
+        ]
+        if not prijzen:
+            return None
+        return sum(prijzen) / len(prijzen)
+
+    def may_sell_now(
+        self, now: datetime, beschikbaar: float | None = None
+    ) -> dict:
+        """Mag de accu nu verkopen, of is dat nodig voor de woning?
+        (v1.23.0)
+
+        Gevraagd: "Hij moet actief kijken of verkoop van energie
+        mogelijk is (dus is er nog genoeg voor mijn woning)." En over de
+        winter: "dan alleen laden en indien nodig bijladen, en de eigen
+        woning voeden, punt."
+
+        De bestaande reserve toetste PASSIEF: blijft er genoeg over?
+        Maar verkopen gaat op 1600 W terwijl het huis 300 W trekt - ruim
+        vijf keer zo snel. Binnen een uur stond de accu op de bodem, en
+        daar bleef hij: het huis hing daarna drie uur aan het net tegen
+        25 tot 33 ct.
+
+        Deze toets is actief en kent twee remmen:
+
+        1. Is er die dag te weinig zon te verwachten, dan wordt er niet
+           verkocht. Wat er is, is voor de woning; wat ontbreekt wordt in
+           het goedkope blok bijgeladen.
+        2. Anders moet er ná de verkoop nog genoeg overblijven om de
+           woning te voeden tot het volgende goedkope blok, met marge.
+        """
+        # v1.23.0: de accustand kan als argument worden meegegeven,
+        # omdat de aanroeper hem in de beslistick al berekend heeft
+        # voordat `last_available_kwh` is bijgewerkt.
+        if beschikbaar is None:
+            beschikbaar = self.last_available_kwh
+        if beschikbaar is None:
+            # Zonder accumeting valt niet te toetsen of er genoeg voor de
+            # woning overblijft. Dan NIET blokkeren: het beproefde gedrag
+            # met de bestaande reserve blijft dan gelden, en die is er
+            # ook zonder deze toets. Blokkeren zou een installatie zonder
+            # accusensor stilzetten.
+            return {
+                "mag_verkopen": True,
+                "reden": (
+                    "Accustand onbekend - de bestaande reserve bepaalt het."
+                ),
+            }
+
+        # Rem 1: zonarme dag.
+        # Alleen remmen als er ECHT een voorspelling is. Zonder
+        # Solcast-sensor geeft deze functie 0,0 terug, en dat zou elke
+        # dag als zonarm bestempelen - dan zou er nooit meer verkocht
+        # worden voor wie die sensor niet heeft.
+        heeft_voorspelling = bool(self.config.get(CONF_SOLAR_TODAY_FORECAST_SENSOR))
+        verwacht_vandaag = (
+            self._estimate_pv_kwh_for_period(
+                now.replace(hour=0, minute=0, second=0, microsecond=0),
+                now.replace(hour=23, minute=59, second=59, microsecond=0),
+            )
+            if heeft_voorspelling
+            else None
+        )
+        if verwacht_vandaag is not None and verwacht_vandaag < SOLAR_POOR_DAY_KWH:
+            return {
+                "mag_verkopen": False,
+                "verwachte_zon_kwh": round(verwacht_vandaag, 1),
+                "reden": (
+                    f"Zonarme dag ({verwacht_vandaag:.1f} kWh verwacht, onder "
+                    f"{SOLAR_POOR_DAY_KWH:.0f}). Wat er is, is voor de woning; "
+                    "wat ontbreekt wordt in het goedkope blok bijgeladen."
+                ),
+            }
+
+        # Rem 2: houdt de woning het tot het goedkope blok?
+        blok_start = self.last_cheap_block_start
+        if blok_start is None or blok_start <= now:
+            nodig = 0.0
+        else:
+            nodig = (
+                self._estimate_consumption_kwh_for_period(now, blok_start) or 0.0
+            )
+            zon = self._estimate_pv_kwh_for_period(now, blok_start) or 0.0
+            nodig = max(0.0, nodig - zon)
+        veilig = nodig * SELL_RESERVE_SAFETY_FACTOR
+
+        if beschikbaar <= veilig:
+            return {
+                "mag_verkopen": False,
+                "nodig_voor_woning_kwh": round(veilig, 2),
+                "beschikbaar_kwh": round(beschikbaar, 2),
+                "reden": (
+                    f"De woning heeft {veilig:.2f} kWh nodig tot het goedkope "
+                    f"blok en er is {beschikbaar:.2f} kWh - verkopen zou het "
+                    "huis aan het net leggen."
+                ),
+            }
+
+        return {
+            "mag_verkopen": True,
+            "nodig_voor_woning_kwh": round(veilig, 2),
+            "beschikbaar_kwh": round(beschikbaar, 2),
+            "vrij_te_verkopen_kwh": round(beschikbaar - veilig, 2),
+            "verwachte_zon_kwh": (
+                round(verwacht_vandaag, 1) if verwacht_vandaag is not None else None
+            ),
+            "reden": (
+                f"{beschikbaar - veilig:.2f} kWh vrij te verkopen: de woning "
+                f"houdt {veilig:.2f} kWh over tot het goedkope blok."
+            ),
+        }
+
+    def plan_solar_capture_moment(self, now: datetime) -> dict:
+        """Wanneer is het beste moment om zon te gaan opvangen?
+        (v1.22.0)
+
+        Gevraagd na een dag waarop de accu 's ochtends vol liep bij hoge
+        prijzen, en het overschot 's middags tegen 13,6 ct werd
+        teruggeleverd.
+
+        Het mechanisme: de accu neemt een vast aantal kilowattuur op;
+        WELKE dat zijn bepaalt welke je exporteert. Laadt hij vroeg, dan
+        slurpt hij de dure ochtendzon op en exporteer je de goedkope
+        middagzon. Laadt hij laat, dan andersom - zelfde eind-SoC,
+        zelfde totale export, andere prijzen.
+
+        Deze functie zoekt het LAATSTE uur waarop er nog genoeg zon
+        overblijft om de accu alsnog te vullen, met marge. Tot dat uur
+        kan de accu in smart_discharging blijven en gaat alle zon tegen
+        de hogere ochtendprijs het net op.
+
+        Geeft altijd een dict terug met `uitstellen` en een `reden`, ook
+        als er niet wordt uitgesteld - anders is op het dashboard niet
+        te zien waarom niet.
+        """
+        capaciteit = self._read_sensor_float(
+            self.config.get(CONF_BATTERY_TOTAL_CAPACITY_SENSOR)
+        )
+        beschikbaar = self.last_available_kwh
+        if capaciteit is None or beschikbaar is None:
+            return {
+                "uitstellen": False,
+                "reden": "Accucapaciteit of beschikbare energie onbekend.",
+            }
+
+        min_soc = self.effective_min_soc_percent()
+        bruikbaar = capaciteit * (100 - min_soc) / 100
+        soc_procent = 100 * beschikbaar / bruikbaar if bruikbaar else 0
+        ruimte = max(0.0, bruikbaar - beschikbaar)
+
+        if soc_procent < SOLAR_DEFER_MIN_SOC_PERCENT:
+            return {
+                "uitstellen": False,
+                "reden": (
+                    f"Accu op {soc_procent:.0f}% - vullen gaat nu voor "
+                    "optimaliseren."
+                ),
+            }
+        if ruimte <= 0.05:
+            return {
+                "uitstellen": False,
+                "reden": "Accu is al vol; er valt niets te plannen.",
+            }
+        if now.hour >= SOLAR_DEFER_LATEST_HOUR:
+            return {
+                "uitstellen": False,
+                "reden": (
+                    f"Na {SOLAR_DEFER_LATEST_HOUR}:00 heeft wachten geen zin "
+                    "meer - er komt te weinig zon achteraan."
+                ),
+            }
+
+        # v1.22.0: rekenen tot de DEADLINE, niet tot zonsondergang.
+        #
+        # Door de accu al om 16:00 vol te willen hebben, wordt de late
+        # middagzon het vangnet in plaats van onderdeel van het plan.
+        # Valt de middag tegen, dan is er nog een paar uur zon over om
+        # het gat te dichten - en anders nog altijd het goedkoopste
+        # nachtblok.
+        deadline = now.replace(
+            hour=SOLAR_DEFER_TARGET_FULL_HOUR, minute=0, second=0, microsecond=0
+        )
+        if deadline <= now:
+            return {
+                "uitstellen": False,
+                "reden": (
+                    f"Na {SOLAR_DEFER_TARGET_FULL_HOUR}:00 hoort de accu al "
+                    "vol te zijn; wachten heeft dan geen zin meer."
+                ),
+            }
+
+        beste_uur = None
+        for uur in range(min(SOLAR_DEFER_LATEST_HOUR, deadline.hour), now.hour, -1):
+            start = now.replace(hour=uur, minute=0, second=0, microsecond=0)
+            if start <= now or start >= deadline:
+                continue
+            zon = self._estimate_pv_kwh_for_period(start, deadline)
+            verbruik = self._estimate_consumption_kwh_for_period(start, deadline)
+            overschot = max(0.0, zon - verbruik)
+            if overschot >= ruimte * SOLAR_DEFER_SAFETY_FACTOR:
+                beste_uur = uur
+                break
+
+        if beste_uur is None:
+            return {
+                "uitstellen": False,
+                "reden": (
+                    f"Te weinig zon verwacht om {ruimte:.1f} kWh vóór "
+                    f"{SOLAR_DEFER_TARGET_FULL_HOUR}:00 nog veilig op te "
+                    "vangen."
+                ),
+            }
+
+        huidige_prijs = self.last_current_price_per_kwh
+        latere_prijs = self._price_at_hour(now, beste_uur)
+        if huidige_prijs is None or latere_prijs is None:
+            return {
+                "uitstellen": False,
+                "reden": "Prijsverloop onbekend.",
+            }
+        winst = huidige_prijs - latere_prijs
+        if winst < SOLAR_DEFER_MIN_PRICE_GAIN_EUR:
+            return {
+                "uitstellen": False,
+                "reden": (
+                    f"Prijsverschil {winst * 100:.1f} ct is te klein om het "
+                    "risico van een tegenvallende middag waard te zijn."
+                ),
+            }
+
+        return {
+            "uitstellen": True,
+            "omslag_uur": beste_uur,
+            "ruimte_kwh": round(ruimte, 2),
+            "prijsverschil_ct": round(winst * 100, 1),
+            "geschatte_winst_eur": round(winst * ruimte, 2),
+            "vol_uiterlijk": f"{SOLAR_DEFER_TARGET_FULL_HOUR}:00",
+            "reden": (
+                f"Zon opvangen kan wachten tot {beste_uur}:00 en de accu is "
+                f"dan naar verwachting om {SOLAR_DEFER_TARGET_FULL_HOUR}:00 "
+                "vol. Tot dan gaat "
+                f"het overschot tegen {huidige_prijs * 100:.1f} ct het net op "
+                f"in plaats van tegen {latere_prijs * 100:.1f} ct - "
+                f"{winst * 100:.1f} ct meer over {ruimte:.1f} kWh."
+            ),
+        }
+
     def _should_capture_solar_instead_of_postponing(
         self, now: datetime, should_postpone_charging: bool
     ) -> bool:
@@ -7331,7 +7921,7 @@ class EnergyManagementSystemCoordinator:
             soc = self._read_sensor_float(soc_entity)
             if soc is not None:
                 min_soc = float(
-                    self.config.get(CONF_MIN_SOC_PERCENT, DEFAULT_MIN_SOC_PERCENT)
+                    self.effective_min_soc_percent()
                 )
                 return soc <= min_soc
 
@@ -7772,7 +8362,7 @@ class EnergyManagementSystemCoordinator:
             self.last_discharge_power_applied = base_power
             return base_power
 
-        min_soc = float(self.config.get(CONF_MIN_SOC_PERCENT, DEFAULT_MIN_SOC_PERCENT))
+        min_soc = self.effective_min_soc_percent()
         taper_start = min_soc + SOC_TAPER_BAND_PERCENT
 
         if soc <= min_soc:
@@ -15352,6 +15942,13 @@ class EnergyManagementSystemCoordinator:
         )
         self.last_explanation = self._build_explanation()
         self._maybe_notify_mode_change(now)
+        # v1.23.4: bericht bij belangrijke wijzigingen in de planning.
+        # Afgeschermd, want dit is een melding - die mag de aansturing
+        # nooit laten vallen.
+        try:
+            self._meld_planningswijzigingen(now)
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Kon de planningsmeldingen niet beoordelen")
 
     def _maybe_notify_mode_change(self, now: datetime) -> None:
         """Send a notification whenever the mode or applied power the
@@ -16033,6 +16630,19 @@ class EnergyManagementSystemCoordinator:
         expensive_tier = "primary" if is_expensive else None
         self.last_secondary_price_threshold = None
 
+        # v1.23.0: eerst actief toetsen of verkopen kán zonder de woning
+        # aan het net te leggen. De bestaande reserve was passief - die
+        # liet de accu tot de bodem zakken en daar bleef hij, terwijl het
+        # huis vervolgens uren tegen 25-33 ct uit het net werd gevoed.
+        verkoopruimte = self.may_sell_now(now, projection_available_kwh)
+        self.last_sell_check = verkoopruimte
+        if is_expensive and not verkoopruimte.get("mag_verkopen"):
+            _LOGGER.debug(
+                "Geen verkoop in dit dure kwartier: %s",
+                verkoopruimte.get("reden"),
+            )
+            is_expensive = False
+            expensive_tier = None
         if is_expensive and self._grid_charged_today:
             self.last_winter_guard_suppressed_today = True
             _LOGGER.debug(
@@ -16278,6 +16888,31 @@ class EnergyManagementSystemCoordinator:
             self._finish_decision_tick(now)
             return
 
+        # v1.22.0: kan het opvangen wachten tot een goedkoper uur?
+        #
+        # De accu neemt een vast aantal kilowattuur op; WELKE dat zijn
+        # bepaalt welke je exporteert. Blijft hij nog even in
+        # smart_discharging, dan gaat de dure ochtendzon het net op en
+        # vult de accu zich later met goedkope middagzon - zelfde
+        # eind-SoC, hogere opbrengst.
+        #
+        # Alleen als er aantoonbaar genoeg zon overblijft, met marge:
+        # het optimum ligt vlak vóór de rand waarop de accu niet meer
+        # vol raakt, en de voorspelling zit gemiddeld 15% naast.
+        uitstelplan = self.plan_solar_capture_moment(now)
+        self.last_solar_defer_plan = uitstelplan
+        if uitstelplan.get("uitstellen") and should_postpone_charging:
+            await self._async_apply_operation(OPTION_SMART_DISCHARGING)
+            self.last_reason = "solar_capture_deferred"
+            self._update_financial_tracking(now, entries, self.last_reason, None, None)
+            self._update_shortfall_detection(
+                now,
+                self.last_reason,
+                self.last_available_kwh,
+                self.last_needed_kwh_to_bridge,
+            )
+            self._finish_decision_tick(now)
+            return
         if self._should_capture_solar_instead_of_postponing(now, should_postpone_charging):
             # v0.63.60/.77, reported ('moet naar smart niet naar
             # manual', then final confirmed decision to remove the
