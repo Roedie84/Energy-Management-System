@@ -374,6 +374,12 @@ async def async_get_config_entry_diagnostics(
             "presence_overview": _veilig("get_presence_overview", coordinator.get_presence_overview),
             # v1.19.4: onderdelen die zichzelf niet konden berekenen.
             "internal_failures": coordinator.internal_failures,
+            # v1.20.2: is de bewolking gewogen, en welke bron gaf bij
+            # grote onenigheid de doorslag?
+            "weather_ensemble_weighted": coordinator.weather_ensemble_weighted,
+            "weather_ensemble_chosen_source": (
+                coordinator.weather_ensemble_chosen_source
+            ),
             "expansion_advice": _veilig("get_expansion_advice", coordinator.get_expansion_advice),
             "presence_week_profile": coordinator.presence_week_profile,
             "water_source_profiles": coordinator.water_source_profiles,
@@ -724,6 +730,9 @@ async def async_get_config_entry_diagnostics(
             "last_actual_kwh": solar_tracker.last_actual_kwh,
             "last_deviation_percent": solar_tracker.last_deviation_percent,
             "last_compared_date": _iso(solar_tracker.last_compared_date),
+            # v1.20.3: staat de vastlegging van vanavond klaar?
+            "next_predicted_kwh": solar_tracker.next_predicted_kwh,
+            "next_predicted_date": _iso(solar_tracker.next_predicted_date),
             "deviation_history_percent": solar_tracker.deviation_history,
             "learned_bias_percent": solar_tracker.learned_bias_percent,
             "forecast_value_history_kwh": solar_tracker.forecast_value_history,

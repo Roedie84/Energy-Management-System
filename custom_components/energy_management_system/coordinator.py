@@ -395,6 +395,9 @@ from .const import (
     PRICE_SCALE_FACTOR,
     SOC_TAPER_BAND_PERCENT,
     UPDATE_INTERVAL_MINUTES,
+    WEATHER_BEST_SOURCE_MIN_LEAD_PP,
+    WEATHER_DISAGREEMENT_PREFER_BEST_PP,
+    WEATHER_WEIGHT_MIN_OBSERVATIONS,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -804,6 +807,11 @@ class EnergyManagementSystemCoordinator:
         self.weather_ensemble_sources_used: list[str] = []
         self.weather_ensemble_label: str | None = None
         self.weather_ensemble_disagreement: str | None = None
+        # v1.20.2: is de bewolking gewogen naar bewezen betrouwbaarheid
+        # of nog een plat gemiddelde?
+        self.weather_ensemble_weighted: bool = False
+        # Welke bron de doorslag gaf bij grote onenigheid.
+        self.weather_ensemble_chosen_source: str | None = None
         # v1.0.2: bijhouden hoe vaak de ensemble het eens is met wat de
         # panelen werkelijk doen.
         self.weather_ensemble_agreement_history: list[bool] = []
@@ -1132,6 +1140,7 @@ class EnergyManagementSystemCoordinator:
         self._unsub_interval = None
         self._unsub_state = None
         self._unsub_water_state = None
+        self._unsub_motion_state = None
         self._unsub_battery_cooling_state = None
 
     def register_listener(self, callback_fn) -> None:
@@ -1239,6 +1248,31 @@ class EnergyManagementSystemCoordinator:
         if water_active_entity:
             self._unsub_water_state = async_track_state_change_event(
                 self.hass, [water_active_entity], self._handle_water_flow_change
+            )
+        # v1.20.2, gemeld: "Beweging moet live gedetecteerd en
+        # weergegeven worden, ook voor melding indien vakantie.
+        # Aan/afwezigheid is natuurlijk vertraagd."
+        #
+        # De tick draait elke vijf minuten en keek of een sensor op DAT
+        # MOMENT "on" stond. Een bewegingsmelder staat 30 tot 60
+        # seconden aan, dus die kans is ongeveer één op vijf - vier van
+        # de vijf bewegingen werden helemaal niet gezien.
+        #
+        # In een echte export was dat te zien: 3 van de 15 sensoren ooit
+        # waargenomen, de laatste 550 minuten geleden, terwijl er die
+        # nacht gewoon geslapen en opgestaan was.
+        #
+        # Voor de vakantiemelding is dat fataal: die kwam niet te laat
+        # maar meestal helemaal niet.
+        bewegingssensoren = self.config.get(CONF_PRESENCE_MOTION_SENSORS) or []
+        if isinstance(bewegingssensoren, str):
+            bewegingssensoren = [bewegingssensoren]
+        slaapsensor = self.config.get(CONF_PRESENCE_BEDTIME_SENSOR)
+        if slaapsensor and slaapsensor not in bewegingssensoren:
+            bewegingssensoren = [*bewegingssensoren, slaapsensor]
+        if bewegingssensoren:
+            self._unsub_motion_state = async_track_state_change_event(
+                self.hass, bewegingssensoren, self._handle_motion_event
             )
         # v0.63.122: accu-koeling reageert live, niet alleen op de
         # 5-minuten-tick. De vervangen automatisering draaide elke 2
@@ -4210,27 +4244,22 @@ class EnergyManagementSystemCoordinator:
             self.presence_state = None
             return
 
-        # v1.20.1: niet stoppen bij de eerste treffer - voor de tabel
-        # moet elke sensor die nu beweegt worden vastgelegd.
-        beweging_nu = False
-        bewegende_sensoren: list[str] = []
-        for entity_id in sensoren:
-            staat = self.hass.states.get(entity_id)
-            if staat is not None and str(staat.state).lower() in ("on", "true"):
-                beweging_nu = True
-                bewegende_sensoren.append(entity_id)
-                self.presence_last_seen[entity_id] = now.isoformat()
-
-        # Alleen de laatste bewegingen onthouden; dit is een overzicht,
-        # geen archief.
-        if len(self.presence_last_seen) > PRESENCE_LAST_SEEN_LENGTH:
-            bewaard = sorted(
-                self.presence_last_seen.items(), key=lambda x: x[1], reverse=True
-            )[:PRESENCE_LAST_SEEN_LENGTH]
-            self.presence_last_seen = dict(bewaard)
-
-        if beweging_nu:
-            self.last_motion_at = now
+        # v1.20.2: de tick is niet langer de bron van bewegingen - die
+        # komen live binnen via `_handle_motion_event`. Wat hier
+        # overblijft is een vangnet: staat een sensor nú aan en heeft
+        # de gebeurtenis hem gemist (herstart, herladen), dan telt hij
+        # alsnog mee.
+        #
+        # Zonder deze vangnetregel zou een herstart midden in een
+        # beweging die beweging kwijtraken.
+        bewegende_sensoren = [
+            entity_id
+            for entity_id in sensoren
+            if (staat := self.hass.states.get(entity_id)) is not None
+            and str(staat.state).lower() in ("on", "true")
+        ]
+        if bewegende_sensoren:
+            self._registreer_beweging(now, bewegende_sensoren)
             self._meld_beweging_bij_vakantie(now, bewegende_sensoren)
 
         # v1.20.0, gemeld: "Als de overloop sensor als laatste beweging
@@ -4241,25 +4270,6 @@ class EnergyManagementSystemCoordinator:
         # "niemand thuis" en "iedereen slaapt" tegengestelde situaties
         # zijn: bij afwezigheid mag alles uit, bij slapen moet de
         # nachtreserve juist kloppen en loopt het basisverbruik door.
-        slaapsensor = self.config.get(CONF_PRESENCE_BEDTIME_SENSOR)
-        if slaapsensor:
-            staat = self.hass.states.get(slaapsensor)
-            actief = staat is not None and str(staat.state).lower() in (
-                "on",
-                "true",
-            )
-            # Overdag loop je ook langs de overloop; alleen 's avonds en
-            # 's nachts markeert het naar bed gaan.
-            in_venster = (
-                now.hour >= PRESENCE_BEDTIME_EARLIEST_HOUR
-                or now.hour < PRESENCE_BEDTIME_LATEST_HOUR
-            )
-            if actief and in_venster:
-                self.last_bedtime_motion_at = now
-                sleutel = now.strftime("%H:%M")
-                if not self.bedtime_history or self.bedtime_history[-1] != sleutel:
-                    self.bedtime_history.append(sleutel)
-                    self.bedtime_history = self.bedtime_history[-30:]
         vorige = self.presence_state
         if self.last_motion_at is None:
             self.presence_state = "onbekend"
@@ -4299,6 +4309,70 @@ class EnergyManagementSystemCoordinator:
 
         if vorige != self.presence_state:
             self.schedule_persisted_state_save()
+
+    @callback
+    def _handle_motion_event(self, event) -> None:
+        """Beweging live verwerken (v1.20.2).
+
+        Gemeld: "Beweging moet live gedetecteerd en weergegeven worden,
+        ook voor melding indien vakantie. Aan/afwezigheid is natuurlijk
+        vertraagd."
+
+        Precies het juiste onderscheid. Een bewegingsmelder staat 30 tot
+        60 seconden aan; de vijf-minutentick zag daar ongeveer één op de
+        vijf van. De AFGELEIDE - thuis, weg, slaapt - mag wel op de tick
+        blijven, want die kantelt pas na minuten.
+
+        Alleen de overgang naar "on" telt. Blijft een sensor aan staan,
+        dan is dat één beweging, geen stroom van gebeurtenissen.
+        """
+        nieuwe_staat = event.data.get("new_state")
+        oude_staat = event.data.get("old_state")
+        if nieuwe_staat is None:
+            return
+        if str(nieuwe_staat.state).lower() not in ("on", "true"):
+            return
+        if oude_staat is not None and str(oude_staat.state).lower() in (
+            "on",
+            "true",
+        ):
+            return
+
+        entity_id = event.data.get("entity_id") or nieuwe_staat.entity_id
+        now = dt_util.now()
+        self._registreer_beweging(now, [entity_id])
+        self._meld_beweging_bij_vakantie(now, [entity_id])
+        # Meteen zichtbaar maken; de afgeleide aanwezigheid volgt op de
+        # eerstvolgende tick.
+        self._notify_listeners()
+
+    def _registreer_beweging(self, now: datetime, sensoren: list[str]) -> None:
+        """Legt vast welke sensor wanneer bewoog (v1.20.2)."""
+        if not sensoren:
+            return
+        for entity_id in sensoren:
+            self.presence_last_seen[entity_id] = now.isoformat()
+        if len(self.presence_last_seen) > PRESENCE_LAST_SEEN_LENGTH:
+            bewaard = sorted(
+                self.presence_last_seen.items(), key=lambda x: x[1], reverse=True
+            )[:PRESENCE_LAST_SEEN_LENGTH]
+            self.presence_last_seen = dict(bewaard)
+        self.last_motion_at = now
+
+        # De slaapsensor markeert naar bed gaan, maar alleen 's avonds -
+        # overdag loop je er ook langs.
+        slaapsensor = self.config.get(CONF_PRESENCE_BEDTIME_SENSOR)
+        if slaapsensor and slaapsensor in sensoren:
+            in_venster = (
+                now.hour >= PRESENCE_BEDTIME_EARLIEST_HOUR
+                or now.hour < PRESENCE_BEDTIME_LATEST_HOUR
+            )
+            if in_venster:
+                self.last_bedtime_motion_at = now
+                sleutel = now.strftime("%H:%M")
+                if not self.bedtime_history or self.bedtime_history[-1] != sleutel:
+                    self.bedtime_history.append(sleutel)
+                    self.bedtime_history = self.bedtime_history[-30:]
 
     def _entiteitsnaam(self, entity_id: str) -> str:
         """Leesbare naam, met de entity_id als terugval (v1.20.1).
@@ -4386,6 +4460,26 @@ class EnergyManagementSystemCoordinator:
             return False
         uren = (now - self.last_bedtime_motion_at).total_seconds() / 3600
         return 0 <= uren <= PRESENCE_SLEEP_WINDOW_HOURS
+
+    def get_weather_source_overview(self) -> dict:
+        """Wat elke weerbron meldt en hoe goed die klopt (v1.20.2).
+
+        Gemeld: "De bewolking nakijken, het is nu bijna onbewolkt" -
+        terwijl er 62% stond. Dat was het gemiddelde van twee bronnen
+        die 32 procentpunt uiteenliepen; zonder die uitsplitsing is dat
+        niet te zien.
+        """
+        betrouwbaarheid = self.get_weather_source_reliability() or {}
+        overzicht = {}
+        for bron, meting in (self.weather_ensemble_readings or {}).items():
+            beoordeling = betrouwbaarheid.get(bron) or {}
+            overzicht[bron] = {
+                "meting": round(meting, 1) if meting is not None else None,
+                "betrouwbaarheid": beoordeling.get("overeenstemming_percent"),
+                "waarnemingen": beoordeling.get("aantal_waarnemingen"),
+                "gekozen": bron == self.weather_ensemble_chosen_source,
+            }
+        return overzicht
 
     def get_presence_overview(self) -> dict:
         """Wat is er geleerd over aanwezigheid? (v1.18.2)"""
@@ -4520,9 +4614,23 @@ class EnergyManagementSystemCoordinator:
         tekorten = [x for x in (self.reserve_shortfall_history or []) if x]
         dagen = len(self.reserve_shortfall_history or [])
 
-        # Knelt het vermogen? Alleen als het verbruik er tegenaan loopt.
-        vermogen_knelt = (
-            ontlaadvermogen > 0 and piek_w > 0.8 * ontlaadvermogen
+        # v1.20.4: ook naar de gemeten PIEK kijken, niet alleen naar
+        # uurgemiddelden.
+        #
+        # Bij deze installatie is het hoogste geleerde uur 497 W, maar
+        # het gemeten piekvermogen 2199 W - ruim boven het
+        # ontlaadvermogen van 1600 W. Een uurgemiddelde verbergt dat:
+        # koken of een oven trekt minuten lang veel, en dat verdwijnt in
+        # het gemiddelde.
+        #
+        # Een piek van een paar minuten vraagt geen capaciteit, maar wél
+        # vermogen. Zonder deze regel zou het advies "vermogen knelt
+        # niet" geven terwijl de accu die piek aantoonbaar niet alleen
+        # kan dekken.
+        gemeten_piek_w = self.peak_power_all_time_w or 0
+        vermogen_knelt = ontlaadvermogen > 0 and (
+            piek_w > 0.8 * ontlaadvermogen
+            or gemeten_piek_w > ontlaadvermogen
         )
         # Knelt de capaciteit? Als de accu de nacht niet haalt.
         capaciteit_knelt = bool(tekorten) or (
@@ -4540,6 +4648,15 @@ class EnergyManagementSystemCoordinator:
                 "Een tweede omvormer helpt; extra modules zonder omvormer "
                 "niet."
             )
+        elif gemeten_piek_w > ontlaadvermogen > 0 and capaciteit_knelt:
+            advies = (
+                f"De capaciteit loopt tegen de grens. Het uurverbruik blijft "
+                f"ruim onder het ontlaadvermogen, maar er zijn pieken tot "
+                f"{gemeten_piek_w:.0f} W gemeten - korte momenten die de accu "
+                "niet alleen kan dekken. Een extra module lost het "
+                "capaciteitstekort op; een tweede omvormer zou daarnaast die "
+                "pieken opvangen, maar dat scheelt weinig omdat ze kort duren."
+            )
         elif capaciteit_knelt:
             advies = (
                 "De capaciteit loopt tegen de grens, het vermogen niet. Een "
@@ -4555,6 +4672,7 @@ class EnergyManagementSystemCoordinator:
         return {
             "beschikbaar": True,
             "hoogste_uurverbruik_w": round(piek_w),
+            "gemeten_piekvermogen_w": round(gemeten_piek_w),
             "ontlaadvermogen_w": round(ontlaadvermogen),
             "vermogensbenutting_procent": (
                 round(100 * piek_w / ontlaadvermogen) if ontlaadvermogen else None
@@ -10169,9 +10287,78 @@ class EnergyManagementSystemCoordinator:
             self.weather_ensemble_spread_percent = None
             self.weather_ensemble_label = None
             self.weather_ensemble_disagreement = None
+            self.weather_ensemble_weighted = False
+            self.weather_ensemble_chosen_source = None
             return
 
-        avg_cloud_pct = sum(cloud_readings) / len(cloud_readings)
+        # v1.20.2, gemeld: "De bewolking nakijken, het is nu bijna
+        # onbewolkt" - terwijl de integratie 62% toonde.
+        #
+        # Dat gemiddelde kwam uit 78,1% (forecast_thuis) en 46,0%
+        # (openweathermap). Maar die twee zijn niet even goed: over 200
+        # waarnemingen kwam openweathermap in 90,5% van de gevallen
+        # overeen met wat de panelen werkelijk deden, forecast_thuis in
+        # 81,5%.
+        #
+        # Een plat gemiddelde weegt beide even zwaar en trekt de
+        # uitkomst dus richting de slechtste bron. Nu wegen naar bewezen
+        # overeenstemming: een bron die het vaker bij het rechte eind
+        # heeft, telt zwaarder.
+        #
+        # Zonder betrouwbaarheidscijfers - de eerste dagen - blijft het
+        # een gewoon gemiddelde, want dan is er niets om op te wegen.
+        betrouwbaarheid = self.get_weather_source_reliability() or {}
+        gewichten = []
+        for bron in sources_used:
+            beoordeling = betrouwbaarheid.get(bron) or {}
+            overeenstemming = beoordeling.get("overeenstemming_percent")
+            aantal = beoordeling.get("aantal_waarnemingen") or 0
+            if overeenstemming is None or aantal < WEATHER_WEIGHT_MIN_OBSERVATIONS:
+                gewichten.append(None)
+            else:
+                # Alleen het deel BOVEN kansniveau telt: een bron die in
+                # de helft van de gevallen klopt, voegt niets toe.
+                gewichten.append(max(0.1, (overeenstemming - 50.0) / 50.0))
+
+        # Bij grote onenigheid is middelen niet zinvol: 78,1% en 46,0%
+        # middelen tot 62% levert een getal op dat bij geen van beide
+        # past, en dat was precies de klacht ("het is nu bijna
+        # onbewolkt"). Dan wint de bron die het aantoonbaar vaker bij
+        # het rechte eind heeft.
+        verschil = max(cloud_readings) - min(cloud_readings)
+        beste_bron = None
+        if (
+            verschil >= WEATHER_DISAGREEMENT_PREFER_BEST_PP
+            and len(sources_used) > 1
+            and all(g is not None for g in gewichten)
+        ):
+            gerangschikt = sorted(
+                zip(sources_used, cloud_readings, gewichten),
+                key=lambda x: x[2],
+                reverse=True,
+            )
+            scores = [
+                (betrouwbaarheid.get(b) or {}).get("overeenstemming_percent") or 0
+                for b, _, _ in gerangschikt
+            ]
+            if scores[0] - scores[1] >= WEATHER_BEST_SOURCE_MIN_LEAD_PP:
+                beste_bron = gerangschikt[0]
+
+        if beste_bron is not None:
+            avg_cloud_pct = beste_bron[1]
+            self.weather_ensemble_weighted = True
+            self.weather_ensemble_chosen_source = beste_bron[0]
+        elif all(g is not None for g in gewichten) and sum(gewichten) > 0:
+            avg_cloud_pct = sum(
+                waarde * gewicht
+                for waarde, gewicht in zip(cloud_readings, gewichten)
+            ) / sum(gewichten)
+            self.weather_ensemble_weighted = True
+            self.weather_ensemble_chosen_source = None
+        else:
+            avg_cloud_pct = sum(cloud_readings) / len(cloud_readings)
+            self.weather_ensemble_weighted = False
+            self.weather_ensemble_chosen_source = None
         self.weather_ensemble_cloud_cover_percent = round(avg_cloud_pct, 1)
         self.weather_ensemble_sources_used = sources_used
         # v1.1.8, gerapporteerd: "25,4% terwijl het zo goed als volledig

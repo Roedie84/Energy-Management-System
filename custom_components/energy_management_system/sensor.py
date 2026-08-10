@@ -34,6 +34,11 @@ ATTR_PREDICTED_KWH = "predicted_kwh"
 ATTR_ACTUAL_KWH = "actual_kwh"
 ATTR_COMPARED_DATE = "compared_date"
 ATTR_PENDING_PREDICTED_KWH = "pending_predicted_kwh"
+# v1.20.3: de vastlegging van 20:00 wacht hier tot de vergelijking van
+# 23:59 klaar is. Zonder bewaren zou een herstart tussen 20:00 en 23:59
+# de voorspelling van morgen kwijtraken.
+ATTR_NEXT_PREDICTED_KWH = "next_predicted_kwh"
+ATTR_NEXT_PREDICTED_DATE = "next_predicted_date"
 ATTR_PENDING_PREDICTED_DATE = "pending_predicted_date"
 ATTR_DEVIATION_HISTORY = "deviation_history"
 ATTR_DEVIATION_STDEV_HISTORY = "deviation_stdev_history"
@@ -172,6 +177,12 @@ class PvForecastAccuracySensor(SensorEntity, RestoreEntity):
                 else None
             ),
             ATTR_PENDING_PREDICTED_KWH: self._tracker.pending_predicted_kwh,
+            ATTR_NEXT_PREDICTED_KWH: self._tracker.next_predicted_kwh,
+            ATTR_NEXT_PREDICTED_DATE: (
+                self._tracker.next_predicted_date.isoformat()
+                if self._tracker.next_predicted_date
+                else None
+            ),
             ATTR_PENDING_PREDICTED_DATE: (
                 self._tracker.pending_predicted_date.isoformat()
                 if self._tracker.pending_predicted_date
@@ -205,6 +216,12 @@ class PvForecastAccuracySensor(SensorEntity, RestoreEntity):
                 )
                 self._tracker.pending_predicted_date = _to_date(
                     attrs.get(ATTR_PENDING_PREDICTED_DATE)
+                )
+                self._tracker.next_predicted_kwh = _to_float(
+                    attrs.get(ATTR_NEXT_PREDICTED_KWH)
+                )
+                self._tracker.next_predicted_date = _to_date(
+                    attrs.get(ATTR_NEXT_PREDICTED_DATE)
                 )
                 history = attrs.get(ATTR_DEVIATION_HISTORY)
                 if isinstance(history, list):
@@ -3768,6 +3785,7 @@ class GacsAssessmentSensor(SensorEntity):
             ("pv_correctie", self._coordinator.get_pv_correction_status),
             ("aanwezigheid", self._coordinator.get_presence_overview),
             ("uitbreidingsadvies", self._coordinator.get_expansion_advice),
+            ("weerbronnen", self._coordinator.get_weather_source_overview),
         ):
             try:
                 attributen[sleutel] = functie()

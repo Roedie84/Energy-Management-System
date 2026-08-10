@@ -507,13 +507,24 @@ views:
       grid_options:
         columns: 12
         rows: auto
+    - type: custom:mushroom-template-card
+      primary: Weerbronnen
+      secondary: Bewolking per bron
+      icon: mdi:weather-partly-cloudy
+      icon_color: blue
+      tap_action:
+        action: navigate
+        navigation_path: /energy-management-system/detail-weer
+      grid_options:
+        columns: 12
+        rows: auto
 - title: Visueel
   path: visueel
   subview: true
   panel: true
   cards:
   - type: picture-elements
-    image: /local/energy_management_system_overview.svg?v=1.20.1
+    image: /local/energy_management_system_overview.svg?v=1.20.4
     elements:
     - type: state-label
       entity: sensor.woonkamer_energy_management_system_system_status
@@ -2091,6 +2102,34 @@ views:
 
 
         _De bovenste is de meest recente. Staat er een sensor bovenaan die je niet verwacht - een gang, de schuur - dan verklaart dat waarom het systeem ''thuis'' meldt terwijl er niemand is._'
+      grid_options:
+        columns: 12
+        rows: auto
+- title: Weerbronnen
+  path: detail-weer
+  subview: true
+  type: sections
+  max_columns: 1
+  sections:
+  - type: grid
+    cards:
+    - type: custom:mushroom-title-card
+      title: Weerbronnen
+      subtitle: Wat elke bron meldt en hoe goed die klopt
+    - type: markdown
+      title: Welke weerbron telt mee?
+      content: '{% set w = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''weerbronnen'') or {} %}{% if not w %}Nog geen bronvergelijking beschikbaar.{% else %}| Bron | Bewolking | Klopt met de panelen |
+
+        |---|---|---|
+
+        {% for b, g in w.items() %}| {{ b.split(''.'')[-1] }} | {{ g.meting }}% | {{ g.betrouwbaarheid }}% |
+
+        {% endfor %}
+
+        {% if w.values() | selectattr(''gekozen'') | list | length > 0 %}De bronnen liepen te ver uiteen om te middelen, dus is de betrouwbaarste gebruikt.{% else %}De bronnen zitten dicht genoeg bij elkaar; het gemiddelde is gebruikt.{% endif %}{% endif %}
+
+
+        _Middelen van twee bronnen die het fundamenteel oneens zijn, geeft een getal dat bij geen van beide past. Vanaf 25 procentpunt verschil wint daarom de bron die het aantoonbaar vaker bij het rechte eind heeft._'
       grid_options:
         columns: 12
         rows: auto

@@ -515,6 +515,226 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Volledige doorlichting van de diagnostiek (v1.20.4)
+
+Terecht opgemerkt dat ik er twee secties had uitgelicht in plaats van
+alles. Alle tien secties nu langsgelopen.
+
+### Wat er in orde is
+
+| Sectie | Uitkomst |
+|---|---|
+| Numerieke waarden (218 velden) | geen enkele buiten bereik |
+| Velden op `None` | 18, allemaal verklaarbaar |
+| Leergezondheid | vijf van vijf op OK |
+| Sensorgezondheid | **100%**, "goed" |
+| Energiebalans | 67 W gemiddelde afwijking |
+| Plausibiliteitscontroles | geen waarschuwingen |
+| Beslissingslogboek | 171 regels, één lege (na herstart) |
+| Stilstaande reeksen | één, terecht als normaal geduid |
+| Adviesmodules | MPC 25 acties, Monte Carlo 0% tekortkans |
+
+De **waterontharder heeft vannacht om 03:17 geregenereerd** — 113,9 liter
+in 26,9 minuten. Precies in jouw venster van 02:00–05:00, en de drempel
+van v1.18.0 herkent het correct.
+
+Ook de **waterbron-toewijzing werkt**: zes van de twintig sessies
+gekoppeld aan wasmachine, warm water en toilet.
+
+### De vondst: pieken telden niet mee
+
+Het hoogste geleerde **uur** is 497 W, maar het gemeten **piekvermogen**
+is **2199 W** — ruim boven je ontlaadvermogen van 1600 W.
+
+Mijn uitbreidingsadvies keek alleen naar uurgemiddelden, en die
+verbergen dit: koken of een oven trekt minuten lang veel, en dat
+verdwijnt in het gemiddelde van een heel uur.
+
+Zo'n piek vraagt geen capaciteit, maar wél vermogen. Het advies zei dus
+"vermogen knelt niet" terwijl je accu die piek aantoonbaar niet alleen
+kan dekken.
+
+Het advies weegt dat nu mee, met een aparte uitkomst: de capaciteit
+knelt, en er zijn korte pieken die de accu niet dekt — maar omdat ze kort
+duren scheelt een tweede omvormer daar weinig.
+
+### Twee valse alarmen van mijn kant
+
+Ik las de energiebalansfout als **procenten** (66,7%, uitschieters tot
+163%) terwijl het **watt** is. Op 300–600 W huisverbruik is 67 M
+afwijking tussen P1, PV en accu normaal — de sensoren meten niet exact
+gelijktijdig.
+
+En ik dacht dat de aansturing nooit een beslissing had genomen, omdat
+`expected_operation_mode` leeg was. Dat veld bestaat niet; de echte
+velden zijn `last_expected_mode` (smart) en `last_reason`
+(`expensive_quarter_soc_protected`). De aansturing draait gewoon.
+
+### Twee dingen die jouw oordeel vragen
+
+**Tien van de 37 bevestigde apparaten hebben geen referentiewaarde** —
+rolluiken, de melkopschuimer, de ontvochtiger. Die staan meestal uit, dus
+er is geen ruststroom om te leren. Gevolg: voor die tien kan geen drift
+worden vastgesteld, dus een defect blijft er onopgemerkt. Verdedigbaar,
+maar het wordt nergens uitgelegd.
+
+**Twee paren dragen identieke namen**: "Spot plafond voor Power" en
+"Woonkamer Power", allebei twee keer met verschillende referenties. De
+duplicaatdetectie heeft ze niet gemeld. Als dat werkelijk twee aparte
+apparaten zijn is er niets aan de hand — maar dan zijn ze niet uit elkaar
+te houden op het dashboard.
+
+### Getest
+
+Drie tests erbij: een gemeten piek boven het ontlaadvermogen telt mee,
+een bescheiden piek niet, en zonder piekmeting werkt het advies nog.
+
+**Volledige testsuite**: 1610 tests, allemaal groen.
+
+## De dagelijkse PV-vergelijking lukte nooit (v1.20.3)
+
+Gevraagd om de diagnostiek volledig door te lichten vóór installatie —
+op waardes, betrouwbaarheid en correctie. Dat leverde één grote vondst
+op.
+
+### Zeven exports, geen enkele vergelijking
+
+`last_compared_date` staat in **alle zeven** exports op `None`, en
+`deviation_history` bleef op precies zeven waarden staan. Die zeven komen
+uit de bootstrap uit de historie — niet uit één enkele live vergelijking.
+
+De oorzaak zit in de volgorde:
+
+| Tijd | Wat er gebeurt |
+|---|---|
+| 20:00 | leg "voorspelling voor morgen" vast |
+| 23:59 | vergelijk, als de vastgelegde datum vandaag is |
+
+De vastlegging schreef **direct** in `pending`. Op 10 augustus om 20:00
+werd dat dus 11 augustus, en om 23:59 klopte de datum niet meer met
+vandaag. De waarde die vergeleken moest worden was op dat moment al
+overschreven.
+
+**De vastlegging van 20:00 gooide elke avond weg wat er om 23:59
+vergeleken had moeten worden.**
+
+### Wat dat betekende
+
+De bias van −11,6% en de spreiding van 14,3% stonden stil op de
+bootstrap-waarden. De voorspelling leerde niet bij van wat er werkelijk
+gebeurde.
+
+De **uurcorrecties** liepen wél door — die hebben een eigen pad dat elk
+uur afzonderlijk vergelijkt, en die vijftien correcties zijn dus echt.
+Dat verklaart waarom de fout zo lang onopgemerkt bleef: er *werd*
+geleerd, alleen niet op dagniveau.
+
+### De correctie
+
+De vastlegging gaat nu naar een apart veld en schuift pas door **nadat**
+de vergelijking klaar is. Getoetst over twee volle dagen: op 10 augustus
+wordt nu wél vergeleken, met een afwijking van −11,5%.
+
+Die velden worden meebewaard, want een herstart tussen 20:00 en 23:59 zou
+anders de voorspelling van morgen kwijtraken. En ze staan in de export —
+zonder die velden was niet te zien of de keten loopt, precies het gat dat
+deze fout zo lang verborgen hield.
+
+### De rest van de diagnostiek
+
+Nagelopen op waardes, betrouwbaarheid en correctie:
+
+- **Numeriek**: geen enkele waarde buiten zijn bereik
+- **Leergezondheid**: alle vijf controles op OK
+- **Accurendement**: 90,8% (was 86,9%) — verbeterd
+- **Zelfconsumptie**: `None`, terecht — 0,08 kWh opwek is te weinig voor
+  een zinnig aandeel
+
+Twee dingen die aandacht vragen. Er zijn nu **drie tekort-nachten op
+rij**; de zelfevaluatie meldt dat terecht. En de diepvries in de schuur
+staat als mogelijk defect — die vraagt jouw oordeel of het hogere
+verbruik klopt.
+
+**Accumodule 1 is verbeterd**: 0,03 V bij 34% SoC, tegen 0,19 V bij zowel
+100% als 12%. Dat bevestigt het beeld van een cel die aan beide uiteinden
+uit de pas loopt maar in het midden prima meedoet — geen acuut probleem.
+
+### Getest
+
+Nieuw `tests/test_daily_forecast_comparison.py`, 6 tests: een volledige
+cyclus over twee dagen, de reeks groeit, de vastlegging schuift pas na
+het vergelijken door, niets in behandeling is onschadelijk, de velden
+overleven een herstart, en ze staan in de export.
+
+**Volledige testsuite**: 1607 tests, allemaal groen.
+
+## Live beweging en gewogen bewolking (v1.20.2)
+
+Twee eerdere bevindingen, nu gebouwd — en de diagnostiek van vanochtend
+was schoon: geen interne fouten, geen ontbrekende attributen, geen dode
+verwijzingen.
+
+### Beweging werd structureel gemist
+
+**Gemeld**: *"Beweging moet live gedetecteerd en weergegeven worden, ook
+voor melding indien vakantie. Aan/afwezigheid is natuurlijk vertraagd."*
+
+De tick draaide elke vijf minuten en keek of een sensor op **dat moment**
+"on" stond. Een bewegingsmelder staat 30 tot 60 seconden aan — kans
+ongeveer één op vijf.
+
+Je export bewees het: van de **vijftien** gekozen sensoren waren er
+**drie** ooit waargenomen, de laatste 550 minuten geleden. Terwijl er die
+nacht gewoon geslapen en opgestaan is.
+
+Voor de vakantiemelding was dat fataal: die kwam niet te laat, maar
+meestal helemaal niet.
+
+Beweging loopt nu via state-change events, net als water en accukoeling
+al deden. De **afgeleide** — thuis, weg, slaapt — blijft op de tick,
+precies zoals je aangaf. De tick blijft wel een vangnet, zodat een
+herstart midden in een beweging die niet kwijtraakt.
+
+### Bewolking: middelen werkte niet
+
+**Gemeld**: *"De bewolking nakijken, het is nu bijna onbewolkt"* —
+terwijl er 62% stond.
+
+Dat was het gemiddelde van 78,1% (forecast_thuis) en 46,0%
+(openweathermap). Mijn eerste aanpak was wegen naar betrouwbaarheid, maar
+dat gaf **60,0%** — twee punten winst, want 81,5% en 90,5% liggen te
+dicht bij elkaar.
+
+Bij **32 procentpunt** verschil is middelen simpelweg verkeerd: de
+uitkomst past bij geen van beide bronnen. Vanaf 25 procentpunt wint nu de
+bron die het aantoonbaar vaker bij het rechte eind heeft — in jouw geval
+openweathermap met **46%**.
+
+Bij kleine verschillen blijft het middelen; dan is het ruis en geen
+onenigheid. En zonder betrouwbaarheidscijfers, de eerste dagen, ook.
+
+### Nieuwe pagina Weerbronnen
+
+Wat elke bron meldt naast hoe goed die klopt met je panelen. Zowel de
+PV- als de Klimaat-pagina liep over de grens van 2500 tekens — precies
+waar die grens voor bedoeld is.
+
+### Wat mij opviel in je export
+
+`binary_sensor.buiten_motion_detected` staat bij je binnensensoren. Die
+slaat aan op voorbijgangers en houdt "thuis" ten onrechte overeind. Ik
+zou hem eruit halen.
+
+### Getest
+
+Nieuw `tests/test_live_motion_and_weather_weighting.py`, 12 tests: live
+vastleggen, alleen de overgang telt, uitschakelen wordt genegeerd, de
+vakantiemelding is direct, de tick blijft vangnet, sterke onenigheid
+kiest de betere bron, kleine verschillen worden nog gemiddeld, een even
+goede bron wint niet, en zonder cijfers wordt er gemiddeld.
+
+**Volledige testsuite**: 1601 tests, allemaal groen.
+
 ## Aanwezigheid: sneller, met bron, tv en vakantiemelding (v1.20.1)
 
 **Gemeld**: *"We zijn net 25 minuten namelijk niet thuis geweest"* —

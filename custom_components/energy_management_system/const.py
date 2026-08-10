@@ -2474,3 +2474,26 @@ CONF_PRESENCE_TV_ENTITY = "presence_tv_entity"
 # minuten. Zonder die rem levert een sensor in een gang tientallen
 # berichten op bij één passage.
 PRESENCE_INTRUSION_COOLDOWN_MINUTES = 5
+
+# --- Weerbronnen wegen naar betrouwbaarheid (v1.20.2) ----------------
+# Gemeld: "De bewolking nakijken, het is nu bijna onbewolkt" - terwijl
+# de integratie 62% toonde, het gemiddelde van 78,1% en 46,0%.
+#
+# Die twee bronnen zijn niet even goed: over 200 waarnemingen kwam
+# openweathermap in 90,5% van de gevallen overeen met wat de panelen
+# deden, forecast_thuis in 81,5%. Een plat gemiddelde weegt ze even
+# zwaar en trekt de uitkomst richting de slechtste bron.
+#
+# Onder dit aantal waarnemingen blijft het een gewoon gemiddelde: dan is
+# er niets om betrouwbaar op te wegen.
+WEATHER_WEIGHT_MIN_OBSERVATIONS = 50
+
+# Bij dit verschil tussen bronnen is middelen niet zinvol meer: het
+# gemiddelde past dan bij geen van beide. Gemeten geval: 78,1% tegen
+# 46,0% - dat is geen ruis maar onenigheid, en dan hoort de bron te
+# winnen die het aantoonbaar vaker bij het rechte eind heeft.
+WEATHER_DISAGREEMENT_PREFER_BEST_PP = 25.0
+
+# Hoeveel betrouwbaarder die bron dan minstens moet zijn. Zonder marge
+# zou een toevallig verschil van een half procent al de doorslag geven.
+WEATHER_BEST_SOURCE_MIN_LEAD_PP = 5.0

@@ -10603,3 +10603,90 @@ ging stuk op een toestand zonder `name`.
 **Getest**: dertien tests erbij in `test_presence_detection.py`.
 
 **Volledige testsuite**: 1589 tests, allemaal groen.
+
+## v1.20.2 — Live beweging en gewogen bewolking
+
+**Beweging werd structureel gemist**: de tick draaide elke vijf minuten
+en keek of een sensor op DAT MOMENT "on" stond. Een bewegingsmelder staat
+30-60 seconden aan, kans ongeveer één op vijf. De export bewees het: 3
+van de 15 sensoren ooit waargenomen, de laatste 550 minuten geleden,
+terwijl er die nacht geslapen en opgestaan was. Voor de vakantiemelding
+fataal - die kwam meestal helemaal niet.
+
+Beweging loopt nu via state-change events, net als water en accukoeling.
+De afgeleide (thuis/weg/slaapt) blijft op de tick; die blijft ook een
+vangnet zodat een herstart midden in een beweging die niet kwijtraakt.
+
+**Bewolking**: 62% getoond terwijl het bijna onbewolkt was - het
+gemiddelde van 78,1% en 46,0%. Wegen naar betrouwbaarheid gaf maar 60,0%,
+want 81,5% en 90,5% liggen te dicht bij elkaar. Bij 32 procentpunt
+verschil is middelen verkeerd: de uitkomst past bij geen van beide. Vanaf
+25 procentpunt wint nu de aantoonbaar betere bron. Bij kleine verschillen
+blijft het middelen.
+
+**Nieuwe pagina Weerbronnen**: wat elke bron meldt naast hoe goed die
+klopt met de panelen. Zowel PV als Klimaat liep over de tekengrens.
+
+**Getest**: nieuw `tests/test_live_motion_and_weather_weighting.py`, 12
+tests.
+
+**Volledige testsuite**: 1601 tests, allemaal groen.
+
+## v1.20.3 — De dagelijkse PV-vergelijking lukte nooit
+
+**Gevonden bij het doorlichten van zeven exports**: `last_compared_date`
+stond in allemaal op None en `deviation_history` bleef op zeven waarden
+staan - allemaal uit de bootstrap, niet uit een live vergelijking.
+
+**De oorzaak is de volgorde**: 20:00 legt "de voorspelling voor morgen"
+vast, 23:59 vergelijkt als die datum vandaag is. Maar de vastlegging
+schreef direct in `pending`, dus op 10 augustus om 20:00 werd dat 11
+augustus - en om 23:59 klopte de datum niet meer. De vastlegging van
+20:00 gooide elke avond weg wat om 23:59 vergeleken had moeten worden.
+
+**Gevolg**: bias en spreiding stonden stil op de bootstrap-waarden. De
+uurcorrecties liepen wél door via hun eigen per-uur pad; dat verklaart
+waarom het zo lang onopgemerkt bleef.
+
+**De correctie**: de vastlegging gaat naar een apart veld en schuift pas
+door NA de vergelijking. Getoetst over twee volle dagen. De velden worden
+meebewaard (een herstart tussen 20:00 en 23:59 zou de voorspelling
+kwijtraken) en staan in de export.
+
+**Rest van de diagnostiek**: numeriek schoon, alle leercontroles OK,
+accurendement 90,8% (was 86,9%), zelfconsumptie terecht None bij 0,08 kWh
+opwek. Drie tekort-nachten op rij worden terecht gemeld.
+
+**Getest**: nieuw `tests/test_daily_forecast_comparison.py`, 6 tests.
+
+**Volledige testsuite**: 1607 tests, allemaal groen.
+
+## v1.20.4 — Volledige doorlichting van de diagnostiek
+
+Alle tien secties van de export langsgelopen in plaats van twee.
+
+**In orde**: 218 velden numeriek binnen bereik, 18 None-velden allemaal
+verklaarbaar, vijf van vijf leercontroles OK, sensorgezondheid 100%,
+energiebalans 67 W afwijking, geen plausibiliteitswaarschuwingen, 171
+beslissingsregels met één lege (na herstart). De waterontharder
+regenereerde om 03:17 (113,9 L in 26,9 min) - precies in het ingestelde
+venster. Waterbron-toewijzing werkt: zes van twintig sessies gekoppeld.
+
+**Vondst**: het hoogste geleerde UUR is 497 W, maar het gemeten
+piekvermogen 2199 W - boven het ontlaadvermogen van 1600 W. Het
+uitbreidingsadvies keek alleen naar uurgemiddelden, die zo'n piek
+verbergen. Nu weegt het advies het gemeten piekvermogen mee, met een
+aparte uitkomst voor korte pieken.
+
+**Twee valse alarmen**: de energiebalansfout las ik als procenten terwijl
+het watt is (67 W is normaal). En `expected_operation_mode` bestaat niet;
+de echte velden zijn `last_expected_mode` (smart) en `last_reason`.
+
+**Voor de gebruiker**: tien van de 37 bevestigde apparaten hebben geen
+referentiewaarde (rolluiken, melkopschuimer) waardoor daar geen drift kan
+worden vastgesteld. En twee paren dragen identieke namen zonder dat de
+duplicaatdetectie ze meldde.
+
+**Getest**: drie tests erbij in `test_expansion_advice.py`.
+
+**Volledige testsuite**: 1610 tests, allemaal groen.

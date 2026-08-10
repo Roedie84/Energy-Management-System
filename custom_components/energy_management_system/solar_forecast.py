@@ -96,6 +96,13 @@ class SolarForecastAccuracyTracker:
         # The forecast captured on the previous day, predicting the date below.
         self.pending_predicted_kwh: float | None = None
         self.pending_predicted_date: date | None = None
+        # v1.20.3: de vastlegging van 20:00 gaat eerst hierheen. Zij
+        # kwam VOOR de vergelijking van 23:59 en overschreef precies de
+        # waarde die vergeleken moest worden - waardoor de dagelijkse
+        # vergelijking nooit lukte. In zeven opeenvolgende exports stond
+        # `last_compared_date` dan ook op None.
+        self.next_predicted_kwh: float | None = None
+        self.next_predicted_date: date | None = None
 
         # Result of the most recent comparison.
         self.last_predicted_kwh: float | None = None
@@ -439,6 +446,21 @@ class SolarForecastAccuracyTracker:
                     self.config.get(CONF_SOLAR_ACTUAL_SENSOR),
                 )
 
+        # v1.20.3: pas NA de vergelijking de vastlegging van vanavond
+        # doorschuiven. Voorheen schreef de vastlegging van 20:00 direct
+        # in `pending`, en die kwam VOOR de vergelijking van 23:59 -
+        # precies de waarde die vergeleken moest worden werd dus gewist.
+        #
+        # Gevolg: de dagelijkse vergelijking lukte nooit. In zeven
+        # opeenvolgende exports stond `last_compared_date` op None, en
+        # de zeven afwijkingen kwamen allemaal uit de bootstrap uit de
+        # historie - niet uit één enkele live vergelijking.
+        if self.next_predicted_date is not None:
+            self.pending_predicted_kwh = self.next_predicted_kwh
+            self.pending_predicted_date = self.next_predicted_date
+            self.next_predicted_kwh = None
+            self.next_predicted_date = None
+
         self._notify_listeners()
 
     @callback
@@ -469,8 +491,10 @@ class SolarForecastAccuracyTracker:
             was_rejected_as_implausible = True
 
         if forecast_value is not None:
-            self.pending_predicted_kwh = forecast_value
-            self.pending_predicted_date = today + timedelta(days=1)
+            # v1.20.3: niet direct in `pending` - dat zou de waarde van
+            # vandaag wissen voordat die om 23:59 vergeleken is.
+            self.next_predicted_kwh = forecast_value
+            self.next_predicted_date = today + timedelta(days=1)
             self.forecast_value_history.append(forecast_value)
             self.forecast_value_history = self.forecast_value_history[
                 -LEARNING_HISTORY_DAYS:
