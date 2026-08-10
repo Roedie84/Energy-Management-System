@@ -1106,6 +1106,10 @@ PERSISTED_PLAIN_FIELDS = (
     # is de tabel na elke herstart leeg, terwijl juist die tabel moet
     # verklaren waarom de status is wat hij is.
     "presence_last_seen",
+    # v1.26.0: het verloop thuis/weg/slaapt. Een tabel die na elke
+    # herstart leeg is, valt niet achteraf te controleren - en dat is
+    # precies waarvoor hij gevraagd werd.
+    "presence_timeline",
     # v1.20.0: wanneer er doorgaans naar bed wordt gegaan. Zonder
     # bewaren begint het leren na elke herstart opnieuw.
     "bedtime_history",
@@ -2464,6 +2468,30 @@ PRESENCE_HISTORY_WEEKS = 6
 # weken zegt nog niets over een vast patroon.
 PRESENCE_MIN_OBSERVATIONS = 3
 
+# --- Tijdlijn van aanwezigheid (v1.26.0) ----------------------------
+# Gevraagd: "Tevens in dit overzicht een 'time table' Thuis, weg slapen
+# of iets dergelijks zodat ik achteraf kan controleren of het klopt."
+#
+# Het percentage per halfuur zegt wat er GEMIDDELD gebeurt; om te
+# controleren of de afleiding klopt heb je het verloop zelf nodig - wat
+# stond er wanneer, hoe lang, en welke sensor was de aanleiding.
+#
+# Alleen OVERGANGEN vastleggen. De staat wordt elke tick opnieuw
+# bepaald; elke tick wegschrijven levert 288 regels per dag op die
+# allemaal hetzelfde zeggen.
+PRESENCE_TIMELINE_LENGTH = 120
+
+# Blokjes korter dan dit tellen als flikkering en worden samengevoegd
+# met wat eraan voorafging. Zonder deze regel staat er bij één beweging
+# midden in de nacht "slaapt - thuis - slaapt" in de tabel, en dat maakt
+# hem onleesbaar terwijl er niets is gebeurd.
+PRESENCE_TIMELINE_MIN_MINUTES = 5
+
+# Hoeveel regels het dashboard toont. De rest blijft bewaard en staat in
+# de diagnostiek-export; een tabel van 120 regels leest niemand, en de
+# attributen van deze sensor hebben een grens (zie v1.25.0).
+PRESENCE_TIMELINE_SHOWN = 30
+
 # --- Nachtvenster van de waterontharder instelbaar (v1.19.6) --------
 # Gemeld: "Dit was overdag, ik weet dat de waterontharder het meestal
 # tussen 02:00 en 05:00 doet."
@@ -2758,9 +2786,20 @@ SELL_RESERVE_SAFETY_FACTOR = 1.5
 # verandert (smart_discharge naar smart) bijvoorbeeld, wil ik dat de
 # tekst rood gearceerd wordt."
 #
-# Negen uur vooruit is genoeg om te zien wat er komt zonder dat de tabel
-# onleesbaar wordt. Voorbije kwartieren vallen er vanzelf uit.
-QUARTER_PLAN_MAX_ROWS = 36
+# v1.25.0, gemeld: "De kwartierplanning toont niet de maximale aantal
+# kwartieren vooruit (waarin zonneplan prijzen beschikbaar zijn)."
+#
+# Klopt. De vraag was "zoveel prijzen er zijn"; ik las de schatting
+# "waarschijnlijk max. 36 regels" als de eis en zette er een harde grens
+# van 36 op. Die schatting was te laag: Zonneplan publiceert de prijzen
+# van morgen in de loop van de middag, en in de export van 10 augustus
+# stonden er 109 kwartieren (27 uur) vooruit klaar terwijl de tabel er
+# 36 toonde.
+#
+# Deze grens is nu alleen nog een fysiek plafond: 192 kwartieren is
+# twee volle etmalen, meer dan er ooit aan prijzen binnenkomt. In de
+# praktijk bepaalt het aantal beschikbare prijzen de lengte.
+QUARTER_PLAN_MAX_ROWS = 192
 
 # Wat er als eerste voor een kwartier werd voorspeld, wordt onthouden.
 # Verandert de modus daarna, dan is dat zichtbaar - juist die

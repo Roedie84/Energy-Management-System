@@ -515,6 +515,78 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Tijdlijn van aanwezigheid (v1.26.0)
+
+**Gevraagd**: *"Tevens in dit overzicht een 'time table' Thuis, weg
+slapen of iets dergelijks zodat ik achteraf kan controleren of het
+klopt."*
+
+Het weekprofiel zegt wat er *gemiddeld* gebeurt. Om te controleren of de
+afleiding klopt is het verloop zelf nodig. Op de pagina
+*Aanwezigheid-tijdlijn* staan twee tabellen:
+
+**Uren per dag** — thuis, weg en slapend per dag. Blokken over
+middernacht worden gesplitst; anders schrijft een nacht slapen zeven uur
+op de verkeerde dag.
+
+**Tijdlijn** — dag, van, tot, staat, duur en *waarom*:
+
+> ma 10-08 · 14:20 → 18:05 · weg · 3.8 u · 45 min zonder beweging
+> (laatst: Aanwezigheid woonkamer)
+
+Die laatste kolom is waar de controle mee begint. Klopt de sensor die de
+omslag veroorzaakte? Staat er een gang- of schuursensor waar je hem niet
+verwacht, dan verklaart dat een verkeerde staat.
+
+Alleen **overgangen** worden vastgelegd, niet elke tick — anders staan er
+288 regels per dag die allemaal hetzelfde zeggen. Blokjes korter dan vijf
+minuten tussen twee gelijke staten worden samengevoegd: één beweging
+midden in de nacht zou anders "slaapt — thuis — slaapt" opleveren.
+
+De tijdlijn wordt bewaard over een herstart heen (120 overgangen). Het
+dashboard toont er 30; de volledige tijdlijn staat in de
+diagnostiek-export.
+
+**Volledige testsuite**: 1767 tests, allemaal groen.
+
+## Zoveel kwartieren als er prijzen zijn (v1.25.0)
+
+**Gemeld**: *"De kwartierplanning toont niet de maximale aantal
+kwartieren vooruit (waarin zonneplan prijzen beschikbaar zijn)."*
+
+De eis in v1.23.2 was "zoveel prijzen er zijn, dus waarschijnlijk max. 36
+regels". Die schatting is als grens overgenomen, en dat was te laag:
+Zonneplan publiceert de prijzen van morgen in de loop van de middag. In
+de export van 10 augustus 20:54 stonden **109 toekomstige kwartieren**
+(27 uur) klaar terwijl de tabel er 36 toonde.
+
+De tabel loopt nu zover als er prijzen zijn. De grens van 192 kwartieren
+(twee etmalen) is alleen nog een fysiek plafond — meer komt er nooit
+binnen.
+
+### Dagaanduiding
+
+Boven een etmaal komt elk tijdstip twee keer voor; zonder merk staat er
+twee keer "05:15" onder elkaar. Vandaag krijgt geen merk (dat leest
+rustiger), morgen en overmorgen wel.
+
+### Te groot om te bewaren
+
+Wat hierbij opviel: de GACS-sensor draagt de tekst voor een stuk of tien
+dashboardpagina's en zat met 36 planregels al op **ruim 21 kB**, waarvan
+12 kB planning. Home Assistant slaat de attributen van een toestand
+**boven 16 kB niet meer op** — die stonden er dus al niet in. Met 109
+regels was het richting 37 kB gegaan.
+
+- Het dashboard krijgt een **compacte planning**: de tien velden die de
+  tabel toont in plaats van alle vijftien. De samenvatting en de
+  diagnostiek-export blijven de volle regels gebruiken.
+- De grote attributen staan in `_unrecorded_attributes`, zodat de
+  recorder ze overslaat. Er verdwijnt niets: de kaarten lezen de huidige
+  toestand, niet de geschiedenis.
+
+**Volledige testsuite**: 1757 tests, allemaal groen.
+
 ## SoC 0% bij een ondergrens van 10% (v1.24.3)
 
 **Gemeld**: *"Dit kon toch niet, zoals aangegeven minimale soc = 10%. SoC
@@ -871,6 +943,9 @@ zes kwartieren sprongen van *manual* naar *smart* — allemaal gemarkeerd.
 ### Negen uur vooruit, voorbije kwartieren weg
 
 Maximaal 36 regels. Voorbije kwartieren verdwijnen vanzelf.
+
+> Die grens van 36 bleek te laag en is in v1.25.0 losgelaten: de tabel
+> loopt nu zover als er prijzen zijn.
 
 ### De samenvatting kreeg een eigen pagina
 

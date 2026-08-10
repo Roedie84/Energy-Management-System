@@ -11024,7 +11024,7 @@ cumulatief de som van de losse kwartieren is.
 **Onderweg**: een eigen test pakte de verkeerde kaart omdat er nu drie
 markdown-kaarten op die pagina staan; die zoekt nu op de tabellus.
 
-**Getest**: acht tests erbij in `test_quarter_plan.py`.
+**Getest**: zeven tests erbij in `test_quarter_plan.py`.
 
 **Volledige testsuite**: 1701 tests, allemaal groen.
 
@@ -11209,3 +11209,83 @@ Getoetst met een avond zonder zon: 20:00 82%/80%, 23:00 26%/18%, 02:00
 **Getest**: vier tests erbij in `test_quarter_plan.py`.
 
 **Volledige testsuite**: 1750 tests, allemaal groen.
+
+## v1.25.0 — Zoveel kwartieren als er prijzen zijn
+
+**Gemeld**: "De kwartierplanning toont niet de maximale aantal
+kwartieren vooruit (waarin zonneplan prijzen beschikbaar zijn)."
+
+Klopt. De vraag in v1.23.2 was "zoveel prijzen er zijn, dus
+waarschijnlijk max. 36 regels" - ik las de schatting als de eis en zette
+er een harde grens van 36 op. Die schatting was te laag: Zonneplan
+publiceert de prijzen van morgen in de loop van de middag. In de export
+van 10 augustus 20:54 stonden **109 toekomstige kwartieren** (27 uur)
+klaar terwijl de tabel er 36 toonde.
+
+**Nu**: de tabel loopt zover als er prijzen zijn. De grens van 192
+(twee etmalen) is alleen nog een fysiek plafond, geen keuze.
+
+**Dagaanduiding erbij**: boven een etmaal komt elk tijdstip twee keer
+voor. Vandaag krijgt geen merk - dat leest rustiger - morgen en
+overmorgen wel.
+
+**Wat er ook uit kwam**: de GACS-sensor draagt de tekst voor een stuk of
+tien dashboardpagina's en zat met 36 planregels al op **ruim 21 kB**,
+waarvan 12 kB planning. Home Assistant slaat de attributen van een
+toestand **boven 16 kB niet meer op** - die stonden er dus al niet in,
+zonder dat iemand dat merkte. Met 109 regels was het richting 37 kB
+gegaan.
+
+Twee dingen daaraan gedaan:
+
+- Het dashboard krijgt een **compacte planning**: de tien velden die de
+  tabel toont in plaats van alle vijftien. Dat scheelt bijna de helft.
+  De samenvatting en de diagnostiek-export blijven de volle regels
+  gebruiken.
+- De grote attributen staan nu in `_unrecorded_attributes`, zodat de
+  recorder ze overslaat. Er verdwijnt niets: de kaarten lezen de huidige
+  toestand, niet de geschiedenis.
+
+**Getest**: zeven tests erbij, in `test_quarter_plan.py` en
+`test_attribute_isolation.py`.
+
+**Volledige testsuite**: 1757 tests, allemaal groen.
+
+## v1.26.0 — Tijdlijn van aanwezigheid
+
+**Gevraagd**: "Tevens in dit overzicht een 'time table' Thuis, weg
+slapen of iets dergelijks zodat ik achteraf kan controleren of het
+klopt."
+
+Het weekprofiel zegt wat er *gemiddeld* gebeurt (33% van de tijd iemand
+thuis). Om te controleren of de afleiding klopt, heb je het verloop zelf
+nodig.
+
+**Twee tabellen op een eigen pagina** *Aanwezigheid-tijdlijn*:
+
+- **Uren per dag** — thuis, weg en slapend per dag. Blokken over
+  middernacht worden gesplitst, anders schrijft een nacht slapen zeven
+  uur op de verkeerde dag.
+- **Tijdlijn** — dag, van, tot, staat, duur en **waarom**. Die laatste
+  kolom is waar de controle mee begint: "weg om 14:20" zegt niets, "weg,
+  45 min na de laatste beweging (Aanwezigheid woonkamer)" wel.
+
+**Alleen overgangen worden vastgelegd**, niet elke tick — anders staan
+er 288 regels per dag die allemaal hetzelfde zeggen. Blokjes korter dan
+vijf minuten tussen twee gelijke staten worden samengevoegd: één
+beweging midden in de nacht zou anders "slaapt — thuis — slaapt"
+opleveren.
+
+De tijdlijn wordt **bewaard over een herstart** heen. Een tabel die elke
+keer leeg begint valt niet achteraf te controleren, en dat was de vraag.
+
+**Eigen pagina, net als in v1.23.2**: met beide tabellen erbij liep de
+aanwezigheidspagina op 3628 tekens, ruim over de grens van 2500. De
+bestaande test sloeg daar terecht op aan.
+
+Het dashboard toont 30 overgangen; de volledige tijdlijn (120) staat in
+de diagnostiek-export.
+
+**Getest**: tien tests erbij in `test_presence_detection.py`.
+
+**Volledige testsuite**: 1767 tests, allemaal groen.

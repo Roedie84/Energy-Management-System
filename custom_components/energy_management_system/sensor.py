@@ -3825,6 +3825,32 @@ class GacsAssessmentSensor(SensorEntity):
     _attr_name = "GACS-zelfbeoordeling"
     _attr_icon = "mdi:clipboard-check-outline"
 
+    # v1.25.0: deze sensor draagt de tekst voor een stuk of tien
+    # dashboardpagina's. Met 36 planregels stond hij al op ruim 21 kB,
+    # en Home Assistant slaat de attributen van een toestand boven 16 kB
+    # niet meer op - er kwam een waarschuwing in het logboek en de
+    # database hield niets bij. Nu de planning zoveel regels telt als er
+    # prijzen zijn, wordt dat alleen maar erger.
+    #
+    # Bewaren hoeft ook niet: de kaarten lezen de huidige toestand, niet
+    # de geschiedenis. Wat hier staat wordt elke tick opnieuw berekend.
+    # Buiten de recorder houden lost het op zonder dat er iets verdwijnt
+    # wat iemand terugkijkt.
+    _unrecorded_attributes = frozenset(
+        {
+            "samenvattingen",
+            "pv_voorspelkwaliteit",
+            "pv_correctie",
+            "aanwezigheid",
+            "uitbreidingsadvies",
+            "weerbronnen",
+            "zon_uitstelplan",
+            "kwartierplanning",
+            "verkooptoets",
+            "kwartier_samenvatting",
+        }
+    )
+
     def __init__(self, coordinator, entry_id: str) -> None:
         self._coordinator = coordinator
         self._attr_unique_id = f"{entry_id}_gacs_assessment"
@@ -3865,7 +3891,7 @@ class GacsAssessmentSensor(SensorEntity):
             ("uitbreidingsadvies", self._coordinator.get_expansion_advice),
             ("weerbronnen", self._coordinator.get_weather_source_overview),
             ("zon_uitstelplan", lambda: self._coordinator.last_solar_defer_plan),
-            ("kwartierplanning", self._coordinator.get_quarter_plan),
+            ("kwartierplanning", self._coordinator.get_quarter_plan_compact),
             ("verkooptoets", lambda: self._coordinator.last_sell_check),
             ("kwartier_samenvatting", self._coordinator.get_quarter_plan_summary),
         ):

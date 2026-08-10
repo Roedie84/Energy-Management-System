@@ -315,6 +315,9 @@ from .const import (
     PRESENCE_SLEEP_WINDOW_HOURS,
     PRESENCE_HISTORY_WEEKS,
     PRESENCE_MIN_OBSERVATIONS,
+    PRESENCE_TIMELINE_LENGTH,
+    PRESENCE_TIMELINE_SHOWN,
+    PRESENCE_TIMELINE_MIN_MINUTES,
     SENSOR_STARTUP_GRACE_MINUTES,
     SENSOR_UNAVAILABLE_CONFIRM_MINUTES,
     STALLED_SERIES_CONSTANT_IS_NORMAL,
@@ -431,6 +434,27 @@ _LOGGER = logging.getLogger(__name__)
 
 # (interval start, interval end, price)
 PriceEntry = tuple[datetime, datetime, float]
+
+
+def _quarter_plan_day_label(start: datetime, now: datetime) -> str:
+    """Welke dag hoort er bij dit kwartier? (v1.25.0)
+
+    Zolang de tabel negen uur vooruit keek, was de tijd genoeg: elk
+    tijdstip kwam één keer voor. Nu er zoveel kwartieren staan als er
+    prijzen zijn - in de praktijk tot 27 uur - komt elk tijdstip twee
+    keer voor en is "05:15" dubbelzinnig.
+
+    Vandaag krijgt geen merk; dat leest rustiger dan een merk op elke
+    regel. Morgen en overmorgen wel.
+    """
+    verschil = (start.date() - now.date()).days
+    if verschil <= 0:
+        return ""
+    if verschil == 1:
+        return "morgen "
+    if verschil == 2:
+        return "overmorgen "
+    return f"+{verschil}d "
 
 
 class _ChronologicalValueTracker:
@@ -614,6 +638,11 @@ class EnergyManagementSystemCoordinator:
         self.bedtime_history: list[str] = []
         # v1.20.1: welke sensor wanneer als laatste bewoog.
         self.presence_last_seen: dict[str, str] = {}
+        # v1.26.0: het verloop thuis/weg/slaapt, om achteraf na te gaan
+        # of de afleiding klopte. Gevraagd: "Tevens in dit overzicht een
+        # time table Thuis, weg slapen of iets dergelijks zodat ik
+        # achteraf kan controleren of het klopt."
+        self.presence_timeline: list[dict] = []
         self._last_intrusion_alert_at: datetime | None = None
         self.water_softener_last_regeneration: datetime | None = None
         self.last_fietsladers_action: str | None = None
@@ -4375,7 +4404,93 @@ class EnergyManagementSystemCoordinator:
                 teller[0] = round(verhouding * maximum)
 
         if vorige != self.presence_state:
+            self._registreer_aanwezigheidsovergang(now, vorige)
             self.schedule_persisted_state_save()
+
+    def _registreer_aanwezigheidsovergang(
+        self, now: datetime, vorige: str | None
+    ) -> None:
+        """Leg een overgang thuis/weg/slaapt vast (v1.26.0).
+
+        Gevraagd: "Tevens in dit overzicht een 'time table' Thuis, weg
+        slapen of iets dergelijks zodat ik achteraf kan controleren of
+        het klopt."
+
+        Alleen overgangen, niet elke tick - anders staan er 288 regels
+        per dag die allemaal hetzelfde zeggen.
+
+        Er staat bij WAAROM de staat omsloeg, want zonder die reden valt
+        er niets te controleren: "weg om 14:20" zegt niets, "weg om
+        14:20, 45 min na de laatste beweging (Aanwezigheid woonkamer)"
+        wel.
+        """
+        staat = self.presence_state
+        if staat is None:
+            return
+
+        # Flikkering wegnemen: één beweging midden in de nacht zou
+        # anders "slaapt - thuis - slaapt" opleveren, en dan is de tabel
+        # onleesbaar terwijl er niets gebeurd is. Duurde het vorige
+        # blokje korter dan een paar minuten en stond er daarvoor
+        # hetzelfde als nu, dan hoort dat één blok te zijn.
+        if len(self.presence_timeline) >= 2:
+            laatste = self.presence_timeline[-1]
+            begon = dt_util.parse_datetime(laatste.get("van") or "")
+            if (
+                begon is not None
+                and (now - begon).total_seconds() / 60
+                < PRESENCE_TIMELINE_MIN_MINUTES
+                and self.presence_timeline[-2].get("staat") == staat
+            ):
+                self.presence_timeline.pop()
+                return
+
+        self.presence_timeline.append(
+            {
+                "van": now.isoformat(),
+                "staat": staat,
+                "aanleiding": self._aanleiding_aanwezigheid(now, vorige),
+            }
+        )
+        if len(self.presence_timeline) > PRESENCE_TIMELINE_LENGTH:
+            self.presence_timeline = self.presence_timeline[
+                -PRESENCE_TIMELINE_LENGTH:
+            ]
+
+    def _aanleiding_aanwezigheid(self, now: datetime, vorige: str | None) -> str:
+        """Waarom sloeg de staat om? (v1.26.0)
+
+        Dit is het deel waarmee te controleren valt of de afleiding
+        klopte - de staat alleen zegt te weinig.
+        """
+        stil = (
+            None
+            if self.last_motion_at is None
+            else (now - self.last_motion_at).total_seconds() / 60
+        )
+        naam = None
+        if self.presence_last_seen:
+            eid = max(self.presence_last_seen, key=self.presence_last_seen.get)
+            naam = self._entiteitsnaam(eid)
+
+        if self.presence_state == "thuis":
+            if self._tv_staat_aan() and (
+                stil is None or stil >= self._afwezigheidsdrempel_minuten()
+            ):
+                return "tv staat aan"
+            return f"beweging{f' ({naam})' if naam else ''}"
+        if self.presence_state == "slaapt":
+            return (
+                "slaapsensor was de laatste beweging"
+                f"{f', {stil:.0f} min stil' if stil is not None else ''}"
+            )
+        if self.presence_state == "weg":
+            drempel = self._afwezigheidsdrempel_minuten()
+            return (
+                f"{drempel:.0f} min zonder beweging"
+                f"{f' (laatst: {naam})' if naam else ''}"
+            )
+        return "geen meting"
 
     @callback
     def _handle_motion_event(self, event) -> None:
@@ -4743,8 +4858,117 @@ class EnergyManagementSystemCoordinator:
             "typisch_thuis_percentage": (
                 round(sum(geleerd.values()) / len(geleerd), 0) if geleerd else None
             ),
+            # v1.26.0: het verloop zelf, om achteraf te controleren of de
+            # afleiding klopte. Begrensd voor het dashboard; de volledige
+            # tijdlijn zit in de diagnostiek-export.
+            "tijdlijn": self.get_presence_timeline(PRESENCE_TIMELINE_SHOWN),
+            "tijdlijn_totaal": len(self.presence_timeline),
+            "per_dag": self.get_presence_day_totals()[:7],
             "profiel": geleerd,
         }
+
+    def get_presence_timeline(self, limiet: int | None = None) -> list[dict]:
+        """Het verloop thuis/weg/slaapt, nieuwste bovenaan (v1.26.0).
+
+        Gevraagd: "Tevens in dit overzicht een 'time table' Thuis, weg
+        slapen of iets dergelijks zodat ik achteraf kan controleren of
+        het klopt."
+
+        De duur wordt hier berekend en niet opgeslagen: die van het
+        laatste blok loopt nog door, en een bewaarde duur zou daar
+        stilstaan.
+        """
+        nu = dt_util.now()
+        regels: list[dict] = []
+        for index, blok in enumerate(self.presence_timeline):
+            begin = dt_util.parse_datetime(blok.get("van") or "")
+            if begin is None:
+                continue
+            volgende = (
+                self.presence_timeline[index + 1]
+                if index + 1 < len(self.presence_timeline)
+                else None
+            )
+            einde = (
+                dt_util.parse_datetime(volgende.get("van") or "")
+                if volgende
+                else None
+            )
+            loopt_nog = einde is None
+            if einde is None:
+                einde = nu
+            minuten = max(0.0, (einde - begin).total_seconds() / 60)
+            regels.append(
+                {
+                    "dag": begin.strftime("%a %d-%m"),
+                    "van": begin.strftime("%H:%M"),
+                    "tot": "nu" if loopt_nog else einde.strftime("%H:%M"),
+                    "staat": blok.get("staat"),
+                    "duur_minuten": round(minuten),
+                    "duur": (
+                        f"{minuten / 60:.1f} u"
+                        if minuten >= 90
+                        else f"{minuten:.0f} min"
+                    ),
+                    "aanleiding": blok.get("aanleiding"),
+                    "loopt_nog": loopt_nog,
+                }
+            )
+        regels.reverse()
+        return regels[:limiet] if limiet else regels
+
+    def get_presence_day_totals(self) -> list[dict]:
+        """Per dag hoeveel tijd er thuis, weg en slapend is doorgebracht
+        (v1.26.0).
+
+        Een rij per dag is waar de controle mee begint: klopt "8 uur weg"
+        met de werkdag die je had? Zo niet, dan staat in de tijdlijn
+        eronder waar het misging.
+
+        Blokken die over middernacht lopen worden gesplitst - anders
+        schrijft een nacht slapen zeven uur op de verkeerde dag.
+        """
+        nu = dt_util.now()
+        per_dag: dict[str, dict[str, float]] = {}
+        for index, blok in enumerate(self.presence_timeline):
+            begin = dt_util.parse_datetime(blok.get("van") or "")
+            if begin is None:
+                continue
+            volgende = (
+                self.presence_timeline[index + 1]
+                if index + 1 < len(self.presence_timeline)
+                else None
+            )
+            einde = (
+                dt_util.parse_datetime(volgende.get("van") or "")
+                if volgende
+                else nu
+            )
+            if einde is None or einde <= begin:
+                continue
+            staat = blok.get("staat") or "onbekend"
+            cursor = begin
+            while cursor < einde:
+                middernacht = (cursor + timedelta(days=1)).replace(
+                    hour=0, minute=0, second=0, microsecond=0
+                )
+                stuk_einde = min(middernacht, einde)
+                dag = per_dag.setdefault(cursor.strftime("%Y-%m-%d"), {})
+                dag[staat] = dag.get(staat, 0.0) + (
+                    stuk_einde - cursor
+                ).total_seconds() / 3600
+                cursor = stuk_einde
+
+        return [
+            {
+                "dag": datum,
+                "thuis_uur": round(uren.get("thuis", 0.0), 1),
+                "weg_uur": round(uren.get("weg", 0.0), 1),
+                "slaapt_uur": round(uren.get("slaapt", 0.0), 1),
+                "onbekend_uur": round(uren.get("onbekend", 0.0), 1),
+            }
+            for datum, uren in sorted(per_dag.items(), reverse=True)
+        ]
 
     def get_expansion_advice(self) -> dict:
         """Loont het om de accu uit te breiden? (v1.19.0)
@@ -7346,8 +7570,11 @@ class EnergyManagementSystemCoordinator:
             # Voorbije kwartieren tonen niets nuttigs meer.
             if einde <= now:
                 continue
-            # v1.23.2: negen uur vooruit is genoeg om te zien wat er
-            # komt zonder dat de tabel onleesbaar wordt.
+            # v1.25.0: zover als er prijzen zijn. De grens hieronder is
+            # een fysiek plafond (twee etmalen), geen keuze - gemeld:
+            # "De kwartierplanning toont niet de maximale aantal
+            # kwartieren vooruit (waarin zonneplan prijzen beschikbaar
+            # zijn)."
             if len(plan) >= QUARTER_PLAN_MAX_ROWS:
                 break
             duur = (einde - start).total_seconds() / 3600
@@ -7437,6 +7664,12 @@ class EnergyManagementSystemCoordinator:
                     "tekort": tekort,
                     "van": start.strftime("%H:%M"),
                     "tot": einde.strftime("%H:%M"),
+                    # v1.25.0: nu de tabel verder reikt dan een etmaal,
+                    # komt elk tijdstip twee keer voor. Zonder dagmerk
+                    # staat er twee keer "05:15" onder elkaar en is niet
+                    # te zien welke van de twee je leest. Leeg voor
+                    # vandaag - dat leest rustiger dan overal een merk.
+                    "dag": _quarter_plan_day_label(start, now),
                     "prijs_ct": round(prijs * 100, 1),
                     "zon_kwh": round(zon, 3),
                     "verbruik_kwh": round(verbruik, 3),
@@ -7468,6 +7701,37 @@ class EnergyManagementSystemCoordinator:
                 }
             )
         return plan
+
+    def get_quarter_plan_compact(self, now: datetime | None = None) -> list[dict]:
+        """Het kwartierplan met alleen wat de tabel toont (v1.25.0).
+
+        Aanleiding: de tabel toonde 36 regels terwijl er 109 kwartieren
+        aan prijzen klaarstonden. Zoveel regels doorgeven kan, maar niet
+        met alle vijftien velden per regel: dit attribuut zat met 36
+        regels al op 12 kB en de sensor als geheel op ruim 21 kB, terwijl
+        Home Assistant boven 16 kB de attributen van een toestand niet
+        meer wegschrijft.
+
+        De volle regels blijven bestaan voor de samenvatting en de
+        diagnostiek-export; het dashboard krijgt de acht velden die het
+        daadwerkelijk gebruikt. Dat scheelt bijna de helft.
+        """
+        velden = (
+            "van",
+            "dag",
+            "prijs_ct",
+            "zon_kwh",
+            "modus",
+            "soc_procent",
+            "cumulatief_eur",
+            "gewijzigd",
+            "eerst_voorspeld",
+            "tekort",
+        )
+        return [
+            {veld: regel.get(veld) for veld in velden}
+            for regel in self.get_quarter_plan(now)
+        ]
 
     def _meld_planningswijzigingen(self, now: datetime) -> None:
         """Bericht bij belangrijke wijzigingen in de planning (v1.23.4).

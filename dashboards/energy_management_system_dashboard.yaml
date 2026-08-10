@@ -508,6 +508,17 @@ views:
         columns: 12
         rows: auto
     - type: custom:mushroom-template-card
+      primary: Aanwezigheid-tijdlijn
+      secondary: Thuis, weg of slapend
+      icon: mdi:timeline-clock-outline
+      icon_color: blue
+      tap_action:
+        action: navigate
+        navigation_path: /energy-management-system/detail-aanwezigheid-tijdlijn
+      grid_options:
+        columns: 12
+        rows: auto
+    - type: custom:mushroom-template-card
       primary: Weerbronnen
       secondary: Bewolking per bron
       icon: mdi:weather-partly-cloudy
@@ -546,7 +557,7 @@ views:
   panel: true
   cards:
   - type: picture-elements
-    image: /local/energy_management_system_overview.svg?v=1.24.3
+    image: /local/energy_management_system_overview.svg?v=1.26.0
     elements:
     - type: state-label
       entity: sensor.woonkamer_energy_management_system_system_status
@@ -2213,6 +2224,47 @@ views:
       grid_options:
         columns: 12
         rows: auto
+- title: Aanwezigheid-tijdlijn
+  path: detail-aanwezigheid-tijdlijn
+  subview: true
+  type: sections
+  max_columns: 1
+  sections:
+  - type: grid
+    cards:
+    - type: custom:mushroom-title-card
+      title: Aanwezigheid-tijdlijn
+      subtitle: Wat er wanneer stond, om achteraf te controleren
+    - type: markdown
+      title: Uren per dag
+      content: '{% set p = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''aanwezigheid'') or {} %}{% set d = p.get(''per_dag'') or [] %}{% if d | length == 0 %}Nog geen volledige dag vastgelegd.{% else %}| Dag | Thuis | Weg | Slaapt |
+
+        |---|---|---|---|
+
+        {% for r in d %}| {{ r.dag }} | {{ r.thuis_uur }} u | {{ r.weg_uur }} u | {{ r.slaapt_uur }} u |
+
+        {% endfor %}{% endif %}
+
+
+        _Klopt "8 uur weg" met de werkdag die je had? Zo niet, dan staat in de tijdlijn hieronder waar het misging. Blokken over middernacht tellen bij de juiste dag._'
+      grid_options:
+        columns: 12
+        rows: auto
+    - type: markdown
+      title: Tijdlijn - thuis, weg of slapend
+      content: '{% set p = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''aanwezigheid'') or {} %}{% set t = p.get(''tijdlijn'') or [] %}{% if t | length == 0 %}Nog geen overgangen vastgelegd - die verschijnen zodra de staat voor het eerst omslaat.{% else %}| Dag | Van | Tot | Staat | Duur | Waarom |
+
+        |---|---|---|---|---|---|
+
+        {% for r in t %}| {{ r.dag }} | {{ r.van }} | {{ r.tot }} | {% if r.staat == ''thuis'' %}**thuis**{% elif r.staat == ''weg'' %}weg{% elif r.staat == ''slaapt'' %}_slaapt_{% else %}{{ r.staat }}{% endif %} | {{ r.duur }} | {{ r.aanleiding }} |
+
+        {% endfor %}{% endif %}
+
+
+        _Nieuwste bovenaan; er worden {{ (p.get(''tijdlijn'') or []) | length }} van de {{ p.get(''tijdlijn_totaal'', 0) }} bewaarde overgangen getoond. Alleen overgangen worden vastgelegd, niet elke meting. Blokjes korter dan vijf minuten tussen twee gelijke staten zijn samengevoegd - anders levert een enkele beweging ''s nachts drie regels op. De kolom "Waarom" is waar de controle mee begint: klopt de sensor die de omslag veroorzaakte?_'
+      grid_options:
+        columns: 12
+        rows: auto
 - title: Weerbronnen
   path: detail-weer
   subview: true
@@ -2258,12 +2310,12 @@ views:
 
         |---|---|---|---|---|---|
 
-        {% for r in p %}{% set k = ''<span style="color:#e05252">'' if r.gewijzigd else '''' %}{% set s = ''</span>'' if r.gewijzigd else '''' %}| {{ k }}{{ r.van }}{{ s }} | {{ k }}{{ r.prijs_ct }}{{ s }} | {{ k }}{{ r.zon_kwh }}{{ s }} | {{ k }}{{ r.modus }}{{ s }}{% if r.gewijzigd %} <sub>was {{ r.eerst_voorspeld }}</sub>{% endif %}{% if r.tekort %} **!**{% endif %} | {{ k }}{{ r.soc_procent }}%{{ s }} | {{ k }}{{ r.cumulatief_eur }}{{ s }} |
+        {% for r in p %}{% set k = ''<span style="color:#e05252">'' if r.gewijzigd else '''' %}{% set s = ''</span>'' if r.gewijzigd else '''' %}| {{ k }}{{ r.dag }}{{ r.van }}{{ s }} | {{ k }}{{ r.prijs_ct }}{{ s }} | {{ k }}{{ r.zon_kwh }}{{ s }} | {{ k }}{{ r.modus }}{{ s }}{% if r.gewijzigd %} <sub>was {{ r.eerst_voorspeld }}</sub>{% endif %}{% if r.tekort %} **!**{% endif %} | {{ k }}{{ r.soc_procent }}%{{ s }} | {{ k }}{{ r.cumulatief_eur }}{{ s }} |
 
         {% endfor %}{% endif %}
 
 
-        _**!** = de accu kan in dat kwartier niets meer leveren en het huis hangt aan het net. **Rood** = van plan veranderd sinds de eerste voorspelling. Voorbije kwartieren verdwijnen; er wordt negen uur vooruit gekeken._'
+        _**!** = de accu kan in dat kwartier niets meer leveren en het huis hangt aan het net. **Rood** = van plan veranderd sinds de eerste voorspelling. Voorbije kwartieren verdwijnen; er wordt gekeken zover als er prijzen zijn ({{ p | length }} kwartieren nu)._'
       grid_options:
         columns: 12
         rows: auto

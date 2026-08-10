@@ -415,6 +415,15 @@ async def async_get_config_entry_diagnostics(
             ),
             "expansion_advice": _veilig("get_expansion_advice", coordinator.get_expansion_advice),
             "presence_week_profile": coordinator.presence_week_profile,
+            # v1.26.0: de VOLLEDIGE tijdlijn - het dashboard toont er 30,
+            # maar juist voor het achteraf controleren moet alles in de
+            # export staan.
+            "presence_timeline": _veilig(
+                "get_presence_timeline", coordinator.get_presence_timeline
+            ),
+            "presence_day_totals": _veilig(
+                "get_presence_day_totals", coordinator.get_presence_day_totals
+            ),
             "water_source_profiles": coordinator.water_source_profiles,
             "water_source_overview": _veilig("get_water_source_overview", coordinator.get_water_source_overview),
             "living_room_temp_bucket_direction": (
