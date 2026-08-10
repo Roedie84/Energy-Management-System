@@ -463,6 +463,12 @@ def test_every_sensor_appears_somewhere_on_the_dashboard():
         "Airco-verwachting (kans binnen 1 uur)": (
             "airco_verwachting_woonkamertemperatuur"
         ),
+        # v1.21.5: hernoemd van "Learned night consumption" omdat het
+        # over het ONTLAADVENSTER gaat, niet over de nacht. De entity_id
+        # blijft die van de eerste aanmaak.
+        "Gemiddeld vermogen in het ontlaadvenster": (
+            "learned_night_consumption"
+        ),
         "Advies-gereedheid (10 modules)": "advies_gereedheid_8_modules",
     }
 

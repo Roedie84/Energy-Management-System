@@ -177,3 +177,86 @@ def test_the_margin_is_used_in_the_drift_check():
 
     assert "_koeling_temperatuurmarge_procent" in blok
     assert "verschil_w = max(0.0, verschil_w - verklaard_w)" in blok
+
+
+# --- v1.21.3: een halve dag aan metingen ----------------------------
+
+
+def test_a_day_needs_enough_samples():
+    """Gevonden in de export ná v1.21.2: de diepvries meldde "-98,8%
+    drift, mogelijk defect" op basis van VIJF metingen.
+
+    Bij een tick van vijf minuten is dat 25 minuten - de integratie was
+    net herstart, en een compressor die in dat kwartier net niet draaide
+    geeft een laag gemiddelde.
+
+    De uitvalfilter uit v1.21.0 werkt op de GESCHIEDENIS; de dag die nog
+    liep werd zonder ondergrens meegewogen. Eén meting volstond.
+    """
+    from custom_components.energy_management_system.const import (
+        NILM_MIN_SAMPLES_FOR_DAY,
+    )
+
+    # Ruim acht uur bij vijf minuten per tick.
+    assert NILM_MIN_SAMPLES_FOR_DAY >= 96
+
+
+def test_a_short_day_is_not_finalised(make_coordinator, hass):
+    """Het gerapporteerde geval: vijf metingen mogen geen dagcijfer
+    opleveren."""
+    from datetime import datetime, timedelta, timezone
+
+    c = make_coordinator({})
+    hass.states.set("sensor.diepvries", "0")
+    c.nilm_confirmed_devices["sensor.diepvries"] = {
+        "friendly_name": "Diepvries schuur Vermogen",
+        "confirmed_at": "2026-08-05",
+        "daily_avg_history": [],
+        "cusum_accumulator": 0.0,
+        "anomaly_detected": False,
+        "estimated_drift_percent": None,
+        "reference_avg_w": 76.34,
+        "_today_sum": 81.5,
+        "_today_count": 5,
+        "_check_date": datetime(2026, 8, 10, tzinfo=timezone.utc).date(),
+    }
+
+    c._update_nilm_confirmed_devices(
+        datetime(2026, 8, 11, 0, 5, tzinfo=timezone.utc)
+    )
+
+    assert c.nilm_confirmed_devices["sensor.diepvries"]["daily_avg_history"] == []
+
+
+def test_a_full_day_is_finalised(make_coordinator, hass):
+    """De drempel mag een echte dag niet tegenhouden."""
+    from datetime import datetime, timezone
+
+    from custom_components.energy_management_system.const import (
+        NILM_MIN_SAMPLES_FOR_DAY,
+    )
+
+    c = make_coordinator({})
+    hass.states.set("sensor.diepvries", "0")
+    c.nilm_confirmed_devices["sensor.diepvries"] = {
+        "friendly_name": "Diepvries schuur Vermogen",
+        "confirmed_at": "2026-08-05",
+        "daily_avg_history": [],
+        "cusum_accumulator": 0.0,
+        "anomaly_detected": False,
+        "estimated_drift_percent": None,
+        "reference_avg_w": 76.34,
+        "_today_sum": 76.0 * NILM_MIN_SAMPLES_FOR_DAY,
+        "_today_count": NILM_MIN_SAMPLES_FOR_DAY,
+        "_check_date": datetime(2026, 8, 10, tzinfo=timezone.utc).date(),
+    }
+
+    c._update_nilm_confirmed_devices(
+        datetime(2026, 8, 11, 0, 5, tzinfo=timezone.utc)
+    )
+
+    geschiedenis = c.nilm_confirmed_devices["sensor.diepvries"][
+        "daily_avg_history"
+    ]
+
+    assert geschiedenis == [76.0]

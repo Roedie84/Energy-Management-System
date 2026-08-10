@@ -42,6 +42,14 @@ def test_the_state_sensor_decides(make_coordinator, hass):
     hass.states.set("sensor.werkstand", "Laden")
     assert c.is_battery_discharging() is False
 
+    # v1.21.4: "Inactief" blijft een BEKENDE werkstand die "doet niets"
+    # betekent. Zou hij terugvallen op het vermogen, dan telde een
+    # ruststroom van een paar honderd watt als ontlading.
+    #
+    # Alleen ONBEKENDE waarden vallen nu terug op het vermogen. Dat kwam
+    # uit een gemeld geval: `battery_discharge_today_kwh` bleef op 0,0
+    # staan terwijl er 's nachts wel ontladen werd, waardoor de
+    # zelfconsumptie op 12,7% bleef hangen.
     hass.states.set("sensor.werkstand", "Inactief")
     assert c.is_battery_discharging() is False
 
@@ -171,3 +179,104 @@ def test_the_config_field_exists():
     # De constante wordt via de naam gebruikt, niet als letterlijke
     # tekenreeks - daarop zoeken gaf een vals negatief.
     assert "CONF_BATTERY_STATE_SENSOR" in bron
+
+
+# --- v1.21.4: exacte werkstand en een eigen sensor ------------------
+
+
+def test_exact_matching_not_substrings(make_coordinator, hass):
+    """"ontladen" bevat "laden" als deelwoord.
+
+    Met een deelwoordvergelijking hing de uitkomst af van de volgorde
+    waarin er wordt getoetst - en die keert stilzwijgend om zodra iemand
+    die volgorde wijzigt. Nu exact.
+    """
+    c = _met_tv(make_coordinator, hass) if False else make_coordinator(
+        {CONF_BATTERY_STATE_SENSOR: "sensor.werkstand"}
+    )
+
+    hass.states.set("sensor.werkstand", "ontladen")
+    assert c.is_battery_discharging() is True
+
+    hass.states.set("sensor.werkstand", "laden")
+    assert c.is_battery_discharging() is False
+
+
+def test_idle_is_a_known_state(make_coordinator, hass):
+    """Zou "Inactief" terugvallen op het vermogen, dan telde een
+    ruststroom van een paar honderd watt als ontlading."""
+    c = make_coordinator(
+        {
+            CONF_BATTERY_STATE_SENSOR: "sensor.werkstand",
+            CONF_BATTERY_POWER_SENSOR: "sensor.accu_w",
+        }
+    )
+    hass.states.set("sensor.accu_w", "500")
+
+    for waarde in ("Inactief", "standby", "idle"):
+        hass.states.set("sensor.werkstand", waarde)
+        assert c.is_battery_discharging() is False, waarde
+
+
+def test_an_unknown_state_falls_back_to_power(make_coordinator, hass):
+    """Gemeld geval: `battery_discharge_today_kwh` bleef op 0,0 staan
+    terwijl er 's nachts wel ontladen werd, waardoor de zelfconsumptie
+    op 12,7% bleef hangen. Een onbekende werkstand mag de meting niet
+    stilzetten."""
+    c = make_coordinator(
+        {
+            CONF_BATTERY_STATE_SENSOR: "sensor.werkstand",
+            CONF_BATTERY_POWER_SENSOR: "sensor.accu_w",
+        }
+    )
+    hass.states.set("sensor.accu_w", "500")
+    hass.states.set("sensor.werkstand", "iets_onverwachts")
+
+    assert c.is_battery_discharging() is True
+
+
+def test_self_consumption_has_its_own_sensor():
+    """Gemeld: de grafiek achter de zelfconsumptie-tegel toonde de
+    zelfvoorziening (97,4%) in plaats van de zelfconsumptie (9,1%).
+
+    Zelfconsumptie stond als attribuut op de zelfvoorzieningssensor, dus
+    de tegel verwees naar diezelfde entiteit - en Home Assistant toont
+    dan de geschiedenis van de hoofdwaarde.
+    """
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    bron = (Path(pkg.__file__).parent / "sensor.py").read_text()
+
+    assert "class SelfConsumptionSensor" in bron
+    assert 'SelfConsumptionSensor(coordinator, entry.entry_id)' in bron
+
+
+def test_the_card_points_at_the_new_sensor():
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+    import yaml
+
+    data = yaml.safe_load(
+        (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
+    )
+
+    def zoek(kaarten):
+        for k in kaarten or []:
+            if not isinstance(k, dict):
+                continue
+            if "zelfconsumptieratio" in str(k.get("entity", "")):
+                return True
+            if zoek(k.get("cards")):
+                return True
+        return False
+
+    gevonden = False
+    for view in data["views"]:
+        gevonden = gevonden or zoek(view.get("cards"))
+        for sectie in view.get("sections") or []:
+            gevonden = gevonden or zoek(sectie.get("cards"))
+
+    assert gevonden

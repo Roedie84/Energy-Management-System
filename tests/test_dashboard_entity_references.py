@@ -187,12 +187,18 @@ def test_the_night_consumption_uses_watt():
     verkeerde eenheid tonen maakt het getal onbruikbaar."""
     bron = (PAKKET / "sensor.py").read_text()
     start = bron.index("class LearnedNightConsumptionSensor")
-    blok = bron[start : start + 600]
+    # v1.21.5: niet op een vast aantal tekens zoeken - het
+    # toelichtingsblok groeit mee met elke correctie. Zoeken tot de
+    # volgende klasse is stabiel.
+    einde = bron.index("\nclass ", start + 10)
+    blok = bron[start:einde]
 
     assert '_attr_native_unit_of_measurement = "W"' in blok
 
     yaml_tekst = (PAKKET / "dashboard_template.yaml").read_text()
-    kaart_start = yaml_tekst.index("secondary: Nachtverbruik")
+    # v1.21.5: "Nachtverbruik" heette misleidend - het gaat om het
+    # ontlaadvenster (avond én nacht), niet om 00:00-06:00.
+    kaart_start = yaml_tekst.index("secondary: Ontlaadvenster")
     kaart = yaml_tekst[max(0, kaart_start - 400) : kaart_start]
 
     assert "' W'" in kaart
@@ -252,3 +258,57 @@ def test_they_are_actually_referenced():
 
     for eid in ("last_decision_reason", "upcoming_schedule", "battery_protection"):
         assert f"sensor.energy_management_system_{eid}" in yaml_tekst, eid
+
+
+# --- v1.21.5: het venster heet nu wat het is ------------------------
+
+
+def test_the_discharge_window_sensor_says_what_it_measures():
+    """Gemeld: "Tevens een nachtverbruik van 400W? Mijns inziens moet
+    dit meer zijn, lijkt wel een uurwaarde?"
+
+    De twijfel was terecht, maar anders dan verwacht. Het getal klopt -
+    het is een VERMOGEN, geen dagtotaal - maar de naam niet: er wordt
+    gemeten over het ONTLAADVENSTER, vanaf het moment dat de accu gaat
+    leveren tot het goedkope laadblok. Dus avond én nacht samen.
+
+    Het geleerde uurprofiel laat 's nachts 200-290 W zien en 's avonds
+    300-380 W; de 403 W past bij een venster dat zwaarder op de avond
+    leunt.
+    """
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    bron = (Path(pkg.__file__).parent / "sensor.py").read_text()
+    start = bron.index("class LearnedNightConsumptionSensor")
+    blok = bron[start : bron.index("\nclass ", start + 10)]
+
+    assert '_attr_name = "Gemiddeld vermogen in het ontlaadvenster"' in blok
+    assert "ontlaadvenster" in blok
+
+
+def test_the_explanation_names_the_evening():
+    """Zonder die uitleg blijft "403 W" te hoog lijken voor een nacht."""
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    bron = (Path(pkg.__file__).parent / "sensor.py").read_text()
+    start = bron.index("class LearnedNightConsumptionSensor")
+    blok = bron[start : bron.index("\nclass ", start + 10)]
+
+    assert "avond én nacht samen" in blok
+
+
+def test_the_entity_id_did_not_change():
+    """Home Assistant houdt de entity_id vast bij de eerste aanmaak -
+    dezelfde regel als bij `piekvermogen` in v1.6.4 en de
+    airco-verwachting in v1.17.6."""
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    tekst = (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
+
+    assert "learned_night_consumption" in tekst
