@@ -10825,3 +10825,80 @@ leiden of een lagere grens een keuze is of een vergetelheid.
 **Getest**: vijf tests erbij in `test_expansion_advice.py`.
 
 **Volledige testsuite**: 1644 tests, allemaal groen.
+
+## v1.21.3 — Een dag afronden op vijf metingen
+
+De correctie van v1.21.0 werkt: de referentie van de diepvries staat nu
+op 76,34 W in plaats van 19,68. Maar hij sloeg de andere kant op aan.
+
+**Vijf metingen, en toch een oordeel**: 81,49 gedeeld door 5 is 16,3 W,
+tegen een referentie van 76,34 - drift -98,8%, "mogelijk defect". Bij een
+tick van vijf minuten is dat 25 minuten; de integratie was net herstart
+en de compressor draaide in dat kwartier net niet.
+
+De uitvalfilter uit v1.21.0 werkt op de GESCHIEDENIS; de dag die nog liep
+werd zonder ondergrens meegewogen. Een dag wordt nu pas afgerond bij
+minstens honderd metingen - ruim acht uur.
+
+**Drie tests moesten mee**: ze rondden een dag af op één of twee
+metingen. Er is nu een hulpfunctie die een volle dag simuleert.
+
+**Getest**: drie tests erbij in `test_cooling_drift_temperature.py`.
+
+**Volledige testsuite**: 1647 tests, allemaal groen.
+
+## v1.21.4 — Zelfconsumptie: verkeerde grafiek en een stilstaande teller
+
+**Gemeld**: klikken op de tegel "9,1% Zelfconsumptie" opende de grafiek
+van de Zelfvoorziening (97,4%).
+
+**Oorzaak**: zelfconsumptie stond als ATTRIBUUT op de
+zelfvoorzieningssensor, dus de tegel verwees naar diezelfde entiteit - en
+HA toont dan de geschiedenis van de hoofdwaarde. Er is nu een aparte
+sensor "Zelfconsumptieratio"; het attribuut blijft bestaan.
+
+**En het getal klopte ook niet**: `battery_discharge_today_kwh` stond op
+0,0 terwijl de accu 's nachts wel had ontladen (zelfvoorziening 97,4%,
+nachtverbruik 403 W). Teruglevering uit de accu telde daardoor als
+zon-export: 12,7% in plaats van ~95%.
+
+**Twee oorzaken in de werkstandherkenning**:
+- Deelwoorden: "ontladen" bevat "laden", dus de uitkomst hing af van de
+  toetsvolgorde. Nu exact vergelijken.
+- Te korte lijst: een onbekende waarde gold als "niet ontladen" en zette
+  de teller stil. Nu terugvallen op het vermogensteken, met een
+  logboekregel. "Inactief" en "standby" blijven bekende waarden die
+  "doet niets" betekenen.
+
+**Getest**: vijf tests erbij in
+`test_battery_state_and_self_consumption.py`.
+
+**Volledige testsuite**: 1652 tests, allemaal groen.
+
+## v1.21.5 — "Nachtverbruik" was het ontlaadvenster
+
+**Gemeld**: een nachtverbruik van 400 W lijkt te hoog, alsof het een
+uurwaarde is.
+
+**Het getal klopt, de naam niet**: het is een vermogen (0,403 kW ->
+403 W), maar gemeten over het ONTLAADVENSTER - vanaf het moment dat de
+accu gaat leveren tot het goedkope laadblok. Dat is avond én nacht
+samen. Het geleerde uurprofiel laat 's nachts 199-271 W zien en 's avonds
+294-379 W; 403 W past bij een venster dat zwaarder op de avond leunt.
+
+De sensor heet nu "Gemiddeld vermogen in het ontlaadvenster", de tegel
+"Ontlaadvenster", met een toelichting die de avond noemt.
+
+**Waarom dit ertoe doet**: het is de terugvalwaarde voor de
+reserveberekening. Wie hem als "nachtverbruik" leest en te hoog vindt,
+gaat zoeken naar een sluipverbruiker die er niet is.
+
+**Onderweg**: het hernoemen brak twee tests - één omdat de entity_id niet
+meeverandert (zoals bij `piekvermogen` in v1.6.4), en één omdat het
+toelichtingsblok de eenheid buiten een zoekvenster van 600 tekens duwde,
+precies zoals eerder bij de waterontharder. Die zoekactie is nu op de
+volgende klasse verankerd.
+
+**Getest**: drie tests erbij in `test_dashboard_entity_references.py`.
+
+**Volledige testsuite**: 1655 tests, allemaal groen.

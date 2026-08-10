@@ -515,6 +515,171 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## "Nachtverbruik" was het ontlaadvenster (v1.21.5)
+
+**Gemeld**: *"Tevens een nachtverbruik van 400W? Mijns inziens moet dit
+meer zijn, lijkt wel een uurwaarde?"*
+
+Terechte twijfel — maar de oorzaak ligt anders dan verwacht.
+
+### Het getal klopt, de naam niet
+
+Het is een **vermogen**, geen dagtotaal: 0,403 kW wordt netjes omgerekend
+naar 403 W. Maar er wordt gemeten over het **ontlaadvenster** — vanaf het
+moment dat de accu gaat leveren tot het goedkope laadblok. Dat is avond
+**én** nacht samen.
+
+Je eigen geleerde uurprofiel laat dat zien:
+
+| | |
+|---|---|
+| Nacht (00:00–06:00) | 199–271 W |
+| Avond (17:00–23:00) | 294–379 W |
+| Gemeten venster | **403 W** |
+
+De 403 W ligt boven allebei, wat past bij een venster dat zwaarder op de
+avond leunt — en dat klopt: 's avonds is de prijs hoog, dus dan ontlaadt
+de accu.
+
+De sensor heet nu *"Gemiddeld vermogen in het ontlaadvenster"*, de tegel
+*"Ontlaadvenster"*, en er staat een toelichting bij die vermeldt dat het
+venster de avond bevat.
+
+### Waarom dit ertoe doet
+
+Dit is de terugvalwaarde voor de reserveberekening als het uurprofiel
+voor een uur nog niets weet. Wie hem als "nachtverbruik" leest en te hoog
+vindt, gaat zoeken naar een sluipverbruiker die er niet is.
+
+### Onderweg, tweemaal hetzelfde patroon
+
+Het hernoemen brak twee tests: één omdat de entity_id níét meeverandert
+(dezelfde regel als bij `piekvermogen` in v1.6.4 en de airco-verwachting
+in v1.17.6), en één omdat mijn toelichtingsblok de eenheid buiten een
+zoekvenster van 600 tekens duwde — precies zoals eerder vandaag bij de
+waterontharder. Die zoekactie is nu op de volgende klasse verankerd in
+plaats van op een aantal tekens.
+
+### Getest
+
+Drie tests erbij: de sensor zegt wat hij meet, de uitleg noemt de avond,
+en de entity_id is ongewijzigd.
+
+**Volledige testsuite**: 1655 tests, allemaal groen.
+
+## Zelfconsumptie: verkeerde grafiek, en een teller die stilstond (v1.21.4)
+
+**Gemeld** met screenshot: klikken op de tegel *"9,1% Zelfconsumptie"*
+opende de grafiek van de **Zelfvoorziening** (97,4%).
+
+### De tegel wees naar de verkeerde sensor
+
+Zelfconsumptie stond als **attribuut** op de zelfvoorzieningssensor, dus
+de tegel verwees naar diezelfde entiteit. Home Assistant toont dan de
+geschiedenis van de hoofdwaarde — een andere grootheid dan de tegel liet
+zien.
+
+Twee klassieke KPI's die verschillende dingen meten horen ieder hun eigen
+geschiedenis te hebben. Er is nu een aparte sensor
+*Zelfconsumptieratio*; het attribuut blijft bestaan voor wie het al
+gebruikte.
+
+### En het getal zelf klopte ook niet
+
+Bij het narekenen bleek `battery_discharge_today_kwh` op **0,0** te
+staan, terwijl de accu 's nachts wel degelijk had ontladen — je
+zelfvoorziening staat op 97,4% en je nachtverbruik op 403 W.
+
+Dat drukt de zelfconsumptie omlaag: teruglevering die uit de accu komt
+telt dan als **zon**-export.
+
+| Accu-ontlading | Zelfconsumptie |
+|---|---|
+| 0,0 kWh (gemeten) | 12,7% |
+| 0,6 kWh (realistisch) | 95,4% |
+
+### Twee oorzaken in de werkstandherkenning
+
+**Deelwoorden.** De code toetste of `"laden"` in de waarde zat — maar
+*"ontladen"* bevat *"laden"*. De uitkomst hing dus af van de volgorde
+waarin er werd getoetst, en die keert stilzwijgend om zodra iemand die
+volgorde wijzigt. Nu exact vergelijken.
+
+**Een te korte lijst.** Meldt je Zendure iets anders dan de zes bekende
+termen, dan gold dat als "niet ontladen" en bleef de teller op nul. Een
+onbekende waarde valt nu terug op het vermogensteken, met een regel in
+het logboek.
+
+*Inactief* en *standby* blijven wél bekende waarden die "doet niets"
+betekenen — anders zou een ruststroom van een paar honderd watt als
+ontlading tellen.
+
+### Wat je zelf kunt nakijken
+
+Kijk in Home Assistant wat `sensor.zendure_manager_operation_state`
+precies teruggeeft. Staat daar iets anders dan *Ontladen* of *Laden*,
+dan zie ik dat graag — dan voeg ik die term toe in plaats van dat de
+terugval hem moet opvangen.
+
+### Getest
+
+Vijf tests erbij: exacte vergelijking in plaats van deelwoorden,
+inactief blijft bekend, een onbekende waarde valt terug op het vermogen,
+zelfconsumptie heeft een eigen sensor, en de kaart wijst ernaar.
+
+**Volledige testsuite**: 1652 tests, allemaal groen.
+
+## Een dag afronden op vijf metingen (v1.21.3)
+
+Je verse export laat zien dat de correctie van v1.21.0 **werkt**: de
+referentie van de diepvries staat nu op **76,34 W** in plaats van 19,68 —
+realistisch voor een diepvries.
+
+Maar hij slaat nu de andere kant op aan.
+
+### Vijf metingen, en toch een oordeel
+
+| | |
+|---|---|
+| Referentie | 76,34 W |
+| Vandaag | 81,49 ÷ **5** = 16,3 W |
+| Drift | **−98,8%** → "mogelijk defect" |
+
+Vijf metingen. Bij een tick van vijf minuten is dat 25 minuten — de
+integratie was net herstart. Een compressor die in dat kwartier net niet
+draaide, geeft dan een laag gemiddelde.
+
+De uitvalfilter uit v1.21.0 werkt op de **geschiedenis**; de dag die nog
+liep werd zonder ondergrens meegewogen. Eén meting volstond om een dag af
+te ronden.
+
+Een dag wordt nu pas afgerond bij **minstens honderd metingen** — ruim
+acht uur. Een apparaat dat in cycli werkt heeft dat nodig voordat een
+dagcijfer iets zegt.
+
+### Wat er verder in je export staat
+
+Geen interne fouten, geen ontbrekende attributen, geen dode
+verwijzingen. Drie lege entiteiten, waarvan `sensor_health_score` nieuw
+is — die is na de herstart nog aan het verzamelen.
+
+De melding *"1 dag op rij weer normaal — herstelt vanzelf over nog 4
+dagen"* laat zien dat het herstelmechanisme óók werkt: de diepvries is
+al bezig zichzelf vrij te pleiten.
+
+### Drie tests moesten mee
+
+Ze rondden een dag af op één of twee metingen — precies wat in productie
+niet meer voorkomt. Er is nu een hulpfunctie die een volle dag simuleert,
+met de reden erbij.
+
+### Getest
+
+Drie tests erbij: de drempel is ruim acht uur, een korte dag wordt niet
+afgerond, en een volle dag wel.
+
+**Volledige testsuite**: 1647 tests, allemaal groen.
+
 ## Bewust begrensd vermogen wordt gerespecteerd (v1.21.2)
 
 **Gemeld**: *"Let wel op dat ik handmatig begrensd heb op 2000W laden

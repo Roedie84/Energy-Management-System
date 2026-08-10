@@ -2320,8 +2320,32 @@ CONF_BATTERY_STATE_SENSOR = "battery_state_sensor_entity"
 # Waarden die "ontladen" betekenen. Zendure levert Nederlandse labels,
 # maar een andere merk of taalinstelling kan afwijken - vandaar een
 # lijst in plaats van één vergelijking.
-BATTERY_STATE_DISCHARGING = ("ontladen", "discharging", "discharge")
-BATTERY_STATE_CHARGING = ("laden", "charging", "charge")
+# v1.21.4: exacte waarden in plaats van deelwoorden. "ontladen" bevat
+# "laden", dus een deelwoordvergelijking maakte de uitkomst afhankelijk
+# van de volgorde waarin er wordt getoetst - een valkuil die stilzwijgend
+# omkeert zodra iemand die volgorde wijzigt.
+#
+# En de lijst was te kort: Zendure meldt afhankelijk van taal en firmware
+# ook "standby", "idle" of Engelse termen. Een onbekende waarde telt nu
+# als "niet ontladen", wat veiliger is dan gokken.
+BATTERY_STATE_DISCHARGING = (
+    "ontladen",
+    "discharging",
+    "discharge",
+    "output",
+)
+BATTERY_STATE_CHARGING = (
+    "laden",
+    "opladen",
+    "charging",
+    "charge",
+    "input",
+)
+
+# Bekend én expliciet "doet niets". Zonder deze lijst zou "Inactief"
+# terugvallen op het vermogensteken, en dat meldt bij een ruststroom van
+# een paar honderd watt ten onrechte ontlading.
+BATTERY_STATE_IDLE = ("inactief", "idle", "standby", "stop", "gestopt")
 
 # --- Waterontharder: realistische drempel (v1.18.0) ------------------
 # Gemeld: "Ik weet zeker dat de waterontharder nog niet heeft
@@ -2601,3 +2625,17 @@ SOLARFLOW_OPERATING_TEMP_MAX_C = 60.0
 # en ondermijnt de rest van het advies. Vandaar een instelling die zegt:
 # deze grenzen zijn zo bedoeld, laat ze met rust.
 CONF_POWER_LIMITS_INTENTIONAL = "power_limits_intentional"
+
+# --- Genoeg metingen voor een dagoordeel (v1.21.3) -------------------
+# Gemeld via de export: de diepvries meldde "-98,8% drift, mogelijk
+# defect" op basis van VIJF metingen. Bij een tick van vijf minuten is
+# dat 25 minuten - de integratie was net herstart, en een compressor die
+# in dat kwartier net niet draaide geeft een laag gemiddelde.
+#
+# De uitvalfilter uit v1.21.0 werkt op de GESCHIEDENIS; de dag die nog
+# loopt werd zonder ondergrens meegewogen. Eén meting volstond.
+#
+# Een halve dag aan metingen is nodig voordat een dagcijfer iets zegt
+# over een apparaat dat in cycli werkt. Bij vijf minuten per tick zijn
+# dat ruim acht uur.
+NILM_MIN_SAMPLES_FOR_DAY = 100

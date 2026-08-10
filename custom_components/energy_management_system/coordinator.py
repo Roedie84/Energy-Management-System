@@ -58,6 +58,7 @@ from .const import (
     CONF_AVAILABLE_ENERGY_SENSOR,
     BATTERY_STATE_CHARGING,
     BATTERY_STATE_DISCHARGING,
+    BATTERY_STATE_IDLE,
     CONF_BATTERY_INVERTER_PRICE_EUR,
     CONF_BATTERY_MODULE_PRICE_EUR,
     CONF_BATTERY_POWER_SENSOR,
@@ -106,6 +107,7 @@ from .const import (
     NILM_CUSUM_ALARM_THRESHOLD,
     NILM_DRIFT_MIN_ABSOLUTE_W,
     NILM_DRIFT_MIN_REFERENCE_W,
+    NILM_MIN_SAMPLES_FOR_DAY,
     NILM_CUSUM_MAX_DAILY_CONTRIBUTION,
     NILM_CUSUM_RESET_STREAK_DAYS,
     NILM_CANDIDATE_COUNT_ATTENTION_THRESHOLD,
@@ -1862,14 +1864,32 @@ class EnergyManagementSystemCoordinator:
                 "unknown",
                 "unavailable",
             ):
+                # v1.21.4: EXACT vergelijken, niet op deelwoorden.
+                # "ontladen" bevat "laden", dus een deelwoordvergelijking
+                # gaf een uitkomst die afhing van de toetsvolgorde - en
+                # die keert stilzwijgend om zodra iemand de volgorde
+                # wijzigt.
                 waarde = str(staat.state).strip().lower()
-                if any(w in waarde for w in BATTERY_STATE_DISCHARGING):
+                if waarde in BATTERY_STATE_DISCHARGING:
                     return True
-                if any(w in waarde for w in BATTERY_STATE_CHARGING):
+                if waarde in BATTERY_STATE_CHARGING:
                     return False
-                # "Inactief" of iets onbekends: niet ontladen.
-                return False
-
+                if waarde in BATTERY_STATE_IDLE:
+                    # Bekend én expliciet "doet niets" - niet terugvallen
+                    # op het vermogen, want een ruststroom van een paar
+                    # honderd watt zou dan als ontlading tellen.
+                    return False
+                # Onbekende waarde: terugvallen op het vermogen in plaats
+                # van "niet ontladen" aannemen. Gemeld geval: de
+                # accu-ontlading bleef op 0,0 kWh staan terwijl er 's
+                # nachts wel degelijk ontladen werd, waardoor de
+                # zelfconsumptie op 12,7% bleef hangen.
+                _LOGGER.debug(
+                    "Onbekende accuwerkstand %r van %s - terugvallen op het "
+                    "vermogensteken",
+                    staat.state,
+                    entity_id,
+                )
         vermogen = self._read_corrected_battery_power()
         if vermogen is None:
             return None
@@ -13465,7 +13485,17 @@ class EnergyManagementSystemCoordinator:
 
             check_date = device.get("_check_date")
             if check_date != now.date():
-                if check_date is not None and device.get("_today_count", 0) > 0:
+                # v1.21.3: pas afronden bij genoeg metingen. Met vijf
+                # metingen - een kwartier na een herstart - meldde de
+                # diepvries "-98,8% drift, mogelijk defect", terwijl de
+                # compressor in dat kwartier gewoon niet draaide.
+                #
+                # Een apparaat dat in cycli werkt heeft een halve dag
+                # nodig voordat een dagcijfer iets zegt.
+                if (
+                    check_date is not None
+                    and device.get("_today_count", 0) >= NILM_MIN_SAMPLES_FOR_DAY
+                ):
                     daily_avg_w = device["_today_sum"] / device["_today_count"]
                     self._finalize_nilm_device_day(entity_id, device, daily_avg_w)
                     any_finalized = True

@@ -99,6 +99,7 @@ async def async_setup_entry(
         PeakPowerSensor(coordinator, entry.entry_id),
         CounterfactualSavingsSensor(coordinator, entry.entry_id),
         SelfSufficiencySensor(coordinator, entry.entry_id),
+        SelfConsumptionSensor(coordinator, entry.entry_id),
         BatteryHealthSensor(coordinator, entry.entry_id),
         CO2IntensitySensor(coordinator, entry.entry_id),
         MissingOptionalFeaturesSensor(coordinator, entry.entry_id),
@@ -2233,6 +2234,61 @@ class BatteryHealthSensor(SensorEntity, RestoreEntity):
             self._coordinator.battery_cumulative_discharged_kwh = float(raw)
 
 
+class SelfConsumptionSensor(SensorEntity):
+    """Zelfconsumptieratio als eigen sensor (v1.21.4).
+
+    Gemeld: de grafiek achter de zelfconsumptie-tegel toonde de
+    zelfvoorziening (97,4%) in plaats van de zelfconsumptie (9,1%).
+
+    De oorzaak zat in de opzet: zelfconsumptie stond als ATTRIBUUT op de
+    zelfvoorzieningssensor, en de tegel verwees dus naar diezelfde
+    entiteit. Home Assistant toont dan de geschiedenis van de
+    hoofdwaarde - een andere grootheid dan de tegel liet zien.
+
+    Twee klassieke EMS-KPI's die verschillende dingen meten horen ook
+    ieder hun eigen geschiedenis te hebben. Het attribuut blijft bestaan
+    voor wie het al gebruikte.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Zelfconsumptieratio"
+    _attr_icon = "mdi:solar-power-variant-outline"
+    _attr_native_unit_of_measurement = "%"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        super().__init__()
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_self_consumption"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def native_value(self) -> float | None:
+        return self._coordinator.self_consumption_ratio_percent
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        c = self._coordinator
+        return {
+            "opwek_vandaag_kwh": round(c.pv_production_today_kwh or 0, 2),
+            "teruglevering_vandaag_kwh": round(c.pv_export_today_kwh or 0, 2),
+            "accu_ontladen_vandaag_kwh": round(
+                c.battery_discharge_today_kwh or 0, 2
+            ),
+            "toelichting": (
+                "Welk deel van de opgewekte zon zelf is gebruikt - "
+                "rechtstreeks of via de accu. Teruglevering die uit de accu "
+                "komt telt niet als zon-export (v1.16.9)."
+            ),
+        }
+
+    async def async_added_to_hass(self) -> None:
+        self._coordinator.register_listener(self.async_write_ha_state)
+
+
 class SelfSufficiencySensor(SensorEntity):
     """Zelfconsumptie-/zelfvoorzieningsratio (v0.63.101, gevraagd:
     "zaken voor een typisch EMS welke we kunnen toevoegen" - klassieke
@@ -3007,7 +3063,20 @@ class LearnedNightConsumptionSensor(SensorEntity, RestoreEntity):
     """
 
     _attr_has_entity_name = True
-    _attr_name = "Learned night consumption"
+    # v1.21.5, gemeld: "Tevens een nachtverbruik van 400W? Mijns
+    # inziens moet dit meer zijn, lijkt wel een uurwaarde?"
+    #
+    # De twijfel was terecht, maar anders dan verwacht. Het getal klopt
+    # - het is een VERMOGEN, geen dagtotaal - maar de naam niet: er
+    # wordt gemeten over het ONTLAADVENSTER (vanaf het moment dat de
+    # accu gaat leveren tot het goedkope laadblok), dus avond én nacht
+    # samen.
+    #
+    # Het geleerde uurprofiel laat 's nachts 200-290 W zien en 's avonds
+    # 300-380 W. De 403 W past bij een venster dat zwaarder op de avond
+    # leunt, en dat klopt: 's avonds is de prijs hoog, dus dan ontlaadt
+    # de accu.
+    _attr_name = "Gemiddeld vermogen in het ontlaadvenster"
     _attr_icon = "mdi:chart-line"
     _attr_native_unit_of_measurement = "W"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
@@ -3030,6 +3099,15 @@ class LearnedNightConsumptionSensor(SensorEntity, RestoreEntity):
     @property
     def extra_state_attributes(self) -> dict:
         return {
+            # v1.21.5: zeggen wat er gemeten wordt, want "403 W" leek te
+            # hoog voor een nacht - terwijl het venster ook de avond
+            # bevat, waar het verbruik hoger ligt.
+            "toelichting": (
+                "Gemiddeld vermogen over het ontlaadvenster: vanaf het "
+                "moment dat de accu gaat leveren tot het goedkope "
+                "laadblok. Dat is avond én nacht samen, dus hoger dan "
+                "het verbruik in de kleine uurtjes alleen."
+            ),
             ATTR_CONSUMPTION_HISTORY: [
                 round(v, 3) for v in self._coordinator.night_consumption_history
             ],

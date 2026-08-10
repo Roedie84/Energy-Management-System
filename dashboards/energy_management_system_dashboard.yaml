@@ -524,7 +524,7 @@ views:
   panel: true
   cards:
   - type: picture-elements
-    image: /local/energy_management_system_overview.svg?v=1.21.2
+    image: /local/energy_management_system_overview.svg?v=1.21.5
     elements:
     - type: state-label
       entity: sensor.woonkamer_energy_management_system_system_status
@@ -1820,11 +1820,11 @@ views:
         tap_action:
           action: more-info
       - type: custom:mushroom-template-card
-        primary: '{{ state_attr(''sensor.woonkamer_energy_management_system_zelfvoorzieningsratio'', ''zelfconsumptie_procent'') }}%'
+        primary: '{{ states(''sensor.woonkamer_energy_management_system_zelfconsumptieratio'') }}%'
         secondary: Zelfconsumptie
         icon: mdi:solar-power-variant
         icon_color: yellow
-        entity: sensor.woonkamer_energy_management_system_zelfvoorzieningsratio
+        entity: sensor.woonkamer_energy_management_system_zelfconsumptieratio
         tap_action:
           action: more-info
     - type: grid
@@ -1864,7 +1864,7 @@ views:
         action: more-info
     - type: custom:mushroom-template-card
       primary: '{% set v = states(''sensor.energy_management_system_learned_night_consumption'') %}{{ v ~ '' W'' if v not in [''unknown'',''unavailable'',''''] else ''nog niet geleerd'' }}'
-      secondary: Nachtverbruik
+      secondary: Ontlaadvenster
       icon: mdi:weather-night
       entity: sensor.energy_management_system_learned_night_consumption
       tap_action:
