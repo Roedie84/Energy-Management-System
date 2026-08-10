@@ -15,6 +15,7 @@ aansturing doet, en dat is erger dan geen planning.
 from datetime import datetime, timedelta, timezone
 
 from custom_components.energy_management_system.const import (
+    PRICE_SCALE_FACTOR,
     CONF_BATTERY_TOTAL_CAPACITY_SENSOR,
     CONF_MANUAL_DISCHARGE_POWER,
     CONF_MIN_SOC_PERCENT,
@@ -39,7 +40,10 @@ def _coordinator(make_coordinator, hass, van_net=False, beschikbaar=7.0):
     entries = []
     for i in range(48):
         start = NU + timedelta(minutes=15 * i)
-        prijs = 0.35 if start.hour < 11 else (0.15 if start.hour < 17 else 0.38)
+        # v1.24.2: rauwe eenheden, zoals Zonneplan ze levert
+        prijs = (
+            0.35 if start.hour < 11 else (0.15 if start.hour < 17 else 0.38)
+        ) * PRICE_SCALE_FACTOR
         entries.append((start, start + timedelta(minutes=15), prijs))
     c._get_forecast_entries = lambda: entries
     c._estimate_pv_kwh_for_period = lambda a, b: (
@@ -276,12 +280,16 @@ def test_the_summary_shows_what_was_asked(make_coordinator, hass):
 
 def test_the_lowest_soc_is_the_warning_signal(make_coordinator, hass):
     """De belangrijkste regel om te bewaken: zakt de accu volgens dit
-    plan te diep, dan is het te gretig."""
+    plan te diep, dan is het te gretig.
+
+    v1.24.3: de ondergrens is niet 0 maar de harde minimum-SoC.
+    """
     samenvatting = _coordinator(make_coordinator, hass).get_quarter_plan_summary(
         NU
     )
 
     assert 0 <= samenvatting["laagste_soc_procent"] <= 100
+    assert samenvatting["laagste_soc_procent"] >= 0
     assert (
         samenvatting["laagste_soc_procent"]
         <= samenvatting["hoogste_soc_procent"]
@@ -440,3 +448,141 @@ def test_the_card_marks_changes_in_red():
     assert "color:#e05252" in tabel
     assert "r.gewijzigd" in tabel
     assert "eerst_voorspeld" in tabel
+
+
+# --- v1.24.1: de accustand rechtstreeks lezen -----------------------
+
+
+def test_the_plan_works_without_last_available_kwh(make_coordinator, hass):
+    """Gemeld met screenshot: "Nog geen planning" en "Accustand
+    onbekend" terwijl de accu gewoon 7,69 kWh had.
+
+    `last_available_kwh` wordt alleen gezet als de HELE energie-check
+    slaagt, en op een tak zonder verbruiksschatting zelfs expliciet op
+    None. Dat veld is een bijproduct van die check, geen betrouwbare
+    accustand.
+    """
+    from custom_components.energy_management_system.const import (
+        CONF_AVAILABLE_ENERGY_SENSOR,
+    )
+
+    c = _coordinator(make_coordinator, hass)
+    c.config = {**c.config, CONF_AVAILABLE_ENERGY_SENSOR: "sensor.beschikbaar"}
+    hass.states.set("sensor.beschikbaar", "7.69")
+    c.last_available_kwh = None
+
+    assert c.beschikbare_energie_kwh() == 7.69
+    assert c.get_quarter_plan(NU)
+
+
+def test_it_falls_back_to_the_computed_value(make_coordinator, hass):
+    """Zonder sensor blijft het bijproduct bruikbaar."""
+    c = _coordinator(make_coordinator, hass)
+    c.last_available_kwh = 5.0
+
+    assert c.beschikbare_energie_kwh() == 5.0
+
+
+def test_the_reason_says_what_is_missing(make_coordinator, hass):
+    """"Nog geen planning" liet de gebruiker zoeken naar iets wat kapot
+    leek, terwijl er gewoon een gegeven miste."""
+    c = make_coordinator({})
+
+    reden = c.get_quarter_plan_summary(NU)["reden"]
+
+    assert "prijsgegevens" in reden
+    assert "ontbreken" in reden or "ontbreekt" in reden
+
+
+def test_a_missing_price_sensor_does_not_crash(make_coordinator, hass):
+    """`_get_forecast_entries` gooit een KeyError zonder prijssensor -
+    dezelfde valkuil als bij de export in v1.22.1. Een planning is
+    informatief en mag nooit iets laten vallen."""
+    c = make_coordinator({})
+
+    assert c.get_quarter_plan(NU) == []
+    assert c.get_quarter_plan_summary(NU)["beschikbaar"] is False
+
+
+# --- v1.24.2: prijzen in euro's -------------------------------------
+
+
+def test_the_revenue_is_in_euros(make_coordinator, hass):
+    """Gemeld met screenshot: "Verwachte opbrengst 15124941.79 EUR" en
+    de vraag "word ik nu miljonair?".
+
+    `_get_forecast_entries` geeft de RAUWE waarde terug (3181681), niet
+    euro's - elders wordt die door PRICE_SCALE_FACTOR gedeeld, in de
+    nieuwe planning gebeurde dat niet.
+    """
+    samenvatting = _coordinator(make_coordinator, hass).get_quarter_plan_summary(
+        NU
+    )
+
+    assert abs(samenvatting["verwachte_opbrengst_eur"]) < 100
+
+
+def test_the_price_column_is_in_cents(make_coordinator, hass):
+    """Een kwartierprijs hoort tussen -50 en 150 cent te liggen."""
+    plan = _coordinator(make_coordinator, hass).get_quarter_plan(NU)
+
+    for r in plan:
+        assert -50 <= r["prijs_ct"] <= 150, r
+
+
+# --- v1.24.3: de echte accustand ------------------------------------
+
+
+def test_the_soc_never_drops_below_the_hard_floor(make_coordinator, hass):
+    """Gemeld: "Dit kon toch niet, zoals aangegeven minimale soc = 10%.
+    SoC laagste / hoogste 0% / 86%."
+
+    Klopt: er werd het percentage van de BRUIKBARE capaciteit getoond,
+    dus 0% betekende 10% - de harde ondergrens. Dat leest als iets
+    onmogelijks. Nu de echte accustand, zoals in de Zendure-app.
+    """
+    from custom_components.energy_management_system.const import (
+        CONF_MIN_SOC_PERCENT,
+    )
+
+    c = _coordinator(make_coordinator, hass)
+    c.config = {**c.config, CONF_MIN_SOC_PERCENT: 10.0}
+    hass.states.set("number.min_soc", "10")
+
+    plan = c.get_quarter_plan(NU)
+
+    for r in plan:
+        assert r["soc_procent"] >= 10, r
+
+
+def test_both_percentages_are_available(make_coordinator, hass):
+    """De echte stand zegt wat de accu doet; het bruikbare deel zegt wat
+    er nog te gebruiken valt. Allebei nuttig, maar niet hetzelfde."""
+    plan = _coordinator(make_coordinator, hass).get_quarter_plan(NU)
+
+    for r in plan:
+        assert r["soc_procent"] >= r["soc_bruikbaar_procent"]
+
+
+def test_an_empty_battery_reads_as_the_floor(make_coordinator, hass):
+    """0% bruikbaar hoort samen te vallen met de harde ondergrens."""
+    c = _coordinator(make_coordinator, hass, beschikbaar=0.0)
+
+    plan = c.get_quarter_plan(NU)
+    leeg = [r for r in plan if r["soc_bruikbaar_procent"] == 0]
+
+    assert leeg
+    assert all(r["soc_procent"] == round(c.effective_min_soc_percent()) for r in leeg)
+
+
+def test_the_summary_shows_both(make_coordinator, hass):
+    samenvatting = _coordinator(make_coordinator, hass).get_quarter_plan_summary(
+        NU
+    )
+
+    assert "laagste_soc_procent" in samenvatting
+    assert "laagste_bruikbaar_procent" in samenvatting
+    assert (
+        samenvatting["laagste_soc_procent"]
+        >= samenvatting["laagste_bruikbaar_procent"]
+    )

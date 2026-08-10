@@ -35,8 +35,16 @@ def _coordinator(make_coordinator, hass, zon=22.0, met_voorspelling=True):
     c._estimate_consumption_kwh_for_period = (
         lambda a, b: 0.3 * (b - a).total_seconds() / 3600
     )
+    # v1.24.2: de dagopbrengst telt nu als "al opgewekt + nog te komen".
+    # Gemeld: 's avonds las de oude berekening 0,1 kWh en dus "zonarme
+    # dag", terwijl er die dag ruim 20 kWh was geproduceerd.
+    #
+    # Om 07:00 is er nog niets opgewekt; de rest van de dag draagt het
+    # geheel. Het korte venster tot het goedkope blok (vier uur) krijgt
+    # een klein deel, zodat de reservetoets iets te toetsen heeft.
+    c.pv_production_today_kwh = 0.0
     c._estimate_pv_kwh_for_period = lambda a, b: (
-        zon if (b - a).total_seconds() > 20 * 3600 else 0.0
+        zon if (b - a).total_seconds() > 10 * 3600 else 0.0
     )
     return c
 
@@ -154,3 +162,61 @@ def test_it_is_wired_into_the_expensive_quarter_decision():
 
     assert "verkoopruimte = self.may_sell_now(" in bron
     assert 'if is_expensive and not verkoopruimte.get("mag_verkopen")' in bron
+
+
+# --- v1.24.2: de hele dag telt, niet alleen wat er nog komt ---------
+
+
+def test_a_good_day_is_not_poor_in_the_evening(make_coordinator, hass):
+    """Gemeld: "Zonarme dag is natuurlijk raar om 20:23, de zon is zo
+    goed als weg en de dagopbrengst was goed."
+
+    `_estimate_pv_kwh_for_period` kijkt alleen VOORUIT, dus 's avonds
+    bleef er 0,1 kWh over en dat las als een zonarme dag - terwijl er
+    die dag ruim 20 kWh was opgewekt.
+    """
+    from datetime import datetime, timezone
+
+    c = _coordinator(make_coordinator, hass, zon=0.1)
+    c.pv_production_today_kwh = 20.4
+    c._estimate_pv_kwh_for_period = lambda a, b: 0.1
+    avond = datetime(2026, 8, 12, 20, 23, tzinfo=timezone.utc)
+    c.last_cheap_block_start = avond.replace(hour=23)
+
+    resultaat = c.may_sell_now(avond, 6.5)
+
+    assert resultaat["mag_verkopen"] is True
+
+
+def test_a_genuinely_poor_day_still_blocks(make_coordinator, hass):
+    """De winterregel mag niet verdwijnen: weinig opgewekt én weinig te
+    verwachten blijft zonarm."""
+    from datetime import datetime, timezone
+
+    c = _coordinator(make_coordinator, hass, zon=0.1)
+    c.pv_production_today_kwh = 3.2
+    c._estimate_pv_kwh_for_period = lambda a, b: 0.1
+    avond = datetime(2026, 8, 12, 20, 23, tzinfo=timezone.utc)
+
+    resultaat = c.may_sell_now(avond, 6.5)
+
+    assert resultaat["mag_verkopen"] is False
+    assert "hele dag" in resultaat["reden"]
+
+
+def test_without_a_day_meter_it_uses_the_forecast(make_coordinator, hass):
+    """Zonder dagmeter is de voorspelling van vanochtend de beste
+    schatting die er is."""
+    from custom_components.energy_management_system.const import (
+        CONF_SOLAR_TODAY_FORECAST_SENSOR,
+    )
+
+    c = _coordinator(make_coordinator, hass)
+    c.pv_production_today_kwh = None
+    hass.states.set("sensor.solcast_vandaag", "18.0")
+    c.config = {
+        **c.config,
+        CONF_SOLAR_TODAY_FORECAST_SENSOR: "sensor.solcast_vandaag",
+    }
+
+    assert c.may_sell_now(NU, 3.0)["mag_verkopen"] is True

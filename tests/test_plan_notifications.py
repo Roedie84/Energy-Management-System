@@ -11,6 +11,7 @@ je ze nodig hebt.
 from datetime import datetime, timedelta, timezone
 
 from custom_components.energy_management_system.const import (
+    PRICE_SCALE_FACTOR,
     CONF_APPLIANCE_NOTIFY_SERVICE,
     CONF_BATTERY_TOTAL_CAPACITY_SENSOR,
     CONF_MANUAL_DISCHARGE_POWER,
@@ -22,6 +23,8 @@ NU = datetime(2026, 8, 11, 18, 0, tzinfo=timezone.utc)
 
 
 def _coordinator(make_coordinator, hass, beschikbaar=0.4, prijs=0.36):
+    # v1.24.2: de parser geeft rauwe eenheden terug.
+    prijs_ruw = prijs * PRICE_SCALE_FACTOR
     c = make_coordinator(
         {
             CONF_BATTERY_TOTAL_CAPACITY_SENSOR: "sensor.cap",
@@ -37,7 +40,7 @@ def _coordinator(make_coordinator, hass, beschikbaar=0.4, prijs=0.36):
         (
             NU + timedelta(minutes=15 * i),
             NU + timedelta(minutes=15 * (i + 1)),
-            prijs,
+            prijs_ruw,
         )
         for i in range(40)
     ]
