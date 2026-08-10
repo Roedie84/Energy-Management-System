@@ -515,6 +515,319 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Bewust begrensd vermogen wordt gerespecteerd (v1.21.2)
+
+**Gemeld**: *"Let wel op dat ik handmatig begrensd heb op 2000W laden
+1600W ontladen."*
+
+Dat maakt mijn advies van zojuist ongefundeerd. Het zag alleen dat 1600
+en 2000 onder de fabrieksgrens van 2400 liggen en raadde aan ze te
+verhogen — terwijl het bewuste keuzes zijn.
+
+### De redenen kent de integratie niet
+
+De groep in de meterkast, de cellen sparen, geluid van de ventilatoren,
+of gewoon marge willen houden onder de fabrieksgrens. Stuk voor stuk
+goede redenen die nergens in de meetgegevens staan.
+
+Advies geven waar iemand al een afweging heeft gemaakt is hinderlijk, en
+ondermijnt het vertrouwen in de rest van het advies.
+
+### Nieuwe instelling
+
+Bij Configureren: *"Laad-/ontlaadvermogen bewust begrensd"*. Staat die
+aan, dan verdwijnen beide suggesties — en verandert ook het **oordeel**:
+
+> *"De capaciteit loopt tegen de grens. Het vermogen ook, maar dat is
+> bewust begrensd — de gemeten pieken worden dus gedeeltelijk door het
+> net gedekt, wat een keuze is en geen gebrek."*
+
+Wat overblijft blijft staan: de capaciteit knelt écht, en daar helpt een
+module wel.
+
+### Waarom een instelling en niet slimmer
+
+Ik kan niet uit de data afleiden of een lagere grens een keuze is of een
+vergetelheid. Dat weet alleen jij, en één vinkje is betrouwbaarder dan
+elke gok.
+
+### Getest
+
+Vijf tests erbij: bewuste grenzen krijgen geen suggesties, zonder de
+instelling komen ze terug, het oordeel verandert mee, het
+capaciteitsadvies blijft overeind, en de instelling bestaat.
+
+**Volledige testsuite**: 1644 tests, allemaal groen.
+
+## Fabrieksgrenzen uit de handleiding (v1.21.1)
+
+De handleiding bevestigt de correctie van v1.20.7 letterlijk:
+
+> *"De omvormer is ingesteld op een standaard uitgangsvermogen van 800W.
+> Als u dit limiet wilt overschrijden, laat dan een gecertificeerde
+> elektricien uw locatie bezoeken... Na verificatie kunt u via de
+> Zendure-app aanvragen om het vermogen naar 2400W te verhogen."*
+
+Goed dat ik "gratis" had teruggenomen.
+
+### Eén ding dat ik nog niet wist
+
+**Ook je laadvermogen heeft ruimte.** De specificatie noemt
+2400 W/2600 W max voor laden en ontladen; jij staat op **2000 W**.
+
+Dat raakt je tekort-nachten direct: bij dynamische prijzen tellen
+goedkope blokken van een kwartier, en sneller laden vangt meer
+kilowattuur binnen hetzelfde blok. Van 2000 naar 2400 W scheelt ruim een
+half uur op een volle laadcyclus.
+
+Dezelfde voorwaarde geldt wel — boven 800 W vraagt de handleiding een
+eigen groep.
+
+### Overige grenzen vastgelegd
+
+| | |
+|---|---|
+| Net in/uit | 2400 W |
+| Accu laden/ontladen | 2400 W / 2600 W max |
+| Accuspanning | 37,5 – 54,75 V |
+| Bedrijfstemperatuur | −20 tot 60 °C |
+| Maximaal modules | 6 (17,28 kWh) |
+
+Die staan nu in de code in plaats van in mijn geheugen — de teksten
+verwijzen ernaar in plaats van het getal te herhalen, zodat er geen
+tweede plek ontstaat die kan verouderen.
+
+### Iets om zelf na te kijken
+
+Je staat al op 2000 W laden en 1600 W ontladen, allebei boven de
+standaard van 800 W. Die verhoging is dus ooit aangevraagd. Als daar geen
+elektricien bij is geweest, is dat het controleren waard — de handleiding
+noemt overbelasting van de groep expliciet als risico.
+
+### Getest
+
+Vier tests erbij: het laadvermogen heeft ruimte, de hint noemt dezelfde
+voorwaarde, een volledig benut laadvermogen geeft geen hint, en de
+grenzen komen aantoonbaar uit de handleiding.
+
+**Volledige testsuite**: 1639 tests, allemaal groen.
+
+## Koeling: meetuitval en buitentemperatuur (v1.21.0)
+
+**Gemeld**: *"Voor het verbruik van de koelkast/diepvries is het
+misschien goed de buitentemperaturen mee te wegen, dit gezien ze in een
+relatief warme schuur staan."*
+
+Terecht — en het onderzoek bracht een groter probleem aan het licht.
+
+### De diepvries was helemaal niet defect
+
+De dagreeks wisselt tussen twee groepen:
+
+| | |
+|---|---|
+| Dagen onder 5 W | 13 (gemiddeld 0,8 W) |
+| Dagen boven 60 W | 12 (gemiddeld 90,3 W) |
+| Ertussen | 5 |
+
+Een dag**gemiddelde** van 0,8 W betekent dat de compressor die hele dag
+niet draaide. Voor een gevulde diepvries kan dat niet — dat zijn dagen
+waarop de meter niets doorgaf.
+
+De referentie is de mediaan over álle dagen, en belandde daardoor op
+**19,68 W**: precies in het niemandsland tussen beide groepen. Vandaar de
+melding *"+57,4% drift, mogelijk defect"* terwijl 40,8 W een normale dag
+is.
+
+Uitvaldagen tellen nu niet mee. De referentie gaat van 19,68 naar **76,3
+W**, wat een diepvries werkelijk trekt — en de valse melding verdwijnt.
+
+### En dan je eigenlijke vraag
+
+Een koelkast in een schuur werkt harder als het buiten warm is. Per graad
+boven de temperatuur waarbij de referentie is opgebouwd, mag het verbruik
+nu **3% hoger** liggen zonder dat het drift heet — de vuistregel uit de
+koeltechniek.
+
+| Buiten | Marge |
+|---|---|
+| 12 °C | 0% |
+| 19 °C (referentie) | 0% |
+| 25 °C | 18% |
+| 32 °C | 39% |
+
+Alleen naar **boven**: koeler weer mag geen echt defect verbergen. En
+alleen voor apparaten die koelen — een lamp verbruikt niet meer omdat het
+warm is.
+
+Zonder temperatuurgeschiedenis van minstens vijf dagen gebeurt er niets;
+dan is er geen referentiepunt.
+
+### Wat dit betekent voor je schuur
+
+Je diepvries en koelkast staan allebei in de schuur. Zodra er vijf dagen
+temperatuurgeschiedenis is opgebouwd, worden warme dagen niet meer als
+defect gelezen — en een échte storing valt juist beter op, omdat de ruis
+eruit is.
+
+### Getest
+
+Nieuw `tests/test_cooling_drift_temperature.py`, 13 tests: uitvaldagen
+worden uitgesloten, de referentie wordt realistisch, een werkelijk zuinig
+apparaat wordt met rust gelaten, warm weer geeft marge en koud weer niet,
+alleen koelapparaten krijgen marge, te weinig geschiedenis geeft niets,
+en de marge wordt ook echt in de driftcontrole gebruikt.
+
+**Volledige testsuite**: 1635 tests, allemaal groen.
+
+## De fabrikantspecificatie corrigeert mijn advies (v1.20.7)
+
+De productpagina van Zendure liet zich wél uitlezen, en dat zet twee
+dingen recht die ik hiervoor beweerde.
+
+### "Gratis" was het niet
+
+Ik zei dat het ontlaadvermogen van 1600 naar 2400 W verhogen niets kost.
+Zendure schrijft er iets anders bij:
+
+> *"To achieve 2400W operation, have an electrician install it on a
+> dedicated circuit without other loads... You can then request a power
+> upgrade to 2400W via the app."*
+
+Er komt dus een **eigen groep in de meterkast** aan te pas. Het blijft de
+goedkoopste stap, maar "gratis" was onjuist — en dat is precies het soort
+detail waarop een advies fout gaat.
+
+De kaart heet nu "Eerst dit" in plaats van "Gratis eerst", met de
+voorwaarde erbij in plaats van eroverheen.
+
+### Eén omvormer draagt zes modules
+
+> *"It supports AB3000X, with a maximum of 6 battery connections,
+> expanding total capacity to 17.28kWh."*
+
+Je hebt er drie. Een vierde, vijfde of zesde module heeft dus **geen
+tweede omvormer nodig**.
+
+Mijn eerdere advies bij "beide knellen" luidde *"een tweede omvormer mét
+eigen modules"*. Dat was duurder dan nodig: capaciteit los je op met
+modules alleen, en meerdere omvormers moeten volgens Zendure óók op
+aparte circuits.
+
+### Wat wel klopte
+
+Het rendement: Zendure claimt tot 93% AC round-trip, jouw gemeten 90,8%
+zit daar dicht tegenaan. En de garantie van tien jaar, die ik eerder al
+naast de terugverdientijd van twintig jaar zette.
+
+### Getest
+
+Twee tests erbij: één omvormer draagt zes modules, en de
+vermogensverhoging noemt zijn voorwaarde. Twee bestaande tests zijn
+bijgesteld omdat ze het oude, onjuiste advies vastlegden.
+
+**Volledige testsuite**: 1622 tests, allemaal groen.
+
+## Echte prijzen, en een gratis optie eerst (v1.20.6)
+
+**Opgegeven**: omvormer **€374**, accumodule **€729**, beide inclusief
+btw.
+
+Ik rekende eerder met €959 voor de omvormer — dat bleek de bundelprijs
+mét module. Een losse omvormer is minder dan de helft daarvan, en dat
+draait de afweging om.
+
+### Maar eerst iets dat niets kost
+
+Je ontlaadvermogen staat op **1600 W** terwijl de SolarFlow 2400 AC
+**2400 W** kan. Dat is een instelling, geen hardwaregrens.
+
+Je gemeten piek was 2199 W. Die instelling verhogen dekt hem volledig —
+**zonder één euro**. Geld uitgeven aanraden waar een instelling volstaat,
+is slecht advies, dus dat staat nu bovenaan de kaart.
+
+### En dan de cijfers
+
+Uit je eigen meetgegevens:
+
+| | |
+|---|---|
+| Opbrengst hele accu | **€212 per jaar** |
+| Opbrengst extra module | ~€35 per jaar |
+| Terugverdientijd module (€729) | **20,6 jaar** |
+| Terugverdientijd omvormer (€374) | **10,6 jaar** |
+
+Een extra module levert bewust minder op dan het gemiddelde van de drie
+bestaande: de eerste kilowattuur vangt de grootste prijsverschillen, wat
+daarna komt wordt alleen op dure dagen benut.
+
+**De omvormer verdient zich twee keer zo snel terug als een module** —
+precies de conclusie die de bundelprijs van €959 verborg.
+
+### Wat dat betekent
+
+Zet eerst die instelling op 2400 W en kijk een winter aan. Knelt de
+capaciteit daarna nog steeds — nu drie tekort-nachten op rij — dan is een
+module de volgende stap, met de kanttekening dat twintig jaar terugverdienen
+langer is dan de garantie van tien jaar.
+
+De prijzen zijn instelbaar, want ze veranderen en verschillen per
+leverancier.
+
+### Getest
+
+Zes tests erbij: de gratis optie staat er als de instelling ruimte
+laat en verdwijnt als hij vol staat, de prijzen kloppen, een extra module
+levert minder dan het gemiddelde, de omvormer verdient sneller terug, en
+zonder kostengeschiedenis wordt er niets berekend.
+
+**Volledige testsuite**: 1620 tests, allemaal groen.
+
+## De status liep achter op de sensoren (v1.20.5)
+
+**Gemeld**: *"Er is gezien de sensoren weldegelijk iemand thuis, echter
+status onbekend?"* — met een tabel waarin de bovenste sensor **0,2
+minuten** geleden bewoog.
+
+### Mijn fout uit v1.20.2
+
+De live gebeurtenis vulde wél de tabel en `last_motion_at`, maar
+herberekende de **status** niet. Die werd alleen op de vijf-minutentick
+gezet, en stond na een herstart dus op "onbekend" — naast een meting van
+twaalf seconden oud.
+
+Vandaar dat rare beeld: *"0,2 minuten zonder beweging"* en *"onbekend"*
+op dezelfde kaart. Het eerste kwam live uit de gebeurtenis, het tweede
+uit een status die nog niet berekend was.
+
+### Precies de verkeerde kant op
+
+Jij zei het zelf: **afwezigheid** mag vertraagd zijn, want dat is een
+afgeleide die pas na minuten kantelt. **Aanwezigheid** niet — beweging
+betekent nu iemand thuis, direct.
+
+Ik had de vertraging op allebei laten gelden. Beweging zet de status nu
+onmiddellijk op "thuis"; alleen de overgang naar "weg" wacht op de tick.
+
+### En de tabel overleeft nu een herstart
+
+`presence_last_seen` werd niet bewaard. Na een herstart was de tabel dus
+leeg — terwijl juist die tabel moet verklaren waarom de status is wat
+hij is.
+
+Bovendien herstelt `last_motion_at` zich nu uit die tabel: is er een
+bewaarde waarneming, dan is dat een betere schatting dan "onbekend"
+melden terwijl er gegevens zijn. Zonder énige waarneming blijft
+"onbekend" wel het eerlijke antwoord.
+
+### Getest
+
+Vier tests erbij: beweging zet de status meteen, de tabel wordt bewaard,
+na een herstart herstelt de status zich eruit, en een werkelijk leeg
+systeem zegt nog steeds "onbekend".
+
+**Volledige testsuite**: 1614 tests, allemaal groen.
+
 ## Volledige doorlichting van de diagnostiek (v1.20.4)
 
 Terecht opgemerkt dat ik er twee secties had uitgelicht in plaats van

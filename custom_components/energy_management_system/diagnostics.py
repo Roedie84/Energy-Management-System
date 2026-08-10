@@ -374,6 +374,19 @@ async def async_get_config_entry_diagnostics(
             "presence_overview": _veilig("get_presence_overview", coordinator.get_presence_overview),
             # v1.19.4: onderdelen die zichzelf niet konden berekenen.
             "internal_failures": coordinator.internal_failures,
+            # v1.21.0: welke koelapparaten een temperatuurmarge krijgen.
+            "cooling_temperature_margins": {
+                gegevens.get("friendly_name") or entity_id: {
+                    "marge_procent": gegevens.get("temperatuurmarge_procent"),
+                    "temperatuurdagen": len(
+                        gegevens.get("outdoor_temp_history") or []
+                    ),
+                }
+                for entity_id, gegevens in (
+                    coordinator.nilm_confirmed_devices or {}
+                ).items()
+                if gegevens.get("temperatuurmarge_procent")
+            },
             # v1.20.2: is de bewolking gewogen, en welke bron gaf bij
             # grote onenigheid de doorslag?
             "weather_ensemble_weighted": coordinator.weather_ensemble_weighted,

@@ -524,7 +524,7 @@ views:
   panel: true
   cards:
   - type: picture-elements
-    image: /local/energy_management_system_overview.svg?v=1.20.4
+    image: /local/energy_management_system_overview.svg?v=1.21.2
     elements:
     - type: state-label
       entity: sensor.woonkamer_energy_management_system_system_status
@@ -1284,11 +1284,19 @@ views:
         '
     - type: markdown
       title: Loont uitbreiden?
-      content: '{% set e = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''uitbreidingsadvies'') or {} %}{% if not e.get(''beschikbaar'') %}{{ e.get(''reden'',''Nog geen gegevens.'') }}{% else %}| | |
+      content: '{% set e = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''uitbreidingsadvies'') or {} %}{% if not e.get(''beschikbaar'') %}{{ e.get(''reden'',''Nog geen gegevens.'') }}{% else %}{% if e.eerst_proberen %}**Eerst dit:** {{ e.eerst_proberen }}
+
+
+        {% endif %}{% if e.laadruimte_over %}**Ook mogelijk:** {{ e.laadruimte_over }}
+
+
+        {% endif %}| | |
 
         |---|---|
 
         | Hoogste uurverbruik | {{ e.hoogste_uurverbruik_w }} W |
+
+        | Gemeten piek | {{ e.gemeten_piekvermogen_w }} W |
 
         | Ontlaadvermogen | {{ e.ontlaadvermogen_w }} W |
 
@@ -1299,6 +1307,18 @@ views:
         | Bruikbare capaciteit | {{ e.bruikbare_capaciteit_kwh }} kWh |
 
         | Tekort-nachten | {{ e.tekort_nachten }} |
+
+        | Modules nu / mogelijk | {{ e.modules_nu }} van {{ e.modules_mogelijk_op_deze_omvormer }} |
+
+        | Laadvermogen | {{ e.laadvermogen_w }} van {{ e.laadvermogen_max_w | round(0) }} W{% if e.vermogen_bewust_begrensd %} (bewust){% endif %} |
+
+        | Opbrengst accu per jaar | {{ e.opbrengst_accu_per_jaar_eur }} EUR |
+
+        | Opbrengst extra module | {{ e.opbrengst_extra_module_per_jaar_eur }} EUR/jaar |
+
+        | Terugverdientijd module | {{ e.terugverdientijd_module_jaar }} jaar |
+
+        | Terugverdientijd omvormer | {{ e.terugverdientijd_omvormer_jaar }} jaar |
 
 
         **{{ e.advies }}**

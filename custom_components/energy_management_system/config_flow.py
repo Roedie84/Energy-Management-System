@@ -37,6 +37,7 @@ from .const import (
     CONF_SLAAPKAMER_CLIMATE_ENTITY,
     CONF_BATTERY_COOLING_FAN_SWITCH,
     CONF_PV_ACTUAL_AZIMUTH_DEGREES,
+    CONF_POWER_LIMITS_INTENTIONAL,
     CONF_PRESENCE_BEDTIME_SENSOR,
     CONF_PRESENCE_MOTION_SENSORS,
     CONF_PRESENCE_TV_ENTITY,
@@ -566,6 +567,14 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
             # afwezigheidsdrempel van 45 naar 10 minuten - die 45 stond
             # er juist om stilzitten op de bank niet als afwezigheid te
             # tellen, en dat vangt de tv nu op.
+            # v1.21.2: staan de vermogensgrenzen bewust lager dan wat de
+            # omvormer aankan? Dan geen suggesties om ze te verhogen -
+            # de redenen (groep, cellen sparen, geluid, marge) kent de
+            # integratie niet.
+            vol.Optional(
+                CONF_POWER_LIMITS_INTENTIONAL,
+                default=defaults.get(CONF_POWER_LIMITS_INTENTIONAL, False),
+            ): selector.BooleanSelector(),
             vol.Optional(
                 CONF_PRESENCE_TV_ENTITY,
                 default=defaults.get(CONF_PRESENCE_TV_ENTITY),

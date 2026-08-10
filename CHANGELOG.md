@@ -10690,3 +10690,138 @@ duplicaatdetectie ze meldde.
 **Getest**: drie tests erbij in `test_expansion_advice.py`.
 
 **Volledige testsuite**: 1610 tests, allemaal groen.
+
+## v1.20.5 — De status liep achter op de sensoren
+
+**Gemeld**: status "onbekend" terwijl de tabel een beweging van 0,2
+minuten geleden toonde.
+
+**Fout uit v1.20.2**: de live gebeurtenis vulde wél de tabel en
+`last_motion_at`, maar herberekende de STATUS niet - die werd alleen op
+de vijf-minutentick gezet en stond na een herstart op "onbekend" naast
+een meting van twaalf seconden oud.
+
+**Precies de verkeerde kant op**: afwezigheid mag vertraagd zijn (een
+afgeleide die pas na minuten kantelt), aanwezigheid niet. Beweging zet de
+status nu onmiddellijk op "thuis"; alleen de overgang naar "weg" wacht op
+de tick.
+
+**De tabel overleeft nu een herstart**: `presence_last_seen` werd niet
+bewaard, waardoor de tabel na elke herstart leeg was - terwijl juist die
+tabel moet verklaren waarom de status is wat hij is. `last_motion_at`
+herstelt zich nu uit die tabel; zonder enige waarneming blijft "onbekend"
+het eerlijke antwoord.
+
+**Getest**: vier tests erbij in
+`test_live_motion_and_weather_weighting.py`.
+
+**Volledige testsuite**: 1614 tests, allemaal groen.
+
+## v1.20.6 — Echte prijzen, en een gratis optie eerst
+
+**Opgegeven**: omvormer 374 euro, accumodule 729 euro, incl. btw. Eerder
+werd met 959 euro voor de omvormer gerekend - dat bleek de bundelprijs
+mét module.
+
+**Gratis optie eerst**: het ontlaadvermogen staat op 1600 W terwijl de
+SolarFlow 2400 AC 2400 W kan. Dat is een instelling, geen hardwaregrens;
+verhogen dekt de gemeten piek van 2199 W zonder kosten. Geld uitgeven
+aanraden waar een instelling volstaat is slecht advies, dus dat staat
+bovenaan.
+
+**Terugverdientijd op basis van eigen meetdata**: opbrengst hele accu 212
+euro/jaar, extra module ~35 euro/jaar (bewust minder dan het gemiddelde -
+de eerste kWh vangt de grootste prijsverschillen). Module 20,6 jaar,
+omvormer 10,6 jaar. De omvormer verdient zich twee keer zo snel terug -
+de conclusie die de bundelprijs verborg.
+
+Prijzen zijn instelbaar.
+
+**Getest**: zes tests erbij in `test_expansion_advice.py`.
+
+**Volledige testsuite**: 1620 tests, allemaal groen.
+
+## v1.20.7 — De fabrikantspecificatie corrigeert het advies
+
+**"Gratis" was het niet**: de verhoging van 1600 naar 2400 W vraagt
+volgens Zendure een eigen groep zonder andere belasting, plus een
+upgrade via de app. Het blijft de goedkoopste stap, maar "gratis" was
+onjuist. De kaart heet nu "Eerst dit", met de voorwaarde erbij.
+
+**Eén omvormer draagt zes modules** (17,28 kWh). Een vierde module heeft
+dus geen tweede omvormer nodig. Het eerdere advies bij "beide knellen"
+("een tweede omvormer mét eigen modules") was duurder dan nodig -
+capaciteit los je op met modules alleen, en meerdere omvormers moeten óók
+op aparte circuits.
+
+**Wat wel klopte**: Zendure claimt tot 93% AC round-trip; de gemeten
+90,8% zit daar dicht tegenaan. Garantie tien jaar, zoals al vermeld.
+
+**Getest**: twee tests erbij, twee bestaande bijgesteld omdat ze het
+oude advies vastlegden.
+
+**Volledige testsuite**: 1622 tests, allemaal groen.
+
+## v1.21.0 — Koeling: meetuitval en buitentemperatuur
+
+**Gemeld**: de buitentemperatuur meewegen bij koelkast/diepvries, die in
+een warme schuur staan.
+
+**Groter probleem eronder**: de dagreeks van de diepvries wisselde tussen
+0,8 W (13 dagen) en 90 W (12 dagen). Een dagGEMIDDELDE van 0,8 W betekent
+dat de compressor die dag niet draaide - dat zijn dagen waarop de meter
+niets doorgaf. De referentie (mediaan over alle dagen) belandde daardoor
+op 19,68 W, precies tussen beide groepen, en meldde "+57,4% drift,
+mogelijk defect" terwijl 40,8 W normaal is.
+
+Uitvaldagen tellen nu niet mee; de referentie gaat naar 76,3 W.
+
+**Temperatuurmarge**: per graad boven de referentietemperatuur mag het
+verbruik 3% hoger liggen (vuistregel koeltechniek). Alleen naar boven -
+koeler weer mag geen defect verbergen - en alleen voor apparaten die
+koelen. Zonder vijf dagen temperatuurgeschiedenis gebeurt er niets.
+
+**Getest**: nieuw `tests/test_cooling_drift_temperature.py`, 13 tests.
+
+**Volledige testsuite**: 1635 tests, allemaal groen.
+
+## v1.21.1 — Fabrieksgrenzen uit de handleiding
+
+De handleiding bevestigt de correctie van v1.20.7 letterlijk: standaard
+800 W, hoger vraagt een gecertificeerde elektricien en daarna een
+verhoging via de app.
+
+**Nieuw**: ook het LAADvermogen heeft ruimte - 2400 W/2600 W max volgens
+de specificatie, tegen 2000 W ingesteld. Dat raakt de tekort-nachten:
+bij dynamische prijzen tellen goedkope kwartierblokken, en sneller laden
+vangt meer kilowattuur binnen hetzelfde blok. Dezelfde voorwaarde geldt.
+
+**Grenzen vastgelegd in code**: net 2400 W, accu 2400/2600 W,
+accuspanning 37,5-54,75 V, bedrijfstemperatuur -20 tot 60 °C, maximaal 6
+modules. De teksten verwijzen ernaar in plaats van het getal te herhalen.
+
+**Getest**: vier tests erbij in `test_expansion_advice.py`.
+
+**Volledige testsuite**: 1639 tests, allemaal groen.
+
+## v1.21.2 — Bewust begrensd vermogen wordt gerespecteerd
+
+**Gemeld**: het laad- en ontlaadvermogen zijn handmatig begrensd op 2000
+respectievelijk 1600 W.
+
+Dat maakt het advies van v1.21.1 ongefundeerd: het zag alleen dat die
+onder de fabrieksgrens van 2400 liggen en raadde aan ze te verhogen. De
+redenen voor een lagere grens - de groep in de meterkast, cellen sparen,
+geluid, marge - staan nergens in de meetgegevens.
+
+**Nieuwe instelling** "Laad-/ontlaadvermogen bewust begrensd". Staat die
+aan, dan verdwijnen beide suggesties en verandert het oordeel mee: het
+vermogen knelt dan wel, maar dat is een keuze en geen gebrek. Het
+capaciteitsadvies blijft overeind.
+
+**Waarom een instelling en niet slimmer**: uit de data valt niet af te
+leiden of een lagere grens een keuze is of een vergetelheid.
+
+**Getest**: vijf tests erbij in `test_expansion_advice.py`.
+
+**Volledige testsuite**: 1644 tests, allemaal groen.

@@ -58,6 +58,8 @@ from .const import (
     CONF_AVAILABLE_ENERGY_SENSOR,
     BATTERY_STATE_CHARGING,
     BATTERY_STATE_DISCHARGING,
+    CONF_BATTERY_INVERTER_PRICE_EUR,
+    CONF_BATTERY_MODULE_PRICE_EUR,
     CONF_BATTERY_POWER_SENSOR,
     CONF_BATTERY_STATE_SENSOR,
     CONF_CONSUMPTION_POWER_SENSOR,
@@ -70,6 +72,8 @@ from .const import (
     CONF_BATTERY_ROUND_TRIP_EFFICIENCY,
     CONF_VACATION_CONSUMPTION_REDUCTION_PERCENT,
     DEFAULT_VACATION_CONSUMPTION_REDUCTION_PERCENT,
+    DEFAULT_BATTERY_INVERTER_PRICE_EUR,
+    DEFAULT_BATTERY_MODULE_PRICE_EUR,
     DEFAULT_BATTERY_ROUND_TRIP_EFFICIENCY_PERCENT,
     CONF_DISHWASHER_POWER_SENSOR,
     CONF_DISHWASHER_READY_SENSOR,
@@ -195,6 +199,10 @@ from .const import (
     MIN_ACTIVE_SOLAR_PRODUCTION_W,
     LEARNING_HISTORY_DAYS,
     CUSUM_BASELINE_HISTORY_DAYS,
+    COOLING_DEVICE_NAME_HINTS,
+    COOLING_DRIFT_PERCENT_PER_DEGREE,
+    COOLING_TEMP_MIN_DAYS,
+    CUSUM_DROPOUT_FRACTION_OF_ACTIVE,
     CUSUM_MIN_HISTORY_FOR_REFERENCE,
     CUSUM_REFERENCE_EXCLUDE_RECENT_DAYS,
     CUSUM_SLACK_KW,
@@ -315,6 +323,7 @@ from .const import (
     CONF_SUN_ELEVATION_SENSOR,
     CONF_SUN_PHASE_SENSOR,
     CONF_PV_ACTUAL_AZIMUTH_DEGREES,
+    CONF_POWER_LIMITS_INTENTIONAL,
     CONF_PRESENCE_BEDTIME_SENSOR,
     CONF_PRESENCE_MOTION_SENSORS,
     CONF_PRESENCE_TV_ENTITY,
@@ -334,6 +343,10 @@ from .const import (
     ZONNEPLAN_COST_MISMATCH_FRACTION,
     PV_GEOMETRY_AZIMUTH_BUCKET_DEGREES,
     SOLAR_BIAS_DRIFT_ATTENTION_PERCENT,
+    SOLARFLOW_DEFAULT_GRID_POWER_W,
+    SOLARFLOW_MAX_BATTERY_CHARGE_W,
+    SOLARFLOW_MAX_GRID_POWER_W,
+    SOLARFLOW_MAX_MODULES,
     SOLAR_BIAS_DRIFT_MIN_DAYS,
     PV_ORIENTATION_MISMATCH_DEGREES,
     PV_SHALLOW_TILT_DEGREES,
@@ -4271,6 +4284,16 @@ class EnergyManagementSystemCoordinator:
         # zijn: bij afwezigheid mag alles uit, bij slapen moet de
         # nachtreserve juist kloppen en loopt het basisverbruik door.
         vorige = self.presence_state
+        # v1.20.5: na een herstart is `last_motion_at` leeg maar de
+        # bewaarde tabel niet. De laatste regel daaruit is dan de beste
+        # schatting - beter dan "onbekend" melden terwijl er gegevens
+        # zijn.
+        if self.last_motion_at is None and self.presence_last_seen:
+            laatste = max(self.presence_last_seen.values())
+            hersteld = dt_util.parse_datetime(laatste)
+            if hersteld is not None:
+                self.last_motion_at = hersteld
+
         if self.last_motion_at is None:
             self.presence_state = "onbekend"
         else:
@@ -4342,8 +4365,20 @@ class EnergyManagementSystemCoordinator:
         now = dt_util.now()
         self._registreer_beweging(now, [entity_id])
         self._meld_beweging_bij_vakantie(now, [entity_id])
-        # Meteen zichtbaar maken; de afgeleide aanwezigheid volgt op de
-        # eerstvolgende tick.
+
+        # v1.20.5, gemeld: "Er is gezien de sensoren weldegelijk iemand
+        # thuis, echter status onbekend?" - met een tabel waarin de
+        # bovenste sensor 0,2 minuten geleden bewoog.
+        #
+        # De live gebeurtenis vulde wél de tabel en `last_motion_at`,
+        # maar herberekende de STATUS niet; die werd alleen op de
+        # vijf-minutentick gezet. Na een herstart stond hij dus op
+        # "onbekend" naast een meting van twaalf seconden oud.
+        #
+        # Dat is precies de verkeerde kant op. Afwezigheid mag vertraagd
+        # zijn - dat is een afgeleide die pas na minuten kantelt - maar
+        # AANWEZIGHEID niet: beweging betekent nu iemand thuis, direct.
+        self.presence_state = "thuis"
         self._notify_listeners()
 
     def _registreer_beweging(self, now: datetime, sensoren: list[str]) -> None:
@@ -4373,6 +4408,64 @@ class EnergyManagementSystemCoordinator:
                 if not self.bedtime_history or self.bedtime_history[-1] != sleutel:
                     self.bedtime_history.append(sleutel)
                     self.bedtime_history = self.bedtime_history[-30:]
+
+    @staticmethod
+    def _zonder_meetuitval(waarden: list[float]) -> list[float]:
+        """Laat dagen weg waarop de meter vrijwel niets doorgaf
+        (v1.21.0).
+
+        Een referentie die uit een uitvaldag komt, maakt elke normale
+        dag verdacht. Andersom: te streng filteren zou een apparaat dat
+        werkelijk minder is gaan verbruiken ten onrechte normaal maken -
+        vandaar een ruime drempel, en alleen ten opzichte van de ACTIEVE
+        dagen.
+        """
+        echt = [w for w in waarden if w is not None and w > 0]
+        if len(echt) < 3:
+            return echt
+        mediaan_actief = statistics.median(echt)
+        grens = mediaan_actief * CUSUM_DROPOUT_FRACTION_OF_ACTIVE
+        overgebleven = [w for w in echt if w >= grens]
+        # Blijft er te weinig over, dan is het patroon niet bimodaal maar
+        # gewoon laag; dan alles houden.
+        return overgebleven if len(overgebleven) >= 3 else echt
+
+    def _is_koelapparaat(self, device: dict) -> bool:
+        """Koelt dit apparaat? (v1.21.0)"""
+        naam = str(device.get("friendly_name") or "").lower()
+        return any(hint in naam for hint in COOLING_DEVICE_NAME_HINTS)
+
+    def _koeling_temperatuurmarge_procent(self, device: dict) -> float:
+        """Hoeveel extra verbruik de buitentemperatuur verklaart
+        (v1.21.0).
+
+        Gemeld: "Voor het verbruik van de koelkast/diepvries is het
+        misschien goed de buitentemperaturen mee te wegen, dit gezien ze
+        in een relatief warme schuur staan."
+
+        Terecht: een koelkast in een schuur werkt harder als het buiten
+        warm is. Zonder correctie leest een warme week als een defect.
+
+        De marge is het verschil tussen vandaag en de temperatuur waarbij
+        de referentie is opgebouwd, maal ongeveer 3% per graad - een
+        vuistregel uit de koeltechniek. Alleen naar BOVEN: koeler weer
+        hoort geen drift te verbergen.
+        """
+        if not self._is_koelapparaat(device):
+            return 0.0
+        geschiedenis = device.get("outdoor_temp_history") or []
+        if len(geschiedenis) < COOLING_TEMP_MIN_DAYS:
+            return 0.0
+        huidig = self._read_sensor_float(
+            self.config.get(CONF_BACKYARD_TEMPERATURE_SENSOR)
+        )
+        if huidig is None:
+            return 0.0
+        referentie_temp = statistics.median(geschiedenis)
+        verschil = huidig - referentie_temp
+        if verschil <= 0:
+            return 0.0
+        return verschil * COOLING_DRIFT_PERCENT_PER_DEGREE
 
     def _entiteitsnaam(self, entity_id: str) -> str:
         """Leesbare naam, met de entity_id als terugval (v1.20.1).
@@ -4600,6 +4693,11 @@ class EnergyManagementSystemCoordinator:
             }
 
         ontlaadvermogen = abs(self.config.get(CONF_MANUAL_DISCHARGE_POWER) or 0)
+        laadvermogen = abs(self.config.get(CONF_MANUAL_CHARGE_POWER) or 0)
+        # v1.21.2: zijn de vermogensgrenzen bewust gekozen? Zo ja, dan
+        # geen suggesties om ze te verhogen - de redenen daarvoor kent de
+        # integratie niet.
+        bewust_begrensd = bool(self.config.get(CONF_POWER_LIMITS_INTENTIONAL))
         piek_w = max(v for _, v in uren) * 1000
         dagverbruik = sum(v for _, v in uren)
 
@@ -4637,10 +4735,30 @@ class EnergyManagementSystemCoordinator:
             bruikbaar is not None and dagverbruik > bruikbaar
         )
 
-        if vermogen_knelt and capaciteit_knelt:
+        if vermogen_knelt and capaciteit_knelt and bewust_begrensd:
+            # v1.21.2: bij een bewuste begrenzing is "verhoog het
+            # vermogen" geen advies maar een herhaling van iets dat al
+            # is afgewogen. Wat overblijft is de capaciteit.
+            advies = (
+                "De capaciteit loopt tegen de grens. Het vermogen ook, maar "
+                "dat is bewust begrensd - de gemeten pieken worden dus "
+                "gedeeltelijk door het net gedekt, wat een keuze is en geen "
+                "gebrek. Voor de capaciteit geldt: deze omvormer draagt tot "
+                "zes modules, dus daar is geen tweede omvormer voor nodig."
+            )
+        elif vermogen_knelt and capaciteit_knelt:
             advies = (
                 "Zowel het vermogen als de capaciteit loopt tegen de grens. "
-                "Een tweede omvormer mét eigen modules lost allebei op."
+                "Capaciteit is het goedkoopst op te lossen: deze omvormer "
+                "draagt tot zes modules, dus daar is geen tweede omvormer "
+                "voor nodig. Het vermogen zit in de instelling van 2400 W - "
+                "die vraagt wel een eigen groep."
+            )
+        elif vermogen_knelt and bewust_begrensd:
+            advies = (
+                "Het vermogen loopt tegen de ingestelde grens, maar die is "
+                "bewust gekozen. De capaciteit knelt niet, dus uitbreiden "
+                "levert op dit moment niets op."
             )
         elif vermogen_knelt:
             advies = (
@@ -4669,10 +4787,97 @@ class EnergyManagementSystemCoordinator:
                 "Uitbreiden levert op dit moment weinig op."
             )
 
+        # v1.20.6: wat levert het op, en wat kost het?
+        #
+        # De jaaropbrengst van de hele accu volgt uit het verschil tussen
+        # de werkelijke kosten en wat het zonder accu geweest was. Een
+        # EXTRA module levert minder op dan het gemiddelde van de
+        # bestaande: de eerste kilowattuur vangt de grootste
+        # prijsverschillen, wat daarna komt wordt alleen op dure dagen
+        # benut. Vandaar de helft als schatting.
+        dagen_gemeten = max(1, len(self.reserve_daily_records or []))
+        voordeel = (self.counterfactual_cost_all_time_eur or 0) - (
+            self.actual_cost_all_time_eur or 0
+        )
+        per_jaar = voordeel / dagen_gemeten * 365 if voordeel else None
+        modules_nu = len(self.config.get(CONF_BATTERY_MODULE_TEMPERATURE_SENSORS) or [])
+        per_module = per_jaar / modules_nu if per_jaar and modules_nu else None
+        extra_module_per_jaar = per_module * 0.5 if per_module else None
+
+        moduleprijs = (
+            self.config.get(CONF_BATTERY_MODULE_PRICE_EUR)
+            or DEFAULT_BATTERY_MODULE_PRICE_EUR
+        )
+        omvormerprijs = (
+            self.config.get(CONF_BATTERY_INVERTER_PRICE_EUR)
+            or DEFAULT_BATTERY_INVERTER_PRICE_EUR
+        )
+
+        def _terugverdien(kosten):
+            if not extra_module_per_jaar or extra_module_per_jaar <= 0:
+                return None
+            return round(kosten / extra_module_per_jaar, 1)
+
         return {
             "beschikbaar": True,
             "hoogste_uurverbruik_w": round(piek_w),
             "gemeten_piekvermogen_w": round(gemeten_piek_w),
+            "opbrengst_accu_per_jaar_eur": (
+                round(per_jaar, 0) if per_jaar else None
+            ),
+            "opbrengst_extra_module_per_jaar_eur": (
+                round(extra_module_per_jaar, 0) if extra_module_per_jaar else None
+            ),
+            "moduleprijs_eur": moduleprijs,
+            "omvormerprijs_eur": omvormerprijs,
+            "terugverdientijd_module_jaar": _terugverdien(moduleprijs),
+            "terugverdientijd_omvormer_jaar": _terugverdien(omvormerprijs),
+            # v1.20.7: de fabrikantspecificatie corrigeert het eerdere
+            # advies. De 2400 W is beschikbaar, maar niet zomaar:
+            # "have an electrician install it on a dedicated circuit
+            # without other loads... You can then request a power
+            # upgrade to 2400W via the app."
+            #
+            # Het was dus onterecht om dit "gratis" te noemen: er komt
+            # een eigen groep in de meterkast aan te pas. Wel nog steeds
+            # de goedkoopste stap, en dat blijft het punt - maar met de
+            # voorwaarde erbij in plaats van eroverheen.
+            "eerst_proberen": (
+                f"Het ontlaadvermogen staat op {ontlaadvermogen:.0f} W terwijl "
+                f"de omvormer {SOLARFLOW_MAX_GRID_POWER_W:.0f} W aankan. Dat "
+                f"dekt de gemeten piek van {gemeten_piek_w:.0f} W zonder nieuwe "
+                "hardware. Let op: de handleiding schrijft voor dat boven "
+                f"{SOLARFLOW_DEFAULT_GRID_POWER_W:.0f} W een eigen groep nodig "
+                "is zonder andere belasting, met verificatie door een "
+                "elektricien - reken daar op, niet op alleen een instelling."
+                if not bewust_begrensd
+                and 0 < ontlaadvermogen < SOLARFLOW_MAX_GRID_POWER_W
+                and gemeten_piek_w > ontlaadvermogen
+                else None
+            ),
+            # Eén omvormer draagt tot zes modules (17,28 kWh). Een vierde
+            # module heeft dus geen tweede omvormer nodig - dat scheelt
+            # de aanschaf én een tweede groep.
+            "modules_mogelijk_op_deze_omvormer": SOLARFLOW_MAX_MODULES,
+            "vermogen_bewust_begrensd": bewust_begrensd,
+            # v1.21.1: uit de handleiding. Ook het LAADvermogen heeft nog
+            # ruimte, en dat raakt de tekort-nachten: sneller laden
+            # betekent meer kilowattuur binnen hetzelfde goedkope
+            # kwartier.
+            "laadvermogen_w": round(abs(laadvermogen)),
+            "laadvermogen_max_w": SOLARFLOW_MAX_BATTERY_CHARGE_W,
+            "laadruimte_over": (
+                f"Laden staat op {abs(laadvermogen):.0f} W; de omvormer kan "
+                f"{SOLARFLOW_MAX_BATTERY_CHARGE_W:.0f} W. Sneller laden vangt "
+                "meer kilowattuur binnen hetzelfde goedkope kwartier - "
+                "dezelfde voorwaarde geldt: boven "
+                f"{SOLARFLOW_DEFAULT_GRID_POWER_W:.0f} W vraagt de handleiding "
+                "een eigen groep en verificatie door een elektricien."
+                if not bewust_begrensd
+                and 0 < abs(laadvermogen) < SOLARFLOW_MAX_BATTERY_CHARGE_W
+                else None
+            ),
+            "modules_nu": modules_nu,
             "ontlaadvermogen_w": round(ontlaadvermogen),
             "vermogensbenutting_procent": (
                 round(100 * piek_w / ontlaadvermogen) if ontlaadvermogen else None
@@ -13287,12 +13492,38 @@ class EnergyManagementSystemCoordinator:
         device["daily_avg_history"] = history[-CUSUM_BASELINE_HISTORY_DAYS:]
         history = device["daily_avg_history"]
 
+        # v1.21.0: bij koelapparaten ook de buitentemperatuur van die dag
+        # bewaren, zodat de referentie weet bij welk weer hij is
+        # opgebouwd.
+        if self._is_koelapparaat(device):
+            buiten = self._read_sensor_float(
+                self.config.get(CONF_BACKYARD_TEMPERATURE_SENSOR)
+            )
+            if buiten is not None:
+                temps = device.setdefault("outdoor_temp_history", [])
+                temps.append(round(buiten, 1))
+                device["outdoor_temp_history"] = temps[-30:]
+
         if len(history) < CUSUM_MIN_HISTORY_FOR_REFERENCE:
             return
         if len(history) > CUSUM_REFERENCE_EXCLUDE_RECENT_DAYS:
             reference_samples = history[:-CUSUM_REFERENCE_EXCLUDE_RECENT_DAYS]
         else:
             reference_samples = history
+        if not reference_samples:
+            return
+
+        # v1.21.0: dagen zonder meting eerst weggooien.
+        #
+        # De diepvries wisselde tussen 0,8 W en 90 W - dertien dagen
+        # onder 5 W, twaalf boven 60. Een dagGEMIDDELDE van 0,8 W
+        # betekent dat de compressor die hele dag niet draaide, en dat
+        # kan niet. Dat zijn dagen waarop de meter niets doorgaf.
+        #
+        # De mediaan over álle dagen belandde daardoor op 19,68 W,
+        # precies tussen beide groepen in - en meldde vervolgens "+57,4%
+        # drift" terwijl 40,8 W een normale dag was.
+        reference_samples = self._zonder_meetuitval(reference_samples)
         if not reference_samples:
             return
 
@@ -13357,6 +13588,20 @@ class EnergyManagementSystemCoordinator:
         # ÉN het verschil moet in absolute zin de moeite waard zijn.
         groot_genoeg = reference_avg_w >= NILM_DRIFT_MIN_REFERENCE_W
         verschil_w = abs(daily_avg_w - reference_avg_w)
+
+        # v1.21.0: bij koelapparaten telt de buitentemperatuur mee. Een
+        # koelkast in een schuur werkt harder als het buiten warm is;
+        # zonder correctie leest een warme week als een defect.
+        #
+        # De marge werkt alleen naar BOVEN: koeler weer mag geen drift
+        # verbergen.
+        marge_procent = self._koeling_temperatuurmarge_procent(device)
+        device["temperatuurmarge_procent"] = round(marge_procent, 1)
+        verklaard_w = reference_avg_w * marge_procent / 100
+        boven_verwachting = daily_avg_w > reference_avg_w
+        if boven_verwachting and verklaard_w > 0:
+            verschil_w = max(0.0, verschil_w - verklaard_w)
+
         device["anomaly_detected"] = (
             device["cusum_accumulator"] >= NILM_CUSUM_ALARM_THRESHOLD
             and groot_genoeg

@@ -1102,6 +1102,10 @@ PERSISTED_PLAIN_FIELDS = (
     # v1.18.2: het weekprofiel van aanwezigheid. Zonder bewaren zou elke
     # herstart het leren opnieuw laten beginnen.
     "presence_week_profile",
+    # v1.20.5: welke sensor wanneer als laatste bewoog. Zonder bewaren
+    # is de tabel na elke herstart leeg, terwijl juist die tabel moet
+    # verklaren waarom de status is wat hij is.
+    "presence_last_seen",
     # v1.20.0: wanneer er doorgaans naar bed wordt gegaan. Zonder
     # bewaren begint het leren na elke herstart opnieuw.
     "bedtime_history",
@@ -2497,3 +2501,103 @@ WEATHER_DISAGREEMENT_PREFER_BEST_PP = 25.0
 # Hoeveel betrouwbaarder die bron dan minstens moet zijn. Zonder marge
 # zou een toevallig verschil van een half procent al de doorslag geven.
 WEATHER_BEST_SOURCE_MIN_LEAD_PP = 5.0
+
+# --- Prijzen voor het uitbreidingsadvies (v1.20.6) -------------------
+# Opgegeven: omvormer 374 euro, accumodule 729 euro, beide inclusief btw
+# (Zendure SolarFlow 2400 AC met AB3000X, 2880 Wh).
+#
+# Eerder werd met 959 euro voor de omvormer gerekend - dat bleek de
+# bundelprijs met module. Een losse omvormer is minder dan de helft
+# daarvan, en dat verandert de afweging wezenlijk: vermogen bijkopen is
+# veel goedkoper dan capaciteit.
+#
+# Instelbaar, want prijzen veranderen en verschillen per leverancier.
+CONF_BATTERY_MODULE_PRICE_EUR = "battery_module_price_eur"
+CONF_BATTERY_INVERTER_PRICE_EUR = "battery_inverter_price_eur"
+DEFAULT_BATTERY_MODULE_PRICE_EUR = 729.0
+DEFAULT_BATTERY_INVERTER_PRICE_EUR = 374.0
+
+# Capaciteit van één AB3000X.
+BATTERY_MODULE_CAPACITY_KWH = 2.88
+
+# --- Meetuitval uitsluiten van de referentie (v1.21.0) ---------------
+# Gemeld: het verbruik van koelkast/diepvries hangt af van de
+# buitentemperatuur, want ze staan in een warme schuur.
+#
+# Dat klopt, maar er zat een groter probleem onder. De dagreeks van de
+# diepvries wisselt tussen 0,8 W en 90 W: dertien dagen onder 5 W,
+# twaalf dagen boven 60 W. Een dagGEMIDDELDE van 0,8 W betekent dat de
+# compressor die hele dag niet draaide - voor een gevulde diepvries
+# onmogelijk. Dat zijn dagen waarop de meter niets doorgaf.
+#
+# De mediaan over álle dagen belandde daardoor op 19,68 W, precies
+# tussen beide groepen in. Vandaar de melding "+57,4% drift" terwijl
+# 40,8 W gewoon een normale dag is.
+#
+# Dagen onder deze fractie van de mediaan van de actieve dagen tellen
+# niet mee voor de referentie. Ruim gekozen: een koelkast die 's winters
+# minder draait moet nog wel meetellen.
+CUSUM_DROPOUT_FRACTION_OF_ACTIVE = 0.15
+
+# --- Buitentemperatuur meewegen bij koeling (v1.21.0) ----------------
+# Een koelkast in een schuur werkt harder als het buiten warm is. Zonder
+# die correctie leest een warme week als een defect.
+#
+# Herkend aan de naam, want welke apparaten koelen weet de bewoner - en
+# die namen staan al in de bevestigde apparaten.
+COOLING_DEVICE_NAME_HINTS = (
+    "koelkast",
+    "diepvries",
+    "vriezer",
+    "vrieskist",
+    "fridge",
+    "freezer",
+)
+
+# Per graad buitentemperatuur boven het referentiepunt mag het verbruik
+# met dit percentage stijgen zonder dat het drift heet. Vuistregel uit
+# de koeltechniek: rond 3% per graad temperatuurverschil.
+COOLING_DRIFT_PERCENT_PER_DEGREE = 3.0
+
+# Onder dit aantal dagen met een temperatuurmeting geen correctie
+# toepassen; dan is er niets om op te baseren.
+COOLING_TEMP_MIN_DAYS = 5
+
+# --- Fabrieksgrenzen SolarFlow 2400 AC (v1.21.1) ---------------------
+# Uit de gebruikershandleiding (V1.2, 2025-03-31), sectie 9:
+#
+#   Max. In-/Uitgangsvermogen (net) : 2400 W
+#   Accu laden/ontladen             : 2400 W / 2600 W max
+#   Accuspanning                    : 37,5 - 54,75 V
+#   Bedrijfstemperatuur             : -20 tot 60 °C
+#   Maximaal 6 x AB3000X            : 17,28 kWh
+#
+# En de voorwaarde die het advies eerder ten onrechte "gratis" noemde:
+# "De omvormer is ingesteld op een standaard uitgangsvermogen van 800W.
+# Als u dit limiet wilt overschrijden, laat dan een gecertificeerde
+# elektricien uw locatie bezoeken... Na verificatie kunt u via de
+# Zendure-app aanvragen om het vermogen naar 2400W te verhogen."
+#
+# Nut voor de integratie: weten wat er nog aan kop zit, zonder te
+# suggereren dat het zomaar kan.
+SOLARFLOW_MAX_GRID_POWER_W = 2400.0
+SOLARFLOW_DEFAULT_GRID_POWER_W = 800.0
+SOLARFLOW_MAX_BATTERY_CHARGE_W = 2400.0
+SOLARFLOW_MAX_MODULES = 6
+SOLARFLOW_OPERATING_TEMP_MIN_C = -20.0
+SOLARFLOW_OPERATING_TEMP_MAX_C = 60.0
+
+# --- Bewust begrensd vermogen (v1.21.2) ------------------------------
+# Gemeld: "Let wel op dat ik handmatig begrensd heb op 2000W laden 1600W
+# ontladen."
+#
+# Het advies zag alleen dat 1600 en 2000 onder de fabrieksgrens van 2400
+# liggen, en raadde aan ze te verhogen. Dat is ongefundeerd: het zijn
+# bewuste keuzes, en de redenen daarvoor kent de integratie niet - de
+# groep in de meterkast, cellen sparen, geluid van de ventilatoren, of
+# gewoon marge willen houden.
+#
+# Advies geven waar iemand al een afweging heeft gemaakt is hinderlijk
+# en ondermijnt de rest van het advies. Vandaar een instelling die zegt:
+# deze grenzen zijn zo bedoeld, laat ze met rust.
+CONF_POWER_LIMITS_INTENTIONAL = "power_limits_intentional"
