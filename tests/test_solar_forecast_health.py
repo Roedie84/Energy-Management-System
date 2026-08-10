@@ -162,6 +162,9 @@ def test_every_notification_type_is_actually_dispatched():
     bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
     verstuurd = set(re.findall(r'kind="([a-z_]+)"', bron))
     verstuurd |= set(re.findall(r'stuur\(\s*"([a-z_]+)"', bron))
+    # v1.23.4: de planningsmeldingen gaan via een hulpfunctie die de
+    # soort als eerste argument krijgt, niet als letterlijke `kind=`.
+    verstuurd |= set(re.findall(r'_meld\(\s*\n?\s*"([a-z_]+)"', bron))
 
     ontbreekt = {
         k for k, _, _, _, _ in NOTIFICATION_TYPES if k not in verstuurd
