@@ -56,7 +56,8 @@ def test_the_detail_page_is_a_subview():
 
     paginas = _detailpaginas()
 
-    assert len(paginas) == 16
+    # v1.26.0: plus detail-aanwezigheid-tijdlijn.
+    assert len(paginas) == 17
     for pagina in paginas:
         assert pagina.get("subview") is True, pagina["title"]
 

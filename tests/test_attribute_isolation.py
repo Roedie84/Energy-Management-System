@@ -135,3 +135,40 @@ def test_the_block_is_built_incrementally():
 
     assert "for sleutel, functie in" in blok
     assert "except Exception" in blok
+
+
+# --- v1.25.0: te groot om te bewaren ---------------------------------
+
+
+def test_the_big_attributes_stay_out_of_the_recorder():
+    """Deze sensor draagt de tekst voor een stuk of tien pagina's en zat
+    met 36 planregels al op ruim 21 kB. Home Assistant slaat de
+    attributen van een toestand boven 16 kB niet meer op; nu de planning
+    zoveel regels telt als er prijzen zijn, wordt dat alleen erger.
+
+    De kaarten lezen de huidige toestand, niet de geschiedenis - er
+    verdwijnt dus niets waar iemand op terugkijkt.
+    """
+    niet_bewaard = _sensor_klasse()._unrecorded_attributes
+
+    for sleutel in (
+        "kwartierplanning",
+        "kwartier_samenvatting",
+        "samenvattingen",
+        "aanwezigheid",
+        "uitbreidingsadvies",
+    ):
+        assert sleutel in niet_bewaard
+
+
+def test_the_dashboard_attribute_is_the_compact_plan(make_coordinator, hass):
+    """Het attribuut hoort de compacte variant te zijn - anders groeit
+    het met vijftien velden per regel mee met de horizon.
+    """
+    c = make_coordinator({})
+    gezien = []
+    c.get_quarter_plan_compact = lambda *a, **k: gezien.append(True) or []
+
+    _sensor_klasse()(c, "x").extra_state_attributes
+
+    assert gezien

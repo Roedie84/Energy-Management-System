@@ -349,9 +349,11 @@ def test_the_summary_is_on_the_dashboard():
 
 
 def test_the_table_is_capped(make_coordinator, hass):
-    """Gevraagd: "moet eigenlijk vooruitkijken zoveel prijzen er zijn,
-    dus waarschijnlijk max. 36 regels." Negen uur is genoeg om te zien
-    wat er komt zonder dat de tabel onleesbaar wordt."""
+    """Gevraagd: "moet eigenlijk vooruitkijken zoveel prijzen er zijn."
+
+    De grens is een fysiek plafond van twee etmalen, geen keuze - er
+    komen nooit meer prijzen binnen dan dat.
+    """
     from custom_components.energy_management_system.const import (
         QUARTER_PLAN_MAX_ROWS,
     )
@@ -359,7 +361,112 @@ def test_the_table_is_capped(make_coordinator, hass):
     plan = _coordinator(make_coordinator, hass).get_quarter_plan(NU)
 
     assert len(plan) <= QUARTER_PLAN_MAX_ROWS
-    assert QUARTER_PLAN_MAX_ROWS == 36
+    assert QUARTER_PLAN_MAX_ROWS == 192
+
+
+# --- v1.25.0: zover als er prijzen zijn ------------------------------
+
+
+def _lange_reeks(make_coordinator, hass, kwartieren=109):
+    """Een coordinator met meer prijzen dan negen uur - zoals Zonneplan
+    ze levert zodra de prijzen van morgen bekend zijn."""
+    c = _coordinator(make_coordinator, hass)
+    entries = []
+    for i in range(kwartieren):
+        start = NU + timedelta(minutes=15 * i)
+        prijs = (
+            0.35 if start.hour < 11 else (0.15 if start.hour < 17 else 0.38)
+        ) * PRICE_SCALE_FACTOR
+        entries.append((start, start + timedelta(minutes=15), prijs))
+    c._get_forecast_entries = lambda: entries
+    return c
+
+
+def test_the_plan_runs_as_far_as_the_prices_do(make_coordinator, hass):
+    """Gemeld: "De kwartierplanning toont niet de maximale aantal
+    kwartieren vooruit (waarin zonneplan prijzen beschikbaar zijn)."
+
+    In de export van 10 augustus stonden 109 toekomstige kwartieren
+    klaar en toonde de tabel er 36.
+    """
+    plan = _lange_reeks(make_coordinator, hass, 109).get_quarter_plan(NU)
+
+    assert len(plan) == 109
+
+
+def test_the_physical_ceiling_still_holds(make_coordinator, hass):
+    """Zoveel prijzen komen er nooit, maar een tabel die eindeloos
+    doorgroeit is erger dan een die te kort is."""
+    from custom_components.energy_management_system.const import (
+        QUARTER_PLAN_MAX_ROWS,
+    )
+
+    plan = _lange_reeks(make_coordinator, hass, 400).get_quarter_plan(NU)
+
+    assert len(plan) == QUARTER_PLAN_MAX_ROWS
+
+
+def test_quarters_beyond_today_carry_a_day_marker(make_coordinator, hass):
+    """Nu de tabel verder reikt dan een etmaal, komt elk tijdstip twee
+    keer voor. Zonder dagmerk staat er twee keer "05:15" onder elkaar.
+    """
+    plan = _lange_reeks(make_coordinator, hass, 109).get_quarter_plan(NU)
+
+    vandaag = [r for r in plan if r["dag"] == ""]
+    morgen = [r for r in plan if r["dag"] == "morgen "]
+
+    assert vandaag and morgen
+    # Vandaag krijgt bewust geen merk - dat leest rustiger.
+    assert all(r["dag"] == "" for r in plan[: len(vandaag)])
+    # En een tijdstip dat twee keer voorkomt, is nu te onderscheiden.
+    dubbel = [r for r in plan if r["van"] == plan[0]["van"]]
+    assert len({(r["dag"], r["van"]) for r in dubbel}) == len(dubbel)
+
+
+def test_the_dashboard_gets_a_slimmed_down_plan(make_coordinator, hass):
+    """De sensor zat met 36 regels al op ruim 21 kB, en Home Assistant
+    bewaart de attributen van een toestand boven 16 kB niet meer. Het
+    dashboard krijgt daarom alleen de velden die de tabel toont.
+    """
+    import json
+
+    c = _lange_reeks(make_coordinator, hass, 109)
+    vol = c.get_quarter_plan(NU)
+    kort = c.get_quarter_plan_compact(NU)
+
+    assert len(kort) == len(vol)
+    # Alles wat de tabel rendert, moet erin zitten.
+    for veld in (
+        "van",
+        "dag",
+        "prijs_ct",
+        "zon_kwh",
+        "modus",
+        "soc_procent",
+        "cumulatief_eur",
+        "gewijzigd",
+        "eerst_voorspeld",
+        "tekort",
+    ):
+        assert veld in kort[0]
+    # En de rest niet - dat is precies waar de winst zit.
+    assert "soc_kwh" not in kort[0]
+    assert "net_kwh" not in kort[0]
+    assert len(json.dumps(kort)) < len(json.dumps(vol)) * 0.7
+
+
+def test_the_summary_still_reads_the_full_rows(make_coordinator, hass):
+    """De samenvatting rekent met verbruik en netto per kwartier; die
+    velden zitten niet in de compacte variant. Dat mag niet stilletjes
+    kapot gaan.
+    """
+    c = _lange_reeks(make_coordinator, hass, 109)
+    c.get_quarter_plan_compact(NU)
+
+    samenvatting = c.get_quarter_plan_summary(NU)
+
+    assert samenvatting["beschikbaar"] is True
+    assert samenvatting["kwartieren"] == 109
 
 
 def test_a_changed_quarter_is_flagged(make_coordinator, hass):

@@ -515,3 +515,166 @@ def test_the_alert_has_a_switch():
 
     assert "vakantie_beweging" in soorten
     assert soorten["vakantie_beweging"][1] == PRESENCE_INTRUSION_COOLDOWN_MINUTES
+
+
+# --- v1.26.0: de tijdlijn --------------------------------------------
+
+
+def _op(c, hass, moment, beweging=True):
+    """Eén tick, met of zonder beweging."""
+    hass.states.set("binary_sensor.gang", "on" if beweging else "off")
+    c._update_presence(moment)
+
+
+def _tijd(nu):
+    """Zet dt_util.now vast, anders loopt de duur van het laatste blok
+    door tot de echte klok."""
+    import custom_components.energy_management_system.coordinator as m
+
+    m.dt_util.now = lambda: nu
+
+
+def test_a_transition_lands_in_the_timeline(make_coordinator, hass):
+    """Gevraagd: "Tevens in dit overzicht een 'time table' Thuis, weg
+    slapen of iets dergelijks zodat ik achteraf kan controleren of het
+    klopt."
+    """
+    c = _coordinator(make_coordinator, hass)
+
+    _op(c, hass, NU)
+    _op(c, hass, NU + timedelta(minutes=PRESENCE_ABSENCE_AFTER_MINUTES + 10), False)
+
+    staten = [b["staat"] for b in c.presence_timeline]
+    assert staten == ["thuis", "weg"]
+
+
+def test_the_timeline_only_records_changes(make_coordinator, hass):
+    """Elke tick wegschrijven levert 288 regels per dag op die allemaal
+    hetzelfde zeggen."""
+    c = _coordinator(make_coordinator, hass)
+
+    for minuut in range(0, 40, 5):
+        _op(c, hass, NU + timedelta(minutes=minuut))
+
+    assert len(c.presence_timeline) == 1
+
+
+def test_the_timeline_says_why(make_coordinator, hass):
+    """Zonder de reden valt er niets te controleren: "weg om 14:20" zegt
+    niets, "weg, 45 min na de laatste beweging (gang)" wel."""
+    c = _coordinator(make_coordinator, hass)
+
+    _op(c, hass, NU)
+    _op(c, hass, NU + timedelta(minutes=PRESENCE_ABSENCE_AFTER_MINUTES + 10), False)
+
+    assert "beweging" in c.presence_timeline[0]["aanleiding"]
+    assert "zonder beweging" in c.presence_timeline[1]["aanleiding"]
+
+
+def test_a_flicker_is_merged_away(make_coordinator, hass):
+    """Eén beweging midden in de nacht zou anders "slaapt - thuis -
+    slaapt" opleveren, en dan is de tabel onleesbaar terwijl er niets
+    gebeurd is."""
+    c = _coordinator(make_coordinator, hass)
+    c.presence_timeline = [
+        {"van": (NU - timedelta(hours=3)).isoformat(), "staat": "weg", "aanleiding": ""},
+        {"van": (NU - timedelta(minutes=2)).isoformat(), "staat": "thuis", "aanleiding": ""},
+    ]
+    c.presence_state = "thuis"
+
+    # Terug naar "weg" binnen twee minuten: dat blokje hoort te
+    # verdwijnen, niet als derde regel te blijven staan.
+    c.presence_state = "weg"
+    c._registreer_aanwezigheidsovergang(NU, "thuis")
+
+    assert [b["staat"] for b in c.presence_timeline] == ["weg"]
+
+
+def test_a_real_block_is_kept(make_coordinator, hass):
+    """De samenvoegregel mag geen echte blokken opeten."""
+    c = _coordinator(make_coordinator, hass)
+    c.presence_timeline = [
+        {"van": (NU - timedelta(hours=3)).isoformat(), "staat": "weg", "aanleiding": ""},
+        {"van": (NU - timedelta(hours=1)).isoformat(), "staat": "thuis", "aanleiding": ""},
+    ]
+    c.presence_state = "weg"
+
+    c._registreer_aanwezigheidsovergang(NU, "thuis")
+
+    assert [b["staat"] for b in c.presence_timeline] == ["weg", "thuis", "weg"]
+
+
+def test_the_table_reads_newest_first_and_computes_duration(
+    make_coordinator, hass
+):
+    c = _coordinator(make_coordinator, hass)
+    c.presence_timeline = [
+        {"van": (NU - timedelta(hours=2)).isoformat(), "staat": "weg", "aanleiding": "x"},
+        {"van": (NU - timedelta(minutes=30)).isoformat(), "staat": "thuis", "aanleiding": "y"},
+    ]
+    _tijd(NU)
+
+    regels = c.get_presence_timeline()
+
+    assert [r["staat"] for r in regels] == ["thuis", "weg"]
+    # Het bovenste blok loopt nog door; de duur ervan is niet bewaard
+    # maar berekend.
+    assert regels[0]["tot"] == "nu"
+    assert regels[0]["duur_minuten"] == 30
+    assert regels[1]["duur_minuten"] == 90
+
+
+def test_the_day_totals_split_at_midnight(make_coordinator, hass):
+    """Anders schrijft een nacht slapen zeven uur op de verkeerde dag."""
+    c = _coordinator(make_coordinator, hass)
+    avond = NU.replace(hour=21, minute=0)
+    c.presence_timeline = [
+        {"van": avond.isoformat(), "staat": "slaapt", "aanleiding": ""},
+        {"van": (avond + timedelta(hours=9)).isoformat(), "staat": "thuis", "aanleiding": ""},
+    ]
+    _tijd(avond + timedelta(hours=10))
+
+    totalen = {r["dag"]: r for r in c.get_presence_day_totals()}
+
+    assert len(totalen) == 2
+    vandaag = totalen[avond.strftime("%Y-%m-%d")]
+    morgen = totalen[(avond + timedelta(days=1)).strftime("%Y-%m-%d")]
+    assert vandaag["slaapt_uur"] == 3.0
+    assert morgen["slaapt_uur"] == 6.0
+    assert morgen["thuis_uur"] == 1.0
+
+
+def test_the_timeline_is_bounded(make_coordinator, hass):
+    from custom_components.energy_management_system.const import (
+        PRESENCE_TIMELINE_LENGTH,
+    )
+
+    c = _coordinator(make_coordinator, hass)
+    for i in range(PRESENCE_TIMELINE_LENGTH + 20):
+        c.presence_state = "thuis" if i % 2 else "weg"
+        c._registreer_aanwezigheidsovergang(
+            NU + timedelta(hours=i), "weg" if i % 2 else "thuis"
+        )
+
+    assert len(c.presence_timeline) == PRESENCE_TIMELINE_LENGTH
+
+
+def test_the_timeline_survives_a_restart():
+    """Een tabel die na elke herstart leeg is, valt niet achteraf te
+    controleren - en dat is precies waarvoor hij gevraagd werd."""
+    from custom_components.energy_management_system.const import (
+        PERSISTED_PLAIN_FIELDS,
+    )
+
+    assert "presence_timeline" in PERSISTED_PLAIN_FIELDS
+
+
+def test_the_overview_carries_the_timeline(make_coordinator, hass):
+    c = _coordinator(make_coordinator, hass)
+    _op(c, hass, NU)
+    _tijd(NU + timedelta(minutes=5))
+
+    overzicht = c.get_presence_overview()
+
+    assert overzicht["tijdlijn"]
+    assert overzicht["tijdlijn_totaal"] == 1
