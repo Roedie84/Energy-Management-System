@@ -163,6 +163,8 @@ from .const import (
     CONF_APPLIANCE_NOTIFY_SERVICE,
     MODE_CHANGE_EMOJI,
     REASON_TO_MODE,
+    ACHTERHOEKS_TITELS,
+    ACHTERHOEKS_WOORDEN,
     APPLIANCE_RUNNING_POWER_THRESHOLD_W,
     CONSUMPTION_CORRECTION_SMOOTHING_SAMPLES,
     MAX_CONSUMPTION_CORRECTION_RATIO,
@@ -536,6 +538,8 @@ class EnergyManagementSystemCoordinator:
         # v1.23.4: wat er als laatste is gemeld, zodat er alleen bij een
         # WIJZIGING een bericht gaat en niet elke tick opnieuw.
         self._last_plan_alert: dict[str, str] = {}
+        # v1.24.0: meldingen in het Achterhoeks.
+        self.achterhoeks: bool = False
         # If True: compute and learn everything as normal, but never send
         # commands to the Zendure entities. Set via a dedicated switch.
         self.learning_only: bool = False
@@ -4507,6 +4511,31 @@ class EnergyManagementSystemCoordinator:
             return 0.0
         return verschil * COOLING_DRIFT_PERCENT_PER_DEGREE
 
+    def beschikbare_energie_kwh(self) -> float | None:
+        """De bruikbare energie in de accu (v1.24.1).
+
+        Gemeld met screenshot: "Nog geen planning" en "Accustand
+        onbekend" terwijl de accu gewoon 7,69 kWh had.
+
+        De oorzaak: `last_available_kwh` wordt alleen gezet als de HELE
+        energie-check slaagt, en op een tak zonder verbruiksschatting
+        wordt hij zelfs expliciet op None gezet. Dat veld is dus een
+        bijproduct van die check, geen betrouwbare accustand.
+
+        Deze functie leest de sensor rechtstreeks, met het bijproduct
+        als terugval. Nieuwe onderdelen die alleen de accustand nodig
+        hebben, horen niet af te hangen van een berekening die om heel
+        andere redenen kan afbreken.
+        """
+        gemeten = self._read_sensor_float(
+            self.config.get(CONF_AVAILABLE_ENERGY_SENSOR)
+        )
+        if gemeten is not None and gemeten >= 0:
+            return gemeten
+        if self.last_available_kwh is not None:
+            return self.last_available_kwh
+        return self.last_projection_available_kwh
+
     def effective_min_soc_percent(self) -> float:
         """De minimum-SoC die de accu WERKELIJK aanhoudt (v1.23.3).
 
@@ -5817,6 +5846,46 @@ class EnergyManagementSystemCoordinator:
         self._notify_listeners()
         self.schedule_persisted_state_save()
 
+    def _naar_achterhoeks(self, tekst: str, soort: str | None = None) -> str:
+        """Vertaalt een melding naar het Achterhoeks (v1.24.0).
+
+        Gevraagd: "kan ik door middel van 1 switch alles in het
+        Achterhoeks laten tonen, dus ook de meldingen op mijn iPhone?"
+
+        De hele integratie vertalen zou ongeveer 1.664 losse teksten in
+        de code raken plus ruim 3.000 dashboardlabels. Alleen de
+        MELDINGEN is een fractie daarvan en levert het leukste deel op:
+        de telefoon spreekt Achterhoeks, het dashboard blijft leesbaar
+        voor wie meekijkt.
+
+        Van lang naar kort vervangen, anders raakt "niet" ook het "niet"
+        in "mogelijk niet".
+
+        Nadrukkelijk een benadering, geen gecontroleerde streektaal -
+        alles staat in één tabel in const.py, dus een woord dat niet
+        klopt is zo aangepast.
+        """
+        if not tekst:
+            return tekst
+        if soort and soort in ACHTERHOEKS_TITELS:
+            return ACHTERHOEKS_TITELS[soort]
+        # In één doorgang, met markeringen: anders vertaalt een later
+        # woord het resultaat van een eerder woord nog eens. Concreet
+        # ging "goedkope blok" via "goedkope" (onveranderd) alsnog naar
+        # "goodkope", omdat "goed" -> "good" er daarna overheen liep.
+        uit = tekst
+        vervangen: list[str] = []
+        for nl, ach in ACHTERHOEKS_WOORDEN:
+            for bron, doel in ((nl, ach), (nl.capitalize(), ach.capitalize())):
+                if bron not in uit:
+                    continue
+                merk = f"\x00{len(vervangen)}\x00"
+                vervangen.append(doel)
+                uit = uit.replace(bron, merk)
+        for i, doel in enumerate(vervangen):
+            uit = uit.replace(f"\x00{i}\x00", doel)
+        return uit
+
     def _dispatch_notification(
         self,
         notify_service: str | None,
@@ -5840,6 +5909,12 @@ class EnergyManagementSystemCoordinator:
         test die vastlegt dat elke aanroep een `kind` meegeeft.
         """
         now = dt_util.now()
+        # v1.24.0: alles wat de deur uitgaat, gaat door de vertaling -
+        # ook de geschiedenis, zodat het meldingenoverzicht en de
+        # telefoon dezelfde taal spreken.
+        if self.achterhoeks:
+            title = self._naar_achterhoeks(title, kind)
+            message = self._naar_achterhoeks(message)
         toegestaan = True
         if kind is not None:
             toegestaan, reden = self.is_notification_allowed(kind, now)
@@ -7230,14 +7305,20 @@ class EnergyManagementSystemCoordinator:
         tabel.
         """
         now = now or dt_util.now()
-        entries = self._get_forecast_entries()
+        # v1.24.1: `_get_forecast_entries` gooit een KeyError zonder
+        # prijssensor - dezelfde valkuil als bij de export in v1.22.1.
+        # Een planning is informatief; die mag nooit iets laten vallen.
+        try:
+            entries = self._get_forecast_entries()
+        except Exception:  # noqa: BLE001
+            entries = []
         if not entries:
             return []
 
         capaciteit = self._read_sensor_float(
             self.config.get(CONF_BATTERY_TOTAL_CAPACITY_SENSOR)
         )
-        beschikbaar = self.last_available_kwh
+        beschikbaar = self.beschikbare_energie_kwh()
         if capaciteit is None or beschikbaar is None:
             return []
         min_soc = self.effective_min_soc_percent()
@@ -7250,13 +7331,18 @@ class EnergyManagementSystemCoordinator:
         uitstelplan = self.last_solar_defer_plan or {}
         omslag = uitstelplan.get("omslag_uur")
 
-        lo = min((p for _, _, p in entries), default=0.0)
-        hi = max((p for _, _, p in entries), default=0.0)
+        lo = min((p / PRICE_SCALE_FACTOR for _, _, p in entries), default=0.0)
+        hi = max((p / PRICE_SCALE_FACTOR for _, _, p in entries), default=0.0)
         blok_drempel = lo + (hi - lo) * CHEAP_BLOCK_THRESHOLD_MARGIN_FRACTION
 
         plan = []
         loper = 0.0
-        for start, einde, prijs in entries:
+        for start, einde, prijs_ruw in entries:
+            # v1.24.2: `_get_forecast_entries` geeft de RAUWE waarde
+            # (3181681), niet euro's. Zonder deling werd de verwachte
+            # opbrengst 15.124.941 EUR - gemeld met een screenshot en de
+            # vraag "word ik nu miljonair?".
+            prijs = prijs_ruw / PRICE_SCALE_FACTOR
             # Voorbije kwartieren tonen niets nuttigs meer.
             if einde <= now:
                 continue
@@ -7356,7 +7442,25 @@ class EnergyManagementSystemCoordinator:
                     "verbruik_kwh": round(verbruik, 3),
                     "modus": modus,
                     "soc_kwh": round(soc, 2),
-                    "soc_procent": round(100 * soc / bruikbaar) if bruikbaar else None,
+                    # v1.24.3, gemeld: "Dit kon toch niet, zoals
+                    # aangegeven minimale soc = 10%. SoC laagste /
+                    # hoogste 0% / 86%."
+                    #
+                    # Klopt: ik toonde het percentage van de BRUIKBARE
+                    # capaciteit, dus 0% betekende 10% - de harde
+                    # ondergrens. Dat leest als iets onmogelijks.
+                    #
+                    # Nu de ECHTE accustand, zoals in de Zendure-app.
+                    # `soc_bruikbaar_procent` blijft erbij, want dát is
+                    # wat er nog te gebruiken valt.
+                    "soc_procent": (
+                        round(min_soc + (100 - min_soc) * soc / bruikbaar)
+                        if bruikbaar
+                        else None
+                    ),
+                    "soc_bruikbaar_procent": (
+                        round(100 * soc / bruikbaar) if bruikbaar else None
+                    ),
                     "net_kwh": net,
                     "opbrengst_eur": round(opbrengst, 4),
                     "cumulatief_eur": round(loper, 3),
@@ -7449,7 +7553,42 @@ class EnergyManagementSystemCoordinator:
         """
         plan = self.get_quarter_plan(now)
         if not plan:
-            return {"beschikbaar": False, "reden": "Nog geen planning."}
+            # v1.24.1: zeggen WAT er ontbreekt. "Nog geen planning" liet
+            # de gebruiker zoeken naar iets wat kapot leek, terwijl er
+            # gewoon een gegeven miste.
+            ontbreekt = []
+            # `_get_forecast_entries` gooit een KeyError zonder
+            # prijssensor - dezelfde valkuil als bij de export in
+            # v1.22.1. Een uitlegtekst mag daar niet op stuklopen.
+            try:
+                heeft_prijzen = bool(self._get_forecast_entries())
+            except Exception:  # noqa: BLE001
+                heeft_prijzen = False
+            if not heeft_prijzen:
+                ontbreekt.append("prijsgegevens")
+            if self.beschikbare_energie_kwh() is None:
+                ontbreekt.append("de accustand")
+            if (
+                self._read_sensor_float(
+                    self.config.get(CONF_BATTERY_TOTAL_CAPACITY_SENSOR)
+                )
+                is None
+            ):
+                ontbreekt.append("de accucapaciteit")
+            return {
+                "beschikbaar": False,
+                "reden": (
+                    "Nog geen planning: "
+                    + (
+                        ontbreekt[0]
+                        if len(ontbreekt) == 1
+                        else ", ".join(ontbreekt[:-1]) + " en " + ontbreekt[-1]
+                    )
+                    + (" ontbreekt." if len(ontbreekt) == 1 else " ontbreken.")
+                    if ontbreekt
+                    else "Nog geen planning; er zijn geen komende kwartieren meer."
+                ),
+            }
 
         per_modus: dict[str, int] = {}
         for r in plan:
@@ -7487,9 +7626,21 @@ class EnergyManagementSystemCoordinator:
             # regel om te bewaken.
             "tekort_kwartieren": len([r for r in plan if r.get("tekort")]),
             "min_soc_procent_hard": self.effective_min_soc_percent(),
+            # v1.24.3: de ECHTE accustand, zoals in de Zendure-app.
             "laagste_soc_procent": min(socs) if socs else None,
             "hoogste_soc_procent": max(socs) if socs else None,
             "eind_soc_procent": socs[-1] if socs else None,
+            # En wat daarvan bruikbaar is - 0% hier betekent dat de accu
+            # op zijn ondergrens staat en niets meer levert.
+            "laagste_bruikbaar_procent": (
+                min(
+                    r["soc_bruikbaar_procent"]
+                    for r in plan
+                    if r.get("soc_bruikbaar_procent") is not None
+                )
+                if plan
+                else None
+            ),
             "modi": per_modus,
         }
 
@@ -7506,7 +7657,7 @@ class EnergyManagementSystemCoordinator:
         start = now.replace(hour=uur, minute=0, second=0, microsecond=0)
         einde = start + timedelta(hours=1)
         prijzen = [
-            prijs
+            prijs / PRICE_SCALE_FACTOR
             for blok_start, blok_eind, prijs in entries
             if blok_start < einde and blok_eind > start
         ]
@@ -7543,17 +7694,21 @@ class EnergyManagementSystemCoordinator:
         # omdat de aanroeper hem in de beslistick al berekend heeft
         # voordat `last_available_kwh` is bijgewerkt.
         if beschikbaar is None:
-            beschikbaar = self.last_available_kwh
+            beschikbaar = self.beschikbare_energie_kwh()
         if beschikbaar is None:
             # Zonder accumeting valt niet te toetsen of er genoeg voor de
             # woning overblijft. Dan NIET blokkeren: het beproefde gedrag
             # met de bestaande reserve blijft dan gelden, en die is er
             # ook zonder deze toets. Blokkeren zou een installatie zonder
             # accusensor stilzetten.
+            # v1.24.1: "Ja. Accustand onbekend" las tegenstrijdig op het
+            # dashboard - het klonk als een fout terwijl het een bewuste
+            # terugval is. Nu zegt de tekst wat er gebeurt.
             return {
                 "mag_verkopen": True,
                 "reden": (
-                    "Accustand onbekend - de bestaande reserve bepaalt het."
+                    "Nog geen accustand gemeten; de bestaande reserve "
+                    "bewaakt de woning zoals hij dat altijd al deed."
                 ),
             }
 
@@ -7563,20 +7718,42 @@ class EnergyManagementSystemCoordinator:
         # dag als zonarm bestempelen - dan zou er nooit meer verkocht
         # worden voor wie die sensor niet heeft.
         heeft_voorspelling = bool(self.config.get(CONF_SOLAR_TODAY_FORECAST_SENSOR))
-        verwacht_vandaag = (
-            self._estimate_pv_kwh_for_period(
-                now.replace(hour=0, minute=0, second=0, microsecond=0),
-                now.replace(hour=23, minute=59, second=59, microsecond=0),
+        # v1.24.2, gemeld: "Zonarme dag is natuurlijk raar om 20:23, de
+        # zon is zo goed als weg en de dagopbrengst was goed."
+        #
+        # Klopt. `_estimate_pv_kwh_for_period` kijkt alleen VOORUIT, dus
+        # 's avonds bleef er 0,1 kWh over en dat las als een zonarme
+        # dag - terwijl er die dag ruim 20 kWh was opgewekt.
+        #
+        # Wat telt is de hele dag: wat er al is opgewekt PLUS wat er nog
+        # komt. De meter weet het eerste, de voorspelling het tweede.
+        verwacht_vandaag = None
+        if heeft_voorspelling:
+            nog_te_komen = (
+                self._estimate_pv_kwh_for_period(
+                    now,
+                    now.replace(hour=23, minute=59, second=59, microsecond=0),
+                )
+                or 0.0
             )
-            if heeft_voorspelling
-            else None
-        )
+            al_opgewekt = self.pv_production_today_kwh
+            if al_opgewekt is None:
+                # Zonder dagmeter valt alleen over de rest iets te
+                # zeggen; dan is de voorspelling van vanochtend de beste
+                # schatting die er is.
+                dag_sensor = self._read_sensor_float(
+                    self.config.get(CONF_SOLAR_TODAY_FORECAST_SENSOR)
+                )
+                verwacht_vandaag = dag_sensor if dag_sensor is not None else None
+            else:
+                verwacht_vandaag = al_opgewekt + nog_te_komen
         if verwacht_vandaag is not None and verwacht_vandaag < SOLAR_POOR_DAY_KWH:
             return {
                 "mag_verkopen": False,
                 "verwachte_zon_kwh": round(verwacht_vandaag, 1),
                 "reden": (
-                    f"Zonarme dag ({verwacht_vandaag:.1f} kWh verwacht, onder "
+                    f"Zonarme dag ({verwacht_vandaag:.1f} kWh over de hele dag, "
+                    f"onder "
                     f"{SOLAR_POOR_DAY_KWH:.0f}). Wat er is, is voor de woning; "
                     "wat ontbreekt wordt in het goedkope blok bijgeladen."
                 ),
@@ -7646,7 +7823,7 @@ class EnergyManagementSystemCoordinator:
         capaciteit = self._read_sensor_float(
             self.config.get(CONF_BATTERY_TOTAL_CAPACITY_SENSOR)
         )
-        beschikbaar = self.last_available_kwh
+        beschikbaar = self.beschikbare_energie_kwh()
         if capaciteit is None or beschikbaar is None:
             return {
                 "uitstellen": False,

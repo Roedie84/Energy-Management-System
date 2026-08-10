@@ -515,6 +515,217 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## SoC 0% bij een ondergrens van 10% (v1.24.3)
+
+**Gemeld**: *"Dit kon toch niet, zoals aangegeven minimale soc = 10%. SoC
+laagste / hoogste 0% / 86%."*
+
+Klopt. Ik toonde het percentage van de **bruikbare** capaciteit, niet de
+echte accustand:
+
+| Getoond | Werkelijk | kWh |
+|---|---|---|
+| 0% | **10,0%** | 0,86 |
+| 50% | 55,0% | 4,73 |
+| 86% | 87,4% | 7,52 |
+
+"0%" betekende dus 10% — de harde ondergrens. De accu is dan leeg *voor
+gebruik*, maar niet leeg. Dat leest als iets onmogelijks, en het is ook
+niet wat je in de Zendure-app ziet staan.
+
+### Nu allebei
+
+De tabel en de samenvatting tonen de **echte accustand**, die nooit onder
+je ondergrens zakt. Daarnaast staat *"Waarvan bruikbaar, laagste"* —
+want dát is wat er nog te gebruiken valt, en 0% daar is het signaal dat
+de accu niets meer levert.
+
+Getoetst met een avond zonder zon:
+
+| Tijd | Echte SoC | Bruikbaar |
+|---|---|---|
+| 20:00 | 82% | 80% |
+| 23:00 | 26% | 18% |
+| 02:00 | **10%** | **0%** |
+
+De echte stand stopt netjes op 10%.
+
+### Getest
+
+Vier tests erbij: de SoC zakt nooit onder de harde ondergrens, beide
+percentages staan erbij, een lege accu leest als de ondergrens, en de
+samenvatting toont ze allebei.
+
+**Volledige testsuite**: 1750 tests, allemaal groen.
+
+## Vijftien miljoen euro en een zonarme zomerdag (v1.24.2)
+
+Twee fouten uit één screenshot.
+
+### "Word ik nu miljonair?"
+
+> Verwachte opbrengst: **15.124.941,79 EUR**
+
+Nee. `_get_forecast_entries` geeft de **rauwe** waarde terug — 3181681,
+niet €0,3181681. Elders in de code wordt die door `PRICE_SCALE_FACTOR`
+(10.000.000) gedeeld; in mijn nieuwe planning gebeurde dat niet.
+
+Precies die factor tien miljoen. Na de correctie: **€2,81** voor de rest
+van de avond.
+
+De deling ontbrak op drie plekken: de kwartierplanning, de uurprijs voor
+het uitstelplan, en de grens van het goedkope blok. Dat laatste
+verklaart ook de **0 kwartieren in goedkoop blok** in je screenshot.
+
+Er staat nu een test op dat een kwartierprijs tussen −50 en 150 cent
+ligt, en dat de opbrengst onder de €100 blijft.
+
+### "Zonarme dag" om 20:23
+
+> Nee. Zonarme dag (0.1 kWh verwacht, onder 5).
+
+Ook terecht opgemerkt. `_estimate_pv_kwh_for_period` kijkt alleen
+**vooruit**, dus 's avonds bleef er 0,1 kWh over — terwijl er die dag
+ruim 20 kWh was opgewekt.
+
+Wat telt is de héle dag: wat er **al is opgewekt** plus wat er nog komt.
+De meter weet het eerste, de voorspelling het tweede. Zonder dagmeter
+valt het terug op de ochtendvoorspelling.
+
+De winterregel blijft intact: weinig opgewekt én weinig te verwachten
+blijft zonarm. Er staat een test op allebei.
+
+### Wat dit zegt
+
+Beide fouten zaten in code die ik vandaag heb geschreven en die de tests
+gewoon doorkwam — omdat mijn testopstellingen prijzen in euro's
+meegaven, terwijl de echte sensor rauwe eenheden levert. Een testopstelling
+die niet lijkt op de werkelijkheid toetst niets. Dat is dezelfde valkuil
+als in v1.19.5, en die had ik moeten herkennen.
+
+De tests gebruiken nu `PRICE_SCALE_FACTOR`, net als de echte data.
+
+### Getest
+
+Vijf tests erbij: de opbrengst is in euro's, de prijskolom in centen, een
+goede dag is 's avonds niet zonarm, een werkelijk zonarme dag blokkeert
+nog steeds, en zonder dagmeter telt de voorspelling.
+
+**Volledige testsuite**: 1746 tests, allemaal groen.
+
+## "Nog geen planning" bij een volle accu (v1.24.1)
+
+**Gemeld** met screenshot: de Planning-samenvatting toonde *"Nog geen
+planning"* en *"Ja. Accustand onbekend"* — terwijl de accu gewoon 7,69
+kWh had.
+
+### Het verkeerde veld
+
+Mijn nieuwe functies lazen `last_available_kwh`. Dat veld wordt **alleen
+gezet als de hele energie-check slaagt**, en op een tak zonder
+verbruiksschatting wordt het zelfs expliciet op `None` gezet.
+
+Het is dus een **bijproduct** van die check, geen betrouwbare accustand.
+Nieuwe onderdelen die alleen de accustand nodig hebben, horen niet af te
+hangen van een berekening die om heel andere redenen kan afbreken.
+
+Er is nu één functie die de sensor rechtstreeks leest, met dat bijproduct
+als terugval. Alle drie de nieuwe onderdelen — kwartierplanning,
+verkooptoets en uitstelplan — gebruiken die.
+
+### Twee teksten die niets zeiden
+
+*"Ja. Accustand onbekend"* las tegenstrijdig; het klonk als een fout
+terwijl het een bewuste terugval is. Nu: *"Nog geen accustand gemeten; de
+bestaande reserve bewaakt de woning zoals hij dat altijd al deed."*
+
+En *"Nog geen planning"* liet je zoeken naar iets wat kapot leek. Nu
+staat erbij **wat** er ontbreekt: *"Nog geen planning: prijsgegevens, de
+accustand en de accucapaciteit ontbreken."*
+
+### Dezelfde valkuil als in v1.22.1
+
+`_get_forecast_entries` gooit een `KeyError` zonder prijssensor. Dat brak
+bij de export al eens, en nu weer bij de planning. Beide zijn nu
+afgeschermd — een planning is informatief en mag nooit iets laten vallen.
+
+### Getest
+
+Vier tests erbij: de planning werkt zonder `last_available_kwh`, hij valt
+terug op de berekende waarde, de reden zegt wat er ontbreekt, en een
+ontbrekende prijssensor loopt niet vast.
+
+**Volledige testsuite**: 1741 tests, allemaal groen.
+
+## Meldingen in het Achterhoeks (v1.24.0)
+
+**Gevraagd**: *"Nu een fun fact, alles is nu in het Nederlands
+weergegeven, kan ik door middel van 1 switch alles in het Achterhoeks
+laten tonen, dus ook de meldingen op mijn iPhone?"*
+
+### Waarom alleen de meldingen
+
+De hele integratie vertalen zou ongeveer **1.664 losse teksten** in de
+code raken plus ruim **3.000 dashboardlabels**. Alleen de meldingen is
+een fractie daarvan en levert het leukste deel op: je telefoon spreekt
+Achterhoeks, het dashboard blijft leesbaar voor wie meekijkt.
+
+Zesentwintig titels en 60 woordvervangingen, allemaal in één tabel in
+`const.py` — klopt een woord niet, dan is dat op één plek aan te passen.
+
+### Hoe het klinkt
+
+| Nederlands | Achterhoeks |
+|---|---|
+| Accu haalt de nacht mogelijk niet | Den accu haalt de nacht neet |
+| Weinig-zon-dag herkend | Weinig-zunne-dag |
+| Mogelijk sluipverbruik | 't Lik of der wat stiekem stroom vret |
+| Beweging tijdens vakantiestand | Der beweeg wat, terwijl gi'j weg bunt |
+
+En een bericht:
+
+> *"'t nachtelijks verbruuk is umhoog egoan; mangs steet er wat aan."*
+>
+> *"D'r is weinig zunne verwacht, de accu wödt bi'jelaojen uut 't
+> goedkope blok."*
+
+### Twee fouten die het proberen opleverde
+
+**"goodkope blok".** Mijn eerste versie verving woord voor woord, en
+"goed" → "good" liep daarna over het al vervangen "goedkope" heen. Nu
+gebeurt alles in één doorgang met markeringen.
+
+**"de accu kan nwat meer leveren".** Daar sloeg "iets" → "wat" toe binnen
+"niets". De volgorde is nu kritisch en dat staat als waarschuwing in de
+tabel: langere woorden altijd eerst.
+
+### De schakelaar
+
+*Meldingen in het Achterhoeks*, bovenaan de Meldingen-pagina. Staat
+standaard uit, en overleeft een herstart.
+
+De vertaling zit in de gedeelde verzendfunctie, dus telefoon én
+meldingenoverzicht spreken dezelfde taal.
+
+### Eerlijk erbij
+
+Dit is een benadering, geen gecontroleerde streektaal. Ik ben geen
+Nedersaksisch spreker — hoor je iets dat niet klopt, zeg het en dan pas
+ik die ene regel aan.
+
+### Getest
+
+Nieuw `tests/test_achterhoeks.py`, 12 tests: titels en berichten worden
+vertaald, langere woorden winnen, een vervanging wordt niet nóg eens
+vertaald, elke meldingsoort heeft een titel, uit betekent uit, de
+schakelaar bestaat en overleeft een herstart, en telefoon én
+geschiedenis worden allebei vertaald.
+
+Die test op "elke meldingsoort heeft een titel" ving er meteen één die
+ik vergeten was.
+
+**Volledige testsuite**: 1737 tests, allemaal groen.
+
 ## Meldingen bij planningswijzigingen (v1.23.4)
 
 **Gevraagd**: *"Voor alle wijzigingen graag ook de diagnostiek

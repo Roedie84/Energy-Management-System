@@ -11110,3 +11110,102 @@ aansturing nooit laten vallen.
 **Getest**: nieuw `tests/test_plan_notifications.py`, 9 tests.
 
 **Volledige testsuite**: 1725 tests, allemaal groen.
+
+## v1.24.0 — Meldingen in het Achterhoeks
+
+**Gevraagd**: met één schakelaar alles in het Achterhoeks, ook de
+meldingen op de telefoon.
+
+**Alleen de meldingen**: de hele integratie vertalen zou ~1.664 losse
+teksten in de code raken plus ruim 3.000 dashboardlabels. Alleen de
+meldingen is een fractie daarvan en levert het leukste deel op - de
+telefoon spreekt Achterhoeks, het dashboard blijft leesbaar.
+
+26 titels en 60 woordvervangingen in één tabel in const.py.
+
+**Twee fouten die het proberen opleverde**: "goedkope blok" werd
+"goodkope blok" omdat "goed" -> "good" over het al vervangen woord heen
+liep (nu in één doorgang met markeringen), en "niets" werd "nwat" omdat
+"iets" -> "wat" erin toesloeg (volgorde: langere woorden eerst).
+
+**De schakelaar** staat bovenaan de Meldingen-pagina, standaard uit, en
+overleeft een herstart. De vertaling zit in de gedeelde verzendfunctie,
+dus telefoon én meldingenoverzicht spreken dezelfde taal.
+
+**Eerlijk erbij**: een benadering, geen gecontroleerde streektaal.
+
+**Getest**: nieuw `tests/test_achterhoeks.py`, 12 tests. De test op
+"elke meldingsoort heeft een titel" ving er meteen één die vergeten was.
+
+**Volledige testsuite**: 1737 tests, allemaal groen.
+
+## v1.24.1 — "Nog geen planning" bij een volle accu
+
+**Gemeld**: de Planning-samenvatting toonde "Nog geen planning" en "Ja.
+Accustand onbekend" terwijl de accu 7,69 kWh had.
+
+**Het verkeerde veld**: de nieuwe functies lazen `last_available_kwh`,
+dat alleen wordt gezet als de HELE energie-check slaagt en op een tak
+zonder verbruiksschatting expliciet op None wordt gezet. Een bijproduct
+dus, geen betrouwbare accustand. Er is nu één functie die de sensor
+rechtstreeks leest, met dat bijproduct als terugval; kwartierplanning,
+verkooptoets en uitstelplan gebruiken die.
+
+**Twee teksten die niets zeiden**: "Ja. Accustand onbekend" las
+tegenstrijdig, en "Nog geen planning" liet zoeken naar iets wat kapot
+leek. Beide zeggen nu wat er aan de hand is.
+
+**Dezelfde valkuil als in v1.22.1**: `_get_forecast_entries` gooit een
+KeyError zonder prijssensor. Dat brak bij de export al eens en nu bij de
+planning; beide zijn afgeschermd.
+
+**Getest**: vier tests erbij in `test_quarter_plan.py`.
+
+**Volledige testsuite**: 1741 tests, allemaal groen.
+
+## v1.24.2 — Vijftien miljoen euro en een zonarme zomerdag
+
+Twee fouten uit één screenshot.
+
+**"Verwachte opbrengst 15124941.79 EUR"**: `_get_forecast_entries` geeft
+de rauwe waarde terug (3181681), niet euro's. Elders wordt die door
+PRICE_SCALE_FACTOR (10.000.000) gedeeld; in de nieuwe planning gebeurde
+dat niet. De deling ontbrak op drie plekken - kwartierplanning, uurprijs
+voor het uitstelplan, en de grens van het goedkope blok. Dat laatste
+verklaart ook "0 kwartieren in goedkoop blok". Na de correctie: 2,81 EUR.
+
+**"Zonarme dag (0.1 kWh verwacht)" om 20:23**:
+`_estimate_pv_kwh_for_period` kijkt alleen vooruit, dus 's avonds bleef
+er 0,1 kWh over terwijl er die dag ruim 20 kWh was opgewekt. Nu telt de
+hele dag: al opgewekt plus nog te komen, met de ochtendvoorspelling als
+terugval zonder dagmeter. De winterregel blijft intact.
+
+**Wat dit zegt**: beide fouten kwamen door de tests omdat de
+testopstellingen prijzen in euro's meegaven terwijl de sensor rauwe
+eenheden levert - dezelfde valkuil als in v1.19.5. De tests gebruiken nu
+PRICE_SCALE_FACTOR.
+
+**Getest**: vijf tests erbij.
+
+**Volledige testsuite**: 1746 tests, allemaal groen.
+
+## v1.24.3 — SoC 0% bij een ondergrens van 10%
+
+**Gemeld**: "SoC laagste / hoogste 0% / 86%" terwijl de accu een harde
+ondergrens van 10% heeft.
+
+Klopt: er werd het percentage van de BRUIKBARE capaciteit getoond, niet
+de echte accustand. "0%" betekende 10% - de accu is dan leeg voor
+gebruik, maar niet leeg. Dat leest als iets onmogelijks en komt niet
+overeen met wat de Zendure-app toont.
+
+**Nu allebei**: de tabel en samenvatting tonen de echte accustand, die
+nooit onder de ondergrens zakt, plus "Waarvan bruikbaar, laagste" - 0%
+daar is het signaal dat de accu niets meer levert.
+
+Getoetst met een avond zonder zon: 20:00 82%/80%, 23:00 26%/18%, 02:00
+10%/0%.
+
+**Getest**: vier tests erbij in `test_quarter_plan.py`.
+
+**Volledige testsuite**: 1750 tests, allemaal groen.

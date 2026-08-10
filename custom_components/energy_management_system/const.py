@@ -2782,3 +2782,126 @@ QUARTER_PLAN_SNAPSHOT_LENGTH = 200
 #   - het zonopvang-uitstelplan gaat aan of uit
 #   - verkopen wordt geblokkeerd omdat de woning voorgaat
 PLAN_CHANGE_MIN_QUARTERS = 1
+
+# --- Achterhoeks (v1.24.0) -------------------------------------------
+# Gevraagd: "kan ik door middel van 1 switch alles in het Achterhoeks
+# laten tonen, dus ook de meldingen op mijn iPhone?"
+#
+# De hele integratie vertalen zou ongeveer 1.664 losse teksten in de
+# code raken plus ruim 3.000 labels op het dashboard. Alleen de
+# MELDINGEN doen is een fractie daarvan en levert het leukste deel op:
+# je telefoon spreekt Achterhoeks, het dashboard blijft leesbaar voor
+# wie meekijkt.
+#
+# Let op: dit is een benadering van Achterhoeks Nedersaksisch, geen
+# gecontroleerde streektaal. Klopt een woord niet, dan is het zo
+# aangepast - het staat allemaal in deze ene tabel.
+CONF_ACHTERHOEKS = "achterhoeks_meldingen"
+
+# Titels per meldingsoort.
+ACHTERHOEKS_TITELS = {
+    "plan_tekort": "Den accu haalt de nacht neet",
+    "plan_uitstel": "Zunne opvangen wödt uutgesteld",
+    "plan_verkoop_geblokkeerd": "Verkopen geet neet, 't huus geet veur",
+    "vakantie_beweging": "Der beweeg wat, terwijl gi'j weg bunt",
+    "appliance_cheap_moment": "Good moment veur de wasmachine",
+    "appliance_ready": "'t Apparaat is kloar",
+    "battery_cooling": "Accukoeling an of uut",
+    "sluipverbruik": "'t Lik of der wat stiekem stroom vret",
+    "device_drift": "Der is mangs wat kapot",
+    "mode_change": "De stand is verandert",
+    "battery_wont_last_night": "Den accu haalt de nacht neet",
+    "battery_full_with_sun": "Accu vol en de zunne schient nog",
+    "low_soc_before_peak": "Weinig in den accu veur de duurte",
+    "cheap_block_soon": "'t Goedkope blok begint zo",
+    "negative_prices": "Prieze goat onder nul",
+    "exceptional_peak_price": "Uutzunderlijk duur kwartier vandage",
+    "solar_underperforming": "De zunne dut minder as verwacht",
+    "low_solar_day": "Weinig-zunne-dag",
+    "sensor_unavailable": "'n Sensor is d'r neet meer",
+    "integration_error": "'t Systeem löp vast",
+    "battery_module_drift": "'n Accumodule löp uut de pas",
+    "module_became_ready": "'n Adviesmodule is kloar",
+    "pv_orientation_mismatch": "De PV-richting klop neet",
+    "cost_mismatch": "De kosten kloppen neet met de rekening",
+    "daily_summary": "Dagoverzicht",
+    "monthly_summary": "Maondoverzicht",
+}
+
+# Woorden die in de berichtteksten worden vervangen.
+#
+# VOLGORDE IS KRITISCH, en dat bleek meteen bij het proberen:
+#   - "niets" moet vóór "niet", anders wordt het "neets"
+#   - "goedkope" moet erin staan, anders maakt "goed" -> "good"
+#     er "goodkope" van
+#   - "iets" moet ná "niets", anders wordt "niets" -> "nwat"
+# Langere woorden dus altijd eerst.
+ACHTERHOEKS_WOORDEN = (
+    ("mogelijk niet", "mangs neet"),
+    ("nachtelijk", "nachtelijks"),
+    ("gestegen", "umhoog egoan"),
+    ("verbruik", "verbruuk"),
+    ("mogelijk", "mangs"),
+    ("schijnt", "schient"),
+    ("bijna", "hoast"),
+    ("staat", "steet"),
+    ("waarschijnlijk", "waarschienlijk"),
+    ("gedetecteerd", "opgemarkt"),
+    ("goedkoopste", "goedkoopste"),
+    ("goedkope", "goedkope"),
+    ("goedkoop", "goedkoop"),
+    ("teruggeleverd", "trugelevert"),
+    ("teruglevering", "trugelevering"),
+    ("verwachting", "verwachting"),
+    ("kwartier(en)", "kwartier(e)"),
+    ("kilowattuur", "kilowattuur"),
+    ("beschikbaar", "beschikbaor"),
+    ("waterontharder", "waterontharder"),
+    ("vaatwasser", "vaatwasser"),
+    ("wasmachine", "wasmachine"),
+    ("bijgeladen", "bi'jelaojen"),
+    ("uitgesteld", "uutgesteld"),
+    ("geblokkeerd", "geblokkeerd"),
+    ("verwacht", "verwacht"),
+    ("gemiddeld", "gemiddeld"),
+    ("nachtelijk", "nachtelijk"),
+    ("opgewekt", "opewekt"),
+    ("verkopen", "verkopen"),
+    ("geladen", "elaojen"),
+    ("woning", "huus"),
+    ("laatste", "leste"),
+    ("volgens", "volgens"),
+    ("daarna", "doarnoa"),
+    ("straks", "strak"),
+    ("zonder", "zunder"),
+    ("weinig", "weinig"),
+    ("hangen", "hangen"),
+    ("hangt", "hank"),
+    ("wordt", "wödt"),
+    ("worden", "wodden"),
+    ("moeten", "mot"),
+    ("moet", "mot"),
+    ("zonne", "zunne"),
+    ("zon ", "zunne "),
+    ("niets", "niks"),
+    ("iets", "wat"),
+    ("niet", "neet"),
+    ("veel", "völle"),
+    ("even", "eem"),
+    ("gaat", "geet"),
+    ("gaan", "goat"),
+    ("goed", "good"),
+    ("nacht", "nacht"),
+    ("accu", "accu"),
+    ("kan ", "kan "),
+    ("het ", "'t "),
+    ("een ", "'n "),
+    ("zijn", "bunt"),
+    ("is er", "is d'r"),
+    ("er is", "d'r is"),
+    ("meer", "meer"),
+    ("nog", "nog"),
+    ("uit", "uut"),
+    ("nu ", "now "),
+    ("ook", "ok"),
+)

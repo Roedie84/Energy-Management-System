@@ -19,6 +19,7 @@ async def async_setup_entry(
             ForceManualSwitch(coordinator, entry_id=entry.entry_id),
             LearningOnlySwitch(coordinator, entry_id=entry.entry_id),
             VacationModeSwitch(coordinator, entry_id=entry.entry_id),
+            AchterhoeksSwitch(coordinator, entry_id=entry.entry_id),
             SteelstofzuigerOverrideSwitch(coordinator, entry_id=entry.entry_id),
             FietsladersOverrideSwitch(coordinator, entry_id=entry.entry_id),
             ApplianceReadyNotificationsSwitch(coordinator, entry_id=entry.entry_id),
@@ -108,6 +109,54 @@ class LearningOnlySwitch(SwitchEntity, RestoreEntity):
 
     async def async_turn_off(self, **kwargs) -> None:
         await self._coordinator.async_set_learning_only(False)
+        self.async_write_ha_state()
+
+
+class AchterhoeksSwitch(SwitchEntity, RestoreEntity):
+    """Meldingen in het Achterhoeks (v1.24.0).
+
+    Gevraagd: "kan ik door middel van 1 switch alles in het Achterhoeks
+    laten tonen, dus ook de meldingen op mijn iPhone?"
+
+    De hele integratie vertalen zou ongeveer 1.664 losse teksten in de
+    code raken plus ruim 3.000 dashboardlabels. Alleen de MELDINGEN is
+    een fractie daarvan en levert het leukste deel op: de telefoon
+    spreekt Achterhoeks, het dashboard blijft leesbaar voor wie
+    meekijkt.
+
+    Geldt voor de telefoon én het meldingenoverzicht, zodat beide
+    dezelfde taal spreken.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Meldingen in het Achterhoeks"
+    _attr_icon = "mdi:translate"
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        super().__init__()
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_achterhoeks"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def is_on(self) -> bool:
+        return self._coordinator.achterhoeks
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if last_state is not None:
+            self._coordinator.achterhoeks = last_state.state == "on"
+
+    async def async_turn_on(self, **kwargs) -> None:
+        self._coordinator.achterhoeks = True
+        self.async_write_ha_state()
+
+    async def async_turn_off(self, **kwargs) -> None:
+        self._coordinator.achterhoeks = False
         self.async_write_ha_state()
 
 
