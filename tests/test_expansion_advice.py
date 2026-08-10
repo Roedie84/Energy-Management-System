@@ -103,13 +103,19 @@ def test_a_power_constrained_house_gets_an_inverter(make_coordinator, hass):
     assert "tweede omvormer helpt" in advies["advies"]
 
 
-def test_both_constrained_advises_both(make_coordinator, hass):
+def test_both_constrained_advises_the_cheapest_route(make_coordinator, hass):
+    """v1.20.7: eerder werd hier "een tweede omvormer mét eigen modules"
+    aangeraden. De fabrikantspecificatie laat zien dat dat te duur is:
+    één omvormer draagt tot zes modules (17,28 kWh), dus capaciteit
+    vraagt geen tweede omvormer.
+    """
     zwaar = {u: 1.5 for u in range(24)}
     c = _coordinator(make_coordinator, hass, profiel=zwaar)
 
     advies = c.get_expansion_advice()
 
-    assert "mét eigen modules" in advies["advies"]
+    assert "tot zes modules" in advies["advies"]
+    assert "geen tweede omvormer voor nodig" in advies["advies"]
 
 
 def test_no_constraint_advises_nothing(make_coordinator, hass):
@@ -259,3 +265,273 @@ def test_without_a_peak_measurement_it_still_works(make_coordinator, hass):
     c.peak_power_all_time_w = None
 
     assert c.get_expansion_advice()["beschikbaar"] is True
+
+
+# --- v1.20.6: echte prijzen en terugverdientijd ---------------------
+
+def _met_kosten(make_coordinator, hass):
+    from custom_components.energy_management_system.const import (
+        CONF_BATTERY_MODULE_TEMPERATURE_SENSORS,
+    )
+
+    c = make_coordinator(
+        {
+            CONF_MANUAL_DISCHARGE_POWER: 1600.0,
+            CONF_BATTERY_TOTAL_CAPACITY_SENSOR: "sensor.cap",
+            CONF_MIN_SOC_PERCENT: 15.0,
+            CONF_BATTERY_MODULE_TEMPERATURE_SENSORS: ["a", "b", "c"],
+        }
+    )
+    hass.states.set("sensor.cap", "8.6")
+    c.hourly_consumption_profile = {
+        uur: [waarde] * 3 for uur, waarde in ECHT_PROFIEL.items()
+    }
+    c.reserve_daily_records = [
+        {"date": f"2026-08-{x:02d}", "shortfall": x >= 8, "excess": False}
+        for x in range(5, 11)
+    ]
+    c.peak_power_all_time_w = 2199.0
+    c.actual_cost_all_time_eur = -8.13
+    c.counterfactual_cost_all_time_eur = -4.64
+    return c
+
+
+def test_the_cheapest_step_comes_first(make_coordinator, hass):
+    """Het ontlaadvermogen staat op 1600 W terwijl de omvormer 2400 W
+    aankan; dat dekt de gemeten piek van 2199 W zonder nieuwe hardware.
+
+    v1.20.7: de fabrikantspecificatie corrigeert dit. Zendure schrijft:
+    "have an electrician install it on a dedicated circuit without other
+    loads... You can then request a power upgrade to 2400W via the app."
+
+    Het was dus onterecht om dit "gratis" te noemen. Nog steeds de
+    goedkoopste stap - maar met de voorwaarde erbij in plaats van
+    eroverheen.
+    """
+    advies = _met_kosten(make_coordinator, hass).get_expansion_advice()
+
+    assert advies["eerst_proberen"] is not None
+    assert "2400 W aankan" in advies["eerst_proberen"]
+    assert "eigen groep" in advies["eerst_proberen"]
+    assert "elektricien" in advies["eerst_proberen"]
+
+
+def test_no_free_option_when_the_setting_is_already_maxed(
+    make_coordinator, hass
+):
+    c = _met_kosten(make_coordinator, hass)
+    c.config = {**c.config, CONF_MANUAL_DISCHARGE_POWER: 2400.0}
+
+    assert c.get_expansion_advice()["eerst_proberen"] is None
+
+
+def test_the_payback_uses_the_real_prices(make_coordinator, hass):
+    from custom_components.energy_management_system.const import (
+        DEFAULT_BATTERY_INVERTER_PRICE_EUR,
+        DEFAULT_BATTERY_MODULE_PRICE_EUR,
+    )
+
+    advies = _met_kosten(make_coordinator, hass).get_expansion_advice()
+
+    assert advies["moduleprijs_eur"] == DEFAULT_BATTERY_MODULE_PRICE_EUR == 729.0
+    assert advies["omvormerprijs_eur"] == DEFAULT_BATTERY_INVERTER_PRICE_EUR == 374.0
+
+
+def test_an_extra_module_yields_less_than_the_average(make_coordinator, hass):
+    """De eerste kilowattuur vangt de grootste prijsverschillen; wat
+    daarna komt wordt alleen op dure dagen benut."""
+    advies = _met_kosten(make_coordinator, hass).get_expansion_advice()
+
+    per_module = advies["opbrengst_accu_per_jaar_eur"] / 3
+
+    assert advies["opbrengst_extra_module_per_jaar_eur"] < per_module
+
+
+def test_the_inverter_pays_back_faster_than_a_module(make_coordinator, hass):
+    """Met 374 tegen 729 euro is dat wiskunde, maar het is wel de
+    conclusie die de eerdere bundelprijs van 959 euro verborg."""
+    advies = _met_kosten(make_coordinator, hass).get_expansion_advice()
+
+    assert (
+        advies["terugverdientijd_omvormer_jaar"]
+        < advies["terugverdientijd_module_jaar"]
+    )
+
+
+def test_without_cost_history_there_is_no_payback(make_coordinator, hass):
+    """Zonder gemeten voordeel valt er niets te berekenen."""
+    c = _met_kosten(make_coordinator, hass)
+    c.actual_cost_all_time_eur = None
+    c.counterfactual_cost_all_time_eur = None
+
+    advies = c.get_expansion_advice()
+
+    assert advies["terugverdientijd_module_jaar"] is None
+
+
+def test_one_inverter_carries_six_modules(make_coordinator, hass):
+    """Uit de fabrikantspecificatie: "It supports AB3000X, with a
+    maximum of 6 battery connections, expanding total capacity to
+    17.28kWh."
+
+    Dat is wezenlijk voor het advies: een vierde module heeft geen
+    tweede omvormer nodig. Dat scheelt de aanschaf én een tweede groep,
+    want meerdere omvormers moeten volgens Zendure op aparte circuits.
+    """
+    advies = _met_kosten(make_coordinator, hass).get_expansion_advice()
+
+    assert advies["modules_mogelijk_op_deze_omvormer"] == 6
+    assert advies["modules_nu"] == 3
+
+
+def test_the_power_upgrade_names_its_condition(make_coordinator, hass):
+    """Zonder die voorwaarde leest het als "even een instelling
+    aanpassen", en dat is het niet."""
+    advies = _met_kosten(make_coordinator, hass).get_expansion_advice()
+
+    assert "zonder andere belasting" in advies["eerst_proberen"]
+
+
+# --- v1.21.1: fabrieksgrenzen uit de handleiding --------------------
+
+
+def test_the_charge_power_has_headroom_too(make_coordinator, hass):
+    """Uit de handleiding (V1.2, sectie 9): accu laden/ontladen
+    2400W/2600W max. Het laadvermogen staat op 2000 W.
+
+    Dat raakt de tekort-nachten: bij dynamische prijzen tellen goedkope
+    blokken van een kwartier, en sneller laden vangt meer kilowattuur
+    binnen hetzelfde blok.
+    """
+    from custom_components.energy_management_system.const import (
+        CONF_MANUAL_CHARGE_POWER,
+        SOLARFLOW_MAX_BATTERY_CHARGE_W,
+    )
+
+    c = _met_kosten(make_coordinator, hass)
+    c.config = {**c.config, CONF_MANUAL_CHARGE_POWER: -2000.0}
+
+    advies = c.get_expansion_advice()
+
+    assert advies["laadvermogen_w"] == 2000
+    assert advies["laadvermogen_max_w"] == SOLARFLOW_MAX_BATTERY_CHARGE_W
+    assert "goedkope kwartier" in advies["laadruimte_over"]
+
+
+def test_the_charge_hint_names_the_same_condition(make_coordinator, hass):
+    """Boven 800 W geldt de eis van een eigen groep - ook voor laden."""
+    from custom_components.energy_management_system.const import (
+        CONF_MANUAL_CHARGE_POWER,
+    )
+
+    c = _met_kosten(make_coordinator, hass)
+    c.config = {**c.config, CONF_MANUAL_CHARGE_POWER: -2000.0}
+
+    advies = c.get_expansion_advice()
+
+    assert "eigen groep" in advies["laadruimte_over"]
+    assert "elektricien" in advies["laadruimte_over"]
+
+
+def test_a_maxed_charge_power_gives_no_hint(make_coordinator, hass):
+    from custom_components.energy_management_system.const import (
+        CONF_MANUAL_CHARGE_POWER,
+        SOLARFLOW_MAX_BATTERY_CHARGE_W,
+    )
+
+    c = _met_kosten(make_coordinator, hass)
+    c.config = {
+        **c.config,
+        CONF_MANUAL_CHARGE_POWER: -SOLARFLOW_MAX_BATTERY_CHARGE_W,
+    }
+
+    assert c.get_expansion_advice()["laadruimte_over"] is None
+
+
+def test_the_limits_come_from_the_manual():
+    """Vastgelegd zodat ze niet stilaan uit een aanname gaan bestaan."""
+    from custom_components.energy_management_system.const import (
+        SOLARFLOW_DEFAULT_GRID_POWER_W,
+        SOLARFLOW_MAX_BATTERY_CHARGE_W,
+        SOLARFLOW_MAX_GRID_POWER_W,
+        SOLARFLOW_MAX_MODULES,
+        SOLARFLOW_OPERATING_TEMP_MAX_C,
+        SOLARFLOW_OPERATING_TEMP_MIN_C,
+    )
+
+    assert SOLARFLOW_MAX_GRID_POWER_W == 2400.0
+    assert SOLARFLOW_DEFAULT_GRID_POWER_W == 800.0
+    assert SOLARFLOW_MAX_BATTERY_CHARGE_W == 2400.0
+    assert SOLARFLOW_MAX_MODULES == 6
+    assert SOLARFLOW_OPERATING_TEMP_MIN_C == -20.0
+    assert SOLARFLOW_OPERATING_TEMP_MAX_C == 60.0
+
+
+# --- v1.21.2: bewust begrensd vermogen -------------------------------
+
+
+def _bewust(make_coordinator, hass, bewust=True):
+    from custom_components.energy_management_system.const import (
+        CONF_MANUAL_CHARGE_POWER,
+        CONF_POWER_LIMITS_INTENTIONAL,
+    )
+
+    c = _met_kosten(make_coordinator, hass)
+    c.config = {
+        **c.config,
+        CONF_MANUAL_CHARGE_POWER: -2000.0,
+        CONF_POWER_LIMITS_INTENTIONAL: bewust,
+    }
+    return c.get_expansion_advice()
+
+
+def test_deliberate_limits_get_no_suggestions(make_coordinator, hass):
+    """Gemeld: "Let wel op dat ik handmatig begrensd heb op 2000W laden
+    1600W ontladen."
+
+    Het advies zag alleen dat die onder de fabrieksgrens van 2400 liggen
+    en raadde aan ze te verhogen. Dat is ongefundeerd: het zijn bewuste
+    keuzes, en de redenen kent de integratie niet - de groep in de
+    meterkast, cellen sparen, geluid, of gewoon marge willen houden.
+    """
+    advies = _bewust(make_coordinator, hass)
+
+    assert advies["eerst_proberen"] is None
+    assert advies["laadruimte_over"] is None
+    assert advies["vermogen_bewust_begrensd"] is True
+
+
+def test_without_the_flag_the_suggestions_return(make_coordinator, hass):
+    """De instelling mag geen suggesties wegnemen bij wie ze wél wil."""
+    advies = _bewust(make_coordinator, hass, bewust=False)
+
+    assert advies["eerst_proberen"] is not None
+    assert advies["laadruimte_over"] is not None
+
+
+def test_the_verdict_changes_too(make_coordinator, hass):
+    """"Verhoog het vermogen" is bij een bewuste grens geen advies maar
+    een herhaling van iets dat al is afgewogen."""
+    advies = _bewust(make_coordinator, hass)
+
+    assert "bewust begrensd" in advies["advies"]
+    assert "een keuze is en geen gebrek" in advies["advies"]
+
+
+def test_the_capacity_advice_survives(make_coordinator, hass):
+    """Wat wél overblijft moet blijven staan: de capaciteit knelt echt,
+    en daar helpt een module."""
+    advies = _bewust(make_coordinator, hass)
+
+    assert advies["capaciteit_knelt"] is True
+    assert "zes modules" in advies["advies"]
+
+
+def test_the_setting_exists():
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    bron = (Path(pkg.__file__).parent / "config_flow.py").read_text()
+
+    assert "CONF_POWER_LIMITS_INTENTIONAL" in bron

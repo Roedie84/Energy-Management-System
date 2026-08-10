@@ -208,3 +208,66 @@ def test_it_is_in_the_export():
     bron = (Path(pkg.__file__).parent / "diagnostics.py").read_text()
 
     assert "weather_ensemble_chosen_source" in bron
+
+
+# --- v1.20.5: de status liep achter -------------------------------
+
+
+def test_motion_sets_the_state_immediately(make_coordinator, hass):
+    """Gemeld: "Er is gezien de sensoren weldegelijk iemand thuis,
+    echter status onbekend?" - met een tabel waarin de bovenste sensor
+    0,2 minuten geleden bewoog.
+
+    De live gebeurtenis vulde wél de tabel en `last_motion_at`, maar
+    herberekende de STATUS niet; die werd alleen op de vijf-minutentick
+    gezet. Dat is precies de verkeerde kant op: afwezigheid mag
+    vertraagd zijn, aanwezigheid niet.
+    """
+    c = _bewegingscoordinator(make_coordinator)
+
+    c._handle_motion_event(_Event("binary_sensor.gang", "off", "on"))
+
+    assert c.presence_state == "thuis"
+
+
+def test_the_table_survives_a_restart():
+    """Zonder bewaren is de tabel na elke herstart leeg, terwijl juist
+    die tabel moet verklaren waarom de status is wat hij is."""
+    import custom_components.energy_management_system.const as C
+
+    bewaard = set()
+    for naam in dir(C):
+        if naam.startswith("PERSISTED_") and isinstance(getattr(C, naam), tuple):
+            bewaard |= set(getattr(C, naam))
+
+    assert "presence_last_seen" in bewaard
+
+
+def test_after_a_restart_the_table_restores_the_state(
+    make_coordinator, hass
+):
+    """`last_motion_at` is dan leeg maar de bewaarde tabel niet; de
+    laatste regel daaruit is de beste schatting."""
+    from datetime import datetime, timezone
+
+    c = _bewegingscoordinator(make_coordinator)
+    c.presence_last_seen = {
+        "binary_sensor.gang": datetime.now(timezone.utc).isoformat()
+    }
+    hass.states.set("binary_sensor.gang", "off")
+
+    c._update_presence(datetime.now(timezone.utc))
+
+    assert c.presence_state == "thuis"
+
+
+def test_a_truly_empty_system_still_says_unknown(make_coordinator, hass):
+    """Zonder enige waarneming is "onbekend" het eerlijke antwoord."""
+    from datetime import datetime, timezone
+
+    c = _bewegingscoordinator(make_coordinator)
+    hass.states.set("binary_sensor.gang", "off")
+
+    c._update_presence(datetime.now(timezone.utc))
+
+    assert c.presence_state == "onbekend"
