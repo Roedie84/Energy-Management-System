@@ -152,3 +152,48 @@ def test_the_failure_is_recorded_not_swallowed():
 
     assert "_LOGGER.exception" in bron
     assert '"fout"' in bron
+
+
+# --- v1.22.1: de losse kwartierprijzen --------------------------------
+
+
+def test_the_quarter_prices_are_exported():
+    """Gevraagd: "De nieuwe kwartierprijzen van Zonneplan zijn toch al
+    bekend?"
+
+    Ja - de integratie kent ze tot morgen middernacht. Maar de export
+    toonde alleen `upcoming_transitions`: samengevoegde blokken per
+    modus met alleen een min- en maxprijs. Voor een hele dag waren dat
+    drie regels met "0,1267 - 0,3505".
+
+    Daarmee valt niet na te gaan WANNEER de prijs hoog is, en dat is nu
+    juist waar het uitstelplan uit v1.22.0 op stuurt.
+    """
+    bron = _export_bron()
+
+    assert "price_forecast_quarters" in bron
+    assert "_get_forecast_entries" in bron
+
+
+def test_the_price_export_is_shielded():
+    """Zonder prijssensor gooit `_get_forecast_entries` een KeyError -
+    dat mag de hele export niet meeslepen."""
+    bron = _export_bron()
+    start = bron.index("price_forecast_quarters")
+    blok = bron[start - 200 : start + 600]
+
+    assert "_veilig(" in blok
+
+
+def test_it_survives_without_a_price_sensor(make_coordinator, hass):
+    c = make_coordinator({})
+
+    def veilig(functie):
+        try:
+            return functie()
+        except Exception as fout:  # noqa: BLE001
+            return {"fout": f"{type(fout).__name__}: {fout}"}
+
+    resultaat = veilig(c._get_forecast_entries)
+
+    assert resultaat is not None

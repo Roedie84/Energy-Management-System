@@ -162,6 +162,12 @@ def test_only_the_pre_existing_kinds_default_to_on():
     standaard_aan = {k for k, _, _, aan, _ in NOTIFICATION_TYPES if aan}
 
     assert standaard_aan == {
+        # v1.23.4: "Accu haalt de nacht mogelijk niet" staat standaard
+        # aan, net als vakantie_beweging en om dezelfde reden: hij vuurt
+        # alleen als er werkelijk iets misgaat. De twee andere
+        # planningsmeldingen (uitstel, verkoop geblokkeerd) zijn
+        # informatief en staan uit - die kunnen wél ruis worden.
+        "plan_tekort",
         "vakantie_beweging",
         "appliance_cheap_moment",
         "appliance_ready",
