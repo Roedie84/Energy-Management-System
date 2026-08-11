@@ -253,3 +253,40 @@ def test_price_still_decides(make_coordinator, hass):
 
     assert plan["uitstellen"] is False
     assert "Prijsverschil" in plan["reden"]
+
+
+# --- v1.31.0: de accu kan maar 2000 W opnemen ------------------------
+
+
+def test_the_charge_limit_decides_the_hour(make_coordinator, hass):
+    """Gemeld: "ik het echter 25% buffer = 1 uur gevraagd, mijn inziens
+    zou het systeem dan om 11 uur naar smart gaan."
+
+    Op 11 augustus koos het plan 12:00. Vanaf dat uur komt er tot 16:00
+    nog 9,66 kWh overschot - meer dan de 8,06 die met marge nodig is -
+    maar in vier uur past er bij 2000 W maar 8,0 kWh in de accu. Precies
+    te weinig, en dat zag het plan niet.
+    """
+    from custom_components.energy_management_system.const import (
+        CONF_MANUAL_CHARGE_POWER,
+    )
+
+    zonder = _coordinator(make_coordinator, hass, beschikbaar=0.6, zon_per_uur=3.5)
+    met = _coordinator(make_coordinator, hass, beschikbaar=0.6, zon_per_uur=3.5)
+    met.config[CONF_MANUAL_CHARGE_POWER] = -2000.0
+
+    laat = zonder.plan_solar_capture_moment(OCHTEND)["omslag_uur"]
+    vroeg = met.plan_solar_capture_moment(OCHTEND)["omslag_uur"]
+
+    # Met de opnamegrens erbij moet de accu eerder beginnen.
+    assert vroeg < laat
+
+
+def test_without_a_configured_charge_power_nothing_changes(
+    make_coordinator, hass
+):
+    """Geen ingesteld vermogen betekent geen grens - blokkeren zou een
+    installatie zonder die instelling stilzetten."""
+    c = _coordinator(make_coordinator, hass, beschikbaar=1.29, zon_per_uur=2.6)
+
+    assert c.plan_solar_capture_moment(OCHTEND)["uitstellen"] is True
