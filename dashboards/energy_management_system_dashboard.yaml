@@ -469,7 +469,7 @@ views:
   panel: true
   cards:
   - type: picture-elements
-    image: /local/energy_management_system_overview.svg?v=1.39.0
+    image: /local/energy_management_system_overview.svg?v=1.39.1
     elements:
     - type: state-label
       entity: sensor.woonkamer_energy_management_system_system_status
@@ -1683,7 +1683,7 @@ views:
         _De accu neemt een vast aantal kilowattuur op; wélke dat zijn bepaalt wat je exporteert. Vroeg laden slurpt de dure ochtendzon op en laat de goedkope middagzon over voor het net - laat laden doet het omgekeerd. Zelfde eind-SoC, hogere opbrengst._
 
 
-        **Verder:** [Proefstand](/energy-management-system/detail-proefstand) · [Kwartierplanning](/energy-management-system/detail-kwartier) · [Samenvatting](/energy-management-system/detail-planning-samenvatting) · [Plantoetsing](/energy-management-system/detail-plantoetsing)'
+        **Verder:** [Kwartierplanning](/energy-management-system/detail-kwartier) · [Samenvatting](/energy-management-system/detail-planning-samenvatting) · [Plantoetsing](/energy-management-system/detail-plantoetsing)'
       grid_options:
         columns: 12
         rows: auto
@@ -2058,7 +2058,7 @@ views:
 
         {% endfor %}{% endif %}
 
-        '
+        **Verder:** [Proefstand](/energy-management-system/detail-proefstand) - kandidaten die meerekenen maar niets sturen, met wat ze zouden hebben opgeleverd.'
 - title: Verloop
   path: detail-verloop
   subview: true

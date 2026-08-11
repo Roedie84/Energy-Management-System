@@ -11978,3 +11978,16 @@ uitspraak doet over het bedrag — ook als die uitspraak "dat kan ik niet"
 is.
 
 **Volledige testsuite**: 1869 tests, allemaal groen.
+
+## v1.39.1 — De proefstand stond op de verkeerde pagina
+
+**Gevraagd**: "Waar vind ik de info nu?"
+
+Goede vraag, en het antwoord klopte niet. De ingang naar de proefstand
+was onder *Planning* beland terwijl hij bij *Meetkwaliteit* hoort — daar
+staat alles wat over betrouwbaarheid gaat, en dat is precies wat een
+kandidaat op de proefstand moet bewijzen.
+
+De link staat nu onderaan de Meetkwaliteit-pagina.
+
+**Volledige testsuite**: 1869 tests, allemaal groen.
