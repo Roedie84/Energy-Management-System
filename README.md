@@ -515,6 +515,45 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Eén tegel per onderwerp (v1.34.0)
+
+**Gemeld**: *"Er zijn nu 2 plannings tegels aanwezig op de
+landingspagina, kan dit samen gevoegd worden?"*
+
+Het waren er vier: Planning, Kwartierplanning, Planning-samenvatting en
+Plantoetsing. Elke keer dat een pagina werd gesplitst omdat de
+tekengrens van 2500 werd gehaald, kwam er ook een tegel bij — een
+indeling die volgt uit een technische grens, niet uit onderwerpen.
+
+Nu één tegel *Planning*, met de doorverwijzingen als links onderaan de
+pagina zelf. Hetzelfde voor *Aanwezigheid* en de tijdlijn.
+
+Daarbij kwamen drie tegels boven water die de verkeerde pagina openden:
+*Systeem*, *Financieel* en *Kwaliteit* wezen alle drie naar
+`detail-verloop`. Zeventien tegels teruggebracht naar acht.
+
+**Volledige testsuite**: 1828 tests, allemaal groen.
+
+## Achterhoeks nagelopen (v1.33.0)
+
+**Gevraagd**: *"Helpt dit nog wat voor de achterhoekse vertaling?"* — met
+een verwijzing naar het dialectwoordenboek van mijnwoordenboek.nl.
+
+Ja, en er zat meteen een fout in: **"mangs" betekent niet "mogelijk"**
+maar *soms*, alvast of binnenkort. De melding "Den accu haalt de nacht
+mangs neet" zei dus "soms niet" in plaats van "misschien niet". Nu
+*meugelijk*.
+
+Verder gecorrigeerd: gaan → *goan* (stond op de wij-vorm), moeten →
+*motten*, bijna → *bi'jnoa*, even → *efkes*, daarna → *daornao*,
+teruggeleverd → *truggelevert*, hangt → *hunk*. En een twintigtal
+woorden erbij die in de meldingen voorkomen.
+
+Het blijft een benadering, geen gecontroleerde streektaal — het
+woordenboek is zelf ook door bezoekers gevuld.
+
+**Volledige testsuite**: 1826 tests, allemaal groen.
+
 ## Rendement per halve slag (v1.32.0)
 
 De gemeten reeks liep van 56,4 tot 97,6% met een mediaan van 82,9,

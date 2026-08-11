@@ -11615,3 +11615,71 @@ en valt de uitkomst hoger uit dan wat er aan de meterkast te merken is.
 Dat is nu zichtbaar doordat beide kanten apart op het dashboard staan.
 
 **Volledige testsuite**: 1823 tests, allemaal groen.
+
+## v1.33.0 — Achterhoeks nagelopen tegen een woordenboek
+
+**Gevraagd**: "Helpt dit nog wat voor de achterhoekse vertaling?" — met
+een verwijzing naar het dialectwoordenboek van mijnwoordenboek.nl (1326
+woorden, door bezoekers aangedragen).
+
+Ja. En er zat meteen een fout in.
+
+### "mangs" betekent niet "mogelijk"
+
+Het betekent **soms**, alvast of binnenkort. De melding *"Den accu haalt
+de nacht mangs neet"* zei dus niet "misschien niet" maar "soms niet" —
+en juist die melding staat standaard aan. Nu **meugelijk**; "mangs"
+staat er nog wel, maar dan voor "soms".
+
+### Verder nagelopen
+
+- **gaan** → *goan* (stond op "goat", dat is de wij-vorm)
+- **moeten** → *motten* (stond op "mot", dat is enkelvoud)
+- **bijna** → *bi'jnoa* (stond op "hoast", dat is Twents/Fries)
+- **even** → *efkes*
+- **daarna** → *daornao*
+- **teruggeleverd** → *truggelevert* (terug is *trugge*, met dubbele g)
+- **hangt** → *hunk*
+
+### Woorden erbij die in de meldingen voorkomen
+
+vandaag → *vandage*, tijd → *tied*, water → *waoter*, klaar → *kloar*,
+nodig → *neudig*, genoeg → *genög*, koud → *kold*, warm → *heit*, werk →
+*wark*, meteen → *dreks*, verder → *wieter*, vaak → *duk*, en de kleine
+woorden voor, maar, naar, over, daar, terwijl.
+
+Het blijft een benadering, geen gecontroleerde streektaal — het
+woordenboek is zelf ook door bezoekers gevuld en geeft per woord vaak
+meerdere vormen. Alles staat nog steeds in één tabel in `const.py`.
+
+**Volledige testsuite**: 1826 tests, allemaal groen.
+
+## v1.34.0 — Eén tegel per onderwerp
+
+**Gemeld**: "Er zijn nu 2 plannings tegels aanwezig op de
+landingspagina, kan dit samen gevoegd worden?"
+
+Het waren er zelfs **vier**: Planning, Kwartierplanning,
+Planning-samenvatting en Plantoetsing. Elke keer dat een pagina werd
+gesplitst omdat de tekengrens van 2500 werd gehaald, kwam er ook een
+tegel bij. Dat is een indeling die volgt uit een technische grens, niet
+uit onderwerpen.
+
+**Nu**: één tegel *Planning*, met de drie doorverwijzingen als links
+onderaan de pagina zelf. Hetzelfde voor *Aanwezigheid* en de tijdlijn.
+
+### Drie tegels die de verkeerde pagina openden
+
+Onder "Meer bekijken" stonden *Systeem*, *Financieel*, *Verloop* en
+*Kwaliteit* — en alle vier wezen ze naar `detail-verloop`. Drie ervan
+beloofden dus iets anders dan ze gaven. Ook stonden *PV / zon* en
+*Apparaten* er dubbel in, één keer per sectie.
+
+Zeventien tegels teruggebracht naar acht, elk naar een eigen pagina.
+
+Twee tests erbij die dit vasthouden: geen twee tegels naar dezelfde
+pagina, en niet meer dan één planningsingang. En de bestaande toets op
+bereikbaarheid telt nu ook links in een markdown-kaart mee — anders zou
+"elke pagina heeft een ingang" alleen met tegels te halen zijn.
+
+**Volledige testsuite**: 1828 tests, allemaal groen.
