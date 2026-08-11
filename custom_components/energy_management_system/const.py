@@ -2778,6 +2778,22 @@ SOLAR_POOR_DAY_KWH = 5.0
 # het net hangt.
 SELL_RESERVE_SAFETY_FACTOR = 1.5
 
+# v1.27.0: de toets hierboven rekende met de NETTOSOM tot het goedkope
+# blok - verbruik min zon over de hele periode. Daarmee werd de zon van
+# MORGENOCHTEND afgetrokken van het verbruik van VANNACHT, en dat is
+# precies de fout die `_estimate_worst_case_deficit_kwh` elders al
+# oplost: zon komt overdag, en helpt vannacht niet.
+#
+# Op 10 augustus 20:54 gaf de nettosom 1,77 kWh nodig; het diepste
+# tekort onderweg was 5,23 kWh. De planning verkocht 10 kwartieren en
+# voorspelde daarna twee kwartieren waarin het huis aan het net hing.
+#
+# De marge mag hier lager dan 1,5: die factor compenseerde een basis die
+# structureel te laag was. Het diepste tekort is zelf al voorzichtig (zon
+# telt met rendement, live verbruik telt mee), dus 1,15 - gelijk aan wat
+# de energiebrug aanhoudt.
+SELL_RESERVE_DEEPEST_SAFETY_FACTOR = 1.15
+
 # --- Kwartierplanning: vooruitkijken en wijzigingen (v1.23.2) --------
 # Gevraagd: "De kwartierplanning pagina moet eigenlijk vooruitkijken
 # zoveel prijzen er zijn, dus waarschijnlijk max. 36 regels. Als

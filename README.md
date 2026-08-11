@@ -515,6 +515,49 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## De zonschatting stond verkeerd geijkt (v1.27.0)
+
+**Gemeld**: *"Hier gaat wat mis de accu kan niet in 1 uur vol zijn.
+Vermogen zonnepanelen is W en niet kWh dus hier gaat iets niet goed."*
+
+De eenheid klopte; de ijking niet.
+
+De live correctie deelt de Solcast-teller *"rest van vandaag"* door de
+eigen optelling voor de rest van vandaag. Die deling geldt alleen vanaf
+**nu** — de teller telt af vanaf het huidige moment. Hij werd geijkt op
+het *begin van de periode die geschat werd*, dus voor een kwartier van
+later vanmiddag krimpt de noemer terwijl de teller blijft staan:
+
+| Kwartier | Getoond | Ruwe voorspelling | Factor |
+|---|---|---|---|
+| 13:00 | 1,227 | 0,743 | 1,65× |
+| 15:00 | 1,795 | 0,645 | 2,78× |
+| 16:30 | 2,641 | 0,517 | 5,11× |
+| 17:30 | 3,512 | 0,396 | 8,87× |
+
+De impliciete teller stond alle vier de keren op 23,0 kWh: de
+dagvoorspelling. Gevolg: 3,5 kWh in een kwartier — 14 kW uit een
+installatie die op 2,9 kW piekt.
+
+Deze fout raakte élke schatting vooruit: ook de reserve, de energiebrug
+en de verkooptoets lazen structureel te veel zon.
+
+### Vermogensgrenzen in de simulatie
+
+De kwartierplanning kende de grenzen niet. Laden staat bewust handmatig
+op 2000 W (0,5 kWh per kwartier), ontladen op 1600 W (0,4 kWh). Zon die
+er niet in kan, wordt als teruglevering geboekt.
+
+### Verkooptoets op het diepste moment
+
+Rem 2 rekende met de nettosom tot het goedkope blok en trok daarmee de
+zon van *morgenochtend* af van het verbruik van *vannacht*: 1,77 kWh
+nodig terwijl het diepste moment onderweg 5,23 kWh vroeg. Nu dezelfde
+wandeling als de energiebrug, met marge 1,15× in plaats van 1,5×. De
+planning past die reserve ook toe, per uur berekend.
+
+**Volledige testsuite**: 1782 tests, allemaal groen.
+
 ## Tijdlijn van aanwezigheid (v1.26.0)
 
 **Gevraagd**: *"Tevens in dit overzicht een 'time table' Thuis, weg

@@ -363,6 +363,7 @@ from .const import (
     SOLAR_DEFER_MIN_PRICE_GAIN_EUR,
     SOLAR_DEFER_MIN_SOC_PERCENT,
     SELL_RESERVE_SAFETY_FACTOR,
+    SELL_RESERVE_DEEPEST_SAFETY_FACTOR,
     SOLAR_DEFER_SAFETY_FACTOR,
     SOLAR_DEFER_TARGET_FULL_HOUR,
     PV_ORIENTATION_MISMATCH_DEGREES,
@@ -7064,10 +7065,33 @@ class EnergyManagementSystemCoordinator:
         daily_bias_percent = (
             self.solar_tracker.learned_bias_percent if self.solar_tracker else None
         )
+        # v1.27.0, gemeld: "Hier gaat wat mis de accu kan niet in 1 uur
+        # vol zijn. Vermogen zonnepanelen is W en niet kWh dus hier gaat
+        # iets niet goed."
+        #
+        # De eenheid klopte wel, de IJKING niet. Deze verhouding is de
+        # live Solcast-teller "rest van vandaag" gedeeld door onze eigen
+        # optelling voor de rest van vandaag. Die deling is alleen
+        # geldig vanaf NU: de teller telt af vanaf het huidige moment.
+        #
+        # Hij werd echter geijkt op `start` - het begin van de periode
+        # die geschat wordt. Bij een kwartier van vanmiddag krimpt de
+        # noemer (nog maar een paar uur zon te gaan) terwijl de teller
+        # blijft staan, en loopt de factor op. In de planning van 11
+        # augustus was dat na te rekenen: 1,65× om 13:00, 2,78× om
+        # 15:00, 5,11× om 16:30 en 8,87× om 17:30 - de impliciete teller
+        # stond alle vier de keren op 23,0 kWh.
+        #
+        # Gevolg: 3,5 kWh zon in een kwartier (14 kW uit een installatie
+        # die op 2,9 kW piekt) en een accu die in een uur vol stond.
+        #
+        # Deze fout raakt élke schatting vooruit: ook de reserve en de
+        # verkooptoets lazen te veel zon.
+        nu = dt_util.now()
         remaining_correction_ratio = self._get_pv_remaining_correction_ratio(
-            start, pv_entries
+            nu, pv_entries
         )
-        today = start.date()
+        today = nu.date()
 
         total_kwh = 0.0
         for entry_start, entry_end, entry_kwh in pv_entries:
@@ -7083,7 +7107,14 @@ class EnergyManagementSystemCoordinator:
             ).total_seconds() / entry_duration
             segment_kwh = entry_kwh * overlap_fraction
 
-            if entry_start.date() == today and remaining_correction_ratio is not None:
+            # De live teller gaat over wat er van vandaag NOG komt. Een
+            # uur van vandaag dat al voorbij is, zit niet in die teller
+            # en hoort de verhouding dus niet te krijgen.
+            if (
+                entry_start.date() == today
+                and entry_end > nu
+                and remaining_correction_ratio is not None
+            ):
                 segment_kwh *= remaining_correction_ratio
             else:
                 hourly_ratio = self.learned_pv_hourly_ratio(entry_start.hour)
@@ -7550,6 +7581,10 @@ class EnergyManagementSystemCoordinator:
         soc = min(beschikbaar, bruikbaar)
 
         ontlaad_w = abs(self.config.get(CONF_MANUAL_DISCHARGE_POWER) or 0)
+        # v1.27.0: het laadvermogen staat bewust handmatig begrensd
+        # (2000 W). Zonder die grens laadde de simulatie 1,7 kWh in een
+        # kwartier - ruim 6 kW.
+        laad_w = abs(self.config.get(CONF_MANUAL_CHARGE_POWER) or 0)
         drempel = self.last_expensive_price_threshold
         van_net_geladen = self._grid_charged_today
         uitstelplan = self.last_solar_defer_plan or {}
@@ -7561,6 +7596,30 @@ class EnergyManagementSystemCoordinator:
 
         plan = []
         loper = 0.0
+        # v1.27.0: de planning verkocht tot de accu leeg was, terwijl de
+        # aansturing dat allang tegenhoudt (de verkooptoets van v1.23.0).
+        # Een planning die iets anders belooft dan de aansturing doet, is
+        # erger dan geen planning - dezelfde reden waarom de manual-regel
+        # er in v1.22.2 in kwam.
+        #
+        # Per uur berekend en onthouden: de wandeling is niet gratis en
+        # binnen een uur verandert het dieptepunt nauwelijks.
+        reserve_cache: dict[str, float] = {}
+
+        def reserve_op(moment: datetime) -> float:
+            blok = self.last_cheap_block_start
+            if blok is None or blok <= moment:
+                return 0.0
+            sleutel = moment.strftime("%Y-%m-%d %H")
+            if sleutel not in reserve_cache:
+                diepste = self._estimate_worst_case_deficit_kwh(moment, blok)
+                reserve_cache[sleutel] = (
+                    0.0
+                    if diepste is None
+                    else diepste * SELL_RESERVE_DEEPEST_SAFETY_FACTOR
+                )
+            return reserve_cache[sleutel]
+
         for start, einde, prijs_ruw in entries:
             # v1.24.2: `_get_forecast_entries` geeft de RAUWE waarde
             # (3181681), niet euro's. Zonder deling werd de verwachte
@@ -7585,6 +7644,7 @@ class EnergyManagementSystemCoordinator:
             in_blok = prijs <= blok_drempel
 
             duur_kwh = ontlaad_w / 1000 * duur
+            laad_kwh = laad_w / 1000 * duur if laad_w else float("inf")
             duur_kwartier = (
                 drempel is not None and prijs >= drempel and not van_net_geladen
             )
@@ -7607,14 +7667,15 @@ class EnergyManagementSystemCoordinator:
             # het net hangt. Dat is geen gewone regel in de tabel maar
             # een waarschuwing.
             tekort = False
-            if duur_kwartier and soc >= duur_kwh * 0.5:
+            if duur_kwartier and soc >= duur_kwh * 0.5 and soc > reserve_op(start):
                 modus = "manual (verkopen)"
                 uit = min(soc, duur_kwh)
                 soc -= uit
                 net = round(-(uit - verbruik + zon), 3)
             elif uitstellen:
                 modus = "smart_discharging"
-                uit = min(soc, verbruik)
+                # v1.27.0: ook hier geldt de ontlaadgrens van 1600 W.
+                uit = min(soc, verbruik, duur_kwh)
                 soc -= uit
                 if uit < verbruik - zon:
                     tekort = True
@@ -7622,10 +7683,18 @@ class EnergyManagementSystemCoordinator:
             else:
                 modus = "smart"
                 over = max(0.0, zon - verbruik)
-                naar = min(over, bruikbaar - soc)
+                # v1.27.0, gemeld: "Hier gaat wat mis de accu kan niet
+                # in 1 uur vol zijn."
+                #
+                # Klopt, en dat was niet alleen de te hoge zon: de
+                # simulatie kende de vermogensgrenzen niet. Ze staan
+                # bewust handmatig op 2000 W laden en 1600 W ontladen,
+                # dus meer dan 0,5 kWh per kwartier kan er niet in - wat
+                # de zon ook doet. De rest gaat naar het net.
+                naar = min(over, bruikbaar - soc, laad_kwh)
                 soc += naar
                 nodig = max(0.0, verbruik - zon)
-                uit = min(soc, nodig)
+                uit = min(soc, nodig, duur_kwh)
                 soc -= uit
                 if uit < nodig:
                     tekort = True
@@ -8025,21 +8094,44 @@ class EnergyManagementSystemCoordinator:
 
         # Rem 2: houdt de woning het tot het goedkope blok?
         blok_start = self.last_cheap_block_start
+        methode = "diepste tekort onderweg"
         if blok_start is None or blok_start <= now:
             nodig = 0.0
+            veilig = 0.0
         else:
-            nodig = (
-                self._estimate_consumption_kwh_for_period(now, blok_start) or 0.0
-            )
-            zon = self._estimate_pv_kwh_for_period(now, blok_start) or 0.0
-            nodig = max(0.0, nodig - zon)
-        veilig = nodig * SELL_RESERVE_SAFETY_FACTOR
+            # v1.27.0, gevonden in de export van 10 augustus: de
+            # nettosom over de hele periode trok de zon van
+            # MORGENOCHTEND af van het verbruik van VANNACHT. Nodig
+            # kwam op 1,77 kWh terwijl het diepste moment onderweg
+            # 5,23 kWh vroeg; de planning verkocht 10 kwartieren en
+            # voorzag daarna twee kwartieren waarin het huis aan het
+            # net hing.
+            #
+            # Dezelfde wandeling als de energiebrug gebruikt: uur voor
+            # uur, met het dieptepunt vlak voor zonsopkomst als
+            # uitkomst.
+            diepste = self._estimate_worst_case_deficit_kwh(now, blok_start)
+            if diepste is None:
+                # Zonder volledig uurprofiel valt die wandeling niet te
+                # maken. Dan de oude nettosom met de oude, ruimere
+                # marge - die was op dít getal gekalibreerd.
+                nodig = (
+                    self._estimate_consumption_kwh_for_period(now, blok_start) or 0.0
+                )
+                zon = self._estimate_pv_kwh_for_period(now, blok_start) or 0.0
+                nodig = max(0.0, nodig - zon)
+                veilig = nodig * SELL_RESERVE_SAFETY_FACTOR
+                methode = "nettosom (geen volledig uurprofiel)"
+            else:
+                nodig = diepste
+                veilig = diepste * SELL_RESERVE_DEEPEST_SAFETY_FACTOR
 
         if beschikbaar <= veilig:
             return {
                 "mag_verkopen": False,
                 "nodig_voor_woning_kwh": round(veilig, 2),
                 "beschikbaar_kwh": round(beschikbaar, 2),
+                "methode": methode,
                 "reden": (
                     f"De woning heeft {veilig:.2f} kWh nodig tot het goedkope "
                     f"blok en er is {beschikbaar:.2f} kWh - verkopen zou het "
@@ -8052,6 +8144,7 @@ class EnergyManagementSystemCoordinator:
             "nodig_voor_woning_kwh": round(veilig, 2),
             "beschikbaar_kwh": round(beschikbaar, 2),
             "vrij_te_verkopen_kwh": round(beschikbaar - veilig, 2),
+            "methode": methode,
             "verwachte_zon_kwh": (
                 round(verwacht_vandaag, 1) if verwacht_vandaag is not None else None
             ),
