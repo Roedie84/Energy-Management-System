@@ -220,3 +220,93 @@ def test_without_a_day_meter_it_uses_the_forecast(make_coordinator, hass):
     }
 
     assert c.may_sell_now(NU, 3.0)["mag_verkopen"] is True
+
+
+# --- v1.27.0: het diepste moment, niet de nettosom -------------------
+
+
+def _nacht(make_coordinator, hass):
+    """Een avond zoals 10 augustus 20:54: het goedkope blok ligt de
+    volgende ochtend, dus er zit een hele nacht tussen.
+
+    De nettosom over die periode trok de zon van MORGENOCHTEND af van
+    het verbruik van VANNACHT. Nodig kwam op 1,77 kWh terwijl het
+    diepste moment onderweg 5,23 kWh vroeg.
+    """
+    avond = datetime(2026, 8, 10, 18, 54, tzinfo=timezone.utc)
+    c = make_coordinator({CONF_SOLAR_TODAY_FORECAST_SENSOR: "sensor.solcast"})
+    c.last_cheap_block_start = avond + timedelta(hours=14)
+    c.pv_production_today_kwh = 21.0
+    c.learned_hourly_avg_kw = lambda uur: 0.35
+    # Zon komt overdag; 's nachts niets.
+    c._estimate_pv_kwh_for_period = lambda a, b: (
+        0.0
+        if a.hour >= 20 or a.hour < 7
+        else 1.0 * (b - a).total_seconds() / 3600
+    )
+    c._estimate_consumption_kwh_for_period = (
+        lambda a, b: 0.35 * (b - a).total_seconds() / 3600
+    )
+    return c, avond
+
+
+def test_the_night_counts_not_the_net_sum(make_coordinator, hass):
+    """De zon van morgenochtend helpt vannacht niet."""
+    c, avond = _nacht(make_coordinator, hass)
+
+    nettosom = c._estimate_consumption_kwh_for_period(
+        avond, c.last_cheap_block_start
+    ) - c._estimate_pv_kwh_for_period(avond, c.last_cheap_block_start)
+    diepste = c._estimate_worst_case_deficit_kwh(avond, c.last_cheap_block_start)
+
+    assert diepste > nettosom
+    resultaat = c.may_sell_now(avond, 6.91)
+    assert resultaat["methode"] == "diepste tekort onderweg"
+    assert resultaat["nodig_voor_woning_kwh"] > nettosom
+
+
+def test_selling_stops_before_the_house_hangs_on_the_grid(
+    make_coordinator, hass
+):
+    """De planning verkocht 10 kwartieren en voorspelde daarna twee
+    kwartieren waarin het huis aan het net hing."""
+    c, avond = _nacht(make_coordinator, hass)
+
+    krap = c.may_sell_now(avond, 4.0)
+
+    assert krap["mag_verkopen"] is False
+    assert "aan het net" in krap["reden"]
+
+
+def test_a_real_surplus_may_still_be_sold(make_coordinator, hass):
+    """De toets mag verkopen niet helemaal stilzetten: wat boven de
+    nachtbehoefte uitkomt, is vrij."""
+    c, avond = _nacht(make_coordinator, hass)
+
+    ruim = c.may_sell_now(avond, 7.7)
+
+    assert ruim["mag_verkopen"] is True
+    assert ruim["vrij_te_verkopen_kwh"] > 0
+
+
+def test_without_an_hourly_profile_it_falls_back(make_coordinator, hass):
+    """Zonder uurprofiel valt die wandeling niet te maken. Dan de oude
+    nettosom met de oude, ruimere marge - die was op dát getal
+    gekalibreerd."""
+    c, avond = _nacht(make_coordinator, hass)
+    c.learned_hourly_avg_kw = lambda uur: None
+
+    resultaat = c.may_sell_now(avond, 6.91)
+
+    assert resultaat["methode"].startswith("nettosom")
+
+
+def test_the_deepest_margin_matches_the_energy_bridge():
+    """De 1,5 compenseerde een basis die structureel te laag was. Het
+    diepste tekort is zelf al voorzichtig, dus dezelfde marge als de
+    energiebrug volstaat."""
+    from custom_components.energy_management_system.const import (
+        SELL_RESERVE_DEEPEST_SAFETY_FACTOR,
+    )
+
+    assert SELL_RESERVE_DEEPEST_SAFETY_FACTOR == 1.15
