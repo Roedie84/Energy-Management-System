@@ -547,6 +547,24 @@ alleen "0 van de 24 uren".
 
 **Volledige testsuite**: 1889 tests, allemaal groen.
 
+## Drie dingen uit de export van 18:53 (v1.49.0)
+
+Een volgordefout: `_recompute_measurement_quality()` werd aangeroepen
+vóór het terugzetten van de opslag, rekende dus op een lege reeks en
+zette score én label op None — precies de kwaal die v1.15.0 wilde
+verhelpen. De bestaande test keek alleen of de aanroep ergens in de
+buurt stond; nu wordt de volgorde getoetst.
+
+Een rapport dat zichzelf tegensprak: `uitval: 0` naast een
+per-sensortelling van 8, omdat de eerste over de laatste twintig
+metingen gaat en de tweede over de hele looptijd.
+
+En de dagstand van de PV-geometrie werd niet bewaard, waardoor elke
+herstart de dag wiste waarop gemeten werd — "0/5 heldere dagen" was
+daarmee een zelfvervullende voorspelling.
+
+**Volledige testsuite**: 1910 tests, allemaal groen.
+
 ## De codebase langs dezelfde meetlat (v1.48.0)
 
 **Gevraagd**: *"kun je aan de hand van deze verbeteringen de hele code

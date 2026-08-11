@@ -12397,3 +12397,51 @@ Een test die geen `datetime.now()`, `datetime.utcnow()` of
 `date.today()` meer toestaat in de integratie.
 
 **Volledige testsuite**: 1908 tests, allemaal groen.
+
+## v1.49.0 — Drie dingen uit de export van 18:53
+
+**Gevraagd**: "Klopt nu alles?" Nee. Maar de ingangscontrole van v1.47.0
+meldt niets meer, dus de azimut wordt nu wél uitgelezen.
+
+### Eerst een correctie op mezelf
+
+Ik schreef gisteren: *"`sun_azimuth_degrees` is None in je export."* Dat
+veld **staat helemaal niet in de export**. Ik las een ontbrekende sleutel
+als een lege waarde en presenteerde dat als bewijs. Het bewijs was de
+lege `pv_azimuth_performance`, en de conclusie bleek te kloppen — maar
+de onderbouwing die ik gaf, klopte niet.
+
+### 1. Een volgordefout die de eerdere fix ongedaan maakte
+
+`_recompute_measurement_quality()` werd aangeroepen **vóór**
+`_apply_persisted_state()`. Hij rekende dus op een lege reeks en zette
+score én label juist op `None` — precies de kwaal die v1.15.0 wilde
+verhelpen, alleen nu met een extra regel code.
+
+Te zien in de export: twintig herstelde metingen,
+`sensor_health_score` op null, en de regel in het
+betrouwbaarheidsoverzicht op *"niet geconfigureerd"* — waardoor hij in
+de **doen**-stapel belandde terwijl er niets te configureren viel.
+
+De bestaande test keek alleen of de aanroep ergens in de buurt stond.
+Nu wordt de volgorde getoetst.
+
+### 2. Een rapport dat zichzelf tegensprak
+
+`uitval: 0` naast `uitval_per_sensor: {available_kwh: 8}` in hetzelfde
+blok. De eerste telt over de laatste twintig metingen, de tweede over de
+hele looptijd. De sleutel heet nu `uitval_per_sensor_totaal`, en de zin
+*"sensor 0x niet uitleesbaar"* — die niemand wil lezen — verschijnt
+alleen nog als er ook echt iets is weggevallen.
+
+### 3. "0/5 heldere dagen" was een zelfvervullende voorspelling
+
+De dagstand van de PV-geometrie (`_pv_geometry_day_peak_w` en
+verwanten) werd **niet bewaard**. Bij een herstart staat de piek op 0 en
+wordt de dag stilzwijgend weggegooid; bij een herstart ná de middagpiek
+is de rest van de dag bovendien te donker om als "helder" door te komen.
+
+Elke versie die je vandaag installeerde, wiste dus de dag waarop
+gemeten werd. Nu blijft de dagstand staan.
+
+**Volledige testsuite**: 1910 tests, allemaal groen.

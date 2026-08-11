@@ -1223,6 +1223,19 @@ PERSISTED_PLAIN_FIELDS = (
     # niet" opnieuw af - te zien in de export van 11 augustus, waar hij
     # om 14:30, 15:31 en 16:31 langskwam.
     "_last_plan_alert",
+    # --- v1.49.0 -----------------------------------------------------
+    # De dagstand van de PV-geometrie. `_finalize_pv_geometry_day` sluit
+    # de dag af zodra de datum wisselt - maar na een herstart staat de
+    # piek op 0 en wordt de dag stilzwijgend weggegooid. Met een herstart
+    # ná de middagpiek is de rest van de dag bovendien te donker om als
+    # "helder" door te komen, en telt die dag dus nooit mee.
+    #
+    # Dat maakt "0/5 heldere dagen" op een strakblauwe dag een
+    # zelfvervullende voorspelling: elke versie die je installeert wist
+    # de dag waarop gemeten werd.
+    "_pv_geometry_day_peak_w",
+    "_pv_geometry_day_peak_azimuth",
+    "_pv_geometry_day_expected_peak_w",
     "plan_review_history",
     "plan_snapshot",
     # v1.20.0: wanneer er doorgaans naar bed wordt gegaan. Zonder
@@ -1299,6 +1312,8 @@ PERSISTED_PLAIN_FIELDS = (
 # tick meteen worden gewist, omdat de coordinator dan denkt dat er een
 # nieuwe dag is begonnen - dan was het terugzetten zinloos geweest.
 PERSISTED_DATE_FIELDS = (
+    # v1.49.0: bij welke dag de piekgegevens hierboven horen.
+    "_pv_geometry_day_key",
     "_water_sessions_day_key",
     "_battery_module_day_key",
     "_peak_power_day_key",

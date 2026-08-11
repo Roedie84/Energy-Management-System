@@ -4074,7 +4074,7 @@ class EnergyManagementSystemCoordinator:
             ),
             "fouten": tellers["fouten"],
             "sensor_uitval": uitsplitsing.get("uitval"),
-            "sensor_uitval_per_sensor": uitsplitsing.get("uitval_per_sensor"),
+            "sensor_uitval_per_sensor": uitsplitsing.get("uitval_per_sensor_totaal"),
             "kosten": self._huidige_dagkosten(),
             "pv_kwh": round(self.pv_production_today_kwh, 2),
             "pv_bron": self.pv_production_source,
@@ -7409,11 +7409,20 @@ class EnergyManagementSystemCoordinator:
             "Sensor-gezondheid (Kirchhoff)",
             {
                 "niveau": self.normalise_reliability(self.measurement_quality),
+                # v1.49.0: "sensor 0x niet uitleesbaar" is geen zin die
+                # iemand wil lezen. Alleen noemen als er ook echt iets
+                # weggevallen is.
                 "reden": (
-                    f"{uitsplitsing['vergelijkingen']} vergelijkingen, "
-                    f"{uitsplitsing['nauwkeurigheid_percent']}% binnen de "
-                    f"marge; sensor {uitsplitsing['uitval']}x niet "
-                    "uitleesbaar."
+                    (
+                        f"{uitsplitsing['vergelijkingen']} vergelijkingen, "
+                        f"{uitsplitsing['nauwkeurigheid_percent']}% binnen "
+                        "de marge"
+                        + (
+                            f"; {uitsplitsing['uitval']}x viel een sensor weg."
+                            if uitsplitsing["uitval"]
+                            else "."
+                        )
+                    )
                     if uitsplitsing["vergelijkingen"]
                     else "Nog geen geldige vergelijkingen."
                 ),
@@ -13295,7 +13304,7 @@ class EnergyManagementSystemCoordinator:
                 "uitval": 0,
                 # Dezelfde sleutels als hieronder: een aanroeper mag niet
                 # hoeven raden of dit veld er is.
-                "uitval_per_sensor": {},
+                "uitval_per_sensor_totaal": {},
                 "nauwkeurigheid_percent": None,
                 "beschikbaarheid_percent": None,
                 "hoofdoorzaak": None,
@@ -13327,7 +13336,15 @@ class EnergyManagementSystemCoordinator:
             "vergelijkingen": len(echte),
             "uitval": uitval,
             # v1.8.2: wélke sensor, gesorteerd op hoe vaak.
-            "uitval_per_sensor": dict(
+            #
+            # v1.49.0: dit is een teller over de HELE looptijd, terwijl
+            # `uitval` hierboven over de laatste twintig metingen gaat.
+            # In de export van 18:53 stond daardoor "uitval 0" naast
+            # "available_kwh: 8" in hetzelfde rapport, en werd de zin
+            # "sensor 0x niet uitleesbaar" opgebouwd terwijl er wel
+            # degelijk iets was weggevallen - alleen langer geleden.
+            # De sleutel zegt nu waar hij over gaat.
+            "uitval_per_sensor_totaal": dict(
                 sorted(
                     self.balance_missing_by_entity.items(),
                     key=lambda kv: -kv[1],
@@ -15373,14 +15390,25 @@ class EnergyManagementSystemCoordinator:
             return
         stored = await self._state_store.async_load()
         self._state_store_loaded = True
+        if isinstance(stored, dict):
+            self._apply_persisted_state(stored)
+        self._discard_history_from_an_older_method()
         # v1.15.0: het oordeel over de meetkwaliteit volgt uit de
         # herstelde foutreeks. Zonder deze aanroep blijft het None tot
         # de eerste nieuwe meting, en verdwijnt het aandachtspunt na een
         # herstart terwijl het probleem gewoon doorloopt.
+        #
+        # v1.49.0: en die aanroep stond VOOR het terugzetten van de
+        # opslag, dus rekende hij op een lege reeks en zette allebei de
+        # velden juist op None. Precies de kwaal die v1.15.0 wilde
+        # verhelpen, alleen nu met een regel code erbij.
+        #
+        # In de export van 18:53 is het gevolg te zien: twintig
+        # herstelde metingen, `sensor_health_score` op null, en de regel
+        # in het betrouwbaarheidsoverzicht op "niet geconfigureerd" -
+        # waardoor hij in de DOEN-stapel belandde terwijl er niets te
+        # configureren viel.
         self._recompute_measurement_quality()
-        if isinstance(stored, dict):
-            self._apply_persisted_state(stored)
-        self._discard_history_from_an_older_method()
 
     def schedule_persisted_state_save(self) -> None:
         """Plant een vertraagde opslag (v1.0.4).
@@ -15869,11 +15897,11 @@ class EnergyManagementSystemCoordinator:
                         + ", ".join(
                             f"{eid} ({aantal}x)"
                             for eid, aantal in uitsplitsing[
-                                "uitval_per_sensor"
+                                "uitval_per_sensor_totaal"
                             ].items()
                         )
                         + "."
-                        if uitsplitsing["uitval_per_sensor"]
+                        if uitsplitsing["uitval_per_sensor_totaal"]
                         else "."
                     )
                 )
