@@ -693,3 +693,77 @@ def test_the_summary_shows_both(make_coordinator, hass):
         samenvatting["laagste_soc_procent"]
         >= samenvatting["laagste_bruikbaar_procent"]
     )
+
+
+# --- v1.27.0: de vermogensgrenzen gelden ook in de simulatie ---------
+
+
+def _zonnig(make_coordinator, hass, zon_kw=8.0):
+    """Een accu die leeg begint met veel meer zon dan hij kan opnemen.
+
+    Gemeld: "Hier gaat wat mis de accu kan niet in 1 uur vol zijn."
+    De simulatie kende de grenzen niet: 2000 W laden en 1600 W ontladen,
+    bewust handmatig ingesteld.
+    """
+    from custom_components.energy_management_system.const import (
+        CONF_MANUAL_CHARGE_POWER,
+    )
+
+    c = _coordinator(make_coordinator, hass, beschikbaar=0.1)
+    c.config[CONF_MANUAL_CHARGE_POWER] = -2000.0
+    c._estimate_pv_kwh_for_period = lambda a, b: (
+        zon_kw * (b - a).total_seconds() / 3600 if 9 <= a.hour < 18 else 0.0
+    )
+    return c
+
+
+def test_charging_respects_the_power_limit(make_coordinator, hass):
+    """Met 2000 W kan er hooguit 0,5 kWh per kwartier in - wat de zon
+    ook doet. De rest gaat naar het net."""
+    plan = _zonnig(make_coordinator, hass).get_quarter_plan(NU)
+
+    stijgingen = [
+        plan[i + 1]["soc_kwh"] - plan[i]["soc_kwh"] for i in range(len(plan) - 1)
+    ]
+
+    assert max(stijgingen) <= 0.5 + 0.001
+
+
+def test_the_battery_cannot_fill_in_an_hour(make_coordinator, hass):
+    """De gemelde regel zelf: 10% -> 100% in vier kwartieren."""
+    plan = _zonnig(make_coordinator, hass).get_quarter_plan(NU)
+
+    vol = next(
+        (i for i, r in enumerate(plan) if r["soc_procent"] >= 100), len(plan)
+    )
+
+    # 7,7 kWh bruikbaar bij 0,5 kWh per kwartier is minstens vijftien
+    # kwartieren, niet vier.
+    assert vol >= 15
+
+
+def test_surplus_above_the_limit_goes_to_the_grid(make_coordinator, hass):
+    """Zon die er niet in kan, hoort als teruglevering geboekt te worden
+    - anders verdwijnt hij uit de opbrengst."""
+    plan = _zonnig(make_coordinator, hass).get_quarter_plan(NU)
+
+    overdag = [r for r in plan if 9 <= int(r["van"][:2]) < 17]
+
+    assert all(r["net_kwh"] < 0 for r in overdag)
+
+
+def test_discharging_respects_the_power_limit(make_coordinator, hass):
+    """1600 W is 0,4 kWh per kwartier; meer kan de accu niet leveren."""
+    c = _coordinator(make_coordinator, hass)
+    c._estimate_pv_kwh_for_period = lambda a, b: 0.0
+    c._estimate_consumption_kwh_for_period = (
+        lambda a, b: 3.0 * (b - a).total_seconds() / 3600
+    )
+
+    plan = c.get_quarter_plan(NU)
+
+    dalingen = [
+        plan[i]["soc_kwh"] - plan[i + 1]["soc_kwh"] for i in range(len(plan) - 1)
+    ]
+
+    assert max(dalingen) <= 0.4 + 0.001
