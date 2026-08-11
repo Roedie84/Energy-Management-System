@@ -598,3 +598,30 @@ def test_user_decisions_are_never_volatile():
         "nilm_dismissed_duplicate_pairs",
     ):
         assert veld in bewaard, veld
+
+
+def test_no_naive_clock_anywhere():
+    """v1.48.0: `datetime.now()` volgt de tijdzone van het PROCES, niet
+    die van Home Assistant. Draait HA in een container op UTC - wat
+    gebruikelijk is - dan scheelt dat 's zomers twee uur.
+
+    Dat viel nergens om: het gaf gewoon een plausibel getal van het
+    verkeerde uur. Twee sensoren lazen zo het verbruiksprofiel en de
+    PV-bias van het verkeerde uur af, en een NILM-bevestiging kreeg
+    mogelijk de verkeerde datum.
+    """
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    map_ = Path(pkg.__file__).parent
+    for bestand in ("coordinator.py", "sensor.py", "diagnostics.py", "config_flow.py"):
+        # Commentaarregels tellen niet mee: daar staat juist de uitleg
+        # waaróm iets niet zo hoort.
+        code = "\n".join(
+            regel.split("#")[0]
+            for regel in (map_ / bestand).read_text().splitlines()
+        )
+        assert "datetime.now()" not in code, bestand
+        assert "datetime.utcnow()" not in code, bestand
+        assert "date.today()" not in code, bestand
