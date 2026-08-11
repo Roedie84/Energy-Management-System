@@ -109,6 +109,8 @@ from .const import (
     NILM_CUSUM_ALARM_THRESHOLD,
     NILM_DRIFT_MIN_ABSOLUTE_W,
     NILM_DRIFT_MIN_REFERENCE_W,
+    NILM_COMPRESSOR_ON_THRESHOLD_W,
+    NILM_COOLING_MIN_DUTY_CYCLE,
     NILM_MIN_SAMPLES_FOR_DAY,
     NILM_CUSUM_MAX_DAILY_CONTRIBUTION,
     NILM_CUSUM_RESET_STREAK_DAYS,
@@ -5137,6 +5139,19 @@ class EnergyManagementSystemCoordinator:
             return 0.0
         geschiedenis = device.get("outdoor_temp_history") or []
         if len(geschiedenis) < COOLING_TEMP_MIN_DAYS:
+            # v1.50.0: dit staat bij de diepvries al sinds v1.21.0 op
+            # 0,0% omdat er maar ÉÉN temperatuur in de reeks stond.
+            #
+            # Die reeks groeit namelijk alleen bij een afgesloten dag, en
+            # meer dan de helft van de dagen viel af als meetuitval - dus
+            # bleef de correctie eeuwig uit. Nu de uitvaldagen bij de
+            # bron worden herkend groeit hij weer; de reden staat er
+            # voortaan bij zodat "0,0%" niet leest als "de temperatuur
+            # doet er niet toe".
+            device["temperatuurmarge_reden"] = (
+                f"{len(geschiedenis)} van de {COOLING_TEMP_MIN_DAYS} dagen "
+                "met een gemeten buitentemperatuur; nog geen correctie."
+            )
             return 0.0
         huidig = self._read_sensor_float(
             self.config.get(CONF_BACKYARD_TEMPERATURE_SENSOR)
@@ -5146,7 +5161,18 @@ class EnergyManagementSystemCoordinator:
         referentie_temp = statistics.median(geschiedenis)
         verschil = huidig - referentie_temp
         if verschil <= 0:
+            device["temperatuurmarge_reden"] = (
+                f"Buiten {huidig:.1f}°C tegen {referentie_temp:.1f}°C toen de "
+                "referentie werd opgebouwd - koeler weer mag drift niet "
+                "verbergen, dus geen correctie."
+            )
             return 0.0
+        device["temperatuurmarge_reden"] = (
+            f"Buiten {huidig:.1f}°C tegen {referentie_temp:.1f}°C toen de "
+            f"referentie werd opgebouwd: {verschil:.1f}°C warmer, ruwweg "
+            f"{COOLING_DRIFT_PERCENT_PER_DEGREE:.0f}% extra verbruik per "
+            "graad."
+        )
         return verschil * COOLING_DRIFT_PERCENT_PER_DEGREE
 
     def beschikbare_energie_kwh(self) -> float | None:
@@ -15493,6 +15519,9 @@ class EnergyManagementSystemCoordinator:
             self.nilm_confirmed_devices = devices
             if devices:
                 self._nilm_store_had_data = True
+            # v1.50.0: het opgebouwde alarm van een koelapparaat kan op
+            # uitvaldagen rusten. Eenmalig herrekenen zonder die dagen.
+            self._herijk_koelapparaten_na_meetuitval()
         rejected = stored.get("nilm_rejected_entities")
         if isinstance(rejected, list):
             self.nilm_rejected_entities = rejected
@@ -16518,7 +16547,15 @@ class EnergyManagementSystemCoordinator:
         if reference_avg_w is None or not history or reference_avg_w <= 0:
             return "onbekend (nog niet genoeg data)"
 
-        latest_avg_w = history[-1]
+        # v1.50.0: vergelijk met de laatste ECHTE dag.
+        #
+        # De referentie filtert uitvaldagen al weg (v1.21.0), maar deze
+        # regel keek naar `history[-1]` - en die kon zelf een uitvaldag
+        # zijn. In de export van 11 augustus stond daar 0,9 W tegen een
+        # referentie van 76,34: "-98,8% drift, mogelijk defect", terwijl
+        # de diepvries de dag ervoor gewoon 80,57 W deed.
+        echte_dagen = self._zonder_meetuitval(history)
+        latest_avg_w = echte_dagen[-1] if echte_dagen else history[-1]
         change_percent = 100 * (latest_avg_w - reference_avg_w) / reference_avg_w
 
         if device.get("anomaly_detected"):
@@ -16573,11 +16610,25 @@ class EnergyManagementSystemCoordinator:
                     any_finalized = True
                 device["_today_sum"] = 0.0
                 device["_today_count"] = 0
+                device["_today_on_count"] = 0
+                device["_today_on_sum"] = 0.0
                 device["_check_date"] = now.date()
 
             if power_w is not None:
                 device["_today_sum"] = device.get("_today_sum", 0.0) + power_w
                 device["_today_count"] = device.get("_today_count", 0) + 1
+                # v1.50.0: apart bijhouden hoe vaak de compressor DRAAIDE
+                # en hoe hard. Gevraagd: "Het is toch simpelweg,
+                # aan/uit?" - en dat klopt: het daggemiddelde is het
+                # product van draaivermogen en inschakelduur, en die
+                # twee door elkaar meten verbergt wat er aan de hand is.
+                if power_w >= NILM_COMPRESSOR_ON_THRESHOLD_W:
+                    device["_today_on_count"] = (
+                        device.get("_today_on_count", 0) + 1
+                    )
+                    device["_today_on_sum"] = (
+                        device.get("_today_on_sum", 0.0) + power_w
+                    )
 
         if any_finalized:
             # v0.63.66: persist the newly-learned daily history/CUSUM
@@ -16586,9 +16637,112 @@ class EnergyManagementSystemCoordinator:
                 self._async_save_nilm_confirmed_devices_store()
             )
 
+    def _herijk_koelapparaten_na_meetuitval(self) -> None:
+        """Herrekent het alarm van koelapparaten zonder de uitvaldagen
+        (v1.50.0).
+
+        Het opgebouwde alarm van de diepvries rust op een reeks waarin
+        12 van de 30 dagen meetuitval waren. Vanaf nu komen die er niet
+        meer in, maar wat er al staat blijft staan - en dan blijft
+        "mogelijk defect" hangen op een apparaat dat het gewoon doet.
+
+        Eenmalig, herkenbaar aan een vlag. Bewust GEEN blinde reset: de
+        opgeschoonde reeks wordt opnieuw afgespeeld, zodat een apparaat
+        dat écht meer is gaan verbruiken zijn alarm houdt.
+        """
+        for entity_id, device in self.nilm_confirmed_devices.items():
+            if device.get("_meetuitval_herijkt") or not self._is_koelapparaat(
+                device
+            ):
+                continue
+            device["_meetuitval_herijkt"] = True
+            reeks = device.get("daily_avg_history") or []
+            echt = self._zonder_meetuitval(reeks)
+            if len(echt) == len(reeks) or len(echt) < 3:
+                continue
+
+            referentie = statistics.median(echt)
+            if referentie <= 0:
+                continue
+            cusum = 0.0
+            for dag in echt:
+                afwijking = min(
+                    (dag - referentie) / referentie - NILM_CUSUM_SLACK_FRACTION,
+                    NILM_CUSUM_MAX_DAILY_CONTRIBUTION,
+                )
+                cusum = max(0.0, cusum + afwijking)
+            device["daily_avg_history"] = echt
+            device["reference_avg_w"] = round(referentie, 2)
+            device["cusum_accumulator"] = cusum
+            device["anomaly_detected"] = cusum >= NILM_CUSUM_ALARM_THRESHOLD
+            if not device["anomaly_detected"]:
+                device["estimated_drift_percent"] = None
+            _LOGGER.info(
+                "%s: %d van de %d dagen waren meetuitval; alarm herrekend "
+                "over de overgebleven dagen (referentie %.1f W, cusum %.2f)",
+                entity_id,
+                len(reeks) - len(echt),
+                len(reeks),
+                referentie,
+                cusum,
+            )
+
     def _finalize_nilm_device_day(
         self, entity_id: str, device: dict, daily_avg_w: float
     ) -> None:
+        # v1.50.0: eerst de vraag of er überhaupt gekoeld is.
+        #
+        # Gevraagd: "Het is toch simpelweg, aan/uit?" Precies - en op een
+        # dag waarop de compressor vrijwel nooit aansloeg, heeft het
+        # daggemiddelde niets te maken met hoe de diepvries het doet.
+        #
+        # In de reeks van 11 augustus staan 12 van de 30 dagen op 0,8 W
+        # en 13 dagen op 76-81 W. Een diepvries doet dat niet; een
+        # sensor die hele dagen niets doorgeeft wel. Toch werd elke
+        # 0,8-dag als "-98,8% drift, mogelijk defect" gelezen.
+        aan = device.get("_today_on_count", 0)
+        totaal = device.get("_today_count", 0) or 1
+        inschakelduur = aan / totaal
+        # De tellers bestaan pas sinds deze versie. Een dag die al liep
+        # tijdens de opwaardering - of een aanroep van buitenaf - heeft
+        # ze niet, en dan mag deze regel niet toeslaan: anders zou élke
+        # dag als meetuitval gelden en zou het hele apparaat na een
+        # opwaardering stilvallen.
+        kan_oordelen = "_today_on_count" in device
+        if self._is_koelapparaat(device) and kan_oordelen:
+            if inschakelduur < NILM_COOLING_MIN_DUTY_CYCLE:
+                device["meetuitval_dagen"] = (
+                    device.get("meetuitval_dagen", 0) + 1
+                )
+                device["laatste_meetuitval"] = (
+                    device.get("_check_date").isoformat()
+                    if hasattr(device.get("_check_date"), "isoformat")
+                    else str(device.get("_check_date"))
+                )
+                _LOGGER.debug(
+                    "%s: dag overgeslagen, compressor draaide %.1f%% van "
+                    "de tijd (%d van %d metingen) - dat is meetuitval, "
+                    "geen drift",
+                    entity_id,
+                    inschakelduur * 100,
+                    aan,
+                    totaal,
+                )
+                return
+            device["inschakelduur_procent"] = round(inschakelduur * 100, 1)
+            device["draaivermogen_w"] = (
+                round(device.get("_today_on_sum", 0.0) / aan, 1) if aan else None
+            )
+            reeks = device.setdefault("duty_cycle_history", [])
+            reeks.append(device["inschakelduur_procent"])
+            device["duty_cycle_history"] = reeks[-CUSUM_BASELINE_HISTORY_DAYS:]
+            vermogens = device.setdefault("draaivermogen_history", [])
+            if device["draaivermogen_w"] is not None:
+                vermogens.append(device["draaivermogen_w"])
+                device["draaivermogen_history"] = vermogens[
+                    -CUSUM_BASELINE_HISTORY_DAYS:
+                ]
+
         history = device.setdefault("daily_avg_history", [])
         history.append(round(daily_avg_w, 2))
         device["daily_avg_history"] = history[-CUSUM_BASELINE_HISTORY_DAYS:]
@@ -17847,6 +18001,43 @@ class EnergyManagementSystemCoordinator:
             "aantal_vergelijkingen": aantal,
         }
 
+    def _readiness_zonder_uitkomst(self, notitie: str | None, standaard: str) -> dict:
+        """Is dit een instelprobleem of een sensor die even zweeg?
+        (v1.51.0)
+
+        Gemeld met screenshot: onder "Vraagt een handeling" stonden
+        `mpc` en `digital_twin` met "Beschikbare-energie-sensor niet
+        uitleesbaar" - terwijl die sensor gewoon is ingesteld en het
+        meestal doet. In hetzelfde rapport staat hij op 10 van de 30
+        ticks.
+
+        Zonder uitkomst was de status altijd "niet geconfigureerd", en
+        dat is de enige status die in de DOEN-stapel belandt. Daarmee
+        vroeg het overzicht om een handeling die er niet is: er valt
+        niets in te stellen, de sensor antwoordde alleen even niet.
+
+        Alleen als de entiteit ECHT ontbreekt is het een instelprobleem.
+        """
+        entity_id = self.config.get(CONF_AVAILABLE_ENERGY_SENSOR)
+        if not entity_id:
+            return {"status": "niet_geconfigureerd", "reden": notitie or standaard}
+        if self.is_sensor_genuinely_unavailable(dt_util.now(), entity_id):
+            return {
+                "status": "niet_geconfigureerd",
+                "reden": (
+                    f"{entity_id} geeft al minutenlang geen waarde - "
+                    "controleer de sensor."
+                ),
+            }
+        return {
+            "status": RELIABILITY_INSUFFICIENT,
+            "reden": (
+                (notitie or standaard)
+                + " De sensor is ingesteld en antwoordde alleen deze ronde "
+                "niet; dat trekt zichzelf recht."
+            ),
+        }
+
     def _update_advisory_readiness(self, now: datetime) -> None:
         """Readiness assessment for the ten advisory-only modules
         (v0.63.40, uitgebreid met extra-dip-marge/temperatuur-regressie
@@ -17962,10 +18153,9 @@ class EnergyManagementSystemCoordinator:
                 ),
             }
         else:
-            readiness["mpc"] = {
-                "status": "niet_geconfigureerd",
-                "reden": self.mpc_note or "Geen plan beschikbaar.",
-            }
+            readiness["mpc"] = self._readiness_zonder_uitkomst(
+                self.mpc_note, "Geen plan beschikbaar."
+            )
 
         # 5. Monte Carlo - depends on the same learned history as
         # sluipverbruik/Digital Twin; maturity = how many of the 24
@@ -18040,10 +18230,9 @@ class EnergyManagementSystemCoordinator:
                 ),
             }
         else:
-            readiness["digital_twin"] = {
-                "status": "niet_geconfigureerd",
-                "reden": self.digital_twin_note or "Geen simulatie beschikbaar.",
-            }
+            readiness["digital_twin"] = self._readiness_zonder_uitkomst(
+                self.digital_twin_note, "Geen simulatie beschikbaar."
+            )
 
         # 8. NILM - per confirmed device, same maturity logic as
         # sluipverbruik, summarised across all of them.

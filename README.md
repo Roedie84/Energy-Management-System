@@ -547,6 +547,40 @@ alleen "0 van de 24 uren".
 
 **Volledige testsuite**: 1889 tests, allemaal groen.
 
+## Een stille sensor is geen instelprobleem (v1.51.0)
+
+Onder "Vraagt een handeling" stonden `mpc` en `digital_twin` met
+"Beschikbare-energie-sensor niet uitleesbaar", terwijl die sensor gewoon
+is ingesteld. Zonder uitkomst was de status altijd "niet
+geconfigureerd", en dat is de enige status die in de doen-stapel belandt.
+
+Nu: entiteit ontbreekt → doen; entiteit zwijgt al minuten → doen; deze
+ronde geen antwoord → wachten.
+
+**Volledige testsuite**: 1920 tests, allemaal groen.
+
+## Een diepvries is aan/uit (v1.50.0)
+
+**Gevraagd**: *"Het is toch simpelweg, aan/uit? Wordt er rekening
+gehouden met de buitentemp?"*
+
+Het daggemiddelde van een koelapparaat is het product van draaivermogen
+en inschakelduur. Die twee door elkaar meten verbergt wat er aan de hand
+is — en het verklaart de reeks van de diepvries: 12 van de 30 dagen op
+0,8 W, 13 op 76-81 W. Dat is geen slijtage maar een sensor die hele
+dagen niets doorgaf.
+
+Inschakelduur en draaivermogen worden nu apart gemeten; draait de
+compressor minder dan 5% van de dag, dan is het meetuitval en telt de
+dag niet mee. Het opgebouwde alarm is eenmalig herrekend over de
+opgeschoonde reeks: van "mogelijk defect" naar "stabiel".
+
+De temperatuurcorrectie bestond al, maar stond op 0,0% omdat de
+temperatuurreeks alleen groeit bij een afgesloten dag — en die vielen
+juist weg. Er staat nu bij waarom hij 0,0% is.
+
+**Volledige testsuite**: 1917 tests, allemaal groen.
+
 ## Drie dingen uit de export van 18:53 (v1.49.0)
 
 Een volgordefout: `_recompute_measurement_quality()` werd aangeroepen

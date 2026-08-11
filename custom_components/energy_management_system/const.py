@@ -2977,6 +2977,37 @@ CONF_POWER_LIMITS_INTENTIONAL = "power_limits_intentional"
 # dat ruim acht uur.
 NILM_MIN_SAMPLES_FOR_DAY = 100
 
+# --- Koelapparaten meten als aan/uit (v1.50.0) -----------------------
+# Gevraagd: "Het is toch simpelweg, aan/uit? Wordt er rekening gehouden
+# met de buitentemp?"
+#
+# Allebei raak. Een diepvries is geen apparaat met een verbruik maar een
+# compressor die aan- en uitslaat; het DAGGEMIDDELDE is het product van
+# twee heel verschillende dingen:
+#
+#   daggemiddelde = vermogen tijdens draaien x aandeel van de dag draaiend
+#
+# Die twee door elkaar meten maakt het onmogelijk te zeggen wat er aan
+# de hand is. Loopt het vermogen tijdens draaien op, dan is er
+# mechanisch iets; loopt de inschakelduur op, dan is er meer warmte -
+# een warme schuur, een deur die openstond, een slechte afdichting.
+#
+# En het verklaart de reeks van de diepvries: 12 van de 30 dagen op
+# 0,8 W, 13 dagen op 76-81 W. Dat is geen slijtage maar een sensor die
+# hele dagen niets doorgaf. Op zo'n dag is de inschakelduur bijna nul,
+# en dat is te zien - het daggemiddelde alleen laat het als "-98,8%
+# drift, mogelijk defect" lezen.
+#
+# Boven deze grens telt een meting als "compressor draait". Ruim onder
+# het draaivermogen van 76 W, ruim boven de ruis van een slimme stekker.
+NILM_COMPRESSOR_ON_THRESHOLD_W = 15.0
+
+# Draait de compressor minder dan dit deel van de dag, dan is er geen
+# sprake van koelen maar van meetuitval. Een diepvries in een schuur
+# draait ruwweg een kwart tot de helft van de tijd; onder de 5% doet hij
+# niets, en dat kan een werkende diepvries niet.
+NILM_COOLING_MIN_DUTY_CYCLE = 0.05
+
 # --- Zonopvang uitstellen naar goedkope uren (v1.22.0) ---------------
 # Gevraagd: "Ik had dus beter mijn inziens tot 11:30 smart_discharge
 # kunnen doen? Dan had in de uren daarvoor mij meer geld opgeleverd, dan

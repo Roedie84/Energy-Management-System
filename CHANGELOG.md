@@ -12445,3 +12445,88 @@ Elke versie die je vandaag installeerde, wiste dus de dag waarop
 gemeten werd. Nu blijft de dagstand staan.
 
 **Volledige testsuite**: 1910 tests, allemaal groen.
+
+## v1.50.0 — Een diepvries is aan/uit
+
+**Gevraagd**: "Het is toch simpelweg, aan/uit? Wordt er rekening
+gehouden met de buitentemp?"
+
+Allebei raak, en samen verklaren ze de hele meldingenreeks.
+
+### Het daggemiddelde is een product van twee dingen
+
+    daggemiddelde = vermogen tijdens draaien × aandeel van de dag draaiend
+
+Die twee door elkaar meten maakt het onmogelijk te zeggen wát er aan de
+hand is. Loopt het draaivermogen op, dan is er mechanisch iets; loopt de
+inschakelduur op, dan is er méér warmte — een warme schuur, een deur die
+openstond, een slechte afdichting.
+
+En het verklaart de reeks van de diepvries: **12 van de 30 dagen op
+0,8 W, 13 dagen op 76-81 W**. Dat is geen slijtage maar een sensor die
+hele dagen niets doorgaf. Een diepvries doet dat niet.
+
+**Nu** worden inschakelduur en draaivermogen apart gemeten. Draait de
+compressor minder dan 5% van de dag, dan is de dag meetuitval en telt
+hij niet mee — in plaats van als "−98,8% drift, mogelijk defect".
+
+### De temperatuurcorrectie stond op 0,0%
+
+Die bestaat sinds v1.21.0, maar in jouw export staat één enkele
+temperatuur in de reeks. Die reeks groeit namelijk alleen bij een
+**afgesloten dag**, en meer dan de helft van de dagen viel af — dus
+bleef de correctie eeuwig uit. Nu de uitvaldagen bij de bron worden
+herkend, groeit hij weer. En er staat voortaan bij waaróm hij 0,0% is,
+zodat dat niet leest als "de temperatuur doet er niet toe".
+
+### Het opgebouwde alarm is eenmalig herrekend
+
+Wat er al stond bleef staan, en dat alarm rust op die uitvaldagen. De
+opgeschoonde reeks wordt nu één keer opnieuw afgespeeld — bewust geen
+blinde reset, zodat een apparaat dat écht meer verbruikt zijn alarm
+houdt.
+
+Op jouw gegevens: van *"⚠️ aanhoudend stijgend — mogelijk defect"* naar
+**"→ stabiel"**, met 18 echte dagen en een referentie van 76,8 W.
+
+### En de drift keek naar de verkeerde dag
+
+De referentie filterde uitvaldagen al weg, maar het driftpercentage
+vergeleek met `history[-1]` — en die kon zelf een uitvaldag zijn. Vandaar
+"−98,8%" terwijl de dag ervoor gewoon 80,57 W was.
+
+**Zeven tests erbij**, waaronder één die bewaakt dat apparaten van vóór
+deze versie blijven werken: zonder vangnet zou elke dag als meetuitval
+gelden en zou de hele detectie na de opwaardering stilvallen.
+
+**Volledige testsuite**: 1917 tests, allemaal groen.
+
+## v1.51.0 — Een stille sensor is geen instelprobleem
+
+**Gemeld** met screenshot: onder *"Vraagt een handeling (2)"* stonden
+`mpc` en `digital_twin`, allebei met "Beschikbare-energie-sensor niet
+uitleesbaar".
+
+Terwijl die sensor gewoon is ingesteld en het meestal doet. Hij
+antwoordde die ronde even niet — en dan levert MPC geen plan, dus stond
+de status op **niet geconfigureerd**. Dat is de enige status die in de
+doen-stapel belandt, dus vroeg het overzicht om een handeling die er
+niet is.
+
+Nu wordt er onderscheid gemaakt:
+
+| Situatie | Waar |
+|---|---|
+| Entiteit niet ingesteld | **doen** — er valt iets in te stellen |
+| Entiteit zwijgt al minuten | **doen** — controleer de sensor |
+| Entiteit antwoordde deze ronde niet | **wachten** — trekt zichzelf recht |
+
+De middelste gebruikt de bestaande bevestigingsdrempel uit v1.11.0: een
+enkele gemiste uitlezing hoort niemand wakker te maken, een sensor die
+minutenlang zwijgt wel.
+
+Dat de doen-stapel rood kleurt is precies de bedoeling — dan moet er ook
+echt iets te doen zijn. Anders leert het overzicht je hem te negeren, en
+dan mist het de keer dat er wél wat aan de hand is.
+
+**Volledige testsuite**: 1920 tests, allemaal groen.
