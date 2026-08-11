@@ -833,3 +833,56 @@ def test_without_a_cheap_block_everything_counts(make_coordinator, hass):
         samenvatting["tekort_kwartieren"]
         == samenvatting["tekort_kwartieren_hele_planning"]
     )
+
+
+# --- v1.44.0: wélke uren hangt het huis aan het net? -----------------
+
+
+def _leeglopend(make_coordinator, hass):
+    c = _coordinator(make_coordinator, hass, beschikbaar=0.4)
+    c._estimate_pv_kwh_for_period = lambda a, b: 0.0
+    c._estimate_consumption_kwh_for_period = (
+        lambda a, b: 0.5 * (b - a).total_seconds() / 3600
+    )
+    c.last_cheap_block_start = NU + timedelta(hours=4)
+    c.last_cheap_block_end = NU + timedelta(hours=10)
+    return c
+
+
+def test_the_shortfall_hours_are_named(make_coordinator, hass):
+    """Gevraagd: "waar zie ik dan welke uren hij verwacht aan het net te
+    hangen?"
+
+    Nergens - tenzij je de 120 regels van de kwartiertabel afzocht op
+    het uitroepteken. Een aantal zonder tijdstip is een alarm zonder
+    adres.
+    """
+    samenvatting = _leeglopend(make_coordinator, hass).get_quarter_plan_summary(NU)
+
+    perioden = samenvatting["tekort_perioden"]
+
+    assert perioden
+    assert "-" in perioden[0]
+
+
+def test_consecutive_quarters_become_one_period(make_coordinator, hass):
+    """Acht losse tijdstippen leest niemand; "03:15-05:15" wel."""
+    samenvatting = _leeglopend(make_coordinator, hass).get_quarter_plan_summary(NU)
+
+    assert len(samenvatting["tekort_perioden"]) == 1
+    assert samenvatting["tekort_kwartieren"] > 1
+
+
+def test_the_periods_match_the_count(make_coordinator, hass):
+    """Perioden en telling komen uit dezelfde regels; lopen ze uiteen,
+    dan klopt een van beide niet."""
+    c = _leeglopend(make_coordinator, hass)
+
+    samenvatting = c.get_quarter_plan_summary(NU)
+    plan = c.get_quarter_plan(NU)
+    losse = [
+        r for r in plan if r.get("tekort") and r.get("voor_bijladen", True)
+    ]
+
+    assert samenvatting["tekort_kwartieren"] == len(losse)
+    assert bool(samenvatting["tekort_perioden"]) == bool(losse)

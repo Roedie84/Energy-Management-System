@@ -369,3 +369,64 @@ def test_without_a_solar_forecast_it_says_so(make_coordinator, hass):
 
     assert profiel["betrouwbaarheid"] == RELIABILITY_NOT_CONFIGURED
     assert "zonvoorspelling" in profiel["reden"]
+
+
+# --- v1.46.0: de azimut kwam nooit binnen ----------------------------
+
+
+def test_an_own_azimuth_sensor_is_used(make_coordinator, hass):
+    """Gemeld: "Vandaag was een mega zonnige dag: PV-installatieprofiel
+    (oriëntatie) 0/5 heldere dagen verzameld."
+
+    Het lag niet aan de bewolking. De azimut werd uitsluitend uit
+    `sun.sun` gelezen, terwijl de zonshoogte wel een eigen instelbare
+    sensor had. Komt de zonstand van een eigen integratie, dan viel de
+    hele leerroutine elke tick meteen stil.
+    """
+    from custom_components.energy_management_system.const import (
+        CONF_SUN_AZIMUTH_SENSOR,
+    )
+
+    c = _coordinator(make_coordinator, hass)
+    c.config[CONF_SUN_AZIMUTH_SENSOR] = "sensor.eigen_azimut"
+    hass.states.set("sensor.eigen_azimut", "182.5")
+
+    assert c.get_sun_azimuth_degrees() == 182.5
+
+
+def test_sun_sun_remains_the_fallback(make_coordinator, hass):
+    """Wie niets instelt mag er niets van merken."""
+    c = _coordinator(make_coordinator, hass)
+    hass.states.set("sun.sun", "above_horizon", {"azimuth": 200.0})
+
+    assert c.get_sun_azimuth_degrees() == 200.0
+
+
+def test_without_any_azimuth_the_profile_says_why(make_coordinator, hass):
+    """"0/5 heldere dagen" is een misleidend antwoord als de oorzaak is
+    dat de zonstand niet uit te lezen valt - dan helpt wachten niet."""
+    from custom_components.energy_management_system.const import (
+        RELIABILITY_NOT_CONFIGURED,
+    )
+
+    c = _coordinator(make_coordinator, hass)
+
+    profiel = c.get_pv_installation_profile()
+
+    assert profiel["betrouwbaarheid"] == RELIABILITY_NOT_CONFIGURED
+    assert "azimut" in profiel["reden"]
+
+
+def test_with_days_collected_the_warning_disappears(make_coordinator, hass):
+    """Zodra er dagen zijn, gaat het weer over die dagen - niet over de
+    sensor."""
+    from custom_components.energy_management_system.const import (
+        RELIABILITY_NOT_CONFIGURED,
+    )
+
+    c = _coordinator(make_coordinator, hass)
+    c.pv_peak_azimuth_history = [180.0, 181.0]
+
+    profiel = c.get_pv_installation_profile()
+
+    assert profiel["betrouwbaarheid"] != RELIABILITY_NOT_CONFIGURED

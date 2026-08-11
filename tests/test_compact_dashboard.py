@@ -190,7 +190,11 @@ def test_the_overview_has_little_prose():
         for kaart in sectie.get("cards") or []
     )
 
-    assert tekens < 1600, f"{tekens} tekens tekst op de landingspagina"
+    # v1.44.0: van 1600 naar 1650, gelijk aan de grens hieronder.
+    # Gevraagd: "waar zie ik dan welke uren hij verwacht aan het net te
+    # hangen?" Die tijdstippen erbij kosten ruimte, en twee grenzen die
+    # net iets van elkaar verschillen leveren alleen verwarring op.
+    assert tekens < 1650, f"{tekens} tekens tekst op de landingspagina"
 
 
 def test_the_attention_points_are_readable_on_the_overview():
