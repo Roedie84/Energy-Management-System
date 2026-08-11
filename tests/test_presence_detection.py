@@ -826,3 +826,90 @@ def test_repeating_the_same_state_adds_nothing(make_coordinator, hass):
         c._update_presence(NU + timedelta(minutes=minuut))
 
     assert len(c.presence_timeline) == 1
+
+
+# --- v1.36.0: lampen als signaal -------------------------------------
+
+
+def _met_lampen(make_coordinator, hass, lampen=("light.woonkamer",)):
+    from custom_components.energy_management_system.const import (
+        CONF_PRESENCE_LIGHT_ENTITIES,
+    )
+
+    c = _coordinator(make_coordinator, hass)
+    c.config[CONF_PRESENCE_LIGHT_ENTITIES] = list(lampen)
+    for lamp in lampen:
+        hass.states.set(lamp, "off")
+    return c
+
+
+def test_a_burning_light_counts_as_home(make_coordinator, hass):
+    """Gevraagd: "Voor aanwezigheids detectie, kan ook nog gekeken naar
+    lampen of heb ik dat niet goed?"
+
+    Klopt - dat gebeurde nog niet, terwijl de systeemscan de lampen al
+    wel verzamelde. Een brandende lamp zegt niets over beweging, maar
+    wel dat er iemand is.
+    """
+    c = _met_lampen(make_coordinator, hass)
+    hass.states.set("binary_sensor.gang", "on")
+    c._update_presence(NU)
+    hass.states.set("binary_sensor.gang", "off")
+    hass.states.set("light.woonkamer", "on")
+
+    c._update_presence(NU + timedelta(hours=3))
+
+    assert c.presence_state == "thuis"
+
+
+def test_without_a_light_it_would_have_been_away(make_coordinator, hass):
+    """Zonder dat signaal was dezelfde stilte afwezigheid geweest - de
+    test hierboven toetst anders niets."""
+    c = _met_lampen(make_coordinator, hass)
+    hass.states.set("binary_sensor.gang", "on")
+    c._update_presence(NU)
+    hass.states.set("binary_sensor.gang", "off")
+
+    c._update_presence(NU + timedelta(hours=3))
+
+    assert c.presence_state == "weg"
+
+
+def test_lights_do_not_count_during_the_holiday_mode(make_coordinator, hass):
+    """De eigen automatisering zet tijdens de vakantiestand juist lampen
+    aan om aanwezigheid na te bootsen. Die als bewijs van aanwezigheid
+    nemen is een cirkelredenering - en het zou de inbraakmelding smoren,
+    precies wanneer die nodig is.
+    """
+    c = _met_lampen(make_coordinator, hass)
+    hass.states.set("binary_sensor.gang", "on")
+    c._update_presence(NU)
+    hass.states.set("binary_sensor.gang", "off")
+    hass.states.set("light.woonkamer", "on")
+    c.vacation_mode = True
+
+    c._update_presence(NU + timedelta(hours=3))
+
+    assert c.presence_state == "weg"
+
+
+def test_the_timeline_says_which_light(make_coordinator, hass):
+    """Zonder te noemen welke lamp valt niet na te gaan of het klopt -
+    een vergeten zolderlamp verklaart een verkeerde staat."""
+    c = _met_lampen(make_coordinator, hass)
+    hass.states.set("binary_sensor.gang", "on")
+    c._update_presence(NU)
+    hass.states.set("binary_sensor.gang", "off")
+    c._update_presence(NU + timedelta(hours=3))
+    hass.states.set("light.woonkamer", "on")
+
+    c._update_presence(NU + timedelta(hours=4))
+
+    assert "licht aan" in c.presence_timeline[-1]["aanleiding"]
+
+
+def test_no_lights_configured_changes_nothing(make_coordinator, hass):
+    """Wie geen lampen kiest, mag er niets van merken."""
+    c = _coordinator(make_coordinator, hass)
+
+    assert c._brandend_licht() is None

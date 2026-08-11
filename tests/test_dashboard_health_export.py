@@ -155,6 +155,8 @@ def test_present_attributes_are_not_reported(make_coordinator, hass):
             "kwartier_samenvatting": {},
             "plantoetsing": {},
             "rendement": {},
+            "prijstoets": {},
+            "proefstand": {},
             "verbetermogelijkheden": [],
         },
     )
