@@ -116,7 +116,12 @@ def test_all_sixteen_cards_survived():
 def test_every_page_has_an_entrance():
     """Een detailpagina zonder ingang is een pagina die niet bestaat."""
     tekst = (PAKKET / "dashboard_template.yaml").read_text()
-    doelen = set(re.findall(r"navigation_path: \S*/([a-z-]+)", tekst))
+    # v1.34.0: een link in een markdown-kaart is net zo goed een ingang.
+    # De vier planningspagina's hangen sinds die versie onder een enkele
+    # tegel, met de doorverwijzingen op de pagina zelf.
+    doelen = set(re.findall(r"navigation_path: \S*/([a-z-]+)", tekst)) | set(
+        re.findall(r"\]\(/energy-management-system/([a-z-]+)\)", tekst)
+    )
 
     for pagina in _detailpaginas():
         assert pagina["path"] in doelen, pagina["path"]

@@ -40,7 +40,10 @@ def test_a_message_is_translated(make_coordinator, hass):
     )
 
     assert "verbruuk" in vertaald
-    assert "mangs" in vertaald
+    # v1.33.0: was "mangs", maar dat betekent SOMS of alvast - niet
+    # "mogelijk". Nagelopen tegen het dialectwoordenboek.
+    assert "meugelijk" in vertaald
+    assert "steet" in vertaald
 
 
 def test_longer_words_win(make_coordinator, hass):
@@ -144,3 +147,55 @@ def test_the_table_is_in_one_place():
     zijn."""
     assert len(ACHTERHOEKS_TITELS) >= 20
     assert len(ACHTERHOEKS_WOORDEN) >= 50
+
+
+# --- v1.33.0: nagelopen tegen een dialectwoordenboek -----------------
+
+
+def test_mangs_no_longer_means_maybe(make_coordinator, hass):
+    """Nagelopen tegen mijnwoordenboek.nl: "mangs" betekent SOMS, alvast
+    of binnenkort - niet "mogelijk".
+
+    "Den accu haalt de nacht mangs neet" zei dus iets anders dan
+    bedoeld: niet "misschien niet", maar "soms niet".
+    """
+    from custom_components.energy_management_system.const import (
+        ACHTERHOEKS_TITELS,
+        ACHTERHOEKS_WOORDEN,
+    )
+
+    tabel = dict(ACHTERHOEKS_WOORDEN)
+
+    assert tabel["mogelijk"] == "meugelijk"
+    assert tabel["soms"] == "mangs"
+    assert not [t for t in ACHTERHOEKS_TITELS.values() if "mangs" in t]
+
+
+def test_the_longest_match_wins(make_coordinator, hass):
+    """De vervanging loopt van boven naar beneden. Stond "niet" boven
+    "mogelijk niet", dan sloeg die eerst toe en bleef er "mogelijk neet"
+    staan in plaats van "meugelijk neet"."""
+    from custom_components.energy_management_system.const import (
+        ACHTERHOEKS_WOORDEN,
+    )
+
+    sleutels = [k for k, _ in ACHTERHOEKS_WOORDEN]
+
+    assert sleutels.index("mogelijk niet") < sleutels.index("mogelijk")
+    assert sleutels.index("mogelijk niet") < sleutels.index("niet")
+    assert sleutels.index("teruglevering") < sleutels.index("meer")
+
+
+def test_a_handful_of_corrections(make_coordinator, hass):
+    """Steekproef op woorden die in de meldingen voorkomen."""
+    c = make_coordinator({})
+
+    vertaald = c._naar_achterhoeks(
+        "Vandaag is er genoeg tijd, maar het water is koud en de "
+        "vaatwasser is klaar."
+    )
+
+    # De hoofdletter blijft staan; de vervanging is hoofdlettergevoelig
+    # en dat is precies goed aan het begin van een zin.
+    for verwacht in ("Vandage", "genög", "tied", "moar", "waoter", "kold", "kloar"):
+        assert verwacht in vertaald, verwacht

@@ -21,11 +21,20 @@ def _data():
 
 
 def _navigatiedoelen():
-    """Alle paden waar ergens naartoe wordt genavigeerd."""
+    """Alle paden waar ergens naartoe wordt genavigeerd.
+
+    v1.34.0: ook links IN een markdown-kaart tellen mee. Gemeld: "Er
+    zijn nu 2 plannings tegels aanwezig op de landingspagina, kan dit
+    samen gevoegd worden?" De vier planningspagina's hangen nu onder een
+    enkele tegel, met de doorverwijzingen op de pagina zelf - anders
+    groeit de landingspagina mee met elke nieuwe subpagina.
+    """
     tekst = (PAKKET / "dashboard_template.yaml").read_text()
     import re
 
-    return set(re.findall(r"navigation_path: \S*/([a-z-]+)", tekst))
+    tegels = set(re.findall(r"navigation_path: \S*/([a-z-]+)", tekst))
+    links = set(re.findall(r"\]\(/energy-management-system/([a-z-]+)\)", tekst))
+    return tegels | links
 
 
 # --- de tabbalk ------------------------------------------------------
@@ -120,3 +129,44 @@ def test_the_first_view_is_not_a_subview():
 
 def test_the_overview_opens_first():
     assert _data()["views"][0]["title"] == "Overzicht"
+
+
+# --- v1.34.0: een tegel per onderwerp --------------------------------
+
+
+def test_the_landing_page_has_one_tile_per_topic():
+    """Gemeld: "Er zijn nu 2 plannings tegels aanwezig op de
+    landingspagina, kan dit samen gevoegd worden?"
+
+    Het waren er zelfs vier: Planning, Kwartierplanning,
+    Planning-samenvatting en Plantoetsing. Elke keer dat er een pagina
+    bijkwam omdat de tekengrens werd gehaald, kwam er ook een tegel bij
+    - en zo groeit de landingspagina mee met een indeling die niets met
+    onderwerpen te maken heeft.
+    """
+    import re
+
+    tekst = (PAKKET / "dashboard_template.yaml").read_text()
+    overzicht = tekst[: tekst.index("- title: Visueel")]
+    doelen = re.findall(r"navigation_path: \S*/([a-z-]+)", overzicht)
+
+    planning = [d for d in doelen if "planning" in d or "kwartier" in d]
+    assert planning == ["detail-planning"]
+
+
+def test_no_tile_points_to_the_wrong_page():
+    """Onder "Meer bekijken" stonden vier tegels - Systeem, Financieel,
+    Verloop en Kwaliteit - die alle vier naar dezelfde pagina wezen.
+    Drie daarvan beloofden iets anders dan ze gaven."""
+    import re
+
+    tekst = (PAKKET / "dashboard_template.yaml").read_text()
+    overzicht = tekst[: tekst.index("- title: Visueel")]
+    doelen = re.findall(r"navigation_path: \S*/([a-z-]+)", overzicht)
+
+    dubbel = {d for d in doelen if doelen.count(d) > 1}
+    # De statusbalk bovenaan wijst ook naar de kwaliteitspagina, en dat
+    # is geen onderwerpstegel maar de aandachtspunten-melding zelf.
+    assert dubbel <= {"detail-kwaliteit"}, (
+        f"meerdere tegels wijzen naar: {sorted(dubbel)}"
+    )
