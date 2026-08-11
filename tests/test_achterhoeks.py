@@ -42,7 +42,7 @@ def test_a_message_is_translated(make_coordinator, hass):
     assert "verbruuk" in vertaald
     # v1.33.0: was "mangs", maar dat betekent SOMS of alvast - niet
     # "mogelijk". Nagelopen tegen het dialectwoordenboek.
-    assert "meugelijk" in vertaald
+    assert "meugelek" in vertaald
     assert "steet" in vertaald
 
 
@@ -166,7 +166,7 @@ def test_mangs_no_longer_means_maybe(make_coordinator, hass):
 
     tabel = dict(ACHTERHOEKS_WOORDEN)
 
-    assert tabel["mogelijk"] == "meugelijk"
+    assert tabel["mogelijk"] == "meugelek"
     assert tabel["soms"] == "mangs"
     assert not [t for t in ACHTERHOEKS_TITELS.values() if "mangs" in t]
 
@@ -197,5 +197,59 @@ def test_a_handful_of_corrections(make_coordinator, hass):
 
     # De hoofdletter blijft staan; de vervanging is hoofdlettergevoelig
     # en dat is precies goed aan het begin van een zin.
-    for verwacht in ("Vandage", "genög", "tied", "moar", "waoter", "kold", "kloar"):
+    for verwacht in ("Vandage", "genög", "tied", "maor", "waoter", "kold", "klaor"):
         assert verwacht in vertaald, verwacht
+
+
+# --- v1.35.0: gespeld volgens de WALD-spelling -----------------------
+
+
+def _tabel():
+    from custom_components.energy_management_system.const import (
+        ACHTERHOEKS_TITELS,
+        ACHTERHOEKS_WOORDEN,
+    )
+
+    return [v for _, v in ACHTERHOEKS_WOORDEN] + list(ACHTERHOEKS_TITELS.values())
+
+
+def test_ao_and_never_oa():
+    """De WALD-spelling kent "ao" als zelfstandig teken; "oa" bestaat
+    niet. Er stond goan, moar, noar, oaver, doar en kloar.
+    """
+    fout = [w for w in _tabel() if "oa" in w.lower()]
+
+    assert not fout, fout
+
+
+def test_unstressed_e_is_written_as_e():
+    """De e zonder klemtoon schrijf je altijd als e. Daarmee wordt -lijk
+    dus -lek en -ig wordt -eg - en juist dat verschil onderscheidt het
+    Achterhoeks van het Liemers, dat -ig houdt.
+    """
+    fout = [w for w in _tabel() if w.endswith("lijk") or w.endswith("ig")]
+
+    assert not fout, fout
+
+
+def test_the_i_j_diphthong_uses_a_hyphen():
+    """i-j is een tweeklank en krijgt een streepje. De apostrof is voor
+    samengetrokken woorden: he'j, da'k, lao'w.
+    """
+    fout = [w for w in _tabel() if "i'j" in w]
+
+    assert not fout, fout
+
+
+def test_a_separable_participle_keeps_its_hyphen():
+    """Bij een scheidbaar werkwoord komt in het voltooid deelwoord een
+    streepje tussen de delen: an-egeven, weg-enommen."""
+    from custom_components.energy_management_system.const import (
+        ACHTERHOEKS_WOORDEN,
+    )
+
+    tabel = dict(ACHTERHOEKS_WOORDEN)
+
+    assert tabel["opgewekt"] == "op-ewekt"
+    assert tabel["uitgesteld"] == "uut-esteld"
+    assert tabel["bijgeladen"] == "bi-j-elaojen"
