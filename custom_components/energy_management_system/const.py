@@ -3008,28 +3008,28 @@ CONF_ACHTERHOEKS = "achterhoeks_meldingen"
 # Titels per meldingsoort.
 ACHTERHOEKS_TITELS = {
     "plan_tekort": "Den accu haalt de nacht neet",
-    "plan_uitstel": "Zunne opvangen wödt uutgesteld",
+    "plan_uitstel": "Zunne opvangen wödt uut-esteld",
     "plan_verkoop_geblokkeerd": "Verkopen geet neet, 't huus geet veur",
-    "vakantie_beweging": "Der beweeg wat, terwiel gi'j weg bunt",
+    "vakantie_beweging": "Der beweeg wat, terwiel gi-j weg bunt",
     "appliance_cheap_moment": "Good moment veur de wasmachine",
-    "appliance_ready": "'t Apparaat is kloar",
+    "appliance_ready": "'t Apparaat is klaor",
     "battery_cooling": "Accukoeling an of uut",
     "sluipverbruik": "'t Lik of der wat stiekem stroom vret",
-    "device_drift": "Der is meugelijk wat kapot",
+    "device_drift": "Der is meugelek wat kapot",
     "mode_change": "De stand is verandert",
     "battery_wont_last_night": "Den accu haalt de nacht neet",
     "battery_full_with_sun": "Accu vol en de zunne schient nog",
     "low_soc_before_peak": "Weinig in den accu veur de duurte",
     "cheap_block_soon": "'t Goedkope blok begint zo",
-    "negative_prices": "Prieze goat onder nul",
-    "exceptional_peak_price": "Uutzunderlijk duur kwartier vandage",
+    "negative_prices": "Prieze gaot onder nul",
+    "exceptional_peak_price": "Uutzunderlek duur kwartier vandage",
     "solar_underperforming": "De zunne dut minder as verwacht",
     "low_solar_day": "Weinig-zunne-dag",
     "sensor_unavailable": "'n Sensor is d'r neet meer",
     "integration_error": "'t Systeem löp vast",
     "interne_fout": "'n Onderdeel rekent neet meer",
     "battery_module_drift": "'n Accumodule löp uut de pas",
-    "module_became_ready": "'n Adviesmodule is kloar",
+    "module_became_ready": "'n Adviesmodule is klaor",
     "pv_orientation_mismatch": "De PV-richting klop neet",
     "cost_mismatch": "De kosten kloppen neet met de rekening",
     "daily_summary": "Dagoverzicht",
@@ -3045,9 +3045,28 @@ ACHTERHOEKS_TITELS = {
 #   - "iets" moet ná "niets", anders wordt "niets" -> "nwat"
 # Langere woorden dus altijd eerst.
 ACHTERHOEKS_WOORDEN = (
+    # v1.35.0: gespeld volgens de WALD-spelling (Staring Instituut),
+    # na de vraag "Helpt deze informatie nog voor de achterhoekse
+    # vertaling om deze te verbeteren?" met een verwijzing naar de
+    # uitgangspunten van die spelling en de Achterhoekse taalwiezer.
+    #
+    # Vier regels die deze tabel raakten:
+    #
+    # 1. "ao" is een zelfstandig teken; "oa" bestaat niet. Er stond
+    #    goan, moar, noar, oaver, doar, kloar - dat wordt gaon, maor,
+    #    naor, aover, daor, klaor.
+    # 2. De e ZONDER KLEMTOON schrijf je altijd als e. Daarmee wordt
+    #    -lijk dus -lek (meugelek) en -ig wordt -eg (neudeg). Juist dat
+    #    onderscheid maakt het Achterhoeks zichtbaar naast het Liemers,
+    #    dat -ig houdt.
+    # 3. De tweeklank i-j krijgt een streepje; een apostrof is voor
+    #    samengetrokken woorden (he'j, da'k). Er stond bi'j.
+    # 4. Bij een scheidbaar werkwoord komt in het voltooid deelwoord een
+    #    streepje tussen de delen: an-egeven, weg-enommen. Dus
+    #    op-ewekt en uut-esteld.
+    #
     # v1.33.0: nagelopen tegen het dialectwoordenboek van
-    # mijnwoordenboek.nl (1326 woorden, door bezoekers aangedragen), na
-    # de vraag "Helpt dit nog wat voor de achterhoekse vertaling?".
+    # mijnwoordenboek.nl (1326 woorden, door bezoekers aangedragen).
     #
     # Ja - en het bracht meteen een fout aan het licht: "mangs" betekent
     # niet "mogelijk" maar SOMS, alvast of binnenkort. "Den accu haalt
@@ -3056,29 +3075,29 @@ ACHTERHOEKS_WOORDEN = (
     # De lange woorden staan boven de korte: de vervanging loopt van
     # boven naar beneden, en "niet" zou anders binnen "mogelijk niet"
     # toeslaan voordat die regel aan de beurt is.
-    ("mogelijk niet", "meugelijk neet"),
-    ("waarschijnlijk", "waarschienlijk"),
-    ("teruggeleverd", "truggelevert"),
+    ("mogelijk niet", "meugelek neet"),
+    ("waarschijnlijk", "waarschijnlek"),
+    ("teruggeleverd", "trugge-elevert"),
     ("teruglevering", "truggelevering"),
     ("waterontharder", "waterontharder"),
     ("gedetecteerd", "opgemarkt"),
     ("beschikbaar", "beschikbaor"),
     ("kilowattuur", "kilowattuur"),
     ("goedkoopste", "goedkoopste"),
-    ("bijgeladen", "bi'jelaojen"),
+    ("bijgeladen", "bi-j-elaojen"),
     ("geblokkeerd", "geblokkeerd"),
     ("kwartier(en)", "kwartier(e)"),
     ("verwachting", "verwachting"),
-    ("uitgesteld", "uutgesteld"),
+    ("uitgesteld", "uut-esteld"),
     ("vaatwasser", "vaatwasser"),
     ("wasmachine", "wasmachine"),
-    ("nachtelijk", "nachtelijks"),
+    ("nachtelijk", "nachtelek"),
     ("gemiddeld", "gemiddeld"),
     ("goedkope", "goedkope"),
-    ("gestegen", "umhoog egoan"),
-    ("mogelijk", "meugelijk"),
+    ("gestegen", "umhoog-egaon"),
+    ("mogelijk", "meugelek"),
     ("verbruik", "verbruuk"),
-    ("opgewekt", "opewekt"),
+    ("opgewekt", "op-ewekt"),
     ("verkopen", "verkopen"),
     ("goedkoop", "goedkoop"),
     ("verwacht", "verwacht"),
@@ -3086,7 +3105,7 @@ ACHTERHOEKS_WOORDEN = (
     ("vandaag", "vandage"),
     ("volgens", "volgens"),
     ("geladen", "elaojen"),
-    ("weinig", "weinig"),
+    ("weinig", "weineg"),
     ("hangen", "hangen"),
     ("worden", "wodden"),
     ("moeten", "motten"),
@@ -3104,12 +3123,14 @@ ACHTERHOEKS_WOORDEN = (
     ("hangt", "hunk"),
     ("staat", "steet"),
     ("wordt", "wödt"),
-    ("bijna", "bi'jnoa"),
-    ("nodig", "neudig"),
-    ("klaar", "kloar"),
+    ("bijna", "bi-jnao"),
+    ("nodig", "neudeg"),
+    ("klaar", "klaor"),
     ("zonne", "zunne"),
     ("marge", "marge"),
-    ("zon ", "zunne "),
+    # Zonder spatie, zodat "zon," en "zon." ook meegaan. Veilig omdat
+    # "zonder" en "zonne" hierboven al zijn afgevangen.
+    ("zon", "zunne"),
     ("water", "waoter"),
     ("verder", "wieter"),
     ("genoeg", "genög"),
@@ -3121,7 +3142,7 @@ ACHTERHOEKS_WOORDEN = (
     ("veel", "veule"),
     ("even", "efkes"),
     ("gaat", "geet"),
-    ("gaan", "goan"),
+    ("gaan", "gaon"),
     ("goed", "good"),
     ("koud", "kold"),
     ("warm", "heit"),
@@ -3136,11 +3157,11 @@ ACHTERHOEKS_WOORDEN = (
     ("zijn", "bunt"),
     ("is er", "is d'r"),
     ("er is", "d'r is"),
-    ("naar", "noar"),
-    ("over", "oaver"),
+    ("naar", "naor"),
+    ("over", "aover"),
     ("voor", "veur"),
-    ("maar", "moar"),
-    ("daar", "doar"),
+    ("maar", "maor"),
+    ("daar", "daor"),
     ("meer", "meer"),
     ("dag", "dag"),
     ("nog", "nog"),

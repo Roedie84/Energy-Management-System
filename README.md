@@ -515,6 +515,39 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Gespeld volgens de WALD-spelling (v1.35.0)
+
+**Gevraagd**: *"Helpt deze informatie nog voor de achterhoekse vertaling
+om deze te verbeteren?"* — met de uitgangspunten van de WALD-spelling
+(Staring Instituut) en de Achterhoekse taalwiezer.
+
+Nuttiger dan het woordenboek van v1.33.0: dat gaf losse woorden, dit
+geeft regels. Vier ervan raakten de tabel:
+
+1. **"ao", nooit "oa"** — goan/moar/noar/oaver/doar/kloar wordt
+   gaon/maor/naor/aover/daor/klaor.
+2. **De e zonder klemtoon is altijd een e** — dus -lijk wordt -lek en
+   -ig wordt -eg: *meugelek*, *neudeg*, *weineg*. Dat onderscheidt het
+   Achterhoeks van het Liemers, dat -ig houdt.
+3. **i-j met een streepje**; de apostrof is voor samentrekkingen (he'j).
+4. **Scheidbare werkwoorden** krijgen een streepje in het voltooid
+   deelwoord: *op-ewekt*, *uut-esteld*, *bi-j-elaojen*.
+
+Vier tests houden de regels vast in plaats van losse woorden — een regel
+is te toetsen, een woordenlijst niet.
+
+**Volledige testsuite**: 1833 tests, allemaal groen.
+
+## Prijsbereik in het komende schema (v1.34.1)
+
+**Gemeld**: *"Hier zou toch een prijs range moeten staan? Elk kwartier
+wijzigd de prijs namelijk."*
+
+Kwartieren met dezelfde modus staan als één blok; een blok van 10:45 tot
+18:45 beslaat 32 kwartieren met evenzoveel prijzen, en er stond alleen
+de hoogste. De laagste werd al berekend maar nergens getoond. Nu het
+bereik, in centen.
+
 ## Eén tegel per onderwerp (v1.34.0)
 
 **Gemeld**: *"Er zijn nu 2 plannings tegels aanwezig op de

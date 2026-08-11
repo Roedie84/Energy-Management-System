@@ -11683,3 +11683,74 @@ bereikbaarheid telt nu ook links in een markdown-kaart mee — anders zou
 "elke pagina heeft een ingang" alleen met tegels te halen zijn.
 
 **Volledige testsuite**: 1828 tests, allemaal groen.
+
+## v1.34.1 — Prijsbereik in het komende schema
+
+**Gemeld** met screenshot: "Hier zou toch een prijs range moeten staan?
+Elk kwartier wijzigd de prijs namelijk."
+
+Klopt. Kwartieren met dezelfde modus staan als één blok — een blok van
+10:45 tot 18:45 beslaat 32 kwartieren met evenzoveel prijzen, en er
+stond alleen de hoogste. Dat las als "de prijs is 0,321 €/kWh" terwijl
+hij tussen 13,1 en 32,1 ct schommelde.
+
+De laagste werd al berekend (`min_price_per_kwh`) maar nergens getoond.
+Nu het bereik, in centen omdat dat leest zoals de rest van het
+dashboard:
+
+| Van | Tot | Modus | Prijs (ct/kWh) |
+|---|---|---|---|
+| 10:45 | 18:45 | smart | 13,1 – 32,1 |
+| 19:30 | 23:00 | manual | 32,4 – 38,1 |
+
+Een blok van één kwartier heeft geen bereik en toont één getal.
+
+**Volledige testsuite**: 1829 tests, allemaal groen.
+
+## v1.35.0 — Gespeld volgens de WALD-spelling
+
+**Gevraagd**: "Helpt deze informatie nog voor de achterhoekse vertaling
+om deze te verbeteren?" — met de uitgangspunten van de WALD-spelling
+(Staring Instituut) en de Achterhoekse taalwiezer.
+
+Ja, en dit is nuttiger dan het woordenboek van v1.33.0: dat gaf losse
+woorden, dit geeft **regels**. Vier ervan raakten de tabel.
+
+### 1. "ao", nooit "oa"
+
+De WALD-spelling kent `ao` als zelfstandig teken; `oa` bestaat niet.
+Er stond *goan, moar, noar, oaver, doar, kloar* — dat wordt **gaon,
+maor, naor, aover, daor, klaor**.
+
+### 2. De e zonder klemtoon is altijd een e
+
+Dus **-lijk wordt -lek** en **-ig wordt -eg**: *meugelek*, *nachtelek*,
+*neudeg*, *weineg*. Juist dat onderscheid maakt het Achterhoeks
+zichtbaar naast het Liemers, dat -ig houdt.
+
+### 3. i-j met een streepje
+
+De tweeklank krijgt een streepje; de apostrof is voor samengetrokken
+woorden (*he'j*, *da'k*, *lao'w*). Er stond *bi'j*.
+
+### 4. Scheidbare werkwoorden
+
+In het voltooid deelwoord komt een streepje tussen de delen —
+*an-egeven*, *weg-enommen*. Dus **op-ewekt**, **uut-esteld**,
+**bi-j-elaojen**, **trugge-elevert**, **umhoog-egaon**.
+
+### Zo leest het nu
+
+> "De accu haalt de nacht waarschijnlek neet: d'r is 2 kWh neudeg maor
+> 1 kWh beschikbaor."
+
+Ook zeven titels bijgewerkt. En "zon" gaat nu zonder spatie in de tabel,
+zodat *zon,* en *zon.* ook meegaan — veilig omdat *zonder* en *zonne*
+eerder in de tabel staan.
+
+**Vier tests erbij** die de regels vasthouden in plaats van losse
+woorden: geen "oa", geen -lijk of -ig, geen i'j, en streepjes bij de
+scheidbare deelwoorden. Dat is het verschil met v1.33.0 — een regel is
+te toetsen, een woordenlijst niet.
+
+**Volledige testsuite**: 1833 tests, allemaal groen.
