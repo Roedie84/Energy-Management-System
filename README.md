@@ -547,6 +547,20 @@ alleen "0 van de 24 uren".
 
 **Volledige testsuite**: 1889 tests, allemaal groen.
 
+## Drie kolommen op de landingspagina (v1.53.0)
+
+**Gemeld**: *"veel lege vlakken op landingspagina... Kun je zaken
+bundelen zodat het mogelijk zelfs zonder scrollen in 1 opzicht te zien
+is?"*
+
+Zeven secties onder elkaar gaven op een laptop een smalle strook tekst
+met een half scherm wit ernaast. Nu drie kolommen die naast elkaar
+doorlopen, elk met eigen koppen: live cijfers en modus links, "haalt de
+accu het?" met de besturing in het midden, status en doorverwijzingen
+rechts.
+
+**Volledige testsuite**: 1930 tests, allemaal groen.
+
 ## De besparing van vandaag stond op min (v1.52.0)
 
 Werkelijk -2,03 tegen -2,40 zonder accu-sturing: besparing -0,37, alsof

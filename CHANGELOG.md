@@ -12573,3 +12573,36 @@ schoon.
 **Zes tests erbij.**
 
 **Volledige testsuite**: 1926 tests, allemaal groen.
+
+## v1.53.0 — Drie kolommen in plaats van zeven stroken
+
+**Gemeld** met screenshot: "veel lege vlakken op landingspagina, op
+mobiel niet te zien op laptop wel. Kun je zaken bundelen zodat het
+mogelijk zelfs zonder scrollen in 1 opzicht te zien is?" en daarna: "3
+secties en die met alles vullen incl headers?"
+
+Zeven secties onder elkaar, elke kaart over de volle breedte van zijn
+sectie: op een laptop gaf dat een smalle strook tekst met een half
+scherm wit ernaast, en drie schermen scrollen.
+
+**Nu drie kolommen die naast elkaar doorlopen**, elk met eigen koppen:
+
+| Kolom | Inhoud |
+|---|---|
+| 1 | Statusbalk, accu- en live cijfers, modus & besluit |
+| 2 | Haalt de accu het?, en de besturing |
+| 3 | Status per onderwerp, nog niet bepaald, meer bekijken |
+
+*Haalt de accu het?* is bewust naar kolom 2 verhuisd: het is het
+antwoord op wat de besturing doet, en die kolom bleef anders halfleeg.
+De statusbalk staat boven de eerste kop, want die gaat over alles.
+
+**Niet voor mobiel geoptimaliseerd**, op verzoek — Home Assistant vouwt
+de kolommen daar vanzelf onder elkaar, dus daar verandert de volgorde
+maar niet de leesbaarheid.
+
+Vier tests erbij: precies drie secties, elke kolom heeft koppen, de
+kolommen blijven in balans (de langste hoogstens 2,5× de kortste), en
+er raakt geen kaart zoek bij het herschikken.
+
+**Volledige testsuite**: 1930 tests, allemaal groen.
