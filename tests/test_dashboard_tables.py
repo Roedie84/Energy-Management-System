@@ -321,7 +321,8 @@ def test_dashboard_yaml_is_valid():
     # v1.18.2: plus de aanwezigheidspagina.
     # v1.26.0: plus de tijdlijnpagina - de aanwezigheidspagina liep over
     # de tekengrens, net als de kwartierpagina in v1.23.2.
-    assert len(data["views"]) == 20
+    # v1.31.0: plus de plantoetsing.
+    assert len(data["views"]) == 21
 
 
 def test_markdown_tables_have_no_blank_lines_between_rows():

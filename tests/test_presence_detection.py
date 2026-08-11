@@ -263,7 +263,13 @@ def test_sleeping_is_not_absence(make_coordinator, hass):
 
 def test_motion_downstairs_after_bedtime_means_awake(make_coordinator, hass):
     """De volgorde is het bewijs: bewoog er daarna nog iets beneden, dan
-    is iemand toch weer op."""
+    zegt de SLAAPSENSOR niets meer.
+
+    v1.30.0: de staat wordt dan alsnog "slaapt", maar via een andere
+    regel - het nachtvenster. Gemeld: "Ik ging om 23:15 slapen, was
+    snachts wel een tijdje wakker", waarna de tijdlijn de hele nacht
+    "weg" gaf. Een huis loopt 's nachts niet vanzelf leeg.
+    """
     c = _met_slaapsensor(make_coordinator, hass)
     _alleen(hass, "binary_sensor.overloop")
     c._update_presence(AVOND)
@@ -273,7 +279,8 @@ def test_motion_downstairs_after_bedtime_means_awake(make_coordinator, hass):
 
     c._update_presence(AVOND + timedelta(hours=6))
 
-    assert c.presence_state == "weg"
+    assert c._slaapt_waarschijnlijk(AVOND + timedelta(hours=6)) is False
+    assert c.presence_state == "slaapt"
 
 
 def test_the_landing_during_the_day_is_not_bedtime(make_coordinator, hass):
@@ -678,3 +685,144 @@ def test_the_overview_carries_the_timeline(make_coordinator, hass):
 
     assert overzicht["tijdlijn"]
     assert overzicht["tijdlijn_totaal"] == 1
+
+
+# --- v1.30.0: de nacht, en niets kwijtraken bij een herstart ---------
+
+
+def test_going_to_bed_via_the_hall_is_still_sleeping(make_coordinator, hass):
+    """Gemeld: "Ik ging om 23:15 slapen, was snachts wel een tijdje
+    wakker" - en de tijdlijn zei van 23:15 tot de ochtend "weg", met
+    "laatst: Gang Beweging" als reden.
+
+    Loop je via de gang naar bed, dan is de gang de laatste beweging en
+    zwijgt de slaapsensor de rest van de nacht.
+    """
+    c = _coordinator(make_coordinator, hass)
+    nacht = NU.replace(hour=23, minute=15)
+    hass.states.set("binary_sensor.gang", "on")
+    c._update_presence(nacht)
+    hass.states.set("binary_sensor.gang", "off")
+
+    c._update_presence(nacht + timedelta(hours=2))
+
+    assert c.presence_state == "slaapt"
+
+
+def test_an_empty_house_at_night_stays_away(make_coordinator, hass):
+    """De regel geldt alleen als er net nog iemand thuis was. Wie om
+    18:00 vertrokken is, ligt om 01:00 niet ineens in bed."""
+    c = _coordinator(make_coordinator, hass)
+    avond = NU.replace(hour=18, minute=0)
+    hass.states.set("binary_sensor.gang", "on")
+    c._update_presence(avond)
+    hass.states.set("binary_sensor.gang", "off")
+    c._update_presence(avond + timedelta(hours=2))
+    assert c.presence_state == "weg"
+
+    c._update_presence(avond + timedelta(hours=7))
+
+    assert c.presence_state == "weg"
+
+
+def test_the_evening_before_the_window_is_unchanged(make_coordinator, hass):
+    """Om 20:00 stil worden betekent nog gewoon weg."""
+    c = _coordinator(make_coordinator, hass)
+    avond = NU.replace(hour=19, minute=0)
+    hass.states.set("binary_sensor.gang", "on")
+    c._update_presence(avond)
+    hass.states.set("binary_sensor.gang", "off")
+
+    c._update_presence(avond + timedelta(hours=1))
+
+    assert c.presence_state == "weg"
+
+
+def test_the_timeline_never_repeats_a_state(make_coordinator, hass):
+    """Gemeld met screenshot: vijf "weg"-regels achter elkaar. Een
+    tijdlijn van blokken hoort nooit twee gelijke staten naast elkaar te
+    hebben."""
+    c = _coordinator(make_coordinator, hass)
+    c.presence_timeline = [
+        {"van": (NU - timedelta(hours=2)).isoformat(), "staat": "weg", "aanleiding": ""}
+    ]
+    c.presence_state = "weg"
+
+    c._registreer_aanwezigheidsovergang(NU, "onbekend")
+
+    assert len(c.presence_timeline) == 1
+
+
+def test_a_missing_reading_does_not_break_the_block(make_coordinator, hass):
+    """Viel er een sensor weg, dan hoort het lopende blok door te lopen
+    in plaats van te eindigen."""
+    c = _coordinator(make_coordinator, hass)
+    c.presence_timeline = [
+        {"van": (NU - timedelta(hours=2)).isoformat(), "staat": "slaapt", "aanleiding": ""}
+    ]
+    c.presence_state = "onbekend"
+
+    c._registreer_aanwezigheidsovergang(NU, "slaapt")
+
+    assert [b["staat"] for b in c.presence_timeline] == ["slaapt"]
+
+
+def test_everything_the_presence_logic_learns_survives_a_restart():
+    """Gevraagd: "Let op alle gecreeerde data dient na een herstart niet
+    verloren te gaan."
+
+    `last_bedtime_motion_at` ontbrak, en dat is precies waarom de
+    slaapherkenning na een herstart niets meer kon zeggen: wie al in bed
+    ligt, loopt niet opnieuw langs die sensor.
+    """
+    from custom_components.energy_management_system.const import (
+        PERSISTED_DATETIME_FIELDS,
+        PERSISTED_PLAIN_FIELDS,
+    )
+
+    for veld in (
+        "presence_timeline",
+        "presence_state",
+        "presence_week_profile",
+        "presence_last_seen",
+        "bedtime_history",
+        "quarter_plan_first_seen",
+    ):
+        assert veld in PERSISTED_PLAIN_FIELDS, veld
+    for veld in ("last_motion_at", "last_bedtime_motion_at"):
+        assert veld in PERSISTED_DATETIME_FIELDS, veld
+
+
+# --- v1.31.1: de tabel loopt niet uit de pas -------------------------
+
+
+def test_the_timeline_catches_up_with_the_state(make_coordinator, hass):
+    """Gevonden in de export van 11 augustus 08:38: de tijdlijn stond op
+    "weg sinds 08:21" terwijl de staat "thuis" was en er 2,6 minuten
+    eerder nog beweging was geweest.
+
+    Zolang alleen een WISSEL werd vastgelegd, was elke gemiste wissel
+    blijvend - er kwam nooit meer een gelegenheid om hem goed te zetten.
+    """
+    c = _coordinator(make_coordinator, hass)
+    c.presence_timeline = [
+        {"van": (NU - timedelta(hours=1)).isoformat(), "staat": "weg", "aanleiding": ""}
+    ]
+    # De staat staat al op thuis, maar dat is nooit in de tabel beland.
+    c.presence_state = "thuis"
+    hass.states.set("binary_sensor.gang", "on")
+
+    c._update_presence(NU)
+
+    assert [b["staat"] for b in c.presence_timeline] == ["weg", "thuis"]
+
+
+def test_repeating_the_same_state_adds_nothing(make_coordinator, hass):
+    """Elke tick aanbieden mag geen regels opleveren."""
+    c = _coordinator(make_coordinator, hass)
+    hass.states.set("binary_sensor.gang", "on")
+
+    for minuut in range(0, 30, 5):
+        c._update_presence(NU + timedelta(minutes=minuut))
+
+    assert len(c.presence_timeline) == 1

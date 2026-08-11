@@ -175,6 +175,13 @@ def test_only_the_pre_existing_kinds_default_to_on():
         "sluipverbruik",
         "device_drift",
         "mode_change",
+        # v1.29.0: "Onderdeel van de integratie faalt" staat aan om
+        # dezelfde reden. Gemeld: "Dat er een txt wordt gemaakt is een
+        # error, ik had daar graag een melding van verwacht zoals eerder
+        # afgesproken." Een integratie die stiekem half werkt is geen
+        # ruis - en stond hij uit, dan zou je er pas achter komen door
+        # de export regel voor regel te lezen.
+        "interne_fout",
     }
 
 
@@ -456,3 +463,64 @@ def test_the_ready_list_survives_a_restart(make_coordinator, hass):
     asyncio.run(verse.async_load_persisted_state())
 
     assert verse.previously_ready_modules == ["kalman", "nilm"]
+
+
+# --- v1.29.0: een falend onderdeel meldt zichzelf --------------------
+
+
+def test_an_internal_failure_sends_a_notification(make_coordinator, hass):
+    """Gemeld: "Dat er een txt wordt gemaakt is een error, ik had daar
+    graag een melding van verwacht zoals eerder afgesproken."
+
+    `internal_failures` bestaat sinds v1.19.4 maar verscheen alleen als
+    aandachtspunt op een dashboardpagina. Afschermen zonder melden laat
+    een storing stil doorlopen.
+    """
+    c = _coordinator(make_coordinator)
+    c.internal_failures["diagnostiek:live_narrative"] = "TypeError: kapot"
+
+    c._evaluate_new_notifications(NOW)
+
+    soorten = [m["soort"] for m in c.notification_history]
+    assert "interne_fout" in soorten
+
+
+def test_the_message_names_the_broken_part(make_coordinator, hass):
+    """Een melding "er is iets stuk" zonder te zeggen wát, kost meer tijd
+    dan hij bespaart."""
+    c = _coordinator(make_coordinator)
+    c.internal_failures["diagnostiek:live_narrative"] = "TypeError: kapot"
+
+    c._evaluate_new_notifications(NOW)
+
+    melding = next(
+        m for m in c.notification_history if m["soort"] == "interne_fout"
+    )
+    assert "live_narrative" in melding.get("bericht", "")
+    assert "TypeError" in melding.get("bericht", "")
+
+
+def test_no_failures_means_no_notification(make_coordinator, hass):
+    c = _coordinator(make_coordinator)
+
+    c._evaluate_new_notifications(NOW)
+
+    assert "interne_fout" not in [m["soort"] for m in c.notification_history]
+
+
+def test_it_can_recover(make_coordinator, hass):
+    """Zonder herstelmelding blijft de laatste stand "er is iets stuk",
+    ook als het allang weer werkt."""
+    from custom_components.energy_management_system.const import (
+        NOTIFICATION_RECOVERY_KINDS,
+    )
+
+    assert "interne_fout" in NOTIFICATION_RECOVERY_KINDS
+
+
+def test_it_has_an_achterhoeks_title():
+    from custom_components.energy_management_system.const import (
+        ACHTERHOEKS_TITELS,
+    )
+
+    assert "interne_fout" in ACHTERHOEKS_TITELS
