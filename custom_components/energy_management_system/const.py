@@ -1869,6 +1869,21 @@ RELIABILITY_ALIASES = {
 # Met de zonnestand klopt het wel: staat de zon boven de horizon, dan
 # HOORT die sensor te bewegen, en een storing valt meteen op.
 CONF_SUN_ELEVATION_SENSOR = "sun_elevation_sensor_entity"
+
+# --- Azimut van de zon (v1.45.0) -------------------------------------
+# Gemeld: "Vandaag was een mega zonnige dag: PV-installatieprofiel
+# (oriëntatie) 0/5 heldere dagen verzameld."
+#
+# Het lag niet aan de bewolking. De azimut werd UITSLUITEND uit `sun.sun`
+# gelezen, terwijl de zonshoogte wel een eigen instelbare sensor had.
+# Ontbreekt dat attribuut - bijvoorbeeld omdat de zonstand van een eigen
+# integratie komt - dan viel de hele leerroutine elke tick meteen stil:
+# geen piekrichting, geen prestatie per windrichting, en dus eeuwig 0/5
+# zonder dat er iets over bewolking te zeggen viel.
+#
+# Zelfde opzet als de zonshoogte: eigen sensor eerst, `sun.sun` als
+# vangnet.
+CONF_SUN_AZIMUTH_SENSOR = "sun_azimuth_sensor_entity"
 CONF_SUN_PHASE_SENSOR = "sun_phase_sensor_entity"
 
 # Boven deze hoogte gaat er noemenswaardig zonlicht op de panelen vallen.
@@ -3164,6 +3179,20 @@ ACHTERHOEKS_TITELS = {
     "sensor_unavailable": "'n Sensor is d'r neet meer",
     "integration_error": "'t Systeem löp vast",
     "interne_fout": "'n Onderdeel rekent neet meer",
+    # v1.46.0, gemeld: "Niet in het achterhoeks?" bij een
+    # herstelmelding. De titels van de PROBLEEMmeldingen stonden er wel
+    # in, die van het herstel niet - en woordvervanging alleen maakt van
+    # "Accu haalt de nacht weer" niets Achterhoeks, want geen van die
+    # woorden staat in de tabel.
+    "plan_tekort_hersteld": "Den accu haalt de nacht weer",
+    "battery_wont_last_night_hersteld": "Den accu haalt de nacht weer",
+    "sensor_unavailable_hersteld": "De sensor dut 't weer",
+    "integration_error_hersteld": "'t Systeem löp weer",
+    "interne_fout_hersteld": "Alle onderdelen rekent weer",
+    "cost_mismatch_hersteld": "De kosten kloppen weer",
+    "solar_underperforming_hersteld": "De zunne dut 't weer",
+    "pv_orientation_mismatch_hersteld": "De PV-richting klop weer",
+    "battery_module_drift_hersteld": "De accumodules loopt weer geliek",
     "battery_module_drift": "'n Accumodule löp uut de pas",
     "module_became_ready": "'n Adviesmodule is klaor",
     "pv_orientation_mismatch": "De PV-richting klop neet",

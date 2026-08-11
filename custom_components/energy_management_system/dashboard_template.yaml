@@ -207,7 +207,7 @@ views:
       heading: Haalt de accu het?
       heading_style: title
     - type: markdown
-      content: '{% set q = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''kwartier_samenvatting'') or {} %}{% if not q.get(''beschikbaar'') %}Nog geen planning.{% else %}{% set t = q.get(''tekort_kwartieren'', 0) %}{% if t > 0 %}**Nee: {{ t }} kwartier(en) aan het net.**{% else %}**Ja**, geen kwartier zonder accu.{% endif %}
+      content: '{% set q = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''kwartier_samenvatting'') or {} %}{% if not q.get(''beschikbaar'') %}Nog geen planning.{% else %}{% set t = q.get(''tekort_kwartieren'', 0) %}{% if t > 0 %}**Nee: {{ t }} kwartier(en) aan het net** — {{ (q.get(''tekort_perioden'') or [])[:2] | join('', '') }}.{% else %}**Ja**, geen kwartier zonder accu.{% endif %}
 
 
         | Laagste | Eind | Opbrengst | Vooruit |
@@ -216,10 +216,7 @@ views:
 
         | {{ q.get(''laagste_soc_procent'', ''—'') }}% | {{ q.get(''eind_soc_procent'', ''—'') }}% | € {{ q.get(''verwachte_opbrengst_eur'', ''—'') }} | {{ ((q.get(''kwartieren'', 0) / 4) | int) ~ '' uur'' }} |
 
-        {% endif %}
-
-
-        _Ondergrens 10%._'
+        {% endif %}'
       grid_options:
         columns: 12
         rows: auto
@@ -505,7 +502,7 @@ views:
   panel: true
   cards:
   - type: picture-elements
-    image: /local/energy_management_system_overview.svg?v=1.43.1
+    image: /local/energy_management_system_overview.svg?v=1.47.0
     elements:
     - type: state-label
       entity: sensor.woonkamer_energy_management_system_system_status
@@ -2470,7 +2467,7 @@ views:
 
         | Gewijzigd sinds eerste plan | {{ s.gewijzigde_kwartieren }} |
 
-        | **Kwartieren met tekort** | **{{ s.tekort_kwartieren }}** |
+        | **Kwartieren met tekort** | **{{ s.tekort_kwartieren }}**{% if s.tekort_kwartieren %} — {{ (s.get(''tekort_perioden'') or []) | join('', '') }}{% endif %} |
 
         | Harde ondergrens accu | {{ s.min_soc_procent_hard }}% |
 

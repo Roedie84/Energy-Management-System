@@ -441,6 +441,10 @@ async def async_get_config_entry_diagnostics(
             ),
             # v1.38.0: de proefstand - kandidaten die meerekenen maar
             # niets sturen.
+            # v1.47.0: ingangen die er zijn maar niets leveren.
+            "input_health": _veilig(
+                "get_input_health", coordinator.get_input_health
+            ),
             "pending_overview": _veilig(
                 "get_pending_overview", coordinator.get_pending_overview
             ),

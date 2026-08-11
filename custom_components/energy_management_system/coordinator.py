@@ -347,6 +347,7 @@ from .const import (
     STALLED_SERIES_MIN_SAMPLES,
     STARTUP_GRACE_KINDS,
     STARTUP_GRACE_SECONDS,
+    CONF_SUN_AZIMUTH_SENSOR,
     CONF_SUN_ELEVATION_SENSOR,
     CONF_SUN_PHASE_SENSOR,
     CONF_PV_ACTUAL_AZIMUTH_DEGREES,
@@ -1459,7 +1460,23 @@ class EnergyManagementSystemCoordinator:
         # updated): without this, the remaining ~20 empty hours would
         # never get backfilled from history at all.
         need_hourly_bootstrap = len(self.hourly_consumption_profile) < 24
-        if not need_night_bootstrap and not need_hourly_bootstrap:
+        # v1.45.0, gevraagd: "Nog geen data verzameld? Verbruiksprofiel
+        # per dagtype: 0 van de 24 uren."
+        #
+        # Klopt, en dat was onnodig traag. Het algemene uurprofiel wordt
+        # bij de installatie in één keer uit de recorder gevuld; het
+        # profiel per dagtype begon leeg en had daardoor weken nodig -
+        # een weekend levert twee dagen per week.
+        #
+        # Dezelfde geschiedenis draagt de dag al: elke emmer is een
+        # (datum, uur)-paar, dus of het een werkdag was staat er gewoon
+        # in. Alleen werd dat weggegooid.
+        need_daytype_bootstrap = not self.daytype_consumption_profile
+        if (
+            not need_night_bootstrap
+            and not need_hourly_bootstrap
+            and not need_daytype_bootstrap
+        ):
             return
 
         consumption_entity = self.config.get(CONF_CONSUMPTION_POWER_SENSOR)
@@ -1584,6 +1601,28 @@ class EnergyManagementSystemCoordinator:
         # Build the full 24-hour profile from the same fetched data: for
         # each (day, hour) bucket, compute that day's average kW, then feed
         # it into the rolling per-hour history exactly like live learning.
+        # v1.45.0: hetzelfde materiaal, maar dan gescheiden naar
+        # werkdagen en weekend.
+        if need_daytype_bootstrap:
+            per_dagtype: dict[str, list[float]] = {}
+            for (day, hour), values in by_day_hour.items():
+                if not values:
+                    continue
+                soort = "weekend" if day.weekday() >= 5 else "werkdag"
+                per_dagtype.setdefault(f"{soort}-{hour}", []).append(
+                    round((sum(values) / len(values)) / 1000, 4)
+                )
+            if per_dagtype:
+                self.daytype_consumption_profile = {
+                    sleutel: reeks[-LEARNING_HISTORY_DAYS:]
+                    for sleutel, reeks in per_dagtype.items()
+                }
+                _LOGGER.info(
+                    "Verbruiksprofiel per dagtype uit de geschiedenis "
+                    "gevuld: %d emmers",
+                    len(per_dagtype),
+                )
+
         per_hour_daily_averages: dict[int, list[float]] = {}
         if need_hourly_bootstrap:
             for (day, hour), values in by_day_hour.items():
@@ -3089,14 +3128,7 @@ class EnergyManagementSystemCoordinator:
                 message=bericht,
                 notification_id=f"ems_{kind}_hersteld",
                 kind=None,
-            )
-            self.notification_history.append(
-                {
-                    "moment": dt_util.now().isoformat(),
-                    "soort": f"{kind}_hersteld",
-                    "titel": titel,
-                    "bericht": bericht,
-                }
+                geschiedenis_soort=f"{kind}_hersteld",
             )
             # Het dempingsvenster van de PROBLEEMmelding wordt gewist,
             # zodat een terugkerend probleem meteen weer gemeld wordt in
@@ -3136,19 +3168,9 @@ class EnergyManagementSystemCoordinator:
             message=bericht,
             notification_id=f"ems_{kind}_hersteld",
             kind=None,
-        )
-        self.notification_history.append(
-            {
-                "moment": dt_util.now().isoformat(),
-                "soort": f"{kind}_hersteld",
-                "titel": titel,
-                "bericht": bericht,
-            }
+            geschiedenis_soort=f"{kind}_hersteld",
         )
         self.notification_last_sent.pop(kind, None)
-        self.notification_history = self.notification_history[
-            -NOTIFICATION_HISTORY_LENGTH:
-        ]
         self.schedule_persisted_state_save()
 
     @staticmethod
@@ -3322,6 +3344,21 @@ class EnergyManagementSystemCoordinator:
                     "Geen zonvoorspelling geconfigureerd. Zonder die "
                     "verwachting valt niet te bepalen of een dag helder "
                     "genoeg was, en wordt er dus geen oriëntatie afgeleid."
+                ),
+            }
+        elif self.get_sun_azimuth_degrees() is None and not dagen:
+            # v1.45.0: dezelfde soort stilstand als hierboven, en tot nu
+            # toe onzichtbaar. Zonder azimut valt er geen piekrichting
+            # vast te leggen, hoe helder de dag ook was - en dan is
+            # "0/5 heldere dagen" een misleidend antwoord.
+            oordeel = {
+                "niveau": RELIABILITY_NOT_CONFIGURED,
+                "reden": (
+                    "De stand van de zon (azimut) is niet uit te lezen. "
+                    "Standaard komt die uit sun.sun; ontbreekt dat, kies "
+                    "dan een eigen azimut-sensor bij de instellingen. "
+                    "Zonder die hoek valt er geen oriëntatie af te leiden, "
+                    "ook niet op een strakblauwe dag."
                 ),
             }
         profiel: dict = {
@@ -5515,6 +5552,32 @@ class EnergyManagementSystemCoordinator:
             for datum, uren in sorted(per_dag.items(), reverse=True)
         ]
 
+    def _tekort_perioden(self, plan: list[dict]) -> list[str]:
+        """Wanneer hangt het huis aan het net? (v1.44.0)
+
+        Aaneengesloten kwartieren worden samengevoegd tot één periode:
+        acht losse tijdstippen lezen niemand, "03:15-05:15" wel.
+
+        Alleen tot het goedkope blok, net als de telling zelf - daarna
+        wordt er geladen en is leeg zijn geen tekort meer.
+        """
+        perioden: list[str] = []
+        begin: str | None = None
+        vorige: dict | None = None
+        for regel in plan:
+            if not regel.get("voor_bijladen", True):
+                break
+            if regel.get("tekort"):
+                if begin is None:
+                    begin = f"{regel.get('dag', '')}{regel.get('van', '')}"
+                vorige = regel
+            elif begin is not None:
+                perioden.append(f"{begin}-{vorige.get('tot', '')}")
+                begin, vorige = None, None
+        if begin is not None and vorige is not None:
+            perioden.append(f"{begin}-{vorige.get('tot', '')}")
+        return perioden
+
     def _tel_tekorten_tot_bijladen(self, plan: list[dict]) -> int:
         """Kwartieren zonder accu, tot het eerstvolgende moment waarop er
         weer bijgeladen wordt (v1.42.0).
@@ -5625,6 +5688,114 @@ class EnergyManagementSystemCoordinator:
                         ]
                     self.schedule_persisted_state_save()
 
+    def get_input_health(self) -> list[dict]:
+        """Zijn de ingangen waar onderdelen op leunen echt uitleesbaar?
+        (v1.47.0)
+
+        Gevraagd: "Meer van dit soort zaken in de integratie?" - na de
+        azimut, die uitsluitend uit `sun.sun` kwam en daar niet in stond,
+        waardoor het installatieprofiel elke tick bij de eerste regel
+        stilviel en tien dagen lang "0/5 heldere dagen" meldde.
+
+        Dat is een SOORT fout, geen incident: een onderdeel leest een
+        attribuut, krijgt None, keert netjes terug - en er is niemand die
+        het merkt. De ontbrekende sensor kan gemeld worden (dat gebeurt),
+        maar een sensor die er wél is en het gevraagde attribuut niet
+        heeft, glipt er tussendoor.
+
+        Deze controle kijkt daarom niet naar de configuratie maar naar de
+        WAARDE: levert de bron op dit moment iets bruikbaars op? Zo nee,
+        dan staat erbij wat er stilvalt.
+
+        Alleen ingangen die daadwerkelijk zijn ingesteld. Wie geen airco
+        heeft moet daar niets over horen.
+        """
+        def _attribuut(entity_id: str | None, naam: str):
+            if not entity_id:
+                return None
+            staat = self.hass.states.get(entity_id)
+            if staat is None:
+                return None
+            return staat.attributes.get(naam)
+
+        controles = [
+            (
+                "Stand van de zon (azimut)",
+                self.get_sun_azimuth_degrees(),
+                "het PV-installatieprofiel en de beschaduwingsanalyse",
+                "Kies een eigen azimut-sensor, of controleer sun.sun.",
+            ),
+            (
+                "Hoogte van de zon",
+                self.get_sun_elevation_degrees(),
+                "de daglichtbepaling en de zonstandcontroles",
+                "Kies een eigen hoogtesensor, of controleer sun.sun.",
+            ),
+            (
+                "Zonvoorspelling per half uur",
+                _attribuut(
+                    self.config.get(CONF_SOLAR_TODAY_FORECAST_SENSOR),
+                    "detailedForecast",
+                )
+                or _attribuut(
+                    self.config.get(CONF_SOLAR_TODAY_FORECAST_SENSOR),
+                    "detailedHourly",
+                ),
+                "elke schatting van de zon vooruit",
+                "De sensor bestaat, maar levert geen detailedForecast.",
+            ),
+            (
+                "Prijsvoorspelling",
+                _attribuut(self.config.get(CONF_PRICE_SENSOR), "forecast"),
+                "de hele planning en elke prijsdrempel",
+                "De prijssensor bestaat, maar heeft geen forecast-attribuut.",
+            ),
+            (
+                "Bewolking van de weerbronnen",
+                self.weather_ensemble_cloud_cover_percent,
+                "de weer-ensemble en de bewolkingscorrectie",
+                "De weerentiteit levert geen cloud_coverage.",
+            ),
+            (
+                "Buitentemperatuur",
+                self._get_filtered_backyard_temp_c(dt_util.now()),
+                "de klimaatvoorspelling en de accukoeling",
+                "Geen enkele bron levert een temperatuur.",
+            ),
+        ]
+
+        for naam, entity_key, waar in (
+            ("Airco", CONF_AIRCO_CLIMATE_ENTITY, "de aircoherkenning"),
+            (
+                "Slaapkamerklimaat",
+                CONF_SLAAPKAMER_CLIMATE_ENTITY,
+                "de herkenning van de slaapkamerairco",
+            ),
+        ):
+            entity_id = self.config.get(entity_key)
+            if entity_id:
+                controles.append(
+                    (
+                        f"{naam}: hvac_action",
+                        _attribuut(entity_id, "hvac_action"),
+                        waar,
+                        f"{entity_id} bestaat, maar meldt geen hvac_action.",
+                    )
+                )
+
+        gebreken = []
+        for naam, waarde, blokkeert, advies in controles:
+            if waarde is not None:
+                continue
+            gebreken.append(
+                {
+                    "naam": naam,
+                    "blokkeert": blokkeert,
+                    "advies": advies,
+                }
+            )
+        return gebreken
+
     def get_pending_overview(self) -> dict:
         """Alles wat nog niet bepaald is, met wat ervoor nodig is
         (v1.41.0).
@@ -5664,6 +5835,23 @@ class EnergyManagementSystemCoordinator:
                 doen.append(regel)
             elif niveau != RELIABILITY_UNVERIFIABLE:
                 wachten.append(regel)
+
+        # v1.47.0: ingangen die er zijn maar niets leveren. Die vragen
+        # om een handeling, niet om geduld - en tot nu toe zeiden ze
+        # niets.
+        for gebrek in self.get_input_health():
+            doen.append(
+                {
+                    "groep": "Ingangen",
+                    "naam": gebrek["naam"],
+                    "niveau": RELIABILITY_NOT_CONFIGURED,
+                    "label": None,
+                    "wat_ontbreekt": (
+                        f"{gebrek['advies']} Zonder deze waarde valt "
+                        f"{gebrek['blokkeert']} stil."
+                    ),
+                }
+            )
 
         for kandidaat in self.get_proefstand()["kandidaten"]:
             if kandidaat.get("status") == RELIABILITY_RELIABLE:
@@ -5918,11 +6106,7 @@ class EnergyManagementSystemCoordinator:
                     "te_becijferen": False,
                     "reden": "Nog te weinig waarnemingen per dagtype.",
                 },
-                "betrouwbaarheid": (
-                    f"{uren} van de 24 uren hebben genoeg waarnemingen voor "
-                    "beide dagtypen. Een weekend levert twee dagen per week, "
-                    "dus dit duurt enkele weken."
-                ),
+                "betrouwbaarheid": self._dagtype_voortgang(uren),
             }
         gem_werk = sum(werkdag) / len(werkdag)
         gem_week = sum(weekend) / len(weekend)
@@ -6006,6 +6190,33 @@ class EnergyManagementSystemCoordinator:
                 "vroeg leeg was of onnodig vol bleef."
             ),
         }
+
+    def _dagtype_voortgang(self, uren: int) -> str:
+        """Zeggen waar het aan ligt (v1.45.0).
+
+        Gevraagd: "Nog geen data verzameld?" bij "0 van de 24 uren".
+        Dat laat in het midden of er niets binnenkomt of dat één van de
+        twee dagtypen achterloopt - en dat is juist het antwoord.
+        """
+        dagen = {
+            soort: max(
+                (
+                    len(reeks)
+                    for sleutel, reeks in self.daytype_consumption_profile.items()
+                    if sleutel.startswith(f"{soort}-")
+                ),
+                default=0,
+            )
+            for soort in ("werkdag", "weekend")
+        }
+        achter = min(dagen, key=lambda k: dagen[k])
+        return (
+            f"Werkdagen: {dagen['werkdag']} waarneming(en) per uur, weekend: "
+            f"{dagen['weekend']}. Er zijn er {PROEFSTAND_MIN_SAMPLES} nodig "
+            f"voor beide, en {achter} loopt achter. Een weekend levert twee "
+            f"dagen per week, dus dat is de vertragende kant. "
+            f"({uren} van de 24 uren compleet.)"
+        )
 
     def _kandidaat_capaciteit(self) -> dict:
         """4. Neemt de bruikbare capaciteit af?"""
@@ -7367,6 +7578,7 @@ class EnergyManagementSystemCoordinator:
         message: str,
         notification_id: str,
         kind: str | None = None,
+        geschiedenis_soort: str | None = None,
     ) -> None:
         """Shared notification dispatch, used for both the appliance-ready
         suggestion (v0.47.0) and the mode/power-change notification
@@ -7387,8 +7599,35 @@ class EnergyManagementSystemCoordinator:
         # ook de geschiedenis, zodat het meldingenoverzicht en de
         # telefoon dezelfde taal spreken.
         if self.achterhoeks:
-            title = self._naar_achterhoeks(title, kind)
+            # v1.46.0: bij een herstelmelding is `kind` bewust leeg (het
+            # dempingsvenster geldt niet), maar voor het opzoeken van de
+            # titel is de soort er wel degelijk.
+            title = self._naar_achterhoeks(title, kind or geschiedenis_soort)
             message = self._naar_achterhoeks(message)
+        # v1.46.0, gemeld: "Niet in het achterhoeks?" bij een
+        # herstelmelding.
+        #
+        # De VERTALING klopte - hierboven gaat alles wat de deur uitgaat
+        # er doorheen. Maar de herstelmeldingen schreven daarna zelf een
+        # regel in de geschiedenis, met hun eigen ONVERTAALDE tekst. Op
+        # de telefoon stond dus Achterhoeks en in het meldingenoverzicht
+        # Nederlands - precies wat v1.24.0 wilde voorkomen.
+        #
+        # Nu schrijft deze functie die regel, met de tekst die
+        # daadwerkelijk is verstuurd.
+        if geschiedenis_soort is not None:
+            self.notification_history.append(
+                {
+                    "moment": now.isoformat(),
+                    "soort": geschiedenis_soort,
+                    "titel": title,
+                    "bericht": message,
+                }
+            )
+            self.notification_history = self.notification_history[
+                -NOTIFICATION_HISTORY_LENGTH:
+            ]
+
         toegestaan = True
         if kind is not None:
             toegestaan, reden = self.is_notification_allowed(kind, now)
@@ -9526,6 +9765,13 @@ class EnergyManagementSystemCoordinator:
             # te laden. Daarna is leeg zijn normaal - dan wordt er
             # geladen.
             "tekort_kwartieren": self._tel_tekorten_tot_bijladen(plan),
+            # v1.44.0, gevraagd: "waar zie ik dan welke uren hij verwacht
+            # aan het net te hangen?"
+            #
+            # Nergens, tenzij je de 120 regels van de kwartiertabel
+            # afzocht op het uitroepteken. Een aantal zonder tijdstip is
+            # een alarm zonder adres.
+            "tekort_perioden": self._tekort_perioden(plan),
             "tekort_kwartieren_hele_planning": len(
                 [r for r in plan if r.get("tekort")]
             ),
@@ -16608,7 +16854,24 @@ class EnergyManagementSystemCoordinator:
         return "uit"
 
     def get_sun_azimuth_degrees(self) -> float | None:
-        """Actuele azimut van de zon in graden (v1.3.1)."""
+        """Actuele azimut van de zon in graden (v1.3.1).
+
+        v1.45.0: eerst een eigen sensor, dan pas `sun.sun` - dezelfde
+        volgorde als de zonshoogte al had.
+
+        Gemeld: "Vandaag was een mega zonnige dag: PV-installatieprofiel
+        (oriëntatie) 0/5 heldere dagen verzameld." Het lag niet aan de
+        bewolking. Deze functie las alleen `sun.sun`, en zonder dat
+        attribuut viel `_update_pv_geometry_learning` elke tick meteen
+        stil - geen piekrichting, geen prestatie per windrichting, en
+        dus eeuwig 0/5 zonder dat er iets over bewolking te zeggen viel.
+        """
+        eigen = self.config.get(CONF_SUN_AZIMUTH_SENSOR)
+        if eigen:
+            waarde = self._read_sensor_float(eigen)
+            if waarde is not None:
+                return waarde
+
         state = self.hass.states.get(SUN_FALLBACK_ENTITY)
         if state is not None:
             try:

@@ -46,6 +46,7 @@ from .const import (
     CONF_WATER_SOFTENER_START_HOUR,
     CONF_PV_ENERGY_SENSOR,
     CONF_PV_ACTUAL_TILT_DEGREES,
+    CONF_SUN_AZIMUTH_SENSOR,
     CONF_SUN_ELEVATION_SENSOR,
     CONF_SUN_PHASE_SENSOR,
     CONF_BATTERY_MODULE_CELL_VOLTAGE_MAX_SENSORS,
@@ -410,6 +411,10 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
             vol.Optional(
                 CONF_SUN_ELEVATION_SENSOR,
                 default=defaults.get(CONF_SUN_ELEVATION_SENSOR),
+            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            vol.Optional(
+                CONF_SUN_AZIMUTH_SENSOR,
+                default=defaults.get(CONF_SUN_AZIMUTH_SENSOR),
             ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
             vol.Optional(
                 CONF_SUN_PHASE_SENSOR,

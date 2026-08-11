@@ -12170,3 +12170,177 @@ uur** — dat zegt bovendien meer: je wilt weten hoe ver het plan reikt,
 niet uit hoeveel blokjes het bestaat.
 
 **Volledige testsuite**: 1883 tests, allemaal groen.
+
+## v1.44.0 — Welke uren dan?
+
+**Gevraagd**: "Ok maar waar zie ik dan welke uren hij verwacht aan het
+net te hangen?"
+
+Nergens — tenzij je de 120 regels van de kwartiertabel afzocht op het
+uitroepteken. Een aantal zonder tijdstip is een alarm zonder adres.
+
+**Nu** staan de tijden erbij, met aaneengesloten kwartieren samengevoegd
+tot één periode:
+
+> **Nee: 8 kwartier(en) aan het net** — 03:15-05:15.
+
+Acht losse tijdstippen leest niemand; één periode wel. Ze staan op de
+landingspagina (de eerste twee, om de tegel leesbaar te houden) en
+volledig op de pagina *Planning-samenvatting*. De melding op je telefoon
+blijft ongewijzigd — daar staat het aantal, en de tijden vind je in het
+dashboard.
+
+Ook hier alleen tot het goedkope blok, net als de telling zelf: daarna
+wordt er geladen en is leeg zijn geen tekort meer.
+
+De regel *"Ondergrens 10%"* is van de landingstegel verdwenen; die stond
+al bij de kwartiertabel en kostte precies de ruimte die de tijden nu
+innemen. En de twee tekengrenzen voor de landingspagina - 1600 en 1400 -
+zijn gelijkgetrokken op 1650; twee grenzen die net iets van elkaar
+verschillen leveren alleen verwarring op.
+
+**Volledige testsuite**: 1886 tests, allemaal groen.
+
+## v1.45.0 — Het dagtypeprofiel hoefde niet vanaf nul
+
+**Gevraagd**: "Nog geen data verzameld? *Verbruiksprofiel per dagtype: 0
+van de 24 uren.*"
+
+Klopt, en dat was onnodig traag. Het algemene uurprofiel wordt bij de
+installatie in één keer uit de recorder gevuld; het profiel per dagtype
+begon leeg en had daardoor weken nodig — een weekend levert twee dagen
+per week.
+
+Terwijl **diezelfde geschiedenis de dag al draagt**: elke emmer in die
+bootstrap is een `(datum, uur)`-paar, dus of het een werkdag was staat
+er gewoon in. Dat werd alleen weggegooid.
+
+Bij de eerstvolgende herstart wordt het profiel per dagtype in één keer
+gevuld uit de zeven dagen recordergeschiedenis die er al waren. In jouw
+geval: vier werkdagen en twee weekenddagen (8 en 9 augustus). Er zijn er
+drie per uur nodig, dus **de derde weekenddag komt zaterdag** — geen
+weken meer, maar vier dagen.
+
+Een bestaand profiel wordt niet overschreven; de bootstrap loopt alleen
+als er nog niets staat.
+
+### En de tekst zei niet waar het aan lag
+
+*"0 van de 24 uren"* laat in het midden of er niets binnenkomt of dat
+één van de twee dagtypen achterloopt. Nu:
+
+> Werkdagen: 4 waarneming(en) per uur, weekend: 2. Er zijn er 3 nodig
+> voor beide, en weekend loopt achter.
+
+**Volledige testsuite**: 1889 tests, allemaal groen.
+
+## v1.46.0 — Het lag niet aan de bewolking
+
+**Gemeld**: "Vandaag was een mega zonnige dag: *PV-installatieprofiel
+(oriëntatie) 0/5 heldere dagen verzameld.*"
+
+Terecht wantrouwen. In de diagnostiek staat `sun_azimuth_degrees` op
+**null** terwijl de zonshoogte gewoon 39,5° geeft.
+
+De azimut werd **uitsluitend** uit `sun.sun` gelezen, terwijl de
+zonshoogte al jaren een eigen instelbare sensor kent met `sun.sun` als
+vangnet. Jouw zonstand komt van een eigen integratie
+(`sensor.zon_van_eibergen_...`), en zonder dat ene attribuut viel
+`_update_pv_geometry_learning` **elke tick meteen stil** — bij de eerste
+regel, nog voor er iets over bewolking berekend werd.
+
+Dat is ook te zien: `pv_peak_azimuth_history` is leeg, en
+`pv_azimuth_performance` — dat elke tick gevuld hoort te worden — óók.
+Twee lege verzamelingen die samen precies één oorzaak aanwijzen.
+
+**Nu**: een eigen azimut-sensor bij de instellingen, met `sun.sun` als
+vangnet. Zelfde opzet als de zonshoogte.
+
+### En de tekst loog
+
+*"0/5 heldere dagen verzameld"* suggereert dat het aan het weer lag en
+dat wachten helpt. Als de zonstand niet uit te lezen valt, staat er nu
+dat dát het probleem is — inclusief wat je eraan kunt doen. Precies
+waarvoor de "nog niet bepaald"-lijst uit v1.41.0 bedoeld was; deze zat
+er alleen nog met de verkeerde reden in.
+
+**Vier tests erbij.**
+
+**Volledige testsuite**: 1893 tests, allemaal groen.
+
+## v1.46.0 — Herstelmeldingen spraken Nederlands
+
+**Gemeld**: "Niet in het achterhoeks? *✅ Accu haalt de nacht weer — Er
+is weer genoeg opgeslagen om tot het goedkope blok te overbruggen.*"
+
+Twee losse fouten in één regel.
+
+### 1. De geschiedenis kreeg de onvertaalde tekst
+
+De vertaling zelf klopte: alles wat de deur uitgaat gaat er doorheen.
+Maar de herstelmeldingen schreven daarna **zelf** een regel in de
+geschiedenis, met hun eigen lokale variabelen — en die waren nog
+Nederlands. Op de telefoon stond dus Achterhoeks en in het
+meldingenoverzicht Nederlands, precies wat v1.24.0 wilde voorkomen.
+
+Die regel wordt nu geschreven door de functie die ook verstuurt, met de
+tekst die daadwerkelijk de deur uitging. Beide herstelpaden — het
+bestaande en dat van v1.40.0 — deden dit fout; het tweede omdat ik het
+eerste had gekopieerd.
+
+### 2. De titel stond niet in de tabel
+
+Bij een herstelmelding is de soort bewust leeg (het dempingsvenster
+geldt er niet voor), en daarmee viel ook het opzoeken van de titel weg.
+Woordvervanging alleen maakt van *"Accu haalt de nacht weer"* niets
+Achterhoeks: geen van die woorden staat in de tabel.
+
+Alle negen herstelsoorten hebben nu een eigen titel — *"Den accu haalt
+de nacht weer"*, *"De sensor dut 't weer"*, *"'t Systeem löp weer"* — en
+een test eist dat elke herstelsoort er een heeft, zodat er niet
+stilzwijgend eentje terugvalt op Nederlands.
+
+**Volledige testsuite**: 1897 tests, allemaal groen.
+
+## v1.47.0 — Ingangen die er zijn maar niets leveren
+
+**Gevraagd**: "Meer van dit soort zaken in de integratie?"
+
+Dat is de goede vraag: de azimut was geen incident maar een **soort**
+fout. Een onderdeel leest een attribuut, krijgt `None`, keert netjes
+terug — en er is niemand die het merkt. Een *ontbrekende* sensor werd al
+gemeld; een sensor die er wél is maar het gevraagde attribuut niet
+heeft, glipte ertussendoor.
+
+**Nieuw**: een controle die niet naar de configuratie kijkt maar naar de
+**waarde**. Levert de bron op dit moment iets bruikbaars op? Zo nee, dan
+staat erbij wat er stilvalt en wat je eraan kunt doen. Acht ingangen:
+
+| Ingang | Wat stilvalt zonder |
+|---|---|
+| Stand van de zon (azimut) | het installatieprofiel en de beschaduwing |
+| Hoogte van de zon | de daglichtbepaling |
+| Zonvoorspelling (`detailedForecast`) | elke schatting van de zon vooruit |
+| Prijsvoorspelling (`forecast`) | de hele planning en elke prijsdrempel |
+| Bewolking (`cloud_coverage`) | het weer-ensemble |
+| Buitentemperatuur | de klimaatvoorspelling en de accukoeling |
+| Airco / slaapkamer (`hvac_action`) | de aircoherkenning |
+
+Alleen wat je hebt ingesteld. Wie geen airco heeft hoort daar niets
+over.
+
+De gebreken landen in de **doen**-stapel van het "nog niet
+bepaald"-overzicht, niet in de wachtstapel — wachten helpt hier niet.
+Daarmee kleurt de tegel op de landingspagina rood zodra er zoiets
+opduikt, in plaats van dat een onderdeel maandenlang stil niets doet.
+
+### Wat de rondgang verder opleverde
+
+Alle andere lege verzamelingen in je export bleken te verklaren en geen
+fout: `water_source_profiles` wacht op jouw bevestiging (zo bedoeld),
+`nilm_unconfirmed_candidates` is leeg omdat alle 37 apparaten al
+beoordeeld zijn, en de rest staat al op de wachtlijst met een reden.
+
+**Zes tests erbij.**
+
+**Volledige testsuite**: 1903 tests, allemaal groen.

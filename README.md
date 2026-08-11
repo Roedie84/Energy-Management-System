@@ -515,6 +515,86 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Herstelmeldingen spraken Nederlands (v1.46.0)
+
+**Gemeld**: *"Niet in het achterhoeks?"* bij "✅ Accu haalt de nacht
+weer".
+
+Twee losse fouten. De vertaling klopte, maar de herstelmeldingen
+schreven zelf een regel in de geschiedenis met hun eigen onvertaalde
+tekst — telefoon Achterhoeks, meldingenoverzicht Nederlands. Die regel
+wordt nu geschreven door de functie die ook verstuurt.
+
+En de titel stond niet in de tabel: bij een herstelmelding is de soort
+bewust leeg, waardoor het opzoeken wegviel. Alle negen herstelsoorten
+hebben nu een eigen titel, en een test eist dat dat zo blijft.
+
+**Volledige testsuite**: 1897 tests, allemaal groen.
+
+## Het dagtypeprofiel hoefde niet vanaf nul (v1.45.0)
+
+**Gevraagd**: *"Nog geen data verzameld?"* bij het verbruiksprofiel per
+dagtype.
+
+Het algemene uurprofiel wordt bij de installatie uit de recorder
+gevuld; het profiel per dagtype begon leeg en had weken nodig. Terwijl
+diezelfde geschiedenis de dag al draagt — elke emmer is een (datum,
+uur)-paar. Dat wordt nu gebruikt, dus na een herstart staat er meteen
+een week in.
+
+De voortgangstekst zegt bovendien welke kant achterloopt in plaats van
+alleen "0 van de 24 uren".
+
+**Volledige testsuite**: 1889 tests, allemaal groen.
+
+## Ingangen die er zijn maar niets leveren (v1.47.0)
+
+**Gevraagd**: *"Meer van dit soort zaken in de integratie?"*
+
+De azimut was geen incident maar een soort fout: een onderdeel leest een
+attribuut, krijgt None, keert netjes terug — en niemand merkt het. Een
+ontbrekende sensor werd al gemeld; een sensor die er wél is maar het
+gevraagde attribuut niet heeft, glipte ertussendoor.
+
+Er is nu een controle die naar de *waarde* kijkt in plaats van naar de
+configuratie, voor acht ingangen: zonstand (azimut en hoogte),
+`detailedForecast`, `forecast`, `cloud_coverage`, buitentemperatuur en
+`hvac_action` van de airco's. Ontbreekt er een, dan staat erbij wat er
+stilvalt en wat eraan te doen is — in de *doen*-stapel, want wachten
+helpt niet.
+
+**Volledige testsuite**: 1903 tests, allemaal groen.
+
+## Het lag niet aan de bewolking (v1.46.0)
+
+**Gemeld**: *"Vandaag was een mega zonnige dag: PV-installatieprofiel
+(oriëntatie) 0/5 heldere dagen verzameld."*
+
+In de diagnostiek stond `sun_azimuth_degrees` op null terwijl de
+zonshoogte gewoon 39,5° gaf. De azimut werd uitsluitend uit `sun.sun`
+gelezen, terwijl de zonshoogte al een eigen instelbare sensor kende.
+Komt de zonstand van een eigen integratie, dan viel de leerroutine elke
+tick meteen stil — nog voor er iets over bewolking berekend werd.
+
+Nu een eigen azimut-sensor bij de instellingen, met `sun.sun` als
+vangnet. En als de zonstand niet uit te lezen valt, zegt het profiel dát
+in plaats van "0/5 heldere dagen".
+
+**Volledige testsuite**: 1893 tests, allemaal groen.
+
+## Welke uren hangt het huis aan het net (v1.44.0)
+
+**Gevraagd**: *"waar zie ik dan welke uren hij verwacht aan het net te
+hangen?"*
+
+Nergens, tenzij je de kwartiertabel afzocht op het uitroepteken. De
+tijden staan er nu bij, met aaneengesloten kwartieren samengevoegd tot
+één periode: "Nee: 8 kwartier(en) aan het net — 03:15-05:15". Op de
+landingspagina de eerste twee perioden, volledig op
+*Planning-samenvatting*.
+
+**Volledige testsuite**: 1886 tests, allemaal groen.
+
 ## Alles bewaren, en dat toetsbaar maken (v1.43.0)
 
 **Gevraagd**: *"Wordt nu echt alle data opgeslagen, zodat een herstart
