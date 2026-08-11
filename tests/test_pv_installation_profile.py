@@ -430,3 +430,51 @@ def test_with_days_collected_the_warning_disappears(make_coordinator, hass):
     profiel = c.get_pv_installation_profile()
 
     assert profiel["betrouwbaarheid"] != RELIABILITY_NOT_CONFIGURED
+
+
+# --- v1.49.0: een herstart wist de dag ------------------------------
+
+
+def test_the_days_peak_survives_a_restart():
+    """`_finalize_pv_geometry_day` sluit de dag af zodra de datum
+    wisselt - maar na een herstart staat de piek op 0 en wordt de dag
+    stilzwijgend weggegooid. Met een herstart ná de middagpiek is de
+    rest van de dag bovendien te donker om als "helder" door te komen.
+
+    Daarmee was "0/5 heldere dagen" op een strakblauwe dag een
+    zelfvervullende voorspelling: elke versie die je installeert wist de
+    dag waarop gemeten werd.
+    """
+    from custom_components.energy_management_system.const import (
+        PERSISTED_DATE_FIELDS,
+        PERSISTED_PLAIN_FIELDS,
+    )
+
+    assert "_pv_geometry_day_key" in PERSISTED_DATE_FIELDS
+    for veld in (
+        "_pv_geometry_day_peak_w",
+        "_pv_geometry_day_peak_azimuth",
+        "_pv_geometry_day_expected_peak_w",
+    ):
+        assert veld in PERSISTED_PLAIN_FIELDS, veld
+
+
+def test_a_restart_mid_afternoon_keeps_the_morning_peak(
+    make_coordinator, hass
+):
+    """De piek van vóór de herstart telt gewoon mee."""
+    c = _coordinator(make_coordinator, hass)
+    _dag(c, hass, 0, 180)
+    piek_voor = c._pv_geometry_day_peak_w
+
+    # Herstart: de dagstand komt terug uit de opslag.
+    verse = _coordinator(make_coordinator, hass)
+    verse._pv_geometry_day_key = c._pv_geometry_day_key
+    verse._pv_geometry_day_peak_w = c._pv_geometry_day_peak_w
+    verse._pv_geometry_day_peak_azimuth = c._pv_geometry_day_peak_azimuth
+    verse._pv_geometry_day_expected_peak_w = c._pv_geometry_day_expected_peak_w
+
+    verse._finalize_pv_geometry_day()
+
+    assert piek_voor > 0
+    assert verse.pv_peak_azimuth_history == [180.0]

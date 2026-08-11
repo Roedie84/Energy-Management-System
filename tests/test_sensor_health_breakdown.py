@@ -131,7 +131,9 @@ def test_the_reliability_overview_shows_the_split(make_coordinator, hass):
         if r["naam"] == "Sensor-gezondheid (Kirchhoff)"
     )
 
-    assert "niet uitleesbaar" in rij["reden"]
+    # v1.49.0: "sensor 0x niet uitleesbaar" was geen zin die iemand wil
+    # lezen; de uitval wordt alleen genoemd als er ook echt iets weg is.
+    assert "7x viel een sensor weg" in rij["reden"]
 
 
 def test_it_is_in_the_diagnostics_export():
@@ -200,7 +202,7 @@ def test_multiple_sensors_are_all_named(make_coordinator, hass):
 
     uitsplitsing = c.get_sensor_health_breakdown()
 
-    assert set(uitsplitsing["uitval_per_sensor"]) == {
+    assert set(uitsplitsing["uitval_per_sensor_totaal"]) == {
         "sensor.beschikbaar",
         "sensor.accu_w",
     }
@@ -211,7 +213,7 @@ def test_the_worst_offender_comes_first(make_coordinator, hass):
     c = _met_uitval(make_coordinator, hass, {"sensor.beschikbaar"})
     c.balance_missing_by_entity = {"sensor.a": 2, "sensor.b": 15}
 
-    eerste = next(iter(c.get_sensor_health_breakdown()["uitval_per_sensor"]))
+    eerste = next(iter(c.get_sensor_health_breakdown()["uitval_per_sensor_totaal"]))
 
     assert eerste == "sensor.b"
 
@@ -219,7 +221,7 @@ def test_the_worst_offender_comes_first(make_coordinator, hass):
 def test_no_dropouts_gives_an_empty_map(make_coordinator, hass):
     c = _met_uitval(make_coordinator, hass, set())
 
-    assert c.get_sensor_health_breakdown()["uitval_per_sensor"] == {}
+    assert c.get_sensor_health_breakdown()["uitval_per_sensor_totaal"] == {}
 
 
 def test_the_counts_survive_a_restart(make_coordinator, hass):
@@ -354,4 +356,14 @@ def test_it_runs_after_loading_the_stored_state():
     bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
     start = bron.index("self._state_store_loaded = True")
 
-    assert "_recompute_measurement_quality()" in bron[start : start + 500]
+    # v1.49.0: NA het terugzetten van de opslag, niet ervoor.
+    #
+    # De aanroep stond er wel, maar vóór `_apply_persisted_state` - dus
+    # rekende hij op een lege reeks en zette allebei de velden juist op
+    # None. Precies de kwaal die v1.15.0 wilde verhelpen. Deze test keek
+    # alleen of de regel ergens in de buurt stond.
+    blok = bron[start : start + 1500]
+    assert "_recompute_measurement_quality()" in blok
+    assert blok.index("_apply_persisted_state") < blok.index(
+        "_recompute_measurement_quality()"
+    )

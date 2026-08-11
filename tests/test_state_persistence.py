@@ -62,6 +62,13 @@ def _vul_alles(c):
     c._peak_power_day_key = date(2026, 8, 6)
     c._counterfactual_day_key = date(2026, 8, 6)
     c._self_sufficiency_day_key = date(2026, 8, 6)
+    # v1.49.0: de dagstand van de PV-geometrie werd bij elke herstart
+    # weggegooid, waardoor "0/5 heldere dagen" op een strakblauwe dag
+    # een zelfvervullende voorspelling was.
+    c._pv_geometry_day_key = date(2026, 8, 6)
+    c._pv_geometry_day_peak_w = 2900.0
+    c._pv_geometry_day_peak_azimuth = 183.0
+    c._pv_geometry_day_expected_peak_w = 3000.0
     c._co2_day_key = date(2026, 8, 6)
     c._peak_power_month_key = 202608
     c._counterfactual_month_key = 202608
@@ -508,8 +515,6 @@ VLUCHTIG_MET_REDEN = {
     "_window_duration_hours": "half meetvenster",
     "_window_temp_samples": "half meetvenster",
     "_temp_prediction_pending": "openstaande voorspelling zonder waarde",
-    "_pv_geometry_day_peak_w": "loopt per dag opnieuw",
-    "_pv_geometry_day_expected_peak_w": "loopt per dag opnieuw",
     # Korte schuivende vensters van enkele minuten.
     "_recent_consumption_readings_kw": "venster van minuten",
     "_balance_power_samples": "venster van minuten",
