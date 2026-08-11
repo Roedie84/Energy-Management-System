@@ -767,3 +767,69 @@ def test_discharging_respects_the_power_limit(make_coordinator, hass):
     ]
 
     assert max(dalingen) <= 0.4 + 0.001
+
+
+# --- v1.42.0: tekorten tellen tot het bijladen -----------------------
+
+
+def test_shortfalls_are_counted_until_the_cheap_block(
+    make_coordinator, hass
+):
+    """Gevonden in de export van 11 augustus 16:31: 36 tekortkwartieren,
+    en de melding "Accu haalt de nacht mogelijk niet" ging om 14:30,
+    15:31 én 16:31 af.
+
+    Dat getal was zinloos geworden. Het telde over de HELE planning, en
+    die reikt sinds v1.25.0 zover als er prijzen zijn - daar 126
+    kwartieren, ruim 31 uur. Over die periode vraagt het huis 38 kWh
+    terwijl er 7,78 kWh in de accu past; dat de accu ergens leeg is, is
+    dan geen storing maar rekenkunde.
+    """
+    c = _coordinator(make_coordinator, hass, beschikbaar=0.4)
+    c._estimate_pv_kwh_for_period = lambda a, b: 0.0
+    c._estimate_consumption_kwh_for_period = (
+        lambda a, b: 0.5 * (b - a).total_seconds() / 3600
+    )
+    c.last_cheap_block_start = NU + timedelta(hours=2)
+    c.last_cheap_block_end = NU + timedelta(hours=8)
+
+    samenvatting = c.get_quarter_plan_summary(NU)
+
+    # Tot het blok is het een handvol kwartieren; daarna loopt de accu
+    # de hele nacht leeg en zou de oude telling tientallen opleveren.
+    assert samenvatting["tekort_kwartieren"] < 10
+    assert (
+        samenvatting["tekort_kwartieren_hele_planning"]
+        > samenvatting["tekort_kwartieren"]
+    )
+
+
+def test_inside_the_cheap_block_nothing_counts(make_coordinator, hass):
+    """Staan we er al in, dan is de belofte ingelost."""
+    c = _coordinator(make_coordinator, hass, beschikbaar=0.4)
+    c._estimate_pv_kwh_for_period = lambda a, b: 0.0
+    c._estimate_consumption_kwh_for_period = (
+        lambda a, b: 0.5 * (b - a).total_seconds() / 3600
+    )
+    c.last_cheap_block_start = NU - timedelta(hours=1)
+    c.last_cheap_block_end = NU + timedelta(hours=5)
+
+    assert c.get_quarter_plan_summary(NU)["tekort_kwartieren"] == 0
+
+
+def test_without_a_cheap_block_everything_counts(make_coordinator, hass):
+    """Zonder blok is er niets om op te wachten, dus telt de hele
+    planning - net als voorheen."""
+    c = _coordinator(make_coordinator, hass, beschikbaar=0.4)
+    c._estimate_pv_kwh_for_period = lambda a, b: 0.0
+    c._estimate_consumption_kwh_for_period = (
+        lambda a, b: 0.5 * (b - a).total_seconds() / 3600
+    )
+    c.last_cheap_block_start = None
+
+    samenvatting = c.get_quarter_plan_summary(NU)
+
+    assert (
+        samenvatting["tekort_kwartieren"]
+        == samenvatting["tekort_kwartieren_hele_planning"]
+    )

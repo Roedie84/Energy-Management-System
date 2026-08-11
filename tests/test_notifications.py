@@ -524,3 +524,63 @@ def test_it_has_an_achterhoeks_title():
     )
 
     assert "interne_fout" in ACHTERHOEKS_TITELS
+
+
+# --- v1.40.0: ook melden dat het weer goed is ------------------------
+
+
+def test_the_shortfall_warning_has_a_recovery(make_coordinator, hass):
+    """Gemeld: "Ik krijg wel de melding dat er niet genoeg is, maar niet
+    dat er wel weer genoeg zou zijn."
+
+    Dat is de vervelende helft: je blijft achter met een waarschuwing
+    die misschien allang niet meer geldt, en dan ga je zelf kijken - of
+    je zet de melding uit.
+    """
+    c = _coordinator(make_coordinator)
+    c.get_quarter_plan_summary = lambda *a, **k: {
+        "beschikbaar": True,
+        "tekort_kwartieren": 11,
+        "laagste_soc_procent": 10,
+    }
+    c._meld_planningswijzigingen(NOW)
+
+    c.get_quarter_plan_summary = lambda *a, **k: {
+        "beschikbaar": True,
+        "tekort_kwartieren": 0,
+        "laagste_soc_procent": 28,
+    }
+    c._meld_planningswijzigingen(NOW + timedelta(hours=1))
+
+    titels = [m["titel"] for m in c.notification_history]
+    assert any("weer" in t for t in titels)
+
+
+def test_no_recovery_without_a_warning_first(make_coordinator, hass):
+    """Anders krijg je elke ochtend een opgewekt bericht dat er niets aan
+    de hand is."""
+    c = _coordinator(make_coordinator)
+    c.get_quarter_plan_summary = lambda *a, **k: {
+        "beschikbaar": True,
+        "tekort_kwartieren": 0,
+        "laagste_soc_procent": 28,
+    }
+
+    c._meld_planningswijzigingen(NOW)
+    c._meld_planningswijzigingen(NOW + timedelta(hours=1))
+
+    assert c.notification_history == []
+
+
+def test_the_house_is_neuter_in_achterhoeks():
+    """Gezien in de melding van 11 augustus: "de huus aan 't net hunk".
+    Huis is onzijdig."""
+    from custom_components.energy_management_system.const import (
+        ACHTERHOEKS_WOORDEN,
+    )
+
+    tabel = dict(ACHTERHOEKS_WOORDEN)
+    sleutels = [k for k, _ in ACHTERHOEKS_WOORDEN]
+
+    assert tabel["de woning"] == "'t huus"
+    assert sleutels.index("de woning") < sleutels.index("woning")

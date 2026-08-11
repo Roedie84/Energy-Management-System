@@ -324,7 +324,13 @@ def test_no_tab_is_a_wall_of_text():
         # v1.17.6: detailpagina's mogen meer tekst hebben - daar staat
         # juist de onderbouwing. De grens geldt voor wat je bij het
         # OPENEN ziet.
-        grens = 2500 if str(view.get("path", "")).startswith("detail-") else 1400
+        # v1.40.0: van 1400 naar 1650 voor de landingspagina. Gemeld:
+        # "op de landingspage misschien, hierbij een tekst en uitleg met
+        # eventueel een kleine tabel?" Die tabel kost ruimte, en dat is
+        # precies wat deze grens bewaakt. Ruim genoeg om er een bij te
+        # kunnen, krap genoeg dat de volgende toevoeging weer een
+        # afweging wordt.
+        grens = 2500 if str(view.get("path", "")).startswith("detail-") else 1650
         assert tekens < grens, f"{view['title']}: {tekens} tekens tekst"
 
 
