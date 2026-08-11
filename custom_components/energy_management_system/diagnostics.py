@@ -441,6 +441,9 @@ async def async_get_config_entry_diagnostics(
             ),
             # v1.38.0: de proefstand - kandidaten die meerekenen maar
             # niets sturen.
+            "pending_overview": _veilig(
+                "get_pending_overview", coordinator.get_pending_overview
+            ),
             "proefstand": _veilig("get_proefstand", coordinator.get_proefstand),
             "wear_cost": _veilig(
                 "get_wear_cost_overview", coordinator.get_wear_cost_overview

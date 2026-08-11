@@ -515,6 +515,59 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## De tekortmelding was zinloos geworden (v1.42.0)
+
+In de diagnostiek van 11 augustus 16:31: 36 tekortkwartieren en de
+melding "Accu haalt de nacht mogelijk niet" om 14:30, 15:31 én 16:31.
+
+Dat getal telde over de hele planning, en die reikt sinds v1.25.0 zover
+als er prijzen zijn — daar 126 kwartieren, ruim 31 uur. Over die periode
+vraagt het huis 38 kWh terwijl er 7,78 kWh in de accu past; dat de accu
+ergens leeg is, is dan rekenkunde en geen storing. De maat was gemaakt
+voor een horizon van negen uur en is nooit meegegaan toen die horizon
+verviervoudigde.
+
+Nu telt hij tot het eerstvolgende goedkope blok — precies wat de reserve
+belooft. Op die gegevens: 0 in plaats van 36. Het oude getal blijft
+zichtbaar als `tekort_kwartieren_hele_planning`.
+
+**Volledige testsuite**: 1880 tests, allemaal groen.
+
+## Nog niet bepaald: en waaróm dan (v1.41.0)
+
+**Gemeld** met een screenshot van de tegel *"PV-installatieprofiel — nog
+niet bepaald"*: *"Als er zaken niet bepaald zijn of nog niet genoeg
+data, wil ik dat graag zien."*
+
+"Nog niet bepaald" zegt niet of er iets stuk is, of er iets moet
+gebeuren, of dat het gewoon wachten is. Achter die tegel stond de reden
+trouwens al klaar — "0/5 heldere dagen verzameld" — alleen haalde die
+het dashboard niet.
+
+Eén overzicht van alles wat nog niet af is, in twee stapels: *wachten op
+waarnemingen* (er is niets mis) en *vraagt een handeling* (er ontbreekt
+een sensor of instelling). Wat niet toetsbaar is blijft er bewust
+buiten. Tabel op de Meetkwaliteit-pagina, tegel op de landingspagina.
+
+**Volledige testsuite**: 1877 tests, allemaal groen.
+
+## Ook melden dat het weer goed is (v1.40.0)
+
+**Gemeld**: *"Ik krijg wel de melding dat er niet genoeg is, maar niet
+dat er wel weer genoeg zou zijn, op de landingspage misschien, hierbij
+een tekst en uitleg met eventueel een kleine tabel?"*
+
+De waarschuwing "Accu haalt de nacht mogelijk niet" had geen
+tegenhanger. Nu volgt "✅ Accu haalt de nacht weer" zodra de planning
+geen tekortkwartieren meer voorziet — alleen bij de omslag, en alleen
+als er eerst een waarschuwing is geweest.
+
+Op de landingspagina staat een sectie *Haalt de accu het?* met de
+laagste stand, de eindstand, de verwachte opbrengst en hoe ver er
+vooruit is gekeken.
+
+**Volledige testsuite**: 1872 tests, allemaal groen.
+
 ## Wat een kandidaat zou hebben opgeleverd (v1.39.0)
 
 **Gevraagd**: *"Dan dus ook aangeven wat het opgeleverd zou hebben als

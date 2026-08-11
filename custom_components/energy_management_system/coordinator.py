@@ -3110,6 +3110,47 @@ class EnergyManagementSystemCoordinator:
             ]
             self.schedule_persisted_state_save()
 
+    def _meld_herstel(self, kind: str, titel: str, bericht: str) -> None:
+        """Meldt dat een toestand voorbij is (v1.40.0).
+
+        Gemeld: "Ik krijg wel de melding dat er niet genoeg is, maar niet
+        dat er wel weer genoeg zou zijn."
+
+        Dezelfde afspraken als de bestaande herstelmeldingen: de
+        SCHAKELAAR van de probleemmelding geldt - wie die uitzet wil ook
+        het herstel niet - maar het DEMPINGSVENSTER wordt bewust
+        omzeild. Een probleem dat tien minuten na de waarschuwing is
+        opgelost zou anders stilzwijgend verdwijnen, en juist dan wil je
+        het horen.
+        """
+        definitie = self.notification_definition(kind)
+        if not self.notifications_master_enabled:
+            return
+        if not self.notification_enabled.get(
+            kind, definitie[3] if definitie else False
+        ):
+            return
+        self._dispatch_notification(
+            notify_service=self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE),
+            title=titel,
+            message=bericht,
+            notification_id=f"ems_{kind}_hersteld",
+            kind=None,
+        )
+        self.notification_history.append(
+            {
+                "moment": dt_util.now().isoformat(),
+                "soort": f"{kind}_hersteld",
+                "titel": titel,
+                "bericht": bericht,
+            }
+        )
+        self.notification_last_sent.pop(kind, None)
+        self.notification_history = self.notification_history[
+            -NOTIFICATION_HISTORY_LENGTH:
+        ]
+        self.schedule_persisted_state_save()
+
     @staticmethod
     def normalise_reliability(status: str | None) -> str:
         """Vertaalt een van de oude woordenlijsten naar de schaal
@@ -5474,6 +5515,26 @@ class EnergyManagementSystemCoordinator:
             for datum, uren in sorted(per_dag.items(), reverse=True)
         ]
 
+    def _tel_tekorten_tot_bijladen(self, plan: list[dict]) -> int:
+        """Kwartieren zonder accu, tot het eerstvolgende moment waarop er
+        weer bijgeladen wordt (v1.42.0).
+
+        De reserve belooft één ding: dat de accu het volhoudt tot het
+        goedkope blok. Wat daarna gebeurt is een andere vraag - dan wordt
+        er geladen, en leeg zijn is geen tekort meer maar het begin van
+        een nieuwe slag.
+        """
+        tekorten = 0
+        for regel in plan:
+            # `voor_bijladen` markeert de kwartieren vóór het goedkope
+            # blok. Staan we er nu al in, dan is de belofte ingelost en
+            # telt er niets meer.
+            if not regel.get("voor_bijladen", True):
+                break
+            if regel.get("tekort"):
+                tekorten += 1
+        return tekorten
+
     def _slijtage_in_planning(self, plan: list[dict]) -> dict:
         """Wat kost de accuslijtage in dit plan? (v1.38.0)
 
@@ -5563,6 +5624,71 @@ class EnergyManagementSystemCoordinator:
                             -PRICE_SHAPE_HISTORY_DAYS:
                         ]
                     self.schedule_persisted_state_save()
+
+    def get_pending_overview(self) -> dict:
+        """Alles wat nog niet bepaald is, met wat ervoor nodig is
+        (v1.41.0).
+
+        Gevraagd, met een screenshot van de tegel "PV-installatieprofiel
+        - nog niet bepaald": "Als er zaken niet bepaald zijn of nog niet
+        genoeg data, wil ik dat graag zien."
+
+        Terecht. "Nog niet bepaald" zegt niet of er iets stuk is, of er
+        iets moet gebeuren, of dat het gewoon een kwestie van wachten is
+        - en dat verschil is precies wat je wilt weten. Achter die tegel
+        zat de reden trouwens al klaar: "0/5 heldere dagen verzameld".
+
+        De onderdelen komen uit het bestaande betrouwbaarheidsoverzicht,
+        de proefstand en de leergezondheid. Niets nieuws gemeten; wel
+        alles wat nog niet af is op één plek, gescheiden in wachten en
+        doen.
+        """
+        wachten: list[dict] = []
+        doen: list[dict] = []
+
+        for rij in self.get_reliability_overview():
+            niveau = rij.get("niveau")
+            if niveau == RELIABILITY_RELIABLE:
+                continue
+            regel = {
+                "groep": rij.get("groep"),
+                "naam": rij.get("naam"),
+                "niveau": niveau,
+                "label": rij.get("label"),
+                "wat_ontbreekt": rij.get("reden") or "",
+            }
+            # `niet_geconfigureerd` vraagt om een handeling; de rest is
+            # wachten. `niet_toetsbaar` staat apart: daar valt principieel
+            # niets tegen af te zetten, dus wachten helpt niet.
+            if niveau == RELIABILITY_NOT_CONFIGURED:
+                doen.append(regel)
+            elif niveau != RELIABILITY_UNVERIFIABLE:
+                wachten.append(regel)
+
+        for kandidaat in self.get_proefstand()["kandidaten"]:
+            if kandidaat.get("status") == RELIABILITY_RELIABLE:
+                continue
+            wachten.append(
+                {
+                    "groep": "Proefstand",
+                    "naam": kandidaat["naam"],
+                    "niveau": kandidaat.get("status"),
+                    "label": None,
+                    "wat_ontbreekt": kandidaat.get("betrouwbaarheid", ""),
+                }
+            )
+
+        return {
+            "aantal_wachten": len(wachten),
+            "aantal_doen": len(doen),
+            "wachten": wachten,
+            "doen": doen,
+            "toelichting": (
+                "Wachten betekent: er is niets mis, er zijn nog te weinig "
+                "waarnemingen. Doen betekent: er ontbreekt een sensor of "
+                "instelling, en wachten helpt niet."
+            ),
+        }
 
     def _boek_proefstand_dag(self, dag) -> None:
         """Boekt per dag wat een kandidaat zou hebben opgeleverd
@@ -8907,6 +9033,17 @@ class EnergyManagementSystemCoordinator:
                     "opbrengst_eur": round(opbrengst, 4),
                     "cumulatief_eur": round(loper, 3),
                     "in_goedkoop_blok": in_blok,
+                    # v1.42.0: valt dit kwartier vóór het goedkope blok?
+                    #
+                    # `in_goedkoop_blok` hierboven betekent iets anders
+                    # dan de naam suggereert: dat is "prijs onder de
+                    # drempel", en die springt heen en weer. Voor de
+                    # vraag tot wanneer de accu het moet volhouden is
+                    # het echte blok nodig, en dat is hier bekend.
+                    "voor_bijladen": (
+                        self.last_cheap_block_start is None
+                        or start < self.last_cheap_block_start
+                    ),
                 }
             )
         return plan
@@ -9239,8 +9376,26 @@ class EnergyManagementSystemCoordinator:
                     f"{samenvatting.get('laagste_soc_procent')}%."
                 ),
             )
-        else:
-            self._last_plan_alert.pop("plan_tekort", None)
+        elif self._last_plan_alert.pop("plan_tekort", None) is not None:
+            # v1.40.0, gemeld: "Ik krijg wel de melding dat er niet
+            # genoeg is, maar niet dat er wel weer genoeg zou zijn."
+            #
+            # Klopt, en dat is de vervelende helft: je blijft achter met
+            # een waarschuwing die misschien allang niet meer geldt, en
+            # dan ga je zelf kijken - of je gaat de melding uitzetten.
+            #
+            # Alleen bij de OMSLAG, en alleen als er ook echt eerst een
+            # waarschuwing is geweest; anders krijg je elke ochtend een
+            # opgewekt bericht dat er niets aan de hand is.
+            self._meld_herstel(
+                "plan_tekort",
+                "✅ Accu haalt de nacht weer",
+                (
+                    "De planning voorziet geen kwartieren meer waarin de "
+                    "woning aan het net hangt. Laagste stand: "
+                    f"{samenvatting.get('laagste_soc_procent')}%."
+                ),
+            )
 
         plan = self.last_solar_defer_plan or {}
         uitstel_sleutel = (
@@ -9355,7 +9510,25 @@ class EnergyManagementSystemCoordinator:
             # v1.23.3: kwartieren waarin de accu niets meer kan leveren
             # en het huis dus aan het net hangt. Dit is de belangrijkste
             # regel om te bewaken.
-            "tekort_kwartieren": len([r for r in plan if r.get("tekort")]),
+            # v1.42.0, gevonden in de export van 11 augustus 16:31: 36
+            # tekortkwartieren, en de melding "Accu haalt de nacht
+            # mogelijk niet" ging om 14:30, 15:31 én 16:31 af.
+            #
+            # Dat getal was zinloos geworden. Dit telde over de HELE
+            # planning, en die reikt sinds v1.25.0 zover als er prijzen
+            # zijn - hier 126 kwartieren, ruim 31 uur. Over die periode
+            # vraagt het huis 38 kWh terwijl er 7,78 kWh in de accu past.
+            # Dat de accu ergens onderweg leeg is, is dan geen storing
+            # maar rekenkunde.
+            #
+            # Waar het WEL over gaat: haalt de accu het tot het volgende
+            # goedkope blok, want tot dat moment is er niets om mee bij
+            # te laden. Daarna is leeg zijn normaal - dan wordt er
+            # geladen.
+            "tekort_kwartieren": self._tel_tekorten_tot_bijladen(plan),
+            "tekort_kwartieren_hele_planning": len(
+                [r for r in plan if r.get("tekort")]
+            ),
             "min_soc_procent_hard": self.effective_min_soc_percent(),
             # v1.24.3: de ECHTE accustand, zoals in de Zendure-app.
             "laagste_soc_procent": min(socs) if socs else None,

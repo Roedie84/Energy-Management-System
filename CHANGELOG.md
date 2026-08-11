@@ -11991,3 +11991,120 @@ kandidaat op de proefstand moet bewijzen.
 De link staat nu onderaan de Meetkwaliteit-pagina.
 
 **Volledige testsuite**: 1869 tests, allemaal groen.
+
+## v1.40.0 — Ook melden dat het weer goed is
+
+**Gemeld**: "Ik krijg wel de melding dat er niet genoeg is, maar niet
+dat er wel weer genoeg zou zijn, op de landingspage misschien, hierbij
+een tekst en uitleg met eventueel een kleine tabel?"
+
+Twee dingen, en het eerste is een gat: de waarschuwing *"Accu haalt de
+nacht mogelijk niet"* had geen tegenhanger. Je blijft dus achter met een
+melding die misschien allang niet meer geldt — en dan ga je zelf kijken,
+of je zet de melding uit. Precies wat je niet wilt bij de enige melding
+die standaard aan staat.
+
+**Nu**: *"✅ Accu haalt de nacht weer"*, met de laagste stand erbij.
+Alleen bij de omslag, en alleen als er ook echt eerst een waarschuwing
+is geweest — anders krijg je elke ochtend een opgewekt bericht dat er
+niets aan de hand is.
+
+Dezelfde afspraken als de bestaande herstelmeldingen: de schakelaar van
+de probleemmelding geldt (wie die uitzet wil ook het herstel niet), maar
+het dempingsvenster wordt bewust omzeild. Een probleem dat tien minuten
+na de waarschuwing is opgelost zou anders stilzwijgend verdwijnen.
+
+### Op de landingspagina
+
+Nieuwe sectie **Haalt de accu het?** met een regel uitleg en een tabel:
+
+| Laagste | Eind | Opbrengst | Vooruit |
+|---|---|---|---|
+| 28% | 28% | € 3,59 | 51 kw |
+
+Daarvoor moest de tekengrens van de landingspagina van 1400 naar 1650 —
+bewust, en met de reden erbij, zodat de volgende toevoeging weer een
+afweging wordt in plaats van vanzelfsprekend.
+
+### En een taalfoutje
+
+In je screenshot stond *"de huus aan 't net hunk"*. Huis is onzijdig:
+"de woning" wordt nu **'t huus**.
+
+**Volledige testsuite**: 1872 tests, allemaal groen.
+
+## v1.41.0 — Nog niet bepaald: en waaróm dan
+
+**Gemeld** met een screenshot van de tegel *"PV-installatieprofiel — nog
+niet bepaald"*: "Als er zaken niet bepaald zijn of nog niet genoeg data,
+wil ik dat graag zien."
+
+Terecht. "Nog niet bepaald" zegt niet of er iets stuk is, of er iets
+moet gebeuren, of dat het gewoon een kwestie van wachten is — en dat
+verschil is precies wat je wilt weten.
+
+Wrang: achter die tegel stond de reden al klaar. In de diagnostiek van
+16:31 staat bij dat profiel *"0/5 heldere dagen verzameld"*. Die zin
+haalde alleen het dashboard niet.
+
+**Nieuw**: één overzicht van alles wat nog niet af is, gescheiden in
+twee stapels:
+
+- **Wachten op waarnemingen** — er is niets mis, er zijn nog te weinig
+  metingen. Nu 16 onderdelen, van *"6/10 dagen minimum"* tot *"0/5
+  heldere dagen verzameld"*.
+- **Vraagt een handeling** — er ontbreekt een sensor of instelling, en
+  wachten helpt niet. Nu 0.
+
+Wat *niet toetsbaar* is blijft er bewust buiten: daar valt principieel
+niets tegen af te zetten, en in de wachtrij zetten zou suggereren dat
+het vanzelf goedkomt.
+
+Zichtbaar als tabel op de Meetkwaliteit-pagina, met een tegel op de
+landingspagina die het aantal toont en rood kleurt zodra er iets in de
+doen-stapel staat.
+
+Niets nieuws gemeten — dit komt uit het bestaande
+betrouwbaarheidsoverzicht, de proefstand en de leergezondheid. Ze stonden
+alleen nergens bij elkaar.
+
+**Vijf tests erbij.**
+
+**Volledige testsuite**: 1877 tests, allemaal groen.
+
+## v1.42.0 — De tekortmelding was zinloos geworden
+
+**Gevraagd**: "Heb je het diagnostiek file ook nagekeken?"
+
+Nee, niet goed genoeg — ik had er alleen het gereedheidsoverzicht uit
+getrokken. Bij het echte nakijken kwam dit boven.
+
+In de export van 16:31: **36 tekortkwartieren**, laagste stand 10%, en
+de melding *"Accu haalt de nacht mogelijk niet"* ging om 14:30, 15:31
+**en** 16:31 af.
+
+Dat getal was zinloos geworden, en door mijn eigen toedoen. Het telde
+over de HELE planning, en die reikt sinds **v1.25.0** zover als er
+prijzen zijn — hier 126 kwartieren, ruim 31 uur. Over die periode vraagt
+het huis 38 kWh terwijl er 7,78 kWh in de accu past. Dat de accu ergens
+onderweg leeg is, is dan geen storing maar rekenkunde.
+
+De maat is gemaakt voor een horizon van negen uur en is nooit meegegaan
+toen die horizon verviervoudigde.
+
+**Nu** telt hij tot het eerstvolgende goedkope blok — precies wat de
+reserve belooft. Wat daarna gebeurt is een andere vraag: dan wordt er
+geladen, en leeg zijn is het begin van een nieuwe slag. Op de gegevens
+van 16:31 wordt dat **0 in plaats van 36**. Het oude getal blijft
+zichtbaar als `tekort_kwartieren_hele_planning`.
+
+### En een tweede fout onderweg
+
+Ik wilde de grens eerst leggen bij het veld `in_goedkoop_blok` dat elke
+planregel al draagt. Dat blijkt iets anders te betekenen dan de naam
+zegt: het is *"prijs onder de drempel"*, en die vlag springt heen en
+weer — in de export staat 16:30 op waar, 16:45 op niet-waar, terwijl het
+blok pas de volgende ochtend begint. Elke planregel draagt nu een eigen
+`voor_bijladen`, gezet op het moment dat het echte blok bekend is.
+
+**Volledige testsuite**: 1880 tests, allemaal groen.

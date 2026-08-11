@@ -3216,6 +3216,9 @@ ACHTERHOEKS_WOORDEN = (
     ("moeten", "motten"),
     ("daarna", "daornao"),
     ("schijnt", "schient"),
+    # v1.40.0: "de woning" wordt "'t huus", niet "de huus" - huis is
+    # onzijdig. Gezien in de melding van 11 augustus 15:31.
+    ("de woning", "'t huus"),
     ("woning", "huus"),
     ("laatste", "leste"),
     ("straks", "strak"),

@@ -3852,6 +3852,7 @@ class GacsAssessmentSensor(SensorEntity):
             "rendement",
             "prijstoets",
             "proefstand",
+            "nog_niet_bepaald",
         }
     )
 
@@ -3903,6 +3904,7 @@ class GacsAssessmentSensor(SensorEntity):
             ("rendement", self._coordinator.get_efficiency_overview),
             ("prijstoets", self._coordinator.get_price_attribute_check),
             ("proefstand", self._coordinator.get_proefstand),
+            ("nog_niet_bepaald", self._coordinator.get_pending_overview),
         ):
             try:
                 attributen[sleutel] = functie()

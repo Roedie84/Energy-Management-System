@@ -204,6 +204,28 @@ views:
   - type: grid
     cards:
     - type: heading
+      heading: Haalt de accu het?
+      heading_style: title
+    - type: markdown
+      content: '{% set q = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''kwartier_samenvatting'') or {} %}{% if not q.get(''beschikbaar'') %}Nog geen planning.{% else %}{% set t = q.get(''tekort_kwartieren'', 0) %}{% if t > 0 %}**Nee: {{ t }} kwartier(en) aan het net.**{% else %}**Ja**, geen kwartier zonder accu.{% endif %}
+
+
+        | Laagste | Eind | Opbrengst | Vooruit |
+
+        |---|---|---|---|
+
+        | {{ q.get(''laagste_soc_procent'', ''—'') }}% | {{ q.get(''eind_soc_procent'', ''—'') }}% | € {{ q.get(''verwachte_opbrengst_eur'', ''—'') }} | {{ q.get(''kwartieren'', ''—'') }} kw |
+
+        {% endif %}
+
+
+        _Ondergrens 10%._'
+      grid_options:
+        columns: 12
+        rows: auto
+  - type: grid
+    cards:
+    - type: heading
       heading: Besturing
       grid_options:
         columns: 12
@@ -370,6 +392,20 @@ views:
         rows: auto
   - type: grid
     cards:
+    - type: custom:mushroom-template-card
+      primary: '{% set p = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''nog_niet_bepaald'') or {} %}{{ p.get(''aantal_wachten'', ''—'') }} wachten, {{ p.get(''aantal_doen'', 0) }} te doen'
+      secondary: Nog niet bepaald
+      icon: mdi:progress-clock
+      icon_color: '{% set p = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''nog_niet_bepaald'') or {} %}{{ ''red'' if p.get(''aantal_doen'', 0) > 0 else (''grey'' if p.get(''aantal_wachten'', 0) > 0 else ''green'') }}'
+      entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
+      tap_action:
+        action: navigate
+        navigation_path: /energy-management-system/detail-kwaliteit
+      grid_options:
+        columns: 12
+        rows: auto
+  - type: grid
+    cards:
     - type: heading
       heading: Meer bekijken
       grid_options:
@@ -469,7 +505,7 @@ views:
   panel: true
   cards:
   - type: picture-elements
-    image: /local/energy_management_system_overview.svg?v=1.39.1
+    image: /local/energy_management_system_overview.svg?v=1.42.0
     elements:
     - type: state-label
       entity: sensor.woonkamer_energy_management_system_system_status
@@ -2045,6 +2081,33 @@ views:
         {% endfor %}{% endif %}
 
         '
+    - type: markdown
+      title: Nog niet bepaald
+      content: '{% set p = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''nog_niet_bepaald'') or {} %}{% set w = p.get(''wachten'') or [] %}{% set d = p.get(''doen'') or [] %}{% if w | length == 0 and d | length == 0 %}Alles is bepaald.{% else %}{% if d | length > 0 %}**Vraagt een handeling ({{ d | length }})**
+
+        | Onderdeel | Wat ontbreekt |
+
+        |---|---|
+
+        {% for r in d %}| {{ r.naam }} | {{ r.wat_ontbreekt }} |
+
+        {% endfor %}
+
+        {% endif %}**Wachten op waarnemingen ({{ w | length }})**
+
+        | Onderdeel | Wat ontbreekt |
+
+        |---|---|
+
+        {% for r in w %}| {{ r.naam }} | {{ r.wat_ontbreekt }} |
+
+        {% endfor %}{% endif %}
+
+
+        _{{ p.get(''toelichting'', '''') }}_'
+      grid_options:
+        columns: 12
+        rows: auto
     - type: markdown
       title: Betrouwbaarheid per grootheid
       content: "{% set rijen = state_attr('sensor.woonkamer_energy_management_system_betrouwbaarheid_gegenereerde_data', 'regels') or [] %}{% if rijen | length == 0 %}Nog geen gegevens.{% else %}{% set ns = namespace(groep='') %}{% for r in rijen %}{% if r.get('groep') != ns.groep %}{% set ns.groep = r.get('groep') %}\n\n**{{ ns.groep }}**\n{% endif %}\n\n{{ r.get('label') }} **{{ r.get('naam') }}**{% if r.get('waarde') is not none %} — {{ r.get('waarde') }}{% endif %}  \n{{ r.get('reden') or '' }}\n\n{% endfor %}{% endif %}\n"
