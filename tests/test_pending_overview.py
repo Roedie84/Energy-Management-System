@@ -20,6 +20,9 @@ def _coordinator(make_coordinator, rijen):
     c = make_coordinator({})
     c.get_reliability_overview = lambda: rijen
     c.get_proefstand = lambda: {"kandidaten": []}
+    # v1.47.0: de ingangscontrole is een eigen onderwerp met eigen
+    # tests; hier gaat het om het scheiden van wachten en doen.
+    c.get_input_health = lambda: []
     return c
 
 
@@ -135,3 +138,89 @@ def test_the_test_bench_joins_the_list(make_coordinator, hass):
     assert [r["naam"] for r in overzicht["wachten"]] == [
         "Accugezondheid over de tijd"
     ]
+
+
+# --- v1.47.0: ingangen die er zijn maar niets leveren ----------------
+
+
+def _met_ingangen(make_coordinator, hass, **config):
+    c = make_coordinator(config)
+    c.get_reliability_overview = lambda: []
+    c.get_proefstand = lambda: {"kandidaten": []}
+    return c
+
+
+def test_a_sensor_without_the_needed_attribute_is_reported(
+    make_coordinator, hass
+):
+    """Gevraagd: "Meer van dit soort zaken in de integratie?"
+
+    Dat is een soort fout, geen incident: een onderdeel leest een
+    attribuut, krijgt None, keert netjes terug - en niemand merkt het.
+    Een ONTBREKENDE sensor werd al gemeld; een sensor die er wél is maar
+    het gevraagde attribuut niet heeft, glipte ertussendoor.
+    """
+    from custom_components.energy_management_system.const import (
+        CONF_PRICE_SENSOR,
+    )
+
+    c = _met_ingangen(make_coordinator, hass, **{CONF_PRICE_SENSOR: "sensor.prijs"})
+    # De sensor bestaat, maar zonder forecast-attribuut.
+    hass.states.set("sensor.prijs", "0.30")
+
+    gebreken = [g["naam"] for g in c.get_input_health()]
+
+    assert "Prijsvoorspelling" in gebreken
+
+
+def test_a_working_input_is_not_reported(make_coordinator, hass):
+    from custom_components.energy_management_system.const import (
+        CONF_PRICE_SENSOR,
+    )
+
+    c = _met_ingangen(make_coordinator, hass, **{CONF_PRICE_SENSOR: "sensor.prijs"})
+    hass.states.set("sensor.prijs", "0.30", {"forecast": [{"x": 1}]})
+
+    assert "Prijsvoorspelling" not in [g["naam"] for g in c.get_input_health()]
+
+
+def test_uninstalled_things_stay_silent(make_coordinator, hass):
+    """Wie geen airco heeft moet daar niets over horen."""
+    c = _met_ingangen(make_coordinator, hass)
+
+    assert not [g for g in c.get_input_health() if "Airco" in g["naam"]]
+
+
+def test_the_azimuth_case_is_covered(make_coordinator, hass):
+    """De aanleiding zelf: sun.sun zonder azimuth-attribuut."""
+    c = _met_ingangen(make_coordinator, hass)
+    hass.states.set("sun.sun", "above_horizon", {"elevation": 39.5})
+
+    gebreken = {g["naam"]: g for g in c.get_input_health()}
+
+    assert "Stand van de zon (azimut)" in gebreken
+    assert "Hoogte van de zon" not in gebreken
+    assert "profiel" in gebreken["Stand van de zon (azimut)"]["blokkeert"]
+
+
+def test_a_broken_input_lands_in_the_doing_pile(make_coordinator, hass):
+    """Wachten helpt hier niet: er moet iets gebeuren."""
+    c = _met_ingangen(make_coordinator, hass)
+    hass.states.set("sun.sun", "above_horizon", {"elevation": 39.5})
+
+    overzicht = c.get_pending_overview()
+
+    assert overzicht["aantal_doen"] > 0
+    assert any(
+        "azimut" in r["naam"].lower() for r in overzicht["doen"]
+    )
+
+
+def test_every_defect_says_what_stalls(make_coordinator, hass):
+    """Zonder te zeggen wát er stilvalt, is het net zo nietszeggend als
+    "0/5 heldere dagen"."""
+    c = _met_ingangen(make_coordinator, hass)
+
+    for gebrek in c.get_input_health():
+        assert gebrek["blokkeert"]
+        assert gebrek["advies"]

@@ -99,7 +99,13 @@ def test_nothing_changes_when_off(make_coordinator, hass):
     bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
     start = bron.index("if self.achterhoeks:")
 
-    assert "title = self._naar_achterhoeks(title, kind)" in bron[start : start + 200]
+    # v1.46.0: de titel wordt opgezocht op `kind`, of - bij een
+    # herstelmelding, waar `kind` bewust leeg is - op de soort waarmee
+    # hij in de geschiedenis komt.
+    assert (
+        "title = self._naar_achterhoeks(title, kind or geschiedenis_soort)"
+        in bron[start : start + 500]
+    )
 
 
 def test_the_switch_exists():
@@ -253,3 +259,61 @@ def test_a_separable_participle_keeps_its_hyphen():
     assert tabel["opgewekt"] == "op-ewekt"
     assert tabel["uitgesteld"] == "uut-esteld"
     assert tabel["bijgeladen"] == "bi-j-elaojen"
+
+
+# --- v1.46.0: ook de herstelmeldingen --------------------------------
+
+
+def test_a_recovery_notification_is_translated(make_coordinator, hass):
+    """Gemeld: "Niet in het achterhoeks?" bij "✅ Accu haalt de nacht
+    weer".
+
+    De vertaling zelf klopte - alles wat de deur uitgaat gaat er
+    doorheen. Maar de herstelmeldingen schreven daarna ZELF een regel in
+    de geschiedenis, met hun eigen onvertaalde tekst. Op de telefoon
+    stond dus Achterhoeks en in het meldingenoverzicht Nederlands.
+    """
+    c = make_coordinator({})
+    c.achterhoeks = True
+
+    c._meld_herstel(
+        "plan_tekort",
+        "✅ Accu haalt de nacht weer",
+        "Er is weer genoeg opgeslagen om tot het goedkope blok te overbruggen.",
+    )
+
+    regel = c.notification_history[-1]
+    assert regel["soort"] == "plan_tekort_hersteld"
+    assert "genög" in regel["bericht"]
+
+
+def test_the_recovery_title_is_translated_too(make_coordinator, hass):
+    """Woordvervanging alleen maakt van "Accu haalt de nacht weer" niets
+    Achterhoeks: geen van die woorden staat in de tabel. De titels van
+    de PROBLEEMmeldingen stonden er wel in, die van het herstel niet."""
+    c = make_coordinator({})
+    c.achterhoeks = True
+
+    c._meld_herstel("plan_tekort", "✅ Accu haalt de nacht weer", "x")
+
+    assert c.notification_history[-1]["titel"] == "Den accu haalt de nacht weer"
+
+
+def test_every_recovery_kind_has_an_achterhoeks_title():
+    """Anders valt er stilzwijgend weer een terug op Nederlands."""
+    from custom_components.energy_management_system.const import (
+        ACHTERHOEKS_TITELS,
+        NOTIFICATION_RECOVERY_KINDS,
+    )
+
+    for kind in NOTIFICATION_RECOVERY_KINDS:
+        assert f"{kind}_hersteld" in ACHTERHOEKS_TITELS, kind
+
+
+def test_dutch_stays_dutch_when_the_switch_is_off(make_coordinator, hass):
+    c = make_coordinator({})
+    c.achterhoeks = False
+
+    c._meld_herstel("plan_tekort", "✅ Accu haalt de nacht weer", "Er is weer genoeg.")
+
+    assert c.notification_history[-1]["titel"] == "✅ Accu haalt de nacht weer"

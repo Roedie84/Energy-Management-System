@@ -318,3 +318,53 @@ def test_the_ledger_survives_a_restart():
     )
 
     assert "proefstand_ledger" in PERSISTED_PLAIN_FIELDS
+
+
+# --- v1.45.0: niet weken wachten op wat er al is ---------------------
+
+
+def test_the_daytype_profile_is_filled_from_history():
+    """Gevraagd: "Nog geen data verzameld?"
+
+    Klopt, en dat was onnodig traag. Het algemene uurprofiel wordt bij
+    de installatie in één keer uit de recorder gevuld; het profiel per
+    dagtype begon leeg en had daardoor weken nodig. Diezelfde
+    geschiedenis draagt de dag al - elke emmer is een (datum, uur)-paar
+    - alleen werd dat weggegooid.
+    """
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    kop = bron.index("async def async_bootstrap_night_consumption_from_history")
+    staart = bron[kop : bron.index("async def async_unload")]
+
+    assert "daytype_consumption_profile" in staart
+    assert "day.weekday() >= 5" in staart
+
+
+def test_the_bootstrap_only_runs_when_empty():
+    """Een bestaand profiel mag niet worden overschreven door een
+    momentopname uit de recorder."""
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+
+    assert "need_daytype_bootstrap = not self.daytype_consumption_profile" in bron
+
+
+def test_the_progress_says_which_side_lags(make_coordinator, hass):
+    """"0 van de 24 uren" laat in het midden of er niets binnenkomt of
+    dat één van de twee dagtypen achterloopt."""
+    c = _coordinator(make_coordinator, hass)
+    for uur in range(24):
+        c.daytype_consumption_profile[f"werkdag-{uur}"] = [0.3, 0.3, 0.3, 0.3]
+        c.daytype_consumption_profile[f"weekend-{uur}"] = [0.4, 0.4]
+
+    tekst = c.get_proefstand()["kandidaten"][2]["betrouwbaarheid"]
+
+    assert "werkdag" in tekst.lower()
+    assert "weekend loopt achter" in tekst
