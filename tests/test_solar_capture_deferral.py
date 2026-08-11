@@ -29,7 +29,6 @@ from custom_components.energy_management_system.const import (
     CONF_MIN_SOC_PERCENT,
     SOLAR_DEFER_LATEST_HOUR,
     SOLAR_DEFER_MIN_PRICE_GAIN_EUR,
-    SOLAR_DEFER_MIN_SOC_PERCENT,
     SOLAR_DEFER_SAFETY_FACTOR,
     SOLAR_DEFER_TARGET_FULL_HOUR,
 )
@@ -116,14 +115,21 @@ def test_a_small_price_gain_does_not_defer(make_coordinator, hass):
     assert "te klein" in plan["reden"]
 
 
-def test_an_almost_empty_battery_does_not_defer(make_coordinator, hass):
-    """Vullen gaat dan voor optimaliseren."""
+def test_an_almost_empty_battery_defers_when_the_sun_covers_it(
+    make_coordinator, hass
+):
+    """v1.28.0: een lege accu is geen rem meer.
+
+    Tot v1.27.0 stond hier "vullen gaat voor optimaliseren" bij een
+    accustand onder de drempel. Gevraagd is nu om alleen prijs en
+    verwachte zon te laten beslissen - en bij 2,2 kW zon per uur tot
+    16:00 is er ruim genoeg om ook een lege accu nog te vullen.
+    """
     c = _coordinator(make_coordinator, hass, beschikbaar=1.0)
 
     plan = c.plan_solar_capture_moment(OCHTEND)
 
-    assert plan["uitstellen"] is False
-    assert "vullen gaat nu voor" in plan["reden"].lower()
+    assert plan["uitstellen"] is True
 
 
 def test_a_full_battery_has_nothing_to_plan(make_coordinator, hass):
@@ -176,7 +182,6 @@ def test_the_margin_covers_the_forecast_error():
     ruim zonder de kans te verspelen."""
     assert SOLAR_DEFER_SAFETY_FACTOR >= 1.2
     assert SOLAR_DEFER_MIN_PRICE_GAIN_EUR >= 0.03
-    assert SOLAR_DEFER_MIN_SOC_PERCENT >= 20
 
 
 def test_the_reason_has_a_dutch_label():
@@ -198,3 +203,53 @@ def test_it_is_wired_into_the_decision():
 
     assert "plan_solar_capture_moment(now)" in bron
     assert 'self.last_reason = "solar_capture_deferred"' in bron
+
+
+# --- v1.28.0: alleen prijs en verwachte zon --------------------------
+
+
+def test_an_empty_battery_no_longer_blocks_the_plan(make_coordinator, hass):
+    """Gevraagd: "Ik wil alleen dat op basis van prijs en verwachte PV
+    opbrengst de modus later naar smart gaat."
+
+    Er stond een ondergrens van 25% op de accustand, gemeten als
+    percentage van de BRUIKBARE capaciteit terwijl de stand die je ziet
+    de echte is. Op 11 augustus stond de accu om 07:45 op 25% echt -
+    16,7% bruikbaar - en gaf het plan "vullen gaat nu voor optimaliseren"
+    terwijl er 23 kWh zon aankwam en het prijsverschil 18 ct was.
+    """
+    c = _coordinator(make_coordinator, hass, beschikbaar=1.29, zon_per_uur=2.6)
+
+    plan = c.plan_solar_capture_moment(OCHTEND)
+
+    assert plan["uitstellen"] is True
+
+
+def test_less_charge_still_demands_more_sun(make_coordinator, hass):
+    """De lege accu is geen vrijbrief: hoe leger, hoe meer zon er nodig
+    is om de ruimte alsnog te vullen. Die eis zit in de marge, niet in
+    een aparte drempel."""
+    krap = _coordinator(make_coordinator, hass, beschikbaar=0.5, zon_per_uur=1.2)
+    ruim = _coordinator(make_coordinator, hass, beschikbaar=6.0, zon_per_uur=1.2)
+
+    assert krap.plan_solar_capture_moment(OCHTEND)["uitstellen"] is False
+    assert "zon" in krap.plan_solar_capture_moment(OCHTEND)["reden"]
+    assert ruim.plan_solar_capture_moment(OCHTEND)["uitstellen"] is True
+
+
+def test_price_still_decides(make_coordinator, hass):
+    """De andere helft van de vraag: zonder prijsverschil geen uitstel,
+    hoeveel zon er ook komt."""
+    c = _coordinator(
+        make_coordinator,
+        hass,
+        beschikbaar=1.29,
+        zon_per_uur=2.6,
+        prijs_nu=0.16,
+        prijs_later=0.145,
+    )
+
+    plan = c.plan_solar_capture_moment(OCHTEND)
+
+    assert plan["uitstellen"] is False
+    assert "Prijsverschil" in plan["reden"]
