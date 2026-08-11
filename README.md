@@ -547,6 +547,20 @@ alleen "0 van de 24 uren".
 
 **Volledige testsuite**: 1889 tests, allemaal groen.
 
+## De besparing van vandaag stond op min (v1.52.0)
+
+Werkelijk -2,03 tegen -2,40 zonder accu-sturing: besparing -0,37, alsof
+de aansturing slechter is dan niets doen — op een dag met 22,7 kWh zon
+en een accu op 98%.
+
+De vergelijking rekent per tick af tegen de netstroom, en laden is op
+dat moment een kost: die kWh had ook teruggeleverd kunnen worden. De
+opbrengst volgt pas bij het ontladen. Er staat nu een correctie naast:
+het verschil in accu-inhoud tussen dagbegin en nu, gewaardeerd tegen de
+huidige terugleverwaarde. Naast het rauwe cijfer, niet eroverheen.
+
+**Volledige testsuite**: 1926 tests, allemaal groen.
+
 ## Een stille sensor is geen instelprobleem (v1.51.0)
 
 Onder "Vraagt een handeling" stonden `mpc` en `digital_twin` met

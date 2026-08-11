@@ -1154,6 +1154,9 @@ class EnergyManagementSystemCoordinator:
         self.counterfactual_cost_all_time_eur: float = 0.0
         self._counterfactual_last_sample: datetime | None = None
         self._counterfactual_day_key: date | None = None
+        # v1.52.0: de accustand bij het begin van de dag, om de besparing
+        # te kunnen corrigeren voor wat er nog in de accu zit.
+        self._savings_day_start_available_kwh: float | None = None
         self._counterfactual_month_key: int | None = None
 
         # -- Zelfconsumptie-/zelfvoorzieningsratio (v0.63.101) --
@@ -3878,6 +3881,61 @@ class EnergyManagementSystemCoordinator:
     def _som(self, dagen: list[dict], sleutel: str) -> float | None:
         waarden = [d[sleutel] for d in dagen if d.get(sleutel) is not None]
         return round(sum(waarden), 2) if waarden else None
+
+    def get_savings_correction(self) -> dict:
+        """De besparing van vandaag, gecorrigeerd voor wat er nog in de
+        accu zit (v1.52.0).
+
+        Gevonden in de export van 19:40: de besparing stond op **-0,37
+        euro**, alsof de aansturing slechter is dan niets doen. Maar de
+        accu stond op 98% en had de zon van vanmiddag nog in huis.
+
+        De vergelijking rekent per tick af tegen de netstroom. Laden is
+        op dat moment een KOST - die kWh had ook teruggeleverd kunnen
+        worden - en de opbrengst volgt pas bij het ontladen. Een dag
+        afsluiten met een volle accu tegen een dag die leeg eindigt is
+        dus geen eerlijke vergelijking.
+
+        De correctie waardeert het verschil in accu-inhoud tegen wat een
+        kWh op dit moment waard is. Bewust NAAST het rauwe cijfer, niet
+        eroverheen: het rauwe cijfer is wat er werkelijk is afgerekend,
+        de correctie is een schatting van wat er nog komt.
+        """
+        begin = self._savings_day_start_available_kwh
+        nu = self.beschikbare_energie_kwh()
+        rauw = self.counterfactual_cost_today_eur - self.actual_cost_today_eur
+        if begin is None or nu is None:
+            return {
+                "besparing_vandaag_eur": round(rauw, 2),
+                "correctie_beschikbaar": False,
+                "reden": "De accustand bij het begin van de dag is niet bekend.",
+            }
+
+        verschil_kwh = nu - begin
+        waarde = self.current_feedin_value_eur_per_kwh
+        if waarde is None:
+            return {
+                "besparing_vandaag_eur": round(rauw, 2),
+                "correctie_beschikbaar": False,
+                "reden": "Geen terugleverwaarde bekend om de voorraad te waarderen.",
+            }
+
+        correctie = verschil_kwh * waarde
+        return {
+            "besparing_vandaag_eur": round(rauw, 2),
+            "correctie_beschikbaar": True,
+            "accu_bij_dagbegin_kwh": round(begin, 2),
+            "accu_nu_kwh": round(nu, 2),
+            "voorraadverschil_kwh": round(verschil_kwh, 2),
+            "voorraadwaarde_eur": round(correctie, 2),
+            "besparing_gecorrigeerd_eur": round(rauw + correctie, 2),
+            "toelichting": (
+                "Laden telt op het moment zelf als kosten; de opbrengst volgt "
+                "pas bij het ontladen. Staat de accu aan het eind van de dag "
+                "voller dan aan het begin, dan is die energie nog niet "
+                "verzilverd - en dat scheelt in het dagcijfer."
+            ),
+        }
 
     def get_energy_cost_overview(self) -> dict:
         """Week-, maand- en jaarcijfers plus trends (v1.8.0).
@@ -11703,6 +11761,23 @@ class EnergyManagementSystemCoordinator:
             self._counterfactual_day_key = today_key
             self.actual_cost_today_eur = 0.0
             self.counterfactual_cost_today_eur = 0.0
+            # v1.52.0: onthouden hoe vol de accu was toen de dag begon.
+            #
+            # Gevonden in de export van 19:40: de besparing van vandaag
+            # stond op -0,37 euro, alsof de aansturing slechter is dan
+            # niets doen. Dat klopt niet - de accu stond op 98% en had
+            # de opbrengst van vanmiddag nog in huis.
+            #
+            # De vergelijking rekent per tick af tegen de netstroom, en
+            # laden is op dat moment een KOST (die kWh had ook
+            # teruggeleverd kunnen worden). De opbrengst volgt pas
+            # vanavond bij het ontladen. Een dag afsluiten met een volle
+            # accu tegen een dag die leeg eindigt is dus geen eerlijke
+            # vergelijking - dezelfde soort fout als het meten over een
+            # horizon die niet aansluit.
+            self._savings_day_start_available_kwh = (
+                self.beschikbare_energie_kwh()
+            )
 
         month_key = now.year * 100 + now.month
         if self._counterfactual_month_key is None:

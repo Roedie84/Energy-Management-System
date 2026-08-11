@@ -3860,6 +3860,7 @@ class GacsAssessmentSensor(SensorEntity):
             "plantoetsing",
             "rendement",
             "prijstoets",
+            "besparingscorrectie",
             "proefstand",
             "nog_niet_bepaald",
         }
@@ -3912,6 +3913,7 @@ class GacsAssessmentSensor(SensorEntity):
             ("plantoetsing", self._coordinator.get_plan_review),
             ("rendement", self._coordinator.get_efficiency_overview),
             ("prijstoets", self._coordinator.get_price_attribute_check),
+            ("besparingscorrectie", self._coordinator.get_savings_correction),
             ("proefstand", self._coordinator.get_proefstand),
             ("nog_niet_bepaald", self._coordinator.get_pending_overview),
         ):

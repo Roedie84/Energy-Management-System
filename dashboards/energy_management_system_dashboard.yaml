@@ -502,7 +502,7 @@ views:
   panel: true
   cards:
   - type: picture-elements
-    image: /local/energy_management_system_overview.svg?v=1.51.0
+    image: /local/energy_management_system_overview.svg?v=1.52.0
     elements:
     - type: state-label
       entity: sensor.woonkamer_energy_management_system_system_status
@@ -1793,6 +1793,18 @@ views:
       tap_action:
         action: navigate
         navigation_path: /energy-management-system/detail-kosten
+    - type: custom:mushroom-template-card
+      primary: '{% set b = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''besparingscorrectie'') or {} %}€ {{ b.get(''besparing_gecorrigeerd_eur'', b.get(''besparing_vandaag_eur'', ''—'')) }} besparing vandaag'
+      secondary: '{% set b = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''besparingscorrectie'') or {} %}{% if b.get(''correctie_beschikbaar'') %}Afgerekend € {{ b.besparing_vandaag_eur }}, plus € {{ b.voorraadwaarde_eur }} die nog in de accu zit ({{ b.voorraadverschil_kwh }} kWh t.o.v. vanochtend).{% else %}{{ b.get(''reden'', ''Nog niet berekend.'') }}{% endif %}'
+      multiline_secondary: true
+      icon: mdi:piggy-bank-outline
+      icon_color: green
+      entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
+      tap_action:
+        action: more-info
+      grid_options:
+        columns: 12
+        rows: auto
     - type: custom:mushroom-template-card
       primary: '{% set p = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''prijstoets'') or {} %}Prijzen {{ ''incl. belasting en BTW'' if p.get(''inclusief_belasting'') else ''ZONDER belasting'' }}'
       secondary: '{% set p = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''prijstoets'') or {} %}{{ p.get(''reden'', ''Nog niet getoetst.'') }} {{ p.get(''teruglevering_na_saldering'', '''') }}'

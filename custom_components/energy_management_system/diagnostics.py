@@ -442,6 +442,11 @@ async def async_get_config_entry_diagnostics(
             # v1.38.0: de proefstand - kandidaten die meerekenen maar
             # niets sturen.
             # v1.47.0: ingangen die er zijn maar niets leveren.
+            # v1.52.0: de besparing gecorrigeerd voor wat er nog in de
+            # accu zit.
+            "savings_correction": _veilig(
+                "get_savings_correction", coordinator.get_savings_correction
+            ),
             "input_health": _veilig(
                 "get_input_health", coordinator.get_input_health
             ),

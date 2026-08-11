@@ -12530,3 +12530,46 @@ echt iets te doen zijn. Anders leert het overzicht je hem te negeren, en
 dan mist het de keer dat er wél wat aan de hand is.
 
 **Volledige testsuite**: 1920 tests, allemaal groen.
+
+## v1.52.0 — De besparing van vandaag stond op min
+
+**Gevraagd**: "Kan alles nu correct gelezen worden, kloppen de waarden
+etc?"
+
+De hele export nagelopen: 239 velden, alle kerncijfers binnen een
+plausibel bereik, geen interne fouten, en de doen-stapel is leeg. Eén
+getal klopte niet.
+
+### -€0,37 besparing, terwijl de accu vol staat
+
+Vandaag: werkelijk **-2,03**, zonder accu-sturing **-2,40**. Besparing
+dus **-0,37** — alsof de aansturing slechter is dan niets doen. Op een
+dag met 22,7 kWh zon en een accu op 98%.
+
+De vergelijking rekent per tick af tegen de netstroom. **Laden is op dat
+moment een kost**: die kWh had ook teruggeleverd kunnen worden. De
+opbrengst volgt pas bij het ontladen, vanavond. Een dag afsluiten met
+een volle accu tegen een dag die leeg eindigt is dus geen eerlijke
+vergelijking — dezelfde soort fout als meten over een horizon die niet
+aansluit.
+
+**Nu** staat er een correctie naast: het verschil in accu-inhoud tussen
+het begin van de dag en nu, gewaardeerd tegen wat een kWh op dit moment
+opbrengt. Met jouw cijfers wordt -0,37 daarmee ruim **+2,00**.
+
+Bewust **naast** het rauwe cijfer en niet eroverheen: het rauwe cijfer
+is wat er werkelijk is afgerekend, de correctie is een schatting van wat
+er nog komt. De maandcijfers blijven zoals ze zijn — over een hele maand
+middelt dit vanzelf uit.
+
+### Wat verder klopte
+
+De begrensde maten uit v1.42 en v1.48 doen hun werk: 13
+tekortkwartieren tot het bijladen tegen 17 over de hele planning, met
+"morgen 05:15-08:30" erbij. Slijtage €0,71 naast €5,19 netto verwacht.
+De diepvries staat op 18 echte dagen zonder alarm. Ingangscontrole
+schoon.
+
+**Zes tests erbij.**
+
+**Volledige testsuite**: 1926 tests, allemaal groen.

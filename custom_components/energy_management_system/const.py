@@ -1223,6 +1223,10 @@ PERSISTED_PLAIN_FIELDS = (
     # niet" opnieuw af - te zien in de export van 11 augustus, waar hij
     # om 14:30, 15:31 en 16:31 langskwam.
     "_last_plan_alert",
+    # v1.52.0: de accustand bij het begin van de dag, voor de correctie
+    # op de dagbesparing. Gaat die verloren, dan valt de correctie weg op
+    # precies de dagen waarop er herstart is.
+    "_savings_day_start_available_kwh",
     # --- v1.49.0 -----------------------------------------------------
     # De dagstand van de PV-geometrie. `_finalize_pv_geometry_day` sluit
     # de dag af zodra de datum wisselt - maar na een herstart staat de
