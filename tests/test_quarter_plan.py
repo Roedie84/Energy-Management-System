@@ -886,3 +886,77 @@ def test_the_periods_match_the_count(make_coordinator, hass):
 
     assert samenvatting["tekort_kwartieren"] == len(losse)
     assert bool(samenvatting["tekort_perioden"]) == bool(losse)
+
+
+# --- v1.48.0: maten die met de horizon meegroeiden -------------------
+
+
+def test_the_summary_can_be_bounded(make_coordinator, hass):
+    """De planning loopt sinds v1.25.0 zover als er prijzen zijn - tot 31
+    uur. De plantoetsing legde die verwachting naast de dagtellers, en
+    die stoppen om middernacht.
+
+    Bij 21 kWh rest-vandaag plus 23 kWh morgen tegenover 23 kWh gemeten
+    zou er elke dag een afwijking van tientallen procenten zijn gemeld.
+    """
+    c = _lange_reeks(make_coordinator, hass, 109)
+    middernacht = (NU + timedelta(days=1)).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+
+    heel = c.get_quarter_plan_summary(NU)
+    tot_middernacht = c.get_quarter_plan_summary(NU, tot=middernacht)
+
+    assert heel["kwartieren"] == 109
+    assert tot_middernacht["kwartieren"] < heel["kwartieren"]
+    assert tot_middernacht["zon_kwh"] <= heel["zon_kwh"]
+
+
+def test_every_row_carries_its_real_moment(make_coordinator, hass):
+    """Tot nu toe droeg een planregel alleen "14:30", en moest elke
+    afbakening met omwegen worden gemaakt - dat ging twee keer mis."""
+    plan = _coordinator(make_coordinator, hass).get_quarter_plan(NU)
+
+    from homeassistant.util import dt as dt_util
+
+    assert dt_util.parse_datetime(plan[0]["start"]) is not None
+
+
+def test_the_lowest_soc_is_bounded_too(make_coordinator, hass):
+    """"Laagste 10%" op de tegel ging over morgenochtend laat, niet over
+    vannacht - en dat is wel wat je erin leest."""
+    c = _lange_reeks(make_coordinator, hass, 109)
+    c.last_available_kwh = 3.0
+    c._estimate_pv_kwh_for_period = lambda a, b: 0.0
+    c._estimate_consumption_kwh_for_period = (
+        lambda a, b: 0.4 * (b - a).total_seconds() / 3600
+    )
+    c.last_cheap_block_start = NU + timedelta(hours=3)
+    c.last_cheap_block_end = NU + timedelta(hours=9)
+
+    samenvatting = c.get_quarter_plan_summary(NU)
+    plan = c.get_quarter_plan(NU)
+    na_het_blok = [
+        r["soc_procent"] for r in plan if not r.get("voor_bijladen", True)
+    ]
+
+    # De hele planning zakt verder dan het stuk tot het bijladen; de
+    # tegel hoort dat laatste te tonen.
+    assert min(na_het_blok) <= samenvatting["laagste_soc_procent"]
+    assert (
+        samenvatting["laagste_soc_tot_bijladen_procent"]
+        >= samenvatting["laagste_soc_procent"]
+    )
+
+
+def test_inside_the_cheap_block_it_reports_the_current_level(
+    make_coordinator, hass
+):
+    """Staan we al in het blok, dan is er niets te overbruggen."""
+    c = _coordinator(make_coordinator, hass, beschikbaar=3.0)
+    c.last_cheap_block_start = NU - timedelta(hours=1)
+    c.last_cheap_block_end = NU + timedelta(hours=5)
+
+    samenvatting = c.get_quarter_plan_summary(NU)
+
+    assert samenvatting["laagste_soc_tot_bijladen_procent"] is not None
