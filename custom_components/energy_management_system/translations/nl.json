@@ -77,6 +77,7 @@
           "water_softener_end_hour": "Waterontharder: laatste uur van het regeneratievenster",
           "presence_bedtime_sensor_entity": "Slaapsensor (optioneel): overloop of trap - laatste beweging 's avonds betekent slapen",
           "presence_tv_entity": "Televisie (optioneel): tv aan telt als iemand thuis",
+          "presence_light_entities": "Lampen binnenshuis (optioneel): een brandende lamp telt als iemand thuis",
           "power_limits_intentional": "Laad-/ontlaadvermogen bewust begrensd (geen suggesties om te verhogen)"
         }
       }
@@ -168,6 +169,7 @@
           "water_softener_end_hour": "Waterontharder: laatste uur van het regeneratievenster",
           "presence_bedtime_sensor_entity": "Slaapsensor (optioneel): overloop of trap - laatste beweging 's avonds betekent slapen",
           "presence_tv_entity": "Televisie (optioneel): tv aan telt als iemand thuis",
+          "presence_light_entities": "Lampen binnenshuis (optioneel): een brandende lamp telt als iemand thuis",
           "power_limits_intentional": "Laad-/ontlaadvermogen bewust begrensd (geen suggesties om te verhogen)"
         }
       }

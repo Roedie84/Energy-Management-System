@@ -60,7 +60,9 @@ from .const import (
     BATTERY_STATE_DISCHARGING,
     BATTERY_STATE_IDLE,
     CONF_BATTERY_INVERTER_PRICE_EUR,
+    CONF_BATTERY_CYCLE_LIFE,
     CONF_BATTERY_MODULE_PRICE_EUR,
+    DEFAULT_BATTERY_CYCLE_LIFE,
     CONF_BATTERY_POWER_SENSOR,
     CONF_BATTERY_STATE_SENSOR,
     CONF_CONSUMPTION_POWER_SENSOR,
@@ -351,6 +353,7 @@ from .const import (
     CONF_POWER_LIMITS_INTENTIONAL,
     CONF_PRESENCE_BEDTIME_SENSOR,
     CONF_PRESENCE_MOTION_SENSORS,
+    CONF_PRESENCE_LIGHT_ENTITIES,
     CONF_PRESENCE_TV_ENTITY,
     CONF_PV_ENERGY_SENSOR,
     PV_ENERGY_METER_RESET_TOLERANCE_KWH,
@@ -437,6 +440,18 @@ from .const import (
     OPTION_MANUAL,
     OPTION_SMART,
     OPTION_SMART_DISCHARGING,
+    PRICE_ATTRIBUTE_CHECK_MARGIN_EUR,
+    PRICE_ATTRIBUTE_INCL_TAX,
+    CAPACITY_TREND_HISTORY_DAYS,
+    PRICE_SHAPE_HISTORY_DAYS,
+    PROEFSTAND_DAYTYPE_MIN_DIFF_PERCENT,
+    PROEFSTAND_MIN_HOURS,
+    PROEFSTAND_MIN_SAMPLES,
+    PROEFSTAND_MIN_TREND_DAYS,
+    PROEFSTAND_SHAPE_MAX_SPREAD,
+    POST_SALDEREN_BARE_SHARE,
+    RELIABILITY_INDICATIVE,
+    PROEFSTAND_LEDGER_DAYS,
     PRICE_SCALE_FACTOR,
     SOC_TAPER_BAND_PERCENT,
     UPDATE_INTERVAL_MINUTES,
@@ -661,6 +676,21 @@ class EnergyManagementSystemCoordinator:
         # v1.31.0: plan tegen werkelijkheid. Gevraagd: "Kun je de
         # diagnostiek zo maken, dat je leert van het accu gedrag en
         # morgen verder optimaliseert indien noodzakelijk?"
+        # v1.38.0: proefstand. Vijf kandidaten die meerekenen maar niets
+        # sturen. Gevraagd: "Misschien eerst integreren totdat ze
+        # daadwerkelijk gaan meebewegen? Dus een extra onzichtbaar
+        # tabblad waar waardes zichtbaar zijn hoe betrouwbaar etc."
+        self.daytype_consumption_profile: dict[str, list[float]] = {}
+        self.capacity_trend_history: list[dict] = []
+        self.price_shape_history: dict[str, list[float]] = {}
+        # v1.39.0: wat een kandidaat zou hebben opgeleverd, per dag.
+        # Gevraagd: "Dan dus ook aangeven wat het opgeleverd zou hebben
+        # als ze wel zouden sturen."
+        self.proefstand_ledger: list[dict] = []
+        self._proefstand_doorzet_bij_dagstart: float | None = None
+        self._capacity_trend_day_key = None
+        self._price_shape_day_key = None
+
         self.plan_snapshot: dict | None = None
         self.plan_review_history: list[dict] = []
         self.laagste_soc_vandaag_procent: float | None = None
@@ -3417,6 +3447,162 @@ class EnergyManagementSystemCoordinator:
                     break
         return gevonden
 
+    def get_price_attribute_check(self) -> dict:
+        """Klopt het prijsattribuut - dus zit de belasting erin?
+        (v1.37.0)
+
+        Gevraagd: "Neem je alles gerelateerd aan de kwartier prijzen van
+        zonneplan mee incl tax/btw?"
+
+        Ja: overal wordt `price_tax_included` gebruikt, en het kale
+        `price_tax_excluded` alleen voor het teruglevertarief NA de
+        saldering. Maar dat is een antwoord uit de code, geen meting.
+
+        Zonneplan levert zelf een sensor met de gemiddelde afnameprijs
+        van vandaag, en die stond al in de export - gevonden, en nergens
+        gebruikt. Ligt dat gemiddelde BUITEN het bereik van onze eigen
+        kwartierprijzen van vandaag, dan lezen we structureel iets
+        anders dan waar jij voor betaalt.
+
+        Bewust alleen die grove toets. Een vergelijking met ons
+        GEMIDDELDE zou niets zeggen: Zonneplan weegt naar werkelijk
+        verbruik en jij koopt vooral 's nachts in, dus dat gemiddelde
+        hoort lager te liggen dan het onze. Buiten het bereik vallen kan
+        niet - tenzij er een verkeerd attribuut wordt gelezen, en dat is
+        precies de vraag.
+        """
+        entiteiten = self.find_zonneplan_cost_entities()
+        gemiddelde = self._read_sensor_float(
+            (entiteiten or {}).get("gemiddelde_afnameprijs_vandaag", "")
+        )
+        attribuut = self.config.get(CONF_PRICE_ATTRIBUTE, DEFAULT_PRICE_ATTRIBUTE)
+        nu = dt_util.now()
+        vandaag = [
+            prijs / PRICE_SCALE_FACTOR
+            for start, _einde, prijs in self._get_forecast_entries()
+            if start.date() == nu.date() and start <= nu
+        ]
+
+        resultaat = {
+            "attribuut": attribuut,
+            "inclusief_belasting": attribuut == PRICE_ATTRIBUTE_INCL_TAX,
+            "zonneplan_gemiddelde_afname_eur_per_kwh": gemiddelde,
+            "eigen_laagste_eur_per_kwh": round(min(vandaag), 4) if vandaag else None,
+            "eigen_hoogste_eur_per_kwh": round(max(vandaag), 4) if vandaag else None,
+            "toelichting": (
+                "Zonneplan weegt naar werkelijk verbruik, dus hun gemiddelde "
+                "hoort ergens tussen de laagste en hoogste prijs van vandaag "
+                "te liggen - niet gelijk aan het onze."
+            ),
+        }
+
+        if attribuut != PRICE_ATTRIBUTE_INCL_TAX:
+            resultaat["status"] = RELIABILITY_UNRELIABLE
+            resultaat["reden"] = (
+                f"Het prijsattribuut staat op '{attribuut}'. Daarmee wordt "
+                "gerekend met een prijs zonder energiebelasting en BTW, "
+                "terwijl je die wel betaalt - elke drempel, reserve en "
+                "opbrengst valt dan te laag uit."
+            )
+            return resultaat
+        if gemiddelde is None or not vandaag:
+            resultaat["status"] = RELIABILITY_INSUFFICIENT
+            resultaat["reden"] = (
+                "Nog niet te toetsen: de gemiddelde afnameprijs van "
+                "Zonneplan of de eigen prijzen van vandaag ontbreken."
+            )
+            return resultaat
+
+        # v1.37.1: alvast nakijken of de teruglevering ná de saldering
+        # te berekenen valt. Gemeld als vraag: "Wanneer salderen wordt
+        # afgeschaft (na 31-12-2026) geldt de export prijs zonder
+        # tax/btw als ik het goed heb."
+        #
+        # Klopt - Zonneplan schrijft het zelf zo op: bij een dynamisch
+        # contract is de terugleververgoeding de kale prijs, dus zonder
+        # energiebelasting en BTW. Precies wat deze integratie doet.
+        #
+        # Maar dat leunt op een attribuut dat vandaag nergens voor
+        # gebruikt wordt. Ontbreekt het, dan valt de terugleverwaarde op
+        # 1 januari stil - en dan sta je op de slechtst denkbare dag te
+        # zoeken. Daarom nu al kijken of het er is en of het lager
+        # uitkomt dan de belaste prijs.
+        resultaat.update(self._toets_teruglevertarief(nu))
+
+        laag, hoog = min(vandaag), max(vandaag)
+        marge = max(PRICE_ATTRIBUTE_CHECK_MARGIN_EUR, (hoog - laag) * 0.1)
+        if laag - marge <= gemiddelde <= hoog + marge:
+            resultaat["status"] = RELIABILITY_RELIABLE
+            resultaat["reden"] = (
+                f"De gemiddelde afnameprijs van Zonneplan "
+                f"({gemiddelde * 100:.1f} ct) ligt binnen de eigen "
+                f"kwartierprijzen van vandaag ({laag * 100:.1f} tot "
+                f"{hoog * 100:.1f} ct). Belasting en BTW zitten er dus in."
+            )
+            return resultaat
+
+        resultaat["status"] = RELIABILITY_UNRELIABLE
+        resultaat["reden"] = (
+            f"De gemiddelde afnameprijs van Zonneplan "
+            f"({gemiddelde * 100:.1f} ct) valt buiten de eigen "
+            f"kwartierprijzen van vandaag ({laag * 100:.1f} tot "
+            f"{hoog * 100:.1f} ct). Dat kan niet kloppen: er wordt "
+            "waarschijnlijk een ander prijsveld gelezen dan waar jij voor "
+            "betaalt."
+        )
+        return resultaat
+
+    def _toets_teruglevertarief(self, now: datetime) -> dict:
+        """Valt de terugleverwaarde ná de saldering al te berekenen?
+        (v1.37.1)
+
+        Zolang salderen geldt is een teruggeleverde kWh de volle
+        inkoopprijs waard. Daarna telt alleen het kale tarief, en dat
+        komt uit een tweede veld in dezelfde prijssensor - een veld dat
+        vandaag nergens voor gebruikt wordt en dus ook nergens
+        opvalt als het ontbreekt.
+        """
+        veld = self.config.get(
+            CONF_FEEDIN_PRICE_ATTRIBUTE, DEFAULT_FEEDIN_PRICE_ATTRIBUTE
+        )
+        kaal = self._get_current_price_per_kwh(
+            self._get_forecast_entries(price_key_override=veld), now
+        )
+        belast = self._get_current_price_per_kwh(self._get_forecast_entries(), now)
+        uit: dict = {
+            "salderen_actief": self._is_salderen_active(now),
+            "salderen_tot": str(
+                self.config.get(CONF_SALDEREN_END_DATE, DEFAULT_SALDEREN_END_DATE)
+            ),
+            "salderen_dagen_resterend": self._salderen_days_remaining(),
+            "teruglever_veld": veld,
+            "kale_prijs_nu_eur_per_kwh": (
+                round(kaal, 4) if kaal is not None else None
+            ),
+        }
+        if kaal is None:
+            uit["teruglevering_na_saldering"] = (
+                f"Let op: het veld '{veld}' zit niet in deze prijssensor. "
+                "Zolang salderen geldt merk je daar niets van, maar daarna "
+                "is de terugleverwaarde niet te berekenen."
+            )
+            return uit
+        if belast is not None and kaal >= belast:
+            uit["teruglevering_na_saldering"] = (
+                f"Let op: het veld '{veld}' geeft {kaal * 100:.1f} ct, niet "
+                f"lager dan de belaste prijs ({belast * 100:.1f} ct). Dat "
+                "kan niet kloppen voor een tarief zonder energiebelasting "
+                "en BTW."
+            )
+            return uit
+        uit["teruglevering_na_saldering"] = (
+            f"Na de saldering telt het kale tarief: nu {kaal * 100:.1f} ct "
+            f"tegen {belast * 100:.1f} ct belast, plus de Zonnebonus van "
+            f"{FEEDIN_PREMIUM_EUR_PER_KWH * 100:.0f} ct. Dat veld is "
+            "aanwezig en leesbaar."
+        )
+        return uit
+
     def get_zonneplan_cost_comparison(self) -> dict:
         """Vergelijkt onze eigen kostenberekening met wat Zonneplan
         werkelijk afrekent (v1.6.0).
@@ -4551,6 +4737,10 @@ class EnergyManagementSystemCoordinator:
             # zie je sneller dat er niemand is.
             if self._tv_staat_aan():
                 self.presence_state = "thuis"
+            elif self._brandend_licht() is not None:
+                # v1.36.0: een brandende lamp binnenshuis telt als
+                # aanwezig, net als de tv. Niet tijdens de vakantiestand.
+                self.presence_state = "thuis"
             elif stil_minuten < self._afwezigheidsdrempel_minuten():
                 self.presence_state = "thuis"
             elif self._slaapt_waarschijnlijk(now):
@@ -4693,10 +4883,12 @@ class EnergyManagementSystemCoordinator:
             naam = self._entiteitsnaam(eid)
 
         if self.presence_state == "thuis":
-            if self._tv_staat_aan() and (
-                stil is None or stil >= self._afwezigheidsdrempel_minuten()
-            ):
+            laat = stil is None or stil >= self._afwezigheidsdrempel_minuten()
+            if self._tv_staat_aan() and laat:
                 return "tv staat aan"
+            licht = self._brandend_licht()
+            if licht is not None and laat:
+                return f"licht aan ({licht})"
             return f"beweging{f' ({naam})' if naam else ''}"
         if self.presence_state == "slaapt":
             return (
@@ -4959,6 +5151,35 @@ class EnergyManagementSystemCoordinator:
             return False
         return str(staat.state).lower() in ("on", "playing", "paused", "true")
 
+    def _brandend_licht(self) -> str | None:
+        """Welke gekozen lamp brandt er? (v1.36.0)
+
+        Gevraagd: "Voor aanwezigheids detectie, kan ook nog gekeken naar
+        lampen of heb ik dat niet goed?"
+
+        Klopt, dat gebeurde nog niet - terwijl de systeemscan de lampen
+        al wel verzamelde "as useful context for a smarter, usage-aware
+        EMS". Ze stonden er dus in en werden nergens gebruikt.
+
+        Een brandende lamp is hetzelfde soort signaal als de tv: het
+        zegt niets over BEWEGING, maar wel dat er iemand is.
+
+        Tijdens de vakantiestand telt hij niet mee. De automatisering
+        die dan draait zet lampen juist aan om aanwezigheid na te
+        bootsen; dat als bewijs van aanwezigheid nemen is een
+        cirkelredenering - en het zou de inbraakmelding smoren, precies
+        wanneer die nodig is.
+        """
+        if self.vacation_mode:
+            return None
+        for entity_id in self.config.get(CONF_PRESENCE_LIGHT_ENTITIES) or []:
+            staat = self.hass.states.get(entity_id)
+            if staat is None:
+                continue
+            if str(staat.state).lower() in ("on", "true"):
+                return self._entiteitsnaam(entity_id)
+        return None
+
     def _afwezigheidsdrempel_minuten(self) -> float:
         """Hoe lang stilte mag duren voor het afwezigheid heet.
 
@@ -5111,6 +5332,11 @@ class EnergyManagementSystemCoordinator:
             # het systeem "thuis" meldde terwijl er 25 minuten niemand
             # was.
             "tv_telt_mee": bool(self.config.get(CONF_PRESENCE_TV_ENTITY)),
+            # v1.36.0: lampen als extra signaal.
+            "lichten_ingesteld": len(
+                self.config.get(CONF_PRESENCE_LIGHT_ENTITIES) or []
+            ),
+            "licht_aan": self._brandend_licht(),
             "tv_staat_aan": self._tv_staat_aan(),
             "afwezig_na_minuten": self._afwezigheidsdrempel_minuten(),
             "laatst_gezien": [
@@ -5247,6 +5473,626 @@ class EnergyManagementSystemCoordinator:
             }
             for datum, uren in sorted(per_dag.items(), reverse=True)
         ]
+
+    def _slijtage_in_planning(self, plan: list[dict]) -> dict:
+        """Wat kost de accuslijtage in dit plan? (v1.38.0)
+
+        Alleen wat er UIT de accu komt telt; laden en ontladen samen zijn
+        één slag, en die reken je één keer af.
+        """
+        slijtage = self.get_wear_cost_overview()
+        if not slijtage.get("beschikbaar"):
+            return {"slijtagekosten_eur": None, "netto_opbrengst_eur": None}
+        per_kwh = slijtage["slijtage_ct_per_kwh"] / 100
+
+        # De ontlading per kwartier volgt uit de daling van de accustand.
+        uit_kwh = 0.0
+        for vorige, huidige in zip(plan, plan[1:]):
+            daling = vorige["soc_kwh"] - huidige["soc_kwh"]
+            if daling > 0:
+                uit_kwh += daling
+
+        kosten = uit_kwh * per_kwh
+        return {
+            "ontladen_kwh": round(uit_kwh, 2),
+            "slijtage_ct_per_kwh": slijtage["slijtage_ct_per_kwh"],
+            "slijtagekosten_eur": round(kosten, 2),
+            "netto_opbrengst_eur": round(plan[-1]["cumulatief_eur"] - kosten, 2),
+        }
+
+    def _update_proefstand(self, now: datetime) -> None:
+        """Verzamelt dagelijks wat de kandidaten nodig hebben (v1.38.0).
+
+        Gevraagd: "Misschien eerst integreren totdat ze daadwerkelijk
+        gaan meebewegen? Dus een extra onzichtbaar tabblad waar waardes
+        zichtbaar zijn hoe betrouwbaar etc."
+
+        Precies de goede volgorde, en dezelfde die bij de plantoetsing
+        werkte: eerst meten, dan pas sturen. Alles hieronder is lezend.
+        """
+        vandaag = now.date()
+
+        # --- capaciteitstrend: één meting per dag ---------------------
+        if self._capacity_trend_day_key != vandaag:
+            if self._capacity_trend_day_key is not None:
+                self._boek_proefstand_dag(self._capacity_trend_day_key)
+            self._capacity_trend_day_key = vandaag
+            capaciteit = self._read_sensor_float(
+                self.config.get(CONF_BATTERY_TOTAL_CAPACITY_SENSOR)
+            )
+            if capaciteit:
+                self.capacity_trend_history.append(
+                    {
+                        "datum": vandaag.isoformat(),
+                        "capaciteit_kwh": round(capaciteit, 3),
+                        "doorzet_kwh": round(
+                            self.battery_cumulative_discharged_kwh, 1
+                        ),
+                    }
+                )
+                self.capacity_trend_history = self.capacity_trend_history[
+                    -CAPACITY_TREND_HISTORY_DAYS:
+                ]
+                self.schedule_persisted_state_save()
+
+        # --- prijsvorm: hoe duur is elk uur t.o.v. de dag zelf --------
+        # Niet de prijzen zelf bewaren maar de VERHOUDING. Een dag van
+        # 40 ct en een dag van 12 ct hebben dezelfde vorm; alleen die
+        # vorm is bruikbaar om verder vooruit te kijken dan de bekende
+        # prijzen reiken.
+        if self._price_shape_day_key != vandaag:
+            entries = [
+                (start, prijs / PRICE_SCALE_FACTOR)
+                for start, _einde, prijs in self._get_forecast_entries()
+                if start.date() == vandaag
+            ]
+            if len(entries) >= 90:  # een vrijwel volledige dag
+                self._price_shape_day_key = vandaag
+                gemiddeld = sum(p for _s, p in entries) / len(entries)
+                if gemiddeld > 0:
+                    per_uur: dict[int, list[float]] = {}
+                    for start, prijs in entries:
+                        per_uur.setdefault(start.hour, []).append(prijs)
+                    for uur, prijzen in per_uur.items():
+                        verhouding = (
+                            sum(prijzen) / len(prijzen)
+                        ) / gemiddeld
+                        reeks = self.price_shape_history.setdefault(str(uur), [])
+                        reeks.append(round(verhouding, 3))
+                        self.price_shape_history[str(uur)] = reeks[
+                            -PRICE_SHAPE_HISTORY_DAYS:
+                        ]
+                    self.schedule_persisted_state_save()
+
+    def _boek_proefstand_dag(self, dag) -> None:
+        """Boekt per dag wat een kandidaat zou hebben opgeleverd
+        (v1.39.0).
+
+        Gevraagd: "Dan dus ook aangeven wat het opgeleverd zou hebben
+        als ze wel zouden sturen."
+
+        Terecht - zonder bedrag is "betrouwbaar" geen argument om iets
+        aan te zetten. Maar niet elke kandidaat is in euro's te vangen,
+        en een verzonnen getal is erger dan geen getal. Wie het niet kan,
+        zegt dat.
+        """
+        boeking = {"datum": dag.isoformat() if hasattr(dag, "isoformat") else str(dag)}
+
+        # 1. Slijtage: wat is er vandaag door de accu gegaan, en wat
+        #    kostte dat? Dit bedrag zit NIET in de gerapporteerde
+        #    opbrengst en maakt die dus te rooskleurig.
+        slijtage = self.get_wear_cost_overview()
+        doorzet = self.battery_cumulative_discharged_kwh - (
+            self._proefstand_doorzet_bij_dagstart or 0.0
+        )
+        self._proefstand_doorzet_bij_dagstart = (
+            self.battery_cumulative_discharged_kwh
+        )
+        if slijtage.get("beschikbaar") and doorzet > 0:
+            boeking["slijtage_eur"] = round(
+                -doorzet * slijtage["slijtage_ct_per_kwh"] / 100, 3
+            )
+            boeking["doorzet_kwh"] = round(doorzet, 2)
+
+        # 2. Dagtype: hoeveel scheelt het profiel van dit dagtype met het
+        #    gemiddelde dat nu wordt gebruikt, over het ontlaadvenster?
+        #    Dat verschil is energie die de reserve mist of te veel
+        #    aanhoudt - tegen de prijs van dat moment.
+        verschil_kwh = self._dagtype_verschil_kwh(dag)
+        if verschil_kwh is not None:
+            prijs = self.last_current_price_per_kwh or 0.0
+            boeking["dagtype_eur"] = round(abs(verschil_kwh) * prijs, 3)
+            boeking["dagtype_kwh"] = round(verschil_kwh, 2)
+
+        if len(boeking) > 1:
+            self.proefstand_ledger.append(boeking)
+            self.proefstand_ledger = self.proefstand_ledger[
+                -PROEFSTAND_LEDGER_DAYS:
+            ]
+            self.schedule_persisted_state_save()
+
+    def _dagtype_verschil_kwh(self, dag) -> float | None:
+        """Hoeveel scheelt het dagtype-profiel met het algemene profiel,
+        over een etmaal? (v1.39.0)"""
+        soort = "weekend" if dag.weekday() >= 5 else "werkdag"
+        totaal = 0.0
+        uren = 0
+        for uur in range(24):
+            reeks = self.daytype_consumption_profile.get(f"{soort}-{uur}") or []
+            algemeen = self.learned_hourly_avg_kw(uur)
+            if len(reeks) < PROEFSTAND_MIN_SAMPLES or algemeen is None:
+                continue
+            totaal += statistics.median(reeks) - algemeen
+            uren += 1
+        if uren < PROEFSTAND_MIN_HOURS:
+            return None
+        return totaal
+
+    def _proefstand_balans(self, sleutel: str) -> dict | None:
+        """De opgetelde boekingen voor één kandidaat (v1.39.0)."""
+        bedragen = [
+            regel[sleutel]
+            for regel in self.proefstand_ledger
+            if sleutel in regel
+        ]
+        if not bedragen:
+            return None
+        return {
+            "dagen": len(bedragen),
+            "totaal_eur": round(sum(bedragen), 2),
+            "per_dag_eur": round(sum(bedragen) / len(bedragen), 3),
+            "per_jaar_eur": round(sum(bedragen) / len(bedragen) * 365, 2),
+        }
+
+    def get_proefstand(self) -> dict:
+        """De vijf kandidaten, met hoe betrouwbaar ze zijn (v1.38.0).
+
+        Niets hiervan stuurt iets aan. Elk onderdeel meldt zelf wat het
+        nu zou zeggen en of daar al op te bouwen valt; pas als een
+        kandidaat zich bewijst, gaat hij mee in de besluitvorming - en
+        dan één tegelijk, zodat bij een afwijking te zien is welke het
+        deed.
+        """
+        return {
+            "toelichting": (
+                "Deze pagina stuurt niets aan. Elke kandidaat rekent mee en "
+                "laat zien wat hij zou zeggen; pas na bewijs gaat er één "
+                "tegelijk mee in de besluitvorming."
+            ),
+            "kandidaten": [
+                self._kandidaat_slijtage(),
+                self._kandidaat_na_saldering(),
+                self._kandidaat_dagtype(),
+                self._kandidaat_capaciteit(),
+                self._kandidaat_prijsvorm(),
+            ],
+        }
+
+    def _kandidaat_slijtage(self) -> dict:
+        """1. Wat kost een kWh door de accu?"""
+        overzicht = self.get_wear_cost_overview()
+        if not overzicht.get("beschikbaar"):
+            return {
+                "naam": "Slijtagekosten per kWh",
+                "status": RELIABILITY_INSUFFICIENT,
+                "waarde": None,
+                "zou_hebben_opgeleverd": {
+                    "te_becijferen": False,
+                    "reden": "Aantal modules of capaciteit ontbreekt nog.",
+                },
+                "betrouwbaarheid": overzicht.get("reden", ""),
+            }
+        rendement = overzicht.get("rendement_procent")
+        return {
+            "naam": "Slijtagekosten per kWh",
+            "waarde": f"{overzicht['slijtage_ct_per_kwh']:.1f} ct/kWh",
+            "status": (
+                RELIABILITY_RELIABLE
+                if self.charge_efficiency_history and self.discharge_efficiency_history
+                else RELIABILITY_INSUFFICIENT
+            ),
+            "onderbouwing": (
+                f"{overzicht['modules']} modules à € "
+                f"{overzicht['moduleprijs_eur']:.0f} over "
+                f"{overzicht['totale_doorzet_kwh']:,.0f} kWh doorzet "
+                f"({overzicht['cycli_verwacht']} cycli x "
+                f"{overzicht['bruikbaar_kwh']} kWh)."
+            ).replace(",", "."),
+            "betrouwbaarheid": (
+                "Het cyclusaantal is een belofte van de fabrikant, geen "
+                f"meting. Rendement nu {rendement:.1f}%"
+                if rendement
+                else "Rendement nog niet gemeten."
+            ),
+            "zou_veranderen": (
+                "Zon opslaan en later gebruiken moet meer opleveren dan deze "
+                "slijtage plus het rendementsverlies. Ontladen naar het huis "
+                "of naar het net is dezelfde slijtage - daar kiest dit niets "
+                "tussen."
+            ),
+            "zou_hebben_opgeleverd": self._opbrengst_slijtage(),
+        }
+
+    def _kandidaat_na_saldering(self) -> dict:
+        """2. Wat zou het plan van vandaag opleveren ná de saldering?"""
+        plan = self.get_quarter_plan()
+        if not plan:
+            return {
+                "naam": "Opbrengst na de saldering",
+                "status": RELIABILITY_INSUFFICIENT,
+                "waarde": None,
+                "betrouwbaarheid": "Nog geen planning berekend.",
+                "zou_hebben_opgeleverd": {
+                    "te_becijferen": False,
+                    "reden": "Nog geen planning om door te rekenen.",
+                },
+            }
+        nu_totaal = plan[-1]["cumulatief_eur"]
+        # Alles wat het net op gaat is straks alleen het kale tarief
+        # waard; wat het huis gebruikt bespaart nog steeds de volle prijs.
+        export_kwh = sum(-r["net_kwh"] for r in plan if r["net_kwh"] < 0)
+        gemiddelde_prijs = (
+            sum(r["prijs_ct"] for r in plan) / len(plan) / 100
+        )
+        kaal = gemiddelde_prijs * POST_SALDEREN_BARE_SHARE
+        verschil = export_kwh * (
+            gemiddelde_prijs + FEEDIN_PREMIUM_EUR_PER_KWH - kaal
+        )
+        return {
+            "naam": "Opbrengst na de saldering",
+            "waarde": f"€ {nu_totaal - verschil:.2f} in plaats van € {nu_totaal:.2f}",
+            "status": RELIABILITY_INDICATIVE,
+            "onderbouwing": (
+                f"{export_kwh:.1f} kWh gaat het net op. Nu ongeveer de volle "
+                f"prijs waard, straks alleen het kale tarief - geschat "
+                f"{kaal * 100:.1f} ct in plaats van "
+                f"{(gemiddelde_prijs + FEEDIN_PREMIUM_EUR_PER_KWH) * 100:.1f} ct."
+            ),
+            "betrouwbaarheid": (
+                "Ruwe schatting: het kale tarief wordt hier afgeleid als een "
+                f"vast deel ({POST_SALDEREN_BARE_SHARE:.0%}) van de belaste "
+                "prijs. Zodra het echte veld meeloopt kan dit exact."
+            ),
+            "zou_veranderen": (
+                "Elke kWh die niet het net op gaat wordt straks veel meer "
+                "waard dan nu. Dat raakt het uitstelplan, de verkooptoets en "
+                "de vraag hoe vol de accu 's avonds moet zijn."
+            ),
+            "zou_hebben_opgeleverd": {
+                "te_becijferen": False,
+                "reden": (
+                    f"Het bedrag hierboven is wat de nieuwe regels KOSTEN "
+                    f"(€ {verschil:.2f} vandaag), niet wat sturen zou "
+                    "opleveren. Dat laatste vraagt om het plan opnieuw door "
+                    "te rekenen onder de nieuwe waardering, en dat is de "
+                    "volgende stap."
+                ),
+            },
+        }
+
+    def _kandidaat_dagtype(self) -> dict:
+        """3. Verschilt een weekenddag genoeg van een werkdag?"""
+        werkdag = [
+            statistics.median(v)
+            for k, v in self.daytype_consumption_profile.items()
+            if k.startswith("werkdag-") and len(v) >= PROEFSTAND_MIN_SAMPLES
+        ]
+        weekend = [
+            statistics.median(v)
+            for k, v in self.daytype_consumption_profile.items()
+            if k.startswith("weekend-") and len(v) >= PROEFSTAND_MIN_SAMPLES
+        ]
+        uren = min(len(werkdag), len(weekend))
+        if uren < PROEFSTAND_MIN_HOURS:
+            return {
+                "naam": "Verbruiksprofiel per dagtype",
+                "status": RELIABILITY_INSUFFICIENT,
+                "waarde": None,
+                "zou_hebben_opgeleverd": {
+                    "te_becijferen": False,
+                    "reden": "Nog te weinig waarnemingen per dagtype.",
+                },
+                "betrouwbaarheid": (
+                    f"{uren} van de 24 uren hebben genoeg waarnemingen voor "
+                    "beide dagtypen. Een weekend levert twee dagen per week, "
+                    "dus dit duurt enkele weken."
+                ),
+            }
+        gem_werk = sum(werkdag) / len(werkdag)
+        gem_week = sum(weekend) / len(weekend)
+        verschil = 100 * (gem_week - gem_werk) / gem_werk if gem_werk else 0
+        return {
+            "naam": "Verbruiksprofiel per dagtype",
+            "waarde": (
+                f"weekend {verschil:+.0f}% t.o.v. werkdag "
+                f"({gem_week * 1000:.0f} W tegen {gem_werk * 1000:.0f} W)"
+            ),
+            "status": (
+                RELIABILITY_RELIABLE
+                if abs(verschil) >= PROEFSTAND_DAYTYPE_MIN_DIFF_PERCENT
+                else RELIABILITY_INDICATIVE
+            ),
+            "onderbouwing": f"{uren} uren met genoeg waarnemingen in beide reeksen.",
+            "betrouwbaarheid": (
+                "Een verschil onder de "
+                f"{PROEFSTAND_DAYTYPE_MIN_DIFF_PERCENT:.0f}% is het splitsen "
+                "niet waard: dan verlies je aan waarnemingen wat je aan "
+                "scherpte wint."
+            ),
+            "zou_veranderen": (
+                "De reserve, de energiebrug en de verkooptoets rekenen nu met "
+                "één gemiddeld uurprofiel voor alle dagen."
+            ),
+            "zou_hebben_opgeleverd": self._opbrengst_dagtype(),
+        }
+
+    def _opbrengst_slijtage(self) -> dict:
+        """Wat zou het slijtagegetal hebben opgeleverd? (v1.39.0)
+
+        Niet als winst, maar als correctie. De opbrengst die dit systeem
+        rapporteert houdt geen rekening met wat de accu zichzelf kost;
+        dit bedrag is precies het deel dat er ten onrechte bij staat.
+        """
+        balans = self._proefstand_balans("slijtage_eur")
+        if balans is None:
+            return {
+                "te_becijferen": False,
+                "reden": (
+                    "Nog geen volledige dag geboekt - de eerste boeking "
+                    "komt na middernacht."
+                ),
+            }
+        return {
+            "te_becijferen": True,
+            "bedrag_per_dag_eur": balans["per_dag_eur"],
+            "bedrag_per_jaar_eur": balans["per_jaar_eur"],
+            "dagen": balans["dagen"],
+            "toelichting": (
+                f"Over {balans['dagen']} dag(en) is er voor € "
+                f"{abs(balans['totaal_eur']):.2f} aan slijtage door de accu "
+                "gegaan. Dat staat nu nergens tegenover de gerapporteerde "
+                "opbrengst - sturen zou dit niet verdienen maar vermijden, "
+                "door energie alleen op te slaan als de marge het waard is."
+            ),
+        }
+
+    def _opbrengst_dagtype(self) -> dict:
+        """Wat zou een profiel per dagtype hebben opgeleverd? (v1.39.0)"""
+        balans = self._proefstand_balans("dagtype_eur")
+        if balans is None:
+            return {
+                "te_becijferen": False,
+                "reden": (
+                    "Nog te weinig waarnemingen per dagtype om het verschil "
+                    "te becijferen."
+                ),
+            }
+        return {
+            "te_becijferen": True,
+            "bedrag_per_dag_eur": balans["per_dag_eur"],
+            "bedrag_per_jaar_eur": balans["per_jaar_eur"],
+            "dagen": balans["dagen"],
+            "toelichting": (
+                "Zoveel energie zit de reserve ernaast door met één "
+                "gemiddeld profiel te rekenen, tegen de prijs van dat "
+                "moment. Het is de bovengrens: niet elke misrekening kost "
+                "ook echt geld - alleen die waarbij de accu daardoor te "
+                "vroeg leeg was of onnodig vol bleef."
+            ),
+        }
+
+    def _kandidaat_capaciteit(self) -> dict:
+        """4. Neemt de bruikbare capaciteit af?"""
+        reeks = self.capacity_trend_history
+        if len(reeks) < PROEFSTAND_MIN_TREND_DAYS:
+            return {
+                "naam": "Accugezondheid over de tijd",
+                "status": RELIABILITY_INSUFFICIENT,
+                "waarde": None,
+                "zou_hebben_opgeleverd": {
+                    "te_becijferen": False,
+                    "reden": "Nog te weinig dagmetingen.",
+                },
+                "betrouwbaarheid": (
+                    f"{len(reeks)} dagmetingen. Capaciteitsverlies is enkele "
+                    "procenten per jáár - hier is een lange reeks voor nodig "
+                    "voordat er iets te zeggen valt."
+                ),
+            }
+        eerste, laatste = reeks[0], reeks[-1]
+        verschil = laatste["capaciteit_kwh"] - eerste["capaciteit_kwh"]
+        doorzet = laatste["doorzet_kwh"] - eerste["doorzet_kwh"]
+        return {
+            "naam": "Accugezondheid over de tijd",
+            "waarde": (
+                f"{laatste['capaciteit_kwh']:.2f} kWh nu, {verschil:+.2f} kWh "
+                f"sinds {eerste['datum']}"
+            ),
+            "status": RELIABILITY_INDICATIVE,
+            "onderbouwing": (
+                f"{len(reeks)} dagmetingen, {doorzet:.0f} kWh doorzet in die "
+                "periode."
+            ),
+            "betrouwbaarheid": (
+                "De capaciteitssensor is zelf een schatting van de accu en "
+                "springt met de temperatuur. Pas over maanden zegt de trend "
+                "iets; een enkele meting niets."
+            ),
+            "zou_veranderen": (
+                "Het uitbreidingsadvies en de reserve rekenen met de "
+                "nominale capaciteit."
+            ),
+            "zou_hebben_opgeleverd": {
+                "te_becijferen": False,
+                "reden": (
+                    "Niet in geld te vangen: dit voorkomt een verkeerde "
+                    "aanname, het levert niets op. Wordt de capaciteit "
+                    "structureel lager gemeten, dan is de reserve nu te "
+                    "optimistisch - en dat kost pas iets op de nacht dat het "
+                    "misgaat."
+                ),
+            },
+        }
+
+    def _kandidaat_prijsvorm(self) -> dict:
+        """5. Valt er verder vooruit te kijken dan de bekende prijzen?"""
+        volledig = {
+            uur: reeks
+            for uur, reeks in self.price_shape_history.items()
+            if len(reeks) >= PROEFSTAND_MIN_SAMPLES
+        }
+        if len(volledig) < PROEFSTAND_MIN_HOURS:
+            return {
+                "naam": "Prijsvorm voorbij de bekende prijzen",
+                "status": RELIABILITY_INSUFFICIENT,
+                "waarde": None,
+                "zou_hebben_opgeleverd": {
+                    "te_becijferen": False,
+                    "reden": "Nog te weinig dagen met een volledige prijsreeks.",
+                },
+                "betrouwbaarheid": (
+                    f"{len(volledig)} van de 24 uren hebben genoeg dagen."
+                ),
+            }
+        duurste = max(volledig, key=lambda u: statistics.median(volledig[u]))
+        goedkoopste = min(volledig, key=lambda u: statistics.median(volledig[u]))
+        spreiding = [
+            statistics.pstdev(reeks) for reeks in volledig.values() if len(reeks) > 1
+        ]
+        gemiddelde_spreiding = (
+            sum(spreiding) / len(spreiding) if spreiding else None
+        )
+        return {
+            "naam": "Prijsvorm voorbij de bekende prijzen",
+            "waarde": (
+                f"duurste uur {duurste}:00 "
+                f"({statistics.median(volledig[duurste]):.2f}x het daggemiddelde), "
+                f"goedkoopste {goedkoopste}:00 "
+                f"({statistics.median(volledig[goedkoopste]):.2f}x)"
+            ),
+            "status": (
+                RELIABILITY_RELIABLE
+                if gemiddelde_spreiding is not None
+                and gemiddelde_spreiding <= PROEFSTAND_SHAPE_MAX_SPREAD
+                else RELIABILITY_INDICATIVE
+            ),
+            "onderbouwing": (
+                f"{len(volledig)} uren, spreiding gemiddeld "
+                f"{gemiddelde_spreiding:.2f}"
+                if gemiddelde_spreiding is not None
+                else f"{len(volledig)} uren"
+            ),
+            "betrouwbaarheid": (
+                "Er wordt alleen de VORM bewaard, niet de prijs zelf - een "
+                "dag van 40 ct en een van 12 ct hebben dezelfde vorm. Is de "
+                "spreiding groot, dan verschilt die vorm te veel per dag om "
+                "op te bouwen."
+            ),
+            "zou_veranderen": (
+                "'s Ochtends houdt de planning op bij middernacht, want de "
+                "prijzen van morgen komen pas rond 13:00. Juist dat stuk is "
+                "nodig voor de avondvraag: verkopen of bewaren voor morgen?"
+            ),
+            "zou_hebben_opgeleverd": {
+                "te_becijferen": False,
+                "reden": (
+                    "Pas te becijferen zodra de voorspelde vorm naast de "
+                    "werkelijke prijzen van de dag erna kan worden gelegd. "
+                    "De spreiding hierboven is de voorbode: is die groot, "
+                    "dan valt er niets te verdienen."
+                ),
+            },
+        }
+
+    def get_wear_cost_overview(self) -> dict:
+        """Wat kost het om een kWh door de accu te sturen? (v1.38.0)
+
+        Gevraagd: "Zijn er nog meer typische EMS dingen welke we kunnen
+        toevoegen?" Dit was punt 1: de cyclustelling bestond al, maar
+        wat een cyclus KOST zat nergens in een afweging.
+
+        Met de echte prijzen: 3 x 729 euro over 7,74 kWh bruikbaar en
+        6000 cycli komt neer op ongeveer 4,7 ct per kWh die er doorheen
+        gaat.
+
+        Belangrijk waar dit WEL en NIET telt, want daar heb ik me eerst
+        in vergist. Ontladen naar het huis of naar het net is dezelfde
+        slijtage - daartussen kiest dit getal dus niets. Het telt bij de
+        vraag of energie überhaupt door de accu MOET:
+
+        - zon direct terugleveren kost niets;
+        - zon opslaan en later gebruiken kost een halve slag heen en een
+          halve terug, plus het rendementsverlies;
+        - verkopen wat het huis vannacht nodig heeft en het daarna
+          terugkopen is een EXTRA slag die er anders niet was geweest.
+
+        Er wordt hier nog niets op gestuurd. Eerst zichtbaar maken en
+        naast de werkelijke marges leggen; sturen is een volgende stap.
+        """
+        modules = len(
+            self.config.get(CONF_BATTERY_MODULE_TEMPERATURE_SENSORS) or []
+        )
+        moduleprijs = self.config.get(
+            CONF_BATTERY_MODULE_PRICE_EUR, DEFAULT_BATTERY_MODULE_PRICE_EUR
+        )
+        cycli = self.config.get(
+            CONF_BATTERY_CYCLE_LIFE, DEFAULT_BATTERY_CYCLE_LIFE
+        )
+        capaciteit = self._read_sensor_float(
+            self.config.get(CONF_BATTERY_TOTAL_CAPACITY_SENSOR)
+        )
+        min_soc = self.effective_min_soc_percent()
+        bruikbaar = (
+            capaciteit * (100 - min_soc) / 100 if capaciteit else None
+        )
+        rendement = self.learned_battery_efficiency_percent
+
+        if not modules or not bruikbaar or not cycli:
+            return {
+                "beschikbaar": False,
+                "reden": (
+                    "Aantal modules, bruikbare capaciteit of cyclusaantal "
+                    "ontbreekt."
+                ),
+            }
+
+        aanschaf = modules * moduleprijs
+        doorzet_kwh = bruikbaar * cycli
+        per_kwh = aanschaf / doorzet_kwh
+
+        # Het rendementsverlies hoort erbij: om 1 kWh uit de accu te
+        # halen moet er meer in dan eruit komt, en dat verschil is even
+        # goed verloren geld.
+        verlies_kwh = (
+            (100 / rendement - 1) if rendement else None
+        )
+
+        return {
+            "beschikbaar": True,
+            "modules": modules,
+            "moduleprijs_eur": moduleprijs,
+            "aanschafwaarde_eur": round(aanschaf, 2),
+            "cycli_verwacht": cycli,
+            "bruikbaar_kwh": round(bruikbaar, 2),
+            "totale_doorzet_kwh": round(doorzet_kwh),
+            "slijtage_ct_per_kwh": round(per_kwh * 100, 2),
+            "rendement_procent": rendement,
+            "rendementsverlies_kwh_per_kwh": (
+                round(verlies_kwh, 3) if verlies_kwh is not None else None
+            ),
+            "reeds_doorgezet_kwh": round(self.battery_cumulative_discharged_kwh, 1),
+            "cycli_gedraaid": (
+                round(self.battery_cumulative_discharged_kwh / bruikbaar, 1)
+                if bruikbaar
+                else None
+            ),
+            "toelichting": (
+                "Ontladen naar het huis of naar het net is dezelfde slijtage; "
+                "dit getal kiest daar dus niet tussen. Het telt bij de vraag "
+                "of energie überhaupt door de accu moet - opslaan en later "
+                "gebruiken kost een slag, direct terugleveren niet."
+            ),
+        }
 
     def get_expansion_advice(self) -> dict:
         """Loont het om de accu uit te breiden? (v1.19.0)
@@ -7010,7 +7856,7 @@ class EnergyManagementSystemCoordinator:
                 self._hour_energy_kwh += (power_w / 1000) * elapsed_to_boundary
                 self._hour_duration_hours += elapsed_to_boundary
 
-            self._finalize_hourly_bucket()
+            self._finalize_hourly_bucket(hour_boundary - timedelta(minutes=1))
             self._current_tracked_hour = current_hour
 
             elapsed_in_new_hour = max(
@@ -7031,7 +7877,7 @@ class EnergyManagementSystemCoordinator:
             self._hour_duration_hours += elapsed_hours
         self._hour_last_sample = now
 
-    def _finalize_hourly_bucket(self) -> None:
+    def _finalize_hourly_bucket(self, moment: datetime | None = None) -> None:
         if self._current_tracked_hour is not None and self._hour_duration_hours > 0:
             avg_power_kw = self._hour_energy_kwh / self._hour_duration_hours
             bucket = self.hourly_consumption_profile.setdefault(
@@ -7039,6 +7885,23 @@ class EnergyManagementSystemCoordinator:
             )
             bucket.append(avg_power_kw)
             self.hourly_consumption_profile[self._current_tracked_hour] = bucket[
+                -LEARNING_HISTORY_DAYS:
+            ]
+
+            # v1.38.0: hetzelfde uur ook apart bijhouden voor werkdagen
+            # en het weekend. Nog niet in gebruik - dit is een kandidaat
+            # op de proefstand, die eerst moet laten zien dat het
+            # verschil groot en stabiel genoeg is om iets te betekenen.
+            #
+            # Gevraagd: "Misschien eerst integreren totdat ze daadwerkelijk
+            # gaan meebewegen? Dus een extra onzichtbaar tabblad waar
+            # waardes zichtbaar zijn hoe betrouwbaar etc."
+            dag = (moment or dt_util.now()).weekday()
+            soort = "weekend" if dag >= 5 else "werkdag"
+            sleutel = f"{soort}-{self._current_tracked_hour}"
+            reeks = self.daytype_consumption_profile.setdefault(sleutel, [])
+            reeks.append(round(avg_power_kw, 4))
+            self.daytype_consumption_profile[sleutel] = reeks[
                 -LEARNING_HISTORY_DAYS:
             ]
 
@@ -8113,6 +8976,28 @@ class EnergyManagementSystemCoordinator:
             self.plan_snapshot = {
                 "datum": vandaag.isoformat(),
                 "opgenomen_om": now.strftime("%H:%M"),
+                # v1.37.2: de stand van de dagtellers OP dit moment.
+                #
+                # Gevonden in de export van 11 augustus 11:21: de
+                # momentopname was om 10:26 genomen, en de verwachting
+                # die erin staat gaat over de rest van de dag - de
+                # planning begint immers bij nu. De werkelijkheid werd
+                # daarna vergeleken met de dagtellers, en die tellen
+                # vanaf middernacht.
+                #
+                # Vandaag scheelt dat de hele ochtendzon: 21,1 kWh
+                # verwacht tegen ruim 23 kWh gemeten, en dat zou als
+                # een afwijking van 10% zijn gerapporteerd terwijl de
+                # voorspelling gewoon klopte. Door de stand hier vast
+                # te leggen wordt het verschil vergeleken met het
+                # verschil.
+                "pv_bij_opname_kwh": round(self.pv_production_today_kwh, 3),
+                "import_bij_opname_kwh": round(self.grid_import_today_kwh, 3),
+                "opbrengst_bij_opname_eur": round(
+                    self.counterfactual_cost_today_eur
+                    - self.actual_cost_today_eur,
+                    4,
+                ),
                 "verwachte_opbrengst_eur": samenvatting.get("verwachte_opbrengst_eur"),
                 "verwachte_zon_kwh": samenvatting.get("zon_kwh"),
                 "verwacht_verbruik_kwh": samenvatting.get("verbruik_kwh"),
@@ -8159,17 +9044,28 @@ class EnergyManagementSystemCoordinator:
                 return None
             return round(100 * (werkelijk - voorspeld) / abs(voorspeld), 1)
 
+        # v1.37.2: alles vanaf de momentopname, niet vanaf middernacht.
+        # De planning begint bij "nu", dus de verwachting gaat over de
+        # rest van de dag; wat daarvoor gebeurde hoort er niet bij.
         werkelijke_opbrengst = (
-            self.counterfactual_cost_today_eur - self.actual_cost_today_eur
+            self.counterfactual_cost_today_eur
+            - self.actual_cost_today_eur
+            - plan.get("opbrengst_bij_opname_eur", 0.0)
+        )
+        werkelijke_zon = self.pv_production_today_kwh - plan.get(
+            "pv_bij_opname_kwh", 0.0
+        )
+        werkelijke_import = self.grid_import_today_kwh - plan.get(
+            "import_bij_opname_kwh", 0.0
         )
         regel = {
             "datum": plan["datum"],
             "opgenomen_om": plan["opgenomen_om"],
             "zon": {
                 "voorspeld_kwh": plan["verwachte_zon_kwh"],
-                "werkelijk_kwh": round(self.pv_production_today_kwh, 2),
+                "werkelijk_kwh": round(werkelijke_zon, 2),
                 "afwijking_procent": _afwijking(
-                    plan["verwachte_zon_kwh"], self.pv_production_today_kwh
+                    plan["verwachte_zon_kwh"], werkelijke_zon
                 ),
             },
             "opbrengst": {
@@ -8181,7 +9077,7 @@ class EnergyManagementSystemCoordinator:
             },
             "import": {
                 "voorspeld_kwh": plan["verwachte_import_kwh"],
-                "werkelijk_kwh": round(self.grid_import_today_kwh, 2),
+                "werkelijk_kwh": round(werkelijke_import, 2),
             },
             "laagste_soc": {
                 "voorspeld_procent": plan["laagste_soc_procent"],
@@ -8441,6 +9337,10 @@ class EnergyManagementSystemCoordinator:
                 sum(-r["net_kwh"] for r in plan if r["net_kwh"] < 0), 2
             ),
             "verwachte_opbrengst_eur": round(plan[-1]["cumulatief_eur"], 2),
+            # v1.38.0: wat er door de accu gaat, kost slijtage. Die stond
+            # tot nu toe nergens tegenover de opbrengst, waardoor een
+            # plan er beter uitzag dan het was.
+            **self._slijtage_in_planning(plan),
             "opbrengst_uit_verkoop_eur": round(
                 sum(r["opbrengst_eur"] for r in verkoop), 2
             ),
@@ -17031,6 +17931,14 @@ class EnergyManagementSystemCoordinator:
         # toetsen. Ook afgeschermd - een rapport mag de aansturing niet
         # in de weg zitten. De fout komt via `internal_failures` alsnog
         # als melding binnen (v1.29.0).
+        try:
+            self._update_proefstand(now)
+        except Exception as fout:  # noqa: BLE001
+            _LOGGER.exception("Kon de proefstand niet bijwerken")
+            self.internal_failures["proefstand"] = f"{type(fout).__name__}: {fout}"
+        else:
+            self.internal_failures.pop("proefstand", None)
+
         try:
             self._update_plan_review(now)
         except Exception as fout:  # noqa: BLE001

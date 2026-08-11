@@ -432,8 +432,18 @@ async def async_get_config_entry_diagnostics(
             # v1.31.0: het volledige rapport, ook de dagen die het
             # dashboard niet toont.
             # v1.32.0: rendement per halve slag.
+            # v1.37.0: klopt het prijsattribuut, dus zit de belasting erin?
+            "price_attribute_check": _veilig(
+                "get_price_attribute_check", coordinator.get_price_attribute_check
+            ),
             "efficiency_overview": _veilig(
                 "get_efficiency_overview", coordinator.get_efficiency_overview
+            ),
+            # v1.38.0: de proefstand - kandidaten die meerekenen maar
+            # niets sturen.
+            "proefstand": _veilig("get_proefstand", coordinator.get_proefstand),
+            "wear_cost": _veilig(
+                "get_wear_cost_overview", coordinator.get_wear_cost_overview
             ),
             "plan_review": _veilig("get_plan_review", coordinator.get_plan_review),
             "plan_snapshot": coordinator.plan_snapshot,
@@ -637,6 +647,14 @@ async def async_get_config_entry_diagnostics(
             "last_cheap_block_end": _iso(coordinator.last_cheap_block_end),
             "last_discharge_start": _iso(coordinator.last_discharge_start),
             "last_soc_percent": coordinator.last_soc_percent,
+            # v1.37.2: het veld hierboven is een bijproduct van de
+            # ontlaadberekening en staat op None zodra de tick eerder
+            # eindigt - in de export van 11 augustus 11:21 was dat zo,
+            # midden in het goedkope blok. De gemeten stand hoort er dan
+            # nog steeds te staan.
+            "accustand_procent": _veilig(
+                "accustand_procent", coordinator.accustand_procent
+            ),
             "last_discharge_power_applied": coordinator.last_discharge_power_applied,
             "last_household_load_w": coordinator.last_household_load_w,
             "last_discharge_floor_applied": coordinator.last_discharge_floor_applied,

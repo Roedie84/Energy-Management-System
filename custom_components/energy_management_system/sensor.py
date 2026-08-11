@@ -3850,6 +3850,8 @@ class GacsAssessmentSensor(SensorEntity):
             "kwartier_samenvatting",
             "plantoetsing",
             "rendement",
+            "prijstoets",
+            "proefstand",
         }
     )
 
@@ -3899,6 +3901,8 @@ class GacsAssessmentSensor(SensorEntity):
             # v1.31.0: plan tegen werkelijkheid.
             ("plantoetsing", self._coordinator.get_plan_review),
             ("rendement", self._coordinator.get_efficiency_overview),
+            ("prijstoets", self._coordinator.get_price_attribute_check),
+            ("proefstand", self._coordinator.get_proefstand),
         ):
             try:
                 attributen[sleutel] = functie()

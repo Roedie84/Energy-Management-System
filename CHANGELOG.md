@@ -11754,3 +11754,227 @@ scheidbare deelwoorden. Dat is het verschil met v1.33.0 — een regel is
 te toetsen, een woordenlijst niet.
 
 **Volledige testsuite**: 1833 tests, allemaal groen.
+
+## v1.36.0 — Lampen tellen mee voor aanwezigheid
+
+**Gevraagd**: "Voor aanwezigheids detectie, kan ook nog gekeken naar
+lampen of heb ik dat niet goed?"
+
+Je had het goed: dat gebeurde niet. Wrang detail — de systeemscan
+verzamelde de lampen al wél, met als reden *"useful context for a
+smarter, usage-aware EMS"*. Ze stonden dus in de export en werden
+nergens gebruikt.
+
+Een brandende lamp is hetzelfde soort signaal als de tv: het zegt niets
+over **beweging**, maar wel dat er iemand is. Daarmee vervalt de stilte
+als bewijs van afwezigheid, net zoals de tv de drempel van 45 naar 10
+minuten kon brengen.
+
+**Nieuw configuratieveld** "Lampen binnenshuis", meerdere te kiezen.
+Bewust een eigen lijst en niet "alle lampen":
+
+- **Alleen binnen.** Een buitenlamp of tuinverlichting op een tijdklok
+  brandt elke winteravond en zou het huis permanent bewoond verklaren.
+- **Niet tijdens de vakantiestand.** De automatisering *Vakantie
+  Rolluiken + Verlichting* zet lampen juist aan om aanwezigheid na te
+  bootsen. Die als bewijs van aanwezigheid nemen is een
+  cirkelredenering — en het zou de inbraakmelding smoren, precies
+  wanneer die nodig is.
+
+In de tijdlijn staat **welke** lamp: "licht aan (Woonkamer)". Zonder die
+naam valt niet na te gaan of het klopt; een vergeten zolderlamp
+verklaart anders een verkeerde staat.
+
+**Vijf tests erbij**, waaronder één die controleert dat dezelfde stilte
+zonder lamp wél "weg" oplevert — anders toetst de rest niets.
+
+**Volledige testsuite**: 1838 tests, allemaal groen.
+
+## v1.37.0 — Toets op het prijsattribuut
+
+**Gevraagd**: "Neem je alles gerelateerd aan de kwartier prijzen van
+zonneplan mee incl tax/btw?"
+
+**Ja.** Alle prijzen komen uit één plek, `_get_forecast_entries`, en die
+leest `price_tax_included` — de prijs inclusief energiebelasting en BTW.
+Dat geldt voor de dure-kwartier-drempels, de reserve, de kostprijs per
+kWh in de accu, de kwartierplanning, de besparing en de meldingen.
+
+Het kale `price_tax_excluded` wordt op **precies één** plek gebruikt:
+het teruglevertarief ná het einde van de saldering. Zolang salderen
+geldt is een teruggeleverde kWh de volle inkoopprijs waard (inclusief
+belasting en BTW) plus de Zonnebonus van 2 ct.
+
+### Maar dat was een antwoord uit de code, geen meting
+
+Zonneplan levert zelf een sensor met de gemiddelde afnameprijs van
+vandaag. Die stond al in de export als *gevonden entiteit* — en werd
+nergens gebruikt.
+
+Nieuw: ligt dat gemiddelde buiten het bereik van onze eigen
+kwartierprijzen van vandaag, dan lezen we structureel iets anders dan
+waarvoor jij betaalt. Op jouw gegevens van vandaag:
+
+> De gemiddelde afnameprijs van Zonneplan (27,4 ct) ligt binnen de eigen
+> kwartierprijzen van vandaag (13,1 tot 33,7 ct). Belasting en BTW zitten
+> er dus in.
+
+Bewust alleen die grove toets. Vergelijken met ons *gemiddelde* zou
+niets zeggen: Zonneplan weegt naar werkelijk verbruik en er wordt vooral
+'s nachts ingekocht, dus dat hoort lager te liggen. Buiten het bereik
+vallen kán niet — tenzij er een verkeerd veld wordt gelezen, en dat is
+precies de vraag.
+
+Staat het attribuut zelf al op het kale tarief, dan wordt dat direct
+gemeld: elke drempel, reserve en opbrengst valt dan te laag uit.
+
+Zichtbaar op de Kosten-pagina; de volledige toets staat in de
+diagnostiek-export. **Zes tests erbij**, waaronder één die bewaakt dat
+het kale tarief nergens anders opduikt dan bij de teruglevering.
+
+**Volledige testsuite**: 1844 tests, allemaal groen.
+
+## v1.37.1 — Vooruitblik op het teruglevertarief
+
+**Gevraagd**: "Wanneer salderen wordt afgeschaft (na 31-12-2026) geldt
+de export prijs zonder tax/btw als ik het goed heb."
+
+Klopt, en Zonneplan schrijft het zelf zo op: bij een dynamisch contract
+is de terugleververgoeding de **kale prijs, dus zonder energiebelasting
+en BTW**. Precies wat deze integratie doet — `price_tax_excluded` plus
+de Zonnebonus van 2 ct, met de omslag op de instelbare
+`salderen_end_date`.
+
+### Het risico zit in het veld, niet in de regel
+
+Die berekening leunt op een tweede veld in dezelfde prijssensor dat
+**vandaag nergens voor wordt gebruikt**. Ontbreekt het, of levert het
+onzin, dan merk je daar niets van zolang salderen geldt — en valt de
+terugleverwaarde stil op 1 januari. Dat is de slechtst denkbare dag om
+dat te ontdekken.
+
+De prijstoets kijkt daarom nu al vooruit en meldt één van drie dingen:
+
+- het kale tarief is aanwezig en lager dan de belaste prijs (goed);
+- het veld zit niet in deze prijssensor;
+- het veld geeft een waarde die niet lager is dan de belaste prijs, en
+  dat kan niet kloppen voor een tarief zonder belasting.
+
+Ook het aantal resterende saldeerdagen staat erbij.
+
+**Vier tests erbij.**
+
+**Volledige testsuite**: 1848 tests, allemaal groen.
+
+## v1.37.2 — De plantoetsing vergeleek appels met peren
+
+Gevonden in de export van 11 augustus 11:21, in wat een dag eerder was
+gebouwd.
+
+De momentopname van het plan was om **10:26** genomen. De verwachting
+die daarin staat gaat over de **rest van de dag** — de planning begint
+immers bij "nu". Maar de werkelijkheid werd vergeleken met de
+**dagtellers**, en die tellen vanaf middernacht.
+
+Vandaag scheelt dat de hele ochtendzon: 21,1 kWh verwacht tegen ruim
+23 kWh gemeten. Dat was vanavond gerapporteerd als een afwijking van
+10% terwijl de voorspelling gewoon klopte — precies het soort vals
+alarm waardoor een rapport niet meer gelezen wordt.
+
+**Nu** legt de momentopname ook de stand van de dagtellers vast (zon,
+import, opbrengst), zodat het verschil met het verschil wordt
+vergeleken. Een opslagbestand van vóór deze versie mist die velden en
+valt terug op nul, zonder om te vallen.
+
+Ook: de gemeten accustand staat nu in de diagnostiek naast
+`last_soc_percent`. Dat laatste veld is een bijproduct van de
+ontlaadberekening en stond in deze export op `null` — midden in het
+goedkope blok eindigt de tick eerder, en dan wordt het niet gezet.
+
+**Volledige testsuite**: 1851 tests, allemaal groen.
+
+## v1.38.0 — Proefstand: vijf kandidaten die niets sturen
+
+**Gevraagd**: "Misschien eerst integreren totdat ze daadwerkelijk gaan
+meebewegen? Dus een extra onzichtbaar tabblad waar waardes zichtbaar
+zijn hoe betrouwbaar etc."
+
+Precies de goede volgorde, en dezelfde die bij de plantoetsing werkte:
+eerst meten, dan pas sturen. Vijf tegelijk in de beslislogica hangen zou
+betekenen dat je bij een afwijking niet meer weet welke het deed.
+
+Nieuwe subview **Proefstand**, bereikbaar vanaf de Meetkwaliteit-pagina.
+Elke kandidaat meldt wat hij zou zeggen, hoe hard dat is, en wat hij zou
+raken:
+
+| Kandidaat | Nu |
+|---|---|
+| Slijtagekosten per kWh | **4,7 ct/kWh** — 3 × €729 over 7,74 kWh × 6000 cycli |
+| Opbrengst na de saldering | ruwe doorrekening van het plan van vandaag |
+| Verbruiksprofiel per dagtype | verzamelt vanaf nu, weken nodig |
+| Accugezondheid over de tijd | dagmeting, minstens 30 dagen |
+| Prijsvorm voorbij de bekende prijzen | verzamelt vanaf nu |
+
+### Wat er onderweg rechtgezet moest worden
+
+Mijn eigen voorstel voor de slijtagekosten klopte niet. Ik schreef dat
+verkopen bij een marge van 2,8 ct verlies is omdat een cyclus 4 ct kost
+— maar **ontladen naar het huis of naar het net is dezelfde slijtage**.
+Dat getal kiest daar dus niets tussen.
+
+Waar het wél telt: of energie überhaupt door de accu moet. Zon direct
+terugleveren kost niets; opslaan en later gebruiken kost een halve slag
+heen en een halve terug. En verkopen wat het huis vannacht nodig heeft
+om het daarna terug te kopen is een **extra** slag die er anders niet
+was geweest. Dat staat nu zo in de code en in de toelichting.
+
+### Bewaakt
+
+Een test leest de proefstandcode en controleert dat er geen modus, geen
+vermogen en geen drempel in voorkomt. Alle drie de nieuwe reeksen worden
+bewaard over een herstart — kandidaten die zich moeten bewijzen kunnen
+dat niet als ze elke keer opnieuw beginnen.
+
+**Dertien tests erbij.**
+
+**Volledige testsuite**: 1864 tests, allemaal groen.
+
+## v1.39.0 — Wat een kandidaat zou hebben opgeleverd
+
+**Gevraagd**: "Dan dus ook aangeven wat het opgeleverd zou hebben als ze
+wel zouden sturen."
+
+Terecht: zonder bedrag is "betrouwbaar" geen argument om iets aan te
+zetten. Elke kandidaat op de proefstand boekt nu dagelijks wat hij zou
+hebben gedaan, met een totaal per dag en per jaar.
+
+### Maar niet alles is in euro's te vangen
+
+Een verzonnen bedrag is erger dan geen bedrag, dus wie het niet kan zegt
+dat — met de reden erbij:
+
+| Kandidaat | Bedrag |
+|---|---|
+| Slijtagekosten | **ja** — doorzet × 4,7 ct, per dag geboekt |
+| Verbruiksprofiel per dagtype | **ja** — het verschil in kWh × de prijs |
+| Opbrengst na de saldering | nee: dat bedrag is wat de nieuwe regels *kosten*, niet wat sturen oplevert |
+| Accugezondheid | nee: het voorkomt een verkeerde aanname, het levert niets op |
+| Prijsvorm | nee: pas te becijferen als de voorspelde vorm naast de echte prijzen van de dag erna ligt |
+
+De slijtage is bewust **negatief** geboekt. Sturen zou dat bedrag niet
+verdienen maar vermijden: de gerapporteerde opbrengst houdt nu geen
+rekening met wat de accu zichzelf kost, en dit is precies het deel dat
+er ten onrechte bij staat. Bij een doorzet van ruim 6 kWh per dag gaat
+het om zo'n **€ 0,29 per dag, oftewel € 107 per jaar**.
+
+Het dagtypebedrag is nadrukkelijk een **bovengrens**: niet elke
+misrekening in de reserve kost ook echt geld — alleen die waarbij de
+accu daardoor te vroeg leeg was of onnodig vol bleef.
+
+De boekingen worden 120 dagen bewaard en overleven een herstart.
+
+**Vijf tests erbij**, waaronder één die eist dat élke kandidaat een
+uitspraak doet over het bedrag — ook als die uitspraak "dat kan ik niet"
+is.
+
+**Volledige testsuite**: 1869 tests, allemaal groen.

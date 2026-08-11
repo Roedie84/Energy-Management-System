@@ -40,6 +40,7 @@ from .const import (
     CONF_POWER_LIMITS_INTENTIONAL,
     CONF_PRESENCE_BEDTIME_SENSOR,
     CONF_PRESENCE_MOTION_SENSORS,
+    CONF_PRESENCE_LIGHT_ENTITIES,
     CONF_PRESENCE_TV_ENTITY,
     CONF_WATER_SOFTENER_END_HOUR,
     CONF_WATER_SOFTENER_START_HOUR,
@@ -581,6 +582,14 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
             ): selector.EntitySelector(
                 selector.EntitySelectorConfig(
                     domain=["media_player", "remote", "binary_sensor", "switch"]
+                )
+            ),
+            vol.Optional(
+                CONF_PRESENCE_LIGHT_ENTITIES,
+                default=defaults.get(CONF_PRESENCE_LIGHT_ENTITIES, []),
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(
+                    domain=["light", "switch"], multiple=True
                 )
             ),
             vol.Optional(

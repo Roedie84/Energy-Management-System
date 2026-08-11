@@ -469,7 +469,7 @@ views:
   panel: true
   cards:
   - type: picture-elements
-    image: /local/energy_management_system_overview.svg?v=1.35.0
+    image: /local/energy_management_system_overview.svg?v=1.39.0
     elements:
     - type: state-label
       entity: sensor.woonkamer_energy_management_system_system_status
@@ -1683,7 +1683,7 @@ views:
         _De accu neemt een vast aantal kilowattuur op; wélke dat zijn bepaalt wat je exporteert. Vroeg laden slurpt de dure ochtendzon op en laat de goedkope middagzon over voor het net - laat laden doet het omgekeerd. Zelfde eind-SoC, hogere opbrengst._
 
 
-        **Verder:** [Kwartierplanning](/energy-management-system/detail-kwartier) · [Samenvatting](/energy-management-system/detail-planning-samenvatting) · [Plantoetsing](/energy-management-system/detail-plantoetsing)'
+        **Verder:** [Proefstand](/energy-management-system/detail-proefstand) · [Kwartierplanning](/energy-management-system/detail-kwartier) · [Samenvatting](/energy-management-system/detail-planning-samenvatting) · [Plantoetsing](/energy-management-system/detail-plantoetsing)'
       grid_options:
         columns: 12
         rows: auto
@@ -1760,6 +1760,18 @@ views:
       tap_action:
         action: navigate
         navigation_path: /energy-management-system/detail-kosten
+    - type: custom:mushroom-template-card
+      primary: '{% set p = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''prijstoets'') or {} %}Prijzen {{ ''incl. belasting en BTW'' if p.get(''inclusief_belasting'') else ''ZONDER belasting'' }}'
+      secondary: '{% set p = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''prijstoets'') or {} %}{{ p.get(''reden'', ''Nog niet getoetst.'') }} {{ p.get(''teruglevering_na_saldering'', '''') }}'
+      multiline_secondary: true
+      icon: mdi:cash-check
+      icon_color: '{% set p = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''prijstoets'') or {} %}{{ ''green'' if p.get(''status'') == ''betrouwbaar'' else (''red'' if p.get(''status'') == ''onbetrouwbaar'' else ''orange'') }}'
+      entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
+      tap_action:
+        action: more-info
+      grid_options:
+        columns: 12
+        rows: auto
     - type: custom:mushroom-template-card
       primary: '{% set z = state_attr(''sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing'', ''zonneplan_vergelijking'') or {} %}{{ z.get(''totale_energiekosten_vandaag_eur'', ''—'') }} € vandaag'
       secondary: '{% set z = state_attr(''sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing'', ''zonneplan_vergelijking'') or {} %}Stroom {{ z.get(''zonneplan_netto_eur'', ''—'') }} € · gas {{ z.get(''zonneplan_gas_vandaag_eur'', ''—'') }} €. {{ ''Eigen berekening klopt met Zonneplan.'' if z.get(''status'') == ''betrouwbaar'' else (z.get(''reden'','''')[:70] ~ ''…'') }}'
@@ -2149,7 +2161,10 @@ views:
         {% if p.halfuren_geleerd > 0 %}Er zijn **{{ p.halfuren_geleerd }} halfuren** van de week geleerd; gemiddeld is er {{ p.typisch_thuis_percentage }}% van de tijd iemand thuis.{% else %}Nog te weinig waarnemingen voor een weekpatroon.{% endif %}
 
 
-        {% if p.slaapsensor_ingesteld %}**Slapen wordt herkend.** Is de slaapsensor de laatste beweging ''s avonds, dan geldt de stilte erna als slapen en niet als afwezigheid.{% if p.bedtijden_geleerd > 0 %} Typische bedtijd: **{{ p.typische_bedtijd }}** (uit {{ p.bedtijden_geleerd }} waarnemingen).{% endif %}{% else %}_Geen slaapsensor ingesteld. Zonder die sensor telt een nacht als afwezigheid, terwijl ''niemand thuis'' en ''iedereen slaapt'' tegengestelde situaties zijn: bij afwezigheid mag alles uit, bij slapen moet de nachtreserve juist kloppen._{% endif %}
+        {% if p.lichten_ingesteld %}**Lampen tellen mee:** {{ p.lichten_ingesteld }} gekozen{% if p.licht_aan %}, nu brandt **{{ p.licht_aan }}**{% endif %}. Tijdens de vakantiestand tellen ze niet mee - dan zet de automatisering ze juist aan.
+
+
+        {% endif %}{% if p.slaapsensor_ingesteld %}**Slapen wordt herkend.** Is de slaapsensor de laatste beweging ''s avonds, dan geldt de stilte erna als slapen en niet als afwezigheid.{% if p.bedtijden_geleerd > 0 %} Typische bedtijd: **{{ p.typische_bedtijd }}** (uit {{ p.bedtijden_geleerd }} waarnemingen).{% endif %}{% else %}_Geen slaapsensor ingesteld. Zonder die sensor telt een nacht als afwezigheid, terwijl ''niemand thuis'' en ''iedereen slaapt'' tegengestelde situaties zijn: bij afwezigheid mag alles uit, bij slapen moet de nachtreserve juist kloppen._{% endif %}
 
 
         _Er wordt per halfuur van de week bijgehouden hoe vaak er iemand thuis was. Werkdagen verschillen van het weekend, en ''s ochtends van ''s avonds. Alleen sensoren die je zelf hebt gekozen tellen mee: buitensensoren slaan aan op voorbijgangers._{% endif %}'
@@ -2260,6 +2275,42 @@ views:
 
 
         _Werkelijk / voorspeld. Het plan wordt elke ochtend om 08:00 vastgelegd en na middernacht getoetst._'
+      grid_options:
+        columns: 12
+        rows: auto
+- title: Proefstand
+  path: detail-proefstand
+  subview: true
+  type: sections
+  max_columns: 1
+  sections:
+  - type: grid
+    cards:
+    - type: custom:mushroom-title-card
+      title: Proefstand
+      subtitle: Rekent mee, stuurt niets
+    - type: markdown
+      title: Kandidaten
+      content: '{% set p = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''proefstand'') or {} %}{% set k = p.get(''kandidaten'') or [] %}{% for c in k %}### {{ c.naam }}
+
+        {% if c.waarde %}**{{ c.waarde }}** — {{ c.status | replace(''_'', '' '') }}
+
+        {{ c.get(''onderbouwing'', '''') }}
+
+        {% else %}_Nog geen uitspraak._
+
+        {% endif %}_{{ c.get(''betrouwbaarheid'', '''') }}_
+
+        {% set o = c.get(''zou_hebben_opgeleverd'') or {} %}{% if o.get(''te_becijferen'') %}**Zou hebben opgeleverd: € {{ o.bedrag_per_dag_eur }} per dag (€ {{ o.bedrag_per_jaar_eur }} per jaar, over {{ o.dagen }} dag(en)).** {{ o.toelichting }}
+
+        {% elif o.get(''reden'') %}_Nog niet in geld te vangen: {{ o.reden }}_
+
+        {% endif %}{% if c.get(''zou_veranderen'') %}Zou raken: {{ c.zou_veranderen }}
+
+        {% endif %}{% endfor %}
+
+
+        _{{ p.get(''toelichting'', '''') }}_'
       grid_options:
         columns: 12
         rows: auto

@@ -515,6 +515,115 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Wat een kandidaat zou hebben opgeleverd (v1.39.0)
+
+**Gevraagd**: *"Dan dus ook aangeven wat het opgeleverd zou hebben als
+ze wel zouden sturen."*
+
+Elke kandidaat boekt nu dagelijks wat hij zou hebben gedaan, met een
+totaal per dag en per jaar. Twee van de vijf zijn in euro's te vangen
+(slijtage en het dagtypeprofiel); de andere drie zeggen waarom niet — een
+verzonnen bedrag is erger dan geen bedrag.
+
+De slijtage staat bewust negatief: sturen zou dat niet verdienen maar
+vermijden. Bij ruim 6 kWh doorzet per dag is dat ongeveer € 0,29 per dag,
+€ 107 per jaar, die nu nergens tegenover de gerapporteerde opbrengst
+staan.
+
+**Volledige testsuite**: 1869 tests, allemaal groen.
+
+## Proefstand (v1.38.0)
+
+**Gevraagd**: *"Misschien eerst integreren totdat ze daadwerkelijk gaan
+meebewegen? Dus een extra onzichtbaar tabblad waar waardes zichtbaar
+zijn hoe betrouwbaar etc."*
+
+Vijf kandidaten rekenen mee en sturen niets, op een eigen subview
+*Proefstand*: slijtagekosten per kWh (nu 4,7 ct), de opbrengst na de
+saldering, een verbruiksprofiel per dagtype, de accugezondheid over de
+tijd, en de prijsvorm voorbij de bekende prijzen. Elk meldt wat het zou
+zeggen, hoe hard dat is en wat het zou raken.
+
+Onderweg bleek mijn eigen redenering over de slijtagekosten fout:
+ontladen naar het huis of naar het net is dezelfde slijtage. Het telt
+bij de vraag of energie überhaupt door de accu moet — niet bij de vraag
+waar hij heen gaat.
+
+Een test controleert dat de proefstandcode geen modus, vermogen of
+drempel aanraakt.
+
+**Volledige testsuite**: 1864 tests, allemaal groen.
+
+## De plantoetsing vergeleek appels met peren (v1.37.2)
+
+De momentopname van het plan wordt genomen zodra de dag begonnen is, en
+de verwachting daarin gaat over de *rest* van de dag — de planning
+begint bij "nu". De werkelijkheid werd echter vergeleken met de
+dagtellers, die vanaf middernacht tellen.
+
+Op 11 augustus scheelde dat de hele ochtendzon: 21,1 kWh verwacht tegen
+ruim 23 kWh gemeten, wat als 10% afwijking zou zijn gemeld terwijl de
+voorspelling klopte. De momentopname legt nu ook de stand van de
+dagtellers vast, zodat verschil met verschil wordt vergeleken.
+
+**Volledige testsuite**: 1851 tests, allemaal groen.
+
+## Vooruitblik op het teruglevertarief (v1.37.1)
+
+**Gevraagd**: *"Wanneer salderen wordt afgeschaft (na 31-12-2026) geldt
+de export prijs zonder tax/btw als ik het goed heb."*
+
+Klopt — Zonneplan schrijft het zelf zo op: bij een dynamisch contract is
+de terugleververgoeding de kale prijs, zonder energiebelasting en BTW.
+Dat doet deze integratie al, met de omslag op de instelbare
+`salderen_end_date`.
+
+Het risico zit niet in de regel maar in het veld: die berekening leunt
+op `price_tax_excluded`, dat vandaag nergens voor wordt gebruikt.
+Ontbreekt het, dan valt de terugleverwaarde stil op 1 januari. De
+prijstoets kijkt daarom nu al vooruit en meldt of dat veld aanwezig is
+en of het lager uitkomt dan de belaste prijs.
+
+**Volledige testsuite**: 1848 tests, allemaal groen.
+
+## Toets op het prijsattribuut (v1.37.0)
+
+**Gevraagd**: *"Neem je alles gerelateerd aan de kwartier prijzen van
+zonneplan mee incl tax/btw?"*
+
+Ja. Alle prijzen komen uit `_get_forecast_entries`, dat
+`price_tax_included` leest — inclusief energiebelasting en BTW. Het kale
+`price_tax_excluded` wordt op precies één plek gebruikt: het
+teruglevertarief ná het einde van de saldering.
+
+Dat was echter een antwoord uit de code, geen meting. Zonneplan levert
+zelf de gemiddelde afnameprijs van vandaag; die stond al in de export
+als gevonden entiteit en werd nergens gebruikt. Ligt dat gemiddelde
+buiten het bereik van de eigen kwartierprijzen van vandaag, dan wordt er
+structureel een ander veld gelezen — en dat wordt nu gemeld.
+
+**Volledige testsuite**: 1844 tests, allemaal groen.
+
+## Lampen tellen mee voor aanwezigheid (v1.36.0)
+
+**Gevraagd**: *"Voor aanwezigheids detectie, kan ook nog gekeken naar
+lampen of heb ik dat niet goed?"*
+
+Dat gebeurde inderdaad niet — terwijl de systeemscan de lampen al wel
+verzamelde "as useful context for a smarter, usage-aware EMS".
+
+Een brandende lamp is hetzelfde soort signaal als de tv: geen beweging,
+maar wel iemand thuis. Nieuw configuratieveld *Lampen binnenshuis*, met
+twee grendels: alleen de lampen die je zelf kiest (een buitenlamp op een
+tijdklok zou het huis permanent bewoond verklaren), en **niet tijdens de
+vakantiestand** — dan zet de automatisering ze juist aan om aanwezigheid
+na te bootsen, en dat als bewijs nemen is een cirkelredenering die de
+inbraakmelding zou smoren.
+
+In de tijdlijn staat welke lamp brandt.
+
+**Volledige testsuite**: 1838 tests, allemaal groen.
+
 ## Gespeld volgens de WALD-spelling (v1.35.0)
 
 **Gevraagd**: *"Helpt deze informatie nog voor de achterhoekse vertaling

@@ -237,6 +237,18 @@ PRICE_ATTRIBUTE_EXCL_TAX = "price_tax_excluded"
 PRICE_ATTRIBUTE_OPTIONS = [PRICE_ATTRIBUTE_INCL_TAX, PRICE_ATTRIBUTE_EXCL_TAX]
 
 DEFAULT_PRICE_ATTRIBUTE = PRICE_ATTRIBUTE_INCL_TAX
+
+# --- Toets op het prijsattribuut (v1.37.0) ---------------------------
+# Gevraagd: "Neem je alles gerelateerd aan de kwartier prijzen van
+# zonneplan mee incl tax/btw?"
+#
+# Ja - maar dat was een antwoord uit de code, geen meting. Zonneplan
+# levert zelf de gemiddelde afnameprijs van vandaag; die stond al in de
+# export als gevonden entiteit en werd nergens gebruikt.
+#
+# Speling op het bereik, want de dag is nog niet voorbij en de
+# gemiddelde prijs loopt een uur achter.
+PRICE_ATTRIBUTE_CHECK_MARGIN_EUR = 0.02
 DEFAULT_EXPENSIVE_QUARTERS_COUNT = 4
 DEFAULT_MANUAL_DISCHARGE_POWER = 1600
 DEFAULT_MANUAL_CHARGE_POWER = -2000
@@ -1173,6 +1185,13 @@ PERSISTED_PLAIN_FIELDS = (
     # herstart verliezen - het gaat over dagen, niet over een tick.
     "charge_efficiency_history",
     "discharge_efficiency_history",
+    # v1.38.0: de proefstand. Deze reeksen zijn het hele punt van
+    # kandidaten die zich eerst moeten bewijzen - na een herstart
+    # opnieuw beginnen zou dat onmogelijk maken.
+    "daytype_consumption_profile",
+    "capacity_trend_history",
+    "price_shape_history",
+    "proefstand_ledger",
     "plan_review_history",
     "plan_snapshot",
     # v1.20.0: wanneer er doorgaans naar bed wordt gegaan. Zonder
@@ -2669,6 +2688,28 @@ PRESENCE_LAST_SEEN_LENGTH = 12
 # sensor liep.
 CONF_PRESENCE_TV_ENTITY = "presence_tv_entity"
 
+# --- Lampen als aanwezigheidssignaal (v1.36.0) -----------------------
+# Gevraagd: "Voor aanwezigheids detectie, kan ook nog gekeken naar
+# lampen of heb ik dat niet goed?"
+#
+# Klopt, dat gebeurde nog niet - terwijl de systeemscan de lampen al
+# WEL verzamelde, met als reden "useful context for a smarter,
+# usage-aware EMS". Ze stonden er dus wel in en werden nergens gebruikt.
+#
+# Een brandende lamp is hetzelfde soort signaal als de tv: het zegt
+# niets over BEWEGING, maar wel dat er iemand is. Twee dingen om op te
+# letten, en daarom een eigen lijst in plaats van "alle lampen":
+#
+# 1. Alleen lampen BINNEN. Een buitenlamp of tuinverlichting op een
+#    tijdklok brandt elke winteravond en zou het huis permanent bewoond
+#    verklaren.
+# 2. Tijdens de VAKANTIESTAND tellen ze niet mee. De eigen automatisering
+#    "Vakantie Rolluiken + Verlichting" zet lampen juist aan om
+#    aanwezigheid na te bootsen; die als bewijs van aanwezigheid nemen
+#    is een cirkelredenering - en het zou de inbraakmelding smoren,
+#    precies wanneer je hem nodig hebt.
+CONF_PRESENCE_LIGHT_ENTITIES = "presence_light_entities"
+
 # Bij vakantiestand: melding bij beweging, maar hoogstens één per vijf
 # minuten. Zonder die rem levert een sensor in een gang tientallen
 # berichten op bij één passage.
@@ -2714,6 +2755,70 @@ DEFAULT_BATTERY_INVERTER_PRICE_EUR = 374.0
 
 # Capaciteit van één AB3000X.
 BATTERY_MODULE_CAPACITY_KWH = 2.88
+
+# --- Slijtagekosten per kWh (v1.38.0) --------------------------------
+# Gevraagd: "Zijn er nog meer typische EMS dingen welke we kunnen
+# toevoegen?" Dit was punt 1 van vijf: de cyclustelling bestond al,
+# maar wat een cyclus KOST zat nergens in een afweging.
+#
+# Rekening met de echte prijzen: 3 x 729 euro over de bruikbare
+# capaciteit (7,74 kWh) en het aantal cycli dat de fabrikant belooft.
+#
+# Let op waar dit WEL en NIET telt. Ontladen naar het huis of naar het
+# net is dezelfde slijtage, dus daartussen kiest het niets. Waar het wél
+# telt is de vraag of energie überhaupt door de accu moet: zon direct
+# terugleveren kost niets, zon opslaan en later gebruiken kost een halve
+# slag heen en een halve terug.
+#
+# Zendure geeft 6000 cycli tot 80% restcapaciteit voor de AB3000X.
+# Instelbaar, want dat getal is een belofte van de fabrikant en geen
+# meting - en het wordt vanzelf toetsbaar zodra de gezondheidstrend
+# erbij komt (punt 4).
+CONF_BATTERY_CYCLE_LIFE = "battery_cycle_life"
+DEFAULT_BATTERY_CYCLE_LIFE = 6000
+
+# Onder deze marge is doorzetten door de accu het niet waard: de
+# slijtage plus het rendementsverlies eet de winst op. Puur informatief
+# zolang er niets op wordt gestuurd.
+WEAR_COST_MIN_MARGIN_EUR = 0.02
+
+# --- Proefstand (v1.38.0) --------------------------------------------
+# Gevraagd: "Misschien eerst integreren totdat ze daadwerkelijk gaan
+# meebewegen? Dus een extra onzichtbaar tabblad waar waardes zichtbaar
+# zijn hoe betrouwbaar etc."
+#
+# Precies de goede volgorde, en dezelfde die bij de plantoetsing werkte:
+# eerst meten, dan pas sturen. Vijf kandidaten rekenen mee en sturen
+# niets; wie zich bewijst gaat mee in de besluitvorming - één tegelijk,
+# zodat bij een afwijking te zien is welke het deed.
+CAPACITY_TREND_HISTORY_DAYS = 400
+PRICE_SHAPE_HISTORY_DAYS = 60
+
+# Onder dit aantal waarnemingen per uur zegt een mediaan niets.
+PROEFSTAND_MIN_SAMPLES = 3
+# En onder dit aantal uren is het beeld te mager om iets over de dag te
+# zeggen.
+PROEFSTAND_MIN_HOURS = 12
+# Capaciteitsverlies is enkele procenten per jaar; een korte reeks zegt
+# niets.
+PROEFSTAND_MIN_TREND_DAYS = 30
+# Onder dit verschil is het splitsen van het verbruiksprofiel het niet
+# waard: dan verlies je aan waarnemingen wat je aan scherpte wint.
+PROEFSTAND_DAYTYPE_MIN_DIFF_PERCENT = 10.0
+# Boven deze spreiding verschilt de prijsvorm te veel per dag om op te
+# bouwen.
+PROEFSTAND_SHAPE_MAX_SPREAD = 0.25
+
+# Hoeveel dagen aan boekingen worden bewaard. Gevraagd: "Dan dus ook
+# aangeven wat het opgeleverd zou hebben als ze wel zouden sturen."
+# Zonder bedrag is "betrouwbaar" geen argument om iets aan te zetten.
+PROEFSTAND_LEDGER_DAYS = 120
+
+# Het kale tarief als deel van de belaste prijs, voor de ruwe
+# doorrekening van de tijd ná de saldering. Bij ongeveer 30 ct belast
+# hoort ruwweg 7 ct kaal - energiebelasting en BTW maken het leeuwendeel
+# uit. Zodra het echte veld meeloopt kan dit exact.
+POST_SALDEREN_BARE_SHARE = 0.23
 
 # --- Meetuitval uitsluiten van de referentie (v1.21.0) ---------------
 # Gemeld: het verbruik van koelkast/diepvries hangt af van de

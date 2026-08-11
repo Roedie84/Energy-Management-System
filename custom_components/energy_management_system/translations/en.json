@@ -77,6 +77,7 @@
           "water_softener_end_hour": "Water softener: last hour of the regeneration window",
           "presence_bedtime_sensor_entity": "Bedtime sensor (optional): landing or stairs - last motion at night means asleep",
           "presence_tv_entity": "Television (optional): TV on counts as someone home",
+          "presence_light_entities": "Indoor lights (optional): a light that is on counts as someone home",
           "power_limits_intentional": "Charge/discharge power deliberately limited (no suggestions to raise it)"
         }
       }
@@ -168,6 +169,7 @@
           "water_softener_end_hour": "Water softener: last hour of the regeneration window",
           "presence_bedtime_sensor_entity": "Bedtime sensor (optional): landing or stairs - last motion at night means asleep",
           "presence_tv_entity": "Television (optional): TV on counts as someone home",
+          "presence_light_entities": "Indoor lights (optional): a light that is on counts as someone home",
           "power_limits_intentional": "Charge/discharge power deliberately limited (no suggestions to raise it)"
         }
       }
