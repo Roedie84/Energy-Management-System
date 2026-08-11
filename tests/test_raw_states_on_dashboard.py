@@ -16,6 +16,7 @@ import re
 from pathlib import Path
 
 import custom_components.energy_management_system as pkg
+import pytest
 import yaml
 
 PAKKET = Path(pkg.__file__).parent
@@ -137,6 +138,64 @@ def test_the_full_schedule_is_on_the_detail_page():
 
     for veld in ("start", "end", "mode", "max_price_per_kwh"):
         assert f"'{veld}'" in kaart["content"], veld
+
+
+def test_a_block_shows_the_price_range(make_coordinator, hass):
+    """Gemeld met screenshot: "Hier zou toch een prijs range moeten
+    staan? Elk kwartier wijzigd de prijs namelijk."
+
+    Klopt. Kwartieren met dezelfde modus staan als een blok - een blok
+    van 10:45 tot 18:45 beslaat 32 kwartieren met evenzoveel prijzen, en
+    er stond alleen de hoogste. De laagste werd al berekend maar nergens
+    getoond.
+    """
+    # CI installeert alleen pytest; jinja2 komt mee met Home Assistant en
+    # is hier dus niet gegarandeerd aanwezig.
+    Environment = pytest.importorskip("jinja2").Environment
+
+    data = yaml.safe_load((PAKKET / "dashboard_template.yaml").read_text())
+    kaarten = [
+        k
+        for v in data["views"]
+        if str(v.get("path", "")).startswith("detail-")
+        for s in v.get("sections") or []
+        for k in s.get("cards") or []
+    ]
+    kaart = next(k for k in kaarten if k.get("title") == "Komend schema")
+
+    omgeving = Environment()
+    omgeving.filters["timestamp_custom"] = lambda waarde, vorm: "hh:mm"
+    omgeving.globals["as_timestamp"] = lambda waarde: 0
+    sjabloon = omgeving.from_string(
+        kaart["content"].replace(
+            "state_attr('sensor.energy_management_system_upcoming_schedule', "
+            "'transitions')",
+            "BLOKKEN",
+        )
+    )
+    tekst = sjabloon.render(
+        BLOKKEN=[
+            {
+                "start": "a",
+                "end": "b",
+                "mode": "smart",
+                "min_price_per_kwh": 0.131,
+                "max_price_per_kwh": 0.321,
+            },
+            {
+                "start": "a",
+                "end": "b",
+                "mode": "smart",
+                "min_price_per_kwh": 0.228,
+                "max_price_per_kwh": 0.228,
+            },
+        ]
+    )
+
+    assert "13.1 – 32.1 ct" in tekst
+    # Een blok van één kwartier heeft geen bereik; dan geen streepje.
+    assert "22.8 ct" in tekst
+    assert "22.8 – 22.8" not in tekst
 
 
 # --- v1.16.1: "Onbekend" dat geen storing is ------------------------
