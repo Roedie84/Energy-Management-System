@@ -12108,3 +12108,65 @@ blok pas de volgende ochtend begint. Elke planregel draagt nu een eigen
 `voor_bijladen`, gezet op het moment dat het echte blok bekend is.
 
 **Volledige testsuite**: 1880 tests, allemaal groen.
+
+## v1.43.0 — Nee, en nu wel
+
+**Gevraagd**: "Wordt nu echt alle data opgeslagen, zodat een herstart
+nergens meer invloed op heeft?"
+
+Nagerekend in plaats van gegokt, en het antwoord was **nee**. Elf velden
+bouwden toestand op en werden nergens bewaard.
+
+### Wat er verloren ging
+
+| Veld | Gevolg van een herstart |
+|---|---|
+| `nilm_dismissed_duplicate_pairs` | weggeklikte dubbelparen kwamen terug |
+| `nilm_unconfirmed_candidates` | "wordt al tien dagen gezien" begon opnieuw bij vandaag |
+| `water_source_profiles` | de geleerde koppeling kraan ↔ verbruik |
+| `current_month_*` (5 tellers) | het maandoverzicht sprong halverwege de maand op nul |
+| `battery_discharge_today_kwh` | de dagteller |
+| `_daily_report_counters` | de dagrapportage |
+| `_last_plan_alert` | **de tekortmelding ging opnieuw af** |
+
+Die laatste verklaart wat je vanmiddag zag: *"Accu haalt de nacht
+mogelijk niet"* om 14:30, 15:31 én 16:31. Elke herstart begon met een
+schone lei, dus gold elke waarschuwing weer als nieuw.
+
+Bij `nilm_unconfirmed_candidates` draai ik een eerdere keuze terug. Die
+lijst wordt inderdaad elke tick opnieuw gevuld — maar één veld niet:
+`first_seen`, de dag waarop een apparaat voor het eerst opviel.
+
+### Bewust níet bewaard
+
+Halve metingen. Een rendementsstuk of meetvenster dat door een herstart
+een gat heeft is geen meting meer; opnieuw beginnen is beter dan een
+verminkt getal bewaren. Datzelfde voor korte schuivende vensters van
+enkele minuten en voor alles wat elke tick opnieuw wordt berekend — dat
+terugzetten zou een oud getal tonen alsof het actueel is.
+
+### En de vraag zelf beantwoordbaar gemaakt
+
+Ik kon dit alleen beantwoorden door alles met de hand na te lopen, en
+dat houdt niemand vol. Een nieuwe test doet het voortaan: elk veld dat
+in `__init__` als lege verzameling of nulteller begint moet in precies
+één van drie bakken vallen — bewaard in de opslag, teruggezet door een
+sensor, of expliciet als vluchtig benoemd **met reden**. Wie er een
+nieuwe bijzet en niets kiest, krijgt een rode test in plaats van stil
+dataverlies.
+
+Plus een test die eist dat wat jij hebt weggeklikt of bevestigd nooit
+vluchtig is.
+
+**Volledige testsuite**: 1883 tests, allemaal groen.
+
+## v1.43.1 — "124 kw" leest als kilowatt
+
+**Gemeld**: "die 124 kw ziet er raar uit niet?"
+
+Klopt. Het waren kwartieren, en op een pagina waar overal vermogens en
+kilowatturen staan is "kw" precies het verkeerde woord. Er staat nu **31
+uur** — dat zegt bovendien meer: je wilt weten hoe ver het plan reikt,
+niet uit hoeveel blokjes het bestaat.
+
+**Volledige testsuite**: 1883 tests, allemaal groen.

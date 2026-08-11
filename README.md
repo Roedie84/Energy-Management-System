@@ -515,6 +515,26 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Alles bewaren, en dat toetsbaar maken (v1.43.0)
+
+**Gevraagd**: *"Wordt nu echt alle data opgeslagen, zodat een herstart
+nergens meer invloed op heeft?"*
+
+Nagerekend: nee. Elf velden bouwden toestand op en werden nergens
+bewaard — weggeklikte NILM-dubbelparen, de geleerde waterbronnen, vijf
+maandtellers, de dagteller, en `_last_plan_alert`. Die laatste verklaart
+waarom de tekortmelding drie keer op één middag afging: elke herstart
+begon met een schone lei.
+
+Bewust níet bewaard: halve metingen (een rendementsstuk met een gat is
+geen meting meer) en alles wat elke tick opnieuw wordt berekend.
+
+Een nieuwe test houdt dit vol: elk veld dat toestand opbouwt moet
+bewaard zijn, door een sensor teruggezet worden, of expliciet als
+vluchtig benoemd zijn mét reden.
+
+**Volledige testsuite**: 1883 tests, allemaal groen.
+
 ## De tekortmelding was zinloos geworden (v1.42.0)
 
 In de diagnostiek van 11 augustus 16:31: 36 tekortkwartieren en de

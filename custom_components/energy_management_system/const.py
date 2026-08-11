@@ -1192,6 +1192,37 @@ PERSISTED_PLAIN_FIELDS = (
     "capacity_trend_history",
     "price_shape_history",
     "proefstand_ledger",
+    # --- v1.43.0 -----------------------------------------------------
+    # Gevraagd: "Wordt nu echt alle data opgeslagen, zodat een herstart
+    # nergens meer invloed op heeft?" Nagerekend, en het antwoord was
+    # nee. Deze stonden er nog niet in:
+    #
+    # Beslissingen die JIJ hebt genomen. Een afgewezen dubbelpaar
+    # opnieuw voorgeschoteld krijgen na elke herstart is het ergste van
+    # de drie - dan doet wegklikken er niet toe.
+    "nilm_dismissed_duplicate_pairs",
+    # Apparaten die nog in de gaten worden gehouden maar nog niet
+    # bevestigd zijn. Bevestigde apparaten werden al bewaard; de
+    # kandidaten begonnen elke keer opnieuw.
+    "nilm_unconfirmed_candidates",
+    # Welke kraan of welk apparaat bij welk waterverbruik hoort.
+    "water_source_profiles",
+    # Maandtellers. Deze lopen per definitie over dagen; een herstart
+    # halverwege de maand gooide ze op nul en daarmee ook het
+    # maandoverzicht.
+    "current_month_discharge_value_eur",
+    "current_month_charge_cost_eur",
+    "current_month_shortfall_days",
+    "current_month_excess_days",
+    "current_month_days_tracked",
+    # De dagteller en de dagrapportage.
+    "battery_discharge_today_kwh",
+    "_daily_report_counters",
+    # Welke planningswaarschuwing er al uit is. Zonder dit begint elke
+    # herstart met een schone lei en gaat "Accu haalt de nacht mogelijk
+    # niet" opnieuw af - te zien in de export van 11 augustus, waar hij
+    # om 14:30, 15:31 en 16:31 langskwam.
+    "_last_plan_alert",
     "plan_review_history",
     "plan_snapshot",
     # v1.20.0: wanneer er doorgaans naar bed wordt gegaan. Zonder
