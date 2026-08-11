@@ -551,13 +551,24 @@ views:
       grid_options:
         columns: 12
         rows: auto
+    - type: custom:mushroom-template-card
+      primary: Plantoetsing
+      secondary: Klopte het plan van gisteren
+      icon: mdi:scale-balance
+      icon_color: blue
+      tap_action:
+        action: navigate
+        navigation_path: /energy-management-system/detail-plantoetsing
+      grid_options:
+        columns: 12
+        rows: auto
 - title: Visueel
   path: visueel
   subview: true
   panel: true
   cards:
   - type: picture-elements
-    image: /local/energy_management_system_overview.svg?v=1.28.0
+    image: /local/energy_management_system_overview.svg?v=1.32.0
     elements:
     - type: state-label
       entity: sensor.woonkamer_energy_management_system_system_status
@@ -1173,6 +1184,16 @@ views:
     hold_action:
       action: more-info
   - type: custom:mushroom-template-card
+    primary: Onderdeel van de integratie faalt
+    secondary: '{% set e = ''switch.woonkamer_energy_management_system_melding_interne_fout'' %}{% set last = state_attr(e, ''laatst_verstuurd'') %}{{ ''AAN'' if is_state(e, ''on'') else ''uit'' }} · demping 60 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom(''%-d %b %H:%M'') }}{% endif %}'
+    icon: mdi:bell-alert-outline
+    icon_color: '{{ ''green'' if is_state(''switch.woonkamer_energy_management_system_melding_interne_fout'', ''on'') else ''grey'' }}'
+    entity: switch.woonkamer_energy_management_system_melding_interne_fout
+    tap_action:
+      action: toggle
+    hold_action:
+      action: more-info
+  - type: custom:mushroom-template-card
     primary: Accumodule loopt uit de pas
     secondary: '{% set e = ''switch.woonkamer_energy_management_system_melding_battery_module_drift'' %}{% set last = state_attr(e, ''laatst_verstuurd'') %}{{ ''AAN'' if is_state(e, ''on'') else ''uit'' }} · demping 1440 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom(''%-d %b %H:%M'') }}{% endif %}'
     icon: mdi:bell-outline
@@ -1399,6 +1420,27 @@ views:
 
 
         _{{ e.voorbehoud }}_{% endif %}'
+      grid_options:
+        columns: 12
+        rows: auto
+    - type: markdown
+      title: Rendement van de accu
+      content: '{% set r = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''rendement'') or {} %}{% if not r.get(''beschikbaar'') %}Nog te weinig metingen; er gelden voorlopig de oude waarden.{% else %}| | |
+
+        |---|---|
+
+        | Laden | {{ r.laadrendement_procent }}% ({{ r.metingen_laden }} metingen) |
+
+        | Ontladen | {{ r.ontlaadrendement_procent }}% ({{ r.metingen_ontladen }} metingen) |
+
+        | Heen en terug | **{{ r.heen_en_terug_procent }}%** |
+
+        | Methode | {{ r.methode }} |
+
+        {% endif %}
+
+
+        _Elke kant apart gemeten. Let op: dit meet wat de accuvermogenssensor ziet; meet die aan de accuzijde, dan blijft het omvormerverlies buiten beeld._'
       grid_options:
         columns: 12
         rows: auto
@@ -2262,6 +2304,54 @@ views:
 
 
         _Nieuwste bovenaan; er worden {{ (p.get(''tijdlijn'') or []) | length }} van de {{ p.get(''tijdlijn_totaal'', 0) }} bewaarde overgangen getoond. Alleen overgangen worden vastgelegd, niet elke meting. Blokjes korter dan vijf minuten tussen twee gelijke staten zijn samengevoegd - anders levert een enkele beweging ''s nachts drie regels op. De kolom "Waarom" is waar de controle mee begint: klopt de sensor die de omslag veroorzaakte?_'
+      grid_options:
+        columns: 12
+        rows: auto
+- title: Plantoetsing
+  path: detail-plantoetsing
+  subview: true
+  type: sections
+  max_columns: 1
+  sections:
+  - type: grid
+    cards:
+    - type: custom:mushroom-title-card
+      title: Plantoetsing
+      subtitle: Wat het plan beloofde, en wat het werd
+    - type: markdown
+      title: Wat er structureel opvalt
+      content: '{% set p = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''plantoetsing'') or {} %}{% if not p.get(''beschikbaar'') %}{{ p.get(''reden'', ''Nog niets getoetst.'') }}{% else %}| | |
+
+        |---|---|
+
+        | Dagen getoetst | {{ p.dagen }} |
+
+        | Binnen de marge | {{ p.dagen_binnen_marge }} van {{ p.dagen }} |
+
+        | Zon, mediane afwijking | {{ p.zon_afwijking_mediaan_procent }}% |
+
+        | Opbrengst, mediane afwijking | {{ p.opbrengst_afwijking_mediaan_procent }}% |
+
+
+        {{ p.structureel }}{% endif %}
+
+
+        _Er wordt hier niets bijgestuurd; dit is een rapport. Een losse dag zegt weinig - een reeks wel._'
+      grid_options:
+        columns: 12
+        rows: auto
+    - type: markdown
+      title: Per dag
+      content: '{% set p = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''plantoetsing'') or {} %}{% set d = p.get(''dagen_overzicht'') or [] %}{% if d | length == 0 %}Het eerste oordeel verschijnt na middernacht.{% else %}| Dag | Zon | Opbrengst | Laagste SoC | Oordeel |
+
+        |---|---|---|---|---|
+
+        {% for r in d %}| {{ r.datum }} | {{ r.zon.werkelijk_kwh }} / {{ r.zon.voorspeld_kwh }} kWh | € {{ r.opbrengst.werkelijk_eur }} / € {{ r.opbrengst.voorspeld_eur }} | {{ r.laagste_soc.werkelijk_procent }}% / {{ r.laagste_soc.voorspeld_procent }}% | {{ r.oordeel }} |
+
+        {% endfor %}{% endif %}
+
+
+        _Werkelijk / voorspeld. Het plan wordt elke ochtend om 08:00 vastgelegd en na middernacht getoetst._'
       grid_options:
         columns: 12
         rows: auto

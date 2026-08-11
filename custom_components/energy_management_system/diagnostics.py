@@ -272,10 +272,26 @@ async def async_get_config_entry_diagnostics(
     # onderdeel apart, en een fout wordt zichtbaar in plaats van fataal.
     def _veilig(naam: str, functie):
         try:
-            return functie()
+            resultaat = functie()
         except Exception as fout:  # noqa: BLE001
             _LOGGER.exception("Diagnostiek: %s kon niet worden opgehaald", naam)
+            # v1.29.0, gemeld: "Dat er een txt wordt gemaakt is een
+            # error, ik had daar graag een melding van verwacht zoals
+            # eerder afgesproken."
+            #
+            # Deze afscherming ving de fout al netjes op, maar hield hem
+            # ook stil: het mislukte onderdeel kreeg een {"fout": ...} in
+            # de export en verder gebeurde er niets. Wie de export niet
+            # regel voor regel leest, merkt er niets van.
+            #
+            # Nu belandt hij in `internal_failures`, en dat veld stuurt
+            # sinds deze versie een melding.
+            coordinator.internal_failures[f"diagnostiek:{naam}"] = (
+                f"{type(fout).__name__}: {fout}"
+            )
             return {"fout": f"{type(fout).__name__}: {fout}"}
+        coordinator.internal_failures.pop(f"diagnostiek:{naam}", None)
+        return resultaat
 
     diagnostics: dict[str, Any] = {
         "config": config,
@@ -413,6 +429,14 @@ async def async_get_config_entry_diagnostics(
                 coordinator.effective_min_soc_percent,
             ),
             "quarter_plan_first_seen": coordinator.quarter_plan_first_seen,
+            # v1.31.0: het volledige rapport, ook de dagen die het
+            # dashboard niet toont.
+            # v1.32.0: rendement per halve slag.
+            "efficiency_overview": _veilig(
+                "get_efficiency_overview", coordinator.get_efficiency_overview
+            ),
+            "plan_review": _veilig("get_plan_review", coordinator.get_plan_review),
+            "plan_snapshot": coordinator.plan_snapshot,
             "quarter_plan_summary": _veilig(
                 "quarter_plan_summary", coordinator.get_quarter_plan_summary
             ),

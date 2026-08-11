@@ -3848,6 +3848,8 @@ class GacsAssessmentSensor(SensorEntity):
             "kwartierplanning",
             "verkooptoets",
             "kwartier_samenvatting",
+            "plantoetsing",
+            "rendement",
         }
     )
 
@@ -3894,9 +3896,16 @@ class GacsAssessmentSensor(SensorEntity):
             ("kwartierplanning", self._coordinator.get_quarter_plan_compact),
             ("verkooptoets", lambda: self._coordinator.last_sell_check),
             ("kwartier_samenvatting", self._coordinator.get_quarter_plan_summary),
+            # v1.31.0: plan tegen werkelijkheid.
+            ("plantoetsing", self._coordinator.get_plan_review),
+            ("rendement", self._coordinator.get_efficiency_overview),
         ):
             try:
                 attributen[sleutel] = functie()
+                # v1.29.0: ook weer opruimen als het wél lukt. Zonder dit
+                # blijft een fout van weken geleden voor altijd staan en
+                # gaat de herstelmelding nooit af.
+                self._coordinator.internal_failures.pop(sleutel, None)
             except Exception as fout:  # noqa: BLE001
                 # Bewust breed: welke fout het ook is, de andere
                 # onderdelen horen gewoon door te komen. En de fout hoort
@@ -3911,6 +3920,7 @@ class GacsAssessmentSensor(SensorEntity):
                 )
         try:
             attributen.update(self._coordinator.get_gacs_assessment())
+            self._coordinator.internal_failures.pop("gacs_beoordeling", None)
         except Exception as fout:  # noqa: BLE001
             _LOGGER.exception("Kon de GACS-beoordeling niet berekenen")
             attributen["gacs_fout"] = f"{type(fout).__name__}: {fout}"

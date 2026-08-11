@@ -515,6 +515,120 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Rendement per halve slag (v1.32.0)
+
+De gemeten reeks liep van 56,4 tot 97,6% met een mediaan van 82,9,
+terwijl de eigen meting op 90,8% uitkwam. Zo'n spreiding zegt niet dat
+de accu wisselt, maar dat er iets anders gemeten werd.
+
+De oude formule — *(ontladen + verschil in voorraad) / geladen* — klopt
+alleen als het venster op een hele slag eindigt. Het venster sloot echter
+zodra er 1 kWh geladen was, dus midden in een lading of ontlading.
+
+**Gevraagd**: *"volgens mij is het simpel te berekenen middels laad en
+ontlaad vermogen en beschikbaar vermogen."* Klopt, mits de twee kanten
+apart blijven:
+
+    laadrendement    = toename voorraad / wat erin ging
+    ontlaadrendement = wat eruit kwam / afname voorraad
+    heen en terug    = laadrendement × ontlaadrendement
+
+Een stuk loopt zolang de accu dezelfde kant op gaat. Grendels: minstens
+1,5 kWh per stuk (de voorraadsensor meldt in stappen van 1%), geen gat
+groter dan 20 minuten, stilstand onder 50 W telt niet mee, en per kant
+moet de uitkomst tussen 70 en 100% liggen.
+
+Beide kanten staan apart op de accupagina. Let op: dit meet wat de
+accuvermogenssensor ziet — meet die aan de accuzijde, dan blijft het
+omvormerverlies buiten beeld.
+
+**Volledige testsuite**: 1823 tests, allemaal groen.
+
+## De accustand als bijproduct (v1.31.1)
+
+Gevonden in de diagnostiek van 11 augustus 08:36: `last_soc_percent`
+stond op None terwijl de accu 22% aangaf. Dat veld wordt alleen gezet in
+de berekening van het ontlaadvermogen, en die tak wordt niet bereikt
+zodra de tick eerder eindigt — bij `solar_capture_deferred` gebeurt dat
+elke ochtend die met uitstellen begint.
+
+Dezelfde vorm als `beschikbare_energie_kwh` in v1.24.1. Nieuw:
+`accustand_procent()`, dat de sensor rechtstreeks leest.
+
+In dezelfde export liep de aanwezigheidstijdlijn uit de pas: "weg sinds
+08:21" terwijl de staat "thuis" was. Alleen wissels vastleggen maakt elke
+gemiste wissel blijvend; de staat wordt nu elke tick aangeboden en de
+tabel herstelt zichzelf.
+
+**Volledige testsuite**: 1816 tests, allemaal groen.
+
+## Plantoetsing en de opnamegrens (v1.31.0)
+
+**Gemeld**: *"ik het echter 25% buffer = 1 uur gevraagd, mijn inziens
+zou het systeem dan om 11 uur naar smart gaan."*
+
+Het uitstelplan keek alleen naar energie. Vanaf 12:00 komt er tot 16:00
+nog 9,66 kWh overschot — meer dan de 8,06 die met marge nodig is — maar
+bij 2000 W past er in vier uur 8,0 kWh in de accu. Precies te weinig.
+Met de opnamegrens erbij wordt het 11:00.
+
+### Plantoetsing
+
+**Gevraagd**: *"Kun je de diagnostiek zo maken, dat je leert van het
+accu gedrag en morgen verder optimaliseert indien noodzakelijk?"*
+
+Stap één is meten. Elke ochtend om 08:00 wordt het plan vastgelegd
+(verwachte opbrengst, zon, import, laagste SoC); na middernacht komt de
+werkelijkheid ernaast met een oordeel per dag. Dertig dagen bewaard, met
+een mediaan en een duiding zodra er vijf dagen zijn.
+
+Er wordt bewust niets bijgestuurd — dat is stap twee.
+
+**Volledige testsuite**: 1812 tests, allemaal groen.
+
+## De nacht is geen afwezigheid (v1.30.0)
+
+**Gemeld**: *"Ik ging om 23:15 slapen, was snachts wel een tijdje
+wakker"* — en de tijdlijn gaf van 23:15 tot de ochtend "weg". Plus:
+*"Let op alle gecreeerde data dient na een herstart niet verloren te
+gaan."*
+
+Die twee horen bij elkaar: `last_bedtime_motion_at` en `last_motion_at`
+werden niet bewaard, en de slaapherkenning vraagt juist of de
+slaapsensor de *laatste* beweging was. Na een herstart was dat niet meer
+te beantwoorden — en wie al in bed ligt, loopt niet opnieuw langs die
+sensor. Ook `presence_state` en `quarter_plan_first_seen` worden nu
+bewaard.
+
+Daarnaast een eigen nachtregel: tussen 22:00 en 07:00 geldt stilte als
+slapen, mits er net nog iemand thuis was. Een huis loopt 's nachts niet
+vanzelf leeg. Kwam de staat van "weg", dan blijft het "weg".
+
+En de tijdlijn zet nooit meer twee gelijke staten naast elkaar; een
+ontbrekende meting onderbreekt het lopende blok niet.
+
+**Volledige testsuite**: 1798 tests, allemaal groen.
+
+## Een falend onderdeel meldt zichzelf (v1.29.0)
+
+**Gemeld**: *"Dat er een txt wordt gemaakt is een error, ik had daar
+graag een melding van verwacht zoals eerder afgesproken."*
+
+In v1.19.4 werd hetzelfde gevraagd en kreeg het een *aandachtspunt* op
+een dashboardpagina. Dat is geen melding.
+
+Nu een eigen meldingsoort, **standaard aan**, met demping van 60 minuten
+en een schakelaar op de Meldingen-pagina. Het bericht noemt welk
+onderdeel faalt en met welke fout. Herstelt het zich, dan volgt "✅ Alle
+onderdelen rekenen weer".
+
+De diagnostiek-export registreert daarvoor nu zijn eigen fouten in
+`internal_failures` — de afscherming ving ze al op, maar hield ze ook
+stil. En fouten worden weer opgeruimd zodra een onderdeel het opnieuw
+doet, anders gaat de herstelmelding nooit af.
+
+**Volledige testsuite**: 1792 tests, allemaal groen.
+
 ## Uitstellen op prijs en zon (v1.28.0)
 
 **Gevraagd**: *"Ik wil alleen dat op basis van prijs en verwachte PV

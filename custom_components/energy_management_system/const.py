@@ -639,6 +639,57 @@ MIN_CHARGED_KWH_FOR_EFFICIENCY_SAMPLE = 1.0
 MIN_PLAUSIBLE_EFFICIENCY_PERCENT = 50.0
 MAX_PLAUSIBLE_EFFICIENCY_PERCENT = 100.0
 
+# --- Rendement per halve slag (v1.32.0) ------------------------------
+# Gevonden in de export van 11 augustus: zeven metingen van 56,4 tot
+# 97,6% met een mediaan van 82,9, terwijl Ruud zelf 90,8% mat. Een
+# spreiding van veertig procentpunt betekent niet dat de accu wisselt,
+# maar dat er iets anders gemeten wordt dan rendement.
+#
+# De oude formule was (ontladen + verschil in voorraad) / geladen, en
+# die klopt alleen als het venster op een HELE slag eindigt. Het venster
+# sloot zodra er genoeg geladen was - dus midden in een lading, midden in
+# een ontlading, waar het uitkwam. Halverwege het laden meet je zo de
+# LAADkant, halverwege het ontladen iets daartussenin.
+#
+# Nu twee losse metingen, elk over een stuk waarin de accu maar een kant
+# op gaat:
+#
+#   laadrendement    = toename voorraad / wat erin ging
+#   ontlaadrendement = wat eruit kwam / afname voorraad
+#   heen en terug    = laadrendement x ontlaadrendement
+#
+# Precies wat gevraagd werd: "volgens mij is het simpel te berekenen
+# middels laad en ontlaad vermogen en beschikbaar vermogen".
+
+# Onder dit vermogen telt de accu als stilstaand; anders zou elke rimpel
+# rond nul een stuk afbreken.
+EFFICIENCY_IDLE_POWER_W = 50.0
+
+# De voorraadsensor meldt in stappen van 1% (0,086 kWh bij deze accu).
+# Onder deze hoeveelheid is die stap alleen al enkele procenten van de
+# uitkomst, en dan meet je afronding in plaats van rendement.
+EFFICIENCY_SEGMENT_MIN_KWH = 1.5
+
+# Zit er een gat in de metingen, dan is er onderweg energie gelopen die
+# niet is geteld. Zo'n stuk is waardeloos.
+#
+# Drie keer de tick (5 min) plus wat speling: een gemiste ronde mag,
+# een storing van een half uur niet. Precies op de tick zetten zou elk
+# stuk afbreken zodra een tick een seconde later valt.
+EFFICIENCY_SEGMENT_MAX_GAP_MINUTES = 20.0
+
+# Twintig metingen per kant: genoeg om een mediaan op te bouwen zonder
+# dat een accu van een half jaar geleden blijft meepraten.
+EFFICIENCY_HALF_HISTORY = 20
+
+# Per halve slag is minder dan 70% onmogelijk; dat is een meetfout.
+MIN_PLAUSIBLE_HALF_EFFICIENCY_PERCENT = 70.0
+MAX_PLAUSIBLE_HALF_EFFICIENCY_PERCENT = 100.0
+
+# Onder dit aantal metingen per kant geen uitspraak - dan blijft de oude
+# schatting gelden.
+MIN_HALF_EFFICIENCY_SAMPLES = 3
+
 # Ramp duration/steps for gradually curtailing/restoring the solar
 # inverter's power limit around negative-price periods.
 SOLAR_RAMP_DURATION_SECONDS = 30
@@ -1110,6 +1161,20 @@ PERSISTED_PLAIN_FIELDS = (
     # herstart leeg is, valt niet achteraf te controleren - en dat is
     # precies waarvoor hij gevraagd werd.
     "presence_timeline",
+    # v1.30.0: de staat zelf ook. Zonder dat begint elke herstart op
+    # "onbekend" en schrijft de eerste tick een nieuwe regel in de
+    # tijdlijn, ook al is er niets veranderd.
+    "presence_state",
+    # v1.30.0: waarmee de rode "was ..."-markering wordt bepaald. Ging
+    # verloren bij elke herstart, waarna elke wijziging weer als
+    # "eerste voorspelling" gold.
+    "quarter_plan_first_seen",
+    # v1.31.0: het rapport plan-tegen-werkelijkheid. Juist dit mag geen
+    # herstart verliezen - het gaat over dagen, niet over een tick.
+    "charge_efficiency_history",
+    "discharge_efficiency_history",
+    "plan_review_history",
+    "plan_snapshot",
     # v1.20.0: wanneer er doorgaans naar bed wordt gegaan. Zonder
     # bewaren begint het leren na elke herstart opnieuw.
     "bedtime_history",
@@ -1200,6 +1265,17 @@ PERSISTED_INT_FIELDS = (
 
 PERSISTED_DATETIME_FIELDS = (
     "battery_cooling_last_change",
+    # v1.30.0, gevraagd: "Let op alle gecreeerde data dient na een
+    # herstart niet verloren te gaan."
+    #
+    # Deze twee stonden er niet in, en dat is te zien in de tijdlijn van
+    # 11 augustus: de hele nacht "weg" terwijl er iemand lag te slapen.
+    # De slaapherkenning kijkt of de slaapsensor de LAATSTE beweging
+    # was; na een herstart was `last_bedtime_motion_at` leeg en kon die
+    # vraag niet meer beantwoord worden. Wie al in bed ligt, loopt niet
+    # opnieuw langs die sensor.
+    "last_motion_at",
+    "last_bedtime_motion_at",
 )
 
 # De opslag wordt vertraagd weggeschreven: een tick kan meerdere velden
@@ -1553,6 +1629,28 @@ NOTIFICATION_TYPES: tuple[tuple[str, str, str, bool, int], ...] = (
         "Integratie loopt vast",
         "Wanneer er een fout optreedt die de aansturing kan blokkeren.",
         False,
+        60,
+    ),
+    # v1.29.0, gemeld: "Dat er een txt wordt gemaakt is een error, ik had
+    # daar graag een melding van verwacht zoals eerder afgesproken."
+    #
+    # Terecht, en dit is de tweede keer. In v1.19.4 was de vraag "ik had
+    # nu ook ergens een melding verwacht dat het systeem niet correct
+    # functioneert", en toen heb ik er een AANDACHTSPUNT van gemaakt -
+    # een regel op een dashboardpagina waar je naartoe moet klikken. Dat
+    # is geen melding.
+    #
+    # Deze staat standaard AAN, tegen de regel in dat nieuwe meldingen
+    # uit beginnen. Die regel gaat over ruis; dit gaat over een
+    # integratie die stiekem half werkt. Hetzelfde argument als bij
+    # "Accu haalt de nacht mogelijk niet".
+    (
+        "interne_fout",
+        "Onderdeel van de integratie faalt",
+        "Wanneer een onderdeel zichzelf niet kan berekenen - bijvoorbeeld "
+        "wanneer de diagnostiek-export mislukt en als tekstbestand "
+        "binnenkomt.",
+        True,
         60,
     ),
     (
@@ -1937,6 +2035,11 @@ NOTIFICATION_RECOVERY_KINDS = {
     "integration_error": (
         "✅ Integratie draait weer",
         "De fout is verholpen; de aansturing werkt weer normaal.",
+    ),
+    "interne_fout": (
+        "✅ Alle onderdelen rekenen weer",
+        "Geen enkel onderdeel meldt nog een fout; de diagnostiek-export "
+        "hoort weer een JSON-bestand te geven.",
     ),
     "cost_mismatch": (
         "✅ Kostenberekening klopt weer",
@@ -2468,6 +2571,17 @@ PRESENCE_HISTORY_WEEKS = 6
 # weken zegt nog niets over een vast patroon.
 PRESENCE_MIN_OBSERVATIONS = 3
 
+# --- Nachtvenster (v1.30.0) -----------------------------------------
+# Gemeld: "Ik ging om 23:15 slapen, was snachts wel een tijdje wakker" -
+# en de tijdlijn zei van 23:15 tot de ochtend "weg".
+#
+# Binnen dit venster geldt stilte als slapen in plaats van afwezigheid,
+# MITS er net nog iemand thuis was. Ruim genomen: wie om 22:30 naar bed
+# gaat hoort erin te vallen, en wie om 06:30 opstaat maakt vanzelf weer
+# beweging.
+PRESENCE_NIGHT_START_HOUR = 22
+PRESENCE_NIGHT_END_HOUR = 7
+
 # --- Tijdlijn van aanwezigheid (v1.26.0) ----------------------------
 # Gevraagd: "Tevens in dit overzicht een 'time table' Thuis, weg slapen
 # of iets dergelijks zodat ik achteraf kan controleren of het klopt."
@@ -2826,6 +2940,35 @@ SELL_RESERVE_DEEPEST_SAFETY_FACTOR = 1.15
 # praktijk bepaalt het aantal beschikbare prijzen de lengte.
 QUARTER_PLAN_MAX_ROWS = 192
 
+# --- Plan tegen werkelijkheid (v1.31.0) ------------------------------
+# Gevraagd: "Kun je de diagnostiek zo maken, dat je leert van het accu
+# gedrag en morgen verder optimaliseert indien noodzakelijk?" Hiervan is
+# dit stap een: METEN. Zonder meting is bijsturen blind.
+#
+# De momentopname wordt genomen zodra de dag echt begonnen is; 's nachts
+# staat er nog geen zon in het plan.
+PLAN_SNAPSHOT_HOUR = 8
+
+# Dertig dagen is genoeg om een patroon te zien zonder dat een seizoen
+# van maanden geleden blijft meepraten.
+PLAN_REVIEW_HISTORY_DAYS = 30
+
+# Binnen deze afwijking heet het plan gewoon te kloppen. De
+# PV-voorspelling zit zelf al 15% naast (gemeten mediaan 10,4%), dus
+# strenger meten zou elke dag een klacht opleveren.
+PLAN_REVIEW_TOLERANCE_PERCENT = 20.0
+
+# Voor de accustand geldt een absolute marge in procentpunten: een
+# voorspelde 40% die 35% wordt is normaal, 40% die 12% wordt niet.
+PLAN_REVIEW_SOC_TOLERANCE_PERCENT = 10.0
+
+# Onder deze noemer zegt een procentuele afwijking niets: bij een
+# voorspelling van 0,02 kWh is alles honderden procenten.
+PLAN_REVIEW_MIN_BASIS = 0.5
+
+# Een losse dag zegt niets over een structurele afwijking.
+PLAN_REVIEW_MIN_DAYS = 5
+
 # Wat er als eerste voor een kwartier werd voorspeld, wordt onthouden.
 # Verandert de modus daarna, dan is dat zichtbaar - juist die
 # wijzigingen zeggen iets over hoe betrouwbaar de planning is.
@@ -2884,6 +3027,7 @@ ACHTERHOEKS_TITELS = {
     "low_solar_day": "Weinig-zunne-dag",
     "sensor_unavailable": "'n Sensor is d'r neet meer",
     "integration_error": "'t Systeem löp vast",
+    "interne_fout": "'n Onderdeel rekent neet meer",
     "battery_module_drift": "'n Accumodule löp uut de pas",
     "module_became_ready": "'n Adviesmodule is kloar",
     "pv_orientation_mismatch": "De PV-richting klop neet",

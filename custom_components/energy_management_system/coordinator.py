@@ -170,6 +170,13 @@ from .const import (
     MAX_CONSUMPTION_CORRECTION_RATIO,
     MIN_CHARGED_KWH_FOR_EFFICIENCY_SAMPLE,
     MIN_PLAUSIBLE_EFFICIENCY_PERCENT,
+    EFFICIENCY_HALF_HISTORY,
+    EFFICIENCY_IDLE_POWER_W,
+    EFFICIENCY_SEGMENT_MAX_GAP_MINUTES,
+    EFFICIENCY_SEGMENT_MIN_KWH,
+    MAX_PLAUSIBLE_HALF_EFFICIENCY_PERCENT,
+    MIN_HALF_EFFICIENCY_SAMPLES,
+    MIN_PLAUSIBLE_HALF_EFFICIENCY_PERCENT,
     MAX_PLAUSIBLE_EFFICIENCY_PERCENT,
     CONF_MANUAL_DISCHARGE_POWER,
     CONF_BATTERY_TOTAL_CAPACITY_SENSOR,
@@ -305,6 +312,12 @@ from .const import (
     PLAN_CHANGE_MIN_QUARTERS,
     PLAUSIBILITY_RULES,
     QUARTER_PLAN_MAX_ROWS,
+    PLAN_REVIEW_HISTORY_DAYS,
+    PLAN_REVIEW_MIN_BASIS,
+    PLAN_REVIEW_MIN_DAYS,
+    PLAN_REVIEW_SOC_TOLERANCE_PERCENT,
+    PLAN_REVIEW_TOLERANCE_PERCENT,
+    PLAN_SNAPSHOT_HOUR,
     QUARTER_PLAN_SNAPSHOT_LENGTH,
     PRESENCE_ABSENCE_AFTER_MINUTES,
     PRESENCE_ABSENCE_AFTER_MINUTES_FAST,
@@ -315,6 +328,8 @@ from .const import (
     PRESENCE_SLEEP_WINDOW_HOURS,
     PRESENCE_HISTORY_WEEKS,
     PRESENCE_MIN_OBSERVATIONS,
+    PRESENCE_NIGHT_END_HOUR,
+    PRESENCE_NIGHT_START_HOUR,
     PRESENCE_TIMELINE_LENGTH,
     PRESENCE_TIMELINE_SHOWN,
     PRESENCE_TIMELINE_MIN_MINUTES,
@@ -643,6 +658,13 @@ class EnergyManagementSystemCoordinator:
         # time table Thuis, weg slapen of iets dergelijks zodat ik
         # achteraf kan controleren of het klopt."
         self.presence_timeline: list[dict] = []
+        # v1.31.0: plan tegen werkelijkheid. Gevraagd: "Kun je de
+        # diagnostiek zo maken, dat je leert van het accu gedrag en
+        # morgen verder optimaliseert indien noodzakelijk?"
+        self.plan_snapshot: dict | None = None
+        self.plan_review_history: list[dict] = []
+        self.laagste_soc_vandaag_procent: float | None = None
+        self._plan_review_day_key = None
         self._last_intrusion_alert_at: datetime | None = None
         self.water_softener_last_regeneration: datetime | None = None
         self.last_fietsladers_action: str | None = None
@@ -1169,6 +1191,14 @@ class EnergyManagementSystemCoordinator:
         self._efficiency_cumulative_discharged_kwh: float = 0.0
         self._efficiency_checkpoint_available_kwh: float | None = None
         self._efficiency_last_sample_time: datetime | None = None
+        # v1.32.0: rendement per halve slag. Een stuk loopt zolang de
+        # accu dezelfde kant op gaat.
+        self._efficiency_segment_direction: int = 0
+        self._efficiency_segment_ac_kwh: float = 0.0
+        self._efficiency_segment_start_kwh: float | None = None
+        self._efficiency_previous_available_kwh: float | None = None
+        self.charge_efficiency_history: list[float] = []
+        self.discharge_efficiency_history: list[float] = []
 
         # -- Reserve shortfall detection & learning --
         # If net grid import happens during a period we believe should be
@@ -1665,7 +1695,15 @@ class EnergyManagementSystemCoordinator:
         saldering is dat het tarief waartegen teruglevering wordt
         afgerekend; zie `_get_feedin_value_per_kwh`.
         """
-        state = self.hass.states.get(self.config[CONF_PRICE_SENSOR])
+        # v1.29.0: `self.config[...]` gooit een KeyError zodra de
+        # prijssensor niet is ingesteld, en die fout sloopt alles wat
+        # hier langskomt - tot en met de meldingenronde. Het staat als
+        # terugkerende valkuil in de overdracht en is nu structureel weg:
+        # geen sensor is gewoon geen prijzen.
+        prijssensor = self.config.get(CONF_PRICE_SENSOR)
+        if not prijssensor:
+            return []
+        state = self.hass.states.get(prijssensor)
         if state is None:
             return []
 
@@ -1965,106 +2003,219 @@ class EnergyManagementSystemCoordinator:
         return battery_power
 
     def _update_battery_efficiency_learning(self, now: datetime) -> None:
-        """Continuously learn the battery's real round-trip efficiency
-        from actual charge/discharge energy, instead of relying solely on
-        the configured guess.
+        """Leert het rendement uit stukken waarin de accu maar één kant
+        op gaat (v1.32.0).
 
-        Energy balance: charged_kwh * efficiency = discharged_kwh +
-        delta_available_kwh (whatever went in either came back out
-        again, or is still stored - the gap between what went in and what
-        came out-or-is-stored is the round-trip loss). Accumulates until
-        enough charged energy has passed for a meaningful sample, then
-        resets the checkpoint.
+        Gevonden in de export van 11 augustus: zeven metingen van 56,4
+        tot 97,6% met een mediaan van 82,9, terwijl er zelf 90,8% was
+        gemeten. Zo'n spreiding zegt niet dat de accu wisselt, maar dat
+        er iets anders gemeten werd dan rendement.
+
+        De oude formule was (ontladen + verschil in voorraad) / geladen.
+        Die klopt alleen als het venster op een HELE slag eindigt, en het
+        venster sloot zodra er genoeg geladen was - dus midden in een
+        lading of midden in een ontlading, waar het uitkwam. Halverwege
+        het laden meet je zo de laadkant, halverwege het ontladen iets
+        daartussenin. Vandaar de sprongen.
+
+        Gevraagd: "volgens mij is het simpel te berekenen middels laad en
+        ontlaad vermogen en beschikbaar vermogen". Klopt - mits je de
+        twee kanten apart houdt:
+
+            laadrendement    = toename voorraad / wat erin ging
+            ontlaadrendement = wat eruit kwam / afname voorraad
+
+        Een stuk loopt zolang de accu dezelfde kant op gaat en wordt
+        afgesloten zodra hij omdraait of stilvalt.
         """
-        battery_power_w = self._read_corrected_battery_power()
-        available_entity = self.config.get(CONF_AVAILABLE_ENERGY_SENSOR)
-        available_kwh = (
-            self._read_sensor_float(available_entity) if available_entity else None
+        vermogen_w = self._read_corrected_battery_power()
+        voorraad_entity = self.config.get(CONF_AVAILABLE_ENERGY_SENSOR)
+        voorraad_kwh = (
+            self._read_sensor_float(voorraad_entity) if voorraad_entity else None
         )
-
-        if battery_power_w is None or available_kwh is None:
+        if vermogen_w is None or voorraad_kwh is None:
             return
 
-        if self._efficiency_checkpoint_available_kwh is None:
-            self._efficiency_checkpoint_available_kwh = available_kwh
-            self._efficiency_last_sample_time = now
-            return
-
-        elapsed_hours = max(
-            (now - self._efficiency_last_sample_time).total_seconds() / 3600, 0
-        )
+        vorige_meting = self._efficiency_last_sample_time
         self._efficiency_last_sample_time = now
 
-        if elapsed_hours > 0:
-            energy_kwh = (battery_power_w / 1000) * elapsed_hours
-            if energy_kwh > 0:
-                self._efficiency_cumulative_discharged_kwh += energy_kwh
-            elif energy_kwh < 0:
-                self._efficiency_cumulative_charged_kwh += -energy_kwh
+        # Positief is ontladen (zie `_read_corrected_battery_power`).
+        richting = 0
+        if vermogen_w > EFFICIENCY_IDLE_POWER_W:
+            richting = 1
+        elif vermogen_w < -EFFICIENCY_IDLE_POWER_W:
+            richting = -1
+
+        gat_minuten = (
+            None
+            if vorige_meting is None
+            else (now - vorige_meting).total_seconds() / 60
+        )
+        vorige_voorraad = self._efficiency_previous_available_kwh
+        self._efficiency_previous_available_kwh = voorraad_kwh
 
         if (
-            self._efficiency_cumulative_charged_kwh
-            < MIN_CHARGED_KWH_FOR_EFFICIENCY_SAMPLE
+            gat_minuten is None
+            or gat_minuten > EFFICIENCY_SEGMENT_MAX_GAP_MINUTES
+            or vorige_voorraad is None
+        ):
+            # Onderweg is er energie gelopen die niet is geteld; wat er
+            # nu ligt is niets waard.
+            self._sluit_rendementsstuk(None)
+            self._start_rendementsstuk(richting, voorraad_kwh)
+            return
+
+        # De grens ligt bij de VORIGE meting, niet bij deze.
+        #
+        # Op de tick waarop de accu omdraait, is de voorraad al een stap
+        # de nieuwe kant op gegaan terwijl dat vermogen nog nergens is
+        # geteld. Sluiten op de huidige stand haalt die stap van het
+        # oude stuk af: in de testopstelling zakte 80% daardoor naar
+        # 68,6% en werd de meting als onmogelijk weggegooid. Het hele
+        # interval hoort bij de nieuwe richting, en de grens dus bij de
+        # stand van net.
+        if richting != self._efficiency_segment_direction:
+            self._sluit_rendementsstuk(vorige_voorraad)
+            self._start_rendementsstuk(richting, vorige_voorraad)
+
+        if richting == 0:
+            return
+
+        uren = gat_minuten / 60
+        self._efficiency_segment_ac_kwh += abs(vermogen_w) / 1000 * uren
+
+    def _start_rendementsstuk(self, richting: int, voorraad_kwh: float) -> None:
+        self._efficiency_segment_direction = richting
+        self._efficiency_segment_ac_kwh = 0.0
+        self._efficiency_segment_start_kwh = voorraad_kwh
+
+    def _sluit_rendementsstuk(self, voorraad_kwh: float | None) -> None:
+        """Reken een afgesloten stuk om naar een rendement (v1.32.0)."""
+        richting = self._efficiency_segment_direction
+        ac_kwh = self._efficiency_segment_ac_kwh
+        begin = self._efficiency_segment_start_kwh
+        self._efficiency_segment_direction = 0
+        self._efficiency_segment_ac_kwh = 0.0
+        self._efficiency_segment_start_kwh = None
+
+        if (
+            richting == 0
+            or voorraad_kwh is None
+            or begin is None
+            or ac_kwh < EFFICIENCY_SEGMENT_MIN_KWH
         ):
             return
 
-        delta_available_kwh = (
-            available_kwh - self._efficiency_checkpoint_available_kwh
-        )
-        efficiency_percent = (
-            (
-                self._efficiency_cumulative_discharged_kwh
-                + delta_available_kwh
-            )
-            / self._efficiency_cumulative_charged_kwh
-        ) * 100
-
-        if (
-            MIN_PLAUSIBLE_EFFICIENCY_PERCENT
-            <= efficiency_percent
-            <= MAX_PLAUSIBLE_EFFICIENCY_PERCENT
-        ):
-            self.learned_efficiency_history.append(round(efficiency_percent, 1))
-            self.learned_efficiency_history = self.learned_efficiency_history[
-                -LEARNING_HISTORY_DAYS:
-            ]
-            _LOGGER.debug(
-                "New battery efficiency sample: %.1f%% (charged=%.2f kWh, "
-                "discharged=%.2f kWh, delta_available=%.2f kWh)",
-                efficiency_percent,
-                self._efficiency_cumulative_charged_kwh,
-                self._efficiency_cumulative_discharged_kwh,
-                delta_available_kwh,
-            )
+        verschil = voorraad_kwh - begin
+        if richting > 0:
+            # Ontladen: eruit gekomen gedeeld door wat de accu kwijtraakte.
+            gedaald = -verschil
+            if gedaald < EFFICIENCY_SEGMENT_MIN_KWH:
+                return
+            percentage = 100 * ac_kwh / gedaald
+            geschiedenis = self.discharge_efficiency_history
         else:
-            _LOGGER.debug(
-                "Discarding implausible battery efficiency sample: %.1f%% "
-                "(likely a sensor glitch, not real - charged=%.2f kWh, "
-                "discharged=%.2f kWh, delta_available=%.2f kWh)",
-                efficiency_percent,
-                self._efficiency_cumulative_charged_kwh,
-                self._efficiency_cumulative_discharged_kwh,
-                delta_available_kwh,
-            )
+            # Laden: erbij gekomen gedeeld door wat erin ging.
+            if verschil < EFFICIENCY_SEGMENT_MIN_KWH:
+                return
+            percentage = 100 * verschil / ac_kwh
+            geschiedenis = self.charge_efficiency_history
 
-        self._efficiency_cumulative_charged_kwh = 0.0
-        self._efficiency_cumulative_discharged_kwh = 0.0
-        self._efficiency_checkpoint_available_kwh = available_kwh
+        # Eerst afronden, dan pas toetsen: een meting die rekenkundig op
+        # 100,00000000000001 uitkomt is gewoon 100 en hoort niet als
+        # onmogelijk weggegooid te worden.
+        percentage = round(percentage, 1)
+        if not (
+            MIN_PLAUSIBLE_HALF_EFFICIENCY_PERCENT
+            <= percentage
+            <= MAX_PLAUSIBLE_HALF_EFFICIENCY_PERCENT
+        ):
+            _LOGGER.debug(
+                "Rendementsstuk verworpen: %.1f%% (richting %s, ac %.2f kWh, "
+                "voorraadverschil %.2f kWh)",
+                percentage,
+                richting,
+                ac_kwh,
+                verschil,
+            )
+            return
+
+        geschiedenis.append(percentage)
+        del geschiedenis[:-EFFICIENCY_HALF_HISTORY]
+        self.schedule_persisted_state_save()
+
+    @property
+    def learned_charge_efficiency_percent(self) -> float | None:
+        """Laadrendement, mediaan van de metingen (v1.32.0)."""
+        if len(self.charge_efficiency_history) < MIN_HALF_EFFICIENCY_SAMPLES:
+            return None
+        return statistics.median(self.charge_efficiency_history)
+
+    @property
+    def learned_discharge_efficiency_percent(self) -> float | None:
+        """Ontlaadrendement, mediaan van de metingen (v1.32.0)."""
+        if len(self.discharge_efficiency_history) < MIN_HALF_EFFICIENCY_SAMPLES:
+            return None
+        return statistics.median(self.discharge_efficiency_history)
+
+    def get_efficiency_overview(self) -> dict:
+        """Waar het rendement vandaan komt (v1.32.0).
+
+        Beide kanten apart, want daar zit de informatie: verlies bij het
+        laden en verlies bij het ontladen zijn verschillende dingen, en
+        alleen samen vormen ze de heen-en-terug-waarde die in de
+        reserveberekening en de kostprijs zit.
+        """
+        laden = self.learned_charge_efficiency_percent
+        ontladen = self.learned_discharge_efficiency_percent
+        heen_en_terug = self.learned_battery_efficiency_percent
+        return {
+            "beschikbaar": heen_en_terug is not None,
+            "laadrendement_procent": laden,
+            "ontlaadrendement_procent": ontladen,
+            "heen_en_terug_procent": (
+                round(heen_en_terug, 1) if heen_en_terug is not None else None
+            ),
+            "metingen_laden": len(self.charge_efficiency_history),
+            "metingen_ontladen": len(self.discharge_efficiency_history),
+            "metingen_laden_reeks": list(self.charge_efficiency_history),
+            "metingen_ontladen_reeks": list(self.discharge_efficiency_history),
+            "methode": (
+                "per halve slag"
+                if laden is not None and ontladen is not None
+                else "oude methode (hele venster)"
+            ),
+            "oude_reeks": list(self.learned_efficiency_history),
+            "toelichting": (
+                "Een stuk telt alleen mee als de accu er minstens "
+                f"{EFFICIENCY_SEGMENT_MIN_KWH} kWh dezelfde kant op ging. De "
+                "voorraadsensor meldt in stappen van 1%, en onder die "
+                "hoeveelheid meet je afronding in plaats van rendement."
+            ),
+        }
 
     @property
     def learned_battery_efficiency_percent(self) -> float | None:
-        """Self-learned round-trip efficiency (%), as the median of
-        recent samples (v0.63.10; was a plain mean, missed in the
-        v0.62.0 switch to median elsewhere) - a single noisy
-        charge/discharge cycle (partial cycle, measurement timing edge)
-        shouldn't meaningfully move this, since it directly scales the
-        safety-critical reserve calculation
+        """Rendement heen en terug (%) (v1.32.0).
+
+        Het product van de twee halve slagen zodra beide er zijn; anders
+        de oude meting, zodat een verse installatie niet zonder waarde
+        komt te zitten.
+
+        Dit getal schaalt de reserveberekening
         (`_get_efficiency_discounted_pv_offset`,
-        `_estimate_worst_case_deficit_kwh`). None until enough samples
-        exist - callers should fall back to the configured value in that
-        case.
+        `_estimate_worst_case_deficit_kwh`) en de kostprijs, dus een
+        losse rare meting mag het niet verslepen - vandaar overal de
+        mediaan.
         """
-        if len(self.learned_efficiency_history) < MIN_SOLAR_HISTORY_FOR_DYNAMIC_THRESHOLD:
+        laden = self.learned_charge_efficiency_percent
+        ontladen = self.learned_discharge_efficiency_percent
+        if laden is not None and ontladen is not None:
+            return laden * ontladen / 100
+        if (
+            len(self.learned_efficiency_history)
+            < MIN_SOLAR_HISTORY_FOR_DYNAMIC_THRESHOLD
+        ):
             return None
         return statistics.median(self.learned_efficiency_history)
 
@@ -2593,7 +2744,8 @@ class EnergyManagementSystemCoordinator:
                     "overbruggen. Er wordt zo nodig bijgeladen.",
                 )
 
-        soc = self.last_soc_percent
+        # v1.31.1: rechtstreeks, zie `accustand_procent`.
+        soc = self.accustand_procent()
         pv_w = self._read_sensor_float(self.config.get(CONF_PV_POWER_SENSOR))
         verbruik_w = self._read_corrected_consumption_power()
         if (
@@ -2632,6 +2784,26 @@ class EnergyManagementSystemCoordinator:
                 "⚠️ Energy Management System liep vast",
                 f"Laatste fout: {self.last_error}. De accu blijft op de "
                 "laatst ingestelde modus staan tot dit is opgelost.",
+            )
+
+        # v1.29.0, gemeld: "Dat er een txt wordt gemaakt is een error, ik
+        # had daar graag een melding van verwacht zoals eerder
+        # afgesproken."
+        #
+        # `internal_failures` bestaat sinds v1.19.4 en verscheen alleen
+        # als aandachtspunt op een dashboardpagina. Afschermen zonder
+        # melden laat een storing stil doorlopen - dat was toen het
+        # argument, en het geldt net zo goed voor de melding zelf.
+        if self.internal_failures:
+            namen = ", ".join(sorted(self.internal_failures))
+            eerste = sorted(self.internal_failures.items())[0]
+            stuur(
+                "interne_fout",
+                "⚠️ Onderdeel van de integratie faalt",
+                f"{len(self.internal_failures)} onderde(e)l(en) kan zichzelf "
+                f"niet berekenen: {namen}. Eerste fout: {eerste[1]}. Een "
+                "mislukte diagnostiek-export komt binnen als tekstbestand "
+                "in plaats van JSON.",
             )
 
         # --- geld: klopt onze berekening met de afrekening? ---
@@ -2693,7 +2865,7 @@ class EnergyManagementSystemCoordinator:
                 )
 
         # --- accu vlak voor de piek ---
-        soc_nu = self.last_soc_percent
+        soc_nu = self.accustand_procent()
         if (
             soc_nu is not None
             and soc_nu < 30
@@ -3597,7 +3769,9 @@ class EnergyManagementSystemCoordinator:
             self.schedule_persisted_state_save()
 
         tellers["ticks"] += 1
-        soc = self.last_soc_percent
+        # v1.31.1: de dagsamenvatting miste elke ochtend met uitstellen
+        # zijn laagste en hoogste stand, omdat het veld dan None was.
+        soc = self.accustand_procent()
         if soc is not None:
             tellers["soc_min"] = min(tellers["soc_min"], soc) if tellers[
                 "soc_min"
@@ -4383,6 +4557,22 @@ class EnergyManagementSystemCoordinator:
                 # Was de slaapsensor de LAATSTE beweging, dan is de
                 # stilte die erop volgt geen afwezigheid maar een nacht.
                 self.presence_state = "slaapt"
+            elif self._stilte_is_nacht(now, vorige):
+                # v1.30.0, gemeld: "Ik ging om 23:15 slapen, was snachts
+                # wel een tijdje wakker" - en de tijdlijn zei de hele
+                # nacht "weg".
+                #
+                # De regel hierboven vraagt of de SLAAPSENSOR de laatste
+                # beweging was. Loop je via de gang naar bed, dan is dat
+                # de gang, en dan viel de nacht als afwezigheid uit de
+                # bus. Bovendien is die sensor stil zodra iemand ligt.
+                #
+                # Een huis loopt 's nachts niet vanzelf leeg: was er om
+                # 23:00 nog iemand thuis en wordt het daarna stil, dan
+                # slaapt die persoon. Weggaan kan, maar is de
+                # uitzondering - en "slaapt" is bovendien de veilige
+                # aanname, want dan blijft de nachtreserve staan.
+                self.presence_state = "slaapt"
             else:
                 self.presence_state = "weg"
 
@@ -4403,8 +4593,21 @@ class EnergyManagementSystemCoordinator:
                 teller[1] = maximum
                 teller[0] = round(verhouding * maximum)
 
+        # v1.31.1: elke tick aanbieden, niet alleen bij een wissel.
+        #
+        # Gevonden in de export van 11 augustus 08:38: de tijdlijn stond
+        # op "weg sinds 08:21" terwijl de staat op dat moment "thuis" was
+        # en er 2,6 minuten eerder nog beweging was. De tabel en de
+        # werkelijkheid liepen uit elkaar, en dat is precies wat je met
+        # zo'n tabel wilt kunnen uitsluiten.
+        #
+        # Zolang alleen een wissel werd vastgelegd, was elke gemiste
+        # wissel blijvend: er kwam nooit meer een gelegenheid om hem
+        # goed te zetten. Nu wordt de staat elke tick aangeboden en
+        # herstelt de tabel zichzelf; gelijke staten worden toch al
+        # samengevoegd (v1.30.0), dus dit levert geen extra regels op.
+        self._registreer_aanwezigheidsovergang(now, vorige)
         if vorige != self.presence_state:
-            self._registreer_aanwezigheidsovergang(now, vorige)
             self.schedule_persisted_state_save()
 
     def _registreer_aanwezigheidsovergang(
@@ -4425,7 +4628,23 @@ class EnergyManagementSystemCoordinator:
         wel.
         """
         staat = self.presence_state
-        if staat is None:
+        if staat is None or staat == "onbekend":
+            # v1.30.0: geen meting is geen gebeurtenis. Viel er een
+            # sensor weg, dan hoort het lopende blok gewoon door te
+            # lopen in plaats van te eindigen - anders staat er een gat
+            # in de tabel waar niets is gebeurd.
+            return
+
+        # v1.30.0, gemeld met screenshot: vijf "weg"-regels achter
+        # elkaar, van 23:15 tot de ochtend. Een tijdlijn van blokken
+        # hoort NOOIT twee gelijke staten naast elkaar te hebben; dat
+        # zegt niets en maakt de tabel onleesbaar.
+        #
+        # Het kwam er vooral doordat de staat zelf niet werd bewaard: na
+        # elke herstart stond hij op "onbekend" en schreef de eerste tick
+        # een nieuwe regel, ook al was er niets veranderd. Die oorzaak is
+        # nu weg, maar de tabel hoort er sowieso tegen te kunnen.
+        if self.presence_timeline and self.presence_timeline[-1].get("staat") == staat:
             return
 
         # Flikkering wegnemen: één beweging midden in de nacht zou
@@ -4589,6 +4808,40 @@ class EnergyManagementSystemCoordinator:
         # gewoon laag; dan alles houden.
         return overgebleven if len(overgebleven) >= 3 else echt
 
+    def accustand_procent(self) -> float | None:
+        """De accustand, rechtstreeks van de sensor (v1.31.1).
+
+        Gevonden in de export van 11 augustus 08:36: `last_soc_percent`
+        stond op **None** terwijl de accu gewoon 22% aangaf en alle drie
+        de modules netjes rapporteerden.
+
+        De oorzaak is dezelfde vorm als bij `beschikbare_energie_kwh` in
+        v1.24.1: dat veld wordt alléén gezet in de berekening van het
+        ontlaadvermogen, en die tak wordt niet bereikt zodra de tick
+        eerder eindigt - bijvoorbeeld bij `solar_capture_deferred`, wat
+        juist elke ochtend gebeurt die met uitstellen begint.
+
+        Zo'n veld is een bijproduct van een berekening, geen accustand.
+        Wie de stand nodig heeft, hoort de sensor te lezen.
+        """
+        gemeten = self._read_sensor_float(self.config.get(CONF_SOC_SENSOR))
+        if gemeten is not None:
+            return gemeten
+        if self.last_soc_percent is not None:
+            return self.last_soc_percent
+        # Laatste terugval: afleiden uit de beschikbare energie.
+        beschikbaar = self.beschikbare_energie_kwh()
+        capaciteit = self._read_sensor_float(
+            self.config.get(CONF_BATTERY_TOTAL_CAPACITY_SENSOR)
+        )
+        if beschikbaar is None or not capaciteit:
+            return None
+        min_soc = self.effective_min_soc_percent()
+        bruikbaar = capaciteit * (100 - min_soc) / 100
+        if bruikbaar <= 0:
+            return None
+        return min_soc + (100 - min_soc) * beschikbaar / bruikbaar
+
     def _is_koelapparaat(self, device: dict) -> bool:
         """Koelt dit apparaat? (v1.21.0)"""
         naam = str(device.get("friendly_name") or "").lower()
@@ -4748,6 +5001,31 @@ class EnergyManagementSystemCoordinator:
             "ems_vakantie_beweging",
             kind="vakantie_beweging",
         )
+
+    def _stilte_is_nacht(self, now: datetime, vorige: str | None) -> bool:
+        """Is deze stilte een nacht in plaats van een lege woning?
+        (v1.30.0)
+
+        Gemeld: "Ik ging om 23:15 slapen, was snachts wel een tijdje
+        wakker" - en de tijdlijn zei van 23:15 tot de ochtend "weg".
+
+        `_slaapt_waarschijnlijk` vraagt of de slaapsensor de laatste
+        beweging was. Loop je via de gang naar bed, dan is de gang de
+        laatste, en dan valt een hele nacht als afwezigheid uit de bus.
+
+        Twee voorwaarden, allebei nodig:
+
+        - het is nacht (tussen de twee uren hieronder);
+        - er was net nog iemand thuis. Een huis loopt 's nachts niet
+          vanzelf leeg; kwam de staat van "weg", dan blijft het "weg".
+        """
+        if vorige not in ("thuis", "slaapt"):
+            return False
+        uur = now.hour
+        if PRESENCE_NIGHT_START_HOUR > PRESENCE_NIGHT_END_HOUR:
+            # Het venster loopt over middernacht heen.
+            return uur >= PRESENCE_NIGHT_START_HOUR or uur < PRESENCE_NIGHT_END_HOUR
+        return PRESENCE_NIGHT_START_HOUR <= uur < PRESENCE_NIGHT_END_HOUR
 
     def _slaapt_waarschijnlijk(self, now: datetime) -> bool:
         """Was de slaapsensor de laatste beweging? (v1.20.0)
@@ -7801,6 +8079,227 @@ class EnergyManagementSystemCoordinator:
             for regel in self.get_quarter_plan(now)
         ]
 
+    def _update_plan_review(self, now: datetime) -> None:
+        """Legt het plan van vanochtend vast en toetst het 's avonds aan
+        de werkelijkheid (v1.31.0).
+
+        Gevraagd: "Kun je de diagnostiek zo maken, dat je leert van het
+        accu gedrag en morgen verder optimaliseert indien noodzakelijk?"
+        Daarvan is dit stap één: METEN. Zonder meting is bijsturen blind,
+        en is niet te controleren of een aanpassing hielp.
+
+        De aanleiding staat in dezelfde week: de zonschatting stond
+        maanden verkeerd geijkt (v1.27.0) zonder dat iets aansloeg. Een
+        dagelijkse vergelijking van voorspeld en werkelijk had dat er
+        binnen een dag uitgehaald - de voorspelde opbrengst liep dan
+        zichtbaar uit de pas met wat er binnenkwam.
+
+        Er wordt hier bewust NIETS bijgesteld. Dit is een rapport.
+        """
+        vandaag = now.date()
+        if self._plan_review_day_key != vandaag:
+            if self._plan_review_day_key is not None:
+                self._finish_plan_review(now)
+            self._plan_review_day_key = vandaag
+            self.plan_snapshot = None
+
+        # De momentopname wordt één keer per dag genomen, en pas als de
+        # dag echt begonnen is: 's nachts staat er nog geen zon in het
+        # plan en zou het rapport iets toetsen wat nergens over gaat.
+        if self.plan_snapshot is None and now.hour >= PLAN_SNAPSHOT_HOUR:
+            samenvatting = self.get_quarter_plan_summary(now)
+            if not samenvatting.get("beschikbaar"):
+                return
+            self.plan_snapshot = {
+                "datum": vandaag.isoformat(),
+                "opgenomen_om": now.strftime("%H:%M"),
+                "verwachte_opbrengst_eur": samenvatting.get("verwachte_opbrengst_eur"),
+                "verwachte_zon_kwh": samenvatting.get("zon_kwh"),
+                "verwacht_verbruik_kwh": samenvatting.get("verbruik_kwh"),
+                "verwachte_import_kwh": samenvatting.get("import_kwh"),
+                "verwachte_export_kwh": samenvatting.get("export_kwh"),
+                "laagste_soc_procent": samenvatting.get("laagste_soc_procent"),
+                "tekort_kwartieren": samenvatting.get("tekort_kwartieren"),
+                "verkoopkwartieren": samenvatting.get("verkoopkwartieren"),
+            }
+
+        # De laagste stand van vandaag zelf bijhouden; die valt niet
+        # achteraf te reconstrueren zonder de recorder te bevragen.
+        #
+        # v1.31.1: via `accustand_procent()` en niet via
+        # `last_soc_percent`. Dat veld staat op None zodra de tick eerder
+        # eindigt - en bij `solar_capture_deferred` gebeurt dat elke
+        # ochtend die met uitstellen begint. Juist dán zakt de accu het
+        # diepst, dus juist dán zou de laagste stand niet gemeten zijn.
+        soc = self.accustand_procent()
+        if soc is not None:
+            if (
+                self.laagste_soc_vandaag_procent is None
+                or soc < self.laagste_soc_vandaag_procent
+            ):
+                self.laagste_soc_vandaag_procent = soc
+
+    def _finish_plan_review(self, now: datetime) -> None:
+        """Zet het plan van de afgelopen dag naast wat er werkelijk
+        gebeurde (v1.31.0)."""
+        plan = self.plan_snapshot
+        self.plan_snapshot = None
+        laagste = self.laagste_soc_vandaag_procent
+        self.laagste_soc_vandaag_procent = None
+        if not plan:
+            return
+
+        def _afwijking(voorspeld, werkelijk):
+            """In procenten, maar alleen als dat iets betekent. Bij een
+            voorspelling van 0,02 kWh is elke afwijking honderden
+            procenten en zegt het niets."""
+            if voorspeld is None or werkelijk is None:
+                return None
+            if abs(voorspeld) < PLAN_REVIEW_MIN_BASIS:
+                return None
+            return round(100 * (werkelijk - voorspeld) / abs(voorspeld), 1)
+
+        werkelijke_opbrengst = (
+            self.counterfactual_cost_today_eur - self.actual_cost_today_eur
+        )
+        regel = {
+            "datum": plan["datum"],
+            "opgenomen_om": plan["opgenomen_om"],
+            "zon": {
+                "voorspeld_kwh": plan["verwachte_zon_kwh"],
+                "werkelijk_kwh": round(self.pv_production_today_kwh, 2),
+                "afwijking_procent": _afwijking(
+                    plan["verwachte_zon_kwh"], self.pv_production_today_kwh
+                ),
+            },
+            "opbrengst": {
+                "voorspeld_eur": plan["verwachte_opbrengst_eur"],
+                "werkelijk_eur": round(werkelijke_opbrengst, 2),
+                "afwijking_procent": _afwijking(
+                    plan["verwachte_opbrengst_eur"], werkelijke_opbrengst
+                ),
+            },
+            "import": {
+                "voorspeld_kwh": plan["verwachte_import_kwh"],
+                "werkelijk_kwh": round(self.grid_import_today_kwh, 2),
+            },
+            "laagste_soc": {
+                "voorspeld_procent": plan["laagste_soc_procent"],
+                "werkelijk_procent": laagste,
+            },
+            "tekort_kwartieren_voorspeld": plan["tekort_kwartieren"],
+            "verkoopkwartieren_voorspeld": plan["verkoopkwartieren"],
+        }
+        regel["oordeel"] = self._beoordeel_plan_review(regel)
+
+        self.plan_review_history.append(regel)
+        if len(self.plan_review_history) > PLAN_REVIEW_HISTORY_DAYS:
+            self.plan_review_history = self.plan_review_history[
+                -PLAN_REVIEW_HISTORY_DAYS:
+            ]
+        self.schedule_persisted_state_save()
+
+    def _beoordeel_plan_review(self, regel: dict) -> str:
+        """Eén regel die zegt of het plan klopte (v1.31.0).
+
+        Zonder oordeel is het een tabel met getallen waar je zelf
+        doorheen moet - en dan wordt hij niet gelezen.
+        """
+        klachten = []
+        zon = regel["zon"]["afwijking_procent"]
+        if zon is not None and abs(zon) > PLAN_REVIEW_TOLERANCE_PERCENT:
+            klachten.append(
+                f"zon {zon:+.0f}%" + (" (minder dan gedacht)" if zon < 0 else "")
+            )
+        opbrengst = regel["opbrengst"]["afwijking_procent"]
+        if opbrengst is not None and abs(opbrengst) > PLAN_REVIEW_TOLERANCE_PERCENT:
+            klachten.append(f"opbrengst {opbrengst:+.0f}%")
+
+        voorspeld_soc = regel["laagste_soc"]["voorspeld_procent"]
+        werkelijk_soc = regel["laagste_soc"]["werkelijk_procent"]
+        if (
+            voorspeld_soc is not None
+            and werkelijk_soc is not None
+            and werkelijk_soc < voorspeld_soc - PLAN_REVIEW_SOC_TOLERANCE_PERCENT
+        ):
+            klachten.append(
+                f"accu zakte naar {werkelijk_soc:.0f}% terwijl "
+                f"{voorspeld_soc:.0f}% was voorspeld"
+            )
+
+        if not klachten:
+            return "Het plan klopte binnen de marge."
+        return "Afwijking: " + ", ".join(klachten) + "."
+
+    def get_plan_review(self) -> dict:
+        """Het overzicht voor het dashboard (v1.31.0)."""
+        if not self.plan_review_history:
+            return {
+                "beschikbaar": False,
+                "reden": (
+                    "Nog geen volledige dag getoetst - het eerste oordeel "
+                    "verschijnt na middernacht."
+                ),
+            }
+
+        recent = list(reversed(self.plan_review_history))
+        zonafwijkingen = [
+            r["zon"]["afwijking_procent"]
+            for r in recent
+            if r["zon"]["afwijking_procent"] is not None
+        ]
+        opbrengstafwijkingen = [
+            r["opbrengst"]["afwijking_procent"]
+            for r in recent
+            if r["opbrengst"]["afwijking_procent"] is not None
+        ]
+        return {
+            "beschikbaar": True,
+            "dagen": len(recent),
+            "dagen_binnen_marge": sum(
+                1 for r in recent if r["oordeel"].startswith("Het plan klopte")
+            ),
+            # Mediaan en niet gemiddelde: één dag met een kapotte sensor
+            # mag het beeld niet verslepen.
+            "zon_afwijking_mediaan_procent": (
+                sorted(zonafwijkingen)[len(zonafwijkingen) // 2]
+                if zonafwijkingen
+                else None
+            ),
+            "opbrengst_afwijking_mediaan_procent": (
+                sorted(opbrengstafwijkingen)[len(opbrengstafwijkingen) // 2]
+                if opbrengstafwijkingen
+                else None
+            ),
+            "structureel": self._duid_plan_review(
+                zonafwijkingen, opbrengstafwijkingen
+            ),
+            "dagen_overzicht": recent,
+        }
+
+    def _duid_plan_review(
+        self, zonafwijkingen: list, opbrengstafwijkingen: list
+    ) -> str:
+        """Een losse dag zegt niets; een reeks wel (v1.31.0).
+
+        Dit is het punt waar stap twee - zelf bijstellen - op zou kunnen
+        aanhaken. Voorlopig alleen benoemen.
+        """
+        if len(zonafwijkingen) < PLAN_REVIEW_MIN_DAYS:
+            return (
+                f"Nog te weinig dagen ({len(zonafwijkingen)}) om iets "
+                "structureels te zien."
+            )
+        gemiddeld = sum(zonafwijkingen) / len(zonafwijkingen)
+        if abs(gemiddeld) <= PLAN_REVIEW_TOLERANCE_PERCENT:
+            return "De zonvoorspelling loopt niet structureel uit de pas."
+        richting = "te hoog" if gemiddeld < 0 else "te laag"
+        return (
+            f"De zonvoorspelling staat structureel {richting}: gemiddeld "
+            f"{gemiddeld:+.0f}% over {len(zonafwijkingen)} dagen. Dat werkt "
+            "door in de reserve en in het uitstelplan."
+        )
+
     def _meld_planningswijzigingen(self, now: datetime) -> None:
         """Bericht bij belangrijke wijzigingen in de planning (v1.23.4).
 
@@ -8244,6 +8743,20 @@ class EnergyManagementSystemCoordinator:
                 ),
             }
 
+        # v1.31.0, gemeld: "ik het echter 25% buffer = 1 uur gevraagd,
+        # mijn inziens zou het systeem dan om 11 uur naar smart gaan."
+        #
+        # Klopt, en de oorzaak is dat dit plan alleen naar ENERGIE keek.
+        # Vanaf 12:00 komt er tot 16:00 nog 9,66 kWh overschot en dat is
+        # meer dan de 8,06 die met marge nodig is - maar de accu neemt
+        # hooguit 2000 W op, dus in die vier uur past er 8,0 kWh in.
+        # Precies te weinig, en dat zag het plan niet.
+        #
+        # Met de opnamegrens erbij valt 12:00 af en wordt het 11:00: vijf
+        # uur x 2 kW = 10 kWh. Dezelfde grens die v1.27.0 al in de
+        # kwartierplanning zette.
+        laad_w = abs(self.config.get(CONF_MANUAL_CHARGE_POWER) or 0)
+
         beste_uur = None
         for uur in range(min(SOLAR_DEFER_LATEST_HOUR, deadline.hour), now.hour, -1):
             start = now.replace(hour=uur, minute=0, second=0, microsecond=0)
@@ -8266,7 +8779,13 @@ class EnergyManagementSystemCoordinator:
                     ),
                 }
             overschot = max(0.0, zon - verbruik)
-            if overschot >= ruimte * SOLAR_DEFER_SAFETY_FACTOR:
+            # Hoeveel past er nog in de accu tussen dit uur en de
+            # deadline? Zon die er niet in kan gaat het net op en telt
+            # dus niet mee voor het vullen.
+            uren = (deadline - start).total_seconds() / 3600
+            opnamegrens = laad_w / 1000 * uren if laad_w else float("inf")
+            haalbaar = min(overschot, opnamegrens)
+            if haalbaar >= ruimte * SOLAR_DEFER_SAFETY_FACTOR:
                 beste_uur = uur
                 break
 
@@ -16508,6 +17027,19 @@ class EnergyManagementSystemCoordinator:
             self._meld_planningswijzigingen(now)
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Kon de planningsmeldingen niet beoordelen")
+        # v1.31.0: het plan van vanochtend vastleggen en 's nachts
+        # toetsen. Ook afgeschermd - een rapport mag de aansturing niet
+        # in de weg zitten. De fout komt via `internal_failures` alsnog
+        # als melding binnen (v1.29.0).
+        try:
+            self._update_plan_review(now)
+        except Exception as fout:  # noqa: BLE001
+            _LOGGER.exception("Kon de plantoetsing niet bijwerken")
+            self.internal_failures["plantoetsing"] = (
+                f"{type(fout).__name__}: {fout}"
+            )
+        else:
+            self.internal_failures.pop("plantoetsing", None)
 
     def _maybe_notify_mode_change(self, now: datetime) -> None:
         """Send a notification whenever the mode or applied power the
