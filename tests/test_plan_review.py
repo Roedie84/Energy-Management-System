@@ -259,3 +259,67 @@ def test_the_state_of_charge_has_a_fallback(make_coordinator, hass):
     c.last_available_kwh = 3.87  # de helft van 7,74 bruikbaar
 
     assert round(c.accustand_procent()) == 55
+
+
+# --- v1.37.2: vergelijken vanaf de momentopname ----------------------
+
+
+def test_only_what_happened_after_the_snapshot_counts(
+    make_coordinator, hass
+):
+    """Gevonden in de export van 11 augustus 11:21: de momentopname was
+    om 10:26 genomen - de verwachting gaat dus over de REST van de dag,
+    want de planning begint bij nu. De werkelijkheid werd daarna
+    vergeleken met de dagtellers, en die tellen vanaf middernacht.
+
+    Vandaag scheelde dat de hele ochtendzon: 21,1 kWh verwacht tegen
+    ruim 23 kWh gemeten, gerapporteerd als 10% afwijking terwijl de
+    voorspelling gewoon klopte.
+    """
+    c = _coordinator(make_coordinator)
+    # Er stond vanochtend al 8 kWh op de teller voordat het plan werd
+    # vastgelegd.
+    c.pv_production_today_kwh = 8.0
+    c.counterfactual_cost_today_eur = 1.0
+    c.actual_cost_today_eur = 0.0
+    c._update_plan_review(OCHTEND)
+
+    # De rest van de dag levert precies wat er voorspeld was: 23 kWh en
+    # 4 euro, boven op wat er al stond.
+    c.pv_production_today_kwh = 8.0 + 23.0
+    c.counterfactual_cost_today_eur = 1.0 + 4.0
+    c.last_soc_percent = 20.0
+    c._update_plan_review(OCHTEND + timedelta(days=1))
+
+    regel = c.plan_review_history[-1]
+
+    assert regel["zon"]["werkelijk_kwh"] == 23.0
+    assert regel["opbrengst"]["werkelijk_eur"] == 4.0
+    assert regel["oordeel"].startswith("Het plan klopte")
+
+
+def test_the_snapshot_records_the_counters(make_coordinator, hass):
+    c = _coordinator(make_coordinator)
+    c.pv_production_today_kwh = 8.0
+
+    c._update_plan_review(OCHTEND)
+
+    assert c.plan_snapshot["pv_bij_opname_kwh"] == 8.0
+
+
+def test_an_old_snapshot_without_counters_still_works(
+    make_coordinator, hass
+):
+    """Een opslagbestand van voor deze versie kent die velden niet; dan
+    mag de toetsing niet omvallen."""
+    c = _coordinator(make_coordinator)
+    c._update_plan_review(OCHTEND)
+    del c.plan_snapshot["pv_bij_opname_kwh"]
+    del c.plan_snapshot["opbrengst_bij_opname_eur"]
+    del c.plan_snapshot["import_bij_opname_kwh"]
+    c.pv_production_today_kwh = 23.0
+    c.last_soc_percent = 20.0
+
+    c._update_plan_review(OCHTEND + timedelta(days=1))
+
+    assert c.plan_review_history[-1]["zon"]["werkelijk_kwh"] == 23.0
