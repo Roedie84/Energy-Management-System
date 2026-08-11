@@ -156,6 +156,7 @@ def test_present_attributes_are_not_reported(make_coordinator, hass):
             "plantoetsing": {},
             "rendement": {},
             "prijstoets": {},
+            "besparingscorrectie": {},
             "proefstand": {},
             "nog_niet_bepaald": {},
             "verbetermogelijkheden": [],

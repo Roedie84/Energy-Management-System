@@ -131,7 +131,10 @@ def test_the_block_is_built_incrementally():
 
     bron = (Path(pkg.__file__).parent / "sensor.py").read_text()
     start = bron.index("def extra_state_attributes(self) -> dict:\n        \"\"\"Alle samenvattingen")
-    blok = bron[start : start + 2500]
+    # v1.52.0: van 2500 naar 3500 tekens. De lijst met samenvattingen is
+    # gegroeid en het commentaar erbij ook; zoeken op een vast aantal
+    # tekens breekt zodra dat gebeurt - valkuil 5 uit de overdracht.
+    blok = bron[start : start + 3500]
 
     assert "for sleutel, functie in" in blok
     assert "except Exception" in blok
