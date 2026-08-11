@@ -224,3 +224,70 @@ def test_every_defect_says_what_stalls(make_coordinator, hass):
     for gebrek in c.get_input_health():
         assert gebrek["blokkeert"]
         assert gebrek["advies"]
+
+
+# --- v1.51.0: een stille sensor is geen instelprobleem ---------------
+
+
+def _zonder_uitkomst(make_coordinator, hass, ingesteld=True):
+    from custom_components.energy_management_system.const import (
+        CONF_AVAILABLE_ENERGY_SENSOR,
+    )
+
+    config = {CONF_AVAILABLE_ENERGY_SENSOR: "sensor.beschikbaar"} if ingesteld else {}
+    c = make_coordinator(config)
+    c.mpc_horizon_quarters_used = 0
+    c.mpc_note = "Beschikbare-energie-sensor niet uitleesbaar."
+    c.digital_twin_trajectory = []
+    c.digital_twin_note = "Beschikbare-energie-sensor niet uitleesbaar."
+    return c
+
+
+def test_a_sensor_that_briefly_stayed_silent_is_waiting_not_doing(
+    make_coordinator, hass
+):
+    """Gemeld met screenshot: onder "Vraagt een handeling" stonden `mpc`
+    en `digital_twin` met "Beschikbare-energie-sensor niet uitleesbaar"
+    - terwijl die sensor gewoon is ingesteld en het meestal doet.
+
+    Zonder uitkomst was de status altijd "niet geconfigureerd", en dat
+    is de enige status die in de doen-stapel belandt. Het overzicht
+    vroeg dus om een handeling die er niet is.
+    """
+    from datetime import datetime, timezone
+
+    c = _zonder_uitkomst(make_coordinator, hass)
+    c._update_advisory_readiness(datetime(2026, 8, 11, 19, 0, tzinfo=timezone.utc))
+
+    assert c.advisory_readiness["mpc"]["status"] == "onvoldoende_data"
+    assert c.advisory_readiness["digital_twin"]["status"] == "onvoldoende_data"
+
+
+def test_a_missing_sensor_is_still_a_doing_item(make_coordinator, hass):
+    """Ontbreekt de entiteit echt, dan valt er wél iets in te stellen."""
+    from datetime import datetime, timezone
+
+    c = _zonder_uitkomst(make_coordinator, hass, ingesteld=False)
+    c._update_advisory_readiness(datetime(2026, 8, 11, 19, 0, tzinfo=timezone.utc))
+
+    assert c.advisory_readiness["mpc"]["status"] == "niet_geconfigureerd"
+
+
+def test_a_sensor_that_stays_away_becomes_a_doing_item(
+    make_coordinator, hass
+):
+    """Een enkele gemiste uitlezing hoort niemand wakker te maken, maar
+    een sensor die minutenlang zwijgt wel."""
+    from datetime import datetime, timedelta, timezone
+
+    nu = datetime(2026, 8, 11, 19, 0, tzinfo=timezone.utc)
+    c = _zonder_uitkomst(make_coordinator, hass)
+    c._sensor_unavailable_since["sensor.beschikbaar"] = nu - timedelta(hours=1)
+
+    import custom_components.energy_management_system.coordinator as mod
+
+    mod.dt_util.now = lambda: nu
+    c._update_advisory_readiness(nu)
+
+    assert c.advisory_readiness["mpc"]["status"] == "niet_geconfigureerd"
+    assert "controleer de sensor" in c.advisory_readiness["mpc"]["reden"]
