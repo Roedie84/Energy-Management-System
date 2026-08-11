@@ -287,7 +287,17 @@ def test_unload_forces_an_immediate_save():
 def test_per_tick_values_are_deliberately_not_persisted():
     """Bewust GEEN volledige momentopname: een per-tick berekende waarde
     terugzetten zou een verouderd getal tonen alsof het actueel is, wat
-    erger is dan hem opnieuw laten berekenen."""
+    erger is dan hem opnieuw laten berekenen.
+
+    v1.43.0: `nilm_unconfirmed_candidates` staat hier NIET meer bij, en
+    dat is een omkering van een eerdere keuze. De lijst wordt inderdaad
+    elke tick opnieuw gevuld uit de entiteitenscan - maar één veld niet:
+    `first_seen`, de dag waarop een apparaat voor het eerst opviel. Dat
+    telde na elke herstart opnieuw vanaf nul, waardoor "dit apparaat
+    wordt al tien dagen gezien" nooit verder kwam dan vandaag. Het
+    vermogen dat één tick oud is wordt onmiddellijk overschreven; de
+    datum niet.
+    """
     vluchtig = (
         "last_explanation",
         "last_timeline",
@@ -296,7 +306,6 @@ def test_per_tick_values_are_deliberately_not_persisted():
         "mpc_planned_actions",
         "advisory_readiness",
         "battery_module_live",
-        "nilm_unconfirmed_candidates",
         "weather_ensemble_cloud_cover_percent",
     )
     alles = PERSISTED_PLAIN_FIELDS + PERSISTED_INT_FIELDS
@@ -447,3 +456,145 @@ def test_a_current_store_keeps_the_balance_history(make_coordinator, hass):
     asyncio.run(verse.async_load_persisted_state())
 
     assert verse.energy_balance_error_history == [45.0, 80.0]
+
+
+# --- v1.43.0: de inventarisatie zelf --------------------------------
+
+# Gevraagd: "Wordt nu echt alle data opgeslagen, zodat een herstart
+# nergens meer invloed op heeft?"
+#
+# Dat viel niet te beantwoorden zonder alles met de hand na te lopen -
+# en dus ook niet vol te houden. Deze test doet het voortaan: elk veld
+# dat in `__init__` als lege verzameling of nulteller begint, moet in
+# precies één van drie bakken vallen. Wie er een nieuwe bijzet en niets
+# kiest, krijgt hier een rode test in plaats van stille dataverlies.
+VLUCHTIG_MET_REDEN = {
+    # Elke tick opnieuw berekend; terugzetten zou een oud getal tonen
+    # alsof het actueel is.
+    "last_solar_defer_plan": "elke tick herrekend",
+    "last_sell_check": "elke tick herrekend",
+    "last_timeline": "elke tick herrekend",
+    "last_transitions": "elke tick herrekend",
+    "last_needed_kwh_breakdown": "elke tick herrekend",
+    "last_reserve_margin_breakdown": "elke tick herrekend",
+    "battery_module_live": "elke tick uit de sensoren gelezen",
+    "battery_module_spread": "elke tick herrekend",
+    "advisory_readiness": "elke tick herrekend",
+    "sensor_cadence": "elke tick herrekend",
+    "decision_log": "loopt mee met de tick",
+    "mpc_planned_actions": "elke tick herrekend",
+    "mpc_horizon_quarters_used": "elke tick herrekend",
+    "monte_carlo_simulations_run": "teller van deze draai",
+    "monte_carlo_hours_simulated": "teller van deze draai",
+    "digital_twin_trajectory": "elke tick herrekend",
+    "digital_twin_hours_simulated": "teller van deze draai",
+    "climate_forecast_trajectory": "elke tick herrekend",
+    "weather_ensemble_sources_used": "elke tick herrekend",
+    "weather_ensemble_readings": "elke tick herrekend",
+    "internal_failures": "hoort na een herstart opnieuw te blijken",
+    "notification_suppressed_count": "demping begint na een herstart opnieuw",
+    "_unavailable_entities": "blijkt opnieuw uit de sensoren",
+    "_sensor_unavailable_since": "blijkt opnieuw uit de sensoren",
+    "battery_cooling_state": "blijkt opnieuw uit de sensoren",
+    # Halve metingen. Een stuk dat door een herstart een gat heeft, is
+    # geen meting meer - beter opnieuw beginnen dan een verminkt getal
+    # bewaren.
+    "_efficiency_segment_direction": "half meetstuk, hoort te vervallen",
+    "_efficiency_segment_ac_kwh": "half meetstuk, hoort te vervallen",
+    "_efficiency_cumulative_charged_kwh": "oude methode, vervalt",
+    "_efficiency_cumulative_discharged_kwh": "oude methode, vervalt",
+    "_water_session_liters_integrated": "halve tapsessie",
+    "_window_energy_kwh": "half meetvenster",
+    "_window_duration_hours": "half meetvenster",
+    "_window_temp_samples": "half meetvenster",
+    "_temp_prediction_pending": "openstaande voorspelling zonder waarde",
+    "_pv_geometry_day_peak_w": "loopt per dag opnieuw",
+    "_pv_geometry_day_expected_peak_w": "loopt per dag opnieuw",
+    # Korte schuivende vensters van enkele minuten.
+    "_recent_consumption_readings_kw": "venster van minuten",
+    "_balance_power_samples": "venster van minuten",
+    # Geen gegevens.
+    "_idx": "hulpteller",
+    "_listeners": "verbindingen, geen gegevens",
+}
+
+
+def test_every_accumulating_field_is_accounted_for():
+    """Elk veld dat toestand opbouwt, moet bewaard worden - of expliciet
+    als vluchtig zijn benoemd, mét reden."""
+    import re
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    map_ = Path(pkg.__file__).parent
+    bron = (map_ / "coordinator.py").read_text()
+    kop = bron.index("    def __init__(")
+    staart = bron.index("\n    async def ", kop)
+
+    velden = re.findall(
+        r"self\.(_?[A-Za-z][A-Za-z_0-9]*)\s*(?::[^=\n]+)?=\s*([^\n]+)",
+        bron[kop:staart],
+    )
+    opbouwend = {
+        naam
+        for naam, waarde in velden
+        if waarde.strip().startswith(("{}", "[]"))
+        or re.match(r"^0\.0$|^0$", waarde.strip())
+    }
+
+    bewaard = set(
+        PERSISTED_PLAIN_FIELDS
+        + PERSISTED_INT_FIELDS
+        + PERSISTED_DATE_FIELDS
+        + PERSISTED_DATETIME_FIELDS
+    )
+    # De tweede bewaarlaag: sensoren die hun eigen attributen
+    # terugzetten bij het opstarten.
+    via_sensor = set(
+        re.findall(r"coordinator\.([a-z_0-9]+) = ", (map_ / "sensor.py").read_text())
+    )
+
+    onbenoemd = opbouwend - bewaard - via_sensor - set(VLUCHTIG_MET_REDEN)
+
+    assert not onbenoemd, (
+        "Deze velden bouwen toestand op maar worden niet bewaard en staan "
+        f"ook niet als vluchtig benoemd: {sorted(onbenoemd)}"
+    )
+
+
+def test_the_volatile_list_has_no_leftovers():
+    """Een veld dat inmiddels wél bewaard wordt, hoort niet meer in de
+    vluchtige lijst te staan - anders vertelt die lijst iets dat niet
+    meer waar is."""
+    bewaard = set(PERSISTED_PLAIN_FIELDS + PERSISTED_INT_FIELDS)
+
+    dubbel = bewaard & set(VLUCHTIG_MET_REDEN)
+
+    assert not dubbel, sorted(dubbel)
+
+
+def test_user_decisions_are_never_volatile():
+    """Wat jij hebt weggeklikt of bevestigd, hoort een herstart te
+    overleven. Anders doet wegklikken er niet toe."""
+    import re
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    # Bevestigde en afgewezen apparaten worden door hun eigen sensor
+    # teruggezet; het dubbelpaar via de opslag. Beide tellen.
+    via_sensor = set(
+        re.findall(
+            r"coordinator\.([a-z_0-9]+) = ",
+            (Path(pkg.__file__).parent / "sensor.py").read_text(),
+        )
+    )
+    bewaard = set(PERSISTED_PLAIN_FIELDS) | via_sensor
+
+    for veld in (
+        "nilm_confirmed_devices",
+        "nilm_rejected_entities",
+        "nilm_dismissed_duplicate_pairs",
+    ):
+        assert veld in bewaard, veld
