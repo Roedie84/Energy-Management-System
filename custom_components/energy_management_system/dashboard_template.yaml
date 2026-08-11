@@ -214,7 +214,7 @@ views:
 
         |---|---|---|---|
 
-        | {{ q.get(''laagste_soc_procent'', ''—'') }}% | {{ q.get(''eind_soc_procent'', ''—'') }}% | € {{ q.get(''verwachte_opbrengst_eur'', ''—'') }} | {{ ((q.get(''kwartieren'', 0) / 4) | int) ~ '' uur'' }} |
+        | {{ q.get(''laagste_soc_tot_bijladen_procent'', ''—'') }}% | {{ q.get(''eind_soc_procent'', ''—'') }}% | € {{ q.get(''verwachte_opbrengst_eur'', ''—'') }} | {{ ((q.get(''kwartieren'', 0) / 4) | int) ~ '' uur'' }} |
 
         {% endif %}'
       grid_options:
@@ -502,7 +502,7 @@ views:
   panel: true
   cards:
   - type: picture-elements
-    image: /local/energy_management_system_overview.svg?v=1.47.0
+    image: /local/energy_management_system_overview.svg?v=1.48.0
     elements:
     - type: state-label
       entity: sensor.woonkamer_energy_management_system_system_status

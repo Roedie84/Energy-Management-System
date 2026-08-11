@@ -12344,3 +12344,56 @@ beoordeeld zijn, en de rest staat al op de wachtlijst met een reden.
 **Zes tests erbij.**
 
 **Volledige testsuite**: 1903 tests, allemaal groen.
+
+## v1.48.0 — De codebase langs dezelfde meetlat
+
+**Gevraagd**: "kun je aan de hand van deze verbeteringen de hele code
+eens nakijken op ontbrekende danwel incorrecte zaken?"
+
+Gezocht op de fouttypen die deze week boven kwamen: tijdzoneloze klokken,
+maten die met de horizon meegroeiden, ijkpunten op het verkeerde moment,
+en stille doodlopende wegen. Drie echte vondsten.
+
+### 1. De klok van het proces in plaats van die van Home Assistant
+
+`datetime.now().hour` volgt de tijdzone van het **proces**, niet die van
+Home Assistant. Draait HA in een container op UTC — wat gebruikelijk is —
+dan scheelt dat 's zomers twee uur.
+
+Twee sensoren lazen zo het **verbruiksprofiel** en de **PV-bias van het
+verkeerde uur** af, en een NILM-bevestiging kreeg mogelijk de verkeerde
+datum. Dit viel nergens om: het gaf een plausibel getal, alleen van het
+verkeerde uur. Dezelfde soort fout als de tijdzoneloze tijd in de
+diagnostiek (v1.28.0), maar dan zonder foutmelding.
+
+### 2. De plantoetsing vergeleek nog steeds appels met peren
+
+In v1.37.2 legde ik de dagtellers vast bij de momentopname. Maar de
+**verwachting** zelf liep nog altijd over de hele planning — sinds
+v1.25.0 tot 31 uur. Er werd dus een halve dag van morgen tegen de
+werkelijkheid van vandaag gelegd: 21 kWh rest-vandaag plus 23 kWh morgen
+tegenover 23 kWh gemeten. Elke dag tientallen procenten "afwijking" op
+een voorspelling die klopte.
+
+De samenvatting kan nu worden afgebakend, en de momentopname loopt tot
+middernacht.
+
+### 3. "Laagste 10%" ging over morgenochtend
+
+Dezelfde horizonfout, derde plek: de laagste stand op de landingstegel
+liep over de hele planning. Nu tot het eerstvolgende bijladen — precies
+wat de reserve belooft, en wat je er als lezer in legt.
+
+### Onderliggende oorzaak weggenomen
+
+Een planregel droeg alleen `"14:30"`. Elke afbakening moest daardoor met
+omwegen worden gemaakt, en dat ging twee keer mis — één keer met een
+veld dat iets anders bleek te betekenen (`in_goedkoop_blok`). Elke regel
+draagt nu zijn **echte tijdstip**.
+
+### Bewaakt
+
+Een test die geen `datetime.now()`, `datetime.utcnow()` of
+`date.today()` meer toestaat in de integratie.
+
+**Volledige testsuite**: 1908 tests, allemaal groen.

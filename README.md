@@ -547,6 +547,24 @@ alleen "0 van de 24 uren".
 
 **Volledige testsuite**: 1889 tests, allemaal groen.
 
+## De codebase langs dezelfde meetlat (v1.48.0)
+
+**Gevraagd**: *"kun je aan de hand van deze verbeteringen de hele code
+eens nakijken op ontbrekende danwel incorrecte zaken?"*
+
+Drie vondsten. `datetime.now().hour` volgt de tijdzone van het proces en
+niet die van Home Assistant, waardoor twee sensoren het verbruiksprofiel
+en de PV-bias van het verkeerde uur aflazen. De plantoetsing vergeleek
+nog altijd een horizon van 31 uur met dagtellers die om middernacht
+stoppen. En de laagste SoC op de landingstegel ging over de hele
+planning in plaats van over de nacht.
+
+Onderliggende oorzaak van de laatste twee: een planregel droeg alleen
+"14:30", zodat elke afbakening met omwegen moest — en dat ging twee keer
+mis. Elke regel draagt nu zijn echte tijdstip.
+
+**Volledige testsuite**: 1908 tests, allemaal groen.
+
 ## Ingangen die er zijn maar niets leveren (v1.47.0)
 
 **Gevraagd**: *"Meer van dit soort zaken in de integratie?"*

@@ -3170,7 +3170,14 @@ class HourlyConsumptionProfileSensor(SensorEntity, RestoreEntity):
     def native_value(self) -> float | None:
         # Stored/learned internally in kW (used for kWh math elsewhere);
         # displayed in W for readability.
-        current_hour = datetime.now().hour
+        # v1.48.0: `datetime.now()` volgt de tijdzone van het PROCES, niet
+        # die van Home Assistant. Draait HA in een container op UTC - wat
+        # gebruikelijk is - dan wees dit 's zomers twee uur verkeerd, en
+        # las deze sensor het verbruiksprofiel van het verkeerde uur af.
+        # Dezelfde soort fout als de tijdzoneloze tijd in de diagnostiek
+        # (v1.28.0), alleen viel deze nergens om: hij gaf gewoon een
+        # plausibel getal van het verkeerde uur.
+        current_hour = dt_util.now().hour
         value = self._coordinator.learned_hourly_avg_kw(current_hour)
         return round(value * 1000) if value is not None else None
 
@@ -3341,7 +3348,9 @@ class PvHourlyBiasSensor(SensorEntity, RestoreEntity):
 
     @property
     def native_value(self) -> float | None:
-        current_hour = datetime.now().hour
+        # v1.48.0: zie hierboven - de tijdzone van Home Assistant, niet
+        # die van het proces.
+        current_hour = dt_util.now().hour
         value = self._coordinator.learned_pv_hourly_ratio(current_hour)
         return round(value, 3) if value is not None else None
 

@@ -5552,6 +5552,20 @@ class EnergyManagementSystemCoordinator:
             for datum, uren in sorted(per_dag.items(), reverse=True)
         ]
 
+    def _laagste_soc_tot_bijladen(self, plan: list[dict]) -> int | None:
+        """De laagste stand tot het eerstvolgende bijladen (v1.48.0)."""
+        socs = [
+            r["soc_procent"]
+            for r in plan
+            if r.get("voor_bijladen", True) and r.get("soc_procent") is not None
+        ]
+        if socs:
+            return min(socs)
+        # Staan we al in het goedkope blok, dan is er niets meer te
+        # overbruggen; dan is de huidige stand het antwoord.
+        alle = [r["soc_procent"] for r in plan if r.get("soc_procent") is not None]
+        return alle[0] if alle else None
+
     def _tekort_perioden(self, plan: list[dict]) -> list[str]:
         """Wanneer hangt het huis aan het net? (v1.44.0)
 
@@ -9236,6 +9250,11 @@ class EnergyManagementSystemCoordinator:
                     "gewijzigd": gewijzigd,
                     "eerst_voorspeld": eerder,
                     "tekort": tekort,
+                    # v1.48.0: het echte tijdstip erbij. Tot nu toe
+                    # droeg een planregel alleen "14:30" en moest elke
+                    # afbakening met omwegen worden gemaakt - en dat
+                    # ging twee keer mis.
+                    "start": start.isoformat(),
                     "van": start.strftime("%H:%M"),
                     "tot": einde.strftime("%H:%M"),
                     # v1.25.0: nu de tabel verder reikt dan een etmaal,
@@ -9346,7 +9365,12 @@ class EnergyManagementSystemCoordinator:
         # dag echt begonnen is: 's nachts staat er nog geen zon in het
         # plan en zou het rapport iets toetsen wat nergens over gaat.
         if self.plan_snapshot is None and now.hour >= PLAN_SNAPSHOT_HOUR:
-            samenvatting = self.get_quarter_plan_summary(now)
+            # v1.48.0: tot middernacht, want daar stoppen de dagtellers
+            # waar dit straks naast wordt gelegd.
+            middernacht = (now + timedelta(days=1)).replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+            samenvatting = self.get_quarter_plan_summary(now, tot=middernacht)
             if not samenvatting.get("beschikbaar"):
                 return
             self.plan_snapshot = {
@@ -9661,7 +9685,9 @@ class EnergyManagementSystemCoordinator:
         else:
             self._last_plan_alert.pop("plan_verkoop_geblokkeerd", None)
 
-    def get_quarter_plan_summary(self, now: datetime | None = None) -> dict:
+    def get_quarter_plan_summary(
+        self, now: datetime | None = None, tot: datetime | None = None
+    ) -> dict:
         """Samenvatting van de kwartierplanning (v1.23.1).
 
         Gevraagd: "Op de kwartierplanning pagina wil ik in het overzicht
@@ -9673,6 +9699,28 @@ class EnergyManagementSystemCoordinator:
         klopt.
         """
         plan = self.get_quarter_plan(now)
+        if tot is not None:
+            # v1.48.0: een samenvatting over een AFGEBAKENDE periode.
+            #
+            # Zonder grens loopt de planning zover als er prijzen zijn -
+            # sinds v1.25.0 tot 31 uur. De plantoetsing legde die
+            # verwachting naast de dagtellers, en die stoppen om
+            # middernacht. De verwachte zon telde dus een halve dag van
+            # morgen mee tegen de werkelijkheid van vandaag: 21 kWh
+            # rest-vandaag plus 23 kWh morgen tegenover 23 kWh gemeten
+            # zou elke dag een afwijking van tientallen procenten
+            # opleveren.
+            #
+            # Dezelfde fout als bij de tekortkwartieren (v1.42.0): een
+            # maat die klopte bij een horizon van negen uur en niet is
+            # meegegaan toen die horizon verviervoudigde.
+            begrensd = []
+            for regel in plan:
+                begin = dt_util.parse_datetime(regel.get("start") or "")
+                if begin is not None and begin >= tot:
+                    break
+                begrensd.append(regel)
+            plan = begrensd
         if not plan:
             # v1.24.1: zeggen WAT er ontbreekt. "Nog geen planning" liet
             # de gebruiker zoeken naar iets wat kapot leek, terwijl er
@@ -9776,6 +9824,14 @@ class EnergyManagementSystemCoordinator:
                 [r for r in plan if r.get("tekort")]
             ),
             "min_soc_procent_hard": self.effective_min_soc_percent(),
+            # v1.48.0: dezelfde afbakening als de tekortkwartieren.
+            # "Laagste 10%" op de landingstegel ging over morgenochtend
+            # laat, niet over vannacht - en dat is wel wat je erin
+            # leest. Het getal over de hele planning blijft ernaast
+            # staan.
+            "laagste_soc_tot_bijladen_procent": self._laagste_soc_tot_bijladen(
+                plan
+            ),
             # v1.24.3: de ECHTE accustand, zoals in de Zendure-app.
             "laagste_soc_procent": min(socs) if socs else None,
             "hoogste_soc_procent": max(socs) if socs else None,
@@ -15108,7 +15164,8 @@ class EnergyManagementSystemCoordinator:
             return False
         self.nilm_confirmed_devices[entity_id] = {
             "friendly_name": candidate["friendly_name"],
-            "confirmed_at": date.today().isoformat(),
+            # v1.48.0: de datum van Home Assistant, niet van het proces.
+            "confirmed_at": dt_util.now().date().isoformat(),
             "daily_avg_history": [],
             "cusum_accumulator": 0.0,
             "anomaly_detected": False,
@@ -15236,7 +15293,7 @@ class EnergyManagementSystemCoordinator:
 
         Datums en tijdstippen gaan als ISO-tekst naar de opslag: de
         JSON-laag kan ze weliswaar wegschrijven, maar zou ze als tekst
-        terugleveren, waardoor een vergelijking met `date.today()`
+        terugleveren, waardoor een datumvergelijking
         stilzwijgend altijd ongelijk zou zijn - en dan zouden de
         dagtellers bij elke tick opnieuw op nul springen.
         """
