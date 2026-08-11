@@ -2745,9 +2745,18 @@ SOLAR_DEFER_TARGET_FULL_HOUR = 16
 # zwaarder dan de winst.
 SOLAR_DEFER_MIN_PRICE_GAIN_EUR = 0.05
 
-# Niet uitstellen als de accu al bijna leeg is - dan is vullen
-# belangrijker dan optimaliseren.
-SOLAR_DEFER_MIN_SOC_PERCENT = 25.0
+# v1.28.0: de ondergrens op de accustand is VERVALLEN. Hij werd gemeten
+# als percentage van de bruikbare capaciteit terwijl de accustand die je
+# ziet de echte is, dus 25% werkte in de praktijk als 32,5% - en op 11
+# augustus hield hij het uitstellen tegen bij 25% echt, met 23 kWh zon
+# op komst en 18 ct prijsverschil.
+#
+# Gevraagd: "Ik wil alleen dat op basis van prijs en verwachte PV
+# opbrengst de modus later naar smart gaat."
+#
+# Een lege accu betekent alleen dat er meer ruimte te vullen is, en dat
+# zit al in SOLAR_DEFER_SAFETY_FACTOR: het overschot moet 1,25x de
+# ruimte zijn, dus hoe leger de accu hoe strenger die eis vanzelf wordt.
 
 # Uitstellen kan alleen zolang er nog zon komt; na dit uur heeft het
 # geen zin meer om te wachten.

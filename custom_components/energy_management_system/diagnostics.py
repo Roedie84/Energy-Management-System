@@ -22,6 +22,7 @@ from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
 
 from .const import (
     DOMAIN,
@@ -280,7 +281,27 @@ async def async_get_config_entry_diagnostics(
         "config": config,
         "diagnostic_summary": _veilig("get_diagnostic_summary", coordinator.get_diagnostic_summary),
         "missing_optional_features": _veilig("get_missing_optional_features", coordinator.get_missing_optional_features),
-        "live_narrative": coordinator.get_live_narrative(datetime.now()),
+        # v1.28.0, gemeld: "Tevens is de diagnostiek weer een txt i.p.v.
+        # json."
+        #
+        # Twee fouten in deze ene regel. `datetime.now()` geeft een tijd
+        # ZONDER tijdzone, terwijl alles binnen de integratie er wel een
+        # heeft. Draait er op dat moment een vaatwasser of wasmachine,
+        # dan rekent het verhaal `nu - starttijd` uit en gooit Python
+        # "can't subtract offset-naive and offset-aware datetimes".
+        #
+        # En die aanroep stond als enige NIET in `_veilig`, dus die fout
+        # sloopte de hele export: Home Assistant geeft dan een foutpagina
+        # terug en de browser bewaart die als .txt. Precies zoals in
+        # v1.19.3, alleen bleven deze twee regels toen staan.
+        #
+        # Dat het maar soms gebeurde, past bij de oorzaak: alleen als er
+        # net een apparaat draaide. De vaatwasser draait hier meestal
+        # tussen 13 en 15 uur.
+        "live_narrative": _veilig(
+            "get_live_narrative",
+            lambda: coordinator.get_live_narrative(dt_util.now()),
+        ),
         "ems_kpis": {
             "peak_power_today_w": coordinator.peak_power_today_w,
             "peak_power_current_month_w": coordinator.peak_power_current_month_w,
@@ -322,8 +343,11 @@ async def async_get_config_entry_diagnostics(
                 coordinator.last_co2_intensity_g_per_kwh
             ),
         },
-        "learning_health": _build_learning_health(
-            coordinator, solar_tracker, datetime.now()
+        "learning_health": _veilig(
+            "learning_health",
+            lambda: _build_learning_health(
+                coordinator, solar_tracker, dt_util.now()
+            ),
         ),
         "coordinator": {
             "first_seen_date": _iso(coordinator.first_seen_date),
@@ -337,7 +361,9 @@ async def async_get_config_entry_diagnostics(
                 coordinator.last_arbitrage_solar_surplus_w
             ),
             "learning_only": coordinator.learning_only,
-            "persisted_state_snapshot": coordinator._collect_persisted_state(),
+            "persisted_state_snapshot": _veilig(
+                "persisted_state_snapshot", coordinator._collect_persisted_state
+            ),
             "weather_ensemble_readings": coordinator.weather_ensemble_readings,
             "weather_ensemble_spread_percent": (
                 coordinator.weather_ensemble_spread_percent
@@ -812,7 +838,12 @@ async def async_get_config_entry_diagnostics(
     already_configured = {
         value for value in config.values() if isinstance(value, str) and "." in value
     }
-    diagnostics["pv_forecast_raw"] = _build_raw_pv_forecast_snapshot(coordinator)
+    # v1.28.0: ook deze twee liepen buiten de afscherming om. Elke
+    # aanroep in deze functie hoort erin te zitten - de export is juist
+    # het gereedschap dat je nodig hebt wanneer er iets stuk is.
+    diagnostics["pv_forecast_raw"] = _veilig(
+        "pv_forecast_raw", lambda: _build_raw_pv_forecast_snapshot(coordinator)
+    )
     diagnostics["system_scan"] = {
         "note": (
             "Bounded scan of Home Assistant entities that could be "
@@ -824,7 +855,9 @@ async def async_get_config_entry_diagnostics(
             "everything listed here is necessarily useful or safe to "
             "wire up."
         ),
-        "entities": _scan_relevant_entities(hass, already_configured),
+        "entities": _veilig(
+            "system_scan", lambda: _scan_relevant_entities(hass, already_configured)
+        ),
     }
 
     # v1.19.4, gemeld: de download gaf een "500 Internal Server Error".

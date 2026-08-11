@@ -11347,3 +11347,62 @@ planning.
 ijkingstests en vier van de vermogenstests om.
 
 **Volledige testsuite**: 1782 tests, allemaal groen.
+
+## v1.28.0 — Uitstellen op prijs en zon, en de diagnostiek weer als JSON
+
+**Gevraagd**: "Ik wil alleen dat op basis van prijs en verwachte PV
+opbrengst de modus later naar smart gaat, en dus (met de data van
+vandaag als voorbeeld) de accu pas rond 11 uur naar smart gaat."
+
+### De accustand was een verborgen rem
+
+Er stond een ondergrens van 25% op het uitstelplan. Die werd gemeten als
+percentage van de **bruikbare** capaciteit, terwijl de accustand die je
+ziet de **echte** is — dezelfde verwarring als in v1.24.3. 25% echt is
+16,7% bruikbaar, dus de rem sloeg pas los boven 32,5% echt.
+
+Op 11 augustus 07:45 stond de accu op 25% en gaf het plan: *"Accu op 17%
+— vullen gaat nu voor optimaliseren."* Terwijl er 23 kWh zon aankwam en
+het prijsverschil 18 ct was.
+
+De rem is **weg**, niet omgerekend. Een lege accu betekent alleen dat er
+méér ruimte te vullen is, en dat zit al in de marge: het overschot moet
+1,25× de ruimte zijn, dus hoe leger de accu hoe strenger die eis vanzelf
+wordt.
+
+Nagerekend op de gegevens van vandaag:
+
+| Tijd | Prijs | SoC | Besluit |
+|---|---|---|---|
+| 08:00 | 33,3 ct | 25% | uitstellen |
+| 09:00 | 30,5 ct | 21% | uitstellen |
+| 10:00 | 24,9 ct | 18% | uitstellen |
+| **11:00** | 16,4 ct | 13% | **smart** (verschil nog 3,4 ct) |
+
+### Een latente fout die hierdoor bovenkwam
+
+`_estimate_consumption_kwh_for_period` kan `None` geven. Zolang de
+accustand-rem er nog voor stond, sprong de functie er bij een lege accu
+al uit; zonder die rem liep de hele beslistick stuk op *"unsupported
+operand -: float and NoneType"*. Valkuil 4 uit de overdracht, opnieuw.
+
+### De diagnostiek was weer een txt
+
+**Gemeld**: "Tevens is de diagnostiek weer een txt i.p.v. json."
+
+Twee fouten in één regel. `datetime.now()` geeft een tijd **zonder
+tijdzone**, terwijl alles binnen de integratie er wel een heeft. Draait
+er net een vaatwasser of wasmachine, dan rekent het verhaal `nu −
+starttijd` uit en gooit Python *"can't subtract offset-naive and
+offset-aware datetimes"*. En die aanroep stond als enige **niet** in
+`_veilig`, dus die fout sloopte de hele export: Home Assistant geeft dan
+een foutpagina terug en de browser bewaart die als .txt.
+
+Dat het maar sóms gebeurde past bij de oorzaak: alleen als er net een
+apparaat draaide. De vaatwasser draait hier meestal tussen 13 en 15 uur.
+
+Precies zoals v1.19.3, alleen bleven deze twee regels toen staan. Nu
+zitten álle aanroepen erin, ook `learning_health`,
+`persisted_state_snapshot`, `pv_forecast_raw` en `system_scan`.
+
+**Volledige testsuite**: 1785 tests, allemaal groen.

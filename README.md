@@ -515,6 +515,43 @@ laadkant (de vraag of zon-geladen energie tegen de gederfde
 teruglever-waarde in plaats van de marktprijs gewaardeerd zou moeten
 worden) — een mogelijke vervolgstap.
 
+## Uitstellen op prijs en zon (v1.28.0)
+
+**Gevraagd**: *"Ik wil alleen dat op basis van prijs en verwachte PV
+opbrengst de modus later naar smart gaat, en dus (met de data van
+vandaag als voorbeeld) de accu pas rond 11 uur naar smart gaat."*
+
+Op het uitstelplan stond een ondergrens van 25% op de accustand,
+gemeten als percentage van de *bruikbare* capaciteit terwijl de stand
+die je ziet de *echte* is — dezelfde verwarring als in v1.24.3. 25%
+echt is 16,7% bruikbaar, dus de rem sloeg pas los boven 32,5% echt.
+
+Die rem is vervallen. Een lege accu betekent alleen dat er méér ruimte
+te vullen is, en dat zit al in de marge: het overschot moet 1,25× de
+ruimte zijn, dus hoe leger de accu hoe strenger die eis vanzelf wordt.
+De aansturing stelt laden bovendien alleen uit als de accu het tot het
+goedkope blok volhoudt — een aparte controle.
+
+Nagerekend op 11 augustus:
+
+| Tijd | Prijs | SoC | Besluit |
+|---|---|---|---|
+| 08:00 | 33,3 ct | 25% | uitstellen |
+| 09:00 | 30,5 ct | 21% | uitstellen |
+| 10:00 | 24,9 ct | 18% | uitstellen |
+| 11:00 | 16,4 ct | 13% | smart |
+
+### De diagnostiek kwam binnen als txt
+
+`datetime.now()` gaf een tijd zonder tijdzone terwijl alles binnen de
+integratie er wel een heeft. Draaide er net een apparaat, dan rekende
+het live verhaal `nu − starttijd` uit en brak de export af — en die ene
+aanroep stond als enige buiten de afscherming, dus Home Assistant gaf
+een foutpagina die de browser als .txt bewaarde. Alle aanroepen zitten
+nu in `_veilig`.
+
+**Volledige testsuite**: 1785 tests, allemaal groen.
+
 ## De zonschatting stond verkeerd geijkt (v1.27.0)
 
 **Gemeld**: *"Hier gaat wat mis de accu kan niet in 1 uur vol zijn.

@@ -361,7 +361,6 @@ from .const import (
     SOLAR_POOR_DAY_KWH,
     SOLAR_DEFER_LATEST_HOUR,
     SOLAR_DEFER_MIN_PRICE_GAIN_EUR,
-    SOLAR_DEFER_MIN_SOC_PERCENT,
     SELL_RESERVE_SAFETY_FACTOR,
     SELL_RESERVE_DEEPEST_SAFETY_FACTOR,
     SOLAR_DEFER_SAFETY_FACTOR,
@@ -8189,17 +8188,29 @@ class EnergyManagementSystemCoordinator:
 
         min_soc = self.effective_min_soc_percent()
         bruikbaar = capaciteit * (100 - min_soc) / 100
-        soc_procent = 100 * beschikbaar / bruikbaar if bruikbaar else 0
         ruimte = max(0.0, bruikbaar - beschikbaar)
 
-        if soc_procent < SOLAR_DEFER_MIN_SOC_PERCENT:
-            return {
-                "uitstellen": False,
-                "reden": (
-                    f"Accu op {soc_procent:.0f}% - vullen gaat nu voor "
-                    "optimaliseren."
-                ),
-            }
+        # v1.28.0: de accustand is hier GEEN rem meer.
+        #
+        # Gevraagd: "Ik wil alleen dat op basis van prijs en verwachte PV
+        # opbrengst de modus later naar smart gaat, en dus (met de data
+        # van vandaag als voorbeeld) de accu pas rond 11 uur naar smart
+        # gaat."
+        #
+        # Er stond een ondergrens van 25% op. Die werd gemeten als
+        # percentage van de BRUIKBARE capaciteit, terwijl de accustand
+        # die je ziet de ECHTE is - dezelfde verwarring als in v1.24.3.
+        # 25% echt is 16,7% bruikbaar, dus de rem sloeg pas los boven
+        # 32,5% echt. Op 11 augustus stond de accu om 07:45 op 25% en
+        # gaf het plan "Accu op 17% - vullen gaat nu voor optimaliseren",
+        # terwijl er 23 kWh zon aankwam en het prijsverschil 18 ct was.
+        #
+        # De rem is nu helemaal weg, niet omgerekend. Een lege accu
+        # betekent alleen dat er MEER ruimte te vullen is, en dat zit al
+        # in de toets hieronder: het overschot moet 1,25x de ruimte zijn.
+        # Hoe leger de accu, hoe strenger die eis vanzelf wordt. En de
+        # aansturing stelt laden alleen uit als de accu het tot het
+        # goedkope blok volhoudt - die controle staat er los van.
         if ruimte <= 0.05:
             return {
                 "uitstellen": False,
@@ -8240,6 +8251,20 @@ class EnergyManagementSystemCoordinator:
                 continue
             zon = self._estimate_pv_kwh_for_period(start, deadline)
             verbruik = self._estimate_consumption_kwh_for_period(start, deadline)
+            # v1.28.0: zonder verbruiksschatting valt er niets te
+            # vergelijken. Dit kwam pas boven water toen de accustand
+            # geen rem meer was: daarvoor sprong de functie er bij een
+            # lege accu al uit vóór deze regel, en anders liep de hele
+            # beslistick stuk op "unsupported operand -: float and
+            # NoneType" - valkuil 4 uit de overdracht, opnieuw.
+            if zon is None or verbruik is None:
+                return {
+                    "uitstellen": False,
+                    "reden": (
+                        "Nog te weinig verbruiksgeschiedenis om te bepalen "
+                        "wanneer het opvangen kan wachten."
+                    ),
+                }
             overschot = max(0.0, zon - verbruik)
             if overschot >= ruimte * SOLAR_DEFER_SAFETY_FACTOR:
                 beste_uur = uur
