@@ -960,3 +960,67 @@ def test_inside_the_cheap_block_it_reports_the_current_level(
     samenvatting = c.get_quarter_plan_summary(NU)
 
     assert samenvatting["laagste_soc_tot_bijladen_procent"] is not None
+
+
+# --- v1.69.0: de goedkoop-drempel per dag ----------------------------
+
+
+def test_the_cheap_threshold_is_per_day(make_coordinator, hass):
+    """Nagelopen na "Gaat het misschien op nog meer plekken kapot?"
+
+    De drempel werd berekend over alle beschikbare prijzen, dus over
+    twee dagen tegelijk. Heeft morgen een extreme piek en vandaag niet,
+    dan rekt die piek de range op en gelden er vandaag ineens veel meer
+    kwartieren als "goedkoop blok".
+    """
+    c = _coordinator(make_coordinator, hass)
+    morgen = NU + timedelta(days=1)
+    entries = []
+    for i in range(96):
+        start = NU.replace(hour=0, minute=0) + timedelta(minutes=15 * i)
+        # Vandaag vlak: 13 tot 38 ct.
+        prijs = (0.13 if 10 <= start.hour < 16 else 0.38) * PRICE_SCALE_FACTOR
+        entries.append((start, start + timedelta(minutes=15), prijs))
+    for i in range(96):
+        start = morgen.replace(hour=0, minute=0) + timedelta(minutes=15 * i)
+        # Morgen een uitschieter van 72 ct.
+        prijs = (0.72 if start.hour == 19 else 0.30) * PRICE_SCALE_FACTOR
+        entries.append((start, start + timedelta(minutes=15), prijs))
+    c._get_forecast_entries = lambda *a, **k: entries
+
+    plan = c.get_quarter_plan(NU)
+    vandaag = [r for r in plan if not r.get("dag")]
+
+    # Met de gedeelde drempel (0,13 tot 0,72) zou 0,278 gelden en telde
+    # ALLES van vandaag onder 27,8 ct als goedkoop blok. Met de eigen
+    # drempel van vandaag (0,13 tot 0,38) is dat 0,193.
+    duur_vandaag = [r for r in vandaag if r["prijs_ct"] > 25]
+
+    assert duur_vandaag
+    assert not [r for r in duur_vandaag if r["in_goedkoop_blok"]]
+
+
+def test_tomorrow_gets_its_own_threshold(make_coordinator, hass):
+    """En morgen mag niet met de vlakke dag van vandaag worden
+    beoordeeld."""
+    c = _coordinator(make_coordinator, hass)
+    morgen = NU + timedelta(days=1)
+    entries = []
+    for i in range(96):
+        start = NU.replace(hour=0, minute=0) + timedelta(minutes=15 * i)
+        entries.append(
+            (start, start + timedelta(minutes=15), 0.30 * PRICE_SCALE_FACTOR)
+        )
+    for i in range(96):
+        start = morgen.replace(hour=0, minute=0) + timedelta(minutes=15 * i)
+        prijs = (0.10 if 10 <= start.hour < 16 else 0.50) * PRICE_SCALE_FACTOR
+        entries.append((start, start + timedelta(minutes=15), prijs))
+    c._get_forecast_entries = lambda *a, **k: entries
+
+    plan = c.get_quarter_plan(NU)
+    goedkoop_morgen = [
+        r for r in plan if r.get("dag") and r["in_goedkoop_blok"]
+    ]
+
+    assert goedkoop_morgen
+    assert all(r["prijs_ct"] < 25 for r in goedkoop_morgen)
