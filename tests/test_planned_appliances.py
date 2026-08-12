@@ -47,7 +47,10 @@ def test_a_planned_end_time_is_seen(make_coordinator, hass):
     plan = c.get_planned_appliance_load(NU)
 
     assert plan["apparaten"][0]["apparaat"] == "wasmachine"
-    assert "starttijd niet" in plan["apparaten"][0]["let_op"]
+    # v1.70.0: zonder betrouwbare cyclusduur blijft de eindtijd staan,
+    # mét kanttekening. Een duur verzinnen is erger dan een moment dat
+    # een uur naast zit.
+    assert "cyclusduur nog niet betrouwbaar" in plan["apparaten"][0]["let_op"]
 
 
 def test_it_reaches_the_consumption_estimate(make_coordinator, hass):
@@ -144,3 +147,57 @@ def test_it_reads_but_never_starts():
 
     for verboden in ("async_call", "set_value", "press", "turn_on"):
         assert verboden not in code, verboden
+
+
+def test_a_learned_duration_moves_the_load_to_the_start(
+    make_coordinator, hass
+):
+    """Gemeld: "wasmachine heeft inderdaad alleen een eindtijd."
+
+    Die eindtijd als moment nemen legt het verbruik uren te laat: bij
+    een programma dat om 07:00 klaar is en anderhalf uur duurt, wordt
+    het water rond 05:30 verwarmd. Voor een reserve die de nacht moet
+    overbruggen valt dat verbruik dan net buiten het venster.
+    """
+    c = _coordinator(
+        make_coordinator, hass, **{CONF_WASHING_MACHINE_END_AT: "sensor.einde"}
+    )
+    c.washing_machine_cycle_duration_history = [80.0, 72.0, 88.0]
+    hass.states.set("sensor.einde", (NU + timedelta(hours=3)).isoformat())
+
+    regel = c.get_planned_appliance_load(NU)["apparaten"][0]
+
+    assert regel["start_kort"] == "21:40"
+    assert regel["eindtijd_kort"] == "23:00"
+    assert "80 min" in regel["let_op"]
+
+
+def test_short_fragments_do_not_count_as_a_duration(
+    make_coordinator, hass
+):
+    """De geleerde reeks bevat ook korte fragmenten - bij deze
+    installatie 8 en 10 minuten tussen echte cycli van 60 tot 80."""
+    c = _coordinator(
+        make_coordinator, hass, **{CONF_WASHING_MACHINE_END_AT: "sensor.einde"}
+    )
+    c.washing_machine_cycle_duration_history = [8.0, 10.0, 9.0]
+    hass.states.set("sensor.einde", (NU + timedelta(hours=3)).isoformat())
+
+    regel = c.get_planned_appliance_load(NU)["apparaten"][0]
+
+    assert regel["start_kort"] == "23:00"
+    assert "niet betrouwbaar" in regel["let_op"]
+
+
+def test_a_cycle_that_already_started_is_not_planned_again(
+    make_coordinator, hass
+):
+    """Draait hij al, dan zit het verbruik in de live meting - dan zou
+    het dubbel tellen."""
+    c = _coordinator(
+        make_coordinator, hass, **{CONF_WASHING_MACHINE_END_AT: "sensor.einde"}
+    )
+    c.washing_machine_cycle_duration_history = [90.0] * 3
+    hass.states.set("sensor.einde", (NU + timedelta(minutes=30)).isoformat())
+
+    assert c.get_planned_appliance_load(NU)["beschikbaar"] is False
