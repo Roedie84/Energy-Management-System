@@ -160,6 +160,8 @@ def test_present_attributes_are_not_reported(make_coordinator, hass):
             "veroudering": {},
             "waarom_nu": {},
             "gepland_witgoed": {},
+            "zon_vandaag": {},
+            "weerbron_vergelijking": {},
             "besparingscorrectie": {},
             "proefstand": {},
             "nog_niet_bepaald": {},
