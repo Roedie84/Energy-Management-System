@@ -493,3 +493,50 @@ def test_every_sensor_appears_somewhere_on_the_dashboard():
         f"{len(ontbreekt)} sensoren staan nergens op het dashboard: "
         f"{ontbreekt}"
     )
+
+
+# --- v1.53.0: drie kolommen die het scherm vullen --------------------
+
+
+def test_the_overview_has_exactly_three_columns():
+    """Gemeld met screenshot: "veel lege vlakken op landingspagina...
+    Kun je zaken bundelen zodat het mogelijk zelfs zonder scrollen in 1
+    opzicht te zien is?" en daarna: "3 secties en die met alles vullen
+    incl headers?"
+
+    Zeven secties onder elkaar met kaarten over de volle breedte gaven
+    een smalle kolom tekst met veel wit ernaast.
+    """
+    overzicht = next(v for v in _views() if v["title"] == "Overzicht")
+
+    assert len(overzicht["sections"]) == 3
+    assert overzicht.get("max_columns") == 3
+
+
+def test_every_column_carries_its_own_headings():
+    """Zonder koppen in elke kolom is niet te zien waar je kijkt."""
+    overzicht = next(v for v in _views() if v["title"] == "Overzicht")
+
+    for sectie in overzicht["sections"]:
+        koppen = [k for k in sectie["cards"] if k.get("type") == "heading"]
+        assert koppen, "kolom zonder kop"
+
+
+def test_the_columns_are_reasonably_balanced():
+    """Een kolom die twee keer zo lang is als de andere maakt de
+    winst weer ongedaan."""
+    overzicht = next(v for v in _views() if v["title"] == "Overzicht")
+
+    aantallen = [len(s["cards"]) for s in overzicht["sections"]]
+
+    assert max(aantallen) <= min(aantallen) * 2.5
+
+
+def test_no_card_is_lost_in_the_regrouping():
+    """Het herschikken mag niets laten verdwijnen."""
+    overzicht = next(v for v in _views() if v["title"] == "Overzicht")
+
+    kaarten = [k for s in overzicht["sections"] for k in s["cards"]]
+    koppen = [k for k in kaarten if k.get("type") == "heading"]
+
+    assert len(kaarten) - len(koppen) >= 35
