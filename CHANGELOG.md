@@ -12845,3 +12845,43 @@ energieteller: die is cumulatief en de stand bij het begin van de cyclus
 is niet bewaard.
 
 **Volledige testsuite**: 1984 tests, allemaal groen.
+
+## v1.62.0 — `grid_cheaper_than_battery` teruggedraaid
+
+**Gemeld** op 12 augustus 11:56, met de modus in bedrijf: "Wat opvalt is
+dat er nu voor smart charging is gekozen, er is voldoende zonne energie,
+ook als de accu tijdelijk ontlaadt voor bijvoorbeeld het hogere vermogen
+van de wasmachine."
+
+De rekensom klopte — 33,1 ct uit de accu tegen 14,3 ct van het net — maar
+de conclusie niet. **Drie fouten in één beslissing:**
+
+**1. Bij zonoverschot is de keuze niet accu-tegen-net maar
+zon-tegen-net.** En zon is gratis. Het huis kocht 14,3 ct van het net
+terwijl diezelfde zon het huis had kunnen voeden. Er stond 1,23 kWh
+import op de teller bij 5,28 kWh zon.
+
+**2. De verkeerde kostprijs.** De vergelijking gebruikte de kostprijs van
+energie die er ál in zat (23,5 ct). Wat er op dat moment ín ging was
+zon, en dat kost niets — de marginale kWh was gratis.
+
+**3. De ergste, en die geldt ook 's nachts: `smart_charging` zet de
+piekbuffer uit.** Bij een wasmachine die 2000 W trekt terwijl de zon
+1500 W levert, moet het verschil volledig van het net komen, terwijl de
+accu op 35% stond. Het gemeten piekvermogen is 2199 W tegen 1600 W
+ontlaadvermogen; die buffer is aantoonbaar nodig.
+
+Die derde is niet met deze modus op te lossen. Wat nodig is — "voed het
+basisverbruik niet uit de accu, maar pieken wél" — kent de Zendure niet:
+`smart_charging` is alles of niets. Dat vraagt om `manual` met een
+vermogen dat het basisverbruik dekt, en dat is een ánder mechanisme.
+
+**De vergelijking blijft meerekenen** en staat in de diagnostiek onder
+`battery_vs_grid`. Ze stuurt alleen niets meer aan. Juist in de winter,
+als de accu uit het net laadt, wordt de vraag interessant — dan is het
+prettig dat er dan al cijfers liggen.
+
+De modus `smart_charging` blijft bestaan als bekende optie, met de
+controle vooraf uit v1.55.0.
+
+**Volledige testsuite**: 1987 tests, allemaal groen.

@@ -547,6 +547,28 @@ alleen "0 van de 24 uren".
 
 **Volledige testsuite**: 1889 tests, allemaal groen.
 
+## `grid_cheaper_than_battery` teruggedraaid (v1.62.0)
+
+**Gemeld met de modus in bedrijf**: *"er is voldoende zonne energie, ook
+als de accu tijdelijk ontlaadt voor bijvoorbeeld het hogere vermogen van
+de wasmachine."*
+
+De rekensom klopte, de conclusie niet. Bij zonoverschot is de keuze niet
+accu-tegen-net maar zon-tegen-net, en zon is gratis. De vergelijking
+gebruikte bovendien de kostprijs van energie die er ál in zat, terwijl
+er op dat moment gratis zon in ging.
+
+En het zwaarste: `smart_charging` zet ook de piekbuffer uit. Bij een
+wasmachine van 2000 W met 1500 W zon komt het verschil volledig van het
+net, terwijl de accu op 35% staat. Dat geldt ook 's nachts en is met
+deze modus niet op te lossen — "voed het basisverbruik niet uit de accu,
+maar pieken wél" bestaat niet bij de Zendure.
+
+De vergelijking blijft meerekenen en staat in de diagnostiek; ze stuurt
+alleen niets meer aan.
+
+**Volledige testsuite**: 1987 tests, allemaal groen.
+
 ## De hele lijst afgewerkt (v1.57–1.61)
 
 Zeven punten van de ideeënlijst, in vijf versies.

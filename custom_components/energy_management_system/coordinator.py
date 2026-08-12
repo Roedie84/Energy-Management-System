@@ -20026,6 +20026,14 @@ class EnergyManagementSystemCoordinator:
         # cheap block" scope was even reached this tick.
         self._update_needed_kwh_breakdown_for_display(now, cheap_block_start)
         self._update_battery_cost_basis_and_savings(now, entries)
+        # v1.62.0: de vergelijking blijft meerekenen, maar stuurt niets.
+        # Zonder deze aanroep zou `battery_vs_grid` leeg blijven en was
+        # de vraag niet meer te volgen - en juist die vraag wordt in de
+        # winter interessant, als de accu uit het net laadt.
+        try:
+            self._net_is_goedkoper_dan_de_accu(now, entries)
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Kon accu-tegen-net niet berekenen")
         self._update_energy_balance_validation(now)
         self._update_anomaly_detection(now)
         self._update_weather_ensemble_check(now)
@@ -20563,15 +20571,40 @@ class EnergyManagementSystemCoordinator:
             self._finish_decision_tick(now)
             return
 
-        # v1.55.0: is een kWh van het net nu goedkoper dan een kWh uit
-        # de accu? Dan de accu vasthouden en de zon toch opnemen.
-        if self._net_is_goedkoper_dan_de_accu(now, entries):
-            await self._async_apply_operation(OPTION_SMART_CHARGING)
-            self.last_reason = "grid_cheaper_than_battery"
-            self._update_financial_tracking(now, entries, self.last_reason, None, None)
-            self._update_shortfall_detection(now, self.last_reason, self.last_available_kwh, self.last_needed_kwh_to_bridge)
-            self._finish_decision_tick(now)
-            return
+        # v1.62.0: TERUGGEDRAAID. Hier stond de omschakeling naar
+        # `smart_charging` zodra het net goedkoper was dan een kWh uit de
+        # accu. Die rekensom klopte, de conclusie niet.
+        #
+        # Gemeld: "Wat opvalt is dat er nu voor smart charging is
+        # gekozen, er is voldoende zonne energie, ook als de accu
+        # tijdelijk ontlaadt voor bijvoorbeeld het hogere vermogen van de
+        # wasmachine."
+        #
+        # Drie fouten in één beslissing, op 12 augustus 11:56 in bedrijf
+        # gezien:
+        #
+        # 1. Bij zonoverschot is de keuze niet accu-tegen-net maar
+        #    ZON-tegen-net, en zon is gratis. Het huis kocht 14,3 ct van
+        #    het net terwijl diezelfde zon het huis had kunnen voeden.
+        # 2. De vergelijking gebruikte de kostprijs van energie die er AL
+        #    in zat (23,5 ct). Wat er op dat moment IN ging was zon, en
+        #    dat kost niets - de marginale kWh was gratis.
+        # 3. De ergste, en die geldt ook 's nachts: `smart_charging` zet
+        #    ook de PIEKBUFFER uit. Bij een wasmachine die 2000 W trekt
+        #    terwijl de zon 1500 W levert, moet het verschil volledig van
+        #    het net komen terwijl de accu op 35% stond. Het gemeten
+        #    piekvermogen is 2199 W tegen 1600 W ontlaadvermogen; die
+        #    buffer is aantoonbaar nodig.
+        #
+        # De derde fout is niet met deze modus op te lossen. Wat nodig is
+        # - "voed het basisverbruik niet uit de accu, maar pieken wel" -
+        # kent de Zendure niet: `smart_charging` is alles of niets. Dat
+        # vraagt om `manual` met een vermogen dat het basisverbruik
+        # dekt, en dat is een ander mechanisme dan dit.
+        #
+        # De vergelijking zelf blijft bestaan en is zichtbaar in de
+        # diagnostiek (`battery_vs_grid`), zodat de vraag meetbaar blijft.
+        # Ze stuurt alleen niets meer aan.
 
         await self._async_apply_operation(OPTION_SMART)
         self.last_reason = "default_smart"
