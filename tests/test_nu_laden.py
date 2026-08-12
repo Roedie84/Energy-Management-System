@@ -125,3 +125,53 @@ def test_it_leaves_the_reserve_alone():
     assert regels
     for verboden in ("force_manual", "_async_apply_manual", "last_reserve"):
         assert verboden not in code, verboden
+
+
+# --- v1.57.0: eerlijk over wat er nog overruled wordt ----------------
+
+
+def test_the_button_ends_at_the_integrations_own_moment(
+    make_coordinator, hass
+):
+    """Gevraagd: "Schakelt de nu laden knop automatisch uit wanneer het
+    goedkope daadwerkelijk door de integratie bepaalde nu starten met
+    laden moment start?"
+
+    Ja - de eindtijd is dat omslagmoment.
+    """
+    c = _coordinator(make_coordinator, omslag_uur=13)
+
+    c.activeer_nu_laden(NU)
+
+    assert c.nu_laden_actief(NU + timedelta(hours=3, minutes=59)) is True
+    assert c.nu_laden_actief(NU + timedelta(hours=4, minutes=1)) is False
+
+
+def test_the_two_hour_floor_no_longer_pretends_to_override(
+    make_coordinator, hass
+):
+    """Ligt het omslagmoment dichterbij dan twee uur, dan loopt de knop
+    daaroverheen. Dat doet geen kwaad - de accu zou dan toch al laden -
+    maar de tegel beweerde wel dat er nog iets werd overruled."""
+    c = _coordinator(make_coordinator, omslag_uur=10)
+    c.activeer_nu_laden(NU)
+
+    voor = c.get_nu_laden_status(NU + timedelta(minutes=30))
+    na = c.get_nu_laden_status(NU + timedelta(minutes=90))
+
+    assert voor["overruled_nog"] is True
+    assert na["overruled_nog"] is False
+    assert "toch al afgelopen" in na["toelichting"]
+    # En dan kost hij ook niets meer.
+    assert na["kost_eur"] == 0.0
+
+
+def test_the_switch_moment_survives_a_restart():
+    """Zodra de knop loopt geeft het uitstelplan geen omslaguur meer
+    terug - die springt er dan meteen uit. Dus moet het moment bewaard
+    worden, niet opnieuw afgeleid."""
+    from custom_components.energy_management_system.const import (
+        PERSISTED_PLAIN_FIELDS,
+    )
+
+    assert "nu_laden_omslag" in PERSISTED_PLAIN_FIELDS
