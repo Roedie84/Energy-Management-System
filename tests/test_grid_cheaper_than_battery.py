@@ -150,3 +150,58 @@ def test_an_entity_that_is_not_loaded_yet_is_not_blocked(
     assert c.operation_option_available(OPTION_SMART) is True
     # Maar er wordt niets nieuws op gebouwd zolang het onzeker is.
     assert c.smart_charging_supported() is False
+
+
+# --- v1.62.0: de vergelijking stuurt niets meer ----------------------
+
+
+def test_the_comparison_no_longer_switches_modes():
+    """Gemeld op 12 augustus 11:56, met `smart_charging` in bedrijf:
+    "er is voldoende zonne energie, ook als de accu tijdelijk ontlaadt
+    voor bijvoorbeeld het hogere vermogen van de wasmachine."
+
+    Drie fouten in één beslissing:
+
+    1. Bij zonoverschot is de keuze niet accu-tegen-net maar
+       ZON-tegen-net, en zon is gratis.
+    2. De vergelijking gebruikte de kostprijs van energie die er AL in
+       zat; wat er op dat moment in ging was gratis zon.
+    3. `smart_charging` zet ook de PIEKBUFFER uit. Bij een wasmachine
+       van 2000 W met 1500 W zon moet het verschil van het net komen,
+       terwijl de accu op 35% stond. Gemeten piek 2199 W tegen 1600 W
+       ontlaadvermogen.
+
+    De derde geldt ook 's nachts en is met deze modus niet op te lossen.
+    """
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    code = "\n".join(r.split("#")[0] for r in bron.splitlines())
+
+    assert "_async_apply_operation(OPTION_SMART_CHARGING)" not in code
+    assert 'last_reason = "grid_cheaper_than_battery"' not in code
+
+
+def test_the_comparison_is_still_measured(make_coordinator, hass):
+    """De vraag blijft meetbaar - juist in de winter, als de accu uit het
+    net laadt, wordt hij interessant."""
+    c, entries = _coordinator(make_coordinator, hass, netprijs=0.12)
+
+    c._net_is_goedkoper_dan_de_accu(NU, entries)
+
+    assert c.last_battery_vs_grid["net_goedkoper"] is True
+
+
+def test_it_is_still_computed_every_tick():
+    """Zonder aanroep in de tick blijft `battery_vs_grid` leeg en is de
+    vraag niet meer te volgen."""
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    code = "\n".join(r.split("#")[0] for r in bron.splitlines())
+
+    assert "self._net_is_goedkoper_dan_de_accu(now, entries)" in code
