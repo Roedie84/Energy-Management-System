@@ -171,6 +171,8 @@ from .const import (
     ACHTERHOEKS_WOORDEN,
     APPLIANCE_RUNNING_POWER_THRESHOLD_W,
     CONSUMPTION_CORRECTION_SMOOTHING_SAMPLES,
+    CONSUMPTION_CORRECTION_FADE_HOURS,
+    CONSUMPTION_CORRECTION_FULL_HOURS,
     MAX_CONSUMPTION_CORRECTION_RATIO,
     MIN_CHARGED_KWH_FOR_EFFICIENCY_SAMPLE,
     MIN_PLAUSIBLE_EFFICIENCY_PERCENT,
@@ -8764,6 +8766,37 @@ class EnergyManagementSystemCoordinator:
 
         return None
 
+    def _uitgedempte_correctie(
+        self, start: datetime, end: datetime, ratio: float
+    ) -> float:
+        """De live correctie, uitgemiddeld over de periode (v1.68.0).
+
+        Vol gewicht in het eerste uur, daarna lineair aflopend tot niets
+        na `CONSUMPTION_CORRECTION_FADE_HOURS`. Over een periode van een
+        half uur verandert er dus niets; over 31 uur zakt de factor naar
+        vrijwel 1,0.
+
+        Wordt de periode korter dan het volle-gewichtvenster, dan geldt
+        de correctie onverkort - dat is precies waar hij voor bedoeld is.
+        """
+        uren = (end - start).total_seconds() / 3600
+        if uren <= 0:
+            return ratio
+        vol = CONSUMPTION_CORRECTION_FULL_HOURS
+        fade = CONSUMPTION_CORRECTION_FADE_HOURS
+        if uren <= vol:
+            return ratio
+
+        # Oppervlak onder de gewichtscurve: 1 tot `vol`, daarna lineair
+        # naar 0 op `fade`.
+        eind_fade = min(uren, fade)
+        oppervlak = vol
+        if eind_fade > vol:
+            hoogte_eind = max(0.0, 1 - (eind_fade - vol) / (fade - vol))
+            oppervlak += (1 + hoogte_eind) / 2 * (eind_fade - vol)
+        gemiddeld_gewicht = oppervlak / uren
+        return 1.0 + (ratio - 1.0) * gemiddeld_gewicht
+
     def _get_smoothed_consumption_correction_ratio(self, current_hour: int) -> float:
         """How much higher (if at all) recent live consumption has been
         running compared to the learned average for this hour - based
@@ -9301,12 +9334,42 @@ class EnergyManagementSystemCoordinator:
 
         correction_ratio = self._get_smoothed_consumption_correction_ratio(start.hour)
         if correction_ratio != 1.0:
-            _LOGGER.debug(
-                "Smoothed live consumption correction: %.1fx - scaling up "
-                "the remaining consumption estimate accordingly",
-                correction_ratio,
+            # v1.68.0: de live correctie geldt alleen voor de KOMENDE
+            # UREN, niet voor de hele horizon.
+            #
+            # Gemeld: "Nee: 34 kwartier(en) aan het net - morgen
+            # 01:00-09:30. Laagste 10%, eind 10%, € -2.0 over 31 uur."
+            #
+            # Om 16:30 stond er gekookt te worden, dus de live correctie
+            # zat op zijn maximum van 5,0x. Die factor werd toegepast op
+            # de HELE planning van 31 uur - inclusief 03:00 vannacht en
+            # morgenmiddag. Het plan rekende daardoor met 1,26 tot 1,38
+            # kW terwijl het geleerde profiel 0,20 tot 0,41 kW zegt, en
+            # kwam uit op 41,2 kWh verbruik en een accu die om 01:00 leeg
+            # is.
+            #
+            # De correctie zelf is goed bedoeld en nodig: draait de airco
+            # nu, dan zegt het gemiddelde van vorige week te weinig. Maar
+            # dat je om half vijf kookt, zegt niets over 03:00 vannacht.
+            #
+            # Daarom uitdempen: vol gewicht in het eerste uur, daarna
+            # aflopend naar niets. Wat verder weg ligt, wordt beter
+            # beschreven door het geleerde profiel dan door wat er nu
+            # toevallig aan staat.
+            #
+            # Dezelfde soort fout als de horizonmaten van v1.42, v1.48 en
+            # v1.63: iets dat klopt voor het nabije moment, toegepast op
+            # een venster dat sindsdien vier keer zo lang is geworden.
+            gewogen = self._uitgedempte_correctie(
+                start, end, correction_ratio
             )
-            total_kwh *= correction_ratio
+            _LOGGER.debug(
+                "Smoothed live consumption correction: %.1fx, uitgedempt "
+                "naar %.2fx over deze periode",
+                correction_ratio,
+                gewogen,
+            )
+            total_kwh *= gewogen
 
         # v1.61.0: gepland witgoed erbij.
         #
@@ -9687,7 +9750,15 @@ class EnergyManagementSystemCoordinator:
                 return None
 
             consumption_kwh = self._vacation_adjusted_kwh(
-                avg_kw * fraction_hours * consumption_correction_ratio
+                avg_kw
+                * fraction_hours
+                # v1.68.0: ook hier uitdempen. De wandeling naar het
+                # diepste tekort loopt tot het goedkope blok - vannacht
+                # was dat zeventien uur - en die hele periode werd met
+                # de kookpiek van dit moment opgeschaald.
+                * self._uitgedempte_correctie(
+                    start, segment_end, consumption_correction_ratio
+                )
             )
             pv_kwh = (
                 self._estimate_pv_kwh_for_period(cursor, segment_end)
@@ -10051,9 +10122,39 @@ class EnergyManagementSystemCoordinator:
         uitstelplan = self.last_solar_defer_plan or {}
         omslag = uitstelplan.get("omslag_uur")
 
-        lo = min((p / PRICE_SCALE_FACTOR for _, _, p in entries), default=0.0)
-        hi = max((p / PRICE_SCALE_FACTOR for _, _, p in entries), default=0.0)
-        blok_drempel = lo + (hi - lo) * CHEAP_BLOCK_THRESHOLD_MARGIN_FRACTION
+        # v1.69.0: de goedkoop-drempel PER DAG, niet over de hele reeks.
+        #
+        # Nagelopen na "Gaat het misschien op nog meer plekken kapot?" -
+        # en ja. Deze drempel werd berekend over alle beschikbare
+        # prijzen, dus over twee dagen tegelijk. Heeft morgen een
+        # extreme piek en vandaag niet, dan rekt die piek de range op en
+        # gelden er vandaag ineens veel meer kwartieren als "goedkoop
+        # blok".
+        #
+        # Op de reeks van 12 augustus: gedeeld 0,271 tegen 0,263 voor
+        # vandaag en 0,278 voor morgen - klein verschil. Maar op 11
+        # augustus (piek 38 ct) zou de gedeelde drempel 0,271 zijn
+        # geweest tegen 0,198 voor die dag zelf: een derde hoger.
+        #
+        # Vijfde plek waar de horizon van v1.25.0 een maat oprekte.
+        drempels_per_dag: dict = {}
+
+        def _blok_drempel_voor(moment: datetime) -> float:
+            dag = moment.date()
+            if dag not in drempels_per_dag:
+                van_die_dag = [
+                    p / PRICE_SCALE_FACTOR
+                    for begin, _e, p in entries
+                    if begin.date() == dag
+                ]
+                if van_die_dag:
+                    laag, hoog = min(van_die_dag), max(van_die_dag)
+                else:
+                    laag = hoog = 0.0
+                drempels_per_dag[dag] = (
+                    laag + (hoog - laag) * CHEAP_BLOCK_THRESHOLD_MARGIN_FRACTION
+                )
+            return drempels_per_dag[dag]
 
         plan = []
         loper = 0.0
@@ -10102,7 +10203,7 @@ class EnergyManagementSystemCoordinator:
                 continue
             zon = self._estimate_pv_kwh_for_period(start, einde)
             verbruik = self._estimate_consumption_kwh_for_period(start, einde)
-            in_blok = prijs <= blok_drempel
+            in_blok = prijs <= _blok_drempel_voor(start)
 
             duur_kwh = ontlaad_w / 1000 * duur
             laad_kwh = laad_w / 1000 * duur if laad_w else float("inf")

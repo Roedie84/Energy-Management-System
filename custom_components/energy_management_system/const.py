@@ -329,6 +329,20 @@ CONSUMPTION_CORRECTION_SMOOTHING_SAMPLES = 4
 # sensor glitch than a genuine sustained change like the airco running.
 MAX_CONSUMPTION_CORRECTION_RATIO = 5.0
 
+# --- Hoe ver reikt de live correctie? (v1.68.0) ----------------------
+# Gemeld: "Nee: 34 kwartier(en) aan het net - morgen 01:00-09:30.
+# Laagste 10%, eind 10%, EUR -2.0 over 31 uur."
+#
+# Om 16:30 werd er gekookt, dus de correctie zat op zijn maximum van
+# 5,0x - en die werd toegepast op de hele planning van 31 uur. Het plan
+# rekende met 1,26 tot 1,38 kW terwijl het geleerde profiel 0,20 tot
+# 0,41 kW zegt, en concludeerde dat de accu om 01:00 leeg zou zijn.
+#
+# Dat de airco nu draait, zegt iets over het komende uur. Dat je om half
+# vijf kookt, zegt niets over 03:00 vannacht.
+CONSUMPTION_CORRECTION_FULL_HOURS = 1.0
+CONSUMPTION_CORRECTION_FADE_HOURS = 4.0
+
 # Heavy-load awareness (v0.63.0): when a known heavy consumer (vaatwasser,
 # wasmachine, Quooker, airco) is *confirmed* active via its own entity,
 # the median smoothing's built-in caution above is no longer needed - it

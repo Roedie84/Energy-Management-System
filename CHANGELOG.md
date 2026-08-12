@@ -13022,3 +13022,85 @@ configuratie te halen. De geruststelling is verhuisd naar de
 procentpunten erbij.
 
 **Volledige testsuite**: 2005 tests, allemaal groen.
+
+## v1.68.0 — Koken om half vijf zegt niets over 03:00
+
+**Gemeld**: "Nee: 34 kwartier(en) aan het net — morgen 01:00-09:30.
+Laagste 10%, eind 10%, € -2.0 over 31 uur." En terecht: "maar hij moet
+van 01:00 tot 09:30 toch juist de woning voorzien van stroom?"
+
+Ja — en die 34 kwartieren betekenden dat hij dat volgens het plan **niet
+kon**.
+
+### Wat er misging
+
+De export van 16:30 laat het zien: het plan rekende met **1,26 tot 1,38
+kW** terwijl het geleerde profiel **0,20 tot 0,41 kW** zegt. Verbruik
+over de hele planning: 41,2 kWh.
+
+De oorzaak is de live verbruikscorrectie. Om 16:30 werd er gekookt, dus
+die correctie zat op zijn maximum van **5,0×** — en die factor werd
+toegepast op de **hele planning van 31 uur**, inclusief 03:00 vannacht en
+morgenmiddag.
+
+Die correctie is goed bedoeld en nodig: draait de airco nu, dan zegt het
+gemiddelde van vorige week te weinig. Maar dat je om half vijf kookt,
+zegt niets over drie uur 's nachts.
+
+### Nu
+
+Vol gewicht in het eerste uur, daarna uitdovend tot niets na vier uur:
+
+| Horizon | Was | Wordt |
+|---|---|---|
+| 1 uur | 5,00× | **5,00×** |
+| 4 uur | 5,00× | 3,50× |
+| 8 uur | 5,00× | 2,25× |
+| 31 uur | 5,00× | **1,32×** |
+
+Naar boven afwijken blijft de veilige kant — dan houdt de accu meer
+achter de hand — maar niet vijf keer het hele etmaal.
+
+Dit raakt zowel de kwartierplanning als de wandeling naar het diepste
+tekort, die tot het goedkope blok loopt (vannacht zeventien uur).
+
+**Vierde keer dat deze horizon een maat kapotmaakte**, na de
+tekortkwartieren (v1.42.0), de plantoetsing (v1.48.0) en de
+zonverwachting (v1.63.0). Steeds dezelfde vorm: iets dat klopt voor het
+nabije moment, toegepast op een venster dat sinds v1.25.0 vier keer zo
+lang is.
+
+**Volledige testsuite**: 2010 tests, allemaal groen.
+
+## v1.69.0 — De rest van de codebase nagelopen op dezelfde fout
+
+**Gevraagd**: "Gaat het misschien op nog meer plekken kapot?"
+
+Vier keer was het al misgegaan met dezelfde vorm — iets dat klopt voor
+één dag of één moment, toegepast op een horizon die sinds v1.25.0 vier
+keer zo lang is. Dus systematisch nagelopen op alle plekken waar een
+periode of een reeks als geheel wordt gebruikt.
+
+**Eén echte vondst.** De drempel voor "goedkoop blok" in de
+kwartierplanning werd berekend over **alle** beschikbare prijzen, dus
+over twee dagen tegelijk. Heeft morgen een extreme piek en vandaag niet,
+dan rekt die piek de range op en gelden er vandaag ineens veel meer
+kwartieren als goedkoop.
+
+Op de reeks van 12 augustus: gedeeld 27,1 ct tegen 26,3 voor vandaag en
+27,8 voor morgen — klein verschil. Maar met de prijzen van 11 augustus
+(piek 38 ct) zou de gedeelde drempel 27,1 ct zijn geweest tegen **19,8**
+voor die dag zelf: een derde hoger. Nu per dag.
+
+**Wat schoon bleek**, en dat is het vermelden waard:
+
+- de dure-prijsdrempel en de telling van dure kwartieren filteren allebei
+  al expliciet op `now.date()`
+- de zoncorrectie is sinds v1.27.0 op het huidige moment geijkt en geldt
+  alleen voor nog komende uren van vandaag
+- de slijtage- en opbrengstcijfers gaan over de hele planning én worden
+  zo genoemd — daar staat geen "vandaag" bij
+- de netto-opbrengst en de slijtagekosten hanteren dezelfde periode, dus
+  ze zijn onderling consistent
+
+**Volledige testsuite**: 2012 tests, allemaal groen.

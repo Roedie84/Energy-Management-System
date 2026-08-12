@@ -547,6 +547,25 @@ alleen "0 van de 24 uren".
 
 **Volledige testsuite**: 1889 tests, allemaal groen.
 
+## Koken om half vijf zegt niets over 03:00 (v1.68.0)
+
+**Gemeld**: *"34 kwartier(en) aan het net — morgen 01:00-09:30 (…) €
+-2.0 over 31 uur"*, met de terechte vraag: *"maar hij moet van 01:00 tot
+09:30 toch juist de woning voorzien van stroom?"*
+
+Dat wilde hij ook — hij kón het volgens het plan niet. Het plan rekende
+met 1,26 tot 1,38 kW terwijl het geleerde profiel 0,20 tot 0,41 kW zegt,
+omdat er om 16:30 gekookt werd: de live verbruikscorrectie stond op zijn
+maximum van 5,0× en werd toegepast op de hele planning van 31 uur.
+
+Die correctie dooft nu uit: vol gewicht in het eerste uur, na vier uur
+niets meer. Over 31 uur blijft er 1,32× over in plaats van 5,00×.
+
+Vierde keer dat deze horizon een maat kapotmaakte, na de
+tekortkwartieren, de plantoetsing en de zonverwachting.
+
+**Volledige testsuite**: 2010 tests, allemaal groen.
+
 ## Twee meldingen eerlijker (v1.66–1.67)
 
 **Gemeld**: *"Zonoverschot gaat de accu in? Kan niet want die is vol :)"*
