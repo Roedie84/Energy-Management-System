@@ -12692,3 +12692,156 @@ uitstel opzij gezet, kost ca. € 0,72"*. Niet om je tegen te houden,
 maar zodat je weet wat je koopt.
 
 **Volledige testsuite**: 1949 tests, allemaal groen.
+
+## v1.57.0 — "None%", en eerlijk over wat de knop nog overruled
+
+**Gemeld** met screenshot: "None%?" in de rendementstabel. De kaart
+toonde de rauwe waarde terwijl die nog niet gemeten is. Er staat nu
+*"nog niet gemeten (0 van 3 stukken)"*.
+
+De rendementstabel is naar een **eigen pagina** verhuisd (bereikbaar via
+de accupagina); met die extra tekst liep de accupagina over de grens van
+2500 tekens.
+
+**Gevraagd**: "Schakelt de nu laden knop automatisch uit wanneer het
+goedkope daadwerkelijk door de integratie bepaalde nu starten met laden
+moment start?"
+
+Ja — de eindtijd ís dat omslagmoment. Behalve bij de ondergrens van twee
+uur: ligt het omslagmoment dichterbij, dan loopt de knop daaroverheen.
+Dat doet geen kwaad (de accu zou dan toch al laden), maar de tegel
+beweerde wél dat er nog iets werd overruled. Nu staat er in dat geval:
+*"Het uitstel was hier toch al afgelopen — de knop loopt alleen nog
+uit"*, en de kostenschatting valt terug op nul.
+
+Het omslagmoment wordt daarvoor apart bewaard: zodra de knop loopt geeft
+het uitstelplan geen omslaguur meer terug, dus het moest worden
+vastgelegd in plaats van opnieuw afgeleid.
+
+## v1.58.0 — Hoe lang draait een noodloop al?
+
+De les van deze week was steeds dezelfde: iets ving een probleem netjes
+op — en **zweeg**. De azimut viel terug op `sun.sun`, kreeg niets, en
+het installatieprofiel stond tien dagen op "0/5 heldere dagen". Er zijn
+28 terugvalpaden en geen enkele mat hoe lang hij al actief was.
+
+Vijf terugvallen worden nu gevolgd: de accustand die wordt afgeleid in
+plaats van gemeten, de azimut en zonshoogte die op `sun.sun` terugvallen,
+het rendement dat nog op de oude methode draait, en een modus die niet
+bestaat.
+
+Een dag terugval is ruis — een sensor die even zweeg. **Boven een dag**
+verschijnt hij bij *"vraagt een handeling"* en kleurt de tegel op de
+landingspagina rood.
+
+Het beginmoment wordt bewaard; bij elke herstart opnieuw beginnen zou
+"al drie dagen" onmogelijk maken, en dat is precies het getal waar het
+om gaat.
+
+De betrouwbaarheidstabel is naar een eigen pagina verhuisd — met de
+noodlopen erbij liep Meetkwaliteit over de tekengrens.
+
+## v1.59.0 — Wat veroudering versnelt
+
+Van een **degradatiemodel is bewust afgezien**. Capaciteitsverlies is
+enkele procenten per jáár, en de capaciteitssensor is zelf een schatting
+die met de temperatuur meebeweegt. Uit elf dagen valt daar niets uit af
+te leiden, en de modellen uit de literatuur vragen celparameters die
+Zendure niet publiceert. Een curve die er wetenschappelijk uitziet met
+onverifieerbare aannames is erger dan geen curve.
+
+**Wat wél kan is de oorzaken meten in plaats van het gevolg.** Per dag
+geteld:
+
+- uren boven **90%** accustand — de accu stond gisteren uren op 98%
+- uren boven **30 °C** celtemperatuur — gemeten 31 °C, 10,9 boven buiten
+- uren op of onder 15%
+- de warmste cel van die dag
+
+Een gat in de metingen telt niet mee: dan weten we niet wat er
+tussendoor gebeurde.
+
+Zichtbaar op de nieuwe rendementspagina. Er wordt niets op gestuurd —
+dit is meten, net als de proefstand. Twee bestaande mechanismen drukken
+die drijvers trouwens al zonder dat dat de bedoeling was: het
+uitstelplan houdt de accu 's ochtends laag, en de accukoeling drukt de
+temperatuur.
+
+**Volledige testsuite**: 1967 tests, allemaal groen.
+
+## v1.60.0 — "Waarom doe je dit nu?"
+
+**Gevraagd**: "Kun je in de integratie nog een eigen AI maken, die zaken
+als *'Waarom laad je nu? → Omdat tussen 16:00 en 19:00 de prijs 31 cent
+hoger ligt, er slechts 4,2 kWh zon wordt verwacht...'* kan toelichten, en
+dan niet alleen het bovenstaande voorbeeld maar voor alles?"
+
+**Geen taalmodel.** Het besluit is deterministisch — er is een exacte
+regel die zei wat er moest gebeuren — dus een gegenereerde verklaring kan
+er náást zitten zonder dat iemand het merkt. Elke regel komt uit een
+waarde die de beslissing daadwerkelijk nam, en kan dus niets anders
+zeggen dan wat er gebeurde. Een test bewaakt dat er geen API-aanroep in
+sluipt.
+
+Het live verhaal bevatte alle getallen al, maar als één lap tekst met
+tabellen en klimaatprojectie ertussen — geen antwoord op "waarom nu".
+
+Vijftien beslisredenen, elk met een eigen vraag boven het antwoord.
+*"Waarom laad je nu?"* leest anders dan *"Waarom verkoop je nu?"*, en dat
+verschil is het halve antwoord:
+
+> **Waarom verkoop je nu?**
+> → de prijs is nu 68,9 ct, de drempel voor 'duur' ligt op 43,0 ct
+> → de accu staat op 77% (5,2 kWh bruikbaar)
+> → er is 2,3 kWh nodig om de nacht te overbruggen, en dat blijft
+> gereserveerd
+
+Hoogstens drie regels: meer leest niemand, en de vierde reden is per
+definitie de minst belangrijke.
+
+Staat op de landingspagina, boven Besturing. Om er ruimte voor te maken
+is de tabel bij *"Haalt de accu het?"* ingeruild voor één regel — de
+getallen staan op de planningspagina. De tekengrens ging van 1650 naar
+1900, met dezelfde reden erbij als de vorige keren.
+
+**Volledige testsuite**: 1974 tests, allemaal groen.
+
+## v1.61.0 — Gepland witgoed telt mee in de reserve
+
+**Gevraagd**: "Nu weet ik zelf dat er morgen 2 wasmachines en een
+vaatwasser zullen draaien, hoe gaat de integratie daar mee om?"
+
+Niet — en dat is een gat van **4 à 5 kWh**, meer dan de helft van de
+bruikbare accu. Het geleerde uurprofiel staat op 0,20 tot 0,51 kW per
+uur. De kwartierplanning, de tekortkwartieren, de reserve en de
+verkooptoets rekenden dus allemaal te laag.
+
+Concreet risico: de verkooptoets besluit 's avonds dat er ruimte is,
+gebaseerd op een nacht zonder wasmachines. Draaien die er 's ochtends
+wél, dan hangt het huis eerder aan het net.
+
+**Home Connect weet het wel.** Twee nieuwe configuratievelden:
+
+| Veld | Entiteit bij jou |
+|---|---|
+| Uitgestelde start vaatwasser | `number.vaatwasser_begin_relatief` |
+| Eindtijd wasmachine | `sensor.wasmachine_programma_eindtijd` |
+
+**Uitlezen, niet bedienen** — die grens blijft staan, en een test
+bewaakt hem: geen `async_call`, geen `set_value`, geen `press`.
+
+Bij de wasmachine is alleen de **eindtijd** bekend, niet de starttijd.
+Het verbruik zit vooral aan het begin (het verwarmen), maar zonder
+programmaduur is het eerlijker om het bij het einde te leggen dan een
+duur te verzinnen. Dat staat er zo bij.
+
+**Wat een cyclus kost wordt gemeten**, niet geschat. Zolang er nog niets
+gemeten is geldt 1,0 kWh voor de vaatwasser en 0,8 voor de wasmachine;
+zodra een hele cyclus is gezien, is dat de waarde — als mediaan, want
+een halve lading of een eco-programma hoort het beeld niet te bepalen.
+
+Dat verbruik wordt uit het gemeten **vermogen** afgeleid en niet uit de
+energieteller: die is cumulatief en de stand bij het begin van de cyclus
+is niet bewaard.
+
+**Volledige testsuite**: 1984 tests, allemaal groen.

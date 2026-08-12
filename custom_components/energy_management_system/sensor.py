@@ -3863,6 +3863,10 @@ class GacsAssessmentSensor(SensorEntity):
             "prijstoets",
             "besparingscorrectie",
             "proefstand",
+            "terugvallen",
+            "veroudering",
+            "waarom_nu",
+            "gepland_witgoed",
             "nog_niet_bepaald",
         }
     )
@@ -3917,6 +3921,10 @@ class GacsAssessmentSensor(SensorEntity):
             ("prijstoets", self._coordinator.get_price_attribute_check),
             ("besparingscorrectie", self._coordinator.get_savings_correction),
             ("proefstand", self._coordinator.get_proefstand),
+            ("terugvallen", self._coordinator.get_fallback_overview),
+            ("veroudering", self._coordinator.get_aging_drivers),
+            ("waarom_nu", self._coordinator.get_why_now),
+            ("gepland_witgoed", self._coordinator.get_planned_appliance_load),
             ("nog_niet_bepaald", self._coordinator.get_pending_overview),
         ):
             try:

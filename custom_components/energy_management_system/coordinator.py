@@ -446,6 +446,20 @@ from .const import (
     OPTION_MANUAL,
     OPTION_SMART,
     GRID_CHEAPER_MARGIN_EUR,
+    APPLIANCE_PLAN_MAX_HOURS,
+    APPLIANCE_POWER_SAMPLE_LIMIT,
+    AGING_HIGH_SOC_PERCENT,
+    CONF_DISHWASHER_START_IN,
+    CONF_WASHING_MACHINE_END_AT,
+    DEFAULT_DISHWASHER_CYCLE_KWH,
+    DEFAULT_WASHING_MACHINE_CYCLE_KWH,
+    DECISION_REASON_LABELS,
+    WHY_MAX_REASONS,
+    WHY_QUESTIONS,
+    AGING_HIGH_TEMPERATURE_C,
+    AGING_LOW_SOC_PERCENT,
+    AGING_MAX_GAP_HOURS,
+    FALLBACK_ALERT_HOURS,
     NU_LADEN_MIN_HOURS,
     OPTION_SMART_CHARGING,
     OPTION_SMART_DISCHARGING,
@@ -599,6 +613,22 @@ class EnergyManagementSystemCoordinator:
         self.last_battery_vs_grid: dict = {}
         # v1.56.0: tot wanneer de knop "Nu laden" loopt (ISO-tekst).
         self.nu_laden_tot: str | None = None
+        # v1.57.0: wanneer de integratie uit zichzelf zou zijn gaan laden.
+        self.nu_laden_omslag: str | None = None
+        # v1.58.0: sinds wanneer draait welke terugval.
+        self.fallback_since: dict[str, str] = {}
+        self.fallback_reasons: dict[str, str] = {}
+        # v1.59.0: wat veroudering versnelt, per dag geteld.
+        self.veroudering_history: list[dict] = []
+        # v1.61.0: wat een witgoedcyclus werkelijk kost, per apparaat.
+        self.appliance_cycle_kwh: dict[str, float] = {}
+        self._appliance_cycle_history: dict[str, list[float]] = {}
+        # Vermogensmetingen tijdens een lopende cyclus, om achteraf de
+        # kWh te kunnen bepalen.
+        self._appliance_power_samples: dict[str, list] = {}
+        self._veroudering_vandaag: dict[str, float] = {}
+        self._veroudering_day_key = None
+        self._veroudering_last_sample: datetime | None = None
         # v1.23.2: wat er als EERSTE voor elk kwartier werd voorspeld,
         # zodat latere wijzigingen zichtbaar worden.
         self.quarter_plan_first_seen: dict[str, str] = {}
@@ -5947,6 +5977,563 @@ class EnergyManagementSystemCoordinator:
             )
         return gebreken
 
+    def _volg_terugvallen(self, now: datetime) -> None:
+        """Houdt bij hoe lang een noodloop al draait (v1.58.0).
+
+        De les van deze week was steeds dezelfde: iets ving een probleem
+        netjes op - en zweeg. De azimut viel terug op `sun.sun`, kreeg
+        niets, en het installatieprofiel stond tien dagen op "0/5 heldere
+        dagen". Er zijn 28 terugvalpaden en geen enkele meet hoe lang hij
+        al actief is.
+
+        Een systeem dat zichzelf stil repareert, verbergt dat er iets
+        kapot is - en dan draait het maanden op een noodloop.
+        """
+        actief = {}
+
+        # De accustand: gemeten of afgeleid uit de beschikbare energie?
+        soc_sensor = self.config.get(CONF_SOC_SENSOR)
+        if soc_sensor and self._read_sensor_float(soc_sensor) is None:
+            actief["accustand"] = (
+                f"{soc_sensor} geeft geen waarde; de accustand wordt "
+                "afgeleid uit de beschikbare energie."
+            )
+
+        # De zonstand: eigen sensor of het vangnet van sun.sun?
+        eigen_azimut = self.config.get(CONF_SUN_AZIMUTH_SENSOR)
+        if eigen_azimut and self._read_sensor_float(eigen_azimut) is None:
+            actief["azimut"] = (
+                f"{eigen_azimut} geeft geen waarde; er wordt teruggevallen "
+                "op sun.sun."
+            )
+        eigen_hoogte = self.config.get(CONF_SUN_ELEVATION_SENSOR)
+        if eigen_hoogte and self._read_sensor_float(eigen_hoogte) is None:
+            actief["zonshoogte"] = (
+                f"{eigen_hoogte} geeft geen waarde; er wordt teruggevallen "
+                "op sun.sun."
+            )
+
+        # Het rendement: per halve slag of nog de oude methode?
+        if not (
+            self.learned_charge_efficiency_percent is not None
+            and self.learned_discharge_efficiency_percent is not None
+        ):
+            actief["rendement"] = (
+                "Nog niet per halve slag gemeten; de oude methode over het "
+                "hele venster is leidend."
+            )
+
+        # De modus: is er teruggevallen op smart?
+        if "modus_niet_beschikbaar" in self.internal_failures:
+            actief["modus"] = self.internal_failures["modus_niet_beschikbaar"]
+
+        for sleutel in list(self.fallback_since):
+            if sleutel not in actief:
+                del self.fallback_since[sleutel]
+        for sleutel, reden in actief.items():
+            self.fallback_since.setdefault(sleutel, now.isoformat())
+            self.fallback_reasons[sleutel] = reden
+        for sleutel in list(self.fallback_reasons):
+            if sleutel not in actief:
+                del self.fallback_reasons[sleutel]
+
+    def _update_verouderingsdrijvers(self, now: datetime) -> None:
+        """Meet wat veroudering versnelt (v1.59.0).
+
+        Van een degradatiemodel afgezien: capaciteitsverlies is enkele
+        procenten per JAAR, en de capaciteitssensor is zelf een schatting
+        die met de temperatuur meebeweegt. Uit elf dagen valt daar niets
+        uit af te leiden.
+
+        Wat wél kan is de OORZAKEN meten in plaats van het gevolg. Van
+        lithium-ijzerfosfaat is bekend wat veroudering versnelt, en dat
+        is vandaag al meetbaar:
+
+        - lang op hoge stand staan (de accu stond gisteren uren op 98%);
+        - hoge celtemperatuur (31 graden gemeten, 10,9 boven buiten);
+        - diepe ontladingen (beperkt door de ondergrens van 10%).
+
+        Per dag geteld in uren, zodat een reeks iets gaat zeggen. Er
+        wordt niets op gestuurd - dit is meten, net als de proefstand.
+        """
+        vandaag = now.date()
+        if self._veroudering_day_key != vandaag:
+            if self._veroudering_day_key is not None and self._veroudering_vandaag:
+                self.veroudering_history.append(
+                    {
+                        "datum": self._veroudering_day_key.isoformat(),
+                        **{
+                            k: round(v, 2)
+                            for k, v in self._veroudering_vandaag.items()
+                        },
+                    }
+                )
+                self.veroudering_history = self.veroudering_history[
+                    -CAPACITY_TREND_HISTORY_DAYS:
+                ]
+                self.schedule_persisted_state_save()
+            self._veroudering_day_key = vandaag
+            self._veroudering_vandaag = {}
+            self._veroudering_last_sample = None
+
+        vorige = self._veroudering_last_sample
+        self._veroudering_last_sample = now
+        if vorige is None:
+            return
+        uren = (now - vorige).total_seconds() / 3600
+        if uren <= 0 or uren > AGING_MAX_GAP_HOURS:
+            # Een gat betekent dat we niet weten wat er tussendoor
+            # gebeurde; dan liever niets tellen dan gokken.
+            return
+
+        stand = self.accustand_procent()
+        if stand is not None:
+            if stand >= AGING_HIGH_SOC_PERCENT:
+                self._veroudering_vandaag["uren_boven_hoge_stand"] = (
+                    self._veroudering_vandaag.get("uren_boven_hoge_stand", 0.0)
+                    + uren
+                )
+            if stand <= AGING_LOW_SOC_PERCENT:
+                self._veroudering_vandaag["uren_op_lage_stand"] = (
+                    self._veroudering_vandaag.get("uren_op_lage_stand", 0.0)
+                    + uren
+                )
+
+        temperaturen = [
+            m.get("temperatuur_c")
+            for m in (self.battery_module_live or [])
+            if m.get("temperatuur_c") is not None
+        ]
+        if temperaturen:
+            hoogste = max(temperaturen)
+            self._veroudering_vandaag["hoogste_temperatuur_c"] = max(
+                self._veroudering_vandaag.get("hoogste_temperatuur_c", 0.0),
+                hoogste,
+            )
+            if hoogste >= AGING_HIGH_TEMPERATURE_C:
+                self._veroudering_vandaag["uren_boven_warme_temperatuur"] = (
+                    self._veroudering_vandaag.get(
+                        "uren_boven_warme_temperatuur", 0.0
+                    )
+                    + uren
+                )
+
+    def get_planned_appliance_load(self, now: datetime | None = None) -> dict:
+        """Wat er aan gepland witgoed nog aankomt (v1.61.0).
+
+        Gevraagd: "Nu weet ik zelf dat er morgen 2 wasmachines en een
+        vaatwasser zullen draaien, hoe gaat de integratie daar mee om?"
+
+        Niet - en dat is een gat van 4 a 5 kWh, meer dan de helft van de
+        bruikbare accu. De reserve rekent met het geleerde uurprofiel van
+        0,20 tot 0,51 kW per uur.
+
+        Home Connect weet het wél: de uitgestelde start staat in
+        `number.vaatwasser_begin_relatief`, de gewenste eindtijd in
+        `sensor.wasmachine_programma_eindtijd`. Uitlezen, niet bedienen -
+        die grens blijft staan.
+        """
+        nu = now or dt_util.now()
+        gepland: list[dict] = []
+
+        vaatwasser = self._geplande_start_vaatwasser(nu)
+        if vaatwasser is not None:
+            gepland.append(vaatwasser)
+        wasmachine = self._geplande_start_wasmachine(nu)
+        if wasmachine is not None:
+            gepland.append(wasmachine)
+
+        return {
+            "beschikbaar": bool(gepland),
+            "totaal_kwh": round(sum(g["kwh"] for g in gepland), 2),
+            "apparaten": gepland,
+            "toelichting": (
+                "Wat hier staat, is wat je zelf hebt ingesteld - er wordt "
+                "niets gestart of verplaatst. Het telt wel mee in de "
+                "reserve, de verkooptoets en de kwartierplanning."
+            ),
+        }
+
+    def _cyclus_kwh(self, sleutel: str, standaard: float) -> tuple[float, str]:
+        """Wat een cyclus kost: gemeten als het kan, anders geschat."""
+        gemeten = (self.appliance_cycle_kwh or {}).get(sleutel)
+        if gemeten:
+            return gemeten, "gemeten"
+        return standaard, "schatting"
+
+    def _geplande_start_vaatwasser(self, now: datetime) -> dict | None:
+        entity_id = self.config.get(CONF_DISHWASHER_START_IN)
+        if not entity_id:
+            return None
+        seconden = self._read_sensor_float(entity_id)
+        if seconden is None or seconden <= 0:
+            return None
+        start = now + timedelta(seconds=seconden)
+        if (start - now).total_seconds() / 3600 > APPLIANCE_PLAN_MAX_HOURS:
+            return None
+        kwh, herkomst = self._cyclus_kwh(
+            "vaatwasser", DEFAULT_DISHWASHER_CYCLE_KWH
+        )
+        return {
+            "apparaat": "vaatwasser",
+            "start": start.isoformat(),
+            "start_kort": start.strftime("%H:%M"),
+            "kwh": kwh,
+            "herkomst": herkomst,
+        }
+
+    def _geplande_start_wasmachine(self, now: datetime) -> dict | None:
+        entity_id = self.config.get(CONF_WASHING_MACHINE_END_AT)
+        if not entity_id:
+            return None
+        staat = self.hass.states.get(entity_id)
+        if staat is None:
+            return None
+        einde = dt_util.parse_datetime(str(staat.state))
+        if einde is None:
+            # Sommige integraties leveren een aantal seconden in plaats
+            # van een tijdstip.
+            seconden = self._read_sensor_float(entity_id)
+            if seconden is None or seconden <= 0:
+                return None
+            einde = now + timedelta(seconds=seconden)
+        if einde <= now:
+            return None
+        if (einde - now).total_seconds() / 3600 > APPLIANCE_PLAN_MAX_HOURS:
+            return None
+        kwh, herkomst = self._cyclus_kwh(
+            "wasmachine", DEFAULT_WASHING_MACHINE_CYCLE_KWH
+        )
+        return {
+            "apparaat": "wasmachine",
+            # De eindtijd is bekend, de starttijd niet. Het verbruik zit
+            # vooral aan het BEGIN (het verwarmen), maar zonder
+            # programmaduur is het eerlijker om het bij het einde te
+            # leggen dan een duur te verzinnen.
+            "start": einde.isoformat(),
+            "start_kort": einde.strftime("%H:%M"),
+            "kwh": kwh,
+            "herkomst": herkomst,
+            "let_op": "eindtijd bekend, starttijd niet",
+        }
+
+    def _cyclus_energie_kwh(
+        self, apparaat: str, start: datetime, einde: datetime
+    ) -> float | None:
+        """Hoeveel kWh ging er in deze cyclus? (v1.61.0)
+
+        Uit het VERMOGEN geïntegreerd en niet uit de energieteller: die
+        teller is cumulatief en de stand bij het begin van de cyclus is
+        niet bewaard. Het vermogen wordt elke tick al gelezen voor de
+        cyclusherkenning zelf.
+
+        Ruwe benadering - het gemiddelde vermogen tijdens de cyclus maal
+        de duur - maar goed genoeg voor een reserve die in kWh rekent, en
+        eerlijker dan een vaste schatting.
+        """
+        reeks = self._appliance_power_samples.get(apparaat) or []
+        binnen = [w for t, w in reeks if start <= t <= einde]
+        if len(binnen) < 3:
+            return None
+        uren = (einde - start).total_seconds() / 3600
+        if uren <= 0:
+            return None
+        return sum(binnen) / len(binnen) / 1000 * uren
+
+    def _leer_cyclusverbruik(self, apparaat: str, kwh: float) -> None:
+        """Legt vast wat een cyclus werkelijk kostte (v1.61.0).
+
+        Schatten is een noodgreep: zodra de energy_import-teller een hele
+        cyclus heeft gezien, is dat de waarde. De mediaan over de laatste
+        metingen, want een halve lading of een eco-programma hoort het
+        beeld niet te bepalen.
+        """
+        if kwh <= 0:
+            return
+        reeks = self._appliance_cycle_history.setdefault(apparaat, [])
+        reeks.append(round(kwh, 3))
+        self._appliance_cycle_history[apparaat] = reeks[-LEARNING_HISTORY_DAYS:]
+        self.appliance_cycle_kwh[apparaat] = round(
+            statistics.median(self._appliance_cycle_history[apparaat]), 3
+        )
+        self.schedule_persisted_state_save()
+
+    def geplande_witgoed_kwh_in_periode(
+        self, start: datetime, einde: datetime
+    ) -> float:
+        """Hoeveel gepland witgoedverbruik valt er in deze periode?
+        (v1.61.0)
+
+        Hierop leunen de reserve, de energiebrug en de verkooptoets: die
+        rekenen met het geleerde uurprofiel, en daar zit een geplande
+        wasbeurt niet in.
+        """
+        totaal = 0.0
+        for regel in self.get_planned_appliance_load(start).get("apparaten", []):
+            moment = dt_util.parse_datetime(regel["start"])
+            if moment is not None and start <= moment < einde:
+                totaal += regel["kwh"]
+        return totaal
+
+    def get_why_now(self, now: datetime | None = None) -> dict:
+        """Waarom doet de aansturing dit, in drie regels (v1.60.0).
+
+        Gevraagd: "Kun je in de integratie nog een eigen AI maken, die
+        zaken als 'Waarom laad je nu? -> Omdat tussen 16:00 en 19:00 de
+        prijs 31 cent hoger ligt, er slechts 4,2 kWh zon wordt verwacht,
+        en de kans op een tekort vannacht 27% bedraagt' kan toelichten?"
+
+        Geen taalmodel. Het besluit is deterministisch - er is een
+        exacte regel die zei wat er moest gebeuren - dus een gegenereerde
+        verklaring kan er náást zitten zonder dat iemand het merkt. Elke
+        regel hieronder komt uit een waarde die de beslissing
+        daadwerkelijk nam, en kan dus niets anders zeggen dan wat er
+        gebeurde.
+
+        Het live verhaal bevatte al alle getallen, maar als één lange lap
+        tekst met tabellen en klimaatprojectie ertussen - geen antwoord
+        op "waarom nu".
+        """
+        nu = now or dt_util.now()
+        reden = self.last_reason
+        if not reden:
+            return {"beschikbaar": False, "reden": "Nog geen beslissing genomen."}
+
+        regels = [r for r in self._waarom_regels(nu, reden) if r]
+        return {
+            "beschikbaar": True,
+            "vraag": WHY_QUESTIONS.get(reden, "Waarom doet de accu dit nu?"),
+            "code": reden,
+            "kort": DECISION_REASON_LABELS.get(reden, reden),
+            "redenen": regels[:WHY_MAX_REASONS],
+        }
+
+    def _waarom_regels(self, now: datetime, reden: str) -> list[str]:
+        """De onderbouwing per beslisreden (v1.60.0)."""
+        prijs = self.last_current_price_per_kwh
+        drempel = self.last_expensive_price_threshold
+        stand = self.accustand_procent()
+        beschikbaar = self.beschikbare_energie_kwh()
+        nodig = self.last_needed_kwh_to_bridge
+        blok = self.last_cheap_block_start
+        uitstel = self.last_solar_defer_plan or {}
+        verkoop = self.last_sell_check or {}
+        vs_net = self.last_battery_vs_grid or {}
+        # De samenvatting live opvragen; er is geen bewaard veld voor.
+        try:
+            samenvatting = self.get_quarter_plan_summary(now) or {}
+        except Exception:  # noqa: BLE001
+            samenvatting = {}
+
+        def _prijs(waarde) -> str | None:
+            return None if waarde is None else f"{waarde * 100:.1f} ct"
+
+        def _blok_tekst() -> str | None:
+            if blok is None:
+                return None
+            uren = (blok - now).total_seconds() / 3600
+            if uren <= 0:
+                return "het goedkope blok is al begonnen"
+            return (
+                f"het goedkope blok begint om {blok.strftime('%H:%M')}, over "
+                f"{uren:.1f} uur"
+            )
+
+        gemeenschappelijk = []
+        if prijs is not None:
+            regel = f"de prijs is nu {_prijs(prijs)}"
+            if drempel is not None:
+                regel += f", de drempel voor 'duur' ligt op {_prijs(drempel)}"
+            gemeenschappelijk.append(regel)
+        if stand is not None and beschikbaar is not None:
+            gemeenschappelijk.append(
+                f"de accu staat op {stand:.0f}% ({beschikbaar:.1f} kWh bruikbaar)"
+            )
+
+        if reden in ("expensive_quarter", "expensive_quarter_no_own_load"):
+            regels = list(gemeenschappelijk)
+            if nodig is not None:
+                regels.append(
+                    f"er is {nodig:.1f} kWh nodig om de nacht te overbruggen, "
+                    "en dat blijft gereserveerd"
+                )
+            if verkoop.get("vrij_te_verkopen_kwh") is not None:
+                regels.append(
+                    f"{verkoop['vrij_te_verkopen_kwh']:.1f} kWh is vrij om te "
+                    "verkopen"
+                )
+            return regels
+
+        if reden == "expensive_quarter_soc_protected":
+            regels = list(gemeenschappelijk)
+            regels.append(
+                "het kwartier is duur genoeg, maar de accu zit op de reserve "
+                "die voor vannacht nodig is"
+            )
+            if nodig is not None:
+                regels.append(f"die reserve is {nodig:.1f} kWh")
+            return regels
+
+        if reden == "solar_capture_deferred":
+            regels = []
+            if uitstel.get("omslag_uur") is not None:
+                regels.append(
+                    f"opvangen kan wachten tot {uitstel['omslag_uur']}:00"
+                )
+            if uitstel.get("prijsverschil_ct") is not None:
+                regels.append(
+                    f"het overschot is nu {uitstel['prijsverschil_ct']:.1f} ct "
+                    "meer waard op het net dan straks"
+                )
+            if uitstel.get("geschatte_winst_eur") is not None:
+                regels.append(
+                    f"dat scheelt naar schatting € "
+                    f"{uitstel['geschatte_winst_eur']:.2f}"
+                )
+            return regels + gemeenschappelijk[1:]
+
+        if reden == "grid_cheaper_than_battery":
+            regels = []
+            if vs_net.get("accu_eur_per_kwh") is not None:
+                regels.append(
+                    f"een kWh uit de accu kost {vs_net['accu_eur_per_kwh']*100:.1f} ct "
+                    f"(kostprijs {vs_net.get('kostprijs_eur_per_kwh', 0)*100:.1f} ct, "
+                    f"rendement {vs_net.get('rendement_procent', 0):.0f}%, slijtage "
+                    f"{vs_net.get('slijtage_ct_per_kwh', 0):.1f} ct)"
+                )
+            if vs_net.get("net_eur_per_kwh") is not None:
+                regels.append(
+                    f"van het net kost hij nu {vs_net['net_eur_per_kwh']*100:.1f} ct"
+                )
+            regels.append("de accu blijft dus vol voor een duurder moment")
+            return regels
+
+        if reden in ("grid_charging_low_solar", "grid_charging_low_solar_extra_dip"):
+            regels = list(gemeenschappelijk)
+            regels.append("er wordt weinig zon verwacht, dus bijladen uit het net")
+            if _blok_tekst():
+                regels.append(_blok_tekst())
+            return regels
+
+        if reden == "discharging_window":
+            regels = list(gemeenschappelijk)
+            if _blok_tekst():
+                regels.append(_blok_tekst())
+            regels.append(
+                "tot dan voedt de accu het huis in plaats van bij te laden"
+            )
+            return regels
+
+        if reden == "emergency_low_battery":
+            return gemeenschappelijk + [
+                "de accu is te ver gezakt; laden gaat nu voor alles"
+            ]
+
+        if reden == "negative_price":
+            return [
+                f"de prijs is negatief ({_prijs(prijs)}): teruglevering kost geld",
+                "de accu laadt hard en de panelen worden teruggeregeld",
+            ]
+
+        if reden in ("arbitrage_solar_capture", "post_salderen_solar_capture"):
+            regels = ["er is zonoverschot en dat gaat de accu in"]
+            if samenvatting.get("zon_kwh") is not None:
+                regels.append(
+                    f"er wordt vandaag nog {samenvatting['zon_kwh']:.1f} kWh zon "
+                    "verwacht"
+                )
+            return regels + gemeenschappelijk[1:]
+
+        if reden == "force_manual":
+            return ["handmatig overschreven; de aansturing laat de accu met rust"]
+
+        if reden == "no_forecast_data":
+            return [
+                "er zijn geen prijzen beschikbaar, dus valt er niets te plannen"
+            ]
+
+        # default_smart en al het overige
+        regels = list(gemeenschappelijk)
+        regels.append(
+            "geen bijzondere reden om iets anders te doen: de accu vangt zon "
+            "op en voedt het huis"
+        )
+        return regels
+
+    def get_aging_drivers(self) -> dict:
+        """Wat veroudering versnelt, per dag geteld (v1.59.0)."""
+        reeks = self.veroudering_history
+        vandaag = {
+            k: round(v, 2) for k, v in (self._veroudering_vandaag or {}).items()
+        }
+        if not reeks:
+            return {
+                "beschikbaar": False,
+                "vandaag": vandaag,
+                "reden": (
+                    "Nog geen volledige dag geteld - de eerste komt na "
+                    "middernacht."
+                ),
+                "toelichting": (
+                    "Er wordt niet voorspeld hoe snel de accu veroudert - dat "
+                    "vraagt jaren aan metingen. Wel wat het VERSNELT: lang op "
+                    f"{AGING_HIGH_SOC_PERCENT:.0f}% of hoger staan, en "
+                    f"celtemperaturen boven {AGING_HIGH_TEMPERATURE_C:.0f} °C."
+                ),
+            }
+
+        def _gem(sleutel: str) -> float:
+            waarden = [r.get(sleutel, 0.0) for r in reeks]
+            return round(sum(waarden) / len(waarden), 2)
+
+        return {
+            "beschikbaar": True,
+            "dagen": len(reeks),
+            "vandaag": vandaag,
+            "gemiddeld_uren_boven_hoge_stand": _gem("uren_boven_hoge_stand"),
+            "gemiddeld_uren_op_lage_stand": _gem("uren_op_lage_stand"),
+            "gemiddeld_uren_boven_warme_temperatuur": _gem(
+                "uren_boven_warme_temperatuur"
+            ),
+            "hoogste_temperatuur_c": max(
+                (r.get("hoogste_temperatuur_c", 0.0) for r in reeks), default=None
+            ),
+            "dagen_overzicht": list(reversed(reeks))[:14],
+            "toelichting": (
+                "Er wordt niet voorspeld hoe snel de accu veroudert - dat "
+                "vraagt jaren aan metingen. Wel wat het VERSNELT: lang op "
+                f"{AGING_HIGH_SOC_PERCENT:.0f}% of hoger staan, en "
+                f"celtemperaturen boven {AGING_HIGH_TEMPERATURE_C:.0f} °C. "
+                "Het uitstelplan en de accukoeling drukken die twee al, "
+                "zonder dat dat de bedoeling was."
+            ),
+        }
+
+    def get_fallback_overview(self) -> list[dict]:
+        """Welke noodlopen draaien er, en hoe lang al? (v1.58.0)
+
+        Een dag terugval is ruis - een sensor die even zweeg. Een week
+        terugval is een storing die niemand heeft gezien.
+        """
+        nu = dt_util.now()
+        regels = []
+        for sleutel, sinds in self.fallback_since.items():
+            begin = dt_util.parse_datetime(sinds)
+            if begin is None:
+                continue
+            uren = (nu - begin).total_seconds() / 3600
+            regels.append(
+                {
+                    "onderdeel": sleutel,
+                    "sinds": begin.strftime("%d-%m %H:%M"),
+                    "uren": round(uren, 1),
+                    "dagen": round(uren / 24, 1),
+                    "langdurig": uren >= FALLBACK_ALERT_HOURS,
+                    "reden": self.fallback_reasons.get(sleutel, ""),
+                }
+            )
+        return sorted(regels, key=lambda r: -r["uren"])
+
     def get_pending_overview(self) -> dict:
         """Alles wat nog niet bepaald is, met wat ervoor nodig is
         (v1.41.0).
@@ -5990,6 +6577,22 @@ class EnergyManagementSystemCoordinator:
         # v1.47.0: ingangen die er zijn maar niets leveren. Die vragen
         # om een handeling, niet om geduld - en tot nu toe zeiden ze
         # niets.
+        # v1.58.0: een noodloop die al een dag draait vraagt om aandacht.
+        for regel in self.get_fallback_overview():
+            if not regel["langdurig"]:
+                continue
+            doen.append(
+                {
+                    "groep": "Terugval",
+                    "naam": f"{regel['onderdeel']} draait op een noodloop",
+                    "niveau": RELIABILITY_NOT_CONFIGURED,
+                    "label": None,
+                    "wat_ontbreekt": (
+                        f"Al {regel['dagen']} dag(en) actief. {regel['reden']}"
+                    ),
+                }
+            )
+
         for gebrek in self.get_input_health():
             doen.append(
                 {
@@ -8528,7 +9131,23 @@ class EnergyManagementSystemCoordinator:
             )
             total_kwh *= correction_ratio
 
-        return self._vacation_adjusted_kwh(total_kwh)
+        # v1.61.0: gepland witgoed erbij.
+        #
+        # Gevraagd: "Nu weet ik zelf dat er morgen 2 wasmachines en een
+        # vaatwasser zullen draaien, hoe gaat de integratie daar mee om?"
+        #
+        # Het geleerde uurprofiel staat op 0,20 tot 0,51 kW; drie
+        # machines zijn samen 4 a 5 kWh, meer dan de helft van de
+        # bruikbare accu. Zonder deze regel rekenen de reserve, de
+        # energiebrug en de verkooptoets allemaal te laag - dan besluit
+        # de verkooptoets 's avonds dat er ruimte is, terwijl de
+        # wasmachine 's ochtends de accu leegtrekt.
+        #
+        # NA de vakantiecorrectie: die verlaagt het HUISHOUDverbruik,
+        # maar een geplande wasbeurt draait even hard tijdens de
+        # vakantie - en als je weg bent staat er ook niets gepland.
+        gepland = self.geplande_witgoed_kwh_in_periode(start, end)
+        return self._vacation_adjusted_kwh(total_kwh) + gepland
 
     # -- Solcast hourly PV production forecast -----------------------------
 
@@ -10201,10 +10820,17 @@ class EnergyManagementSystemCoordinator:
         einde = nu + timedelta(hours=NU_LADEN_MIN_HOURS)
 
         omslag = plan.get("omslag_uur")
+        self.nu_laden_omslag = None
         if omslag is not None:
             venster_einde = nu.replace(
                 hour=int(omslag), minute=0, second=0, microsecond=0
             )
+            # v1.57.0: het omslagmoment apart onthouden. De eindtijd kan
+            # er door de ondergrens overheen lopen, en dan is het
+            # verschil tussen "loopt nog" en "overruled nog iets" precies
+            # wat de tegel moet laten zien.
+            if venster_einde > nu:
+                self.nu_laden_omslag = venster_einde.isoformat()
             if venster_einde > einde:
                 einde = venster_einde
 
@@ -10248,15 +10874,49 @@ class EnergyManagementSystemCoordinator:
             }
         einde = dt_util.parse_datetime(self.nu_laden_tot)
         minuten = max(0, int((einde - nu).total_seconds() // 60))
+        # v1.57.0, gevraagd: "Schakelt de nu laden knop automatisch uit
+        # wanneer het goedkope daadwerkelijk door de integratie bepaalde
+        # nu starten met laden moment start?"
+        #
+        # Ja - de eindtijd is het omslagmoment van de integratie zelf.
+        # Behalve bij de ondergrens van twee uur: ligt het omslagmoment
+        # dichterbij, dan loopt de knop daaroverheen. Dat doet geen
+        # kwaad (de accu zou dan toch al laden), maar de tegel beweerde
+        # wel dat er nog iets werd overruled.
+        omslag = self._nu_laden_omslag_moment(nu)
+        overruled_nog = omslag is None or nu < omslag
         return {
             "actief": True,
             "tot": einde.strftime("%H:%M"),
             "resterend_minuten": minuten,
             "resterend": f"{minuten // 60}u{minuten % 60:02d}m",
-            "kost_eur": (self.last_solar_defer_plan or {}).get(
-                "geschatte_winst_eur"
+            "overruled_nog": overruled_nog,
+            "toelichting": (
+                "Zet het uitstel opzij."
+                if overruled_nog
+                else (
+                    "Het uitstel was hier toch al afgelopen - de knop loopt "
+                    "alleen nog uit."
+                )
+            ),
+            "kost_eur": (
+                (self.last_solar_defer_plan or {}).get("geschatte_winst_eur")
+                if overruled_nog
+                else 0.0
             ),
         }
+
+    def _nu_laden_omslag_moment(self, now: datetime) -> datetime | None:
+        """Wanneer zou de integratie uit zichzelf zijn gaan laden?
+        (v1.57.0)
+
+        Vastgelegd bij het indrukken, want zodra de knop loopt geeft
+        `plan_solar_capture_moment` geen omslaguur meer terug - die
+        springt er dan meteen uit.
+        """
+        if not self.nu_laden_omslag:
+            return None
+        return dt_util.parse_datetime(self.nu_laden_omslag)
 
     def plan_solar_capture_moment(self, now: datetime) -> dict:
         """Wanneer is het beste moment om zon te gaan opvangen?
@@ -14170,6 +14830,16 @@ class EnergyManagementSystemCoordinator:
         if power_w is None:
             return
 
+        # v1.61.0: het vermogen meelopen bewaren, zodat achteraf te
+        # bepalen valt wat de cyclus kostte. Alleen de lopende cyclus -
+        # bij "klaar" wordt de reeks geleegd.
+        naam = "vaatwasser" if "dishwasher" in state_attr else "wasmachine"
+        monsters = self._appliance_power_samples.setdefault(naam, [])
+        monsters.append((now, power_w))
+        self._appliance_power_samples[naam] = monsters[
+            -APPLIANCE_POWER_SAMPLE_LIMIT:
+        ]
+
         current_state = getattr(self, state_attr)
 
         if power_w >= APPLIANCE_RUNNING_POWER_THRESHOLD_W:
@@ -14199,6 +14869,15 @@ class EnergyManagementSystemCoordinator:
                 history = getattr(self, duration_history_attr)
                 history.append(round(duration_minutes, 1))
                 setattr(self, duration_history_attr, history[-LEARNING_HISTORY_DAYS:])
+
+                # v1.61.0: ook vastleggen wat de cyclus KOSTTE. Schatten
+                # is een noodgreep; zodra een hele cyclus gemeten is, is
+                # dat de waarde die in de reserve meetelt.
+                naam = "vaatwasser" if "dishwasher" in state_attr else "wasmachine"
+                gemeten = self._cyclus_energie_kwh(naam, started_at, now)
+                if gemeten:
+                    self._leer_cyclusverbruik(naam, gemeten)
+                self._appliance_power_samples[naam] = []
 
         setattr(self, state_attr, "klaar")
         setattr(self, below_threshold_since_attr, None)
@@ -18866,6 +19545,16 @@ class EnergyManagementSystemCoordinator:
         # toetsen. Ook afgeschermd - een rapport mag de aansturing niet
         # in de weg zitten. De fout komt via `internal_failures` alsnog
         # als melding binnen (v1.29.0).
+        try:
+            self._update_verouderingsdrijvers(now)
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Kon de verouderingsdrijvers niet bijwerken")
+
+        try:
+            self._volg_terugvallen(now)
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Kon de terugvallen niet bijhouden")
+
         try:
             self._update_proefstand(now)
         except Exception as fout:  # noqa: BLE001

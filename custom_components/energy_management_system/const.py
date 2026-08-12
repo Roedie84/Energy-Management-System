@@ -989,6 +989,102 @@ GRID_CHEAPER_MARGIN_EUR = 0.02
 # uur alleen zou op een dag met uitstel tot 13:00 betekenen dat het
 # uitstel om 10:00 hervat en je alsnog met een halfvolle accu zit.
 NU_LADEN_MIN_HOURS = 2
+
+# --- Hoe lang draait een noodloop al? (v1.58.0) ----------------------
+# Er zijn 28 terugvalpaden en geen enkele meet hoe lang hij al actief is.
+# De azimut viel terug op sun.sun, kreeg niets, en het
+# installatieprofiel stond tien dagen op "0/5 heldere dagen" zonder dat
+# iets aansloeg.
+#
+# Een dag terugval is ruis - een sensor die even zweeg. Boven deze grens
+# is het een storing die niemand heeft gezien.
+FALLBACK_ALERT_HOURS = 24.0
+
+# --- Wat veroudering versnelt (v1.59.0) ------------------------------
+# Van een degradatiemodel afgezien: capaciteitsverlies is enkele
+# procenten per JAAR en de capaciteitssensor is zelf een schatting die
+# met de temperatuur meebeweegt. Uit elf dagen valt daar niets uit af te
+# leiden, en een curve die er wetenschappelijk uitziet met
+# onverifieerbare aannames is erger dan geen curve.
+#
+# Wat wél kan is de OORZAKEN meten. Van lithium-ijzerfosfaat is bekend
+# dat lang op hoge stand staan en hoge celtemperatuur de veroudering
+# versnellen - en dat is vandaag al meetbaar.
+AGING_HIGH_SOC_PERCENT = 90.0
+AGING_LOW_SOC_PERCENT = 15.0
+AGING_HIGH_TEMPERATURE_C = 30.0
+
+# Een gat betekent dat we niet weten wat er tussendoor gebeurde; dan
+# liever niets tellen dan gokken.
+AGING_MAX_GAP_HOURS = 0.5
+
+# --- "Waarom doe je dit nu?" (v1.60.0) -------------------------------
+# Gevraagd: "Kun je in de integratie nog een eigen AI maken, die zaken
+# als 'Waarom laad je nu? -> Omdat tussen 16:00 en 19:00 de prijs 31
+# cent hoger ligt, er slechts 4,2 kWh zon wordt verwacht...' kan
+# toelichten, en dan niet alleen het bovenstaande voorbeeld maar voor
+# alles?"
+#
+# Geen taalmodel. Het besluit is deterministisch - er is een exacte
+# regel die zei wat er moest gebeuren - dus een gegenereerde verklaring
+# kan er náást zitten zonder dat iemand het merkt. Elke regel komt uit
+# een waarde die de beslissing daadwerkelijk nam.
+#
+# Drie regels, net als in het voorbeeld. Meer leest niemand, en de
+# vierde reden is per definitie de minst belangrijke.
+WHY_MAX_REASONS = 3
+
+# --- Gepland witgoed in de planning (v1.61.0) ------------------------
+# Gevraagd: "Nu weet ik zelf dat er morgen 2 wasmachines en een
+# vaatwasser zullen draaien, hoe gaat de integratie daar mee om?"
+#
+# Niet. De reserve rekent met het geleerde uurprofiel (0,20-0,51 kW);
+# drie machines zijn samen 4 a 5 kWh, meer dan de helft van de bruikbare
+# accu. Dat verbruik zat nergens in de planning, dus rekenden de
+# kwartierplanning, de tekortkwartieren en de verkooptoets allemaal te
+# laag.
+#
+# Home Connect weet het wel: `number.vaatwasser_begin_relatief` en
+# `sensor.wasmachine_programma_eindtijd` dragen het geplande moment.
+# Uitlezen, niet bedienen - die grens blijft staan.
+CONF_DISHWASHER_START_IN = "dishwasher_start_in_entity"
+CONF_WASHING_MACHINE_END_AT = "washing_machine_end_at_entity"
+
+# Wat een cyclus kost, zolang er nog niets gemeten is. Zodra de
+# energy_import-teller een hele cyclus heeft gezien, wordt dat de
+# waarde - schatten is een noodgreep, geen uitgangspunt.
+DEFAULT_DISHWASHER_CYCLE_KWH = 1.0
+DEFAULT_WASHING_MACHINE_CYCLE_KWH = 0.8
+
+# Verder vooruit dan dit is de planning zelf niet betrouwbaar genoeg om
+# er een geplande cyclus in te hangen.
+APPLIANCE_PLAN_MAX_HOURS = 24.0
+
+# Hoeveel vermogensmetingen er van een lopende cyclus worden bewaard.
+# Bij een tick van vijf minuten is 60 gelijk aan vijf uur - ruim genoeg
+# voor de langste wasbeurt, en klein genoeg om niet in de weg te zitten.
+APPLIANCE_POWER_SAMPLE_LIMIT = 60
+
+# De vraag boven het antwoord, per beslisreden - "Waarom laad je nu?"
+# leest anders dan "Waarom verkoop je nu?", en dat verschil is het halve
+# antwoord.
+WHY_QUESTIONS = {
+    "expensive_quarter": "Waarom verkoop je nu?",
+    "expensive_quarter_no_own_load": "Waarom verkoop je nu?",
+    "expensive_quarter_soc_protected": "Waarom verkoop je nu niet?",
+    "solar_capture_deferred": "Waarom laad je nu nog niet?",
+    "grid_cheaper_than_battery": "Waarom gebruik je de accu nu niet?",
+    "grid_charging_low_solar": "Waarom laad je nu uit het net?",
+    "grid_charging_low_solar_extra_dip": "Waarom laad je nu uit het net?",
+    "discharging_window": "Waarom ontlaad je nu?",
+    "emergency_low_battery": "Waarom laad je met spoed?",
+    "negative_price": "Waarom laad je nu hard?",
+    "arbitrage_solar_capture": "Waarom laad je nu?",
+    "post_salderen_solar_capture": "Waarom laad je nu?",
+    "force_manual": "Waarom doet de aansturing niets?",
+    "no_forecast_data": "Waarom gebeurt er niets?",
+    "default_smart": "Waarom doet de accu dit nu?",
+}
 OPTION_MANUAL = "manual"
 
 # Maps the final coordinator.last_reason (decided only after headroom/
@@ -1249,6 +1345,16 @@ PERSISTED_PLAIN_FIELDS = (
     # teller - anders zet een herstart de klok terug op de volle
     # looptijd.
     "nu_laden_tot",
+    "nu_laden_omslag",
+    # v1.58.0: hoe lang een terugval al draait. Bij elke herstart
+    # opnieuw beginnen zou "al drie dagen" onmogelijk maken - en dat is
+    # precies het getal waar het om gaat.
+    "fallback_since",
+    # v1.59.0: de dagreeks van verouderingsdrijvers.
+    "veroudering_history",
+    # v1.61.0: wat een cyclus werkelijk kostte, per apparaat gemeten.
+    "appliance_cycle_kwh",
+    "_appliance_cycle_history",
     "presence_timeline",
     # v1.30.0: de staat zelf ook. Zonder dat begint elke herstart op
     # "onbekend" en schrijft de eerste tick een nieuwe regel in de

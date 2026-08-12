@@ -449,6 +449,21 @@ async def async_get_config_entry_diagnostics(
             "savings_correction": _veilig(
                 "get_savings_correction", coordinator.get_savings_correction
             ),
+            # v1.58.0: draaiende noodlopen en hoe lang al.
+            # v1.59.0: wat veroudering versnelt.
+            # v1.60.0: waarom doet de aansturing dit nu.
+            # v1.61.0: gepland witgoed dat in de reserve meetelt.
+            "planned_appliances": _veilig(
+                "get_planned_appliance_load",
+                coordinator.get_planned_appliance_load,
+            ),
+            "why_now": _veilig("get_why_now", coordinator.get_why_now),
+            "aging_drivers": _veilig(
+                "get_aging_drivers", coordinator.get_aging_drivers
+            ),
+            "fallback_overview": _veilig(
+                "get_fallback_overview", coordinator.get_fallback_overview
+            ),
             "input_health": _veilig(
                 "get_input_health", coordinator.get_input_health
             ),

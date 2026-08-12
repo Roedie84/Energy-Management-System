@@ -547,6 +547,36 @@ alleen "0 van de 24 uren".
 
 **Volledige testsuite**: 1889 tests, allemaal groen.
 
+## De hele lijst afgewerkt (v1.57–1.61)
+
+Zeven punten van de ideeënlijst, in vijf versies.
+
+**v1.57.0** — "None%" in de rendementstabel wordt "nog niet gemeten"; de
+knop *Nu laden* meldt eerlijk wanneer hij nog loopt maar niets meer
+overruled.
+
+**v1.58.0** — Terugval-duur. Vijf noodlopen worden gevolgd; boven een dag
+verschijnen ze bij "vraagt een handeling". De les van deze week was dat
+elke fout dezelfde vorm had: iets ving het probleem netjes op, en zweeg.
+
+**v1.59.0** — Verouderingsdrijvers: uren boven 90% stand, uren boven
+30 °C, warmste cel per dag. Geen degradatiemodel — dat vraagt jaren data
+en celparameters die de fabrikant niet publiceert.
+
+**v1.60.0** — "Waarom doe je dit nu?" Vijftien beslisredenen, elk met
+hoogstens drie regels uit de getallen die de beslissing namen. Geen
+taalmodel: het besluit is deterministisch, dus een gegenereerde
+verklaring kan er náást zitten zonder dat iemand het merkt.
+
+**v1.61.0** — Gepland witgoed telt mee in de reserve. Uitlezen wat Home
+Connect al weet, niet bedienen.
+
+Twee punten vervielen: fase-onbalans (geen sensoren per fase in Home
+Assistant) en "reserve leren van tekortdagen" — dat bleek al te bestaan
+en stond bij de laatste meting op 15% bonus bij drie tekortdagen.
+
+**Volledige testsuite**: 1984 tests, allemaal groen.
+
 ## Uitschieters, `smart_charging` en de knop "Nu laden" (v1.54–1.56)
 
 **Gemeld op de dag van de zonsverduistering**: *"De integratie geeft nu
