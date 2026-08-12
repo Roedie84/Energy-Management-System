@@ -499,3 +499,85 @@ def test_every_tab_shows_its_name_not_just_an_icon():
             f"view '{view['title']}' heeft een icoon - dan verbergt Home "
             "Assistant de naam in de tabbalk"
         )
+
+
+# --- v1.64.0: het celverschil hangt van de accustand af --------------
+
+
+def _staat(vak="90", reeks=None):
+    return {
+        "soc_buckets": {vak: reeks if reeks is not None else [0.02] * 30},
+        "waarschuwingen": [],
+    }
+
+
+def test_a_full_battery_no_longer_cries_wolf(make_coordinator, hass):
+    """Gemeld: "Accumodule 1: celspanningsverschil 0.190 V - hoger dan
+    gebruikelijk. Dit lijkt een standaard iets te zijn, gebeurt altijd
+    nabij laden rond 100% SOC."
+
+    LFP heeft een vlakke curve in het midden en steile uiteinden. Dezelfde
+    module staat in het vak van 70% op 0,00 tot 0,03 V.
+    """
+    c = make_coordinator({})
+    staat = _staat(vak="90", reeks=[0.17, 0.18, 0.19, 0.185] * 8)
+
+    melding = c._beoordeel_celspreiding(staat, 0.190, soc=99.0)
+
+    assert melding is None
+
+
+def test_the_flat_middle_still_uses_the_absolute_limits(
+    make_coordinator, hass
+):
+    """In het vlakke midden zegt een hoge delta wél iets - daar is de
+    curve immers vlak."""
+    c = make_coordinator({})
+
+    melding = c._beoordeel_celspreiding(_staat(vak="50"), 0.12, soc=50.0)
+
+    assert melding is not None
+    assert "hoger dan gebruikelijk" in melding
+
+
+def test_an_outlier_at_a_full_battery_is_still_reported(
+    make_coordinator, hass
+):
+    """De melding hoort niet te verdwijnen, alleen eerlijker te worden:
+    boven wat voor DEZE module bij DEZE stand gebruikelijk is, telt het
+    alsnog."""
+    c = make_coordinator({})
+    staat = _staat(vak="90", reeks=[0.05] * 30)
+
+    melding = c._beoordeel_celspreiding(staat, 0.190, soc=98.0)
+
+    assert melding is not None
+    assert "gebruikelijk is rond deze stand" in melding
+
+
+def test_too_little_history_says_nothing(make_coordinator, hass):
+    """Liever een gemiste melding dan een drempel op drie waarnemingen -
+    anders leert het overzicht je hem te negeren."""
+    c = make_coordinator({})
+    staat = _staat(vak="90", reeks=[0.02, 0.03, 0.02])
+
+    assert c._beoordeel_celspreiding(staat, 0.190, soc=98.0) is None
+
+
+def test_a_nearly_empty_battery_is_treated_the_same(make_coordinator, hass):
+    """De curve is aan béide uiteinden steil."""
+    c = make_coordinator({})
+    staat = _staat(vak="10", reeks=[0.15] * 30)
+
+    assert c._beoordeel_celspreiding(staat, 0.18, soc=12.0) is None
+
+
+def test_without_a_state_of_charge_it_falls_back(make_coordinator, hass):
+    """Zonder stand valt er niets over het uiteinde te zeggen; dan de
+    oude, veilige beoordeling."""
+    c = make_coordinator({})
+
+    melding = c._beoordeel_celspreiding(_staat(), 0.25, soc=None)
+
+    assert melding is not None
+    assert "fors uit balans" in melding

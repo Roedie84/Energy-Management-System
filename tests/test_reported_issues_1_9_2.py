@@ -136,24 +136,34 @@ def test_the_threshold_matches_a_real_regeneration():
 # --- 4. weerbronnen --------------------------------------------------
 
 
-def test_comparable_sources_are_also_reported(make_coordinator, hass):
-    """Zonder deze melding is stilte dubbelzinnig: geen verschil, of nog
-    niet genoeg gemeten? Een sterke indruk op basis van losse momenten
-    verdient een cijfer om tegen te houden."""
+def test_comparable_sources_are_reported_on_the_weather_page(
+    make_coordinator, hass
+):
+    """v1.67.0: deze melding stond op de LANDINGSPAGINA, en is daar
+    weggehaald.
+
+    Gemeld: "Deze zie ik altijd op de landingspagina, nu niet meer nodig
+    toch?" In v1.9.2 kwam hij erbij om een verkeerde conclusie voor te
+    zijn - stilte was dubbelzinnig. Maar die boodschap heb je één keer
+    nodig, op het moment dat je die vraag hebt. Permanent wordt hij
+    behang.
+
+    De cijfers blijven, alleen op de weerpagina.
+    """
     c = make_coordinator({})
     c.weather_source_agreement = {
         "weather.forecast_thuis": [True] * 149 + [False] * 31,
         "weather.openweathermap": [True] * 143 + [False] * 37,
     }
 
-    melding = next(
-        p
-        for p in c.get_diagnostic_summary()["informatief"]
-        if "Weerbronnen" in p
-    )
+    landing = [
+        p for p in c.get_diagnostic_summary()["informatief"] if "Weerbronnen" in p
+    ]
+    vergelijking = c.get_weather_source_reliability()["_vergelijking"]
 
-    assert "vergelijkbaar" in melding
-    assert "82.8%" in melding
+    assert landing == []
+    assert "vergelijkbaar" in vergelijking["advies"]
+    assert vergelijking["verschil_procentpunt"] < 20
 
 
 def test_a_real_difference_still_advises(make_coordinator, hass):

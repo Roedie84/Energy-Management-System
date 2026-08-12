@@ -138,3 +138,85 @@ def test_without_a_decision_it_says_so(make_coordinator, hass):
     c = _coordinator(make_coordinator, None)
 
     assert c.get_why_now(NU)["beschikbaar"] is False
+
+
+# --- v1.63.0: "vandaag" moet ook echt vandaag zijn -------------------
+
+
+def test_todays_sun_stops_at_midnight(make_coordinator, hass):
+    """Gemeld met een screenshot van Solcast ernaast: "De verwachtte kw
+    zonneenergie kan niet kloppen." De regel zei "er wordt vandaag nog
+    28,5 kWh zon verwacht" terwijl Solcast 6,63 meldde.
+
+    28,5 = 6,6 vandaag plus ruim 22 van morgen. De kaart meldde het zelf:
+    "over 32 uur". Derde keer dat deze horizon een maat betekenisloos
+    maakte, na de tekortkwartieren (v1.42.0) en de plantoetsing
+    (v1.48.0).
+    """
+    gevraagd = {}
+
+    c = _coordinator(make_coordinator, "arbitrage_solar_capture")
+
+    def _samenvatting(nu=None, tot=None):
+        gevraagd["tot"] = tot
+        return {"zon_kwh": 6.6}
+
+    c.get_quarter_plan_summary = _samenvatting
+
+    tekst = " ".join(c.get_why_now(NU)["redenen"])
+
+    # Er wordt expliciet om een grens gevraagd, en die ligt op
+    # middernacht.
+    assert gevraagd["tot"] is not None
+    assert gevraagd["tot"].hour == 0
+    assert gevraagd["tot"].date() > NU.date()
+    assert "6.6 kWh" in tekst
+
+
+# --- v1.66.0: een volle accu vangt niets meer op ---------------------
+
+
+def _met_ruimte(make_coordinator, ruimte):
+    c = _coordinator(make_coordinator, "arbitrage_solar_capture")
+    c._resterende_laadruimte_kwh = lambda: ruimte
+    return c
+
+
+def test_a_full_battery_says_the_surplus_goes_to_the_grid(
+    make_coordinator, hass
+):
+    """Gemeld: "Zonoverschot gaat de accu in? Kan niet want die is vol
+    :)" De regel stond er onvoorwaardelijk, ook bij 100%."""
+    c = _met_ruimte(make_coordinator, 0.0)
+
+    tekst = " ".join(c.get_why_now(NU)["redenen"])
+
+    assert "het net op" in tekst
+    assert "gaat de accu in" not in tekst
+
+
+def test_room_left_names_how_much(make_coordinator, hass):
+    c = _met_ruimte(make_coordinator, 3.4)
+
+    tekst = " ".join(c.get_why_now(NU)["redenen"])
+
+    assert "gaat de accu in" in tekst
+    assert "3.4 kWh ruimte" in tekst
+
+
+def test_almost_full_counts_as_full(make_coordinator, hass):
+    """Een kwartier laden op 2000 W is 0,5 kWh; onder een paar tienden is
+    er in de praktijk geen ruimte meer."""
+    c = _met_ruimte(make_coordinator, 0.2)
+
+    assert "het net op" in " ".join(c.get_why_now(NU)["redenen"])
+
+
+def test_without_a_capacity_it_stays_vague(make_coordinator, hass):
+    """Geen ruimte bekend betekent niet: geen ruimte."""
+    c = _met_ruimte(make_coordinator, None)
+
+    tekst = " ".join(c.get_why_now(NU)["redenen"])
+
+    assert "gaat de accu in" in tekst
+    assert "ruimte)" not in tekst
