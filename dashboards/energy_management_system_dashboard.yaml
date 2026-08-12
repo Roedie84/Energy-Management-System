@@ -509,7 +509,7 @@ views:
   panel: true
   cards:
   - type: picture-elements
-    image: /local/energy_management_system_overview.svg?v=1.69.0
+    image: /local/energy_management_system_overview.svg?v=1.70.0
     elements:
     - type: state-label
       entity: sensor.woonkamer_energy_management_system_system_status
@@ -1669,7 +1669,7 @@ views:
 
         |---|---|---|---|
 
-        {% for a in g.apparaten %}| {{ a.apparaat }} | {{ a.start_kort }} | {{ a.kwh }} | {{ a.herkomst }} |
+        {% for a in g.apparaten %}| {{ a.apparaat }} | {{ a.start_kort }}{% if a.eindtijd_kort %} (klaar {{ a.eindtijd_kort }}){% endif %} | {{ a.kwh }} | {{ a.herkomst }} |
 
         {% endfor %}{% endif %}
 

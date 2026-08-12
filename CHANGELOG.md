@@ -13104,3 +13104,31 @@ voor die dag zelf: een derde hoger. Nu per dag.
   ze zijn onderling consistent
 
 **Volledige testsuite**: 2012 tests, allemaal groen.
+
+## v1.70.0 — Terugrekenen vanaf de eindtijd
+
+**Gemeld**: "wasmachine heeft inderdaad alleen een eindtijd."
+
+Dat legde een zwakte in v1.61.0 bloot. Die eindtijd als moment nemen
+plaatst het verbruik **uren te laat**: bij een programma dat om 07:00
+klaar is en anderhalf uur duurt, wordt het water rond 05:30 verwarmd.
+Voor een reserve die de nacht moet overbruggen valt dat verbruik dan net
+buiten het venster — precies de verkeerde kant op.
+
+De cyclusduur wordt al geleerd. Is die er en plausibel, dan wordt
+daarmee teruggerekend naar het startmoment.
+
+**Maar niet blind.** De geleerde reeks bevat ook korte fragmenten — bij
+deze installatie 8 en 10 minuten tussen echte cycli van 60 tot 80. Onder
+de dertig minuten is de duur niet te vertrouwen en blijft de eindtijd
+staan, mét kanttekening. Een duur verzinnen is erger dan een moment dat
+een uur naast zit.
+
+Ligt het berekende begin al in het verleden, dan draait de machine nu
+al — en dan zit het verbruik in de live meting. Dan wordt hij niet
+opnieuw gepland, anders telt hij dubbel.
+
+Op de kaart staat nu ook de eindtijd: *"wasmachine | 21:40 (klaar 23:00)
+| 0,8 | schatting"*.
+
+**Volledige testsuite**: 2015 tests, allemaal groen.

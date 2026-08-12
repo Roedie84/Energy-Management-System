@@ -1086,6 +1086,21 @@ APPLIANCE_PLAN_MAX_HOURS = 24.0
 # voor de langste wasbeurt, en klein genoeg om niet in de weg te zitten.
 APPLIANCE_POWER_SAMPLE_LIMIT = 60
 
+# --- Terugrekenen vanaf een eindtijd (v1.70.0) -----------------------
+# Gemeld: "wasmachine heeft inderdaad alleen een eindtijd."
+#
+# Die eindtijd als moment nemen legt het verbruik uren te laat: bij een
+# programma dat om 07:00 klaar is en anderhalf uur duurt, wordt het
+# water rond 05:30 verwarmd. Voor een reserve die de nacht moet
+# overbruggen valt dat verbruik dan net buiten het venster.
+#
+# De cyclusduur wordt al geleerd, maar die reeks bevat ook korte
+# fragmenten (bij deze installatie 8 en 10 minuten tussen echte cycli
+# van 60 tot 80). Onder deze grens is de geleerde duur niet te
+# vertrouwen en blijft de eindtijd staan, mét kanttekening - een duur
+# verzinnen is erger dan een moment dat een uur naast zit.
+APPLIANCE_MIN_PLAUSIBLE_CYCLE_MINUTES = 30.0
+
 # De vraag boven het antwoord, per beslisreden - "Waarom laad je nu?"
 # leest anders dan "Waarom verkoop je nu?", en dat verschil is het halve
 # antwoord.

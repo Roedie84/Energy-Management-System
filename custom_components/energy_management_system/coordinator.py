@@ -452,6 +452,7 @@ from .const import (
     OPTION_MANUAL,
     OPTION_SMART,
     GRID_CHEAPER_MARGIN_EUR,
+    APPLIANCE_MIN_PLAUSIBLE_CYCLE_MINUTES,
     APPLIANCE_PLAN_MAX_HOURS,
     APPLIANCE_POWER_SAMPLE_LIMIT,
     AGING_HIGH_SOC_PERCENT,
@@ -6221,17 +6222,46 @@ class EnergyManagementSystemCoordinator:
         kwh, herkomst = self._cyclus_kwh(
             "wasmachine", DEFAULT_WASHING_MACHINE_CYCLE_KWH
         )
+
+        # v1.70.0: het verbruik hoort bij het BEGIN van de cyclus, niet
+        # bij het einde.
+        #
+        # Gemeld: "wasmachine heeft inderdaad alleen een eindtijd." Die
+        # eindtijd als moment nemen legt het verbruik uren te laat: bij
+        # een programma dat om 07:00 klaar is en anderhalf uur duurt,
+        # wordt het water rond 05:30 verwarmd. Voor een reserve die de
+        # nacht moet overbruggen scheelt dat precies de verkeerde kant
+        # op - het verbruik valt dan buiten het venster dat overbrugd
+        # moet worden.
+        #
+        # De cyclusduur wordt al geleerd. Is die er en is hij
+        # plausibel, dan wordt daarmee teruggerekend; anders blijft de
+        # eindtijd staan mét de kanttekening, want een duur verzinnen is
+        # erger dan een moment dat een uur naast zit.
+        duur = self.learned_washing_machine_cycle_duration_minutes
+        if duur is not None and duur >= APPLIANCE_MIN_PLAUSIBLE_CYCLE_MINUTES:
+            moment = einde - timedelta(minutes=duur)
+            let_op = (
+                f"teruggerekend vanaf de eindtijd met {duur:.0f} min "
+                "geleerde cyclusduur"
+            )
+        else:
+            moment = einde
+            let_op = "eindtijd bekend, cyclusduur nog niet betrouwbaar geleerd"
+
+        # Ligt het begin al in het verleden, dan draait hij nu al - en
+        # dan zit het verbruik al in de live meting.
+        if moment <= now:
+            return None
+
         return {
             "apparaat": "wasmachine",
-            # De eindtijd is bekend, de starttijd niet. Het verbruik zit
-            # vooral aan het BEGIN (het verwarmen), maar zonder
-            # programmaduur is het eerlijker om het bij het einde te
-            # leggen dan een duur te verzinnen.
-            "start": einde.isoformat(),
-            "start_kort": einde.strftime("%H:%M"),
+            "start": moment.isoformat(),
+            "start_kort": moment.strftime("%H:%M"),
+            "eindtijd_kort": einde.strftime("%H:%M"),
             "kwh": kwh,
             "herkomst": herkomst,
-            "let_op": "eindtijd bekend, starttijd niet",
+            "let_op": let_op,
         }
 
     def _cyclus_energie_kwh(
