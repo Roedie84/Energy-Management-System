@@ -94,7 +94,16 @@ def test_worst_case_deficit_reacts_to_live_consumption_spike(make_coordinator, h
         coordinator2._track_recent_consumption_reading(start)
     reserve_with_airco = coordinator2._estimate_worst_case_deficit_kwh(start, end)
 
-    assert reserve_with_airco == pytest.approx(reserve_normal * 3, rel=0.01)
+    # v1.68.0: de correctie geldt vol in het eerste uur en dooft daarna
+    # uit. Over dit venster van elfenhalf uur blijft er dus een deel van
+    # de factor 3 over, niet de volle drie.
+    #
+    # Gemeld: het plan rekende met 1,26 kW terwijl het profiel 0,25 zei,
+    # omdat er om 16:30 gekookt werd en die factor over 31 uur werd
+    # uitgesmeerd. Dat de airco nu draait zegt iets over het komende uur,
+    # niet over 03:00 vannacht.
+    assert reserve_with_airco > reserve_normal
+    assert reserve_with_airco < reserve_normal * 3
 
 
 def test_brief_single_tick_spike_does_not_scale_the_whole_estimate(
@@ -198,3 +207,80 @@ def test_sustained_change_still_fully_detected_with_median_smoothing(
 
 
 
+
+
+# --- v1.68.0: hoe ver reikt de live correctie? -----------------------
+
+
+def test_a_short_window_keeps_the_full_correction(make_coordinator, hass):
+    """Draait de airco nu, dan zegt het gemiddelde van vorige week te
+    weinig over het komende uur. Daar is de correctie voor."""
+    c = make_coordinator({})
+
+    assert c._uitgedempte_correctie(
+        DAY0, DAY0 + timedelta(minutes=30), 5.0
+    ) == 5.0
+
+
+def test_a_long_horizon_fades_it_out(make_coordinator, hass):
+    """Gemeld: "34 kwartier(en) aan het net - morgen 01:00-09:30 (...) €
+    -2.0 over 31 uur."
+
+    Om 16:30 werd er gekookt, dus de correctie zat op zijn maximum van
+    5,0x - toegepast op de hele planning van 31 uur. Het plan rekende
+    met 1,26 tot 1,38 kW terwijl het profiel 0,20 tot 0,41 kW zegt.
+    """
+    c = make_coordinator({})
+
+    over_31_uur = c._uitgedempte_correctie(DAY0, DAY0 + timedelta(hours=31), 5.0)
+
+    assert over_31_uur < 1.4
+
+
+def test_the_fade_is_gradual(make_coordinator, hass):
+    """Geen harde knip: een venster van twee uur hoort tussen die van één
+    en vier in te liggen."""
+    c = make_coordinator({})
+
+    een = c._uitgedempte_correctie(DAY0, DAY0 + timedelta(hours=1), 3.0)
+    twee = c._uitgedempte_correctie(DAY0, DAY0 + timedelta(hours=2), 3.0)
+    vier = c._uitgedempte_correctie(DAY0, DAY0 + timedelta(hours=4), 3.0)
+
+    assert een > twee > vier > 1.0
+
+
+def test_no_correction_stays_no_correction(make_coordinator, hass):
+    """Zonder afwijking mag er niets veranderen, hoe lang het venster ook
+    is."""
+    c = make_coordinator({})
+
+    assert c._uitgedempte_correctie(DAY0, DAY0 + timedelta(hours=31), 1.0) == 1.0
+
+
+def test_the_night_estimate_is_no_longer_inflated_by_dinner(
+    make_coordinator, hass
+):
+    """De praktijktoets: koken om half vijf mag de nacht niet vier keer
+    zo duur maken."""
+    c = make_coordinator({"consumption_power_sensor_entity": "sensor.p1"})
+    for hour in range(24):
+        c.hourly_consumption_profile[hour] = [0.3]
+
+    start = DAY0.replace(hour=16, minute=30)
+    hass.states.set("sensor.p1", "1500")  # koken: 5x het gemiddelde
+    for _ in range(4):
+        c._track_recent_consumption_reading(start)
+
+    nacht = c._estimate_consumption_kwh_for_period(
+        start, start + timedelta(hours=17)
+    )
+    zonder_correctie = 0.3 * 17
+
+    # Een deel van de piek telt mee - dat is de bedoeling, en naar boven
+    # afwijken is de veilige kant: dan houdt de accu meer achter de hand.
+    # Maar niet vijf keer het hele etmaal.
+    #
+    # Met de uitdemping komt er over zeventien uur het equivalent van
+    # ruim twee uur verhoogd verbruik bij, in plaats van zeventien.
+    assert nacht < zonder_correctie * 5 * 0.4
+    assert nacht > zonder_correctie
