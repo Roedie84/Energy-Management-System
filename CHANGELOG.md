@@ -13132,3 +13132,37 @@ Op de kaart staat nu ook de eindtijd: *"wasmachine | 21:40 (klaar 23:00)
 | 0,8 | schatting"*.
 
 **Volledige testsuite**: 2015 tests, allemaal groen.
+
+## v1.71.0 — De zonstand wordt nagerekend
+
+**Gevraagd**: "Kunnen we op een of andere manier verifieren dat de
+azimuth correct wordt uitgelezen?"
+
+Ja — de zonstand volgt uit tijd en plaats, en Home Assistant kent de
+coördinaten. Dat geeft een onafhankelijke toets die niets van de sensor
+aanneemt.
+
+**Meteen toegepast op de melding van 12 augustus 17:30:** gemeten
+**248,05°**, berekend **252,9°** voor Lochem. Verschil 4,9 graden — en
+dat is precies wat een aflezing van een paar minuten eerder oplevert,
+want de zon draait 15 graden per uur. De sensor klopt dus.
+
+De controle draait nu permanent en meldt één van vier dingen:
+
+| | |
+|---|---|
+| verschil ≤ 5° | betrouwbaar |
+| verschil > 5° | onbetrouwbaar, met beide getallen erbij |
+| buiten 0–360 | "dit is geen azimut" — vangt graden/radialen door elkaar |
+| geen coördinaten | niet toetsbaar |
+
+De draaiing over middernacht wordt goed afgehandeld: 359 en 1 graad
+schelen twee graden, geen 358 — anders zou elke nacht een alarm geven.
+
+Een afwijking landt in de **doen**-stapel, want wachten helpt daar niet.
+Op de Meetkwaliteit-pagina staat de vergelijking met beide getallen.
+
+De berekening is de standaard NOAA-benadering, nauwkeurig tot ongeveer
+een tiende graad, en zonder extra afhankelijkheid.
+
+**Volledige testsuite**: 2023 tests, allemaal groen.

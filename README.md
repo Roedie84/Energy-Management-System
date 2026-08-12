@@ -547,6 +547,23 @@ alleen "0 van de 24 uren".
 
 **Volledige testsuite**: 1889 tests, allemaal groen.
 
+## De zonstand wordt nagerekend (v1.71.0)
+
+**Gevraagd**: *"Kunnen we op een of andere manier verifieren dat de
+azimuth correct wordt uitgelezen?"*
+
+De zonstand volgt uit tijd en plaats, en Home Assistant kent de
+coördinaten. Toegepast op de meting van 12 augustus 17:30: gemeten
+248,05°, berekend 252,9° — 4,9 graden verschil, precies wat een aflezing
+van een paar minuten eerder oplevert.
+
+De controle draait permanent: binnen vijf graden is betrouwbaar,
+daarbuiten onbetrouwbaar met beide getallen erbij, en een waarde buiten
+0–360 wordt herkend als "dit is geen azimut". De draaiing over
+middernacht wordt goed afgehandeld.
+
+**Volledige testsuite**: 2023 tests, allemaal groen.
+
 ## Koken om half vijf zegt niets over 03:00 (v1.68.0)
 
 **Gemeld**: *"34 kwartier(en) aan het net — morgen 01:00-09:30 (…) €

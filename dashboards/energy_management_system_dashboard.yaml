@@ -509,7 +509,7 @@ views:
   panel: true
   cards:
   - type: picture-elements
-    image: /local/energy_management_system_overview.svg?v=1.70.0
+    image: /local/energy_management_system_overview.svg?v=1.71.0
     elements:
     - type: state-label
       entity: sensor.woonkamer_energy_management_system_system_status
@@ -2162,6 +2162,18 @@ views:
         {% endfor %}{% endif %}
 
         '
+    - type: custom:mushroom-template-card
+      primary: '{% set z = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''zonstand'') or {} %}{% if z.get(''beschikbaar'') %}Zonstand {{ z.gemeten_azimut }}° gemeten, {{ z.get(''berekend_azimut'', ''—'') }}° berekend{% else %}Zonstand niet uitleesbaar{% endif %}'
+      secondary: '{% set z = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''zonstand'') or {} %}{{ z.get(''reden'', '''') }}'
+      multiline_secondary: true
+      icon: mdi:sun-compass
+      icon_color: '{% set z = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''zonstand'') or {} %}{{ ''green'' if z.get(''status'') == ''betrouwbaar'' else (''red'' if z.get(''status'') == ''onbetrouwbaar'' else ''grey'') }}'
+      entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
+      tap_action:
+        action: more-info
+      grid_options:
+        columns: 12
+        rows: auto
     - type: markdown
       title: Draaiende noodlopen
       content: '{% set t = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''terugvallen'') or [] %}{% if t | length == 0 %}Geen enkele terugval actief - alles draait op de eigen bron.{% else %}| Onderdeel | Sinds | Duur | Waarom |

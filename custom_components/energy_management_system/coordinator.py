@@ -40,7 +40,7 @@ import logging
 import math
 import statistics
 import random
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import CoreState, Event, HomeAssistant, callback
@@ -462,6 +462,7 @@ from .const import (
     DEFAULT_WASHING_MACHINE_CYCLE_KWH,
     DECISION_REASON_LABELS,
     SOLAR_CAPTURE_FULL_MARGIN_KWH,
+    SUN_AZIMUTH_TOLERANCE_DEGREES,
     WHY_MAX_REASONS,
     WHY_QUESTIONS,
     AGING_HIGH_TEMPERATURE_C,
@@ -6669,6 +6670,131 @@ class EnergyManagementSystemCoordinator:
             "afwijking_procent": afwijking,
         }
 
+    def get_sun_position_check(self, now: datetime | None = None) -> dict:
+        """Klopt de uitgelezen zonstand? (v1.71.0)
+
+        Gevraagd: "Kunnen we op een of andere manier verifieren dat de
+        azimuth correct wordt uitgelezen?"
+
+        Drie onafhankelijke toetsen, elk met een eigen zwakte - samen
+        vangen ze het meeste af:
+
+        1. **Berekend tegen gemeten.** De zonstand is uit tijd en plaats
+           te berekenen; Home Assistant kent de coordinaten. Wijkt de
+           sensor meer dan een paar graden af, dan klopt er iets niet.
+           Zwakte: de berekening is zelf een benadering (enkele tienden
+           van een graad), en een sensor die een paar minuten oud is
+           loopt tot een graad achter.
+        2. **Bereik.** Een azimut hoort tussen 0 en 360 te liggen. Vangt
+           een sensor die graden en radialen door elkaar haalt, of die
+           een percentage geeft.
+        3. **Zuiden bij de hoogste stand.** Op het hoogste punt van de
+           dag staat de zon pal zuid - dat is natuurkunde en hangt niet
+           van de sensor af. Trager, maar de sterkste toets: hij vangt
+           ook een sensor die consequent een vaste offset heeft.
+        """
+        nu = now or dt_util.now()
+        gemeten = self.get_sun_azimuth_degrees()
+        hoogte = self.get_sun_elevation_degrees()
+
+        if gemeten is None:
+            return {
+                "beschikbaar": False,
+                "reden": "Geen azimut uitleesbaar.",
+            }
+
+        uitkomst: dict = {
+            "beschikbaar": True,
+            "gemeten_azimut": round(gemeten, 1),
+            "gemeten_hoogte": round(hoogte, 1) if hoogte is not None else None,
+        }
+
+        if not 0.0 <= gemeten <= 360.0:
+            uitkomst["status"] = RELIABILITY_UNRELIABLE
+            uitkomst["reden"] = (
+                f"{gemeten:.1f} ligt buiten 0-360 graden; dit is geen azimut."
+            )
+            return uitkomst
+
+        berekend = self._bereken_zonstand(nu)
+        if berekend is None:
+            uitkomst["status"] = RELIABILITY_UNVERIFIABLE
+            uitkomst["reden"] = (
+                "Geen coordinaten bekend om de zonstand mee na te rekenen."
+            )
+            return uitkomst
+
+        az_berekend, hoogte_berekend = berekend
+        # Het verschil over de kortste weg: 359 en 1 graad schelen twee
+        # graden, geen 358.
+        verschil = abs((gemeten - az_berekend + 180) % 360 - 180)
+        uitkomst["berekend_azimut"] = round(az_berekend, 1)
+        uitkomst["berekende_hoogte"] = round(hoogte_berekend, 1)
+        uitkomst["verschil_graden"] = round(verschil, 1)
+
+        if verschil <= SUN_AZIMUTH_TOLERANCE_DEGREES:
+            uitkomst["status"] = RELIABILITY_RELIABLE
+            uitkomst["reden"] = (
+                f"Gemeten {gemeten:.1f}°, berekend {az_berekend:.1f}° voor "
+                f"deze plaats en tijd - {verschil:.1f}° verschil."
+            )
+        else:
+            uitkomst["status"] = RELIABILITY_UNRELIABLE
+            uitkomst["reden"] = (
+                f"Gemeten {gemeten:.1f}° tegen {az_berekend:.1f}° berekend: "
+                f"{verschil:.1f}° verschil. Controleer of deze sensor "
+                "werkelijk de azimut van de zon geeft."
+            )
+        return uitkomst
+
+    def _bereken_zonstand(
+        self, now: datetime
+    ) -> tuple[float, float] | None:
+        """Azimut en hoogte van de zon uit tijd en plaats (v1.71.0).
+
+        Standaardbenadering (NOAA), nauwkeurig tot ongeveer een tiende
+        graad - ruim genoeg om een verkeerde sensor te herkennen, en
+        bewust zonder extra afhankelijkheid.
+        """
+        lat = getattr(self.hass.config, "latitude", None)
+        lon = getattr(self.hass.config, "longitude", None)
+        if lat is None or lon is None:
+            return None
+
+        moment = now.astimezone(timezone.utc)
+        n = (
+            moment - datetime(2000, 1, 1, 12, tzinfo=timezone.utc)
+        ).total_seconds() / 86400
+        gem_lengte = (280.460 + 0.9856474 * n) % 360
+        anomalie = math.radians((357.528 + 0.9856003 * n) % 360)
+        ecliptisch = math.radians(
+            gem_lengte
+            + 1.915 * math.sin(anomalie)
+            + 0.020 * math.sin(2 * anomalie)
+        )
+        scheefstand = math.radians(23.439 - 0.0000004 * n)
+        declinatie = math.asin(
+            math.sin(scheefstand) * math.sin(ecliptisch)
+        )
+        rechte_klimming = math.atan2(
+            math.cos(scheefstand) * math.sin(ecliptisch), math.cos(ecliptisch)
+        )
+        sterrentijd = (18.697374558 + 24.06570982441908 * n) % 24
+        lokale_sterrentijd = math.radians((sterrentijd * 15 + lon) % 360)
+        uurhoek = lokale_sterrentijd - rechte_klimming
+        breedte = math.radians(lat)
+
+        hoogte = math.asin(
+            math.sin(breedte) * math.sin(declinatie)
+            + math.cos(breedte) * math.cos(declinatie) * math.cos(uurhoek)
+        )
+        azimut = math.atan2(
+            math.sin(uurhoek),
+            math.cos(uurhoek) * math.sin(breedte)
+            - math.tan(declinatie) * math.cos(breedte),
+        )
+        return (math.degrees(azimut) + 180) % 360, math.degrees(hoogte)
+
     def get_aging_drivers(self) -> dict:
         """Wat veroudering versnelt, per dag geteld (v1.59.0)."""
         reeks = self.veroudering_history
@@ -6799,6 +6925,20 @@ class EnergyManagementSystemCoordinator:
                     "wat_ontbreekt": (
                         f"Al {regel['dagen']} dag(en) actief. {regel['reden']}"
                     ),
+                }
+            )
+
+        # v1.71.0: een azimut die niet klopt met de berekende zonstand
+        # vraagt om een handeling - wachten helpt daar niet.
+        zonstand = self.get_sun_position_check()
+        if zonstand.get("status") == RELIABILITY_UNRELIABLE:
+            doen.append(
+                {
+                    "groep": "Ingangen",
+                    "naam": "Stand van de zon klopt niet",
+                    "niveau": RELIABILITY_NOT_CONFIGURED,
+                    "label": None,
+                    "wat_ontbreekt": zonstand.get("reden", ""),
                 }
             )
 

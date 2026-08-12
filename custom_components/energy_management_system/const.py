@@ -1055,6 +1055,21 @@ WHY_MAX_REASONS = 3
 # in de praktijk geen ruimte meer.
 SOLAR_CAPTURE_FULL_MARGIN_KWH = 0.3
 
+# --- Klopt de uitgelezen zonstand? (v1.71.0) -------------------------
+# Gevraagd: "Kunnen we op een of andere manier verifieren dat de azimuth
+# correct wordt uitgelezen?"
+#
+# De zon draait 15 graden per uur, dus een aflezing van een paar minuten
+# oud loopt al een halve graad achter. De berekening zelf is nauwkeurig
+# tot ongeveer een tiende graad. Vijf graden is ruim genoeg om normale
+# vertraging door te laten en scherp genoeg om een verkeerde sensor te
+# herkennen.
+#
+# Nagerekend op de melding van 12 augustus 17:30: gemeten 248,05 tegen
+# 252,9 berekend voor Lochem - 4,9 graden, precies wat een aflezing van
+# een paar minuten eerder oplevert.
+SUN_AZIMUTH_TOLERANCE_DEGREES = 5.0
+
 # --- Gepland witgoed in de planning (v1.61.0) ------------------------
 # Gevraagd: "Nu weet ik zelf dat er morgen 2 wasmachines en een
 # vaatwasser zullen draaien, hoe gaat de integratie daar mee om?"

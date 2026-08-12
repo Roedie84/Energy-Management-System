@@ -466,6 +466,10 @@ async def async_get_config_entry_diagnostics(
             "fallback_overview": _veilig(
                 "get_fallback_overview", coordinator.get_fallback_overview
             ),
+            # v1.71.0: gemeten tegen berekende zonstand.
+            "sun_position_check": _veilig(
+                "get_sun_position_check", coordinator.get_sun_position_check
+            ),
             "input_health": _veilig(
                 "get_input_health", coordinator.get_input_health
             ),
