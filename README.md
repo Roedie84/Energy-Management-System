@@ -547,6 +547,28 @@ alleen "0 van de 24 uren".
 
 **Volledige testsuite**: 1889 tests, allemaal groen.
 
+## Uitschieters, `smart_charging` en de knop "Nu laden" (v1.54–1.56)
+
+**Gemeld op de dag van de zonsverduistering**: *"De integratie geeft nu
+maar 2 dure kwartieren door de piek, maar waarschijnlijk kan er toch
+meer ontladen worden."* De drempel was de bovenste 20% van de prijsrange,
+en één piek van 68,9 ct rekte die op tot 57,5 ct — kwartieren van 43 tot
+51 ct vielen af. Er wordt nu ook een mediaanmaat berekend en de ruimste
+van de twee wint, maar alleen als de piek écht een uitschieter is
+(minstens tweemaal de mediaan).
+
+**Modus `smart_charging`** ontbrak: zon opnemen zonder af te geven, de
+tegenhanger van `smart_discharging`. Daardoor kon de aansturing niet
+anders dan het huis voeden, ook als een kWh uit de accu duurder is dan
+van het net. Die vergelijking bestaat nu: kostprijs gedeeld door
+rendement plus slijtage, tegen de prijs van dat moment.
+
+**Knop "Nu laden"** zet alleen het uitstelplan opzij, tot het einde van
+het uitstelvenster met twee uur als ondergrens. De eindtijd wordt
+bewaard, geen teller. De tegel telt af en noemt wat het kost.
+
+**Volledige testsuite**: 1950 tests, allemaal groen.
+
 ## Drie kolommen op de landingspagina (v1.53.0)
 
 **Gemeld**: *"veel lege vlakken op landingspagina... Kun je zaken

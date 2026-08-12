@@ -19,6 +19,7 @@ async def async_setup_entry(
             ForceManualSwitch(coordinator, entry_id=entry.entry_id),
             LearningOnlySwitch(coordinator, entry_id=entry.entry_id),
             VacationModeSwitch(coordinator, entry_id=entry.entry_id),
+            NuLadenSwitch(coordinator, entry_id=entry.entry_id),
             AchterhoeksSwitch(coordinator, entry_id=entry.entry_id),
             SteelstofzuigerOverrideSwitch(coordinator, entry_id=entry.entry_id),
             FietsladersOverrideSwitch(coordinator, entry_id=entry.entry_id),
@@ -197,6 +198,49 @@ class VacationModeSwitch(SwitchEntity, RestoreEntity):
     async def async_turn_off(self, **kwargs) -> None:
         self._coordinator.vacation_mode = False
         self.async_write_ha_state()
+
+
+class NuLadenSwitch(SwitchEntity):
+    """Zet het uitstelplan opzij tot het einde van het venster (v1.56.0).
+
+    Gevraagd: "als ik weet dat ik veel ga gebruiken is een button die
+    overschakelt naar smart (en automatische reset na 2 uur bijvoorbeeld)
+    een idee?"
+
+    Geen RestoreEntity: de coordinator bewaart de EINDTIJD zelf. Zou deze
+    schakelaar zijn eigen aan/uit terugzetten, dan zou hij na een
+    herstart aan blijven staan terwijl de tijd allang verstreken is.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Nu laden"
+    _attr_icon = "mdi:battery-charging-high"
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_nu_laden"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def is_on(self) -> bool:
+        return self._coordinator.nu_laden_actief()
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return self._coordinator.get_nu_laden_status()
+
+    async def async_turn_on(self, **kwargs) -> None:
+        self._coordinator.activeer_nu_laden()
+        self.async_write_ha_state()
+        await self._coordinator.async_request_refresh()
+
+    async def async_turn_off(self, **kwargs) -> None:
+        self._coordinator.annuleer_nu_laden()
+        self.async_write_ha_state()
+        await self._coordinator.async_request_refresh()
 
 
 class SteelstofzuigerOverrideSwitch(SwitchEntity, RestoreEntity):

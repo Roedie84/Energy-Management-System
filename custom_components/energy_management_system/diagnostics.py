@@ -420,6 +420,8 @@ async def async_get_config_entry_diagnostics(
             "solar_defer_plan": coordinator.last_solar_defer_plan,
             # v1.23.0: mag er verkocht worden, en waarom wel of niet?
             "sell_check": coordinator.last_sell_check,
+            # v1.55.0: accu tegen net.
+            "battery_vs_grid": coordinator.last_battery_vs_grid,
             # v1.23.4: de werkelijke ondergrens waarop alles rust, en de
             # eerste voorspelling per kwartier. Zonder die twee is niet
             # na te gaan waarom een SoC-percentage is wat het is, of

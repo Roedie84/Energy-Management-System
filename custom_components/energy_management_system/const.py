@@ -211,6 +211,49 @@ TEMP_CONSUMPTION_MIN_SAMPLES = 4
 EXPENSIVE_PRICE_THRESHOLD_FRACTION = 0.20
 EXPENSIVE_PRICE_THRESHOLD_FRACTION_LOW_SOLAR = 0.08
 
+# --- Vangnet tegen één uitschieter (v1.54.0) -------------------------
+# Gemeld op 12 augustus, de dag van de zonsverduistering: "De integratie
+# geeft nu maar 2 dure kwartieren door de piek, maar waarschijnlijk kan
+# er toch meer ontladen worden."
+#
+# Klopt. De drempel hierboven is de bovenste 20% van de PRIJSRANGE, en
+# die range wordt opgerekt door één extreme piek:
+#
+#   68,9 - 0,20 x (68,9 - 12,1) = 57,5 ct
+#
+# Alleen 19:45 (68,9) en 20:00 (61,8) haalden dat. Kwartieren van 43 tot
+# 51 ct - anderhalf keer de mediaan van 30,7 - telden niet mee, puur
+# omdat de eclipspiek de meetlat omhoog trok.
+#
+# De verdeling kent dat probleem niet: een mediaan verschuift nauwelijks
+# van één uitschieter. Maar een mediaandrempel alléén werkt weer niet op
+# een vlakke dag - op 11 augustus (13-38 ct) haalt geen enkel kwartier
+# 1,4x de mediaan, terwijl de range-drempel er terecht 17 aanwijst.
+#
+# Daarom allebei, en de RUIMSTE wint. De range doet het werk op een
+# gewone dag; de mediaan beperkt de schade als één piek de range
+# oprekt. Nagerekend:
+#
+#   11 aug (vlak):      range 33 ct -> 17 kw | mediaan 42 ct ->  0 kw
+#   12 aug (eclips):    range 58 ct ->  2 kw | mediaan 43 ct ->  6 kw
+#
+# Met de laagste van de twee: 17 respectievelijk 6. Beide dagen goed.
+EXPENSIVE_PRICE_MEDIAN_MULTIPLIER = 1.4
+
+# Onder deze spreiding is er geen sprake van een uitschieter en blijft
+# de range-drempel gewoon leidend; de mediaanmaat wordt dan niet eens
+# berekend.
+EXPENSIVE_PRICE_OUTLIER_MIN_RANGE_EUR = 0.15
+
+# En alleen als de piek echt een uitschieter IS. Zonder deze voorwaarde
+# zou de mediaanmaat ook gewone dagen soepeler maken, en daar is niets
+# mis mee gegaan - de eis is dat de hoogste prijs minstens twee keer de
+# mediaan is.
+#
+#   12 augustus (eclips): 68,9 tegen 30,7 = 2,24x -> ingrijpen
+#   11 augustus (vlak):   37,8 tegen 30,2 = 1,25x -> ongemoeid laten
+EXPENSIVE_PRICE_OUTLIER_MEDIAN_RATIO = 2.0
+
 # A wider, more lenient "worth selling if there's spare capacity"
 # threshold - only used to fill headroom left unused after today's
 # genuinely expensive (primary-tier) quarters are accounted for. Never
@@ -916,6 +959,36 @@ UPDATE_INTERVAL_MINUTES = 5
 # Zendure operation modes (select.select_option values)
 OPTION_SMART = "smart"
 OPTION_SMART_DISCHARGING = "smart_discharging"
+
+# v1.55.0: zon opnemen, niets afgeven - de tegenhanger van
+# smart_discharging, die de integratie tot nu toe niet kende.
+#
+# Gemeld: "er is ook een operation mode smart-charge, deze laadt alleen
+# zonne energie maar geeft niet terug aan de woning", en daarna
+# gecorrigeerd naar de exacte waarde: manual, smart, smart_discharging,
+# smart_charging.
+#
+# Zonder deze modus moest de aansturing altijd kiezen tussen "voed het
+# huis" (smart) en "doe niets met de zon" (manual op 0 W). Dat is precies
+# waarom een goedkope nacht niet te benutten was: de accu leegt op een
+# moment dat van het net halen goedkoper is, en de enige uitweg zette
+# ook de zonopname stil.
+OPTION_SMART_CHARGING = "smart_charging"
+
+# Marge op de vergelijking accu-tegen-net. Zonder marge zou een verschil
+# van een halve cent de modus elke tick heen en weer laten schakelen, en
+# dat is slechter dan de verkeerde keuze even volhouden.
+GRID_CHEAPER_MARGIN_EUR = 0.02
+
+# --- Knop "Nu laden" (v1.56.0) ---------------------------------------
+# Gevraagd: "als ik weet dat ik veel ga gebruiken is een button die
+# overschakelt naar smart (en automatische reset na 2 uur bijvoorbeeld)
+# een idee?"
+#
+# Loopt tot het einde van het uitstelvenster, met deze ondergrens. Twee
+# uur alleen zou op een dag met uitstel tot 13:00 betekenen dat het
+# uitstel om 10:00 hervat en je alsnog met een halfvolle accu zit.
+NU_LADEN_MIN_HOURS = 2
 OPTION_MANUAL = "manual"
 
 # Maps the final coordinator.last_reason (decided only after headroom/
@@ -1172,6 +1245,10 @@ PERSISTED_PLAIN_FIELDS = (
     # v1.26.0: het verloop thuis/weg/slaapt. Een tabel die na elke
     # herstart leeg is, valt niet achteraf te controleren - en dat is
     # precies waarvoor hij gevraagd werd.
+    # v1.56.0: tot wanneer de knop "Nu laden" loopt. Een eindtijd, geen
+    # teller - anders zet een herstart de klok terug op de volle
+    # looptijd.
+    "nu_laden_tot",
     "presence_timeline",
     # v1.30.0: de staat zelf ook. Zonder dat begint elke herstart op
     # "onbekend" en schrijft de eerste tick een nieuwe regel in de
@@ -2474,6 +2551,9 @@ SELF_EVAL_IDLE_MODULE_DAYS = 30
 DECISION_REASON_LABELS = {
     # v1.22.0: zon opvangen bewust uitgesteld naar een goedkoper uur.
     "solar_capture_deferred": "Zon opvangen uitgesteld (betere prijs nu)",
+    # v1.55.0: de accu vasthouden omdat het net op dit moment goedkoper
+    # is dan wat een kWh uit de accu kost.
+    "grid_cheaper_than_battery": "net goedkoper dan de accu (accu vasthouden)",
     "arbitrage_solar_capture": "zonoverschot opvangen",
     "default_smart": "standaard slim laden",
     "discharging_window": "ontladen in duur blok",

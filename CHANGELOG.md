@@ -12606,3 +12606,89 @@ kolommen blijven in balans (de langste hoogstens 2,5× de kortste), en
 er raakt geen kaart zoek bij het herschikken.
 
 **Volledige testsuite**: 1930 tests, allemaal groen.
+
+## v1.54.0 — Eén uitschieter mag de meetlat niet optillen
+
+**Gemeld** op de dag van de zonsverduistering: "De integratie geeft nu
+maar 2 dure kwartieren door de piek, maar waarschijnlijk kan er toch
+meer ontladen worden."
+
+Klopt. De drempel is de bovenste 20% van de **prijsrange**, en die range
+wordt opgerekt door één extreme piek:
+
+    68,9 − 0,20 × (68,9 − 12,1) = 57,5 ct
+
+Alleen 19:45 (68,9) en 20:00 (61,8) haalden dat. Kwartieren van 43 tot
+51 ct — **anderhalf keer de mediaan van 30,7** — telden niet mee, puur
+omdat de eclipspiek de meetlat omhoog trok.
+
+**Nu wordt ook een mediaanmaat berekend en wint de ruimste van de
+twee.** De range doet het werk op een gewone dag, de mediaan beperkt de
+schade als één piek de range oprekt:
+
+| Dag | Range | Mediaan | Resultaat |
+|---|---|---|---|
+| 11 aug (vlak) | 33 ct → 17 kw | 42 ct → 0 kw | **17** |
+| 12 aug (eclips) | 58 ct → 2 kw | 43 ct → 6 kw | **6** |
+
+Met twee grendels: er moet spreiding zijn (minstens 15 ct), én de piek
+moet écht een uitschieter zijn (minstens tweemaal de mediaan). Op 11
+augustus is de piek 1,25× de mediaan — dan verandert er niets. De maat
+kan alleen versoepelen, nooit verstrengen.
+
+## v1.55.0 — Modus `smart_charging`, en de vraag of de accu wel de goedkoopste bron is
+
+**Gemeld**: "er is ook een operation mode smart-charge, deze laadt
+alleen zonne energie maar geeft niet terug aan de woning" — en daarna
+zelf gecorrigeerd naar de exacte waarde: `smart_charging`.
+
+Die modus kende de integratie niet. Er stonden er drie in de code, en
+`smart_charging` is de tegenhanger van `smart_discharging` die ontbrak.
+Daardoor moest de aansturing altijd kiezen tussen "voed het huis"
+(smart) en "doe niets met de zon" (manual op 0 W).
+
+**Dat blokkeerde de vraag ervoor**: "het kan dus zijn dat de prijs
+'s nachts zo laag is dat stroom van het net goedkoper is."
+
+Een kWh uit de accu is niet gratis:
+
+    waarde = kostprijs / rendement + slijtage
+           = 21,75 / 0,829 + 4,7 = 31,0 ct
+
+Staat de nachtprijs op 12 ct, dan is die kWh van het net halen
+goedkoper — én houd je de accu vol voor de ochtendpiek. De accu gaat dan
+naar `smart_charging`: zon opnemen, niets afgeven.
+
+Drie grendels: alleen als de modus écht in de select-entiteit staat,
+alleen als kostprijs, rendement én slijtage gemeten zijn, en met 2 ct
+marge zodat een half cent verschil niet elke tick heen en weer
+schakelt.
+
+**En een controle vooraf op elke modus.** Valkuil 2 uit de overdracht: een
+term die de accu niet kent wordt stil genegeerd, en dan staat de accu
+ergens anders dan de integratie denkt. Nu wordt de optielijst gelezen
+vóór gebruik, met terugval op `smart` en een zichtbare melding.
+
+## v1.56.0 — Knop "Nu laden"
+
+**Gevraagd**: "als ik weet dat ik veel ga gebruiken is een button die
+overschakelt naar smart (en automatische reset na 2 uur bijvoorbeeld)
+een idee?"
+
+Zet **alleen** het uitstelplan opzij. De reserve, de energiebrug en de
+verkooptoets blijven werken — dat is het verschil met `force_manual`,
+dat de hele aansturing overneemt. Een test bewaakt die grens.
+
+Loopt tot het **einde van het uitstelvenster**, met twee uur als
+ondergrens: twee uur alleen zou op een dag met uitstel tot 13:00
+betekenen dat het uitstel om 10:00 hervat en je alsnog met een halfvolle
+accu zit.
+
+De **eindtijd** wordt bewaard, geen teller — anders zet een herstart de
+klok terug op de volle looptijd.
+
+De tegel telt af en noemt wat het kost: *"Nu laden — nog 3u12m ·
+uitstel opzij gezet, kost ca. € 0,72"*. Niet om je tegen te houden,
+maar zodat je weet wat je koopt.
+
+**Volledige testsuite**: 1949 tests, allemaal groen.

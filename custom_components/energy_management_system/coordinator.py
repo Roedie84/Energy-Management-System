@@ -238,6 +238,9 @@ from .const import (
     LOW_SOLAR_FRACTION_DEFAULT,
     LOW_SOLAR_FRACTION_UNRELIABLE,
     TEMP_CONSUMPTION_MIN_SAMPLES,
+    EXPENSIVE_PRICE_MEDIAN_MULTIPLIER,
+    EXPENSIVE_PRICE_OUTLIER_MEDIAN_RATIO,
+    EXPENSIVE_PRICE_OUTLIER_MIN_RANGE_EUR,
     EXPENSIVE_PRICE_THRESHOLD_FRACTION,
     EXPENSIVE_PRICE_THRESHOLD_FRACTION_LOW_SOLAR,
     SECONDARY_EXPENSIVE_PRICE_THRESHOLD_FRACTION,
@@ -442,6 +445,9 @@ from .const import (
     MIN_SOLAR_HISTORY_FOR_DYNAMIC_THRESHOLD,
     OPTION_MANUAL,
     OPTION_SMART,
+    GRID_CHEAPER_MARGIN_EUR,
+    NU_LADEN_MIN_HOURS,
+    OPTION_SMART_CHARGING,
     OPTION_SMART_DISCHARGING,
     PRICE_ATTRIBUTE_CHECK_MARGIN_EUR,
     PRICE_ATTRIBUTE_INCL_TAX,
@@ -589,6 +595,10 @@ class EnergyManagementSystemCoordinator:
         self.last_solar_defer_plan: dict = {}
         # v1.23.0: waarom er wel of niet verkocht mag worden.
         self.last_sell_check: dict = {}
+        # v1.55.0: de vergelijking accu tegen net.
+        self.last_battery_vs_grid: dict = {}
+        # v1.56.0: tot wanneer de knop "Nu laden" loopt (ISO-tekst).
+        self.nu_laden_tot: str | None = None
         # v1.23.2: wat er als EERSTE voor elk kwartier werd voorspeld,
         # zodat latere wijzigingen zichtbaar worden.
         self.quarter_plan_first_seen: dict[str, str] = {}
@@ -1856,7 +1866,50 @@ class EnergyManagementSystemCoordinator:
                 if narrow_for_low_solar
                 else EXPENSIVE_PRICE_THRESHOLD_FRACTION
             )
-        return max_price - fraction * price_range
+        range_threshold = max_price - fraction * price_range
+
+        # v1.54.0: vangnet tegen één uitschieter.
+        #
+        # De drempel hierboven volgt de RANGE, en die wordt opgerekt door
+        # een enkele piek. Op 12 augustus (zonsverduistering) gaf dat
+        # 57,5 ct terwijl de mediaan op 30,7 stond: alleen de twee
+        # piekkwartieren zelf telden mee, en kwartieren van 43 tot 51 ct
+        # vielen af.
+        #
+        # De mediaan verschuift nauwelijks van één uitschieter. Allebei
+        # rekenen en de RUIMSTE nemen: de range doet het werk op een
+        # gewone dag, de mediaan beperkt de schade als één piek de range
+        # oprekt. Nooit strenger dan voorheen - alleen soepeler waar de
+        # oude maat doorsloeg.
+        if price_range < EXPENSIVE_PRICE_OUTLIER_MIN_RANGE_EUR:
+            return range_threshold
+        mediaan = statistics.median(prices)
+        if mediaan <= 0:
+            return range_threshold
+        # Alleen ingrijpen als er ECHT een uitschieter is. Anders zou
+        # deze maat ook gewone dagen soepeler maken, en daar is niets
+        # mis mee gegaan.
+        #
+        #   12 aug (eclips): piek 68,9 tegen mediaan 30,7 = 2,24x -> wel
+        #   11 aug (vlak):   piek 37,8 tegen mediaan 30,2 = 1,25x -> niet
+        if max_price < mediaan * EXPENSIVE_PRICE_OUTLIER_MEDIAN_RATIO:
+            return range_threshold
+        median_threshold = mediaan * self._median_multiplier(fraction)
+        return min(range_threshold, median_threshold)
+
+    def _median_multiplier(self, fraction: float) -> float:
+        """De mediaanfactor, meeschalend met de gekozen strengheid
+        (v1.54.0).
+
+        De standaardfractie is 0,20; bij weinig zon 0,08 (strenger) en
+        voor de tweede laag 0,45 (soepeler). De mediaanmaat hoort die
+        beweging te volgen, anders zou een strenge dag via de mediaan
+        alsnog soepel worden.
+        """
+        verhouding = fraction / EXPENSIVE_PRICE_THRESHOLD_FRACTION
+        return 1.0 + (EXPENSIVE_PRICE_MEDIAN_MULTIPLIER - 1.0) / max(
+            verhouding, 0.01
+        )
 
     def _get_secondary_expensive_price_threshold(
         self, entries: list[PriceEntry], now: datetime
@@ -10120,6 +10173,91 @@ class EnergyManagementSystemCoordinator:
             ),
         }
 
+    def activeer_nu_laden(self, now: datetime | None = None) -> dict:
+        """Zet het uitstelplan opzij tot het einde van het venster
+        (v1.56.0).
+
+        Gevraagd: "we hadden gisteren uitgesteld laden geprogrammeerd.
+        Prima, echter als ik weet dat ik veel ga gebruiken is een button
+        die overschakelt naar smart (en automatische reset na 2 uur
+        bijvoorbeeld) een idee?"
+
+        Bewust ALLEEN het uitstel. De reserve, de energiebrug en de
+        verkooptoets blijven gewoon werken - je zegt "vul de accu nu",
+        niet "laat alle controles los". Dat is het verschil met
+        `force_manual`, dat de hele aansturing overneemt.
+
+        De eindtijd wordt vastgelegd, geen teller: een herstart zou een
+        aftellende teller terugzetten op de volle looptijd. Precies de
+        fout die we deze week vier keer tegenkwamen.
+
+        Tot het einde van het uitstelvenster, met twee uur als
+        ondergrens. Twee uur alleen zou op een dag met uitstel tot 13:00
+        betekenen dat het uitstel om 10:00 hervat en je alsnog met een
+        halfvolle accu zit.
+        """
+        nu = now or dt_util.now()
+        plan = self.last_solar_defer_plan or {}
+        einde = nu + timedelta(hours=NU_LADEN_MIN_HOURS)
+
+        omslag = plan.get("omslag_uur")
+        if omslag is not None:
+            venster_einde = nu.replace(
+                hour=int(omslag), minute=0, second=0, microsecond=0
+            )
+            if venster_einde > einde:
+                einde = venster_einde
+
+        self.nu_laden_tot = einde.isoformat()
+        self.schedule_persisted_state_save()
+        return self.get_nu_laden_status(nu)
+
+    def annuleer_nu_laden(self) -> None:
+        """Zet de knop weer uit (v1.56.0)."""
+        self.nu_laden_tot = None
+        self.schedule_persisted_state_save()
+
+    def nu_laden_actief(self, now: datetime | None = None) -> bool:
+        """Loopt de knop nog? (v1.56.0)"""
+        if not self.nu_laden_tot:
+            return False
+        einde = dt_util.parse_datetime(self.nu_laden_tot)
+        if einde is None:
+            return False
+        if (now or dt_util.now()) >= einde:
+            # Vanzelf uitgewerkt; opruimen zodat de tegel klopt.
+            self.nu_laden_tot = None
+            return False
+        return True
+
+    def get_nu_laden_status(self, now: datetime | None = None) -> dict:
+        """Wat de tegel toont (v1.56.0).
+
+        Met aftelling en kostenschatting: het uitstel is er om geld op te
+        leveren, dus deze knop indrukken kost iets. Niet om je tegen te
+        houden - vaak is het het waard, want een lege accu op een dure
+        avond kost meer - maar zodat je weet wat je koopt.
+        """
+        nu = now or dt_util.now()
+        if not self.nu_laden_actief(nu):
+            return {
+                "actief": False,
+                "kost_eur": (self.last_solar_defer_plan or {}).get(
+                    "geschatte_winst_eur"
+                ),
+            }
+        einde = dt_util.parse_datetime(self.nu_laden_tot)
+        minuten = max(0, int((einde - nu).total_seconds() // 60))
+        return {
+            "actief": True,
+            "tot": einde.strftime("%H:%M"),
+            "resterend_minuten": minuten,
+            "resterend": f"{minuten // 60}u{minuten % 60:02d}m",
+            "kost_eur": (self.last_solar_defer_plan or {}).get(
+                "geschatte_winst_eur"
+            ),
+        }
+
     def plan_solar_capture_moment(self, now: datetime) -> dict:
         """Wanneer is het beste moment om zon te gaan opvangen?
         (v1.22.0)
@@ -10156,6 +10294,18 @@ class EnergyManagementSystemCoordinator:
         min_soc = self.effective_min_soc_percent()
         bruikbaar = capaciteit * (100 - min_soc) / 100
         ruimte = max(0.0, bruikbaar - beschikbaar)
+
+        # v1.56.0: de knop "Nu laden" zet dit plan opzij.
+        if self.nu_laden_actief(now):
+            status = self.get_nu_laden_status(now)
+            return {
+                "uitstellen": False,
+                "reden": (
+                    "Handmatig overgeschakeld naar nu laden, nog "
+                    f"{status['resterend']} te gaan."
+                ),
+                "nu_laden_actief": True,
+            }
 
         # v1.28.0: de accustand is hier GEEN rem meer.
         #
@@ -19724,14 +19874,143 @@ class EnergyManagementSystemCoordinator:
             self._finish_decision_tick(now)
             return
 
+        # v1.55.0: is een kWh van het net nu goedkoper dan een kWh uit
+        # de accu? Dan de accu vasthouden en de zon toch opnemen.
+        if self._net_is_goedkoper_dan_de_accu(now, entries):
+            await self._async_apply_operation(OPTION_SMART_CHARGING)
+            self.last_reason = "grid_cheaper_than_battery"
+            self._update_financial_tracking(now, entries, self.last_reason, None, None)
+            self._update_shortfall_detection(now, self.last_reason, self.last_available_kwh, self.last_needed_kwh_to_bridge)
+            self._finish_decision_tick(now)
+            return
+
         await self._async_apply_operation(OPTION_SMART)
         self.last_reason = "default_smart"
         self._update_financial_tracking(now, entries, self.last_reason, None, None)
         self._update_shortfall_detection(now, self.last_reason, self.last_available_kwh, self.last_needed_kwh_to_bridge)
         self._finish_decision_tick(now)
 
+    def _net_is_goedkoper_dan_de_accu(
+        self, now: datetime, entries: list[PriceEntry]
+    ) -> bool:
+        """Kost een kWh uit de accu meer dan een kWh van het net?
+        (v1.55.0)
+
+        Gevraagd: "het kan dus zijn dat de prijs op gegeven moment
+        's nachts zo laag is dat stroom van het net goedkoper is in de
+        nacht, hoe gaat de integratie daar nu mee om?"
+
+        Tot nu toe: niet. In `smart` voedt de accu het huis met wat hij
+        heeft, zonder te vragen of dat op dat moment verstandig is.
+
+        Een kWh uit de accu is niet gratis. Hij is gekocht (of aan
+        teruglevering opgegeven), er ging meer in dan eruit komt, en het
+        kost een stukje levensduur:
+
+            waarde = kostprijs / rendement + slijtage
+
+        Bij de gemeten cijfers van 11 augustus: 21,75 ct kostprijs,
+        82,9% rendement, 4,7 ct slijtage -> ruim 31 ct. Staat de
+        nachtprijs op 12 ct, dan is die kWh van het net halen
+        goedkoper - en houd je de accu vol voor de ochtendpiek.
+
+        Drie grendels, want dit mag nooit een tekort veroorzaken:
+
+        - alleen als `smart_charging` echt bestaat op deze accu;
+        - alleen als alle drie de getallen gemeten zijn, niet geraden;
+        - alleen met een marge, zodat een verschil van een halve cent
+          niet elke tick heen en weer schakelt.
+        """
+        if not self.smart_charging_supported():
+            return False
+
+        kostprijs = self.battery_cost_basis_eur_per_kwh
+        rendement = self.learned_battery_efficiency_percent
+        if kostprijs is None or not rendement:
+            return False
+
+        slijtage = (self.get_wear_cost_overview() or {}).get(
+            "slijtage_ct_per_kwh"
+        )
+        if slijtage is None:
+            return False
+
+        accu_eur = kostprijs / (rendement / 100) + slijtage / 100
+        netprijs = self._get_current_price_per_kwh(entries, now)
+        if netprijs is None:
+            return False
+
+        self.last_battery_vs_grid = {
+            "accu_eur_per_kwh": round(accu_eur, 4),
+            "net_eur_per_kwh": round(netprijs, 4),
+            "kostprijs_eur_per_kwh": round(kostprijs, 4),
+            "rendement_procent": rendement,
+            "slijtage_ct_per_kwh": slijtage,
+            "net_goedkoper": netprijs + GRID_CHEAPER_MARGIN_EUR < accu_eur,
+        }
+        return netprijs + GRID_CHEAPER_MARGIN_EUR < accu_eur
+
+    def operation_option_available(self, option: str) -> bool:
+        """Kent deze installatie die modus? (v1.55.0)
+
+        Valkuil 2 uit de overdracht: een term die de accu niet kent,
+        wordt stil genegeerd en dan doet de aansturing niets. De
+        select-entiteit draagt zelf de lijst met geldige opties, dus die
+        valt te controleren vóór gebruik in plaats van te hopen.
+        """
+        entity_id = self.config.get(CONF_OPERATION_SELECT)
+        if not entity_id:
+            return False
+        staat = self.hass.states.get(entity_id)
+        # Niet te controleren is iets anders dan afwezig. Tijdens het
+        # opstarten bestaat de entiteit nog niet en de bestaande modi
+        # werkten al jaren zonder deze controle - dan blokkeren zou een
+        # werkende installatie stilzetten om een controle die zelf niets
+        # weet.
+        if staat is None:
+            return True
+        opties = staat.attributes.get("options")
+        if not opties:
+            return True
+        return option in opties
+
+    def smart_charging_supported(self) -> bool:
+        """Kan de accu zon opnemen zonder af te geven? (v1.55.0)
+
+        Streng waar de functie hierboven soepel is, en met opzet: daar
+        gaat het om "mag ik dit toepassen", hier om "zal ik hier iets
+        nieuws op bouwen". Bij twijfel geen nieuwe modus gebruiken -
+        een installatie die hem niet kent zou anders stil in smart
+        blijven hangen terwijl de planning iets anders belooft.
+        """
+        entity_id = self.config.get(CONF_OPERATION_SELECT)
+        if not entity_id:
+            return False
+        staat = self.hass.states.get(entity_id)
+        if staat is None:
+            return False
+        return OPTION_SMART_CHARGING in (staat.attributes.get("options") or [])
+
     async def _async_apply_operation(self, option: str) -> None:
         """Set the Zendure operation mode, unless in learning_only mode."""
+        # v1.55.0: een onbekende modus wordt door de select-entiteit
+        # stilzwijgend genegeerd, en dan staat de accu ergens anders dan
+        # de integratie denkt. Liever terugvallen op smart met een
+        # zichtbare fout dan stil niets doen.
+        if not self.operation_option_available(option):
+            self.internal_failures["modus_niet_beschikbaar"] = (
+                f"De accu kent de modus '{option}' niet; teruggevallen op "
+                f"'{OPTION_SMART}'."
+            )
+            _LOGGER.warning(
+                "Modus '%s' staat niet in %s - teruggevallen op '%s'",
+                option,
+                self.config.get(CONF_OPERATION_SELECT),
+                OPTION_SMART,
+            )
+            option = OPTION_SMART
+        else:
+            self.internal_failures.pop("modus_niet_beschikbaar", None)
         if self.learning_only:
             self.last_simulated_action = f"would set operation to '{option}'"
             _LOGGER.debug("Learning-only mode: %s", self.last_simulated_action)

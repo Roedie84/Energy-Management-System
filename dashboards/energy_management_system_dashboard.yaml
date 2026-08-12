@@ -244,6 +244,20 @@ views:
       grid_options:
         columns: 12
         rows: auto
+    - type: custom:mushroom-template-card
+      primary: '{% set e = ''switch.woonkamer_energy_management_system_nu_laden'' %}{% set a = state_attr(e, ''resterend'') %}{{ ''Nu laden — nog '' ~ a if is_state(e, ''on'') and a else ''Nu laden'' }}'
+      secondary: '{% set e = ''switch.woonkamer_energy_management_system_nu_laden'' %}{% set k = state_attr(e, ''kost_eur'') %}{% if is_state(e, ''on'') %}Uitstel opzij gezet{% if k %}, kost ca. € {{ k }}{% endif %}.{% elif k %}Zet het uitstel opzij; kost naar schatting € {{ k }}.{% else %}Er wordt nu niets uitgesteld.{% endif %}'
+      multiline_secondary: true
+      icon: mdi:battery-charging-high
+      icon_color: '{{ ''orange'' if is_state(''switch.woonkamer_energy_management_system_nu_laden'', ''on'') else ''grey'' }}'
+      entity: switch.woonkamer_energy_management_system_nu_laden
+      tap_action:
+        action: toggle
+      hold_action:
+        action: more-info
+      grid_options:
+        columns: 12
+        rows: auto
     - type: custom:mushroom-entity-card
       entity: button.woonkamer_energy_management_system_test_notificatie_versturen
       name: Testmelding
@@ -495,7 +509,7 @@ views:
   panel: true
   cards:
   - type: picture-elements
-    image: /local/energy_management_system_overview.svg?v=1.53.0
+    image: /local/energy_management_system_overview.svg?v=1.56.0
     elements:
     - type: state-label
       entity: sensor.woonkamer_energy_management_system_system_status
@@ -1625,7 +1639,7 @@ views:
       title: Planning
       subtitle: Wat de aansturing nu doet en straks gaat doen
     - type: custom:mushroom-template-card
-      primary: '{% set m = {''arbitrage_solar_capture'': ''zonoverschot opvangen'', ''default_smart'': ''standaard slim laden'', ''discharging_window'': ''ontladen in duur blok'', ''emergency_low_battery'': ''noodladen bij lage accu'', ''expensive_quarter'': ''duur kwartier'', ''expensive_quarter_no_own_load'': ''duur kwartier, geen eigen verbruik'', ''expensive_quarter_soc_protected'': ''duur kwartier, accu beschermd'', ''force_manual'': ''handmatig overschreven'', ''grid_charging_low_solar'': ''bijladen bij weinig zon'', ''grid_charging_low_solar_extra_dip'': ''bijladen bij extra prijsdip'', ''negative_price'': ''negatieve prijs'', ''no_forecast_data'': ''geen prijsvoorspelling'', ''post_salderen_solar_capture'': ''zon opvangen na saldering''} %}{% set v = states(''sensor.energy_management_system_last_decision_reason'') %}{{ m.get(v, v if v not in [''unknown'',''unavailable'',''''] else ''nog geen beslissing'') }}'
+      primary: '{% set m = {''arbitrage_solar_capture'': ''zonoverschot opvangen'', ''default_smart'': ''standaard slim laden'', ''discharging_window'': ''ontladen in duur blok'', ''emergency_low_battery'': ''noodladen bij lage accu'', ''expensive_quarter'': ''duur kwartier'', ''expensive_quarter_no_own_load'': ''duur kwartier, geen eigen verbruik'', ''expensive_quarter_soc_protected'': ''duur kwartier, accu beschermd'', ''force_manual'': ''handmatig overschreven'', ''grid_charging_low_solar'': ''bijladen bij weinig zon'', ''grid_charging_low_solar_extra_dip'': ''bijladen bij extra prijsdip'', ''negative_price'': ''negatieve prijs'', ''no_forecast_data'': ''geen prijsvoorspelling'', ''post_salderen_solar_capture'': ''zon opvangen na saldering'', ''grid_cheaper_than_battery'': ''net goedkoper dan de accu'', ''solar_capture_deferred'': ''zon opvangen uitgesteld''} %}{% set v = states(''sensor.energy_management_system_last_decision_reason'') %}{{ m.get(v, v if v not in [''unknown'',''unavailable'',''''] else ''nog geen beslissing'') }}'
       secondary: Laatste reden
       icon: mdi:comment-question-outline
       entity: sensor.energy_management_system_last_decision_reason
