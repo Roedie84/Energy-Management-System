@@ -249,7 +249,11 @@ from .const import (
     SOLAR_RAMP_STEPS,
     GRID_IMPORT_SHORTFALL_THRESHOLD_W,
     BATTERY_COOLING_FAN_UNAVAILABLE_STATES,
+    BATTERY_MODULE_BUCKET_DELTA_MARGIN_V,
+    BATTERY_MODULE_BUCKET_MIN_SAMPLES,
     BATTERY_MODULE_CELL_DELTA_ATTENTION_V,
+    BATTERY_MODULE_FLAT_SOC_MAX_PERCENT,
+    BATTERY_MODULE_FLAT_SOC_MIN_PERCENT,
     DIGITAL_TWIN_ACCURACY_GOOD_FRACTION,
     CLIMATE_RATE_NEIGHBOUR_BUCKETS,
     KALMAN_DIVERGENCE_HISTORY_LENGTH,
@@ -454,6 +458,7 @@ from .const import (
     DEFAULT_DISHWASHER_CYCLE_KWH,
     DEFAULT_WASHING_MACHINE_CYCLE_KWH,
     DECISION_REASON_LABELS,
+    SOLAR_CAPTURE_FULL_MARGIN_KWH,
     WHY_MAX_REASONS,
     WHY_QUESTIONS,
     AGING_HIGH_TEMPERATURE_C,
@@ -4479,11 +4484,21 @@ class EnergyManagementSystemCoordinator:
                 "reden": f"Kon niet berekenen: {type(fout).__name__}",
             }
         opwek = self.pv_production_today_kwh
+
+        # v1.65.0: wat de integratie zelf voor vandaag verwachtte.
+        # Gevraagd: "Kun je het 'voorspeld was xx kw' stuk toevoegen? Ik
+        # wil de voorspelling van de integratie."
+        def _voorspeld_erbij() -> str:
+            waarde, _herkomst = self.voorspelde_zon_vandaag_kwh()
+            if waarde is None:
+                return ""
+            return f" (voorspeld {waarde:.1f})"
+
         if not kwaliteit_pv.get("beschikbaar"):
             samenvatting["zon"] = {
                 "niveau": RELIABILITY_INSUFFICIENT,
                 "zin": (
-                    f"{opwek:.1f} kWh opgewekt vandaag. "
+                    f"{opwek:.1f} kWh opgewekt vandaag{_voorspeld_erbij()}. "
                     "Nog geen voltooide dagen om de voorspelling mee te "
                     "toetsen."
                 ),
@@ -4501,9 +4516,9 @@ class EnergyManagementSystemCoordinator:
                     )
                 ),
                 "zin": (
-                    f"{opwek:.1f} kWh opgewekt vandaag. De voorspelling "
-                    f"zit er over {kwaliteit_pv['dagen']} dagen gemiddeld "
-                    f"{fout:.0f}% naast."
+                    f"{opwek:.1f} kWh opgewekt vandaag{_voorspeld_erbij()}. "
+                    f"De voorspelling zit er over {kwaliteit_pv['dagen']} "
+                    f"dagen gemiddeld {fout:.0f}% naast."
                 ),
             }
 
@@ -6320,8 +6335,26 @@ class EnergyManagementSystemCoordinator:
         verkoop = self.last_sell_check or {}
         vs_net = self.last_battery_vs_grid or {}
         # De samenvatting live opvragen; er is geen bewaard veld voor.
+        #
+        # v1.63.0, gemeld met een screenshot van Solcast ernaast: "De
+        # verwachtte kw zonneenergie kan niet kloppen." De regel zei "er
+        # wordt vandaag nog 28,5 kWh zon verwacht" terwijl Solcast 6,63
+        # meldde.
+        #
+        # 28,5 = 6,6 vandaag plus ruim 22 van morgen. De planning loopt
+        # zover als er prijzen zijn - de kaart meldde het zelf: "over 32
+        # uur" - en de samenvatting telt alles bij elkaar op. Daar plakte
+        # deze regel het woord "vandaag" op.
+        #
+        # Derde keer dat deze horizon een maat betekenisloos maakte, na
+        # de tekortkwartieren (v1.42.0) en de plantoetsing (v1.48.0).
+        # Vandaar hier expliciet de grens meegeven in plaats van erop te
+        # vertrouwen dat de planning bij middernacht ophoudt.
+        middernacht = (now + timedelta(days=1)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
         try:
-            samenvatting = self.get_quarter_plan_summary(now) or {}
+            samenvatting = self.get_quarter_plan_summary(now, tot=middernacht) or {}
         except Exception:  # noqa: BLE001
             samenvatting = {}
 
@@ -6436,7 +6469,21 @@ class EnergyManagementSystemCoordinator:
             ]
 
         if reden in ("arbitrage_solar_capture", "post_salderen_solar_capture"):
-            regels = ["er is zonoverschot en dat gaat de accu in"]
+            # v1.66.0, gemeld: "Zonoverschot gaat de accu in? Kan niet
+            # want die is vol :)"
+            #
+            # Klopt. Deze regel stond er onvoorwaardelijk, ook bij een
+            # accu op 100%. Dan gaat het overschot het net op - en dat is
+            # een heel ander verhaal dan "de accu vangt het op".
+            ruimte = self._resterende_laadruimte_kwh()
+            if ruimte is not None and ruimte <= SOLAR_CAPTURE_FULL_MARGIN_KWH:
+                regels = [
+                    "de accu is vol; het zonoverschot gaat het net op"
+                ]
+            else:
+                regels = ["er is zonoverschot en dat gaat de accu in"]
+                if ruimte is not None:
+                    regels[0] += f" (nog {ruimte:.1f} kWh ruimte)"
             if samenvatting.get("zon_kwh") is not None:
                 regels.append(
                     f"er wordt vandaag nog {samenvatting['zon_kwh']:.1f} kWh zon "
@@ -6459,6 +6506,136 @@ class EnergyManagementSystemCoordinator:
             "op en voedt het huis"
         )
         return regels
+
+    def _beoordeel_celspreiding(
+        self, staat: dict, delta: float, soc: float | None
+    ) -> str | None:
+        """Is dit celspanningsverschil het vermelden waard? (v1.64.0)
+
+        Gemeld: "Accumodule 1: celspanningsverschil 0.190 V - hoger dan
+        gebruikelijk. Dit lijkt een standaard iets te zijn, gebeurt
+        altijd nabij laden rond 100% SOC."
+
+        Klopt, en het stond al in de code: LFP heeft een vlakke curve in
+        het midden en steile uiteinden, dus het celspanningsverschil is
+        sterk SoC-afhankelijk. Daarvoor waren de SoC-vakken ooit
+        aangelegd - maar de waarschuwing gebruikte de vaste drempel.
+
+        De eigen metingen bevestigen het: dezelfde module staat in het
+        vak van 70% op 0,00 tot 0,03 V.
+
+        In het vlakke midden gelden de absolute drempels gewoon. In de
+        uiteinden wordt vergeleken met wat voor DEZE module in DIT vak
+        gebruikelijk is; is er nog te weinig geschiedenis, dan wordt er
+        niets gemeld. Liever een gemiste melding dan er elke avond een
+        die niets betekent - dan leert het overzicht je hem te negeren.
+        """
+        in_het_vlakke_midden = (
+            soc is None
+            or BATTERY_MODULE_FLAT_SOC_MIN_PERCENT
+            <= soc
+            <= BATTERY_MODULE_FLAT_SOC_MAX_PERCENT
+        )
+
+        if in_het_vlakke_midden:
+            if delta >= BATTERY_MODULE_CELL_DELTA_SERIOUS_V:
+                return f"celspanningsverschil {delta:.3f} V - fors uit balans"
+            if delta >= BATTERY_MODULE_CELL_DELTA_ATTENTION_V:
+                return (
+                    f"celspanningsverschil {delta:.3f} V - hoger dan gebruikelijk"
+                )
+            return None
+
+        vak = str(
+            int(soc // BATTERY_MODULE_SOC_BUCKET_SIZE_PERCENT)
+            * BATTERY_MODULE_SOC_BUCKET_SIZE_PERCENT
+        )
+        reeks = (staat.get("soc_buckets") or {}).get(vak) or []
+        if len(reeks) < BATTERY_MODULE_BUCKET_MIN_SAMPLES:
+            return None
+        gebruikelijk = statistics.median(reeks)
+        if delta < gebruikelijk + BATTERY_MODULE_BUCKET_DELTA_MARGIN_V:
+            return None
+        return (
+            f"celspanningsverschil {delta:.3f} V bij {soc:.0f}% - hoger dan de "
+            f"{gebruikelijk:.3f} V die bij deze module gebruikelijk is rond "
+            "deze stand"
+        )
+
+    def voorspelde_zon_vandaag_kwh(
+        self, now: datetime | None = None
+    ) -> tuple[float | None, str]:
+        """Wat de integratie voor vandaag verwachtte (v1.65.0).
+
+        Gevraagd: "xx kw opgewekt vandaag (voorspeld was xx kw). Kun je
+        het 'voorspeld was xx kw' stuk toevoegen? Ik wil de voorspelling
+        van de integratie."
+
+        Nadrukkelijk de EIGEN verwachting, niet de kale Solcast-waarde:
+        die wordt gecorrigeerd met de geleerde bias per uur en de live
+        teller (zie `_estimate_pv_kwh_for_period`). Precies dat verschil
+        maakt "zit er x% naast" een zinnig getal.
+
+        Twee bronnen, in deze volgorde:
+
+        - de momentopname van vanochtend, als die er is. Dat is een echte
+          "was": het getal stond vast voordat de dag zich ontvouwde.
+        - anders wat er nu nog verwacht wordt plus wat er al ligt. Dat
+          schuift mee met de dag en is dus geen eerlijke voorspelling
+          meer, maar wel het beste dat er is - en het staat erbij.
+        """
+        nu = now or dt_util.now()
+        snapshot = self.plan_snapshot or {}
+        if (
+            snapshot.get("datum") == nu.date().isoformat()
+            and snapshot.get("verwachte_zon_kwh") is not None
+        ):
+            return (
+                round(
+                    snapshot.get("pv_bij_opname_kwh", 0.0)
+                    + snapshot["verwachte_zon_kwh"],
+                    1,
+                ),
+                f"vastgelegd om {snapshot.get('opgenomen_om', '?')}",
+            )
+
+        middernacht = (nu + timedelta(days=1)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        rest = self._estimate_pv_kwh_for_period(nu, middernacht)
+        if rest is None:
+            return None, "geen voorspelling beschikbaar"
+        return (
+            round(self.pv_production_today_kwh + rest, 1),
+            "bijgesteld gedurende de dag",
+        )
+
+    def _resterende_laadruimte_kwh(self) -> float | None:
+        """Hoeveel past er nog in de accu? (v1.66.0)"""
+        capaciteit = self._read_sensor_float(
+            self.config.get(CONF_BATTERY_TOTAL_CAPACITY_SENSOR)
+        )
+        beschikbaar = self.beschikbare_energie_kwh()
+        if not capaciteit or beschikbaar is None:
+            return None
+        min_soc = self.effective_min_soc_percent()
+        bruikbaar = capaciteit * (100 - min_soc) / 100
+        return max(0.0, bruikbaar - beschikbaar)
+
+    def get_solar_today(self, now: datetime | None = None) -> dict:
+        """Opgewekt tegenover voorspeld, voor vandaag (v1.65.0)."""
+        nu = now or dt_util.now()
+        voorspeld, herkomst = self.voorspelde_zon_vandaag_kwh(nu)
+        opgewekt = round(self.pv_production_today_kwh, 1)
+        afwijking = None
+        if voorspeld:
+            afwijking = round(100 * (opgewekt - voorspeld) / voorspeld, 1)
+        return {
+            "opgewekt_kwh": opgewekt,
+            "voorspeld_kwh": voorspeld,
+            "herkomst": herkomst,
+            "afwijking_procent": afwijking,
+        }
 
     def get_aging_drivers(self) -> dict:
         """Wat veroudering versnelt, per dag geteld (v1.59.0)."""
@@ -13388,14 +13565,11 @@ class EnergyManagementSystemCoordinator:
             waarschuwingen = []
             delta = module["cel_delta_v"]
             if delta is not None:
-                if delta >= BATTERY_MODULE_CELL_DELTA_SERIOUS_V:
-                    waarschuwingen.append(
-                        f"celspanningsverschil {delta:.3f} V - fors uit balans"
-                    )
-                elif delta >= BATTERY_MODULE_CELL_DELTA_ATTENTION_V:
-                    waarschuwingen.append(
-                        f"celspanningsverschil {delta:.3f} V - hoger dan gebruikelijk"
-                    )
+                melding = self._beoordeel_celspreiding(
+                    staat, delta, module.get("soc_percent")
+                )
+                if melding:
+                    waarschuwingen.append(melding)
             temperatuur = module["temperatuur_c"]
             if (
                 temperatuur is not None
@@ -17060,16 +17234,24 @@ class EnergyManagementSystemCoordinator:
                 if not eid.startswith("_")
                 and g.get("overeenstemming_percent") is not None
             )
+            # v1.67.0, gemeld: "Deze zie ik altijd op de landingspagina,
+            # nu niet meer nodig toch?"
+            #
+            # Klopt. In v1.9.2 kwam de "vergelijkbaar"-variant erbij om
+            # een verkeerde conclusie voor te zijn - een sterke indruk op
+            # basis van losse momenten verdient een cijfer om tegen te
+            # houden. Maar die boodschap heb je één keer nodig, op het
+            # moment dat je die vraag hebt. Permanent op de
+            # landingspagina wordt hij behang, en dan leest niemand meer
+            # de regel eronder die er wél toe doet.
+            #
+            # Alleen het ACTIEBARE geval blijft hier staan. De
+            # geruststelling verhuist naar de weerpagina, waar je komt
+            # als je de vraag stelt.
             if vergelijking["verschil_procentpunt"] >= 20:
                 informatief.append(
                     "Weerbronnen verschillen structureel in betrouwbaarheid "
                     f"({percentages}). {vergelijking['advies']}"
-                )
-            else:
-                informatief.append(
-                    f"Weerbronnen presteren vergelijkbaar ({percentages}) - "
-                    "een groot verschil op één moment zegt dus weinig over "
-                    "welke bron beter is."
                 )
 
         spreiding = self.weather_ensemble_spread_percent

@@ -547,6 +547,67 @@ alleen "0 van de 24 uren".
 
 **Volledige testsuite**: 1889 tests, allemaal groen.
 
+## Twee meldingen eerlijker (v1.66–1.67)
+
+**Gemeld**: *"Zonoverschot gaat de accu in? Kan niet want die is vol :)"*
+Die regel stond er onvoorwaardelijk, ook bij 100%. Nu: "de accu is vol;
+het zonoverschot gaat het net op", en bij ruimte staat erbij hoeveel.
+
+**Gemeld**: *"Deze zie ik altijd op de landingspagina, nu niet meer nodig
+toch?"* De melding dat de weerbronnen vergelijkbaar presteren kwam in
+v1.9.2 met reden — stilte was dubbelzinnig — maar permanent wordt hij
+behang. Alleen het actiebare geval (20 procentpunt verschil) blijft op de
+landingspagina; de geruststelling staat nu op de weerpagina.
+
+**Volledige testsuite**: 2005 tests, allemaal groen.
+
+## Opgewekt én voorspeld (v1.65.0)
+
+**Gevraagd**: *"Kun je het 'voorspeld was xx kw' stuk toevoegen? Ik wil
+de voorspelling van de integratie."*
+
+De tegel zei alleen wat er uit kwam en hoeveel de voorspelling er
+gemiddeld naast zit, niet waar dat percentage vandaag op sloeg. Nu staat
+de eigen verwachting erbij — gecorrigeerd met de geleerde bias, niet de
+kale Solcast-waarde. Bij voorkeur de momentopname van 08:00, want dat is
+een echte "was"; anders bijgesteld gedurende de dag, met de herkomst
+erbij.
+
+**Volledige testsuite**: 2001 tests, allemaal groen.
+
+## Celspanningsverschil hangt van de accustand af (v1.64.0)
+
+**Gemeld**: *"celspanningsverschil 0.190 V - hoger dan gebruikelijk. Dit
+lijkt een standaard iets te zijn, gebeurt altijd nabij laden rond 100%
+SOC."*
+
+Klopt, en het stond al in de code: LFP heeft een vlakke curve in het
+midden en steile uiteinden, en daarvoor werden SoC-vakken bijgehouden —
+die de waarschuwing vervolgens niet gebruikte. Dezelfde module staat in
+het vak van 70% op 0,00 tot 0,03 V.
+
+Tussen 20 en 90% gelden de absolute drempels; daarbuiten wordt vergeleken
+met wat voor die module bij die stand gebruikelijk is. Bij te weinig
+geschiedenis wordt er niets gemeld.
+
+**Volledige testsuite**: 1994 tests, allemaal groen.
+
+## "Vandaag" moet ook echt vandaag zijn (v1.63.0)
+
+**Gemeld** met een Solcast-screenshot ernaast: de waarom-kaart zei "er
+wordt vandaag nog 28,5 kWh zon verwacht", Solcast meldde 6,63.
+
+28,5 = 6,6 van vandaag plus ruim 22 van morgen. De planning loopt zover
+als er prijzen zijn — de kaart ernaast meldde het zelf: "over 32 uur" —
+en de samenvatting telt alles op. Derde keer dat deze horizon een maat
+betekenisloos maakte, na de tekortkwartieren en de plantoetsing.
+
+De grens wordt nu expliciet meegegeven. Dezelfde belofte stond ook op de
+pagina *Planning-samenvatting*, die "Verwachting voor de rest van de
+dag" heette terwijl er onbegrensde cijfers stonden.
+
+**Volledige testsuite**: 1988 tests, allemaal groen.
+
 ## `grid_cheaper_than_battery` teruggedraaid (v1.62.0)
 
 **Gemeld met de modus in bedrijf**: *"er is voldoende zonne energie, ook

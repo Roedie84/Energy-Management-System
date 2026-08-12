@@ -509,7 +509,7 @@ views:
   panel: true
   cards:
   - type: picture-elements
-    image: /local/energy_management_system_overview.svg?v=1.62.0
+    image: /local/energy_management_system_overview.svg?v=1.67.0
     elements:
     - type: state-label
       entity: sensor.woonkamer_energy_management_system_system_status
@@ -1234,6 +1234,18 @@ views:
       entity: sensor.woonkamer_energy_management_system_pv_hourly_forecast_bias
       tap_action:
         action: more-info
+    - type: custom:mushroom-template-card
+      primary: '{% set z = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''zon_vandaag'') or {} %}{{ z.get(''opgewekt_kwh'', ''—'') }} kWh opgewekt, voorspeld {{ z.get(''voorspeld_kwh'', ''—'') }} kWh'
+      secondary: '{% set z = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''zon_vandaag'') or {} %}{{ z.get(''herkomst'', '''') }}{% if z.get(''afwijking_procent'') is not none %} · nu {{ z.afwijking_procent }}% ten opzichte van de voorspelling{% endif %}'
+      multiline_secondary: true
+      icon: mdi:sun-clock
+      icon_color: amber
+      entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
+      tap_action:
+        action: more-info
+      grid_options:
+        columns: 12
+        rows: auto
     - type: markdown
       title: Hoe goed is de PV-voorspelling?
       content: '{% set q = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''pv_voorspelkwaliteit'') or {} %}{% if not q.get(''beschikbaar'') %}{{ q.get(''reden'', ''Nog geen gegevens.'') }}{% else %}Over **{{ q.dagen }} voltooide dagen**:
@@ -2493,7 +2505,10 @@ views:
 
         {% endfor %}
 
-        {% if w.values() | selectattr(''gekozen'') | list | length > 0 %}De bronnen liepen te ver uiteen om te middelen, dus is de betrouwbaarste gebruikt.{% else %}De bronnen zitten dicht genoeg bij elkaar; het gemiddelde is gebruikt.{% endif %}{% endif %}
+        {% if w.values() | selectattr(''gekozen'') | list | length > 0 %}De bronnen liepen te ver uiteen om te middelen, dus is de betrouwbaarste gebruikt.{% else %}De bronnen zitten dicht genoeg bij elkaar; het gemiddelde is gebruikt.{% endif %}
+
+
+        {% set v = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''weerbron_vergelijking'') or {} %}{% if v.get(''advies'') %}**Over langere tijd:** {{ v.advies }} Verschil {{ v.verschil_procentpunt }} procentpunt.{% endif %}{% endif %}
 
 
         _Middelen van twee bronnen die het fundamenteel oneens zijn, geeft een getal dat bij geen van beide past. Vanaf 25 procentpunt verschil wint daarom de bron die het aantoonbaar vaker bij het rechte eind heeft._'
@@ -2538,10 +2553,12 @@ views:
       title: Planning-samenvatting
       subtitle: Verwachte opbrengst en of verkopen mag
     - type: markdown
-      title: Verwachting voor de rest van de dag
+      title: Verwachting over de hele planning
       content: '{% set s = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''kwartier_samenvatting'') or {} %}{% if not s.get(''beschikbaar'') %}{{ s.get(''reden'',''Nog geen planning.'') }}{% else %}| | |
 
         |---|---|
+
+        | Vooruit gekeken | {{ ((s.get(''kwartieren'', 0) / 4) | int) }} uur ({{ s.get(''kwartieren'', ''—'') }} kwartieren) |
 
         | Verwachte zon | {{ s.zon_kwh }} kWh |
 
@@ -2579,7 +2596,7 @@ views:
         _De SoC is de echte accustand, zoals in de Zendure-app; hij zakt nooit onder de harde ondergrens. "Bruikbaar" is wat daarvan nog te gebruiken valt - 0% daar betekent dat de accu op die ondergrens staat._
 
 
-        _Let op de laagste SoC: die laat zien hoe diep de accu volgens dit plan zakt. Blijft die ver boven je reserve, dan is er ruimte; komt hij eronder, dan is het plan te gretig._'
+        _Let op de laagste SoC: die laat zien hoe diep de accu zakt._'
       grid_options:
         columns: 12
         rows: auto

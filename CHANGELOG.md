@@ -12885,3 +12885,140 @@ De modus `smart_charging` blijft bestaan als bekende optie, met de
 controle vooraf uit v1.55.0.
 
 **Volledige testsuite**: 1987 tests, allemaal groen.
+
+## v1.63.0 — "Vandaag" moet ook echt vandaag zijn
+
+**Gemeld** met een Solcast-screenshot ernaast: "De verwachtte kw
+zonneenergie kan niet kloppen."
+
+De waarom-kaart zei *"er wordt vandaag nog 28,5 kWh zon verwacht"*,
+Solcast meldde **6,63**.
+
+28,5 = 6,6 van vandaag plus ruim 22 van morgen. De planning loopt zover
+als er prijzen zijn — de kaart ernaast meldde het zelf: *"€ 6,59 over 32
+uur"* — en de samenvatting telt alles bij elkaar op. Daar plakte deze
+regel het woord "vandaag" op.
+
+**Derde keer** dat deze horizon een maat betekenisloos maakte, na de
+tekortkwartieren (v1.42.0) en de plantoetsing (v1.48.0). Telkens
+dezelfde vorm: een maat die klopte bij negen uur vooruit, en die niet is
+meegegaan toen die horizon in v1.25.0 verviervoudigde.
+
+De grens wordt nu expliciet meegegeven in plaats van erop te vertrouwen
+dat de planning bij middernacht ophoudt. Een test controleert dat er
+daadwerkelijk om een grens wordt gevraagd, niet alleen dat het getal
+toevallig klopt.
+
+**En dezelfde belofte stond er nog een keer.** De pagina
+*Planning-samenvatting* had als kop *"Verwachting voor de rest van de
+dag"* terwijl daar dezelfde onbegrensde cijfers staan. Die kop is nu
+*"Verwachting over de hele planning"*, met een regel erbij die zegt hoe
+ver er gekeken wordt.
+
+**Volledige testsuite**: 1988 tests, allemaal groen.
+
+## v1.64.0 — Celspanningsverschil hangt van de accustand af
+
+**Gemeld**: "Accumodule 1: celspanningsverschil 0.190 V - hoger dan
+gebruikelijk. Dit lijkt een standaard iets te zijn, gebeurt altijd nabij
+laden rond 100% SOC."
+
+Klopt — en het stond al in de code, drie regels boven de drempel die het
+negeerde:
+
+> *"LFP heeft een vlakke spanningscurve in het midden en steile
+> uiteinden, waardoor het celspanningsverschil sterk SoC-afhankelijk is.
+> (…) De absolute delta wordt daarom per SoC-bucket bijgehouden."*
+
+Die vakken werden bijgehouden **en nergens gebruikt**: de waarschuwing
+vergeleek gewoon met een vaste drempel van 0,10 V. De eigen metingen
+bevestigen je waarneming: dezelfde module 1 staat in het vak van 70% op
+**0,00 tot 0,03 V**.
+
+**Nu:**
+
+| Accustand | Beoordeling |
+|---|---|
+| 20–90% (vlak) | de absolute drempels, zoals voorheen |
+| Buiten dat bereik | vergeleken met wat voor **deze module** bij **deze stand** gebruikelijk is |
+
+Bij minder dan twintig metingen in zo'n vak wordt er niets gemeld —
+liever een gemiste melding dan er elke avond een die niets betekent, want
+dan leert het overzicht je hem te negeren.
+
+De melding verdwijnt dus niet, maar wordt eerlijk: staat module 1 bij een
+volle accu op 0,19 terwijl 0,05 gebruikelijk is, dan hoor je dat nog
+steeds. En de **differentiële** vergelijking (module tegen de andere
+modules op hetzelfde moment) blijft onveranderd — die heeft geen last van
+de accustand, want alle modules zitten op vrijwel dezelfde stand.
+
+**Volledige testsuite**: 1994 tests, allemaal groen.
+
+## v1.65.0 — Opgewekt én voorspeld
+
+**Gevraagd**: "xx kw opgewekt vandaag (voorspeld was xx kw). Kun je het
+'voorspeld was xx kw' stuk toevoegen? Ik wil de voorspelling van de
+integratie."
+
+De tegel zei alleen wat er uit kwam en hoeveel de voorspelling er
+gemiddeld naast zit — maar niet waar die 9% vandaag op sloeg. Nu:
+
+> **PV / zon** — 16,4 kWh opgewekt vandaag (voorspeld 23,0). De
+> voorspelling zit er over 7 dagen gemiddeld 9% naast.
+
+Nadrukkelijk de **eigen** verwachting, niet de kale Solcast-waarde: die
+wordt gecorrigeerd met de geleerde bias per uur en de live teller. Juist
+dat verschil maakt "zit er x% naast" een zinnig getal.
+
+**Twee bronnen, in deze volgorde.** De momentopname van 08:00 als die er
+is — dat is een echte *"was"*, want dat getal stond vast voordat de dag
+zich ontvouwde. Anders wat er nu nog verwacht wordt plus wat er al ligt;
+dat schuift mee met de dag en is dus geen eerlijke voorspelling meer,
+maar het is het beste dat er is en de herkomst staat erbij.
+
+Op de PV-pagina staat het uitgebreider, met de afwijking van vandaag en
+waar het getal vandaan komt.
+
+**Volledige testsuite**: 2001 tests, allemaal groen.
+
+## v1.66.0 — Een volle accu vangt niets meer op
+
+**Gemeld**: "Zonoverschot gaat de accu in? Kan niet want die is vol :)"
+
+Klopt. Die regel stond er onvoorwaardelijk, ook bij een accu op 100%.
+Dan gaat het overschot het net op — en dat is een heel ander verhaal dan
+"de accu vangt het op".
+
+Nu:
+
+> **Waarom laad je nu?**
+> → de accu is vol; het zonoverschot gaat het net op
+
+En is er wél ruimte, dan staat erbij hoeveel: *"er is zonoverschot en
+dat gaat de accu in (nog 3,4 kWh ruimte)"*. Geen ruimte kunnen bepalen
+is iets anders dan geen ruimte hebben — dan blijft de regel vaag in
+plaats van onwaar.
+
+**Volledige testsuite**: 2005 tests, allemaal groen.
+
+## v1.67.0 — De weerbronnenmelding van de landingspagina af
+
+**Gemeld**: "Deze zie ik altijd op de landingspagina, nu niet meer nodig
+toch?"
+
+Klopt. In **v1.9.2** kwam die "vergelijkbaar"-variant erbij met een goede
+reden: stilte was dubbelzinnig — geen verschil, of nog niet genoeg
+gemeten? Een sterke indruk op basis van losse momenten ("die ene zit er
+altijd naast") verdient een cijfer om tegen te houden.
+
+Maar die boodschap heb je **één keer** nodig, op het moment dat je die
+vraag stelt. Permanent op de landingspagina wordt hij behang — en dan
+leest niemand meer de regel eronder die er wél toe doet.
+
+**Alleen het actiebare geval blijft:** verschillen de bronnen 20
+procentpunt of meer, dan staat er nog steeds een advies om er één uit de
+configuratie te halen. De geruststelling is verhuisd naar de
+**weerpagina**, waar je komt als je de vraag hebt — met het verschil in
+procentpunten erbij.
+
+**Volledige testsuite**: 2005 tests, allemaal groen.

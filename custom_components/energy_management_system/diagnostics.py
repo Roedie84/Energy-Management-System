@@ -453,6 +453,8 @@ async def async_get_config_entry_diagnostics(
             # v1.59.0: wat veroudering versnelt.
             # v1.60.0: waarom doet de aansturing dit nu.
             # v1.61.0: gepland witgoed dat in de reserve meetelt.
+            # v1.65.0: opgewekt tegenover voorspeld.
+            "solar_today": _veilig("get_solar_today", coordinator.get_solar_today),
             "planned_appliances": _veilig(
                 "get_planned_appliance_load",
                 coordinator.get_planned_appliance_load,

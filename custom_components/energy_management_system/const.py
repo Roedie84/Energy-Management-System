@@ -1034,6 +1034,13 @@ AGING_MAX_GAP_HOURS = 0.5
 # vierde reden is per definitie de minst belangrijke.
 WHY_MAX_REASONS = 3
 
+# Onder deze resterende laadruimte geldt de accu als vol. Gemeld:
+# "Zonoverschot gaat de accu in? Kan niet want die is vol :)" - de
+# uitleg beweerde dat het overschot werd opgevangen terwijl er niets
+# meer bij kon. Een kwartier laden op 2000 W is 0,5 kWh; daaronder is er
+# in de praktijk geen ruimte meer.
+SOLAR_CAPTURE_FULL_MARGIN_KWH = 0.3
+
 # --- Gepland witgoed in de planning (v1.61.0) ------------------------
 # Gevraagd: "Nu weet ik zelf dat er morgen 2 wasmachines en een
 # vaatwasser zullen draaien, hoe gaat de integratie daar mee om?"
@@ -1183,6 +1190,37 @@ CONF_BATTERY_MODULE_POWER_SENSORS = "battery_module_power_sensor_entities"
 # hierboven verdienen aandacht (niet: zijn direct gevaarlijk).
 BATTERY_MODULE_CELL_DELTA_ATTENTION_V = 0.10
 BATTERY_MODULE_CELL_DELTA_SERIOUS_V = 0.20
+
+# --- Waar die drempels wél en niet gelden (v1.64.0) ------------------
+# Gemeld: "Accumodule 1: celspanningsverschil 0.190 V - hoger dan
+# gebruikelijk. Dit lijkt een standaard iets te zijn, gebeurt altijd
+# nabij laden rond 100% SOC."
+#
+# Klopt, en het staat drie regels hierboven al in de code: LFP heeft een
+# vlakke curve in het midden en STEILE UITEINDEN, waardoor het
+# celspanningsverschil sterk SoC-afhankelijk is. Daarvoor zijn de
+# SoC-vakken ooit aangelegd - maar de waarschuwing gebruikte gewoon de
+# vaste drempel.
+#
+# De eigen metingen bevestigen het: module 1 staat in het vak van 70%
+# op 0,00 tot 0,03 V. Diezelfde module meldt 0,190 V bij een volle accu.
+# Dat is geen onbalans maar natuurkunde.
+#
+# Buiten dit bereik gelden de absolute drempels niet meer. De
+# DIFFERENTIELE vergelijking (module tegen de andere modules op hetzelfde
+# moment) blijft wél gelden - die heeft geen last van de SoC, want alle
+# modules zitten op vrijwel dezelfde stand.
+BATTERY_MODULE_FLAT_SOC_MIN_PERCENT = 20.0
+BATTERY_MODULE_FLAT_SOC_MAX_PERCENT = 90.0
+
+# In de steile uiteinden wordt vergeleken met wat voor DEZE module in
+# DIT SoC-vak gebruikelijk is. Boven de mediaan plus deze marge is het
+# alsnog het vermelden waard.
+BATTERY_MODULE_BUCKET_DELTA_MARGIN_V = 0.08
+
+# Onder dit aantal metingen in een vak zegt de mediaan te weinig; dan
+# liever niets melden dan een drempel op drie waarnemingen.
+BATTERY_MODULE_BUCKET_MIN_SAMPLES = 20
 
 # Absolute celtemperatuur waarboven het vermelden waard is.
 BATTERY_MODULE_TEMPERATURE_ATTENTION_C = 40.0

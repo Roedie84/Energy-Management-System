@@ -3867,6 +3867,8 @@ class GacsAssessmentSensor(SensorEntity):
             "veroudering",
             "waarom_nu",
             "gepland_witgoed",
+            "zon_vandaag",
+            "weerbron_vergelijking",
             "nog_niet_bepaald",
         }
     )
@@ -3925,6 +3927,16 @@ class GacsAssessmentSensor(SensorEntity):
             ("veroudering", self._coordinator.get_aging_drivers),
             ("waarom_nu", self._coordinator.get_why_now),
             ("gepland_witgoed", self._coordinator.get_planned_appliance_load),
+            ("zon_vandaag", self._coordinator.get_solar_today),
+            (
+                "weerbron_vergelijking",
+                lambda: (
+                    self._coordinator.get_weather_source_reliability().get(
+                        "_vergelijking"
+                    )
+                    or {}
+                ),
+            ),
             ("nog_niet_bepaald", self._coordinator.get_pending_overview),
         ):
             try:
