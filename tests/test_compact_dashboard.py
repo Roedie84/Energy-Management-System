@@ -194,7 +194,12 @@ def test_the_overview_has_little_prose():
     # Gevraagd: "waar zie ik dan welke uren hij verwacht aan het net te
     # hangen?" Die tijdstippen erbij kosten ruimte, en twee grenzen die
     # net iets van elkaar verschillen leveren alleen verwarring op.
-    assert tekens < 1650, f"{tekens} tekens tekst op de landingspagina"
+    # v1.60.0: van 1650 naar 1900. De "waarom doe je dit nu"-kaart is
+    # de derde toevoeging die deze grens raakt, en de eerste die het
+    # antwoord geeft op de vraag waarvoor je op deze pagina komt. Om er
+    # ruimte voor te maken is de tabel bij "Haalt de accu het?" ingeruild
+    # voor een regel; de getallen staan op de planningspagina.
+    assert tekens < 1900, f"{tekens} tekens tekst op de landingspagina"
 
 
 def test_the_attention_points_are_readable_on_the_overview():
@@ -334,7 +339,7 @@ def test_no_tab_is_a_wall_of_text():
         # precies wat deze grens bewaakt. Ruim genoeg om er een bij te
         # kunnen, krap genoeg dat de volgende toevoeging weer een
         # afweging wordt.
-        grens = 2500 if str(view.get("path", "")).startswith("detail-") else 1650
+        grens = 2500 if str(view.get("path", "")).startswith("detail-") else 1900
         assert tekens < grens, f"{view['title']}: {tekens} tekens tekst"
 
 

@@ -39,6 +39,8 @@ def _confirm_many_devices(coordinator, count):
             "reference_avg_w": 10.0,
             "_today_sum": 0.0,
             "_today_count": 0,
+            "_today_on_count": 40,
+            "_today_on_sum": 8800.0,
             "_check_date": None,
         }
 
@@ -225,6 +227,8 @@ def test_finalizing_a_device_day_saves_to_the_store(make_coordinator, hass):
         # niet draaide.
         "_today_sum": 5000.0,
         "_today_count": 100,
+            "_today_on_count": 40,
+            "_today_on_sum": 8800.0,
         "_check_date": DAY0.date(),
     }
 

@@ -480,6 +480,7 @@ VLUCHTIG_MET_REDEN = {
     # alsof het actueel is.
     "last_solar_defer_plan": "elke tick herrekend",
     "last_sell_check": "elke tick herrekend",
+    "last_battery_vs_grid": "elke tick herrekend",
     "last_timeline": "elke tick herrekend",
     "last_transitions": "elke tick herrekend",
     "last_needed_kwh_breakdown": "elke tick herrekend",
@@ -499,6 +500,9 @@ VLUCHTIG_MET_REDEN = {
     "weather_ensemble_sources_used": "elke tick herrekend",
     "weather_ensemble_readings": "elke tick herrekend",
     "internal_failures": "hoort na een herstart opnieuw te blijken",
+    # v1.58.0: de REDEN blijkt elke tick opnieuw; alleen het beginmoment
+    # (`fallback_since`) wordt bewaard, want dat is niet te herleiden.
+    "fallback_reasons": "blijkt elke tick opnieuw",
     "notification_suppressed_count": "demping begint na een herstart opnieuw",
     "_unavailable_entities": "blijkt opnieuw uit de sensoren",
     "_sensor_unavailable_since": "blijkt opnieuw uit de sensoren",
@@ -511,10 +515,18 @@ VLUCHTIG_MET_REDEN = {
     "_efficiency_cumulative_charged_kwh": "oude methode, vervalt",
     "_efficiency_cumulative_discharged_kwh": "oude methode, vervalt",
     "_water_session_liters_integrated": "halve tapsessie",
+    # v1.61.0: de metingen van een lopende cyclus. Een halve cyclus
+    # terugzetten zou een verkeerd kWh-getal opleveren; de UITKOMST
+    # (`appliance_cycle_kwh`) wordt wel bewaard.
+    "_appliance_power_samples": "halve cyclus, hoort te vervallen",
     "_window_energy_kwh": "half meetvenster",
     "_window_duration_hours": "half meetvenster",
     "_window_temp_samples": "half meetvenster",
     "_temp_prediction_pending": "openstaande voorspelling zonder waarde",
+    # v1.59.0: de tellers van de lopende dag. Die worden bij middernacht
+    # in `veroudering_history` weggeschreven; halverwege bewaren zou een
+    # halve dag als hele dag laten meetellen.
+    "_veroudering_vandaag": "halve dag, wordt bij middernacht afgesloten",
     # Korte schuivende vensters van enkele minuten.
     "_recent_consumption_readings_kw": "venster van minuten",
     "_balance_power_samples": "venster van minuten",
