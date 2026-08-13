@@ -92,6 +92,11 @@ def _dag_afronden(c, zon=23.0, opbrengst=4.0, soc_laagste=20.0):
     c.pv_production_today_kwh = zon
     c.counterfactual_cost_today_eur = opbrengst
     c.actual_cost_today_eur = 0.0
+    # v1.74.0: nog één tick op dezelfde dag, zodat de eindstand wordt
+    # vastgehouden. In bedrijf gebeurt dat vanzelf - de tellers lopen
+    # elke vijf minuten mee - maar de toetsing mag niet met de tellers
+    # van ná de dagwissel rekenen, want die staan dan al op nul.
+    c._update_plan_review(OCHTEND + timedelta(hours=12))
     c._update_plan_review(OCHTEND + timedelta(days=1))
     return c.plan_review_history[-1]
 
@@ -323,3 +328,101 @@ def test_an_old_snapshot_without_counters_still_works(
     c._update_plan_review(OCHTEND + timedelta(days=1))
 
     assert c.plan_review_history[-1]["zon"]["werkelijk_kwh"] == 23.0
+
+
+# --- v1.74.0: rekenen met de eindstand, niet met nul ------------------
+
+
+def test_the_counters_are_read_before_they_reset(make_coordinator, hass):
+    """Gevonden in de export van 13 augustus: de plantoetsing meldde
+    "zon -1190%" met een werkelijke opbrengst van -20,82 kWh.
+
+    Dat is precies de negatieve stand van de momentopname. De oorzaak
+    is een volgordefout: `pv_production_today_kwh` wordt bij de dagwissel
+    op nul gezet door een routine die eerder in de tick draait, dus
+    rekende de toetsing 0 min 20,82.
+    """
+    c = _coordinator(make_coordinator)
+    c.pv_production_today_kwh = 0.2
+    c._update_plan_review(OCHTEND)
+
+    # De dag verloopt; de teller loopt op.
+    c.pv_production_today_kwh = 21.0
+    c.last_soc_percent = 40.0
+    c._update_plan_review(OCHTEND + timedelta(hours=10))
+
+    # Middernacht: de teller is al gewist voordat de toetsing draait.
+    c.pv_production_today_kwh = 0.0
+    c._update_plan_review(OCHTEND + timedelta(days=1))
+
+    regel = c.plan_review_history[-1]
+    assert regel["zon"]["werkelijk_kwh"] > 0
+    assert round(regel["zon"]["werkelijk_kwh"], 1) == 20.8
+
+
+def test_the_same_holds_for_import_and_savings(make_coordinator, hass):
+    """Alle drie de dagtellers hadden dezelfde fout."""
+    c = _coordinator(make_coordinator)
+    c._update_plan_review(OCHTEND)
+
+    c.grid_import_today_kwh = 1.5
+    c.counterfactual_cost_today_eur = 4.0
+    c.actual_cost_today_eur = 0.5
+    c.last_soc_percent = 40.0
+    c._update_plan_review(OCHTEND + timedelta(hours=10))
+
+    c.grid_import_today_kwh = 0.0
+    c.counterfactual_cost_today_eur = 0.0
+    c.actual_cost_today_eur = 0.0
+    c._update_plan_review(OCHTEND + timedelta(days=1))
+
+    regel = c.plan_review_history[-1]
+    assert regel["import"]["werkelijk_kwh"] == 1.5
+    assert regel["opbrengst"]["werkelijk_eur"] == 3.5
+
+
+def test_a_restart_does_not_discard_this_mornings_snapshot(
+    make_coordinator, hass
+):
+    """Gevonden in de export van 13 augustus: de momentopnames staan op
+    18:00 en 20:19 in plaats van 08:00, telkens vlak na een herstart.
+
+    `_plan_review_day_key` werd niet bewaard, dus stond hij na een
+    herstart op None - en dan wiste de dagwisselregel de opname van
+    vanochtend. Een opname om 18:00 vergelijkt de REST van de dag (1,91
+    kWh zon) met de werkelijkheid; dat zegt nauwelijks iets.
+    """
+    c = _coordinator(make_coordinator)
+    c._update_plan_review(OCHTEND)
+    opname = dict(c.plan_snapshot)
+
+    # Herstart: de dagsleutel is leeg, de momentopname komt terug uit de
+    # opslag.
+    verse = _coordinator(make_coordinator)
+    verse.plan_snapshot = opname
+    verse._plan_review_day_key = None
+
+    verse._update_plan_review(OCHTEND + timedelta(hours=9))
+
+    assert verse.plan_snapshot["opgenomen_om"] == opname["opgenomen_om"]
+
+
+def test_a_restart_on_a_new_day_still_closes_yesterday(
+    make_coordinator, hass
+):
+    """Blijft de opname van gisteren staan omdat de integratie 's nachts
+    uit was, dan hoort hij alsnog afgesloten te worden - anders
+    verdwijnt die dag stilzwijgend uit de reeks."""
+    c = _coordinator(make_coordinator)
+    c._update_plan_review(OCHTEND)
+    opname = dict(c.plan_snapshot)
+
+    verse = _coordinator(make_coordinator)
+    verse.plan_snapshot = opname
+    verse._plan_review_day_key = None
+    verse.last_soc_percent = 40.0
+
+    verse._update_plan_review(OCHTEND + timedelta(days=1))
+
+    assert verse.plan_review_history
+    assert verse.plan_review_history[-1]["datum"] == opname["datum"]

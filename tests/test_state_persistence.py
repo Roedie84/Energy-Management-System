@@ -62,6 +62,7 @@ def _vul_alles(c):
     c._peak_power_day_key = date(2026, 8, 6)
     c._counterfactual_day_key = date(2026, 8, 6)
     c._self_sufficiency_day_key = date(2026, 8, 6)
+    c._plan_review_day_key = date(2026, 8, 6)
     # v1.49.0: de dagstand van de PV-geometrie werd bij elke herstart
     # weggegooid, waardoor "0/5 heldere dagen" op een strakblauwe dag
     # een zelfvervullende voorspelling was.
