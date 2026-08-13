@@ -310,3 +310,77 @@ def test_the_deepest_margin_matches_the_energy_bridge():
     )
 
     assert SELL_RESERVE_DEEPEST_SAFETY_FACTOR == 1.15
+
+
+# --- v1.86.0: één reserve, niet twee ---------------------------------
+
+
+def test_the_sell_check_uses_the_self_correcting_margin(
+    make_coordinator, hass
+):
+    """Gevraagd na een tekortmelding: "Maar dan worden toch simpelweg de
+    manual ontlaadkwartieren tegen een hoge prijs gereduceerd om de
+    nacht te halen?"
+
+    Precies - en dat gebeurde niet, want er waren twee reserves in
+    omloop. De ontlaadreserve stond op 40% marge (10% basis, 15% wegens
+    drie tekortdagen, 15% voor de onbeschermde nacht erna), de
+    verkooptoets op een vaste 15%.
+
+    Op 13 augustus 17:05: diepste tekort 3,69 kWh. De ontlaadreserve
+    wilde 5,16 kWh achterhouden, de verkooptoets liet los bij 4,24 - en
+    verkocht dus precies de buffer weg die de tekortbonus had opgebouwd.
+    """
+    c = make_coordinator({})
+    c.last_reserve_margin_breakdown = {"total_percent": 40.0}
+
+    assert c._reserve_margin_factor() == 1.4
+
+
+def test_without_a_breakdown_it_falls_back(make_coordinator, hass):
+    """Vlak na een herstart is de uitsplitsing er nog niet; dan de oude
+    vaste factor in plaats van geen marge."""
+    from custom_components.energy_management_system.const import (
+        SELL_RESERVE_DEEPEST_SAFETY_FACTOR,
+    )
+
+    c = make_coordinator({})
+    c.last_reserve_margin_breakdown = {}
+
+    assert c._reserve_margin_factor() == SELL_RESERVE_DEEPEST_SAFETY_FACTOR
+
+
+def test_the_margin_never_drops_below_the_old_floor(make_coordinator, hass):
+    """De zelfcorrigerende marge kan dalen na dagen met overschot. Onder
+    de oude vaste factor zakken zou de verkooptoets ruimer maken dan hij
+    ooit was - dat is niet de bedoeling van deze wijziging."""
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    kop = bron.index("marge = self._reserve_margin_factor()")
+
+    assert "max(marge, SELL_RESERVE_DEEPEST_SAFETY_FACTOR)" in bron[kop : kop + 200]
+
+
+def test_three_shortfall_days_actually_reduce_selling(
+    make_coordinator, hass
+):
+    """Het hele punt: de tekortbonus moet nu ook de verkoop beperken.
+
+    Met 3,69 kWh diepste tekort en 7,78 kWh beschikbaar was er 3,54 kWh
+    vrij te verkopen; met de 40%-marge blijft daar 2,62 kWh van over.
+    """
+    c = make_coordinator({})
+    diepste = 3.688
+    beschikbaar = 7.78
+
+    c.last_reserve_margin_breakdown = {"total_percent": 15.0}
+    vrij_oud = beschikbaar - diepste * c._reserve_margin_factor()
+
+    c.last_reserve_margin_breakdown = {"total_percent": 40.0}
+    vrij_nieuw = beschikbaar - diepste * c._reserve_margin_factor()
+
+    assert round(vrij_oud, 2) == 3.54
+    assert round(vrij_nieuw, 2) == 2.62
