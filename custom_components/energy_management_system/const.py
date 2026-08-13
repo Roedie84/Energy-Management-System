@@ -1204,7 +1204,15 @@ BATTERY_COOLING_ON_HIGH_POWER_TEMP_C = 30.0
 # Lithium-ijzerfosfaat komt pas boven ongeveer 35 graden in het gebied
 # waar veroudering merkbaar versnelt. Onder 25 valt er niets te winnen;
 # je verbruikt alleen ventilatorstroom en slijtage.
-BATTERY_COOLING_MIN_ABSOLUTE_C = 25.0
+#
+# v1.76.0: MET hysterese. In de export van 13 augustus staan twintig
+# schakelingen in een uur, sommige binnen drie seconden: de
+# temperatuursensor meldt hele graden en wipte tussen 24 en 25, precies
+# op deze grens. Aanzetten mag pas boven de bovenste waarde, uitzetten
+# gebeurt onder de onderste - net als bij de andere drempels in dit
+# blok (5 tegen 2, 35 tegen 33, 500 tegen 300).
+BATTERY_COOLING_MIN_ABSOLUTE_C = 26.0
+BATTERY_COOLING_STOP_BELOW_C = 24.0
 
 # --- En blijven koelen zolang de accu echt warm is (v1.73.0) ---------
 # De uitschakelregel keek naar het verschil met buiten, en zette de
@@ -1577,6 +1585,7 @@ PERSISTED_PLAIN_FIELDS = (
     # meteen weer afgaan.
     "notification_enabled",
     "notification_last_sent",
+    "_notification_history_last",
     "notification_history",
     "notifications_master_enabled",
     # v1.5.1: welke modules al klaar waren, zodat alleen de OVERGANG
@@ -1601,6 +1610,9 @@ PERSISTED_PLAIN_FIELDS = (
     "co2_emitted_today_kg",
     "pv_production_today_kwh",
     "pv_export_today_kwh",
+    # v1.76.0: de export gesplitst in zon en accu, per tick gemeten.
+    "solar_export_today_kwh",
+    "battery_export_today_kwh",
     "gross_consumption_today_kwh",
     "grid_import_today_kwh",
     "peak_power_today_w",

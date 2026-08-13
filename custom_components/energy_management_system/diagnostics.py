@@ -467,6 +467,13 @@ async def async_get_config_entry_diagnostics(
                 "get_fallback_overview", coordinator.get_fallback_overview
             ),
             # v1.71.0: gemeten tegen berekende zonstand.
+            # v1.76.0: de export gesplitst in zon en accu, en wanneer een
+            # soort voor het laatst is vastgelegd. Allebei ontbraken bij
+            # de volledige controle, waardoor ze niet na te kijken waren.
+            "solar_export_today_kwh": coordinator.solar_export_today_kwh,
+            "battery_export_today_kwh": coordinator.battery_export_today_kwh,
+            "notification_last_sent": coordinator.notification_last_sent,
+            "notification_history_last": coordinator._notification_history_last,
             "sun_position_check": _veilig(
                 "get_sun_position_check", coordinator.get_sun_position_check
             ),

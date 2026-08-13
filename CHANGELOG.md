@@ -13333,3 +13333,78 @@ het net op. Daar valt met de accu weinig aan te doen — dat is een
 kwestie van meer opslag of meer verbruik verplaatsen.
 
 **Volledige testsuite**: 2042 tests, allemaal groen.
+
+## v1.76.0 — Volledige controle: vier vondsten
+
+**Gevraagd**: "Kun je nog een keer de diagnostiek nakijken (…) ik wil er
+zeker van zijn dat nu alles maar dan ook echt alles klopt."
+
+Alles nagelopen: 247 velden, alle 22 null-waarden en 12 lege
+verzamelingen verklaard, elke planregel op fysieke plausibiliteit
+getoetst, en de kerncijfers tegen elkaar nagerekend. Vier fouten.
+
+### 1. Zelfconsumptie 100% bij 1,04 kWh teruglevering
+
+De berekening trok de hele **dagontlading** van de export af. Omdat de
+accu die dag 2,47 kWh had geleverd, bleef er niets over als zon-export.
+
+Die aanname is achteraf niet toetsbaar: met alleen dagtotalen is "alle
+export kwam uit de accu" net zo consistent met de energiebalans als
+"alle export was zon". Beide passen precies.
+
+Op het moment zélf is het wél te zien: er kan niet meer accu-energie het
+net op gaan dan de accu op dat moment levert. Dezelfde vergelijking, maar
+per tick — over een hele dag dekt de ontlading van vannacht de zon-export
+van vanmiddag af, terwijl die twee niets met elkaar te maken hebben.
+
+Op de gecontroleerde cijfers: **54,4%** in plaats van 100%.
+
+### 2. Twee tellingen van hetzelfde, met verschillende uitkomsten
+
+De cyclusteller deelt de doorzet door de **nominale** capaciteit (8,6
+kWh) en kwam op 5,5 cycli; de slijtageberekening gebruikte de
+**bruikbare** 7,74 en kwam op 6,1.
+
+De nominale is hier de juiste — de 6000 cycli van de fabrikant zijn
+daarop gespecificeerd. Slijtage gaat van 4,7 naar **4,2 ct/kWh**.
+
+### 3. Mijn koeldrempel van v1.73.0 miste hysterese
+
+Twintig schakelingen in een uur, sommige binnen drie seconden. De
+temperatuursensor meldt hele graden en wipte tussen 24 en 25 — precies
+op de nieuwe grens.
+
+Nu 26 aan / 24 uit, zoals de rest van dat bestand het al deed. Het
+bestand zegt het zelf: *"bewust hysterese tussen aan- en uitschakelen
+(…) zonder die marge zou de ventilator rond een enkele drempel blijven
+pendelen."*
+
+### 4. Een uitgezette melding vulde de geschiedenis
+
+41 van de 200 regels waren accukoeling, waarvan 31 op één ochtend — bij
+een soort die **uitstaat**, dus er ging niets naar de telefoon.
+
+`is_notification_allowed` toetst eerst de schakelaar en komt bij een
+uitgezette soort nooit aan het dempingsvenster toe. De reden is dan
+"deze melding staat uit" en niet "gedempt", dus werd elke herhaling
+alsnog vastgelegd — en duwde echte meldingen uit het venster van 200.
+
+### En de export zelf was incompleet
+
+Drie dingen bleken niet na te kijken omdat ze niet in de diagnostiek
+stonden. Een ontbrekend veld ziet er hetzelfde uit als een veld dat op
+nul staat — dat verschil kostte bij de azimut al een verkeerde
+conclusie. Nu staan ze erin, met een test die dat vasthoudt.
+
+### Wat goed bleek
+
+- de energiebalans van de planning sluit tot op 0,24 kWh, precies het
+  laadverlies bij 90%
+- geen enkele planregel fysiek onmogelijk: geen SoC buiten bereik, geen
+  sprong groter dan het laadvermogen toelaat
+- zelfvoorziening 84,8% klopt exact met de narekening
+- zonstandcontrole 0,4° verschil
+- geen interne fouten, geen plausibiliteitswaarschuwingen, doen-stapel
+  leeg
+
+**Volledige testsuite**: 2058 tests, allemaal groen.

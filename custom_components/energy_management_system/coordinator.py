@@ -302,6 +302,7 @@ from .const import (
     BATTERY_COOLING_ON_ABSOLUTE_C,
     BATTERY_COOLING_KEEP_RUNNING_ABOVE_C,
     BATTERY_COOLING_MIN_ABSOLUTE_C,
+    BATTERY_COOLING_STOP_BELOW_C,
     BATTERY_COOLING_ON_DELTA_C,
     BATTERY_COOLING_ON_HIGH_POWER_TEMP_C,
     BATTERY_COOLING_ON_HIGH_POWER_W,
@@ -769,6 +770,9 @@ class EnergyManagementSystemCoordinator:
             sleutel: standaard for sleutel, _, _, standaard, _ in NOTIFICATION_TYPES
         }
         self.notification_last_sent: dict[str, str] = {}
+        # v1.76.0: wanneer een soort voor het laatst in de GESCHIEDENIS
+        # is gezet - ook als hij is uitgezet en dus niet is verstuurd.
+        self._notification_history_last: dict[str, str] = {}
         self.notification_history: list[dict] = []
         self.notification_suppressed_count: dict[str, int] = {}
         # v1.5.1: welke adviesmodules al "klaar" waren, om de OVERGANG
@@ -1220,6 +1224,9 @@ class EnergyManagementSystemCoordinator:
         # de ratio's zelf worden er telkens live uit afgeleid.
         self.pv_production_today_kwh: float = 0.0
         self.pv_export_today_kwh: float = 0.0
+        # v1.76.0: de export gesplitst op het moment zelf.
+        self.solar_export_today_kwh: float = 0.0
+        self.battery_export_today_kwh: float = 0.0
         # v1.16.9: hoeveel de accu vandaag heeft ONTLADEN. Nodig om
         # export toe te wijzen: wat de accu levert kan geen zon-export
         # zijn, ook niet als het diezelfde dag scheen.
@@ -2821,6 +2828,26 @@ class EnergyManagementSystemCoordinator:
                 return definitie
         return None
 
+    def _geschiedenis_te_kort_geleden(self, kind: str, now: datetime) -> bool:
+        """Is deze soort net al vastgelegd? (v1.76.0)
+
+        Alleen voor de geschiedenis. Een melding die WEL doorgaat naar de
+        telefoon is per definitie al door het dempingsvenster gekomen;
+        deze toets vangt de uitgezette soorten af, die dat venster
+        overslaan.
+        """
+        definitie = self.notification_definition(kind)
+        venster = definitie[4] if definitie else None
+        if not venster:
+            return False
+        laatste = self._notification_history_last.get(kind)
+        if not laatste:
+            return False
+        moment = dt_util.parse_datetime(laatste)
+        if moment is None:
+            return False
+        return (now - moment).total_seconds() / 60 < venster
+
     def is_notification_allowed(self, kind: str, now: datetime) -> tuple[bool, str]:
         """Mag deze melding nu verstuurd worden? (v1.2.0)
 
@@ -3253,6 +3280,9 @@ class EnergyManagementSystemCoordinator:
             # zodat een terugkerend probleem meteen weer gemeld wordt in
             # plaats van pas na het venster.
             self.notification_last_sent.pop(kind, None)
+            # v1.76.0: ook de geschiedenis-teller, anders wordt een
+            # terugkerend probleem wel gemeld maar niet vastgelegd.
+            self._notification_history_last.pop(kind, None)
 
         if opgelost or actief_nu != self.notification_active_conditions:
             self.notification_active_conditions = sorted(actief_nu)
@@ -3290,6 +3320,7 @@ class EnergyManagementSystemCoordinator:
             geschiedenis_soort=f"{kind}_hersteld",
         )
         self.notification_last_sent.pop(kind, None)
+        self._notification_history_last.pop(kind, None)
         self.schedule_persisted_state_save()
 
     @staticmethod
@@ -7579,7 +7610,27 @@ class EnergyManagementSystemCoordinator:
             }
 
         aanschaf = modules * moduleprijs
-        doorzet_kwh = bruikbaar * cycli
+
+        # v1.76.0: rekenen met de NOMINALE capaciteit, net als de
+        # cyclustelling.
+        #
+        # Gevonden bij de volledige controle: de cyclustelling deelt de
+        # doorzet door de nominale capaciteit (8,6 kWh) en kwam op 5,5
+        # cycli, terwijl deze berekening met de bruikbare 7,74 rekende -
+        # goed voor 6,1. Twee tellingen van hetzelfde, met verschillende
+        # uitkomsten.
+        #
+        # De nominale is hier de juiste: de 6000 cycli van de fabrikant
+        # zijn op nominale capaciteit gespecificeerd. Rekenen met de
+        # bruikbare capaciteit maakt de slijtage per kWh kunstmatig hoger
+        # (4,7 in plaats van 4,2 ct).
+        #
+        # Kanttekening die de andere kant op wijst: bij een
+        # ontlaaddiepte van 90% in plaats van 100% gaan cellen in de
+        # praktijk juist LANGER mee dan de opgegeven 6000. Die winst
+        # wordt hier niet meegerekend - dat is de conservatieve kant, en
+        # zonder meting valt er niets beters over te zeggen.
+        doorzet_kwh = (capaciteit or bruikbaar) * cycli
         per_kwh = aanschaf / doorzet_kwh
 
         # Het rendementsverlies hoort erbij: om 1 kWh uit de accu te
@@ -7596,6 +7647,7 @@ class EnergyManagementSystemCoordinator:
             "aanschafwaarde_eur": round(aanschaf, 2),
             "cycli_verwacht": cycli,
             "bruikbaar_kwh": round(bruikbaar, 2),
+            "nominale_capaciteit_kwh": round(capaciteit, 2) if capaciteit else None,
             "totale_doorzet_kwh": round(doorzet_kwh),
             "slijtage_ct_per_kwh": round(per_kwh * 100, 2),
             "rendement_procent": rendement,
@@ -7604,8 +7656,8 @@ class EnergyManagementSystemCoordinator:
             ),
             "reeds_doorgezet_kwh": round(self.battery_cumulative_discharged_kwh, 1),
             "cycli_gedraaid": (
-                round(self.battery_cumulative_discharged_kwh / bruikbaar, 1)
-                if bruikbaar
+                round(self.battery_cumulative_discharged_kwh / capaciteit, 1)
+                if capaciteit
                 else None
             ),
             "toelichting": (
@@ -8856,7 +8908,27 @@ class EnergyManagementSystemCoordinator:
                 self.notification_last_sent[kind] = now.isoformat()
                 self.notification_suppressed_count[kind] = 0
 
+            # v1.76.0: het dempingsvenster geldt ook voor de
+            # GESCHIEDENIS van een uitgezette melding.
+            #
+            # Gevonden bij de volledige controle: 41 van de 200 regels
+            # waren accukoeling, waarvan 31 op één ochtend - terwijl die
+            # soort uitstaat en er dus niets naar de telefoon ging.
+            #
+            # De oorzaak: `is_notification_allowed` toetst eerst de
+            # schakelaar en komt bij een uitgezette soort nooit aan het
+            # venster toe. De reden is dan "deze melding staat uit" en
+            # niet "gedempt", dus werd elke herhaling alsnog vastgelegd.
+            #
+            # Dat is precies wat v1.12.5 wilde voorkomen: de
+            # geschiedenis van tweehonderd regels volschrijven met
+            # dubbele regels - alleen dan via de achterdeur van een
+            # uitgezette melding.
             if toegestaan or not gedempt:
+                if self._geschiedenis_te_kort_geleden(kind, now):
+                    self._notify_listeners()
+                    return
+                self._notification_history_last[kind] = now.isoformat()
                 self.notification_history.append(
                     {
                         "moment": now.isoformat(),
@@ -13361,6 +13433,8 @@ class EnergyManagementSystemCoordinator:
             # gisteren vanaf middernacht gewoon door.
             self._reset_pv_energy_meter_day()
             self.pv_export_today_kwh = 0.0
+            self.solar_export_today_kwh = 0.0
+            self.battery_export_today_kwh = 0.0
             self.gross_consumption_today_kwh = 0.0
             self.grid_import_today_kwh = 0.0
 
@@ -13398,13 +13472,51 @@ class EnergyManagementSystemCoordinator:
         else:
             self.pv_production_source = "geïntegreerd vermogen"
             self.pv_production_today_kwh += (pv_power_w / 1000) * elapsed_hours
-        self.pv_export_today_kwh += (
-            max(0.0, -p1_power_w) / 1000
-        ) * elapsed_hours
+        # v1.76.0: het accuvermogen is hier al nodig voor de
+        # exportsplitsing hieronder.
+        accu_w = self._read_corrected_battery_power()
+
+        export_w = max(0.0, -p1_power_w)
+        self.pv_export_today_kwh += (export_w / 1000) * elapsed_hours
+
+        # v1.76.0: splits de export op het MOMENT ZELF in zon en accu.
+        #
+        # Gevonden bij de volledige controle: zelfconsumptie stond op
+        # 100,0% terwijl er 1,04 kWh was teruggeleverd bij 2,29 kWh
+        # opwek. De berekening trok eerst de hele dagontlading van de
+        # export af - en omdat de accu die dag 2,47 kWh had geleverd,
+        # bleef er niets over als zon-export.
+        #
+        # Die aanname is niet toetsbaar achteraf: met alleen dagtotalen
+        # is "alle export kwam uit de accu" net zo consistent met de
+        # energiebalans als "alle export was zon". Beide passen.
+        #
+        # Op het moment zelf is het wél te zien. Is de zon groter dan wat
+        # het huis vraagt, dan gaat dat overschot het net op; alleen wat
+        # daar bovenop komt kan uit de accu komen. Drie vermogens die we
+        # elke tick al lezen, dus meten in plaats van aannemen.
+        if export_w > 0:
+            # Op dít moment kan er niet meer accu-energie het net op gaan
+            # dan de accu op dít moment levert. Wat daar bovenop wordt
+            # geëxporteerd, is zon.
+            #
+            # Dezelfde vergelijking als de oude dagformule - maar per
+            # tick klopt hij wél. Over een hele dag niet: dan "dekt" de
+            # ontlading van vannacht de zon-export van vanmiddag af,
+            # terwijl die twee niets met elkaar te maken hebben.
+            accu_uit_w = 0.0
+            if accu_w is not None and self.is_battery_discharging():
+                accu_uit_w = abs(accu_w)
+            accu_naar_net_w = min(export_w, accu_uit_w)
+            self.battery_export_today_kwh += (
+                accu_naar_net_w / 1000
+            ) * elapsed_hours
+            self.solar_export_today_kwh += (
+                (export_w - accu_naar_net_w) / 1000
+            ) * elapsed_hours
         # v1.16.9: de werkstand bepaalt OF er ontladen wordt, het
         # vermogen HOEVEEL. Zo kan een verkeerd ingestelde
         # tekenomkering het laden niet als ontladen laten meetellen.
-        accu_w = self._read_corrected_battery_power()
         if accu_w is not None and self.is_battery_discharging():
             self.battery_discharge_today_kwh += (
                 abs(accu_w) / 1000
@@ -13458,9 +13570,39 @@ class EnergyManagementSystemCoordinator:
         # als zelfconsumptie zodra ze in huis wordt gebruikt. Daarom
         # eerst de accu-ontlading van de export aftrekken; wat overblijft
         # is zon die rechtstreeks het net op ging.
+        # v1.76.0: de splitsing wordt nu per tick gemeten in plaats van
+        # uit dagtotalen afgeleid. Zie `_update_self_sufficiency`: op het
+        # moment zelf is te zien of het zonoverschot het net op gaat of
+        # dat de accu levert.
+        #
+        # De oude afleiding gaf 100,0% bij 2,29 kWh opwek en 1,04 kWh
+        # export, omdat de dagontlading van 2,47 kWh de hele export
+        # "opslokte". Met alleen dagtotalen is dat net zo consistent met
+        # de energiebalans als het tegendeel - dus viel er niets uit af
+        # te leiden.
+        if self._solar_export_gemeten():
+            zon_export = min(self.solar_export_today_kwh, opwek)
+            return round(100 * (opwek - zon_export) / opwek, 1)
+
+        # Terugval voor installaties zonder PV-vermogenssensor: dan is de
+        # splitsing niet te meten en blijft de oude aanname staan.
         accu_export = min(self.battery_discharge_today_kwh, self.pv_export_today_kwh)
         zon_export = min(max(0.0, self.pv_export_today_kwh - accu_export), opwek)
         return round(100 * (opwek - zon_export) / opwek, 1)
+
+    def _solar_export_gemeten(self) -> bool:
+        """Is de export-splitsing werkelijk gemeten? (v1.76.0)
+
+        Alleen als er een PV-vermogenssensor is en de gemeten delen bij
+        elkaar ongeveer de totale export vormen. Zonder die controle zou
+        een halve dag aan metingen als volledig beeld gelden.
+        """
+        if not self.config.get(CONF_PV_POWER_SENSOR):
+            return False
+        gemeten = self.solar_export_today_kwh + self.battery_export_today_kwh
+        if self.pv_export_today_kwh <= 0:
+            return gemeten <= 0
+        return gemeten >= self.pv_export_today_kwh * 0.9
 
     @property
     def self_sufficiency_ratio_percent(self) -> float | None:
@@ -13573,7 +13715,11 @@ class EnergyManagementSystemCoordinator:
         # v1.73.0: onder de ondergrens is er niets meer te koelen, dus
         # dan altijd uit - ook als de andere voorwaarden nog niet zijn
         # teruggevallen.
-        if accu_c < BATTERY_COOLING_MIN_ABSOLUTE_C:
+        #
+        # v1.76.0: met hysterese. Zonder marge wipte de ventilator mee
+        # met een sensor die in hele graden meldt: twintig schakelingen
+        # in een uur, sommige binnen drie seconden.
+        if accu_c < BATTERY_COOLING_STOP_BELOW_C:
             return True
 
         # En blijven draaien zolang de accu echt warm is, ongeacht het

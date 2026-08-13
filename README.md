@@ -547,6 +547,32 @@ alleen "0 van de 24 uren".
 
 **Volledige testsuite**: 1889 tests, allemaal groen.
 
+## Volledige controle: vier vondsten (v1.76.0)
+
+**Gevraagd**: *"ik wil er zeker van zijn dat nu alles maar dan ook echt
+alles klopt."*
+
+247 velden nagelopen, alle lege waarden verklaard, elke planregel op
+fysieke plausibiliteit getoetst en de kerncijfers tegen elkaar
+nagerekend.
+
+1. **Zelfconsumptie stond op 100%** bij 1,04 kWh teruglevering. De
+   berekening trok de hele dagontlading van de export af; met alleen
+   dagtotalen valt die toewijzing niet te maken. Nu per tick gemeten:
+   54,4%.
+2. **Twee tellingen van hetzelfde** — de cyclusteller gebruikte de
+   nominale capaciteit, de slijtageberekening de bruikbare. Slijtage gaat
+   van 4,7 naar 4,2 ct/kWh.
+3. **De koeldrempel van v1.73.0 miste hysterese**: twintig schakelingen
+   in een uur omdat de sensor tussen 24 en 25 wipte. Nu 26 aan / 24 uit.
+4. **Een uitgezette melding vulde de geschiedenis** — 41 van de 200
+   regels, want de schakelaartoets komt vóór de dempingstoets.
+
+De energiebalans van de planning sluit tot op 0,24 kWh, precies het
+laadverlies bij 90%.
+
+**Volledige testsuite**: 2058 tests, allemaal groen.
+
 ## Niet koelen wat niet warm is (v1.73.0)
 
 **Gemeld**: *"De koeling van de accu is nu wel heel veel aan (…) Ik kan
