@@ -1536,6 +1536,9 @@ PERSISTED_PLAIN_FIELDS = (
     "_pv_geometry_day_expected_peak_w",
     "plan_review_history",
     "plan_snapshot",
+    # v1.74.0: de eindstand van de lopende dag, zodat een herstart vlak
+    # voor middernacht de toetsing niet met lege tellers laat rekenen.
+    "_plan_review_dagstand",
     # v1.20.0: wanneer er doorgaans naar bed wordt gegaan. Zonder
     # bewaren begint het leren na elke herstart opnieuw.
     "bedtime_history",
@@ -1610,6 +1613,11 @@ PERSISTED_PLAIN_FIELDS = (
 # tick meteen worden gewist, omdat de coordinator dan denkt dat er een
 # nieuwe dag is begonnen - dan was het terugzetten zinloos geweest.
 PERSISTED_DATE_FIELDS = (
+    # v1.74.0: bij welke dag de plantoetsing staat. Zonder dit veld
+    # begon elke herstart met een lege sleutel en werd de momentopname
+    # van vanochtend weggegooid. Als DATUM bewaard, niet als tekst -
+    # anders is de vergelijking met `now.date()` altijd ongelijk.
+    "_plan_review_day_key",
     # v1.49.0: bij welke dag de piekgegevens hierboven horen.
     "_pv_geometry_day_key",
     "_water_sessions_day_key",
@@ -3176,11 +3184,20 @@ PROEFSTAND_SHAPE_MAX_SPREAD = 0.25
 # Zonder bedrag is "betrouwbaar" geen argument om iets aan te zetten.
 PROEFSTAND_LEDGER_DAYS = 120
 
-# Het kale tarief als deel van de belaste prijs, voor de ruwe
-# doorrekening van de tijd ná de saldering. Bij ongeveer 30 ct belast
-# hoort ruwweg 7 ct kaal - energiebelasting en BTW maken het leeuwendeel
-# uit. Zodra het echte veld meeloopt kan dit exact.
-POST_SALDEREN_BARE_SHARE = 0.23
+# --- VERVALLEN in v1.75.0 --------------------------------------------
+# Hier stond `POST_SALDEREN_BARE_SHARE = 0.23`: het kale tarief als vast
+# DEEL van de belaste prijs.
+#
+# Die aanname klopte niet. Energiebelasting plus BTW is een vast BEDRAG
+# per kWh - bij deze aansluiting 11,1 ct - en geen vast percentage. Bij
+# 30 ct belast is kaal 19 ct (63%), bij 13 ct is kaal 1,9 ct (15%). Eén
+# breuk kan dat niet vangen.
+#
+# Daardoor meldde de proefstand "EUR 0,61 in plaats van EUR 3,90" - een
+# daling van 84%, terwijl het met de gemeten cijfers 37% is.
+#
+# Het bedrag wordt nu gemeten: het verschil tussen `price_tax_included`
+# en `price_tax_excluded` uit dezelfde sensor.
 
 # --- Meetuitval uitsluiten van de referentie (v1.21.0) ---------------
 # Gemeld: het verbruik van koelkast/diepvries hangt af van de

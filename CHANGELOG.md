@@ -13242,3 +13242,94 @@ hier bleven alle 2026 bestaande tests groen: die dekten de vier
 aanzetregels apart, maar nooit een koude accu.
 
 **Volledige testsuite**: 2033 tests, allemaal groen.
+
+## v1.74.0 — De plantoetsing rekende met gewiste tellers
+
+**Gevraagd**: "graag volledige controle, dus alles wat te controleren
+valt."
+
+Twee fouten gevonden, allebei in de plantoetsing en allebei van mij.
+
+### Zon: −20,82 kWh
+
+De toetsing meldde *"zon −1190% (minder dan gedacht)"* met een
+werkelijke opbrengst van **−20,82 kWh**. Dat getal is precies de
+negatieve stand van de momentopname.
+
+De oorzaak is een volgordefout: `pv_production_today_kwh` en de
+kostentellers worden bij de dagwissel op nul gezet door een routine die
+**eerder** in de tick draait. De toetsing rekende dus 0 (nieuwe dag) min
+20,82 (stand bij de opname). Alle drie de dagtellers hadden dat — zon,
+import en opbrengst.
+
+De eindstand van de laatste tick van die dag wordt nu vastgehouden en
+gebruikt.
+
+### De momentopname werd bij elke herstart weggegooid
+
+De opnames stonden op **18:00** en **20:19** in plaats van 08:00,
+telkens vlak na een herstart. `_plan_review_day_key` werd niet bewaard,
+dus stond hij na een herstart op `None` — en dan wiste de dagwisselregel
+de opname van vanochtend.
+
+Een opname om 18:00 vergelijkt de **rest** van de dag (1,91 kWh zon) met
+de werkelijkheid; dat zegt nauwelijks iets. Nu draagt de opname zelf de
+datum en blijft hij staan. Stond er nog een opname van gisteren omdat de
+integratie 's nachts uit was, dan wordt die alsnog afgesloten in plaats
+van stilzwijgend verdwijnen.
+
+Als datumveld bewaard, niet als tekst — anders is de vergelijking met de
+huidige dag altijd ongelijk, en dat is een valkuil die al in de code
+staat beschreven.
+
+**Volledige testsuite**: 2037 tests, allemaal groen.
+
+## v1.75.0 — Wat de saldering kost, gemeten in plaats van geschat
+
+**Gevraagd**: "Kun je dat nu bekijken? Saldering is als bekend nu nog
+actief, en stopt na 31-12-2026."
+
+De proefstand meldde *"€ 0,61 in plaats van € 3,90"* — een daling van
+84%. Dat klopt niet.
+
+### De denkfout
+
+Ik nam aan dat het kale tarief een vast **deel** van de belaste prijs is
+(23%). Maar energiebelasting plus BTW is een vast **bedrag** per kWh:
+
+| Belaste prijs | Kaal | Aandeel |
+|---|---|---|
+| 30 ct | 19 ct | 63% |
+| 13 ct | 1,9 ct | 15% |
+
+Eén breuk kan dat niet vangen. En 23% was er bovendien ver naast: bij
+deze aansluiting is het gemeten verschil **11,1 ct/kWh**.
+
+### Nu gemeten
+
+Beide prijsvelden zitten in dezelfde sensor, dus het verschil valt te
+meten in plaats van te schatten — als mediaan, zodat een kwartier met
+een ontbrekend veld de uitkomst niet verpest.
+
+Met de echte gegevens van 13 augustus:
+
+> **€ 2,46 in plaats van € 3,90.** 13,0 kWh gaat het net op — nu 32,4 ct
+> per kWh waard, straks 19,3 ct.
+
+Dus **een derde eraf**, niet vijf zesde. Nog steeds fors, maar een heel
+ander verhaal.
+
+### Wat dit betekent voor 2027
+
+Elke kWh die je 's avonds uit de accu gebruikt in plaats van 's middags
+terug te leveren, wordt straks 13 ct meer waard. Dat maakt de vraag *"of
+energie überhaupt door de accu moet"* — proefstandkandidaat 1 — een stuk
+scherper: de slijtage van 4,7 ct blijft gelijk, de winst per opgeslagen
+kWh stijgt.
+
+En het maakt de rekensom omgekeerd óók scherper: op een dag als vandaag
+is 21 kWh zon tegen 5,8 kWh verbruik, dus het meeste gaat hoe dan ook
+het net op. Daar valt met de accu weinig aan te doen — dat is een
+kwestie van meer opslag of meer verbruik verplaatsen.
+
+**Volledige testsuite**: 2042 tests, allemaal groen.

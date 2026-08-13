@@ -483,7 +483,6 @@ from .const import (
     PROEFSTAND_MIN_SAMPLES,
     PROEFSTAND_MIN_TREND_DAYS,
     PROEFSTAND_SHAPE_MAX_SPREAD,
-    POST_SALDEREN_BARE_SHARE,
     RELIABILITY_INDICATIVE,
     PROEFSTAND_LEDGER_DAYS,
     PRICE_SCALE_FACTOR,
@@ -749,6 +748,9 @@ class EnergyManagementSystemCoordinator:
         self.plan_review_history: list[dict] = []
         self.laagste_soc_vandaag_procent: float | None = None
         self._plan_review_day_key = None
+        # v1.74.0: de dagstand van de laatste tick, om bij de dagwissel
+        # niet met al gewiste tellers te rekenen.
+        self._plan_review_dagstand: dict = {}
         self._last_intrusion_alert_at: datetime | None = None
         self.water_softener_last_regeneration: datetime | None = None
         self.last_fietsladers_action: str | None = None
@@ -7165,16 +7167,39 @@ class EnergyManagementSystemCoordinator:
                 },
             }
         nu_totaal = plan[-1]["cumulatief_eur"]
-        # Alles wat het net op gaat is straks alleen het kale tarief
-        # waard; wat het huis gebruikt bespaart nog steeds de volle prijs.
         export_kwh = sum(-r["net_kwh"] for r in plan if r["net_kwh"] < 0)
+
+        # v1.75.0: het ECHTE verschil tussen belast en kaal, niet een
+        # geschatte breuk.
+        #
+        # Gevraagd: "Kun je dat nu bekijken? Saldering is als bekend nu
+        # nog actief, en stopt na 31-12-2026."
+        #
+        # De schatting hiervoor nam aan dat het kale tarief een vast
+        # DEEL van de belaste prijs is (23%). Dat klopt niet: de
+        # energiebelasting plus BTW is een vast BEDRAG per kWh - bij
+        # deze aansluiting 11,1 ct. Bij een belaste prijs van 28,6 ct is
+        # kaal dus 17,6 (61%), en bij 13 ct is kaal 1,9 (15%). Eén breuk
+        # kan dat niet vangen.
+        #
+        # Daardoor stond er "€ 0,61 in plaats van € 3,90" - een daling
+        # van 84%, terwijl het met de gemeten cijfers 35% is.
+        #
+        # Beide prijsvelden zitten in dezelfde sensor, dus het verschil
+        # valt te meten in plaats van te schatten.
+        belastingdeel = self._gemeten_belastingdeel_eur_per_kwh()
+        verschil = 0.0
+        for regel in plan:
+            if regel["net_kwh"] >= 0:
+                continue
+            kwh = -regel["net_kwh"]
+            prijs = regel["prijs_ct"] / 100
+            kaal_tarief = max(0.0, prijs - belastingdeel)
+            verschil += kwh * (prijs - kaal_tarief)
         gemiddelde_prijs = (
             sum(r["prijs_ct"] for r in plan) / len(plan) / 100
         )
-        kaal = gemiddelde_prijs * POST_SALDEREN_BARE_SHARE
-        verschil = export_kwh * (
-            gemiddelde_prijs + FEEDIN_PREMIUM_EUR_PER_KWH - kaal
-        )
+        kaal = max(0.0, gemiddelde_prijs - belastingdeel)
         return {
             "naam": "Opbrengst na de saldering",
             "waarde": f"€ {nu_totaal - verschil:.2f} in plaats van € {nu_totaal:.2f}",
@@ -7186,9 +7211,13 @@ class EnergyManagementSystemCoordinator:
                 f"{(gemiddelde_prijs + FEEDIN_PREMIUM_EUR_PER_KWH) * 100:.1f} ct."
             ),
             "betrouwbaarheid": (
-                "Ruwe schatting: het kale tarief wordt hier afgeleid als een "
-                f"vast deel ({POST_SALDEREN_BARE_SHARE:.0%}) van de belaste "
-                "prijs. Zodra het echte veld meeloopt kan dit exact."
+                f"Gemeten: energiebelasting plus BTW is {belastingdeel * 100:.1f} "
+                "ct/kWh, het verschil tussen de belaste en de kale prijs uit "
+                "dezelfde sensor. Dat is een vast bedrag, geen vast "
+                "percentage - bij een lage prijs valt er dus verhoudingsgewijs "
+                "veel meer weg."
+                if belastingdeel
+                else "Het kale prijsveld levert nog geen waarde; schatting."
             ),
             "zou_veranderen": (
                 "Elke kWh die niet het net op gaat wordt straks veel meer "
@@ -7206,6 +7235,39 @@ class EnergyManagementSystemCoordinator:
                 ),
             },
         }
+
+    def _gemeten_belastingdeel_eur_per_kwh(self) -> float:
+        """Energiebelasting plus BTW per kWh, gemeten (v1.75.0).
+
+        Het verschil tussen `price_tax_included` en `price_tax_excluded`
+        uit dezelfde prijssensor. Dat is een vast bedrag per kWh - bij
+        deze aansluiting 11,1 ct - en niet een vast percentage.
+
+        De mediaan over de bekende kwartieren, want een enkel kwartier
+        waarin één van de twee velden ontbreekt zou de uitkomst anders
+        verpesten.
+        """
+        veld = self.config.get(
+            CONF_FEEDIN_PRICE_ATTRIBUTE, DEFAULT_FEEDIN_PRICE_ATTRIBUTE
+        )
+        belast = {
+            begin: prijs / PRICE_SCALE_FACTOR
+            for begin, _e, prijs in self._get_forecast_entries()
+        }
+        kaal = {
+            begin: prijs / PRICE_SCALE_FACTOR
+            for begin, _e, prijs in self._get_forecast_entries(
+                price_key_override=veld
+            )
+        }
+        verschillen = [
+            belast[moment] - kaal[moment]
+            for moment in belast
+            if moment in kaal and belast[moment] > kaal[moment]
+        ]
+        if not verschillen:
+            return 0.0
+        return statistics.median(verschillen)
 
     def _kandidaat_dagtype(self) -> dict:
         """3. Verschilt een weekenddag genoeg van een werkdag?"""
@@ -10588,11 +10650,60 @@ class EnergyManagementSystemCoordinator:
         Er wordt hier bewust NIETS bijgesteld. Dit is een rapport.
         """
         vandaag = now.date()
+
+        # v1.74.0: de dagstand van de VORIGE tick vasthouden.
+        #
+        # Gevonden in de export van 13 augustus: de plantoetsing meldde
+        # "zon -1190%" met een werkelijke opbrengst van -20,82 kWh. Dat
+        # is precies de negatieve stand van de momentopname, en de
+        # oorzaak is een volgordefout: `pv_production_today_kwh` en de
+        # kostentellers worden bij de dagwissel op nul gezet door
+        # `_update_self_sufficiency`, dat eerder in de tick draait.
+        #
+        # De toetsing rekende dus 0 (nieuwe dag) min 20,82 (stand bij de
+        # momentopname). Alle drie de dagtellers hadden dat: zon, import
+        # en opbrengst.
+        #
+        # De stand van de laatste tick VAN GISTEREN is wat we nodig
+        # hebben; die wordt hier elke tick bijgehouden.
+        if self._plan_review_day_key == vandaag:
+            self._plan_review_dagstand = {
+                "pv": self.pv_production_today_kwh,
+                "import": self.grid_import_today_kwh,
+                "opbrengst": (
+                    self.counterfactual_cost_today_eur
+                    - self.actual_cost_today_eur
+                ),
+            }
+
         if self._plan_review_day_key != vandaag:
+            # v1.74.0: alleen afsluiten en wissen als het echt een NIEUWE
+            # dag is, niet bij elke herstart.
+            #
+            # `_plan_review_day_key` werd niet bewaard, dus stond hij na
+            # een herstart op None - en dan wiste deze regel de
+            # momentopname van vanochtend. In de export van 13 augustus
+            # is dat te zien: de opnames staan op 18:00 en 20:19 in
+            # plaats van 08:00, telkens vlak na een herstart.
+            #
+            # Een opname om 18:00 vergelijkt de REST van de dag (1,91
+            # kWh zon) met de werkelijkheid - een toetsing die
+            # nauwelijks iets zegt.
+            #
+            # De momentopname draagt zelf de datum, dus daar valt op te
+            # bouwen zonder aparte sleutel.
+            zelfde_dag = (self.plan_snapshot or {}).get(
+                "datum"
+            ) == vandaag.isoformat()
             if self._plan_review_day_key is not None:
                 self._finish_plan_review(now)
+            elif not zelfde_dag and self.plan_snapshot:
+                # Herstart op een nieuwe dag, met een opname van
+                # gisteren die nooit is afgesloten: alsnog doen.
+                self._finish_plan_review(now)
             self._plan_review_day_key = vandaag
-            self.plan_snapshot = None
+            if not zelfde_dag:
+                self.plan_snapshot = None
 
         # De momentopname wordt één keer per dag genomen, en pas als de
         # dag echt begonnen is: 's nachts staat er nog geen zon in het
@@ -10680,17 +10791,19 @@ class EnergyManagementSystemCoordinator:
         # v1.37.2: alles vanaf de momentopname, niet vanaf middernacht.
         # De planning begint bij "nu", dus de verwachting gaat over de
         # rest van de dag; wat daarvoor gebeurde hoort er niet bij.
-        werkelijke_opbrengst = (
-            self.counterfactual_cost_today_eur
-            - self.actual_cost_today_eur
-            - plan.get("opbrengst_bij_opname_eur", 0.0)
-        )
-        werkelijke_zon = self.pv_production_today_kwh - plan.get(
-            "pv_bij_opname_kwh", 0.0
-        )
-        werkelijke_import = self.grid_import_today_kwh - plan.get(
-            "import_bij_opname_kwh", 0.0
-        )
+        # v1.74.0: de eindstand van de dag die wordt afgesloten, niet de
+        # tellers van vandaag - die staan op dit moment al op nul.
+        eindstand = self._plan_review_dagstand or {}
+        werkelijke_opbrengst = eindstand.get(
+            "opbrengst",
+            self.counterfactual_cost_today_eur - self.actual_cost_today_eur,
+        ) - plan.get("opbrengst_bij_opname_eur", 0.0)
+        werkelijke_zon = eindstand.get(
+            "pv", self.pv_production_today_kwh
+        ) - plan.get("pv_bij_opname_kwh", 0.0)
+        werkelijke_import = eindstand.get(
+            "import", self.grid_import_today_kwh
+        ) - plan.get("import_bij_opname_kwh", 0.0)
         regel = {
             "datum": plan["datum"],
             "opgenomen_om": plan["opgenomen_om"],
