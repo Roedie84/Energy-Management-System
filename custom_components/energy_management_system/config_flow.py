@@ -47,6 +47,8 @@ from .const import (
     CONF_PV_ENERGY_SENSOR,
     CONF_PV_ACTUAL_TILT_DEGREES,
     CONF_DISHWASHER_START_IN,
+    CONF_PRESENCE_ABSENCE_MINUTES,
+    PRESENCE_ABSENCE_AFTER_MINUTES_FAST,
     CONF_SUN_AZIMUTH_SENSOR,
     CONF_WASHING_MACHINE_END_AT,
     CONF_SUN_ELEVATION_SENSOR,
@@ -418,6 +420,19 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
                 CONF_SUN_AZIMUTH_SENSOR,
                 default=defaults.get(CONF_SUN_AZIMUTH_SENSOR),
             ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            vol.Optional(
+                CONF_PRESENCE_ABSENCE_MINUTES,
+                # Terugvalwaarde verplicht: een leeg NumberSelector geeft
+                # "expected float" en blokkeert het hele formulier.
+                default=defaults.get(
+                    CONF_PRESENCE_ABSENCE_MINUTES,
+                    PRESENCE_ABSENCE_AFTER_MINUTES_FAST,
+                ),
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=5, max=180, step=5, unit_of_measurement="min"
+                )
+            ),
             vol.Optional(
                 CONF_DISHWASHER_START_IN,
                 default=defaults.get(CONF_DISHWASHER_START_IN),

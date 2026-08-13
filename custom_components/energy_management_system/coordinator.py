@@ -369,6 +369,7 @@ from .const import (
     CONF_PRESENCE_BEDTIME_SENSOR,
     CONF_PRESENCE_MOTION_SENSORS,
     CONF_PRESENCE_LIGHT_ENTITIES,
+    CONF_PRESENCE_ABSENCE_MINUTES,
     CONF_PRESENCE_TV_ENTITY,
     CONF_PV_ENERGY_SENSOR,
     PV_ENERGY_METER_RESET_TOLERANCE_KWH,
@@ -5505,6 +5506,13 @@ class EnergyManagementSystemCoordinator:
         drempel nodig, anders meldt hij 's avonds telkens dat er niemand
         is.
         """
+        # v1.78.0: instelbaar, want hoe lang stilte normaal is hangt van
+        # het huis en de sensoren af. Gemeld: "De aanwezigheid sensor
+        # wijzigt te snel naar weg, misschien de tijd voor analyse
+        # verlengen?"
+        eigen = self.config.get(CONF_PRESENCE_ABSENCE_MINUTES)
+        if eigen:
+            return float(eigen)
         if self.config.get(CONF_PRESENCE_TV_ENTITY):
             return PRESENCE_ABSENCE_AFTER_MINUTES_FAST
         return PRESENCE_ABSENCE_AFTER_MINUTES

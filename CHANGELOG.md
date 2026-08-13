@@ -13408,3 +13408,93 @@ conclusie. Nu staan ze erin, met een test die dat vasthoudt.
   leeg
 
 **Volledige testsuite**: 2058 tests, allemaal groen.
+
+## v1.77.0 — Een README als visitekaartje
+
+**Gevraagd**: "Ik wil een readme die er professioneel uitziet. Mogelijk
+willen anderen in de toekomst de integratie ook gaan gebruiken."
+
+De README was **12.389 regels**: bij elke versie was het verhaal
+erbovenop geplakt, waardoor de installatie-instructie ergens op regel 37
+begon en daarna 256 hoofdstukken volgden. Waardevol materiaal, maar niet
+als eerste indruk — iemand die overweegt de integratie te gebruiken haakt
+af voordat hij bij de configuratie is.
+
+**Nu 434 regels**, opgebouwd zoals iemand hem leest: wat doet het, wat
+heb je nodig, hoe installeer je het, hoe stel je het in, en pas daarna de
+werking.
+
+Toegevoegd:
+
+- badges voor versie, Home Assistant-eis, testaantal en licentie
+- een inhoudsopgave
+- een korte Engelse samenvatting bovenaan, met de reden waarom de rest
+  Nederlands is: de integratie is specifiek op de Nederlandse markt
+  gericht (kwartierprijzen, salderingsregeling, meldingen in het
+  Nederlands en Achterhoeks)
+- een tabel met alle kenmerken, gegroepeerd naar aansturing, zelflerend
+  en bewaking
+- uitklapbare probleemoplossing
+- een **MIT-licentie** — die ontbrak volledig, en zonder licentie mag
+  niemand het gebruiken
+
+De 11.873 regels ontwikkelgeschiedenis staan nu in
+[`docs/ONTWIKKELING.md`](docs/ONTWIKKELING.md). Niet weggegooid: die
+verhalen leggen vast wáárom een regel er is, en dat is vaak nuttiger dan
+wat er staat.
+
+**Eerlijk over de grenzen**, want dat hoort iemand vóór de installatie te
+weten: er staat expliciet op welke opstelling dit getest is, dat andere
+combinaties niet getest zijn, en dat `Learning only` bestaat om eerst mee
+te kijken zonder dat er iets geschakeld wordt.
+
+**Zeven tests erbij** die de vorm bewaken: de README mag niet opnieuw een
+dagboek worden, de geschiedenis moet ergens bewaard blijven, de
+beginnerssecties moeten er zijn, er moet een licentie zijn, en de
+versiebadge moet met het manifest overeenkomen — een badge die achterloopt
+is erger dan geen badge.
+
+**Volledige testsuite**: 2065 tests, allemaal groen.
+
+## v1.78.0 — De aanwezigheidsdrempel van 10 naar 20 minuten
+
+**Gemeld**: "De aanwezigheid sensor wijzigt te snel naar weg, misschien
+de tijd voor analyse verlengen?"
+
+### Eerst een verkeerde verklaring van mijn kant
+
+Ik dacht dat iemand naar de douche kon lopen zonder langs een sensor te
+komen. Weerlegd: *"als je de doucheruimte in loopt loop je langs de
+bewegingssensor op de overloop"*. Het gaat dus niet om ontbrekende
+dekking maar puur om de lengte van de stilte.
+
+### Wat de eigen tijdlijn zegt
+
+Vier dagen, 24 weg-blokken. **Acht daarvan duurden precies vijf tot zeven
+minuten** — dat is geflikker, geen vertrek. Daarboven zit een gat, en pas
+bij een kwartier beginnen de echte blokken.
+
+| Drempel | Blokken die vervallen |
+|---|---|
+| 10 min | 1 van de 24 |
+| 15 min | 8 |
+| **20 min** | **10** |
+| 25 min | 13 |
+| 45 min | 18 |
+
+De aanname achter de tien minuten was *"wie stil zit, kijkt tv"*. Die
+gaat 's avonds op de bank op, maar niet 's ochtends: de blokken van
+07:00-07:49 en 07:00-07:34 vielen precies in het uur na het opstaan.
+
+**Twintig minuten** haalt het geflikker weg en laat de blokken van
+twintig minuten en langer staan — die kunnen een echt vertrek zijn.
+
+### En instelbaar
+
+Hoe lang stilte normaal is hangt af van hoeveel sensoren er hangen en hoe
+het huis loopt; dat valt niet met één getal voor iedereen te vangen. Het
+nieuwe veld staat bij Configureren, met de standaard als terugvalwaarde —
+een leeg `NumberSelector` blokkeert anders het hele formulier, zoals een
+bestaande test al bewaakte.
+
+**Volledige testsuite**: 2068 tests, allemaal groen.

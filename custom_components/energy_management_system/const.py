@@ -3000,7 +3000,11 @@ PRESENCE_TIMELINE_LENGTH = 120
 # met wat eraan voorafging. Zonder deze regel staat er bij één beweging
 # midden in de nacht "slaapt - thuis - slaapt" in de tabel, en dat maakt
 # hem onleesbaar terwijl er niets is gebeurd.
-PRESENCE_TIMELINE_MIN_MINUTES = 5
+#
+# v1.78.0: van 5 naar 10 minuten. In de tijdlijn van 13 augustus staat
+# een blok van precies 5 minuten "weg" tussen twee keer "thuis" - net te
+# lang om samengevoegd te worden. Zulke flikkeringen horen weg te vallen.
+PRESENCE_TIMELINE_MIN_MINUTES = 10
 
 # Hoeveel regels het dashboard toont. De rest blijft bewaard en staat in
 # de diagnostiek-export; een tabel van 120 regels leest niemand, en de
@@ -3061,7 +3065,36 @@ PRESENCE_SLEEP_WINDOW_HOURS = 12
 # als afwezigheid te tellen. Met de tv als extra signaal is die reden
 # grotendeels weg: wie stil op de bank zit, kijkt meestal tv. Daarom nu
 # een veel kortere drempel.
-PRESENCE_ABSENCE_AFTER_MINUTES_FAST = 10
+#
+# v1.78.0, gemeld: "De aanwezigheid sensor wijzigt te snel naar weg,
+# misschien de tijd voor analyse verlengen?"
+#
+# Eerst een verkeerde verklaring van mijn kant: ik dacht dat iemand naar
+# de douche kon lopen zonder langs een sensor te komen. Weerlegd - "als
+# je de doucheruimte in loopt loop je langs de bewegingssensor op de
+# overloop". Het gaat dus niet om ontbrekende dekking maar puur om de
+# lengte van de stilte.
+#
+# De eigen tijdlijn van vier dagen wijst de drempel aan. Van de 24
+# weg-blokken duurden er ACHT precies vijf tot zeven minuten - dat is
+# geflikker, geen vertrek. Daarboven zit een gat, en pas bij een kwartier
+# beginnen de echte blokken:
+#
+#   drempel 10 min ->  1 van de 24 blokken vervalt
+#   drempel 15 min ->  8
+#   drempel 20 min -> 10
+#   drempel 25 min -> 13
+#   drempel 45 min -> 18
+#
+# De aanname achter de tien minuten was: "wie stil zit, kijkt tv". Die
+# gaat 's avonds op de bank op, maar niet 's ochtends: de blokken van
+# 07:00-07:49 en 07:00-07:34 vielen precies in het uur na het opstaan.
+#
+# Twintig minuten haalt het geflikker weg en laat de blokken van twintig
+# minuten en langer staan - die kunnen een echt vertrek zijn. Instelbaar,
+# want hoe lang stilte normaal is hangt van het huis en de sensoren af.
+PRESENCE_ABSENCE_AFTER_MINUTES_FAST = 20
+CONF_PRESENCE_ABSENCE_MINUTES = "presence_absence_minutes"
 
 # Hoeveel bewegingen er per sensor worden onthouden voor de tabel.
 PRESENCE_LAST_SEEN_LENGTH = 12
@@ -3091,6 +3124,18 @@ CONF_PRESENCE_TV_ENTITY = "presence_tv_entity"
 #    is een cirkelredenering - en het zou de inbraakmelding smoren,
 #    precies wanneer je hem nodig hebt.
 CONF_PRESENCE_LIGHT_ENTITIES = "presence_light_entities"
+
+# --- Stromend water telt als aanwezig (v1.78.0) ----------------------
+# Gemeld: "De aanwezigheid sensor wijzigt te snel naar weg."
+#
+# De langste stiltes vallen waar geen bewegingssensor hangt: de badkamer
+# en het toilet. Precies daar loopt water - en die sensor is er al, voor
+# het waterverbruik. Hij werd alleen niet voor aanwezigheid gebruikt.
+#
+# Sterker signaal dan een lamp: water loopt niet vanzelf, en er is geen
+# tijdklok die het aanzet. Vandaar dat het ook tijdens de vakantiestand
+# blijft tellen, in tegenstelling tot de verlichting.
+PRESENCE_WATER_MIN_LITERS_PER_MINUTE = 0.5
 
 # Bij vakantiestand: melding bij beweging, maar hoogstens één per vijf
 # minuten. Zonder die rem levert een sensor in een gang tientallen
