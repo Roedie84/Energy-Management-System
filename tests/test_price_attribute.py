@@ -121,10 +121,14 @@ def test_only_the_feedin_may_use_the_bare_market_price():
         if "price_key_override=" in r and not r.strip().startswith("#")
     ]
 
-    # v1.37.1: twee plekken, en allebei over de teruglevering - de
+    # v1.37.1: twee plekken, allebei over de teruglevering - de
     # berekening zelf en de vooruitblik die nakijkt of dat veld er
     # überhaupt is voordat 1 januari aanbreekt.
-    assert len(regels) == 2
+    #
+    # v1.75.0: een derde, en ook die gaat over de teruglevering: het
+    # gemeten verschil tussen belast en kaal, waarmee de doorrekening
+    # van na de saldering exact wordt in plaats van geschat.
+    assert len(regels) == 3
     assert all("veld" in r or "feedin" in r for r in regels)
 
 
