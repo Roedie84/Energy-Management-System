@@ -348,3 +348,83 @@ def test_cooling_tile_sits_in_the_live_figures_section():
     # op een breed scherm), dus binnen een sectie nog eens opdelen maakte
     # de tegels een negende van het scherm - te smal voor hun tekst.
     assert koeltegels[0]["grid_options"]["columns"] == 12
+
+
+# --- v1.73.0: niet koelen wat niet warm is ---------------------------
+
+# Gemeld: "De koeling van de accu is nu wel heel veel aan, is dit
+# daadwerkelijk zoveel nodig? (...) Ik kan me voorstellen dat hij pas bij
+# ca. 25 graden actief gaat koelen?"
+
+
+def _aan(accu, buiten, vermogen):
+    from custom_components.energy_management_system.coordinator import (
+        EnergyManagementSystemCoordinator as C,
+    )
+
+    return C._battery_cooling_should_turn_on(accu, buiten, vermogen)
+
+
+def _uit(accu, buiten, vermogen):
+    from custom_components.energy_management_system.coordinator import (
+        EnergyManagementSystemCoordinator as C,
+    )
+
+    return C._battery_cooling_should_turn_off(accu, buiten, vermogen)
+
+
+def test_the_logged_case_no_longer_starts_the_fan():
+    """Uit de export van 13 augustus: de ventilator draaide bij 23 °C
+    accutemperatuur, met als reden "1203W door de accu en al 3,0 °C
+    boven buiten".
+
+    Drie van de vier aanzetregels kijken naar het VERSCHIL met buiten of
+    naar het vermogen. Op een frisse ochtend is de accu bijna altijd
+    twee graden warmer - dat is normale afvoerwarmte.
+    """
+    assert _aan(23.0, 20.0, 1203.0) is None
+
+
+def test_a_big_difference_on_a_cold_morning_is_not_a_reason():
+    """Ook de vijf-graden-regel geldt niet als de accu zelf koud is: 20
+    tegen 12 graden is acht graden verschil en volstrekt onschuldig."""
+    assert _aan(20.0, 12.0, 0.0) is None
+
+
+def test_above_the_floor_the_old_rules_still_apply():
+    """Boven de ondergrens verandert er niets - dat is precies waar de
+    koeling voor is."""
+    assert _aan(28.0, 24.0, 1203.0) is not None
+    assert _aan(36.0, 30.0, 0.0) is not None
+
+
+def test_a_warm_battery_keeps_cooling_on_a_warm_day():
+    """Uit de export van 12 augustus 15:27: "accu 32,0 °C, nog maar 1,9
+    °C boven buiten" - en de ventilator ging uit. Bij 32 graden, het
+    warmste punt van die dag, omdat het buiten óók warm was.
+    """
+    assert _uit(32.0, 30.1, 0.0) is False
+
+
+def test_a_cold_battery_always_stops_cooling():
+    """Onder de ondergrens valt er niets te koelen, ook als de andere
+    voorwaarden nog niet zijn teruggevallen."""
+    assert _uit(22.0, 15.0, 1500.0) is True
+
+
+def test_the_hysteresis_in_the_middle_is_unchanged():
+    """Tussen 25 en 30 graden gelden de oude regels met hun hysterese."""
+    assert _uit(26.0, 25.0, 100.0) is True
+    assert _uit(26.0, 20.0, 100.0) is False
+
+
+def test_the_floor_matches_the_aging_threshold():
+    """De grens waarboven doorgekoeld wordt is dezelfde als waarboven de
+    verouderingsdrijvers de uren tellen - dan betekent "warm" overal
+    hetzelfde."""
+    from custom_components.energy_management_system.const import (
+        AGING_HIGH_TEMPERATURE_C,
+        BATTERY_COOLING_KEEP_RUNNING_ABOVE_C,
+    )
+
+    assert BATTERY_COOLING_KEEP_RUNNING_ABOVE_C == AGING_HIGH_TEMPERATURE_C
