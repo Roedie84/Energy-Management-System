@@ -107,8 +107,13 @@ def test_the_wear_cost_uses_the_real_prices(make_coordinator, hass):
 
     assert overzicht["aanschafwaarde_eur"] == 2187.0
     assert overzicht["bruikbaar_kwh"] == 7.74
-    # 2187 / (7,74 x 6000) = 4,7 ct
-    assert 4.6 <= overzicht["slijtage_ct_per_kwh"] <= 4.8
+    # v1.76.0: op de NOMINALE capaciteit, net als de cyclustelling. De
+    # 6000 cycli van de fabrikant zijn daarop gespecificeerd; rekenen met
+    # de bruikbare 7,74 maakte de slijtage kunstmatig hoger.
+    #
+    # 2187 / (8,6 x 6000) = 4,2 ct
+    assert overzicht["nominale_capaciteit_kwh"] == 8.6
+    assert 4.1 <= overzicht["slijtage_ct_per_kwh"] <= 4.3
 
 
 def test_the_wear_cost_does_not_decide_between_house_and_grid():
@@ -122,7 +127,9 @@ def test_the_wear_cost_does_not_decide_between_house_and_grid():
     bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
     kop = bron.index("def get_wear_cost_overview")
 
-    assert "dezelfde slijtage" in bron[kop : kop + 4000]
+    # v1.76.0: van 4000 naar 6000 tekens - de toelichting is gegroeid en
+    # zoeken op een vast aantal tekens breekt zodra dat gebeurt.
+    assert "dezelfde slijtage" in bron[kop : kop + 6000]
 
 
 # --- 3. dagtype ------------------------------------------------------
@@ -296,8 +303,8 @@ def test_the_wear_is_booked_per_day(make_coordinator, hass):
 
     boeking = c.proefstand_ledger[-1]
     assert boeking["doorzet_kwh"] == 6.0
-    # 6 kWh x 4,7 ct = 28 cent, als kostenpost dus negatief.
-    assert -0.30 <= boeking["slijtage_eur"] <= -0.27
+    # 6 kWh x 4,2 ct = 25 cent, als kostenpost dus negatief.
+    assert -0.27 <= boeking["slijtage_eur"] <= -0.24
 
 
 def test_the_wear_amount_reaches_the_candidate(make_coordinator, hass):
@@ -309,7 +316,7 @@ def test_the_wear_amount_reaches_the_candidate(make_coordinator, hass):
     opbrengst = c.get_proefstand()["kandidaten"][0]["zou_hebben_opgeleverd"]
 
     assert opbrengst["te_becijferen"] is True
-    assert opbrengst["bedrag_per_jaar_eur"] < -90
+    assert opbrengst["bedrag_per_jaar_eur"] < -80
 
 
 def test_the_ledger_survives_a_restart():

@@ -399,3 +399,87 @@ def test_the_reason_explains_the_delay(make_coordinator, hass):
 
     assert toegestaan is False
     assert "aanlooptijd" in reden
+
+
+# --- v1.76.0: een uitgezette melding mag de geschiedenis niet vullen --
+
+
+def test_a_disabled_kind_respects_the_damping_window(
+    make_coordinator, hass
+):
+    """Gevonden bij de volledige controle van 13 augustus: 41 van de 200
+    regels in de geschiedenis waren accukoeling, waarvan 31 op één
+    ochtend - terwijl die soort uitstaat en er dus niets naar de telefoon
+    ging.
+
+    `is_notification_allowed` toetst eerst de schakelaar en komt bij een
+    uitgezette soort nooit aan het venster toe. De reden is dan "deze
+    melding staat uit" en niet "gedempt", dus werd elke herhaling alsnog
+    vastgelegd.
+    """
+    import custom_components.energy_management_system.coordinator as mod
+
+    c = _coordinator(make_coordinator, hass)
+    c.notification_enabled["battery_cooling"] = False
+
+    for minuut in (0, 1, 2, 5):
+        mod.dt_util.now = lambda m=minuut: NOW + timedelta(minutes=m)
+        c._dispatch_notification(
+            notify_service=None,
+            title="Koeling",
+            message=f"tick {minuut}",
+            notification_id="x",
+            kind="battery_cooling",
+        )
+
+    koeling = [
+        m for m in c.notification_history if m["soort"] == "battery_cooling"
+    ]
+
+    # Het venster is 15 minuten; vier ticks binnen vijf minuten horen
+    # één regel op te leveren.
+    assert len(koeling) == 1
+
+
+def test_the_history_still_records_a_disabled_kind(make_coordinator, hass):
+    """v1.12.5 blijft gelden: uitzetten is niet hetzelfde als weggooien -
+    je moet een uitgezette soort nog kunnen nalezen."""
+    import custom_components.energy_management_system.coordinator as mod
+
+    c = _coordinator(make_coordinator, hass)
+    c.notification_enabled["battery_cooling"] = False
+    mod.dt_util.now = lambda: NOW
+
+    c._dispatch_notification(
+        notify_service=None,
+        title="Koeling",
+        message="eerste",
+        notification_id="x",
+        kind="battery_cooling",
+    )
+
+    assert [m for m in c.notification_history if m["soort"] == "battery_cooling"]
+
+
+def test_after_the_window_it_records_again(make_coordinator, hass):
+    """Demping is geen onderdrukking: na het venster hoort er weer een
+    regel bij te komen."""
+    import custom_components.energy_management_system.coordinator as mod
+
+    c = _coordinator(make_coordinator, hass)
+    c.notification_enabled["battery_cooling"] = False
+
+    for minuut in (0, 20):
+        mod.dt_util.now = lambda m=minuut: NOW + timedelta(minutes=m)
+        c._dispatch_notification(
+            notify_service=None,
+            title="Koeling",
+            message=f"tick {minuut}",
+            notification_id="x",
+            kind="battery_cooling",
+        )
+
+    koeling = [
+        m for m in c.notification_history if m["soort"] == "battery_cooling"
+    ]
+    assert len(koeling) == 2
