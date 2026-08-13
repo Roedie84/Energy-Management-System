@@ -13643,3 +13643,68 @@ eenheid die niet bij de grootheid past. Plus één die controleert dat de
 eenheid ook echt op het scherm komt; hem alleen opslaan lost niets op.
 
 **Volledige testsuite**: 2083 tests, allemaal groen.
+
+## v1.83.0 — "Heb je dit nu overal opgelost?"
+
+Nee, toen niet. v1.82.0 raakte alleen de betrouwbaarheidstabel — de
+tabel waar het screenshot vandaan kwam.
+
+Het hele dashboard nagelopen op velden die een hoeveelheid dragen. **Eén
+overgebleven geval**: op de witgoedpagina stond het geplande verbruik als
+kaal getal, met de eenheid alleen in de kolomkop. Dat werkt zolang je de
+kop meeleest, maar bij één regel in een tabel van vier kolommen is dat
+te mager. De kop heet nu *Verbruik* en het getal draagt zelf **kWh**.
+
+Ook de sensoren zelf gecontroleerd: elke sensor met een `state_class` of
+`device_class` heeft een eenheid. Daar was niets mis.
+
+**Twee tests erbij** die dit blijvend bewaken — één die het complete
+dashboard doorzoekt op numerieke velden zonder eenheid, en één die
+hetzelfde doet voor de sensoren. Zonder die toetsen was dit een
+eenmalige opruiming geweest die bij de volgende toevoeging weer
+scheefloopt.
+
+**Volledige testsuite**: 2085 tests, allemaal groen.
+
+## v1.84.0 — Nog twee regels zonder eenheid
+
+**Gevraagd**: "En zijn er nog meer van dit soort schoonheidsfoutjes?"
+
+Systematisch gezocht in plaats van gegokt. Zes categorieën nagelopen:
+getallen zonder eenheid, ongeronde waarden, taalmenging, `None` in
+gebruikersteksten, typografie, en waarden die niet bij hun eenheid
+passen.
+
+**Twee vondsten**, allebei in dezelfde tabel als vorige keer:
+
+- **Meetfrequentie per sensor** — stond als kaal `97.3`
+- **Weerbron-betrouwbaarheid** — stond als kaal `84.5`
+
+Allebei procenten. Ze vielen buiten de eerste ronde omdat ze pas in de
+tabel verschijnen zódra er genoeg metingen zijn — en de test bouwde een
+lege coordinator, waarin die regels er simpelweg niet stonden. De test is
+uitgebreid met meetgegevens, zodat hij het hele overzicht toetst en niet
+de helft.
+
+### Wat schoon bleek
+
+- **Ongeronde getallen**: geen enkele in de dashboardattributen. Vier
+  decimalen in `battery_vs_grid`, maar dat is diagnostiek en daar is
+  precisie juist nuttig.
+- **Taalmenging**: alleen "reserve", en dat is ook Nederlands.
+- **`None` in teksten**: drie f-strings met optionele velden, alle drie
+  achter een controle op aanwezigheid.
+- **Typografie**: alle treffers zaten in commentaar en
+  Engelstalige foutmeldingen, niet in wat jij te zien krijgt.
+- **Sensoren**: elke sensor met een `state_class` heeft een eenheid.
+
+### Eén ding bewust níet aangepakt
+
+De markdown-tabellen tonen `13.21` met een **punt**, terwijl Home
+Assistant zelf `13,21` toont. Dat is een echte inconsistentie binnen
+dezelfde gebruikersinterface, maar het repareren vraagt een filter op
+elke waarde in vijfentwintig kaarten — veel wijzigingen met kans op
+nieuwe fouten, voor een verschil dat niemand verkeerd zal lezen. Als je
+het toch wilt, is het een aparte, geïsoleerde ronde waard.
+
+**Volledige testsuite**: 2085 tests, allemaal groen.

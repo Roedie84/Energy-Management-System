@@ -8758,6 +8758,7 @@ class EnergyManagementSystemCoordinator:
                     "reden": gegevens.get("reden"),
                 },
                 gegevens.get("beweegt_percent"),
+                "%",
             )
 
         # --- geleerde waarden die tot v1.2.0 geen oordeel hadden ---
@@ -8807,6 +8808,7 @@ class EnergyManagementSystemCoordinator:
                 f"Weerbron {entity_id}",
                 {"niveau": gegevens["status"], "reden": gegevens["reden"]},
                 gegevens.get("overeenstemming_percent"),
+                "%",
             )
 
         kosten = self.get_zonneplan_cost_comparison()
