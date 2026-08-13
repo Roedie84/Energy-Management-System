@@ -5,9 +5,9 @@
 **Home Assistant-integratie die een thuisaccu aanstuurt op dynamische energieprijzen — en zichzelf bijleert.**
 
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=flat-square)](https://hacs.xyz)
-[![Version](https://img.shields.io/badge/versie-1.78.0-blue.svg?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/versie-1.79.0-blue.svg?style=flat-square)](CHANGELOG.md)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2024.6.0%2B-41BDF5.svg?style=flat-square)](https://www.home-assistant.io)
-[![Tests](https://img.shields.io/badge/tests-2068%20groen-brightgreen.svg?style=flat-square)](tests)
+[![Tests](https://img.shields.io/badge/tests-2071%20groen-brightgreen.svg?style=flat-square)](tests)
 [![License](https://img.shields.io/badge/licentie-MIT-lightgrey.svg?style=flat-square)](LICENSE)
 
 </div>
@@ -398,7 +398,7 @@ python -m venv .venv && .venv/bin/pip install pytest homeassistant
 .venv/bin/python -m pytest
 ```
 
-**2068 tests**, allemaal groen. De testsuite is niet alleen dekking maar
+**2071 tests**, allemaal groen. De testsuite is niet alleen dekking maar
 ook documentatie: elke test legt vast *welke waarneming* aanleiding gaf
 tot een regel. Een falende test vertelt daardoor niet alleen dát er iets
 stuk is, maar waarom die regel er ooit kwam.

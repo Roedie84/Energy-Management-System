@@ -13498,3 +13498,27 @@ een leeg `NumberSelector` blokkeert anders het hele formulier, zoals een
 bestaande test al bewaakte.
 
 **Volledige testsuite**: 2068 tests, allemaal groen.
+
+## v1.79.0 — Wachten is geen handeling
+
+Gevonden in de export van 13 augustus 12:07: het rendement stond bij
+**"vraagt een handeling"** omdat het al 24 uur op de oude methode
+draaide.
+
+Maar daar valt niets aan te doen. Het rendement per halve slag heeft
+drie meetstukken per kant nodig van minstens 1,5 kWh; die komen vanzelf
+zodra de accu een paar keer volledig laadt en ontlaadt.
+
+De terugval-melding uit v1.58.0 zette **elke** langlopende noodloop in de
+doen-stapel. Dat onderscheid ontbrak:
+
+| Soort terugval | Waar |
+|---|---|
+| Sensor zwijgt, attribuut ontbreekt | **doen** — dat lost zichzelf niet op |
+| Leerroutine verzamelt nog metingen | **wachten** — dat komt vanzelf |
+
+De doen-stapel kleurt de tegel op de landingspagina rood. Als daar
+dingen in staan waar je niets mee kunt, leer je hem negeren — precies
+wat er met de tekortmelding en de weerbronnenmelding al gebeurde.
+
+**Volledige testsuite**: 2071 tests, allemaal groen.

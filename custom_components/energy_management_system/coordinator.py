@@ -630,6 +630,8 @@ class EnergyManagementSystemCoordinator:
         # v1.58.0: sinds wanneer draait welke terugval.
         self.fallback_since: dict[str, str] = {}
         self.fallback_reasons: dict[str, str] = {}
+        # v1.79.0: per terugval of het wachten of doen is.
+        self._fallback_soort: dict[str, str] = {}
         # v1.59.0: wat veroudering versnelt, per dag geteld.
         self.veroudering_history: list[dict] = []
         # v1.61.0: wat een witgoedcyclus werkelijk kost, per apparaat.
@@ -6070,6 +6072,7 @@ class EnergyManagementSystemCoordinator:
         kapot is - en dan draait het maanden op een noodloop.
         """
         actief = {}
+        self._fallback_soort = {}
 
         # De accustand: gemeten of afgeleid uit de beschikbare energie?
         soc_sensor = self.config.get(CONF_SOC_SENSOR)
@@ -6094,6 +6097,10 @@ class EnergyManagementSystemCoordinator:
             )
 
         # Het rendement: per halve slag of nog de oude methode?
+        #
+        # v1.79.0: dit is WACHTEN, geen handeling. Er zijn drie stukken
+        # per kant nodig van minstens 1,5 kWh; daar valt niets aan te
+        # doen behalve de accu laten werken.
         if not (
             self.learned_charge_efficiency_percent is not None
             and self.learned_discharge_efficiency_percent is not None
@@ -6102,6 +6109,7 @@ class EnergyManagementSystemCoordinator:
                 "Nog niet per halve slag gemeten; de oude methode over het "
                 "hele venster is leidend."
             )
+            self._fallback_soort["rendement"] = "wachten"
 
         # De modus: is er teruggevallen op smart?
         if "modus_niet_beschikbaar" in self.internal_failures:
@@ -6925,6 +6933,10 @@ class EnergyManagementSystemCoordinator:
                     "uren": round(uren, 1),
                     "dagen": round(uren / 24, 1),
                     "langdurig": uren >= FALLBACK_ALERT_HOURS,
+                    # v1.79.0: wachten of doen? Een sensor die zwijgt
+                    # vraagt om een handeling; een leerroutine die nog
+                    # metingen verzamelt niet.
+                    "soort": self._fallback_soort.get(sleutel, "doen"),
                     "reden": self.fallback_reasons.get(sleutel, ""),
                 }
             )
@@ -6976,6 +6988,29 @@ class EnergyManagementSystemCoordinator:
         # v1.58.0: een noodloop die al een dag draait vraagt om aandacht.
         for regel in self.get_fallback_overview():
             if not regel["langdurig"]:
+                continue
+            # v1.79.0, gevonden in de export van 13 augustus 12:07: het
+            # rendement stond bij "vraagt een handeling" omdat het al 24
+            # uur op de oude methode draaide. Maar daar valt niets aan te
+            # doen - er zijn drie meetstukken per kant nodig en die komen
+            # vanzelf.
+            #
+            # Een noodloop die op een zwijgende sensor wacht is een
+            # handeling; een leerroutine die metingen verzamelt is
+            # wachten. Dat onderscheid stond er niet in.
+            if regel.get("soort") == "wachten":
+                wachten.append(
+                    {
+                        "groep": "Terugval",
+                        "naam": f"{regel['onderdeel']} draait op een noodloop",
+                        "niveau": RELIABILITY_INSUFFICIENT,
+                        "label": None,
+                        "wat_ontbreekt": (
+                            f"Al {regel['dagen']} dag(en) actief. "
+                            f"{regel['reden']}"
+                        ),
+                    }
+                )
                 continue
             doen.append(
                 {
