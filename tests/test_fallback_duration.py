@@ -110,3 +110,69 @@ def test_the_start_moment_survives_a_restart():
     )
 
     assert "fallback_since" in PERSISTED_PLAIN_FIELDS
+
+
+# --- v1.79.0: wachten is geen handeling ------------------------------
+
+
+def test_a_learning_fallback_lands_in_the_waiting_pile(
+    make_coordinator, hass
+):
+    """Gevonden in de export van 13 augustus 12:07: het rendement stond
+    bij "vraagt een handeling" omdat het al 24 uur op de oude methode
+    draaide.
+
+    Maar daar valt niets aan te doen - er zijn drie meetstukken per kant
+    nodig van minstens 1,5 kWh, en die komen vanzelf. Een noodloop die op
+    een zwijgende sensor wacht is een handeling; een leerroutine die
+    metingen verzamelt is wachten.
+    """
+    import custom_components.energy_management_system.coordinator as mod
+
+    c = _coordinator(make_coordinator, hass)
+    # Het rendement is standaard nog niet per halve slag gemeten.
+    c.charge_efficiency_history = []
+    c.discharge_efficiency_history = []
+    c.get_reliability_overview = lambda: []
+    c.get_proefstand = lambda: {"kandidaten": []}
+    c.get_input_health = lambda: []
+    c._volg_terugvallen(NU)
+
+    mod.dt_util.now = lambda: NU + timedelta(days=2)
+    overzicht = c.get_pending_overview()
+
+    assert overzicht["aantal_doen"] == 0
+    assert any("noodloop" in r["naam"] for r in overzicht["wachten"])
+
+
+def test_a_silent_sensor_still_asks_for_action(make_coordinator, hass):
+    """Het onderscheid moet wel blijven werken: een sensor die zwijgt
+    lost zichzelf niet op."""
+    import custom_components.energy_management_system.coordinator as mod
+
+    from custom_components.energy_management_system.const import (
+        CONF_SUN_AZIMUTH_SENSOR,
+    )
+
+    c = _coordinator(
+        make_coordinator, hass, **{CONF_SUN_AZIMUTH_SENSOR: "sensor.azimut"}
+    )
+    c.get_reliability_overview = lambda: []
+    c.get_proefstand = lambda: {"kandidaten": []}
+    c.get_input_health = lambda: []
+    c._volg_terugvallen(NU)
+
+    mod.dt_util.now = lambda: NU + timedelta(days=2)
+    overzicht = c.get_pending_overview()
+
+    assert any("azimut" in r["naam"] for r in overzicht["doen"])
+
+
+def test_every_fallback_says_which_kind_it_is(make_coordinator, hass):
+    c = _coordinator(make_coordinator, hass)
+    c.charge_efficiency_history = []
+    c.discharge_efficiency_history = []
+    c._volg_terugvallen(NU)
+
+    for regel in c.get_fallback_overview():
+        assert regel["soort"] in ("wachten", "doen")
