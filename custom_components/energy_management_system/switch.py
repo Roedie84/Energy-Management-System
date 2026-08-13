@@ -233,14 +233,12 @@ class NuLadenSwitch(SwitchEntity):
         return self._coordinator.get_nu_laden_status()
 
     async def async_turn_on(self, **kwargs) -> None:
-        self._coordinator.activeer_nu_laden()
+        await self._coordinator.async_set_nu_laden(True)
         self.async_write_ha_state()
-        await self._coordinator.async_request_refresh()
 
     async def async_turn_off(self, **kwargs) -> None:
-        self._coordinator.annuleer_nu_laden()
+        await self._coordinator.async_set_nu_laden(False)
         self.async_write_ha_state()
-        await self._coordinator.async_request_refresh()
 
 
 class SteelstofzuigerOverrideSwitch(SwitchEntity, RestoreEntity):

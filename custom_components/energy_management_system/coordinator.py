@@ -1719,6 +1719,24 @@ class EnergyManagementSystemCoordinator:
     def _handle_state_change(self, _event: Event) -> None:
         self.hass.async_create_task(self.async_update())
 
+    async def async_set_nu_laden(self, value: bool) -> None:
+        """Zet de knop "Nu laden" aan of uit (v1.72.0).
+
+        Gemeld: "De nu laden button geeft een fout: 'object has no
+        attribute async_request_refresh'."
+
+        Die methode hoort bij `DataUpdateCoordinator`; deze coordinator
+        is er geen. De bestaande schakelaars roepen `async_update()`
+        aan, en dat had deze ook moeten doen - dan gaat de nieuwe stand
+        meteen mee in de eerstvolgende beslissing in plaats van pas over
+        vijf minuten.
+        """
+        if value:
+            self.activeer_nu_laden()
+        else:
+            self.annuleer_nu_laden()
+        await self.async_update()
+
     async def async_set_force_manual(self, value: bool) -> None:
         self.force_manual = value
         await self.async_update()

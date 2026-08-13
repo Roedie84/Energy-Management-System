@@ -13166,3 +13166,32 @@ De berekening is de standaard NOAA-benadering, nauwkeurig tot ongeveer
 een tiende graad, en zonder extra afhankelijkheid.
 
 **Volledige testsuite**: 2023 tests, allemaal groen.
+
+## v1.72.0 — De knop "Nu laden" werkte niet
+
+**Gemeld**: "De nu laden button geeft een fout: *'EnergyManagementSystem
+Coordinator' object has no attribute 'async_request_refresh'*."
+
+Die methode hoort bij `DataUpdateCoordinator`; deze coordinator is er
+geen. De bestaande schakelaars roepen `async_update()` aan — dat had
+deze ook moeten doen.
+
+**Het ergste is dat alle 2023 tests groen bleven.** De tests toetsten de
+coordinator-functies (`activeer_nu_laden`, aftelling, herstart), maar
+nooit de schakelaar zelf. Het pad van "knop indrukken" tot "uitstel
+opzij" was nergens gedekt.
+
+Twee tests erbij die dat afdekken:
+
+- de schakelaar wordt nu echt ingedrukt en losgelaten, met controle dat
+  de knop daarna aan respectievelijk uit staat;
+- een brede toets die van **elk** entiteitsbestand nagaat dat alle
+  aangeroepen coordinator-methodes ook echt bestaan. Zonder die toets
+  komt zoiets pas boven water als je de knop indrukt — en dan staat er
+  een rode melding in de gebruikersinterface in plaats van een rode
+  test.
+
+De knop past de nieuwe stand nu ook meteen toe in plaats van pas bij de
+volgende tick.
+
+**Volledige testsuite**: 2026 tests, allemaal groen.
