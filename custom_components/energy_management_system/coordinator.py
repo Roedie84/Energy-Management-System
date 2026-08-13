@@ -239,6 +239,7 @@ from .const import (
     LOW_SOLAR_FRACTION_CONSISTENT,
     LOW_SOLAR_FRACTION_DEFAULT,
     LOW_SOLAR_FRACTION_UNRELIABLE,
+    TEMP_CONSUMPTION_MIN_HOURS,
     TEMP_CONSUMPTION_MIN_SAMPLES,
     EXPENSIVE_PRICE_MEDIAN_MULTIPLIER,
     EXPENSIVE_PRICE_OUTLIER_MEDIAN_RATIO,
@@ -6194,6 +6195,37 @@ class EnergyManagementSystemCoordinator:
         ]
         if temperaturen:
             hoogste = max(temperaturen)
+
+            # v1.80.0: hoeveel de cellen bóven de buitentemperatuur
+            # zaten, en hoe warm het buiten was.
+            #
+            # Gemeld: "de buitentemperatuur is ook ruim 32 graden."
+            # Terecht: "6,0 uur boven 30 graden" klinkt zorgelijk, maar
+            # op een dag waarop het buiten 32 was is dat onvermijdelijk.
+            #
+            # Veroudering hangt van de ABSOLUTE celtemperatuur af, dus
+            # die telling blijft leidend. Maar zonder de buitenwaarde
+            # ernaast is niet te zien of het aan de accu lag of aan het
+            # weer - en alleen het eerste valt te beïnvloeden.
+            buiten = self._get_filtered_backyard_temp_c(now)
+            if buiten is not None:
+                self._veroudering_vandaag["hoogste_buiten_c"] = max(
+                    self._veroudering_vandaag.get("hoogste_buiten_c", -99.0),
+                    buiten,
+                )
+                if hoogste > buiten:
+                    self._veroudering_vandaag["uren_warmer_dan_buiten"] = (
+                        self._veroudering_vandaag.get(
+                            "uren_warmer_dan_buiten", 0.0
+                        )
+                        + uren
+                    )
+                    self._veroudering_vandaag["grootste_oversprong_c"] = max(
+                        self._veroudering_vandaag.get(
+                            "grootste_oversprong_c", 0.0
+                        ),
+                        hoogste - buiten,
+                    )
             self._veroudering_vandaag["hoogste_temperatuur_c"] = max(
                 self._veroudering_vandaag.get("hoogste_temperatuur_c", 0.0),
                 hoogste,
@@ -6899,6 +6931,11 @@ class EnergyManagementSystemCoordinator:
             "gemiddeld_uren_boven_warme_temperatuur": _gem(
                 "uren_boven_warme_temperatuur"
             ),
+            "gemiddeld_uren_warmer_dan_buiten": _gem("uren_warmer_dan_buiten"),
+            "grootste_oversprong_c": max(
+                (r.get("grootste_oversprong_c", 0.0) for r in reeks),
+                default=None,
+            ),
             "hoogste_temperatuur_c": max(
                 (r.get("hoogste_temperatuur_c", 0.0) for r in reeks), default=None
             ),
@@ -6908,8 +6945,9 @@ class EnergyManagementSystemCoordinator:
                 "vraagt jaren aan metingen. Wel wat het VERSNELT: lang op "
                 f"{AGING_HIGH_SOC_PERCENT:.0f}% of hoger staan, en "
                 f"celtemperaturen boven {AGING_HIGH_TEMPERATURE_C:.0f} °C. "
-                "Het uitstelplan en de accukoeling drukken die twee al, "
-                "zonder dat dat de bedoeling was."
+                "Op een tropische dag zijn die uren onvermijdelijk; kijk "
+                "dan naar hoeveel de cellen bóven de buitentemperatuur "
+                "zaten - alleen dát valt te beïnvloeden."
             ),
         }
 
@@ -8620,7 +8658,20 @@ class EnergyManagementSystemCoordinator:
         """
         rijen: list[dict] = []
 
-        def voeg_toe(groep: str, naam: str, oordeel: dict, waarde=None) -> None:
+        def voeg_toe(
+            groep: str, naam: str, oordeel: dict, waarde=None, eenheid=None
+        ) -> None:
+            """Voegt een regel toe aan het betrouwbaarheidsoverzicht.
+
+            v1.82.0: met eenheid. Gemeld met een screenshot: "PV-dagopwek
+            - 13.21". Dertien komma twee wat? De tabel toonde kale
+            getallen, en dat gold voor de hele lijst: rendement,
+            nachtverbruik, sensorgezondheid en kostenverschil stonden er
+            net zo bij.
+
+            Een getal zonder eenheid is niet te controleren, en dat is
+            precies waar deze pagina voor bedoeld is.
+            """
             niveau = oordeel.get("niveau", RELIABILITY_INSUFFICIENT)
             rijen.append(
                 {
@@ -8630,6 +8681,7 @@ class EnergyManagementSystemCoordinator:
                     "label": self.reliability_label(niveau),
                     "reden": oordeel.get("reden"),
                     "waarde": waarde,
+                    "eenheid": eenheid,
                 }
             )
 
@@ -8667,6 +8719,7 @@ class EnergyManagementSystemCoordinator:
                 ),
             },
             round(self.pv_production_today_kwh, 2),
+            "kWh",
         )
 
         uitsplitsing = self.get_sensor_health_breakdown()
@@ -8694,6 +8747,7 @@ class EnergyManagementSystemCoordinator:
                 ),
             },
             self.sensor_health_score,
+            "%",
         )
         for entity_id, gegevens in self.get_sensor_cadence_report().items():
             voeg_toe(
@@ -8719,6 +8773,7 @@ class EnergyManagementSystemCoordinator:
             # percentage. Het overzicht toonde daardoor 8290% terwijl
             # `learning_health` in dezelfde export 82,9 meldde.
             self.learned_battery_efficiency_percent,
+            "%",
         )
         voeg_toe(
             "Geleerde waarden",
@@ -8727,6 +8782,7 @@ class EnergyManagementSystemCoordinator:
                 len(self.night_consumption_history or []), 3, 14, "nachten"
             ),
             self.learned_night_consumption_kw,
+            "kW",
         )
         voeg_toe(
             "Geleerde waarden",
@@ -8759,6 +8815,7 @@ class EnergyManagementSystemCoordinator:
             "Kosten t.o.v. Zonneplan-afrekening",
             {"niveau": kosten["status"], "reden": kosten["reden"]},
             kosten.get("verschil_eur"),
+            "EUR",
         )
 
         gezondheid = self.get_solar_forecast_health()
@@ -8767,6 +8824,7 @@ class EnergyManagementSystemCoordinator:
             "Zonvoorspelling (klopt de correctie nog?)",
             {"niveau": gezondheid["status"], "reden": gezondheid["reden"]},
             gezondheid.get("drift_percent"),
+            "%",
         )
         voeg_toe(
             "Geleerde waarden",
@@ -9412,7 +9470,9 @@ class EnergyManagementSystemCoordinator:
                 self.night_consumption_history,
             )
             self._finalize_temp_consumption_regression(
-                self._window_temp_samples, self._window_energy_kwh
+                self._window_temp_samples,
+                self._window_energy_kwh,
+                self._window_duration_hours,
             )
 
         self._tracking_window_end = None
@@ -9442,7 +9502,7 @@ class EnergyManagementSystemCoordinator:
         intercept = y_mean - slope * x_mean
         return slope, intercept
 
-    def _predict_temp_consumption_kwh(self, temp_c: float) -> float | None:
+    def _predict_temp_consumption_kw(self, temp_c: float) -> float | None:
         """Verwacht nachtverbruik (kWh) bij een gegeven buitentemperatuur,
         op basis van de tot nu toe geleerde (temperatuur, verbruik)-
         paren. None zolang er nog niet genoeg geschiedenis is
@@ -9450,8 +9510,13 @@ class EnergyManagementSystemCoordinator:
         """
         if len(self.temp_consumption_history) < TEMP_CONSUMPTION_MIN_SAMPLES:
             return None
-        xs = [pair["temp_c"] for pair in self.temp_consumption_history]
-        ys = [pair["kwh"] for pair in self.temp_consumption_history]
+        bruikbaar = [
+            paar for paar in self.temp_consumption_history if "kw" in paar
+        ]
+        if len(bruikbaar) < TEMP_CONSUMPTION_MIN_SAMPLES:
+            return None
+        xs = [paar["temp_c"] for paar in bruikbaar]
+        ys = [paar["kw"] for paar in bruikbaar]
         fit = self._ols_fit(xs, ys)
         if fit is None:
             return None
@@ -9459,7 +9524,10 @@ class EnergyManagementSystemCoordinator:
         return intercept + slope * temp_c
 
     def _finalize_temp_consumption_regression(
-        self, temp_samples: list[float], window_energy_kwh: float
+        self,
+        temp_samples: list[float],
+        window_energy_kwh: float,
+        duur_uren: float,
     ) -> None:
         """Temperatuur-verbruik-regressie voor extreme-koude-dagen
         (v0.63.88, uitgebreid besproken en ontworpen door de gebruiker
@@ -9487,19 +9555,46 @@ class EnergyManagementSystemCoordinator:
 
         avg_temp_c = sum(temp_samples) / len(temp_samples)
 
-        predicted_kwh = self._predict_temp_consumption_kwh(avg_temp_c)
-        if predicted_kwh is not None and predicted_kwh > 0:
+        # v1.81.0: op GEMIDDELD VERMOGEN, niet op energie over het venster.
+        #
+        # Gemeld met een screenshot: "Voorspeld 0.33 kWh bij 30.3°C,
+        # werkelijk 1.92 kWh (afwijking +476.4%)."
+        #
+        # De oorzaak is een ontwerpfout van mijn kant: het model
+        # voorspelde het TOTAAL over het ontlaadvenster, terwijl de
+        # lengte van dat venster niet in het model zat. Dat venster loopt
+        # van het begin van het ontladen tot het goedkope blok en duurt
+        # de ene nacht drie uur en de andere veertien - een factor vijf
+        # verschil dat de temperatuur niet kan verklaren.
+        #
+        # De twee metingen van 13 augustus zijn zelfs van dezelfde nacht:
+        # om 00:00 een venster van bijna niets, om 06:04 een langer stuk.
+        # Beide werden getoetst aan een model dat op volle nachten was
+        # gebouwd.
+        #
+        # Gemiddeld vermogen is lengte-onafhankelijk en dus de juiste
+        # grootheid - `night_consumption_history` doet dat al zo.
+        gemiddeld_kw = window_energy_kwh / duur_uren if duur_uren else None
+        if gemiddeld_kw is None or duur_uren < TEMP_CONSUMPTION_MIN_HOURS:
+            self.last_temp_consumption_note = (
+                f"Venster van {duur_uren:.1f} uur is te kort om iets over "
+                "het verbruik te zeggen - geen sample toegevoegd."
+            )
+            return
+
+        predicted_kw = self._predict_temp_consumption_kw(avg_temp_c)
+        if predicted_kw is not None and predicted_kw > 0:
             error_percent = round(
-                100 * (window_energy_kwh - predicted_kwh) / predicted_kwh, 1
+                100 * (gemiddeld_kw - predicted_kw) / predicted_kw, 1
             )
             self.temp_consumption_prediction_error_history.append(abs(error_percent))
             self.temp_consumption_prediction_error_history = (
                 self.temp_consumption_prediction_error_history[-LEARNING_HISTORY_DAYS:]
             )
             self.last_temp_consumption_note = (
-                f"Voorspeld {predicted_kwh:.2f} kWh bij {avg_temp_c:.1f}°C, "
-                f"werkelijk {window_energy_kwh:.2f} kWh "
-                f"(afwijking {error_percent:+.1f}%)."
+                f"Voorspeld {predicted_kw * 1000:.0f} W bij "
+                f"{avg_temp_c:.1f}°C, werkelijk {gemiddeld_kw * 1000:.0f} W "
+                f"over {duur_uren:.1f} uur (afwijking {error_percent:+.1f}%)."
             )
         else:
             self.last_temp_consumption_note = (
@@ -9508,7 +9603,11 @@ class EnergyManagementSystemCoordinator:
             )
 
         self.temp_consumption_history.append(
-            {"temp_c": round(avg_temp_c, 1), "kwh": round(window_energy_kwh, 2)}
+            {
+                "temp_c": round(avg_temp_c, 1),
+                "kw": round(gemiddeld_kw, 3),
+                "uren": round(duur_uren, 1),
+            }
         )
         self.temp_consumption_history = self.temp_consumption_history[
             -LEARNING_HISTORY_DAYS:

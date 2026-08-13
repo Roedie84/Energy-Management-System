@@ -201,6 +201,12 @@ MIN_SOLAR_HISTORY_FOR_SPREAD_BASED_FRACTION = 5
 # geen enkele manier. Minimaal aantal (temperatuur, verbruik)-paren
 # voordat er een voorspelling wordt gedaan - een regressie door te
 # weinig punten is zelf onbetrouwbaar.
+# v1.81.0: een venster korter dan dit zegt niets over het nachtverbruik.
+# Gemeld: "Voorspeld 0.33 kWh bij 30.3°C, werkelijk 1.92 kWh (afwijking
+# +476.4%)." Beide metingen van die nacht kwamen uit afgebroken
+# vensters - het ene van bijna niets, het andere van een paar uur.
+TEMP_CONSUMPTION_MIN_HOURS = 2.0
+
 TEMP_CONSUMPTION_MIN_SAMPLES = 4
 
 # Dynamic "expensive quarter" threshold: a quarter counts as expensive if
@@ -1179,59 +1185,73 @@ CONF_BATTERY_COOLING_OUTDOOR_SENSOR = "battery_cooling_outdoor_sensor_entity"
 
 # AANZETTEN zodra één van deze vier waar is:
 #   1. accu staat meer dan 5°C boven buiten
+# --- Wat de ventilator afzuigt: de OMVORMER (v1.80.0) ----------------
+# Gemeld: "Ventilatoren zuigen af van de omvormer" en "dat is de juiste
+# temperatuur van de omvormer".
+#
+# Dat legt een fout bloot die dieper zat dan de drempels. De redenering
+# in dit blok stond letterlijk op CELtemperatuur: "lithium-ijzerfosfaat
+# komt boven ongeveer 35 graden in het gebied waar veroudering
+# versnelt". Maar de sensor die de koeling aanstuurt is
+# `solarflow_2400_ac_hyper_tmp` - de omvormer. Vermogenselektronica
+# draait routinematig boven de 60 graden zonder enig probleem.
+#
+# Alle absolute drempels waren dus op de verkeerde grootheid geijkt. De
+# ventilator sloeg aan bij 25 tot 29 graden omvormertemperatuur, en dat
+# is voor een omvormer volstrekt normaal.
+#
+# In de eigen geschiedenis van vier dagen: tien aanzetmomenten, allemaal
+# tussen 25 en 29 graden. Met een ondergrens van 35 vervallen ze
+# alle tien - terwijl de 38 graden van 13 augustus (2062 W laden, 32
+# graden buiten) wel gewoon gekoeld wordt.
+#
+# LET OP: 35 en 50 zijn SCHATTINGEN. Zendure publiceert niet bij welke
+# temperatuur de hyper terugregelt, en er is geen sensor die dat meldt.
+# De eigen reeks loopt van 24 tot 38 graden en is te kort om er een
+# grens uit af te leiden. Wat wél vaststaat is de fysica: een ventilator
+# kan niet onder de buitentemperatuur koelen, en daar zijn de
+# verschilregels op gebaseerd.
+
+# Onder deze omvormertemperatuur valt er niets te winnen.
+BATTERY_COOLING_MIN_ABSOLUTE_C = 35.0
+# Met hysterese, want de sensor meldt hele graden.
+BATTERY_COOLING_STOP_BELOW_C = 32.0
+
+# Zo warm dat er onvoorwaardelijk gekoeld wordt, wat het verschil met
+# buiten ook is. Ruim boven alles wat deze installatie ooit heeft laten
+# zien (38), als vangnet.
+BATTERY_COOLING_ON_ABSOLUTE_C = 50.0
+# En blijven draaien tot hij daar duidelijk onder zit.
+BATTERY_COOLING_OFF_ABSOLUTE_C = 45.0
+
+# De verschilregels: hierop is de fysica van toepassing en niet de
+# aanname over veroudering. Een ventilator kan niet onder de
+# buitentemperatuur koelen; onder een paar graden verschil is er dus
+# weinig te halen.
 BATTERY_COOLING_ON_DELTA_C = 5.0
-#   2. accu is absoluut te warm
-BATTERY_COOLING_ON_ABSOLUTE_C = 35.0
-#   3. noemenswaardig laden/ontladen én accu al 2°C boven buiten
+BATTERY_COOLING_OFF_DELTA_C = 2.0
+
+# Warmte in een omvormer schaalt met het vermogen dat erdoorheen gaat -
+# dit is de meest betekenisvolle regel van de vier.
 BATTERY_COOLING_ON_POWER_W = 500.0
 BATTERY_COOLING_ON_POWER_DELTA_C = 2.0
-#   4. zwaar laden/ontladen én accu al boven 30°C
+BATTERY_COOLING_OFF_POWER_W = 300.0
+
 BATTERY_COOLING_ON_HIGH_POWER_W = 1500.0
-BATTERY_COOLING_ON_HIGH_POWER_TEMP_C = 30.0
+BATTERY_COOLING_ON_HIGH_POWER_TEMP_C = 40.0
 
-# --- Ondergrens: onder deze temperatuur nooit koelen (v1.73.0) -------
-# Gemeld: "De koeling van de accu is nu wel heel veel aan, is dit
-# daadwerkelijk zoveel nodig? Ik kan me voorstellen dat hij pas bij ca.
-# 25 graden actief gaat koelen?"
-#
-# Klopt. Drie van de vier aanzetregels kijken naar het VERSCHIL met
-# buiten of naar het vermogen, en maar één naar de absolute temperatuur.
-# Op een frisse ochtend van 16,5 graden is de accu bijna altijd 2 graden
-# warmer - dat is normale afvoerwarmte, geen probleem. In de export van
-# 13 augustus stond de ventilator aan bij 23 graden accutemperatuur, met
-# als reden "1203W door de accu en al 3,0 graden boven buiten".
-#
-# Lithium-ijzerfosfaat komt pas boven ongeveer 35 graden in het gebied
-# waar veroudering merkbaar versnelt. Onder 25 valt er niets te winnen;
-# je verbruikt alleen ventilatorstroom en slijtage.
-#
-# v1.76.0: MET hysterese. In de export van 13 augustus staan twintig
-# schakelingen in een uur, sommige binnen drie seconden: de
-# temperatuursensor meldt hele graden en wipte tussen 24 en 25, precies
-# op deze grens. Aanzetten mag pas boven de bovenste waarde, uitzetten
-# gebeurt onder de onderste - net als bij de andere drempels in dit
-# blok (5 tegen 2, 35 tegen 33, 500 tegen 300).
-BATTERY_COOLING_MIN_ABSOLUTE_C = 26.0
-BATTERY_COOLING_STOP_BELOW_C = 24.0
-
-# --- En blijven koelen zolang de accu echt warm is (v1.73.0) ---------
-# De uitschakelregel keek naar het verschil met buiten, en zette de
-# ventilator daardoor uit op het slechtst denkbare moment. Op 12
-# augustus 15:27: "accu 32,0 graden, nog maar 1,9 graden boven buiten" -
-# uit dus, terwijl 32 het warmste punt van die dag was en het buiten
-# gewoon ook warm was.
-#
-# Boven deze grens blijft de ventilator draaien, ongeacht het verschil
-# met buiten. Zelfde grens als waarboven de verouderingsdrijvers de uren
-# tellen (v1.59.0), zodat "warm" overal hetzelfde betekent.
-BATTERY_COOLING_KEEP_RUNNING_ABOVE_C = 30.0
+# Boven deze temperatuur blijft de ventilator draaien ongeacht het
+# verschil met buiten - zolang er tenminste iets te koelen valt.
+BATTERY_COOLING_KEEP_RUNNING_ABOVE_C = 42.0
 
 # UITZETTEN alleen als ALLE drie tegelijk gelden - één voorwaarde die
 # terugvalt is niet genoeg, anders slaat de ventilator af terwijl er nog
-# een andere reden is om te blijven koelen.
-BATTERY_COOLING_OFF_DELTA_C = 2.0
-BATTERY_COOLING_OFF_POWER_W = 300.0
-BATTERY_COOLING_OFF_ABSOLUTE_C = 33.0
+# een andere reden is om te blijven koelen. De waarden staan hierboven,
+# bij hun tegenhangers.
+#
+# v1.80.0: hier stond een tweede, oudere set die de nieuwe overschreef -
+# de reden waarom `KEEP_RUNNING_ABOVE` op 30 bleef staan terwijl er 42
+# hoorde te gelden.
 
 # Toestanden waarin de ventilatorschakelaar niets zinnigs zegt - dan
 # wordt er niet geschakeld (niet gokken op "hij zal wel uit staan").

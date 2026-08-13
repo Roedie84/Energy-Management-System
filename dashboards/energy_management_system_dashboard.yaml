@@ -509,7 +509,7 @@ views:
   panel: true
   cards:
   - type: picture-elements
-    image: /local/energy_management_system_overview.svg?v=1.79.0
+    image: /local/energy_management_system_overview.svg?v=1.82.0
     elements:
     - type: state-label
       entity: sensor.woonkamer_energy_management_system_system_status
@@ -1396,11 +1396,11 @@ views:
 
         {% if v.get(''beschikbaar'') %}
 
-        | Dag | Boven 90% | Boven 30 °C | Warmste |
+        | Dag | Boven 90% | Boven 30 °C | Warmste cel | Buiten | Warmer dan buiten |
 
-        |---|---|---|---|
+        |---|---|---|---|---|---|
 
-        {% for r in v.dagen_overzicht %}| {{ r.datum }} | {{ r.get(''uren_boven_hoge_stand'', 0) }} u | {{ r.get(''uren_boven_warme_temperatuur'', 0) }} u | {{ r.get(''hoogste_temperatuur_c'', ''—'') }} °C |
+        {% for r in v.dagen_overzicht %}| {{ r.datum }} | {{ r.get(''uren_boven_hoge_stand'', 0) }} u | {{ r.get(''uren_boven_warme_temperatuur'', 0) }} u | {{ r.get(''hoogste_temperatuur_c'', ''—'') }} °C | {{ r.get(''hoogste_buiten_c'', ''—'') }} °C | {{ r.get(''uren_warmer_dan_buiten'', 0) }} u |
 
         {% endfor %}{% else %}
 
@@ -2240,7 +2240,7 @@ views:
       subtitle: Wat gemeten is en wat geschat
     - type: markdown
       title: Betrouwbaarheid per grootheid
-      content: "{% set rijen = state_attr('sensor.woonkamer_energy_management_system_betrouwbaarheid_gegenereerde_data', 'regels') or [] %}{% if rijen | length == 0 %}Nog geen gegevens.{% else %}{% set ns = namespace(groep='') %}{% for r in rijen %}{% if r.get('groep') != ns.groep %}{% set ns.groep = r.get('groep') %}\n\n**{{ ns.groep }}**\n{% endif %}\n\n{{ r.get('label') }} **{{ r.get('naam') }}**{% if r.get('waarde') is not none %} — {{ r.get('waarde') }}{% endif %}  \n{{ r.get('reden') or '' }}\n\n{% endfor %}{% endif %}\n"
+      content: "{% set rijen = state_attr('sensor.woonkamer_energy_management_system_betrouwbaarheid_gegenereerde_data', 'regels') or [] %}{% if rijen | length == 0 %}Nog geen gegevens.{% else %}{% set ns = namespace(groep='') %}{% for r in rijen %}{% if r.get('groep') != ns.groep %}{% set ns.groep = r.get('groep') %}\n\n**{{ ns.groep }}**\n{% endif %}\n\n{{ r.get('label') }} **{{ r.get('naam') }}**{% if r.get('waarde') is not none %} — {{ r.get('waarde') }}{% if r.get('eenheid') %} {{ r.get('eenheid') }}{% endif %}{% endif %}  \n{{ r.get('reden') or '' }}\n\n{% endfor %}{% endif %}\n"
 - title: Verloop
   path: detail-verloop
   subview: true

@@ -13522,3 +13522,124 @@ dingen in staan waar je niets mee kunt, leer je hem negeren — precies
 wat er met de tekortmelding en de weerbronnenmelding al gebeurde.
 
 **Volledige testsuite**: 2071 tests, allemaal groen.
+
+## v1.80.0 — De koeling stuurde op de omvormer, niet op de cellen
+
+**Gemeld**: "Ventilatoren zuigen af van de omvormer" en "dat is de juiste
+temperatuur van de omvormer".
+
+Dat legt een fout bloot die dieper zat dan de drempels van v1.73.0 en
+v1.76.0.
+
+### Alle absolute drempels waren op de verkeerde grootheid geijkt
+
+De redenering in de code stond letterlijk op **celtemperatuur**:
+*"lithium-ijzerfosfaat komt boven ongeveer 35 °C in het gebied waar
+veroudering versnelt"*. Maar de sensor die de koeling aanstuurt is
+`solarflow_2400_ac_hyper_tmp` — de **omvormer**. Vermogenselektronica
+draait routinematig boven de 60 °C zonder enig probleem.
+
+In de eigen geschiedenis: tien aanzetmomenten, allemaal tussen **25 en
+29 °C omvormertemperatuur**. Voor een omvormer volstrekt normaal. Met de
+nieuwe ondergrens van 35 vervallen ze alle tien — terwijl de 38 °C van
+13 augustus (2062 W laden, 32 °C buiten) gewoon gekoeld wordt.
+
+| Drempel | Was | Wordt |
+|---|---|---|
+| Ondergrens (niets te winnen) | 26 °C | **35 °C** |
+| Uit onder | 24 °C | 32 °C |
+| Onvoorwaardelijk koelen | 35 °C | **50 °C** |
+| Doorkoelen ongeacht buiten | 30 °C | 42 °C |
+
+**Deze getallen zijn schattingen**, en dat staat er zo bij. Zendure
+publiceert niet bij welke temperatuur de hyper terugregelt, er is geen
+sensor die dat meldt, en de eigen reeks (24 tot 38 °C) is te kort om er
+een grens uit af te leiden. Wat wél vaststaat is de fysica: een
+ventilator kan niet onder de buitentemperatuur koelen — daar zijn de
+verschilregels op gebaseerd, en die blijven ongewijzigd.
+
+Er stond bovendien een **tweede, oudere set constanten** onderaan die de
+nieuwe overschreef. Dat is de reden waarom `KEEP_RUNNING_ABOVE` op 30
+bleef staan terwijl er 42 hoorde te gelden.
+
+### En de verouderingsdrijvers misten hun context
+
+**Gemeld**: "de buitentemperatuur is ook ruim 32 graden."
+
+*"6,0 uur boven 30 °C"* klinkt zorgelijk, maar op een dag waarop het
+buiten 32 was is dat onvermijdelijk. Veroudering hangt van de absolute
+celtemperatuur af, dus die telling blijft leidend — maar zonder de
+buitenwaarde ernaast is niet te zien of het aan de accu lag of aan het
+weer, en alleen het eerste valt te beïnvloeden.
+
+Er komen twee getallen bij: **hoogste buitentemperatuur** van die dag, en
+**uren dat de cellen warmer waren dan buiten**, met de grootste
+oversprong. Op 13 augustus waren de cellen 28 tot 32 °C bij 32 °C buiten
+— dus koeler dan de omgeving, en dat is geen accuprobleem.
+
+Alle temperaturen in de koeltests zijn twaalf graden opgehoogd, want die
+stonden ook op de celschaal.
+
+**Volledige testsuite**: 2075 tests, allemaal groen.
+
+## v1.81.0 — Een model dat de vensterlengte niet kende
+
+**Gemeld** met een screenshot van de modelnauwkeurigheid:
+
+> Voorspeld 0.33 kWh bij 30.3°C, werkelijk 1.92 kWh (afwijking +476.4%)
+> Voorspeld 0.84 kWh bij 18.5°C, werkelijk 1.60 kWh (afwijking +90.7%)
+
+Dat zijn geen meetfouten maar een ontwerpfout van mijn kant.
+
+### Wat er mis was
+
+Het model voorspelde het **totaal** over het ontlaadvenster, terwijl de
+lengte van dat venster niet in het model zat. Dat venster loopt van het
+begin van het ontladen tot het goedkope blok en duurt de ene nacht drie
+uur en de andere veertien — een factor vijf verschil dat de temperatuur
+onmogelijk kan verklaren.
+
+De twee metingen hierboven zijn zelfs van **dezelfde nacht**: om 00:00
+een venster van bijna niets, om 06:04 een langer stuk. Beide werden
+getoetst aan een model dat op volle nachten was gebouwd.
+
+### Nu op gemiddeld vermogen
+
+Vermogen is lengte-onafhankelijk — `night_consumption_history` doet dat
+al zo, en de temperatuurregressie had dat vanaf het begin moeten volgen.
+Twee nachten met hetzelfde verbruikspatroon geven nu dezelfde meting,
+hoe lang het venster ook was.
+
+Daarnaast worden vensters korter dan twee uur helemaal niet meer
+vastgelegd: zo'n stuk zegt niets over het nachtverbruik.
+
+De melding noemt nu watt in plaats van kWh, want anders is de afwijking
+niet na te rekenen. Reeksen van vóór deze versie dragen kWh over
+wisselende vensters; die worden genegeerd in plaats van meegerekend — ze
+door elkaar halen zou een model opleveren dat twee grootheden mengt.
+
+**Volledige testsuite**: 2079 tests, allemaal groen.
+
+## v1.82.0 — Dertien komma twee wát?
+
+**Gemeld** met een screenshot van de betrouwbaarheidstabel:
+
+> ✅ betrouwbaar **PV-dagopwek** — 13.21
+
+Een getal zonder eenheid is niet te controleren, en dat is precies waar
+die pagina voor bedoeld is.
+
+Het gold niet alleen voor die regel: **de hele tabel** toonde kale
+getallen. Rendement, nachtverbruik, sensorgezondheid en het
+kostenverschil met de leverancier stonden er net zo bij — en bij
+"rendement 82.9" of "nachtverbruik 0.34" is het maar de vraag of je
+procenten, kilowatt of kilowattuur leest.
+
+Elke regel draagt nu zijn eenheid: **kWh**, **kW**, **%** of **EUR**.
+
+Twee tests erbij: elke waarde moet een eenheid hebben, en die eenheid
+moet uit een bekende verzameling komen — dat vangt een typefout of een
+eenheid die niet bij de grootheid past. Plus één die controleert dat de
+eenheid ook echt op het scherm komt; hem alleen opslaan lost niets op.
+
+**Volledige testsuite**: 2083 tests, allemaal groen.
