@@ -13753,3 +13753,40 @@ details. En "Wat veroudering versnelt" heeft een eigen subview gekregen,
 want de rendementspagina liep daarmee over de leesbaarheidsgrens.
 
 **Volledige testsuite**: 2088 tests, allemaal groen.
+
+## v1.86.0 — Twee reserves die elkaar tegenwerkten
+
+**Gevraagd** na de melding *"Den accu haalt de nacht neet"*: "Maar dan
+worden toch simpelweg de manual ontlaadkwartieren tegen een hoge prijs
+gereduceerd om de nacht te halen?"
+
+Precies. En dat gebeurde niet, want er waren **twee verschillende
+reserves** in omloop.
+
+| | Marge | Achterhouden |
+|---|---|---|
+| Ontlaadreserve | **40%** | 5,16 kWh |
+| Verkooptoets | vaste 15% | 4,24 kWh |
+
+Die 40% is niet willekeurig: 10% basis, plus **15% wegens drie
+tekortdagen**, plus 15% voor de onbeschermde nacht na een duur kwartier.
+Precies de bonus die na een tekort wordt opgebouwd om herhaling te
+voorkomen.
+
+Maar de verkooptoets kende die bonus niet en liet los bij 4,24 kWh — en
+verkocht dus **exact de buffer weg die de tekortbonus had opgebouwd**.
+
+Dat is een lus: tekortdag → bonus verhoogt de reserve → verkooptoets
+negeert de bonus → volgende tekortdag. Dat verklaart waarom "3
+onverwachte tekortdagen" al dagen bleef staan terwijl de zelfcorrectie
+had moeten werken.
+
+**Nu delen beide kanten dezelfde marge.** Met de cijfers van 13 augustus
+17:05 gaat het vrij te verkopen deel van 3,54 naar **2,62 kWh** — zo'n
+drie kwartieren minder verkopen vanavond, precies wat je voorstelde.
+
+De oude vaste factor blijft de ondergrens: daalt de zelfcorrigerende
+marge na dagen met overschot onder de 15%, dan wint 15%. Deze wijziging
+mag de verkooptoets ruimer maken dan hij ooit was.
+
+**Volledige testsuite**: 2092 tests, allemaal groen.

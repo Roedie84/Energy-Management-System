@@ -10412,6 +10412,31 @@ class EnergyManagementSystemCoordinator:
             return None
         return statistics.median(values)
 
+    def _reserve_margin_factor(self) -> float:
+        """De marge die de ontlaadreserve op dit moment aanhoudt
+        (v1.86.0).
+
+        Gevraagd: "Maar dan worden toch simpelweg de manual
+        ontlaadkwartieren tegen een hoge prijs gereduceerd om de nacht te
+        halen?"
+
+        Precies - en dat gebeurde niet, omdat er twee reserves in omloop
+        waren. De ontlaadreserve is zelfcorrigerend (elke tekortdag
+        verhoogt hem), de verkooptoets hield een vaste 1,15 aan. Die
+        verkocht dus precies de buffer weg die de tekortbonus had
+        opgebouwd.
+
+        Deze functie geeft die ene marge terug, zodat beide kanten
+        hetzelfde getal gebruiken. Terugval op de vaste factor zolang de
+        uitsplitsing er nog niet is - dat is de stand vlak na een
+        herstart.
+        """
+        uitsplitsing = self.last_reserve_margin_breakdown or {}
+        totaal = uitsplitsing.get("total_percent")
+        if totaal is None:
+            return SELL_RESERVE_DEEPEST_SAFETY_FACTOR
+        return 1.0 + totaal / 100
+
     def _get_dynamic_discharge_reserve_kwh(
         self, now: datetime, cheap_block_start: datetime | None
     ) -> float | None:
@@ -11559,7 +11584,30 @@ class EnergyManagementSystemCoordinator:
                 methode = "nettosom (geen volledig uurprofiel)"
             else:
                 nodig = diepste
-                veilig = diepste * SELL_RESERVE_DEEPEST_SAFETY_FACTOR
+                # v1.86.0: dezelfde marge als de ontlaadreserve, niet een
+                # vaste 1,15.
+                #
+                # Gevraagd: "Maar dan worden toch simpelweg de manual
+                # ontlaadkwartieren tegen een hoge prijs gereduceerd om
+                # de nacht te halen?"
+                #
+                # Precies - en dat gebeurde niet, omdat er twee
+                # verschillende reserves in omloop waren. De
+                # ontlaadreserve stond op 40% marge (10% basis plus 15%
+                # wegens drie tekortdagen plus 15% voor de onbeschermde
+                # nacht erna), de verkooptoets op een vaste 15%.
+                #
+                # Op 13 augustus 17:05: diepste tekort 3,69 kWh. De
+                # ontlaadreserve wilde 5,16 kWh achterhouden, de
+                # verkooptoets liet los bij 4,24 - en verkocht dus
+                # precies de buffer weg die de tekortbonus had
+                # opgebouwd. Met 13 tekortkwartieren de volgende ochtend
+                # als gevolg.
+                #
+                # Dat is een lus: tekortdag verhoogt de bonus, de
+                # verkooptoets negeert de bonus, volgende tekortdag.
+                marge = self._reserve_margin_factor()
+                veilig = diepste * max(marge, SELL_RESERVE_DEEPEST_SAFETY_FACTOR)
 
         if beschikbaar <= veilig:
             return {
