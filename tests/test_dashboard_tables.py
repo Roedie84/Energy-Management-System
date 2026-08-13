@@ -325,7 +325,8 @@ def test_dashboard_yaml_is_valid():
     # v1.38.0: plus de proefstand.
     # v1.57.0: plus de rendementspagina.
     # v1.58.0: plus de betrouwbaarheidspagina.
-    assert len(data["views"]) == 24
+    # v1.85.0: plus de verouderingspagina.
+    assert len(data["views"]) == 25
 
 
 def test_markdown_tables_have_no_blank_lines_between_rows():

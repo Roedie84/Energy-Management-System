@@ -22,8 +22,10 @@ PAKKET = Path(pkg.__file__).parent
 
 def _efficiency_card() -> str:
     yaml_tekst = (PAKKET / "dashboard_template.yaml").read_text()
+    # v1.85.0: de kaart staat nu op de rendementspagina en leest de
+    # halve-slag-reeksen; het zoekvenster moet die hele regel omvatten.
     start = yaml_tekst.index("Laatste laadcyclus")
-    return yaml_tekst[max(0, start - 600) : start + 600]
+    return yaml_tekst[max(0, start - 900) : start + 900]
 
 
 def test_a_difference_is_labelled_as_percentage_points():
@@ -57,3 +59,43 @@ def test_the_code_uses_percentage_points_consistently():
 
     for fragment in ("verschil_procentpunt", "procentpunt "):
         assert fragment in bron, fragment
+
+
+# --- v1.85.0: de oude reeks is geen trend ----------------------------
+
+
+def test_the_card_reads_the_half_cycle_series():
+    """Gevraagd: "Die 56.4% is toch vaag, 10 --> 100% is toch altijd
+    90%?"
+
+    Twee dingen. Rendement is niet de SoC-spanne maar energie eruit
+    gedeeld door energie erin. En die 56,4% kwam uit de OUDE methode,
+    die een venster afsloot zodra er 1 kWh geladen was - dus vaak
+    middenin een slag. De reeks liep van 56 tot 98%, wat een
+    lithium-ijzerfosfaataccu niet kan.
+
+    De kaart presenteerde die losse waarden mét een verschil van -41,2
+    procentpunt: ruis, getoond als signaal.
+    """
+    kaart = _efficiency_card()
+
+    assert "metingen_laden_reeks" in kaart
+    assert "metingen_ontladen_reeks" in kaart
+
+
+def test_it_says_when_the_old_method_is_still_leading():
+    """Zolang er geen halve slagen gemeten zijn, hoort er te staan
+    waaróm die getallen niet per cyclus te lezen zijn."""
+    kaart = _efficiency_card()
+
+    assert "oude methode" in kaart
+    assert "niet te lezen" in kaart
+
+
+def test_it_says_a_measurement_is_not_per_day():
+    """Gevraagd: "Het rendement is een doorlopende meting toch, niet per
+    dag?" Ja - een stuk loopt tot de accu van richting draait."""
+    kaart = _efficiency_card()
+
+    assert "van richting draait" in kaart
+    assert "niet per dag" in kaart
