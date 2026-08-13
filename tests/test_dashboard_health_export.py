@@ -212,3 +212,28 @@ def test_the_explanation_names_the_hardest_case(make_coordinator, hass):
 
     assert "ATTRIBUUT" in toelichting
     assert "vangnettekst" in toelichting
+
+
+def test_the_export_shows_what_the_check_needed():
+    """v1.76.0: bij de volledige controle van 13 augustus bleken drie
+    dingen niet na te kijken omdat ze niet in de export stonden -
+    `notification_last_sent` was er niet, en de export-splitsing bestond
+    nog niet.
+
+    Een diagnostiek waarin een veld ontbreekt, ziet er hetzelfde uit als
+    een veld dat op nul staat. Dat verschil kostte bij de azimut al een
+    verkeerde conclusie.
+    """
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    bron = (Path(pkg.__file__).parent / "diagnostics.py").read_text()
+
+    for veld in (
+        "solar_export_today_kwh",
+        "battery_export_today_kwh",
+        "notification_last_sent",
+        "notification_history_last",
+    ):
+        assert veld in bron, veld

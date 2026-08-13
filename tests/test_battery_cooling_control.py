@@ -66,7 +66,10 @@ def test_turns_on_above_the_absolute_limit(make_coordinator, hass):
 
 def test_turns_on_at_moderate_load_slightly_above_outdoor(make_coordinator, hass):
     coordinator = make_coordinator(_config())
-    _situatie(hass, accu=25.0, buiten=22.0, vermogen=800)
+    # v1.76.0: 25,0 lag precies op de ondergrens, die nu op 26 ligt met
+    # hysterese naar 24. De sensor meldt hele graden en wipte anders
+    # mee - twintig schakelingen in een uur.
+    _situatie(hass, accu=27.0, buiten=24.0, vermogen=800)
 
     besluit = coordinator.evaluate_battery_cooling()
 
@@ -428,3 +431,41 @@ def test_the_floor_matches_the_aging_threshold():
     )
 
     assert BATTERY_COOLING_KEEP_RUNNING_ABOVE_C == AGING_HIGH_TEMPERATURE_C
+
+
+def test_a_flickering_sensor_no_longer_toggles_the_fan(
+    make_coordinator, hass
+):
+    """Uit de export van 13 augustus: twintig schakelingen in een uur,
+    sommige binnen drie seconden. De temperatuursensor meldt hele graden
+    en wipte tussen 24 en 25 - precies op de ondergrens van v1.73.0.
+
+    Met hysterese blijft de ventilator staan waar hij staat zolang de
+    accu tussen 24 en 26 zweeft.
+    """
+    from custom_components.energy_management_system.coordinator import (
+        EnergyManagementSystemCoordinator as C,
+    )
+
+    # Aan blijven: 24 en 25 mogen niet uitschakelen.
+    assert C._battery_cooling_should_turn_off(25.0, 17.5, 500.0) is False
+    assert C._battery_cooling_should_turn_off(24.0, 17.5, 500.0) is False
+
+    # En niet aanslaan zolang hij onder de bovenste grens blijft.
+    assert C._battery_cooling_should_turn_on(25.0, 17.5, 500.0) is None
+
+
+def test_below_the_hysteresis_band_it_still_stops():
+    from custom_components.energy_management_system.coordinator import (
+        EnergyManagementSystemCoordinator as C,
+    )
+
+    assert C._battery_cooling_should_turn_off(23.0, 15.0, 1500.0) is True
+
+
+def test_above_the_band_it_still_starts():
+    from custom_components.energy_management_system.coordinator import (
+        EnergyManagementSystemCoordinator as C,
+    )
+
+    assert C._battery_cooling_should_turn_on(27.0, 21.0, 0.0) is not None
