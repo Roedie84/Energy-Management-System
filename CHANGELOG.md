@@ -13708,3 +13708,48 @@ nieuwe fouten, voor een verschil dat niemand verkeerd zal lezen. Als je
 het toch wilt, is het een aparte, geïsoleerde ronde waard.
 
 **Volledige testsuite**: 2085 tests, allemaal groen.
+
+## v1.85.0 — Ruis die als trend werd getoond
+
+**Gevraagd**: "Laatste laadcyclus 56.4%, daarvoor 97.6% (-41.2
+procentpunt). (…) Die 56.4% is toch vaag, 10 → 100% is toch altijd 90%?"
+
+Twee dingen, en het tweede is een fout in de weergave.
+
+### Rendement is niet de accustand
+
+Van 10 naar 100% is 90 **procentpunt accustand**. Rendement is iets
+anders: energie eruit gedeeld door energie erin. Je stopt er 10 kWh in
+en haalt er 9 uit — dat is 90% rendement, en de stand ging in beide
+gevallen van 10 naar 100.
+
+### Maar die 56,4% is inderdaad geen rendement
+
+Hij komt uit de **oude** methode, die een venster afsloot zodra er 1 kWh
+geladen was — ongeacht of de slag klaar was. Die grens valt willekeurig
+middenin een cyclus. Vandaar de reeks:
+
+    95,5 — 76,9 — 74,2 — 82,9 — 83,2 — 97,6 — 56,4
+
+Van 56 tot 98 procent. Dat kán een lithium-ijzerfosfaataccu niet doen.
+Het zijn geen rendementen maar afkapfouten.
+
+De kaart toonde die losse waarden mét een verschil van **−41,2
+procentpunt** tussen twee afkapfouten: ruis, gepresenteerd als signaal.
+
+**Nu** leest de kaart de halve-slag-reeksen, die wél per stuk betekenis
+hebben. Zolang die er nog niet zijn staat er wat er aan de hand is — dat
+de oude reeks per cyclus niet te lezen is en alleen de mediaan iets
+zegt.
+
+**En op de vraag of het een doorlopende meting is:** ja. Een stuk loopt
+tot de accu van richting draait, niet per dag. Draait hij op één dag
+drie keer om, dan zijn dat drie metingen; gaat hij twee dagen dezelfde
+kant op, dan is dat er één. Dat staat nu op de kaart.
+
+De kaart is verhuisd van de landingspagina naar de rendementspagina — de
+tegel met de mediaan blijft op het overzicht, de uitleg hoort bij de
+details. En "Wat veroudering versnelt" heeft een eigen subview gekregen,
+want de rendementspagina liep daarmee over de leesbaarheidsgrens.
+
+**Volledige testsuite**: 2088 tests, allemaal groen.

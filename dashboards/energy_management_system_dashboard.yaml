@@ -55,29 +55,6 @@ views:
         rows: auto
       tap_action:
         action: more-info
-    - type: markdown
-      content: '{%- set history = state_attr(''sensor.woonkamer_energy_management_system_learned_battery_efficiency'', ''history'') or [] %}
-
-        {%- if history|length >= 2 %}
-
-        {%- set laatste = history[-1] %}
-
-        {%- set vorige = history[-2] %}
-
-        {%- set verschil = laatste - vorige %}
-
-        Laatste laadcyclus {{ ''%.1f''|format(laatste) }}%, daarvoor {{ ''%.1f''|format(vorige) }}% ({{ ''%+.1f''|format(verschil) }} procentpunt). De tegel hierboven toont de mediaan over {{ history|length }} cycli - één afwijkende cyclus telt daar bewust nauwelijks in mee.
-
-        {%- else %}
-
-        Nog niet genoeg metingen voor een trend
-
-        {%- endif %}
-
-        '
-      grid_options:
-        columns: 12
-        rows: auto
     - type: custom:mushroom-template-card
       primary: '{{ states(''sensor.solarflow_2400_ac_available_kwh'') }} kWh'
       secondary: Beschikbare energie
@@ -509,7 +486,7 @@ views:
   panel: true
   cards:
   - type: picture-elements
-    image: /local/energy_management_system_overview.svg?v=1.84.0
+    image: /local/energy_management_system_overview.svg?v=1.85.0
     elements:
     - type: state-label
       entity: sensor.woonkamer_energy_management_system_system_status
@@ -1375,7 +1352,7 @@ views:
         _{{ e.voorbehoud }}_{% endif %}
 
 
-        **Verder:** [Rendement van de accu](/energy-management-system/detail-rendement)'
+        **Verder:** [Rendement van de accu](/energy-management-system/detail-rendement) · [Wat veroudering versnelt](/energy-management-system/detail-veroudering)'
       grid_options:
         columns: 12
         rows: auto
@@ -1391,23 +1368,7 @@ views:
       title: Rendement van de accu
       subtitle: Laden en ontladen apart gemeten
     - type: markdown
-      title: Wat veroudering versnelt
-      content: '{% set v = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''veroudering'') or {} %}{% set n = v.get(''vandaag'') or {} %}**Vandaag tot nu toe:** {{ n.get(''uren_boven_hoge_stand'', 0) }} u boven 90%, {{ n.get(''uren_boven_warme_temperatuur'', 0) }} u boven 30 °C{% if n.get(''hoogste_temperatuur_c'') %}, warmste cel {{ n.hoogste_temperatuur_c }} °C{% endif %}.
-
-        {% if v.get(''beschikbaar'') %}
-
-        | Dag | Boven 90% | Boven 30 °C | Warmste cel | Buiten | Warmer dan buiten |
-
-        |---|---|---|---|---|---|
-
-        {% for r in v.dagen_overzicht %}| {{ r.datum }} | {{ r.get(''uren_boven_hoge_stand'', 0) }} u | {{ r.get(''uren_boven_warme_temperatuur'', 0) }} u | {{ r.get(''hoogste_temperatuur_c'', ''—'') }} °C | {{ r.get(''hoogste_buiten_c'', ''—'') }} °C | {{ r.get(''uren_warmer_dan_buiten'', 0) }} u |
-
-        {% endfor %}{% else %}
-
-        {{ v.get(''reden'', '''') }}{% endif %}
-
-
-        _{{ v.get(''toelichting'', '''') }}_'
+      content: '{%- set r = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''rendement'') or {} %}{%- set l = r.get(''metingen_laden_reeks'') or [] %}{%- set o = r.get(''metingen_ontladen_reeks'') or [] %}{%- if l or o %}{% if l %}Laatste laadcyclus {{ ''%.1f''|format(l[-1]) }}%{% if l|length >= 2 %}, daarvoor {{ ''%.1f''|format(l[-2]) }}% ({{ ''%+.1f''|format(l[-1] - l[-2]) }} procentpunt){% endif %}.{% endif %}{% if o %} Ontladen {{ ''%.1f''|format(o[-1]) }}%{% if o|length >= 2 %} ({{ ''%+.1f''|format(o[-1] - o[-2]) }} procentpunt){% endif %}.{% endif %} De tegel toont de mediaan; één afwijkend stuk telt daar nauwelijks in mee. Een meting loopt tot de accu van richting draait, niet per dag.{%- else %}Nog geen meting per halve slag. De tegel toont zolang de mediaan van de oude methode, die afsloot zodra er 1 kWh geladen was - vaak middenin een slag. Die losse waarden zijn per cyclus niet te lezen.{%- endif %}'
       grid_options:
         columns: 12
         rows: auto
@@ -1429,6 +1390,38 @@ views:
 
 
         _Elke kant apart gemeten. Let op: dit meet wat de accuvermogenssensor ziet; meet die aan de accuzijde, dan blijft het omvormerverlies buiten beeld._'
+      grid_options:
+        columns: 12
+        rows: auto
+- title: Veroudering
+  path: detail-veroudering
+  subview: true
+  type: sections
+  max_columns: 1
+  sections:
+  - type: grid
+    cards:
+    - type: custom:mushroom-title-card
+      title: Wat veroudering versnelt
+      subtitle: Gemeten, niet voorspeld
+    - type: markdown
+      title: Wat veroudering versnelt
+      content: '{% set v = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''veroudering'') or {} %}{% set n = v.get(''vandaag'') or {} %}**Vandaag tot nu toe:** {{ n.get(''uren_boven_hoge_stand'', 0) }} u boven 90%, {{ n.get(''uren_boven_warme_temperatuur'', 0) }} u boven 30 °C{% if n.get(''hoogste_temperatuur_c'') %}, warmste cel {{ n.hoogste_temperatuur_c }} °C{% endif %}.
+
+        {% if v.get(''beschikbaar'') %}
+
+        | Dag | Boven 90% | Boven 30 °C | Warmste cel | Buiten | Warmer dan buiten |
+
+        |---|---|---|---|---|---|
+
+        {% for r in v.dagen_overzicht %}| {{ r.datum }} | {{ r.get(''uren_boven_hoge_stand'', 0) }} u | {{ r.get(''uren_boven_warme_temperatuur'', 0) }} u | {{ r.get(''hoogste_temperatuur_c'', ''—'') }} °C | {{ r.get(''hoogste_buiten_c'', ''—'') }} °C | {{ r.get(''uren_warmer_dan_buiten'', 0) }} u |
+
+        {% endfor %}{% else %}
+
+        {{ v.get(''reden'', '''') }}{% endif %}
+
+
+        _{{ v.get(''toelichting'', '''') }}_'
       grid_options:
         columns: 12
         rows: auto
