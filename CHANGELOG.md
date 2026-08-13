@@ -13195,3 +13195,50 @@ De knop past de nieuwe stand nu ook meteen toe in plaats van pas bij de
 volgende tick.
 
 **Volledige testsuite**: 2026 tests, allemaal groen.
+
+## v1.73.0 — Niet koelen wat niet warm is
+
+**Gemeld**: "De koeling van de accu is nu wel heel veel aan, is dit
+daadwerkelijk zoveel nodig? (…) Ik kan me voorstellen dat hij pas bij ca.
+25 graden actief gaat koelen?"
+
+Beide vermoedens kloppen, en er zat nog een tweede fout naast.
+
+### Geen ondergrens
+
+Drie van de vier aanzetregels kijken naar het **verschil met buiten** of
+naar het **vermogen**, en maar één naar de absolute temperatuur. Op een
+frisse ochtend van 16,5 °C is de accu bijna altijd twee graden warmer —
+dat is normale afvoerwarmte, geen probleem.
+
+In de export van 13 augustus draaide de ventilator bij **23 °C**, met
+als reden *"1203W door de accu en al 3,0 °C boven buiten"*.
+
+Lithium-ijzerfosfaat komt pas boven ongeveer 35 °C in het gebied waar
+veroudering merkbaar versnelt. Onder **25 °C** wordt er nu niet meer
+gekoeld, wat de andere regels ook zeggen.
+
+### En hij ging uit op het slechtste moment
+
+De uitschakelregel keek naar het verschil met buiten. Op 12 augustus
+15:27: *"accu 32,0 °C, nog maar 1,9 °C boven buiten"* — ventilator uit,
+bij het warmste punt van die dag, omdat het buiten óók warm was.
+Precies andersom.
+
+Boven **30 °C** blijft de ventilator nu draaien, ongeacht het verschil
+met buiten. Dezelfde grens als waarboven de verouderingsdrijvers de uren
+tellen (v1.59.0), zodat "warm" overal hetzelfde betekent.
+
+### Effect
+
+Nagerekend op de eigen geschiedenis: van de tien aanzetmomenten vervalt
+er één (11 augustus 10:38, 23 °C bij 1958 W) — maar dat is de bovengrens
+van het effect, want de geschiedenis legt alleen *wisselingen* vast, niet
+hoe lang hij daarna doorliep. Het uitschakelen bij 32 °C is de zwaarste
+van de twee.
+
+**Zeven tests erbij**, gebaseerd op de werkelijk gelogde gevallen. Ook
+hier bleven alle 2026 bestaande tests groen: die dekten de vier
+aanzetregels apart, maar nooit een koude accu.
+
+**Volledige testsuite**: 2033 tests, allemaal groen.

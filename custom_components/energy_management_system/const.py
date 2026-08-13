@@ -1189,6 +1189,35 @@ BATTERY_COOLING_ON_POWER_DELTA_C = 2.0
 BATTERY_COOLING_ON_HIGH_POWER_W = 1500.0
 BATTERY_COOLING_ON_HIGH_POWER_TEMP_C = 30.0
 
+# --- Ondergrens: onder deze temperatuur nooit koelen (v1.73.0) -------
+# Gemeld: "De koeling van de accu is nu wel heel veel aan, is dit
+# daadwerkelijk zoveel nodig? Ik kan me voorstellen dat hij pas bij ca.
+# 25 graden actief gaat koelen?"
+#
+# Klopt. Drie van de vier aanzetregels kijken naar het VERSCHIL met
+# buiten of naar het vermogen, en maar één naar de absolute temperatuur.
+# Op een frisse ochtend van 16,5 graden is de accu bijna altijd 2 graden
+# warmer - dat is normale afvoerwarmte, geen probleem. In de export van
+# 13 augustus stond de ventilator aan bij 23 graden accutemperatuur, met
+# als reden "1203W door de accu en al 3,0 graden boven buiten".
+#
+# Lithium-ijzerfosfaat komt pas boven ongeveer 35 graden in het gebied
+# waar veroudering merkbaar versnelt. Onder 25 valt er niets te winnen;
+# je verbruikt alleen ventilatorstroom en slijtage.
+BATTERY_COOLING_MIN_ABSOLUTE_C = 25.0
+
+# --- En blijven koelen zolang de accu echt warm is (v1.73.0) ---------
+# De uitschakelregel keek naar het verschil met buiten, en zette de
+# ventilator daardoor uit op het slechtst denkbare moment. Op 12
+# augustus 15:27: "accu 32,0 graden, nog maar 1,9 graden boven buiten" -
+# uit dus, terwijl 32 het warmste punt van die dag was en het buiten
+# gewoon ook warm was.
+#
+# Boven deze grens blijft de ventilator draaien, ongeacht het verschil
+# met buiten. Zelfde grens als waarboven de verouderingsdrijvers de uren
+# tellen (v1.59.0), zodat "warm" overal hetzelfde betekent.
+BATTERY_COOLING_KEEP_RUNNING_ABOVE_C = 30.0
+
 # UITZETTEN alleen als ALLE drie tegelijk gelden - één voorwaarde die
 # terugvalt is niet genoeg, anders slaat de ventilator af terwijl er nog
 # een andere reden is om te blijven koelen.

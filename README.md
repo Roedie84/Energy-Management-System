@@ -547,6 +547,22 @@ alleen "0 van de 24 uren".
 
 **Volledige testsuite**: 1889 tests, allemaal groen.
 
+## Niet koelen wat niet warm is (v1.73.0)
+
+**Gemeld**: *"De koeling van de accu is nu wel heel veel aan (…) Ik kan
+me voorstellen dat hij pas bij ca. 25 graden actief gaat koelen?"*
+
+Drie van de vier aanzetregels keken naar het verschil met buiten of naar
+het vermogen, en maar één naar de absolute temperatuur. De ventilator
+draaide bij 23 °C omdat de accu drie graden boven buiten stond — normale
+afvoerwarmte. Onder 25 °C wordt er nu niet meer gekoeld.
+
+En de uitschakelregel keek óók naar het verschil met buiten: op 12
+augustus ging de ventilator uit bij 32 °C omdat het buiten ook warm was.
+Boven 30 °C blijft hij nu draaien.
+
+**Volledige testsuite**: 2033 tests, allemaal groen.
+
 ## De zonstand wordt nagerekend (v1.71.0)
 
 **Gevraagd**: *"Kunnen we op een of andere manier verifieren dat de

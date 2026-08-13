@@ -300,6 +300,8 @@ from .const import (
     BATTERY_COOLING_OFF_DELTA_C,
     BATTERY_COOLING_OFF_POWER_W,
     BATTERY_COOLING_ON_ABSOLUTE_C,
+    BATTERY_COOLING_KEEP_RUNNING_ABOVE_C,
+    BATTERY_COOLING_MIN_ABSOLUTE_C,
     BATTERY_COOLING_ON_DELTA_C,
     BATTERY_COOLING_ON_HIGH_POWER_TEMP_C,
     BATTERY_COOLING_ON_HIGH_POWER_W,
@@ -13409,6 +13411,15 @@ class EnergyManagementSystemCoordinator:
         genoeg om iets van te leren.
         """
         delta_c = accu_c - buiten_c
+
+        # v1.73.0: onder deze temperatuur nooit koelen, wat de andere
+        # regels ook zeggen. Gemeld: "Ik kan me voorstellen dat hij pas
+        # bij ca. 25 graden actief gaat koelen?" - en dat klopt: onder
+        # die temperatuur valt er niets te winnen, je verbruikt alleen
+        # ventilatorstroom.
+        if accu_c < BATTERY_COOLING_MIN_ABSOLUTE_C:
+            return None
+
         if delta_c > BATTERY_COOLING_ON_DELTA_C:
             return (
                 f"accu staat {delta_c:.1f}°C boven buiten "
@@ -13446,6 +13457,19 @@ class EnergyManagementSystemCoordinator:
         staat. De drempels liggen bewust lager dan die voor aanzetten
         (hysterese), zodat er niet rond één grens gependeld wordt.
         """
+        # v1.73.0: onder de ondergrens is er niets meer te koelen, dus
+        # dan altijd uit - ook als de andere voorwaarden nog niet zijn
+        # teruggevallen.
+        if accu_c < BATTERY_COOLING_MIN_ABSOLUTE_C:
+            return True
+
+        # En blijven draaien zolang de accu echt warm is, ongeacht het
+        # verschil met buiten. Op 12 augustus 15:27 ging de ventilator
+        # uit bij 32 graden omdat het buiten ook warm was - precies het
+        # moment waarop je wilt blijven koelen.
+        if accu_c >= BATTERY_COOLING_KEEP_RUNNING_ABOVE_C:
+            return False
+
         delta_c = accu_c - buiten_c
         return (
             delta_c < BATTERY_COOLING_OFF_DELTA_C
