@@ -377,16 +377,27 @@ def test_absence_is_seen_much_faster_with_a_tv(make_coordinator, hass):
     c = _met_tv(make_coordinator, hass)
 
     assert c._afwezigheidsdrempel_minuten() == PRESENCE_ABSENCE_AFTER_MINUTES_FAST
-    assert PRESENCE_ABSENCE_AFTER_MINUTES_FAST <= 15
+    # v1.78.0: van 10 naar 20 minuten. Gemeld: "De aanwezigheid sensor
+    # wijzigt te snel naar weg." Van de 24 weg-blokken in de eigen
+    # tijdlijn duurden er acht precies vijf tot zeven minuten - geflikker,
+    # geen vertrek.
+    assert PRESENCE_ABSENCE_AFTER_MINUTES_FAST <= 30
 
 
-def test_twelve_quiet_minutes_now_means_away(make_coordinator, hass):
+def test_a_short_silence_is_no_longer_absence(make_coordinator, hass):
     c = _met_tv(make_coordinator, hass)
     hass.states.set("binary_sensor.gang", "on")
     c._update_presence(NU)
     hass.states.set("binary_sensor.gang", "off")
 
     c._update_presence(NU + timedelta(minutes=12))
+
+    # v1.78.0: twaalf minuten stilte is geen vertrek meer. In de eigen
+    # tijdlijn leverde de drempel van tien minuten acht valse
+    # weg-blokken van vijf tot zeven minuten op.
+    assert c.presence_state == "thuis"
+
+    c._update_presence(NU + timedelta(minutes=25))
 
     assert c.presence_state == "weg"
 
@@ -913,3 +924,46 @@ def test_no_lights_configured_changes_nothing(make_coordinator, hass):
     c = _coordinator(make_coordinator, hass)
 
     assert c._brandend_licht() is None
+
+
+# --- v1.78.0: de drempel is instelbaar -------------------------------
+
+
+def test_the_threshold_can_be_set_per_house(make_coordinator, hass):
+    """Gemeld: "De aanwezigheid sensor wijzigt te snel naar weg,
+    misschien de tijd voor analyse verlengen?"
+
+    Hoe lang stilte normaal is hangt af van hoeveel sensoren er hangen en
+    hoe het huis loopt - dat valt niet met één getal voor iedereen te
+    vangen.
+    """
+    from custom_components.energy_management_system.const import (
+        CONF_PRESENCE_ABSENCE_MINUTES,
+    )
+
+    c = _met_tv(make_coordinator, hass)
+    c.config[CONF_PRESENCE_ABSENCE_MINUTES] = 45
+
+    assert c._afwezigheidsdrempel_minuten() == 45
+
+
+def test_without_a_setting_the_default_applies(make_coordinator, hass):
+    c = _met_tv(make_coordinator, hass)
+
+    assert c._afwezigheidsdrempel_minuten() == PRESENCE_ABSENCE_AFTER_MINUTES_FAST
+
+
+def test_the_flicker_from_the_real_timeline_is_gone(make_coordinator, hass):
+    """De acht valse blokken uit de eigen tijdlijn duurden vijf tot zeven
+    minuten. Die horen geen van alle nog een toestandswissel op te
+    leveren."""
+    c = _met_tv(make_coordinator, hass)
+
+    for minuten in (5, 6, 7):
+        c.presence_state = "thuis"
+        # `last_motion_at` is een datetime in het geheugen; de ISO-tekst
+        # is alleen het opslagformaat.
+        c.last_motion_at = NU
+        c._update_presence(NU + timedelta(minutes=minuten))
+
+        assert c.presence_state == "thuis", f"{minuten} min gaf een wissel"
