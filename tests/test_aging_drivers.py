@@ -96,3 +96,64 @@ def test_the_series_survives_a_restart():
     )
 
     assert "veroudering_history" in PERSISTED_PLAIN_FIELDS
+
+
+# --- v1.80.0: warm weer is geen accuprobleem -------------------------
+
+
+def test_the_outside_temperature_is_recorded_alongside(
+    make_coordinator, hass
+):
+    """Gemeld: "de buitentemperatuur is ook ruim 32 graden."
+
+    "6,0 uur boven 30 graden" klinkt zorgelijk, maar op een dag waarop
+    het buiten 32 was is dat onvermijdelijk. Zonder de buitenwaarde
+    ernaast is niet te zien of het aan de accu lag of aan het weer - en
+    alleen het eerste valt te beïnvloeden.
+    """
+    c = _coordinator(make_coordinator, temp=31.0)
+    c._get_filtered_backyard_temp_c = lambda now: 32.0
+
+    c._update_verouderingsdrijvers(NU)
+    c._update_verouderingsdrijvers(NU + timedelta(minutes=30))
+
+    vandaag = c._veroudering_vandaag
+    assert vandaag["hoogste_buiten_c"] == 32.0
+    # De cellen waren KOELER dan buiten, dus geen oversprong.
+    assert "uren_warmer_dan_buiten" not in vandaag
+
+
+def test_cells_warmer_than_outside_are_counted(make_coordinator, hass):
+    """Dát is wat de accu zichzelf aandoet."""
+    c = _coordinator(make_coordinator, temp=38.0)
+    c._get_filtered_backyard_temp_c = lambda now: 30.0
+
+    c._update_verouderingsdrijvers(NU)
+    c._update_verouderingsdrijvers(NU + timedelta(minutes=30))
+
+    vandaag = c._veroudering_vandaag
+    assert vandaag["uren_warmer_dan_buiten"] == 0.5
+    assert vandaag["grootste_oversprong_c"] == 8.0
+
+
+def test_the_absolute_count_stays_leading(make_coordinator, hass):
+    """Veroudering hangt van de absolute celtemperatuur af; die telling
+    blijft dus staan, met de buitenwaarde ernaast als context."""
+    c = _coordinator(make_coordinator, temp=38.0)
+    c._get_filtered_backyard_temp_c = lambda now: 36.0
+
+    c._update_verouderingsdrijvers(NU)
+    c._update_verouderingsdrijvers(NU + timedelta(minutes=30))
+
+    assert c._veroudering_vandaag["uren_boven_warme_temperatuur"] == 0.5
+
+
+def test_without_an_outdoor_reading_it_still_works(make_coordinator, hass):
+    """Geen buitensensor mag de telling niet stilzetten."""
+    c = _coordinator(make_coordinator, temp=38.0)
+    c._get_filtered_backyard_temp_c = lambda now: None
+
+    c._update_verouderingsdrijvers(NU)
+    c._update_verouderingsdrijvers(NU + timedelta(minutes=30))
+
+    assert c._veroudering_vandaag["uren_boven_warme_temperatuur"] == 0.5

@@ -1,5 +1,14 @@
 """Accu-koeling geïntegreerd (v0.63.122).
 
+v1.80.0: alle temperaturen in dit bestand zijn twaalf graden opgehoogd.
+Gemeld: "Ventilatoren zuigen af van de omvormer" - de sensor die de
+koeling aanstuurt is dus `solarflow_2400_ac_hyper_tmp` en niet de cellen.
+
+De drempels stonden op CELtemperaturen (35 graden als grens voor
+versnelde veroudering van lithium-ijzerfosfaat), maar een omvormer
+draait routinematig veel warmer. Daardoor sloeg de ventilator aan bij 25
+tot 29 graden - voor een omvormer volstrekt normaal.
+
 Gevraagd: "Integreren zodat ik dit niet meer als losse automatisering
 hoef te doen, het heeft mijn inziens toch met de accu te maken."
 
@@ -45,7 +54,7 @@ def _situatie(hass, accu, buiten, vermogen, ventilator="off"):
 
 def test_turns_on_when_delta_exceeds_five(make_coordinator, hass):
     coordinator = make_coordinator(_config())
-    _situatie(hass, accu=28.0, buiten=22.0, vermogen=0)
+    _situatie(hass, accu=40.0, buiten=34.0, vermogen=0)
 
     besluit = coordinator.evaluate_battery_cooling()
 
@@ -54,9 +63,10 @@ def test_turns_on_when_delta_exceeds_five(make_coordinator, hass):
 
 
 def test_turns_on_above_the_absolute_limit(make_coordinator, hass):
-    """Ook zonder groot verschil met buiten: 35°C is gewoon te warm."""
+    """Ook zonder groot verschil met buiten: boven de absolute grens is
+    de omvormer gewoon te warm."""
     coordinator = make_coordinator(_config())
-    _situatie(hass, accu=35.5, buiten=34.0, vermogen=0)
+    _situatie(hass, accu=51.0, buiten=49.5, vermogen=0)
 
     besluit = coordinator.evaluate_battery_cooling()
 
@@ -69,7 +79,7 @@ def test_turns_on_at_moderate_load_slightly_above_outdoor(make_coordinator, hass
     # v1.76.0: 25,0 lag precies op de ondergrens, die nu op 26 ligt met
     # hysterese naar 24. De sensor meldt hele graden en wipte anders
     # mee - twintig schakelingen in een uur.
-    _situatie(hass, accu=27.0, buiten=24.0, vermogen=800)
+    _situatie(hass, accu=39.0, buiten=36.0, vermogen=800)
 
     besluit = coordinator.evaluate_battery_cooling()
 
@@ -79,7 +89,7 @@ def test_turns_on_at_moderate_load_slightly_above_outdoor(make_coordinator, hass
 
 def test_turns_on_at_heavy_load_above_thirty(make_coordinator, hass):
     coordinator = make_coordinator(_config())
-    _situatie(hass, accu=31.0, buiten=30.0, vermogen=1800)
+    _situatie(hass, accu=43.0, buiten=42.0, vermogen=1800)
 
     besluit = coordinator.evaluate_battery_cooling()
 
@@ -89,7 +99,7 @@ def test_turns_on_at_heavy_load_above_thirty(make_coordinator, hass):
 
 def test_stays_off_when_no_reason_applies(make_coordinator, hass):
     coordinator = make_coordinator(_config())
-    _situatie(hass, accu=24.0, buiten=22.0, vermogen=100)
+    _situatie(hass, accu=36.0, buiten=34.0, vermogen=100)
 
     besluit = coordinator.evaluate_battery_cooling()
 
@@ -101,7 +111,7 @@ def test_stays_off_when_no_reason_applies(make_coordinator, hass):
 
 def test_turns_off_when_all_three_conditions_hold(make_coordinator, hass):
     coordinator = make_coordinator(_config())
-    _situatie(hass, accu=25.0, buiten=24.0, vermogen=100, ventilator="on")
+    _situatie(hass, accu=37.0, buiten=36.0, vermogen=100, ventilator="on")
 
     besluit = coordinator.evaluate_battery_cooling()
 
@@ -112,7 +122,7 @@ def test_keeps_cooling_when_only_the_load_dropped(make_coordinator, hass):
     """Eén voorwaarde die terugvalt is niet genoeg - de accu staat nog
     ruim boven buiten."""
     coordinator = make_coordinator(_config())
-    _situatie(hass, accu=30.0, buiten=24.0, vermogen=100, ventilator="on")
+    _situatie(hass, accu=42.0, buiten=36.0, vermogen=100, ventilator="on")
 
     besluit = coordinator.evaluate_battery_cooling()
 
@@ -122,7 +132,7 @@ def test_keeps_cooling_when_only_the_load_dropped(make_coordinator, hass):
 
 def test_keeps_cooling_when_still_too_hot(make_coordinator, hass):
     coordinator = make_coordinator(_config())
-    _situatie(hass, accu=34.0, buiten=33.5, vermogen=50, ventilator="on")
+    _situatie(hass, accu=46.0, buiten=45.5, vermogen=50, ventilator="on")
 
     besluit = coordinator.evaluate_battery_cooling()
 
@@ -134,10 +144,10 @@ def test_hysteresis_prevents_immediate_switch_back(make_coordinator, hass):
     gaan (<2). Wat er ook staat, blijft staan."""
     coordinator = make_coordinator(_config())
 
-    _situatie(hass, accu=25.0, buiten=22.0, vermogen=100, ventilator="off")
+    _situatie(hass, accu=37.0, buiten=34.0, vermogen=100, ventilator="off")
     assert coordinator.evaluate_battery_cooling()["actie"] is None
 
-    _situatie(hass, accu=25.0, buiten=22.0, vermogen=100, ventilator="on")
+    _situatie(hass, accu=37.0, buiten=34.0, vermogen=100, ventilator="on")
     assert coordinator.evaluate_battery_cooling()["actie"] is None
 
 
@@ -152,7 +162,7 @@ def test_unavailable_outdoor_sensor_does_not_switch_anything(
     accutemperatuur, waardoor de ventilator zou aanslaan op een meting
     die er niet is."""
     coordinator = make_coordinator(_config())
-    _situatie(hass, accu=28.0, buiten=22.0, vermogen=0)
+    _situatie(hass, accu=40.0, buiten=34.0, vermogen=0)
     hass.states.set("sensor.buiten_temp", "unavailable")
 
     besluit = coordinator.evaluate_battery_cooling()
@@ -167,7 +177,7 @@ def test_unavailable_battery_sensor_does_not_switch_anything(
     """Andersom net zo gevaarlijk: accu = 0°C zou betekenen dat er nooit
     meer gekoeld wordt."""
     coordinator = make_coordinator(_config())
-    _situatie(hass, accu=36.0, buiten=22.0, vermogen=0, ventilator="off")
+    _situatie(hass, accu=48.0, buiten=34.0, vermogen=0, ventilator="off")
     hass.states.set("sensor.accu_temp", "unavailable")
 
     besluit = coordinator.evaluate_battery_cooling()
@@ -177,7 +187,7 @@ def test_unavailable_battery_sensor_does_not_switch_anything(
 
 def test_unavailable_fan_switch_is_not_guessed_at(make_coordinator, hass):
     coordinator = make_coordinator(_config())
-    _situatie(hass, accu=36.0, buiten=22.0, vermogen=0)
+    _situatie(hass, accu=48.0, buiten=34.0, vermogen=0)
     hass.states.set(FAN, "unavailable")
 
     besluit = coordinator.evaluate_battery_cooling()
@@ -204,7 +214,7 @@ def _calls(hass):
 
 def test_applying_calls_the_switch_service(make_coordinator, hass):
     coordinator = make_coordinator(_config())
-    _situatie(hass, accu=36.0, buiten=22.0, vermogen=0)
+    _situatie(hass, accu=48.0, buiten=34.0, vermogen=0)
 
     asyncio.run(coordinator._async_apply_battery_cooling())
 
@@ -215,7 +225,7 @@ def test_applying_calls_the_switch_service(make_coordinator, hass):
 
 def test_applying_records_history_and_timestamp(make_coordinator, hass):
     coordinator = make_coordinator(_config())
-    _situatie(hass, accu=36.0, buiten=22.0, vermogen=0)
+    _situatie(hass, accu=48.0, buiten=34.0, vermogen=0)
 
     asyncio.run(coordinator._async_apply_battery_cooling())
 
@@ -229,7 +239,7 @@ def test_force_manual_blocks_the_switch(make_coordinator, hass):
     aansturing in deze integratie."""
     coordinator = make_coordinator(_config())
     coordinator.force_manual = True
-    _situatie(hass, accu=36.0, buiten=22.0, vermogen=0)
+    _situatie(hass, accu=48.0, buiten=34.0, vermogen=0)
 
     asyncio.run(coordinator._async_apply_battery_cooling())
 
@@ -240,7 +250,7 @@ def test_force_manual_blocks_the_switch(make_coordinator, hass):
 def test_learning_only_blocks_the_switch(make_coordinator, hass):
     coordinator = make_coordinator(_config())
     coordinator.learning_only = True
-    _situatie(hass, accu=36.0, buiten=22.0, vermogen=0)
+    _situatie(hass, accu=48.0, buiten=34.0, vermogen=0)
 
     asyncio.run(coordinator._async_apply_battery_cooling())
 
@@ -251,7 +261,7 @@ def test_no_redundant_switch_when_already_correct(make_coordinator, hass):
     """Ventilator staat al aan en moet aan blijven - niet elke tick
     opnieuw turn_on sturen."""
     coordinator = make_coordinator(_config())
-    _situatie(hass, accu=36.0, buiten=22.0, vermogen=0, ventilator="on")
+    _situatie(hass, accu=48.0, buiten=34.0, vermogen=0, ventilator="on")
 
     asyncio.run(coordinator._async_apply_battery_cooling())
 
@@ -261,13 +271,13 @@ def test_no_redundant_switch_when_already_correct(make_coordinator, hass):
 def test_state_is_exposed_even_without_action(make_coordinator, hass):
     """Het dashboard moet ook kloppen als er niets te schakelen valt."""
     coordinator = make_coordinator(_config())
-    _situatie(hass, accu=24.0, buiten=22.0, vermogen=100)
+    _situatie(hass, accu=36.0, buiten=34.0, vermogen=100)
 
     asyncio.run(coordinator._async_apply_battery_cooling())
 
     state = coordinator.battery_cooling_state
-    assert state["accu_c"] == 24.0
-    assert state["buiten_c"] == 22.0
+    assert state["accu_c"] == 36.0
+    assert state["buiten_c"] == 34.0
     assert state["delta_c"] == 2.0
     assert state["ventilator_aan"] is False
 
@@ -281,15 +291,15 @@ def test_falls_back_to_the_existing_outdoor_temperature(make_coordinator, hass):
     config = _config()
     del config[CONF_BATTERY_COOLING_OUTDOOR_SENSOR]
     coordinator = make_coordinator(config)
-    coordinator.climate_live_outdoor_temp_c = 22.0
-    hass.states.set("sensor.accu_temp", "28.0")
+    coordinator.climate_live_outdoor_temp_c = 34.0
+    hass.states.set("sensor.accu_temp", "40.0")
     hass.states.set("sensor.accu_vermogen", "0")
     hass.states.set(FAN, "off")
 
     besluit = coordinator.evaluate_battery_cooling()
 
     assert besluit["actie"] == "aan"
-    assert besluit["buiten_c"] == 22.0
+    assert besluit["buiten_c"] == 34.0
 
 
 def test_sensor_reports_the_current_state(make_coordinator, hass):
@@ -298,13 +308,13 @@ def test_sensor_reports_the_current_state(make_coordinator, hass):
     )
 
     coordinator = make_coordinator(_config())
-    _situatie(hass, accu=36.0, buiten=22.0, vermogen=0, ventilator="on")
+    _situatie(hass, accu=48.0, buiten=34.0, vermogen=0, ventilator="on")
     coordinator.battery_cooling_state = coordinator.evaluate_battery_cooling()
 
     sensor = BatteryCoolingSensor(coordinator, "entry1")
 
     assert sensor.native_value == "koelt"
-    assert sensor.extra_state_attributes["accu_c"] == 36.0
+    assert sensor.extra_state_attributes["accu_c"] == 48.0
 
 
 def test_cooling_tile_sits_in_the_live_figures_section():
@@ -385,20 +395,20 @@ def test_the_logged_case_no_longer_starts_the_fan():
     naar het vermogen. Op een frisse ochtend is de accu bijna altijd
     twee graden warmer - dat is normale afvoerwarmte.
     """
-    assert _aan(23.0, 20.0, 1203.0) is None
+    assert _aan(30.0, 27.0, 1203.0) is None
 
 
 def test_a_big_difference_on_a_cold_morning_is_not_a_reason():
     """Ook de vijf-graden-regel geldt niet als de accu zelf koud is: 20
     tegen 12 graden is acht graden verschil en volstrekt onschuldig."""
-    assert _aan(20.0, 12.0, 0.0) is None
+    assert _aan(28.0, 20.0, 0.0) is None
 
 
 def test_above_the_floor_the_old_rules_still_apply():
     """Boven de ondergrens verandert er niets - dat is precies waar de
     koeling voor is."""
-    assert _aan(28.0, 24.0, 1203.0) is not None
-    assert _aan(36.0, 30.0, 0.0) is not None
+    assert _aan(38.0, 34.0, 1203.0) is not None
+    assert _aan(52.0, 44.0, 0.0) is not None
 
 
 def test_a_warm_battery_keeps_cooling_on_a_warm_day():
@@ -406,19 +416,19 @@ def test_a_warm_battery_keeps_cooling_on_a_warm_day():
     °C boven buiten" - en de ventilator ging uit. Bij 32 graden, het
     warmste punt van die dag, omdat het buiten óók warm was.
     """
-    assert _uit(32.0, 30.1, 0.0) is False
+    assert _uit(44.0, 42.1, 0.0) is False
 
 
 def test_a_cold_battery_always_stops_cooling():
     """Onder de ondergrens valt er niets te koelen, ook als de andere
     voorwaarden nog niet zijn teruggevallen."""
-    assert _uit(22.0, 15.0, 1500.0) is True
+    assert _uit(30.0, 23.0, 1500.0) is True
 
 
 def test_the_hysteresis_in_the_middle_is_unchanged():
     """Tussen 25 en 30 graden gelden de oude regels met hun hysterese."""
-    assert _uit(26.0, 25.0, 100.0) is True
-    assert _uit(26.0, 20.0, 100.0) is False
+    assert _uit(37.0, 36.0, 100.0) is True
+    assert _uit(37.0, 30.0, 100.0) is False
 
 
 def test_the_floor_matches_the_aging_threshold():
@@ -430,7 +440,10 @@ def test_the_floor_matches_the_aging_threshold():
         BATTERY_COOLING_KEEP_RUNNING_ABOVE_C,
     )
 
-    assert BATTERY_COOLING_KEEP_RUNNING_ABOVE_C == AGING_HIGH_TEMPERATURE_C
+    # v1.80.0: deze koppeling is vervallen. De koeling stuurt op de
+    # OMVORMER, de verouderingsdrijvers tellen op de CELLEN - twee
+    # verschillende grootheden, dus twee verschillende grenzen.
+    assert BATTERY_COOLING_KEEP_RUNNING_ABOVE_C > AGING_HIGH_TEMPERATURE_C
 
 
 def test_a_flickering_sensor_no_longer_toggles_the_fan(
@@ -448,11 +461,11 @@ def test_a_flickering_sensor_no_longer_toggles_the_fan(
     )
 
     # Aan blijven: 24 en 25 mogen niet uitschakelen.
-    assert C._battery_cooling_should_turn_off(25.0, 17.5, 500.0) is False
-    assert C._battery_cooling_should_turn_off(24.0, 17.5, 500.0) is False
+    assert C._battery_cooling_should_turn_off(34.0, 26.5, 500.0) is False
+    assert C._battery_cooling_should_turn_off(33.0, 26.5, 500.0) is False
 
     # En niet aanslaan zolang hij onder de bovenste grens blijft.
-    assert C._battery_cooling_should_turn_on(25.0, 17.5, 500.0) is None
+    assert C._battery_cooling_should_turn_on(34.0, 26.5, 500.0) is None
 
 
 def test_below_the_hysteresis_band_it_still_stops():
@@ -460,7 +473,7 @@ def test_below_the_hysteresis_band_it_still_stops():
         EnergyManagementSystemCoordinator as C,
     )
 
-    assert C._battery_cooling_should_turn_off(23.0, 15.0, 1500.0) is True
+    assert C._battery_cooling_should_turn_off(31.0, 23.0, 1500.0) is True
 
 
 def test_above_the_band_it_still_starts():
@@ -468,4 +481,4 @@ def test_above_the_band_it_still_starts():
         EnergyManagementSystemCoordinator as C,
     )
 
-    assert C._battery_cooling_should_turn_on(27.0, 21.0, 0.0) is not None
+    assert C._battery_cooling_should_turn_on(38.0, 30.0, 0.0) is not None
