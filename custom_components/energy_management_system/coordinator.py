@@ -9206,23 +9206,60 @@ class EnergyManagementSystemCoordinator:
         Wordt de periode korter dan het volle-gewichtvenster, dan geldt
         de correctie onverkort - dat is precies waar hij voor bedoeld is.
         """
-        uren = (end - start).total_seconds() / 3600
-        if uren <= 0:
-            return ratio
+        # v1.89.0: de afstand tot NU telt, niet de lengte van het
+        # gevraagde venster.
+        #
+        # Gemeld: de tekortmelding bleef terugkomen. De oorzaak zat niet
+        # in de reserve maar hier: de kwartierplanning vraagt om een
+        # schatting per KWARTIER, en een venster van een kwartier is
+        # korter dan het volle-gewichtvenster - dus kreeg elk kwartier de
+        # volle correctie, ook een kwartier van morgenochtend.
+        #
+        # Op 13 augustus 17:47: het plan rekende met 0,428 kW voor
+        # vannacht terwijl het geleerde profiel 0,213 zegt en de
+        # reserve-wandeling op 0,322 uitkwam. De planning zag daardoor
+        # een tekort dat de reserve niet zag - twee mechanismen die
+        # hetzelfde horen te berekenen.
+        #
+        # De correctie hoort te vervagen naarmate een moment verder weg
+        # ligt. Dat is de afstand van NU tot dat moment, en die is voor
+        # een kwartier van morgenochtend zestien uur - ongeacht hoe lang
+        # het gevraagde stukje zelf is.
+        nu = dt_util.now()
+        afstand_start = max(0.0, (start - nu).total_seconds() / 3600)
+        afstand_eind = max(afstand_start, (end - nu).total_seconds() / 3600)
+
+        uren = afstand_eind - afstand_start
         vol = CONSUMPTION_CORRECTION_FULL_HOURS
         fade = CONSUMPTION_CORRECTION_FADE_HOURS
-        if uren <= vol:
-            return ratio
 
-        # Oppervlak onder de gewichtscurve: 1 tot `vol`, daarna lineair
-        # naar 0 op `fade`.
-        eind_fade = min(uren, fade)
-        oppervlak = vol
-        if eind_fade > vol:
-            hoogte_eind = max(0.0, 1 - (eind_fade - vol) / (fade - vol))
-            oppervlak += (1 + hoogte_eind) / 2 * (eind_fade - vol)
-        gemiddeld_gewicht = oppervlak / uren
-        return 1.0 + (ratio - 1.0) * gemiddeld_gewicht
+        def _gewicht(u: float) -> float:
+            """Gewicht van de correctie op afstand `u` uur van nu."""
+            if u <= vol:
+                return 1.0
+            if u >= fade:
+                return 0.0
+            return 1 - (u - vol) / (fade - vol)
+
+        if uren <= 0:
+            return 1.0 + (ratio - 1.0) * _gewicht(afstand_start)
+
+        # Gemiddeld gewicht over het gevraagde stuk, via de oppervlakte
+        # onder de curve tussen begin en eind.
+        def _oppervlak(u: float) -> float:
+            if u <= vol:
+                return u
+            if u >= fade:
+                return vol + (fade - vol) / 2
+            deel = u - vol
+            hoogte = _gewicht(u)
+            return vol + (1 + hoogte) / 2 * deel
+
+        gemiddeld_gewicht = (
+            _oppervlak(afstand_eind) - _oppervlak(afstand_start)
+        ) / uren
+        return 1.0 + (ratio - 1.0) * max(0.0, gemiddeld_gewicht)
+
 
     def _get_smoothed_consumption_correction_ratio(self, current_hour: int) -> float:
         """How much higher (if at all) recent live consumption has been

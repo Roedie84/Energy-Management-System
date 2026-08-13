@@ -13853,3 +13853,45 @@ van 4,24, waardoor er 2,62 kWh vrij te verkopen blijft in plaats van
 3,47 — ongeveer drie kwartieren minder.
 
 **Volledige testsuite**: 2098 tests, allemaal groen.
+
+## v1.89.0 — Het lag niet aan de reserve
+
+Na drie reparaties aan de reserve bleef de tekortmelding terugkomen — nu
+met 8 kwartieren. De reserve deed inmiddels wél zijn werk: 5,05 kWh
+achterhouden in plaats van 4,24, en één verkoopkwartier minder.
+
+Maar de oorzaak zat ergens anders.
+
+### Plan en reserve rekenden met verschillend verbruik
+
+| | Verbruik vannacht |
+|---|---|
+| Geleerd profiel | 0,213 kW |
+| Reserve-wandeling | 0,322 kW |
+| **Kwartierplanning** | **0,428 kW** |
+
+Twee mechanismen die hetzelfde horen te berekenen, met een verschil van
+een derde. De planning zag daardoor een tekort dat de reserve niet zag.
+
+### De uitdemping mat het verkeerde
+
+In v1.68.0 heb ik de live verbruikscorrectie laten uitdoven over de
+horizon — vol gewicht in het eerste uur, na vier uur niets. Maar die
+uitdemping keek naar **de lengte van het gevraagde venster**, niet naar
+de afstand tot nu.
+
+De kwartierplanning vraagt om een schatting **per kwartier**. Een venster
+van vijftien minuten is korter dan het volle-gewichtvenster, dus kreeg
+elk kwartier de volle correctie van 5,0× — ook een kwartier van
+morgenochtend zeven uur.
+
+De reserve-wandeling vraagt om één venster van zeventien uur en kreeg
+daardoor wél de uitgedoofde waarde. Vandaar het verschil.
+
+**Nu telt de afstand van nu tot dat moment.** Een kwartier over veertien
+uur krijgt geen correctie meer, of het nu apart of als onderdeel van een
+groter venster wordt opgevraagd. Een test controleert dat de som van de
+losse kwartieren gelijk is aan de schatting over het hele venster — dat
+is precies wat er misging.
+
+**Volledige testsuite**: 2101 tests, allemaal groen.
