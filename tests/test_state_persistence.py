@@ -504,6 +504,9 @@ VLUCHTIG_MET_REDEN = {
     # v1.58.0: de REDEN blijkt elke tick opnieuw; alleen het beginmoment
     # (`fallback_since`) wordt bewaard, want dat is niet te herleiden.
     "fallback_reasons": "blijkt elke tick opnieuw",
+    # v1.79.0: idem - of een terugval wachten of doen is, volgt uit de
+    # oorzaak en die wordt elke tick opnieuw vastgesteld.
+    "_fallback_soort": "blijkt elke tick opnieuw",
     "notification_suppressed_count": "demping begint na een herstart opnieuw",
     "_unavailable_entities": "blijkt opnieuw uit de sensoren",
     "_sensor_unavailable_since": "blijkt opnieuw uit de sensoren",
