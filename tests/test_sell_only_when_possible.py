@@ -384,3 +384,128 @@ def test_three_shortfall_days_actually_reduce_selling(
 
     assert round(vrij_oud, 2) == 3.54
     assert round(vrij_nieuw, 2) == 2.62
+
+
+# --- v1.87.0: de marge is nu ook zichtbaar ---------------------------
+
+
+def test_the_margin_is_broken_down(make_coordinator, hass):
+    """Gevraagd: "Waar zie ik die 40?" Nergens - hij stond alleen in de
+    diagnostiek-export.
+
+    Precies de reden waarom de lus van v1.86.0 dagen kon doorlopen: de
+    marge liep op van 25 naar 40% wegens tekortdagen, terwijl de
+    verkooptoets dat getal negeerde. Een zelfcorrigerend mechanisme dat
+    zichzelf niet laat zien, is niet te controleren.
+    """
+    c = make_coordinator({})
+    c.last_reserve_margin_breakdown = {
+        "base_percent": 10.0,
+        "low_solar_bonus_percent": 0.0,
+        "consecutive_low_solar_days": 0,
+        "shortfall_bonus_percent": 15.0,
+        "recent_shortfall_days": 3,
+        "excess_reduction_percent": 0.0,
+        "recent_excess_days": 0,
+        "unprotected_aftermath_percent": 15.0,
+        "total_percent": 40.0,
+        "needed_kwh_before_margin": 3.688,
+        "reserve_kwh_after_margin": 5.164,
+    }
+
+    o = c.get_reserve_margin_overview()
+
+    assert o["totaal_procent"] == 40.0
+    assert o["vast_procent"] == 25.0
+    assert o["dynamisch_procent"] == 15.0
+
+
+def test_it_names_which_part_moves(make_coordinator, hass):
+    """De vraag erachter was of 40% niet veel is. Het antwoord hangt
+    ervan af welk deel beweegt - basis en onbeschermde nacht zijn vast."""
+    c = make_coordinator({})
+    c.last_reserve_margin_breakdown = {
+        "base_percent": 10.0,
+        "shortfall_bonus_percent": 15.0,
+        "recent_shortfall_days": 3,
+        "unprotected_aftermath_percent": 15.0,
+        "total_percent": 40.0,
+    }
+
+    soorten = {o["naam"]: o["soort"] for o in c.get_reserve_margin_overview()["onderdelen"]}
+
+    assert soorten["Basis"] == "vast"
+    assert soorten["Onbeschermde nacht na een duur kwartier"] == "vast"
+    assert soorten["Tekortdagen (3 recent)"] == "dynamisch"
+
+
+def test_zero_parts_are_left_out(make_coordinator, hass):
+    """Regels op nul zeggen niets en maken de tabel alleen langer."""
+    c = make_coordinator({})
+    c.last_reserve_margin_breakdown = {
+        "base_percent": 10.0,
+        "low_solar_bonus_percent": 0.0,
+        "shortfall_bonus_percent": 0.0,
+        "unprotected_aftermath_percent": 15.0,
+        "total_percent": 25.0,
+    }
+
+    namen = [o["naam"] for o in c.get_reserve_margin_overview()["onderdelen"]]
+
+    assert not [n for n in namen if "Weinig zon" in n]
+
+
+def test_without_a_calculation_it_says_so(make_coordinator, hass):
+    c = make_coordinator({})
+    c.last_reserve_margin_breakdown = {}
+
+    assert c.get_reserve_margin_overview()["beschikbaar"] is False
+
+
+# --- v1.88.0: alle drie de plekken, niet twee ------------------------
+
+
+def test_the_plan_simulation_uses_the_same_margin(make_coordinator, hass):
+    """Gemeld direct na de installatie van v1.87.0: "Krijg de melding na
+    installatie direct weer."
+
+    Terecht. In v1.86.0 was alleen de VERKOOPTOETS gelijkgetrokken,
+    terwijl de kwartierplanning zijn eigen reserve simuleert - en die
+    stond nog op de vaste 1,15. De simulatie plande dus meer verkoop dan
+    de aansturing zou toestaan, en de tekortmelding leest die simulatie.
+    """
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    kop = bron.index("def reserve_op(")
+    blok = bron[kop : kop + 1400]
+
+    assert "_reserve_margin_factor()" in blok
+
+
+def test_no_place_applies_a_margin_of_its_own():
+    """Drie plekken pasten dezelfde marge toe met drie verschillende
+    getallen. Elke toepassing hoort via `_reserve_margin_factor` te
+    lopen, met de vaste factor alleen als ondergrens.
+    """
+    import re
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    code = "\n".join(r.split("#")[0] for r in bron.splitlines())
+
+    # Elke vermenigvuldiging met de vaste factor moet in een max() met
+    # de dynamische marge staan.
+    los = [
+        m.group(0)
+        for m in re.finditer(r"\*\s*SELL_RESERVE_DEEPEST_SAFETY_FACTOR", code)
+    ]
+
+    assert not los, (
+        "de vaste factor wordt ergens rechtstreeks toegepast in plaats "
+        "van als ondergrens onder de dynamische marge"
+    )
