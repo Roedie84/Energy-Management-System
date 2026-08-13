@@ -175,3 +175,36 @@ def test_the_dashboard_attribute_is_the_compact_plan(make_coordinator, hass):
     _sensor_klasse()(c, "x").extra_state_attributes
 
     assert gezien
+
+
+# --- v1.72.0: hetzelfde voor de andere entiteitsbestanden ------------
+
+
+def test_no_entity_file_calls_a_missing_coordinator_method():
+    """De knop "Nu laden" riep `async_request_refresh` aan, een methode
+    van `DataUpdateCoordinator` die deze coordinator niet heeft. Alle
+    tests bleven groen omdat niemand de knop indrukte.
+
+    Deze toets loopt alle entiteitsbestanden na.
+    """
+    import re
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+    from custom_components.energy_management_system.coordinator import (
+        EnergyManagementSystemCoordinator,
+    )
+
+    map_ = Path(pkg.__file__).parent
+    ontbreekt = []
+    for bestand in ("switch.py", "sensor.py", "button.py", "number.py", "select.py"):
+        pad = map_ / bestand
+        if not pad.exists():
+            continue
+        for naam in sorted(
+            set(re.findall(r"_coordinator\.([a-z_][a-z_0-9]*)\(", pad.read_text()))
+        ):
+            if not hasattr(EnergyManagementSystemCoordinator, naam):
+                ontbreekt.append(f"{bestand}: {naam}")
+
+    assert not ontbreekt, ontbreekt

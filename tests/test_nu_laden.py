@@ -175,3 +175,59 @@ def test_the_switch_moment_survives_a_restart():
     )
 
     assert "nu_laden_omslag" in PERSISTED_PLAIN_FIELDS
+
+
+# --- v1.72.0: de knop werkte niet, en geen test merkte het -----------
+
+
+def test_pressing_the_switch_actually_works(make_coordinator, hass):
+    """Gemeld: "De nu laden button geeft een fout: 'object has no
+    attribute async_request_refresh'."
+
+    Die methode hoort bij `DataUpdateCoordinator`; deze coordinator is er
+    geen. De tests toetsten alleen de coordinator-functies, nooit de
+    schakelaar zelf - dus bleef alles groen terwijl de knop niet werkte.
+    """
+    import asyncio
+
+    from custom_components.energy_management_system.switch import NuLadenSwitch
+
+    c = _coordinator(make_coordinator)
+    knop = NuLadenSwitch(c, entry_id="x")
+
+    asyncio.run(knop.async_turn_on())
+
+    assert c.nu_laden_actief(NU) is True
+    assert knop.is_on is True
+
+    asyncio.run(knop.async_turn_off())
+
+    assert c.nu_laden_actief(NU) is False
+
+
+def test_no_switch_calls_a_method_that_does_not_exist():
+    """De brede versie van dezelfde fout: elke coordinator-aanroep vanuit
+    de schakelaars moet bestaan.
+
+    Zonder deze toets komt zoiets pas boven water als je de knop
+    indrukt - en dan staat er een rode melding in de gebruikersinterface
+    in plaats van een rode test.
+    """
+    import re
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+    from custom_components.energy_management_system.coordinator import (
+        EnergyManagementSystemCoordinator,
+    )
+
+    bron = (Path(pkg.__file__).parent / "switch.py").read_text()
+    aangeroepen = set(re.findall(r"_coordinator\.([a-z_][a-z_0-9]*)\(", bron))
+
+    ontbreekt = [
+        naam
+        for naam in sorted(aangeroepen)
+        if not hasattr(EnergyManagementSystemCoordinator, naam)
+    ]
+
+    assert not ontbreekt, f"switch.py roept aan wat niet bestaat: {ontbreekt}"
