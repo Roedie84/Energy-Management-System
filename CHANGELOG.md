@@ -13790,3 +13790,66 @@ marge na dagen met overschot onder de 15%, dan wint 15%. Deze wijziging
 mag de verkooptoets ruimer maken dan hij ooit was.
 
 **Volledige testsuite**: 2092 tests, allemaal groen.
+
+## v1.87.0 — "Waar zie ik die 40?"
+
+Nergens. Die stond alleen in de diagnostiek-export onder
+`last_reserve_margin_breakdown`.
+
+En dat is precies waarom de lus uit v1.86.0 dagen kon doorlopen: de marge
+liep op van 25 naar 40% wegens tekortdagen, terwijl de verkooptoets dat
+getal negeerde. **Een zelfcorrigerend mechanisme dat zichzelf niet laat
+zien, is niet te controleren** — noch door jou, noch door mij.
+
+Nieuwe subview **Reservemarge**, bereikbaar vanaf de planningspagina:
+
+| Onderdeel | % | Soort |
+|---|---|---|
+| Basis | 10 | vast |
+| Tekortdagen (3 recent) | 15 | dynamisch |
+| Onbeschermde nacht na een duur kwartier | 15 | vast |
+
+Met daarbij hoeveel er vast is en hoeveel beweegt. Dat is het antwoord op
+de vraag erachter — of 40% niet veel is. **Vijfentwintig procentpunt is
+structureel**; alleen de tekortbonus beweegt, met 5 procentpunt per
+tekortdag omhoog en 3 per overschotdag omlaag.
+
+Regels op nul worden weggelaten: die zeggen niets en maken de tabel
+alleen langer.
+
+**Volledige testsuite**: 2096 tests, allemaal groen.
+
+## v1.88.0 — De derde plek
+
+**Gemeld** direct na de installatie van v1.87.0: "Krijg de melding na
+installatie direct weer."
+
+Terecht, en het is mijn fout. In v1.86.0 heb ik alleen de
+**verkooptoets** gelijkgetrokken. Maar de kwartierplanning simuleert zijn
+**eigen** reserve — en die stond nog op de vaste 1,15.
+
+De simulatie plande dus meer verkoop dan de aansturing daadwerkelijk zou
+toestaan, en de tekortmelding leest precies die simulatie. Vandaar dat de
+melding meteen terugkwam, zij het met 11 in plaats van 13 kwartieren.
+
+**Dezelfde marge stond op drie plekken los gedefinieerd:**
+
+| Plek | Was | Nu |
+|---|---|---|
+| Ontlaadreserve | dynamisch, 40% | dynamisch |
+| Verkooptoets | vast 15% | dezelfde dynamische |
+| Kwartierplanning | vast 15% | dezelfde dynamische |
+
+Alle drie lopen nu via `_reserve_margin_factor()`, met de vaste factor
+alleen als **ondergrens**.
+
+Een test bewaakt dat: zodra de vaste factor ergens rechtstreeks wordt
+toegepast in plaats van als ondergrens onder de dynamische marge, valt
+hij om. Zonder die toets was dit een derde ronde geworden na een vierde
+plek.
+
+Met de cijfers van vanavond: de simulatie houdt 5,16 kWh achter in plaats
+van 4,24, waardoor er 2,62 kWh vrij te verkopen blijft in plaats van
+3,47 — ongeveer drie kwartieren minder.
+
+**Volledige testsuite**: 2098 tests, allemaal groen.

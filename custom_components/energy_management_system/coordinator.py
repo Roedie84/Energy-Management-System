@@ -10412,6 +10412,71 @@ class EnergyManagementSystemCoordinator:
             return None
         return statistics.median(values)
 
+    def get_reserve_margin_overview(self) -> dict:
+        """Hoe de reservemarge is opgebouwd (v1.87.0).
+
+        Gevraagd: "Waar zie ik die 40?" Nergens - hij stond alleen in de
+        diagnostiek-export. Precies de reden waarom de lus van v1.86.0
+        dagen kon doorlopen zonder dat iemand het zag: de marge liep op
+        van 25 naar 40% wegens tekortdagen, terwijl de verkooptoets dat
+        getal negeerde.
+
+        Een zelfcorrigerend mechanisme dat zichzelf niet laat zien, is
+        niet te controleren.
+        """
+        u = self.last_reserve_margin_breakdown or {}
+        if not u:
+            return {
+                "beschikbaar": False,
+                "reden": "Nog geen reserveberekening gemaakt.",
+            }
+        onderdelen = [
+            ("Basis", u.get("base_percent", 0.0), "vast"),
+            (
+                f"Weinig zon ({u.get('consecutive_low_solar_days', 0)} dagen)",
+                u.get("low_solar_bonus_percent", 0.0),
+                "dynamisch",
+            ),
+            (
+                f"Tekortdagen ({u.get('recent_shortfall_days', 0)} recent)",
+                u.get("shortfall_bonus_percent", 0.0),
+                "dynamisch",
+            ),
+            (
+                f"Overschotdagen ({u.get('recent_excess_days', 0)} recent)",
+                -u.get("excess_reduction_percent", 0.0),
+                "dynamisch",
+            ),
+            (
+                "Onbeschermde nacht na een duur kwartier",
+                u.get("unprotected_aftermath_percent", 0.0),
+                "vast",
+            ),
+        ]
+        return {
+            "beschikbaar": True,
+            "totaal_procent": u.get("total_percent"),
+            "vast_procent": round(
+                sum(w for _n, w, s in onderdelen if s == "vast"), 1
+            ),
+            "dynamisch_procent": round(
+                sum(w for _n, w, s in onderdelen if s == "dynamisch"), 1
+            ),
+            "onderdelen": [
+                {"naam": n, "procent": round(w, 1), "soort": s}
+                for n, w, s in onderdelen
+                if w
+            ],
+            "diepste_tekort_kwh": u.get("needed_kwh_before_margin"),
+            "reserve_kwh": u.get("reserve_kwh_after_margin"),
+            "toelichting": (
+                "De marge staat bovenop het diepste tekort onderweg. Elke "
+                "tekortdag verhoogt hem met 5 procentpunt, elke dag met "
+                "overschot verlaagt hem met 3. Sinds v1.86.0 hanteert de "
+                "verkooptoets dezelfde marge als de ontlaadreserve."
+            ),
+        }
+
     def _reserve_margin_factor(self) -> float:
         """De marge die de ontlaadreserve op dit moment aanhoudt
         (v1.86.0).
@@ -10668,10 +10733,27 @@ class EnergyManagementSystemCoordinator:
             sleutel = moment.strftime("%Y-%m-%d %H")
             if sleutel not in reserve_cache:
                 diepste = self._estimate_worst_case_deficit_kwh(moment, blok)
+                # v1.88.0: dezelfde marge als de verkooptoets en de
+                # ontlaadreserve.
+                #
+                # Gemeld direct na de installatie van v1.87.0: "Krijg de
+                # melding na installatie direct weer." Terecht - ik had
+                # in v1.86.0 alleen de VERKOOPTOETS gelijkgetrokken, en
+                # de kwartierplanning simuleert zijn eigen reserve.
+                #
+                # Die stond nog op de vaste 1,15, dus plande de
+                # simulatie meer verkoop dan de aansturing zou
+                # toestaan - en de tekortmelding leest die simulatie.
+                #
+                # Derde plek waar dezelfde marge apart was
+                # gedefinieerd. Nu alle drie via
+                # `_reserve_margin_factor`.
+                marge = max(
+                    self._reserve_margin_factor(),
+                    SELL_RESERVE_DEEPEST_SAFETY_FACTOR,
+                )
                 reserve_cache[sleutel] = (
-                    0.0
-                    if diepste is None
-                    else diepste * SELL_RESERVE_DEEPEST_SAFETY_FACTOR
+                    0.0 if diepste is None else diepste * marge
                 )
             return reserve_cache[sleutel]
 

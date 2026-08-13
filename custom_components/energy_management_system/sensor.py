@@ -3856,6 +3856,7 @@ class GacsAssessmentSensor(SensorEntity):
             "zon_uitstelplan",
             "kwartierplanning",
             "verkooptoets",
+            "reservemarge",
             "accu_tegen_net",
             "kwartier_samenvatting",
             "plantoetsing",
@@ -3916,6 +3917,7 @@ class GacsAssessmentSensor(SensorEntity):
             ("zon_uitstelplan", lambda: self._coordinator.last_solar_defer_plan),
             ("kwartierplanning", self._coordinator.get_quarter_plan_compact),
             ("verkooptoets", lambda: self._coordinator.last_sell_check),
+            ("reservemarge", self._coordinator.get_reserve_margin_overview),
             ("accu_tegen_net", lambda: self._coordinator.last_battery_vs_grid),
             ("kwartier_samenvatting", self._coordinator.get_quarter_plan_summary),
             # v1.31.0: plan tegen werkelijkheid.

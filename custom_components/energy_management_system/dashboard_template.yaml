@@ -486,7 +486,7 @@ views:
   panel: true
   cards:
   - type: picture-elements
-    image: /local/energy_management_system_overview.svg?v=1.86.0
+    image: /local/energy_management_system_overview.svg?v=1.88.0
     elements:
     - type: state-label
       entity: sensor.woonkamer_energy_management_system_system_status
@@ -1425,6 +1425,32 @@ views:
       grid_options:
         columns: 12
         rows: auto
+- title: Reservemarge
+  path: detail-reservemarge
+  subview: true
+  type: sections
+  max_columns: 1
+  sections:
+  - type: grid
+    cards:
+    - type: custom:mushroom-title-card
+      title: Reservemarge
+      subtitle: Hoeveel er wordt achtergehouden, en waarom
+    - type: markdown
+      title: Reservemarge
+      content: '{% set m = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''reservemarge'') or {} %}{% if not m.get(''beschikbaar'') %}{{ m.get(''reden'', ''Nog niet berekend.'') }}{% else %}**{{ m.totaal_procent }}%** bovenop het diepste tekort van {{ m.diepste_tekort_kwh }} kWh, dus {{ m.reserve_kwh }} kWh achterhouden. Daarvan {{ m.vast_procent }} vast en {{ m.dynamisch_procent }} dynamisch.
+
+
+        | Onderdeel | % | Soort |
+
+        |---|---|---|
+
+        {% for o in m.onderdelen %}| {{ o.naam }} | {{ o.procent }}% | {{ o.soort }} |
+
+        {% endfor %}{% endif %}'
+      grid_options:
+        columns: 12
+        rows: auto
 - title: Water
   path: detail-water
   subview: true
@@ -1781,7 +1807,7 @@ views:
         _De accu neemt een vast aantal kilowattuur op; wélke dat zijn bepaalt wat je exporteert. Vroeg laden slurpt de dure ochtendzon op en laat de goedkope middagzon over voor het net - laat laden doet het omgekeerd. Zelfde eind-SoC, hogere opbrengst._
 
 
-        **Verder:** [Kwartierplanning](/energy-management-system/detail-kwartier) · [Samenvatting](/energy-management-system/detail-planning-samenvatting) · [Plantoetsing](/energy-management-system/detail-plantoetsing)'
+        **Verder:** [Reservemarge](/energy-management-system/detail-reservemarge) · [Kwartierplanning](/energy-management-system/detail-kwartier) · [Samenvatting](/energy-management-system/detail-planning-samenvatting) · [Plantoetsing](/energy-management-system/detail-plantoetsing)'
       grid_options:
         columns: 12
         rows: auto
