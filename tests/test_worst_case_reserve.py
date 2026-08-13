@@ -13,6 +13,17 @@ import pytest
 
 DAY0 = datetime(2026, 8, 2, tzinfo=timezone.utc)
 
+def _klok_op(moment):
+    """v1.89.0: de uitdemping meet de afstand tot NU, niet de lengte van
+    het gevraagde venster. Deze tests werken met vaste tijdstippen, dus
+    moet de klok daarop staan - anders ligt alles in het verleden en is
+    de afstand nul.
+    """
+    import custom_components.energy_management_system.coordinator as mod
+
+    mod.dt_util.now = lambda: moment
+
+
 
 def _two_day_pv_forecast(peak_kw: float = 1.4, start_hour: int = 8, end_hour: int = 16):
     detailed = []
@@ -75,6 +86,9 @@ def test_worst_case_deficit_reacts_to_live_consumption_spike(make_coordinator, h
 
     start = DAY0.replace(hour=23, minute=45)
     end = (DAY0 + timedelta(days=1)).replace(hour=11, minute=15)
+    # v1.89.0: de uitdemping meet de afstand tot NU; zonder klok op het
+    # begin van het venster ligt alles in het verleden.
+    _klok_op(start)
 
     hass.states.set("sensor.p1", "300")  # matches the learned average
     for _ in range(4):
@@ -216,6 +230,7 @@ def test_a_short_window_keeps_the_full_correction(make_coordinator, hass):
     """Draait de airco nu, dan zegt het gemiddelde van vorige week te
     weinig over het komende uur. Daar is de correctie voor."""
     c = make_coordinator({})
+    _klok_op(DAY0)
 
     assert c._uitgedempte_correctie(
         DAY0, DAY0 + timedelta(minutes=30), 5.0
@@ -231,6 +246,7 @@ def test_a_long_horizon_fades_it_out(make_coordinator, hass):
     met 1,26 tot 1,38 kW terwijl het profiel 0,20 tot 0,41 kW zegt.
     """
     c = make_coordinator({})
+    _klok_op(DAY0)
 
     over_31_uur = c._uitgedempte_correctie(DAY0, DAY0 + timedelta(hours=31), 5.0)
 
@@ -241,6 +257,7 @@ def test_the_fade_is_gradual(make_coordinator, hass):
     """Geen harde knip: een venster van twee uur hoort tussen die van één
     en vier in te liggen."""
     c = make_coordinator({})
+    _klok_op(DAY0)
 
     een = c._uitgedempte_correctie(DAY0, DAY0 + timedelta(hours=1), 3.0)
     twee = c._uitgedempte_correctie(DAY0, DAY0 + timedelta(hours=2), 3.0)
@@ -253,6 +270,7 @@ def test_no_correction_stays_no_correction(make_coordinator, hass):
     """Zonder afwijking mag er niets veranderen, hoe lang het venster ook
     is."""
     c = make_coordinator({})
+    _klok_op(DAY0)
 
     assert c._uitgedempte_correctie(DAY0, DAY0 + timedelta(hours=31), 1.0) == 1.0
 
@@ -267,6 +285,7 @@ def test_the_night_estimate_is_no_longer_inflated_by_dinner(
         c.hourly_consumption_profile[hour] = [0.3]
 
     start = DAY0.replace(hour=16, minute=30)
+    _klok_op(start)
     hass.states.set("sensor.p1", "1500")  # koken: 5x het gemiddelde
     for _ in range(4):
         c._track_recent_consumption_reading(start)
@@ -284,3 +303,67 @@ def test_the_night_estimate_is_no_longer_inflated_by_dinner(
     # ruim twee uur verhoogd verbruik bij, in plaats van zeventien.
     assert nacht < zonder_correctie * 5 * 0.4
     assert nacht > zonder_correctie
+
+
+# --- v1.89.0: afstand tot nu, niet vensterlengte ---------------------
+
+
+def test_a_quarter_far_ahead_gets_no_correction(make_coordinator, hass):
+    """Gemeld: de tekortmelding bleef terugkomen na drie reparaties aan
+    de reserve.
+
+    De oorzaak zat niet in de reserve maar hier. De kwartierplanning
+    vraagt om een schatting per KWARTIER, en een venster van een
+    kwartier is korter dan het volle-gewichtvenster - dus kreeg elk
+    kwartier de volle correctie, ook een kwartier van morgenochtend.
+
+    Op 13 augustus 17:47 rekende het plan met 0,428 kW voor vannacht
+    terwijl het geleerde profiel 0,213 zegt en de reserve-wandeling op
+    0,322 uitkwam. Twee mechanismen die hetzelfde horen te berekenen.
+    """
+    c = make_coordinator({})
+    nu = DAY0.replace(hour=17, minute=45)
+    _klok_op(nu)
+
+    dichtbij = c._uitgedempte_correctie(nu, nu + timedelta(minutes=15), 5.0)
+    ver_weg = c._uitgedempte_correctie(
+        nu + timedelta(hours=14), nu + timedelta(hours=14, minutes=15), 5.0
+    )
+
+    assert dichtbij == 5.0
+    assert ver_weg == 1.0
+
+
+def test_the_plan_and_the_reserve_now_agree(make_coordinator, hass):
+    """Het plan schat per kwartier, de reserve over het hele venster.
+    Bij dezelfde correctie horen die op hetzelfde uit te komen."""
+    c = make_coordinator({})
+    nu = DAY0.replace(hour=17, minute=45)
+    _klok_op(nu)
+    einde = nu + timedelta(hours=16)
+
+    over_alles = c._uitgedempte_correctie(nu, einde, 5.0)
+
+    stukjes = []
+    moment = nu
+    while moment < einde:
+        stukjes.append(
+            c._uitgedempte_correctie(moment, moment + timedelta(minutes=15), 5.0)
+        )
+        moment += timedelta(minutes=15)
+    gemiddeld = sum(stukjes) / len(stukjes)
+
+    assert abs(over_alles - gemiddeld) < 0.05
+
+
+def test_a_window_in_the_past_is_harmless(make_coordinator, hass):
+    """Een tick kan achterlopen; dan ligt het begin al net achter ons."""
+    c = make_coordinator({})
+    nu = DAY0.replace(hour=17, minute=45)
+    _klok_op(nu)
+
+    waarde = c._uitgedempte_correctie(
+        nu - timedelta(minutes=10), nu + timedelta(minutes=5), 5.0
+    )
+
+    assert 1.0 <= waarde <= 5.0
