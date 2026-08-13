@@ -61,7 +61,8 @@ def test_the_detail_page_is_a_subview():
     # v1.38.0: plus detail-proefstand.
     # v1.57.0: plus detail-rendement.
     # v1.58.0: plus detail-betrouwbaarheid.
-    assert len(paginas) == 21
+    # v1.85.0: plus detail-veroudering.
+    assert len(paginas) == 22
     for pagina in paginas:
         assert pagina.get("subview") is True, pagina["title"]
 
