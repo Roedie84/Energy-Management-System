@@ -83,7 +83,9 @@ from .const import (
     CONF_FEEDIN_COST_EUR_PER_KWH,
     CONF_FEEDIN_PRICE_ATTRIBUTE,
     CONF_PRICE_ATTRIBUTE,
+    CONF_BATTERY_DISCHARGE_ENERGY_SENSOR,
     CONF_CONTRACT_START_DATE,
+    CONF_COST_ENERGY_SENSOR,
     CONF_GRID_EXPORT_ENERGY_SENSOR,
     CONF_GRID_IMPORT_ENERGY_SENSOR,
     CONF_SALDEREN_END_DATE,
@@ -213,6 +215,18 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
             vol.Optional(
                 CONF_GRID_EXPORT_ENERGY_SENSOR,
                 default=defaults.get(CONF_GRID_EXPORT_ENERGY_SENSOR),
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="sensor")
+            ),
+            vol.Optional(
+                CONF_BATTERY_DISCHARGE_ENERGY_SENSOR,
+                default=defaults.get(CONF_BATTERY_DISCHARGE_ENERGY_SENSOR),
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="sensor")
+            ),
+            vol.Optional(
+                CONF_COST_ENERGY_SENSOR,
+                default=defaults.get(CONF_COST_ENERGY_SENSOR),
             ): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="sensor")
             ),

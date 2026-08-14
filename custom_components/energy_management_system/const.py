@@ -863,7 +863,7 @@ ENERGY_DAY_SANITY_MAX_KWH = 500.0
 # Zonder merkteken valt niet te zien welke dagen uit een kapotte ronde
 # komen. Verhoog dit getal zodra er iets aan het inlezen verandert; dan
 # worden de oude regels weggegooid en opnieuw opgehaald.
-ENERGY_BOOTSTRAP_VERSION = 2
+ENERGY_BOOTSTRAP_VERSION = 3
 
 # --- Leest de buitensensor plausibel? (v1.96.0) ----------------------
 # Gevonden bij de eindcontrole: de verouderingsdrijvers legden 41,7 graden
@@ -2647,6 +2647,27 @@ CONF_PV_ENERGY_SENSOR = "pv_energy_sensor_entity"
 # genoeg.
 CONF_GRID_IMPORT_ENERGY_SENSOR = "grid_import_energy_sensor_entity"
 CONF_GRID_EXPORT_ENERGY_SENSOR = "grid_export_energy_sensor_entity"
+
+# --- Meer meters voor de geschiedenis (v1.97.0) ----------------------
+# Gevraagd bij een screenshot waarop accu, kosten, CO2 en besparing nul
+# stonden voor de langere perioden: "deze kunnen toch ook met data uit
+# geschiedenis worden bepaald?"
+#
+# Deels. Wat een METER heeft, kan uit de statistieken:
+#   - accu-ontlading: `sensor.zendure_export` of vergelijkbaar
+#   - kosten: `sensor.zonneplan_electricity_delivery_costs_today` of de
+#     kostensensor van de P1-meter
+#
+# CO2 volgt uit de al ingelezen netafname maal de intensiteit; daar is
+# geen aparte meter voor nodig.
+#
+# BESPARING kan niet. Dat is het verschil met een tegenfeitelijke wereld
+# zonder aansturing, en die is nooit ergens vastgelegd. Terugrekenen zou
+# historische kwartierprijzen vragen die de prijssensor niet bewaart -
+# en een geschat verschil naast echte cijfers zetten is erger dan een
+# leeg vakje.
+CONF_BATTERY_DISCHARGE_ENERGY_SENSOR = "battery_discharge_energy_sensor_entity"
+CONF_COST_ENERGY_SENSOR = "cost_energy_sensor_entity"
 
 # Een meterstand hoort te stijgen. Daalt hij, dan is de omvormer
 # herstart of de teller teruggezet; dan is het verschil betekenisloos en

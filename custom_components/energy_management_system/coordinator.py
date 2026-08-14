@@ -372,6 +372,8 @@ from .const import (
     CONF_PRESENCE_LIGHT_ENTITIES,
     CONF_PRESENCE_ABSENCE_MINUTES,
     CONF_PRESENCE_TV_ENTITY,
+    CONF_BATTERY_DISCHARGE_ENERGY_SENSOR,
+    CONF_COST_ENERGY_SENSOR,
     CONF_GRID_EXPORT_ENERGY_SENSOR,
     CONF_GRID_IMPORT_ENERGY_SENSOR,
     CONF_PV_ENERGY_SENSOR,
@@ -14078,6 +14080,25 @@ class EnergyManagementSystemCoordinator:
             ),
         }
 
+    def _gemiddelde_co2_intensiteit_g_per_kwh(self) -> float | None:
+        """Gemiddelde CO2-intensiteit uit de eigen dagreeks (v1.97.0).
+
+        Uit de dagen die live zijn gemeten valt af te leiden hoeveel gram
+        per kWh netafname er gemiddeld bij hoort. Dat is een benadering
+        voor de ingelezen dagen - de intensiteit per uur is niet bewaard,
+        en die schommelt met de windproductie.
+        """
+        paren = [
+            (r["co2_kg"], r["import_kwh"])
+            for r in self.energy_daily_history
+            if r.get("co2_kg") and r.get("import_kwh")
+        ]
+        if not paren:
+            return None
+        return statistics.median(
+            co2 * 1000 / invoer for co2, invoer in paren if invoer > 0
+        )
+
     def _weather_outdoor_temperature_c(self) -> float | None:
         """De actuele buitentemperatuur volgens de weerbronnen."""
         waarden = []
@@ -14179,6 +14200,11 @@ class EnergyManagementSystemCoordinator:
             "opwek_kwh": self.config.get(CONF_PV_ENERGY_SENSOR),
             "import_kwh": self.config.get(CONF_GRID_IMPORT_ENERGY_SENSOR),
             "export_kwh": self.config.get(CONF_GRID_EXPORT_ENERGY_SENSOR),
+            # v1.97.0: ook accu en kosten, als daar een meter voor is.
+            "accu_ontladen_kwh": self.config.get(
+                CONF_BATTERY_DISCHARGE_ENERGY_SENSOR
+            ),
+            "kosten_eur": self.config.get(CONF_COST_ENERGY_SENSOR),
         }
         bronnen = {k: v for k, v in bronnen.items() if v}
         if not bronnen:
@@ -14243,7 +14269,11 @@ class EnergyManagementSystemCoordinator:
                 if meta
                 else None
             )
-            factor = ENERGY_UNIT_TO_KWH.get(eenheid)
+            # v1.97.0: een kostenmeter staat in euro's, niet in kWh.
+            if veld == "kosten_eur":
+                factor = 1.0 if eenheid in (None, "EUR", "\u20ac") else None
+            else:
+                factor = ENERGY_UNIT_TO_KWH.get(eenheid)
             if factor is None:
                 _LOGGER.warning(
                     "Statistieken van %s hebben eenheid %r; overgeslagen bij "
@@ -14272,6 +14302,11 @@ class EnergyManagementSystemCoordinator:
                         per_dag.setdefault(dag, {})[veld] = round(groei, 3)
                 vorige = stand
 
+        # De gemiddelde CO2-intensiteit van de afgelopen dagen als
+        # benadering voor de hele periode. Nauwkeuriger kan niet: de
+        # intensiteit per uur is niet bewaard.
+        co2_intensiteit = self._gemiddelde_co2_intensiteit_g_per_kwh()
+
         toegevoegd = [
             {
                 "datum": dag.isoformat(),
@@ -14297,6 +14332,20 @@ class EnergyManagementSystemCoordinator:
                 # Uit statistieken valt niet af te leiden welk deel van de
                 # export zon was en welk deel uit de accu kwam; dat wordt
                 # pas sinds v1.76.0 live gemeten.
+                "accu_ontladen_kwh": waarden.get("accu_ontladen_kwh"),
+                "kosten_eur": waarden.get("kosten_eur"),
+                # v1.97.0: CO2 volgt uit de netafname maal de intensiteit;
+                # daar is geen aparte meter voor nodig.
+                "co2_kg": (
+                    round(
+                        waarden["import_kwh"] * co2_intensiteit / 1000, 4
+                    )
+                    if "import_kwh" in waarden and co2_intensiteit
+                    else None
+                ),
+                # Besparing kan niet: dat is het verschil met een wereld
+                # zonder aansturing, en die is nooit vastgelegd.
+                "zonder_sturing_eur": None,
                 "zon_export_kwh": None,
                 "herkomst": "statistieken",
                 "inlees_versie": ENERGY_BOOTSTRAP_VERSION,
@@ -14359,16 +14408,35 @@ class EnergyManagementSystemCoordinator:
                 "van": dagen[0]["datum"],
             }
             for sleutel, _naam, _eenheid in self.PERIODE_GROOTHEDEN:
-                uitkomst[sleutel] = round(
-                    sum(r.get(sleutel, 0.0) or 0.0 for r in dagen), 2
+                # v1.97.0: geen enkele dag met een waarde is iets anders
+                # dan een periode die op nul uitkomt.
+                #
+                # Gevraagd bij een screenshot waarop accu, kosten, CO2 en
+                # besparing nul stonden: "deze kunnen toch ook met data
+                # uit geschiedenis worden bepaald?" Die nullen waren geen
+                # meting maar een gat - en dat hoort zichtbaar te zijn.
+                aanwezig = [
+                    r[sleutel] for r in dagen if r.get(sleutel) is not None
+                ]
+                uitkomst[sleutel] = (
+                    round(sum(aanwezig), 2) if aanwezig else None
                 )
-            uitkomst["besparing_eur"] = round(
-                sum(
-                    (r.get("zonder_sturing_eur", 0.0) or 0.0)
-                    - (r.get("kosten_eur", 0.0) or 0.0)
-                    for r in dagen
-                ),
-                2,
+            # Besparing alleen waar de tegenfeitelijke kosten bekend
+            # zijn. Ingelezen dagen hebben die niet: die wereld zonder
+            # aansturing is nooit ergens vastgelegd.
+            met_tegenfeit = [
+                r for r in dagen if r.get("zonder_sturing_eur") is not None
+            ]
+            uitkomst["besparing_eur"] = (
+                round(
+                    sum(
+                        r["zonder_sturing_eur"] - (r.get("kosten_eur") or 0.0)
+                        for r in met_tegenfeit
+                    ),
+                    2,
+                )
+                if met_tegenfeit
+                else None
             )
             # v1.92.0: gemiddelde per dag. Gevraagd: "Worden de kosten en
             # het verbruik etc ook dag/week/maand/jaar meegenomen en
@@ -14378,11 +14446,17 @@ class EnergyManagementSystemCoordinator:
             # vergelijken - je kijkt dan naar het aantal dagen in plaats
             # van naar het verbruik.
             uitkomst["gemiddeld_per_dag"] = {
-                sleutel: round(uitkomst[sleutel] / len(dagen), 2)
+                sleutel: (
+                    round(uitkomst[sleutel] / len(dagen), 2)
+                    if uitkomst[sleutel] is not None
+                    else None
+                )
                 for sleutel, _n, _e in self.PERIODE_GROOTHEDEN
             }
-            uitkomst["gemiddeld_per_dag"]["besparing_eur"] = round(
-                uitkomst["besparing_eur"] / len(dagen), 2
+            uitkomst["gemiddeld_per_dag"]["besparing_eur"] = (
+                round(uitkomst["besparing_eur"] / len(met_tegenfeit), 2)
+                if met_tegenfeit
+                else None
             )
             return uitkomst
 

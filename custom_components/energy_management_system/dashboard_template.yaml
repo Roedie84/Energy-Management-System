@@ -486,7 +486,7 @@ views:
   panel: true
   cards:
   - type: picture-elements
-    image: /local/energy_management_system_overview.svg?v=1.96.0
+    image: /local/energy_management_system_overview.svg?v=1.97.0
     elements:
     - type: state-label
       entity: sensor.woonkamer_energy_management_system_system_status
@@ -1467,9 +1467,9 @@ views:
 
         |---|{% for naam in p %}---|{% endfor %}
 
-        {% for x in g %}| {{ x.naam }} ({{ x.eenheid }}) | {% for naam, w in p.items() %}{{ w.get(x.sleutel, ''—'') }} | {% endfor %}
+        {% for x in g %}| {{ x.naam }} ({{ x.eenheid }}) | {% for naam, w in p.items() %}{{ w.get(x.sleutel) if w.get(x.sleutel) is not none else ''niet te bepalen'' }} | {% endfor %}
 
-        {% endfor %}| Besparing (EUR) | {% for naam, w in p.items() %}{{ w.get(''besparing_eur'', ''—'') }} | {% endfor %}
+        {% endfor %}| Besparing (EUR) | {% for naam, w in p.items() %}{{ w.get(''besparing_eur'') if w.get(''besparing_eur'') is not none else ''niet te bepalen'' }} | {% endfor %}
 
         | _gemiddeld per dag_ | {% for naam, w in p.items() %}{% set g = w.get(''gemiddeld_per_dag'') %}{{ (g.verbruik_kwh ~ '' kWh'') if g else ''—'' }} | {% endfor %}
 

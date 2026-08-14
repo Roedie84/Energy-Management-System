@@ -14179,3 +14179,43 @@ terugzetten van de toestand, zoals v1.95.0 leerde.
   van naar de module
 
 **Volledige testsuite**: 2144 tests, allemaal groen.
+
+## v1.97.0 — Accu, kosten en CO₂ ook uit de geschiedenis
+
+**Gevraagd** bij een screenshot waarop accu, kosten, CO₂ en besparing op
+nul stonden voor de langere perioden: "deze kunnen toch ook met data uit
+geschiedenis worden bepaald?"
+
+Drie van de vier wel, één niet.
+
+| Rij | Uit geschiedenis? |
+|---|---|
+| Uit de accu | **ja**, met een kWh-meter — bij deze installatie `sensor.zendure_export` |
+| Kosten | **ja**, met een kostensensor — bijvoorbeeld `sensor.zonneplan_electricity_delivery_costs_today` |
+| CO₂ | **ja**, afgeleid uit de al ingelezen netafname |
+| Besparing | **nee** |
+
+Besparing is het verschil met een tegenfeitelijke wereld zonder
+aansturing, en die is nooit ergens vastgelegd. Terugrekenen zou
+historische kwartierprijzen vragen die de prijssensor niet bewaart — en
+een geschat verschil naast echte cijfers zetten is erger dan een leeg
+vakje.
+
+Twee nieuwe configuratievelden: **meter accu-ontlading** en
+**kostensensor stroom**.
+
+### En die nullen waren geen meting
+
+Een periode zonder enkele dag met een waarde kwam als **0,0** in de tabel
+— niet te onderscheiden van een periode die werkelijk op nul uitkomt.
+Daar staat nu *"niet te bepalen"*.
+
+De CO₂-intensiteit wordt afgeleid uit de dagen die live zijn gemeten: de
+mediaan van gram per kWh netafname. Dat is een benadering voor ingelezen
+dagen, want de intensiteit per uur is niet bewaard en schommelt met de
+windproductie.
+
+Het inlezen krijgt versie 3, dus de bestaande ingelezen dagen worden
+opnieuw opgehaald — nu inclusief de nieuwe kolommen.
+
+**Volledige testsuite**: 2148 tests, allemaal groen.
