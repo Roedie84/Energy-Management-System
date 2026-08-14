@@ -327,7 +327,9 @@ def test_dashboard_yaml_is_valid():
     # v1.58.0: plus de betrouwbaarheidspagina.
     # v1.85.0: plus de verouderingspagina.
     # v1.87.0: plus de reservemargepagina.
-    assert len(data["views"]) == 26
+    # v1.90.0: plus de zelfconsumptiepagina.
+    # v1.91.0: plus de periodepagina.
+    assert len(data["views"]) == 28
 
 
 def test_markdown_tables_have_no_blank_lines_between_rows():

@@ -113,6 +113,11 @@ def test_no_numeric_field_on_the_dashboard_lacks_a_unit():
     eenheid = re.compile(r"\s*(kWh|kW|%|W\b|EUR|€|ct|u\b|uur)")
     einde = re.compile(r"^\s*(\||$|\n|')")
 
+    # v1.91.0: een tabel waarin de eenheid in de RIJKOP staat en de
+    # kolommen perioden zijn, hoeft hem niet bij elke cel te herhalen.
+    # Dat zou de tabel onleesbaar maken en zegt niets extra.
+    kop_draagt_eenheid = re.compile(r"\(\{\{ x\.eenheid \}\}\)")
+
     zonder = []
     for view in data["views"]:
         secties = view.get("sections") or [{"cards": view.get("cards") or []}]
@@ -122,6 +127,8 @@ def test_no_numeric_field_on_the_dashboard_lacks_a_unit():
                     str(kaart.get(sleutel) or "")
                     for sleutel in ("content", "primary", "secondary")
                 )
+                if kop_draagt_eenheid.search(inhoud):
+                    continue
                 for m in veld.finditer(inhoud):
                     staart = m.group(2)
                     if einde.match(staart) and not eenheid.match(staart):
