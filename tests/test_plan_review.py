@@ -426,3 +426,52 @@ def test_a_restart_on_a_new_day_still_closes_yesterday(
 
     assert verse.plan_review_history
     assert verse.plan_review_history[-1]["datum"] == opname["datum"]
+
+
+# --- v1.96.0: restanten van de volgordefout opruimen -----------------
+
+
+def test_impossible_rows_are_removed_on_startup(make_coordinator, hass):
+    """Gevonden bij de eindcontrole van 14 augustus: de plantoetsing
+    droeg nog regels met een werkelijke zonopbrengst van -20,82 en -22,73
+    kWh.
+
+    Die zijn geschreven toen de dagtellers al op nul stonden voordat de
+    toetsing draaide. De fout is in v1.74.0 gerepareerd, maar net als bij
+    de energiereeks bleven de foute regels staan - een reparatie van het
+    SCHRIJVEN raakt niet wat er al bewaard is.
+    """
+    regels = [
+        {"datum": "2026-08-11", "zon": {"werkelijk_kwh": -22.73}},
+        {"datum": "2026-08-12", "zon": {"werkelijk_kwh": -20.82}},
+        {"datum": "2026-08-13", "zon": {"werkelijk_kwh": 21.48}},
+    ]
+
+    bewaard = [
+        r for r in regels if (r.get("zon") or {}).get("werkelijk_kwh", 0) >= 0
+    ]
+
+    assert [r["datum"] for r in bewaard] == ["2026-08-13"]
+
+
+def test_a_row_without_sun_data_is_kept(make_coordinator, hass):
+    """Ontbrekend is geen onmogelijk - zo'n regel mag blijven."""
+    regel = {"datum": "2026-08-10", "zon": {}}
+
+    assert (regel.get("zon") or {}).get("werkelijk_kwh", 0) >= 0
+
+
+def test_the_cleanup_runs_after_the_state_is_restored():
+    """Anders ruimt hij een lege lijst op - precies de fout van v1.95.0."""
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    kop = bron.index("    async def async_setup(self) -> None:")
+    staart = bron.index("\n    async def ", kop + 40)
+    blok = bron[kop:staart]
+
+    assert blok.index("async_load_persisted_nilm_state()") < blok.index(
+        "voor_toetsing = len(self.plan_review_history)"
+    )
