@@ -132,7 +132,10 @@ def test_a_day_missing_a_field_does_not_break_it(make_coordinator, hass):
 
     week = c.get_period_overview(NU)["perioden"]["week"]
 
-    assert week["accu_ontladen_kwh"] == 0.0
+    # v1.97.0: geen enkele dag met een waarde is iets anders dan een
+    # periode die op nul uitkomt. Die nullen waren geen meting maar een
+    # gat, en dat hoort zichtbaar te zijn.
+    assert week["accu_ontladen_kwh"] is None
     assert week["opwek_kwh"] == 120.0
 
 
@@ -196,9 +199,10 @@ def test_the_bootstrap_never_overwrites_measured_days():
 
     bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
     kop = bron.index("async def async_bootstrap_energy_history")
-    # v1.92.0: ruim venster - de functie is lang en zoeken op een vast
-    # aantal tekens breekt zodra het commentaar groeit.
-    blok = bron[kop : kop + 8000]
+    # v1.97.0: op de FUNCTIEGRENS zoeken, niet op een aantal tekens.
+    # Dat brak zodra de functie groeide - een valkuil die al in de
+    # overdracht staat beschreven.
+    blok = bron[kop : bron.index("\n    def ", kop)]
 
     assert "if dag < oudste" in blok
 
@@ -241,7 +245,7 @@ def test_the_unit_is_read_not_assumed():
 
     bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
     kop = bron.index("async def async_bootstrap_energy_history")
-    blok = bron[kop : kop + 8000]
+    blok = bron[kop : bron.index("\n    def ", kop)]
 
     assert "get_metadata" in blok
     assert "ENERGY_UNIT_TO_KWH" in blok
@@ -268,7 +272,7 @@ def test_consumption_is_not_invented(make_coordinator, hass):
 
     bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
     kop = bron.index("async def async_bootstrap_energy_history")
-    blok = bron[kop : kop + 8000]
+    blok = bron[kop : bron.index("\n    def ", kop)]
 
     assert '<= set(waarden)' in blok
 
@@ -293,7 +297,7 @@ def test_a_missing_field_counts_as_missing_not_zero(make_coordinator, hass):
     week = c.get_period_overview(NU)["perioden"]["week"]
 
     assert week["opwek_kwh"] == 60.0
-    assert week["verbruik_kwh"] == 0.0
+    assert week["verbruik_kwh"] is None
 
 
 def test_an_absurd_day_is_rejected():
@@ -372,3 +376,71 @@ def test_a_day_with_missing_values_is_not_rejected(make_coordinator, hass):
     assert c._energiedag_is_onzin(
         {"opwek_kwh": 20.0, "verbruik_kwh": None, "import_kwh": None}
     ) is False
+
+
+# --- v1.97.0: wat wél en niet uit geschiedenis kan --------------------
+
+
+def test_the_battery_row_can_come_from_a_meter():
+    """Gevraagd bij een screenshot waarop accu, kosten, CO2 en besparing
+    nul stonden voor de langere perioden: "deze kunnen toch ook met data
+    uit geschiedenis worden bepaald?"
+
+    Wat een METER heeft wel: bij deze installatie
+    `sensor.zendure_export` voor de accu.
+    """
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    kop = bron.index("async def async_bootstrap_energy_history")
+    blok = bron[kop : bron.index("\n    def ", kop)]
+
+    assert "CONF_BATTERY_DISCHARGE_ENERGY_SENSOR" in blok
+
+
+def test_co2_is_derived_not_measured():
+    """CO2 volgt uit de al ingelezen netafname maal de intensiteit; daar
+    is geen aparte meter voor nodig."""
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    kop = bron.index("async def async_bootstrap_energy_history")
+    blok = bron[kop : bron.index("\n    def ", kop)]
+
+    assert "co2_intensiteit" in blok
+
+
+def test_savings_can_never_be_reconstructed(make_coordinator, hass):
+    """Besparing is het verschil met een wereld zonder aansturing, en die
+    is nooit ergens vastgelegd. Terugrekenen zou historische
+    kwartierprijzen vragen die de prijssensor niet bewaart - en een
+    geschat verschil naast echte cijfers zetten is erger dan een leeg
+    vakje.
+    """
+    c = _coordinator(make_coordinator, dagen=0)
+    c.energy_daily_history = [
+        {
+            "datum": (NU.date() - timedelta(days=n)).isoformat(),
+            "opwek_kwh": 20.0,
+            "kosten_eur": -2.0,
+            "zonder_sturing_eur": None,
+            "herkomst": "statistieken",
+        }
+        for n in range(1, 4)
+    ]
+
+    week = c.get_period_overview(NU)["perioden"]["week"]
+
+    assert week["kosten_eur"] == -6.0
+    assert week["besparing_eur"] is None
+
+
+def test_a_measured_day_still_gives_savings(make_coordinator, hass):
+    """Live gemeten dagen hebben de tegenfeitelijke kosten wel."""
+    c = _coordinator(make_coordinator)
+
+    assert c.get_period_overview(NU)["perioden"]["week"]["besparing_eur"] == 6.0
