@@ -14025,3 +14025,46 @@ Die kon al sinds v1.90.0: **Configureren → Startdatum energiecontract**,
 als `JJJJ-MM-DD`. Het contractjaar verschijnt dan als extra kolom.
 
 **Volledige testsuite**: 2123 tests, allemaal groen.
+
+## v1.93.0 — Een factor duizend, en twee onvindbare pagina's
+
+**Gemeld**: "Ik zie de nieuwe pagina niet?" en daarna "De data is onreëel
+— Opwek 131548 kWh over een week."
+
+Drie fouten in het werk van v1.91.0 en v1.92.0, alle drie van mij.
+
+### De eenheid stond niet vast
+
+131548 kWh over een week is een factor duizend te hoog: de bronsensor
+levert **wattuur** en de code nam kilowattuur aan. Statistieken dragen
+hun eigen eenheid; die wordt nu uit de metadata gelezen in plaats van
+geraden, met een omrekentabel voor Wh, kWh en MWh.
+
+Een sensor met een eenheid die daar niet in staat wordt overgeslagen met
+een waarschuwing in het logboek — dat is beter dan een getal dat er
+plausibel uitziet maar duizend keer verkeerd is.
+
+Daarbij een plafond: een dag met meer dan 500 kWh is geen meting maar een
+meterwissel of een teller die opnieuw begon.
+
+### Verbruik werd verzonnen
+
+Opwek en verbruik stonden in de tabel op **exact hetzelfde getal**, en
+dat was meteen de verklikker. Verbruik werd berekend als *opwek + import
+− export*; stonden de netmeters niet ingesteld, dan waren import en
+export nul en kwam verbruik dus gelijk aan de opwek uit.
+
+Nu wordt verbruik alleen ingevuld als **beide** netmeters er zijn.
+Ontbreekt er één, dan blijft het veld leeg — ontbrekend is iets anders
+dan nul.
+
+### En de pagina's waren onvindbaar
+
+De twee nieuwe pagina's misten `subview: true` en de links stonden
+weggestopt onderaan het accu-uitbreidingsadvies. Er staan nu **tegels op
+de Kostenpagina**, waar deze onderwerpen thuishoren. Twee bestaande tests
+vingen dit alsnog: één die eist dat alleen het overzicht in de tabbalk
+staat, en één die eist dat elke verborgen pagina via een tegel
+bereikbaar is.
+
+**Volledige testsuite**: 2128 tests, allemaal groen.

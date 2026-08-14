@@ -435,6 +435,8 @@ from .const import (
     CONF_CONTRACT_START_DATE,
     ENERGY_BALANCE_ERROR_HISTORY_LENGTH,
     ENERGY_DAILY_HISTORY_DAYS,
+    ENERGY_DAY_SANITY_MAX_KWH,
+    ENERGY_UNIT_TO_KWH,
     SELF_CONSUMPTION_MIN_PV_KWH,
     ENERGY_BALANCE_ERROR_BAD_THRESHOLD_W,
     MEASUREMENT_QUALITY_GOOD_THRESHOLD,
@@ -14017,6 +14019,7 @@ class EnergyManagementSystemCoordinator:
         try:
             from homeassistant.components.recorder import get_instance
             from homeassistant.components.recorder.statistics import (
+                get_metadata,
                 statistics_during_period,
             )
         except ImportError:
@@ -14027,6 +14030,15 @@ class EnergyManagementSystemCoordinator:
 
         einde = dt_util.start_of_local_day(oudste)
         start = einde - timedelta(days=ENERGY_DAILY_HISTORY_DAYS)
+
+        # v1.93.0: de EENHEID uit de metadata, want die staat niet vast.
+        #
+        # Gemeld: "De data is onreëel - Opwek 131548 kWh over een week."
+        # Dat is een factor duizend: de bronsensor levert wattuur en de
+        # code nam kilowattuur aan. Statistieken dragen hun eigen
+        # eenheid, en die moet gelezen worden in plaats van geraden.
+        def _metadata():
+            return get_metadata(self.hass, statistic_ids=set(bronnen.values()))
 
         def _ophalen():
             return statistics_during_period(
@@ -14040,6 +14052,7 @@ class EnergyManagementSystemCoordinator:
             )
 
         try:
+            meta = await get_instance(self.hass).async_add_executor_job(_metadata)
             rijen = await get_instance(self.hass).async_add_executor_job(_ophalen)
         except Exception as fout:  # noqa: BLE001 - best effort
             _LOGGER.warning("Kon de energiegeschiedenis niet inlezen: %s", fout)
@@ -14053,6 +14066,20 @@ class EnergyManagementSystemCoordinator:
         # het verschil - niet de stand zelf.
         per_dag: dict = {}
         for veld, entity_id in bronnen.items():
+            eenheid = (
+                (meta.get(entity_id) or (None, {}))[1].get("unit_of_measurement")
+                if meta
+                else None
+            )
+            factor = ENERGY_UNIT_TO_KWH.get(eenheid)
+            if factor is None:
+                _LOGGER.warning(
+                    "Statistieken van %s hebben eenheid %r; overgeslagen bij "
+                    "het inlezen van de geschiedenis",
+                    entity_id,
+                    eenheid,
+                )
+                continue
             reeks = rijen.get(entity_id) or []
             vorige = None
             for punt in reeks:
@@ -14066,22 +14093,34 @@ class EnergyManagementSystemCoordinator:
                     else moment
                 ).date()
                 if vorige is not None:
-                    groei = stand - vorige
-                    if groei >= 0:
+                    groei = (stand - vorige) * factor
+                    # Een dag met meer dan dit is geen meting maar een
+                    # meterwissel of een teller die opnieuw begon.
+                    if 0 <= groei <= ENERGY_DAY_SANITY_MAX_KWH:
                         per_dag.setdefault(dag, {})[veld] = round(groei, 3)
                 vorige = stand
 
         toegevoegd = [
             {
                 "datum": dag.isoformat(),
-                "opwek_kwh": waarden.get("opwek_kwh", 0.0),
-                "import_kwh": waarden.get("import_kwh", 0.0),
-                "export_kwh": waarden.get("export_kwh", 0.0),
-                "verbruik_kwh": round(
-                    waarden.get("opwek_kwh", 0.0)
-                    + waarden.get("import_kwh", 0.0)
-                    - waarden.get("export_kwh", 0.0),
-                    3,
+                "opwek_kwh": waarden.get("opwek_kwh"),
+                "import_kwh": waarden.get("import_kwh"),
+                "export_kwh": waarden.get("export_kwh"),
+                # v1.93.0: verbruik alleen als BEIDE netmeters er zijn.
+                #
+                # Stonden die niet ingesteld, dan werden import en export
+                # nul en kwam verbruik gelijk aan de opwek uit. In de
+                # tabel stond daardoor twee keer hetzelfde getal - en dat
+                # was meteen de verklikker dat er iets niet klopte.
+                "verbruik_kwh": (
+                    round(
+                        waarden["opwek_kwh"]
+                        + waarden["import_kwh"]
+                        - waarden["export_kwh"],
+                        3,
+                    )
+                    if {"opwek_kwh", "import_kwh", "export_kwh"} <= set(waarden)
+                    else None
                 ),
                 # Uit statistieken valt niet af te leiden welk deel van de
                 # export zon was en welk deel uit de accu kwam; dat wordt
@@ -14241,7 +14280,10 @@ class EnergyManagementSystemCoordinator:
             ]
             if not dagen:
                 return None
-            opwek = sum(r["opwek_kwh"] for r in dagen)
+            # v1.93.0: ingelezen dagen kunnen een veld missen als de
+            # bijbehorende meter niet was ingesteld. Ontbrekend is iets
+            # anders dan nul.
+            opwek = sum(r.get("opwek_kwh") or 0.0 for r in dagen)
             if opwek < SELF_CONSUMPTION_MIN_PV_KWH:
                 return None
             # De GEMETEN zon-export als die er is; anders de totale
@@ -14249,11 +14291,11 @@ class EnergyManagementSystemCoordinator:
             zon_export = sum(
                 r.get("zon_export_kwh")
                 if r.get("zon_export_kwh") is not None
-                else min(r["export_kwh"], r["opwek_kwh"])
+                else min(r.get("export_kwh") or 0.0, r.get("opwek_kwh") or 0.0)
                 for r in dagen
             )
-            verbruik = sum(r["verbruik_kwh"] for r in dagen)
-            invoer = sum(r["import_kwh"] for r in dagen)
+            verbruik = sum(r.get("verbruik_kwh") or 0.0 for r in dagen)
+            invoer = sum(r.get("import_kwh") or 0.0 for r in dagen)
             return {
                 "dagen": len(dagen),
                 "opwek_kwh": round(opwek, 1),

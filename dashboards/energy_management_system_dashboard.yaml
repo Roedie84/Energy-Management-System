@@ -486,7 +486,7 @@ views:
   panel: true
   cards:
   - type: picture-elements
-    image: /local/energy_management_system_overview.svg?v=1.92.0
+    image: /local/energy_management_system_overview.svg?v=1.93.0
     elements:
     - type: state-label
       entity: sensor.woonkamer_energy_management_system_system_status
@@ -1352,7 +1352,7 @@ views:
         _{{ e.voorbehoud }}_{% endif %}
 
 
-        **Verder:** [Dag/week/maand/jaar](/energy-management-system/detail-perioden) · [Zelfconsumptie](/energy-management-system/detail-zelfconsumptie) · [Rendement van de accu](/energy-management-system/detail-rendement) · [Wat veroudering versnelt](/energy-management-system/detail-veroudering)'
+        **Verder:** [Rendement van de accu](/energy-management-system/detail-rendement) · [Wat veroudering versnelt](/energy-management-system/detail-veroudering)'
       grid_options:
         columns: 12
         rows: auto
@@ -1888,6 +1888,32 @@ views:
   sections:
   - type: grid
     cards:
+    - type: custom:mushroom-template-card
+      primary: Dag, week, maand, jaar
+      secondary: '{% set o = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''perioden'') or {} %}{{ o.get(''dagen_in_reeks'', 0) }} dagen in de reeks{% if o.get(''contractjaar_begin'') %}, contractjaar vanaf {{ o.contractjaar_begin }}{% endif %}'
+      multiline_secondary: true
+      icon: mdi:calendar-range
+      icon_color: blue
+      entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
+      tap_action:
+        action: navigate
+        navigation_path: /energy-management-system/detail-perioden
+      grid_options:
+        columns: 6
+        rows: auto
+    - type: custom:mushroom-template-card
+      primary: Zelfconsumptie
+      secondary: '{% set z = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''zelfconsumptie'') or {} %}{% set w = (z.get(''perioden'') or {}).get(''week'') %}{% if w %}{{ w.zelfconsumptie_procent }}% deze week{% else %}nog te weinig dagen{% endif %}'
+      multiline_secondary: true
+      icon: mdi:solar-power-variant
+      icon_color: amber
+      entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
+      tap_action:
+        action: navigate
+        navigation_path: /energy-management-system/detail-zelfconsumptie
+      grid_options:
+        columns: 6
+        rows: auto
     - type: custom:mushroom-title-card
       title: Kosten
       subtitle: Vandaag, week en maand, en de Zonneplan-vergelijking

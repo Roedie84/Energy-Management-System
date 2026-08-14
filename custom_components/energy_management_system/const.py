@@ -837,6 +837,22 @@ ENERGY_DAILY_HISTORY_DAYS = 400
 # 14 augustus 08:23 stond er 0,109 kWh opwek tegen 0,448 kWh export, en
 # daar rolt geen betekenisvol percentage uit.
 SELF_CONSUMPTION_MIN_PV_KWH = 0.5
+
+# --- Eenheden van statistieken (v1.93.0) -----------------------------
+# Gemeld: "De data is onreeel - Opwek 131548 kWh over een week." Dat is
+# een factor duizend: de bronsensor levert wattuur en de code nam
+# kilowattuur aan. Statistieken dragen hun eigen eenheid; die moet
+# gelezen worden in plaats van geraden.
+ENERGY_UNIT_TO_KWH = {
+    "kWh": 1.0,
+    "Wh": 0.001,
+    "MWh": 1000.0,
+}
+
+# Een dag met meer dan dit is geen meting maar een meterwissel of een
+# teller die opnieuw begon. Ruim boven wat een woonhuis met zonnepanelen
+# ooit haalt.
+ENERGY_DAY_SANITY_MAX_KWH = 500.0
 DEFAULT_SALDEREN_END_DATE = "2026-12-31"
 
 # Welk attribuut van de prijssensor het teruglevertarief NA saldering
