@@ -198,7 +198,7 @@ def test_the_bootstrap_never_overwrites_measured_days():
     kop = bron.index("async def async_bootstrap_energy_history")
     # v1.92.0: ruim venster - de functie is lang en zoeken op een vast
     # aantal tekens breekt zodra het commentaar groeit.
-    blok = bron[kop : kop + 6000]
+    blok = bron[kop : kop + 8000]
 
     assert "if dag < oudste" in blok
 
@@ -224,3 +224,83 @@ def test_a_backfilled_day_is_marked(make_coordinator, hass):
     # Zonder splitsing valt hij terug op de oude aanname, en dat mag -
     # als het maar navolgbaar is.
     assert c.energy_daily_history[0]["herkomst"] == "statistieken"
+
+
+# --- v1.93.0: de eenheid stond niet vast -----------------------------
+
+
+def test_the_unit_is_read_not_assumed():
+    """Gemeld: "De data is onreëel - Opwek 131548 kWh over een week."
+
+    Dat is een factor duizend: de bronsensor levert wattuur en de code
+    nam kilowattuur aan. Statistieken dragen hun eigen eenheid.
+    """
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    kop = bron.index("async def async_bootstrap_energy_history")
+    blok = bron[kop : kop + 8000]
+
+    assert "get_metadata" in blok
+    assert "ENERGY_UNIT_TO_KWH" in blok
+
+
+def test_the_conversion_table_covers_the_usual_units():
+    from custom_components.energy_management_system.const import (
+        ENERGY_UNIT_TO_KWH,
+    )
+
+    assert ENERGY_UNIT_TO_KWH["Wh"] == 0.001
+    assert ENERGY_UNIT_TO_KWH["kWh"] == 1.0
+    assert ENERGY_UNIT_TO_KWH["MWh"] == 1000.0
+
+
+def test_consumption_is_not_invented(make_coordinator, hass):
+    """Stonden de netmeters niet ingesteld, dan werden import en export
+    nul en kwam verbruik gelijk aan de opwek uit. In de tabel stond
+    daardoor twee keer hetzelfde getal - en dat was meteen de verklikker
+    dat er iets niet klopte."""
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    kop = bron.index("async def async_bootstrap_energy_history")
+    blok = bron[kop : kop + 8000]
+
+    assert '<= set(waarden)' in blok
+
+
+def test_a_missing_field_counts_as_missing_not_zero(make_coordinator, hass):
+    """Een ingelezen dag zonder netmeter mag de optelling niet laten
+    omvallen, maar ook geen nul verzinnen."""
+    c = _coordinator(make_coordinator, dagen=0)
+    c.energy_daily_history = [
+        {
+            "datum": (NU.date() - timedelta(days=n)).isoformat(),
+            "opwek_kwh": 20.0,
+            "import_kwh": None,
+            "export_kwh": None,
+            "verbruik_kwh": None,
+            "zon_export_kwh": None,
+            "herkomst": "statistieken",
+        }
+        for n in range(1, 4)
+    ]
+
+    week = c.get_period_overview(NU)["perioden"]["week"]
+
+    assert week["opwek_kwh"] == 60.0
+    assert week["verbruik_kwh"] == 0.0
+
+
+def test_an_absurd_day_is_rejected():
+    """Een dag met meer dan het plafond is geen meting maar een
+    meterwissel of een teller die opnieuw begon."""
+    from custom_components.energy_management_system.const import (
+        ENERGY_DAY_SANITY_MAX_KWH,
+    )
+
+    assert ENERGY_DAY_SANITY_MAX_KWH < 1000
