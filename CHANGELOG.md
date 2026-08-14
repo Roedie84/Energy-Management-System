@@ -14068,3 +14068,114 @@ staat, en één die eist dat elke verborgen pagina via een tegel
 bereikbaar is.
 
 **Volledige testsuite**: 2128 tests, allemaal groen.
+
+## v1.94.0 — De foute reeks stond er nog
+
+**Gemeld** na de reparatie van v1.93.0: dezelfde 131548 kWh per week.
+
+Terecht, en ik had het moeten voorzien. v1.93.0 repareerde het **inlezen**
+— maar de reeks was al bewaard, en de routine vult alleen dagen *vóór* de
+oudste bekende dag aan. Die 399 foute dagen bleven dus gewoon staan.
+
+**Ingelezen dagen dragen nu een merkteken.** Alles zonder dat merkteken
+komt uit de versie die de eenheid niet omrekende en verbruik gelijkstelde
+aan de opwek; dat wordt weggegooid en opnieuw opgehaald. Verandert er
+later weer iets aan het inlezen, dan volstaat het ophogen van dat getal.
+
+**Live gemeten dagen blijven altijd staan.** Die kennen de splitsing
+tussen zon- en accu-export en zijn niet opnieuw op te halen.
+
+Daarnaast een **vangnet dat losstaat van het merkteken**: elke dag boven
+500 kWh wordt geweerd, wie hem er ook in zette. Een woonhuis met
+zonnepanelen haalt dat niet, dus zo'n waarde komt van een verkeerde
+eenheid, een meterwissel of een teller die opnieuw begon.
+
+Op de Perioden-pagina staat wat er is opgeruimd, naast wat er is
+ingelezen.
+
+**Wat vandaag wél klopte**: 20,98 kWh opwek, 6,19 kWh verbruik, 0,13 van
+het net en 9,6 terug. Het live gedeelte was dus in orde; alleen de
+ingelezen geschiedenis niet.
+
+**Volledige testsuite**: 2132 tests, allemaal groen.
+
+## v1.95.0 — De opruiming draaide op een lege lijst
+
+**Gemeld** na v1.94.0: dezelfde 131548 kWh per week.
+
+De opruiming van foute ingelezen dagen stond **vóór**
+`async_load_persisted_nilm_state()` — dus ruimde hij een lege lijst op,
+waarna de bewaarde reeks er meteen overheen kwam.
+
+**Exact dezelfde volgordefout als v1.49.0.** Toen stond
+`_recompute_measurement_quality()` vóór het terugzetten van de toestand
+en bleef de meetkwaliteit daardoor altijd leeg. Ik heb toen wél de fout
+gerepareerd maar géén test gemaakt die de *volgorde* bewaakt — en dus
+kon dezelfde vorm terugkomen.
+
+Nu drie tests die dat wel doen:
+
+- alles wat de bewaarde reeksen leest of opruimt, moet ná het terugzetten
+  komen;
+- de tick mag pas starten als de toestand terug is;
+- en een vangnet dat omvalt zodra er een nieuwe `async_bootstrap_...`
+  bijkomt die niet expliciet in de volgorde is geplaatst.
+
+Die eerste test is op de proef gesteld door de volgorde in een kopie
+daadwerkelijk om te draaien: dan valt hij om. Een test die groen blijft
+bij de fout die hij hoort te vangen, is erger dan geen test — en dat was
+bij de eerste poging precies wat er gebeurde.
+
+**Volledige testsuite**: 2135 tests, allemaal groen.
+
+## v1.96.0 — Eindcontrole: twee vondsten
+
+**Gevraagd**: "Zijn er verder nog zaken uit de diagnostiek naar voren
+gekomen? Wil niet elke keer een nieuwe versie installeren."
+
+De hele export nagelopen. Twee vondsten.
+
+### De buitensensor leest structureel te warm
+
+De verouderingsdrijvers legden **41,7 °C** buiten vast, en in de
+koelgeschiedenis staan 35,4 en 35,9. Voor Lochem onwaarschijnlijk hoog.
+
+De bron is `hue_outdoor_motion_sensor_1_temperatuur` — een
+bewegingsmelder die in de zon hangt. Die leest bij direct zonlicht
+makkelijk vijf tot tien graden te hoog. Geen uitschieter maar een
+**aanhoudende afwijking**, dus het bestaande piekfilter ziet er niets
+van.
+
+**Dit raakt de aansturing.** De koeling vergelijkt de accu met buiten; een
+te hoge buitenwaarde maakt dat verschil kunstmatig klein en laat de
+ventilator te vroeg stoppen.
+
+De sensor wordt nu vergeleken met de weerbronnen (luchttemperatuur in de
+schaduw). Boven vier graden verschil verschijnt er een melding bij
+*"vraagt een handeling"*. **Er wordt niets bijgesteld** — welke lucht de
+ventilator werkelijk aanzuigt hangt van de opstelling af, en meten gaat
+hier voor sturen.
+
+### Restanten in de plantoetsing
+
+Die droeg nog regels met **−20,82 en −22,73 kWh** aan werkelijke
+zonopbrengst, geschreven vóór de volgordefix van v1.74.0. Negatieve zon
+bestaat niet; die regels worden bij het opstarten verwijderd — ná het
+terugzetten van de toestand, zoals v1.95.0 leerde.
+
+### Wat schoon bleek
+
+- geen interne fouten, geen plausibiliteitswaarschuwingen, doen-stapel
+  leeg
+- zelfvoorziening 97,9%, cycli en accustand kloppen exact met de
+  narekening
+- zonstand 0,4° verschil
+- **nul tekortkwartieren**, laagste stand 34%
+- rendement per halve slag heeft nu twee metingen per kant: laden 89,0 en
+  85,2, ontladen 94,2 en 94,1 — bij drie slaat de methode om
+- NILM 37 apparaten zonder alarm, 20 watersessies, aanwezigheid werkt
+- de modulemelding is omgeslagen: module 1 is nog steeds de warmste maar
+  levert niet minder, dus de melding wijst nu naar de plaatsing in plaats
+  van naar de module
+
+**Volledige testsuite**: 2144 tests, allemaal groen.

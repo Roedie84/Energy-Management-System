@@ -853,6 +853,31 @@ ENERGY_UNIT_TO_KWH = {
 # teller die opnieuw begon. Ruim boven wat een woonhuis met zonnepanelen
 # ooit haalt.
 ENERGY_DAY_SANITY_MAX_KWH = 500.0
+
+# Welke inleesronde een bewaarde dag heeft geschreven (v1.94.0).
+#
+# Gemeld na de reparatie van v1.93.0: de tabel stond nog steeds op
+# 131548 kWh per week. Die versie repareerde het INLEZEN, maar de reeks
+# was al bewaard en wordt alleen aangevuld VOOR de oudste bekende dag.
+#
+# Zonder merkteken valt niet te zien welke dagen uit een kapotte ronde
+# komen. Verhoog dit getal zodra er iets aan het inlezen verandert; dan
+# worden de oude regels weggegooid en opnieuw opgehaald.
+ENERGY_BOOTSTRAP_VERSION = 2
+
+# --- Leest de buitensensor plausibel? (v1.96.0) ----------------------
+# Gevonden bij de eindcontrole: de verouderingsdrijvers legden 41,7 graden
+# buiten vast, en in de koelgeschiedenis staan 35,4 en 35,9. Voor Lochem
+# onwaarschijnlijk hoog.
+#
+# De sensor is een Hue-bewegingsmelder die in de zon hangt. Die leest bij
+# direct zonlicht makkelijk vijf tot tien graden te hoog - geen
+# uitschieter maar een aanhoudende afwijking, dus het piekfilter ziet er
+# niets van.
+#
+# Vier graden boven de weerbron is meer dan meetruis en minder dan wat
+# een sensor in de volle zon laat zien; daartussen zit de grens.
+OUTDOOR_SENSOR_BIAS_WARN_C = 4.0
 DEFAULT_SALDEREN_END_DATE = "2026-12-31"
 
 # Welk attribuut van de prijssensor het teruglevertarief NA saldering

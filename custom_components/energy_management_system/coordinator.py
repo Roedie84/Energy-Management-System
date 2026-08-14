@@ -434,6 +434,8 @@ from .const import (
     WATER_VOLUME_AGREEMENT_TOLERANCE,
     CONF_CONTRACT_START_DATE,
     ENERGY_BALANCE_ERROR_HISTORY_LENGTH,
+    ENERGY_BOOTSTRAP_VERSION,
+    OUTDOOR_SENSOR_BIAS_WARN_C,
     ENERGY_DAILY_HISTORY_DAYS,
     ENERGY_DAY_SANITY_MAX_KWH,
     ENERGY_UNIT_TO_KWH,
@@ -1438,16 +1440,50 @@ class EnergyManagementSystemCoordinator:
         everything else has caught up.
         """
         await self.async_bootstrap_night_consumption_from_history()
-        # v1.92.0: en de dagreeks uit de langetermijnstatistieken.
-        try:
-            await self.async_bootstrap_energy_history()
-        except Exception:  # noqa: BLE001 - mag nooit het opstarten breken
-            _LOGGER.exception("Kon de energiegeschiedenis niet inlezen")
         # v0.63.115: normaal al geladen in `async_setup_entry`, vóór de
         # platforms werden opgezet. Blijft hier staan als vangnet (o.a.
         # voor herladen van opties en voor tests die de coordinator
         # los opzetten); de load zelf is idempotent.
         await self.async_load_persisted_nilm_state()
+
+        # v1.96.0: restanten van de volgordefout uit v1.74.0 opruimen.
+        #
+        # Gevonden bij de eindcontrole: de plantoetsing draagt nog regels
+        # met een werkelijke zonopbrengst van -20,82 en -22,73 kWh. Die
+        # zijn geschreven toen de dagtellers al op nul stonden voordat de
+        # toetsing draaide. De fout is in v1.74.0 gerepareerd, maar net
+        # als bij de energiereeks bleven de foute regels staan.
+        #
+        # Negatieve zon bestaat niet; zulke regels zeggen niets en maken
+        # het overzicht onbetrouwbaar.
+        voor_toetsing = len(self.plan_review_history)
+        self.plan_review_history = [
+            r
+            for r in self.plan_review_history
+            if (r.get("zon") or {}).get("werkelijk_kwh", 0) >= 0
+        ]
+        if len(self.plan_review_history) != voor_toetsing:
+            _LOGGER.info(
+                "%d plantoetsing-regel(s) met onmogelijke waarden verwijderd",
+                voor_toetsing - len(self.plan_review_history),
+            )
+            self.schedule_persisted_state_save()
+
+        # v1.95.0: NA het terugzetten van de bewaarde toestand.
+        #
+        # Gemeld na v1.94.0: dezelfde 131548 kWh. De opruiming stond vóór
+        # `async_load_persisted_nilm_state()`, dus ruimde hij een lege
+        # lijst op waarna de bewaarde reeks er overheen kwam.
+        #
+        # Exact dezelfde volgordefout als v1.49.0, waar
+        # `_recompute_measurement_quality()` vóór het terugzetten stond en
+        # de meetkwaliteit daardoor altijd leeg bleef. Toen heb ik er geen
+        # test voor gemaakt die de VOLGORDE bewaakt; nu wel.
+        try:
+            await self.async_bootstrap_energy_history()
+        except Exception:  # noqa: BLE001 - mag nooit het opstarten breken
+            _LOGGER.exception("Kon de energiegeschiedenis niet inlezen")
+
         self._unsub_interval = async_track_time_interval(
             self.hass,
             self._handle_interval,
@@ -7093,6 +7129,20 @@ class EnergyManagementSystemCoordinator:
                     "niveau": RELIABILITY_NOT_CONFIGURED,
                     "label": None,
                     "wat_ontbreekt": zonstand.get("reden", ""),
+                }
+            )
+
+        # v1.96.0: een buitensensor die structureel te warm leest raakt
+        # de koeling, dus dat vraagt een handeling (verhangen).
+        buiten = self.get_outdoor_sensor_check()
+        if buiten.get("verdacht"):
+            doen.append(
+                {
+                    "groep": "Ingangen",
+                    "naam": "Buitensensor leest te warm",
+                    "niveau": RELIABILITY_NOT_CONFIGURED,
+                    "label": None,
+                    "wat_ontbreekt": buiten.get("reden", ""),
                 }
             )
 
@@ -13976,6 +14026,98 @@ class EnergyManagementSystemCoordinator:
         ("co2_kg", "CO2", "kg"),
     )
 
+    def get_outdoor_sensor_check(self) -> dict:
+        """Leest de buitensensor plausibel? (v1.96.0)
+
+        Gevonden bij de eindcontrole van 14 augustus: de
+        verouderingsdrijvers legden een buitentemperatuur van 41,7 °C
+        vast, en in de koelgeschiedenis staan waarden van 35,4 en 35,9.
+        Voor Lochem is dat onwaarschijnlijk hoog.
+
+        De sensor is `hue_outdoor_motion_sensor_1_temperatuur` - een
+        bewegingsmelder die in de zon hangt. Zulke sensoren lezen bij
+        direct zonlicht makkelijk vijf tot tien graden te hoog. Dat is
+        geen uitschieter maar een aanhoudende afwijking, dus het
+        bestaande piekfilter ziet er niets van.
+
+        Dit RAAKT de aansturing: de koeling vergelijkt de accu met buiten,
+        en een te hoge buitenwaarde maakt dat verschil kunstmatig klein -
+        waardoor er te vroeg wordt gestopt met koelen.
+
+        Er wordt niets bijgesteld. De weerbron is de referentie
+        (luchttemperatuur in de schaduw), en het verschil wordt gemeld
+        zodat jij kunt bepalen of de sensor verhangen moet worden.
+        """
+        sensor_waarde = self.climate_live_outdoor_temp_c
+        weerbron = self._weather_outdoor_temperature_c()
+        if sensor_waarde is None or weerbron is None:
+            return {
+                "beschikbaar": False,
+                "reden": "Geen sensor of geen weerbron om mee te vergelijken.",
+            }
+
+        verschil = sensor_waarde - weerbron
+        te_warm = verschil >= OUTDOOR_SENSOR_BIAS_WARN_C
+        return {
+            "beschikbaar": True,
+            "sensor_c": round(sensor_waarde, 1),
+            "weerbron_c": round(weerbron, 1),
+            "verschil_c": round(verschil, 1),
+            "verdacht": te_warm,
+            "reden": (
+                f"Sensor leest {verschil:.1f} °C hoger dan de weerbron "
+                f"({sensor_waarde:.1f} tegen {weerbron:.1f}). Dat past bij een "
+                "sensor in direct zonlicht. De koeling vergelijkt de accu met "
+                "deze waarde, dus een te hoge meting laat de ventilator te "
+                "vroeg stoppen."
+                if te_warm
+                else (
+                    f"Sensor en weerbron liggen {verschil:+.1f} °C uit elkaar - "
+                    "binnen het normale."
+                )
+            ),
+        }
+
+    def _weather_outdoor_temperature_c(self) -> float | None:
+        """De actuele buitentemperatuur volgens de weerbronnen."""
+        waarden = []
+        for sleutel in (
+            CONF_KNMI_WEATHER_ENTITY,
+            CONF_OPENWEATHERMAP_WEATHER_ENTITY,
+        ):
+            entity_id = self.config.get(sleutel)
+            if not entity_id:
+                continue
+            staat = self.hass.states.get(entity_id)
+            if staat is None:
+                continue
+            temp = staat.attributes.get("temperature")
+            if isinstance(temp, (int, float)):
+                waarden.append(float(temp))
+        if not waarden:
+            return None
+        return statistics.median(waarden)
+
+    @staticmethod
+    def _energiedag_is_onzin(regel: dict) -> bool:
+        """Is deze dagregel fysiek onmogelijk? (v1.94.0)
+
+        Een woonhuis met zonnepanelen haalt geen 500 kWh op een dag. Zo'n
+        waarde komt van een verkeerd omgerekende eenheid, een
+        meterwissel, of een teller die opnieuw begon.
+        """
+        for sleutel in (
+            "opwek_kwh",
+            "verbruik_kwh",
+            "import_kwh",
+            "export_kwh",
+            "accu_ontladen_kwh",
+        ):
+            waarde = regel.get(sleutel)
+            if waarde is not None and abs(waarde) > ENERGY_DAY_SANITY_MAX_KWH:
+                return True
+        return False
+
     async def async_bootstrap_energy_history(self) -> None:
         """Vult de dagreeks uit de statistieken van Home Assistant
         (v1.92.0).
@@ -13995,6 +14137,36 @@ class EnergyManagementSystemCoordinator:
         Bestaande dagen worden nooit overschreven: wat live is gemeten
         wint van wat achteraf uit statistieken komt.
         """
+        # v1.94.0: eerst opruimen wat de vorige versie verkeerd heeft
+        # ingelezen.
+        #
+        # Gemeld na de reparatie van v1.93.0: de tabel stond nog steeds op
+        # 131548 kWh per week. Terecht - v1.93.0 repareerde het INLEZEN,
+        # maar de reeks was al bewaard, en de routine vult alleen dagen
+        # VOOR de oudste bekende dag aan. Die 399 foute dagen bleven dus
+        # staan.
+        #
+        # Ingelezen dagen dragen sindsdien een merkteken. Alles zonder dat
+        # merkteken komt uit de versie die de eenheid niet omrekende en
+        # verbruik gelijkstelde aan de opwek; dat wordt weggegooid en
+        # opnieuw opgehaald. Live gemeten dagen blijven altijd staan.
+        voor = len(self.energy_daily_history)
+        self.energy_daily_history = [
+            r
+            for r in self.energy_daily_history
+            if r.get("herkomst") != "statistieken"
+            or r.get("inlees_versie", 0) >= ENERGY_BOOTSTRAP_VERSION
+        ]
+        # En een vangnet dat losstaat van het merkteken: een dag die de
+        # plausibiliteitsgrens overschrijdt hoort er nooit in te staan,
+        # ongeacht welke ronde hem schreef.
+        self.energy_daily_history = [
+            r
+            for r in self.energy_daily_history
+            if not self._energiedag_is_onzin(r)
+        ]
+        opgeruimd = voor - len(self.energy_daily_history)
+
         if self.energy_daily_history:
             # Alleen de dagen VOOR de oudste bekende dag aanvullen.
             oudste = min(
@@ -14127,6 +14299,7 @@ class EnergyManagementSystemCoordinator:
                 # pas sinds v1.76.0 live gemeten.
                 "zon_export_kwh": None,
                 "herkomst": "statistieken",
+                "inlees_versie": ENERGY_BOOTSTRAP_VERSION,
             }
             for dag, waarden in sorted(per_dag.items())
             if dag < oudste
@@ -14143,6 +14316,11 @@ class EnergyManagementSystemCoordinator:
         self.energy_history_bootstrap_note = (
             f"{len(toegevoegd)} dag(en) ingelezen uit de statistieken, vanaf "
             f"{toegevoegd[0]['datum']}."
+            + (
+                f" {opgeruimd} dag(en) uit een oudere inleesronde verwijderd."
+                if opgeruimd
+                else ""
+            )
         )
         self.schedule_persisted_state_save()
 
