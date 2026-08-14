@@ -13895,3 +13895,133 @@ losse kwartieren gelijk is aan de schatting over het hele venster — dat
 is precies wat er misging.
 
 **Volledige testsuite**: 2101 tests, allemaal groen.
+
+## v1.90.0 — Zelfconsumptie per periode, en het contractjaar
+
+**Gevraagd**: "Misschien zelfconsumptie per dag/week/maand/jaar?" en
+"Tevens lijkt het me handig dat de start van mijn contract bij Zonneplan
+ingevoerd kan worden zodat ik precies het gebeuren voor mijn contractjaar
+kan zien."
+
+Daaraan ging een scherpere vraag vooraf: *"de zonne-energie van gisteren,
+opgeslagen in de batterij, is vannacht gebruikt — dat is toch ook
+zelfconsumptie?"*
+
+**Ja, en de formule doet dat al goed:** wat niet is geëxporteerd, is zelf
+gebruikt. Zon die via de accu in huis belandt telt dus mee.
+
+Waar het misging is de **daggrens**. Op 14 augustus 08:23 stond er 0,109
+kWh opwek tegen 0,448 kWh export — allemaal gisteren opgeslagen zon die
+vannacht is verkocht. Die wordt afgerekend op de kalenderdag van vandaag,
+terwijl hij bij de opwek van gisteren hoort. Vandaar ook de `unknown`:
+onder een halve kWh opwek wordt er bewust geen aandeel berekend, want
+daar rolt geen betekenisvol percentage uit.
+
+**Nieuw: een dagreeks van 400 dagen** met opwek, zon-export, accu-export,
+verbruik en import. Daarop rusten:
+
+| Periode | |
+|---|---|
+| Week | laatste 7 dagen |
+| Maand | vanaf de eerste van de maand |
+| Jaar | vanaf 1 januari |
+| **Contractjaar** | vanaf de ingevoerde startdatum |
+
+Over een week valt de daggrens weg, en dat cijfer zegt dus meer dan dat
+van vandaag. Zelfvoorziening staat er per periode bij.
+
+Het contractjaar is nieuw configureerbaar (`JJJJ-MM-DD`) en schuift
+automatisch mee: begint het contract later in het jaar dan vandaag, dan
+loopt het lopende jaar vanaf vorig jaar.
+
+Elke periode gebruikt de **gemeten** zon-export uit v1.76.0. Dagen van
+daarvóór hebben die splitsing niet en vallen terug op de totale export
+begrensd op de opwek, zoals v1.9.2 al deed.
+
+Zichtbaar op de nieuwe subview **Zelfconsumptie**, bereikbaar vanaf de
+accupagina. **Negen tests erbij.**
+
+**Volledige testsuite**: 2110 tests, allemaal groen.
+
+## v1.91.0 — Alles per dag, week, maand, jaar en contractjaar
+
+**Gevraagd**: "Misschien dag/week/maand/jaar voor alle relevante sensoren
+invoeren en zichtbaar maken? Kosten, verbruik, opwek, accu, noem het maar
+op."
+
+De dagreeks uit v1.90.0 draagt nu ook **accu-ontlading, kosten en CO₂**.
+Daarmee ligt alles in één reeks en volgt de rest vanzelf:
+
+| | Vandaag | Week | Maand | Jaar | Contractjaar |
+|---|---|---|---|---|---|
+| Opwek (kWh) | | | | | |
+| Verbruik (kWh) | | | | | |
+| Van het net (kWh) | | | | | |
+| Naar het net (kWh) | | | | | |
+| Uit de accu (kWh) | | | | | |
+| Kosten (EUR) | | | | | |
+| CO₂ (kg) | | | | | |
+| Besparing (EUR) | | | | | |
+
+**Eén reeks, één optelling, één tabel.** Losse tellers per onderwerp en
+per periode zouden tientallen sensoren opleveren die elk hun eigen
+dagwissel en herstart moeten overleven — en dat is precies waar deze week
+een paar keer iets misging.
+
+Besparing wordt apart berekend, want dat is een **verschil** tussen twee
+reeksen en geen optelling. Vandaag komt uit de lopende tellers en telt
+mee vanaf middernacht; de langere perioden rusten op afgesloten dagen.
+
+Dagen van vóór deze versie missen de nieuwe velden; die tellen als nul
+in plaats van de hele optelling te laten omvallen.
+
+Zichtbaar op de nieuwe subview **Perioden**, bereikbaar vanaf de
+accupagina naast Zelfconsumptie.
+
+**Acht tests erbij.**
+
+**Volledige testsuite**: 2118 tests, allemaal groen.
+
+## v1.92.0 — Historische cijfers en gemiddelden
+
+**Gevraagd**: "Historische cijfers kun je toch meenemen? Kan ik nu ook
+startdatum contract invullen? Worden de kosten en het verbruik etc ook
+dag/week/maand/jaar meegenomen en gemiddelden etc."
+
+Drie keer ja, en op de eerste had ik me te snel neergelegd.
+
+### Geschiedenis wordt nu ingelezen
+
+Home Assistant houdt van elke energiesensor
+**langetermijnstatistieken** bij — per uur, jaren terug. In deze
+integratie staat daar al een voorbeeld van:
+`async_bootstrap_night_consumption_from_history` uit een eerdere versie.
+Ik had beter moeten kijken voordat ik zei dat het niet kon.
+
+Bij het opstarten wordt de dagreeks tot **400 dagen** terug aangevuld uit
+die statistieken. Alleen dagen vóór de oudste bekende dag: wat live is
+gemeten wint altijd, want die kent de splitsing tussen zon- en
+accu-export.
+
+**Alleen uit meters.** Er zijn twee nieuwe configuratievelden voor de
+kWh-meters van afname en teruglevering. Een vermogenssensor zou per uur
+geïntegreerd moeten worden en dat wordt een schatting — deze cijfers
+moeten naast een jaarafrekening kunnen liggen.
+
+Ingelezen dagen missen de export-splitsing (die wordt pas sinds v1.76.0
+gemeten) en dragen daarom `herkomst: statistieken`. Voor die dagen valt
+de zelfconsumptie terug op de oude aanname, en dat is navolgbaar in
+plaats van stilzwijgend.
+
+### Gemiddelden per dag
+
+Elke periode toont nu ook het **gemiddelde per dag** voor alle
+grootheden. Zonder dat is een maand niet met een week te vergelijken —
+dan kijk je naar het aantal dagen in plaats van naar het verbruik.
+
+### En de contractdatum
+
+Die kon al sinds v1.90.0: **Configureren → Startdatum energiecontract**,
+als `JJJJ-MM-DD`. Het contractjaar verschijnt dan als extra kolom.
+
+**Volledige testsuite**: 2123 tests, allemaal groen.

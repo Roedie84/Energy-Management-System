@@ -808,6 +808,35 @@ FEEDIN_PREMIUM_EUR_PER_KWH = 0.02
 # (ISO-datum). Configureerbaar, niet hard ingebakken, omdat politiek
 # uitstel/vervroeging in het verleden al meerdere keren is voorgekomen.
 CONF_SALDEREN_END_DATE = "salderen_end_date"
+
+# --- Contractjaar (v1.90.0) ------------------------------------------
+# Gevraagd: "Tevens lijkt het me handig dat de start van mijn contract
+# bij Zonneplan ingevoerd kan worden zodat ik precies het gebeuren voor
+# mijn contract jaar kan zien."
+#
+# Een energiecontract loopt zelden gelijk met het kalenderjaar, en de
+# afrekening gaat over het contractjaar. Zonder deze datum vergelijk je
+# appels met de jaaropgave.
+CONF_CONTRACT_START_DATE = "contract_start_date"
+
+# --- Dagreeks voor zelfconsumptie over langere perioden (v1.90.0) ----
+# Gevraagd: "Misschien zelfconsumptie per dag/week/maand/jaar?"
+#
+# En daar zit een tweede reden onder. De zelfconsumptie per DAG rekent
+# af op de kalenderdag: zon die gisteren in de accu ging en vannacht
+# wordt verkocht, telt vandaag als export terwijl hij bij de opwek van
+# gisteren hoort. Op 14 augustus 08:23 stond er 0,109 kWh opwek tegen
+# 0,448 kWh export - allemaal uit de accu van gisteren.
+#
+# Over een week of langer valt die daggrens weg. Vierhonderd dagen is
+# genoeg voor een volledig contractjaar plus wat marge.
+ENERGY_DAILY_HISTORY_DAYS = 400
+
+# Onder deze opwek in een periode valt er geen zinnig aandeel te
+# berekenen. Gemeld: "Zelfconsumptie klopt niet? staat op unknown?" - op
+# 14 augustus 08:23 stond er 0,109 kWh opwek tegen 0,448 kWh export, en
+# daar rolt geen betekenisvol percentage uit.
+SELF_CONSUMPTION_MIN_PV_KWH = 0.5
 DEFAULT_SALDEREN_END_DATE = "2026-12-31"
 
 # Welk attribuut van de prijssensor het teruglevertarief NA saldering
@@ -1491,6 +1520,9 @@ PERSISTED_PLAIN_FIELDS = (
     "fallback_since",
     # v1.59.0: de dagreeks van verouderingsdrijvers.
     "veroudering_history",
+    # v1.90.0: de dagreeks waar zelfconsumptie per week/maand/jaar op
+    # rust.
+    "energy_daily_history",
     # v1.61.0: wat een cyclus werkelijk kostte, per apparaat gemeten.
     "appliance_cycle_kwh",
     "_appliance_cycle_history",
@@ -1630,6 +1662,8 @@ PERSISTED_PLAIN_FIELDS = (
     "co2_emitted_today_kg",
     "pv_production_today_kwh",
     "pv_export_today_kwh",
+    # v1.90.0: de dagreeks voor de zelfconsumptie over een week.
+    "pv_daily_history",
     # v1.76.0: de export gesplitst in zon en accu, per tick gemeten.
     "solar_export_today_kwh",
     "battery_export_today_kwh",
@@ -2561,6 +2595,18 @@ DAILY_REPORT_HISTORY_DAYS = 30
 # heeft.
 CONF_PV_ENERGY_SENSOR = "pv_energy_sensor_entity"
 
+# --- kWh-meters voor de geschiedenis (v1.92.0) -----------------------
+# Gevraagd: "Historische cijfers kun je toch meenemen?"
+#
+# Ja - Home Assistant houdt van elke energiesensor
+# langetermijnstatistieken bij, per uur en jaren terug. Maar alleen van
+# METERS (kWh, total_increasing); een vermogenssensor zou per uur
+# geintegreerd moeten worden en dat wordt een schatting. Deze cijfers
+# moeten naast een jaarafrekening kunnen liggen, dus dat is niet goed
+# genoeg.
+CONF_GRID_IMPORT_ENERGY_SENSOR = "grid_import_energy_sensor_entity"
+CONF_GRID_EXPORT_ENERGY_SENSOR = "grid_export_energy_sensor_entity"
+
 # Een meterstand hoort te stijgen. Daalt hij, dan is de omvormer
 # herstart of de teller teruggezet; dan is het verschil betekenisloos en
 # wordt de dag opnieuw geijkt in plaats van een negatieve opwek te
@@ -3491,6 +3537,22 @@ SOLAR_POOR_DAY_KWH = 5.0
 # overblijven om de woning te voeden tot het volgende goedkope blok -
 # mét deze marge. Anders staat de accu straks leeg terwijl het huis aan
 # het net hangt.
+# --- Zelfconsumptie over een venster (v1.90.0) -----------------------
+# Gevraagd: "de zonne-energie van gisteren, opgeslagen in de batterij, is
+# vannacht gebruikt - dat is toch ook zelfconsumptie?"
+#
+# Ja, en de formule telt dat ook zo. Maar de daggrens vertekent: wordt
+# die opgeslagen zon de volgende ochtend verkocht, dan telt de export bij
+# de opwek van die dag terwijl hij bij gisteren hoort.
+#
+# Een week is lang genoeg om dat tegen elkaar weg te laten vallen, en
+# kort genoeg om nog iets over het seizoen te zeggen.
+SELF_CONSUMPTION_WINDOW_DAYS = 7
+
+# Onder deze opwek in het hele venster valt er geen zinnig aandeel te
+# berekenen.
+SELF_CONSUMPTION_MIN_KWH = 1.0
+
 SELL_RESERVE_SAFETY_FACTOR = 1.5
 
 # v1.27.0: de toets hierboven rekende met de NETTOSOM tot het goedkope

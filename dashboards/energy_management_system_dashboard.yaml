@@ -486,7 +486,7 @@ views:
   panel: true
   cards:
   - type: picture-elements
-    image: /local/energy_management_system_overview.svg?v=1.89.0
+    image: /local/energy_management_system_overview.svg?v=1.92.0
     elements:
     - type: state-label
       entity: sensor.woonkamer_energy_management_system_system_status
@@ -1352,7 +1352,7 @@ views:
         _{{ e.voorbehoud }}_{% endif %}
 
 
-        **Verder:** [Rendement van de accu](/energy-management-system/detail-rendement) · [Wat veroudering versnelt](/energy-management-system/detail-veroudering)'
+        **Verder:** [Dag/week/maand/jaar](/energy-management-system/detail-perioden) · [Zelfconsumptie](/energy-management-system/detail-zelfconsumptie) · [Rendement van de accu](/energy-management-system/detail-rendement) · [Wat veroudering versnelt](/energy-management-system/detail-veroudering)'
       grid_options:
         columns: 12
         rows: auto
@@ -1448,6 +1448,75 @@ views:
         {% for o in m.onderdelen %}| {{ o.naam }} | {{ o.procent }}% | {{ o.soort }} |
 
         {% endfor %}{% endif %}'
+      grid_options:
+        columns: 12
+        rows: auto
+- title: Perioden
+  path: detail-perioden
+  subview: true
+  type: sections
+  max_columns: 1
+  sections:
+  - type: grid
+    cards:
+    - type: custom:mushroom-title-card
+      title: Dag, week, maand, jaar
+      subtitle: Alle cijfers naast elkaar
+    - type: markdown
+      content: '{% set o = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''perioden'') or {} %}{% set p = o.get(''perioden'') or {} %}{% set g = o.get(''grootheden'') or [] %}{% if p %}| | {% for naam in p %}{{ naam }} | {% endfor %}
+
+        |---|{% for naam in p %}---|{% endfor %}
+
+        {% for x in g %}| {{ x.naam }} ({{ x.eenheid }}) | {% for naam, w in p.items() %}{{ w.get(x.sleutel, ''—'') }} | {% endfor %}
+
+        {% endfor %}| Besparing (EUR) | {% for naam, w in p.items() %}{{ w.get(''besparing_eur'', ''—'') }} | {% endfor %}
+
+        | _gemiddeld per dag_ | {% for naam, w in p.items() %}{% set g = w.get(''gemiddeld_per_dag'') %}{{ (g.verbruik_kwh ~ '' kWh'') if g else ''—'' }} | {% endfor %}
+
+        {% else %}Nog geen afgesloten dag in de reeks.{% endif %}{% if o.get(''contractjaar_begin'') %}
+
+
+        Contractjaar begon op {{ o.contractjaar_begin }}.{% endif %}
+
+
+        {% if o.get(''geschiedenis'') %}
+
+
+        _{{ o.geschiedenis }}_{% endif %}
+
+
+        _{{ o.get(''toelichting'', '''') }}_'
+      grid_options:
+        columns: 12
+        rows: auto
+- title: Zelfconsumptie
+  path: detail-zelfconsumptie
+  subview: true
+  type: sections
+  max_columns: 1
+  sections:
+  - type: grid
+    cards:
+    - type: custom:mushroom-title-card
+      title: Zelfconsumptie
+      subtitle: Welk deel van de zon zelf is gebruikt
+    - type: markdown
+      content: '{% set z = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''zelfconsumptie'') or {} %}{% set p = z.get(''perioden'') or {} %}Vandaag: {{ z.get(''vandaag_procent'') if z.get(''vandaag_procent'') is not none else ''nog te weinig zon'' }}{% if z.get(''vandaag_procent'') is not none %}%{% endif %}.
+
+
+        {% if p %}| Periode | Dagen | Opwek | Zon het net op | Zelfconsumptie | Zelfvoorziening |
+
+        |---|---|---|---|---|---|
+
+        {% for naam, w in p.items() %}| {{ naam }} | {{ w.dagen }} | {{ w.opwek_kwh }} kWh | {{ w.zon_export_kwh }} kWh | {{ w.zelfconsumptie_procent }}% | {{ w.zelfvoorziening_procent if w.zelfvoorziening_procent is not none else ''—'' }}{% if w.zelfvoorziening_procent is not none %}%{% endif %} |
+
+        {% endfor %}{% else %}Nog geen volledige dag in de reeks; de eerste komt na middernacht.{% endif %}{% if z.get(''contractjaar_begin'') %}
+
+
+        Contractjaar begon op {{ z.contractjaar_begin }}.{% endif %}
+
+
+        _{{ z.get(''toelichting'', '''') }}_'
       grid_options:
         columns: 12
         rows: auto

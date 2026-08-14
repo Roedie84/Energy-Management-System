@@ -421,6 +421,15 @@ async def async_get_config_entry_diagnostics(
             # v1.23.0: mag er verkocht worden, en waarom wel of niet?
             "sell_check": coordinator.last_sell_check,
             # v1.87.0: hoe de reservemarge is opgebouwd.
+            # v1.90.0: zelfconsumptie over langere perioden.
+            # v1.91.0: alle dagcijfers over dag/week/maand/jaar.
+            "period_overview": _veilig(
+                "get_period_overview", coordinator.get_period_overview
+            ),
+            "self_consumption_overview": _veilig(
+                "get_self_consumption_overview",
+                coordinator.get_self_consumption_overview,
+            ),
             "reserve_margin_overview": _veilig(
                 "get_reserve_margin_overview",
                 coordinator.get_reserve_margin_overview,

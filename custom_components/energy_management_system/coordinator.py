@@ -372,6 +372,8 @@ from .const import (
     CONF_PRESENCE_LIGHT_ENTITIES,
     CONF_PRESENCE_ABSENCE_MINUTES,
     CONF_PRESENCE_TV_ENTITY,
+    CONF_GRID_EXPORT_ENERGY_SENSOR,
+    CONF_GRID_IMPORT_ENERGY_SENSOR,
     CONF_PV_ENERGY_SENSOR,
     PV_ENERGY_METER_RESET_TOLERANCE_KWH,
     CONF_PV_ACTUAL_TILT_DEGREES,
@@ -396,6 +398,8 @@ from .const import (
     SOLAR_POOR_DAY_KWH,
     SOLAR_DEFER_LATEST_HOUR,
     SOLAR_DEFER_MIN_PRICE_GAIN_EUR,
+    SELF_CONSUMPTION_MIN_KWH,
+    SELF_CONSUMPTION_WINDOW_DAYS,
     SELL_RESERVE_SAFETY_FACTOR,
     SELL_RESERVE_DEEPEST_SAFETY_FACTOR,
     SOLAR_DEFER_SAFETY_FACTOR,
@@ -428,7 +432,10 @@ from .const import (
     PERSISTED_PLAIN_FIELDS,
     PERSISTED_STATE_SAVE_DELAY_SECONDS,
     WATER_VOLUME_AGREEMENT_TOLERANCE,
+    CONF_CONTRACT_START_DATE,
     ENERGY_BALANCE_ERROR_HISTORY_LENGTH,
+    ENERGY_DAILY_HISTORY_DAYS,
+    SELF_CONSUMPTION_MIN_PV_KWH,
     ENERGY_BALANCE_ERROR_BAD_THRESHOLD_W,
     MEASUREMENT_QUALITY_GOOD_THRESHOLD,
     MEASUREMENT_QUALITY_DEGRADED_THRESHOLD,
@@ -1228,8 +1235,14 @@ class EnergyManagementSystemCoordinator:
         # de ratio's zelf worden er telkens live uit afgeleid.
         self.pv_production_today_kwh: float = 0.0
         self.pv_export_today_kwh: float = 0.0
+        # v1.90.0: dagreeks voor zelfconsumptie over langere perioden.
+        self.energy_daily_history: list[dict] = []
+        # v1.92.0: wat het inlezen van de geschiedenis opleverde.
+        self.energy_history_bootstrap_note: str | None = None
         # v1.76.0: de export gesplitst op het moment zelf.
         self.solar_export_today_kwh: float = 0.0
+        # v1.90.0: dagreeks van opwek en export, voor het weekcijfer.
+        self.pv_daily_history: list[dict] = []
         self.battery_export_today_kwh: float = 0.0
         # v1.16.9: hoeveel de accu vandaag heeft ONTLADEN. Nodig om
         # export toe te wijzen: wat de accu levert kan geen zon-export
@@ -1423,6 +1436,11 @@ class EnergyManagementSystemCoordinator:
         everything else has caught up.
         """
         await self.async_bootstrap_night_consumption_from_history()
+        # v1.92.0: en de dagreeks uit de langetermijnstatistieken.
+        try:
+            await self.async_bootstrap_energy_history()
+        except Exception:  # noqa: BLE001 - mag nooit het opstarten breken
+            _LOGGER.exception("Kon de energiegeschiedenis niet inlezen")
         # v0.63.115: normaal al geladen in `async_setup_entry`, vóór de
         # platforms werden opgezet. Blijft hier staan als vangnet (o.a.
         # voor herladen van opties en voor tests die de coordinator
@@ -13743,6 +13761,56 @@ class EnergyManagementSystemCoordinator:
             # dus het ijkpunt moet mee - anders telt de opwek van
             # gisteren vanaf middernacht gewoon door.
             self._reset_pv_energy_meter_day()
+            # v1.90.0: de dag afsluiten in een reeks, vóór de tellers op
+            # nul gaan.
+            #
+            # Gevraagd: "de zonne-energie van gisteren, opgeslagen in de
+            # batterij, is vannacht gebruikt - dat is toch ook
+            # zelfconsumptie?"
+            #
+            # Ja, en de formule telt dat ook zo: wat niet is
+            # teruggeleverd geldt als zelf verbruikt. Maar de DAGGRENS
+            # vertekent. Op 14 augustus 08:23 stond er 0,109 kWh opwek
+            # tegen 0,448 kWh export - allemaal uit de accu, dus zon van
+            # gisteren. Dat drukt de zelfconsumptie van vandaag terwijl
+            # het over gisteren gaat.
+            #
+            # Over een week valt dat tegen elkaar weg: wat aan het begin
+            # wordt meegeteld, valt aan het eind af.
+            if self.pv_production_today_kwh > 0 or self.pv_export_today_kwh > 0:
+                self.pv_daily_history.append(
+                    {
+                        "datum": (
+                            self._self_sufficiency_day_key.isoformat()
+                            if self._self_sufficiency_day_key
+                            else None
+                        ),
+                        "opwek_kwh": round(self.pv_production_today_kwh, 3),
+                        "export_kwh": round(self.pv_export_today_kwh, 3),
+                        "zon_export_kwh": round(self.solar_export_today_kwh, 3),
+                        "gemeten_splitsing": self._solar_export_gemeten(),
+                    }
+                )
+                self.pv_daily_history = self.pv_daily_history[
+                    -SELF_CONSUMPTION_WINDOW_DAYS:
+                ]
+
+            # v1.90.0: de dag die wordt afgesloten eerst vastleggen.
+            #
+            # Gevraagd: "Misschien zelfconsumptie per
+            # dag/week/maand/jaar?" Daarvoor is een dagreeks nodig, en die
+            # bestond niet - er was alleen een kostenreeks van zeven
+            # dagen.
+            #
+            # En er zit een tweede reden onder. De zelfconsumptie per DAG
+            # rekent af op de kalenderdag: zon die gisteren in de accu
+            # ging en vannacht wordt verkocht, telt vandaag als export
+            # terwijl hij bij de opwek van gisteren hoort. Op 14 augustus
+            # 08:23 stond er 0,109 kWh opwek tegen 0,448 kWh export -
+            # allemaal uit de accu van gisteren. Over een week valt die
+            # daggrens weg.
+            if self._self_sufficiency_day_key is not None:
+                self._sluit_energiedag_af(self._self_sufficiency_day_key)
             self.pv_export_today_kwh = 0.0
             self.solar_export_today_kwh = 0.0
             self.battery_export_today_kwh = 0.0
@@ -13836,6 +13904,392 @@ class EnergyManagementSystemCoordinator:
         self.grid_import_today_kwh += (
             max(0.0, p1_power_w) / 1000
         ) * elapsed_hours
+
+    def _sluit_energiedag_af(self, dag) -> None:
+        """Legt de energiecijfers van een afgesloten dag vast (v1.90.0)."""
+        if self.pv_production_today_kwh <= 0 and self.gross_consumption_today_kwh <= 0:
+            return
+        self.energy_daily_history.append(
+            {
+                "datum": dag.isoformat() if hasattr(dag, "isoformat") else str(dag),
+                "opwek_kwh": round(self.pv_production_today_kwh, 3),
+                "zon_export_kwh": round(self.solar_export_today_kwh, 3),
+                "accu_export_kwh": round(self.battery_export_today_kwh, 3),
+                "export_kwh": round(self.pv_export_today_kwh, 3),
+                "verbruik_kwh": round(self.gross_consumption_today_kwh, 3),
+                "import_kwh": round(self.grid_import_today_kwh, 3),
+                # v1.91.0: ook de accu en de kosten, zodat één reeks alle
+                # onderwerpen draagt.
+                #
+                # Gevraagd: "Misschien dag/week/maand/jaar voor alle
+                # relevante sensoren invoeren en zichtbaar maken? Kosten,
+                # verbruik, opwek, accu, noem het maar op."
+                "accu_ontladen_kwh": round(self.battery_discharge_today_kwh, 3),
+                "kosten_eur": round(self.actual_cost_today_eur, 4),
+                "zonder_sturing_eur": round(
+                    self.counterfactual_cost_today_eur, 4
+                ),
+                "co2_kg": round(self.co2_emitted_today_kg, 4),
+            }
+        )
+        self.energy_daily_history = self.energy_daily_history[
+            -ENERGY_DAILY_HISTORY_DAYS:
+        ]
+        self.schedule_persisted_state_save()
+
+    def _contract_start(self):
+        """De startdatum van het energiecontract, of None (v1.90.0)."""
+        rauw = self.config.get(CONF_CONTRACT_START_DATE)
+        if not rauw:
+            return None
+        try:
+            return date.fromisoformat(str(rauw))
+        except (TypeError, ValueError):
+            return None
+
+    def _huidig_contractjaar_begin(self, vandaag):
+        """Wanneer het lopende contractjaar begon (v1.90.0).
+
+        Een energiecontract loopt zelden gelijk met het kalenderjaar, en
+        de afrekening gaat over het contractjaar.
+        """
+        start = self._contract_start()
+        if start is None:
+            return None
+        begin = start.replace(year=vandaag.year)
+        if begin > vandaag:
+            begin = start.replace(year=vandaag.year - 1)
+        return begin
+
+    # v1.91.0: wat er per periode wordt opgeteld, met eenheid en of een
+    # hogere waarde beter is. Eén tabel in plaats van losse features per
+    # onderwerp.
+    PERIODE_GROOTHEDEN = (
+        ("opwek_kwh", "Opwek", "kWh"),
+        ("verbruik_kwh", "Verbruik", "kWh"),
+        ("import_kwh", "Van het net", "kWh"),
+        ("export_kwh", "Naar het net", "kWh"),
+        ("accu_ontladen_kwh", "Uit de accu", "kWh"),
+        ("kosten_eur", "Kosten", "EUR"),
+        ("co2_kg", "CO2", "kg"),
+    )
+
+    async def async_bootstrap_energy_history(self) -> None:
+        """Vult de dagreeks uit de statistieken van Home Assistant
+        (v1.92.0).
+
+        Gevraagd: "Historische cijfers kun je toch meenemen?"
+
+        Ja - en ik had dat te snel afgewezen. Home Assistant houdt van
+        elke energiesensor langetermijnstatistieken bij, per uur, jaren
+        terug. Er is in deze integratie al een voorbeeld van hoe dat
+        gelezen wordt: `async_bootstrap_night_consumption_from_history`.
+
+        Alleen de meters (kWh, `total_increasing`) zijn hiervoor
+        bruikbaar. Vermogenssensoren zouden per uur geïntegreerd moeten
+        worden en dat wordt een schatting; hier gaat het om cijfers die
+        naast een jaarafrekening moeten kunnen liggen.
+
+        Bestaande dagen worden nooit overschreven: wat live is gemeten
+        wint van wat achteraf uit statistieken komt.
+        """
+        if self.energy_daily_history:
+            # Alleen de dagen VOOR de oudste bekende dag aanvullen.
+            oudste = min(
+                date.fromisoformat(r["datum"]) for r in self.energy_daily_history
+            )
+        else:
+            oudste = dt_util.now().date()
+
+        bronnen = {
+            "opwek_kwh": self.config.get(CONF_PV_ENERGY_SENSOR),
+            "import_kwh": self.config.get(CONF_GRID_IMPORT_ENERGY_SENSOR),
+            "export_kwh": self.config.get(CONF_GRID_EXPORT_ENERGY_SENSOR),
+        }
+        bronnen = {k: v for k, v in bronnen.items() if v}
+        if not bronnen:
+            self.energy_history_bootstrap_note = (
+                "Geen kWh-meters ingesteld; de dagreeks vult zich vanaf nu "
+                "dag voor dag."
+            )
+            return
+
+        try:
+            from homeassistant.components.recorder import get_instance
+            from homeassistant.components.recorder.statistics import (
+                statistics_during_period,
+            )
+        except ImportError:
+            self.energy_history_bootstrap_note = (
+                "De recorder is niet beschikbaar; geen geschiedenis ingelezen."
+            )
+            return
+
+        einde = dt_util.start_of_local_day(oudste)
+        start = einde - timedelta(days=ENERGY_DAILY_HISTORY_DAYS)
+
+        def _ophalen():
+            return statistics_during_period(
+                self.hass,
+                start,
+                einde,
+                set(bronnen.values()),
+                "day",
+                None,
+                {"sum"},
+            )
+
+        try:
+            rijen = await get_instance(self.hass).async_add_executor_job(_ophalen)
+        except Exception as fout:  # noqa: BLE001 - best effort
+            _LOGGER.warning("Kon de energiegeschiedenis niet inlezen: %s", fout)
+            self.energy_history_bootstrap_note = (
+                f"Inlezen mislukt: {type(fout).__name__}."
+            )
+            return
+
+        # Per dag de aangroei van elke meter: het verschil tussen twee
+        # opeenvolgende standen. `sum` is cumulatief, dus de dagwaarde is
+        # het verschil - niet de stand zelf.
+        per_dag: dict = {}
+        for veld, entity_id in bronnen.items():
+            reeks = rijen.get(entity_id) or []
+            vorige = None
+            for punt in reeks:
+                stand = punt.get("sum")
+                moment = punt.get("start")
+                if stand is None or moment is None:
+                    continue
+                dag = dt_util.as_local(
+                    datetime.fromtimestamp(moment, tz=timezone.utc)
+                    if isinstance(moment, (int, float))
+                    else moment
+                ).date()
+                if vorige is not None:
+                    groei = stand - vorige
+                    if groei >= 0:
+                        per_dag.setdefault(dag, {})[veld] = round(groei, 3)
+                vorige = stand
+
+        toegevoegd = [
+            {
+                "datum": dag.isoformat(),
+                "opwek_kwh": waarden.get("opwek_kwh", 0.0),
+                "import_kwh": waarden.get("import_kwh", 0.0),
+                "export_kwh": waarden.get("export_kwh", 0.0),
+                "verbruik_kwh": round(
+                    waarden.get("opwek_kwh", 0.0)
+                    + waarden.get("import_kwh", 0.0)
+                    - waarden.get("export_kwh", 0.0),
+                    3,
+                ),
+                # Uit statistieken valt niet af te leiden welk deel van de
+                # export zon was en welk deel uit de accu kwam; dat wordt
+                # pas sinds v1.76.0 live gemeten.
+                "zon_export_kwh": None,
+                "herkomst": "statistieken",
+            }
+            for dag, waarden in sorted(per_dag.items())
+            if dag < oudste
+        ]
+        if not toegevoegd:
+            self.energy_history_bootstrap_note = (
+                "Geen bruikbare statistieken gevonden voor de periode ervoor."
+            )
+            return
+
+        self.energy_daily_history = (toegevoegd + self.energy_daily_history)[
+            -ENERGY_DAILY_HISTORY_DAYS:
+        ]
+        self.energy_history_bootstrap_note = (
+            f"{len(toegevoegd)} dag(en) ingelezen uit de statistieken, vanaf "
+            f"{toegevoegd[0]['datum']}."
+        )
+        self.schedule_persisted_state_save()
+
+    def get_period_overview(self, now: datetime | None = None) -> dict:
+        """Alle dagcijfers over dag, week, maand, jaar en contractjaar
+        (v1.91.0).
+
+        Gevraagd: "Misschien dag/week/maand/jaar voor alle relevante
+        sensoren invoeren en zichtbaar maken? Kosten, verbruik, opwek,
+        accu, noem het maar op."
+
+        Eén reeks, één optelling, één tabel. Losse tellers per onderwerp
+        en per periode zouden tientallen sensoren opleveren die elk hun
+        eigen dagwissel en herstart moeten overleven - en dat is precies
+        waar deze week een paar keer iets misging.
+
+        De besparing staat er apart bij, want dat is een verschil van
+        twee reeksen en geen optelling.
+        """
+        nu = now or dt_util.now()
+        vandaag = nu.date()
+        reeks = self.energy_daily_history or []
+
+        def _dagen_vanaf(vanaf):
+            return [
+                r
+                for r in reeks
+                if date.fromisoformat(r["datum"]) >= vanaf
+            ]
+
+        def _tel(dagen) -> dict | None:
+            if not dagen:
+                return None
+            uitkomst = {
+                "dagen": len(dagen),
+                "van": dagen[0]["datum"],
+            }
+            for sleutel, _naam, _eenheid in self.PERIODE_GROOTHEDEN:
+                uitkomst[sleutel] = round(
+                    sum(r.get(sleutel, 0.0) or 0.0 for r in dagen), 2
+                )
+            uitkomst["besparing_eur"] = round(
+                sum(
+                    (r.get("zonder_sturing_eur", 0.0) or 0.0)
+                    - (r.get("kosten_eur", 0.0) or 0.0)
+                    for r in dagen
+                ),
+                2,
+            )
+            # v1.92.0: gemiddelde per dag. Gevraagd: "Worden de kosten en
+            # het verbruik etc ook dag/week/maand/jaar meegenomen en
+            # gemiddelden etc."
+            #
+            # Zonder gemiddelde is een maand niet met een week te
+            # vergelijken - je kijkt dan naar het aantal dagen in plaats
+            # van naar het verbruik.
+            uitkomst["gemiddeld_per_dag"] = {
+                sleutel: round(uitkomst[sleutel] / len(dagen), 2)
+                for sleutel, _n, _e in self.PERIODE_GROOTHEDEN
+            }
+            uitkomst["gemiddeld_per_dag"]["besparing_eur"] = round(
+                uitkomst["besparing_eur"] / len(dagen), 2
+            )
+            return uitkomst
+
+        vandaag_rij = {
+            "dagen": 0,
+            "van": vandaag.isoformat(),
+            "opwek_kwh": round(self.pv_production_today_kwh, 2),
+            "verbruik_kwh": round(self.gross_consumption_today_kwh, 2),
+            "import_kwh": round(self.grid_import_today_kwh, 2),
+            "export_kwh": round(self.pv_export_today_kwh, 2),
+            "accu_ontladen_kwh": round(self.battery_discharge_today_kwh, 2),
+            "kosten_eur": round(self.actual_cost_today_eur, 2),
+            "co2_kg": round(self.co2_emitted_today_kg, 2),
+            "besparing_eur": round(
+                self.counterfactual_cost_today_eur - self.actual_cost_today_eur,
+                2,
+            ),
+        }
+
+        perioden = {
+            "vandaag": vandaag_rij,
+            "week": _tel(_dagen_vanaf(vandaag - timedelta(days=6))),
+            "maand": _tel(_dagen_vanaf(vandaag.replace(day=1))),
+            "jaar": _tel(_dagen_vanaf(vandaag.replace(month=1, day=1))),
+        }
+        contract_begin = self._huidig_contractjaar_begin(vandaag)
+        if contract_begin is not None:
+            perioden["contractjaar"] = _tel(_dagen_vanaf(contract_begin))
+
+        return {
+            "grootheden": [
+                {"sleutel": s, "naam": n, "eenheid": e}
+                for s, n, e in self.PERIODE_GROOTHEDEN
+            ],
+            "perioden": {k: v for k, v in perioden.items() if v},
+            "contractjaar_begin": (
+                contract_begin.isoformat() if contract_begin else None
+            ),
+            "dagen_in_reeks": len(reeks),
+            "geschiedenis": self.energy_history_bootstrap_note,
+            "toelichting": (
+                "Vandaag telt mee vanaf middernacht en is dus nog niet af. "
+                "De langere perioden rusten op afgesloten dagen."
+            ),
+        }
+
+    def get_self_consumption_overview(self, now: datetime | None = None) -> dict:
+        """Zelfconsumptie over dag, week, maand, jaar en contractjaar
+        (v1.90.0).
+
+        Gevraagd: "Misschien zelfconsumptie per dag/week/maand/jaar?" en
+        "de start van mijn contract (...) zodat ik precies het gebeuren
+        voor mijn contractjaar kan zien".
+
+        Zelfconsumptie is het deel van de opgewekte zon dat niet het net
+        op is gegaan. Zon die naar de accu gaat en later in huis wordt
+        gebruikt telt dus mee - die is niet geëxporteerd.
+
+        Over één dag is dat cijfer onbetrouwbaar, want de accu loopt over
+        de daggrens heen. Daarom staan de langere perioden erbij; die
+        zeggen meer.
+        """
+        nu = now or dt_util.now()
+        vandaag = nu.date()
+        reeks = self.energy_daily_history or []
+
+        def _over(vanaf, tot_en_met=None) -> dict | None:
+            dagen = [
+                r
+                for r in reeks
+                if (d := date.fromisoformat(r["datum"])) >= vanaf
+                and (tot_en_met is None or d <= tot_en_met)
+            ]
+            if not dagen:
+                return None
+            opwek = sum(r["opwek_kwh"] for r in dagen)
+            if opwek < SELF_CONSUMPTION_MIN_PV_KWH:
+                return None
+            # De GEMETEN zon-export als die er is; anders de totale
+            # export begrensd op de opwek, zoals v1.9.2 al deed.
+            zon_export = sum(
+                r.get("zon_export_kwh")
+                if r.get("zon_export_kwh") is not None
+                else min(r["export_kwh"], r["opwek_kwh"])
+                for r in dagen
+            )
+            verbruik = sum(r["verbruik_kwh"] for r in dagen)
+            invoer = sum(r["import_kwh"] for r in dagen)
+            return {
+                "dagen": len(dagen),
+                "opwek_kwh": round(opwek, 1),
+                "zon_export_kwh": round(zon_export, 1),
+                "zelfconsumptie_procent": round(
+                    100 * (opwek - min(zon_export, opwek)) / opwek, 1
+                ),
+                "zelfvoorziening_procent": (
+                    round(100 * (1 - invoer / verbruik), 1) if verbruik else None
+                ),
+            }
+
+        perioden = {
+            "week": _over(vandaag - timedelta(days=6)),
+            "maand": _over(vandaag.replace(day=1)),
+            "jaar": _over(vandaag.replace(month=1, day=1)),
+        }
+        contract_begin = self._huidig_contractjaar_begin(vandaag)
+        if contract_begin is not None:
+            perioden["contractjaar"] = _over(contract_begin)
+
+        return {
+            "vandaag_procent": self.self_consumption_ratio_percent,
+            "perioden": {k: v for k, v in perioden.items() if v},
+            "contractjaar_begin": (
+                contract_begin.isoformat() if contract_begin else None
+            ),
+            "dagen_in_reeks": len(reeks),
+            "toelichting": (
+                "Zelfconsumptie is het deel van de opgewekte zon dat niet "
+                "het net op ging - zon die via de accu in huis belandt telt "
+                "dus mee. Over één dag is dat cijfer onbetrouwbaar omdat de "
+                "accu over de daggrens heen loopt; de langere perioden "
+                "zeggen meer."
+            ),
+        }
 
     @property
     def self_consumption_ratio_percent(self) -> float | None:

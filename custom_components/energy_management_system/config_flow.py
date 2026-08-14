@@ -83,6 +83,9 @@ from .const import (
     CONF_FEEDIN_COST_EUR_PER_KWH,
     CONF_FEEDIN_PRICE_ATTRIBUTE,
     CONF_PRICE_ATTRIBUTE,
+    CONF_CONTRACT_START_DATE,
+    CONF_GRID_EXPORT_ENERGY_SENSOR,
+    CONF_GRID_IMPORT_ENERGY_SENSOR,
     CONF_SALDEREN_END_DATE,
     CONF_PRICE_SENSOR,
     CONF_PV_POWER_SENSOR,
@@ -201,6 +204,22 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
             # v0.63.117 - einde saldering. Laatste dag dat salderen
             # nog geldt; vanaf de dag erna wordt teruglevering apart
             # (en veel lager) gewaardeerd in alle financiele getallen.
+            vol.Optional(
+                CONF_GRID_IMPORT_ENERGY_SENSOR,
+                default=defaults.get(CONF_GRID_IMPORT_ENERGY_SENSOR),
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="sensor")
+            ),
+            vol.Optional(
+                CONF_GRID_EXPORT_ENERGY_SENSOR,
+                default=defaults.get(CONF_GRID_EXPORT_ENERGY_SENSOR),
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="sensor")
+            ),
+            vol.Optional(
+                CONF_CONTRACT_START_DATE,
+                default=_as_text(defaults.get(CONF_CONTRACT_START_DATE)),
+            ): selector.TextSelector(),
             vol.Optional(
                 CONF_SALDEREN_END_DATE,
                 default=defaults.get(
