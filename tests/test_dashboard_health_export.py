@@ -161,6 +161,7 @@ def test_present_attributes_are_not_reported(make_coordinator, hass):
             "prijstoets": {},
             "terugvallen": [],
             "zonstand": {},
+            "buitensensor": {},
             "veroudering": {},
             "waarom_nu": {},
             "gepland_witgoed": {},

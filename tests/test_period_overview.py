@@ -304,3 +304,71 @@ def test_an_absurd_day_is_rejected():
     )
 
     assert ENERGY_DAY_SANITY_MAX_KWH < 1000
+
+
+# --- v1.94.0: de foute reeks stond er nog ----------------------------
+
+
+def test_days_from_an_older_bootstrap_are_discarded(make_coordinator, hass):
+    """Gemeld na de reparatie van v1.93.0: de tabel stond nog steeds op
+    131548 kWh per week.
+
+    Terecht. Die versie repareerde het INLEZEN, maar de reeks was al
+    bewaard - en de routine vult alleen dagen VOOR de oudste bekende dag
+    aan. Die 399 foute dagen bleven dus staan.
+    """
+    from custom_components.energy_management_system.const import (
+        ENERGY_BOOTSTRAP_VERSION,
+    )
+
+    oud = {"datum": "2025-07-11", "opwek_kwh": 21924.0, "herkomst": "statistieken"}
+    nieuw = {
+        "datum": "2025-07-12",
+        "opwek_kwh": 21.9,
+        "herkomst": "statistieken",
+        "inlees_versie": ENERGY_BOOTSTRAP_VERSION,
+    }
+    gemeten = {"datum": "2026-08-13", "opwek_kwh": 18.0}
+
+    bewaard = [
+        r
+        for r in (oud, nieuw, gemeten)
+        if r.get("herkomst") != "statistieken"
+        or r.get("inlees_versie", 0) >= ENERGY_BOOTSTRAP_VERSION
+    ]
+
+    assert bewaard == [nieuw, gemeten]
+
+
+def test_a_measured_day_is_never_discarded(make_coordinator, hass):
+    """Wat live is gemeten kent de export-splitsing en is niet opnieuw op
+    te halen; dat blijft altijd staan."""
+    from custom_components.energy_management_system.const import (
+        ENERGY_BOOTSTRAP_VERSION,
+    )
+
+    gemeten = {"datum": "2026-08-13", "opwek_kwh": 18.0, "zon_export_kwh": 6.0}
+
+    assert gemeten.get("herkomst") != "statistieken"
+    assert ENERGY_BOOTSTRAP_VERSION >= 2
+
+
+def test_an_impossible_day_is_rejected_regardless_of_origin(
+    make_coordinator, hass
+):
+    """Een vangnet dat losstaat van het merkteken: 21924 kWh op een dag
+    kan een woonhuis niet, wie het er ook in zette."""
+    c = make_coordinator({})
+
+    assert c._energiedag_is_onzin({"opwek_kwh": 21924.0}) is True
+    assert c._energiedag_is_onzin({"verbruik_kwh": 131548.0}) is True
+    assert c._energiedag_is_onzin({"opwek_kwh": 21.9}) is False
+
+
+def test_a_day_with_missing_values_is_not_rejected(make_coordinator, hass):
+    """Ontbrekend is geen onzin."""
+    c = make_coordinator({})
+
+    assert c._energiedag_is_onzin(
+        {"opwek_kwh": 20.0, "verbruik_kwh": None, "import_kwh": None}
+    ) is False
