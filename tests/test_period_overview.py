@@ -444,3 +444,81 @@ def test_a_measured_day_still_gives_savings(make_coordinator, hass):
     c = _coordinator(make_coordinator)
 
     assert c.get_period_overview(NU)["perioden"]["week"]["besparing_eur"] == 6.0
+
+
+# --- v1.98.0: de tellers waren al gewist -----------------------------
+
+
+def test_the_closed_day_uses_the_last_standing_values(
+    make_coordinator, hass
+):
+    """Gevonden bij de controle van 15 augustus: accu, kosten en CO2
+    stonden in ELKE periode op dezelfde waarde - week, maand, jaar en
+    contractjaar allemaal 0.0 en 0.05.
+
+    Voor de derde keer dezelfde volgordefout. De kostentellers worden
+    eerder in de tick gewist dan de dag wordt afgesloten, dus stond alles
+    al op nul. Eerder opgelost voor de plantoetsing (v1.74.0) met precies
+    deze aanpak.
+    """
+    c = _coordinator(make_coordinator, dagen=0)
+    gisteren = NU.date() - timedelta(days=1)
+
+    # Laatste tick van gisteren: alle tellers staan op hun eindstand.
+    c.pv_production_today_kwh = 21.0
+    c.gross_consumption_today_kwh = 9.0
+    c.battery_discharge_today_kwh = 5.5
+    c.actual_cost_today_eur = -3.3
+    c.counterfactual_cost_today_eur = -1.1
+    c.co2_emitted_today_kg = 0.4
+    c._onthoud_energiedagstand(gisteren)
+
+    # Middernacht: de tellers zijn al gewist voordat de dag sluit.
+    c.pv_production_today_kwh = 0.0
+    c.battery_discharge_today_kwh = 0.0
+    c.actual_cost_today_eur = 0.0
+    c.counterfactual_cost_today_eur = 0.0
+    c.co2_emitted_today_kg = 0.0
+    c._sluit_energiedag_af(gisteren)
+
+    r = c.energy_daily_history[-1]
+    assert r["opwek_kwh"] == 21.0
+    assert r["accu_ontladen_kwh"] == 5.5
+    assert r["kosten_eur"] == -3.3
+    assert r["co2_kg"] == 0.4
+
+
+def test_a_stale_snapshot_is_not_used(make_coordinator, hass):
+    """De bewaarde stand hoort bij één dag; die van eergisteren mag niet
+    aan gisteren worden geplakt."""
+    c = _coordinator(make_coordinator, dagen=0)
+    c._onthoud_energiedagstand(NU.date() - timedelta(days=2))
+
+    c.pv_production_today_kwh = 4.0
+    c.gross_consumption_today_kwh = 2.0
+    c._sluit_energiedag_af(NU.date() - timedelta(days=1))
+
+    assert c.energy_daily_history[-1]["opwek_kwh"] == 4.0
+
+
+def test_the_snapshot_is_taken_after_the_counters(make_coordinator, hass):
+    """Vóór de tellers zou de stand van het vorige kwartier vastleggen."""
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+
+    assert bron.index("_update_self_sufficiency_tracking(") < bron.index(
+        "self._onthoud_energiedagstand(now.date())"
+    )
+
+
+def test_the_snapshot_survives_a_restart():
+    """Een herstart vlak voor middernacht zou de dag anders met lege
+    tellers afsluiten."""
+    from custom_components.energy_management_system.const import (
+        PERSISTED_PLAIN_FIELDS,
+    )
+
+    assert "_energiedagstand" in PERSISTED_PLAIN_FIELDS

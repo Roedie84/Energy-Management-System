@@ -68,3 +68,32 @@ def test_every_bootstrap_is_named_in_this_test():
         "nieuwe opstartroutine gevonden - bepaal eerst of hij voor of na "
         f"het terugzetten van de toestand hoort: {gevonden - bekend}"
     )
+
+
+def test_no_day_counter_is_read_after_it_may_be_cleared():
+    """v1.98.0: de derde keer dezelfde volgordefout.
+
+    Dagtellers worden op verschillende plekken in de tick gewist. Wie ze
+    bij de dagwissel nog wil lezen, moet ze eerder hebben vastgelegd -
+    zoals `_plan_review_dagstand` (v1.74.0) en `_energiedagstand`
+    (v1.98.0) doen.
+
+    Deze toets valt om zodra een afsluitroutine rechtstreeks een
+    dagteller leest in plaats van de bewaarde stand.
+    """
+    for functie, teller in (
+        ("_sluit_energiedag_af", "self.battery_discharge_today_kwh"),
+        ("_finish_plan_review", "self.pv_production_today_kwh"),
+    ):
+        kop = BRON.index(f"    def {functie}(")
+        blok = BRON[kop : BRON.index("\n    def ", kop + 10)]
+        # De teller mag alleen als TERUGVAL voorkomen, in een aanroep die
+        # de bewaarde stand voorrang geeft.
+        for regel in blok.splitlines():
+            if teller in regel and "#" not in regel.split(teller)[0]:
+                assert (
+                    "_w(" in regel
+                    or "eindstand.get" in regel
+                    or "stand.get" in regel
+                    or "," in regel
+                ), f"{functie} leest {teller} rechtstreeks: {regel.strip()}"

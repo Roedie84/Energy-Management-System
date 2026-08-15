@@ -482,3 +482,93 @@ def test_above_the_band_it_still_starts():
     )
 
     assert C._battery_cooling_should_turn_on(38.0, 30.0, 0.0) is not None
+
+
+# --- v1.99.0: minimale loop- en rusttijd -----------------------------
+
+
+def test_the_fan_does_not_short_cycle(make_coordinator, hass):
+    """Gevonden bij de controle van 15 augustus: de ventilator pendelde
+    die nacht DERTIEN keer tussen 31 en 35 graden, om de twintig minuten.
+
+    Geen sensorruis - de hysterese van v1.76.0 vangt dat al. Het is echt
+    thermisch pendelen: de ventilator koelt de omvormer in minuten van 35
+    naar 31, waarna hij weer opwarmt. Het systeem is dus sneller dan de
+    band tussen 32 en 35 breed is.
+    """
+    from datetime import timedelta
+
+    import custom_components.energy_management_system.coordinator as mod
+
+    coordinator = make_coordinator(_config())
+    nu = datetime(2026, 8, 15, 2, 0, tzinfo=timezone.utc)
+    mod.dt_util.now = lambda: nu
+
+    # De ventilator draait en is net aangezet.
+    coordinator.battery_cooling_last_change = nu - timedelta(minutes=8)
+    _situatie(hass, accu=31.0, buiten=23.0, vermogen=300)
+    hass.states.set(FAN, "on")
+
+    besluit = coordinator.evaluate_battery_cooling()
+
+    assert besluit["actie"] is None
+    assert "pendelen" in besluit["reden"]
+
+
+def test_after_the_minimum_runtime_it_may_stop(make_coordinator, hass):
+    from datetime import timedelta
+
+    import custom_components.energy_management_system.coordinator as mod
+
+    coordinator = make_coordinator(_config())
+    nu = datetime(2026, 8, 15, 2, 0, tzinfo=timezone.utc)
+    mod.dt_util.now = lambda: nu
+    coordinator.battery_cooling_last_change = nu - timedelta(minutes=45)
+    _situatie(hass, accu=33.0, buiten=31.5, vermogen=100)
+    hass.states.set(FAN, "on")
+
+    assert coordinator.evaluate_battery_cooling()["actie"] == "uit"
+
+
+def test_a_pointless_fan_stops_immediately(make_coordinator, hass):
+    """De uitzondering op de minimale looptijd moet SMAL zijn.
+
+    Eerst stond er "onder de ondergrens", maar dat ondermijnde precies
+    het geval dat de regel moet vangen: op 15 augustus schakelde hij uit
+    bij 31 graden, en dat is onder de ondergrens van 32.
+
+    Alleen als het verschil met buiten te klein is om nog iets te halen,
+    hoeft er niet gewacht te worden.
+    """
+    from datetime import timedelta
+
+    import custom_components.energy_management_system.coordinator as mod
+
+    coordinator = make_coordinator(_config())
+    nu = datetime(2026, 8, 15, 2, 0, tzinfo=timezone.utc)
+    mod.dt_util.now = lambda: nu
+    coordinator.battery_cooling_last_change = nu - timedelta(minutes=2)
+    # Nauwelijks verschil met buiten: koelen levert niets op.
+    _situatie(hass, accu=28.0, buiten=27.5, vermogen=100)
+    hass.states.set(FAN, "on")
+
+    assert coordinator.evaluate_battery_cooling()["actie"] == "uit"
+
+
+def test_it_waits_before_starting_again(make_coordinator, hass):
+    """Ook de andere kant op: net uitgezet betekent even niet aan."""
+    from datetime import timedelta
+
+    import custom_components.energy_management_system.coordinator as mod
+
+    coordinator = make_coordinator(_config())
+    nu = datetime(2026, 8, 15, 2, 0, tzinfo=timezone.utc)
+    mod.dt_util.now = lambda: nu
+    coordinator.battery_cooling_last_change = nu - timedelta(minutes=5)
+    _situatie(hass, accu=36.0, buiten=25.0, vermogen=300)
+    hass.states.set(FAN, "off")
+
+    besluit = coordinator.evaluate_battery_cooling()
+
+    assert besluit["actie"] is None
+    assert "net uitgezet" in besluit["reden"]
