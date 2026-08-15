@@ -33,7 +33,11 @@ def _coordinator(make_coordinator, hass):
     c.last_successful_update = NU.isoformat()
     c.internal_failures = {}
     c.last_consistency_checks = {"bevindingen": []}
-    c.is_sensor_genuinely_unavailable = lambda entity_id: False
+    # v2.0.5: DEZELFDE handtekening als de echte functie - die wil ook
+    # het tijdstip. De nabootsing met één argument liet de fout
+    # verdwijnen die in bedrijf 27 keer in dertien minuten optrad:
+    # "missing 1 required positional argument: 'entity_id'".
+    c.is_sensor_genuinely_unavailable = lambda now, entity_id: False
     return c
 
 

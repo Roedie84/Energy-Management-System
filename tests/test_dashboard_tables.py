@@ -543,3 +543,68 @@ def test_every_template_is_valid_jinja():
                     raise AssertionError(
                         f"{view['title']} / {kaart.get('title') or veld}: {fout}"
                     ) from fout
+
+
+# --- v2.0.4: dubbele sleutels in het dashboard -----------------------
+
+
+def test_no_card_has_a_duplicate_key():
+    """Gemeld uit het logboek van Home Assistant:
+
+        YAML file energy_management_system_dashboard.yaml contains
+        duplicate key "grid_options". Check lines 279 and 282
+
+    De zelfcontrole-tegel uit v2.0.1 kreeg `grid_options` mee terwijl de
+    kaart die al had. Home Assistant negeert dan de eerste stilzwijgend.
+
+    Geen enkele test ving dit, want `yaml.safe_load` slikt dubbele
+    sleutels zonder te klagen - de laatste wint. Deze toets weigert ze
+    expliciet, precies zoals Home Assistant zelf doet.
+    """
+    from pathlib import Path
+
+    import yaml
+
+    import custom_components.energy_management_system as pkg
+
+    class Streng(yaml.SafeLoader):
+        pass
+
+    def _geen_dubbele(loader, node, deep=False):
+        gezien = set()
+        for sleutelnode, _waarde in node.value:
+            sleutel = loader.construct_object(sleutelnode, deep=deep)
+            assert sleutel not in gezien, (
+                f"dubbele sleutel {sleutel!r} op regel "
+                f"{sleutelnode.start_mark.line + 1}"
+            )
+            gezien.add(sleutel)
+        return yaml.SafeLoader.construct_mapping(loader, node, deep)
+
+    Streng.construct_mapping = _geen_dubbele
+
+    for pad in (
+        Path(pkg.__file__).parent / "dashboard_template.yaml",
+        Path(pkg.__file__).parent.parent.parent
+        / "dashboards"
+        / "energy_management_system_dashboard.yaml",
+    ):
+        yaml.load(pad.read_text(), Streng)
+
+
+def test_every_card_has_at_most_one_grid_options():
+    """De concrete vorm die misging: een tegel die twee keer verteld
+    krijgt hoe breed hij is."""
+    import re
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    tekst = (
+        Path(pkg.__file__).parent / "dashboard_template.yaml"
+    ).read_text()
+
+    # Binnen één kaart (tussen twee '- type:' regels) hoogstens één keer.
+    kaarten = re.split(r"\n(?=\s*- type:)", tekst)
+    for kaart in kaarten:
+        assert kaart.count("grid_options:") <= 1, kaart[:120]

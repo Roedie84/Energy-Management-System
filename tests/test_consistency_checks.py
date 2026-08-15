@@ -111,8 +111,12 @@ def test_a_flapping_fan_is_reported(make_coordinator, hass):
     """De ventilator schakelde in de nacht van 15 augustus dertien
     keer."""
     c = _coordinator(make_coordinator, hass)
+    # v2.0.3: over een venster van zes uur, niet vanaf middernacht.
     c.battery_cooling_history = [
-        {"moment": f"2026-08-15T0{i % 10}:00:00+02:00", "actie": "aan"}
+        {
+            "moment": (NU - timedelta(minutes=20 * i)).isoformat(),
+            "actie": "aan",
+        }
         for i in range(15)
     ]
 
@@ -250,3 +254,80 @@ def test_the_full_list_stays_on_its_own_page():
     )
 
     assert "for b in z.bevindingen" in inhoud
+
+
+# --- v2.0.3: onvolledig is geen rekenfout ----------------------------
+
+
+def test_one_contributing_day_is_not_a_calculation_error(
+    make_coordinator, hass
+):
+    """Gemeld: "Periode: CO2 - week, maand en jaar staan alle drie op
+    0.05."
+
+    De controle had gelijk, maar de oorzaak is niet dat er iets fout
+    wordt gerekend: er is simpelweg één dag met een CO2-waarde.
+    Ingelezen dagen hebben die niet, want de intensiteit per uur is nooit
+    bewaard.
+
+    Een fout melden waar niets aan te doen is, is de snelste manier om
+    de controle te laten negeren - dezelfde afweging als bij de
+    terugval-duur (v1.79.0).
+    """
+    c = _coordinator(make_coordinator, hass)
+    c.energy_daily_history = [
+        {"datum": "2026-08-14", "opwek_kwh": 20.0, "co2_kg": 0.05},
+        *[
+            {"datum": f"2026-08-{d:02d}", "opwek_kwh": 20.0, "co2_kg": None}
+            for d in range(1, 14)
+        ],
+    ]
+
+    co2 = [
+        b
+        for b in c.get_consistency_checks(NU)["bevindingen"]
+        if b["naam"].endswith("CO2")
+    ]
+
+    assert co2
+    assert co2[0]["ernst"] == "aandacht"
+    assert "vult zich vanzelf" in co2[0]["uitleg"].lower()
+
+
+def test_many_contributing_days_with_one_value_is_a_fault(
+    make_coordinator, hass
+):
+    """Dragen er wél meerdere dagen bij en staat elke periode toch op
+    hetzelfde getal, dan is er echt iets mis."""
+    c = _coordinator(make_coordinator, hass)
+    c.energy_daily_history = [
+        {"datum": f"2026-08-{d:02d}", "opwek_kwh": 20.0, "co2_kg": 0.05}
+        for d in range(1, 15)
+    ]
+
+    co2 = [
+        b
+        for b in c.get_consistency_checks(NU)["bevindingen"]
+        if b["naam"].endswith("CO2")
+    ]
+
+    if co2:
+        assert co2[0]["ernst"] == "fout"
+
+
+def test_the_cooling_check_looks_at_a_window(make_coordinator, hass):
+    """Gemeld: "18 schakelingen vandaag." Dat telde ook de uren van vóór
+    de minimale looptijd uit v1.99.0, die die middag pas was
+    geïnstalleerd. Een controle die terugkijkt naar een periode waarin de
+    reparatie nog niet draaide, meldt een probleem dat al opgelost is.
+    """
+    c = _coordinator(make_coordinator, hass)
+    # Veel schakelingen vanochtend, niets in de laatste zes uur.
+    c.battery_cooling_history = [
+        {"moment": (NU - timedelta(hours=10, minutes=i)).isoformat()}
+        for i in range(18)
+    ]
+
+    namen = [b["naam"] for b in c.get_consistency_checks(NU)["bevindingen"]]
+
+    assert "Accukoeling" not in namen
