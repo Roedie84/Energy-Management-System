@@ -182,6 +182,12 @@ def test_only_the_pre_existing_kinds_default_to_on():
         # ruis - en stond hij uit, dan zou je er pas achter komen door
         # de export regel voor regel te lezen.
         "interne_fout",
+        # v2.0.0: de zelfcontrole hoort bij dezelfde uitzondering. Ze
+        # meldt alleen als twee getallen die elkaar moeten kloppen dat
+        # niet doen - dat is per definitie geen ruis, en stond ze uit
+        # dan zou je er pas achter komen door de export regel voor
+        # regel te lezen. Precies wat deze week een paar keer nodig was.
+        "zelfcontrole",
     }
 
 

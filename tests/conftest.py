@@ -184,6 +184,12 @@ def _install_ha_mocks() -> None:
             self.args = a
             self.kwargs = k
 
+        # v2.0.2: voluptuous eist een aanroepbaar object als
+        # validatiefunctie. Zonder dit is het formulier hier niet te
+        # bouwen - en dus was er nooit een test die het probeerde.
+        def __call__(self, waarde):
+            return waarde
+
     helpers_selector.EntitySelector = _SelectorStub
     helpers_selector.EntitySelectorConfig = _SelectorConfigStub
     helpers_selector.NumberSelector = _SelectorStub
@@ -194,6 +200,25 @@ def _install_ha_mocks() -> None:
         SLIDER = "slider"
 
     helpers_selector.NumberSelectorMode = NumberSelectorMode
+
+    # v2.0.2: de overige selectors die de configuratiestroom gebruikt.
+    #
+    # Gevraagd: "Tevens wil ik zien dat de integratie nog opstart." Bij
+    # het bouwen van die toets bleek dat het formulier hier helemaal niet
+    # opgebouwd KON worden - deze vier ontbraken, dus was er nooit een
+    # test die het probeerde. Een fout in de configuratiestroom zou pas
+    # bij een echte herstart zijn opgevallen.
+    helpers_selector.SelectSelector = _SelectorStub
+    helpers_selector.SelectSelectorConfig = _SelectorConfigStub
+    class SelectSelectorMode:
+        DROPDOWN = "dropdown"
+        LIST = "list"
+
+    helpers_selector.SelectSelectorMode = SelectSelectorMode
+    helpers_selector.TextSelector = _SelectorStub
+    helpers_selector.TextSelectorConfig = _SelectorConfigStub
+    helpers_selector.BooleanSelector = _SelectorStub
+    helpers_selector.TimeSelector = _SelectorStub
     sys.modules["homeassistant.helpers.selector"] = helpers_selector
 
     # -- homeassistant.components (namespace) + sensor/switch -------------
