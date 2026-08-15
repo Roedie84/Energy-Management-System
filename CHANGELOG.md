@@ -14664,3 +14664,39 @@ de juiste weg kiest.
 De vijfde melding (dubbele YAML-sleutel) was al opgelost in v2.0.4.
 
 **Volledige testsuite**: 2214 tests, allemaal groen.
+
+## v2.0.6 — Een bestand lezen in de event loop
+
+**Gemeld** uit het logboek:
+
+> Detected blocking call to read_text (…) inside the event loop by
+> custom integration 'energy_management_system'
+
+Een bestand lezen duurt milliseconden, maar in de event loop staat in
+die tijd **alles** stil — elke andere integratie, elke automatisering.
+Home Assistant verbiedt dat daarom, en terecht.
+
+Het viel op bij het **downloaden van de diagnostiek**, want die roept
+`get_dashboard_health` aan en die las het dashboardsjabloon van schijf.
+Uitgerekend de functie die ik gebruik om problemen op te sporen,
+veroorzaakte er dus zelf een.
+
+Het sjabloon verandert alleen bij een update, dus het hoeft maar één keer
+gelezen te worden: **bij het opstarten, in een executor**. Daarna komt
+het uit het geheugen.
+
+**Twee tests erbij.** Eén die het hele pakket doorzoekt op
+bestandstoegang buiten een executor — met de omgeving als criterium, want
+binnen een hulpfunctie die aan `async_add_executor_job` wordt meegegeven
+is het juist correct. En één die vastlegt dat het sjabloon bij het
+opstarten wordt ingelezen.
+
+De eerste is op de proef gesteld door de fout terug te zetten in een
+kopie: dan valt hij om.
+
+**Vierde soort fout die alleen Home Assistant zelf ziet**, na de
+ontbrekende selectors, de dubbele YAML-sleutel en de taak vanaf de
+verkeerde draad. De testomgeving is milder dan de werkelijkheid; deze
+toetsen halen daar telkens een stuk van weg.
+
+**Volledige testsuite**: 2216 tests, allemaal groen.

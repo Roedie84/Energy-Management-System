@@ -791,6 +791,9 @@ class EnergyManagementSystemCoordinator:
         # HA-automatisering, zie const.py.
         self.battery_cooling_state: dict = {}
         self.battery_cooling_last_change: datetime | None = None
+        # v2.0.6: het dashboardsjabloon, één keer ingelezen bij het
+        # opstarten - lezen in de event loop is verboden.
+        self._dashboard_template_cache: str | None = None
         self.battery_cooling_history: list[dict] = []
 
         # Meldingen (v1.2.0). Per soort een aan/uit-stand, het laatste
@@ -1464,6 +1467,12 @@ class EnergyManagementSystemCoordinator:
         warning right at startup that clears itself up moments later once
         everything else has caught up.
         """
+        # v2.0.6: het dashboardsjabloon nu inlezen, buiten de event loop.
+        try:
+            await self.async_load_dashboard_template()
+        except Exception:  # noqa: BLE001 - mag nooit het opstarten breken
+            _LOGGER.exception("Kon het dashboardsjabloon niet inlezen")
+
         await self.async_bootstrap_night_consumption_from_history()
         # v0.63.115: normaal al geladen in `async_setup_entry`, vóór de
         # platforms werden opgezet. Blijft hier staan als vangnet (o.a.
@@ -4527,14 +4536,39 @@ class EnergyManagementSystemCoordinator:
         }
 
     def _read_dashboard_template(self) -> str:
-        """Leest het meegeleverde dashboardsjabloon."""
+        """Het meegeleverde dashboardsjabloon, uit het geheugen (v2.0.6).
+
+        Gemeld uit het logboek:
+
+            Detected blocking call to read_text (...) inside the event
+            loop by custom integration 'energy_management_system'
+
+        Een bestand lezen duurt milliseconden, maar in de event loop
+        staat in die tijd ALLES stil - elke andere integratie, elke
+        automatisering. Home Assistant verbiedt dat daarom.
+
+        Het viel op bij het downloaden van de diagnostiek, want die roept
+        `get_dashboard_health` aan. Maar het sjabloon verandert alleen bij
+        een update, dus het hoeft überhaupt maar één keer gelezen te
+        worden: bij het opstarten, buiten de loop.
+        """
+        return self._dashboard_template_cache or ""
+
+    async def async_load_dashboard_template(self) -> None:
+        """Leest het sjabloon één keer, buiten de event loop (v2.0.6)."""
         from pathlib import Path
 
         pad = Path(__file__).parent / "dashboard_template.yaml"
-        try:
-            return pad.read_text(encoding="utf-8")
-        except OSError:
-            return ""
+
+        def _lezen() -> str:
+            try:
+                return pad.read_text(encoding="utf-8")
+            except OSError:
+                return ""
+
+        self._dashboard_template_cache = await self.hass.async_add_executor_job(
+            _lezen
+        )
 
     def get_topic_summaries(self) -> dict:
         """Eén zin per onderwerp: klopt het, of vraagt het aandacht?
