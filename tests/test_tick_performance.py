@@ -25,7 +25,11 @@ def test_without_measurements_it_says_so(make_coordinator, hass):
 def test_the_load_is_the_share_of_the_interval(make_coordinator, hass):
     """Een ronde van 300 ms bij vijf minuten is 0,1% van de tijd."""
     c = make_coordinator({})
-    c.tick_duration_history = [300.0] * 10
+    # v2.1.1: elke ronde draagt wandklok EN rekentijd, en de eerste
+    # ronde telt niet mee - daar zit het inlezen van de geschiedenis in.
+    c.tick_duration_history = [
+        {"wandklok_ms": 300.0, "rekentijd_ms": 300.0, "eerste": False}
+    ] * 10
 
     p = c.get_tick_performance()
 
@@ -38,7 +42,9 @@ def test_it_names_the_smallest_responsible_interval(make_coordinator, hass):
     """Dat is het antwoord op "kan het vaker?" - met een getal in plaats
     van een vermoeden."""
     c = make_coordinator({})
-    c.tick_duration_history = [500.0] * 10
+    c.tick_duration_history = [
+        {"wandklok_ms": 500.0, "rekentijd_ms": 500.0, "eerste": False}
+    ] * 10
 
     p = c.get_tick_performance()
 
@@ -52,7 +58,9 @@ def test_the_slowest_round_is_kept_separately(make_coordinator, hass):
     """De mediaan verbergt een uitschieter, en juist die bepaalt of Home
     Assistant merkbaar hapert."""
     c = make_coordinator({})
-    c.tick_duration_history = [50.0] * 9 + [2000.0]
+    c.tick_duration_history = [
+        {"wandklok_ms": 50.0, "rekentijd_ms": 50.0, "eerste": False}
+    ] * 9 + [{"wandklok_ms": 2000.0, "rekentijd_ms": 2000.0, "eerste": False}]
 
     p = c.get_tick_performance()
 
@@ -74,7 +82,9 @@ def test_a_heavy_round_is_flagged(make_coordinator, hass):
     c.gross_consumption_today_kwh = 0.0
     c.energy_daily_history = []
     # 30 seconden per ronde bij vijf minuten = 10%.
-    c.tick_duration_history = [30_000.0] * 10
+    c.tick_duration_history = [
+        {"wandklok_ms": 30_000.0, "rekentijd_ms": 30_000.0, "eerste": False}
+    ] * 10
 
     namen = [b["naam"] for b in c.get_consistency_checks(nu)["bevindingen"]]
 

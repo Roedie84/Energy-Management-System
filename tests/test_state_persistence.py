@@ -510,6 +510,7 @@ VLUCHTIG_MET_REDEN = {
     # Metingen van voor een herstart zeggen daar niets over - een
     # herstart komt meestal juist door een nieuwe versie.
     "tick_duration_history": "meet de huidige versie; begint opnieuw",
+    "_tick_part_timings": "meet de huidige versie; begint opnieuw",
     # v2.0.0: de zelfcontrole rekent elke ronde opnieuw.
     "last_consistency_checks": "blijkt elke ronde opnieuw",
     # v2.2.0: hoe vaak de watchdog moest ingrijpen. Bij een herstart is
