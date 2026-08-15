@@ -192,6 +192,8 @@ from .const import (
     COOLING_SWITCH_WINDOW_HOURS,
     CONSISTENCY_TICK_STALE_MINUTES,
     TICK_DURATION_HISTORY_LENGTH,
+    TICK_MAX_STALL_MS,
+    TICK_PART_HISTORY_LENGTH,
     TICK_MAX_DUTY_FRACTION,
     HEALTH_MAX_MISSED_TICKS,
     HEALTH_STATUS_AANDACHT,
@@ -1271,6 +1273,9 @@ class EnergyManagementSystemCoordinator:
         self.last_consistency_checks: dict = {}
         # v2.1.0: hoe lang elke ronde duurde, in milliseconden.
         self.tick_duration_history: list[float] = []
+        # v2.1.1: per onderdeel, om te zien waar de tijd heen gaat.
+        # v2.1.1: per onderdeel, om te zien waar de tijd heen gaat.
+        self._tick_part_timings: dict[str, list[float]] = {}
         # v2.2.0: hoe vaak de watchdog een ronde heeft afgedwongen.
         self.watchdog_herstelpogingen: int = 0
         self._unsub_watchdog = None
@@ -8759,6 +8764,26 @@ class EnergyManagementSystemCoordinator:
             ),
         }
 
+    def _klok(self, naam: str, functie):
+        """Voert `functie` uit en onthoudt hoe lang dat duurde (v2.1.1).
+
+        Gemeld na de eerste meting: 5613 ms voor een ronde. Dat is geen
+        1,9% van de tijd maar een bevriezing van vijfenhalve seconde -
+        de ronde draait in de event loop, dus al die tijd reageert er
+        niets anders in Home Assistant.
+
+        Waar die tijd heen gaat viel niet te raden, dus wordt elk zwaar
+        onderdeel apart geklokt.
+        """
+        begonnen = time.perf_counter()
+        try:
+            return functie()
+        finally:
+            duur = (time.perf_counter() - begonnen) * 1000
+            reeks = self._tick_part_timings.setdefault(naam, [])
+            reeks.append(duur)
+            self._tick_part_timings[naam] = reeks[-TICK_PART_HISTORY_LENGTH:]
+
     def get_tick_performance(self) -> dict:
         """Hoe lang duurt een ronde? (v2.1.0)
 
@@ -8775,15 +8800,26 @@ class EnergyManagementSystemCoordinator:
         vermoeden: bij een ronde van 50 ms kan een tick per minuut
         gemakkelijk, bij 2 seconden niet.
         """
-        reeks = self.tick_duration_history
+        # v2.1.1: de eerste ronde na een herstart telt niet mee - daar
+        # zit het inlezen van de geschiedenis in en dat gebeurt één keer.
+        reeks = [
+            r
+            for r in self.tick_duration_history
+            if isinstance(r, dict) and not r.get("eerste")
+        ]
         if not reeks:
             return {
                 "beschikbaar": False,
-                "reden": "Nog geen ronde gemeten.",
+                "reden": (
+                    "Nog geen gewone ronde gemeten - de eerste na een "
+                    "herstart telt niet mee, want daar zit het inlezen van "
+                    "de geschiedenis in."
+                ),
             }
-        gesorteerd = sorted(reeks)
-        mediaan = statistics.median(gesorteerd)
-        langzaamste = gesorteerd[-1]
+        wandklok = sorted(r["wandklok_ms"] for r in reeks)
+        rekentijd = sorted(r["rekentijd_ms"] for r in reeks)
+        mediaan = statistics.median(rekentijd)
+        langzaamste = rekentijd[-1]
         # Bij welke frequentie zou de integratie de helft van de tijd
         # bezig zijn? Dat is de grens waarboven het onverstandig wordt.
         seconden_per_ronde = mediaan / 1000
@@ -8792,6 +8828,8 @@ class EnergyManagementSystemCoordinator:
             "metingen": len(reeks),
             "mediaan_ms": round(mediaan, 1),
             "langzaamste_ms": round(langzaamste, 1),
+            "wandklok_mediaan_ms": round(statistics.median(wandklok), 1),
+            "wandklok_langzaamste_ms": round(wandklok[-1], 1),
             "huidige_interval_minuten": UPDATE_INTERVAL_MINUTES,
             "belasting_procent": round(
                 100 * seconden_per_ronde / (UPDATE_INTERVAL_MINUTES * 60), 3
@@ -8799,12 +8837,27 @@ class EnergyManagementSystemCoordinator:
             "kleinste_verantwoorde_interval_s": round(
                 seconden_per_ronde / TICK_MAX_DUTY_FRACTION, 1
             ),
+            # v2.1.1: waar de rekentijd heen gaat. Zonder deze uitsplitsing
+            # valt alleen te raden welk onderdeel zwaar is.
+            "onderdelen_ms": {
+                naam: round(statistics.median(waarden), 1)
+                for naam, waarden in sorted(self._tick_part_timings.items())
+                if waarden
+            },
+            # En de harde grens: rekentijd blokkeert de event loop, dus
+            # daar telt de DUUR en niet het percentage.
+            "te_lang_stil": mediaan > TICK_MAX_STALL_MS,
             "toelichting": (
-                "De belasting is de tijd die een ronde kost, gedeeld door "
-                "de tijd ertussen. Zolang dat ruim onder de "
-                f"{TICK_MAX_DUTY_FRACTION:.0%} blijft is er geen bezwaar; "
-                "daarboven staat Home Assistant te vaak op deze integratie "
-                "te wachten."
+                "De belasting rekent met de REKENTIJD, niet met de "
+                "wandklok. Die laatste telt ook het wachten mee - op de "
+                "Zendure, op de schijf - en in die tijd doet Home "
+                "Assistant gewoon ander werk. Alleen rekentijd belast de "
+                "event loop echt. Zolang dat ruim onder de "
+                f"{TICK_MAX_DUTY_FRACTION:.0%} blijft is er geen bezwaar. "
+                "Let daarnaast op de duur zelf: rekentijd blokkeert de "
+                "event loop, dus boven "
+                f"{TICK_MAX_STALL_MS:.0f} ms hapert Home Assistant "
+                "merkbaar, hoe weinig vaak die ronde ook draait."
             ),
         }
 
@@ -22158,6 +22211,7 @@ class EnergyManagementSystemCoordinator:
         # naar live gaan? Hoe belastend is dat?" - dat valt alleen met
         # echte cijfers te beantwoorden.
         begonnen = time.perf_counter()
+        rekentijd_begin = time.process_time()
         try:
             async with self._lock:
                 await self._async_update_locked()
@@ -22181,9 +22235,27 @@ class EnergyManagementSystemCoordinator:
             # many early `return` points for different decision
             # branches, not one single exit.
             self._notify_listeners()
-            # v2.1.0: en de duur van deze ronde vastleggen.
+            # v2.1.1: WANDKLOK en REKENTIJD apart.
+            #
+            # Gemeld: "Mediaan 5613 ms over 1 rondes." Dat getal is om
+            # twee redenen misleidend, en dat is een fout in mijn meting.
+            #
+            # 1. De wandklok telt ook het WACHTEN mee: een
+            #    `services.async_call(..., blocking=True)` naar de
+            #    Zendure, een uitvoerderstaak voor de statistieken. In
+            #    die tijd doet Home Assistant gewoon ander werk - de
+            #    event loop staat niet stil. Alleen de rekentijd belast
+            #    de loop echt.
+            # 2. Het was de EERSTE ronde na een herstart, met het
+            #    inlezen van de geschiedenis erin. Dat is de zwaarste
+            #    die er is en niet representatief.
             self.tick_duration_history.append(
-                (time.perf_counter() - begonnen) * 1000
+                {
+                    "wandklok_ms": (time.perf_counter() - begonnen) * 1000,
+                    "rekentijd_ms": (time.process_time() - rekentijd_begin)
+                    * 1000,
+                    "eerste": len(self.tick_duration_history) == 0,
+                }
             )
             self.tick_duration_history = self.tick_duration_history[
                 -TICK_DURATION_HISTORY_LENGTH:
@@ -22378,7 +22450,7 @@ class EnergyManagementSystemCoordinator:
         # Afgeschermd, want dit is een melding - die mag de aansturing
         # nooit laten vallen.
         try:
-            self._meld_planningswijzigingen(now)
+            self._klok("planningsmeldingen", lambda: self._meld_planningswijzigingen(now))
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Kon de planningsmeldingen niet beoordelen")
         # v1.31.0: het plan van vanochtend vastleggen en 's nachts
@@ -22392,27 +22464,27 @@ class EnergyManagementSystemCoordinator:
         # melding krijg (...) zodat ik live kan zien dat een berekening
         # ofzo niet klopt."
         try:
-            self._meld_zelfcontrole(now)
+            self._klok("zelfcontrole", lambda: self._meld_zelfcontrole(now))
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Kon de zelfcontrole niet uitvoeren")
 
         try:
-            self._onthoud_energiedagstand(now.date())
+            self._klok("energiedagstand", lambda: self._onthoud_energiedagstand(now.date()))
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Kon de energiedagstand niet vasthouden")
 
         try:
-            self._update_verouderingsdrijvers(now)
+            self._klok("veroudering", lambda: self._update_verouderingsdrijvers(now))
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Kon de verouderingsdrijvers niet bijwerken")
 
         try:
-            self._volg_terugvallen(now)
+            self._klok("terugvallen", lambda: self._volg_terugvallen(now))
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Kon de terugvallen niet bijhouden")
 
         try:
-            self._update_proefstand(now)
+            self._klok("proefstand", lambda: self._update_proefstand(now))
         except Exception as fout:  # noqa: BLE001
             _LOGGER.exception("Kon de proefstand niet bijwerken")
             self.internal_failures["proefstand"] = f"{type(fout).__name__}: {fout}"
@@ -22420,7 +22492,7 @@ class EnergyManagementSystemCoordinator:
             self.internal_failures.pop("proefstand", None)
 
         try:
-            self._update_plan_review(now)
+            self._klok("plantoetsing", lambda: self._update_plan_review(now))
         except Exception as fout:  # noqa: BLE001
             _LOGGER.exception("Kon de plantoetsing niet bijwerken")
             self.internal_failures["plantoetsing"] = (

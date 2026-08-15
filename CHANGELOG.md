@@ -14766,3 +14766,37 @@ versie op deze machine, en een herstart komt meestal juist door een
 nieuwe versie.
 
 **Volledige testsuite**: 2229 tests, allemaal groen.
+
+## v2.1.1 — 5613 ms, en waar die tijd heen gaat
+
+**Gemeld** na de eerste meting:
+
+> Mediaan 5613.0 ms, langzaamste 5613.0 ms over 1 rondes.
+
+Twintig keer meer dan ik had verwacht. Mijn schatting van 50 tot 300 ms
+was er ver naast, en dat is precies waarom die meting er nu is.
+
+### Drie dingen die dat getal nog niet zei
+
+**Eén ronde is geen meting.** En het is uitgerekend de eerste na een
+herstart, waarin het inlezen van vierhonderd dagen geschiedenis zit —
+werk dat maar één keer gebeurt. Die ronde telt nu niet mee.
+
+**Wandklok is niet hetzelfde als belasting.** Van die 5,6 seconden gaat
+een deel op aan wáchten: op de Zendure, op de schijf, op de recorder. In
+die tijd doet Home Assistant gewoon ander werk. Alleen **rekentijd**
+blokkeert de event loop echt, en die wordt nu apart gemeten.
+
+**Het percentage is niet de enige maat.** 1,87% klinkt onschuldig, maar
+zolang een ronde rekent staat alles stil. Boven een seconde hapert Home
+Assistant merkbaar, hoe weinig vaak die ronde ook draait. Dat is nu een
+eigen grens naast het aandeel.
+
+### En de uitsplitsing
+
+Zeven onderdelen worden apart geklokt: planningsmeldingen, zelfcontrole,
+energiedagstand, veroudering, terugvallen, proefstand en plantoetsing. In
+de volgende diagnostiek staat waar de tijd heen gaat, in plaats van dat
+we het moeten raden.
+
+**Volledige testsuite**: 2229 tests, allemaal groen.

@@ -1354,6 +1354,18 @@ TICK_DURATION_HISTORY_LENGTH = 100
 # voor alle andere integraties.
 TICK_MAX_DUTY_FRACTION = 0.05
 
+# Los van het AANDEEL van de tijd telt ook de duur van één ronde: zolang
+# die loopt staat de event loop stil. Gemeten op deze installatie: 5613
+# ms voor de eerste ronde na een herstart - twintig keer meer dan
+# verwacht.
+#
+# Boven een seconde is dat merkbaar voor de rest van Home Assistant,
+# ongeacht hoe vaak het gebeurt.
+TICK_MAX_STALL_MS = 1000.0
+
+# Hoeveel metingen per onderdeel worden bewaard.
+TICK_PART_HISTORY_LENGTH = 50
+
 # De ventilator schakelde in de nacht van 15 augustus dertien keer,
 # ongeveer om de twintig minuten.
 #
