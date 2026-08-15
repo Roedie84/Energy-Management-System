@@ -501,6 +501,12 @@ VLUCHTIG_MET_REDEN = {
     "weather_ensemble_sources_used": "elke tick herrekend",
     "weather_ensemble_readings": "elke tick herrekend",
     "internal_failures": "hoort na een herstart opnieuw te blijken",
+    # v2.0.0: de zelfcontrole rekent elke ronde opnieuw.
+    "last_consistency_checks": "blijkt elke ronde opnieuw",
+    # v2.2.0: hoe vaak de watchdog moest ingrijpen. Bij een herstart is
+    # dat getal niet meer relevant - het gaat om de huidige draai.
+    "watchdog_herstelpogingen": "telt per draai, niet over herstarts heen",
+    "_laatste_zelfcontrole_sleutel": "blijkt elke ronde opnieuw",
     # v1.58.0: de REDEN blijkt elke tick opnieuw; alleen het beginmoment
     # (`fallback_since`) wordt bewaard, want dat is niet te herleiden.
     "fallback_reasons": "blijkt elke tick opnieuw",
