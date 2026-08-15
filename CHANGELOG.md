@@ -14551,3 +14551,116 @@ Elf toetsen die nu bij elke oplevering meelopen:
   laadt maar niets toont is net zo stuk
 
 **Volledige testsuite**: 2205 tests, allemaal groen.
+
+## v2.0.3 — De zelfcontrole werkt, en had op twee punten ongelijk
+
+De eerste bevindingen kwamen binnen een ronde binnen. Allebei terecht
+gesignaleerd, allebei verkeerd geëtiketteerd.
+
+### "Week, maand en jaar staan alle drie op 0.05"
+
+De waarneming klopt, maar de oorzaak is geen rekenfout: er is simpelweg
+**één dag met een CO₂-waarde**. Ingelezen dagen hebben die niet, want de
+intensiteit per uur is nooit bewaard.
+
+De controle telt nu hoeveel dagen er werkelijk bijdragen. Is dat er één,
+dan is het **aandacht** met erbij dat het zich vanzelf vult — of eerder,
+met een meter bij Configureren. Dragen er meerdere dagen bij en staat
+elke periode tóch op hetzelfde getal, dan is het wél een fout.
+
+Een fout melden waar niets aan te doen is, is de snelste manier om de
+controle te laten negeren. Dezelfde afweging als bij de terugval-duur
+(v1.79.0).
+
+### "18 schakelingen vandaag"
+
+Ook waar, maar dat telde vanaf middernacht — inclusief de uren vóór de
+minimale looptijd uit v1.99.0, die die middag pas was geïnstalleerd. Een
+controle die terugkijkt naar een periode waarin de reparatie nog niet
+draaide, meldt een probleem dat al opgelost is.
+
+Nu over een **venster van zes uur**, met een grens van zes schakelingen.
+Bij een minimale loop- en rusttijd van een half uur zijn er hoogstens
+twaalf mogelijk in zes uur; zes is dus ruim boven normaal en onder het
+maximum. Lang genoeg om pendelen te zien — het ging om de twintig
+minuten — en kort genoeg om te merken dat het over is.
+
+**Volledige testsuite**: 2208 tests, allemaal groen.
+
+## v2.0.4 — Dubbele sleutel in het dashboard
+
+**Gemeld** uit het logboek van Home Assistant:
+
+> YAML file energy_management_system_dashboard.yaml contains duplicate
+> key "grid_options". Check lines 279 and 282
+
+De zelfcontrole-tegel uit v2.0.1 kreeg `grid_options` mee terwijl de
+kaart die al had. Home Assistant negeert er dan één stilzwijgend — hier
+zonder zichtbaar gevolg, maar het had net zo goed de breedte kunnen
+verzetten.
+
+**Geen enkele test ving dit**, en dat is het eigenlijke probleem:
+`yaml.safe_load` slikt dubbele sleutels zonder te klagen, de laatste
+wint. Alle bestaande dashboardtests gebruiken die functie en zagen dus
+niets.
+
+Twee toetsen erbij:
+
+- een strenge lader die dubbele sleutels weigert, precies zoals Home
+  Assistant zelf doet — over beide kopieën van het bestand;
+- en een die de concrete vorm vangt: één kaart die twee keer verteld
+  krijgt hoe breed hij is.
+
+Allebei op de proef gesteld door de fout terug te zetten in een kopie:
+dan vallen ze om.
+
+**Volledige testsuite**: 2210 tests, allemaal groen.
+
+## v2.0.5 — Vier vondsten uit het logboek
+
+**Gevraagd**: "Logboek controle?" — en toen vijf meldingen gedeeld. Het
+logboek zit niet in de diagnostiek-export, dus dit was voor mij tot nu
+toe onzichtbaar.
+
+### De gezondheidssensor was stuk
+
+> `missing 1 required positional argument: 'entity_id'` — 27 keer in
+> dertien minuten
+
+`is_sensor_genuinely_unavailable` wil ook het tijdstip; het werd met één
+argument aangeroepen. Die sensor was dus sinds zijn invoering kapot.
+
+**Waarom dat niet opviel**: het attributenblok vangt elke sleutel apart
+af sinds v1.16.x, dus de rest van de tegels bleef gewoon werken. Er stond
+alleen dit ene attribuut niet — precies de vorm die je pas ziet als je de
+export regel voor regel leest.
+
+En de test die het had moeten vangen, bootste de functie na **met één
+argument**. De nabootsing week af van de echte handtekening, dus de fout
+was in de tests onzichtbaar.
+
+### Taken vanaf de verkeerde draad
+
+> `calls hass.async_create_task from a thread other than the event loop,
+> which may cause Home Assistant to crash or data to corrupt`
+
+En de gevolgmelding uit hetzelfde logboek: *"coroutine 'async_update' was
+never awaited"*. De coroutine werd wél aangemaakt maar nooit uitgevoerd —
+dus die tick ging verloren.
+
+Beide terugroepen gebruiken nu `add_job`, dat wél draadveilig is en zelf
+de juiste weg kiest.
+
+### Vier tests erbij
+
+- de gezondheidsberekening wordt echt uitgevoerd;
+- **elke** attribuutfunctie van de sensor wordt aangeroepen — zonder dat
+  blijft een fout verborgen achter de foutafvanging;
+- geen van beide terugroepen mag nog `async_create_task` gebruiken;
+- en een toets die alle **nabootsingen in de testbestanden** vergelijkt
+  met de echte handtekening. Dat is de diepere oorzaak, en die kan overal
+  toeslaan.
+
+De vijfde melding (dubbele YAML-sleutel) was al opgelost in v2.0.4.
+
+**Volledige testsuite**: 2214 tests, allemaal groen.

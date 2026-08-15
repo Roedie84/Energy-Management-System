@@ -186,7 +186,8 @@ from .const import (
     MAX_PLAUSIBLE_EFFICIENCY_PERCENT,
     CONF_MANUAL_DISCHARGE_POWER,
     CONF_BATTERY_TOTAL_CAPACITY_SENSOR,
-    CONSISTENCY_MAX_COOLING_SWITCHES_PER_DAY,
+    CONSISTENCY_MAX_COOLING_SWITCHES_PER_WINDOW,
+    COOLING_SWITCH_WINDOW_HOURS,
     CONSISTENCY_TICK_STALE_MINUTES,
     HEALTH_MAX_MISSED_TICKS,
     HEALTH_STATUS_AANDACHT,
@@ -1858,11 +1859,27 @@ class EnergyManagementSystemCoordinator:
             _LOGGER.exception("De afgedwongen ronde mislukte ook")
 
     def _handle_interval(self, _now) -> None:
-        self.hass.async_create_task(self.async_update())
+        """v2.0.5: draadveilig plannen.
+
+        Gemeld uit het logboek: "calls hass.async_create_task from a
+        thread other than the event loop, which may cause Home Assistant
+        to crash or data to corrupt."
+
+        `async_create_task` mag alleen vanuit de event loop. Deze
+        terugroep kan van een andere draad komen, en dan wordt de
+        coroutine wél aangemaakt maar nooit uitgevoerd - vandaar de
+        tweede melding uit hetzelfde logboek: "coroutine 'async_update'
+        was never awaited".
+
+        `add_job` is wél draadveilig en kiest zelf de juiste weg.
+        """
+        self.hass.add_job(self.async_update)
 
     @callback
     def _handle_state_change(self, _event: Event) -> None:
-        self.hass.async_create_task(self.async_update())
+        # Deze draait wél op de event loop (@callback), maar `add_job`
+        # werkt daar net zo goed - één manier is beter dan twee.
+        self.hass.add_job(self.async_update)
 
     async def async_set_nu_laden(self, value: bool) -> None:
         """Zet de knop "Nu laden" aan of uit (v1.72.0).
@@ -8479,7 +8496,11 @@ class EnergyManagementSystemCoordinator:
         stil = [
             entity_id
             for entity_id in self.tracked_entities
-            if self.is_sensor_genuinely_unavailable(entity_id)
+            # v2.0.5: deze functie verwacht ook het tijdstip. Gemeld uit
+            # het logboek: "missing 1 required positional argument:
+            # 'entity_id'" - de aanroep gaf alleen de entiteit mee,
+            # waardoor die als `now` binnenkwam.
+            if self.is_sensor_genuinely_unavailable(nu, entity_id)
         ]
         onderdelen.append(
             {
@@ -8811,14 +8832,47 @@ class EnergyManagementSystemCoordinator:
         if len(lang) >= 2:
             for sleutel, naam, _e in self.PERIODE_GROOTHEDEN:
                 waarden = [w.get(sleutel) for w in lang]
-                if all(v is not None for v in waarden) and len(set(waarden)) == 1:
-                    if waarden[0]:
-                        _toets(
-                            f"Periode: {naam}",
-                            False,
-                            f"Week, maand en jaar staan alle drie op "
-                            f"{waarden[0]}. Dan telt er maar één dag mee.",
-                        )
+                if not (
+                    all(v is not None for v in waarden)
+                    and len(set(waarden)) == 1
+                    and waarden[0]
+                ):
+                    continue
+
+                # v2.0.3: hoeveel dagen dragen er eigenlijk bij?
+                #
+                # Gemeld: "Periode: CO2 - week, maand en jaar staan alle
+                # drie op 0.05." De controle had gelijk, maar de OORZAAK
+                # is niet dat er iets fout wordt gerekend: er is
+                # simpelweg één dag met een CO2-waarde. Ingelezen dagen
+                # hebben die niet, want de intensiteit per uur is nooit
+                # bewaard.
+                #
+                # Een fout melden waar niets aan te doen is, is de
+                # snelste manier om de controle te laten negeren -
+                # dezelfde afweging als bij de terugval-duur (v1.79.0).
+                dragende_dagen = sum(
+                    1
+                    for r in (self.energy_daily_history or [])
+                    if r.get(sleutel) is not None
+                )
+                if dragende_dagen <= 1:
+                    _toets(
+                        f"Periode: {naam}",
+                        False,
+                        f"Alle perioden staan op {waarden[0]} omdat er maar "
+                        f"{dragende_dagen} dag met een waarde is. Vult zich "
+                        "vanzelf, of eerder met een meter bij Configureren.",
+                        ernst="aandacht",
+                    )
+                else:
+                    _toets(
+                        f"Periode: {naam}",
+                        False,
+                        f"Week, maand en jaar staan alle drie op "
+                        f"{waarden[0]} terwijl {dragende_dagen} dagen een "
+                        "waarde hebben. Dat kan niet.",
+                    )
 
         # --- 7. Loopt de tick nog? ---
         laatste = self.last_successful_update
@@ -8838,16 +8892,28 @@ class EnergyManagementSystemCoordinator:
                 )
 
         # --- 8. Schakelt de koeling niet te vaak? ---
-        vandaag = nu.date().isoformat()
-        schakelingen = sum(
-            1
-            for x in (self.battery_cooling_history or [])
-            if str(x.get("moment", "")).startswith(vandaag)
-        )
+        # v2.0.3: over de laatste ZES UUR, niet vanaf middernacht.
+        #
+        # Gemeld: "18 schakelingen vandaag." Dat klopte, maar het telde
+        # ook de uren van vóór de minimale looptijd uit v1.99.0 - die was
+        # die middag pas geïnstalleerd. Een controle die uren terugkijkt
+        # naar een periode waarin een reparatie nog niet draaide, meldt
+        # een probleem dat al opgelost is.
+        #
+        # Zes uur is lang genoeg om pendelen te zien (het ging om de
+        # twintig minuten) en kort genoeg om snel te merken dat het over
+        # is.
+        grens_moment = nu - timedelta(hours=COOLING_SWITCH_WINDOW_HOURS)
+        schakelingen = 0
+        for x in self.battery_cooling_history or []:
+            moment = dt_util.parse_datetime(str(x.get("moment", "")))
+            if moment is not None and moment >= grens_moment:
+                schakelingen += 1
         _toets(
             "Accukoeling",
-            schakelingen <= CONSISTENCY_MAX_COOLING_SWITCHES_PER_DAY,
-            f"{schakelingen} schakelingen vandaag - dat wijst op pendelen "
+            schakelingen <= CONSISTENCY_MAX_COOLING_SWITCHES_PER_WINDOW,
+            f"{schakelingen} schakelingen in de laatste "
+            f"{COOLING_SWITCH_WINDOW_HOURS:.0f} uur - dat wijst op pendelen "
             "rond een drempel.",
             ernst="aandacht",
         )

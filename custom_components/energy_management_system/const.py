@@ -1340,9 +1340,21 @@ BATTERY_COOLING_MIN_REST_MINUTES = 30.0
 # Twee ticks missen kan; een half uur stilte niet.
 CONSISTENCY_TICK_STALE_MINUTES = 20.0
 
-# De ventilator schakelde in de nacht van 15 augustus dertien keer.
-# Boven dit aantal is er iets aan de hand met de drempels.
-CONSISTENCY_MAX_COOLING_SWITCHES_PER_DAY = 12
+# De ventilator schakelde in de nacht van 15 augustus dertien keer,
+# ongeveer om de twintig minuten.
+#
+# v2.0.3: over een VENSTER, niet vanaf middernacht. Gemeld: "18
+# schakelingen vandaag" - dat telde ook de uren van voor de minimale
+# looptijd uit v1.99.0, die die middag pas was geinstalleerd. Een
+# controle die terugkijkt naar een periode waarin de reparatie nog niet
+# draaide, meldt een probleem dat al opgelost is.
+#
+# Zes uur is lang genoeg om pendelen te zien en kort genoeg om snel te
+# merken dat het over is. Bij een minimale loop- en rusttijd van een half
+# uur zijn er hoogstens twaalf schakelingen in zes uur mogelijk; zes is
+# dus ruim boven normaal en onder het maximum.
+COOLING_SWITCH_WINDOW_HOURS = 6.0
+CONSISTENCY_MAX_COOLING_SWITCHES_PER_WINDOW = 6
 
 # --- Logboek met drie prioriteiten (v2.1.0) --------------------------
 # Gevraagd: "Misschien een soort logboek? Waarbij ik live besluiten, en

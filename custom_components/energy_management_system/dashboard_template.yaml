@@ -279,9 +279,6 @@ views:
         navigation_path: /energy-management-system/detail-zelfcontrole
       grid_options:
         columns: 12
-        rows: auto
-      grid_options:
-        columns: 12
         rows: 1
     - type: custom:mushroom-template-card
       primary: PV / zon
