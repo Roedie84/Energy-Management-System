@@ -14700,3 +14700,69 @@ verkeerde draad. De testomgeving is milder dan de werkelijkheid; deze
 toetsen halen daar telkens een stuk van weg.
 
 **Volledige testsuite**: 2216 tests, allemaal groen.
+
+## v2.0.7 — Twee verminkte woorden in de meldingen
+
+**Gevraagd**: "Verder nog fouten, textuele fouten of iets dergelijks
+gevonden?" Die had ik niet gericht gezocht. Alsnog gedaan: 1545 zinnen
+uit de export, 857 teksten uit de code en 157 uit het dashboard.
+
+De export en het dashboard waren schoon. De **meldingen** niet:
+
+> de diagnostiek-export hoort weer 'n JSON-bestand te **gefkes**
+> 1 onderdeel kan zichzelf neet berekenen: **gezunnedheid**
+
+De Achterhoekse vertaling gebruikte `str.replace` **zonder
+woordgrenzen**. "geven" bevat "even" en werd `g` + `efkes`;
+"gezondheid" bevat "zon" en werd `ge` + `zunne` + `dheid`.
+
+Nu met een woordgrens eromheen. De tabel bevat ook meerwoordige regels
+("aan het" → "an 't"), en die werken daar net zo goed mee.
+
+**En één echte taalfout**: *"De stand is verandert"* moet **veranderd**
+zijn — voltooid deelwoord na "is", geen persoonsvorm.
+
+### Wat géén fout bleek
+
+*"Alle onderdelen rekent weer"* oogde als een meervoudsfout, en ik heb
+het even "gerepareerd" naar "rekenen". Dat was verkeerd: het Achterhoeks
+heeft een **eenvormig meervoud op -t**, net als *"Prieze gaot onder nul"*
+twee regels verderop. Teruggedraaid.
+
+**Zeven tests erbij**, waarvan de belangrijkste het mechanisme toetst in
+plaats van de uitkomst: elk woord uit de tabel wordt in een langer woord
+geplakt en moet daar ongemoeid blijven. Op de uitkomst toetsen zou
+"vannacht" ten onrechte afkeuren, want dat bevat terecht "nacht".
+
+**Volledige testsuite**: 2223 tests, allemaal groen.
+
+## v2.1.0 — Hoe zwaar is een ronde?
+
+**Gevraagd**: "Nu wordt alle data om de 5 minuten gerefreshed, wat als we
+naar live gaan? Hoe belastend is dat?"
+
+Dat viel hier niet te meten. In een testomgeving zonder echte prijzen
+bouwt de kwartierplanning niet — en dat is juist het zwaarste deel. Een
+lege ronde duurt 4 ms, en dat getal zegt niets over de praktijk.
+
+Een schatting naast echte cijfers zetten is precies wat deze week een
+paar keer is teruggedraaid. **Dus meet de integratie het nu zelf.**
+
+Elke ronde wordt geklokt. Op de Zelfcontrole-pagina staat:
+
+- de **mediaan** en de **langzaamste** ronde over de laatste honderd —
+  die laatste apart, want de mediaan verbergt een uitschieter en juist
+  die bepaalt of Home Assistant merkbaar hapert;
+- welk **aandeel van de tijd** de integratie bezig is;
+- en het **kleinste verantwoorde interval**: dat is het antwoord op "kan
+  het vaker?", met een getal in plaats van een vermoeden.
+
+Boven de vijf procent belasting verschijnt er een bevinding in de
+zelfcontrole. Dat is streng genoeg om ruimte te laten voor alle andere
+integraties.
+
+De metingen overleven **bewust geen herstart**: ze gelden voor de huidige
+versie op deze machine, en een herstart komt meestal juist door een
+nieuwe versie.
+
+**Volledige testsuite**: 2229 tests, allemaal groen.

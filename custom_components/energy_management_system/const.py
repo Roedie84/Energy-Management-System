@@ -1340,6 +1340,20 @@ BATTERY_COOLING_MIN_REST_MINUTES = 30.0
 # Twee ticks missen kan; een half uur stilte niet.
 CONSISTENCY_TICK_STALE_MINUTES = 20.0
 
+# --- Hoe zwaar is een ronde? (v2.1.0) --------------------------------
+# Gevraagd: "Nu wordt alle data om de 5 minuten gerefreshed, wat als we
+# naar live gaan? Hoe belastend is dat?"
+#
+# Niet te schatten zonder te meten - in een testomgeving zonder echte
+# prijzen bouwt de kwartierplanning niet, en dat is juist het zwaarste
+# deel. Dus meet de integratie het zelf.
+TICK_DURATION_HISTORY_LENGTH = 100
+
+# Boven dit aandeel van de tijd staat Home Assistant te vaak op deze
+# integratie te wachten. Vijf procent is streng genoeg om ruimte te laten
+# voor alle andere integraties.
+TICK_MAX_DUTY_FRACTION = 0.05
+
 # De ventilator schakelde in de nacht van 15 augustus dertien keer,
 # ongeveer om de twintig minuten.
 #
@@ -3875,7 +3889,9 @@ ACHTERHOEKS_TITELS = {
     "battery_cooling": "Accukoeling an of uut",
     "sluipverbruik": "'t Lik of der wat stiekem stroom vret",
     "device_drift": "Der is meugelek wat kapot",
-    "mode_change": "De stand is verandert",
+    # v2.0.7: "veranderd", niet "verandert" - voltooid deelwoord na "is",
+    # geen persoonsvorm. Gevonden bij het nakijken van de meldingen.
+    "mode_change": "De stand is veranderd",
     "battery_wont_last_night": "Den accu haalt de nacht neet",
     "battery_full_with_sun": "Accu vol en de zunne schient nog",
     "low_soc_before_peak": "Weinig in den accu veur de duurte",
@@ -3896,6 +3912,11 @@ ACHTERHOEKS_TITELS = {
     "battery_wont_last_night_hersteld": "Den accu haalt de nacht weer",
     "sensor_unavailable_hersteld": "De sensor dut 't weer",
     "integration_error_hersteld": "'t Systeem löp weer",
+    # v2.0.7: TERUGGEDRAAID. Even stond hier "rekenen", omdat "Alle
+    # onderdelen rekent" als een meervoudsfout oogde. Dat is het niet:
+    # het Achterhoeks heeft een EENVORMIG MEERVOUD op -t. Twee regels
+    # verderop staat "Prieze gaot onder nul", en die volgt dezelfde
+    # regel.
     "interne_fout_hersteld": "Alle onderdelen rekent weer",
     "cost_mismatch_hersteld": "De kosten kloppen weer",
     "solar_underperforming_hersteld": "De zunne dut 't weer",

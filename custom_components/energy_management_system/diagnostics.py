@@ -506,6 +506,10 @@ async def async_get_config_entry_diagnostics(
             ),
             "watchdog_herstelpogingen": coordinator.watchdog_herstelpogingen,
             "event_log": _veilig("get_event_log", coordinator.get_event_log),
+            # v2.1.0: hoe zwaar een ronde is.
+            "tick_performance": _veilig(
+                "get_tick_performance", coordinator.get_tick_performance
+            ),
             "consistency_checks": _veilig(
                 "get_consistency_checks", coordinator.get_consistency_checks
             ),

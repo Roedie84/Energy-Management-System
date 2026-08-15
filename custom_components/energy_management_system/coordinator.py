@@ -39,7 +39,9 @@ import asyncio
 import logging
 import math
 import statistics
+import time
 import random
+import re
 from datetime import date, datetime, timedelta, timezone
 
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
@@ -189,6 +191,8 @@ from .const import (
     CONSISTENCY_MAX_COOLING_SWITCHES_PER_WINDOW,
     COOLING_SWITCH_WINDOW_HOURS,
     CONSISTENCY_TICK_STALE_MINUTES,
+    TICK_DURATION_HISTORY_LENGTH,
+    TICK_MAX_DUTY_FRACTION,
     HEALTH_MAX_MISSED_TICKS,
     HEALTH_STATUS_AANDACHT,
     HEALTH_STATUS_GOED,
@@ -1265,6 +1269,8 @@ class EnergyManagementSystemCoordinator:
         self._energiedagstand: dict = {}
         # v2.0.0: de laatste uitkomst van de zelfcontrole.
         self.last_consistency_checks: dict = {}
+        # v2.1.0: hoe lang elke ronde duurde, in milliseconden.
+        self.tick_duration_history: list[float] = []
         # v2.2.0: hoe vaak de watchdog een ronde heeft afgedwongen.
         self.watchdog_herstelpogingen: int = 0
         self._unsub_watchdog = None
@@ -8753,6 +8759,55 @@ class EnergyManagementSystemCoordinator:
             ),
         }
 
+    def get_tick_performance(self) -> dict:
+        """Hoe lang duurt een ronde? (v2.1.0)
+
+        Gevraagd: "Nu wordt alle data om de 5 minuten gerefreshed, wat
+        als we naar live gaan? Hoe belastend is dat?"
+
+        Dat viel hier niet te meten - in een testomgeving zonder echte
+        prijzen bouwt de kwartierplanning niet, en dat is juist het
+        zwaarste deel. Een geschat getal naast echte cijfers zetten is
+        precies wat we deze week een paar keer hebben teruggedraaid.
+
+        Dus meet de integratie het zelf. Daarmee is de vraag "kan het
+        vaker?" te beantwoorden met een getal in plaats van een
+        vermoeden: bij een ronde van 50 ms kan een tick per minuut
+        gemakkelijk, bij 2 seconden niet.
+        """
+        reeks = self.tick_duration_history
+        if not reeks:
+            return {
+                "beschikbaar": False,
+                "reden": "Nog geen ronde gemeten.",
+            }
+        gesorteerd = sorted(reeks)
+        mediaan = statistics.median(gesorteerd)
+        langzaamste = gesorteerd[-1]
+        # Bij welke frequentie zou de integratie de helft van de tijd
+        # bezig zijn? Dat is de grens waarboven het onverstandig wordt.
+        seconden_per_ronde = mediaan / 1000
+        return {
+            "beschikbaar": True,
+            "metingen": len(reeks),
+            "mediaan_ms": round(mediaan, 1),
+            "langzaamste_ms": round(langzaamste, 1),
+            "huidige_interval_minuten": UPDATE_INTERVAL_MINUTES,
+            "belasting_procent": round(
+                100 * seconden_per_ronde / (UPDATE_INTERVAL_MINUTES * 60), 3
+            ),
+            "kleinste_verantwoorde_interval_s": round(
+                seconden_per_ronde / TICK_MAX_DUTY_FRACTION, 1
+            ),
+            "toelichting": (
+                "De belasting is de tijd die een ronde kost, gedeeld door "
+                "de tijd ertussen. Zolang dat ruim onder de "
+                f"{TICK_MAX_DUTY_FRACTION:.0%} blijft is er geen bezwaar; "
+                "daarboven staat Home Assistant te vaak op deze integratie "
+                "te wachten."
+            ),
+        }
+
     def get_consistency_checks(self, now: datetime | None = None) -> dict:
         """Rekent na of getallen die elkaar moeten kloppen dat ook doen
         (v2.0.0).
@@ -8943,6 +8998,18 @@ class EnergyManagementSystemCoordinator:
             moment = dt_util.parse_datetime(str(x.get("moment", "")))
             if moment is not None and moment >= grens_moment:
                 schakelingen += 1
+        # --- 9. Wordt een ronde niet te zwaar? ---
+        prestatie = self.get_tick_performance()
+        if prestatie.get("beschikbaar"):
+            _toets(
+                "Rondeduur",
+                prestatie["belasting_procent"] / 100 < TICK_MAX_DUTY_FRACTION,
+                f"Een ronde duurt {prestatie['mediaan_ms']:.0f} ms; dat is "
+                f"{prestatie['belasting_procent']:.1f}% van de tijd tussen "
+                "twee rondes.",
+                ernst="aandacht",
+            )
+
         _toets(
             "Accukoeling",
             schakelingen <= CONSISTENCY_MAX_COOLING_SWITCHES_PER_WINDOW,
@@ -8953,7 +9020,7 @@ class EnergyManagementSystemCoordinator:
         )
 
         return {
-            "gecontroleerd": 8,
+            "gecontroleerd": 9,
             "bevindingen": bevindingen,
             "alles_klopt": not bevindingen,
             "toelichting": (
@@ -9787,13 +9854,30 @@ class EnergyManagementSystemCoordinator:
         # "goodkope", omdat "goed" -> "good" er daarna overheen liep.
         uit = tekst
         vervangen: list[str] = []
+        # v2.0.7: op HELE WOORDEN vervangen.
+        #
+        # Gevonden bij het nakijken van de meldingsteksten:
+        #
+        #   "de diagnostiek-export hoort weer 'n JSON-bestand te gefkes"
+        #   "1 onderdeel kan zichzelf neet berekenen: gezunnedheid"
+        #
+        # De vervanging gebruikte `str.replace` zonder woordgrenzen.
+        # "geven" bevat "even" en werd "g" + "efkes"; "gezondheid" bevat
+        # "zon" en werd "ge" + "zunne" + "dheid".
+        #
+        # Met een woordgrens eromheen kan dat niet meer. De tabel bevat
+        # ook meerwoordige regels ("aan het" -> "an 't"), en die werken
+        # met \b net zo goed.
         for nl, ach in ACHTERHOEKS_WOORDEN:
             for bron, doel in ((nl, ach), (nl.capitalize(), ach.capitalize())):
-                if bron not in uit:
+                patroon = re.compile(
+                    rf"(?<![\w']){re.escape(bron)}(?![\w'])"
+                )
+                if not patroon.search(uit):
                     continue
                 merk = f"\x00{len(vervangen)}\x00"
                 vervangen.append(doel)
-                uit = uit.replace(bron, merk)
+                uit = patroon.sub(merk, uit)
         for i, doel in enumerate(vervangen):
             uit = uit.replace(f"\x00{i}\x00", doel)
         return uit
@@ -22070,6 +22154,10 @@ class EnergyManagementSystemCoordinator:
         can see at a glance whether the integration is actually working,
         without needing to check the Home Assistant logs yourself.
         """
+        # v2.1.0: meet hoe lang een ronde kost. Gevraagd: "wat als we
+        # naar live gaan? Hoe belastend is dat?" - dat valt alleen met
+        # echte cijfers te beantwoorden.
+        begonnen = time.perf_counter()
         try:
             async with self._lock:
                 await self._async_update_locked()
@@ -22093,6 +22181,13 @@ class EnergyManagementSystemCoordinator:
             # many early `return` points for different decision
             # branches, not one single exit.
             self._notify_listeners()
+            # v2.1.0: en de duur van deze ronde vastleggen.
+            self.tick_duration_history.append(
+                (time.perf_counter() - begonnen) * 1000
+            )
+            self.tick_duration_history = self.tick_duration_history[
+                -TICK_DURATION_HISTORY_LENGTH:
+            ]
 
     @property
     def system_status(self) -> str:
