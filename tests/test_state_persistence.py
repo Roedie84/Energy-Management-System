@@ -330,6 +330,11 @@ GEEN_OPGEBOUWDE_TOESTAND = {
     # Een vlag die bij het opstarten opnieuw wordt gezet, geen
     # geschiedenis - de naam suggereert alleen iets anders.
     "was_bootstrapped_from_history",
+    # v2.1.0: de rondeduur meet de HUIDIGE versie op de HUIDIGE machine.
+    # Metingen van voor een herstart zeggen daar niets over - een
+    # herstart komt meestal juist door een nieuwe versie, en dan is de
+    # oude meting niet meer geldig.
+    "tick_duration_history",
 }
 
 
@@ -501,6 +506,10 @@ VLUCHTIG_MET_REDEN = {
     "weather_ensemble_sources_used": "elke tick herrekend",
     "weather_ensemble_readings": "elke tick herrekend",
     "internal_failures": "hoort na een herstart opnieuw te blijken",
+    # v2.1.0: de rondeduur meet de HUIDIGE versie op de HUIDIGE machine.
+    # Metingen van voor een herstart zeggen daar niets over - een
+    # herstart komt meestal juist door een nieuwe versie.
+    "tick_duration_history": "meet de huidige versie; begint opnieuw",
     # v2.0.0: de zelfcontrole rekent elke ronde opnieuw.
     "last_consistency_checks": "blijkt elke ronde opnieuw",
     # v2.2.0: hoe vaak de watchdog moest ingrijpen. Bij een herstart is

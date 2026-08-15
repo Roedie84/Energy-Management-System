@@ -163,6 +163,7 @@ def test_present_attributes_are_not_reported(make_coordinator, hass):
             "zonstand": {},
             "buitensensor": {},
             "zelfcontrole": {},
+            "rondeduur": {},
             "logboek": {},
             "gezondheid": {},
             "veroudering": {},
