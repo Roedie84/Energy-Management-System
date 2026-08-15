@@ -157,3 +157,59 @@ def test_test_doubles_match_the_real_signature():
                 )
 
     assert not fouten, fouten
+
+
+def test_no_blocking_file_access_outside_the_executor():
+    """Gemeld uit het logboek:
+
+        Detected blocking call to read_text (...) inside the event loop
+        by custom integration 'energy_management_system'
+
+    Een bestand lezen duurt milliseconden, maar in de event loop staat in
+    die tijd ALLES stil - elke andere integratie, elke automatisering.
+    Home Assistant verbiedt dat daarom.
+
+    Het viel op bij het downloaden van de diagnostiek. Deze toets weert
+    bestandstoegang buiten een `async_add_executor_job`.
+    """
+    import re
+
+    overtredingen = []
+    for bestand in (
+        "coordinator.py",
+        "sensor.py",
+        "switch.py",
+        "diagnostics.py",
+        "__init__.py",
+    ):
+        pad = PAKKET / bestand
+        if not pad.exists():
+            continue
+        regels = pad.read_text().splitlines()
+        for nummer, regel in enumerate(regels, 1):
+            code = regel.split("#")[0]
+            if not re.search(r"\.(read_text|write_text|read_bytes)\(", code):
+                continue
+
+            # Toegestaan binnen een hulpfunctie die aan een executor
+            # wordt meegegeven. Die herkennen we aan de dichtstbijzijnde
+            # `def` erboven én een `async_add_executor_job` eronder.
+            omgeving = "\n".join(regels[max(0, nummer - 12) : nummer + 12])
+            if "async_add_executor_job" in omgeving:
+                continue
+            overtredingen.append(f"{bestand}:{nummer}: {code.strip()}")
+
+    assert not overtredingen, overtredingen
+
+
+def test_the_dashboard_template_is_read_once_at_startup():
+    """Het sjabloon verandert alleen bij een update, dus het hoeft maar
+    één keer gelezen te worden."""
+    bron = (PAKKET / "coordinator.py").read_text()
+
+    assert "async_load_dashboard_template" in bron
+    assert "_dashboard_template_cache" in bron
+
+    kop = bron.index("    async def async_setup(self) -> None:")
+    blok = bron[kop : bron.index("\n    async def ", kop + 40)]
+    assert "async_load_dashboard_template()" in blok
