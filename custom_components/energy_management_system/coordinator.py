@@ -186,6 +186,17 @@ from .const import (
     MAX_PLAUSIBLE_EFFICIENCY_PERCENT,
     CONF_MANUAL_DISCHARGE_POWER,
     CONF_BATTERY_TOTAL_CAPACITY_SENSOR,
+    CONSISTENCY_MAX_COOLING_SWITCHES_PER_DAY,
+    CONSISTENCY_TICK_STALE_MINUTES,
+    HEALTH_MAX_MISSED_TICKS,
+    HEALTH_STATUS_AANDACHT,
+    HEALTH_STATUS_GOED,
+    HEALTH_STATUS_SLECHT,
+    LOG_MAX_REGELS,
+    LOG_PRIORITEITEN,
+    LOG_PRIO_AANDACHT,
+    LOG_PRIO_INFO,
+    LOG_PRIO_KRITIEK,
     CONF_BATTERY_MIN_SOC_NUMBER,
     CONF_MANUAL_POWER_NUMBER,
     CONF_MIN_SOC_PERCENT,
@@ -1248,6 +1259,12 @@ class EnergyManagementSystemCoordinator:
         # v1.98.0: de dagstand van de laatste tick, om bij de dagwissel
         # niet met al gewiste tellers te rekenen.
         self._energiedagstand: dict = {}
+        # v2.0.0: de laatste uitkomst van de zelfcontrole.
+        self.last_consistency_checks: dict = {}
+        # v2.2.0: hoe vaak de watchdog een ronde heeft afgedwongen.
+        self.watchdog_herstelpogingen: int = 0
+        self._unsub_watchdog = None
+        self._laatste_zelfcontrole_sleutel: str | None = None
         # v1.92.0: wat het inlezen van de geschiedenis opleverde.
         self.energy_history_bootstrap_note: str | None = None
         # v1.76.0: de export gesplitst op het moment zelf.
@@ -1495,6 +1512,14 @@ class EnergyManagementSystemCoordinator:
             self.hass,
             self._handle_interval,
             timedelta(minutes=UPDATE_INTERVAL_MINUTES),
+        )
+        # v2.2.0: een eigen klok voor de watchdog. Op dezelfde klok
+        # meeliften zou betekenen dat hij zwijgt als juist die klok het
+        # begeeft.
+        self._unsub_watchdog = async_track_time_interval(
+            self.hass,
+            self._watchdog,
+            timedelta(minutes=UPDATE_INTERVAL_MINUTES * HEALTH_MAX_MISSED_TICKS),
         )
         self._unsub_state = async_track_state_change_event(
             self.hass, self.tracked_entities, self._handle_state_change
@@ -1777,6 +1802,13 @@ class EnergyManagementSystemCoordinator:
             )
 
     async def async_unload(self) -> None:
+        # v2.2.0: ook de watchdog-klok opzeggen. Via een lokale naam,
+        # anders leest de structuurscan `self._unsub_watchdog()` als een
+        # aanroep van een methode die niet bestaat.
+        opzeggen = getattr(self, "_unsub_watchdog", None)
+        if opzeggen:
+            opzeggen()
+            self._unsub_watchdog = None
         if self._unsub_interval:
             self._unsub_interval()
         if self._unsub_state:
@@ -1790,6 +1822,41 @@ class EnergyManagementSystemCoordinator:
         await self.async_save_persisted_state_now()
 
     @callback
+    async def _watchdog(self, _now) -> None:
+        """Grijpt in als de ronde is vastgelopen (v2.2.0).
+
+        Voorgesteld als "watchdog op laatste succesvolle update". De
+        zelfcontrole van v2.0.0 MELDT dat al, maar melden is niet
+        herstellen - en als de tijdklok zelf niet meer afgaat, komt die
+        melding er ook niet.
+
+        Deze loopt op een eigen klok en probeert één ronde af te dwingen.
+        Lukt dat niet, dan is er meer aan de hand dan een gemiste tick.
+        """
+        laatste = self.last_successful_update
+        moment = (
+            dt_util.parse_datetime(laatste)
+            if isinstance(laatste, str)
+            else laatste
+        )
+        if moment is None:
+            return
+        minuten = (dt_util.now() - moment).total_seconds() / 60
+        if minuten < UPDATE_INTERVAL_MINUTES * HEALTH_MAX_MISSED_TICKS:
+            return
+
+        self.watchdog_herstelpogingen += 1
+        _LOGGER.warning(
+            "Geen geslaagde ronde in %.0f minuten - watchdog dwingt er een af "
+            "(poging %d)",
+            minuten,
+            self.watchdog_herstelpogingen,
+        )
+        try:
+            await self.async_update()
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("De afgedwongen ronde mislukte ook")
+
     def _handle_interval(self, _now) -> None:
         self.hass.async_create_task(self.async_update())
 
@@ -8192,6 +8259,640 @@ class EnergyManagementSystemCoordinator:
                 )
         return waarschuwingen
 
+    def beantwoord_vraag(self, vraag: str, now: datetime | None = None) -> dict:
+        """Beantwoordt een vraag over de eigen gegevens (v2.3.0).
+
+        Gevraagd: "zodat ik ook vragen kan stellen als: Wat is het
+        verwachte verbruik vandaag, wat zijn de kosten vandaag? Hoe laat
+        was iedereen thuis, weg etc."
+
+        Geen taalmodel in de integratie - dezelfde afweging als bij de
+        waarom-uitleg (v1.60.0) en de zelfcontrole (v2.0.0). Een
+        gegenereerd antwoord kan een getal noemen dat nergens staat, en
+        dat is bij energiecijfers erger dan geen antwoord.
+
+        In plaats daarvan een vaste tabel: trefwoorden wijzen naar een
+        functie die het antwoord uit de gemeten waarden opbouwt. Wat er
+        niet in staat, krijgt eerlijk "die vraag ken ik niet" plus de
+        lijst met wat wel kan.
+
+        Voor vrije vragen is de juiste route de gespreksassistent van
+        Home Assistant zelf: die kan een taalmodel gebruiken en leest de
+        entiteiten van deze integratie. Het verschil is dat het model dan
+        buiten de aansturing staat.
+        """
+        nu = now or dt_util.now()
+        tekst = (vraag or "").lower()
+
+        for trefwoorden, functie in self._vraag_tabel():
+            if all(w in tekst for w in trefwoorden[0]) or any(
+                all(w in tekst for w in groep) for groep in trefwoorden
+            ):
+                try:
+                    return {"vraag": vraag, "gevonden": True, **functie(nu)}
+                except Exception as fout:  # noqa: BLE001
+                    _LOGGER.exception("Kon de vraag niet beantwoorden")
+                    return {
+                        "vraag": vraag,
+                        "gevonden": True,
+                        "antwoord": (
+                            "Die vraag ken ik wel, maar het antwoord is nu "
+                            f"niet te berekenen ({type(fout).__name__})."
+                        ),
+                    }
+
+        return {
+            "vraag": vraag,
+            "gevonden": False,
+            "antwoord": (
+                "Die vraag ken ik niet. Wel bijvoorbeeld: verwacht verbruik "
+                "vandaag, kosten vandaag, opwek vandaag, wat de accu nu doet "
+                "en waarom, of de accu de nacht haalt, wanneer er iemand "
+                "thuis was, en de besparing."
+            ),
+            "bekende_vragen": [
+                " / ".join(g[0]) for g, _f in self._vraag_tabel()
+            ],
+        }
+
+    def _vraag_tabel(self):
+        """Trefwoorden en het antwoord dat erbij hoort (v2.3.0)."""
+        return [
+            ([["verbruik"], ["verbruikt"]], self._antwoord_verbruik),
+            ([["kosten"], ["kost"], ["betaald"]], self._antwoord_kosten),
+            ([["opwek"], ["zon"], ["opgewekt"]], self._antwoord_opwek),
+            ([["accu", "nacht"], ["haalt"]], self._antwoord_nacht),
+            ([["waarom"], ["accu", "nu"], ["doet"]], self._antwoord_waarom),
+            ([["thuis"], ["weg"], ["aanwezig"]], self._antwoord_aanwezigheid),
+            ([["bespaar"], ["besparing"], ["opgeleverd"]], self._antwoord_besparing),
+            ([["stand"], ["vol"], ["procent"]], self._antwoord_accustand),
+        ]
+
+    def _antwoord_verbruik(self, nu: datetime) -> dict:
+        tot_nu = self.gross_consumption_today_kwh
+        middernacht = (nu + timedelta(days=1)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        rest = self._estimate_consumption_kwh_for_period(nu, middernacht)
+        verwacht = tot_nu + (rest or 0.0)
+        return {
+            "antwoord": (
+                f"Tot nu toe {tot_nu:.1f} kWh verbruikt. Voor de rest van de "
+                f"dag verwacht ik nog {rest:.1f} kWh, dus vandaag ongeveer "
+                f"{verwacht:.1f} kWh."
+                if rest is not None
+                else f"Tot nu toe {tot_nu:.1f} kWh verbruikt; een verwachting "
+                "voor de rest van de dag is er nog niet."
+            ),
+            "waarden": {
+                "tot_nu_kwh": round(tot_nu, 2),
+                "verwacht_totaal_kwh": round(verwacht, 2),
+            },
+        }
+
+    def _antwoord_kosten(self, nu: datetime) -> dict:
+        kosten = self.actual_cost_today_eur
+        zonder = self.counterfactual_cost_today_eur
+        return {
+            "antwoord": (
+                f"Vandaag staat er € {abs(kosten):.2f} "
+                f"{'aan opbrengst' if kosten < 0 else 'aan kosten'}. Zonder "
+                f"aansturing was dat € {abs(zonder):.2f} geweest."
+            ),
+            "waarden": {
+                "kosten_eur": round(kosten, 2),
+                "zonder_sturing_eur": round(zonder, 2),
+            },
+        }
+
+    def _antwoord_opwek(self, nu: datetime) -> dict:
+        voorspeld, herkomst = self.voorspelde_zon_vandaag_kwh(nu)
+        opgewekt = self.pv_production_today_kwh
+        return {
+            "antwoord": (
+                f"Vandaag {opgewekt:.1f} kWh opgewekt"
+                + (
+                    f", voorspeld was {voorspeld:.1f} kWh ({herkomst})."
+                    if voorspeld
+                    else "."
+                )
+            ),
+            "waarden": {
+                "opgewekt_kwh": round(opgewekt, 2),
+                "voorspeld_kwh": voorspeld,
+            },
+        }
+
+    def _antwoord_nacht(self, nu: datetime) -> dict:
+        samenvatting = self.get_quarter_plan_summary(nu) or {}
+        tekort = samenvatting.get("tekort_kwartieren")
+        perioden = samenvatting.get("tekort_perioden") or []
+        return {
+            "antwoord": (
+                "Ja, volgens de planning hangt het huis geen enkel kwartier "
+                f"aan het net. Laagste stand "
+                f"{samenvatting.get('laagste_soc_tot_bijladen_procent', '?')}%."
+                if not tekort
+                else f"Nee: {tekort} kwartier(en) aan het net"
+                + (f", {perioden[0]}." if perioden else ".")
+            ),
+            "waarden": {"tekort_kwartieren": tekort},
+        }
+
+    def _antwoord_waarom(self, nu: datetime) -> dict:
+        waarom = self.get_why_now(nu)
+        if not waarom.get("beschikbaar"):
+            return {"antwoord": "Er is nog geen beslissing genomen."}
+        return {
+            "antwoord": waarom["vraag"]
+            + " "
+            + " ".join(f"{r}." for r in waarom["redenen"]),
+            "waarden": {"reden": waarom.get("code")},
+        }
+
+    def _antwoord_aanwezigheid(self, nu: datetime) -> dict:
+        overzicht = self.get_presence_overview() or {}
+        tijdlijn = [
+            r
+            for r in (self.presence_timeline or [])
+            if str(r.get("dag", "")).endswith(nu.strftime("%d-%m"))
+        ]
+        blokken = "; ".join(
+            f"{r['staat']} van {r['van']} tot {r['tot']}" for r in tijdlijn[:6]
+        )
+        return {
+            "antwoord": (
+                f"Nu: {overzicht.get('nu', 'onbekend')}."
+                + (f" Vandaag: {blokken}." if blokken else "")
+            ),
+            "waarden": {"nu": overzicht.get("nu"), "blokken": len(tijdlijn)},
+        }
+
+    def _antwoord_besparing(self, nu: datetime) -> dict:
+        correctie = self.get_savings_correction() or {}
+        return {
+            "antwoord": (
+                f"Vandaag € {correctie.get('besparing_gecorrigeerd_eur', 0):.2f} "
+                "bespaard, gecorrigeerd voor wat er nog in de accu zit."
+                if correctie.get("correctie_beschikbaar")
+                else f"Vandaag € {correctie.get('besparing_vandaag_eur', 0):.2f} "
+                "bespaard."
+            ),
+            "waarden": correctie,
+        }
+
+    def _antwoord_accustand(self, nu: datetime) -> dict:
+        stand = self.accustand_procent()
+        beschikbaar = self.beschikbare_energie_kwh()
+        return {
+            "antwoord": (
+                f"De accu staat op {stand:.0f}%"
+                + (f", dat is {beschikbaar:.1f} kWh bruikbaar." if beschikbaar else ".")
+                if stand is not None
+                else "De accustand is nu niet uitleesbaar."
+            ),
+            "waarden": {"stand_procent": stand, "beschikbaar_kwh": beschikbaar},
+        }
+
+    def get_integration_health(self, now: datetime | None = None) -> dict:
+        """Vier onderdelen van integratiegezondheid, apart (v2.2.0).
+
+        Voorgesteld: een score van 0-100% op basis van
+        API-beschikbaarheid, updatefrequentie, aantal fouten en
+        dataconsistentie.
+
+        De vier onderdelen zijn goed gekozen en alle vier meetbaar. Het
+        SAMENVOEGEN tot één percentage is dat niet: dat vraagt wegingen
+        die nergens vandaan komen. Is 90% beschikbaarheid met perfecte
+        consistentie beter of slechter dan 100% beschikbaarheid met een
+        rekenfout? Elk antwoord daarop is verzonnen - dezelfde reden
+        waarom de netkwaliteitsscore eerder is afgevallen.
+
+        Daarom vier oordelen naast elkaar, en de status van het geheel is
+        die van de slechtste. Een ketting is zo sterk als de zwakste
+        schakel; dat is geen aanname maar een definitie.
+        """
+        nu = now or dt_util.now()
+        onderdelen: list[dict] = []
+
+        # --- 1. Zijn de bronnen bereikbaar? ---
+        stil = [
+            entity_id
+            for entity_id in self.tracked_entities
+            if self.is_sensor_genuinely_unavailable(entity_id)
+        ]
+        onderdelen.append(
+            {
+                "naam": "Bronnen bereikbaar",
+                "status": (
+                    HEALTH_STATUS_GOED if not stil else HEALTH_STATUS_SLECHT
+                ),
+                "waarde": f"{len(self.tracked_entities) - len(stil)} van "
+                f"{len(self.tracked_entities)}",
+                "uitleg": (
+                    "Alle gevolgde entiteiten geven een waarde."
+                    if not stil
+                    else f"Geen waarde van: {', '.join(sorted(stil)[:3])}."
+                ),
+            }
+        )
+
+        # --- 2. Loopt de ronde op tempo? ---
+        laatste = self.last_successful_update
+        moment = (
+            dt_util.parse_datetime(laatste)
+            if isinstance(laatste, str)
+            else laatste
+        )
+        if moment is None:
+            onderdelen.append(
+                {
+                    "naam": "Updatefrequentie",
+                    "status": HEALTH_STATUS_SLECHT,
+                    "waarde": "geen ronde",
+                    "uitleg": "Er is nog geen geslaagde ronde geweest.",
+                }
+            )
+        else:
+            gemist = (
+                (nu - moment).total_seconds() / 60 / UPDATE_INTERVAL_MINUTES
+            )
+            onderdelen.append(
+                {
+                    "naam": "Updatefrequentie",
+                    "status": (
+                        HEALTH_STATUS_GOED
+                        if gemist <= 1.5
+                        else (
+                            HEALTH_STATUS_AANDACHT
+                            if gemist <= HEALTH_MAX_MISSED_TICKS
+                            else HEALTH_STATUS_SLECHT
+                        )
+                    ),
+                    "waarde": f"{(nu - moment).total_seconds() / 60:.0f} min "
+                    "geleden",
+                    "uitleg": (
+                        f"De ronde loopt elke {UPDATE_INTERVAL_MINUTES} "
+                        "minuten."
+                    ),
+                }
+            )
+
+        # --- 3. Zijn er fouten? ---
+        fouten = len(self.internal_failures or {})
+        onderdelen.append(
+            {
+                "naam": "Interne fouten",
+                "status": (
+                    HEALTH_STATUS_GOED if not fouten else HEALTH_STATUS_SLECHT
+                ),
+                "waarde": str(fouten),
+                "uitleg": (
+                    "Geen enkel onderdeel is vastgelopen."
+                    if not fouten
+                    else "; ".join(list(self.internal_failures.values())[:2])
+                ),
+            }
+        )
+
+        # --- 4. Klopt de data met zichzelf? ---
+        controles = self.last_consistency_checks or {}
+        bevindingen = controles.get("bevindingen") or []
+        echte_fouten = [b for b in bevindingen if b.get("ernst") == "fout"]
+        onderdelen.append(
+            {
+                "naam": "Dataconsistentie",
+                "status": (
+                    HEALTH_STATUS_SLECHT
+                    if echte_fouten
+                    else (
+                        HEALTH_STATUS_AANDACHT
+                        if bevindingen
+                        else HEALTH_STATUS_GOED
+                    )
+                ),
+                "waarde": f"{len(bevindingen)} bevinding(en)",
+                "uitleg": (
+                    "Alle kruiscontroles kloppen."
+                    if not bevindingen
+                    else "; ".join(b["naam"] for b in bevindingen[:3])
+                ),
+            }
+        )
+
+        volgorde = {
+            HEALTH_STATUS_SLECHT: 0,
+            HEALTH_STATUS_AANDACHT: 1,
+            HEALTH_STATUS_GOED: 2,
+        }
+        slechtste = min(onderdelen, key=lambda o: volgorde[o["status"]])
+
+        return {
+            "status": slechtste["status"],
+            "bepaald_door": slechtste["naam"],
+            "onderdelen": onderdelen,
+            "toelichting": (
+                "Bewust geen samengesteld percentage: de vier onderdelen tot "
+                "één getal samenvoegen vraagt wegingen die nergens vandaan "
+                "komen. De status is die van het slechtste onderdeel."
+            ),
+        }
+
+    def get_event_log(
+        self, now: datetime | None = None, prio: str | None = None
+    ) -> dict:
+        """Eén tijdlijn van besluiten en gebeurtenissen (v2.1.0).
+
+        Gevraagd: "Misschien een soort logboek? Waarbij ik live besluiten,
+        en allerlei zaken kan zien? Dit in 3 prio's definieren, en bij een
+        kritische melding een melding naar mijn iPhone?"
+
+        De bouwstenen lagen er al, maar verspreid over vier reeksen:
+        modusveranderingen, meldingen, koelschakelingen en de energiebrug.
+        Dit voegt ze samen op moment.
+
+        Bewust GEEN vijfde reeks die alles nog eens apart bijhoudt. Dan
+        kunnen de twee uit elkaar gaan lopen, en dat is precies waar het
+        deze week een paar keer misging - een reparatie van het schrijven
+        die niet raakte wat er al bewaard was.
+        """
+        nu = now or dt_util.now()
+        regels: list[dict] = []
+
+        def _voeg_toe(moment, soort: str, tekst: str, detail: str = "") -> None:
+            if not moment:
+                return
+            regels.append(
+                {
+                    "moment": str(moment),
+                    "prio": LOG_PRIORITEITEN.get(soort, LOG_PRIO_INFO),
+                    "soort": soort,
+                    "tekst": tekst,
+                    "detail": detail,
+                }
+            )
+
+        # De meldingen dragen hun eigen soort al.
+        for m in self.notification_history or []:
+            _voeg_toe(
+                m.get("moment"),
+                m.get("soort", "besluit"),
+                m.get("titel", ""),
+                (m.get("bericht") or "").replace("\n", " ")[:120],
+            )
+
+        # Modusveranderingen: het besluit zelf.
+        for m in self.mode_change_log or []:
+            reden = m.get("reason", "")
+            _voeg_toe(
+                m.get("at"),
+                "besluit",
+                f"Stand: {DECISION_REASON_LABELS.get(reden, reden)}",
+                f"modus {m.get('expected_mode')}",
+            )
+
+        # Koelschakelingen.
+        for m in self.battery_cooling_history or []:
+            _voeg_toe(
+                m.get("moment"),
+                "battery_cooling",
+                f"Accukoeling {m.get('actie')}",
+                m.get("reden", ""),
+            )
+
+        # De energiebrug.
+        for m in self.energy_bridge_transition_log or []:
+            _voeg_toe(
+                m.get("at"),
+                "energiebrug",
+                f"Energiebrug: {m.get('decision')}",
+                f"{m.get('available_kwh')} van {m.get('needed_kwh')} kWh nodig",
+            )
+
+        # De zelfcontrole van dit moment - die staat nergens anders.
+        for b in (self.last_consistency_checks or {}).get("bevindingen", []):
+            _voeg_toe(
+                nu.isoformat(),
+                "zelfcontrole" if b.get("ernst") == "fout" else "terugval",
+                f"Zelfcontrole: {b.get('naam')}",
+                b.get("uitleg", ""),
+            )
+
+        regels.sort(key=lambda r: r["moment"], reverse=True)
+        if prio:
+            regels = [r for r in regels if r["prio"] == prio]
+
+        tellingen = {
+            p: sum(1 for r in regels if r["prio"] == p)
+            for p in (LOG_PRIO_KRITIEK, LOG_PRIO_AANDACHT, LOG_PRIO_INFO)
+        }
+        return {
+            "regels": regels[:LOG_MAX_REGELS],
+            "aantallen": tellingen,
+            "totaal": len(regels),
+            "toelichting": (
+                "Kritiek: er gaat geld of comfort verloren, of de integratie "
+                "doet iets anders dan bedoeld. Aandacht: het vraagt een "
+                "beslissing, maar niet nu. Info: het hoort erbij en is "
+                "achteraf nuttig."
+            ),
+        }
+
+    def get_consistency_checks(self, now: datetime | None = None) -> dict:
+        """Rekent na of getallen die elkaar moeten kloppen dat ook doen
+        (v2.0.0).
+
+        Gevraagd: "Kun je dit soort zaken ook live in de integratie
+        analyseren, dus zonder jou een diagnostiek te sturen? Eigenlijk
+        dus een soort van AI in de integratie."
+
+        Geen taalmodel - en dat is geen beperking maar de juiste keuze.
+        Vrijwel alles wat er bij het nakijken van een diagnostiek uit
+        kwam, kwam uit KRUISCONTROLES: twee getallen die hetzelfde horen
+        te zeggen en dat niet deden.
+
+        - "opwek exact gelijk aan verbruik" wees op een verzonnen
+          verbruik;
+        - "131548 kWh per week" wees op een niet-omgerekende eenheid;
+        - "elke periode dezelfde waarde" wees op tellers die al gewist
+          waren;
+        - "zon -20,82 kWh" wees op een volgordefout.
+
+        Stuk voor stuk mechanisch te vinden. Een taalmodel zou daar
+        niets aan toevoegen en wel een reden kunnen verzinnen die niet
+        klopt - dezelfde afweging als bij de waarom-uitleg (v1.60.0).
+
+        Wat dit NIET vangt is een fout van een soort die hier niet in
+        staat. Daarvoor is nog steeds iemand nodig die kijkt.
+        """
+        nu = now or dt_util.now()
+        bevindingen: list[dict] = []
+
+        def _toets(naam: str, ok: bool, uitleg: str, ernst: str = "fout") -> None:
+            if not ok:
+                bevindingen.append(
+                    {"naam": naam, "ernst": ernst, "uitleg": uitleg}
+                )
+
+        # --- 1. Zelfvoorziening moet volgen uit import en verbruik ---
+        verbruik = self.gross_consumption_today_kwh
+        if verbruik > 1.0:
+            verwacht = 100 * (1 - self.grid_import_today_kwh / verbruik)
+            gemeld = self.self_sufficiency_ratio_percent
+            if gemeld is not None:
+                _toets(
+                    "Zelfvoorziening",
+                    abs(gemeld - verwacht) < 0.5,
+                    f"Gemeld {gemeld:.1f}%, narekening {verwacht:.1f}%.",
+                )
+
+        # --- 2. Beschikbare energie moet volgen uit de accustand ---
+        stand = self.accustand_procent()
+        beschikbaar = self.beschikbare_energie_kwh()
+        capaciteit = self._read_sensor_float(
+            self.config.get(CONF_BATTERY_TOTAL_CAPACITY_SENSOR)
+        )
+        if None not in (stand, beschikbaar, capaciteit) and capaciteit:
+            min_soc = self.effective_min_soc_percent()
+            verwacht = capaciteit * (stand - min_soc) / 100
+            _toets(
+                "Beschikbare energie",
+                abs(beschikbaar - verwacht) < max(0.3, verwacht * 0.1),
+                f"Sensor {beschikbaar:.2f} kWh, uit de accustand van "
+                f"{stand:.0f}% volgt {verwacht:.2f} kWh.",
+            )
+
+        # --- 3. De exportsplitsing moet optellen tot het totaal ---
+        splitsing = self.solar_export_today_kwh + self.battery_export_today_kwh
+        if self.pv_export_today_kwh > 0.5 and self._solar_export_gemeten():
+            _toets(
+                "Exportsplitsing",
+                abs(splitsing - self.pv_export_today_kwh) < 0.05,
+                f"Zon {self.solar_export_today_kwh:.2f} plus accu "
+                f"{self.battery_export_today_kwh:.2f} is {splitsing:.2f}, "
+                f"totaal gemeten {self.pv_export_today_kwh:.2f} kWh.",
+            )
+
+        # --- 4. Opwek exact gelijk aan verbruik is geen toeval ---
+        for regel in (self.energy_daily_history or [])[-7:]:
+            opwek = regel.get("opwek_kwh")
+            verbr = regel.get("verbruik_kwh")
+            if opwek and verbr and abs(opwek - verbr) < 0.001:
+                _toets(
+                    "Dagreeks",
+                    False,
+                    f"{regel['datum']}: opwek en verbruik staan allebei op "
+                    f"{opwek:.2f} kWh. Zo'n gelijkheid ontstaat niet vanzelf.",
+                )
+                break
+
+        # --- 5. Geen fysiek onmogelijke dagen in de reeks ---
+        onzin = [
+            r["datum"]
+            for r in (self.energy_daily_history or [])
+            if self._energiedag_is_onzin(r)
+        ]
+        _toets(
+            "Dagreeks",
+            not onzin,
+            f"Onmogelijke waarden op: {', '.join(onzin[:3])}.",
+        )
+
+        # --- 6. Elke periode dezelfde waarde wijst op één bron ---
+        try:
+            perioden = self.get_period_overview(nu).get("perioden") or {}
+        except Exception:  # noqa: BLE001
+            perioden = {}
+        lang = [
+            w
+            for naam, w in perioden.items()
+            if naam in ("week", "maand", "jaar") and w.get("dagen")
+        ]
+        if len(lang) >= 2:
+            for sleutel, naam, _e in self.PERIODE_GROOTHEDEN:
+                waarden = [w.get(sleutel) for w in lang]
+                if all(v is not None for v in waarden) and len(set(waarden)) == 1:
+                    if waarden[0]:
+                        _toets(
+                            f"Periode: {naam}",
+                            False,
+                            f"Week, maand en jaar staan alle drie op "
+                            f"{waarden[0]}. Dan telt er maar één dag mee.",
+                        )
+
+        # --- 7. Loopt de tick nog? ---
+        laatste = self.last_successful_update
+        if laatste:
+            moment = (
+                dt_util.parse_datetime(laatste)
+                if isinstance(laatste, str)
+                else laatste
+            )
+            if moment is not None:
+                achterstand = (nu - moment).total_seconds() / 60
+                _toets(
+                    "Tick",
+                    achterstand < CONSISTENCY_TICK_STALE_MINUTES,
+                    f"Laatste geslaagde ronde was {achterstand:.0f} minuten "
+                    "geleden.",
+                )
+
+        # --- 8. Schakelt de koeling niet te vaak? ---
+        vandaag = nu.date().isoformat()
+        schakelingen = sum(
+            1
+            for x in (self.battery_cooling_history or [])
+            if str(x.get("moment", "")).startswith(vandaag)
+        )
+        _toets(
+            "Accukoeling",
+            schakelingen <= CONSISTENCY_MAX_COOLING_SWITCHES_PER_DAY,
+            f"{schakelingen} schakelingen vandaag - dat wijst op pendelen "
+            "rond een drempel.",
+            ernst="aandacht",
+        )
+
+        return {
+            "gecontroleerd": 8,
+            "bevindingen": bevindingen,
+            "alles_klopt": not bevindingen,
+            "toelichting": (
+                "Getallen die elkaar moeten kloppen worden elke ronde tegen "
+                "elkaar nagerekend. Dit vangt rekenfouten en tellers die niet "
+                "meelopen - niet een fout van een soort die hier niet in "
+                "staat."
+            ),
+        }
+
+    def _meld_zelfcontrole(self, now: datetime) -> None:
+        """Stuurt een melding zodra een kruiscontrole faalt (v2.0.0).
+
+        Alleen bij een VERANDERING: dezelfde bevinding elke ronde
+        opnieuw melden is de snelste manier om ervoor te zorgen dat er
+        niet meer naar gekeken wordt.
+        """
+        uitkomst = self.get_consistency_checks(now)
+        self.last_consistency_checks = uitkomst
+        fouten = [
+            b for b in uitkomst["bevindingen"] if b.get("ernst") == "fout"
+        ]
+        sleutel = " | ".join(sorted(b["naam"] for b in fouten))
+        if sleutel == self._laatste_zelfcontrole_sleutel:
+            return
+        self._laatste_zelfcontrole_sleutel = sleutel
+        if not fouten:
+            return
+
+        self._dispatch_notification(
+            notify_service=self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE),
+            title="🧮 Zelfcontrole vond een fout",
+            message="; ".join(
+                f"{b['naam']}: {b['uitleg']}" for b in fouten[:3]
+            ),
+            notification_id="ems_zelfcontrole",
+            kind="zelfcontrole",
+        )
+
     def get_self_evaluation(self) -> list[dict]:
         """Toetst achteraf of de eigen instellingen goed uitpakken
         (v1.14.0).
@@ -9152,11 +9853,29 @@ class EnergyManagementSystemCoordinator:
                     )
                 )
             else:
+                gegevens = {"message": message, "title": title}
+                # v2.1.0: kritieke meldingen doorbreken de stille modus
+                # van de telefoon.
+                #
+                # Gevraagd: "bij een kritische melding een melding naar
+                # mijn iPhone?" Een melding die om drie uur 's nachts
+                # tegelijk met de rest in de wachtrij belandt, is geen
+                # kritieke melding.
+                #
+                # `interruption-level: time-sensitive` is het iOS-veld
+                # daarvoor; Android krijgt via dezelfde sleutel een hoge
+                # prioriteit. Een app die het niet kent, negeert het.
+                if LOG_PRIORITEITEN.get(kind) == LOG_PRIO_KRITIEK:
+                    gegevens["data"] = {
+                        "push": {"interruption-level": "time-sensitive"},
+                        "ttl": 0,
+                        "priority": "high",
+                    }
                 self.hass.async_create_task(
                     self.hass.services.async_call(
                         service_domain,
                         service_name,
-                        {"message": message, "title": title},
+                        gegevens,
                     )
                 )
         except Exception:  # noqa: BLE001 - a failed notification must never crash the update
@@ -21474,6 +22193,14 @@ class EnergyManagementSystemCoordinator:
         # v1.98.0: de dagstand vasthouden, NA alle tellers van deze tick.
         # Bij de volgende dagwissel is dit de laatste stand van de dag
         # die wordt afgesloten.
+        # v2.0.0: de zelfcontrole. Gevraagd: "als er wat fout gaat ik een
+        # melding krijg (...) zodat ik live kan zien dat een berekening
+        # ofzo niet klopt."
+        try:
+            self._meld_zelfcontrole(now)
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Kon de zelfcontrole niet uitvoeren")
+
         try:
             self._onthoud_energiedagstand(now.date())
         except Exception:  # noqa: BLE001

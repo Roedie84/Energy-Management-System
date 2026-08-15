@@ -267,6 +267,19 @@ views:
     cards:
     - type: heading
       heading: Status per onderwerp
+    - type: custom:mushroom-template-card
+      primary: '{% set z = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''zelfcontrole'') or {} %}{% if z.get(''alles_klopt'') %}Zelfcontrole: alles klopt{% elif z.get(''bevindingen'') %}Zelfcontrole: {{ z.bevindingen | length }} bevinding(en){% else %}Zelfcontrole{% endif %}'
+      secondary: '{% set z = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''zelfcontrole'') or {} %}{% if z.get(''alles_klopt'') %}{{ z.gecontroleerd }} kruiscontroles nagerekend{% elif z.get(''bevindingen'') %}{{ z.bevindingen[0].naam }} — {{ z.bevindingen[0].uitleg[:60] }}{% else %}Nog niet uitgevoerd{% endif %}'
+      multiline_secondary: true
+      icon: mdi:calculator-variant-outline
+      icon_color: '{% set z = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''zelfcontrole'') or {} %}{% if z.get(''alles_klopt'') %}green{% elif z.get(''bevindingen'') | selectattr(''ernst'', ''eq'', ''fout'') | list | length > 0 %}red{% elif z.get(''bevindingen'') %}amber{% else %}grey{% endif %}'
+      entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
+      tap_action:
+        action: navigate
+        navigation_path: /energy-management-system/detail-zelfcontrole
+      grid_options:
+        columns: 12
+        rows: auto
       grid_options:
         columns: 12
         rows: 1
@@ -486,7 +499,7 @@ views:
   panel: true
   cards:
   - type: picture-elements
-    image: /local/energy_management_system_overview.svg?v=1.99.0
+    image: /local/energy_management_system_overview.svg?v=2.3.0
     elements:
     - type: state-label
       entity: sensor.woonkamer_energy_management_system_system_status
@@ -1102,6 +1115,16 @@ views:
     hold_action:
       action: more-info
   - type: custom:mushroom-template-card
+    primary: Zelfcontrole vond een fout
+    secondary: '{% set e = ''switch.woonkamer_energy_management_system_melding_zelfcontrole'' %}{% set last = state_attr(e, ''laatst_verstuurd'') %}{{ ''AAN'' if is_state(e, ''on'') else ''uit'' }} · demping 120 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom(''%-d %b %H:%M'') }}{% endif %}'
+    icon: mdi:calculator-variant-outline
+    icon_color: '{{ ''green'' if is_state(''switch.woonkamer_energy_management_system_melding_zelfcontrole'', ''on'') else ''grey'' }}'
+    entity: switch.woonkamer_energy_management_system_melding_zelfcontrole
+    tap_action:
+      action: toggle
+    hold_action:
+      action: more-info
+  - type: custom:mushroom-template-card
     primary: Onderdeel van de integratie faalt
     secondary: '{% set e = ''switch.woonkamer_energy_management_system_melding_interne_fout'' %}{% set last = state_attr(e, ''laatst_verstuurd'') %}{{ ''AAN'' if is_state(e, ''on'') else ''uit'' }} · demping 60 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom(''%-d %b %H:%M'') }}{% endif %}'
     icon: mdi:bell-alert-outline
@@ -1517,6 +1540,84 @@ views:
 
 
         _{{ z.get(''toelichting'', '''') }}_'
+      grid_options:
+        columns: 12
+        rows: auto
+- title: Zelfcontrole
+  path: detail-zelfcontrole
+  subview: true
+  type: sections
+  max_columns: 1
+  sections:
+  - type: grid
+    cards:
+    - type: custom:mushroom-title-card
+      title: Zelfcontrole
+      subtitle: Getallen die elkaar moeten kloppen
+    - type: markdown
+      title: Zelfcontrole
+      content: '{% set z = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''zelfcontrole'') or {} %}{% if z.get(''alles_klopt'') %}✅ Alle {{ z.gecontroleerd }} kruiscontroles kloppen.{% elif z.get(''bevindingen'') %}{% for b in z.bevindingen %}{{ ''❌'' if b.ernst == ''fout'' else ''⚠️'' }} **{{ b.naam }}** — {{ b.uitleg }}
+
+        {% endfor %}{% else %}Nog niet uitgevoerd.{% endif %}
+
+
+        _{{ z.get(''toelichting'', '''') }}_'
+      grid_options:
+        columns: 12
+        rows: auto
+- title: Integratiegezondheid
+  path: detail-gezondheid
+  subview: true
+  type: sections
+  max_columns: 1
+  sections:
+  - type: grid
+    cards:
+    - type: custom:mushroom-title-card
+      title: Integratiegezondheid
+      subtitle: Vier onderdelen, apart beoordeeld
+    - type: markdown
+      content: '{% set g = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''gezondheid'') or {} %}{% set icoon = {''goed'': ''✅'', ''aandacht'': ''⚠️'', ''slecht'': ''❌''} %}**{{ icoon.get(g.get(''status''), ''—'') }} {{ g.get(''status'', ''onbekend'') | capitalize }}** — bepaald door {{ g.get(''bepaald_door'', ''—'') }}.
+
+
+        | | Onderdeel | Waarde | Toelichting |
+
+        |---|---|---|---|
+
+        {% for o in (g.get(''onderdelen'') or []) %}| {{ icoon.get(o.status, ''—'') }} | {{ o.naam }} | {{ o.waarde }} | {{ o.uitleg }} |
+
+        {% endfor %}
+
+
+        _{{ g.get(''toelichting'', '''') }}_'
+      grid_options:
+        columns: 12
+        rows: auto
+- title: Logboek
+  path: detail-logboek
+  subview: true
+  type: sections
+  max_columns: 1
+  sections:
+  - type: grid
+    cards:
+    - type: custom:mushroom-title-card
+      title: Logboek
+      subtitle: Besluiten en gebeurtenissen op volgorde
+    - type: markdown
+      content: '{% set l = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''logboek'') or {} %}{% set a = l.get(''aantallen'') or {} %}❌ {{ a.get(''kritiek'', 0) }} kritiek · ⚠️ {{ a.get(''aandacht'', 0) }} aandacht · ℹ️ {{ a.get(''info'', 0) }} info
+
+
+        | | Wanneer | Wat |
+
+        |---|---|---|
+
+        {% for r in (l.get(''regels'') or [])[:40] %}| {{ ''❌'' if r.prio == ''kritiek'' else (''⚠️'' if r.prio == ''aandacht'' else ''ℹ️'') }} | {{ r.moment[5:16] | replace(''T'', '' '') }} | {{ r.tekst }}{% if r.detail %} — _{{ r.detail[:70] }}_{% endif %} |
+
+        {% endfor %}
+
+
+        _{{ l.get(''toelichting'', '''') }}_'
       grid_options:
         columns: 12
         rows: auto
@@ -2340,7 +2441,7 @@ views:
 
         {% endfor %}{% endif %}
 
-        **Verder:** [Betrouwbaarheid per grootheid](/energy-management-system/detail-betrouwbaarheid) · [Proefstand](/energy-management-system/detail-proefstand) - kandidaten die meerekenen maar niets sturen, met wat ze zouden hebben opgeleverd.'
+        **Verder:** [Integratiegezondheid](/energy-management-system/detail-gezondheid) · [Logboek](/energy-management-system/detail-logboek) · [Zelfcontrole](/energy-management-system/detail-zelfcontrole) · [Betrouwbaarheid per grootheid](/energy-management-system/detail-betrouwbaarheid) · [Proefstand](/energy-management-system/detail-proefstand) - kandidaten die meerekenen maar niets sturen, met wat ze zouden hebben opgeleverd.'
 - title: Betrouwbaarheid
   path: detail-betrouwbaarheid
   subview: true

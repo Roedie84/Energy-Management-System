@@ -1333,6 +1333,106 @@ BATTERY_COOLING_KEEP_RUNNING_ABOVE_C = 42.0
 BATTERY_COOLING_MIN_RUNTIME_MINUTES = 30.0
 BATTERY_COOLING_MIN_REST_MINUTES = 30.0
 
+# --- Zelfcontrole (v2.0.0) -------------------------------------------
+# Gevraagd: "Kun je dit soort zaken ook live in de integratie analyseren
+# (...) zodat ik live kan zien dat een berekening ofzo niet klopt."
+#
+# Twee ticks missen kan; een half uur stilte niet.
+CONSISTENCY_TICK_STALE_MINUTES = 20.0
+
+# De ventilator schakelde in de nacht van 15 augustus dertien keer.
+# Boven dit aantal is er iets aan de hand met de drempels.
+CONSISTENCY_MAX_COOLING_SWITCHES_PER_DAY = 12
+
+# --- Logboek met drie prioriteiten (v2.1.0) --------------------------
+# Gevraagd: "Misschien een soort logboek? Waarbij ik live besluiten, en
+# allerlei zaken kan zien? Dit in 3 prio's definieren, en bij een
+# kritische melding een melding naar mijn iPhone?"
+#
+# De bouwstenen lagen er al, maar verspreid over vier losse reeksen:
+# modusveranderingen, meldingen, koelschakelingen en energiebrug. Het
+# logboek voegt ze samen op moment, zodat je één tijdlijn hebt.
+#
+# Bewust GEEN vijfde reeks die alles nog eens apart bijhoudt: dan kunnen
+# de twee uit elkaar gaan lopen, en dat is precies waar het deze week een
+# paar keer misging.
+LOG_PRIO_KRITIEK = "kritiek"
+LOG_PRIO_AANDACHT = "aandacht"
+LOG_PRIO_INFO = "info"
+
+# Welke gebeurtenis welke prioriteit krijgt. Kritiek betekent: er gaat
+# geld of comfort verloren, of de integratie doet iets anders dan
+# bedoeld. Aandacht: het vraagt een beslissing maar niet nu. Info: het
+# hoort erbij en is achteraf nuttig.
+LOG_PRIORITEITEN = {
+    # Kritiek - hier gaat iets mis.
+    "interne_fout": LOG_PRIO_KRITIEK,
+    "zelfcontrole": LOG_PRIO_KRITIEK,
+    "plan_tekort": LOG_PRIO_KRITIEK,
+    "battery_wont_last_night": LOG_PRIO_KRITIEK,
+    "sensor_unavailable": LOG_PRIO_KRITIEK,
+    "integration_error": LOG_PRIO_KRITIEK,
+    "low_soc_before_peak": LOG_PRIO_KRITIEK,
+    # Aandacht - het vraagt een beslissing.
+    "plan_verkoop_geblokkeerd": LOG_PRIO_AANDACHT,
+    "battery_module_drift": LOG_PRIO_AANDACHT,
+    "device_drift": LOG_PRIO_AANDACHT,
+    "solar_underperforming": LOG_PRIO_AANDACHT,
+    "pv_orientation_mismatch": LOG_PRIO_AANDACHT,
+    "vakantie_beweging": LOG_PRIO_AANDACHT,
+    "sluipverbruik": LOG_PRIO_AANDACHT,
+    "terugval": LOG_PRIO_AANDACHT,
+    "exceptional_peak_price": LOG_PRIO_AANDACHT,
+    "cost_mismatch": LOG_PRIO_AANDACHT,
+    # Info - het hoort erbij.
+    "mode_change": LOG_PRIO_INFO,
+    "plan_uitstel": LOG_PRIO_INFO,
+    "plan_tekort_hersteld": LOG_PRIO_INFO,
+    "battery_cooling": LOG_PRIO_INFO,
+    "appliance_ready": LOG_PRIO_INFO,
+    "energiebrug": LOG_PRIO_INFO,
+    "battery_full_with_sun": LOG_PRIO_INFO,
+    "cheap_block_soon": LOG_PRIO_INFO,
+    "negative_prices": LOG_PRIO_INFO,
+    "low_solar_day": LOG_PRIO_INFO,
+    "module_became_ready": LOG_PRIO_INFO,
+    "appliance_cheap_moment": LOG_PRIO_INFO,
+    "daily_summary": LOG_PRIO_INFO,
+    "monthly_summary": LOG_PRIO_INFO,
+    "besluit": LOG_PRIO_INFO,
+}
+
+# Hoeveel regels het logboek toont. Meer dan dit leest niemand, en de
+# onderliggende reeksen bewaren het toch al.
+LOG_MAX_REGELS = 120
+
+# --- Integratiegezondheid (v2.2.0) -----------------------------------
+# Voorgesteld: een gezondheidsscore van 0-100% op basis van
+# API-beschikbaarheid, updatefrequentie, aantal fouten en
+# dataconsistentie.
+#
+# De vier ONDERDELEN zijn goed gekozen en alle vier meetbaar. Het
+# samenvoegen tot één percentage is dat niet: dat vraagt wegingen die
+# nergens vandaan komen. Is 90% beschikbaarheid met perfecte consistentie
+# beter of slechter dan 100% beschikbaarheid met een rekenfout? Elk
+# antwoord daarop is verzonnen.
+#
+# Dezelfde afweging als bij de eerder afgevallen netkwaliteitsscore. Wat
+# hier wel kan: de vier onderdelen apart tonen, elk met een eigen
+# oordeel, en de STATUS laten bepalen door de slechtste. Een ketting is
+# zo sterk als de zwakste schakel, en dat is geen aanname maar een
+# definitie.
+HEALTH_STATUS_GOED = "goed"
+HEALTH_STATUS_AANDACHT = "aandacht"
+HEALTH_STATUS_SLECHT = "slecht"
+
+# Een sensor die bij minder dan dit deel van de rondes beweegt, levert
+# geen bruikbaar tempo meer.
+HEALTH_MIN_CADENCE_PERCENT = 20.0
+
+# Meer dan dit aantal ticks zonder geslaagde ronde is een storing.
+HEALTH_MAX_MISSED_TICKS = 3
+
 # UITZETTEN alleen als ALLE drie tegelijk gelden - één voorwaarde die
 # terugvalt is niet genoeg, anders slaat de ventilator af terwijl er nog
 # een andere reden is om te blijven koelen. De waarden staan hierboven,
@@ -2025,6 +2125,14 @@ NOTIFICATION_TYPES: tuple[tuple[str, str, str, bool, int], ...] = (
         "Wanneer de vaatwasser of wasmachine zijn cyclus heeft afgerond.",
         True,
         5,
+    ),
+    (
+        "zelfcontrole",
+        "Zelfcontrole vond een fout",
+        "Wanneer twee getallen die elkaar moeten kloppen dat niet doen - "
+        "een rekenfout of een teller die niet meeloopt.",
+        True,
+        120,
     ),
     (
         "battery_cooling",
@@ -3751,6 +3859,7 @@ ACHTERHOEKS_TITELS = {
     "vakantie_beweging": "Der beweeg wat, terwiel gi-j weg bunt",
     "appliance_cheap_moment": "Good moment veur de wasmachine",
     "appliance_ready": "'t Apparaat is klaor",
+    "zelfcontrole": "Der klopt wat neet in de sommen",
     "battery_cooling": "Accukoeling an of uut",
     "sluipverbruik": "'t Lik of der wat stiekem stroom vret",
     "device_drift": "Der is meugelek wat kapot",

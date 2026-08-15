@@ -119,3 +119,18 @@ confirm_water_source:
           - vaatwasser
           - wasmachine
           - waterontharder
+
+vraag:
+  name: Vraag stellen
+  description: >-
+    Beantwoordt een vraag over de eigen gegevens, bijvoorbeeld het
+    verwachte verbruik vandaag, de kosten, of wanneer er iemand thuis
+    was. Het antwoord komt terug als dienstuitvoer.
+  fields:
+    vraag:
+      name: Vraag
+      description: De vraag in gewone taal.
+      required: true
+      example: Wat zijn de kosten vandaag?
+      selector:
+        text:

@@ -498,6 +498,17 @@ async def async_get_config_entry_diagnostics(
             "notification_last_sent": coordinator.notification_last_sent,
             "notification_history_last": coordinator._notification_history_last,
             # v1.96.0: leest de buitensensor plausibel?
+            # v2.0.0: de kruiscontroles die live meelopen.
+            # v2.1.0: het samengevoegde logboek met prioriteiten.
+            # v2.2.0: integratiegezondheid in vier onderdelen.
+            "integration_health": _veilig(
+                "get_integration_health", coordinator.get_integration_health
+            ),
+            "watchdog_herstelpogingen": coordinator.watchdog_herstelpogingen,
+            "event_log": _veilig("get_event_log", coordinator.get_event_log),
+            "consistency_checks": _veilig(
+                "get_consistency_checks", coordinator.get_consistency_checks
+            ),
             "outdoor_sensor_check": _veilig(
                 "get_outdoor_sensor_check", coordinator.get_outdoor_sensor_check
             ),

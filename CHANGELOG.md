@@ -14301,3 +14301,253 @@ is om nog iets te halen, wordt er niet gewacht.
 - Geen interne fouten, doen-stapel leeg, NILM zonder alarm
 
 **Volledige testsuite**: 2157 tests, allemaal groen.
+
+## v2.0.0 — Zelfcontrole: de integratie kijkt zichzelf na
+
+**Gevraagd**: "Kun je dit soort zaken ook live in de integratie
+analyseren, dus zonder jou een diagnostiek te sturen? (…) Eigenlijk dus
+een soort van AI in de integratie, zodat ik live kan zien dat een
+berekening ofzo niet klopt."
+
+Ja — en er komt geen taalmodel aan te pas. Dat is geen beperking maar de
+juiste keuze.
+
+### Wat het nakijken werkelijk was
+
+Vrijwel alles wat er deze week uit een diagnostiek kwam, kwam uit
+**kruiscontroles**: twee getallen die hetzelfde horen te zeggen en dat
+niet deden.
+
+| Waarneming | Wat het aanwees |
+|---|---|
+| Opwek exact gelijk aan verbruik | een verzonnen verbruik |
+| 131548 kWh per week | een niet-omgerekende eenheid |
+| Elke periode dezelfde waarde | tellers die al gewist waren |
+| Zon −20,82 kWh | een volgordefout |
+
+Stuk voor stuk mechanisch te vinden. Een taalmodel zou daar niets aan
+toevoegen en wél een reden kunnen verzinnen die niet klopt — dezelfde
+afweging als bij de waarom-uitleg van v1.60.0.
+
+### Acht controles, elke ronde
+
+Zelfvoorziening tegen de tellers, beschikbare energie tegen de
+accustand, de exportsplitsing tegen het totaal, opwek gelijk aan
+verbruik, onmogelijke dagen in de reeks, week/maand/jaar met dezelfde
+waarde, een vastgelopen tick, en een ventilator die te vaak schakelt.
+
+Elke controle komt overeen met een fout die werkelijk is voorgekomen.
+
+Bij een bevinding volgt een **melding** — alleen bij een verandering,
+want dezelfde bevinding elke ronde herhalen is de snelste manier om te
+zorgen dat er niet meer naar gekeken wordt. Die melding staat standaard
+aan, net als "onderdeel van de integratie faalt": als twee getallen
+elkaar tegenspreken is dat per definitie geen ruis.
+
+Nieuwe subview **Zelfcontrole**, bereikbaar vanaf Meetkwaliteit.
+
+### Wat het niet kan
+
+Een fout van een soort die er niet in staat. Elke controle hierboven is
+achteraf toegevoegd nadat de fout zich had voorgedaan — dat blijft zo.
+Daar is nog steeds iemand voor nodig die kijkt, en dat staat ook in de
+toelichting op het scherm.
+
+**Volledige testsuite**: 2166 tests, allemaal groen.
+
+## v2.1.0 — Logboek met drie prioriteiten
+
+**Gevraagd**: "Misschien een soort logboek? Waarbij ik live besluiten, en
+allerlei zaken kan zien? Dit in 3 prio's definieren, en bij een kritische
+melding een melding naar mijn iPhone?"
+
+De bouwstenen lagen er al, maar verspreid over vier reeksen:
+modusveranderingen, meldingen, koelschakelingen en de energiebrug. Het
+logboek voegt ze samen op moment, zodat er één tijdlijn is.
+
+**Bewust geen vijfde reeks** die alles nog eens apart bijhoudt. Dan
+kunnen de twee uit elkaar gaan lopen — en dat is precies waar het deze
+week een paar keer misging: een reparatie van het schrijven die niet
+raakte wat er al bewaard was.
+
+### Drie prioriteiten
+
+| | Betekenis |
+|---|---|
+| ❌ **Kritiek** | er gaat geld of comfort verloren, of de integratie doet iets anders dan bedoeld |
+| ⚠️ **Aandacht** | het vraagt een beslissing, maar niet nu |
+| ℹ️ **Info** | het hoort erbij en is achteraf nuttig |
+
+Kritiek zijn: een voorspeld tekort, een lage stand vlak voor de piek, een
+interne fout, een sensor die uitvalt, en een bevinding van de
+zelfcontrole. **Vijf van de ruim dertig soorten** — een test bewaakt dat
+het er hoogstens acht blijven, want als er tien kritiek zijn is er geen
+enkele meer kritiek.
+
+Elke meldingssoort moet een prioriteit hebben; een test valt om zodra er
+een bijkomt zonder. Anders zou zo'n soort stilzwijgend als info eindigen,
+ook als hij kritiek is.
+
+### Kritieke meldingen op de telefoon
+
+Die krijgen `interruption-level: time-sensitive` mee — het iOS-veld dat
+de stille modus doorbreekt. Android krijgt via dezelfde sleutel hoge
+prioriteit; een app die het niet kent, negeert het.
+
+Een melding die om drie uur 's nachts met de rest in de wachtrij belandt,
+is immers geen kritieke melding.
+
+Nieuwe subview **Logboek**, bereikbaar vanaf Meetkwaliteit, met de
+aantallen per prioriteit bovenaan.
+
+**Volledige testsuite**: 2176 tests, allemaal groen.
+
+## v2.0.1 — Zelfcontrole ook op de landingspagina
+
+**Gevraagd**: "Dit uiteraard op een apart tabblad, maar op de
+landingspagina een klein overzicht."
+
+Een tegel bij *Status per onderwerp*, die het oordeel toont en hoogstens
+de **eerste** bevinding — de rest staat op de eigen pagina, één tik
+verderop.
+
+De kleur zegt het meteen: groen als alle acht kruiscontroles kloppen,
+rood bij een fout, amber bij iets dat aandacht vraagt, grijs als er nog
+niets is nagerekend. Zonder kleur zou je hem moeten lezen om te weten of
+er iets is, en dan werkt hij niet.
+
+De landingspagina blijft daarmee op 1272 van de 1900 toegestane tekens.
+
+**Volledige testsuite**: 2179 tests, allemaal groen.
+
+## v2.2.0 — Integratiegezondheid, maar zonder verzonnen score
+
+**Voorgesteld**: health check endpoint, diagnostische sensoren, watchdog,
+automatisch reconnecten, datavalidatie — en een gezondheidsscore van
+0-100% op basis van API-beschikbaarheid, updatefrequentie, aantal fouten
+en dataconsistentie.
+
+Twee daarvan zijn gebouwd, drie bestonden al, en één berust op een
+misverstand.
+
+### De score: goede onderdelen, verkeerde optelling
+
+De vier onderdelen zijn goed gekozen en alle vier meetbaar. Het
+**samenvoegen** tot één percentage is dat niet: dat vraagt wegingen die
+nergens vandaan komen. Is 90% beschikbaarheid met perfecte consistentie
+beter of slechter dan 100% beschikbaarheid met een rekenfout? Elk
+antwoord daarop is verzonnen.
+
+Dezelfde afweging als bij de eerder afgevallen netkwaliteitsscore. Wat
+er nu staat: **vier oordelen naast elkaar**, en de status van het geheel
+is die van het slechtste onderdeel — een ketting is zo sterk als de
+zwakste schakel, en dat is geen aanname maar een definitie. Er staat ook
+bij wélk onderdeel de status bepaalde.
+
+Een test bewaakt dat er geen samengesteld percentage terugsluipt.
+
+### Watchdog die ook ingrijpt
+
+De zelfcontrole van v2.0.0 **meldt** al dat de ronde stilstaat, maar
+melden is niet herstellen — en als de tijdklok zelf niet meer afgaat,
+komt die melding er ook niet.
+
+De watchdog loopt op een **eigen klok** en dwingt een ronde af na drie
+gemiste ticks. Op dezelfde klok meeliften zou betekenen dat hij zwijgt
+als juist die klok het begeeft.
+
+### Wat er al was
+
+- **Diagnostische sensoren**: 34 entiteiten dragen al
+  `EntityCategory.DIAGNOSTIC`
+- **Health check endpoint**: dat is de diagnostiek-export van Home
+  Assistant zelf; een eigen HTTP-endpoint voegt daar niets aan toe en
+  vraagt onderhoud
+- **Datavalidatie**: plausibiliteitsregels (v1.9.5), ingangscontrole
+  (v1.47.0), zelfcontrole (v2.0.0) en de plafonds op de dagreeks
+
+### En het misverstand
+
+**Automatisch reconnecten** kan niet, want er is geen verbinding. Deze
+integratie praat niet met Zendure, SolarEdge of de P1-meter; ze leest
+entiteiten uit Home Assistant. Vallen die weg, dan is dat een probleem
+van díe integratie, en herstelt Home Assistant het zelf. Wat hier wél
+kan is signaleren dat een bron stil is — en dat doet het eerste onderdeel
+van de gezondheidspagina.
+
+Nieuwe subview **Integratiegezondheid**, bereikbaar vanaf Meetkwaliteit.
+
+**Volledige testsuite**: 2186 tests, allemaal groen.
+
+## v2.3.0 — Vragen stellen over de eigen gegevens
+
+**Gevraagd**: "zodat ik ook vragen kan stellen als: Wat is het verwachte
+verbruik vandaag, wat zijn de kosten vandaag? Hoe laat was iedereen
+thuis, weg etc."
+
+Nieuwe dienst `energy_management_system.vraag`. Het antwoord komt terug
+als dienstuitvoer, dus je kunt hem aanroepen vanuit een automatisering,
+een script, of direct in de ontwikkelaarshulpmiddelen.
+
+> **Wat zijn de kosten vandaag?**
+> Vandaag staat er € 3,10 aan opbrengst. Zonder aansturing was dat
+> € 0,40 geweest.
+
+Acht vraagsoorten: verwacht verbruik, kosten, opwek tegenover
+voorspelling, of de accu de nacht haalt, wat de accu nu doet en waarom,
+aanwezigheid, besparing, en de accustand.
+
+**Geen taalmodel in de integratie** — dezelfde afweging als bij de
+waarom-uitleg (v1.60.0) en de zelfcontrole (v2.0.0). Een gegenereerd
+antwoord kan een getal noemen dat nergens staat, en dat is bij
+energiecijfers erger dan geen antwoord. In plaats daarvan een vaste
+tabel: trefwoorden wijzen naar een functie die het antwoord uit gemeten
+waarden opbouwt.
+
+Elk antwoord draagt de **waarden** waarop het rust, zodat het na te
+rekenen is. Een vraag die er niet in staat krijgt eerlijk *"die vraag ken
+ik niet"* plus de lijst met wat wel kan — geen verzonnen antwoord. En een
+vraag die de integratie kent maar niet kan beantwoorden, zegt dat in
+plaats van de hele ronde te breken.
+
+**Voor vrije vragen** is de juiste route de gespreksassistent van Home
+Assistant zelf. Die kan een taalmodel gebruiken en leest de entiteiten
+van deze integratie; het verschil is dat het model dan buiten de
+aansturing staat. Deze dienst is bedoeld voor de vragen die vaak
+terugkomen en waar een exact antwoord op hoort.
+
+**Volledige testsuite**: 2194 tests, allemaal groen.
+
+## v2.0.2 — Start de integratie nog op?
+
+**Gevraagd**: "Tevens wil ik zien dat de integratie nog opstart (na een
+herstart van HA)."
+
+Terecht na drie dagen met tientallen wijzigingen. De testsuite draaide
+`async_setup()` al, maar vier dingen worden pas bij een échte start
+aangeraakt en werden nergens getoetst.
+
+**En bij het bouwen van die toets bleek er meteen een gat**: de
+configuratiestroom kon in de testomgeving **helemaal niet worden
+opgebouwd**. Er ontbraken vier selectors en de dummy was niet
+aanroepbaar, dus was er nooit een test die het probeerde. Een fout in de
+configuratiestroom — een verkeerde selector, een standaardwaarde die niet
+bij het type past — zou pas bij een echte herstart zijn opgevallen, en
+dan laadt de integratie wel maar kun je hem niet instellen.
+
+Elf toetsen die nu bij elke oplevering meelopen:
+
+- elke module importeert (een ontbrekende constante laat niets laden)
+- het **configuratieformulier** wordt gebouwd, leeg én met bestaande
+  waarden
+- de vertalingen zijn geldige JSON, en elk configuratieveld heeft een
+  Nederlandse omschrijving
+- manifest, `services.yaml` en het dashboardbestand zijn geldig
+- de **diagnostiek** raakt alleen attributen die bestaan — anders faalt
+  het downloaden precies op het moment dat je hem nodig hebt
+- een **volledige opstartronde** met een realistische configuratie, met
+  daarna een echte beslisronde
+- en daarna zijn alle acht overzichten opvraagbaar: een integratie die
+  laadt maar niets toont is net zo stuk
+
+**Volledige testsuite**: 2205 tests, allemaal groen.

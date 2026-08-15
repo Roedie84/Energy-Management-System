@@ -8,6 +8,11 @@ from pathlib import Path
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
+
+try:  # pragma: no cover - afhankelijk van de Home Assistant-versie
+    from homeassistant.core import SupportsResponse
+except ImportError:  # v2.3.0: oudere versies kennen dit niet
+    SupportsResponse = None
 from homeassistant.helpers import config_validation as cv
 
 from .const import DOMAIN
@@ -26,6 +31,9 @@ BACKGROUND_SOURCE_FILENAME = "overview_background.svg"
 BACKGROUND_TARGET_PATH = "www/energy_management_system_overview.svg"
 
 SERVICE_CONFIRM_NILM_DEVICE = "confirm_nilm_device"
+# v2.3.0: een vraag stellen over de eigen gegevens.
+SERVICE_VRAAG = "vraag"
+VRAAG_SERVICE_SCHEMA = vol.Schema({vol.Required("vraag"): cv.string})
 SERVICE_REJECT_NILM_DEVICE = "reject_nilm_device"
 SERVICE_UNCONFIRM_NILM_DEVICE = "unconfirm_nilm_device"
 # v1.1.7: drift accepteren als nieuw normaal, zonder de leergeschiedenis
@@ -249,6 +257,35 @@ def _async_register_nilm_services(hass: HomeAssistant) -> None:
                 entity_id,
             )
 
+    async def _handle_vraag(call: ServiceCall) -> dict:
+        """v2.3.0, gevraagd: "zodat ik ook vragen kan stellen als: Wat is
+        het verwachte verbruik vandaag, wat zijn de kosten vandaag? Hoe
+        laat was iedereen thuis, weg etc."
+
+        Geeft het antwoord terug als dienstuitvoer, zodat het in een
+        automatisering of script te gebruiken is - en in de
+        ontwikkelaarshulpmiddelen direct te lezen.
+        """
+        vraag = call.data.get("vraag", "")
+        for coordinator in _iter_coordinators():
+            return coordinator.beantwoord_vraag(vraag)
+        return {"gevonden": False, "antwoord": "Geen actieve integratie."}
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_VRAAG,
+        _handle_vraag,
+        schema=VRAAG_SERVICE_SCHEMA,
+        # v2.3.0: het antwoord komt terug als dienstuitvoer, zodat het in
+        # een automatisering te gebruiken is. Home Assistant kent dat pas
+        # vanaf 2023.7; op oudere versies wordt de dienst gewoon
+        # geregistreerd zonder antwoord.
+        **(
+            {"supports_response": SupportsResponse.ONLY}
+            if SupportsResponse is not None
+            else {}
+        ),
+    )
     hass.services.async_register(
         DOMAIN, SERVICE_CONFIRM_NILM_DEVICE, _handle_confirm, schema=NILM_SERVICE_SCHEMA
     )
