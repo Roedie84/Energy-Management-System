@@ -1314,6 +1314,25 @@ BATTERY_COOLING_ON_HIGH_POWER_TEMP_C = 40.0
 # verschil met buiten - zolang er tenminste iets te koelen valt.
 BATTERY_COOLING_KEEP_RUNNING_ABOVE_C = 42.0
 
+# --- Minimale loop- en rusttijd (v1.99.0) ----------------------------
+# Gevonden bij de controle van 15 augustus: de ventilator pendelde die
+# nacht DERTIEN keer tussen 31 en 35 graden, om de twintig minuten.
+#
+# Dat is geen sensorruis - de hysterese van v1.76.0 vangt dat al. Het is
+# echt thermisch pendelen: de ventilator koelt de omvormer in enkele
+# minuten van 35 naar 31, waarna hij weer opwarmt. Het systeem is dus
+# sneller dan de band tussen 32 en 35 breed is.
+#
+# Een bredere band zou betekenen dat de omvormer onnodig warm wordt
+# gehouden. Een minimale loop- en rusttijd is de gebruikelijke oplossing
+# bij ventilatoren en compressoren: hij lost het pendelen op zonder aan
+# de temperatuurgrenzen te sleutelen.
+#
+# Twintig minuten is de gemeten cyclusduur; dertig zit daar net boven en
+# halveert het aantal schakelingen ruwweg.
+BATTERY_COOLING_MIN_RUNTIME_MINUTES = 30.0
+BATTERY_COOLING_MIN_REST_MINUTES = 30.0
+
 # UITZETTEN alleen als ALLE drie tegelijk gelden - één voorwaarde die
 # terugvalt is niet genoeg, anders slaat de ventilator af terwijl er nog
 # een andere reden is om te blijven koelen. De waarden staan hierboven,
@@ -1564,6 +1583,9 @@ PERSISTED_PLAIN_FIELDS = (
     # v1.90.0: de dagreeks waar zelfconsumptie per week/maand/jaar op
     # rust.
     "energy_daily_history",
+    # v1.98.0: de stand van de laatste tick, zodat een herstart vlak voor
+    # middernacht de dag niet met lege tellers afsluit.
+    "_energiedagstand",
     # v1.61.0: wat een cyclus werkelijk kostte, per apparaat gemeten.
     "appliance_cycle_kwh",
     "_appliance_cycle_history",

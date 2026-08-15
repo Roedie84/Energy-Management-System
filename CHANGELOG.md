@@ -14219,3 +14219,85 @@ Het inlezen krijgt versie 3, dus de bestaande ingelezen dagen worden
 opnieuw opgehaald — nu inclusief de nieuwe kolommen.
 
 **Volledige testsuite**: 2148 tests, allemaal groen.
+
+## v1.98.0 — Voor de derde keer dezelfde volgordefout
+
+De energiecijfers kloppen nu — 108,36 kWh opwek deze week, 62,02
+verbruik — en de opruiming deed zijn werk: 399 dagen verwijderd, 399
+opnieuw ingelezen.
+
+Maar accu, kosten en CO₂ stonden in **elke** periode op dezelfde waarde.
+Week, maand, jaar en contractjaar allemaal 0,0 en 0,05. Dat kan niet.
+
+### De tellers waren al gewist
+
+De kostentellers worden op regel 13608 van de tick op nul gezet, de
+accuteller op 13813 — en de dag wordt pas op 13867 afgesloten. Alles
+stond dan al op nul, dus kreeg elke afgesloten dag nullen mee.
+
+**Dit is de derde keer.** Eerder bij de plantoetsing (v1.74.0, negatieve
+zonopbrengst) en bij de opruiming van de energiereeks (v1.95.0, die op
+een lege lijst draaide). Steeds dezelfde vorm: iets leest een waarde
+nadat een andere routine hem heeft gewist.
+
+De oplossing is die van v1.74.0: de stand van de laatste tick van die dag
+vasthouden, en die gebruiken bij het afsluiten. Dat gebeurt aan het
+**einde** van de tick, als alle tellers zijn bijgewerkt, en het overleeft
+een herstart.
+
+**Een bredere test erbij** die omvalt zodra een afsluitroutine
+rechtstreeks een dagteller leest in plaats van de bewaarde stand. Zonder
+zo'n toets komt deze vorm een vierde keer terug.
+
+### En de reeks stond niet in de export
+
+Waardoor niet na te gaan was waarom die getallen gelijk waren. Een
+optelling zonder de onderliggende regels is niet te controleren —
+hetzelfde gat als eerder bij de meldingen. De laatste dertig dagen staan
+er nu in.
+
+**Volledige testsuite**: 2153 tests, allemaal groen.
+
+## v1.99.0 — De ventilator pendelde dertien keer per nacht
+
+**Gevraagd**: "Heb je de diagnostiek volledig nagekeken?" Nee — ik was op
+één ding gestuit en had de rest laten liggen. Alsnog gedaan.
+
+### De koeling pendelt
+
+In de nacht van 15 augustus schakelde de ventilator **dertien keer**,
+telkens tussen 31 en 35 °C, om de twintig minuten. In de
+meldingsgeschiedenis staan daardoor 63 koelmeldingen op 200 regels.
+
+Dit is géén sensorruis — de hysterese van v1.76.0 vangt dat al. Het is
+echt thermisch pendelen: de ventilator koelt de omvormer in enkele
+minuten van 35 naar 31, waarna hij weer opwarmt. Het systeem is sneller
+dan de band tussen 32 en 35 breed is.
+
+Een bredere band zou de omvormer onnodig warm houden. Daarom een
+**minimale loop- en rusttijd van 30 minuten** — de gebruikelijke
+oplossing bij ventilatoren en compressoren, en ze lost het op zonder aan
+de temperatuurgrenzen te sleutelen.
+
+De uitzondering daarop is bewust smal. Mijn eerste poging was "onder de
+ondergrens mag hij altijd uit", en dat ondermijnde precies het
+waargenomen geval: de uitschakeling gebeurde bíj 31 graden. Bij 31 met 23
+buiten valt er nog acht graden te koelen; de ondergrens zegt alleen dat
+de omvormer koel genoeg *is*. Alleen als het verschil met buiten te klein
+is om nog iets te halen, wordt er niet gewacht.
+
+### Wat verder uit de controle kwam
+
+- **Alle kruiscontroles kloppen**: zelfvoorziening 99,9%, accustand,
+  cycli 7,2
+- **Zonstand** 0,7° verschil; **buitensensor** nu 0,9 °C boven de
+  weerbron — vannacht dus geen zonnestraling op de sensor, wat het
+  vermoeden van gisteren ondersteunt
+- **Plantoetsing is schoon**: de negatieve regels zijn verdwenen, 14
+  augustus staat op 20,9 kWh zon tegen 21,36 voorspeld
+- **Nul tekortkwartieren**, en de tekortdagen zakken van 3 naar 2
+- **Rendement**: drie ontlaadmetingen (94,2 / 94,1 / 93,0), nog twee
+  laadmetingen — bij drie slaat de methode om
+- Geen interne fouten, doen-stapel leeg, NILM zonder alarm
+
+**Volledige testsuite**: 2157 tests, allemaal groen.

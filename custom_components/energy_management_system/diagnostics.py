@@ -423,6 +423,15 @@ async def async_get_config_entry_diagnostics(
             # v1.87.0: hoe de reservemarge is opgebouwd.
             # v1.90.0: zelfconsumptie over langere perioden.
             # v1.91.0: alle dagcijfers over dag/week/maand/jaar.
+            # v1.98.0: de dagreeks zelf, niet alleen de optelling.
+            #
+            # Bij de controle van 15 augustus bleek de reeks niet in de
+            # export te staan, waardoor niet na te gaan was waarom accu,
+            # kosten en CO2 in elke periode dezelfde waarde toonden. Een
+            # optelling zonder de onderliggende regels is niet te
+            # controleren - hetzelfde gat als bij de meldingen.
+            "energy_daily_history": coordinator.energy_daily_history[-30:],
+            "energy_daily_history_length": len(coordinator.energy_daily_history),
             "period_overview": _veilig(
                 "get_period_overview", coordinator.get_period_overview
             ),

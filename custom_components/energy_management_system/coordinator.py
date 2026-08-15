@@ -302,6 +302,8 @@ from .const import (
     BATTERY_COOLING_OFF_POWER_W,
     BATTERY_COOLING_ON_ABSOLUTE_C,
     BATTERY_COOLING_KEEP_RUNNING_ABOVE_C,
+    BATTERY_COOLING_MIN_REST_MINUTES,
+    BATTERY_COOLING_MIN_RUNTIME_MINUTES,
     BATTERY_COOLING_MIN_ABSOLUTE_C,
     BATTERY_COOLING_STOP_BELOW_C,
     BATTERY_COOLING_ON_DELTA_C,
@@ -1243,6 +1245,9 @@ class EnergyManagementSystemCoordinator:
         self.pv_export_today_kwh: float = 0.0
         # v1.90.0: dagreeks voor zelfconsumptie over langere perioden.
         self.energy_daily_history: list[dict] = []
+        # v1.98.0: de dagstand van de laatste tick, om bij de dagwissel
+        # niet met al gewiste tellers te rekenen.
+        self._energiedagstand: dict = {}
         # v1.92.0: wat het inlezen van de geschiedenis opleverde.
         self.energy_history_bootstrap_note: str | None = None
         # v1.76.0: de export gesplitst op het moment zelf.
@@ -13865,6 +13870,7 @@ class EnergyManagementSystemCoordinator:
             # daggrens weg.
             if self._self_sufficiency_day_key is not None:
                 self._sluit_energiedag_af(self._self_sufficiency_day_key)
+            self._energiedagstand = {}
             self.pv_export_today_kwh = 0.0
             self.solar_export_today_kwh = 0.0
             self.battery_export_today_kwh = 0.0
@@ -13959,31 +13965,83 @@ class EnergyManagementSystemCoordinator:
             max(0.0, p1_power_w) / 1000
         ) * elapsed_hours
 
+    def _onthoud_energiedagstand(self, dag) -> None:
+        """Houdt de dagstand van de lopende dag bij (v1.98.0).
+
+        Gevonden bij de controle van 15 augustus: accu, kosten en CO2
+        stonden in ELKE periode op dezelfde waarde. De oorzaak is voor de
+        derde keer dezelfde volgordefout - de kostentellers worden op
+        regel 13608 gewist, de accu op 13813, en de dag wordt pas op
+        13867 afgesloten. Alles stond dan al op nul.
+
+        Eerder opgelost voor de plantoetsing (v1.74.0) met precies deze
+        aanpak: de stand van de laatste tick van die dag vasthouden, en
+        die gebruiken bij het afsluiten.
+        """
+        self._energiedagstand = {
+            "dag": dag,
+            "opwek_kwh": self.pv_production_today_kwh,
+            "zon_export_kwh": self.solar_export_today_kwh,
+            "accu_export_kwh": self.battery_export_today_kwh,
+            "export_kwh": self.pv_export_today_kwh,
+            "verbruik_kwh": self.gross_consumption_today_kwh,
+            "import_kwh": self.grid_import_today_kwh,
+            "accu_ontladen_kwh": self.battery_discharge_today_kwh,
+            "kosten_eur": self.actual_cost_today_eur,
+            "zonder_sturing_eur": self.counterfactual_cost_today_eur,
+            "co2_kg": self.co2_emitted_today_kg,
+        }
+
     def _sluit_energiedag_af(self, dag) -> None:
         """Legt de energiecijfers van een afgesloten dag vast (v1.90.0)."""
-        if self.pv_production_today_kwh <= 0 and self.gross_consumption_today_kwh <= 0:
+        # v1.98.0: de stand van de laatste tick van DIE dag, niet de
+        # tellers van nu - die zijn eerder in deze tick al gewist.
+        stand = self._energiedagstand or {}
+        if stand.get("dag") != dag:
+            stand = {}
+
+        def _w(sleutel, terugval):
+            waarde = stand.get(sleutel)
+            return terugval if waarde is None else waarde
+
+        opwek = _w("opwek_kwh", self.pv_production_today_kwh)
+        verbruik = _w("verbruik_kwh", self.gross_consumption_today_kwh)
+        if opwek <= 0 and verbruik <= 0:
             return
         self.energy_daily_history.append(
             {
                 "datum": dag.isoformat() if hasattr(dag, "isoformat") else str(dag),
-                "opwek_kwh": round(self.pv_production_today_kwh, 3),
-                "zon_export_kwh": round(self.solar_export_today_kwh, 3),
-                "accu_export_kwh": round(self.battery_export_today_kwh, 3),
-                "export_kwh": round(self.pv_export_today_kwh, 3),
-                "verbruik_kwh": round(self.gross_consumption_today_kwh, 3),
-                "import_kwh": round(self.grid_import_today_kwh, 3),
+                "opwek_kwh": round(opwek, 3),
+                "zon_export_kwh": round(
+                    _w("zon_export_kwh", self.solar_export_today_kwh), 3
+                ),
+                "accu_export_kwh": round(
+                    _w("accu_export_kwh", self.battery_export_today_kwh), 3
+                ),
+                "export_kwh": round(
+                    _w("export_kwh", self.pv_export_today_kwh), 3
+                ),
+                "verbruik_kwh": round(verbruik, 3),
+                "import_kwh": round(
+                    _w("import_kwh", self.grid_import_today_kwh), 3
+                ),
                 # v1.91.0: ook de accu en de kosten, zodat één reeks alle
                 # onderwerpen draagt.
                 #
                 # Gevraagd: "Misschien dag/week/maand/jaar voor alle
                 # relevante sensoren invoeren en zichtbaar maken? Kosten,
                 # verbruik, opwek, accu, noem het maar op."
-                "accu_ontladen_kwh": round(self.battery_discharge_today_kwh, 3),
-                "kosten_eur": round(self.actual_cost_today_eur, 4),
-                "zonder_sturing_eur": round(
-                    self.counterfactual_cost_today_eur, 4
+                "accu_ontladen_kwh": round(
+                    _w("accu_ontladen_kwh", self.battery_discharge_today_kwh), 3
                 ),
-                "co2_kg": round(self.co2_emitted_today_kg, 4),
+                "kosten_eur": round(
+                    _w("kosten_eur", self.actual_cost_today_eur), 4
+                ),
+                "zonder_sturing_eur": round(
+                    _w("zonder_sturing_eur", self.counterfactual_cost_today_eur),
+                    4,
+                ),
+                "co2_kg": round(_w("co2_kg", self.co2_emitted_today_kg), 4),
             }
         )
         self.energy_daily_history = self.energy_daily_history[
@@ -14771,9 +14829,8 @@ class EnergyManagementSystemCoordinator:
         staat. De drempels liggen bewust lager dan die voor aanzetten
         (hysterese), zodat er niet rond één grens gependeld wordt.
         """
-        # v1.73.0: onder de ondergrens is er niets meer te koelen, dus
-        # dan altijd uit - ook als de andere voorwaarden nog niet zijn
-        # teruggevallen.
+        # v1.99.0: onder de ondergrens altijd uit, ook binnen de
+        # minimale looptijd - daar valt niets meer te koelen.
         #
         # v1.76.0: met hysterese. Zonder marge wipte de ventilator mee
         # met een sensor die in hele graden meldt: twintig schakelingen
@@ -14794,6 +14851,33 @@ class EnergyManagementSystemCoordinator:
             and vermogen_w < BATTERY_COOLING_OFF_POWER_W
             and accu_c < BATTERY_COOLING_OFF_ABSOLUTE_C
         )
+
+    def _cooling_switch_too_recent(self, now: datetime, aanzetten: bool) -> bool:
+        """Is de laatste schakeling te kort geleden? (v1.99.0)
+
+        Gevonden bij de controle van 15 augustus: de ventilator pendelde
+        die nacht dertien keer tussen 31 en 35 graden, om de twintig
+        minuten. Geen sensorruis - de hysterese van v1.76.0 vangt dat al -
+        maar echt thermisch pendelen: de ventilator koelt in minuten van
+        35 naar 31, waarna de omvormer weer opwarmt.
+
+        Een minimale loop- en rusttijd lost dat op zonder aan de
+        temperatuurgrenzen te sleutelen.
+        """
+        moment = self.battery_cooling_last_change
+        if moment is None:
+            return False
+        if isinstance(moment, str):
+            moment = dt_util.parse_datetime(moment)
+            if moment is None:
+                return False
+        minuten = (now - moment).total_seconds() / 60
+        grens = (
+            BATTERY_COOLING_MIN_REST_MINUTES
+            if aanzetten
+            else BATTERY_COOLING_MIN_RUNTIME_MINUTES
+        )
+        return minuten < grens
 
     def evaluate_battery_cooling(self) -> dict:
         """Bepaalt wat er met de koelventilator zou moeten gebeuren -
@@ -14824,6 +14908,7 @@ class EnergyManagementSystemCoordinator:
             )
             return resultaat
 
+        nu = dt_util.now()
         accu_c, buiten_c, vermogen_w = metingen
         resultaat.update(
             {
@@ -14849,6 +14934,13 @@ class EnergyManagementSystemCoordinator:
                 accu_c, buiten_c, vermogen_w
             )
             if reden:
+                # v1.99.0: pas na de minimale rusttijd.
+                if self._cooling_switch_too_recent(nu, aanzetten=True):
+                    resultaat["reden"] = (
+                        f"{reden} - maar de ventilator is net uitgezet; "
+                        "wachten om pendelen te voorkomen."
+                    )
+                    return resultaat
                 resultaat["actie"] = "aan"
                 resultaat["reden"] = reden
             else:
@@ -14856,6 +14948,27 @@ class EnergyManagementSystemCoordinator:
             return resultaat
 
         if self._battery_cooling_should_turn_off(accu_c, buiten_c, vermogen_w):
+            # v1.99.0: pas na de minimale looptijd, behalve als koelen
+            # fysiek niets meer oplevert.
+            #
+            # Die uitzondering moet smal zijn. Eerst stond hier "onder de
+            # ondergrens", maar dat ondermijnde precies het geval dat
+            # deze regel moet vangen: op 15 augustus schakelde hij uit
+            # bij 31 graden, en dat is onder de ondergrens van 32.
+            #
+            # Bij 31 graden met 23 buiten valt er nog acht graden te
+            # koelen; de ondergrens zegt alleen dat de omvormer koel
+            # genoeg IS. Alleen als het verschil met buiten te klein is
+            # om nog iets te halen, hoeft er niet gewacht te worden.
+            koelen_zinloos = (accu_c - buiten_c) < BATTERY_COOLING_OFF_DELTA_C
+            if not koelen_zinloos and self._cooling_switch_too_recent(
+                nu, aanzetten=False
+            ):
+                resultaat["reden"] = (
+                    "Zou uit kunnen, maar de ventilator draait nog geen "
+                    "half uur; doorlaten om pendelen te voorkomen."
+                )
+                return resultaat
             resultaat["actie"] = "uit"
             resultaat["reden"] = (
                 f"accu {accu_c:.1f}°C, nog maar "
@@ -21358,6 +21471,14 @@ class EnergyManagementSystemCoordinator:
         # toetsen. Ook afgeschermd - een rapport mag de aansturing niet
         # in de weg zitten. De fout komt via `internal_failures` alsnog
         # als melding binnen (v1.29.0).
+        # v1.98.0: de dagstand vasthouden, NA alle tellers van deze tick.
+        # Bij de volgende dagwissel is dit de laatste stand van de dag
+        # die wordt afgesloten.
+        try:
+            self._onthoud_energiedagstand(now.date())
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Kon de energiedagstand niet vasthouden")
+
         try:
             self._update_verouderingsdrijvers(now)
         except Exception:  # noqa: BLE001
