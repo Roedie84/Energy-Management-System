@@ -1532,8 +1532,24 @@ class EnergyManagementSystemCoordinator:
         # test voor gemaakt die de VOLGORDE bewaakt; nu wel.
         try:
             await self.async_bootstrap_energy_history()
-        except Exception:  # noqa: BLE001 - mag nooit het opstarten breken
+        except Exception as fout:  # noqa: BLE001 - mag nooit het opstarten breken
+            # v2.2.4: de fout ook ZICHTBAAR maken.
+            #
+            # Deze try/except ving drie dagen lang een NameError op zonder
+            # dat er iets van te zien was: de geschiedenis vulde zich
+            # niet, de inleesmelding bleef leeg, en er stond geen fout in
+            # de diagnostiek. Alleen het logboek wist ervan, en dat zit
+            # niet in de export.
+            #
+            # Opvangen blijft goed - het opstarten mag hier niet op
+            # stuklopen - maar zwijgen niet.
             _LOGGER.exception("Kon de energiegeschiedenis niet inlezen")
+            self.energy_history_bootstrap_note = (
+                f"Inlezen mislukt: {type(fout).__name__}: {fout}"
+            )
+            self.internal_failures["energiegeschiedenis"] = (
+                f"{type(fout).__name__}: {fout}"
+            )
 
         self._unsub_interval = async_track_time_interval(
             self.hass,
@@ -15306,15 +15322,6 @@ class EnergyManagementSystemCoordinator:
         # verbruik gelijkstelde aan de opwek; dat wordt weggegooid en
         # opnieuw opgehaald. Live gemeten dagen blijven altijd staan.
 
-        # En een vangnet dat losstaat van het merkteken: een dag die de
-        # plausibiliteitsgrens overschrijdt hoort er nooit in te staan,
-        # ongeacht welke ronde hem schreef.
-        self.energy_daily_history = [
-            r
-            for r in self.energy_daily_history
-            if not self._energiedag_is_onzin(r)
-        ]
-        opgeruimd = voor - len(self.energy_daily_history)
 
         if self.energy_daily_history:
             # Alleen de dagen VOOR de oudste bekende dag aanvullen.
@@ -15376,6 +15383,22 @@ class EnergyManagementSystemCoordinator:
                 and r.get("inlees_versie", 0) >= ENERGY_BOOTSTRAP_VERSION
             )
         ]
+
+        # v2.2.4: en een vangnet dat losstaat van het merkteken: een dag
+        # die de plausibiliteitsgrens overschrijdt hoort er nooit in te
+        # staan, ongeacht welke ronde hem schreef.
+        #
+        # Dit blok stond hierboven, vóór `voor` werd gezet - en las die
+        # dus voordat hij bestond. Gevolg: een NameError bij élke start,
+        # stilzwijgend opgevangen door de try/except in `async_setup`.
+        # De geschiedenis is daardoor sinds v1.94.0 nooit meer
+        # ingelezen, en dat verklaart de lege inleesmelding.
+        self.energy_daily_history = [
+            r
+            for r in self.energy_daily_history
+            if not self._energiedag_is_onzin(r)
+        ]
+        opgeruimd = voor - len(self.energy_daily_history)
 
         if not bronnen:
             self.energy_history_bootstrap_note = (

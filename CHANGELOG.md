@@ -14975,3 +14975,45 @@ niet te controleren was — hetzelfde gat als eerder bij de meldingen
 (v1.76.0) en de dagreeks (v1.98.0).
 
 **Volledige testsuite**: 2245 tests, allemaal groen.
+
+## v2.2.4 — De routine viel bij elke start om
+
+De uitsplitsing per bron uit v2.2.3 gaf meteen antwoord: **leeg**. Niet
+één bron bevraagd, geen inleesmelding. De routine draaide dus helemaal
+niet.
+
+### Een NameError, sinds v1.94.0
+
+    opgeruimd = voor - len(self.energy_daily_history)
+
+stond **boven** de regel die `voor` zet. Elke start gaf een `NameError`,
+en de `try/except` in `async_setup` ving die netjes op.
+
+Dat betekent: sinds v1.94.0 is de geschiedenis **nooit meer ingelezen**.
+De 398 dagen in de reeks komen uit de inleesronde van dáárvoor — en
+daarom bleven accu en kosten leeg, ongeacht welke meters er werden
+ingesteld.
+
+### En het zweeg erover
+
+Precies de fout die deze integratie op tien andere plekken wél meldt: de
+geschiedenis vulde zich niet, de melding bleef leeg, er stond geen fout
+in de diagnostiek. Alleen het logboek wist ervan, en dat zit niet in de
+export.
+
+Opvangen blijft goed — het opstarten mag hier niet op stuklopen — maar
+zwijgen niet. Een afgevangen fout landt nu in `internal_failures` én in
+de inleesmelding.
+
+### Wat de tests niet vingen
+
+**Alle 2245 tests bleven groen**, want geen enkele voerde de routine
+daadwerkelijk uit; ze lazen alleen de broncode. Nu wel:
+
+- de routine wordt echt aangeroepen en moet een melding achterlaten;
+- elke uitgang van de routine moet vertellen wat er gebeurde;
+- en elke afgevangen fout in `async_setup` moet ergens zichtbaar worden.
+
+Op de proef gesteld door de fout terug te zetten: dan vallen ze om.
+
+**Volledige testsuite**: 2249 tests, allemaal groen.
