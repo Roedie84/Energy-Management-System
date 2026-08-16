@@ -430,6 +430,9 @@ async def async_get_config_entry_diagnostics(
             # kosten en CO2 in elke periode dezelfde waarde toonden. Een
             # optelling zonder de onderliggende regels is niet te
             # controleren - hetzelfde gat als bij de meldingen.
+            # v2.2.3: wat het inlezen per bron opleverde.
+            "energy_history_sources": coordinator.energy_history_sources,
+            "energy_history_note": coordinator.energy_history_bootstrap_note,
             "energy_daily_history": coordinator.energy_daily_history[-30:],
             "energy_daily_history_length": len(coordinator.energy_daily_history),
             "period_overview": _veilig(

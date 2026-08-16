@@ -1286,6 +1286,8 @@ class EnergyManagementSystemCoordinator:
         self._laatste_zelfcontrole_sleutel: str | None = None
         # v1.92.0: wat het inlezen van de geschiedenis opleverde.
         self.energy_history_bootstrap_note: str | None = None
+        # v2.2.3: per bron wat het inlezen opleverde.
+        self.energy_history_sources: dict = {}
         # v1.76.0: de export gesplitst op het moment zelf.
         self.solar_export_today_kwh: float = 0.0
         # v1.90.0: dagreeks van opwek en export, voor het weekcijfer.
@@ -15442,6 +15444,15 @@ class EnergyManagementSystemCoordinator:
         # Per dag de aangroei van elke meter: het verschil tussen twee
         # opeenvolgende standen. `sum` is cumulatief, dus de dagwaarde is
         # het verschil - niet de stand zelf.
+        # v2.2.3: per bron vastleggen wat eruit kwam.
+        #
+        # Gemeld: accu en kosten bleven leeg na het instellen van de
+        # meters, en uit de export was niet af te leiden waarom - de
+        # inleesmelding was leeg en er stond geen fout. Zonder deze
+        # uitsplitsing is het gissen tussen "de routine draaide niet",
+        # "de sensor heeft geen statistieken" en "de eenheid werd niet
+        # herkend".
+        self.energy_history_sources = {}
         per_dag: dict = {}
         for veld, entity_id in bronnen.items():
             eenheid = (
@@ -15461,8 +15472,28 @@ class EnergyManagementSystemCoordinator:
                     entity_id,
                     eenheid,
                 )
+                self.energy_history_sources[veld] = {
+                    "entiteit": entity_id,
+                    "eenheid": eenheid,
+                    "dagen": 0,
+                    "reden": (
+                        f"Eenheid {eenheid!r} wordt niet herkend; verwacht "
+                        "kWh, Wh, MWh of EUR."
+                    ),
+                }
                 continue
             reeks = rijen.get(entity_id) or []
+            self.energy_history_sources[veld] = {
+                "entiteit": entity_id,
+                "eenheid": eenheid,
+                "punten": len(reeks),
+                "reden": (
+                    "Geen langetermijnstatistieken gevonden - staat er wel "
+                    "een state_class op deze sensor?"
+                    if not reeks
+                    else None
+                ),
+            }
             vorige = None
             for punt in reeks:
                 stand = punt.get("sum")

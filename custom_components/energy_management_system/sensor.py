@@ -3859,6 +3859,7 @@ class GacsAssessmentSensor(SensorEntity):
             "reservemarge",
             "zelfconsumptie",
             "perioden",
+            "geschiedenisbronnen",
             "accu_tegen_net",
             "kwartier_samenvatting",
             "plantoetsing",
@@ -3927,6 +3928,10 @@ class GacsAssessmentSensor(SensorEntity):
             ("reservemarge", self._coordinator.get_reserve_margin_overview),
             ("zelfconsumptie", self._coordinator.get_self_consumption_overview),
             ("perioden", self._coordinator.get_period_overview),
+            (
+                "geschiedenisbronnen",
+                lambda: self._coordinator.energy_history_sources,
+            ),
             ("accu_tegen_net", lambda: self._coordinator.last_battery_vs_grid),
             ("kwartier_samenvatting", self._coordinator.get_quarter_plan_summary),
             # v1.31.0: plan tegen werkelijkheid.

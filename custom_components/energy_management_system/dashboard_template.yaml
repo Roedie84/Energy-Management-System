@@ -1499,7 +1499,16 @@ views:
         Contractjaar begon op {{ o.contractjaar_begin }}.{% endif %}
 
 
-        {% if o.get(''geschiedenis'') %}
+        {% set br = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''geschiedenisbronnen'') or {} %}{% if br %}
+
+
+        | Bron | Entiteit | Punten | Opmerking |
+
+        |---|---|---|---|
+
+        {% for veld, w in br.items() %}| {{ veld }} | {{ w.entiteit }} | {{ w.get(''punten'', ''—'') }} | {{ w.get(''reden'') or ''in orde'' }} |
+
+        {% endfor %}{% endif %}{% if o.get(''geschiedenis'') %}
 
 
         _{{ o.geschiedenis }}_{% endif %}

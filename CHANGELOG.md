@@ -14949,3 +14949,29 @@ aanvullen en het zojuist gewiste gat laten staan — dezelfde vorm als de
 volgordefouten van v1.74.0 en v1.95.0, en daarom staat er nu een test op.
 
 **Volledige testsuite**: 2243 tests, allemaal groen.
+
+## v2.2.3 — Waarom bleven accu en kosten leeg?
+
+**Gemeld** met een diagnostiek waarin accu en kosten voor week, maand en
+jaar op *"niet te bepalen"* stonden.
+
+De opruiming uit v2.2.2 wérkte — die 0,0-waarden zijn weg. Maar het
+opnieuw inlezen leverde niets op, en uit de export was **niet af te
+leiden waarom**: de inleesmelding was leeg, er stond geen fout, en de
+398 dagen droegen allemaal `null` voor die twee kolommen.
+
+Zonder uitsplitsing is het gissen tussen drie oorzaken:
+
+- de routine draaide helemaal niet;
+- de sensor heeft geen langetermijnstatistieken (geen `state_class`);
+- de eenheid werd niet herkend.
+
+**Per bron wordt nu vastgelegd** welke entiteit is bevraagd, welke
+eenheid die draagt, hoeveel statistiekpunten er zijn gevonden en wat er
+eventueel misging. Dat staat in de diagnostiek én op de Perioden-pagina.
+
+Dit is de tweede keer dat een optelling zonder de onderliggende gegevens
+niet te controleren was — hetzelfde gat als eerder bij de meldingen
+(v1.76.0) en de dagreeks (v1.98.0).
+
+**Volledige testsuite**: 2245 tests, allemaal groen.
