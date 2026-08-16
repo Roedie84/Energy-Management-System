@@ -297,8 +297,14 @@ def test_one_contributing_day_is_not_a_calculation_error(
 def test_many_contributing_days_with_one_value_is_a_fault(
     make_coordinator, hass
 ):
-    """Dragen er wél meerdere dagen bij en staat elke periode toch op
-    hetzelfde getal, dan is er echt iets mis."""
+    """Dragen de perioden VERSCHILLENDE dagen en staan ze toch op
+    hetzelfde getal, dan is er echt iets mis.
+
+    v2.1.2: gemeld dat "2 dagen een waarde hebben" als fout werd
+    gemeld terwijl beide dagen binnen de week vielen - dan bevatten
+    week, maand en jaar dezelfde twee dagen en hoort er hetzelfde getal
+    te staan. Hier liggen ze wél verspreid.
+    """
     c = _coordinator(make_coordinator, hass)
     c.energy_daily_history = [
         {"datum": f"2026-08-{d:02d}", "opwek_kwh": 20.0, "co2_kg": 0.05}
@@ -331,3 +337,39 @@ def test_the_cooling_check_looks_at_a_window(make_coordinator, hass):
     namen = [b["naam"] for b in c.get_consistency_checks(NU)["bevindingen"]]
 
     assert "Accukoeling" not in namen
+
+
+def test_days_inside_one_week_are_not_a_fault(make_coordinator, hass):
+    """v2.1.2: gemeld als fout terwijl het er geen was.
+
+    "Week, maand en jaar staan alle drie op 0.09 terwijl 2 dagen een
+    waarde hebben." Beide dagen vielen binnen de week, dus bevatten alle
+    drie de perioden dezelfde twee dagen - en dan hoort er hetzelfde
+    getal te staan.
+    """
+    c = _coordinator(make_coordinator, hass)
+    c.energy_daily_history = [
+        {
+            "datum": (NU.date() - timedelta(days=n)).isoformat(),
+            "opwek_kwh": 20.0,
+            "co2_kg": 0.045,
+        }
+        for n in (1, 2)
+    ] + [
+        {
+            "datum": (NU.date() - timedelta(days=n)).isoformat(),
+            "opwek_kwh": 20.0,
+            "co2_kg": None,
+        }
+        for n in range(3, 30)
+    ]
+
+    co2 = [
+        b
+        for b in c.get_consistency_checks(NU)["bevindingen"]
+        if b["naam"].endswith("CO2")
+    ]
+
+    assert co2
+    assert co2[0]["ernst"] == "aandacht"
+    assert "binnen de week" in co2[0]["uitleg"]
