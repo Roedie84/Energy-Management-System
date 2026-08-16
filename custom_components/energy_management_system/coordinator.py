@@ -488,9 +488,8 @@ from .const import (
     MIN_TOTAL_MARGIN_BONUS_PERCENT,
     UNPROTECTED_AFTERMATH_MARGIN_PERCENT,
     MIN_SOLAR_HISTORY_FOR_DYNAMIC_THRESHOLD,
-    CONF_PV_FORECAST_P10,
-    CONF_PV_FORECAST_P90,
     PV_HOURLY_BIAS_MAX_RATIO,
+    CHEAP_BLOCK_ALERT_MAX_OF_MEDIAN,
     PV_HOURLY_BIAS_MIN_KWH,
     PV_HOURLY_BIAS_MIN_RATIO,
     PV_SPREAD_MARGIN_BONUS_PERCENT,
@@ -3282,13 +3281,46 @@ class EnergyManagementSystemCoordinator:
         if cheap_block_start is not None:
             minuten_tot = (cheap_block_start - now).total_seconds() / 60
             if 0 < minuten_tot <= 15:
-                stuur(
-                    "cheap_block_soon",
-                    "⏰ Goedkoopste blok begint bijna",
-                    f"Om {cheap_block_start:%H:%M} begint het goedkoopste "
-                    "blok van vandaag - een goed moment voor apparaten die "
-                    "kunnen wachten.",
+                # v2.5.0: alleen melden als het blok ook wérkelijk
+                # goedkoop is.
+                #
+                # Gemeld: "Om 17:00 begint 't goedkoopste blok van
+                # vandage" - terwijl het dagminimum om 13:00 op 16,4 ct
+                # lag en 17:00 op 30,7 ct. Bijna het dubbele.
+                #
+                # De melding klopte binnen zijn eigen logica: het blok is
+                # het goedkoopste dat er nog RESTEERT. Maar om kwart voor
+                # vijf is dat alleen nog de avond, en dan is "een goed
+                # moment voor apparaten die kunnen wachten" precies het
+                # verkeerde advies.
+                blok_prijs = self._gemiddelde_prijs_in_blok(
+                    entries, cheap_block_start, self.last_cheap_block_end
                 )
+                dag_mediaan = None
+                if entries:
+                    van_vandaag = [
+                        e[2] / PRICE_SCALE_FACTOR
+                        for e in entries
+                        if e[0].date() == now.date()
+                    ]
+                    if van_vandaag:
+                        dag_mediaan = statistics.median(van_vandaag)
+
+                de_moeite = (
+                    blok_prijs is not None
+                    and dag_mediaan is not None
+                    and blok_prijs <= dag_mediaan * CHEAP_BLOCK_ALERT_MAX_OF_MEDIAN
+                )
+                if de_moeite:
+                    stuur(
+                        "cheap_block_soon",
+                        "⏰ Goedkoopste blok begint bijna",
+                        f"Om {cheap_block_start:%H:%M} begint het "
+                        f"goedkoopste blok dat er nog komt vandaag: "
+                        f"{blok_prijs * 100:.1f} ct tegen een dagmediaan van "
+                        f"{dag_mediaan * 100:.1f} ct. Een goed moment voor "
+                        "apparaten die kunnen wachten.",
+                    )
 
         # --- accu vlak voor de piek ---
         soc_nu = self.accustand_procent()
@@ -11592,17 +11624,60 @@ class EnergyManagementSystemCoordinator:
         onzekere dag als onzeker wordt behandeld, en dat is precies waar
         de slechtste dagen (41,6% fout) pijn deden.
         """
-        p10 = self._read_sensor_float(self.config.get(CONF_PV_FORECAST_P10))
-        p90 = self._read_sensor_float(self.config.get(CONF_PV_FORECAST_P90))
-        verwacht = self._read_sensor_float(
-            self.config.get(CONF_SOLAR_TODAY_FORECAST_SENSOR)
+        # v2.4.1: uit dezelfde `detailedForecast` als de voorspelling
+        # zelf - geen extra sensoren nodig.
+        #
+        # Aangereikt met een uitdraai van de sensorattributen: Solcast
+        # levert per halfuur `pv_estimate`, `pv_estimate10` én
+        # `pv_estimate90` in één lijst. Losse sensoren zouden alleen het
+        # dagtotaal geven; hiermee is de onzekerheid PER MOMENT bekend.
+        entity_id = self.config.get(CONF_SOLAR_TODAY_FORECAST_SENSOR)
+        staat = self.hass.states.get(entity_id) if entity_id else None
+        regels = (
+            (staat.attributes.get("detailedForecast") or []) if staat else []
         )
-        if None in (p10, p90) or not verwacht:
+        vandaag = dt_util.now().date()
+
+        verwacht = p10 = p90 = 0.0
+        gevonden = False
+        for regel in regels:
+            moment = dt_util.parse_datetime(str(regel.get("period_start")))
+            if moment is None or dt_util.as_local(moment).date() != vandaag:
+                continue
+            centraal = regel.get("pv_estimate")
+            laag = regel.get("pv_estimate10")
+            hoog = regel.get("pv_estimate90")
+            if None in (centraal, laag, hoog):
+                continue
+            # Vermogen in kW over een halfuur; delen door twee geeft kWh.
+            verwacht += float(centraal) / 2
+            p10 += float(laag) / 2
+            p90 += float(hoog) / 2
+            gevonden = True
+
+        if not gevonden:
+            # v2.5.0: terugval op de DAGATTRIBUTEN.
+            #
+            # `detailedForecast` bevat de percentielen per halfuur, maar
+            # niet elke Solcast-versie levert die drie velden per regel.
+            # De dagtotalen (`estimate`, `estimate10`, `estimate90`)
+            # staan er wel altijd op - grover, maar genoeg om een
+            # onzekere dag te herkennen.
+            attributen = (staat.attributes or {}) if staat else {}
+            try:
+                verwacht = float(attributen.get("estimate"))
+                p10 = float(attributen.get("estimate10"))
+                p90 = float(attributen.get("estimate90"))
+                gevonden = True
+            except (TypeError, ValueError):
+                gevonden = False
+
+        if not gevonden or verwacht <= 0:
             return {
                 "beschikbaar": False,
                 "reden": (
-                    "Geen p10/p90-sensoren ingesteld; de onzekerheid van de "
-                    "voorspelling is dan niet te meten."
+                    "De voorspelling levert geen pv_estimate10/90 per "
+                    "halfuur; de onzekerheid is dan niet te meten."
                 ),
             }
 
@@ -11640,6 +11715,21 @@ class EnergyManagementSystemCoordinator:
         if not spreiding.get("beschikbaar") or not spreiding.get("onzeker"):
             return 0.0
         return PV_SPREAD_MARGIN_BONUS_PERCENT
+
+    def _gemiddelde_prijs_in_blok(
+        self, entries, start, einde
+    ) -> float | None:
+        """De gemiddelde prijs binnen het goedkope blok (v2.5.0)."""
+        if not entries or start is None:
+            return None
+        binnen = [
+            e[2] / PRICE_SCALE_FACTOR
+            for e in entries
+            if e[0] >= start and (einde is None or e[0] < einde)
+        ]
+        if not binnen:
+            return None
+        return sum(binnen) / len(binnen)
 
     def _ruim_pv_uurbias_op(self) -> None:
         """Verwijdert verhoudingen die uit te kleine getallen komen

@@ -15110,3 +15110,39 @@ is het geen ruis maar een schaduw die Solcast niet kent. Dat blijkt zodra
 het profiel af is — meten voordat er iets op wordt gebouwd.
 
 **Volledige testsuite**: 2268 tests, allemaal groen.
+
+## v2.5.0 — Het goedkope blok, en de percentielen zaten er al
+
+### "Om 17:00 begint 't goedkoopste blok van vandage"
+
+**Gemeld** om 16:45. Terwijl het dagminimum om 13:00 op **16,4 ct** lag
+en 17:00 op **30,7 ct** — bijna het dubbele.
+
+De melding klopte binnen zijn eigen logica: het blok is het goedkoopste
+dat er nog *resteert*. Maar om kwart voor vijf is dat alleen nog de
+avond, en dan is *"een goed moment voor apparaten die kunnen wachten"*
+precies het verkeerde advies.
+
+De melding komt nu alleen nog als het blok **onder de dagmediaan** ligt.
+Daarboven zegt hij alleen dat de rest van de dag nóg duurder is, en dat
+is geen reden om de vaatwasser aan te zetten. De tekst noemt de
+blokprijs én de dagmediaan, zodat je zelf kunt zien of het de moeite is.
+
+### De percentielen zaten al in de sensor
+
+De opzet van v2.4.0 vroeg om twee losse p10/p90-sensoren. **Die bestaan
+niet.** Uit de aangereikte sensorattributen bleek dat Solcast de
+percentielen als attributen levert op de bestaande voorspellingssensor —
+en zelfs **per halfuur** in `detailedForecast`, met `pv_estimate`,
+`pv_estimate10` en `pv_estimate90` naast elkaar.
+
+Dat is beter dan losse sensoren: de onzekerheid is nu **per moment**
+bekend in plaats van per dag. De twee configuratievelden zijn weer
+verwijderd — velden laten instellen die nergens naar wijzen is erger dan
+geen veld.
+
+Levert een Solcast-versie die drie velden niet per regel, dan wordt
+teruggevallen op de dagtotalen (`estimate`, `estimate10`, `estimate90`).
+Grover, maar genoeg om een onzekere dag te herkennen.
+
+**Volledige testsuite**: 2272 tests, allemaal groen.

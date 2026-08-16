@@ -496,7 +496,7 @@ views:
   panel: true
   cards:
   - type: picture-elements
-    image: /local/energy_management_system_overview.svg?v=2.4.0
+    image: /local/energy_management_system_overview.svg?v=2.5.0
     elements:
     - type: state-label
       entity: sensor.woonkamer_energy_management_system_system_status

@@ -184,6 +184,20 @@ EXTENDED_LOW_SOLAR_MARGIN_BONUS_PER_DAY = 5.0
 #
 # Bij een tiende kWh weegt een meetfout van enkele wattuur nog maar
 # enkele procenten door.
+# --- Wanneer is een goedkoop blok een melding waard? (v2.5.0) --------
+# Gemeld om 16:45: "Om 17:00 begint 't goedkoopste blok van vandage" -
+# terwijl het dagminimum om 13:00 op 16,4 ct lag en 17:00 op 30,7 ct.
+#
+# De melding klopte binnen zijn eigen logica: het blok is het goedkoopste
+# dat er nog RESTEERT. Maar om kwart voor vijf is dat alleen nog de
+# avond, en dan is "een goed moment voor apparaten die kunnen wachten"
+# precies het verkeerde advies.
+#
+# Onder de dagmediaan is het blok werkelijk goedkoop. Daarboven zegt de
+# melding alleen dat de rest van de dag nóg duurder is, en dat is geen
+# reden om de vaatwasser aan te zetten.
+CHEAP_BLOCK_ALERT_MAX_OF_MEDIAN = 1.0
+
 PV_HOURLY_BIAS_MIN_KWH = 0.10
 
 # Grenzen waarbuiten een bewaarde verhouding niet van een echte
@@ -202,8 +216,10 @@ PV_HOURLY_BIAS_MIN_KWH = 0.10
 # 10,8%, slechtste dag 41,6%. De meeste dagen kloppen prima; een paar
 # zitten er volledig naast. Een betere gemiddelde correctie helpt daar
 # niet - die maakt de goede dagen slechter zonder de slechte te redden.
-CONF_PV_FORECAST_P10 = "pv_forecast_p10_sensor_entity"
-CONF_PV_FORECAST_P90 = "pv_forecast_p90_sensor_entity"
+# v2.5.0: geen losse velden nodig - Solcast levert `estimate10` en
+# `estimate90` als ATTRIBUTEN op de bestaande voorspellingssensor, en
+# zelfs per half uur in `detailedForecast`. Twee extra velden laten
+# instellen die nergens naar wijzen is erger dan geen veld.
 
 # Boven deze bandbreedte (als deel van de verwachting) geldt de dag als
 # onzeker. Veertig procent betekent dat p10 en p90 bijvoorbeeld 12 en 20
