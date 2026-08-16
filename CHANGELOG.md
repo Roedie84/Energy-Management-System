@@ -14883,3 +14883,21 @@ anders klopt het percentage niet zodra je het aanpast. De
 watchdog-drempel schaalt mee.
 
 **Volledige testsuite**: 2238 tests, allemaal groen.
+
+## v2.2.1 — "Entity None is neither a valid entity ID"
+
+**Gemeld** met een screenshot van het configuratiescherm.
+
+`vol.Optional(sleutel, default=None)` geeft de EntitySelector een lege
+waarde mee, en die weigert dat — het veld is dan niet in te vullen.
+Zonder `default` laat voluptuous het veld gewoon weg als er niets is
+gekozen, en dat is wat een optioneel veld hoort te doen.
+
+**Dit raakte 52 velden**, niet alleen de twee nieuwe. Die vielen alleen
+op omdat ze nog nooit waren ingevuld; alle andere optionele
+entiteitsvelden hadden bij jou al een waarde.
+
+Er stond al een toets tegen precies deze fout — maar alleen voor
+`NumberSelector` (v1.78.0). Die dekte `EntitySelector` niet. Nu allebei.
+
+**Volledige testsuite**: 2240 tests, allemaal groen.

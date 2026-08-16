@@ -117,6 +117,27 @@ from .const import (
 )
 
 
+def _optioneel(sleutel: str, defaults: dict):
+    """Een optioneel veld, met of zonder bestaande waarde (v2.2.1).
+
+    Gemeld met een screenshot van het configuratiescherm:
+
+        Entity None is neither a valid entity ID nor a valid UUID
+
+    `vol.Optional(sleutel, default=None)` geeft de EntitySelector een
+    lege waarde mee, en die weigert dat - het veld is dan niet in te
+    vullen. Zonder `default` laat voluptuous het veld gewoon weg als er
+    niets is gekozen, en dat is wat een optioneel veld hoort te doen.
+
+    Dit raakte elk leeg entiteitsveld, niet alleen de nieuwe; die twee
+    vielen alleen op omdat ze nog nooit waren ingevuld.
+    """
+    waarde = defaults.get(sleutel)
+    if waarde in (None, ""):
+        return vol.Optional(sleutel)
+    return vol.Optional(sleutel, default=waarde)
+
+
 def _as_text(waarde) -> str:
     """Toont een opgeslagen getal als tekst in een TextSelector
     (v1.15.1).
@@ -210,28 +231,16 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
             # v0.63.117 - einde saldering. Laatste dag dat salderen
             # nog geldt; vanaf de dag erna wordt teruglevering apart
             # (en veel lager) gewaardeerd in alle financiele getallen.
-            vol.Optional(
-                CONF_GRID_IMPORT_ENERGY_SENSOR,
-                default=defaults.get(CONF_GRID_IMPORT_ENERGY_SENSOR),
-            ): selector.EntitySelector(
+            _optioneel(CONF_GRID_IMPORT_ENERGY_SENSOR, defaults): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="sensor")
             ),
-            vol.Optional(
-                CONF_GRID_EXPORT_ENERGY_SENSOR,
-                default=defaults.get(CONF_GRID_EXPORT_ENERGY_SENSOR),
-            ): selector.EntitySelector(
+            _optioneel(CONF_GRID_EXPORT_ENERGY_SENSOR, defaults): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="sensor")
             ),
-            vol.Optional(
-                CONF_BATTERY_DISCHARGE_ENERGY_SENSOR,
-                default=defaults.get(CONF_BATTERY_DISCHARGE_ENERGY_SENSOR),
-            ): selector.EntitySelector(
+            _optioneel(CONF_BATTERY_DISCHARGE_ENERGY_SENSOR, defaults): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="sensor")
             ),
-            vol.Optional(
-                CONF_COST_ENERGY_SENSOR,
-                default=defaults.get(CONF_COST_ENERGY_SENSOR),
-            ): selector.EntitySelector(
+            _optioneel(CONF_COST_ENERGY_SENSOR, defaults): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="sensor")
             ),
             vol.Optional(
@@ -283,14 +292,8 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
                     min=0, max=10000, step=50, mode=selector.NumberSelectorMode.BOX
                 )
             ),
-            vol.Optional(
-                CONF_BATTERY_TOTAL_CAPACITY_SENSOR,
-                default=defaults.get(CONF_BATTERY_TOTAL_CAPACITY_SENSOR),
-            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
-            vol.Optional(
-                CONF_BATTERY_MIN_SOC_NUMBER,
-                default=defaults.get(CONF_BATTERY_MIN_SOC_NUMBER),
-            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="number")),
+            _optioneel(CONF_BATTERY_TOTAL_CAPACITY_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            _optioneel(CONF_BATTERY_MIN_SOC_NUMBER, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="number")),
             vol.Optional(
                 CONF_MANUAL_CHARGE_POWER,
                 default=defaults.get(
@@ -312,26 +315,11 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
                     min=-10000, max=0, step=50, mode=selector.NumberSelectorMode.BOX
                 )
             ),
-            vol.Optional(
-                CONF_SOLAR_POWER_LIMIT_ENTITY,
-                default=defaults.get(CONF_SOLAR_POWER_LIMIT_ENTITY),
-            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="number")),
-            vol.Optional(
-                CONF_KNMI_WEATHER_ENTITY,
-                default=defaults.get(CONF_KNMI_WEATHER_ENTITY),
-            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="weather")),
-            vol.Optional(
-                CONF_OPENWEATHERMAP_WEATHER_ENTITY,
-                default=defaults.get(CONF_OPENWEATHERMAP_WEATHER_ENTITY),
-            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="weather")),
-            vol.Optional(
-                CONF_BACKYARD_TEMPERATURE_SENSOR,
-                default=defaults.get(CONF_BACKYARD_TEMPERATURE_SENSOR),
-            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
-            vol.Optional(
-                CONF_CO2_INTENSITY_SENSOR,
-                default=defaults.get(CONF_CO2_INTENSITY_SENSOR),
-            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            _optioneel(CONF_SOLAR_POWER_LIMIT_ENTITY, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="number")),
+            _optioneel(CONF_KNMI_WEATHER_ENTITY, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="weather")),
+            _optioneel(CONF_OPENWEATHERMAP_WEATHER_ENTITY, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="weather")),
+            _optioneel(CONF_BACKYARD_TEMPERATURE_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            _optioneel(CONF_CO2_INTENSITY_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
             vol.Optional(
                 CONF_BATTERY_ROUND_TRIP_EFFICIENCY,
                 default=defaults.get(
@@ -354,40 +342,19 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
                     min=0, max=100, step=5, mode=selector.NumberSelectorMode.BOX
                 )
             ),
-            vol.Optional(
-                CONF_DISHWASHER_POWER_SENSOR,
-                default=defaults.get(CONF_DISHWASHER_POWER_SENSOR),
-            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
-            vol.Optional(
-                CONF_DISHWASHER_READY_SENSOR,
-                default=defaults.get(CONF_DISHWASHER_READY_SENSOR),
-            ): selector.EntitySelector(
+            _optioneel(CONF_DISHWASHER_POWER_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            _optioneel(CONF_DISHWASHER_READY_SENSOR, defaults): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="binary_sensor")
             ),
-            vol.Optional(
-                CONF_WASHING_MACHINE_POWER_SENSOR,
-                default=defaults.get(CONF_WASHING_MACHINE_POWER_SENSOR),
-            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
-            vol.Optional(
-                CONF_WASHING_MACHINE_READY_SENSOR,
-                default=defaults.get(CONF_WASHING_MACHINE_READY_SENSOR),
-            ): selector.EntitySelector(
+            _optioneel(CONF_WASHING_MACHINE_POWER_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            _optioneel(CONF_WASHING_MACHINE_READY_SENSOR, defaults): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="binary_sensor")
             ),
-            vol.Optional(
-                CONF_QUOOKER_POWER_SENSOR,
-                default=defaults.get(CONF_QUOOKER_POWER_SENSOR),
-            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
-            vol.Optional(
-                CONF_AIRCO_CLIMATE_ENTITY,
-                default=defaults.get(CONF_AIRCO_CLIMATE_ENTITY),
-            ): selector.EntitySelector(
+            _optioneel(CONF_QUOOKER_POWER_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            _optioneel(CONF_AIRCO_CLIMATE_ENTITY, defaults): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="climate")
             ),
-            vol.Optional(
-                CONF_SLAAPKAMER_CLIMATE_ENTITY,
-                default=defaults.get(CONF_SLAAPKAMER_CLIMATE_ENTITY),
-            ): selector.EntitySelector(
+            _optioneel(CONF_SLAAPKAMER_CLIMATE_ENTITY, defaults): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="climate")
             ),
             vol.Optional(
@@ -427,10 +394,7 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
             # getalvelden in deze flow hebben allemaal een concrete
             # standaard en lopen daar dus niet tegenaan. De waarde wordt
             # in `_validate_input` gecontroleerd en omgezet.
-            vol.Optional(
-                CONF_PV_ENERGY_SENSOR,
-                default=defaults.get(CONF_PV_ENERGY_SENSOR),
-            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            _optioneel(CONF_PV_ENERGY_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
             # v1.15.1: de standaardwaarde als TEKST teruggeven. In
             # v1.4.2 zijn dit tekstvelden geworden omdat een leeg
             # NumberSelector "expected float" gaf. Maar `_validate_input`
@@ -449,14 +413,8 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
                 CONF_PV_ACTUAL_TILT_DEGREES,
                 default=_as_text(defaults.get(CONF_PV_ACTUAL_TILT_DEGREES)),
             ): selector.TextSelector(),
-            vol.Optional(
-                CONF_SUN_ELEVATION_SENSOR,
-                default=defaults.get(CONF_SUN_ELEVATION_SENSOR),
-            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
-            vol.Optional(
-                CONF_SUN_AZIMUTH_SENSOR,
-                default=defaults.get(CONF_SUN_AZIMUTH_SENSOR),
-            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            _optioneel(CONF_SUN_ELEVATION_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            _optioneel(CONF_SUN_AZIMUTH_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
             vol.Optional(
                 CONF_UPDATE_INTERVAL_SECONDS,
                 default=defaults.get(
@@ -483,86 +441,29 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
                     min=5, max=180, step=5, unit_of_measurement="min"
                 )
             ),
-            vol.Optional(
-                CONF_DISHWASHER_START_IN,
-                default=defaults.get(CONF_DISHWASHER_START_IN),
-            ): selector.EntitySelector(
+            _optioneel(CONF_DISHWASHER_START_IN, defaults): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain=["number", "sensor"])
             ),
-            vol.Optional(
-                CONF_WASHING_MACHINE_END_AT,
-                default=defaults.get(CONF_WASHING_MACHINE_END_AT),
-            ): selector.EntitySelector(
+            _optioneel(CONF_WASHING_MACHINE_END_AT, defaults): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain=["sensor", "number"])
             ),
-            vol.Optional(
-                CONF_SUN_PHASE_SENSOR,
-                default=defaults.get(CONF_SUN_PHASE_SENSOR),
-            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
-            vol.Optional(
-                CONF_BATTERY_TEMPERATURE_SENSOR,
-                default=defaults.get(CONF_BATTERY_TEMPERATURE_SENSOR),
-            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
-            vol.Optional(
-                CONF_BATTERY_COOLING_FAN_SWITCH,
-                default=defaults.get(CONF_BATTERY_COOLING_FAN_SWITCH),
-            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="switch")),
-            vol.Optional(
-                CONF_BATTERY_COOLING_OUTDOOR_SENSOR,
-                default=defaults.get(CONF_BATTERY_COOLING_OUTDOOR_SENSOR),
-            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
-            vol.Optional(
-                CONF_LIVING_ROOM_TEMPERATURE_SENSOR,
-                default=defaults.get(CONF_LIVING_ROOM_TEMPERATURE_SENSOR),
-            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
-            vol.Optional(
-                CONF_LIVING_ROOM_HUMIDITY_SENSOR,
-                default=defaults.get(CONF_LIVING_ROOM_HUMIDITY_SENSOR),
-            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
-            vol.Optional(
-                CONF_LIVING_ROOM_SHUTTER_ENTITY_1,
-                default=defaults.get(CONF_LIVING_ROOM_SHUTTER_ENTITY_1),
-            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="cover")),
-            vol.Optional(
-                CONF_LIVING_ROOM_SHUTTER_ENTITY_2,
-                default=defaults.get(CONF_LIVING_ROOM_SHUTTER_ENTITY_2),
-            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="cover")),
-            vol.Optional(
-                CONF_OVEN_STATE_SENSOR,
-                default=defaults.get(CONF_OVEN_STATE_SENSOR),
-            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
-            vol.Optional(
-                CONF_KOOKPLAAT_STATE_SENSOR,
-                default=defaults.get(CONF_KOOKPLAAT_STATE_SENSOR),
-            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
-            vol.Optional(
-                CONF_STEELSTOFZUIGER_SWITCH,
-                default=defaults.get(CONF_STEELSTOFZUIGER_SWITCH),
-            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="switch")),
-            vol.Optional(
-                CONF_STEELSTOFZUIGER_POWER_SENSOR,
-                default=defaults.get(CONF_STEELSTOFZUIGER_POWER_SENSOR),
-            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
-            vol.Optional(
-                CONF_FIETSLADERS_SWITCH,
-                default=defaults.get(CONF_FIETSLADERS_SWITCH),
-            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="switch")),
-            vol.Optional(
-                CONF_FIETSLADERS_POWER_SENSOR,
-                default=defaults.get(CONF_FIETSLADERS_POWER_SENSOR),
-            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
-            vol.Optional(
-                CONF_WATER_ACTIVE_USAGE_SENSOR,
-                default=defaults.get(CONF_WATER_ACTIVE_USAGE_SENSOR),
-            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
-            vol.Optional(
-                CONF_WATER_DAILY_TOTAL_SENSOR,
-                default=defaults.get(CONF_WATER_DAILY_TOTAL_SENSOR),
-            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
-            vol.Optional(
-                CONF_WATER_TOTAL_USAGE_SENSOR,
-                default=defaults.get(CONF_WATER_TOTAL_USAGE_SENSOR),
-            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            _optioneel(CONF_SUN_PHASE_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            _optioneel(CONF_BATTERY_TEMPERATURE_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            _optioneel(CONF_BATTERY_COOLING_FAN_SWITCH, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="switch")),
+            _optioneel(CONF_BATTERY_COOLING_OUTDOOR_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            _optioneel(CONF_LIVING_ROOM_TEMPERATURE_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            _optioneel(CONF_LIVING_ROOM_HUMIDITY_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            _optioneel(CONF_LIVING_ROOM_SHUTTER_ENTITY_1, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="cover")),
+            _optioneel(CONF_LIVING_ROOM_SHUTTER_ENTITY_2, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="cover")),
+            _optioneel(CONF_OVEN_STATE_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            _optioneel(CONF_KOOKPLAAT_STATE_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            _optioneel(CONF_STEELSTOFZUIGER_SWITCH, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="switch")),
+            _optioneel(CONF_STEELSTOFZUIGER_POWER_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            _optioneel(CONF_FIETSLADERS_SWITCH, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="switch")),
+            _optioneel(CONF_FIETSLADERS_POWER_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            _optioneel(CONF_WATER_ACTIVE_USAGE_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            _optioneel(CONF_WATER_DAILY_TOTAL_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            _optioneel(CONF_WATER_TOTAL_USAGE_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
             vol.Optional(
                 CONF_APPLIANCE_NOTIFY_SERVICE,
                 default=defaults.get(CONF_APPLIANCE_NOTIFY_SERVICE, ""),
@@ -577,10 +478,7 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
                     min=1, max=20, step=1, mode=selector.NumberSelectorMode.BOX
                 )
             ),
-            vol.Optional(
-                CONF_SOC_SENSOR,
-                default=defaults.get(CONF_SOC_SENSOR),
-            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            _optioneel(CONF_SOC_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
             vol.Optional(
                 CONF_MIN_SOC_PERCENT,
                 default=defaults.get(CONF_MIN_SOC_PERCENT, DEFAULT_MIN_SOC_PERCENT),
@@ -589,36 +487,18 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
                     min=0, max=100, step=1, mode=selector.NumberSelectorMode.BOX
                 )
             ),
-            vol.Optional(
-                CONF_SOLAR_FORECAST_SENSOR,
-                default=defaults.get(CONF_SOLAR_FORECAST_SENSOR),
-            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
-            vol.Optional(
-                CONF_SOLAR_TODAY_FORECAST_SENSOR,
-                default=defaults.get(CONF_SOLAR_TODAY_FORECAST_SENSOR),
-            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
-            vol.Optional(
-                CONF_SOLAR_REMAINING_TODAY_SENSOR,
-                default=defaults.get(CONF_SOLAR_REMAINING_TODAY_SENSOR),
-            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            _optioneel(CONF_SOLAR_FORECAST_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            _optioneel(CONF_SOLAR_TODAY_FORECAST_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            _optioneel(CONF_SOLAR_REMAINING_TODAY_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
             vol.Optional(
                 CONF_SOLAR_EXTENDED_FORECAST_SENSORS,
                 default=defaults.get(CONF_SOLAR_EXTENDED_FORECAST_SENSORS, []),
             ): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="sensor", multiple=True)
             ),
-            vol.Optional(
-                CONF_SOLAR_ACTUAL_SENSOR,
-                default=defaults.get(CONF_SOLAR_ACTUAL_SENSOR),
-            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
-            vol.Optional(
-                CONF_CONSUMPTION_POWER_SENSOR,
-                default=defaults.get(CONF_CONSUMPTION_POWER_SENSOR),
-            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
-            vol.Optional(
-                CONF_BATTERY_POWER_SENSOR,
-                default=defaults.get(CONF_BATTERY_POWER_SENSOR),
-            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            _optioneel(CONF_SOLAR_ACTUAL_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            _optioneel(CONF_CONSUMPTION_POWER_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            _optioneel(CONF_BATTERY_POWER_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
             # v1.16.9: de werkstand van de accu ("Laden"/"Ontladen") is
             # betrouwbaarder dan het teken van de vermogenssensor, dat
             # afhangt van de omkering hieronder. Optioneel: zonder deze
@@ -660,10 +540,7 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
                 CONF_POWER_LIMITS_INTENTIONAL,
                 default=defaults.get(CONF_POWER_LIMITS_INTENTIONAL, False),
             ): selector.BooleanSelector(),
-            vol.Optional(
-                CONF_PRESENCE_TV_ENTITY,
-                default=defaults.get(CONF_PRESENCE_TV_ENTITY),
-            ): selector.EntitySelector(
+            _optioneel(CONF_PRESENCE_TV_ENTITY, defaults): selector.EntitySelector(
                 selector.EntitySelectorConfig(
                     domain=["media_player", "remote", "binary_sensor", "switch"]
                 )
@@ -676,10 +553,7 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
                     domain=["light", "switch"], multiple=True
                 )
             ),
-            vol.Optional(
-                CONF_PRESENCE_BEDTIME_SENSOR,
-                default=defaults.get(CONF_PRESENCE_BEDTIME_SENSOR),
-            ): selector.EntitySelector(
+            _optioneel(CONF_PRESENCE_BEDTIME_SENSOR, defaults): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="binary_sensor")
             ),
             vol.Optional(
@@ -688,22 +562,13 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
             ): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="binary_sensor", multiple=True)
             ),
-            vol.Optional(
-                CONF_BATTERY_STATE_SENSOR,
-                default=defaults.get(CONF_BATTERY_STATE_SENSOR),
-            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            _optioneel(CONF_BATTERY_STATE_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
             vol.Optional(
                 CONF_INVERT_BATTERY_POWER_SIGN,
                 default=defaults.get(CONF_INVERT_BATTERY_POWER_SIGN, False),
             ): selector.BooleanSelector(),
-            vol.Optional(
-                CONF_PV_POWER_SENSOR,
-                default=defaults.get(CONF_PV_POWER_SENSOR),
-            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
-            vol.Optional(
-                CONF_AVAILABLE_ENERGY_SENSOR,
-                default=defaults.get(CONF_AVAILABLE_ENERGY_SENSOR),
-            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            _optioneel(CONF_PV_POWER_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            _optioneel(CONF_AVAILABLE_ENERGY_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
             vol.Optional(
                 CONF_LOW_SOLAR_THRESHOLD_KWH,
                 default=defaults.get(
