@@ -283,3 +283,50 @@ def test_no_optional_number_selector_without_a_default():
             f"{veld}: optioneel NumberSelector zonder terugvalwaarde - "
             "levert 'expected float' zodra het veld leeg blijft"
         )
+
+
+def test_no_optional_entity_selector_defaults_to_none():
+    """Gemeld met een screenshot van het configuratiescherm:
+
+        Entity None is neither a valid entity ID nor a valid UUID
+
+    `vol.Optional(sleutel, default=None)` geeft de EntitySelector een
+    lege waarde mee, en die weigert dat - het veld is dan niet in te
+    vullen.
+
+    Er stond al zo'n toets voor NumberSelector (v1.78.0); die dekte
+    EntitySelector niet. Dit raakte 52 velden, waarvan er twee opvielen
+    omdat ze nog nooit waren ingevuld.
+    """
+    import re
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    bron = (Path(pkg.__file__).parent / "config_flow.py").read_text()
+
+    fout = [
+        m.group(1)
+        for m in re.finditer(
+            r"vol\.Optional\(\s*(CONF_\w+),\s*default=defaults\.get\(\1\),"
+            r"\s*\):\s*selector\.EntitySelector",
+            bron,
+            re.S,
+        )
+    ]
+
+    assert not fout, (
+        "optioneel entiteitsveld met een lege standaard - gebruik "
+        f"_optioneel(): {fout}"
+    )
+
+
+def test_the_helper_omits_the_default_when_empty():
+    """De kern: zonder waarde hoort er geen `default` mee te gaan."""
+    from custom_components.energy_management_system import config_flow
+
+    leeg = config_flow._optioneel("iets", {})
+    gevuld = config_flow._optioneel("iets", {"iets": "sensor.x"})
+
+    assert leeg.default is not None  # voluptuous' UNDEFINED-markering
+    assert gevuld.default() == "sensor.x"
