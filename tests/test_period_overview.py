@@ -653,3 +653,67 @@ def test_the_sources_reach_the_diagnostics():
 
     assert "energy_history_sources" in bron
     assert "energy_history_note" in bron
+
+
+def test_the_bootstrap_actually_runs(make_coordinator, hass):
+    """Gevonden na drie diagnostieken met een lege inleesmelding: de
+    routine viel bij ELKE start om op een NameError.
+
+    `opgeruimd = voor - len(...)` stond boven de regel die `voor` zet.
+    De try/except in `async_setup` ving dat op en logde het, en verder
+    ging alles gewoon door - dus was er niets aan te zien behalve een
+    geschiedenis die zich niet vulde.
+
+    Alle 2245 tests bleven groen, want geen enkele voerde de routine
+    daadwerkelijk uit. Deze wel.
+    """
+    import asyncio
+
+    from custom_components.energy_management_system.const import (
+        CONF_PRICE_SENSOR,
+        CONF_PV_ENERGY_SENSOR,
+    )
+
+    c = make_coordinator(
+        {
+            CONF_PRICE_SENSOR: "sensor.prijs",
+            CONF_PV_ENERGY_SENSOR: "sensor.pv_totaal",
+        }
+    )
+
+    # Mag geen uitzondering geven, en moet een melding achterlaten -
+    # welke dan ook, want zonder recorder valt er niets in te lezen.
+    asyncio.run(c.async_bootstrap_energy_history())
+
+    assert c.energy_history_bootstrap_note is not None
+
+
+def test_the_bootstrap_leaves_a_note_in_every_path(make_coordinator, hass):
+    """Elke uitgang van de routine hoort te vertellen wat er gebeurde.
+    Een lege melding betekende drie diagnostieken lang: "geen idee"."""
+    import re
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    kop = bron.index("async def async_bootstrap_energy_history")
+    blok = bron[kop : min(
+        x
+        for x in (
+            bron.find("\n    def ", kop + 10),
+            bron.find("\n    @", kop + 10),
+            bron.find("\n    async def ", kop + 10),
+        )
+        if x > 0
+    )]
+
+    # Elke `return` moet worden voorafgegaan door het zetten van de
+    # melding (binnen de vijf regels ervoor).
+    regels = blok.splitlines()
+    for n, regel in enumerate(regels):
+        if regel.strip() == "return":
+            omgeving = "\n".join(regels[max(0, n - 8) : n])
+            assert "energy_history_bootstrap_note" in omgeving, (
+                f"uitgang op regel {n} laat geen melding achter"
+            )
