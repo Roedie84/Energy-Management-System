@@ -213,3 +213,41 @@ def test_the_dashboard_template_is_read_once_at_startup():
     kop = bron.index("    async def async_setup(self) -> None:")
     blok = bron[kop : bron.index("\n    async def ", kop + 40)]
     assert "async_load_dashboard_template()" in blok
+
+
+def test_a_swallowed_startup_error_becomes_visible():
+    """v2.2.4: de try/except rond het inlezen ving drie dagen lang een
+    NameError op zonder dat er iets van te zien was.
+
+    De geschiedenis vulde zich niet, de inleesmelding bleef leeg, en er
+    stond geen fout in de diagnostiek. Alleen het logboek wist ervan, en
+    dat zit niet in de export - dus kostte het drie diagnostieken en twee
+    versies om erachter te komen.
+
+    Opvangen blijft goed; het opstarten mag hier niet op stuklopen. Maar
+    zwijgen niet.
+    """
+    bron = (PAKKET / "coordinator.py").read_text()
+    kop = bron.index("await self.async_bootstrap_energy_history()")
+    blok = bron[kop : kop + 1200]
+
+    assert "internal_failures" in blok
+    assert "energy_history_bootstrap_note" in blok
+
+
+def test_every_startup_step_that_is_caught_reports_itself():
+    """De brede versie: een opstartstap die wordt afgevangen, hoort de
+    fout ergens achter te laten waar hij in de diagnostiek terechtkomt."""
+    import re
+
+    bron = (PAKKET / "coordinator.py").read_text()
+    kop = bron.index("    async def async_setup(self) -> None:")
+    blok = bron[kop : bron.index("\n    async def ", kop + 40)]
+
+    for m in re.finditer(r"except Exception[^\n]*:\n((?:\s{12}[^\n]*\n)+)", blok):
+        afhandeling = m.group(1)
+        assert (
+            "internal_failures" in afhandeling
+            or "_note" in afhandeling
+            or "raise" in afhandeling
+        ), f"stille afvanging in async_setup: {afhandeling.strip()[:80]}"
