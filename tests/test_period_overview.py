@@ -610,3 +610,46 @@ def test_a_newly_configured_meter_triggers_a_reread():
     assert blok.index("voor = len(self.energy_daily_history)") < blok.rindex(
         "oudste = min("
     )
+
+
+def test_the_bootstrap_reports_per_source(make_coordinator, hass):
+    """Gemeld: accu en kosten bleven leeg na het instellen van de meters,
+    en uit de export was niet af te leiden waarom - de inleesmelding was
+    leeg en er stond geen fout.
+
+    Zonder uitsplitsing per bron is het gissen tussen "de routine
+    draaide niet", "de sensor heeft geen statistieken" en "de eenheid
+    werd niet herkend".
+    """
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    kop = bron.index("async def async_bootstrap_energy_history")
+    blok = bron[kop : min(
+        x
+        for x in (
+            bron.find("\n    def ", kop + 10),
+            bron.find("\n    @", kop + 10),
+            bron.find("\n    async def ", kop + 10),
+        )
+        if x > 0
+    )]
+
+    assert "energy_history_sources" in blok
+    assert "Geen langetermijnstatistieken" in blok
+    assert "wordt niet herkend" in blok
+
+
+def test_the_sources_reach_the_diagnostics():
+    """Een uitsplitsing die niet in de export komt, lost niets op - dat
+    was precies het gat bij de meldingen (v1.76.0)."""
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    bron = (Path(pkg.__file__).parent / "diagnostics.py").read_text()
+
+    assert "energy_history_sources" in bron
+    assert "energy_history_note" in bron

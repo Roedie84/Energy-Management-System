@@ -155,6 +155,7 @@ def test_present_attributes_are_not_reported(make_coordinator, hass):
             "reservemarge": {},
             "zelfconsumptie": {},
             "perioden": {},
+            "geschiedenisbronnen": {},
             "kwartier_samenvatting": {},
             "plantoetsing": {},
             "rendement": {},
