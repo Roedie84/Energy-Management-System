@@ -1046,6 +1046,22 @@ PRICE_SCALE_FACTOR = 10_000_000
 
 UPDATE_INTERVAL_MINUTES = 5
 
+# --- Instelbaar interval (v2.2.0) ------------------------------------
+# Gevraagd: "instelbaar maken", nadat de gemeten rondeduur uitkwam op
+# 48,6 ms - 0,016% van de tijd bij vijf minuten.
+#
+# In SECONDEN, want minuten zijn te grof zodra je onder de minuut wilt.
+# De ondergrens is niet willekeurig: bij 48,6 ms per ronde is tien
+# seconden 0,5% belasting en een seconde 4,9% - dat laatste zit tegen de
+# grens van vijf procent aan waarboven Home Assistant merkbaar op deze
+# integratie staat te wachten.
+#
+# Vijf seconden laat ruimte voor een tragere ronde op een dag met een
+# volle prijsreeks, zonder dat de gebruiker daar zelf op hoeft te letten.
+CONF_UPDATE_INTERVAL_SECONDS = "update_interval_seconds"
+UPDATE_INTERVAL_MIN_SECONDS = 5
+UPDATE_INTERVAL_MAX_SECONDS = 3600
+
 # Zendure operation modes (select.select_option values)
 OPTION_SMART = "smart"
 OPTION_SMART_DISCHARGING = "smart_discharging"

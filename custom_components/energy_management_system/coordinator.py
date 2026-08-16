@@ -523,6 +523,9 @@ from .const import (
     PROEFSTAND_LEDGER_DAYS,
     PRICE_SCALE_FACTOR,
     SOC_TAPER_BAND_PERCENT,
+    CONF_UPDATE_INTERVAL_SECONDS,
+    UPDATE_INTERVAL_MAX_SECONDS,
+    UPDATE_INTERVAL_MIN_SECONDS,
     UPDATE_INTERVAL_MINUTES,
     WEATHER_BEST_SOURCE_MIN_LEAD_PP,
     WEATHER_DISAGREEMENT_PREFER_BEST_PP,
@@ -1532,7 +1535,7 @@ class EnergyManagementSystemCoordinator:
         self._unsub_interval = async_track_time_interval(
             self.hass,
             self._handle_interval,
-            timedelta(minutes=UPDATE_INTERVAL_MINUTES),
+            timedelta(seconds=self.update_interval_seconds),
         )
         # v2.2.0: een eigen klok voor de watchdog. Op dezelfde klok
         # meeliften zou betekenen dat hij zwijgt als juist die klok het
@@ -1540,7 +1543,9 @@ class EnergyManagementSystemCoordinator:
         self._unsub_watchdog = async_track_time_interval(
             self.hass,
             self._watchdog,
-            timedelta(minutes=UPDATE_INTERVAL_MINUTES * HEALTH_MAX_MISSED_TICKS),
+            timedelta(
+                seconds=self.update_interval_seconds * HEALTH_MAX_MISSED_TICKS
+            ),
         )
         self._unsub_state = async_track_state_change_event(
             self.hass, self.tracked_entities, self._handle_state_change
@@ -8784,6 +8789,42 @@ class EnergyManagementSystemCoordinator:
             reeks.append(duur)
             self._tick_part_timings[naam] = reeks[-TICK_PART_HISTORY_LENGTH:]
 
+    @property
+    def update_interval_seconds(self) -> int:
+        """Hoe vaak er een ronde draait, in seconden (v2.2.0).
+
+        Gevraagd: "instelbaar maken", nadat de gemeten rondeduur uitkwam
+        op 48,6 ms - 0,016% van de tijd bij vijf minuten.
+
+        Buiten de grenzen wordt teruggevallen op de standaard in plaats
+        van de opgegeven waarde te gebruiken: een interval van nul zou de
+        integratie onafgebroken laten draaien, en een verkeerd getal in
+        de configuratie mag geen onbruikbaar systeem opleveren.
+        """
+        rauw = self.config.get(CONF_UPDATE_INTERVAL_SECONDS)
+        standaard = UPDATE_INTERVAL_MINUTES * 60
+        if rauw in (None, ""):
+            return standaard
+        try:
+            waarde = int(float(rauw))
+        except (TypeError, ValueError):
+            return standaard
+        if not (
+            UPDATE_INTERVAL_MIN_SECONDS
+            <= waarde
+            <= UPDATE_INTERVAL_MAX_SECONDS
+        ):
+            _LOGGER.warning(
+                "Interval van %s s ligt buiten %s-%s; standaard van %s s "
+                "aangehouden",
+                waarde,
+                UPDATE_INTERVAL_MIN_SECONDS,
+                UPDATE_INTERVAL_MAX_SECONDS,
+                standaard,
+            )
+            return standaard
+        return waarde
+
     def get_tick_performance(self) -> dict:
         """Hoe lang duurt een ronde? (v2.1.0)
 
@@ -8830,9 +8871,12 @@ class EnergyManagementSystemCoordinator:
             "langzaamste_ms": round(langzaamste, 1),
             "wandklok_mediaan_ms": round(statistics.median(wandklok), 1),
             "wandklok_langzaamste_ms": round(wandklok[-1], 1),
-            "huidige_interval_minuten": UPDATE_INTERVAL_MINUTES,
+            # v2.2.0: op het WERKELIJK ingestelde interval, niet op de
+            # standaard - anders klopt het percentage niet zodra iemand
+            # het aanpast.
+            "huidige_interval_seconden": self.update_interval_seconds,
             "belasting_procent": round(
-                100 * seconden_per_ronde / (UPDATE_INTERVAL_MINUTES * 60), 3
+                100 * seconden_per_ronde / self.update_interval_seconds, 3
             ),
             "kleinste_verantwoorde_interval_s": round(
                 seconden_per_ronde / TICK_MAX_DUTY_FRACTION, 1
@@ -8993,11 +9037,48 @@ class EnergyManagementSystemCoordinator:
                 # Een fout melden waar niets aan te doen is, is de
                 # snelste manier om de controle te laten negeren -
                 # dezelfde afweging als bij de terugval-duur (v1.79.0).
-                dragende_dagen = sum(
-                    1
-                    for r in (self.energy_daily_history or [])
-                    if r.get(sleutel) is not None
+                # v2.1.2: tel de dagen PER PERIODE, niet in totaal.
+                #
+                # Gemeld: "Week, maand en jaar staan alle drie op 0.09
+                # terwijl 2 dagen een waarde hebben." Die melding was
+                # onterecht: als beide dagen binnen de week vallen, dan
+                # bevatten week, maand en jaar dezelfde twee dagen - en
+                # dan hoort er hetzelfde getal te staan.
+                #
+                # Een fout is het pas als de perioden VERSCHILLENDE dagen
+                # bevatten en tóch op hetzelfde uitkomen.
+                # De grenzen expliciet berekenen. `van` uit het
+                # overzicht is het EERSTE element van de lijst, en die is
+                # niet op datum gesorteerd - dat gaf een telling van één
+                # dag waar er twee waren.
+                vandaag_d = nu.date()
+                grenzen = (
+                    vandaag_d - timedelta(days=6),
+                    vandaag_d.replace(day=1),
+                    vandaag_d.replace(month=1, day=1),
                 )
+                per_periode = [
+                    sum(
+                        1
+                        for r in (self.energy_daily_history or [])
+                        if r.get(sleutel) is not None
+                        and date.fromisoformat(r["datum"]) >= grens
+                    )
+                    for grens in grenzen
+                ]
+                if len(set(per_periode)) > 1:
+                    # De perioden bevatten verschillende aantallen dagen
+                    # en komen tóch op hetzelfde getal uit.
+                    _toets(
+                        f"Periode: {naam}",
+                        False,
+                        f"Week, maand en jaar staan alle drie op "
+                        f"{waarden[0]} terwijl ze verschillende dagen "
+                        "beslaan. Dat kan niet.",
+                    )
+                    continue
+
+                dragende_dagen = per_periode[0] if per_periode else 0
                 if dragende_dagen <= 1:
                     _toets(
                         f"Periode: {naam}",
@@ -9008,12 +9089,16 @@ class EnergyManagementSystemCoordinator:
                         ernst="aandacht",
                     )
                 else:
+                    # Evenveel dagen in elke periode, dus hetzelfde getal
+                    # is juist wat je verwacht. Wel het melden waard
+                    # zolang de reeks zich vult.
                     _toets(
                         f"Periode: {naam}",
                         False,
-                        f"Week, maand en jaar staan alle drie op "
-                        f"{waarden[0]} terwijl {dragende_dagen} dagen een "
-                        "waarde hebben. Dat kan niet.",
+                        f"Alle perioden staan op {waarden[0]}: de "
+                        f"{dragende_dagen} dagen met een waarde vallen "
+                        "allemaal binnen de week. Vult zich vanzelf.",
+                        ernst="aandacht",
                     )
 
         # --- 7. Loopt de tick nog? ---
@@ -15000,9 +15085,13 @@ class EnergyManagementSystemCoordinator:
                 "co2_kg": round(_w("co2_kg", self.co2_emitted_today_kg), 4),
             }
         )
-        self.energy_daily_history = self.energy_daily_history[
-            -ENERGY_DAILY_HISTORY_DAYS:
-        ]
+        # v2.1.2: op datum gesorteerd houden. Ingelezen dagen worden
+        # vooraan geplakt en live dagen achteraan; zonder sorteren is het
+        # eerste element niet de oudste dag, en dan klopt "van" in het
+        # periodeoverzicht niet.
+        self.energy_daily_history = sorted(
+            self.energy_daily_history, key=lambda r: r["datum"]
+        )[-ENERGY_DAILY_HISTORY_DAYS:]
         self.schedule_persisted_state_save()
 
     def _contract_start(self):

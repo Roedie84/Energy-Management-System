@@ -1556,7 +1556,7 @@ views:
       content: '{% set t = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''rondeduur'') or {} %}{% if not t.get(''beschikbaar'') %}{{ t.get(''reden'', ''Nog niet gemeten.'') }}{% else %}Mediaan **{{ t.mediaan_ms }} ms**, langzaamste {{ t.langzaamste_ms }} ms over {{ t.metingen }} rondes.
 
 
-        Bij een interval van {{ t.huidige_interval_minuten }} minuten is dat **{{ t.belasting_procent }}%** van de tijd. Verantwoord zou een interval vanaf **{{ t.kleinste_verantwoorde_interval_s }} seconden** zijn.{% endif %}
+        Bij een interval van {{ t.huidige_interval_seconden }} seconden is dat **{{ t.belasting_procent }}%** van de tijd. Verantwoord zou een interval vanaf **{{ t.kleinste_verantwoorde_interval_s }} seconden** zijn.{% endif %}
 
 
         _{{ t.get(''toelichting'', '''') }}_'

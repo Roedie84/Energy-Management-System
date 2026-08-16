@@ -14800,3 +14800,86 @@ de volgende diagnostiek staat waar de tijd heen gaat, in plaats van dat
 we het moeten raden.
 
 **Volledige testsuite**: 2229 tests, allemaal groen.
+
+## v2.1.2 — De rondeduur is beantwoord, en een valse melding
+
+### 48,6 ms
+
+Over honderd rondes, langzaamste 59,9. Geen uitschieters meer nu de
+eerste ronde na een herstart niet meer meetelt.
+
+De **rekentijd is gelijk aan de wandklok** (48,6 tegen 48,6), dus er
+wordt vrijwel niet gewacht op sensoren — het is allemaal rekenwerk. Van
+die 48,6 ms zit **14,7 ms in de planningsmeldingen**; de andere zes
+gemeten onderdelen kosten samen nog geen 1,5 ms.
+
+| Interval | Belasting |
+|---|---|
+| 5 minuten (nu) | 0,016% |
+| 1 minuut | 0,08% |
+| 10 seconden | 0,5% |
+| 1 seconde | 4,9% |
+
+### Een fout die geen fout was
+
+De zelfcontrole meldde: *"Week, maand en jaar staan alle drie op 0.09
+terwijl 2 dagen een waarde hebben."*
+
+Onterecht. Vallen beide dagen binnen de week, dan bevatten week, maand
+én jaar dezelfde twee dagen — en hoort er hetzelfde getal te staan. Een
+fout is het pas als de perioden **verschillende** dagen beslaan en tóch
+op hetzelfde uitkomen.
+
+Onderweg bleek de telling bovendien op `van` uit het periodeoverzicht te
+leunen, en dat is het **eerste element van een ongesorteerde lijst** in
+plaats van het begin van de periode. Ingelezen dagen worden vooraan
+geplakt en live dagen achteraan. De reeks wordt nu op datum gesorteerd,
+en de controle rekent de grenzen zelf uit.
+
+### En het rendement per halve slag is omgeslagen
+
+Na vier dagen wachten staat de methode op **"per halve slag"**:
+
+| | Metingen | Mediaan |
+|---|---|---|
+| Laden | 89,0 / 85,2 / 84,2 | 85,2% |
+| Ontladen | 94,2 / 94,1 / 93,0 / 96,6 | 94,2% |
+
+Heen en terug **80,2%**, waar de oude methode 82,9% zei. Die 2,7
+procentpunt werken door in de kostprijs en dus in de vergelijking tussen
+accu en net.
+
+**Volledige testsuite**: 2230 tests, allemaal groen.
+
+## v2.2.0 — Het interval is instelbaar
+
+**Gevraagd**: "instelbaar maken", nadat de gemeten rondeduur uitkwam op
+**48,6 ms** — 0,016% van de tijd bij vijf minuten.
+
+Nieuw veld bij Configureren: **Interval tussen rondes in seconden**,
+standaard 300. In seconden en niet in minuten, want minuten zijn te grof
+zodra je eronder wilt.
+
+| Interval | Belasting bij 48,6 ms |
+|---|---|
+| 300 s (standaard) | 0,016% |
+| 60 s | 0,08% |
+| 10 s | 0,5% |
+| 5 s (ondergrens) | 1,0% |
+
+De **ondergrens van vijf seconden** is niet willekeurig: één seconde zou
+4,9% zijn, en dat zit tegen de grens aan waarboven Home Assistant
+merkbaar op deze integratie staat te wachten. Vijf seconden laat ruimte
+voor een tragere ronde op een dag met een volle prijsreeks, zonder dat je
+daar zelf op hoeft te letten.
+
+Buiten de grenzen — of bij onzin in het veld — valt de integratie terug
+op de standaard, met een regel in het logboek. Een interval van nul zou
+haar onafgebroken laten draaien, en een verkeerd getal in de
+configuratie mag geen onbruikbaar systeem opleveren.
+
+De belastingweergave rekent nu met het **werkelijk ingestelde** interval;
+anders klopt het percentage niet zodra je het aanpast. De
+watchdog-drempel schaalt mee.
+
+**Volledige testsuite**: 2238 tests, allemaal groen.

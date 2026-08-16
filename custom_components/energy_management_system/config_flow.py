@@ -48,6 +48,10 @@ from .const import (
     CONF_PV_ACTUAL_TILT_DEGREES,
     CONF_DISHWASHER_START_IN,
     CONF_PRESENCE_ABSENCE_MINUTES,
+    CONF_UPDATE_INTERVAL_SECONDS,
+    UPDATE_INTERVAL_MAX_SECONDS,
+    UPDATE_INTERVAL_MIN_SECONDS,
+    UPDATE_INTERVAL_MINUTES,
     PRESENCE_ABSENCE_AFTER_MINUTES_FAST,
     CONF_SUN_AZIMUTH_SENSOR,
     CONF_WASHING_MACHINE_END_AT,
@@ -453,6 +457,19 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
                 CONF_SUN_AZIMUTH_SENSOR,
                 default=defaults.get(CONF_SUN_AZIMUTH_SENSOR),
             ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            vol.Optional(
+                CONF_UPDATE_INTERVAL_SECONDS,
+                default=defaults.get(
+                    CONF_UPDATE_INTERVAL_SECONDS, UPDATE_INTERVAL_MINUTES * 60
+                ),
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=UPDATE_INTERVAL_MIN_SECONDS,
+                    max=UPDATE_INTERVAL_MAX_SECONDS,
+                    step=5,
+                    unit_of_measurement="s",
+                )
+            ),
             vol.Optional(
                 CONF_PRESENCE_ABSENCE_MINUTES,
                 # Terugvalwaarde verplicht: een leeg NumberSelector geeft
