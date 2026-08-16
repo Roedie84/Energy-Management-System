@@ -1,3 +1,4 @@
+import json
 """Alle cijfers over dag, week, maand, jaar en contractjaar (v1.91.0).
 
 Gevraagd: "Misschien dag/week/maand/jaar voor alle relevante sensoren
@@ -184,7 +185,17 @@ def test_history_is_read_from_statistics_not_power(make_coordinator, hass):
 
     bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
     kop = bron.index("async def async_bootstrap_energy_history")
-    blok = bron[kop : kop + 4000]
+    # v2.2.2: tot de volgende definitie; de functie is gegroeid voorbij
+    # elk vast aantal tekens.
+    blok = bron[kop : min(
+        x
+        for x in (
+            bron.find("\n    def ", kop + 10),
+            bron.find("\n    @", kop + 10),
+            bron.find("\n    async def ", kop + 10),
+        )
+        if x > 0
+    )]
 
     assert "statistics_during_period" in blok
     assert "CONF_GRID_IMPORT_ENERGY_SENSOR" in blok
@@ -522,3 +533,80 @@ def test_the_snapshot_survives_a_restart():
     )
 
     assert "_energiedagstand" in PERSISTED_PLAIN_FIELDS
+
+
+# --- v2.2.2: de datum kwam als tekst terug ---------------------------
+
+
+def test_the_snapshot_matches_after_a_restart(make_coordinator, hass):
+    """Gemeld: 15 en 16 augustus stonden op 0,0 kWh opwek terwijl er
+    11,8 kWh was teruggeleverd - fysiek onmogelijk.
+
+    De dagstand bewaarde de datum als date-object, maar die komt na een
+    herstart als TEKST uit de opslag terug. De vergelijking faalde
+    daardoor altijd, waarna de afsluiting terugviel op de live tellers -
+    en die waren op dat moment al gewist.
+    """
+    c = _coordinator(make_coordinator, dagen=0)
+    gisteren = NU.date() - timedelta(days=1)
+
+    c.pv_production_today_kwh = 21.0
+    c.gross_consumption_today_kwh = 9.0
+    c._onthoud_energiedagstand(gisteren)
+
+    # Zoals na een herstart: de bewaarde stand komt als tekst terug.
+    c._energiedagstand = json.loads(json.dumps(c._energiedagstand, default=str))
+
+    c.pv_production_today_kwh = 0.0
+    c._sluit_energiedag_af(gisteren)
+
+    assert c.energy_daily_history[-1]["opwek_kwh"] == 21.0
+
+
+def test_export_without_a_source_is_rejected(make_coordinator, hass):
+    """Teruglevering zonder opwek en zonder accu-ontlading kan niet -
+    die energie moet ergens vandaan komen."""
+    c = _coordinator(make_coordinator, dagen=0)
+
+    assert c._energiedag_is_onzin(
+        {"opwek_kwh": 0.0, "accu_ontladen_kwh": 0.0, "export_kwh": 11.8}
+    ) is True
+    assert c._energiedag_is_onzin(
+        {"opwek_kwh": 21.0, "export_kwh": 11.8}
+    ) is False
+    # Een klein restje telt niet als onmogelijk.
+    assert c._energiedag_is_onzin(
+        {"opwek_kwh": 0.0, "export_kwh": 0.1}
+    ) is False
+
+
+def test_a_newly_configured_meter_triggers_a_reread():
+    """Gemeld na het instellen van de accu- en kostenmeter: week, maand
+    en jaar bleven op 0,0 staan.
+
+    De routine vult alleen dagen VOOR de oudste bekende dag aan, en die
+    reeks was al vol - dus gebeurde er niets. Het versienummer vangt een
+    wijziging in de CODE, maar niet een wijziging in de CONFIGURATIE.
+    """
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    kop = bron.index("async def async_bootstrap_energy_history")
+    blok = bron[kop : min(
+        x
+        for x in (
+            bron.find("\n    def ", kop + 10),
+            bron.find("\n    @", kop + 10),
+            bron.find("\n    async def ", kop + 10),
+        )
+        if x > 0
+    )]
+
+    assert "nieuwe_meter" in blok
+    # En de oudste dag moet NA de opruiming opnieuw worden bepaald,
+    # anders blijft het zojuist gewiste gat staan.
+    assert blok.index("voor = len(self.energy_daily_history)") < blok.rindex(
+        "oudste = min("
+    )
