@@ -164,6 +164,61 @@ EXTENDED_LOW_SOLAR_MARGIN_BONUS_PER_DAY = 5.0
 # Once at least this many days of forecast history are known, the "low
 # solar" threshold is derived from the installation's own learned typical
 # forecast instead of the fixed CONF_LOW_SOLAR_THRESHOLD_KWH fallback.
+# --- Wanneer is een uurverhouding betekenisvol? (v2.4.0) -------------
+# Gevraagd: "Kun je diepgaand uitzoeken hoe we de PV voorspelling beter
+# kunnen maken?"
+#
+# De grootste vondst zat niet in de voorspelling zelf maar in de
+# CORRECTIE. De drempel stond op 0,01 kWh - tien wattuur - en een
+# verhouding uit zulke getallen is ruis: 0,02 gedeeld door 0,06 geeft
+# 0,33, terwijl de absolute fout 0,04 kWh is.
+#
+# Gemeten uurprofiel op deze installatie:
+#
+#     6h -> 0,334    7h -> 0,856    8h -> 0,385
+#     19h -> 0,589   20h -> 0,226
+#
+# Zeven uur tussen zes en acht in breekt elk patroon; dat is ruis. En
+# die factoren werden toegepast, waardoor de ochtend- en
+# avondvoorspelling met een factor drie werd gedrukt.
+#
+# Bij een tiende kWh weegt een meetfout van enkele wattuur nog maar
+# enkele procenten door.
+PV_HOURLY_BIAS_MIN_KWH = 0.10
+
+# Grenzen waarbuiten een bewaarde verhouding niet van een echte
+# voorspelfout kan komen. Drie keer zoveel opwek als voorspeld, of een
+# derde, gebeurt bij een redelijke voorspelling niet - behalve bij een
+# deling door bijna nul.
+#
+# Nodig omdat er geen manier is om achteraf te zien uit welke getallen
+# een bewaarde verhouding kwam.
+# --- Onzekerheid van de voorspelling (v2.4.0) ------------------------
+# Solcast levert naast de verwachting een tiende- en
+# negentigste-percentiel. Liggen die ver uit elkaar, dan is het een dag
+# met wisselende bewolking.
+#
+# De gemeten cijfers wijzen die kant op: mediane fout 2,7%, gemiddelde
+# 10,8%, slechtste dag 41,6%. De meeste dagen kloppen prima; een paar
+# zitten er volledig naast. Een betere gemiddelde correctie helpt daar
+# niet - die maakt de goede dagen slechter zonder de slechte te redden.
+CONF_PV_FORECAST_P10 = "pv_forecast_p10_sensor_entity"
+CONF_PV_FORECAST_P90 = "pv_forecast_p90_sensor_entity"
+
+# Boven deze bandbreedte (als deel van de verwachting) geldt de dag als
+# onzeker. Veertig procent betekent dat p10 en p90 bijvoorbeeld 12 en 20
+# kWh zijn bij een verwachting van 20 - dan valt er weinig op te
+# rekenen.
+PV_SPREAD_UNCERTAIN_FRACTION = 0.40
+
+# Hoeveel extra reservemarge zo'n dag oplevert. Loopt mee in de
+# BESTAANDE zelfcorrigerende marge, zodat er niet weer twee reserves
+# naast elkaar ontstaan - dat kostte v1.86.0 tot en met v1.88.0.
+PV_SPREAD_MARGIN_BONUS_PERCENT = 10.0
+
+PV_HOURLY_BIAS_MIN_RATIO = 0.40
+PV_HOURLY_BIAS_MAX_RATIO = 2.50
+
 MIN_SOLAR_HISTORY_FOR_DYNAMIC_THRESHOLD = 3
 
 # "Low" = below this fraction of the learned typical forecast.
@@ -1745,6 +1800,9 @@ PERSISTED_PLAIN_FIELDS = (
     # v1.98.0: de stand van de laatste tick, zodat een herstart vlak voor
     # middernacht de dag niet met lege tellers afsluit.
     "_energiedagstand",
+    # v2.3.0: de stand van de kostenmeter bij dagbegin, zodat "vandaag"
+    # de aangroei toont en niet het totaal-ooit.
+    "_kosten_meter_dagbegin",
     # v1.61.0: wat een cyclus werkelijk kostte, per apparaat gemeten.
     "appliance_cycle_kwh",
     "_appliance_cycle_history",

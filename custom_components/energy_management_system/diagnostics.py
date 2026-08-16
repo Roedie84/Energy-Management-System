@@ -903,6 +903,10 @@ async def async_get_config_entry_diagnostics(
                 for hour in range(24)
                 if coordinator.learned_hourly_avg_kw(hour) is not None
             },
+            # v2.4.0: hoe onzeker de voorspelling vandaag is.
+            "pv_forecast_spread": _veilig(
+                "get_pv_forecast_spread", coordinator.get_pv_forecast_spread
+            ),
             "pv_hourly_bias_profile_confident": {
                 str(hour): coordinator.learned_pv_hourly_ratio(hour)
                 for hour in range(24)

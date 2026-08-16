@@ -90,6 +90,8 @@ from .const import (
     CONF_BATTERY_DISCHARGE_ENERGY_SENSOR,
     CONF_CONTRACT_START_DATE,
     CONF_COST_ENERGY_SENSOR,
+    CONF_PV_FORECAST_P10,
+    CONF_PV_FORECAST_P90,
     CONF_GRID_EXPORT_ENERGY_SENSOR,
     CONF_GRID_IMPORT_ENERGY_SENSOR,
     CONF_SALDEREN_END_DATE,
@@ -235,6 +237,12 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
                 selector.EntitySelectorConfig(domain="sensor")
             ),
             _optioneel(CONF_GRID_EXPORT_ENERGY_SENSOR, defaults): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="sensor")
+            ),
+            _optioneel(CONF_PV_FORECAST_P10, defaults): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="sensor")
+            ),
+            _optioneel(CONF_PV_FORECAST_P90, defaults): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="sensor")
             ),
             _optioneel(CONF_BATTERY_DISCHARGE_ENERGY_SENSOR, defaults): selector.EntitySelector(

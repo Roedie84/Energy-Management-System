@@ -3878,6 +3878,7 @@ class GacsAssessmentSensor(SensorEntity):
             "waarom_nu",
             "gepland_witgoed",
             "zon_vandaag",
+            "zonspreiding",
             "weerbron_vergelijking",
             "nog_niet_bepaald",
         }
@@ -3951,6 +3952,7 @@ class GacsAssessmentSensor(SensorEntity):
             ("waarom_nu", self._coordinator.get_why_now),
             ("gepland_witgoed", self._coordinator.get_planned_appliance_load),
             ("zon_vandaag", self._coordinator.get_solar_today),
+            ("zonspreiding", self._coordinator.get_pv_forecast_spread),
             (
                 "weerbron_vergelijking",
                 lambda: (

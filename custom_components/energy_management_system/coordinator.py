@@ -488,6 +488,13 @@ from .const import (
     MIN_TOTAL_MARGIN_BONUS_PERCENT,
     UNPROTECTED_AFTERMATH_MARGIN_PERCENT,
     MIN_SOLAR_HISTORY_FOR_DYNAMIC_THRESHOLD,
+    CONF_PV_FORECAST_P10,
+    CONF_PV_FORECAST_P90,
+    PV_HOURLY_BIAS_MAX_RATIO,
+    PV_HOURLY_BIAS_MIN_KWH,
+    PV_HOURLY_BIAS_MIN_RATIO,
+    PV_SPREAD_MARGIN_BONUS_PERCENT,
+    PV_SPREAD_UNCERTAIN_FRACTION,
     OPTION_MANUAL,
     OPTION_SMART,
     GRID_CHEAPER_MARGIN_EUR,
@@ -1273,6 +1280,8 @@ class EnergyManagementSystemCoordinator:
         # v1.98.0: de dagstand van de laatste tick, om bij de dagwissel
         # niet met al gewiste tellers te rekenen.
         self._energiedagstand: dict = {}
+        # v2.3.0: de stand van de kostenmeter bij het begin van de dag.
+        self._kosten_meter_dagbegin: float | None = None
         # v2.0.0: de laatste uitkomst van de zelfcontrole.
         self.last_consistency_checks: dict = {}
         # v2.1.0: hoe lang elke ronde duurde, in milliseconden.
@@ -1530,6 +1539,13 @@ class EnergyManagementSystemCoordinator:
         # `_recompute_measurement_quality()` vóór het terugzetten stond en
         # de meetkwaliteit daardoor altijd leeg bleef. Toen heb ik er geen
         # test voor gemaakt die de VOLGORDE bewaakt; nu wel.
+        # v2.4.0: vervuilde uurverhoudingen opruimen, NA het terugzetten
+        # van de bewaarde toestand.
+        try:
+            self._ruim_pv_uurbias_op()
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Kon de PV-uurverhoudingen niet opruimen")
+
         try:
             await self.async_bootstrap_energy_history()
         except Exception as fout:  # noqa: BLE001 - mag nooit het opstarten breken
@@ -11517,7 +11533,24 @@ class EnergyManagementSystemCoordinator:
             forecast_kwh = self._get_forecast_kwh_for_hour(
                 completed_hour_date, self._pv_current_tracked_hour
             )
-            if forecast_kwh is not None and forecast_kwh > 0.01:
+            # v2.4.0: alleen leren waar er iets te leren valt.
+            #
+            # De drempel stond op 0,01 kWh - tien wattuur. Een
+            # verhouding uit zulke getallen is ruis: 0,02 gedeeld door
+            # 0,06 geeft 0,33, terwijl de absolute fout 0,04 kWh is en
+            # dus niets betekent.
+            #
+            # In de gemeten uurprofielen was dat goed te zien:
+            #
+            #     6h -> 0,334    7h -> 0,856    8h -> 0,385
+            #
+            # Geen patroon maar ruis - en die factoren werden wél
+            # toegepast, waardoor de ochtend- en avondvoorspelling met
+            # een factor drie werd gedrukt.
+            #
+            # Bij een tiende kWh weegt een meetfout van enkele
+            # wattuur nog maar enkele procenten door.
+            if forecast_kwh is not None and forecast_kwh >= PV_HOURLY_BIAS_MIN_KWH:
                 ratio = actual_kwh / forecast_kwh
                 bucket = self.pv_hourly_bias_history.setdefault(
                     self._pv_current_tracked_hour, []
@@ -11538,6 +11571,112 @@ class EnergyManagementSystemCoordinator:
 
         self._pv_hour_energy_kwh = 0.0
         self._pv_hour_duration_hours = 0.0
+
+    def get_pv_forecast_spread(self) -> dict:
+        """Hoe onzeker is de zonvoorspelling vandaag? (v2.4.0)
+
+        Gevraagd: "hoe we de PV voorspelling beter kunnen maken".
+
+        De gemeten cijfers wijzen een andere kant op dan verwacht: de
+        MEDIANE fout is 2,7% en de gemiddelde 10,8%. De meeste dagen
+        kloppen dus prima en een paar zitten er volledig naast. Een
+        betere gemiddelde correctie helpt daar niet - die maakt de goede
+        dagen slechter zonder de slechte te redden.
+
+        Wat wel kan: herkennen WANNEER de voorspelling onzeker is.
+        Solcast levert naast de verwachting ook een tiende- en
+        negentigste-percentiel. Liggen die ver uit elkaar, dan is het een
+        dag met wisselende bewolking - en dan hoort de reserve ruimer.
+
+        Dit maakt de voorspelling niet beter. Het maakt wél dat een
+        onzekere dag als onzeker wordt behandeld, en dat is precies waar
+        de slechtste dagen (41,6% fout) pijn deden.
+        """
+        p10 = self._read_sensor_float(self.config.get(CONF_PV_FORECAST_P10))
+        p90 = self._read_sensor_float(self.config.get(CONF_PV_FORECAST_P90))
+        verwacht = self._read_sensor_float(
+            self.config.get(CONF_SOLAR_TODAY_FORECAST_SENSOR)
+        )
+        if None in (p10, p90) or not verwacht:
+            return {
+                "beschikbaar": False,
+                "reden": (
+                    "Geen p10/p90-sensoren ingesteld; de onzekerheid van de "
+                    "voorspelling is dan niet te meten."
+                ),
+            }
+
+        breedte = max(0.0, p90 - p10)
+        relatief = breedte / verwacht if verwacht else 0.0
+        onzeker = relatief >= PV_SPREAD_UNCERTAIN_FRACTION
+        return {
+            "beschikbaar": True,
+            "verwacht_kwh": round(verwacht, 1),
+            "p10_kwh": round(p10, 1),
+            "p90_kwh": round(p90, 1),
+            "breedte_kwh": round(breedte, 1),
+            "relatieve_breedte": round(relatief, 2),
+            "onzeker": onzeker,
+            "reden": (
+                f"De voorspelling loopt van {p10:.1f} tot {p90:.1f} kWh - "
+                f"{relatief:.0%} van de verwachting. Dat is een dag met "
+                "wisselende bewolking; de reserve houdt meer achter."
+                if onzeker
+                else (
+                    f"Bandbreedte {breedte:.1f} kWh op {verwacht:.1f} - "
+                    "een voorspelbare dag."
+                )
+            ),
+        }
+
+    def _pv_onzekerheidsmarge_procent(self) -> float:
+        """Extra reservemarge op een onzekere zondag (v2.4.0).
+
+        Loopt mee in de bestaande zelfcorrigerende marge, zodat er niet
+        weer twee reserves naast elkaar ontstaan - dat kostte v1.86.0 tot
+        en met v1.88.0.
+        """
+        spreiding = self.get_pv_forecast_spread()
+        if not spreiding.get("beschikbaar") or not spreiding.get("onzeker"):
+            return 0.0
+        return PV_SPREAD_MARGIN_BONUS_PERCENT
+
+    def _ruim_pv_uurbias_op(self) -> None:
+        """Verwijdert verhoudingen die uit te kleine getallen komen
+        (v2.4.0).
+
+        De drempel ging van 0,01 naar 0,10 kWh, maar de reeksen die er
+        al staan zijn met de oude drempel gevuld. Zonder opruiming duurt
+        het veertien dagen voordat de reparatie doorwerkt - en tot die
+        tijd wordt de ochtend- en avondvoorspelling nog steeds met een
+        factor drie gedrukt.
+
+        Er is geen manier om achteraf te zien uit welke getallen een
+        bewaarde verhouding kwam. Wat wel kan: verhoudingen weren die
+        fysiek onwaarschijnlijk zijn. Een uur waarin er drie keer zoveel
+        wordt opgewekt als voorspeld, of een derde, komt bij een
+        redelijke voorspelling niet voor - behalve bij een deling door
+        bijna nul.
+        """
+        opgeruimd = 0
+        for uur, waarden in list(self.pv_hourly_bias_history.items()):
+            schoon = [
+                v
+                for v in waarden
+                if PV_HOURLY_BIAS_MIN_RATIO <= v <= PV_HOURLY_BIAS_MAX_RATIO
+            ]
+            if len(schoon) != len(waarden):
+                opgeruimd += len(waarden) - len(schoon)
+                self.pv_hourly_bias_history[uur] = schoon
+        if opgeruimd:
+            _LOGGER.info(
+                "%d onwaarschijnlijke PV-uurverhoudingen verwijderd "
+                "(buiten %.2f-%.2f)",
+                opgeruimd,
+                PV_HOURLY_BIAS_MIN_RATIO,
+                PV_HOURLY_BIAS_MAX_RATIO,
+            )
+            self.schedule_persisted_state_save()
 
     def learned_pv_hourly_ratio(self, hour: int) -> float | None:
         """Learned (actual/forecast) ratio for a given hour-of-day (0-23),
@@ -11764,9 +11903,13 @@ class EnergyManagementSystemCoordinator:
         # blind spot (found after a real incident: ~6.5 kWh was correctly
         # sold to the reserve floor, then the unprotected night finished
         # the job and ran the battery to empty).
+        # v2.4.0: een onzekere zondag telt mee in DEZELFDE marge.
+        pv_onzeker_percent = self._pv_onzekerheidsmarge_procent()
+
         margin_bonus_percent = max(
             MIN_TOTAL_MARGIN_BONUS_PERCENT,
-            low_solar_bonus_percent
+            pv_onzeker_percent
+            + low_solar_bonus_percent
             + shortfall_bonus_percent
             - excess_reduction_percent
             + UNPROTECTED_AFTERMATH_MARGIN_PERCENT,
@@ -11781,6 +11924,7 @@ class EnergyManagementSystemCoordinator:
             "recent_shortfall_days": recent_shortfalls,
             "excess_reduction_percent": round(excess_reduction_percent, 1),
             "recent_excess_days": recent_excess_days,
+            "pv_onzekerheid_percent": round(pv_onzeker_percent, 1),
             "unprotected_aftermath_percent": round(
                 UNPROTECTED_AFTERMATH_MARGIN_PERCENT, 1
             ),
@@ -14931,6 +15075,10 @@ class EnergyManagementSystemCoordinator:
             if self._self_sufficiency_day_key is not None:
                 self._sluit_energiedag_af(self._self_sufficiency_day_key)
             self._energiedagstand = {}
+            # v2.3.0: de kostenmeter opnieuw ijken op de stand van nu.
+            self._kosten_meter_dagbegin = self._read_sensor_float(
+                self.config.get(CONF_COST_ENERGY_SENSOR)
+            )
             self.pv_export_today_kwh = 0.0
             self.solar_export_today_kwh = 0.0
             self.battery_export_today_kwh = 0.0
@@ -15607,6 +15755,40 @@ class EnergyManagementSystemCoordinator:
         )
         self.schedule_persisted_state_save()
 
+    def _kosten_vandaag_uit_meter(self) -> float | None:
+        """De kosten van vandaag uit de kostenmeter (v2.3.0).
+
+        Dezelfde bron als de historische kolommen, zodat de rij van links
+        naar rechts hetzelfde meet. Zonder meter blijft het veld leeg -
+        de eigen berekening erin zetten zou de rij weer ongelijksoortig
+        maken.
+        """
+        entity_id = self.config.get(CONF_COST_ENERGY_SENSOR)
+        if not entity_id:
+            return None
+        waarde = self._read_sensor_float(entity_id)
+        if waarde is None:
+            return None
+
+        # De AANGROEI sinds middernacht, niet de stand.
+        #
+        # Een dagsensor (`..._costs_today`) reset zelf en dan is de stand
+        # gelijk aan de aangroei. Maar een levenslange teller
+        # (`total_power_import_cost`) zou anders het totaal-ooit tonen in
+        # de kolom "vandaag" - een verschil van jaren.
+        begin = self._kosten_meter_dagbegin
+        if begin is None:
+            # Vlak na een herstart is het ijkpunt onbekend. Een dagsensor
+            # geeft dan meteen het juiste getal; een levenslange teller
+            # pas na de eerstvolgende dagwissel. Dat is beter dan een
+            # verzonnen ijkpunt, en het corrigeert zichzelf.
+            return round(waarde, 2)
+        if waarde < begin:
+            # De teller is gereset (dagsensor om middernacht, of een
+            # meterwissel): de stand zelf is dan de aangroei.
+            return round(waarde, 2)
+        return round(waarde - begin, 2)
+
     def get_period_overview(self, now: datetime | None = None) -> dict:
         """Alle dagcijfers over dag, week, maand, jaar en contractjaar
         (v1.91.0).
@@ -15702,7 +15884,20 @@ class EnergyManagementSystemCoordinator:
             "import_kwh": round(self.grid_import_today_kwh, 2),
             "export_kwh": round(self.pv_export_today_kwh, 2),
             "accu_ontladen_kwh": round(self.battery_discharge_today_kwh, 2),
-            "kosten_eur": round(self.actual_cost_today_eur, 2),
+            # v2.3.0: uit DEZELFDE meter als de historische kolommen.
+            #
+            # Gemeld met een screenshot: "Kosten (EUR) vandaag -0.54" bij
+            # 0,04 kWh afname. Een negatief bedrag bij afname kan niet.
+            #
+            # De dagkolom kwam uit `actual_cost_today_eur` - de eigen
+            # kostenberekening, waar de opbrengst van teruglevering vanaf
+            # gaat. De historische kolommen lezen de kostenmeter, die
+            # alleen de afname telt. Twee verschillende grootheden in één
+            # rij, en dan is de rij niet van links naar rechts te lezen.
+            #
+            # Het saldo blijft bestaan, maar dan in de BESPARINGSrij waar
+            # het thuishoort: dat is per definitie een verschil.
+            "kosten_eur": self._kosten_vandaag_uit_meter(),
             "co2_kg": round(self.co2_emitted_today_kg, 2),
             "besparing_eur": round(
                 self.counterfactual_cost_today_eur - self.actual_cost_today_eur,

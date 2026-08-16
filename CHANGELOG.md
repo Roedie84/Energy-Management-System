@@ -15017,3 +15017,96 @@ daadwerkelijk uit; ze lazen alleen de broncode. Nu wel:
 Op de proef gesteld door de fout terug te zetten: dan vallen ze om.
 
 **Volledige testsuite**: 2249 tests, allemaal groen.
+
+## v2.3.0 — De kostenrij meet nu overal hetzelfde
+
+**Gemeld** met een screenshot: *"Kosten (EUR) vandaag −0,54"* bij 0,04
+kWh afname. Een negatief bedrag bij afname kan niet.
+
+De dagkolom kwam uit `actual_cost_today_eur` — de eigen
+kostenberekening, waar de opbrengst van teruglevering vanaf gaat. De
+historische kolommen lezen de **kostenmeter**, die alleen de afname
+telt. Twee verschillende grootheden in één rij, en dan is die rij niet
+van links naar rechts te lezen.
+
+Beide komen nu uit dezelfde meter. Het saldo verdwijnt niet — het staat
+in de **besparingsrij**, waar het thuishoort: dat is per definitie een
+verschil.
+
+### En een valkuil die daarbij hoorde
+
+De stand van een meter is niet hetzelfde als de kosten van vandaag. Een
+dagsensor (`..._costs_today`) reset zelf, maar een levenslange teller
+(`total_power_import_cost`) zou het **totaal-ooit** in de kolom "vandaag"
+zetten — een verschil van jaren.
+
+Daarom wordt de stand bij het begin van de dag onthouden en de
+**aangroei** getoond. Een teller die terugspringt (middernacht, of een
+meterwissel) wordt herkend: dan is de stand zelf de aangroei. Vlak na een
+herstart is het ijkpunt onbekend; dan geeft een dagsensor meteen het
+juiste getal en een levenslange teller pas na de eerstvolgende
+dagwissel — beter dan een verzonnen ijkpunt, en het corrigeert zichzelf.
+
+**Volledige testsuite**: 2257 tests, allemaal groen.
+
+## v2.4.0 — De zonvoorspelling: meten waar de fout zit
+
+**Gevraagd**: "Kun je diepgaand uitzoeken hoe we de PV voorspelling
+beter kunnen maken? Het is namelijk 1 van de belangrijkste zaken."
+
+De gemeten cijfers wezen een andere kant op dan verwacht:
+
+| | |
+|---|---|
+| Mediane fout | **2,7%** |
+| Gemiddelde fout | 10,8% |
+| Slechtste dag | 41,6% |
+| Binnen 10% | 4 van 7 dagen |
+
+Het verschil tussen mediaan en gemiddelde is het hele verhaal: **de
+meeste dagen zitten er nauwelijks naast, een paar volledig.** Een betere
+gemiddelde correctie helpt daar niet — die maakt de goede dagen slechter
+zonder de slechte te redden.
+
+### 1. De correctie was zelf de grootste foutenbron
+
+Het geleerde uurprofiel op deze installatie:
+
+    6h → 0,334    7h → 0,856    8h → 0,385
+    19h → 0,589   20h → 0,226
+
+Zeven uur tussen zes en acht in breekt elk patroon. Dat is ruis, geen
+signaal — en die factoren werden wél toegepast, waardoor de ochtend- en
+avondvoorspelling met een factor drie werd gedrukt.
+
+De oorzaak: de drempel om een verhouding te leren stond op **0,01 kWh**.
+Tien wattuur. Een verhouding uit zulke getallen is betekenisloos: 0,02
+gedeeld door 0,06 geeft 0,33, terwijl de absolute fout 0,04 kWh is.
+
+Nu **0,10 kWh**. En de reeksen die er al staan worden opgeruimd: een
+verhouding buiten 0,40–2,50 kan bij een redelijke voorspelling niet
+voorkomen, behalve bij een deling door bijna nul. Zonder die opruiming
+zou de reparatie pas over veertien dagen doorwerken.
+
+### 2. Onzekerheid meten in plaats van de voorspelling verbeteren
+
+Solcast levert naast de verwachting een **tiende- en
+negentigste-percentiel**. Liggen die ver uit elkaar, dan is het een dag
+met wisselende bewolking — en dan hoort de reserve ruimer.
+
+Dat maakt de voorspelling niet beter. Het maakt wél dat een onzekere dag
+als onzeker wordt behandeld, en dat is precies waar de slechtste dagen
+pijn deden.
+
+Twee nieuwe optionele sensoren. De extra marge loopt mee in de
+**bestaande** zelfcorrigerende reserve — twee reserves naast elkaar
+kostte v1.86.0 tot en met v1.88.0.
+
+### 3. Het installatieprofiel
+
+Dat staat op 4 van de 5 heldere dagen en heeft al beschaduwing gevonden
+op azimut 80° (oost). Mogelijk verklaart dát de rare ochtendfactoren, en
+is het geen ruis maar een schaduw die Solcast niet kent. Dat blijkt zodra
+het profiel af is — meten voordat er iets op wordt gebouwd.
+
+**Volledige testsuite**: 2268 tests, allemaal groen.
