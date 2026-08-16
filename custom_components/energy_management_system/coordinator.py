@@ -459,6 +459,7 @@ from .const import (
     ENERGY_BOOTSTRAP_VERSION,
     OUTDOOR_SENSOR_BIAS_WARN_C,
     ENERGY_DAILY_HISTORY_DAYS,
+    ENERGY_DAY_MIN_SOURCE_KWH,
     ENERGY_DAY_SANITY_MAX_KWH,
     ENERGY_UNIT_TO_KWH,
     SELF_CONSUMPTION_MIN_PV_KWH,
@@ -15020,7 +15021,21 @@ class EnergyManagementSystemCoordinator:
         die gebruiken bij het afsluiten.
         """
         self._energiedagstand = {
-            "dag": dag,
+            # v2.2.2: als TEKST. Gemeld met een reeks waarin 15 en 16
+            # augustus op 0,0 kWh opwek stonden terwijl er 11,8 kWh was
+            # teruggeleverd - fysiek onmogelijk.
+            #
+            # De datum werd als date-object bewaard, maar komt na een
+            # herstart als tekst uit de opslag terug. De vergelijking
+            # `stand["dag"] != dag` faalde daardoor altijd, waarna de
+            # afsluiting terugviel op de LIVE tellers - en die waren op
+            # dat moment al gewist.
+            #
+            # Precies dezelfde val als bij `_plan_review_day_key`
+            # (v1.74.0), waar de oplossing was om hem als DATUM te
+            # bewaren. Hier is tekst de juiste kant: dit veld zit in
+            # PERSISTED_PLAIN_FIELDS en niet in PERSISTED_DATE_FIELDS.
+            "dag": dag.isoformat() if hasattr(dag, "isoformat") else str(dag),
             "opwek_kwh": self.pv_production_today_kwh,
             "zon_export_kwh": self.solar_export_today_kwh,
             "accu_export_kwh": self.battery_export_today_kwh,
@@ -15038,7 +15053,8 @@ class EnergyManagementSystemCoordinator:
         # v1.98.0: de stand van de laatste tick van DIE dag, niet de
         # tellers van nu - die zijn eerder in deze tick al gewist.
         stand = self._energiedagstand or {}
-        if stand.get("dag") != dag:
+        dag_tekst = dag.isoformat() if hasattr(dag, "isoformat") else str(dag)
+        if str(stand.get("dag")) != dag_tekst:
             stand = {}
 
         def _w(sleutel, terugval):
@@ -15240,6 +15256,19 @@ class EnergyManagementSystemCoordinator:
             waarde = regel.get(sleutel)
             if waarde is not None and abs(waarde) > ENERGY_DAY_SANITY_MAX_KWH:
                 return True
+
+        # v2.2.2: teruglevering zonder opwek en zonder accu-ontlading kan
+        # niet. Die energie moet ergens vandaan komen.
+        #
+        # Dit vangt het geval dat een dag met al gewiste tellers is
+        # afgesloten - de vorm waarin 15 en 16 augustus op 0,0 kWh opwek
+        # stonden bij 11,8 kWh teruglevering.
+        export = regel.get("export_kwh") or 0.0
+        bronnen = (regel.get("opwek_kwh") or 0.0) + (
+            regel.get("accu_ontladen_kwh") or 0.0
+        )
+        if export > ENERGY_DAY_MIN_SOURCE_KWH and bronnen <= 0:
+            return True
         return False
 
     async def async_bootstrap_energy_history(self) -> None:
@@ -15274,13 +15303,7 @@ class EnergyManagementSystemCoordinator:
         # merkteken komt uit de versie die de eenheid niet omrekende en
         # verbruik gelijkstelde aan de opwek; dat wordt weggegooid en
         # opnieuw opgehaald. Live gemeten dagen blijven altijd staan.
-        voor = len(self.energy_daily_history)
-        self.energy_daily_history = [
-            r
-            for r in self.energy_daily_history
-            if r.get("herkomst") != "statistieken"
-            or r.get("inlees_versie", 0) >= ENERGY_BOOTSTRAP_VERSION
-        ]
+
         # En een vangnet dat losstaat van het merkteken: een dag die de
         # plausibiliteitsgrens overschrijdt hoort er nooit in te staan,
         # ongeacht welke ronde hem schreef.
@@ -15310,6 +15333,48 @@ class EnergyManagementSystemCoordinator:
             "kosten_eur": self.config.get(CONF_COST_ENERGY_SENSOR),
         }
         bronnen = {k: v for k, v in bronnen.items() if v}
+
+        # v2.2.2: ook opnieuw inlezen als er een METER is BIJGEKOMEN.
+        #
+        # Gemeld na het instellen van de accu- en kostenmeter: week,
+        # maand en jaar bleven op 0,0 staan. De routine vult alleen dagen
+        # VOOR de oudste bekende dag aan, en die reeks was al vol - dus
+        # gebeurde er niets.
+        #
+        # Het versienummer vangt een wijziging in de CODE, maar niet een
+        # wijziging in de CONFIGURATIE. Daarom hier vergelijken welke
+        # kolommen de ingelezen dagen dragen met welke meters er nu
+        # staan.
+        ingelezen = [
+            r
+            for r in self.energy_daily_history
+            if r.get("herkomst") == "statistieken"
+        ]
+        nieuwe_meter = False
+        if ingelezen:
+            for veld, entity_id in bronnen.items():
+                if entity_id and all(
+                    r.get(veld) is None for r in ingelezen
+                ):
+                    nieuwe_meter = True
+                    _LOGGER.info(
+                        "Meter voor %s is nieuw; geschiedenis wordt opnieuw "
+                        "ingelezen",
+                        veld,
+                    )
+                    break
+
+        voor = len(self.energy_daily_history)
+        self.energy_daily_history = [
+            r
+            for r in self.energy_daily_history
+            if r.get("herkomst") != "statistieken"
+            or (
+                not nieuwe_meter
+                and r.get("inlees_versie", 0) >= ENERGY_BOOTSTRAP_VERSION
+            )
+        ]
+
         if not bronnen:
             self.energy_history_bootstrap_note = (
                 "Geen kWh-meters ingesteld; de dagreeks vult zich vanaf nu "
@@ -15328,6 +15393,18 @@ class EnergyManagementSystemCoordinator:
                 "De recorder is niet beschikbaar; geen geschiedenis ingelezen."
             )
             return
+
+        # v2.2.2: de oudste bekende dag OPNIEUW bepalen, want de
+        # opruiming hierboven kan dagen hebben verwijderd. Zonder dit zou
+        # de routine alleen dagen voor de oude grens aanvullen en het
+        # zojuist gewiste gat laten staan.
+        if self.energy_daily_history:
+            oudste = min(
+                date.fromisoformat(r["datum"])
+                for r in self.energy_daily_history
+            )
+        else:
+            oudste = dt_util.now().date()
 
         einde = dt_util.start_of_local_day(oudste)
         start = einde - timedelta(days=ENERGY_DAILY_HISTORY_DAYS)

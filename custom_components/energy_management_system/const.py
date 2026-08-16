@@ -854,6 +854,11 @@ ENERGY_UNIT_TO_KWH = {
 # ooit haalt.
 ENERGY_DAY_SANITY_MAX_KWH = 500.0
 
+# Teruglevering zonder opwek en zonder accu-ontlading kan niet - die
+# energie moet ergens vandaan komen. Boven deze drempel is het geen
+# meetruis maar een dag die met al gewiste tellers is afgesloten.
+ENERGY_DAY_MIN_SOURCE_KWH = 0.5
+
 # Welke inleesronde een bewaarde dag heeft geschreven (v1.94.0).
 #
 # Gemeld na de reparatie van v1.93.0: de tabel stond nog steeds op

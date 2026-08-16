@@ -14901,3 +14901,51 @@ Er stond al een toets tegen precies deze fout — maar alleen voor
 `NumberSelector` (v1.78.0). Die dekte `EntitySelector` niet. Nu allebei.
 
 **Volledige testsuite**: 2240 tests, allemaal groen.
+
+## v2.2.2 — Nul kWh opwek bij 11,8 kWh teruglevering
+
+**Gevraagd**: "Staan de nieuwe entiteiten nu goed?" Deels — en de reeks
+bevatte twee onmogelijke dagen.
+
+### De datum kwam als tekst terug
+
+15 en 16 augustus stonden op **0,0 kWh opwek** terwijl er 11,8 kWh was
+teruggeleverd. Die energie moet ergens vandaan komen.
+
+De dagstand bewaart de datum, en die werd als **date-object** weggezet.
+Na een herstart komt hij als **tekst** uit de opslag terug, waardoor de
+vergelijking altijd faalde. De afsluiting viel dan terug op de live
+tellers — en die waren op dat moment al gewist.
+
+Precies dezelfde val als bij `_plan_review_day_key` in v1.74.0, alleen
+andersom: daar was een datum nodig, hier tekst. Het veld staat in
+`PERSISTED_PLAIN_FIELDS` en niet in `PERSISTED_DATE_FIELDS`.
+
+### En een vangnet
+
+Teruglevering zonder opwek én zonder accu-ontlading wordt nu geweigerd,
+net als een dag boven 500 kWh. Dat vangt deze vorm ook als hij langs een
+andere weg terugkomt.
+
+**Volledige testsuite**: 2242 tests, allemaal groen.
+
+## v2.2.2 — Een nieuwe meter vulde de geschiedenis niet
+
+**Gemeld** na het instellen van de accu- en kostenmeter: week, maand en
+jaar bleven op **0,0** staan.
+
+De inleesroutine vult alleen dagen **vóór de oudste bekende dag** aan, en
+die reeks was al vol met vierhonderd dagen. Er gebeurde dus niets.
+
+Het versienummer uit v1.94.0 vangt een wijziging in de **code**, maar
+niet een wijziging in de **configuratie**. Nu wordt gekeken welke
+kolommen de ingelezen dagen dragen tegenover welke meters er nu staan:
+draagt geen enkele ingelezen dag een waarde voor een meter die wél is
+ingesteld, dan wordt de geschiedenis opnieuw opgehaald.
+
+Daarbij moest de oudste bekende dag **na** de opruiming opnieuw worden
+bepaald. Zonder dat zou de routine alleen dagen vóór de oude grens
+aanvullen en het zojuist gewiste gat laten staan — dezelfde vorm als de
+volgordefouten van v1.74.0 en v1.95.0, en daarom staat er nu een test op.
+
+**Volledige testsuite**: 2243 tests, allemaal groen.
