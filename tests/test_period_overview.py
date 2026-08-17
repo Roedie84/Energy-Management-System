@@ -717,3 +717,67 @@ def test_the_bootstrap_leaves_a_note_in_every_path(make_coordinator, hass):
             assert "energy_history_bootstrap_note" in omgeving, (
                 f"uitgang op regel {n} laat geen melding achter"
             )
+
+
+def test_the_day_is_closed_under_the_previous_date(make_coordinator, hass):
+    """Gevonden door de zelfcontrole zelf: "Onmogelijke waarden op
+    2026-08-17" - opwek 0,0 kWh met 9,8 kWh export. En er was geen 16
+    augustus.
+
+    De dagsleutel werd op de nieuwe dag gezet en de opwekteller gewist
+    VOORDAT de dag werd afgesloten. Die kreeg dus de datum van vandaag
+    mee, met de cijfers van gisteren.
+
+    Vierde keer dezelfde volgordefout, na v1.74.0, v1.95.0 en v1.98.0 -
+    en de eerste die niet door een screenshot maar door de zelfcontrole
+    is gevonden.
+    """
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    kop = bron.index("af_te_sluiten_dag = self._self_sufficiency_day_key")
+    # Tot de volgende definitie; het afsluiten staat verderop in
+    # dezelfde functie dan een vast aantal tekens toelaat.
+    blok = bron[kop : bron.index("\n    def ", kop)]
+
+    # De sleutel wordt pas NA het vastleggen overschreven, en het
+    # afsluiten gebruikt de bewaarde dag.
+    assert blok.index("af_te_sluiten_dag") < blok.index(
+        "self._self_sufficiency_day_key = today_key"
+    )
+    assert "_sluit_energiedag_af(af_te_sluiten_dag)" in blok
+
+
+def test_an_impossible_day_is_actually_removed(make_coordinator, hass):
+    """De controle bestond al en meldde 17 augustus keurig - maar de
+    regel bleef staan. Een fout melden zonder hem op te ruimen betekent
+    dat je hem elke dag opnieuw ziet."""
+    c = make_coordinator({})
+    c.energy_daily_history = [
+        {"datum": "2026-08-15", "opwek_kwh": 9.3, "export_kwh": 2.3},
+        {"datum": "2026-08-17", "opwek_kwh": 0.0, "export_kwh": 9.8},
+    ]
+
+    c._weer_onmogelijke_dagen()
+
+    assert [r["datum"] for r in c.energy_daily_history] == ["2026-08-15"]
+
+
+def test_a_night_of_selling_is_not_removed(make_coordinator, hass):
+    """'s Nachts uit de accu verkopen bij nul opwek is normaal - dat mag
+    niet worden weggegooid."""
+    c = make_coordinator({})
+    c.energy_daily_history = [
+        {
+            "datum": "2026-12-21",
+            "opwek_kwh": 0.0,
+            "export_kwh": 3.2,
+            "accu_ontladen_kwh": 4.0,
+        }
+    ]
+
+    c._weer_onmogelijke_dagen()
+
+    assert len(c.energy_daily_history) == 1
