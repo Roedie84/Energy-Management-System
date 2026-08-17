@@ -97,3 +97,45 @@ def test_no_day_counter_is_read_after_it_may_be_cleared():
                     or "stand.get" in regel
                     or "," in regel
                 ), f"{functie} leest {teller} rechtstreeks: {regel.strip()}"
+
+
+def test_every_day_counter_rolls_over_on_the_clock():
+    """v3.0.1: de vijfde dagwissel die niet liep.
+
+    Na v1.74.0 (plantoetsing), v1.95.0 (opruiming op een lege lijst),
+    v1.98.0 (accu en kosten op nul) en v2.6.1 (verkeerde datum) bleek de
+    waterteller alleen om te rollen bij een NIEUWE sessie. Gebeurde er
+    een dag niets, dan bleef die van eergisteren staan - vandaar "15
+    gebruiksmoment(en) vandaag, 0 liter".
+
+    Elke dagsleutel hoort te worden vergeleken met de KLOK, ergens in de
+    tick. Deze toets valt om zodra er een dagsleutel bijkomt die alleen
+    door een gebeurtenis wordt bijgewerkt.
+    """
+    import re
+
+    sleutels = set(re.findall(r"self\.(_\w*_day_key)\b", BRON))
+    assert sleutels, "geen dagsleutels gevonden"
+
+    # Waar wordt elke sleutel vergeleken met een datum die uit de klok
+    # komt? Dat is ofwel `now.date()` ofwel `dt_util.now().date()`.
+    zonder_klok = []
+    for sleutel in sorted(sleutels):
+        vergelijkingen = re.findall(
+            rf"self\.{sleutel}\s*!=\s*(\w+)", BRON
+        )
+        bronnen = set()
+        for naam in vergelijkingen:
+            # De variabele die ernaast staat: waar komt die vandaan?
+            toewijzing = re.search(rf"\b{naam}\s*=\s*([^\n]+)", BRON)
+            if toewijzing:
+                bronnen.add(toewijzing.group(1))
+        if vergelijkingen and not any(
+            "now" in b or "dt_util" in b for b in bronnen
+        ):
+            zonder_klok.append(sleutel)
+
+    assert not zonder_klok, (
+        "deze dagsleutels worden nergens met de klok vergeleken en rollen "
+        f"dus alleen om bij een gebeurtenis: {zonder_klok}"
+    )

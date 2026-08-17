@@ -332,7 +332,7 @@ def test_dashboard_yaml_is_valid():
     # v2.0.0: plus de zelfcontrolepagina.
     # v2.1.0: plus de logboekpagina.
     # v2.2.0: plus de gezondheidspagina.
-    assert len(data["views"]) == 31
+    assert len(data["views"]) == 32
 
 
 def test_markdown_tables_have_no_blank_lines_between_rows():
