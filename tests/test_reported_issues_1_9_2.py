@@ -73,7 +73,23 @@ def test_the_notification_uses_the_real_time_of_day(make_coordinator, hass):
     )
 
     c = make_coordinator({CONF_APPLIANCE_NOTIFY_SERVICE: "notify.telefoon"})
-    c._get_forecast_entries = lambda: []
+    # v2.7.0: de melding komt alleen nog als het blok er WERKELIJK
+    # uitspringt en er nog tijd is om bij te laden. Zonder prijzen valt
+    # dat niet te beoordelen, dus hier een dag met een echte piek: 30 ct
+    # overdag, 45 ct in het blok van 07:15.
+    from custom_components.energy_management_system.const import (
+        PRICE_SCALE_FACTOR,
+    )
+
+    _prijzen = [
+        (
+            NOW + timedelta(minutes=15 * i),
+            None,
+            (0.45 if 5 <= i <= 9 else 0.30) * PRICE_SCALE_FACTOR,
+        )
+        for i in range(40)
+    ]
+    c._get_forecast_entries = lambda *a, **k: _prijzen
     c.set_notification_enabled("low_soc_before_peak", True)
     c.last_soc_percent = 23.0
     c.last_discharge_start = NOW + timedelta(hours=1, minutes=28)  # 07:15

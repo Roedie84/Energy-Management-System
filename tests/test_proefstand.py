@@ -76,7 +76,8 @@ def test_every_candidate_reports_its_own_reliability(
 
     kandidaten = c.get_proefstand()["kandidaten"]
 
-    assert len(kandidaten) == 5
+    # v2.6.0: plus "Vasthouden voor morgen".
+    assert len(kandidaten) == 6
     for kandidaat in kandidaten:
         assert kandidaat["naam"]
         assert kandidaat["status"]
