@@ -77,7 +77,8 @@ def test_every_candidate_reports_its_own_reliability(
     kandidaten = c.get_proefstand()["kandidaten"]
 
     # v2.6.0: plus "Vasthouden voor morgen".
-    assert len(kandidaten) == 6
+    # v2.9.0: plus het regressiewoud.
+    assert len(kandidaten) == 7
     for kandidaat in kandidaten:
         assert kandidaat["naam"]
         assert kandidaat["status"]
@@ -376,3 +377,85 @@ def test_the_progress_says_which_side_lags(make_coordinator, hass):
 
     assert "werkdag" in tekst.lower()
     assert "weekend loopt achter" in tekst
+
+
+# --- v3.0.0: meting en winst zijn twee dingen ------------------------
+
+
+def test_a_reliable_measurement_is_not_yet_ready(make_coordinator, hass):
+    """Gevraagd: "Zijn er al zaken uit (meetkwaliteit) die nu
+    betrouwbaar genoeg zijn en eventueel al kunnen meedoen?"
+
+    Die vraag was moeilijker te beantwoorden dan nodig. "Betrouwbaar"
+    sloeg op twee dingen: de prijsvorm stond op betrouwbaar omdat de VORM
+    stabiel is - terwijl er letterlijk bij stond dat de winst pas te
+    becijferen valt zodra de voorspelde vorm naast de werkelijke prijzen
+    kan.
+    """
+    c = make_coordinator({})
+
+    uitkomst = c._met_gereedheid(
+        {
+            "naam": "Prijsvorm",
+            "status": "betrouwbaar",
+            "zou_hebben_opgeleverd": {"te_becijferen": False},
+        }
+    )
+
+    assert uitkomst["meting_betrouwbaar"] is True
+    assert uitkomst["winst_becijferd"] is False
+    assert uitkomst["gereedheid"] == "winst onbekend"
+
+
+def test_both_together_make_it_ready(make_coordinator, hass):
+    c = make_coordinator({})
+
+    uitkomst = c._met_gereedheid(
+        {
+            "naam": "Iets",
+            "status": "betrouwbaar",
+            "zou_hebben_opgeleverd": {"te_becijferen": True},
+        }
+    )
+
+    assert uitkomst["gereedheid"] == "klaar om mee te doen"
+    assert "één tegelijk" in uitkomst["gereedheid_uitleg"]
+
+
+def test_an_unreliable_measurement_says_so(make_coordinator, hass):
+    c = make_coordinator({})
+
+    uitkomst = c._met_gereedheid(
+        {
+            "naam": "Iets",
+            "status": "onvoldoende_data",
+            "zou_hebben_opgeleverd": {"te_becijferen": True},
+        }
+    )
+
+    assert uitkomst["gereedheid"] == "meet nog"
+
+
+def test_every_candidate_carries_a_readiness(make_coordinator, hass):
+    c = make_coordinator({})
+
+    for k in c.get_proefstand()["kandidaten"]:
+        assert k["gereedheid"] in (
+            "meet nog",
+            "winst onbekend",
+            "klaar om mee te doen",
+        ), k["naam"]
+
+
+def test_the_summary_answers_the_question_at_a_glance(
+    make_coordinator, hass
+):
+    """Zodat "is er al iets rijp?" met één blik te beantwoorden is, in
+    plaats van door zeven kandidaten te lezen."""
+    c = make_coordinator({})
+
+    s = c.get_proefstand()["samenvatting"]
+
+    assert s["aantal"] == 7
+    assert isinstance(s["klaar"], list)
+    assert s["oordeel"]

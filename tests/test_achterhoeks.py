@@ -102,10 +102,11 @@ def test_nothing_changes_when_off(make_coordinator, hass):
     # v1.46.0: de titel wordt opgezocht op `kind`, of - bij een
     # herstelmelding, waar `kind` bewust leeg is - op de soort waarmee
     # hij in de geschiedenis komt.
-    assert (
-        "title = self._naar_achterhoeks(title, kind or geschiedenis_soort)"
-        in bron[start : start + 500]
-    )
+    # v3.0.2: de aanroep geeft ook de ACTIE mee, want bij de accukoeling
+    # zijn aan en uit tegenovergesteld en verdient elk zijn eigen titel.
+    venster = bron[start : start + 900]
+    assert "title = self._naar_achterhoeks(" in venster
+    assert "kind or geschiedenis_soort" in venster
 
 
 def test_the_switch_exists():
@@ -317,3 +318,52 @@ def test_dutch_stays_dutch_when_the_switch_is_off(make_coordinator, hass):
     c._meld_herstel("plan_tekort", "✅ Accu haalt de nacht weer", "Er is weer genoeg.")
 
     assert c.notification_history[-1]["titel"] == "✅ Accu haalt de nacht weer"
+
+
+def test_a_varying_title_keeps_its_distinction(make_coordinator, hass):
+    """Gemeld: "Melding accu koeling aan/uit is niet goed (...) Maar het
+    is of hij is aan (koelen) of hij is uit (niet koelen)."
+
+    De Nederlandse titel zei wel "koeling AAN" of "koeling UIT", maar de
+    vertaling verving de hele titel door "Accukoeling an of uut" - en
+    daarmee verdween precies de informatie waar het om ging.
+    """
+    c = make_coordinator({})
+
+    aan = c._naar_achterhoeks("🔋 Accu: koeling AAN", "battery_cooling", "aan")
+    uit = c._naar_achterhoeks("🔋 Accu: koeling UIT", "battery_cooling", "uit")
+
+    assert aan != uit
+    assert "an" in aan and "uut" in uit
+
+
+def test_every_varying_title_has_both_actions():
+    """Bij het nazoeken bleken er VIER meldingen met een wisselende
+    titel, niet één. Elk hoort zijn onderscheid te houden."""
+    from custom_components.energy_management_system.const import (
+        ACHTERHOEKS_TITELS_PER_ACTIE,
+    )
+
+    soorten = {soort for soort, _actie in ACHTERHOEKS_TITELS_PER_ACTIE}
+
+    for soort in (
+        "battery_cooling",
+        "appliance_ready",
+        "appliance_cheap_moment",
+        "device_drift",
+    ):
+        assert soort in soorten, soort
+
+
+def test_the_action_also_appears_in_the_message():
+    """Staat de actie ook in het bericht, dan gaat hij niet verloren als
+    de titel wordt vervangen of afgekapt."""
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    kop = bron.index('kind="battery_cooling"')
+    blok = bron[kop - 1200 : kop]
+
+    assert "De ventilator gaat" in blok

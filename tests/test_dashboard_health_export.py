@@ -172,6 +172,7 @@ def test_present_attributes_are_not_reported(make_coordinator, hass):
             "gepland_witgoed": {},
             "zon_vandaag": {},
             "zonspreiding": {},
+            "zonband_ijking": {},
             "weerbron_vergelijking": {},
             "besparingscorrectie": {},
             "proefstand": {},
@@ -208,7 +209,9 @@ def test_the_doubled_quotes_are_handled(make_coordinator, hass):
 
     bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
     start = bron.index("def get_dashboard_health")
-    blok = bron[start : start + 3000]
+    # v3.2.0: tot de volgende definitie. Een vast aantal tekens breekt
+    # zodra de functie groeit - de valkuil die al in de overdracht staat.
+    blok = bron[start : bron.index("\n    def ", start + 10)]
 
     assert 'replace("\'\'", "\'")' in blok
 
@@ -247,3 +250,65 @@ def test_the_export_shows_what_the_check_needed():
         "notification_history_last",
     ):
         assert veld in bron, veld
+
+
+# --- v3.2.0: geen zelfgemaakte helpers op het dashboard --------------
+
+
+def test_the_dashboard_only_uses_its_own_entities():
+    """Gemeld met een screenshot van de kostenpagina: vijf van de zes
+    eurotegels stonden op nul, terwijl er onderaan wél "-20,44 € stroom
+    deze week" stond.
+
+    Ze lazen negen zelfgemaakte helper-sensoren
+    (`sensor.ems_ontlaadwaarde_*`, `..._netlaadkosten_*`,
+    `..._accubesparing_*`) die de integratie nergens aanmaakt. Een
+    dashboard dat de integratie meelevert mag alleen leunen op wat die
+    integratie zelf levert - anders werkt het bij de een en niet bij de
+    ander.
+    """
+    import yaml
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    data = yaml.safe_load(
+        (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
+    )
+
+    verwezen = set()
+
+    def _loop(o):
+        if isinstance(o, dict):
+            for k, v in o.items():
+                if k == "entity" and isinstance(v, str):
+                    verwezen.add(v)
+                _loop(v)
+        elif isinstance(o, list):
+            for x in o:
+                _loop(x)
+
+    _loop(data)
+
+    eigenbouw = sorted(e for e in verwezen if e.startswith("sensor.ems_"))
+
+    assert not eigenbouw, (
+        "deze entiteiten worden door de integratie niet aangemaakt en "
+        f"blijven dus leeg: {eigenbouw}"
+    )
+
+
+def test_the_check_covers_every_domain():
+    """De controle keek alleen naar `sensor.`. Een tegel die naar een
+    verdwenen switch of button wijst toont "Entiteit niet gevonden"
+    zonder dat er iets van te zien was."""
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    start = bron.index("def get_dashboard_health")
+    blok = bron[start : bron.index("\n    def ", start + 10)]
+
+    for domein in ("switch", "button", "number", "select"):
+        assert domein in blok, domein
