@@ -513,6 +513,13 @@ async def async_get_config_entry_diagnostics(
             "tick_performance": _veilig(
                 "get_tick_performance", coordinator.get_tick_performance
             ),
+            # v3.4.0: welke versie draait hier, en wat heeft de
+            # integratie zelf gelogd? Beide ontbraken, en dat kostte deze
+            # week meerdere ronden.
+            "installation": _veilig(
+                "get_installation_facts", coordinator.get_installation_facts
+            ),
+            "own_log": coordinator.eigen_logregels[-60:],
             "consistency_checks": _veilig(
                 "get_consistency_checks", coordinator.get_consistency_checks
             ),

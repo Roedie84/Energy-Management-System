@@ -38,7 +38,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import math
+import json
 import statistics
+import sys
 import time
 import random
 import re
@@ -457,6 +459,8 @@ from .const import (
     WATER_VOLUME_AGREEMENT_TOLERANCE,
     CONF_CONTRACT_START_DATE,
     ENERGY_BALANCE_ERROR_HISTORY_LENGTH,
+    EIGEN_LOG_REGELS,
+    INSTALL_FILE_SPREAD_MAX_HOURS,
     ENERGY_BOOTSTRAP_VERSION,
     OUTDOOR_SENSOR_BIAS_WARN_C,
     ENERGY_DAILY_HISTORY_DAYS,
@@ -697,6 +701,14 @@ class EnergyManagementSystemCoordinator:
         self.pv_band_history: list[dict] = []
         # v2.9.0: kenmerken per afgesloten uur, voor het regressiewoud.
         self.pv_model_samples: list[dict] = []
+        # v3.4.0: wanneer deze draaironde begon.
+        self.integration_started_at: datetime | None = None
+        self._manifest_versie: str | None = None
+        self._bestandsinfo: dict = {}
+        # v3.4.0: eigen waarschuwingen, want het logboek van Home
+        # Assistant zit niet in de export.
+        self.eigen_logregels: list[dict] = []
+        self._log_handler = None
         # v1.61.0: wat een witgoedcyclus werkelijk kost, per apparaat.
         self.appliance_cycle_kwh: dict[str, float] = {}
         self._appliance_cycle_history: dict[str, list[float]] = {}
@@ -1516,6 +1528,15 @@ class EnergyManagementSystemCoordinator:
             await self.async_load_dashboard_template()
         except Exception:  # noqa: BLE001 - mag nooit het opstarten breken
             _LOGGER.exception("Kon het dashboardsjabloon niet inlezen")
+
+        # v3.4.0: vastleggen wanneer deze draaironde begon, en de versie
+        # en bestandsgegevens inlezen - buiten de event loop.
+        self.integration_started_at = dt_util.now()
+        self._start_logopvang()
+        try:
+            await self.async_load_installation_facts()
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Kon de installatiegegevens niet inlezen")
 
         await self.async_bootstrap_night_consumption_from_history()
         # v0.63.115: normaal al geladen in `async_setup_entry`, vóór de
@@ -9282,6 +9303,184 @@ class EnergyManagementSystemCoordinator:
             ),
         }
 
+    def _start_logopvang(self) -> None:
+        """Vangt de eigen waarschuwingen op (v3.4.0).
+
+        Gevraagd wat er aan de diagnostiek te verbeteren valt. Dit is de
+        tweede vondst: alles wat deze integratie via `_LOGGER.warning` of
+        `_LOGGER.exception` wegschrijft, verdwijnt in het logboek van
+        Home Assistant - en dat zit niet in de export.
+
+        Dat kostte deze week echt tijd. De NameError die het inlezen van
+        de geschiedenis bij ELKE start liet omvallen, stond alleen in het
+        logboek; het duurde drie diagnostieken en twee versies voordat
+        die boven water kwam. En de waarschuwing over een niet-herkende
+        eenheid zou hetzelfde lot hebben gehad.
+
+        Alleen de EIGEN meldingen worden opgevangen, en alleen vanaf het
+        niveau waarschuwing. Wat andere integraties loggen blijft
+        onzichtbaar - daar heeft deze integratie niets te zoeken.
+        """
+        if self._log_handler is not None:
+            return
+
+        coordinator = self
+
+        class _Opvang(logging.Handler):
+            def emit(self, record: logging.LogRecord) -> None:
+                try:
+                    coordinator.eigen_logregels.append(
+                        {
+                            "moment": datetime.fromtimestamp(
+                                record.created, tz=timezone.utc
+                            ).isoformat(),
+                            "niveau": record.levelname,
+                            "waar": f"{record.module}:{record.lineno}",
+                            "tekst": record.getMessage()[:400],
+                            "fout": (
+                                repr(record.exc_info[1])[:200]
+                                if record.exc_info
+                                else None
+                            ),
+                        }
+                    )
+                    coordinator.eigen_logregels = coordinator.eigen_logregels[
+                        -EIGEN_LOG_REGELS:
+                    ]
+                except Exception:  # noqa: BLE001 - loggen mag nooit breken
+                    pass
+
+        handler = _Opvang()
+        handler.setLevel(logging.WARNING)
+        logging.getLogger(__package__).addHandler(handler)
+        self._log_handler = handler
+
+    def _stop_logopvang(self) -> None:
+        if self._log_handler is not None:
+            logging.getLogger(__package__).removeHandler(self._log_handler)
+            self._log_handler = None
+
+    def get_installation_facts(self) -> dict:
+        """Welke versie draait hier, en sinds wanneer? (v3.4.0)
+
+        Gevraagd wat er aan de diagnostiek te verbeteren valt. Dit is de
+        grootste vondst: de VERSIE stond er niet in.
+
+        Op 17 augustus kwam een koelmelding binnen met de oude tekst,
+        terwijl de reparatie was opgeleverd. Om te bepalen of de nieuwe
+        code draaide moest ik afleiden welke FUNCTIES aanwezig waren -
+        twee ronden werk voor iets wat één regel had kunnen zijn.
+
+        Met de GitHub-storing van die middag erbij was dat geen
+        theoretisch probleem: bij 50% foutkans op downloads kan een
+        installatie half aankomen.
+        """
+        from pathlib import Path
+
+        gegevens = {
+            "versie": None,
+            "gestart_op": (
+                self.integration_started_at.isoformat()
+                if self.integration_started_at
+                else None
+            ),
+            "draait_sinds_uren": None,
+            "home_assistant": None,
+            "python": None,
+        }
+
+        # v3.4.0: uit het geheugen. Bij het opstarten één keer gelezen,
+        # buiten de event loop - lezen daarbinnen is verboden (v2.0.6).
+        gegevens["versie"] = self._manifest_versie
+
+        if self.integration_started_at:
+            gegevens["draait_sinds_uren"] = round(
+                (dt_util.now() - self.integration_started_at).total_seconds()
+                / 3600,
+                1,
+            )
+
+        try:
+            from homeassistant.const import __version__ as ha_versie
+
+            gegevens["home_assistant"] = ha_versie
+        except ImportError:
+            pass
+
+        gegevens["python"] = (
+            f"{sys.version_info.major}.{sys.version_info.minor}."
+            f"{sys.version_info.micro}"
+        )
+
+        # Draait de code die in het manifest staat? Bij een halve
+        # installatie kan een bestand achterblijven, en dat is aan de
+        # buitenkant niet te zien.
+        gegevens["bestanden"] = self._bestandsinfo
+        return gegevens
+
+    async def async_load_installation_facts(self) -> None:
+        """Leest versie en bestandsgegevens één keer, buiten de event
+        loop (v3.4.0)."""
+
+        def _lezen():
+            return (
+                self._lees_manifest_versie(),
+                self._bestandsvingerafdrukken(),
+            )
+
+        self._manifest_versie, self._bestandsinfo = (
+            await self.hass.async_add_executor_job(_lezen)
+        )
+
+    @staticmethod
+    def _lees_manifest_versie() -> str | None:
+        from pathlib import Path
+
+        try:
+            manifest = json.loads(
+                (Path(__file__).parent / "manifest.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            return manifest.get("version")
+        except (OSError, ValueError):
+            return None
+
+    @staticmethod
+    def _bestandsvingerafdrukken() -> dict:
+        """Grootte en wijzigingsmoment per bronbestand (v3.4.0).
+
+        Bij een halve installatie - zoals mogelijk tijdens de
+        GitHub-storing van 17 augustus - blijft een bestand achter op een
+        oudere versie. Dat is aan de buitenkant niet te zien, maar wel
+        aan een wijzigingsmoment dat uit de pas loopt.
+        """
+        from pathlib import Path
+
+        uitkomst = {}
+        map_ = Path(__file__).parent
+        for naam in (
+            "coordinator.py",
+            "const.py",
+            "sensor.py",
+            "config_flow.py",
+            "dashboard_template.yaml",
+            "manifest.json",
+            "pv_model.py",
+        ):
+            pad = map_ / naam
+            try:
+                stat = pad.stat()
+                uitkomst[naam] = {
+                    "bytes": stat.st_size,
+                    "gewijzigd": datetime.fromtimestamp(
+                        stat.st_mtime, tz=timezone.utc
+                    ).isoformat(),
+                }
+            except OSError:
+                uitkomst[naam] = {"reden": "niet gevonden"}
+        return uitkomst
+
     def get_consistency_checks(self, now: datetime | None = None) -> dict:
         """Rekent na of getallen die elkaar moeten kloppen dat ook doen
         (v2.0.0).
@@ -9513,6 +9712,34 @@ class EnergyManagementSystemCoordinator:
             moment = dt_util.parse_datetime(str(x.get("moment", "")))
             if moment is not None and moment >= grens_moment:
                 schakelingen += 1
+        # --- 10. Zijn de bestanden van dezelfde installatie? ---
+        #
+        # Gemeld op 17 augustus: een koelmelding met de oude tekst,
+        # terwijl de reparatie was opgeleverd. Tijdens de GitHub-storing
+        # van die middag (50% foutkans op downloads) kan een installatie
+        # half aankomen: het ene bestand nieuw, het andere oud.
+        #
+        # Dat is aan de buitenkant niet te zien, maar wel aan
+        # wijzigingsmomenten die ver uit elkaar liggen.
+        bestanden = self._bestandsinfo or {}
+        momenten = [
+            dt_util.parse_datetime(w["gewijzigd"])
+            for w in bestanden.values()
+            if w.get("gewijzigd")
+        ]
+        momenten = [m for m in momenten if m is not None]
+        if len(momenten) >= 2:
+            spreiding_uren = (
+                max(momenten) - min(momenten)
+            ).total_seconds() / 3600
+            _toets(
+                "Installatie",
+                spreiding_uren <= INSTALL_FILE_SPREAD_MAX_HOURS,
+                f"De bronbestanden zijn {spreiding_uren:.0f} uur uit "
+                "elkaar gewijzigd. Dat wijst op een half aangekomen "
+                "update; installeer opnieuw.",
+            )
+
         # --- 9. Wordt een ronde niet te zwaar? ---
         prestatie = self.get_tick_performance()
         if prestatie.get("beschikbaar"):
@@ -9535,7 +9762,7 @@ class EnergyManagementSystemCoordinator:
         )
 
         return {
-            "gecontroleerd": 9,
+            "gecontroleerd": 10,
             "bevindingen": bevindingen,
             "alles_klopt": not bevindingen,
             "toelichting": (
@@ -12070,22 +12297,53 @@ class EnergyManagementSystemCoordinator:
                 "hoogte": zonstand.get("berekende_hoogte"),
                 "azimut": zonstand.get("berekend_azimut"),
                 "bewolking": bewolking,
+                # v3.3.0: en hoe ver de bronnen uiteenlopen. Niet de
+                # bewolking zelf maar de ONZEKERHEID erover.
+                "bewolking_onenigheid": self._weather_cloud_disagreement_pp(),
                 "band_breedte": spreiding.get("relatieve_breedte"),
                 "maand": now.month,
             }
         )
         self.pv_model_samples = self.pv_model_samples[-PV_MODEL_MAX_SAMPLES:]
 
+    # v3.3.0: kenmerken die ALTIJD moeten kunnen, en kenmerken die
+    # mogen ontbreken.
+    #
+    # Een ontbrekend kenmerk maakte de hele rij onbruikbaar. Dat is bij
+    # de eerste vier terecht - zonder voorspelling of uur valt er niets
+    # te leren. Maar bij de bewolking niet: wie maar één weerbron heeft
+    # ingesteld krijgt nooit een onenigheidsgetal, en dan zou het model
+    # NOOIT iets leren.
+    #
+    # Ontbreekt een los kenmerk bij ALLE monsters, dan valt de KOLOM weg
+    # in plaats van de rijen. Ontbreekt hij bij enkele, dan vallen alleen
+    # die rijen weg.
+    MODEL_KENMERKEN_VERPLICHT = ("voorspeld_kwh", "uur", "hoogte", "maand")
+    MODEL_KENMERKEN_OPTIONEEL = (
+        "azimut",
+        "bewolking",
+        "bewolking_onenigheid",
+        "band_breedte",
+    )
+
+    @classmethod
+    def _bruikbare_kenmerken(cls, monsters: list[dict]) -> tuple[str, ...]:
+        """Welke kolommen zijn bij deze monsters te gebruiken?"""
+        bruikbaar = list(cls.MODEL_KENMERKEN_VERPLICHT)
+        for veld in cls.MODEL_KENMERKEN_OPTIONEEL:
+            if any(m.get(veld) is not None for m in monsters):
+                bruikbaar.append(veld)
+        return tuple(bruikbaar)
+
     @staticmethod
-    def _model_rij(monster: dict) -> list[float] | None:
+    def _model_rij(
+        monster: dict, kenmerken: tuple[str, ...] | None = None
+    ) -> list[float] | None:
         """De kenmerken waarop het woud leert."""
-        velden = (
+        velden = kenmerken or (
             "voorspeld_kwh",
             "uur",
             "hoogte",
-            "azimut",
-            "bewolking",
-            "band_breedte",
             "maand",
         )
         rij = []
@@ -12103,9 +12361,9 @@ class EnergyManagementSystemCoordinator:
         met de huidige uurcorrectie op diezelfde dagen. Anders zou een
         woud dat de gegevens uit zijn hoofd leert er briljant uitzien.
         """
-        monsters = [
-            m for m in (self.pv_model_samples or []) if self._model_rij(m)
-        ]
+        alles = self.pv_model_samples or []
+        kenmerken = self._bruikbare_kenmerken(alles)
+        monsters = [m for m in alles if self._model_rij(m, kenmerken)]
         dagen = sorted({m["datum"] for m in monsters})
         if len(monsters) < PV_MODEL_MIN_SAMPLES or len(dagen) < PV_MODEL_MIN_DAGEN:
             return {
@@ -12135,12 +12393,14 @@ class EnergyManagementSystemCoordinator:
 
         woud = RegressieWoud()
         woud.leer(
-            [self._model_rij(m) for m in leer],
+            [self._model_rij(m, kenmerken) for m in leer],
             [m["werkelijk_kwh"] for m in leer],
         )
 
         werkelijk = [m["werkelijk_kwh"] for m in toets]
-        door_woud = [woud.voorspel(self._model_rij(m)) for m in toets]
+        door_woud = [
+            woud.voorspel(self._model_rij(m, kenmerken)) for m in toets
+        ]
 
         # De huidige methode op DEZELFDE uren: de voorspelling maal de
         # geleerde uurverhouding, geleerd uit alleen het leermateriaal.
@@ -12174,6 +12434,7 @@ class EnergyManagementSystemCoordinator:
             "leermonsters": len(leer),
             "toetsmonsters": len(toets),
             "toetsdagen": len({m["datum"] for m in toets}),
+            "kenmerken": list(kenmerken),
             "fout_woud_kwh": round(fout_woud, 3),
             "fout_huidig_kwh": round(fout_huidig, 3),
             "winst_procent": round(winst, 1),
@@ -16211,6 +16472,44 @@ class EnergyManagementSystemCoordinator:
         if not waarden:
             return None
         return statistics.median(waarden)
+
+    def _weather_cloud_disagreement_pp(self) -> float | None:
+        """Hoe ver lopen de weerbronnen uiteen over de bewolking?
+        (v3.3.0)
+
+        Gevraagd of een integratie die bewolking per uur voorspelt de
+        PV-voorspelling kan helpen. Die bestaat - `weather.get_forecasts`
+        levert `cloud_coverage` per uur, ook voor morgen - maar Solcast
+        VERWERKT bewolking al: hun voorspelling is een bewerking van
+        satellietbeelden en weermodellen. Bewolking ernaast leggen voegt
+        vermoedelijk een tweede afgeleide van hetzelfde weerbeeld toe.
+
+        De ONENIGHEID tussen de bronnen is iets anders. Op 16 augustus
+        stond de een op 100% en de ander op 15% - 85 procentpunt
+        verschil. Dat zegt niets over de bewolking, maar wel dat de dag
+        moeilijk te voorspellen is. Net als de Solcast-bandbreedte.
+
+        Of dat werkelijk helpt, weet ik niet. Daarom wordt het gemeten
+        en niet aangenomen: het woud krijgt het als kenmerk en wijst
+        over drie weken zelf uit of het iets toevoegt.
+        """
+        waarden = []
+        for sleutel in (
+            CONF_KNMI_WEATHER_ENTITY,
+            CONF_OPENWEATHERMAP_WEATHER_ENTITY,
+        ):
+            entity_id = self.config.get(sleutel)
+            if not entity_id:
+                continue
+            staat = self.hass.states.get(entity_id)
+            if staat is None:
+                continue
+            bewolking = staat.attributes.get("cloud_coverage")
+            if isinstance(bewolking, (int, float)):
+                waarden.append(float(bewolking))
+        if len(waarden) < 2:
+            return None
+        return max(waarden) - min(waarden)
 
     def _weather_outdoor_temperature_c(self) -> float | None:
         """De actuele buitentemperatuur volgens de weerbronnen."""

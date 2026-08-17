@@ -15530,3 +15530,96 @@ Nu alle domeinen, plus een test die omvalt zodra er weer een
 `sensor.ems_*` op het dashboard belandt.
 
 **Volledige testsuite**: 2332 tests, allemaal groen.
+
+## v3.3.0 — Onenigheid over de bewolking als kenmerk
+
+**Gevraagd**: "Is er een integratie beschikbaar welke de bewolking per
+uur voorspelt (dus ook morgen)? Misschien kan dat nog helpen in de PV
+voorspelling?"
+
+Die bestaat, en draait al: `weather.get_forecasts` op de twee ingestelde
+weerentiteiten levert `cloud_coverage` per uur, ook voor morgen. Er is
+niets bij te installeren.
+
+*(De aangedragen `openweathermap.get_minute_forecast` is het niet: die
+levert alleen **neerslag** in mm/uur, en alleen voor de komende zestig
+minuten.)*
+
+### Maar de winst zit er waarschijnlijk niet
+
+Solcast **verwerkt bewolking al** — hun voorspelling is een bewerking van
+satellietbeelden en weermodellen. Bewolking van OpenWeatherMap ernaast
+leggen voegt vermoedelijk een tweede afgeleide van hetzelfde weerbeeld
+toe, vaak minder actueel.
+
+En de 41% fout op de slechtste dagen komt niet doordat niemand wist dat
+het bewolkt zou worden. Hij komt doordat wolkenvelden op een ander
+**tijdstip** overtrokken dan voorspeld, en dat lost geen bewolkingsbron
+op.
+
+### Wat wél nieuw is: de onenigheid
+
+Op 16 augustus stond de ene bron op **100%** bewolking en de andere op
+**15%**. Dat zegt niets over de bewolking, maar wel dat de dag moeilijk
+te voorspellen is — net als de Solcast-bandbreedte.
+
+Dat verschil is nu een kenmerk van het regressiewoud. Of het helpt, wijst
+het woud over drie weken zelf uit.
+
+### En een valkuil onderweg
+
+Een ontbrekend kenmerk maakte de **hele rij** onbruikbaar. Bij de
+voorspelling en het uur is dat terecht, maar wie maar één weerbron heeft
+ingesteld krijgt nooit een onenigheidsgetal — en dan zou het model
+**nooit** iets leren.
+
+Ontbreekt een los kenmerk bij alle monsters, dan valt nu de **kolom** weg
+in plaats van de rijen.
+
+**Volledige testsuite**: 2337 tests, allemaal groen.
+
+## v3.4.0 — Wat de diagnostiek miste
+
+**Gevraagd**: "Kun je nog wat verbeteren aan de diagnostiek van mijn EMS
+zodat we hem nog beter kunnen maken?"
+
+Drie dingen die deze week **aantoonbaar tijd kostten**.
+
+### 1. De versie stond er niet in
+
+Op 17 augustus kwam een koelmelding binnen met de oude tekst, terwijl de
+reparatie was opgeleverd. Om te bepalen of de nieuwe code draaide moest
+worden afgeleid welke *functies* aanwezig waren — twee ronden werk voor
+iets wat één regel had kunnen zijn.
+
+Nu staan versie, starttijd, draaiduur, Home Assistant-versie en
+Python-versie in de export.
+
+### 2. De eigen waarschuwingen verdwenen
+
+Alles wat via `_LOGGER.warning` of `_LOGGER.exception` wordt
+weggeschreven, verdwijnt in het logboek van Home Assistant — en dat zit
+niet in de export.
+
+De `NameError` die het inlezen van de geschiedenis bij **elke start** liet
+omvallen stond alleen daar. Het duurde drie diagnostieken en twee versies
+voordat die boven water kwam.
+
+De laatste zestig eigen meldingen vanaf niveau *waarschuwing* zitten er
+nu in. Alleen de eigen; wat andere integraties loggen blijft onzichtbaar.
+
+### 3. Een half aangekomen update was niet te zien
+
+Tijdens de GitHub-storing van diezelfde middag — 50% foutkans op
+downloads — kan een installatie half aankomen: het ene bestand nieuw, het
+andere oud. Aan de buitenkant is dat niet te zien, maar wel aan
+wijzigingsmomenten die ver uit elkaar liggen.
+
+Tiende kruiscontrole erbij: liggen de bronbestanden meer dan een uur uit
+elkaar, dan is dat een bevinding.
+
+*Bij het bouwen hiervan sloeg de eigen test uit v2.0.6 meteen aan: het
+manifest werd in de event loop gelezen. Dat gebeurt nu bij het opstarten,
+in een executor.*
+
+**Volledige testsuite**: 2345 tests, allemaal groen.

@@ -1023,6 +1023,30 @@ ENERGY_DAY_MIN_SOURCE_KWH = 0.5
 # Zonder merkteken valt niet te zien welke dagen uit een kapotte ronde
 # komen. Verhoog dit getal zodra er iets aan het inlezen verandert; dan
 # worden de oude regels weggegooid en opnieuw opgehaald.
+# --- Eigen logregels in de export (v3.4.0) ---------------------------
+# Alles wat deze integratie via `_LOGGER.warning` of `_LOGGER.exception`
+# wegschrijft, verdwijnt in het logboek van Home Assistant - en dat zit
+# niet in de diagnostiek-export.
+#
+# Dat kostte deze week echt tijd: de NameError die het inlezen van de
+# geschiedenis bij ELKE start liet omvallen, stond alleen in het logboek.
+# Het duurde drie diagnostieken en twee versies voordat die boven water
+# kwam.
+EIGEN_LOG_REGELS = 100
+
+# Hoe ver de wijzigingsmomenten van de bronbestanden uit elkaar mogen
+# liggen (v3.4.0).
+#
+# Gemeld op 17 augustus: een koelmelding met de oude tekst, terwijl de
+# reparatie was opgeleverd. Tijdens de GitHub-storing van die middag (50%
+# foutkans op downloads) kan een installatie half aankomen: het ene
+# bestand nieuw, het andere oud.
+#
+# Een normale installatie schrijft alle bestanden binnen enkele minuten.
+# Een uur is ruim genoeg voor een trage schijf en streng genoeg om een
+# half aangekomen update te zien.
+INSTALL_FILE_SPREAD_MAX_HOURS = 1.0
+
 ENERGY_BOOTSTRAP_VERSION = 3
 
 # --- Leest de buitensensor plausibel? (v1.96.0) ----------------------
