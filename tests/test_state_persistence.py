@@ -513,6 +513,11 @@ VLUCHTIG_MET_REDEN = {
     "_tick_part_timings": "meet de huidige versie; begint opnieuw",
     # v2.2.3: wat het inlezen opleverde, blijkt bij elke start opnieuw.
     "energy_history_sources": "blijkt bij elke opstart opnieuw",
+    # v3.4.0: versie en bestandsgegevens gelden voor DEZE draaironde.
+    "_bestandsinfo": "blijkt bij elke opstart opnieuw",
+    # v3.4.0: logregels gelden voor DEZE draaironde; na een herstart is
+    # juist wat er daarna gebeurt interessant.
+    "eigen_logregels": "geldt voor deze draaironde",
     # v2.0.0: de zelfcontrole rekent elke ronde opnieuw.
     "last_consistency_checks": "blijkt elke ronde opnieuw",
     # v2.2.0: hoe vaak de watchdog moest ingrijpen. Bij een herstart is
