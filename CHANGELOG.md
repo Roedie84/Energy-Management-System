@@ -15260,3 +15260,273 @@ beide prijzen én de resterende tijd, zodat je zelf kunt beoordelen of het
 de moeite is — dezelfde reden als bij het goedkope blok in v2.5.0.
 
 **Volledige testsuite**: 2289 tests, allemaal groen.
+
+## v2.8.0 — De integratie ijkt de bandbreedte zelf
+
+**Gevraagd**: "Is de spreiding op de verwachting niet heeeeel erg groot?
+Wat zegt dit nog?" — en daarna: "Ik wil dat de integratie dit zelf leert,
+en bepaalt aan de hand van beschikbare data."
+
+Terechte scepsis. Op 17 augustus liep de voorspelling van **2,4 tot 18,3
+kWh** op een verwachting van 9,8 — een factor zeven. Zo'n band zegt op
+zichzelf niets over de opbrengst.
+
+En mijn oplossing van v2.4.0 was een aanname, geen meting: een vaste
+drempel van 40% met een vaste bonus van 10 procentpunt. Verzonnen
+getallen.
+
+### Wat er nu wordt geleerd
+
+Per dag wordt vastgelegd **waar in de band** de werkelijke opwek viel:
+0 is p10, 1 is p90. Buiten de band mag — dat is juist het interessante
+geval.
+
+Daaruit volgt vanzelf:
+
+| | |
+|---|---|
+| Hoe vaak de opwek **onder p10** viel | bij een goed geijkte voorspelling ongeveer 1 op 10 |
+| Waar hij **meestal** landt | de mediane positie |
+| Welke aanname **veilig** is | de positie die op 4 van de 5 dagen werd gehaald |
+
+De reservemarge is nu **hoeveel die veilige aanname tekortschiet op de
+verwachting**. Blijkt Solcast te optimistisch aan de onderkant, dan
+schuift de aanname vanzelf omlaag; landt de opwek steevast hoog in de
+band, dan mag de reserve minder somber doen.
+
+Twee grenzen blijven van mij, en die zijn te verdedigen: **veertien
+dagen** voordat er iets verandert (een verdeling uit drie metingen zegt
+niets), en een **plafond van 25 procentpunt** (zonder plafond zou een
+extreem brede band de hele accu blokkeren).
+
+Nieuwe subview **Zonvoorspelling ijken**, bereikbaar vanaf de PV-pagina.
+
+**Volledige testsuite**: 2299 tests, allemaal groen.
+
+## v2.9.0 — Een regressiewoud, en of het iets oplevert
+
+**Gevraagd**: "Is verder optimaliseren middels een Random Forest
+Regressor nog een idee?" — en na mijn bezwaren: **"Proberen kan altijd
+toch?"**
+
+Terecht. Mijn bezwaren gingen over scikit-learn (numpy en scipy erbij,
+zo'n 100 MB op een Raspberry Pi), niet over de techniek. Een woud voor
+tweehonderd waarnemingen is in een paar honderd regels te schrijven,
+**zonder enige afhankelijkheid**.
+
+### Eerlijk getoetst
+
+Het woud leert op oudere dagen en wordt getoetst op **nieuwere dagen die
+het niet heeft gezien** — op tijd gesplitst, niet willekeurig.
+Willekeurig splitsen zou uren van dezelfde dag in beide helften laten
+belanden, en die lijken sterk op elkaar; dan lijkt elk model goed.
+
+Op diezelfde uren wordt de **huidige uurcorrectie** doorgerekend, geleerd
+uit alleen het leermateriaal. Twee getallen, één vergelijking.
+
+### Wat een proef op nagebootste gegevens al liet zien
+
+Met veertig dagen die op deze installatie lijken — meestal accuraat, een
+kwart van de dagen fors mis door wolkenvelden:
+
+| | Fout per uur |
+|---|---|
+| Huidige methode | 0,169 kWh |
+| Regressiewoud | 0,213 kWh |
+| **Winst** | **−25,9%** |
+
+Het woud doet het **slechter**. De reden is te begrijpen: of wolkenvelden
+overtrekken staat niet in de kenmerken, dus zoekt het woud structuur in
+ruis en vindt patronen die er niet zijn.
+
+Maar dat is mijn simulatie met mijn aannames. Daarom draait hij nu op de
+**echte** gegevens, als proefstandkandidaat die niets stuurt. Onder de
+tien procent winst blijft hij daar: een woud is niet uit te leggen, en
+dat is een echte prijs.
+
+Kenmerken: voorspelling, uur, zonshoogte, azimut, bewolking (mediaan van
+de weerbronnen), bandbreedte en maand. Dat laatste vraagt twintig dagen
+en 150 gemeten uren voordat er iets wordt beweerd.
+
+**Volledige testsuite**: 2310 tests, allemaal groen.
+
+## v3.0.0 — Meting en winst zijn twee verschillende dingen
+
+**Gevraagd**: "Zijn er al zaken uit (meetkwaliteit) die nu betrouwbaar
+genoeg zijn en eventueel al kunnen meedoen in plaats van alleen meten?"
+
+Die vraag was moeilijker te beantwoorden dan nodig, en dat lag aan mij.
+**"Betrouwbaar" sloeg op twee verschillende dingen:**
+
+- de **slijtagekosten** stonden op betrouwbaar omdat het bedrag goed
+  gemeten is — maar het cyclusaantal is een fabrieksbelofte, en zes dagen
+  zeggen niets over de ruil tussen minder cyclen en minder opbrengst;
+- de **prijsvorm** stond op betrouwbaar omdat de vorm stabiel is — 
+  terwijl er letterlijk bij staat dat de winst pas te becijferen valt
+  zodra de voorspelde vorm naast de werkelijke prijzen kan.
+
+Aan de lijst was niet te zien welke van de twee bedoeld werd.
+
+### Nu apart
+
+Elke kandidaat draagt een **gereedheid**:
+
+| | |
+|---|---|
+| ⚪ meet nog | de meting zelf klopt nog niet |
+| 🟡 winst onbekend | de meting klopt, maar wat meesturen oplevert is niet becijferd |
+| ✅ klaar om mee te doen | allebei rond |
+
+Met de cijfers van 17 augustus staat er precies **één** op groen: de
+slijtagekosten. De prijsvorm staat op oranje, de rest meet nog.
+
+Bovenaan de proefstandpagina staat nu een samenvatting, zodat "is er al
+iets rijp?" met één blik te beantwoorden is in plaats van door zeven
+kandidaten te lezen.
+
+Er verandert niets aan de aansturing. Maar de vraag die hierachter zit —
+*welke kandidaat mag als eerste meesturen* — is nu zelf te beantwoorden.
+
+**Volledige testsuite**: 2315 tests, allemaal groen.
+
+## v3.0.1 — "15 gebruiksmomenten vandaag, 0 liter"
+
+**Gemeld** met een screenshot, terwijl er niemand thuis was.
+
+Vijftien momenten van elk nul liter is intern al tegenstrijdig, en dat
+was meteen de verklikker. De sessies bleken van **14 augustus** — drie
+dagen eerder.
+
+De teller werd alleen omgezet bij een **nieuwe sessie**. Gebeurde er een
+dag niets, dan bleef die van eergisteren staan. Het litertotaal klopte
+wel, want dat komt uit een andere teller.
+
+### Vijfde keer een dagwissel die niet loopt
+
+Na v1.74.0 (plantoetsing), v1.95.0 (opruiming op een lege lijst),
+v1.98.0 (accu en kosten op nul) en v2.6.1 (verkeerde datum). Steeds
+dezelfde vorm: een dagteller die afhangt van een gebeurtenis in plaats
+van van de klok.
+
+De waterteller rolt nu om **op de klok**, elke ronde.
+
+En er staat een bredere toets bij die elke dagsleutel in de code
+nagaat: wordt hij ergens met de klok vergeleken, of alleen bij een
+gebeurtenis die er misschien niet komt? Zonder die toets komt deze vorm
+een zesde keer terug.
+
+**Volledige testsuite**: 2320 tests, allemaal groen.
+
+## v3.0.2 — "Accukoeling an of uut" — maar wélke?
+
+**Gemeld**: "Melding accu koeling aan/uit is niet goed (…) Maar het is of
+hij is aan (koelen) of hij is uit (niet koelen)."
+
+De Nederlandse titel zei wél *"koeling AAN"* of *"koeling UIT"*. De
+Achterhoekse vertaling verving die hele titel door één vaste tekst —
+*"Accukoeling an of uut"* — en daarmee verdween precies de informatie
+waar het om ging.
+
+### Vier meldingen, niet één
+
+Bij het nazoeken bleken er **vier** soorten een wisselende Nederlandse
+titel te hebben en toch één vaste Achterhoekse: accukoeling, apparaat
+klaar, goedkoop moment en afwijkend apparaat. Alle vier krijgen nu hun
+onderscheid terug.
+
+### En de actie staat nu ook in het bericht
+
+*"De ventilator gaat AAN."* voorop, vóór de meetwaarden. Staat de actie
+ook daar, dan gaat hij niet verloren als de titel wordt vervangen of
+afgekapt — en dat is precies wat hier gebeurde.
+
+### Twee eigen tests deden hun werk
+
+Mijn eerste poging schreef *"kloar"*, en de spellingstest uit v1.35.0
+viel er meteen over: de WALD-spelling kent **ao** als zelfstandig teken,
+en "oa" bestaat niet. Het moet *"klaor"* zijn.
+
+**Volledige testsuite**: 2323 tests, allemaal groen.
+
+## v3.1.0 — "Accukoeling an of uut" zei niet wat er gebeurde
+
+**Gemeld** met een melding van 17 augustus 14:34:
+
+> Accukoeling an of uut
+> Accu 30.0°C, buiten 20.4°C, delta 9.6°C, vermogen 1080W — accu 30.0°C,
+> nog maor 9.6°C boven buiten en 1080W belasting
+
+"Maar het is of hij is aan (koelen) of hij is uit (niet koelen)."
+
+Terecht. De reden verraadt het wel — *"nog maar 9,6°C boven buiten"* is de
+uitschakelvoorwaarde — maar dat moet je afleiden.
+
+**En de informatie was er al.** De Nederlandse titel maakte het
+onderscheid: "koeling AAN" of "koeling UIT". De Achterhoekse vertaling
+gooide het weg door één vaste titel voor de hele soort te gebruiken.
+
+Nu:
+
+| Actie | Titel |
+|---|---|
+| aan | De koeling geet an |
+| uit | De koeling geet uut |
+
+De actie wordt afgeleid uit de Nederlandse titel, zodat er geen extra
+parameter door de hele meldingsketen hoeft.
+
+**Een vangnet erbij**: komt er een soort bij waarvan de titel twee kanten
+op kan, dan valt de test om. Een vaste titel per soort werkt alleen als
+die soort altijd hetzelfde betekent.
+
+### En de kaartwaarden nagelopen
+
+Bij dezelfde controle: de ingebouwde dashboardcontrole liep **69
+verwijzingen** na — geen niet-bestaande entiteiten, geen ontbrekende
+attributen. Zeven zichtbare waarden zijn met de hand uit de brongegevens
+nagerekend (zelfvoorziening, cycli, beschikbare energie, rendement,
+bandbreedte, zelfconsumptie, accuprijs per kWh) en klopten alle zeven.
+
+De slijtage staat op 4,22 ct/kWh op drie onafhankelijke plekken in de
+export — precies de kruiscontrole die eerder wél fouten opleverde.
+
+**Volledige testsuite**: 2330 tests, allemaal groen.
+
+## v3.2.0 — Negen tegels lazen sensoren die de integratie niet levert
+
+**Gemeld** met een screenshot van de kostenpagina: vijf van de zes
+eurotegels op **€ 0**, terwijl er onderaan wél *"−20,44 € stroom deze
+week"* stond. Dat spreekt elkaar tegen.
+
+De tegels lazen negen **zelfgemaakte helper-sensoren**:
+`sensor.ems_ontlaadwaarde_*`, `..._netlaadkosten_*` en
+`..._accubesparing_*`. Die maakt de integratie nergens aan, en ze staan
+nergens in het changelog — ze zijn er ooit ingekomen zonder bron.
+
+Een dashboard dat de integratie meelevert mag alleen leunen op wat die
+integratie zelf levert. Anders werkt het bij de een en niet bij de ander.
+
+### Nu uit eigen gegevens
+
+Alle negen tegels lezen het **periodeoverzicht**: kosten, accu-ontlading
+en besparing per dag, week en maand. Dezelfde bron als de
+Perioden-pagina, dus dezelfde getallen — en tikken op een tegel brengt je
+daar.
+
+Wat daarbij bleek: **drie van die nullen waren correct.** De
+netlaadkosten zijn werkelijk nul, want er wordt niet van het net geladen
+(`total_charge_cost_eur` staat op 0,0). Alleen de ontlaadwaarde en de
+besparing waren stuk.
+
+### En de controle had een blinde vlek
+
+`get_dashboard_health` liep 69 verwijzingen na en meldde niets — maar
+keek alleen naar `state_attr`-aanroepen en alleen naar het domein
+`sensor.`. Switches en buttons werden **helemaal niet** nagelopen, en een
+tegel die naar een verdwenen schakelaar wijst toont "Entiteit niet
+gevonden" zonder dat er iets van te zien was.
+
+Nu alle domeinen, plus een test die omvalt zodra er weer een
+`sensor.ems_*` op het dashboard belandt.
+
+**Volledige testsuite**: 2332 tests, allemaal groen.

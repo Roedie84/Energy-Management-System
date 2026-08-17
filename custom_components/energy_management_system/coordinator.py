@@ -170,6 +170,7 @@ from .const import (
     MODE_CHANGE_EMOJI,
     REASON_TO_MODE,
     ACHTERHOEKS_TITELS,
+    ACHTERHOEKS_TITELS_PER_ACTIE,
     ACHTERHOEKS_WOORDEN,
     APPLIANCE_RUNNING_POWER_THRESHOLD_W,
     CONSUMPTION_CORRECTION_SMOOTHING_SAMPLES,
@@ -496,7 +497,15 @@ from .const import (
     PEAK_ALERT_MIN_OF_MEDIAN,
     PV_HOURLY_BIAS_MIN_KWH,
     PV_HOURLY_BIAS_MIN_RATIO,
+    PV_BAND_HISTORY_DAYS,
+    PV_MODEL_MAX_SAMPLES,
+    PV_MODEL_MIN_DAGEN,
+    PV_MODEL_MIN_SAMPLES,
+    PV_MODEL_MIN_WINST_PROCENT,
+    PV_BAND_MIN_DAGEN,
+    PV_BAND_SAFE_QUANTILE,
     PV_SPREAD_MARGIN_BONUS_PERCENT,
+    PV_SPREAD_MARGIN_MAX_PERCENT,
     PV_SPREAD_UNCERTAIN_FRACTION,
     OPTION_MANUAL,
     OPTION_SMART,
@@ -684,6 +693,10 @@ class EnergyManagementSystemCoordinator:
         self.veroudering_history: list[dict] = []
         # v2.6.0: metingen voor de kandidaat 'vasthouden voor morgen'.
         self.langere_horizon_history: list[dict] = []
+        # v2.8.0: waar de werkelijke opwek in de Solcast-band viel.
+        self.pv_band_history: list[dict] = []
+        # v2.9.0: kenmerken per afgesloten uur, voor het regressiewoud.
+        self.pv_model_samples: list[dict] = []
         # v1.61.0: wat een witgoedcyclus werkelijk kost, per apparaat.
         self.appliance_cycle_kwh: dict[str, float] = {}
         self._appliance_cycle_history: dict[str, list[float]] = {}
@@ -4631,8 +4644,27 @@ class EnergyManagementSystemCoordinator:
         if not sjabloon:
             return {"beschikbaar": False}
 
+        # v3.2.0: ALLE domeinen, niet alleen `sensor.`.
+        #
+        # Gemeld met een screenshot van de kostenpagina: vijf van de zes
+        # eurotegels stonden op nul. Ze lazen negen zelfgemaakte
+        # helper-sensoren (`sensor.ems_ontlaadwaarde_*`,
+        # `..._netlaadkosten_*`, `..._accubesparing_*`) die de integratie
+        # nergens aanmaakt.
+        #
+        # Deze controle vond die wél - het waren geen ONTBREKENDE
+        # entiteiten, ze bestonden en gaven nul terug. Maar switches en
+        # buttons werden helemaal niet nagelopen, en een tegel die naar
+        # een verdwenen schakelaar wijst toont "Entiteit niet gevonden"
+        # zonder dat hier iets van te zien was.
         verwezen = sorted(
-            set(re.findall(r"\b(sensor\.[a-z0-9_]+)", sjabloon))
+            set(
+                re.findall(
+                    r"\b((?:sensor|switch|button|number|select|binary_sensor)"
+                    r"\.[a-z0-9_]+)",
+                    sjabloon,
+                )
+            )
         )
         ontbrekend: list[str] = []
         leeg: list[str] = []
@@ -7553,16 +7585,114 @@ class EnergyManagementSystemCoordinator:
             "toelichting": (
                 "Deze pagina stuurt niets aan. Elke kandidaat rekent mee en "
                 "laat zien wat hij zou zeggen; pas na bewijs gaat er één "
-                "tegelijk mee in de besluitvorming."
+                "tegelijk mee in de besluitvorming.\n\n"
+                "De gereedheid staat los van de meting: \"meet nog\" "
+                "betekent dat de meting zelf nog niet klopt, \"winst "
+                "onbekend\" dat de meting klopt maar niet becijferd is wat "
+                "meesturen oplevert, en \"klaar om mee te doen\" dat "
+                "allebei rond is."
             ),
+            "samenvatting": self._proefstand_samenvatting(),
             "kandidaten": [
+                self._met_gereedheid(k)
+                for k in (
+                    self._kandidaat_slijtage(),
+                    self._kandidaat_na_saldering(),
+                    self._kandidaat_dagtype(),
+                    self._kandidaat_capaciteit(),
+                    self._kandidaat_prijsvorm(),
+                    self._kandidaat_langere_horizon(),
+                    self._kandidaat_pv_model(),
+                )
+            ],
+        }
+
+    def _proefstand_samenvatting(self) -> dict:
+        """Hoeveel kandidaten staan er klaar? (v3.0.0)
+
+        Zodat de vraag "is er al iets rijp?" met één blik te
+        beantwoorden is, in plaats van door zeven kandidaten te lezen.
+        """
+        kandidaten = [
+            self._met_gereedheid(k)
+            for k in (
                 self._kandidaat_slijtage(),
                 self._kandidaat_na_saldering(),
                 self._kandidaat_dagtype(),
                 self._kandidaat_capaciteit(),
                 self._kandidaat_prijsvorm(),
                 self._kandidaat_langere_horizon(),
-            ],
+                self._kandidaat_pv_model(),
+            )
+        ]
+        klaar = [k for k in kandidaten if k["gereedheid"] == "klaar om mee te doen"]
+        return {
+            "aantal": len(kandidaten),
+            "meet_nog": sum(
+                1 for k in kandidaten if k["gereedheid"] == "meet nog"
+            ),
+            "winst_onbekend": sum(
+                1 for k in kandidaten if k["gereedheid"] == "winst onbekend"
+            ),
+            "klaar": [k["naam"] for k in klaar],
+            "oordeel": (
+                f"{len(klaar)} kandidaat(en) klaar om mee te doen."
+                if klaar
+                else "Nog geen kandidaat is klaar om mee te sturen."
+            ),
+        }
+
+    @staticmethod
+    def _met_gereedheid(kandidaat: dict) -> dict:
+        """Scheidt "de meting klopt" van "de winst is aangetoond"
+        (v3.0.0).
+
+        Gevraagd: "Zijn er al zaken uit (meetkwaliteit) die nu
+        betrouwbaar genoeg zijn en eventueel al kunnen meedoen in plaats
+        van alleen meten?"
+
+        Die vraag was moeilijker te beantwoorden dan nodig, en dat lag
+        aan mij. "Betrouwbaar" sloeg op twee verschillende dingen:
+
+        - de slijtagekosten stonden op betrouwbaar omdat het BEDRAG goed
+          gemeten is - maar het cyclusaantal is een fabrieksbelofte, en
+          zes dagen zeggen niets over de ruil tussen minder cyclen en
+          minder opbrengst;
+        - de prijsvorm stond op betrouwbaar omdat de VORM stabiel is -
+          terwijl er letterlijk bij staat dat de winst pas te becijferen
+          is zodra de voorspelde vorm naast de werkelijke prijzen kan.
+
+        Aan de lijst was niet te zien welke van de twee bedoeld werd. Nu
+        staan ze apart, en pas bij het tweede is meesturen aan de orde.
+        """
+        opbrengst = kandidaat.get("zou_hebben_opgeleverd") or {}
+        meting_betrouwbaar = kandidaat.get("status") == RELIABILITY_RELIABLE
+        winst_becijferd = bool(opbrengst.get("te_becijferen"))
+
+        if not meting_betrouwbaar:
+            gereed = "meet nog"
+            uitleg = "De meting zelf is nog niet betrouwbaar genoeg."
+        elif not winst_becijferd:
+            gereed = "winst onbekend"
+            uitleg = (
+                "De meting klopt, maar wat meesturen zou opleveren is nog "
+                "niet becijferd. Zonder dat getal is meedoen een gok."
+            )
+        else:
+            gereed = "klaar om mee te doen"
+            uitleg = (
+                "Meting en winst zijn allebei becijferd. Dit is de "
+                "kandidaat om als eerste te laten meesturen - één "
+                "tegelijk, zodat bij een afwijking te zien is welke het "
+                "deed."
+            )
+
+        return {
+            **kandidaat,
+            "meting_betrouwbaar": meting_betrouwbaar,
+            "winst_becijferd": winst_becijferd,
+            "gereedheid": gereed,
+            "gereedheid_uitleg": uitleg,
         }
 
     def _meet_langere_horizon(self, now: datetime) -> None:
@@ -10210,7 +10340,9 @@ class EnergyManagementSystemCoordinator:
         self._notify_listeners()
         self.schedule_persisted_state_save()
 
-    def _naar_achterhoeks(self, tekst: str, soort: str | None = None) -> str:
+    def _naar_achterhoeks(
+        self, tekst: str, soort: str | None = None, actie: str | None = None
+    ) -> str:
         """Vertaalt een melding naar het Achterhoeks (v1.24.0).
 
         Gevraagd: "kan ik door middel van 1 switch alles in het
@@ -10231,6 +10363,13 @@ class EnergyManagementSystemCoordinator:
         """
         if not tekst:
             return tekst
+        # v3.1.0: eerst kijken of de titel van de ACTIE afhangt.
+        #
+        # Gemeld: "Accukoeling an of uut" - terwijl het of aan of uit is.
+        # De Nederlandse titel maakte dat onderscheid wel; de vertaling
+        # gooide het weg door één vaste titel per soort te gebruiken.
+        if soort and actie and (soort, actie) in ACHTERHOEKS_TITELS_PER_ACTIE:
+            return ACHTERHOEKS_TITELS_PER_ACTIE[(soort, actie)]
         if soort and soort in ACHTERHOEKS_TITELS:
             return ACHTERHOEKS_TITELS[soort]
         # In één doorgang, met markeringen: anders vertaalt een later
@@ -10298,7 +10437,18 @@ class EnergyManagementSystemCoordinator:
             # v1.46.0: bij een herstelmelding is `kind` bewust leeg (het
             # dempingsvenster geldt niet), maar voor het opzoeken van de
             # titel is de soort er wel degelijk.
-            title = self._naar_achterhoeks(title, kind or geschiedenis_soort)
+            # v3.1.0: de ACTIE erbij, want bij de accukoeling zijn aan en
+            # uit tegenovergesteld en verdient elk zijn eigen titel.
+            # Die leiden we af uit de Nederlandse titel, zodat er geen
+            # extra parameter door de hele keten hoeft.
+            actie = None
+            if "AAN" in title:
+                actie = "aan"
+            elif "UIT" in title:
+                actie = "uit"
+            title = self._naar_achterhoeks(
+                title, kind or geschiedenis_soort, actie
+            )
             message = self._naar_achterhoeks(message)
         # v1.46.0, gemeld: "Niet in het achterhoeks?" bij een
         # herstelmelding.
@@ -11762,6 +11912,14 @@ class EnergyManagementSystemCoordinator:
             #
             # Bij een tiende kWh weegt een meetfout van enkele
             # wattuur nog maar enkele procenten door.
+            # v2.9.0: ook de kenmerken vastleggen voor het regressiewoud.
+            try:
+                self._leg_pv_modelmonster_vast(
+                    hour, forecast_kwh, actual_kwh, dt_util.now()
+                )
+            except Exception:  # noqa: BLE001 - mag het leren nooit breken
+                _LOGGER.exception("Kon het PV-modelmonster niet vastleggen")
+
             if forecast_kwh is not None and forecast_kwh >= PV_HOURLY_BIAS_MIN_KWH:
                 ratio = actual_kwh / forecast_kwh
                 bucket = self.pv_hourly_bias_history.setdefault(
@@ -11884,6 +12042,314 @@ class EnergyManagementSystemCoordinator:
             ),
         }
 
+    def _leg_pv_modelmonster_vast(
+        self, uur: int, voorspeld_kwh: float, werkelijk_kwh: float, now: datetime
+    ) -> None:
+        """Legt de kenmerken van een afgesloten uur vast (v2.9.0).
+
+        Gevraagd: "Is verder optimaliseren middels een Random Forest
+        Regressor nog een idee?" - en na mijn bezwaren: "Proberen kan
+        altijd toch?"
+
+        Terecht. Om te kunnen proberen zijn er kenmerken nodig, en die
+        werden nergens bewaard: `pv_hourly_bias_history` bevat alleen de
+        verhoudingen.
+        """
+        if voorspeld_kwh is None or voorspeld_kwh < PV_HOURLY_BIAS_MIN_KWH:
+            return
+        zonstand = self.get_sun_position_check() or {}
+        spreiding = self.get_pv_forecast_spread() or {}
+        bewolking = self._weather_cloud_cover_percent()
+
+        self.pv_model_samples.append(
+            {
+                "datum": now.date().isoformat(),
+                "uur": uur,
+                "voorspeld_kwh": round(voorspeld_kwh, 3),
+                "werkelijk_kwh": round(werkelijk_kwh, 3),
+                "hoogte": zonstand.get("berekende_hoogte"),
+                "azimut": zonstand.get("berekend_azimut"),
+                "bewolking": bewolking,
+                "band_breedte": spreiding.get("relatieve_breedte"),
+                "maand": now.month,
+            }
+        )
+        self.pv_model_samples = self.pv_model_samples[-PV_MODEL_MAX_SAMPLES:]
+
+    @staticmethod
+    def _model_rij(monster: dict) -> list[float] | None:
+        """De kenmerken waarop het woud leert."""
+        velden = (
+            "voorspeld_kwh",
+            "uur",
+            "hoogte",
+            "azimut",
+            "bewolking",
+            "band_breedte",
+            "maand",
+        )
+        rij = []
+        for veld in velden:
+            waarde = monster.get(veld)
+            if waarde is None:
+                return None
+            rij.append(float(waarde))
+        return rij
+
+    def get_pv_model_evaluation(self) -> dict:
+        """Haalt een woud het bij de huidige methode? (v2.9.0)
+
+        Getoetst op dagen die het model NIET heeft gezien, en vergeleken
+        met de huidige uurcorrectie op diezelfde dagen. Anders zou een
+        woud dat de gegevens uit zijn hoofd leert er briljant uitzien.
+        """
+        monsters = [
+            m for m in (self.pv_model_samples or []) if self._model_rij(m)
+        ]
+        dagen = sorted({m["datum"] for m in monsters})
+        if len(monsters) < PV_MODEL_MIN_SAMPLES or len(dagen) < PV_MODEL_MIN_DAGEN:
+            return {
+                "beschikbaar": False,
+                "monsters": len(monsters),
+                "dagen": len(dagen),
+                "reden": (
+                    f"{len(monsters)} van {PV_MODEL_MIN_SAMPLES} uren over "
+                    f"{len(dagen)} van {PV_MODEL_MIN_DAGEN} dagen gemeten."
+                ),
+            }
+
+        # De laatste vijfde van de dagen is toetsmateriaal - op TIJD
+        # gesplitst, niet willekeurig. Willekeurig splitsen zou uren van
+        # dezelfde dag in beide helften laten belanden, en die lijken
+        # sterk op elkaar.
+        grens = dagen[int(len(dagen) * 0.8)]
+        leer = [m for m in monsters if m["datum"] < grens]
+        toets = [m for m in monsters if m["datum"] >= grens]
+        if len(leer) < PV_MODEL_MIN_SAMPLES // 2 or not toets:
+            return {
+                "beschikbaar": False,
+                "monsters": len(monsters),
+                "dagen": len(dagen),
+                "reden": "Te weinig dagen om eerlijk te kunnen toetsen.",
+            }
+
+        woud = RegressieWoud()
+        woud.leer(
+            [self._model_rij(m) for m in leer],
+            [m["werkelijk_kwh"] for m in leer],
+        )
+
+        werkelijk = [m["werkelijk_kwh"] for m in toets]
+        door_woud = [woud.voorspel(self._model_rij(m)) for m in toets]
+
+        # De huidige methode op DEZELFDE uren: de voorspelling maal de
+        # geleerde uurverhouding, geleerd uit alleen het leermateriaal.
+        per_uur: dict[int, list[float]] = {}
+        for m in leer:
+            if m["voorspeld_kwh"] > 0:
+                per_uur.setdefault(m["uur"], []).append(
+                    m["werkelijk_kwh"] / m["voorspeld_kwh"]
+                )
+        door_huidig = [
+            m["voorspeld_kwh"]
+            * (
+                statistics.median(per_uur[m["uur"]])
+                if per_uur.get(m["uur"])
+                else 1.0
+            )
+            for m in toets
+        ]
+
+        fout_woud = gemiddelde_absolute_fout(werkelijk, door_woud)
+        fout_huidig = gemiddelde_absolute_fout(werkelijk, door_huidig)
+        if None in (fout_woud, fout_huidig) or not fout_huidig:
+            return {
+                "beschikbaar": False,
+                "reden": "Kon de fouten niet vergelijken.",
+            }
+
+        winst = 100 * (fout_huidig - fout_woud) / fout_huidig
+        return {
+            "beschikbaar": True,
+            "leermonsters": len(leer),
+            "toetsmonsters": len(toets),
+            "toetsdagen": len({m["datum"] for m in toets}),
+            "fout_woud_kwh": round(fout_woud, 3),
+            "fout_huidig_kwh": round(fout_huidig, 3),
+            "winst_procent": round(winst, 1),
+            "beter": winst > PV_MODEL_MIN_WINST_PROCENT,
+            "toelichting": (
+                "Getoetst op dagen die het model niet heeft gezien, en "
+                "vergeleken met de huidige uurcorrectie op diezelfde uren. "
+                "Een woud dat de gegevens uit zijn hoofd leert scoort hier "
+                "slecht - dat is de bedoeling.\n\n"
+                "Het stuurt niets. Een woud is niet uit te leggen, en zonder "
+                "aantoonbare winst op ongeziene dagen is dat een slechte "
+                "ruil."
+            ),
+        }
+
+    def _kandidaat_pv_model(self) -> dict:
+        """7. Haalt een regressiewoud het bij de huidige uurcorrectie?"""
+        uitkomst = self.get_pv_model_evaluation()
+        if not uitkomst.get("beschikbaar"):
+            return {
+                "naam": "Regressiewoud voor de zonvoorspelling",
+                "status": RELIABILITY_INSUFFICIENT,
+                "waarde": None,
+                "zou_hebben_opgeleverd": {
+                    "te_becijferen": False,
+                    "reden": uitkomst.get("reden", "Nog niet te toetsen."),
+                },
+                "betrouwbaarheid": (
+                    "Leert op oudere dagen en wordt getoetst op nieuwere. "
+                    "Stuurt niets."
+                ),
+            }
+        return {
+            "naam": "Regressiewoud voor de zonvoorspelling",
+            "waarde": (
+                f"{uitkomst['winst_procent']:+.1f}% tegen de huidige methode"
+            ),
+            "status": (
+                RELIABILITY_RELIABLE if uitkomst["beter"] else RELIABILITY_INDICATIVE
+            ),
+            "zou_hebben_opgeleverd": {
+                "te_becijferen": True,
+                "fout_woud_kwh": uitkomst["fout_woud_kwh"],
+                "fout_huidig_kwh": uitkomst["fout_huidig_kwh"],
+                "toetsdagen": uitkomst["toetsdagen"],
+                "reden": (
+                    f"Gemiddelde fout {uitkomst['fout_woud_kwh']} kWh per uur "
+                    f"tegen {uitkomst['fout_huidig_kwh']} nu, over "
+                    f"{uitkomst['toetsdagen']} ongeziene dagen."
+                ),
+            },
+            "betrouwbaarheid": uitkomst["toelichting"],
+        }
+
+    def _leg_pv_bandbreedte_vast(self, dag) -> None:
+        """Legt vast waar de werkelijke opwek in de band viel (v2.8.0).
+
+        Gevraagd: "Is de spreiding op de verwachting niet heeeeel erg
+        groot? Wat zegt dit nog?" - en daarna: "Ik wil dat de integratie
+        dit zelf leert, en bepaalt aan de hand van beschikbare data."
+
+        Terechte scepsis. Op 17 augustus liep de voorspelling van 2,4 tot
+        18,3 kWh op een verwachting van 9,8 - een factor zeven. Zo'n band
+        zegt op zichzelf niets over de opbrengst.
+
+        Wat er WEL in zit is dat Solcast zegt: ik weet het niet. Maar of
+        dat bruikbaar is, hangt af van twee dingen die alleen uit
+        metingen blijken:
+
+        - hoe vaak valt de werkelijke opwek ONDER p10? Bij een goed
+          geijkte voorspelling zou dat ongeveer een op de tien zijn;
+        - en WAAR in de band landt hij meestal?
+
+        Beide worden hier vastgelegd zodat de integratie het zelf kan
+        uitrekenen, in plaats van dat ik een drempel verzin.
+        """
+        spreiding = self.get_pv_forecast_spread()
+        if not spreiding.get("beschikbaar"):
+            return
+        werkelijk = (self._energiedagstand or {}).get("opwek_kwh")
+        if werkelijk is None:
+            werkelijk = self.pv_production_today_kwh
+        p10 = spreiding.get("p10_kwh")
+        p90 = spreiding.get("p90_kwh")
+        verwacht = spreiding.get("verwacht_kwh")
+        if None in (werkelijk, p10, p90, verwacht) or p90 <= p10:
+            return
+
+        self.pv_band_history.append(
+            {
+                "datum": dag.isoformat() if hasattr(dag, "isoformat") else str(dag),
+                "p10_kwh": round(p10, 2),
+                "p90_kwh": round(p90, 2),
+                "verwacht_kwh": round(verwacht, 2),
+                "werkelijk_kwh": round(werkelijk, 2),
+                # Waar in de band viel de werkelijke opwek? 0 = op p10,
+                # 1 = op p90. Buiten de band mag: dat is juist het
+                # interessante geval.
+                "positie": round((werkelijk - p10) / (p90 - p10), 3),
+            }
+        )
+        self.pv_band_history = self.pv_band_history[-PV_BAND_HISTORY_DAYS:]
+
+    def get_pv_band_calibration(self) -> dict:
+        """Wat is die bandbreedte waard? (v2.8.0)
+
+        Rekent uit de eigen metingen uit hoe betrouwbaar de onderkant van
+        Solcast is, en welke aanname veilig genoeg is om de reserve op te
+        baseren.
+        """
+        reeks = self.pv_band_history or []
+        if len(reeks) < PV_BAND_MIN_DAGEN:
+            return {
+                "beschikbaar": False,
+                "dagen": len(reeks),
+                "reden": (
+                    f"{len(reeks)} van {PV_BAND_MIN_DAGEN} dagen gemeten. "
+                    "Tot die tijd wordt de verwachting gebruikt zoals "
+                    "voorheen."
+                ),
+            }
+
+        posities = sorted(r["positie"] for r in reeks)
+        onder_p10 = [p for p in posities if p < 0]
+        boven_p90 = [p for p in posities if p > 1]
+        breedtes = [
+            (r["p90_kwh"] - r["p10_kwh"]) / r["verwacht_kwh"]
+            for r in reeks
+            if r["verwacht_kwh"] > 0
+        ]
+
+        # De aanname die in vier van de vijf gevallen gehaald wordt.
+        index = max(0, int(len(posities) * PV_BAND_SAFE_QUANTILE) - 1)
+        veilige_positie = posities[index]
+
+        return {
+            "beschikbaar": True,
+            "dagen": len(reeks),
+            "aandeel_onder_p10_procent": round(
+                100 * len(onder_p10) / len(posities), 1
+            ),
+            "aandeel_boven_p90_procent": round(
+                100 * len(boven_p90) / len(posities), 1
+            ),
+            "mediane_positie": round(statistics.median(posities), 2),
+            "veilige_positie": round(veilige_positie, 2),
+            "gemiddelde_breedte_procent": (
+                round(100 * statistics.median(breedtes), 0) if breedtes else None
+            ),
+            "toelichting": (
+                "De positie zegt waar de werkelijke opwek in de band viel: "
+                "0 is p10, 1 is p90. De veilige positie is de waarde die "
+                f"in {PV_BAND_SAFE_QUANTILE:.0%} van de gemeten dagen werd "
+                "gehaald - daar rekent de reserve mee. Valt de opwek "
+                "structureel onder p10, dan is Solcast te optimistisch aan "
+                "de onderkant en schuift die aanname vanzelf omlaag."
+            ),
+        }
+
+    def veilige_pv_verwachting_kwh(self) -> float | None:
+        """De opwek waar de reserve op mag rekenen (v2.8.0).
+
+        Niet de verwachting maar de geleerde ondergrens: de waarde die op
+        vier van de vijf gemeten dagen werd gehaald. Zolang er te weinig
+        dagen zijn, geeft dit None en blijft alles bij het oude.
+        """
+        ijking = self.get_pv_band_calibration()
+        if not ijking.get("beschikbaar"):
+            return None
+        spreiding = self.get_pv_forecast_spread()
+        if not spreiding.get("beschikbaar"):
+            return None
+        p10 = spreiding["p10_kwh"]
+        p90 = spreiding["p90_kwh"]
+        return max(0.0, p10 + ijking["veilige_positie"] * (p90 - p10))
+
     def _pv_onzekerheidsmarge_procent(self) -> float:
         """Extra reservemarge op een onzekere zondag (v2.4.0).
 
@@ -11891,10 +12357,33 @@ class EnergyManagementSystemCoordinator:
         weer twee reserves naast elkaar ontstaan - dat kostte v1.86.0 tot
         en met v1.88.0.
         """
+        # v2.8.0: uit de EIGEN metingen, niet uit een verzonnen drempel.
+        #
+        # Gevraagd: "Ik wil dat de integratie dit zelf leert, en bepaalt
+        # aan de hand van beschikbare data."
+        #
+        # De marge is nu hoeveel de veilige aanname tekortschiet op de
+        # verwachting. Loopt de band van 2,4 tot 18,3 bij een verwachting
+        # van 9,8 en blijkt de veilige positie 0,25, dan is de aanname
+        # 6,4 kWh - 35% onder de verwachting, en dat wordt de marge.
+        #
+        # Zonder genoeg metingen valt hij terug op de vaste bonus, zodat
+        # er vanaf dag één iets gebeurt.
+        veilig = self.veilige_pv_verwachting_kwh()
         spreiding = self.get_pv_forecast_spread()
-        if not spreiding.get("beschikbaar") or not spreiding.get("onzeker"):
+        if not spreiding.get("beschikbaar"):
             return 0.0
-        return PV_SPREAD_MARGIN_BONUS_PERCENT
+        verwacht = spreiding.get("verwacht_kwh") or 0.0
+
+        if veilig is not None and verwacht > 0:
+            tekort = max(0.0, (verwacht - veilig) / verwacht)
+            return min(
+                PV_SPREAD_MARGIN_MAX_PERCENT, round(tekort * 100, 1)
+            )
+
+        if spreiding.get("onzeker"):
+            return PV_SPREAD_MARGIN_BONUS_PERCENT
+        return 0.0
 
     def _gemiddelde_prijs_in_blok(
         self, entries, start, einde
@@ -15360,6 +15849,11 @@ class EnergyManagementSystemCoordinator:
             # daggrens weg.
             if af_te_sluiten_dag is not None:
                 self._sluit_energiedag_af(af_te_sluiten_dag)
+                # v2.8.0: en vastleggen waar de opwek in de band viel.
+                try:
+                    self._leg_pv_bandbreedte_vast(af_te_sluiten_dag)
+                except Exception:  # noqa: BLE001
+                    _LOGGER.exception("Kon de PV-bandbreedte niet vastleggen")
             self._energiedagstand = {}
             # v2.3.0: de kostenmeter opnieuw ijken op de stand van nu.
             self._kosten_meter_dagbegin = self._read_sensor_float(
@@ -15691,6 +16185,32 @@ class EnergyManagementSystemCoordinator:
         return statistics.median(
             co2 * 1000 / invoer for co2, invoer in paren if invoer > 0
         )
+
+    def _weather_cloud_cover_percent(self) -> float | None:
+        """De bewolkingsgraad volgens de weerbronnen (v2.9.0).
+
+        Als kenmerk voor het regressiewoud. De mediaan van de bronnen,
+        want die liepen op 16 augustus 85 procentpunt uiteen - 100% tegen
+        15%. Bij twee bronnen is de mediaan het gemiddelde, maar bij een
+        derde bron werkt dit vanzelf beter.
+        """
+        waarden = []
+        for sleutel in (
+            CONF_KNMI_WEATHER_ENTITY,
+            CONF_OPENWEATHERMAP_WEATHER_ENTITY,
+        ):
+            entity_id = self.config.get(sleutel)
+            if not entity_id:
+                continue
+            staat = self.hass.states.get(entity_id)
+            if staat is None:
+                continue
+            bewolking = staat.attributes.get("cloud_coverage")
+            if isinstance(bewolking, (int, float)):
+                waarden.append(float(bewolking))
+        if not waarden:
+            return None
+        return statistics.median(waarden)
 
     def _weather_outdoor_temperature_c(self) -> float | None:
         """De actuele buitentemperatuur volgens de weerbronnen."""
@@ -16723,6 +17243,14 @@ class EnergyManagementSystemCoordinator:
             notify_service=self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE),
             title=titel,
             message=(
+                # v3.0.2: de ACTIE voorop, niet alleen in de titel.
+                #
+                # Gemeld: de melding somde de meetwaarden op zonder te
+                # zeggen wat er gebeurde. Staat de actie ook in het
+                # bericht, dan gaat hij niet verloren als de titel wordt
+                # vervangen of afgekapt.
+                f"De ventilator gaat "
+                f"{'AAN' if besluit['actie'] == 'aan' else 'UIT'}. "
                 f"Accu {besluit['accu_c']}°C, buiten {besluit['buiten_c']}°C, "
                 f"delta {besluit['delta_c']}°C, vermogen "
                 f"{besluit['vermogen_w']:.0f}W — {besluit['reden']}."
@@ -18729,6 +19257,31 @@ class EnergyManagementSystemCoordinator:
         self._water_sessions_day_key = vandaag
         self.water_sessions_today_l = round(totaal, 2)
         self.water_sessions_today_count = aantal
+
+    def _rol_waterdag_om(self, now: datetime | None = None) -> None:
+        """Zet de dagtellers voor water op nul bij een nieuwe dag
+        (v3.0.1).
+
+        Gemeld met een screenshot: "15 gebruiksmoment(en) vandaag, 0
+        liter" - terwijl er niemand thuis was. De sessies waren van 14
+        augustus, drie dagen eerder.
+
+        De teller werd alleen omgezet bij een NIEUWE sessie. Gebeurde er
+        een dag niets, dan bleef die van eergisteren staan. Het
+        litertotaal klopte wel, want dat komt uit een andere teller - en
+        die tegenstrijdigheid (vijftien momenten van elk nul liter) was
+        meteen de verklikker.
+
+        Vijfde keer een dagwissel die niet loopt, na v1.74.0, v1.95.0,
+        v1.98.0 en v2.6.1. Deze rolt nu om op de KLOK in plaats van op
+        een gebeurtenis die er misschien niet komt.
+        """
+        vandaag = (now or dt_util.now()).date()
+        if self._water_sessions_day_key == vandaag:
+            return
+        self._water_sessions_day_key = vandaag
+        self.water_sessions_today_l = 0.0
+        self.water_sessions_today_count = 0
 
     def _water_volume_matches_the_meter(self) -> bool | None:
         """Komt het geïntegreerde debiet overeen met wat de meterstand
@@ -23188,6 +23741,9 @@ class EnergyManagementSystemCoordinator:
         # ofzo niet klopt."
         try:
             self._klok("zelfcontrole", lambda: self._meld_zelfcontrole(now))
+            # v3.0.1: de waterdagtellers op de klok laten omrollen, niet
+            # op een sessie die er misschien niet komt.
+            self._rol_waterdag_om(now)
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Kon de zelfcontrole niet uitvoeren")
 

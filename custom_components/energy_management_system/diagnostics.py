@@ -904,6 +904,17 @@ async def async_get_config_entry_diagnostics(
                 if coordinator.learned_hourly_avg_kw(hour) is not None
             },
             # v2.4.0: hoe onzeker de voorspelling vandaag is.
+            # v2.8.0: wat de bandbreedte waard is, uit eigen metingen.
+            # v2.9.0: doet het regressiewoud het beter dan de huidige
+            # methode, op dagen die het niet heeft gezien?
+            "pv_model_evaluation": _veilig(
+                "get_pv_model_evaluation", coordinator.get_pv_model_evaluation
+            ),
+            "pv_model_samples_count": len(coordinator.pv_model_samples),
+            "pv_band_calibration": _veilig(
+                "get_pv_band_calibration", coordinator.get_pv_band_calibration
+            ),
+            "pv_band_history": coordinator.pv_band_history[-30:],
             "pv_forecast_spread": _veilig(
                 "get_pv_forecast_spread", coordinator.get_pv_forecast_spread
             ),

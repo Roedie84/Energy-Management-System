@@ -265,6 +265,51 @@ PV_SPREAD_UNCERTAIN_FRACTION = 0.40
 # naast elkaar ontstaan - dat kostte v1.86.0 tot en met v1.88.0.
 PV_SPREAD_MARGIN_BONUS_PERCENT = 10.0
 
+# --- De band zelf leren ijken (v2.8.0) -------------------------------
+# Gevraagd: "Is de spreiding op de verwachting niet heeeeel erg groot?
+# Wat zegt dit nog?" - en daarna: "Ik wil dat de integratie dit zelf
+# leert, en bepaalt aan de hand van beschikbare data."
+#
+# Terecht. Op 17 augustus liep de voorspelling van 2,4 tot 18,3 kWh op
+# een verwachting van 9,8 - een factor zeven. Zo'n band zegt op zichzelf
+# niets, en een vaste drempel van 40% met een vaste bonus van 10
+# procentpunt is dan een aanname en geen meting.
+#
+# Nu wordt per dag vastgelegd WAAR in de band de werkelijke opwek viel.
+# Daaruit volgt vanzelf hoe betrouwbaar de onderkant is.
+# --- Regressiewoud voor de zonvoorspelling (v2.9.0) ------------------
+# Gevraagd: "Is verder optimaliseren middels een Random Forest Regressor
+# nog een idee?" - en na mijn bezwaren: "Proberen kan altijd toch?"
+#
+# Terecht. De bezwaren gingen over scikit-learn (numpy en scipy erbij,
+# zo'n 100 MB op een Raspberry Pi), niet over de techniek. Een woud voor
+# tweehonderd waarnemingen is in gewoon Python te schrijven.
+#
+# Wat blijft: met zo weinig gegevens leert een woud de metingen uit zijn
+# hoofd. Daarom wordt getoetst op dagen die het NIET heeft gezien.
+PV_MODEL_MAX_SAMPLES = 3000
+PV_MODEL_MIN_SAMPLES = 150
+PV_MODEL_MIN_DAGEN = 20
+
+# Onder deze winst is het de moeite niet: een woud is niet uit te leggen,
+# en dat is een echte prijs. Vijf procent minder fout weegt daar niet
+# tegenop.
+PV_MODEL_MIN_WINST_PROCENT = 10.0
+
+PV_BAND_HISTORY_DAYS = 120
+
+# Onder dit aantal dagen zegt de verdeling te weinig; dan blijft alles
+# bij het oude.
+PV_BAND_MIN_DAGEN = 14
+
+# Welke positie in de band als veilig geldt: die op vier van de vijf
+# gemeten dagen werd gehaald.
+PV_BAND_SAFE_QUANTILE = 0.20
+
+# Hoe ver de marge mag oplopen. Zonder plafond zou een dag met een
+# extreem brede band de hele accu blokkeren.
+PV_SPREAD_MARGIN_MAX_PERCENT = 25.0
+
 PV_HOURLY_BIAS_MIN_RATIO = 0.40
 PV_HOURLY_BIAS_MAX_RATIO = 2.50
 
@@ -1850,6 +1895,8 @@ PERSISTED_PLAIN_FIELDS = (
     # v1.59.0: de dagreeks van verouderingsdrijvers.
     "veroudering_history",
     "langere_horizon_history",
+    "pv_band_history",
+    "pv_model_samples",
     # v1.90.0: de dagreeks waar zelfconsumptie per week/maand/jaar op
     # rust.
     "energy_daily_history",
@@ -4030,12 +4077,17 @@ ACHTERHOEKS_TITELS = {
     "plan_uitstel": "Zunne opvangen wödt uut-esteld",
     "plan_verkoop_geblokkeerd": "Verkopen geet neet, 't huus geet veur",
     "vakantie_beweging": "Der beweeg wat, terwiel gi-j weg bunt",
-    "appliance_cheap_moment": "Good moment veur de wasmachine",
-    "appliance_ready": "'t Apparaat is klaor",
     "zelfcontrole": "Der klopt wat neet in de sommen",
-    "battery_cooling": "Accukoeling an of uut",
+    # v3.1.0: NIET "an of uut" - dat zegt niet wat er gebeurt.
+    #
+    # Gemeld: "Accukoeling an of uut - Accu 30.0°C, buiten 20.4°C (...)
+    # nog maor 9.6°C boven buiten". Maar het is of hij gaat aan, of hij
+    # gaat uit.
+    #
+    # De Nederlandse titel maakte dat onderscheid wel ("koeling AAN" /
+    # "koeling UIT"); de vertaling gooide het weg door één vaste titel
+    # voor de hele soort te gebruiken. Zie ACHTERHOEKS_TITELS_PER_ACTIE.
     "sluipverbruik": "'t Lik of der wat stiekem stroom vret",
-    "device_drift": "Der is meugelek wat kapot",
     # v2.0.7: "veranderd", niet "verandert" - voltooid deelwoord na "is",
     # geen persoonsvorm. Gevonden bij het nakijken van de meldingen.
     "mode_change": "De stand is veranderd",
@@ -4074,7 +4126,14 @@ ACHTERHOEKS_TITELS = {
     "pv_orientation_mismatch": "De PV-richting klop neet",
     "cost_mismatch": "De kosten kloppen neet met de rekening",
     "daily_summary": "Dagoverzicht",
-    "monthly_summary": "Maondoverzicht",
+    "monthly_summary": "Maondoverzicht",    # v3.0.2: deze vier hebben een WISSELENDE Nederlandse titel en
+    # krijgen hun onderscheid uit ACHTERHOEKS_TITELS_PER_ACTIE. Wat
+    # hieronder staat is de terugval als de actie niet af te leiden is.
+    "battery_cooling": "Accukoeling",
+    "appliance_ready": "'n Apparaat is klaor",
+    "appliance_cheap_moment": "Good moment veur 'n apparaat",
+    "device_drift": "'n Apparaat wiekt af",
+
 }
 
 # Woorden die in de berichtteksten worden vervangen.
@@ -4085,6 +4144,21 @@ ACHTERHOEKS_TITELS = {
 #     er "goodkope" van
 #   - "iets" moet ná "niets", anders wordt "niets" -> "nwat"
 # Langere woorden dus altijd eerst.
+# --- Titels die van de ACTIE afhangen (v3.1.0) -----------------------
+# Een vaste titel per soort werkt alleen als die soort altijd hetzelfde
+# betekent. Bij de accukoeling is dat niet zo: aan en uit zijn
+# tegenovergesteld, en "an of uut" laat de lezer raden.
+ACHTERHOEKS_TITELS_PER_ACTIE = {
+    ("battery_cooling", "aan"): "De koeling geet an",
+    ("battery_cooling", "uit"): "De koeling geet uut",
+    # v3.0.2: dezelfde behandeling voor de andere drie meldingen met een
+    # wisselende titel. Gevonden bij het nazoeken van de koelmelding:
+    # vier soorten verloren hun onderscheid, niet één.
+    ("appliance_ready", "aan"): "'n Apparaat is klaor",
+    ("appliance_cheap_moment", "aan"): "Now is 't goodkoop veur 'n apparaat",
+    ("device_drift", "aan"): "'n Apparaat wiekt af van gewoon",
+}
+
 ACHTERHOEKS_WOORDEN = (
     # v1.35.0: gespeld volgens de WALD-spelling (Staring Instituut),
     # na de vraag "Helpt deze informatie nog voor de achterhoekse

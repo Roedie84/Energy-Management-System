@@ -496,7 +496,7 @@ views:
   panel: true
   cards:
   - type: picture-elements
-    image: /local/energy_management_system_overview.svg?v=2.7.0
+    image: /local/energy_management_system_overview.svg?v=3.0.2
     elements:
     - type: state-label
       entity: sensor.woonkamer_energy_management_system_system_status
@@ -1214,6 +1214,19 @@ views:
   sections:
   - type: grid
     cards:
+    - type: custom:mushroom-template-card
+      primary: Zonvoorspelling ijken
+      secondary: '{% set y = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''zonband_ijking'') or {} %}{% if y.get(''beschikbaar'') %}{{ y.dagen }} dagen gemeten, veilige positie {{ y.veilige_positie }}{% else %}{{ y.get(''dagen'', 0) }} dagen gemeten{% endif %}'
+      multiline_secondary: true
+      icon: mdi:chart-bell-curve
+      icon_color: amber
+      entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
+      tap_action:
+        action: navigate
+        navigation_path: /energy-management-system/detail-zonband
+      grid_options:
+        columns: 12
+        rows: auto
     - type: custom:mushroom-title-card
       title: PV / zon
       subtitle: Opwek, installatieprofiel en voorspelnauwkeurigheid
@@ -1651,6 +1664,41 @@ views:
       grid_options:
         columns: 12
         rows: auto
+- title: Zonvoorspelling ijken
+  path: detail-zonband
+  subview: true
+  type: sections
+  max_columns: 1
+  sections:
+  - type: grid
+    cards:
+    - type: custom:mushroom-title-card
+      title: Wat is de bandbreedte waard?
+      subtitle: Geleerd uit de eigen metingen
+    - type: markdown
+      title: Wat is die bandbreedte waard?
+      content: '{% set y = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''zonband_ijking'') or {} %}{% if not y.get(''beschikbaar'') %}{{ y.get(''reden'', ''Nog niet gemeten.'') }}{% else %}Over {{ y.dagen }} dagen: de werkelijke opwek viel gemiddeld op **{{ y.mediane_positie }}** in de band (0 = p10, 1 = p90).
+
+
+        | | |
+
+        |---|---|
+
+        | Onder p10 gevallen | {{ y.aandeel_onder_p10_procent }}% |
+
+        | Boven p90 gevallen | {{ y.aandeel_boven_p90_procent }}% |
+
+        | Veilige positie | {{ y.veilige_positie }} |
+
+        | Mediane bandbreedte | {{ y.gemiddelde_breedte_procent }}% |
+
+        {% endif %}
+
+
+        _{{ y.get(''toelichting'', '''') }}_'
+      grid_options:
+        columns: 12
+        rows: auto
 - title: Water
   path: detail-water
   subview: true
@@ -2053,53 +2101,59 @@ views:
       square: false
       cards:
       - type: custom:mushroom-template-card
-        primary: € {{ states('sensor.ems_ontlaadwaarde_vandaag') }}
-        secondary: Vandaag
-        icon: mdi:calendar-today
+        primary: '{% set o = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''perioden'') or {} %}{% set p = o.get(''perioden'') or {} %}{% set w = p.get(''vandaag'') %}{{ (''€ '' ~ w.kosten_eur) if w and w.kosten_eur is not none else ''niet te bepalen'' }}'
+        secondary: Kosten vandaag
+        icon: mdi:cash
+        icon_color: blue
+        entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
+        tap_action:
+          action: navigate
+          navigation_path: /energy-management-system/detail-perioden
+      - type: custom:mushroom-template-card
+        primary: '{% set o = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''perioden'') or {} %}{% set p = o.get(''perioden'') or {} %}{% set w = p.get(''week'') %}{{ (''€ '' ~ w.kosten_eur) if w and w.kosten_eur is not none else ''niet te bepalen'' }}'
+        secondary: Kosten deze week
+        icon: mdi:cash
+        icon_color: blue
+        entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
+        tap_action:
+          action: navigate
+          navigation_path: /energy-management-system/detail-perioden
+      - type: custom:mushroom-template-card
+        primary: '{% set o = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''perioden'') or {} %}{% set p = o.get(''perioden'') or {} %}{% set w = p.get(''maand'') %}{{ (''€ '' ~ w.kosten_eur) if w and w.kosten_eur is not none else ''niet te bepalen'' }}'
+        secondary: Kosten deze maand
+        icon: mdi:cash
+        icon_color: blue
+        entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
+        tap_action:
+          action: navigate
+          navigation_path: /energy-management-system/detail-perioden
+      - type: custom:mushroom-template-card
+        primary: '{% set o = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''perioden'') or {} %}{% set p = o.get(''perioden'') or {} %}{% set w = p.get(''vandaag'') %}{{ (''kWh: '' ~ w.accu_ontladen_kwh) if w and w.accu_ontladen_kwh is not none else ''niet te bepalen'' }}'
+        secondary: Uit de accu vandaag
+        icon: mdi:battery-arrow-down
         icon_color: green
-        entity: sensor.ems_ontlaadwaarde_vandaag
+        entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
         tap_action:
-          action: more-info
+          action: navigate
+          navigation_path: /energy-management-system/detail-perioden
       - type: custom:mushroom-template-card
-        primary: € {{ states('sensor.ems_ontlaadwaarde_deze_week') }}
-        secondary: Deze week
-        icon: mdi:calendar-week
+        primary: '{% set o = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''perioden'') or {} %}{% set p = o.get(''perioden'') or {} %}{% set w = p.get(''week'') %}{{ (''kWh: '' ~ w.accu_ontladen_kwh) if w and w.accu_ontladen_kwh is not none else ''niet te bepalen'' }}'
+        secondary: Uit de accu deze week
+        icon: mdi:battery-arrow-down
         icon_color: green
-        entity: sensor.ems_ontlaadwaarde_deze_week
+        entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
         tap_action:
-          action: more-info
+          action: navigate
+          navigation_path: /energy-management-system/detail-perioden
       - type: custom:mushroom-template-card
-        primary: € {{ states('sensor.ems_ontlaadwaarde_deze_maand') }}
-        secondary: Deze maand
-        icon: mdi:calendar-month
+        primary: '{% set o = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''perioden'') or {} %}{% set p = o.get(''perioden'') or {} %}{% set w = p.get(''maand'') %}{{ (''kWh: '' ~ w.accu_ontladen_kwh) if w and w.accu_ontladen_kwh is not none else ''niet te bepalen'' }}'
+        secondary: Uit de accu deze maand
+        icon: mdi:battery-arrow-down
         icon_color: green
-        entity: sensor.ems_ontlaadwaarde_deze_maand
+        entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
         tap_action:
-          action: more-info
-      - type: custom:mushroom-template-card
-        primary: € {{ states('sensor.ems_netlaadkosten_vandaag') }}
-        secondary: Vandaag
-        icon: mdi:calendar-today
-        icon_color: red
-        entity: sensor.ems_netlaadkosten_vandaag
-        tap_action:
-          action: more-info
-      - type: custom:mushroom-template-card
-        primary: € {{ states('sensor.ems_netlaadkosten_deze_week') }}
-        secondary: Deze week
-        icon: mdi:calendar-week
-        icon_color: red
-        entity: sensor.ems_netlaadkosten_deze_week
-        tap_action:
-          action: more-info
-      - type: custom:mushroom-template-card
-        primary: € {{ states('sensor.ems_netlaadkosten_deze_maand') }}
-        secondary: Deze maand
-        icon: mdi:calendar-month
-        icon_color: red
-        entity: sensor.ems_netlaadkosten_deze_maand
-        tap_action:
-          action: more-info
+          action: navigate
+          navigation_path: /energy-management-system/detail-perioden
     - type: custom:mushroom-template-card
       primary: '{% set o = state_attr(''sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing'', ''energiekosten_overzicht'') or {} %}{{ (o.get(''stroom'') or {}).get(''week'', ''—'') }} € stroom deze week'
       secondary: '{% set o = state_attr(''sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing'', ''energiekosten_overzicht'') or {} %}{% set st = o.get(''stroom'') or {} %}{% set g = o.get(''gas'') or {} %}Gas {{ g.get(''week'', ''—'') }} €. {% if st.get(''weektrend_procent'') is not none %}Week {{ ''📈'' if st.weektrend_procent > 0 else ''📉'' }} {{ st.weektrend_procent }}%{% else %}Trend na 14 voltooide dagen.{% endif %}'
@@ -2204,29 +2258,32 @@ views:
       square: false
       cards:
       - type: custom:mushroom-template-card
-        primary: € {{ states('sensor.ems_accubesparing_vandaag') }}
+        primary: '{% set o = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''perioden'') or {} %}{% set p = (o.get(''perioden'') or {}).get(''vandaag'') %}{{ (''€ '' ~ p.besparing_eur) if p and p.besparing_eur is not none else ''niet te bepalen'' }}'
         secondary: Besparing vandaag
         icon: mdi:calendar-today
-        icon_color: '{{ ''green'' if states(''sensor.ems_accubesparing_vandaag'') | float(0) >= 0 else ''red'' }}'
-        entity: sensor.ems_accubesparing_vandaag
+        icon_color: '{% set o = state_attr(''''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'''', ''''perioden'''') or {} %}{% set p = (o.get(''''perioden'''') or {}).get(''''vandaag'''') %}{{ ''grey'' if not p or p.besparing_eur is none else (''green'' if p.besparing_eur >= 0 else ''red'') }}'
+        entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
         tap_action:
-          action: more-info
+          action: navigate
+          navigation_path: /energy-management-system/detail-perioden
       - type: custom:mushroom-template-card
-        primary: € {{ states('sensor.ems_accubesparing_deze_week') }}
+        primary: '{% set o = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''perioden'') or {} %}{% set p = (o.get(''perioden'') or {}).get(''week'') %}{{ (''€ '' ~ p.besparing_eur) if p and p.besparing_eur is not none else ''niet te bepalen'' }}'
         secondary: Besparing deze week
         icon: mdi:calendar-week
-        icon_color: '{{ ''green'' if states(''sensor.ems_accubesparing_deze_week'') | float(0) >= 0 else ''red'' }}'
-        entity: sensor.ems_accubesparing_deze_week
+        icon_color: '{% set o = state_attr(''''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'''', ''''perioden'''') or {} %}{% set p = (o.get(''''perioden'''') or {}).get(''''week'''') %}{{ ''grey'' if not p or p.besparing_eur is none else (''green'' if p.besparing_eur >= 0 else ''red'') }}'
+        entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
         tap_action:
-          action: more-info
+          action: navigate
+          navigation_path: /energy-management-system/detail-perioden
       - type: custom:mushroom-template-card
-        primary: € {{ states('sensor.ems_accubesparing_deze_maand') }}
+        primary: '{% set o = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''perioden'') or {} %}{% set p = (o.get(''perioden'') or {}).get(''maand'') %}{{ (''€ '' ~ p.besparing_eur) if p and p.besparing_eur is not none else ''niet te bepalen'' }}'
         secondary: Besparing deze maand
         icon: mdi:calendar-month
-        icon_color: '{{ ''green'' if states(''sensor.ems_accubesparing_deze_maand'') | float(0) >= 0 else ''red'' }}'
-        entity: sensor.ems_accubesparing_deze_maand
+        icon_color: '{% set o = state_attr(''''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'''', ''''perioden'''') or {} %}{% set p = (o.get(''''perioden'''') or {}).get(''''maand'''') %}{{ ''grey'' if not p or p.besparing_eur is none else (''green'' if p.besparing_eur >= 0 else ''red'') }}'
+        entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
         tap_action:
-          action: more-info
+          action: navigate
+          navigation_path: /energy-management-system/detail-perioden
     - type: grid
       columns: 2
       square: false
@@ -2717,10 +2774,24 @@ views:
       title: Proefstand
       subtitle: Rekent mee, stuurt niets
     - type: markdown
+      title: Wie staat er klaar?
+      content: '{% set p = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''proefstand'') or {} %}{% set s = p.get(''samenvatting'') or {} %}**{{ s.get(''oordeel'', ''Nog niet bepaald.'') }}**
+
+
+        {% if s %}Van de {{ s.aantal }} kandidaten meten er {{ s.meet_nog }} nog; bij {{ s.winst_onbekend }} klopt de meting maar is niet becijferd wat meesturen oplevert.{% endif %}
+
+
+        {% for k in (p.get(''kandidaten'') or []) %}{{ ''✅'' if k.gereedheid == ''klaar om mee te doen'' else (''🟡'' if k.gereedheid == ''winst onbekend'' else ''⚪'') }} {{ k.naam }} — {{ k.gereedheid }}
+
+        {% endfor %}'
+      grid_options:
+        columns: 12
+        rows: auto
+    - type: markdown
       title: Kandidaten
       content: '{% set p = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''proefstand'') or {} %}{% set k = p.get(''kandidaten'') or [] %}{% for c in k %}### {{ c.naam }}
 
-        {% if c.waarde %}**{{ c.waarde }}** — {{ c.status | replace(''_'', '' '') }}
+        {% if c.waarde %}**{{ c.waarde }}** — {{ c.gereedheid }}
 
         {{ c.get(''onderbouwing'', '''') }}
 
