@@ -468,6 +468,8 @@ from .const import (
     MEASUREMENT_QUALITY_DEGRADED_THRESHOLD,
     MIN_COST_BASIS_DELTA_KWH,
     FEEDIN_PREMIUM_EUR_PER_KWH,
+    LANGERE_HORIZON_HISTORY_LENGTH,
+    LANGERE_HORIZON_MIN_METINGEN,
     FEEDIN_PREMIUM_EUR_PER_KWH,
     MPC_HORIZON_HOURS,
     MPC_MIN_MARGIN_EUR_PER_KWH,
@@ -490,6 +492,8 @@ from .const import (
     MIN_SOLAR_HISTORY_FOR_DYNAMIC_THRESHOLD,
     PV_HOURLY_BIAS_MAX_RATIO,
     CHEAP_BLOCK_ALERT_MAX_OF_MEDIAN,
+    PEAK_ALERT_MIN_HOURS_AHEAD,
+    PEAK_ALERT_MIN_OF_MEDIAN,
     PV_HOURLY_BIAS_MIN_KWH,
     PV_HOURLY_BIAS_MIN_RATIO,
     PV_SPREAD_MARGIN_BONUS_PERCENT,
@@ -678,6 +682,8 @@ class EnergyManagementSystemCoordinator:
         self._fallback_soort: dict[str, str] = {}
         # v1.59.0: wat veroudering versnelt, per dag geteld.
         self.veroudering_history: list[dict] = []
+        # v2.6.0: metingen voor de kandidaat 'vasthouden voor morgen'.
+        self.langere_horizon_history: list[dict] = []
         # v1.61.0: wat een witgoedcyclus werkelijk kost, per apparaat.
         self.appliance_cycle_kwh: dict[str, float] = {}
         self._appliance_cycle_history: dict[str, list[float]] = {}
@@ -1540,6 +1546,11 @@ class EnergyManagementSystemCoordinator:
         # test voor gemaakt die de VOLGORDE bewaakt; nu wel.
         # v2.4.0: vervuilde uurverhoudingen opruimen, NA het terugzetten
         # van de bewaarde toestand.
+        try:
+            self._weer_onmogelijke_dagen()
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Kon de energiereeks niet opschonen")
+
         try:
             self._ruim_pv_uurbias_op()
         except Exception:  # noqa: BLE001
@@ -3324,11 +3335,64 @@ class EnergyManagementSystemCoordinator:
 
         # --- accu vlak voor de piek ---
         soc_nu = self.accustand_procent()
+        uren_tot_piek = (
+            (discharge_start - now).total_seconds() / 3600
+            if discharge_start is not None
+            else None
+        )
+
+        # v2.7.0: alleen melden als er nog iets te DOEN valt, en als het
+        # blok er ook werkelijk uitspringt.
+        #
+        # Gemeld: drie keer dezelfde melding op één ochtend, en het
+        # "duurste blok" schoof telkens op - om 05:15 begon het om 08:15,
+        # om 06:15 om 09:15, om 09:15 om 09:30. Dat is geen vaste
+        # gebeurtenis maar een horizon die meebeweegt: het duurste blok
+        # dat er nog RESTEERT.
+        #
+        # Om 09:15 melden dat om 09:30 de piek begint, met de accu op
+        # 11%, is bovendien nutteloos: er valt in een kwartier niets meer
+        # bij te laden.
+        #
+        # En op 17 augustus liep de prijs van 29,7 tot 38,9 ct over de
+        # hele dag. Bij zo'n vlak verloop is "het duurste blok" een dun
+        # begrip; 37,1 ct zat nauwelijks boven de mediaan van 34,5.
+        piek_prijs = self._gemiddelde_prijs_in_blok(
+            # Het uur vanaf de start van de piek: er is geen apart veld
+            # voor het einde van het ontlaadblok, en een uur is genoeg om
+            # te zien of het blok er werkelijk uitspringt.
+            entries,
+            discharge_start,
+            discharge_start + timedelta(hours=1)
+            if discharge_start
+            else None,
+        )
+        dag_mediaan_prijs = None
+        if entries:
+            vandaag_prijzen = [
+                e[2] / PRICE_SCALE_FACTOR
+                for e in entries
+                if e[0].date() == now.date()
+            ]
+            if vandaag_prijzen:
+                dag_mediaan_prijs = statistics.median(vandaag_prijzen)
+
+        springt_eruit = (
+            piek_prijs is not None
+            and dag_mediaan_prijs
+            and piek_prijs >= dag_mediaan_prijs * PEAK_ALERT_MIN_OF_MEDIAN
+        )
+        op_tijd = (
+            uren_tot_piek is not None
+            and PEAK_ALERT_MIN_HOURS_AHEAD <= uren_tot_piek <= 3
+        )
+
         if (
             soc_nu is not None
             and soc_nu < 30
             and discharge_start is not None
-            and 0 < (discharge_start - now).total_seconds() / 3600 <= 3
+            and op_tijd
+            and springt_eruit
         ):
             stuur(
                 "low_soc_before_peak",
@@ -3339,7 +3403,10 @@ class EnergyManagementSystemCoordinator:
                 # uit de werkelijke tijd.
                 f"🔋 Lage accustand vlak voor de {self._dagdeel(discharge_start)}piek",
                 f"De accu staat op {soc_nu:.0f}% en om "
-                f"{discharge_start:%H:%M} begint het duurste blok.",
+                f"{discharge_start:%H:%M} begint het duurste blok dat er "
+                f"nog komt: {piek_prijs * 100:.1f} ct tegen een dagmediaan "
+                f"van {dag_mediaan_prijs * 100:.1f} ct. Er is nog "
+                f"{uren_tot_piek:.1f} uur om bij te laden.",
             )
 
         # --- sensor valt weg ---
@@ -7494,7 +7561,120 @@ class EnergyManagementSystemCoordinator:
                 self._kandidaat_dagtype(),
                 self._kandidaat_capaciteit(),
                 self._kandidaat_prijsvorm(),
+                self._kandidaat_langere_horizon(),
             ],
+        }
+
+    def _meet_langere_horizon(self, now: datetime) -> None:
+        """Meet wat een langere horizon zou hebben opgeleverd (v2.6.0).
+
+        Gevraagd: "Houdt de integratie ook rekening met bijvoorbeeld
+        minder PV energie morgen en daardoor meer te behouden in plaats
+        van terugleveren?"
+
+        Deels. De reserve kijkt tot het EERSTVOLGENDE goedkope blok.
+        Ligt dat morgenmiddag, dan telt de nacht en de ochtend mee - maar
+        de reserve redeneert dan: daar kan ik bijladen, dus de zon van
+        morgen hoeft niet vastgehouden.
+
+        De vraag erachter is een andere dan "haal ik de nacht": is deze
+        kWh MORGEN meer waard dan wat hij nu opbrengt? Dat is
+        teruglevering nu tegen vermeden inkoop later.
+
+        Deze kandidaat meet dat en stuurt niets - dezelfde route als de
+        slijtagekosten. Pas als de cijfers het rechtvaardigen mag het
+        meesturen.
+        """
+        prijs_nu = self.last_current_price_per_kwh
+        if prijs_nu is None or not self.is_battery_discharging():
+            return
+
+        # Wat levert een kWh nu op als hij het net op gaat?
+        opbrengst_nu = prijs_nu + FEEDIN_PREMIUM_EUR_PER_KWH
+
+        # En wat zou hij besparen als hij morgen wordt gebruikt in het
+        # duurste kwartier dat we kennen voorbij het goedkope blok?
+        entries = self._get_forecast_entries()
+        blok_einde = self.last_cheap_block_end
+        if not entries or blok_einde is None:
+            return
+        later = [
+            e[2] / PRICE_SCALE_FACTOR for e in entries if e[0] >= blok_einde
+        ]
+        if not later:
+            return
+        duurste_later = max(later)
+
+        # De kWh moet er nog doorheen: rendement en slijtage kosten.
+        rendement = (self.learned_battery_efficiency_percent or 90.0) / 100
+        slijtage = (
+            self.get_wear_cost_overview().get("slijtage_ct_per_kwh") or 0.0
+        ) / 100
+        besparing_later = duurste_later * rendement - slijtage
+
+        voordeel = besparing_later - opbrengst_nu
+        self.langere_horizon_history.append(
+            {
+                "moment": now.isoformat(),
+                "opbrengst_nu_eur": round(opbrengst_nu, 4),
+                "besparing_later_eur": round(besparing_later, 4),
+                "voordeel_eur_per_kwh": round(voordeel, 4),
+            }
+        )
+        self.langere_horizon_history = self.langere_horizon_history[
+            -LANGERE_HORIZON_HISTORY_LENGTH:
+        ]
+
+    def _kandidaat_langere_horizon(self) -> dict:
+        """6. Was vasthouden voor morgen beter geweest dan verkopen?"""
+        reeks = self.langere_horizon_history
+        if len(reeks) < LANGERE_HORIZON_MIN_METINGEN:
+            return {
+                "naam": "Vasthouden voor morgen",
+                "status": RELIABILITY_INSUFFICIENT,
+                "waarde": None,
+                "zou_hebben_opgeleverd": {
+                    "te_becijferen": False,
+                    "reden": (
+                        f"{len(reeks)} van {LANGERE_HORIZON_MIN_METINGEN} "
+                        "momenten gemeten."
+                    ),
+                },
+                "betrouwbaarheid": (
+                    "Meet bij elke ontlading of die kWh morgen meer waard "
+                    "was geweest. Stuurt niets."
+                ),
+            }
+
+        voordelen = [r["voordeel_eur_per_kwh"] for r in reeks]
+        mediaan = statistics.median(voordelen)
+        gunstig = [v for v in voordelen if v > 0]
+        return {
+            "naam": "Vasthouden voor morgen",
+            "waarde": f"{mediaan * 100:+.1f} ct/kWh",
+            "status": RELIABILITY_RELIABLE,
+            "zou_hebben_opgeleverd": {
+                "te_becijferen": True,
+                "bedrag_per_kwh_ct": round(mediaan * 100, 1),
+                "aandeel_gunstig_procent": round(
+                    100 * len(gunstig) / len(voordelen), 1
+                ),
+                "metingen": len(voordelen),
+                "reden": (
+                    f"Bij {len(gunstig)} van de {len(voordelen)} gemeten "
+                    "momenten was vasthouden voordeliger geweest."
+                ),
+            },
+            "betrouwbaarheid": (
+                "Vergelijkt de opbrengst van teruglevering NU met wat "
+                "dezelfde kWh na het goedkope blok zou besparen, na "
+                "rendement en slijtage. Een positief getal betekent dat "
+                "vasthouden beter was geweest.\n\n"
+                "Let op: dit weet niet of de accu die kWh straks nog kwijt "
+                "kan. Op een zomerdag met overschot is vasthouden zinloos - "
+                "dan is de accu toch vol. Dat is precies waarom deze "
+                "kandidaat nog niets stuurt."
+            ),
         }
 
     def _kandidaat_slijtage(self) -> dict:
@@ -15107,6 +15287,22 @@ class EnergyManagementSystemCoordinator:
 
         today_key = now.date()
         if self._self_sufficiency_day_key != today_key:
+            # v2.6.1: de dag die wordt AFGESLOTEN vasthouden voordat de
+            # sleutel op vandaag gaat.
+            #
+            # Gemeld door de zelfcontrole: "Onmogelijke waarden op
+            # 2026-08-17" - opwek 0,0 kWh met 9,8 kWh export. En er was
+            # geen 16 augustus.
+            #
+            # De sleutel werd op de nieuwe dag gezet en de opwek gewist
+            # VOORDAT `_sluit_energiedag_af` werd aangeroepen. Die kreeg
+            # dus de datum van vandaag mee, met de cijfers van gisteren
+            # en een al gewiste opwekteller.
+            #
+            # Vierde keer dezelfde volgordefout, na v1.74.0, v1.95.0 en
+            # v1.98.0 - en de eerste die door de zelfcontrole zelf is
+            # gevonden in plaats van door een screenshot.
+            af_te_sluiten_dag = self._self_sufficiency_day_key
             self._self_sufficiency_day_key = today_key
             self.pv_production_today_kwh = 0.0
             self.battery_discharge_today_kwh = 0.0
@@ -15162,8 +15358,8 @@ class EnergyManagementSystemCoordinator:
             # 08:23 stond er 0,109 kWh opwek tegen 0,448 kWh export -
             # allemaal uit de accu van gisteren. Over een week valt die
             # daggrens weg.
-            if self._self_sufficiency_day_key is not None:
-                self._sluit_energiedag_af(self._self_sufficiency_day_key)
+            if af_te_sluiten_dag is not None:
+                self._sluit_energiedag_af(af_te_sluiten_dag)
             self._energiedagstand = {}
             # v2.3.0: de kostenmeter opnieuw ijken op de stand van nu.
             self._kosten_meter_dagbegin = self._read_sensor_float(
@@ -15303,6 +15499,28 @@ class EnergyManagementSystemCoordinator:
             "zonder_sturing_eur": self.counterfactual_cost_today_eur,
             "co2_kg": self.co2_emitted_today_kg,
         }
+
+    def _weer_onmogelijke_dagen(self) -> None:
+        """Verwijdert dagregels die fysiek niet kunnen (v2.6.1).
+
+        De controle bestond al en meldde 17 augustus keurig - maar de
+        regel bleef staan, want opruimen gebeurde alleen bij het
+        inlezen van de geschiedenis. Een fout melden zonder hem op te
+        ruimen betekent dat je hem elke dag opnieuw ziet.
+        """
+        voor = len(self.energy_daily_history)
+        self.energy_daily_history = [
+            r
+            for r in self.energy_daily_history
+            if not self._energiedag_is_onzin(r)
+        ]
+        weg = voor - len(self.energy_daily_history)
+        if weg:
+            _LOGGER.info(
+                "%d onmogelijke dagregel(s) uit de energiereeks verwijderd",
+                weg,
+            )
+            self.schedule_persisted_state_save()
 
     def _sluit_energiedag_af(self, dag) -> None:
         """Legt de energiecijfers van een afgesloten dag vast (v1.90.0)."""
@@ -22990,6 +23208,10 @@ class EnergyManagementSystemCoordinator:
 
         try:
             self._klok("proefstand", lambda: self._update_proefstand(now))
+            # v2.6.0: en de meting voor "vasthouden voor morgen".
+            self._klok(
+                "langere_horizon", lambda: self._meet_langere_horizon(now)
+            )
         except Exception as fout:  # noqa: BLE001
             _LOGGER.exception("Kon de proefstand niet bijwerken")
             self.internal_failures["proefstand"] = f"{type(fout).__name__}: {fout}"

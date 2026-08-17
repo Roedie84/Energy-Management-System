@@ -198,6 +198,39 @@ EXTENDED_LOW_SOLAR_MARGIN_BONUS_PER_DAY = 5.0
 # reden om de vaatwasser aan te zetten.
 CHEAP_BLOCK_ALERT_MAX_OF_MEDIAN = 1.0
 
+# --- Wanneer is een piek een waarschuwing waard? (v2.7.0) ------------
+# Gemeld: drie keer dezelfde melding op een ochtend, en het "duurste
+# blok" schoof telkens op - om 05:15 begon het om 08:15, om 06:15 om
+# 09:15, om 09:15 om 09:30. Dat is geen vaste gebeurtenis maar een
+# horizon die meebeweegt.
+#
+# Om 09:15 melden dat om 09:30 de piek begint, met de accu op 11%, is
+# nutteloos: er valt in een kwartier niets meer bij te laden.
+#
+# Een uur geeft bij 2000 W laadvermogen 2 kWh - een kwart van de accu, en
+# genoeg om een piek van een uur te overbruggen. Ruimer nemen zou een
+# melding van 1 uur 28 vooraf wegfilteren, en die is wél bruikbaar.
+PEAK_ALERT_MIN_HOURS_AHEAD = 1.0
+
+# En het blok moet er ook werkelijk uitspringen. Op 17 augustus liep de
+# prijs van 29,7 tot 38,9 ct over de hele dag; 37,1 zat nauwelijks boven
+# de mediaan van 34,5. Bij zo'n vlak verloop is "het duurste blok" een
+# dun begrip en levert bijladen weinig op.
+PEAK_ALERT_MIN_OF_MEDIAN = 1.15
+
+# --- Vasthouden voor morgen (v2.6.0) ---------------------------------
+# Gevraagd: "Houdt de integratie ook rekening met bijvoorbeeld minder PV
+# energie morgen en daardoor meer te behouden in plaats van
+# terugleveren?"
+#
+# Deels. De reserve kijkt tot het eerstvolgende goedkope blok, en
+# redeneert dan: daar kan ik bijladen. De vraag erachter is een andere:
+# is deze kWh MORGEN meer waard dan wat hij nu opbrengt?
+#
+# Eerst meten, dan pas sturen - dezelfde route als de slijtagekosten.
+LANGERE_HORIZON_HISTORY_LENGTH = 200
+LANGERE_HORIZON_MIN_METINGEN = 20
+
 PV_HOURLY_BIAS_MIN_KWH = 0.10
 
 # Grenzen waarbuiten een bewaarde verhouding niet van een echte
@@ -924,6 +957,12 @@ ENERGY_UNIT_TO_KWH = {
 # teller die opnieuw begon. Ruim boven wat een woonhuis met zonnepanelen
 # ooit haalt.
 ENERGY_DAY_SANITY_MAX_KWH = 500.0
+
+# Fors terugleveren zonder opwek kan niet (v2.6.1). De grens ligt niet
+# op nul: 's nachts uit de accu verkopen bij nul opwek is normaal. Maar
+# tien kilowattuur is dat niet - dat was een dag die onder de verkeerde
+# datum werd afgesloten, met een al gewiste opwekteller.
+ENERGY_DAY_EXPORT_WITHOUT_PV_MAX_KWH = 8.0
 
 # Teruglevering zonder opwek en zonder accu-ontlading kan niet - die
 # energie moet ergens vandaan komen. Boven deze drempel is het geen
@@ -1810,6 +1849,7 @@ PERSISTED_PLAIN_FIELDS = (
     "fallback_since",
     # v1.59.0: de dagreeks van verouderingsdrijvers.
     "veroudering_history",
+    "langere_horizon_history",
     # v1.90.0: de dagreeks waar zelfconsumptie per week/maand/jaar op
     # rust.
     "energy_daily_history",

@@ -15146,3 +15146,117 @@ teruggevallen op de dagtotalen (`estimate`, `estimate10`, `estimate90`).
 Grover, maar genoeg om een onzekere dag te herkennen.
 
 **Volledige testsuite**: 2272 tests, allemaal groen.
+
+## v2.6.0 — Vasthouden voor morgen: eerst meten
+
+**Gevraagd**: "Houdt de integratie ook rekening met bijvoorbeeld minder
+PV energie morgen en daardoor meer te behouden in plaats van
+terugleveren?"
+
+**Deels**, en het is goed om precies te zijn over waar de grens ligt.
+
+De reserve kijkt naar het diepste tekort tot het **eerstvolgende
+goedkope blok**. Ligt dat morgenmiddag, dan zit de hele nacht en ochtend
+erin, inclusief de verwachte zon. Weinig zon morgenochtend betekent dus
+al meer achterhouden. Daarbovenop komt de bonus voor opeenvolgende
+zonarme dagen, en sinds v2.5.0 de bonus voor een onzekere dag.
+
+**Waar het stopt**: bij dat goedkope blok. De reserve redeneert dan "daar
+kan ik bijladen" — terwijl "goedkoop" in de winter 25 ct kan zijn, en dat
+is duurder dan de zon die je vanavond weggeeft.
+
+### De vraag erachter is een andere
+
+Niet *"haal ik de nacht"* maar *"is deze kWh morgen meer waard dan wat
+hij nu opbrengt"*. Dat is teruglevering nu tegen vermeden inkoop later,
+na rendement en slijtage.
+
+Nieuwe proefstandkandidaat die dat **meet en niets stuurt** — dezelfde
+route als de slijtagekosten. Bij elke ontlading wordt vastgelegd wat de
+kWh nu opbracht en wat hij na het goedkope blok zou hebben bespaard. Na
+twintig metingen verschijnt de mediaan en het aandeel momenten waarop
+vasthouden voordeliger was geweest.
+
+### Wat deze meting niet weet
+
+Of de accu die kWh straks nog **kwijt kan**. Op een zomerdag met
+overschot is vasthouden zinloos: de accu is toch vol, en dan is
+teruglevering het enige alternatief. Dat staat erbij, en het is precies
+waarom deze kandidaat nog niets stuurt.
+
+Na 1 januari wordt deze afweging wezenlijk scherper: teruglevering levert
+dan nog 19 ct op tegen 32 ct vermeden inkoop.
+
+**Volledige testsuite**: 2281 tests, allemaal groen.
+
+## v2.6.1 — De zelfcontrole vond zijn eerste echte fout
+
+**Gevonden door de zelfcontrole zelf**, niet door een screenshot:
+
+> ❌ Dagreeks: Onmogelijke waarden op 2026-08-17
+
+17 augustus stond op **0,0 kWh opwek met 9,8 kWh export**. En er was geen
+16 augustus.
+
+### Weer de volgorde
+
+De dagsleutel ging op de nieuwe dag en de opwekteller werd gewist
+**voordat** `_sluit_energiedag_af` werd aangeroepen. Die kreeg dus de
+datum van vandaag mee, met de cijfers van gisteren en een al gewiste
+opwekteller.
+
+**Vierde keer dezelfde vorm**, na v1.74.0 (plantoetsing), v1.95.0
+(opruiming op een lege lijst) en v1.98.0 (accu en kosten op nul). De dag
+die wordt afgesloten wordt nu eerst vastgehouden.
+
+### En melden is niet opruimen
+
+De plausibiliteitscontrole bestond al en deed keurig zijn werk — maar de
+foute regel bleef staan, want opruimen gebeurde alleen tijdens het
+inlezen van de geschiedenis. Een fout melden zonder hem op te ruimen
+betekent dat je hem elke dag opnieuw ziet.
+
+### Wat wél goed ging
+
+De opruiming van de PV-uurfactoren uit v2.4.0 werkte: de waarden van
+0,334 en 0,226 zijn verdwenen, en 8h ging van 0,385 naar **0,783**. Het
+profiel loopt nu netjes op van 0,87 in de ochtend naar 1,16 rond tien uur
+en terug — een patroon in plaats van ruis.
+
+**Volledige testsuite**: 2284 tests, allemaal groen.
+
+## v2.7.0 — "Dure uren beginnen" op een vlakke dag
+
+**Gemeld**: drie keer dezelfde melding op één ochtend, en het "duurste
+blok" schoof telkens op:
+
+    05:15 → "om 08:15 begint 't duurste blok"
+    06:15 → "om 09:15 begint het duurste blok"
+    09:15 → "om 09:30 begint het duurste blok"
+
+Dat is geen vaste gebeurtenis maar een **horizon die meebeweegt**: het
+duurste blok dat er nog *resteert*.
+
+Twee dingen mis, en allebei gerepareerd.
+
+### Te laat om nog iets te doen
+
+Om 09:15 melden dat om 09:30 de piek begint, met de accu op 11%, is
+nutteloos — er valt in een kwartier niets meer bij te laden. De melding
+komt nu alleen nog met **minstens een uur** speling. Bij 2000 W is dat
+2 kWh, een kwart van de accu.
+
+Niet ruimer: anderhalf uur zou een melding van 1 uur 28 vooraf
+wegfilteren, en die is wél bruikbaar.
+
+### Geen piek maar gewoon ochtend
+
+Op 17 augustus liep de prijs van **29,7 tot 38,9 ct** over de hele dag.
+Het gemelde blok zat op 37,1 tegen een mediaan van 34,5 — nauwelijks
+erboven. Bij zo'n vlak verloop levert bijladen weinig op.
+
+Het blok moet nu **15% boven de dagmediaan** liggen. En de melding noemt
+beide prijzen én de resterende tijd, zodat je zelf kunt beoordelen of het
+de moeite is — dezelfde reden als bij het goedkope blok in v2.5.0.
+
+**Volledige testsuite**: 2289 tests, allemaal groen.
