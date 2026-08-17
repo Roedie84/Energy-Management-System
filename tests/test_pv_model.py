@@ -144,3 +144,100 @@ def test_no_external_library_is_used():
 
     for verboden in ("sklearn", "numpy", "scipy", "pandas"):
         assert verboden not in imports
+
+
+# --- v3.3.0: bewolking en onenigheid als kenmerk ---------------------
+
+
+def test_the_disagreement_between_sources_is_measured(
+    make_coordinator, hass
+):
+    """Gevraagd of een integratie die bewolking per uur voorspelt kan
+    helpen. Die bestaat, maar Solcast VERWERKT bewolking al - hun
+    voorspelling is een bewerking van satellietbeelden en weermodellen.
+
+    De ONENIGHEID tussen bronnen is iets anders. Op 16 augustus stond de
+    een op 100% en de ander op 15%. Dat zegt niets over de bewolking,
+    maar wel dat de dag moeilijk te voorspellen is.
+    """
+    from custom_components.energy_management_system.const import (
+        CONF_KNMI_WEATHER_ENTITY,
+        CONF_OPENWEATHERMAP_WEATHER_ENTITY,
+    )
+
+    c = make_coordinator(
+        {
+            CONF_KNMI_WEATHER_ENTITY: "weather.knmi",
+            CONF_OPENWEATHERMAP_WEATHER_ENTITY: "weather.owm",
+        }
+    )
+    hass.states.set("weather.knmi", "cloudy", {"cloud_coverage": 100})
+    hass.states.set("weather.owm", "sunny", {"cloud_coverage": 15})
+
+    assert c._weather_cloud_disagreement_pp() == 85.0
+
+
+def test_one_source_gives_no_disagreement(make_coordinator, hass):
+    """Met één bron valt er niets te vergelijken - dan geen getal in
+    plaats van een verzonnen nul."""
+    from custom_components.energy_management_system.const import (
+        CONF_KNMI_WEATHER_ENTITY,
+    )
+
+    c = make_coordinator({CONF_KNMI_WEATHER_ENTITY: "weather.knmi"})
+    hass.states.set("weather.knmi", "cloudy", {"cloud_coverage": 80})
+
+    assert c._weather_cloud_disagreement_pp() is None
+
+
+def test_a_missing_optional_feature_drops_the_column_not_the_rows(
+    make_coordinator, hass
+):
+    """Een ontbrekend kenmerk maakte de hele rij onbruikbaar. Wie maar
+    één weerbron heeft ingesteld krijgt nooit een onenigheidsgetal - en
+    dan zou het model NOOIT iets leren."""
+    c = make_coordinator({})
+    monsters = [
+        {
+            "voorspeld_kwh": 1.0,
+            "uur": 12,
+            "hoogte": 50.0,
+            "maand": 8,
+            "bewolking": None,
+            "bewolking_onenigheid": None,
+        }
+        for _ in range(5)
+    ]
+
+    kenmerken = c._bruikbare_kenmerken(monsters)
+
+    assert "bewolking_onenigheid" not in kenmerken
+    assert c._model_rij(monsters[0], kenmerken) is not None
+
+
+def test_a_present_optional_feature_is_used(make_coordinator, hass):
+    c = make_coordinator({})
+    monsters = [
+        {
+            "voorspeld_kwh": 1.0,
+            "uur": 12,
+            "hoogte": 50.0,
+            "maand": 8,
+            "bewolking": 40.0,
+            "bewolking_onenigheid": 12.0,
+        }
+    ]
+
+    kenmerken = c._bruikbare_kenmerken(monsters)
+
+    assert "bewolking" in kenmerken
+    assert "bewolking_onenigheid" in kenmerken
+
+
+def test_a_required_feature_still_drops_the_row(make_coordinator, hass):
+    """Zonder voorspelling of uur valt er niets te leren."""
+    c = make_coordinator({})
+
+    assert c._model_rij(
+        {"uur": 12, "hoogte": 50.0, "maand": 8}, ("voorspeld_kwh", "uur")
+    ) is None
