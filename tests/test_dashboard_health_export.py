@@ -165,6 +165,7 @@ def test_present_attributes_are_not_reported(make_coordinator, hass):
             "buitensensor": {},
             "zelfcontrole": {},
             "rondeduur": {},
+            "capaciteit": {},
             "logboek": {},
             "gezondheid": {},
             "veroudering": {},
