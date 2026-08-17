@@ -200,5 +200,23 @@
       "negative_cost": "Feed-in costs cannot be negative.",
       "out_of_range": "Value is outside the allowed range."
     }
+  },
+  "issues": {
+    "ontbrekende_ingang": {
+      "title": "{aantal} input(s) are not providing what they should",
+      "description": "These parts read a sensor or attribute that does not exist: {namen}. Check the integration settings."
+    },
+    "halve_installatie": {
+      "title": "The update appears to be incomplete",
+      "description": "{uitleg}\n\nThis happens after an interrupted download. Reinstall the integration via HACS."
+    },
+    "interne_fout": {
+      "title": "{aantal} part(s) are failing",
+      "description": "These parts raise an error: {namen}. Please include the diagnostics export when reporting this."
+    },
+    "dashboard_entiteit": {
+      "title": "{aantal} dashboard card(s) point to nothing",
+      "description": "These entities no longer exist: {namen}. Update the dashboard or restore the entities."
+    }
   }
 }

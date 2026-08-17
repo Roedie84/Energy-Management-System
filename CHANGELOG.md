@@ -15623,3 +15623,106 @@ manifest werd in de event loop gelezen. Dat gebeurt nu bij het opstarten,
 in een executor.*
 
 **Volledige testsuite**: 2345 tests, allemaal groen.
+
+## v3.4.1 — Het versienummer klopte al vier opleveringen niet
+
+**Gevonden dankzij de verbetering uit v3.4.0.** In de export stond
+`"versie": "3.0.2"` — terwijl de code aantoonbaar v3.4.0 was: tien
+kruiscontroles, logopvang, installatiegegevens, en de koelmelding die nu
+*"De koeling geet an"* zegt.
+
+De ironie is compleet: de verbetering die deze fout aan het licht bracht,
+was in dezelfde oplevering gebouwd. Zonder dat veld was hij onzichtbaar
+gebleven.
+
+### De oorzaak is de werkwijze, niet de code
+
+Elke oplevering verhoogde het nummer met een zoek-en-vervang op de
+**oude** waarde:
+
+    sed -i 's/"version": "3.3.0"/"version": "3.4.0"/' manifest.json
+
+Klopt die oude waarde niet, dan doet het commando **niets** — zonder
+foutmelding. Vier opleveringen op rij zijn zo stilzwijgend mislukt, en ik
+heb het nooit gecontroleerd.
+
+Hetzelfde gold voor het testaantal in de README: dat stond op **2194**
+terwijl er 2352 draaien.
+
+### En het was al vaker gebeurd
+
+Het changelog bevat vijf nummers die twee keer zijn gebruikt: 1.46.0,
+2.1.0, 2.2.0, 2.2.2 en 2.3.0. Dezelfde fout, eerder opgetreden zonder dat
+iemand het zag.
+
+**Die geschiedenis wordt niet herschreven** — dat zou verslaglegging
+vervalsen. De nieuwe toetsen bewaken wat er vanaf hier bij komt, met een
+vangnet dat omvalt zodra er een zesde dubbel nummer verschijnt.
+
+Manifest, README, dashboard en changelog staan nu alle vier op **3.4.0**,
+en zes tests houden dat zo.
+
+**Volledige testsuite**: 2352 tests, allemaal groen.
+
+## v3.5.0 — Repairs, en de reserve rekent met de gemeten accu
+
+Twee punten uit een externe review die hout sneden.
+
+### 1. Repair Issues
+
+> "Ik mis een vermelding van Repair Issues. Veel meldingen worden nu via
+> notificaties, dashboard en diagnostiek afgehandeld. Maar Home Assistant
+> heeft tegenwoordig een uitstekend Repairs-framework."
+
+Terecht, en het beste punt uit die review. Wat er tot nu toe gebeurde bij
+een ontbrekende sensor: een melding op de telefoon die je wegklikt, een
+regel op een dashboardpagina die je moet opzoeken, en een veld in de
+diagnostiek dat alleen bij een export zichtbaar is.
+
+Vier soorten verschijnen nu in **Instellingen → Repairs**:
+
+| | |
+|---|---|
+| Ontbrekende ingang | een onderdeel leest een sensor of attribuut dat er niet is |
+| Halve installatie | de bronbestanden liggen meer dan een uur uit elkaar |
+| Interne fout | een onderdeel valt om |
+| Dashboardkaart wijst naar niets | de entiteit bestaat niet meer |
+
+Ze verdwijnen zodra het probleem over is. Dat is even belangrijk als het
+plaatsen: een Repairs-scherm dat vol blijft staan met opgeloste dingen
+wordt niet meer gelezen.
+
+**Alleen wat de gebruiker zelf kan verhelpen** komt hier terecht. Een
+leerproces dat nog dagen nodig heeft is geen reparatie maar geduld, en
+zoiets in Repairs zetten leert mensen het scherm te negeren. Een test
+bewaakt dat.
+
+### 2. De reserve rekent met de gemeten capaciteit
+
+> "Nominaal 8,64 kWh, gemeten 7,95 kWh, degradatie 8% — en automatisch de
+> reserveberekening aanpassen."
+
+Ook terecht. De reserve rekende met de **nominale** waarde uit de sensor.
+Levert de accu feitelijk minder, dan wordt er gerekend op energie die er
+niet is, en is elke reserveberekening structureel optimistisch.
+
+Vanaf nu de gemeten waarde zodra die er is — na de bestaande drempel van
+trenddagen. Met twee grenzen: een meting **boven** nominaal wordt
+afgekapt, en een meting die meer dan een derde **onder** nominaal ligt
+wordt geweerd. Dat laatste is eerder een meetfout dan een versleten accu,
+en anders zou een verkeerd uitgelezen sensor de hele accu blokkeren.
+
+Er is één functie waar dit doorheen loopt, niet dertien losse aanroepen —
+dat is precies wat er met de reservemarge misging in v1.86.0 tot en met
+v1.88.0.
+
+### Wat uit de review niet klopte
+
+De README zou te groot zijn: die is **434 regels**, sinds v1.77.0
+teruggebracht van 12.389, met het dagboek al in `docs/`. En de scheiding
+tussen advies en sturing bestaat al: alle service-aanroepen zitten in de
+coordinator, buiten het bereik van de adviesmodules, met tests per
+kandidaat. Het versienummer klopte inderdaad niet — dat was een uur
+eerder al gevonden en gerepareerd in v3.4.1.
+
+**Volledige testsuite**: 2363 tests, allemaal groen.

@@ -516,6 +516,10 @@ async def async_get_config_entry_diagnostics(
             # v3.4.0: welke versie draait hier, en wat heeft de
             # integratie zelf gelogd? Beide ontbraken, en dat kostte deze
             # week meerdere ronden.
+            # v3.5.0: nominale tegenover gemeten capaciteit.
+            "capacity_overview": _veilig(
+                "get_capacity_overview", coordinator.get_capacity_overview
+            ),
             "installation": _veilig(
                 "get_installation_facts", coordinator.get_installation_facts
             ),

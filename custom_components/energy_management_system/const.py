@@ -1032,6 +1032,21 @@ ENERGY_DAY_MIN_SOURCE_KWH = 0.5
 # geschiedenis bij ELKE start liet omvallen, stond alleen in het logboek.
 # Het duurde drie diagnostieken en twee versies voordat die boven water
 # kwam.
+# --- Gemeten capaciteit in de reserve (v3.5.0) -----------------------
+# Uit een externe review: "Je leert al rendement en gezondheid. De
+# volgende stap: nominaal 8,64 kWh, gemeten 7,95 kWh, degradatie 8% - en
+# automatisch de reserveberekening aanpassen."
+#
+# Terecht. De reserve rekende met de NOMINALE capaciteit. Levert de accu
+# feitelijk minder, dan wordt er gerekend op energie die er niet is.
+CAPACITY_MEASURE_WINDOW_DAYS = 30
+
+# Een meting die meer dan een derde onder nominaal ligt is eerder een
+# meetfout dan een versleten accu. Daar mag de reserve niet op gaan
+# rekenen - dan zou een verkeerd uitgelezen sensor de hele accu
+# blokkeren.
+CAPACITY_MEASURE_MIN_FRACTION = 0.65
+
 EIGEN_LOG_REGELS = 100
 
 # Hoe ver de wijzigingsmomenten van de bronbestanden uit elkaar mogen

@@ -190,6 +190,8 @@ from .const import (
     MIN_PLAUSIBLE_HALF_EFFICIENCY_PERCENT,
     MAX_PLAUSIBLE_EFFICIENCY_PERCENT,
     CONF_MANUAL_DISCHARGE_POWER,
+    CAPACITY_MEASURE_MIN_FRACTION,
+    CAPACITY_MEASURE_WINDOW_DAYS,
     CONF_BATTERY_TOTAL_CAPACITY_SENSOR,
     CONSISTENCY_MAX_COOLING_SWITCHES_PER_WINDOW,
     COOLING_SWITCH_WINDOW_HOURS,
@@ -5704,9 +5706,8 @@ class EnergyManagementSystemCoordinator:
             return self.last_soc_percent
         # Laatste terugval: afleiden uit de beschikbare energie.
         beschikbaar = self.beschikbare_energie_kwh()
-        capaciteit = self._read_sensor_float(
-            self.config.get(CONF_BATTERY_TOTAL_CAPACITY_SENSOR)
-        )
+        # v3.5.0: de GEMETEN capaciteit zodra die er is.
+        capaciteit = self.bruikbare_capaciteit_kwh()
         if beschikbaar is None or not capaciteit:
             return None
         min_soc = self.effective_min_soc_percent()
@@ -7130,9 +7131,10 @@ class EnergyManagementSystemCoordinator:
 
     def _resterende_laadruimte_kwh(self) -> float | None:
         """Hoeveel past er nog in de accu? (v1.66.0)"""
-        capaciteit = self._read_sensor_float(
-            self.config.get(CONF_BATTERY_TOTAL_CAPACITY_SENSOR)
-        )
+        # v3.5.0: de GEMETEN capaciteit zodra die er is. Rekenen met
+        # nominaal betekent hier dat er ruimte wordt aangenomen die er
+        # niet is.
+        capaciteit = self.bruikbare_capaciteit_kwh()
         beschikbaar = self.beschikbare_energie_kwh()
         if not capaciteit or beschikbaar is None:
             return None
@@ -8123,6 +8125,102 @@ class EnergyManagementSystemCoordinator:
             f"dagen per week, dus dat is de vertragende kant. "
             f"({uren} van de 24 uren compleet.)"
         )
+
+    def bruikbare_capaciteit_kwh(self) -> float | None:
+        """De capaciteit waar de reserve mee hoort te rekenen (v3.5.0).
+
+        De gemeten waarde zodra die er is, anders de nominale. Eén plek,
+        zodat er niet dertien losse aanroepen ontstaan die uit elkaar
+        gaan lopen - dat is precies wat er met de reservemarge gebeurde
+        in v1.86.0 tot en met v1.88.0.
+        """
+        gemeten = self.gemeten_capaciteit_kwh()
+        if gemeten is not None:
+            return gemeten
+        return self._read_sensor_float(
+            self.config.get(CONF_BATTERY_TOTAL_CAPACITY_SENSOR)
+        )
+
+    def gemeten_capaciteit_kwh(self) -> float | None:
+        """De GEMETEN bruikbare capaciteit, of None (v3.5.0).
+
+        Uit een externe review: "Je leert al rendement en gezondheid. De
+        volgende stap: nominaal 8,64 kWh, gemeten 7,95 kWh, degradatie
+        8% - en automatisch de reserveberekening aanpassen."
+
+        Terecht. De reserve rekende met de NOMINALE capaciteit uit de
+        sensor. Levert de accu feitelijk minder, dan is elke
+        reserveberekening structureel optimistisch: er wordt gerekend op
+        energie die er niet is.
+
+        Pas na PROEFSTAND_MIN_TREND_DAYS dagen; daaronder zegt de trend
+        te weinig en blijft de nominale waarde staan. En de uitkomst
+        wordt begrensd: een meting die meer dan een derde onder nominaal
+        ligt is eerder een meetfout dan een versleten accu, en daar mag
+        de reserve niet op gaan rekenen.
+        """
+        reeks = self.capacity_trend_history or []
+        if len(reeks) < PROEFSTAND_MIN_TREND_DAYS:
+            return None
+
+        waarden = [
+            r.get("bruikbaar_kwh")
+            for r in reeks[-CAPACITY_MEASURE_WINDOW_DAYS:]
+            if r.get("bruikbaar_kwh")
+        ]
+        if len(waarden) < PROEFSTAND_MIN_TREND_DAYS:
+            return None
+
+        gemeten = statistics.median(waarden)
+        nominaal = self._read_sensor_float(
+            self.config.get(CONF_BATTERY_TOTAL_CAPACITY_SENSOR)
+        )
+        if not nominaal:
+            return None
+
+        ondergrens = nominaal * CAPACITY_MEASURE_MIN_FRACTION
+        if gemeten < ondergrens:
+            _LOGGER.warning(
+                "Gemeten capaciteit %.2f kWh ligt meer dan %.0f%% onder de "
+                "nominale %.2f kWh; nominaal aangehouden",
+                gemeten,
+                (1 - CAPACITY_MEASURE_MIN_FRACTION) * 100,
+                nominaal,
+            )
+            return None
+        # Boven nominaal meten kan niet; dan is er iets anders aan de
+        # hand en blijft nominaal staan.
+        return min(gemeten, nominaal)
+
+    def get_capacity_overview(self) -> dict:
+        """Wat de accu nominaal en feitelijk levert (v3.5.0)."""
+        nominaal = self._read_sensor_float(
+            self.config.get(CONF_BATTERY_TOTAL_CAPACITY_SENSOR)
+        )
+        gemeten = self.gemeten_capaciteit_kwh()
+        if not nominaal:
+            return {
+                "beschikbaar": False,
+                "reden": "Geen capaciteitssensor ingesteld.",
+            }
+        return {
+            "beschikbaar": True,
+            "nominaal_kwh": round(nominaal, 2),
+            "gemeten_kwh": round(gemeten, 2) if gemeten else None,
+            "gebruikt_kwh": round(gemeten or nominaal, 2),
+            "degradatie_procent": (
+                round(100 * (1 - gemeten / nominaal), 1) if gemeten else None
+            ),
+            "dagen_gemeten": len(self.capacity_trend_history or []),
+            "toelichting": (
+                "De reserve rekent met de gemeten capaciteit zodra die er "
+                f"is - na {PROEFSTAND_MIN_TREND_DAYS} dagen. Daaronder de "
+                "nominale, want een trend uit een handvol dagen zegt te "
+                "weinig. Een meting die ver onder nominaal ligt wordt "
+                "geweerd: dat is eerder een meetfout dan een versleten "
+                "accu."
+            ),
+        }
 
     def _kandidaat_capaciteit(self) -> dict:
         """4. Neemt de bruikbare capaciteit af?"""
@@ -9302,6 +9400,21 @@ class EnergyManagementSystemCoordinator:
                 "merkbaar, hoe weinig vaak die ronde ook draait."
             ),
         }
+
+    def _werk_repairs_bij(self) -> None:
+        """Zet de huidige stand in het Repairs-scherm (v3.5.0).
+
+        Uit een externe review: meldingen gaan nu via de telefoon, het
+        dashboard en de diagnostiek - maar Home Assistant heeft daar een
+        eigen kader voor, en dat is waar een gebruiker dit soort dingen
+        verwacht.
+        """
+        from .repairs import werk_bij
+
+        try:
+            werk_bij(self.hass, self)
+        except Exception:  # noqa: BLE001 - mag de ronde nooit breken
+            _LOGGER.exception("Kon het Repairs-scherm niet bijwerken")
 
     def _start_logopvang(self) -> None:
         """Vangt de eigen waarschuwingen op (v3.4.0).
@@ -24040,6 +24153,8 @@ class EnergyManagementSystemCoordinator:
         # ofzo niet klopt."
         try:
             self._klok("zelfcontrole", lambda: self._meld_zelfcontrole(now))
+            # v3.5.0: en de stand in het Repairs-scherm bijwerken.
+            self._klok("repairs", self._werk_repairs_bij)
             # v3.0.1: de waterdagtellers op de klok laten omrollen, niet
             # op een sessie die er misschien niet komt.
             self._rol_waterdag_om(now)

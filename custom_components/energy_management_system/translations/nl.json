@@ -200,5 +200,23 @@
       "negative_cost": "Terugleverkosten kunnen niet negatief zijn.",
       "out_of_range": "Waarde valt buiten het toegestane bereik."
     }
+  },
+  "issues": {
+    "ontbrekende_ingang": {
+      "title": "{aantal} ingang(en) leveren niet wat ze horen te leveren",
+      "description": "De volgende onderdelen lezen een sensor of attribuut dat er niet is: {namen}. Ze slaan daardoor stil over. Controleer de instellingen van de integratie."
+    },
+    "halve_installatie": {
+      "title": "De update lijkt half aangekomen",
+      "description": "{uitleg}\n\nDit gebeurt bij een onderbroken download. Installeer de integratie opnieuw via HACS."
+    },
+    "interne_fout": {
+      "title": "{aantal} onderdeel(en) vallen om",
+      "description": "Deze onderdelen geven een fout: {namen}. De rest blijft werken, maar wat deze onderdelen berekenen klopt niet. Stuur de diagnostiek-export mee bij een melding."
+    },
+    "dashboard_entiteit": {
+      "title": "{aantal} dashboardkaart(en) wijzen naar niets",
+      "description": "Deze entiteiten bestaan niet (meer): {namen}. De kaarten tonen \"Entiteit niet gevonden\". Werk het dashboard bij of herstel de entiteiten."
+    }
   }
 }
