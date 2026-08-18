@@ -1,0 +1,502 @@
+"""De visuele pagina in SCADA-stijl (v3.17.0).
+
+Gevraagd naar aanleiding van een schermafbeelding van een Grid Support
+Unit: "Deze style vind ik wel mooi" - en daarna: "Ik wil alleen de
+'visueel' pagina geüpdate hebben, de rest is goed."
+
+Overgenomen wat daar werkt: halve-cirkelmeters met één groot getal,
+staafjes per accupakket, één kleur met rood alleen voor alarmen.
+"""
+import sys
+from pathlib import Path
+
+import custom_components.energy_management_system as pkg
+
+sys.path.insert(0, str(Path(pkg.__file__).parent))
+
+from overview_svg import bouw_scada  # noqa: E402
+
+
+def _plaat(**overrides):
+    gegevens = {
+        "status": "goed",
+        "soc": 87.0,
+        "omvormer_c": 31.0,
+        "beschikbaar_kwh": 6.6,
+        "accu_w": -430.0,
+        "pv_w": 210.0,
+        "net_w": 180.0,
+        "huis_w": 820.0,
+        "modules": [
+            {"module": 1, "temperatuur_c": 31.0, "cel_delta_v": 0.26},
+            {"module": 2, "temperatuur_c": 28.0, "cel_delta_v": 0.0},
+            {"module": 3, "temperatuur_c": 27.0, "cel_delta_v": 0.0},
+        ],
+        "koeling": {"ventilator_aan": True, "buiten_c": 17.9},
+        "tekort_kwartieren": 0,
+        "verkoopkwartieren": 14,
+    }
+    gegevens.update(overrides)
+    return bouw_scada(gegevens)
+
+
+def test_it_produces_valid_svg():
+    import xml.etree.ElementTree as ET
+
+    ET.fromstring(_plaat())
+
+
+
+
+
+def test_no_meter_for_a_fixed_number():
+    """Op het voorbeeld staat "Power capacity 413 kW" in een halve
+    cirkel. Dat is versiering: een waarde die nooit beweegt hoort geen
+    meter te krijgen."""
+    plaat = _plaat()
+
+    for vast in ("capaciteit", "nominaal", "8.6 kWh"):
+        assert vast.lower() not in plaat.lower()
+
+
+def test_charging_and_discharging_are_named():
+    assert "LADEN" in _plaat(accu_w=800.0)
+    assert "ONTLADEN" in _plaat(accu_w=-800.0)
+    assert "RUST" in _plaat(accu_w=0.0)
+
+
+def test_the_cooling_state_is_visible():
+    assert "ventilator draait" in _plaat()
+    assert "ventilator uit" in _plaat(koeling={"ventilator_aan": False})
+
+
+def test_a_shortfall_is_marked_red():
+    from overview_svg import KLEUR_ALARM, KLEUR_GOED
+
+    assert KLEUR_GOED in _plaat(tekort_kwartieren=0)
+    assert KLEUR_ALARM in _plaat(tekort_kwartieren=6)
+
+
+def test_empty_data_does_not_crash():
+    """Vlak na een herstart is er nog niets gemeten."""
+    import xml.etree.ElementTree as ET
+
+    ET.fromstring(bouw_scada({}))
+
+
+def test_the_page_is_full_width():
+    """Een installatieschema in een kolom van een derde is onleesbaar."""
+    import yaml
+
+    data = yaml.safe_load(
+        (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
+    )
+    pagina = next(v for v in data["views"] if v.get("path") == "visueel")
+
+    assert pagina.get("panel") is True
+
+
+# --- v3.17.1: uitlijning ---------------------------------------------
+
+
+
+
+def test_the_canvas_fits_its_content():
+    """Alles moet binnen de viewBox vallen, anders wordt de onderbalk
+    afgesneden."""
+    import re
+
+    plaat = _plaat()
+    hoogte = float(re.search(r'viewBox="0 0 \d+ (\d+)"', plaat).group(1))
+    ys = [float(y) for y in re.findall(r'y="(\d+(?:\.\d+)?)"', plaat)]
+
+    assert max(ys) < hoogte
+
+
+# --- v3.18.0: uitlijning en loze ruimte ------------------------------
+
+
+
+
+def test_the_power_block_carries_context():
+    """Gemeld: "hier bijvoorbeeld veel loze ruimte". Een kader van 128
+    hoog voor één getal is verspilling."""
+    plaat = _plaat(prijs_ct=28.9, accu_ct=43.2, reden="Zon opvangen")
+
+    assert "stroomprijs nu" in plaat
+    assert "kWh uit de accu" in plaat
+    assert "Zon opvangen" in plaat
+
+
+def test_missing_context_shows_a_dash():
+    plaat = _plaat()
+
+    assert "--" in plaat
+
+
+def test_the_sections_have_three_columns():
+    """Gevraagd: "misschien 3 secties naast elkaar welke wat meer info
+    geven"."""
+    from overview_svg import bouw_secties
+
+    svg = bouw_secties(
+        {
+            "secties": [
+                ("vandaag", [("opgewekt", "2.7 kWh", None)]),
+                ("vooruit", [("laagste stand", "50 %", None)]),
+                ("kosten", [("rendement", "84.5 %", None)]),
+            ]
+        }
+    )
+
+    for titel in ("VANDAAG", "VOORUIT", "KOSTEN"):
+        assert titel in svg
+
+
+def test_the_sections_are_valid_svg():
+    import xml.etree.ElementTree as ET
+
+    from overview_svg import bouw_secties
+
+    ET.fromstring(bouw_secties({"secties": []}))
+
+
+# --- v3.19.0: accumodules eruit --------------------------------------
+
+
+def test_the_modules_are_gone():
+    """Gevraagd: "de accumodules gedeelte mag er wel uit, die info vind
+    ik overbodig op deze pagina."
+
+    Terecht. De staafjes stonden er om een uitschieter te laten zien,
+    maar de modules lopen gelijk - drie identieke blokjes zeggen niets.
+    De accupagina heeft de cijfers per module, en de zelfcontrole meldt
+    het zodra er wél iets uit de pas loopt.
+    """
+    plaat = _plaat()
+
+    assert "ACCUMODULES" not in plaat
+    assert "celspreiding" not in plaat
+
+
+def test_the_day_figures_took_their_place():
+    """Loze ruimte is geen verbetering: er staat nu iets dat op een
+    overzichtspagina hoort."""
+    plaat = _plaat(
+        opgewekt_kwh=2.7,
+        voorspeld_kwh=9.1,
+        verbruik_kwh=2.9,
+        import_kwh=5.9,
+    )
+
+    assert "opgewekt" in plaat
+    assert "van het net" in plaat
+
+
+def test_the_module_bars_helper_still_works():
+    """De bouwsteen blijft, want de accupagina gebruikt hem. Alleen op
+    deze plaat staat hij niet meer."""
+    from overview_svg import _staafjes
+
+    svg = _staafjes(10, 60, [30.0, 28.0], ["M1", "M2"])
+
+    assert "M1" in svg and "M2" in svg
+
+
+# --- v3.19.0: status per onderwerp, klikbaar -------------------------
+
+
+def test_each_topic_links_to_its_page():
+    """Gevraagd: "Deze info toevoegen bijvoorbeeld? En klikbaar maken?"
+
+    SVG kent gewoon `<a>`, en Home Assistant laat dat door in een
+    markdown-kaart.
+    """
+    from overview_svg import bouw_status
+
+    svg = bouw_status(
+        {
+            "onderwerpen": {
+                "water": {"niveau": "betrouwbaar", "zin": "1 moment vandaag."},
+                "zon": {"niveau": "indicatief", "zin": "3.2 kWh opgewekt."},
+            }
+        }
+    )
+
+    assert "/energy-management-system/detail-water" in svg
+    assert "/energy-management-system/detail-zon" in svg
+
+
+def test_the_reliability_level_is_coloured():
+    """Dezelfde schaal als de proefstand en de meetkwaliteit gebruiken,
+    dus geen nieuw begrip."""
+    from overview_svg import KLEUR_ALARM, KLEUR_GOED, bouw_status
+
+    goed = bouw_status(
+        {"onderwerpen": {"water": {"niveau": "betrouwbaar", "zin": "ok"}}}
+    )
+    slecht = bouw_status(
+        {"onderwerpen": {"water": {"niveau": "onbetrouwbaar", "zin": "ok"}}}
+    )
+
+    assert KLEUR_GOED in goed
+    assert KLEUR_ALARM in slecht
+
+
+def test_an_unknown_topic_is_skipped():
+    """Zonder pad valt er niets te openen, en een blok dat niet klikt
+    terwijl de andere dat wel doen is verwarrend."""
+    from overview_svg import bouw_status
+
+    svg = bouw_status(
+        {"onderwerpen": {"iets_nieuws": {"niveau": "goed", "zin": "test"}}}
+    )
+
+    assert svg == ""
+
+
+def test_long_sentences_are_cut_on_a_word():
+    """Midden in een woord afkappen leest slecht."""
+    from overview_svg import _kort
+
+    assert _kort("een tekst die te lang is om te tonen", 20).endswith("…")
+    assert " …" not in _kort("een tekst die te lang is", 12)
+
+
+def test_empty_topics_render_nothing():
+    from overview_svg import bouw_status
+
+    assert bouw_status({}) == ""
+
+
+# --- v3.20.0: één plaat, en nette schaalgrenzen -----------------------
+
+
+
+
+
+def test_everything_still_fits_the_canvas():
+    import re
+
+    plaat = _plaat(
+        onderwerpen={
+            "water": {"niveau": "betrouwbaar", "zin": "test"},
+            "zon": {"niveau": "betrouwbaar", "zin": "test"},
+        }
+    )
+    hoogte = int(re.search(r'viewBox="0 0 760 (\d+)"', plaat).group(1))
+    ys = [float(y) for y in re.findall(r'y="(\d+(?:\.\d+)?)"', plaat)]
+
+    assert max(ys) < hoogte
+
+
+# --- v3.21.0: drie kolommen -------------------------------------------
+
+
+def test_the_layout_has_three_columns():
+    """Gevraagd: "2 blokken links, 2 blokken midden, status per onderwerp
+    rechts."
+
+    Links accu en installatie, midden vermogen en vandaag, rechts de
+    statuslijst.
+    """
+    plaat = _plaat(
+        onderwerpen={"water": {"niveau": "betrouwbaar", "zin": "test"}}
+    )
+
+    # Vier kaders links en midden, plus het statuskader rechts.
+    for titel in ("ACCU", "INSTALLATIE", "VERMOGEN", "VANDAAG", "STATUS"):
+        assert titel in plaat
+
+
+
+def test_the_status_column_is_clickable():
+    plaat = _plaat(
+        onderwerpen={
+            "water": {"niveau": "betrouwbaar", "zin": "1 moment vandaag."}
+        }
+    )
+
+    assert "/energy-management-system/detail-water" in plaat
+
+
+def test_the_plate_grows_with_the_status_list():
+    """De linkerkolom is vast; de plaat wordt zo hoog als de langste van
+    de twee. Een vaste hoogte zou de onderste blokken afsnijden."""
+    import re
+
+    def _hoogte(aantal):
+        sleutels = ["water", "zon", "apparaten", "klimaat", "financieel",
+                    "zelflerend", "meetkwaliteit", "accumodules",
+                    "zelfcontrole", "planning"][:aantal]
+        plaat = _plaat(
+            onderwerpen={
+                s: {"niveau": "betrouwbaar", "zin": "test"} for s in sleutels
+            }
+        )
+        return int(re.search(r'viewBox="0 0 760 (\d+)"', plaat).group(1))
+
+    # Tot de hoogte van de linkerkolom verandert er niets; daarboven
+    # groeit de plaat mee.
+    assert _hoogte(10) > _hoogte(4)
+
+
+def test_the_bottom_bar_spans_the_full_width():
+    plaat = _plaat()
+
+    assert 'width="728"' in plaat
+
+
+# --- v3.22.0: balkjes in plaats van meters ---------------------------
+
+
+def test_the_gauges_are_gone():
+    """Gemeld: "springt er teveel uit, misschien compacter, en geen
+    gauges?"
+
+    Terecht. Drie halve cirkels met bogen, achtergrondbogen en
+    schaalgrenzen zijn veel lijnen voor drie getallen.
+    """
+    plaat = _plaat(soc=87.0, omvormer_c=26.0, beschikbaar_kwh=7.0)
+
+    assert " A 22.0 22.0 " not in plaat
+    assert " A 30.0 30.0 " not in plaat
+
+
+def test_the_number_is_what_stands_out():
+    """Het getal blijft het belangrijkste, en dat is nu ook wat
+    opvalt."""
+    plaat = _plaat(soc=87.0)
+
+    assert 'font-size="17" font-weight="600"' in plaat
+
+
+def test_a_bar_shows_the_position_on_the_scale():
+    """Een balkje van drie pixels zegt hetzelfde als een halve cirkel:
+    waar sta je tussen minimum en maximum."""
+    from overview_svg import _balkje
+
+    leeg = _balkje(0, 20, 0.0, 0, 100, "test")
+    vol = _balkje(0, 20, 100.0, 0, 100, "test")
+
+    assert 'width="0.0" height="3"' in leeg
+    assert 'width="68.0" height="3"' in vol
+
+
+def test_a_missing_value_shows_a_dash():
+    """Een balkje op nul lijkt een meting."""
+    from overview_svg import _balkje
+
+    assert "--" in _balkje(0, 20, None, 0, 100, "test")
+
+
+def test_a_high_value_is_marked_red():
+    from overview_svg import KLEUR_ALARM, _balkje
+
+    assert KLEUR_ALARM in _balkje(0, 20, 48.0, 10, 55, "t", alarm_boven=45)
+    assert KLEUR_ALARM not in _balkje(0, 20, 26.0, 10, 55, "t", alarm_boven=45)
+
+
+def test_the_plate_got_shorter():
+    """Compacter was de vraag, niet alleen anders."""
+    import re
+
+    plaat = _plaat(
+        onderwerpen={
+            sleutel: {"niveau": "betrouwbaar", "zin": "test"}
+            for sleutel in (
+                "water", "zon", "apparaten", "klimaat", "financieel",
+                "zelflerend", "accumodules",
+            )
+        }
+    )
+    hoogte = int(re.search(r'viewBox="0 0 760 (\d+)"', plaat).group(1))
+
+    assert hoogte < 400, f"{hoogte} hoog - dat was 464 met de meters"
+
+
+def test_nothing_falls_outside_the_canvas():
+    """Elke keer dat de indeling verandert kan er iets uitlopen; dit
+    rekent het na in plaats van het met het oog te beoordelen."""
+    import re
+
+    plaat = _plaat(
+        onderwerpen={
+            sleutel: {"niveau": "betrouwbaar", "zin": "test"}
+            for sleutel in ("water", "zon", "apparaten")
+        }
+    )
+    hoogte = int(re.search(r'viewBox="0 0 760 (\d+)"', plaat).group(1))
+    ys = [float(y) for y in re.findall(r'y="(\d+(?:\.\d+)?)"', plaat)]
+    xs = [float(x) for x in re.findall(r'x="(\d+(?:\.\d+)?)"', plaat)]
+
+    assert max(ys) < hoogte
+    assert max(xs) <= 760
+
+
+# --- v3.22.1: bewegende stroompijlen ---------------------------------
+
+
+def test_the_flows_are_animated():
+    """Gevraagd: "Bewegen er nu ook richtingspijlen in het installatie
+    gedeelte?"
+
+    Nee, en dat was een gemis: de pijlfunctie bestond al sinds v3.17.0
+    maar werd na de herindeling niet meer gebruikt.
+    """
+    plaat = _plaat(pv_w=210.0, net_w=180.0, huis_w=820.0, accu_w=-430.0)
+
+    assert plaat.count("<animate") >= 3
+
+
+def test_no_flow_no_arrow():
+    """Een pijl die altijd staat zegt niets."""
+    plaat = _plaat(pv_w=0.0, net_w=0.0, huis_w=0.0, accu_w=0.0)
+
+    assert "<animate" not in plaat
+
+
+def test_the_arrow_thickness_follows_the_power():
+    """Bij veel stroom een dikkere pijl - dan zie je in één blik waar de
+    energie heen gaat."""
+    from overview_svg import _pijl
+
+    import re
+
+    dun = _pijl(0, 0, 0, 30, 100, "#fff")
+    dik = _pijl(0, 0, 0, 30, 3000, "#fff")
+
+    d1 = float(re.search(r'stroke-width="([\d.]+)"', dun).group(1))
+    d2 = float(re.search(r'stroke-width="([\d.]+)"', dik).group(1))
+
+    assert d2 > d1
+
+
+def test_exporting_reverses_the_grid_arrow():
+    """Levert het net, dan loopt de pijl naar beneden; lever je terug,
+    dan omhoog."""
+    import re
+
+    afname = _plaat(net_w=800.0)
+    teruglevering = _plaat(net_w=-800.0)
+
+    def _richting(plaat):
+        m = re.search(
+            r'<line x1="194" y1="(\d+)" x2="194" y2="(\d+)"[^>]*'
+            r'stroke-dasharray',
+            plaat,
+        )
+        return (int(m.group(1)), int(m.group(2))) if m else None
+
+    assert _richting(afname) == (196, 226)
+    assert _richting(teruglevering) == (226, 196)
+
+
+def test_charging_and_discharging_reverse_the_battery_arrow():
+    import re
+
+    laden = _plaat(accu_w=900.0)
+    ontladen = _plaat(accu_w=-900.0)
+
+    assert re.search(r'x1="136" y1="211" x2="194"', laden)
+    assert re.search(r'x1="194" y1="226" x2="136"', ontladen)
