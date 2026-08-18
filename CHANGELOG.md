@@ -16884,3 +16884,27 @@ leeg, verscheen er weer platte tekst, of stonden de tegels er wel maar
 zonder inhoud? Elk van die drie wijst een andere kant op.
 
 **Volledige testsuite**: 2492 tests, allemaal groen.
+
+## v3.25.3 — Twee SVG's in één markdown-kaart
+
+**Gemeld** met de volledige pagina-inhoud: de plaat verscheen als
+**platte tekst**, en er stonden geen links meer in.
+
+Dat sloot de eerdere verklaring uit. De werkelijke oorzaak: **twee
+`<svg>`-blokken in dezelfde markdown-kaart.** Het eerste wordt als HTML
+herkend, het tweede niet meer — en dan valt alles terug op tekst.
+
+Dat verklaart ook waarom het eerder wél werkte: toen stond er één SVG in
+de kaart. De cijfersecties uit v3.18.0 waren de tweede.
+
+Nu **één SVG per kaart**, met een `vertical-stack` eromheen zodat ze
+onder elkaar blijven staan.
+
+Een test loopt elke markdown-kaart in het dashboard na en valt om zodra
+er meer dan één SVG-bron in staat. Dat is de vorm die dit probleem
+veroorzaakte, en die kan bij elke volgende toevoeging terugkomen.
+
+*De klikbare tegels uit v3.23.0 blijven voorlopig weg; die kunnen terug
+zodra dit stabiel blijkt.*
+
+**Volledige testsuite**: 2493 tests, allemaal groen.
