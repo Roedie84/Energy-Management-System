@@ -386,11 +386,18 @@ def _aan(accu, buiten, vermogen):
 
 
 def _uit(accu, buiten, vermogen):
+    """v3.14.0: de uitschakelregel kent nu ook de GOEDKOPE koeling, en
+    leest daarvoor de configuratie. Vandaar een echt object in plaats van
+    een aanroep op de klasse."""
     from custom_components.energy_management_system.coordinator import (
         EnergyManagementSystemCoordinator as C,
     )
 
-    return C._battery_cooling_should_turn_off(accu, buiten, vermogen)
+    class _Kaal:
+        config: dict = {}
+        _goedkope_koeling_nog_zinvol = C._goedkope_koeling_nog_zinvol
+
+    return C._battery_cooling_should_turn_off(_Kaal(), accu, buiten, vermogen)
 
 
 def test_the_logged_case_no_longer_starts_the_fan():
@@ -468,8 +475,8 @@ def test_a_flickering_sensor_no_longer_toggles_the_fan(
     )
 
     # Aan blijven: 24 en 25 mogen niet uitschakelen.
-    assert C._battery_cooling_should_turn_off(34.0, 26.5, 500.0) is False
-    assert C._battery_cooling_should_turn_off(33.0, 26.5, 500.0) is False
+    assert _uit(34.0, 26.5, 500.0) is False
+    assert _uit(33.0, 26.5, 500.0) is False
 
     # En niet aanslaan zolang hij onder de bovenste grens blijft.
     assert _aan(34.0, 26.5, 500.0) is None
@@ -480,7 +487,7 @@ def test_below_the_hysteresis_band_it_still_stops():
         EnergyManagementSystemCoordinator as C,
     )
 
-    assert C._battery_cooling_should_turn_off(31.0, 23.0, 1500.0) is True
+    assert _uit(31.0, 23.0, 1500.0) is True
 
 
 def test_above_the_band_it_still_starts():
@@ -743,3 +750,70 @@ def test_a_working_state_is_unchanged(make_coordinator, hass):
 
     c.battery_cooling_state = {"ventilator_aan": False, "accu_c": 31.0}
     assert sensor.native_value == "uit"
+
+
+# --- v3.14.0: hysterese voor de goedkope koeling ---------------------
+
+
+def test_the_cheap_cooling_keeps_running():
+    """Gemeld: acht schakelingen in zes uur, netjes op de klok van de
+    minimale looptijd.
+
+    De regel uit v3.6.0 zette de ventilator aan bij 27 graden, waarna de
+    gewone uitschakelregel hem meteen weer wilde stoppen omdat 27 onder
+    de 32 ligt. Aan bij 27, uit bij 27 - dat is geen hysterese maar een
+    tegenstelling.
+    """
+    # Het gemeten geval van 09:17: aan bij 27 met 14,8 buiten, met de
+    # drempel op 25 (zelf ingesteld, standaard is 28).
+    from custom_components.energy_management_system.coordinator import (
+        EnergyManagementSystemCoordinator as C,
+    )
+    from custom_components.energy_management_system.const import (
+        CONF_BATTERY_COOLING_OPPORTUNITY_C,
+    )
+
+    class _Kaal:
+        config = {CONF_BATTERY_COOLING_OPPORTUNITY_C: 25.0}
+        _koelen_is_goedkoop = C._koelen_is_goedkoop
+        _goedkope_koeling_nog_zinvol = C._goedkope_koeling_nog_zinvol
+
+    assert (
+        C._battery_cooling_should_turn_on(_Kaal(), 27.0, 14.8, 200.0)
+        is not None
+    )
+    # En dan NIET meteen weer uit.
+    assert (
+        C._battery_cooling_should_turn_off(_Kaal(), 27.0, 14.8, 200.0) is False
+    )
+
+
+def test_it_stops_once_the_inverter_is_really_cool():
+    """Gemeten om 09:47: 21 graden met 14,9 buiten. Bij een drempel van
+    25 loopt de koeling door tot 20 - maar het verschil met buiten is
+    dan nog maar 6,1 graden, en dat is te weinig."""
+    assert _uit(21.0, 14.9, 200.0) is True
+
+
+def test_the_hysteresis_band_is_wide_enough():
+    """De ventilator haalt er in een half uur zes tot acht graden af
+    (27 naar 21). Een smallere band zou dezelfde tegenstelling
+    opleveren."""
+    from custom_components.energy_management_system.const import (
+        BATTERY_COOLING_OPPORTUNITY_HYSTERESE_C,
+    )
+
+    assert BATTERY_COOLING_OPPORTUNITY_HYSTERESE_C >= 4.0
+
+
+def test_without_a_difference_it_stops_anyway():
+    """Zonder verschil met buiten valt er niets te halen, ook niet
+    binnen de band."""
+    assert _uit(26.0, 25.0, 200.0) is True
+
+
+def test_the_normal_rules_are_untouched():
+    """Boven 32 graden verandert er niets - de bestaande bescherming van
+    de omvormer blijft precies zoals hij was."""
+    assert _uit(34.0, 26.5, 500.0) is False
+    assert _uit(31.0, 29.5, 100.0) is True
