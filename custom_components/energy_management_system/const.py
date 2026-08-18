@@ -249,6 +249,24 @@ PEAK_ALERT_MIN_OF_MEDIAN = 1.15
 # Zou sturen via `manual` met een POSITIEF vermogen - net zoals het
 # ontladen in dure kwartieren met een negatief vermogen gaat. Maar eerst
 # meten.
+# Hoe dicht bij de ondergrens een planning "krap" heet (v3.24.0).
+#
+# Gevraagd na een dag met 42,9% minder zon: de bijkoop-kandidaat stond op
+# nul metingen omdat hij alleen bij een BECIJFERD tekort mat - en dat was
+# er niet, want de reserve had het opgevangen.
+#
+# Tien procentpunt boven de ondergrens is krap genoeg om te zeggen dat
+# een kWh erbij verschil had gemaakt, en ruim genoeg om niet elke dag af
+# te gaan.
+BIJKOOP_KRAPPE_MARGE_PROCENT = 10.0
+
+# De werkelijke netlading, per ronde gemeten (v3.25.0).
+#
+# Gevraagd: "maar er is vandaag toch wel degelijk bijgekocht?" - en dat
+# klopte. Er ging 6,90 kWh de accu in, waarvan tussen de 2,02 en 5,93 kWh
+# van het net. Op dagniveau is dat niet scherper te krijgen.
+NETLADING_HISTORY_LENGTH = 400
+
 BIJKOOP_HISTORY_LENGTH = 300
 BIJKOOP_MIN_METINGEN = 30
 
@@ -1578,6 +1596,21 @@ BATTERY_COOLING_OPPORTUNITY_DELTA_C = 12.0
 # acht af, zoals de metingen laten zien (27 naar 21).
 BATTERY_COOLING_OPPORTUNITY_HYSTERESE_C = 5.0
 
+# Hoeveel verschil met buiten er nog nodig is om DOOR te gaan (v3.23.1).
+#
+# Gemeld: negen schakelingen in zes uur, ook na de hysterese van
+# v3.14.0. De oorzaak was dat ik dezelfde delta-eis van 12 graden
+# gebruikte voor aanzetten én voor doorgaan.
+#
+# Zodra de ventilator zijn werk doet zakt het verschil: 33 naar 24 bij
+# 17,7 buiten is nog maar 6,3 graden. Dan stopt hij, warmt de omvormer
+# weer op, en begint het opnieuw. De regel die pendelen moest voorkomen
+# veroorzaakte het.
+#
+# Doorgaan vraagt minder dan beginnen: er valt nog steeds iets te halen
+# zolang er vier graden verschil is.
+BATTERY_COOLING_OPPORTUNITY_KEEP_DELTA_C = 4.0
+
 # Boven deze temperatuur koelt de ventilator ALTIJD (v3.15.0).
 #
 # Gemeld: "Koelen mag niets te maken hebben met goedkoop of dure prijzen,
@@ -2019,6 +2052,9 @@ PERSISTED_PLAIN_FIELDS = (
     "langere_horizon_history",
     "lange_reserve_history",
     "bijkoop_history",
+    "netlading_vandaag_kwh",
+    "netlading_kosten_eur",
+    "netlading_history",
     "_eerder_rijpe_kandidaten",
     "pv_band_history",
     "pv_model_samples",

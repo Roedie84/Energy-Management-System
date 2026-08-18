@@ -332,6 +332,7 @@ from .const import (
     BATTERY_COOLING_ON_DELTA_C,
     BATTERY_COOLING_OPPORTUNITY_DELTA_C,
     BATTERY_COOLING_OPPORTUNITY_HYSTERESE_C,
+    BATTERY_COOLING_OPPORTUNITY_KEEP_DELTA_C,
     BATTERY_COOLING_PROTECT_ALWAYS_C,
     BATTERY_COOLING_OPPORTUNITY_MIN_C,
     CONF_BATTERY_COOLING_OPPORTUNITY_C,
@@ -483,6 +484,8 @@ from .const import (
     MIN_COST_BASIS_DELTA_KWH,
     FEEDIN_PREMIUM_EUR_PER_KWH,
     BIJKOOP_HISTORY_LENGTH,
+    BIJKOOP_KRAPPE_MARGE_PROCENT,
+    NETLADING_HISTORY_LENGTH,
     BIJKOOP_MIN_METINGEN,
     LANGE_RESERVE_HISTORY_LENGTH,
     LANGE_RESERVE_MIN_METINGEN,
@@ -714,6 +717,11 @@ class EnergyManagementSystemCoordinator:
         self.lange_reserve_history: list[dict] = []
         # v3.11.0: was bijkopen bij een tekort goedkoper geweest?
         self.bijkoop_history: list[dict] = []
+        # v3.25.0: de WERKELIJKE netlading, per ronde gemeten.
+        self.netlading_vandaag_kwh: float = 0.0
+        self.netlading_kosten_eur: float = 0.0
+        self.netlading_history: list[dict] = []
+        self._netlading_laatste_meting: datetime | None = None
         # v3.12.0: welke kandidaten al als rijp zijn gemeld.
         self._eerder_rijpe_kandidaten: list[str] = []
         # v2.8.0: waar de werkelijke opwek in de Solcast-band viel.
@@ -7894,14 +7902,57 @@ class EnergyManagementSystemCoordinator:
         hij stuurt niets: eerst zien of het loont.
         """
         samenvatting = self.get_quarter_plan_summary() or {}
+        # v3.24.0: ook meten bij een DREIGEND tekort.
+        #
+        # Gevraagd na een dag met 42,9% minder zon dan voorspeld: die
+        # kandidaat stond op nul metingen, terwijl het precies zo'n dag
+        # was waarop bijkopen relevant kon zijn.
+        #
+        # De reden: hij mat alleen bij een BECIJFERD tekort in de
+        # planning, en dat was er niet - de reserve had het opgevangen.
+        # Dat is geen fout, maar het betekent wel dat de kandidaat
+        # maandenlang op nul blijft staan tot de reserve een keer
+        # tekortschiet. En dan is er nog niets geleerd.
+        #
+        # Een dreigend tekort telt nu ook: zakt de planning tot dicht bij
+        # de ondergrens, dan had een kWh erbij verschil gemaakt. Dat
+        # wordt apart vastgelegd, zodat later te zien is welke metingen
+        # uit een echt tekort komen en welke uit een krappe marge.
+        if not entries:
+            return
+
         tekorten = samenvatting.get("tekort_kwartieren") or 0
-        if not entries or tekorten <= 0:
+        laagste = samenvatting.get("laagste_soc_procent")
+        min_soc = self.effective_min_soc_percent()
+        krap = (
+            laagste is not None
+            and laagste <= min_soc + BIJKOOP_KRAPPE_MARGE_PROCENT
+        )
+        if tekorten <= 0 and not krap:
             return
 
         plan = self.get_quarter_plan() or []
         tekort_regels = [r for r in plan if r.get("tekort")]
         if not tekort_regels:
-            return
+            # Geen becijferd tekort, maar wel een krappe marge: dan
+            # rekenen we met de kwartieren rond het diepste punt. Daar
+            # zou een kWh erbij het verschil hebben gemaakt.
+            if not krap:
+                return
+            met_soc = [
+                r for r in plan if r.get("soc_procent") is not None
+            ]
+            if not met_soc:
+                return
+            diepste = min(met_soc, key=lambda r: r["soc_procent"])
+            tekort_regels = [
+                r
+                for r in met_soc
+                if r["soc_procent"]
+                <= diepste["soc_procent"] + BIJKOOP_KRAPPE_MARGE_PROCENT
+            ]
+            if not tekort_regels:
+                return
 
         # Wat kost de energie op het moment van het tekort?
         prijzen_tekort = [
@@ -7931,6 +7982,10 @@ class EnergyManagementSystemCoordinator:
         self.bijkoop_history.append(
             {
                 "moment": now.isoformat(),
+                # v3.24.0: onderscheid tussen een echt en een dreigend
+                # tekort - anders zijn de cijfers later niet te duiden.
+                "soort": "tekort" if tekorten > 0 else "krappe marge",
+                "laagste_soc_procent": laagste,
                 "tekort_kwartieren": tekorten,
                 "tekort_kwh": round(tekort_kwh, 3),
                 "laadprijs_nu_eur": round(laadprijs, 4),
@@ -7942,6 +7997,131 @@ class EnergyManagementSystemCoordinator:
             }
         )
         self.bijkoop_history = self.bijkoop_history[-BIJKOOP_HISTORY_LENGTH:]
+
+    def _meet_werkelijke_netlading(self, now: datetime) -> None:
+        """Rekent per ronde af wat er van het net de accu in ging
+        (v3.25.0).
+
+        Gevraagd: "maar er is vandaag toch wel degelijk bijgekocht?" -
+        en dat klopte. Er ging 6,90 kWh de accu in, waarvan tussen de
+        2,02 en 5,93 kWh van het net. Op dagniveau is dat niet scherper
+        te krijgen; per ronde wél.
+
+        De bijkoop-kandidaat mat het HYPOTHETISCHE geval: had ik moeten
+        laden bij een verwacht tekort? Maar het laden gebeurde al, via de
+        winterguard, en dat mechanisme meldde zich daar niet. De
+        kandidaat wachtte op een situatie die nooit ontstond omdat een
+        ander onderdeel hem had weggenomen.
+
+        Deze meting doet het omgekeerde: ze rekent de werkelijke
+        handeling achteraf af. Wat kostte die kWh op het moment van
+        laden, en wat is hij waard op het duurste moment daarna? Dat is
+        geen hypothese maar een afrekening.
+        """
+        accu_w = self._read_sensor_float(
+            self.config.get(CONF_BATTERY_POWER_SENSOR)
+        )
+        net_w = self._read_sensor_float(
+            self.config.get(CONF_CONSUMPTION_POWER_SENSOR)
+        )
+        pv_w = self._read_sensor_float(self.config.get(CONF_PV_POWER_SENSOR))
+        prijs = self.last_current_price_per_kwh
+        if None in (accu_w, net_w, prijs) or accu_w <= 0:
+            self._netlading_laatste_meting = now
+            return
+
+        vorige = self._netlading_laatste_meting
+        self._netlading_laatste_meting = now
+        if vorige is None:
+            return
+        uren = (now - vorige).total_seconds() / 3600
+        if uren <= 0 or uren > 0.5:
+            # Na een herstart of een gat in de metingen valt er niets
+            # betrouwbaars af te leiden.
+            return
+
+        # Welk deel van het laadvermogen kwam van het net?
+        #
+        # De P1-meter geeft het NET: positief is afname. Het huis krijgt
+        # eerst de zon; wat er van de zon overblijft gaat naar de accu,
+        # en de rest van het laadvermogen komt van het net.
+        #
+        #   huis = net + zon - accu
+        #   zon over voor de accu = zon - huis
+        #
+        # Dat laatste is gelijk aan `accu - net`, en dus is het netdeel
+        # simpelweg de netafname - begrensd op wat de accu opneemt.
+        zon_naar_accu = max(0.0, min(accu_w, (pv_w or 0.0) - 0.0))
+        net_naar_accu = max(0.0, min(accu_w, net_w))
+        if net_naar_accu < 25:
+            return
+
+        kwh = net_naar_accu / 1000 * uren
+        self.netlading_vandaag_kwh += kwh
+        self.netlading_kosten_eur += kwh * prijs
+        self.netlading_history.append(
+            {
+                "moment": now.isoformat(),
+                "kwh": round(kwh, 4),
+                "prijs_eur": round(prijs, 4),
+                "accu_w": round(accu_w),
+                "pv_w": round(pv_w or 0),
+            }
+        )
+        self.netlading_history = self.netlading_history[
+            -NETLADING_HISTORY_LENGTH:
+        ]
+
+    def get_netlading_overview(self) -> dict:
+        """Wat kostte het bijkopen, en was het de moeite? (v3.25.0)"""
+        kwh = self.netlading_vandaag_kwh
+        if kwh <= 0.05:
+            return {
+                "beschikbaar": False,
+                "reden": "Vandaag is er niet van het net geladen.",
+            }
+
+        gemiddeld = self.netlading_kosten_eur / kwh
+        rendement = (self.learned_battery_efficiency_percent or 90.0) / 100
+        slijtage = (
+            (self.get_wear_cost_overview() or {}).get("slijtage_ct_per_kwh")
+            or 0.0
+        ) / 100
+        kostprijs = gemiddeld / rendement + slijtage
+
+        # Waar is die energie later voor gebruikt? Het duurste kwartier
+        # dat nog komt is de bovengrens van wat hij waard is.
+        entries = self._get_forecast_entries() or []
+        resterend = [
+            e[2] / PRICE_SCALE_FACTOR
+            for e in entries
+            if e[0] >= dt_util.now()
+        ]
+        waarde = max(resterend) if resterend else None
+
+        return {
+            "beschikbaar": True,
+            "kwh_vandaag": round(kwh, 2),
+            "kosten_eur": round(self.netlading_kosten_eur, 2),
+            "gemiddelde_inkoop_ct": round(gemiddeld * 100, 1),
+            "kostprijs_uit_de_accu_ct": round(kostprijs * 100, 1),
+            "hoogste_resterende_prijs_ct": (
+                round(waarde * 100, 1) if waarde else None
+            ),
+            "voordeel_ct_per_kwh": (
+                round((waarde - kostprijs) * 100, 1) if waarde else None
+            ),
+            "toelichting": (
+                "Wat er van het net de accu in ging, per ronde gemeten en "
+                "afgerekend tegen de prijs van dat moment. De kostprijs is "
+                "de inkoopprijs gedeeld door het rendement, plus de "
+                "slijtage.\n\n"
+                "Op dagniveau is dit niet af te leiden: op 18 augustus ging "
+                "er 6,90 kWh de accu in, waarvan tussen de 2,02 en 5,93 kWh "
+                "van het net. Welk deel precies hangt af van wat de zon op "
+                "elk moment leverde."
+            ),
+        }
 
     def _kandidaat_bijkopen(self) -> dict:
         """9. Was bijkopen bij een tekort goedkoper geweest?"""
@@ -7955,7 +8135,8 @@ class EnergyManagementSystemCoordinator:
                     "te_becijferen": False,
                     "reden": (
                         f"{len(reeks)} van {BIJKOOP_MIN_METINGEN} momenten "
-                        "met een verwacht tekort gemeten."
+                        "gemeten - bij een verwacht tekort of een planning "
+                        "die tot dicht bij de ondergrens zakt."
                     ),
                 },
                 "betrouwbaarheid": (
@@ -7977,14 +8158,23 @@ class EnergyManagementSystemCoordinator:
             "zou_hebben_opgeleverd": {
                 "te_becijferen": True,
                 "metingen": len(voordelen),
+                # v3.24.0: apart houden waar de meting vandaan komt.
+                "bij_echt_tekort": sum(
+                    1 for r in reeks if r.get("soort") == "tekort"
+                ),
+                "bij_krappe_marge": sum(
+                    1 for r in reeks if r.get("soort") == "krappe marge"
+                ),
                 "aandeel_gunstig_procent": round(
                     100 * len(gunstig) / len(voordelen), 1
                 ),
                 "gemist_voordeel_eur": round(totaal, 2),
                 "reden": (
-                    f"Bij {len(gunstig)} van de {len(voordelen)} verwachte "
-                    f"tekorten was bijladen goedkoper geweest; samen "
-                    f"€ {totaal:.2f}."
+                    f"Bij {len(gunstig)} van de {len(voordelen)} momenten was "
+                    f"bijladen goedkoper geweest; samen € {totaal:.2f}. "
+                    "Een meting bij een krappe marge weegt lichter dan een "
+                    "bij een echt tekort: daar had de reserve het al "
+                    "opgevangen."
                 ),
             },
             "betrouwbaarheid": (
@@ -9885,7 +10075,9 @@ class EnergyManagementSystemCoordinator:
                 # v3.21.0: het middenblok "vandaag" heeft ruimte voor
                 # meer, en netlading is precies het cijfer dat de
                 # zelfvoorziening verklaart (zie v3.16.0).
-                "netlading_kwh": self.grid_charge_today_kwh,
+                # v3.25.0: de GEMETEN netlading, niet de teller uit de
+                # kostprijsboekhouding die leeg kan blijven.
+                "netlading_kwh": self.netlading_vandaag_kwh,
                 "zelfvoorziening_pct": self.self_sufficiency_ratio_percent,
                 "modules": self.battery_module_live or [],
                 "koeling": self.battery_cooling_state or {},
@@ -10318,8 +10510,12 @@ class EnergyManagementSystemCoordinator:
             # v3.16.0: dezelfde formule als de sensor - netlading telt
             # niet mee. Zonder dit meldt de zelfcontrole vanaf nu elke
             # dag een fout die er niet is.
-            import_voor_huis = max(
-                0.0, self.grid_import_today_kwh - self.grid_charge_today_kwh
+            # v3.23.1: dezelfde begrenzing als de sensor - anders meldt
+            # de zelfcontrole vanaf nu elke dag een fout die er niet is.
+            netlading = self.grid_charge_today_kwh or 0.0
+            import_voor_huis = min(
+                verbruik,
+                max(0.0, self.grid_import_today_kwh - netlading),
             )
             verwacht = 100 * (1 - import_voor_huis / verbruik)
             gemeld = self.self_sufficiency_ratio_percent
@@ -17058,6 +17254,8 @@ class EnergyManagementSystemCoordinator:
             self.gross_consumption_today_kwh = 0.0
             self.grid_import_today_kwh = 0.0
             self.grid_charge_today_kwh = 0.0
+            self.netlading_vandaag_kwh = 0.0
+            self.netlading_kosten_eur = 0.0
 
         if self._self_sufficiency_last_sample is None:
             self._self_sufficiency_last_sample = now
@@ -18170,17 +18368,30 @@ class EnergyManagementSystemCoordinator:
         Wat er van het net de accu in gaat is geen huisverbruik. Die kWh
         wordt later gebruikt of verkocht, en telt dan mee - niet nu.
         """
-        if self.gross_consumption_today_kwh <= 0:
+        verbruik = self.gross_consumption_today_kwh
+        if verbruik <= 0:
             return None
-        import_voor_huis = max(
-            0.0, self.grid_import_today_kwh - self.grid_charge_today_kwh
+
+        # v3.23.1: het huis kan nooit MEER van het net krijgen dan het
+        # zelf verbruikt heeft.
+        #
+        # Gemeld met een schermafbeelding: "-54% zelfvoorziening", en na
+        # de reparatie van v3.16.0 nog steeds. De oorzaak: die reparatie
+        # trok de netlading eraf, maar die teller wordt alleen gevuld
+        # door de kostprijsboekhouding - en die draait niet bij elke
+        # laadroute. Vandaag stond hij op `None` terwijl er 5,93 kWh
+        # binnenkwam bij 3,91 kWh verbruik.
+        #
+        # Een teller die kan ontbreken is een zwakke basis. Wat WEL
+        # altijd waar is: alles wat er méér binnenkomt dan het huis
+        # verbruikt, is per definitie ergens anders heen gegaan - de
+        # accu. Daarmee is de uitkomst gebonden aan 0 tot 100 zonder van
+        # een aparte meting af te hangen.
+        netlading = self.grid_charge_today_kwh or 0.0
+        import_voor_huis = min(
+            verbruik, max(0.0, self.grid_import_today_kwh - netlading)
         )
-        return round(
-            100
-            * (self.gross_consumption_today_kwh - import_voor_huis)
-            / self.gross_consumption_today_kwh,
-            1,
-        )
+        return round(100 * (verbruik - import_voor_huis) / verbruik, 1)
 
     def _read_battery_cooling_inputs(self) -> tuple | None:
         """Leest de drie metingen die de koelbeslissing nodig heeft:
@@ -18384,10 +18595,17 @@ class EnergyManagementSystemCoordinator:
         except (TypeError, ValueError):
             drempel = BATTERY_COOLING_OPPORTUNITY_MIN_C
 
+        # v3.23.1: doorgaan vraagt MINDER verschil dan beginnen.
+        #
+        # Met dezelfde eis van 12 graden stopte de ventilator zodra hij
+        # zijn werk deed: 33 naar 24 bij 17,7 buiten is nog maar 6,3
+        # graden verschil. Dan warmt de omvormer weer op en begint het
+        # opnieuw - negen schakelingen in zes uur.
         stop_bij = drempel - BATTERY_COOLING_OPPORTUNITY_HYSTERESE_C
         return (
             accu_c > stop_bij
-            and (accu_c - buiten_c) >= BATTERY_COOLING_OPPORTUNITY_DELTA_C
+            and (accu_c - buiten_c)
+            >= BATTERY_COOLING_OPPORTUNITY_KEEP_DELTA_C
         )
 
     def _cooling_switch_too_recent(self, now: datetime, aanzetten: bool) -> bool:
@@ -25709,6 +25927,7 @@ class EnergyManagementSystemCoordinator:
             # `entries` pas in het staartstuk bestaat.
             ("lange reserve", lambda: self._meet_lange_reserve(now, entries)),
             ("bijkopen", lambda: self._meet_bijkopen_bij_tekort(now, entries)),
+            ("netlading", lambda: self._meet_werkelijke_netlading(now)),
             ("teruglevertarief", lambda: self._update_feedin_regime(now, entries)),
             (
                 "tegenfeitelijke besparing",

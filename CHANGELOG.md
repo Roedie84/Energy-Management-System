@@ -16668,3 +16668,156 @@ bij teruglevering en bij ontladen. Dat is precies het soort ding dat er
 goed uitziet in één toestand en fout in de andere.
 
 **Volledige testsuite**: 2471 tests, allemaal groen.
+
+## v3.23.0 — Klikbaar, maar dan buiten de SVG
+
+**Gemeld** met een schermafbeelding waarop de hele plaat als **platte
+tekst** verscheen, met de linkgedeelten blauw onderstreept.
+
+De oorzaak: de opschoner van de markdown-kaart accepteert `<a>` binnen
+SVG niet, en zet dan het hele blok om naar tekst. Dat was mijn fout uit
+v3.19.0 — ik had geschreven dat Home Assistant het "normaal doorlaat",
+maar dat kon ik niet uitproberen en het bleek niet zo.
+
+**Gevraagd**: "niet de links eruit, ik wil hem juist klikbaar hebben."
+
+Terecht, en dat kan — alleen moet het klikken **buiten** de SVG gebeuren.
+Onder de plaat staan nu negen **echte tegels** met een navigate-actie,
+elk met dezelfde samenvatting en dezelfde kleurcodering als de blokken in
+de SVG hadden. Die werken gegarandeerd.
+
+De pagina is daarvoor van paneelweergave naar secties gegaan; beide
+vullen de volle breedte.
+
+### De plaat werd breder
+
+Nu de statuskolom eruit is, mogen de twee overgebleven kolommen van 240
+naar **352** breed. Meer ruimte voor de balkjes, de blokken in het
+installatieschema en de tekstregels.
+
+Twee tests erbij die dit soort fouten voortaan vangen: geen links in de
+SVG, en elke tegel moet naar een pagina wijzen die werkelijk bestaat.
+
+**Volledige testsuite**: 2469 tests, allemaal groen.
+
+## v3.23.1 — De regel die pendelen moest voorkomen, veroorzaakte het
+
+Twee fouten uit de diagnostiek van 18 augustus 20:42, beide van mij.
+
+### De ventilator pendelde nog steeds
+
+**Negen schakelingen in zes uur**, ook na de hysterese van v3.14.0:
+
+    15:07 aan  33 °C     15:37 uit  24 °C     (30 min)
+    16:40 aan  31 °C     17:10 uit  27 °C     (30 min)
+    17:54 aan  32 °C     18:24 uit  26 °C     (30 min)
+    19:15 aan  31 °C     19:45 uit  23 °C     (30 min)
+
+De oorzaak: ik gebruikte **dezelfde delta-eis van 12 graden** voor
+aanzetten én voor doorgaan. Zodra de ventilator zijn werk doet zakt het
+verschil — 33 naar 24 bij 17,7 buiten is nog maar 6,3 graden — en dan
+stopte hij, warmde de omvormer weer op, en begon het opnieuw.
+
+Doorgaan vraagt nu **vier graden** in plaats van twaalf. Alle vier de
+gemeten uitschakelingen vervallen daarmee; de ventilator draait door tot
+de omvormer werkelijk koel is (20 °C bij een drempel van 25).
+
+*Reken op langere maar veel minder frequente cycli.*
+
+### Zelfvoorziening stond weer negatief
+
+**−51,5%**, en de netladingteller stond op **`None`**. Die wordt alleen
+gevuld door de kostprijsboekhouding, en die draait niet bij elke
+laadroute — dus de reparatie van v3.16.0 leunde op een meting die kan
+ontbreken.
+
+Wat wél altijd waar is: **het huis kan nooit meer van het net krijgen dan
+het zelf verbruikt heeft.** Alles daarboven is per definitie ergens
+anders heen gegaan. Daarmee is de uitkomst gebonden aan 0–100 zonder van
+een aparte teller af te hangen.
+
+Met de cijfers van vanavond: **0%** in plaats van −51,5%. Laag, maar
+eerlijk — vandaag kwam alles van het net.
+
+**Volledige testsuite**: 2476 tests, allemaal groen.
+
+## v3.24.0 — Ook meten bij een dreigend tekort
+
+**Gevraagd** na een dag met **42,9% minder zon** dan voorspeld: wat heeft
+de integratie hiervan geleerd?
+
+Het eerlijke antwoord was gemengd. De reserve leerde direct — tien
+procentpunt erbij voor "weinig zon" en "tekortdagen", die morgen
+automatisch doorwerken. Maar de **bijkoop-kandidaat stond op nul
+metingen**, terwijl het precies zo'n dag was waarop bijkopen relevant kon
+zijn.
+
+De reden: hij mat alleen bij een **becijferd** tekort in de planning, en
+dat was er niet — de reserve had het opgevangen. Dat is geen fout, maar
+het betekent wel dat de kandidaat maandenlang op nul blijft staan tot de
+reserve een keer tekortschiet. En dán is er nog niets geleerd.
+
+Een **dreigend** tekort telt nu ook mee: zakt de planning tot binnen tien
+procentpunt van de ondergrens, dan had een kWh erbij verschil gemaakt.
+
+De twee soorten worden apart geteld. Een meting bij een krappe marge
+weegt lichter dan een bij een echt tekort — daar had de reserve het al
+opgevangen, dus het "voordeel" is hypothetischer.
+
+### Wat dit vandaag zou hebben gedaan
+
+**Niets.** De laagste stand was **41%** tegen een ondergrens van 10 — dat
+is geen krappe marge maar een comfortabele. De reserve werkte vandaag
+gewoon goed, en dat is een uitkomst en geen tekortkoming.
+
+De kandidaat gaat nu tellen op dagen waarop het spannend wordt zonder
+mis te gaan. Dat zijn er meer dan dagen waarop het misgaat, maar nog
+steeds niet veel.
+
+**Volledige testsuite**: 2480 tests, allemaal groen.
+
+## v3.25.0 — Wat er wérkelijk van het net de accu in ging
+
+**Gevraagd**: "maar er is vandaag toch wel degelijk bijgekocht?" — en dat
+klopte. Mijn analyse van daarvoor was fout.
+
+En daarna: "ik denk dat het ook meer was dan 2,02 kWh." Ook dat klopte:
+
+| | |
+|---|---|
+| In de accu gegaan | **6,90 kWh** |
+| Ondergrens netdeel (import − verbruik) | 2,02 kWh |
+| Bovengrens netdeel | 5,93 kWh |
+
+Op dagniveau is dat niet scherper te krijgen: welk deel precies van het
+net kwam hangt af van wat de zon op **elk moment** leverde.
+
+### De bijkoop-kandidaat mat de verkeerde vraag
+
+Die keek naar het **hypothetische** geval — had ik moeten laden bij een
+verwacht tekort? Maar het laden gebeurde al, via de winterguard, en dat
+mechanisme meldde zich daar niet. De kandidaat wachtte op een situatie
+die nooit ontstond omdat een ander onderdeel hem had weggenomen.
+
+Dat is een ontwerpfout: ik mat de hypothese terwijl de werkelijke
+handeling ongemeten bleef.
+
+### Nu per ronde afgerekend
+
+Elke ronde wordt bepaald welk deel van het laadvermogen van het net kwam,
+en dat wordt geboekt tegen de prijs van **dat moment**. Vier gevallen
+nagerekend:
+
+    laden zonder zon      accu 2000 W, net 2100 W  ->  2000 W van het net
+    laden uit de zon      accu 2000 W, net -100 W  ->     0 W
+    deels net, deels zon  accu 2000 W, net  800 W  ->   800 W
+    ontladen              accu -1600 W             ->     0 W
+
+Daar rolt een kostprijs uit: inkoopprijs gedeeld door het rendement, plus
+de slijtage. Naast het duurste resterende kwartier is dat een afrekening
+in plaats van een hypothese.
+
+Een gat in de metingen — na een herstart — wordt overgeslagen; anders
+boekt één ronde uren aan energie.
+
+**Volledige testsuite**: 2489 tests, allemaal groen.

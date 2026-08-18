@@ -521,6 +521,11 @@ async def async_get_config_entry_diagnostics(
             "lange_reserve_history": coordinator.lange_reserve_history[-30:],
             # v3.11.0: was bijkopen bij een tekort goedkoper geweest?
             "bijkoop_history": coordinator.bijkoop_history[-30:],
+            # v3.25.0: wat er werkelijk van het net de accu in ging.
+            "netlading_overview": _veilig(
+                "get_netlading_overview", coordinator.get_netlading_overview
+            ),
+            "netlading_history": coordinator.netlading_history[-40:],
             "capacity_overview": _veilig(
                 "get_capacity_overview", coordinator.get_capacity_overview
             ),

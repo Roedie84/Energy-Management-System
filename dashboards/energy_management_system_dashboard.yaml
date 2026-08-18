@@ -496,16 +496,115 @@ views:
 - title: Visueel
   path: visueel
   subview: true
-  panel: true
-  cards:
-  - type: markdown
-    content: '{{ state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''overzichtsplaat'') }}
-
-
-      {{ state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''overzichtsecties'') }}
-
-
-      <p style="color:#6b8fa3;font-size:0.8em;margin-top:8px">Alles op deze plaat beweegt. Een meter voor een vast getal is versiering, en die staat er dus niet in.</p>'
+  type: sections
+  max_columns: 3
+  sections:
+  - type: grid
+    column_span: 3
+    cards:
+    - type: markdown
+      content: '{{ state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''overzichtsplaat'') }}'
+      grid_options:
+        columns: full
+    - type: markdown
+      content: '{{ state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''overzichtsecties'') }}'
+      grid_options:
+        columns: full
+  - type: grid
+    column_span: 3
+    cards:
+    - type: heading
+      heading: Status per onderwerp
+    - type: custom:mushroom-template-card
+      primary: Zelfcontrole
+      secondary: '{% set s = (state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''samenvattingen'') or {}).get(''zelfcontrole'') or {} %}{{ s.get(''zin'', ''nog geen gegevens'') }}'
+      multiline_secondary: true
+      icon: mdi:clipboard-check-outline
+      icon_color: '{% set s = (state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''samenvattingen'') or {}).get(''zelfcontrole'') or {} %}{{ ''green'' if s.get(''niveau'') == ''betrouwbaar'' else (''orange'' if s.get(''niveau'') == ''indicatief'' else ''grey'') }}'
+      entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
+      tap_action:
+        action: navigate
+        navigation_path: /energy-management-system/detail-zelfcontrole
+    - type: custom:mushroom-template-card
+      primary: PV / zon
+      secondary: '{% set s = (state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''samenvattingen'') or {}).get(''zon'') or {} %}{{ s.get(''zin'', ''nog geen gegevens'') }}'
+      multiline_secondary: true
+      icon: mdi:solar-power
+      icon_color: '{% set s = (state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''samenvattingen'') or {}).get(''zon'') or {} %}{{ ''green'' if s.get(''niveau'') == ''betrouwbaar'' else (''orange'' if s.get(''niveau'') == ''indicatief'' else ''grey'') }}'
+      entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
+      tap_action:
+        action: navigate
+        navigation_path: /energy-management-system/detail-zon
+    - type: custom:mushroom-template-card
+      primary: Accumodules
+      secondary: '{% set s = (state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''samenvattingen'') or {}).get(''accumodules'') or {} %}{{ s.get(''zin'', ''nog geen gegevens'') }}'
+      multiline_secondary: true
+      icon: mdi:battery-heart-variant
+      icon_color: '{% set s = (state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''samenvattingen'') or {}).get(''accumodules'') or {} %}{{ ''green'' if s.get(''niveau'') == ''betrouwbaar'' else (''orange'' if s.get(''niveau'') == ''indicatief'' else ''grey'') }}'
+      entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
+      tap_action:
+        action: navigate
+        navigation_path: /energy-management-system/detail-accu
+    - type: custom:mushroom-template-card
+      primary: Apparaten
+      secondary: '{% set s = (state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''samenvattingen'') or {}).get(''apparaten'') or {} %}{{ s.get(''zin'', ''nog geen gegevens'') }}'
+      multiline_secondary: true
+      icon: mdi:power-plug
+      icon_color: '{% set s = (state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''samenvattingen'') or {}).get(''apparaten'') or {} %}{{ ''green'' if s.get(''niveau'') == ''betrouwbaar'' else (''orange'' if s.get(''niveau'') == ''indicatief'' else ''grey'') }}'
+      entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
+      tap_action:
+        action: navigate
+        navigation_path: /energy-management-system/detail-apparaten
+    - type: custom:mushroom-template-card
+      primary: Zelflerend
+      secondary: '{% set s = (state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''samenvattingen'') or {}).get(''zelflerend'') or {} %}{{ s.get(''zin'', ''nog geen gegevens'') }}'
+      multiline_secondary: true
+      icon: mdi:school-outline
+      icon_color: '{% set s = (state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''samenvattingen'') or {}).get(''zelflerend'') or {} %}{{ ''green'' if s.get(''niveau'') == ''betrouwbaar'' else (''orange'' if s.get(''niveau'') == ''indicatief'' else ''grey'') }}'
+      entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
+      tap_action:
+        action: navigate
+        navigation_path: /energy-management-system/detail-kwaliteit
+    - type: custom:mushroom-template-card
+      primary: Financieel
+      secondary: '{% set s = (state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''samenvattingen'') or {}).get(''financieel'') or {} %}{{ s.get(''zin'', ''nog geen gegevens'') }}'
+      multiline_secondary: true
+      icon: mdi:cash-multiple
+      icon_color: '{% set s = (state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''samenvattingen'') or {}).get(''financieel'') or {} %}{{ ''green'' if s.get(''niveau'') == ''betrouwbaar'' else (''orange'' if s.get(''niveau'') == ''indicatief'' else ''grey'') }}'
+      entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
+      tap_action:
+        action: navigate
+        navigation_path: /energy-management-system/detail-kosten
+    - type: custom:mushroom-template-card
+      primary: Klimaat
+      secondary: '{% set s = (state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''samenvattingen'') or {}).get(''klimaat'') or {} %}{{ s.get(''zin'', ''nog geen gegevens'') }}'
+      multiline_secondary: true
+      icon: mdi:home-thermometer
+      icon_color: '{% set s = (state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''samenvattingen'') or {}).get(''klimaat'') or {} %}{{ ''green'' if s.get(''niveau'') == ''betrouwbaar'' else (''orange'' if s.get(''niveau'') == ''indicatief'' else ''grey'') }}'
+      entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
+      tap_action:
+        action: navigate
+        navigation_path: /energy-management-system/detail-klimaat
+    - type: custom:mushroom-template-card
+      primary: Water
+      secondary: '{% set s = (state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''samenvattingen'') or {}).get(''water'') or {} %}{{ s.get(''zin'', ''nog geen gegevens'') }}'
+      multiline_secondary: true
+      icon: mdi:water
+      icon_color: '{% set s = (state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''samenvattingen'') or {}).get(''water'') or {} %}{{ ''green'' if s.get(''niveau'') == ''betrouwbaar'' else (''orange'' if s.get(''niveau'') == ''indicatief'' else ''grey'') }}'
+      entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
+      tap_action:
+        action: navigate
+        navigation_path: /energy-management-system/detail-water
+    - type: custom:mushroom-template-card
+      primary: Meetkwaliteit
+      secondary: '{% set s = (state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''samenvattingen'') or {}).get(''meetkwaliteit'') or {} %}{{ s.get(''zin'', ''nog geen gegevens'') }}'
+      multiline_secondary: true
+      icon: mdi:shield-check
+      icon_color: '{% set s = (state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''samenvattingen'') or {}).get(''meetkwaliteit'') or {} %}{{ ''green'' if s.get(''niveau'') == ''betrouwbaar'' else (''orange'' if s.get(''niveau'') == ''indicatief'' else ''grey'') }}'
+      entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
+      tap_action:
+        action: navigate
+        navigation_path: /energy-management-system/detail-betrouwbaarheid
 - title: Meldingen
   path: meldingen
   subview: true

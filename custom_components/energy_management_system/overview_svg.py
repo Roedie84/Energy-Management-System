@@ -495,19 +495,13 @@ def bouw_scada(g: dict) -> str:
     accu_w = g.get("accu_w")
     laadt = accu_w is not None and accu_w > 0
 
-    onderwerpen = [
-        (sleutel, w)
-        for sleutel, w in (g.get("onderwerpen") or {}).items()
-        if sleutel in ONDERWERP_PADEN and (w or {}).get("zin")
-    ]
-
     # Drie kolommen binnen 760: 232 + 232 + 232 met 16 marge en 12
     # tussenruimte.
-    L, M, R, KB = 16, 260, 504, 240
+    # Twee kolommen van 360 breed, want de status staat er niet meer
+    # naast.
+    L, M, KB = 16, 392, 352
 
-    kolom_h = 240
-    rechts_h = 22 + len(onderwerpen) * 34 if onderwerpen else 0
-    inhoud_h = max(kolom_h, rechts_h)
+    inhoud_h = 240
     hoogte = 44 + inhoud_h + 64
 
     d = [
@@ -543,14 +537,14 @@ def bouw_scada(g: dict) -> str:
     # v3.22.0: getallen met een balkje, geen halve cirkels meer.
     d.append(_kader(L, 44, KB, 84, "accu"))
     for x, waarde, mn, mx, label, eenheid, alarm in (
-        (L + 14, g.get("soc"), 0, 100, "accustand", "%", None),
-        (L + 90, g.get("omvormer_c"), 10, 55, "omvormer", "°C", 45),
-        (L + 166, g.get("beschikbaar_kwh"), 0, 8.6, "beschikbaar", "kWh", None),
+        (L + 16, g.get("soc"), 0, 100, "accustand", "%", None),
+        (L + 130, g.get("omvormer_c"), 10, 55, "omvormer", "°C", 45),
+        (L + 244, g.get("beschikbaar_kwh"), 0, 8.6, "beschikbaar", "kWh", None),
     ):
         d.append(
             _balkje(
                 x, 84, waarde, mn, mx, label, eenheid,
-                breedte=62.0, alarm_boven=alarm,
+                breedte=92.0, alarm_boven=alarm,
             )
         )
 
@@ -558,10 +552,10 @@ def bouw_scada(g: dict) -> str:
     # accu eronder gaf veel lucht; nu twee rijen dicht op elkaar.
     d.append(_kader(L, 136, KB, 148, "installatie"))
     for naam, x, y, w in (
-        ("zon", L + 62, 178, g.get("pv_w")),
-        ("net", L + 178, 178, g.get("net_w")),
-        ("huis", L + 62, 244, g.get("huis_w")),
-        ("accu", L + 178, 244, g.get("accu_w")),
+        ("zon", L + 92, 178, g.get("pv_w")),
+        ("net", L + 260, 178, g.get("net_w")),
+        ("huis", L + 92, 244, g.get("huis_w")),
+        ("accu", L + 260, 244, g.get("accu_w")),
     ):
         kleur = KLEUR_ACCENT if naam == "accu" else KLEUR_LIJN
         d.append(
@@ -588,40 +582,40 @@ def bouw_scada(g: dict) -> str:
     net_w = g.get("net_w")
     accu_w = g.get("accu_w")
     d.append(
-        f'<line x1="{L + 62}" y1="196" x2="{L + 62}" y2="226" '
+        f'<line x1="{L + 92}" y1="196" x2="{L + 92}" y2="226" '
         f'stroke="{KLEUR_LIJN}" stroke-opacity="0.25" stroke-width="1"/>'
-        f'<line x1="{L + 178}" y1="196" x2="{L + 178}" y2="226" '
+        f'<line x1="{L + 260}" y1="196" x2="{L + 260}" y2="226" '
         f'stroke="{KLEUR_LIJN}" stroke-opacity="0.25" stroke-width="1"/>'
-        f'<line x1="{L + 62}" y1="211" x2="{L + 178}" y2="211" '
+        f'<line x1="{L + 92}" y1="211" x2="{L + 260}" y2="211" '
         f'stroke="{KLEUR_LIJN}" stroke-opacity="0.25" stroke-width="1"/>'
     )
     # Zon naar beneden: die levert altijd.
-    d.append(_pijl(L + 62, 196, L + 62, 226, g.get("pv_w"), KLEUR_GOED))
+    d.append(_pijl(L + 92, 196, L + 92, 226, g.get("pv_w"), KLEUR_GOED))
     # Net: naar beneden bij afname, omhoog bij teruglevering.
     if net_w:
         if net_w > 0:
-            d.append(_pijl(L + 178, 196, L + 178, 226, net_w, "#e0a852"))
+            d.append(_pijl(L + 260, 196, L + 260, 226, net_w, "#e0a852"))
         else:
-            d.append(_pijl(L + 178, 226, L + 178, 196, net_w, KLEUR_GOED))
+            d.append(_pijl(L + 260, 226, L + 260, 196, net_w, KLEUR_GOED))
     # Accu: naar het blok toe bij laden, ervandaan bij ontladen.
     if accu_w:
         if accu_w > 0:
-            d.append(_pijl(L + 120, 211, L + 178, 226, accu_w, KLEUR_ACCENT))
+            d.append(_pijl(L + 176, 211, L + 260, 226, accu_w, KLEUR_ACCENT))
         else:
-            d.append(_pijl(L + 178, 226, L + 120, 211, accu_w, KLEUR_ACCENT))
+            d.append(_pijl(L + 260, 226, L + 176, 211, accu_w, KLEUR_ACCENT))
     # En naar het huis.
-    d.append(_pijl(L + 120, 211, L + 62, 226, g.get("huis_w"), KLEUR_TEKST))
+    d.append(_pijl(L + 176, 211, L + 92, 226, g.get("huis_w"), KLEUR_TEKST))
 
     # ================= MIDDEN: vermogen + vandaag ===================
     d.append(_kader(M, 44, KB, 122, "vermogen"))
     d.append(
-        f'<text x="{M + 120}" y="98" text-anchor="middle" font-size="32" '
+        f'<text x="{M + 176}" y="98" text-anchor="middle" font-size="32" '
         f'font-weight="600" fill="{KLEUR_TEKST}">'
         f'{abs(accu_w or 0):.0f}<tspan font-size="14" fill="{KLEUR_ZWAK}">'
         " W</tspan></text>"
     )
     d.append(
-        f'<text x="{M + 120}" y="116" text-anchor="middle" font-size="10" '
+        f'<text x="{M + 176}" y="116" text-anchor="middle" font-size="10" '
         f'fill="{KLEUR_ACCENT}">'
         f'{"LADEN" if laadt else "ONTLADEN" if accu_w else "RUST"}</text>'
     )
@@ -666,27 +660,12 @@ def bouw_scada(g: dict) -> str:
             f'font-size="10" fill="{KLEUR_TEKST}">{tekst}</text>'
         )
 
-    # ================= RECHTS: status per onderwerp =================
-    if onderwerpen:
-        d.append(_kader(R, 44, KB, rechts_h + 8, "status"))
-        for i, (sleutel, w) in enumerate(onderwerpen):
-            naam, pad = ONDERWERP_PADEN[sleutel]
-            y = 62 + i * 34
-            kleur = NIVEAU_KLEUR.get(w.get("niveau"), KLEUR_ZWAK)
-            blok = (
-                f'<rect x="{R + 8}" y="{y}" width="{KB - 16}" height="28" '
-                f'rx="5" fill="{KLEUR_VLAK}" fill-opacity="0.5"/>'
-                f'<rect x="{R + 8}" y="{y}" width="3" height="28" rx="1.5" '
-                f'fill="{kleur}"/>'
-                f'<text x="{R + 20}" y="{y + 14}" font-size="9.5" '
-                f'font-weight="600" fill="{KLEUR_TEKST}">'
-                f'{_kort(naam, 24)}</text>'
-                f'<text x="{R + 20}" y="{y + 24}" font-size="7.5" '
-                f'fill="{KLEUR_ZWAK}">{_kort(w.get("zin", ""), 38)}</text>'
-                f'<text x="{R + KB - 14}" y="{y + 18}" text-anchor="end" '
-                f'font-size="11" fill="{KLEUR_LIJN}">\u203a</text>'
-            )
-            d.append(_wikkel(blok, pad))
+    # v3.23.0: de statuskolom staat niet meer IN de plaat.
+    #
+    # De opschoner van de markdown-kaart accepteert `<a>` binnen SVG
+    # niet en toont dan het hele blok als platte tekst. Gevraagd is om
+    # het klikbaar te HOUDEN, dus staan de statusblokken nu als echte
+    # tegels onder de plaat - die werken gegarandeerd.
 
     # ================= ONDERBALK ====================================
     balk_y = 44 + inhoud_h + 8
@@ -797,6 +776,22 @@ NIVEAU_KLEUR = {
 
 
 def _wikkel(inhoud: str, pad: str | None) -> str:
+    """v3.23.0: GEEN links meer in de SVG.
+
+    Gemeld met een schermafbeelding waarop de hele plaat als platte
+    tekst verscheen, met de linkgedeelten blauw onderstreept. De
+    opschoner van de markdown-kaart accepteert `<a>` binnen SVG niet en
+    zet dan het hele blok om naar tekst.
+
+    Gevraagd: "niet de links eruit, ik wil hem juist klikbaar hebben."
+    Terecht - maar dan moet het klikken buiten de SVG gebeuren. Onder de
+    plaat staan nu echte tegels met een navigate-actie; die werken
+    gegarandeerd en zien er hetzelfde uit.
+    """
+    return inhoud
+
+
+def _oude_wikkel(inhoud: str, pad: str | None) -> str:
     """Maakt een blok klikbaar (v3.19.0).
 
     SVG kent gewoon `<a>`, en Home Assistant laat dat door in een
