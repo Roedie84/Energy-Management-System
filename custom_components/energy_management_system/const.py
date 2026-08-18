@@ -228,6 +228,20 @@ PEAK_ALERT_MIN_OF_MEDIAN = 1.15
 # is deze kWh MORGEN meer waard dan wat hij nu opbrengt?
 #
 # Eerst meten, dan pas sturen - dezelfde route als de slijtagekosten.
+# --- Verder vooruitkijken bij de reserve (v3.10.0) -------------------
+# Gevraagd: "Het gaat er mij vooral om dat er niet gewacht wordt tot een
+# duur kwartier om extra bij te laden. De integratie moet ruim vooruit
+# kijken."
+#
+# Terecht. Op 18 augustus rekende de reserve tot 16:45 - het
+# eerstvolgende goedkope blok. Daarna kwam de avondpiek van 37,4 ct, en
+# die telde niet mee bij de vraag hoeveel er in dat blok van 28,9 ct
+# geladen moest worden.
+#
+# Eerst meten wat het verschil zou zijn, dan pas sturen.
+LANGE_RESERVE_HISTORY_LENGTH = 300
+LANGE_RESERVE_MIN_METINGEN = 50
+
 LANGERE_HORIZON_HISTORY_LENGTH = 200
 LANGERE_HORIZON_MIN_METINGEN = 20
 
@@ -1959,6 +1973,7 @@ PERSISTED_PLAIN_FIELDS = (
     # v1.59.0: de dagreeks van verouderingsdrijvers.
     "veroudering_history",
     "langere_horizon_history",
+    "lange_reserve_history",
     "pv_band_history",
     "pv_model_samples",
     # v1.90.0: de dagreeks waar zelfconsumptie per week/maand/jaar op
@@ -4118,6 +4133,25 @@ QUARTER_PLAN_SNAPSHOT_LENGTH = 200
 #   - de accu haalt de nacht niet (tekortkwartieren in de planning)
 #   - het zonopvang-uitstelplan gaat aan of uit
 #   - verkopen wordt geblokkeerd omdat de woning voorgaat
+# --- Wanneer is een tekort een melding waard? (v3.9.0) ---------------
+# Gemeld: "Deze melding op dit tijdstip is een beetje raar toch?" bij
+# "Den accu haalt de nacht weer" om 09:30 's ochtends.
+#
+# Uit de geschiedenis bleek meer: 75 meldingen over tekorten, waarvan er
+# 47 op één dag (16 augustus). Twaalf keer ging het om EEN ENKEL
+# kwartier, en om 06:44 stond "hersteld" met om 06:45 weer "tekort".
+#
+# Een kwartier tekort is bij dit verbruik zo'n 0,1 kWh van het net. Dat
+# is geen probleem maar een planning die precies uitkomt - en bij een
+# laagste stand van exact 10% kantelt elke kleine verschuiving in de
+# zonverwachting het.
+PLAN_SHORTFALL_ALERT_MIN_QUARTERS = 3
+
+# En de omslag naar "hersteld" pas als het even stabiel is. De planning
+# wordt elke ronde opnieuw gebouwd en schommelt rond de grens; zonder
+# wachttijd krijg je bij elke passage een bericht.
+PLAN_SHORTFALL_RECOVERY_STABLE_MINUTES = 30.0
+
 PLAN_CHANGE_MIN_QUARTERS = 1
 
 # --- Achterhoeks (v1.24.0) -------------------------------------------
@@ -4137,7 +4171,7 @@ CONF_ACHTERHOEKS = "achterhoeks_meldingen"
 
 # Titels per meldingsoort.
 ACHTERHOEKS_TITELS = {
-    "plan_tekort": "Den accu haalt de nacht neet",
+    "plan_tekort": "Den accu kump tekort",
     "plan_uitstel": "Zunne opvangen wödt uut-esteld",
     "plan_verkoop_geblokkeerd": "Verkopen geet neet, 't huus geet veur",
     "vakantie_beweging": "Der beweeg wat, terwiel gi-j weg bunt",
@@ -4171,7 +4205,7 @@ ACHTERHOEKS_TITELS = {
     # in, die van het herstel niet - en woordvervanging alleen maakt van
     # "Accu haalt de nacht weer" niets Achterhoeks, want geen van die
     # woorden staat in de tabel.
-    "plan_tekort_hersteld": "Den accu haalt de nacht weer",
+    "plan_tekort_hersteld": "Den accu kump neet meer tekort",
     "battery_wont_last_night_hersteld": "Den accu haalt de nacht weer",
     "sensor_unavailable_hersteld": "De sensor dut 't weer",
     "integration_error_hersteld": "'t Systeem löp weer",

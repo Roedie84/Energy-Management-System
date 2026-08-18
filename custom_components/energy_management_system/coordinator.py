@@ -355,6 +355,8 @@ from .const import (
     GACS_REQUIREMENTS,
     GACS_SELF_CONSUMPTION_ADVICE_PERCENT,
     PLAN_CHANGE_MIN_QUARTERS,
+    PLAN_SHORTFALL_ALERT_MIN_QUARTERS,
+    PLAN_SHORTFALL_RECOVERY_STABLE_MINUTES,
     PLAUSIBILITY_RULES,
     QUARTER_PLAN_MAX_ROWS,
     PLAN_REVIEW_HISTORY_DAYS,
@@ -478,6 +480,8 @@ from .const import (
     MEASUREMENT_QUALITY_DEGRADED_THRESHOLD,
     MIN_COST_BASIS_DELTA_KWH,
     FEEDIN_PREMIUM_EUR_PER_KWH,
+    LANGE_RESERVE_HISTORY_LENGTH,
+    LANGE_RESERVE_MIN_METINGEN,
     LANGERE_HORIZON_HISTORY_LENGTH,
     LANGERE_HORIZON_MIN_METINGEN,
     FEEDIN_PREMIUM_EUR_PER_KWH,
@@ -702,6 +706,8 @@ class EnergyManagementSystemCoordinator:
         self.veroudering_history: list[dict] = []
         # v2.6.0: metingen voor de kandidaat 'vasthouden voor morgen'.
         self.langere_horizon_history: list[dict] = []
+        # v3.10.0: reserve met korte tegenover lange horizon.
+        self.lange_reserve_history: list[dict] = []
         # v2.8.0: waar de werkelijke opwek in de Solcast-band viel.
         self.pv_band_history: list[dict] = []
         # v2.9.0: kenmerken per afgesloten uur, voor het regressiewoud.
@@ -7629,6 +7635,7 @@ class EnergyManagementSystemCoordinator:
                     self._kandidaat_prijsvorm(),
                     self._kandidaat_langere_horizon(),
                     self._kandidaat_pv_model(),
+                    self._kandidaat_lange_reserve(),
                 )
             ],
         }
@@ -7649,6 +7656,7 @@ class EnergyManagementSystemCoordinator:
                 self._kandidaat_prijsvorm(),
                 self._kandidaat_langere_horizon(),
                 self._kandidaat_pv_model(),
+                self._kandidaat_lange_reserve(),
             )
         ]
         klaar = [k for k in kandidaten if k["gereedheid"] == "klaar om mee te doen"]
@@ -7780,6 +7788,143 @@ class EnergyManagementSystemCoordinator:
         self.langere_horizon_history = self.langere_horizon_history[
             -LANGERE_HORIZON_HISTORY_LENGTH:
         ]
+
+    def _meet_lange_reserve(self, now: datetime, entries) -> None:
+        """Wat zou de reserve zijn met een LANGE horizon? (v3.10.0)
+
+        Gevraagd: "Het gaat er mij vooral om dat er niet gewacht wordt
+        tot een duur kwartier om extra bij te laden. De integratie moet
+        ruim vooruit kijken."
+
+        Terecht, en de cijfers van 18 augustus laten het zien. De reserve
+        rekent tot het EERSTVOLGENDE goedkope blok - die dag tot 16:45.
+        Daarna kwam de avondpiek van 37,4 ct, en die telde niet mee bij
+        de vraag hoeveel er in dat blok van 28,9 ct geladen moest worden.
+
+        Gevolg: er wordt geladen wat nodig is TOT het blok, niet wat
+        nodig is tot de volgende gelegenheid. Kom je 's avonds tekort,
+        dan zit je in de dure uren en is het te laat.
+
+        Deze meting rekent beide uit en legt het verschil vast. Ze stuurt
+        niets - eerst zien of het loont, dan pas sturen.
+        """
+        blok_start = self.last_cheap_block_start
+        if not entries or blok_start is None or blok_start <= now:
+            return
+
+        kort = self._estimate_worst_case_deficit_kwh(now, blok_start)
+        # De lange horizon: tot het eind van de bekende prijzen.
+        eind = max(e[0] for e in entries)
+        lang = self._estimate_worst_case_deficit_kwh(now, eind)
+        if kort is None or lang is None:
+            return
+
+        # Wat kost het om dat verschil in het goedkope blok te laden, en
+        # wat zou het besparen in het duurste kwartier daarna?
+        na_blok = [
+            e[2] / PRICE_SCALE_FACTOR
+            for e in entries
+            if e[0] >= (self.last_cheap_block_end or blok_start)
+        ]
+        in_blok = [
+            e[2] / PRICE_SCALE_FACTOR
+            for e in entries
+            if blok_start <= e[0] < (self.last_cheap_block_end or eind)
+        ]
+        if not na_blok or not in_blok:
+            return
+
+        rendement = (self.learned_battery_efficiency_percent or 90.0) / 100
+        slijtage = (
+            (self.get_wear_cost_overview() or {}).get("slijtage_ct_per_kwh")
+            or 0.0
+        ) / 100
+        laadprijs = min(in_blok) / rendement + slijtage
+        vermeden = max(na_blok)
+
+        self.lange_reserve_history.append(
+            {
+                "moment": now.isoformat(),
+                "reserve_kort_kwh": round(kort, 3),
+                "reserve_lang_kwh": round(lang, 3),
+                "extra_kwh": round(max(0.0, lang - kort), 3),
+                "laadprijs_eur": round(laadprijs, 4),
+                "vermeden_eur": round(vermeden, 4),
+                "voordeel_eur_per_kwh": round(vermeden - laadprijs, 4),
+            }
+        )
+        self.lange_reserve_history = self.lange_reserve_history[
+            -LANGE_RESERVE_HISTORY_LENGTH:
+        ]
+
+    def _kandidaat_lange_reserve(self) -> dict:
+        """8. Zou verder vooruitkijken bij de reserve iets opleveren?"""
+        reeks = self.lange_reserve_history
+        if len(reeks) < LANGE_RESERVE_MIN_METINGEN:
+            return {
+                "naam": "Verder vooruitkijken bij de reserve",
+                "status": RELIABILITY_INSUFFICIENT,
+                "waarde": None,
+                "zou_hebben_opgeleverd": {
+                    "te_becijferen": False,
+                    "reden": (
+                        f"{len(reeks)} van {LANGE_RESERVE_MIN_METINGEN} "
+                        "momenten gemeten."
+                    ),
+                },
+                "betrouwbaarheid": (
+                    "Rekent elke ronde uit wat de reserve zou zijn tot het "
+                    "eind van de bekende prijzen, in plaats van tot het "
+                    "eerstvolgende goedkope blok. Stuurt niets."
+                ),
+            }
+
+        extra = [r["extra_kwh"] for r in reeks]
+        voordelen = [
+            r["voordeel_eur_per_kwh"] for r in reeks if r["extra_kwh"] > 0.05
+        ]
+        gunstig = [v for v in voordelen if v > 0]
+        mediaan_extra = statistics.median(extra)
+        return {
+            "naam": "Verder vooruitkijken bij de reserve",
+            "waarde": (
+                f"{mediaan_extra:.2f} kWh extra reserve"
+                if mediaan_extra > 0.05
+                else "geen verschil"
+            ),
+            "status": RELIABILITY_RELIABLE,
+            "zou_hebben_opgeleverd": {
+                "te_becijferen": bool(voordelen),
+                "extra_reserve_kwh": round(mediaan_extra, 2),
+                "momenten_met_verschil": len(voordelen),
+                "aandeel_gunstig_procent": (
+                    round(100 * len(gunstig) / len(voordelen), 1)
+                    if voordelen
+                    else None
+                ),
+                "mediaan_voordeel_ct_per_kwh": (
+                    round(statistics.median(voordelen) * 100, 1)
+                    if voordelen
+                    else None
+                ),
+                "reden": (
+                    f"Op {len(voordelen)} momenten zou de lange horizon meer "
+                    f"reserve vragen; bij {len(gunstig)} daarvan was extra "
+                    "laden ook goedkoper dan later van het net kopen."
+                    if voordelen
+                    else "De lange horizon vroeg nooit meer reserve."
+                ),
+            },
+            "betrouwbaarheid": (
+                "De reserve rekent tot het eerstvolgende goedkope blok. Op "
+                "18 augustus was dat tot 16:45, waarna de avondpiek van "
+                "37,4 ct niet meetelde bij de vraag hoeveel er in dat blok "
+                "van 28,9 ct geladen moest worden.\n\n"
+                "Meer reserve betekent minder verkopen. Dat loont alleen "
+                "als het prijsverschil de accukosten dekt - bij 84,5% "
+                "rendement en 4,2 ct slijtage is dat ruwweg 11 ct."
+            ),
+        }
 
     def _kandidaat_langere_horizon(self) -> dict:
         """6. Was vasthouden voor morgen beter geweest dan verkopen?"""
@@ -13791,19 +13936,58 @@ class EnergyManagementSystemCoordinator:
             )
 
         tekorten = samenvatting.get("tekort_kwartieren") or 0
-        if tekorten >= PLAN_CHANGE_MIN_QUARTERS:
+
+        # v3.9.0: een ondergrens, en zeggen WANNEER het tekort valt.
+        #
+        # Gemeld bij "Den accu haalt de nacht weer" om 09:30 's ochtends.
+        # Uit de geschiedenis bleek meer: 75 meldingen, 47 op één dag, en
+        # twaalf keer over een ENKEL kwartier - zo'n 0,1 kWh van het net.
+        #
+        # Dat is geen probleem maar een planning die precies uitkomt. Bij
+        # een laagste stand van exact 10% kantelt elke kleine
+        # verschuiving in de zonverwachting het, en dan krijg je bij elke
+        # passage een bericht.
+        perioden = samenvatting.get("tekort_perioden") or []
+        wanneer = (
+            ", ".join(str(p) for p in perioden[:2])
+            if perioden
+            else "onbekend wanneer"
+        )
+
+        if tekorten >= PLAN_SHORTFALL_ALERT_MIN_QUARTERS:
+            self._plan_tekort_vrij_sinds = None
             _meld(
                 "plan_tekort",
                 f"tekort:{tekorten}",
-                "Accu haalt de nacht mogelijk niet",
+                "Accu komt tekort",
                 (
                     f"De planning voorziet {tekorten} kwartier(en) waarin de "
                     "accu niets meer kan leveren en de woning aan het net "
-                    f"hangt. Laagste stand: "
+                    f"hangt: {wanneer}. Laagste stand: "
                     f"{samenvatting.get('laagste_soc_procent')}%."
                 ),
             )
-        elif self._last_plan_alert.pop("plan_tekort", None) is not None:
+        elif tekorten > 0:
+            # Eén of twee kwartieren: ruis rond de rekengrens. Geen
+            # melding, maar de teller voor "hersteld" ook niet starten -
+            # er is immers nog een tekort.
+            self._plan_tekort_vrij_sinds = None
+        elif self._last_plan_alert.get("plan_tekort") is not None:
+            # v3.9.0: pas melden na een stabiele periode.
+            #
+            # Om 06:44 stond "hersteld" met om 06:45 weer "tekort". De
+            # planning schommelt rond de grens; zonder wachttijd is die
+            # melding niets waard.
+            if self._plan_tekort_vrij_sinds is None:
+                self._plan_tekort_vrij_sinds = now
+                return
+            stabiel_minuten = (
+                now - self._plan_tekort_vrij_sinds
+            ).total_seconds() / 60
+            if stabiel_minuten < PLAN_SHORTFALL_RECOVERY_STABLE_MINUTES:
+                return
+            self._plan_tekort_vrij_sinds = None
+            self._last_plan_alert.pop("plan_tekort", None)
             # v1.40.0, gemeld: "Ik krijg wel de melding dat er niet
             # genoeg is, maar niet dat er wel weer genoeg zou zijn."
             #
@@ -13816,11 +14000,11 @@ class EnergyManagementSystemCoordinator:
             # opgewekt bericht dat er niets aan de hand is.
             self._meld_herstel(
                 "plan_tekort",
-                "✅ Accu haalt de nacht weer",
+                "✅ Accu komt niet meer tekort",
                 (
-                    "De planning voorziet geen kwartieren meer waarin de "
-                    "woning aan het net hangt. Laagste stand: "
-                    f"{samenvatting.get('laagste_soc_procent')}%."
+                    "De planning voorziet al een half uur geen kwartieren "
+                    "meer waarin de woning aan het net hangt. Laagste "
+                    f"stand: {samenvatting.get('laagste_soc_procent')}%."
                 ),
             )
 
@@ -24266,6 +24450,7 @@ class EnergyManagementSystemCoordinator:
             self._klok(
                 "langere_horizon", lambda: self._meet_langere_horizon(now)
             )
+
         except Exception as fout:  # noqa: BLE001
             _LOGGER.exception("Kon de proefstand niet bijwerken")
             self.internal_failures["proefstand"] = f"{type(fout).__name__}: {fout}"
@@ -24824,6 +25009,9 @@ class EnergyManagementSystemCoordinator:
             self._noteer_staartfout("accukoeling")
 
         for naam, stap in (
+            # v3.10.0: de reserve met een lange horizon, hier omdat
+            # `entries` pas in het staartstuk bestaat.
+            ("lange reserve", lambda: self._meet_lange_reserve(now, entries)),
             ("teruglevertarief", lambda: self._update_feedin_regime(now, entries)),
             (
                 "tegenfeitelijke besparing",

@@ -15953,3 +15953,99 @@ toegevoegd die niet door dezelfde afscherming loopt. Die vond meteen nog
 één ongeschermde stap: het geplande apparaat.
 
 **Volledige testsuite**: 2381 tests, allemaal groen.
+
+## v3.9.0 — 75 tekortmeldingen, waarvan 47 op één dag
+
+**Gemeld**: "Deze melding op dit tijdstip is een beetje raar toch?" bij
+
+> 18 Aug 09:30 · Den accu haalt de nacht weer
+
+De bewoording was inderdaad raar. Maar de geschiedenis liet iets ergers
+zien: **75 meldingen** over tekorten, waarvan **47 op 16 augustus
+alleen**. Twaalf keer ging het om één enkel kwartier. Om 06:44 stond
+"hersteld", om 06:45 weer "tekort" — en om 00:00 kwamen beide in dezelfde
+minuut.
+
+Drie dingen deugden niet.
+
+### Een randgeval werd als alarm behandeld
+
+Eén kwartier tekort is bij dit verbruik zo'n **0,1 kWh** van het net.
+Dat is geen probleem maar een planning die precies uitkomt. Bij een
+laagste stand van exact 10% kantelt elke kleine verschuiving in de
+zonverwachting het.
+
+De drempel ligt nu op **drie kwartieren**.
+
+### Geen demping op de omslag
+
+De planning wordt elke ronde opnieuw gebouwd en schommelt rond de grens;
+elke passage gaf een bericht. "Hersteld" komt nu pas na een **half uur
+stabiel**, en een terugkerend tekort zet die klok opnieuw.
+
+### En de tekst klopte niet
+
+"Haalt de nacht" om half tien 's ochtends slaat nergens op — het tekort
+kan op elk moment binnen de horizon liggen. De melding noemt nu het
+**tijdvak** uit de planning, die dat al kende: *"morgen 07:00-09:00"*.
+
+Dezelfde fout als bij het goedkoopste blok (v2.5.0) en het duurste blok
+(v2.7.0): een tekst die een tijdstip suggereert dat er niet is.
+
+### Wat dit op de gemeten reeks doet
+
+| | |
+|---|---|
+| Waarschuwingen over 1–2 kwartieren, vervallen | **17** |
+| Waarschuwingen die blijven | 22 |
+| Herstelmeldingen, nu met wachttijd | 36 |
+
+**Volledige testsuite**: 2390 tests, allemaal groen.
+
+## v3.10.0 — De reserve kijkt niet ver genoeg vooruit
+
+**Gevraagd**: "Het gaat er mij vooral om dat er niet gewacht wordt tot
+een duur kwartier om extra bij te laden. De integratie moet ruim vooruit
+kijken."
+
+Terecht, en de cijfers van 18 augustus laten het precies zien.
+
+De reserve rekent tot het **eerstvolgende goedkope blok** — die dag tot
+16:45. Wat daarna kwam telde niet mee:
+
+| | |
+|---|---|
+| Goedkoopste kwartier ín het blok | 28,9 ct |
+| Avondpiek ná het blok | **37,4 ct** |
+
+Gevolg: er wordt geladen wat nodig is *tot* het blok, niet wat nodig is
+tot de volgende gelegenheid. Kom je 's avonds tekort, dan zit je in de
+dure uren en is het te laat.
+
+### Eerst meten
+
+Gevraagd: "Eerst als meting, via de diagnostiek kun je dan later bepalen
+of sturen wenselijk is toch?" Precies — dezelfde route als de
+slijtagekosten.
+
+Nieuwe proefstandkandidaat die elke ronde beide reserves uitrekent: tot
+het goedkope blok, en tot het eind van de bekende prijzen. Plus wat het
+verschil zou **kosten** (laden in het blok, na rendement en slijtage) en
+wat het zou **besparen** (het duurste kwartier daarna).
+
+**Hij stuurt niets.** Meer reserve betekent minder verkopen, en dat loont
+alleen als het prijsverschil de accukosten dekt. Bij 84,5% rendement en
+4,22 ct slijtage is dat ruwweg **11 ct** — en vandaag zat er maar 8,5 ct
+tussen het blok en de avondpiek.
+
+### Wat de bestaande kandidaten er al over zeggen
+
+*"Vasthouden voor morgen"* staat inmiddels op **klaar om mee te doen**,
+met een duidelijk antwoord: bij **0 van de 200** gemeten momenten was
+vasthouden voordeliger, mediaan **−8,0 ct/kWh**. Dat meet de andere kant
+van dezelfde economie.
+
+Dat verandert na 1 januari: teruglevering levert dan nog 19 ct op tegen
+32 ct inkoop, en dan komt het verschil ruim boven de drempel.
+
+**Volledige testsuite**: 2398 tests, allemaal groen.

@@ -517,6 +517,8 @@ async def async_get_config_entry_diagnostics(
             # integratie zelf gelogd? Beide ontbraken, en dat kostte deze
             # week meerdere ronden.
             # v3.5.0: nominale tegenover gemeten capaciteit.
+            # v3.10.0: reserve met korte tegenover lange horizon.
+            "lange_reserve_history": coordinator.lange_reserve_history[-30:],
             "capacity_overview": _veilig(
                 "get_capacity_overview", coordinator.get_capacity_overview
             ),
