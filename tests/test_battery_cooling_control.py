@@ -375,7 +375,14 @@ def _aan(accu, buiten, vermogen):
         EnergyManagementSystemCoordinator as C,
     )
 
-    return C._battery_cooling_should_turn_on(accu, buiten, vermogen)
+    # v3.6.0: de functie kent nu ook de KANS om goedkoop te koelen, en
+    # leest daarvoor de configuratie. Vandaar een echt object in plaats
+    # van een aanroep op de klasse.
+    class _Kaal:
+        config: dict = {}
+        _koelen_is_goedkoop = C._koelen_is_goedkoop
+
+    return C._battery_cooling_should_turn_on(_Kaal(), accu, buiten, vermogen)
 
 
 def _uit(accu, buiten, vermogen):
@@ -465,7 +472,7 @@ def test_a_flickering_sensor_no_longer_toggles_the_fan(
     assert C._battery_cooling_should_turn_off(33.0, 26.5, 500.0) is False
 
     # En niet aanslaan zolang hij onder de bovenste grens blijft.
-    assert C._battery_cooling_should_turn_on(34.0, 26.5, 500.0) is None
+    assert _aan(34.0, 26.5, 500.0) is None
 
 
 def test_below_the_hysteresis_band_it_still_stops():
@@ -481,7 +488,7 @@ def test_above_the_band_it_still_starts():
         EnergyManagementSystemCoordinator as C,
     )
 
-    assert C._battery_cooling_should_turn_on(38.0, 30.0, 0.0) is not None
+    assert _aan(38.0, 30.0, 0.0) is not None
 
 
 # --- v1.99.0: minimale loop- en rusttijd -----------------------------
@@ -572,3 +579,76 @@ def test_it_waits_before_starting_again(make_coordinator, hass):
 
     assert besluit["actie"] is None
     assert "net uitgezet" in besluit["reden"]
+
+
+# --- v3.6.0: koelen als het bijna niets kost -------------------------
+
+
+def test_the_reported_case_now_cools():
+    """Gemeld op 18 augustus 07:57: "De accu moet meer gekoeld worden,
+    hij is nu 31 graden en de buitentemperatuur is veel lager."
+
+    Terecht. De ventilator stond stil omdat 31 onder de drempel van 35
+    ligt. Die drempel beschermt de OMVORMER - hij zegt niets over de
+    vraag of koelen de moeite is. Bij 31 met 14,1 buiten is er bijna
+    zeventien graden te halen voor een paar watt.
+    """
+    assert _aan(31.0, 14.1, 190.0) is not None
+
+
+def test_a_small_difference_is_not_worth_it():
+    """Zonder verschil met buiten valt er niets te halen, hoe warm de
+    omvormer ook is."""
+    assert _aan(31.0, 25.0, 190.0) is None
+
+
+def test_a_cool_inverter_is_left_alone():
+    """Onder de ondergrens wordt er sowieso niet gekoeld: dan is er niets
+    te winnen, hoe koud het buiten ook is."""
+    assert _aan(22.0, 4.0, 190.0) is None
+
+
+def test_the_old_rules_are_untouched():
+    """Boven 35 graden verandert er niets - de bestaande bescherming van
+    de omvormer blijft precies zoals hij was."""
+    assert _aan(38.0, 34.0, 1203.0) is not None
+    assert _aan(52.0, 44.0, 0.0) is not None
+
+
+def test_the_threshold_is_configurable():
+    """De drempels zijn schattingen - Zendure publiceert niet wanneer de
+    omvormer terugregelt (v1.80.0). Dan hoort de gebruiker eraan te
+    kunnen draaien."""
+    from custom_components.energy_management_system.coordinator import (
+        EnergyManagementSystemCoordinator as C,
+    )
+    from custom_components.energy_management_system.const import (
+        CONF_BATTERY_COOLING_OPPORTUNITY_C,
+    )
+
+    class _Kaal:
+        config = {CONF_BATTERY_COOLING_OPPORTUNITY_C: 34.0}
+        _koelen_is_goedkoop = C._koelen_is_goedkoop
+
+    # Met een hogere drempel blijft 31 graden ongemoeid.
+    assert (
+        C._battery_cooling_should_turn_on(_Kaal(), 31.0, 14.1, 190.0) is None
+    )
+
+
+def test_nonsense_in_the_setting_falls_back():
+    from custom_components.energy_management_system.coordinator import (
+        EnergyManagementSystemCoordinator as C,
+    )
+    from custom_components.energy_management_system.const import (
+        CONF_BATTERY_COOLING_OPPORTUNITY_C,
+    )
+
+    class _Kaal:
+        config = {CONF_BATTERY_COOLING_OPPORTUNITY_C: "warm"}
+        _koelen_is_goedkoop = C._koelen_is_goedkoop
+
+    assert (
+        C._battery_cooling_should_turn_on(_Kaal(), 31.0, 14.1, 190.0)
+        is not None
+    )
