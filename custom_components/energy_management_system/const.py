@@ -2177,6 +2177,7 @@ PERSISTED_PLAIN_FIELDS = (
     "battery_export_today_kwh",
     "gross_consumption_today_kwh",
     "grid_import_today_kwh",
+    "grid_charge_today_kwh",
     "peak_power_today_w",
     "water_sessions_today_l",
     "water_sessions_today_count",

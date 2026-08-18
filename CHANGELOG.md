@@ -16281,3 +16281,390 @@ De reden vermeldt het expliciet: *"wél uitgevoerd ondanks force manual:
 koelen is bescherming, geen aansturing"*.
 
 **Volledige testsuite**: 2433 tests, allemaal groen.
+
+## v3.16.0 — Zelfvoorziening van −103%
+
+**Gemeld** met een screenshot: *"−103.2% Zelfvoorziening"*. Een schaal
+die van 0 tot 100 loopt kan daar niet uitkomen.
+
+De rekensom klopte, maar de **vraag** niet:
+
+| | |
+|---|---|
+| Verbruik vandaag | 2,87 kWh |
+| Import vandaag | **5,88 kWh** |
+
+Het verschil zat in de **accu** — de winterguard had bijgeladen. De
+formule nam aan dat alle import naar het huis gaat, en telde die
+accu-energie dus mee als "verbruik dat niet zelf is opgewekt".
+
+Wat er van het net de accu in gaat is geen huisverbruik. Die kWh wordt
+later gebruikt of verkocht, en telt dán mee — niet nu.
+
+Er is een dagteller bijgekomen voor netlading; die gaat er nu vanaf.
+
+### En de zelfcontrole rekende mee
+
+De kruiscontrole op zelfvoorziening gebruikte dezelfde oude formule. Was
+die niet meegewijzigd, dan had hij vanaf nu **elke dag** een fout gemeld
+die er niet is — precies het soort valse melding waar we deze week al
+tweemaal iets aan hebben moeten doen.
+
+Een test bewaakt dat beide formules gelijk blijven.
+
+**Volledige testsuite**: 2441 tests, allemaal groen.
+
+## v3.17.0 — Het visuele overzicht opnieuw gebouwd
+
+**Gevraagd**: dynamisch maken, kleinere getallen, leesbaar op elk
+apparaat, klikbaar, en de stromen inzichtelijk.
+
+Vijf wensen, en ze hadden alle vijf dezelfde oorzaak: de kaart was een
+**statische SVG** met `picture-elements` eroverheen, met vaste
+pixelgroottes.
+
+| Klacht | Oorzaak |
+|---|---|
+| Zon bij 99,6% bewolking | het weerbeeld zat ín het plaatje |
+| "0.2900598 €/kWh" | rauwe sensorwaarde, geen opmaak |
+| Slecht leesbaar op mobiel | vaste pixels, geen `viewBox` |
+| Niets klikbaar | alleen `more-info`, geen navigatie |
+| Geen stromen | niet te tekenen zonder de achtergrond te vervangen |
+
+De plaat wordt nu elke ronde opnieuw opgebouwd in code.
+
+### Wat er verandert
+
+**Het weerbeeld volgt de bewolking** — zon, licht bewolkt, halfbewolkt of
+wolk. De bewolking beslist, niet de opwek: 's avonds is er geen opwek
+terwijl het helder kan zijn.
+
+**Getallen zijn afgerond**: 29,0 ct/kWh, 6,65 kWh, 268 W. Boven de
+kilowatt schakelt het vermogen om. Een ontbrekende waarde toont een
+streepje, geen verzonnen nul.
+
+**Eén `viewBox` zonder vaste breedte** schaalt vanzelf mee met het
+scherm.
+
+**Elk blok is klikbaar** naar zijn detailpagina, en een test controleert
+dat elke link naar een pagina wijst die bestaat.
+
+**Stromen als pijlen** waarvan de dikte en de loopsnelheid het vermogen
+volgen. Onder 25 watt wordt er niets getekend — een pijl die altijd staat
+zegt niets. Het netvermogen wordt afgeleid uit verbruik min zon min accu;
+daar was geen sensor voor.
+
+### Onderweg
+
+Drie sensoren stonden **alleen** op de oude kaart en zouden zijn
+verdwenen. De bestaande test ving dat af; ze hebben nu een echte plek op
+de Integratiegezondheid-pagina in plaats van alleen in een plaatje.
+
+En een test hield tegen dat de plaat `heavy_load_source` zou tonen als
+grootste verbruiker — dat is een beslislogica-signaal, en die verwarring
+was eerder al rechtgezet.
+
+**Volledige testsuite**: 2434 tests, allemaal groen.
+
+**Gevraagd** na een schermafbeelding van een Grid Support Unit: "Deze
+style vind ik wel mooi." En daarna: "Ik wil alleen de 'visueel' pagina
+geüpdate hebben, de rest is goed."
+
+Alleen die pagina dus. De 31 andere blijven precies zoals ze waren.
+
+### Wat is overgenomen
+
+| | |
+|---|---|
+| Halve-cirkelmeters | accustand, omvormertemperatuur, beschikbare energie |
+| Groot vermogensgetal | met LADEN / ONTLADEN / RUST eronder |
+| Installatieschema | zon, huis, net, met de accu eronder |
+| Staafjes per module | temperatuur en celspreiding naast elkaar |
+| Één kleurschema | cyaan op donkerblauw, **rood alleen bij alarm** |
+
+Die staafjes zijn hier het nuttigst: module 1 loopt al een week uit de
+pas, en in een tabel zie je dat pas als je de getallen naast elkaar legt.
+
+### Wat bewust níet is overgenomen
+
+Op het voorbeeld staat *"Power capacity 413 kW"* in een halve cirkel. Dat
+is versiering: een waarde die nooit beweegt hoort geen meter te krijgen.
+**Alles op deze plaat beweegt**, en een test bewaakt dat.
+
+Een ontbrekende waarde toont een **streepje**, geen nul — een naald op
+nul lijkt een meting.
+
+### Onderweg gevonden
+
+Het huisverbruik stond gelijk aan de netafname. De P1-meter meet alleen
+het net; zodra de accu bijspringt klopt dat schema niet. Nu net plus zon
+min accu.
+
+En de scan uit v3.6.1 ving meteen af dat ik `get_battery_module_live()`
+aanriep terwijl dat een veld is, geen functie.
+
+**Volledige testsuite**: 2444 tests, allemaal groen.
+
+## v3.17.1 — De uitlijning klopte niet
+
+**Gemeld** met een schermafbeelding van de nieuwe plaat: "Dat ziet er al
+een stuk beter uit, echter is de uitlijning niet overal goed."
+
+Drie fouten, alle drie zichtbaar in die afbeelding.
+
+### De meters overlapten
+
+Ze stonden 100 pixels uit elkaar met een straal van 46 — dus 92 breed.
+Dat paste net niet en de bogen liepen in elkaar. Nu straal 38 op
+90/194/298: veertien pixels tussen de bogen en achtentwintig aan de
+randen.
+
+### De kolommen liepen niet door
+
+Het schema eronder stond op 84/194/304, de meters op 94/194/294. Nu
+allebei op 90/194/298, en de verzamelrail is symmetrisch rond het midden.
+Dan oogt de plaat als één geheel in plaats van twee losse helften.
+
+### De staafjes schaalden vanaf de laagste meting
+
+Daardoor werd bij 31/28/27 °C een verschil van vier graden uitvergroot
+tot de volle hoogte — dat suggereert een alarm dat er niet is. En bij
+drie gelijke waarden (celspreiding allemaal nul) kreeg elk staafje de
+minimale hoogte, wat oogt als "bijna niets" terwijl het "allemaal gelijk"
+betekent.
+
+Nu vanaf **nul**. Gelijke waarden geven gelijke staafjes, en een
+uitschieter blijft zichtbaar doordat hij als enige de accentkleur krijgt.
+
+Vijf tests erbij, waaronder één die controleert dat alles binnen de
+viewBox valt — anders wordt de onderbalk afgesneden.
+
+**Volledige testsuite**: 2449 tests, allemaal groen.
+
+## v3.18.0 — Uitlijning, loze ruimte en drie secties
+
+**Gemeld** met drie schermafbeeldingen: *"deze ook nog niet correct
+uitgelijnd"*, *"hier bijvoorbeeld veel loze ruimte"*, en *"er mag wat
+meer relevante informatie op, misschien 3 secties naast elkaar"*.
+
+### De meters stonden wél gelijk, de bogen niet
+
+De teksten stonden alle drie op dezelfde hoogte. Maar 87% en 81% vullen
+bijna de hele halve cirkel, terwijl 36% links blijft hangen — en dan
+lijkt de middelste meter lager en kleiner.
+
+De achtergrondboog is nu **zichtbaar**, dus je ziet altijd de volle
+cirkel en verschilt alleen de vulling. Dat is wat een meter hoort te
+doen. Met de schaalgrenzen erbij: zonder die twee getallen is niet te
+zien of 26 °C laag of hoog is.
+
+### De loze ruimte gevuld met wat erbij hoort
+
+Een kader van 128 hoog voor één getal is verspilling. Naast het vermogen
+staan nu de **stroomprijs**, wat een **kWh uit de accu kost**, en de
+**reden** van de huidige beslissing — precies de afweging waar de
+aansturing op draait.
+
+### Drie secties onder de plaat
+
+| | |
+|---|---|
+| Vandaag | opgewekt tegen voorspeld, verbruik, netafname, netlading, zelfvoorziening, besparing |
+| Vooruit | laagste stand, tekortkwartieren, opbrengst, reserve, bandbreedte |
+| Kosten en kwaliteit | rendement, slijtage, accu tegen net, ijking, rondeduur |
+
+De plaat toont de **toestand**; deze secties het **verhaal**. Alles komt
+uit gegevens die er al waren; er wordt niets extra berekend.
+
+Een ontbrekende waarde toont een streepje. Een nul zou eruitzien als een
+meting — dezelfde fout die deze week bij de zelfvoorziening en de
+perioden is opgelost.
+
+### Onderweg
+
+De structuurscan ving tweemaal een aanroep van iets dat geen functie is:
+`get_battery_module_live` en `get_battery_vs_grid` zijn velden.
+
+**Volledige testsuite**: 2455 tests, allemaal groen.
+
+## v3.19.0 — Status per onderwerp, klikbaar — en de modules eruit
+
+**Gevraagd**: "Deze info toevoegen bijvoorbeeld? En klikbaar maken?" bij
+een schermafbeelding van de statustegels. En: "de accumodules gedeelte
+mag er wel uit, die info vind ik overbodig op deze pagina."
+
+### Klikbare status per onderwerp
+
+Onder de plaat staat nu dezelfde statuslijst als op de landingspagina —
+zelfcontrole, zon, apparaten, financieel, klimaat, water, meetkwaliteit —
+met per blok een **link naar de detailpagina**.
+
+Een gekleurd streepje links geeft het betrouwbaarheidsniveau: dezelfde
+schaal die de proefstand en de meetkwaliteit al gebruiken, dus geen nieuw
+begrip. Onderwerpen zonder detailpagina worden overgeslagen; een blok dat
+niet klikt terwijl de andere dat wel doen is verwarrend.
+
+*SVG kent gewoon `<a>`, en Home Assistant laat dat door in een
+markdown-kaart. Werkt het onverwacht niet, dan is de plaat nog steeds
+leesbaar — de link is een toevoeging, geen voorwaarde.*
+
+### De accumodules eruit
+
+Terecht. De staafjes stonden er om een uitschieter te laten zien, maar de
+drie modules liepen gelijk en de celspreiding stond op nul — zes blokjes
+die niets zeiden. De accupagina heeft de cijfers met historie, en de
+zelfcontrole meldt het zodra er wél iets uit de pas loopt.
+
+Op die plek staan nu de **dagcijfers**: opgewekt tegen voorspeld,
+verbruikt, van het net, teruggeleverd. Loze ruimte zou geen verbetering
+zijn geweest.
+
+De bouwsteen voor staafjes blijft bestaan, want de accupagina gebruikt
+hem.
+
+**Volledige testsuite**: 2459 tests, allemaal groen.
+
+## v3.20.0 — Eén plaat, en nette schaalgrenzen
+
+**Gevraagd**: "Kan status niet bij op het overzicht?" En: "tevens dit nog
+niet netjes op het overzicht."
+
+### De status zit nu in dezelfde plaat
+
+Twee losse platen onder elkaar gaven twee achtergronden, twee kaders en
+een naad ertussen. Nu één plaat die **meegroeit** met het aantal
+onderwerpen — een vaste hoogte zou de onderste blokken afsnijden of loze
+ruimte laten, precies de klacht van eerder.
+
+De blokken blijven klikbaar naar hun detailpagina.
+
+### Twee fouten bij de schaalgrenzen
+
+De getallen stonden op `x ± straal` — precies onder de uiteinden van de
+boog, waar ze tegen de lijn aan botsten. Ze staan nu ernaast, naar buiten
+uitgelijnd.
+
+En **8,6 kWh werd weergegeven als "9"**. Dat is geen afronding maar een
+verkeerde grens: de accu levert 8,6 bruikbaar, niet 9. Onder de tien telt
+de decimaal nu mee.
+
+Vijf tests erbij, waaronder één die de plaat met verschillende aantallen
+onderwerpen rendert en controleert dat alles binnen de viewBox blijft.
+
+**Volledige testsuite**: 2464 tests, allemaal groen.
+
+## v3.21.0 — Drie kolommen
+
+**Gevraagd**: "2 blokken links, 2 blokken midden, status per onderwerp
+rechts." Daarvoor liep de plaat rechts buiten het kader.
+
+| Kolom | Inhoud |
+|---|---|
+| Links | accu (drie meters) en installatie (zon, net, huis, accu) |
+| Midden | vermogen met prijzen en reden, en de dagcijfers |
+| Rechts | status per onderwerp, klikbaar |
+
+Onderaan een balk over de volle breedte: koeling, tekortkwartieren,
+verkoopkwartieren en de grootste verbruiker.
+
+Drie kolommen van 240 breed op 16/260/504 binnen 760 — vier pixels tussen
+de kaders, zestien aan de randen. Een test controleert dat geen kader
+buiten de plaat valt, want dat was precies wat er misging.
+
+### Compacter geworden
+
+Van **744** naar **464** hoog, terwijl er méér op staat: in het
+middenblok is ruimte gekomen voor de **netlading** en de
+**zelfvoorziening** — precies de twee cijfers die elkaar verklaren sinds
+v3.16.0.
+
+De meters zijn kleiner (straal 30) en de statusregels korter afgekapt op
+een woordgrens. De plaat groeit nog wel mee wanneer de statuslijst langer
+wordt dan de linkerkolom.
+
+**Volledige testsuite**: 2465 tests, allemaal groen.
+
+## v3.21.1 — Het derde meterlabel viel buiten het kader
+
+**Gemeld** met een schermafbeelding: "dat ziet er al een heel stuk beter
+uit, alleen nog steeds die gauges."
+
+Twee fouten. De derde meter stond op y 176, dus zijn label op **202** —
+terwijl het accukader op 194 eindigt. En twee meters boven met één
+eronder was asymmetrisch.
+
+De drie meters staan nu op **één rij**: straal 22 op 60/136/212 binnen
+een kolom van 240. Met de schaalgrenzen erbij beslaat elke meter 68
+pixels, dus er blijft acht pixels tussen — nagerekend in plaats van met
+het oog beoordeeld, want zo kwam die fout erin.
+
+Twee tests erbij:
+
+- geen meterlabel mag buiten zijn kader vallen;
+- alle bogen staan op dezelfde hoogte.
+
+De tweede kostte een poging: het eindpunt van een boog verschuift met de
+waarde, dus de test moet naar het **startpunt** kijken.
+
+**Volledige testsuite**: 2467 tests, allemaal groen.
+
+## v3.22.0 — Geen gauges meer
+
+**Gemeld** met een schermafbeelding: "springt er teveel uit, misschien
+compacter, en geen gauges?"
+
+Terecht. Drie halve cirkels met een boog, een achtergrondboog en twee
+schaalgrenzen zijn **acht lijnen voor drie getallen**. Dat trekt de
+aandacht naar de versiering in plaats van naar de waarde.
+
+Nu een groot getal met een balkje van drie pixels eronder. Dat zegt
+hetzelfde — waar sta je tussen minimum en maximum — en het getal is weer
+wat opvalt.
+
+### En compacter
+
+| | |
+|---|---|
+| Vorige versie | 464 hoog |
+| Nu | **368 hoog** |
+
+Het installatieschema stond als drie blokken op een rij met de accu
+eronder; dat gaf veel lucht. Nu twee rijen van twee, met de verzamelrail
+ertussen — en de accu erbij, die er eerst alleen als naam stond zonder
+vermogen.
+
+De statusregels zijn 34 pixels hoog in plaats van 40, en de kaders in het
+midden zijn ingekort tot wat hun inhoud nodig heeft.
+
+Een test rekent na dat niets buiten de plaat valt, in beide richtingen.
+Bij elke indelingswijziging tot nu toe liep er iets uit, en dat is met
+het oog niet betrouwbaar te beoordelen.
+
+**Volledige testsuite**: 2466 tests, allemaal groen.
+
+## v3.22.1 — De stroompijlen bewogen niet meer
+
+**Gevraagd**: "Bewegen er nu ook richtingspijlen in het installatie
+gedeelte?"
+
+Nee. De pijlfunctie bestond al sinds v3.17.0 — met bewegende streepjes en
+een dikte die het vermogen volgt — maar na de herindeling werd hij niet
+meer aangeroepen. Er stonden alleen dunne verbindingslijnen.
+
+Nu weer aangesloten, met de richting die de werkelijkheid volgt:
+
+| | |
+|---|---|
+| Zon | altijd naar beneden — die levert |
+| Net | omlaag bij afname, **omhoog** bij teruglevering |
+| Accu | naar het blok toe bij laden, ervandaan bij ontladen |
+
+De dikte volgt het vermogen en de snelheid ook: bij veel stroom lopen de
+streepjes sneller. Onder 25 W wordt er niets getekend — een pijl die
+altijd staat zegt niets.
+
+Vijf tests erbij, waaronder twee die controleren dat de pijl **omdraait**
+bij teruglevering en bij ontladen. Dat is precies het soort ding dat er
+goed uitziet in één toestand en fout in de andere.
+
+**Volledige testsuite**: 2471 tests, allemaal groen.

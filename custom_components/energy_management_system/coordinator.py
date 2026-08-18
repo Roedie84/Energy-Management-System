@@ -1043,6 +1043,8 @@ class EnergyManagementSystemCoordinator:
         self.feedin_import_spread_eur_per_kwh: float | None = None
         self.charge_pv_kwh_total: float = 0.0
         self.charge_grid_kwh_total: float = 0.0
+        # v3.16.0: wat er vandaag van het net de ACCU in ging.
+        self.grid_charge_today_kwh: float = 0.0
         self.discharge_export_kwh_total: float = 0.0
         self.forgone_feedin_eur_total: float = 0.0
         # Kirchhoff energy-balance validation (v0.63.28).
@@ -9790,6 +9792,369 @@ class EnergyManagementSystemCoordinator:
             logging.getLogger(__package__).removeHandler(self._log_handler)
             self._log_handler = None
 
+    def _netvermogen_w(self) -> float | None:
+        """Wat er nu van of naar het net gaat (v3.17.0).
+
+        Er is geen aparte sensor voor; het net is wat er overblijft nadat
+        de zon en de accu hun deel hebben gedaan:
+
+            net = verbruik - zon - accu-ontlading
+
+        Positief betekent afnemen, negatief terugleveren. Voor de
+        stroompijlen op het overzicht is dat precies wat er nodig is.
+        """
+        huis = self._read_sensor_float(
+            self.config.get(CONF_CONSUMPTION_POWER_SENSOR)
+        )
+        if huis is None:
+            return None
+        zon = self._read_sensor_float(self.config.get(CONF_PV_POWER_SENSOR)) or 0.0
+        accu = (
+            self._read_sensor_float(self.config.get(CONF_BATTERY_POWER_SENSOR))
+            or 0.0
+        )
+        # De accusensor is positief bij ontladen op deze installatie.
+        return huis - zon - accu
+
+    def get_overview_svg(self) -> str:
+        """Het dynamische overzichtsplaatje (v3.17.0).
+
+        Gevraagd: dynamisch, kleinere getallen, leesbaar op elk apparaat,
+        klikbaar, en met de stromen erin. De oude kaart was een statische
+        SVG met vaste pixelgroottes eroverheen, en dat verklaarde alle
+        vier de klachten.
+        """
+        from .overview_svg import bouw_overzicht, bouw_scada
+
+        koeling = self.battery_cooling_state or {}
+        samenvatting = self.get_quarter_plan_summary() or {}
+        # v3.17.0: in de stijl van een Grid Support Unit, op verzoek na
+        # een schermafbeelding daarvan. Halve-cirkelmeters, staafjes per
+        # accumodule, één kleur met rood alleen voor alarmen.
+        return bouw_scada(
+            {
+                "status": (self.get_diagnostic_summary() or {}).get("status"),
+                "soc": self.accustand_procent(),
+                "omvormer_c": (self.battery_cooling_state or {}).get("accu_c"),
+                "beschikbaar_kwh": self.beschikbare_energie_kwh(),
+                "accu_w": self._read_sensor_float(
+                    self.config.get(CONF_BATTERY_POWER_SENSOR)
+                ),
+                "pv_w": self._read_sensor_float(
+                    self.config.get(CONF_PV_POWER_SENSOR)
+                ),
+                # De P1-meter IS het netvermogen; het huisverbruik volgt
+                # daaruit met de zon en de accu erbij. Er is geen aparte
+                # netsensor, en er een verzinnen zou een lege meter
+                # opleveren.
+                "net_w": self._read_sensor_float(
+                    self.config.get(CONF_CONSUMPTION_POWER_SENSOR)
+                ),
+                "huis_w": self._huisverbruik_w(),
+                # NIET `last_heavy_load_source` - dat is een
+                # beslislogica-signaal, geen verbruikersaanduiding.
+                "grootverbruiker": self.get_largest_known_consumer(),
+                # v3.18.0: de afweging waar de aansturing op draait,
+                # naast het vermogen in plaats van loze ruimte.
+                "prijs_ct": (
+                    self.last_current_price_per_kwh * 100
+                    if self.last_current_price_per_kwh is not None
+                    else None
+                ),
+                "accu_ct": (
+                    (self.last_battery_vs_grid or {}).get("accu_eur_per_kwh")
+                    * 100
+                    if (self.last_battery_vs_grid or {}).get("accu_eur_per_kwh")
+                    else None
+                ),
+                "reden": DECISION_REASON_LABELS.get(
+                    self.last_reason, self.last_reason
+                ),
+                # v3.19.0: op de plek van de accumodules, want die info
+                # is op deze pagina overbodig.
+                "opgewekt_kwh": self.pv_production_today_kwh,
+                "voorspeld_kwh": (self.get_solar_today() or {}).get(
+                    "voorspeld_kwh"
+                ),
+                "verbruik_kwh": self.gross_consumption_today_kwh,
+                "import_kwh": self.grid_import_today_kwh,
+                "export_kwh": self.solar_export_today_kwh,
+                # v3.20.0: de status hoort in dezelfde plaat, niet in een
+                # tweede eronder.
+                "onderwerpen": self._overzicht_onderwerpen(),
+                # v3.21.0: het middenblok "vandaag" heeft ruimte voor
+                # meer, en netlading is precies het cijfer dat de
+                # zelfvoorziening verklaart (zie v3.16.0).
+                "netlading_kwh": self.grid_charge_today_kwh,
+                "zelfvoorziening_pct": self.self_sufficiency_ratio_percent,
+                "modules": self.battery_module_live or [],
+                "koeling": self.battery_cooling_state or {},
+                "tekort_kwartieren": (
+                    self.get_quarter_plan_summary() or {}
+                ).get("tekort_kwartieren"),
+                "verkoopkwartieren": (
+                    self.get_quarter_plan_summary() or {}
+                ).get("verkoopkwartieren"),
+            }
+        )
+
+    def _overzicht_secties(self) -> list:
+        """Drie kolommen met de cijfers achter de plaat (v3.18.0).
+
+        Gevraagd: "Tevens mag er wat meer relevante informatie op,
+        misschien 3 secties naast elkaar welke wat meer info geven."
+
+        De plaat toont de TOESTAND. Deze secties tonen het verhaal: waar
+        de dag heen gaat, wat de accu kost, en hoe betrouwbaar de cijfers
+        zijn.
+
+        Ontbreekt een waarde, dan staat er een streepje. Een nul zou
+        eruitzien als een meting, en dat is precies de fout die deze
+        week bij de zelfvoorziening en de perioden is opgelost.
+        """
+        from .overview_svg import KLEUR_ALARM, KLEUR_GOED, KLEUR_ZWAK
+
+        def _e(waarde, eenheid="", decimalen=1):
+            if waarde is None:
+                return "--"
+            return f"{float(waarde):.{decimalen}f} {eenheid}".strip()
+
+        qs = self.get_quarter_plan_summary() or {}
+        zon = self.get_solar_today() or {}
+        rendement = self.get_efficiency_overview() or {}
+        marge = self.get_reserve_margin_overview() or {}
+        spreiding = self.get_pv_forecast_spread() or {}
+        ijking = self.get_pv_band_calibration() or {}
+        besparing = self.get_savings_correction() or {}
+
+        tekort = qs.get("tekort_kwartieren")
+        vandaag = [
+            (
+                "opgewekt",
+                f'{_e(zon.get("opgewekt_kwh"), "kWh")} van '
+                f'{_e(zon.get("voorspeld_kwh"), "kWh")}',
+                KLEUR_ALARM
+                if (zon.get("afwijking_procent") or 0) < -40
+                else None,
+            ),
+            ("verbruik", _e(self.gross_consumption_today_kwh, "kWh"), None),
+            ("van het net", _e(self.grid_import_today_kwh, "kWh"), None),
+            (
+                "waarvan in de accu",
+                _e(self.grid_charge_today_kwh, "kWh"),
+                None,
+            ),
+            (
+                "zelfvoorziening",
+                _e(self.self_sufficiency_ratio_percent, "%", 0),
+                None,
+            ),
+            (
+                "besparing vandaag",
+                _e(besparing.get("besparing_vandaag_eur"), "EUR", 2),
+                KLEUR_ALARM
+                if (besparing.get("besparing_vandaag_eur") or 0) < 0
+                else KLEUR_GOED,
+            ),
+        ]
+
+        vooruit = [
+            (
+                "laagste stand",
+                _e(qs.get("laagste_soc_procent"), "%", 0),
+                KLEUR_ALARM
+                if (qs.get("laagste_soc_procent") or 100) <= 12
+                else None,
+            ),
+            (
+                "tekortkwartieren",
+                "--" if tekort is None else str(tekort),
+                KLEUR_ALARM if tekort else KLEUR_GOED,
+            ),
+            (
+                "verwachte opbrengst",
+                _e(qs.get("netto_opbrengst_eur"), "EUR", 2),
+                None,
+            ),
+            ("ontladen gepland", _e(qs.get("ontladen_kwh"), "kWh"), None),
+            (
+                "reserve",
+                _e(marge.get("totaal_procent"), "%", 0),
+                None,
+            ),
+            (
+                "zonvoorspelling",
+                f'{_e(spreiding.get("p10_kwh"), "")}-'
+                f'{_e(spreiding.get("p90_kwh"), "kWh")}',
+                KLEUR_ALARM if spreiding.get("onzeker") else None,
+            ),
+        ]
+
+        kwaliteit = [
+            (
+                "rendement",
+                _e(rendement.get("heen_en_terug_procent"), "%"),
+                None,
+            ),
+            (
+                "slijtage",
+                _e(qs.get("slijtage_ct_per_kwh"), "ct/kWh", 2),
+                None,
+            ),
+            (
+                "kWh uit de accu",
+                _e(
+                    (self.last_battery_vs_grid or {}).get("accu_eur_per_kwh"),
+                    "EUR",
+                    2,
+                ),
+                None,
+            ),
+            (
+                "kWh van het net",
+                _e(
+                    (self.last_battery_vs_grid or {}).get("net_eur_per_kwh"),
+                    "EUR",
+                    2,
+                ),
+                None,
+            ),
+            (
+                "band geijkt over",
+                f'{ijking.get("dagen", 0)} dagen',
+                KLEUR_ZWAK if not ijking.get("beschikbaar") else None,
+            ),
+            (
+                "ronde",
+                _e(
+                    (self.get_tick_performance() or {}).get("mediaan_ms"),
+                    "ms",
+                    0,
+                ),
+                None,
+            ),
+        ]
+
+        return [
+            ("vandaag", vandaag),
+            ("vooruit", vooruit),
+            ("kosten en kwaliteit", kwaliteit),
+        ]
+
+    def _overzicht_onderwerpen(self) -> dict:
+        """De statusregels voor de plaat (v3.20.0).
+
+        Dezelfde samenvattingen als op de landingspagina, met de
+        zelfcontrole erbij - dat is daar de eerste tegel.
+        """
+        onderwerpen = dict(self.get_topic_summaries() or {})
+        controle = self.get_consistency_checks() or {}
+        if controle.get("gecontroleerd"):
+            bevindingen = controle.get("bevindingen") or []
+            onderwerpen["zelfcontrole"] = {
+                "niveau": "betrouwbaar" if not bevindingen else "indicatief",
+                "zin": (
+                    f"{controle['gecontroleerd']} kruiscontroles nagerekend, "
+                    "alles klopt."
+                    if not bevindingen
+                    else f"{bevindingen[0]['naam']}: {bevindingen[0]['uitleg']}"
+                ),
+            }
+        return onderwerpen
+
+    def get_overview_status_svg(self) -> str:
+        """De status per onderwerp op de visuele pagina (v3.19.0).
+
+        Gevraagd: "Deze info toevoegen bijvoorbeeld? En klikbaar maken?"
+
+        Dezelfde samenvattingen als op de landingspagina, dus dezelfde
+        teksten - er is niets nieuws berekend. Elk blok wijst naar de
+        bijbehorende detailpagina.
+        """
+        # v3.20.0: de status zit nu IN de plaat. Deze functie blijft
+        # bestaan voor wie hem los wil gebruiken, maar de visuele pagina
+        # gebruikt hem niet meer.
+        from .overview_svg import bouw_status
+
+        return bouw_status({"onderwerpen": self._overzicht_onderwerpen()})
+
+    def get_overview_sections_svg(self) -> str:
+        """De drie secties onder de plaat (v3.18.0)."""
+        from .overview_svg import bouw_secties
+
+        return bouw_secties({"secties": self._overzicht_secties()})
+
+    def _huisverbruik_w(self) -> float | None:
+        """Wat het huis nu vraagt (v3.17.0).
+
+        Het net plus de zon plus wat de accu levert. De P1-meter meet
+        alleen het net; zonder deze optelling zou de plaat het
+        huisverbruik gelijkstellen aan de netafname, en dan klopt het
+        schema niet zodra de accu bijspringt.
+        """
+        net = self._read_sensor_float(
+            self.config.get(CONF_CONSUMPTION_POWER_SENSOR)
+        )
+        zon = self._read_sensor_float(self.config.get(CONF_PV_POWER_SENSOR))
+        accu = self._read_sensor_float(
+            self.config.get(CONF_BATTERY_POWER_SENSOR)
+        )
+        if net is None:
+            return None
+        # Accuvermogen: positief is laden, dus dat gaat ervan af.
+        return max(0.0, net + (zon or 0.0) - (accu or 0.0))
+
+    def _oude_overzichtsplaat(self) -> str:
+        return bouw_overzicht(
+            {
+                "status": (self.get_diagnostic_summary() or {}).get("status"),
+                "pv_w": self._read_sensor_float(
+                    self.config.get(CONF_PV_POWER_SENSOR)
+                ),
+                "bewolking": self._weather_cloud_cover_percent(),
+                "zon_rest": self._read_sensor_float(
+                    self.config.get(CONF_SOLAR_REMAINING_TODAY_SENSOR)
+                ),
+                "huis_w": self._read_sensor_float(
+                    self.config.get(CONF_CONSUMPTION_POWER_SENSOR)
+                ),
+                # v3.17.0: NIET `last_heavy_load_source` - dat is een
+                # beslislogica-signaal, geen verbruikersaanduiding. Die
+                # verwarring is in een eerdere versie al rechtgezet en
+                # heeft een eigen test.
+                "grootste": self.get_largest_known_consumer(),
+                # Er is geen aparte netvermogen-sensor; het net is wat
+                # er overblijft. Positief = van het net, negatief =
+                # teruglevering.
+                "net_w": self._netvermogen_w(),
+                "accu_w": self._read_sensor_float(
+                    self.config.get(CONF_BATTERY_POWER_SENSOR)
+                ),
+                "prijs_ct": (
+                    self.last_current_price_per_kwh * 100
+                    if self.last_current_price_per_kwh is not None
+                    else None
+                ),
+                "drempel_ct": (
+                    self.last_expensive_price_threshold * 100
+                    if self.last_expensive_price_threshold is not None
+                    else None
+                ),
+                "modus": self.last_expected_mode,
+                "dure_kwartieren": samenvatting.get("dure_kwartieren"),
+                "soc": self.accustand_procent(),
+                "beschikbaar_kwh": self.beschikbare_energie_kwh(),
+                "koeling": (
+                    "koelt" if koeling.get("ventilator_aan") else "uit"
+                ),
+                "omvormer_c": koeling.get("accu_c"),
+                "sensor_gezondheid": self.sensor_health_score,
+                "sluipverbruik": (
+                    "verhoogd" if self.sluipverbruik_detected else "normaal"
+                ),
+            }
+        )
+
     def get_installation_facts(self) -> dict:
         """Welke versie draait hier, en sinds wanneer? (v3.4.0)
 
@@ -9950,7 +10315,13 @@ class EnergyManagementSystemCoordinator:
         # --- 1. Zelfvoorziening moet volgen uit import en verbruik ---
         verbruik = self.gross_consumption_today_kwh
         if verbruik > 1.0:
-            verwacht = 100 * (1 - self.grid_import_today_kwh / verbruik)
+            # v3.16.0: dezelfde formule als de sensor - netlading telt
+            # niet mee. Zonder dit meldt de zelfcontrole vanaf nu elke
+            # dag een fout die er niet is.
+            import_voor_huis = max(
+                0.0, self.grid_import_today_kwh - self.grid_charge_today_kwh
+            )
+            verwacht = 100 * (1 - import_voor_huis / verbruik)
             gemeld = self.self_sufficiency_ratio_percent
             if gemeld is not None:
                 _toets(
@@ -16686,6 +17057,7 @@ class EnergyManagementSystemCoordinator:
             self.battery_export_today_kwh = 0.0
             self.gross_consumption_today_kwh = 0.0
             self.grid_import_today_kwh = 0.0
+            self.grid_charge_today_kwh = 0.0
 
         if self._self_sufficiency_last_sample is None:
             self._self_sufficiency_last_sample = now
@@ -17782,11 +18154,30 @@ class EnergyManagementSystemCoordinator:
 
     @property
     def self_sufficiency_ratio_percent(self) -> float | None:
+        """Welk deel van het huisverbruik kwam niet van het net?
+
+        v3.16.0: de netlading telt NIET mee.
+
+        Gemeld met een screenshot: "-103.2% Zelfvoorziening". Een schaal
+        die van 0 tot 100 loopt kan niet op min honderd uitkomen.
+
+        De rekensom klopte, maar de vraag niet: op 18 augustus was er
+        5,88 kWh geïmporteerd bij 2,87 kWh verbruik. Het verschil zat in
+        de ACCU - de winterguard had bijgeladen. De formule nam aan dat
+        alle import naar het huis gaat, en telde die accu-energie dus mee
+        als "verbruik dat niet zelf is opgewekt".
+
+        Wat er van het net de accu in gaat is geen huisverbruik. Die kWh
+        wordt later gebruikt of verkocht, en telt dan mee - niet nu.
+        """
         if self.gross_consumption_today_kwh <= 0:
             return None
+        import_voor_huis = max(
+            0.0, self.grid_import_today_kwh - self.grid_charge_today_kwh
+        )
         return round(
             100
-            * (self.gross_consumption_today_kwh - self.grid_import_today_kwh)
+            * (self.gross_consumption_today_kwh - import_voor_huis)
             / self.gross_consumption_today_kwh,
             1,
         )
@@ -18878,6 +19269,8 @@ class EnergyManagementSystemCoordinator:
             charge_cost_eur = grid_kwh * current_price + pv_kwh * feedin_value
             self.charge_pv_kwh_total += pv_kwh
             self.charge_grid_kwh_total += grid_kwh
+            # v3.16.0: ook per dag, voor de zelfvoorziening.
+            self.grid_charge_today_kwh += grid_kwh
             self.forgone_feedin_eur_total += pv_kwh * feedin_value
 
             effective_charge_price = charge_cost_eur / delta_kwh
