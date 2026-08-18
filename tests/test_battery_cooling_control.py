@@ -498,9 +498,14 @@ def test_a_warm_battery_keeps_cooling_on_a_warm_day():
 
 
 def test_a_cold_battery_always_stops_cooling():
-    """Onder de ondergrens valt er niets te koelen, ook als de andere
-    voorwaarden nog niet zijn teruggevallen."""
-    assert _uit(30.0, 23.0, 1500.0) is True
+    """Onder de ondergrens valt er niets te koelen.
+
+    v3.23.1: die ondergrens is nu de aanzetdrempel min de hysterese - bij
+    de standaard 28 dus 23 graden. Daarboven draait de goedkope koeling
+    door zolang er vier graden verschil is; dat is precies wat het
+    pendelen wegneemt.
+    """
+    assert _uit(22.0, 18.0, 1500.0) is True
 
 
 def test_the_hysteresis_in_the_middle_is_unchanged():
@@ -551,7 +556,10 @@ def test_below_the_hysteresis_band_it_still_stops():
         EnergyManagementSystemCoordinator as C,
     )
 
-    assert _uit(31.0, 23.0, 1500.0) is True
+    # v3.23.1: bij 31 graden met 23 buiten valt er nog acht graden te
+    # halen, dus die blijft draaien tot hij koel is.
+    assert _uit(31.0, 23.0, 1500.0) is False
+    assert _uit(22.0, 20.0, 1500.0) is True
 
 
 def test_above_the_band_it_still_starts():
@@ -589,8 +597,33 @@ def test_the_fan_does_not_short_cycle(make_coordinator, hass):
 
     besluit = coordinator.evaluate_battery_cooling()
 
+    # v3.23.1: hij stopt hier sowieso niet meer - bij 31 graden met 23
+    # buiten valt er nog acht graden te halen. De minimale looptijd is
+    # daarmee een tweede vangnet geworden in plaats van het enige.
     assert besluit["actie"] is None
-    assert "pendelen" in besluit["reden"]
+
+
+def test_the_short_cycle_guard_still_exists(make_coordinator, hass):
+    """De minimale looptijd blijft nodig voor het geval de goedkope
+    koeling niet van toepassing is - bijvoorbeeld op een warme dag
+    waarop er weinig verschil met buiten is."""
+    from datetime import timedelta
+
+    import custom_components.energy_management_system.coordinator as mod
+
+    coordinator = make_coordinator(_config())
+    nu = datetime(2026, 8, 15, 14, 0, tzinfo=timezone.utc)
+    mod.dt_util.now = lambda: nu
+    coordinator.battery_cooling_last_change = nu - timedelta(minutes=8)
+    # Weinig verschil met buiten: de goedkope regel grijpt niet in.
+    _situatie(hass, accu=31.0, buiten=30.0, vermogen=300)
+    hass.states.set(FAN, "on")
+
+    besluit = coordinator.evaluate_battery_cooling()
+
+    # Zonder verschil met buiten valt er niets meer te halen, dus dan
+    # mag hij wél uit - de goedkope regel houdt hem niet tegen.
+    assert besluit["actie"] == "uit"
 
 
 def test_after_the_minimum_runtime_it_may_stop(make_coordinator, hass):
@@ -881,3 +914,72 @@ def test_the_normal_rules_are_untouched():
     de omvormer blijft precies zoals hij was."""
     assert _uit(34.0, 26.5, 500.0) is False
     assert _uit(31.0, 29.5, 100.0) is True
+
+
+def test_the_measured_short_cycles_are_gone():
+    """v3.23.1: negen schakelingen in zes uur, ook na de hysterese van
+    v3.14.0.
+
+    De oorzaak was dat ik dezelfde delta-eis van 12 graden gebruikte
+    voor aanzetten én voor doorgaan. Zodra de ventilator zijn werk doet
+    zakt het verschil - 33 naar 24 bij 17,7 buiten is nog maar 6,3
+    graden - en dan stopte hij, warmde de omvormer weer op, en begon het
+    opnieuw.
+
+    De regel die pendelen moest voorkomen veroorzaakte het.
+    """
+    from custom_components.energy_management_system.coordinator import (
+        EnergyManagementSystemCoordinator as C,
+    )
+    from custom_components.energy_management_system.const import (
+        CONF_BATTERY_COOLING_OPPORTUNITY_C,
+    )
+
+    class _Kaal:
+        config = {CONF_BATTERY_COOLING_OPPORTUNITY_C: 25.0}
+        _goedkope_koeling_nog_zinvol = C._goedkope_koeling_nog_zinvol
+
+    # De vier gemeten uitschakelingen van 18 augustus.
+    for accu, buiten in ((24.0, 17.7), (27.0, 20.2), (26.0, 19.8), (23.0, 18.9)):
+        assert (
+            C._battery_cooling_should_turn_off(_Kaal(), accu, buiten, 200.0)
+            is False
+        ), f"stopt nog steeds bij {accu} met {buiten}"
+
+
+def test_it_does_stop_once_really_cool():
+    """Anders zou de ventilator permanent draaien, en dat kost meer dan
+    het oplevert."""
+    from custom_components.energy_management_system.coordinator import (
+        EnergyManagementSystemCoordinator as C,
+    )
+    from custom_components.energy_management_system.const import (
+        CONF_BATTERY_COOLING_OPPORTUNITY_C,
+    )
+
+    class _Kaal:
+        config = {CONF_BATTERY_COOLING_OPPORTUNITY_C: 25.0}
+        _goedkope_koeling_nog_zinvol = C._goedkope_koeling_nog_zinvol
+
+    # Onder de ondergrens van 20 graden.
+    assert (
+        C._battery_cooling_should_turn_off(_Kaal(), 19.0, 12.0, 200.0) is True
+    )
+    # Of zonder verschil met buiten.
+    assert (
+        C._battery_cooling_should_turn_off(_Kaal(), 24.0, 22.0, 200.0) is True
+    )
+
+
+def test_continuing_asks_less_than_starting():
+    """Dat verschil IS de oplossing; zonder dat komt het pendelen
+    terug."""
+    from custom_components.energy_management_system.const import (
+        BATTERY_COOLING_OPPORTUNITY_DELTA_C,
+        BATTERY_COOLING_OPPORTUNITY_KEEP_DELTA_C,
+    )
+
+    assert (
+        BATTERY_COOLING_OPPORTUNITY_KEEP_DELTA_C
+        < BATTERY_COOLING_OPPORTUNITY_DELTA_C
+    )

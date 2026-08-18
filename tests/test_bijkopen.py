@@ -160,3 +160,74 @@ def test_it_steers_nothing():
 
     for verboden in ("async_call", "select_option", "set_value", "OPTION_MANUAL"):
         assert verboden not in code, verboden
+
+
+# --- v3.24.0: ook meten bij een dreigend tekort ----------------------
+
+
+def test_a_tight_margin_is_also_measured(make_coordinator, hass):
+    """Gevraagd na een dag met 42,9% minder zon dan voorspeld: de
+    kandidaat stond op nul metingen, terwijl het precies zo'n dag was
+    waarop bijkopen relevant kon zijn.
+
+    Hij mat alleen bij een BECIJFERD tekort, en dat was er niet - de
+    reserve had het opgevangen. Dan blijft de kandidaat maandenlang op
+    nul staan tot de reserve een keer tekortschiet, en dan is er nog
+    niets geleerd.
+    """
+    c, entries = _coordinator(make_coordinator, hass)
+    c.get_quarter_plan_summary = lambda *a, **k: {
+        "beschikbaar": True,
+        "tekort_kwartieren": 0,
+        "laagste_soc_procent": 14,
+    }
+    c.effective_min_soc_percent = lambda: 10.0
+    c.get_quarter_plan = lambda *a, **k: [
+        {"soc_procent": 14, "prijs_ct": 40.0, "verbruik_kwh": 0.25},
+        {"soc_procent": 60, "prijs_ct": 30.0, "verbruik_kwh": 0.25},
+    ]
+
+    c._meet_bijkopen_bij_tekort(NU, entries)
+
+    assert c.bijkoop_history
+    assert c.bijkoop_history[0]["soort"] == "krappe marge"
+
+
+def test_a_comfortable_plan_is_not_measured(make_coordinator, hass):
+    """Anders zou elke dag meetellen en zegt het cijfer niets."""
+    c, entries = _coordinator(make_coordinator, hass)
+    c.get_quarter_plan_summary = lambda *a, **k: {
+        "beschikbaar": True,
+        "tekort_kwartieren": 0,
+        "laagste_soc_procent": 55,
+    }
+    c.effective_min_soc_percent = lambda: 10.0
+
+    c._meet_bijkopen_bij_tekort(NU, entries)
+
+    assert c.bijkoop_history == []
+
+
+def test_a_real_shortfall_is_marked_as_such(make_coordinator, hass):
+    """Een meting bij een krappe marge weegt lichter dan een bij een
+    echt tekort - daar had de reserve het al opgevangen."""
+    c, entries = _coordinator(make_coordinator, hass)
+
+    c._meet_bijkopen_bij_tekort(NU, entries)
+
+    assert c.bijkoop_history[0]["soort"] == "tekort"
+
+
+def test_the_candidate_separates_the_two_kinds(make_coordinator, hass):
+    """Zonder dat onderscheid zijn de cijfers later niet te duiden."""
+    c, _ = _coordinator(make_coordinator, hass)
+    c.bijkoop_history = [
+        {"soort": "tekort", "voordeel_eur_per_kwh": 0.08, "voordeel_totaal_eur": 0.08}
+    ] * 10 + [
+        {"soort": "krappe marge", "voordeel_eur_per_kwh": -0.02, "voordeel_totaal_eur": 0.0}
+    ] * 20
+
+    o = c._kandidaat_bijkopen()["zou_hebben_opgeleverd"]
+
+    assert o["bij_echt_tekort"] == 10
+    assert o["bij_krappe_marge"] == 20
