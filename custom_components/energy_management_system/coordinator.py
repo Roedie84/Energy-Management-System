@@ -8042,16 +8042,23 @@ class EnergyManagementSystemCoordinator:
 
         # Welk deel van het laadvermogen kwam van het net?
         #
-        # De P1-meter geeft het NET: positief is afname. Het huis krijgt
-        # eerst de zon; wat er van de zon overblijft gaat naar de accu,
-        # en de rest van het laadvermogen komt van het net.
+        # Gevraagd: "ik denk dat je PV bent vergeten?" - een terechte
+        # controle, en er stond inderdaad een berekening met `pv_w` die
+        # NERGENS werd gebruikt. Dode code uit een eerste poging, die een
+        # som suggereerde die er niet was.
         #
-        #   huis = net + zon - accu
-        #   zon over voor de accu = zon - huis
+        # De zon hoeft niet apart, want hij zit al in de P1-meter. Die
+        # meet wat er overblijft nadat zon, huis en accu met elkaar zijn
+        # verrekend:
         #
-        # Dat laatste is gelijk aan `accu - net`, en dus is het netdeel
-        # simpelweg de netafname - begrensd op wat de accu opneemt.
-        zon_naar_accu = max(0.0, min(accu_w, (pv_w or 0.0) - 0.0))
+        #     net = huis + accu - zon
+        #
+        # Levert de zon meer, dan zakt de netafname vanzelf. Het netdeel
+        # van de lading is dus simpelweg de netafname, begrensd op wat de
+        # accu werkelijk opneemt - meer dan dat kan er niet in.
+        #
+        # Voorbeeld: accu laadt 2000 W, zon geeft 1400, huis gebruikt
+        # 200. Dan staat de P1-meter op 800, en dat is het netdeel.
         net_naar_accu = max(0.0, min(accu_w, net_w))
         if net_naar_accu < 25:
             return

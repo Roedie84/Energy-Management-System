@@ -16821,3 +16821,66 @@ Een gat in de metingen — na een herstart — wordt overgeslagen; anders
 boekt één ronde uren aan energie.
 
 **Volledige testsuite**: 2489 tests, allemaal groen.
+
+## v3.25.1 — De zon zat er al in, maar de code suggereerde anders
+
+**Gevraagd**: "ik denk dat je PV bent vergeten?"
+
+Een terechte controle, en het antwoord is nee — maar de code gaf reden
+tot twijfel.
+
+**De zon hoeft niet apart in de som**, want hij zit al in de P1-meter.
+Die meet wat er overblijft nadat zon, huis en accu met elkaar zijn
+verrekend:
+
+    net = huis + accu − zon
+
+Levert de zon meer, dan zakt de netafname vanzelf. Het netdeel van de
+lading is dus simpelweg de netafname, begrensd op wat de accu opneemt.
+
+*Voorbeeld: accu laadt 2000 W, zon geeft 1400, huis gebruikt 200. Dan
+staat de P1-meter op 800 — en dat is het netdeel.*
+
+### Maar er stond dode code
+
+`zon_naar_accu` werd berekend en **nergens gebruikt** — een restant van
+mijn eerste poging. Dat suggereert een som die er niet is, en dat is
+erger dan geen code: het maakt de logica onnavolgbaar en roept precies
+deze vraag op.
+
+Opgeruimd, met de redenering in het commentaar zodat de volgende lezer
+niet hoeft te twijfelen.
+
+Drie tests erbij, waaronder één die **elke** variabele in die functie
+nagaat: berekend maar nergens gelezen valt om. Op de proef gesteld door
+de dode code terug te zetten.
+
+**Volledige testsuite**: 2492 tests, allemaal groen.
+
+## v3.25.2 — Visueel-pagina teruggezet
+
+**Gemeld**: "de Visueel pagina werkt niet correct, graag terugbrengen
+naar de stand van gisteren."
+
+De dashboardcontrole vond niets: **103 verwijzingen nagelopen**, geen
+ontbrekende entiteiten, geen ontbrekende attributen. Wat er precies
+misging is dus niet vast te stellen — en dan is teruggaan naar een
+aantoonbaar werkende stand verstandiger dan blijven sleutelen aan iets
+waarvan de fout onbekend is.
+
+De pagina staat weer op **paneelweergave met één markdown-kaart**: de
+plaat en de cijfersecties eronder. Dat is de opzet die aantoonbaar
+renderde.
+
+### Wat daarmee vervalt
+
+De sectie-indeling met de negen klikbare tegels uit v3.23.0. Die kwamen
+er omdat links binnen de SVG niet werken; het klikken is dus voorlopig
+weg.
+
+Dat kan terugkomen zodra duidelijk is wat er misging. Om dat te kunnen
+vaststellen helpt het te weten **wat** er niet werkte: bleef de pagina
+leeg, verscheen er weer platte tekst, of stonden de tegels er wel maar
+zonder inhoud? Elk van die drie wijst een andere kant op.
+
+**Volledige testsuite**: 2492 tests, allemaal groen.
