@@ -134,3 +134,71 @@ def test_the_counters_reset_at_midnight():
 
     assert "self.netlading_vandaag_kwh = 0.0" in blok
     assert "self.netlading_kosten_eur = 0.0" in blok
+
+
+# --- v3.25.1: de zon zit al in de P1-meter ---------------------------
+
+
+def test_more_sun_lowers_the_grid_share(make_coordinator, hass):
+    """Gevraagd: "ik denk dat je PV bent vergeten?"
+
+    Een terechte controle. De zon hoeft niet apart in de som, want hij
+    zit al in de P1-meter: die meet wat er overblijft nadat zon, huis en
+    accu met elkaar zijn verrekend.
+
+    Deze toets maakt dat zichtbaar: bij hetzelfde laadvermogen zakt het
+    netdeel zodra de zon meer levert.
+    """
+    veel_zon = _c(make_coordinator, hass, accu_w=2000, net_w=200, pv_w=2000)
+    _twee_rondes(veel_zon)
+
+    weinig_zon = _c(make_coordinator, hass, accu_w=2000, net_w=1800, pv_w=400)
+    _twee_rondes(weinig_zon)
+
+    assert veel_zon.netlading_vandaag_kwh < weinig_zon.netlading_vandaag_kwh
+
+
+def test_the_grid_share_never_exceeds_the_charge(make_coordinator, hass):
+    """Meer dan wat de accu opneemt kan er niet in - ook niet als het
+    huis tegelijk veel van het net trekt."""
+    c = _c(make_coordinator, hass, accu_w=500, net_w=3000, pv_w=0)
+
+    _twee_rondes(c)
+
+    # 500 W gedurende 5 minuten is 0,042 kWh, niet 0,25.
+    assert c.netlading_vandaag_kwh < 0.06
+
+
+def test_no_unused_sun_calculation_remains():
+    """Er stond een berekening met `pv_w` die nergens werd gebruikt.
+    Dode code die een som suggereert die er niet is, is erger dan geen
+    code."""
+    import ast
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    kop = bron.index("def _meet_werkelijke_netlading")
+    blok = bron[kop : bron.index("\n    def ", kop + 10)]
+
+    boom = ast.parse("def f():\n" + "\n".join(
+        "    " + r for r in blok.splitlines()[1:]
+    ).replace("self.", "s."))
+
+    toegewezen = {
+        n.id
+        for n in ast.walk(boom)
+        if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store)
+    }
+    gelezen = {
+        n.id
+        for n in ast.walk(boom)
+        if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)
+    }
+
+    ongebruikt = {
+        naam for naam in toegewezen - gelezen if not naam.startswith("_")
+    }
+
+    assert not ongebruikt, f"berekend maar nergens gebruikt: {ongebruikt}"
