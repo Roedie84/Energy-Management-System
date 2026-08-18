@@ -16908,3 +16908,32 @@ veroorzaakte, en die kan bij elke volgende toevoeging terugkomen.
 zodra dit stabiel blijkt.*
 
 **Volledige testsuite**: 2493 tests, allemaal groen.
+
+## v3.25.4 — Het was `<animate>`
+
+**Gemeld**: "Visueel is nog steeds een lap tekst."
+
+Derde poging op dezelfde pagina, en de eerste twee waren gissingen die ik
+niet kon toetsen: eerst dacht ik dat de links het deden, toen dat twee
+SVG's in één kaart het probleem waren.
+
+De tijdlijn wijst één kant op. De bewegende pijlen kwamen er in
+**v3.22.1**, en precies daarna begon dit — daarvoor renderde de plaat.
+Home Assistant filtert **SMIL-animatie** uit de markdown-kaart, en wat
+overblijft is geen geldige SVG meer.
+
+De richting is net zo goed te zien met een **pijlpunt**, en dat is gewone
+SVG. De dikte volgt nog steeds het vermogen; onder 25 W wordt er niets
+getekend.
+
+### Een vangnet voor alle platen
+
+Een test rendert nu **elke** plaat die de integratie kan maken — leeg,
+ladend, ontladend, met en zonder status — en valt om zodra er een
+element in staat dat de opschoner kan weren: `animate`, `set`, `script`,
+`foreignObject`, `iframe` of `a`.
+
+Dat is de les van deze drie pogingen: niet raden welk element het
+probleem is, maar de hele verzameling afschermen.
+
+**Volledige testsuite**: 2496 tests, allemaal groen.

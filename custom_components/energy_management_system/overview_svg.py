@@ -107,30 +107,51 @@ def _zon_svg(x: float, y: float, soort: str, kleur: str) -> str:
 def _pijl(
     x1: float, y1: float, x2: float, y2: float, watt, kleur: str
 ) -> str:
-    """Een stroompijl waarvan de dikte het vermogen volgt (v3.17.0).
+    """Een stroompijl waarvan de dikte het vermogen volgt (v3.25.4).
 
-    Gevraagd: "stromen inzichtelijk maken (bijvoorbeeld stroom van PV
-    naar huis of accu etc)".
+    v3.25.4: ZONDER `<animate>`.
 
-    Bij nul vermogen wordt er niets getekend - een pijl die altijd staat
-    zegt niets.
+    Gemeld: "Visueel is nog steeds een lap tekst." De plaat verscheen als
+    platte tekst, en de tijdlijn wijst één kant op: de beweging kwam er
+    in v3.22.1, en precies daarna begon dit. Daarvoor renderde hij.
+
+    Home Assistant filtert SMIL-animatie (`<animate>`) uit de
+    markdown-kaart; wat overblijft is geen geldige SVG meer en valt terug
+    op tekst.
+
+    De richting is net zo goed te zien met een pijlPUNT, en die is
+    gewone SVG. Bij nul vermogen wordt er niets getekend - een pijl die
+    altijd staat zegt niets.
     """
+    import math
+
     try:
         w = abs(float(watt or 0))
     except (TypeError, ValueError):
         return ""
     if w < 25:
         return ""
-    dikte = min(9.0, 1.5 + w / 400)
-    duur = max(1.2, 4.0 - w / 800)
+
+    dikte = min(7.0, 1.5 + w / 500)
+    # De punt op driekwart van de lijn, zodat hij niet op het blok valt.
+    lengte = math.hypot(x2 - x1, y2 - y1)
+    if lengte < 1:
+        return ""
+    ex, ey = (x2 - x1) / lengte, (y2 - y1) / lengte
+    px, py = x1 + ex * lengte * 0.72, y1 + ey * lengte * 0.72
+    # Een driehoek loodrecht op de richting.
+    b = 4.5 + dikte / 2
+    punt = (
+        f"{px + ex * 9:.1f},{py + ey * 9:.1f} "
+        f"{px - ey * b:.1f},{py + ex * b:.1f} "
+        f"{px + ey * b:.1f},{py - ex * b:.1f}"
+    )
     return (
         f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="{kleur}" '
-        f'stroke-width="{dikte:.1f}" stroke-linecap="round" opacity="0.75" '
-        f'stroke-dasharray="10 14">'
-        f'<animate attributeName="stroke-dashoffset" from="24" to="0" '
-        f'dur="{duur:.1f}s" repeatCount="indefinite"/>'
-        "</line>"
+        f'stroke-width="{dikte:.1f}" stroke-linecap="round" opacity="0.65"/>'
+        f'<polygon points="{punt}" fill="{kleur}" opacity="0.9"/>'
     )
+
 
 
 # Waar de vier blokken staan. Eén viewBox van 1000 breed; de kaart
