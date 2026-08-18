@@ -234,12 +234,18 @@ def test_applying_records_history_and_timestamp(make_coordinator, hass):
     assert coordinator.battery_cooling_last_change is not None
 
 
-def test_force_manual_blocks_the_switch(make_coordinator, hass):
-    """Zelfde respect voor de bestaande noodrem als elke andere
-    aansturing in deze integratie."""
+def test_force_manual_blocks_an_optimisation(make_coordinator, hass):
+    """v3.15.0: de noodrem blokkeert de koeling nog steeds, MAAR alleen
+    zolang koelen een optimalisatie is.
+
+    Gemeld: "Koelen mag niets te maken hebben met goedkoop of dure
+    prijzen, hij moet wanneer nodig altijd koelen." Prijzen raakten de
+    koeling al nergens - maar deze blokkade wél.
+    """
     coordinator = make_coordinator(_config())
     coordinator.force_manual = True
-    _situatie(hass, accu=48.0, buiten=34.0, vermogen=0)
+    # Onder de beschermingsgrens: hier is koelen winst, geen noodzaak.
+    _situatie(hass, accu=30.0, buiten=15.0, vermogen=0)
 
     asyncio.run(coordinator._async_apply_battery_cooling())
 
@@ -247,14 +253,72 @@ def test_force_manual_blocks_the_switch(make_coordinator, hass):
     assert "force manual" in coordinator.battery_cooling_state["reden"]
 
 
-def test_learning_only_blocks_the_switch(make_coordinator, hass):
+def test_force_manual_does_not_block_protection(make_coordinator, hass):
+    """Een ventilator laadt of ontlaadt niets; hij beschermt alleen. Wie
+    de sturing overneemt wil niet dat zijn accu ondertussen
+    oververhit."""
+    coordinator = make_coordinator(_config())
+    coordinator.force_manual = True
+    _situatie(hass, accu=48.0, buiten=34.0, vermogen=0)
+
+    asyncio.run(coordinator._async_apply_battery_cooling())
+
+    assert any(c[0] == "switch" for c in _calls(hass))
+    assert "bescherming" in coordinator.battery_cooling_state["reden"]
+
+
+def test_learning_only_does_not_block_protection(make_coordinator, hass):
+    """Leermodus zegt "stuur mijn accu niet aan" - niet "laat hem
+    oververhitten"."""
     coordinator = make_coordinator(_config())
     coordinator.learning_only = True
     _situatie(hass, accu=48.0, buiten=34.0, vermogen=0)
 
     asyncio.run(coordinator._async_apply_battery_cooling())
 
+    assert any(c[0] == "switch" for c in _calls(hass))
+    assert "bescherming" in coordinator.battery_cooling_state["reden"]
+
+
+def test_learning_only_still_blocks_an_optimisation(make_coordinator, hass):
+    """Onder de beschermingsgrens blijft de oude terughoudendheid
+    gelden: dan is koelen een optimalisatie, en die hoort te wijken voor
+    wie de sturing overneemt."""
+    coordinator = make_coordinator(_config())
+    coordinator.learning_only = True
+    _situatie(hass, accu=30.0, buiten=15.0, vermogen=0)
+
+    asyncio.run(coordinator._async_apply_battery_cooling())
+
     assert not any(c[0] == "switch" for c in _calls(hass))
+
+
+def test_no_price_touches_the_cooling_decision():
+    """Gemeld: "Koelen mag niets te maken hebben met goedkoop of dure
+    prijzen." Dat was al zo, en het hoort zo te blijven.
+
+    De naam "goedkoop koelen" uit v3.6.0 sloeg op de VENTILATOR - een
+    paar watt voor veel koeling - niet op de stroomprijs. Een
+    ongelukkige naam, en dit legt vast waar het om gaat.
+    """
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    for naam in (
+        "evaluate_battery_cooling",
+        "_battery_cooling_should_turn_on",
+        "_battery_cooling_should_turn_off",
+        "_koelen_is_goedkoop",
+        "_goedkope_koeling_nog_zinvol",
+    ):
+        kop = bron.index(f"def {naam}(")
+        blok = bron[kop : bron.index("\n    def ", kop + 10)]
+        code = "\n".join(r.split("#")[0] for r in blok.splitlines())
+
+        for verboden in ("price", "prijs", "entries", "cheap_block"):
+            assert verboden not in code, f"{naam} kijkt naar {verboden}"
 
 
 def test_no_redundant_switch_when_already_correct(make_coordinator, hass):
