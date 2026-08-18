@@ -411,48 +411,6 @@ def test_the_svg_has_no_links():
     assert "xlink" not in plaat
 
 
-def test_the_status_tiles_are_real_cards():
-    """Echte tegels met een navigate-actie werken gegarandeerd."""
-    import yaml
-    from pathlib import Path
-
-    import custom_components.energy_management_system as pkg
-
-    data = yaml.safe_load(
-        (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
-    )
-    pagina = next(v for v in data["views"] if v.get("path") == "visueel")
-    kaarten = [k for sec in pagina["sections"] for k in sec["cards"]]
-    navigaties = [
-        k["tap_action"]["navigation_path"]
-        for k in kaarten
-        if (k.get("tap_action") or {}).get("action") == "navigate"
-    ]
-
-    assert len(navigaties) >= 8
-    assert "/energy-management-system/detail-water" in navigaties
-
-
-def test_every_status_tile_points_at_an_existing_page():
-    """Een tegel die naar niets wijst is erger dan geen tegel."""
-    import yaml
-    from pathlib import Path
-
-    import custom_components.energy_management_system as pkg
-
-    data = yaml.safe_load(
-        (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
-    )
-    paden = {v.get("path") for v in data["views"]}
-    pagina = next(v for v in data["views"] if v.get("path") == "visueel")
-    kaarten = [k for sec in pagina["sections"] for k in sec["cards"]]
-
-    for k in kaarten:
-        actie = k.get("tap_action") or {}
-        if actie.get("action") != "navigate":
-            continue
-        doel = actie["navigation_path"].rsplit("/", 1)[-1]
-        assert doel in paden, f"tegel wijst naar onbekende pagina: {doel}"
 
 
 def test_the_plate_has_two_columns_now():
@@ -492,3 +450,47 @@ def test_the_arrows_still_reverse():
     # Bij afname loopt de netpijl omlaag, bij teruglevering omhoog.
     assert _omlaag(afname[0])
     assert not _omlaag(teruglevering[0])
+
+
+def test_the_visual_page_is_a_panel_again():
+    """v3.25.2: teruggezet naar de paneelweergave met alleen de plaat.
+
+    Gemeld: "de Visueel pagina werkt niet correct, graag terugbrengen
+    naar de stand van gisteren." De dashboardcontrole vond niets - 103
+    verwijzingen nagelopen, geen ontbrekende entiteiten of attributen -
+    dus wat er precies misging is niet vast te stellen.
+
+    Dan is teruggaan naar een aantoonbaar werkende stand verstandiger
+    dan blijven sleutelen. De sectie-indeling met de klikbare tegels uit
+    v3.23.0 vervalt daarmee; die kan terugkomen zodra duidelijk is wat er
+    aan de hand was.
+    """
+    import yaml
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    data = yaml.safe_load(
+        (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
+    )
+    pagina = next(v for v in data["views"] if v.get("path") == "visueel")
+
+    assert pagina.get("panel") is True
+    assert len(pagina["cards"]) == 1
+    assert pagina["cards"][0]["type"] == "markdown"
+
+
+def test_the_plate_and_the_sections_are_both_shown():
+    import yaml
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    data = yaml.safe_load(
+        (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
+    )
+    pagina = next(v for v in data["views"] if v.get("path") == "visueel")
+    inhoud = pagina["cards"][0]["content"]
+
+    assert "overzichtsplaat" in inhoud
+    assert "overzichtsecties" in inhoud
