@@ -361,3 +361,147 @@ def test_no_call_uses_an_undefined_local_name():
                         )
 
     assert not fouten, fouten
+
+
+def test_no_staticmethod_uses_self():
+    """v3.7.1: een `@staticmethod` met `self` als eerste parameter.
+
+    Gemeld met een screenshot: twee tegels op "unknown". De oorzaak was
+    ernstiger dan de tegels: `last_successful_update` stond op None - er
+    had sinds het opstarten geen ENKELE ronde gedraaid.
+
+        TypeError: _koelen_is_goedkoop() missing 1 required positional
+        argument: 'buiten_c'
+
+    In v3.6.0 is `_koelen_is_goedkoop` ingevoegd TUSSEN een
+    `@staticmethod`-decorator en de functie waar die bij hoorde. De
+    decorator plakte daardoor aan de nieuwe functie: `self` werd de
+    eerste echte parameter, en er bleef er één over.
+
+    Alle 2375 tests bleven groen, want geen enkele riep die functie aan
+    via een echt object - de testhulpfunctie plakte hem los op een kale
+    klasse. In bedrijf viel elke ronde om.
+    """
+    import ast
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    fouten = []
+    for bestand in ("coordinator.py", "sensor.py", "switch.py", "button.py"):
+        pad = Path(pkg.__file__).parent / bestand
+        if not pad.exists():
+            continue
+        for knoop in ast.walk(ast.parse(pad.read_text())):
+            if not isinstance(knoop, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            statisch = any(
+                isinstance(d, ast.Name) and d.id == "staticmethod"
+                for d in knoop.decorator_list
+            )
+            eerste = knoop.args.args[0].arg if knoop.args.args else None
+            if statisch and eerste == "self":
+                fouten.append(f"{bestand}:{knoop.lineno}: {knoop.name}")
+
+    assert not fouten, (
+        "deze functies zijn @staticmethod maar hebben `self` als eerste "
+        f"parameter: {fouten}"
+    )
+
+
+def test_no_method_with_self_is_called_as_static():
+    """De andere kant: een gewone methode die zonder object wordt
+    aangeroepen. Dat gaf in v3.6.0 achttien testfouten voordat het in
+    bedrijf kwam."""
+    import ast
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    pad = Path(pkg.__file__).parent / "coordinator.py"
+    boom = ast.parse(pad.read_text())
+
+    # Namen van gewone methoden (met self, zonder staticmethod).
+    gewoon = {
+        k.name
+        for k in ast.walk(boom)
+        if isinstance(k, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and k.args.args
+        and k.args.args[0].arg == "self"
+        and not any(
+            isinstance(d, ast.Name) and d.id in ("staticmethod", "classmethod")
+            for d in k.decorator_list
+        )
+    }
+
+    fouten = [
+        f"{aanroep.lineno}: {aanroep.func.attr}"
+        for aanroep in ast.walk(boom)
+        if isinstance(aanroep, ast.Call)
+        and isinstance(aanroep.func, ast.Attribute)
+        and isinstance(aanroep.func.value, ast.Name)
+        and aanroep.func.value.id
+        == "EnergyManagementSystemCoordinator"
+        and aanroep.func.attr in gewoon
+    ]
+
+    assert not fouten, fouten
+
+
+def test_no_staticmethod_uses_self():
+    """v3.7.1: `_koelen_is_goedkoop` kreeg per ongeluk een
+    `@staticmethod` boven zich.
+
+    Bij het invoegen van die functie schoof de decorator van de
+    ONDERLIGGENDE functie naar de nieuwe. Gevolg in bedrijf:
+
+        _koelen_is_goedkoop() missing 1 required positional argument:
+        'buiten_c'
+
+    Want `self._koelen_is_goedkoop(accu_c, buiten_c)` geeft bij een
+    statische methode twee argumenten aan een functie die er drie
+    verwacht - `self` telt dan mee als gewone parameter.
+
+    Deze soort fout is met het blote oog nauwelijks te zien: de
+    decorator staat een regel hoger en hoort visueel bij de vorige
+    functie.
+    """
+    import ast
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    fouten = []
+    for bestand in ("coordinator.py", "sensor.py", "switch.py", "solar_forecast.py"):
+        pad = Path(pkg.__file__).parent / bestand
+        if not pad.exists():
+            continue
+
+        for knoop in ast.walk(ast.parse(pad.read_text())):
+            if not isinstance(knoop, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+
+            statisch = any(
+                isinstance(d, ast.Name) and d.id == "staticmethod"
+                for d in knoop.decorator_list
+            )
+            if not statisch:
+                continue
+
+            # Een statische methode mag `self` niet als parameter hebben,
+            # en mag hem ook niet gebruiken.
+            if knoop.args.args and knoop.args.args[0].arg == "self":
+                fouten.append(
+                    f"{bestand}:{knoop.lineno}: {knoop.name} is statisch "
+                    "maar heeft `self` als eerste parameter"
+                )
+                continue
+            for n in ast.walk(knoop):
+                if isinstance(n, ast.Name) and n.id == "self":
+                    fouten.append(
+                        f"{bestand}:{knoop.lineno}: {knoop.name} is statisch "
+                        "maar gebruikt `self`"
+                    )
+                    break
+
+    assert not fouten, fouten
