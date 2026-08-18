@@ -356,23 +356,6 @@ def test_nothing_falls_outside_the_canvas():
 # --- v3.22.1: bewegende stroompijlen ---------------------------------
 
 
-def test_the_flows_are_animated():
-    """Gevraagd: "Bewegen er nu ook richtingspijlen in het installatie
-    gedeelte?"
-
-    Nee, en dat was een gemis: de pijlfunctie bestond al sinds v3.17.0
-    maar werd na de herindeling niet meer gebruikt.
-    """
-    plaat = _plaat(pv_w=210.0, net_w=180.0, huis_w=820.0, accu_w=-430.0)
-
-    assert plaat.count("<animate") >= 3
-
-
-def test_no_flow_no_arrow():
-    """Een pijl die altijd staat zegt niets."""
-    plaat = _plaat(pv_w=0.0, net_w=0.0, huis_w=0.0, accu_w=0.0)
-
-    assert "<animate" not in plaat
 
 
 def test_the_arrow_thickness_follows_the_power():
@@ -422,34 +405,6 @@ def test_the_plate_has_two_columns_now():
         assert titel in plaat
     assert "STATUS" not in plaat
 
-
-def test_the_arrows_still_reverse():
-    """De richting volgt de werkelijkheid; die eis blijft, alleen de
-    posities zijn verschoven."""
-    import re
-
-    def _netpijl(plaat):
-        # De netpijl staat op x 276; de zonpijl op 108. Zonder dat
-        # onderscheid pakt de test de verkeerde regel zodra er meerdere
-        # stromen lopen.
-        return re.findall(
-            r'<line x1="276" y1="(\d+)" x2="276" y2="(\d+)"[^>]*'
-            r'stroke-dasharray',
-            plaat,
-        )
-
-    afname = _netpijl(_plaat(net_w=800.0))
-    teruglevering = _netpijl(_plaat(net_w=-800.0))
-
-    assert afname and teruglevering
-
-    def _omlaag(lijn):
-        y1, y2 = lijn
-        return int(y2) > int(y1)
-
-    # Bij afname loopt de netpijl omlaag, bij teruglevering omhoog.
-    assert _omlaag(afname[0])
-    assert not _omlaag(teruglevering[0])
 
 
 def test_the_visual_page_is_a_panel_again():
@@ -535,3 +490,125 @@ def test_no_card_holds_two_svgs():
             if naam in inhoud
         )
         assert aantal <= 1, f"kaart met {aantal} SVG-bronnen: {inhoud[:80]}"
+
+
+# --- v3.25.4: geen SMIL-animatie meer --------------------------------
+
+
+def test_the_plate_uses_only_plain_svg():
+    """Gemeld: "Visueel is nog steeds een lap tekst."
+
+    De tijdlijn wijst één kant op: de beweging kwam er in v3.22.1, en
+    precies daarna begon dit. Daarvoor renderde de plaat.
+
+    Home Assistant filtert SMIL-animatie uit de markdown-kaart; wat
+    overblijft is geen geldige SVG meer en valt terug op tekst.
+    """
+    import re
+
+    plaat = _plaat(pv_w=210.0, net_w=180.0, huis_w=820.0, accu_w=-430.0)
+    elementen = set(re.findall(r"<([a-z]+)", plaat))
+
+    verboden = {"animate", "animatetransform", "animatemotion", "set", "script"}
+    assert not (elementen & verboden), elementen & verboden
+
+
+def test_the_direction_is_still_visible():
+    """Zonder beweging moet de richting uit een pijlPUNT blijken."""
+    plaat = _plaat(pv_w=800.0)
+
+    assert "<polygon" in plaat
+
+
+def test_no_flow_no_arrowhead():
+    """Een pijl die altijd staat zegt niets."""
+    plaat = _plaat(pv_w=0.0, net_w=0.0, huis_w=0.0, accu_w=0.0)
+
+    assert "<polygon" not in plaat
+
+
+def test_the_arrowhead_turns_with_the_flow():
+    """Bij teruglevering wijst de punt omhoog in plaats van omlaag."""
+    import re
+
+    def _punt_y(plaat):
+        # De eerste coördinaat is de TIP van de driehoek; die wijst de
+        # kant op waar de stroom heen gaat.
+        m = re.search(r'<polygon points="[\d.]+,([\d.]+) ', plaat)
+        return float(m.group(1)) if m else None
+
+    # Alleen de NETpijl: de plaat bevat er meer, en dan pakt een zoekactie
+    # op het eerste voorkomen de verkeerde.
+    omlaag = _punt_y(_plaat(net_w=800.0, pv_w=0.0, huis_w=0.0, accu_w=0.0))
+    omhoog = _punt_y(_plaat(net_w=-800.0, pv_w=0.0, huis_w=0.0, accu_w=0.0))
+
+    assert omlaag is not None and omhoog is not None
+    assert omlaag > omhoog
+
+
+def test_the_thickness_still_follows_the_power():
+    import re
+
+    from overview_svg import _pijl
+
+    dun = _pijl(0, 0, 0, 30, 100, "#fff")
+    dik = _pijl(0, 0, 0, 30, 3000, "#fff")
+
+    d1 = float(re.search(r'stroke-width="([\d.]+)"', dun).group(1))
+    d2 = float(re.search(r'stroke-width="([\d.]+)"', dik).group(1))
+
+    assert d2 > d1
+
+
+def test_no_svg_anywhere_uses_unsafe_elements():
+    """v3.25.4: derde poging op dezelfde pagina.
+
+    Eerst dacht ik dat links het probleem waren, toen dat twee SVG's in
+    één kaart het deden. Beide waren gissingen die ik niet kon toetsen.
+    De werkelijke oorzaak bleek `<animate>`.
+
+    Deze toets loopt ELKE plaat na die de integratie kan maken, met
+    verschillende gegevens, zodat een element dat alleen in een bepaalde
+    toestand verschijnt ook wordt gevangen.
+    """
+    import re
+
+    from overview_svg import bouw_scada, bouw_secties, bouw_status
+
+    verboden = {
+        "animate",
+        "animatetransform",
+        "animatemotion",
+        "set",
+        "script",
+        "foreignobject",
+        "iframe",
+        "a",
+    }
+
+    gevallen = [
+        bouw_scada({}),
+        bouw_scada(
+            {
+                "soc": 75.0,
+                "pv_w": 2000.0,
+                "net_w": -1400.0,
+                "huis_w": 249.0,
+                "accu_w": 1600.0,
+                "koeling": {"ventilator_aan": True, "buiten_c": 17.8},
+                "tekort_kwartieren": 3,
+            }
+        ),
+        bouw_scada({"net_w": 800.0, "accu_w": -900.0}),
+        bouw_secties({"secties": [("test", [("a", "b", None)])]}),
+        bouw_status(
+            {"onderwerpen": {"water": {"niveau": "betrouwbaar", "zin": "x"}}}
+        ),
+    ]
+
+    for svg in gevallen:
+        if not svg:
+            continue
+        elementen = {m.lower() for m in re.findall(r"<([a-zA-Z]+)", svg)}
+        fout = elementen & verboden
+        assert not fout, f"onveilig element in een plaat: {fout}"
