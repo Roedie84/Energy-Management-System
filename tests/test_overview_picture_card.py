@@ -98,17 +98,10 @@ def test_the_drawing_scales_with_the_screen():
 def test_the_card_fills_the_width():
     view = _visuele_view()
 
-    # v3.23.0: geen paneelweergave meer maar secties over drie kolommen,
-    # want alleen zo kunnen er echte klikbare tegels onder de plaat.
-    # Beide vullen de volle breedte.
-    assert view.get("type") == "sections"
-    assert view.get("max_columns") == 3
-    # De plaat en de cijfers staan in de eerste sectie, de klikbare
-    # tegels in de tweede.
-    kaarten = [k for sec in view["sections"] for k in sec["cards"]]
-    platen = [k for k in kaarten if k.get("type") == "markdown"]
-
-    assert len(platen) == 2
+    # v3.25.2: terug naar de paneelweergave - zie
+    # test_the_visual_page_is_a_panel_again.
+    assert view.get("panel") is True
+    assert len(view["cards"]) == 1
 
 
 # --- 4. Klikbaar ------------------------------------------------------

@@ -459,9 +459,7 @@ def test_the_visual_view_is_still_a_panel():
     )
     visueel = next(v for v in data["views"] if v["title"] == "Visueel")
 
-    # v3.23.0: secties in plaats van paneel - zie
-    # test_the_status_tiles_are_real_cards.
-    assert visueel.get("type") == "sections"
+    assert visueel.get("panel") is True
 
 
 def test_no_heading_repeats_the_one_below_it():
