@@ -480,6 +480,8 @@ from .const import (
     MEASUREMENT_QUALITY_DEGRADED_THRESHOLD,
     MIN_COST_BASIS_DELTA_KWH,
     FEEDIN_PREMIUM_EUR_PER_KWH,
+    BIJKOOP_HISTORY_LENGTH,
+    BIJKOOP_MIN_METINGEN,
     LANGE_RESERVE_HISTORY_LENGTH,
     LANGE_RESERVE_MIN_METINGEN,
     LANGERE_HORIZON_HISTORY_LENGTH,
@@ -708,6 +710,10 @@ class EnergyManagementSystemCoordinator:
         self.langere_horizon_history: list[dict] = []
         # v3.10.0: reserve met korte tegenover lange horizon.
         self.lange_reserve_history: list[dict] = []
+        # v3.11.0: was bijkopen bij een tekort goedkoper geweest?
+        self.bijkoop_history: list[dict] = []
+        # v3.12.0: welke kandidaten al als rijp zijn gemeld.
+        self._eerder_rijpe_kandidaten: list[str] = []
         # v2.8.0: waar de werkelijke opwek in de Solcast-band viel.
         self.pv_band_history: list[dict] = []
         # v2.9.0: kenmerken per afgesloten uur, voor het regressiewoud.
@@ -7636,6 +7642,7 @@ class EnergyManagementSystemCoordinator:
                     self._kandidaat_langere_horizon(),
                     self._kandidaat_pv_model(),
                     self._kandidaat_lange_reserve(),
+                    self._kandidaat_bijkopen(),
                 )
             ],
         }
@@ -7657,6 +7664,7 @@ class EnergyManagementSystemCoordinator:
                 self._kandidaat_langere_horizon(),
                 self._kandidaat_pv_model(),
                 self._kandidaat_lange_reserve(),
+                self._kandidaat_bijkopen(),
             )
         ]
         klaar = [k for k in kandidaten if k["gereedheid"] == "klaar om mee te doen"]
@@ -7856,6 +7864,139 @@ class EnergyManagementSystemCoordinator:
         self.lange_reserve_history = self.lange_reserve_history[
             -LANGE_RESERVE_HISTORY_LENGTH:
         ]
+
+    def _meet_bijkopen_bij_tekort(self, now: datetime, entries) -> None:
+        """Was bijkopen goedkoper dan het tekort laten ontstaan?
+        (v3.11.0)
+
+        Gevraagd: "Maar wat als het rendabel is om bij te kopen wanneer
+        er niet genoeg PV energie is?"
+
+        Een andere vraag dan arbitrage. Je koopt niet om te verkopen, je
+        koopt om niet LATER duurder te moeten kopen. Bij een verwacht
+        tekort trekt de woning straks van het net; de vraag is of dat
+        goedkoper is dan nu bijladen.
+
+        De rekensom:
+
+            nu laden = prijs_nu / rendement + slijtage
+            straks   = prijs op het moment van het tekort
+
+        Loopt de PV-opbrengst achter, dan groeit het tekort en verschuift
+        het naar duurdere uren - precies waar deze meting op let.
+
+        ZOU STUREN via `manual` met een POSITIEF vermogen, net zoals het
+        ontladen in dure kwartieren met een negatief vermogen gaat. Maar
+        hij stuurt niets: eerst zien of het loont.
+        """
+        samenvatting = self.get_quarter_plan_summary() or {}
+        tekorten = samenvatting.get("tekort_kwartieren") or 0
+        if not entries or tekorten <= 0:
+            return
+
+        plan = self.get_quarter_plan() or []
+        tekort_regels = [r for r in plan if r.get("tekort")]
+        if not tekort_regels:
+            return
+
+        # Wat kost de energie op het moment van het tekort?
+        prijzen_tekort = [
+            r.get("prijs_ct") for r in tekort_regels if r.get("prijs_ct")
+        ]
+        if not prijzen_tekort:
+            return
+        tekortprijs = statistics.median(prijzen_tekort) / 100
+
+        # En wat kost het om die kWh nu in de accu te zetten?
+        prijs_nu = self.last_current_price_per_kwh
+        if prijs_nu is None:
+            return
+        rendement = (self.learned_battery_efficiency_percent or 90.0) / 100
+        slijtage = (
+            (self.get_wear_cost_overview() or {}).get("slijtage_ct_per_kwh")
+            or 0.0
+        ) / 100
+        laadprijs = prijs_nu / rendement + slijtage
+
+        # Hoeveel zou er bijgeladen moeten worden? Het tekort in
+        # kwartieren maal het verwachte verbruik per kwartier.
+        tekort_kwh = sum(
+            (r.get("verbruik_kwh") or 0.0) for r in tekort_regels
+        )
+
+        self.bijkoop_history.append(
+            {
+                "moment": now.isoformat(),
+                "tekort_kwartieren": tekorten,
+                "tekort_kwh": round(tekort_kwh, 3),
+                "laadprijs_nu_eur": round(laadprijs, 4),
+                "tekortprijs_eur": round(tekortprijs, 4),
+                "voordeel_eur_per_kwh": round(tekortprijs - laadprijs, 4),
+                "voordeel_totaal_eur": round(
+                    (tekortprijs - laadprijs) * tekort_kwh, 3
+                ),
+            }
+        )
+        self.bijkoop_history = self.bijkoop_history[-BIJKOOP_HISTORY_LENGTH:]
+
+    def _kandidaat_bijkopen(self) -> dict:
+        """9. Was bijkopen bij een tekort goedkoper geweest?"""
+        reeks = self.bijkoop_history
+        if len(reeks) < BIJKOOP_MIN_METINGEN:
+            return {
+                "naam": "Bijkopen bij een verwacht tekort",
+                "status": RELIABILITY_INSUFFICIENT,
+                "waarde": None,
+                "zou_hebben_opgeleverd": {
+                    "te_becijferen": False,
+                    "reden": (
+                        f"{len(reeks)} van {BIJKOOP_MIN_METINGEN} momenten "
+                        "met een verwacht tekort gemeten."
+                    ),
+                },
+                "betrouwbaarheid": (
+                    "Meet bij elk verwacht tekort of nu bijladen goedkoper "
+                    "was geweest dan de woning straks van het net laten "
+                    "trekken. Stuurt niets."
+                ),
+            }
+
+        voordelen = [r["voordeel_eur_per_kwh"] for r in reeks]
+        gunstig = [v for v in voordelen if v > 0]
+        totaal = sum(
+            r["voordeel_totaal_eur"] for r in reeks if r["voordeel_totaal_eur"] > 0
+        )
+        return {
+            "naam": "Bijkopen bij een verwacht tekort",
+            "waarde": f"{statistics.median(voordelen) * 100:+.1f} ct/kWh",
+            "status": RELIABILITY_RELIABLE,
+            "zou_hebben_opgeleverd": {
+                "te_becijferen": True,
+                "metingen": len(voordelen),
+                "aandeel_gunstig_procent": round(
+                    100 * len(gunstig) / len(voordelen), 1
+                ),
+                "gemist_voordeel_eur": round(totaal, 2),
+                "reden": (
+                    f"Bij {len(gunstig)} van de {len(voordelen)} verwachte "
+                    f"tekorten was bijladen goedkoper geweest; samen "
+                    f"€ {totaal:.2f}."
+                ),
+            },
+            "betrouwbaarheid": (
+                "Vergelijkt de prijs om NU bij te laden (na rendement en "
+                "slijtage) met de prijs op het moment van het tekort. Loopt "
+                "de PV-opbrengst achter, dan groeit het tekort en "
+                "verschuift het naar duurdere uren.\n\n"
+                "Zou sturen via `manual` met een POSITIEF vermogen - net "
+                "zoals het ontladen in dure kwartieren met een negatief "
+                "vermogen gaat. Maar dat gebeurt niet: eerst de cijfers.\n\n"
+                "Wat deze meting NIET weet: of er op dat moment ook ruimte "
+                "in de accu was, en of het laden de piekbuffer zou "
+                "verstoren. Dat is precies waarom `smart_charging` niet "
+                "wordt toegepast (v1.62.0)."
+            ),
+        }
 
     def _kandidaat_lange_reserve(self) -> dict:
         """8. Zou verder vooruitkijken bij de reserve iets opleveren?"""
@@ -10059,6 +10200,58 @@ class EnergyManagementSystemCoordinator:
                 "staat."
             ),
         }
+
+    def _meld_rijpe_kandidaten(self, now: datetime) -> None:
+        """Meldt wanneer een kandidaat klaar is om mee te doen (v3.12.0).
+
+        Gevraagd: "Houd je dit zelf bij middels diagnostiek?" - en het
+        eerlijke antwoord was nee. Er is geen geheugen tussen gesprekken
+        en geen toegang tot dit systeem; elke diagnostiek wordt op dat
+        moment gelezen en is daarna weg.
+
+        Wat er wél bijhoudt is de integratie zelf. Maar dan moet je zelf
+        onthouden dat je moet kijken, en drie weken is lang.
+
+        Nu komt het naar je toe: springt een kandidaat van "meet nog" of
+        "winst onbekend" naar "klaar om mee te doen", dan is dat een
+        melding. Alleen bij de OMSLAG - een kandidaat die al maanden
+        klaar staat is geen nieuws.
+        """
+        try:
+            kandidaten = (self.get_proefstand() or {}).get("kandidaten") or []
+        except Exception:  # noqa: BLE001
+            return
+
+        rijp = {
+            k["naam"]
+            for k in kandidaten
+            if k.get("gereedheid") == "klaar om mee te doen"
+        }
+        nieuw_rijp = rijp - set(self._eerder_rijpe_kandidaten or [])
+        self._eerder_rijpe_kandidaten = sorted(rijp)
+        if not nieuw_rijp:
+            return
+
+        for naam in sorted(nieuw_rijp):
+            kandidaat = next(
+                (k for k in kandidaten if k["naam"] == naam), None
+            )
+            if kandidaat is None:
+                continue
+            opbrengst = kandidaat.get("zou_hebben_opgeleverd") or {}
+            self._dispatch_notification(
+                notify_service=self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE),
+                title=f"🧪 {naam}: klaar om mee te doen",
+                message=(
+                    f"{kandidaat.get('waarde')} — "
+                    f"{opbrengst.get('reden', '')}\n\n"
+                    "Meting en winst zijn allebei becijferd. Dit is de "
+                    "kandidaat om als eerste te laten meesturen, één "
+                    "tegelijk."
+                ),
+                notification_id=f"ems_proefstand_{naam[:20]}",
+                kind="proefstand_rijp",
+            )
 
     def _meld_zelfcontrole(self, now: datetime) -> None:
         """Stuurt een melding zodra een kruiscontrole faalt (v2.0.0).
@@ -24421,6 +24614,10 @@ class EnergyManagementSystemCoordinator:
         # ofzo niet klopt."
         try:
             self._klok("zelfcontrole", lambda: self._meld_zelfcontrole(now))
+            # v3.12.0: en melden zodra een kandidaat rijp wordt.
+            self._klok(
+                "proefstand-rijpheid", lambda: self._meld_rijpe_kandidaten(now)
+            )
             # v3.5.0: en de stand in het Repairs-scherm bijwerken.
             self._klok("repairs", self._werk_repairs_bij)
             # v3.0.1: de waterdagtellers op de klok laten omrollen, niet
@@ -25012,6 +25209,7 @@ class EnergyManagementSystemCoordinator:
             # v3.10.0: de reserve met een lange horizon, hier omdat
             # `entries` pas in het staartstuk bestaat.
             ("lange reserve", lambda: self._meet_lange_reserve(now, entries)),
+            ("bijkopen", lambda: self._meet_bijkopen_bij_tekort(now, entries)),
             ("teruglevertarief", lambda: self._update_feedin_regime(now, entries)),
             (
                 "tegenfeitelijke besparing",

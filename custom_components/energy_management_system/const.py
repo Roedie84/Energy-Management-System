@@ -239,6 +239,19 @@ PEAK_ALERT_MIN_OF_MEDIAN = 1.15
 # geladen moest worden.
 #
 # Eerst meten wat het verschil zou zijn, dan pas sturen.
+# --- Bijkopen bij een verwacht tekort (v3.11.0) ----------------------
+# Gevraagd: "Maar wat als het rendabel is om bij te kopen wanneer er niet
+# genoeg PV energie is?"
+#
+# Een andere vraag dan arbitrage. Je koopt niet om te verkopen, je koopt
+# om niet LATER duurder te moeten kopen.
+#
+# Zou sturen via `manual` met een POSITIEF vermogen - net zoals het
+# ontladen in dure kwartieren met een negatief vermogen gaat. Maar eerst
+# meten.
+BIJKOOP_HISTORY_LENGTH = 300
+BIJKOOP_MIN_METINGEN = 30
+
 LANGE_RESERVE_HISTORY_LENGTH = 300
 LANGE_RESERVE_MIN_METINGEN = 50
 
@@ -1659,6 +1672,7 @@ LOG_PRIO_INFO = "info"
 LOG_PRIORITEITEN = {
     # Kritiek - hier gaat iets mis.
     "interne_fout": LOG_PRIO_KRITIEK,
+    "proefstand_rijp": LOG_PRIO_INFO,
     "zelfcontrole": LOG_PRIO_KRITIEK,
     "plan_tekort": LOG_PRIO_KRITIEK,
     "battery_wont_last_night": LOG_PRIO_KRITIEK,
@@ -1974,6 +1988,8 @@ PERSISTED_PLAIN_FIELDS = (
     "veroudering_history",
     "langere_horizon_history",
     "lange_reserve_history",
+    "bijkoop_history",
+    "_eerder_rijpe_kandidaten",
     "pv_band_history",
     "pv_model_samples",
     # v1.90.0: de dagreeks waar zelfconsumptie per week/maand/jaar op
@@ -2424,6 +2440,14 @@ NOTIFICATION_TYPES: tuple[tuple[str, str, str, bool, int], ...] = (
         "Wanneer de vaatwasser of wasmachine zijn cyclus heeft afgerond.",
         True,
         5,
+    ),
+    (
+        "proefstand_rijp",
+        "Een kandidaat is klaar om mee te doen",
+        "Wanneer een proefstandkandidaat van 'meet nog' naar 'klaar om mee "
+        "te doen' springt - dus meting én winst zijn allebei becijferd.",
+        True,
+        1440,
     ),
     (
         "zelfcontrole",
@@ -4175,6 +4199,7 @@ ACHTERHOEKS_TITELS = {
     "plan_uitstel": "Zunne opvangen wödt uut-esteld",
     "plan_verkoop_geblokkeerd": "Verkopen geet neet, 't huus geet veur",
     "vakantie_beweging": "Der beweeg wat, terwiel gi-j weg bunt",
+    "proefstand_rijp": "'n Kandidaat is now zo wied",
     "zelfcontrole": "Der klopt wat neet in de sommen",
     # v3.1.0: NIET "an of uut" - dat zegt niet wat er gebeurt.
     #

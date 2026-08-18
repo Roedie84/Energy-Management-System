@@ -499,7 +499,7 @@ views:
   panel: true
   cards:
   - type: picture-elements
-    image: /local/energy_management_system_overview.svg?v=3.10.0
+    image: /local/energy_management_system_overview.svg?v=3.12.0
     elements:
     - type: state-label
       entity: sensor.woonkamer_energy_management_system_system_status
@@ -1110,6 +1110,16 @@ views:
     icon: mdi:bell-outline
     icon_color: '{{ ''green'' if is_state(''switch.woonkamer_energy_management_system_melding_integration_error'', ''on'') else ''grey'' }}'
     entity: switch.woonkamer_energy_management_system_melding_integration_error
+    tap_action:
+      action: toggle
+    hold_action:
+      action: more-info
+  - type: custom:mushroom-template-card
+    primary: Een kandidaat is klaar om mee te doen
+    secondary: '{% set e = ''switch.woonkamer_energy_management_system_melding_proefstand_rijp'' %}{% set last = state_attr(e, ''laatst_verstuurd'') %}{{ ''AAN'' if is_state(e, ''on'') else ''uit'' }} · demping 1440 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom(''%-d %b %H:%M'') }}{% endif %}'
+    icon: mdi:flask-outline
+    icon_color: '{{ ''green'' if is_state(''switch.woonkamer_energy_management_system_melding_proefstand_rijp'', ''on'') else ''grey'' }}'
+    entity: switch.woonkamer_energy_management_system_melding_proefstand_rijp
     tap_action:
       action: toggle
     hold_action:

@@ -519,6 +519,8 @@ async def async_get_config_entry_diagnostics(
             # v3.5.0: nominale tegenover gemeten capaciteit.
             # v3.10.0: reserve met korte tegenover lange horizon.
             "lange_reserve_history": coordinator.lange_reserve_history[-30:],
+            # v3.11.0: was bijkopen bij een tekort goedkoper geweest?
+            "bijkoop_history": coordinator.bijkoop_history[-30:],
             "capacity_overview": _veilig(
                 "get_capacity_overview", coordinator.get_capacity_overview
             ),

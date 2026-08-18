@@ -16049,3 +16049,81 @@ Dat verandert na 1 januari: teruglevering levert dan nog 19 ct op tegen
 32 ct inkoop, en dan komt het verschil ruim boven de drempel.
 
 **Volledige testsuite**: 2398 tests, allemaal groen.
+
+## v3.11.0 — Bijkopen bij een verwacht tekort: eerst meten
+
+**Gevraagd**: "Maar wat als het rendabel is om bij te kopen wanneer er
+niet genoeg PV energie is?"
+
+Een andere vraag dan arbitrage, en dat verschil is wezenlijk. Je koopt
+niet om te verkopen — je koopt om **niet later duurder te moeten kopen**.
+
+Nu gebeurt er niets. Drie grendels blokkeren het: arbitragelading is
+permanent verwijderd, `smart_charging` wordt niet toegepast omdat die de
+piekbuffer uitschakelt, en de vergelijking accu-tegen-net is in v1.62.0
+teruggedraaid.
+
+### De negende kandidaat
+
+Bij elk verwacht tekort wordt nu vastgelegd:
+
+    nu laden = prijs_nu / rendement + slijtage
+    straks   = prijs op het moment van het tekort
+
+Loopt de PV-opbrengst achter, dan groeit het tekort en verschuift het
+naar duurdere uren — precies waar deze meting op let.
+
+**Hij stuurt niets.** Bij 84,5% rendement en 4,22 ct slijtage moet er
+ruim 11 ct verschil zijn; op 18 augustus was dat 8,5 ct.
+
+### De aansturingsroute is alvast vastgelegd
+
+Meegegeven: "let op dat het bijladen vanaf het net in de modus **manual**
+gebeuren moet, net als het ontladen op dure kwartieren, maar dan laden."
+
+Dat staat nu in de kandidaat zelf: sturen zou gaan via `manual` met een
+**positief** vermogen, waar het ontladen een negatief vermogen gebruikt.
+Vastgelegd voordat er iets gebouwd wordt — anders is het over drie
+maanden weg.
+
+### Wat deze meting niet weet
+
+Of er op dat moment ruimte in de accu was, en of het laden de piekbuffer
+zou verstoren. Dat staat erbij, en het is precies waarom
+`smart_charging` niet wordt toegepast.
+
+Daarmee meten drie kandidaten dezelfde economie vanuit een andere hoek:
+vasthouden voor morgen, verder vooruitkijken bij de reserve, en bijkopen
+bij een tekort. Na 1 januari — 19 ct teruglevering tegen 32 ct inkoop —
+wijzen ze waarschijnlijk alledrie dezelfde kant op.
+
+**Volledige testsuite**: 2408 tests, allemaal groen.
+
+## v3.12.0 — De integratie meldt zelf wanneer een kandidaat rijp is
+
+**Gevraagd**: "Houd je dit zelf bij middels diagnostiek?"
+
+Het eerlijke antwoord is **nee**. Er is geen geheugen tussen gesprekken
+en geen toegang tot dit systeem; elke diagnostiek wordt op dat moment
+gelezen en is daarna weg. Er komt geen seintje als een kandidaat omslaat.
+
+Wat er wél bijhoudt is de integratie zelf — de metingen lopen door en
+overleven herstarts. Maar dan moet de gebruiker onthouden dat hij over
+drie weken moet kijken, en drie weken is lang.
+
+**Nu komt het naar hem toe.** Springt een kandidaat van *meet nog* of
+*winst onbekend* naar **klaar om mee te doen**, dan volgt een melding met
+het getal en de onderbouwing erbij.
+
+Alleen bij de **omslag**: een kandidaat die al maanden klaar staat is
+geen nieuws. De lijst overleeft een herstart, anders zou na elke start
+alles opnieuw worden gemeld.
+
+De melding staat standaard aan, net als "onderdeel van de integratie
+faalt" en de zelfcontrole. Staat hij uit, dan blijft een rijpe kandidaat
+ongebruikt staan — en dat is precies wat deze melding moet voorkomen.
+
+Demping: een dag. Deze gebeurtenis komt hooguit een paar keer per jaar
+voor.
+
+**Volledige testsuite**: 2415 tests, allemaal groen.
