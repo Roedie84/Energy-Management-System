@@ -652,3 +652,94 @@ def test_nonsense_in_the_setting_falls_back():
         C._battery_cooling_should_turn_on(_Kaal(), 31.0, 14.1, 190.0)
         is not None
     )
+
+
+# --- v3.7.0: de tegel zegt wat er aan de hand is ---------------------
+
+
+def test_the_tile_shows_both_temperatures():
+    """Gemeld met een screenshot: "niet actief / Accu-koeling: niet
+    actief" - twee keer hetzelfde en geen enkel getal.
+
+    Terwijl er op dat moment 31,0 °C omvormer tegen 14,1 buiten in de
+    toestand stond. De tegel liet het alleen niet zien.
+    """
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    sjabloon = (
+        Path(pkg.__file__).parent / "dashboard_template.yaml"
+    ).read_text()
+    # De regel van de koeltegel op de landingspagina.
+    regel = next(
+        r
+        for r in sjabloon.splitlines()
+        if "accu_koeling" in r and "°C omvormer" in r
+    )
+    kop = sjabloon.index(regel)
+    blok = sjabloon[kop : kop + 1400]
+
+    assert "buiten_c" in blok
+    assert "delta_c" in blok
+    assert "vermogen_w" in blok
+
+
+def test_the_tile_does_not_repeat_itself():
+    """"niet actief / Accu-koeling: niet actief" - de tweede regel
+    voegde niets toe."""
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    sjabloon = (
+        Path(pkg.__file__).parent / "dashboard_template.yaml"
+    ).read_text()
+
+    assert "Accu-koeling: {{ st }}" not in sjabloon
+
+
+def test_an_inactive_state_says_why(make_coordinator, hass):
+    """"niet actief" is niet te onderscheiden van een defect. Het kan
+    drie dingen betekenen: geen ventilator ingesteld, geen
+    temperatuursensor, of nog geen ronde geweest."""
+    from custom_components.energy_management_system.sensor import (
+        BatteryCoolingSensor,
+    )
+
+    c = make_coordinator({})
+    c.battery_cooling_state = {}
+    sensor = BatteryCoolingSensor(c, "entry")
+
+    assert sensor.native_value == "geen ventilator ingesteld"
+
+
+def test_a_missing_temperature_is_named(make_coordinator, hass):
+    from custom_components.energy_management_system.const import (
+        CONF_BATTERY_COOLING_FAN_SWITCH,
+    )
+    from custom_components.energy_management_system.sensor import (
+        BatteryCoolingSensor,
+    )
+
+    c = make_coordinator({CONF_BATTERY_COOLING_FAN_SWITCH: "switch.vent"})
+    c.battery_cooling_state = {}
+    sensor = BatteryCoolingSensor(c, "entry")
+
+    assert sensor.native_value == "geen temperatuur"
+
+
+def test_a_working_state_is_unchanged(make_coordinator, hass):
+    """De gewone gevallen blijven precies zoals ze waren."""
+    from custom_components.energy_management_system.sensor import (
+        BatteryCoolingSensor,
+    )
+
+    c = make_coordinator({})
+    sensor = BatteryCoolingSensor(c, "entry")
+
+    c.battery_cooling_state = {"ventilator_aan": True, "accu_c": 35.0}
+    assert sensor.native_value == "koelt"
+
+    c.battery_cooling_state = {"ventilator_aan": False, "accu_c": 31.0}
+    assert sensor.native_value == "uit"
