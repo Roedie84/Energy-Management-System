@@ -9419,6 +9419,32 @@ class EnergyManagementSystemCoordinator:
         except Exception:  # noqa: BLE001 - mag de ronde nooit breken
             _LOGGER.exception("Kon het Repairs-scherm niet bijwerken")
 
+    def _zet_zware_verbruiker(self, now: datetime):
+        """Hulpje: een toewijzing past niet in een lambda."""
+
+        def _doe() -> None:
+            self.last_heavy_load_source = self._get_confirmed_heavy_load_source(
+                now
+            )
+
+        return _doe
+
+    def _noteer_staartfout(self, naam: str) -> None:
+        """Legt vast dat een staartonderdeel omviel (v3.8.0)."""
+        _LOGGER.exception("Onderdeel %s van de ronde viel om", naam)
+        self.internal_failures[f"ronde:{naam}"] = "viel om in de laatste ronde"
+
+    def _voer_staartstap_uit(self, naam: str, stap) -> None:
+        """Voert een staartonderdeel uit en vangt een fout af (v3.8.0).
+
+        Zonder dit legt één fout in een leerroutine de hele aansturing
+        plat - precies wat er met de accukoeling gebeurde in v3.6.0.
+        """
+        try:
+            stap()
+        except Exception:  # noqa: BLE001 - één stap mag de ronde niet breken
+            self._noteer_staartfout(naam)
+
     def _start_logopvang(self) -> None:
         """Vangt de eigen waarschuwingen op (v3.4.0).
 
@@ -17401,7 +17427,6 @@ class EnergyManagementSystemCoordinator:
             return None
         return accu_c, buiten_c, abs(vermogen_w)
 
-    @staticmethod
     def _koelen_is_goedkoop(self, accu_c: float, buiten_c: float) -> bool:
         """Valt er veel te koelen voor weinig? (v3.6.0)
 
@@ -24768,23 +24793,56 @@ class EnergyManagementSystemCoordinator:
             # geladen (bijvoorbeeld in een test), dan begint de
             # aanlooptijd hier alsnog.
             self._started_at = now
-        self._update_daily_cost_history(now)
-        self._record_decision_log(now)
-        self._update_daily_report(now)
-        self._update_pv_geometry_learning(now)
-        self._evaluate_new_notifications(now)
-        self.schedule_persisted_state_save()
-        await self._async_apply_battery_cooling()
-        self._update_feedin_regime(now, entries)
-        self._update_counterfactual_savings(now, entries)
-        self._update_self_sufficiency_tracking(now)
-        self._update_battery_cycle_tracking(now)
-        self._update_co2_tracking(now)
-        self.last_heavy_load_source = self._get_confirmed_heavy_load_source(now)
-        self._track_recent_consumption_reading(now)
-        self._update_living_room_airco_prediction(now)
-        self._update_climate_rate_learning(now)
-        await self._async_update_climate_forecast(now)
+        # v3.8.0: elk staartonderdeel apart afgeschermd.
+        #
+        # Gemeld met twee screenshots: "unknown / Verwachte modus" en
+        # "nog geen beslissing / nog geen schema". De planning was niet
+        # berekend, en dat had NIETS met de planning te maken.
+        #
+        # Deze twintig aanroepen stonden ongeschermd op een rij. De
+        # NameError in de accukoeling (v3.7.1) brak de hele ronde af, dus
+        # alles vanaf `_async_apply_battery_cooling` verviel - en de
+        # ronde eindigde nooit succesvol, waardoor ook de planning en de
+        # beslissing leeg bleven.
+        #
+        # Eén fout in een leerroutine hoort niet de aansturing plat te
+        # leggen. Wat omvalt wordt gemeld en overgeslagen; de rest loopt
+        # door.
+        for naam, stap in (
+            ("dagkosten", lambda: self._update_daily_cost_history(now)),
+            ("beslislogboek", lambda: self._record_decision_log(now)),
+            ("dagrapport", lambda: self._update_daily_report(now)),
+            ("pv-geometrie", lambda: self._update_pv_geometry_learning(now)),
+            ("meldingen", lambda: self._evaluate_new_notifications(now)),
+            ("opslag", self.schedule_persisted_state_save),
+        ):
+            self._voer_staartstap_uit(naam, stap)
+
+        try:
+            await self._async_apply_battery_cooling()
+        except Exception:  # noqa: BLE001
+            self._noteer_staartfout("accukoeling")
+
+        for naam, stap in (
+            ("teruglevertarief", lambda: self._update_feedin_regime(now, entries)),
+            (
+                "tegenfeitelijke besparing",
+                lambda: self._update_counterfactual_savings(now, entries),
+            ),
+            ("zelfvoorziening", lambda: self._update_self_sufficiency_tracking(now)),
+            ("cyclustelling", lambda: self._update_battery_cycle_tracking(now)),
+            ("co2", lambda: self._update_co2_tracking(now)),
+            ("zware verbruiker", self._zet_zware_verbruiker(now)),
+            ("verbruiksmeting", lambda: self._track_recent_consumption_reading(now)),
+            ("airco-voorspelling", lambda: self._update_living_room_airco_prediction(now)),
+            ("klimaatleren", lambda: self._update_climate_rate_learning(now)),
+        ):
+            self._voer_staartstap_uit(naam, stap)
+
+        try:
+            await self._async_update_climate_forecast(now)
+        except Exception:  # noqa: BLE001
+            self._noteer_staartfout("klimaatvoorspelling")
 
         is_currently_cheapest_block = (
             cheap_block_start is not None
@@ -24792,25 +24850,30 @@ class EnergyManagementSystemCoordinator:
             and cheap_block_start <= now < cheap_block_end
         )
         self._check_and_notify_appliance_ready(now, is_currently_cheapest_block)
-        await self._async_update_scheduled_charge_appliance(
-            now,
-            is_currently_cheapest_block,
-            switch_entity=self.config.get(CONF_STEELSTOFZUIGER_SWITCH),
-            power_entity=self.config.get(CONF_STEELSTOFZUIGER_POWER_SENSOR),
-            complete_threshold_w=APPLIANCE_RUNNING_POWER_THRESHOLD_W,
-            complete_today_attr="_steelstofzuiger_complete_today",
-            complete_date_attr="_steelstofzuiger_complete_date",
-            charge_started_attr="_steelstofzuiger_charge_started_at",
-            below_threshold_since_attr="_steelstofzuiger_below_threshold_since",
-            duration_history_attr="steelstofzuiger_charge_duration_history",
-            last_action_attr="last_steelstofzuiger_action",
-            ever_active_this_session_attr="_steelstofzuiger_ever_active_this_session",
-            next_poll_attr="_steelstofzuiger_next_poll_at",
-            idle_history_attr="_steelstofzuiger_idle_power_history",
-            notify_title="🧹 Steelstofzuiger opgeladen",
-            notify_message="De steelstofzuiger is klaar met laden en de lader is uitgeschakeld.",
-            override_attr="steelstofzuiger_override",
-        )
+        # v3.8.0: ook deze afgeschermd - een apparaat dat niet
+        # reageert mag de ronde niet meenemen.
+        try:
+            await self._async_update_scheduled_charge_appliance(
+                now,
+                is_currently_cheapest_block,
+                switch_entity=self.config.get(CONF_STEELSTOFZUIGER_SWITCH),
+                power_entity=self.config.get(CONF_STEELSTOFZUIGER_POWER_SENSOR),
+                complete_threshold_w=APPLIANCE_RUNNING_POWER_THRESHOLD_W,
+                complete_today_attr="_steelstofzuiger_complete_today",
+                complete_date_attr="_steelstofzuiger_complete_date",
+                charge_started_attr="_steelstofzuiger_charge_started_at",
+                below_threshold_since_attr="_steelstofzuiger_below_threshold_since",
+                duration_history_attr="steelstofzuiger_charge_duration_history",
+                last_action_attr="last_steelstofzuiger_action",
+                ever_active_this_session_attr="_steelstofzuiger_ever_active_this_session",
+                next_poll_attr="_steelstofzuiger_next_poll_at",
+                idle_history_attr="_steelstofzuiger_idle_power_history",
+                notify_title="🧹 Steelstofzuiger opgeladen",
+                notify_message="De steelstofzuiger is klaar met laden en de lader is uitgeschakeld.",
+                override_attr="steelstofzuiger_override",
+            )
+        except Exception:  # noqa: BLE001
+            self._noteer_staartfout("gepland apparaat")
         await self._async_update_scheduled_charge_appliance(
             now,
             is_currently_cheapest_block,

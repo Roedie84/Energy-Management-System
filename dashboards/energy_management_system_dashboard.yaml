@@ -100,8 +100,11 @@ views:
       tap_action:
         action: more-info
     - type: custom:mushroom-template-card
-      primary: '{% set s = ''sensor.woonkamer_energy_management_system_accu_koeling'' %}{% set accu = state_attr(s, ''accu_c'') %}{{ (accu ~ '' °C'') if accu is not none else states(s) }}'
-      secondary: '{% set s = ''sensor.woonkamer_energy_management_system_accu_koeling'' %}{% set st = states(s) %}Accu-koeling: {{ st }}'
+      primary: '{% set s = ''sensor.woonkamer_energy_management_system_accu_koeling'' %}{% set accu = state_attr(s, ''accu_c'') %}{% set buiten = state_attr(s, ''buiten_c'') %}{% if accu is not none and buiten is not none %}{{ accu }}°C omvormer, {{ buiten }}°C buiten{% else %}Accu-koeling{% endif %}'
+      secondary: '{% set s = ''sensor.woonkamer_energy_management_system_accu_koeling'' %}{% set st = states(s) %}{% set d = state_attr(s, ''delta_c'') %}{% set w = state_attr(s, ''vermogen_w'') %}{% set r = state_attr(s, ''reden'') %}{{ ''Ventilator draait'' if st == ''koelt'' else (''Ventilator uit'' if st == ''uit'' else ''Nog niet beoordeeld'') }}{% if d is not none %} · {{ d }}°C verschil{% endif %}{% if w is not none %} · {{ w | round }} W{% endif %}{% if r %}
+
+        {{ r }}{% endif %}'
+      multiline_secondary: true
       icon: mdi:fan
       icon_color: '{% set st = states(''sensor.woonkamer_energy_management_system_accu_koeling'') %}{% if st == ''koelt'' %}blue{% elif st == ''uit'' %}grey{% else %}orange{% endif %}'
       entity: sensor.woonkamer_energy_management_system_accu_koeling
@@ -496,7 +499,7 @@ views:
   panel: true
   cards:
   - type: picture-elements
-    image: /local/energy_management_system_overview.svg?v=3.6.1
+    image: /local/energy_management_system_overview.svg?v=3.8.0
     elements:
     - type: state-label
       entity: sensor.woonkamer_energy_management_system_system_status

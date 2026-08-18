@@ -15806,3 +15806,150 @@ Elke tussenversie is getoetst door de fout terug te zetten. Pas de
 laatste is groen op de goede code en rood op de foute.
 
 **Volledige testsuite**: 2370 tests, allemaal groen.
+
+## v3.7.0 — De koeltegel zei twee keer hetzelfde
+
+**Gemeld** met een screenshot:
+
+> niet actief
+> Accu-koeling: niet actief
+
+Twee regels, dezelfde tekst, geen enkel getal. Terwijl er op dat moment
+gewoon **31,0 °C omvormer tegen 14,1 °C buiten** in de toestand stond —
+de tegel liet het alleen niet zien.
+
+De tegel toont nu beide temperaturen, het verschil, het vermogen en de
+reden waarom er wel of niet wordt gekoeld.
+
+### En "niet actief" was misleidend
+
+Dat kan drie dingen betekenen: geen ventilator ingesteld, geen
+temperatuursensor, of nog geen ronde geweest. Geen ervan is te
+onderscheiden van een defect.
+
+De sensor zegt nu welke het is.
+
+### Waarom de voorgestelde regel er niet is gekomen
+
+Gevraagd: "Omvormer temp >5 graden hoger dan buiten temp = koelen? Als
+het vermogen >500 is ook koelen?"
+
+Doorgerekend op de twintig gemeten schakelmomenten:
+
+| Regel | Zou aanslaan |
+|---|---|
+| Huidig (v3.6.0) | 11 van 20 |
+| Delta > 5 °C | **20 van 20** |
+| Vermogen > 500 W | 15 van 20 |
+
+Bij **alle** gemeten momenten was het verschil groter dan vijf graden.
+Een omvormer staat normaal boven de buitentemperatuur; dat is werking,
+geen alarm. De ventilator zou dus permanent draaien — ook bij 21 °C, waar
+niets te koelen valt, met cellen op 21 tot 23 °C die ruim onder de
+verouderingsgrens zitten.
+
+Wie toch vaker wil koelen: de drempel van 28 °C staat sinds v3.6.0 bij
+Configureren en kan naar 25. Dat dekt de twee gemeten gevallen van 26 en
+27 °C zonder dat de ventilator bij 21 °C gaat blazen.
+
+**Volledige testsuite**: 2375 tests, allemaal groen.
+
+## v3.7.1 — Elke ronde viel om (installeer dit met spoed)
+
+**Gemeld** met een screenshot: twee tegels op "unknown". De oorzaak was
+ernstiger dan de tegels.
+
+`last_successful_update` stond op **None**: sinds het opstarten om 08:33
+had er geen **enkele** ronde gedraaid. De integratie stuurde niets meer
+aan.
+
+    TypeError: _koelen_is_goedkoop() missing 1 required positional
+    argument: 'buiten_c'
+
+### Een decorator die aan de verkeerde functie plakte
+
+In v3.6.0 is `_koelen_is_goedkoop` ingevoegd **tussen** een
+`@staticmethod`-decorator en de functie waar die bij hoorde. De decorator
+kwam daardoor op de nieuwe functie te staan: `self` werd de eerste echte
+parameter, en er bleef er één over.
+
+### Wat dit blootlegt
+
+**Alle 2375 tests bleven groen.** Geen enkele riep die functie aan via
+een echt object — de testhulpfunctie plakte hem los op een kale klasse,
+en dan werkt het toevallig wél.
+
+Twee scans erbij:
+
+- een `@staticmethod` met `self` als eerste parameter;
+- een gewone methode die zonder object wordt aangeroepen.
+
+Beide op de proef gesteld door de fout terug te zetten.
+
+Dat de fout via de tegels binnenkwam en niet via het logboek is geen
+toeval: het logboek uit v3.4.0 **had** hem, met dertig identieke regels.
+Alleen was er niet naar gekeken zolang niemand iets meldde.
+
+### De onderliggende oorzaak
+
+**Gemeld** uit bedrijf:
+
+    _koelen_is_goedkoop() missing 1 required positional argument:
+    'buiten_c'
+
+Bij het invoegen van die functie in v3.6.0 schoof de `@staticmethod` van
+de **onderliggende** functie naar de nieuwe. Daardoor gaf
+`self._koelen_is_goedkoop(accu_c, buiten_c)` twee argumenten aan een
+functie die er drie verwacht — `self` telt bij een statische methode mee
+als gewone parameter.
+
+Gevolg: de koelbeslissing viel bij elke ronde om, precies de regel die
+v3.6.0 kwam toevoegen.
+
+Deze soort fout is met het blote oog nauwelijks te zien: de decorator
+staat een regel hoger en hoort visueel bij de vorige functie. In de
+testsuite viel hij niet op omdat die de functie via een eigen hulpobject
+aanriep, waar het wél goed ging.
+
+**Nu een scan** die elke statische methode nagaat: heeft hij `self` als
+parameter, of gebruikt hij `self` in de code? Beide kan niet. Op de proef
+gesteld door de decorator terug te zetten — dan valt hij om.
+
+Dit is de tweede structuurscan in twee dagen die uit een echte fout is
+voortgekomen, na die op onbekende variabelen in v3.6.1.
+
+**Volledige testsuite**: 2377 tests, allemaal groen.
+
+## v3.8.0 — Eén fout legde de hele aansturing plat
+
+**Gevraagd**: "Is het planningsprobleem daarmee ook opgelost?" — bij twee
+screenshots met *"unknown / Verwachte modus"* en *"nog geen beslissing /
+nog geen schema"*.
+
+**Ja.** En het antwoord op de vraag erachter is belangrijker dan de
+reparatie.
+
+De planning was niet berekend, en dat had **niets met de planning te
+maken**. Aan het eind van elke ronde stonden twintig aanroepen
+ongeschermd op een rij: dagkosten, beslislogboek, accukoeling,
+zelfvoorziening, CO₂, klimaatleren.
+
+De `NameError` in de accukoeling uit v3.7.1 brak de hele ronde af. Alles
+daarna verviel, de ronde eindigde nooit succesvol, en dus bleven ook de
+beslissing en het schema leeg.
+
+### Een leerroutine hoort de aansturing niet plat te leggen
+
+Elk staartonderdeel is nu apart afgeschermd. Wat omvalt wordt gemeld in
+`internal_failures` en overgeslagen; de rest loopt door.
+
+**Stil overslaan zou net zo erg zijn** — dan werkt de integratie half
+zonder dat iemand het merkt, precies de fout die v2.2.4 opleverde. Daarom
+komt elke omgevallen stap in de diagnostiek terecht, en daarmee ook in
+Repairs.
+
+Een vangnettest valt om zodra er een aanroep aan het staartstuk wordt
+toegevoegd die niet door dezelfde afscherming loopt. Die vond meteen nog
+één ongeschermde stap: het geplande apparaat.
+
+**Volledige testsuite**: 2381 tests, allemaal groen.

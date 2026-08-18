@@ -17,6 +17,7 @@ from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    CONF_BATTERY_COOLING_FAN_SWITCH,
     RELIABILITY_LABELS,
     RELIABILITY_RELIABLE,
     DEFAULT_NAME,
@@ -3536,11 +3537,25 @@ class BatteryCoolingSensor(SensorEntity):
 
     @property
     def native_value(self) -> str:
+        # v3.7.0: "niet actief" zegt niet WAAROM.
+        #
+        # Gemeld met een screenshot: "niet actief / Accu-koeling: niet
+        # actief" - twee keer hetzelfde en geen enkel getal. Er stond op
+        # dat moment gewoon 31,0 °C omvormer tegen 14,1 buiten in de
+        # toestand; de tegel liet het alleen niet zien.
+        #
+        # En "niet actief" is niet te onderscheiden van een defect. Het
+        # kan drie dingen betekenen: geen ventilator ingesteld, geen
+        # temperatuursensor, of nog geen ronde geweest.
         state = self._coordinator.battery_cooling_state or {}
         aan = state.get("ventilator_aan")
-        if aan is None:
-            return "niet actief"
-        return "koelt" if aan else "uit"
+        if aan is not None:
+            return "koelt" if aan else "uit"
+        if not self._coordinator.config.get(CONF_BATTERY_COOLING_FAN_SWITCH):
+            return "geen ventilator ingesteld"
+        if state.get("accu_c") is None:
+            return "geen temperatuur"
+        return "nog niet beoordeeld"
 
     @property
     def extra_state_attributes(self) -> dict:
