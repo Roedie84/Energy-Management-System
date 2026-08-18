@@ -92,3 +92,39 @@ def test_the_consistency_check_uses_the_same_formula(make_coordinator, hass):
     blok = bron[kop : kop + 900]
 
     assert "grid_charge_today_kwh" in blok
+
+
+# --- v3.23.1: niet meer afhankelijk van een teller -------------------
+
+
+def test_it_never_goes_negative_without_the_counter(make_coordinator, hass):
+    """Gemeld: "-54% zelfvoorziening", en na de reparatie van v3.16.0
+    nog steeds.
+
+    Die reparatie trok de netlading eraf, maar die teller wordt alleen
+    gevuld door de kostprijsboekhouding - en die draait niet bij elke
+    laadroute. Op 18 augustus stond hij op `None` terwijl er 5,93 kWh
+    binnenkwam bij 3,91 kWh verbruik.
+    """
+    c = _c(make_coordinator, verbruik=3.91, importeren=5.93)
+    c.grid_charge_today_kwh = 0.0
+
+    ratio = c.self_sufficiency_ratio_percent
+
+    assert ratio == 0.0
+
+
+def test_a_missing_counter_does_not_crash(make_coordinator, hass):
+    """De teller stond zelfs op `None` - dan mag de som niet omvallen."""
+    c = _c(make_coordinator, verbruik=4.0, importeren=2.0)
+    c.grid_charge_today_kwh = None
+
+    assert c.self_sufficiency_ratio_percent == 50.0
+
+
+def test_the_house_cannot_import_more_than_it_used(make_coordinator, hass):
+    """Wat er méér binnenkomt dan het huis verbruikt is per definitie
+    ergens anders heen gegaan - de accu."""
+    c = _c(make_coordinator, verbruik=2.0, importeren=9.0)
+
+    assert c.self_sufficiency_ratio_percent == 0.0

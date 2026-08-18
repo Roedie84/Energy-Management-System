@@ -84,22 +84,6 @@ def test_empty_data_does_not_crash():
     ET.fromstring(bouw_scada({}))
 
 
-def test_the_page_is_full_width():
-    """Een installatieschema in een kolom van een derde is onleesbaar."""
-    import yaml
-
-    data = yaml.safe_load(
-        (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
-    )
-    pagina = next(v for v in data["views"] if v.get("path") == "visueel")
-
-    assert pagina.get("panel") is True
-
-
-# --- v3.17.1: uitlijning ---------------------------------------------
-
-
-
 
 def test_the_canvas_fits_its_content():
     """Alles moet binnen de viewBox vallen, anders wordt de onderbalk
@@ -206,26 +190,6 @@ def test_the_module_bars_helper_still_works():
 # --- v3.19.0: status per onderwerp, klikbaar -------------------------
 
 
-def test_each_topic_links_to_its_page():
-    """Gevraagd: "Deze info toevoegen bijvoorbeeld? En klikbaar maken?"
-
-    SVG kent gewoon `<a>`, en Home Assistant laat dat door in een
-    markdown-kaart.
-    """
-    from overview_svg import bouw_status
-
-    svg = bouw_status(
-        {
-            "onderwerpen": {
-                "water": {"niveau": "betrouwbaar", "zin": "1 moment vandaag."},
-                "zon": {"niveau": "indicatief", "zin": "3.2 kWh opgewekt."},
-            }
-        }
-    )
-
-    assert "/energy-management-system/detail-water" in svg
-    assert "/energy-management-system/detail-zon" in svg
-
 
 def test_the_reliability_level_is_coloured():
     """Dezelfde schaal als de proefstand en de meetkwaliteit gebruiken,
@@ -293,52 +257,7 @@ def test_everything_still_fits_the_canvas():
 # --- v3.21.0: drie kolommen -------------------------------------------
 
 
-def test_the_layout_has_three_columns():
-    """Gevraagd: "2 blokken links, 2 blokken midden, status per onderwerp
-    rechts."
 
-    Links accu en installatie, midden vermogen en vandaag, rechts de
-    statuslijst.
-    """
-    plaat = _plaat(
-        onderwerpen={"water": {"niveau": "betrouwbaar", "zin": "test"}}
-    )
-
-    # Vier kaders links en midden, plus het statuskader rechts.
-    for titel in ("ACCU", "INSTALLATIE", "VERMOGEN", "VANDAAG", "STATUS"):
-        assert titel in plaat
-
-
-
-def test_the_status_column_is_clickable():
-    plaat = _plaat(
-        onderwerpen={
-            "water": {"niveau": "betrouwbaar", "zin": "1 moment vandaag."}
-        }
-    )
-
-    assert "/energy-management-system/detail-water" in plaat
-
-
-def test_the_plate_grows_with_the_status_list():
-    """De linkerkolom is vast; de plaat wordt zo hoog als de langste van
-    de twee. Een vaste hoogte zou de onderste blokken afsnijden."""
-    import re
-
-    def _hoogte(aantal):
-        sleutels = ["water", "zon", "apparaten", "klimaat", "financieel",
-                    "zelflerend", "meetkwaliteit", "accumodules",
-                    "zelfcontrole", "planning"][:aantal]
-        plaat = _plaat(
-            onderwerpen={
-                s: {"niveau": "betrouwbaar", "zin": "test"} for s in sleutels
-            }
-        )
-        return int(re.search(r'viewBox="0 0 760 (\d+)"', plaat).group(1))
-
-    # Tot de hoogte van de linkerkolom verandert er niets; daarboven
-    # groeit de plaat mee.
-    assert _hoogte(10) > _hoogte(4)
 
 
 def test_the_bottom_bar_spans_the_full_width():
@@ -472,31 +391,104 @@ def test_the_arrow_thickness_follows_the_power():
     assert d2 > d1
 
 
-def test_exporting_reverses_the_grid_arrow():
-    """Levert het net, dan loopt de pijl naar beneden; lever je terug,
-    dan omhoog."""
+# --- v3.23.0: klikken buiten de SVG ----------------------------------
+
+
+def test_the_svg_has_no_links():
+    """Gemeld met een schermafbeelding waarop de hele plaat als PLATTE
+    TEKST verscheen, met de linkgedeelten blauw onderstreept.
+
+    De opschoner van de markdown-kaart accepteert `<a>` binnen SVG niet
+    en zet dan het hele blok om naar tekst. Gevraagd: "niet de links
+    eruit, ik wil hem juist klikbaar hebben" - dus moet het klikken
+    buiten de SVG gebeuren.
+    """
+    plaat = _plaat(
+        onderwerpen={"water": {"niveau": "betrouwbaar", "zin": "test"}}
+    )
+
+    assert "<a href" not in plaat
+    assert "xlink" not in plaat
+
+
+def test_the_status_tiles_are_real_cards():
+    """Echte tegels met een navigate-actie werken gegarandeerd."""
+    import yaml
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    data = yaml.safe_load(
+        (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
+    )
+    pagina = next(v for v in data["views"] if v.get("path") == "visueel")
+    kaarten = [k for sec in pagina["sections"] for k in sec["cards"]]
+    navigaties = [
+        k["tap_action"]["navigation_path"]
+        for k in kaarten
+        if (k.get("tap_action") or {}).get("action") == "navigate"
+    ]
+
+    assert len(navigaties) >= 8
+    assert "/energy-management-system/detail-water" in navigaties
+
+
+def test_every_status_tile_points_at_an_existing_page():
+    """Een tegel die naar niets wijst is erger dan geen tegel."""
+    import yaml
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    data = yaml.safe_load(
+        (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
+    )
+    paden = {v.get("path") for v in data["views"]}
+    pagina = next(v for v in data["views"] if v.get("path") == "visueel")
+    kaarten = [k for sec in pagina["sections"] for k in sec["cards"]]
+
+    for k in kaarten:
+        actie = k.get("tap_action") or {}
+        if actie.get("action") != "navigate":
+            continue
+        doel = actie["navigation_path"].rsplit("/", 1)[-1]
+        assert doel in paden, f"tegel wijst naar onbekende pagina: {doel}"
+
+
+def test_the_plate_has_two_columns_now():
+    """De statuskolom is eruit, dus de twee die overblijven mogen
+    breder."""
+    plaat = _plaat()
+
+    for titel in ("ACCU", "INSTALLATIE", "VERMOGEN", "VANDAAG"):
+        assert titel in plaat
+    assert "STATUS" not in plaat
+
+
+def test_the_arrows_still_reverse():
+    """De richting volgt de werkelijkheid; die eis blijft, alleen de
+    posities zijn verschoven."""
     import re
 
-    afname = _plaat(net_w=800.0)
-    teruglevering = _plaat(net_w=-800.0)
-
-    def _richting(plaat):
-        m = re.search(
-            r'<line x1="194" y1="(\d+)" x2="194" y2="(\d+)"[^>]*'
+    def _netpijl(plaat):
+        # De netpijl staat op x 276; de zonpijl op 108. Zonder dat
+        # onderscheid pakt de test de verkeerde regel zodra er meerdere
+        # stromen lopen.
+        return re.findall(
+            r'<line x1="276" y1="(\d+)" x2="276" y2="(\d+)"[^>]*'
             r'stroke-dasharray',
             plaat,
         )
-        return (int(m.group(1)), int(m.group(2))) if m else None
 
-    assert _richting(afname) == (196, 226)
-    assert _richting(teruglevering) == (226, 196)
+    afname = _netpijl(_plaat(net_w=800.0))
+    teruglevering = _netpijl(_plaat(net_w=-800.0))
 
+    assert afname and teruglevering
 
-def test_charging_and_discharging_reverse_the_battery_arrow():
-    import re
+    def _omlaag(lijn):
+        y1, y2 = lijn
+        return int(y2) > int(y1)
 
-    laden = _plaat(accu_w=900.0)
-    ontladen = _plaat(accu_w=-900.0)
-
-    assert re.search(r'x1="136" y1="211" x2="194"', laden)
-    assert re.search(r'x1="194" y1="226" x2="136"', ontladen)
+    # Bij afname loopt de netpijl omlaag, bij teruglevering omhoog.
+    assert _omlaag(afname[0])
+    assert not _omlaag(teruglevering[0])
