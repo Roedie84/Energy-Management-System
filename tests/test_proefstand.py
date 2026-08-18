@@ -460,3 +460,31 @@ def test_the_summary_answers_the_question_at_a_glance(
     assert s["aantal"] == 9
     assert isinstance(s["klaar"], list)
     assert s["oordeel"]
+
+
+def test_every_candidate_explains_itself_in_a_readable_field(
+    make_coordinator, hass
+):
+    """v3.12.1: de ene kandidaat gebruikt `reden`, de andere
+    `toelichting`.
+
+    Dat verschil maakte de melding leeg: er stond "4.2 ct/kWh —" met
+    niets erachter. Wie een kandidaat toevoegt hoeft niet te raden welk
+    veld gelezen wordt, maar er moet er wél één zijn.
+    """
+    c = make_coordinator({})
+
+    zonder_uitleg = []
+    for k in c.get_proefstand()["kandidaten"]:
+        opbrengst = k.get("zou_hebben_opgeleverd") or {}
+        if not (
+            opbrengst.get("reden")
+            or opbrengst.get("toelichting")
+            or k.get("betrouwbaarheid")
+        ):
+            zonder_uitleg.append(k["naam"])
+
+    assert not zonder_uitleg, (
+        "deze kandidaten leggen nergens uit waar hun getal vandaan komt: "
+        f"{zonder_uitleg}"
+    )

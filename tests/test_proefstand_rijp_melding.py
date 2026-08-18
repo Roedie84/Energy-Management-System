@@ -143,3 +143,102 @@ def test_a_broken_proefstand_does_not_break_the_tick(
     c.get_proefstand = _valt_om
 
     c._meld_rijpe_kandidaten(NU)  # mag niet opgooien
+
+
+# --- v3.12.1: de melding was leeg en incompleet ----------------------
+
+
+def test_a_candidate_with_toelichting_is_not_empty(make_coordinator, hass):
+    """Gemeld: "4.2 ct/kWh —" met niets erachter.
+
+    De slijtagekandidaat gebruikt `toelichting`, de andere `reden`. De
+    melding las alleen `reden`, en dan blijft er een gedachtestreepje
+    over zonder onderbouwing.
+    """
+    c = _coordinator(make_coordinator, hass, {"Slijtage": "meet nog"})
+    c._meld_rijpe_kandidaten(NU)
+
+    c.get_proefstand = lambda *a, **k: {
+        "kandidaten": [
+            {
+                "naam": "Slijtage",
+                "gereedheid": "klaar om mee te doen",
+                "waarde": "4.2 ct/kWh",
+                "zou_hebben_opgeleverd": {
+                    "toelichting": "Over 7 dagen € 17,61 aan slijtage."
+                },
+            }
+        ]
+    }
+    c._meld_rijpe_kandidaten(NU)
+
+    bericht = next(
+        m["bericht"] for m in c.notification_history if m["soort"] == "proefstand_rijp"
+    )
+    assert "17,61" in bericht
+
+
+def test_two_candidates_at_once_are_both_named(make_coordinator, hass):
+    """Er werden twee kandidaten tegelijk rijp en er kwam één bericht;
+    de demping van een dag filterde de tweede weg.
+
+    Een demping per SOORT werkt hier verkeerd: dit is geen herhaling maar
+    een tweede gebeurtenis.
+    """
+    c = _coordinator(
+        make_coordinator,
+        hass,
+        {"Slijtage": "meet nog", "Vasthouden": "meet nog"},
+    )
+    c._meld_rijpe_kandidaten(NU)
+
+    c.get_proefstand = lambda *a, **k: {
+        "kandidaten": [
+            {
+                "naam": "Slijtage",
+                "gereedheid": "klaar om mee te doen",
+                "waarde": "4.2 ct/kWh",
+                "zou_hebben_opgeleverd": {"toelichting": "zeven dagen"},
+            },
+            {
+                "naam": "Vasthouden",
+                "gereedheid": "klaar om mee te doen",
+                "waarde": "-8.0 ct/kWh",
+                "zou_hebben_opgeleverd": {"reden": "0 van de 200 gunstig"},
+            },
+        ]
+    }
+    c._meld_rijpe_kandidaten(NU)
+
+    berichten = [
+        m["bericht"] for m in c.notification_history if m["soort"] == "proefstand_rijp"
+    ]
+    assert berichten
+    assert "Slijtage" in berichten[-1]
+    assert "Vasthouden" in berichten[-1]
+
+
+def test_the_value_is_never_orphaned(make_coordinator, hass):
+    """Een waarde met een gedachtestreepje en niets erachter is erger dan
+    geen melding: je weet dat er iets is maar niet wat."""
+    c = _coordinator(make_coordinator, hass, {"Iets": "meet nog"})
+    c._meld_rijpe_kandidaten(NU)
+
+    c.get_proefstand = lambda *a, **k: {
+        "kandidaten": [
+            {
+                "naam": "Iets",
+                "gereedheid": "klaar om mee te doen",
+                "waarde": "1.0 ct",
+                "zou_hebben_opgeleverd": {},
+                "betrouwbaarheid": "laatste terugval",
+            }
+        ]
+    }
+    c._meld_rijpe_kandidaten(NU)
+
+    bericht = next(
+        m["bericht"] for m in c.notification_history if m["soort"] == "proefstand_rijp"
+    )
+    assert "laatste terugval" in bericht
+    assert "— \n" not in bericht
