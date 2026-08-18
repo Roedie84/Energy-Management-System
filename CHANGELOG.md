@@ -16207,3 +16207,44 @@ van de dag is. Die keuze staat, en een test bewaakt dat ze niet
 stilzwijgend verdwijnt.
 
 **Volledige testsuite**: 2425 tests, allemaal groen.
+
+## v3.14.0 — Aan bij 27, uit bij 27
+
+**Gevonden door de zelfcontrole**: *"8 schakelingen in de laatste 6 uur -
+dat wijst op pendelen rond een drempel."*
+
+En dat klopte, met een pijnlijke bijzonderheid: het pendelen liep **netjes
+op de klok** van de minimale looptijd uit v1.99.0. Precies dertig minuten
+tussen elke schakeling.
+
+    09:17  aan   27 °C, 14,8 buiten
+    09:47  uit   21 °C   (30 min later)
+    10:18  aan   27 °C   (30 min later)
+    10:49  uit   23 °C   (30 min later)
+    11:19  aan   29 °C   (30 min later)
+
+### Een tegenstelling, geen hysterese
+
+De regel uit v3.6.0 zet de ventilator aan zodra de omvormer boven de
+drempel zit en het buiten veel kouder is. Maar de gewone uitschakelregel
+stopt hem onder de **32 graden** — dus aan bij 27, en meteen weer uit bij
+27.
+
+De gewone koeling heeft die marge wel: aan bij 35, uit onder 32. De
+goedkope koeling had hem niet.
+
+Nu loopt de goedkope koeling door tot **vijf graden onder de
+aanzetdrempel**, mits het verschil met buiten groot genoeg blijft. Dan
+draait de ventilator één keer langer in plaats van drie keer kort.
+
+Op de gemeten schakelingen van 18 augustus vervallen daarmee **twee van
+de vijf** uitschakelingen.
+
+### Onderweg
+
+`_battery_cooling_should_turn_off` was een `@staticmethod` en kan nu bij
+de configuratie. De scan uit v3.7.1 ving dat meteen af — dezelfde fout
+die daar een dag eerder in bedrijf was opgetreden, nu voordat hij de deur
+uit ging.
+
+**Volledige testsuite**: 2430 tests, allemaal groen.

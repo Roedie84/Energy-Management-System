@@ -331,6 +331,7 @@ from .const import (
     BATTERY_COOLING_STOP_BELOW_C,
     BATTERY_COOLING_ON_DELTA_C,
     BATTERY_COOLING_OPPORTUNITY_DELTA_C,
+    BATTERY_COOLING_OPPORTUNITY_HYSTERESE_C,
     BATTERY_COOLING_OPPORTUNITY_MIN_C,
     CONF_BATTERY_COOLING_OPPORTUNITY_C,
     BATTERY_COOLING_ON_HIGH_POWER_TEMP_C,
@@ -17916,8 +17917,8 @@ class EnergyManagementSystemCoordinator:
             )
         return None
 
-    @staticmethod
     def _battery_cooling_should_turn_off(
+        self,
         accu_c: float, buiten_c: float, vermogen_w: float
     ) -> bool:
         """Uitschakelen mag alleen als ALLE drie voorwaarden tegelijk
@@ -17932,7 +17933,24 @@ class EnergyManagementSystemCoordinator:
         # v1.76.0: met hysterese. Zonder marge wipte de ventilator mee
         # met een sensor die in hele graden meldt: twintig schakelingen
         # in een uur, sommige binnen drie seconden.
+        # v3.14.0: maar niet als de GOEDKOPE koeling nog wat te doen
+        # heeft.
+        #
+        # Gemeld: acht schakelingen in zes uur, netjes op de klok van de
+        # minimale looptijd. De oorzaak is de regel uit v3.6.0: die zet
+        # de ventilator aan bij 27 graden, waarna deze uitschakelregel
+        # hem meteen weer wil stoppen omdat 27 onder de 32 ligt.
+        #
+        # Aan bij 27, uit bij 27 - dat is geen hysterese maar een
+        # tegenstelling. De gewone koeling heeft die marge wel: aan bij
+        # 35, uit onder 32.
+        #
+        # De goedkope koeling houdt nu aan tot de omvormer werkelijk koel
+        # is. Dan draait hij één keer langer in plaats van drie keer
+        # kort, en dat is precies wat een ventilator hoort te doen.
         if accu_c < BATTERY_COOLING_STOP_BELOW_C:
+            if self._goedkope_koeling_nog_zinvol(accu_c, buiten_c):
+                return False
             return True
 
         # En blijven draaien zolang de accu echt warm is, ongeacht het
@@ -17947,6 +17965,37 @@ class EnergyManagementSystemCoordinator:
             delta_c < BATTERY_COOLING_OFF_DELTA_C
             and vermogen_w < BATTERY_COOLING_OFF_POWER_W
             and accu_c < BATTERY_COOLING_OFF_ABSOLUTE_C
+        )
+
+    def _goedkope_koeling_nog_zinvol(
+        self, accu_c: float, buiten_c: float
+    ) -> bool:
+        """Heeft de goedkope koeling nog wat te doen? (v3.14.0)
+
+        De regel uit v3.6.0 zet de ventilator aan bij 27 graden als het
+        buiten veel kouder is. Maar de gewone uitschakelregel stopt hem
+        onder de 32 - dus aan en uit bij dezelfde temperatuur.
+
+        Gemeten op 18 augustus: aan bij 27, uit bij 21, dertig minuten
+        later weer aan bij 27. Acht schakelingen in zes uur.
+
+        Nu blijft hij draaien tot de omvormer werkelijk koel is. De
+        ondergrens ligt bewust een flink stuk onder de aanzetdrempel -
+        anders ontstaat dezelfde tegenstelling opnieuw.
+        """
+        drempel = self.config.get(
+            CONF_BATTERY_COOLING_OPPORTUNITY_C,
+            BATTERY_COOLING_OPPORTUNITY_MIN_C,
+        )
+        try:
+            drempel = float(drempel)
+        except (TypeError, ValueError):
+            drempel = BATTERY_COOLING_OPPORTUNITY_MIN_C
+
+        stop_bij = drempel - BATTERY_COOLING_OPPORTUNITY_HYSTERESE_C
+        return (
+            accu_c > stop_bij
+            and (accu_c - buiten_c) >= BATTERY_COOLING_OPPORTUNITY_DELTA_C
         )
 
     def _cooling_switch_too_recent(self, now: datetime, aanzetten: bool) -> bool:

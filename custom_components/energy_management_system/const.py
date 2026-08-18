@@ -1565,6 +1565,19 @@ BATTERY_COOLING_OPPORTUNITY_MIN_C = 28.0
 # zien (35 naar 26 in een half uur).
 BATTERY_COOLING_OPPORTUNITY_DELTA_C = 12.0
 
+# Hoeveel graden ONDER de aanzetdrempel de goedkope koeling doorgaat
+# (v3.14.0).
+#
+# Gemeld: acht schakelingen in zes uur, netjes op de klok van de
+# minimale looptijd. De regel uit v3.6.0 zette de ventilator aan bij 27
+# graden, waarna de gewone uitschakelregel hem meteen weer wilde stoppen
+# omdat 27 onder de 32 ligt. Aan bij 27, uit bij 27 - dat is geen
+# hysterese maar een tegenstelling.
+#
+# Vijf graden is ruim: de ventilator haalt er in een half uur zes tot
+# acht af, zoals de metingen laten zien (27 naar 21).
+BATTERY_COOLING_OPPORTUNITY_HYSTERESE_C = 5.0
+
 BATTERY_COOLING_ON_DELTA_C = 5.0
 BATTERY_COOLING_OFF_DELTA_C = 2.0
 
