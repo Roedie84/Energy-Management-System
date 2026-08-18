@@ -78,7 +78,8 @@ def test_every_candidate_reports_its_own_reliability(
 
     # v2.6.0: plus "Vasthouden voor morgen".
     # v2.9.0: plus het regressiewoud.
-    assert len(kandidaten) == 7
+    # v3.10.0: plus "Verder vooruitkijken bij de reserve".
+    assert len(kandidaten) == 8
     for kandidaat in kandidaten:
         assert kandidaat["naam"]
         assert kandidaat["status"]
@@ -456,6 +457,6 @@ def test_the_summary_answers_the_question_at_a_glance(
 
     s = c.get_proefstand()["samenvatting"]
 
-    assert s["aantal"] == 7
+    assert s["aantal"] == 8
     assert isinstance(s["klaar"], list)
     assert s["oordeel"]
