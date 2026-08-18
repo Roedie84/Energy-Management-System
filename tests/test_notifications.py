@@ -188,6 +188,12 @@ def test_only_the_pre_existing_kinds_default_to_on():
         # dan zou je er pas achter komen door de export regel voor
         # regel te lezen. Precies wat deze week een paar keer nodig was.
         "zelfcontrole",
+        # v3.12.0: "een kandidaat is klaar om mee te doen" staat aan om
+        # dezelfde reden. Gevraagd: "Houd je dit zelf bij middels
+        # diagnostiek?" - nee, en dan moet de gebruiker zelf onthouden
+        # dat hij over drie weken moet kijken. Staat deze uit, dan
+        # gebeurt dat niet en blijft de kandidaat ongebruikt staan.
+        "proefstand_rijp",
     }
 
 
