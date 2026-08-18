@@ -88,7 +88,8 @@
           "presence_bedtime_sensor_entity": "Bedtime sensor (optional): landing or stairs - last motion at night means asleep",
           "presence_tv_entity": "Television (optional): TV on counts as someone home",
           "presence_light_entities": "Indoor lights (optional): a light that is on counts as someone home",
-          "power_limits_intentional": "Charge/discharge power deliberately limited (no suggestions to raise it)"
+          "power_limits_intentional": "Charge/discharge power deliberately limited (no suggestions to raise it)",
+          "battery_cooling_opportunity_c": "Cool when cheap above (°C): fan runs below the main threshold when outdoor air is much colder"
         }
       }
     },
@@ -190,7 +191,8 @@
           "presence_bedtime_sensor_entity": "Bedtime sensor (optional): landing or stairs - last motion at night means asleep",
           "presence_tv_entity": "Television (optional): TV on counts as someone home",
           "presence_light_entities": "Indoor lights (optional): a light that is on counts as someone home",
-          "power_limits_intentional": "Charge/discharge power deliberately limited (no suggestions to raise it)"
+          "power_limits_intentional": "Charge/discharge power deliberately limited (no suggestions to raise it)",
+          "battery_cooling_opportunity_c": "Cool when cheap above (°C): fan runs below the main threshold when outdoor air is much colder"
         }
       }
     },

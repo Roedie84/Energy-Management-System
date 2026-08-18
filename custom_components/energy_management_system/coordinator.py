@@ -330,6 +330,9 @@ from .const import (
     BATTERY_COOLING_MIN_ABSOLUTE_C,
     BATTERY_COOLING_STOP_BELOW_C,
     BATTERY_COOLING_ON_DELTA_C,
+    BATTERY_COOLING_OPPORTUNITY_DELTA_C,
+    BATTERY_COOLING_OPPORTUNITY_MIN_C,
+    CONF_BATTERY_COOLING_OPPORTUNITY_C,
     BATTERY_COOLING_ON_HIGH_POWER_TEMP_C,
     BATTERY_COOLING_ON_HIGH_POWER_W,
     BATTERY_COOLING_ON_POWER_DELTA_C,
@@ -12254,8 +12257,23 @@ class EnergyManagementSystemCoordinator:
             # wattuur nog maar enkele procenten door.
             # v2.9.0: ook de kenmerken vastleggen voor het regressiewoud.
             try:
+                # v3.6.1: het uur heet hier `_pv_current_tracked_hour`.
+                #
+                # Sinds v2.9.0 stond hier `hour`, en die bestaat in deze
+                # functie niet. Elke afgesloten lichte uur gaf een
+                # NameError, netjes opgevangen door de try/except - dus
+                # het woud verzamelde NUL monsters, en de drie weken
+                # wachten waren voor niets geweest.
+                #
+                # Gevonden door het logboek uit v3.4.0, binnen een dag na
+                # invoering. Zonder dat was dit pas over drie weken
+                # opgevallen, als de kandidaat nog steeds "0 van 150
+                # uren" had gemeld.
                 self._leg_pv_modelmonster_vast(
-                    hour, forecast_kwh, actual_kwh, dt_util.now()
+                    self._pv_current_tracked_hour,
+                    forecast_kwh,
+                    actual_kwh,
+                    dt_util.now(),
                 )
             except Exception:  # noqa: BLE001 - mag het leren nooit breken
                 _LOGGER.exception("Kon het PV-modelmonster niet vastleggen")
@@ -17384,8 +17402,37 @@ class EnergyManagementSystemCoordinator:
         return accu_c, buiten_c, abs(vermogen_w)
 
     @staticmethod
+    def _koelen_is_goedkoop(self, accu_c: float, buiten_c: float) -> bool:
+        """Valt er veel te koelen voor weinig? (v3.6.0)
+
+        Gemeld: "De accu moet meer gekoeld worden, hij is nu 31 graden en
+        de buitentemperatuur is veel lager."
+
+        Terecht. De drempel van 35 graden beschermt de OMVORMER - die
+        regelt pas terug als hij warm wordt. Maar bij 31 graden met 14
+        buiten is er zeventien graden koeling te halen voor een
+        ventilator van een paar watt.
+
+        Dit is nadrukkelijk een KANS, geen noodzaak: de cellen stonden op
+        dat moment op 21 tot 23 graden en daar was niets mis mee. Maar
+        koelen dat bijna niets kost en meetbaar veroudering scheelt, is
+        de moeite waard.
+        """
+        drempel = self.config.get(
+            CONF_BATTERY_COOLING_OPPORTUNITY_C,
+            BATTERY_COOLING_OPPORTUNITY_MIN_C,
+        )
+        try:
+            drempel = float(drempel)
+        except (TypeError, ValueError):
+            drempel = BATTERY_COOLING_OPPORTUNITY_MIN_C
+        return (
+            accu_c >= drempel
+            and (accu_c - buiten_c) >= BATTERY_COOLING_OPPORTUNITY_DELTA_C
+        )
+
     def _battery_cooling_should_turn_on(
-        accu_c: float, buiten_c: float, vermogen_w: float
+        self, accu_c: float, buiten_c: float, vermogen_w: float
     ) -> str | None:
         """Welke van de vier aanzet-redenen geldt op dit moment, of None
         (v0.63.122). Geeft de reden terug in plaats van alleen True/
@@ -17401,6 +17448,18 @@ class EnergyManagementSystemCoordinator:
         # die temperatuur valt er niets te winnen, je verbruikt alleen
         # ventilatorstroom.
         if accu_c < BATTERY_COOLING_MIN_ABSOLUTE_C:
+            # v3.6.0: maar wél koelen als het bijna niets kost.
+            #
+            # Gemeld: 31 graden bij 14 buiten, en de ventilator stond
+            # stil omdat 31 onder de drempel van 35 ligt. Die drempel
+            # beschermt de omvormer; hij zegt niets over de vraag of
+            # koelen de moeite is.
+            if self._koelen_is_goedkoop(accu_c, buiten_c):
+                return (
+                    f"accu {accu_c:.0f}°C met {buiten_c:.0f}°C buiten - "
+                    f"{accu_c - buiten_c:.0f}°C te halen voor een paar watt "
+                    "ventilator, dus koelen zolang het goedkoop is"
+                )
             return None
 
         if delta_c > BATTERY_COOLING_ON_DELTA_C:

@@ -1462,6 +1462,7 @@ REASON_TO_MODE = {
 # 33, vermogen 500 vs 300): zonder die marge zou de ventilator rond een
 # enkele drempel blijven pendelen.
 CONF_BATTERY_TEMPERATURE_SENSOR = "battery_temperature_sensor_entity"
+CONF_BATTERY_COOLING_OPPORTUNITY_C = "battery_cooling_opportunity_c"
 CONF_BATTERY_COOLING_FAN_SWITCH = "battery_cooling_fan_switch_entity"
 # Optioneel: een eigen buitentemperatuursensor specifiek voor deze
 # vergelijking. Leeg laten betekent terugvallen op de al bestaande
@@ -1513,6 +1514,30 @@ BATTERY_COOLING_OFF_ABSOLUTE_C = 45.0
 # aanname over veroudering. Een ventilator kan niet onder de
 # buitentemperatuur koelen; onder een paar graden verschil is er dus
 # weinig te halen.
+# --- Koelen als het goedkoop is (v3.6.0) -----------------------------
+# Gemeld: "De accu moet meer gekoeld worden, hij is nu 31 graden en de
+# buitentemperatuur is veel lager."
+#
+# Terecht. De drempel van 35 graden beschermt de OMVORMER - die regelt
+# pas terug als hij warm wordt. Maar bij 31 graden met 14 buiten is er
+# zeventien graden koeling te halen voor een ventilator van een paar
+# watt, en dan is wachten tot 35 zonde.
+#
+# De cellen stonden op dat moment op 21 tot 23 graden, ruim onder de
+# drempel waarboven LFP versneld veroudert. Er was dus geen alarm - maar
+# koelen dat bijna niets kost en meetbaar veroudering scheelt, is de
+# moeite waard.
+#
+# Onder deze grens wordt er sowieso niet gekoeld: dan is er niets te
+# winnen, hoe koud het buiten ook is.
+BATTERY_COOLING_OPPORTUNITY_MIN_C = 28.0
+
+# En dan alleen als er genoeg verschil met buiten is om het zinvol te
+# maken. Twaalf graden is ruim: de ventilator haalt er dan in enkele
+# minuten meerdere graden af, zoals de metingen van 17 augustus laten
+# zien (35 naar 26 in een half uur).
+BATTERY_COOLING_OPPORTUNITY_DELTA_C = 12.0
+
 BATTERY_COOLING_ON_DELTA_C = 5.0
 BATTERY_COOLING_OFF_DELTA_C = 2.0
 

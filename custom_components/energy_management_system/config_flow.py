@@ -35,7 +35,9 @@ from .const import (
     CONF_QUOOKER_POWER_SENSOR,
     CONF_AIRCO_CLIMATE_ENTITY,
     CONF_SLAAPKAMER_CLIMATE_ENTITY,
+    BATTERY_COOLING_OPPORTUNITY_MIN_C,
     CONF_BATTERY_COOLING_FAN_SWITCH,
+    CONF_BATTERY_COOLING_OPPORTUNITY_C,
     CONF_PV_ACTUAL_AZIMUTH_DEGREES,
     CONF_POWER_LIMITS_INTENTIONAL,
     CONF_PRESENCE_BEDTIME_SENSOR,
@@ -449,6 +451,17 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
             ),
             _optioneel(CONF_SUN_PHASE_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
             _optioneel(CONF_BATTERY_TEMPERATURE_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            vol.Optional(
+                CONF_BATTERY_COOLING_OPPORTUNITY_C,
+                default=defaults.get(
+                    CONF_BATTERY_COOLING_OPPORTUNITY_C,
+                    BATTERY_COOLING_OPPORTUNITY_MIN_C,
+                ),
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=20, max=45, step=1, unit_of_measurement="°C"
+                )
+            ),
             _optioneel(CONF_BATTERY_COOLING_FAN_SWITCH, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="switch")),
             _optioneel(CONF_BATTERY_COOLING_OUTDOOR_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
             _optioneel(CONF_LIVING_ROOM_TEMPERATURE_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),

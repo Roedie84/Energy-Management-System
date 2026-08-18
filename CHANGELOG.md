@@ -15726,3 +15726,83 @@ kandidaat. Het versienummer klopte inderdaad niet — dat was een uur
 eerder al gevonden en gerepareerd in v3.4.1.
 
 **Volledige testsuite**: 2363 tests, allemaal groen.
+
+## v3.6.0 — Koelen als het bijna niets kost
+
+**Gemeld** op 18 augustus, 07:57: "De accu moet meer gekoeld worden, hij
+is nu 31 graden en de buitentemperatuur is veel lager."
+
+Terecht. De ventilator stond stil omdat 31 °C onder de aanzetdrempel van
+35 ligt. Die drempel beschermt de **omvormer** — die regelt pas terug als
+hij warm wordt. Maar hij zegt niets over de vraag of koelen de moeite is.
+
+Bij **31 °C met 14,1 °C buiten** is er bijna zeventien graden te halen
+voor een ventilator van een paar watt. Wachten tot 35 is dan zonde.
+
+### Een kans, geen noodzaak
+
+De cellen stonden op dat moment op **21 tot 23 °C** — ruim onder de
+grens waarboven LFP versneld veroudert. Er was dus geen alarm. Maar
+koelen dat bijna niets kost en meetbaar veroudering scheelt, is de moeite
+waard.
+
+De ventilator gaat nu ook aan onder de hoofddrempel, mits:
+
+- de omvormer boven **28 °C** zit (instelbaar), en
+- er minstens **12 °C** verschil met buiten is.
+
+Boven 35 °C verandert er niets: de bestaande bescherming van de omvormer
+blijft precies zoals hij was.
+
+De drempel is instelbaar, want deze getallen zijn schattingen — Zendure
+publiceert niet wanneer de omvormer terugregelt, zoals in v1.80.0 al
+werd vastgelegd.
+
+### Onderweg
+
+`_battery_cooling_should_turn_on` was een `@staticmethod` en kan nu bij
+de configuratie. Achttien tests vielen daardoor om — allemaal omdat ze de
+functie op de klasse aanriepen, geen enkele omdat het gedrag veranderde.
+De bestaande drempels zijn ongemoeid.
+
+**Volledige testsuite**: 2369 tests, allemaal groen.
+
+## v3.6.1 — Het regressiewoud verzamelde niets
+
+**Gevonden door het logboek uit v3.4.0**, binnen één dag na invoering:
+
+    ERROR coordinator:12261: Kon het PV-modelmonster niet vastleggen
+    NameError("name 'hour' is not defined")
+
+Elk afgesloten licht uur, sinds v2.9.0. De aanroep gebruikte `hour`,
+terwijl het uur daar `self._pv_current_tracked_hour` heet.
+
+De `try/except` eromheen ving dat netjes op — dus alles bleef werken en
+er was niets van te zien. Behalve dan dat het regressiewoud **nul
+monsters** verzamelde. De drie weken wachten op cijfers waren voor niets
+geweest, en dat zou pas over drie weken zijn opgevallen als de kandidaat
+nog steeds "0 van 150 uren" had gemeld.
+
+Precies waarvoor dat logboek is toegevoegd, en sneller dan verwacht.
+
+### En een scan die dit voortaan vangt
+
+Er stond al een AST-scan op **methoden** die niet bestaan (die ving in
+v2.9.0 nog een ontbrekende functie). Nu ook een op **variabelen**: een
+naam die als argument aan een eigen methode wordt meegegeven en in die
+functie niet bestaat.
+
+Die scan kostte vier pogingen, en elke misser is het vermelden waard:
+
+- eerst gold `hour` als bekend omdat de naam **elders in het bestand**
+  bestond — en juist daardoor viel de fout niet op;
+- toen omdat `ast.walk` over `boom.body` ook élke naam uit élke methode
+  meenam als "modulenaam";
+- toen omdat geneste functies de namen van hun omhulsel zien;
+- en toen omdat `ast.walk` vanuit de buitenste functie ook de aanroepen
+  in geneste functies beoordeelde.
+
+Elke tussenversie is getoetst door de fout terug te zetten. Pas de
+laatste is groen op de goede code en rood op de foute.
+
+**Volledige testsuite**: 2370 tests, allemaal groen.
