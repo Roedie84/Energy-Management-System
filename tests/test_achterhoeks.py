@@ -26,10 +26,10 @@ def test_a_title_is_translated(make_coordinator, hass):
     c = make_coordinator({})
 
     vertaald = c._naar_achterhoeks(
-        "Accu haalt de nacht mogelijk niet", "plan_tekort"
+        "Accu komt tekort", "plan_tekort"
     )
 
-    assert vertaald == "Den accu haalt de nacht neet"
+    assert vertaald == "Den accu kump tekort"
 
 
 def test_a_message_is_translated(make_coordinator, hass):
@@ -279,7 +279,7 @@ def test_a_recovery_notification_is_translated(make_coordinator, hass):
 
     c._meld_herstel(
         "plan_tekort",
-        "✅ Accu haalt de nacht weer",
+        "✅ Accu komt niet meer tekort",
         "Er is weer genoeg opgeslagen om tot het goedkope blok te overbruggen.",
     )
 
@@ -295,9 +295,9 @@ def test_the_recovery_title_is_translated_too(make_coordinator, hass):
     c = make_coordinator({})
     c.achterhoeks = True
 
-    c._meld_herstel("plan_tekort", "✅ Accu haalt de nacht weer", "x")
+    c._meld_herstel("plan_tekort", "✅ Accu komt niet meer tekort", "x")
 
-    assert c.notification_history[-1]["titel"] == "Den accu haalt de nacht weer"
+    assert c.notification_history[-1]["titel"] == "Den accu kump neet meer tekort"
 
 
 def test_every_recovery_kind_has_an_achterhoeks_title():
@@ -315,9 +315,9 @@ def test_dutch_stays_dutch_when_the_switch_is_off(make_coordinator, hass):
     c = make_coordinator({})
     c.achterhoeks = False
 
-    c._meld_herstel("plan_tekort", "✅ Accu haalt de nacht weer", "Er is weer genoeg.")
+    c._meld_herstel("plan_tekort", "✅ Accu komt niet meer tekort", "Er is weer genoeg.")
 
-    assert c.notification_history[-1]["titel"] == "✅ Accu haalt de nacht weer"
+    assert c.notification_history[-1]["titel"] == "✅ Accu komt niet meer tekort"
 
 
 def test_a_varying_title_keeps_its_distinction(make_coordinator, hass):

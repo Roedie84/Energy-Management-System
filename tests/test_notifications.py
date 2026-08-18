@@ -556,10 +556,18 @@ def test_the_shortfall_warning_has_a_recovery(make_coordinator, hass):
         "tekort_kwartieren": 0,
         "laagste_soc_procent": 28,
     }
+    # v3.9.0: het herstel komt pas na een stabiele periode. De planning
+    # schommelt rond de grens; om 06:44 stond "hersteld" met om 06:45
+    # weer "tekort". Twee rondes: de eerste start de klok, de tweede
+    # meldt.
     c._meld_planningswijzigingen(NOW + timedelta(hours=1))
+    c._meld_planningswijzigingen(NOW + timedelta(hours=2))
 
     titels = [m["titel"] for m in c.notification_history]
-    assert any("weer" in t for t in titels)
+    # v3.9.0: "haalt de nacht weer" is vervangen. Die tekst sloeg
+    # nergens op om half tien 's ochtends - het tekort kan op elk moment
+    # binnen de horizon liggen.
+    assert any("niet meer tekort" in t for t in titels)
 
 
 def test_no_recovery_without_a_warning_first(make_coordinator, hass):
