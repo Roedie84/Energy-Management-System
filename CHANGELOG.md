@@ -16248,3 +16248,36 @@ die daar een dag eerder in bedrijf was opgetreden, nu voordat hij de deur
 uit ging.
 
 **Volledige testsuite**: 2430 tests, allemaal groen.
+
+## v3.15.0 — Koelen is bescherming, geen aansturing
+
+**Gemeld**: "Koelen mag niets te maken hebben met goedkoop of dure
+prijzen, hij moet wanneer nodig altijd koelen."
+
+### De naam was ongelukkig
+
+"Goedkoop koelen" uit v3.6.0 sloeg op de **ventilator** — een paar watt
+voor veel koeling als het buiten kouder is — niet op de stroomprijs. Dat
+was verwarrend, en terecht opgemerkt.
+
+Nagekeken in de code: **geen enkele koelfunctie raakt een prijs.** Niet
+`evaluate_battery_cooling`, niet de aan- of uitschakelregels, niet de
+hysterese. Er staat nu een test op die dat vastlegt voor alle vijf.
+
+### Maar er wás een blokkade
+
+In **leermodus** of bij **handmatige overname** werd de ventilator niet
+geschakeld — ook niet bij een te warme accu. Voor de accusturing is dat
+terecht: die schakelaars zeggen "raak mijn accu niet aan".
+
+Maar een ventilator laadt of ontlaadt niets; hij beschermt alleen. Wie de
+sturing overneemt wil niet dat zijn accu ondertussen oververhit.
+
+Boven **35 °C** wordt er nu doorgeschakeld, ook in die twee standen.
+Daaronder blijft de oude terughoudendheid gelden: dan is koelen een
+optimalisatie, en die hoort te wijken voor wie de sturing overneemt.
+
+De reden vermeldt het expliciet: *"wél uitgevoerd ondanks force manual:
+koelen is bescherming, geen aansturing"*.
+
+**Volledige testsuite**: 2433 tests, allemaal groen.

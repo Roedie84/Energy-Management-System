@@ -1578,6 +1578,23 @@ BATTERY_COOLING_OPPORTUNITY_DELTA_C = 12.0
 # acht af, zoals de metingen laten zien (27 naar 21).
 BATTERY_COOLING_OPPORTUNITY_HYSTERESE_C = 5.0
 
+# Boven deze temperatuur koelt de ventilator ALTIJD (v3.15.0).
+#
+# Gemeld: "Koelen mag niets te maken hebben met goedkoop of dure prijzen,
+# hij moet wanneer nodig altijd koelen."
+#
+# Prijzen raakten de koeling al nergens. Maar in leermodus of bij
+# handmatige overname werd de ventilator niet geschakeld, ook niet bij
+# een te warme accu.
+#
+# Voor de accusturing is dat terecht - die schakelaars zeggen "raak mijn
+# accu niet aan". Maar een ventilator laadt of ontlaadt niets; hij
+# beschermt alleen.
+#
+# Deze grens ligt bij de gewone aanzetdrempel: daaronder is koelen een
+# optimalisatie die mag wijken, daarboven is het bescherming die voorgaat.
+BATTERY_COOLING_PROTECT_ALWAYS_C = 35.0
+
 BATTERY_COOLING_ON_DELTA_C = 5.0
 BATTERY_COOLING_OFF_DELTA_C = 2.0
 

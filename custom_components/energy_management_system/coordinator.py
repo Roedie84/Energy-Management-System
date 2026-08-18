@@ -332,6 +332,7 @@ from .const import (
     BATTERY_COOLING_ON_DELTA_C,
     BATTERY_COOLING_OPPORTUNITY_DELTA_C,
     BATTERY_COOLING_OPPORTUNITY_HYSTERESE_C,
+    BATTERY_COOLING_PROTECT_ALWAYS_C,
     BATTERY_COOLING_OPPORTUNITY_MIN_C,
     CONF_BATTERY_COOLING_OPPORTUNITY_C,
     BATTERY_COOLING_ON_HIGH_POWER_TEMP_C,
@@ -18144,13 +18145,44 @@ class EnergyManagementSystemCoordinator:
         self.battery_cooling_state = besluit
         if besluit["actie"] is None:
             return
+        # v3.15.0: koelen is BESCHERMING, geen aansturing.
+        #
+        # Gemeld: "Koelen mag niets te maken hebben met goedkoop of dure
+        # prijzen, hij moet wanneer nodig altijd koelen."
+        #
+        # Prijzen raakten de koeling al nergens - dat is nagekeken. Maar
+        # er was wél een blokkade: in leermodus of bij handmatige
+        # overname werd de ventilator niet geschakeld, ook niet bij een
+        # te warme accu.
+        #
+        # Voor de ACCUSTURING is dat terecht: die twee schakelaars zeggen
+        # "raak mijn accu niet aan". Maar een ventilator laadt of ontlaadt
+        # niets; hij beschermt alleen. Een gebruiker die de sturing
+        # overneemt wil niet dat zijn accu ondertussen oververhit.
+        #
+        # Alleen wanneer de accu ECHT warm is wordt er doorgeschakeld.
+        # Onder die grens blijft de oude terughoudendheid gelden: dan is
+        # koelen een optimalisatie, en die hoort te wijken voor wie de
+        # sturing overneemt.
         if self.learning_only or self.force_manual:
-            besluit["reden"] = (
-                f"{besluit['reden']} (niet uitgevoerd: "
-                f"{'learning only' if self.learning_only else 'force manual'} "
-                "staat aan)"
+            accu_c = besluit.get("accu_c")
+            beschermend = (
+                accu_c is not None
+                and accu_c >= BATTERY_COOLING_PROTECT_ALWAYS_C
+                and besluit["actie"] == "aan"
             )
-            return
+            if not beschermend:
+                besluit["reden"] = (
+                    f"{besluit['reden']} (niet uitgevoerd: "
+                    f"{'learning only' if self.learning_only else 'force manual'} "
+                    "staat aan)"
+                )
+                return
+            besluit["reden"] = (
+                f"{besluit['reden']} - wél uitgevoerd ondanks "
+                f"{'learning only' if self.learning_only else 'force manual'}: "
+                "koelen is bescherming, geen aansturing"
+            )
 
         fan_entity = self.config.get(CONF_BATTERY_COOLING_FAN_SWITCH)
         service = "turn_on" if besluit["actie"] == "aan" else "turn_off"
