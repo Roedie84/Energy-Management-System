@@ -41,7 +41,9 @@ def test_the_learning_uses_the_threshold():
 
     bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
     kop = bron.index("def _finalize_pv_hourly_bucket")
-    blok = bron[kop : kop + 2500]
+    # v3.6.1: tot de volgende definitie - het commentaar is gegroeid
+    # voorbij elk vast aantal tekens.
+    blok = bron[kop : bron.index("\n    def ", kop + 10)]
 
     assert "PV_HOURLY_BIAS_MIN_KWH" in blok
     assert "forecast_kwh > 0.01" not in blok

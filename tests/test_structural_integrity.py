@@ -218,3 +218,146 @@ def test_sensor_platform_setup_instantiates_every_registered_sensor():
             failures[class_name] = repr(exc)
 
     assert not failures, f"sensor classes failed to instantiate: {failures}"
+
+
+def test_no_call_uses_an_undefined_local_name():
+    """v3.6.1: `self._leg_pv_modelmonster_vast(hour, ...)` gebruikte een
+    naam die in die functie niet bestond.
+
+    Elke afgesloten lichte uur gaf een NameError, netjes opgevangen door
+    de try/except eromheen - dus het regressiewoud verzamelde NUL
+    monsters, en de drie weken wachten waren voor niets geweest.
+
+    Gevonden door het logboek uit v3.4.0, binnen een dag. De AST-scan
+    hierboven kijkt naar METHODEN die niet bestaan; deze naar
+    VARIABELEN.
+    """
+    import ast
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    fouten = []
+    for bestand in ("coordinator.py", "sensor.py", "solar_forecast.py"):
+        pad = Path(pkg.__file__).parent / bestand
+        if not pad.exists():
+            continue
+        boom = ast.parse(pad.read_text())
+        # Alleen toewijzingen op het HOOGSTE niveau. `boom.body` bevat
+        # ook de klasse, en `ast.walk` daarop levert elke naam uit elke
+        # methode - waardoor `hour` als bekend gold en de fout niet werd
+        # gezien.
+        modulenamen = {
+            doel.id
+            for knoop in boom.body
+            if isinstance(knoop, (ast.Assign, ast.AnnAssign, ast.AugAssign))
+            for doel in (
+                knoop.targets if isinstance(knoop, ast.Assign) else [knoop.target]
+            )
+            if isinstance(doel, ast.Name)
+        } | {
+            (alias.asname or alias.name).split(".")[0]
+            for knoop in boom.body
+            if isinstance(knoop, (ast.Import, ast.ImportFrom))
+            for alias in knoop.names
+        }
+
+        # Per functie ook de namen uit de OMSLUITENDE functies, want een
+        # geneste functie ziet die. Zonder dat worden `moment` en `tekst`
+        # ten onrechte als onbekend gemeld.
+        omhullend: dict[int, set[str]] = {}
+
+        def _verzamel(knoop, buiten: set[str]) -> None:
+            for kind in ast.iter_child_nodes(knoop):
+                if isinstance(kind, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    omhullend[id(kind)] = set(buiten)
+                    eigen = set(buiten)
+                    eigen |= {a.arg for a in kind.args.args}
+                    eigen |= {a.arg for a in kind.args.kwonlyargs}
+                    for n in ast.walk(kind):
+                        if isinstance(n, ast.Name) and isinstance(
+                            n.ctx, (ast.Store, ast.Del)
+                        ):
+                            eigen.add(n.id)
+                    _verzamel(kind, eigen)
+                else:
+                    _verzamel(kind, buiten)
+
+        _verzamel(boom, set())
+
+        for functie in ast.walk(boom):
+            if not isinstance(functie, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+
+            # Namen die in deze functie beschikbaar zijn.
+            bekend = set(omhullend.get(id(functie), set()))
+            bekend |= {a.arg for a in functie.args.args}
+            bekend |= {a.arg for a in functie.args.kwonlyargs}
+            if functie.args.vararg:
+                bekend.add(functie.args.vararg.arg)
+            if functie.args.kwarg:
+                bekend.add(functie.args.kwarg.arg)
+            for knoop in ast.walk(functie):
+                if isinstance(knoop, ast.Name) and isinstance(
+                    knoop.ctx, (ast.Store, ast.Del)
+                ):
+                    bekend.add(knoop.id)
+                elif isinstance(knoop, (ast.Import, ast.ImportFrom)):
+                    for alias in knoop.names:
+                        bekend.add((alias.asname or alias.name).split(".")[0])
+                elif isinstance(knoop, ast.ExceptHandler) and knoop.name:
+                    bekend.add(knoop.name)
+                elif isinstance(
+                    knoop, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+                ):
+                    bekend.add(knoop.name)
+                elif isinstance(knoop, (ast.comprehension,)):
+                    for n in ast.walk(knoop.target):
+                        if isinstance(n, ast.Name):
+                            bekend.add(n.id)
+
+            # Namen die als ARGUMENT aan een eigen methode worden
+            # meegegeven: die moeten bestaan.
+            # Alleen aanroepen die bij DEZE functie horen. `ast.walk`
+            # daalt af in geneste functies, en dan werd een aanroep in
+            # een binnenfunctie ook vanuit de buitenste beoordeeld -
+            # waar de parameter van de binnenfunctie niet bestaat.
+            def _eigen_aanroepen(knoop):
+                for kind in ast.iter_child_nodes(knoop):
+                    if isinstance(
+                        kind, (ast.FunctionDef, ast.AsyncFunctionDef)
+                    ):
+                        continue
+                    if isinstance(kind, ast.Call):
+                        yield kind
+                    yield from _eigen_aanroepen(kind)
+
+            for aanroep in _eigen_aanroepen(functie):
+                if not isinstance(aanroep, ast.Call):
+                    continue
+                doel = aanroep.func
+                if not (
+                    isinstance(doel, ast.Attribute)
+                    and isinstance(doel.value, ast.Name)
+                    and doel.value.id == "self"
+                ):
+                    continue
+                for arg in aanroep.args:
+                    if isinstance(arg, ast.Name) and arg.id not in bekend:
+                        # Ingebouwde namen en modulevariabelen overslaan.
+                        if arg.id in dir(__builtins__) or arg.id.isupper():
+                            continue
+                        # NIET overslaan omdat de naam elders in het
+                        # bestand bestaat: `hour` bestond in twintig
+                        # andere functies, en juist daardoor viel deze
+                        # fout niet op. Alleen namen op MODULENIVEAU
+                        # tellen als bekend.
+                        if arg.id in modulenamen:
+                            continue
+                        fouten.append(
+                            f"{bestand}:{arg.lineno}: "
+                            f"self.{doel.attr}(... {arg.id} ...) - "
+                            f"{arg.id!r} bestaat hier niet"
+                        )
+
+    assert not fouten, fouten
