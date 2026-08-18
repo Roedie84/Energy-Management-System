@@ -476,8 +476,13 @@ def test_the_visual_page_is_a_panel_again():
     pagina = next(v for v in data["views"] if v.get("path") == "visueel")
 
     assert pagina.get("panel") is True
-    assert len(pagina["cards"]) == 1
-    assert pagina["cards"][0]["type"] == "markdown"
+
+    # v3.25.3: één SVG per markdown-kaart. Twee SVG-blokken in dezelfde
+    # kaart werden als PLATTE TEKST getoond - de markdown-verwerker
+    # herkent het tweede blok dan niet meer als HTML.
+    stapel = pagina["cards"][0]
+    assert stapel["type"] == "vertical-stack"
+    assert all(k["type"] == "markdown" for k in stapel["cards"])
 
 
 def test_the_plate_and_the_sections_are_both_shown():
@@ -490,7 +495,43 @@ def test_the_plate_and_the_sections_are_both_shown():
         (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
     )
     pagina = next(v for v in data["views"] if v.get("path") == "visueel")
-    inhoud = pagina["cards"][0]["content"]
+    inhoud = [k["content"] for k in pagina["cards"][0]["cards"]]
 
-    assert "overzichtsplaat" in inhoud
-    assert "overzichtsecties" in inhoud
+    assert any("overzichtsplaat" in c for c in inhoud)
+    assert any("overzichtsecties" in c for c in inhoud)
+
+
+def test_no_card_holds_two_svgs():
+    """De oorzaak van de platte tekst: twee `<svg>`-blokken in dezelfde
+    markdown-kaart. Het eerste wordt als HTML herkend, het tweede niet
+    meer - en dan verschijnt alles als tekst.
+
+    Eén per kaart, en een vertical-stack eromheen zodat ze onder elkaar
+    blijven staan.
+    """
+    import yaml
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    data = yaml.safe_load(
+        (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
+    )
+
+    def _kaarten(o):
+        if isinstance(o, dict):
+            if o.get("type") == "markdown" and o.get("content"):
+                yield o["content"]
+            for v in o.values():
+                yield from _kaarten(v)
+        elif isinstance(o, list):
+            for x in o:
+                yield from _kaarten(x)
+
+    for inhoud in _kaarten(data):
+        aantal = sum(
+            1
+            for naam in ("overzichtsplaat", "overzichtsecties", "overzichtstatus")
+            if naam in inhoud
+        )
+        assert aantal <= 1, f"kaart met {aantal} SVG-bronnen: {inhoud[:80]}"
