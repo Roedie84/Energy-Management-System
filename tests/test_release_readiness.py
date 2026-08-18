@@ -67,7 +67,13 @@ def test_the_version_is_consistent_everywhere():
     versie = json.loads((PAKKET / "manifest.json").read_text())["version"]
     dashboard = (PAKKET / "dashboard_template.yaml").read_text()
 
-    assert f"?v={versie}" in dashboard
+    # v3.17.0: de overzichtsplaat komt niet meer uit een BESTAND maar
+    # live uit de sensor, dus er valt geen browsercache te omzeilen. De
+    # cache-sleutel is daarmee overbodig geworden.
+    assert "?v=" not in dashboard, (
+        "de plaat wordt live opgebouwd; een cache-sleutel wijst op een "
+        "achtergebleven statische afbeelding"
+    )
     assert f"## v{versie}" in (WORTEL / "CHANGELOG.md").read_text()
 
 

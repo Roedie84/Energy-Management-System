@@ -115,9 +115,27 @@ def test_exposed_on_the_explanation_sensor(make_coordinator, hass):
     )
 
 
-def test_card_uses_the_new_attribute():
-    """De kaart mag niet meer op `heavy_load_source` staan - dat is een
-    beslislogica-signaal, geen verbruikersaanduiding."""
+def test_the_overview_uses_the_new_source():
+    """De kaart mag niet op `heavy_load_source` staan - dat is een
+    beslislogica-signaal, geen verbruikersaanduiding.
+
+    v3.17.0: de picture-elements-kaart is vervangen door een dynamische
+    tekening. De eis blijft dezelfde, alleen de plek verandert.
+    """
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    kop = bron.index("def get_overview_svg")
+    blok = bron[kop : bron.index("\n    def ", kop + 10)]
+    code = "\n".join(r.split("#")[0] for r in blok.splitlines())
+
+    assert "get_largest_known_consumer()" in code
+    assert "last_heavy_load_source" not in code
+
+
+def _oud_test_card_uses_the_new_attribute():
     from pathlib import Path
 
     import custom_components.energy_management_system as pkg
@@ -138,9 +156,20 @@ def test_card_uses_the_new_attribute():
     assert "heavy_load_source" not in attributen
 
 
-def test_svg_label_matches_what_is_shown():
+def test_the_label_matches_what_is_shown():
     """Het label beloofde "zwaarste bron" terwijl er iets anders stond;
-    tekening en inhoud moeten hetzelfde zeggen."""
+    tekening en inhoud moeten hetzelfde zeggen.
+
+    v3.17.0: de tekening wordt nu opgebouwd in code, dus daar kijken we.
+    """
+    from custom_components.energy_management_system.overview_svg import (
+        bouw_overzicht,
+    )
+
+    assert "Grootste verbruiker" in bouw_overzicht({})
+
+
+def _oud_test_svg_label():
     from pathlib import Path
 
     import custom_components.energy_management_system as pkg
