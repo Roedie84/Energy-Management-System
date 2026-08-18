@@ -16127,3 +16127,83 @@ Demping: een dag. Deze gebeurtenis komt hooguit een paar keer per jaar
 voor.
 
 **Volledige testsuite**: 2415 tests, allemaal groen.
+
+## v3.12.1 — De melding werkte, maar zei niets
+
+**Gemeld** met de eerste melding uit v3.12.0:
+
+> 'n Kandidaat is now zo wied
+> **4.2 ct/kWh —**
+> Meting en winst bunt allebei becijferd.
+
+Na het gedachtestreepje stond niets. En er kwam **één** bericht terwijl
+er **twee** kandidaten tegelijk rijp werden.
+
+### Twee velden voor hetzelfde
+
+De slijtagekandidaat legt zich uit in `toelichting`, de andere in
+`reden`. De melding las alleen `reden` — en dan blijft er een streepje
+over zonder onderbouwing. Een waarde zonder uitleg is erger dan geen
+melding: je weet dát er iets is, maar niet wat.
+
+Nu wordt `reden`, dan `toelichting`, dan de betrouwbaarheidstekst
+gelezen. En een test controleert dat **elke** kandidaat zich ergens
+verklaart.
+
+### De demping werkte tegen
+
+Twee kandidaten werden tegelijk rijp; de demping van een dag filterde de
+tweede weg. Dat is per soort ingesteld, en dat klopt bij een herhaling —
+maar dit was geen herhaling, dit was een tweede gebeurtenis.
+
+Alle nieuwe kandidaten staan nu in **één** bericht, dat de demping maar
+één keer raakt.
+
+**Alle 2415 tests bleven groen** met beide fouten erin. Geen enkele las
+de inhoud van de melding; ze controleerden alleen dát er een melding
+kwam.
+
+**Volledige testsuite**: 2419 tests, allemaal groen.
+
+## v3.13.0 — De winterguard vergat de slijtage
+
+**Gemeld** op 18 augustus 14:15: "Waarom wordt er vandaag zoveel van het
+net gehaald, is toch meer als nodig vannacht?"
+
+De cijfers: **5,33 kWh import bij 2,68 kWh verbruik**, accu op 80%, reden
+`grid_charging_low_solar_extra_dip`. Er werd dus bewust van het net
+geladen omdat er weinig zon werd verwacht — 11,5 kWh tegen een typische
+18,6.
+
+### De rekensom klopte, maar was onvolledig
+
+| | |
+|---|---|
+| Inkoop om 14:15 | 28,9 ct |
+| Duurste kwartier vandaag (21:15) | 38,3 ct |
+| Marge bij 84,5% rendement | **+3,49 ct** → boven de drempel van 3,00 |
+
+Alleen kost elke doorgezette kWh ook **4,22 ct aan slijtage**. Met dat
+erbij wordt de marge **−0,73 ct**: dat laden kostte ongeveer een cent per
+kWh in plaats van dat het bespaarde.
+
+De slijtage telt nu mee. Met de gemeten cijfers van vandaag zou er geen
+enkel uur meer zijn geladen.
+
+### Waarom dit juist nu opviel
+
+Deze regel is gemaakt voor de **winter**, wanneer het prijsverschil groot
+genoeg is om de accukosten te dekken. Op een zomerdag met een vlak
+prijsverloop — vandaag 8,5 ct tussen dal en piek — pakt hij verkeerd uit.
+
+Dat is precies wat de bijkoop-kandidaat uit v3.11.0 meet. Alleen stuurde
+die niets, terwijl deze regel dat wél deed.
+
+### Wat ongemoeid blijft
+
+Het **hoofdblok** van de winterguard heeft bewust géén rendementstoets —
+uitdrukkelijk zo gevraagd, omdat dat per definitie het goedkoopste moment
+van de dag is. Die keuze staat, en een test bewaakt dat ze niet
+stilzwijgend verdwijnt.
+
+**Volledige testsuite**: 2425 tests, allemaal groen.

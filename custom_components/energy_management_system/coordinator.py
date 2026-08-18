@@ -10232,6 +10232,16 @@ class EnergyManagementSystemCoordinator:
         if not nieuw_rijp:
             return
 
+        # v3.12.1: ALLE nieuwe kandidaten in ÉÉN melding.
+        #
+        # Gemeld: "4.2 ct/kWh —" met niets erachter, en er kwam maar één
+        # bericht terwijl er twee kandidaten tegelijk rijp werden. De
+        # demping van een dag filterde de tweede weg.
+        #
+        # Een demping per SOORT werkt hier verkeerd: dit is geen
+        # herhaling maar een tweede gebeurtenis. Daarom nu alles in één
+        # bericht, dat de demping maar één keer raakt.
+        regels = []
         for naam in sorted(nieuw_rijp):
             kandidaat = next(
                 (k for k in kandidaten if k["naam"] == naam), None
@@ -10239,19 +10249,34 @@ class EnergyManagementSystemCoordinator:
             if kandidaat is None:
                 continue
             opbrengst = kandidaat.get("zou_hebben_opgeleverd") or {}
-            self._dispatch_notification(
-                notify_service=self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE),
-                title=f"🧪 {naam}: klaar om mee te doen",
-                message=(
-                    f"{kandidaat.get('waarde')} — "
-                    f"{opbrengst.get('reden', '')}\n\n"
-                    "Meting en winst zijn allebei becijferd. Dit is de "
-                    "kandidaat om als eerste te laten meesturen, één "
-                    "tegelijk."
-                ),
-                notification_id=f"ems_proefstand_{naam[:20]}",
-                kind="proefstand_rijp",
+            # De ene kandidaat gebruikt `reden`, de andere `toelichting`.
+            # Dat verschil maakte de melding leeg.
+            onderbouwing = (
+                opbrengst.get("reden")
+                or opbrengst.get("toelichting")
+                or kandidaat.get("betrouwbaarheid", "")
             )
+            regels.append(
+                f"**{naam}** — {kandidaat.get('waarde')}\n{onderbouwing}"
+            )
+
+        if not regels:
+            return
+
+        self._dispatch_notification(
+            notify_service=self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE),
+            title=(
+                f"🧪 {len(regels)} kandidaat(en) klaar om mee te doen"
+            ),
+            message=(
+                "\n\n".join(regels)
+                + "\n\nMeting en winst zijn becijferd. Laat er één "
+                "tegelijk meesturen, zodat bij een afwijking te zien is "
+                "welke het deed."
+            ),
+            notification_id="ems_proefstand_rijp",
+            kind="proefstand_rijp",
+        )
 
     def _meld_zelfcontrole(self, now: datetime) -> None:
         """Stuurt een melding zodra een kruiscontrole faalt (v2.0.0).
@@ -25600,9 +25625,34 @@ class EnergyManagementSystemCoordinator:
                 entries, now
             )
             if best_remaining_price_eur is not None and current_price_per_kwh is not None:
+                # v3.13.0: de SLIJTAGE hoort erbij.
+                #
+                # Gemeld op 18 augustus 14:15: "Waarom wordt er vandaag
+                # zoveel van het net gehaald, is toch meer als nodig
+                # vannacht?" - 5,33 kWh import bij 2,68 kWh verbruik,
+                # accu op 80%, reden `grid_charging_low_solar_extra_dip`.
+                #
+                # De rekensom klopte, maar was onvolledig. Bij 28,9 ct
+                # inkoop en 37,4 ct vanavond gaf de marge 3,54 ct groen
+                # licht - terwijl elke doorgezette kWh 4,22 ct aan
+                # slijtage kost. Netto kostte dat laden ongeveer een cent
+                # per kWh in plaats van dat het bespaarde.
+                #
+                # Deze regel is gemaakt voor de winter, wanneer het
+                # prijsverschil groot genoeg is om de accukosten te
+                # dekken. Op een zomerdag met een vlak prijsverloop pakt
+                # hij verkeerd uit.
+                slijtage_eur_per_kwh = (
+                    (self.get_wear_cost_overview() or {}).get(
+                        "slijtage_ct_per_kwh"
+                    )
+                    or 0.0
+                ) / 100
                 margin_eur_per_kwh = (
-                    efficiency * best_remaining_price_eur
-                ) - current_price_per_kwh
+                    (efficiency * best_remaining_price_eur)
+                    - current_price_per_kwh
+                    - slijtage_eur_per_kwh
+                )
                 self.last_extra_dip_margin_eur_per_kwh = round(margin_eur_per_kwh, 4)
                 # v0.63.88, gevraagd: inzicht of de marge over tijd
                 # groter/kleiner wordt. Eén sample per dag (niet elke
