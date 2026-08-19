@@ -44,9 +44,13 @@ class _Kaal:
     learning_only = False
     vacation_mode = False
     config: dict = {}
+    _kalibratie_meting = None
 
     def __init__(self) -> None:
         self.verstuurd: list[dict] = []
+
+    def _read_sensor_float(self, entity_id):
+        return None
 
     def _dispatch_notification(self, **kwargs) -> None:
         self.verstuurd.append(kwargs)
@@ -153,10 +157,14 @@ def test_the_battery_is_left_alone():
     import inspect
 
     bron = inspect.getsource(C)
-    gate = bron[bron.index('if self.kalibratie:') :][:600]
+    begin = bron.index("if self.kalibratie:")
+    # tot en met de `return` die de tak afsluit
+    gate = bron[begin : bron.index("\n            return", begin) + 20]
 
     assert 'self.last_reason = "kalibratie"' in gate
     assert "return" in gate
+    # v3.29.0: geen kostentelling meer tijdens een kalibratie.
+    assert "_update_financial_tracking" not in gate
 
 
 def test_the_explanation_says_what_is_going_on():

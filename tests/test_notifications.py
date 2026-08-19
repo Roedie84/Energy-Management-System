@@ -177,6 +177,9 @@ def test_only_the_pre_existing_kinds_default_to_on():
         # kalibratiestand aan staat - een bewuste handeling - en dan is
         # hij het hele punt van die stand. Ruis kan hier niet ontstaan.
         "kalibratie_vol",
+        # v3.30.0: net als de kalibratie een gevolg van een bewuste
+        # handeling. Wie op de knop drukt hoort te horen wat er weg is.
+        "verbruiksleer_reset",
         "sluipverbruik",
         "device_drift",
         "mode_change",
