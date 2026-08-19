@@ -137,10 +137,15 @@ def test_cooling_keeps_switching_during_a_calibration():
 
     bron = inspect.getsource(C._async_apply_battery_cooling_locked)
 
-    # De rem geldt voor leermodus en handmatige overname, niet voor de
-    # kalibratie.
-    assert "self.learning_only or self.force_manual" in bron
-    assert "self.kalibratie" not in bron.split("if self.learning_only")[1]
+    # v3.27.3: de rem geldt voor leermodus en handmatige overname, maar
+    # niet als de kalibratiestand aan staat. Gemeld met een
+    # schermafdruk waarop `Learning only` aan stond tijdens een
+    # kalibratie van 2000 W - dan komt de ventilator pas boven de 35
+    # graden.
+    assert (
+        "(self.learning_only or self.force_manual) and not self.kalibratie"
+        in bron
+    )
 
 
 def test_the_battery_is_left_alone():
@@ -300,3 +305,60 @@ def test_it_only_fires_once():
     C._leg_kalibratie_vast(obj, datetime(2026, 8, 19, 16, 30), 100.0)
 
     assert len(obj.verstuurd) == 1
+
+
+# --- de uitleg op het dashboard --------------------------------------
+
+
+def test_both_explanation_builders_know_about_the_calibration():
+    """Gemeld met een schermafdruk: "Tekst is in kalibratie mode niet
+
+    geheel correct." De kop klopte - "Waarom doet de aansturing niets?" -
+    maar eronder stond het gewone verhaal over prijsdrempels: de prijs
+    is nu 30,8 ct, de drempel voor duur ligt op 37,6 ct, geen bijzondere
+    reden om iets anders te doen.
+
+    Twee plekken bouwen een uitleg. `_build_explanation` had zijn tak
+    al, `_waarom_regels` niet, en die viel door naar de terugval van
+    `default_smart`.
+    """
+    import inspect
+
+    for functie in (C._build_explanation, C._waarom_regels):
+        bron = inspect.getsource(functie)
+
+        assert "kalibratie" in bron, functie.__name__
+
+
+def test_the_reason_lines_say_what_is_paused():
+    """Wie op het dashboard kijkt hoort niet te lezen dat er geen
+
+    bijzondere reden is, terwijl de aansturing juist stilstaat.
+    """
+
+    class _Uitleg(_Kaal):
+        last_current_price_per_kwh = 0.308
+        last_expensive_price_threshold = 0.376
+        last_needed_kwh_to_bridge = None
+        last_cheap_block_start = None
+        last_solar_defer_plan = None
+        last_sell_check = None
+        last_battery_vs_grid = None
+        _waarom_regels = C._waarom_regels
+
+        def accustand_procent(self):
+            return 30.0
+
+        def beschikbare_energie_kwh(self):
+            return 1.7
+
+        def get_quarter_plan_summary(self, now, tot=None):
+            return {}
+
+    regels = _Uitleg()._waarom_regels(datetime(2026, 8, 19, 14, 0), "kalibratie")
+    tekst = " ".join(regels)
+
+    assert "kalibratiestand" in tekst
+    assert "30%" in tekst
+    assert "drempel" not in tekst
+    assert "geen bijzondere reden" not in tekst
