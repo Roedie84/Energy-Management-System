@@ -939,10 +939,22 @@ def test_the_measured_short_cycles_are_gone():
         config = {CONF_BATTERY_COOLING_OPPORTUNITY_C: 25.0}
         _goedkope_koeling_nog_zinvol = C._goedkope_koeling_nog_zinvol
 
-    # De vier gemeten uitschakelingen van 18 augustus.
-    for accu, buiten in ((24.0, 17.7), (27.0, 20.2), (26.0, 19.8), (23.0, 18.9)):
+    # De vier gemeten uitschakelingen van 18 augustus, nu MET het
+    # vermogen dat er in de schakelgeschiedenis bij stond.
+    #
+    # v3.26.1: hier stond eerst 200 W voor alle vier, een getal dat
+    # nergens gemeten is. Met de echte waarden erbij blijkt de laatste
+    # er niet bij te horen: bij 24,0 graden ging er nul watt door de
+    # accu. Daar valt niets te koelen, en sinds v3.26.1 stopt hij daar
+    # dan ook - anders draait de ventilator de hele nacht door. Zie
+    # `test_battery_cooling_stops_again.py`.
+    for accu, buiten, watt in (
+        (27.0, 20.2, 341.0),
+        (26.0, 19.8, 207.0),
+        (23.0, 18.9, 1623.0),
+    ):
         assert (
-            C._battery_cooling_should_turn_off(_Kaal(), accu, buiten, 200.0)
+            C._battery_cooling_should_turn_off(_Kaal(), accu, buiten, watt)
             is False
         ), f"stopt nog steeds bij {accu} met {buiten}"
 
