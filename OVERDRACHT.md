@@ -7,8 +7,8 @@ Locatie Lochem. Communicatie in het Nederlands, terse stijl.
 
 - Repo: https://github.com/Roedie84/Energy-Management-System
 - Lokaal: `/home/claude/ems/`
-- **Huidige versie: v3.26.1**, 2515 tests groen
-- Zip: `/mnt/user-data/outputs/energy_management_system_v3.26.1.zip`
+- **Huidige versie: v3.27.0**, 2528 tests groen
+- Zip: `/mnt/user-data/outputs/energy_management_system_v3.27.0.zip`
 
 ## Werkwijze (belangrijk)
 1. Diagnostiek-export lezen uit `/mnt/user-data/uploads/`
@@ -76,8 +76,14 @@ tellers staan er nu bij. Of de meting echt werkt is pas te zien op een
 dag waarop er van het net geladen is.
 
 ### 4. Module 1 celspreiding
-Opgelopen deze week: 0,190 → 0,230 → 0,260 → 0,350 → 0,340 V bij lage
-accustand (19 aug: 0,34 bij 13% laadstand).
+Opgelopen deze week: 0,190 → 0,230 → 0,260 → 0,350 → 0,340 → **0,460** V.
+Op 19 aug 08:46: cel_min 2,72 tegen cel_max 3,18 bij 12% laadstand,
+modules 2 en 3 op 0,00 en 0,01. De integratie waarschuwt zelf.
+
+De gebruiker draait nu een kalibratie (5% → 100% met 2000 W). De
+momentopname bij 99% uit v3.27.0 is het bewijsstuk: zakt de spreiding
+bovenin mee naar nul dan was het balanceerachterstand, blijft hij staan
+dan is het een zwakke cel. Niet nóg een keer naar 5% zolang dit loopt.
 Alleen module 1; 2 en 3 staan op 0,00. Bij structureel patroon: Zendure
 melden met de reeks als bewijs.
 
@@ -97,6 +103,7 @@ melden met de reeks als bewijs.
 | v3.25.0 | werkelijke netlading per ronde gemeten en afgerekend |
 | v3.26.0 | plaat als afbeelding: markdown-kaart ontsnapt élk SVG-element |
 | v3.26.1 | koeling stopt bij stille accu; netlading-tellers in de export |
+| v3.27.0 | kalibratiestand: sturing eruit, koeling erin, leren gepauzeerd |
 
 ## Proefstand (9 kandidaten, sturen niets)
 - **Slijtagekosten** 4,22 ct/kWh — klaar om mee te doen

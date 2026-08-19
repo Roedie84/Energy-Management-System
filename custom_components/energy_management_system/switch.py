@@ -17,6 +17,7 @@ async def async_setup_entry(
     async_add_entities(
         [
             ForceManualSwitch(coordinator, entry_id=entry.entry_id),
+            KalibratieSwitch(coordinator, entry_id=entry.entry_id),
             LearningOnlySwitch(coordinator, entry_id=entry.entry_id),
             VacationModeSwitch(coordinator, entry_id=entry.entry_id),
             NuLadenSwitch(coordinator, entry_id=entry.entry_id),
@@ -38,6 +39,66 @@ async def async_setup_entry(
             ],
         ]
     )
+
+
+class KalibratieSwitch(SwitchEntity, RestoreEntity):
+    """Kalibratiestand: de accu wordt met de hand geladen (v3.27.0).
+
+    Gevraagd: "Af en toe moet een kalibratie worden gedaan voor de accu.
+    Dit houdt in ontladen tot 5% en dan in 1 keer zonder ontladen naar
+    100% laden."
+
+    Verschil met `Force manual`: daar valt ook de goedkope koeling weg,
+    en de ventilator komt dan pas boven 35 graden. Bij 2000 W is dat te
+    laat - op 18 augustus stond de omvormer bij 2038 W op 42 graden.
+    Tijdens een kalibratie blijft de koeling dus gewoon schakelen.
+
+    Wat er wél stilvalt: netladingafrekening, piekmeting,
+    tekortdetectie, verbruiksleer en apparaatherkenning. Die zouden een
+    kalibratie als een gewone dag opvatten en er de verkeerde les uit
+    trekken.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Kalibratie"
+    _attr_icon = "mdi:battery-sync"
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_kalibratie"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def is_on(self) -> bool:
+        return self._coordinator.kalibratie
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        opname = self._coordinator.kalibratie_momentopname
+        if not opname:
+            return {"momentopname": "nog niet vol geweest"}
+        return {
+            "moment": opname.get("moment"),
+            "soc_percent": opname.get("soc_percent"),
+            "modules": opname.get("modules"),
+        }
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if last_state is not None:
+            self._coordinator.kalibratie = last_state.state == "on"
+
+    async def async_turn_on(self, **kwargs) -> None:
+        await self._coordinator.async_set_kalibratie(True)
+        self.async_write_ha_state()
+
+    async def async_turn_off(self, **kwargs) -> None:
+        await self._coordinator.async_set_kalibratie(False)
+        self.async_write_ha_state()
 
 
 class ForceManualSwitch(SwitchEntity, RestoreEntity):

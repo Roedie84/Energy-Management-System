@@ -1469,6 +1469,7 @@ WHY_QUESTIONS = {
     "arbitrage_solar_capture": "Waarom laad je nu?",
     "post_salderen_solar_capture": "Waarom laad je nu?",
     "force_manual": "Waarom doet de aansturing niets?",
+    "kalibratie": "Waarom doet de aansturing niets?",
     "no_forecast_data": "Waarom gebeurt er niets?",
     "default_smart": "Waarom doet de accu dit nu?",
 }
@@ -2022,7 +2023,18 @@ WEATHER_ENSEMBLE_AGREEMENT_USABLE_PERCENT = 60.0
 # alsof die actueel is, wat erger is dan hem opnieuw laten berekenen.
 
 # Gewone JSON-waarden (getallen, lijsten, dicts).
+# Vanaf welke laadstand een kalibratie als "vol" telt (v3.27.0).
+#
+# De BMS balanceert bovenin. Precies 100% halen sommige pakketten nooit,
+# en wachten op een getal dat niet komt levert geen meting op.
+KALIBRATIE_VOL_PERCENT = 99.0
+
 PERSISTED_PLAIN_FIELDS = (
+    # v3.27.0: de kalibratiestand en de momentopname bovenin. Een
+    # kalibratie duurt uren; een herstart halverwege mag hem niet
+    # stilzwijgend afbreken, en de meting op vol mag niet verdwijnen.
+    "kalibratie",
+    "kalibratie_momentopname",
     # v1.16.5, gemeld: "Vandaag: 0.0 kWh opgewekt" terwijl de omvormer
     # 15,5 kWh had geproduceerd.
     #
@@ -3471,6 +3483,7 @@ DECISION_REASON_LABELS = {
     "expensive_quarter_no_own_load": "duur kwartier, geen eigen verbruik",
     "expensive_quarter_soc_protected": "duur kwartier, accu beschermd",
     "force_manual": "handmatig overschreven",
+    "kalibratie": "kalibratie van de accu",
     "grid_charging_low_solar": "bijladen bij weinig zon",
     "grid_charging_low_solar_extra_dip": "bijladen bij extra prijsdip",
     "negative_price": "negatieve prijs",

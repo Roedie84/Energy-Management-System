@@ -17048,3 +17048,52 @@ rustige dag is een lege samenvatting nu te onderscheiden van een meting
 die niet draait.
 
 **Volledige testsuite**: 2515 tests, allemaal groen.
+
+## v3.27.0 — Kalibratiestand
+
+**Gevraagd**: "Af en toe moet een kalibratie worden gedaan voor de accu.
+Dit houdt in ontladen tot 5% en dan in 1 keer zonder ontladen naar 100%
+laden. Dit doe ik nu manual (...) Ja lijkt me handig, stoort dit de rest
+van de integratie niet?"
+
+Die laatste vraag is de kern. Een kalibratie is geen gewone dag, en vijf
+lerende onderdelen zouden hem als één opvatten.
+
+### Nieuwe schakelaar: Kalibratie
+
+De sturing gaat eruit, net als bij `Force manual`. Maar met één
+belangrijk verschil: **de koeling blijft schakelen**. Bij handmatige
+overname komt de ventilator pas boven de 35 graden, en dat is te laat
+bij 2000 W — op 18 augustus stond de omvormer bij 2038 W op 42 graden.
+Tijdens een kalibratie is koelen bescherming, geen optimalisatie.
+
+### Wat er stilvalt
+
+| Onderdeel | Waarom |
+|---|---|
+| netladingafrekening | zeven kWh bij 30 ct is geen bijkoopbesluit |
+| piekmeting | 2000 W laden is geen huispiek; de maandpiek staat op 2294 W |
+| tekortdetectie | netstroom tijdens een kalibratie is niet onverwacht — anders telt de dag als tekortdag en gaat de veiligheidsmarge omhoog, en die staat na één zo'n dag al op 40% |
+| verbruiksleer | 2000 W is geen huisverbruik |
+| apparaatherkenning | een blok van 2000 W dat uren aanstaat is precies het patroon waar die op zoekt |
+
+De vakantiestand doet dit al langer met de verbruiksleer, om dezelfde
+reden. Deze stand volgt dat voorbeeld.
+
+### Momentopname bovenin
+
+Zodra de accu boven de 99% komt wordt de celspreiding per module
+vastgelegd — één keer per kalibratie, want daarna zakt de spanning weer
+zodra er ontladen wordt.
+
+Dat is waar het nu om draait: module 1 stond op 19 augustus op 2,72
+tegen 3,18 V, een verschil van 0,46 bij 12% laadstand, terwijl module 2
+en 3 vlak stonden. Bovenin balanceert de BMS. Zakt dat verschil mee naar
+nul, dan was het een balanceerachterstand. Blijft het staan, dan is het
+een zwakke cel — en dan is dit de meting om aan Zendure voor te leggen.
+
+De opname staat als attribuut op de schakelaar en in de
+diagnostiek-export. De stand zelf overleeft een herstart: een kalibratie
+duurt uren.
+
+**Volledige testsuite**: 2528 tests, allemaal groen.

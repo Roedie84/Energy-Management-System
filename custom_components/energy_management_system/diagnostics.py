@@ -532,6 +532,11 @@ async def async_get_config_entry_diagnostics(
             # te onderscheiden van een meting die helemaal niet draait.
             # Wie de teller opvroeg kreeg `None` omdat de sleutel
             # ontbrak, wat een halve sessie op een vals spoor zette.
+            # v3.27.0: de kalibratiestand en de meting bovenin.
+            "kalibratie": getattr(coordinator, "kalibratie", False),
+            "kalibratie_momentopname": getattr(
+                coordinator, "kalibratie_momentopname", None
+            ),
             "netlading_vandaag_kwh": coordinator.netlading_vandaag_kwh,
             "netlading_kosten_eur": coordinator.netlading_kosten_eur,
             "netlading_laatste_meting": _iso(

@@ -220,6 +220,7 @@ from .const import (
     CONF_PRICE_SENSOR,
     CONF_PV_POWER_SENSOR,
     CONF_SOC_SENSOR,
+    KALIBRATIE_VOL_PERCENT,
     CONF_SOLAR_FORECAST_SENSOR,
     CONF_SOLAR_EXTENDED_FORECAST_SENSORS,
     CONF_SOLAR_TODAY_FORECAST_SENSOR,
@@ -679,6 +680,15 @@ class EnergyManagementSystemCoordinator:
 
         # Replaces the old input_boolean.accu_laden_forceer_manual helper.
         self.force_manual: bool = False
+        # v3.27.0: kalibratiestand. Gevraagd: "Af en toe moet een
+        # kalibratie worden gedaan voor de accu - ontladen tot 5% en dan
+        # in 1 keer zonder ontladen naar 100% laden."
+        #
+        # Dat is geen gewone dag. De sturing gaat eruit zoals bij
+        # handmatige overname, maar de KOELING blijft wél schakelen -
+        # bij 2000 W is dat bescherming, geen optimalisatie.
+        self.kalibratie: bool = False
+        self.kalibratie_momentopname: dict | None = None
         self.steelstofzuiger_override: bool = False
         self.fietsladers_override: bool = False
         # Appliance-ready notification toggle (v0.63.54, requested):
@@ -2032,6 +2042,17 @@ class EnergyManagementSystemCoordinator:
             self.activeer_nu_laden()
         else:
             self.annuleer_nu_laden()
+        await self.async_update()
+
+    async def async_set_kalibratie(self, value: bool) -> None:
+        """Zet de kalibratiestand aan of uit (v3.27.0).
+
+        Bij het aanzetten wordt de vorige momentopname gewist: anders
+        toont de volgende kalibratie de celspreiding van de vorige.
+        """
+        if value and not self.kalibratie:
+            self.kalibratie_momentopname = None
+        self.kalibratie = value
         await self.async_update()
 
     async def async_set_force_manual(self, value: bool) -> None:
@@ -8020,6 +8041,14 @@ class EnergyManagementSystemCoordinator:
         laden, en wat is hij waard op het duurste moment daarna? Dat is
         geen hypothese maar een afrekening.
         """
+        # v3.27.0: een kalibratie is geen bijkoopbesluit. Zeven kWh van
+        # het net bij 30 cent zou hier als bijkoop worden afgerekend
+        # tegen de duurste prijs die nog komt, terwijl er geen prijs aan
+        # te pas kwam.
+        if getattr(self, "kalibratie", False):
+            self._netlading_laatste_meting = now
+            return
+
         accu_w = self._read_sensor_float(
             self.config.get(CONF_BATTERY_POWER_SENSOR)
         )
@@ -15756,6 +15785,13 @@ class EnergyManagementSystemCoordinator:
         if reason not in self_sufficient_reasons:
             return
 
+        # v3.27.0: netstroom tijdens een kalibratie is niet onverwacht -
+        # de gebruiker laadt zelf met 2000 W. Zonder deze uitzondering
+        # telt de dag als tekortdag en gaat de veiligheidsmarge omhoog;
+        # die staat na één zo'n dag al op 40%.
+        if getattr(self, "kalibratie", False):
+            return
+
         if not self._shortfall_detected_today:
             grid_entity = self.config.get(CONF_CONSUMPTION_POWER_SENSOR)
             grid_power_w = self._read_sensor_float(grid_entity)
@@ -19004,6 +19040,37 @@ class EnergyManagementSystemCoordinator:
             return None
         return eigen - (sum(anderen) / len(anderen))
 
+    def _leg_kalibratie_vast(
+        self, now: datetime, soc_percent: float | None
+    ) -> None:
+        """Legt de celspreiding vast zodra de accu vol is (v3.27.0).
+
+        Waarom bovenin: daar balanceert de BMS. Module 1 stond op 19
+        augustus op 2,72 tegen 3,18 V - een verschil van 0,46 bij 12%
+        laadstand - terwijl module 2 en 3 vlak stonden. Zakt dat
+        verschil op vol mee naar nul, dan was het een balanceer-
+        achterstand. Blijft het staan, dan is het een zwakke cel, en dan
+        is dit de meting om aan Zendure voor te leggen.
+
+        Eén meting per kalibratie: de eerste op vol. Daarna zakt de
+        spanning weer zodra er ontladen wordt, en dan zegt het getal
+        niets meer.
+        """
+        if not self.kalibratie or self.kalibratie_momentopname is not None:
+            return
+        if soc_percent is None or soc_percent < KALIBRATIE_VOL_PERCENT:
+            return
+
+        modules = self.battery_module_live or []
+        if not modules:
+            return
+
+        self.kalibratie_momentopname = {
+            "moment": now.isoformat(),
+            "soc_percent": soc_percent,
+            "modules": [dict(m) for m in modules],
+        }
+
     def _update_battery_module_health(self, now: datetime) -> None:
         """Verzamelt per module de live metingen en de afwijking t.o.v.
         de andere modules, en rondt aan het einde van de dag een
@@ -19295,6 +19362,13 @@ class EnergyManagementSystemCoordinator:
         accu op dit moment ontlaadt om het huishouden te dekken, ziet
         het net minder (of geen) import, en dát telt voor deze piek.
         """
+        # v3.27.0: 2000 W laden tijdens een kalibratie is geen huispiek.
+        # De maandpiek staat op 2294 W en zou er zomaar door verlegd
+        # worden, terwijl een capaciteitstarief hier niets mee te maken
+        # heeft.
+        if getattr(self, "kalibratie", False):
+            return
+
         power_w = self._read_sensor_float(
             self.config.get(CONF_CONSUMPTION_POWER_SENSOR)
         )
@@ -25546,6 +25620,15 @@ class EnergyManagementSystemCoordinator:
         is doing and why - without having to piece together raw sensor
         values yourself.
         """
+        if getattr(self, "kalibratie", False) or self.last_reason == "kalibratie":
+            return (
+                "De kalibratiestand staat aan: de accu wordt met de hand "
+                "geladen en de integratie stuurt niets. De koeling loopt "
+                "wél door - bij 2000 W is dat bescherming. Netlading, "
+                "piekmeting, tekortdetectie en verbruiksleer tellen deze "
+                "periode niet mee."
+            )
+
         if self.force_manual:
             return (
                 "De 'Force manual'-schakelaar staat aan: de integratie doet nu "
@@ -25953,7 +26036,10 @@ class EnergyManagementSystemCoordinator:
         # coming back. PV bias and battery efficiency learning are
         # unaffected by household consumption, so those keep learning
         # normally throughout.
-        if not self.vacation_mode:
+        # v3.27.0: en tijdens een kalibratie, om dezelfde reden. Een blok
+        # van 2000 W dat uren aanstaat is geen huisverbruik en geen
+        # apparaat.
+        if not self.vacation_mode and not self.kalibratie:
             self._update_night_consumption_tracking(now, should_postpone_charging)
             self._update_hourly_consumption_profile(now)
         self._update_pv_hourly_bias_tracking(now)
@@ -25966,6 +26052,9 @@ class EnergyManagementSystemCoordinator:
         self._update_presence(now)
         self._update_peak_power_tracking(now)
         self._update_battery_module_health(now)
+        self._leg_kalibratie_vast(
+            now, self._read_sensor_float(self.config.get(CONF_SOC_SENSOR))
+        )
         self._update_sensor_cadence_tracking()
         if self._started_at is None:
             # Vangnet: draait de coordinator zonder dat de opslag is
@@ -26112,7 +26201,11 @@ class EnergyManagementSystemCoordinator:
         )
         self.last_transitions = self._collapse_timeline(self.last_timeline)
         self._run_digital_twin_simulation(now)
-        self._update_nilm_discovery(now)
+        # v3.27.0: geen apparaatherkenning tijdens een kalibratie. Een
+        # blok van 2000 W dat uren aanstaat en dan ineens stopt is
+        # precies het patroon waar de herkenning op zoekt.
+        if not self.kalibratie:
+            self._update_nilm_discovery(now)
         self._update_nilm_confirmed_devices(now)
         self._update_advisory_readiness(now)
 
@@ -26136,6 +26229,17 @@ class EnergyManagementSystemCoordinator:
             if (is_expensive or should_force_charge)
             else (OPTION_SMART_DISCHARGING if should_postpone_charging else OPTION_SMART)
         )
+
+        if self.kalibratie:
+            # v3.27.0: kalibratie loopt buiten de sturing om. De
+            # gebruiker zet zelf 2000 W en een ondergrens van 5% in de
+            # Zendure-app; elke schrijfactie van hier zou daar
+            # doorheen fietsen.
+            self.last_reason = "kalibratie"
+            self.last_simulated_action = None
+            self._update_financial_tracking(now, entries, self.last_reason, None, None)
+            self.last_explanation = self._build_explanation()
+            return
 
         if self.force_manual:
             # Explicit manual override: leave the Zendure mode untouched.
