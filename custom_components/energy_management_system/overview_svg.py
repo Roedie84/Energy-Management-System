@@ -21,6 +21,67 @@ Deze module bouwt de hele plaat elke ronde opnieuw op, als tekst. Een
 """
 from __future__ import annotations
 
+import base64
+import re
+
+
+def als_afbeelding(svg: str | None, beschrijving: str = "Overzicht") -> str:
+    """Pakt een plaat in als `<img>` met een data-URI (v3.26.0).
+
+    Vier opleveringen lang verscheen de visuele pagina als platte tekst.
+    De oorzaak zit niet in de plaat maar in de markdown-kaart:
+    `hui-markdown-card.ts` zet `allow-svg` NIET, dus draait de opschoner
+    met de gewone witte lijst en die kent geen enkel SVG-element. Alles
+    wat er niet op staat wordt naar tekst ontsnapt - de hele plaat dus.
+
+    Zelfs mét `allow-svg` zou het niet gaan: die lijst kent alleen
+    `svg`, `path` en `img`, en de plaat bestaat uit `rect`, `text`,
+    `circle` en `line`.
+
+    `<img>` staat wél op de gewone lijst, en `safeAttrValue` van de
+    xss-bibliotheek laat `data:image/` uitdrukkelijk toe. Base64, want
+    de plaat staat vol `#`-kleurcodes en die breken een niet-gecodeerde
+    data-URI.
+    """
+    if not svg:
+        return ""
+
+    plaat = _vaste_maten(svg)
+    blok = base64.b64encode(plaat.encode("utf-8")).decode("ascii")
+    tekst = beschrijving.replace('"', "'")
+
+    return f'<img alt="{tekst}" src="data:image/svg+xml;base64,{blok}">'
+
+
+def _vaste_maten(svg: str) -> str:
+    """Zet `width="100%"` om naar de maat uit de `viewBox`.
+
+    Binnen een `<img>` is een percentage betekenisloos: de browser kent
+    dan geen eigen afmeting en valt terug op 300 bij 150 pixels. Met een
+    echte maat klopt de verhouding, en `img { max-width: 100% }` uit
+    `ha-markdown` laat hem alsnog meeschalen op een telefoon.
+    """
+    kop = re.match(r"<svg\b[^>]*>", svg)
+    if not kop:
+        return svg
+
+    origineel = kop.group(0)
+    doos = re.search(r'viewBox="([^"]+)"', origineel)
+    if not doos:
+        return svg
+
+    delen = doos.group(1).split()
+    if len(delen) != 4:
+        return svg
+
+    breedte, hoogte = delen[2], delen[3]
+    nieuw = re.sub(r'\s(width|height)="[^"]*"', "", origineel)
+    nieuw = nieuw.replace(
+        "<svg", f'<svg width="{breedte}" height="{hoogte}"', 1
+    )
+
+    return nieuw + svg[len(origineel):]
+
 
 def _getal(waarde, eenheid: str = "", decimalen: int = 1) -> str:
     """Een leesbaar getal, of een streepje.

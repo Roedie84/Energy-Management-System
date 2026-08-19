@@ -1611,6 +1611,30 @@ BATTERY_COOLING_OPPORTUNITY_HYSTERESE_C = 5.0
 # zolang er vier graden verschil is.
 BATTERY_COOLING_OPPORTUNITY_KEEP_DELTA_C = 4.0
 
+# Wanneer de goedkope koeling niets meer te koelen HEEFT (v3.26.1).
+#
+# Gemeten 18/19 augustus: na de reparatie van v3.23.1 verdween het
+# pendelen - elf uur achter elkaar geen enkele schakeling - maar de
+# ventilator ging ook nooit meer uit. Bij een drempel van 25 stopt hij
+# pas onder de 20, en de accu staat 's nachts op 23 met 16 buiten. Die
+# stand wordt nooit bereikt.
+#
+# De omvormer wordt warm van WERK. Staat de accu onder de aanzetdrempel
+# én gaat er nauwelijks vermogen doorheen, dan is er geen warmtebron en
+# valt er niets te koelen. Boven die stroomgrens blijft hij draaien,
+# ook onder de drempel - want dan zit de warmte er wél aan te komen.
+BATTERY_COOLING_OPPORTUNITY_IDLE_W = 300.0
+
+# Hoe lang de goedkope koeling wacht voor hij opnieuw begint (v3.26.1).
+#
+# Uitzetten mag alleen als er ook een rem op het opnieuw aanzetten zit,
+# anders keert het pendelen terug: op 18 augustus stond de omvormer een
+# half uur na uitschakelen weer op 27 graden bij nul watt belasting.
+#
+# Twee uur bij een stille accu. Komt er wél belasting, dan geldt de
+# gewone rusttijd van een half uur - dan is er een echte reden.
+BATTERY_COOLING_OPPORTUNITY_REST_MINUTES = 120.0
+
 # Boven deze temperatuur koelt de ventilator ALTIJD (v3.15.0).
 #
 # Gemeld: "Koelen mag niets te maken hebben met goedkoop of dure prijzen,

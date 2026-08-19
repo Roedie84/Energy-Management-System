@@ -333,6 +333,8 @@ from .const import (
     BATTERY_COOLING_OPPORTUNITY_DELTA_C,
     BATTERY_COOLING_OPPORTUNITY_HYSTERESE_C,
     BATTERY_COOLING_OPPORTUNITY_KEEP_DELTA_C,
+    BATTERY_COOLING_OPPORTUNITY_IDLE_W,
+    BATTERY_COOLING_OPPORTUNITY_REST_MINUTES,
     BATTERY_COOLING_PROTECT_ALWAYS_C,
     BATTERY_COOLING_OPPORTUNITY_MIN_C,
     CONF_BATTERY_COOLING_OPPORTUNITY_C,
@@ -10021,14 +10023,18 @@ class EnergyManagementSystemCoordinator:
         SVG met vaste pixelgroottes eroverheen, en dat verklaarde alle
         vier de klachten.
         """
-        from .overview_svg import bouw_overzicht, bouw_scada
+        from .overview_svg import als_afbeelding, bouw_overzicht, bouw_scada
 
         koeling = self.battery_cooling_state or {}
         samenvatting = self.get_quarter_plan_summary() or {}
         # v3.17.0: in de stijl van een Grid Support Unit, op verzoek na
         # een schermafbeelding daarvan. Halve-cirkelmeters, staafjes per
         # accumodule, één kleur met rood alleen voor alarmen.
-        return bouw_scada(
+        # v3.26.0: als afbeelding, niet als ruwe SVG. De markdown-kaart
+        # ontsnapt elk SVG-element naar tekst - dat was de klacht die
+        # vier opleveringen lang op de verkeerde plek is gezocht.
+        return als_afbeelding(
+            bouw_scada(
             {
                 "status": (self.get_diagnostic_summary() or {}).get("status"),
                 "soc": self.accustand_procent(),
@@ -10095,6 +10101,8 @@ class EnergyManagementSystemCoordinator:
                     self.get_quarter_plan_summary() or {}
                 ).get("verkoopkwartieren"),
             }
+            ),
+            "Overzicht accu-installatie",
         )
 
     def _overzicht_secties(self) -> list:
@@ -10273,15 +10281,21 @@ class EnergyManagementSystemCoordinator:
         # v3.20.0: de status zit nu IN de plaat. Deze functie blijft
         # bestaan voor wie hem los wil gebruiken, maar de visuele pagina
         # gebruikt hem niet meer.
-        from .overview_svg import bouw_status
+        from .overview_svg import als_afbeelding, bouw_status
 
-        return bouw_status({"onderwerpen": self._overzicht_onderwerpen()})
+        return als_afbeelding(
+            bouw_status({"onderwerpen": self._overzicht_onderwerpen()}),
+            "Status per onderwerp",
+        )
 
     def get_overview_sections_svg(self) -> str:
         """De drie secties onder de plaat (v3.18.0)."""
-        from .overview_svg import bouw_secties
+        from .overview_svg import als_afbeelding, bouw_secties
 
-        return bouw_secties({"secties": self._overzicht_secties()})
+        return als_afbeelding(
+            bouw_secties({"secties": self._overzicht_secties()}),
+            "Cijfers bij het overzicht",
+        )
 
     def _huisverbruik_w(self) -> float | None:
         """Wat het huis nu vraagt (v3.17.0).
@@ -18469,6 +18483,17 @@ class EnergyManagementSystemCoordinator:
             and (accu_c - buiten_c) >= BATTERY_COOLING_OPPORTUNITY_DELTA_C
         )
 
+    def _is_goedkope_koelreden(self, accu_c: float, buiten_c: float) -> bool:
+        """Komt de aanzetreden van de goedkope koeling? (v3.26.1)
+
+        `_battery_cooling_should_turn_on` keert onder de 35 graden altijd
+        via de goedkope tak terug; boven die grens gaat het om
+        bescherming van de omvormer, en die wacht nergens op.
+        """
+        return accu_c < BATTERY_COOLING_MIN_ABSOLUTE_C and (
+            self._koelen_is_goedkoop(accu_c, buiten_c)
+        )
+
     def _battery_cooling_should_turn_on(
         self, accu_c: float, buiten_c: float, vermogen_w: float
     ) -> str | None:
@@ -18559,7 +18584,9 @@ class EnergyManagementSystemCoordinator:
         # is. Dan draait hij één keer langer in plaats van drie keer
         # kort, en dat is precies wat een ventilator hoort te doen.
         if accu_c < BATTERY_COOLING_STOP_BELOW_C:
-            if self._goedkope_koeling_nog_zinvol(accu_c, buiten_c):
+            if self._goedkope_koeling_nog_zinvol(
+                accu_c, buiten_c, vermogen_w
+            ):
                 return False
             return True
 
@@ -18578,7 +18605,7 @@ class EnergyManagementSystemCoordinator:
         )
 
     def _goedkope_koeling_nog_zinvol(
-        self, accu_c: float, buiten_c: float
+        self, accu_c: float, buiten_c: float, vermogen_w: float | None = None
     ) -> bool:
         """Heeft de goedkope koeling nog wat te doen? (v3.14.0)
 
@@ -18608,6 +18635,27 @@ class EnergyManagementSystemCoordinator:
         # zijn werk deed: 33 naar 24 bij 17,7 buiten is nog maar 6,3
         # graden verschil. Dan warmt de omvormer weer op en begint het
         # opnieuw - negen schakelingen in zes uur.
+        # v3.26.1: en stoppen zodra er niets meer te koelen IS.
+        #
+        # Gemeten 18/19 augustus: het pendelen was weg - elf uur achter
+        # elkaar geen schakeling - maar de ventilator ging ook nooit
+        # meer uit. Bij een drempel van 25 ligt de ondergrens op 20, en
+        # de accu staat 's nachts op 23 met 16 buiten. Die stand komt
+        # nooit.
+        #
+        # De omvormer wordt warm van WERK. Staat de accu onder de
+        # aanzetdrempel én gaat er bijna niets doorheen, dan is er geen
+        # warmtebron. Boven die stroomgrens draait hij door, ook onder
+        # de drempel: op 18 augustus 19:45 stond de accu op 23 graden
+        # met 1623 W, en een half uur later op 31. Dáár uitzetten is
+        # precies het verkeerde moment.
+        if (
+            vermogen_w is not None
+            and accu_c < drempel
+            and vermogen_w < BATTERY_COOLING_OPPORTUNITY_IDLE_W
+        ):
+            return False
+
         stop_bij = drempel - BATTERY_COOLING_OPPORTUNITY_HYSTERESE_C
         return (
             accu_c > stop_bij
@@ -18615,7 +18663,12 @@ class EnergyManagementSystemCoordinator:
             >= BATTERY_COOLING_OPPORTUNITY_KEEP_DELTA_C
         )
 
-    def _cooling_switch_too_recent(self, now: datetime, aanzetten: bool) -> bool:
+    def _cooling_switch_too_recent(
+        self,
+        now: datetime,
+        aanzetten: bool,
+        grens_minuten: float | None = None,
+    ) -> bool:
         """Is de laatste schakeling te kort geleden? (v1.99.0)
 
         Gevonden bij de controle van 15 augustus: de ventilator pendelde
@@ -18635,6 +18688,8 @@ class EnergyManagementSystemCoordinator:
             if moment is None:
                 return False
         minuten = (now - moment).total_seconds() / 60
+        if grens_minuten is not None:
+            return minuten < grens_minuten
         grens = (
             BATTERY_COOLING_MIN_REST_MINUTES
             if aanzetten
@@ -18697,8 +18752,26 @@ class EnergyManagementSystemCoordinator:
                 accu_c, buiten_c, vermogen_w
             )
             if reden:
+                # v3.26.1: de goedkope koeling wacht langer voor hij
+                # opnieuw begint, zolang de accu stil staat.
+                #
+                # Uitzetten bij een stille accu mag alleen met een rem
+                # op het opnieuw aanzetten. Zonder die rem keert het
+                # pendelen terug: op 18 augustus stond de omvormer een
+                # half uur na uitschakelen weer op 27 graden bij nul
+                # watt. Komt er wél belasting, dan geldt de gewone
+                # rusttijd - dan is er een echte reden.
+                grens = None
+                if (
+                    self._is_goedkope_koelreden(accu_c, buiten_c)
+                    and vermogen_w < BATTERY_COOLING_OPPORTUNITY_IDLE_W
+                ):
+                    grens = BATTERY_COOLING_OPPORTUNITY_REST_MINUTES
+
                 # v1.99.0: pas na de minimale rusttijd.
-                if self._cooling_switch_too_recent(nu, aanzetten=True):
+                if self._cooling_switch_too_recent(
+                    nu, aanzetten=True, grens_minuten=grens
+                ):
                     resultaat["reden"] = (
                         f"{reden} - maar de ventilator is net uitgezet; "
                         "wachten om pendelen te voorkomen."

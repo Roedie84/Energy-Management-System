@@ -16937,3 +16937,114 @@ Dat is de les van deze drie pogingen: niet raden welk element het
 probleem is, maar de hele verzameling afschermen.
 
 **Volledige testsuite**: 2496 tests, allemaal groen.
+
+## v3.26.0 — De plaat gaat als afbeelding de kaart in
+
+**Gemeld**: "Visueel-pagina toont platte tekst" — voor de vierde keer.
+
+Drie eerdere verklaringen waren alle drie fout: de links (v3.23.0), twee
+SVG's in één kaart (v3.25.3) en `<animate>` (v3.25.4). Geen ervan hielp,
+want geen ervan was de oorzaak.
+
+### Wat het wél is
+
+De oorzaak staat in de bron van de Home Assistant frontend en is gewoon
+na te lezen. `hui-markdown-card.ts` rendert:
+
+    <ha-markdown cache breaks .content=${...}></ha-markdown>
+
+**zonder** `allow-svg`. In `ha-markdown.ts` staat die eigenschap
+standaard op `false`. Daardoor draait `markdown-worker.ts` met de gewone
+witte lijst, en die kent **geen enkel SVG-element** — `<svg>` zelf ook
+niet. De xss-opschoner ontsnapt alles wat er niet op staat naar tekst.
+Dat is letterlijk de klacht.
+
+Zelfs mét `allow-svg` zou het niet gaan. Die lijst is:
+
+    svg:  xmlns, height, width
+    path: transform, stroke, d
+    img:  src
+
+Geen `viewBox`, geen `rect`, `text`, `circle`, `line`, `g`, `tspan`,
+`polygon` — en de plaat bestaat vrijwel volledig uit die elementen. Ruwe
+SVG in een markdown-kaart kan dus nóóit werken, in geen enkele vorm.
+
+### De reparatie
+
+`<img>` staat wél op de gewone witte lijst, en `safeAttrValue` van de
+xss-bibliotheek laat `data:image/` uitdrukkelijk toe. De plaat gaat nu
+als data-URI door een `<img>` heen. Base64, want de plaat staat vol
+`#`-kleurcodes en die breken een niet-gecodeerde data-URI.
+
+De wortel van de SVG krijgt daarbij een echte maat uit de `viewBox` in
+plaats van `width="100%"`: binnen een `<img>` is een percentage
+betekenisloos en valt de browser terug op 300 bij 150 pixels. Met een
+echte maat klopt de verhouding, en `img { max-width: 100% }` uit
+`ha-markdown` laat hem alsnog meeschalen op een telefoon.
+
+**Het dashboard verandert niet.** De kaart leest dezelfde
+sensorattributen als eerst; alleen de inhoud van die attributen is
+veranderd. Opnieuw importeren is niet nodig.
+
+Wat de plaat niet terugkrijgt zijn klikbare gebieden — dat kan een
+afbeelding niet. De tegels onder de plaat blijven de weg naar de
+detailpagina's, net als sinds v3.23.0.
+
+**Volledige testsuite**: 2506 tests, allemaal groen.
+
+## v3.26.1 — De ventilator gaat ook weer uit
+
+**Gemeld**: "Accukoeling pendelt nog steeds — negen schakelingen in zes
+uur." Nagerekend aan de export van 19 augustus 08:09, en het lag anders.
+
+### Het pendelen was al voorbij
+
+De twintig regels in de schakelgeschiedenis zijn van een **oudere
+versie**. Élke "uit" gebeurde onder de 32 graden zonder dat de goedkope
+koeling werd ontzien — het gedrag van vóór v3.14.0. Twee regels sluiten
+v3.14.0 ook uit: 11:49 bij 30,0 graden met 14,7 verschil, en 14:37 bij
+31,0 met 13,4. Die hadden toen moeten doordraaien.
+
+De laatste schakeling is 18 augustus 21:15. De export is elf uur later.
+Daartussen staat niets. De reparatie van v3.23.1 werkt.
+
+### Maar hij ging ook nooit meer uit
+
+Bij een drempel van 25 ligt de ondergrens op 20 graden. De accu stond
+die nacht op 23,0 met 16,5 buiten en 114 W. Die 20 graden komt nooit —
+de ventilator draaide van de avond tot de ochtend door terwijl er onder
+de eigen aanzetdrempel niets te halen viel.
+
+### De reparatie kijkt naar de warmtebron
+
+De omvormer wordt warm van **werk**. Staat de accu onder de
+aanzetdrempel én gaat er minder dan 300 W doorheen, dan is er geen
+warmtebron en stopt de ventilator.
+
+Gaat er wél vermogen doorheen, dan draait hij door, ook onder de
+drempel: op 18 augustus 19:45 stond de accu op 23 graden met 1623 W, en
+een half uur later op 31. Dáár uitzetten is precies het verkeerde
+moment.
+
+Uitzetten mag alleen met een rem op het opnieuw aanzetten, anders is het
+pendelen meteen terug — een half uur na uitschakelen stond de omvormer
+weer op 27 graden bij nul watt. De goedkope koeling wacht daarom twee
+uur voor hij opnieuw begint, zolang de accu stil staat. Komt er
+belasting, dan geldt de gewone rusttijd van een half uur.
+
+Van de tien gemeten uitschakelingen blijven er vier over. De
+bescherming boven 32 graden is niet aangeraakt.
+
+### Netlading: vals alarm
+
+Gemeld als "netlading_vandaag_kwh staat op None in de export". Het veld
+stond er **helemaal niet in** — `diagnostics.py` schreef alleen de
+samenvatting weg. Wie de teller opvroeg kreeg `None` omdat de sleutel
+ontbrak, en dat zette een halve sessie op een vals spoor.
+
+De rauwe tellers staan er nu bij: `netlading_vandaag_kwh`,
+`netlading_kosten_eur` en het moment van de laatste meting. Bij een
+rustige dag is een lege samenvatting nu te onderscheiden van een meting
+die niet draait.
+
+**Volledige testsuite**: 2515 tests, allemaal groen.

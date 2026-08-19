@@ -1,155 +1,125 @@
-# Energie Management Systeem — overdracht naar nieuwe chat
+# Overdracht EMS — stand 19 augustus 2026
 
-**Nieuwe chat noemen: "Energie Management Systeem"**
+## Wat dit is
+Custom Home Assistant integratie voor een Zendure SolarFlow 2400 AC accu
+met SolarEdge PV, Solcast voorspelling en Zonneplan kwartierprijzen.
+Locatie Lochem. Communicatie in het Nederlands, terse stijl.
 
-## Waar we staan
+- Repo: https://github.com/Roedie84/Energy-Management-System
+- Lokaal: `/home/claude/ems/`
+- **Huidige versie: v3.26.1**, 2515 tests groen
+- Zip: `/mnt/user-data/outputs/energy_management_system_v3.26.1.zip`
 
-| | |
+## Werkwijze (belangrijk)
+1. Diagnostiek-export lezen uit `/mnt/user-data/uploads/`
+2. Fout **narekenen** met de echte cijfers voordat er iets verandert
+3. Test schrijven die de fout vangt, dan pas repareren
+4. Toetsen dat de test omvalt bij de oude code
+5. Versie ophogen in manifest, README (versie + testaantal) en dashboard
+6. Changelog met de gemelde klacht letterlijk erin
+7. Volledige suite groen, dan zippen
+
+**Valkuil**: versie ophogen met `sed` op de oude waarde faalt stilzwijgend
+als die waarde niet klopt. Vier opleveringen zijn zo misgegaan (v3.4.1).
+Er staan nu tests op consistentie tussen manifest, README en changelog.
+
+---
+
+## OPENSTAAND — met voorrang
+
+### 1. Visueel-pagina toont platte tekst — OPGELOST in v3.26.0
+Oorzaak nagelezen in de bron van de Home Assistant frontend:
+`hui-markdown-card.ts` rendert `<ha-markdown cache breaks>` **zonder**
+`allow-svg`, en die eigenschap staat standaard op `false`. De opschoner
+draait daardoor met de gewone witte lijst, die geen enkel SVG-element
+kent — ook `<svg>` zelf niet. Alles wat er niet op staat wordt naar
+tekst ontsnapt. Gecontroleerd op alle tags vanaf 20230802.0: `allow-svg`
+heeft daar nooit gestaan.
+
+Zelfs mét die vlag zou het niet gaan: de SVG-lijst is `svg` (xmlns,
+height, width), `path` (transform, stroke, d) en `img` (src). Geen
+`viewBox`, `rect`, `text`, `circle`, `line`, `g`, `tspan`, `polygon`.
+
+Reparatie: de plaat gaat als base64 data-URI door een `<img>`, want die
+staat wél op de gewone lijst en `safeAttrValue` laat `data:image/`
+uitdrukkelijk toe. De SVG-wortel krijgt een echte maat uit de `viewBox`
+in plaats van `width="100%"`.
+
+Nagerekend door de kaartinhoud door marked 18 + xss 1.0.15 te halen met
+de configuratie van `markdown-worker.ts`: oud 123 ontsnapte tags en nul
+afbeeldingen, nieuw nul ontsnapte tags en één `<img>`.
+
+**Nog te bevestigen door de gebruiker**: staat de plaat er na een
+herstart? Het dashboard hoeft niet opnieuw geïmporteerd te worden — de
+YAML is niet veranderd, alleen de inhoud van het sensorattribuut.
+
+### 2. Accukoeling — OPGELOST in v3.26.1
+Het pendelen was al voorbij: de twintig regels in de schakel-
+geschiedenis zijn van vóór v3.14.0 (élke "uit" onder de 32 graden zonder
+dat de goedkope koeling werd ontzien). Laatste schakeling 18 augustus
+21:15, export elf uur later, niets ertussen.
+
+Nieuw probleem dat daaruit kwam: hij ging ook nooit meer uit. Drempel 25
+betekent ondergrens 20, en de accu staat 's nachts op 23. Sinds v3.26.1
+stopt hij als de accu onder de aanzetdrempel staat én er minder dan
+300 W doorheen gaat, met twee uur wachttijd voor het opnieuw aanzetten
+bij een stille accu.
+
+**Nog te bevestigen**: schakelgeschiedenis van een hele dag onder
+v3.26.1. Verwacht: vier uitschakelingen in plaats van tien, en 's nachts
+uit.
+
+### 3. Netlading — vals alarm, opgelost in v3.26.1
+`netlading_vandaag_kwh` stond niet op `None` maar zat helemaal niet in
+de export. Diagnostics schreef alleen de samenvatting weg. De rauwe
+tellers staan er nu bij. Of de meting echt werkt is pas te zien op een
+dag waarop er van het net geladen is.
+
+### 4. Module 1 celspreiding
+Opgelopen deze week: 0,190 → 0,230 → 0,260 → 0,350 → 0,340 V bij lage
+accustand (19 aug: 0,34 bij 13% laadstand).
+Alleen module 1; 2 en 3 staan op 0,00. Bij structureel patroon: Zendure
+melden met de reeks als bewijs.
+
+---
+
+## Recent opgeleverd (18 augustus)
+
+| Versie | Wat |
 |---|---|
-| Versie | **v1.24.3** |
-| Tests | **1750**, allemaal groen |
-| Repo | https://github.com/Roedie84/Energy-Management-System |
-| Lokaal pad | `/home/claude/ems/` |
-| Transcripts | `/mnt/transcripts/` (zie `journal.txt`) |
-| Exports | `/mnt/user-data/uploads/` |
+| v3.13.0 | winterguard vergat de slijtage — laadde tegen verlies |
+| v3.14.0 | hysterese goedkope koeling |
+| v3.15.0 | koelen = bescherming: draait door in leermodus/handmatig boven 35 °C |
+| v3.16.0 | zelfvoorziening: netlading telt niet als huisverbruik |
+| v3.17.0–3.25.4 | visuele plaat in SCADA-stijl (zie openstaand punt 1) |
+| v3.23.1 | zelfvoorziening begrensd 0–100 zonder afhankelijke teller |
+| v3.24.0 | bijkoop-kandidaat meet ook bij dreigend tekort |
+| v3.25.0 | werkelijke netlading per ronde gemeten en afgerekend |
+| v3.26.0 | plaat als afbeelding: markdown-kaart ontsnapt élk SVG-element |
+| v3.26.1 | koeling stopt bij stille accu; netlading-tellers in de export |
 
-**Belangrijk:** v1.24.3 is nog niet in de praktijk beproefd. Alles vanaf
-v1.22.0 is vandaag gebouwd en nauwelijks een dag in bedrijf geweest.
+## Proefstand (9 kandidaten, sturen niets)
+- **Slijtagekosten** 4,22 ct/kWh — klaar om mee te doen
+- **Vasthouden voor morgen** −8,0 ct/kWh — klaar, maar wijst de verkeerde
+  kant op: bij 0 van de 200 metingen was vasthouden voordeliger
+- Prijsvorm — winst onbekend
+- Overige zes — meten nog
 
----
+De gereedheid staat los van het oordeel: "klaar om mee te doen" betekent
+becijferd, niet gunstig.
 
-## De installatie
+## Structuurscans (uit echte fouten voortgekomen)
+1. AST-scan op methoden die niet bestaan
+2. AST-scan op variabelen die in die functie niet bestaan (v3.6.1)
+3. `@staticmethod` die `self` gebruikt (v3.7.1)
+4. Berekend maar nergens gelezen (v3.25.1)
+5. Onveilige SVG-elementen in alle platen (v3.25.4)
+6. Getters die ruwe SVG naar een markdown-kaart teruggeven (v3.26.0)
 
-- Zendure SolarFlow 2400 AC, **3 × AB3000X** (8,6 kWh)
-- **Harde ondergrens 10%** → 7,74 kWh bruikbaar
-- Laden **2000 W**, ontladen **1600 W** — **bewust handmatig begrensd**
-- SolarEdge PV, Solcast-voorspelling, Zonneplan kwartierprijzen
-- Prijzen komen als **rauwe eenheden** binnen (3181681 = €0,3181681),
-  delen door `PRICE_SCALE_FACTOR` (10.000.000)
-- Rendement gemeten 90,8% (fabrikant claimt tot 93%)
-- Koelkast en diepvries staan in de schuur
-
----
-
-## Wat er vandaag is gebouwd (v1.20.2 → v1.24.3)
-
-### Zonopvang uitstellen naar een goedkoper uur (v1.22.0)
-
-De accu neemt een vast aantal kWh op; **wélke** dat zijn bepaalt wat je
-exporteert. Vroeg laden slurpt de dure ochtendzon op (26,8 ct) en laat de
-goedkope middagzon over voor het net (13,6 ct). Laat laden doet het
-omgekeerd.
-
-Gesimuleerd op 10 augustus: **+€0,49** bij omslag 13:00.
-
-Rekent tot **16:00** (de late middagzon is dan het vangnet) met **25%**
-marge. Vier remmen: te weinig zon, minder dan 5 ct verschil, accu onder
-25%, of na 16:00.
-
-### De woning gaat voor verkopen (v1.23.0)
-
-Onder **5 kWh** verwachte dagopbrengst wordt er niet verkocht — ook niet
-met een volle accu. Anders moet er na de verkoop genoeg overblijven om
-het huis te voeden tot het goedkope blok, met **1,5×** marge.
-
-Aanleiding: op een winterdag verkocht de accu 's ochtends tot nul en
-stond daarna drie uur leeg terwijl het huis 25–33 ct betaalde. De reserve
-klopte wel, maar verkopen gaat op 1600 W terwijl het huis 300 W trekt.
-
-### Kwartierplanning (v1.22.2 → v1.24.3)
-
-Eigen pagina met per kwartier: prijs, zon, modus, **echte SoC** en lopend
-totaal. Negen uur vooruit (36 regels), voorbije kwartieren verdwijnen.
-Gewijzigde kwartieren kleuren **rood** met "was ..." erbij.
-
-Aparte pagina *Planning-samenvatting* met verwachte opbrengst, laagste
-SoC, kwartieren met tekort.
-
-### Meldingen (v1.23.4)
-
-Drie soorten, elk apart uitschakelbaar:
-
-| Melding | Standaard |
-|---|---|
-| Accu haalt de nacht mogelijk niet | **aan** |
-| Zon opvangen uitgesteld | uit |
-| Verkopen geblokkeerd voor de woning | uit |
-
-Alleen bij een overgang, niet elke tick.
-
-### Achterhoeks (v1.24.0)
-
-Eén schakelaar op de Meldingen-pagina zet alle meldingen om — telefoon én
-meldingenoverzicht. 26 titels en ~70 woordvervangingen in één tabel in
-`const.py`. Nadrukkelijk een benadering, geen gecontroleerde streektaal.
-
-### Overige correcties
-
-- **v1.20.3** — de dagelijkse PV-vergelijking lukte **nooit**: de
-  vastlegging van 20:00 wiste elke avond wat om 23:59 vergeleken moest
-  worden
-- **v1.21.0** — de diepvries was niet defect; 13 van 30 dagen was
-  meetuitval, waardoor de referentie op 19,68 W stond in plaats van 76,34
-- **v1.21.5** — "Nachtverbruik 403 W" bleek het **ontlaadvenster**
-  (avond én nacht), niet de nacht
-- **v1.23.3** — de minimum-SoC stond op 15% terwijl de accu 10%
-  aanhoudt: **0,43 kWh** die in élke berekening ontbrak
-
----
-
-## Openstaand
-
-**Nog niet beproefd.** Vraag om een verse export en kijk naar:
-
-- `quarter_plan_summary` → **tekort_kwartieren** hoort **0** te zijn
-- `laagste_soc_procent` → hoort nooit onder 10% te komen
-- `solar_defer_plan` → slaat het uitstelplan aan, en met welke winst?
-- `sell_check` → wordt verkopen terecht wel of niet geblokkeerd?
-
-**Twee dingen die Ruud zelf moet beoordelen:**
-
-1. **`sensor.zendure_manager_operation_state`** — welke waarden geeft
-   die precies? Staat er iets anders dan *Ontladen* / *Laden*, dan die
-   term toevoegen aan `BATTERY_STATE_DISCHARGING` / `_CHARGING`.
-2. **Tien van de 37 apparaten hebben geen referentiewaarde** (rolluiken,
-   melkopschuimer). Daar kan geen drift worden vastgesteld.
-
-**Uitbreidingsadvies** (met echte prijzen: module €729, omvormer €374):
-één omvormer draagt **zes** modules, dus capaciteit vraagt geen tweede
-omvormer. Vermogen verhogen naar 2400 W vraagt een **eigen groep** en een
-elektricien — dat was mijn eerdere "gratis" advies, en dat klopte niet.
-
----
-
-## Werkwijze
-
-- **Nederlands**, terse en direct
-- Elke wijziging: **eigen versienummer**, README + CHANGELOG bijwerken,
-  volledige testsuite groen, zip opleveren
-- Commentaar in de code legt de **aanleiding** vast, met de gemelde zin
-  erbij — niet alleen wat de code doet
-- Ruud levert screenshots, diagnostiek-JSON en ruwe CSV; hij duwt door
-  tot de werkelijke oorzaak
-- **Eerlijk zijn over eigen fouten.** Er zijn er vandaag flink wat
-  geweest en dat benoemen werkt beter dan het gladstrijken
-
-## Terugkerende valkuilen
-
-1. `yaml.dump` verdubbelt aanhalingstekens in Jinja
-2. Entity_id verandert **niet** mee bij hernoemen (`piekvermogen` v1.6.4,
-   airco v1.17.6, ontlaadvenster v1.21.5)
-3. **Testopstellingen die niet op de werkelijkheid lijken toetsen niets**
-   — prijzen in euro's terwijl de sensor rauwe eenheden geeft (v1.24.2),
-   getallen in plaats van lijsten (v1.19.5)
-4. `_get_forecast_entries` gooit `KeyError` zonder prijssensor — afschermen
-5. Zoeken op een vast aantal tekens breekt zodra commentaar groeit;
-   verankeren op de volgende klasse
-6. Dashboardpagina's hebben een grens van **2500 tekens** en **6 kolommen**
-
-## Locked besluiten
-
-- Dynamische reserve en energiebrug-check zijn **twee aparte** mechanismen
-- Zonherlading telt **niet** mee in de prijsprioriteit-rangschikking
-- Arbitrage-laden is **permanent verwijderd**
-- Verkopen op `manual` mag **alleen** als de accu die dag **niet van het
-  net** is geladen
+## Vaste afspraken
+- Proefstandkandidaten sturen pas na bewijs, één tegelijk
+- Apparaten niet automatisch starten, alleen melden
+- Geen LLM in de integratie voor aansturing
+- Hoofdblok winterguard heeft bewust géén rendementstoets
+- Saldering eindigt 31-12-2026: dan 19 ct teruglevering tegen 32 ct
+  inkoop, en draaien de proefstandcijfers waarschijnlijk om

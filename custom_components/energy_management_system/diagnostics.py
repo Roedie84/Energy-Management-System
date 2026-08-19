@@ -526,6 +526,17 @@ async def async_get_config_entry_diagnostics(
                 "get_netlading_overview", coordinator.get_netlading_overview
             ),
             "netlading_history": coordinator.netlading_history[-40:],
+            # v3.26.1: de rauwe tellers erbij. In de export van 19
+            # augustus stond alleen de samenvatting, en die meldt bij een
+            # rustige dag "vandaag is er niet van het net geladen" - niet
+            # te onderscheiden van een meting die helemaal niet draait.
+            # Wie de teller opvroeg kreeg `None` omdat de sleutel
+            # ontbrak, wat een halve sessie op een vals spoor zette.
+            "netlading_vandaag_kwh": coordinator.netlading_vandaag_kwh,
+            "netlading_kosten_eur": coordinator.netlading_kosten_eur,
+            "netlading_laatste_meting": _iso(
+                getattr(coordinator, "_netlading_laatste_meting", None)
+            ),
             "capacity_overview": _veilig(
                 "get_capacity_overview", coordinator.get_capacity_overview
             ),
