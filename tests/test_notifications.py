@@ -172,6 +172,11 @@ def test_only_the_pre_existing_kinds_default_to_on():
         "appliance_cheap_moment",
         "appliance_ready",
         "battery_cooling",
+        # v3.27.1: net als vakantie_beweging een gevolg van de regel,
+        # geen uitzondering erop. Deze melding vuurt alleen als de
+        # kalibratiestand aan staat - een bewuste handeling - en dan is
+        # hij het hele punt van die stand. Ruis kan hier niet ontstaan.
+        "kalibratie_vol",
         "sluipverbruik",
         "device_drift",
         "mode_change",

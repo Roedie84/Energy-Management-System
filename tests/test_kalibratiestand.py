@@ -43,6 +43,15 @@ class _Kaal:
     force_manual = False
     learning_only = False
     vacation_mode = False
+    config: dict = {}
+
+    def __init__(self) -> None:
+        self.verstuurd: list[dict] = []
+
+    def _dispatch_notification(self, **kwargs) -> None:
+        self.verstuurd.append(kwargs)
+
+    _meld_kalibratie_vol = C._meld_kalibratie_vol
 
 
 # --- de vlag zelf ----------------------------------------------------
@@ -228,3 +237,66 @@ def test_without_the_flag_nothing_changes(functie, argumenten):
     begin = bron.index("if ")
 
     assert 'kalibratie", False)' in bron[begin : begin + 400]
+
+
+# --- de melding ------------------------------------------------------
+
+
+def test_reaching_full_sends_a_critical_notification():
+    """Gevraagd: "melding wanneer accu in kalibratie modus 100% bereikt,
+
+    indien mogelijk kritisch."
+
+    Kritiek niet omdat er iets mis is, maar omdat er iets moet GEBEUREN:
+    stand uit, ondergrens terug. Blijft die melding tot de volgende
+    ochtend in de wachtrij, dan staat de sturing uren onnodig stil.
+    """
+    from custom_components.energy_management_system.const import (
+        LOG_PRIO_KRITIEK,
+        LOG_PRIORITEITEN,
+    )
+
+    obj = _Kaal()
+    obj.kalibratie_momentopname = None
+    obj.battery_module_live = [
+        {"module": 1, "cel_delta_v": 0.46, "cel_min_v": 2.72, "cel_max_v": 3.18},
+    ]
+
+    C._leg_kalibratie_vast(obj, datetime(2026, 8, 19, 16, 0), 100.0)
+
+    assert len(obj.verstuurd) == 1
+    melding = obj.verstuurd[0]
+    assert melding["kind"] == "kalibratie_vol"
+    assert LOG_PRIORITEITEN["kalibratie_vol"] == LOG_PRIO_KRITIEK
+
+
+def test_the_message_carries_the_cell_spread():
+    """De reden dat deze kalibratie gedraaid wordt. Op de telefoon meteen
+
+    af te lezen, zonder de export erbij te halen.
+    """
+    obj = _Kaal()
+    obj.kalibratie_momentopname = None
+    obj.battery_module_live = [
+        {"module": 1, "cel_delta_v": 0.46, "cel_min_v": 2.72, "cel_max_v": 3.18},
+        {"module": 2, "cel_delta_v": 0.00, "cel_min_v": 3.16, "cel_max_v": 3.16},
+    ]
+
+    C._leg_kalibratie_vast(obj, datetime(2026, 8, 19, 16, 0), 100.0)
+    bericht = obj.verstuurd[0]["message"]
+
+    assert "module 1: 0.460 V" in bericht
+    assert "module 2: 0.000 V" in bericht
+    assert "kalibratiestand uit" in bericht
+
+
+def test_it_only_fires_once():
+    """De momentopname is de rem: één melding per kalibratie."""
+    obj = _Kaal()
+    obj.kalibratie_momentopname = None
+    obj.battery_module_live = [{"module": 1, "cel_delta_v": 0.46}]
+
+    C._leg_kalibratie_vast(obj, datetime(2026, 8, 19, 16, 0), 100.0)
+    C._leg_kalibratie_vast(obj, datetime(2026, 8, 19, 16, 30), 100.0)
+
+    assert len(obj.verstuurd) == 1
