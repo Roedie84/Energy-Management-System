@@ -7,8 +7,8 @@ Locatie Lochem. Communicatie in het Nederlands, terse stijl.
 
 - Repo: https://github.com/Roedie84/Energy-Management-System
 - Lokaal: `/home/claude/ems/`
-- **Huidige versie: v3.31.0**, 2601 tests groen
-- Zip: `/mnt/user-data/outputs/energy_management_system_v3.31.0.zip`
+- **Huidige versie: v3.32.0**, 2622 tests groen
+- Zip: `/mnt/user-data/outputs/energy_management_system_v3.32.0.zip`
 
 ## Werkwijze (belangrijk)
 1. Diagnostiek-export lezen uit `/mnt/user-data/uploads/`
@@ -112,6 +112,7 @@ melden met de reeks als bewijs.
 | v3.30.0 | knop om de verbruiksleer opnieuw te beginnen, met bevestiging |
 | v3.30.1 | reset wist ook de lopende dag, dus het tijdstip doet er niet toe |
 | v3.31.0 | diagnostiek-export 54% kleiner zonder verlies aan inhoud |
+| v3.32.0 | dagreeks vult eigen gaten; structuurscan op argumentaantallen |
 
 ## Proefstand (9 kandidaten, sturen niets)
 - **Slijtagekosten** 4,22 ct/kWh — klaar om mee te doen
@@ -132,6 +133,7 @@ becijferd, niet gunstig.
 6. Getters die ruwe SVG naar een markdown-kaart teruggeven (v3.26.0)
 7. Schakelaarkaarten met een afwijkend entiteit-voorvoegsel (v3.27.2)
 8. Beslisredenen zonder eigen onderbouwing (v3.29.0)
+9. Aanroepen met een verkeerd aantal argumenten (v3.32.0)
 
 ## Vaste afspraken
 - Proefstandkandidaten sturen pas na bewijs, één tegelijk

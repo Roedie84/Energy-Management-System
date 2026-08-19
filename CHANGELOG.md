@@ -17478,3 +17478,81 @@ na   :   573 KB   (54% kleiner)
 Zonder dat er één diagnostisch gegeven verdwijnt dat vandaag gebruikt is.
 
 **Volledige testsuite**: 2601 tests, allemaal groen.
+
+## v3.32.0 — Wat het gebeurtenislogboek verraadde
+
+**Gevraagd**: "Dus geen zaken gevonden uit de diagnostiek?" — terecht,
+want ik zat vooral mijn eigen reparaties af te tikken. Bij echt zoeken
+kwamen er twee dingen uit.
+
+### 16 augustus is nooit afgesloten, en werd nooit bijgehaald
+
+De nieuwe gatentoets meldde hem meteen:
+
+> Dagreeks — Ontbrekende dag(en): 2026-08-16. Geen opruiming
+> vastgelegd, dus die dag is nooit afgesloten.
+
+Het Home Assistant-logboek van die nacht was leeg — dat bewaart alleen
+de huidige draai. Maar het antwoord stond al in deze codebase, in de
+toelichting bij `_energiedag_is_onzin` (v2.2.2):
+
+> Dit vangt het geval dat een dag met al gewiste tellers is afgesloten -
+> de vorm waarin 15 en 16 augustus op 0,0 kWh opwek stonden bij 11,8 kWh
+> teruglevering.
+
+Beide dagen zijn afgesloten met tellers die al op nul stonden, en de
+opruimtoets heeft ze er terecht uitgegooid. 15 augustus kwam terug via
+de statistieken; 16 augustus viel buiten het inleesvenster.
+
+`dagreeks_verwijderd` staat leeg omdat die lijst pas sinds v3.29.0
+bestaat — de opruiming gebeurde onder een oudere versie, en toen nog
+stil. De melding van de gatentoets is daarop aangepast: "nooit
+afgesloten, of vóór v3.29.0 stil opgeruimd" in plaats van een
+conclusie die de gegevens niet dragen.
+
+Erger: hij zou ook nooit meer terugkomen. De inleesroutine vult
+uitsluitend dagen aan **vóór** de oudste bekende dag, en een gat in het
+midden valt daar per definitie buiten. De statistieken van 16 augustus
+staan gewoon in de recorder.
+
+Die routine kijkt nu eerst welke dagen er midden in de reeks ontbreken
+en haalt het venster ver genoeg terug om ze mee te nemen. Dagen die als
+onmogelijk zijn opgeruimd blijven weg — opnieuw inlezen zou ze meteen
+weer weggooien — en de dag van vandaag telt niet, die is nog niet
+afgesloten.
+
+### Structuurscan 9: aanroepen met het juiste aantal argumenten
+
+In het logboek staan twee kritieke regels van 18 augustus:
+
+```
+08:36  't Systeem löp vast
+08:58  't Systeem löp vast
+detail: _koelen_is_goedkoop() missing 1 required positional
+        argument: 'buiten_c'
+```
+
+Twee vastgelopen rondes, en de watchdog die ze weer aan de gang trok. De
+methode bestond, de variabelen bestonden — alleen werd hij met één
+argument te weinig aangeroepen.
+
+De acht bestaande structuurscans kijken allemaal naar **namen**. Deze
+negende kijkt naar de vorm van de aanroep, en dat is precies het gat
+waar die storing doorheen viel. De scan houdt rekening met decorators:
+zonder dat onderscheid meldt hij tweeënzestig aanroepen die allemaal in
+orde zijn.
+
+Getoetst dat de scan de storing van 18 augustus werkelijk zou hebben
+gevangen — een scan die niets vindt in code die klopt, bewijst niets.
+
+### Twee kleinere
+
+- **De reservemarge zei "nog geen reserveberekening gemaakt"** terwijl
+  de integratie al uren draaide. De oorzaak was de kalibratiestand: die
+  tak keert terug vóór de reserve wordt berekend. Geen storing, maar de
+  kaart suggereerde van wel. Hij zegt nu waarom.
+- **De rij "vandaag" miste `dagen_met_waarde`**, omdat hij uit de
+  lopende tellers komt en apart wordt gebouwd. De tabel is nu van links
+  naar rechts gelijk te lezen.
+
+**Volledige testsuite**: 2622 tests, allemaal groen.

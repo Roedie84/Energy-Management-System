@@ -10928,12 +10928,21 @@ class EnergyManagementSystemCoordinator:
                 if (data[i + 1] - data[i]).days == 2
             ]
             onverklaard = [g for g in gaten if g not in opgeruimd]
+            # v3.32.0: niet stelliger dan de gegevens toelaten.
+            #
+            # De eerste versie van deze toets zei "die dag is nooit
+            # afgesloten". Dat bleek te stellig: `dagreeks_verwijderd`
+            # bestaat pas sinds v3.29.0, dus een opruiming van vóór die
+            # versie staat er per definitie niet in. 16 augustus was wél
+            # opgeruimd - met gewiste tellers en 11,8 kWh teruglevering
+            # zonder opwek - alleen stil.
             _toets(
                 "Dagreeks",
                 not onverklaard,
                 f"Ontbrekende dag(en): {', '.join(onverklaard[:3])}. "
-                "Geen opruiming vastgelegd, dus die dag is nooit "
-                "afgesloten.",
+                "Nooit afgesloten, of vóór v3.29.0 stil opgeruimd. Bij "
+                "de eerstvolgende start wordt geprobeerd hem uit de "
+                "statistieken bij te halen.",
             )
 
         # --- 6. Elke periode dezelfde waarde wijst op één bron ---
@@ -14263,6 +14272,29 @@ class EnergyManagementSystemCoordinator:
         """
         u = self.last_reserve_margin_breakdown or {}
         if not u:
+            # v3.32.0: zeggen WAAROM er niets staat.
+            #
+            # Gevonden in de export van 12:28: "Nog geen reserve-
+            # berekening gemaakt" terwijl de integratie al uren draaide.
+            # De oorzaak was de kalibratiestand: die tak keert terug
+            # vóór de reserve wordt berekend. Dat is geen storing, maar
+            # de kaart suggereerde van wel.
+            if self.kalibratie:
+                return {
+                    "beschikbaar": False,
+                    "reden": (
+                        "De kalibratiestand staat aan; de reserve wordt "
+                        "niet berekend zolang de aansturing stilligt."
+                    ),
+                }
+            if self.force_manual:
+                return {
+                    "beschikbaar": False,
+                    "reden": (
+                        "Handmatige overname staat aan; de reserve wordt "
+                        "niet berekend."
+                    ),
+                }
             return {
                 "beschikbaar": False,
                 "reden": "Nog geen reserveberekening gemaakt.",
@@ -18250,6 +18282,38 @@ class EnergyManagementSystemCoordinator:
             return True
         return False
 
+    def _ontbrekende_dagen(self) -> list:
+        """Welke dagen ontbreken er midden in de dagreeks? (v3.32.0)
+
+        De dag van vandaag telt niet mee - die is nog niet afgesloten.
+        Dagen die als fysiek onmogelijk zijn opgeruimd tellen ook niet
+        mee: die zijn er bewust uit, en opnieuw inlezen zou ze meteen
+        weer weggooien.
+        """
+        data = sorted(
+            date.fromisoformat(r["datum"])
+            for r in (self.energy_daily_history or [])
+            if r.get("datum")
+        )
+        if len(data) < 2:
+            return []
+        opgeruimd = {
+            x.get("datum") for x in (self.dagreeks_verwijderd or [])
+        }
+        aanwezig = set(data)
+        vandaag = dt_util.now().date()
+        ontbreekt = []
+        dag = data[0]
+        while dag < data[-1]:
+            dag += timedelta(days=1)
+            if (
+                dag not in aanwezig
+                and dag != vandaag
+                and dag.isoformat() not in opgeruimd
+            ):
+                ontbreekt.append(dag)
+        return ontbreekt
+
     async def async_bootstrap_energy_history(self) -> None:
         """Vult de dagreeks uit de statistieken van Home Assistant
         (v1.92.0).
@@ -18392,8 +18456,30 @@ class EnergyManagementSystemCoordinator:
         else:
             oudste = dt_util.now().date()
 
-        einde = dt_util.start_of_local_day(oudste)
-        start = einde - timedelta(days=ENERGY_DAILY_HISTORY_DAYS)
+        # v3.32.0: ook GATEN midden in de reeks aanvullen.
+        #
+        # Gevonden op 19 augustus: 16 augustus ontbrak, tussen 15 en 17
+        # in. Niet opgeruimd - `dagreeks_verwijderd` was leeg - maar
+        # nooit afgesloten. De statistieken van die dag staan gewoon in
+        # de recorder, alleen keek deze routine er niet naar: hij vulde
+        # uitsluitend de dagen VOOR de oudste bekende dag aan, en een gat
+        # in het midden valt daar per definitie buiten.
+        #
+        # Dan blijft zo'n dag voorgoed weg, en elke weekvergelijking
+        # eromheen is stiekem scheef.
+        gaten = self._ontbrekende_dagen()
+        if gaten:
+            _LOGGER.info(
+                "Gaten in de dagreeks worden bijgehaald: %s",
+                ", ".join(d.isoformat() for d in gaten[:5]),
+            )
+            einde = dt_util.start_of_local_day(dt_util.now().date())
+            start = dt_util.start_of_local_day(
+                min(min(gaten), oudste - timedelta(days=1))
+            ) - timedelta(days=1)
+        else:
+            einde = dt_util.start_of_local_day(oudste)
+            start = einde - timedelta(days=ENERGY_DAILY_HISTORY_DAYS)
 
         # v1.93.0: de EENHEID uit de metadata, want die staat niet vast.
         #
@@ -18755,6 +18841,14 @@ class EnergyManagementSystemCoordinator:
                 self.counterfactual_cost_today_eur - self.actual_cost_today_eur,
                 2,
             ),
+            # v3.32.0: dezelfde vorm als de andere perioden. De rij van
+            # vandaag komt uit de lopende tellers en werd apart gebouwd,
+            # dus miste hij dit veld - waardoor de tabel van links naar
+            # rechts niet gelijk te lezen was.
+            "dagen_met_waarde": {
+                sleutel: 1 for sleutel, _n, _e in self.PERIODE_GROOTHEDEN
+            }
+            | {"besparing_eur": 1},
         }
 
         perioden = {
