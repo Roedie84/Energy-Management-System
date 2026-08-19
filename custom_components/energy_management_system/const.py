@@ -1767,6 +1767,12 @@ LOG_PRIORITEITEN = {
     "sensor_unavailable": LOG_PRIO_KRITIEK,
     "integration_error": LOG_PRIO_KRITIEK,
     "low_soc_before_peak": LOG_PRIO_KRITIEK,
+    # v3.27.1: gevraagd "melding wanneer accu in kalibratie modus 100%
+    # bereikt, indien mogelijk kritisch". Kritiek is hier de juiste
+    # soort: de kalibratie is klaar en er moet iets GEBEUREN - stand
+    # uit, ondergrens terug. Blijft die melding in de wachtrij hangen,
+    # dan staat de sturing uren onnodig stil.
+    "kalibratie_vol": LOG_PRIO_KRITIEK,
     # Aandacht - het vraagt een beslissing.
     "plan_verkoop_geblokkeerd": LOG_PRIO_AANDACHT,
     "battery_module_drift": LOG_PRIO_AANDACHT,
@@ -2566,6 +2572,14 @@ NOTIFICATION_TYPES: tuple[tuple[str, str, str, bool, int], ...] = (
         "Wanneer de koelventilator van de thuisaccu schakelt.",
         True,
         15,
+    ),
+    (
+        "kalibratie_vol",
+        "Kalibratie: accu is vol",
+        "Wanneer de accu tijdens een kalibratie de 100% haalt. Kritiek, "
+        "dus hij doorbreekt de stille stand van de telefoon.",
+        True,
+        60,
     ),
     (
         "sluipverbruik",
@@ -4357,6 +4371,7 @@ ACHTERHOEKS_TITELS = {
     # krijgen hun onderscheid uit ACHTERHOEKS_TITELS_PER_ACTIE. Wat
     # hieronder staat is de terugval als de actie niet af te leiden is.
     "battery_cooling": "Accukoeling",
+    "kalibratie_vol": "De accu is vol - kalibratie klaor",
     "appliance_ready": "'n Apparaat is klaor",
     "appliance_cheap_moment": "Good moment veur 'n apparaat",
     "device_drift": "'n Apparaat wiekt af",

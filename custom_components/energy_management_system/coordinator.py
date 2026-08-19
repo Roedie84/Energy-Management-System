@@ -19070,6 +19070,47 @@ class EnergyManagementSystemCoordinator:
             "soc_percent": soc_percent,
             "modules": [dict(m) for m in modules],
         }
+        self._meld_kalibratie_vol(soc_percent, modules)
+
+    def _meld_kalibratie_vol(self, soc_percent: float, modules: list) -> None:
+        """Meldt dat de kalibratie klaar is (v3.27.1).
+
+        Gevraagd: "melding wanneer accu in kalibratie modus 100%
+        bereikt, indien mogelijk kritisch."
+
+        Kritiek is hier de juiste soort. Niet omdat er iets mis is, maar
+        omdat er iets moet GEBEUREN: de kalibratiestand uit en de
+        ondergrens in de Zendure-app terug. Blijft de melding in de
+        wachtrij hangen tot de volgende ochtend, dan staat de sturing
+        uren onnodig stil.
+
+        De celspreiding gaat mee in het bericht. Dat is de reden dat
+        deze kalibratie gedraaid wordt, en op de telefoon is het meteen
+        af te lezen zonder de export erbij te halen.
+        """
+        regels = []
+        for m in sorted(modules, key=lambda x: x.get("module") or 0):
+            delta = m.get("cel_delta_v")
+            if delta is None:
+                continue
+            regels.append(
+                f"module {m.get('module')}: {delta:.3f} V "
+                f"({m.get('cel_min_v')}-{m.get('cel_max_v')})"
+            )
+        spreiding = "; ".join(regels) or "geen modulegegevens"
+
+        self._dispatch_notification(
+            notify_service=self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE),
+            title="🔋 Kalibratie klaar - accu is vol",
+            message=(
+                f"De accu staat op {soc_percent:.0f}%. Zet de "
+                f"kalibratiestand uit en zet de ondergrens in de "
+                f"Zendure-app terug.\n\n"
+                f"Celspreiding bovenin: {spreiding}."
+            ),
+            notification_id="ems_kalibratie_vol",
+            kind="kalibratie_vol",
+        )
 
     def _update_battery_module_health(self, now: datetime) -> None:
         """Verzamelt per module de live metingen en de afwijking t.o.v.

@@ -17093,7 +17093,36 @@ nul, dan was het een balanceerachterstand. Blijft het staan, dan is het
 een zwakke cel — en dan is dit de meting om aan Zendure voor te leggen.
 
 De opname staat als attribuut op de schakelaar en in de
-diagnostiek-export. De stand zelf overleeft een herstart: een kalibratie
+diagnostiek-export. De schakelaar zelf staat op het dashboard onder
+**Besturing**, naast `Force manual` — dat is een wijziging in de
+dashboard-YAML, dus die pagina moet één keer opnieuw geïmporteerd
+worden. De stand zelf overleeft een herstart: een kalibratie
 duurt uren.
 
 **Volledige testsuite**: 2528 tests, allemaal groen.
+
+## v3.27.1 — Kritieke melding als de kalibratie klaar is
+
+**Gevraagd**: "Graag melding wanneer accu in kalibratie modus 100%
+bereikt, indien mogelijk kritisch."
+
+Nieuwe meldingssoort `kalibratie_vol`, met prioriteit **kritiek**. Die
+prioriteit doorbreekt de stille stand van de telefoon —
+`interruption-level: time-sensitive` op iOS, hoge prioriteit op Android.
+
+Kritiek niet omdat er iets mis is, maar omdat er iets moet gebeuren: de
+kalibratiestand uit en de ondergrens in de Zendure-app terug. Blijft die
+melding tot de volgende ochtend in de wachtrij, dan staat de sturing
+uren onnodig stil.
+
+De celspreiding per module gaat mee in het bericht. Dat is de reden dat
+deze kalibratie gedraaid wordt, en zo is het op de telefoon meteen af te
+lezen zonder de diagnostiek-export erbij te halen.
+
+Staat standaard aan, net als `vakantie_beweging` en om dezelfde reden:
+hij vuurt alleen als de kalibratiestand aan staat — een bewuste
+handeling. De momentopname is meteen de rem: één melding per kalibratie.
+
+Uit te zetten op het meldingen-tabblad.
+
+**Volledige testsuite**: 2531 tests, allemaal groen.
