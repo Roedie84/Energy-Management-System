@@ -17126,3 +17126,30 @@ handeling. De momentopname is meteen de rem: één melding per kalibratie.
 Uit te zetten op het meldingen-tabblad.
 
 **Volledige testsuite**: 2531 tests, allemaal groen.
+
+## v3.27.2 — De kalibratiekaart wees naar niets
+
+**Gemeld** met een schermafdruk: "Entiteit niet gevonden" op de
+kalibratiekaart.
+
+De kaart wees naar `switch.energy_management_system_kalibratie`, terwijl
+de entiteit `switch.woonkamer_energy_management_system_kalibratie` heet.
+
+Dat komt door een gewoonte van Home Assistant, niet van deze
+integratie: entiteiten met `_attr_has_entity_name` krijgen hun id uit de
+apparaatnaam. `force_manual` en `learning_only` zijn aangemaakt vóórdat
+het apparaat in een gebied stond en hebben daarom geen voorvoegsel; al
+het latere werk — vakantiemodus, alle meldingsschakelaars — heeft
+`woonkamer_` ervoor.
+
+Ik heb de nieuwe kaart naar het patroon van `force_manual` gebouwd, en
+dat is precies de verkeerde van de twee om te kopiëren.
+
+Nieuwe structuurscan, uit deze fout voortgekomen: elke schakelaarkaart
+op het dashboard moet het voorvoegsel gebruiken dat de rest ook
+gebruikt. De twee entiteiten van vóór het gebied staan als bekende
+uitzondering vastgelegd. Slaat de installatie ooit om naar een ander
+voorvoegsel, dan valt die scan om in plaats van dat kaarten stilletjes
+leeg blijven.
+
+**Volledige testsuite**: 2535 tests, allemaal groen.

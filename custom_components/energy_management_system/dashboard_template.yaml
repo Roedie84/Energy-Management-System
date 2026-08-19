@@ -211,7 +211,7 @@ views:
         columns: 12
         rows: auto
     - type: custom:mushroom-entity-card
-      entity: switch.energy_management_system_kalibratie
+      entity: switch.woonkamer_energy_management_system_kalibratie
       name: Kalibratie
       icon: mdi:battery-sync
       secondary_info: last-changed

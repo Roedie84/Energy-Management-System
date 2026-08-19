@@ -7,8 +7,8 @@ Locatie Lochem. Communicatie in het Nederlands, terse stijl.
 
 - Repo: https://github.com/Roedie84/Energy-Management-System
 - Lokaal: `/home/claude/ems/`
-- **Huidige versie: v3.27.1**, 2531 tests groen
-- Zip: `/mnt/user-data/outputs/energy_management_system_v3.27.1.zip`
+- **Huidige versie: v3.27.2**, 2535 tests groen
+- Zip: `/mnt/user-data/outputs/energy_management_system_v3.27.2.zip`
 
 ## Werkwijze (belangrijk)
 1. Diagnostiek-export lezen uit `/mnt/user-data/uploads/`
@@ -105,6 +105,7 @@ melden met de reeks als bewijs.
 | v3.26.1 | koeling stopt bij stille accu; netlading-tellers in de export |
 | v3.27.0 | kalibratiestand: sturing eruit, koeling erin, leren gepauzeerd |
 | v3.27.1 | kritieke melding zodra de accu vol is in kalibratiestand |
+| v3.27.2 | kalibratiekaart wees naar een entiteit-id zonder gebiedsvoorvoegsel |
 
 ## Proefstand (9 kandidaten, sturen niets)
 - **Slijtagekosten** 4,22 ct/kWh — klaar om mee te doen
@@ -123,6 +124,7 @@ becijferd, niet gunstig.
 4. Berekend maar nergens gelezen (v3.25.1)
 5. Onveilige SVG-elementen in alle platen (v3.25.4)
 6. Getters die ruwe SVG naar een markdown-kaart teruggeven (v3.26.0)
+7. Schakelaarkaarten met een afwijkend entiteit-voorvoegsel (v3.27.2)
 
 ## Vaste afspraken
 - Proefstandkandidaten sturen pas na bewijs, één tegelijk
