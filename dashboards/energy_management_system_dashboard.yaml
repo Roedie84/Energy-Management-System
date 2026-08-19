@@ -218,6 +218,27 @@ views:
       grid_options:
         columns: 12
         rows: auto
+    - type: custom:mushroom-template-card
+      primary: Verbruiksleer opnieuw beginnen
+      secondary: >-
+        {% set e = 'button.woonkamer_energy_management_system_verbruiksleer_opnieuw_beginnen'
+        %}{% set wacht = state_attr(e, 'seconden_resterend') %}{% if wacht %}DRUK
+        NOGMAALS binnen {{ wacht }} s om te bevestigen{% else %}{% set l =
+        state_attr(e, 'laatste_reset') %}{{ 'laatst ' ~
+        (as_timestamp(l) | timestamp_custom('%-d %b %H:%M')) if l and l !=
+        'nog niet gebruikt' else 'nog niet gebruikt' }}{% endif %}
+      icon: mdi:broom
+      icon_color: >-
+        {{ 'red' if state_attr('button.woonkamer_energy_management_system_verbruiksleer_opnieuw_beginnen',
+        'bevestiging_nodig') else 'grey' }}
+      entity: button.woonkamer_energy_management_system_verbruiksleer_opnieuw_beginnen
+      tap_action:
+        action: toggle
+      hold_action:
+        action: more-info
+      grid_options:
+        columns: 12
+        rows: auto
     - type: custom:mushroom-entity-card
       entity: switch.energy_management_system_learning_only_no_control
       name: Learning only
@@ -641,6 +662,16 @@ views:
     icon: mdi:bell-alert-outline
     icon_color: '{{ ''green'' if is_state(''switch.woonkamer_energy_management_system_melding_kalibratie_vol'', ''on'') else ''grey'' }}'
     entity: switch.woonkamer_energy_management_system_melding_kalibratie_vol
+    tap_action:
+      action: toggle
+    hold_action:
+      action: more-info
+  - type: custom:mushroom-template-card
+    primary: Verbruiksleer opnieuw begonnen
+    secondary: '{% set e = ''switch.woonkamer_energy_management_system_melding_verbruiksleer_reset'' %}{% set last = state_attr(e, ''laatst_verstuurd'') %}{{ ''AAN'' if is_state(e, ''on'') else ''uit'' }} · demping 1440 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom(''%-d %b %H:%M'') }}{% endif %}'
+    icon: mdi:bell-outline
+    icon_color: '{{ ''green'' if is_state(''switch.woonkamer_energy_management_system_melding_verbruiksleer_reset'', ''on'') else ''grey'' }}'
+    entity: switch.woonkamer_energy_management_system_melding_verbruiksleer_reset
     tap_action:
       action: toggle
     hold_action:

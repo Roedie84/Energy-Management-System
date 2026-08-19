@@ -65,8 +65,13 @@ from .const import (
     BATTERY_STATE_IDLE,
     CONF_BATTERY_INVERTER_PRICE_EUR,
     CONF_BATTERY_CYCLE_LIFE,
+    CONF_BATTERY_CALENDAR_YEARS,
     CONF_BATTERY_MODULE_PRICE_EUR,
     DEFAULT_BATTERY_CYCLE_LIFE,
+    DEFAULT_BATTERY_CALENDAR_YEARS,
+    BATTERY_CALENDAR_MIN_DAYS,
+    BATTERY_MODULE_CAPACITY_KWH,
+    WEAR_COST_MIN_MARGIN_EUR,
     CONF_BATTERY_POWER_SENSOR,
     CONF_BATTERY_STATE_SENSOR,
     CONF_CONSUMPTION_POWER_SENSOR,
@@ -221,6 +226,8 @@ from .const import (
     CONF_PV_POWER_SENSOR,
     CONF_SOC_SENSOR,
     KALIBRATIE_VOL_PERCENT,
+    KALIBRATIE_MIN_SCHAALDEEL,
+    VERBRUIKSLEER_RESET_BEVESTIGING_SECONDEN,
     CONF_SOLAR_FORECAST_SENSOR,
     CONF_SOLAR_EXTENDED_FORECAST_SENSORS,
     CONF_SOLAR_TODAY_FORECAST_SENSOR,
@@ -376,6 +383,7 @@ from .const import (
     PRESENCE_ABSENCE_AFTER_MINUTES_FAST,
     PRESENCE_INTRUSION_COOLDOWN_MINUTES,
     PRESENCE_LAST_SEEN_LENGTH,
+    PRESENCE_WATER_MIN_LITERS_PER_MINUTE,
     PRESENCE_BEDTIME_EARLIEST_HOUR,
     PRESENCE_BEDTIME_LATEST_HOUR,
     PRESENCE_SLEEP_WINDOW_HOURS,
@@ -481,6 +489,7 @@ from .const import (
     ENERGY_DAILY_HISTORY_DAYS,
     ENERGY_DAY_MIN_SOURCE_KWH,
     ENERGY_DAY_SANITY_MAX_KWH,
+    ENERGY_DAY_EXPORT_WITHOUT_PV_MAX_KWH,
     ENERGY_UNIT_TO_KWH,
     SELF_CONSUMPTION_MIN_PV_KWH,
     ENERGY_BALANCE_ERROR_BAD_THRESHOLD_W,
@@ -691,6 +700,12 @@ class EnergyManagementSystemCoordinator:
         # bij 2000 W is dat bescherming, geen optimalisatie.
         self.kalibratie: bool = False
         self.kalibratie_momentopname: dict | None = None
+        self._kalibratie_meting: dict | None = None
+        # v3.30.0: wanneer de verbruiksleer voor het laatst opnieuw is
+        # begonnen, en wat er toen is weggegooid.
+        self.verbruiksleer_reset_op: str | None = None
+        self.verbruiksleer_reset_historie: list[dict] = []
+        self._verbruiksleer_reset_gevraagd_op: datetime | None = None
         self.steelstofzuiger_override: bool = False
         self.fietsladers_override: bool = False
         # Appliance-ready notification toggle (v0.63.54, requested):
@@ -1390,7 +1405,6 @@ class EnergyManagementSystemCoordinator:
         # van ontladen (niet laden) energie, de gangbare conventie voor
         # cyclus-telling.
         self.battery_cumulative_discharged_kwh: float = 0.0
-        self._battery_cycle_last_available_kwh: float | None = None
         self._battery_cycle_last_sample: datetime | None = None
 
         # -- CO2-intensiteit van het net (v0.63.101) --
@@ -1433,7 +1447,6 @@ class EnergyManagementSystemCoordinator:
         self.learned_efficiency_history: list[float] = []
         self._efficiency_cumulative_charged_kwh: float = 0.0
         self._efficiency_cumulative_discharged_kwh: float = 0.0
-        self._efficiency_checkpoint_available_kwh: float | None = None
         self._efficiency_last_sample_time: datetime | None = None
         # v1.32.0: rendement per halve slag. Een stuk loopt zolang de
         # accu dezelfde kant op gaat.
@@ -1464,6 +1477,8 @@ class EnergyManagementSystemCoordinator:
         # verderop) voor volledige achterwaartse compatibiliteit met
         # bestaande sensoren/diagnostiek-attributen.
         self.reserve_daily_records: list[dict] = []
+        # v3.29.0: welke dagregels als fysiek onmogelijk zijn opgeruimd.
+        self.dagreeks_verwijderd: list[dict] = []
         self._shortfall_detected_today: bool = False
         self._shortfall_check_date: date | None = None
         self._excess_detected_today: bool = False
@@ -1965,6 +1980,16 @@ class EnergyManagementSystemCoordinator:
             self._unsub_water_state()
         if self._unsub_battery_cooling_state:
             self._unsub_battery_cooling_state()
+        # v3.29.0: en de terugregeltaak van de panelen.
+        #
+        # Gevonden bij de doorlichting van 19 augustus: die taak werd
+        # aangemaakt en nergens opgezegd. Bij een herlaad van de
+        # integratie liep hij door en kon hij nog naar de omvormer
+        # schrijven terwijl de nieuwe coordinator al draaide.
+        taak = getattr(self, "_solar_ramp_task", None)
+        if taak is not None and not taak.done():
+            taak.cancel()
+        self._solar_ramp_task = None
         # v1.0.4: een geplande, nog niet uitgevoerde opslag zou bij een
         # herstart alsnog verloren gaan - dus hier hard wegschrijven.
         await self.async_save_persisted_state_now()
@@ -2045,6 +2070,172 @@ class EnergyManagementSystemCoordinator:
         else:
             self.annuleer_nu_laden()
         await self.async_update()
+
+    def vraag_verbruiksleer_reset(self, now: datetime | None = None) -> dict:
+        """Eerste druk wapent, tweede druk voert uit (v3.30.0).
+
+        Gevraagd: "De reset button moet na een druk op de knop nog een
+        keer bevestigd worden dat een reset zeker gewenst is."
+
+        Terecht: de knop gooit onomkeerbaar weg wat in weken is
+        opgebouwd, en een knop in Home Assistant kent geen
+        bevestigingsvenster. Dus doet de knop het zelf.
+
+        De aanvraag vervalt vanzelf na
+        `VERBRUIKSLEER_RESET_BEVESTIGING_SECONDEN`. Een knop die na een
+        uur nog scherp staat is gevaarlijker dan een knop zonder
+        bevestiging - dan drukt iemand er een keer op zonder te weten
+        dat de vorige druk er nog stond.
+        """
+        nu = now or dt_util.now()
+        gevraagd = self._verbruiksleer_reset_gevraagd_op
+        if gevraagd is not None:
+            verstreken = (nu - gevraagd).total_seconds()
+            if 0 <= verstreken <= VERBRUIKSLEER_RESET_BEVESTIGING_SECONDEN:
+                self._verbruiksleer_reset_gevraagd_op = None
+                gewist = self.reset_verbruiksleer(nu)
+                return {"stap": "uitgevoerd", "gewist": gewist}
+
+        self._verbruiksleer_reset_gevraagd_op = nu
+        self._notify_listeners()
+        _LOGGER.warning(
+            "Verbruiksleer-reset gevraagd; druk binnen %d seconden nogmaals "
+            "om te bevestigen",
+            VERBRUIKSLEER_RESET_BEVESTIGING_SECONDEN,
+        )
+        return {
+            "stap": "bevestiging_nodig",
+            "seconden": VERBRUIKSLEER_RESET_BEVESTIGING_SECONDEN,
+        }
+
+    def verbruiksleer_reset_wacht_op_bevestiging(
+        self, now: datetime | None = None
+    ) -> float | None:
+        """Hoeveel seconden er nog zijn om te bevestigen, of None."""
+        gevraagd = self._verbruiksleer_reset_gevraagd_op
+        if gevraagd is None:
+            return None
+        nu = now or dt_util.now()
+        rest = VERBRUIKSLEER_RESET_BEVESTIGING_SECONDEN - (
+            nu - gevraagd
+        ).total_seconds()
+        if rest <= 0:
+            return None
+        return round(rest)
+
+    def reset_verbruiksleer(self, now: datetime | None = None) -> dict:
+        """Begint de verbruiksleer opnieuw (v3.30.0).
+
+        Gevraagd: "Graag een reset knop aanbrengen, voor direct na de
+        vakantie. Vanaf dat moment dient er opnieuw geleerd te worden."
+
+        Aanleiding: vijf dagen vakantie zonder de vakantiestand. Het
+        uurprofiel staat kaarsvlak op 0,18 tot 0,29 kW - samen 5,5 kWh
+        per dag, terwijl het huis er op 12 en 13 augustus 12,3 en 12,6
+        door joeg. Geen ochtendpiek, geen avondpiek: een basislast, geen
+        huishouden. Zonder ingrijpen reserveert de integratie bij
+        thuiskomst voor het verkeerde huis.
+
+        Gewist wordt alles wat uit het GEDRAG van de bewoners volgt.
+        Met rust gelaten wordt alles wat een meting is (de dagreeks, de
+        cyclustelling) en alles wat losstaat van bewoning: de
+        zonvoorspelling, het accurendement, de herkende apparaten. Die
+        25 bevestigde apparaten opnieuw laten ontdekken zou weken kosten
+        en er is niets mis mee.
+
+        Wat er weggaat wordt eerst samengevat en bewaard. Een
+        onomkeerbare knop zonder spoor is een knop die je niet durft te
+        gebruiken.
+        """
+        nu = now or dt_util.now()
+        gewist = {
+            "uurprofiel_uren": len(self.hourly_consumption_profile or {}),
+            "nachten": len(self.night_consumption_history or []),
+            "temperatuurmonsters": len(self.temp_consumption_history or []),
+            "basislastdagen": len(self.baseline_load_history or []),
+            "tekortdagen": len(self.reserve_daily_records or []),
+            "bedtijden": len(self.bedtime_history or []),
+            "aanwezigheidshalfuren": len(self.presence_week_profile or {}),
+            "nachtverbruik_kw": self.learned_night_consumption_kw,
+            "sluipverbruik_referentie_w": self.sluipverbruik_reference_w,
+            "tekortvlag_vandaag": self._shortfall_detected_today,
+        }
+
+        # --- verbruik ---
+        self.hourly_consumption_profile = {}
+        self.night_consumption_history = []
+        self.temp_consumption_history = []
+        self.temp_consumption_prediction_error_history = []
+
+        # --- sluipverbruik: anders komt er bij thuiskomst een valse
+        # melding, want de referentie staat op een leeg huis en normaal
+        # gebruik ziet er dan uit als een sprong.
+        self.baseline_load_history = []
+        self.sluipverbruik_reference_w = None
+        self.sluipverbruik_estimated_drift_w = None
+        self.sluipverbruik_detected = False
+        self.cusum_accumulator_kw = 0.0
+
+        # --- de zelfcorrectie van de ontlaadreserve. De tekortdag van
+        # 16 augustus verhoogde de marge met 5 procentpunt en zegt niets
+        # over een bewoond huis.
+        self.reserve_daily_records = []
+
+        # --- het ritme van het huishouden. Elke vakantienacht stond er
+        # 6,5 uur "slaapt" terwijl er niemand was.
+        self.bedtime_history = []
+        self.presence_week_profile = {}
+
+        # v3.30.1: en de dag die op dit moment loopt.
+        #
+        # Gevraagd: "Moet dit dan precies om 12 uur snachts of zo? Dat is
+        # niet handig toch dan slaap ik." Nee - en juist daarom moesten
+        # deze erbij.
+        #
+        # Wie 's middags op de knop drukt, wist de reeksen maar niet de
+        # tellers van de lopende dag. Het uur dat op dat moment bezig is
+        # werd na afloop alsnog aan het verse profiel toegevoegd, met
+        # het verbruik van een leeg huis erin. En stond de tekortvlag
+        # van vandaag aan, dan schoof die om middernacht alsnog als
+        # tekortdag de reeks in - de eerste dag na de reset zou dan
+        # meteen 5 procentpunt marge opleveren.
+        #
+        # "Vanaf dat moment opnieuw leren" hoort ook echt vanaf dát
+        # moment te gelden.
+        self._hour_energy_kwh = 0.0
+        self._hour_duration_hours = 0.0
+        self._today_min_load_kw = None
+        self._shortfall_detected_today = False
+        self._excess_detected_today = False
+
+        self.verbruiksleer_reset_op = nu.isoformat()
+        self.verbruiksleer_reset_historie.append(
+            {"moment": nu.isoformat(), "gewist": gewist}
+        )
+        self.verbruiksleer_reset_historie = self.verbruiksleer_reset_historie[
+            -10:
+        ]
+
+        self._dispatch_notification(
+            notify_service=self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE),
+            title="🧹 Verbruiksleer opnieuw begonnen",
+            message=(
+                f"Weggegooid: {gewist['uurprofiel_uren']} uren profiel, "
+                f"{gewist['nachten']} nachten, "
+                f"{gewist['tekortdagen']} tekortdag(en) en "
+                f"{gewist['basislastdagen']} dagen basislast. "
+                "De zonvoorspelling, het accurendement en de herkende "
+                "apparaten zijn niet aangeraakt. Reken op ongeveer een "
+                "week voordat de reserve weer klopt; tot die tijd is een "
+                "ruimere ondergrens verstandig."
+            ),
+            notification_id="ems_verbruiksleer_reset",
+            kind="verbruiksleer_reset",
+        )
+        _LOGGER.warning("Verbruiksleer opnieuw begonnen: %s", gewist)
+        self.schedule_persisted_state_save()
+        self._notify_listeners()
+        return gewist
 
     async def async_set_kalibratie(self, value: bool) -> None:
         """Zet de kalibratiestand aan of uit (v3.27.0).
@@ -5472,6 +5663,11 @@ class EnergyManagementSystemCoordinator:
             # zie je sneller dat er niemand is.
             if self._tv_staat_aan():
                 self.presence_state = "thuis"
+            elif self._stromend_water():
+                # v3.29.0: een lopende kraan is het sterkste signaal dat
+                # er is, en het enige dat een simulatie-automatisering
+                # niet kan nabootsen.
+                self.presence_state = "thuis"
             elif self._brandend_licht() is not None:
                 # v1.36.0: een brandende lamp binnenshuis telt als
                 # aanwezig, net als de tv. Niet tijdens de vakantiestand.
@@ -5621,6 +5817,8 @@ class EnergyManagementSystemCoordinator:
             laat = stil is None or stil >= self._afwezigheidsdrempel_minuten()
             if self._tv_staat_aan() and laat:
                 return "tv staat aan"
+            if self._stromend_water() and laat:
+                return "er loopt water"
             licht = self._brandend_licht()
             if licht is not None and laat:
                 return f"licht aan ({licht})"
@@ -5909,6 +6107,33 @@ class EnergyManagementSystemCoordinator:
             return False
         return str(staat.state).lower() in ("on", "playing", "paused", "true")
 
+    def _stromend_water(self) -> bool:
+        """Loopt er op dit moment water? (v3.29.0)
+
+        De constante `PRESENCE_WATER_MIN_LITERS_PER_MINUTE` stond sinds
+        de bouw van de waterregistratie in const.py, met de toelichting
+        dat water als aanwezigheidsbewijs meetelt - óók tijdens de
+        vakantiestand, want water loopt niet vanzelf en er is geen
+        tijdklok die het aanzet.
+
+        Bij de doorlichting van 19 augustus bleek die constante nergens
+        gelezen te worden. De toelichting beschreef gedrag dat niet
+        bestond, en dat is erger dan geen toelichting.
+
+        Dit is precies het geval waarvoor het bedoeld was: het huis staat
+        leeg, om de dag komt er iemand de dieren verzorgen, en de enige
+        sensor die dat betrouwbaar ziet is de watermeter. Een lamp of een
+        tv kan door een simulatie-automatisering zijn aangezet; een kraan
+        niet.
+        """
+        entity_id = self.config.get(CONF_WATER_ACTIVE_USAGE_SENSOR)
+        if not entity_id:
+            return False
+        stroom = self._read_sensor_float(entity_id)
+        if stroom is None:
+            return False
+        return stroom >= PRESENCE_WATER_MIN_LITERS_PER_MINUTE
+
     def _brandend_licht(self) -> str | None:
         """Welke gekozen lamp brandt er? (v1.36.0)
 
@@ -6102,6 +6327,7 @@ class EnergyManagementSystemCoordinator:
                 self.config.get(CONF_PRESENCE_LIGHT_ENTITIES) or []
             ),
             "licht_aan": self._brandend_licht(),
+            "water_loopt": self._stromend_water(),
             "tv_staat_aan": self._tv_staat_aan(),
             "afwezig_na_minuten": self._afwezigheidsdrempel_minuten(),
             "laatst_gezien": [
@@ -8402,9 +8628,22 @@ class EnergyManagementSystemCoordinator:
             "onderbouwing": (
                 f"{overzicht['modules']} modules à € "
                 f"{overzicht['moduleprijs_eur']:.0f} over "
-                f"{overzicht['totale_doorzet_kwh']:,.0f} kWh doorzet "
-                f"({overzicht['cycli_verwacht']} cycli x "
-                f"{overzicht['bruikbaar_kwh']} kWh)."
+                f"{overzicht['totale_doorzet_kwh']:,.0f} kWh doorzet"
+                + (
+                    # v3.29.0: hier stond "6000 cycli x 7,78 kWh" terwijl
+                    # de doorzet met de NOMINALE 8,64 was gerekend -
+                    # 6000 x 7,78 is 46.680 en niet 51.840. De zin klopte
+                    # rekenkundig niet.
+                    f" ({overzicht['cycli_verwacht']} cycli x "
+                    f"{overzicht['nominale_capaciteit_kwh']} kWh)."
+                    if overzicht.get("bindende_grens") == "cycli"
+                    else (
+                        f" ({overzicht['kalenderjaren']} jaar x "
+                        f"{overzicht['gemeten_jaardoorzet_kwh']:,.0f} kWh "
+                        "gemeten per jaar - de kalender is eerder op dan "
+                        f"de {overzicht['cycli_verwacht']} cycli)."
+                    )
+                )
             ).replace(",", "."),
             "betrouwbaarheid": (
                 "Het cyclusaantal is een belofte van de fabrikant, geen "
@@ -8891,6 +9130,23 @@ class EnergyManagementSystemCoordinator:
             },
         }
 
+    def _gemeten_jaardoorzet_kwh(self) -> float | None:
+        """Hoeveel kWh gaat er per jaar door de accu? (v3.29.0)
+
+        Geschat uit de gemeten doorzet sinds de eerste dag. Onder
+        `BATTERY_CALENDAR_MIN_DAYS` dagen niet: een schatting uit vijf
+        dagen die de slijtage kan verdubbelen, hoort niet mee te tellen.
+        """
+        if not self.first_seen_date:
+            return None
+        dagen = (dt_util.now().date() - self.first_seen_date).days + 1
+        if dagen < BATTERY_CALENDAR_MIN_DAYS:
+            return None
+        doorzet = self.battery_cumulative_discharged_kwh or 0.0
+        if doorzet <= 0:
+            return None
+        return doorzet / dagen * 365
+
     def get_wear_cost_overview(self) -> dict:
         """Wat kost het om een kWh door de accu te sturen? (v1.38.0)
 
@@ -8964,7 +9220,33 @@ class EnergyManagementSystemCoordinator:
         # praktijk juist LANGER mee dan de opgegeven 6000. Die winst
         # wordt hier niet meegerekend - dat is de conservatieve kant, en
         # zonder meting valt er niets beters over te zeggen.
-        doorzet_kwh = (capaciteit or bruikbaar) * cycli
+        cyclus_doorzet_kwh = (capaciteit or bruikbaar) * cycli
+
+        # v3.29.0: de cycli raken niet op - de kalender wel.
+        #
+        # Gevonden bij de doorlichting van 19 augustus: 86,3 kWh in 18
+        # dagen is ruwweg 1.750 kWh per jaar. Bij 51.840 kWh cyclus-
+        # doorzet duurt dat DERTIG JAAR. Zo lang gaat geen accu mee, dus
+        # de 4,2 ct/kWh die daaruit volgde was een onderschatting: wat
+        # er werkelijk slijt is de kalender.
+        #
+        # De bindende grens is de kleinste van de twee doorzetten, en
+        # dus de HOOGSTE prijs per kWh. Allebei blijven zichtbaar, want
+        # de kalenderjaren zijn een aanname en de cycli een belofte -
+        # geen van beide is een meting.
+        jaren = self.config.get(
+            CONF_BATTERY_CALENDAR_YEARS, DEFAULT_BATTERY_CALENDAR_YEARS
+        )
+        kalender_doorzet_kwh = None
+        per_jaar_kwh = self._gemeten_jaardoorzet_kwh()
+        if per_jaar_kwh and jaren:
+            kalender_doorzet_kwh = per_jaar_kwh * jaren
+
+        doorzet_kwh = cyclus_doorzet_kwh
+        grens = "cycli"
+        if kalender_doorzet_kwh and kalender_doorzet_kwh < cyclus_doorzet_kwh:
+            doorzet_kwh = kalender_doorzet_kwh
+            grens = "kalender"
         per_kwh = aanschaf / doorzet_kwh
 
         # Het rendementsverlies hoort erbij: om 1 kWh uit de accu te
@@ -8980,6 +9262,19 @@ class EnergyManagementSystemCoordinator:
             "moduleprijs_eur": moduleprijs,
             "aanschafwaarde_eur": round(aanschaf, 2),
             "cycli_verwacht": cycli,
+            "bindende_grens": grens,
+            "kalenderjaren": jaren,
+            "gemeten_jaardoorzet_kwh": (
+                round(per_jaar_kwh) if per_jaar_kwh else None
+            ),
+            "cyclus_doorzet_kwh": round(cyclus_doorzet_kwh),
+            "kalender_doorzet_kwh": (
+                round(kalender_doorzet_kwh) if kalender_doorzet_kwh else None
+            ),
+            "slijtage_ct_per_kwh_cycli": round(
+                aanschaf / cyclus_doorzet_kwh * 100, 2
+            ),
+            "min_marge_eur": WEAR_COST_MIN_MARGIN_EUR,
             "bruikbaar_kwh": round(bruikbaar, 2),
             "nominale_capaciteit_kwh": round(capaciteit, 2) if capaciteit else None,
             "totale_doorzet_kwh": round(doorzet_kwh),
@@ -10371,56 +10666,6 @@ class EnergyManagementSystemCoordinator:
         # Accuvermogen: positief is laden, dus dat gaat ervan af.
         return max(0.0, net + (zon or 0.0) - (accu or 0.0))
 
-    def _oude_overzichtsplaat(self) -> str:
-        return bouw_overzicht(
-            {
-                "status": (self.get_diagnostic_summary() or {}).get("status"),
-                "pv_w": self._read_sensor_float(
-                    self.config.get(CONF_PV_POWER_SENSOR)
-                ),
-                "bewolking": self._weather_cloud_cover_percent(),
-                "zon_rest": self._read_sensor_float(
-                    self.config.get(CONF_SOLAR_REMAINING_TODAY_SENSOR)
-                ),
-                "huis_w": self._read_sensor_float(
-                    self.config.get(CONF_CONSUMPTION_POWER_SENSOR)
-                ),
-                # v3.17.0: NIET `last_heavy_load_source` - dat is een
-                # beslislogica-signaal, geen verbruikersaanduiding. Die
-                # verwarring is in een eerdere versie al rechtgezet en
-                # heeft een eigen test.
-                "grootste": self.get_largest_known_consumer(),
-                # Er is geen aparte netvermogen-sensor; het net is wat
-                # er overblijft. Positief = van het net, negatief =
-                # teruglevering.
-                "net_w": self._netvermogen_w(),
-                "accu_w": self._read_sensor_float(
-                    self.config.get(CONF_BATTERY_POWER_SENSOR)
-                ),
-                "prijs_ct": (
-                    self.last_current_price_per_kwh * 100
-                    if self.last_current_price_per_kwh is not None
-                    else None
-                ),
-                "drempel_ct": (
-                    self.last_expensive_price_threshold * 100
-                    if self.last_expensive_price_threshold is not None
-                    else None
-                ),
-                "modus": self.last_expected_mode,
-                "dure_kwartieren": samenvatting.get("dure_kwartieren"),
-                "soc": self.accustand_procent(),
-                "beschikbaar_kwh": self.beschikbare_energie_kwh(),
-                "koeling": (
-                    "koelt" if koeling.get("ventilator_aan") else "uit"
-                ),
-                "omvormer_c": koeling.get("accu_c"),
-                "sensor_gezondheid": self.sensor_health_score,
-                "sluipverbruik": (
-                    "verhoogd" if self.sluipverbruik_detected else "normaal"
-                ),
-            }
-        )
 
     def get_installation_facts(self) -> dict:
         """Welke versie draait hier, en sinds wanneer? (v3.4.0)
@@ -10609,7 +10854,15 @@ class EnergyManagementSystemCoordinator:
         )
         if None not in (stand, beschikbaar, capaciteit) and capaciteit:
             min_soc = self.effective_min_soc_percent()
-            verwacht = capaciteit * (stand - min_soc) / 100
+            # v3.29.0: op nul afkappen. Een negatieve beschikbare energie
+            # bestaat niet.
+            #
+            # Gemeld door de zelfcontrole zelf, twee keer: "sensor 0,00
+            # kWh, uit de accustand van 6% volgt -0,35 kWh". Onder de
+            # ondergrens van 10% is er niets beschikbaar, en dan meldt
+            # de sensor terecht nul - de toets rekende het verschil met
+            # een getal dat niet kan bestaan.
+            verwacht = max(0.0, capaciteit * (stand - min_soc) / 100)
             _toets(
                 "Beschikbare energie",
                 abs(beschikbaar - verwacht) < max(0.3, verwacht * 0.1),
@@ -10653,6 +10906,36 @@ class EnergyManagementSystemCoordinator:
             f"Onmogelijke waarden op: {', '.join(onzin[:3])}.",
         )
 
+        # --- 5b. Een gat in de dagreeks (v3.29.0) ---
+        #
+        # Gevonden bij de doorlichting van 19 augustus: 16 augustus
+        # ontbrak, tussen 15 en 17 in. Niet door een storing maar door de
+        # opruiming van onmogelijke dagen - alleen stond dat nergens, en
+        # een reeks met een onzichtbaar gat maakt elke weekvergelijking
+        # stiekem scheef.
+        data = sorted(
+            date.fromisoformat(r["datum"])
+            for r in (self.energy_daily_history or [])
+            if r.get("datum")
+        )
+        if len(data) >= 3:
+            opgeruimd = {
+                x.get("datum") for x in (self.dagreeks_verwijderd or [])
+            }
+            gaten = [
+                (data[i] + timedelta(days=1)).isoformat()
+                for i in range(len(data) - 1)
+                if (data[i + 1] - data[i]).days == 2
+            ]
+            onverklaard = [g for g in gaten if g not in opgeruimd]
+            _toets(
+                "Dagreeks",
+                not onverklaard,
+                f"Ontbrekende dag(en): {', '.join(onverklaard[:3])}. "
+                "Geen opruiming vastgelegd, dus die dag is nooit "
+                "afgesloten.",
+            )
+
         # --- 6. Elke periode dezelfde waarde wijst op één bron ---
         try:
             perioden = self.get_period_overview(nu).get("perioden") or {}
@@ -10664,7 +10947,17 @@ class EnergyManagementSystemCoordinator:
             if naam in ("week", "maand", "jaar") and w.get("dagen")
         ]
         if len(lang) >= 2:
-            for sleutel, naam, _e in self.PERIODE_GROOTHEDEN:
+            # v3.29.0: de besparing hoort er ook bij.
+            #
+            # Gevonden bij de doorlichting van 19 augustus: CO2 stond op
+            # 1,41 voor week, maand, jaar én contractjaar - en die werd
+            # keurig gemeld. De besparing stond op -0,09 voor exact
+            # dezelfde vier perioden en werd niet gemeld, want deze lus
+            # liep alleen over `PERIODE_GROOTHEDEN` en de besparing zit
+            # daar niet in: die is een verschil, geen optelling.
+            for sleutel, naam, _e in list(self.PERIODE_GROOTHEDEN) + [
+                ("besparing_eur", "Besparing", "EUR")
+            ]:
                 waarden = [w.get(sleutel) for w in lang]
                 if not (
                     all(v is not None for v in waarden)
@@ -10705,11 +10998,18 @@ class EnergyManagementSystemCoordinator:
                     vandaag_d.replace(day=1),
                     vandaag_d.replace(month=1, day=1),
                 )
+                # De besparing telt de dagen met een tegenfeitelijke
+                # waarde; daar hangt hij vanaf.
+                telsleutel = (
+                    "zonder_sturing_eur"
+                    if sleutel == "besparing_eur"
+                    else sleutel
+                )
                 per_periode = [
                     sum(
                         1
                         for r in (self.energy_daily_history or [])
-                        if r.get(sleutel) is not None
+                        if r.get(telsleutel) is not None
                         and date.fromisoformat(r["datum"]) >= grens
                     )
                     for grens in grenzen
@@ -13989,10 +14289,30 @@ class EnergyManagementSystemCoordinator:
                 u.get("unprotected_aftermath_percent", 0.0),
                 "vast",
             ),
+            # v3.29.0: en de PV-onzekerheid, die hier ontbrak.
+            #
+            # Gevonden bij de doorlichting van 19 augustus: de kaart
+            # toonde 40% totaal terwijl de onderdelen op 30 uitkwamen.
+            # De ontbrekende 10 zat wel in de berekening en niet in de
+            # opsomming - een verschil dat niemand kan naslaan is erger
+            # dan geen opsomming.
+            (
+                "Onzekerheid in de zonvoorspelling",
+                u.get("pv_onzekerheid_percent", 0.0),
+                "dynamisch",
+            ),
         ]
+        opgeteld = round(sum(w for _n, w, _s in onderdelen), 1)
+        totaal = u.get("total_percent")
         return {
             "beschikbaar": True,
-            "totaal_procent": u.get("total_percent"),
+            "totaal_procent": totaal,
+            # v3.29.0: als de som ooit weer uiteenloopt met het totaal,
+            # hoort dat op de kaart te staan en niet stilletjes.
+            "onderdelen_opgeteld_procent": opgeteld,
+            "sluit_aan": (
+                totaal is None or abs(opgeteld - totaal) < 0.05
+            ),
             "vast_procent": round(
                 sum(w for _n, w, s in onderdelen if s == "vast"), 1
             ),
@@ -17508,6 +17828,39 @@ class EnergyManagementSystemCoordinator:
             "co2_kg": self.co2_emitted_today_kg,
         }
 
+    def _migreer_dagreeks_kosten(self) -> None:
+        """Trekt saldo en meterstand uit elkaar in oude dagregels
+        (v3.29.0).
+
+        Tot deze versie schreef het afsluiten van een dag het SALDO onder
+        `kosten_eur`, terwijl ingelezen dagen daar de METERSTAND dragen.
+        Bij elkaar opgeteld leverde dat een jaarkolom van € 241,60 op -
+        twee grootheden onder één naam.
+
+        Een live dag is te herkennen aan `zonder_sturing_eur`: die wereld
+        zonder aansturing wordt alleen live vastgelegd, nooit ingelezen.
+        Het bedrag verhuist naar `netto_eur` en de kostenkolom blijft
+        leeg, want de meterstand van die dag is niet meer te achterhalen.
+        Leeg is hier het eerlijke antwoord: het alternatief is een getal
+        dat iets anders meet dan de kolom eromheen.
+        """
+        verplaatst = 0
+        for regel in self.energy_daily_history or []:
+            if regel.get("zonder_sturing_eur") is None:
+                continue
+            if "netto_eur" in regel:
+                continue
+            regel["netto_eur"] = regel.get("kosten_eur")
+            regel["kosten_eur"] = None
+            verplaatst += 1
+        if verplaatst:
+            _LOGGER.info(
+                "%d dagregel(s): saldo verplaatst van kosten_eur naar "
+                "netto_eur (v3.29.0)",
+                verplaatst,
+            )
+            self.schedule_persisted_state_save()
+
     def _weer_onmogelijke_dagen(self) -> None:
         """Verwijdert dagregels die fysiek niet kunnen (v2.6.1).
 
@@ -17516,19 +17869,71 @@ class EnergyManagementSystemCoordinator:
         inlezen van de geschiedenis. Een fout melden zonder hem op te
         ruimen betekent dat je hem elke dag opnieuw ziet.
         """
-        voor = len(self.energy_daily_history)
+        # v3.29.0: opschrijven WELKE dag eruit ging.
+        #
+        # Gevonden bij de doorlichting van 19 augustus: 16 augustus
+        # ontbrak in de reeks, tussen 15 en 17 in. Geen gat door een
+        # storing maar door deze opruiming - alleen stond dat nergens,
+        # en een reeks met een onzichtbaar gat maakt elke weekvergelijking
+        # stiekem scheef.
+        weggehaald = [
+            r for r in self.energy_daily_history if self._energiedag_is_onzin(r)
+        ]
+        if not weggehaald:
+            return
         self.energy_daily_history = [
             r
             for r in self.energy_daily_history
             if not self._energiedag_is_onzin(r)
         ]
-        weg = voor - len(self.energy_daily_history)
-        if weg:
-            _LOGGER.info(
-                "%d onmogelijke dagregel(s) uit de energiereeks verwijderd",
-                weg,
+        for r in weggehaald:
+            regel = {
+                "datum": r.get("datum"),
+                "reden": self._waarom_dag_onzin(r),
+                "opgeruimd": dt_util.now().isoformat(),
+            }
+            if regel["datum"] not in [
+                x.get("datum") for x in self.dagreeks_verwijderd
+            ]:
+                self.dagreeks_verwijderd.append(regel)
+        self.dagreeks_verwijderd = self.dagreeks_verwijderd[-30:]
+        _LOGGER.info(
+            "%d onmogelijke dagregel(s) uit de energiereeks verwijderd: %s",
+            len(weggehaald),
+            ", ".join(str(r.get("datum")) for r in weggehaald),
+        )
+        self.schedule_persisted_state_save()
+
+    @staticmethod
+    def _waarom_dag_onzin(regel: dict) -> str:
+        """In één zin waarom deze dagregel niet kan (v3.29.0)."""
+        for sleutel in (
+            "opwek_kwh",
+            "verbruik_kwh",
+            "import_kwh",
+            "export_kwh",
+            "accu_ontladen_kwh",
+        ):
+            waarde = regel.get(sleutel)
+            if waarde is not None and abs(waarde) > ENERGY_DAY_SANITY_MAX_KWH:
+                return (
+                    f"{sleutel} stond op {waarde:.1f} kWh - boven de grens "
+                    f"van {ENERGY_DAY_SANITY_MAX_KWH:.0f}."
+                )
+        export = regel.get("export_kwh") or 0.0
+        bronnen = (regel.get("opwek_kwh") or 0.0) + (
+            regel.get("accu_ontladen_kwh") or 0.0
+        )
+        if export > ENERGY_DAY_EXPORT_WITHOUT_PV_MAX_KWH and bronnen <= 0:
+            return (
+                f"{export:.1f} kWh teruglevering zonder opwek en zonder "
+                "accu-ontlading - die energie moet ergens vandaan komen."
             )
-            self.schedule_persisted_state_save()
+        if export > ENERGY_DAY_MIN_SOURCE_KWH and bronnen <= 0:
+            return (
+                f"{export:.1f} kWh teruglevering zonder bron."
+            )
+        return "voldeed niet aan de fysieke controle."
 
     def _sluit_energiedag_af(self, dag) -> None:
         """Legt de energiecijfers van een afgesloten dag vast (v1.90.0)."""
@@ -17573,8 +17978,26 @@ class EnergyManagementSystemCoordinator:
                 "accu_ontladen_kwh": round(
                     _w("accu_ontladen_kwh", self.battery_discharge_today_kwh), 3
                 ),
-                "kosten_eur": round(
-                    _w("kosten_eur", self.actual_cost_today_eur), 4
+                # v3.29.0: DEZELFDE grootheid als de kolom "vandaag" en
+                # als de ingelezen dagen - de kostenmeter.
+                #
+                # Gevonden bij de doorlichting van 19 augustus. Hier
+                # stond `actual_cost_today_eur`: de eigen berekening,
+                # waar de opbrengst van teruglevering vanaf gaat en die
+                # dus negatief kan zijn. Ingelezen dagen dragen de
+                # meterstand, die alleen afname telt en altijd positief
+                # is.
+                #
+                # Twee grootheden onder één sleutel, bij elkaar opgeteld:
+                # de jaarkolom stond op € 241,60 en dat is geen bedrag.
+                # Erger nog, dezelfde dag veranderde bij middernacht van
+                # betekenis - overdag de meter, na afsluiten het saldo.
+                #
+                # Het saldo blijft bewaard onder een eigen naam, want de
+                # besparing is een verschil van twee saldi.
+                "kosten_eur": _w("kosten_eur", self._kosten_vandaag_uit_meter()),
+                "netto_eur": round(
+                    _w("netto_eur", self.actual_cost_today_eur), 4
                 ),
                 "zonder_sturing_eur": round(
                     _w("zonder_sturing_eur", self.counterfactual_cost_today_eur),
@@ -17814,6 +18237,16 @@ class EnergyManagementSystemCoordinator:
             regel.get("accu_ontladen_kwh") or 0.0
         )
         if export > ENERGY_DAY_MIN_SOURCE_KWH and bronnen <= 0:
+            return True
+
+        # v3.29.0: en een dag die MEER terugleverde dan er ooit uit een
+        # huis kan komen zonder opwek. De constante stond er sinds v2.2.2
+        # maar werd nergens gelezen - gevonden bij de doorlichting van 19
+        # augustus.
+        if (
+            export > ENERGY_DAY_EXPORT_WITHOUT_PV_MAX_KWH
+            and (regel.get("opwek_kwh") or 0.0) <= 0
+        ):
             return True
         return False
 
@@ -18196,6 +18629,29 @@ class EnergyManagementSystemCoordinator:
                 if date.fromisoformat(r["datum"]) >= vanaf
             ]
 
+        def _saldo(regel: dict):
+            """Het saldo van een dag (v3.29.0).
+
+            Na de migratie staat dat in `netto_eur`. Een regel die de
+            migratie nog niet zag draagt het nog onder `kosten_eur` -
+            herkenbaar aan de aanwezigheid van `zonder_sturing_eur`.
+            """
+            if "netto_eur" in regel:
+                return regel["netto_eur"]
+            return regel.get("kosten_eur")
+
+        def _telt_mee_als_meterstand(regel: dict) -> bool:
+            """Draagt `kosten_eur` hier werkelijk een meterstand?
+
+            Bij een live regel van vóór v3.29.0 staat daar het saldo, en
+            dat mag niet bij de meterstanden van de ingelezen dagen
+            worden opgeteld.
+            """
+            return not (
+                regel.get("zonder_sturing_eur") is not None
+                and "netto_eur" not in regel
+            )
+
         def _tel(dagen) -> dict | None:
             if not dagen:
                 return None
@@ -18212,10 +18668,22 @@ class EnergyManagementSystemCoordinator:
                 # uit geschiedenis worden bepaald?" Die nullen waren geen
                 # meting maar een gat - en dat hoort zichtbaar te zijn.
                 aanwezig = [
-                    r[sleutel] for r in dagen if r.get(sleutel) is not None
+                    r[sleutel]
+                    for r in dagen
+                    if r.get(sleutel) is not None
+                    and (sleutel != "kosten_eur" or _telt_mee_als_meterstand(r))
                 ]
                 uitkomst[sleutel] = (
                     round(sum(aanwezig), 2) if aanwezig else None
+                )
+                # v3.29.0: hoeveel dagen droegen dit getal werkelijk?
+                #
+                # Gevonden bij de doorlichting van 19 augustus: CO2 en
+                # besparing stonden voor week, maand, jaar én contractjaar
+                # op exact hetzelfde bedrag, omdat maar twee dagen die
+                # kolom hadden. Zonder dit aantal is dat niet te zien.
+                uitkomst.setdefault("dagen_met_waarde", {})[sleutel] = len(
+                    aanwezig
                 )
             # Besparing alleen waar de tegenfeitelijke kosten bekend
             # zijn. Ingelezen dagen hebben die niet: die wereld zonder
@@ -18223,10 +18691,14 @@ class EnergyManagementSystemCoordinator:
             met_tegenfeit = [
                 r for r in dagen if r.get("zonder_sturing_eur") is not None
             ]
+            uitkomst["dagen_met_waarde"]["besparing_eur"] = len(met_tegenfeit)
             uitkomst["besparing_eur"] = (
                 round(
                     sum(
-                        r["zonder_sturing_eur"] - (r.get("kosten_eur") or 0.0)
+                        # v3.29.0: tegen het SALDO, niet tegen de
+                        # meterstand. Die twee zijn sinds deze versie uit
+                        # elkaar getrokken.
+                        r["zonder_sturing_eur"] - (_saldo(r) or 0.0)
                         for r in met_tegenfeit
                     ),
                     2,
@@ -18583,6 +19055,25 @@ class EnergyManagementSystemCoordinator:
             accu_c >= drempel
             and (accu_c - buiten_c) >= BATTERY_COOLING_OPPORTUNITY_DELTA_C
         )
+
+    def _ververs_toestandsvelden(self, now: datetime, entries) -> None:
+        """Houdt de kijkvelden bij terwijl de sturing stilligt (v3.29.0).
+
+        Gevonden bij de doorlichting van 19 augustus: tijdens een
+        kalibratie stonden `sell_check`, `solar_defer_plan` en de
+        accustand leeg, omdat de beslissing eerder terugkeert dan de
+        plek waar die velden gevuld worden. Het dashboard toonde dan
+        lege kaarten alsof er iets stuk was.
+
+        Alleen LEZEN en vastleggen; er wordt hier niets aangestuurd.
+        """
+        soc_entity = self.config.get(CONF_SOC_SENSOR)
+        if soc_entity:
+            self.last_soc_percent = self._read_sensor_float(soc_entity)
+        self.last_current_price_per_kwh = self._get_current_price_per_kwh(
+            entries, now
+        )
+        self.last_household_load_w = self._read_corrected_consumption_power()
 
     def _is_goedkope_koelreden(self, accu_c: float, buiten_c: float) -> bool:
         """Komt de aanzetreden van de goedkope koeling? (v3.26.1)
@@ -19110,6 +19601,66 @@ class EnergyManagementSystemCoordinator:
             return None
         return eigen - (sum(anderen) / len(anderen))
 
+    def _meet_kalibratiecapaciteit(
+        self, now: datetime, soc_percent: float | None
+    ) -> None:
+        """Telt op wat er tijdens een kalibratie de accu in gaat
+        (v3.29.0).
+
+        Gevonden bij de doorlichting van 19 augustus: de proefstand-
+        kandidaat "Accugezondheid over de tijd" meldde "8,64 kWh nu,
+        +0,00 kWh sinds 11 augustus" en zal dat altijd blijven melden.
+        Die 8,64 komt uit `sensor.zendure_manager_total_kwh` - een
+        TYPEPLAATJE. Dat getal verandert nooit, dus die kandidaat kan
+        per definitie geen veroudering vinden.
+
+        Een kalibratie is wél een meting: van 5% naar 100% in één keer,
+        zonder ontladen ertussen. Wat er dan ingaat, gedeeld door het
+        doorlopen deel van de schaal, is de werkelijke capaciteit.
+
+        Er wordt niets op gestuurd. Dit legt alleen vast wat er te meten
+        viel, zodat een tweede kalibratie over een jaar iets heeft om
+        mee te vergelijken.
+        """
+        if not self.kalibratie:
+            self._kalibratie_meting = None
+            return
+
+        accu_w = self._read_sensor_float(
+            self.config.get(CONF_BATTERY_POWER_SENSOR)
+        )
+        meting = self._kalibratie_meting
+        if meting is None:
+            if soc_percent is None:
+                return
+            self._kalibratie_meting = {
+                "begin_soc": soc_percent,
+                "begin": now.isoformat(),
+                "kwh_in": 0.0,
+                "laatste": now,
+            }
+            return
+
+        vorige = meting.get("laatste")
+        meting["laatste"] = now
+        if accu_w is None or vorige is None:
+            return
+        uren = (now - vorige).total_seconds() / 3600
+        if uren <= 0 or uren > 0.5:
+            # Na een herstart of een gat valt er niets af te leiden.
+            return
+        if accu_w > 0:
+            meting["kwh_in"] += accu_w / 1000 * uren
+
+        if soc_percent is None:
+            return
+        meting["eind_soc"] = soc_percent
+        deel = (soc_percent - meting["begin_soc"]) / 100
+        if deel >= KALIBRATIE_MIN_SCHAALDEEL and meting["kwh_in"] > 0:
+            meting["gemeten_capaciteit_kwh"] = round(
+                meting["kwh_in"] / deel, 2
+            )
+
     def _leg_kalibratie_vast(
         self, now: datetime, soc_percent: float | None
     ) -> None:
@@ -19135,10 +19686,21 @@ class EnergyManagementSystemCoordinator:
         if not modules:
             return
 
+        meting = self._kalibratie_meting or {}
         self.kalibratie_momentopname = {
             "moment": now.isoformat(),
             "soc_percent": soc_percent,
             "modules": [dict(m) for m in modules],
+            # v3.29.0: de werkelijk gemeten capaciteit, als de kalibratie
+            # genoeg van de schaal heeft doorlopen.
+            "begin_soc_percent": meting.get("begin_soc"),
+            "geladen_kwh": (
+                round(meting["kwh_in"], 2) if meting.get("kwh_in") else None
+            ),
+            "gemeten_capaciteit_kwh": meting.get("gemeten_capaciteit_kwh"),
+            "typeplaatje_kwh": self._read_sensor_float(
+                self.config.get(CONF_BATTERY_TOTAL_CAPACITY_SENSOR)
+            ),
         }
         self._meld_kalibratie_vol(soc_percent, modules)
 
@@ -22328,6 +22890,7 @@ class EnergyManagementSystemCoordinator:
         if isinstance(stored, dict):
             self._apply_persisted_state(stored)
         self._discard_history_from_an_older_method()
+        self._migreer_dagreeks_kosten()
         # v1.15.0: het oordeel over de meetkwaliteit volgt uit de
         # herstelde foutreeks. Zonder deze aanroep blijft het None tot
         # de eerste nieuwe meting, en verdwijnt het aandachtspunt na een
@@ -26163,9 +26726,11 @@ class EnergyManagementSystemCoordinator:
         self._update_presence(now)
         self._update_peak_power_tracking(now)
         self._update_battery_module_health(now)
-        self._leg_kalibratie_vast(
-            now, self._read_sensor_float(self.config.get(CONF_SOC_SENSOR))
+        _kalibratie_soc = self._read_sensor_float(
+            self.config.get(CONF_SOC_SENSOR)
         )
+        self._meet_kalibratiecapaciteit(now, _kalibratie_soc)
+        self._leg_kalibratie_vast(now, _kalibratie_soc)
         self._update_sensor_cadence_tracking()
         if self._started_at is None:
             # Vangnet: draait de coordinator zonder dat de opslag is
@@ -26348,7 +26913,20 @@ class EnergyManagementSystemCoordinator:
             # doorheen fietsen.
             self.last_reason = "kalibratie"
             self.last_simulated_action = None
-            self._update_financial_tracking(now, entries, self.last_reason, None, None)
+            # v3.29.0: en de kostentelling ligt ook stil.
+            #
+            # Gevonden bij de doorlichting van 19 augustus: netlading,
+            # piek, tekortdetectie, verbruiksleer en apparaatherkenning
+            # stonden wél stil, de tegenfeitelijke kostenvergelijking
+            # niet. Zeven kWh handmatig laden bij 30 ct zette de dag op
+            # € 0,76 werkelijk tegen € 0,49 zonder sturing - alsof de
+            # aansturing die keuze had gemaakt.
+            #
+            # v3.29.0: en de toestandsvelden blijven wél bijwerken. Ze
+            # bevroren tijdens een kalibratie omdat deze tak eerder
+            # terugkeert, en dan staat het halve dashboard stil zonder
+            # dat er iets mis is.
+            self._ververs_toestandsvelden(now, entries)
             self.last_explanation = self._build_explanation()
             return
 

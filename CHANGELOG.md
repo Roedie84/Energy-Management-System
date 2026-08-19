@@ -17244,3 +17244,237 @@ half-om-half verdeling. Dit is de eerste stap; de correctie koppelen aan
 de verwachte bewolking is de structurele oplossing.
 
 **Volledige testsuite**: 2548 tests, allemaal groen.
+
+## v3.29.0 — Wat de volledige doorlichting opleverde
+
+**Gevraagd**: "controleer de volledige integratie op zaken welke niet
+kloppen, beter kunnen, etc etc", en daarna "alle zaken welke je kunt
+oplossen, graag nu oplossen ook al duurt dat lang".
+
+### De slijtage was ruim twee keer te laag
+
+De 4,22 ct/kWh rustte alleen op de 6000 cycli van de fabrikant. Gemeten:
+86,3 kWh in 18 dagen, ruwweg 1.750 kWh per jaar. Dan duurt die 51.840
+kWh **dertig jaar**, en zo lang gaat geen accu mee.
+
+De berekening neemt nu de kleinste van beide doorzetten — cycli of
+kalender — en dus de hoogste prijs per kWh. Bij twaalf jaar komt dat op
+ongeveer 10,4 ct/kWh. Beide getallen blijven zichtbaar met
+`bindende_grens` erbij, want de cycli zijn een belofte en de jaren een
+aanname; geen van beide is een meting. Onder de 14 dagen meting telt de
+kalendergrens niet mee.
+
+Dit werkt door in elke afweging: de drempel van "ruwweg 11 ct" in de
+proefstand wordt daarmee ruwweg 19 ct.
+
+### De jaarkolom van € 241,60 was geen bedrag
+
+Het afsluiten van een dag schreef het SALDO onder `kosten_eur`, terwijl
+ingelezen dagen daar de meterstand dragen. Twee grootheden onder één
+naam, bij elkaar opgeteld. Erger nog: dezelfde dag veranderde bij
+middernacht van betekenis — overdag de meter, na afsluiten het saldo.
+
+Het saldo staat nu apart onder `netto_eur`, en er is een migratie die
+bestaande dagregels omzet. De kostenkolom van die dagen blijft leeg: de
+meterstand van toen is niet meer te achterhalen, en leeg is dan het
+eerlijke antwoord.
+
+### 16 augustus was niet zoekgeraakt
+
+De dag ontbrak tussen 15 en 17 in. Niet door een storing maar door de
+opruiming van fysiek onmogelijke dagregels — alleen stond dat nergens,
+en een reeks met een onzichtbaar gat maakt elke weekvergelijking stiekem
+scheef. De opruiming legt nu vast wélke dag eruit ging en waarom, en er
+is een toets op gaten waar géén opruiming bij hoort.
+
+### Verder
+
+- **`dagen_met_waarde` per grootheid.** CO2 en besparing stonden voor
+  week, maand, jaar én contractjaar op hetzelfde bedrag, omdat maar twee
+  dagen die kolom hadden. Nu is dat af te lezen.
+- **De gelijke-waarden-toets loopt ook over de besparing.** Die viel er
+  buiten omdat hij een verschil is en geen optelling — precies de kolom
+  die het probleem had.
+- **De reservemarge telt op.** `pv_onzekerheid_percent` ontbrak in de
+  opsomming: de kaart toonde 40% totaal met onderdelen die op 30
+  uitkwamen. Er staat nu ook een `sluit_aan` bij.
+- **De zelfcontrole kapt af op nul.** "Sensor 0,00 kWh, uit de accustand
+  van 6% volgt −0,35 kWh" — een negatieve beschikbare energie bestaat
+  niet. Twee van de drie alarmen kwamen hiervandaan.
+- **De slijtagetekst klopt rekenkundig.** Er stond "6000 cycli x 7,78
+  kWh" bij een doorzet van 51.840, en 6000 × 7,78 is 46.680.
+- **Tijdens een kalibratie ligt ook de kostentelling stil**, en blijven
+  de kijkvelden wél bijwerken. Ze bevroren omdat die tak eerder
+  terugkeert, en dan staat het halve dashboard stil zonder dat er iets
+  mis is.
+- **De kalibratie meet nu de werkelijke capaciteit.** De kandidaat
+  "Accugezondheid over de tijd" las een typeplaatje dat nooit verandert
+  en kon dus per definitie niets vinden. Wat er tijdens een kalibratie
+  ingaat, gedeeld door het doorlopen deel van de schaal, is wél een
+  meting.
+- **Water telt mee voor aanwezigheid.** De toelichting bij
+  `PRESENCE_WATER_MIN_LITERS_PER_MINUTE` beschreef dat gedrag al, maar de
+  constante werd nergens gelezen. Een lopende kraan is het enige signaal
+  dat een simulatie-automatisering niet kan nabootsen.
+- **De meetfrequentie-teller overleeft een herstart.** Vier sensoren
+  stonden na zes herstarts nog op 23/30, omdat hij elke keer opnieuw
+  begon.
+- **De terugregeltaak van de panelen wordt opgezegd** bij het ontladen
+  van de integratie. Hij liep door bij een herlaad.
+- **Opgeruimd**: `_oude_overzichtsplaat`, twee dode attributen,
+  `HEALTH_MIN_CADENCE_PERCENT`. Er zijn nu nul ongebruikte constanten.
+- **`BATTERY_MODULE_CAPACITY_KWH`** is de terugval als er geen
+  capaciteitssensor is ingesteld; daarvoor gaf de berekening dan niets.
+
+### Structuurscan 8: elke beslisreden heeft een onderbouwing
+
+`WHY_QUESTIONS` en `_waarom_regels` moeten naast elkaar lopen. Doen ze
+dat niet, dan krijgt de gebruiker het verhaal van een andere beslissing
+te lezen — zoals bij de kalibratie gebeurde. Alle zestien redenen hebben
+op dit moment een eigen tak; de scan houdt dat zo.
+
+**Volledige testsuite**: 2564 tests, allemaal groen.
+
+## v3.30.0 — Verbruiksleer opnieuw beginnen
+
+**Gevraagd**: "Graag een reset knop aanbrengen, voor direct na de
+vakantie. Vanaf dat moment dient er opnieuw geleerd te worden." En
+daarna: "De reset button moet na een druk op de knop nog een keer
+bevestigd worden dat een reset zeker gewenst is."
+
+### Waarom
+
+Sinds 14 augustus 11:00 stond het huis leeg zonder dat de vakantiestand
+aan was. Vijf dagen leeg huis zijn de leerbestanden in gelopen. Het
+uurprofiel staat kaarsvlak op 0,18 tot 0,29 kW — samen 5,5 kWh per dag,
+terwijl het huis er op 12 en 13 augustus 12,3 en 12,6 doorjoeg. Geen
+ochtendpiek, geen avondpiek: dat is een basislast, geen huishouden.
+
+Zonder ingrijpen reserveert de integratie bij thuiskomst voor een huis
+van 5,5 kWh en loopt de accu 's avonds leeg. De tekortdetectie corrigeert
+dat met 5 procentpunt per dag — een week lang, met dure avonden.
+
+### Wat de knop wist
+
+| | |
+|---|---|
+| uurprofiel | het verbruik per uur van de dag |
+| nachtverbruik | de reeks nachten en de geleerde mediaan |
+| temperatuurrelatie | verbruik tegen buitentemperatuur |
+| basislast | inclusief de sluipverbruik-referentie en de cusum-teller |
+| tekortdagen | de zelfcorrectie van de ontlaadreserve |
+| bedtijden | en het aanwezigheidsritme per halfuur |
+
+De sluipverbruik-referentie moet mee: die staat nu op een leeg huis, en
+normaal gebruik ziet er dan uit als een sprong. Zonder wissen krijg je
+bij thuiskomst een valse melding.
+
+### Wat blijft staan
+
+Metingen worden niet aangeraakt: de dagreeks, de cyclustelling, de
+kosten. En alles wat losstaat van bewoning blijft geleerd: de
+zonvoorspelling, het accurendement, en de 25 bevestigde apparaten. Die
+opnieuw laten ontdekken zou weken kosten, en er is niets mis mee.
+
+### Twee drukken
+
+Een knop in Home Assistant kent geen bevestigingsvenster, dus doet de
+knop het zelf: de eerste druk wapent, de tweede voert uit. De aanvraag
+vervalt na zestig seconden vanzelf — een knop die na een uur nog scherp
+staat is gevaarlijker dan een knop zonder bevestiging, want dan drukt
+iemand er een keer op zonder te weten dat de vorige druk er nog stond.
+
+De kaart telt af zolang de knop scherp staat, en toont anders wanneer de
+laatste reset was.
+
+### En een spoor
+
+Wat er weggegooid wordt, wordt eerst samengevat en bewaard in
+`verbruiksleer_reset_historie`: hoeveel uren profiel, hoeveel nachten,
+hoeveel tekortdagen. Een onomkeerbare knop zonder spoor is een knop die
+je niet durft te gebruiken.
+
+Er gaat een melding uit, standaard aan — een stille reset is niet van
+een storing te onderscheiden.
+
+**Volledige testsuite**: 2584 tests, allemaal groen.
+
+## v3.30.1 — De reset geldt ook voor de dag die loopt
+
+**Gevraagd**: "Moet dit dan precies om 12 uur snachts of zo? Dat is niet
+handig toch dan slaap ik."
+
+Nee — en die vraag legde bloot dat het wél uitmaakte, wat niet de
+bedoeling was.
+
+De knop wiste de reeksen maar niet de tellers van de lopende dag. Wie 's
+middags drukte, kreeg het uur dat op dat moment bezig was na afloop
+alsnog aan het verse profiel geplakt, met het verbruik van een leeg huis
+erin. En stond de tekortvlag van vandaag aan, dan schoof die om
+middernacht alsnog als tekortdag de reeks in — waarmee de eerste dag na
+de reset meteen 5 procentpunt marge zou opleveren.
+
+Nu gaan het lopende uur, de dagminimum-basislast en de tekort- en
+overschotvlag van vandaag er ook uit. "Vanaf dat moment opnieuw leren"
+geldt daarmee echt vanaf dát moment, en het tijdstip doet er niet meer
+toe.
+
+De samenvatting vermeldt of er een tekortvlag stond, zodat achteraf te
+zien is dat die is weggevallen.
+
+**Volledige testsuite**: 2587 tests, allemaal groen.
+
+## v3.31.0 — De diagnostiek-export is meer dan gehalveerd
+
+**Gevraagd**: "Is de generatie van de diagnostiek nu ook helemaal
+geoptimaliseerd?"
+
+Nee. Gemeten aan de export van 19 augustus 11:22:
+
+| | |
+|---|---|
+| totaal | 1.243 KB |
+| waarvan `persisted_state_snapshot` | 604 KB |
+| waarvan `battery_module_health` | 109 KB |
+
+### De momentopname droeg alles dubbel
+
+Van die 604 KB was 496 KB een tweede afdruk van reeksen die er los al in
+staan — maar dan **ongekort**. De export knipt `energy_daily_history`
+netjes af op 30 regels; de momentopname ernaast droeg alle 400.
+Hetzelfde bij `bijkoop_history` (30 tegen 300) en
+`lange_reserve_history`. De zorgvuldige afkapping werd teniet gedaan
+door het veld dat ernaast stond.
+
+Die momentopname is er om te zien wát een herstart overleeft. Daarvoor
+is de vorm genoeg: welke velden, hoeveel regels, hoe groot, en een
+voorbeeldregel. De inhoud staat verderop al.
+
+### De ruwe modulemetingen zijn een bereik geworden
+
+Vijf reeksen van 740 monsters per module, maal drie modules: elfduizend
+getallen. Wat er bij de diagnose van 19 augustus werkelijk uit gelezen
+werd, was het bereik — "celspreiding liep deze week op van 0,190 naar
+0,460 V" — en de laatste waarde. Die staan er nu, met het aantal
+metingen en de mediaan erbij.
+
+Het dagoverzicht en de waarschuwingen blijven heel: die dragen de trend
+over dagen, en die is klein.
+
+### En de drijvendekomma-ruis
+
+1.298 getallen met tien of meer decimalen, zoals `0.024999999999999998`
+waar 0,025 bedoeld is. Een artefact van het rekenwerk, vijftien tekens
+per stuk. De laatste stap voor het wegschrijven rondt nu af op zes
+decimalen — ruim voor watt, kWh, euro's en graden.
+
+### Nagerekend op de echte export
+
+```
+voor : 1.243 KB
+na   :   573 KB   (54% kleiner)
+```
+
+Zonder dat er één diagnostisch gegeven verdwijnt dat vandaag gebruikt is.
+
+**Volledige testsuite**: 2601 tests, allemaal groen.

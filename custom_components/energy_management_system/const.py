@@ -1773,6 +1773,7 @@ LOG_PRIORITEITEN = {
     # uit, ondergrens terug. Blijft die melding in de wachtrij hangen,
     # dan staat de sturing uren onnodig stil.
     "kalibratie_vol": LOG_PRIO_KRITIEK,
+    "verbruiksleer_reset": LOG_PRIO_AANDACHT,
     # Aandacht - het vraagt een beslissing.
     "plan_verkoop_geblokkeerd": LOG_PRIO_AANDACHT,
     "battery_module_drift": LOG_PRIO_AANDACHT,
@@ -1826,9 +1827,11 @@ HEALTH_STATUS_GOED = "goed"
 HEALTH_STATUS_AANDACHT = "aandacht"
 HEALTH_STATUS_SLECHT = "slecht"
 
-# Een sensor die bij minder dan dit deel van de rondes beweegt, levert
-# geen bruikbaar tempo meer.
-HEALTH_MIN_CADENCE_PERCENT = 20.0
+# v3.29.0 verwijderd: HEALTH_MIN_CADENCE_PERCENT.
+#
+# Stond hier sinds v1.1.4 en werd nergens gelezen; het oordeel over de
+# meetfrequentie loopt via SENSOR_CADENCE_SLOW_PERCENT. Twee drempels
+# voor hetzelfde is een uitnodiging om de verkeerde te wijzigen.
 
 # Meer dan dit aantal ticks zonder geslaagde ronde is een storing.
 HEALTH_MAX_MISSED_TICKS = 3
@@ -2035,11 +2038,41 @@ WEATHER_ENSEMBLE_AGREEMENT_USABLE_PERCENT = 60.0
 # en wachten op een getal dat niet komt levert geen meting op.
 KALIBRATIE_VOL_PERCENT = 99.0
 
+# Minimaal deel van de schaal dat een kalibratie moet doorlopen voordat
+# de gemeten capaciteit iets betekent (v3.29.0). Van 60 naar 100 procent
+# is een halve meting; de afrondingsfout op de laadstand weegt dan zwaar.
+KALIBRATIE_MIN_SCHAALDEEL = 0.7
+
+# Hoe lang een gevraagde reset op bevestiging wacht (v3.30.0).
+#
+# Gevraagd: "De reset button moet na een druk op de knop nog een keer
+# bevestigd worden dat een reset zeker gewenst is."
+#
+# Een knop in Home Assistant kent geen bevestigingsvenster, dus doet de
+# knop het zelf: de eerste druk wapent, de tweede voert uit. Loopt de
+# tijd af, dan vervalt de aanvraag vanzelf - een knop die na een uur nog
+# scherp staat is gevaarlijker dan een knop zonder bevestiging.
+#
+# Zestig seconden: lang genoeg om te lezen wat er gaat gebeuren, kort
+# genoeg om niet per ongeluk scherp te blijven staan.
+VERBRUIKSLEER_RESET_BEVESTIGING_SECONDEN = 60
+
 PERSISTED_PLAIN_FIELDS = (
     # v3.27.0: de kalibratiestand en de momentopname bovenin. Een
     # kalibratie duurt uren; een herstart halverwege mag hem niet
     # stilzwijgend afbreken, en de meting op vol mag niet verdwijnen.
     "kalibratie",
+    "dagreeks_verwijderd",
+    # v3.29.0: de meetfrequentie-teller. Die begon bij elke herstart
+    # opnieuw op nul, dus wie zijn integratie vaak bijwerkt zag altijd
+    # "onvoldoende data" en nooit een oordeel. Gevonden op 19 augustus,
+    # toen vier sensoren na zes herstarts nog steeds op 23/30 stonden.
+    "sensor_cadence",
+    # v3.30.0: wanneer de verbruiksleer opnieuw is begonnen, en wat er
+    # toen is weggegooid. Zonder dat is later niet te verklaren waarom
+    # een profiel maar drie dagen oud is.
+    "verbruiksleer_reset_op",
+    "verbruiksleer_reset_historie",
     "kalibratie_momentopname",
     # v1.16.5, gemeld: "Vandaag: 0.0 kWh opgewekt" terwijl de omvormer
     # 15,5 kWh had geproduceerd.
@@ -2572,6 +2605,13 @@ NOTIFICATION_TYPES: tuple[tuple[str, str, str, bool, int], ...] = (
         "Wanneer de koelventilator van de thuisaccu schakelt.",
         True,
         15,
+    ),
+    (
+        "verbruiksleer_reset",
+        "Verbruiksleer opnieuw begonnen",
+        "Wanneer de geleerde verbruikspatronen met de knop zijn gewist.",
+        True,
+        1440,
     ),
     (
         "kalibratie_vol",
@@ -3913,7 +3953,32 @@ BATTERY_MODULE_CAPACITY_KWH = 2.88
 # meting - en het wordt vanzelf toetsbaar zodra de gezondheidstrend
 # erbij komt (punt 4).
 CONF_BATTERY_CYCLE_LIFE = "battery_cycle_life"
+CONF_BATTERY_CALENDAR_YEARS = "battery_calendar_years"
 DEFAULT_BATTERY_CYCLE_LIFE = 6000
+
+# Hoeveel jaar een thuisaccu meegaat als de cycli niet op raken (v3.29.0).
+#
+# Gevonden bij de volledige doorlichting van 19 augustus: de slijtage per
+# kWh rustte alleen op de 6000 cycli van de fabrikant. Met een gemeten
+# doorzet van 86,3 kWh in 18 dagen - ruwweg 1.750 kWh per jaar - duurt
+# het DERTIG JAAR voordat die 51.840 kWh vol is. Zo lang gaat geen accu
+# mee.
+#
+# Wat er dan werkelijk slijt is de kalender, niet de cyclus. Bij twaalf
+# jaar en 1.750 kWh per jaar is de doorzet 21.000 kWh, en dat maakt de
+# slijtage 10,4 ct/kWh in plaats van 4,2 - ruim tweeënhalf keer zoveel.
+#
+# Twaalf jaar is aan de voorzichtige kant van wat er voor LFP wordt
+# opgegeven, en het is niet meer dan een aanname. Vandaar dat de
+# berekening het MAXIMUM van beide neemt en allebei laat zien.
+DEFAULT_BATTERY_CALENDAR_YEARS = 12
+
+# Minimaal aantal dagen meting voordat de kalendergrens meetelt.
+#
+# De jaarlijkse doorzet wordt uit de gemeten dagen geschat. Bij vijf
+# dagen is dat een gok, en een gok die de slijtage kan verdubbelen hoort
+# niet mee te tellen.
+BATTERY_CALENDAR_MIN_DAYS = 14
 
 # Onder deze marge is doorzetten door de accu het niet waard: de
 # slijtage plus het rendementsverlies eet de winst op. Puur informatief
@@ -4321,6 +4386,10 @@ PLAN_CHANGE_MIN_QUARTERS = 1
 # Let op: dit is een benadering van Achterhoeks Nedersaksisch, geen
 # gecontroleerde streektaal. Klopt een woord niet, dan is het zo
 # aangepast - het staat allemaal in deze ene tabel.
+# v3.29.0: de Achterhoekse meldingen staan als schakelaar in Home
+# Assistant en herstellen zichzelf; deze sleutel werd nergens gelezen.
+# Bewaard omdat een instelling die ooit is weggeschreven bij het
+# verwijderen van de sleutel stilzwijgend zou vervallen.
 CONF_ACHTERHOEKS = "achterhoeks_meldingen"
 
 # Titels per meldingsoort.
@@ -4384,6 +4453,7 @@ ACHTERHOEKS_TITELS = {
     # hieronder staat is de terugval als de actie niet af te leiden is.
     "battery_cooling": "Accukoeling",
     "kalibratie_vol": "De accu is vol - kalibratie klaor",
+    "verbruiksleer_reset": "t Leren begint opnieuw",
     "appliance_ready": "'n Apparaat is klaor",
     "appliance_cheap_moment": "Good moment veur 'n apparaat",
     "device_drift": "'n Apparaat wiekt af",

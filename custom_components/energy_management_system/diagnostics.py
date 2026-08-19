@@ -76,6 +76,123 @@ def _iso(value: datetime | date | None) -> str | None:
     return value.isoformat() if value is not None else None
 
 
+# v3.31.0: hoeveel regels een reeks mag hebben voordat hij wordt
+# samengevat in de opslag-momentopname.
+BEKNOPT_DREMPEL = 25
+
+# Zoveel decimalen blijven staan. Ruim voor alles wat hier gemeten
+# wordt: watt, kWh, euro's en graden.
+AFROND_DECIMALEN = 6
+
+
+def _kort_af(waarde):
+    """Rondt drijvendekomma-ruis af (v3.31.0).
+
+    Gemeten in de export van 19 augustus: 1.298 getallen met tien of meer
+    decimalen, zoals `0.024999999999999998` waar 0,025 bedoeld is. Dat is
+    een artefact van het rekenwerk en kost per stuk vijftien tekens.
+
+    Booleans zijn in Python ook getallen; die moeten expliciet met rust
+    gelaten worden, anders wordt True een 1.
+    """
+    if isinstance(waarde, bool) or waarde is None:
+        return waarde
+    if isinstance(waarde, float):
+        return round(waarde, AFROND_DECIMALEN)
+    if isinstance(waarde, dict):
+        return {k: _kort_af(v) for k, v in waarde.items()}
+    if isinstance(waarde, (list, tuple)):
+        return [_kort_af(v) for v in waarde]
+    return waarde
+
+
+def _reeks_samenvatting(reeks: list) -> dict:
+    """Vat een reeks meetwaarden samen tot wat je eruit afleest
+    (v3.31.0).
+
+    De ruwe dagmetingen van de accumodules stonden met 740 monsters per
+    reeks in de export: vijf reeksen maal drie modules is elfduizend
+    getallen, samen 70 KB. Wat er bij de diagnose van 19 augustus
+    werkelijk uit gelezen werd, was het bereik - "celspreiding liep deze
+    week op van 0,190 naar 0,460 V" - en de laatste waarde.
+
+    Het dagoverzicht (`geschiedenis`) blijft ongemoeid: dat is de reeks
+    die de trend over dagen draagt, en die is klein.
+    """
+    getallen = [x for x in reeks if isinstance(x, (int, float))]
+    if not getallen:
+        return {"metingen": len(reeks)}
+    getallen_sorted = sorted(getallen)
+    midden = len(getallen_sorted) // 2
+    return {
+        "metingen": len(getallen),
+        "laagste": round(min(getallen), 6),
+        "hoogste": round(max(getallen), 6),
+        "mediaan": round(getallen_sorted[midden], 6),
+        "laatste": round(getallen[-1], 6),
+    }
+
+
+def _beknopte_modulegezondheid(gezondheid: dict) -> dict:
+    """Ruwe monsterreeksen samenvatten, oordelen laten staan."""
+    if not isinstance(gezondheid, dict):
+        return gezondheid
+    uit = {}
+    for module, gegevens in gezondheid.items():
+        if not isinstance(gegevens, dict):
+            uit[module] = gegevens
+            continue
+        beknopt = {}
+        for sleutel, waarde in gegevens.items():
+            if sleutel in ("dag_metingen", "soc_buckets") and isinstance(
+                waarde, dict
+            ):
+                beknopt[sleutel] = {
+                    naam: (
+                        _reeks_samenvatting(reeks)
+                        if isinstance(reeks, list)
+                        else reeks
+                    )
+                    for naam, reeks in waarde.items()
+                }
+            else:
+                beknopt[sleutel] = waarde
+        uit[module] = beknopt
+    return uit
+
+
+def _beknopt(waarde, drempel: int = BEKNOPT_DREMPEL):
+    """Vat een lange reeks samen tot zijn vorm (v3.31.0).
+
+    Gevraagd: "Is de generatie van de diagnostiek nu ook helemaal
+    geoptimaliseerd?" Dat was hij niet. De export was 1.243 KB en de
+    opslag-momentopname alleen al 604 KB, waarvan 496 KB een tweede
+    afdruk van reeksen die er los al in staan - maar dan ONGEKORT. De
+    export knipt `energy_daily_history` af op 30 regels; de momentopname
+    ernaast droeg alle 400.
+
+    Die momentopname is er om te zien wat een herstart overleeft.
+    Daarvoor is de vorm genoeg: welke velden, hoeveel regels, hoe groot.
+    De inhoud staat verderop, en waar niet is een samenvatting genoeg om
+    te zien dat het veld gevuld is.
+    """
+    if isinstance(waarde, (list, tuple)) and len(waarde) > drempel:
+        return {
+            "soort": "lijst",
+            "regels": len(waarde),
+            "ongeveer_kb": round(len(str(waarde)) / 1024, 1),
+            "voorbeeld": _kort_af(waarde[-1]),
+        }
+    if isinstance(waarde, dict) and len(str(waarde)) > drempel * 200:
+        return {
+            "soort": "map",
+            "sleutels": len(waarde),
+            "ongeveer_kb": round(len(str(waarde)) / 1024, 1),
+            "voorbeeld_sleutels": sorted(map(str, waarde))[:5],
+        }
+    return waarde
+
+
 def _build_raw_pv_forecast_snapshot(coordinator) -> dict[str, Any]:
     """Raw Solcast half-hour forecast entries (start/end/kwh), bounded to
     roughly the next 48 hours - lets you verify the PV forecast itself
@@ -377,8 +494,18 @@ async def async_get_config_entry_diagnostics(
                 coordinator.last_arbitrage_solar_surplus_w
             ),
             "learning_only": coordinator.learning_only,
+            # v3.31.0: de VORM van wat een herstart overleeft, niet de
+            # inhoud. Zie `_beknopt` - dit veld was in zijn eentje de
+            # helft van de export, grotendeels als tweede, ongekorte
+            # afdruk van reeksen die er los al in staan.
             "persisted_state_snapshot": _veilig(
-                "persisted_state_snapshot", coordinator._collect_persisted_state
+                "persisted_state_snapshot",
+                lambda: {
+                    veld: _beknopt(waarde)
+                    for veld, waarde in (
+                        coordinator._collect_persisted_state() or {}
+                    ).items()
+                },
             ),
             "weather_ensemble_readings": coordinator.weather_ensemble_readings,
             "weather_ensemble_spread_percent": (
@@ -537,6 +664,12 @@ async def async_get_config_entry_diagnostics(
             "kalibratie_momentopname": getattr(
                 coordinator, "kalibratie_momentopname", None
             ),
+            # v3.29.0: welke dagregels als fysiek onmogelijk zijn
+            # opgeruimd - anders is een gat in de reeks niet te
+            # onderscheiden van een dag die nooit is afgesloten.
+            "dagreeks_verwijderd": getattr(
+                coordinator, "dagreeks_verwijderd", []
+            ),
             "netlading_vandaag_kwh": coordinator.netlading_vandaag_kwh,
             "netlading_kosten_eur": coordinator.netlading_kosten_eur,
             "netlading_laatste_meting": _iso(
@@ -654,7 +787,13 @@ async def async_get_config_entry_diagnostics(
                 coordinator.digital_twin_accuracy_history
             ),
             "battery_module_live": coordinator.battery_module_live,
-            "battery_module_health": coordinator.battery_module_health,
+            # v3.31.0: de ruwe dagmonsters samengevat. Vijf reeksen van
+            # 740 waarden maal drie modules is 70 KB aan getallen waar
+            # het bereik en de laatste waarde uit gelezen worden. Het
+            # dagoverzicht eronder blijft heel.
+            "battery_module_health": _beknopte_modulegezondheid(
+                coordinator.battery_module_health
+            ),
             "battery_module_spread": coordinator.battery_module_spread,
             "battery_cooling_state": coordinator.battery_cooling_state,
             "battery_cooling_history": coordinator.battery_cooling_history,
@@ -1067,8 +1206,13 @@ def _json_veilig(waarde: Any) -> Any:
     stuk is - dan mag hij niet zelf omvallen op een type dat niemand
     had voorzien.
     """
-    if waarde is None or isinstance(waarde, (bool, int, float, str)):
+    if waarde is None or isinstance(waarde, (bool, int, str)):
         return waarde
+    if isinstance(waarde, float):
+        # v3.31.0: drijvendekomma-ruis eruit. In de export van 19
+        # augustus stonden 1.298 getallen met tien of meer decimalen,
+        # zoals 0.024999999999999998 waar 0,025 bedoeld is.
+        return round(waarde, AFROND_DECIMALEN)
     if isinstance(waarde, (datetime, date)):
         return waarde.isoformat()
     if isinstance(waarde, dict):

@@ -20,7 +20,10 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     coordinator = hass.data[DOMAIN][entry.entry_id]
-    entities = [TestNotificationButton(coordinator, entry_id=entry.entry_id)]
+    entities = [
+        TestNotificationButton(coordinator, entry_id=entry.entry_id),
+        VerbruiksleerResetButton(coordinator, entry_id=entry.entry_id),
+    ]
     for slot in range(NILM_DASHBOARD_SLOT_COUNT):
         entities.append(NilmConfirmCandidateButton(coordinator, entry.entry_id, slot))
         entities.append(NilmRejectCandidateButton(coordinator, entry.entry_id, slot))
@@ -30,6 +33,85 @@ async def async_setup_entry(
         entities.append(NilmConfirmDuplicateButton(coordinator, entry.entry_id, slot))
         entities.append(NilmDismissDuplicateButton(coordinator, entry.entry_id, slot))
     async_add_entities(entities)
+
+
+class VerbruiksleerResetButton(ButtonEntity):
+    """Begint de verbruiksleer opnieuw (v3.30.0).
+
+    Gevraagd: "Graag een reset knop aanbrengen, voor direct na de
+    vakantie. Vanaf dat moment dient er opnieuw geleerd te worden."
+
+    Aanleiding: vijf dagen leeg huis zonder dat de vakantiestand aan
+    stond. Het uurprofiel zakte naar 5,5 kWh per dag terwijl het huis er
+    bewoond 12,5 doorjoeg, en zonder ingrijpen reserveert de integratie
+    bij thuiskomst voor het verkeerde huis.
+
+    Wist alleen wat uit het GEDRAG van de bewoners is geleerd. Metingen
+    blijven staan, en de zonvoorspelling, het accurendement en de 25
+    herkende apparaten worden niet aangeraakt - die hebben geen last van
+    een leeg huis, en opnieuw laten ontdekken zou weken kosten.
+
+    Onomkeerbaar. Daarom laat de knop zijn attributen zien wát er de
+    vorige keer is weggegooid, en wanneer.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Verbruiksleer opnieuw beginnen"
+    _attr_icon = "mdi:broom"
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_verbruiksleer_reset"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        # v3.30.0: staat de knop scherp? Dan is dat het enige dat er nu
+        # toe doet.
+        wacht = self._coordinator.verbruiksleer_reset_wacht_op_bevestiging()
+        if wacht is not None:
+            return {
+                "bevestiging_nodig": True,
+                "seconden_resterend": wacht,
+                "toelichting": (
+                    "Druk nogmaals om de verbruiksleer werkelijk te "
+                    "wissen. Doe je niets, dan vervalt de aanvraag "
+                    "vanzelf."
+                ),
+            }
+
+        historie = getattr(
+            self._coordinator, "verbruiksleer_reset_historie", []
+        )
+        if not historie:
+            return {
+                "bevestiging_nodig": False,
+                "laatste_reset": "nog niet gebruikt",
+                "wat_er_gewist_wordt": (
+                    "uurprofiel, nachtverbruik, temperatuurrelatie, "
+                    "basislast/sluipverbruik, tekortdagen, bedtijden en "
+                    "het aanwezigheidsritme"
+                ),
+                "wat_blijft_staan": (
+                    "de dagreeks, de cyclustelling, de zonvoorspelling, "
+                    "het accurendement en de herkende apparaten"
+                ),
+            }
+        laatste = historie[-1]
+        return {
+            "bevestiging_nodig": False,
+            "laatste_reset": laatste.get("moment"),
+            "aantal_resets": len(historie),
+            "toen_gewist": laatste.get("gewist"),
+        }
+
+    async def async_press(self) -> None:
+        # v3.30.0: twee drukken. De eerste wapent, de tweede voert uit.
+        self._coordinator.vraag_verbruiksleer_reset()
+        self.async_write_ha_state()
 
 
 class TestNotificationButton(ButtonEntity):
