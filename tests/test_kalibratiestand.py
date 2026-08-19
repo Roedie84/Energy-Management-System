@@ -157,7 +157,10 @@ def test_the_battery_is_left_alone():
     import inspect
 
     bron = inspect.getsource(C)
-    begin = bron.index("if self.kalibratie:")
+    # v3.32.0: er is nu meer dan één plek met deze toets; het gaat om
+    # de tak in de beslissing zelf.
+    begin = bron.index('self.last_reason = "kalibratie"')
+    begin = bron.rindex("if self.kalibratie:", 0, begin)
     # tot en met de `return` die de tak afsluit
     gate = bron[begin : bron.index("\n            return", begin) + 20]
 
