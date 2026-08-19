@@ -428,6 +428,8 @@ from .const import (
     ZONNEPLAN_COST_MISMATCH_FRACTION,
     PV_GEOMETRY_AZIMUTH_BUCKET_DEGREES,
     SOLAR_BIAS_DRIFT_ATTENTION_PERCENT,
+    SOLAR_DAG_GOED_PERCENT,
+    SOLAR_DAG_VER_MIS_PERCENT,
     SOLARFLOW_DEFAULT_GRID_POWER_W,
     SOLARFLOW_MAX_BATTERY_CHARGE_W,
     SOLARFLOW_MAX_GRID_POWER_W,
@@ -7060,6 +7062,29 @@ class EnergyManagementSystemCoordinator:
                 )
             return regels + gemeenschappelijk[1:]
 
+        if reden == "kalibratie":
+            # v3.27.3, gemeld met een schermafdruk: "Tekst is in
+            # kalibratie mode niet geheel correct." De kop klopte wel -
+            # "Waarom doet de aansturing niets?" - maar eronder stond
+            # het gewone verhaal over prijsdrempels, want `kalibratie`
+            # viel hier door naar de terugval van `default_smart`.
+            #
+            # Twee plekken bouwen een uitleg: `_build_explanation` had
+            # zijn tak al, deze niet.
+            regels = [
+                "de kalibratiestand staat aan: de accu wordt met de hand "
+                "geladen en de aansturing schrijft niets"
+            ]
+            if stand is not None:
+                regels.append(
+                    f"de accu staat op {stand:.0f}% - de melding komt bij 99%"
+                )
+            regels.append(
+                "koeling loopt door; netlading, piek, tekortdetectie en "
+                "verbruiksleer tellen deze periode niet mee"
+            )
+            return regels
+
         if reden == "force_manual":
             return ["handmatig overschreven; de aansturing laat de accu met rust"]
 
@@ -11398,23 +11423,63 @@ class EnergyManagementSystemCoordinator:
         recente_mediaan = statistics.median(recent)
         drift = recente_mediaan - geleerd
 
-        if abs(drift) <= SOLAR_BIAS_DRIFT_ATTENTION_PERCENT:
-            status = RELIABILITY_RELIABLE
+        # v3.28.0: eerst uitzoeken WELKE van de twee het is.
+        #
+        # Gemeld met een schermafdruk: de kaart wees vervuiling, een
+        # uitgevallen streng of beschaduwing aan. De zes dagen eronder
+        # spraken dat tegen: 13 aug -0,7%, 14 aug -2,2%, 16 aug +1,3%,
+        # maar 15 aug -40,7%, 17 aug -48,9% en 18 aug -43,2%.
+        #
+        # Een uitgevallen streng haalt élke dag met ongeveer hetzelfde
+        # percentage omlaag. Een array die 21,48 kWh levert op 21,62
+        # voorspeld mist geen streng.
+        #
+        # Twee soorten dagen dus, geen verschuiving - en dat hoort de
+        # kaart te zeggen, want anders staat de gebruiker voor niets op
+        # het dak.
+        goed = [v for v in recent if abs(v) <= SOLAR_DAG_GOED_PERCENT]
+        ver_mis = [v for v in recent if abs(v) >= SOLAR_DAG_VER_MIS_PERCENT]
+        spreiding = bool(goed) and bool(ver_mis)
+
+        if abs(drift) <= SOLAR_BIAS_DRIFT_ATTENTION_PERCENT and not spreiding:
+            return {
+                "status": RELIABILITY_RELIABLE,
+                "soort": "geen",
+                "reden": (
+                    f"Recente afwijking ({recente_mediaan:.1f}%) ligt dicht "
+                    f"bij de geleerde bias ({geleerd:.1f}%) - de correctie "
+                    "werkt."
+                ),
+                "drift_percent": round(drift, 1),
+            }
+
+        if spreiding:
+            status = RELIABILITY_UNRELIABLE
+            soort = "spreiding"
             reden = (
-                f"Recente afwijking ({recente_mediaan:.1f}%) ligt dicht bij "
-                f"de geleerde bias ({geleerd:.1f}%) - de correctie werkt."
+                f"Twee soorten dagen: {len(goed)} van de {len(recent)} "
+                f"binnen {SOLAR_DAG_GOED_PERCENT:.0f}% en {len(ver_mis)} "
+                f"meer dan {SOLAR_DAG_VER_MIS_PERCENT:.0f}% ernaast. Op "
+                "heldere dagen klopt de voorspelling, op wisselvallige "
+                "dagen niet - dat wijst op de bewolkingsinschatting in de "
+                "voorspelling, niet op de installatie. Panelen die op de "
+                "goede dagen leveren wat er voorspeld wordt, zijn niet "
+                "vervuild en missen geen streng."
             )
         else:
             status = RELIABILITY_UNRELIABLE
+            soort = "verschuiving"
             richting = "lager" if drift < 0 else "hoger"
             reden = (
                 f"De laatste {len(recent)} dagen liggen structureel "
                 f"{abs(drift):.0f} procentpunt {richting} dan de geleerde "
-                f"bias ({geleerd:.1f}%). Dat wijst op een verandering aan de "
+                f"bias ({geleerd:.1f}%), en dat geldt voor élke dag - geen "
+                "goede dag ertussen. Dat wijst op een verandering aan de "
                 "installatie: vervuiling, een uitgevallen streng, of "
                 "beschaduwing die is toegenomen."
             )
         return {
+            "soort": soort,
             "status": status,
             "reden": reden,
             "drift_percent": round(drift, 1),
@@ -18889,7 +18954,12 @@ class EnergyManagementSystemCoordinator:
         # Onder die grens blijft de oude terughoudendheid gelden: dan is
         # koelen een optimalisatie, en die hoort te wijken voor wie de
         # sturing overneemt.
-        if self.learning_only or self.force_manual:
+        # v3.27.3: behalve tijdens een kalibratie. Gemeld met een
+        # schermafdruk waarop `Learning only` aan stond terwijl er met
+        # 2000 W geladen werd - dan komt de ventilator pas boven de 35
+        # graden. Wie zelf een kalibratie start wil niet dat zijn
+        # omvormer ondertussen naar 42 loopt.
+        if (self.learning_only or self.force_manual) and not self.kalibratie:
             accu_c = besluit.get("accu_c")
             beschermend = (
                 accu_c is not None

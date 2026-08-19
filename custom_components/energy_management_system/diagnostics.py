@@ -1004,6 +1004,10 @@ async def async_get_config_entry_diagnostics(
             "next_predicted_date": _iso(solar_tracker.next_predicted_date),
             "deviation_history_percent": solar_tracker.deviation_history,
             "learned_bias_percent": solar_tracker.learned_bias_percent,
+            # v3.28.0: het oude gemiddelde ernaast. Lopen die twee ver
+            # uiteen, dan zijn het twee soorten dagen en geen
+            # verschuiving - precies wat de duiding moet weten.
+            "mean_bias_percent": solar_tracker.mean_bias_percent,
             "forecast_value_history_kwh": solar_tracker.forecast_value_history,
             "learned_typical_forecast_kwh": (
                 solar_tracker.learned_typical_forecast_kwh

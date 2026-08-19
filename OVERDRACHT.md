@@ -7,8 +7,8 @@ Locatie Lochem. Communicatie in het Nederlands, terse stijl.
 
 - Repo: https://github.com/Roedie84/Energy-Management-System
 - Lokaal: `/home/claude/ems/`
-- **Huidige versie: v3.27.2**, 2535 tests groen
-- Zip: `/mnt/user-data/outputs/energy_management_system_v3.27.2.zip`
+- **Huidige versie: v3.28.0**, 2548 tests groen
+- Zip: `/mnt/user-data/outputs/energy_management_system_v3.28.0.zip`
 
 ## Werkwijze (belangrijk)
 1. Diagnostiek-export lezen uit `/mnt/user-data/uploads/`
@@ -106,6 +106,8 @@ melden met de reeks als bewijs.
 | v3.27.0 | kalibratiestand: sturing eruit, koeling erin, leren gepauzeerd |
 | v3.27.1 | kritieke melding zodra de accu vol is in kalibratiestand |
 | v3.27.2 | kalibratiekaart wees naar een entiteit-id zonder gebiedsvoorvoegsel |
+| v3.27.3 | uitleg kende de kalibratie niet; koeling nu ook los van leermodus |
+| v3.28.0 | zonbias mediaan i.p.v. gemiddelde; duiding spreiding vs verschuiving |
 
 ## Proefstand (9 kandidaten, sturen niets)
 - **Slijtagekosten** 4,22 ct/kWh — klaar om mee te doen

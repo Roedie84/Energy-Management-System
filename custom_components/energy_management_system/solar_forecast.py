@@ -147,20 +147,54 @@ class SolarForecastAccuracyTracker:
             and self.config.get(CONF_SOLAR_ACTUAL_SENSOR)
         )
 
-    @property
-    def learned_bias_percent(self) -> float | None:
-        """Rolling average deviation (%) over the last LEARNING_HISTORY_DAYS,
-        ignoring implausible outliers (see MAX_REASONABLE_DEVIATION_PERCENT).
-
-        A positive value means Solcast has been under-forecasting for this
-        installation (actual yield higher than predicted); negative means
-        it has been over-forecasting.
-        """
-        valid = [
+    def _bruikbare_afwijkingen(self) -> list[float]:
+        return [
             v
             for v in self.deviation_history
             if abs(v) <= MAX_REASONABLE_DEVIATION_PERCENT
         ]
+
+    @property
+    def learned_bias_percent(self) -> float | None:
+        """De MEDIANE afwijking (%) over de laatste LEARNING_HISTORY_DAYS,
+        met onmogelijke uitschieters eruit (zie
+        MAX_REASONABLE_DEVIATION_PERCENT).
+
+        Positief betekent dat Solcast voor deze installatie te laag
+        voorspelt (meer opbrengst dan voorspeld); negatief te hoog.
+
+        v3.28.0: mediaan in plaats van gemiddelde. Gemeten over zeven
+        dagen in augustus: vier dagen binnen 4,7% en drie dagen 41 tot
+        55% te hoog voorspeld. Het gemiddelde van die zeven is -22,6% en
+        wordt volledig door die drie bepaald.
+
+        Als vlakke correctie op alles maakte dat een heldere dag die
+        klopte 22% te laag, zonder de bewolkte dagen te dekken.
+        Nagerekend over dezelfde zeven dagen (fout na correctie):
+
+            zonder correctie        gemiddeld 22,6%   mediaan 4,7%
+            gemiddelde-bias -22,6%  gemiddeld 29,6%   mediaan 27,3%
+            mediaan-bias -4,7%      gemiddeld 21,9%   mediaan 4,0%
+
+        De correctie die er stond maakte het slechter dan helemaal niet
+        corrigeren. Bij een ECHTE verschuiving - élke dag ongeveer even
+        ver omlaag - lopen mediaan en gemiddelde vanzelf samen, dus die
+        blijft gewoon geleerd worden.
+        """
+        valid = self._bruikbare_afwijkingen()
+        if not valid:
+            return None
+        return round(statistics.median(valid), 1)
+
+    @property
+    def mean_bias_percent(self) -> float | None:
+        """Het oude gemiddelde, bewaard om naast de mediaan te kunnen
+
+        leggen (v3.28.0). Lopen die twee ver uiteen, dan zijn het twee
+        soorten dagen en niet één verschuiving - en dat is precies wat
+        de duiding op de meetkwaliteitskaart moet weten.
+        """
+        valid = self._bruikbare_afwijkingen()
         if not valid:
             return None
         return round(sum(valid) / len(valid), 1)

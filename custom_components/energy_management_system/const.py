@@ -2997,6 +2997,18 @@ PV_SHALLOW_TILT_EXTRA_TOLERANCE_DEGREES = 15.0
 SOLAR_BIAS_DRIFT_MIN_DAYS = 5
 SOLAR_BIAS_DRIFT_ATTENTION_PERCENT = 15.0
 
+# Wanneer een dag "klopt" en wanneer hij "ver mis" is (v3.28.0).
+#
+# Gemeld met een schermafdruk die vervuiling of een uitgevallen streng
+# aanwees. De zes dagen eronder: drie binnen 2,2% en drie 40 tot 49%
+# ernaast. Dat zijn twee soorten dagen, geen verschuiving.
+#
+# Een dag binnen 10% is een dag waarop de panelen leverden wat er
+# voorspeld werd - dan is er niets mis met de installatie. Een dag die
+# er 25% of meer naast zit, is meer dan dagruis.
+SOLAR_DAG_GOED_PERCENT = 10.0
+SOLAR_DAG_VER_MIS_PERCENT = 25.0
+
 # Hoe dicht een dag bij de weinig-zon-drempel mag liggen voordat het het
 # vermelden waard is. Vandaag zat op ~70% van typisch, vlak op de grens -
 # en dat was nergens te zien, waardoor niet te beoordelen viel of het

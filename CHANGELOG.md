@@ -17153,3 +17153,94 @@ voorvoegsel, dan valt die scan om in plaats van dat kaarten stilletjes
 leeg blijven.
 
 **Volledige testsuite**: 2535 tests, allemaal groen.
+
+## v3.27.3 — De uitleg wist niets van de kalibratie
+
+**Gemeld** met een schermafdruk: "Tekst is in kalibratie mode niet
+geheel correct."
+
+De kop klopte — "Waarom doet de aansturing niets?" — maar eronder stond
+het gewone verhaal: de prijs is nu 30,8 ct, de drempel voor 'duur' ligt
+op 37,6 ct, geen bijzondere reden om iets anders te doen. Terwijl de
+aansturing juist stilstaat omdat er een kalibratie loopt.
+
+Twee plekken bouwen een uitleg. `_build_explanation` had zijn tak al,
+`_waarom_regels` niet, en die viel door naar de terugval van
+`default_smart`. Nu vertelt hij wat er stilligt en bij welke stand de
+melding komt.
+
+### En iets belangrijkers op diezelfde schermafdruk
+
+`Learning only` stond aan. Dat betekende tot nu toe dat de ventilator
+pas boven de 35 graden schakelt — precies de rem die de kalibratiestand
+voor `Force manual` al ophief, maar voor de leermodus nog niet.
+
+Bij 2000 W is dat te laat: op 18 augustus stond de omvormer bij 2038 W
+op 42 graden. Wie zelf een kalibratie start wil niet dat zijn omvormer
+ondertussen oploopt. De koeling schakelt nu tijdens een kalibratie,
+ongeacht welke van de twee schakelaars aan staat.
+
+**Volledige testsuite**: 2537 tests, allemaal groen.
+
+## v3.28.0 — Twee soorten dagen, geen verschuiving
+
+**Gemeld** met een schermafdruk van de meetkwaliteitskaart: "1 van de 26
+gemeten grootheden is onbetrouwbaar: Zonvoorspelling (klopt de correctie
+nog?)". De kaart wees vervuiling, een uitgevallen streng of toegenomen
+beschaduwing aan.
+
+De zes dagen eronder zeggen iets anders:
+
+| datum | voorspeld | werkelijk | afwijking |
+|---|---|---|---|
+| 13 aug | 21,62 | 21,48 | −0,7% |
+| 14 aug | 21,36 | 20,90 | −2,2% |
+| 15 aug | 15,39 | 9,13 | −40,7% |
+| 16 aug | 16,17 | 16,38 | **+1,3%** |
+| 17 aug | 18,49 | 9,44 | −48,9% |
+| 18 aug | 9,14 | 5,20 | −43,2% |
+
+Een uitgevallen streng haalt élke dag met ongeveer hetzelfde percentage
+omlaag. Drie van de zes dagen zitten binnen 2,2%. Een array die 21,48
+kWh levert op 21,62 voorspeld mist geen streng en is niet vervuild.
+
+### 1. De duiding onderscheidt nu twee gevallen
+
+**Spreiding**: goede dagen én dagen die er ver naast zitten in hetzelfde
+venster. Dan klopt de voorspelling op heldere dagen en niet op
+wisselvallige — een bewolkingsprobleem in de voorspelling, niet in de
+installatie. De kaart zegt dat nu ook.
+
+**Verschuiving**: élke dag ongeveer even ver omlaag, geen goede dag
+ertussen. Dán staat de tekst over vervuiling en strengen er nog steeds,
+en dan hoort hij er ook.
+
+### 2. De bias is de mediaan geworden, niet het gemiddelde
+
+De geleerde bias was het gemiddelde van de afwijkingen, en dat werd
+volledig door de uitschieters bepaald: −22,6% over zeven dagen waarvan
+er vier binnen 4,7% lagen. Als vlakke correctie op alles maakte dat een
+heldere dag die klopte 22% te laag, zonder de bewolkte dagen te dekken.
+
+Nagerekend over dezelfde zeven dagen — de fout die na correctie
+overblijft:
+
+| correctie | gemiddelde fout | mediane fout |
+|---|---|---|
+| geen | 22,6% | 4,7% |
+| gemiddelde-bias −22,6% | **29,6%** | 27,3% |
+| mediaan-bias −4,7% | 21,9% | 4,0% |
+
+De correctie die erin zat maakte het slechter dan helemaal niet
+corrigeren. Dat is geen afweging meer maar een reparatie.
+
+Bij een echte verschuiving — élke dag ongeveer even ver omlaag — lopen
+mediaan en gemiddelde vanzelf samen, dus die wordt gewoon geleerd. Het
+oude gemiddelde staat als `mean_bias_percent` in de export, om de keuze
+naast elkaar te kunnen leggen.
+
+**Let op**: zeven dagen is dun, en de mediaan is wiebelig bij een
+half-om-half verdeling. Dit is de eerste stap; de correctie koppelen aan
+de verwachte bewolking is de structurele oplossing.
+
+**Volledige testsuite**: 2548 tests, allemaal groen.
