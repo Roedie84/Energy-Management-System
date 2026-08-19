@@ -135,10 +135,11 @@ def test_setup_registers_all_slot_buttons(make_coordinator, hass):
 
     aio.run(async_setup_entry(hass, _FakeEntry(), fake_add_entities))
 
-    # 1 test-notification button + (confirm+reject) x N kandidaat-slots
+    # 1 test-notification button + 1 verbruiksleer-reset (v3.30.0)
+    # + (confirm+reject) x N kandidaat-slots
     # + (bevestigen+negeren) x N duplicaat-slots (v0.63.118).
     assert len(added) == (
-        1
+        2
         + 2 * NILM_DASHBOARD_SLOT_COUNT
         + 2 * NILM_DUPLICATE_DASHBOARD_SLOT_COUNT
     )

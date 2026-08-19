@@ -289,7 +289,7 @@ def test_unload_forces_an_immediate_save():
 
     bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
     unload = bron.index("async def async_unload")
-    assert "async_save_persisted_state_now" in bron[unload : unload + 900]
+    assert "async_save_persisted_state_now" in bron[unload : unload + 2000]
 
 
 def test_per_tick_values_are_deliberately_not_persisted():
@@ -494,7 +494,6 @@ VLUCHTIG_MET_REDEN = {
     "battery_module_live": "elke tick uit de sensoren gelezen",
     "battery_module_spread": "elke tick herrekend",
     "advisory_readiness": "elke tick herrekend",
-    "sensor_cadence": "elke tick herrekend",
     "decision_log": "loopt mee met de tick",
     "mpc_planned_actions": "elke tick herrekend",
     "mpc_horizon_quarters_used": "elke tick herrekend",

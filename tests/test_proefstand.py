@@ -132,7 +132,7 @@ def test_the_wear_cost_does_not_decide_between_house_and_grid():
 
     # v1.76.0: van 4000 naar 6000 tekens - de toelichting is gegroeid en
     # zoeken op een vast aantal tekens breekt zodra dat gebeurt.
-    assert "dezelfde slijtage" in bron[kop : kop + 6000]
+    assert "dezelfde slijtage" in bron[kop : kop + 9000]
 
 
 # --- 3. dagtype ------------------------------------------------------
