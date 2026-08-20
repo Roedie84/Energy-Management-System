@@ -7,8 +7,8 @@ Locatie Lochem. Communicatie in het Nederlands, terse stijl.
 
 - Repo: https://github.com/Roedie84/Energy-Management-System
 - Lokaal: `/home/claude/ems/`
-- **Huidige versie: v3.43.0**, 2936 tests groen
-- Zip: `/mnt/user-data/outputs/energy_management_system_v3.43.0.zip`
+- **Huidige versie: v3.44.0**, 2942 tests groen
+- Zip: `/mnt/user-data/outputs/energy_management_system_v3.44.0.zip`
 
 ## Werkwijze (belangrijk)
 1. Diagnostiek-export lezen uit `/mnt/user-data/uploads/`

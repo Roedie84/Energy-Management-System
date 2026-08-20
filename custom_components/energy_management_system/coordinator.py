@@ -15534,6 +15534,29 @@ class EnergyManagementSystemCoordinator:
         else:
             self._last_plan_alert.pop("plan_verkoop_geblokkeerd", None)
 
+    def verkoop_geblokkeerd_door_tekort(self) -> bool:
+        """Weigert de aansturing op dit moment te verkopen? (v3.44.0)
+
+        Dezelfde drempel als de rem zelf. Twee drempels voor dezelfde
+        beslissing zou betekenen dat de tabel iets anders zegt dan de
+        aansturing doet, en dat is precies wat hier gerepareerd wordt.
+        """
+        return (
+            (self.last_plan_shortfall or {}).get("kwartieren", 0)
+            >= PLAN_SHORTFALL_ALERT_MIN_QUARTERS
+        )
+
+    def verkoop_blokkade_reden(self) -> str | None:
+        """Waarom de verkoopkolom laat zien wat er niet gebeurt."""
+        if not self.verkoop_geblokkeerd_door_tekort():
+            return None
+        return (
+            "De aansturing verkoopt op dit moment niet: de planning "
+            "voorziet een tekort. Deze kolom laat zien wat er zou gebeuren "
+            "als er wél verkocht werd - dat is de vergelijking waarop de "
+            "rem berust."
+        )
+
     def get_quarter_plan_summary(
         self, now: datetime | None = None, tot: datetime | None = None
     ) -> dict:
@@ -15636,6 +15659,23 @@ class EnergyManagementSystemCoordinator:
                 sum(r["opbrengst_eur"] for r in verkoop), 2
             ),
             "verkoopkwartieren": len(verkoop),
+            # v3.44.0: de tabel vertelt nu ook dat die verkoop niet
+            # doorgaat.
+            #
+            # De simulatie verkoopt bewust WÉL, ook als de rem van
+            # v3.43.0 aanstaat. Dat is geen vergissing: de planning is
+            # de tegenfeitelijke wereld die de rem rechtvaardigt - "als
+            # ik nu verkoop, kom ik morgenvroeg tekort". Zou de
+            # simulatie de rem meenemen, dan verdwijnt het tekort,
+            # gaat de rem uit, komt het tekort terug, en pendelt het
+            # tussen die twee. Precies wat de koeling vier versies lang
+            # deed.
+            #
+            # Wat er wél mis was: de tabel toonde dertig
+            # verkoopkwartieren terwijl de aansturing weigerde te
+            # verkopen, zonder een woord van uitleg.
+            "verkoop_geblokkeerd": self.verkoop_geblokkeerd_door_tekort(),
+            "verkoop_blokkade_reden": self.verkoop_blokkade_reden(),
             "kwartieren_in_goedkoop_blok": len(blok),
             # v1.23.2: hoeveel kwartieren zijn sinds de eerste
             # voorspelling van plan veranderd? Veel wijzigingen betekent

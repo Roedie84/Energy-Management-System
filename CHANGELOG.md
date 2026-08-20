@@ -18283,3 +18283,48 @@ bewust in de lijst bijgewerkt met de reden erbij. De ratel is een
 drempel en geen verbod: hij dwingt af dat groei een besluit is.
 
 **Volledige testsuite**: 2936 tests, allemaal groen.
+
+## v3.44.0 — De tabel toont wat er niet gebeurt
+
+Gemeten op 20 augustus 21:16, één minuut na het installeren van de rem
+uit v3.43.0:
+
+```
+sell_check     mag_verkopen: false, "planning voorziet een tekort"
+quarter_plan   30 verkoopkwartieren
+```
+
+De aansturing weigert te verkopen; de tabel toont dertig
+verkoopkwartieren. Geen van beide is fout, maar samen misleiden ze.
+
+### Waarom de simulatie NIET wordt aangepast
+
+De eerste neiging is om de planning de rem te laten meenemen. Dat bouwt
+een slinger:
+
+```
+planning simuleert mét verkoop  →  tekort  →  rem gaat aan
+rem aan  →  geen verkoop  →  geen tekort  →  rem gaat uit
+rem uit  →  verkoop  →  tekort  →  rem gaat aan
+```
+
+Precies het pendelen dat de koeling vier versies lang deed. De planning
+**moet** met verkoop simuleren, want dat is de tegenfeitelijke wereld
+die de rem rechtvaardigt: "als ik nu verkoop, kom ik morgenvroeg
+tekort."
+
+Dat de rem stabiel is, komt er dus door dat de planning hem niet kent.
+Daar staat nu een toets op, zodat niemand het later per ongeluk
+"repareert".
+
+### Wat er wel is veranderd
+
+De samenvatting draagt `verkoop_geblokkeerd` en een reden, uit dezelfde
+drempel als de rem zelf — twee drempels zou betekenen dat de tabel iets
+anders zegt dan de aansturing doet.
+
+En `last_plan_shortfall` staat nu in de diagnostiek-export. Zonder dat
+veld was op 21:15 niet na te gaan of de rem zweeg omdat er geen tekort
+was, of omdat de stand na de herstart nog leeg was.
+
+**Volledige testsuite**: 2942 tests, allemaal groen.

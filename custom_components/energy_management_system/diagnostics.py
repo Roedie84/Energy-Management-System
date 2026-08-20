@@ -547,6 +547,12 @@ async def async_get_config_entry_diagnostics(
             "solar_defer_plan": coordinator.last_solar_defer_plan,
             # v1.23.0: mag er verkocht worden, en waarom wel of niet?
             "sell_check": coordinator.last_sell_check,
+            # v3.44.0: waar de verkooprem zijn oordeel op baseert. Zonder
+            # dit veld is niet na te gaan of de rem zweeg omdat er geen
+            # tekort was, of omdat de stand nog leeg was.
+            "last_plan_shortfall": getattr(
+                coordinator, "last_plan_shortfall", None
+            ),
             # v1.87.0: hoe de reservemarge is opgebouwd.
             # v1.90.0: zelfconsumptie over langere perioden.
             # v1.91.0: alle dagcijfers over dag/week/maand/jaar.
