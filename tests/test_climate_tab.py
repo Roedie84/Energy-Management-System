@@ -152,8 +152,79 @@ def test_learns_a_rate_from_two_ticks(make_coordinator, hass):
     hass.states.set("sensor.living_room_temp", "20.0")  # +1C over 1 hour
     coordinator._update_climate_rate_learning(DAY0 + timedelta(hours=1))
 
-    key = coordinator._climate_rate_key("10.0", "beide_dicht", "uit")
+    # v3.41.0: de cel sleutelt op het VERSCHIL met binnen, niet op de
+    # buitentemperatuur. Buiten 10, binnen 19 bij het anker: verschil -9,
+    # dus vakje -10 bij stappen van twee graden.
+    verschil = coordinator._climate_verschil_bucket(10.0, 19.0)
+    key = coordinator._climate_rate_key(verschil, "beide_dicht", "uit")
     assert coordinator.climate_rate_history[key] == [1.0]
+
+
+def test_the_bucket_follows_the_difference_not_the_outdoor_temp(
+    make_coordinator, hass
+):
+    """De aanleiding: bij 26 graden buiten warmt een kamer van 21 op en
+
+    koelt een kamer van 28 af. Zelfde emmer, tegengesteld teken - en dat
+    stond ook zo in de gemeten reeks:
+
+        26.0|beide_open|uit: [-0.284, +0.137, -0.067, +0.009, -0.156]
+    """
+    c = make_coordinator(_base_config())
+
+    warm = c._climate_verschil_bucket(26.0, 21.0)
+    koel = c._climate_verschil_bucket(26.0, 28.0)
+
+    assert warm != koel
+    assert warm.startswith("d")
+
+
+def test_old_cells_are_thrown_away(make_coordinator, hass):
+    """De oude sleutels zijn niet om te rekenen: de binnentemperatuur van
+
+    dat moment is niet bewaard. Ze laten staan zou twee soorten sleutels
+    naast elkaar geven waarvan de helft nooit meer gelezen wordt.
+    """
+    c = make_coordinator(_base_config())
+    c.climate_rate_history = {
+        "26.0|beide_open|uit": [-0.284, 0.137],
+        "d-4.0|beide_dicht|uit": [-0.1],
+    }
+
+    c._ruim_oude_klimaatcellen_op()
+
+    assert list(c.climate_rate_history) == ["d-4.0|beide_dicht|uit"]
+
+
+def test_a_cell_that_disagrees_with_itself_is_not_learned(
+    make_coordinator, hass
+):
+    """Ook met de juiste sleutel blijft een cel waarin de helft opwarmt
+
+    en de helft afkoelt onbruikbaar - dan vangt hij nog iets anders,
+    bijvoorbeeld de zon op het raam.
+    """
+    c = make_coordinator(_base_config())
+    key = c._climate_rate_key("d4.0", "beide_open", "uit")
+    c.climate_rate_history = {key: [-0.284, 0.137, -0.067, 0.009, -0.156]}
+
+    oordeel = c.get_climate_rate("d4.0", "beide_open", "uit")
+
+    assert oordeel["eenduidig"] is False
+    assert oordeel["betrouwbaarheid"] == "niet_eenduidig"
+    assert oordeel["voldoende_data"] is False
+
+
+def test_a_cell_that_agrees_is_learned(make_coordinator, hass):
+    c = make_coordinator(_base_config())
+    key = c._climate_rate_key("d-6.0", "beide_dicht", "uit")
+    c.climate_rate_history = {key: [-0.10, -0.12, -0.05, -0.17, -0.20]}
+
+    oordeel = c.get_climate_rate("d-6.0", "beide_dicht", "uit")
+
+    assert oordeel["eenduidig"] is True
+    assert oordeel["voldoende_data"] is True
+    assert oordeel["rate_c_per_hour"] == -0.12
 
 
 def test_no_sample_recorded_without_shutter_data(make_coordinator, hass):
@@ -369,7 +440,10 @@ def test_forecast_projection_reaches_betrouwbaar_tier_with_enough_samples(
     coordinator = make_coordinator(_base_config())
     hass.states.set("climate.woonkamer_airco", "heat", {"hvac_action": "idle"})
 
-    key = coordinator._climate_rate_key("10.0", "beide_dicht", "uit")
+    # v3.41.0: de cel hoort bij het verschil tussen buiten (10) en de
+    # kamer zoals die er in de projectie voor staat (19).
+    verschil = coordinator._climate_verschil_bucket(10.0, 19.0)
+    key = coordinator._climate_rate_key(verschil, "beide_dicht", "uit")
     coordinator.climate_rate_history[key] = [0.5] * 15  # meets the reliable threshold
     coordinator.climate_shutter_state = "beide_dicht"
     coordinator.climate_airco_state = "uit"
