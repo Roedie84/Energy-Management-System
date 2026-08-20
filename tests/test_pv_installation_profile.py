@@ -20,6 +20,7 @@ from custom_components.energy_management_system.const import (
     CONF_SUN_PHASE_SENSOR,
     PV_GEOMETRY_BUCKET_MIN_SAMPLES,
     PV_GEOMETRY_MIN_DAYS,
+    PV_GEOMETRY_MULTI_ORIENTATION_MIN_DAYS,
     RELIABILITY_INDICATIVE,
     RELIABILITY_INSUFFICIENT,
 )
@@ -119,7 +120,10 @@ def test_multiple_roof_planes_are_flagged(make_coordinator, hass):
     """Bij één dakvlak liggen de dagelijkse pieken dicht bij elkaar; een
     brede spreiding wijst op meer dan één richting."""
     c = _coordinator(make_coordinator, hass)
-    for dag in range(4):
+    # v3.40.0: twintig heldere dagen. Bij acht dragen de uitersten
+    # waarschijnlijk het weer en niet het dak - één wolk rond het
+    # middaguur verschuift de piek al met tientallen graden.
+    for dag in range(PV_GEOMETRY_MULTI_ORIENTATION_MIN_DAYS):
         _dag(c, hass, dag * 2, 120)
         _dag(c, hass, dag * 2 + 1, 240)
 
@@ -129,9 +133,27 @@ def test_multiple_roof_planes_are_flagged(make_coordinator, hass):
     assert profiel["spreiding_graden"] > 40
 
 
+def test_a_short_series_draws_no_conclusion(make_coordinator, hass):
+    """Acht heldere dagen met 103 graden spreiding leverden "ja" op. Dat
+
+    is een stevige conclusie uit weinig dagen; de spreiding blijft
+    zichtbaar, alleen het oordeel wacht.
+    """
+    c = _coordinator(make_coordinator, hass)
+    for dag in range(4):
+        _dag(c, hass, dag * 2, 120)
+        _dag(c, hass, dag * 2 + 1, 240)
+
+    profiel = c.get_pv_installation_profile()
+
+    assert profiel["waarschijnlijk_meerdere_dakvlakken"] is None
+    assert profiel["spreiding_graden"] > 40
+    assert "te weinig" in profiel["spreiding_toelichting"]
+
+
 def test_one_roof_plane_is_not_flagged(make_coordinator, hass):
     c = _coordinator(make_coordinator, hass)
-    for dag in range(PV_GEOMETRY_MIN_DAYS + 3):
+    for dag in range(PV_GEOMETRY_MULTI_ORIENTATION_MIN_DAYS + 3):
         _dag(c, hass, dag, 180)
 
     assert (
