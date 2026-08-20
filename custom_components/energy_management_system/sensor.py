@@ -2043,8 +2043,23 @@ class ClimateForecastSensor(SensorEntity, RestoreEntity):
             return
         raw_cells = last_state.attributes.get("geleerde_cellen")
         if isinstance(raw_cells, dict):
+            # v3.42.1: de opruiming van v3.41.0 werkte niet, en dit is
+            # waarom.
+            #
+            # Gemeten in de export van 20 augustus 14:10: veertig cellen,
+            # allemaal nog met de oude sleutel op buitentemperatuur en
+            # geen enkele met de nieuwe. `_ruim_oude_klimaatcellen_op`
+            # draait bij het terugzetten van de opslag - en dán komt
+            # DEZE herstelroutine langs en zet ze er weer in.
+            #
+            # Twee herstelpaden voor dezelfde gegevens, en de tweede won.
+            # Precies de klasse fout die deze codebase eerder zag bij de
+            # NILM-apparaten (v0.63.115): entiteit-attributen die de
+            # Store overschrijven.
             self._coordinator.climate_rate_history = {
-                str(k): [float(v) for v in vals] for k, vals in raw_cells.items()
+                str(k): [float(v) for v in vals]
+                for k, vals in raw_cells.items()
+                if str(k).startswith("d")
             }
         raw_bias_history = last_state.attributes.get("voorspelling_bias_geschiedenis")
         if isinstance(raw_bias_history, list):

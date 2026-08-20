@@ -77,7 +77,19 @@
           "water_softener_end_hour": "Water softener: last hour of the regeneration window",
           "presence_bedtime_sensor_entity": "Bedtime sensor (optional): landing or stairs - last motion at night means asleep",
           "presence_tv_entity": "Television (optional): TV on counts as someone home",
-          "power_limits_intentional": "Charge/discharge power deliberately limited (no suggestions to raise it)"
+          "power_limits_intentional": "Charge/discharge power deliberately limited (no suggestions to raise it)",
+          "sun_azimuth_sensor_entity": "Sun azimuth (optional): needed to derive the array orientation; falls back to sun.sun",
+          "dishwasher_start_in_entity": "Dishwasher delayed start (optional): planned load counts towards the reserve",
+          "presence_absence_minutes": "Minutes of silence before counting as away (optional, default 20)",
+          "update_interval_seconds": "Update interval in seconds (optional, default 300): measured round takes ~50 ms",
+          "washing_machine_end_at_entity": "Washing machine end time (optional): planned load counts towards the reserve",
+          "contract_start_date": "Contract start date (optional, YYYY-MM-DD): shows figures per contract year",
+          "battery_discharge_energy_sensor_entity": "Battery discharge meter (optional, kWh): fills the battery row in history",
+          "cost_energy_sensor_entity": "Electricity cost sensor (optional, EUR): fills the cost row in history",
+          "grid_import_energy_sensor_entity": "Grid import meter (optional, kWh): enables reading historical figures",
+          "grid_export_energy_sensor_entity": "Grid export meter (optional, kWh): enables reading historical figures",
+          "presence_light_entities": "Indoor lights (optional): a light that is on counts as someone home",
+          "battery_cooling_opportunity_c": "Cool when cheap above (°C): fan runs below the main threshold when outdoor air is much colder"
         }
       }
     },
@@ -168,7 +180,19 @@
           "water_softener_end_hour": "Water softener: last hour of the regeneration window",
           "presence_bedtime_sensor_entity": "Bedtime sensor (optional): landing or stairs - last motion at night means asleep",
           "presence_tv_entity": "Television (optional): TV on counts as someone home",
-          "power_limits_intentional": "Charge/discharge power deliberately limited (no suggestions to raise it)"
+          "power_limits_intentional": "Charge/discharge power deliberately limited (no suggestions to raise it)",
+          "sun_azimuth_sensor_entity": "Sun azimuth (optional): needed to derive the array orientation; falls back to sun.sun",
+          "dishwasher_start_in_entity": "Dishwasher delayed start (optional): planned load counts towards the reserve",
+          "presence_absence_minutes": "Minutes of silence before counting as away (optional, default 20)",
+          "update_interval_seconds": "Update interval in seconds (optional, default 300): measured round takes ~50 ms",
+          "washing_machine_end_at_entity": "Washing machine end time (optional): planned load counts towards the reserve",
+          "contract_start_date": "Contract start date (optional, YYYY-MM-DD): shows figures per contract year",
+          "battery_discharge_energy_sensor_entity": "Battery discharge meter (optional, kWh): fills the battery row in history",
+          "cost_energy_sensor_entity": "Electricity cost sensor (optional, EUR): fills the cost row in history",
+          "grid_import_energy_sensor_entity": "Grid import meter (optional, kWh): enables reading historical figures",
+          "grid_export_energy_sensor_entity": "Grid export meter (optional, kWh): enables reading historical figures",
+          "presence_light_entities": "Indoor lights (optional): a light that is on counts as someone home",
+          "battery_cooling_opportunity_c": "Cool when cheap above (°C): fan runs below the main threshold when outdoor air is much colder"
         }
       }
     },
@@ -177,6 +201,24 @@
       "invalid_number": "Not a valid number.",
       "negative_cost": "Feed-in costs cannot be negative.",
       "out_of_range": "Value is outside the allowed range."
+    }
+  },
+  "issues": {
+    "ontbrekende_ingang": {
+      "title": "{aantal} input(s) are not providing what they should",
+      "description": "These parts read a sensor or attribute that does not exist: {namen}. Check the integration settings."
+    },
+    "halve_installatie": {
+      "title": "The update appears to be incomplete",
+      "description": "{uitleg}\n\nThis happens after an interrupted download. Reinstall the integration via HACS."
+    },
+    "interne_fout": {
+      "title": "{aantal} part(s) are failing",
+      "description": "These parts raise an error: {namen}. Please include the diagnostics export when reporting this."
+    },
+    "dashboard_entiteit": {
+      "title": "{aantal} dashboard card(s) point to nothing",
+      "description": "These entities no longer exist: {namen}. Update the dashboard or restore the entities."
     }
   }
 }

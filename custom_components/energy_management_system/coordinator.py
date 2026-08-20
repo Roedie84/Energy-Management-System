@@ -578,6 +578,10 @@ from .const import (
     PROEFSTAND_MIN_SAMPLES,
     PROEFSTAND_MIN_TREND_DAYS,
     PROEFSTAND_SHAPE_MAX_SPREAD,
+    PROEFSTAND_EIS_AANDEEL_GUNSTIG_PROCENT,
+    PROEFSTAND_EIS_METINGEN,
+    PROEFSTAND_EIS_DAGEN,
+    PROEFSTAND_EIS_VOORDEEL_CT_PER_KWH,
     RELIABILITY_INDICATIVE,
     PROEFSTAND_LEDGER_DAYS,
     PRICE_SCALE_FACTOR,
@@ -8023,8 +8027,7 @@ class EnergyManagementSystemCoordinator:
             ),
         }
 
-    @staticmethod
-    def _met_gereedheid(kandidaat: dict) -> dict:
+    def _met_gereedheid(self, kandidaat: dict) -> dict:
         """Scheidt "de meting klopt" van "de winst is aangetoond"
         (v3.0.0).
 
@@ -8074,6 +8077,80 @@ class EnergyManagementSystemCoordinator:
             "winst_becijferd": winst_becijferd,
             "gereedheid": gereed,
             "gereedheid_uitleg": uitleg,
+            # v3.42.0: en wat er nog aan de EIS ontbreekt.
+            "toelating": self._proefstand_toelating(kandidaat, opbrengst),
+        }
+
+    def _proefstand_toelating(self, kandidaat: dict, opbrengst: dict) -> dict:
+        """Voldoet deze kandidaat aan de toelatingseis? (v3.42.0)
+
+        Negen kandidaten, waarvan er meerdere weken op "klaar om mee te
+        doen" staan, en er is er nog nooit één doorgestroomd. Wat ontbrak
+        was geen bewijs maar een afspraak: zonder criterium vooraf wordt
+        het altijd "nog even een week".
+
+        Dit besluit niets - het zegt alleen wat er nog ontbreekt en wat
+        er dan zou moeten gebeuren. Meesturen blijft een handmatige
+        keuze, één kandidaat tegelijk, precies zoals afgesproken.
+        """
+        aandeel = opbrengst.get("aandeel_gunstig_procent")
+        metingen = opbrengst.get("metingen") or opbrengst.get(
+            "momenten_met_verschil"
+        )
+        voordeel = (
+            opbrengst.get("mediaan_voordeel_ct_per_kwh")
+            if opbrengst.get("mediaan_voordeel_ct_per_kwh") is not None
+            else opbrengst.get("bedrag_per_kwh_ct")
+        )
+
+        tekort = []
+        if aandeel is None:
+            tekort.append("het aandeel gunstige metingen is niet becijferd")
+        elif aandeel < PROEFSTAND_EIS_AANDEEL_GUNSTIG_PROCENT:
+            tekort.append(
+                f"gunstig bij {aandeel:.0f}% van de metingen, eis is "
+                f"{PROEFSTAND_EIS_AANDEEL_GUNSTIG_PROCENT:.0f}%"
+            )
+        if metingen is None:
+            tekort.append("het aantal metingen is niet bekend")
+        elif metingen < PROEFSTAND_EIS_METINGEN:
+            tekort.append(
+                f"{metingen} metingen, eis is {PROEFSTAND_EIS_METINGEN}"
+            )
+        if voordeel is None:
+            tekort.append("het voordeel per kWh is niet becijferd")
+        elif voordeel < PROEFSTAND_EIS_VOORDEEL_CT_PER_KWH:
+            tekort.append(
+                f"voordeel {voordeel:.1f} ct/kWh, eis is "
+                f"{PROEFSTAND_EIS_VOORDEEL_CT_PER_KWH:.1f}"
+            )
+
+        dagen = len(self.reserve_daily_records or [])
+        if dagen < PROEFSTAND_EIS_DAGEN:
+            tekort.append(
+                f"{dagen} dagen gemeten, eis is {PROEFSTAND_EIS_DAGEN} - "
+                "driehonderd metingen op één dag is één dag"
+            )
+
+        if tekort:
+            return {
+                "voldoet": False,
+                "wat_ontbreekt": tekort,
+                "advies": (
+                    "Nog niet laten meesturen. De eis staat vast in "
+                    "const.py; hij is er om te voorkomen dat een kandidaat "
+                    "eeuwig op 'bijna' blijft staan."
+                ),
+            }
+        return {
+            "voldoet": True,
+            "wat_ontbreekt": [],
+            "advies": (
+                "Voldoet aan de eis. Laat deze kandidaat meesturen - één "
+                "tegelijk, zodat bij een afwijking te zien is welke het "
+                "deed - en vergelijk de eerstvolgende week met de week "
+                "ervoor."
+            ),
         }
 
     def _meet_langere_horizon(self, now: datetime) -> None:
@@ -15631,6 +15708,65 @@ class EnergyManagementSystemCoordinator:
             return None
         return sum(prijzen) / len(prijzen)
 
+    def _verkoop_loont_na_saldering(self, now: datetime) -> dict | None:
+        """Weegt verkopen nu tegen zelf gebruiken straks (v3.42.0).
+
+        Geeft None zolang salderen geldt of zolang de cijfers ontbreken -
+        dan verandert er niets aan het bestaande gedrag. Dat is bewust:
+        deze rem is tot 1 januari 2027 volledig inert, en er staat een
+        toets op dat dat zo blijft.
+        """
+        if self._is_salderen_active(now):
+            return None
+
+        entries = self._get_forecast_entries()
+        if not entries:
+            return None
+
+        opbrengst_nu = self._get_feedin_value_per_kwh(entries, now)
+        if opbrengst_nu is None:
+            return None
+
+        # De duurste prijs die vandaag nog komt: dát is wat een
+        # vastgehouden kWh straks bespaart.
+        rest = [
+            e["price_per_kwh"]
+            for e in entries
+            if datetime.fromisoformat(e["start"]) > now
+            and datetime.fromisoformat(e["start"]).date() == now.date()
+        ]
+        if not rest:
+            return None
+        vermeden = max(rest)
+
+        rendement = (self.learned_battery_efficiency_percent or 90.0) / 100
+        slijtage = (
+            (self.get_wear_cost_overview() or {}).get("slijtage_ct_per_kwh")
+            or 0.0
+        ) / 100
+        # De kWh zit al in de accu, dus alleen de ontlaadkant en de
+        # slijtage van deze slag tellen nog.
+        waarde_vasthouden = vermeden * rendement - slijtage
+
+        if waarde_vasthouden <= opbrengst_nu:
+            return None
+
+        return {
+            "mag_verkopen": False,
+            "methode": "na saldering: zelf gebruiken loont meer",
+            "opbrengst_verkopen_eur_per_kwh": round(opbrengst_nu, 4),
+            "waarde_vasthouden_eur_per_kwh": round(waarde_vasthouden, 4),
+            "duurste_prijs_later_eur_per_kwh": round(vermeden, 4),
+            "reden": (
+                f"Verkopen levert {opbrengst_nu * 100:.1f} ct/kWh op, terwijl "
+                f"dezelfde kWh straks {waarde_vasthouden * 100:.1f} ct "
+                f"bespaart (duurste prijs {vermeden * 100:.1f} ct, na "
+                f"{rendement * 100:.0f}% rendement en "
+                f"{slijtage * 100:.1f} ct slijtage). Sinds het einde van de "
+                "saldering is teruglevering geen wegstrepen meer."
+            ),
+        }
+
     def may_sell_now(
         self, now: datetime, beschikbaar: float | None = None
     ) -> dict:
@@ -15724,6 +15860,28 @@ class EnergyManagementSystemCoordinator:
                     "wat ontbreekt wordt in het goedkope blok bijgeladen."
                 ),
             }
+
+        # Rem 3 (v3.42.0): loont verkopen na de saldering nog wel?
+        #
+        # Zolang salderen geldt wordt een teruggeleverde kWh weggestreept
+        # tegen inkoop, dus verkopen levert exact de inkoopprijs op en is
+        # het om het even. Vanaf 1 januari 2027 niet meer: dan krijg je
+        # het kale tarief terwijl inkoop belast blijft.
+        #
+        # De machinerie daarvoor lag er al sinds v1.1.0 -
+        # `_export_value_eur_per_kwh` rekent beide werelden uit - maar de
+        # verkoopcheck gebruikte hem niet. Die vroeg alleen "houdt de
+        # woning het?", en ging er stilzwijgend van uit dat verkopen
+        # verder gratis geld is. Dat is de aanname die op 1 januari
+        # omklapt.
+        #
+        # Wat een vastgehouden kWh straks waard is: de duurste prijs die
+        # nog komt, min wat het kost om hem door de accu te halen -
+        # rendementsverlies en slijtage. Is dat meer dan wat verkopen nu
+        # opbrengt, dan is verkopen verlies.
+        rem = self._verkoop_loont_na_saldering(now)
+        if rem is not None:
+            return rem
 
         # Rem 2: houdt de woning het tot het goedkope blok?
         blok_start = self.last_cheap_block_start

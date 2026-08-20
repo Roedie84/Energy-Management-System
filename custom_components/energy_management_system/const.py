@@ -4087,6 +4087,28 @@ CAPACITY_TREND_HISTORY_DAYS = 400
 PRICE_SHAPE_HISTORY_DAYS = 60
 
 # Onder dit aantal waarnemingen per uur zegt een mediaan niets.
+# --- Wanneer een proefstandkandidaat mag meesturen (v3.42.0) ---------
+#
+# Negen kandidaten, waarvan er meerdere weken op "klaar om mee te doen"
+# staan, en er is er nog nooit één doorgestroomd. Wat ontbrak was geen
+# bewijs maar een AFSPRAAK: zonder criterium vooraf wordt het altijd
+# "nog even een week".
+#
+# Deze drempels leggen vast wat genoeg is. Ze zijn met opzet streng: een
+# kandidaat die gaat meesturen verandert wat de accu doet, en dat is niet
+# terug te draaien voor de dag die al voorbij is.
+#
+# - het voordeel moet in de overgrote meerderheid van de metingen gelden,
+#   niet gemiddeld: een kandidaat die de helft van de tijd geld kost en
+#   de andere helft meer oplevert, is een gok met een gunstig gemiddelde
+# - er moet genoeg gemeten zijn, en over genoeg dagen: 300 metingen op
+#   één dag is één dag
+# - en het voordeel moet groot genoeg zijn om de meetruis te overstijgen
+PROEFSTAND_EIS_AANDEEL_GUNSTIG_PROCENT = 90.0
+PROEFSTAND_EIS_METINGEN = 200
+PROEFSTAND_EIS_DAGEN = 14
+PROEFSTAND_EIS_VOORDEEL_CT_PER_KWH = 2.0
+
 PROEFSTAND_MIN_SAMPLES = 3
 # En onder dit aantal uren is het beeld te mager om iets over de dag te
 # zeggen.

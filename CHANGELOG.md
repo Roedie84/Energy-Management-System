@@ -18100,3 +18100,103 @@ een kamer die 's zomers dicht bij de buitentemperatuur zit, vullen de
 cellen rond het nulverschil zich snel.
 
 **Volledige testsuite**: 2900 tests, allemaal groen.
+
+## v3.42.0 — Drie punten: saldering, proefstand, vertalingen
+
+### 1. De verkoopcheck kende de saldering niet
+
+Op 31 december 2026 vervalt de saldering. Dan wordt een teruggeleverde
+kWh niet meer weggestreept tegen een ingekochte: je krijgt het kale
+tarief terwijl inkoop belast blijft.
+
+De machinerie daarvoor ligt er sinds v1.1.0 —
+`_get_feedin_value_per_kwh` rekent beide werelden al uit, de
+configuratie staat er, en de datum is instelbaar. Maar **de
+verkoopcheck gebruikte hem niet**. Die vroeg alleen "houdt de woning het
+tot het goedkope blok?" en ging er stilzwijgend van uit dat verkopen
+verder gratis geld is. Precies die aanname klapt om.
+
+Er is nu een derde rem: verkopen wordt geweigerd zodra dezelfde kWh
+straks méér bespaart dan hij nu opbrengt, na rendement en slijtage.
+
+```
+verkopen nu       2,0 ct/kWh
+vasthouden       27,7 ct/kWh   (duurste prijs 40 ct, 94% rendement,
+                                10,9 ct slijtage)
+```
+
+**Tot 1 januari 2027 is deze rem volledig inert**, en daar staat een
+toets op. Ontbreekt het teruglever-attribuut op de prijssensor, dan
+wordt er niets besloten — gissen met de inkoopprijs is precies de
+aanname die dan niet meer klopt.
+
+### 2. De proefstand zegt nu wat genoeg is
+
+Negen kandidaten, waarvan er meerdere weken op "klaar om mee te doen"
+stonden, en er is er nog nooit één doorgestroomd. Wat ontbrak was geen
+bewijs maar een **afspraak** — zonder criterium vooraf wordt het altijd
+"nog even een week".
+
+De eis staat nu in `const.py` en bij elke kandidaat staat wat er nog aan
+ontbreekt:
+
+| eis | waarde |
+|---|---|
+| gunstig bij | 90% van de metingen |
+| aantal metingen | 200 |
+| gemeten over | 14 dagen |
+| voordeel | 2,0 ct/kWh |
+
+Die veertien dagen zijn er bewust bij: een kandidaat meet elk kwartier,
+dus driehonderd metingen kunnen uit één etmaal komen. Driehonderd
+metingen op één dag is één dag.
+
+Dit besluit niets — meesturen blijft een handmatige keuze, één kandidaat
+tegelijk.
+
+### 3. De tekstbestanden liepen uiteen
+
+`strings.json` miste 32 sleutels die wél in `nl.json` en `en.json`
+stonden: de labels van de helft van de instelvelden. Aangevuld, en er
+staat nu een toets op dat de drie bestanden dezelfde sleutels dragen —
+in beide richtingen, en zonder lege teksten.
+
+**Volledige testsuite**: 2923 tests, allemaal groen.
+
+## v3.42.1 — De opruiming werkte, maar had geen effect
+
+**Gemeld** door de export van 20 augustus 14:10, ná het installeren van
+v3.41.0: veertig klimaatcellen, allemaal nog met de oude sleutel op
+buitentemperatuur, en geen enkele met de nieuwe.
+
+De opruiming werkte wel degelijk — er staat een toets op die aantoont
+dat hij de oude sleutels weggooit. Maar hij draait bij het terugzetten
+van de **opslag**, en daarna komt de klimaatsensor langs die dezelfde
+cellen terugzet uit zijn eigen **entiteit-attributen**. Twee paden voor
+dezelfde gegevens, en de tweede won.
+
+Precies de klasse fout die deze codebase eerder zag bij de
+NILM-apparaten (v0.63.115): entiteit-attributen die de Store
+overschrijven, met als gevolg dat een reparatie in de opslag geen effect
+heeft.
+
+Het herstelpad laat nu alleen het nieuwe sleutelformaat door.
+
+### Structuurscan 11: geen twee stille herstelpaden
+
+Een veld dat zowel in de Store staat als uit een entiteit wordt
+teruggezet, heeft twee bronnen van waarheid. Dat mag — soms is het de
+enige migratieweg — maar dan moet het bewust zijn en in de scan staan
+met de reden erbij.
+
+**De scan vond meteen een tweede geval, en dat was er één van mij.** In
+v3.27.0 zette ik de kalibratiestand in de opslag en liet ik het
+bestaande herstelpad van de schakelaar staan. De entiteit wordt opgezet
+ná het terugzetten van de opslag, dus won die altijd: zet je de stand uit
+en herstart je binnen de dertig seconden voordat de opslag is
+weggeschreven, dan kwam de kalibratie terug alsof er niets gebeurd was.
+
+De opslag is nu leidend. Die draagt ook de momentopname en de lopende
+capaciteitsmeting, en die drie horen bij elkaar.
+
+**Volledige testsuite**: 2929 tests, allemaal groen.

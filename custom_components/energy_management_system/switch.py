@@ -88,9 +88,20 @@ class KalibratieSwitch(SwitchEntity, RestoreEntity):
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
-        last_state = await self.async_get_last_state()
-        if last_state is not None:
-            self._coordinator.kalibratie = last_state.state == "on"
+        # v3.42.1: de stand komt uit de Store, niet uit deze entiteit.
+        #
+        # Gevonden door structuurscan 11, die op dezelfde dag werd
+        # geschreven naar aanleiding van de klimaatcellen. Ik had in
+        # v3.27.0 de kalibratiestand in de opslag gezet én dit
+        # herstelpad laten staan - twee bronnen voor dezelfde vlag.
+        #
+        # Deze entiteit wordt opgezet NA het terugzetten van de opslag,
+        # dus won hij altijd. Zet je de stand uit en herstart je binnen
+        # de dertig seconden voordat de opslag is weggeschreven, dan
+        # kwam de kalibratie terug alsof er niets gebeurd was.
+        #
+        # De opslag is leidend: die draagt ook de momentopname en de
+        # lopende capaciteitsmeting, en die drie horen bij elkaar.
 
     async def async_turn_on(self, **kwargs) -> None:
         await self._coordinator.async_set_kalibratie(True)
