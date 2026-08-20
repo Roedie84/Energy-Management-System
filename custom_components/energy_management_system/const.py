@@ -1624,7 +1624,16 @@ BATTERY_COOLING_OPPORTUNITY_KEEP_DELTA_C = 4.0
 # én gaat er nauwelijks vermogen doorheen, dan is er geen warmtebron en
 # valt er niets te koelen. Boven die stroomgrens blijft hij draaien,
 # ook onder de drempel - want dan zit de warmte er wél aan te komen.
-BATTERY_COOLING_OPPORTUNITY_IDLE_W = 300.0
+# v3.33.0: 300 was te hoog. Gemeten in de nacht van 19 op 20 augustus:
+# de ventilator ging zes keer uit bij 194 tot 290 W, en elke keer stond
+# de omvormer binnen een half uur weer op 27 graden. Bij die vermogens
+# is er dus wel degelijk een warmtebron - de aanname "onder 300 W valt
+# er niets te koelen" klopte niet.
+#
+# Bij écht nul watt bleef hij wel netjes uit: 08:57 uit bij 20 graden en
+# 0 W, en daarna is hij niet meer aangegaan. Honderd watt houdt dat
+# geval vast en laat de rest met rust.
+BATTERY_COOLING_OPPORTUNITY_IDLE_W = 100.0
 
 # Hoe lang de goedkope koeling wacht voor hij opnieuw begint (v3.26.1).
 #
@@ -1635,6 +1644,24 @@ BATTERY_COOLING_OPPORTUNITY_IDLE_W = 300.0
 # Twee uur bij een stille accu. Komt er wél belasting, dan geldt de
 # gewone rusttijd van een half uur - dan is er een echte reden.
 BATTERY_COOLING_OPPORTUNITY_REST_MINUTES = 120.0
+
+# Hoe vaak de goedkope koeling per etmaal mag aanslaan (v3.33.0).
+#
+# Drie keer heb ik aan drempels gedraaid om het pendelen te stoppen, en
+# drie keer kwam het in een andere vorm terug: v3.14.0, v3.23.1, en het
+# stilstandgetal van v3.26.1. De oorzaak zit niet in de drempel maar in
+# de installatie: bij 200 tot 430 W klimt de omvormer binnen een half
+# uur van 23 naar 27 graden, en dan is elke hysterese te smal.
+#
+# Dus een harde bovengrens. Slaat de goedkope koeling vaker dan dit aan,
+# dan is de aanzetdrempel voor DEZE installatie te laag gezet en heeft
+# doorgaan geen zin: bij 23 tegenover 27 graden valt er voor de cellen
+# vrijwel niets te winnen. De tak gaat op slot tot middernacht en er
+# gaat één melding uit met het advies.
+#
+# De BESCHERMING boven 35 graden valt hier niet onder en blijft altijd
+# schakelen - die grens gaat over de omvormer, niet over centen.
+BATTERY_COOLING_OPPORTUNITY_MAX_PER_DAG = 4
 
 # Boven deze temperatuur koelt de ventilator ALTIJD (v3.15.0).
 #
@@ -1774,6 +1801,7 @@ LOG_PRIORITEITEN = {
     # dan staat de sturing uren onnodig stil.
     "kalibratie_vol": LOG_PRIO_KRITIEK,
     "verbruiksleer_reset": LOG_PRIO_AANDACHT,
+    "koeling_te_scherp": LOG_PRIO_AANDACHT,
     # Aandacht - het vraagt een beslissing.
     "plan_verkoop_geblokkeerd": LOG_PRIO_AANDACHT,
     "battery_module_drift": LOG_PRIO_AANDACHT,
@@ -1831,6 +1859,19 @@ HEALTH_STATUS_SLECHT = "slecht"
 #
 # Stond hier sinds v1.1.4 en werd nergens gelezen; het oordeel over de
 # meetfrequentie loopt via SENSOR_CADENCE_SLOW_PERCENT. Twee drempels
+
+# Vanaf welke stapgrootte een sensor "grof afgerond" heet in plaats van
+# "traag" (v3.34.0).
+#
+# Gemeten aan de beschikbare-energiesensor: die zet stappen van 0,0864
+# kWh - exact één procent van 8,64 kWh. Bij 300 W duurt het een kwartier
+# voor de volgende stap valt, en dan lijkt hij traag terwijl hij gewoon
+# grof afrondt.
+#
+# De vermogenssensoren waarmee hij vergeleken wordt bewegen in stappen
+# van één watt. Een honderdste is ruim genoeg om die twee werelden te
+# scheiden zonder aan een eenheid vast te zitten.
+SENSOR_CADENCE_COARSE_STEP = 0.01
 # voor hetzelfde is een uitnodiging om de verkeerde te wijzigen.
 
 # Meer dan dit aantal ticks zonder geslaagde ronde is een storing.
@@ -2073,7 +2114,16 @@ PERSISTED_PLAIN_FIELDS = (
     # een profiel maar drie dagen oud is.
     "verbruiksleer_reset_op",
     "verbruiksleer_reset_historie",
+    # v3.33.0: de dagportie van de goedkope koeling. Een herstart mag
+    # de teller niet op nul zetten - dan is de bovengrens te omzeilen
+    # door de integratie te herladen.
+    "goedkope_koeling_teller",
     "kalibratie_momentopname",
+    # v3.33.1: de lopende capaciteitsmeting. Een kalibratie duurt uren
+    # en wordt zelden gedaan; één herstart mag hem niet kosten. Bij de
+    # kalibratie van 19 augustus gebeurde precies dat - de meting begon
+    # opnieuw bij 71% en haalde de drempel van 70% van de schaal niet.
+    "kalibratie_meting",
     # v1.16.5, gemeld: "Vandaag: 0.0 kWh opgewekt" terwijl de omvormer
     # 15,5 kWh had geproduceerd.
     #
@@ -2299,6 +2349,7 @@ PERSISTED_PLAIN_FIELDS = (
 # tick meteen worden gewist, omdat de coordinator dan denkt dat er een
 # nieuwe dag is begonnen - dan was het terugzetten zinloos geweest.
 PERSISTED_DATE_FIELDS = (
+    "goedkope_koeling_teldag",
     # v1.74.0: bij welke dag de plantoetsing staat. Zonder dit veld
     # begon elke herstart met een lege sleutel en werd de momentopname
     # van vanochtend weggegooid. Als DATUM bewaard, niet als tekst -
@@ -2605,6 +2656,14 @@ NOTIFICATION_TYPES: tuple[tuple[str, str, str, bool, int], ...] = (
         "Wanneer de koelventilator van de thuisaccu schakelt.",
         True,
         15,
+    ),
+    (
+        "koeling_te_scherp",
+        "Goedkope koeling staat te scherp",
+        "Wanneer de goedkope koeling zijn dagportie opmaakt - dan staat "
+        "de aanzetdrempel voor deze installatie te laag.",
+        True,
+        1440,
     ),
     (
         "verbruiksleer_reset",
@@ -3048,6 +3107,11 @@ SOLAR_BIAS_DRIFT_ATTENTION_PERCENT = 15.0
 # er 25% of meer naast zit, is meer dan dagruis.
 SOLAR_DAG_GOED_PERCENT = 10.0
 SOLAR_DAG_VER_MIS_PERCENT = 25.0
+
+# Vanaf hoeveel dagen het oordeel "twee soorten dagen" mag vallen
+# (v3.33.0). Met drie dagen is één uitschieter al genoeg om de correctie
+# in te houden, en dan wordt er nooit meer geleerd.
+SOLAR_BIAS_MIN_DAGEN = 5
 
 # Hoe dicht een dag bij de weinig-zon-drempel mag liggen voordat het het
 # vermelden waard is. Vandaag zat op ~70% van typisch, vlak op de grens -
@@ -4454,6 +4518,7 @@ ACHTERHOEKS_TITELS = {
     "battery_cooling": "Accukoeling",
     "kalibratie_vol": "De accu is vol - kalibratie klaor",
     "verbruiksleer_reset": "t Leren begint opnieuw",
+    "koeling_te_scherp": "De koeling geet te vaak an",
     "appliance_ready": "'n Apparaat is klaor",
     "appliance_cheap_moment": "Good moment veur 'n apparaat",
     "device_drift": "'n Apparaat wiekt af",

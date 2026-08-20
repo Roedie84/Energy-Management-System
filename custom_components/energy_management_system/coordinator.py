@@ -343,6 +343,7 @@ from .const import (
     BATTERY_COOLING_OPPORTUNITY_KEEP_DELTA_C,
     BATTERY_COOLING_OPPORTUNITY_IDLE_W,
     BATTERY_COOLING_OPPORTUNITY_REST_MINUTES,
+    BATTERY_COOLING_OPPORTUNITY_MAX_PER_DAG,
     BATTERY_COOLING_PROTECT_ALWAYS_C,
     BATTERY_COOLING_OPPORTUNITY_MIN_C,
     CONF_BATTERY_COOLING_OPPORTUNITY_C,
@@ -361,6 +362,7 @@ from .const import (
     SENSOR_CADENCE_HISTORY_LENGTH,
     SENSOR_CADENCE_MIN_SAMPLES,
     SENSOR_CADENCE_SLOW_PERCENT,
+    SENSOR_CADENCE_COARSE_STEP,
     MEASUREMENT_QUALITY_MIN_SAMPLES,
     NOTIFICATION_HISTORY_LENGTH,
     NOTIFICATION_RECOVERY_KINDS,
@@ -700,12 +702,16 @@ class EnergyManagementSystemCoordinator:
         # bij 2000 W is dat bescherming, geen optimalisatie.
         self.kalibratie: bool = False
         self.kalibratie_momentopname: dict | None = None
-        self._kalibratie_meting: dict | None = None
+        self.kalibratie_meting: dict | None = None
         # v3.30.0: wanneer de verbruiksleer voor het laatst opnieuw is
         # begonnen, en wat er toen is weggegooid.
         self.verbruiksleer_reset_op: str | None = None
         self.verbruiksleer_reset_historie: list[dict] = []
         self._verbruiksleer_reset_gevraagd_op: datetime | None = None
+        # v3.33.0: dagportie van de goedkope koeling.
+        self.goedkope_koeling_teller: int = 0
+        self.goedkope_koeling_teldag = None
+        self._goedkope_koeling_gemeld: bool = False
         self.steelstofzuiger_override: bool = False
         self.fietsladers_override: bool = False
         # Appliance-ready notification toggle (v0.63.54, requested):
@@ -18468,6 +18474,7 @@ class EnergyManagementSystemCoordinator:
         # Dan blijft zo'n dag voorgoed weg, en elke weekvergelijking
         # eromheen is stiekem scheef.
         gaten = self._ontbrekende_dagen()
+        gaten_set = set(gaten)
         if gaten:
             _LOGGER.info(
                 "Gaten in de dagreeks worden bijgehaald: %s",
@@ -18632,7 +18639,14 @@ class EnergyManagementSystemCoordinator:
                 "inlees_versie": ENERGY_BOOTSTRAP_VERSION,
             }
             for dag, waarden in sorted(per_dag.items())
-            if dag < oudste
+            # v3.32.1: ook de gaten MIDDEN in de reeks.
+            #
+            # v3.32.0 verbreedde het ophaalvenster wel, maar deze regel
+            # bleef `dag < oudste` - en 16 augustus ligt ver ná de oudste
+            # bekende dag. De dag werd dus keurig opgehaald en hier weer
+            # weggegooid. Bewezen door de export van 20 augustus 09:11:
+            # 404 meetpunten ingelezen, 16 augustus nog steeds weg.
+            if dag < oudste or dag in gaten_set
         ]
         if not toegevoegd:
             self.energy_history_bootstrap_note = (
@@ -18640,9 +18654,20 @@ class EnergyManagementSystemCoordinator:
             )
             return
 
-        self.energy_daily_history = (toegevoegd + self.energy_daily_history)[
-            -ENERGY_DAILY_HISTORY_DAYS:
-        ]
+        # v3.32.1: op datum samenvoegen in plaats van vooraan plakken.
+        #
+        # Een bijgehaald gat hoort op zijn eigen plek in de reeks, niet
+        # vóór de oudste dag. Zonder sorteren staat 16 augustus tussen de
+        # dagen van juli en klopt elke vergelijking die op volgorde
+        # rekent.
+        bestaand = {
+            r["datum"]: r for r in self.energy_daily_history if r.get("datum")
+        }
+        for rij in toegevoegd:
+            bestaand.setdefault(rij["datum"], rij)
+        self.energy_daily_history = sorted(
+            bestaand.values(), key=lambda r: r["datum"]
+        )[-ENERGY_DAILY_HISTORY_DAYS:]
         self.energy_history_bootstrap_note = (
             f"{len(toegevoegd)} dag(en) ingelezen uit de statistieken, vanaf "
             f"{toegevoegd[0]['datum']}."
@@ -19169,6 +19194,54 @@ class EnergyManagementSystemCoordinator:
         )
         self.last_household_load_w = self._read_corrected_consumption_power()
 
+    def _goedkope_koeling_op_slot(self, now: datetime) -> bool:
+        """Heeft de goedkope koeling zijn dagportie op? (v3.33.0)
+
+        Drie keer heb ik aan drempels gedraaid om het pendelen te
+        stoppen, en drie keer kwam het in een andere vorm terug. De
+        oorzaak zit niet in de drempel maar in de installatie: bij 200
+        tot 430 W klimt de omvormer binnen een half uur van 23 naar 27
+        graden, en dan is elke hysterese te smal.
+
+        Dus een harde bovengrens, met een melding erbij. Slaat de tak
+        vaker aan, dan staat de aanzetdrempel voor DEZE installatie te
+        laag en heeft doorgaan geen zin - bij 23 tegenover 27 graden valt
+        er voor de cellen vrijwel niets te winnen.
+        """
+        vandaag = now.date()
+        if self.goedkope_koeling_teldag != vandaag:
+            self.goedkope_koeling_teldag = vandaag
+            self.goedkope_koeling_teller = 0
+            self._goedkope_koeling_gemeld = False
+
+        if self.goedkope_koeling_teller < BATTERY_COOLING_OPPORTUNITY_MAX_PER_DAG:
+            return False
+
+        if not self._goedkope_koeling_gemeld:
+            self._goedkope_koeling_gemeld = True
+            drempel = self.config.get(
+                CONF_BATTERY_COOLING_OPPORTUNITY_C,
+                BATTERY_COOLING_OPPORTUNITY_MIN_C,
+            )
+            self._dispatch_notification(
+                notify_service=self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE),
+                title="🌀 Goedkope koeling staat te scherp",
+                message=(
+                    f"De ventilator sloeg vandaag al "
+                    f"{self.goedkope_koeling_teller} keer aan voor goedkope "
+                    f"koeling. Bij een aanzetdrempel van {drempel:.0f} °C "
+                    "komt hij op deze installatie steeds terug, want de "
+                    "omvormer warmt binnen een half uur weer op. "
+                    "Overweeg de drempel een paar graden hoger te zetten; "
+                    "onder de 30 °C valt er voor de cellen weinig te "
+                    "winnen. De koeling ligt tot middernacht stil - de "
+                    "bescherming boven 35 °C blijft gewoon werken."
+                ),
+                notification_id="ems_koeling_te_scherp",
+                kind="koeling_te_scherp",
+            )
+        return True
+
     def _is_goedkope_koelreden(self, accu_c: float, buiten_c: float) -> bool:
         """Komt de aanzetreden van de goedkope koeling? (v3.26.1)
 
@@ -19447,12 +19520,33 @@ class EnergyManagementSystemCoordinator:
                 # half uur na uitschakelen weer op 27 graden bij nul
                 # watt. Komt er wél belasting, dan geldt de gewone
                 # rusttijd - dan is er een echte reden.
+                # v3.33.0: de lange rusttijd geldt voor de HELE goedkope
+                # tak, niet alleen bij een stille accu.
+                #
+                # Gemeten in de nacht van 19 op 20 augustus: zes keer
+                # aan en uit tussen 22:05 en 08:57, steeds met een
+                # belasting van 200 tot 430 W. Die viel boven de
+                # stilstandgrens, dus gold de gewone rusttijd van een
+                # half uur en kon het pendelen elk uur terugkomen.
                 grens = None
-                if (
-                    self._is_goedkope_koelreden(accu_c, buiten_c)
-                    and vermogen_w < BATTERY_COOLING_OPPORTUNITY_IDLE_W
-                ):
+                if self._is_goedkope_koelreden(accu_c, buiten_c):
                     grens = BATTERY_COOLING_OPPORTUNITY_REST_MINUTES
+                    if self._goedkope_koeling_op_slot(nu):
+                        self.battery_cooling_state = {
+                            "actie": None,
+                            "reden": (
+                                "Goedkope koeling ligt tot middernacht "
+                                "stil: vandaag al "
+                                f"{self.goedkope_koeling_teller} keer "
+                                "aangeslagen."
+                            ),
+                            "accu_c": accu_c,
+                            "buiten_c": buiten_c,
+                            "vermogen_w": vermogen_w,
+                            "ventilator_aan": aan,
+                            "delta_c": round(accu_c - buiten_c, 1),
+                        }
+                        return
 
                 # v1.99.0: pas na de minimale rusttijd.
                 if self._cooling_switch_too_recent(
@@ -19580,6 +19674,19 @@ class EnergyManagementSystemCoordinator:
             return
 
         self.battery_cooling_last_change = dt_util.now()
+        # v3.33.0: alleen het AANSLAAN van de goedkope tak telt mee voor
+        # de dagportie. Uitschakelen is geen kosten en de bescherming
+        # boven 35 graden valt er buiten - die gaat over de omvormer,
+        # niet over centen.
+        if besluit["actie"] == "aan" and self._is_goedkope_koelreden(
+            besluit.get("accu_c") or 0.0, besluit.get("buiten_c") or 0.0
+        ):
+            vandaag = self.battery_cooling_last_change.date()
+            if self.goedkope_koeling_teldag != vandaag:
+                self.goedkope_koeling_teldag = vandaag
+                self.goedkope_koeling_teller = 0
+                self._goedkope_koeling_gemeld = False
+            self.goedkope_koeling_teller += 1
         self.battery_cooling_history.append(
             {
                 "moment": self.battery_cooling_last_change.isoformat(),
@@ -19717,26 +19824,39 @@ class EnergyManagementSystemCoordinator:
         mee te vergelijken.
         """
         if not self.kalibratie:
-            self._kalibratie_meting = None
+            self.kalibratie_meting = None
             return
 
         accu_w = self._read_sensor_float(
             self.config.get(CONF_BATTERY_POWER_SENSOR)
         )
-        meting = self._kalibratie_meting
+        meting = self.kalibratie_meting
         if meting is None:
             if soc_percent is None:
                 return
-            self._kalibratie_meting = {
+            self.kalibratie_meting = {
                 "begin_soc": soc_percent,
                 "begin": now.isoformat(),
                 "kwh_in": 0.0,
-                "laatste": now,
+                "laatste": now.isoformat(),
             }
             return
 
+        # v3.33.1: als tekst bewaren, zodat de meting een herstart
+        # overleeft.
+        #
+        # Gemeten bij de kalibratie van 19 augustus: er kwam geen
+        # capaciteit uit, omdat de herstart voor v3.31.0 de lopende
+        # meting op nul zette. Hij begon opnieuw bij 71% en had 70% van
+        # de schaal nodig. Een kalibratie duurt uren en wordt zelden
+        # gedaan - dan mag één herstart hem niet kosten.
         vorige = meting.get("laatste")
-        meting["laatste"] = now
+        if isinstance(vorige, str):
+            try:
+                vorige = datetime.fromisoformat(vorige)
+            except ValueError:
+                vorige = None
+        meting["laatste"] = now.isoformat()
         if accu_w is None or vorige is None:
             return
         uren = (now - vorige).total_seconds() / 3600
@@ -19780,7 +19900,7 @@ class EnergyManagementSystemCoordinator:
         if not modules:
             return
 
-        meting = self._kalibratie_meting or {}
+        meting = self.kalibratie_meting or {}
         self.kalibratie_momentopname = {
             "moment": now.isoformat(),
             "soc_percent": soc_percent,
@@ -20726,6 +20846,35 @@ class EnergyManagementSystemCoordinator:
         if huidige != gegevens["laatste"]:
             if gegevens["laatste"] is not None:
                 gegevens["wijzigingen"] += 1
+                # v3.34.0: hoe GROOT is de kleinste stap die deze sensor
+                # zet?
+                #
+                # Gemeld: "Dit is toch logisch? Als de accu niets doet
+                # staat de waarde stil." Terecht - en het lag nog
+                # specifieker. De beschikbare-energiesensor bewoog bij
+                # 4,9% van de ticks en werd daarom "traag" genoemd, met
+                # het advies om afgeleide tempo's anders te berekenen.
+                #
+                # De stappen in de eigen loggegevens waren echter
+                # allemaal veelvouden van 0,0864 kWh: exact één procent
+                # van 8,64 kWh. Die sensor rapporteert de laadstand in
+                # hele procenten. Bij 300 W duurt het een kwartier voor
+                # de volgende stap valt, en dat is precies de gemeten
+                # 4,9%.
+                #
+                # Grof afronden is iets anders dan achterlopen. Het
+                # eerste is normaal en vraagt niets; het tweede is een
+                # probleem. Zonder de stapgrootte zijn ze niet te
+                # onderscheiden.
+                try:
+                    stap = abs(float(huidige) - float(gegevens["laatste"]))
+                except (TypeError, ValueError):
+                    stap = None
+                if stap:
+                    vorige = gegevens.get("kleinste_stap")
+                    gegevens["kleinste_stap"] = (
+                        stap if vorige is None else min(vorige, stap)
+                    )
             gegevens["laatste"] = huidige
         # Begrensd venster, zodat het percentage het RECENTE gedrag
         # weerspiegelt en niet een gemiddelde over maanden.
@@ -20765,20 +20914,45 @@ class EnergyManagementSystemCoordinator:
                 continue
             percentage = round(100 * gegevens["wijzigingen"] / ticks, 1)
             traag = percentage < SENSOR_CADENCE_SLOW_PERCENT
+            stap = gegevens.get("kleinste_stap")
+
+            # v3.34.0: grof afronden is iets anders dan achterlopen.
+            #
+            # Een sensor die zelden beweegt maar dan altijd met dezelfde
+            # forse stap, rondt af. Dat is normaal en vraagt niets - de
+            # WAARDE klopt, hij komt alleen in brokken. Een sensor die
+            # zelden beweegt met kleine stappen loopt werkelijk achter,
+            # en daar zijn afgeleide tempo's wél onbetrouwbaar.
+            grof = bool(traag and stap and stap >= SENSOR_CADENCE_COARSE_STEP)
+            if grof:
+                status = "grof_afgerond"
+                reden = (
+                    f"Beweegt bij {percentage}% van de ticks, maar dan in "
+                    f"stappen van {stap:g}. Dat is de resolutie van de "
+                    "sensor, niet een achterstand: de waarde klopt, hij "
+                    "komt alleen in brokken."
+                )
+            elif traag:
+                status = "traag"
+                reden = (
+                    f"Beweegt bij {percentage}% van de ticks in stappen van "
+                    f"{stap:g}" if stap else
+                    f"Beweegt bij {percentage}% van de ticks"
+                ) + (
+                    " - trager dan de tick, dus afgeleide tempo's moeten "
+                    "over de werkelijke beweging worden gerekend en niet "
+                    "per tick."
+                )
+            else:
+                status = "volgt_de_tick"
+                reden = f"Beweegt bij {percentage}% van de ticks."
+
             rapport[entity_id] = {
-                "status": "traag" if traag else "volgt_de_tick",
+                "status": status,
                 "beweegt_percent": percentage,
                 "ticks": ticks,
-                "reden": (
-                    f"Beweegt bij {percentage}% van de ticks"
-                    + (
-                        " - trager dan de tick, dus afgeleide tempo's "
-                        "moeten over de werkelijke beweging worden "
-                        "gerekend en niet per tick."
-                        if traag
-                        else "."
-                    )
-                ),
+                "kleinste_stap": stap,
+                "reden": reden,
             }
         return rapport
 

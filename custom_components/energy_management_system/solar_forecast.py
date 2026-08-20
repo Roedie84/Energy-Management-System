@@ -31,6 +31,9 @@ from .const import (
     LEARNING_HISTORY_DAYS,
     MIN_SOLAR_HISTORY_FOR_DYNAMIC_THRESHOLD,
     MIN_SOLAR_HISTORY_FOR_SPREAD_BASED_FRACTION,
+    SOLAR_BIAS_MIN_DAGEN,
+    SOLAR_DAG_GOED_PERCENT,
+    SOLAR_DAG_VER_MIS_PERCENT,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -184,7 +187,53 @@ class SolarForecastAccuracyTracker:
         valid = self._bruikbare_afwijkingen()
         if not valid:
             return None
+
+        # v3.33.0: bij twee soorten dagen helemaal niet corrigeren.
+        #
+        # Gemeten op 20 augustus, één dag na het invoeren van de
+        # mediaan: die sprong van -4,7 naar -36,8 procent. Eén nieuwe
+        # dag liet hem van de goede naar de slechte groep overslaan,
+        # want de verdeling is drie goede en vier slechte dagen en
+        # daartussen kan een mediaan niet kiezen.
+        #
+        # Nagerekend over die zeven dagen - de fout die na correctie
+        # overblijft:
+        #
+        #     geen correctie        gemiddeld 27,6%   mediaan 36,8%
+        #     mediaan-bias -36,8%   gemiddeld 31,4%   mediaan 28,5%
+        #     gemiddelde-bias       gemiddeld 29,2%   mediaan 32,8%
+        #
+        # Geen van de drie wint overtuigend, en dat is het antwoord: een
+        # VLAKKE correctie kan twee soorten dagen niet tegelijk
+        # bedienen. Op een heldere dag die binnen 2% klopte, maakt
+        # -36,8% de voorspelling een derde te laag - dat is erger dan
+        # niets doen, want het is stelselmatig fout in plaats van soms.
+        #
+        # Dus: alleen corrigeren als de dagen op één hoop liggen. Doen
+        # ze dat niet, dan is nul de eerlijkste correctie, en - net zo
+        # belangrijk - een stabiele.
+        if self.bias_ingehouden_reden:
+            return None
         return round(statistics.median(valid), 1)
+
+    @property
+    def bias_ingehouden_reden(self) -> str | None:
+        """Waarom er geen vlakke correctie wordt toegepast (v3.33.0)."""
+        valid = self._bruikbare_afwijkingen()
+        if len(valid) < SOLAR_BIAS_MIN_DAGEN:
+            return None
+        goed = [v for v in valid if abs(v) <= SOLAR_DAG_GOED_PERCENT]
+        ver_mis = [v for v in valid if abs(v) >= SOLAR_DAG_VER_MIS_PERCENT]
+        if goed and ver_mis:
+            return (
+                f"Twee soorten dagen: {len(goed)} binnen "
+                f"{SOLAR_DAG_GOED_PERCENT:.0f}% en {len(ver_mis)} meer dan "
+                f"{SOLAR_DAG_VER_MIS_PERCENT:.0f}% ernaast. Een vlakke "
+                "correctie kan die niet allebei bedienen en zou de "
+                "heldere dagen bederven; daarom wordt er niet "
+                "gecorrigeerd."
+            )
+        return None
 
     @property
     def mean_bias_percent(self) -> float | None:

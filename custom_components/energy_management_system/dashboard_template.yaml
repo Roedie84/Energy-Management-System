@@ -677,6 +677,16 @@ views:
     hold_action:
       action: more-info
   - type: custom:mushroom-template-card
+    primary: Goedkope koeling staat te scherp
+    secondary: '{% set e = ''switch.woonkamer_energy_management_system_melding_koeling_te_scherp'' %}{% set last = state_attr(e, ''laatst_verstuurd'') %}{{ ''AAN'' if is_state(e, ''on'') else ''uit'' }} · demping 1440 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom(''%-d %b %H:%M'') }}{% endif %}'
+    icon: mdi:bell-outline
+    icon_color: '{{ ''green'' if is_state(''switch.woonkamer_energy_management_system_melding_koeling_te_scherp'', ''on'') else ''grey'' }}'
+    entity: switch.woonkamer_energy_management_system_melding_koeling_te_scherp
+    tap_action:
+      action: toggle
+    hold_action:
+      action: more-info
+  - type: custom:mushroom-template-card
     primary: Mogelijk sluipverbruik
     secondary: '{% set e = ''switch.woonkamer_energy_management_system_melding_sluipverbruik'' %}{% set last = state_attr(e, ''laatst_verstuurd'') %}{{ ''AAN'' if is_state(e, ''on'') else ''uit'' }} · demping 720 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom(''%-d %b %H:%M'') }}{% endif %}'
     icon: mdi:bell-outline

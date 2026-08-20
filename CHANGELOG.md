@@ -17556,3 +17556,152 @@ gevangen — een scan die niets vindt in code die klopt, bewijst niets.
   naar rechts gelijk te lezen.
 
 **Volledige testsuite**: 2622 tests, allemaal groen.
+
+## v3.32.1 — De gatenreparatie was half
+
+**Gemeld** door de export van 20 augustus 09:11: 16 augustus stond er
+nog steeds niet in, terwijl v3.32.0 dat had moeten oplossen. De
+inleesronde had wél gedraaid — 404 meetpunten per bron.
+
+v3.32.0 verbreedde het ophaalvenster, maar de regel die daarna bepaalt
+wélke opgehaalde dagen de reeks in gaan bleef staan op `dag < oudste`.
+En 16 augustus ligt ver ná de oudste bekende dag. De dag werd dus keurig
+opgehaald en één regel later weer weggegooid.
+
+Die regel laat nu ook de gaten door. En de samenvoeging gaat op datum in
+plaats van vooraan plakken: een bijgehaald gat hoort op zijn eigen plek,
+niet tussen de dagen van juli.
+
+**Volledige testsuite**: 2624 tests, allemaal groen.
+
+## v3.33.0 — De zonbias houdt zich in, en de koeling krijgt een dagportie
+
+**Gevraagd**: "Alles zo goed mogelijk maken, het moet een TOP integratie
+worden."
+
+### De zonbias sprong van -4,7 naar -36,8 in één dag
+
+Precies de zwakte waar v3.28.0 voor waarschuwde. De verdeling is drie
+goede dagen en vier slechte; daar kan een mediaan niet tussen kiezen, en
+één nieuwe dag laat hem overslaan.
+
+Nagerekend over die zeven dagen — de fout die na correctie overblijft:
+
+| correctie | gemiddelde fout | mediane fout |
+|---|---|---|
+| geen | **27,6%** | 36,8% |
+| mediaan −36,8% | 31,4% | **28,5%** |
+| gemiddelde −27,6% | 29,2% | 32,8% |
+
+Geen van de drie wint overtuigend, en dat is het antwoord: **een vlakke
+correctie kan twee soorten dagen niet tegelijk bedienen.** Op een
+heldere dag die binnen 2% klopte, maakt −36,8% de voorspelling een derde
+te laag. Dat is erger dan niets doen, want het is stelselmatig fout in
+plaats van soms.
+
+Vanaf nu wordt er alleen gecorrigeerd als de dagen op één hoop liggen.
+Liggen ze dat niet — en dat wordt met dezelfde grenzen bepaald als de
+meetkwaliteitskaart gebruikt — dan is nul de eerlijkste correctie, en
+net zo belangrijk: een stabiele. De reden staat erbij in
+`bias_ingehouden_reden`.
+
+Een reeks die wél op één hoop ligt wordt gewoon geleerd, en onder de
+vijf dagen wordt er niet ingehouden — anders is één uitschieter genoeg
+om nooit meer te leren.
+
+### De koeling: derde poging, nu met een vangrail
+
+Drie keer aan drempels gedraaid, drie keer kwam het pendelen in een
+andere vorm terug. De nacht van 19 op 20 augustus, zeven schakelingen:
+
+```
+00:03 uit 24,0°C 283W    00:47 aan 28,0°C
+01:18 uit 23,0°C 272W    01:57 aan 27,0°C
+02:28 uit 23,0°C 231W    03:04 aan 27,0°C
+...
+08:57 uit 20,0°C   0W    → bleef uit
+```
+
+De stilstandgrens van 300 W uit v3.26.1 was te hoog: bij 194 tot 290 W
+staat de omvormer binnen een half uur weer op 27 graden, dus daar is wel
+degelijk een warmtebron. **Naar 100 W** — bij écht nul watt bleef hij
+netjes uit, en dat geval blijft staan.
+
+De lange rusttijd gold alleen bij een stille accu, en die vlag stond
+door dezelfde 300 W-toets nooit aan. **Nu geldt hij voor de hele
+goedkope tak.**
+
+En dan het punt: **de oorzaak zit niet in de drempel maar in de
+installatie.** Bij 200 tot 430 W klimt de omvormer binnen een half uur
+van 23 naar 27 graden — daar is geen hysterese tegen bestand. Daarom
+een harde bovengrens van vier keer aanslaan per etmaal. Daarboven gaat
+de goedkope tak op slot tot middernacht, met één melding en het advies
+om de aanzetdrempel een paar graden hoger te zetten. Bij 23 tegenover 27
+graden valt er voor de cellen vrijwel niets te winnen.
+
+De teller overleeft een herstart — anders is de bovengrens te omzeilen
+door de integratie te herladen. En de **bescherming boven 35 graden valt
+er buiten**: die gaat over de omvormer, niet over centen.
+
+**Volledige testsuite**: 2634 tests, allemaal groen.
+
+## v3.33.1 — De capaciteitsmeting overleeft een herstart
+
+**Gevraagd**: "Is nu alles verwerkt in 3.33.0? Geen open eindjes meer?"
+
+Eén wel, en die had ik zelf beloofd. Bij de kalibratie van 19 augustus
+kwam er geen gemeten capaciteit uit: de herstart voor v3.31.0 zette de
+lopende meting op nul. Hij begon opnieuw bij 71% laadstand en had 70%
+van de schaal nodig — die drempel haalde hij niet meer.
+
+Een kalibratie duurt uren en wordt zelden gedaan. Dan mag één herstart
+hem niet kosten. De meting wordt nu bewaard, met het tijdstempel als
+tekst zodat het de opslag overleeft.
+
+**Volledige testsuite**: 2637 tests, allemaal groen.
+
+## v3.34.0 — Grof afronden is geen achterstand
+
+**Gemeld**: "Dit is toch logisch? Als de accu niets doet staat de waarde
+stil."
+
+Terecht, en het lag nog specifieker. De beschikbare-energiesensor bewoog
+bij 4,9% van de ticks en heette daarom "traag", met het advies om
+afgeleide tempo's over de werkelijke beweging te berekenen.
+
+Maar de stappen in de eigen loggegevens zijn allemaal veelvouden van
+**0,0864 kWh** — exact één procent van 8,64 kWh. Die sensor rapporteert
+de laadstand in hele procenten en rekent dat om. Bij 300 W valt de
+volgende stap pas na een kwartier, en dat komt uit op ongeveer 1 op de
+17 ticks. Gemeten: 4,9%. Het klopt tot op de decimaal.
+
+De waarde is dus niet fout en niet oud; hij komt alleen in brokken. Dat
+vraagt niets, en de kaart wekte ten onrechte de indruk van wel.
+
+De meting houdt nu ook de **kleinste stap** bij die een sensor zet.
+Beweegt een sensor zelden maar dan altijd met een forse stap, dan heet
+dat `grof_afgerond` en zegt de kaart dat het de resolutie is en geen
+achterstand. Beweegt hij zelden met kleine stapjes, dan loopt hij
+werkelijk achter en blijft het oordeel `traag` staan — daar zijn
+afgeleide tempo's wél onbetrouwbaar.
+
+De vermogenssensoren waarmee hij vergeleken wordt bewegen in stappen van
+één watt; de grens ligt op een honderdste, ruim genoeg om die twee
+werelden te scheiden.
+
+### Volledige controle voor deze oplevering
+
+| | |
+|---|---|
+| ongebruikte constanten | 0 van 541 |
+| structuurscan 1–4 (namen, statics, dood rekenwerk) | groen |
+| structuurscan 8 (beslisredenen) | groen |
+| structuurscan 9 (argumentaantallen) | groen |
+| versie ↔ README ↔ changelog | groen |
+| dashboard-YAML en de kopie in `dashboards/` | gelijk, 32 pagina's |
+
+De acht attributen die nog als "geschreven maar nooit gelezen" uit de
+scan komen, zijn alle acht via naamstrings of `getattr` bereikbaar — dat
+is nagegaan en geen van beide is dood.
+
+**Volledige testsuite**: 2639 tests, allemaal groen.
