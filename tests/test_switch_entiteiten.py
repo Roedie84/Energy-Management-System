@@ -137,7 +137,11 @@ def test_turning_it_on_reaches_the_coordinator(klasse, vlag):
         (mod.ForceManualSwitch, "force_manual"),
         (mod.LearningOnlySwitch, "learning_only"),
         (mod.VacationModeSwitch, "vacation_mode"),
-        (mod.KalibratieSwitch, "kalibratie"),
+        # v3.42.1: de kalibratie staat hier NIET meer bij. Die stand komt
+        # uit de opslag, samen met de momentopname en de lopende
+        # capaciteitsmeting - dat zijn drie dingen die bij elkaar horen.
+        # Twee herstelpaden voor dezelfde vlag betekende dat deze
+        # entiteit de opslag overschreef; zie structuurscan 11.
     ],
 )
 def test_the_state_survives_a_restart(klasse, vlag):
@@ -153,9 +157,21 @@ def test_the_state_survives_a_restart(klasse, vlag):
     assert getattr(c, vlag) is True
 
 
-@pytest.mark.parametrize(
-    "klasse", [mod.ForceManualSwitch, mod.KalibratieSwitch]
-)
+def test_the_calibration_state_comes_from_the_store():
+    """De entiteit mag de opslag niet overschrijven: die draagt ook de
+
+    momentopname en de lopende capaciteitsmeting.
+    """
+    c = _Coordinator()
+    c.kalibratie = True
+    knop = _bouw(mod.KalibratieSwitch, c, laatste=_VorigeStand("off"))
+
+    _run(knop.async_added_to_hass())
+
+    assert c.kalibratie is True
+
+
+@pytest.mark.parametrize("klasse", [mod.ForceManualSwitch])
 def test_without_a_previous_state_nothing_changes(klasse):
     """Een verse installatie heeft geen vorige stand."""
     c = _Coordinator()
