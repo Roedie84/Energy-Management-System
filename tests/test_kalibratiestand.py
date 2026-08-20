@@ -44,7 +44,7 @@ class _Kaal:
     learning_only = False
     vacation_mode = False
     config: dict = {}
-    _kalibratie_meting = None
+    kalibratie_meting = None
 
     def __init__(self) -> None:
         self.verstuurd: list[dict] = []
@@ -373,3 +373,53 @@ def test_the_reason_lines_say_what_is_paused():
     assert "30%" in tekst
     assert "drempel" not in tekst
     assert "geen bijzondere reden" not in tekst
+
+
+# --- de capaciteitsmeting overleeft een herstart ---------------------
+
+
+def test_the_running_measurement_is_kept():
+    """v3.33.1. Bij de kalibratie van 19 augustus kwam er geen capaciteit
+
+    uit: de herstart voor v3.31.0 zette de lopende meting op nul. Hij
+    begon opnieuw bij 71% en had 70% van de schaal nodig.
+
+    Een kalibratie duurt uren en wordt zelden gedaan - dan mag één
+    herstart hem niet kosten.
+    """
+    from custom_components.energy_management_system.const import (
+        PERSISTED_PLAIN_FIELDS,
+    )
+
+    assert "kalibratie_meting" in PERSISTED_PLAIN_FIELDS
+
+
+def test_the_clock_in_the_measurement_is_text():
+    """Een `datetime` overleeft de JSON-opslag niet; als tekst wel."""
+    obj = _Kaal()
+    obj.kalibratie_meting = None
+    obj.config = {}
+
+    C._meet_kalibratiecapaciteit(obj, datetime(2026, 8, 19, 12, 0), 40.0)
+
+    assert isinstance(obj.kalibratie_meting["laatste"], str)
+
+
+def test_it_picks_up_where_it_left_off():
+    """Na een herstart staat er tekst in plaats van een klok; dat mag de
+
+    optelling niet breken.
+    """
+    obj = _Kaal()
+    obj.config = {}
+    obj.kalibratie_meting = {
+        "begin_soc": 5.0,
+        "begin": "2026-08-19T09:00:00",
+        "kwh_in": 3.1,
+        "laatste": "2026-08-19T12:00:00",
+    }
+
+    C._meet_kalibratiecapaciteit(obj, datetime(2026, 8, 19, 12, 5), 45.0)
+
+    assert obj.kalibratie_meting["kwh_in"] == 3.1
+    assert obj.kalibratie_meting["begin_soc"] == 5.0

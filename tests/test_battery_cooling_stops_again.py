@@ -60,13 +60,32 @@ def _uit(accu, buiten, vermogen):
 # --- de nachtstand uit de export -------------------------------------
 
 
-def test_the_fan_stops_on_the_measured_night_reading():
-    """19 augustus 08:09: accu 23,0 met 16,5 buiten en 114 W, ventilator
+def test_the_fan_stops_when_the_battery_is_truly_idle():
+    """v3.33.0: de stilstandgrens is van 300 naar 100 W gegaan.
 
-    al elf uur aan. Onder de aanzetdrempel van 25 en vrijwel geen
-    vermogen - er is niets dat warmte maakt.
+    De nacht van 19 op 20 augustus liet zien dat 300 te hoog was: de
+    ventilator ging zes keer uit bij 194 tot 290 W, en elke keer stond
+    de omvormer binnen een half uur weer op 27 graden. Bij die vermogens
+    is er dus wel degelijk een warmtebron.
+
+    Bij écht nul watt klopte het wel: 20 augustus 08:57 uit bij 20
+    graden en 0 W, en daarna bleef hij uit.
     """
-    assert _uit(23.0, 16.5, 114.0) is True
+    assert _uit(20.0, 15.9, 0.0) is True
+    assert _uit(23.0, 16.5, 60.0) is True
+
+
+def test_a_working_battery_no_longer_stops_the_fan():
+    """De zes uitschakelingen van die nacht, met hun echte belasting."""
+    for accu, buiten, watt in (
+        (24.0, 15.7, 283.0),
+        (23.0, 15.3, 272.0),
+        (23.0, 14.7, 231.0),
+        (23.0, 14.5, 281.0),
+        (23.0, 14.5, 194.0),
+        (23.0, 14.3, 290.0),
+    ):
+        assert _uit(accu, buiten, watt) is False, f"{accu} bij {watt}W"
 
 
 def test_it_keeps_running_while_the_battery_is_working():
@@ -193,4 +212,105 @@ def test_the_measured_day_stops_far_less_often():
         if _uit(accu, buiten, watt)
     ]
 
-    assert stopt == ["08:31", "09:47", "10:49", "15:37"]
+    # v3.33.0: met de grens op 100 W valt 08:31 er ook buiten - daar
+    # ging 159 W door de accu, en dat is geen stilstand. De drie die
+    # overblijven draaiden op 87, 39 en 0 W.
+    assert stopt == ["09:47", "10:49", "15:37"]
+
+
+# --- de dagportie ----------------------------------------------------
+
+
+class _MetTeller(_Kaal):
+    """De harde bovengrens op de goedkope tak (v3.33.0)."""
+
+    def __init__(self):
+        self.goedkope_koeling_teller = 0
+        self.goedkope_koeling_teldag = None
+        self._goedkope_koeling_gemeld = False
+        self.verstuurd = []
+
+    def _dispatch_notification(self, **kwargs):
+        self.verstuurd.append(kwargs)
+
+    _goedkope_koeling_op_slot = C._goedkope_koeling_op_slot
+
+
+def test_the_cheap_branch_has_a_daily_ration():
+    """Drie keer heb ik aan drempels gedraaid om het pendelen te stoppen,
+
+    en drie keer kwam het in een andere vorm terug. De oorzaak zit niet
+    in de drempel maar in de installatie: bij 200 tot 430 W klimt de
+    omvormer binnen een half uur van 23 naar 27 graden, en dan is elke
+    hysterese te smal.
+    """
+    from custom_components.energy_management_system.const import (
+        BATTERY_COOLING_OPPORTUNITY_MAX_PER_DAG,
+    )
+
+    obj = _MetTeller()
+    nu = datetime(2026, 8, 20, 6, 0)
+
+    assert obj._goedkope_koeling_op_slot(nu) is False
+
+    obj.goedkope_koeling_teller = BATTERY_COOLING_OPPORTUNITY_MAX_PER_DAG
+
+    assert obj._goedkope_koeling_op_slot(nu) is True
+
+
+def test_the_ration_resets_at_midnight():
+    obj = _MetTeller()
+    obj.goedkope_koeling_teldag = datetime(2026, 8, 19).date()
+    obj.goedkope_koeling_teller = 9
+
+    assert obj._goedkope_koeling_op_slot(datetime(2026, 8, 20, 0, 5)) is False
+    assert obj.goedkope_koeling_teller == 0
+
+
+def test_it_says_why_the_fan_stays_off():
+    """Een ventilator die zonder uitleg stilligt, is niet van een storing
+
+    te onderscheiden.
+    """
+    obj = _MetTeller()
+    obj.goedkope_koeling_teller = 9
+    obj.goedkope_koeling_teldag = datetime(2026, 8, 20).date()
+
+    obj._goedkope_koeling_op_slot(datetime(2026, 8, 20, 6, 0))
+
+    assert len(obj.verstuurd) == 1
+    assert obj.verstuurd[0]["kind"] == "koeling_te_scherp"
+    assert "drempel" in obj.verstuurd[0]["message"]
+
+
+def test_the_warning_comes_once_a_day():
+    obj = _MetTeller()
+    obj.goedkope_koeling_teller = 9
+    obj.goedkope_koeling_teldag = datetime(2026, 8, 20).date()
+
+    for _ in range(5):
+        obj._goedkope_koeling_op_slot(datetime(2026, 8, 20, 6, 0))
+
+    assert len(obj.verstuurd) == 1
+
+
+def test_the_ration_survives_a_restart():
+    """Anders is de bovengrens te omzeilen door de integratie te
+
+    herladen.
+    """
+    from custom_components.energy_management_system.const import (
+        PERSISTED_DATE_FIELDS,
+        PERSISTED_PLAIN_FIELDS,
+    )
+
+    assert "goedkope_koeling_teller" in PERSISTED_PLAIN_FIELDS
+    assert "goedkope_koeling_teldag" in PERSISTED_DATE_FIELDS
+
+
+def test_protection_is_never_rationed():
+    """Boven 35 graden gaat het om de omvormer, niet om centen."""
+    obj = _Kaal()
+
+    assert obj._is_goedkope_koelreden(42.0, 15.8) is False
+    assert obj._is_goedkope_koelreden(36.0, 15.0) is False

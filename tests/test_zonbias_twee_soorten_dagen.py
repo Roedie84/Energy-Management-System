@@ -70,10 +70,51 @@ def _fout_na_correctie(afwijkingen: list[float], bias: float) -> tuple:
 def test_the_learned_bias_is_the_median():
     """Het gemiddelde wordt door de uitschieters bepaald; de mediaan
 
-    niet. Bij vier goede en drie slechte dagen hoort de correctie de
-    goede dagen met rust te laten.
+    niet. Bij een reeks die op één hoop ligt is de mediaan de correctie.
     """
-    assert _tracker(GEMETEN).learned_bias_percent == -4.7
+    eenduidig = [-18.0, -22.0, -20.0, -19.0, -21.0, -20.0, -23.0]
+
+    assert _tracker(eenduidig).learned_bias_percent == -20.0
+
+
+def test_two_kinds_of_days_get_no_flat_correction():
+    """v3.33.0. Gemeten op 20 augustus, één dag na het invoeren van de
+
+    mediaan: die sprong van -4,7 naar -36,8 procent. Eén nieuwe dag liet
+    hem van de goede naar de slechte groep overslaan.
+
+    Nagerekend over die zeven dagen wint geen van de drie mogelijkheden
+    overtuigend, en dat is het antwoord: een vlakke correctie kan twee
+    soorten dagen niet tegelijk bedienen. Op een heldere dag die binnen
+    2% klopte maakt -36,8% de voorspelling een derde te laag.
+    """
+    tracker = _tracker(GEMETEN)
+
+    assert tracker.learned_bias_percent is None
+    assert "Twee soorten dagen" in tracker.bias_ingehouden_reden
+
+
+def test_the_correction_no_longer_jumps():
+    """De sprong van -4,7 naar -36,8 door één nieuwe dag was het
+
+    probleem. Met inhouden blijft de uitkomst gelijk, hoe de slechte
+    dagen ook binnenkomen.
+    """
+    gisteren = [-1.3, -2.7, -1.5, -41.6, -4.7, -51.4, -54.8]
+    vandaag = [-2.7, -1.5, -41.6, -4.7, -51.4, -54.8, -36.8]
+
+    assert _tracker(gisteren).learned_bias_percent is None
+    assert _tracker(vandaag).learned_bias_percent is None
+
+
+def test_a_short_history_still_learns():
+    """Met drie dagen is één uitschieter al genoeg om de correctie in te
+
+    houden, en dan wordt er nooit meer geleerd.
+    """
+    kort = [-1.0, -40.0, -2.0]
+
+    assert _tracker(kort).learned_bias_percent == -2.0
 
 
 def test_the_mean_is_still_visible_for_comparison():

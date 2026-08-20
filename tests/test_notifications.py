@@ -180,6 +180,10 @@ def test_only_the_pre_existing_kinds_default_to_on():
         # v3.30.0: net als de kalibratie een gevolg van een bewuste
         # handeling. Wie op de knop drukt hoort te horen wat er weg is.
         "verbruiksleer_reset",
+        # v3.33.0: adviesmelding bij een te scherpe drempel; die hoort
+        # aan te staan, want anders blijft de koeling stil zonder dat
+        # iemand weet waarom.
+        "koeling_te_scherp",
         "sluipverbruik",
         "device_drift",
         "mode_change",
