@@ -71,6 +71,10 @@ def _vul_alles(c):
     c._pv_geometry_day_peak_azimuth = 183.0
     c._pv_geometry_day_expected_peak_w = 3000.0
     c._co2_day_key = date(2026, 8, 6)
+    # v3.33.0: de dagportie van de goedkope koeling. Zonder bewaren is
+    # de bovengrens te omzeilen door de integratie te herladen.
+    c.goedkope_koeling_teldag = date(2026, 8, 6)
+    c.goedkope_koeling_teller = 3
     c._peak_power_month_key = 202608
     c._counterfactual_month_key = 202608
     c._summary_month_key = 202608

@@ -93,3 +93,33 @@ def test_the_bootstrap_reaches_back_to_the_gap():
     bron = inspect.getsource(C.async_bootstrap_energy_history)
 
     assert "_ontbrekende_dagen" in bron
+
+
+def test_the_gap_day_is_not_filtered_out_again():
+    """v3.32.0 verbreedde het ophaalvenster wel, maar de regel die de
+
+    rijen selecteerde bleef `dag < oudste` - en 16 augustus ligt ver ná
+    de oudste bekende dag. De dag werd opgehaald en meteen weer
+    weggegooid.
+
+    Bewezen door de export van 20 augustus 09:11: 404 meetpunten
+    ingelezen, 16 augustus nog steeds weg.
+    """
+    import inspect
+
+    bron = inspect.getsource(C.async_bootstrap_energy_history)
+
+    assert "if dag < oudste or dag in gaten_set" in bron
+
+
+def test_a_filled_gap_lands_in_the_right_place():
+    """Een bijgehaald gat hoort op zijn eigen plek in de reeks, niet
+
+    vóór de oudste dag: zonder sorteren staat 16 augustus tussen de
+    dagen van juli.
+    """
+    import inspect
+
+    bron = inspect.getsource(C.async_bootstrap_energy_history)
+
+    assert "sorted(" in bron.split("bestaand = {")[1][:400]

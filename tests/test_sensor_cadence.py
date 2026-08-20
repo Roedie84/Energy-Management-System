@@ -10,6 +10,7 @@ tegen" van "de sensoren meten op een ander tempo" - en alleen het tweede
 was waar.
 """
 from datetime import datetime, timedelta, timezone
+import pytest
 
 from custom_components.energy_management_system.const import (
     CONF_AVAILABLE_ENERGY_SENSOR,
@@ -54,8 +55,9 @@ def test_a_slow_sensor_is_recognised(make_coordinator, hass):
     c = make_coordinator(_config())
     _accu_actief(hass)
     for i in range(SENSOR_CADENCE_MIN_SAMPLES + 10):
-        # Beweegt eens per vijf ticks.
-        hass.states.set("sensor.beschikbaar", str(6.0 + (i // 5) * 0.1))
+        # Beweegt eens per vijf ticks, en dan met een KLEINE stap: dat
+        # is achterlopen, niet afronden (v3.34.0).
+        hass.states.set("sensor.beschikbaar", str(6.0 + (i // 5) * 0.001))
         c._update_sensor_cadence_tracking()
 
     rapport = c.get_sensor_cadence_report()["sensor.beschikbaar"]
@@ -207,9 +209,56 @@ def test_a_genuinely_slow_sensor_is_still_caught(make_coordinator, hass):
     _accu_actief(hass)
 
     for i in range(SENSOR_CADENCE_MIN_SAMPLES * 2):
-        hass.states.set("sensor.beschikbaar", str(6.0 + (i // 8) * 0.1))
+        hass.states.set("sensor.beschikbaar", str(6.0 + (i // 8) * 0.001))
         c._update_sensor_cadence_tracking()
 
     assert c.get_sensor_cadence_report()["sensor.beschikbaar"]["status"] == (
         "traag"
+    )
+
+
+# --- grof afronden is geen achterstand (v3.34.0) ---------------------
+
+
+def test_coarse_rounding_is_not_called_slow(make_coordinator, hass):
+    """Gemeld: "Dit is toch logisch? Als de accu niets doet staat de
+
+    waarde stil."
+
+    Terecht, en het lag nog specifieker. De beschikbare-energiesensor
+    bewoog bij 4,9% van de ticks en heette daarom "traag", met het advies
+    om afgeleide tempo's anders te berekenen. Maar de stappen in de
+    loggegevens waren allemaal veelvouden van 0,0864 kWh - exact één
+    procent van 8,64 kWh. Die sensor rapporteert de laadstand in hele
+    procenten; bij 300 W valt de volgende stap pas na een kwartier.
+
+    De waarde klopt, hij komt alleen in brokken. Dat vraagt niets.
+    """
+    c = make_coordinator(_config())
+    _accu_actief(hass)
+
+    for i in range(SENSOR_CADENCE_MIN_SAMPLES * 2):
+        # Eens per zeventien ticks een stap van 0,0864 - de gemeten
+        # werkelijkheid.
+        hass.states.set("sensor.beschikbaar", str(6.0 - (i // 17) * 0.0864))
+        c._update_sensor_cadence_tracking()
+
+    rapport = c.get_sensor_cadence_report()["sensor.beschikbaar"]
+
+    assert rapport["status"] == "grof_afgerond"
+    assert rapport["kleinste_stap"] == pytest.approx(0.0864, abs=0.0005)
+    assert "resolutie" in rapport["reden"]
+    assert "achterstand" in rapport["reden"]
+
+
+def test_a_sensor_that_follows_the_tick_needs_no_verdict(make_coordinator, hass):
+    c = make_coordinator(_config())
+    _accu_actief(hass)
+
+    for i in range(SENSOR_CADENCE_MIN_SAMPLES * 2):
+        hass.states.set("sensor.beschikbaar", str(6.0 + i * 0.013))
+        c._update_sensor_cadence_tracking()
+
+    assert c.get_sensor_cadence_report()["sensor.beschikbaar"]["status"] == (
+        "volgt_de_tick"
     )
