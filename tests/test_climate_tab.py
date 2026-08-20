@@ -206,7 +206,10 @@ def test_a_cell_that_disagrees_with_itself_is_not_learned(
     """
     c = make_coordinator(_base_config())
     key = c._climate_rate_key("d4.0", "beide_open", "uit")
-    c.climate_rate_history = {key: [-0.284, 0.137, -0.067, 0.009, -0.156]}
+    # v3.42.2: met een mediaan ruim boven het omslagpunt. Bij een mediaan
+    # rond nul is tekenwisseling juist te verwachten - zie de toets
+    # hieronder.
+    c.climate_rate_history = {key: [-0.42, 0.14, -0.51, -0.38, -0.47]}
 
     oordeel = c.get_climate_rate("d4.0", "beide_open", "uit")
 
@@ -850,3 +853,41 @@ def test_backyard_spike_filter_returns_none_without_sensor_configured(
     coordinator = make_coordinator({})
 
     assert coordinator._get_filtered_backyard_temp_c(DAY0) is None
+
+
+def test_the_crossover_cell_is_allowed_to_flip_sign(make_coordinator, hass):
+    """De eerste cel die zich vulde na de omzetting naar verschil-
+
+    sleutels, gemeten op 20 augustus 20:43:
+
+        d0.0|gedeeltelijk|uit  [0.394, 0.219, -0.142, -0.068, 0.045]
+
+    Bij buiten gelijk aan binnen is het werkelijke tempo per definitie
+    ongeveer nul, en dan wisselt het teken vanzelf. De toets van v3.41.0
+    zou die cel ALTIJD afwijzen - niet omdat hij onbruikbaar is, maar
+    omdat hij op het omslagpunt ligt. Dat was de ene cel die per
+    constructie nooit kon slagen.
+    """
+    c = make_coordinator(_base_config())
+    key = c._climate_rate_key("d0.0", "gedeeltelijk", "uit")
+    c.climate_rate_history = {key: [0.394, 0.219, -0.142, -0.068, 0.045]}
+
+    oordeel = c.get_climate_rate("d0.0", "gedeeltelijk", "uit")
+
+    assert oordeel["eenduidig"] is True
+    assert oordeel["voldoende_data"] is True
+    assert abs(oordeel["rate_c_per_hour"]) < 0.1
+
+
+def test_a_clear_rate_that_disagrees_is_still_refused(make_coordinator, hass):
+    """De uitzondering geldt alleen rond nul. Een cel die zegt dat het
+
+    een halve graad per uur opwarmt én afkoelt, blijft onbruikbaar.
+    """
+    c = make_coordinator(_base_config())
+    key = c._climate_rate_key("d8.0", "beide_open", "uit")
+    c.climate_rate_history = {key: [0.62, -0.55, 0.71, -0.48, 0.66]}
+
+    oordeel = c.get_climate_rate("d8.0", "beide_open", "uit")
+
+    assert oordeel["eenduidig"] is False
