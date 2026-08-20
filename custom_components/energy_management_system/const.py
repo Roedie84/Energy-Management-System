@@ -869,6 +869,29 @@ CLIMATE_RATE_MIN_SAMPLES = 5
 # the more confident projection. Both tiers are computed in parallel
 # for the same forecast, not two separate models.
 CLIMATE_RATE_RELIABLE_SAMPLES = 15
+
+# Onder welk tempo een cel "er gebeurt niets" zegt (v3.42.2).
+#
+# De teken-toets van v3.41.0 wees cellen af waarin de helft opwarmt en
+# de helft afkoelt. Dat is juist bij een fors tempo, maar het is een
+# denkfout bij het VERSCHIL rond nul.
+#
+# Gemeten op 20 augustus 20:43, de eerste cel die zich vulde na de
+# omzetting naar verschil-sleutels:
+#
+#     d0.0|gedeeltelijk|uit  [0.394, 0.219, -0.142, -0.068, 0.045]
+#     mediaan 0,045 °C/uur
+#
+# Bij buiten gelijk aan binnen is het werkelijke tempo per definitie
+# ongeveer nul, en dan wisselt het teken vanzelf. Mijn toets zou die cel
+# ALTIJD afwijzen - niet omdat hij onbruikbaar is, maar omdat hij precies
+# op het omslagpunt ligt. Dat is de ene cel die per constructie nooit
+# kon slagen.
+#
+# Een tempo onder een tiende graad per uur verandert de kamer over een
+# projectie van zes uur met minder dan een halve graad. Dat is "er
+# gebeurt niets", en dat is een bruikbaar antwoord.
+CLIMATE_RATE_NEUTRAL_C_PER_HOUR = 0.1
 CLIMATE_FORECAST_HORIZON_HOURS = 24
 CLIMATE_FORECAST_FETCH_INTERVAL_MINUTES = 30
 

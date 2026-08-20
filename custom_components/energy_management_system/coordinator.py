@@ -160,6 +160,7 @@ from .const import (
     CLIMATE_RATE_MAX_INTERVAL_HOURS,
     CLIMATE_RATE_MIN_SAMPLES,
     CLIMATE_RATE_RELIABLE_SAMPLES,
+    CLIMATE_RATE_NEUTRAL_C_PER_HOUR,
     CLIMATE_FORECAST_HORIZON_HOURS,
     CLIMATE_FORECAST_FETCH_INTERVAL_MINUTES,
     CLIMATE_FORECAST_BIAS_HISTORY_LENGTH,
@@ -716,6 +717,11 @@ class EnergyManagementSystemCoordinator:
         self.verbruiksleer_reset_historie: list[dict] = []
         self._verbruiksleer_reset_gevraagd_op: datetime | None = None
         # v3.33.0: dagportie van de goedkope koeling.
+        # v3.43.0: wat de planning het laatst over een tekort zei. Eén
+        # veld in plaats van twee, want de functiegrootte-ratel van
+        # v3.35.0 laat `__init__` niet verder groeien - en die ratel
+        # heeft gelijk.
+        self.last_plan_shortfall: dict = {"kwartieren": 0, "perioden": []}
         self.goedkope_koeling_teller: int = 0
         self.goedkope_koeling_teldag = None
         self._goedkope_koeling_gemeld: bool = False
@@ -15425,6 +15431,12 @@ class EnergyManagementSystemCoordinator:
             )
 
         tekorten = samenvatting.get("tekort_kwartieren") or 0
+        # v3.43.0: vastleggen voor de verkooptoets, die hier niet zelf
+        # de planning voor mag opbouwen.
+        self.last_plan_shortfall = {
+            "kwartieren": tekorten,
+            "perioden": list(samenvatting.get("tekort_perioden") or []),
+        }
 
         # v3.9.0: een ondergrens, en zeggen WANNEER het tekort valt.
         #
@@ -15858,6 +15870,56 @@ class EnergyManagementSystemCoordinator:
                     f"onder "
                     f"{SOLAR_POOR_DAY_KWH:.0f}). Wat er is, is voor de woning; "
                     "wat ontbreekt wordt in het goedkope blok bijgeladen."
+                ),
+            }
+
+        # Rem 4 (v3.43.0): de planning zegt zelf dat de accu tekortkomt.
+        #
+        # Gemeld: "Als ik een melding krijg dat de accu de nacht niet
+        # haalt, moet hij toch eigenlijk ook het manual terugleveren
+        # stoppen?"
+        #
+        # Ja. Gemeten op 20 augustus 20:06 en 20:43: de planning meldde
+        # kritiek "vier kwartieren waarin de accu niets meer kan leveren,
+        # morgen 06:30-07:30", en tegelijk stond er acht kwartieren
+        # verkopen gepland tussen 20:45 en 23:00 - van 69% naar 35%.
+        #
+        # Beide kloppen op zichzelf. `may_sell_now` kijkt tot het
+        # volgende goedkope blok; de tekortmelding kijkt de hele
+        # planning door. Maar het is één accu, en dan is dit één hand die
+        # geeft en één die het weer wegneemt.
+        #
+        # Dezelfde drempel als de melding: onder de drie kwartieren is
+        # het een planning die precies uitkomt, en die reden staat
+        # uitgeschreven bij `PLAN_SHORTFALL_ALERT_MIN_QUARTERS`.
+        # De LAATST berekende stand, niet hier opnieuw uitrekenen.
+        #
+        # De eerste versie riep `get_quarter_plan_summary` aan vanuit
+        # deze toets. Dat bouwt honderdtien kwartieren opnieuw op bij
+        # elke ronde, en een fout daarin breekt dan de aansturing - de
+        # volledige tick-toets viel er meteen over om.
+        #
+        # De planning wordt elke ronde toch al doorgerekend voor de
+        # tekortmelding. Eén ronde vertraging is hier onschadelijk: een
+        # tekort dat over acht uur valt, verschuift niet binnen een
+        # minuut.
+        tekorten = self.last_plan_shortfall.get("kwartieren") or 0
+        if tekorten >= PLAN_SHORTFALL_ALERT_MIN_QUARTERS:
+            perioden = self.last_plan_shortfall.get("perioden") or []
+            wanneer = (
+                ", ".join(str(p) for p in perioden[:2])
+                if perioden
+                else "onbekend wanneer"
+            )
+            return {
+                "mag_verkopen": False,
+                "methode": "planning voorziet een tekort",
+                "tekort_kwartieren": tekorten,
+                "reden": (
+                    f"Niet verkopen: de planning voorziet {tekorten} "
+                    f"kwartier(en) waarin de accu niets meer kan leveren "
+                    f"({wanneer}). Wat er nu weggaat, moet dan van het net "
+                    "komen."
                 ),
             }
 
@@ -25605,7 +25667,18 @@ class EnergyManagementSystemCoordinator:
         eenduidig = True
         if sample_count >= CLIMATE_RATE_MIN_SAMPLES:
             positief = sum(1 for v in history if v > 0)
-            eenduidig = positief == 0 or positief == sample_count
+            middelpunt = statistics.median(history)
+            # v3.42.2: een cel rond het omslagpunt mag wisselen van teken.
+            #
+            # Bij buiten gelijk aan binnen is het werkelijke tempo per
+            # definitie ongeveer nul, en dan wisselt het teken vanzelf.
+            # De toets van v3.41.0 zou die cel altijd afwijzen - niet
+            # omdat hij onbruikbaar is, maar omdat hij op het omslagpunt
+            # ligt. "Er gebeurt niets" is een bruikbaar antwoord.
+            neutraal = abs(middelpunt) < CLIMATE_RATE_NEUTRAL_C_PER_HOUR
+            eenduidig = (
+                positief == 0 or positief == sample_count or neutraal
+            )
             if not eenduidig:
                 betrouwbaarheid = "niet_eenduidig"
         return {

@@ -18200,3 +18200,86 @@ De opslag is nu leidend. Die draagt ook de momentopname en de lopende
 capaciteitsmeting, en die drie horen bij elkaar.
 
 **Volledige testsuite**: 2929 tests, allemaal groen.
+
+## v3.42.2 — De cel op het omslagpunt kon nooit slagen
+
+**Gemeten** in de export van 20 augustus 20:43, de eerste cel die zich
+vulde na de omzetting naar verschil-sleutels:
+
+```
+d0.0|gedeeltelijk|uit   [0.394, 0.219, -0.142, -0.068, 0.045]
+mediaan 0,045 °C/uur    spreiding 0,54
+```
+
+Tekens door elkaar heen — precies waar de wachter van v3.41.0 op afgaat.
+Maar hier is dat geen ruis en geen verkeerde sleutel: bij buiten gelijk
+aan binnen is het werkelijke tempo per definitie ongeveer nul, en dan
+wisselt het teken vanzelf.
+
+Die wachter zou de cel rond nul verschil **altijd** afwijzen. Niet omdat
+hij onbruikbaar is, maar omdat hij op het omslagpunt ligt — de ene cel
+die per constructie nooit kon slagen. En het is niet zomaar een cel: bij
+een kamer die 's zomers dicht bij de buitentemperatuur zit, is dat de
+cel die zich het eerst vult.
+
+Een tempo onder een tiende graad per uur verandert de kamer over een
+projectie van zes uur met minder dan een halve graad. Dat is "er gebeurt
+niets", en dat is een bruikbaar antwoord. Cellen met een mediaan onder
+die grens mogen daarom van teken wisselen; daarboven blijft de wachter
+staan.
+
+De toets die de wachter bewaakte gebruikte cijfers met een mediaan van
+−0,067 — óók onder de grens. Die is vervangen door een reeks die
+werkelijk een half graad per uur beweert en zichzelf tegenspreekt, want
+dát is het geval waar de wachter voor bedoeld is.
+
+**Volledige testsuite**: 2931 tests, allemaal groen.
+
+## v3.43.0 — Eén hand die geeft en één die het wegneemt
+
+**Gevraagd**: "Als ik een melding krijg dat de accu de nacht niet haalt,
+moet hij toch eigenlijk ook het manual terugleveren stoppen? Of zie ik
+dat verkeerd?"
+
+Niet verkeerd. Gemeten op 20 augustus, in dezelfde export:
+
+```
+20:06  KRITIEK  vier kwartieren waarin de accu niets meer kan
+                leveren, morgen 06:30-07:30
+
+20:45  verkopen  37,5 ct   soc 69%
+21:00  verkopen  37,4 ct   soc 64%
+...
+23:00  verkopen  34,9 ct   soc 35%
+```
+
+Acht kwartieren verkoop gepland, terwijl de planning zelf waarschuwt dat
+de accu morgenvroeg leegloopt.
+
+Beide kloppen op zichzelf. `may_sell_now` kijkt tot het volgende
+goedkope blok; de tekortmelding kijkt de hele planning door. Maar het is
+één accu, en dan is dit één hand die geeft en één die het weer wegneemt.
+
+Er is nu een vierde rem: voorziet de planning drie of meer
+tekortkwartieren, dan wordt er niet verkocht. Dezelfde ondergrens als de
+melding zelf — onder de drie is het geen tekort maar een planning die
+precies uitkomt, en die reden staat uitgeschreven bij
+`PLAN_SHORTFALL_ALERT_MIN_QUARTERS` na 75 meldingen waarvan 47 op één
+dag.
+
+### Twee eigen wachters die aansloegen
+
+**De eerste versie riep de kwartierplanning aan vanuit de verkooptoets.**
+Dat bouwt honderdtien kwartieren opnieuw op bij élke ronde, en een fout
+daarin breekt dan de aansturing — de volledige tick-toets viel er meteen
+over om. De rem leest nu de laatst berekende stand, die elke ronde toch
+al wordt doorgerekend voor de melding. Eén ronde vertraging is
+onschadelijk: een tekort dat over acht uur valt, verschuift niet binnen
+een minuut.
+
+**En de functiegrootte-ratel van v3.35.0 sloeg aan** omdat `__init__`
+met twee uitspraken groeide. Teruggebracht naar één veld, en die ene is
+bewust in de lijst bijgewerkt met de reden erbij. De ratel is een
+drempel en geen verbod: hij dwingt af dat groei een besluit is.
+
+**Volledige testsuite**: 2936 tests, allemaal groen.
