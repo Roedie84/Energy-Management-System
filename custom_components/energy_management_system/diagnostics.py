@@ -811,6 +811,12 @@ async def async_get_config_entry_diagnostics(
             "last_extra_dip_margin_eur_per_kwh": coordinator.last_extra_dip_margin_eur_per_kwh,
             "extra_dip_margin_history": coordinator.extra_dip_margin_history,
             "temp_consumption_history": coordinator.temp_consumption_history,
+            # v3.39.0: en het oordeel erover. De reeks alleen laat niet
+            # zien of er ook op voorspeld wordt, en waarom niet.
+            "temp_consumption_bruikbaarheid": _veilig(
+                "temp_consumption_bruikbaarheid",
+                coordinator.get_temp_consumption_bruikbaarheid,
+            ),
             "temp_consumption_prediction_error_history": (
                 coordinator.temp_consumption_prediction_error_history
             ),
@@ -1147,6 +1153,11 @@ async def async_get_config_entry_diagnostics(
             # uiteen, dan zijn het twee soorten dagen en geen
             # verschuiving - precies wat de duiding moet weten.
             "mean_bias_percent": solar_tracker.mean_bias_percent,
+            # v3.35.1: en waarom er niet gecorrigeerd wordt. Zonder deze
+            # regel staat `learned_bias_percent` op null in de export en
+            # is niet te zien of dat komt door te weinig dagen of door
+            # twee soorten dagen.
+            "bias_ingehouden_reden": solar_tracker.bias_ingehouden_reden,
             "forecast_value_history_kwh": solar_tracker.forecast_value_history,
             "learned_typical_forecast_kwh": (
                 solar_tracker.learned_typical_forecast_kwh

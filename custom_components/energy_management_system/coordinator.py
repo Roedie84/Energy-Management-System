@@ -272,6 +272,8 @@ from .const import (
     LOW_SOLAR_FRACTION_UNRELIABLE,
     TEMP_CONSUMPTION_MIN_HOURS,
     TEMP_CONSUMPTION_MIN_SAMPLES,
+    TEMP_CONSUMPTION_MIN_RANGE_C,
+    TEMP_CONSUMPTION_EXTRAPOLATION_MARGIN_C,
     EXPENSIVE_PRICE_MEDIAN_MULTIPLIER,
     EXPENSIVE_PRICE_OUTLIER_MEDIAN_RATIO,
     EXPENSIVE_PRICE_OUTLIER_MIN_RANGE_EUR,
@@ -462,6 +464,7 @@ from .const import (
     PV_GEOMETRY_MIN_CLEARNESS_RATIO,
     PV_GEOMETRY_MIN_DAYS,
     PV_GEOMETRY_MULTI_ORIENTATION_SPREAD_DEGREES,
+    PV_GEOMETRY_MULTI_ORIENTATION_MIN_DAYS,
     PV_GEOMETRY_RELIABLE_DAYS,
     PV_GEOMETRY_SHADING_RATIO,
     RELIABILITY_ALIASES,
@@ -2913,12 +2916,31 @@ class EnergyManagementSystemCoordinator:
         ontladen = self.learned_discharge_efficiency_percent
         if laden is not None and ontladen is not None:
             return laden * ontladen / 100
-        if (
-            len(self.learned_efficiency_history)
-            < MIN_SOLAR_HISTORY_FOR_DYNAMIC_THRESHOLD
-        ):
+        # v3.40.0: de oude reeks door dezelfde plausibiliteitsgrenzen.
+        #
+        # `learned_efficiency_history` wordt sinds de invoering van de
+        # halve cycli NERGENS meer bijgeschreven - hij staat alleen nog
+        # in de opslag en dient als terugval. Maar hij is opgebouwd
+        # zonder de grenzen die nu gelden, en dat is te zien:
+        #
+        #     [95.5, 76.9, 74.2, 82.9, 83.2, 97.6, 56.4]
+        #
+        # Die 56,4% en 97,6% zouden vandaag als onmogelijk worden
+        # verworpen - een heen-en-terugrendement van 97,6% bestaat niet
+        # bij een omvormer die twee keer omzet. Als terugval hoort die
+        # reeks aan dezelfde eis te voldoen als verse metingen, anders
+        # levert de terugval een getal waar de rest van de integratie
+        # niet meer mee had willen rekenen.
+        bruikbaar = [
+            v
+            for v in self.learned_efficiency_history
+            if MIN_PLAUSIBLE_HALF_EFFICIENCY_PERCENT
+            <= v
+            <= MAX_PLAUSIBLE_HALF_EFFICIENCY_PERCENT
+        ]
+        if len(bruikbaar) < MIN_SOLAR_HISTORY_FOR_DYNAMIC_THRESHOLD:
             return None
-        return statistics.median(self.learned_efficiency_history)
+        return statistics.median(bruikbaar)
 
     def _update_single_appliance_usage_tracking(
         self, now: datetime, power_entity: str | None, history: dict[int, list[float]]
@@ -4125,12 +4147,36 @@ class EnergyManagementSystemCoordinator:
             if len(dagen) > 2:
                 spreiding = round(max(dagen) - min(dagen), 1)
                 profiel["spreiding_graden"] = spreiding
+                # v3.40.0: pas een conclusie trekken bij genoeg dagen.
+                #
+                # Gemeten op 20 augustus: acht heldere dagen met pieken
+                # op 136,9 tot 240,3 graden - een spreiding van 103 - en
+                # daaruit rolde "waarschijnlijk meerdere dakvlakken:
+                # ja". Dat is een stevige conclusie uit acht dagen.
+                #
+                # Eén wolk rond het middaguur verschuift de piek met
+                # tientallen graden. Bij acht dagen is de kans groot dat
+                # de uitersten door bewolking komen en niet door een
+                # tweede dakvlak. De spreiding blijft zichtbaar; alleen
+                # de conclusie wacht.
                 # Bij één dakvlak liggen de dagelijkse pieken dicht bij
                 # elkaar; een brede spreiding wijst op meer dan één
                 # richting (of op veel beschaduwing rond het middaguur).
-                profiel["waarschijnlijk_meerdere_dakvlakken"] = (
-                    spreiding > PV_GEOMETRY_MULTI_ORIENTATION_SPREAD_DEGREES
-                )
+                if len(dagen) >= PV_GEOMETRY_MULTI_ORIENTATION_MIN_DAYS:
+                    profiel["waarschijnlijk_meerdere_dakvlakken"] = (
+                        spreiding
+                        > PV_GEOMETRY_MULTI_ORIENTATION_SPREAD_DEGREES
+                    )
+                else:
+                    profiel["waarschijnlijk_meerdere_dakvlakken"] = None
+                    profiel["spreiding_toelichting"] = (
+                        f"{len(dagen)} heldere dagen is te weinig om uit een "
+                        f"spreiding van {spreiding:.0f} graden een tweede "
+                        "dakvlak af te leiden - één wolk rond het middaguur "
+                        "verschuift de piek al met tientallen graden. "
+                        f"Vanaf {PV_GEOMETRY_MULTI_ORIENTATION_MIN_DAYS} "
+                        "dagen volgt er een oordeel."
+                    )
 
         # v1.4.1: vergelijken met wat de gebruiker zelf heeft opgegeven.
         opgegeven = self.config.get(CONF_PV_ACTUAL_AZIMUTH_DEGREES)
@@ -7128,6 +7174,7 @@ class EnergyManagementSystemCoordinator:
 
     def _waarom_regels(self, now: datetime, reden: str) -> list[str]:
         """De onderbouwing per beslisreden (v1.60.0)."""
+
         prijs = self.last_current_price_per_kwh
         drempel = self.last_expensive_price_threshold
         stand = self.accustand_procent()
@@ -12806,7 +12853,112 @@ class EnergyManagementSystemCoordinator:
         if fit is None:
             return None
         slope, intercept = fit
+
+        # v3.39.0: drie redenen om NIET te voorspellen.
+        #
+        # Gemeten op 20 augustus: zeven punten tussen 15,3 en 21,3
+        # graden, correlatie 0,90, helling +6,3 W per graad. Dat oogt
+        # overtuigend en is het niet.
+        #
+        # 1. HET BEREIK. Zes graden is te smal om een helling uit af te
+        #    leiden die op een winternacht wordt losgelaten. Extrapoleren
+        #    naar 0 graden gaf hier 105 W waar er 400 hoort te staan.
+        #
+        #    Buiten het gemeten bereik voorspellen wordt NIET geweigerd,
+        #    en dat is een bewuste keuze: dit model bestaat juist voor de
+        #    koudste nacht van het jaar, en die ligt per definitie buiten
+        #    wat er tot dan toe gemeten is. Weigeren zou het model
+        #    uitschakelen op precies het moment waarvoor het gebouwd is.
+        #    Het wordt wel gemeld - zie `get_temp_consumption_bruikbaarheid`.
+        #
+        # 2. HET TEKEN. Dit model is gebouwd na de analyse van 11 januari,
+        #    de koudste nacht van het jaar, waar het verband NEGATIEF is:
+        #    kouder betekent meer verwarming. Een positieve helling kan
+        #    in de zomer kloppen - koeling, koelkast - maar dan is het
+        #    een ander verband dan waar dit model voor bedoeld is, en het
+        #    mag niet op een koude nacht worden toegepast.
+        #
+        # 3. DE STORENDE FACTOR. De warmste meting van die reeks was de
+        #    laatste nacht dat het huis bewoond was; daarna stond het
+        #    leeg én werd het kouder. Het model zag "warmer is meer
+        #    verbruik", terwijl de oorzaak "thuis is meer verbruik" was.
+        #    Daar helpt geen toets tegen, maar een breder bereik eisen
+        #    maakt het wel minder waarschijnlijk dat één zo'n punt de
+        #    hele helling draagt.
+        laagste, hoogste = min(xs), max(xs)
+        if (hoogste - laagste) < TEMP_CONSUMPTION_MIN_RANGE_C:
+            return None
+        if slope > 0 and temp_c < laagste:
+            return None
+
         return intercept + slope * temp_c
+
+    def get_temp_consumption_bruikbaarheid(self, temp_c: float | None = None) -> dict:
+        """Waarom er wel of niet voorspeld wordt (v3.39.0).
+
+        Zonder deze uitleg staat er alleen "geen voorspelling" en lijkt
+        het alsof er te weinig metingen zijn, terwijl de reeks vol staat.
+        """
+        bruikbaar = [
+            paar for paar in (self.temp_consumption_history or [])
+            if "kw" in paar
+        ]
+        uit = {
+            "metingen": len(bruikbaar),
+            "minimaal_nodig": TEMP_CONSUMPTION_MIN_SAMPLES,
+        }
+        if len(bruikbaar) < TEMP_CONSUMPTION_MIN_SAMPLES:
+            uit["oordeel"] = "onvoldoende_metingen"
+            uit["reden"] = (
+                f"{len(bruikbaar)} van de {TEMP_CONSUMPTION_MIN_SAMPLES} "
+                "metingen."
+            )
+            return uit
+
+        xs = [paar["temp_c"] for paar in bruikbaar]
+        laagste, hoogste = min(xs), max(xs)
+        uit["bereik_c"] = [round(laagste, 1), round(hoogste, 1)]
+        uit["spreiding_c"] = round(hoogste - laagste, 1)
+        fit = self._ols_fit(xs, [paar["kw"] for paar in bruikbaar])
+        if fit:
+            uit["helling_w_per_graad"] = round(fit[0] * 1000, 1)
+
+        if (hoogste - laagste) < TEMP_CONSUMPTION_MIN_RANGE_C:
+            uit["oordeel"] = "bereik_te_smal"
+            uit["reden"] = (
+                f"Alle metingen liggen binnen {hoogste - laagste:.1f} graden "
+                f"({laagste:.1f} tot {hoogste:.1f}). Een helling uit zo'n "
+                "smal bereik zegt niets over een koude nacht."
+            )
+            return uit
+
+        if fit and fit[0] > 0:
+            uit["oordeel"] = "zomerverband"
+            uit["reden"] = (
+                "Het geleerde verband is positief: warmer gaat samen met "
+                "meer verbruik. Dat kan in de zomer kloppen - koeling, "
+                "koelkast - maar dit model is voor koude nachten, waar het "
+                "verband omgekeerd hoort te zijn. Niet toegepast onder het "
+                "gemeten bereik."
+            )
+            return uit
+
+        uit["oordeel"] = "bruikbaar"
+        uit["reden"] = (
+            f"{len(bruikbaar)} metingen over {hoogste - laagste:.1f} graden."
+        )
+        # Extrapoleren mag - de koudste nacht ligt altijd buiten het
+        # gemeten bereik - maar het hoort er wel bij te staan.
+        marge = TEMP_CONSUMPTION_EXTRAPOLATION_MARGIN_C
+        if temp_c is not None and not (
+            (laagste - marge) <= temp_c <= (hoogste + marge)
+        ):
+            uit["geextrapoleerd"] = True
+            uit["reden"] += (
+                f" Let op: {temp_c:.1f} °C ligt buiten het gemeten bereik, "
+                "dus dit is doorgetrokken en niet gemeten."
+            )
+        return uit
 
     def _finalize_temp_consumption_regression(
         self,
@@ -22750,8 +22902,38 @@ class EnergyManagementSystemCoordinator:
                 energy_kwh = min(headroom_kwh, (charge_power_w / 1000) * interval_hours)
                 soc_kwh += energy_kwh
                 total_profit_eur -= energy_kwh * price
-            # else (smart_discharging, or smart outside the cheap block):
-            # no explicit SoC change in this simplified twin.
+            else:
+                # v3.35.1: hier gebeurde niets, en dat was de hele fout.
+                #
+                # Gemeten over 60 vergelijkingen: gemiddeld 1,25 kWh
+                # ernaast, zes uur vooruit. Dat is 16% van de bruikbare
+                # capaciteit, en het leek een onnauwkeurige simulatie.
+                #
+                # Het was geen onnauwkeurigheid maar een ontbrekende
+                # term. In `smart_discharging` voedt de accu het huis,
+                # en de tweeling liet de stand ongemoeid. Zes uur maal
+                # het geleerde huisverbruik van ongeveer 0,23 kW is
+                # ruwweg 1,4 kWh - vrijwel precies de gemeten fout.
+                #
+                # De kwartierplanning rekent dat allang uit met deze
+                # twee hulpjes; de tweeling gebruikte ze niet. Nu wel,
+                # zodat beide met dezelfde cijfers rekenen.
+                zon_kwh = self._estimate_pv_kwh_for_period(start, end) or 0.0
+                huis_kwh = (
+                    self._estimate_consumption_kwh_for_period(start, end) or 0.0
+                )
+                netto_kwh = huis_kwh - zon_kwh
+                if netto_kwh > 0:
+                    energy_kwh = min(
+                        soc_kwh,
+                        netto_kwh,
+                        (discharge_power_w / 1000) * interval_hours,
+                    )
+                    soc_kwh -= energy_kwh
+                elif netto_kwh < 0 and usable_capacity_kwh is not None:
+                    # Zonoverschot laadt de accu, tot de bak vol is.
+                    headroom_kwh = max(0.0, usable_capacity_kwh - soc_kwh)
+                    soc_kwh += min(headroom_kwh, -netto_kwh)
 
             trajectory.append(
                 {"start": entry["start"], "mode": mode, "soc_kwh": round(soc_kwh, 3)}
@@ -22772,8 +22954,9 @@ class EnergyManagementSystemCoordinator:
             "logica (dezelfde tijdlijn als 'Overzicht komende uren') aan "
             "SoC/financieel resultaat zou opleveren, als vergelijkingspunt "
             "naast het MPC-adviesplan (theoretisch optimum). Vereenvoudigd: "
-            "geen huishoudverbruik/PV-modellering buiten het geïdentificeerde "
-            "goedkoopste blok. Stuurt nooit een commando."
+            "buiten het goedkoopste blok wordt de accustand gevolgd met "
+            "het geleerde huisverbruik min de zonverwachting - dezelfde "
+            "cijfers als de kwartierplanning. Stuurt nooit een commando."
         )
 
     def _nilm_excluded_entity_ids(self) -> set[str]:
@@ -23159,6 +23342,7 @@ class EnergyManagementSystemCoordinator:
             self._apply_persisted_state(stored)
         self._discard_history_from_an_older_method()
         self._migreer_dagreeks_kosten()
+        self._ruim_oude_klimaatcellen_op()
         # v1.15.0: het oordeel over de meetkwaliteit volgt uit de
         # herstelde foutreeks. Zonder deze aanroep blijft het None tot
         # de eerste nieuwe meting, en verdwijnt het aandachtspunt na een
@@ -25094,10 +25278,61 @@ class EnergyManagementSystemCoordinator:
     def _outdoor_temp_bucket(temp_c: float) -> str:
         return str(round(temp_c / OUTDOOR_TEMP_BUCKET_SIZE_C) * OUTDOOR_TEMP_BUCKET_SIZE_C)
 
+    @staticmethod
+    def _climate_verschil_bucket(outdoor_temp_c: float, indoor_temp_c: float) -> str:
+        """Het VERSCHIL tussen buiten en binnen, in vakjes (v3.41.0).
+
+        Gevonden bij het nalopen van de correlaties. De emmers sleutelden
+        op de buitentemperatuur, terwijl het gemeten getal de verandering
+        van de BINNENtemperatuur is. Binnen dezelfde emmer stonden de
+        tekens door elkaar:
+
+            26.0|beide_open|uit: [-0.284, +0.137, -0.067, +0.009, -0.156]
+
+        Dat is geen ruis maar natuurkunde. Een kamer volgt de wet van
+        Newton: hoe snel de temperatuur verandert hangt af van het
+        VERSCHIL met buiten, niet van de buitentemperatuur alleen. Bij 26
+        graden buiten warmt een kamer van 21 op en koelt een kamer van 28
+        af - zelfde emmer, tegengesteld teken.
+
+        Dit is uitdrukkelijk GEEN vierde dimensie. Het vervangt er een:
+        buitentemperatuur wordt verschil. Het aantal cellen blijft
+        gelijk, de natuurkunde klopt, en het teken wordt voorspelbaar -
+        positief verschil betekent opwarmen.
+
+        Het merkteken `d` voorop houdt oude en nieuwe sleutels uit
+        elkaar; de oude zijn niet om te rekenen, want de
+        binnentemperatuur van toen is niet bewaard.
+        """
+        verschil = outdoor_temp_c - indoor_temp_c
+        vak = round(verschil / OUTDOOR_TEMP_BUCKET_SIZE_C) * OUTDOOR_TEMP_BUCKET_SIZE_C
+        return f"d{vak}"
+
     def _climate_rate_key(
         self, outdoor_bucket: str, shutter_state: str, airco_state: str
     ) -> str:
         return f"{outdoor_bucket}|{shutter_state}|{airco_state}"
+
+    def _ruim_oude_klimaatcellen_op(self) -> None:
+        """Gooit de cellen van vóór v3.41.0 weg.
+
+        Ze sleutelden op de buitentemperatuur en zijn niet om te rekenen:
+        de binnentemperatuur van dat moment is niet bewaard. Ze laten
+        staan zou betekenen dat er twee soorten sleutels naast elkaar
+        leven en dat de helft van de metingen nooit meer wordt gelezen.
+        """
+        oud = [k for k in (self.climate_rate_history or {}) if not k.startswith("d")]
+        if not oud:
+            return
+        for k in oud:
+            del self.climate_rate_history[k]
+        _LOGGER.info(
+            "%d klimaatcellen van vóór v3.41.0 verwijderd - die sleutelden "
+            "op de buitentemperatuur in plaats van op het verschil met "
+            "binnen, en zijn niet om te rekenen",
+            len(oud),
+        )
+        self.schedule_persisted_state_save()
 
     def _update_climate_rate_learning(self, now: datetime) -> None:
         """Learns the living room's own rate of temperature change
@@ -25176,7 +25411,10 @@ class EnergyManagementSystemCoordinator:
     ) -> None:
         self._climate_anchor_time = now
         self._climate_anchor_temp_c = temp_c
-        self._climate_anchor_outdoor_bucket = self._outdoor_temp_bucket(outdoor_temp_c)
+        # v3.41.0: het VERSCHIL met binnen, niet de buitentemperatuur.
+        self._climate_anchor_outdoor_bucket = self._climate_verschil_bucket(
+            outdoor_temp_c, temp_c
+        )
         self._climate_anchor_shutter_state = shutter_state
         self._climate_anchor_airco_state = airco_state
 
@@ -25198,6 +25436,20 @@ class EnergyManagementSystemCoordinator:
             betrouwbaarheid = "indicatief"
         else:
             betrouwbaarheid = "onvoldoende_data"
+        # v3.41.0: staan de metingen in deze cel het onderling eens?
+        #
+        # Ook met de juiste sleutel blijft een cel waarin de helft
+        # opwarmt en de helft afkoelt onbruikbaar - dan vangt hij nog
+        # steeds iets anders dan hij denkt, bijvoorbeeld de zon op het
+        # raam. De mediaan van zo'n cel is een getal zonder betekenis,
+        # en dat hoort erbij te staan in plaats van dat het als geleerd
+        # tempo wordt gepresenteerd.
+        eenduidig = True
+        if sample_count >= CLIMATE_RATE_MIN_SAMPLES:
+            positief = sum(1 for v in history if v > 0)
+            eenduidig = positief == 0 or positief == sample_count
+            if not eenduidig:
+                betrouwbaarheid = "niet_eenduidig"
         return {
             "key": key,
             "sample_count": sample_count,
@@ -25205,7 +25457,10 @@ class EnergyManagementSystemCoordinator:
                 round(statistics.median(history), 3) if history else None
             ),
             "betrouwbaarheid": betrouwbaarheid,
-            "voldoende_data": sample_count >= CLIMATE_RATE_MIN_SAMPLES,
+            "eenduidig": eenduidig,
+            "voldoende_data": (
+                sample_count >= CLIMATE_RATE_MIN_SAMPLES and eenduidig
+            ),
         }
 
     def get_climate_rate_indicative(
@@ -25515,7 +25770,12 @@ class EnergyManagementSystemCoordinator:
             :CLIMATE_FORECAST_HORIZON_HOURS
         ]:
             outdoor_temp_c = raw_outdoor_temp_c + bias_c
-            outdoor_bucket = self._outdoor_temp_bucket(outdoor_temp_c)
+            # v3.41.0: het verschil met de kamer zoals die er op dit punt
+            # van de projectie voor staat - dat is de grootheid die het
+            # tempo bepaalt.
+            outdoor_bucket = self._climate_verschil_bucket(
+                outdoor_temp_c, betrouwbaar_temp
+            )
             # v1.1.2: de twee reeksen gebruiken nu elk hun eigen bron.
             # De strenge reeks blijft uitsluitend op deze exacte cel
             # rekenen - dat is haar bestaansreden. De indicatieve reeks

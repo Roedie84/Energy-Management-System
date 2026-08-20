@@ -7,8 +7,8 @@ Locatie Lochem. Communicatie in het Nederlands, terse stijl.
 
 - Repo: https://github.com/Roedie84/Energy-Management-System
 - Lokaal: `/home/claude/ems/`
-- **Huidige versie: v3.34.0**, 2639 tests groen
-- Zip: `/mnt/user-data/outputs/energy_management_system_v3.34.0.zip`
+- **Huidige versie: v3.41.0**, 2900 tests groen
+- Zip: `/mnt/user-data/outputs/energy_management_system_v3.41.0.zip`
 
 ## Werkwijze (belangrijk)
 1. Diagnostiek-export lezen uit `/mnt/user-data/uploads/`
@@ -134,6 +134,7 @@ becijferd, niet gunstig.
 7. Schakelaarkaarten met een afwijkend entiteit-voorvoegsel (v3.27.2)
 8. Beslisredenen zonder eigen onderbouwing (v3.29.0)
 9. Aanroepen met een verkeerd aantal argumenten (v3.32.0)
+10. Ratel op functiegrootte, gemeten in uitspraken (v3.35.0)
 
 ## Vaste afspraken
 - Proefstandkandidaten sturen pas na bewijs, één tegelijk

@@ -17705,3 +17705,398 @@ scan komen, zijn alle acht via naamstrings of `getattr` bereikbaar — dat
 is nagegaan en geen van beide is dood.
 
 **Volledige testsuite**: 2639 tests, allemaal groen.
+
+## v3.35.0 — Structuurscan 10: de ratel op functiegrootte
+
+**Gevraagd**: "Wat kunnen we hier nog aan doen?" — over de 27.000 regels
+in één klasse.
+
+### Eerst gemeten in plaats van gegist
+
+`coordinator.py` telt 27.798 regels, maar **34% daarvan is
+documentatie**:
+
+| | | |
+|---|---|---|
+| commentaar | 3.968 | 14% |
+| docstrings | 5.588 | 20% |
+| leeg | 2.259 | 8% |
+| code | 15.983 | 57% |
+
+En die code is fijnmazig: 917 functies met een **mediaan van zes
+uitspraken** en een negentigste percentiel van vijfentwintig. Het is
+geen kluwen van verstrengelde logica maar een groot aantal kleine, goed
+uitgelegde functies.
+
+De werkelijke complexiteit zit in tweeëntwintig uitzonderingen, en twee
+daarvan zijn de echte: `__init__` met 416 uitspraken en
+`_async_update_locked` met 255. **Alles opsplitsen in losse bestanden
+verandert daar niets aan** — die twee blijven even groot en even lastig,
+alleen dan in een ander bestand.
+
+### Dus geen verbouwing, maar een ratel
+
+Deze scan bevriest de huidige stand. Bestaande grote functies mogen niet
+verder groeien, er mogen geen nieuwe bijkomen, en zakt er een onder de
+grens dan moet hij uit de lijst — anders vertelt die lijst over een jaar
+iets dat niet meer waar is, en dat is precies hoe deze codebase eerder
+in de problemen kwam.
+
+Gemeten in **uitspraken, niet in regels**. Deze codebase legt uit waarom
+iets zo is, en dat is de reden dat fouten hier terug te vinden zijn: de
+verklaring van 16 augustus stond letterlijk in een commentaarblok uit
+v2.2.2. Commentaar mag daarom nooit tegen een grens aanlopen, en er
+staat een toets op dat het dat ook niet doet.
+
+Getoetst dat de ratel werkelijk vangt: drie regels toegevoegd aan
+`_waarom_regels` en de scan sloeg aan.
+
+### Wat dit niet is
+
+Geen oplossing voor de twee grote functies. Die blijven staan tot er een
+reden is om ze aan te raken — en dan moeten ze krimpen, want anders komt
+deze scan er tussen.
+
+**Volledige testsuite**: 2664 tests, allemaal groen.
+
+## v3.35.1 — De tweeling vergat dat de accu het huis voedt
+
+**Gemeld** als openstaand punt: de digitale tweeling zat er over 60
+vergelijkingen gemiddeld 1,25 kWh naast, zes uur vooruit. Dat is 16% van
+de bruikbare capaciteit, en het stond als "onnauwkeurige simulatie" op
+de kaart.
+
+Het was geen onnauwkeurigheid maar een **ontbrekende term**. In
+`smart_discharging` — verreweg de meeste kwartieren — liet de tweeling
+de accustand ongemoeid. Dat stond zelfs met zoveel woorden in de eigen
+toelichting: "geen huishoudverbruik/PV-modellering buiten het
+geïdentificeerde goedkoopste blok."
+
+Reken het na:
+
+```
+zes uur x 0,23 kW geleerd huisverbruik = 1,4 kWh
+gemeten gemiddelde fout                = 1,25 kWh
+```
+
+De kwartierplanning rekent dat allang uit, met
+`_estimate_pv_kwh_for_period` en `_estimate_consumption_kwh_for_period`.
+De tweeling gebruikte ze niet en bouwde daarnaast een eigen, simpelere
+wereld — precies het soort tweede waarheid waar deze codebase eerder
+last van had.
+
+Nu volgt hij buiten het goedkope blok de netto last: geleerd
+huisverbruik min zonverwachting, begrensd door de accustand, de
+laadruimte en het ontlaadvermogen. Zonoverschot vult de accu in plaats
+van te verdampen.
+
+Het is en blijft adviserend; er wordt niets mee aangestuurd.
+
+### Verder
+
+De reden waaróm de zonbias wordt ingehouden staat nu in de export.
+`learned_bias_percent` op `null` was niet te onderscheiden van te weinig
+dagen.
+
+**Volledige testsuite**: 2670 tests, allemaal groen.
+
+## v3.36.0 — Dekking op het ongeziene deel
+
+**Gevraagd**: dekking op `solar_forecast.py` en `switch.py` — niet omdat
+daar iets vermoed werd, maar juist omdat niemand er ooit naar keek.
+
+| bestand | voor | na |
+|---|---|---|
+| `solar_forecast.py` | 55% | **96%** |
+| `switch.py` | 54% | **83%** |
+| totaal | 85% | 87% |
+
+64 nieuwe tests, en ze leverden meteen iets op.
+
+### Een grens die aan de onderkant nooit kon vuren
+
+`MAX_REASONABLE_DEVIATION_PERCENT` staat op 200 en is er onder andere om
+een sensor-rollover te vangen — dat staat letterlijk in de melding die
+erbij hoort:
+
+> Ignoring implausible forecast deviation (...) likely captured during a
+> sensor reset/rollover
+
+Maar een afwijking kan aan de ONDERKANT nooit verder gaan dan −100%:
+minder dan nul opbrengst bestaat niet. Voor precies het geval dat de
+melding noemt, kon die grens dus nooit vuren. Draait de dagteller van de
+opbrengstsensor om vlak vóór de vergelijking van 23:59, dan wordt −100%
+netjes als les opgeslagen en bederft die twee weken lang de geleerde
+correctie.
+
+Nu wordt een dagteller die op nul staat terwijl er meer dan 1 kWh
+voorspeld was, als omslag herkend en weggegooid. De ondergrens op de
+voorspelling staat erbij zodat een donkere winterdag met 0,3 kWh
+voorspeld en 0,0 werkelijk gewoon geleerd wordt — daar is nul wél een
+echte uitkomst.
+
+### Wat er verder onder de dekking kwam
+
+De inleesroutine uit de recorder (128 regels, draait bij elke start en
+vult de leergegevens): de eenheidsomrekening voor Wh en MWh, een
+recorder die eruit ligt, ontbrekende geschiedenis, `unavailable` in de
+reeks, en de regel dat live geleerde gegevens nooit overschreven worden
+— behalve als ze onzin zijn.
+
+En de elf schakelaars: dat aan- en uitzetten werkelijk in de coordinator
+landt, dat een herstart de stand terugzet, dat elke schakelaar een eigen
+id heeft, en dat er geen twee hetzelfde id delen.
+
+**Volledige testsuite**: 2734 tests, allemaal groen.
+
+## v3.37.0 — Dekking op de bedrading en de sensoren
+
+**Gevraagd**: de twee laatste blinde vlekken uit de dekkingsmeting.
+
+| bestand | voor | na |
+|---|---|---|
+| `__init__.py` | 50% | **71%** |
+| `sensor.py` | 73% | **81%** |
+| totaal | 87% | **88%** |
+
+131 nieuwe tests, 2865 in totaal.
+
+### De opstartcode
+
+Het kopiëren van het dashboard en de achtergrondtekening — inclusief een
+schijf die vol zit, een ontbrekend sjabloon en een `www/` die nog niet
+bestaat. Deze routines draaien bij élke start, en een fout daar neemt de
+hele integratie mee.
+
+En de zes NILM-diensten: dat ze maar één keer geregistreerd worden — twee
+keer betekent een "service already registered"-fout bij het herladen van
+de instellingen — en dat de zonvoorspelling-tracker die naast de
+coordinator in `hass.data` staat, niet per ongeluk voor een coordinator
+wordt aangezien. Zou dat gebeuren, dan slaat elke dienst stuk op een
+object dat de methode niet heeft.
+
+### De sensoren
+
+Zestig klassen, waarvan er 33 in geen enkele test voorkwamen. Ze zijn nu
+alle zestig getoetst tegen een **vers gebouwde coordinator** — de eerste
+ronde na een herstart, als er nog niets berekend is en de sensoren al wel
+worden uitgelezen.
+
+Die toets komt uit een echte storing: in een eerdere versie was het hele
+attributenblok van de GACS-sensor één dict-uitdrukking. Viel er één
+waarde weg, dan bleven álle tegels leeg, en Home Assistant toont dat als
+een niet-beschikbare entiteit zonder duidelijke fout in het logboek.
+
+Uitkomst: nul van de zestig slaat stuk. Getoetst op een echte coordinator
+en niet op een stub — een stub die alles op None zet meldt zesendertig
+problemen die geen van alle bestaan, want de coordinator zet zijn lijsten
+en woordenboeken zelf al leeg klaar.
+
+Daarnaast: geen twee sensoren delen een unieke id, elke sensor hangt aan
+het EMS-apparaat, en elk attributenblok is een woordenboek of niets.
+
+**Volledige testsuite**: 2865 tests, allemaal groen.
+
+## v3.38.0 — De twee inleesroutines uit de recorder
+
+**Gevraagd**: de resterende 12% dekking ook nog.
+
+Eerst uitgesplitst wat die 942 ongedekte regels in `coordinator.py`
+werkelijk zijn:
+
+| soort | regels |
+|---|---|
+| gewone code | 510 |
+| vroege terugkeer | 203 |
+| voorwaarde | 86 |
+| lusbesturing | 63 |
+| foutafhandeling | 46 |
+| logregel | 34 |
+
+En waar ze zitten: **twee functies dragen 160 regels**, de overige 550
+liggen verspreid over 210 functies met twee à drie regels elk — vrijwel
+allemaal foutafhandeling en vroege terugkeer bij een niet-ingestelde
+sensor.
+
+Die twee functies zijn getoetst; de staart bewust niet. Elke regel daar
+kost een eigen opzet en levert een toets op die niets bewaakt wat er toe
+doet.
+
+### Wat er nu gedekt is
+
+`async_bootstrap_night_consumption_from_history` en
+`async_bootstrap_energy_history`. Allebei draaien ze bij élke start en
+allebei vullen ze leergegevens die daarna de reserveberekening in gaan.
+De derde van dat soort — de zonvoorspelling — leverde bij het toetsen
+meteen een fout op die er jaren in had gezeten, en dat was de reden om
+deze twee ook te doen.
+
+Getoetst: een recorder die eruit ligt, een ontbrekende
+recorder-component, lege geschiedenis, `unavailable` in de reeks, en de
+regel dat live geleerde gegevens nooit worden overschreven. Plus dat de
+dagreeks op datum gesorteerd blijft — de reparatie van v3.32.1 heeft
+daarmee nu een eigen wachter.
+
+Onderweg bleek dat de dagreeks **langetermijnstatistieken** leest en niet
+de losse toestanden, anders dan de andere twee routines. Dat was uit de
+code alleen met moeite te zien; nu staat het in een toets.
+
+Ook meegenomen: de capaciteitsmeting van de kalibratie — dat hij alleen
+loopt tijdens een kalibratie, dat een gat in de tijd niets optelt, en dat
+onder 70% van de schaal geen uitkomst wordt gegeven.
+
+**Volledige testsuite**: 2881 tests, allemaal groen. Totale dekking 89%.
+
+## v3.39.0 — Een verband dat sterk oogt maar het niet is
+
+**Gevraagd**: "Hoe zit het met correlaties welke gemaakt worden door de
+integratie?"
+
+Vier verbanden nagelopen. Drie houden stand — de weerbronnen onderling
+(de spreiding van 51 procentpunt wordt netjes gemeld), de
+weersvoorspelling tegen de kamertemperatuur (van 4 graden fout naar
+−0,1), en de PV-uurcorrecties. De vierde niet.
+
+### De temperatuur-verbruikreeks
+
+```
+21,3 °C -> 239 W        helling  +6,3 W per graad
+19,2 °C -> 212 W        correlatie r = 0,90
+17,6 °C -> 207 W        r² = 0,81
+17,0 °C -> 209 W
+17,0 °C -> 197 W        bereik 15,3 tot 21,3 °C
+15,9 °C -> 205 W
+15,3 °C -> 197 W
+```
+
+Een correlatie van 0,90 ziet er overtuigend uit. Leg hem naast het
+dagverbruik en hij valt om: 12 en 13 augustus 12,3 en 12,6 kWh met
+bewoners thuis, vanaf 15 augustus 4,6 tot 7,1 kWh met een leeg huis. **De
+warmste meting is de laatste bewoonde nacht.** Het model zag "warmer is
+meer verbruik" terwijl de oorzaak "thuis is meer verbruik" was.
+
+En structureler: dit model is gebouwd na de analyse van 11 januari, de
+koudste nacht van het jaar, waar het verband **negatief** hoort te zijn.
+Deze positieve helling doorgetrokken naar 0 °C geeft 105 W waar er 400
+hoort te staan.
+
+### Drie wachters
+
+- **Bereik.** Onder de 8 graden spreiding wordt er niet voorspeld. Zes
+  graden is te smal om een helling uit af te leiden die op een
+  winternacht wordt losgelaten.
+- **Teken.** Een positieve helling kan in de zomer kloppen — koeling,
+  koelkast — maar wordt nooit ónder het gemeten bereik toegepast.
+- **Uitleg.** `get_temp_consumption_bruikbaarheid` zegt waarom er niet
+  voorspeld wordt. Zonder dat lijkt het alsof er te weinig metingen zijn,
+  terwijl de reeks vol staat. Staat ook in de export.
+
+### En één ding dat bewust NIET geweigerd wordt
+
+Buiten het gemeten bereik voorspellen blijft toegestaan. Dit model
+bestaat juist voor de koudste nacht van het jaar, en die ligt per
+definitie buiten wat er tot dan toe gemeten is — weigeren zou het
+uitschakelen op precies het moment waarvoor het gebouwd is. Het wordt
+wel gemarkeerd: doorgetrokken is niet gemeten.
+
+Die keuze kwam uit een bestaande toets die omviel bij mijn eerste,
+strengere versie. Terecht omgevallen.
+
+**Volledige testsuite**: 2891 tests, allemaal groen.
+
+## v3.40.0 — Nog twee conclusies uit te weinig gegevens
+
+**Gevraagd**: "Zijn er nog meer ontwerpfouten?"
+
+Elke geleerde reeks nagelopen op scheefheid en bereik. Twee kwamen eruit
+met dezelfde fóútsoort als het temperatuurverband: een conclusie die
+steviger is dan de gegevens dragen.
+
+### Een tweede dakvlak uit acht dagen
+
+```
+pv_peak_azimuth_history: 163,6  174,8  175,3  136,9
+                         203,9  137,4  240,3  149,4
+spreiding: 103 graden  ->  "waarschijnlijk meerdere dakvlakken: ja"
+```
+
+Eén wolk rond het middaguur verschuift de piek al met tientallen graden.
+Bij acht dagen dragen de uitersten waarschijnlijk het weer en niet het
+dak — 240 tegenover 137 graden is geen tweede dakvlak, dat is bewolking.
+
+De conclusie wacht nu tot twintig heldere dagen. De spreiding blijft
+gewoon zichtbaar, met de reden erbij waarom er nog geen oordeel volgt.
+
+### De oude rendementsreeks als terugval
+
+```
+learned_efficiency_history: [95.5, 76.9, 74.2, 82.9, 83.2, 97.6, 56.4]
+```
+
+41 procentpunt spreiding. Die reeks wordt sinds de invoering van de halve
+cycli **nergens meer bijgeschreven** — hij staat alleen nog in de opslag
+en dient als terugval zolang de halve metingen er niet zijn. Maar hij is
+opgebouwd zonder de plausibiliteitsgrenzen die nu gelden, en 56,4% ligt
+daar ruim buiten.
+
+Een terugval hoort aan dezelfde eis te voldoen als een verse meting,
+anders levert hij een getal waar de rest van de integratie niet meer mee
+had willen rekenen — en dat getal schaalt de reserveberekening en de
+kostprijs. De terugval gaat nu door dezelfde grenzen, en blijven er te
+weinig bruikbare metingen over, dan geeft hij niets terug: dan valt de
+integratie terug op de veilige 90%.
+
+### Wat wél standhield
+
+De weerbronnen onderling (spreiding van 51 procentpunt wordt gemeld), de
+weersvoorspelling tegen de kamertemperatuur (van 4 graden fout naar
+−0,1), de PV-uurcorrecties, en het rendement zelf: laden 89,0%, ontladen
+94,15%, heen en terug 83,8% — netjes begrensd en plausibel.
+
+**Volledige testsuite**: 2896 tests, allemaal groen.
+
+## v3.41.0 — De klimaatcellen sleutelden op de verkeerde grootheid
+
+**Besproken**: de emmers van `climate_rate_history`, waarin binnen
+dezelfde cel soms opwarming en soms afkoeling stond.
+
+```
+26.0|beide_open|uit:  [-0.284, +0.137, -0.067, +0.009, -0.156]
+```
+
+Ik dacht eerst dat er een vierde dimensie bij moest — bewolking, of de
+zon op het raam. Dat bleek niet zo. De cel sleutelde op de
+**buitentemperatuur**, terwijl het gemeten getal de verandering van de
+**binnentemperatuur** is.
+
+Dat is geen ruis maar natuurkunde. Een kamer volgt de wet van Newton:
+hoe snel de temperatuur verandert hangt af van het **verschil** met
+buiten, niet van de buitentemperatuur alleen. Bij 26 graden buiten warmt
+een kamer van 21 op en koelt een kamer van 28 af — zelfde cel,
+tegengesteld teken. Precies wat er stond.
+
+### Geen dimensie erbij, maar een vervangen
+
+De sleutel is nu het verschil tussen buiten en binnen. **Het aantal
+cellen blijft gelijk**, de natuurkunde klopt, en het teken wordt
+voorspelbaar: positief verschil betekent opwarmen. Dat was de zorg bij
+het bespreken — 252 cellen die elk hun eigen data nodig hebben — en die
+zorg is hiermee van tafel.
+
+De oude cellen zijn weggegooid. Ze zijn niet om te rekenen: de
+binnentemperatuur van dat moment is niet bewaard. Ze laten staan zou
+twee soorten sleutels naast elkaar geven waarvan de helft nooit meer
+gelezen wordt.
+
+### En een wachter erbovenop
+
+Ook met de juiste sleutel blijft een cel waarin de helft opwarmt en de
+helft afkoelt onbruikbaar — dan vangt hij nog iets anders, bijvoorbeeld
+de zon op het raam. Zo'n cel heet nu `niet_eenduidig` en levert geen
+geleerd tempo, in plaats van een mediaan zonder betekenis.
+
+**Let op**: de klimaatprojectie begint hierdoor opnieuw met leren. Bij
+een kamer die 's zomers dicht bij de buitentemperatuur zit, vullen de
+cellen rond het nulverschil zich snel.
+
+**Volledige testsuite**: 2900 tests, allemaal groen.

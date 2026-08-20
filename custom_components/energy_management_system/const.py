@@ -403,6 +403,21 @@ TEMP_CONSUMPTION_MIN_HOURS = 2.0
 
 TEMP_CONSUMPTION_MIN_SAMPLES = 4
 
+# Hoeveel graden de gemeten punten uit elkaar moeten liggen voordat een
+# helling iets betekent (v3.39.0).
+#
+# Gemeten op 20 augustus: zeven punten tussen 15,3 en 21,3 graden, met
+# een correlatie van 0,90 en een helling van +6,3 W per graad. Overtuigend
+# op het oog, en toch onbruikbaar - zes graden is te smal om een helling
+# uit af te leiden die op nul graden wordt losgelaten.
+TEMP_CONSUMPTION_MIN_RANGE_C = 8.0
+
+# Hoe ver buiten het gemeten bereik er nog voorspeld mag worden.
+#
+# Een helling die op 15 tot 21 graden is gemeten, zegt niets over een
+# nacht van 0 graden. Extrapoleren is geen voorspellen maar hopen.
+TEMP_CONSUMPTION_EXTRAPOLATION_MARGIN_C = 3.0
+
 # Dynamic "expensive quarter" threshold: a quarter counts as expensive if
 # its price is within this fraction of today's price *range* from the
 # day's maximum - no fixed count of quarters, self-adjusting to however
@@ -3055,6 +3070,16 @@ PV_GEOMETRY_RELIABLE_DAYS = 20
 # meer dan één dakvlak - bij één vlak liggen de dagelijkse pieken dicht
 # bij elkaar.
 PV_GEOMETRY_MULTI_ORIENTATION_SPREAD_DEGREES = 40.0
+
+# Vanaf hoeveel heldere dagen er een uitspraak over een tweede dakvlak
+# mag volgen (v3.40.0).
+#
+# Gemeten op 20 augustus: acht heldere dagen met pieken op 136,9 tot
+# 240,3 graden, en daaruit rolde "waarschijnlijk meerdere dakvlakken:
+# ja". Eén wolk rond het middaguur verschuift de piek al met tientallen
+# graden; bij acht dagen dragen de uitersten waarschijnlijk het weer en
+# niet het dak.
+PV_GEOMETRY_MULTI_ORIENTATION_MIN_DAYS = 20
 
 # --- Opgegeven PV-oriëntatie als ijkpunt (v1.4.1) --------------------
 # De afgeleide oriëntatie is pas nuttig als je hem ergens tegen kunt

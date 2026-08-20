@@ -56,6 +56,25 @@ FORECAST_CAPTURE_SECOND = 0
 # reasonably be off by more than this. Treated as an invalid outlier.
 MAX_REASONABLE_DEVIATION_PERCENT = 200.0
 
+# De teller van de opbrengstsensor sprong op nul vlak voordat er
+# vergeleken werd (v3.36.0).
+#
+# Gevonden bij het dichten van de testdekking. De bovenstaande grens van
+# 200% is bedoeld om onder andere een sensor-rollover te vangen - dat
+# staat er letterlijk bij in de melding. Maar aan de ONDERKANT kan een
+# afwijking nooit verder gaan dan -100%: minder dan nul opbrengst
+# bestaat niet. Die grens kon voor dat geval dus nooit vuren.
+#
+# Een dagteller die om 23:59 op nul staat terwijl er een noemenswaardige
+# voorspelling lag, is vrijwel zeker net omgeslagen. Een echte dag met
+# nul opbrengst bestaat in Nederland niet als er iets voorspeld was.
+#
+# De ondergrens op de voorspelling staat erbij zodat een donkere
+# winterdag met een voorspelling van 0,3 kWh en 0,0 werkelijk gewoon
+# geleerd wordt - daar is nul wél een echte uitkomst.
+ROLLOVER_MIN_FORECAST_KWH = 1.0
+ROLLOVER_MAX_ACTUAL_KWH = 0.05
+
 # A daily PV forecast this high almost certainly means the wrong Solcast
 # sensor was configured (e.g. a peak-power sensor in W, or a sensor with
 # a name containing "piek", instead of the daily total in kWh) - even a
@@ -493,7 +512,15 @@ class SolarForecastAccuracyTracker:
                         * 100,
                         1,
                     )
-                    if abs(self.last_deviation_percent) <= MAX_REASONABLE_DEVIATION_PERCENT:
+                    rollover = (
+                        self.pending_predicted_kwh >= ROLLOVER_MIN_FORECAST_KWH
+                        and actual <= ROLLOVER_MAX_ACTUAL_KWH
+                    )
+                    if (
+                        abs(self.last_deviation_percent)
+                        <= MAX_REASONABLE_DEVIATION_PERCENT
+                        and not rollover
+                    ):
                         self.deviation_history.append(self.last_deviation_percent)
                         self.deviation_history = self.deviation_history[
                             -LEARNING_HISTORY_DAYS:
