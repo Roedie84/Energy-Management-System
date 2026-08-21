@@ -19944,21 +19944,28 @@ class EnergyManagementSystemCoordinator:
                 if self._is_goedkope_koelreden(accu_c, buiten_c):
                     grens = BATTERY_COOLING_OPPORTUNITY_REST_MINUTES
                     if self._goedkope_koeling_op_slot(nu):
-                        self.battery_cooling_state = {
-                            "actie": None,
-                            "reden": (
-                                "Goedkope koeling ligt tot middernacht "
-                                "stil: vandaag al "
-                                f"{self.goedkope_koeling_teller} keer "
-                                "aangeslagen."
-                            ),
-                            "accu_c": accu_c,
-                            "buiten_c": buiten_c,
-                            "vermogen_w": vermogen_w,
-                            "ventilator_aan": aan,
-                            "delta_c": round(accu_c - buiten_c, 1),
-                        }
-                        return
+                        # v3.44.1: `resultaat` teruggeven, net als elke
+                        # andere vroege terugkeer in deze functie.
+                        #
+                        # Hier stond een kale `return`, en die geeft None
+                        # terug uit een functie die een dict belooft. De
+                        # aanroeper valt daar meteen over:
+                        #
+                        #   21 Aug 19:34  De koeling geet te vaak an
+                        #   21 Aug 19:36  1 onderdeel kan zichzelf neet
+                        #                 berekenen: ronde:accukoeling
+                        #
+                        # Twee minuten na het aanslaan van de dagportie
+                        # lag de koelronde eruit. De tak was getoetst op
+                        # wat hij BESLIST en niet op wat hij teruggeeft.
+                        resultaat["reden"] = (
+                            "Goedkope koeling ligt tot middernacht stil: "
+                            f"vandaag al {self.goedkope_koeling_teller} "
+                            "keer aangeslagen. De bescherming boven "
+                            f"{BATTERY_COOLING_PROTECT_ALWAYS_C:.0f} °C "
+                            "blijft werken."
+                        )
+                        return resultaat
 
                 # v1.99.0: pas na de minimale rusttijd.
                 if self._cooling_switch_too_recent(

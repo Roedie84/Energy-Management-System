@@ -18328,3 +18328,47 @@ veld was op 21:15 niet na te gaan of de rem zweeg omdat er geen tekort
 was, of omdat de stand na de herstart nog leeg was.
 
 **Volledige testsuite**: 2942 tests, allemaal groen.
+
+## v3.44.1 — De dagportie liet de koelronde omvallen
+
+**Gemeld** met drie meldingen op een rij:
+
+```
+21 Aug 19:34  De koeling geet te vaak an
+              De ventilator sloeg vandaag al 4 keer aan
+21 Aug 19:36  1 onderde(e)l(en) kan zichzelf neet berekenen:
+              ronde:accukoeling
+```
+
+Twee minuten na het aanslaan van de dagportie uit v3.33.0 lag de
+koelronde eruit.
+
+De oorzaak: die tak deed een **kale `return`** in een functie die
+`-> dict` belooft, en gaf dus `None` terug. Elke andere vroege terugkeer
+in `evaluate_battery_cooling` geeft `resultaat` terug; deze niet.
+
+### Waarom de suite groen bleef
+
+De toetsen op de dagportie keken naar wat hij **beslist** —
+`_goedkope_koeling_op_slot` geeft True of False — en niet naar wat de
+omliggende functie **teruggeeft**. Vijf toetsen op het besluit, nul op
+de uitkomst.
+
+Er staat nu een toets op dat er in `evaluate_battery_cooling` geen kale
+`return` voorkomt, en dezelfde toets loopt over vier andere functies die
+een dict beloven. Nagegaan dat hij de fout werkelijk vangt door de kale
+`return` terug te zetten: twee toetsen vielen om.
+
+### Wat er ondertussen wel goed ging
+
+De melding zelf klopte, inclusief het advies:
+
+> De ventilator sloeg vandaag al 4 keer aan voor goedkope koeling. Bij
+> een aanzetdrempel van 25 °C komt hij op deze installatie steeds terug
+> (...) Overweeg de drempel een paar graden hoger te zetten.
+
+En de tekortrem meldde zich af zodra hij niet meer nodig was: "de
+planning voorziet al een half uur geen kwartieren meer waarin het huis
+aan het net hangt. Laagste stand: 22%."
+
+**Volledige testsuite**: 2949 tests, allemaal groen.
