@@ -42,6 +42,7 @@ ATTR_NEXT_PREDICTED_KWH = "next_predicted_kwh"
 ATTR_NEXT_PREDICTED_DATE = "next_predicted_date"
 ATTR_PENDING_PREDICTED_DATE = "pending_predicted_date"
 ATTR_DEVIATION_HISTORY = "deviation_history"
+ATTR_DEVIATION_CONTEXT = "deviation_context"
 ATTR_DEVIATION_STDEV_HISTORY = "deviation_stdev_history"
 ATTR_LEARNED_BIAS_PERCENT = "learned_bias_percent"
 ATTR_FORECAST_VALUE_HISTORY = "forecast_value_history"
@@ -191,6 +192,11 @@ class PvForecastAccuracySensor(SensorEntity, RestoreEntity):
                 else None
             ),
             ATTR_DEVIATION_HISTORY: self._tracker.deviation_history,
+            # v3.45.0: dezelfde afwijkingen mét de bewolking van die
+            # dag. Zonder bewaren begint de correctie per soort dag na
+            # elke herstart opnieuw, en dan komt hij nooit aan zijn vier
+            # dagen per vak.
+            ATTR_DEVIATION_CONTEXT: self._tracker.deviation_context,
             ATTR_DEVIATION_STDEV_HISTORY: self._tracker.deviation_stdev_history,
             ATTR_LEARNED_BIAS_PERCENT: self._tracker.learned_bias_percent,
             ATTR_FORECAST_VALUE_HISTORY: self._tracker.forecast_value_history,
@@ -228,6 +234,16 @@ class PvForecastAccuracySensor(SensorEntity, RestoreEntity):
                 history = attrs.get(ATTR_DEVIATION_HISTORY)
                 if isinstance(history, list):
                     self._tracker.deviation_history = [float(v) for v in history]
+                # v3.45.0: dezelfde afwijkingen mét de bewolking van
+                # die dag - anders begint de correctie per soort dag na
+                # elke herstart opnieuw.
+                context = attrs.get(ATTR_DEVIATION_CONTEXT)
+                if isinstance(context, list):
+                    self._tracker.deviation_context = [
+                        r
+                        for r in context
+                        if isinstance(r, dict) and "afwijking" in r
+                    ]
                 stdev_history = attrs.get(ATTR_DEVIATION_STDEV_HISTORY)
                 if isinstance(stdev_history, list):
                     self._tracker.deviation_stdev_history = [

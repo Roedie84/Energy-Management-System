@@ -32,6 +32,9 @@ from .const import (
     MIN_SOLAR_HISTORY_FOR_DYNAMIC_THRESHOLD,
     MIN_SOLAR_HISTORY_FOR_SPREAD_BASED_FRACTION,
     SOLAR_BIAS_MIN_DAGEN,
+    SOLAR_BIAS_MIN_PER_VAK,
+    SOLAR_BEWOLKING_HELDER_PERCENT,
+    SOLAR_BEWOLKING_BEWOLKT_PERCENT,
     SOLAR_DAG_GOED_PERCENT,
     SOLAR_DAG_VER_MIS_PERCENT,
 )
@@ -135,6 +138,10 @@ class SolarForecastAccuracyTracker:
         # Rolling history of deviation percentages, used to learn a
         # systematic bias in the Solcast forecast for this installation.
         self.deviation_history: list[float] = []
+        # v3.45.0: dezelfde afwijkingen, mét de bewolking van die dag.
+        # De coordinator schuift die door via `laatste_bewolking_percent`.
+        self.deviation_context: list[dict] = []
+        self.laatste_bewolking_percent: float | None = None
         self.deviation_stdev_history: list[float] = []
 
         # Rolling history of the raw forecast values themselves, used to
@@ -234,6 +241,73 @@ class SolarForecastAccuracyTracker:
         if self.bias_ingehouden_reden:
             return None
         return round(statistics.median(valid), 1)
+
+    def bias_voor_bewolking(self, bewolking_percent: float | None) -> float | None:
+        """De correctie die bij DEZE bewolking hoort (v3.45.0).
+
+        De vlakke correctie werd in v3.33.0 ingehouden omdat het twee
+        soorten dagen zijn: heldere dagen kloppen binnen 2%, wisselvallige
+        zitten er 40 tot 55% naast. Een enkel getal kan die niet allebei
+        bedienen - dat is nagerekend en geen van de drie mogelijkheden
+        won.
+
+        Inhouden was het eerlijke antwoord, maar geen oplossing: op 23
+        augustus stond de voorspelling nog steeds ongecorrigeerd, en de
+        tweeling zat er overdag 2,16 kWh naast tegen 0,90 's nachts.
+
+        De oplossing is niet een beter gemiddelde maar een correctie PER
+        SOORT DAG. Bij weinig bewolking hoort een correctie rond nul; bij
+        veel bewolking een forse. Dat is precies wat de reeks laat zien
+        zodra je hem uitsplitst.
+
+        Geeft None zolang er te weinig dagen in het betreffende vakje
+        zitten. Dan blijft de bestaande terugval gelden: geen correctie.
+        """
+        if bewolking_percent is None:
+            return None
+        vak = self._bewolkingsvak(bewolking_percent)
+        metingen = [
+            r["afwijking"]
+            for r in (self.deviation_context or [])
+            if r.get("bewolking") is not None
+            and self._bewolkingsvak(r["bewolking"]) == vak
+            and abs(r["afwijking"]) <= MAX_REASONABLE_DEVIATION_PERCENT
+        ]
+        if len(metingen) < SOLAR_BIAS_MIN_PER_VAK:
+            return None
+        return round(statistics.median(metingen), 1)
+
+    @staticmethod
+    def _bewolkingsvak(percent: float) -> str:
+        """Drie soorten dagen: helder, halfbewolkt, bewolkt.
+
+        Drie en niet meer, want elk vakje moet zich met echte dagen
+        vullen en er zijn er maar zoveel per maand.
+        """
+        if percent < SOLAR_BEWOLKING_HELDER_PERCENT:
+            return "helder"
+        if percent < SOLAR_BEWOLKING_BEWOLKT_PERCENT:
+            return "half"
+        return "bewolkt"
+
+    def bewolkingsvakken(self) -> dict:
+        """Wat er per soort dag geleerd is - voor de kaart en de export."""
+        uit = {}
+        for vak in ("helder", "half", "bewolkt"):
+            metingen = [
+                r["afwijking"]
+                for r in (self.deviation_context or [])
+                if r.get("bewolking") is not None
+                and self._bewolkingsvak(r["bewolking"]) == vak
+            ]
+            uit[vak] = {
+                "dagen": len(metingen),
+                "mediaan_afwijking_procent": (
+                    round(statistics.median(metingen), 1) if metingen else None
+                ),
+                "genoeg": len(metingen) >= SOLAR_BIAS_MIN_PER_VAK,
+            }
+        return uit
 
     @property
     def bias_ingehouden_reden(self) -> str | None:
@@ -522,6 +596,23 @@ class SolarForecastAccuracyTracker:
                         and not rollover
                     ):
                         self.deviation_history.append(self.last_deviation_percent)
+                        # v3.45.0: mét de bewolking van die dag erbij.
+                        #
+                        # De coordinator schuift die elke ronde door; zie
+                        # `laatste_bewolking_percent`. Zonder dit veld is
+                        # de reeks niet uit te splitsen en blijft er
+                        # alleen de keuze tussen een verkeerd gemiddelde
+                        # en helemaal niets.
+                        self.deviation_context.append(
+                            {
+                                "datum": today.isoformat(),
+                                "afwijking": self.last_deviation_percent,
+                                "bewolking": self.laatste_bewolking_percent,
+                            }
+                        )
+                        self.deviation_context = self.deviation_context[
+                            -LEARNING_HISTORY_DAYS:
+                        ]
                         self.deviation_history = self.deviation_history[
                             -LEARNING_HISTORY_DAYS:
                         ]

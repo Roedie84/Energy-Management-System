@@ -789,6 +789,13 @@ async def async_get_config_entry_diagnostics(
                 _veilig("get_weather_ensemble_agreement_status", coordinator.get_weather_ensemble_agreement_status)
             ),
             "digital_twin_accuracy": _veilig("get_digital_twin_accuracy_status", coordinator.get_digital_twin_accuracy_status),
+            # v3.45.0: nacht tegenover dag. Eén getal dat de simulatie
+            # en de zonverwachting samen meet, vertelt niet welke van de
+            # twee beweegt.
+            "digital_twin_error_split": _veilig(
+                "get_digital_twin_error_split",
+                coordinator.get_digital_twin_error_split,
+            ),
             "digital_twin_accuracy_history": (
                 coordinator.digital_twin_accuracy_history
             ),
@@ -1164,6 +1171,14 @@ async def async_get_config_entry_diagnostics(
             # is niet te zien of dat komt door te weinig dagen of door
             # twee soorten dagen.
             "bias_ingehouden_reden": solar_tracker.bias_ingehouden_reden,
+            # v3.45.0: de correctie per soort dag, en hoe vol de drie
+            # vakjes zitten. Zonder dit is niet te zien of er niet
+            # gecorrigeerd wordt omdat het niet kan, of omdat er nog te
+            # weinig dagen zijn.
+            "bewolkingsvakken": _veilig(
+                "bewolkingsvakken", solar_tracker.bewolkingsvakken
+            ),
+            "deviation_context": solar_tracker.deviation_context[-30:],
             "forecast_value_history_kwh": solar_tracker.forecast_value_history,
             "learned_typical_forecast_kwh": (
                 solar_tracker.learned_typical_forecast_kwh

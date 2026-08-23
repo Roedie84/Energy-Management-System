@@ -307,6 +307,7 @@ from .const import (
     WEATHER_ENSEMBLE_AGREEMENT_USABLE_PERCENT,
     DIGITAL_TWIN_ACCURACY_HISTORY_LENGTH,
     DIGITAL_TWIN_ACCURACY_HORIZON_HOURS,
+    DIGITAL_TWIN_ZON_DREMPEL_KWH,
     DIGITAL_TWIN_ACCURACY_MAX_LATE_MINUTES,
     DIGITAL_TWIN_ACCURACY_MIN_SAMPLES,
     DIGITAL_TWIN_ACCURACY_QUEUE_INTERVAL_MINUTES,
@@ -13572,9 +13573,8 @@ class EnergyManagementSystemCoordinator:
         if not pv_entries:
             return 0.0
 
-        daily_bias_percent = (
-            self.solar_tracker.learned_bias_percent if self.solar_tracker else None
-        )
+        # v3.45.0: per soort dag als dat kan, anders de vlakke.
+        daily_bias_percent = self.zonbias_percent()
         # v1.27.0, gemeld: "Hier gaat wat mis de accu kan niet in 1 uur
         # vol zijn. Vermogen zonnepanelen is W en niet kWh dus hier gaat
         # iets niet goed."
@@ -17062,9 +17062,8 @@ class EnergyManagementSystemCoordinator:
         if forecast_kwh_raw is None:
             return False
 
-        bias_percent = (
-            self.solar_tracker.learned_bias_percent if self.solar_tracker else None
-        )
+        # v3.45.0: per soort dag als dat kan, anders de vlakke.
+        bias_percent = self.zonbias_percent()
         corrected_forecast_kwh = (
             forecast_kwh_raw * (1 + bias_percent / 100)
             if bias_percent is not None
@@ -17625,6 +17624,27 @@ class EnergyManagementSystemCoordinator:
             if start <= now < end:
                 return price / PRICE_SCALE_FACTOR
         return None
+
+    def zonbias_percent(self) -> float | None:
+        """De correctie op de zonvoorspelling, per soort dag (v3.45.0).
+
+        Eerst de correctie die bij de VERWACHTE BEWOLKING hoort. Is die
+        er nog niet - te weinig dagen in dat vakje - dan de vlakke
+        correctie, die zichzelf inhoudt zodra het twee soorten dagen
+        zijn.
+
+        Waarom die volgorde: de vlakke correctie is aantoonbaar
+        onbruikbaar bij een gespreide reeks, en dat is precies de
+        situatie sinds 20 augustus. De correctie per soort dag is de
+        enige die heldere én bewolkte dagen tegelijk kan bedienen.
+        """
+        tracker = self.solar_tracker
+        if not tracker:
+            return None
+        per_vak = tracker.bias_voor_bewolking(self._weather_cloud_cover_percent())
+        if per_vak is not None:
+            return per_vak
+        return tracker.learned_bias_percent
 
     def _is_salderen_active(self, now: datetime) -> bool:
         """Geldt de salderingsregeling op dit moment nog? (v0.63.117)
@@ -21665,6 +21685,23 @@ class EnergyManagementSystemCoordinator:
                     kind="sluipverbruik",
                 )
 
+    def _deel_bewolking_met_de_zontracker(self) -> None:
+        """Schuift de huidige bewolking door naar de zonvoorspelling.
+
+        De tracker kent de weerentiteiten niet - die zitten hier. Zonder
+        deze doorgifte kan de avondvergelijking de bewolking niet bij de
+        afwijking van die dag bewaren, en dan valt de reeks niet uit te
+        splitsen in heldere en bewolkte dagen (v3.45.0).
+
+        Een eigen functie, want zowel `_async_update_locked` als
+        `_update_weather_ensemble_check` staan al op de ratel van
+        v3.35.0 en mogen niet groeien.
+        """
+        if self.solar_tracker is not None:
+            self.solar_tracker.laatste_bewolking_percent = (
+                self._weather_cloud_cover_percent()
+            )
+
     def _update_weather_ensemble_check(self, now: datetime) -> None:
         """Weather ensemble cross-check (v0.63.30): compares live PV
         output against what Solcast's own forecast predicts for right
@@ -21684,6 +21721,15 @@ class EnergyManagementSystemCoordinator:
         weather) or the reverse (overperforming despite reported heavy
         cloud, less concerning but still worth noting for calibration).
         """
+        # v3.45.0: de zonvoorspelling-tracker kent de weerentiteiten
+        # niet - die zitten hier. Elke ronde de huidige bewolking
+        # doorschuiven, zodat de avondvergelijking hem bij de afwijking
+        # van die dag kan bewaren.
+        #
+        # Deze functie bepaalt de bewolking toch al; hier zetten kost
+        # niets en houdt `_async_update_locked` buiten de ratel van
+        # v3.35.0.
+
         knmi_entity = self.config.get(CONF_KNMI_WEATHER_ENTITY)
         owm_entity = self.config.get(CONF_OPENWEATHERMAP_WEATHER_ENTITY)
         source_entities = [e for e in (knmi_entity, owm_entity) if e]
@@ -26169,12 +26215,34 @@ class EnergyManagementSystemCoordinator:
         if abs((beste[0] - doelmoment).total_seconds()) / 60 > 60:
             return
 
+        # v3.45.0: vastleggen HOEVEEL zon er in dit venster verwacht
+        # werd.
+        #
+        # Gemeten 21 en 23 augustus: de fout van de tweeling sprong van
+        # 0,97 naar 1,56 kWh, en de splitsing liet zien waar dat vandaan
+        # kwam - 's nachts +0,90, overdag +2,16. De simulatie zelf is
+        # sinds v3.35.1 nauwkeurig; wat er overdag bij komt is de
+        # zonverwachting, die op wisselvallige dagen 28 tot 50% te hoog
+        # ligt.
+        #
+        # Eén getal dat twee dingen meet, vertelt niet welke van de twee
+        # beweegt. Vandaar dat de verwachte zon meereist met de
+        # voorspelling: bij het afrekenen is dan te zeggen of het een
+        # nacht- of een dagvergelijking was.
+        verwachte_zon_kwh = 0.0
+        for punt in self.digital_twin_trajectory:
+            start = dt_util.parse_datetime(punt["start"])
+            if start is None or not (now <= start <= beste[0]):
+                continue
+            verwachte_zon_kwh += punt.get("zon_kwh") or 0.0
+
         self._digital_twin_last_queued = now
         self._digital_twin_pending.append(
             {
                 "voorspeld_op": now.isoformat(),
                 "afrekenen_op": beste[0].isoformat(),
                 "voorspelde_soc_kwh": beste[1],
+                "verwachte_zon_kwh": round(verwachte_zon_kwh, 3),
             }
         )
         self._digital_twin_pending = self._digital_twin_pending[
@@ -26218,6 +26286,14 @@ class EnergyManagementSystemCoordinator:
                     "voorspeld_kwh": round(voorspelling["voorspelde_soc_kwh"], 3),
                     "werkelijk_kwh": round(werkelijk_kwh, 3),
                     "fout_kwh": round(fout_kwh, 3),
+                    # v3.45.0: waar deze vergelijking over ging.
+                    "verwachte_zon_kwh": voorspelling.get(
+                        "verwachte_zon_kwh"
+                    ),
+                    "met_zon": (
+                        (voorspelling.get("verwachte_zon_kwh") or 0.0)
+                        >= DIGITAL_TWIN_ZON_DREMPEL_KWH
+                    ),
                 }
             )
         self._digital_twin_pending = openstaand
@@ -26234,6 +26310,63 @@ class EnergyManagementSystemCoordinator:
             return None
         fouten = [r["fout_kwh"] for r in self.digital_twin_accuracy_history]
         return round(sum(fouten) / len(fouten), 3)
+
+    def get_digital_twin_error_split(self) -> dict:
+        """Splitst de tweelingfout in nacht en dag (v3.45.0).
+
+        Gemeten op 21 augustus, de dag na de reparatie van v3.35.1:
+
+            47 vergelijkingen zonder zon   gemiddeld +0,90 kWh
+            13 vergelijkingen met zon      gemiddeld +2,16 kWh
+
+        De simulatie zelf is nauwkeurig geworden; wat er overdag bij komt
+        is de zonverwachting, die op wisselvallige dagen 28 tot 50% te
+        hoog ligt. Twee dagen later stond het totaal op 1,56 kWh en zag
+        het eruit als een verslechterende tweeling - terwijl het de
+        voorspelling was die het slechter deed.
+
+        Zonder deze splitsing is dat niet te zien, en dan wordt er
+        gerepareerd aan het verkeerde.
+        """
+        geschiedenis = self.digital_twin_accuracy_history or []
+        met = [r["fout_kwh"] for r in geschiedenis if r.get("met_zon")]
+        zonder = [
+            r["fout_kwh"]
+            for r in geschiedenis
+            if r.get("met_zon") is False
+        ]
+        onbekend = len(geschiedenis) - len(met) - len(zonder)
+
+        def _gem(reeks):
+            return round(sum(reeks) / len(reeks), 3) if reeks else None
+
+        uit = {
+            "vergelijkingen": len(geschiedenis),
+            "zonder_zon": {"aantal": len(zonder), "fout_kwh": _gem(zonder)},
+            "met_zon": {"aantal": len(met), "fout_kwh": _gem(met)},
+            "nog_zonder_kenmerk": onbekend,
+        }
+
+        nacht, dag = _gem(zonder), _gem(met)
+        if nacht is None or dag is None:
+            uit["duiding"] = (
+                "Nog niet te splitsen; er zijn zowel nacht- als "
+                "dagvergelijkingen nodig."
+            )
+        elif dag > nacht * 2 and dag - nacht > 0.5:
+            uit["duiding"] = (
+                f"De simulatie zelf zit er 's nachts {nacht:.2f} kWh naast; "
+                f"overdag loopt dat op naar {dag:.2f} kWh. Dat verschil komt "
+                "van de zonverwachting, niet van het model - repareren aan "
+                "de simulatie helpt hier niet."
+            )
+        else:
+            uit["duiding"] = (
+                f"Nacht {nacht:.2f} kWh en dag {dag:.2f} kWh liggen dicht "
+                "bij elkaar; de fout zit in de simulatie zelf en niet in de "
+                "zonverwachting."
+            )
+        return uit
 
     def get_digital_twin_accuracy_status(self) -> dict:
         """Vertaalt de gemeten fout naar een oordeel (v1.0.1).
@@ -27579,6 +27712,11 @@ class EnergyManagementSystemCoordinator:
             ("lange reserve", lambda: self._meet_lange_reserve(now, entries)),
             ("bijkopen", lambda: self._meet_bijkopen_bij_tekort(now, entries)),
             ("netlading", lambda: self._meet_werkelijke_netlading(now)),
+            # v3.45.0: de bewolking doorschuiven naar de zonvoorspelling.
+            # Hier in de rondelijst, want de twee functies waar het
+            # anders in zou passen staan allebei al op de ratel van
+            # v3.35.0 en mogen niet groeien.
+            ("bewolking delen", self._deel_bewolking_met_de_zontracker),
             ("teruglevertarief", lambda: self._update_feedin_regime(now, entries)),
             (
                 "tegenfeitelijke besparing",

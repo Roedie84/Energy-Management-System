@@ -18372,3 +18372,68 @@ planning voorziet al een half uur geen kwartieren meer waarin het huis
 aan het net hangt. Laagste stand: 22%."
 
 **Volledige testsuite**: 2949 tests, allemaal groen.
+
+## v3.45.0 — Een correctie per soort dag
+
+Twee reparaties die bij elkaar horen: de zonvoorspelling, en het
+meetinstrument waarmee je ziet of die klopt.
+
+### De biascorrectie is niet meer vlak
+
+In v3.33.0 is de vlakke correctie ingehouden omdat het twee soorten
+dagen zijn: heldere binnen 2%, wisselvallige 40 tot 55% ernaast.
+Nagerekend won geen van de drie mogelijkheden — gemiddelde, mediaan of
+niets.
+
+Inhouden was het eerlijke antwoord maar geen oplossing. Op 23 augustus
+stond de voorspelling nog altijd ongecorrigeerd, en de integratie meldde
+het zelf: "Twee soorten dagen: 2 van de 5 binnen 10% en 2 meer dan 25%
+ernaast."
+
+De oplossing is geen beter gemiddelde maar een correctie **per soort
+dag**. De afwijking wordt vanaf nu bewaard mét de bewolking van die dag,
+en de correctie komt uit het vakje dat bij de verwachte bewolking hoort:
+
+| vakje | bewolking |
+|---|---|
+| helder | onder 30% |
+| half | 30 tot 70% |
+| bewolkt | boven 70% |
+
+Vier dagen per vakje voordat het meetelt. Is een vakje nog niet vol, dan
+blijft de bestaande terugval gelden — inclusief het inhouden bij een
+gespreide reeks. Er verandert dus niets tot de vakjes zich gevuld
+hebben, en dat duurt ongeveer twee weken.
+
+De bewolking komt uit de coordinator, die de weerentiteiten kent; de
+tracker kende die niet. Die doorgifte staat als eigen ronde-taak in de
+lijst.
+
+### De tweelingfout is gesplitst
+
+Gemeten op 21 augustus, de dag na de reparatie van v3.35.1:
+
+```
+47 vergelijkingen zonder zon   gemiddeld +0,90 kWh
+13 vergelijkingen met zon      gemiddeld +2,16 kWh
+```
+
+De simulatie zelf is nauwkeurig; wat er overdag bij komt is de
+zonverwachting. Twee dagen later stond het totaal op 1,56 kWh en zag het
+eruit als een verslechterende tweeling — terwijl het de voorspelling was
+die het slechter deed.
+
+Elke voorspelling draagt nu de verwachte zon over zijn venster, en de
+kaart splitst de fout in nacht en dag mét een duiding welke van de twee
+beweegt. Eén getal dat twee dingen meet, vertelt niet waar je moet
+repareren.
+
+### Wat de ratel deed
+
+De functiegrootte-ratel van v3.35.0 sloeg drie keer aan bij het
+inbouwen: `_async_update_locked` mocht niet groeien, en
+`_update_weather_ensemble_check` ook niet. Uiteindelijk is de doorgifte
+een eigen functie geworden in de rondelijst — met eigen foutafhandeling,
+en beter dan waar ik hem eerst had gezet.
+
+**Volledige testsuite**: 2966 tests, allemaal groen.

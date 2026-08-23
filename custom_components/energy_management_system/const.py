@@ -2054,6 +2054,19 @@ WATER_VOLUME_AGREEMENT_TOLERANCE = 0.25
 # voorspelling weggeschreven - dat zou binnen een dag honderden sterk
 # overlappende metingen opleveren die allemaal vrijwel hetzelfde zeggen.
 DIGITAL_TWIN_ACCURACY_HORIZON_HOURS = 6
+
+# Vanaf hoeveel verwachte zon een vergelijking een "dagvergelijking"
+# heet (v3.45.0).
+#
+# De tweelingfout meet twee dingen tegelijk: de simulatie en de
+# zonverwachting. Gemeten op 21 augustus: 's nachts +0,90 kWh gemiddeld,
+# overdag +2,16. Eén getal dat allebei meet, vertelt niet welke van de
+# twee beweegt.
+#
+# Een halve kilowattuur over zes uur is het punt waarop de zon
+# meetelbaar wordt; daaronder is het schemer of nacht en meet je de
+# simulatie zelf.
+DIGITAL_TWIN_ZON_DREMPEL_KWH = 0.5
 DIGITAL_TWIN_ACCURACY_QUEUE_INTERVAL_MINUTES = 60
 
 # Een voorspelling die door een herstart of hiaat pas veel te laat wordt
@@ -3160,6 +3173,21 @@ SOLAR_DAG_VER_MIS_PERCENT = 25.0
 # (v3.33.0). Met drie dagen is één uitschieter al genoeg om de correctie
 # in te houden, en dan wordt er nooit meer geleerd.
 SOLAR_BIAS_MIN_DAGEN = 5
+
+# Grenzen tussen de drie soorten dagen, en hoeveel er per soort nodig
+# zijn voordat de correctie meetelt (v3.45.0).
+#
+# De vlakke correctie werd in v3.33.0 ingehouden omdat het twee soorten
+# dagen zijn: heldere binnen 2%, wisselvallige 40 tot 55% ernaast. Dat
+# was het eerlijke antwoord maar geen oplossing - op 23 augustus stond
+# de voorspelling nog altijd ongecorrigeerd.
+#
+# Drie vakken en niet meer: elk vak moet zich met echte dagen vullen, en
+# er zijn er maar zoveel per maand. Vier dagen per vak is dun, maar het
+# alternatief is nul correctie, en dat is aantoonbaar slechter.
+SOLAR_BEWOLKING_HELDER_PERCENT = 30.0
+SOLAR_BEWOLKING_BEWOLKT_PERCENT = 70.0
+SOLAR_BIAS_MIN_PER_VAK = 4
 
 # Hoe dicht een dag bij de weinig-zon-drempel mag liggen voordat het het
 # vermelden waard is. Vandaag zat op ~70% van typisch, vlak op de grens -
