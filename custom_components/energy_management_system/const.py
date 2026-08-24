@@ -410,6 +410,19 @@ TEMP_CONSUMPTION_MIN_SAMPLES = 4
 # een correlatie van 0,90 en een helling van +6,3 W per graad. Overtuigend
 # op het oog, en toch onbruikbaar - zes graden is te smal om een helling
 # uit af te leiden die op nul graden wordt losgelaten.
+# Laatste terugval voor het huisverbruik, als er niets geleerd is en de
+# meter niets zegt (v3.45.1).
+#
+# Gemeld na het indrukken van de resetknop: elf onderdelen tegelijk met
+# "float - NoneType". Het uurprofiel was leeg en de kwartierplanning
+# rekende met None.
+#
+# Nul is hier de gevaarlijke keuze: dan lijkt het huis niets te
+# gebruiken en belooft de planning een volle accu die er niet komt. Een
+# kwart kilowatt is de basislast die deze woning in de zomer laat zien -
+# aan de lage kant, dus voorzichtig, maar niet nul.
+DEFAULT_HOUSEHOLD_LOAD_KW = 0.25
+
 TEMP_CONSUMPTION_MIN_RANGE_C = 8.0
 
 # Hoe ver buiten het gemeten bereik er nog voorspeld mag worden.

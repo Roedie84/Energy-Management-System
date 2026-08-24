@@ -274,6 +274,7 @@ from .const import (
     TEMP_CONSUMPTION_MIN_HOURS,
     TEMP_CONSUMPTION_MIN_SAMPLES,
     TEMP_CONSUMPTION_MIN_RANGE_C,
+    DEFAULT_HOUSEHOLD_LOAD_KW,
     TEMP_CONSUMPTION_EXTRAPOLATION_MARGIN_C,
     EXPENSIVE_PRICE_MEDIAN_MULTIPLIER,
     EXPENSIVE_PRICE_OUTLIER_MEDIAN_RATIO,
@@ -13280,6 +13281,31 @@ class EnergyManagementSystemCoordinator:
         )
         return kwh * (1 - reduction_percent / 100)
 
+    def _verbruik_met_terugval(self, start: datetime, einde: datetime) -> float:
+        """Verbruik over een venster, altijd een getal (v3.45.1).
+
+        Het uurprofiel is de beste schatting, maar het is er niet altijd
+        - na de resetknop van v3.30.0 is het leeg tot er weer een etmaal
+        geleerd is. Dan is het geleerde nachtverbruik de beste
+        vervanger, en anders de belasting van dit moment.
+
+        Nul is uitdrukkelijk NIET de terugval: dan lijkt het huis niets
+        te gebruiken en belooft de planning een volle accu die er niet
+        komt.
+        """
+        uit_profiel = self._estimate_consumption_kwh_for_period(start, einde)
+        if uit_profiel is not None:
+            return uit_profiel
+
+        uren = max(0.0, (einde - start).total_seconds() / 3600)
+        kw = self.learned_night_consumption_kw
+        if kw is None:
+            watt = self._read_corrected_consumption_power()
+            kw = (watt / 1000) if watt is not None else None
+        if kw is None:
+            kw = DEFAULT_HOUSEHOLD_LOAD_KW
+        return round(kw * uren, 4)
+
     def _estimate_consumption_kwh_for_period(
         self, start: datetime, end: datetime
     ) -> float | None:
@@ -14912,7 +14938,33 @@ class EnergyManagementSystemCoordinator:
             if duur <= 0:
                 continue
             zon = self._estimate_pv_kwh_for_period(start, einde)
-            verbruik = self._estimate_consumption_kwh_for_period(start, einde)
+            # v3.45.1: terugval als het uurprofiel (nog) niet elk uur
+            # dekt.
+            #
+            # Gemeld na het indrukken van de resetknop bij thuiskomst:
+            # elf onderdelen tegelijk met "unsupported operand type(s)
+            # for -: 'float' and 'NoneType'" - de kwartierplanning, de
+            # overzichtsplaat, de proefstand en de tekortmelding.
+            #
+            # `_estimate_consumption_kwh_for_period` geeft bewust None
+            # zodra één uur in het venster nog geen geleerde waarde
+            # heeft, "zodat de aanroeper kan terugvallen op een
+            # eenvoudiger schatting". Zes van de negen aanroepers doen
+            # dat ook, met `or 0.0`. Deze niet, en die rekende er
+            # rechtstreeks mee door.
+            #
+            # Vóór de resetknop van v3.30.0 kwam een volledig leeg
+            # profiel in de praktijk niet voor: er was altijd wel
+            # geschiedenis. Die knop maakte de lege staat bereikbaar, en
+            # daarmee werd een sluimerende fout van jaren oud opeens
+            # zichtbaar.
+            #
+            # Nul is hier de verkeerde terugval - dan lijkt het huis
+            # niets te gebruiken en belooft de planning een volle accu.
+            # Het geleerde nachtverbruik is de beste schatting die er
+            # zonder profiel is; is ook die er niet, dan de gemeten
+            # live-belasting.
+            verbruik = self._verbruik_met_terugval(start, einde)
             in_blok = prijs <= _blok_drempel_voor(start)
 
             duur_kwh = ontlaad_w / 1000 * duur

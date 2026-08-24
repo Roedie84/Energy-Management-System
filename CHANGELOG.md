@@ -18437,3 +18437,46 @@ een eigen functie geworden in de rondelijst — met eigen foutafhandeling,
 en beter dan waar ik hem eerst had gezet.
 
 **Volledige testsuite**: 2966 tests, allemaal groen.
+
+## v3.45.1 — De resetknop legde de planning plat
+
+**Gemeld** direct na het indrukken van de resetknop bij thuiskomst van
+vakantie. Elf onderdelen tegelijk:
+
+```
+kwartierplanning, kwartier_samenvatting, overzichtsplaat,
+overzichtsecties, proefstand, ronde:bijkopen en vijf
+diagnostiek-onderdelen
+
+TypeError: unsupported operand type(s) for -: 'float' and 'NoneType'
+```
+
+`_estimate_consumption_kwh_for_period` geeft **bewust** None zodra één
+uur in het venster nog geen geleerde waarde heeft. De docstring zegt het
+letterlijk: *"Returns None (...) so the caller can fall back to a
+simpler estimate."* Zes van de negen aanroepers doen dat ook, met
+`or 0.0`. De kwartierplanning niet, en die rekende er rechtstreeks mee
+door.
+
+Vóór de resetknop van v3.30.0 kwam een volledig leeg profiel in de
+praktijk niet voor — er was altijd wel geschiedenis. Die knop maakte de
+lege staat bereikbaar, en daarmee werd een sluimerende fout van jaren
+oud opeens zichtbaar. De knop was niet fout; hij liep tegen iets aan dat
+er al lag.
+
+### De terugval is niet nul
+
+Nul zou betekenen dat het huis niets gebruikt, en dan belooft de
+planning een volle accu die er niet komt. De volgorde is nu: het
+geleerde uurprofiel, anders het geleerde nachtverbruik, anders de
+gemeten belasting van dit moment, en pas als laatste een vaste 0,25 kW —
+de basislast die deze woning in de zomer laat zien.
+
+### Wat er ondertussen bleef werken
+
+De sturing zelf, de verkooptoets, de koeling en de reservemarge draaiden
+gewoon door. Wat wegviel was alles wat uit de planning leest.
+
+**Volledige testsuite**: 2973 tests, allemaal groen. Nagegaan dat de
+nieuwe toets de fout werkelijk vangt door de oude aanroep terug te
+zetten.
