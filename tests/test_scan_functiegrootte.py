@@ -47,11 +47,15 @@ GRENS = 60
 # De stand van 20 augustus 2026. Deze lijst hoort te KRIMPEN.
 BEVROREN = {
     "__init__.py:_async_register_nilm_services": 71,
-    # v3.43.0: +1 voor `last_plan_shortfall`, bewust. De ratel is een
-    # drempel en geen verbod: hij dwingt af dat groei een besluit is. Dit
-    # veld voorkomt dat de verkooptoets de hele kwartierplanning opnieuw
-    # opbouwt bij elke ronde, en dat is de groei waard.
-    "coordinator.py:__init__": 417,
+    # v3.43.0: +1 voor `last_plan_shortfall`. v3.46.0: +1 voor
+    # `aansturing_onbereikbaar`. Allebei bewust, allebei één veld waar
+    # het er twee hadden kunnen zijn.
+    #
+    # Dit is de tweede keer in een week dat `__init__` groeit, en dat is
+    # het signaal waar deze ratel voor bedoeld is: 419 uitspraken in één
+    # functie is te veel, en de volgende keer dat hier iets bij moet,
+    # hoort er eerst een blok uit.
+    "coordinator.py:__init__": 418,
     "coordinator.py:_async_update_locked": 255,
     "coordinator.py:_async_update_scheduled_charge_appliance": 70,
     "coordinator.py:_build_explanation": 73,
