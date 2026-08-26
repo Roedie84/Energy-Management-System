@@ -136,7 +136,7 @@ def test_a_returning_shortfall_resets_the_clock(make_coordinator, hass):
     }
     c._meld_planningswijzigingen(NU + timedelta(minutes=2))
 
-    assert c._plan_tekort_vrij_sinds is None
+    assert c.last_plan_shortfall["vrij_sinds"] is None
 
 
 def test_one_quarter_does_not_count_as_recovered(make_coordinator, hass):
@@ -152,7 +152,7 @@ def test_one_quarter_does_not_count_as_recovered(make_coordinator, hass):
     }
     c._meld_planningswijzigingen(NU + timedelta(minutes=1))
 
-    assert c._plan_tekort_vrij_sinds is None
+    assert c.last_plan_shortfall["vrij_sinds"] is None
     assert "plan_tekort_hersteld" not in _soorten(c)
 
 
@@ -161,3 +161,22 @@ def test_the_thresholds_match_the_reported_pattern():
     moet die wegfilteren zonder een echt tekort te missen."""
     assert PLAN_SHORTFALL_ALERT_MIN_QUARTERS >= 3
     assert PLAN_SHORTFALL_RECOVERY_STABLE_MINUTES >= 15
+
+
+def test_the_recovery_clock_exists_from_the_start(make_coordinator, hass):
+    """Gemeld met traceback op 26 augustus 11:38:
+
+        AttributeError: 'EnergyManagementSystemCoordinator' object has
+        no attribute '_plan_tekort_vrij_sinds'
+
+    Het veld werd op vijf plekken gezet en op één plek gelezen, en stond
+    niet in `__init__`. In vrijwel elk pad wordt het eerst gezet - maar
+    niet als er eerder een tekortmelding was die daarna verdwijnt,
+    zonder herstart ertussen.
+
+    Deze toetsen vingen dat niet, omdat ze het veld zelf klaarzetten via
+    een eerdere aanroep. Vandaar deze: kaal, zonder iets vooraf.
+    """
+    c = make_coordinator({})
+
+    assert c.last_plan_shortfall["vrij_sinds"] is None
