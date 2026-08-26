@@ -18480,3 +18480,51 @@ gewoon door. Wat wegviel was alles wat uit de planning leest.
 **Volledige testsuite**: 2973 tests, allemaal groen. Nagegaan dat de
 nieuwe toets de fout werkelijk vangt door de oude aanroep terug te
 zetten.
+
+## v3.45.2 — Een bewaking die naar de verkeerde kant keek
+
+**Gemeld** op 26 augustus 09:15, vijf onderdelen tegelijk:
+
+```
+kwartier_samenvatting, overzichtsplaat, overzichtsecties,
+ronde:bijkopen, diagnostiek:quarter_plan_summary
+
+ValueError: min() iterable argument is empty
+```
+
+Twee uur eerder, om 07:05, meldde de integratie zelf:
+
+> `sensor.zendure_manager_available_kwh`, `sensor.hw_p1_vermogen` geeft
+> al minstens 15 minuten geen waarde.
+
+De code stond er zo:
+
+```python
+min(r["soc_bruikbaar_procent"] for r in plan
+    if r.get("soc_bruikbaar_procent") is not None) if plan else None
+```
+
+De bewaking kijkt naar `plan` — de **herkomst** — terwijl de reeks die
+in `min()` gaat door een filter is gehaald. Het plan bevatte 59
+kwartieren, dus `if plan` was waar. Geen enkel kwartier had nog een
+bruikbare accustand, want die komt uit de weggevallen sensor. De reeks
+was leeg.
+
+Eén regel hoger staat het wél goed: `min(socs) if socs`. Daar wordt de
+lijst zelf getoetst.
+
+### Structuurscan 12
+
+Een `min` of `max` over een comprehension **mét filter**, bewaakt door
+een toets op precies de lijst waar die comprehension overheen loopt. Dat
+is altijd fout: het filter kan de reeks leegmaken terwijl de bron gevuld
+blijft.
+
+Getoetst dat de scan de storing van 26 augustus werkelijk vangt, en dat
+hij de goede vorm — een toets op de gefilterde lijst — met rust laat.
+
+Dit is de tweede storing in drie dagen die door een wegvallende sensor
+kwam. De integratie meldde die uitval keurig; wat ontbrak was dat de
+berekening erop voorbereid was.
+
+**Volledige testsuite**: 2988 tests, allemaal groen.

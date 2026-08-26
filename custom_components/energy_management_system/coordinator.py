@@ -15688,6 +15688,13 @@ class EnergyManagementSystemCoordinator:
             per_modus[r["modus"]] = per_modus.get(r["modus"], 0) + 1
 
         socs = [r["soc_procent"] for r in plan if r["soc_procent"] is not None]
+        # v3.45.2: de bruikbare standen als eigen lijst, zodat de toets
+        # naar de WAARDEN kijkt en niet naar hun herkomst.
+        bruikbare_socs = [
+            r["soc_bruikbaar_procent"]
+            for r in plan
+            if r.get("soc_bruikbaar_procent") is not None
+        ]
         verkoop = [r for r in plan if "manual" in r["modus"]]
         blok = [r for r in plan if r.get("in_goedkoop_blok")]
 
@@ -15779,14 +15786,22 @@ class EnergyManagementSystemCoordinator:
             "eind_soc_procent": socs[-1] if socs else None,
             # En wat daarvan bruikbaar is - 0% hier betekent dat de accu
             # op zijn ondergrens staat en niets meer levert.
+            # v3.45.2: de bewaking keek naar het PLAN, niet naar de
+            # waarden erin.
+            #
+            # Gemeld op 26 augustus 09:15. Om 07:05 vielen twee sensoren
+            # weg - `zendure_manager_available_kwh` en `hw_p1_vermogen`,
+            # allebei minstens een kwartier lang. Het plan bleef gevuld
+            # met 59 kwartieren, maar geen enkel kwartier had nog een
+            # bruikbare accustand. `if plan` was dus waar, en `min()`
+            # kreeg een lege reeks:
+            #
+            #   ValueError: min() iterable argument is empty
+            #
+            # Eén regel hoger staat het wél goed: `min(socs) if socs`.
+            # Daar wordt de lijst zelf getoetst en niet zijn herkomst.
             "laagste_bruikbaar_procent": (
-                min(
-                    r["soc_bruikbaar_procent"]
-                    for r in plan
-                    if r.get("soc_bruikbaar_procent") is not None
-                )
-                if plan
-                else None
+                min(bruikbare_socs) if bruikbare_socs else None
             ),
             "modi": per_modus,
         }
