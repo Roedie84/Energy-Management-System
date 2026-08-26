@@ -216,7 +216,11 @@ def test_no_climate_flag_with_some_learned_data(make_coordinator, hass):
         {"living_room_temperature_sensor_entity": "sensor.living_room_temp"}
     )
     coordinator.first_seen_date = fixed_now.date() - timedelta(days=3)
-    coordinator.climate_rate_history = {"20|beide_dicht|uit": [0.5]}
+    # v3.47.0: sleutels dragen sinds v3.41.0 het VERSCHIL met binnen en
+    # beginnen met een `d`. Deze toets slaagde met de oude vorm omdat hij
+    # alleen telt of er cellen zijn, maar hij beschreef daarmee een
+    # opzet die niet meer bestaat.
+    coordinator.climate_rate_history = {"d-6.0|beide_dicht|uit": [0.5]}
 
     summary = coordinator.get_diagnostic_summary()
 

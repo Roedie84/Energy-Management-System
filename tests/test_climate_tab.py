@@ -404,7 +404,10 @@ def test_forecast_projection_walks_forward_using_learned_rates(make_coordinator,
 
     # 6 samples clears CLIMATE_RATE_MIN_SAMPLES (5, "indicatief") but not
     # CLIMATE_RATE_RELIABLE_SAMPLES (15, "betrouwbaar").
-    key = coordinator._climate_rate_key("10.0", "beide_dicht", "uit")
+    # v3.47.0: de cel hoort bij het VERSCHIL tussen buiten (10) en de
+    # kamer (19), dus vakje d-8.0.
+    verschil = coordinator._climate_verschil_bucket(10.0, 19.0)
+    key = coordinator._climate_rate_key(verschil, "beide_dicht", "uit")
     coordinator.climate_rate_history[key] = [0.5] * 6
     coordinator.climate_shutter_state = "beide_dicht"
     coordinator.climate_airco_state = "uit"
@@ -489,7 +492,10 @@ def test_indicatief_cell_shows_onvoldoende_data_in_the_strict_field(
     coordinator = make_coordinator(_base_config())
     hass.states.set("climate.woonkamer_airco", "heat", {"hvac_action": "idle"})
 
-    key = coordinator._climate_rate_key("10.0", "beide_dicht", "uit")
+    # v3.47.0: de cel hoort bij het VERSCHIL. Binnen 19, buiten 10 geeft
+    # -9, en dat valt in vakje d-8.0.
+    verschil = coordinator._climate_verschil_bucket(10.0, 19.0)
+    key = coordinator._climate_rate_key(verschil, "beide_dicht", "uit")
     coordinator.climate_rate_history[key] = [0.5] * 8  # indicatief, not betrouwbaar
     coordinator.climate_shutter_state = "beide_dicht"
     coordinator.climate_airco_state = "uit"
