@@ -109,3 +109,46 @@ def test_the_climate_cells_filter_on_the_key_format():
     blok = bron[begin:][:1600]
 
     assert 'startswith("d")' in blok
+
+
+# --- structuurscan 14: sleutels in toetsen volgen het echte formaat ---
+
+
+def test_no_test_uses_a_stale_climate_key_format():
+    """De vorm die zes dagen onopgemerkt bleef (v3.47.0).
+
+    Elf toetsen op de klimaatterugval gebruikten nog sleutels op
+    buitentemperatuur, van de vorm "18-punt-0 pipe beide_dicht pipe uit",
+    waar het sinds v3.41.0 met een `d` hoort te beginnen. Ze slaagden, omdat ze consequent hun eigen
+    oude vorm gebruikten aan beide kanten: zelf de cel aanmaken, zelf
+    bevragen, alles klopt.
+
+    Een gesloten wereldje dat prima klopt en niets meer met de
+    werkelijkheid te maken heeft. Daardoor bewaakten ze zes dagen lang
+    een terugval die in de praktijk niet meer liep.
+
+    De uitzondering is de toets die juist bewijst dat oude sleutels
+    worden opgeruimd; die MOET de oude vorm gebruiken.
+    """
+    import re
+    from pathlib import Path
+
+    map_tests = Path(__file__).parent
+    toegestaan = {
+        # Bewijst dat de opruiming van v3.42.1 werkt.
+        "test_klimaatcellen_twee_herstelpaden.py",
+        "test_climate_tab.py",
+    }
+
+    fout = []
+    for pad in sorted(map_tests.glob("*.py")):
+        if pad.name in toegestaan or pad.name == Path(__file__).name:
+            continue
+        for nummer, regel in enumerate(pad.read_text().split("\n"), 1):
+            for sleutel in re.findall(r'"([-\d.]+)\|[a-z_]+\|[a-z]+"', regel):
+                fout.append(f"{pad.name}:{nummer} - '{sleutel}|...'")
+
+    assert not fout, (
+        "klimaatsleutels zonder het `d`-merkteken van v3.41.0: "
+        + ", ".join(fout)
+    )
