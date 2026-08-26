@@ -905,6 +905,19 @@ CLIMATE_RATE_RELIABLE_SAMPLES = 15
 # projectie van zes uur met minder dan een halve graad. Dat is "er
 # gebeurt niets", en dat is een bruikbaar antwoord.
 CLIMATE_RATE_NEUTRAL_C_PER_HOUR = 0.1
+
+# Hoe ver buiten de gemeten verschillen er nog een tempo geraden mag
+# worden (v3.47.0).
+#
+# Gemeld met een schermafdruk: vanaf 11:00 stond overal `algemeen` met
+# nul metingen, en de voorspelde binnentemperatuur zakte van 21,3 naar
+# 20,9 terwijl het buiten naar 31 graden liep - een verschil van +10 met
+# binnen, waar geen enkele cel voor bestond.
+#
+# Twee graden speling is één vakje. Daarbuiten zegt de projectie niets
+# meer, en dat is beter dan een tempo dat geloofwaardig oogt en niet
+# klopt.
+CLIMATE_RATE_MAX_EXTRAPOLATIE_C = 2.0
 CLIMATE_FORECAST_HORIZON_HOURS = 24
 CLIMATE_FORECAST_FETCH_INTERVAL_MINUTES = 30
 

@@ -7,8 +7,8 @@ Locatie Lochem. Communicatie in het Nederlands, terse stijl.
 
 - Repo: https://github.com/Roedie84/Energy-Management-System
 - Lokaal: `/home/claude/ems/`
-- **Huidige versie: v3.46.0**, 3003 tests groen
-- Zip: `/mnt/user-data/outputs/energy_management_system_v3.46.0.zip`
+- **Huidige versie: v3.47.0**, 3008 tests groen
+- Zip: `/mnt/user-data/outputs/energy_management_system_v3.47.0.zip`
 
 ## Werkwijze (belangrijk)
 1. Diagnostiek-export lezen uit `/mnt/user-data/uploads/`
@@ -138,6 +138,7 @@ becijferd, niet gunstig.
 11. Twee stille herstelpaden voor hetzelfde veld (v3.42.1)
 12. min()/max() bewaakt op de herkomst in plaats van de waarden (v3.45.2)
 13. Attributen die gelezen worden maar niet in __init__ staan (v3.45.3)
+14. Toetsen die een verouderd sleutelformaat gebruiken (v3.47.0)
 
 ## Vaste afspraken
 - Proefstandkandidaten sturen pas na bewijs, één tegelijk

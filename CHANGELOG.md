@@ -18613,3 +18613,87 @@ De berekening loopt gewoon door: planning, reserve en proefstand blijven
 werken, er wordt alleen niets aangestuurd zolang het duurt.
 
 **Volledige testsuite**: 3003 tests, allemaal groen.
+
+## v3.47.0 — Twee gaten in de klimaatterugval
+
+**Gemeld** met een schermafdruk van de klimaattabel: vanaf 11:00 stond
+overal `algemeen` met nul metingen, en de voorspelde binnentemperatuur
+zakte van 21,3 naar 20,9 — terwijl het buiten naar 31 graden liep.
+
+### De naburige vakjes werden zes dagen overgeslagen
+
+Sinds v3.41.0 beginnen de celsleutels met een `d`, omdat ze het verschil
+met binnen dragen en niet de buitentemperatuur. De terugval naar
+naburige vakjes rekende daar nog mee als getal:
+
+```python
+bucket_waarde = float(outdoor_bucket)   #  float("d-6.0")
+```
+
+Dat werpt een ValueError, `bucket_waarde` werd None, en de hele stap
+werd overgeslagen. Stilzwijgend: geen fout, geen melding, alleen een
+terugval die er niet meer was.
+
+Daardoor viel de projectie meteen door naar de grofste samenvatting — de
+directe oorzaak van wat er op de kaart stond.
+
+### En die grofste samenvatting kende geen grens
+
+`algemeen` neemt de mediaan over **alle** cellen, en die zijn overwegend
+nachtcellen met dichte rolluiken die afkoelen. Dat gemiddelde werd
+losgelaten op een middag waarin buiten tien graden boven binnen staat,
+bij een verschil waar geen enkele cel voor bestond.
+
+Precies de fout die deze week al vier keer langskwam: een model buiten
+zijn geldigheidsgebied gebruikt. Het temperatuurverband, de dakvlakken,
+de rendementsterugval, de klimaatcellen — en nu de terugval van die
+klimaatcellen zelf.
+
+Buiten twee graden van de gemeten reeks zegt de projectie nu niets meer,
+met de reden erbij. Een projectie die zegt "het koelt af terwijl het
+buiten tien graden warmer is" is erger dan geen projectie: hij oogt
+geloofwaardig en klopt niet.
+
+### Elf toetsen bijgewerkt
+
+De toetsen op de terugval gebruikten allemaal nog sleutels op
+buitentemperatuur — "18.0" waar het nu "d2.0" moet zijn. Ze slaagden
+omdat ze consequent hun eigen oude vorm gebruikten, aan beide kanten.
+Daardoor bewaakten ze zes dagen lang een terugval die in de praktijk
+niet meer liep.
+
+### Structuurscan 14: toetsen gebruiken het echte sleutelformaat
+
+Toegevoegd bij de eindcontrole. Elf toetsen op de klimaatterugval
+gebruikten nog de oude sleutelvorm en slaagden daarmee, omdat ze
+consequent hun eigen vorm gebruikten aan beide kanten: zelf de cel
+aanmaken, zelf bevragen, alles klopt. Een gesloten wereldje dat prima
+klopt en niets meer met de werkelijkheid te maken heeft.
+
+De scan vond bij het invoeren nog een twaalfde geval in
+`test_diagnostic_summary.py`. Die toets slaagde omdat hij alleen telt
+of er cellen zijn, maar beschreef daarmee een opzet die niet meer
+bestaat.
+
+Twee bestanden staan er bewust buiten: die bewijzen juist dat de oude
+sleutels worden opgeruimd, en móeten de oude vorm gebruiken.
+
+### Eindcontrole voor deze oplevering
+
+| | |
+|---|---|
+| structuurscans 1 t/m 14 | groen |
+| ongebruikte constanten | 0 van 555 |
+| dashboard-YAML ↔ kopie | gelijk |
+| versie ↔ README ↔ changelog | sluit |
+| tekstbestanden leesbaar | ja |
+| totale dekking | 90% |
+| `const.py` | 100% |
+
+De acht functies die deze week zijn bijgekomen — de verbruiksterugval,
+de bereikbaarheidstoets, het verschil-vakje, de zonbias per soort dag,
+de tweelingsplitsing, de verkoopblokkade, de saldering-rem en de
+proefstand-toelating — zijn alle acht door toetsen gedekt, en alle
+zeven nieuwe exportvelden staan in de diagnostiek.
+
+**Volledige testsuite**: 3008 tests, allemaal groen.

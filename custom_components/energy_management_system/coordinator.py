@@ -161,6 +161,7 @@ from .const import (
     CLIMATE_RATE_MIN_SAMPLES,
     CLIMATE_RATE_RELIABLE_SAMPLES,
     CLIMATE_RATE_NEUTRAL_C_PER_HOUR,
+    CLIMATE_RATE_MAX_EXTRAPOLATIE_C,
     CLIMATE_FORECAST_HORIZON_HOURS,
     CLIMATE_FORECAST_FETCH_INTERVAL_MINUTES,
     CLIMATE_FORECAST_BIAS_HISTORY_LENGTH,
@@ -25899,8 +25900,20 @@ class EnergyManagementSystemCoordinator:
         if exact["voldoende_data"]:
             return {**exact, "basis": "exact"}
 
+        # v3.47.0: het merkteken `d` eraf voordat er gerekend wordt.
+        #
+        # Sinds v3.41.0 beginnen de sleutels met een `d` - "d-6.0" in
+        # plaats van "6.0" - omdat ze het VERSCHIL met binnen dragen en
+        # niet de buitentemperatuur. Deze omzetting liep daar stil op
+        # stuk: `float("d-6.0")` werpt een ValueError, `bucket_waarde`
+        # werd None, en stap 2 werd sindsdien overgeslagen.
+        #
+        # Gevolg: de naburige vakjes zijn zes dagen lang nooit
+        # geraadpleegd. De projectie viel meteen door naar de
+        # grofste terugval, en dat is precies wat er misging bij een
+        # verschil van +8 graden waar geen cel voor bestond.
         try:
-            bucket_waarde = float(outdoor_bucket)
+            bucket_waarde = float(str(outdoor_bucket).lstrip("d"))
         except (TypeError, ValueError):
             bucket_waarde = None
 
@@ -25927,7 +25940,7 @@ class EnergyManagementSystemCoordinator:
                     naburig = bucket_waarde + richting * stap * OUTDOOR_TEMP_BUCKET_SIZE_C
                     buren.append(
                         self._climate_rate_key(
-                            str(naburig), shutter_state, airco_state
+                            f"d{naburig}", shutter_state, airco_state
                         )
                     )
             resultaat = _samenvatting(
@@ -25946,7 +25959,51 @@ class EnergyManagementSystemCoordinator:
         if resultaat is not None:
             return resultaat
 
-        # 4. Alles wat er is.
+        # 4. Alles wat er is - maar alleen binnen bereik.
+        #
+        # Gemeld met een schermafdruk van de klimaattabel: vanaf 11:00
+        # stond overal `algemeen` met nul metingen, en de voorspelde
+        # binnentemperatuur zakte van 21,3 naar 20,9 terwijl het buiten
+        # naar 31 graden liep.
+        #
+        # Dat kan niet. `algemeen` neemt de mediaan over ALLE cellen, en
+        # die zijn overwegend nachtcellen met dichte rolluiken die
+        # afkoelen. Dat gemiddelde werd losgelaten op een middag waarin
+        # buiten tien graden boven binnen staat.
+        #
+        # Precies de fout die deze week al vier keer langskwam: een model
+        # buiten zijn geldigheidsgebied gebruikt. Het temperatuurverband,
+        # de dakvlakken, de rendementsterugval, de klimaatcellen - en nu
+        # de terugval van die klimaatcellen zelf.
+        #
+        # Een projectie die zegt "het koelt af terwijl het buiten tien
+        # graden warmer is" is erger dan geen projectie: hij oogt
+        # geloofwaardig en klopt niet. Buiten het bereik waar cellen
+        # bestaan, hoort hij niets te zeggen.
+        if bucket_waarde is not None:
+            gemeten = []
+            for sleutel in self.climate_rate_history:
+                try:
+                    gemeten.append(float(sleutel.split("|")[0].lstrip("d")))
+                except ValueError:
+                    continue
+            if gemeten and not (
+                min(gemeten) - CLIMATE_RATE_MAX_EXTRAPOLATIE_C
+                <= bucket_waarde
+                <= max(gemeten) + CLIMATE_RATE_MAX_EXTRAPOLATIE_C
+            ):
+                return {
+                    **exact,
+                    "basis": "buiten_bereik",
+                    "toelichting": (
+                        f"Een verschil van {bucket_waarde:+.0f} °C valt "
+                        f"buiten de gemeten reeks ({min(gemeten):+.0f} tot "
+                        f"{max(gemeten):+.0f} °C). Er wordt geen tempo "
+                        "geraden; de kamertemperatuur blijft staan tot er "
+                        "voor deze omstandigheden gemeten is."
+                    ),
+                }
+
         resultaat = _samenvatting(list(self.climate_rate_history), "algemeen")
         if resultaat is not None:
             return resultaat
