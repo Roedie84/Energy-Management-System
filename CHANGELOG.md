@@ -18574,3 +18574,42 @@ een leeg uurprofiel na de resetknop, toen een weggevallen sensor, nu een
 attribuut dat nooit is aangemaakt. Er staan nu scans op alle drie.
 
 **Volledige testsuite**: 2993 tests, allemaal groen.
+
+## v3.46.0 — Niet schrijven naar een accu die offline is
+
+**Gemeld**: "Ik krijg telkens deze melding van de integratie: Zendure -
+No devices online, not possible to start the operation. Als ik de app op
+learn only zet niet."
+
+Die melding komt van de **Zendure-integratie**, niet van deze. Hij
+verschijnt zodra EMS naar de modus- of vermogensentiteit schrijft
+terwijl Zendure geen verbinding met de accu heeft. In leermodus schrijft
+EMS niets, dus dan blijft het stil — het probleem is er dan nog steeds,
+alleen onzichtbaar.
+
+EMS keek nergens of die entiteiten bereikbaar waren; het schreef er
+gewoon naartoe. Elke ronde tegen een dode entiteit levert niets op
+behalve een foutmelding per ronde. Wie zijn accu twee uur offline heeft,
+krijgt er honderd.
+
+Vóór het schrijven wordt nu gekeken of de modus- en de
+vermogensentiteit een bruikbare toestand hebben. Zo niet, dan wordt er
+niets geschreven en gaat er **één** melding uit — de aanleiding was
+juist een stroom foutmeldingen, en een oplossing die er zelf een stroom
+van maakt is geen oplossing. Zodra de accu terug is, staat dat in het
+logboek met de duur erbij.
+
+Alleen een uitdrukkelijk `unavailable` of `unknown` telt. Staat een
+entiteit vlak na het opstarten nog niet in de toestandsmachine, dan
+wordt er gewoon geschreven — die is straks prima in orde, en daarop
+afgaan zou de aansturing bij elke herstart een tijdje stilzetten.
+
+**Uitdrukkelijk niet in `internal_failures`.** Daar hangt de kritieke
+melding "onderdeel van de integratie faalt" aan, en een accu die offline
+is, is geen fout van deze integratie. De eerste versie deed dat wel, en
+de bestaande toetsen sloegen daar meteen op aan.
+
+De berekening loopt gewoon door: planning, reserve en proefstand blijven
+werken, er wordt alleen niets aangestuurd zolang het duurt.
+
+**Volledige testsuite**: 3003 tests, allemaal groen.

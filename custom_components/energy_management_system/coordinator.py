@@ -734,6 +734,10 @@ class EnergyManagementSystemCoordinator:
         # Dat pad loopt alleen als er eerder een tekortmelding is
         # geweest én die daarna verdwijnt, zonder herstart ertussen.
         # Zeldzaam genoeg om jaren te blijven zitten.
+        # v3.46.0: of en sinds wanneer de accu niet aanstuurbaar is.
+        # Eén veld, want de functiegrootte-ratel van v3.35.0 laat
+        # `__init__` niet verder groeien.
+        self.aansturing_onbereikbaar: dict = {"reden": None, "sinds": None}
         self.last_plan_shortfall: dict = {
             "kwartieren": 0,
             "perioden": [],
@@ -28519,6 +28523,10 @@ class EnergyManagementSystemCoordinator:
             _LOGGER.debug("Learning-only mode: %s", self.last_simulated_action)
             return
         self.last_simulated_action = None
+        onbereikbaar = self._aansturing_bereikbaar()
+        if onbereikbaar:
+            self._meld_aansturing_onbereikbaar(onbereikbaar)
+            return
         await self.hass.services.async_call(
             "select",
             "select_option",
@@ -28528,6 +28536,79 @@ class EnergyManagementSystemCoordinator:
             },
             blocking=True,
         )
+
+    def _meld_aansturing_onbereikbaar(self, reden: str) -> None:
+        """Eén melding, niet één per ronde (v3.46.0).
+
+        De aanleiding was juist dat er een stroom foutmeldingen kwam. Een
+        oplossing die er zelf een stroom van maakt, is geen oplossing.
+        """
+        if self.aansturing_onbereikbaar.get("sinds") is None:
+            self.aansturing_onbereikbaar["sinds"] = dt_util.now().isoformat()
+            _LOGGER.warning(
+                "De accu is niet aanstuurbaar: %s. De berekening loopt "
+                "door; er wordt niets geschreven zolang dit duurt.",
+                reden,
+            )
+        # Uitdrukkelijk NIET in `internal_failures`: een accu die
+        # offline is, is geen fout van deze integratie. Daar hangt de
+        # kritieke melding "onderdeel van de integratie faalt" aan, en
+        # die zou hier het verkeerde verhaal vertellen.
+        self.aansturing_onbereikbaar["reden"] = reden
+
+    def _aansturing_hersteld(self) -> None:
+        """Opruimen zodra er weer geschreven kan worden."""
+        sinds = self.aansturing_onbereikbaar.get("sinds")
+        if sinds is not None:
+            duur = (
+                dt_util.now() - datetime.fromisoformat(sinds)
+            ).total_seconds() / 60
+            _LOGGER.info(
+                "De accu is weer aanstuurbaar na %.0f minuten.", duur
+            )
+            self.aansturing_onbereikbaar["sinds"] = None
+        self.aansturing_onbereikbaar["reden"] = None
+
+    def _aansturing_bereikbaar(self) -> str | None:
+        """Kan er überhaupt naar de accu geschreven worden? (v3.46.0)
+
+        Gemeld: "Ik krijg telkens deze melding van de integratie: Zendure
+        - No devices online, not possible to start the operation. Als ik
+        de app op learn only zet niet."
+
+        Die melding komt van de Zendure-integratie, niet van deze. Hij
+        verschijnt zodra EMS naar de modus- of vermogensentiteit schrijft
+        terwijl Zendure geen verbinding met de accu heeft. In leermodus
+        schrijft EMS niets, dus dan blijft het stil - het probleem is er
+        dan nog steeds, alleen onzichtbaar.
+
+        Elke ronde tegen een dode entiteit aan schrijven levert niets op
+        behalve een foutmelding per ronde. Wie zijn accu twee uur offline
+        heeft, krijgt er honderd. Beter is: constateren dat er niets te
+        schrijven valt, dat één keer zeggen, en verder normaal
+        doorrekenen.
+        """
+        for sleutel in (CONF_OPERATION_SELECT, CONF_MANUAL_POWER_NUMBER):
+            entity_id = self.config.get(sleutel)
+            if not entity_id:
+                continue
+            staat = self.hass.states.get(entity_id)
+            if staat is None:
+                # Bewust GEEN reden om niet te schrijven.
+                #
+                # Vlak na het opstarten staat een entiteit soms nog niet
+                # in de toestandsmachine terwijl hij straks prima werkt.
+                # Daar niet op afgaan: alleen een uitdrukkelijk
+                # `unavailable` of `unknown` betekent dat de andere
+                # integratie zelf zegt dat het niet kan.
+                continue
+            if staat.state in ("unavailable", "unknown"):
+                return (
+                    f"{entity_id} is {staat.state} - de accu-integratie "
+                    "heeft geen verbinding"
+                )
+        self._aansturing_hersteld()
+        return None
 
     async def _async_apply_manual(self, power: float) -> None:
         """Set manual mode with the given power, unless in learning_only
@@ -28541,6 +28622,10 @@ class EnergyManagementSystemCoordinator:
             _LOGGER.debug("Learning-only mode: %s", self.last_simulated_action)
             return
         self.last_simulated_action = None
+        onbereikbaar = self._aansturing_bereikbaar()
+        if onbereikbaar:
+            self._meld_aansturing_onbereikbaar(onbereikbaar)
+            return
         await self.hass.services.async_call(
             "select",
             "select_option",

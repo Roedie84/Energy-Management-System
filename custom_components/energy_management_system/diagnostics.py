@@ -550,6 +550,12 @@ async def async_get_config_entry_diagnostics(
             # v3.44.0: waar de verkooprem zijn oordeel op baseert. Zonder
             # dit veld is niet na te gaan of de rem zweeg omdat er geen
             # tekort was, of omdat de stand nog leeg was.
+            # v3.46.0: of de accu aanstuurbaar is. Staat bewust NIET in
+            # internal_failures - een offline accu is geen fout van deze
+            # integratie.
+            "aansturing_onbereikbaar": getattr(
+                coordinator, "aansturing_onbereikbaar", None
+            ),
             "last_plan_shortfall": getattr(
                 coordinator, "last_plan_shortfall", None
             ),
