@@ -18528,3 +18528,49 @@ kwam. De integratie meldde die uitval keurig; wat ontbrak was dat de
 berekening erop voorbereid was.
 
 **Volledige testsuite**: 2988 tests, allemaal groen.
+
+## v3.45.3 — Een attribuut dat nooit is aangemaakt
+
+**Gemeld** met traceback op 26 augustus 11:38:
+
+```
+File "coordinator.py", line 15534, in _meld_planningswijzigingen
+  if self._plan_tekort_vrij_sinds is None:
+AttributeError: 'EnergyManagementSystemCoordinator' object has no
+attribute '_plan_tekort_vrij_sinds'
+```
+
+Dat veld werd op vijf plekken gezet en op één plek gelezen, en stond
+niet in `__init__`. In vrijwel elk pad wordt het eerst gezet en dan
+gelezen — behalve als er eerder een tekortmelding is geweest die daarna
+verdwijnt, zonder herstart ertussen. Zeldzaam genoeg om jaren te blijven
+zitten.
+
+De herstelklok zit nu in `last_plan_shortfall`, dat wél een beginwaarde
+heeft. Die dict wordt bijgewerkt in plaats van vervangen — een volledige
+toewijzing zou de klok elke ronde wissen en dan komt de herstelmelding
+nooit.
+
+### Waarom de bestaande toetsen dit misten
+
+Er wáren drie toetsen op dit pad. Alle drie riepen eerst
+`_meld_planningswijzigingen` aan met een tekort, en dat zet het veld.
+Daarna toetsten ze het gedrag. Geen enkele begon kaal.
+
+Er staat er nu één bij die niets vooraf doet.
+
+### Structuurscan 13: elk attribuut bestaat vóór het gelezen wordt
+
+De scan vergelijkt wat er in de klasse gelezen én geschreven wordt met
+wat `__init__` klaarzet. Attributen die via `getattr(self, ...)` worden
+benaderd tellen niet mee — daar is de afwezigheid uitdrukkelijk
+afgevangen.
+
+Uitkomst over de hele coordinator: dit was het enige geval.
+
+Dit is de derde storing in vier dagen van dezelfde familie — een waarde
+die er in de praktijk altijd was, tot hij er een keer niet was. Eerst
+een leeg uurprofiel na de resetknop, toen een weggevallen sensor, nu een
+attribuut dat nooit is aangemaakt. Er staan nu scans op alle drie.
+
+**Volledige testsuite**: 2993 tests, allemaal groen.

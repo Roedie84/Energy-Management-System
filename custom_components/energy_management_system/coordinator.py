@@ -719,11 +719,26 @@ class EnergyManagementSystemCoordinator:
         self.verbruiksleer_reset_historie: list[dict] = []
         self._verbruiksleer_reset_gevraagd_op: datetime | None = None
         # v3.33.0: dagportie van de goedkope koeling.
-        # v3.43.0: wat de planning het laatst over een tekort zei. Eén
-        # veld in plaats van twee, want de functiegrootte-ratel van
-        # v3.35.0 laat `__init__` niet verder groeien - en die ratel
-        # heeft gelijk.
-        self.last_plan_shortfall: dict = {"kwartieren": 0, "perioden": []}
+        # v3.43.0: wat de planning het laatst over een tekort zei, en
+        # sinds wanneer die vrij is. Twee dingen in één veld, want de
+        # functiegrootte-ratel van v3.35.0 laat `__init__` niet verder
+        # groeien - en die ratel heeft gelijk.
+        #
+        # v3.45.3: `vrij_sinds` hoorde hier al te staan. Het werd op vijf
+        # plekken gezet en op één plek gelezen, en dat lezen kwam in één
+        # pad vóór het zetten:
+        #
+        #   AttributeError: 'EnergyManagementSystemCoordinator' object
+        #   has no attribute '_plan_tekort_vrij_sinds'
+        #
+        # Dat pad loopt alleen als er eerder een tekortmelding is
+        # geweest én die daarna verdwijnt, zonder herstart ertussen.
+        # Zeldzaam genoeg om jaren te blijven zitten.
+        self.last_plan_shortfall: dict = {
+            "kwartieren": 0,
+            "perioden": [],
+            "vrij_sinds": None,
+        }
         self.goedkope_koeling_teller: int = 0
         self.goedkope_koeling_teldag = None
         self._goedkope_koeling_gemeld: bool = False
@@ -15485,10 +15500,16 @@ class EnergyManagementSystemCoordinator:
         tekorten = samenvatting.get("tekort_kwartieren") or 0
         # v3.43.0: vastleggen voor de verkooptoets, die hier niet zelf
         # de planning voor mag opbouwen.
-        self.last_plan_shortfall = {
-            "kwartieren": tekorten,
-            "perioden": list(samenvatting.get("tekort_perioden") or []),
-        }
+        # v3.45.3: BIJWERKEN, niet vervangen. De herstelklok zit sinds
+        # deze versie in dezelfde dict, en die overleeft een volledige
+        # toewijzing niet - dan begint hij elke ronde opnieuw en komt de
+        # herstelmelding nooit.
+        self.last_plan_shortfall.update(
+            {
+                "kwartieren": tekorten,
+                "perioden": list(samenvatting.get("tekort_perioden") or []),
+            }
+        )
 
         # v3.9.0: een ondergrens, en zeggen WANNEER het tekort valt.
         #
@@ -15508,7 +15529,7 @@ class EnergyManagementSystemCoordinator:
         )
 
         if tekorten >= PLAN_SHORTFALL_ALERT_MIN_QUARTERS:
-            self._plan_tekort_vrij_sinds = None
+            self.last_plan_shortfall["vrij_sinds"] = None
             _meld(
                 "plan_tekort",
                 f"tekort:{tekorten}",
@@ -15524,22 +15545,22 @@ class EnergyManagementSystemCoordinator:
             # Eén of twee kwartieren: ruis rond de rekengrens. Geen
             # melding, maar de teller voor "hersteld" ook niet starten -
             # er is immers nog een tekort.
-            self._plan_tekort_vrij_sinds = None
+            self.last_plan_shortfall["vrij_sinds"] = None
         elif self._last_plan_alert.get("plan_tekort") is not None:
             # v3.9.0: pas melden na een stabiele periode.
             #
             # Om 06:44 stond "hersteld" met om 06:45 weer "tekort". De
             # planning schommelt rond de grens; zonder wachttijd is die
             # melding niets waard.
-            if self._plan_tekort_vrij_sinds is None:
-                self._plan_tekort_vrij_sinds = now
+            if self.last_plan_shortfall.get("vrij_sinds") is None:
+                self.last_plan_shortfall["vrij_sinds"] = now
                 return
             stabiel_minuten = (
-                now - self._plan_tekort_vrij_sinds
+                now - self.last_plan_shortfall["vrij_sinds"]
             ).total_seconds() / 60
             if stabiel_minuten < PLAN_SHORTFALL_RECOVERY_STABLE_MINUTES:
                 return
-            self._plan_tekort_vrij_sinds = None
+            self.last_plan_shortfall["vrij_sinds"] = None
             self._last_plan_alert.pop("plan_tekort", None)
             # v1.40.0, gemeld: "Ik krijg wel de melding dat er niet
             # genoeg is, maar niet dat er wel weer genoeg zou zijn."
