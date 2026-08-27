@@ -87,6 +87,10 @@ def test_an_unavailable_plan_is_not_captured(make_coordinator, hass):
 
 def _dag_afronden(c, zon=23.0, opbrengst=4.0, soc_laagste=20.0):
     c._update_plan_review(OCHTEND)
+    # v3.48.0: de stand komt uit de SENSOR, niet uit `last_soc_percent`.
+    # Dat veld liep achter - in de export van 27 augustus stond het op
+    # 38% terwijl de accu op 6% zat - en is daarom geen terugval meer.
+    c.accustand_procent = lambda: soc_laagste
     c.last_soc_percent = soc_laagste
     c._update_plan_review(OCHTEND + timedelta(hours=1))
     c.pv_production_today_kwh = zon

@@ -25,6 +25,7 @@ def _coordinator(make_coordinator):
     c.last_expected_mode = "smart"
     c.last_reason = "expensive_quarter"
     c.last_soc_percent = 62.0
+    c.accustand_procent = lambda v=62.0: v
     c.last_available_kwh = 4.8
     c.last_current_price_per_kwh = 0.3421
     return c
@@ -127,8 +128,10 @@ def test_the_soc_range_is_tracked(make_coordinator, hass):
     c = _coordinator(make_coordinator)
     c._update_daily_report(NOW)
     c.last_soc_percent = 20.0
+    c.accustand_procent = lambda v=20.0: v
     c._update_daily_report(NOW + timedelta(hours=1))
     c.last_soc_percent = 95.0
+    c.accustand_procent = lambda v=95.0: v
     c._update_daily_report(NOW + timedelta(hours=2))
     c._update_daily_report(NOW + timedelta(days=1))
 

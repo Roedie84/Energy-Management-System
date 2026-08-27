@@ -55,7 +55,11 @@ BEVROREN = {
     # het signaal waar deze ratel voor bedoeld is: 419 uitspraken in één
     # functie is te veel, en de volgende keer dat hier iets bij moet,
     # hoort er eerst een blok uit.
-    "coordinator.py:__init__": 418,
+    # v3.50.0: +1 voor `meting_tijdstippen`. De ratel eist een besluit
+    # en dit is er een: zonder tijdstempel is een waarde van een minuut
+    # oud niet te onderscheiden van een van vijf uur, en juist dat
+    # verschil kostte op 27 augustus een nacht aan ontladen.
+    "coordinator.py:__init__": 419,
     "coordinator.py:_async_update_locked": 255,
     "coordinator.py:_async_update_scheduled_charge_appliance": 70,
     "coordinator.py:_build_explanation": 73,
@@ -63,7 +67,9 @@ BEVROREN = {
     "coordinator.py:_compute_mpc_plan": 83,
     "coordinator.py:_evaluate_new_notifications": 103,
     "coordinator.py:_finalize_nilm_device_day": 71,
-    "coordinator.py:_get_soc_scaled_discharge_power": 64,
+    # v3.50.0: +2, de tijdstempels bij de twee schrijvers van
+    # `last_soc_percent` in deze functie.
+    "coordinator.py:_get_soc_scaled_discharge_power": 66,
     "coordinator.py:_run_monte_carlo_simulation": 61,
     "coordinator.py:_update_advisory_readiness": 68,
     "coordinator.py:_update_self_sufficiency_tracking": 67,

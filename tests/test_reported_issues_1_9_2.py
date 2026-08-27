@@ -92,6 +92,7 @@ def test_the_notification_uses_the_real_time_of_day(make_coordinator, hass):
     c._get_forecast_entries = lambda *a, **k: _prijzen
     c.set_notification_enabled("low_soc_before_peak", True)
     c.last_soc_percent = 23.0
+    c.accustand_procent = lambda: 23.0
     c.last_discharge_start = NOW + timedelta(hours=1, minutes=28)  # 07:15
 
     from custom_components.energy_management_system import coordinator as mod
