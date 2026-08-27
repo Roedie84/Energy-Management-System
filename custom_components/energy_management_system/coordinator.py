@@ -446,6 +446,10 @@ from .const import (
     SOLAR_BIAS_DRIFT_ATTENTION_PERCENT,
     SOLAR_DAG_GOED_PERCENT,
     SOLAR_DAG_VER_MIS_PERCENT,
+    SPIEGEL_MARGE_SOC_PROCENT,
+    METING_MAX_LEEFTIJD_MINUTEN,
+    SPIEGEL_MARGE_ENERGIE_KWH,
+    SPIEGEL_MARGE_KRUIS_PROCENT,
     SOLARFLOW_DEFAULT_GRID_POWER_W,
     SOLARFLOW_MAX_BATTERY_CHARGE_W,
     SOLARFLOW_MAX_GRID_POWER_W,
@@ -739,6 +743,10 @@ class EnergyManagementSystemCoordinator:
         # Eén veld, want de functiegrootte-ratel van v3.35.0 laat
         # `__init__` niet verder groeien.
         self.aansturing_onbereikbaar: dict = {"reden": None, "sinds": None}
+        # v3.50.0: wanneer elk gespiegeld veld voor het laatst uit zijn
+        # sensor is gevuld. Zonder tijdstempel is een waarde van een
+        # minuut oud niet te onderscheiden van een van vijf uur.
+        self.meting_tijdstippen: dict = {}
         self.last_plan_shortfall: dict = {
             "kwartieren": 0,
             "perioden": [],
@@ -4862,15 +4870,15 @@ class EnergyManagementSystemCoordinator:
             "t": now.isoformat(timespec="minutes"),
             "modus": self.last_expected_mode,
             "reden": self.last_reason,
-            "soc": self.last_soc_percent,
+            "soc": self.accustand_procent(),
             "kwh": (
                 round(self.last_available_kwh, 2)
                 if self.last_available_kwh is not None
                 else None
             ),
             "prijs": (
-                round(self.last_current_price_per_kwh, 4)
-                if self.last_current_price_per_kwh is not None
+                round(prijs, 4)
+                if (prijs := self.huidige_prijs_eur_per_kwh()) is not None
                 else None
             ),
             "pv_w": self._read_sensor_float(self.config.get(CONF_PV_POWER_SENSOR)),
@@ -6036,8 +6044,34 @@ class EnergyManagementSystemCoordinator:
         gemeten = self._read_sensor_float(self.config.get(CONF_SOC_SENSOR))
         if gemeten is not None:
             return gemeten
-        if self.last_soc_percent is not None:
+
+        # v3.50.0: dezelfde regel als bij de beschikbare energie - een
+        # verse waarde mag, een oude niet.
+        if self._meting_is_vers("last_soc_percent"):
             return self.last_soc_percent
+
+        # v3.48.0: `last_soc_percent` is GEEN blinde terugval meer.
+        #
+        # Gemeld in de export van 27 augustus 08:09. Het veld stond op
+        # 38% terwijl elk ander getal in dezelfde export "leeg" zei:
+        #
+        #     kwartierplan begint     10 %
+        #     modules                 2, 8, 7 %
+        #     grafiek van de sensor    6 %
+        #     kalman gefilterd         0,0 kWh
+        #
+        # De sensor liep gewoon door - die 38% kwam ergens uit de nacht,
+        # toen een tak die het veld zet voor het laatst werd bereikt.
+        #
+        # Dat is precies de vorm waarvoor deze helper in v1.31.1 is
+        # gemaakt: een bijproduct van een berekening is geen accustand.
+        # Toen ging het om None in plaats van 22%; het veld bleef als
+        # terugval staan en levert nu een getal dat er twintig uur naast
+        # zit. Een oude waarde is gevaarlijker dan geen waarde, want er
+        # wordt zonder aarzeling mee gerekend.
+        #
+        # Zegt de sensor niets, dan liever afleiden uit de beschikbare
+        # energie - dat is een VERSE meting - en anders niets.
         # Laatste terugval: afleiden uit de beschikbare energie.
         beschikbaar = self.beschikbare_energie_kwh()
         # v3.5.0: de GEMETEN capaciteit zodra die er is.
@@ -6132,9 +6166,54 @@ class EnergyManagementSystemCoordinator:
         )
         if gemeten is not None and gemeten >= 0:
             return gemeten
-        if self.last_available_kwh is not None:
+
+        # v3.50.0: het bijproduct mag terugval blijven, maar alleen
+        # zolang het VERS is.
+        #
+        # Eerst had ik de terugval helemaal geschrapt, net als bij
+        # `accustand_procent()`. Achtenveertig toetsen vielen om, en dat
+        # was terecht: bij een sensor die één ronde niets zegt, is een
+        # waarde van een minuut geleden prima. De aansturing helemaal
+        # stilzetten bij elke hapering is erger dan het kwaad.
+        #
+        # Het probleem is niet de terugval maar de LEEFTIJD ervan. Op 27
+        # augustus stond de accustand op 38% terwijl de accu op 6% zat -
+        # een waarde uit de nacht. Een minuut oud is bruikbaar, vijf uur
+        # niet, en zonder tijdstempel is dat verschil niet te zien.
+        if self._meting_is_vers("last_available_kwh"):
             return self.last_available_kwh
         return self.last_projection_available_kwh
+
+    def _onthoud_meting(self, veld: str) -> None:
+        """Legt vast wanneer een gespiegeld veld voor het laatst is
+        bijgewerkt (v3.50.0)."""
+        self.meting_tijdstippen[veld] = dt_util.now()
+
+    def _meting_is_vers(self, veld: str) -> bool:
+        """Is dat veld recent genoeg om als terugval te dienen?
+
+        Zonder tijdstempel is een oude waarde niet van een verse te
+        onderscheiden, en juist dat verschil kostte op 27 augustus een
+        nacht aan ontladen.
+        """
+        if getattr(self, veld, None) is None:
+            return False
+        gezet = self.meting_tijdstippen.get(veld)
+        if gezet is None:
+            # Geen tijdstempel betekent dat dit veld nog nooit door de
+            # normale weg is gezet. In de draaiende integratie kan dat
+            # niet - élke schrijver legt het tijdstip vast - maar wel na
+            # een herstart, of wanneer een toets het veld rechtstreeks
+            # zet.
+            #
+            # Bewust NIET als "oud" behandelen: dan zou de aansturing na
+            # elke herstart een ronde lang zonder terugval zitten, en dat
+            # is het middel erger dan de kwaal. De storing van 27
+            # augustus wordt hoe dan ook gevangen, want daar was het veld
+            # wél via de normale weg gezet - alleen uren eerder.
+            return True
+        leeftijd = (dt_util.now() - gezet).total_seconds() / 60
+        return leeftijd <= METING_MAX_LEEFTIJD_MINUTEN
 
     def effective_min_soc_percent(self) -> float:
         """De minimum-SoC die de accu WERKELIJK aanhoudt (v1.23.3).
@@ -7207,7 +7286,7 @@ class EnergyManagementSystemCoordinator:
     def _waarom_regels(self, now: datetime, reden: str) -> list[str]:
         """De onderbouwing per beslisreden (v1.60.0)."""
 
-        prijs = self.last_current_price_per_kwh
+        prijs = self.huidige_prijs_eur_per_kwh()
         drempel = self.last_expensive_price_threshold
         stand = self.accustand_procent()
         beschikbaar = self.beschikbare_energie_kwh()
@@ -7937,7 +8016,7 @@ class EnergyManagementSystemCoordinator:
         #    aanhoudt - tegen de prijs van dat moment.
         verschil_kwh = self._dagtype_verschil_kwh(dag)
         if verschil_kwh is not None:
-            prijs = self.last_current_price_per_kwh or 0.0
+            prijs = self.huidige_prijs_eur_per_kwh() or 0.0
             boeking["dagtype_eur"] = round(abs(verschil_kwh) * prijs, 3)
             boeking["dagtype_kwh"] = round(verschil_kwh, 2)
 
@@ -8201,7 +8280,7 @@ class EnergyManagementSystemCoordinator:
         slijtagekosten. Pas als de cijfers het rechtvaardigen mag het
         meesturen.
         """
-        prijs_nu = self.last_current_price_per_kwh
+        prijs_nu = self.huidige_prijs_eur_per_kwh()
         if prijs_nu is None or not self.is_battery_discharging():
             return
 
@@ -8395,7 +8474,7 @@ class EnergyManagementSystemCoordinator:
         tekortprijs = statistics.median(prijzen_tekort) / 100
 
         # En wat kost het om die kWh nu in de accu te zetten?
-        prijs_nu = self.last_current_price_per_kwh
+        prijs_nu = self.huidige_prijs_eur_per_kwh()
         if prijs_nu is None:
             return
         rendement = (self.learned_battery_efficiency_percent or 90.0) / 100
@@ -8465,7 +8544,7 @@ class EnergyManagementSystemCoordinator:
             self.config.get(CONF_CONSUMPTION_POWER_SENSOR)
         )
         pv_w = self._read_sensor_float(self.config.get(CONF_PV_POWER_SENSOR))
-        prijs = self.last_current_price_per_kwh
+        prijs = self.huidige_prijs_eur_per_kwh()
         if None in (accu_w, net_w, prijs) or accu_w <= 0:
             self._netlading_laatste_meting = now
             return
@@ -10567,8 +10646,8 @@ class EnergyManagementSystemCoordinator:
                 # v3.18.0: de afweging waar de aansturing op draait,
                 # naast het vermogen in plaats van loze ruimte.
                 "prijs_ct": (
-                    self.last_current_price_per_kwh * 100
-                    if self.last_current_price_per_kwh is not None
+                    prijs * 100
+                    if (prijs := self.huidige_prijs_eur_per_kwh()) is not None
                     else None
                 ),
                 "accu_ct": (
@@ -10946,6 +11025,138 @@ class EnergyManagementSystemCoordinator:
                 uitkomst[naam] = {"reden": "niet gevonden"}
         return uitkomst
 
+    def _spiegelbevindingen(self) -> list[dict]:
+        """De spiegelcontrole als bevindingen (v3.49.0).
+
+        Eigen functie, want `get_consistency_checks` staat op de ratel
+        van v3.35.0 en mag niet groeien.
+        """
+        return [
+            {
+                "naam": f"Spiegel: {regel['naam']}",
+                "ernst": "fout",
+                "uitleg": (
+                    f"De integratie rekent met {regel['intern']} "
+                    f"{regel['eenheid']} terwijl {regel['bron']} "
+                    f"{regel['gemeten']} {regel['eenheid']} aangeeft - een "
+                    f"verschil van {regel['verschil']}. Eén van de twee "
+                    "klopt niet, en alles wat met het interne getal "
+                    "rekent, rekent dan consequent verkeerd."
+                ),
+            }
+            for regel in self.get_spiegelcontrole()
+            if regel["oordeel"] == "loopt_uiteen"
+        ]
+
+    def get_spiegelcontrole(self) -> list[dict]:
+        """Vergelijkt eigen getallen met de bron waar ze vandaan komen
+        (v3.49.0).
+
+        Gevraagd: "Volgens mij moet je in de diagnostiek iets bouwen dat
+        werkelijke entiteiten vergelijkt met entiteiten van het EMS,
+        zodat fouten hierin sneller gedetecteerd worden."
+
+        Terecht, en het zou deze week drie keer geholpen hebben:
+
+        - 27 augustus: `last_soc_percent` stond op 38% terwijl de sensor
+          6% aangaf. Het veld wordt maar op drie plaatsen geschreven, en
+          alle drie zitten in een tak die die ochtend niet werd bereikt.
+        - 26 augustus: `beschikbare_energie_kwh` stond op 0,00 terwijl er
+          nog stroom in de accu zat - de Zendure-manager was zijn
+          apparaat kwijt.
+        - 11 augustus: hetzelfde veld op None terwijl de accu 22% aangaf.
+
+        Drie keer dezelfde vorm: een intern getal dat afdrijft van de
+        meting waar het vandaan komt. Van binnenuit is dat niet te zien,
+        want alles wat ermee rekent, rekent consequent met dezelfde
+        verkeerde waarde.
+
+        Deze controle zet ze naast elkaar. Niet één keer bij het
+        opsporen, maar elke ronde.
+        """
+        uit: list[dict] = []
+
+        def _voeg_toe(
+            naam: str,
+            intern,
+            gemeten,
+            eenheid: str,
+            marge: float,
+            bron: str,
+        ) -> None:
+            regel = {
+                "naam": naam,
+                "bron": bron,
+                "intern": intern,
+                "gemeten": gemeten,
+                "eenheid": eenheid,
+                "marge": marge,
+            }
+            if intern is None or gemeten is None:
+                regel["oordeel"] = "niet_te_vergelijken"
+                regel["verschil"] = None
+            else:
+                verschil = abs(intern - gemeten)
+                regel["verschil"] = round(verschil, 3)
+                regel["oordeel"] = "loopt_uiteen" if verschil > marge else "sluit_aan"
+            uit.append(regel)
+
+        # 1. De accustand tegen zijn eigen sensor.
+        soc_entity = self.config.get(CONF_SOC_SENSOR)
+        if soc_entity:
+            _voeg_toe(
+                "Accustand",
+                self.last_soc_percent,
+                self._read_sensor_float(soc_entity),
+                "%",
+                SPIEGEL_MARGE_SOC_PROCENT,
+                soc_entity,
+            )
+
+        # 2. De beschikbare energie tegen zijn eigen sensor.
+        beschikbaar_entity = self.config.get(CONF_AVAILABLE_ENERGY_SENSOR)
+        if beschikbaar_entity:
+            _voeg_toe(
+                "Beschikbare energie",
+                self.last_available_kwh,
+                self._read_sensor_float(beschikbaar_entity),
+                "kWh",
+                SPIEGEL_MARGE_ENERGIE_KWH,
+                beschikbaar_entity,
+            )
+
+        # 3. En de twee tegen elkaar - dat is de sterkste toets.
+        #
+        # Accustand en beschikbare energie komen uit VERSCHILLENDE
+        # sensoren. Wijken die van elkaar af, dan is er één stuk, en dan
+        # maakt het niet uit welke van de twee zijn eigen bron nog volgt.
+        #
+        # Dit is de toets die op 27 augustus had aangeslagen: 38% tegen
+        # 0,00 kWh kan niet allebei waar zijn.
+        stand = (
+            self._read_sensor_float(soc_entity) if soc_entity else None
+        )
+        beschikbaar = (
+            self._read_sensor_float(beschikbaar_entity)
+            if beschikbaar_entity
+            else None
+        )
+        capaciteit = self.bruikbare_capaciteit_kwh()
+        if stand is not None and beschikbaar is not None and capaciteit:
+            bodem = self.effective_min_soc_percent()
+            schaal = max(1.0, 100.0 - bodem)
+            afgeleid = bodem + (beschikbaar / capaciteit) * schaal
+            _voeg_toe(
+                "Accustand tegen beschikbare energie",
+                round(afgeleid, 1),
+                stand,
+                "%",
+                SPIEGEL_MARGE_KRUIS_PROCENT,
+                f"{beschikbaar_entity} tegenover {soc_entity}",
+            )
+
+        return uit
+
     def get_consistency_checks(self, now: datetime | None = None) -> dict:
         """Rekent na of getallen die elkaar moeten kloppen dat ook doen
         (v2.0.0).
@@ -10982,6 +11193,9 @@ class EnergyManagementSystemCoordinator:
                     {"naam": naam, "ernst": ernst, "uitleg": uitleg}
                 )
 
+        # --- 0. Eigen getallen tegen hun bron (v3.49.0) ---
+        bevindingen.extend(self._spiegelbevindingen())
+
         # --- 1. Zelfvoorziening moet volgen uit import en verbruik ---
         verbruik = self.gross_consumption_today_kwh
         if verbruik > 1.0:
@@ -11004,29 +11218,21 @@ class EnergyManagementSystemCoordinator:
                     f"Gemeld {gemeld:.1f}%, narekening {verwacht:.1f}%.",
                 )
 
-        # --- 2. Beschikbare energie moet volgen uit de accustand ---
-        stand = self.accustand_procent()
-        beschikbaar = self.beschikbare_energie_kwh()
-        capaciteit = self._read_sensor_float(
-            self.config.get(CONF_BATTERY_TOTAL_CAPACITY_SENSOR)
-        )
-        if None not in (stand, beschikbaar, capaciteit) and capaciteit:
-            min_soc = self.effective_min_soc_percent()
-            # v3.29.0: op nul afkappen. Een negatieve beschikbare energie
-            # bestaat niet.
-            #
-            # Gemeld door de zelfcontrole zelf, twee keer: "sensor 0,00
-            # kWh, uit de accustand van 6% volgt -0,35 kWh". Onder de
-            # ondergrens van 10% is er niets beschikbaar, en dan meldt
-            # de sensor terecht nul - de toets rekende het verschil met
-            # een getal dat niet kan bestaan.
-            verwacht = max(0.0, capaciteit * (stand - min_soc) / 100)
-            _toets(
-                "Beschikbare energie",
-                abs(beschikbaar - verwacht) < max(0.3, verwacht * 0.1),
-                f"Sensor {beschikbaar:.2f} kWh, uit de accustand van "
-                f"{stand:.0f}% volgt {verwacht:.2f} kWh.",
-            )
+        # --- 2. vervallen in v3.49.0 ---
+        #
+        # Deze toets vergeleek de beschikbare energie met de accustand -
+        # precies wat de spiegelcontrole nu doet. Maar hij haalde de
+        # capaciteit uit `CONF_BATTERY_TOTAL_CAPACITY_SENSOR`, en die is
+        # niet bij iedereen ingesteld. Staat die op None, dan viel de
+        # hele toets stil weg.
+        #
+        # Dat is precies wat er op 27 augustus gebeurde: 38% accustand
+        # tegenover 0,00 kWh beschikbaar, en de toets die dat had moeten
+        # vangen deed niets omdat er geen capaciteitssensor was.
+        #
+        # De spiegelcontrole gebruikt `bruikbare_capaciteit_kwh()`, en
+        # die heeft terugvallen: eerst de gemeten capaciteit, dan het
+        # typeplaatje. Daarmee werkt de toets ook zonder die sensor.
 
         # --- 3. De exportsplitsing moet optellen tot het totaal ---
         splitsing = self.solar_export_today_kwh + self.battery_export_today_kwh
@@ -16448,7 +16654,7 @@ class EnergyManagementSystemCoordinator:
                 ),
             }
 
-        huidige_prijs = self.last_current_price_per_kwh
+        huidige_prijs = self.huidige_prijs_eur_per_kwh()
         latere_prijs = self._price_at_hour(now, beste_uur)
         if huidige_prijs is None or latere_prijs is None:
             return {
@@ -16966,6 +17172,7 @@ class EnergyManagementSystemCoordinator:
                 soc_entity = self.config.get(CONF_SOC_SENSOR)
                 if soc_entity:
                     self.last_soc_percent = self._read_sensor_float(soc_entity)
+                    self._onthoud_meting("last_soc_percent")
 
                 # Household-consumption floor: the reserve-based headroom
                 # above protects tonight's deepest deficit, but during an
@@ -17092,6 +17299,7 @@ class EnergyManagementSystemCoordinator:
 
         soc = self._read_sensor_float(soc_entity)
         self.last_soc_percent = soc
+        self._onthoud_meting("last_soc_percent")
         if soc is None:
             self.last_discharge_power_applied = base_power
             return base_power
@@ -17415,6 +17623,7 @@ class EnergyManagementSystemCoordinator:
                 )
 
                 self.last_available_kwh = available_kwh
+                self._onthoud_meting("last_available_kwh")
                 self.last_needed_kwh_to_bridge = needed_kwh
                 self.last_has_enough_energy = has_enough
 
@@ -17712,10 +17921,52 @@ class EnergyManagementSystemCoordinator:
     def _get_current_price_per_kwh(
         self, entries: list[PriceEntry], now: datetime
     ) -> float | None:
-        """Price (€/kWh) for the interval containing 'now', or None if not found."""
+        """Price (€/kWh) for the interval containing 'now', or None if not found.
+
+        v3.51.0: legt meteen vast wanneer dit is berekend. Elke aanroeper
+        schrijft de uitkomst naar `last_current_price_per_kwh`, en dan
+        hoort het tijdstip daar bij te horen - niet bij de aanroeper, want
+        dan moet elke plek eraan denken en groeit `_async_update_locked`
+        tegen de ratel van v3.35.0 aan.
+        """
         for start, end, price in entries:
             if start <= now < end:
+                self._onthoud_meting("last_current_price_per_kwh")
                 return price / PRICE_SCALE_FACTOR
+        return None
+
+    def huidige_prijs_eur_per_kwh(self, now: datetime | None = None) -> float | None:
+        """De prijs van DIT kwartier, opnieuw uitgerekend (v3.51.0).
+
+        Gevraagd bij het nalopen van alle gespiegelde velden:
+        `last_current_price_per_kwh` had tien lezers en geen enkele
+        controle op zijn leeftijd.
+
+        Bij de accustand en de beschikbare energie was een leeftijdsgrens
+        het antwoord, want die komen uit een sensor die kan haperen. De
+        prijs niet: die volgt uit de prijsreeks en de klok, en is dus
+        altijd opnieuw uit te rekenen. Onthouden is hier helemaal niet
+        nodig.
+
+        En het verschil is groot. Prijzen springen op de kwartiergrens -
+        op 26 augustus van 37,5 naar 22,0 cent binnen één kwartier.
+        Blijft het veld staan omdat een ronde eerder eindigde, dan
+        rekenen tien plekken met een prijs die anderhalf uur oud kan
+        zijn, en dat is genoeg om een verkeerd besluit te nemen.
+
+        Lukt het opnieuw uitrekenen niet - geen prijsgegevens - dan het
+        onthouden getal, mits vers. Dezelfde regel als bij de andere
+        twee, zodat er niet drie verschillende antwoorden op dezelfde
+        vraag ontstaan.
+        """
+        nu = now or dt_util.now()
+        entries = self._get_forecast_entries()
+        if entries:
+            vers = self._get_current_price_per_kwh(entries, nu)
+            if vers is not None:
+                return vers
+        if self._meting_is_vers("last_current_price_per_kwh"):
+            return self.last_current_price_per_kwh
         return None
 
     def zonbias_percent(self) -> float | None:
@@ -17949,7 +18200,7 @@ class EnergyManagementSystemCoordinator:
         p1_power_w = self._read_sensor_float(p1_entity)
         if p1_power_w is None:
             return
-        price_per_kwh = self.last_current_price_per_kwh
+        price_per_kwh = self.huidige_prijs_eur_per_kwh()
         if price_per_kwh is None:
             return
 
@@ -19714,6 +19965,7 @@ class EnergyManagementSystemCoordinator:
         soc_entity = self.config.get(CONF_SOC_SENSOR)
         if soc_entity:
             self.last_soc_percent = self._read_sensor_float(soc_entity)
+            self._onthoud_meting("last_soc_percent")
         self.last_current_price_per_kwh = self._get_current_price_per_kwh(
             entries, now
         )
@@ -27428,8 +27680,11 @@ class EnergyManagementSystemCoordinator:
                     f"zodat er niet alsnog tegen de piekprijs wordt "
                     f"geïmporteerd."
                 )
-            if self.last_soc_percent is not None:
-                parts.append(f"Huidige accu-SoC: {self.last_soc_percent:.0f}%.")
+            # v3.48.0: via de helper, want het veld zelf loopt achter.
+            # Als toewijzing in de voorwaarde, zodat `_build_explanation`
+            # niet groeit - die staat op de ratel van v3.35.0.
+            if (stand := self.accustand_procent()) is not None:
+                parts.append(f"Huidige accu-SoC: {stand:.0f}%.")
 
         elif reason == "post_salderen_solar_capture":
             parts.append(
@@ -27462,8 +27717,8 @@ class EnergyManagementSystemCoordinator:
                 )
             elif self.last_used_soc_taper_fallback:
                 soc_txt = (
-                    f"{self.last_soc_percent:.0f}%"
-                    if self.last_soc_percent is not None
+                    f"{self.accustand_procent():.0f}%"
+                    if self.accustand_procent() is not None
                     else "onbekend"
                 )
                 parts.append(
@@ -27513,8 +27768,8 @@ class EnergyManagementSystemCoordinator:
 
         elif reason == "emergency_low_battery":
             soc_txt = (
-                f"{self.last_soc_percent:.0f}%"
-                if self.last_soc_percent is not None
+                f"{self.accustand_procent():.0f}%"
+                if self.accustand_procent() is not None
                 else "kritiek laag"
             )
             parts.append(
@@ -27600,8 +27855,8 @@ class EnergyManagementSystemCoordinator:
                 )
             else:
                 price_txt = (
-                    f"€{self.last_current_price_per_kwh:.3f}/kWh"
-                    if self.last_current_price_per_kwh is not None
+                    f"€{prijs:.3f}/kWh"
+                    if (prijs := self.huidige_prijs_eur_per_kwh()) is not None
                     else "onbekend"
                 )
                 if self.last_expensive_price_threshold is not None:

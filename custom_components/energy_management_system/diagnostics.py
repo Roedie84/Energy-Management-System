@@ -553,6 +553,12 @@ async def async_get_config_entry_diagnostics(
             # v3.46.0: of de accu aanstuurbaar is. Staat bewust NIET in
             # internal_failures - een offline accu is geen fout van deze
             # integratie.
+            # v3.49.0: eigen getallen naast de sensoren waar ze vandaan
+            # komen. Drie storingen deze week waren een intern getal dat
+            # van zijn bron was afgedreven.
+            "spiegelcontrole": _veilig(
+                "spiegelcontrole", coordinator.get_spiegelcontrole
+            ),
             "aansturing_onbereikbaar": getattr(
                 coordinator, "aansturing_onbereikbaar", None
             ),

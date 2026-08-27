@@ -18697,3 +18697,190 @@ proefstand-toelating — zijn alle acht door toetsen gedekt, en alle
 zeven nieuwe exportvelden staan in de diagnostiek.
 
 **Volledige testsuite**: 3008 tests, allemaal groen.
+
+## v3.48.0 — Een accustand van twintig uur oud
+
+**Gemeld**: "Accu lijkt 's morgens structureel te weinig te hebben, dit
+kan en mag niet, gezien de hoge prijzen nu."
+
+Gemeten in de export van 27 augustus 08:09:
+
+```
+last_soc_percent          38 %
+kwartierplan begint       10 %
+modules                    2, 8, 7 %
+grafiek van de sensor      6 %
+kalman gefilterd           0,0 kWh
+```
+
+Elk getal in dezelfde export zei "leeg", behalve dat ene veld. De sensor
+liep gewoon door — die 38% kwam ergens uit de nacht, toen een tak die het
+veld zet voor het laatst werd bereikt.
+
+`last_soc_percent` wordt namelijk maar op drie plaatsen geschreven, en
+alle drie zitten in de berekening van het ontlaadvermogen. Wordt die tak
+niet bereikt, dan blijft de oude waarde staan.
+
+### Dit is dezelfde fout als op 11 augustus
+
+Toen stond het veld op **None** terwijl de accu 22% aangaf. Daarvoor is
+`accustand_procent()` gemaakt, met in de toelichting: *"Zo'n veld is een
+bijproduct van een berekening, geen accustand. Wie de stand nodig heeft,
+hoort de sensor te lezen."*
+
+Maar het veld bleef als **terugval** in die helper staan, en zes andere
+plekken lazen het nog rechtstreeks. De reparatie was half.
+
+Nu gaat elke lezer via de helper, en het veld is geen terugval meer.
+Zegt de sensor niets, dan wordt de stand afgeleid uit de beschikbare
+energie — een verse meting — en anders niets. **Een oude waarde is
+gevaarlijker dan geen waarde**, want er wordt zonder aarzeling mee
+gerekend.
+
+### Wat het die nacht kostte
+
+De accu liep van 84% om 18:30 naar 6% om 08:00 — ruim zeven kilowattuur,
+terwijl het huis er 's nachts hooguit tweeëneenhalf gebruikt. Het
+verschil ging het net op, en 's ochtends is er voor 33 cent per kWh
+teruggekocht.
+
+**Volledige testsuite**: 3014 tests, allemaal groen.
+
+## v3.49.0 — De spiegelcontrole
+
+**Gevraagd**: "Volgens mij moet je in de diagnostiek iets bouwen dat
+werkelijke entiteiten vergelijkt met entiteiten van het EMS, zodat
+fouten hierin sneller gedetecteerd worden."
+
+Terecht, en het zou deze week drie keer geholpen hebben:
+
+| | |
+|---|---|
+| 27 aug | `last_soc_percent` op 38% terwijl de sensor 6% aangaf |
+| 26 aug | `beschikbare_energie_kwh` op 0,00 terwijl er stroom in de accu zat |
+| 11 aug | hetzelfde veld op None terwijl de accu 22% aangaf |
+
+Drie keer dezelfde vorm: een intern getal dat afdrijft van de meting
+waar het vandaan komt. Van binnenuit is dat niet te zien, want alles wat
+ermee rekent, rekent consequent met dezelfde verkeerde waarde.
+
+De spiegelcontrole zet ze naast elkaar — elke ronde, niet één keer bij
+het opsporen. Drie vergelijkingen:
+
+1. de accustand tegen zijn eigen sensor
+2. de beschikbare energie tegen zijn eigen sensor
+3. en die twee tegen elkaar, omgerekend via de capaciteit
+
+De derde is de sterkste: accustand en beschikbare energie komen uit
+**verschillende** sensoren. Wijken die van elkaar af, dan is er één
+stuk, en dan maakt het niet uit welke van de twee zijn eigen bron nog
+volgt. 38% tegenover 0,00 kWh kan niet allebei waar zijn.
+
+Elke afwijking komt in de zelfcontrole te staan, met beide getallen en
+de naam van de bronsensor erbij.
+
+### Een toets die er al was en stil wegviel
+
+Bij het inbouwen bleek dat controle 2 in de zelfcontrole dit al deed.
+Maar hij haalde de capaciteit uit `CONF_BATTERY_TOTAL_CAPACITY_SENSOR`,
+en die sensor kwam uit dezelfde Zendure-manager die zijn accu kwijt was.
+Geen capaciteit, geen toets — **precies op het moment dat hij nodig
+was.**
+
+Die controle is vervallen; de spiegelcontrole neemt hem over, met twee
+losse toetsen die ook werken als de omrekening niet lukt. Dat is de
+kern: het geval van 27 augustus wordt nu gevangen door de vergelijking
+van het veld met zijn eigen sensor, waar geen capaciteit voor nodig is.
+
+### Wat de ratel deed
+
+`get_consistency_checks` mocht niet groeien. Eerst is de nieuwe code
+naar een eigen functie verplaatst, en toen dat nog één uitspraak te veel
+was, is de dubbele controle 2 eruit gegaan. De ratel dwong daarmee af
+dat de dubbeling werd opgeruimd in plaats van ernaast blijven staan.
+
+**Volledige testsuite**: 3024 tests, allemaal groen.
+
+## v3.50.0 — Een terugval mag, zolang hij vers is
+
+**Gevraagd**: "Graag de gehele integratie hierop nakijken, alle
+parameters dienen geverifieerd te worden om fouten te voorkomen."
+
+Alle 49 `last_*`-velden nagelopen op de vraag: spiegelt dit een meting,
+en wordt het elders gelezen alsof het actueel is? De meeste beschrijven
+een **besluit** — die mogen van de vorige ronde zijn. Drie spiegelen een
+meting:
+
+| veld | gelezen buiten de schrijver |
+|---|---|
+| `last_current_price_per_kwh` | 10 functies |
+| `last_available_kwh` | 6 functies |
+| `last_soc_percent` | 1 functie (na v3.48.0) |
+
+En `beschikbare_energie_kwh()` bleek exact dezelfde half-afgemaakte
+reparatie te dragen als `accustand_procent()`. De toelichting van
+v1.24.1 zegt het goed — *"dat veld is een bijproduct van die check, geen
+betrouwbare accustand"* — en liet het veld daarna alsnog als terugval
+staan.
+
+### Waarom schrappen niet het antwoord was
+
+Eerst heb ik die terugval geschrapt, net als bij de accustand.
+**Achtenveertig toetsen vielen om**, en dat was terecht: bij een sensor
+die één ronde niets zegt is een waarde van een minuut geleden prima. De
+aansturing stilzetten bij elke hapering is erger dan het kwaad.
+
+Het probleem is niet de terugval maar de **leeftijd** ervan. Op 27
+augustus stond de accustand op 38% terwijl de accu op 6% zat — een
+waarde uit de nacht. Een minuut oud is bruikbaar, vijf uur niet, en
+zonder tijdstempel is dat verschil niet te zien.
+
+Elke schrijver legt nu het moment vast, en de terugval geldt tot vijf
+minuten — ruim tien ronden. Dat geldt voor **beide** helpers, want twee
+functies met dezelfde vorm horen dezelfde regel te volgen. Precies dat
+liep tussen 11 en 27 augustus uiteen.
+
+Geen tijdstempel telt bewust als vers: anders zou de aansturing na elke
+herstart een ronde zonder terugval zitten. De storing van 27 augustus
+wordt hoe dan ook gevangen, want daar was het veld wél via de normale
+weg gezet — alleen uren eerder.
+
+**Volledige testsuite**: 3036 tests, allemaal groen.
+
+## v3.51.0 — De prijs wordt uitgerekend, niet onthouden
+
+**Gevraagd**: de laatste bekende zwakke plek uit de inventarisatie van
+v3.50.0 afmaken.
+
+`last_current_price_per_kwh` was de grootste van de drie gespiegelde
+velden: **veertien lezers** — zeven meer dan mijn eerste telling, want
+die zocht op de verkeerde vorm.
+
+Bij de accustand en de beschikbare energie was een leeftijdsgrens het
+antwoord, want die komen uit een sensor die kan haperen. De prijs niet:
+die volgt uit de prijsreeks en de klok, en is dus **altijd opnieuw uit
+te rekenen**. Onthouden is hier helemaal niet nodig.
+
+En het verschil is groot. Prijzen springen op de kwartiergrens — op 26
+augustus van 37,5 naar 22,0 cent binnen één kwartier. Bleef het veld
+staan omdat een ronde eerder eindigde, dan rekenden veertien plekken met
+een prijs die anderhalf uur oud kon zijn. Dat is genoeg voor een
+verkeerd besluit over kopen of verkopen.
+
+Elke lezer gaat nu via `huidige_prijs_eur_per_kwh()`, die het kwartier
+opzoekt dat bij de klok hoort. Lukt dat niet — geen prijsgegevens — dan
+het onthouden getal, mits vers volgens dezelfde regel als de andere
+twee. Eén antwoord op één vraag.
+
+Ook de prijssensor op het dashboard toonde het onthouden getal; die
+rekent nu mee.
+
+### Wat de ratel deed
+
+De tijdstempel hoorde eerst bij elke aanroeper, en daarmee groeide
+`_async_update_locked`. Nu legt `_get_current_price_per_kwh` het moment
+zelf vast — één plek in plaats van drie, en niemand hoeft eraan te
+denken. Vijfde keer deze week dat die ratel naar een beter ontwerp
+duwde.
+
+**Volledige testsuite**: 3044 tests, allemaal groen.

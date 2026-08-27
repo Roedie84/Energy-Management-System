@@ -353,7 +353,11 @@ class CurrentPricePerKwhSensor(_CoordinatorDiagnosticSensor):
 
     @property
     def native_value(self) -> float | None:
-        value = self._coordinator.last_current_price_per_kwh
+        # v3.51.0: opnieuw uitrekenen, niet het onthouden getal. Prijzen
+        # springen op de kwartiergrens - op 26 augustus van 37,5 naar
+        # 22,0 cent - en dan toont deze sensor een prijs die niet meer
+        # geldt.
+        value = self._coordinator.huidige_prijs_eur_per_kwh()
         return round(value, 4) if value is not None else None
 
 
@@ -631,7 +635,7 @@ class ExplanationSensor(_CoordinatorDiagnosticSensor):
             "grootste_verbruiker": self._coordinator.get_largest_known_consumer(),
             "force_manual": self._coordinator.force_manual,
             "expected_mode": self._coordinator.last_expected_mode,
-            "current_price_per_kwh": self._coordinator.last_current_price_per_kwh,
+            "current_price_per_kwh": self._coordinator.huidige_prijs_eur_per_kwh(),
             "expensive_price_threshold": (
                 self._coordinator.last_expensive_price_threshold
             ),

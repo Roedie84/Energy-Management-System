@@ -4800,3 +4800,38 @@ ACHTERHOEKS_WOORDEN = (
     ("nu ", "now "),
     ("ook", "ok"),
 )
+
+
+# --- De spiegelcontrole (v3.49.0) ------------------------------------
+#
+# Hoeveel een intern getal van zijn bron mag afwijken voordat het een
+# bevinding wordt.
+#
+# Gevraagd na drie storingen van dezelfde vorm: een intern getal dat
+# afdrijft van de meting waar het vandaan komt. Op 27 augustus stond de
+# accustand op 38% terwijl de sensor 6% aangaf; op 26 augustus stond de
+# beschikbare energie op 0,00 terwijl er stroom in de accu zat.
+#
+# De marges zijn ruim genoeg voor het normale verschil in tijdstip - een
+# sensor die net is bijgewerkt en een veld van de vorige ronde - en krap
+# genoeg om afdrijven te vangen.
+SPIEGEL_MARGE_SOC_PROCENT = 5.0
+SPIEGEL_MARGE_ENERGIE_KWH = 0.5
+
+# De kruistoets krijgt meer ruimte: accustand en beschikbare energie
+# komen uit verschillende sensoren met een eigen afronding, en de
+# omrekening gaat via de bruikbare capaciteit. Vijftien procentpunt is
+# ruim, maar 38 tegenover 0 vangt hij nog steeds.
+SPIEGEL_MARGE_KRUIS_PROCENT = 15.0
+
+# Hoe oud een gespiegeld veld mag zijn om nog als terugval te dienen
+# (v3.50.0).
+#
+# Bij een sensor die één ronde niets zegt is een waarde van een minuut
+# geleden prima; de aansturing stilzetten bij elke hapering is erger dan
+# het kwaad. Maar op 27 augustus stond de accustand op 38% terwijl de
+# accu op 6% zat - een waarde uit de nacht.
+#
+# Vijf minuten is ruim tien ronden, en het vangt elke uitval die langer
+# duurt dan een hapering.
+METING_MAX_LEEFTIJD_MINUTEN = 5.0
