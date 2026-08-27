@@ -486,6 +486,7 @@ def test_a_current_store_keeps_the_balance_history(make_coordinator, hass):
 # precies één van drie bakken vallen. Wie er een nieuwe bijzet en niets
 # kiest, krijgt hier een rode test in plaats van stille dataverlies.
 VLUCHTIG_MET_REDEN = {
+    "meting_tijdstippen": "wanneer elk gespiegeld veld voor het laatst uit zijn sensor kwam; na een herstart hoort dat leeg te zijn",
     "last_plan_shortfall": "elke tick herrekend uit de kwartierplanning",
     # Elke tick opnieuw berekend; terugzetten zou een oud getal tonen
     # alsof het actueel is.
