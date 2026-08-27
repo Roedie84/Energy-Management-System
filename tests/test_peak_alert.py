@@ -33,6 +33,7 @@ def _coordinator(make_coordinator, hass, piek_ct, basis_ct, uren_vooruit):
     c = make_coordinator({CONF_APPLIANCE_NOTIFY_SERVICE: "notify.telefoon"})
     c.set_notification_enabled("low_soc_before_peak", True)
     c.last_soc_percent = 15.0
+    c.accustand_procent = lambda v=15.0: v
     start = NU + timedelta(hours=uren_vooruit)
     c.last_discharge_start = start
 

@@ -348,7 +348,13 @@ def test_the_reason_lines_say_what_is_paused():
     """
 
     class _Uitleg(_Kaal):
+        # v3.51.0: de prijs wordt opnieuw uitgerekend in plaats van
+        # onthouden, dus deze stub moet die helper kennen.
         last_current_price_per_kwh = 0.308
+
+        def huidige_prijs_eur_per_kwh(self, now=None):
+            return self.last_current_price_per_kwh
+
         last_expensive_price_threshold = 0.376
         last_needed_kwh_to_bridge = None
         last_cheap_block_start = None

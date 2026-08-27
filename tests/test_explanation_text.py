@@ -72,6 +72,7 @@ def test_soc_protected_distinguishes_price_priority_from_real_soc_protection(
     coordinator.last_reason = "expensive_quarter_soc_protected"
     coordinator.last_price_priority_held_off = True
     coordinator.last_soc_percent = 80.0  # ample SoC - not actually the issue
+    coordinator.accustand_procent = lambda v=80.0: v
 
     text = coordinator._build_explanation()
 
@@ -85,6 +86,7 @@ def test_soc_protected_still_explains_genuine_soc_protection(make_coordinator):
     coordinator.last_price_priority_held_off = False
     coordinator.last_used_soc_taper_fallback = True
     coordinator.last_soc_percent = 12.0
+    coordinator.accustand_procent = lambda v=12.0: v
 
     text = coordinator._build_explanation()
 
@@ -102,6 +104,7 @@ def test_soc_protected_explains_reserve_exhaustion_not_soc(make_coordinator):
     coordinator.last_price_priority_held_off = False
     coordinator.last_used_soc_taper_fallback = False
     coordinator.last_soc_percent = 88.0
+    coordinator.accustand_procent = lambda v=88.0: v
     coordinator.last_available_kwh = 6.83
 
     text = coordinator._build_explanation()
