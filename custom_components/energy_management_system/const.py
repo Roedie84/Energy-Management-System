@@ -2312,6 +2312,7 @@ PERSISTED_PLAIN_FIELDS = (
     "veroudering_history",
     "langere_horizon_history",
     "lange_reserve_history",
+    "niet_ontladen_history",
     "bijkoop_history",
     "netlading_vandaag_kwh",
     "netlading_kosten_eur",
@@ -5040,3 +5041,22 @@ APPLIANCE_CYCLE_MAX_KWH = 10.0
 # doorschiet terwijl het totaal meevalt. Vijftig watt is ruim genoeg om
 # meetruis buiten te sluiten.
 FASEPIEK_MELDGRENS_W = 50.0
+
+# Vanaf welk ontlaadvermogen het meetellen (v3.60.0).
+#
+# Gevraagd naar aanleiding van de prijzen van 29 augustus - 13 ct
+# overdag, 38 ct 's avonds: "Als ik de wasmachine aanzet kan het zijn
+# dat de accu moet bijleveren, terwijl het beter is dat de accu
+# bijlevert tijdens dure uren later op de dag."
+#
+# Een accu die vijftig watt levert is ruis van de meting; het gaat om de
+# gevallen waarin het huis werkelijk meer trekt dan de zon geeft.
+NIET_ONTLADEN_MIN_VERMOGEN_W = 100.0
+
+# Hoeveel momenten er gemeten moeten zijn voordat de kandidaat "niet
+# ontladen bij een lage prijs" iets zegt (v3.60.0).
+#
+# Hij meet alleen op momenten dat de accu werkelijk aan het huis
+# levert, en dat is een deel van de dag. Tweehonderd momenten is
+# ongeveer twee dagen met een normale verdeling.
+NIET_ONTLADEN_MIN_METINGEN = 200

@@ -19264,3 +19264,59 @@ Instellingen met meerdere entiteiten hebben een eigen lijst, want een
 standaardwaarde is daar een lijst en geen tekst.
 
 **Volledige testsuite**: 3099 tests, allemaal groen.
+
+## v3.60.0 — Niet ontladen bij een lage prijs
+
+**Gevraagd** naar aanleiding van de prijzen van 29 augustus:
+
+```
+09:00 - 16:00    13 ct
+19:00 - 21:00    38 ct
+```
+
+> "Als ik de wasmachine aanzet kan het zijn dat de accu moet bijleveren,
+> terwijl het beter is dat de accu bijlevert tijdens dure uren later op
+> de dag."
+
+Klopt. In `smart` springt de accu bij zodra het huis meer trekt dan de
+zon levert — ook bij 13 ct. Die kilowattuur is er dan een die niet naar
+de avond gaat:
+
+```
+uit de accu nu        13 ct bespaard
+waard om 20:00        38 ct
+rendementsverlies    ~ 5 ct
+slijtage              10,9 ct
+                      -------
+gemist                 9 ct per kWh
+```
+
+### Wat er in v1.62.0 misging, en wat daarvan blijft staan
+
+Daar stond een tak die naar `smart_charging` schakelde, en die is
+teruggedraaid om drie redenen. Twee daarvan blijven staan: bij
+zonoverschot is de keuze zon-tegen-net en niet accu-tegen-net, en de som
+gebruikte de kostprijs van wat er **al in zat** in plaats van wat die
+kilowattuur later waard is.
+
+De derde klopte niet. Daar stond dat `smart_charging` de piekbuffer
+uitzet, met een wasmachine als voorbeeld. Volgens de gebruiker is die
+modus juist *"alleen opladen uit PV, niet ontladen naar het huis"* — en
+dat is geen bijwerking maar precies wat er nodig is.
+
+### Wat er nu gemeten wordt
+
+Elke ronde waarin de accu werkelijk aan het huis levert: wat die
+kilowattuur nu bespaart tegenover wat hij later waard is, na rendement
+en slijtage. De duurste prijs die vandaag nog komt is de vergelijking —
+morgen telt niet mee, want dan is de accu allang weer gevuld door de
+zon.
+
+Als kandidaat op de proefstand, de tiende. **Stuurt niets**, en daar
+staat een toets op: in v1.62.0 stuurde dit wél, en dat hoort niet
+stilletjes terug te komen.
+
+Na tweehonderd momenten — ongeveer twee dagen — zegt hij hoe vaak
+wachten gunstiger was geweest en hoeveel het scheelt.
+
+**Volledige testsuite**: 3110 tests, allemaal groen.

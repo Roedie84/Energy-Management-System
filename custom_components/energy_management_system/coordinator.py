@@ -468,6 +468,8 @@ from .const import (
     SOLARFLOW_MAX_BATTERY_CHARGE_W,
     SOLARFLOW_MAX_GRID_POWER_W,
     SOLARFLOW_MAX_MODULES,
+    NIET_ONTLADEN_MIN_VERMOGEN_W,
+    NIET_ONTLADEN_MIN_METINGEN,
     SOLAR_BIAS_DRIFT_MIN_DAYS,
     SOLAR_POOR_DAY_KWH,
     SOLAR_DEFER_LATEST_HOUR,
@@ -808,6 +810,9 @@ class EnergyManagementSystemCoordinator:
         self.langere_horizon_history: list[dict] = []
         # v3.10.0: reserve met korte tegenover lange horizon.
         self.lange_reserve_history: list[dict] = []
+        # v3.60.0: wat het kost dat de accu bijspringt in een goedkoop
+        # kwartier, terwijl diezelfde kWh 's avonds meer waard is.
+        self.niet_ontladen_history: list[dict] = []
         # v3.11.0: was bijkopen bij een tekort goedkoper geweest?
         self.bijkoop_history: list[dict] = []
         # v3.25.0: de WERKELIJKE netlading, per ronde gemeten.
@@ -8165,6 +8170,7 @@ class EnergyManagementSystemCoordinator:
                     self._kandidaat_pv_model(),
                     self._kandidaat_lange_reserve(),
                     self._kandidaat_bijkopen(),
+                    self._kandidaat_niet_ontladen_bij_lage_prijs(),
                 )
             ],
         }
@@ -8187,6 +8193,7 @@ class EnergyManagementSystemCoordinator:
                 self._kandidaat_pv_model(),
                 self._kandidaat_lange_reserve(),
                 self._kandidaat_bijkopen(),
+                self._kandidaat_niet_ontladen_bij_lage_prijs(),
             )
         ]
         klaar = [k for k in kandidaten if k["gereedheid"] == "klaar om mee te doen"]
@@ -8390,6 +8397,86 @@ class EnergyManagementSystemCoordinator:
         )
         self.langere_horizon_history = self.langere_horizon_history[
             -LANGERE_HORIZON_HISTORY_LENGTH:
+        ]
+
+    def _meet_niet_ontladen_bij_lage_prijs(self, now: datetime, entries) -> None:
+        """Wat kost het dat de accu bijspringt in een GOEDKOOP kwartier?
+        (v3.60.0)
+
+        Gevraagd naar aanleiding van de prijzen van 29 augustus:
+
+            09:00 - 16:00    13 ct
+            19:00 - 21:00    38 ct
+
+        "Als ik de wasmachine aanzet kan het zijn dat de accu moet
+        bijleveren, terwijl het beter is dat de accu bijlevert tijdens
+        dure uren later op de dag."
+
+        Klopt. In `smart` springt de accu bij zodra het huis meer trekt
+        dan de zon levert - ook bij 13 ct. Die kilowattuur is er dan een
+        die niet naar de avond gaat:
+
+            uit de accu nu        13 ct bespaard
+            waard om 20:00        38 ct
+            rendementsverlies    ~ 5 ct
+            slijtage              10,9 ct
+                                  -------
+            gemist                 9 ct per kWh
+
+        In v1.62.0 stond hier een tak die naar `smart_charging`
+        schakelde, en die is teruggedraaid. Twee van de drie redenen
+        blijven staan: bij zonoverschot is de keuze zon-tegen-net en niet
+        accu-tegen-net, en de som gebruikte de kostprijs van wat er AL in
+        zat in plaats van wat die kilowattuur later waard is.
+
+        De derde reden klopte niet. Daar stond dat `smart_charging` de
+        piekbuffer uitzet; volgens de gebruiker is die modus juist
+        "alleen opladen uit PV, niet ontladen naar het huis" - en dat is
+        geen bijwerking maar precies wat er nodig is.
+
+        Deze meting rekent het uit en legt het vast. Ze stuurt niets.
+        """
+        prijs_nu = self.huidige_prijs_eur_per_kwh(now)
+        if prijs_nu is None or not entries:
+            return
+
+        # Levert de accu op dit moment aan het huis?
+        vermogen = self._read_corrected_battery_power()
+        if vermogen is None or vermogen <= NIET_ONTLADEN_MIN_VERMOGEN_W:
+            return
+
+        # De duurste prijs die vandaag nog komt.
+        rest = [
+            e[2] / PRICE_SCALE_FACTOR
+            for e in entries
+            if e[0] > now and e[0].date() == now.date()
+        ]
+        if not rest:
+            return
+        duurste = max(rest)
+
+        rendement = (self.learned_battery_efficiency_percent or 90.0) / 100
+        slijtage = (
+            (self.get_wear_cost_overview() or {}).get("slijtage_ct_per_kwh")
+            or 0.0
+        ) / 100
+        # Wat die kilowattuur later waard is, na de kosten om hem vast te
+        # houden. Vergeleken met wat hij NU bespaart.
+        later = duurste * rendement - slijtage
+        voordeel = later - prijs_nu
+
+        self.niet_ontladen_history.append(
+            {
+                "moment": now.isoformat(),
+                "prijs_nu_ct": round(prijs_nu * 100, 1),
+                "duurste_later_ct": round(duurste * 100, 1),
+                "waarde_later_ct": round(later * 100, 1),
+                "voordeel_ct_per_kwh": round(voordeel * 100, 1),
+                "vermogen_w": round(vermogen),
+            }
+        )
+        self.niet_ontladen_history = self.niet_ontladen_history[
+            -PROEFSTAND_LEDGER_DAYS * 96 :
         ]
 
     def _meet_lange_reserve(self, now: datetime, entries) -> None:
@@ -8787,6 +8874,71 @@ class EnergyManagementSystemCoordinator:
                 "in de accu was, en of het laden de piekbuffer zou "
                 "verstoren. Dat is precies waarom `smart_charging` niet "
                 "wordt toegepast (v1.62.0)."
+            ),
+        }
+
+    def _kandidaat_niet_ontladen_bij_lage_prijs(self) -> dict:
+        """10. Zou de accu niet moeten bijspringen bij een lage prijs?
+
+        Gevraagd naar aanleiding van de prijzen van 29 augustus - 13 ct
+        overdag, 38 ct 's avonds:
+
+            "Als ik de wasmachine aanzet kan het zijn dat de accu moet
+            bijleveren, terwijl het beter is dat de accu bijlevert
+            tijdens dure uren later op de dag."
+
+        In `smart` springt de accu bij zodra het huis meer trekt dan de
+        zon levert - ook bij 13 ct. Die kilowattuur is er dan een die
+        niet naar de avond gaat.
+
+        Meet wat dat kost. Stuurt niets: in v1.62.0 stond hier een tak
+        die wél stuurde, en die is teruggedraaid omdat de rekensom de
+        verkeerde kostprijs gebruikte.
+        """
+        reeks = self.niet_ontladen_history
+        if len(reeks) < NIET_ONTLADEN_MIN_METINGEN:
+            return {
+                "naam": "Niet ontladen bij een lage prijs",
+                "status": RELIABILITY_INSUFFICIENT,
+                "waarde": None,
+                "zou_hebben_opgeleverd": {
+                    "te_becijferen": False,
+                    "reden": (
+                        f"{len(reeks)} van {NIET_ONTLADEN_MIN_METINGEN} "
+                        "momenten gemeten."
+                    ),
+                },
+                "betrouwbaarheid": (
+                    "Rekent elke ronde uit wat een kWh uit de accu nu "
+                    "bespaart tegenover wat hij later waard is, na "
+                    "rendement en slijtage. Stuurt niets."
+                ),
+            }
+
+        voordelen = [r["voordeel_ct_per_kwh"] for r in reeks]
+        gunstig = [v for v in voordelen if v > 0]
+        mediaan = statistics.median(voordelen)
+        return {
+            "naam": "Niet ontladen bij een lage prijs",
+            "waarde": f"{mediaan:+.1f} ct/kWh",
+            "status": RELIABILITY_RELIABLE,
+            "zou_hebben_opgeleverd": {
+                "te_becijferen": True,
+                "mediaan_voordeel_ct_per_kwh": round(mediaan, 1),
+                "momenten_met_verschil": len(voordelen),
+                "aandeel_gunstig_procent": round(
+                    100 * len(gunstig) / len(voordelen), 1
+                ),
+                "reden": (
+                    "Positief betekent dat die kWh later meer waard was "
+                    "dan wat hij op dat moment bespaarde - dan had de accu "
+                    "beter niet kunnen bijspringen."
+                ),
+            },
+            "betrouwbaarheid": (
+                "Gemeten op de momenten dat de accu werkelijk aan het huis "
+                "leverde. De duurste prijs die daarna nog kwam is de "
+                "vergelijking, na rendement en slijtage."
             ),
         }
 
@@ -28582,6 +28734,12 @@ class EnergyManagementSystemCoordinator:
             # v3.10.0: de reserve met een lange horizon, hier omdat
             # `entries` pas in het staartstuk bestaat.
             ("lange reserve", lambda: self._meet_lange_reserve(now, entries)),
+            # v3.60.0: wat het kost dat de accu bijspringt in een
+            # goedkoop kwartier.
+            (
+                "niet ontladen bij lage prijs",
+                lambda: self._meet_niet_ontladen_bij_lage_prijs(now, entries),
+            ),
             ("bijkopen", lambda: self._meet_bijkopen_bij_tekort(now, entries)),
             ("netlading", lambda: self._meet_werkelijke_netlading(now)),
             # v3.45.0: de bewolking doorschuiven naar de zonvoorspelling.

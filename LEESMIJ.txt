@@ -1,45 +1,39 @@
-v3.57.0 t/m v3.59.0 - alleen de gewijzigde bestanden sinds v3.56.0
+v3.60.0 - alleen de gewijzigde bestanden sinds v3.59.0
 
 Pak uit in de hoofdmap van de repository; de mapstructuur klopt al.
 
 CODE (deze naar Home Assistant, daarna herstarten)
   custom_components/energy_management_system/
-    coordinator.py       cyclusmeting, fasepieken, __init__ opgesplitst
-    const.py             de nieuwe instellingen met standaardwaarden
-    config_flow.py       standaardwaarden ook voor meerwaardige velden
-    diagnostics.py       fasepieken in de export
-    strings.json
-    translations/nl.json
-    translations/en.json
-    manifest.json        versienummer 3.59.0
+    coordinator.py   de meting en de proefstandkandidaat
+    const.py         twee nieuwe drempels
+    manifest.json    versienummer 3.60.0
+
+  (config_flow.py, diagnostics.py, strings.json en de vertalingen
+   zitten erbij omdat ze sinds v3.56.0 zijn gewijzigd; heb je v3.59.0
+   al geinstalleerd, dan zijn ze ongewijzigd.)
 
 TOETSEN (alleen voor de repository)
-  tests/test_cyclusverbruik_uit_de_meter.py   nieuw
-  tests/test_fasepieken.py                    nieuw
-  tests/test_apparaatinstellingen_spiegel.py
-  tests/test_state_persistence.py
-  tests/test_scan_functiegrootte.py
-  tests/test_scan_attributen_geinitialiseerd.py
+  tests/test_niet_ontladen_bij_lage_prijs.py   nieuw
+  tests/test_proefstand.py                     tien kandidaten
+  en de vier andere toetsbestanden die meeliepen
 
 DOCUMENTEN
   CHANGELOG.md  README.md  OVERDRACHT.md
 
-WAT ER IS VERBETERD
--------------------
+WAT ER IS BIJGEKOMEN
+--------------------
 
-v3.57.0  Het cyclusverbruik van de vaatwasser en de wasmachine komt uit
-         de energiemeter in plaats van uit een schatting.
+Een meting: wat kost het dat de accu bijspringt terwijl de prijs laag
+is, terwijl diezelfde kWh 's avonds meer waard is?
 
-v3.58.0  De dagpiek wordt ook per fase bijgehouden. Alles gebeurt bij
-         jou op fase 1, terwijl het capaciteitstarief naar de zwaarste
-         fase kijkt en niet naar het totaal.
+Bij de prijzen van 29 augustus - 13 ct overdag, 38 ct 's avonds - is
+dat ongeveer 9 ct per kWh, na rendement en slijtage.
 
-v3.59.0  De vijf nieuwe velden staan al ingevuld.
+Als kandidaat op de proefstand, de tiende. STUURT NIETS. Na ongeveer
+twee dagen zegt hij hoe vaak wachten gunstiger was geweest.
 
 WAT JE ZELF MOET DOEN
 ---------------------
 
-Niets. De velden staan ingevuld met jouw entiteiten.
-
-Kijk na de herstart wel even in de diagnostiek onder
-"configuratiecontrole" of ze alle vijf op "in_orde" staan.
+Niets. Kijk over een paar dagen in de diagnostiek onder "proefstand"
+naar de kandidaat "Niet ontladen bij een lage prijs".

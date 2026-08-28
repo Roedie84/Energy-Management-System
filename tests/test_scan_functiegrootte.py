@@ -51,7 +51,10 @@ BEVROREN = {
     # eindelijk een blok uit gegaan - de vijfenveertig velden die de
     # LAATSTE beslissing beschrijven staan nu in
     # `_init_laatste_beslissing()`. Van 420 naar 377.
-    "coordinator.py:__init__": 377,
+    # v3.60.0: +1 voor `niet_ontladen_history`. De ratel liet net een
+    # blok van 45 uitspraken vertrekken; deze ene erbij is de meting
+    # waard die eronder ligt.
+    "coordinator.py:__init__": 378,
     "coordinator.py:_async_update_locked": 255,
     "coordinator.py:_async_update_scheduled_charge_appliance": 70,
     "coordinator.py:_build_explanation": 73,
