@@ -146,3 +146,103 @@ def test_a_differing_setting_becomes_a_finding(make_coordinator, hass):
     namen = [b["naam"] for b in c.get_consistency_checks()["bevindingen"]]
 
     assert "Spiegel: Ondergrens van de accu" in namen
+
+
+# --- het teken (v3.54.0) ---------------------------------------------
+
+
+def test_the_sign_convention_does_not_cause_a_false_alarm(
+    make_coordinator, hass
+):
+    """Gemeten in de export van 28 augustus 10:55, meteen na het
+
+    koppelen:
+
+        Maximaal laadvermogen  -2000,0 vs 2400,0 W -> loopt_uiteen
+
+    Het laadvermogen is in deze integratie NEGATIEF - laden is negatief -
+    terwijl het apparaat een positieve grens meldt. Rechtstreeks
+    vergelijken loopt dan per definitie uiteen, en dan is de melding geen
+    signaal meer.
+    """
+    c = make_coordinator(
+        {
+            CONF_BATTERY_MAX_CHARGE_POWER_ENTITY: "sensor.laadlimiet",
+            CONF_MANUAL_CHARGE_POWER: -2000,
+        }
+    )
+    hass.states.set("sensor.laadlimiet", "2000")
+
+    assert _regel(c, "Maximaal laadvermogen")["oordeel"] == "sluit_aan"
+
+
+def test_a_real_difference_still_shows(make_coordinator, hass):
+    """Wat er ná die correctie overblijft is wél een echt verschil: de
+
+    accu kan 2400 W laden terwijl de berekening met 2000 rekent.
+    """
+    c = make_coordinator(
+        {
+            CONF_BATTERY_MAX_CHARGE_POWER_ENTITY: "sensor.laadlimiet",
+            CONF_MANUAL_CHARGE_POWER: -2000,
+        }
+    )
+    hass.states.set("sensor.laadlimiet", "2400")
+
+    regel = _regel(c, "Maximaal laadvermogen")
+
+    assert regel["oordeel"] == "loopt_uiteen"
+    assert regel["verschil"] == 400.0
+
+
+# --- de standaardwaarden (v3.54.0) -----------------------------------
+
+
+def test_the_known_entities_have_a_default():
+    """Gevraagd: "Alles wat nu goed en bekend is moet hard in de code
+
+    staan om verwarring te voorkomen."
+
+    Als standaardwaarde in plaats van hard ingebakken. Het verschil
+    telt: deze week braken drie dingen doordat een naam of adres
+    veranderde, en hard ingebakken namen breken dan STIL.
+    """
+    from custom_components.energy_management_system.const import (
+        STANDAARD_ENTITEITEN,
+    )
+
+    assert STANDAARD_ENTITEITEN[CONF_BATTERY_MIN_SOC_NUMBER] == (
+        "number.solarflow_2400_ac_min_soc"
+    )
+    assert STANDAARD_ENTITEITEN[CONF_BATTERY_MAX_CHARGE_POWER_ENTITY] == (
+        "sensor.solarflow_2400_ac_charge_max_limit"
+    )
+    assert len(STANDAARD_ENTITEITEN) == 4
+
+
+def test_the_default_is_used_when_nothing_is_configured():
+    """Er hoeft niets ingevuld te worden - het staat meteen goed."""
+    from custom_components.energy_management_system.config_flow import (
+        _optioneel,
+    )
+
+    veld = _optioneel(CONF_BATTERY_MIN_SOC_NUMBER, {})
+
+    assert veld.default() == "number.solarflow_2400_ac_min_soc"
+
+
+def test_a_configured_value_always_wins():
+    """Wie hem hernoemt of een ander merk gebruikt, kan hem aanpassen
+
+    zonder de code in.
+    """
+    from custom_components.energy_management_system.config_flow import (
+        _optioneel,
+    )
+
+    veld = _optioneel(
+        CONF_BATTERY_MIN_SOC_NUMBER,
+        {CONF_BATTERY_MIN_SOC_NUMBER: "number.iets_anders"},
+    )
+
+    assert veld.default() == "number.iets_anders"
