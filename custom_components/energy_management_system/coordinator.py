@@ -482,6 +482,7 @@ from .const import (
     SELL_RESERVE_SAFETY_FACTOR,
     SELL_RESERVE_DEEPEST_SAFETY_FACTOR,
     SOLAR_DEFER_SAFETY_FACTOR,
+    MPC_MIN_METINGEN,
     SOLAR_DEFER_TARGET_FULL_HOUR,
     PV_ORIENTATION_MISMATCH_DEGREES,
     PV_SHALLOW_TILT_DEGREES,
@@ -1200,6 +1201,10 @@ class EnergyManagementSystemCoordinator:
         self.mpc_horizon_quarters_used: int = 0
         self.mpc_last_computed_at: datetime | None = None
         self.mpc_note: str | None = None
+        # v3.68.0: de energiebalans waar het plan op rust.
+        self.mpc_balans: dict = {}
+        self.mpc_vergelijking_history: list[dict] = []
+        self._mpc_gemeten_op: str | None = None
         # Monte Carlo advisory engine (v0.63.34).
         self.monte_carlo_median_deficit_kwh: float | None = None
         self.monte_carlo_p90_deficit_kwh: float | None = None
@@ -8223,6 +8228,7 @@ class EnergyManagementSystemCoordinator:
                     self._kandidaat_lange_reserve(),
                     self._kandidaat_bijkopen(),
                     self._kandidaat_niet_ontladen_bij_lage_prijs(),
+                    self._kandidaat_mpc(),
                 )
             ],
         }
@@ -8246,6 +8252,7 @@ class EnergyManagementSystemCoordinator:
                 self._kandidaat_lange_reserve(),
                 self._kandidaat_bijkopen(),
                 self._kandidaat_niet_ontladen_bij_lage_prijs(),
+                self._kandidaat_mpc(),
             )
         ]
         klaar = [k for k in kandidaten if k["gereedheid"] == "klaar om mee te doen"]
@@ -8826,6 +8833,38 @@ class EnergyManagementSystemCoordinator:
             ),
         }
 
+    def _meet_mpc(self, now: datetime) -> None:
+        """Legt een keer per dag de twee verwachtingen naast elkaar
+        (v3.68.0).
+
+        Eén meting per dag, want beide plannen kijken over dezelfde 24
+        uur - vaker meten levert dezelfde vergelijking met een andere
+        starttijd, en dat telt als nieuwe waarneming terwijl het er geen
+        is.
+        """
+        vandaag = now.date().isoformat()
+        if self._mpc_gemeten_op == vandaag:
+            return
+        mpc = self.mpc_projected_total_profit_eur
+        eigen = (self.get_quarter_plan_summary() or {}).get(
+            "netto_opbrengst_eur"
+        )
+        if mpc is None or eigen is None:
+            return
+        self._mpc_gemeten_op = vandaag
+        self.mpc_vergelijking_history.append(
+            {
+                "dag": vandaag,
+                "mpc_eur": round(mpc, 3),
+                "planning_eur": round(eigen, 3),
+                "verschil_eur": round(mpc - eigen, 3),
+                "balans": dict(self.mpc_balans or {}),
+            }
+        )
+        self.mpc_vergelijking_history = self.mpc_vergelijking_history[
+            -PROEFSTAND_LEDGER_DAYS:
+        ]
+
     def _meet_niet_ontladen_bij_lage_prijs(self, now: datetime, entries) -> None:
         """Wat kost het dat de accu bijspringt in een GOEDKOOP kwartier?
         (v3.60.0)
@@ -9329,6 +9368,78 @@ class EnergyManagementSystemCoordinator:
                 "in de accu was, en of het laden de piekbuffer zou "
                 "verstoren. Dat is precies waarom `smart_charging` niet "
                 "wordt toegepast (v1.62.0)."
+            ),
+        }
+
+    def _kandidaat_mpc(self) -> dict:
+        """11. Zou vooruitplannen over 24 uur beter zijn? (v3.68.0)
+
+        Gevraagd: "Het EMS zou niet meer alleen reageren op 'is dit een
+        goedkoop of duur kwartier?', maar op 'welke actie levert over de
+        komende 24 uur het beste resultaat op?'"
+
+        De vier modules uit dat voorstel bestaan alle vier al: het
+        uurprofiel, de PV-voorspelling met bias per bewolkingsvak, de
+        energiebalans in `_build_forecast_timeline`, en de besluitboom.
+        Wat ontbrak was de OPTIMALISATIE over het geheel - de besluitboom
+        kiest per kwartier lokaal, en de reserve is een randvoorwaarde,
+        geen doelfunctie.
+
+        Deze kandidaat legt de winst van het MPC-plan naast wat de
+        planning zelf verwacht. Het verschil is wat vooruitplannen zou
+        opleveren.
+
+        Let op wat deze meting NIET weet: het MPC-plan mag de accu
+        leegtrekken waar de beslisboom dat weigert, want het beschermt de
+        nachtreserve niet. Een positief verschil is dus deels
+        "optimalisatie" en deels "minder voorzichtig". Dat onderscheid is
+        precies waarom dit meet en niet stuurt.
+        """
+        reeks = self.mpc_vergelijking_history
+        if len(reeks) < MPC_MIN_METINGEN:
+            return {
+                "naam": "Vooruitplannen over 24 uur",
+                "status": RELIABILITY_INSUFFICIENT,
+                "waarde": None,
+                "zou_hebben_opgeleverd": {
+                    "te_becijferen": False,
+                    "reden": f"{len(reeks)} van {MPC_MIN_METINGEN} dagen gemeten.",
+                },
+                "betrouwbaarheid": (
+                    "Legt de winst van het MPC-plan naast wat de planning "
+                    "zelf verwacht. Sinds v3.68.0 rekent dat plan mét "
+                    "verbruik en zon; daarvoor was het pure "
+                    "prijsarbitrage en dus een bovengrens. Stuurt niets."
+                ),
+            }
+
+        verschillen = [r["verschil_eur"] for r in reeks]
+        gunstig = [v for v in verschillen if v > 0]
+        mediaan = statistics.median(verschillen)
+        return {
+            "naam": "Vooruitplannen over 24 uur",
+            "waarde": f"{mediaan:+.2f} euro per dag",
+            "status": RELIABILITY_RELIABLE,
+            "zou_hebben_opgeleverd": {
+                "te_becijferen": True,
+                "bedrag_per_dag_eur": round(mediaan, 3),
+                "bedrag_per_jaar_eur": round(mediaan * 365, 2),
+                "dagen": len(reeks),
+                "aandeel_gunstig_procent": round(
+                    100 * len(gunstig) / len(verschillen), 1
+                ),
+                "reden": (
+                    "Het MPC-plan beschermt de nachtreserve niet, dus een "
+                    "deel van dit verschil is minder voorzichtigheid en "
+                    "geen betere planning. Dat onderscheid valt pas te "
+                    "maken zodra het plan die reserve ook aanhoudt."
+                ),
+            },
+            "betrouwbaarheid": (
+                "Het MPC-plan is een greedy koppeling van het goedkoopste "
+                "aan het duurste kwartier - een goede heuristiek, geen "
+                "echte optimalisatie. De uitkomst is dus een ondergrens "
+                "van wat vooruitplannen kan."
             ),
         }
 
@@ -24133,6 +24244,7 @@ class EnergyManagementSystemCoordinator:
         self.mpc_planned_actions = []
         self.mpc_projected_total_profit_eur = None
         self.mpc_horizon_quarters_used = 0
+        self.mpc_balans = {}
 
         available_entity = self.config.get(CONF_AVAILABLE_ENERGY_SENSOR)
         if not available_entity:
@@ -24176,24 +24288,9 @@ class EnergyManagementSystemCoordinator:
             )
         efficiency = efficiency_percent / 100
 
-        quarters = []
-        for start, end, raw_price in horizon_entries:
-            interval_hours = (end - start).total_seconds() / 3600
-            if interval_hours <= 0:
-                continue
-            quarters.append(
-                {
-                    "start": start,
-                    "end": end,
-                    "price": raw_price / PRICE_SCALE_FACTOR,
-                    "charge_remaining_kwh": (base_charge_power_w / 1000)
-                    * interval_hours,
-                    "discharge_remaining_kwh": (base_discharge_power_w / 1000)
-                    * interval_hours,
-                    "net_charge_kwh": 0.0,
-                    "net_discharge_kwh": 0.0,
-                }
-            )
+        quarters = self._mpc_kwartieren(
+            horizon_entries, base_charge_power_w, base_discharge_power_w
+        )
         self.mpc_horizon_quarters_used = len(quarters)
         if not quarters:
             self.mpc_note = "Geen bruikbare kwartieren binnen de horizon."
@@ -24287,14 +24384,127 @@ class EnergyManagementSystemCoordinator:
 
         self.mpc_planned_actions = actions
         self.mpc_projected_total_profit_eur = round(total_profit, 4)
+        # v3.68.0: de balans over de horizon, in een eigen functie -
+        # `_compute_mpc_plan` staat op de ratel van v3.35.0.
+        self.mpc_balans = self._mpc_energiebalans(quarters, available_kwh)
         self.mpc_note = (
-            "Adviserend, puur prijsarbitrage - stuurt nooit een commando "
-            "en overschrijft nooit de bestaande beslisboom. Houdt geen "
-            "rekening met huishoudverbruik, PV-opwek, of de "
-            "nachtreserve die de echte beslisboom apart beschermt; dit "
-            "is een theoretisch maximum aan arbitrage-winst, geen "
-            "letterlijke aanbeveling."
+            "Adviserend - stuurt nooit een commando en overschrijft "
+            "nooit de bestaande beslisboom.\n\n"
+            "v3.68.0: verbruik en PV tellen nu mee. Een kwartier waarin "
+            "de zon de accu al vult heeft geen laadruimte meer, en een "
+            "kwartier waarin het huis trekt heeft minder ontlaadruimte "
+            "dan het vermogen suggereert. Daarvóór was dit puur "
+            "prijsarbitrage en dus een theoretische bovengrens.\n\n"
+            "Wat nog steeds ontbreekt: de nachtreserve die de echte "
+            "beslisboom apart beschermt. Dit plan mag de accu leegtrekken "
+            "waar de beslisboom dat weigert, en dat verschil is precies "
+            "wat de proefstand meet."
         )
+
+    def _mpc_kwartieren(
+        self,
+        horizon_entries: list,
+        laadvermogen_w: float,
+        ontlaadvermogen_w: float,
+    ) -> list[dict]:
+        """De kwartieren waarop het MPC-plan rekent (v3.68.0).
+
+        Uit `_compute_mpc_plan` gehaald: die functie staat op de ratel
+        van v3.35.0 en groeide van 79 naar 91 uitspraken door het
+        verbruik en de zon erbij.
+        """
+        quarters = []
+        for start, end, raw_price in horizon_entries:
+            interval_hours = (end - start).total_seconds() / 3600
+            if interval_hours <= 0:
+                continue
+            # v3.68.0: verbruik en zon meenemen.
+            #
+            # Gevraagd: "Het EMS zou niet meer alleen reageren op 'is dit
+            # een goedkoop of duur kwartier?', maar op 'welke actie
+            # levert over de komende 24 uur het beste resultaat op?'"
+            #
+            # De vier modules uit dat voorstel bestaan alle vier al - het
+            # uurprofiel, de PV-voorspelling met bias, de energiebalans
+            # en de besluitboom. Wat ontbrak zat híer: deze
+            # arbitragerekening was BEWUST puur prijs, zonder huis en
+            # zonder zon. De toelichting noemde de winst daarom "een
+            # theoretische bovengrens, geen aanbeveling".
+            #
+            # Zonder die twee klopt de ruimte niet. Een kwartier waarin
+            # de zon de accu al vult heeft geen laadruimte meer, en een
+            # kwartier waarin het huis 2 kW trekt heeft minder
+            # ontlaadruimte over dan het vermogen suggereert.
+            zon_kwh = self._estimate_pv_kwh_for_period(start, end) or 0.0
+            huis_kwh = (
+                self._estimate_consumption_kwh_for_period(start, end) or 0.0
+            )
+            # Het overschot laadt de accu al vanzelf; die ruimte is dus
+            # niet meer vrij om goedkoop bij te kopen.
+            zon_naar_accu_kwh = max(0.0, zon_kwh - huis_kwh)
+            # En het tekort gaat er hoe dan ook uit - dat is geen
+            # arbitrage maar de basislast.
+            tekort_kwh = max(0.0, huis_kwh - zon_kwh)
+
+            quarters.append(
+                {
+                    "start": start,
+                    "end": end,
+                    "price": raw_price / PRICE_SCALE_FACTOR,
+                    "zon_kwh": round(zon_kwh, 3),
+                    "huis_kwh": round(huis_kwh, 3),
+                    "zon_naar_accu_kwh": round(zon_naar_accu_kwh, 3),
+                    "tekort_kwh": round(tekort_kwh, 3),
+                    "charge_remaining_kwh": max(
+                        0.0,
+                        (laadvermogen_w / 1000) * interval_hours
+                        - zon_naar_accu_kwh,
+                    ),
+                    "discharge_remaining_kwh": max(
+                        0.0,
+                        (ontlaadvermogen_w / 1000) * interval_hours
+                        - tekort_kwh,
+                    ),
+                    "net_charge_kwh": 0.0,
+                    "net_discharge_kwh": 0.0,
+                }
+            )
+        return quarters
+
+    @staticmethod
+    def _mpc_balans_uit(quarters: list[dict], beschikbaar_kwh: float) -> dict:
+        """De energiebalans over de horizon (v3.68.0).
+
+        Gevraagd: "Verwacht verbruik min verwachte PV-opbrengst geeft een
+        verwacht energietekort of energieoverschot."
+
+        Precies dit. Positief saldo betekent overschot - dan hoeft de
+        accu 's nachts minder te overbruggen en is er meer ruimte om te
+        verkopen.
+        """
+        zon = sum(q["zon_kwh"] for q in quarters)
+        huis = sum(q["huis_kwh"] for q in quarters)
+        return {
+            "uren": round(len(quarters) * 0.25, 1),
+            "zon_kwh": round(zon, 2),
+            "verbruik_kwh": round(huis, 2),
+            "saldo_kwh": round(zon - huis, 2),
+            "beschikbaar_kwh": round(beschikbaar_kwh, 2),
+            "toelichting": (
+                "Verwachte zon min verwacht verbruik over de horizon. "
+                "Positief betekent overschot - dan hoeft de accu 's "
+                "nachts minder te overbruggen en is er meer ruimte om "
+                "te verkopen."
+            ),
+        }
+
+    def _mpc_energiebalans(
+        self, quarters: list[dict], beschikbaar_kwh: float
+    ) -> dict:
+        """De balans, met de reserve van de echte beslisboom ernaast."""
+        uit = self._mpc_balans_uit(quarters, beschikbaar_kwh)
+        uit["reserve_nu_kwh"] = self.last_projection_reserve_kwh
+        return uit
 
     def _max_usable_battery_capacity_kwh(self) -> float | None:
         """Live-read usable battery capacity (kWh) = total capacity minus
@@ -29311,6 +29521,8 @@ class EnergyManagementSystemCoordinator:
             # v3.10.0: de reserve met een lange horizon, hier omdat
             # `entries` pas in het staartstuk bestaat.
             ("lange reserve", lambda: self._meet_lange_reserve(now, entries)),
+            # v3.68.0: het MPC-plan naast de eigen planning.
+            ("mpc tegen de planning", lambda: self._meet_mpc(now)),
             # v3.60.0: wat het kost dat de accu bijspringt in een
             # goedkoop kwartier.
             (

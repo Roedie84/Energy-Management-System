@@ -19672,3 +19672,60 @@ De grens is dus naar negen, met de afweging in de toelichting. Bij een
 tiende moet er echt een weg.
 
 **Volledige testsuite**: 3168 tests, allemaal groen.
+
+## v3.68.0 — MPC rekent nu mét verbruik en zon
+
+**Gevraagd**: "Het EMS zou niet meer alleen reageren op 'is dit een
+goedkoop of duur kwartier?', maar op 'welke actie levert over de komende
+24 uur het beste resultaat op?'"
+
+### De vier modules bestonden al
+
+| voorstel | bestaat als |
+|---|---|
+| verbruiksvoorspelling | `hourly_consumption_profile`, 24 uren geleerd |
+| PV-voorspelling | Solcast + bias per bewolkingsvak + per-uur correctie |
+| energiebalans → doel-SOC | `_build_forecast_timeline` + `_estimate_worst_case_deficit_kwh` |
+| control-loop | `_async_update_locked` |
+
+En de balans rolt er al uit, 118 kwartieren vooruit: 12,87 kWh zon
+tegenover 8,76 kWh verbruik, met een diepste tekort van 3,19 kWh als
+doel-SOC.
+
+### Wat er wél ontbrak
+
+De arbitragerekening van v0.63.33 was **bewust puur prijs**, zonder huis
+en zonder zon. De toelichting noemde de winst daarom "een theoretische
+bovengrens, geen aanbeveling".
+
+Zonder die twee klopt de ruimte niet:
+
+- een kwartier waarin de zon de accu al vult heeft geen laadruimte meer
+  om goedkoop bij te kopen
+- een kwartier waarin het huis 2 kW trekt heeft minder ontlaadruimte over
+  dan het vermogen suggereert — dat deel is basislast, geen arbitrage
+
+Beide worden nu per kwartier verrekend, en de balans over de horizon
+staat in de export onder `mpc_balans`.
+
+### En een kandidaat die meet of het loont
+
+De elfde op de proefstand: **"Vooruitplannen over 24 uur"**. Eén meting
+per dag — beide plannen kijken over dezelfde 24 uur, dus vaker meten
+levert dezelfde vergelijking met een andere starttijd.
+
+Wat die meting **niet** weet, en dat staat er ook bij: het MPC-plan
+beschermt de nachtreserve niet. Het mag de accu leegtrekken waar de
+beslisboom dat weigert. Een positief verschil is dus deels betere
+planning en deels minder voorzichtigheid, en dat onderscheid valt pas te
+maken zodra het plan die reserve ook aanhoudt.
+
+Over veertien dagen staat er een getal.
+
+### Wat de ratel afdwong
+
+`_compute_mpc_plan` groeide van 79 naar 91 uitspraken. In plaats van de
+grens op te hogen zijn de kwartieropbouw en de balansberekening naar
+eigen functies verhuisd — terug op 80.
+
+**Volledige testsuite**: 3181 tests, allemaal groen.

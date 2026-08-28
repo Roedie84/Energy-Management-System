@@ -55,7 +55,11 @@ BEVROREN = {
     # blok van 45 uitspraken vertrekken; deze ene erbij is de meting
     # waard die eronder ligt.
     # v3.63.0: +1 voor `bestandscontrole`.
-    "coordinator.py:__init__": 379,
+    # v3.68.0: +1 voor `mpc_balans`. De twee blokken die het MPC-plan
+    # lieten groeien zijn naar eigen functies verhuisd, dus daar is de
+    # ratel wél op zijn eigen voorwaarden gehaald.
+    # v3.68.0: +2 voor de MPC-vergelijking en de dagmarkering.
+    "coordinator.py:__init__": 382,
     "coordinator.py:_async_update_locked": 255,
     "coordinator.py:_async_update_scheduled_charge_appliance": 70,
     "coordinator.py:_build_explanation": 73,

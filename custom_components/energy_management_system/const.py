@@ -2314,6 +2314,7 @@ PERSISTED_PLAIN_FIELDS = (
     "langere_horizon_history",
     "lange_reserve_history",
     "niet_ontladen_history",
+    "mpc_vergelijking_history",
     "bijkoop_history",
     "netlading_vandaag_kwh",
     "netlading_kosten_eur",
@@ -5082,3 +5083,11 @@ NIET_ONTLADEN_MIN_METINGEN = 200
 # Twintig metingen is genoeg om te zeggen dat een lege kant geen toeval
 # is, en weinig genoeg om het binnen een dag te merken.
 ZELFTOETS_MIN_REEKS = 20
+
+# Hoeveel dagen er gemeten moet zijn voordat de MPC-kandidaat iets zegt
+# (v3.68.0).
+#
+# Eén meting per dag, want beide plannen kijken over dezelfde 24 uur.
+# Veertien dagen dekt twee weekenden en een stuk weersverloop - minder
+# zegt vooral iets over het weer van die week.
+MPC_MIN_METINGEN = 14

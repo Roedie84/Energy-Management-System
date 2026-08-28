@@ -1,21 +1,18 @@
-v3.64.0 t/m v3.67.0 - alleen de gewijzigde bestanden sinds v3.63.0
+v3.68.0 - alleen de gewijzigde bestanden sinds v3.67.0
 
 CODE (naar Home Assistant, daarna herstarten)
   custom_components/energy_management_system/
-    coordinator.py            vier reparaties, zie hieronder
-    const.py                  nieuwe drempel en meldingssoort
-    diagnostics.py            de zelftoets in de export
-    dashboard_template.yaml   de proefplanning + meldingsschakelaar
-    manifest.json             versienummer 3.67.0
+    coordinator.py            MPC met verbruik en zon + de kandidaat
+    const.py                  MPC_MIN_METINGEN
+    diagnostics.py            mpc_balans en mpc_vergelijking in de export
+    manifest.json             versienummer 3.68.0
     bestandscontrole.json     bijgewerkte hashlijst  (MOET mee)
 
-DASHBOARD
-  dashboards/energy_management_system_dashboard.yaml
-
 TOETSEN (repository)
-  tests/test_onvolledige_installatie_meldt.py   nieuw
-  tests/test_zelftoets.py                       nieuw
-  en zes bestaande toetsbestanden
+  tests/test_mpc_met_verbruik_en_zon.py    nieuw
+  tests/test_proefstand.py                 elf kandidaten
+  tests/test_state_persistence.py
+  tests/test_scan_functiegrootte.py
 
 DOCUMENTEN
   CHANGELOG.md  README.md  OVERDRACHT.md
@@ -23,20 +20,26 @@ DOCUMENTEN
 WAT ER IS GEBEURD
 -----------------
 
-v3.64.0  De tweeling zag nooit een dagvergelijking.
-v3.65.0  De integratie toetst haar eigen uitkomsten op wat niet kan.
-v3.66.0  Twee getallen voor dezelfde grootheid (4000 en 6000 cycli), en
-         een cyclusteller die nergens werd opgehoogd. Je slijtage zakt
-         van 9,5 naar ongeveer 7,4 ct/kWh.
-v3.67.0  De proefplanning staat onder Kwartierplanning op het dashboard.
-         En een onvolledige installatie meldt zich nu: bij de
-         aandachtspunten op je landingspagina EN op je telefoon.
+De arbitragerekening van v0.63.33 was bewust puur prijs, zonder huis en
+zonder zon. Nu telt beide mee:
+
+  - een kwartier waarin de zon de accu al vult heeft geen laadruimte
+    meer om goedkoop bij te kopen
+  - een kwartier waarin het huis trekt heeft minder ontlaadruimte over
+    dan het vermogen suggereert
+
+En er staat een elfde proefstandkandidaat: "Vooruitplannen over 24 uur".
+Die legt elke dag de winst van het MPC-plan naast wat de planning zelf
+verwacht.
+
+STUURT NIETS. De hele MPC-tak is adviserend sinds v0.63.33 en dat blijft
+zo - er staat nu een toets op die dat via de boomstructuur controleert.
 
 WAT JE ZELF MOET DOEN
 ---------------------
 
-Herlaad het dashboard na de herstart (Instellingen -> Dashboards, of
-gewoon de pagina verversen).
+Niets. Over veertien dagen staat er een getal bij de kandidaat
+"Vooruitplannen over 24 uur" in de proefstand.
 
-De nieuwe melding "De installatie is onvolledig" staat standaard aan.
-Je vindt de schakelaar bij de andere meldingen.
+In de diagnostiek verschijnt meteen "mpc_balans": verwachte zon min
+verwacht verbruik over de horizon.
