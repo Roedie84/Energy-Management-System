@@ -18884,3 +18884,115 @@ denken. Vijfde keer deze week dat die ratel naar een beter ontwerp
 duwde.
 
 **Volledige testsuite**: 3044 tests, allemaal groen.
+
+## v3.52.0 — De laagste celspanning
+
+**Gevraagd**: "Kan de integratie zelf beoordelen of bijladen noodzakelijk
+is? In de winter moet hier immers wel rekening mee worden gehouden. Let
+wel op: financieel moet het voor mij optimaal zijn."
+
+### Eerst een correctie op mijn eigen advies
+
+Ik raadde aan de accu bij te laden omdat hij twee dagen op 6 à 8 procent
+eindigde. Dat was te voorzichtig. **LiFePO4 heeft geen last van lang
+laag staan** — dat is het verschil met de accu's in telefoons en auto's.
+De laadstand zegt daar bovendien weinig over, want de spanningskromme is
+onderin vlak: 6% en 12% zijn nauwelijks te onderscheiden.
+
+Wat wél telt is dat één cel de afschakelspanning raakt terwijl de rest
+nog ruimte heeft. Gemeten op 27 augustus:
+
+```
+module 1   laagste cel 3,08 V
+module 2   3,21
+module 3   3,21
+```
+
+De pakketspanning oogt dan gemiddeld prima terwijl één cel al bijna leeg
+is, en de BMS grijpt in op die ene.
+
+### Wat er nu gemeten wordt
+
+De **laagste celspanning per module**, met het dagminimum in de
+geschiedenis. Uitdrukkelijk het minimum en niet de mediaan, zoals elk
+ander veld: een dieptepunt van een kwartier verdwijnt anders in het
+gemiddelde van een etmaal.
+
+De grenzen volgen de LFP-ontlaadkromme:
+
+| | |
+|---|---|
+| boven 3,20 V | ruim |
+| 3,10 | let op |
+| 3,00 | de BMS komt in beeld |
+| 2,50 | schade |
+
+### En hoe het financieel optimaal blijft
+
+Een gezondheidsgrens mag **geen aankoop afdwingen op het moment dat hij
+aanslaat** — dat is bijna altijd een duur kwartier. De juiste vorm is een
+randvoorwaarde met een venster: het goedkoopste kwartier binnen zes uur,
+met de slijtage meegerekend.
+
+De melding noemt dat moment en de prijs erbij, zodat de afweging te maken
+is. Er wordt niets aangestuurd; de keuze blijft handmatig.
+
+Melden pas bij een **patroon** van meerdere dagen, niet bij één bewolkte
+dag. Eén dag laag is geen probleem; meerdere dagen op rij betekent dat de
+zon het niet meer bijhoudt — en dat is de winter die eraan komt.
+
+### Twee eigen toetsen die aansloegen
+
+De bestaande toets op te weinig dagmetingen ving dat mijn dagminimum
+buiten die regel viel: één uitlezing na een herstart zou als volwaardige
+dag in de geschiedenis zijn gekomen.
+
+En de toets "elke meldingssoort wordt ook werkelijk verstuurd" ving dat
+ik de melding wel had geregistreerd maar nergens aangeroepen.
+
+**Volledige testsuite**: 3056 tests, allemaal groen.
+
+## v3.53.0 — De instellingen van het apparaat tegen die van de berekening
+
+**Gevraagd**: "De properties/report moeten ook in de diagnostiek zitten
+om de integratie te verbeteren."
+
+Bewust **niet** door dat adres zelf uit te lezen. Dat zou een tweede
+bron van waarheid zijn naast de Zendure-integratie, en precies daar zijn
+we op 26 augustus twee dagen aan kwijt geweest. Wel de entiteiten die
+die integratie al maakt.
+
+### De aanleiding staat in dezelfde momentopname
+
+```
+minSoc: 50        het apparaat houdt 5% aan
+EMS rekent met                      10%
+```
+
+Die 5% was de kalibratie-instelling van een week eerder. **EMS plande dus
+met een bodem van 10 terwijl de accu doorliep tot 5**, en in de nacht van
+27 op 28 augustus kwam module 1 op 0% uit met een cel op 2,71 V.
+
+Er was niets kapot. De number-entiteit toonde 10, de berekening
+gebruikte 10, en het apparaat deed 5. Zo'n verschil is van buitenaf niet
+te zien.
+
+### Wat er nu vergeleken wordt
+
+Vier instellingen, allemaal optioneel te koppelen:
+
+| | waarom het ertoe doet |
+|---|---|
+| ondergrens | 5 tegen 10 — dit kostte module 1 een nacht op 2,71 V |
+| bovengrens | bepaalt of vol ook echt vol is |
+| maximaal laadvermogen | `chargeMaxLimit` ging van 2000 naar 2400 |
+| maximaal ontlaadvermogen | `inverseMaxPower` van 1600 naar 2000 |
+
+Die twee vermogens veranderden op 26 en 27 augustus zonder dat de
+berekening dat wist. Elke afwijking wordt een bevinding in de
+zelfcontrole, met beide getallen erbij.
+
+Wie een instelling niet koppelt, mist alleen de controle — geen
+bevinding, geen foutmelding.
+
+**Volledige testsuite**: 3064 tests, allemaal groen.

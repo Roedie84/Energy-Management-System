@@ -89,7 +89,10 @@
           "presence_tv_entity": "Televisie (optioneel): tv aan telt als iemand thuis",
           "presence_light_entities": "Lampen binnenshuis (optioneel): een brandende lamp telt als iemand thuis",
           "power_limits_intentional": "Laad-/ontlaadvermogen bewust begrensd (geen suggesties om te verhogen)",
-          "battery_cooling_opportunity_c": "Goedkoop koelen boven (°C): ventilator draait onder de hoofddrempel als het buiten veel kouder is"
+          "battery_cooling_opportunity_c": "Goedkoop koelen boven (°C): ventilator draait onder de hoofddrempel als het buiten veel kouder is",
+          "battery_max_soc_number_entity": "Bovengrens van de accu (optioneel)",
+          "battery_max_charge_power_entity": "Maximaal laadvermogen van de accu (optioneel)",
+          "battery_max_discharge_power_entity": "Maximaal ontlaadvermogen van de accu (optioneel)"
         }
       }
     },
@@ -192,7 +195,10 @@
           "presence_tv_entity": "Televisie (optioneel): tv aan telt als iemand thuis",
           "presence_light_entities": "Lampen binnenshuis (optioneel): een brandende lamp telt als iemand thuis",
           "power_limits_intentional": "Laad-/ontlaadvermogen bewust begrensd (geen suggesties om te verhogen)",
-          "battery_cooling_opportunity_c": "Goedkoop koelen boven (°C): ventilator draait onder de hoofddrempel als het buiten veel kouder is"
+          "battery_cooling_opportunity_c": "Goedkoop koelen boven (°C): ventilator draait onder de hoofddrempel als het buiten veel kouder is",
+          "battery_max_soc_number_entity": "Bovengrens van de accu (optioneel)",
+          "battery_max_charge_power_entity": "Maximaal laadvermogen van de accu (optioneel)",
+          "battery_max_discharge_power_entity": "Maximaal ontlaadvermogen van de accu (optioneel)"
         }
       }
     },

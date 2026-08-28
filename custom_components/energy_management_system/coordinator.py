@@ -448,6 +448,15 @@ from .const import (
     SOLAR_DAG_VER_MIS_PERCENT,
     SPIEGEL_MARGE_SOC_PROCENT,
     METING_MAX_LEEFTIJD_MINUTEN,
+    CELSPANNING_AANDACHT_V,
+    CELSPANNING_KRITIEK_V,
+    CELSPANNING_DAGEN_VOOR_PATROON,
+    CELSPANNING_VENSTER_UREN,
+    CONF_BATTERY_MAX_SOC_NUMBER,
+    CONF_BATTERY_MAX_CHARGE_POWER_ENTITY,
+    CONF_BATTERY_MAX_DISCHARGE_POWER_ENTITY,
+    SPIEGEL_MARGE_INSTELLING_PROCENT,
+    SPIEGEL_MARGE_VERMOGEN_W,
     SPIEGEL_MARGE_ENERGIE_KWH,
     SPIEGEL_MARGE_KRUIS_PROCENT,
     SOLARFLOW_DEFAULT_GRID_POWER_W,
@@ -11048,6 +11057,113 @@ class EnergyManagementSystemCoordinator:
             if regel["oordeel"] == "loopt_uiteen"
         ]
 
+    def get_celspanning_oordeel(self) -> dict:
+        """Staat er een cel te laag, en wat zou bijladen kosten?
+        (v3.52.0)
+
+        Meet, oordeelt en rekent voor - maar stuurt niets. De keuze om
+        bij te laden blijft handmatig, zoals afgesproken.
+
+        Waarom de laagste celspanning en niet de laadstand: LiFePO4
+        heeft een vlakke spanningskromme, dus onderin zegt de laadstand
+        weinig. Wat telt is dat één cel de afschakelspanning raakt
+        terwijl de rest nog ruimte heeft.
+        """
+        modules = self.battery_module_live or []
+        spanningen = [
+            (m["module"], m["cel_min_v"])
+            for m in modules
+            if m.get("cel_min_v") is not None
+        ]
+        uit: dict = {
+            "beschikbaar": bool(spanningen),
+            "aandachtsgrens_v": CELSPANNING_AANDACHT_V,
+            "kritieke_grens_v": CELSPANNING_KRITIEK_V,
+        }
+        if not spanningen:
+            uit["reden"] = "Geen celspanningen beschikbaar."
+            return uit
+
+        module, laagste = min(spanningen, key=lambda x: x[1])
+        uit["laagste_cel_v"] = laagste
+        uit["module"] = module
+        uit["per_module"] = {str(m): v for m, v in spanningen}
+
+        # Hoeveel dagen op rij zakte de laagste cel onder de grens?
+        dagen = 0
+        for staat in (self.battery_module_health or {}).values():
+            reeks = (staat.get("geschiedenis") or {}).get("laagste_cel_v") or []
+            achter_elkaar = 0
+            for waarde in reversed(reeks):
+                if waarde < CELSPANNING_AANDACHT_V:
+                    achter_elkaar += 1
+                else:
+                    break
+            dagen = max(dagen, achter_elkaar)
+        uit["dagen_onder_grens"] = dagen
+
+        if laagste < CELSPANNING_KRITIEK_V:
+            uit["oordeel"] = "kritiek"
+            uit["advies"] = (
+                f"Module {module} staat op {laagste:.2f} V. Onder "
+                f"{CELSPANNING_KRITIEK_V:.2f} V grijpt de BMS in op deze "
+                "ene cel terwijl de rest nog ruimte heeft. Nu bijladen, "
+                "ongeacht de prijs."
+            )
+        elif laagste < CELSPANNING_AANDACHT_V:
+            uit["oordeel"] = "aandacht"
+            uit["advies"] = (
+                f"Module {module} staat op {laagste:.2f} V, onder de "
+                f"grens van {CELSPANNING_AANDACHT_V:.2f} V. Niet "
+                "dringend - LiFePO4 heeft geen last van laag staan - maar "
+                "deze cel raakt de afschakelspanning eerder dan de rest."
+            )
+        else:
+            uit["oordeel"] = "ruim"
+            uit["advies"] = (
+                f"De laagste cel staat op {laagste:.2f} V, ruim boven de "
+                f"grens van {CELSPANNING_AANDACHT_V:.2f} V."
+            )
+
+        uit.update(self._celspanning_bijlaadkosten())
+        return uit
+
+    def _celspanning_bijlaadkosten(self) -> dict:
+        """Wat zou bijladen kosten, en wanneer is het het goedkoopst?
+
+        Een gezondheidsgrens mag geen aankoop afdwingen op het moment dat
+        hij aanslaat - dat is bijna altijd een duur kwartier. De juiste
+        vorm is een randvoorwaarde met een VENSTER: koop het goedkoopste
+        kwartier binnen de komende uren.
+        """
+        entries = self._get_forecast_entries()
+        if not entries:
+            return {}
+        nu = dt_util.now()
+        venster = [
+            (start, prijs / PRICE_SCALE_FACTOR)
+            for start, _einde, prijs in entries
+            if nu <= start <= nu + timedelta(hours=CELSPANNING_VENSTER_UREN)
+        ]
+        if not venster:
+            return {}
+        moment, prijs = min(venster, key=lambda x: x[1])
+        slijtage = (
+            (self.get_wear_cost_overview() or {}).get("slijtage_ct_per_kwh")
+            or 0.0
+        ) / 100
+        return {
+            "goedkoopste_moment": moment.isoformat(),
+            "goedkoopste_prijs_ct": round(prijs * 100, 1),
+            "kosten_per_kwh_ct": round((prijs + slijtage) * 100, 1),
+            "kosten_toelichting": (
+                f"Eén kWh bijladen kost daar {(prijs + slijtage) * 100:.1f} "
+                f"ct inclusief {slijtage * 100:.1f} ct slijtage. Wachten op "
+                "dat kwartier in plaats van nu kopen is het verschil tussen "
+                "een randvoorwaarde en een dure ingreep."
+            ),
+        }
+
     def get_spiegelcontrole(self) -> list[dict]:
         """Vergelijkt eigen getallen met de bron waar ze vandaan komen
         (v3.49.0).
@@ -11125,7 +11241,64 @@ class EnergyManagementSystemCoordinator:
                 beschikbaar_entity,
             )
 
-        # 3. En de twee tegen elkaar - dat is de sterkste toets.
+        # 3. De instellingen van het apparaat zelf (v3.53.0).
+        #
+        # Gemeten op 26 augustus in `properties/report`:
+        #
+        #     minSoc: 50        het apparaat houdt 5% aan
+        #     EMS rekent met                      10%
+        #
+        # Die 5% was de kalibratie-instelling van een week eerder. EMS
+        # plande dus met een bodem van 10 terwijl de accu doorliep tot 5,
+        # en in de nacht van 27 op 28 augustus kwam module 1 op 0% uit
+        # met een cel op 2,71 V.
+        #
+        # Een instelling die in het apparaat anders staat dan waar de
+        # berekening mee rekent, is niet van buitenaf te zien - en juist
+        # daarom hoort hij hier.
+        for naam, sleutel, intern, eenheid, marge in (
+            (
+                "Ondergrens van de accu",
+                CONF_BATTERY_MIN_SOC_NUMBER,
+                self.effective_min_soc_percent(),
+                "%",
+                SPIEGEL_MARGE_INSTELLING_PROCENT,
+            ),
+            (
+                "Bovengrens van de accu",
+                CONF_BATTERY_MAX_SOC_NUMBER,
+                100.0,
+                "%",
+                SPIEGEL_MARGE_INSTELLING_PROCENT,
+            ),
+            (
+                "Maximaal laadvermogen",
+                CONF_BATTERY_MAX_CHARGE_POWER_ENTITY,
+                self.config.get(CONF_MANUAL_CHARGE_POWER),
+                "W",
+                SPIEGEL_MARGE_VERMOGEN_W,
+            ),
+            (
+                "Maximaal ontlaadvermogen",
+                CONF_BATTERY_MAX_DISCHARGE_POWER_ENTITY,
+                self.config.get(CONF_MANUAL_DISCHARGE_POWER),
+                "W",
+                SPIEGEL_MARGE_VERMOGEN_W,
+            ),
+        ):
+            entity_id = self.config.get(sleutel)
+            if not entity_id:
+                continue
+            _voeg_toe(
+                naam,
+                intern,
+                self._read_sensor_float(entity_id),
+                eenheid,
+                marge,
+                entity_id,
+            )
+
+        # 4. En de twee tegen elkaar - dat is de sterkste toets.
         #
         # Accustand en beschikbare energie komen uit VERSCHILLENDE
         # sensoren. Wijken die van elkaar af, dan is er één stuk, en dan
@@ -20807,6 +20980,36 @@ class EnergyManagementSystemCoordinator:
                 if waarde is not None:
                     metingen.setdefault(veld, []).append(waarde)
 
+            # v3.52.0: de LAAGSTE celspanning van de dag.
+            #
+            # Gevraagd: "Kan de integratie zelf beoordelen of bijladen
+            # noodzakelijk is? In de winter moet hier wel rekening mee
+            # worden gehouden."
+            #
+            # De laadstand zegt daar weinig over. LiFePO4 heeft een
+            # vlakke spanningskromme, dus onderin is 6% en 12% nauwelijks
+            # te onderscheiden - en lang laag staan is bij LFP niet
+            # schadelijk, anders dan bij de accu's in telefoons.
+            #
+            # Wat wél telt is dat één cel de afschakelspanning raakt
+            # terwijl de rest nog ruimte heeft. Gemeten op 27 augustus:
+            #
+            #     module 1  laagste cel 3,08 V
+            #     module 2  3,21     module 3  3,21
+            #
+            # De pakketspanning ziet er dan gemiddeld prima uit terwijl
+            # één cel al bijna leeg is, en de BMS grijpt in op die ene.
+            #
+            # Let op: dit is een MINIMUM, geen mediaan. De dagelijkse
+            # geschiedenis vat elk ander veld samen met de mediaan, en
+            # dat is hier precies verkeerd - een dieptepunt van een
+            # kwartier verdwijnt dan in het gemiddelde van een etmaal.
+            if module.get("cel_min_v") is not None:
+                staat["laagste_cel_vandaag_v"] = min(
+                    staat.get("laagste_cel_vandaag_v", module["cel_min_v"]),
+                    module["cel_min_v"],
+                )
+
             # Absolute celdelta per SoC-bucket, puur ter referentie: bij
             # LFP hoort de delta aan de uiteinden hoger te liggen, dus
             # zonder die opsplitsing is een absolute waarde niet met
@@ -20817,6 +21020,7 @@ class EnergyManagementSystemCoordinator:
                 staat["soc_buckets"][bucket] = buckets[-200:]
 
         self._evaluate_battery_module_warnings(modules)
+        self._meld_lage_celspanning()
 
     def _finalize_battery_module_day(self) -> None:
         """Sluit de dag af: mediaan per grootheid de geschiedenis in, en
@@ -20833,6 +21037,27 @@ class EnergyManagementSystemCoordinator:
                     -BATTERY_MODULE_HISTORY_DAYS:
                 ]
                 self._update_battery_module_cusum(staat, veld, mediaan)
+            # v3.52.0: het dagminimum apart wegschrijven - de mediaan
+            # hierboven zou het dieptepunt juist wegmiddelen.
+            laagste = staat.pop("laagste_cel_vandaag_v", None)
+            # Dezelfde eis als de andere velden: een dag met te weinig
+            # metingen telt niet mee.
+            #
+            # Gevangen door de bestaande toets: mijn eerste versie
+            # schreef het minimum weg ongeacht het aantal metingen, en
+            # dan zou één uitlezing na een herstart als volwaardige dag
+            # in de geschiedenis komen.
+            genoeg = any(
+                len(w) >= BATTERY_MODULE_MIN_SAMPLES_PER_DAY
+                for w in (staat.get("dag_metingen") or {}).values()
+            )
+            if laagste is not None and genoeg:
+                reeks = staat["geschiedenis"].setdefault("laagste_cel_v", [])
+                reeks.append(round(laagste, 3))
+                staat["geschiedenis"]["laagste_cel_v"] = reeks[
+                    -BATTERY_MODULE_HISTORY_DAYS:
+                ]
+
             staat["dag_metingen"] = {}
 
     @staticmethod
@@ -20896,6 +21121,42 @@ class EnergyManagementSystemCoordinator:
         if cusum["accumulator"] > drempel:
             cusum["drift"] = True
         cusum["accumulator"] = round(cusum["accumulator"], 4)
+
+    def _meld_lage_celspanning(self) -> None:
+        """Meldt een cel die meerdere dagen te laag staat (v3.52.0).
+
+        Pas bij een PATROON, niet bij één bewolkte dag. Eén dag laag is
+        bij LiFePO4 geen probleem; meerdere dagen op rij betekent dat de
+        zon het niet meer bijhoudt, en dan is dit de winter die eraan
+        komt.
+        """
+        oordeel = self.get_celspanning_oordeel()
+        if not oordeel.get("beschikbaar"):
+            return
+        kritiek = oordeel["oordeel"] == "kritiek"
+        patroon = (
+            oordeel["oordeel"] == "aandacht"
+            and oordeel.get("dagen_onder_grens", 0)
+            >= CELSPANNING_DAGEN_VOOR_PATROON
+        )
+        if not (kritiek or patroon):
+            return
+
+        kosten = oordeel.get("kosten_toelichting", "")
+        moment = oordeel.get("goedkoopste_moment")
+        wanneer = (
+            f" Het goedkoopste moment binnen {CELSPANNING_VENSTER_UREN} uur "
+            f"is {moment[11:16]}."
+            if moment
+            else ""
+        )
+        self._dispatch_notification(
+            notify_service=self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE),
+            title="🔋 Een cel staat laag",
+            message=f"{oordeel['advies']}{wanneer} {kosten}".strip(),
+            notification_id="ems_celspanning_laag",
+            kind="celspanning_laag",
+        )
 
     def _evaluate_battery_module_warnings(self, modules: list[dict]) -> None:
         """Directe, absolute controles per module (v0.63.123).

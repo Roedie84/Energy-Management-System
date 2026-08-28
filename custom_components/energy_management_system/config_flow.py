@@ -83,6 +83,9 @@ from .const import (
     CONF_MANUAL_DISCHARGE_POWER,
     CONF_BATTERY_TOTAL_CAPACITY_SENSOR,
     CONF_BATTERY_MIN_SOC_NUMBER,
+    CONF_BATTERY_MAX_SOC_NUMBER,
+    CONF_BATTERY_MAX_CHARGE_POWER_ENTITY,
+    CONF_BATTERY_MAX_DISCHARGE_POWER_ENTITY,
     CONF_MANUAL_POWER_NUMBER,
     CONF_MIN_SOC_PERCENT,
     CONF_OPERATION_SELECT,
@@ -296,6 +299,12 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
             ),
             _optioneel(CONF_BATTERY_TOTAL_CAPACITY_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
             _optioneel(CONF_BATTERY_MIN_SOC_NUMBER, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="number")),
+            # v3.53.0: de overige instellingen van het apparaat, om
+            # tegen te spiegelen. Optioneel - wie ze niet koppelt, mist
+            # alleen de controle.
+            _optioneel(CONF_BATTERY_MAX_SOC_NUMBER, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="number")),
+            _optioneel(CONF_BATTERY_MAX_CHARGE_POWER_ENTITY, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain=["number", "sensor"])),
+            _optioneel(CONF_BATTERY_MAX_DISCHARGE_POWER_ENTITY, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain=["number", "sensor"])),
             vol.Optional(
                 CONF_MANUAL_CHARGE_POWER,
                 default=defaults.get(

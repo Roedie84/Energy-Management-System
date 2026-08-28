@@ -12,6 +12,21 @@ CONF_EXPENSIVE_QUARTERS_COUNT = "expensive_quarters_count"
 CONF_MANUAL_DISCHARGE_POWER = "manual_discharge_power"
 CONF_BATTERY_TOTAL_CAPACITY_SENSOR = "battery_total_capacity_sensor_entity"
 CONF_BATTERY_MIN_SOC_NUMBER = "battery_min_soc_number_entity"
+
+# De instellingen van het apparaat zelf, om tegen te spiegelen
+# (v3.53.0). Allemaal optioneel: wie ze niet koppelt, mist alleen de
+# controle.
+#
+# Gevraagd: "De properties/report moeten ook in de diagnostiek zitten om
+# de integratie te verbeteren."
+#
+# Bewust NIET door dat adres zelf uit te lezen - dat is een tweede bron
+# van waarheid naast de Zendure-integratie, en precies daar zijn we op
+# 26 augustus twee dagen aan kwijt geweest. Wel de entiteiten die die
+# integratie al maakt.
+CONF_BATTERY_MAX_SOC_NUMBER = "battery_max_soc_number_entity"
+CONF_BATTERY_MAX_CHARGE_POWER_ENTITY = "battery_max_charge_power_entity"
+CONF_BATTERY_MAX_DISCHARGE_POWER_ENTITY = "battery_max_discharge_power_entity"
 CONF_MANUAL_CHARGE_POWER = "manual_charge_power"
 CONF_NEGATIVE_PRICE_CHARGE_POWER = "negative_price_charge_power"
 CONF_SOLAR_POWER_LIMIT_ENTITY = "solar_power_limit_entity"
@@ -1866,6 +1881,7 @@ LOG_PRIORITEITEN = {
     "kalibratie_vol": LOG_PRIO_KRITIEK,
     "verbruiksleer_reset": LOG_PRIO_AANDACHT,
     "koeling_te_scherp": LOG_PRIO_AANDACHT,
+    "celspanning_laag": LOG_PRIO_AANDACHT,
     # Aandacht - het vraagt een beslissing.
     "plan_verkoop_geblokkeerd": LOG_PRIO_AANDACHT,
     "battery_module_drift": LOG_PRIO_AANDACHT,
@@ -2733,6 +2749,14 @@ NOTIFICATION_TYPES: tuple[tuple[str, str, str, bool, int], ...] = (
         "Wanneer de koelventilator van de thuisaccu schakelt.",
         True,
         15,
+    ),
+    (
+        "celspanning_laag",
+        "Een cel staat laag",
+        "Wanneer de laagste cel meerdere dagen onder de aandachtsgrens "
+        "zakt - dat is de cel die de afschakelspanning het eerst raakt.",
+        True,
+        1440,
     ),
     (
         "koeling_te_scherp",
@@ -4643,6 +4667,7 @@ ACHTERHOEKS_TITELS = {
     "kalibratie_vol": "De accu is vol - kalibratie klaor",
     "verbruiksleer_reset": "t Leren begint opnieuw",
     "koeling_te_scherp": "De koeling geet te vaak an",
+    "celspanning_laag": "n Cel steet te lege",
     "appliance_ready": "'n Apparaat is klaor",
     "appliance_cheap_moment": "Good moment veur 'n apparaat",
     "device_drift": "'n Apparaat wiekt af",
@@ -4835,3 +4860,58 @@ SPIEGEL_MARGE_KRUIS_PROCENT = 15.0
 # Vijf minuten is ruim tien ronden, en het vangt elke uitval die langer
 # duurt dan een hapering.
 METING_MAX_LEEFTIJD_MINUTEN = 5.0
+
+# --- De laagste celspanning (v3.52.0) --------------------------------
+#
+# Gevraagd: "Kan de integratie zelf beoordelen of bijladen noodzakelijk
+# is? In de winter moet hier wel rekening mee worden gehouden. Let wel
+# op: financieel moet het voor mij optimaal zijn."
+#
+# De laadstand zegt daar weinig over. LiFePO4 heeft een vlakke
+# spanningskromme, dus onderin is 6% en 12% nauwelijks te
+# onderscheiden - en lang laag staan is bij LFP niet schadelijk, anders
+# dan bij de accu's in telefoons en auto's.
+#
+# Wat wél telt is dat één cel de afschakelspanning raakt terwijl de rest
+# nog ruimte heeft. Gemeten op 27 augustus: module 1 op 3,08 V terwijl
+# module 2 en 3 op 3,21 stonden. De pakketspanning oogt dan prima en de
+# BMS grijpt in op die ene cel.
+#
+# De grenzen volgen de LFP-ontlaadkromme:
+#
+#     boven 3,20 V   ruim
+#           3,10     let op - de knik naar beneden begint
+#           3,00     de BMS komt in beeld
+#           2,50     schade
+#
+# Bij 3,08 zat module 1 dus al onder "let op", terwijl de laadstand van
+# 6% dat niet liet zien.
+CELSPANNING_AANDACHT_V = 3.10
+CELSPANNING_KRITIEK_V = 3.00
+
+# Hoeveel dagen op rij onder de aandachtsgrens voordat het een patroon
+# heet in plaats van een uitschieter. Twee dagen is genoeg om een
+# donkere winterperiode te herkennen zonder op één bewolkte dag aan te
+# slaan.
+CELSPANNING_DAGEN_VOOR_PATROON = 2
+
+# Binnen hoeveel uur er een goedkoop moment gezocht wordt om aan de
+# celspanningsgrens te voldoen (v3.52.0).
+#
+# Een gezondheidsgrens mag geen aankoop afdwingen op het moment dat hij
+# aanslaat - dat is bijna altijd een duur kwartier. Zes uur is ruim
+# genoeg om een goedkoop blok te vinden en kort genoeg om niet te lang
+# onder de grens te blijven.
+CELSPANNING_VENSTER_UREN = 6
+
+# Hoeveel een instelling in het apparaat mag afwijken van waar de
+# berekening mee rekent (v3.53.0).
+#
+# Nul zou te streng zijn - een number-entiteit rondt af - maar het
+# verschil van 26 augustus was vijf procentpunt, en dat kostte module 1
+# een nacht op 2,71 V. Twee procentpunt vangt dat ruim.
+SPIEGEL_MARGE_INSTELLING_PROCENT = 2.0
+
+# Vermogens lopen in stappen van tientallen watts; honderd watt verschil
+# is een instelling die niet klopt, geen afronding.
+SPIEGEL_MARGE_VERMOGEN_W = 100.0

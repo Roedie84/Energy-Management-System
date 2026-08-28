@@ -89,7 +89,10 @@
           "grid_import_energy_sensor_entity": "Grid import meter (optional, kWh): enables reading historical figures",
           "grid_export_energy_sensor_entity": "Grid export meter (optional, kWh): enables reading historical figures",
           "presence_light_entities": "Indoor lights (optional): a light that is on counts as someone home",
-          "battery_cooling_opportunity_c": "Cool when cheap above (°C): fan runs below the main threshold when outdoor air is much colder"
+          "battery_cooling_opportunity_c": "Cool when cheap above (°C): fan runs below the main threshold when outdoor air is much colder",
+          "battery_max_soc_number_entity": "Battery upper limit (optional)",
+          "battery_max_charge_power_entity": "Battery maximum charge power (optional)",
+          "battery_max_discharge_power_entity": "Battery maximum discharge power (optional)"
         }
       }
     },
@@ -192,7 +195,10 @@
           "grid_import_energy_sensor_entity": "Grid import meter (optional, kWh): enables reading historical figures",
           "grid_export_energy_sensor_entity": "Grid export meter (optional, kWh): enables reading historical figures",
           "presence_light_entities": "Indoor lights (optional): a light that is on counts as someone home",
-          "battery_cooling_opportunity_c": "Cool when cheap above (°C): fan runs below the main threshold when outdoor air is much colder"
+          "battery_cooling_opportunity_c": "Cool when cheap above (°C): fan runs below the main threshold when outdoor air is much colder",
+          "battery_max_soc_number_entity": "Battery upper limit (optional)",
+          "battery_max_charge_power_entity": "Battery maximum charge power (optional)",
+          "battery_max_discharge_power_entity": "Battery maximum discharge power (optional)"
         }
       }
     },

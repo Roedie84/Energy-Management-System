@@ -89,7 +89,10 @@
           "presence_tv_entity": "Television (optional): TV on counts as someone home",
           "presence_light_entities": "Indoor lights (optional): a light that is on counts as someone home",
           "power_limits_intentional": "Charge/discharge power deliberately limited (no suggestions to raise it)",
-          "battery_cooling_opportunity_c": "Cool when cheap above (°C): fan runs below the main threshold when outdoor air is much colder"
+          "battery_cooling_opportunity_c": "Cool when cheap above (°C): fan runs below the main threshold when outdoor air is much colder",
+          "battery_max_soc_number_entity": "Battery upper limit (optional)",
+          "battery_max_charge_power_entity": "Battery maximum charge power (optional)",
+          "battery_max_discharge_power_entity": "Battery maximum discharge power (optional)"
         }
       }
     },
@@ -192,7 +195,10 @@
           "presence_tv_entity": "Television (optional): TV on counts as someone home",
           "presence_light_entities": "Indoor lights (optional): a light that is on counts as someone home",
           "power_limits_intentional": "Charge/discharge power deliberately limited (no suggestions to raise it)",
-          "battery_cooling_opportunity_c": "Cool when cheap above (°C): fan runs below the main threshold when outdoor air is much colder"
+          "battery_cooling_opportunity_c": "Cool when cheap above (°C): fan runs below the main threshold when outdoor air is much colder",
+          "battery_max_soc_number_entity": "Battery upper limit (optional)",
+          "battery_max_charge_power_entity": "Battery maximum charge power (optional)",
+          "battery_max_discharge_power_entity": "Battery maximum discharge power (optional)"
         }
       }
     },
