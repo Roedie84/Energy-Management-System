@@ -184,6 +184,9 @@ def test_only_the_pre_existing_kinds_default_to_on():
         # aan te staan, want anders blijft de koeling stil zonder dat
         # iemand weet waarom.
         "koeling_te_scherp",
+        # v3.52.0: een cel die meerdere dagen te laag staat hoort te
+        # melden - in de winter is dat het enige signaal dat er komt.
+        "celspanning_laag",
         "sluipverbruik",
         "device_drift",
         "mode_change",
