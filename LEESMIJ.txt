@@ -1,16 +1,17 @@
-v3.68.0 - alleen de gewijzigde bestanden sinds v3.67.0
+v3.68.0 en v3.69.0 - alleen de gewijzigde bestanden sinds v3.67.0
 
 CODE (naar Home Assistant, daarna herstarten)
   custom_components/energy_management_system/
-    coordinator.py            MPC met verbruik en zon + de kandidaat
+    coordinator.py            MPC met verbruik/zon, doel-SOC, gereedheid
     const.py                  MPC_MIN_METINGEN
-    diagnostics.py            mpc_balans en mpc_vergelijking in de export
-    manifest.json             versienummer 3.68.0
+    diagnostics.py            mpc_balans, mpc_doel_soc, mpc_vergelijking
+    manifest.json             versienummer 3.69.0
     bestandscontrole.json     bijgewerkte hashlijst  (MOET mee)
 
 TOETSEN (repository)
+  tests/test_mpc_doel_soc.py               nieuw
   tests/test_mpc_met_verbruik_en_zon.py    nieuw
-  tests/test_proefstand.py                 elf kandidaten
+  tests/test_proefstand.py
   tests/test_state_persistence.py
   tests/test_scan_functiegrootte.py
 
@@ -20,26 +21,26 @@ DOCUMENTEN
 WAT ER IS GEBEURD
 -----------------
 
-De arbitragerekening van v0.63.33 was bewust puur prijs, zonder huis en
-zonder zon. Nu telt beide mee:
+v3.68.0  De arbitragerekening telt nu verbruik en zon mee, en er staat
+         een elfde proefstandkandidaat: "Vooruitplannen over 24 uur".
 
-  - een kwartier waarin de zon de accu al vult heeft geen laadruimte
-    meer om goedkoop bij te kopen
-  - een kwartier waarin het huis trekt heeft minder ontlaadruimte over
-    dan het vermogen suggereert
+v3.69.0  De gereedheid op de proefstand kijkt nu OOK naar de
+         toelatingseis. "Klaar om mee te doen" stond bij kandidaten die
+         niet mochten meedoen - dat was verwarrend en ik heb het zelf
+         verkeerd gelezen.
 
-En er staat een elfde proefstandkandidaat: "Vooruitplannen over 24 uur".
-Die legt elke dag de winst van het MPC-plan naast wat de planning zelf
-verwacht.
+         Nieuwe stand: "gemeten: levert niets op". Drie kandidaten
+         stonden op klaar terwijl ze bij NUL van de driehonderd
+         momenten gunstig waren.
 
-STUURT NIETS. De hele MPC-tak is adviserend sinds v0.63.33 en dat blijft
-zo - er staat nu een toets op die dat via de boomstructuur controleert.
+         En een doel-SOC per kwartier, van achter naar voren gerekend:
+         hoeveel moet er in de accu zitten om alles wat daarna komt te
+         overbruggen? Zon die eraan komt verlaagt die eis.
+
+ALLES STUURT NIETS.
 
 WAT JE ZELF MOET DOEN
 ---------------------
 
-Niets. Over veertien dagen staat er een getal bij de kandidaat
-"Vooruitplannen over 24 uur" in de proefstand.
-
-In de diagnostiek verschijnt meteen "mpc_balans": verwachte zon min
-verwacht verbruik over de horizon.
+Niets. In de diagnostiek staat vanaf nu "mpc_doel_soc" naast de
+bestaande reserve, zodat het verschil zichtbaar is.

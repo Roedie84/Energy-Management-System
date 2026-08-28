@@ -410,7 +410,15 @@ def test_a_reliable_measurement_is_not_yet_ready(make_coordinator, hass):
     assert uitkomst["gereedheid"] == "winst onbekend"
 
 
-def test_both_together_make_it_ready(make_coordinator, hass):
+def test_both_together_are_not_enough(make_coordinator, hass):
+    """v3.69.0: meting en winst zijn niet genoeg - de TOELATINGSEIS
+
+    telt ook mee.
+
+    Gemeld: "Je zegt net dat deze klaar was" - over een kandidaat waar
+    in dezelfde export onder stond dat hij niet voldeed. "Klaar om mee
+    te doen" hoort niet te staan bij iets dat niet mag meedoen.
+    """
     c = make_coordinator({})
 
     uitkomst = c._met_gereedheid(
@@ -421,7 +429,48 @@ def test_both_together_make_it_ready(make_coordinator, hass):
         }
     )
 
-    assert uitkomst["gereedheid"] == "klaar om mee te doen"
+    assert uitkomst["mag_meesturen"] is False
+    assert uitkomst["gereedheid"] != "mag meesturen"
+
+
+def test_a_negative_result_is_named_as_such(make_coordinator, hass):
+    """"Gemeten en afgevallen" is iets anders dan "nog niet lang genoeg",
+
+    en die twee zagen er hetzelfde uit.
+    """
+    c = make_coordinator({})
+
+    uitkomst = c._met_gereedheid(
+        {
+            "naam": "Iets",
+            "status": "betrouwbaar",
+            "zou_hebben_opgeleverd": {
+                "te_becijferen": True,
+                "aandeel_gunstig_procent": 0,
+                "metingen": 300,
+                "bedrag_per_kwh_ct": -15.4,
+            },
+        }
+    )
+
+    assert uitkomst["gereedheid"] == "gemeten: levert niets op"
+    assert "afgevallen" in uitkomst["gereedheid_uitleg"]
+
+
+def test_a_fully_admitted_candidate_may_steer(make_coordinator, hass):
+    c = make_coordinator({})
+    c._proefstand_toelating = lambda k, o: {"voldoet": True}
+
+    uitkomst = c._met_gereedheid(
+        {
+            "naam": "Iets",
+            "status": "betrouwbaar",
+            "zou_hebben_opgeleverd": {"te_becijferen": True},
+        }
+    )
+
+    assert uitkomst["gereedheid"] == "mag meesturen"
+    assert uitkomst["mag_meesturen"] is True
     assert "één tegelijk" in uitkomst["gereedheid_uitleg"]
 
 

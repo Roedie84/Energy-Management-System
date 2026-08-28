@@ -1203,6 +1203,8 @@ class EnergyManagementSystemCoordinator:
         self.mpc_note: str | None = None
         # v3.68.0: de energiebalans waar het plan op rust.
         self.mpc_balans: dict = {}
+        # v3.69.0: de doel-SOC per kwartier, achteruit gerekend.
+        self.mpc_doel_soc: dict = {}
         self.mpc_vergelijking_history: list[dict] = []
         self._mpc_gemeten_op: str | None = None
         # Monte Carlo advisory engine (v0.63.34).
@@ -8255,7 +8257,7 @@ class EnergyManagementSystemCoordinator:
                 self._kandidaat_mpc(),
             )
         ]
-        klaar = [k for k in kandidaten if k["gereedheid"] == "klaar om mee te doen"]
+        klaar = [k for k in kandidaten if k.get("mag_meesturen")]
         return {
             "aantal": len(kandidaten),
             "meet_nog": sum(
@@ -8266,7 +8268,7 @@ class EnergyManagementSystemCoordinator:
             ),
             "klaar": [k["naam"] for k in klaar],
             "oordeel": (
-                f"{len(klaar)} kandidaat(en) klaar om mee te doen."
+                f"{len(klaar)} kandidaat(en) mogen meesturen."
                 if klaar
                 else "Nog geen kandidaat is klaar om mee te sturen."
             ),
@@ -8297,7 +8299,24 @@ class EnergyManagementSystemCoordinator:
         opbrengst = kandidaat.get("zou_hebben_opgeleverd") or {}
         meting_betrouwbaar = kandidaat.get("status") == RELIABILITY_RELIABLE
         winst_becijferd = bool(opbrengst.get("te_becijferen"))
+        toelating = self._proefstand_toelating(kandidaat, opbrengst)
 
+        # v3.69.0: de gereedheid kijkt nu ook naar de TOELATING.
+        #
+        # Gemeld: "Je zegt net dat deze klaar was" - over een kandidaat
+        # waar in dezelfde export onder stond:
+        #
+        #     gereedheid   klaar om mee te doen
+        #     toelating    voldoet: false, 4 dagen gemeten, eis is 14
+        #
+        # Twee velden die allebei "klaar" leken te zeggen, en ik heb de
+        # bovenste doorgegeven zonder de onderste ernaast te leggen. Dat
+        # is mijn fout, maar de benaming maakte hem makkelijk: "klaar om
+        # mee te doen" hoort niet te staan bij iets dat niet mag
+        # meedoen.
+        #
+        # Er is nu één antwoord op de vraag "mag dit meesturen", en de
+        # tussenstanden zeggen alleen nog iets over de meting.
         if not meting_betrouwbaar:
             gereed = "meet nog"
             uitleg = "De meting zelf is nog niet betrouwbaar genoeg."
@@ -8307,23 +8326,46 @@ class EnergyManagementSystemCoordinator:
                 "De meting klopt, maar wat meesturen zou opleveren is nog "
                 "niet becijferd. Zonder dat getal is meedoen een gok."
             )
+        elif not toelating.get("voldoet"):
+            # Onderscheid tussen "nog niet lang genoeg" en "gemeten en
+            # het levert niets op" - dat zijn heel verschillende
+            # uitkomsten en ze zagen er hetzelfde uit.
+            ontbreekt = toelating.get("wat_ontbreekt") or []
+            negatief = any(
+                "gunstig bij" in r or "voordeel" in r for r in ontbreekt
+            )
+            if negatief:
+                gereed = "gemeten: levert niets op"
+                uitleg = (
+                    "De meting klopt en de winst is becijferd - en die "
+                    "is niet positief. Dit is geen kandidaat die nog moet "
+                    "rijpen; hij is gemeten en afgevallen. "
+                    + "; ".join(ontbreekt)
+                )
+            else:
+                gereed = "voldoet nog niet aan de eis"
+                uitleg = (
+                    "Meting en winst zijn becijferd, maar de "
+                    "toelatingseis is nog niet gehaald: "
+                    + "; ".join(ontbreekt)
+                )
         else:
-            gereed = "klaar om mee te doen"
+            gereed = "mag meesturen"
             uitleg = (
-                "Meting en winst zijn allebei becijferd. Dit is de "
-                "kandidaat om als eerste te laten meesturen - één "
-                "tegelijk, zodat bij een afwijking te zien is welke het "
-                "deed."
+                "Meting, winst en toelatingseis zijn alle drie rond. Dit "
+                "is de kandidaat om te laten meesturen - één tegelijk, "
+                "zodat bij een afwijking te zien is welke het deed."
             )
 
         return {
             **kandidaat,
             "meting_betrouwbaar": meting_betrouwbaar,
             "winst_becijferd": winst_becijferd,
+            "mag_meesturen": bool(toelating.get("voldoet")),
             "gereedheid": gereed,
             "gereedheid_uitleg": uitleg,
             # v3.42.0: en wat er nog aan de EIS ontbreekt.
-            "toelating": self._proefstand_toelating(kandidaat, opbrengst),
+            "toelating": toelating,
         }
 
     def _proefstand_toelating(self, kandidaat: dict, opbrengst: dict) -> dict:
@@ -24245,6 +24287,7 @@ class EnergyManagementSystemCoordinator:
         self.mpc_projected_total_profit_eur = None
         self.mpc_horizon_quarters_used = 0
         self.mpc_balans = {}
+        self.mpc_doel_soc = {}
 
         available_entity = self.config.get(CONF_AVAILABLE_ENERGY_SENSOR)
         if not available_entity:
@@ -24387,6 +24430,10 @@ class EnergyManagementSystemCoordinator:
         # v3.68.0: de balans over de horizon, in een eigen functie -
         # `_compute_mpc_plan` staat op de ratel van v3.35.0.
         self.mpc_balans = self._mpc_energiebalans(quarters, available_kwh)
+        # v3.69.0: en de doel-SOC-lijn.
+        self.mpc_doel_soc = self._mpc_doel_soc(
+            quarters, available_kwh, usable_capacity_kwh
+        )
         self.mpc_note = (
             "Adviserend - stuurt nooit een commando en overschrijft "
             "nooit de bestaande beslisboom.\n\n"
@@ -24470,6 +24517,82 @@ class EnergyManagementSystemCoordinator:
                 }
             )
         return quarters
+
+    def _mpc_doel_soc(self, quarters: list[dict], beschikbaar_kwh: float,
+                      capaciteit_kwh: float) -> dict:
+        """Welke laadstand hoort er aan het eind van elk kwartier te
+        staan? (v3.69.0)
+
+        Gevraagd: "De voorspelde energiebehoefte kan worden gecombineerd
+        met een voorspelling van de verwachte PV-opbrengst. Deze
+        energiebalans zou gebruikt kunnen worden om een gewenst doel-SOC
+        te berekenen."
+
+        Precies dit, en het is iets anders dan de arbitragerekening
+        ernaast. Die zoekt de winstgevendste PAREN; dit loopt de horizon
+        van ACHTER naar VOREN en vraagt per kwartier: hoeveel moet er in
+        de accu zitten om alles wat hierna komt te overbruggen?
+
+        Achteruit werken is de kern. Vooruit weet je niet wat je nodig
+        hebt; achteruit wel, want het laatste kwartier heeft alleen
+        zichzelf nodig en elk kwartier daarvoor telt zijn eigen tekort
+        erbij op.
+
+        Dat levert per kwartier een ondergrens, en die ondergrens is de
+        doel-SOC. Waar de huidige reserve één getal is voor de hele
+        horizon, is dit een LIJN - lager als er zon aankomt, hoger vlak
+        voor een dure nacht.
+
+        Stuurt niets. Het staat naast de bestaande reserve, zodat het
+        verschil zichtbaar is.
+        """
+        if not quarters or capaciteit_kwh <= 0:
+            return {"beschikbaar": False, "reden": "Geen horizon of capaciteit."}
+
+        # Van achter naar voren: wat moet er aan het BEGIN van dit
+        # kwartier in zitten om de rest te halen?
+        nodig_kwh = 0.0
+        lijn = []
+        for q in reversed(quarters):
+            # Zon die het huis niet nodig heeft, vult de accu - dat
+            # verlaagt wat er vooraf in moet zitten.
+            nodig_kwh = max(
+                0.0, nodig_kwh + q["tekort_kwh"] - q["zon_naar_accu_kwh"]
+            )
+            # Meer dan de accu kan bevatten heeft geen zin als eis; dan
+            # komt er hoe dan ook iets van het net.
+            begrensd = min(nodig_kwh, capaciteit_kwh)
+            lijn.append(
+                {
+                    "van": q["start"].strftime("%H:%M"),
+                    "doel_kwh": round(begrensd, 3),
+                    "doel_procent": round(100 * begrensd / capaciteit_kwh, 1),
+                    "onbereikbaar": nodig_kwh > capaciteit_kwh,
+                }
+            )
+        lijn.reverse()
+
+        hoogste = max(r["doel_kwh"] for r in lijn)
+        onbereikbaar = [r for r in lijn if r["onbereikbaar"]]
+        return {
+            "beschikbaar": True,
+            "nu_nodig_kwh": lijn[0]["doel_kwh"],
+            "nu_nodig_procent": lijn[0]["doel_procent"],
+            "hoogste_kwh": round(hoogste, 3),
+            "beschikbaar_kwh": round(beschikbaar_kwh, 2),
+            "tekort_nu_kwh": round(
+                max(0.0, lijn[0]["doel_kwh"] - beschikbaar_kwh), 3
+            ),
+            "kwartieren_onbereikbaar": len(onbereikbaar),
+            "lijn": lijn,
+            "toelichting": (
+                "Van achter naar voren gerekend: hoeveel moet er in de "
+                "accu zitten om alles wat daarna komt te overbruggen. "
+                "Waar de bestaande reserve één getal is voor de hele "
+                "horizon, is dit een lijn - lager als er zon aankomt, "
+                "hoger vlak voor een dure nacht. Stuurt niets."
+            ),
+        }
 
     @staticmethod
     def _mpc_balans_uit(quarters: list[dict], beschikbaar_kwh: float) -> dict:

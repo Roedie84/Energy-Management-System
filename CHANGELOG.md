@@ -19729,3 +19729,57 @@ grens op te hogen zijn de kwartieropbouw en de balansberekening naar
 eigen functies verhuisd — terug op 80.
 
 **Volledige testsuite**: 3181 tests, allemaal groen.
+
+## v3.69.0 — Eén antwoord op "mag dit meesturen", en een doel-SOC-lijn
+
+**Gemeld**: "Je zegt net dat deze klaar was" — over een kandidaat waar in
+dezelfde export onder stond:
+
+```
+gereedheid   klaar om mee te doen
+toelating    voldoet: false, 4 dagen gemeten, eis is 14
+```
+
+Terecht. Ik heb de bovenste regel doorgegeven zonder de onderste ernaast
+te leggen — mijn fout — maar de benaming maakte hem makkelijk: **"klaar
+om mee te doen" hoort niet te staan bij iets dat niet mag meedoen.**
+
+De gereedheid kijkt nu ook naar de toelatingseis, en er is één veld dat
+de vraag beantwoordt: `mag_meesturen`. De standen zijn:
+
+| | |
+|---|---|
+| meet nog | de meting klopt nog niet |
+| winst onbekend | de meting klopt, de winst is niet becijferd |
+| **gemeten: levert niets op** | becijferd, en het resultaat is negatief |
+| voldoet nog niet aan de eis | becijferd en positief, maar te kort gemeten |
+| mag meesturen | alle drie rond |
+
+Die derde is nieuw en belangrijk. Drie kandidaten stonden op "klaar om
+mee te doen" terwijl ze bij **nul van de driehonderd** momenten gunstig
+waren. Dat is geen kandidaat die nog moet rijpen — die is gemeten en
+afgevallen, en dat zag er hetzelfde uit als "nog niet lang genoeg".
+
+### En een doel-SOC per kwartier
+
+**Gevraagd**: "Deze energiebalans zou gebruikt kunnen worden om een
+gewenst doel-SOC te berekenen."
+
+Iets anders dan de arbitragerekening ernaast. Die zoekt de
+winstgevendste **paren**; dit loopt de horizon van **achter naar voren**
+en vraagt per kwartier: hoeveel moet er in de accu zitten om alles wat
+hierna komt te overbruggen?
+
+Achteruit werken is de kern. Vooruit weet je niet wat je nodig hebt;
+achteruit wel — het laatste kwartier heeft alleen zichzelf nodig, en elk
+kwartier daarvoor telt zijn eigen tekort erbij op. Zon die het huis niet
+nodig heeft trekt de eis omlaag, en dat is precies "veel zon verwacht →
+accu bewust leger houden".
+
+Waar de bestaande reserve **één getal** is voor de hele horizon, is dit
+een **lijn**: lager als er zon aankomt, hoger vlak voor een dure nacht.
+
+Staat in de export onder `mpc_doel_soc`, naast de bestaande reserve
+zodat het verschil zichtbaar is. Stuurt niets.
+
+**Volledige testsuite**: 3193 tests, allemaal groen.

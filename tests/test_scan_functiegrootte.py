@@ -59,7 +59,8 @@ BEVROREN = {
     # lieten groeien zijn naar eigen functies verhuisd, dus daar is de
     # ratel wél op zijn eigen voorwaarden gehaald.
     # v3.68.0: +2 voor de MPC-vergelijking en de dagmarkering.
-    "coordinator.py:__init__": 382,
+    # v3.69.0: +1 voor `mpc_doel_soc`.
+    "coordinator.py:__init__": 383,
     "coordinator.py:_async_update_locked": 255,
     "coordinator.py:_async_update_scheduled_charge_appliance": 70,
     "coordinator.py:_build_explanation": 73,

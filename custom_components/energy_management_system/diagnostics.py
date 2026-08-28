@@ -428,6 +428,8 @@ async def async_get_config_entry_diagnostics(
         "zelftoets": _veilig("get_zelftoets", coordinator.get_zelftoets),
         # v3.68.0: de energiebalans waar het MPC-plan op rust.
         "mpc_balans": getattr(coordinator, "mpc_balans", None),
+        # v3.69.0: de doel-SOC per kwartier, achteruit gerekend.
+        "mpc_doel_soc": getattr(coordinator, "mpc_doel_soc", None),
         "mpc_vergelijking": getattr(
             coordinator, "mpc_vergelijking_history", None
         ),

@@ -486,6 +486,7 @@ def test_a_current_store_keeps_the_balance_history(make_coordinator, hass):
 # precies één van drie bakken vallen. Wie er een nieuwe bijzet en niets
 # kiest, krijgt hier een rode test in plaats van stille dataverlies.
 VLUCHTIG_MET_REDEN = {
+    "mpc_doel_soc": "de doel-SOC-lijn over de MPC-horizon; elke ronde opnieuw achteruit gerekend uit zon en verbruik",
     "_mpc_gemeten_op": "welke dag de MPC-vergelijking al is vastgelegd; na een herstart mag die dag opnieuw gemeten worden",
     "mpc_balans": "de energiebalans over de MPC-horizon; elke ronde opnieuw berekend uit prijzen, zon en verbruik",
     "bestandscontrole": "de uitkomst van de hashvergelijking bij het opstarten; na een herstart hoort die opnieuw berekend te worden",
