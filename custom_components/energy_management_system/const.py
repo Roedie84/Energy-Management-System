@@ -4915,3 +4915,30 @@ SPIEGEL_MARGE_INSTELLING_PROCENT = 2.0
 # Vermogens lopen in stappen van tientallen watts; honderd watt verschil
 # is een instelling die niet klopt, geen afronding.
 SPIEGEL_MARGE_VERMOGEN_W = 100.0
+
+
+# --- Standaardwaarden voor de Zendure-entiteiten (v3.54.0) -----------
+#
+# Gevraagd: "Alles wat nu goed en bekend is moet hard in de code staan om
+# verwarring te voorkomen."
+#
+# Niet hard ingebakken, wel als STANDAARDWAARDE. Het verschil telt: deze
+# week braken drie dingen doordat een naam of adres veranderde - het IP
+# van de accu, de manager die zijn apparaat kwijt was, en de entiteiten
+# na een herinstallatie. Hard ingebakken namen breken dan STIL: de
+# spiegelcontrole meldt "niet te vergelijken" en verder gebeurt er
+# niets.
+#
+# Met een standaardwaarde hoeft er niets ingevuld te worden - het staat
+# meteen goed - maar is het wel aan te passen zodra er iets hernoemd
+# wordt, zonder de code in.
+STANDAARD_ENTITEITEN = {
+    CONF_BATTERY_MIN_SOC_NUMBER: "number.solarflow_2400_ac_min_soc",
+    CONF_BATTERY_MAX_SOC_NUMBER: "number.solarflow_2400_ac_soc_set",
+    CONF_BATTERY_MAX_CHARGE_POWER_ENTITY: (
+        "sensor.solarflow_2400_ac_charge_max_limit"
+    ),
+    CONF_BATTERY_MAX_DISCHARGE_POWER_ENTITY: (
+        "sensor.solarflow_2400_ac_inverse_max_power"
+    ),
+}

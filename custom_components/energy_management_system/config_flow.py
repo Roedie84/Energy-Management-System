@@ -83,6 +83,7 @@ from .const import (
     CONF_MANUAL_DISCHARGE_POWER,
     CONF_BATTERY_TOTAL_CAPACITY_SENSOR,
     CONF_BATTERY_MIN_SOC_NUMBER,
+    STANDAARD_ENTITEITEN,
     CONF_BATTERY_MAX_SOC_NUMBER,
     CONF_BATTERY_MAX_CHARGE_POWER_ENTITY,
     CONF_BATTERY_MAX_DISCHARGE_POWER_ENTITY,
@@ -138,6 +139,16 @@ def _optioneel(sleutel: str, defaults: dict):
     vielen alleen op omdat ze nog nooit waren ingevuld.
     """
     waarde = defaults.get(sleutel)
+    if waarde in (None, ""):
+        # v3.54.0: voor de bekende Zendure-entiteiten een
+        # standaardwaarde, zodat er niets ingevuld hoeft te worden.
+        #
+        # Gevraagd: "Alles wat nu goed en bekend is moet hard in de code
+        # staan om verwarring te voorkomen." Als standaardwaarde in
+        # plaats van hard ingebakken, want deze week braken drie dingen
+        # doordat een naam of adres veranderde - en hard ingebakken
+        # namen breken dan stil.
+        waarde = STANDAARD_ENTITEITEN.get(sleutel)
     if waarde in (None, ""):
         return vol.Optional(sleutel)
     return vol.Optional(sleutel, default=waarde)

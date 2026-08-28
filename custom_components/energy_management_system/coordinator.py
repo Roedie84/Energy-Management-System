@@ -11289,10 +11289,27 @@ class EnergyManagementSystemCoordinator:
             entity_id = self.config.get(sleutel)
             if not entity_id:
                 continue
+            # v3.54.0: op de ABSOLUTE waarde vergelijken.
+            #
+            # Gemeten in de export van 28 augustus 10:55, meteen na het
+            # koppelen:
+            #
+            #     Maximaal laadvermogen  -2000,0 vs 2400,0 W -> loopt_uiteen
+            #
+            # Het laadvermogen is in deze integratie NEGATIEF - dat is de
+            # tekenafspraak, laden is negatief - terwijl het apparaat een
+            # positieve grens meldt. Rechtstreeks vergelijken loopt dan
+            # per definitie uiteen, en dan is de melding geen signaal
+            # meer.
+            #
+            # Wat er ná die correctie overblijft is wél een echt
+            # verschil: 2000 tegenover 2400. De accu kan meer dan waar de
+            # berekening mee rekent.
+            gemeten = self._read_sensor_float(entity_id)
             _voeg_toe(
                 naam,
-                intern,
-                self._read_sensor_float(entity_id),
+                abs(intern) if isinstance(intern, (int, float)) else intern,
+                abs(gemeten) if gemeten is not None else None,
                 eenheid,
                 marge,
                 entity_id,

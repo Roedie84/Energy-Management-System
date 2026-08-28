@@ -18996,3 +18996,53 @@ Wie een instelling niet koppelt, mist alleen de controle — geen
 bevinding, geen foutmelding.
 
 **Volledige testsuite**: 3064 tests, allemaal groen.
+
+## v3.54.0 — Standaardwaarden, en een teken dat niet klopte
+
+**Gemeld** met de export van 28 augustus 10:55, meteen na het koppelen
+van de nieuwe entiteiten:
+
+```
+Maximaal laadvermogen   -2000,0  vs  2400,0 W  ->  loopt_uiteen
+```
+
+Het laadvermogen is in deze integratie **negatief** — dat is de
+tekenafspraak, laden is negatief — terwijl het apparaat een positieve
+grens meldt. Rechtstreeks vergelijken loopt dan per definitie uiteen, en
+dan is de melding geen signaal meer.
+
+De vergelijking gaat nu op de absolute waarde. Wat er ná die correctie
+overblijft is wél een echt verschil: **2000 tegenover 2400** — de accu
+kan meer laden dan waar de berekening mee rekent.
+
+### Standaardwaarden in plaats van hard ingebakken
+
+**Gevraagd**: "Alles wat nu goed en bekend is moet hard in de code staan
+om verwarring te voorkomen."
+
+Als standaardwaarde, niet hard ingebakken. Het verschil telt: deze week
+braken drie dingen doordat een naam of adres veranderde — het IP van de
+accu, de manager die zijn apparaat kwijt was, en de entiteiten na een
+herinstallatie. Hard ingebakken namen breken dan **stil**: de
+spiegelcontrole meldt "niet te vergelijken" en verder gebeurt er niets.
+
+Met een standaardwaarde hoeft er niets ingevuld te worden — het staat
+meteen goed — maar is het wel aan te passen zodra er iets hernoemd
+wordt, zonder de code in.
+
+Vier entiteiten hebben nu een standaardwaarde: de onder- en bovengrens
+van de accu, en de twee vermogenslimieten.
+
+### De stand na het koppelen
+
+```
+Ondergrens van de accu               10,0  vs   10,0 %   sluit_aan
+Bovengrens van de accu              100,0  vs  100,0 %   sluit_aan
+Maximaal ontlaadvermogen           2000,0  vs 2000,0 W   sluit_aan
+Beschikbare energie                0,6912  vs 0,7776 kWh sluit_aan
+Accustand tegen beschikbare energie  18,1  vs   19,0 %   sluit_aan
+```
+
+De ondergrens die op 26 augustus nog 5 tegen 10 stond, sluit nu aan.
+
+**Volledige testsuite**: 3069 tests, allemaal groen.
