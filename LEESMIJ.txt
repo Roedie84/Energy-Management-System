@@ -1,31 +1,40 @@
-v3.64.0 - alleen de gewijzigde bestanden sinds v3.63.0
+v3.64.0 en v3.65.0 - alleen de gewijzigde bestanden sinds v3.63.0
 
 CODE (naar Home Assistant, daarna herstarten)
   custom_components/energy_management_system/
-    coordinator.py           de tweeling telt de zon nu wel mee
-    manifest.json            versienummer 3.64.0
+    coordinator.py           de zonsplitsing en de zelftoets
+    const.py                 een nieuwe drempel
+    diagnostics.py           de zelftoets in de export
+    manifest.json            versienummer 3.65.0
     bestandscontrole.json    bijgewerkte hashlijst
 
-  Let op: bestandscontrole.json MOET mee, anders meldt de integratie
-  dat coordinator.py afwijkt.
+  Let op: bestandscontrole.json MOET mee.
 
 TOETSEN (repository)
+  tests/test_zelftoets.py                 nieuw
   tests/test_digital_twin_netto_last.py
 
 DOCUMENTEN
   CHANGELOG.md  README.md  OVERDRACHT.md
 
-WAT ER IS GEREPAREERD
----------------------
+WAT ER IS GEBEURD
+-----------------
 
-De tweeling zag nooit een dagvergelijking: zestig van de zestig stonden
-als "zonder zon", terwijl er die dag uren zon waren geweest.
+v3.64.0  De tweeling zag nooit een dagvergelijking. De punten in de
+         tijdlijn droegen geen zon, en zon_kwh werd alleen in de
+         ontlaadtak berekend. De splitsing van v3.45.0 deed dus niets.
 
-De punten in de tijdlijn droegen geen zon, en zon_kwh werd alleen in de
-ontlaadtak berekend. De splitsing van v3.45.0 - bedoeld om te zien of
-de fout van het model komt of van de zonverwachting - deed dus niets.
+v3.65.0  De integratie toetst nu haar eigen UITKOMSTEN op wat logisch
+         niet kan: een splitsing waarvan een kant leeg blijft, een reeks
+         waarin elke waarde gelijk is, een percentage buiten zijn
+         bereik, klimaatcellen die allemaal nul zijn.
+
+         Elke bevinding daar is een fout in de integratie zelf, en komt
+         BOVENAAN in de analyse te staan.
 
 WAT JE ZELF MOET DOEN
 ---------------------
 
-Niets. Over zes uur staan de eerste dagvergelijkingen in de export.
+Niets. Over zes uur staan de eerste dagvergelijkingen in de tweeling,
+en vanaf nu meldt de integratie het zelf als er iets onmogelijks
+uitkomt.

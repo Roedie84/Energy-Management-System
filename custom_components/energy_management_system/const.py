@@ -5060,3 +5060,14 @@ NIET_ONTLADEN_MIN_VERMOGEN_W = 100.0
 # levert, en dat is een deel van de dag. Tweehonderd momenten is
 # ongeveer twee dagen met een normale verdeling.
 NIET_ONTLADEN_MIN_METINGEN = 200
+
+# Vanaf hoeveel metingen de zelftoets iets mag zeggen (v3.65.0).
+#
+# Gemeld: "Dus je hebt toch fouten gevonden, dan heb je niet grondig
+# genoeg gezocht." Terecht - op 28 augustus stond er zestig keer
+# "zonder zon" en nul keer "met zon", en dat is een dag lang gelezen
+# zonder dat het opviel.
+#
+# Twintig metingen is genoeg om te zeggen dat een lege kant geen toeval
+# is, en weinig genoeg om het binnen een dag te merken.
+ZELFTOETS_MIN_REEKS = 20

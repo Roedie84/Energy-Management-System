@@ -19506,3 +19506,51 @@ een binnenfunctie, Solcast-regels die van buiten komen, en een
 padsamenstelling die als deling werd gelezen.
 
 **Volledige testsuite**: 3141 tests, allemaal groen.
+
+## v3.65.0 — De integratie toetst haar eigen uitkomsten
+
+**Gemeld**: "Dus je hebt toch fouten gevonden, dan heb je niet grondig
+genoeg gezocht."
+
+Terecht. In de export van 28 augustus 17:58 stond:
+
+```
+vergelijkingen  60
+zonder zon      60
+met zon          0
+```
+
+Zestig van de zestig als nacht, terwijl de zon die dag geschenen had.
+Dat stond er gewoon. Ik heb die dag "geen bevindingen" gemeld en het is
+pas de dag erna opgevallen, toen erom werd gevraagd.
+
+### Waarom niets dat ving
+
+De spiegelcontrole bewaakt de **sensoren** — een intern getal tegen de
+meting waar het vandaan komt. De configuratiecontrole bewaakt de
+**entiteiten**. De zelfcontrole bewaakt de **boekhouding**.
+
+Deze fout zat in een **afgeleid cijfer**, en daar keek niets naar.
+
+### Wat er nu getoetst wordt
+
+Uitkomsten die logisch niet kunnen. Niet of een getal klopt — dat is
+vaak niet te zeggen — maar of het een waarde heeft die onmogelijk is:
+
+- een splitsing waarvan één kant leeg blijft terwijl beide moeten
+  voorkomen
+- een reeks waarin elke waarde gelijk is: een bron die stilstaat levert
+  een reeks op die er gevuld uitziet en niets meet
+- een percentage buiten zijn bereik
+- klimaatcellen die allemaal op nul staan — een kamer die nooit van
+  temperatuur verandert bestaat niet
+
+Elke bevinding is een fout in de integratie **zelf**, niet in de
+meetopstelling. Ze komen bovenaan in de analyse te staan; onderaan een
+export van 600 kB zouden ze net zo goed worden overgeslagen als de rest,
+en dat is precies wat er op 28 augustus gebeurde.
+
+Er staat een toets op die de cijfers van die export letterlijk
+teruglegt, met de vraag of hij nu wél afgaat.
+
+**Volledige testsuite**: 3154 tests, allemaal groen.

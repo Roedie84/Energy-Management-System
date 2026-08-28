@@ -476,6 +476,7 @@ from .const import (
     SOLAR_POOR_DAY_KWH,
     SOLAR_DEFER_LATEST_HOUR,
     SOLAR_DEFER_MIN_PRICE_GAIN_EUR,
+    ZELFTOETS_MIN_REEKS,
     SELF_CONSUMPTION_MIN_KWH,
     SELF_CONSUMPTION_WINDOW_DAYS,
     SELL_RESERVE_SAFETY_FACTOR,
@@ -8500,6 +8501,113 @@ class EnergyManagementSystemCoordinator:
             "reden": "Nog niet gecontroleerd; dat gebeurt bij het opstarten.",
         }
 
+    def get_zelftoets(self) -> list[dict]:
+        """Toetst de eigen UITKOMSTEN op wat niet kan (v3.65.0).
+
+        Gemeld: "Dus je hebt toch fouten gevonden, dan heb je niet
+        grondig genoeg gezocht."
+
+        Terecht. Op 28 augustus stond in de export:
+
+            vergelijkingen  60
+            zonder zon      60
+            met zon          0
+
+        Zestig van de zestig als nacht, terwijl de zon die dag geschenen
+        had. Dat stond er gewoon, en het is een dag lang gelezen zonder
+        dat het opviel.
+
+        De spiegelcontrole bewaakt de SENSOREN - een intern getal tegen
+        de meting waar het vandaan komt. Maar deze fout zat in een
+        AFGELEID cijfer, en daar keek niets naar.
+
+        Deze toets kijkt naar uitkomsten die niet kunnen. Niet naar de
+        vraag of een getal klopt - dat is vaak niet te zeggen - maar of
+        het een waarde heeft die logisch onmogelijk is:
+
+        - een splitsing waarvan één kant leeg blijft terwijl beide
+          moeten voorkomen
+        - een reeks waarin elke waarde gelijk is
+        - een percentage buiten zijn bereik
+        - een teller die stil blijft staan
+
+        Elke bevinding hier is een fout in de integratie zelf, niet in
+        de meetopstelling.
+        """
+        uit: list[dict] = []
+
+        def _meld(naam: str, wat: str) -> None:
+            uit.append({"naam": naam, "wat": wat})
+
+        # 1. De dag/nacht-splitsing van de tweeling.
+        #
+        # De fout van 28 augustus. Zijn er genoeg vergelijkingen en valt
+        # alles aan één kant, dan wordt het kenmerk niet gezet.
+        split = self.get_digital_twin_error_split()
+        totaal = split.get("vergelijkingen") or 0
+        if totaal >= ZELFTOETS_MIN_REEKS:
+            met = (split.get("met_zon") or {}).get("aantal") or 0
+            zonder = (split.get("zonder_zon") or {}).get("aantal") or 0
+            if met == 0 or zonder == 0:
+                _meld(
+                    "Tweeling: splitsing eenzijdig",
+                    f"{totaal} vergelijkingen, waarvan {met} met zon en "
+                    f"{zonder} zonder. Over meerdere dagen horen beide "
+                    "voor te komen; valt alles aan één kant, dan wordt "
+                    "het kenmerk niet gezet.",
+                )
+
+        # 2. Reeksen waarin elke waarde gelijk is.
+        #
+        # Een bron die stilstaat levert een reeks op die er gevuld
+        # uitziet en niets meet.
+        for naam, reeks in (
+            ("Nachtverbruik", self.night_consumption_history),
+            ("Rendement", self.learned_efficiency_history),
+            ("Zonafwijking", getattr(self.solar_tracker, "deviation_history", None)),
+        ):
+            waarden = [w for w in (reeks or []) if isinstance(w, (int, float))]
+            if len(waarden) >= ZELFTOETS_MIN_REEKS and len(set(waarden)) == 1:
+                _meld(
+                    f"{naam}: elke waarde gelijk",
+                    f"{len(waarden)} metingen, allemaal {waarden[0]}. Een "
+                    "bron die stilstaat levert een reeks op die er gevuld "
+                    "uitziet en niets meet.",
+                )
+
+        # 3. Percentages buiten hun bereik.
+        for naam, waarde, laag, hoog in (
+            ("Accustand", self.accustand_procent(), 0.0, 100.0),
+            (
+                "Rendement",
+                self.learned_battery_efficiency_percent,
+                0.0,
+                100.0,
+            ),
+            ("Zelfvoorziening", self.self_sufficiency_ratio_percent, 0.0, 100.0),
+        ):
+            if waarde is not None and not (laag <= waarde <= hoog):
+                _meld(
+                    f"{naam} buiten bereik",
+                    f"{waarde} valt buiten {laag} tot {hoog}. Zo'n waarde "
+                    "kan niet uit een geldige berekening komen.",
+                )
+
+        # 4. Klimaatcellen die allemaal op nul staan.
+        cellen = self.climate_rate_history or {}
+        if len(cellen) >= ZELFTOETS_MIN_REEKS:
+            medianen = [
+                statistics.median(v) for v in cellen.values() if v
+            ]
+            if medianen and all(abs(m) < 0.001 for m in medianen):
+                _meld(
+                    "Klimaatcellen: alles nul",
+                    f"{len(cellen)} cellen en elk tempo op nul. Een kamer "
+                    "die nooit van temperatuur verandert bestaat niet.",
+                )
+
+        return uit
+
     def get_analyse(self) -> dict:
         """Wat er nú aan de hand is, in één blok (v3.62.0).
 
@@ -8565,6 +8673,10 @@ class EnergyManagementSystemCoordinator:
                 bevinding.get("naam", "Zelfcontrole"),
                 bevinding.get("uitleg", ""),
             )
+
+        # v3.65.0: uitkomsten die niet kunnen.
+        for bevinding in self.get_zelftoets():
+            _voeg("fout", bevinding["naam"], bevinding["wat"])
 
         # 4. De accu zelf.
         cel = self.get_celspanning_oordeel()

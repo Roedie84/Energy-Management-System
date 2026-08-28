@@ -423,6 +423,9 @@ async def async_get_config_entry_diagnostics(
         "bestandscontrole": _veilig(
             "get_bestandscontrole", coordinator.get_bestandscontrole
         ),
+        # v3.65.0: uitkomsten die logisch niet kunnen. Elke bevinding
+        # hier is een fout in de integratie zelf.
+        "zelftoets": _veilig("get_zelftoets", coordinator.get_zelftoets),
         "config": config,
         "diagnostic_summary": _veilig("get_diagnostic_summary", coordinator.get_diagnostic_summary),
         "missing_optional_features": _veilig("get_missing_optional_features", coordinator.get_missing_optional_features),
