@@ -131,10 +131,19 @@ def test_the_block_is_built_incrementally():
 
     bron = (Path(pkg.__file__).parent / "sensor.py").read_text()
     start = bron.index("def extra_state_attributes(self) -> dict:\n        \"\"\"Alle samenvattingen")
-    # v1.52.0: van 2500 naar 3500 tekens. De lijst met samenvattingen is
-    # gegroeid en het commentaar erbij ook; zoeken op een vast aantal
-    # tekens breekt zodra dat gebeurt - valkuil 5 uit de overdracht.
-    blok = bron[start : start + 4500]
+    # v3.61.0: tot het EINDE van de functie in plaats van een vast
+    # aantal tekens.
+    #
+    # Dat aantal is drie keer opgehoogd - 2500, 3500, 4500 - en elke
+    # keer om dezelfde reden: de lijst met samenvattingen groeit en het
+    # commentaar erbij ook. Valkuil 5 uit de overdracht, en die staat er
+    # letterlijk boven.
+    #
+    # De functie loopt tot de volgende definitie op hetzelfde
+    # inspringniveau. Dan hoeft er nooit meer aan een getal gesleuteld
+    # te worden.
+    einde = bron.find("\n    def ", start + 1)
+    blok = bron[start : einde if einde > 0 else len(bron)]
 
     assert "for sleutel, functie in" in blok
     assert "except Exception" in blok

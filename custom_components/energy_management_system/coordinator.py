@@ -8399,6 +8399,187 @@ class EnergyManagementSystemCoordinator:
             -LANGERE_HORIZON_HISTORY_LENGTH:
         ]
 
+    def get_analyse(self) -> dict:
+        """Wat er nú aan de hand is, in één blok (v3.62.0).
+
+        Gevraagd: "Uit de diagnostiek dient uiteraard ook een analyse
+        voor jou te komen zodat ik de data ook aan jou kan aanbieden."
+
+        Terecht, en het zou vandaag vier keer geholpen hebben. Bij het
+        nalopen van de exports heb ik vier keer een ONTBREKENDE sleutel
+        als `null` gelezen - `wear_cost` in plaats van
+        `wear_cost_overview`, `hourly_consumption_profile` dat alleen in
+        de momentopname staat - en elke keer volgde er een verkeerde
+        diagnose uit.
+
+        Dit blok verzamelt de oordelen die er al zijn, op één plek en
+        bovenaan. Het verzint niets nieuws: elke regel komt uit een
+        controle die zichzelf al uitspreekt.
+        """
+        punten: list[dict] = []
+
+        def _voeg(ernst: str, onderwerp: str, tekst: str) -> None:
+            punten.append(
+                {"ernst": ernst, "onderwerp": onderwerp, "wat": tekst}
+            )
+
+        # 1. Draait alles?
+        for naam, reden in (self.internal_failures or {}).items():
+            _voeg("fout", "Onderdeel valt om", f"{naam}: {reden}")
+
+        onbereikbaar = (self.aansturing_onbereikbaar or {}).get("reden")
+        if onbereikbaar:
+            _voeg("fout", "Accu niet aanstuurbaar", onbereikbaar)
+
+        # 2. Klopt de invoer?
+        for regel in self.get_spiegelcontrole():
+            if regel["oordeel"] == "loopt_uiteen":
+                _voeg(
+                    "fout",
+                    f"Spiegel: {regel['naam']}",
+                    f"{regel['intern']} tegenover {regel['gemeten']} "
+                    f"{regel['eenheid']} uit {regel['bron']}",
+                )
+
+        configuratie = self.get_configuratiecontrole()
+        for regel in configuratie.get("entiteiten", []):
+            if regel["oordeel"] == "bestaat_niet":
+                _voeg(
+                    "fout",
+                    "Entiteit bestaat niet",
+                    f"{regel['instelling']}: {regel['entiteit']}",
+                )
+
+        # 3. Wat de zelfcontrole zelf al zegt.
+        for bevinding in self.get_consistency_checks().get("bevindingen", []):
+            if bevinding.get("naam", "").startswith("Spiegel: "):
+                continue  # hierboven al genoemd
+            _voeg(
+                bevinding.get("ernst", "aandacht"),
+                bevinding.get("naam", "Zelfcontrole"),
+                bevinding.get("uitleg", ""),
+            )
+
+        # 4. De accu zelf.
+        cel = self.get_celspanning_oordeel()
+        if cel.get("oordeel") in ("aandacht", "kritiek"):
+            _voeg(
+                "fout" if cel["oordeel"] == "kritiek" else "aandacht",
+                "Celspanning",
+                cel.get("advies", ""),
+            )
+
+        return {
+            "sturing": {
+                "reden": self.last_reason,
+                "leermodus": bool(self.learning_only),
+                "handmatig": bool(self.force_manual),
+                "kalibratie": bool(self.kalibratie),
+            },
+            "accu": {
+                "laadstand_procent": self.accustand_procent(),
+                "beschikbaar_kwh": self.beschikbare_energie_kwh(),
+                "laagste_cel_v": cel.get("laagste_cel_v"),
+            },
+            "aantal_fouten": sum(1 for p in punten if p["ernst"] == "fout"),
+            "aantal_aandacht": sum(
+                1 for p in punten if p["ernst"] != "fout"
+            ),
+            "punten": punten,
+            "entiteiten_in_orde": configuratie.get("aantal_in_orde"),
+            "entiteiten_stuk": configuratie.get("aantal_stuk"),
+            "samenvatting": (
+                "Geen bijzonderheden."
+                if not punten
+                else f"{len(punten)} punt(en) die aandacht vragen."
+            ),
+        }
+
+    def get_smart_charging_proefplanning(self, now: datetime | None = None) -> dict:
+        """Beide modi naast elkaar, per kwartier (v3.61.0).
+
+        Gevraagd: "Ik wil ook een planning zien waarin smart_charging is
+        meegenomen zodat ik het zelf ook kan beoordelen, een soort van
+        test pagina dus."
+
+        Per kwartier: is er een tekort, wat kost het om dat uit de ACCU
+        te dekken tegenover uit het NET, en wat is die kilowattuur later
+        waard?
+
+        Rekent op de kwartierplanning die er al is. Verandert niets aan
+        de aansturing - dit is een tabel om zelf naar te kijken.
+        """
+        plan = self.get_quarter_plan(now)
+        if not plan:
+            return {
+                "beschikbaar": False,
+                "reden": "Nog geen kwartierplanning.",
+            }
+
+        prijzen = [r["prijs_ct"] for r in plan if r.get("prijs_ct") is not None]
+        if not prijzen:
+            return {"beschikbaar": False, "reden": "Geen prijzen bekend."}
+        duurste = max(prijzen)
+
+        rendement = (self.learned_battery_efficiency_percent or 90.0) / 100
+        slijtage = (
+            (self.get_wear_cost_overview() or {}).get("slijtage_ct_per_kwh")
+            or 0.0
+        )
+        # Wat een vastgehouden kWh straks waard is, na de kosten om hem
+        # door de accu te halen.
+        waarde_later = duurste * rendement - slijtage
+
+        rijen = []
+        totaal_voordeel = 0.0
+        for r in plan:
+            zon = r.get("zon_kwh") or 0.0
+            verbruik = r.get("verbruik_kwh") or 0.0
+            prijs = r.get("prijs_ct")
+            if prijs is None:
+                continue
+            tekort = max(0.0, verbruik - zon)
+            # Zonder tekort dekt de zon het huis en doen beide modi
+            # hetzelfde - dan valt er niets te kiezen.
+            voordeel = (waarde_later - prijs) * tekort / 100 if tekort else 0.0
+            totaal_voordeel += voordeel
+            rijen.append(
+                {
+                    "van": r["van"],
+                    "prijs_ct": prijs,
+                    "zon_kwh": round(zon, 3),
+                    "verbruik_kwh": round(verbruik, 3),
+                    "tekort_kwh": round(tekort, 3),
+                    "uit_accu_kosten_ct": round(prijs * tekort, 2),
+                    "uit_net_kosten_ct": round(prijs * tekort, 2),
+                    "waarde_later_ct_per_kwh": round(waarde_later, 1),
+                    "voordeel_eur": round(voordeel, 4),
+                    "smart_charging_beter": voordeel > 0,
+                }
+            )
+
+        beter = [r for r in rijen if r["smart_charging_beter"]]
+        return {
+            "beschikbaar": True,
+            "kwartieren": len(rijen),
+            "duurste_prijs_ct": round(duurste, 1),
+            "rendement_procent": round(rendement * 100, 1),
+            "slijtage_ct_per_kwh": round(slijtage, 1),
+            "waarde_later_ct_per_kwh": round(waarde_later, 1),
+            "kwartieren_met_tekort": sum(1 for r in rijen if r["tekort_kwh"] > 0),
+            "kwartieren_smart_charging_beter": len(beter),
+            "totaal_voordeel_eur": round(totaal_voordeel, 2),
+            "rijen": rijen,
+            "toelichting": (
+                "Per kwartier: dekt de zon het huis niet, dan springt de "
+                "accu bij in `smart`. Deze tabel zet daar tegenover wat "
+                "diezelfde kWh later waard is, na "
+                f"{rendement * 100:.0f}% rendement en {slijtage:.1f} ct "
+                "slijtage. Positief voordeel betekent dat het gat beter "
+                "van het net had kunnen komen. Stuurt niets."
+            ),
+        }
+
     def _meet_niet_ontladen_bij_lage_prijs(self, now: datetime, entries) -> None:
         """Wat kost het dat de accu bijspringt in een GOEDKOOP kwartier?
         (v3.60.0)
@@ -8445,6 +8626,33 @@ class EnergyManagementSystemCoordinator:
         if vermogen is None or vermogen <= NIET_ONTLADEN_MIN_VERMOGEN_W:
             return
 
+        # v3.61.0: en is er werkelijk een TEKORT?
+        #
+        # Aangevuld: "Tenzij er natuurlijk ruim voldoende PV energie is,
+        # dan is bovenstaande niet nodig."
+        #
+        # Terecht. Er zijn twee situaties, en maar een ervan is
+        # interessant:
+        #
+        # - de zon dekt het huis: de accu levert niets of een rimpeling,
+        #   en `smart` doet hetzelfde als `smart_charging`. Er valt niets
+        #   te kiezen.
+        # - de zon dekt het huis NIET: de wasmachine trekt 2000 W terwijl
+        #   er 1500 komt. Dan springt de accu bij, en dan is de vraag of
+        #   dat gat beter van het net had kunnen komen.
+        #
+        # Zonder deze voorwaarde tellen beide even zwaar. Vult de accu
+        # tien keer 150 W bij ruime zon en een keer 500 W bij een
+        # wasmachine, dan telt dat als elf metingen terwijl er maar een
+        # toe doet - en dan zegt het gemiddelde niets.
+        pv = self._read_sensor_float(self.config.get(CONF_PV_POWER_SENSOR))
+        huis = self._read_corrected_consumption_power()
+        if pv is None or huis is None:
+            return
+        tekort_w = huis - pv
+        if tekort_w <= NIET_ONTLADEN_MIN_VERMOGEN_W:
+            return
+
         # De duurste prijs die vandaag nog komt.
         rest = [
             e[2] / PRICE_SCALE_FACTOR
@@ -8473,6 +8681,7 @@ class EnergyManagementSystemCoordinator:
                 "waarde_later_ct": round(later * 100, 1),
                 "voordeel_ct_per_kwh": round(voordeel * 100, 1),
                 "vermogen_w": round(vermogen),
+                "tekort_w": round(tekort_w),
             }
         )
         self.niet_ontladen_history = self.niet_ontladen_history[

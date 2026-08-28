@@ -59,8 +59,19 @@ def _prijzen(c, prijzen, start=None):
 
 
 def _opstelling(make_coordinator, vermogen=500.0, slijtage=10.9,
-                rendement=94.0):
-    c = make_coordinator({})
+                rendement=94.0, pv=1500.0, huis=2000.0):
+    """v3.61.0: er moet ook een werkelijk TEKORT zijn.
+
+    De standaard is het geval uit de vraag: een wasmachine die 2000 W
+    trekt terwijl de zon 1500 levert.
+    """
+    from custom_components.energy_management_system.const import (
+        CONF_PV_POWER_SENSOR,
+    )
+
+    c = make_coordinator({CONF_PV_POWER_SENSOR: "sensor.pv"})
+    c._read_sensor_float = lambda e: pv if e == "sensor.pv" else None
+    c._read_corrected_consumption_power = lambda: huis
     c._read_corrected_battery_power = lambda: vermogen
     c.get_wear_cost_overview = lambda: {"slijtage_ct_per_kwh": slijtage}
     c.charge_efficiency_history = [rendement] * 7
@@ -224,3 +235,47 @@ def test_it_is_on_the_bench(make_coordinator, hass):
     namen = [k["naam"] for k in c.get_proefstand()["kandidaten"]]
 
     assert "Niet ontladen bij een lage prijs" in namen
+
+
+# --- alleen bij een werkelijk tekort (v3.61.0) -----------------------
+
+
+def test_ample_sun_is_not_measured(make_coordinator, hass):
+    """Aangevuld: "Tenzij er natuurlijk ruim voldoende PV energie is,
+
+    dan is bovenstaande niet nodig."
+
+    Dekt de zon het huis, dan doet `smart` hetzelfde als
+    `smart_charging` en valt er niets te kiezen. Zou dat toch meetellen,
+    dan verwatert het gemiddelde: tien keer een rimpeling bij ruime zon
+    weegt dan even zwaar als een wasmachine die werkelijk bijgevuld
+    moet worden.
+    """
+    c = _prijzen(
+        _opstelling(make_coordinator, pv=3000.0, huis=400.0), [0.13, 0.38]
+    )
+
+    c._meet_niet_ontladen_bij_lage_prijs(NU, c._get_forecast_entries())
+
+    assert c.niet_ontladen_history == []
+
+
+def test_a_real_deficit_is_measured(make_coordinator, hass):
+    """Het geval uit de vraag: 2000 W wasmachine, 1500 W zon."""
+    c = _prijzen(
+        _opstelling(make_coordinator, pv=1500.0, huis=2000.0), [0.13, 0.38]
+    )
+
+    c._meet_niet_ontladen_bij_lage_prijs(NU, c._get_forecast_entries())
+
+    assert c.niet_ontladen_history[-1]["tekort_w"] == 500
+
+
+def test_without_pv_data_nothing_is_measured(make_coordinator, hass):
+    """Zonder te weten of er een tekort is, valt er niets te concluderen."""
+    c = _prijzen(_opstelling(make_coordinator), [0.13, 0.38])
+    c._read_sensor_float = lambda e: None
+
+    c._meet_niet_ontladen_bij_lage_prijs(NU, c._get_forecast_entries())
+
+    assert c.niet_ontladen_history == []

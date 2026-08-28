@@ -3917,6 +3917,7 @@ class GacsAssessmentSensor(SensorEntity):
             "prijstoets",
             "besparingscorrectie",
             "proefstand",
+            "smart_charging_proef",
             "terugvallen",
             "zonstand",
             "buitensensor",
@@ -3996,6 +3997,12 @@ class GacsAssessmentSensor(SensorEntity):
             ("prijstoets", self._coordinator.get_price_attribute_check),
             ("besparingscorrectie", self._coordinator.get_savings_correction),
             ("proefstand", self._coordinator.get_proefstand),
+            # v3.61.0: de proefpagina waarop beide modi naast elkaar
+            # staan, om zelf te beoordelen.
+            (
+                "smart_charging_proef",
+                self._coordinator.get_smart_charging_proefplanning,
+            ),
             ("terugvallen", self._coordinator.get_fallback_overview),
             ("zonstand", self._coordinator.get_sun_position_check),
             ("buitensensor", self._coordinator.get_outdoor_sensor_check),

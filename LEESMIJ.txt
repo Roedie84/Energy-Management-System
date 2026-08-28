@@ -1,21 +1,23 @@
-v3.60.0 - alleen de gewijzigde bestanden sinds v3.59.0
+v3.60.0 t/m v3.62.0 - alleen de gewijzigde bestanden sinds v3.59.0
 
 Pak uit in de hoofdmap van de repository; de mapstructuur klopt al.
 
 CODE (deze naar Home Assistant, daarna herstarten)
   custom_components/energy_management_system/
-    coordinator.py   de meting en de proefstandkandidaat
-    const.py         twee nieuwe drempels
-    manifest.json    versienummer 3.60.0
+    coordinator.py    de analyse, de meting, de proefpagina
+    const.py          nieuwe drempels
+    diagnostics.py    de analyse BOVENAAN de export
+    sensor.py         de proefpagina op het dashboard
+    manifest.json     versienummer 3.62.0
 
-  (config_flow.py, diagnostics.py, strings.json en de vertalingen
-   zitten erbij omdat ze sinds v3.56.0 zijn gewijzigd; heb je v3.59.0
-   al geinstalleerd, dan zijn ze ongewijzigd.)
+  (config_flow.py, strings.json en de vertalingen zitten erbij omdat ze
+   sinds v3.59.0 zijn gewijzigd; heb je die al, dan zijn ze gelijk.)
 
 TOETSEN (alleen voor de repository)
-  tests/test_niet_ontladen_bij_lage_prijs.py   nieuw
-  tests/test_proefstand.py                     tien kandidaten
-  en de vier andere toetsbestanden die meeliepen
+  tests/test_analyse.py                         nieuw
+  tests/test_niet_ontladen_bij_lage_prijs.py    nieuw
+  tests/test_smart_charging_proefplanning.py    nieuw
+  en acht bestaande toetsbestanden die meeliepen
 
 DOCUMENTEN
   CHANGELOG.md  README.md  OVERDRACHT.md
@@ -23,17 +25,15 @@ DOCUMENTEN
 WAT ER IS BIJGEKOMEN
 --------------------
 
-Een meting: wat kost het dat de accu bijspringt terwijl de prijs laag
-is, terwijl diezelfde kWh 's avonds meer waard is?
+v3.60.0  Meting: wat kost het dat de accu bijspringt bij een lage prijs?
+v3.61.0  Alleen bij een echt tekort, plus een proefpagina per kwartier.
+v3.62.0  Een analyse als EERSTE sleutel in de export.
 
-Bij de prijzen van 29 augustus - 13 ct overdag, 38 ct 's avonds - is
-dat ongeveer 9 ct per kWh, na rendement en slijtage.
-
-Als kandidaat op de proefstand, de tiende. STUURT NIETS. Na ongeveer
-twee dagen zegt hij hoe vaak wachten gunstiger was geweest.
+Die analyse verzamelt wat er al gemeten wordt - omgevallen onderdelen,
+afgedreven getallen, ontbrekende entiteiten, de laagste celspanning, en
+of de sturing uberhaupt aan staat.
 
 WAT JE ZELF MOET DOEN
 ---------------------
 
-Niets. Kijk over een paar dagen in de diagnostiek onder "proefstand"
-naar de kandidaat "Niet ontladen bij een lage prijs".
+Niets. Bij de volgende export staat "analyse" bovenaan.

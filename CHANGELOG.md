@@ -19320,3 +19320,94 @@ Na tweehonderd momenten — ongeveer twee dagen — zegt hij hoe vaak
 wachten gunstiger was geweest en hoeveel het scheelt.
 
 **Volledige testsuite**: 3110 tests, allemaal groen.
+
+## v3.61.0 — Alleen bij een echt tekort, en een proefpagina
+
+**Aangevuld**: "Tenzij er natuurlijk ruim voldoende PV energie is, dan
+is bovenstaande niet nodig."
+
+Terecht, en het maakte de meting van v3.60.0 te ruim. Er zijn twee
+situaties en maar één ervan is interessant:
+
+- **de zon dekt het huis** — de accu levert niets of een rimpeling, en
+  `smart` doet hetzelfde als `smart_charging`. Er valt niets te kiezen.
+- **de zon dekt het huis niet** — de wasmachine trekt 2000 W terwijl er
+  1500 komt. Dán springt de accu bij, en dán is de vraag of dat gat
+  beter van het net had kunnen komen.
+
+Zonder die voorwaarde tellen beide even zwaar. Vult de accu tien keer
+150 W bij ruime zon en één keer 500 W bij een wasmachine, dan telt dat
+als elf metingen terwijl er maar één toe doet — en dan zegt het
+gemiddelde niets.
+
+### De proefpagina
+
+**Gevraagd**: "Ik wil ook een planning zien waarin smart_charging is
+meegenomen zodat ik het zelf ook kan beoordelen, een soort van test
+pagina dus."
+
+Per kwartier van de planning: hoeveel zon, hoeveel verbruik, hoeveel
+tekort, wat het kost om dat uit de accu te dekken, en wat diezelfde
+kilowattuur later waard is na rendement en slijtage. Met een
+samenvatting erboven: hoeveel kwartieren een tekort hebben, in hoeveel
+daarvan het net goedkoper was geweest, en wat dat samen scheelt.
+
+Staat in de diagnostiek-export onder `smart_charging_proefplanning` en
+op het dashboard onder `smart_charging_proef`.
+
+Stuurt niets, en daar staat een toets op.
+
+### Een toets die drie keer was opgehoogd
+
+De isolatietoets op de attributenlijst zocht in de eerste 4500 tekens
+van een functie. Dat getal is drie keer opgehoogd — 2500, 3500, 4500 —
+telkens omdat de lijst groeide. In de toelichting stond letterlijk dat
+dit "valkuil 5 uit de overdracht" is.
+
+Hij zoekt nu tot het einde van de functie. Dan hoeft er nooit meer aan
+een getal gesleuteld te worden.
+
+**Volledige testsuite**: 3121 tests, allemaal groen.
+
+## v3.62.0 — Een analyse bovenaan de export
+
+**Gevraagd**: "Uit de diagnostiek dient uiteraard ook een analyse voor
+jou te komen zodat ik de data ook aan jou kan aanbieden."
+
+Terecht, en het zou op 28 augustus vier keer geholpen hebben. Bij het
+nalopen van de exports is vier keer een **ontbrekende sleutel als
+`null` gelezen** — `wear_cost` in plaats van `wear_cost_overview`,
+`hourly_consumption_profile` dat alleen in de momentopname staat — en
+elke keer volgde er een verkeerde diagnose uit:
+
+| gemeld | werkelijkheid |
+|---|---|
+| "de slijtageberekening werkt niet" | werkte gewoon |
+| "het uurprofiel is leeg" | stond op 24 uren |
+| "de dagteller is stuk" | stond op 1 |
+| "`last_plan_shortfall` wordt niet gezet" | stond gevuld |
+
+Vier verkeerde diagnoses op één dag, allemaal door op de verkeerde plek
+te kijken in een export van 600 kB.
+
+### Wat er nu bovenaan staat
+
+Eén blok met de oordelen die er al zijn:
+
+- onderdelen die omvallen, en of de accu aanstuurbaar is
+- elk intern getal dat van zijn sensor is afgedreven
+- entiteiten die niet meer bestaan
+- wat de zelfcontrole zelf al meldt
+- de laagste celspanning
+- en de context: stuurt hij eigenlijk wel, of staat de leermodus aan
+
+Dat laatste is geen detail. Op 28 augustus stond de leermodus een halve
+dag aan zonder dat dat ergens bovenaan stond, en dus zonder dat de
+integratie iets deed.
+
+Het blok **verzint niets nieuws**: elke regel komt uit een controle die
+zichzelf al uitspreekt. Het zet ze alleen bij elkaar, op één plek, als
+eerste sleutel in de export — en daar staat een toets op, want onderaan
+zou het net zo goed worden overgeslagen als de rest.
+
+**Volledige testsuite**: 3131 tests, allemaal groen.

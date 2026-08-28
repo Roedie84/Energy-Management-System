@@ -411,6 +411,13 @@ async def async_get_config_entry_diagnostics(
         return resultaat
 
     diagnostics: dict[str, Any] = {
+        # v3.62.0: bovenaan, zodat het als eerste gelezen wordt.
+        #
+        # Gevraagd: "Uit de diagnostiek dient uiteraard ook een analyse
+        # voor jou te komen." Bij het nalopen van de exports van 28
+        # augustus is vier keer een ONTBREKENDE sleutel als `null`
+        # gelezen, en elke keer volgde er een verkeerde diagnose uit.
+        "analyse": _veilig("get_analyse", coordinator.get_analyse),
         "config": config,
         "diagnostic_summary": _veilig("get_diagnostic_summary", coordinator.get_diagnostic_summary),
         "missing_optional_features": _veilig("get_missing_optional_features", coordinator.get_missing_optional_features),
@@ -565,6 +572,12 @@ async def async_get_config_entry_diagnostics(
             # stonden al in de export, maar niet op een plek waar je ze
             # zou zien.
             # v3.58.0: de piek per fase naast die van het totaal.
+            # v3.61.0: beide modi naast elkaar, per kwartier - om zelf
+            # te beoordelen of `smart_charging` iets oplevert.
+            "smart_charging_proefplanning": _veilig(
+                "smart_charging_proefplanning",
+                coordinator.get_smart_charging_proefplanning,
+            ),
             "fasepieken": _veilig(
                 "fasepieken", coordinator.get_fasepiek_overzicht
             ),
