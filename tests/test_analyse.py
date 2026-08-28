@@ -156,6 +156,9 @@ def test_it_is_the_first_key_in_the_export():
     import custom_components.energy_management_system as pkg
 
     bron = (Path(pkg.__file__).parent / "diagnostics.py").read_text()
-    blok = bron[bron.index("diagnostics: dict[str, Any] = {") :][:600]
+    # v3.63.0: op ruimte zoeken brak zodra er een sleutel bijkwam - de
+    # bestandscontrole duwde `"config"` voorbij de 600 tekens. Zoeken op
+    # de VOLGORDE in plaats van op afstand.
+    start = bron.index("diagnostics: dict[str, Any] = {")
 
-    assert blok.index('"analyse"') < blok.index('"config"')
+    assert bron.index('"analyse"', start) < bron.index('"config"', start)

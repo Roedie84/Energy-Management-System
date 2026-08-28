@@ -36,6 +36,7 @@ original automation).
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import math
 import json
@@ -44,6 +45,7 @@ import sys
 import time
 import random
 import re
+from pathlib import Path
 from datetime import date, datetime, timedelta, timezone
 
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
@@ -813,6 +815,8 @@ class EnergyManagementSystemCoordinator:
         # v3.60.0: wat het kost dat de accu bijspringt in een goedkoop
         # kwartier, terwijl diezelfde kWh 's avonds meer waard is.
         self.niet_ontladen_history: list[dict] = []
+        # v3.63.0: de uitkomst van de bestandscontrole bij het opstarten.
+        self.bestandscontrole: dict = {}
         # v3.11.0: was bijkopen bij een tekort goedkoper geweest?
         self.bijkoop_history: list[dict] = []
         # v3.25.0: de WERKELIJKE netlading, per ronde gemeten.
@@ -1674,6 +1678,25 @@ class EnergyManagementSystemCoordinator:
             await self.async_load_dashboard_template()
         except Exception:  # noqa: BLE001 - mag nooit het opstarten breken
             _LOGGER.exception("Kon het dashboardsjabloon niet inlezen")
+
+        # v3.63.0: de bestandscontrole ook nu, in de uitvoerder.
+        #
+        # Bestanden lezen blokkeert de gebeurtenislus, en daar staat een
+        # toets op sinds het logboekonderzoek. Die sloeg bij de eerste
+        # versie hiervan meteen aan - terecht.
+        try:
+            self.bestandscontrole = await self.hass.async_add_executor_job(
+                self.bereken_bestandscontrole
+            )
+            if self.bestandscontrole.get("beschikbaar") and not (
+                self.bestandscontrole.get("in_orde")
+            ):
+                _LOGGER.warning(
+                    "Onvolledige installatie: %s",
+                    self.bestandscontrole.get("uitleg"),
+                )
+        except Exception:  # noqa: BLE001 - mag nooit het opstarten breken
+            _LOGGER.exception("Kon de bestandscontrole niet uitvoeren")
 
         # v3.4.0: vastleggen wanneer deze draaironde begon, en de versie
         # en bestandsgegevens inlezen - buiten de event loop.
@@ -8399,6 +8422,84 @@ class EnergyManagementSystemCoordinator:
             -LANGERE_HORIZON_HISTORY_LENGTH:
         ]
 
+    def bereken_bestandscontrole(self) -> dict:
+        """Leest de bestanden en vergelijkt de hashes (v3.63.0).
+
+        BLOKKEERT - hoort dus in de uitvoerder te draaien, niet op de
+        gebeurtenislus. Dat is precies wat de toets
+        `test_no_blocking_file_access_outside_the_executor` afdwingt, en
+        die sloeg bij de eerste versie hiervan meteen aan.
+
+        Wordt eenmalig bij het opstarten aangeroepen; daarna staat de
+        uitkomst in `bestandscontrole` en kost bevragen niets.
+        """
+        map_ = Path(__file__).parent
+        lijst_pad = map_ / "bestandscontrole.json"
+        if not lijst_pad.exists():
+            return {
+                "beschikbaar": False,
+                "reden": (
+                    "Geen bestandscontrole.json - die hoort bij de "
+                    "integratie te zitten."
+                ),
+            }
+        try:
+            verwacht = json.loads(lijst_pad.read_text())
+        except ValueError as fout:
+            return {"beschikbaar": False, "reden": f"Onleesbaar: {fout}"}
+
+        afwijkend, ontbrekend = [], []
+        for naam, hash_verwacht in verwacht.items():
+            pad = map_ / naam
+            if not pad.exists():
+                ontbrekend.append(naam)
+                continue
+            huidig = hashlib.sha256(pad.read_bytes()).hexdigest()[:16]
+            if huidig != hash_verwacht:
+                afwijkend.append(naam)
+
+        in_orde = not afwijkend and not ontbrekend
+        return {
+            "beschikbaar": True,
+            "in_orde": in_orde,
+            "aantal_bestanden": len(verwacht),
+            "afwijkend": afwijkend,
+            "ontbrekend": ontbrekend,
+            "uitleg": (
+                "Alle bestanden komen overeen met deze versie."
+                if in_orde
+                else (
+                    f"{len(afwijkend)} bestand(en) wijken af en "
+                    f"{len(ontbrekend)} ontbreken. Bij een deellevering is "
+                    "er waarschijnlijk een bestand niet meegekopieerd - de "
+                    "code draait dan wel, maar een deel is van een oudere "
+                    "versie."
+                )
+            ),
+        }
+
+    def get_bestandscontrole(self) -> dict:
+        """De uitkomst van de controle bij het opstarten (v3.63.0).
+
+        Gevraagd: "Tevens wil ik graag dat er altijd wordt gecontroleerd
+        of de meest actuele bestanden uit de integratie aanwezig zijn.
+        Nu we niet elke keer meer de volledige integratie in ZIP maar
+        alleen de gewijzigde wil ik hier een borging."
+
+        Terecht. Sinds v3.55.0 gaan er alleen nog gewijzigde bestanden
+        de deur uit, en dan is er precies een nieuwe manier om het mis te
+        laten gaan: er blijft een oud bestand staan. Dat breekt stil - de
+        code draait, alleen een deel ervan is van vorige week.
+
+        Een hash per bestand vangt dat. Niet een versienummer per
+        bestand, want dat moet je bijhouden en dan is de bewaking net zo
+        betrouwbaar als de discipline om eraan te denken.
+        """
+        return self.bestandscontrole or {
+            "beschikbaar": False,
+            "reden": "Nog niet gecontroleerd; dat gebeurt bij het opstarten.",
+        }
+
     def get_analyse(self) -> dict:
         """Wat er nú aan de hand is, in één blok (v3.62.0).
 
@@ -8430,6 +8531,11 @@ class EnergyManagementSystemCoordinator:
         onbereikbaar = (self.aansturing_onbereikbaar or {}).get("reden")
         if onbereikbaar:
             _voeg("fout", "Accu niet aanstuurbaar", onbereikbaar)
+
+        # v3.63.0: draait er wel een volledige versie?
+        bestanden = self.get_bestandscontrole()
+        if bestanden.get("beschikbaar") and not bestanden.get("in_orde"):
+            _voeg("fout", "Onvolledige installatie", bestanden["uitleg"])
 
         # 2. Klopt de invoer?
         for regel in self.get_spiegelcontrole():

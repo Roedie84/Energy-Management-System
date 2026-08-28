@@ -54,7 +54,8 @@ BEVROREN = {
     # v3.60.0: +1 voor `niet_ontladen_history`. De ratel liet net een
     # blok van 45 uitspraken vertrekken; deze ene erbij is de meting
     # waard die eronder ligt.
-    "coordinator.py:__init__": 378,
+    # v3.63.0: +1 voor `bestandscontrole`.
+    "coordinator.py:__init__": 379,
     "coordinator.py:_async_update_locked": 255,
     "coordinator.py:_async_update_scheduled_charge_appliance": 70,
     "coordinator.py:_build_explanation": 73,

@@ -19411,3 +19411,51 @@ eerste sleutel in de export — en daar staat een toets op, want onderaan
 zou het net zo goed worden overgeslagen als de rest.
 
 **Volledige testsuite**: 3131 tests, allemaal groen.
+
+## v3.63.0 — Borging op deelleveringen
+
+**Gevraagd**: "Tevens wil ik graag dat er altijd wordt gecontroleerd of
+de meest actuele bestanden uit de integratie aanwezig zijn. Nu we niet
+elke keer meer de volledige integratie in ZIP maar alleen de gewijzigde
+wil ik hier een borging."
+
+Terecht. Sinds v3.55.0 gaan er alleen nog gewijzigde bestanden de deur
+uit, en dan is er precies één nieuwe manier om het mis te laten gaan:
+**er blijft een oud bestand staan**. Dat breekt stil — de code draait,
+alleen een deel ervan is van vorige week.
+
+De integratie draagt nu een `bestandscontrole.json` met een hash per
+bestand. Bij het opstarten wordt elk bestand nagerekend; wijkt er iets
+af of ontbreekt er iets, dan staat dat in het logboek, in de export, en
+bovenaan in de analyse.
+
+Een hash en geen versienummer per bestand. Een versienummer moet je
+bijhouden, en dan is de bewaking net zo betrouwbaar als de discipline
+om eraan te denken.
+
+### Twee bestaande wachters die aansloegen
+
+**Bestanden lezen op de gebeurtenislus.** De eerste versie deed dat bij
+elke bevraging. De toets uit het logboekonderzoek sloeg meteen aan —
+terecht: in de event loop staat in die tijd álles stil. De berekening
+draait nu eenmalig bij het opstarten, in de uitvoerder.
+
+**En diezelfde toets zocht op twaalf regels afstand** naar een
+`async_add_executor_job`. Dat brak zodra een executor-functie langer
+werd, en dat gebeurde hier. Hij kijkt nu naar de functie waarin de regel
+staat.
+
+Dat is dezelfde valkuil als de isolatietoets van v3.61.0, die drie keer
+was opgehoogd van 2500 naar 4500 tekens: zoeken op een vaste afstand in
+plaats van op de structuur. Beide zijn nu omgezet.
+
+### En de lijst kan niet verouderen
+
+Er staat een toets op dat `bestandscontrole.json` overeenkomt met wat er
+werkelijk in de map ligt. Zonder die toets zou de lijst de vórige versie
+bewaken — precies de vorm die deze week zes keer voorkwam: een controle
+die klopt met zichzelf en niets meer met de werkelijkheid.
+
+Bijwerken gaat met `python3 tools_maak_bestandslijst.py`.
+
+**Volledige testsuite**: 3139 tests, allemaal groen.

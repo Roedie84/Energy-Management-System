@@ -1,0 +1,23 @@
+{
+  "__init__.py": "59041e19f5cd8b90",
+  "brand/icon.png": "07df281da7da0080",
+  "brand/icon@2x.png": "0d2e1d114f877501",
+  "button.py": "ca005ec84424eb98",
+  "config_flow.py": "fc5ea34b478227b0",
+  "const.py": "792080b285eba748",
+  "coordinator.py": "f7c0aa47135e7c3d",
+  "dashboard_template.yaml": "f7b022298619d956",
+  "diagnostics.py": "0531c5743ef9aac3",
+  "manifest.json": "03444078d15aebd5",
+  "overview_background.svg": "0839174ff8db12f7",
+  "overview_svg.py": "373a87d80d7d3d37",
+  "pv_model.py": "56c4410d272e7219",
+  "repairs.py": "33f7ec695b6eba5d",
+  "sensor.py": "59eed8c758e1c3e8",
+  "services.yaml": "173dafdcca29d160",
+  "solar_forecast.py": "29934f8dd848a238",
+  "strings.json": "279cb4278b79aea3",
+  "switch.py": "eadea68a889757bd",
+  "translations/en.json": "fc9322b0a57f1761",
+  "translations/nl.json": "b2234a639f8b78d9"
+}

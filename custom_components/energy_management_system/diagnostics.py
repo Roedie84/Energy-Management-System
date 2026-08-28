@@ -418,6 +418,11 @@ async def async_get_config_entry_diagnostics(
         # augustus is vier keer een ONTBREKENDE sleutel als `null`
         # gelezen, en elke keer volgde er een verkeerde diagnose uit.
         "analyse": _veilig("get_analyse", coordinator.get_analyse),
+        # v3.63.0: draait er wel een volledige versie? Sinds v3.55.0
+        # gaan er alleen nog gewijzigde bestanden de deur uit.
+        "bestandscontrole": _veilig(
+            "get_bestandscontrole", coordinator.get_bestandscontrole
+        ),
         "config": config,
         "diagnostic_summary": _veilig("get_diagnostic_summary", coordinator.get_diagnostic_summary),
         "missing_optional_features": _veilig("get_missing_optional_features", coordinator.get_missing_optional_features),

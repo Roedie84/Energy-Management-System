@@ -1,39 +1,45 @@
-v3.60.0 t/m v3.62.0 - alleen de gewijzigde bestanden sinds v3.59.0
+v3.60.0 t/m v3.63.0 - alleen de gewijzigde bestanden sinds v3.59.0
 
 Pak uit in de hoofdmap van de repository; de mapstructuur klopt al.
 
 CODE (deze naar Home Assistant, daarna herstarten)
   custom_components/energy_management_system/
-    coordinator.py    de analyse, de meting, de proefpagina
-    const.py          nieuwe drempels
-    diagnostics.py    de analyse BOVENAAN de export
-    sensor.py         de proefpagina op het dashboard
-    manifest.json     versienummer 3.62.0
+    coordinator.py           analyse, bestandscontrole, proefpagina
+    const.py                 nieuwe drempels
+    diagnostics.py           analyse en bestandscontrole bovenaan
+    sensor.py                de proefpagina op het dashboard
+    manifest.json            versienummer 3.63.0
+    bestandscontrole.json    NIEUW - de hashlijst
 
-  (config_flow.py, strings.json en de vertalingen zitten erbij omdat ze
-   sinds v3.59.0 zijn gewijzigd; heb je die al, dan zijn ze gelijk.)
+  Let op: bestandscontrole.json MOET mee. Zonder dat bestand meldt de
+  integratie dat de controle niet uitgevoerd kan worden.
 
-TOETSEN (alleen voor de repository)
-  tests/test_analyse.py                         nieuw
-  tests/test_niet_ontladen_bij_lage_prijs.py    nieuw
-  tests/test_smart_charging_proefplanning.py    nieuw
-  en acht bestaande toetsbestanden die meeliepen
+GEREEDSCHAP (repository)
+  tools_maak_bestandslijst.py   NIEUW - werkt de hashlijst bij
+
+TOETSEN (repository)
+  tests/test_bestandscontrole.py   nieuw
+  en twaalf andere toetsbestanden
 
 DOCUMENTEN
   CHANGELOG.md  README.md  OVERDRACHT.md
 
-WAT ER IS BIJGEKOMEN
---------------------
+DE BORGING
+----------
 
-v3.60.0  Meting: wat kost het dat de accu bijspringt bij een lage prijs?
-v3.61.0  Alleen bij een echt tekort, plus een proefpagina per kwartier.
-v3.62.0  Een analyse als EERSTE sleutel in de export.
+Sinds v3.55.0 lever ik alleen gewijzigde bestanden, en dan is er een
+nieuwe manier om het mis te laten gaan: er blijft een oud bestand
+staan. De code draait dan wel, maar een deel is van vorige week.
 
-Die analyse verzamelt wat er al gemeten wordt - omgevallen onderdelen,
-afgedreven getallen, ontbrekende entiteiten, de laagste celspanning, en
-of de sturing uberhaupt aan staat.
+De integratie rekent nu bij het opstarten elk bestand na tegen een
+hashlijst. Wijkt er iets af, dan staat dat in het logboek en BOVENAAN
+in de analyse van de export.
+
+Verander je zelf iets in de code, dan slaat die controle ook aan. Draai
+dan `python3 tools_maak_bestandslijst.py` om de lijst bij te werken.
 
 WAT JE ZELF MOET DOEN
 ---------------------
 
-Niets. Bij de volgende export staat "analyse" bovenaan.
+Niets, behalve alle bestanden kopieren - en dat is precies wat deze
+controle voortaan bewaakt.

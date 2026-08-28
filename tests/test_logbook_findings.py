@@ -192,10 +192,31 @@ def test_no_blocking_file_access_outside_the_executor():
                 continue
 
             # Toegestaan binnen een hulpfunctie die aan een executor
-            # wordt meegegeven. Die herkennen we aan de dichtstbijzijnde
-            # `def` erboven én een `async_add_executor_job` eronder.
+            # wordt meegegeven.
+            #
+            # v3.63.0: niet meer op twaalf regels afstand zoeken maar op
+            # de FUNCTIE waarin de regel staat. Een venster van twaalf
+            # regels brak zodra een executor-functie langer werd - en dat
+            # gebeurde bij `bereken_bestandscontrole`, die de bestanden
+            # doorloopt en dus wel wat langer is.
+            #
+            # Dezelfde valkuil als de isolatietoets die drie keer is
+            # opgehoogd: zoeken op een vaste afstand in plaats van op de
+            # structuur.
+            functie_begin = nummer - 1
+            while functie_begin > 0 and not regels[functie_begin].lstrip().startswith(
+                ("def ", "async def ")
+            ):
+                functie_begin -= 1
+            functie_naam = regels[functie_begin].strip()
+            in_uitvoerder = f"async_add_executor_job(\n" in pad.read_text() and any(
+                functie_naam.split("(")[0].replace("def ", "").strip() in r
+                for r in regels
+                if "async_add_executor_job" in r
+                or "self." + functie_naam.split("(")[0].replace("def ", "").strip() in r
+            )
             omgeving = "\n".join(regels[max(0, nummer - 12) : nummer + 12])
-            if "async_add_executor_job" in omgeving:
+            if in_uitvoerder or "async_add_executor_job" in omgeving:
                 continue
             overtredingen.append(f"{bestand}:{nummer}: {code.strip()}")
 
