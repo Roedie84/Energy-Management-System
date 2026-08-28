@@ -24479,6 +24479,10 @@ class EnergyManagementSystemCoordinator:
             interval_hours = (end - start).total_seconds() / 3600
             price = entry["price_per_kwh"]
             mode = entry["mode"]
+            # v3.64.0: voor ELK punt, niet alleen in de ontlaadtak.
+            # Anders bestaat `zon_kwh` in de andere takken niet en telt
+            # de splitsing van v3.45.0 elk kwartier als nacht.
+            zon_kwh = self._estimate_pv_kwh_for_period(start, end) or 0.0
 
             if mode == OPTION_MANUAL and entry["is_expensive"]:
                 energy_kwh = min(soc_kwh, (discharge_power_w / 1000) * interval_hours)
@@ -24511,7 +24515,6 @@ class EnergyManagementSystemCoordinator:
                 # De kwartierplanning rekent dat allang uit met deze
                 # twee hulpjes; de tweeling gebruikte ze niet. Nu wel,
                 # zodat beide met dezelfde cijfers rekenen.
-                zon_kwh = self._estimate_pv_kwh_for_period(start, end) or 0.0
                 huis_kwh = (
                     self._estimate_consumption_kwh_for_period(start, end) or 0.0
                 )
@@ -24528,8 +24531,27 @@ class EnergyManagementSystemCoordinator:
                     headroom_kwh = max(0.0, usable_capacity_kwh - soc_kwh)
                     soc_kwh += min(headroom_kwh, -netto_kwh)
 
+            # v3.64.0: de verwachte zon meegeven per punt.
+            #
+            # Gemeten in de export van 28 augustus 17:58: zestig van de
+            # zestig vergelijkingen stonden als "zonder zon", nul met
+            # zon - terwijl er die dag uren zon waren geweest.
+            #
+            # Twee fouten. De punten droegen alleen `start`, `mode` en
+            # `soc_kwh`; de lus in `_queue_digital_twin_prediction` telde
+            # dus een sleutel op die er nooit in heeft gezeten en kwam
+            # altijd op nul uit. En `zon_kwh` werd alleen berekend in de
+            # ontlaadtak, dus in de andere takken bestond hij niet eens.
+            #
+            # Daarmee deed de splitsing van v3.45.0 niets: alles heette
+            # nacht, ook het midden van de dag.
             trajectory.append(
-                {"start": entry["start"], "mode": mode, "soc_kwh": round(soc_kwh, 3)}
+                {
+                    "start": entry["start"],
+                    "mode": mode,
+                    "soc_kwh": round(soc_kwh, 3),
+                    "zon_kwh": round(zon_kwh, 3),
+                }
             )
             hours_simulated += interval_hours
 

@@ -1,45 +1,31 @@
-v3.60.0 t/m v3.63.0 - alleen de gewijzigde bestanden sinds v3.59.0
+v3.64.0 - alleen de gewijzigde bestanden sinds v3.63.0
 
-Pak uit in de hoofdmap van de repository; de mapstructuur klopt al.
-
-CODE (deze naar Home Assistant, daarna herstarten)
+CODE (naar Home Assistant, daarna herstarten)
   custom_components/energy_management_system/
-    coordinator.py           analyse, bestandscontrole, proefpagina
-    const.py                 nieuwe drempels
-    diagnostics.py           analyse en bestandscontrole bovenaan
-    sensor.py                de proefpagina op het dashboard
-    manifest.json            versienummer 3.63.0
-    bestandscontrole.json    NIEUW - de hashlijst
+    coordinator.py           de tweeling telt de zon nu wel mee
+    manifest.json            versienummer 3.64.0
+    bestandscontrole.json    bijgewerkte hashlijst
 
-  Let op: bestandscontrole.json MOET mee. Zonder dat bestand meldt de
-  integratie dat de controle niet uitgevoerd kan worden.
-
-GEREEDSCHAP (repository)
-  tools_maak_bestandslijst.py   NIEUW - werkt de hashlijst bij
+  Let op: bestandscontrole.json MOET mee, anders meldt de integratie
+  dat coordinator.py afwijkt.
 
 TOETSEN (repository)
-  tests/test_bestandscontrole.py   nieuw
-  en twaalf andere toetsbestanden
+  tests/test_digital_twin_netto_last.py
 
 DOCUMENTEN
   CHANGELOG.md  README.md  OVERDRACHT.md
 
-DE BORGING
-----------
+WAT ER IS GEREPAREERD
+---------------------
 
-Sinds v3.55.0 lever ik alleen gewijzigde bestanden, en dan is er een
-nieuwe manier om het mis te laten gaan: er blijft een oud bestand
-staan. De code draait dan wel, maar een deel is van vorige week.
+De tweeling zag nooit een dagvergelijking: zestig van de zestig stonden
+als "zonder zon", terwijl er die dag uren zon waren geweest.
 
-De integratie rekent nu bij het opstarten elk bestand na tegen een
-hashlijst. Wijkt er iets af, dan staat dat in het logboek en BOVENAAN
-in de analyse van de export.
-
-Verander je zelf iets in de code, dan slaat die controle ook aan. Draai
-dan `python3 tools_maak_bestandslijst.py` om de lijst bij te werken.
+De punten in de tijdlijn droegen geen zon, en zon_kwh werd alleen in de
+ontlaadtak berekend. De splitsing van v3.45.0 - bedoeld om te zien of
+de fout van het model komt of van de zonverwachting - deed dus niets.
 
 WAT JE ZELF MOET DOEN
 ---------------------
 
-Niets, behalve alle bestanden kopieren - en dat is precies wat deze
-controle voortaan bewaakt.
+Niets. Over zes uur staan de eerste dagvergelijkingen in de export.

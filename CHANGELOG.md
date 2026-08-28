@@ -19459,3 +19459,50 @@ die klopt met zichzelf en niets meer met de werkelijkheid.
 Bijwerken gaat met `python3 tools_maak_bestandslijst.py`.
 
 **Volledige testsuite**: 3139 tests, allemaal groen.
+
+## v3.64.0 — De tweeling zag nooit een dag
+
+**Gevonden** bij de volledige controle, in de export van 28 augustus
+17:58:
+
+```
+vergelijkingen   60
+zonder zon       60
+met zon           0
+```
+
+Zestig van de zestig als nacht, terwijl er die dag uren zon waren
+geweest. De splitsing die in v3.45.0 is gebouwd om te zien of de fout
+van het model komt of van de zonverwachting, deed dus **niets** — hij
+noemde alles nacht, ook het midden van de dag.
+
+Twee fouten, allebei van mij:
+
+**De tijdlijnpunten droegen geen zon.** Ze bevatten `start`, `mode` en
+`soc_kwh`. De lus die de verwachte zon optelt, telde dus een sleutel op
+die er nooit in heeft gezeten en kwam altijd op nul uit.
+
+**En `zon_kwh` bestond alleen in de ontlaadtak.** In de andere takken
+werd hij niet eens berekend, dus zelfs mét de sleutel zou het in de
+helft van de gevallen misgaan.
+
+De zon wordt nu vóór de takken bepaald en gaat mee in elk punt.
+
+### De rest van de controle
+
+| | |
+|---|---|
+| 3139 tests | groen |
+| 15 structuurscans | groen |
+| ongebruikte constanten | 0 van 577 |
+| 284 bestanden syntactisch | in orde |
+| dekking | 90% |
+| deling door nul | 0 van 143 onbeschermd |
+| sleutels gelezen maar nooit gezet | 0 echte |
+
+De vijf fóútsoorten van deze week zijn alle vijf nog dicht. Drie
+meldingen bleken vals alarm van mijn eigen scans: een kale `return` in
+een binnenfunctie, Solcast-regels die van buiten komen, en een
+padsamenstelling die als deling werd gelezen.
+
+**Volledige testsuite**: 3141 tests, allemaal groen.

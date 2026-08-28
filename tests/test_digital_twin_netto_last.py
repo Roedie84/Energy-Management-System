@@ -134,3 +134,47 @@ def test_the_note_no_longer_claims_the_simplification():
 
     assert "geen huishoudverbruik" not in obj.digital_twin_note
     assert "huisverbruik" in obj.digital_twin_note
+
+
+# --- de splitsing kreeg nooit een dagvergelijking (v3.64.0) ----------
+
+
+def test_every_trajectory_point_carries_the_expected_sun():
+    """Gemeten in de export van 28 augustus 17:58: zestig van de zestig
+
+    vergelijkingen stonden als "zonder zon", nul met zon - terwijl er
+    die dag uren zon waren geweest.
+
+    Twee fouten. De punten in de tijdlijn droegen alleen `start`, `mode`
+    en `soc_kwh`; de lus in `_queue_digital_twin_prediction` telde dus
+    een sleutel op die er nooit in heeft gezeten en kwam altijd op nul
+    uit. En `zon_kwh` werd alleen berekend in de ontlaadtak, dus in de
+    andere takken bestond hij niet eens.
+
+    Daarmee deed de splitsing van v3.45.0 niets: alles heette nacht, ook
+    het midden van de dag.
+    """
+    import inspect
+
+    from custom_components.energy_management_system.coordinator import (
+        EnergyManagementSystemCoordinator as C,
+    )
+
+    bron = inspect.getsource(C._run_digital_twin_simulation)
+
+    # De zon wordt bepaald vóór de takken, en gaat mee in elk punt.
+    berekend = bron.index("zon_kwh = self._estimate_pv_kwh_for_period")
+    eerste_tak = bron.index("if mode == OPTION_MANUAL")
+
+    assert berekend < eerste_tak, "zon_kwh hoort vóór de takken te staan"
+    assert '"zon_kwh": round(zon_kwh, 3)' in bron
+
+
+def test_a_sunny_point_is_labelled_as_such(make_coordinator, hass):
+    """De sleutel die de splitsing leest, moet er ook echt in zitten."""
+    obj = _Tweeling(zon_per_kwartier=0.4)
+    obj._run_digital_twin_simulation(datetime(2026, 8, 28, 12, 0))
+
+    assert obj.digital_twin_trajectory
+    assert all("zon_kwh" in punt for punt in obj.digital_twin_trajectory)
+    assert obj.digital_twin_trajectory[0]["zon_kwh"] == 0.4
