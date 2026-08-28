@@ -1,0 +1,29 @@
+v3.55.0 - alleen de gewijzigde bestanden sinds v3.53.0
+
+Pak uit in de hoofdmap van de repository; de mapstructuur klopt al.
+
+  custom_components/energy_management_system/
+    const.py         de twee vermogensgrenzen uit de standaardwaarden
+    config_flow.py   standaardwaarden voor de bekende entiteiten
+    coordinator.py   vergelijking op absolute waarde, vermogens eruit
+    manifest.json    versienummer 3.55.0
+
+  tests/
+    test_apparaatinstellingen_spiegel.py
+
+  CHANGELOG.md  README.md  OVERDRACHT.md
+
+Naar Home Assistant hoeven alleen de vier bestanden uit
+custom_components/. Herstart daarna.
+
+WAT JE ZELF NOG MOET DOEN
+-------------------------
+
+1. Zet het ontlaadvermogen in de EMS-instellingen TERUG naar 1600 W.
+   Mijn advies van vanochtend om er 2000 van te maken was fout: 1600 is
+   de werkelijke grens uit de veiligheidsinstellingen van de Zendure-app.
+
+2. Maak de twee velden voor het maximale laad- en ontlaadvermogen weer
+   LEEG. Die vergelijking is eruit gehaald.
+
+De ondergrens en de bovengrens mogen gekoppeld blijven.

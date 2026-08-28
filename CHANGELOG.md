@@ -19046,3 +19046,42 @@ Accustand tegen beschikbare energie  18,1  vs   19,0 %   sluit_aan
 De ondergrens die op 26 augustus nog 5 tegen 10 stond, sluit nu aan.
 
 **Volledige testsuite**: 3069 tests, allemaal groen.
+
+## v3.55.0 — Twee vergelijkingen die alleen ruis opleverden
+
+**Gemeld**: "Maximale ontlaadvermogen is hard in de software van Zendure
+begrensd op 1600 W, oplaadvermogen op 2000 W. Dit heeft niets met HA te
+maken maar is geconfigureerd in de Zendure-app in de
+veiligheidsinstellingen."
+
+Dat verandert de zaak. De sensoren tonen namelijk iets anders:
+
+```
+ingesteld in de app       laden 2000 W   ontladen 1600 W
+charge_max_limit          2400 W
+inverse_max_power         2000 W
+```
+
+Die sensoren meten dus **niet** de veiligheidsinstellingen —
+vermoedelijk de fabrieksgrenzen van het apparaat. Ze vergelijken met wat
+de berekening aanhoudt levert daarom **altijd** "loopt uiteen" op.
+
+En dat is geen signaal maar ruis. Ruis is hier het gevaarlijkst wat er
+is: wie elke dag twee valse meldingen ziet, kijkt over de echte heen.
+Liever vier vergelijkingen die kloppen dan zes waarvan er twee altijd
+afgaan.
+
+Beide vergelijkingen zijn eruit, en de twee standaardwaarden ook. Wat
+blijft: de ondergrens, de bovengrens, de accustand, de beschikbare
+energie en de kruistoets tussen die laatste twee. De ondergrens is
+degene die er toe doet — 5 tegen 10 kostte module 1 een nacht op
+2,71 V.
+
+### En een advies dat ik moet terugnemen
+
+Ik raadde aan het ontlaadvermogen in de instellingen van 1600 naar 2000
+te zetten, omdat de sensor 2000 meldde. Dat was fout: 1600 is de
+werkelijke grens en dus de juiste waarde. Met 2000 zou de planning meer
+in een duur kwartier verwachten dan de accu levert.
+
+**Volledige testsuite**: 3067 tests, allemaal groen.

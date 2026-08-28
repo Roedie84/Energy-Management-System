@@ -11271,20 +11271,17 @@ class EnergyManagementSystemCoordinator:
                 "%",
                 SPIEGEL_MARGE_INSTELLING_PROCENT,
             ),
-            (
-                "Maximaal laadvermogen",
-                CONF_BATTERY_MAX_CHARGE_POWER_ENTITY,
-                self.config.get(CONF_MANUAL_CHARGE_POWER),
-                "W",
-                SPIEGEL_MARGE_VERMOGEN_W,
-            ),
-            (
-                "Maximaal ontlaadvermogen",
-                CONF_BATTERY_MAX_DISCHARGE_POWER_ENTITY,
-                self.config.get(CONF_MANUAL_DISCHARGE_POWER),
-                "W",
-                SPIEGEL_MARGE_VERMOGEN_W,
-            ),
+            # v3.55.0: de twee vermogensgrenzen zijn hier weggehaald.
+            #
+            # Gemeld: de grenzen staan in de Zendure-app onder de
+            # veiligheidsinstellingen - laden 2000 W, ontladen 1600 W -
+            # en die staan los van Home Assistant. De sensoren melden
+            # 2400 en 2000, dus iets anders.
+            #
+            # Vergelijken met wat de berekening aanhoudt levert dan
+            # altijd "loopt uiteen" op, en dat is geen signaal maar ruis.
+            # Wie elke dag twee valse meldingen ziet, kijkt over de echte
+            # heen.
         ):
             entity_id = self.config.get(sleutel)
             if not entity_id:

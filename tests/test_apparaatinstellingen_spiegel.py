@@ -79,35 +79,6 @@ def test_rounding_is_allowed(make_coordinator, hass):
 # --- de vermogens ----------------------------------------------------
 
 
-def test_a_changed_charge_limit_is_caught(make_coordinator, hass):
-    """Gemeten op 26 en 27 augustus: `chargeMaxLimit` ging van 2000 naar
-
-    2400 en `inverseMaxPower` van 1600 naar 2000, zonder dat de
-    berekening dat wist.
-    """
-    c = make_coordinator(
-        {
-            CONF_BATTERY_MAX_CHARGE_POWER_ENTITY: "number.laadlimiet",
-            CONF_MANUAL_CHARGE_POWER: 2000,
-        }
-    )
-    hass.states.set("number.laadlimiet", "2400")
-
-    assert _regel(c, "Maximaal laadvermogen")["oordeel"] == "loopt_uiteen"
-
-
-def test_a_changed_discharge_limit_is_caught(make_coordinator, hass):
-    c = make_coordinator(
-        {
-            CONF_BATTERY_MAX_DISCHARGE_POWER_ENTITY: "number.ontlaadlimiet",
-            CONF_MANUAL_DISCHARGE_POWER: 1600,
-        }
-    )
-    hass.states.set("number.ontlaadlimiet", "2000")
-
-    assert _regel(c, "Maximaal ontlaadvermogen")["oordeel"] == "loopt_uiteen"
-
-
 # --- optioneel blijft optioneel --------------------------------------
 
 
@@ -151,50 +122,6 @@ def test_a_differing_setting_becomes_a_finding(make_coordinator, hass):
 # --- het teken (v3.54.0) ---------------------------------------------
 
 
-def test_the_sign_convention_does_not_cause_a_false_alarm(
-    make_coordinator, hass
-):
-    """Gemeten in de export van 28 augustus 10:55, meteen na het
-
-    koppelen:
-
-        Maximaal laadvermogen  -2000,0 vs 2400,0 W -> loopt_uiteen
-
-    Het laadvermogen is in deze integratie NEGATIEF - laden is negatief -
-    terwijl het apparaat een positieve grens meldt. Rechtstreeks
-    vergelijken loopt dan per definitie uiteen, en dan is de melding geen
-    signaal meer.
-    """
-    c = make_coordinator(
-        {
-            CONF_BATTERY_MAX_CHARGE_POWER_ENTITY: "sensor.laadlimiet",
-            CONF_MANUAL_CHARGE_POWER: -2000,
-        }
-    )
-    hass.states.set("sensor.laadlimiet", "2000")
-
-    assert _regel(c, "Maximaal laadvermogen")["oordeel"] == "sluit_aan"
-
-
-def test_a_real_difference_still_shows(make_coordinator, hass):
-    """Wat er ná die correctie overblijft is wél een echt verschil: de
-
-    accu kan 2400 W laden terwijl de berekening met 2000 rekent.
-    """
-    c = make_coordinator(
-        {
-            CONF_BATTERY_MAX_CHARGE_POWER_ENTITY: "sensor.laadlimiet",
-            CONF_MANUAL_CHARGE_POWER: -2000,
-        }
-    )
-    hass.states.set("sensor.laadlimiet", "2400")
-
-    regel = _regel(c, "Maximaal laadvermogen")
-
-    assert regel["oordeel"] == "loopt_uiteen"
-    assert regel["verschil"] == 400.0
-
-
 # --- de standaardwaarden (v3.54.0) -----------------------------------
 
 
@@ -214,10 +141,9 @@ def test_the_known_entities_have_a_default():
     assert STANDAARD_ENTITEITEN[CONF_BATTERY_MIN_SOC_NUMBER] == (
         "number.solarflow_2400_ac_min_soc"
     )
-    assert STANDAARD_ENTITEITEN[CONF_BATTERY_MAX_CHARGE_POWER_ENTITY] == (
-        "sensor.solarflow_2400_ac_charge_max_limit"
-    )
-    assert len(STANDAARD_ENTITEITEN) == 4
+    # v3.55.0: de twee vermogensgrenzen staan hier BEWUST NIET bij.
+    assert CONF_BATTERY_MAX_CHARGE_POWER_ENTITY not in STANDAARD_ENTITEITEN
+    assert len(STANDAARD_ENTITEITEN) == 2
 
 
 def test_the_default_is_used_when_nothing_is_configured():
@@ -246,3 +172,44 @@ def test_a_configured_value_always_wins():
     )
 
     assert veld.default() == "number.iets_anders"
+
+
+def test_the_power_limits_are_not_compared(make_coordinator, hass):
+    """Gemeld: "Maximale ontlaadvermogen is hard in de software van
+
+    Zendure begrensd op 1600 W, oplaadvermogen op 2000 W. Dit heeft
+    niets met HA te maken maar is geconfigureerd in de Zendure-app in de
+    veiligheidsinstellingen."
+
+    De sensoren tonen iets anders - 2400 en 2000 - dus die meten niet
+    die instellingen. Vergelijken levert dan ALTIJD "loopt uiteen" op,
+    en dat is geen signaal maar ruis.
+
+    Ruis is hier het gevaarlijkst wat er is: wie elke dag twee valse
+    meldingen ziet, kijkt over de echte heen.
+    """
+    c = make_coordinator(
+        {
+            CONF_BATTERY_MAX_CHARGE_POWER_ENTITY: "sensor.laadlimiet",
+            CONF_BATTERY_MAX_DISCHARGE_POWER_ENTITY: "sensor.ontlaadlimiet",
+            CONF_MANUAL_CHARGE_POWER: -2000,
+            CONF_MANUAL_DISCHARGE_POWER: 1600,
+        }
+    )
+    hass.states.set("sensor.laadlimiet", "2400")
+    hass.states.set("sensor.ontlaadlimiet", "2000")
+
+    assert _regel(c, "Maximaal laadvermogen") is None
+    assert _regel(c, "Maximaal ontlaadvermogen") is None
+
+
+def test_the_settings_that_do_match_remain(make_coordinator, hass):
+    """De ondergrens blijft, en dat is degene die er toe doet: 5 tegen 10
+
+    kostte module 1 een nacht op 2,71 V.
+    """
+    c = make_coordinator({CONF_BATTERY_MIN_SOC_NUMBER: "number.min_soc"})
+    hass.states.set("number.min_soc", "5.0")
+    c.effective_min_soc_percent = lambda: 10.0
+
+    assert _regel(c, "Ondergrens van de accu")["oordeel"] == "loopt_uiteen"

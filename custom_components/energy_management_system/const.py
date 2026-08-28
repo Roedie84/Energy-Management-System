@@ -4932,13 +4932,29 @@ SPIEGEL_MARGE_VERMOGEN_W = 100.0
 # Met een standaardwaarde hoeft er niets ingevuld te worden - het staat
 # meteen goed - maar is het wel aan te passen zodra er iets hernoemd
 # wordt, zonder de code in.
+#
+# v3.55.0: de twee vermogensgrenzen staan hier BEWUST NIET bij.
+#
+# Gemeld: "Maximale ontlaadvermogen is hard in de software van Zendure
+# begrensd op 1600 W, oplaadvermogen op 2000 W. Dit heeft niets met HA
+# te maken maar is geconfigureerd in de Zendure-app in de
+# veiligheidsinstellingen."
+#
+# De sensoren tonen iets anders:
+#
+#     ingesteld in de app       laden 2000 W   ontladen 1600 W
+#     charge_max_limit          2400 W
+#     inverse_max_power         2000 W
+#
+# Dat zijn dus niet de veiligheidsinstellingen maar iets anders -
+# vermoedelijk de fabrieksgrenzen van het apparaat. Ze vergelijken met
+# wat de berekening aanhoudt levert daarom ALTIJD "loopt uiteen" op, en
+# dat is geen signaal maar ruis.
+#
+# Ruis is hier het gevaarlijkst wat er is: wie elke dag twee valse
+# meldingen ziet, kijkt over de echte heen. Liever vier vergelijkingen
+# die kloppen dan zes waarvan er twee altijd afgaan.
 STANDAARD_ENTITEITEN = {
     CONF_BATTERY_MIN_SOC_NUMBER: "number.solarflow_2400_ac_min_soc",
     CONF_BATTERY_MAX_SOC_NUMBER: "number.solarflow_2400_ac_soc_set",
-    CONF_BATTERY_MAX_CHARGE_POWER_ENTITY: (
-        "sensor.solarflow_2400_ac_charge_max_limit"
-    ),
-    CONF_BATTERY_MAX_DISCHARGE_POWER_ENTITY: (
-        "sensor.solarflow_2400_ac_inverse_max_power"
-    ),
 }
