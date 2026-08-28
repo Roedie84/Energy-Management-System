@@ -19783,3 +19783,46 @@ Staat in de export onder `mpc_doel_soc`, naast de bestaande reserve
 zodat het verschil zichtbaar is. Stuurt niets.
 
 **Volledige testsuite**: 3193 tests, allemaal groen.
+
+## v3.70.0 — De aandachtspunten waren teksten, geen dicts
+
+**Gemeld** met een schermafdruk:
+
+```
+1 onderdeel(en) vallen om
+Deze onderdelen geven een fout: diagnostiek:get_live_narrative
+```
+
+En: *"Helaas is de diagnostiek weer een text file, die kan ik niet
+uploaden."*
+
+`aandachtspunten` is een lijst **teksten**. Elke plek voegt er een zin
+aan toe, en `_narrate_attention` doet daar `" ".join(...)` overheen voor
+het Live-verhaal. In v3.67.0 heb ik er **dicts** aan toegevoegd met
+`titel`, `tekst` en `actie` — en `join` op een dict werpt een TypeError.
+
+Dat brak het Live-verhaal, en daarmee de hele export.
+
+### Dezelfde vorm als vier dagen eerder
+
+Op 24 augustus ging het om de kwartierplanning: een bestaande lijst
+vullen met een ander soort element dan de lezers verwachten. Twee keer
+dezelfde fout in vier dagen.
+
+**Structuurscan 16** bewaakt dat nu: per lijst wordt gekeken of alle
+`append`-aanroepen hetzelfde soort element toevoegen. Er staat een proef
+onder die de fout van vanochtend letterlijk terugzet en controleert dat
+de scan afgaat.
+
+De scan kijkt **per functie** voor lokale lijsten — `regels` heet in tien
+functies zo en betekent overal iets anders. Alleen binnen dezelfde
+functie, of op een `self.`-veld dat werkelijk gedeeld is, zegt een
+mengeling iets.
+
+### En mijn eigen toetsen dekten het niet
+
+De drie toetsen die ik in v3.67.0 schreef, verwachtten juist die dicts.
+Ze bevestigden dus precies wat er fout was — een gesloten wereldje dat
+klopt met zichzelf, en dat is de vorm die deze week vaker langskwam.
+
+**Volledige testsuite**: 3194 tests, allemaal groen.

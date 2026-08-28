@@ -152,3 +152,87 @@ def test_no_test_uses_a_stale_climate_key_format():
         "klimaatsleutels zonder het `d`-merkteken van v3.41.0: "
         + ", ".join(fout)
     )
+
+
+# --- structuurscan 16: gedeelde lijsten houden één soort -------------
+
+
+def test_shared_lists_hold_one_kind_of_element():
+    """De fout van 24 augustus én van 28 augustus (v3.70.0).
+
+    Gemeld met een schermafdruk: "1 onderdeel(en) vallen om -
+    diagnostiek:get_live_narrative", en de export kwam als tekstbestand
+    terug in plaats van JSON.
+
+    De oorzaak: `aandachtspunten` is een lijst TEKSTEN. Elke plek voegt
+    er een zin aan toe, en `_narrate_attention` doet daar
+    `" ".join(...)` overheen voor het Live-verhaal. In v3.67.0 kwamen
+    daar dicts bij met `titel`, `tekst` en `actie` - en `join` op een
+    dict werpt een TypeError.
+
+    Vier dagen eerder ging het om de kwartierplanning, met dezelfde
+    vorm: een bestaande lijst vullen met een ander soort element dan de
+    lezers verwachten.
+
+    Deze scan kijkt per lijst of alle `append`-aanroepen hetzelfde soort
+    element toevoegen.
+    """
+    import ast
+    import collections
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    boom = ast.parse((Path(pkg.__file__).parent / "coordinator.py").read_text())
+
+    # Per FUNCTIE, niet per naam: `regels` heet in tien functies zo en
+    # betekent overal iets anders. Alleen binnen dezelfde functie - of
+    # op een `self.`-veld, dat wél gedeeld is - zegt een mengeling iets.
+    soorten = collections.defaultdict(set)
+    regels = collections.defaultdict(list)
+    omhullend = {}
+    for fn in ast.walk(boom):
+        if isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            for k in ast.walk(fn):
+                omhullend.setdefault(id(k), fn.name)
+
+    for n in ast.walk(boom):
+        if not (
+            isinstance(n, ast.Call)
+            and isinstance(n.func, ast.Attribute)
+            and n.func.attr == "append"
+            and len(n.args) == 1
+        ):
+            continue
+        doel = n.func.value
+        naam = (
+            doel.attr
+            if isinstance(doel, ast.Attribute)
+            else (doel.id if isinstance(doel, ast.Name) else None)
+        )
+        if not naam:
+            continue
+        if isinstance(doel, ast.Name):
+            # Een lokale lijst: alleen binnen dezelfde functie
+            # vergelijken.
+            naam = f"{omhullend.get(id(n), '?')}::{naam}"
+        arg = n.args[0]
+        if isinstance(arg, ast.Dict):
+            soort = "dict"
+        elif isinstance(arg, (ast.JoinedStr, ast.Constant)) and not isinstance(
+            getattr(arg, "value", None), (int, float, bool)
+        ):
+            soort = "tekst"
+        else:
+            continue  # variabelen zeggen niets zonder typeanalyse
+        soorten[naam].add(soort)
+        regels[naam].append(f"regel {n.lineno}: {soort}")
+
+    gemengd = {
+        naam: regels[naam] for naam, s in soorten.items() if len(s) > 1
+    }
+
+    assert not gemengd, (
+        "deze lijsten krijgen zowel teksten als dicts, en de lezers "
+        f"verwachten er maar een van: {gemengd}"
+    )

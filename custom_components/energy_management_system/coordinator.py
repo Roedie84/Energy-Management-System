@@ -25940,32 +25940,36 @@ class EnergyManagementSystemCoordinator:
         Eigen functie, want `get_diagnostic_summary` staat op de ratel
         van v3.35.0 en mag niet groeien.
         """
-        uit: list[dict] = []
+        # v3.70.0: TEKSTEN, geen dicts.
+        #
+        # Gemeld met een schermafdruk: "1 onderdeel(en) vallen om -
+        # diagnostiek:get_live_narrative", en de export kwam als
+        # tekstbestand terug in plaats van JSON.
+        #
+        # De oorzaak: `aandachtspunten` is een lijst TEKSTEN. Elke andere
+        # plek voegt er een zin aan toe, en `_narrate_attention` doet
+        # daar `" ".join(...)` overheen voor het Live-verhaal. Ik voegde
+        # er in v3.67.0 dicts aan toe met `titel`, `tekst` en `actie` -
+        # en `join` op een dict werpt een TypeError.
+        #
+        # Dat is dezelfde fout als op 24 augustus: een bestaande lijst
+        # vullen met een ander soort element dan wat de lezers
+        # verwachten. Toen ging het om de kwartierplanning.
+        uit: list[str] = []
 
         bestanden = self.get_bestandscontrole()
         if bestanden.get("beschikbaar") and not bestanden.get("in_orde"):
             uit.append(
-                {
-                    "titel": "Onvolledige installatie",
-                    "tekst": bestanden.get("uitleg", ""),
-                    "actie": (
-                        "Kopieer alle bestanden uit de laatste levering "
-                        "opnieuw en herstart Home Assistant."
-                    ),
-                }
+                f"Onvolledige installatie: {bestanden.get('uitleg', '')} "
+                "Kopieer alle bestanden uit de laatste levering opnieuw "
+                "en herstart Home Assistant."
             )
 
         # En de uitkomsten die logisch niet kunnen (v3.65.0).
         for bevinding in self.get_zelftoets():
             uit.append(
-                {
-                    "titel": bevinding["naam"],
-                    "tekst": bevinding["wat"],
-                    "actie": (
-                        "Dit is een fout in de integratie zelf, niet in "
-                        "de meetopstelling."
-                    ),
-                }
+                f"{bevinding['naam']}: {bevinding['wat']} Dit is een fout "
+                "in de integratie zelf, niet in de meetopstelling."
             )
         return uit
 

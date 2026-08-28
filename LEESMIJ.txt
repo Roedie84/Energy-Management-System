@@ -1,46 +1,32 @@
-v3.68.0 en v3.69.0 - alleen de gewijzigde bestanden sinds v3.67.0
+v3.70.0 - SPOEDREPARATIE, alleen de gewijzigde bestanden sinds v3.69.0
 
 CODE (naar Home Assistant, daarna herstarten)
   custom_components/energy_management_system/
-    coordinator.py            MPC met verbruik/zon, doel-SOC, gereedheid
-    const.py                  MPC_MIN_METINGEN
-    diagnostics.py            mpc_balans, mpc_doel_soc, mpc_vergelijking
-    manifest.json             versienummer 3.69.0
+    coordinator.py            de reparatie
+    manifest.json             versienummer 3.70.0
     bestandscontrole.json     bijgewerkte hashlijst  (MOET mee)
 
 TOETSEN (repository)
-  tests/test_mpc_doel_soc.py               nieuw
-  tests/test_mpc_met_verbruik_en_zon.py    nieuw
-  tests/test_proefstand.py
-  tests/test_state_persistence.py
-  tests/test_scan_functiegrootte.py
+  tests/test_scan_herstelpaden.py            structuurscan 16
+  tests/test_onvolledige_installatie_meldt.py
 
 DOCUMENTEN
   CHANGELOG.md  README.md  OVERDRACHT.md
 
-WAT ER IS GEBEURD
------------------
+WAT ER FOUT WAS
+---------------
 
-v3.68.0  De arbitragerekening telt nu verbruik en zon mee, en er staat
-         een elfde proefstandkandidaat: "Vooruitplannen over 24 uur".
+De melding "1 onderdeel(en) vallen om - diagnostiek:get_live_narrative",
+en de export kwam als tekstbestand terug in plaats van JSON.
 
-v3.69.0  De gereedheid op de proefstand kijkt nu OOK naar de
-         toelatingseis. "Klaar om mee te doen" stond bij kandidaten die
-         niet mochten meedoen - dat was verwarrend en ik heb het zelf
-         verkeerd gelezen.
+`aandachtspunten` is een lijst TEKSTEN, en ik heb er in v3.67.0 dicts
+aan toegevoegd. Het Live-verhaal doet daar " ".join(...) overheen, en
+dat werpt een TypeError op een dict.
 
-         Nieuwe stand: "gemeten: levert niets op". Drie kandidaten
-         stonden op klaar terwijl ze bij NUL van de driehonderd
-         momenten gunstig waren.
-
-         En een doel-SOC per kwartier, van achter naar voren gerekend:
-         hoeveel moet er in de accu zitten om alles wat daarna komt te
-         overbruggen? Zon die eraan komt verlaagt die eis.
-
-ALLES STUURT NIETS.
+Dezelfde fout als op 24 augustus met de kwartierplanning. Structuurscan
+16 bewaakt het nu, met een proef die de fout letterlijk terugzet.
 
 WAT JE ZELF MOET DOEN
 ---------------------
 
-Niets. In de diagnostiek staat vanaf nu "mpc_doel_soc" naast de
-bestaande reserve, zodat het verschil zichtbaar is.
+Niets, behalve installeren. Daarna is de export weer JSON.

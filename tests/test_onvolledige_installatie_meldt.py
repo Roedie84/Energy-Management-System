@@ -31,31 +31,30 @@ def test_it_shows_up_as_an_attention_point(make_coordinator, hass):
 
     punten = c.get_diagnostic_summary()["aandachtspunten"]
 
-    punt = next(p for p in punten if p["titel"] == "Onvolledige installatie")
-    assert "sensor.py" in punt["tekst"] or "1 bestand" in punt["tekst"]
-    assert "herstart" in punt["actie"].lower()
+    # v3.70.0: het zijn TEKSTEN, geen dicts - `_narrate_attention` doet
+    # er `" ".join(...)` overheen, en dat werpt een TypeError op een
+    # dict. Dat brak het Live-verhaal en de hele export.
+    punt = next(p for p in punten if "Onvolledige installatie" in p)
+    assert "1 bestand" in punt
+    assert "herstart" in punt.lower()
 
 
 def test_a_complete_installation_says_nothing(make_coordinator, hass):
     c = make_coordinator({})
     c.bestandscontrole = {"beschikbaar": True, "in_orde": True}
 
-    titels = [
-        p["titel"] for p in c.get_diagnostic_summary()["aandachtspunten"]
-    ]
+    titels = c.get_diagnostic_summary()["aandachtspunten"]
 
-    assert "Onvolledige installatie" not in titels
+    assert not any("Onvolledige installatie" in p for p in titels)
 
 
 def test_before_startup_it_says_nothing(make_coordinator, hass):
     """Zolang de controle niet is gedraaid valt er niets te melden."""
     c = make_coordinator({})
 
-    titels = [
-        p["titel"] for p in c.get_diagnostic_summary()["aandachtspunten"]
-    ]
+    titels = c.get_diagnostic_summary()["aandachtspunten"]
 
-    assert "Onvolledige installatie" not in titels
+    assert not any("Onvolledige installatie" in p for p in titels)
 
 
 # --- de zelftoets komt er ook op ------------------------------------
@@ -70,11 +69,9 @@ def test_a_self_test_finding_reaches_the_landing_page(
         {"fout_kwh": 1.346, "met_zon": False} for _ in range(60)
     ]
 
-    titels = [
-        p["titel"] for p in c.get_diagnostic_summary()["aandachtspunten"]
-    ]
+    titels = c.get_diagnostic_summary()["aandachtspunten"]
 
-    assert "Tweeling: splitsing eenzijdig" in titels
+    assert any("Tweeling: splitsing eenzijdig" in p for p in titels)
 
 
 # --- de melding op de telefoon --------------------------------------
