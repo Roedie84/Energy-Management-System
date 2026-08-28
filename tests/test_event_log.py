@@ -149,9 +149,27 @@ def test_only_critical_kinds_get_the_flag(make_coordinator, hass):
 
 def test_the_critical_set_stays_small():
     """Als er tien soorten kritiek zijn, is er geen enkele meer
-    kritiek."""
+    kritiek.
+
+    v3.67.0: van 8 naar 9, voor `installatie_onvolledig`. Bewust, en met
+    de afweging erbij.
+
+    De definitie van kritiek is "er gaat geld of comfort verloren, of de
+    integratie doet iets anders dan bedoeld". Een installatie waarvan de
+    helft van vorige week is, is letterlijk dat tweede - en het is de
+    enige storing die je niet kunt zien: de code draait gewoon.
+
+    Overwogen om `kalibratie_vol` te degraderen om onder de acht te
+    blijven. Niet gedaan: die staat daar op uitdrukkelijk verzoek
+    ("indien mogelijk kritisch"), en zoiets hoort niet stilletjes
+    teruggedraaid te worden om een grens te halen.
+
+    Dit is de tweede keer dat deze verzameling groeit. Bij een tiende
+    moet er echt een weg, want dan klopt de eerste zin van deze
+    toelichting niet meer.
+    """
     kritiek = [
         k for k, v in LOG_PRIORITEITEN.items() if v == LOG_PRIO_KRITIEK
     ]
 
-    assert len(kritiek) <= 8, kritiek
+    assert len(kritiek) <= 9, kritiek

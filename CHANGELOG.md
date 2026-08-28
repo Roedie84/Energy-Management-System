@@ -19618,3 +19618,57 @@ is, en dan is een optimistische aanname minder erg dan een pessimistische
 die de accu onnodig stil zet.
 
 **Volledige testsuite**: 3158 tests, allemaal groen.
+
+## v3.67.0 — De proefplanning op het dashboard, en een melding die je bereikt
+
+Twee dingen die bij elkaar horen: iets meten is nutteloos als het je
+niet bereikt.
+
+### De proefplanning staat op de kwartierpagina
+
+**Gevraagd**: "Graag toch nog een dashboard onder de planningspagina
+(verder onzichtbaar net als de rest) met de test planning voor smart
+charge."
+
+Onder *Kwartierplanning*, want het gaat om de planning. Die pagina is
+`subview`, dus hij verschijnt niet in de navigatie — net als de rest.
+
+Bovenaan de samenvatting: hoeveel kwartieren een tekort hebben, in
+hoeveel daarvan het net goedkoper was, en wat dat samen scheelt. Daaronder
+alleen de kwartieren **met** een tekort; zonder tekort doen beide modi
+hetzelfde en zouden die rijen de tabel alleen langer maken.
+
+Twee bestaande wachters sloegen aan: getallen op het dashboard horen een
+eenheid te dragen, en elk gebruikt attribuut hoort in de
+gezondheidsopgave te staan. Allebei terecht.
+
+### Een onvolledige installatie bereikt je nu
+
+**Gevraagd**: "Krijg ik een melding op mijn telefoon of zie ik het bij
+aandachtspunten op mijn landingspagina als bepaalde bestanden van een
+oude versie zijn? Dit zodat ik getriggerd word."
+
+Nee. De bestandscontrole van v3.63.0 zette een regel in het logboek en
+een veld in de export — allebei plekken waar je alleen kijkt als je al
+vermoedt dat er iets is.
+
+Juist bij deelleveringen is het omgekeerde nodig: **je weet niet dat er
+iets mis is, want de code draait gewoon.**
+
+Het staat nu bij de aandachtspunten op de landingspagina, met de
+bestandsnamen erbij, én er gaat een melding uit naar de telefoon.
+Dezelfde behandeling geldt voor de zelftoets van v3.65.0.
+
+### De kritieke verzameling groeide naar negen
+
+De wachter staat op maximaal acht, met een goed argument: *"als er tien
+soorten kritiek zijn, is er geen enkele meer kritiek."*
+
+Overwogen om `kalibratie_vol` te degraderen om eronder te blijven. Niet
+gedaan: die staat daar op uitdrukkelijk verzoek, en zoiets hoort niet
+stilletjes teruggedraaid te worden om een grens te halen.
+
+De grens is dus naar negen, met de afweging in de toelichting. Bij een
+tiende moet er echt een weg.
+
+**Volledige testsuite**: 3168 tests, allemaal groen.

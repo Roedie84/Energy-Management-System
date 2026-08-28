@@ -1,47 +1,42 @@
-v3.64.0 t/m v3.66.0 - alleen de gewijzigde bestanden sinds v3.63.0
+v3.64.0 t/m v3.67.0 - alleen de gewijzigde bestanden sinds v3.63.0
 
 CODE (naar Home Assistant, daarna herstarten)
   custom_components/energy_management_system/
-    coordinator.py           drie reparaties, zie hieronder
-    const.py                 een nieuwe drempel
-    diagnostics.py           de zelftoets in de export
-    manifest.json            versienummer 3.66.0
-    bestandscontrole.json    bijgewerkte hashlijst  (MOET mee)
+    coordinator.py            vier reparaties, zie hieronder
+    const.py                  nieuwe drempel en meldingssoort
+    diagnostics.py            de zelftoets in de export
+    dashboard_template.yaml   de proefplanning + meldingsschakelaar
+    manifest.json             versienummer 3.67.0
+    bestandscontrole.json     bijgewerkte hashlijst  (MOET mee)
+
+DASHBOARD
+  dashboards/energy_management_system_dashboard.yaml
 
 TOETSEN (repository)
-  tests/test_zelftoets.py                   nieuw
-  tests/test_digital_twin_netto_last.py
-  tests/test_battery_cycle_tracking.py
-  tests/test_doorlichting_19_augustus.py
+  tests/test_onvolledige_installatie_meldt.py   nieuw
+  tests/test_zelftoets.py                       nieuw
+  en zes bestaande toetsbestanden
 
 DOCUMENTEN
   CHANGELOG.md  README.md  OVERDRACHT.md
 
-WAT ER IS GEREPAREERD
----------------------
+WAT ER IS GEBEURD
+-----------------
 
-v3.64.0  De tweeling zag nooit een dagvergelijking - de tijdlijnpunten
-         droegen geen zon.
-
-v3.65.0  De integratie toetst haar eigen UITKOMSTEN op wat logisch niet
-         kan, en meldt dat bovenaan in de analyse.
-
-v3.66.0  Twee getallen voor dezelfde grootheid: de capaciteitsschatting
-         rekende met 4000 cycli en de slijtage met 6000.
-
-         En de cyclusteller werd NERGENS opgehoogd, waardoor de
-         kalendergrens met nul doorzet rekende. De jaardoorzet komt nu
-         uit de dagreeks: 2456 kWh in plaats van de geschatte 1925.
-         Je slijtage zakt daardoor van 9,5 naar ongeveer 7,4 ct/kWh.
-
-WAT DAT BETEKENT
-----------------
-
-Die 7,4 ct is de drempel in de verkooptoets, de saldering-rem en vier
-proefstandkandidaten. Alles wat "loont het om die kWh door de accu te
-sturen" vraagt, wordt hiermee een stuk gunstiger.
+v3.64.0  De tweeling zag nooit een dagvergelijking.
+v3.65.0  De integratie toetst haar eigen uitkomsten op wat niet kan.
+v3.66.0  Twee getallen voor dezelfde grootheid (4000 en 6000 cycli), en
+         een cyclusteller die nergens werd opgehoogd. Je slijtage zakt
+         van 9,5 naar ongeveer 7,4 ct/kWh.
+v3.67.0  De proefplanning staat onder Kwartierplanning op het dashboard.
+         En een onvolledige installatie meldt zich nu: bij de
+         aandachtspunten op je landingspagina EN op je telefoon.
 
 WAT JE ZELF MOET DOEN
 ---------------------
 
-Niets.
+Herlaad het dashboard na de herstart (Instellingen -> Dashboards, of
+gewoon de pagina verversen).
+
+De nieuwe melding "De installatie is onvolledig" staat standaard aan.
+Je vindt de schakelaar bij de andere meldingen.

@@ -148,3 +148,65 @@ def test_it_reaches_the_export_and_the_dashboard():
         map_ / "diagnostics.py"
     ).read_text()
     assert '"smart_charging_proef"' in (map_ / "sensor.py").read_text()
+
+
+# --- de kaart op het dashboard (v3.67.0) -----------------------------
+
+
+def test_the_card_lives_on_the_planning_page():
+    """Gevraagd: "Graag toch nog een dashboard ergens onder de
+
+    planningspagina (verder onzichtbaar net als de rest) met de test
+    planning voor smart charge."
+
+    Op de kwartierpagina, want het gaat om de planning - en die pagina
+    is `subview`, dus hij verschijnt niet in de navigatie.
+    """
+    from pathlib import Path
+
+    import yaml
+
+    import custom_components.energy_management_system as pkg
+
+    sjabloon = yaml.safe_load(
+        (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
+    )
+    pagina = next(
+        v for v in sjabloon["views"] if v.get("path") == "detail-kwartier"
+    )
+
+    assert pagina.get("subview") is True
+
+    titels = [k.get("title") for k in pagina["sections"][0]["cards"]]
+    assert "Proef - zou smart_charging lonen?" in titels
+
+
+def test_the_card_reads_the_right_attribute():
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    map_ = Path(pkg.__file__).parent
+    sjabloon = (map_ / "dashboard_template.yaml").read_text()
+
+    assert "smart_charging_proef" in sjabloon
+    # En de kopie die de gebruiker installeert loopt niet achter.
+    kopie = (map_.parent.parent / "dashboards"
+             / "energy_management_system_dashboard.yaml").read_text()
+    assert kopie == sjabloon
+
+
+def test_only_quarters_with_a_deficit_are_listed():
+    """Zonder tekort doen beide modi hetzelfde; die rijen zouden de
+
+    tabel alleen langer maken.
+    """
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    sjabloon = (
+        Path(pkg.__file__).parent / "dashboard_template.yaml"
+    ).read_text()
+
+    assert "{% if r.tekort_kwh > 0 %}" in sjabloon

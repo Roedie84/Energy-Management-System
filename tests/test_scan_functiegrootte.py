@@ -74,7 +74,11 @@ BEVROREN = {
     "coordinator.py:async_bootstrap_energy_history": 83,
     "coordinator.py:async_bootstrap_night_consumption_from_history": 99,
     "coordinator.py:get_consistency_checks": 81,
-    "coordinator.py:get_diagnostic_summary": 120,
+    # v3.67.0: +1 voor de aanroep van
+    # `_aandachtspunten_over_de_integratie()`. De twee blokken zelf
+    # staan in die functie, dus dit is een aanroep en geen groei van de
+    # inhoud.
+    "coordinator.py:get_diagnostic_summary": 121,
     "coordinator.py:get_quarter_plan": 95,
     "overview_svg.py:bouw_scada": 69,
     "solar_forecast.py:async_bootstrap_from_history": 69,

@@ -697,6 +697,16 @@ views:
     hold_action:
       action: more-info
   - type: custom:mushroom-template-card
+    primary: De installatie is onvolledig
+    secondary: '{% set e = ''switch.woonkamer_energy_management_system_melding_installatie_onvolledig'' %}{% set last = state_attr(e, ''laatst_verstuurd'') %}{{ ''AAN'' if is_state(e, ''on'') else ''uit'' }} · demping 1440 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom(''%-d %b %H:%M'') }}{% endif %}'
+    icon: mdi:bell-outline
+    icon_color: '{{ ''green'' if is_state(''switch.woonkamer_energy_management_system_melding_installatie_onvolledig'', ''on'') else ''grey'' }}'
+    entity: switch.woonkamer_energy_management_system_melding_installatie_onvolledig
+    tap_action:
+      action: toggle
+    hold_action:
+      action: more-info
+  - type: custom:mushroom-template-card
     primary: Mogelijk sluipverbruik
     secondary: '{% set e = ''switch.woonkamer_energy_management_system_melding_sluipverbruik'' %}{% set last = state_attr(e, ''laatst_verstuurd'') %}{{ ''AAN'' if is_state(e, ''on'') else ''uit'' }} · demping 720 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom(''%-d %b %H:%M'') }}{% endif %}'
     icon: mdi:bell-outline
@@ -2603,6 +2613,39 @@ views:
 
 
         _**!** = de accu kan in dat kwartier niets meer leveren en het huis hangt aan het net. **Rood** = van plan veranderd sinds de eerste voorspelling. Voorbije kwartieren verdwijnen; er wordt gekeken zover als er prijzen zijn ({{ p | length }} kwartieren nu)._'
+      grid_options:
+        columns: 12
+        rows: auto
+    - type: markdown
+      title: Proef - zou smart_charging lonen?
+      content: '{% set t = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''smart_charging_proef'') or {} %}{% if not t.get(''beschikbaar'') %}{{ t.get(''reden'', ''Nog geen planning beschikbaar.'') }}{% else %}| | |
+
+        |---|---|
+
+        | Kwartieren met een tekort | {{ t.kwartieren_met_tekort }} van {{ t.kwartieren }} |
+
+        | Waarvan het net goedkoper was | {{ t.kwartieren_smart_charging_beter }} |
+
+        | Samen | {{ t.totaal_voordeel_eur }} euro |
+
+        | Duurste prijs vandaag | {{ t.duurste_prijs_ct }} ct |
+
+        | Waard om vast te houden | {{ t.waarde_later_ct_per_kwh }} ct/kWh |
+
+
+        _Na {{ t.rendement_procent }}% rendement en {{ t.slijtage_ct_per_kwh }} ct slijtage._
+
+
+        | Tijd | Prijs | Zon | Verbruik | Tekort | Beter? |
+
+        |---|---|---|---|---|---|
+
+        {% for r in t.rijen %}{% if r.tekort_kwh > 0 %}| {{ r.van }} | {{ r.prijs_ct }} ct | {{ r.zon_kwh }} kWh | {{ r.verbruik_kwh }} kWh | {{ r.tekort_kwh }} kWh | {% if r.smart_charging_beter %}**ja** {{ (r.voordeel_eur * 100) | round(1) }} ct{% else %}nee{% endif %} |
+
+        {% endif %}{% endfor %}{% endif %}
+
+
+        _Alleen kwartieren waarin de zon het huis niet dekt; anders doen beide modi hetzelfde. Meet alleen - stuurt niets._'
       grid_options:
         columns: 12
         rows: auto

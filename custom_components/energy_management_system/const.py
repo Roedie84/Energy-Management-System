@@ -1925,6 +1925,7 @@ LOG_PRIORITEITEN = {
     "verbruiksleer_reset": LOG_PRIO_AANDACHT,
     "koeling_te_scherp": LOG_PRIO_AANDACHT,
     "celspanning_laag": LOG_PRIO_AANDACHT,
+    "installatie_onvolledig": LOG_PRIO_KRITIEK,
     # Aandacht - het vraagt een beslissing.
     "plan_verkoop_geblokkeerd": LOG_PRIO_AANDACHT,
     "battery_module_drift": LOG_PRIO_AANDACHT,
@@ -2793,6 +2794,15 @@ NOTIFICATION_TYPES: tuple[tuple[str, str, str, bool, int], ...] = (
         "Wanneer de koelventilator van de thuisaccu schakelt.",
         True,
         15,
+    ),
+    (
+        "installatie_onvolledig",
+        "De installatie is onvolledig",
+        "Wanneer een bestand van een oudere versie is of ontbreekt. Sinds "
+        "v3.55.0 worden alleen gewijzigde bestanden geleverd, en dan is "
+        "een vergeten bestand de nieuwe manier om het mis te laten gaan.",
+        True,
+        1440,
     ),
     (
         "celspanning_laag",
@@ -4712,6 +4722,7 @@ ACHTERHOEKS_TITELS = {
     "verbruiksleer_reset": "t Leren begint opnieuw",
     "koeling_te_scherp": "De koeling geet te vaak an",
     "celspanning_laag": "n Cel steet te lege",
+    "installatie_onvolledig": "De installatie is neet compleet",
     "appliance_ready": "'n Apparaat is klaor",
     "appliance_cheap_moment": "Good moment veur 'n apparaat",
     "device_drift": "'n Apparaat wiekt af",

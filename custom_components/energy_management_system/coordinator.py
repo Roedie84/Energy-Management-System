@@ -1696,6 +1696,34 @@ class EnergyManagementSystemCoordinator:
                     "Onvolledige installatie: %s",
                     self.bestandscontrole.get("uitleg"),
                 )
+                # v3.67.0: en een melding op de telefoon.
+                #
+                # Gevraagd: "Krijg ik een melding op mijn telefoon of zie
+                # ik het bij aandachtspunten op mijn landingspagina als
+                # bepaalde bestanden van een oude versie zijn? Dit zodat
+                # ik getriggerd word."
+                #
+                # Het logboek is de verkeerde plek: daar kijk je alleen
+                # als je al vermoedt dat er iets is. Bij een deellevering
+                # is het omgekeerde het geval - de code draait gewoon, en
+                # niets wijst erop dat de helft van vorige week is.
+                afwijkend = self.bestandscontrole.get("afwijkend") or []
+                ontbrekend = self.bestandscontrole.get("ontbrekend") or []
+                self._dispatch_notification(
+                    notify_service=self.config.get(
+                        CONF_APPLIANCE_NOTIFY_SERVICE
+                    ),
+                    title="📦 De installatie is onvolledig",
+                    message=(
+                        f"{self.bestandscontrole.get('uitleg', '')} "
+                        f"Afwijkend: {', '.join(afwijkend) or 'geen'}. "
+                        f"Ontbrekend: {', '.join(ontbrekend) or 'geen'}. "
+                        "Kopieer alle bestanden uit de laatste levering "
+                        "opnieuw en herstart."
+                    ),
+                    notification_id="ems_installatie_onvolledig",
+                    kind="installatie_onvolledig",
+                )
         except Exception:  # noqa: BLE001 - mag nooit het opstarten breken
             _LOGGER.exception("Kon de bestandscontrole niet uitvoeren")
 
@@ -25561,6 +25589,53 @@ class EnergyManagementSystemCoordinator:
 
         return missing
 
+    def _aandachtspunten_over_de_integratie(self) -> list[dict]:
+        """Punten die over de INTEGRATIE gaan, niet over de installatie
+        (v3.67.0).
+
+        Gevraagd: "Krijg ik een melding op mijn telefoon of zie ik het
+        bij aandachtspunten op mijn landingspagina als bepaalde bestanden
+        van een oude versie zijn? Dit zodat ik getriggerd word."
+
+        Nee, en dat was een gat. De bestandscontrole van v3.63.0 zette
+        een regel in het logboek en een veld in de export - allebei
+        plekken waar je alleen kijkt als je al vermoedt dat er iets is.
+
+        Juist bij deelleveringen is het omgekeerde nodig: je weet niet
+        dat er iets mis is, want de code draait gewoon.
+
+        Eigen functie, want `get_diagnostic_summary` staat op de ratel
+        van v3.35.0 en mag niet groeien.
+        """
+        uit: list[dict] = []
+
+        bestanden = self.get_bestandscontrole()
+        if bestanden.get("beschikbaar") and not bestanden.get("in_orde"):
+            uit.append(
+                {
+                    "titel": "Onvolledige installatie",
+                    "tekst": bestanden.get("uitleg", ""),
+                    "actie": (
+                        "Kopieer alle bestanden uit de laatste levering "
+                        "opnieuw en herstart Home Assistant."
+                    ),
+                }
+            )
+
+        # En de uitkomsten die logisch niet kunnen (v3.65.0).
+        for bevinding in self.get_zelftoets():
+            uit.append(
+                {
+                    "titel": bevinding["naam"],
+                    "tekst": bevinding["wat"],
+                    "actie": (
+                        "Dit is een fout in de integratie zelf, niet in "
+                        "de meetopstelling."
+                    ),
+                }
+            )
+        return uit
+
     def get_diagnostic_summary(self) -> dict:
         """Snelle gezondheidscheck-samenvatting (v0.63.91, gevraagd:
         "zijn er nog zaken om de integratie te verbeteren, bijvoorbeeld
@@ -25586,6 +25661,8 @@ class EnergyManagementSystemCoordinator:
         """
         aandachtspunten = []
         informatief = []
+
+        aandachtspunten.extend(self._aandachtspunten_over_de_integratie())
 
         if (
             self.measurement_quality is not None
