@@ -10028,6 +10028,36 @@ class EnergyManagementSystemCoordinator:
         dagen = (dt_util.now().date() - self.first_seen_date).days + 1
         if dagen < BATTERY_CALENDAR_MIN_DAYS:
             return None
+        # v3.66.0: uit de DAGREEKS, niet uit de cyclusteller.
+        #
+        # Gevonden bij het nalopen van de aannames.
+        # `battery_cumulative_discharged_kwh` wordt op geen enkele plek
+        # opgehoogd - hij staat op 0.0 bij het opstarten en blijft daar.
+        # De kalendergrens rekende dus met nul doorzet en viel terug op
+        # een schatting.
+        #
+        # Gemeten bij deze installatie:
+        #
+        #     dagreeks, laatste 7 dagen   6,73 kWh/dag
+        #     per jaar                    2456 kWh
+        #     over 12 jaar               29.469 kWh
+        #     de berekening gebruikte    23.103 kWh
+        #
+        # Een verschil van 27%, en dat drukt de slijtage van 9,5 naar
+        # ongeveer 7,4 ct per kWh - een getal dat in de verkooptoets, de
+        # saldering-rem en vier proefstandkandidaten zit.
+        #
+        # De dagreeks draagt `accu_ontladen_kwh` per dag en is wél
+        # gevuld. Die is bovendien beter: hij overleeft een herstart en
+        # is uit de meterstanden opgebouwd.
+        dagen_met_doorzet = [
+            r["accu_ontladen_kwh"]
+            for r in (self.energy_daily_history or [])
+            if r.get("accu_ontladen_kwh") is not None
+        ]
+        if len(dagen_met_doorzet) >= BATTERY_CALENDAR_MIN_DAYS:
+            return statistics.median(dagen_met_doorzet) * 365
+
         doorzet = self.battery_cumulative_discharged_kwh or 0.0
         if doorzet <= 0:
             return None
@@ -19279,9 +19309,30 @@ class EnergyManagementSystemCoordinator:
         cycles = self.battery_estimated_full_cycles
         if cycles is None:
             return None
-        degraded_fraction = min(
-            1.0, cycles / BATTERY_CYCLES_TO_80_PERCENT_CAPACITY
+        # v3.66.0: dezelfde cyclusverwachting als de slijtageberekening.
+        #
+        # Gevonden bij het nalopen van de aannames. Er stonden er TWEE
+        # voor dezelfde grootheid:
+        #
+        #     BATTERY_CYCLES_TO_80_PERCENT_CAPACITY = 4000  (v0.63.101)
+        #     DEFAULT_BATTERY_CYCLE_LIFE            = 6000  (v3.5.0)
+        #
+        # Allebei "cycli tot 80% restcapaciteit". De 4000 is een
+        # generieke LFP-aanname uit de tijd dat de fabrikantwaarde nog
+        # niet bekend was; de 6000 is Zendure's opgave voor de AB3000X en
+        # is bovendien instelbaar.
+        #
+        # Gevolg van het verschil: deze schatting rekende de accu
+        # anderhalf keer zo snel af als de slijtageberekening. Bij 500
+        # cycli gaf de een 97,5% restcapaciteit en de ander 98,3% - klein
+        # nu, maar het loopt lineair uit elkaar.
+        #
+        # Twee getallen voor dezelfde grootheid is altijd fout, ook als
+        # ze allebei verdedigbaar zijn.
+        verwachte_cycli = self.instelling(
+            CONF_BATTERY_CYCLE_LIFE, DEFAULT_BATTERY_CYCLE_LIFE
         )
+        degraded_fraction = min(1.0, cycles / max(1, verwachte_cycli))
         return round(100 - degraded_fraction * 20, 1)
 
     def _update_self_sufficiency_tracking(self, now: datetime) -> None:

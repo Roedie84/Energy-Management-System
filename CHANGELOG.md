@@ -19554,3 +19554,67 @@ Er staat een toets op die de cijfers van die export letterlijk
 teruglegt, met de vraag of hij nu wél afgaat.
 
 **Volledige testsuite**: 3154 tests, allemaal groen.
+
+## v3.66.0 — Twee getallen voor dezelfde grootheid, en een teller die nooit liep
+
+**Gevraagd**: alle aannames controleren.
+
+Twee echte vondsten.
+
+### De cyclusverwachting stond er twee keer in
+
+```
+BATTERY_CYCLES_TO_80_PERCENT_CAPACITY = 4000   (v0.63.101)
+DEFAULT_BATTERY_CYCLE_LIFE            = 6000   (v3.5.0)
+```
+
+Allebei "cycli tot 80% restcapaciteit". De 4000 is een generieke
+LFP-aanname uit de tijd dat de fabrikantwaarde nog niet bekend was; de
+6000 is Zendure's opgave voor de AB3000X en is bovendien instelbaar.
+
+Gevolg: de capaciteitsschatting rekende de accu **anderhalf keer zo snel
+af** als de slijtageberekening. Klein bij 500 cycli, maar het loopt
+lineair uit elkaar. Twee getallen voor dezelfde grootheid is altijd
+fout, ook als ze allebei verdedigbaar zijn.
+
+### En de cyclusteller werd nergens opgehoogd
+
+`battery_cumulative_discharged_kwh` staat op 0.0 bij het opstarten en
+wordt op geen enkele plek verhoogd. De kalendergrens van de
+slijtageberekening rekende dus met nul doorzet.
+
+Gemeten bij deze installatie:
+
+```
+dagreeks, laatste 7 dagen    6,73 kWh/dag
+per jaar                     2456 kWh
+over 12 jaar                29.469 kWh
+de berekening gebruikte     23.103 kWh
+```
+
+Een verschil van **27%**, en dat drukt de slijtage van 9,5 naar ongeveer
+7,4 ct per kWh — een getal dat in de verkooptoets, de saldering-rem en
+vier proefstandkandidaten zit.
+
+De jaardoorzet komt nu uit de **dagreeks**, die `accu_ontladen_kwh` per
+dag draagt en wél gevuld is. Die is bovendien beter: hij overleeft een
+herstart en is uit de meterstanden opgebouwd. Met de mediaan, zodat een
+kalibratiedag van 8 kWh de schatting niet optilt — dezelfde reden als
+bij het verbruik in v0.62.0.
+
+### De overige aannames
+
+| | |
+|---|---|
+| minimum laadstand | config 15%, apparaat 10% — de entiteit wint, klopt |
+| moduleprijs 729 × 3 | door de gebruiker bevestigd |
+| kalenderjaren 12 | aanname, niet toetsbaar |
+| celspanning 3,10 en 3,00 V | volgen de LFP-ontlaadkromme |
+| saldering 31-12-2026 | instelbaar |
+| rendement-terugval 90% | gemeten 82–84%, dus optimistisch |
+
+Die laatste laat ik staan: hij geldt alleen zolang er nog niets gemeten
+is, en dan is een optimistische aanname minder erg dan een pessimistische
+die de accu onnodig stil zet.
+
+**Volledige testsuite**: 3158 tests, allemaal groen.

@@ -26,6 +26,12 @@ from custom_components.energy_management_system.coordinator import (
 
 
 class _Slijtage:
+    # v3.66.0: de jaardoorzet komt uit de DAGREEKS, niet uit de
+    # cyclusteller - die werd nergens opgehoogd en stond permanent op
+    # nul. Achttien dagen van 4,8 kWh is dezelfde 86,3 kWh als voorheen.
+    energy_daily_history = [
+        {"accu_ontladen_kwh": 4.794} for _ in range(18)
+    ]
 
     def instelling(self, sleutel, standaard):
         """v3.56.0: de standaard geldt ook bij een opgeslagen None."""
@@ -265,3 +271,85 @@ def test_the_cadence_counter_is_kept():
     oordeel dan nooit te zien.
     """
     assert "sensor_cadence" in PERSISTED_PLAIN_FIELDS
+
+
+# --- de jaardoorzet komt uit de dagreeks (v3.66.0) -------------------
+
+
+def test_the_yearly_throughput_comes_from_the_daily_series(monkeypatch):
+    """Gevonden bij het nalopen van de aannames op 28 augustus.
+
+    `battery_cumulative_discharged_kwh` wordt op geen enkele plek
+    opgehoogd - hij staat op 0.0 bij het opstarten en blijft daar. De
+    kalendergrens rekende dus met nul doorzet.
+
+    Gemeten bij deze installatie:
+
+        dagreeks, laatste 7 dagen   6,73 kWh/dag
+        per jaar                    2456 kWh
+        over 12 jaar               29.469 kWh
+        de berekening gebruikte    23.103 kWh
+
+    Een verschil van 27%, en dat drukt de slijtage van 9,5 naar ongeveer
+    7,4 ct per kWh - een getal dat in de verkooptoets, de saldering-rem
+    en vier proefstandkandidaten zit.
+    """
+    from custom_components.energy_management_system import coordinator as mod
+
+    class _Klok:
+        @staticmethod
+        def now():
+            return datetime(2026, 8, 28, 12, 0)
+
+    monkeypatch.setattr(mod, "dt_util", _Klok)
+
+    obj = _Slijtage()
+    obj.battery_cumulative_discharged_kwh = 0.0
+    obj.energy_daily_history = [{"accu_ontladen_kwh": 6.73} for _ in range(20)]
+
+    per_jaar = obj._gemeten_jaardoorzet_kwh()
+
+    assert per_jaar == pytest.approx(6.73 * 365, abs=1)
+
+
+def test_a_short_series_falls_back(monkeypatch):
+    """Een schatting uit vijf dagen die de slijtage kan verdubbelen,
+
+    hoort niet mee te tellen - dezelfde regel als voorheen.
+    """
+    from custom_components.energy_management_system import coordinator as mod
+
+    class _Klok:
+        @staticmethod
+        def now():
+            return datetime(2026, 8, 28, 12, 0)
+
+    monkeypatch.setattr(mod, "dt_util", _Klok)
+
+    obj = _Slijtage()
+    obj.battery_cumulative_discharged_kwh = 0.0
+    obj.energy_daily_history = [{"accu_ontladen_kwh": 6.73} for _ in range(3)]
+
+    assert obj._gemeten_jaardoorzet_kwh() is None
+
+
+def test_the_median_is_used_not_the_mean(monkeypatch):
+    """Een dag met een kalibratie van 8 kWh mag de jaarschatting niet
+
+    optillen - dezelfde reden als bij het verbruik in v0.62.0.
+    """
+    from custom_components.energy_management_system import coordinator as mod
+
+    class _Klok:
+        @staticmethod
+        def now():
+            return datetime(2026, 8, 28, 12, 0)
+
+    monkeypatch.setattr(mod, "dt_util", _Klok)
+
+    obj = _Slijtage()
+    obj.battery_cumulative_discharged_kwh = 0.0
+    obj.energy_daily_history = [{"accu_ontladen_kwh": 5.0} for _ in range(19)]
+    obj.energy_daily_history.append({"accu_ontladen_kwh": 40.0})
+
+    assert obj._gemeten_jaardoorzet_kwh() == pytest.approx(5.0 * 365, abs=1)

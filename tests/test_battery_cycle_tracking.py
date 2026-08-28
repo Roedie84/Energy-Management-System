@@ -73,8 +73,15 @@ def test_estimated_capacity_percent_at_zero_cycles(make_coordinator, hass):
 
 
 def test_estimated_capacity_percent_at_expected_end_of_life(make_coordinator, hass):
+    """v3.66.0: dezelfde cyclusverwachting als de slijtageberekening.
+
+    Er stonden er twee voor dezelfde grootheid - 4000 uit v0.63.101 en
+    6000 uit v3.5.0 - allebei "cycli tot 80% restcapaciteit". Deze
+    schatting rekende de accu daardoor anderhalf keer zo snel af als de
+    slijtageberekening.
+    """
     from custom_components.energy_management_system.const import (
-        BATTERY_CYCLES_TO_80_PERCENT_CAPACITY,
+        DEFAULT_BATTERY_CYCLE_LIFE,
     )
 
     coordinator = make_coordinator(
@@ -82,8 +89,30 @@ def test_estimated_capacity_percent_at_expected_end_of_life(make_coordinator, ha
     )
     hass.states.set("sensor.capacity", "5.0")
     coordinator.battery_cumulative_discharged_kwh = (
-        BATTERY_CYCLES_TO_80_PERCENT_CAPACITY * 5.0
+        DEFAULT_BATTERY_CYCLE_LIFE * 5.0
     )
+
+    assert coordinator.battery_estimated_capacity_percent == 80.0
+
+
+def test_the_configured_cycle_life_is_followed(make_coordinator, hass):
+    """Wie zijn eigen cyclusaantal invult, hoort dat ook hier terug te
+
+    zien - anders rekent de ene helft van de integratie met de opgave
+    van de fabrikant en de andere met een generieke aanname.
+    """
+    from custom_components.energy_management_system.const import (
+        CONF_BATTERY_CYCLE_LIFE,
+    )
+
+    coordinator = make_coordinator(
+        _base_config(
+            battery_total_capacity_sensor_entity="sensor.capacity",
+            **{CONF_BATTERY_CYCLE_LIFE: 3000},
+        )
+    )
+    hass.states.set("sensor.capacity", "5.0")
+    coordinator.battery_cumulative_discharged_kwh = 3000 * 5.0
 
     assert coordinator.battery_estimated_capacity_percent == 80.0
 
