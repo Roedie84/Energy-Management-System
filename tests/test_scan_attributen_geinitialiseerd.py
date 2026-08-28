@@ -53,9 +53,31 @@ def _ongezette_attributen(klasse: ast.ClassDef, bron: str) -> list[str]:
     if init is None:
         return []
 
+    # v3.58.0: ook wat de door `__init__` aangeroepen hulpfuncties
+    # zetten.
+    #
+    # De ratel dwong af dat er een blok uit `__init__` moest; die velden
+    # staan nu in `_init_laatste_beslissing()`. Ze zijn daarmee niet
+    # minder geinitialiseerd - deze scan keek alleen op de verkeerde
+    # plek, en zou anders elke opsplitsing bestraffen.
+    hulpfuncties = {
+        n.func.attr
+        for n in ast.walk(init)
+        if isinstance(n, ast.Call)
+        and isinstance(n.func, ast.Attribute)
+        and isinstance(n.func.value, ast.Name)
+        and n.func.value.id == "self"
+    }
+    zetters = [init] + [
+        n
+        for n in klasse.body
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and n.name in hulpfuncties
+    ]
     gezet = {
         n.attr
-        for n in ast.walk(init)
+        for zetter in zetters
+        for n in ast.walk(zetter)
         if isinstance(n, ast.Attribute)
         and isinstance(n.value, ast.Name)
         and n.value.id == "self"

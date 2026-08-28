@@ -29,6 +29,9 @@ from .const import (
     CONF_VACATION_CONSUMPTION_REDUCTION_PERCENT,
     DEFAULT_VACATION_CONSUMPTION_REDUCTION_PERCENT,
     CONF_DISHWASHER_POWER_SENSOR,
+    CONF_DISHWASHER_ENERGY_SENSOR,
+    CONF_PHASE_POWER_SENSORS,
+    CONF_WASHING_MACHINE_ENERGY_SENSOR,
     CONF_DISHWASHER_READY_SENSOR,
     CONF_WASHING_MACHINE_POWER_SENSOR,
     CONF_WASHING_MACHINE_READY_SENSOR,
@@ -84,6 +87,8 @@ from .const import (
     CONF_BATTERY_TOTAL_CAPACITY_SENSOR,
     CONF_BATTERY_MIN_SOC_NUMBER,
     STANDAARD_ENTITEITEN,
+    STANDAARD_ENTITEITLIJSTEN,
+    STANDAARD_ENTITEITLIJSTEN,
     CONF_BATTERY_MAX_SOC_NUMBER,
     CONF_BATTERY_MAX_CHARGE_POWER_ENTITY,
     CONF_BATTERY_MAX_DISCHARGE_POWER_ENTITY,
@@ -148,7 +153,12 @@ def _optioneel(sleutel: str, defaults: dict):
         # plaats van hard ingebakken, want deze week braken drie dingen
         # doordat een naam of adres veranderde - en hard ingebakken
         # namen breken dan stil.
-        waarde = STANDAARD_ENTITEITEN.get(sleutel)
+        waarde = STANDAARD_ENTITEITEN.get(
+            sleutel
+        ) or STANDAARD_ENTITEITLIJSTEN.get(sleutel)
+    if waarde in (None, "", []):
+        # v3.59.0: en de instellingen met meerdere entiteiten.
+        waarde = STANDAARD_ENTITEITLIJSTEN.get(sleutel)
     if waarde in (None, ""):
         return vol.Optional(sleutel)
     return vol.Optional(sleutel, default=waarde)
@@ -365,6 +375,14 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
                 )
             ),
             _optioneel(CONF_DISHWASHER_POWER_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            # v3.57.0: de cumulatieve energiemeters, zodat het
+            # cyclusverbruik een meting wordt in plaats van een
+            # benadering uit het gemiddelde vermogen.
+            # v3.58.0: het vermogen per fase. Het capaciteitstarief
+            # kijkt naar de zwaarst belaste fase, niet naar het totaal.
+            _optioneel(CONF_PHASE_POWER_SENSORS, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor", device_class="power", multiple=True)),
+            _optioneel(CONF_DISHWASHER_ENERGY_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor", device_class="energy")),
+            _optioneel(CONF_WASHING_MACHINE_ENERGY_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor", device_class="energy")),
             _optioneel(CONF_DISHWASHER_READY_SENSOR, defaults): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="binary_sensor")
             ),

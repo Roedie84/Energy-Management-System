@@ -92,7 +92,10 @@
           "battery_cooling_opportunity_c": "Cool when cheap above (°C): fan runs below the main threshold when outdoor air is much colder",
           "battery_max_soc_number_entity": "Battery upper limit (optional)",
           "battery_max_charge_power_entity": "Battery maximum charge power (optional)",
-          "battery_max_discharge_power_entity": "Battery maximum discharge power (optional)"
+          "battery_max_discharge_power_entity": "Battery maximum discharge power (optional)",
+          "dishwasher_energy_sensor_entity": "Dishwasher energy meter (optional)",
+          "washing_machine_energy_sensor_entity": "Washing machine energy meter (optional)",
+          "phase_power_sensor_entities": "Power per phase (optional, in order L1 L2 L3)"
         }
       }
     },
@@ -198,7 +201,10 @@
           "battery_cooling_opportunity_c": "Cool when cheap above (°C): fan runs below the main threshold when outdoor air is much colder",
           "battery_max_soc_number_entity": "Battery upper limit (optional)",
           "battery_max_charge_power_entity": "Battery maximum charge power (optional)",
-          "battery_max_discharge_power_entity": "Battery maximum discharge power (optional)"
+          "battery_max_discharge_power_entity": "Battery maximum discharge power (optional)",
+          "dishwasher_energy_sensor_entity": "Dishwasher energy meter (optional)",
+          "washing_machine_energy_sensor_entity": "Washing machine energy meter (optional)",
+          "phase_power_sensor_entities": "Power per phase (optional, in order L1 L2 L3)"
         }
       }
     },

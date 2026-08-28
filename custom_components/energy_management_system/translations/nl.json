@@ -92,7 +92,10 @@
           "battery_cooling_opportunity_c": "Goedkoop koelen boven (°C): ventilator draait onder de hoofddrempel als het buiten veel kouder is",
           "battery_max_soc_number_entity": "Bovengrens van de accu (optioneel)",
           "battery_max_charge_power_entity": "Maximaal laadvermogen van de accu (optioneel)",
-          "battery_max_discharge_power_entity": "Maximaal ontlaadvermogen van de accu (optioneel)"
+          "battery_max_discharge_power_entity": "Maximaal ontlaadvermogen van de accu (optioneel)",
+          "dishwasher_energy_sensor_entity": "Energiemeter van de vaatwasser (optioneel)",
+          "washing_machine_energy_sensor_entity": "Energiemeter van de wasmachine (optioneel)",
+          "phase_power_sensor_entities": "Vermogen per fase (optioneel, in volgorde L1 L2 L3)"
         }
       }
     },
@@ -198,7 +201,10 @@
           "battery_cooling_opportunity_c": "Goedkoop koelen boven (°C): ventilator draait onder de hoofddrempel als het buiten veel kouder is",
           "battery_max_soc_number_entity": "Bovengrens van de accu (optioneel)",
           "battery_max_charge_power_entity": "Maximaal laadvermogen van de accu (optioneel)",
-          "battery_max_discharge_power_entity": "Maximaal ontlaadvermogen van de accu (optioneel)"
+          "battery_max_discharge_power_entity": "Maximaal ontlaadvermogen van de accu (optioneel)",
+          "dishwasher_energy_sensor_entity": "Energiemeter van de vaatwasser (optioneel)",
+          "washing_machine_energy_sensor_entity": "Energiemeter van de wasmachine (optioneel)",
+          "phase_power_sensor_entities": "Vermogen per fase (optioneel, in volgorde L1 L2 L3)"
         }
       }
     },

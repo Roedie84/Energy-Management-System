@@ -458,6 +458,11 @@ from .const import (
     SPIEGEL_MARGE_INSTELLING_PROCENT,
     SPIEGEL_MARGE_VERMOGEN_W,
     SPIEGEL_MARGE_ENERGIE_KWH,
+    CONF_DISHWASHER_ENERGY_SENSOR,
+    CONF_WASHING_MACHINE_ENERGY_SENSOR,
+    APPLIANCE_CYCLE_MAX_KWH,
+    CONF_PHASE_POWER_SENSORS,
+    FASEPIEK_MELDGRENS_W,
     SPIEGEL_MARGE_KRUIS_PROCENT,
     SOLARFLOW_DEFAULT_GRID_POWER_W,
     SOLARFLOW_MAX_BATTERY_CHARGE_W,
@@ -780,7 +785,8 @@ class EnergyManagementSystemCoordinator:
         # is removed - see `_should_capture_solar_instead_of_postponing`.
         # Only the live solar-surplus tracking remains, purely to avoid
         # wasting solar that's already there during smart_discharging.
-        self.last_arbitrage_solar_surplus_w: float | None = None
+        # v3.58.0: verhuisd naar een eigen functie; zie daar.
+        self._init_laatste_beslissing()
         # v1.22.0: het laatste uitstelplan voor de zonopvang.
         self.last_solar_defer_plan: dict = {}
         # v1.23.0: waarom er wel of niet verkocht mag worden.
@@ -854,7 +860,6 @@ class EnergyManagementSystemCoordinator:
         # spikes.
         self._recent_consumption_readings_kw: list[float] = []
         self._quooker_active_since: datetime | None = None
-        self.last_heavy_load_source: str | None = None
         self._steelstofzuiger_complete_today: bool = False
         self._steelstofzuiger_complete_date: date | None = None
         self._steelstofzuiger_charge_started_at: datetime | None = None
@@ -863,7 +868,6 @@ class EnergyManagementSystemCoordinator:
         self._steelstofzuiger_next_poll_at: datetime | None = None
         self._steelstofzuiger_idle_power_history: list[float] = []
         self.steelstofzuiger_charge_duration_history: list[float] = []
-        self.last_steelstofzuiger_action: str | None = None
         self._fietsladers_complete_today: bool = False
         self._fietsladers_complete_date: date | None = None
         self._fietsladers_charge_started_at: datetime | None = None
@@ -901,7 +905,6 @@ class EnergyManagementSystemCoordinator:
         # duurpatroon.
         self.water_source_profiles: dict[str, dict] = {}
         # v1.18.2: aanwezigheid uit bewegingssensoren.
-        self.last_motion_at: datetime | None = None
         self.presence_state: str | None = None
         # Per kwartier van de week: [aantal keer thuis, totaal].
         self.presence_week_profile: dict[str, list[int]] = {}
@@ -910,7 +913,6 @@ class EnergyManagementSystemCoordinator:
         # correct functioneert."
         self.internal_failures: dict[str, str] = {}
         # v1.20.0: wanneer de slaapsensor als laatste bewoog.
-        self.last_bedtime_motion_at: datetime | None = None
         self.bedtime_history: list[str] = []
         # v1.20.1: welke sensor wanneer als laatste bewoog.
         self.presence_last_seen: dict[str, str] = {}
@@ -946,7 +948,6 @@ class EnergyManagementSystemCoordinator:
         self._plan_review_dagstand: dict = {}
         self._last_intrusion_alert_at: datetime | None = None
         self.water_softener_last_regeneration: datetime | None = None
-        self.last_fietsladers_action: str | None = None
 
         # Accu-koeling (v0.63.122) - overgenomen uit een losse
         # HA-automatisering, zie const.py.
@@ -1015,22 +1016,9 @@ class EnergyManagementSystemCoordinator:
         self.washing_machine_usage_hourly_history: dict[int, list[float]] = {}
         self._dishwasher_notified_date: date | None = None
         self._washing_machine_notified_date: date | None = None
-        self.last_dishwasher_notification: str | None = None
-        self.last_washing_machine_notification: str | None = None
 
-        self.last_reason: str | None = None
         self._last_notified_mode_signature: tuple | None = None
         self.mode_change_log: list[dict] = []
-        self.last_cheap_block_start: datetime | None = None
-        self.last_cheap_block_end: datetime | None = None
-        self.last_discharge_start: datetime | None = None
-        self.last_is_expensive: bool = False
-        self.last_effective_expensive_quarters_count: int | None = None
-        self.last_max_sellable_quarters_by_capacity: int | None = None
-        self.last_simulated_action: str | None = None
-        self.last_expected_mode: str | None = None
-        self.last_available_kwh: float | None = None
-        self.last_needed_kwh_to_bridge: float | None = None
         self.last_needed_kwh_breakdown: dict = {}
         # v0.63.76, requested ("ik wil daarom ook altijd de tabel
         # zien"): the actual end-of-window used for the breakdown
@@ -1038,23 +1026,9 @@ class EnergyManagementSystemCoordinator:
         # stays consistent with whatever reference window was actually
         # used (cheap_block_start, or the 24h fallback when there's no
         # meaningful upcoming cheap block).
-        self.last_needed_kwh_breakdown_end_time: datetime | None = None
-        self.last_has_enough_energy: bool | None = None
         self.energy_bridge_transition_log: list[dict] = []
-        self.last_explanation: str = "Nog geen data verwerkt."
-        self.last_soc_percent: float | None = None
-        self.last_discharge_power_applied: float | None = None
-        self.last_household_load_w: float | None = None
-        self.last_discharge_floor_applied: bool = False
         self.discharge_floor_events: list[dict] = []
-        self.last_expensive_tier: str | None = None
-        self.last_expensive_price_threshold: float | None = None
-        self.last_secondary_price_threshold: float | None = None
-        self.last_low_solar_narrowed_threshold: bool = False
-        self.last_price_priority_held_off: bool = False
-        self.last_used_soc_taper_fallback: bool = False
         self.last_reserve_margin_breakdown: dict = {}
-        self.last_winter_guard_suppressed_today: bool = False
         self.last_timeline: list[dict] = []
         self.last_transitions: list[dict] = []
 
@@ -1074,7 +1048,6 @@ class EnergyManagementSystemCoordinator:
         # berekening nog op geen enkele manier aan) --
         self.temp_consumption_history: list[dict] = []
         self.temp_consumption_prediction_error_history: list[float] = []
-        self.last_temp_consumption_note: str | None = None
 
         # -- Full-day hourly consumption profile --
         # Learned continuously, all day every day (not just during the
@@ -1167,7 +1140,6 @@ class EnergyManagementSystemCoordinator:
         # v1.1.4: hoe vaak elke bronsensor daadwerkelijk beweegt t.o.v.
         # de tick. Zie SENSOR_CADENCE_* in const.py.
         self.sensor_cadence: dict[str, dict] = {}
-        self.last_energy_balance_error_w: float | None = None
         self.energy_balance_error_history: list[float | None] = []
         self.sensor_health_score: float | None = None
         self.measurement_quality: str | None = None
@@ -1202,6 +1174,8 @@ class EnergyManagementSystemCoordinator:
         # Vaatwasser/wasmachine RUSTEND/ACTIEF/KLAAR-toestandsmachine
         # (v0.63.32).
         self._dishwasher_state: str = "rustend"
+        # v3.57.0: de meterstand bij het begin van elke cyclus.
+        self._meterstand_bij_cyclusstart: dict = {}
         self._dishwasher_cycle_started_at: datetime | None = None
         self._dishwasher_below_threshold_since: datetime | None = None
         self.dishwasher_cycle_duration_history: list[float] = []
@@ -1358,17 +1332,9 @@ class EnergyManagementSystemCoordinator:
         self._pv_geometry_day_peak_w: float = 0.0
         self._pv_geometry_day_peak_azimuth: float | None = None
         self._pv_geometry_day_expected_peak_w: float = 0.0
-        self.last_backyard_spike_filtered_note: str | None = None
         self._listeners: list = []
         self._last_cost_basis_calc_time: datetime | None = None
-        self.last_charge_power_applied: float | None = None
-        self.last_current_price_per_kwh: float | None = None
-        self.last_projection_available_kwh: float | None = None
-        self.last_projection_reserve_kwh: float | None = None
         # -- System health tracking (for sensor.system_status) --
-        self.last_error: str | None = None
-        self.last_error_time: datetime | None = None
-        self.last_successful_update: datetime | None = None
 
         # -- Monthly summary (long-term trend, vs. the existing rolling
         # 7-day self-correction) --
@@ -1384,6 +1350,9 @@ class EnergyManagementSystemCoordinator:
         # tarieven gebaseerd op het hoogste piekvermogen (kW) i.p.v.
         # alleen kWh. Bewust op de gecorrigeerde consumptie-sensor
         # (netto netimport), niet op los batterij-/PV-vermogen.
+        # v3.58.0: de dagpiek per fase. Eén veld, want de
+        # functiegrootte-ratel laat `__init__` niet verder groeien.
+        self.fasepieken: dict = {"dag": None, "per_fase": {}}
         self.peak_power_today_w: float = 0.0
         self.peak_power_current_month_w: float = 0.0
         self.peak_power_previous_month_w: float | None = None
@@ -1467,7 +1436,6 @@ class EnergyManagementSystemCoordinator:
 
         # -- CO2-intensiteit van het net (v0.63.101) --
         self.co2_emitted_today_kg: float = 0.0
-        self.last_co2_intensity_g_per_kwh: float | None = None
         self._co2_last_sample: datetime | None = None
         self._co2_day_key: date | None = None
         self.previous_month_discharge_value_eur: float | None = None
@@ -1487,7 +1455,6 @@ class EnergyManagementSystemCoordinator:
         # energy was bought to cover the household, not to arbitrage.
         self._grid_charged_today: bool = False
         self._grid_charged_date: date | None = None
-        self.last_extra_dip_margin_eur_per_kwh: float | None = None
         self.extra_dip_margin_history: list[float] = []
         self._extra_dip_margin_last_sample_date: date | None = None
 
@@ -1557,6 +1524,64 @@ class EnergyManagementSystemCoordinator:
         self._unsub_water_state = None
         self._unsub_motion_state = None
         self._unsub_battery_cooling_state = None
+
+    def _init_laatste_beslissing(self) -> None:
+        """De velden die de LAATSTE beslissing beschrijven (v3.58.0).
+
+        Uit `__init__` gehaald omdat de functiegrootte-ratel van
+        v3.35.0 voor de vierde keer deze week aansloeg. Bij de vorige
+        keer stond er: "de volgende keer dat hier iets bij moet, hoort
+        er eerst een blok uit." Dit is dat blok.
+
+        Ze horen bij elkaar - allemaal het resultaat van de vorige
+        ronde - en geen van alle draagt geschiedenis. Verhuizen kost
+        dus niets.
+        """
+        self.last_arbitrage_solar_surplus_w: float | None = None
+        self.last_heavy_load_source: str | None = None
+        self.last_steelstofzuiger_action: str | None = None
+        self.last_motion_at: datetime | None = None
+        self.last_bedtime_motion_at: datetime | None = None
+        self.last_fietsladers_action: str | None = None
+        self.last_dishwasher_notification: str | None = None
+        self.last_washing_machine_notification: str | None = None
+        self.last_reason: str | None = None
+        self.last_cheap_block_start: datetime | None = None
+        self.last_cheap_block_end: datetime | None = None
+        self.last_discharge_start: datetime | None = None
+        self.last_is_expensive: bool = False
+        self.last_effective_expensive_quarters_count: int | None = None
+        self.last_max_sellable_quarters_by_capacity: int | None = None
+        self.last_simulated_action: str | None = None
+        self.last_expected_mode: str | None = None
+        self.last_available_kwh: float | None = None
+        self.last_needed_kwh_to_bridge: float | None = None
+        self.last_needed_kwh_breakdown_end_time: datetime | None = None
+        self.last_has_enough_energy: bool | None = None
+        self.last_explanation: str = "Nog geen data verwerkt."
+        self.last_soc_percent: float | None = None
+        self.last_discharge_power_applied: float | None = None
+        self.last_household_load_w: float | None = None
+        self.last_discharge_floor_applied: bool = False
+        self.last_expensive_tier: str | None = None
+        self.last_expensive_price_threshold: float | None = None
+        self.last_secondary_price_threshold: float | None = None
+        self.last_low_solar_narrowed_threshold: bool = False
+        self.last_price_priority_held_off: bool = False
+        self.last_used_soc_taper_fallback: bool = False
+        self.last_winter_guard_suppressed_today: bool = False
+        self.last_temp_consumption_note: str | None = None
+        self.last_energy_balance_error_w: float | None = None
+        self.last_backyard_spike_filtered_note: str | None = None
+        self.last_charge_power_applied: float | None = None
+        self.last_current_price_per_kwh: float | None = None
+        self.last_projection_available_kwh: float | None = None
+        self.last_projection_reserve_kwh: float | None = None
+        self.last_error: str | None = None
+        self.last_error_time: datetime | None = None
+        self.last_successful_update: datetime | None = None
+        self.last_co2_intensity_g_per_kwh: float | None = None
+        self.last_extra_dip_margin_eur_per_kwh: float | None = None
 
     def register_listener(self, callback_fn) -> None:
         """Register a callback (e.g. entity.async_write_ha_state) to
@@ -7194,6 +7219,50 @@ class EnergyManagementSystemCoordinator:
             "herkomst": herkomst,
             "let_op": let_op,
         }
+
+    @staticmethod
+    def _energiemeter_sleutel(state_attr: str) -> str:
+        return (
+            CONF_DISHWASHER_ENERGY_SENSOR
+            if "dishwasher" in state_attr
+            else CONF_WASHING_MACHINE_ENERGY_SENSOR
+        )
+
+    def _onthoud_meterstand_bij_start(self, state_attr: str) -> None:
+        """Legt de stand van de energiemeter vast bij het begin van een
+        cyclus (v3.57.0).
+
+        Zonder dit is het cyclusverbruik een benadering uit het
+        gemiddelde vermogen. Met de beginstand is het een meting:
+        eindstand min beginstand.
+        """
+        stand = self._read_sensor_float(
+            self.config.get(self._energiemeter_sleutel(state_attr))
+        )
+        self._meterstand_bij_cyclusstart[state_attr] = stand
+
+    def _cyclus_uit_de_meter_kwh(self, state_attr: str) -> float | None:
+        """Het gemeten cyclusverbruik, of None zonder bruikbare meter.
+
+        Geeft None zodra er iets niet klopt - geen meter, geen
+        beginstand, of een teller die is teruggesprongen. In al die
+        gevallen valt de aanroeper terug op de schatting uit het
+        vermogen, en dat is beter dan een verzonnen getal.
+        """
+        begin = self._meterstand_bij_cyclusstart.pop(state_attr, None)
+        if begin is None:
+            return None
+        eind = self._read_sensor_float(
+            self.config.get(self._energiemeter_sleutel(state_attr))
+        )
+        if eind is None:
+            return None
+        verschil = eind - begin
+        # Een teller die is teruggesprongen - na een herstart van het
+        # apparaat of een reset - levert een negatief of absurd getal op.
+        if verschil <= 0 or verschil > APPLIANCE_CYCLE_MAX_KWH:
+            return None
+        return round(verschil, 4)
 
     def _cyclus_energie_kwh(
         self, apparaat: str, start: datetime, einde: datetime
@@ -21407,6 +21476,9 @@ class EnergyManagementSystemCoordinator:
             self.peak_power_current_month_w = 0.0
             self._peak_power_month_key = month_key
 
+        # v3.58.0: ook per fase.
+        self._volg_fasepieken(now)
+
         if power_w > self.peak_power_today_w:
             self.peak_power_today_w = power_w
         if power_w > self.peak_power_current_month_w:
@@ -21414,6 +21486,71 @@ class EnergyManagementSystemCoordinator:
         if power_w > self.peak_power_all_time_w:
             self.peak_power_all_time_w = power_w
             self.peak_power_all_time_date = now.date().isoformat()
+
+    def _volg_fasepieken(self, now: datetime) -> None:
+        """De piek per fase, naast die van het totaal (v3.58.0).
+
+        Gemeten op 28 augustus: fase 1 op 1305 W, fase 2 op 40 en fase 3
+        op 76. De accu laadt op fase 1 en de omvormer levert op fase 1,
+        dus alles gebeurt daar - terwijl het capaciteitstarief door de
+        zwaarst belaste fase wordt bepaald en niet door het totaal.
+
+        Een dagpiek per fase, dezelfde omslag als de bestaande
+        totaalpiek. Meet alleen; er wordt niets mee aangestuurd.
+        """
+        entiteiten = self.config.get(CONF_PHASE_POWER_SENSORS) or []
+        if not entiteiten:
+            return
+        vandaag = now.date().isoformat()
+        if self.fasepieken.get("dag") != vandaag:
+            self.fasepieken = {"dag": vandaag, "per_fase": {}}
+        for nummer, entity_id in enumerate(entiteiten, 1):
+            vermogen = self._read_sensor_float(entity_id)
+            if vermogen is None:
+                continue
+            sleutel = f"fase_{nummer}"
+            huidig = self.fasepieken["per_fase"].get(sleutel, 0.0)
+            if vermogen > huidig:
+                self.fasepieken["per_fase"][sleutel] = round(vermogen, 1)
+
+    def get_fasepiek_overzicht(self) -> dict:
+        """De fasepieken naast de totaalpiek (v3.58.0).
+
+        Het interessante geval is niet dat ze verschillen - bij een
+        gelijkmatig verdeeld huis hoort dat - maar dat een FASE
+        doorschiet terwijl het totaal meevalt. Dan denkt de piekbewaking
+        dat het goed gaat.
+        """
+        per_fase = (self.fasepieken or {}).get("per_fase") or {}
+        if not per_fase:
+            return {
+                "beschikbaar": False,
+                "reden": "Geen vermogenssensoren per fase gekoppeld.",
+            }
+        zwaarste, waarde = max(per_fase.items(), key=lambda x: x[1])
+        totaal = self.peak_power_today_w or 0.0
+        uit = {
+            "beschikbaar": True,
+            "per_fase_w": dict(per_fase),
+            "zwaarste_fase": zwaarste,
+            "zwaarste_fase_w": waarde,
+            "totaalpiek_w": round(totaal, 1),
+        }
+        if waarde > totaal + FASEPIEK_MELDGRENS_W:
+            uit["oordeel"] = "fase_boven_totaal"
+            uit["uitleg"] = (
+                f"{zwaarste} piekte op {waarde:.0f} W terwijl de totaalpiek "
+                f"op {totaal:.0f} W staat. Die twee vallen op verschillende "
+                "momenten, en het capaciteitstarief kijkt naar de zwaarste "
+                "fase - niet naar het totaal."
+            )
+        else:
+            uit["oordeel"] = "in_orde"
+            uit["uitleg"] = (
+                f"De zwaarste fase piekte op {waarde:.0f} W, binnen de "
+                f"totaalpiek van {totaal:.0f} W."
+            )
+        return uit
 
     def _check_monthly_rollover(self, now: datetime) -> None:
         """Detect a new calendar month starting, snapshotting the current
@@ -22801,6 +22938,10 @@ class EnergyManagementSystemCoordinator:
             if current_state != "actief":
                 setattr(self, cycle_started_attr, now)
                 setattr(self, state_attr, "actief")
+                # v3.57.0: de meterstand bij het begin vastleggen, zodat
+                # het cyclusverbruik straks een METING is en geen
+                # benadering uit het gemiddelde vermogen.
+                self._onthoud_meterstand_bij_start(state_attr)
             return
 
         if current_state != "actief":
@@ -22828,7 +22969,10 @@ class EnergyManagementSystemCoordinator:
                 # is een noodgreep; zodra een hele cyclus gemeten is, is
                 # dat de waarde die in de reserve meetelt.
                 naam = "vaatwasser" if "dishwasher" in state_attr else "wasmachine"
-                gemeten = self._cyclus_energie_kwh(naam, started_at, now)
+                # v3.57.0: eerst de meter, dan pas de schatting.
+                gemeten = self._cyclus_uit_de_meter_kwh(state_attr)
+                if gemeten is None:
+                    gemeten = self._cyclus_energie_kwh(naam, started_at, now)
                 if gemeten:
                     self._leer_cyclusverbruik(naam, gemeten)
                 self._appliance_power_samples[naam] = []

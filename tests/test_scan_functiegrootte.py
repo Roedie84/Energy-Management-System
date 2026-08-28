@@ -47,19 +47,11 @@ GRENS = 60
 # De stand van 20 augustus 2026. Deze lijst hoort te KRIMPEN.
 BEVROREN = {
     "__init__.py:_async_register_nilm_services": 71,
-    # v3.43.0: +1 voor `last_plan_shortfall`. v3.46.0: +1 voor
-    # `aansturing_onbereikbaar`. Allebei bewust, allebei één veld waar
-    # het er twee hadden kunnen zijn.
-    #
-    # Dit is de tweede keer in een week dat `__init__` groeit, en dat is
-    # het signaal waar deze ratel voor bedoeld is: 419 uitspraken in één
-    # functie is te veel, en de volgende keer dat hier iets bij moet,
-    # hoort er eerst een blok uit.
-    # v3.50.0: +1 voor `meting_tijdstippen`. De ratel eist een besluit
-    # en dit is er een: zonder tijdstempel is een waarde van een minuut
-    # oud niet te onderscheiden van een van vijf uur, en juist dat
-    # verschil kostte op 27 augustus een nacht aan ontladen.
-    "coordinator.py:__init__": 419,
+    # v3.58.0: de ratel sloeg voor de vierde keer aan, en toen is er
+    # eindelijk een blok uit gegaan - de vijfenveertig velden die de
+    # LAATSTE beslissing beschrijven staan nu in
+    # `_init_laatste_beslissing()`. Van 420 naar 377.
+    "coordinator.py:__init__": 377,
     "coordinator.py:_async_update_locked": 255,
     "coordinator.py:_async_update_scheduled_charge_appliance": 70,
     "coordinator.py:_build_explanation": 73,

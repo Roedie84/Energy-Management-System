@@ -56,6 +56,26 @@ CONF_VACATION_CONSUMPTION_REDUCTION_PERCENT = "vacation_consumption_reduction_pe
 CONF_DISHWASHER_POWER_SENSOR = "dishwasher_power_sensor_entity"
 CONF_DISHWASHER_READY_SENSOR = "dishwasher_ready_sensor_entity"
 CONF_WASHING_MACHINE_POWER_SENSOR = "washing_machine_power_sensor_entity"
+
+# De cumulatieve energiemeters per apparaat (v3.57.0).
+#
+# Gedeeld op 28 augustus:
+#
+#     sensor.wasmachine_energy_import   582,7 kWh
+#     sensor.vaatwasser_energy_import   639,0 kWh
+#
+# Tot nu toe schatte de integratie het cyclusverbruik uit het VERMOGEN:
+# het gemiddelde over de metingen maal de duur. De toelichting bij
+# `_cyclus_energie_kwh` zegt waarom - "niet uit de energieteller: die
+# teller is cumulatief en de stand bij het begin van de cyclus is niet
+# bewaard."
+#
+# Die stand valt wel te bewaren. Dan is het geen benadering meer maar
+# een meting: eindstand min beginstand, precies wat er doorheen ging.
+#
+# Beide optioneel; zonder meter blijft de schatting uit het vermogen.
+CONF_DISHWASHER_ENERGY_SENSOR = "dishwasher_energy_sensor_entity"
+CONF_WASHING_MACHINE_ENERGY_SENSOR = "washing_machine_energy_sensor_entity"
 CONF_WASHING_MACHINE_READY_SENSOR = "washing_machine_ready_sensor_entity"
 CONF_QUOOKER_POWER_SENSOR = "quooker_power_sensor_entity"
 CONF_AIRCO_CLIMATE_ENTITY = "airco_climate_entity"
@@ -107,6 +127,29 @@ CONF_SOLAR_REMAINING_TODAY_SENSOR = "solar_remaining_today_sensor_entity"
 CONF_SOLAR_EXTENDED_FORECAST_SENSORS = "solar_extended_forecast_sensor_entities"
 CONF_SOLAR_ACTUAL_SENSOR = "solar_actual_sensor_entity"
 CONF_CONSUMPTION_POWER_SENSOR = "consumption_power_sensor_entity"
+
+# De vermogenssensoren per fase (v3.58.0).
+#
+# Gedeeld op 28 augustus, uit de P1-meter:
+#
+#     fase 1   1305 W   5,61 A
+#     fase 2     40 W   0,17 A
+#     fase 3     76 W   0,32 A
+#     totaal   1421 W
+#
+# De accu laadt op fase 1 (`phaseSwitch: 1`) en de omvormer is een
+# SE4000H, enkelfasig - die levert ook op fase 1. Alles wat er gebeurt,
+# gebeurt dus op één fase, terwijl de integratie alleen het TOTAAL kent.
+#
+# Dat maakt uit voor twee dingen:
+#
+# - het capaciteitstarief wordt bepaald door de zwaarst belaste fase,
+#   niet door het totaal
+# - bij 2 kW laden plus het huisverbruik op diezelfde fase zit je al
+#   richting de grens van wat één fase aankan
+#
+# Alle drie optioneel. Wie ze niet koppelt, houdt wat er was.
+CONF_PHASE_POWER_SENSORS = "phase_power_sensor_entities"
 CONF_BATTERY_POWER_SENSOR = "battery_power_sensor_entity"
 CONF_INVERT_BATTERY_POWER_SIGN = "invert_battery_power_sign"
 CONF_PV_POWER_SENSOR = "pv_power_sensor_entity"
@@ -4957,4 +5000,43 @@ SPIEGEL_MARGE_VERMOGEN_W = 100.0
 STANDAARD_ENTITEITEN = {
     CONF_BATTERY_MIN_SOC_NUMBER: "number.solarflow_2400_ac_min_soc",
     CONF_BATTERY_MAX_SOC_NUMBER: "number.solarflow_2400_ac_soc_set",
+    # v3.59.0: gemeld "ik wil dit niet allemaal in de config zelf doen,
+    # ik raak daardoor het overzicht kwijt".
+    #
+    # Als standaardwaarde en niet hard ingebakken. Het verschil telt: er
+    # braken deze week vier dingen doordat een naam of adres veranderde,
+    # en hard ingebakken namen breken dan STIL - de configuratiecontrole
+    # meldt "bestaat niet" en verder gebeurt er niets.
+    #
+    # Zo hoeft er niets ingevuld te worden, maar is het wel aan te
+    # passen zodra er iets hernoemt.
+    CONF_DISHWASHER_ENERGY_SENSOR: "sensor.vaatwasser_energy_import",
+    CONF_WASHING_MACHINE_ENERGY_SENSOR: "sensor.wasmachine_energy_import",
 }
+
+# Instellingen met meerdere entiteiten hebben een eigen lijst, want een
+# standaardwaarde is hier een lijst en geen tekst (v3.59.0).
+STANDAARD_ENTITEITLIJSTEN = {
+    CONF_PHASE_POWER_SENSORS: [
+        "sensor.p1_meter_3c39e724275e_active_power_l1",
+        "sensor.p1_meter_3c39e724275e_active_power_l2",
+        "sensor.p1_meter_3c39e724275e_active_power_l3",
+    ],
+}
+
+# Bovengrens voor het gemeten verbruik van één apparaatcyclus (v3.57.0).
+#
+# Een energieteller die terugspringt - na een herstart van het apparaat
+# of een reset - levert een absurd verschil op. Een wasmachine of
+# vaatwasser gebruikt hooguit een paar kWh per cyclus; tien is ruim en
+# vangt elke terugsprong.
+APPLIANCE_CYCLE_MAX_KWH = 10.0
+
+# Vanaf welk verschil tussen de fasepiek en de totaalpiek dat het melden
+# waard is (v3.58.0).
+#
+# Bij een gelijkmatig verdeeld huis liggen die twee ver uit elkaar, en
+# dat is normaal. Waar het om gaat is het omgekeerde: een fase die
+# doorschiet terwijl het totaal meevalt. Vijftig watt is ruim genoeg om
+# meetruis buiten te sluiten.
+FASEPIEK_MELDGRENS_W = 50.0

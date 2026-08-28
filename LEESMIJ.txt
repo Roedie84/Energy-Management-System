@@ -1,37 +1,45 @@
-v3.56.0 - alleen de gewijzigde bestanden
+v3.57.0 t/m v3.59.0 - alleen de gewijzigde bestanden sinds v3.56.0
 
 Pak uit in de hoofdmap van de repository; de mapstructuur klopt al.
 
 CODE (deze naar Home Assistant, daarna herstarten)
   custom_components/energy_management_system/
-    coordinator.py    instelling(), configuratiecontrole
-    const.py
-    diagnostics.py    de configuratiecontrole in de export
-    manifest.json     versienummer 3.56.0
+    coordinator.py       cyclusmeting, fasepieken, __init__ opgesplitst
+    const.py             de nieuwe instellingen met standaardwaarden
+    config_flow.py       standaardwaarden ook voor meerwaardige velden
+    diagnostics.py       fasepieken in de export
+    strings.json
+    translations/nl.json
+    translations/en.json
+    manifest.json        versienummer 3.59.0
 
 TOETSEN (alleen voor de repository)
-  tests/test_configuratiecontrole.py          nieuw
+  tests/test_cyclusverbruik_uit_de_meter.py   nieuw
+  tests/test_fasepieken.py                    nieuw
   tests/test_apparaatinstellingen_spiegel.py
-  en negen bestaande toetsbestanden waarvan de hulpklassen de
-  nieuwe helper `instelling()` moesten kennen
+  tests/test_state_persistence.py
+  tests/test_scan_functiegrootte.py
+  tests/test_scan_attributen_geinitialiseerd.py
 
 DOCUMENTEN
   CHANGELOG.md  README.md  OVERDRACHT.md
 
-WAT ER IS GEREPAREERD
+WAT ER IS VERBETERD
+-------------------
+
+v3.57.0  Het cyclusverbruik van de vaatwasser en de wasmachine komt uit
+         de energiemeter in plaats van uit een schatting.
+
+v3.58.0  De dagpiek wordt ook per fase bijgehouden. Alles gebeurt bij
+         jou op fase 1, terwijl het capaciteitstarief naar de zwaarste
+         fase kijkt en niet naar het totaal.
+
+v3.59.0  De vijf nieuwe velden staan al ingevuld.
+
+WAT JE ZELF MOET DOEN
 ---------------------
 
-De slijtageberekening gaf niets terug omdat het cyclusaantal en de
-moduleprijs leeg stonden. De code viel bewust terug op 6000 cycli, maar
-die standaard geldt alleen als de SLEUTEL ontbreekt - en Home Assistant
-slaat een leeg veld op MET de waarde None.
+Niets. De velden staan ingevuld met jouw entiteiten.
 
-Vier-en-dertig plekken gebruikten dat patroon. Ze gaan nu allemaal via
-`instelling()`, en structuurscan 15 bewaakt dat er geen nieuwe bijkomen.
-
-WAT JE ZELF NOG KUNT DOEN
--------------------------
-
-De slijtageberekening werkt nu met de standaardwaarden (6000 cycli).
-Wil je hem op jouw werkelijke cijfers, vul dan in de EMS-instellingen
-het cyclusaantal en de prijs per accumodule in.
+Kijk na de herstart wel even in de diagnostiek onder
+"configuratiecontrole" of ze alle vijf op "in_orde" staan.

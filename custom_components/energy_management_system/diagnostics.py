@@ -564,6 +564,10 @@ async def async_get_config_entry_diagnostics(
             # hij iets. Drie van de vier correcties van 28 augustus
             # stonden al in de export, maar niet op een plek waar je ze
             # zou zien.
+            # v3.58.0: de piek per fase naast die van het totaal.
+            "fasepieken": _veilig(
+                "fasepieken", coordinator.get_fasepiek_overzicht
+            ),
             "configuratiecontrole": _veilig(
                 "configuratiecontrole", coordinator.get_configuratiecontrole
             ),

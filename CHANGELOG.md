@@ -19138,3 +19138,129 @@ teruggevallen. Maar wie een getal verwacht en een standaard krijgt,
 rekent met iets anders dan hij denkt.
 
 **Volledige testsuite**: 3078 tests, allemaal groen.
+
+## v3.57.0 — Het cyclusverbruik uit de meter
+
+**Gedeeld** op 28 augustus, uit de entiteitenlijst:
+
+```
+sensor.wasmachine_energy_import   582,7 kWh
+sensor.vaatwasser_energy_import   639,0 kWh
+```
+
+Tot nu toe schatte de integratie het cyclusverbruik uit het **vermogen**:
+het gemiddelde over de metingen maal de duur. De toelichting bij
+`_cyclus_energie_kwh` zegt waarom:
+
+> Uit het VERMOGEN geïntegreerd en niet uit de energieteller: die teller
+> is cumulatief en de stand bij het begin van de cyclus is niet bewaard.
+
+Die stand valt wel te bewaren. Bij het openen van een cyclus wordt de
+meterstand nu vastgelegd; bij het sluiten is het verschil de meting.
+Geen benadering meer — precies wat er doorheen ging.
+
+Waarom dat uitmaakt: het geleerde cyclusverbruik gaat de reserve in. Een
+vaatwasser die 1,1 kWh gebruikt terwijl er 0,8 wordt geschat, betekent
+elke keer 0,3 kWh te weinig achtergehouden.
+
+De schatting blijft als terugval, en die geldt zodra er iets niet klopt:
+geen meter, geen beginstand — bijvoorbeeld na een herstart midden in een
+cyclus — of een teller die is teruggesprongen. Beter een eerlijke
+benadering dan een verzonnen getal.
+
+Beide meters zijn optioneel te koppelen. Zonder koppeling verandert er
+niets.
+
+**Volledige testsuite**: 3087 tests, allemaal groen.
+
+## v3.58.0 — De piek per fase
+
+**Gedeeld** op 28 augustus, uit de P1-meter:
+
+```
+fase 1   1305 W   5,61 A
+fase 2     40 W   0,17 A
+fase 3     76 W   0,32 A
+totaal   1421 W
+```
+
+De accu laadt op fase 1 (`phaseSwitch: 1`) en de omvormer is een
+SE4000H, **enkelfasig** — die levert ook op fase 1. Alles wat er gebeurt,
+gebeurt dus op één fase, terwijl de integratie alleen het **totaal**
+kende.
+
+Dat maakt uit voor twee dingen. Het capaciteitstarief wordt bepaald door
+de zwaarst belaste fase, niet door het totaal. En bij 2 kW laden plus het
+huisverbruik op diezelfde fase zit je al richting de grens van wat één
+fase aankan.
+
+De dagpiek wordt nu ook per fase bijgehouden, met dezelfde omslag als de
+bestaande totaalpiek. Het interessante geval is niet dát ze verschillen —
+bij een gelijkmatig verdeeld huis hoort dat — maar dat een fase
+doorschiet terwijl het totaal meevalt. Dan denkt de piekbewaking dat het
+goed gaat.
+
+Optioneel te koppelen, in de volgorde L1 L2 L3. Meet alleen; er wordt
+niets mee aangestuurd.
+
+### De ratel sloeg voor de vierde keer aan, en nu ging er iets uit
+
+`__init__` mocht niet groeien. Bij de vorige keer stond er in de
+toelichting: *"de volgende keer dat hier iets bij moet, hoort er eerst
+een blok uit."*
+
+Dat blok is er nu uit. De vijfenveertig velden die de **laatste
+beslissing** beschrijven staan in `_init_laatste_beslissing()` — ze horen
+bij elkaar, ze zijn allemaal het resultaat van de vorige ronde, en geen
+van alle draagt geschiedenis.
+
+```
+__init__   van 420 naar 377 uitspraken
+```
+
+Structuurscan 13 sloeg daarop aan: die velden staan nu niet meer in
+`__init__` en golden als niet-geïnitialiseerd. Terecht gevangen — de
+scan volgt nu de hulpfuncties die `__init__` aanroept, anders zou hij
+elke opsplitsing bestraffen.
+
+**Volledige testsuite**: 3096 tests, allemaal groen.
+
+## v3.59.0 — Niets meer invullen
+
+**Gevraagd**: "Ik wil dit niet allemaal in de config zelf doen, ik raak
+daardoor het overzicht kwijt, kun je ze niet hardcoded maken?"
+
+En daarna: "De integratie kan toch inmiddels zelf ook de juiste
+entiteiten vinden?"
+
+De vijf nieuwe velden staan nu al ingevuld:
+
+```
+Energiemeter vaatwasser   sensor.vaatwasser_energy_import
+Energiemeter wasmachine   sensor.wasmachine_energy_import
+Vermogen per fase         ..._active_power_l1 / _l2 / _l3
+```
+
+Als **standaardwaarde**, niet hard ingebakken. Het resultaat is
+hetzelfde — er hoeft niets ingevuld te worden — maar de keuze blijft
+zichtbaar in de configuratiecontrole en aanpasbaar zonder de code in.
+
+### Waarom niet automatisch zoeken
+
+Zoeken op `device_class` **kiest**, en die keuze is niet zichtbaar. Bij
+de P1-meter leveren vier sensoren `device_class: power` — het totaal en
+drie fasen — en welke drie in welke volgorde valt alleen uit de naam af
+te leiden. Bij een ander merk heet dat anders.
+
+En het gaat mis op het moment dat het het meest kost: valt er iets weg,
+dan kiest hij stilletjes iets anders. Precies het patroon van deze week,
+toen de Zendure-manager 0,00 kWh gaf en niets dat meldde.
+
+Hard ingebakken namen hebben hetzelfde bezwaar in een andere vorm: die
+breken stil. De configuratiecontrole meldt dan "bestaat niet" en verder
+gebeurt er niets.
+
+Instellingen met meerdere entiteiten hebben een eigen lijst, want een
+standaardwaarde is daar een lijst en geen tekst.
+
+**Volledige testsuite**: 3099 tests, allemaal groen.

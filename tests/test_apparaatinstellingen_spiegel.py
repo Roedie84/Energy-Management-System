@@ -143,7 +143,8 @@ def test_the_known_entities_have_a_default():
     )
     # v3.55.0: de twee vermogensgrenzen staan hier BEWUST NIET bij.
     assert CONF_BATTERY_MAX_CHARGE_POWER_ENTITY not in STANDAARD_ENTITEITEN
-    assert len(STANDAARD_ENTITEITEN) == 2
+    # v3.59.0: de twee energiemeters zijn erbij gekomen.
+    assert len(STANDAARD_ENTITEITEN) == 4
 
 
 def test_the_default_is_used_when_nothing_is_configured():
@@ -213,3 +214,64 @@ def test_the_settings_that_do_match_remain(make_coordinator, hass):
     c.effective_min_soc_percent = lambda: 10.0
 
     assert _regel(c, "Ondergrens van de accu")["oordeel"] == "loopt_uiteen"
+
+
+def test_the_phase_sensors_have_a_default():
+    """Gevraagd: "Ik wil dit niet allemaal in de config zelf doen, ik
+
+    raak daardoor het overzicht kwijt."
+
+    Een instelling met meerdere entiteiten heeft een lijst als
+    standaardwaarde, en die past niet in dezelfde dict.
+    """
+    from custom_components.energy_management_system.const import (
+        CONF_PHASE_POWER_SENSORS,
+        STANDAARD_ENTITEITLIJSTEN,
+    )
+
+    fasen = STANDAARD_ENTITEITLIJSTEN[CONF_PHASE_POWER_SENSORS]
+
+    assert len(fasen) == 3
+    assert fasen[0].endswith("_l1")
+    assert fasen[2].endswith("_l3")
+
+
+def test_the_energy_meters_have_a_default():
+    from custom_components.energy_management_system.const import (
+        CONF_DISHWASHER_ENERGY_SENSOR,
+        CONF_WASHING_MACHINE_ENERGY_SENSOR,
+        STANDAARD_ENTITEITEN,
+    )
+
+    assert STANDAARD_ENTITEITEN[CONF_DISHWASHER_ENERGY_SENSOR] == (
+        "sensor.vaatwasser_energy_import"
+    )
+    assert STANDAARD_ENTITEITEN[CONF_WASHING_MACHINE_ENERGY_SENSOR] == (
+        "sensor.wasmachine_energy_import"
+    )
+
+
+def test_nothing_needs_to_be_filled_in():
+    """De kern van het verzoek: er hoeft niets ingevuld te worden.
+
+    Als standaardwaarde en niet hard ingebakken, want hard ingebakken
+    namen breken STIL - de configuratiecontrole meldt "bestaat niet" en
+    verder gebeurt er niets.
+    """
+    from custom_components.energy_management_system.config_flow import (
+        _optioneel,
+    )
+    from custom_components.energy_management_system.const import (
+        CONF_PHASE_POWER_SENSORS,
+        STANDAARD_ENTITEITEN,
+        STANDAARD_ENTITEITLIJSTEN,
+    )
+
+    for sleutel in list(STANDAARD_ENTITEITEN) + list(STANDAARD_ENTITEITLIJSTEN):
+        veld = _optioneel(sleutel, {})
+
+        assert veld.default() not in (None, ""), sleutel
+
+    assert _optioneel(CONF_PHASE_POWER_SENSORS, {}).default() == (
+        STANDAARD_ENTITEITLIJSTEN[CONF_PHASE_POWER_SENSORS]
+    )
