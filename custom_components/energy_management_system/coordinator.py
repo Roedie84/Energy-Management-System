@@ -2421,9 +2421,7 @@ class EnergyManagementSystemCoordinator:
         if not forecast:
             return []
 
-        price_key = price_key_override or self.config.get(
-            CONF_PRICE_ATTRIBUTE, DEFAULT_PRICE_ATTRIBUTE
-        )
+        price_key = price_key_override or self.instelling(CONF_PRICE_ATTRIBUTE, DEFAULT_PRICE_ATTRIBUTE)
         entries: list[PriceEntry] = []
 
         for item in forecast:
@@ -2648,9 +2646,7 @@ class EnergyManagementSystemCoordinator:
         if usable_capacity_kwh is None:
             return None
 
-        base_power = self.config.get(
-            CONF_MANUAL_DISCHARGE_POWER, DEFAULT_MANUAL_DISCHARGE_POWER
-        )
+        base_power = self.instelling(CONF_MANUAL_DISCHARGE_POWER, DEFAULT_MANUAL_DISCHARGE_POWER)
         energy_per_quarter_kwh = (base_power / 1000) * 0.25
         if energy_per_quarter_kwh <= 0:
             return None
@@ -4393,7 +4389,7 @@ class EnergyManagementSystemCoordinator:
         gemiddelde = self._read_sensor_float(
             (entiteiten or {}).get("gemiddelde_afnameprijs_vandaag", "")
         )
-        attribuut = self.config.get(CONF_PRICE_ATTRIBUTE, DEFAULT_PRICE_ATTRIBUTE)
+        attribuut = self.instelling(CONF_PRICE_ATTRIBUTE, DEFAULT_PRICE_ATTRIBUTE)
         nu = dt_util.now()
         vandaag = [
             prijs / PRICE_SCALE_FACTOR
@@ -4480,9 +4476,7 @@ class EnergyManagementSystemCoordinator:
         vandaag nergens voor gebruikt wordt en dus ook nergens
         opvalt als het ontbreekt.
         """
-        veld = self.config.get(
-            CONF_FEEDIN_PRICE_ATTRIBUTE, DEFAULT_FEEDIN_PRICE_ATTRIBUTE
-        )
+        veld = self.instelling(CONF_FEEDIN_PRICE_ATTRIBUTE, DEFAULT_FEEDIN_PRICE_ATTRIBUTE)
         kaal = self._get_current_price_per_kwh(
             self._get_forecast_entries(price_key_override=veld), now
         )
@@ -4490,7 +4484,7 @@ class EnergyManagementSystemCoordinator:
         uit: dict = {
             "salderen_actief": self._is_salderen_active(now),
             "salderen_tot": str(
-                self.config.get(CONF_SALDEREN_END_DATE, DEFAULT_SALDEREN_END_DATE)
+                self.instelling(CONF_SALDEREN_END_DATE, DEFAULT_SALDEREN_END_DATE)
             ),
             "salderen_dagen_resterend": self._salderen_days_remaining(),
             "teruglever_veld": veld,
@@ -6248,7 +6242,7 @@ class EnergyManagementSystemCoordinator:
             if gemeten is not None and 0 <= gemeten <= 100:
                 return float(gemeten)
         return float(
-            self.config.get(CONF_MIN_SOC_PERCENT, DEFAULT_MIN_SOC_PERCENT) or 0
+            self.instelling(CONF_MIN_SOC_PERCENT, DEFAULT_MIN_SOC_PERCENT) or 0
         )
 
     def _entiteitsnaam(self, entity_id: str) -> str:
@@ -9001,9 +8995,7 @@ class EnergyManagementSystemCoordinator:
         waarin één van de twee velden ontbreekt zou de uitkomst anders
         verpesten.
         """
-        veld = self.config.get(
-            CONF_FEEDIN_PRICE_ATTRIBUTE, DEFAULT_FEEDIN_PRICE_ATTRIBUTE
-        )
+        veld = self.instelling(CONF_FEEDIN_PRICE_ATTRIBUTE, DEFAULT_FEEDIN_PRICE_ATTRIBUTE)
         belast = {
             begin: prijs / PRICE_SCALE_FACTOR
             for begin, _e, prijs in self._get_forecast_entries()
@@ -9421,12 +9413,8 @@ class EnergyManagementSystemCoordinator:
         modules = len(
             self.config.get(CONF_BATTERY_MODULE_TEMPERATURE_SENSORS) or []
         )
-        moduleprijs = self.config.get(
-            CONF_BATTERY_MODULE_PRICE_EUR, DEFAULT_BATTERY_MODULE_PRICE_EUR
-        )
-        cycli = self.config.get(
-            CONF_BATTERY_CYCLE_LIFE, DEFAULT_BATTERY_CYCLE_LIFE
-        )
+        moduleprijs = self.instelling(CONF_BATTERY_MODULE_PRICE_EUR, DEFAULT_BATTERY_MODULE_PRICE_EUR)
+        cycli = self.instelling(CONF_BATTERY_CYCLE_LIFE, DEFAULT_BATTERY_CYCLE_LIFE)
         capaciteit = self._read_sensor_float(
             self.config.get(CONF_BATTERY_TOTAL_CAPACITY_SENSOR)
         )
@@ -9480,9 +9468,7 @@ class EnergyManagementSystemCoordinator:
         # dus de HOOGSTE prijs per kWh. Allebei blijven zichtbaar, want
         # de kalenderjaren zijn een aanname en de cycli een belofte -
         # geen van beide is een meting.
-        jaren = self.config.get(
-            CONF_BATTERY_CALENDAR_YEARS, DEFAULT_BATTERY_CALENDAR_YEARS
-        )
+        jaren = self.instelling(CONF_BATTERY_CALENDAR_YEARS, DEFAULT_BATTERY_CALENDAR_YEARS)
         kalender_doorzet_kwh = None
         per_jaar_kwh = self._gemeten_jaardoorzet_kwh()
         if per_jaar_kwh and jaren:
@@ -11161,6 +11147,96 @@ class EnergyManagementSystemCoordinator:
                 f"ct inclusief {slijtage * 100:.1f} ct slijtage. Wachten op "
                 "dat kwartier in plaats van nu kopen is het verschil tussen "
                 "een randvoorwaarde en een dure ingreep."
+            ),
+        }
+
+    def get_configuratiecontrole(self) -> dict:
+        """Elke ingestelde entiteit: bestaat hij, en zegt hij iets?
+        (v3.56.0)
+
+        Gevraagd: "Alles wat vandaag gecorrigeerd is had volgens mij uit
+        een diagnostiek kunnen komen, dus deze verder uitbreiden zodat we
+        samen de integratie telkens beter maken."
+
+        Terecht. Van de vier dingen die op 28 augustus zijn rechtgezet
+        stonden er drie al in de export, maar niet op een plek waar je ze
+        zou zien:
+
+        - `sensor.zendure_manager_available_kwh` gaf al dagen 0,00 kWh
+          terwijl de accu vol zat. Alleen zichtbaar door de spiegel-
+          controle die er die ochtend toevallig bij kwam.
+        - `wear_cost_overview` stond op null, met de reden verstopt in
+          een veld dat niemand leest.
+        - De laadstand kwam van een veld dat maar op drie plaatsen wordt
+          geschreven.
+
+        Deze controle zet ze bij elkaar: welke sensor bestaat niet,
+        welke geeft niets, welke geeft nul terwijl dat vreemd is, en
+        welke getalsinstelling staat leeg terwijl er op een standaard
+        wordt gerekend.
+        """
+        entiteiten: list[dict] = []
+        for sleutel, waarde in sorted((self.config or {}).items()):
+            if not isinstance(waarde, str) or "." not in waarde:
+                continue
+            if waarde.split(".")[0] not in (
+                "sensor",
+                "number",
+                "select",
+                "switch",
+                "binary_sensor",
+                "input_number",
+                "input_boolean",
+                "weather",
+                "climate",
+                "cover",
+            ):
+                continue
+            staat = self.hass.states.get(waarde)
+            regel = {"instelling": sleutel, "entiteit": waarde}
+            if staat is None:
+                regel["oordeel"] = "bestaat_niet"
+                regel["uitleg"] = (
+                    "Deze entiteit bestaat niet (meer). Is hij hernoemd of "
+                    "hoort hij bij een integratie die weg is?"
+                )
+            elif staat.state in ("unavailable", "unknown"):
+                regel["oordeel"] = "geen_waarde"
+                regel["waarde"] = staat.state
+            else:
+                regel["waarde"] = staat.state
+                regel["laatst_gewijzigd"] = (
+                    staat.last_changed.isoformat()
+                    if getattr(staat, "last_changed", None)
+                    else None
+                )
+                regel["oordeel"] = "in_orde"
+            entiteiten.append(regel)
+
+        # Getalsinstellingen die leeg staan terwijl er op een standaard
+        # gerekend wordt. Home Assistant slaat een leeg veld op MET de
+        # waarde None, en dan gaf `.get(sleutel, standaard)` vroeger None
+        # terug in plaats van de standaard - zie `instelling()`.
+        leeg = sorted(
+            sleutel
+            for sleutel, waarde in (self.config or {}).items()
+            if waarde is None
+        )
+
+        return {
+            "entiteiten": entiteiten,
+            "aantal_in_orde": sum(
+                1 for r in entiteiten if r["oordeel"] == "in_orde"
+            ),
+            "aantal_stuk": sum(
+                1 for r in entiteiten if r["oordeel"] != "in_orde"
+            ),
+            "lege_instellingen": leeg,
+            "toelichting": (
+                "Een lege instelling is niet fout - er wordt op een "
+                "standaard teruggevallen. Maar wie een getal verwacht en "
+                "een standaard krijgt, rekent met iets anders dan hij "
+                "denkt."
             ),
         }
 
@@ -13687,10 +13763,7 @@ class EnergyManagementSystemCoordinator:
         if not self.vacation_mode:
             return kwh
         reduction_percent = float(
-            self.config.get(
-                CONF_VACATION_CONSUMPTION_REDUCTION_PERCENT,
-                DEFAULT_VACATION_CONSUMPTION_REDUCTION_PERCENT,
-            )
+            self.instelling(CONF_VACATION_CONSUMPTION_REDUCTION_PERCENT, DEFAULT_VACATION_CONSUMPTION_REDUCTION_PERCENT)
         )
         return kwh * (1 - reduction_percent / 100)
 
@@ -14103,10 +14176,7 @@ class EnergyManagementSystemCoordinator:
         efficiency_percent = self.learned_battery_efficiency_percent
         if efficiency_percent is None:
             efficiency_percent = float(
-                self.config.get(
-                    CONF_BATTERY_ROUND_TRIP_EFFICIENCY,
-                    DEFAULT_BATTERY_ROUND_TRIP_EFFICIENCY_PERCENT,
-                )
+                self.instelling(CONF_BATTERY_ROUND_TRIP_EFFICIENCY, DEFAULT_BATTERY_ROUND_TRIP_EFFICIENCY_PERCENT)
             )
         return expected_pv_kwh * (efficiency_percent / 100)
 
@@ -14137,10 +14207,7 @@ class EnergyManagementSystemCoordinator:
         efficiency_percent = self.learned_battery_efficiency_percent
         if efficiency_percent is None:
             efficiency_percent = float(
-                self.config.get(
-                    CONF_BATTERY_ROUND_TRIP_EFFICIENCY,
-                    DEFAULT_BATTERY_ROUND_TRIP_EFFICIENCY_PERCENT,
-                )
+                self.instelling(CONF_BATTERY_ROUND_TRIP_EFFICIENCY, DEFAULT_BATTERY_ROUND_TRIP_EFFICIENCY_PERCENT)
             )
         efficiency_factor = efficiency_percent / 100
 
@@ -17567,9 +17634,7 @@ class EnergyManagementSystemCoordinator:
             threshold_kwh = learned_typical_kwh * self._get_low_solar_relative_fraction()
         else:
             threshold_kwh = float(
-                self.config.get(
-                    CONF_LOW_SOLAR_THRESHOLD_KWH, DEFAULT_LOW_SOLAR_THRESHOLD_KWH
-                )
+                self.instelling(CONF_LOW_SOLAR_THRESHOLD_KWH, DEFAULT_LOW_SOLAR_THRESHOLD_KWH)
             )
 
         return corrected_forecast_kwh < threshold_kwh
@@ -17898,9 +17963,7 @@ class EnergyManagementSystemCoordinator:
                 continue
             by_date.setdefault(entry[0].date(), []).append(entry)
 
-        discharge_power_w = self.config.get(
-            CONF_MANUAL_DISCHARGE_POWER, DEFAULT_MANUAL_DISCHARGE_POWER
-        )
+        discharge_power_w = self.instelling(CONF_MANUAL_DISCHARGE_POWER, DEFAULT_MANUAL_DISCHARGE_POWER)
 
         # Determine which "expensive" candidates actually make the cut,
         # simulating headroom consumption in *price-priority* order
@@ -18192,7 +18255,7 @@ class EnergyManagementSystemCoordinator:
         het bestaande, bekende gedrag aan in plaats van ongemerkt over
         te schakelen op een heel ander waarderingsmodel door een typefout.
         """
-        raw = self.config.get(CONF_SALDEREN_END_DATE, DEFAULT_SALDEREN_END_DATE)
+        raw = self.instelling(CONF_SALDEREN_END_DATE, DEFAULT_SALDEREN_END_DATE)
         try:
             end_date = date.fromisoformat(str(raw))
         except (TypeError, ValueError):
@@ -18202,7 +18265,7 @@ class EnergyManagementSystemCoordinator:
     def _salderen_days_remaining(self) -> int | None:
         """Aantal dagen dat salderen nog geldt, of None bij een
         ongeldige/onleesbare datum (v0.63.117)."""
-        raw = self.config.get(CONF_SALDEREN_END_DATE, DEFAULT_SALDEREN_END_DATE)
+        raw = self.instelling(CONF_SALDEREN_END_DATE, DEFAULT_SALDEREN_END_DATE)
         try:
             end_date = date.fromisoformat(str(raw))
         except (TypeError, ValueError):
@@ -18241,9 +18304,7 @@ class EnergyManagementSystemCoordinator:
                 return None
             return import_price + FEEDIN_PREMIUM_EUR_PER_KWH
 
-        feedin_key = self.config.get(
-            CONF_FEEDIN_PRICE_ATTRIBUTE, DEFAULT_FEEDIN_PRICE_ATTRIBUTE
-        )
+        feedin_key = self.instelling(CONF_FEEDIN_PRICE_ATTRIBUTE, DEFAULT_FEEDIN_PRICE_ATTRIBUTE)
         feedin_entries = self._get_forecast_entries(price_key_override=feedin_key)
         market_price = self._get_current_price_per_kwh(feedin_entries, now)
         if market_price is None:
@@ -18253,9 +18314,7 @@ class EnergyManagementSystemCoordinator:
             # fors zou overschatten).
             return None
         feedin_cost = float(
-            self.config.get(
-                CONF_FEEDIN_COST_EUR_PER_KWH, DEFAULT_FEEDIN_COST_EUR_PER_KWH
-            )
+            self.instelling(CONF_FEEDIN_COST_EUR_PER_KWH, DEFAULT_FEEDIN_COST_EUR_PER_KWH)
             or 0.0
         )
         return market_price + FEEDIN_PREMIUM_EUR_PER_KWH - feedin_cost
@@ -23305,18 +23364,13 @@ class EnergyManagementSystemCoordinator:
             return
 
         base_charge_power_w = abs(
-            self.config.get(CONF_MANUAL_CHARGE_POWER, DEFAULT_MANUAL_CHARGE_POWER)
+            self.instelling(CONF_MANUAL_CHARGE_POWER, DEFAULT_MANUAL_CHARGE_POWER)
         )
-        base_discharge_power_w = self.config.get(
-            CONF_MANUAL_DISCHARGE_POWER, DEFAULT_MANUAL_DISCHARGE_POWER
-        )
+        base_discharge_power_w = self.instelling(CONF_MANUAL_DISCHARGE_POWER, DEFAULT_MANUAL_DISCHARGE_POWER)
         efficiency_percent = self.learned_battery_efficiency_percent
         if efficiency_percent is None:
             efficiency_percent = float(
-                self.config.get(
-                    CONF_BATTERY_ROUND_TRIP_EFFICIENCY,
-                    DEFAULT_BATTERY_ROUND_TRIP_EFFICIENCY_PERCENT,
-                )
+                self.instelling(CONF_BATTERY_ROUND_TRIP_EFFICIENCY, DEFAULT_BATTERY_ROUND_TRIP_EFFICIENCY_PERCENT)
             )
         efficiency = efficiency_percent / 100
 
@@ -23513,10 +23567,7 @@ class EnergyManagementSystemCoordinator:
         efficiency_percent = self.learned_battery_efficiency_percent
         if efficiency_percent is None:
             efficiency_percent = float(
-                self.config.get(
-                    CONF_BATTERY_ROUND_TRIP_EFFICIENCY,
-                    DEFAULT_BATTERY_ROUND_TRIP_EFFICIENCY_PERCENT,
-                )
+                self.instelling(CONF_BATTERY_ROUND_TRIP_EFFICIENCY, DEFAULT_BATTERY_ROUND_TRIP_EFFICIENCY_PERCENT)
             )
         efficiency_factor = efficiency_percent / 100
 
@@ -23799,11 +23850,9 @@ class EnergyManagementSystemCoordinator:
             return
 
         usable_capacity_kwh = self._max_usable_battery_capacity_kwh()
-        discharge_power_w = self.config.get(
-            CONF_MANUAL_DISCHARGE_POWER, DEFAULT_MANUAL_DISCHARGE_POWER
-        )
+        discharge_power_w = self.instelling(CONF_MANUAL_DISCHARGE_POWER, DEFAULT_MANUAL_DISCHARGE_POWER)
         charge_power_w = abs(
-            self.config.get(CONF_MANUAL_CHARGE_POWER, DEFAULT_MANUAL_CHARGE_POWER)
+            self.instelling(CONF_MANUAL_CHARGE_POWER, DEFAULT_MANUAL_CHARGE_POWER)
         )
         horizon_end = now + timedelta(hours=DIGITAL_TWIN_HORIZON_HOURS)
 
@@ -28217,7 +28266,7 @@ class EnergyManagementSystemCoordinator:
                 "'forecast' attribute exists and the selected price "
                 "attribute (%s) is present on its items)",
                 self.config[CONF_PRICE_SENSOR],
-                self.config.get(CONF_PRICE_ATTRIBUTE, DEFAULT_PRICE_ATTRIBUTE),
+                self.instelling(CONF_PRICE_ATTRIBUTE, DEFAULT_PRICE_ATTRIBUTE),
             )
             self.last_reason = "no_forecast_data"
             self._last_value_calc_time = now
@@ -28576,9 +28625,7 @@ class EnergyManagementSystemCoordinator:
             if not self._is_negative_price_active:
                 self._is_negative_price_active = True
                 self._start_solar_ramp(0.0)
-            charge_power = self.config.get(
-                CONF_NEGATIVE_PRICE_CHARGE_POWER, DEFAULT_NEGATIVE_PRICE_CHARGE_POWER
-            )
+            charge_power = self.instelling(CONF_NEGATIVE_PRICE_CHARGE_POWER, DEFAULT_NEGATIVE_PRICE_CHARGE_POWER)
             await self._async_apply_manual(charge_power)
             self.last_reason = "negative_price"
             self.last_charge_power_applied = charge_power
@@ -28667,9 +28714,7 @@ class EnergyManagementSystemCoordinator:
                     secondary_headroom_kwh = max(
                         0.0, secondary_available_kwh - secondary_reserve_kwh
                     )
-                    secondary_discharge_power = self.config.get(
-                        CONF_MANUAL_DISCHARGE_POWER, DEFAULT_MANUAL_DISCHARGE_POWER
-                    )
+                    secondary_discharge_power = self.instelling(CONF_MANUAL_DISCHARGE_POWER, DEFAULT_MANUAL_DISCHARGE_POWER)
                     if self._is_worth_discharging_at_secondary_tier(
                         entries, now, secondary_headroom_kwh, secondary_discharge_power
                     ):
@@ -28703,9 +28748,7 @@ class EnergyManagementSystemCoordinator:
                 self._finish_decision_tick(now)
                 return
 
-            discharge_power = self.config.get(
-                CONF_MANUAL_DISCHARGE_POWER, DEFAULT_MANUAL_DISCHARGE_POWER
-            )
+            discharge_power = self.instelling(CONF_MANUAL_DISCHARGE_POWER, DEFAULT_MANUAL_DISCHARGE_POWER)
             scaled_power = self._get_soc_scaled_discharge_power(
                 discharge_power, now, cheap_block_start, entries
             )
@@ -28730,9 +28773,7 @@ class EnergyManagementSystemCoordinator:
                 # "protected". Don't just sit in smart mode hoping for the
                 # best (that's exactly what failed in the reported
                 # incident) - actively top up instead.
-                charge_power = self.config.get(
-                    CONF_MANUAL_CHARGE_POWER, DEFAULT_MANUAL_CHARGE_POWER
-                )
+                charge_power = self.instelling(CONF_MANUAL_CHARGE_POWER, DEFAULT_MANUAL_CHARGE_POWER)
                 await self._async_apply_manual(charge_power)
                 self.last_reason = "emergency_low_battery"
                 self._grid_charged_today = True
@@ -28767,9 +28808,7 @@ class EnergyManagementSystemCoordinator:
             return
 
         if should_force_charge:
-            charge_power = self.config.get(
-                CONF_MANUAL_CHARGE_POWER, DEFAULT_MANUAL_CHARGE_POWER
-            )
+            charge_power = self.instelling(CONF_MANUAL_CHARGE_POWER, DEFAULT_MANUAL_CHARGE_POWER)
             await self._async_apply_manual(charge_power)
             self.last_reason = "grid_charging_low_solar"
             self._grid_charged_today = True
@@ -28804,10 +28843,7 @@ class EnergyManagementSystemCoordinator:
             efficiency_percent = self.learned_battery_efficiency_percent
             if efficiency_percent is None:
                 efficiency_percent = float(
-                    self.config.get(
-                        CONF_BATTERY_ROUND_TRIP_EFFICIENCY,
-                        DEFAULT_BATTERY_ROUND_TRIP_EFFICIENCY_PERCENT,
-                    )
+                    self.instelling(CONF_BATTERY_ROUND_TRIP_EFFICIENCY, DEFAULT_BATTERY_ROUND_TRIP_EFFICIENCY_PERCENT)
                 )
             efficiency = efficiency_percent / 100
             best_remaining_price_eur = self._get_best_remaining_price_today_eur(
@@ -28857,9 +28893,7 @@ class EnergyManagementSystemCoordinator:
                         -LEARNING_HISTORY_DAYS:
                     ]
                 if margin_eur_per_kwh >= LOW_SOLAR_EXTRA_DIP_MIN_MARGIN_EUR_PER_KWH:
-                    charge_power = self.config.get(
-                        CONF_MANUAL_CHARGE_POWER, DEFAULT_MANUAL_CHARGE_POWER
-                    )
+                    charge_power = self.instelling(CONF_MANUAL_CHARGE_POWER, DEFAULT_MANUAL_CHARGE_POWER)
                     await self._async_apply_manual(charge_power)
                     self.last_reason = "grid_charging_low_solar_extra_dip"
                     self._grid_charged_today = True
@@ -28877,9 +28911,7 @@ class EnergyManagementSystemCoordinator:
         # incident (the shortage was visible hours in advance, but nothing
         # intervened outside the cheap block until the battery was empty).
         if self._is_emergency_low_battery():
-            charge_power = self.config.get(
-                CONF_MANUAL_CHARGE_POWER, DEFAULT_MANUAL_CHARGE_POWER
-            )
+            charge_power = self.instelling(CONF_MANUAL_CHARGE_POWER, DEFAULT_MANUAL_CHARGE_POWER)
             await self._async_apply_manual(charge_power)
             self.last_reason = "emergency_low_battery"
             self._grid_charged_today = True
@@ -29155,6 +29187,33 @@ class EnergyManagementSystemCoordinator:
             )
             self.aansturing_onbereikbaar["sinds"] = None
         self.aansturing_onbereikbaar["reden"] = None
+
+    def instelling(self, sleutel: str, standaard):
+        """Een instelling, met de standaard ook als er None staat
+        (v3.56.0).
+
+        Gemeld: de slijtageberekening gaf niets terug. Oorzaak:
+
+            cyclusaantal    None
+            moduleprijs     None
+
+        De code viel bewust terug op 6000 cycli met
+        `config.get(CONF_BATTERY_CYCLE_LIFE, DEFAULT_BATTERY_CYCLE_LIFE)`.
+        Maar die standaard geldt alleen als de SLEUTEL ontbreekt - en
+        Home Assistant slaat een leeg veld op MET de waarde None. Dan
+        geeft `.get` netjes None terug en is de standaard nooit gebruikt.
+
+        Gevolg: geen slijtagekosten, en dat getal van 10,9 ct zit in
+        vrijwel elke afweging - de verkooptoets, de saldering-rem, de
+        proefstand.
+
+        Dezelfde vorm als de fout van 24 augustus, waar
+        `plan.get("pv_bij_opname_kwh", 0.0)` een opgeslagen None
+        teruggaf. Vier-en-dertig plekken in deze codebase gebruiken dit
+        patroon; ze gaan nu allemaal hierlangs.
+        """
+        waarde = self.config.get(sleutel)
+        return standaard if waarde is None else waarde
 
     def _aansturing_bereikbaar(self) -> str | None:
         """Kan er überhaupt naar de accu geschreven worden? (v3.46.0)

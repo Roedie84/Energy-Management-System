@@ -43,6 +43,11 @@ sys.path.insert(0, str(Path(pkg.__file__).parent))
 
 
 class _Kaal:
+
+    def instelling(self, sleutel, standaard):
+        """v3.56.0: de standaard geldt ook bij een opgeslagen None."""
+        waarde = (self.config or {}).get(sleutel)
+        return standaard if waarde is None else waarde
     """Alleen de koelbeslissing, zonder de rest van de coordinator."""
 
     config = {CONF_BATTERY_COOLING_OPPORTUNITY_C: 25.0}

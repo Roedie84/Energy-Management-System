@@ -22,6 +22,11 @@ from custom_components.energy_management_system.coordinator import (
 
 
 class _Tweeling:
+
+    def instelling(self, sleutel, standaard):
+        """v3.56.0: de standaard geldt ook bij een opgeslagen None."""
+        waarde = (self.config or {}).get(sleutel)
+        return standaard if waarde is None else waarde
     """Alleen de simulatie, met een tijdlijn van zes uur ontladen."""
 
     last_cheap_block_start = None

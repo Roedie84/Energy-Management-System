@@ -1,29 +1,37 @@
-v3.55.0 - alleen de gewijzigde bestanden sinds v3.53.0
+v3.56.0 - alleen de gewijzigde bestanden
 
 Pak uit in de hoofdmap van de repository; de mapstructuur klopt al.
 
+CODE (deze naar Home Assistant, daarna herstarten)
   custom_components/energy_management_system/
-    const.py         de twee vermogensgrenzen uit de standaardwaarden
-    config_flow.py   standaardwaarden voor de bekende entiteiten
-    coordinator.py   vergelijking op absolute waarde, vermogens eruit
-    manifest.json    versienummer 3.55.0
+    coordinator.py    instelling(), configuratiecontrole
+    const.py
+    diagnostics.py    de configuratiecontrole in de export
+    manifest.json     versienummer 3.56.0
 
-  tests/
-    test_apparaatinstellingen_spiegel.py
+TOETSEN (alleen voor de repository)
+  tests/test_configuratiecontrole.py          nieuw
+  tests/test_apparaatinstellingen_spiegel.py
+  en negen bestaande toetsbestanden waarvan de hulpklassen de
+  nieuwe helper `instelling()` moesten kennen
 
+DOCUMENTEN
   CHANGELOG.md  README.md  OVERDRACHT.md
 
-Naar Home Assistant hoeven alleen de vier bestanden uit
-custom_components/. Herstart daarna.
+WAT ER IS GEREPAREERD
+---------------------
 
-WAT JE ZELF NOG MOET DOEN
+De slijtageberekening gaf niets terug omdat het cyclusaantal en de
+moduleprijs leeg stonden. De code viel bewust terug op 6000 cycli, maar
+die standaard geldt alleen als de SLEUTEL ontbreekt - en Home Assistant
+slaat een leeg veld op MET de waarde None.
+
+Vier-en-dertig plekken gebruikten dat patroon. Ze gaan nu allemaal via
+`instelling()`, en structuurscan 15 bewaakt dat er geen nieuwe bijkomen.
+
+WAT JE ZELF NOG KUNT DOEN
 -------------------------
 
-1. Zet het ontlaadvermogen in de EMS-instellingen TERUG naar 1600 W.
-   Mijn advies van vanochtend om er 2000 van te maken was fout: 1600 is
-   de werkelijke grens uit de veiligheidsinstellingen van de Zendure-app.
-
-2. Maak de twee velden voor het maximale laad- en ontlaadvermogen weer
-   LEEG. Die vergelijking is eruit gehaald.
-
-De ondergrens en de bovengrens mogen gekoppeld blijven.
+De slijtageberekening werkt nu met de standaardwaarden (6000 cycli).
+Wil je hem op jouw werkelijke cijfers, vul dan in de EMS-instellingen
+het cyclusaantal en de prijs per accumodule in.

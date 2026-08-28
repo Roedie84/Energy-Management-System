@@ -560,6 +560,13 @@ async def async_get_config_entry_diagnostics(
             "celspanning": _veilig(
                 "celspanning", coordinator.get_celspanning_oordeel
             ),
+            # v3.56.0: elke ingestelde entiteit, bestaat hij en zegt
+            # hij iets. Drie van de vier correcties van 28 augustus
+            # stonden al in de export, maar niet op een plek waar je ze
+            # zou zien.
+            "configuratiecontrole": _veilig(
+                "configuratiecontrole", coordinator.get_configuratiecontrole
+            ),
             "spiegelcontrole": _veilig(
                 "spiegelcontrole", coordinator.get_spiegelcontrole
             ),

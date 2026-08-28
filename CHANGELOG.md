@@ -19085,3 +19085,56 @@ werkelijke grens en dus de juiste waarde. Met 2000 zou de planning meer
 in een duur kwartier verwachten dan de accu levert.
 
 **Volledige testsuite**: 3067 tests, allemaal groen.
+
+## v3.56.0 — De standaard die nooit gebruikt werd
+
+**Gemeld**: de slijtageberekening gaf niets terug.
+
+```
+cyclusaantal    None
+moduleprijs     None
+```
+
+De code viel bewust terug op 6000 cycli met
+`config.get(CONF_BATTERY_CYCLE_LIFE, DEFAULT_BATTERY_CYCLE_LIFE)`. Maar
+die standaard geldt alleen als de **sleutel ontbreekt** — en Home
+Assistant slaat een leeg veld op **mét de waarde None**. Dan geeft `.get`
+netjes None terug en komt de standaard er nooit aan te pas.
+
+Gevolg: geen slijtagekosten, en dat getal van 10,9 ct zit in vrijwel elke
+afweging — de verkooptoets, de saldering-rem, de proefstand.
+
+Dezelfde vorm als de fout van 24 augustus, waar
+`plan.get("pv_bij_opname_kwh", 0.0)` een opgeslagen None teruggaf.
+**Vier-en-dertig plekken** in deze codebase gebruikten dit patroon; ze
+gaan nu allemaal via `instelling()`, en structuurscan 15 bewaakt dat er
+geen nieuwe bijkomen.
+
+Die scan loopt over de boomstructuur en niet over de tekst — anders
+vindt hij ook het voorbeeld in de toelichting.
+
+### De configuratiecontrole
+
+**Gevraagd**: "Alles wat vandaag gecorrigeerd is had volgens mij uit een
+diagnostiek kunnen komen, dus deze verder uitbreiden zodat we samen de
+integratie telkens beter maken."
+
+Terecht. Van de correcties van 28 augustus stonden er drie al in de
+export, maar niet op een plek waar je ze zou zien:
+
+- `sensor.zendure_manager_available_kwh` gaf al dagen 0,00 kWh terwijl
+  de accu vol zat
+- `wear_cost_overview` stond op null, met de reden verstopt in een veld
+  dat niemand leest
+- de laadstand kwam uit een veld dat maar op drie plaatsen wordt gezet
+
+De export draagt nu een overzicht van **elke ingestelde entiteit**:
+bestaat hij, geeft hij een waarde, wanneer is hij voor het laatst
+bijgewerkt. Plus de getalsinstellingen die leeg staan terwijl er op een
+standaard wordt gerekend.
+
+Een lege instelling is niet fout — er wordt op een standaard
+teruggevallen. Maar wie een getal verwacht en een standaard krijgt,
+rekent met iets anders dan hij denkt.
+
+**Volledige testsuite**: 3078 tests, allemaal groen.

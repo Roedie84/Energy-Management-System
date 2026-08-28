@@ -23,6 +23,11 @@ class _FakeConfig:
 
 
 class _FakeHass:
+
+    def instelling(self, sleutel, standaard):
+        """v3.56.0: de standaard geldt ook bij een opgeslagen None."""
+        waarde = (self.config or {}).get(sleutel)
+        return standaard if waarde is None else waarde
     def __init__(self, path: str):
         self.config = _FakeConfig(path)
 

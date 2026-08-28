@@ -26,6 +26,11 @@ from custom_components.energy_management_system.coordinator import (
 
 
 class _Slijtage:
+
+    def instelling(self, sleutel, standaard):
+        """v3.56.0: de standaard geldt ook bij een opgeslagen None."""
+        waarde = (self.config or {}).get(sleutel)
+        return standaard if waarde is None else waarde
     """Zijn installatie: 3 modules, 8,64 kWh, 86,3 kWh in 18 dagen."""
 
     config = {
@@ -210,6 +215,11 @@ def test_a_normal_day_survives():
 
 
 class _Water:
+
+    def instelling(self, sleutel, standaard):
+        """v3.56.0: de standaard geldt ook bij een opgeslagen None."""
+        waarde = (self.config or {}).get(sleutel)
+        return standaard if waarde is None else waarde
     config = {"water_active_usage_sensor_entity": "sensor.kraan"}
     _stromend_water = C._stromend_water
     stroom = 0.0
