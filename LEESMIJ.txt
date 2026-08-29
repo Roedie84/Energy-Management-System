@@ -1,40 +1,43 @@
-v3.71.0 - alleen de gewijzigde bestanden sinds v3.70.0
+v3.71.1 - alleen de gewijzigde bestanden sinds v3.70.0
 
 CODE (naar Home Assistant, daarna herstarten)
   custom_components/energy_management_system/
-    coordinator.py            de drie reparaties
-    const.py                  VERKOOP_BODEM_FRACTIE
-    manifest.json             versienummer 3.71.0
+    coordinator.py            twee reparaties
+    const.py
+    manifest.json             versienummer 3.71.1
     bestandscontrole.json     bijgewerkte hashlijst  (MOET mee)
 
 TOETSEN (repository)
-  tests/test_verkoop_bodem.py                 nieuw
   tests/test_plan_review.py
   tests/test_zelftoets.py
   tests/test_onvolledige_installatie_meldt.py
 
+  LET OP: verwijder tests/test_verkoop_bodem.py als je die uit een
+  eerdere levering hebt - de code die hij toetst bestaat niet meer.
+
 DOCUMENTEN
   CHANGELOG.md  README.md  OVERDRACHT.md
 
-WAT ER IS GEBEURD
------------------
+WAT ER IN ZIT
+-------------
 
-1. ER BLIJFT 5% IN DE ACCU
-   Bovenop de bestaande verkooptoets, die op een voorspelling rust.
-   Ongeveer 0,39 kWh - ruim een uur basislast.
-
-2. DE PLANTOETSING VERGELEEK APPELS MET PEREN
+1. DE PLANTOETSING VERGELEEK APPELS MET PEREN
    Die -99,5% kwam doordat de planning alleen de verkoopkwartieren
    telde en de meting de hele dag inclusief laadkosten. Het oordeel
-   hangt nu op het aantal VERKOCHTE kilowatturen.
+   hangt nu op het aantal VERKOCHTE kilowatturen - aan beide kanten
+   dezelfde grootheid.
 
-3. DE ZELFTOETS SLOEG TE VROEG ALARM
+2. DE ZELFTOETS SLOEG TE VROEG ALARM
    Mijn diagnose van vanochtend was fout. De tweelingreparatie werkt
-   waarschijnlijk wel; het bewijs komt pas bij een vergelijking die
-   rond het middaguur is ingelegd.
+   waarschijnlijk wel; het bewijs komt bij een vergelijking die rond het
+   middaguur is ingelegd.
 
-WAT JE ZELF MOET DOEN
----------------------
+WAT ER NIET IN ZIT
+------------------
 
-Niets. Kijk vanavond of er minder naar het net is gegaan, en morgen of
-de plantoetsing nu wel zinnige percentages laat zien.
+De 5%-verkoopbodem is gebouwd en weer verwijderd. Die deed iets anders
+dan bedoeld: alleen een vangnet als de bestaande berekening onder de 5%
+uitkwam, en alleen op verkopen aan het net.
+
+Voor "12% wordt 17%" is de ondergrens of de reservemarge het juiste
+veld.

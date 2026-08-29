@@ -488,7 +488,6 @@ from .const import (
     PV_SHALLOW_TILT_DEGREES,
     PV_SHALLOW_TILT_EXTRA_TOLERANCE_DEGREES,
     PV_GEOMETRY_BUCKET_MIN_SAMPLES,
-    VERKOOP_BODEM_FRACTIE,
     PV_GEOMETRY_HISTORY_DAYS,
     PV_GEOMETRY_MIN_CLEARNESS_RATIO,
     PV_GEOMETRY_MIN_DAYS,
@@ -17524,36 +17523,10 @@ class EnergyManagementSystemCoordinator:
                 marge = self._reserve_margin_factor()
                 veilig = diepste * max(marge, SELL_RESERVE_DEEPEST_SAFETY_FACTOR)
 
-        # v3.71.0: en er blijft altijd een bodem in de accu.
-        #
-        # Gevraagd: "Graag ook zorgen dat er 5% accu extra inblijft, dus
-        # minder aan het net verkopen."
-        #
-        # Aanleiding: drie ochtenden op rij een lege accu. Op 28
-        # augustus ging 3,82 van de 7,52 ontladen kilowattuur naar het
-        # NET, en daarna is er 10,54 kWh teruggekocht.
-        #
-        # De bestaande toets rekent uit hoeveel het huis nodig heeft tot
-        # het goedkope blok, en dat is een VOORSPELLING. Klopt die niet -
-        # een bewolkte dag, een wasmachine die er niet in zat - dan is de
-        # accu alsnog leeg. Deze bodem staat daar bovenop en is geen
-        # voorspelling maar een vaste marge.
-        #
-        # Vijf procent van de bruikbare capaciteit is bij deze accu
-        # ongeveer 0,39 kWh: genoeg voor ruim een uur basislast, en klein
-        # genoeg om de arbitrage niet te verstikken.
-        capaciteit = self.bruikbare_capaciteit_kwh() or 0.0
-        bodem = capaciteit * VERKOOP_BODEM_FRACTIE
-        # Vastleggen VOOR de vergelijking, anders is de vlag altijd waar:
-        # `veilig` is dan al opgehoogd tot de bodem.
-        bodem_bindend = bool(bodem) and bodem > veilig
-        veilig = max(veilig, bodem) if bodem else veilig
-
         if beschikbaar <= veilig:
             return {
                 "mag_verkopen": False,
                 "nodig_voor_woning_kwh": round(veilig, 2),
-                "bodem_kwh": round(bodem, 3),
                 "beschikbaar_kwh": round(beschikbaar, 2),
                 "methode": methode,
                 "reden": (
@@ -17568,8 +17541,6 @@ class EnergyManagementSystemCoordinator:
             "nodig_voor_woning_kwh": round(veilig, 2),
             "beschikbaar_kwh": round(beschikbaar, 2),
             "vrij_te_verkopen_kwh": round(beschikbaar - veilig, 2),
-            "bodem_kwh": round(bodem, 3),
-            "bodem_bindend": bodem_bindend,
             "methode": methode,
             "verwachte_zon_kwh": (
                 round(verwacht_vandaag, 1) if verwacht_vandaag is not None else None

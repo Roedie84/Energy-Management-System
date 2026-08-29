@@ -5092,23 +5092,3 @@ ZELFTOETS_MIN_REEKS = 20
 # zegt vooral iets over het weer van die week.
 MPC_MIN_METINGEN = 14
 
-# Hoeveel van de accu er altijd in blijft, ongeacht wat de verkooptoets
-# uitrekent (v3.71.0).
-#
-# Gevraagd: "Graag ook zorgen dat er 5% accu extra inblijft, dus minder
-# aan het net verkopen."
-#
-# Aanleiding: drie ochtenden op rij een lege accu. Op 28 augustus ging
-# 3,82 van de 7,52 ontladen kilowattuur naar het NET, en daarna is er
-# 10,54 kWh teruggekocht.
-#
-# De bestaande toets rekent uit hoeveel het huis nodig heeft tot het
-# goedkope blok, en dat is een VOORSPELLING. Klopt die niet - een
-# bewolkte dag, een wasmachine die er niet in zat - dan is de accu
-# alsnog leeg. Deze bodem staat daar bovenop en is geen voorspelling
-# maar een vaste marge.
-#
-# Vijf procent van 7,78 kWh bruikbaar is ongeveer 0,39 kWh: genoeg voor
-# ruim een uur basislast, en klein genoeg om de arbitrage niet te
-# verstikken.
-VERKOOP_BODEM_FRACTIE = 0.05

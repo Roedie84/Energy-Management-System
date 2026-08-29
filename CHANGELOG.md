@@ -19827,34 +19827,28 @@ klopt met zichzelf, en dat is de vorm die deze week vaker langskwam.
 
 **Volledige testsuite**: 3194 tests, allemaal groen.
 
-## v3.71.0 — Een bodem in de accu, en twee vergelijkingen die niet klopten
+## v3.71.0 — Twee vergelijkingen die niet klopten
 
-Drie dingen die bij elkaar horen: de accu stond drie ochtenden op rij
-leeg, en twee rapportages die dat hadden moeten laten zien deugden niet.
+De accu stond drie ochtenden op rij leeg, en twee rapportages die dat
+hadden moeten laten zien deugden niet.
 
-### Er blijft nu 5% in de accu
+### Wat er NIET in zit: de 5%-bodem
 
-**Gevraagd**: "Graag ook zorgen dat er 5% accu extra inblijft, dus
-minder aan het net verkopen."
+Er is een verkoopbodem gebouwd en weer verwijderd, en de reden is het
+opschrijven waard.
 
-Gemeten op 28 augustus:
+Gevraagd was: "Zorg dat er 5% accu extra inblijft." Ik bouwde een
+`max(veilig, bodem)` in de verkooptoets, en dat is iets anders dan wat
+er bedoeld werd - het treedt alleen in werking als de bestaande
+berekening ONDER de 5% uitkomt, en het raakt alleen het verkopen aan het
+net, niet het ontladen naar het huis.
 
-```
-accu ontladen         7,52 kWh
-waarvan naar het NET  3,82 kWh
-daarna teruggekocht  10,54 kWh
-```
+De verwachting was 12% naar 17% aan het eind van de nacht. Dat doet zo'n
+bodem niet; daarvoor is de ondergrens of de reservemarge het juiste
+veld.
 
-De bestaande verkooptoets rekent uit hoeveel het huis nodig heeft tot
-het goedkope blok, en dat is een **voorspelling**. Klopt die niet — een
-bewolkte dag, een wasmachine die er niet in zat — dan is de accu alsnog
-leeg.
-
-Deze bodem staat daar bovenop en is geen voorspelling maar een vaste
-marge: 5% van de bruikbare capaciteit, bij deze accu ongeveer 0,39 kWh.
-Genoeg voor ruim een uur basislast, klein genoeg om de arbitrage niet te
-verstikken. De export meldt `bodem_bindend`, zodat te zien is of het
-verkopen werd geblokkeerd door de voorspelling of door de bodem.
+Weer verwijderd, want een instelling die iets anders doet dan de naam
+belooft is erger dan geen instelling.
 
 ### De plantoetsing vergeleek appels met peren
 
@@ -19891,3 +19885,26 @@ vastgelegd. Dat is een fout in de integratie; onder de drempel blijven
 is timing.
 
 **Volledige testsuite**: 3201 tests, allemaal groen.
+
+## v3.71.1 — De verkoopbodem er weer uit
+
+**Gemeld**: "Ik neem aan 5% bovenop de al ingestelde marge, dus nu gaat
+hij 's morgens meestal naar ca. 12% dan zou dat nu 17% moeten zijn." En
+daarna: "Die 5% regel er weer uithalen, ik denk dat het een misverstand
+is."
+
+Terecht. De bodem was een `max(veilig, bodem)` in de verkooptoets:
+
+- hij treedt alleen in werking als de bestaande berekening **onder** de
+  5% uitkomt
+- en hij raakt alleen het **verkopen** aan het net, niet het ontladen
+  naar het huis
+
+Voor "12% wordt 17%" is de ondergrens of de reservemarge het juiste
+veld, en die staan allebei al ingesteld — de ondergrens op 10%, de
+reserve op 45% marge.
+
+Een instelling die iets anders doet dan de naam belooft, is erger dan
+geen instelling. Eruit dus.
+
+**Volledige testsuite**: 3195 tests, allemaal groen.
