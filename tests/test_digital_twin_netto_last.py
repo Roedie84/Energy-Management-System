@@ -178,3 +178,55 @@ def test_a_sunny_point_is_labelled_as_such(make_coordinator, hass):
     assert obj.digital_twin_trajectory
     assert all("zon_kwh" in punt for punt in obj.digital_twin_trajectory)
     assert obj.digital_twin_trajectory[0]["zon_kwh"] == 0.4
+
+
+# --- geen dubbele afrekeningen (v3.73.0) -----------------------------
+
+
+def test_two_predictions_for_the_same_moment_count_once(
+    make_coordinator, hass
+):
+    """Gevonden bij het opruimen op 29 augustus: twee vergelijkingen op
+
+    hetzelfde moment, met bijna dezelfde waarde:
+
+        28-08 15:30  voorspeld 7,061  fout 0,715
+        28-08 15:30  voorspeld 6,594  fout 1,182
+
+    `_digital_twin_last_queued` is vluchtig, dus na een herstart verviel
+    de wachttijd en werd er meteen opnieuw ingelegd. Zes uur later komen
+    die twee samen aan en tellen ze allebei mee in de gemiddelde fout.
+    """
+    c = make_coordinator({})
+    c.digital_twin_accuracy_history = [
+        {"moment": "2026-08-28T15:30:00+02:00", "fout_kwh": 0.715},
+        {"moment": "2026-08-28T15:30:00+02:00", "fout_kwh": 1.182},
+        {"moment": "2026-08-28T21:30:00+02:00", "fout_kwh": 0.4},
+    ]
+    c._digital_twin_pending = []
+
+    c._resolve_digital_twin_predictions(datetime(2026, 8, 29, 10, 0))
+
+    momenten = [r["moment"] for r in c.digital_twin_accuracy_history]
+    assert len(momenten) == len(set(momenten))
+    # De eerste blijft staan.
+    assert c.digital_twin_accuracy_history[0]["fout_kwh"] == 0.715
+
+
+def test_the_queue_moment_survives_a_restart(make_coordinator, hass):
+    """De openstaande voorspellingen weten zelf wanneer ze zijn
+
+    ingelegd, en die overleven de herstart wél.
+    """
+    c = make_coordinator({})
+    c._digital_twin_last_queued = None
+    c._digital_twin_pending = [
+        {"voorspeld_op": "2026-08-29T09:00:00+02:00", "doelmoment": "x"}
+    ]
+
+    laatst = c._digital_twin_laatst_ingelegd(
+        datetime(2026, 8, 29, 9, 30, tzinfo=None)
+    )
+
+    assert laatst is not None
+    assert laatst.hour == 9

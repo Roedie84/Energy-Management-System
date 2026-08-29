@@ -8918,7 +8918,33 @@ class EnergyManagementSystemCoordinator:
         #
         # De geschiedenis zelf overleeft de herstart wél, en die weet
         # precies of deze dag al is vastgelegd.
-        if any(r.get("dag") == vandaag for r in self.mpc_vergelijking_history):
+        # v3.73.0: en de dubbelen die er al staan opruimen.
+        #
+        # De reparatie van v3.72.0 voorkwam nieuwe dubbele metingen maar
+        # liet de bestaande staan - vier stuks, met paren als +1,45 en
+        # -0,75 op dezelfde dag. Die blijven de mediaan verstoren tot ze
+        # uit het venster lopen, en dat duurt langer dan de veertien
+        # dagen die de kandidaat nodig heeft.
+        #
+        # De EERSTE van een dag blijft staan: die is genomen op het
+        # moment dat de planning het verst vooruitkeek, en de tweede
+        # kwam alleen doordat er halverwege de dag opnieuw is opgestart.
+        gezien: set[str] = set()
+        ontdubbeld = []
+        for regel in self.mpc_vergelijking_history:
+            dag = regel.get("dag")
+            if dag in gezien:
+                continue
+            gezien.add(dag)
+            ontdubbeld.append(regel)
+        if len(ontdubbeld) != len(self.mpc_vergelijking_history):
+            _LOGGER.info(
+                "MPC-vergelijking: %d dubbele meting(en) opgeruimd.",
+                len(self.mpc_vergelijking_history) - len(ontdubbeld),
+            )
+            self.mpc_vergelijking_history = ontdubbeld
+
+        if vandaag in gezien:
             return
         if self._mpc_gemeten_op == vandaag:
             return
@@ -28193,6 +28219,33 @@ class EnergyManagementSystemCoordinator:
             "Stuurt nooit een commando."
         )
 
+    def _digital_twin_laatst_ingelegd(self, now: datetime) -> datetime | None:
+        """Wanneer er voor het laatst een voorspelling is ingelegd
+        (v3.73.0).
+
+        Gevonden bij het opruimen: twee vergelijkingen die op hetzelfde
+        moment worden afgerekend, met bijna dezelfde waarde -
+        `voorspeld_kwh` 7,061 en 6,594 voor 28 augustus 15:30.
+
+        `_digital_twin_last_queued` is vluchtig, dus na een herstart
+        verviel de wachttijd en werd er meteen opnieuw ingelegd. Zes uur
+        later komen die twee samen aan en tellen ze allebei mee in de
+        gemiddelde fout.
+
+        Dezelfde vorm als de dubbele MPC-meting: een vluchtige markering
+        die een bewaarde reeks bewaakt. De openstaande voorspellingen
+        weten het zelf, en die overleven de herstart.
+        """
+        momenten = [
+            dt_util.parse_datetime(v["voorspeld_op"])
+            for v in (self._digital_twin_pending or [])
+            if v.get("voorspeld_op")
+        ]
+        momenten = [m for m in momenten if m is not None]
+        if self._digital_twin_last_queued is not None:
+            momenten.append(self._digital_twin_last_queued)
+        return max(momenten) if momenten else None
+
     def _queue_digital_twin_prediction(self, now: datetime) -> None:
         """Legt de voorspelde SoC over
         DIGITAL_TWIN_ACCURACY_HORIZON_HOURS vast, om later tegen de
@@ -28210,8 +28263,9 @@ class EnergyManagementSystemCoordinator:
         if not self.digital_twin_trajectory:
             return
         if (
-            self._digital_twin_last_queued is not None
-            and (now - self._digital_twin_last_queued).total_seconds() / 60
+            self._digital_twin_laatst_ingelegd(now) is not None
+            and (now - self._digital_twin_laatst_ingelegd(now)).total_seconds()
+            / 60
             < DIGITAL_TWIN_ACCURACY_QUEUE_INTERVAL_MINUTES
         ):
             return
@@ -28279,6 +28333,24 @@ class EnergyManagementSystemCoordinator:
         bedoeld was, en zou de meting vervuilen met een fout die niets
         met de modelkwaliteit te maken heeft.
         """
+        # v3.73.0: dubbele afrekeningen opruimen.
+        #
+        # Twee voorspellingen die op hetzelfde moment aankomen, met
+        # bijna dezelfde waarde - 7,061 en 6,594 voor 28 augustus 15:30.
+        # Allebei geteld vertekenen ze de gemiddelde fout.
+        #
+        # Vóór de vroege uitgang, want bij een lege wachtrij stopt de
+        # functie meteen - en dan zou er nooit worden opgeruimd.
+        gezien: set[str] = set()
+        ontdubbeld = []
+        for regel in self.digital_twin_accuracy_history:
+            moment = regel.get("moment")
+            if moment in gezien:
+                continue
+            gezien.add(moment)
+            ontdubbeld.append(regel)
+        self.digital_twin_accuracy_history = ontdubbeld
+
         available_entity = self.config.get(CONF_AVAILABLE_ENERGY_SENSOR)
         if not available_entity or not self._digital_twin_pending:
             return
@@ -28316,6 +28388,25 @@ class EnergyManagementSystemCoordinator:
                     ),
                 }
             )
+        # v3.73.0: dubbele afrekeningen opruimen.
+        #
+        # Twee voorspellingen die op hetzelfde moment aankomen, met
+        # bijna dezelfde waarde - 7,061 en 6,594 voor 28 augustus 15:30.
+        # Allebei geteld vertekenen ze de gemiddelde fout.
+        #
+        # De EERSTE blijft: die is ingelegd op het geplande moment, de
+        # tweede kwam er alleen doordat de wachttijd bij een herstart
+        # verviel.
+        gezien: set[str] = set()
+        ontdubbeld = []
+        for regel in self.digital_twin_accuracy_history:
+            moment = regel.get("moment")
+            if moment in gezien:
+                continue
+            gezien.add(moment)
+            ontdubbeld.append(regel)
+        self.digital_twin_accuracy_history = ontdubbeld
+
         self._digital_twin_pending = openstaand
         self.digital_twin_accuracy_history = self.digital_twin_accuracy_history[
             -DIGITAL_TWIN_ACCURACY_HISTORY_LENGTH:

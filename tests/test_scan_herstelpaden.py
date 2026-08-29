@@ -236,3 +236,77 @@ def test_shared_lists_hold_one_kind_of_element():
         "deze lijsten krijgen zowel teksten als dicts, en de lezers "
         f"verwachten er maar een van: {gemengd}"
     )
+
+
+# --- structuurscan 17: vluchtige markering bij bewaarde reeks --------
+
+
+def test_no_volatile_marker_guards_a_persisted_series():
+    """Twee keer dezelfde fout in twee dagen (v3.73.0).
+
+    Gemeten in de export van 29 augustus:
+
+        mpc_vergelijking              2 dubbele dagen
+        digital_twin_accuracy_history 2 dubbele momenten
+
+    Allebei dezelfde vorm: een VLUCHTIGE markering die bewaakt of er al
+    is gemeten, terwijl de reeks zelf WEL wordt bewaard. Na een herstart
+    is de markering weg, de reeks niet - en dan wordt dezelfde dag
+    opnieuw gemeten.
+
+    Bij de MPC leverde dat +1,45 en -0,75 op dezelfde dag; bij de
+    tweeling twee voorspellingen die op hetzelfde moment aankwamen. In
+    beide gevallen vertekent dat de mediaan waar de kandidaat op rust.
+
+    Deze scan zoekt naar markeringen die als vluchtig zijn verklaard en
+    toch in een `if`-vergelijking staan die iets afdwingt.
+    """
+    import ast
+    import re
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    toetsen = Path(__file__).parent / "test_state_persistence.py"
+    tekst = toetsen.read_text()
+    vluchtig = set(
+        re.findall(
+            r'"(\w+)":\s*"', tekst[tekst.index("VLUCHTIG_MET_REDEN") :]
+        )
+    )
+
+    boom = ast.parse(bron)
+    verdacht = []
+    for n in ast.walk(boom):
+        if not isinstance(n, ast.Compare) or not isinstance(n.left, ast.Attribute):
+            continue
+        if not (
+            isinstance(n.left.value, ast.Name) and n.left.value.id == "self"
+        ):
+            continue
+        naam = n.left.attr
+        if naam not in vluchtig:
+            continue
+        # Alleen markeringen die een MOMENT vasthouden. Een lusteller
+        # (`_idx`) of een tijdvenster (`_window_duration_hours`) staat
+        # ook in een vergelijking, maar bewaakt niets dat een herstart
+        # moet overleven - die twee gaven vals alarm bij het invoeren.
+        if not any(
+            w in naam for w in ("gemeten", "queued", "laatst", "_op", "datum", "dag")
+        ):
+            continue
+        verdacht.append(f"regel {n.lineno}: self.{naam}")
+
+    # De MPC- en tweelingmarkering mogen blijven staan: ze zijn nu een
+    # TWEEDE slot naast de geschiedenis, niet het enige.
+    toegestaan = {"_mpc_gemeten_op", "_digital_twin_last_queued"}
+    echt = [
+        v for v in verdacht
+        if not any(t in v for t in toegestaan)
+    ]
+
+    assert not echt, (
+        "vluchtige markeringen die als enige bewaken of iets al is "
+        f"gebeurd: {echt}"
+    )

@@ -19961,3 +19961,56 @@ Het plan draait gewoon: 13,86 kWh zon tegen 5,38 kWh verbruik over 14,2
 uur, saldo +8,49.
 
 **Volledige testsuite**: 3196 tests, allemaal groen.
+
+## v3.73.0 — Opruimen: dubbele metingen, twee keer dezelfde oorzaak
+
+**Gevraagd**: "Alles wat op te ruimen valt, maakt de integratie
+natuurlijk schoner."
+
+Twee reeksen droegen dubbelen, en het bleek dezelfde fout:
+
+```
+mpc_vergelijking               2 dubbele dagen
+digital_twin_accuracy_history  2 dubbele momenten
+```
+
+Bij de MPC stond er +1,45 en −0,75 op dezelfde dag; bij de tweeling twee
+voorspellingen die op hetzelfde moment aankwamen met 7,061 en 6,594 kWh.
+In beide gevallen vertekent dat de mediaan waar de kandidaat op rust.
+
+### De oorzaak
+
+Een **vluchtige markering** die bewaakt of er al is gemeten, terwijl de
+reeks zelf **wel** wordt bewaard. Na een herstart is de markering weg en
+de reeks niet — en dan wordt dezelfde dag opnieuw gemeten.
+
+Bij de MPC was dat `_mpc_gemeten_op`, bij de tweeling
+`_digital_twin_last_queued`. Allebei leiden ze nu af uit wat er al
+bewaard is: de geschiedenis respectievelijk de openstaande
+voorspellingen. De markering blijft als tweede slot staan.
+
+En de dubbelen die er al stonden worden opgeruimd — de eerste van elke
+dag blijft, want die is genomen op het geplande moment.
+
+**Structuurscan 17** bewaakt dit nu. Bij het invoeren gaf hij twee keer
+vals alarm — een lusteller en een tijdvenster staan ook in zo'n
+vergelijking — dus hij kijkt alleen naar markeringen die een moment
+vasthouden.
+
+### De rest van de controle
+
+| | |
+|---|---|
+| 3199 tests | groen |
+| 17 structuurscans, 134 toetsen | groen |
+| ongebruikte constanten | 0 van 579 |
+| 288 bestanden syntactisch | in orde |
+| dashboard ↔ kopie | gelijk |
+| resten van de 5%-bodem | geen |
+| dekking | 90%, `coordinator.py` 91% |
+
+Andere reeksen met dubbele sleutels nagekeken: `quarter_plan` gebruikt
+`dag` als label en de aanwezigheidstijdlijn hoort meerdere perioden per
+dag te hebben. Geen van beide is een fout.
+
+**Volledige testsuite**: 3199 tests, allemaal groen.

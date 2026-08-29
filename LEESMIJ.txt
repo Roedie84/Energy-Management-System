@@ -1,14 +1,16 @@
-v3.72.0 - alleen de gewijzigde bestanden sinds v3.70.0
+v3.73.0 - alleen de gewijzigde bestanden sinds v3.70.0
 
 CODE (naar Home Assistant, daarna herstarten)
   custom_components/energy_management_system/
-    coordinator.py            drie reparaties
+    coordinator.py            vier reparaties
     const.py
-    manifest.json             versienummer 3.72.0
+    manifest.json             versienummer 3.73.0
     bestandscontrole.json     bijgewerkte hashlijst  (MOET mee)
 
 TOETSEN (repository)
+  tests/test_digital_twin_netto_last.py
   tests/test_mpc_met_verbruik_en_zon.py
+  tests/test_scan_herstelpaden.py         structuurscan 17
   tests/test_plan_review.py
   tests/test_zelftoets.py
   tests/test_onvolledige_installatie_meldt.py
@@ -22,22 +24,25 @@ DOCUMENTEN
 WAT ER IN ZIT
 -------------
 
-1. DE PLANTOETSING VERGELEEK APPELS MET PEREN (v3.71.0)
+1. DE PLANTOETSING VERGELEEK APPELS MET PEREN
    Die -99,5% kwam doordat de planning alleen de verkoopkwartieren
    telde en de meting de hele dag inclusief laadkosten. Het oordeel
    hangt nu op het aantal VERKOCHTE kilowatturen.
 
-2. DE ZELFTOETS SLOEG TE VROEG ALARM (v3.71.0)
+2. DE ZELFTOETS SLOEG TE VROEG ALARM
    Meldt nu alleen nog als de verwachte zon NOOIT wordt vastgelegd.
 
-3. TWEE MPC-METINGEN PER DAG (v3.72.0)
-   De dagmarkering was vluchtig, dus na een herstart werd dezelfde dag
-   opnieuw gemeten. Leidt nu af uit de geschiedenis.
+3. DUBBELE METINGEN, TWEE KEER DEZELFDE OORZAAK
+   Een vluchtige markering die bewaakt of er al gemeten is, terwijl de
+   reeks zelf WEL bewaard wordt. Na een herstart werd dezelfde dag
+   opnieuw gemeten - bij de MPC en bij de tweeling.
 
-De 5%-verkoopbodem uit v3.71.0 is er weer uit.
+   De bestaande dubbelen worden bij de eerstvolgende ronde opgeruimd.
+
+4. STRUCTUURSCAN 17 bewaakt die vorm voortaan.
 
 WAT JE ZELF MOET DOEN
 ---------------------
 
-Niets. Morgen staat er een nieuwe regel in de plantoetsing met
-"verkocht" erin - dat is de eerste die het gerepareerde oordeel draagt.
+Niets. Na de herstart staan er nog twee MPC-metingen in plaats van
+vier, en 58 tweelingvergelijkingen in plaats van 60.
