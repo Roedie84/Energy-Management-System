@@ -8904,6 +8904,22 @@ class EnergyManagementSystemCoordinator:
         is.
         """
         vandaag = now.date().isoformat()
+        # v3.72.0: uit de GESCHIEDENIS afleiden, niet uit een vluchtige
+        # markering.
+        #
+        # Gemeten in de export van 29 augustus: twee metingen op 28
+        # augustus en twee op 29, terwijl er één per dag hoort te staan.
+        #
+        # `_mpc_gemeten_op` is bewust vluchtig - na een herstart mag die
+        # dag opnieuw gemeten worden, dacht ik. Maar bij twee
+        # installaties op één dag levert dat twee metingen met heel
+        # verschillende uitkomsten (+1,45 en -0,75), en die verstoren de
+        # mediaan.
+        #
+        # De geschiedenis zelf overleeft de herstart wél, en die weet
+        # precies of deze dag al is vastgelegd.
+        if any(r.get("dag") == vandaag for r in self.mpc_vergelijking_history):
+            return
         if self._mpc_gemeten_op == vandaag:
             return
         mpc = self.mpc_projected_total_profit_eur

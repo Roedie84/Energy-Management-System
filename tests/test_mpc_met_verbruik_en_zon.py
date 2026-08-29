@@ -237,3 +237,30 @@ def test_it_still_steers_nothing(make_coordinator, hass):
 
         assert "_async_apply_operation" not in aanroepen
         assert "_async_apply_manual" not in aanroepen
+
+
+def test_a_restart_does_not_add_a_second_measurement(
+    make_coordinator, hass
+):
+    """v3.72.0: gemeten in de export van 29 augustus - twee metingen op
+
+    28 augustus en twee op 29, terwijl er één per dag hoort te staan.
+
+    `_mpc_gemeten_op` is vluchtig, dus na een herstart stond die weer op
+    None. Bij twee installaties op één dag levert dat twee metingen met
+    heel verschillende uitkomsten (+1,45 en -0,75), en die verstoren de
+    mediaan.
+
+    De geschiedenis overleeft de herstart wél.
+    """
+    c = make_coordinator({})
+    c.mpc_projected_total_profit_eur = 2.0
+    c.get_quarter_plan_summary = lambda: {"netto_opbrengst_eur": 1.5}
+
+    c._meet_mpc(NU)
+    # De herstart: de markering is weg, de geschiedenis niet.
+    c._mpc_gemeten_op = None
+    c.mpc_projected_total_profit_eur = 3.0
+    c._meet_mpc(NU + timedelta(hours=3))
+
+    assert len(c.mpc_vergelijking_history) == 1

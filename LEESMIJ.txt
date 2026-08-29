@@ -1,19 +1,20 @@
-v3.71.1 - alleen de gewijzigde bestanden sinds v3.70.0
+v3.72.0 - alleen de gewijzigde bestanden sinds v3.70.0
 
 CODE (naar Home Assistant, daarna herstarten)
   custom_components/energy_management_system/
-    coordinator.py            twee reparaties
+    coordinator.py            drie reparaties
     const.py
-    manifest.json             versienummer 3.71.1
+    manifest.json             versienummer 3.72.0
     bestandscontrole.json     bijgewerkte hashlijst  (MOET mee)
 
 TOETSEN (repository)
+  tests/test_mpc_met_verbruik_en_zon.py
   tests/test_plan_review.py
   tests/test_zelftoets.py
   tests/test_onvolledige_installatie_meldt.py
 
-  LET OP: verwijder tests/test_verkoop_bodem.py als je die uit een
-  eerdere levering hebt - de code die hij toetst bestaat niet meer.
+  LET OP: verwijder tests/test_verkoop_bodem.py als je die uit v3.71.0
+  hebt - de code die hij toetst bestaat niet meer.
 
 DOCUMENTEN
   CHANGELOG.md  README.md  OVERDRACHT.md
@@ -21,23 +22,22 @@ DOCUMENTEN
 WAT ER IN ZIT
 -------------
 
-1. DE PLANTOETSING VERGELEEK APPELS MET PEREN
+1. DE PLANTOETSING VERGELEEK APPELS MET PEREN (v3.71.0)
    Die -99,5% kwam doordat de planning alleen de verkoopkwartieren
    telde en de meting de hele dag inclusief laadkosten. Het oordeel
-   hangt nu op het aantal VERKOCHTE kilowatturen - aan beide kanten
-   dezelfde grootheid.
+   hangt nu op het aantal VERKOCHTE kilowatturen.
 
-2. DE ZELFTOETS SLOEG TE VROEG ALARM
-   Mijn diagnose van vanochtend was fout. De tweelingreparatie werkt
-   waarschijnlijk wel; het bewijs komt bij een vergelijking die rond het
-   middaguur is ingelegd.
+2. DE ZELFTOETS SLOEG TE VROEG ALARM (v3.71.0)
+   Meldt nu alleen nog als de verwachte zon NOOIT wordt vastgelegd.
 
-WAT ER NIET IN ZIT
-------------------
+3. TWEE MPC-METINGEN PER DAG (v3.72.0)
+   De dagmarkering was vluchtig, dus na een herstart werd dezelfde dag
+   opnieuw gemeten. Leidt nu af uit de geschiedenis.
 
-De 5%-verkoopbodem is gebouwd en weer verwijderd. Die deed iets anders
-dan bedoeld: alleen een vangnet als de bestaande berekening onder de 5%
-uitkwam, en alleen op verkopen aan het net.
+De 5%-verkoopbodem uit v3.71.0 is er weer uit.
 
-Voor "12% wordt 17%" is de ondergrens of de reservemarge het juiste
-veld.
+WAT JE ZELF MOET DOEN
+---------------------
+
+Niets. Morgen staat er een nieuwe regel in de plantoetsing met
+"verkocht" erin - dat is de eerste die het gerepareerde oordeel draagt.

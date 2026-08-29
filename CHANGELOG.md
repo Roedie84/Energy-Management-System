@@ -19908,3 +19908,56 @@ Een instelling die iets anders doet dan de naam belooft, is erger dan
 geen instelling. Eruit dus.
 
 **Volledige testsuite**: 3195 tests, allemaal groen.
+
+## v3.72.0 — Eén meting per dag, ook na een herstart
+
+**Gevonden** bij de volledige controle, in de export van 29 augustus:
+
+```
+2026-08-28   MPC +0.22  planning -1.23  verschil +1.45
+2026-08-28   MPC +0.23  planning +0.98  verschil -0.75
+2026-08-29   MPC +0.84  planning -1.40  verschil +2.24
+2026-08-29   MPC +0.73  planning +1.03  verschil -0.30
+```
+
+Twee metingen per dag, terwijl er één hoort te staan — dat is precies wat
+`_meet_mpc` afdwingt met een dagmarkering.
+
+Die markering is bewust **vluchtig**: na een herstart mag de dag opnieuw
+gemeten worden, dacht ik. Maar bij twee installaties op één dag levert
+dat twee metingen met heel verschillende uitkomsten, en die verstoren de
+mediaan waar de kandidaat op rust.
+
+De markering leidt nu af uit de **geschiedenis**, en die overleeft de
+herstart wél.
+
+Nagekeken of dezelfde vorm elders voorkomt: één vluchtige markering die
+een bewaarde reeks bewaakt, en dat was deze.
+
+### De rest van de controle
+
+| | |
+|---|---|
+| 3196 tests | groen |
+| 16 structuurscans, 133 toetsen | groen |
+| ongebruikte constanten | 0 van 579 |
+| 288 bestanden syntactisch | in orde |
+| JSON, YAML, tekstbestanden | leesbaar |
+| dashboard ↔ kopie | gelijk |
+| resten van de verwijderde 5%-bodem | geen |
+| dekking | 90%, `const.py` 100%, `coordinator.py` 91% |
+
+De acht wijzigingen van vandaag zitten er alle acht in en zijn alle acht
+gedekt.
+
+### En een eigen vergissing
+
+Ik meldde vanochtend dat het MPC-plan op `null` stond. Dat klopte niet:
+ik keek in `data/coordinator/` terwijl het onder `data/` staat. **De
+vijfde keer deze week** dat ik op de verkeerde plek zoek en dan "null"
+rapporteer.
+
+Het plan draait gewoon: 13,86 kWh zon tegen 5,38 kWh verbruik over 14,2
+uur, saldo +8,49.
+
+**Volledige testsuite**: 3196 tests, allemaal groen.
