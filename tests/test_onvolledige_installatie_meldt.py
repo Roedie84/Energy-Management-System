@@ -63,7 +63,14 @@ def test_before_startup_it_says_nothing(make_coordinator, hass):
 def test_a_self_test_finding_reaches_the_landing_page(
     make_coordinator, hass
 ):
-    """De fout van 28 augustus: zestig vergelijkingen, nul met zon."""
+    """De fout van 28 augustus: zestig vergelijkingen, nul met zon.
+
+    v3.71.0: de melding heet nu naar wat er werkelijk fout kan zijn -
+    dat de verwachte zon nooit wordt vastgelegd. Onder de drempel
+    blijven is geen fout maar timing: een vergelijking wordt zes uur na
+    het inleggen afgerekend, dus die van 08:15 gaat over een venster dat
+    om 02:15 begon.
+    """
     c = make_coordinator({})
     c.digital_twin_accuracy_history = [
         {"fout_kwh": 1.346, "met_zon": False} for _ in range(60)
@@ -71,7 +78,7 @@ def test_a_self_test_finding_reaches_the_landing_page(
 
     titels = c.get_diagnostic_summary()["aandachtspunten"]
 
-    assert any("Tweeling: splitsing eenzijdig" in p for p in titels)
+    assert any("Tweeling: zon wordt nooit vastgelegd" in p for p in titels)
 
 
 # --- de melding op de telefoon --------------------------------------

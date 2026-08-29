@@ -488,6 +488,7 @@ from .const import (
     PV_SHALLOW_TILT_DEGREES,
     PV_SHALLOW_TILT_EXTRA_TOLERANCE_DEGREES,
     PV_GEOMETRY_BUCKET_MIN_SAMPLES,
+    VERKOOP_BODEM_FRACTIE,
     PV_GEOMETRY_HISTORY_DAYS,
     PV_GEOMETRY_MIN_CLEARNESS_RATIO,
     PV_GEOMETRY_MIN_DAYS,
@@ -8625,15 +8626,34 @@ class EnergyManagementSystemCoordinator:
         if totaal >= ZELFTOETS_MIN_REEKS:
             met = (split.get("met_zon") or {}).get("aantal") or 0
             zonder = (split.get("zonder_zon") or {}).get("aantal") or 0
-            if met == 0 or zonder == 0:
+            # v3.71.0: alleen als de zon ook wérkelijk nooit werd
+            # vastgelegd.
+            #
+            # De toets sloeg alarm terwijl het mechanisme deed wat het
+            # moest. Gemeten op 29 augustus 08:42: de laatste
+            # vergelijking droeg `verwachte_zon_kwh: 0.208` - de zon
+            # kwam dus door, maar bleef onder de drempel van 0,5 kWh
+            # omdat het venster van 02:15 tot 08:15 liep.
+            #
+            # Een vergelijking wordt zes uur na het inleggen afgerekend.
+            # Om een dagvenster te krijgen moet er rond het middaguur
+            # zijn ingelegd, en die staan er pas een halve dag na een
+            # herstart in.
+            #
+            # Wat er WEL fout kan zijn: dat het veld nooit wordt gevuld.
+            # Dat is een fout in de integratie; onder de drempel blijven
+            # is er geen.
+            zon_ooit = any(
+                (r.get("verwachte_zon_kwh") or 0) > 0
+                for r in (self.digital_twin_accuracy_history or [])
+            )
+            if not zon_ooit and (met == 0 or zonder == 0):
                 _meld(
-                    "Tweeling: splitsing eenzijdig",
-                    f"{totaal} vergelijkingen, waarvan {met} met zon en "
-                    f"{zonder} zonder. Over meerdere dagen horen beide "
-                    "voor te komen; valt alles aan één kant, dan wordt "
-                    "het kenmerk niet gezet.",
+                    "Tweeling: zon wordt nooit vastgelegd",
+                    f"{totaal} vergelijkingen en bij geen enkele staat er "
+                    "verwachte zon bij. Het kenmerk wordt dan niet gezet "
+                    "en de splitsing meet niets.",
                 )
-
         # 2. Reeksen waarin elke waarde gelijk is.
         #
         # Een bron die stilstaat levert een reeks op die er gevuld
@@ -16591,6 +16611,11 @@ class EnergyManagementSystemCoordinator:
                     - self.actual_cost_today_eur,
                     4,
                 ),
+                # v3.71.0: en de accu-uitvoer, want dat is het enige dat
+                # aan beide kanten hetzelfde meet.
+                "accu_export_bij_opname_kwh": round(
+                    self.battery_export_today_kwh, 3
+                ),
                 "verwachte_opbrengst_eur": samenvatting.get("verwachte_opbrengst_eur"),
                 "verwachte_zon_kwh": samenvatting.get("zon_kwh"),
                 "verwacht_verbruik_kwh": samenvatting.get("verbruik_kwh"),
@@ -16653,6 +16678,9 @@ class EnergyManagementSystemCoordinator:
         werkelijke_import = eindstand.get(
             "import", self.grid_import_today_kwh
         ) - plan.get("import_bij_opname_kwh", 0.0)
+        werkelijke_accu_export = self.battery_export_today_kwh - plan.get(
+            "accu_export_bij_opname_kwh", 0.0
+        )
         regel = {
             "datum": plan["datum"],
             "opgenomen_om": plan["opgenomen_om"],
@@ -16663,10 +16691,46 @@ class EnergyManagementSystemCoordinator:
                     plan["verwachte_zon_kwh"], werkelijke_zon
                 ),
             },
+            # v3.71.0: verkocht tegenover verwacht - twee keer dezelfde
+            # grootheid.
+            #
+            # Gemeld met een schermafdruk: "-99.5% afwijking?" bij vijftien
+            # dagen op rij. Dat was geen afwijking maar een fout in de
+            # vergelijking:
+            #
+            #     voorspeld    de opbrengst van de VERKOOPKWARTIEREN
+            #     werkelijk    tegenfeitelijk min werkelijk over de HELE DAG
+            #
+            # De eerste telt alleen de opbrengstkant, de tweede telt
+            # opbrengst MIN de laadkosten. Dan komt er per definitie bijna
+            # -100% uit, elke dag, hoe goed het ook ging - en vielen er in
+            # vijftien dagen nul binnen de marge terwijl de zonvoorspelling
+            # er met -12,4% prima uitzag.
+            #
+            # De kilowatturen die de accu het net op stuurde staan aan
+            # beide kanten wél voor hetzelfde: de planning verwacht ze, de
+            # meter telt ze. Dat is de vergelijking die iets zegt.
+            "verkocht": {
+                "voorspeld_kwh": plan.get("verwachte_export_kwh"),
+                "werkelijk_kwh": round(werkelijke_accu_export, 2),
+                "afwijking_procent": _afwijking(
+                    plan.get("verwachte_export_kwh"), werkelijke_accu_export
+                ),
+            },
             "opbrengst": {
                 "voorspeld_eur": plan["verwachte_opbrengst_eur"],
                 "werkelijk_eur": round(werkelijke_opbrengst, 2),
-                "afwijking_procent": _afwijking(
+                # Bewust GEEN afwijkingspercentage: deze twee meten niet
+                # hetzelfde, en een percentage suggereert van wel.
+                "vergelijkbaar": False,
+                "toelichting": (
+                    "De voorspelling telt alleen de opbrengst van de "
+                    "verkoopkwartieren; de meting telt de besparing over "
+                    "de hele dag, inclusief de laadkosten. Kijk voor het "
+                    "oordeel naar `verkocht` - dat meet aan beide kanten "
+                    "hetzelfde."
+                ),
+                "_afwijking_ongeldig": _afwijking(
                     plan["verwachte_opbrengst_eur"], werkelijke_opbrengst
                 ),
             },
@@ -16702,9 +16766,15 @@ class EnergyManagementSystemCoordinator:
             klachten.append(
                 f"zon {zon:+.0f}%" + (" (minder dan gedacht)" if zon < 0 else "")
             )
-        opbrengst = regel["opbrengst"]["afwijking_procent"]
-        if opbrengst is not None and abs(opbrengst) > PLAN_REVIEW_TOLERANCE_PERCENT:
-            klachten.append(f"opbrengst {opbrengst:+.0f}%")
+        # v3.71.0: op het VERKOCHTE, niet op de opbrengst.
+        #
+        # Die twee maten niet hetzelfde, en het oordeel hing daarop:
+        # vijftien dagen op rij "opbrengst -99%" terwijl er niets mis
+        # was. Het aantal kilowatturen dat de accu het net op stuurde
+        # staat aan beide kanten wél voor hetzelfde.
+        verkocht = (regel.get("verkocht") or {}).get("afwijking_procent")
+        if verkocht is not None and abs(verkocht) > PLAN_REVIEW_TOLERANCE_PERCENT:
+            klachten.append(f"verkocht {verkocht:+.0f}%")
 
         voorspeld_soc = regel["laagste_soc"]["voorspeld_procent"]
         werkelijk_soc = regel["laagste_soc"]["werkelijk_procent"]
@@ -16740,9 +16810,9 @@ class EnergyManagementSystemCoordinator:
             if r["zon"]["afwijking_procent"] is not None
         ]
         opbrengstafwijkingen = [
-            r["opbrengst"]["afwijking_procent"]
+            (r.get("verkocht") or {}).get("afwijking_procent")
             for r in recent
-            if r["opbrengst"]["afwijking_procent"] is not None
+            if (r.get("verkocht") or {}).get("afwijking_procent") is not None
         ]
         return {
             "beschikbaar": True,
@@ -16757,7 +16827,7 @@ class EnergyManagementSystemCoordinator:
                 if zonafwijkingen
                 else None
             ),
-            "opbrengst_afwijking_mediaan_procent": (
+            "verkocht_afwijking_mediaan_procent": (
                 sorted(opbrengstafwijkingen)[len(opbrengstafwijkingen) // 2]
                 if opbrengstafwijkingen
                 else None
@@ -17454,10 +17524,36 @@ class EnergyManagementSystemCoordinator:
                 marge = self._reserve_margin_factor()
                 veilig = diepste * max(marge, SELL_RESERVE_DEEPEST_SAFETY_FACTOR)
 
+        # v3.71.0: en er blijft altijd een bodem in de accu.
+        #
+        # Gevraagd: "Graag ook zorgen dat er 5% accu extra inblijft, dus
+        # minder aan het net verkopen."
+        #
+        # Aanleiding: drie ochtenden op rij een lege accu. Op 28
+        # augustus ging 3,82 van de 7,52 ontladen kilowattuur naar het
+        # NET, en daarna is er 10,54 kWh teruggekocht.
+        #
+        # De bestaande toets rekent uit hoeveel het huis nodig heeft tot
+        # het goedkope blok, en dat is een VOORSPELLING. Klopt die niet -
+        # een bewolkte dag, een wasmachine die er niet in zat - dan is de
+        # accu alsnog leeg. Deze bodem staat daar bovenop en is geen
+        # voorspelling maar een vaste marge.
+        #
+        # Vijf procent van de bruikbare capaciteit is bij deze accu
+        # ongeveer 0,39 kWh: genoeg voor ruim een uur basislast, en klein
+        # genoeg om de arbitrage niet te verstikken.
+        capaciteit = self.bruikbare_capaciteit_kwh() or 0.0
+        bodem = capaciteit * VERKOOP_BODEM_FRACTIE
+        # Vastleggen VOOR de vergelijking, anders is de vlag altijd waar:
+        # `veilig` is dan al opgehoogd tot de bodem.
+        bodem_bindend = bool(bodem) and bodem > veilig
+        veilig = max(veilig, bodem) if bodem else veilig
+
         if beschikbaar <= veilig:
             return {
                 "mag_verkopen": False,
                 "nodig_voor_woning_kwh": round(veilig, 2),
+                "bodem_kwh": round(bodem, 3),
                 "beschikbaar_kwh": round(beschikbaar, 2),
                 "methode": methode,
                 "reden": (
@@ -17472,6 +17568,8 @@ class EnergyManagementSystemCoordinator:
             "nodig_voor_woning_kwh": round(veilig, 2),
             "beschikbaar_kwh": round(beschikbaar, 2),
             "vrij_te_verkopen_kwh": round(beschikbaar - veilig, 2),
+            "bodem_kwh": round(bodem, 3),
+            "bodem_bindend": bodem_bindend,
             "methode": methode,
             "verwachte_zon_kwh": (
                 round(verwacht_vandaag, 1) if verwacht_vandaag is not None else None

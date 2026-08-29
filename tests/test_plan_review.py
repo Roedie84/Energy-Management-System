@@ -85,7 +85,21 @@ def test_an_unavailable_plan_is_not_captured(make_coordinator, hass):
 # --- het oordeel -----------------------------------------------------
 
 
-def _dag_afronden(c, zon=23.0, opbrengst=4.0, soc_laagste=20.0):
+def _dag_afronden(c, zon=23.0, opbrengst=4.0, soc_laagste=20.0,
+                  accu_export=None):
+    """v3.71.0: het oordeel hangt nu op het VERKOCHTE.
+
+    De opbrengstvergelijking legde appels naast peren - de planning telde
+    alleen de verkoopkwartieren, de meting de hele dag inclusief
+    laadkosten. Vijftien dagen op rij "-99%" terwijl er niets mis was.
+
+    Zonder waarde hier komt de accu-uitvoer op nul uit, en dan valt het
+    oordeel op -100%. Standaard dus meegeven wat de planning verwachtte.
+    """
+    if accu_export is None:
+        accu_export = (c.get_quarter_plan_summary() or {}).get(
+            "export_kwh"
+        ) or 0.0
     c._update_plan_review(OCHTEND)
     # v3.48.0: de stand komt uit de SENSOR, niet uit `last_soc_percent`.
     # Dat veld liep achter - in de export van 27 augustus stond het op
@@ -96,6 +110,7 @@ def _dag_afronden(c, zon=23.0, opbrengst=4.0, soc_laagste=20.0):
     c.pv_production_today_kwh = zon
     c.counterfactual_cost_today_eur = opbrengst
     c.actual_cost_today_eur = 0.0
+    c.battery_export_today_kwh = accu_export
     # v1.74.0: nog één tick op dezelfde dag, zodat de eindstand wordt
     # vastgehouden. In bedrijf gebeurt dat vanzelf - de tellers lopen
     # elke vijf minuten mee - maar de toetsing mag niet met de tellers
@@ -157,7 +172,10 @@ def test_a_tiny_basis_does_not_produce_a_percentage(make_coordinator, hass):
     regel = _dag_afronden(c, zon=0.4, opbrengst=0.2, soc_laagste=40.0)
 
     assert regel["zon"]["afwijking_procent"] is None
-    assert regel["opbrengst"]["afwijking_procent"] is None
+    # v3.71.0: het oordeel hangt op het VERKOCHTE; de opbrengst draagt
+    # geen percentage meer omdat die twee kanten niet hetzelfde meten.
+    assert regel["verkocht"]["afwijking_procent"] is None
+    assert "afwijking_procent" not in regel["opbrengst"]
     assert regel["oordeel"].startswith("Het plan klopte")
 
 
@@ -291,12 +309,17 @@ def test_only_what_happened_after_the_snapshot_counts(
     c.pv_production_today_kwh = 8.0
     c.counterfactual_cost_today_eur = 1.0
     c.actual_cost_today_eur = 0.0
+    # v3.71.0: en er stond ook al accu-uitvoer op de teller.
+    c.battery_export_today_kwh = 2.0
     c._update_plan_review(OCHTEND)
 
     # De rest van de dag levert precies wat er voorspeld was: 23 kWh en
     # 4 euro, boven op wat er al stond.
     c.pv_production_today_kwh = 8.0 + 23.0
     c.counterfactual_cost_today_eur = 1.0 + 4.0
+    c.battery_export_today_kwh = 2.0 + (
+        (c.get_quarter_plan_summary() or {}).get("export_kwh") or 0.0
+    )
     c.last_soc_percent = 20.0
     c._update_plan_review(OCHTEND + timedelta(days=1))
 

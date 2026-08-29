@@ -19826,3 +19826,68 @@ Ze bevestigden dus precies wat er fout was — een gesloten wereldje dat
 klopt met zichzelf, en dat is de vorm die deze week vaker langskwam.
 
 **Volledige testsuite**: 3194 tests, allemaal groen.
+
+## v3.71.0 — Een bodem in de accu, en twee vergelijkingen die niet klopten
+
+Drie dingen die bij elkaar horen: de accu stond drie ochtenden op rij
+leeg, en twee rapportages die dat hadden moeten laten zien deugden niet.
+
+### Er blijft nu 5% in de accu
+
+**Gevraagd**: "Graag ook zorgen dat er 5% accu extra inblijft, dus
+minder aan het net verkopen."
+
+Gemeten op 28 augustus:
+
+```
+accu ontladen         7,52 kWh
+waarvan naar het NET  3,82 kWh
+daarna teruggekocht  10,54 kWh
+```
+
+De bestaande verkooptoets rekent uit hoeveel het huis nodig heeft tot
+het goedkope blok, en dat is een **voorspelling**. Klopt die niet — een
+bewolkte dag, een wasmachine die er niet in zat — dan is de accu alsnog
+leeg.
+
+Deze bodem staat daar bovenop en is geen voorspelling maar een vaste
+marge: 5% van de bruikbare capaciteit, bij deze accu ongeveer 0,39 kWh.
+Genoeg voor ruim een uur basislast, klein genoeg om de arbitrage niet te
+verstikken. De export meldt `bodem_bindend`, zodat te zien is of het
+verkopen werd geblokkeerd door de voorspelling of door de bodem.
+
+### De plantoetsing vergeleek appels met peren
+
+**Gemeld** met een schermafdruk: *"-99.5% afwijking?"* bij vijftien dagen
+op rij, terwijl de zonvoorspelling er met −12,4% prima uitzag.
+
+```
+voorspeld    de opbrengst van de VERKOOPKWARTIEREN
+werkelijk    tegenfeitelijk min werkelijk over de HELE DAG
+```
+
+De eerste telt alleen de opbrengstkant, de tweede telt opbrengst **min**
+de laadkosten. Dan komt er per definitie bijna −100% uit, elke dag, hoe
+goed het ook ging — en vielen er in vijftien dagen nul binnen de marge.
+
+Het oordeel hangt nu op het aantal **verkochte kilowatturen**: de
+planning verwacht ze, de meter telt ze, en dat is aan beide kanten
+dezelfde grootheid. De opbrengst blijft zichtbaar maar zonder
+percentage, met de reden erbij.
+
+### En de zelftoets sloeg te vroeg alarm
+
+Ik meldde vanochtend dat de tweelingreparatie van v3.64.0 niet werkte.
+Dat klopte waarschijnlijk niet.
+
+De vergelijking van 08:15 is zes uur eerder ingelegd — om 02:15 — en
+droeg `verwachte_zon_kwh: 0.208`. De zon kwam dus door, maar bleef onder
+de drempel van 0,5 kWh omdat het venster grotendeels nacht was. Om een
+dagvenster te krijgen moet er rond het middaguur zijn ingelegd, en die
+staan er pas een halve dag na een herstart in.
+
+De toets meldt nu alleen nog als de verwachte zon **nooit** wordt
+vastgelegd. Dat is een fout in de integratie; onder de drempel blijven
+is timing.
+
+**Volledige testsuite**: 3201 tests, allemaal groen.

@@ -1,32 +1,40 @@
-v3.70.0 - SPOEDREPARATIE, alleen de gewijzigde bestanden sinds v3.69.0
+v3.71.0 - alleen de gewijzigde bestanden sinds v3.70.0
 
 CODE (naar Home Assistant, daarna herstarten)
   custom_components/energy_management_system/
-    coordinator.py            de reparatie
-    manifest.json             versienummer 3.70.0
+    coordinator.py            de drie reparaties
+    const.py                  VERKOOP_BODEM_FRACTIE
+    manifest.json             versienummer 3.71.0
     bestandscontrole.json     bijgewerkte hashlijst  (MOET mee)
 
 TOETSEN (repository)
-  tests/test_scan_herstelpaden.py            structuurscan 16
+  tests/test_verkoop_bodem.py                 nieuw
+  tests/test_plan_review.py
+  tests/test_zelftoets.py
   tests/test_onvolledige_installatie_meldt.py
 
 DOCUMENTEN
   CHANGELOG.md  README.md  OVERDRACHT.md
 
-WAT ER FOUT WAS
----------------
+WAT ER IS GEBEURD
+-----------------
 
-De melding "1 onderdeel(en) vallen om - diagnostiek:get_live_narrative",
-en de export kwam als tekstbestand terug in plaats van JSON.
+1. ER BLIJFT 5% IN DE ACCU
+   Bovenop de bestaande verkooptoets, die op een voorspelling rust.
+   Ongeveer 0,39 kWh - ruim een uur basislast.
 
-`aandachtspunten` is een lijst TEKSTEN, en ik heb er in v3.67.0 dicts
-aan toegevoegd. Het Live-verhaal doet daar " ".join(...) overheen, en
-dat werpt een TypeError op een dict.
+2. DE PLANTOETSING VERGELEEK APPELS MET PEREN
+   Die -99,5% kwam doordat de planning alleen de verkoopkwartieren
+   telde en de meting de hele dag inclusief laadkosten. Het oordeel
+   hangt nu op het aantal VERKOCHTE kilowatturen.
 
-Dezelfde fout als op 24 augustus met de kwartierplanning. Structuurscan
-16 bewaakt het nu, met een proef die de fout letterlijk terugzet.
+3. DE ZELFTOETS SLOEG TE VROEG ALARM
+   Mijn diagnose van vanochtend was fout. De tweelingreparatie werkt
+   waarschijnlijk wel; het bewijs komt pas bij een vergelijking die
+   rond het middaguur is ingelegd.
 
 WAT JE ZELF MOET DOEN
 ---------------------
 
-Niets, behalve installeren. Daarna is de export weer JSON.
+Niets. Kijk vanavond of er minder naar het net is gegaan, en morgen of
+de plantoetsing nu wel zinnige percentages laat zien.

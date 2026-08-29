@@ -46,7 +46,8 @@ def test_a_one_sided_split_is_caught(make_coordinator, hass):
 
     namen = _namen(c)
 
-    assert "Tweeling: splitsing eenzijdig" in namen
+    # v3.71.0: alleen als de zon ook werkelijk nooit werd vastgelegd.
+    assert "Tweeling: zon wordt nooit vastgelegd" in namen
 
 
 def test_a_balanced_split_is_fine(make_coordinator, hass):
@@ -55,7 +56,7 @@ def test_a_balanced_split_is_fine(make_coordinator, hass):
         {"fout_kwh": 1.0, "met_zon": i % 3 == 0} for i in range(60)
     ]
 
-    assert "Tweeling: splitsing eenzijdig" not in _namen(c)
+    assert "Tweeling: zon wordt nooit vastgelegd" not in _namen(c)
 
 
 def test_a_short_series_says_nothing(make_coordinator, hass):
@@ -66,7 +67,7 @@ def test_a_short_series_says_nothing(make_coordinator, hass):
         for _ in range(ZELFTOETS_MIN_REEKS - 1)
     ]
 
-    assert "Tweeling: splitsing eenzijdig" not in _namen(c)
+    assert "Tweeling: zon wordt nooit vastgelegd" not in _namen(c)
 
 
 # --- reeksen die stilstaan -------------------------------------------
@@ -155,7 +156,7 @@ def test_a_finding_lands_in_the_analysis(make_coordinator, hass):
 
     assert analyse["aantal_fouten"] >= 1
     assert any(
-        p["onderwerp"] == "Tweeling: splitsing eenzijdig"
+        p["onderwerp"] == "Tweeling: zon wordt nooit vastgelegd"
         for p in analyse["punten"]
     )
 
@@ -184,6 +185,30 @@ def test_it_would_have_caught_the_export_of_28_august(
     assert analyse["samenvatting"] != "Geen bijzonderheden."
     punt = next(
         p for p in analyse["punten"]
-        if p["onderwerp"] == "Tweeling: splitsing eenzijdig"
+        if p["onderwerp"] == "Tweeling: zon wordt nooit vastgelegd"
     )
     assert "60" in punt["wat"]
+
+
+def test_a_sun_value_below_the_threshold_is_not_a_finding(
+    make_coordinator, hass
+):
+    """v3.71.0: de toets sloeg alarm terwijl het mechanisme deed wat het
+
+    moest.
+
+    Gemeten op 29 augustus 08:42: de laatste vergelijking droeg
+    `verwachte_zon_kwh: 0.208` - de zon kwam dus door, maar bleef onder
+    de drempel van 0,5 kWh omdat het venster van 02:15 tot 08:15 liep.
+
+    Een vergelijking wordt zes uur na het inleggen afgerekend. Om een
+    dagvenster te krijgen moet er rond het middaguur zijn ingelegd, en
+    die staan er pas een halve dag na een herstart in.
+    """
+    c = make_coordinator({})
+    c.digital_twin_accuracy_history = [
+        {"fout_kwh": 0.5, "met_zon": False, "verwachte_zon_kwh": 0.208}
+        for _ in range(60)
+    ]
+
+    assert "Tweeling: zon wordt nooit vastgelegd" not in _namen(c)
