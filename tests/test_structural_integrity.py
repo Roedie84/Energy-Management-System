@@ -691,3 +691,86 @@ def test_battery_power_is_always_read_sign_corrected():
         "negeren daarmee `invert_battery_power_sign` - gebruik "
         f"`_read_corrected_battery_power`: {fouten}"
     )
+
+
+# --- structuurscan 22: bestaan de gelezen attributen? ---------------
+
+
+def test_every_self_attribute_exists_on_the_class():
+    """De fout van 31 augustus (v3.91.0).
+
+    Gemeld: "1 onderdeel(en) vallen om -
+    diagnostiek:get_planning_tegen_sturing", met in de export:
+
+        AttributeError: object has no attribute 'quarter_plan'
+
+    Ik las die naam uit de EXPORT - daar heet de sleutel wel
+    `quarter_plan` - en nam aan dat de coordinator hem net zo noemt. Het
+    is een FUNCTIE, `get_quarter_plan()`.
+
+    De toets die ik erbij schreef zette `c.quarter_plan` gewoon als
+    attribuut, en bevestigde daarmee mijn aanname in plaats van de code
+    te toetsen. Dezelfde vorm als bij de klimaatsleutels (v3.47.0) en de
+    aandachtspunten (v3.70.0).
+
+    Deze scan kijkt of elk `self.<naam>` dat gelezen wordt, ook ergens
+    wordt gezet of als methode bestaat.
+    """
+    import ast
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    boom = ast.parse(bron)
+    kl = next(
+        n
+        for n in ast.walk(boom)
+        if isinstance(n, ast.ClassDef) and "Coordinator" in n.name
+    )
+
+    methoden = {
+        n.name
+        for n in kl.body
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+    geschreven = {
+        n.attr
+        for n in ast.walk(kl)
+        if isinstance(n, ast.Attribute)
+        and isinstance(n.value, ast.Name)
+        and n.value.id == "self"
+        and isinstance(n.ctx, ast.Store)
+    }
+    # Sommige velden komen van de basisklasse of via getattr.
+    import re
+
+    via_getattr = set(re.findall(r'getattr\(self,\s*"([a-z_]+)"', bron))
+    van_de_basis = {
+        "hass", "config", "data", "logger", "name", "update_interval",
+        "last_update_success", "config_entry", "async_update_listeners",
+        "_unsub_interval", "_listeners",
+    }
+
+    gelezen = {
+        n.attr
+        for n in ast.walk(kl)
+        if isinstance(n, ast.Attribute)
+        and isinstance(n.value, ast.Name)
+        and n.value.id == "self"
+        and isinstance(n.ctx, ast.Load)
+    }
+
+    onbekend = sorted(
+        gelezen - geschreven - methoden - via_getattr - van_de_basis
+    )
+    # Alleen namen die eruitzien als een eigen veld; alles wat met een
+    # hoofdletter of dunder begint komt ergens anders vandaan.
+    onbekend = [
+        n for n in onbekend if n.islower() and not n.startswith("__")
+    ]
+
+    assert not onbekend, (
+        "deze attributen worden gelezen maar nergens gezet - dat werpt "
+        f"een AttributeError zodra die tak loopt: {onbekend}"
+    )

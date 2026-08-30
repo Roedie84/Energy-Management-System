@@ -1,38 +1,35 @@
-v3.90.0 - alleen de gewijzigde bestanden sinds v3.89.0
+v3.91.0 - SPOEDREPARATIE, alleen de gewijzigde bestanden sinds v3.90.0
 
 CODE (naar Home Assistant, daarna herstarten)
   custom_components/energy_management_system/
-    coordinator.py            drie controles erbij
-    diagnostics.py            twee nieuwe overzichten
-    manifest.json             versienummer 3.90.0
+    coordinator.py            de reparatie
+    manifest.json             versienummer 3.91.0
     bestandscontrole.json     bijgewerkte hashlijst  (MOET mee)
 
 TOETSEN (repository)
-  tests/test_zomertijd.py            nieuw
-  tests/test_state_persistence.py
-  tests/test_scan_functiegrootte.py
+  tests/test_planning_tegen_sturing.py
+  tests/test_structural_integrity.py    structuurscan 22
 
 DOCUMENTEN
   CHANGELOG.md  README.md  OVERDRACHT.md
 
-WAT ER IN ZIT
--------------
+WAT ER FOUT WAS
+---------------
 
-1. DUBBELE EN ONTBREKENDE KWARTIEREN
-   Twee records met dezelfde starttijd telden DUBBEL in elke som.
-   Dubbelen worden nu verwijderd; gaten worden gemeld maar NIET gevuld -
-   een verzonnen prijs is erger dan een gat.
+`get_planning_tegen_sturing` las `self.quarter_plan`, maar de
+kwartierplanning is een FUNCTIE: `get_quarter_plan()`.
 
-2. HET VERKEERDE SOORT ENTITEIT
-   Vul je een `sensor` in waar een `number` hoort, dan mislukte de
-   schrijfactie stil. Dat komt nu bovenaan in de analyse.
+Ik las de naam uit de EXPORT - daar heet de sleutel wel `quarter_plan` -
+en nam aan dat de coordinator hem net zo noemt.
 
-3. DE KLOK DIE VERSPRINGT
-   Twaalf toetsen op zomertijd, wintertijd en middernacht. Alle twaalf
-   slagen - maar er lag tot nu toe geen enkele.
+De toets die ik erbij schreef zette dat attribuut gewoon, en bevestigde
+daarmee mijn aanname in plaats van de code te toetsen.
+
+Structuurscan 22 kijkt nu of elk gelezen attribuut ook ergens wordt
+gezet.
 
 WAT JE ZELF MOET DOEN
 ---------------------
 
-Kopieren en herstarten. In de export staat vanaf nu "prijsreeks" met de
-bevindingen over dubbelen en gaten.
+Kopieren en herstarten. Daarna verdwijnt de melding en staat
+"planning_tegen_sturing" met echte getallen in de export.

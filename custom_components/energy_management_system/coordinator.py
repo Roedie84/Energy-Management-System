@@ -31925,7 +31925,23 @@ class EnergyManagementSystemCoordinator:
         Wie de planning leest zonder dat te weten, denkt dat de accu
         vannacht leeg gaat. Die kwartieren staan nu apart.
         """
-        plan = self.quarter_plan or []
+        # v3.91.0: `get_quarter_plan()` is een FUNCTIE, geen veld.
+        #
+        # Gemeld: "1 onderdeel(en) vallen om -
+        # diagnostiek:get_planning_tegen_sturing", met in de export:
+        #
+        #     AttributeError: object has no attribute 'quarter_plan'
+        #
+        # Ik las de naam uit de EXPORT - daar heet de sleutel wel
+        # `quarter_plan` - en nam aan dat de coordinator hem net zo
+        # noemt. Dat is de negende keer deze week dat ik uit de verkeerde
+        # plek een conclusie trek.
+        #
+        # De toets die ik erbij schreef, zette `c.quarter_plan` gewoon
+        # als attribuut. Daarmee bevestigde hij mijn aanname in plaats
+        # van de code te toetsen - dezelfde vorm als bij de
+        # klimaatsleutels en de aandachtspunten.
+        plan = self.get_quarter_plan() or []
         reserve = self.last_projection_reserve_kwh
         capaciteit = self.bruikbare_capaciteit_kwh()
         if not plan or reserve is None or not capaciteit:

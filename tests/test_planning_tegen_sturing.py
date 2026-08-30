@@ -17,10 +17,16 @@ import pytest
 
 def _coordinator(make_coordinator, socs, reserve=4.86, capaciteit=7.78):
     c = make_coordinator({})
-    c.quarter_plan = [
+    # v3.91.0: `get_quarter_plan()` is een FUNCTIE, geen veld.
+    #
+    # De vorige versie zette `c.quarter_plan` als attribuut, en dan
+    # bevestigde de toets mijn aanname in plaats van de code te toetsen.
+    # In bedrijf viel de functie meteen om met een AttributeError.
+    plan = [
         {"van": f"{9 + i}:00", "soc_procent": soc, "modus": "smart"}
         for i, soc in enumerate(socs)
     ]
+    c.get_quarter_plan = lambda now=None: plan
     c.last_projection_reserve_kwh = reserve
     c.bruikbare_capaciteit_kwh = lambda: capaciteit
     c.effective_min_soc_percent = lambda: 10.0

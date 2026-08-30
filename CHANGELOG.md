@@ -20961,3 +20961,43 @@ Dat is geruststellend, maar het betekent vooral dat deze categorie tot
 nu toe op geluk berustte.
 
 **Volledige testsuite**: 3344 tests, allemaal groen.
+
+## v3.91.0 — Een attribuut dat niet bestaat
+
+**Gemeld**: "1 onderdeel(en) vallen om —
+diagnostiek:get_planning_tegen_sturing", met in de export:
+
+```
+AttributeError: object has no attribute 'quarter_plan'
+```
+
+De kwartierplanning is een **functie**, `get_quarter_plan()`, geen veld.
+Ik las de naam uit de **export** — daar heet de sleutel wel
+`quarter_plan` — en nam aan dat de coordinator hem net zo noemt.
+
+Dat is de negende keer deze week dat ik uit de verkeerde plek een
+conclusie trek.
+
+### En de toets bevestigde de aanname
+
+De toets die ik erbij schreef, zette `c.quarter_plan` gewoon als
+attribuut:
+
+```python
+c.quarter_plan = [...]      # bestaat niet in bedrijf
+```
+
+Daarmee toetste hij mijn aanname in plaats van de code. Dezelfde vorm
+als bij de klimaatsleutels (v3.47.0) en de aandachtspunten (v3.70.0) —
+en dat is nu drie keer dezelfde les.
+
+**Structuurscan 22** kijkt voortaan of elk `self.<naam>` dat gelezen
+wordt, ook ergens wordt gezet of als methode bestaat. Er staat een proef
+onder die de fout terugzet en controleert dat de scan afgaat.
+
+Waarom dit niet eerder opviel: de functie viel pas om toen de reserve
+gevuld raakte. Daarvóór stopte hij op de regel ervoor, met "nog geen
+planning of reserve berekend" — een keurig antwoord op een tak die nooit
+werd bereikt.
+
+**Volledige testsuite**: 3345 tests, allemaal groen.
