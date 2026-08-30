@@ -343,9 +343,17 @@ def test_a_different_pair_is_a_new_period(make_coordinator, hass):
 # --- en ervan leren --------------------------------------------------
 
 
-def _ingreep(prijs=13.0, duurste=38.8, soc=70.0, zon=10.8):
+def _ingreep(prijs=13.0, duurste=38.8, soc=70.0, zon=10.8, dag=30,
+             richting="laden"):
+    """v3.85.0: elke ingreep krijgt een eigen DAG.
+
+    De vorige versie zette ze allemaal op 30 augustus - precies de fout
+    die in de export van die dag naar boven kwam: twaalf ingrepen op één
+    dag hebben per definitie dezelfde duurste prijs en zonverwachting.
+    """
     return {
-        "moment": "2026-08-30T14:00:00+02:00",
+        "moment": f"2026-08-{dag:02d}T14:00:00+02:00",
+        "richting": richting,
         "prijs_nu_ct": prijs,
         "duurste_vandaag_ct": duurste,
         "accustand_procent": soc,
@@ -355,7 +363,7 @@ def _ingreep(prijs=13.0, duurste=38.8, soc=70.0, zon=10.8):
 
 def test_a_pattern_needs_enough_cases(make_coordinator, hass):
     c = make_coordinator({})
-    c.handmatige_ingrepen = [_ingreep() for _ in range(3)]
+    c.handmatige_ingrepen = [_ingreep(dag=10 + i) for i in range(3)]
 
     assert c._patroon_in_de_ingrepen()["beschikbaar"] is False
 
@@ -367,7 +375,7 @@ def test_consistent_circumstances_form_a_line(make_coordinator, hass):
     """
     c = make_coordinator({})
     c.handmatige_ingrepen = [
-        _ingreep(prijs=13.0 + i * 0.2, zon=10.8 + i * 0.1)
+        _ingreep(prijs=13.0 + i * 0.2, zon=10.8 + i * 0.1, dag=10 + i)
         for i in range(HANDMATIGE_INGREPEN_MIN_VOOR_PATROON)
     ]
 
@@ -384,7 +392,8 @@ def test_scattered_circumstances_are_no_line(make_coordinator, hass):
     """
     c = make_coordinator({})
     c.handmatige_ingrepen = [
-        _ingreep(prijs=5.0 + i * 8, soc=10.0 + i * 9, zon=1.0 + i * 3)
+        _ingreep(prijs=5.0 + i * 8, soc=10.0 + i * 9, zon=1.0 + i * 3,
+                 dag=10 + i)
         for i in range(HANDMATIGE_INGREPEN_MIN_VOOR_PATROON)
     ]
 
@@ -396,7 +405,8 @@ def test_scattered_circumstances_are_no_line(make_coordinator, hass):
 def test_the_pattern_is_in_the_overview(make_coordinator, hass):
     c = make_coordinator({})
     c.handmatige_ingrepen = [
-        _ingreep() for _ in range(HANDMATIGE_INGREPEN_MIN_VOOR_PATROON)
+        _ingreep(dag=10 + i)
+        for i in range(HANDMATIGE_INGREPEN_MIN_VOOR_PATROON)
     ]
 
     assert c.get_handmatige_ingrepen()["patroon"]["beschikbaar"] is True
@@ -419,3 +429,145 @@ def test_the_pattern_steers_nothing(make_coordinator, hass):
 
     assert "_async_apply_operation" not in aanroepen
     assert "_async_apply_manual" not in aanroepen
+
+
+# --- de fout van 30 augustus (v3.85.0) -------------------------------
+
+
+def test_one_day_is_never_a_pattern(make_coordinator, hass):
+    """Gemeten in de export van 30 augustus 20:24. Twaalf ingrepen,
+
+    allemaal op diezelfde dag, en de analyse meldde een lijn met drie
+    consistente kenmerken:
+
+        duurste_vandaag_ct   38,8  altijd
+        verwachte_zon_kwh    10,8  altijd
+
+    Twee daarvan zijn DAGwaarden. Twaalf ingrepen op één dag hebben per
+    definitie dezelfde duurste prijs en dezelfde zonverwachting; dat is
+    geen patroon maar een telfout.
+    """
+    c = make_coordinator({})
+    c.handmatige_ingrepen = [
+        _ingreep(dag=30) for _ in range(12)
+    ]
+
+    patroon = c._patroon_in_de_ingrepen()
+
+    assert patroon["beschikbaar"] is False
+    assert "dag(en)" in patroon["reden"]
+
+
+def test_enough_days_does_produce_a_pattern(make_coordinator, hass):
+    c = make_coordinator({})
+    c.handmatige_ingrepen = [
+        _ingreep(dag=10 + i)
+        for i in range(HANDMATIGE_INGREPEN_MIN_VOOR_PATROON)
+    ]
+
+    patroon = c._patroon_in_de_ingrepen()
+
+    assert patroon["beschikbaar"] is True
+    assert patroon["dagen"] >= 3
+
+
+# --- laden en ontladen apart -----------------------------------------
+
+
+def test_charging_and_discharging_are_counted_apart(
+    make_coordinator, hass
+):
+    """Gemeten op 30 augustus: om 14:22 ging de stand van 67 naar 78% bij
+
+    13 ct, en om 18:45 van 96 naar 90% bij 37 ct. Dat zijn twee
+    TEGENGESTELDE beslissingen, en op één hoop geteld is de mediaanprijs
+    van 13 en 37 ct betekenisloos.
+    """
+    c = make_coordinator({})
+    c.handmatige_ingrepen = [
+        _ingreep(prijs=13.0, soc=70.0, dag=10 + i, richting="laden")
+        for i in range(5)
+    ] + [
+        _ingreep(prijs=37.0, soc=95.0, dag=20 + i, richting="ontladen")
+        for i in range(5)
+    ]
+
+    per = c._patroon_in_de_ingrepen()["per_richting"]
+
+    assert per["laden"]["prijs_ct"]["mediaan"] == 13.0
+    assert per["ontladen"]["prijs_ct"]["mediaan"] == 37.0
+    assert per["laden"]["accustand_procent"]["mediaan"] == 70.0
+
+
+def test_too_few_of_one_kind_says_so(make_coordinator, hass):
+    c = make_coordinator({})
+    c.handmatige_ingrepen = [
+        _ingreep(dag=10 + i, richting="laden") for i in range(10)
+    ]
+
+    per = c._patroon_in_de_ingrepen()["per_richting"]
+
+    assert per["laden"]["genoeg"] is True
+    assert per["ontladen"]["genoeg"] is False
+
+
+def test_the_direction_comes_from_the_power(make_coordinator, hass):
+    """Uit het accuvermogen, want dat is wat er WERKELIJK gebeurt - de
+
+    modus zegt alleen wat er bedoeld was.
+    """
+    from custom_components.energy_management_system.const import (
+        CONF_BATTERY_POWER_SENSOR,
+    )
+
+    c = make_coordinator({CONF_BATTERY_POWER_SENSOR: "sensor.accu"})
+
+    hass.states.set("sensor.accu", "-1800")
+    assert c._richting_van_de_accu() == "laden"
+
+    hass.states.set("sensor.accu", "1200")
+    assert c._richting_van_de_accu() == "ontladen"
+
+    hass.states.set("sensor.accu", "12")
+    assert c._richting_van_de_accu() == "stil"
+
+
+def test_the_sun_shortfall_is_recorded(make_coordinator, hass):
+    """Gemeten op 30 augustus: verwacht 10,8 kWh, gemeten 6,04 - 44%
+
+    eronder. De ingreep om 14:22 was dus terecht: de accu zou het op zon
+    alleen niet gehaald hebben.
+
+    Dat is de correlatie die ertoe doet - niet de voorspelling alleen,
+    maar het VERSCHIL tussen wat het model beloofde en wat er kwam.
+    """
+    c = _coordinator(make_coordinator, hass, "manual", "smart")
+    c.voorspelde_zon_vandaag_kwh = lambda now=None: (10.8, "toets")
+    c.pv_production_today_kwh = 6.04
+
+    c._volg_handmatige_ingrepen(NU)
+
+    regel = c.handmatige_ingrepen[0]
+    assert regel["zon_tot_nu_kwh"] == 6.04
+    assert 0 < regel["deel_van_de_dag"] < 1
+
+
+def test_a_lagging_sun_shows_in_the_pattern(make_coordinator, hass):
+    """Onder de 1 betekent dat de zon achterliep op de voorspelling."""
+    c = make_coordinator({})
+    c.handmatige_ingrepen = [
+        dict(
+            _ingreep(dag=10 + i, richting="laden"),
+            zon_tot_nu_kwh=3.0,
+            deel_van_de_dag=14 / 24,
+            verwachte_zon_kwh=10.8,
+        )
+        for i in range(HANDMATIGE_INGREPEN_MIN_VOOR_PATROON)
+    ]
+
+    per = c._patroon_in_de_ingrepen()["per_richting"]["laden"]
+
+    assert per["zon_tegenover_voorspelling"] is not None
+    # 3,0 kWh gemeten waar er op dat punt van de dag 5,8 verwacht mocht
+    # worden: de zon liep ver achter, en dat rechtvaardigt bijladen.
+    assert per["zon_tegenover_voorspelling"] < 1.0

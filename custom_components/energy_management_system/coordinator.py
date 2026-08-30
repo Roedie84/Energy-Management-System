@@ -497,6 +497,8 @@ from .const import (
     PV_GEOMETRY_MULTI_ORIENTATION_MIN_DAYS,
     HANDMATIGE_INGREPEN_LENGTE,
     HANDMATIGE_INGREPEN_MIN_VOOR_PATROON,
+    HANDMATIGE_INGREPEN_MIN_DAGEN,
+    HANDMATIGE_RICHTING_DREMPEL_W,
     PV_GEOMETRY_RELIABLE_DAYS,
     HANDMATIGE_STAND_LADEN,
     HANDMATIGE_STAND_SMART_CHARGE,
@@ -9062,6 +9064,14 @@ class EnergyManagementSystemCoordinator:
                 "werkelijk": werkelijk,
                 "reden_ems": self.last_reason,
                 # De omstandigheden, want daar zit de mogelijke regel in.
+                # v3.85.0: laadde de accu of ontlaadde hij?
+                #
+                # Gemeten op 30 augustus: om 14:22 ging de stand van 67
+                # naar 78% bij 13 ct, en om 18:45 van 96 naar 90% bij 37
+                # ct. Dat zijn twee TEGENGESTELDE beslissingen, en op één
+                # hoop geteld is de mediaanprijs van 13 en 37 ct
+                # betekenisloos.
+                "richting": self._richting_van_de_accu(),
                 "accustand_procent": self.accustand_procent(),
                 "beschikbaar_kwh": self.beschikbare_energie_kwh(),
                 "prijs_nu_ct": (
@@ -9070,7 +9080,24 @@ class EnergyManagementSystemCoordinator:
                 "duurste_vandaag_ct": self._duurste_prijs_vandaag_ct(now),
                 # De helper geeft (waarde, herkomst) terug; alleen de
                 # waarde is hier bruikbaar.
+                # De helper geeft (waarde, herkomst) terug; alleen de
+                # waarde is hier bruikbaar.
                 "verwachte_zon_kwh": self.voorspelde_zon_vandaag_kwh(now)[0],
+                # v3.85.0: en wat er OP DAT MOMENT al gemeten was.
+                #
+                # Gemeten op 30 augustus: verwacht 10,8 kWh, gemeten
+                # 6,04 - 44% eronder. De ingreep om 14:22 was dus
+                # terecht: de accu zou het op zon alleen niet gehaald
+                # hebben.
+                #
+                # Dat is de correlatie die ertoe doet - niet de
+                # voorspelling alleen, maar het VERSCHIL tussen wat het
+                # model beloofde en wat er kwam. Daarmee valt te zien of
+                # een ingreep een modelfout corrigeerde.
+                "zon_tot_nu_kwh": round(self.pv_production_today_kwh, 2),
+                "deel_van_de_dag": round(
+                    (now.hour + now.minute / 60) / 24, 3
+                ),
             }
         )
         self.handmatige_ingrepen = self.handmatige_ingrepen[
@@ -9100,6 +9127,23 @@ class EnergyManagementSystemCoordinator:
         if "charging" in reden:
             return OPTION_SMART_CHARGING
         return OPTION_SMART
+
+    def _richting_van_de_accu(self) -> str | None:
+        """Laadt de accu, ontlaadt hij, of staat hij stil? (v3.85.0)
+
+        Uit het accuvermogen, want dat is wat er werkelijk gebeurt - de
+        MODUS zegt alleen wat er bedoeld was.
+        """
+        vermogen = self._read_sensor_float(
+            self.config.get(CONF_BATTERY_POWER_SENSOR)
+        )
+        if vermogen is None:
+            return None
+        if vermogen > HANDMATIGE_RICHTING_DREMPEL_W:
+            return "ontladen"
+        if vermogen < -HANDMATIGE_RICHTING_DREMPEL_W:
+            return "laden"
+        return "stil"
 
     def _duurste_prijs_vandaag_ct(self, now: datetime) -> float | None:
         """De duurste prijs die vandaag nog komt (v3.75.0)."""
@@ -9144,9 +9188,36 @@ class EnergyManagementSystemCoordinator:
                 ),
             }
 
-        def _spreiding(sleutel: str) -> dict | None:
+        # v3.85.0: en ze moeten van MEERDERE DAGEN komen.
+        #
+        # Gemeten in de export van 30 augustus 20:24. Twaalf ingrepen,
+        # allemaal op diezelfde dag, en de analyse meldde een lijn met
+        # drie consistente kenmerken:
+        #
+        #     duurste_vandaag_ct   38,8  altijd
+        #     verwachte_zon_kwh    10,8  altijd
+        #
+        # Twee daarvan zijn DAGwaarden. Twaalf ingrepen op één dag hebben
+        # per definitie dezelfde duurste prijs en dezelfde
+        # zonverwachting; dat is geen patroon maar een telfout.
+        dagen = {r["moment"][:10] for r in reeks if r.get("moment")}
+        if len(dagen) < HANDMATIGE_INGREPEN_MIN_DAGEN:
+            return {
+                "beschikbaar": False,
+                "reden": (
+                    f"{len(reeks)} ingrepen, maar van {len(dagen)} "
+                    f"dag(en) - er zijn er {HANDMATIGE_INGREPEN_MIN_DAGEN} "
+                    "nodig. Op één dag zijn de duurste prijs en de "
+                    "zonverwachting altijd gelijk, en dan lijkt elke "
+                    "ingreep op de vorige zonder dat dat iets zegt."
+                ),
+            }
+
+        def _spreiding(sleutel: str, deelreeks=None) -> dict | None:
             waarden = [
-                r[sleutel] for r in reeks if r.get(sleutel) is not None
+                r[sleutel]
+                for r in (deelreeks if deelreeks is not None else reeks)
+                if r.get(sleutel) is not None
             ]
             if len(waarden) < 3:
                 return None
@@ -9175,10 +9246,53 @@ class EnergyManagementSystemCoordinator:
             for naam, g in kenmerken.items()
             if g and g["consistent"]
         ]
+        # v3.85.0: en apart voor laden en ontladen.
+        per_richting = {}
+        for richting in ("laden", "ontladen"):
+            deel = [r for r in reeks if r.get("richting") == richting]
+            if len(deel) < 3:
+                per_richting[richting] = {
+                    "ingrepen": len(deel),
+                    "genoeg": False,
+                }
+                continue
+            # v3.85.0: liep de zon achter op de voorspelling?
+            #
+            # Per ingreep: hoeveel er tot dat moment gemeten was,
+            # gedeeld door wat er op dat deel van de dag verwacht mocht
+            # worden. Onder de 1 betekent dat de zon tegenviel.
+            achterstand = []
+            for r in deel:
+                verwacht = r.get("verwachte_zon_kwh")
+                gemeten = r.get("zon_tot_nu_kwh")
+                deel_dag = r.get("deel_van_de_dag")
+                if not verwacht or gemeten is None or not deel_dag:
+                    continue
+                # Ruwe verdeling: de zon komt tussen 06:00 en 21:00.
+                verstreken = min(1.0, max(0.0, (deel_dag * 24 - 6) / 15))
+                if verstreken < 0.2:
+                    continue
+                achterstand.append(gemeten / (verwacht * verstreken))
+
+            per_richting[richting] = {
+                "ingrepen": len(deel),
+                "genoeg": True,
+                "dagen": len({r["moment"][:10] for r in deel}),
+                "prijs_ct": _spreiding("prijs_nu_ct", deel),
+                "accustand_procent": _spreiding("accustand_procent", deel),
+                "zon_tegenover_voorspelling": (
+                    round(statistics.median(achterstand), 2)
+                    if len(achterstand) >= 3
+                    else None
+                ),
+            }
+
         return {
             "beschikbaar": True,
             "ingrepen": len(reeks),
+            "dagen": len(dagen),
             "kenmerken": kenmerken,
+            "per_richting": per_richting,
             "consistente_kenmerken": vast,
             "heeft_lijn": len(vast) >= 2,
             "toelichting": (

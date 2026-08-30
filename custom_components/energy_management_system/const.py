@@ -5257,3 +5257,19 @@ PRIJSSTIJGING_MELDGRENS_CT = 5.0
 # uur opnieuw.
 LEERMODUS_WAARSCHUWING_UREN = 2.0
 LEERMODUS_HERINNERING_UREN = 2.0
+
+# Van hoeveel verschillende dagen de ingrepen moeten komen voordat er
+# van een patroon gesproken kan worden (v3.85.0).
+#
+# Gemeten op 30 augustus: twaalf ingrepen, allemaal op diezelfde dag, en
+# de analyse meldde een lijn met drie consistente kenmerken. Twee
+# daarvan - de duurste prijs van de dag en de zonverwachting - zijn
+# DAGwaarden en dus per definitie gelijk. Dat is geen patroon maar een
+# telfout.
+HANDMATIGE_INGREPEN_MIN_DAGEN = 3
+
+# Vanaf welk accuvermogen er sprake is van laden of ontladen (v3.85.0).
+#
+# Vijftig watt: daaronder is het meetruis of het eigen verbruik van de
+# omvormer, en dan heet het "stil".
+HANDMATIGE_RICHTING_DREMPEL_W = 50.0

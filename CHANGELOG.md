@@ -20604,3 +20604,67 @@ geïnstalleerd en de accu voor het eerst met de nieuwe reservebodem de
 nacht in gaat.
 
 **Volledige testsuite**: 3278 tests, allemaal groen.
+
+## v3.85.0 — Het patroon in de ingrepen deugde niet
+
+**Gevraagd**: "Vandaag heb ik bijna alles manueel geladen, wat vind je
+daarvan en wat kun je hiervan leren, misschien door correlaties te
+leggen?"
+
+Bij het beantwoorden bleek de analyse zelf fout.
+
+### Twaalf ingrepen op één dag zijn geen patroon
+
+De export van 30 augustus 20:24 meldde `heeft_lijn: true` met drie
+consistente kenmerken:
+
+```
+duurste_vandaag_ct   38,8  altijd
+verwachte_zon_kwh    10,8  altijd
+accustand            67 – 96 %
+prijs                13 – 37 ct   ← niet consistent
+```
+
+Twee daarvan zijn **dagwaarden**. Twaalf ingrepen op één dag hebben per
+definitie dezelfde duurste prijs en dezelfde zonverwachting. Dat is geen
+patroon maar een telfout.
+
+Er zijn nu ingrepen van minstens drie verschillende dagen nodig.
+
+### En laden en ontladen stonden op één hoop
+
+```
+14:22 – 14:32   67 → 78 %   bij 13 ct   laden
+18:45 – 19:50   96 → 90 %   bij 37 ct   ontladen
+```
+
+Twee tegengestelde beslissingen, en op één hoop geteld is de mediaanprijs
+van 13 en 37 ct betekenisloos. De richting wordt nu per ingreep
+vastgelegd — uit het **accuvermogen**, want dat is wat er werkelijk
+gebeurt; de modus zegt alleen wat er bedoeld was.
+
+### De correlatie die er wél toe doet
+
+Op 30 augustus was de zonverwachting 10,8 kWh en kwam er **6,04** — 44%
+eronder. De ingreep om 14:22 was dus terecht: de accu zou het op zon
+alleen niet gehaald hebben.
+
+Dat is de correlatie die telt: niet de voorspelling alleen, maar het
+**verschil** tussen wat het model beloofde en wat er kwam. Per ingreep
+wordt nu vastgelegd hoeveel zon er tot dat moment gemeten was en welk
+deel van de dag verstreken was; de analyse deelt dat door de
+voorspelling naar rato. Onder de 1 betekent dat de zon achterliep.
+
+Zo valt te zien of een ingreep een **modelfout corrigeerde** — en dat is
+iets waar de integratie werkelijk van kan leren.
+
+### Wat de dag zelf opleverde
+
+```
+werkelijk betaald        € 0,69
+zonder sturing           € 0,48
+4,32 kWh extra in de accu, waarde € 1,62
+gecorrigeerde besparing  € 1,41
+```
+
+**Volledige testsuite**: 3285 tests, allemaal groen.

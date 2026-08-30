@@ -1,52 +1,45 @@
-v3.84.0 - alleen de gewijzigde bestanden sinds v3.82.0
+v3.85.0 - alleen de gewijzigde bestanden sinds v3.83.0
 
-Bevat ook v3.83.0 (de schakelaars die niet meeluisterden).
+Bevat ook v3.84.0, dat je nog niet had geinstalleerd.
 
 CODE (naar Home Assistant, daarna herstarten)
   custom_components/energy_management_system/
-    coordinator.py            drie reparaties + twee dode functies weg
-    const.py                  de leermodus-melding als aandacht
-    switch.py                 drie schakelaars luisteren mee
-    dashboard_template.yaml   twee nieuwe meldingsschakelaars
-    manifest.json             versienummer 3.84.0
+    coordinator.py            de reparaties uit v3.84 en v3.85
+    const.py                  nieuwe drempels
+    switch.py                 de schakelaars luisteren mee
+    dashboard_template.yaml   twee meldingsschakelaars
+    manifest.json             versienummer 3.85.0
     bestandscontrole.json     bijgewerkte hashlijst  (MOET mee)
 
 DASHBOARD
   dashboards/energy_management_system_dashboard.yaml
 
-TOETSEN (repository)
-  tests/test_leermodus_lang_aan.py     nieuw
-  en zeven bestaande toetsbestanden
-
 DOCUMENTEN
   CHANGELOG.md  README.md  OVERDRACHT.md
 
-WAT ER IN ZIT
--------------
+WAT ER IN ZIT (v3.85.0)
+-----------------------
 
-1. DE LEERMODUS MELDT ZICH
-   De waarschuwing lag half af en werd NERGENS aangeroepen. Nu wel.
+1. TWAALF INGREPEN OP EEN DAG ZIJN GEEN PATROON
+   De duurste prijs en de zonverwachting zijn DAGwaarden - die zijn op
+   een dag altijd gelijk. Er zijn nu drie verschillende dagen nodig.
 
-2. EEN KANDIDAAT VIEL TEN ONRECHTE AF
-   "Verbruiksprofiel per dagtype" stond op "levert niets op" terwijl hij
-   120 euro per jaar oplevert.
+2. LADEN EN ONTLADEN APART
+   13 ct laden en 37 ct ontladen stonden op een hoop; de mediaan
+   daarvan zegt niets.
 
-3. DE VERKOCHTE KILOWATTUREN STONDEN ALTIJD OP NUL
-   De dagteller wordt bij de wissel op nul gezet; de plantoetsing las
-   hem rechtstreeks in plaats van uit de eindstand.
+3. DE ZON TEGENOVER DE VOORSPELLING
+   Per ingreep wordt nu vastgelegd hoeveel zon er tot dat moment was.
+   Op 30 augustus: verwacht 10,8 kWh, gekregen 6,04. Zo valt te zien of
+   een ingreep een MODELFOUT corrigeerde.
 
-4. DE SCHAKELAARS LUISTEREN MEE (v3.83.0)
-   De knop "Handmatig laden" stond op AAN terwijl de integratie hem al
-   had uitgezet.
+EN UIT v3.84.0
+--------------
 
-5. TWEE DODE FUNCTIES WEG
-   `_netvermogen_w` en `_outdoor_temp_bucket`. Beide kwamen precies een
-   keer voor in de hele codebase: hun eigen definitie.
+De leermodus-waarschuwing, de kandidaat die ten onrechte afviel, de
+verkochte kilowatturen die op nul stonden, en twee dode functies weg.
 
 WAT JE ZELF MOET DOEN
 ---------------------
 
 Kopieren, herstarten, dashboard verversen.
-
-Morgenochtend is de eerste plantoetsing die "verkocht" met echte
-getallen laat zien, en de eerste nacht met de reservebodem.
