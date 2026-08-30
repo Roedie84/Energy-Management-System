@@ -1,50 +1,38 @@
-v3.76.0 en v3.77.0 - alleen de gewijzigde bestanden sinds v3.75.0
+v3.78.0 - SPOEDREPARATIE, alleen de gewijzigde bestanden sinds v3.77.0
 
 CODE (naar Home Assistant, daarna herstarten)
   custom_components/energy_management_system/
-    coordinator.py            de handmatige stand en de ingrepenlijst
-    const.py                  de standen, de herinnering, de melding
-    switch.py                 de twee nieuwe schakelaars
-    dashboard_template.yaml   de meldingsschakelaar
-    manifest.json             versienummer 3.77.0
+    switch.py                 de ontbrekende import
+    manifest.json             versienummer 3.78.0
     bestandscontrole.json     bijgewerkte hashlijst  (MOET mee)
 
-DASHBOARD
-  dashboards/energy_management_system_dashboard.yaml
-
 TOETSEN (repository)
-  tests/test_handmatige_stand.py       nieuw
-  en zes bestaande toetsbestanden
+  tests/test_structural_integrity.py    structuurscan 18
 
 DOCUMENTEN
   CHANGELOG.md  README.md  OVERDRACHT.md
 
-DE TWEE KNOPPEN
+WAT ER FOUT WAS
 ---------------
 
-Na de herstart staan er bij Besturing twee nieuwe schakelaars:
+De twee handmatige schakelaars verschenen niet, terwijl de
+bestandscontrole zei dat alles klopte en er geen logboekmelding was.
 
-  Handmatig laden 2000 W
-  Handmatig smart charge
+`HANDMATIGE_STAND_LADEN` werd in switch.py gebruikt maar nooit
+geimporteerd. Dat werpt een NameError bij het opzetten van de
+schakelaars, en dan wordt die stap STIL overgeslagen - geen entiteiten,
+geen zichtbare fout.
 
-Ze sluiten elkaar uit. Zolang er een aan staat:
-  - gaat de leermodus aan, zodat EMS er niet tegenin stuurt
-  - komt er elk uur een herinnering
-  - en bij 100% zet de integratie het zelf uit, met een melding
-
-DE VALKUIL
-----------
-
-Had je de leermodus zelf al aan, dan zet de knop hem straks NIET uit.
-Er wordt onthouden wie hem aanzette.
-
-En de standen overleven een herstart niet - anders staat de accu uren
-later nog handmatig te laden zonder dat iemand eraan denkt.
+Structuurscan 18 kijkt nu per bestand of elke gebruikte naam in
+hoofdletters ook ergens vandaan komt.
 
 WAT JE ZELF MOET DOEN
 ---------------------
 
-Herstarten, en het dashboard verversen. De twee schakelaars verschijnen
-vanzelf bij de andere besturingsknoppen.
+Kopieren en HERSTARTEN. Daarna staan er drie nieuwe entiteiten:
 
-Je kunt de Zendure-app nu laten staan voor het handmatig laden.
+  switch...._handmatig_laden
+  switch...._handmatig_smart_charge
+  switch...._melding_handmatige_stand
+
+Dan verdwijnt ook de dashboardwaarschuwing.

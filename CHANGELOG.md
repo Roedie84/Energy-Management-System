@@ -20223,3 +20223,43 @@ van de gebruiker is iets anders, en die wordt bovendien vastgelegd als
 handmatige stand. De toets bewaakt nu alleen de beslissingsfuncties.
 
 **Volledige testsuite**: 3239 tests, allemaal groen.
+
+## v3.78.0 — De twee knoppen verschenen niet
+
+**Gemeld** met een schermafdruk: geen enkele entiteit gevonden op
+`handmatig`, terwijl de bestandscontrole zei dat alles klopte en er geen
+logboekmelding was.
+
+De oorzaak: `HANDMATIGE_STAND_LADEN` werd in `switch.py` gebruikt maar
+**nooit geïmporteerd**. De import die ik in v3.77.0 wilde toevoegen zocht
+naar `from .const import (` met een haakje, en die regel staat er zonder.
+De vervanging deed dus niets, en dat viel niet op.
+
+Bij het opzetten van de schakelaars werpt dat een `NameError`, en dan
+wordt die hele stap stil overgeslagen — geen entiteiten, geen zichtbare
+fout. De rest van de integratie draait gewoon door, en daarom klopte de
+bestandscontrole ook: de bestanden waren compleet, alleen de code erin
+liep vast.
+
+### Waarom mijn toetsen dit misten
+
+Ze controleerden of de **klasse in het bestand stond**:
+
+```python
+assert "HandmatigeStandSwitch" in bron
+assert "Handmatig laden 2000 W" in bron
+```
+
+Dat was allemaal waar. Wat er niet werd getoetst, is of die klasse ook
+**opgezet kon worden** — en dat is precies het verschil tussen code die
+er staat en code die draait.
+
+**Structuurscan 18** kijkt nu per bestand of elke naam in hoofdletters
+die gebruikt wordt, ook geïmporteerd of gedefinieerd is. Er staat een
+proef onder die de import weghaalt en controleert dat de scan afgaat.
+
+Dat is de derde keer deze week dat een toets zijn eigen aanname
+bevestigde in plaats van de werkelijkheid te toetsen — na de
+klimaatsleutels en de aandachtspunten.
+
+**Volledige testsuite**: 3240 tests, allemaal groen.

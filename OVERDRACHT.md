@@ -7,8 +7,8 @@ Locatie Lochem. Communicatie in het Nederlands, terse stijl.
 
 - Repo: https://github.com/Roedie84/Energy-Management-System
 - Lokaal: `/home/claude/ems/`
-- **Huidige versie: v3.77.0**, 3239 tests groen
-- Zip: `/mnt/user-data/outputs/ems_v3.77.0_alleen_gewijzigd.zip`
+- **Huidige versie: v3.78.0**, 3240 tests groen
+- Zip: `/mnt/user-data/outputs/ems_v3.78.0_alleen_gewijzigd.zip`
 
 ## Werkwijze (belangrijk)
 1. Diagnostiek-export lezen uit `/mnt/user-data/uploads/`
@@ -142,6 +142,7 @@ becijferd, niet gunstig.
 15. .get(CONF_..., DEFAULT_...) valt niet terug bij een opgeslagen None (v3.56.0)
 16. Gedeelde lijsten die zowel teksten als dicts krijgen (v3.70.0)
 17. Vluchtige markering die als enige een bewaarde reeks bewaakt (v3.73.0)
+18. Namen die gebruikt worden maar nergens geïmporteerd zijn (v3.78.0)
 
 ## Vaste afspraken
 - Proefstandkandidaten sturen pas na bewijs, één tegelijk

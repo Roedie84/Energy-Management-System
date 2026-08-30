@@ -505,3 +505,63 @@ def test_no_staticmethod_uses_self():
                     break
 
     assert not fouten, fouten
+
+
+# --- structuurscan 18: elke gebruikte naam is geïmporteerd -----------
+
+
+def test_every_module_imports_what_it_uses():
+    """De fout van 30 augustus (v3.78.0).
+
+    De twee handmatige schakelaars verschenen niet in Home Assistant,
+    terwijl de bestandscontrole zei dat alle bestanden klopten en er
+    geen logboekmelding was.
+
+    De oorzaak: `HANDMATIGE_STAND_LADEN` werd in `switch.py` gebruikt
+    maar nooit geïmporteerd. Bij het opzetten van de schakelaars werpt
+    dat een NameError, en dan wordt die hele stap stil overgeslagen -
+    geen entiteiten, geen zichtbare fout.
+
+    Mijn toetsen misten het volledig: die controleerden of de KLASSE in
+    het bestand stond, niet of hij ook opgezet kon worden.
+
+    Deze scan kijkt per bestand of elke naam in HOOFDLETTERS die
+    gebruikt wordt, ook geïmporteerd of gedefinieerd is.
+    """
+    import ast
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    fouten = []
+    for pad in sorted(Path(pkg.__file__).parent.glob("*.py")):
+        boom = ast.parse(pad.read_text())
+        beschikbaar = set()
+        for n in ast.walk(boom):
+            if isinstance(n, (ast.Import, ast.ImportFrom)):
+                beschikbaar |= {
+                    (a.asname or a.name).split(".")[0] for a in n.names
+                }
+            elif isinstance(n, ast.Assign):
+                beschikbaar |= {
+                    t.id for t in n.targets if isinstance(t, ast.Name)
+                }
+            elif isinstance(n, ast.AnnAssign) and isinstance(n.target, ast.Name):
+                beschikbaar.add(n.target.id)
+
+        gebruikt = {
+            n.id
+            for n in ast.walk(boom)
+            if isinstance(n, ast.Name)
+            and isinstance(n.ctx, ast.Load)
+            and n.id.isupper()
+            and len(n.id) > 3
+        }
+        ontbreekt = sorted(gebruikt - beschikbaar - set(dir(__builtins__)))
+        if ontbreekt:
+            fouten.append(f"{pad.name}: {ontbreekt}")
+
+    assert not fouten, (
+        "namen die gebruikt worden maar nergens vandaan komen - dat "
+        f"werpt een NameError bij het opstarten: {fouten}"
+    )

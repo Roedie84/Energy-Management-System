@@ -7,7 +7,13 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 
-from .const import NOTIFICATION_TYPES, DEFAULT_NAME, DOMAIN
+from .const import (
+    DEFAULT_NAME,
+    DOMAIN,
+    HANDMATIGE_STAND_LADEN,
+    HANDMATIGE_STAND_SMART_CHARGE,
+    NOTIFICATION_TYPES,
+)
 
 
 async def async_setup_entry(

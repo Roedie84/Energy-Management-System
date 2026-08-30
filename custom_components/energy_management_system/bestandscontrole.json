@@ -8,7 +8,7 @@
   "coordinator.py": "eba20ed3d3bd7a9b",
   "dashboard_template.yaml": "e34b2097a03bb6b0",
   "diagnostics.py": "b4fb7e9034f5cb8f",
-  "manifest.json": "51b1709d207ac34b",
+  "manifest.json": "bd62f054a4970cf5",
   "overview_background.svg": "0839174ff8db12f7",
   "overview_svg.py": "373a87d80d7d3d37",
   "pv_model.py": "56c4410d272e7219",
@@ -17,7 +17,7 @@
   "services.yaml": "173dafdcca29d160",
   "solar_forecast.py": "29934f8dd848a238",
   "strings.json": "279cb4278b79aea3",
-  "switch.py": "10ab89a19eeefe23",
+  "switch.py": "bf31bd1b675d7187",
   "translations/en.json": "fc9322b0a57f1761",
   "translations/nl.json": "b2234a639f8b78d9"
 }
