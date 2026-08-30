@@ -42,6 +42,17 @@ class _Kaal:
         """v3.56.0: de standaard geldt ook bij een opgeslagen None."""
         waarde = (self.config or {}).get(sleutel)
         return standaard if waarde is None else waarde
+
+    def _read_corrected_battery_power(self):
+        """v3.88.0: de kalibratiemeting leest het accuvermogen nu via de
+
+        helper die `invert_battery_power_sign` verrekent.
+
+        Daarvoor las hij de sensor rechtstreeks, en bij deze installatie
+        staat die instelling AAN - dan telde de meting laden als
+        ontladen.
+        """
+        return getattr(self, "_accuvermogen", None)
     """Alleen de vlaggen, zonder de rest van de coordinator."""
 
     kalibratie = True

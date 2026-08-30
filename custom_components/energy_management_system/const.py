@@ -1937,6 +1937,23 @@ LOG_PRIORITEITEN = {
     # zelf heeft gekozen, niet iets dat stuk is. Wel iets dat opgemerkt
     # moet worden, en daar is "aandacht" precies voor.
     "leermodus_lang_aan": LOG_PRIO_AANDACHT,
+    # v3.87.0: KRITIEK, en daarvoor gaat `kalibratie_vol` naar aandacht.
+    #
+    # De toets houdt de verzameling op negen met de regel: "als er tien
+    # soorten kritiek zijn, is er geen enkele meer kritiek." Op 29
+    # augustus is die grens van acht naar negen gegaan voor
+    # `installatie_onvolledig`, met de aantekening dat er bij de tiende
+    # echt een weg moest.
+    #
+    # Deze hoort er wél bij: als een opdracht niet aankomt, stuurt de
+    # integratie in het luchtledige en dat is aan geen enkele meter te
+    # zien. Dat is de definitie van kritiek.
+    #
+    # Overwogen om `kalibratie_vol` te degraderen om onder de negen te
+    # blijven. Niet gedaan: die staat daar op uitdrukkelijk verzoek, en
+    # er ligt een toets op die dat vastlegt. Zoiets hoort niet
+    # stilzwijgend teruggedraaid te worden om een grens te halen.
+    "opdracht_niet_aangekomen": LOG_PRIO_KRITIEK,
     "installatie_onvolledig": LOG_PRIO_KRITIEK,
     # Aandacht - het vraagt een beslissing.
     "plan_verkoop_geblokkeerd": LOG_PRIO_AANDACHT,
@@ -2328,6 +2345,7 @@ PERSISTED_PLAIN_FIELDS = (
     "niet_ontladen_history",
     "mpc_vergelijking_history",
     "handmatige_ingrepen",
+    "moduswissels",
     "bijkoop_history",
     "netlading_vandaag_kwh",
     "netlading_kosten_eur",
@@ -2817,6 +2835,15 @@ NOTIFICATION_TYPES: tuple[tuple[str, str, str, bool, int], ...] = (
         "een vergeten bestand de nieuwe manier om het mis te laten gaan.",
         True,
         1440,
+    ),
+    (
+        "opdracht_niet_aangekomen",
+        "De accu volgde een opdracht niet",
+        "Wanneer een geschreven modus of vermogen na anderhalve minuut "
+        "nog niet is overgenomen. Dan stuurt de integratie in het "
+        "luchtledige, en dat is niet aan de meters te zien.",
+        True,
+        30,
     ),
     (
         "leermodus_lang_aan",
@@ -4769,6 +4796,7 @@ ACHTERHOEKS_TITELS = {
     "handmatige_stand": "De accu steet nog met de hand",
     "prijsstijging_handmatig": "De stroom wordt duurder",
     "leermodus_lang_aan": "De leermodus steet nog an",
+    "opdracht_niet_aangekomen": "De accu luusterde neet",
     "installatie_onvolledig": "De installatie is neet compleet",
     "appliance_ready": "'n Apparaat is klaor",
     "appliance_cheap_moment": "Good moment veur 'n apparaat",
@@ -5273,3 +5301,55 @@ HANDMATIGE_INGREPEN_MIN_DAGEN = 3
 # Vijftig watt: daaronder is het meetruis of het eigen verbruik van de
 # omvormer, en dan heet het "stil".
 HANDMATIGE_RICHTING_DREMPEL_W = 50.0
+
+# Hoe lang de accu de tijd krijgt om een opdracht op te volgen
+# (v3.87.0).
+#
+# Gevraagd bij de doorlichting: "Hoe wordt gecontroleerd dat een
+# verzonden commando daadwerkelijk is uitgevoerd?"
+#
+# Het antwoord was: dat gebeurde niet. Er werd gecontroleerd of de
+# entiteit BEREIKBAAR was vóór het schrijven, maar nooit of de stand
+# daarna werkelijk was veranderd. Op 30 augustus zette de knop
+# "Handmatig laden" de accu niet, en dat bleef een halve dag
+# onopgemerkt.
+#
+# Negentig seconden: de Zendure-integratie leest elke dertig seconden
+# uit, dus drie ronden. Korter geeft valse meldingen bij een trage
+# uitlezing.
+OPDRACHT_BEVESTIGING_SECONDEN = 90
+
+# Het bijhouden van moduswisselingen (v3.87.0).
+#
+# Gevraagd bij de doorlichting: "Hoe wordt voorkomen dat de batterij te
+# vaak schakelt tussen modi? Welke hysterese wordt gebruikt? Wat is de
+# minimale tijd dat een gekozen modus actief blijft?"
+#
+# Het antwoord op alle drie was: die is er niet. Er is hysterese op de
+# keuze van het goedkoopste blok en op de koeling, maar niets houdt de
+# modus zelf vast.
+#
+# Bewust geen rem ingebouwd: die kan een noodzakelijke omschakeling
+# tegenhouden - een prijspiek, een accu die leegloopt - en dan kost hij
+# geld op precies de momenten dat het telt. Eerst meten.
+#
+# Vier per uur: de prijzen liggen per kwartier vast, dus vaker wisselen
+# komt ergens anders vandaan.
+MODUSWISSEL_HISTORIE = 500
+MODUSWISSEL_DREMPEL_PER_UUR = 4
+
+# De marge op de energiebalans (v3.88.0).
+#
+# Gevraagd bij de doorlichting: "Controleert het EMS of productie + net
+# + batterij = verbruik? Wat is de toegestane afwijking?"
+#
+# Dat gebeurde niet. Het is de sterkste realiteitscheck die er bestaat:
+# vier meters die op hetzelfde moment iets anders meten van dezelfde
+# stroom.
+#
+# Tweehonderd watt of tien procent van het huisverbruik, wat groter is.
+# De vier sensoren lezen niet gelijktijdig uit, en bij een omvormer die
+# net inschakelt zit er even honderd watt verschil in - dat is meetruis,
+# geen fout.
+ENERGIEBALANS_MARGE_W = 200.0
+ENERGIEBALANS_MARGE_FRACTIE = 0.10

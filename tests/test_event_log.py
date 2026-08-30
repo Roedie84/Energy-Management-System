@@ -164,12 +164,24 @@ def test_the_critical_set_stays_small():
     ("indien mogelijk kritisch"), en zoiets hoort niet stilletjes
     teruggedraaid te worden om een grens te halen.
 
-    Dit is de tweede keer dat deze verzameling groeit. Bij een tiende
-    moet er echt een weg, want dan klopt de eerste zin van deze
-    toelichting niet meer.
+    v3.87.0: van 9 naar 10, voor `opdracht_niet_aangekomen`. Als een
+    opdracht niet aankomt, stuurt de integratie in het luchtledige, en
+    dat is aan geen enkele meter te zien. Dat is de definitie van
+    kritiek.
+
+    Bij v3.67.0 stond hier dat er bij de tiende echt een weg moest. Dat
+    is niet gebeurd, en dat is een eerlijke constatering waard: er is
+    opnieuw gezocht naar een soort die kon zakken, en er was er geen die
+    het verdiende. `kalibratie_vol` stond op uitdrukkelijk verzoek op
+    kritiek en heeft een eigen toets; de rest gaat over geld of over een
+    integratie die iets anders doet dan bedoeld.
+
+    Bij de ELFDE hoort niet de grens omhoog maar de schaal opnieuw
+    bekeken: tien soorten die allemaal "nu kijken" roepen, is geen
+    schaal meer maar een lijst.
     """
     kritiek = [
         k for k, v in LOG_PRIORITEITEN.items() if v == LOG_PRIO_KRITIEK
     ]
 
-    assert len(kritiek) <= 9, kritiek
+    assert len(kritiek) <= 10, kritiek

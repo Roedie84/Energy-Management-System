@@ -40,6 +40,7 @@ import hashlib
 import logging
 import math
 import json
+import time
 import statistics
 import sys
 import time
@@ -612,6 +613,11 @@ from .const import (
     AGING_MAX_GAP_HOURS,
     FALLBACK_ALERT_HOURS,
     NU_LADEN_MIN_HOURS,
+    ENERGIEBALANS_MARGE_W,
+    ENERGIEBALANS_MARGE_FRACTIE,
+    MODUSWISSEL_HISTORIE,
+    MODUSWISSEL_DREMPEL_PER_UUR,
+    OPDRACHT_BEVESTIGING_SECONDEN,
     OPTION_SMART_CHARGING,
     OPTION_SMART_DISCHARGING,
     PRICE_ATTRIBUTE_CHECK_MARGIN_EUR,
@@ -1224,6 +1230,22 @@ class EnergyManagementSystemCoordinator:
         self.mpc_doel_soc: dict = {}
         self.mpc_vergelijking_history: list[dict] = []
         self._mpc_gemeten_op: str | None = None
+        # v3.89.0: welke voorwaarden tot de beslissing leidden.
+        self._afwegingen_deze_ronde: list[dict] = []
+        self.laatste_afwegingen: list[dict] = []
+        self.laatste_afwegingen_moment: str | None = None
+
+        # v3.87.0: wanneer de modus wisselde.
+        self.moduswissels: list[str] = []
+
+        # v3.87.0: opdrachten die nog nagekeken moeten worden.
+        self._openstaande_opdrachten: dict[str, dict] = {}
+        self.opdracht_bevestigingen: dict = {
+            "gelukt": 0,
+            "mislukt": 0,
+            "laatste_mislukking": None,
+        }
+
         # v3.77.0: de handmatige stand vanuit het dashboard.
         self.handmatige_stand: str | None = None
         self.handmatige_stand_sinds: datetime | None = None
@@ -5076,6 +5098,41 @@ class EnergyManagementSystemCoordinator:
                 else None
             ),
         }
+        # v3.87.0: tellen hoe vaak de modus wisselt.
+        #
+        # Gevraagd bij de doorlichting: "Hoe wordt voorkomen dat de
+        # batterij te vaak schakelt tussen modi? Welke hysterese wordt
+        # gebruikt? Wat is de minimale tijd dat een gekozen modus actief
+        # blijft?"
+        #
+        # Het antwoord op alle drie was: die is er niet. Er is hysterese
+        # op de keuze van het goedkoopste blok en op de koeling, maar
+        # niets houdt de modus zelf vast.
+        #
+        # Bewust GEEN minimale duur ingebouwd. Zo'n rem kan een
+        # noodzakelijke omschakeling tegenhouden - een prijspiek, een
+        # accu die leegloopt - en dan kost hij geld op precies de
+        # momenten dat het telt. Eerst meten hoe vaak het werkelijk
+        # gebeurt; dat is dezelfde volgorde als bij elke andere
+        # kandidaat op de proefstand.
+        # Een lege regel telt NIET als wisseling.
+        #
+        # Gemeten in de export van 30 augustus 20:42: het beslislogboek
+        # had één regel met `modus: null`, geschreven op de eerste ronde
+        # na de herstart voordat de beslisboom had gedraaid. Zou die
+        # meetellen, dan lijkt elke herstart op een moduswisseling.
+        #
+        # De regel zelf blijft staan: sinds v1.30.0 legt het logboek
+        # bewust ook onvolledige rondes vast, en daar ligt een toets op.
+        vorige = self.decision_log[-1]["modus"] if self.decision_log else None
+        if (
+            vorige is not None
+            and self.last_expected_mode is not None
+            and vorige != self.last_expected_mode
+        ):
+            self.moduswissels.append(now.isoformat())
+            self.moduswissels = self.moduswissels[-MODUSWISSEL_HISTORIE:]
+
         self.decision_log.append(regel)
         self.decision_log = self.decision_log[-DECISION_LOG_LENGTH:]
 
@@ -7819,8 +7876,26 @@ class EnergyManagementSystemCoordinator:
         rest = self._estimate_pv_kwh_for_period(nu, middernacht)
         if rest is None:
             return None, "geen voorspelling beschikbaar"
+        # v3.86.0: bewaking tegen een lege zonteller.
+        #
+        # `pv_production_today_kwh` is gedeclareerd als `float = 0.0` en
+        # wordt nergens op None gezet, dus in bedrijf kan dit niet
+        # gebeuren. De bewaking staat er omdat `None + float` de HELE
+        # aanroep laat omvallen, inclusief de velden die er niets mee te
+        # maken hebben - en dat is een dure prijs voor een aanname die
+        # niemand meer nakijkt.
+        #
+        # Eerlijk over de aanleiding: dit kwam aan het licht doordat een
+        # TOETS het veld op None zette, niet doordat het in de export
+        # stond. Ik las `coordinator.pv_production_today_kwh` en kreeg
+        # None terug omdat die sleutel onder `ems_kpis` staat en niet
+        # onder `coordinator` - de achtste keer deze week dat ik uit de
+        # verkeerde plek een conclusie trok.
+        tot_nu = self.pv_production_today_kwh
+        if tot_nu is None:
+            return round(rest, 1), "alleen het resterende deel van de dag"
         return (
-            round(self.pv_production_today_kwh + rest, 1),
+            round(tot_nu + rest, 1),
             "bijgesteld gedurende de dag",
         )
 
@@ -9094,7 +9169,23 @@ class EnergyManagementSystemCoordinator:
                 # voorspelling alleen, maar het VERSCHIL tussen wat het
                 # model beloofde en wat er kwam. Daarmee valt te zien of
                 # een ingreep een modelfout corrigeerde.
-                "zon_tot_nu_kwh": round(self.pv_production_today_kwh, 2),
+                # v3.86.0: `round(None, 2)` werpt een TypeError, en dan
+                # mislukt de HELE regel.
+                #
+                # Gemeten in de export van 30 augustus 20:42: de drie
+                # ingrepen van dat moment droegen geen richting, geen
+                # zon en geen deel van de dag - de sleutels ontbraken
+                # volledig, ook niet als None.
+                #
+                # `pv_production_today_kwh` stond op None omdat de
+                # zonteller die dag nog niet gevuld was. Dezelfde
+                # valkuil als bij de klimaatcellen op 22 augustus: een
+                # waarde die meestal een getal is, is dat niet altijd.
+                "zon_tot_nu_kwh": (
+                    round(self.pv_production_today_kwh, 2)
+                    if self.pv_production_today_kwh is not None
+                    else None
+                ),
                 "deel_van_de_dag": round(
                     (now.hour + now.minute / 60) / 24, 3
                 ),
@@ -9134,9 +9225,17 @@ class EnergyManagementSystemCoordinator:
         Uit het accuvermogen, want dat is wat er werkelijk gebeurt - de
         MODUS zegt alleen wat er bedoeld was.
         """
-        vermogen = self._read_sensor_float(
-            self.config.get(CONF_BATTERY_POWER_SENSOR)
-        )
+        # v3.86.0: via de BESTAANDE helper, niet zelf de sensor lezen.
+        #
+        # Mijn eerste versie las de sensor rechtstreeks en negeerde
+        # daarmee `invert_battery_power_sign`. Bij een installatie waar
+        # die aan staat, zou "laden" en "ontladen" precies omgekeerd zijn
+        # vastgelegd - en dan meet de hele patroonanalyse het
+        # tegenovergestelde van wat er gebeurde.
+        #
+        # `_read_corrected_battery_power` bestaat al sinds v0.39.0 en
+        # doet dat goed: positief is ontladen, negatief is laden.
+        vermogen = self._read_corrected_battery_power()
         if vermogen is None:
             return None
         if vermogen > HANDMATIGE_RICHTING_DREMPEL_W:
@@ -10050,9 +10149,7 @@ class EnergyManagementSystemCoordinator:
             self._netlading_laatste_meting = now
             return
 
-        accu_w = self._read_sensor_float(
-            self.config.get(CONF_BATTERY_POWER_SENSOR)
-        )
+        accu_w = self._read_corrected_battery_power()
         net_w = self._read_sensor_float(
             self.config.get(CONF_CONSUMPTION_POWER_SENSOR)
         )
@@ -12275,9 +12372,7 @@ class EnergyManagementSystemCoordinator:
                 "soc": self.accustand_procent(),
                 "omvormer_c": (self.battery_cooling_state or {}).get("accu_c"),
                 "beschikbaar_kwh": self.beschikbare_energie_kwh(),
-                "accu_w": self._read_sensor_float(
-                    self.config.get(CONF_BATTERY_POWER_SENSOR)
-                ),
+                "accu_w": self._read_corrected_battery_power(),
                 "pv_w": self._read_sensor_float(
                     self.config.get(CONF_PV_POWER_SENSOR)
                 ),
@@ -12544,9 +12639,7 @@ class EnergyManagementSystemCoordinator:
             self.config.get(CONF_CONSUMPTION_POWER_SENSOR)
         )
         zon = self._read_sensor_float(self.config.get(CONF_PV_POWER_SENSOR))
-        accu = self._read_sensor_float(
-            self.config.get(CONF_BATTERY_POWER_SENSOR)
-        )
+        accu = self._read_corrected_battery_power()
         if net is None:
             return None
         # Accuvermogen: positief is laden, dus dat gaat ervan af.
@@ -22650,9 +22743,7 @@ class EnergyManagementSystemCoordinator:
             self.kalibratie_meting = None
             return
 
-        accu_w = self._read_sensor_float(
-            self.config.get(CONF_BATTERY_POWER_SENSOR)
-        )
+        accu_w = self._read_corrected_battery_power()
         meting = self.kalibratie_meting
         if meting is None:
             if soc_percent is None:
@@ -29984,6 +30075,23 @@ class EnergyManagementSystemCoordinator:
         just build the explanation directly, since there's nothing the
         integration did to notify about.
         """
+        # v3.89.0: de afwegingen van deze ronde vasthouden.
+        #
+        # Gevraagd bij de duivelsadvocaat-audit: "Kan ik zien welke
+        # voorwaarden FALSE waren?" Het antwoord was nee: de gekozen
+        # reden werd vastgelegd, maar niet waarom de vijftien andere
+        # afvielen.
+        #
+        # Hier, in de gemeenschappelijke staart van elke tak, is de
+        # beslissing rond en staan de afwegingen compleet.
+        if self._afwegingen_deze_ronde:
+            self.laatste_afwegingen = self._afwegingen_deze_ronde
+            self.laatste_afwegingen_moment = now.isoformat()
+        # En meteen leeg voor de volgende ronde. Dat gebeurt HIER en niet
+        # aan het begin van de ronde, want `_async_update_locked` staat
+        # op de ratel en mag geen uitspraak groeien.
+        self._afwegingen_deze_ronde = []
+
         self.last_expected_mode = REASON_TO_MODE.get(
             self.last_reason, self.last_expected_mode
         )
@@ -30017,6 +30125,10 @@ class EnergyManagementSystemCoordinator:
             # v3.84.0: en waarschuwen als de leermodus blijft staan.
             self.hass.async_create_task(
                 self._waarschuw_bij_lange_leermodus(now)
+            )
+            # v3.87.0: en nakijken of de vorige opdracht is aangekomen.
+            self._klok(
+                "opdrachtcontrole", lambda: self.controleer_opdrachten(now)
             )
             self._klok("zelfcontrole", lambda: self._meld_zelfcontrole(now))
             # v3.12.0: en melden zodra een kandidaat rijp wordt.
@@ -30969,8 +31081,11 @@ class EnergyManagementSystemCoordinator:
             # het dashboard is dat verschil juist het interessante.
             soc_allowed_power = scaled_power
             scaled_power = self.cap_discharge_to_own_consumption(now, scaled_power)
-            capped_away_by_own_load = (
-                soc_allowed_power is not None and scaled_power is None
+            # v3.89.0: de helper bepaalt het zelf én legt het vast, zodat
+            # `_async_update_locked` geen uitspraak groeit - die staat op
+            # de ratel van v3.35.0.
+            capped_away_by_own_load = self._noteer_ontlaadafwegingen(
+                soc_allowed_power, scaled_power
             )
             if scaled_power is None and self._is_emergency_low_battery():
                 # SoC too low to discharge - and critically low, not just
@@ -31362,6 +31477,416 @@ class EnergyManagementSystemCoordinator:
             },
             blocking=True,
         )
+        # v3.87.0: en controleren of het ook is aangekomen.
+        self._noteer_opdracht(
+            self.config[CONF_OPERATION_SELECT], option, "modus"
+        )
+
+    def _noteer_opdracht(
+        self,
+        entity_id: str,
+        verwacht: str | float,
+        wat: str,
+        nu_seconden: float | None = None,
+    ) -> None:
+        """Onthoudt wat er is geschreven, om het straks na te kijken
+        (v3.87.0).
+
+        Gevraagd bij de doorlichting: "Hoe wordt gecontroleerd dat een
+        verzonden commando daadwerkelijk is uitgevoerd?"
+
+        Het antwoord was: dat gebeurde niet. Er werd gecontroleerd of de
+        entiteit BEREIKBAAR was vóór het schrijven, maar nooit of de
+        stand daarna werkelijk was veranderd.
+
+        Dat is geen theoretisch gat. Op 30 augustus zette de knop
+        "Handmatig laden" de accu niet, en dat bleef een halve dag
+        onopgemerkt - de integratie dacht dat ze stuurde terwijl de accu
+        op `smart` bleef staan.
+        """
+        # v3.87.0: de wachttijd in SECONDEN sinds het opstarten, niet
+        # een klokstand.
+        #
+        # Een tijdstip uit `dt_util.now()` draagt een tijdzone, en de
+        # vergelijking gebeurt met de `now` die de ronde meekrijgt. Gaan
+        # die twee ooit uiteenlopen - een toets, een herstart over een
+        # zomertijdgrens - dan werpt de aftrekking een TypeError en valt
+        # de hele controle om.
+        #
+        # Een monotone teller kent dat probleem niet.
+        self._openstaande_opdrachten[entity_id] = {
+            "verwacht": verwacht,
+            "wat": wat,
+            "sinds": nu_seconden if nu_seconden is not None else time.monotonic(),
+        }
+
+    def controleer_opdrachten(
+        self, now: datetime, nu_seconden: float | None = None
+    ) -> None:
+        """Kijkt na of de accu doet wat er is opgedragen (v3.87.0).
+
+        Een apparaat heeft even nodig om te reageren; pas na
+        `OPDRACHT_BEVESTIGING_SECONDEN` telt het als niet aangekomen.
+
+        Bewust GEEN automatische herhaling. Een opdracht die niet
+        aankomt, komt meestal niet aan omdat er iets anders mis is - de
+        app die tegenstuurt, een apparaat in standby, een entiteit die de
+        waarde niet kent. Blind herhalen maakt dat erger; melden maakt
+        het zichtbaar.
+        """
+        for entity_id, opdracht in list(self._openstaande_opdrachten.items()):
+            wachttijd = (nu_seconden or time.monotonic()) - opdracht["sinds"]
+            if wachttijd < OPDRACHT_BEVESTIGING_SECONDEN:
+                continue
+            del self._openstaande_opdrachten[entity_id]
+
+            staat = self.hass.states.get(entity_id)
+            if staat is None or staat.state in ("unavailable", "unknown"):
+                continue  # onbereikbaar wordt elders al gemeld
+
+            verwacht = opdracht["verwacht"]
+            werkelijk = staat.state
+            if isinstance(verwacht, (int, float)):
+                try:
+                    aangekomen = abs(float(werkelijk) - float(verwacht)) < 1.0
+                except (TypeError, ValueError):
+                    aangekomen = False
+            else:
+                aangekomen = str(werkelijk) == str(verwacht)
+
+            if aangekomen:
+                self.opdracht_bevestigingen["gelukt"] += 1
+                continue
+
+            self.opdracht_bevestigingen["mislukt"] += 1
+            self.opdracht_bevestigingen["laatste_mislukking"] = {
+                "moment": now.isoformat(),
+                "entiteit": entity_id,
+                "wat": opdracht["wat"],
+                "verwacht": verwacht,
+                "werkelijk": werkelijk,
+            }
+            _LOGGER.warning(
+                "Opdracht niet aangekomen: %s stond na %.0f seconden op "
+                "%s in plaats van %s.",
+                entity_id,
+                wachttijd,
+                werkelijk,
+                verwacht,
+            )
+            self._dispatch_notification(
+                notify_service=self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE),
+                title="⚠️ De accu volgde een opdracht niet",
+                message=(
+                    f"De {opdracht['wat']} zou op {verwacht} moeten staan, "
+                    f"maar staat op {werkelijk}. Mogelijk stuurt de "
+                    "Zendure-app tegen, of staat het apparaat in standby."
+                ),
+                notification_id="ems_opdracht_niet_aangekomen",
+                kind="opdracht_niet_aangekomen",
+            )
+
+    def _noteer_ontlaadafwegingen(
+        self, soc_allowed_power: float | None, scaled_power: float | None
+    ) -> bool:
+        """De drie toetsen op weg naar een ontlaadbeslissing (v3.89.0).
+
+        Eigen functie, want `_async_update_locked` staat op de ratel van
+        v3.35.0 en mag niet groeien. Die ratel is er precies hiervoor:
+        hij dwingt af dat een uitbreiding ergens anders landt.
+        """
+        capped_away = soc_allowed_power is not None and scaled_power is None
+        self._noteer_afweging(
+            "genoeg lading om te ontladen",
+            soc_allowed_power is not None,
+            (
+                f"na de reserve bleef er {soc_allowed_power:.0f} W over"
+                if soc_allowed_power is not None
+                else "de reserve liet niets over"
+            ),
+        )
+        self._noteer_afweging(
+            "genoeg eigen verbruik",
+            not capped_away,
+            (
+                "het huis vraagt te weinig om zinvol op te ontladen"
+                if capped_away
+                else "het huis vraagt genoeg"
+            ),
+        )
+        kritiek = self._is_emergency_low_battery()
+        self._noteer_afweging(
+            "accu kritiek laag",
+            kritiek,
+            (
+                "onder de noodgrens - er wordt bijgeladen"
+                if kritiek
+                else "boven de noodgrens"
+            ),
+        )
+        return capped_away
+
+    def _noteer_afweging(self, naam: str, uitkomst: bool, waarom: str) -> None:
+        """Legt vast welke voorwaarde is getoetst en wat eruit kwam
+        (v3.89.0).
+
+        Gevraagd bij de duivelsadvocaat-audit: "Kan ik zien welke
+        voorwaarden FALSE waren? Welke beslissingen zijn niet
+        reproduceerbaar?"
+
+        Het antwoord was nee. Er zijn zestien beslisredenen in een vaste
+        volgorde, en de gekozen reden werd vastgelegd - maar niet waarom
+        de vijftien andere afvielen. Bij `expensive_quarter` was niet te
+        zien of `emergency_low_battery` op een haar na niet aansloeg.
+
+        Dat maakt een beslissing achteraf onverklaarbaar, en het is de
+        enige manier waarop de rest van de auditvragen ooit te
+        beantwoorden is.
+        """
+        self._afwegingen_deze_ronde.append(
+            {"voorwaarde": naam, "waar": bool(uitkomst), "waarom": waarom}
+        )
+
+    def get_afwegingen(self) -> dict:
+        """De voorwaarden die tot de laatste beslissing leidden
+        (v3.89.0)."""
+        if not self.laatste_afwegingen:
+            return {
+                "beschikbaar": False,
+                "reden": "Nog geen beslissing met afwegingen vastgelegd.",
+            }
+        return {
+            "beschikbaar": True,
+            "reden": self.last_reason,
+            "moment": self.laatste_afwegingen_moment,
+            "afwegingen": self.laatste_afwegingen,
+            "toelichting": (
+                "De voorwaarden die op weg naar de beslissing zijn "
+                "getoetst, in volgorde, met de uitkomst. Zo is achteraf "
+                "te zien welke tak niet is genomen en waarom - niet "
+                "alleen welke wel."
+            ),
+        }
+
+    def get_energiebalans_controle(self) -> dict:
+        """Kloppen de meters onderling? (v3.88.0)
+
+        Gevraagd bij de doorlichting: "Controleert het EMS of productie +
+        net + batterij = verbruik? Wat is de toegestane afwijking?"
+
+        Die som NIET, en om een goede reden: het huisverbruik wordt er
+        zelf uit afgeleid. `_read_corrected_consumption_power` rekent
+        `net + accu + zon`, dus een controle op diezelfde formule klopt
+        per definitie. Dat is rondrekenen, geen toets.
+
+        Wat er wél onafhankelijk te vergelijken valt, zijn twee sommen
+        waarvan beide kanten uit een EIGEN meter komen:
+
+        - de drie fasen tegen de totale P1-stand;
+        - de drie accumodules tegen het accuvermogen.
+
+        Klopt zo'n som niet, dan meet een sensor iets anders dan hij
+        belooft - een fase die stilstaat, een module die niet meedoet.
+        """
+        uitkomsten = {}
+
+        totaal = self._read_sensor_float(
+            self.config.get(CONF_CONSUMPTION_POWER_SENSOR)
+        )
+        fasen = [
+            self._read_sensor_float(e)
+            for e in (self.instelling(CONF_PHASE_POWER_SENSORS, []) or [])
+        ]
+        if totaal is not None and fasen and all(f is not None for f in fasen):
+            som = sum(fasen)
+            grens = max(
+                ENERGIEBALANS_MARGE_W,
+                abs(totaal) * ENERGIEBALANS_MARGE_FRACTIE,
+            )
+            uitkomsten["fasen_tegen_p1"] = {
+                "som_fasen_w": round(som, 1),
+                "totaal_w": round(totaal, 1),
+                "verschil_w": round(som - totaal, 1),
+                "marge_w": round(grens, 1),
+                "klopt": abs(som - totaal) <= grens,
+            }
+
+        accu = self._read_corrected_battery_power()
+        modules = [
+            self._read_sensor_float(e)
+            for e in (self.instelling(CONF_BATTERY_MODULE_POWER_SENSORS, []) or [])
+        ]
+        if accu is not None and modules and all(m is not None for m in modules):
+            som = sum(modules)
+            grens = max(
+                ENERGIEBALANS_MARGE_W,
+                abs(accu) * ENERGIEBALANS_MARGE_FRACTIE,
+            )
+            # De modulesensoren melden het vermogen zonder teken; alleen
+            # de grootte is vergelijkbaar.
+            uitkomsten["modules_tegen_accu"] = {
+                "som_modules_w": round(som, 1),
+                "accu_w": round(abs(accu), 1),
+                "verschil_w": round(som - abs(accu), 1),
+                "marge_w": round(grens, 1),
+                "klopt": abs(som - abs(accu)) <= grens,
+            }
+
+        if not uitkomsten:
+            return {
+                "beschikbaar": False,
+                "reden": "Geen fase- of modulesensoren die te vergelijken zijn.",
+            }
+
+        return {
+            "beschikbaar": True,
+            "controles": uitkomsten,
+            "alles_klopt": all(u["klopt"] for u in uitkomsten.values()),
+            "toelichting": (
+                "Twee sommen waarvan beide kanten uit een eigen meter "
+                "komen. De som van productie, net en accu tegen het "
+                "verbruik staat er NIET bij: het huisverbruik wordt uit "
+                "precies die formule afgeleid, dus zo'n controle klopt "
+                "altijd en zegt niets."
+            ),
+        }
+
+    def get_planning_tegen_sturing(self) -> dict:
+        """Waar wijkt de planning af van wat de aansturing zou doen?
+        (v3.87.0)
+
+        Gemeld bij de doorlichting, en tweemaal zelf ingetrapt: de
+        kwartierplanning laat de accu naar 10% zakken terwijl de
+        verkooptoets bij 4,86 kWh ingrijpt.
+
+        Dat is geen fout maar een verschil in aard. De planning is een
+        VOORUITBEREKENING die laat zien wat er gebeurt als de prijs
+        leidend is; de verkooptoets is een GRENDEL die elk moment
+        opnieuw kijkt of de woning nog genoeg overhoudt.
+
+        Wie de planning leest zonder dat te weten, denkt dat de accu
+        vannacht leeg gaat. Die kwartieren staan nu apart.
+        """
+        plan = self.quarter_plan or []
+        reserve = self.last_projection_reserve_kwh
+        capaciteit = self.bruikbare_capaciteit_kwh()
+        if not plan or reserve is None or not capaciteit:
+            return {
+                "beschikbaar": False,
+                "reden": "Nog geen planning of reserve berekend.",
+            }
+
+        bodem = self.effective_min_soc_percent() or 0.0
+        schaal = max(1.0, 100.0 - bodem)
+        onder = []
+        for q in plan:
+            soc = q.get("soc_procent")
+            if soc is None:
+                continue
+            kwh = (soc - bodem) / schaal * capaciteit
+            if kwh < reserve:
+                onder.append(
+                    {
+                        "van": q.get("van"),
+                        "soc_procent": soc,
+                        "beschikbaar_kwh": round(kwh, 2),
+                        "modus": q.get("modus"),
+                    }
+                )
+
+        return {
+            "beschikbaar": True,
+            "reserve_kwh": round(reserve, 2),
+            "kwartieren_onder_de_reserve": len(onder),
+            "eerste": onder[0] if onder else None,
+            "laagste": (
+                min(onder, key=lambda r: r["beschikbaar_kwh"])
+                if onder
+                else None
+            ),
+            "toelichting": (
+                "De planning rekent op prijs; de verkooptoets grendelt "
+                "elk moment op de reserve. Deze kwartieren staan in de "
+                "planning onder die reserve en gaan in bedrijf dus NIET "
+                "gebeuren - er wordt eerder gestopt met verkopen. Wie de "
+                "planning leest zonder dat te weten, denkt dat de accu "
+                "leeg gaat."
+            ),
+        }
+
+    def get_moduswissels(self) -> dict:
+        """Hoe vaak wisselt de accu van modus? (v3.87.0)
+
+        Gevraagd bij de doorlichting: "Hoe wordt voorkomen dat de
+        batterij te vaak schakelt tussen modi?"
+
+        Het antwoord was: dat wordt niet voorkomen. Er is hysterese op
+        de keuze van het goedkoopste blok en op de koeling, maar niets
+        houdt de modus zelf vast.
+
+        Dit meet alleen. Een minimale duur inbouwen zou een noodzakelijke
+        omschakeling kunnen tegenhouden - een prijspiek, een accu die
+        leegloopt - en dan kost die rem geld op precies de momenten dat
+        het telt.
+
+        Elke ronde duurt een paar minuten en de prijzen liggen per
+        kwartier vast, dus meer dan vier wissels per uur wijst op iets
+        anders dan de prijs.
+        """
+        if not self.moduswissels:
+            return {
+                "beschikbaar": False,
+                "reden": "Nog geen moduswisselingen vastgelegd.",
+            }
+
+        nu = dt_util.now()
+        laatste_uur = [
+            m
+            for m in self.moduswissels
+            if (nu - dt_util.parse_datetime(m)).total_seconds() < 3600
+        ]
+        laatste_dag = [
+            m
+            for m in self.moduswissels
+            if (nu - dt_util.parse_datetime(m)).total_seconds() < 86400
+        ]
+        return {
+            "beschikbaar": True,
+            "laatste_uur": len(laatste_uur),
+            "laatste_dag": len(laatste_dag),
+            "vastgelegd": len(self.moduswissels),
+            "te_vaak": len(laatste_uur) > MODUSWISSEL_DREMPEL_PER_UUR,
+            "toelichting": (
+                "Elke ronde duurt een paar minuten en de prijzen liggen "
+                f"per kwartier vast, dus meer dan "
+                f"{MODUSWISSEL_DREMPEL_PER_UUR} wissels per uur wijst op "
+                "iets anders dan de prijs. Er wordt niets geremd: een "
+                "minimale duur kan een noodzakelijke omschakeling "
+                "tegenhouden, en dan kost die rem geld op precies de "
+                "momenten dat het telt."
+            ),
+        }
+
+    def get_opdrachtcontrole(self) -> dict:
+        """Hoe vaak kwamen de opdrachten aan? (v3.87.0)"""
+        g = self.opdracht_bevestigingen
+        totaal = g["gelukt"] + g["mislukt"]
+        return {
+            "gelukt": g["gelukt"],
+            "mislukt": g["mislukt"],
+            "aandeel_gelukt_procent": (
+                round(100 * g["gelukt"] / totaal, 1) if totaal else None
+            ),
+            "openstaand": len(self._openstaande_opdrachten),
+            "laatste_mislukking": g.get("laatste_mislukking"),
+            "toelichting": (
+                "Elke opdracht aan de accu wordt na "
+                f"{OPDRACHT_BEVESTIGING_SECONDEN} seconden nagekeken. "
+                "Er wordt niet automatisch herhaald: een opdracht die "
+                "niet aankomt, komt meestal niet aan omdat er iets "
+                "anders mis is, en blind herhalen maakt dat erger."
+            ),
+        }
 
     def _meld_aansturing_onbereikbaar(self, reden: str) -> None:
         """Eén melding, niet één per ronde (v3.46.0).
@@ -31496,4 +32021,12 @@ class EnergyManagementSystemCoordinator:
                 "value": power,
             },
             blocking=True,
+        )
+        # v3.87.0: allebei nakijken - de modus én het vermogen. Op 30
+        # augustus stond de modus goed maar deed het vermogen niets.
+        self._noteer_opdracht(
+            self.config[CONF_OPERATION_SELECT], OPTION_MANUAL, "modus"
+        )
+        self._noteer_opdracht(
+            self.config[CONF_MANUAL_POWER_NUMBER], power, "handmatig vermogen"
         )

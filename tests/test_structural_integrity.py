@@ -616,3 +616,78 @@ def test_every_switch_that_reads_the_coordinator_listens():
         "deze schakelaars lezen hun stand uit de coordinator maar "
         f"luisteren niet mee - dan blijft het dashboard hangen: {fouten}"
     )
+
+
+# --- structuurscan 21: het accuvermogen via de juiste helper ---------
+
+
+def test_battery_power_is_always_read_sign_corrected():
+    """De fout van 30 augustus (v3.88.0).
+
+    `_richting_van_de_accu` las de vermogenssensor RECHTSTREEKS en
+    negeerde daarmee `invert_battery_power_sign` - een instelling die bij
+    deze installatie aan staat. Laden en ontladen zouden precies
+    omgekeerd zijn vastgelegd, en dan meet de hele patroonanalyse het
+    tegenovergestelde van wat er gebeurde.
+
+    `_read_corrected_battery_power` bestaat sinds v0.39.0 en doet het
+    goed: positief is ontladen, negatief is laden.
+
+    Deze scan zoekt naar plekken die `CONF_BATTERY_POWER_SENSOR` zelf
+    lezen in plaats van die helper te gebruiken.
+    """
+    import ast
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    boom = ast.parse(bron)
+
+    # Wie de sensor rechtstreeks leest, MOET het teken zelf verrekenen.
+    #
+    # Acht functies doen dat laatste al met dezelfde vier regels als de
+    # helper. Dat is dubbele code - een van de punten uit de
+    # doorlichting - maar geen fout: het teken klopt er.
+    #
+    # Deze scan slaat alleen aan als de correctie ONTBREEKT, want dan
+    # staat er stilzwijgend een omgekeerde waarde.
+    fouten = []
+    for fn in ast.walk(boom):
+        if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if fn.name == "_read_corrected_battery_power":
+            continue
+        tekst = ast.get_source_segment(bron, fn) or ""
+        code = "\n".join(
+            r for r in tekst.split("\n") if not r.strip().startswith("#")
+        )
+        if "CONF_INVERT_BATTERY_POWER_SIGN" in code:
+            continue
+        if "_read_corrected_battery_power" in code:
+            continue
+
+        # Alleen waar de WAARDE wordt gelezen, niet waar alleen wordt
+        # gekeken of de sensor bestaat. Twee functies controleren de
+        # beschikbaarheid van vier sensoren tegelijk in een lus - die
+        # lezen wel `_read_sensor_float`, maar op een andere entiteit.
+        import re
+
+        rechtstreeks = re.search(
+            r"_read_sensor_float\(\s*\n?\s*(self\.config\.get\()?"
+            r"CONF_BATTERY_POWER_SENSOR",
+            code,
+        ) or re.search(
+            r"battery_entity\s*=\s*self\.config\.get\("
+            r"CONF_BATTERY_POWER_SENSOR\)[\s\S]{0,400}"
+            r"_read_sensor_float\(battery_entity\)",
+            code,
+        )
+        if rechtstreeks:
+            fouten.append(fn.name)
+
+    assert not fouten, (
+        "deze functies lezen de accuvermogenssensor rechtstreeks en "
+        "negeren daarmee `invert_battery_power_sign` - gebruik "
+        f"`_read_corrected_battery_power`: {fouten}"
+    )

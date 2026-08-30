@@ -20668,3 +20668,235 @@ gecorrigeerde besparing  € 1,41
 ```
 
 **Volledige testsuite**: 3285 tests, allemaal groen.
+
+## v3.86.0 — De richting werd verkeerd om gelezen
+
+Controle na de installatie van v3.85.0, in de export van 30 augustus
+20:42.
+
+### De tekencorrectie ontbrak
+
+`_richting_van_de_accu` las de vermogenssensor **rechtstreeks** en
+negeerde daarmee `invert_battery_power_sign`. Bij een installatie waar
+die aan staat, zouden "laden" en "ontladen" precies omgekeerd zijn
+vastgelegd — en dan meet de hele patroonanalyse het tegenovergestelde
+van wat er gebeurde.
+
+`_read_corrected_battery_power` bestaat al sinds v0.39.0 en doet dat
+goed. Die had ik moeten gebruiken.
+
+### En een aanroep die alles meesleepte
+
+`voorspelde_zon_vandaag_kwh` telt de zonteller op bij de rest van de
+voorspelling zonder te controleren of die er is. `None + float` werpt
+een TypeError, en dan mislukt de **hele** vastlegging — inclusief de
+velden die er niets mee te maken hebben.
+
+In bedrijf kan dat niet gebeuren: `pv_production_today_kwh` is
+gedeclareerd als `float = 0.0` en wordt nergens op None gezet. De
+bewaking staat er omdat één ontbrekende waarde nooit een hele regel zou
+mogen slopen.
+
+### Wat er niet fout was
+
+Ik meldde eerst dat drie dagtellers op `None` stonden. Dat klopte niet:
+die sleutels staan onder `ems_kpis` en niet onder `coordinator`, en
+`c.get()` gaf None omdat de sleutel er niet **is**. De teller stond
+gewoon op 6,044 kWh.
+
+**Achtste keer deze week** dat ik uit de verkeerde plek in de export een
+conclusie trek. Dat patroon is inmiddels hardnekkiger dan welke fout in
+de code ook, en de analyse bovenaan de export helpt er niet tegen —
+want die dekt alleen wat er zelf in staat.
+
+### Wat wél werkte
+
+De patroonanalyse van v3.85.0 doet precies wat hij moet:
+
+```
+15 ingrepen, maar van 1 dag - er zijn er 3 nodig
+```
+
+En het dagtype-profiel ging van "levert niets op" naar "voldoet nog niet
+aan de eis".
+
+**Volledige testsuite**: 3287 tests, allemaal groen.
+
+## v3.87.0 — De drie zwakste punten uit de doorlichting
+
+**Gevraagd**: "Alles wat verbeterd kan worden optimaliseren."
+
+Uit de vragenlijst kwamen drie punten waarop het antwoord "dat gebeurt
+niet" was. Alle drie zijn nu opgelost — twee door te meten, één door te
+controleren.
+
+### 1. Er werd niet gecontroleerd of een opdracht aankwam
+
+*"Hoe wordt gecontroleerd dat een verzonden commando daadwerkelijk is
+uitgevoerd?"*
+
+Dat gebeurde niet. Er werd gekeken of de entiteit **bereikbaar** was
+vóór het schrijven, maar nooit of de stand daarna werkelijk was
+veranderd.
+
+Geen theoretisch gat: op 30 augustus zette de knop "Handmatig laden" de
+accu niet, en dat bleef een halve dag onopgemerkt — de integratie dacht
+dat ze stuurde terwijl de accu op `smart` bleef staan.
+
+Elke opdracht wordt nu na 90 seconden nagekeken, de modus én het
+vermogen. Komt hij niet aan, dan volgt een melding.
+
+**Bewust geen automatische herhaling.** Een opdracht die niet aankomt,
+komt meestal niet aan omdat er iets anders mis is — de app die
+tegenstuurt, een apparaat in standby. Blind herhalen maakt dat erger;
+melden maakt het zichtbaar.
+
+De kritieke verzameling gaat daarmee van negen naar tien. Bij v3.67.0
+stond hier dat er bij de tiende echt een weg moest. Dat is niet gebeurd,
+en dat is een eerlijke constatering waard: er is opnieuw gezocht en er
+was er geen die het verdiende. **Bij de elfde hoort niet de grens omhoog
+maar de schaal opnieuw bekeken** — tien soorten die allemaal "nu kijken"
+roepen, is geen schaal meer maar een lijst.
+
+### 2. Niets hield de modus vast
+
+*"Hoe wordt voorkomen dat de batterij te vaak schakelt? Welke hysterese?
+Wat is de minimale tijd dat een modus actief blijft?"*
+
+Op alle drie was het antwoord: die is er niet. Er is hysterese op de
+keuze van het goedkoopste blok en op de koeling, maar niets houdt de
+modus zelf vast.
+
+**Er is bewust geen rem ingebouwd.** Die kan een noodzakelijke
+omschakeling tegenhouden — een prijspiek, een accu die leegloopt — en
+dan kost hij geld op precies de momenten dat het telt. Eerst meten hoe
+vaak het werkelijk gebeurt; dezelfde volgorde als bij elke andere
+kandidaat.
+
+Meer dan vier wissels per uur wordt gemeld: de prijzen liggen per
+kwartier vast, dus vaker komt ergens anders vandaan.
+
+### 3. De planning toonde een verloop dat niet gaat gebeuren
+
+De kwartierplanning laat de accu naar 10% zakken terwijl de verkooptoets
+bij 4,86 kWh grendelt. Geen fout, maar een verschil in aard: de planning
+rekent op **prijs**, de verkooptoets grendelt elk moment op de
+**reserve**.
+
+Die kwartieren staan nu apart in de export. Wie de planning leest zonder
+dat te weten, denkt dat de accu vannacht leeg gaat — en daar ben ik zelf
+tweemaal ingetrapt.
+
+### En een lege regel in het beslislogboek
+
+Die telde als moduswisseling. Geschreven op de eerste ronde na een
+herstart, vóórdat de beslisboom had gedraaid. De regel blijft staan —
+sinds v1.30.0 legt het logboek bewust ook onvolledige rondes vast — maar
+telt niet meer mee.
+
+**Volledige testsuite**: 3310 tests, allemaal groen.
+
+## v3.88.0 — Vier plekken lazen het accuvermogen verkeerd om
+
+**Gevraagd**: alles uit de tweede vragenlijst nalopen — eenheden,
+tekenconventies, fysische controles, extreme scenario's.
+
+### De vondst: vier functies negeerden de tekenomkering
+
+Bij deze installatie staat `invert_battery_power_sign` **aan**. Vier
+functies lazen de sensor rechtstreeks en verrekenden dat niet:
+
+```
+_huisverbruik_w              het huisverbruik op de plaat
+_meet_werkelijke_netlading   de meting van wat er van het net kwam
+_meet_kalibratiecapaciteit   de kalibratiemeting
+get_overview_svg             het schema op het dashboard
+```
+
+Voor alle vier gold dat laden als ontladen werd geteld en omgekeerd. Dat
+is dezelfde fout die ik gisteren in `_richting_van_de_accu` maakte — en
+toen ik daarvoor een scan schreef, bleek hij er al vier keer te staan.
+
+Acht andere functies verrekenen het teken zélf, met dezelfde vier regels
+als de helper. Dat is dubbele code — een van de punten uit de
+doorlichting — maar geen fout: het teken klopt er.
+
+**Structuurscan 21** bewaakt dit nu.
+
+### De energiebalans, maar dan een die iets zegt
+
+*"Controleert het EMS of productie + net + batterij = verbruik?"*
+
+Die som **niet**, en om een goede reden: het huisverbruik wordt er zelf
+uit afgeleid. Een controle op diezelfde formule klopt per definitie —
+dat is rondrekenen, geen toets.
+
+Wat er wél onafhankelijk te vergelijken valt, staat er nu wel: de drie
+**fasen** tegen de totale P1-stand, en de drie **accumodules** tegen het
+accuvermogen. Bij beide komen de twee kanten uit een eigen meter.
+
+### Elf toetsen op de uitersten
+
+Op geen van de negen extreme scenario's uit de vragenlijst lag een
+toets:
+
+```
+-€0,20/kWh          150 ct/kWh          een vlakke dag
+100 % SoC           0 % SoC             een SoC boven de 100
+0 W zon             10 kW verbruik      alle sensoren weg
+een sensor die tekst teruggeeft         een echte nul
+```
+
+Alle elf slagen. Dat is geruststellend, maar het betekent vooral dat
+deze categorie tot nu toe op geluk berustte.
+
+**Volledige testsuite**: 3322 tests, allemaal groen.
+
+## v3.89.0 — De beslissing is nu achteraf te verklaren
+
+**Gevraagd** bij de duivelsadvocaat-audit: "Kan ik zien welke
+voorwaarden FALSE waren? Welke beslissingen zijn niet reproduceerbaar?"
+
+Het antwoord was **nee**. Er zijn zestien beslisredenen in een vaste
+volgorde, en de gekozen reden werd vastgelegd — maar niet waarom de
+vijftien andere afvielen. Bij `expensive_quarter` was niet te zien of
+`emergency_low_battery` op een haar na niet aansloeg.
+
+Elke ronde legt nu vast welke voorwaarden zijn getoetst, met de uitkomst
+**en de reden**:
+
+```
+genoeg lading om te ontladen   nee   de reserve liet niets over
+genoeg eigen verbruik          ja    het huis vraagt genoeg
+accu kritiek laag              nee   boven de noodgrens
+```
+
+Een waar/onwaar zonder reden verklaart niets; daarom staat de
+onderbouwing erbij. En het onderscheid dat er toe doet blijft zichtbaar:
+viel het vermogen weg door een lage stand, of door te weinig eigen
+verbruik? De uitkomst is dezelfde, de reden niet.
+
+### Wat de ratel afdwong
+
+`_async_update_locked` groeide van 255 naar 257 uitspraken. In plaats van
+de grens op te hogen zijn de drie afwegingen naar een eigen functie
+verhuisd, en die bepaalt nu zelf of het vermogen door het eigen verbruik
+werd weggeknepen — daarmee verdween ook de bestaande toewijzing.
+
+Terug op 255, zonder de grens aan te raken. Dat is precies waar die
+ratel voor is.
+
+### Wat hiermee nog niet is opgelost
+
+De audit vroeg naar meer dan dit, en het eerlijke antwoord op die
+vragen blijft staan:
+
+- **de Zendure-sensoren** zijn niet bewezen — dat
+  `invert_battery_power_sign` bestaat, is het bewijs dat het ooit fout
+  ging, en in v3.88.0 bleek het er nog vier keer te staan
+- **de 6000 cycli en de twaalf kalenderjaren** zijn fabrikantopgave en
+  aanname; bij 4000 cycli zou de slijtage 18 ct zijn in plaats van 12
+- **een scheve reserve geeft geen alarm** — dat merk je pas als je
+  's ochtends leeg staat
+
+**Volledige testsuite**: 3332 tests, allemaal groen.

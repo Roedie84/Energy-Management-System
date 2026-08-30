@@ -193,6 +193,8 @@ def test_only_the_pre_existing_kinds_default_to_on():
         "prijsstijging_handmatig",
         # v3.84.0: en dat de leermodus is blijven staan.
         "leermodus_lang_aan",
+        # v3.87.0: en dat een opdracht niet is aangekomen.
+        "opdracht_niet_aangekomen",
         # v3.67.0: een onvolledige installatie hoort te melden - dat is
         # het hele punt van de bestandscontrole.
         "installatie_onvolledig",

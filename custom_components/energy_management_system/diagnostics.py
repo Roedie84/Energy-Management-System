@@ -427,6 +427,26 @@ async def async_get_config_entry_diagnostics(
         "platformcontrole": _veilig(
             "get_platformcontrole", coordinator.get_platformcontrole
         ),
+        # v3.87.0: kwamen de opdrachten aan bij de accu?
+        "opdrachtcontrole": _veilig(
+            "get_opdrachtcontrole", coordinator.get_opdrachtcontrole
+        ),
+        # v3.87.0: hoe vaak wisselde de accu van modus?
+        "moduswissels": _veilig(
+            "get_moduswissels", coordinator.get_moduswissels
+        ),
+        # v3.87.0: waar wijkt de planning af van de aansturing?
+        "planning_tegen_sturing": _veilig(
+            "get_planning_tegen_sturing",
+            coordinator.get_planning_tegen_sturing,
+        ),
+        # v3.88.0: kloppen de meters onderling?
+        "energiebalans_controle": _veilig(
+            "get_energiebalans_controle",
+            coordinator.get_energiebalans_controle,
+        ),
+        # v3.89.0: welke voorwaarden tot de beslissing leidden.
+        "afwegingen": _veilig("get_afwegingen", coordinator.get_afwegingen),
         # v3.65.0: uitkomsten die logisch niet kunnen. Elke bevinding
         # hier is een fout in de integratie zelf.
         "zelftoets": _veilig("get_zelftoets", coordinator.get_zelftoets),

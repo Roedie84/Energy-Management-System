@@ -486,6 +486,11 @@ def test_a_current_store_keeps_the_balance_history(make_coordinator, hass):
 # precies één van drie bakken vallen. Wie er een nieuwe bijzet en niets
 # kiest, krijgt hier een rode test in plaats van stille dataverlies.
 VLUCHTIG_MET_REDEN = {
+    "_afwegingen_deze_ronde": "de afwegingen die nu worden verzameld; elke ronde opnieuw",
+    "laatste_afwegingen": "de afwegingen van de laatste beslissing; na een herstart hoort er een verse beslissing te komen voordat er iets te verklaren valt",
+    "laatste_afwegingen_moment": "hoort bij laatste_afwegingen",
+    "_openstaande_opdrachten": "opdrachten die nog nagekeken moeten worden; na een herstart is er niets meer na te kijken",
+    "opdracht_bevestigingen": "de telling van gelukte en mislukte opdrachten sinds het opstarten; een lopend totaal over herstarts heen zou de verhouding vertroebelen",
     "leermodus_sinds": "sinds wanneer de leermodus aan staat; na een herstart begint die telling opnieuw en dat is juist - dan is de stand net opnieuw ingelezen",
     "_leermodus_laatste_herinnering": "hoort bij leermodus_sinds",
     "_prijsstijging_gemeld": "welke prijsstijging al is gemeld; hoort bij de handmatige stand, die een herstart ook niet overleeft",

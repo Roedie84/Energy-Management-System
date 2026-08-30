@@ -532,6 +532,63 @@ def test_the_direction_comes_from_the_power(make_coordinator, hass):
     assert c._richting_van_de_accu() == "stil"
 
 
+def test_the_direction_respects_the_inverted_sign(make_coordinator, hass):
+    """v3.86.0: mijn eerste versie las de sensor RECHTSTREEKS en negeerde
+
+    daarmee `invert_battery_power_sign`.
+
+    Bij een installatie waar die aan staat, zouden "laden" en "ontladen"
+    precies omgekeerd zijn vastgelegd - en dan meet de hele
+    patroonanalyse het tegenovergestelde van wat er gebeurde.
+
+    `_read_corrected_battery_power` bestaat al sinds v0.39.0 en doet dat
+    goed.
+    """
+    from custom_components.energy_management_system.const import (
+        CONF_BATTERY_POWER_SENSOR,
+        CONF_INVERT_BATTERY_POWER_SIGN,
+    )
+
+    c = make_coordinator(
+        {
+            CONF_BATTERY_POWER_SENSOR: "sensor.accu",
+            CONF_INVERT_BATTERY_POWER_SIGN: True,
+        }
+    )
+
+    hass.states.set("sensor.accu", "-1800")
+    assert c._richting_van_de_accu() == "ontladen"
+
+    hass.states.set("sensor.accu", "1200")
+    assert c._richting_van_de_accu() == "laden"
+
+
+def test_a_missing_sun_counter_does_not_break_the_record(
+    make_coordinator, hass
+):
+    """v3.86.0: `round(None, 2)` werpt een TypeError, en dan mislukt de
+
+    HELE regel.
+
+    Gemeten in de export van 30 augustus 20:42: de drie ingrepen van dat
+    moment droegen geen richting, geen zon en geen deel van de dag - de
+    sleutels ontbraken volledig, ook niet als None.
+
+    `pv_production_today_kwh` stond op None omdat de zonteller die dag
+    nog niet gevuld was.
+    """
+    c = _coordinator(make_coordinator, hass, "manual", "smart")
+    c.pv_production_today_kwh = None
+
+    c._volg_handmatige_ingrepen(NU)
+
+    assert len(c.handmatige_ingrepen) == 1
+    regel = c.handmatige_ingrepen[0]
+    assert "zon_tot_nu_kwh" in regel
+    assert regel["zon_tot_nu_kwh"] is None
+    assert "richting" in regel
+
+
 def test_the_sun_shortfall_is_recorded(make_coordinator, hass):
     """Gemeten op 30 augustus: verwacht 10,8 kWh, gemeten 6,04 - 44%
 
