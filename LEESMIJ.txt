@@ -1,13 +1,15 @@
-v3.79.0 - alleen de gewijzigde bestanden sinds v3.78.0
+v3.80.0 - alleen de gewijzigde bestanden sinds v3.78.0
+
+Bevat ook v3.79.0 (de platformcontrole en de knoppen op de kaart).
 
 CODE (naar Home Assistant, daarna herstarten)
   custom_components/energy_management_system/
-    coordinator.py            de platformcontrole
+    coordinator.py            de volgorde, en de platformcontrole
     const.py                  de drempels per platform
-    switch.py                 vaste entity_id, vermogen als attribuut
+    switch.py                 vaste naam, vermogen als attribuut
     diagnostics.py            platformcontrole in de export
-    dashboard_template.yaml   de twee knoppen op de Besturing-kaart
-    manifest.json             versienummer 3.79.0
+    dashboard_template.yaml   de knoppen op de Besturing-kaart
+    manifest.json             versienummer 3.80.0
     bestandscontrole.json     bijgewerkte hashlijst  (MOET mee)
 
 DASHBOARD
@@ -16,49 +18,29 @@ DASHBOARD
 TOETSEN (repository)
   tests/test_platformcontrole.py       nieuw
   tests/test_structural_integrity.py   structuurscan 18
+  tests/test_dashboard_health_export.py structuurscan 19
   tests/test_handmatige_stand.py
   tests/conftest.py
 
 DOCUMENTEN
   CHANGELOG.md  README.md  OVERDRACHT.md
 
-WAT ER IN ZIT
--------------
+DE HOOFDZAAK
+------------
 
-1. DE TWEE KNOPPEN OP JE BESTURING-KAART
-   Hun naam ligt nu vast. Het vermogen staat als ATTRIBUUT en niet in
-   de naam - anders ontstaat `..._handmatig_laden_2000_w`, en dan klopt
-   elke verwijzing niet meer zodra dat getal wijzigt.
+De knop "Handmatig laden 2000 W" zette de accu NIET. Hij zette alleen de
+leermodus aan, en daarmee de aansturing stil.
 
-2. DE PLATFORMCONTROLE
-   Op 30 augustus vielen tien schakelaars weg door een ontbrekende
-   import, en de integratie zag er van binnenuit gezond uit: bestanden
-   compleet, 59 entiteiten in orde, geen melding.
+_async_apply_manual begint met `if self.learning_only: return`, en die
+bewaking staat daar terecht. Maar de leermodus ging AAN voordat er werd
+geschreven, dus de opdracht werd door de eigen bewaking geweigerd.
 
-   Er wordt nu per platform geteld hoeveel EIGEN entiteiten er zijn
-   aangemaakt. Nul betekent omgevallen, en dat staat bovenaan in de
-   analyse.
-
-BELANGRIJK: DE OUDE ENTITEITEN HERNOEMEN
-----------------------------------------
-
-De schakelaars zijn in v3.78.0 al aangemaakt met de verkeerde naam.
-Home Assistant houdt die vast, ook na deze wijziging.
-
-Ga naar Ontwikkelaarshulpmiddelen -> Toestanden, zoek op `handmatig`,
-klik op:
-
-  switch.woonkamer_energy_management_system_handmatig_laden_2000_w
-
-en verander de entiteit-ID via het tandwiel naar:
-
-  switch.woonkamer_energy_management_system_handmatig_laden
-
-De andere twee kloppen al.
+Nu: eerst schrijven, dan de leermodus.
 
 WAT JE ZELF MOET DOEN
 ---------------------
 
-Kopieren, herstarten, hernoemen, dashboard verversen.
+Kopieren, herstarten, dashboard verversen.
 
-En: ZET JE LEERMODUS UIT. Die staat nog aan van vanochtend.
+Zet de knop daarna even aan en kijk in de Zendure-app of de modus
+werkelijk op `manual` springt. Dat is de proef.

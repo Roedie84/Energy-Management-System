@@ -318,3 +318,63 @@ def test_the_check_covers_every_domain():
 
     for domein in ("switch", "button", "number", "select"):
         assert domein in blok, domein
+
+
+# --- structuurscan 19: geen sjabloon waar het niet werkt -------------
+
+
+def test_no_template_in_a_field_that_does_not_render_one():
+    """De fout van 30 augustus (v3.79.0).
+
+    Op de Besturing-kaart stond letterlijk op het dashboard:
+
+        {% set e = 'switch.woonkamer_energy_management_system_han...
+
+    Een `mushroom-entity-card` accepteert geen sjabloon in `name` - dat
+    werkt alleen bij een `mushroom-template-card`. De sjabloontekst werd
+    dus gewoon als naam getoond.
+
+    Geen foutmelding, geen kapotte kaart: hij ziet er alleen dom uit. En
+    dat is precies het soort fout dat blijft staan.
+    """
+    from pathlib import Path
+
+    import yaml
+
+    import custom_components.energy_management_system as pkg
+
+    sjabloon = yaml.safe_load(
+        (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
+    )
+
+    # Kaarttypes die GEEN sjabloon verwerken, met de velden waar het
+    # misgaat.
+    zonder_sjabloon = {
+        "custom:mushroom-entity-card": ("name",),
+        "entities": ("title",),
+        "custom:mushroom-chips-card": (),
+    }
+
+    fouten = []
+
+    def _loop(kaarten, pagina):
+        for kaart in kaarten or []:
+            if not isinstance(kaart, dict):
+                continue
+            soort = kaart.get("type")
+            for veld in zonder_sjabloon.get(soort, ()):
+                waarde = kaart.get(veld)
+                if isinstance(waarde, str) and "{%" in waarde:
+                    fouten.append(f"{pagina}: {soort}.{veld}")
+            for sleutel in ("cards", "sections"):
+                _loop(kaart.get(sleutel), pagina)
+
+    for pagina in sjabloon.get("views", []):
+        _loop(pagina.get("cards"), pagina.get("title"))
+        for sectie in pagina.get("sections", []) or []:
+            _loop(sectie.get("cards"), pagina.get("title"))
+
+    assert not fouten, (
+        "sjabloon in een veld dat er geen verwerkt - dat komt letterlijk "
+        f"op het dashboard te staan: {fouten}"
+    )

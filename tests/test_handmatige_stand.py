@@ -226,8 +226,15 @@ def test_the_wattage_is_an_attribute_not_a_name():
     sjabloon = (map_ / "dashboard_template.yaml").read_text()
 
     assert '"vermogen_w"' in bron
-    # En de kaart leest het daar, met een terugval.
-    assert "state_attr(e, 'vermogen_w')" in sjabloon
+
+    # De KAART toont het als vaste tekst.
+    #
+    # v3.79.0: een `mushroom-entity-card` accepteert geen sjabloon in
+    # `name` - dat werkt alleen bij een `mushroom-template-card`. De
+    # eerste versie zette er wel een in, en toen stond de sjabloontekst
+    # zelf op het dashboard.
+    assert "Handmatig laden 2000 W" in sjabloon
+    assert "state_attr(e, 'vermogen_w')" not in sjabloon
 
 
 def test_the_switches_do_not_survive_a_restart():
@@ -245,3 +252,53 @@ def test_the_switches_do_not_survive_a_restart():
     staart = bron[kop : bron.index("class AchterhoeksSwitch")]
 
     assert "async_get_last_state" not in staart
+
+
+# --- de volgorde (v3.80.0) -------------------------------------------
+
+
+def test_the_battery_is_set_before_learning_mode_blocks_it(
+    make_coordinator, hass
+):
+    """Gemeld: "smart is inmiddels geen laden" - de knop stond aan en de
+
+    accu bleef op `smart` staan.
+
+    `_async_apply_manual` begint met `if self.learning_only: return`, en
+    die bewaking staat daar terecht. Maar de leermodus ging AAN voordat
+    er werd geschreven, dus de opdracht werd door de eigen bewaking
+    geweigerd. De knop deed niets aan de accu.
+    """
+    c = make_coordinator({})
+    c.learning_only = False
+    volgorde = []
+
+    async def _schrijf(waarde):
+        volgorde.append(("schrijf", c.learning_only))
+
+    async def _leer(aan):
+        volgorde.append(("leermodus", aan))
+        c.learning_only = aan
+
+    c._async_apply_manual = _schrijf
+    c.async_set_learning_only = _leer
+
+    _run(c.async_set_handmatige_stand(HANDMATIGE_STAND_LADEN, NU))
+
+    assert volgorde[0][0] == "schrijf"
+    # En op het moment van schrijven stond de leermodus nog uit.
+    assert volgorde[0][1] is False
+    assert volgorde[1] == ("leermodus", True)
+
+
+def test_the_real_guard_would_have_blocked_it(make_coordinator, hass):
+    """Dat de bewaking klopt, en de volgorde dus de enige oplossing was."""
+    import inspect
+
+    from custom_components.energy_management_system.coordinator import (
+        EnergyManagementSystemCoordinator as C,
+    )
+
+    bron = inspect.getsource(C._async_apply_manual)
+
+    assert "if self.learning_only:" in bron

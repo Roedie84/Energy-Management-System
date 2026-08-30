@@ -20331,3 +20331,45 @@ te importeren — exact de fout van vanochtend, één dag later opnieuw. De
 scan die daarvoor is geschreven sloeg meteen aan.
 
 **Volledige testsuite**: 3247 tests, allemaal groen.
+
+## v3.80.0 — De knop zette de accu niet, alleen de leermodus
+
+**Gemeld**: "smart is inmiddels geen laden" — de knop "Handmatig laden
+2000 W" stond aan, en de accu bleef gewoon op `smart` staan.
+
+De oorzaak zit in de volgorde. `_async_apply_manual` begint met:
+
+```python
+if self.learning_only:
+    return
+```
+
+Die bewaking staat daar terecht: in leermodus schrijft EMS niets naar de
+accu. Maar ik zette de leermodus aan **vóórdat** ik schreef, dus de
+opdracht werd door mijn eigen bewaking geweigerd.
+
+De knop deed dus niets aan de accu — hij zette alleen de leermodus aan,
+en daarmee de aansturing stil. Precies het omgekeerde van de bedoeling.
+
+Eerst schrijven, dan de leermodus. Dat is de enige volgorde die klopt:
+de accu krijgt de stand terwijl EMS nog mag schrijven, en pas daarna
+wordt de sturing stilgezet zodat de volgende ronde er niet overheen
+gaat.
+
+### Twee kleinere correcties
+
+**De naam van de schakelaar** droeg het vermogen —
+`..._handmatig_laden_2000_w`. Dat getal hoort in de knop, niet in de
+identiteit: wijzigt het ooit, dan klopt elke verwijzing niet meer. Het
+staat nu als attribuut `vermogen_w`.
+
+**En op de kaart stond een sjabloon** in het `name`-veld van een
+`mushroom-entity-card`. Dat kaarttype verwerkt geen sjablonen, dus stond
+de sjabloontekst letterlijk op het dashboard. Geen foutmelding, geen
+kapotte kaart — hij zag er alleen dom uit, en dat is precies het soort
+fout dat blijft staan.
+
+**Structuurscan 19** bewaakt dat nu: een sjabloon in een veld dat er
+geen verwerkt.
+
+**Volledige testsuite**: 3250 tests, allemaal groen.

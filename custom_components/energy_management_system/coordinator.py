@@ -8712,14 +8712,28 @@ class EnergyManagementSystemCoordinator:
         self.handmatige_stand_sinds = nu
         self._handmatige_stand_laatste_herinnering = nu
 
-        if not self.learning_only:
-            self._leermodus_door_handmatige_stand = True
-            await self.async_set_learning_only(True)
-
+        # v3.80.0: EERST schrijven, DAN de leermodus.
+        #
+        # Gemeld: "smart is inmiddels geen laden" - de knop stond aan en
+        # de accu bleef op `smart` staan.
+        #
+        # `_async_apply_manual` begint met `if self.learning_only:
+        # return`, en die bewaking staat daar terecht. Maar ik zette de
+        # leermodus aan VOORDAT ik schreef, dus de opdracht werd door
+        # mijn eigen bewaking geweigerd. De knop deed niets aan de accu -
+        # hij zette alleen de leermodus aan.
+        #
+        # Deze volgorde is de enige die klopt: de accu krijgt de stand
+        # terwijl EMS nog mag schrijven, en pas daarna wordt de sturing
+        # stilgezet zodat de volgende ronde er niet overheen gaat.
         if stand == HANDMATIGE_STAND_LADEN:
             await self._async_apply_manual(-HANDMATIG_LAADVERMOGEN_W)
         else:
             await self._async_apply_operation(OPTION_SMART_CHARGING)
+
+        if not self.learning_only:
+            self._leermodus_door_handmatige_stand = True
+            await self.async_set_learning_only(True)
         _LOGGER.info("Handmatige stand %s aangezet.", stand)
 
     async def _volg_handmatige_stand(self, now: datetime) -> None:

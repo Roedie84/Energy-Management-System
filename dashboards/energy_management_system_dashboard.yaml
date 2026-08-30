@@ -248,9 +248,7 @@ views:
         rows: auto
     - type: custom:mushroom-entity-card
       entity: switch.woonkamer_energy_management_system_handmatig_laden
-      name: >-
-        {% set e = 'switch.woonkamer_energy_management_system_handmatig_laden' %}
-        Handmatig laden {{ (state_attr(e, 'vermogen_w') or 2000) }} W
+      name: Handmatig laden 2000 W
       icon: mdi:battery-charging-high
       grid_options:
         columns: 12
