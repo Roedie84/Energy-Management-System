@@ -20165,3 +20165,61 @@ lege plek als "niets geleerd". **De zesde keer deze week** dat ik op de
 verkeerde plek zoek en een verkeerde conclusie meld.
 
 **Volledige testsuite**: 3226 tests, allemaal groen.
+
+## v3.77.0 — Twee knoppen om de accu zelf aan te sturen
+
+**Gevraagd**: "Ik zou hier graag 2 buttons bij hebben — Manual 2000W
+laden en Smart_charge. Dit zorgt ervoor dat ik de Zendure app niet meer
+nodig heb."
+
+Twee schakelaars op het dashboard, bij de andere besturingsknoppen:
+
+```
+Handmatig laden 2000 W     zet de accu op manual met -2000 W
+Handmatig smart charge     zet de accu op smart_charging
+```
+
+Ze sluiten elkaar uit — de accu kan maar in één stand staan.
+
+### Wat er automatisch bij hoort
+
+**De leermodus gaat aan**, want anders vecht de aansturing van EMS er
+elke ronde tegenin. En uit zodra de stand weer weg is.
+
+**Elk uur een herinnering**, met de stand, sinds wanneer, en de huidige
+laadstand. Zonder die herinnering blijft de aansturing stil zonder dat
+het opvalt — precies wat er op 28 augustus een halve dag gebeurde.
+
+**Bij een volle accu zet de integratie het zelf uit**, inclusief de
+leermodus, met een melding erbij.
+
+### De valkuil
+
+De leermodus is óók een eigen schakelaar. Stond die al aan omdat de
+gebruiker hem zelf had aangezet, dan mag deze knop hem straks niet
+stilzwijgend uitzetten — dan zou een handmatige laadsessie ongemerkt de
+aansturing weer aanzetten.
+
+Er wordt daarom onthouden **wie** hem aanzette, en alleen teruggedraaid
+wat deze schakelaar zelf heeft gedaan.
+
+Ook bewust: **de standen overleven een herstart niet.** De andere
+schakelaars doen dat wel, maar hier zou het betekenen dat de accu na een
+herstart uren later nog handmatig staat te laden zonder dat iemand er
+nog aan denkt.
+
+### Twee wachters die aansloegen, en allebei terecht
+
+**De proefstandtoets** verbood `_async_apply_manual` in een blok tussen
+twee functienamen. Die begrenzing brak zodra er een functie tussen kwam
+te staan. Hij kijkt nu naar de proefstandfuncties zelf — dezelfde
+valkuil als de isolatietoets van v3.61.0: begrenzen op posities in
+plaats van op structuur.
+
+**En de toets uit v1.62.0** verbood `smart_charging` in de hele
+codebase. Dat was juist zolang alleen de integratie die stand kon
+zetten; het bezwaar gold de **automatische** keuze. Een bewuste ingreep
+van de gebruiker is iets anders, en die wordt bovendien vastgelegd als
+handmatige stand. De toets bewaakt nu alleen de beslissingsfuncties.
+
+**Volledige testsuite**: 3239 tests, allemaal groen.

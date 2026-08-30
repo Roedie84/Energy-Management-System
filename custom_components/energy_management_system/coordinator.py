@@ -497,6 +497,11 @@ from .const import (
     HANDMATIGE_INGREPEN_LENGTE,
     HANDMATIGE_INGREPEN_MIN_VOOR_PATROON,
     PV_GEOMETRY_RELIABLE_DAYS,
+    HANDMATIGE_STAND_LADEN,
+    HANDMATIGE_STAND_SMART_CHARGE,
+    HANDMATIG_LAADVERMOGEN_W,
+    HANDMATIGE_STAND_HERINNERING_MINUTEN,
+    HANDMATIGE_STAND_VOL_PROCENT,
     PV_GEOMETRY_SHADING_RATIO,
     RELIABILITY_ALIASES,
     SUN_DAYLIGHT_MIN_ELEVATION_DEGREES,
@@ -1210,6 +1215,12 @@ class EnergyManagementSystemCoordinator:
         self.mpc_doel_soc: dict = {}
         self.mpc_vergelijking_history: list[dict] = []
         self._mpc_gemeten_op: str | None = None
+        # v3.77.0: de handmatige stand vanuit het dashboard.
+        self.handmatige_stand: str | None = None
+        self.handmatige_stand_sinds: datetime | None = None
+        self._handmatige_stand_laatste_herinnering: datetime | None = None
+        self._leermodus_door_handmatige_stand: bool = False
+
         # v3.75.0: wanneer de accu anders stond dan EMS wilde.
         self.last_applied_operation: str | None = None
         self.handmatige_ingrepen: list[dict] = []
@@ -8584,6 +8595,114 @@ class EnergyManagementSystemCoordinator:
             "beschikbaar": False,
             "reden": "Nog niet gecontroleerd; dat gebeurt bij het opstarten.",
         }
+
+    async def async_set_handmatige_stand(
+        self, stand: str | None, nu: datetime | None = None
+    ) -> None:
+        """Zet de accu met de hand op laden of op smart_charging
+        (v3.77.0).
+
+        Gevraagd: "Ik zou hier graag 2 buttons bij hebben - Manual 2000W
+        laden en Smart_charge. Dit zorgt ervoor dat ik de Zendure app
+        niet meer nodig heb."
+
+        Vier dingen horen bij elkaar en staan daarom op één plek:
+
+        - de accu krijgt de stand;
+        - de leermodus gaat aan, want anders vecht de aansturing van EMS
+          er elke ronde tegenin;
+        - er komt elk uur een herinnering zolang het aan staat;
+        - en bij een volle accu zet de integratie het weer uit.
+
+        De valkuil zit in die leermodus. Die is ook een eigen schakelaar
+        van de gebruiker; had die al aangestaan, dan mag hij straks niet
+        stilzwijgend uitgezet worden. Daarom wordt onthouden WIE hem
+        aanzette.
+        """
+        nu = nu or dt_util.now()
+
+        if stand is None:
+            vorige = self.handmatige_stand
+            self.handmatige_stand = None
+            self.handmatige_stand_sinds = None
+            self._handmatige_stand_laatste_herinnering = None
+            # Alleen terugdraaien wat deze schakelaar zelf heeft gezet.
+            if self._leermodus_door_handmatige_stand:
+                self._leermodus_door_handmatige_stand = False
+                await self.async_set_learning_only(False)
+            if vorige:
+                _LOGGER.info(
+                    "Handmatige stand %s uitgezet; de aansturing is weer "
+                    "aan EMS.",
+                    vorige,
+                )
+            return
+
+        # Eén tegelijk: de twee standen sluiten elkaar uit.
+        self.handmatige_stand = stand
+        self.handmatige_stand_sinds = nu
+        self._handmatige_stand_laatste_herinnering = nu
+
+        if not self.learning_only:
+            self._leermodus_door_handmatige_stand = True
+            await self.async_set_learning_only(True)
+
+        if stand == HANDMATIGE_STAND_LADEN:
+            await self._async_apply_manual(-HANDMATIG_LAADVERMOGEN_W)
+        else:
+            await self._async_apply_operation(OPTION_SMART_CHARGING)
+        _LOGGER.info("Handmatige stand %s aangezet.", stand)
+
+    async def _volg_handmatige_stand(self, now: datetime) -> None:
+        """De herinnering, en uitzetten zodra de accu vol is (v3.77.0).
+
+        Gevraagd: "Als hij manueel is geschakeld door 1 van deze 2
+        buttons wil ik elk heel uur een herinnering dat dit nog aan
+        staat. Wanneer de accu 100% is mogen de buttons door de
+        integratie worden uitgeschakeld en de learning button ook uit."
+        """
+        if not self.handmatige_stand:
+            return
+
+        stand = self.accustand_procent()
+        if stand is not None and stand >= HANDMATIGE_STAND_VOL_PROCENT:
+            self._dispatch_notification(
+                notify_service=self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE),
+                title="🔋 De accu is vol",
+                message=(
+                    f"De handmatige stand ({self.handmatige_stand}) is "
+                    "uitgezet en de aansturing is weer aan EMS."
+                ),
+                notification_id="ems_handmatige_stand",
+                kind="handmatige_stand",
+            )
+            await self.async_set_handmatige_stand(None, now)
+            return
+
+        laatste = self._handmatige_stand_laatste_herinnering
+        if laatste is not None and (
+            (now - laatste).total_seconds() / 60
+            < HANDMATIGE_STAND_HERINNERING_MINUTEN
+        ):
+            return
+        self._handmatige_stand_laatste_herinnering = now
+
+        sinds = self.handmatige_stand_sinds
+        duur = (
+            f", sinds {sinds.strftime('%H:%M')}" if sinds else ""
+        )
+        self._dispatch_notification(
+            notify_service=self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE),
+            title="✋ De accu staat nog handmatig",
+            message=(
+                f"Stand: {self.handmatige_stand}{duur}. De accu staat op "
+                f"{stand:.0f}%. " if stand is not None else
+                f"Stand: {self.handmatige_stand}{duur}. "
+            )
+            + "EMS stuurt niet zolang dit aan staat.",
+            notification_id="ems_handmatige_stand",
+            kind="handmatige_stand",
+        )
 
     def _volg_handmatige_ingrepen(self, now: datetime) -> None:
         """Legt vast wanneer de accu anders staat dan EMS wilde
@@ -29423,6 +29542,7 @@ class EnergyManagementSystemCoordinator:
                 "handmatige ingrepen",
                 lambda: self._volg_handmatige_ingrepen(now),
             )
+            self.hass.async_create_task(self._volg_handmatige_stand(now))
             self._klok("zelfcontrole", lambda: self._meld_zelfcontrole(now))
             # v3.12.0: en melden zodra een kandidaat rijp wordt.
             self._klok(

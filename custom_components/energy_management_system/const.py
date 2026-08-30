@@ -1925,6 +1925,7 @@ LOG_PRIORITEITEN = {
     "verbruiksleer_reset": LOG_PRIO_AANDACHT,
     "koeling_te_scherp": LOG_PRIO_AANDACHT,
     "celspanning_laag": LOG_PRIO_AANDACHT,
+    "handmatige_stand": LOG_PRIO_AANDACHT,
     "installatie_onvolledig": LOG_PRIO_KRITIEK,
     # Aandacht - het vraagt een beslissing.
     "plan_verkoop_geblokkeerd": LOG_PRIO_AANDACHT,
@@ -2805,6 +2806,18 @@ NOTIFICATION_TYPES: tuple[tuple[str, str, str, bool, int], ...] = (
         "een vergeten bestand de nieuwe manier om het mis te laten gaan.",
         True,
         1440,
+    ),
+    (
+        "handmatige_stand",
+        "De accu staat handmatig",
+        "Elk uur een herinnering zolang een van de handmatige "
+        "schakelaars aan staat, en een melding zodra de accu vol is en "
+        "de integratie het weer overneemt.",
+        True,
+        # 55 en niet 60: de herinnering bepaalt zelf zijn tempo op het
+        # hele uur, en een demping van precies 60 zou net iets te laat
+        # kunnen vrijgeven en dan een uur overslaan.
+        55,
     ),
     (
         "celspanning_laag",
@@ -4724,6 +4737,7 @@ ACHTERHOEKS_TITELS = {
     "verbruiksleer_reset": "t Leren begint opnieuw",
     "koeling_te_scherp": "De koeling geet te vaak an",
     "celspanning_laag": "n Cel steet te lege",
+    "handmatige_stand": "De accu steet nog met de hand",
     "installatie_onvolledig": "De installatie is neet compleet",
     "appliance_ready": "'n Apparaat is klaor",
     "appliance_cheap_moment": "Good moment veur 'n apparaat",
@@ -5133,3 +5147,26 @@ RESERVE_BODEM_FRACTIE = 0.15
 # werd gebouwd op grond van één waarneming.
 HANDMATIGE_INGREPEN_LENGTE = 100
 HANDMATIGE_INGREPEN_MIN_VOOR_PATROON = 10
+
+# De handmatige standen vanuit het dashboard (v3.77.0).
+#
+# Gevraagd: "Ik zou hier graag 2 buttons bij hebben - Manual 2000W laden
+# en Smart_charge. Dit zorgt ervoor dat ik de Zendure app niet meer
+# nodig heb."
+#
+# 2000 W is het laadvermogen uit de veiligheidsinstellingen van de
+# Zendure-app; hoger accepteert het apparaat niet.
+HANDMATIGE_STAND_LADEN = "laden"
+HANDMATIGE_STAND_SMART_CHARGE = "smart_charge"
+HANDMATIG_LAADVERMOGEN_W = 2000
+
+# Elk heel uur een herinnering zolang zo'n stand aan staat.
+#
+# "Als hij manueel is geschakeld door 1 van deze 2 buttons wil ik elk
+# heel uur een herinnering dat dit nog aan staat." Zonder die
+# herinnering blijft de aansturing stil zonder dat het opvalt - en dat
+# is precies wat er op 28 augustus een halve dag gebeurde.
+HANDMATIGE_STAND_HERINNERING_MINUTEN = 60
+
+# En bij een volle accu zet de integratie het zelf uit.
+HANDMATIGE_STAND_VOL_PROCENT = 100.0

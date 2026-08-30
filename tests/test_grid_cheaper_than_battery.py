@@ -177,8 +177,38 @@ def test_the_comparison_no_longer_switches_modes():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
-    code = "\n".join(r.split("#")[0] for r in bron.splitlines())
+    # v3.77.0: de BESLISSING mag er niet naartoe schakelen; de
+    # gebruiker wel.
+    #
+    # Deze toets verbood `smart_charging` in de hele codebase, en dat
+    # was juist zolang alleen de integratie die stand kon zetten. Sinds
+    # de handmatige schakelaars is er een tweede weg: de gebruiker die
+    # er bewust voor kiest, met de leermodus aan en een herinnering per
+    # uur.
+    #
+    # Het bezwaar uit v1.62.0 gold de AUTOMATISCHE keuze - drie fouten
+    # in één beslissing. Een bewuste ingreep is iets anders, en die
+    # wordt bovendien vastgelegd als handmatige stand.
+    import ast
+    import inspect
+
+    from custom_components.energy_management_system.coordinator import (
+        EnergyManagementSystemCoordinator as C,
+    )
+
+    beslissers = [
+        naam
+        for naam in dir(C)
+        if naam.startswith(("_beslis", "_bepaal", "_net_is_goedkoper"))
+        or naam in ("_async_update_locked",)
+    ]
+    code = "\n".join(
+        "\n".join(
+            r.split("#")[0]
+            for r in inspect.getsource(getattr(C, naam)).splitlines()
+        )
+        for naam in beslissers
+    )
 
     assert "_async_apply_operation(OPTION_SMART_CHARGING)" not in code
     assert 'last_reason = "grid_cheaper_than_battery"' not in code

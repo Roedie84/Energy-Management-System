@@ -1,42 +1,50 @@
-v3.76.0 - alleen de gewijzigde bestanden sinds v3.75.0
+v3.76.0 en v3.77.0 - alleen de gewijzigde bestanden sinds v3.75.0
 
 CODE (naar Home Assistant, daarna herstarten)
   custom_components/energy_management_system/
-    coordinator.py            de terugval op de laatste beslissing
-    manifest.json             versienummer 3.76.0
+    coordinator.py            de handmatige stand en de ingrepenlijst
+    const.py                  de standen, de herinnering, de melding
+    switch.py                 de twee nieuwe schakelaars
+    dashboard_template.yaml   de meldingsschakelaar
+    manifest.json             versienummer 3.77.0
     bestandscontrole.json     bijgewerkte hashlijst  (MOET mee)
 
+DASHBOARD
+  dashboards/energy_management_system_dashboard.yaml
+
 TOETSEN (repository)
-  tests/test_handmatige_ingrepen.py
+  tests/test_handmatige_stand.py       nieuw
+  en zes bestaande toetsbestanden
 
 DOCUMENTEN
   CHANGELOG.md  README.md  OVERDRACHT.md
 
-WAT ER FOUT WAS
+DE TWEE KNOPPEN
 ---------------
 
-De ingrepenlijst van v3.75.0 ving jouw ingreep van vanochtend NIET.
+Na de herstart staan er bij Besturing twee nieuwe schakelaars:
 
-`last_applied_operation` wordt pas gevuld zodra EMS zelf naar de accu
-schrijft, en dat was sinds de herstart niet gebeurd - want de manager
-stond op `off` omdat jij handmatig stuurde.
+  Handmatig laden 2000 W
+  Handmatig smart charge
 
-Precies verkeerd om: een ingreep die vóór of tijdens een herstart
-begint, is er een die je juist wilt zien.
+Ze sluiten elkaar uit. Zolang er een aan staat:
+  - gaat de leermodus aan, zodat EMS er niet tegenin stuurt
+  - komt er elk uur een herinnering
+  - en bij 100% zet de integratie het zelf uit, met een melding
 
-Er wordt nu teruggevallen op de laatste BESLISSING. De regel meldt
-`uit_beslissing`, zodat te zien is waar de vergelijking vandaan kwam.
+DE VALKUIL
+----------
 
-VERDER GEZOCHT
---------------
+Had je de leermodus zelf al aan, dan zet de knop hem straks NIET uit.
+Er wordt onthouden wie hem aanzette.
 
-Dertien functies stoppen vroeg op een veld dat pas later gevuld raakt -
-alle dertien terecht. Vijfendertig velden staan leeg in de export, met
-één oorzaak: de beslissingstak draait niet zolang de manager op `off`
-staat. Het leren loopt gewoon door.
+En de standen overleven een herstart niet - anders staat de accu uren
+later nog handmatig te laden zonder dat iemand eraan denkt.
 
 WAT JE ZELF MOET DOEN
 ---------------------
 
-Installeren. Daarna wordt jouw handmatige stand alsnog vastgelegd,
-zolang die afwijkt van wat EMS wilde.
+Herstarten, en het dashboard verversen. De twee schakelaars verschijnen
+vanzelf bij de andere besturingsknoppen.
+
+Je kunt de Zendure-app nu laten staan voor het handmatig laden.

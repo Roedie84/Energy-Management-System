@@ -62,7 +62,11 @@ BEVROREN = {
     # v3.69.0: +1 voor `mpc_doel_soc`.
     # v3.75.0: +3 voor het vastleggen van handmatige ingrepen - de
     # gewenste modus, de reeks en de periode-markering.
-    "coordinator.py:__init__": 386,
+    # v3.77.0: +4 voor de handmatige stand - welke stand, sinds wanneer,
+    # de laatste herinnering en wie de leermodus aanzette. Dat laatste
+    # is de valkuil: had de gebruiker de leermodus zelf al aan, dan mag
+    # de schakelaar hem straks niet stilzwijgend uitzetten.
+    "coordinator.py:__init__": 390,
     "coordinator.py:_async_update_locked": 255,
     "coordinator.py:_async_update_scheduled_charge_appliance": 70,
     "coordinator.py:_build_explanation": 73,

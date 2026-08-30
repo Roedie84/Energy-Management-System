@@ -19,6 +19,22 @@ async def async_setup_entry(
             ForceManualSwitch(coordinator, entry_id=entry.entry_id),
             KalibratieSwitch(coordinator, entry_id=entry.entry_id),
             LearningOnlySwitch(coordinator, entry_id=entry.entry_id),
+            # v3.77.0: de accu met de hand aansturen zonder de
+            # Zendure-app.
+            HandmatigeStandSwitch(
+                coordinator,
+                entry_id=entry.entry_id,
+                stand=HANDMATIGE_STAND_LADEN,
+                naam="Handmatig laden 2000 W",
+                icoon="mdi:battery-charging-high",
+            ),
+            HandmatigeStandSwitch(
+                coordinator,
+                entry_id=entry.entry_id,
+                stand=HANDMATIGE_STAND_SMART_CHARGE,
+                naam="Handmatig smart charge",
+                icoon="mdi:solar-power-variant",
+            ),
             VacationModeSwitch(coordinator, entry_id=entry.entry_id),
             NuLadenSwitch(coordinator, entry_id=entry.entry_id),
             AchterhoeksSwitch(coordinator, entry_id=entry.entry_id),
@@ -182,6 +198,68 @@ class LearningOnlySwitch(SwitchEntity, RestoreEntity):
 
     async def async_turn_off(self, **kwargs) -> None:
         await self._coordinator.async_set_learning_only(False)
+        self.async_write_ha_state()
+
+
+class HandmatigeStandSwitch(SwitchEntity, RestoreEntity):
+    """De accu met de hand op laden of op smart_charging (v3.77.0).
+
+    Gevraagd: "Ik zou hier graag 2 buttons bij hebben - Manual 2000W
+    laden en Smart_charge. Dit zorgt ervoor dat ik de Zendure app niet
+    meer nodig heb."
+
+    Twee schakelaars die dezelfde klasse delen; ze sluiten elkaar uit,
+    want de accu kan maar in één stand staan.
+
+    Bewust GEEN herstel na een herstart. De andere schakelaars doen dat
+    wel, maar hier zou het betekenen dat de accu na een herstart uren
+    later nog handmatig staat te laden zonder dat iemand er nog aan
+    denkt - en dat is precies wat er op 28 augustus een halve dag
+    gebeurde.
+    """
+
+    _attr_has_entity_name = True
+
+    def __init__(self, coordinator, entry_id: str, stand: str, naam: str,
+                 icoon: str) -> None:
+        self._coordinator = coordinator
+        self._stand = stand
+        self._attr_name = naam
+        self._attr_icon = icoon
+        self._attr_unique_id = f"{entry_id}_handmatig_{stand}"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def is_on(self) -> bool:
+        return self._coordinator.handmatige_stand == self._stand
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        sinds = self._coordinator.handmatige_stand_sinds
+        return {
+            "sinds": sinds.isoformat() if sinds else None,
+            "leermodus_door_deze_schakelaar": (
+                self._coordinator._leermodus_door_handmatige_stand
+            ),
+            "toelichting": (
+                "Zolang dit aan staat stuurt EMS niet, en komt er elk uur "
+                "een herinnering. Bij een volle accu zet de integratie "
+                "het zelf uit."
+            ),
+        }
+
+    async def async_turn_on(self, **kwargs) -> None:
+        await self._coordinator.async_set_handmatige_stand(self._stand)
+        self.async_write_ha_state()
+
+    async def async_turn_off(self, **kwargs) -> None:
+        # Alleen uitzetten wat DEZE schakelaar heeft aangezet; anders
+        # zet de ene knop de andere uit.
+        if self._coordinator.handmatige_stand == self._stand:
+            await self._coordinator.async_set_handmatige_stand(None)
         self.async_write_ha_state()
 
 

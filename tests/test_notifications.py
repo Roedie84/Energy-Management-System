@@ -187,6 +187,8 @@ def test_only_the_pre_existing_kinds_default_to_on():
         # v3.52.0: een cel die meerdere dagen te laag staat hoort te
         # melden - in de winter is dat het enige signaal dat er komt.
         "celspanning_laag",
+        # v3.77.0: de herinnering dat de accu handmatig staat.
+        "handmatige_stand",
         # v3.67.0: een onvolledige installatie hoort te melden - dat is
         # het hele punt van de bestandscontrole.
         "installatie_onvolledig",

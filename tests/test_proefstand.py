@@ -52,9 +52,29 @@ def test_nothing_on_the_test_bench_steers_anything():
 
     import custom_components.energy_management_system as pkg
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
-    kop = bron.index("def _update_proefstand")
-    staart = bron[kop : bron.index("def get_wear_cost_overview")]
+    # v3.77.0: op de FUNCTIES zelf, niet op een blok tussen twee
+    # namen.
+    #
+    # Die begrenzing brak zodra er een functie tussen kwam te staan, en
+    # dat gebeurde bij het bouwen van de handmatige schakelaars - die
+    # roepen `_async_apply_manual` aan, en dat hoort ook. Dezelfde
+    # valkuil als de isolatietoets van v3.61.0: begrenzen op posities in
+    # plaats van op structuur.
+    import ast
+    import inspect
+
+    from custom_components.energy_management_system.coordinator import (
+        EnergyManagementSystemCoordinator as C,
+    )
+
+    proefstand_functies = [
+        naam
+        for naam in dir(C)
+        if naam.startswith(("_kandidaat_", "_meet_", "_update_proefstand"))
+    ]
+    staart = "\n".join(
+        inspect.getsource(getattr(C, naam)) for naam in proefstand_functies
+    )
 
     # Alleen lezen en in eigen reeksen wegschrijven; geen modus, geen
     # vermogen, geen drempel.
