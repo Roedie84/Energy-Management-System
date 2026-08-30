@@ -20084,3 +20084,40 @@ En de opruiming van v3.73.0 is gelukt: geen dubbele momenten meer, en
 één MPC-meting per dag.
 
 **Volledige testsuite**: 3208 tests, allemaal groen.
+
+## v3.75.0 — Vastleggen wanneer je zelf ingrijpt
+
+**Gevraagd**: "Maar als ik iets manueel doe kan dat toch juist een leer
+voor de integratie zijn?"
+
+Terecht, en dat zat er niet in. Alle bestaande metingen vergelijken
+alternatieven die de integratie **zelf** had kunnen kiezen; een ingreep
+van buitenaf is een derde optie die nergens werd opgemerkt.
+
+De aanleiding: op 30 augustus is de accu handmatig op laden gezet, omdat
+het pas na tweeën zou opklaren en de planning de avond niet zou halen.
+Dat is een oordeel dat de integratie niet had — en precies het soort
+waarneming waar iets van te leren valt.
+
+Elke keer dat de accu anders staat dan EMS wilde, komt er nu een regel
+met het tijdstip, wat EMS wilde, wat er werkelijk stond, en de
+omstandigheden: accustand, prijs nu, duurste prijs die nog komt, en de
+verwachte zon.
+
+Eén regel per aaneengesloten periode, niet per ronde — anders staat er
+na een middag handmatig laden honderd keer hetzelfde.
+
+### Wat er nadrukkelijk NIET in zit
+
+Geen patroonherkenning, geen conclusie, geen sturing.
+
+Eén waarneming is geen patroon, en deze week is het **vijf keer**
+misgegaan dat er iets werd gebouwd op grond van één geval. Vanaf tien
+ingrepen valt te kijken of er een lijn in zit; het overzicht meldt zelf
+wanneer dat punt bereikt is.
+
+Als er dan een regel uit komt — bijvoorbeeld "handmatig geladen bij
+minder dan 8 kWh verwachte zon en een avondprijs boven 35 ct" — dan is
+dat een proefstandkandidaat, en die moet zijn eigen bewijs leveren.
+
+**Volledige testsuite**: 3219 tests, allemaal groen.

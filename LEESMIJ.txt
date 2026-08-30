@@ -1,45 +1,50 @@
-v3.74.0 - alleen de gewijzigde bestanden sinds v3.73.0
+v3.74.0 en v3.75.0 - alleen de gewijzigde bestanden sinds v3.73.0
+
+INSTALLEER DIT VANDAAG NOG. De reservebodem uit v3.74.0 is precies wat
+er vanavond nodig is: weinig zon, hoge avondprijzen, en een planning die
+vijftien kwartieren wil verkopen.
 
 CODE (naar Home Assistant, daarna herstarten)
   custom_components/energy_management_system/
-    coordinator.py            de reservebodem en de melding
-    const.py                  RESERVE_BODEM_FRACTIE
-    manifest.json             versienummer 3.74.0
+    coordinator.py            de reservebodem en het vastleggen
+    const.py                  drie nieuwe constanten
+    diagnostics.py            handmatige ingrepen in de export
+    manifest.json             versienummer 3.75.0
     bestandscontrole.json     bijgewerkte hashlijst  (MOET mee)
 
 TOETSEN (repository)
-  tests/test_reserve_bodem.py             nieuw
-  tests/test_spiegelcontrole.py
-  en de vijf toetsbestanden uit v3.71-3.73
+  tests/test_handmatige_ingrepen.py    nieuw
+  tests/test_reserve_bodem.py          nieuw
+  en acht bestaande toetsbestanden
 
 DOCUMENTEN
   CHANGELOG.md  README.md  OVERDRACHT.md
 
-DE HOOFDZAAK
-------------
+DE HOOFDZAAK (v3.74.0)
+----------------------
 
 De reserve hield structureel NIETS achter. De marge van 55% wordt
 vermenigvuldigd met het diepste tekort onderweg, en dat tekort is nul
 zodra de voorspelling zegt dat de zon het huis morgen dekt.
 
-Er staat nu een bodem van 15% van de bruikbare capaciteit onder: 1,17
-kWh, ongeveer vijf uur basislast. Die zit in de RESERVE, dus hij werkt
-door in het ontladen, de verkooptoets en de kwartierplanning tegelijk.
+Er staat nu een bodem van 15% onder: 1,17 kWh, ongeveer vijf uur
+basislast. Die zit in de RESERVE, dus hij werkt door in het ontladen, de
+verkooptoets en de kwartierplanning tegelijk.
 
-Dat is het verschil met de bodem uit v3.71.0 die weer is verwijderd:
-die zat alleen in de verkooptoets.
+EN VASTLEGGEN VAN JOUW INGREPEN (v3.75.0)
+-----------------------------------------
 
-WAT JE MERKT
-------------
+Elke keer dat de accu anders staat dan EMS wilde, komt er een regel met
+de omstandigheden erbij: accustand, prijs nu, duurste prijs die nog
+komt, verwachte zon.
 
-Er gaat minder naar het net op de dagen dat de voorspelling optimistisch
-is. Je verkocht 2 tot 4 kWh per dag; daar houdt de bodem hooguit 1,17
-van tegen.
+Er wordt niets uit geconcludeerd en niets mee gestuurd. Vanaf tien
+ingrepen valt te kijken of er een lijn in zit.
 
-En de melding "Spiegel: Accustand" verdwijnt, tenzij er werkelijk iets
-mis is.
+Zet je vandaag handmatig op laden, dan staat dat er straks in.
 
 WAT JE ZELF MOET DOEN
 ---------------------
 
-Niets. Kijk morgenochtend wat de accu doet - dat is de proef.
+Installeren, en zet EMS daarna weer op automatisch als je klaar bent met
+handmatig laden. Morgenochtend is de proef op de reservebodem.

@@ -60,7 +60,9 @@ BEVROREN = {
     # ratel wél op zijn eigen voorwaarden gehaald.
     # v3.68.0: +2 voor de MPC-vergelijking en de dagmarkering.
     # v3.69.0: +1 voor `mpc_doel_soc`.
-    "coordinator.py:__init__": 383,
+    # v3.75.0: +3 voor het vastleggen van handmatige ingrepen - de
+    # gewenste modus, de reeks en de periode-markering.
+    "coordinator.py:__init__": 386,
     "coordinator.py:_async_update_locked": 255,
     "coordinator.py:_async_update_scheduled_charge_appliance": 70,
     "coordinator.py:_build_explanation": 73,

@@ -2315,6 +2315,7 @@ PERSISTED_PLAIN_FIELDS = (
     "lange_reserve_history",
     "niet_ontladen_history",
     "mpc_vergelijking_history",
+    "handmatige_ingrepen",
     "bijkoop_history",
     "netlading_vandaag_kwh",
     "netlading_kosten_eur",
@@ -5116,3 +5117,19 @@ MPC_MIN_METINGEN = 14
 # Deze staat in de RESERVE, en die werkt door in het ontladen, de
 # verkooptoets en de kwartierplanning tegelijk.
 RESERVE_BODEM_FRACTIE = 0.15
+
+# Hoeveel handmatige ingrepen er bewaard worden, en hoeveel er nodig
+# zijn voordat er van een patroon gesproken kan worden (v3.75.0).
+#
+# Gevraagd: "Maar als ik iets manueel doe kan dat toch juist een leer
+# voor de integratie zijn?"
+#
+# Terecht, en dat zat er niet in. Alle bestaande metingen vergelijken
+# alternatieven die de integratie ZELF had kunnen kiezen; een ingreep
+# van buitenaf is een derde optie die nergens wordt opgemerkt.
+#
+# Tien is te weinig om een regel op te bouwen maar genoeg om te zien of
+# er een lijn in zit. Deze week is het vijf keer misgegaan dat er iets
+# werd gebouwd op grond van één waarneming.
+HANDMATIGE_INGREPEN_LENGTE = 100
+HANDMATIGE_INGREPEN_MIN_VOOR_PATROON = 10

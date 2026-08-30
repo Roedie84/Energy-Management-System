@@ -494,6 +494,8 @@ from .const import (
     RESERVE_BODEM_FRACTIE,
     PV_GEOMETRY_MULTI_ORIENTATION_SPREAD_DEGREES,
     PV_GEOMETRY_MULTI_ORIENTATION_MIN_DAYS,
+    HANDMATIGE_INGREPEN_LENGTE,
+    HANDMATIGE_INGREPEN_MIN_VOOR_PATROON,
     PV_GEOMETRY_RELIABLE_DAYS,
     PV_GEOMETRY_SHADING_RATIO,
     RELIABILITY_ALIASES,
@@ -1208,6 +1210,10 @@ class EnergyManagementSystemCoordinator:
         self.mpc_doel_soc: dict = {}
         self.mpc_vergelijking_history: list[dict] = []
         self._mpc_gemeten_op: str | None = None
+        # v3.75.0: wanneer de accu anders stond dan EMS wilde.
+        self.last_applied_operation: str | None = None
+        self.handmatige_ingrepen: list[dict] = []
+        self._handmatig_sinds: datetime | None = None
         # Monte Carlo advisory engine (v0.63.34).
         self.monte_carlo_median_deficit_kwh: float | None = None
         self.monte_carlo_p90_deficit_kwh: float | None = None
@@ -8577,6 +8583,110 @@ class EnergyManagementSystemCoordinator:
         return self.bestandscontrole or {
             "beschikbaar": False,
             "reden": "Nog niet gecontroleerd; dat gebeurt bij het opstarten.",
+        }
+
+    def _volg_handmatige_ingrepen(self, now: datetime) -> None:
+        """Legt vast wanneer de accu anders staat dan EMS wilde
+        (v3.75.0).
+
+        Gevraagd: "Maar als ik iets manueel doe kan dat toch juist een
+        leer voor de integratie zijn?"
+
+        Terecht, en dat zat er niet in. Alle bestaande metingen
+        vergelijken alternatieven die de integratie ZELF had kunnen
+        kiezen; een ingreep van buitenaf is een derde optie die nergens
+        wordt opgemerkt.
+
+        De aanleiding: op 30 augustus is de accu handmatig op laden gezet
+        omdat het pas na tweeen zou opklaren en de planning de avond niet
+        zou halen. Dat is een oordeel dat de integratie niet had - en
+        precies het soort waarneming waar iets van te leren valt.
+
+        Dit legt alleen VAST. Geen patroon, geen conclusie, geen
+        sturing: daar zijn tien tot twintig ingrepen voor nodig, en die
+        zijn er nog niet. Over twee weken valt te zien of er een lijn in
+        zit.
+        """
+        entity_id = self.config.get(CONF_OPERATION_SELECT)
+        if not entity_id:
+            return
+        staat = self.hass.states.get(entity_id)
+        if staat is None or staat.state in ("unavailable", "unknown"):
+            return
+        werkelijk = staat.state
+        gewenst = self.last_applied_operation
+
+        # Zonder een gewenste stand valt er niets te vergelijken - vlak
+        # na het opstarten, of in leermodus waarin EMS niets schrijft.
+        if not gewenst or werkelijk == gewenst:
+            self._handmatig_sinds = None
+            return
+
+        # Eén regel per aaneengesloten periode, niet per ronde. Anders
+        # staat er na een middag handmatig laden honderd keer hetzelfde.
+        if self._handmatig_sinds is not None:
+            return
+        self._handmatig_sinds = now
+
+        self.handmatige_ingrepen.append(
+            {
+                "moment": now.isoformat(),
+                "ems_wilde": gewenst,
+                "werkelijk": werkelijk,
+                "reden_ems": self.last_reason,
+                # De omstandigheden, want daar zit de mogelijke regel in.
+                "accustand_procent": self.accustand_procent(),
+                "beschikbaar_kwh": self.beschikbare_energie_kwh(),
+                "prijs_nu_ct": (
+                    round((self.huidige_prijs_eur_per_kwh() or 0) * 100, 1)
+                ),
+                "duurste_vandaag_ct": self._duurste_prijs_vandaag_ct(now),
+                # De helper geeft (waarde, herkomst) terug; alleen de
+                # waarde is hier bruikbaar.
+                "verwachte_zon_kwh": self.voorspelde_zon_vandaag_kwh(now)[0],
+            }
+        )
+        self.handmatige_ingrepen = self.handmatige_ingrepen[
+            -HANDMATIGE_INGREPEN_LENGTE:
+        ]
+        _LOGGER.info(
+            "Handmatige ingreep vastgelegd: EMS wilde %s, de accu staat "
+            "op %s.",
+            gewenst,
+            werkelijk,
+        )
+
+    def _duurste_prijs_vandaag_ct(self, now: datetime) -> float | None:
+        """De duurste prijs die vandaag nog komt (v3.75.0)."""
+        entries = self._get_forecast_entries()
+        rest = [
+            e[2] / PRICE_SCALE_FACTOR
+            for e in (entries or [])
+            if e[0] > now and e[0].date() == now.date()
+        ]
+        return round(max(rest) * 100, 1) if rest else None
+
+    def get_handmatige_ingrepen(self) -> dict:
+        """Wat er is vastgelegd, zonder conclusie (v3.75.0).
+
+        Bewust geen patroonherkenning: één waarneming is geen patroon,
+        en deze week is het vijf keer misgegaan dat er iets werd gebouwd
+        op grond van één geval.
+        """
+        reeks = self.handmatige_ingrepen or []
+        return {
+            "aantal": len(reeks),
+            "ingrepen": reeks[-20:],
+            "genoeg_voor_een_patroon": len(reeks)
+            >= HANDMATIGE_INGREPEN_MIN_VOOR_PATROON,
+            "toelichting": (
+                "Elke keer dat de accu anders staat dan de integratie "
+                "wilde. Eén regel per aaneengesloten periode, met de "
+                "omstandigheden erbij. Er wordt niets uit geconcludeerd "
+                f"en niets mee gestuurd; vanaf "
+                f"{HANDMATIGE_INGREPEN_MIN_VOOR_PATROON} ingrepen valt te "
+                "kijken of er een lijn in zit."
+            ),
         }
 
     def get_zelftoets(self) -> list[dict]:
@@ -29265,6 +29375,12 @@ class EnergyManagementSystemCoordinator:
         # melding krijg (...) zodat ik live kan zien dat een berekening
         # ofzo niet klopt."
         try:
+            # v3.75.0: legt vast wanneer de accu anders staat dan EMS
+            # wilde - dat is een derde optie die nergens werd opgemerkt.
+            self._klok(
+                "handmatige ingrepen",
+                lambda: self._volg_handmatige_ingrepen(now),
+            )
             self._klok("zelfcontrole", lambda: self._meld_zelfcontrole(now))
             # v3.12.0: en melden zodra een kandidaat rijp wordt.
             self._klok(
@@ -30597,6 +30713,9 @@ class EnergyManagementSystemCoordinator:
         if onbereikbaar:
             self._meld_aansturing_onbereikbaar(onbereikbaar)
             return
+        # v3.75.0: onthouden WAT er is geschreven, zodat een ingreep van
+        # buitenaf herkenbaar is.
+        self.last_applied_operation = option
         await self.hass.services.async_call(
             "select",
             "select_option",

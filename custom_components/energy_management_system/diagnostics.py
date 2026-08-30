@@ -426,6 +426,10 @@ async def async_get_config_entry_diagnostics(
         # v3.65.0: uitkomsten die logisch niet kunnen. Elke bevinding
         # hier is een fout in de integratie zelf.
         "zelftoets": _veilig("get_zelftoets", coordinator.get_zelftoets),
+        # v3.75.0: wanneer de accu anders stond dan de integratie wilde.
+        "handmatige_ingrepen": _veilig(
+            "handmatige_ingrepen", coordinator.get_handmatige_ingrepen
+        ),
         # v3.68.0: de energiebalans waar het MPC-plan op rust.
         "mpc_balans": getattr(coordinator, "mpc_balans", None),
         # v3.69.0: de doel-SOC per kwartier, achteruit gerekend.
