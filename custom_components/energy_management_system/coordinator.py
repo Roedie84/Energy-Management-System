@@ -506,6 +506,8 @@ from .const import (
     PLATFORM_MINIMUM_ENTITEITEN,
     PRIJSSTIJGING_VENSTER_MINUTEN,
     PRIJSSTIJGING_MELDGRENS_CT,
+    LEERMODUS_WAARSCHUWING_UREN,
+    LEERMODUS_HERINNERING_UREN,
     PLATFORMS,
     PV_GEOMETRY_SHADING_RATIO,
     RELIABILITY_ALIASES,
@@ -1225,6 +1227,10 @@ class EnergyManagementSystemCoordinator:
         self.handmatige_stand_sinds: datetime | None = None
         self._handmatige_stand_laatste_herinnering: datetime | None = None
         self._prijsstijging_gemeld: str | None = None
+
+        # v3.84.0: sinds wanneer de leermodus aan staat.
+        self.leermodus_sinds: datetime | None = None
+        self._leermodus_laatste_herinnering: datetime | None = None
         self._leermodus_door_handmatige_stand: bool = False
 
         # v3.75.0: wanneer de accu anders stond dan EMS wilde.
@@ -2436,8 +2442,70 @@ class EnergyManagementSystemCoordinator:
         await self.async_update()
 
     async def async_set_learning_only(self, value: bool) -> None:
+        # v3.84.0: onthouden SINDS wanneer, zodat een leermodus die blijft
+        # hangen opvalt.
+        if value and not self.learning_only:
+            self.leermodus_sinds = dt_util.now()
+        elif not value:
+            self.leermodus_sinds = None
+            self._leermodus_laatste_herinnering = None
         self.learning_only = value
         await self.async_update()
+
+    async def _waarschuw_bij_lange_leermodus(self, now: datetime) -> None:
+        """Melden als de leermodus blijft hangen (v3.84.0).
+
+        Gemeld: "Maar er wordt niet geladen??" - terwijl de export gaf:
+
+            leermodus              True
+            last_simulated_action  "would set operation to 'smart'"
+
+        Die stond uren aan, en de analyse meldde "geen bijzonderheden".
+        Dat klopte: leermodus is een geldige stand, geen fout. Maar hij
+        was aangezet door de handmatige knop en bleef staan toen die
+        uitging - want de knop draait alleen terug wat hij ZELF heeft
+        gezet, en de gebruiker had hem oorspronkelijk aangezet.
+
+        Gevolg: een halve dag geen aansturing, met prijzen die naar 39 ct
+        liepen. De herinnering uit v3.77.0 geldt alleen zolang de
+        handmatige knop aan staat; blijft alleen de leermodus over, dan
+        zwijgt alles.
+
+        Deze melding vult dat gat. Niet meteen - een leermodus van een
+        half uur is normaal bij het instellen - maar zodra hij zo lang
+        aan staat dat het waarschijnlijk vergeten is.
+        """
+        if not self.learning_only or self.leermodus_sinds is None:
+            return
+        uren = (now - self.leermodus_sinds).total_seconds() / 3600
+        if uren < LEERMODUS_WAARSCHUWING_UREN:
+            return
+
+        laatste = self._leermodus_laatste_herinnering
+        if laatste is not None and (
+            (now - laatste).total_seconds() / 3600
+            < LEERMODUS_HERINNERING_UREN
+        ):
+            return
+        self._leermodus_laatste_herinnering = now
+
+        duurste = self._duurste_prijs_vandaag_ct(now)
+        prijs = (
+            f" De duurste prijs die vandaag nog komt is {duurste} ct."
+            if duurste
+            else ""
+        )
+        self._dispatch_notification(
+            notify_service=self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE),
+            title="🎓 De leermodus staat nog aan",
+            message=(
+                f"Al {uren:.0f} uur, sinds "
+                f"{self.leermodus_sinds.strftime('%H:%M')}. De integratie "
+                f"rekent wel maar stuurt de accu niet aan.{prijs}"
+            ),
+            notification_id="ems_leermodus_lang_aan",
+            kind="leermodus_lang_aan",
+        )
 
     @property
     def learned_night_consumption_kw(self) -> float | None:
@@ -8355,8 +8423,32 @@ class EnergyManagementSystemCoordinator:
             # het levert niets op" - dat zijn heel verschillende
             # uitkomsten en ze zagen er hetzelfde uit.
             ontbreekt = toelating.get("wat_ontbreekt") or []
+
+            # v3.84.0: "niet becijferd" is iets anders dan "negatief".
+            #
+            # Gemeten in de export van 30 augustus 19:38. De kandidaat
+            # "Verbruiksprofiel per dagtype" stond op "gemeten: levert
+            # niets op" terwijl er in dezelfde regel stond:
+            #
+            #     weekend -23% t.o.v. werkdag, betrouwbaar
+            #     bedrag_per_jaar_eur: 120,09
+            #     dagen: 14
+            #
+            # Hij levert dus 120 euro per jaar op. Wat er ontbreekt is
+            # dat hij de toelatingscijfers niet in dat formaat aanlevert
+            # - geen "aandeel gunstig", geen "voordeel per kWh", want die
+            # grootheden passen niet bij deze meting.
+            #
+            # De vorige versie las "niet becijferd" en concludeerde
+            # daaruit "negatief". Dat is een verkeerde gevolgtrekking:
+            # een ontbrekend getal zegt niets over de uitkomst.
+            #
+            # Alleen een getal dat er WEL staat en niet deugt, telt als
+            # afgevallen.
             negatief = any(
-                "gunstig bij" in r or "voordeel" in r for r in ontbreekt
+                ("gunstig bij" in r or "voordeel van" in r)
+                and "niet becijferd" not in r
+                for r in ontbreekt
             )
             if negatief:
                 gereed = "gemeten: levert niets op"
@@ -17191,6 +17283,18 @@ class EnergyManagementSystemCoordinator:
                     self.counterfactual_cost_today_eur
                     - self.actual_cost_today_eur
                 ),
+                # v3.84.0: en de accu-uitvoer, want dat is de grootheid
+                # waarop het oordeel sinds v3.71.0 hangt.
+                #
+                # Gemeten in de export van 30 augustus 19:38: de regel
+                # van 29 augustus stond op "verkocht 6,51 -> 0,0 kWh",
+                # terwijl de dagreeks 2,24 kWh accu-uitvoer meldde.
+                #
+                # `battery_export_today_kwh` is een DAGteller die bij de
+                # wissel op nul gaat. De andere drie standen worden
+                # daarom hier vastgehouden - ik las de teller
+                # rechtstreeks en kreeg dus altijd nul.
+                "accu_export": self.battery_export_today_kwh,
             }
 
         if self._plan_review_day_key != vandaag:
@@ -17326,9 +17430,9 @@ class EnergyManagementSystemCoordinator:
         werkelijke_import = eindstand.get(
             "import", self.grid_import_today_kwh
         ) - plan.get("import_bij_opname_kwh", 0.0)
-        werkelijke_accu_export = self.battery_export_today_kwh - plan.get(
-            "accu_export_bij_opname_kwh", 0.0
-        )
+        werkelijke_accu_export = eindstand.get(
+            "accu_export", self.battery_export_today_kwh
+        ) - plan.get("accu_export_bij_opname_kwh", 0.0)
         regel = {
             "datum": plan["datum"],
             "opgenomen_om": plan["opgenomen_om"],
@@ -29822,6 +29926,10 @@ class EnergyManagementSystemCoordinator:
                 lambda: self._volg_handmatige_ingrepen(now),
             )
             self.hass.async_create_task(self._volg_handmatige_stand(now))
+            # v3.84.0: en waarschuwen als de leermodus blijft staan.
+            self.hass.async_create_task(
+                self._waarschuw_bij_lange_leermodus(now)
+            )
             self._klok("zelfcontrole", lambda: self._meld_zelfcontrole(now))
             # v3.12.0: en melden zodra een kandidaat rijp wordt.
             self._klok(

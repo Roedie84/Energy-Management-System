@@ -1,36 +1,50 @@
-v3.83.0 - SPOEDREPARATIE, alleen de gewijzigde bestanden sinds v3.82.0
+v3.84.0 - alleen de gewijzigde bestanden sinds v3.82.0
+
+Bevat ook v3.83.0 (de schakelaars die niet meeluisterden).
 
 CODE (naar Home Assistant, daarna herstarten)
   custom_components/energy_management_system/
-    switch.py                 drie schakelaars luisteren nu mee
-    manifest.json             versienummer 3.83.0
+    coordinator.py            drie reparaties
+    const.py                  de leermodus-melding als aandacht
+    switch.py                 drie schakelaars luisteren mee (v3.83.0)
+    dashboard_template.yaml   twee nieuwe meldingsschakelaars
+    manifest.json             versienummer 3.84.0
     bestandscontrole.json     bijgewerkte hashlijst  (MOET mee)
 
+DASHBOARD
+  dashboards/energy_management_system_dashboard.yaml
+
 TOETSEN (repository)
-  tests/test_structural_integrity.py   structuurscan 20
-  tests/test_handmatige_stand.py
+  tests/test_leermodus_lang_aan.py     nieuw
+  en zeven bestaande toetsbestanden
 
 DOCUMENTEN
   CHANGELOG.md  README.md  OVERDRACHT.md
 
-WAT ER FOUT WAS
----------------
+WAT ER IN ZIT
+-------------
 
-De knop "Handmatig laden 2000 W" stond op AAN terwijl de integratie
-`handmatige_stand: None` had. Die knop luisterde niet mee, dus bleef hij
-tonen wat jij er ooit op had gezet.
+1. DE LEERMODUS MELDT ZICH
+   Stond hij uren aan zonder dat iets dat zei; nu komt er een melding
+   zodra hij lang genoeg aan staat om vergeten te zijn.
 
-Zelfde probleem bij de kalibratieknop en bij "Nu laden" - allebei
-standen die de integratie zelf beëindigt.
+2. EEN KANDIDAAT VIEL TEN ONRECHTE AF
+   "Verbruiksprofiel per dagtype" stond op "levert niets op" terwijl hij
+   120 euro per jaar oplevert. Ontbrekende cijfers zijn geen negatieve
+   cijfers.
 
-WAT JE NU MOET DOEN
--------------------
+3. DE VERKOCHTE KILOWATTUREN STONDEN ALTIJD OP NUL
+   De dagteller wordt bij de wissel op nul gezet; de plantoetsing las
+   hem rechtstreeks in plaats van uit de eindstand.
 
-1. Kopieer de bestanden en herstart.
+4. EN DE SCHAKELAARS LUISTEREN MEE (v3.83.0)
+   De knop "Handmatig laden" stond op AAN terwijl de integratie hem al
+   had uitgezet.
 
-2. ZET DE LEERMODUS UIT. Die staat al uren aan, en zolang dat zo is
-   stuurt EMS niet. Vanavond lopen de prijzen naar 39 ct met 6,5 kWh in
-   je accu.
+WAT JE ZELF MOET DOEN
+---------------------
 
-3. Kijk daarna of de knop "Handmatig laden" op UIT staat. Zo niet, druk
-   hem een keer in en weer uit - dan is de weergave weer in de pas.
+Kopieren, herstarten, dashboard verversen.
+
+Morgenochtend is de eerste plantoetsing die "verkocht" met echte
+getallen laat zien.

@@ -67,7 +67,9 @@ BEVROREN = {
     # is de valkuil: had de gebruiker de leermodus zelf al aan, dan mag
     # de schakelaar hem straks niet stilzwijgend uitzetten.
     # v3.82.0: +1 voor de markering welke prijsstijging al is gemeld.
-    "coordinator.py:__init__": 391,
+    # v3.84.0: +2 voor de leermodus-waarschuwing - sinds wanneer hij
+    # aan staat, en wanneer er voor het laatst aan herinnerd is.
+    "coordinator.py:__init__": 393,
     "coordinator.py:_async_update_locked": 255,
     "coordinator.py:_async_update_scheduled_charge_appliance": 70,
     "coordinator.py:_build_explanation": 73,

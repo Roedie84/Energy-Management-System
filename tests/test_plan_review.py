@@ -502,3 +502,52 @@ def test_the_cleanup_runs_after_the_state_is_restored():
     assert blok.index("async_load_persisted_nilm_state()") < blok.index(
         "voor_toetsing = len(self.plan_review_history)"
     )
+
+
+# --- de accu-uitvoer overleeft de dagwissel (v3.84.0) ----------------
+
+
+def test_the_sold_energy_is_read_before_the_counter_resets():
+    """Gemeten in de export van 30 augustus 19:38: de regel van 29
+
+    augustus stond op "verkocht 6,51 -> 0,0 kWh", terwijl de dagreeks
+    2,24 kWh accu-uitvoer meldde.
+
+    `battery_export_today_kwh` is een DAGteller die bij de wissel op nul
+    gaat. De andere drie standen worden daarom in
+    `_plan_review_dagstand` vastgehouden - ik las de teller rechtstreeks
+    en kreeg dus altijd nul.
+
+    Dezelfde fout die in v1.74.0 al voor de import en de zon was
+    opgelost, en die ik bij het toevoegen van een vierde grootheid
+    opnieuw heb gemaakt.
+    """
+    import inspect
+
+    from custom_components.energy_management_system.coordinator import (
+        EnergyManagementSystemCoordinator as C,
+    )
+
+    # Het wegschrijven en het lezen staan in VERSCHILLENDE functies.
+    schrijven = inspect.getsource(C._update_plan_review)
+    lezen = inspect.getsource(C._finish_plan_review)
+
+    assert '"accu_export": self.battery_export_today_kwh' in schrijven
+    assert "eindstand.get(" in lezen
+    assert '"accu_export"' in lezen
+
+
+def test_the_end_of_day_snapshot_holds_all_four(make_coordinator, hass):
+    """Vier grootheden, en alle vier moeten de dagwissel overleven."""
+    import inspect
+
+    from custom_components.energy_management_system.coordinator import (
+        EnergyManagementSystemCoordinator as C,
+    )
+
+    bron = inspect.getsource(C._update_plan_review)
+    kop = bron.index("self._plan_review_dagstand = {")
+    blok = bron[kop : bron.index("}", kop)]
+
+    for sleutel in ('"pv"', '"import"', '"opbrengst"', '"accu_export"'):
+        assert sleutel in blok, sleutel

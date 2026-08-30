@@ -1927,6 +1927,16 @@ LOG_PRIORITEITEN = {
     "celspanning_laag": LOG_PRIO_AANDACHT,
     "handmatige_stand": LOG_PRIO_AANDACHT,
     "prijsstijging_handmatig": LOG_PRIO_AANDACHT,
+    # v3.84.0: AANDACHT en niet kritiek.
+    #
+    # De verzameling kritieke soorten stond al op negen, met in de toets
+    # de regel: "als er tien soorten kritiek zijn, is er geen enkele meer
+    # kritiek." Bij de tiende moest er echt een weg.
+    #
+    # Deze hoort er ook niet: de leermodus is een stand die de gebruiker
+    # zelf heeft gekozen, niet iets dat stuk is. Wel iets dat opgemerkt
+    # moet worden, en daar is "aandacht" precies voor.
+    "leermodus_lang_aan": LOG_PRIO_AANDACHT,
     "installatie_onvolledig": LOG_PRIO_KRITIEK,
     # Aandacht - het vraagt een beslissing.
     "plan_verkoop_geblokkeerd": LOG_PRIO_AANDACHT,
@@ -2807,6 +2817,15 @@ NOTIFICATION_TYPES: tuple[tuple[str, str, str, bool, int], ...] = (
         "een vergeten bestand de nieuwe manier om het mis te laten gaan.",
         True,
         1440,
+    ),
+    (
+        "leermodus_lang_aan",
+        "De leermodus staat nog aan",
+        "Wanneer de leermodus langer dan twee uur aan staat. De "
+        "integratie rekent dan wel maar stuurt de accu niet aan, en dat "
+        "kost geld zonder dat er iets op wijst.",
+        True,
+        120,
     ),
     (
         "prijsstijging_handmatig",
@@ -4749,6 +4768,7 @@ ACHTERHOEKS_TITELS = {
     "celspanning_laag": "n Cel steet te lege",
     "handmatige_stand": "De accu steet nog met de hand",
     "prijsstijging_handmatig": "De stroom wordt duurder",
+    "leermodus_lang_aan": "De leermodus steet nog an",
     "installatie_onvolledig": "De installatie is neet compleet",
     "appliance_ready": "'n Apparaat is klaor",
     "appliance_cheap_moment": "Good moment veur 'n apparaat",
@@ -5224,3 +5244,16 @@ PRIJSSTIJGING_VENSTER_MINUTEN = 90
 # van 13,0 naar 38,8 ct - dat is 25,8 ct. Vijf cent vangt de echte
 # sprongen en laat de ruis van een paar tienden liggen.
 PRIJSSTIJGING_MELDGRENS_CT = 5.0
+
+# Wanneer een leermodus die blijft hangen wordt gemeld (v3.84.0).
+#
+# Gemeld: "Maar er wordt niet geladen??" - terwijl de leermodus uren aan
+# stond en de analyse "geen bijzonderheden" meldde. Dat klopte: het is
+# een geldige stand, geen fout. Maar hij was aangezet door de handmatige
+# knop en bleef staan toen die uitging.
+#
+# Twee uur is lang genoeg om niet te storen bij het instellen, en kort
+# genoeg om een avond met hoge prijzen nog te redden. Daarna elke twee
+# uur opnieuw.
+LEERMODUS_WAARSCHUWING_UREN = 2.0
+LEERMODUS_HERINNERING_UREN = 2.0

@@ -20502,3 +20502,73 @@ De herinnering per uur uit v3.77.0 geldt alleen zolang de handmatige
 knop aan staat. Blijft alleen de leermodus over, dan zwijgt alles.
 
 **Volledige testsuite**: 3269 tests, allemaal groen.
+
+## v3.84.0 — De openstaande zaken, en drie fouten uit de diagnostiek
+
+### 1. De leermodus-waarschuwing afgemaakt
+
+**Gemeld**: "Maar er wordt niet geladen??" — terwijl de export gaf:
+
+```
+leermodus              True
+last_simulated_action  "would set operation to 'smart'"
+```
+
+Die stond uren aan en de analyse meldde "geen bijzonderheden". Dat
+klopte: leermodus is een geldige stand, geen fout. Maar hij was aangezet
+door de handmatige knop en bleef staan toen die uitging — want de knop
+draait alleen terug wat hij **zelf** heeft gezet.
+
+Gevolg: een halve dag geen aansturing, met prijzen die naar 39 ct
+liepen.
+
+De waarschuwing lag half af en werd **nergens aangeroepen**. Nu wel, en
+als *aandacht* in plaats van kritiek: de verzameling kritieke soorten
+stond al op negen, met in de toets de regel dat er bij de tiende echt
+een weg moest. De leermodus is een stand die de gebruiker zelf koos,
+niet iets dat stuk is.
+
+### 2. "Niet becijferd" is niet hetzelfde als "negatief"
+
+De kandidaat **Verbruiksprofiel per dagtype** stond op *"gemeten: levert
+niets op"* terwijl er in dezelfde regel stond:
+
+```
+weekend -23% t.o.v. werkdag, betrouwbaar
+bedrag_per_jaar_eur: 120,09
+dagen: 14
+```
+
+Hij levert dus €120 per jaar op. Wat er ontbreekt is dat hij de
+toelatingscijfers niet in dat formaat aanlevert — geen "aandeel
+gunstig", geen "voordeel per kWh", want die grootheden passen niet bij
+deze meting.
+
+De vorige versie las "niet becijferd" en concludeerde daaruit
+"negatief". Een ontbrekend getal zegt niets over de uitkomst.
+
+### 3. De verkochte kilowatturen stonden altijd op nul
+
+De regel van 29 augustus stond op *"verkocht 6,51 → 0,0 kWh"*, terwijl
+de dagreeks 2,24 kWh accu-uitvoer meldde.
+
+`battery_export_today_kwh` is een **dagteller** die bij de wissel op nul
+gaat. De andere drie standen worden daarom in `_plan_review_dagstand`
+vastgehouden — ik las de teller rechtstreeks en kreeg dus altijd nul.
+
+Dezelfde fout die in v1.74.0 al voor de import en de zon was opgelost,
+en die ik bij het toevoegen van een vierde grootheid opnieuw heb
+gemaakt. Nagekeken of het elders ook voorkomt: nergens.
+
+### Wat de diagnostiek verder liet zien
+
+Negenenveertig lege of nulvelden nagelopen. Allemaal terecht: schakelaars
+die uit staan, geen storingen, en de klimaatrichting die leeg blijft
+omdat de airco in 122 waarnemingen geen enkele keer heeft gedraaid — ook
+niet bij 26 graden binnen.
+
+Die laatste heb ik eerst als "geen airco" afgedaan op grond van één leeg
+veld, zonder de zeven gevulde bins ernaast te leggen. **Zevende keer deze
+week** dat ik uit één plek een conclusie trek die de rest tegenspreekt.
+
+**Volledige testsuite**: 3278 tests, allemaal groen.
