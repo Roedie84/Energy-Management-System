@@ -20263,3 +20263,71 @@ bevestigde in plaats van de werkelijkheid te toetsen — na de
 klimaatsleutels en de aandachtspunten.
 
 **Volledige testsuite**: 3240 tests, allemaal groen.
+
+## v3.79.0 — De knoppen op het dashboard, en een gat dat ze verborgen hield
+
+### De twee schakelaars staan nu op de Besturing-kaart
+
+Ze bestonden wel na v3.78.0, maar die kaart is een vaste lijst in het
+dashboardsjabloon en daar had ik ze niet aan toegevoegd.
+
+Hun `entity_id` staat nu vast, net als bij de meldingsschakelaars. Zonder
+dat leidt Home Assistant hem af van de **weergavenaam**, en die bevatte
+het vermogen:
+
+```
+switch..._handmatig_laden_2000_w      wat er ontstond
+switch..._handmatig_laden             wat de kaart verwacht
+```
+
+Dat getal hoort in de knop, niet in de identiteit: wijzigt het ooit, dan
+klopt elke verwijzing niet meer. Het staat nu als **attribuut**
+`vermogen_w`, en de kaart leest het daar met een terugval.
+
+Zonder een vaste naam pakt het bovendien ongelijk uit — de bestaande
+schakelaars laten dat zien:
+
+```
+switch.energy_management_system_learning_only_no_control
+switch.woonkamer_energy_management_system_vacation_mode
+```
+
+Een dashboardkaart heeft een voorspelbare naam nodig.
+
+### En de controle op omgevallen onderdelen
+
+**Gevraagd** na een storing die van binnenuit onzichtbaar was. Op 30
+augustus werd `HANDMATIGE_STAND_LADEN` in `switch.py` gebruikt maar nooit
+geïmporteerd. Dat werpt een `NameError` bij het opzetten, en dan wordt
+dat hele platform stil overgeslagen.
+
+Gevolg: **tien schakelaars verdwenen** — Force manual, Learning only,
+Vakantiemodus, de apparaatknoppen. En de integratie zag er van binnenuit
+precies zo uit als een gezonde:
+
+| | |
+|---|---|
+| bestandscontrole | alle bestanden kloppen |
+| entiteiten | 59 in orde, 0 stuk |
+| analyse | geen bijzonderheden |
+| logboek | geen melding |
+
+Dat klopte allemaal. De **bestanden** waren compleet, en de sensoren die
+de configuratiecontrole nakijkt zijn **andermans** entiteiten. Wat er
+ontbrak waren de eigen entiteiten, en daar keek niets naar.
+
+Er wordt nu per platform geteld hoeveel entiteiten de integratie zelf
+heeft aangemaakt. Nul waar er meer worden verwacht, betekent dat het
+platform is omgevallen — en dat komt bovenaan in de analyse te staan.
+
+De drempels liggen ruim onder het werkelijke aantal: het gaat erom of een
+platform **helemaal niets** heeft aangemaakt, niet om het precieze
+aantal. Anders breekt deze controle bij elke nieuwe entiteit.
+
+### En structuurscan 18 ving mij meteen
+
+Bij het bouwen van deze controle gebruikte ik `DEFAULT_NAME` zonder het
+te importeren — exact de fout van vanochtend, één dag later opnieuw. De
+scan die daarvoor is geschreven sloeg meteen aan.
+
+**Volledige testsuite**: 3247 tests, allemaal groen.

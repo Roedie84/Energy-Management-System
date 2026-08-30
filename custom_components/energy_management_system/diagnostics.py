@@ -423,6 +423,10 @@ async def async_get_config_entry_diagnostics(
         "bestandscontrole": _veilig(
             "get_bestandscontrole", coordinator.get_bestandscontrole
         ),
+        # v3.79.0: en zijn alle onderdelen overeind gebleven?
+        "platformcontrole": _veilig(
+            "get_platformcontrole", coordinator.get_platformcontrole
+        ),
         # v3.65.0: uitkomsten die logisch niet kunnen. Elke bevinding
         # hier is een fout in de integratie zelf.
         "zelftoets": _veilig("get_zelftoets", coordinator.get_zelftoets),

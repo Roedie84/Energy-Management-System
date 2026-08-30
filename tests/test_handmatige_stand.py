@@ -204,8 +204,30 @@ def test_both_switches_exist():
     bron = (Path(pkg.__file__).parent / "switch.py").read_text()
 
     assert "HandmatigeStandSwitch" in bron
-    assert "Handmatig laden 2000 W" in bron
+    # v3.79.0: het vermogen staat in een ATTRIBUUT, niet in de naam.
+    # Home Assistant leidt de entity_id af van de weergavenaam als de
+    # entiteit al bestond, en dan ontstaat `..._handmatig_laden_2000_w`.
+    assert "Handmatig laden" in bron
+    assert "Handmatig laden 2000 W" not in bron
     assert "Handmatig smart charge" in bron
+
+
+def test_the_wattage_is_an_attribute_not_a_name():
+    """Dat getal hoort in de knop, niet in de identiteit: wijzigt het
+
+    ooit, dan klopt elke verwijzing niet meer.
+    """
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    map_ = Path(pkg.__file__).parent
+    bron = (map_ / "switch.py").read_text()
+    sjabloon = (map_ / "dashboard_template.yaml").read_text()
+
+    assert '"vermogen_w"' in bron
+    # En de kaart leest het daar, met een terugval.
+    assert "state_attr(e, 'vermogen_w')" in sjabloon
 
 
 def test_the_switches_do_not_survive_a_restart():

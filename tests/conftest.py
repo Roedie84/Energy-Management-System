@@ -434,6 +434,14 @@ def make_coordinator(hass, coordinator_cls):
             c._dashboard_template_cache = pad.read_text(encoding="utf-8")
         except OSError:
             c._dashboard_template_cache = ""
+
+        # v3.79.0: de platformcontrole telt de EIGEN entiteiten van de
+        # integratie, en die worden in de toetsomgeving niet aangemaakt.
+        # Standaard uit; de toetsen die hem nakijken zetten hem zelf aan.
+        c.get_platformcontrole = lambda: {
+            "beschikbaar": False,
+            "reden": "niet van toepassing in de toetsomgeving",
+        }
         return c
 
     return _make

@@ -59,6 +59,7 @@ from homeassistant.helpers.storage import Store
 
 from .const import (
     DOMAIN,
+    DEFAULT_NAME,
     CHEAP_BLOCK_THRESHOLD_MARGIN_FRACTION,
     CHEAP_BLOCK_STABILITY_MARGIN_FRACTION,
     CONF_AVAILABLE_ENERGY_SENSOR,
@@ -502,6 +503,7 @@ from .const import (
     HANDMATIG_LAADVERMOGEN_W,
     HANDMATIGE_STAND_HERINNERING_MINUTEN,
     HANDMATIGE_STAND_VOL_PROCENT,
+    PLATFORM_MINIMUM_ENTITEITEN,
     PV_GEOMETRY_SHADING_RATIO,
     RELIABILITY_ALIASES,
     SUN_DAYLIGHT_MIN_ELEVATION_DEGREES,
@@ -8574,6 +8576,73 @@ class EnergyManagementSystemCoordinator:
             ),
         }
 
+    def get_platformcontrole(self) -> dict:
+        """Hebben alle onderdelen hun entiteiten aangemaakt? (v3.79.0)
+
+        Gevraagd na een storing die van binnenuit onzichtbaar was: op 30
+        augustus werd `HANDMATIGE_STAND_LADEN` in `switch.py` gebruikt
+        maar nooit geimporteerd. Dat werpt een NameError bij het opzetten
+        van de schakelaars, en dan wordt dat hele platform stil
+        overgeslagen.
+
+        Gevolg: TIEN schakelaars verdwenen - Force manual, Learning only,
+        Vakantiemodus, de apparaatknoppen. En de integratie zag er van
+        binnenuit precies zo uit als een gezonde:
+
+            bestandscontrole   alle bestanden kloppen
+            entiteiten         59 in orde, 0 stuk
+            analyse            geen bijzonderheden
+            logboek            geen melding
+
+        Dat klopte allemaal: de BESTANDEN waren compleet, en de sensoren
+        die de configuratiecontrole nakijkt zijn andermans entiteiten.
+        Wat er ontbrak waren de EIGEN entiteiten, en daar keek niets naar.
+
+        Deze controle telt per platform hoeveel entiteiten de integratie
+        zelf heeft aangemaakt. Nul waar er meer worden verwacht, betekent
+        dat het platform is omgevallen.
+        """
+        verwacht = {
+            "sensor": PLATFORM_MINIMUM_ENTITEITEN.get("sensor", 1),
+            "switch": PLATFORM_MINIMUM_ENTITEITEN.get("switch", 1),
+            "number": PLATFORM_MINIMUM_ENTITEITEN.get("number", 1),
+            "button": PLATFORM_MINIMUM_ENTITEITEN.get("button", 1),
+            "select": PLATFORM_MINIMUM_ENTITEITEN.get("select", 1),
+        }
+        gevonden: dict[str, int] = {p: 0 for p in verwacht}
+        for staat in self.hass.states.async_all():
+            platform = staat.entity_id.split(".")[0]
+            if platform not in gevonden:
+                continue
+            if DOMAIN in (staat.attributes.get("attribution") or ""):
+                gevonden[platform] += 1
+                continue
+            # De eigen entiteiten dragen de apparaatnaam.
+            if DEFAULT_NAME.lower().replace(" ", "_") in staat.entity_id:
+                gevonden[platform] += 1
+
+        omgevallen = [
+            p for p, minimum in verwacht.items() if gevonden[p] < minimum
+        ]
+        return {
+            "beschikbaar": True,
+            "gevonden": gevonden,
+            "verwacht_minimaal": verwacht,
+            "omgevallen": omgevallen,
+            "in_orde": not omgevallen,
+            "uitleg": (
+                "Alle onderdelen hebben hun entiteiten aangemaakt."
+                if not omgevallen
+                else (
+                    f"Deze onderdelen hebben geen entiteiten: "
+                    f"{', '.join(omgevallen)}. Dat gebeurt als de code van "
+                    "dat platform bij het opstarten vastloopt - de rest "
+                    "van de integratie draait dan gewoon door, en er komt "
+                    "geen foutmelding."
+                )
+            ),
+        }
+
     def get_bestandscontrole(self) -> dict:
         """De uitkomst van de controle bij het opstarten (v3.63.0).
 
@@ -9012,6 +9081,11 @@ class EnergyManagementSystemCoordinator:
         bestanden = self.get_bestandscontrole()
         if bestanden.get("beschikbaar") and not bestanden.get("in_orde"):
             _voeg("fout", "Onvolledige installatie", bestanden["uitleg"])
+
+        # v3.79.0: en zijn alle onderdelen overeind gebleven?
+        platforms = self.get_platformcontrole()
+        if platforms.get("beschikbaar") and not platforms.get("in_orde"):
+            _voeg("fout", "Onderdeel niet geladen", platforms["uitleg"])
 
         # 2. Klopt de invoer?
         for regel in self.get_spiegelcontrole():

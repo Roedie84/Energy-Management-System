@@ -1,38 +1,64 @@
-v3.78.0 - SPOEDREPARATIE, alleen de gewijzigde bestanden sinds v3.77.0
+v3.79.0 - alleen de gewijzigde bestanden sinds v3.78.0
 
 CODE (naar Home Assistant, daarna herstarten)
   custom_components/energy_management_system/
-    switch.py                 de ontbrekende import
-    manifest.json             versienummer 3.78.0
+    coordinator.py            de platformcontrole
+    const.py                  de drempels per platform
+    switch.py                 vaste entity_id, vermogen als attribuut
+    diagnostics.py            platformcontrole in de export
+    dashboard_template.yaml   de twee knoppen op de Besturing-kaart
+    manifest.json             versienummer 3.79.0
     bestandscontrole.json     bijgewerkte hashlijst  (MOET mee)
 
+DASHBOARD
+  dashboards/energy_management_system_dashboard.yaml
+
 TOETSEN (repository)
-  tests/test_structural_integrity.py    structuurscan 18
+  tests/test_platformcontrole.py       nieuw
+  tests/test_structural_integrity.py   structuurscan 18
+  tests/test_handmatige_stand.py
+  tests/conftest.py
 
 DOCUMENTEN
   CHANGELOG.md  README.md  OVERDRACHT.md
 
-WAT ER FOUT WAS
----------------
+WAT ER IN ZIT
+-------------
 
-De twee handmatige schakelaars verschenen niet, terwijl de
-bestandscontrole zei dat alles klopte en er geen logboekmelding was.
+1. DE TWEE KNOPPEN OP JE BESTURING-KAART
+   Hun naam ligt nu vast. Het vermogen staat als ATTRIBUUT en niet in
+   de naam - anders ontstaat `..._handmatig_laden_2000_w`, en dan klopt
+   elke verwijzing niet meer zodra dat getal wijzigt.
 
-`HANDMATIGE_STAND_LADEN` werd in switch.py gebruikt maar nooit
-geimporteerd. Dat werpt een NameError bij het opzetten van de
-schakelaars, en dan wordt die stap STIL overgeslagen - geen entiteiten,
-geen zichtbare fout.
+2. DE PLATFORMCONTROLE
+   Op 30 augustus vielen tien schakelaars weg door een ontbrekende
+   import, en de integratie zag er van binnenuit gezond uit: bestanden
+   compleet, 59 entiteiten in orde, geen melding.
 
-Structuurscan 18 kijkt nu per bestand of elke gebruikte naam in
-hoofdletters ook ergens vandaan komt.
+   Er wordt nu per platform geteld hoeveel EIGEN entiteiten er zijn
+   aangemaakt. Nul betekent omgevallen, en dat staat bovenaan in de
+   analyse.
+
+BELANGRIJK: DE OUDE ENTITEITEN HERNOEMEN
+----------------------------------------
+
+De schakelaars zijn in v3.78.0 al aangemaakt met de verkeerde naam.
+Home Assistant houdt die vast, ook na deze wijziging.
+
+Ga naar Ontwikkelaarshulpmiddelen -> Toestanden, zoek op `handmatig`,
+klik op:
+
+  switch.woonkamer_energy_management_system_handmatig_laden_2000_w
+
+en verander de entiteit-ID via het tandwiel naar:
+
+  switch.woonkamer_energy_management_system_handmatig_laden
+
+De andere twee kloppen al.
 
 WAT JE ZELF MOET DOEN
 ---------------------
 
-Kopieren en HERSTARTEN. Daarna staan er drie nieuwe entiteiten:
+Kopieren, herstarten, hernoemen, dashboard verversen.
 
-  switch...._handmatig_laden
-  switch...._handmatig_smart_charge
-  switch...._melding_handmatige_stand
-
-Dan verdwijnt ook de dashboardwaarschuwing.
+En: ZET JE LEERMODUS UIT. Die staat nog aan van vanochtend.

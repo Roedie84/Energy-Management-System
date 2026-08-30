@@ -5170,3 +5170,23 @@ HANDMATIGE_STAND_HERINNERING_MINUTEN = 60
 
 # En bij een volle accu zet de integratie het zelf uit.
 HANDMATIGE_STAND_VOL_PROCENT = 100.0
+
+# Hoeveel entiteiten elk onderdeel minimaal hoort aan te maken
+# (v3.79.0).
+#
+# Gevraagd na een storing die van binnenuit onzichtbaar was: op 30
+# augustus werd een constante in `switch.py` gebruikt maar nooit
+# geimporteerd. Dat werpt een NameError bij het opzetten, en dan wordt
+# dat hele platform stil overgeslagen - tien schakelaars weg, en de
+# integratie zag er van binnenuit gezond uit.
+#
+# De getallen zijn ruim onder het werkelijke aantal: het gaat erom of
+# een platform HELEMAAL niets heeft aangemaakt, niet om het precieze
+# aantal. Anders breekt deze controle bij elke nieuwe entiteit.
+PLATFORM_MINIMUM_ENTITEITEN = {
+    "sensor": 20,
+    "switch": 5,
+    "number": 1,
+    "button": 1,
+    "select": 1,
+}

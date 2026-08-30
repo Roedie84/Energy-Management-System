@@ -10,6 +10,8 @@ from homeassistant.helpers.restore_state import RestoreEntity
 from .const import (
     DEFAULT_NAME,
     DOMAIN,
+    HANDMATIG_LAADVERMOGEN_W,
+    HANDMATIG_LAADVERMOGEN_W,
     HANDMATIGE_STAND_LADEN,
     HANDMATIGE_STAND_SMART_CHARGE,
     NOTIFICATION_TYPES,
@@ -31,7 +33,17 @@ async def async_setup_entry(
                 coordinator,
                 entry_id=entry.entry_id,
                 stand=HANDMATIGE_STAND_LADEN,
-                naam="Handmatig laden 2000 W",
+                # v3.80.0: het vermogen NIET in de naam.
+                #
+                # Home Assistant leidt de entiteit-ID af van de
+                # weergavenaam zodra er geen expliciete is meegegeven,
+                # en dan werd het `..._handmatig_laden_2000_w`. Dat
+                # bakt een instelling in een identiteit: wijzigt het
+                # vermogen ooit, dan klopt de naam niet meer.
+                #
+                # Het vermogen staat in de toelichting en op de
+                # dashboardkaart, waar het thuishoort.
+                naam="Handmatig laden",
                 icoon="mdi:battery-charging-high",
             ),
             HandmatigeStandSwitch(
@@ -233,6 +245,18 @@ class HandmatigeStandSwitch(SwitchEntity, RestoreEntity):
         self._attr_name = naam
         self._attr_icon = icoon
         self._attr_unique_id = f"{entry_id}_handmatig_{stand}"
+        # v3.79.0: de naam expliciet, net als bij de meldingen.
+        #
+        # Zonder dit leidt Home Assistant hem af van de apparaatnaam, en
+        # dan is niet te voorspellen hoe hij heet - de bestaande
+        # schakelaars laten zien dat dat ongelijk uitpakt:
+        # `switch.energy_management_system_learning_only_no_control`
+        # naast `switch.woonkamer_energy_management_system_vacation_mode`.
+        #
+        # Een dashboardkaart heeft een vaste naam nodig.
+        self.entity_id = (
+            f"switch.woonkamer_energy_management_system_handmatig_{stand}"
+        )
         self._attr_device_info = {
             "identifiers": {(DOMAIN, entry_id)},
             "name": DEFAULT_NAME,
@@ -247,8 +271,25 @@ class HandmatigeStandSwitch(SwitchEntity, RestoreEntity):
         sinds = self._coordinator.handmatige_stand_sinds
         return {
             "sinds": sinds.isoformat() if sinds else None,
+            # v3.79.0: het vermogen als ATTRIBUUT, niet in de naam.
+            #
+            # Home Assistant leidt de entity_id af van de weergavenaam
+            # als de entiteit al bestond, en dan ontstaat
+            # `..._handmatig_laden_2000_w`. Dat getal hoort in de knop,
+            # niet in de identiteit: wijzigt het ooit, dan klopt elke
+            # verwijzing niet meer.
+            "vermogen_w": (
+                HANDMATIG_LAADVERMOGEN_W
+                if self._stand == HANDMATIGE_STAND_LADEN
+                else None
+            ),
             "leermodus_door_deze_schakelaar": (
                 self._coordinator._leermodus_door_handmatige_stand
+            ),
+            "vermogen_w": (
+                HANDMATIG_LAADVERMOGEN_W
+                if self._stand == HANDMATIGE_STAND_LADEN
+                else None
             ),
             "toelichting": (
                 "Zolang dit aan staat stuurt EMS niet, en komt er elk uur "
