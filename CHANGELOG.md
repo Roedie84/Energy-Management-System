@@ -20462,3 +20462,43 @@ duurder is. Eén melding per stijging; wordt de piek later hoger, dan is
 dat nieuwe informatie en mag er opnieuw gemeld worden.
 
 **Volledige testsuite**: 3268 tests, allemaal groen.
+
+## v3.83.0 — De knop stond aan, de integratie deed niets
+
+**Gemeld** met een schermafdruk: "Learning only — Aan" en "Handmatig
+laden 2000 W — Aan", terwijl de export op datzelfde moment gaf:
+
+```
+handmatige_stand:       None
+last_simulated_action:  "would set operation to 'smart'"
+```
+
+Die twee spraken elkaar tegen. De schakelaar abonneerde zich nergens op:
+`is_on` leest het juiste veld, maar Home Assistant vraagt dat alleen
+opnieuw op als iemand het zegt — en dat gebeurt pas als je de knop
+aanraakt.
+
+Gevolg: de integratie zet de stand uit — bij een herstart, of omdat de
+accu vol is — en het dashboard blijft "Aan" tonen. **Dan denk je dat je
+aan het laden bent terwijl er niets gebeurt.**
+
+### Twee andere schakelaars hadden hetzelfde
+
+De **kalibratie**, die vanzelf afrondt bij een volle accu, en **Nu
+laden**, waarvan het uitstel afloopt. Allebei standen die de integratie
+zelf wijzigt, en allebei knoppen die dat niet lieten zien.
+
+**Structuurscan 20** bewaakt het nu: een schakelaar die zijn stand uit
+de coordinator leest, moet meeluisteren. Tenzij hij zijn stand uit de
+Store herstelt — dan is hij zelf de bron.
+
+### Wat er nog steeds ontbreekt
+
+De leermodus stond uren aan terwijl EMS niets stuurde, en de analyse
+meldde "geen bijzonderheden". Dat is een geldige stand, maar als hij per
+ongeluk aan blijft staan kost dat een avond aan hoge prijzen.
+
+De herinnering per uur uit v3.77.0 geldt alleen zolang de handmatige
+knop aan staat. Blijft alleen de leermodus over, dan zwijgt alles.
+
+**Volledige testsuite**: 3269 tests, allemaal groen.

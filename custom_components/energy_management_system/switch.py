@@ -136,6 +136,14 @@ class KalibratieSwitch(SwitchEntity, RestoreEntity):
         #
         # De opslag is leidend: die draagt ook de momentopname en de
         # lopende capaciteitsmeting, en die drie horen bij elkaar.
+        #
+        # v3.83.0: wél meeluisteren, anders blijft de knop hangen zodra
+        # de integratie de stand zelf wijzigt - en dat doet ze, want bij
+        # een volle accu wordt de kalibratie afgerond.
+        self._coordinator.register_listener(self.async_write_ha_state)
+
+    async def async_will_remove_from_hass(self) -> None:
+        self._coordinator.unregister_listener(self.async_write_ha_state)
 
     async def async_turn_on(self, **kwargs) -> None:
         await self._coordinator.async_set_kalibratie(True)
@@ -261,6 +269,28 @@ class HandmatigeStandSwitch(SwitchEntity, RestoreEntity):
             "identifiers": {(DOMAIN, entry_id)},
             "name": DEFAULT_NAME,
         }
+
+    async def async_added_to_hass(self) -> None:
+        """v3.83.0: meeluisteren, anders blijft de knop hangen.
+
+        Gemeld met een schermafdruk: "Learning only - Aan" en
+        "Handmatig laden 2000 W - Aan", terwijl de export op datzelfde
+        moment `handmatige_stand: None` gaf.
+
+        Die twee spraken elkaar tegen omdat deze schakelaar zich nergens
+        op abonneerde. `is_on` leest het juiste veld, maar Home Assistant
+        vraagt dat alleen opnieuw op als iemand het zegt - en dat gebeurt
+        pas als je de knop aanraakt.
+
+        Gevolg: de integratie zet de stand uit - bij een herstart, of
+        omdat de accu vol is - en het dashboard blijft "Aan" tonen. Dan
+        denk je dat je aan het laden bent terwijl er niets gebeurt.
+        """
+        await super().async_added_to_hass()
+        self._coordinator.register_listener(self.async_write_ha_state)
+
+    async def async_will_remove_from_hass(self) -> None:
+        self._coordinator.unregister_listener(self.async_write_ha_state)
 
     @property
     def is_on(self) -> bool:
@@ -428,6 +458,19 @@ class NuLadenSwitch(SwitchEntity):
     @property
     def extra_state_attributes(self) -> dict:
         return self._coordinator.get_nu_laden_status()
+
+    async def async_added_to_hass(self) -> None:
+        """v3.83.0: meeluisteren, anders blijft de knop hangen.
+
+        Deze stand loopt vanzelf af zodra het uitstel voorbij is; zonder
+        abonnement blijft het dashboard "Aan" tonen tot iemand hem
+        aanraakt.
+        """
+        await super().async_added_to_hass()
+        self._coordinator.register_listener(self.async_write_ha_state)
+
+    async def async_will_remove_from_hass(self) -> None:
+        self._coordinator.unregister_listener(self.async_write_ha_state)
 
     async def async_turn_on(self, **kwargs) -> None:
         await self._coordinator.async_set_nu_laden(True)

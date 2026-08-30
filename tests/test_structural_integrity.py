@@ -565,3 +565,54 @@ def test_every_module_imports_what_it_uses():
         "namen die gebruikt worden maar nergens vandaan komen - dat "
         f"werpt een NameError bij het opstarten: {fouten}"
     )
+
+
+# --- structuurscan 20: schakelaars luisteren mee ---------------------
+
+
+def test_every_switch_that_reads_the_coordinator_listens():
+    """De fout van 30 augustus (v3.83.0).
+
+    Gemeld met een schermafdruk: "Handmatig laden 2000 W - Aan", terwijl
+    de export op datzelfde moment `handmatige_stand: None` gaf.
+
+    Die twee spraken elkaar tegen omdat de schakelaar zich nergens op
+    abonneerde. `is_on` leest het juiste veld, maar Home Assistant vraagt
+    dat alleen opnieuw op als iemand het zegt - en dat gebeurt pas als je
+    de knop aanraakt.
+
+    Gevolg: de integratie zet de stand uit - bij een herstart, of omdat
+    de accu vol is - en het dashboard blijft "Aan" tonen. Dan denk je dat
+    je aan het laden bent terwijl er niets gebeurt.
+
+    Twee andere schakelaars hadden hetzelfde: de kalibratie, die vanzelf
+    afrondt bij een volle accu, en `Nu laden`, waarvan het uitstel
+    afloopt.
+
+    Een schakelaar die zijn stand uit de coordinator leest, moet
+    meeluisteren. Tenzij hij zijn stand uit de Store herstelt - dan is
+    hij zelf de bron.
+    """
+    import ast
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    bron = (Path(pkg.__file__).parent / "switch.py").read_text()
+    boom = ast.parse(bron)
+
+    fouten = []
+    for kl in ast.walk(boom):
+        if not isinstance(kl, ast.ClassDef) or not kl.name.endswith("Switch"):
+            continue
+        tekst = ast.get_source_segment(bron, kl) or ""
+        leest = "self._coordinator." in tekst
+        luistert = "register_listener" in tekst
+        eigen_bron = "async_get_last_state" in tekst
+        if leest and not luistert and not eigen_bron:
+            fouten.append(kl.name)
+
+    assert not fouten, (
+        "deze schakelaars lezen hun stand uit de coordinator maar "
+        f"luisteren niet mee - dan blijft het dashboard hangen: {fouten}"
+    )

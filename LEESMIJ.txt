@@ -1,49 +1,36 @@
-v3.82.0 - alleen de gewijzigde bestanden sinds v3.81.0
+v3.83.0 - SPOEDREPARATIE, alleen de gewijzigde bestanden sinds v3.82.0
 
 CODE (naar Home Assistant, daarna herstarten)
   custom_components/energy_management_system/
-    coordinator.py            de correcties en de patroonanalyse
-    const.py                  de prijswaarschuwing
-    __init__.py               PLATFORMS uit const (v3.81.0)
-    dashboard_template.yaml   de meldingsschakelaar
-    manifest.json             versienummer 3.82.0
+    switch.py                 drie schakelaars luisteren nu mee
+    manifest.json             versienummer 3.83.0
     bestandscontrole.json     bijgewerkte hashlijst  (MOET mee)
 
-DASHBOARD
-  dashboards/energy_management_system_dashboard.yaml
-
 TOETSEN (repository)
-  tests/test_handmatige_ingrepen.py
+  tests/test_structural_integrity.py   structuurscan 20
   tests/test_handmatige_stand.py
-  en vier andere
 
 DOCUMENTEN
   CHANGELOG.md  README.md  OVERDRACHT.md
 
-WAT ER IN ZIT
--------------
+WAT ER FOUT WAS
+---------------
 
-1. VIER VAN DE ZEVEN INGREPEN WAREN GEEN INGREEP
-   "EMS wilde smart_discharging, werkelijk smart" is de LEERMODUS, niet
-   jouw hand. Die telt niet meer mee. Ook dubbelen binnen dezelfde
-   periode zijn eruit.
+De knop "Handmatig laden 2000 W" stond op AAN terwijl de integratie
+`handmatige_stand: None` had. Die knop luisterde niet mee, dus bleef hij
+tonen wat jij er ooit op had gezet.
 
-2. ERVAN LEREN
-   Per kenmerk - prijs, duurste prijs van de dag, accustand, verwachte
-   zon - de mediaan en de spreiding. Lijken de omstandigheden op elkaar,
-   dan is er een lijn; anders zegt de integratie dat er geen regel is.
+Zelfde probleem bij de kalibratieknop en bij "Nu laden" - allebei
+standen die de integratie zelf beëindigt.
 
-   Stuurt niets. Komt er een lijn uit, dan wordt dat een
-   proefstandkandidaat.
+WAT JE NU MOET DOEN
+-------------------
 
-3. WAARSCHUWING BIJ STIJGENDE PRIJZEN
-   Alleen bij handmatig LADEN, en vooruitkijkend: zodra er binnen
-   anderhalf uur een kwartier aankomt dat vijf cent duurder is.
+1. Kopieer de bestanden en herstart.
 
-WAT JE ZELF MOET DOEN
----------------------
+2. ZET DE LEERMODUS UIT. Die staat al uren aan, en zolang dat zo is
+   stuurt EMS niet. Vanavond lopen de prijzen naar 39 ct met 6,5 kWh in
+   je accu.
 
-Kopieren en herstarten.
-
-Let op: de vier onterechte ingrepen blijven in de lijst staan tot ze uit
-het venster lopen. Nieuwe komen er niet meer bij.
+3. Kijk daarna of de knop "Handmatig laden" op UIT staat. Zo niet, druk
+   hem een keer in en weer uit - dan is de weergave weer in de pas.

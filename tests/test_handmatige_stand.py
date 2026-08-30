@@ -207,8 +207,13 @@ def test_both_switches_exist():
     # v3.79.0: het vermogen staat in een ATTRIBUUT, niet in de naam.
     # Home Assistant leidt de entity_id af van de weergavenaam als de
     # entiteit al bestond, en dan ontstaat `..._handmatig_laden_2000_w`.
-    assert "Handmatig laden" in bron
-    assert "Handmatig laden 2000 W" not in bron
+    # Alleen de CODE, niet de toelichting: die noemt de oude naam om
+    # uit te leggen wat er fout was.
+    code = "\n".join(
+        r for r in bron.split("\n") if not r.strip().startswith("#")
+    )
+    assert 'naam="Handmatig laden"' in code
+    assert 'naam="Handmatig laden 2000 W"' not in code
     assert "Handmatig smart charge" in bron
 
 
