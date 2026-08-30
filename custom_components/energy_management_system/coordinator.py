@@ -491,6 +491,7 @@ from .const import (
     PV_GEOMETRY_HISTORY_DAYS,
     PV_GEOMETRY_MIN_CLEARNESS_RATIO,
     PV_GEOMETRY_MIN_DAYS,
+    RESERVE_BODEM_FRACTIE,
     PV_GEOMETRY_MULTI_ORIENTATION_SPREAD_DEGREES,
     PV_GEOMETRY_MULTI_ORIENTATION_MIN_DAYS,
     PV_GEOMETRY_RELIABLE_DAYS,
@@ -11946,6 +11947,26 @@ class EnergyManagementSystemCoordinator:
         Eigen functie, want `get_consistency_checks` staat op de ratel
         van v3.35.0 en mag niet groeien.
         """
+        # v3.74.0: de accustand niet melden als de KRUISTOETS aansluit.
+        #
+        # Gemeld: "Spiegel: Accustand 40,0 tegenover 13,0" - elke ochtend
+        # opnieuw. Het veld `last_soc_percent` wordt alleen op bepaalde
+        # takken bijgewerkt en loopt daardoor achter.
+        #
+        # Maar de sturing gebruikt dat veld niet meer: sinds v3.48.0 gaat
+        # alles via `accustand_procent()`, die de sensor leest. En de
+        # kruistoets - accustand tegen beschikbare energie, uit twee
+        # VERSCHILLENDE sensoren - stond in dezelfde export op 12,7
+        # tegenover 13,0.
+        #
+        # Een melding zonder gevolg die elke dag terugkomt, kost aandacht
+        # die er niet meer is als het een keer wél iets is.
+        spiegels = self.get_spiegelcontrole()
+        kruis_klopt = any(
+            r["naam"] == "Accustand tegen beschikbare energie"
+            and r["oordeel"] == "sluit_aan"
+            for r in spiegels
+        )
         return [
             {
                 "naam": f"Spiegel: {regel['naam']}",
@@ -11959,8 +11980,9 @@ class EnergyManagementSystemCoordinator:
                     "rekent, rekent dan consequent verkeerd."
                 ),
             }
-            for regel in self.get_spiegelcontrole()
+            for regel in spiegels
             if regel["oordeel"] == "loopt_uiteen"
+            and not (regel["naam"] == "Accustand" and kruis_klopt)
         ]
 
     def get_celspanning_oordeel(self) -> dict:
@@ -16158,6 +16180,37 @@ class EnergyManagementSystemCoordinator:
             + UNPROTECTED_AFTERMATH_MARGIN_PERCENT,
         )
         margin = DYNAMIC_DISCHARGE_RESERVE_MARGIN + margin_bonus_percent / 100
+        reserve_kwh = needed_kwh * margin
+
+        # v3.74.0: een ondergrens die NIET van de voorspelling afhangt.
+        #
+        # Gemeld: "De accu was weer leeg, dat moet opgelost worden."
+        # Drie ochtenden op rij, en gemeten in de export van 30 augustus:
+        #
+        #     diepste tekort onderweg   0,001 kWh
+        #     marge                    55 %
+        #     reserve                   0,001 kWh
+        #
+        # Daar zit de weeffout. De marge wordt VERMENIGVULDIGD met het
+        # diepste tekort, en dat tekort is nul zodra de voorspelling zegt
+        # dat de zon het huis morgen dekt. Vijfenvijftig procent van nul
+        # is nul.
+        #
+        # De reserve houdt dus structureel niets achter op precies de
+        # dagen dat de voorspelling optimistisch is - en dan is er 's
+        # nachts niets meer. Op 29 augustus ging 2,24 van de 5,92
+        # ontladen kilowattuur naar het NET; had de accu die gehouden,
+        # dan was hij 's ochtends op 40% gebleven in plaats van 13%.
+        #
+        # Deze bodem is geen voorspelling maar een vaste marge, en hij
+        # staat op ÉÉN plek zodat hij doorwerkt in het ontladen, de
+        # verkooptoets en de kwartierplanning tegelijk. Dat is het
+        # verschil met de bodem die in v3.71.0 is gebouwd en weer
+        # verwijderd: die zat alleen in de verkooptoets.
+        capaciteit = self.bruikbare_capaciteit_kwh() or 0.0
+        bodem_kwh = capaciteit * RESERVE_BODEM_FRACTIE
+        bodem_bindend = bodem_kwh > reserve_kwh
+        reserve_kwh = max(reserve_kwh, bodem_kwh)
 
         self.last_reserve_margin_breakdown = {
             "base_percent": round((DYNAMIC_DISCHARGE_RESERVE_MARGIN - 1) * 100, 1),
@@ -16173,7 +16226,11 @@ class EnergyManagementSystemCoordinator:
             ),
             "total_percent": round((margin - 1) * 100, 1),
             "needed_kwh_before_margin": round(needed_kwh, 3),
-            "reserve_kwh_after_margin": round(needed_kwh * margin, 3),
+            "reserve_kwh_after_margin": round(reserve_kwh, 3),
+            # v3.74.0: en of die bodem het is die bindt.
+            "bodem_kwh": round(bodem_kwh, 3),
+            "bodem_bindend": bodem_bindend,
+            "bodem_procent": round(RESERVE_BODEM_FRACTIE * 100, 1),
         }
 
         if margin_bonus_percent != 0:

@@ -185,3 +185,56 @@ def test_the_finding_names_both_numbers(make_coordinator, hass):
     assert "38" in bevinding["uitleg"]
     assert "6" in bevinding["uitleg"]
     assert "sensor.soc" in bevinding["uitleg"]
+
+
+# --- geen melding zonder gevolg (v3.74.0) ----------------------------
+
+
+def test_a_stale_soc_is_not_reported_when_the_cross_check_agrees(
+    make_coordinator, hass
+):
+    """Gemeld: "Spiegel: Accustand 40,0 tegenover 13,0" - elke ochtend
+
+    opnieuw.
+
+    Het veld `last_soc_percent` wordt alleen op bepaalde takken
+    bijgewerkt en loopt daardoor achter. Maar de sturing gebruikt dat
+    veld niet meer: sinds v3.48.0 gaat alles via `accustand_procent()`,
+    die de sensor leest.
+
+    En de kruistoets - accustand tegen beschikbare energie, uit twee
+    verschillende sensoren - stond in dezelfde export op 12,7 tegenover
+    13,0. Er was dus niets mis.
+
+    Een melding zonder gevolg die elke dag terugkomt, kost aandacht die
+    er niet meer is als het een keer wél iets is.
+    """
+    c = make_coordinator(_config())
+    hass.states.set("sensor.soc", "13.0")
+    hass.states.set("sensor.beschikbaar", "0.26")
+    c.bruikbare_capaciteit_kwh = lambda: 7.78
+    # De omrekening rust op de ondergrens; in bedrijf is die 10%.
+    c.effective_min_soc_percent = lambda: 10.0
+    c.last_soc_percent = 40.0
+
+    namen = [b["naam"] for b in c.get_consistency_checks()["bevindingen"]]
+
+    assert "Spiegel: Accustand" not in namen
+
+
+def test_it_is_still_reported_when_the_cross_check_disagrees(
+    make_coordinator, hass
+):
+    """De storing van 27 augustus: 38% tegenover 0,00 kWh. Toen klopte
+
+    de kruistoets NIET, en dan is de melding wel terecht.
+    """
+    c = make_coordinator(_config())
+    hass.states.set("sensor.soc", "38.0")
+    hass.states.set("sensor.beschikbaar", "0.0")
+    c.bruikbare_capaciteit_kwh = lambda: 7.78
+    c.last_soc_percent = 38.0
+
+    namen = [b["naam"] for b in c.get_consistency_checks()["bevindingen"]]
+
+    assert "Spiegel: Accustand tegen beschikbare energie" in namen

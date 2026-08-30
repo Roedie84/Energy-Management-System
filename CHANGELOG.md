@@ -20014,3 +20014,73 @@ Andere reeksen met dubbele sleutels nagekeken: `quarter_plan` gebruikt
 dag te hebben. Geen van beide is een fout.
 
 **Volledige testsuite**: 3199 tests, allemaal groen.
+
+## v3.74.0 — De reserve houdt nu altijd iets achter
+
+**Gemeld**: "De accu was weer leeg, dat moet opgelost worden." Drie
+ochtenden op rij.
+
+Gemeten in de export van 30 augustus:
+
+```
+diepste tekort onderweg   0,001 kWh
+marge                    55 %
+reserve                   0,001 kWh
+```
+
+Daar zit de weeffout. De marge wordt **vermenigvuldigd** met het diepste
+tekort, en dat tekort is nul zodra de voorspelling zegt dat de zon het
+huis morgen dekt. Vijfenvijftig procent van nul is nul.
+
+De reserve houdt dus structureel niets achter op precies de dagen dat de
+voorspelling optimistisch is. Op 29 augustus:
+
+```
+accu ontladen        5,92 kWh
+waarvan naar het net 2,24 kWh
+naar het huis        3,68 kWh
+```
+
+Had de accu die 2,24 gehouden, dan was hij 's ochtends op ongeveer 40%
+gebleven in plaats van 13%.
+
+### De bodem
+
+15% van de bruikbare capaciteit, bij deze accu 1,17 kWh. Bij een
+basislast van 250 W is dat bijna vijf uur — genoeg om de nacht te halen
+als de voorspelling tegenvalt, en klein genoeg om de arbitrage te laten
+werken op de dagen dat het wél klopt. Er wordt 2 tot 4 kWh per dag
+verkocht; daar houdt de bodem hooguit 1,17 van tegen.
+
+**Anders dan de bodem uit v3.71.0**, die is gebouwd en weer verwijderd:
+die zat alleen in de verkooptoets. Deze staat in de **reserve**, en die
+werkt door in het ontladen, de verkooptoets en de kwartierplanning
+tegelijk — één plek, drie effecten.
+
+De uitsplitsing meldt `bodem_bindend`, zodat te zien is of de
+voorspelling of de bodem het achterhoudt.
+
+### En een melding zonder gevolg
+
+*"Spiegel: Accustand 40,0 tegenover 13,0"* stond er elke ochtend. Het
+veld `last_soc_percent` wordt alleen op bepaalde takken bijgewerkt en
+loopt daardoor achter — maar de sturing gebruikt het sinds v3.48.0 niet
+meer, en de **kruistoets** stond in diezelfde export op 12,7 tegenover
+13,0.
+
+Er was dus niets mis. Die melding komt nu alleen nog als de kruistoets
+óók afwijkt, want dan is er werkelijk iets stuk.
+
+Een melding zonder gevolg die elke dag terugkomt, kost aandacht die er
+niet meer is als het een keer wél iets is.
+
+### Wat er goed ging
+
+De tweelingreparatie van v3.64.0 werkt: 16 vergelijkingen met zon, tegen
+0 gisteren, en de hoogste verwachte zon in een venster is 11,78 kWh in
+plaats van 0,208. Het bewijs was er gisteren simpelweg nog niet.
+
+En de opruiming van v3.73.0 is gelukt: geen dubbele momenten meer, en
+één MPC-meting per dag.
+
+**Volledige testsuite**: 3208 tests, allemaal groen.

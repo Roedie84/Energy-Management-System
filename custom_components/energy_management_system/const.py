@@ -5092,3 +5092,27 @@ ZELFTOETS_MIN_REEKS = 20
 # zegt vooral iets over het weer van die week.
 MPC_MIN_METINGEN = 14
 
+
+# Hoeveel er altijd in de accu blijft, ongeacht wat de voorspelling zegt
+# (v3.74.0).
+#
+# Gemeld: "De accu was weer leeg, dat moet opgelost worden." Drie
+# ochtenden op rij, en gemeten in de export van 30 augustus:
+#
+#     diepste tekort onderweg   0,001 kWh
+#     marge                    55 %
+#     reserve                   0,001 kWh
+#
+# Daar zit de weeffout. De marge wordt VERMENIGVULDIGD met het diepste
+# tekort, en dat tekort is nul zodra de voorspelling zegt dat de zon het
+# huis morgen dekt.
+#
+# Vijftien procent van 7,78 kWh bruikbaar is ongeveer 1,17 kWh. Bij een
+# basislast van 250 W is dat bijna vijf uur - genoeg om de nacht te
+# halen als de voorspelling tegenvalt, en klein genoeg om de arbitrage
+# te laten werken op de dagen dat het wél klopt.
+#
+# Anders dan de bodem uit v3.71.0: die zat alleen in de verkooptoets.
+# Deze staat in de RESERVE, en die werkt door in het ontladen, de
+# verkooptoets en de kwartierplanning tegelijk.
+RESERVE_BODEM_FRACTIE = 0.15

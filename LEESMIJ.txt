@@ -1,48 +1,45 @@
-v3.73.0 - alleen de gewijzigde bestanden sinds v3.70.0
+v3.74.0 - alleen de gewijzigde bestanden sinds v3.73.0
 
 CODE (naar Home Assistant, daarna herstarten)
   custom_components/energy_management_system/
-    coordinator.py            vier reparaties
-    const.py
-    manifest.json             versienummer 3.73.0
+    coordinator.py            de reservebodem en de melding
+    const.py                  RESERVE_BODEM_FRACTIE
+    manifest.json             versienummer 3.74.0
     bestandscontrole.json     bijgewerkte hashlijst  (MOET mee)
 
 TOETSEN (repository)
-  tests/test_digital_twin_netto_last.py
-  tests/test_mpc_met_verbruik_en_zon.py
-  tests/test_scan_herstelpaden.py         structuurscan 17
-  tests/test_plan_review.py
-  tests/test_zelftoets.py
-  tests/test_onvolledige_installatie_meldt.py
-
-  LET OP: verwijder tests/test_verkoop_bodem.py als je die uit v3.71.0
-  hebt - de code die hij toetst bestaat niet meer.
+  tests/test_reserve_bodem.py             nieuw
+  tests/test_spiegelcontrole.py
+  en de vijf toetsbestanden uit v3.71-3.73
 
 DOCUMENTEN
   CHANGELOG.md  README.md  OVERDRACHT.md
 
-WAT ER IN ZIT
--------------
+DE HOOFDZAAK
+------------
 
-1. DE PLANTOETSING VERGELEEK APPELS MET PEREN
-   Die -99,5% kwam doordat de planning alleen de verkoopkwartieren
-   telde en de meting de hele dag inclusief laadkosten. Het oordeel
-   hangt nu op het aantal VERKOCHTE kilowatturen.
+De reserve hield structureel NIETS achter. De marge van 55% wordt
+vermenigvuldigd met het diepste tekort onderweg, en dat tekort is nul
+zodra de voorspelling zegt dat de zon het huis morgen dekt.
 
-2. DE ZELFTOETS SLOEG TE VROEG ALARM
-   Meldt nu alleen nog als de verwachte zon NOOIT wordt vastgelegd.
+Er staat nu een bodem van 15% van de bruikbare capaciteit onder: 1,17
+kWh, ongeveer vijf uur basislast. Die zit in de RESERVE, dus hij werkt
+door in het ontladen, de verkooptoets en de kwartierplanning tegelijk.
 
-3. DUBBELE METINGEN, TWEE KEER DEZELFDE OORZAAK
-   Een vluchtige markering die bewaakt of er al gemeten is, terwijl de
-   reeks zelf WEL bewaard wordt. Na een herstart werd dezelfde dag
-   opnieuw gemeten - bij de MPC en bij de tweeling.
+Dat is het verschil met de bodem uit v3.71.0 die weer is verwijderd:
+die zat alleen in de verkooptoets.
 
-   De bestaande dubbelen worden bij de eerstvolgende ronde opgeruimd.
+WAT JE MERKT
+------------
 
-4. STRUCTUURSCAN 17 bewaakt die vorm voortaan.
+Er gaat minder naar het net op de dagen dat de voorspelling optimistisch
+is. Je verkocht 2 tot 4 kWh per dag; daar houdt de bodem hooguit 1,17
+van tegen.
+
+En de melding "Spiegel: Accustand" verdwijnt, tenzij er werkelijk iets
+mis is.
 
 WAT JE ZELF MOET DOEN
 ---------------------
 
-Niets. Na de herstart staan er nog twee MPC-metingen in plaats van
-vier, en 58 tweelingvergelijkingen in plaats van 60.
+Niets. Kijk morgenochtend wat de accu doet - dat is de proef.
