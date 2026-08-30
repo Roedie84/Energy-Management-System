@@ -15,11 +15,13 @@ except ImportError:  # v2.3.0: oudere versies kennen dit niet
     SupportsResponse = None
 from homeassistant.helpers import config_validation as cv
 
-from .const import DOMAIN
+from .const import DOMAIN, PLATFORMS
 from .coordinator import EnergyManagementSystemCoordinator
 from .solar_forecast import SolarForecastAccuracyTracker
 
-PLATFORMS = ["switch", "sensor", "button"]
+# v3.81.0: de lijst staat in const.py, zodat de platformcontrole er
+# niet naast kan zitten. Twee lijsten met dezelfde inhoud is precies de
+# vorm die op 26 augustus fout bleek bij de cyclusverwachting.
 
 _LOGGER = logging.getLogger(__name__)
 

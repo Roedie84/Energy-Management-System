@@ -5183,10 +5183,17 @@ HANDMATIGE_STAND_VOL_PROCENT = 100.0
 # De getallen zijn ruim onder het werkelijke aantal: het gaat erom of
 # een platform HELEMAAL niets heeft aangemaakt, niet om het precieze
 # aantal. Anders breekt deze controle bij elke nieuwe entiteit.
+# De lijst komt uit `PLATFORMS` in __init__.py; hier staan alleen de
+# drempels. Zo kan er geen platform in staan dat de integratie niet
+# opzet - dat gebeurde in de eerste versie met `number` en `select`, en
+# toen meldde de controle meteen twee omgevallen onderdelen die er nooit
+# waren geweest.
+# De platforms die deze integratie opzet. Stond in __init__.py; hier
+# ook, zodat de platformcontrole er niet naast kan zitten (v3.81.0).
+PLATFORMS = ["switch", "sensor", "button"]
+
 PLATFORM_MINIMUM_ENTITEITEN = {
     "sensor": 20,
     "switch": 5,
-    "number": 1,
     "button": 1,
-    "select": 1,
 }

@@ -39,10 +39,11 @@ def _entiteiten(hass, platform, aantal):
 
 def test_a_healthy_installation_reports_nothing(make_coordinator, hass):
     c = make_coordinator({})
-    for platform, minimum in (
-        ("sensor", 20), ("switch", 5), ("number", 1),
-        ("button", 1), ("select", 1),
-    ):
+    from custom_components.energy_management_system.const import (
+        PLATFORM_MINIMUM_ENTITEITEN,
+    )
+
+    for platform, minimum in PLATFORM_MINIMUM_ENTITEITEN.items():
         _entiteiten(hass, platform, minimum)
 
     uitkomst = _echte_controle(c)
@@ -58,9 +59,7 @@ def test_a_collapsed_platform_is_caught(make_coordinator, hass):
     """
     c = make_coordinator({})
     _entiteiten(hass, "sensor", 20)
-    _entiteiten(hass, "number", 1)
     _entiteiten(hass, "button", 1)
-    _entiteiten(hass, "select", 1)
 
     uitkomst = _echte_controle(c)
 
@@ -126,3 +125,48 @@ def test_a_collapsed_platform_lands_in_the_analysis(
     assert any(
         p["onderwerp"] == "Onderdeel niet geladen" for p in analyse["punten"]
     )
+
+
+def test_only_platforms_the_integration_sets_up_are_checked():
+    """De eerste versie noemde er vijf, waaronder `number` en `select`.
+
+    Die maakt deze integratie helemaal niet aan - er is geen number.py
+    en geen select.py - en dus meldde de controle meteen twee omgevallen
+    onderdelen die er nooit waren geweest.
+
+    Vals alarm van eigen makelij, en dezelfde fout als die hij moest
+    vangen: een controle schrijven op grond van wat je DENKT dat er
+    hoort te staan.
+    """
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+    from custom_components.energy_management_system.const import (
+        PLATFORMS,
+        PLATFORM_MINIMUM_ENTITEITEN,
+    )
+
+    map_ = Path(pkg.__file__).parent
+
+    # Elk platform in de lijst heeft ook een bestand.
+    for platform in PLATFORMS:
+        assert (map_ / f"{platform}.py").exists(), platform
+
+    # En de drempels gaan over precies die platforms.
+    assert set(PLATFORM_MINIMUM_ENTITEITEN) == set(PLATFORMS)
+
+
+def test_the_platform_list_has_one_source():
+    """Twee lijsten met dezelfde inhoud is precies de vorm die op 26
+
+    augustus fout bleek bij de cyclusverwachting: 4000 naast 6000, en de
+    ene helft van de integratie rekende anders dan de andere.
+    """
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    bron = (Path(pkg.__file__).parent / "__init__.py").read_text()
+
+    assert 'PLATFORMS = [' not in bron
+    assert "from .const import DOMAIN, PLATFORMS" in bron

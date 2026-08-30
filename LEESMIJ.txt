@@ -1,46 +1,33 @@
-v3.80.0 - alleen de gewijzigde bestanden sinds v3.78.0
-
-Bevat ook v3.79.0 (de platformcontrole en de knoppen op de kaart).
+v3.81.0 - alleen de gewijzigde bestanden sinds v3.80.0
 
 CODE (naar Home Assistant, daarna herstarten)
   custom_components/energy_management_system/
-    coordinator.py            de volgorde, en de platformcontrole
-    const.py                  de drempels per platform
-    switch.py                 vaste naam, vermogen als attribuut
-    diagnostics.py            platformcontrole in de export
-    dashboard_template.yaml   de knoppen op de Besturing-kaart
-    manifest.json             versienummer 3.80.0
+    coordinator.py            de platformlijst uit PLATFORMS
+    const.py                  PLATFORMS en de drempels
+    __init__.py               importeert PLATFORMS uit const
+    manifest.json             versienummer 3.81.0
     bestandscontrole.json     bijgewerkte hashlijst  (MOET mee)
 
-DASHBOARD
-  dashboards/energy_management_system_dashboard.yaml
-
 TOETSEN (repository)
-  tests/test_platformcontrole.py       nieuw
-  tests/test_structural_integrity.py   structuurscan 18
-  tests/test_dashboard_health_export.py structuurscan 19
-  tests/test_handmatige_stand.py
-  tests/conftest.py
+  tests/test_platformcontrole.py
 
 DOCUMENTEN
   CHANGELOG.md  README.md  OVERDRACHT.md
 
-DE HOOFDZAAK
-------------
+WAT ER FOUT WAS
+---------------
 
-De knop "Handmatig laden 2000 W" zette de accu NIET. Hij zette alleen de
-leermodus aan, en daarmee de aansturing stil.
+De platformcontrole uit v3.79.0 meldde twee omgevallen onderdelen:
+`number` en `select`. Die bestaan helemaal niet in deze integratie - er
+is geen number.py en geen select.py.
 
-_async_apply_manual begint met `if self.learning_only: return`, en die
-bewaking staat daar terecht. Maar de leermodus ging AAN voordat er werd
-geschreven, dus de opdracht werd door de eigen bewaking geweigerd.
+Vals alarm van mijn eigen makelij, en dezelfde fout als die de controle
+moest vangen: iets schrijven op grond van wat ik DENK dat er hoort te
+staan.
 
-Nu: eerst schrijven, dan de leermodus.
+De lijst komt nu uit PLATFORMS, op een plek.
 
 WAT JE ZELF MOET DOEN
 ---------------------
 
-Kopieren, herstarten, dashboard verversen.
-
-Zet de knop daarna even aan en kijk in de Zendure-app of de modus
-werkelijk op `manual` springt. Dat is de proef.
+Kopieren en herstarten. Daarna staat de analyse weer op nul fouten.

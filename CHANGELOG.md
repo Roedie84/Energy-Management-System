@@ -20373,3 +20373,31 @@ fout dat blijft staan.
 geen verwerkt.
 
 **Volledige testsuite**: 3250 tests, allemaal groen.
+
+## v3.81.0 — De platformcontrole meldde onderdelen die nooit bestonden
+
+**Gemeten** in de export van 30 augustus 14:23, twee uur na het bouwen
+van die controle:
+
+```
+sensor  60    switch  48    button  6
+number   0    select   0    ← "omgevallen"
+```
+
+Er is geen `number.py` en geen `select.py`. Die platforms zet deze
+integratie helemaal niet op — ik had ze in de drempellijst gezet zonder
+te kijken of ze bestaan.
+
+**Vals alarm van eigen makelij**, en dezelfde fout als die de controle
+moest vangen: iets schrijven op grond van wat ik dénk dat er hoort te
+staan.
+
+De lijst komt nu uit `PLATFORMS`, en die staat op **één** plek. Hij stond
+in `__init__.py`; als ik hem in `const.py` ernaast had gezet, waren er
+twee lijsten met dezelfde inhoud — precies de vorm die op 26 augustus
+fout bleek bij de cyclusverwachting, waar 4000 naast 6000 stond.
+
+Er staat nu een toets op dat elk platform in die lijst ook een bestand
+heeft, en dat de drempels over precies die platforms gaan.
+
+**Volledige testsuite**: 3252 tests, allemaal groen.

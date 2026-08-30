@@ -504,6 +504,7 @@ from .const import (
     HANDMATIGE_STAND_HERINNERING_MINUTEN,
     HANDMATIGE_STAND_VOL_PROCENT,
     PLATFORM_MINIMUM_ENTITEITEN,
+    PLATFORMS,
     PV_GEOMETRY_SHADING_RATIO,
     RELIABILITY_ALIASES,
     SUN_DAYLIGHT_MIN_ELEVATION_DEGREES,
@@ -8602,12 +8603,20 @@ class EnergyManagementSystemCoordinator:
         zelf heeft aangemaakt. Nul waar er meer worden verwacht, betekent
         dat het platform is omgevallen.
         """
+        # v3.81.0: alleen de platforms die deze integratie ook WERKELIJK
+        # opzet.
+        #
+        # De eerste versie noemde er vijf, waaronder `number` en
+        # `select`. Die maakt deze integratie helemaal niet aan - er is
+        # geen number.py en geen select.py - en dus meldde de controle
+        # meteen twee omgevallen onderdelen.
+        #
+        # Vals alarm van mijn eigen makelij, en dezelfde fout als die hij
+        # moest vangen: een controle schrijven op grond van wat ik dénk
+        # dat er hoort te staan.
         verwacht = {
-            "sensor": PLATFORM_MINIMUM_ENTITEITEN.get("sensor", 1),
-            "switch": PLATFORM_MINIMUM_ENTITEITEN.get("switch", 1),
-            "number": PLATFORM_MINIMUM_ENTITEITEN.get("number", 1),
-            "button": PLATFORM_MINIMUM_ENTITEITEN.get("button", 1),
-            "select": PLATFORM_MINIMUM_ENTITEITEN.get("select", 1),
+            platform: PLATFORM_MINIMUM_ENTITEITEN.get(platform, 1)
+            for platform in PLATFORMS
         }
         gevonden: dict[str, int] = {p: 0 for p in verwacht}
         for staat in self.hass.states.async_all():
