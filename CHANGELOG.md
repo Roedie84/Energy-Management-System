@@ -20571,4 +20571,36 @@ Die laatste heb ik eerst als "geen airco" afgedaan op grond van één leeg
 veld, zonder de zeven gevulde bins ernaast te leggen. **Zevende keer deze
 week** dat ik uit één plek een conclusie trek die de rest tegenspreekt.
 
+### En twee dode functies opgeruimd
+
+Gevraagd: "Zijn er nog veel ongebruikte zaken die nu kunnen worden
+opgeruimd?"
+
+Nagekeken, en het viel mee. Van de 593 constanten wordt er geen enkele
+ongebruikt, en er waren precies twee functies die nergens vandaan worden
+aangeroepen:
+
+```
+_netvermogen_w         v3.17.0, voor stroompijlen die er nooit kwamen
+_outdoor_temp_bucket   vervangen in v3.41.0 door _climate_verschil_bucket
+```
+
+Die tweede is precies de functie waarvan de omzetting op 28 augustus een
+stille fout veroorzaakte: de sleutels kregen een `d` en de terugval naar
+naburige vakjes rekende daar nog mee als getal.
+
+Vóór het weghalen gecontroleerd: beide komen precies één keer voor in de
+hele codebase - hun eigen definitie. Geen aanroep, geen tekenreeks, geen
+`getattr`, niets in het dashboard.
+
+Vijf andere kandidaten bleken vals alarm: `_steelstofzuiger_*` en
+`_washing_machine_notified_date` worden via `getattr` op naam benaderd,
+en vijf constanten worden alleen in toetsen gebruikt.
+
+**Wat er NIET is opgeruimd**: `coordinator.py` telt 31.400 regels in één
+klasse. Dat is geen rommel maar omvang, en opsplitsen is een verbouwing
+van weken - niet iets om te doen op een dag waarop er elf versies zijn
+geïnstalleerd en de accu voor het eerst met de nieuwe reservebodem de
+nacht in gaat.
+
 **Volledige testsuite**: 3278 tests, allemaal groen.

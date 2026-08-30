@@ -12135,29 +12135,6 @@ class EnergyManagementSystemCoordinator:
             logging.getLogger(__package__).removeHandler(self._log_handler)
             self._log_handler = None
 
-    def _netvermogen_w(self) -> float | None:
-        """Wat er nu van of naar het net gaat (v3.17.0).
-
-        Er is geen aparte sensor voor; het net is wat er overblijft nadat
-        de zon en de accu hun deel hebben gedaan:
-
-            net = verbruik - zon - accu-ontlading
-
-        Positief betekent afnemen, negatief terugleveren. Voor de
-        stroompijlen op het overzicht is dat precies wat er nodig is.
-        """
-        huis = self._read_sensor_float(
-            self.config.get(CONF_CONSUMPTION_POWER_SENSOR)
-        )
-        if huis is None:
-            return None
-        zon = self._read_sensor_float(self.config.get(CONF_PV_POWER_SENSOR)) or 0.0
-        accu = (
-            self._read_sensor_float(self.config.get(CONF_BATTERY_POWER_SENSOR))
-            or 0.0
-        )
-        # De accusensor is positief bij ontladen op deze installatie.
-        return huis - zon - accu
 
     def get_overview_svg(self) -> str:
         """Het dynamische overzichtsplaatje (v3.17.0).
@@ -28288,9 +28265,6 @@ class EnergyManagementSystemCoordinator:
                 return waarde
         return None
 
-    @staticmethod
-    def _outdoor_temp_bucket(temp_c: float) -> str:
-        return str(round(temp_c / OUTDOOR_TEMP_BUCKET_SIZE_C) * OUTDOOR_TEMP_BUCKET_SIZE_C)
 
     @staticmethod
     def _climate_verschil_bucket(outdoor_temp_c: float, indoor_temp_c: float) -> str:

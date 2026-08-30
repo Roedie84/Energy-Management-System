@@ -4,9 +4,9 @@ Bevat ook v3.83.0 (de schakelaars die niet meeluisterden).
 
 CODE (naar Home Assistant, daarna herstarten)
   custom_components/energy_management_system/
-    coordinator.py            drie reparaties
+    coordinator.py            drie reparaties + twee dode functies weg
     const.py                  de leermodus-melding als aandacht
-    switch.py                 drie schakelaars luisteren mee (v3.83.0)
+    switch.py                 drie schakelaars luisteren mee
     dashboard_template.yaml   twee nieuwe meldingsschakelaars
     manifest.json             versienummer 3.84.0
     bestandscontrole.json     bijgewerkte hashlijst  (MOET mee)
@@ -25,21 +25,23 @@ WAT ER IN ZIT
 -------------
 
 1. DE LEERMODUS MELDT ZICH
-   Stond hij uren aan zonder dat iets dat zei; nu komt er een melding
-   zodra hij lang genoeg aan staat om vergeten te zijn.
+   De waarschuwing lag half af en werd NERGENS aangeroepen. Nu wel.
 
 2. EEN KANDIDAAT VIEL TEN ONRECHTE AF
    "Verbruiksprofiel per dagtype" stond op "levert niets op" terwijl hij
-   120 euro per jaar oplevert. Ontbrekende cijfers zijn geen negatieve
-   cijfers.
+   120 euro per jaar oplevert.
 
 3. DE VERKOCHTE KILOWATTUREN STONDEN ALTIJD OP NUL
    De dagteller wordt bij de wissel op nul gezet; de plantoetsing las
    hem rechtstreeks in plaats van uit de eindstand.
 
-4. EN DE SCHAKELAARS LUISTEREN MEE (v3.83.0)
+4. DE SCHAKELAARS LUISTEREN MEE (v3.83.0)
    De knop "Handmatig laden" stond op AAN terwijl de integratie hem al
    had uitgezet.
+
+5. TWEE DODE FUNCTIES WEG
+   `_netvermogen_w` en `_outdoor_temp_bucket`. Beide kwamen precies een
+   keer voor in de hele codebase: hun eigen definitie.
 
 WAT JE ZELF MOET DOEN
 ---------------------
@@ -47,4 +49,4 @@ WAT JE ZELF MOET DOEN
 Kopieren, herstarten, dashboard verversen.
 
 Morgenochtend is de eerste plantoetsing die "verkocht" met echte
-getallen laat zien.
+getallen laat zien, en de eerste nacht met de reservebodem.
