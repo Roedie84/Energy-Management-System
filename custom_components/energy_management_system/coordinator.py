@@ -1230,6 +1230,9 @@ class EnergyManagementSystemCoordinator:
         self.mpc_doel_soc: dict = {}
         self.mpc_vergelijking_history: list[dict] = []
         self._mpc_gemeten_op: str | None = None
+        # v3.90.0: dubbele of ontbrekende kwartieren in de prijsreeks.
+        self.prijsreeks_bevindingen: dict = {}
+
         # v3.89.0: welke voorwaarden tot de beslissing leidden.
         self._afwegingen_deze_ronde: list[dict] = []
         self.laatste_afwegingen: list[dict] = []
@@ -2664,7 +2667,89 @@ class EnergyManagementSystemCoordinator:
             entries.append((dt_util.as_local(start), dt_util.as_local(end), price))
 
         entries.sort(key=lambda entry: entry[0])
+        # v3.90.0: dubbelen eruit, en gaten onthouden.
+        #
+        # Gevraagd bij de doorlichting: "Wordt gecontroleerd op dubbele
+        # timestamps? Hoe wordt vastgesteld dat geen kwartieren
+        # ontbreken?"
+        #
+        # Op geen van beide. Twee records met dezelfde starttijd kwamen
+        # allebei in de reeks, en dan telt dat kwartier DUBBEL in elke
+        # som - de planning, de reserve, het diepste tekort. Een gat van
+        # twee uur werd niet opgemerkt; de planning rekende gewoon door
+        # met minder punten.
+        #
+        # Geen van beide geeft een foutmelding, en beide vervuilen elke
+        # berekening die erop rust. Precies de categorie "stille fout"
+        # uit de audit.
+        self.prijsreeks_bevindingen = self._controleer_prijsreeks(entries)
+        if self.prijsreeks_bevindingen.get("dubbele"):
+            gezien = set()
+            ontdubbeld = []
+            for regel in entries:
+                if regel[0] in gezien:
+                    continue
+                gezien.add(regel[0])
+                ontdubbeld.append(regel)
+            entries = ontdubbeld
         return entries
+
+    def _controleer_prijsreeks(self, entries: list) -> dict:
+        """Zijn er dubbele of ontbrekende kwartieren? (v3.90.0)
+
+        De gaten worden gemeld maar NIET gevuld: een prijs verzinnen voor
+        een kwartier dat de leverancier niet gaf, is erger dan een gat -
+        dan rekent de planning met een getal dat nergens vandaan komt.
+
+        Dubbelen worden wel verwijderd. Daar valt niets te verzinnen: het
+        is dezelfde starttijd, dus dezelfde periode, en die hoort één
+        keer te tellen.
+        """
+        if len(entries) < 2:
+            return {"dubbele": [], "gaten": [], "in_orde": True}
+
+        dubbele = []
+        gezien = set()
+        for start, _einde, _prijs in entries:
+            if start in gezien:
+                dubbele.append(start.isoformat())
+            gezien.add(start)
+
+        # De verwachte stap is de kleinste die voorkomt; dat is
+        # betrouwbaarder dan de eerste twee records, want juist daar kan
+        # een fout zitten.
+        stappen = [
+            (entries[i + 1][0] - entries[i][0]).total_seconds() / 60
+            for i in range(len(entries) - 1)
+        ]
+        stappen = [s for s in stappen if s > 0]
+        if not stappen:
+            return {"dubbele": dubbele, "gaten": [], "in_orde": not dubbele}
+        verwacht = min(stappen)
+
+        gaten = []
+        for i, stap in enumerate(stappen):
+            if stap > verwacht * 1.5:
+                gaten.append(
+                    {
+                        "na": entries[i][0].isoformat(),
+                        "gemist_minuten": round(stap - verwacht),
+                    }
+                )
+
+        return {
+            "dubbele": dubbele,
+            "gaten": gaten,
+            "interval_minuten": round(verwacht),
+            "kwartieren": len(entries),
+            "in_orde": not dubbele and not gaten,
+            "toelichting": (
+                "Dubbele starttijden zijn verwijderd - dezelfde periode "
+                "hoort één keer te tellen. Gaten worden alleen gemeld: "
+                "een prijs verzinnen voor een kwartier dat de leverancier "
+                "niet gaf, is erger dan een gat."
+            ),
+        }
 
     def _price_threshold_for_entries(
         self,
@@ -9591,6 +9676,17 @@ class EnergyManagementSystemCoordinator:
         bestanden = self.get_bestandscontrole()
         if bestanden.get("beschikbaar") and not bestanden.get("in_orde"):
             _voeg("fout", "Onvolledige installatie", bestanden["uitleg"])
+
+        # v3.90.0: staat er wel het juiste soort entiteit ingevuld?
+        typen = self.get_entiteittypecontrole()
+        for regel in typen.get("verkeerd_type") or []:
+            _voeg(
+                "fout",
+                "Verkeerd soort entiteit",
+                f"{regel['instelling']} verwijst naar {regel['entiteit']}, "
+                f"maar er hoort een {regel['verwacht']} te staan. "
+                f"{regel['gevolg']}",
+            )
 
         # v3.79.0: en zijn alle onderdelen overeind gebleven?
         platforms = self.get_platformcontrole()
@@ -31585,6 +31681,68 @@ class EnergyManagementSystemCoordinator:
                 notification_id="ems_opdracht_niet_aangekomen",
                 kind="opdracht_niet_aangekomen",
             )
+
+    def get_entiteittypecontrole(self) -> dict:
+        """Staat er wel het juiste SOORT entiteit ingevuld? (v3.90.0)
+
+        Gevraagd bij de doorlichting: "Wat gebeurt er als een
+        number-entity per ongeluk een sensor wordt? Kan een gebruiker een
+        verkeerde entiteit configureren zonder foutmelding?"
+
+        Ja, dat kon. De configuratiecontrole kijkt of de entiteit BESTAAT
+        en een waarde heeft, niet of er naartoe te schrijven valt. Vul je
+        een `sensor` in waar een `number` hoort, dan mislukt de
+        schrijfactie stil - en dat merkte je pas als de accu niets deed.
+
+        Vanaf v3.87.0 wordt dat na negentig seconden gemeld, maar dan is
+        de opdracht al weg. Dit vangt het bij het instellen.
+        """
+        verwacht = {
+            CONF_OPERATION_SELECT: "select",
+            CONF_MANUAL_POWER_NUMBER: "number",
+            CONF_SOC_SENSOR: "sensor",
+            CONF_AVAILABLE_ENERGY_SENSOR: "sensor",
+            CONF_BATTERY_POWER_SENSOR: "sensor",
+            CONF_CONSUMPTION_POWER_SENSOR: "sensor",
+            CONF_PV_POWER_SENSOR: "sensor",
+        }
+        fout = []
+        for sleutel, soort in verwacht.items():
+            entity_id = self.config.get(sleutel)
+            if not entity_id:
+                continue
+            werkelijk = str(entity_id).split(".")[0]
+            if werkelijk == soort:
+                continue
+            fout.append(
+                {
+                    "instelling": sleutel,
+                    "entiteit": entity_id,
+                    "verwacht": soort,
+                    "gevonden": werkelijk,
+                    "gevolg": (
+                        "Er valt niet naartoe te schrijven; de aansturing "
+                        "mislukt stil."
+                        if soort in ("select", "number")
+                        else "De waarde wordt gelezen alsof het een meting is."
+                    ),
+                }
+            )
+
+        return {
+            "beschikbaar": True,
+            "in_orde": not fout,
+            "verkeerd_type": fout,
+            "gecontroleerd": len(
+                [k for k in verwacht if self.config.get(k)]
+            ),
+            "toelichting": (
+                "De configuratiecontrole kijkt of een entiteit bestaat "
+                "en een waarde heeft. Dit kijkt of het het juiste SOORT "
+                "is: naar een `sensor` valt niet te schrijven, hoe geldig "
+                "de waarde ook is."
+            ),
+        }
 
     def _noteer_ontlaadafwegingen(
         self, soc_allowed_power: float | None, scaled_power: float | None

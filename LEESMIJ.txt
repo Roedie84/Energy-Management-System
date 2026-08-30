@@ -1,27 +1,16 @@
-v3.89.0 - alle wijzigingen sinds v3.85.0
-
-Bevat v3.86.0 tot en met v3.89.0. Je draait v3.85.0, dus dit is
-compleet: er worden hele bestanden geleverd, geen losse regels.
+v3.90.0 - alleen de gewijzigde bestanden sinds v3.89.0
 
 CODE (naar Home Assistant, daarna herstarten)
   custom_components/energy_management_system/
-    coordinator.py            alle reparaties
-    const.py                  nieuwe drempels en meldingssoorten
-    diagnostics.py            vijf nieuwe overzichten in de export
-    dashboard_template.yaml   meldingsschakelaars
-    manifest.json             versienummer 3.89.0
+    coordinator.py            drie controles erbij
+    diagnostics.py            twee nieuwe overzichten
+    manifest.json             versienummer 3.90.0
     bestandscontrole.json     bijgewerkte hashlijst  (MOET mee)
 
-DASHBOARD
-  dashboards/energy_management_system_dashboard.yaml
-
 TOETSEN (repository)
-  tests/test_afwegingen.py               nieuw
-  tests/test_extreme_scenarios.py        nieuw
-  tests/test_opdrachtcontrole.py         nieuw
-  tests/test_moduswissels.py             nieuw
-  tests/test_planning_tegen_sturing.py   nieuw
-  en zeven bestaande
+  tests/test_zomertijd.py            nieuw
+  tests/test_state_persistence.py
+  tests/test_scan_functiegrootte.py
 
 DOCUMENTEN
   CHANGELOG.md  README.md  OVERDRACHT.md
@@ -29,24 +18,21 @@ DOCUMENTEN
 WAT ER IN ZIT
 -------------
 
-v3.86.0  De tekencorrectie bij het bepalen van laden/ontladen, en een
-         aanroep die de hele vastlegging meesleepte.
+1. DUBBELE EN ONTBREKENDE KWARTIEREN
+   Twee records met dezelfde starttijd telden DUBBEL in elke som.
+   Dubbelen worden nu verwijderd; gaten worden gemeld maar NIET gevuld -
+   een verzonnen prijs is erger dan een gat.
 
-v3.87.0  Opdrachten worden na 90 seconden nagekeken. Moduswisselingen
-         worden geteld. De planning toont waar hij afwijkt van de
-         aansturing.
+2. HET VERKEERDE SOORT ENTITEIT
+   Vul je een `sensor` in waar een `number` hoort, dan mislukte de
+   schrijfactie stil. Dat komt nu bovenaan in de analyse.
 
-v3.88.0  VIER functies lazen het accuvermogen zonder de tekencorrectie,
-         terwijl `invert_battery_power_sign` bij jou AAN staat. Laden
-         werd als ontladen geteld in het huisverbruik op de plaat, de
-         netladingsmeting, de kalibratiemeting en het schema.
-         Plus elf toetsen op de uiterste gevallen.
-
-v3.89.0  Elke beslissing legt nu vast welke voorwaarden zijn getoetst,
-         met de uitkomst en de reden. Zo is achteraf te zien welke tak
-         NIET is genomen en waarom.
+3. DE KLOK DIE VERSPRINGT
+   Twaalf toetsen op zomertijd, wintertijd en middernacht. Alle twaalf
+   slagen - maar er lag tot nu toe geen enkele.
 
 WAT JE ZELF MOET DOEN
 ---------------------
 
-Kopieren, herstarten, dashboard verversen.
+Kopieren en herstarten. In de export staat vanaf nu "prijsreeks" met de
+bevindingen over dubbelen en gaten.

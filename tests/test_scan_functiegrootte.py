@@ -73,7 +73,8 @@ BEVROREN = {
     # v3.87.0: +1 voor de moduswisselingen.
     # v3.89.0: +3 voor de afwegingen - de lijst van deze ronde, de
     # laatste complete set, en het moment.
-    "coordinator.py:__init__": 399,
+    # v3.90.0: +1 voor de bevindingen over de prijsreeks.
+    "coordinator.py:__init__": 400,
     "coordinator.py:_async_update_locked": 255,
     "coordinator.py:_async_update_scheduled_charge_appliance": 70,
     "coordinator.py:_build_explanation": 73,

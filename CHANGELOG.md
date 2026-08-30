@@ -20900,3 +20900,64 @@ vragen blijft staan:
   's ochtends leeg staat
 
 **Volledige testsuite**: 3332 tests, allemaal groen.
+
+## v3.90.0 — Dubbele kwartieren, verkeerde entiteiten, en de klok
+
+Drie punten uit de doorlichting waarop het antwoord "dat wordt niet
+gecontroleerd" was.
+
+### 1. Dubbele en ontbrekende kwartieren in de prijsreeks
+
+*"Wordt gecontroleerd op dubbele timestamps? Hoe wordt vastgesteld dat
+geen kwartieren ontbreken?"*
+
+Op geen van beide. Twee records met dezelfde starttijd kwamen allebei in
+de reeks, en dan telt dat kwartier **dubbel** in elke som — de planning,
+de reserve, het diepste tekort. Een gat van twee uur werd niet
+opgemerkt; de planning rekende gewoon door met minder punten.
+
+Geen van beide geeft een foutmelding. Precies de categorie "stille fout"
+uit de audit.
+
+**Dubbelen worden nu verwijderd**: dezelfde starttijd is dezelfde
+periode, en die hoort één keer te tellen. **Gaten worden alleen gemeld,
+niet gevuld** — een prijs verzinnen voor een kwartier dat de leverancier
+niet gaf, is erger dan een gat, want dan rekent de planning met een
+getal dat nergens vandaan komt.
+
+De verwachte stap is de **kleinste die voorkomt**, niet die tussen de
+eerste twee records: juist daar kan een fout zitten. Zo worden
+uurprijzen ook goed herkend.
+
+### 2. Het verkeerde soort entiteit
+
+*"Wat gebeurt er als een number-entity per ongeluk een sensor wordt? Kan
+een gebruiker een verkeerde entiteit configureren zonder foutmelding?"*
+
+Ja, dat kon. De configuratiecontrole kijkt of een entiteit **bestaat** en
+een waarde heeft, niet of er naartoe te schrijven valt. Vul je een
+`sensor` in waar een `number` hoort, dan mislukt de schrijfactie stil.
+
+Sinds v3.87.0 wordt dat na negentig seconden gemeld — maar dan is de
+opdracht al weg. Dit vangt het bij het instellen, en het komt bovenaan
+in de analyse.
+
+### 3. De klok die verspringt
+
+*"Worden zomer- en wintertijd correct verwerkt? Welke dag hoort een
+kwartier van 00:00 toe?"*
+
+Er lag geen enkele toets op. Op **25 oktober** gaat de klok terug en
+bestaat 02:00 twee keer; op 29 maart bestaat hij niet. Dat is precies
+het soort nacht waarop een fout duur is: de prijzen lopen door, de accu
+moet het halen, en niemand kijkt.
+
+Twaalf toetsen erop, met echte tijdzone-aritmetiek. Alle twaalf slagen —
+de omzetting via `dt_util.as_local` doet zijn werk, en een herhaald
+kloktijdstip wordt niet als dubbele gezien omdat het twee verschillende
+momenten zijn.
+
+Dat is geruststellend, maar het betekent vooral dat deze categorie tot
+nu toe op geluk berustte.
+
+**Volledige testsuite**: 3344 tests, allemaal groen.

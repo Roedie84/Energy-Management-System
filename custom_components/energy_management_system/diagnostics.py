@@ -447,6 +447,11 @@ async def async_get_config_entry_diagnostics(
         ),
         # v3.89.0: welke voorwaarden tot de beslissing leidden.
         "afwegingen": _veilig("get_afwegingen", coordinator.get_afwegingen),
+        # v3.90.0: het juiste soort entiteit, en de prijsreeks.
+        "entiteittypecontrole": _veilig(
+            "get_entiteittypecontrole", coordinator.get_entiteittypecontrole
+        ),
+        "prijsreeks": getattr(coordinator, "prijsreeks_bevindingen", None),
         # v3.65.0: uitkomsten die logisch niet kunnen. Elke bevinding
         # hier is een fout in de integratie zelf.
         "zelftoets": _veilig("get_zelftoets", coordinator.get_zelftoets),
