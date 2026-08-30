@@ -721,6 +721,16 @@ views:
     hold_action:
       action: more-info
   - type: custom:mushroom-template-card
+    primary: De stroomprijs gaat omhoog
+    secondary: '{% set e = ''switch.woonkamer_energy_management_system_melding_prijsstijging_handmatig'' %}{% set last = state_attr(e, ''laatst_verstuurd'') %}{{ ''AAN'' if is_state(e, ''on'') else ''uit'' }} · demping 1440 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom(''%-d %b %H:%M'') }}{% endif %}'
+    icon: mdi:bell-outline
+    icon_color: '{{ ''green'' if is_state(''switch.woonkamer_energy_management_system_melding_prijsstijging_handmatig'', ''on'') else ''grey'' }}'
+    entity: switch.woonkamer_energy_management_system_melding_prijsstijging_handmatig
+    tap_action:
+      action: toggle
+    hold_action:
+      action: more-info
+  - type: custom:mushroom-template-card
     primary: De installatie is onvolledig
     secondary: '{% set e = ''switch.woonkamer_energy_management_system_melding_installatie_onvolledig'' %}{% set last = state_attr(e, ''laatst_verstuurd'') %}{{ ''AAN'' if is_state(e, ''on'') else ''uit'' }} · demping 1440 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom(''%-d %b %H:%M'') }}{% endif %}'
     icon: mdi:bell-outline

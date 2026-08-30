@@ -504,6 +504,8 @@ from .const import (
     HANDMATIGE_STAND_HERINNERING_MINUTEN,
     HANDMATIGE_STAND_VOL_PROCENT,
     PLATFORM_MINIMUM_ENTITEITEN,
+    PRIJSSTIJGING_VENSTER_MINUTEN,
+    PRIJSSTIJGING_MELDGRENS_CT,
     PLATFORMS,
     PV_GEOMETRY_SHADING_RATIO,
     RELIABILITY_ALIASES,
@@ -1222,12 +1224,13 @@ class EnergyManagementSystemCoordinator:
         self.handmatige_stand: str | None = None
         self.handmatige_stand_sinds: datetime | None = None
         self._handmatige_stand_laatste_herinnering: datetime | None = None
+        self._prijsstijging_gemeld: str | None = None
         self._leermodus_door_handmatige_stand: bool = False
 
         # v3.75.0: wanneer de accu anders stond dan EMS wilde.
         self.last_applied_operation: str | None = None
         self.handmatige_ingrepen: list[dict] = []
-        self._handmatig_sinds: datetime | None = None
+        self._handmatig_sinds: str | None = None
         # Monte Carlo advisory engine (v0.63.34).
         self.monte_carlo_median_deficit_kwh: float | None = None
         self.monte_carlo_p90_deficit_kwh: float | None = None
@@ -8771,6 +8774,16 @@ class EnergyManagementSystemCoordinator:
             await self.async_set_handmatige_stand(None, now)
             return
 
+        # v3.82.0: waarschuwen als de prijs gaat stijgen.
+        #
+        # Gevraagd: "Als de prijs gaat stijgen en manual laden knop is
+        # ingeschakeld wil ik daar ook een melding van hebben."
+        #
+        # Alleen bij LADEN. `smart_charge` laadt uit de zon en koopt
+        # niets, dus daar maakt de prijs niet uit - een waarschuwing zou
+        # dan alleen ruis zijn.
+        await self._waarschuw_bij_stijgende_prijs(now)
+
         laatste = self._handmatige_stand_laatste_herinnering
         if laatste is not None and (
             (now - laatste).total_seconds() / 60
@@ -8794,6 +8807,60 @@ class EnergyManagementSystemCoordinator:
             + "EMS stuurt niet zolang dit aan staat.",
             notification_id="ems_handmatige_stand",
             kind="handmatige_stand",
+        )
+
+    async def _waarschuw_bij_stijgende_prijs(self, now: datetime) -> None:
+        """Melden zodra het bijkopen duurder wordt (v3.82.0).
+
+        Gevraagd: "Als de prijs gaat stijgen en manual laden knop is
+        ingeschakeld wil ik daar ook een melding van hebben."
+
+        Alleen bij LADEN. `smart_charge` laadt uit de zon en koopt niets,
+        dus daar maakt de prijs niet uit.
+
+        Er wordt vooruitgekeken, niet achteraf gemeld: wie hoort dat de
+        prijs een uur geleden is gestegen, heeft er niets meer aan. De
+        waarschuwing komt zodra er binnen het venster een kwartier
+        aankomt dat merkbaar duurder is dan nu.
+        """
+        if self.handmatige_stand != HANDMATIGE_STAND_LADEN:
+            return
+        nu_prijs = self.huidige_prijs_eur_per_kwh(now)
+        if nu_prijs is None:
+            return
+
+        grens = now + timedelta(minutes=PRIJSSTIJGING_VENSTER_MINUTEN)
+        komend = [
+            (start, prijs / PRICE_SCALE_FACTOR)
+            for start, _einde, prijs in (self._get_forecast_entries() or [])
+            if now < start <= grens
+        ]
+        if not komend:
+            return
+        moment, hoogste = max(komend, key=lambda x: x[1])
+        stijging_ct = (hoogste - nu_prijs) * 100
+        if stijging_ct < PRIJSSTIJGING_MELDGRENS_CT:
+            return
+
+        # Eén melding per stijging, niet per ronde. De sleutel is het
+        # kwartier waar het om gaat; wordt de piek later hoger, dan mag
+        # er opnieuw gemeld worden.
+        sleutel = f"{moment.isoformat()}|{round(hoogste, 3)}"
+        if self._prijsstijging_gemeld == sleutel:
+            return
+        self._prijsstijging_gemeld = sleutel
+
+        self._dispatch_notification(
+            notify_service=self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE),
+            title="💸 De stroomprijs gaat omhoog",
+            message=(
+                f"Handmatig laden staat aan en de prijs loopt van "
+                f"{nu_prijs * 100:.1f} naar {hoogste * 100:.1f} ct om "
+                f"{moment.strftime('%H:%M')}. Dat is {stijging_ct:.1f} ct "
+                "per kWh duurder."
+            ),
+            notification_id="ems_prijsstijging_handmatig",
+            kind="prijsstijging_handmatig",
         )
 
     def _volg_handmatige_ingrepen(self, now: datetime) -> None:
@@ -8845,6 +8912,27 @@ class EnergyManagementSystemCoordinator:
         # herstart begint, is er een die je juist wilt zien. De laatste
         # beslissing weet wel wat EMS wilde, ook als hij niet aan
         # schrijven toekwam.
+        # v3.82.0: in leermodus valt er niets vast te leggen.
+        #
+        # Gemeten in de export van 30 augustus 14:33: zeven ingrepen in
+        # veertig minuten, terwijl er hooguit twee waren gedaan. Vier
+        # daarvan waren van de vorm:
+        #
+        #     EMS wilde smart_discharging, werkelijk smart
+        #
+        # Dat is geen ingreep van de gebruiker maar de LEERMODUS: EMS
+        # schrijft dan niets, dus staat de accu vanzelf ergens anders
+        # dan de beslissing zegt. Daar valt niets van te leren - het is
+        # de integratie die zichzelf stilzet.
+        #
+        # De vergelijking met de laatste BESLISSING blijft nuttig voor
+        # het geval van 30 augustus 10:16, waarin de accu handmatig
+        # stond nog voordat EMS iets had geschreven. Maar dan moet de
+        # leermodus wel uit staan.
+        if self.learning_only or self.force_manual:
+            self._handmatig_sinds = None
+            return
+
         if not gewenst:
             gewenst = self._modus_bij_beslissing(self.last_reason)
 
@@ -8856,9 +8944,21 @@ class EnergyManagementSystemCoordinator:
 
         # Eén regel per aaneengesloten periode, niet per ronde. Anders
         # staat er na een middag handmatig laden honderd keer hetzelfde.
-        if self._handmatig_sinds is not None:
+        #
+        # v3.82.0: op de STAND, niet op een tijdstip.
+        #
+        # In dezelfde export stonden 14:19:48 en 14:20:57 allebei, met
+        # precies dezelfde inhoud. `_handmatig_sinds` werd elders weer op
+        # None gezet - bij elke ronde waarin de standen toevallig gelijk
+        # waren - en dan telde de volgende ronde als nieuwe periode.
+        #
+        # Het paar (gewenst, werkelijk) verandert niet zolang de ingreep
+        # duurt, en dat is precies de vraag die hier beantwoord moet
+        # worden.
+        vergelijking = f"{gewenst}->{werkelijk}"
+        if self._handmatig_sinds == vergelijking:
             return
-        self._handmatig_sinds = now
+        self._handmatig_sinds = vergelijking
 
         self.handmatige_ingrepen.append(
             {
@@ -8919,6 +9019,86 @@ class EnergyManagementSystemCoordinator:
         ]
         return round(max(rest) * 100, 1) if rest else None
 
+    def _patroon_in_de_ingrepen(self) -> dict:
+        """Zit er een lijn in de ingrepen? (v3.82.0)
+
+        Gevraagd: "De integratie dient te allen tijde mijn manuele
+        overrules vast te leggen en ervan te leren."
+
+        Het vastleggen zat er sinds v3.75.0; dit is het leren. Bewust
+        geen slim model: bij een handvol waarnemingen is het gemiddelde
+        van de omstandigheden alles wat er eerlijk uit te halen valt.
+
+        Wat er wél uit komt is een BESCHRIJVING - "u greep in bij
+        gemiddeld 13 ct met 10,8 kWh zon verwacht" - en of die
+        omstandigheden onderling lijken. Lijken ze niet, dan is er geen
+        regel en zegt de integratie dat.
+
+        Er wordt niets mee gestuurd. Komt er een duidelijke lijn uit,
+        dan is dat een proefstandkandidaat die zijn eigen bewijs moet
+        leveren.
+        """
+        reeks = [
+            r
+            for r in (self.handmatige_ingrepen or [])
+            if r.get("prijs_nu_ct") is not None
+        ]
+        if len(reeks) < HANDMATIGE_INGREPEN_MIN_VOOR_PATROON:
+            return {
+                "beschikbaar": False,
+                "reden": (
+                    f"{len(reeks)} van "
+                    f"{HANDMATIGE_INGREPEN_MIN_VOOR_PATROON} ingrepen."
+                ),
+            }
+
+        def _spreiding(sleutel: str) -> dict | None:
+            waarden = [
+                r[sleutel] for r in reeks if r.get(sleutel) is not None
+            ]
+            if len(waarden) < 3:
+                return None
+            mediaan = statistics.median(waarden)
+            spreiding = max(waarden) - min(waarden)
+            return {
+                "mediaan": round(mediaan, 1),
+                "laagste": round(min(waarden), 1),
+                "hoogste": round(max(waarden), 1),
+                # Een omstandigheid die bij elke ingreep ongeveer gelijk
+                # is, zegt iets. Eentje die alle kanten op gaat niet.
+                "consistent": bool(mediaan) and spreiding <= abs(mediaan) * 0.5,
+            }
+
+        kenmerken = {
+            naam: _spreiding(naam)
+            for naam in (
+                "prijs_nu_ct",
+                "duurste_vandaag_ct",
+                "accustand_procent",
+                "verwachte_zon_kwh",
+            )
+        }
+        vast = [
+            naam
+            for naam, g in kenmerken.items()
+            if g and g["consistent"]
+        ]
+        return {
+            "beschikbaar": True,
+            "ingrepen": len(reeks),
+            "kenmerken": kenmerken,
+            "consistente_kenmerken": vast,
+            "heeft_lijn": len(vast) >= 2,
+            "toelichting": (
+                "De omstandigheden waaronder er werd ingegrepen. Een "
+                "kenmerk heet consistent als de spreiding onder de helft "
+                "van de mediaan blijft - dan lijkt elke ingreep op de "
+                "vorige. Bij twee of meer consistente kenmerken zit er "
+                "een lijn in; daar valt een proefstandkandidaat van te "
+                "maken. Er wordt niets mee gestuurd."
+            ),
+        }
+
     def get_handmatige_ingrepen(self) -> dict:
         """Wat er is vastgelegd, zonder conclusie (v3.75.0).
 
@@ -8932,6 +9112,8 @@ class EnergyManagementSystemCoordinator:
             "ingrepen": reeks[-20:],
             "genoeg_voor_een_patroon": len(reeks)
             >= HANDMATIGE_INGREPEN_MIN_VOOR_PATROON,
+            # v3.82.0: en wat eruit komt zodra er genoeg zijn.
+            "patroon": self._patroon_in_de_ingrepen(),
             "toelichting": (
                 "Elke keer dat de accu anders staat dan de integratie "
                 "wilde. Eén regel per aaneengesloten periode, met de "

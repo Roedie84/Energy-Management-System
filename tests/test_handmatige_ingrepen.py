@@ -276,3 +276,146 @@ def test_the_decision_maps_to_a_mode(
     c = make_coordinator({})
 
     assert c._modus_bij_beslissing(reden) == verwacht
+
+
+# --- niet meten wat de integratie zelf doet (v3.82.0) ----------------
+
+
+def test_learning_mode_is_not_an_intervention(make_coordinator, hass):
+    """Gemeten in de export van 30 augustus 14:33: zeven ingrepen in
+
+    veertig minuten, terwijl er hooguit twee waren gedaan. Vier daarvan
+    waren van de vorm:
+
+        EMS wilde smart_discharging, werkelijk smart
+
+    Dat is geen ingreep van de gebruiker maar de LEERMODUS: EMS schrijft
+    dan niets, dus staat de accu vanzelf ergens anders dan de beslissing
+    zegt. Daar valt niets van te leren.
+    """
+    c = _coordinator(make_coordinator, hass, "smart", None)
+    c.last_reason = "discharging_window"
+    c.learning_only = True
+
+    c._volg_handmatige_ingrepen(NU)
+
+    assert c.handmatige_ingrepen == []
+
+
+def test_force_manual_is_not_an_intervention(make_coordinator, hass):
+    """Dezelfde reden: dan stuurt de gebruiker via een andere schakelaar
+
+    en is de afwijking geen verrassing.
+    """
+    c = _coordinator(make_coordinator, hass, "manual", "smart")
+    c.force_manual = True
+
+    c._volg_handmatige_ingrepen(NU)
+
+    assert c.handmatige_ingrepen == []
+
+
+def test_the_same_pair_is_recorded_once(make_coordinator, hass):
+    """In dezelfde export stonden 14:19:48 en 14:20:57 allebei, met
+
+    precies dezelfde inhoud. De periode-markering hing aan een tijdstip
+    dat elders weer op None werd gezet; hij hangt nu aan het PAAR
+    (gewenst, werkelijk), en dat verandert niet zolang de ingreep duurt.
+    """
+    c = _coordinator(make_coordinator, hass, "manual", "smart")
+
+    for minuut in (0, 1, 2, 15, 60):
+        c._volg_handmatige_ingrepen(NU + timedelta(minutes=minuut))
+
+    assert len(c.handmatige_ingrepen) == 1
+
+
+def test_a_different_pair_is_a_new_period(make_coordinator, hass):
+    c = _coordinator(make_coordinator, hass, "manual", "smart")
+    c._volg_handmatige_ingrepen(NU)
+
+    hass.states.set("select.modus", "smart_charging")
+    c._volg_handmatige_ingrepen(NU + timedelta(minutes=5))
+
+    assert len(c.handmatige_ingrepen) == 2
+
+
+# --- en ervan leren --------------------------------------------------
+
+
+def _ingreep(prijs=13.0, duurste=38.8, soc=70.0, zon=10.8):
+    return {
+        "moment": "2026-08-30T14:00:00+02:00",
+        "prijs_nu_ct": prijs,
+        "duurste_vandaag_ct": duurste,
+        "accustand_procent": soc,
+        "verwachte_zon_kwh": zon,
+    }
+
+
+def test_a_pattern_needs_enough_cases(make_coordinator, hass):
+    c = make_coordinator({})
+    c.handmatige_ingrepen = [_ingreep() for _ in range(3)]
+
+    assert c._patroon_in_de_ingrepen()["beschikbaar"] is False
+
+
+def test_consistent_circumstances_form_a_line(make_coordinator, hass):
+    """Elke keer bij ongeveer dezelfde prijs en dezelfde verwachte zon:
+
+    dan lijkt elke ingreep op de vorige.
+    """
+    c = make_coordinator({})
+    c.handmatige_ingrepen = [
+        _ingreep(prijs=13.0 + i * 0.2, zon=10.8 + i * 0.1)
+        for i in range(HANDMATIGE_INGREPEN_MIN_VOOR_PATROON)
+    ]
+
+    patroon = c._patroon_in_de_ingrepen()
+
+    assert patroon["heeft_lijn"] is True
+    assert "prijs_nu_ct" in patroon["consistente_kenmerken"]
+
+
+def test_scattered_circumstances_are_no_line(make_coordinator, hass):
+    """Gaat een kenmerk alle kanten op, dan is er geen regel - en dan
+
+    hoort de integratie dat te zeggen in plaats van iets te verzinnen.
+    """
+    c = make_coordinator({})
+    c.handmatige_ingrepen = [
+        _ingreep(prijs=5.0 + i * 8, soc=10.0 + i * 9, zon=1.0 + i * 3)
+        for i in range(HANDMATIGE_INGREPEN_MIN_VOOR_PATROON)
+    ]
+
+    patroon = c._patroon_in_de_ingrepen()
+
+    assert patroon["heeft_lijn"] is False
+
+
+def test_the_pattern_is_in_the_overview(make_coordinator, hass):
+    c = make_coordinator({})
+    c.handmatige_ingrepen = [
+        _ingreep() for _ in range(HANDMATIGE_INGREPEN_MIN_VOOR_PATROON)
+    ]
+
+    assert c.get_handmatige_ingrepen()["patroon"]["beschikbaar"] is True
+
+
+def test_the_pattern_steers_nothing(make_coordinator, hass):
+    import ast
+    import inspect
+
+    from custom_components.energy_management_system.coordinator import (
+        EnergyManagementSystemCoordinator as C,
+    )
+
+    boom = ast.parse(inspect.getsource(C._patroon_in_de_ingrepen).lstrip())
+    aanroepen = {
+        n.func.attr
+        for n in ast.walk(boom)
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+    }
+
+    assert "_async_apply_operation" not in aanroepen
+    assert "_async_apply_manual" not in aanroepen

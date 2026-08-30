@@ -20401,3 +20401,64 @@ Er staat nu een toets op dat elk platform in die lijst ook een bestand
 heeft, en dat de drempels over precies die platforms gaan.
 
 **Volledige testsuite**: 3252 tests, allemaal groen.
+
+## v3.82.0 — Vastleggen wat een ingreep is, en ervan leren
+
+**Gevraagd**: "De integratie dient te allen tijde mijn manuele overrules
+vast te leggen en ervan te leren."
+
+### Eerst: vier van de zeven waren geen ingreep
+
+Gemeten in de export van 30 augustus 14:33 — zeven ingrepen in veertig
+minuten, terwijl er hooguit twee waren gedaan:
+
+```
+13:54  EMS wilde smart_discharging, werkelijk smart
+14:08  EMS wilde smart_discharging, werkelijk smart
+14:19  EMS wilde smart_discharging, werkelijk smart
+14:20  EMS wilde smart_discharging, werkelijk smart
+```
+
+Dat is geen ingreep van de gebruiker maar de **leermodus**: EMS schrijft
+dan niets, dus staat de accu vanzelf ergens anders dan de beslissing
+zegt. Daar valt niets van te leren — het is de integratie die zichzelf
+stilzet. Hetzelfde geldt voor `force_manual`.
+
+En 14:19 en 14:20 stonden er allebei in met precies dezelfde inhoud. De
+periode-markering hing aan een **tijdstip** dat elders weer op None werd
+gezet; hij hangt nu aan het **paar** (gewenst, werkelijk), en dat
+verandert niet zolang de ingreep duurt.
+
+### Dan: ervan leren
+
+Het vastleggen zat er sinds v3.75.0; dit is het leren. Bewust geen slim
+model — bij een handvol waarnemingen is het gemiddelde van de
+omstandigheden alles wat er eerlijk uit te halen valt.
+
+Per kenmerk (prijs, duurste prijs van de dag, accustand, verwachte zon)
+wordt de mediaan en de spreiding berekend. Een kenmerk heet
+**consistent** als de spreiding onder de helft van de mediaan blijft —
+dan lijkt elke ingreep op de vorige. Bij twee of meer consistente
+kenmerken zit er een lijn in.
+
+Gaat een kenmerk alle kanten op, dan is er geen regel, en dan zegt de
+integratie dat in plaats van iets te verzinnen.
+
+Er wordt niets mee gestuurd. Komt er een duidelijke lijn uit, dan is dat
+een proefstandkandidaat die zijn eigen bewijs moet leveren.
+
+### En een waarschuwing bij stijgende prijzen
+
+**Gevraagd**: "Als de prijs gaat stijgen en manual laden knop is
+ingeschakeld wil ik daar ook een melding van hebben."
+
+Alleen bij **laden**. `smart_charge` laadt uit de zon en koopt niets, dus
+daar maakt de prijs niet uit — een waarschuwing zou alleen ruis zijn.
+
+Er wordt vooruitgekeken en niet achteraf gemeld: wie hoort dat de prijs
+een uur geleden is gestegen, heeft er niets meer aan. De melding komt
+zodra er binnen anderhalf uur een kwartier aankomt dat vijf cent of meer
+duurder is. Eén melding per stijging; wordt de piek later hoger, dan is
+dat nieuwe informatie en mag er opnieuw gemeld worden.
+
+**Volledige testsuite**: 3268 tests, allemaal groen.

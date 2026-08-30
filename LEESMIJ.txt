@@ -1,33 +1,49 @@
-v3.81.0 - alleen de gewijzigde bestanden sinds v3.80.0
+v3.82.0 - alleen de gewijzigde bestanden sinds v3.81.0
 
 CODE (naar Home Assistant, daarna herstarten)
   custom_components/energy_management_system/
-    coordinator.py            de platformlijst uit PLATFORMS
-    const.py                  PLATFORMS en de drempels
-    __init__.py               importeert PLATFORMS uit const
-    manifest.json             versienummer 3.81.0
+    coordinator.py            de correcties en de patroonanalyse
+    const.py                  de prijswaarschuwing
+    __init__.py               PLATFORMS uit const (v3.81.0)
+    dashboard_template.yaml   de meldingsschakelaar
+    manifest.json             versienummer 3.82.0
     bestandscontrole.json     bijgewerkte hashlijst  (MOET mee)
 
+DASHBOARD
+  dashboards/energy_management_system_dashboard.yaml
+
 TOETSEN (repository)
-  tests/test_platformcontrole.py
+  tests/test_handmatige_ingrepen.py
+  tests/test_handmatige_stand.py
+  en vier andere
 
 DOCUMENTEN
   CHANGELOG.md  README.md  OVERDRACHT.md
 
-WAT ER FOUT WAS
----------------
+WAT ER IN ZIT
+-------------
 
-De platformcontrole uit v3.79.0 meldde twee omgevallen onderdelen:
-`number` en `select`. Die bestaan helemaal niet in deze integratie - er
-is geen number.py en geen select.py.
+1. VIER VAN DE ZEVEN INGREPEN WAREN GEEN INGREEP
+   "EMS wilde smart_discharging, werkelijk smart" is de LEERMODUS, niet
+   jouw hand. Die telt niet meer mee. Ook dubbelen binnen dezelfde
+   periode zijn eruit.
 
-Vals alarm van mijn eigen makelij, en dezelfde fout als die de controle
-moest vangen: iets schrijven op grond van wat ik DENK dat er hoort te
-staan.
+2. ERVAN LEREN
+   Per kenmerk - prijs, duurste prijs van de dag, accustand, verwachte
+   zon - de mediaan en de spreiding. Lijken de omstandigheden op elkaar,
+   dan is er een lijn; anders zegt de integratie dat er geen regel is.
 
-De lijst komt nu uit PLATFORMS, op een plek.
+   Stuurt niets. Komt er een lijn uit, dan wordt dat een
+   proefstandkandidaat.
+
+3. WAARSCHUWING BIJ STIJGENDE PRIJZEN
+   Alleen bij handmatig LADEN, en vooruitkijkend: zodra er binnen
+   anderhalf uur een kwartier aankomt dat vijf cent duurder is.
 
 WAT JE ZELF MOET DOEN
 ---------------------
 
-Kopieren en herstarten. Daarna staat de analyse weer op nul fouten.
+Kopieren en herstarten.
+
+Let op: de vier onterechte ingrepen blijven in de lijst staan tot ze uit
+het venster lopen. Nieuwe komen er niet meer bij.

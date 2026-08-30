@@ -189,6 +189,8 @@ def test_only_the_pre_existing_kinds_default_to_on():
         "celspanning_laag",
         # v3.77.0: de herinnering dat de accu handmatig staat.
         "handmatige_stand",
+        # v3.82.0: en de waarschuwing dat het bijkopen duurder wordt.
+        "prijsstijging_handmatig",
         # v3.67.0: een onvolledige installatie hoort te melden - dat is
         # het hele punt van de bestandscontrole.
         "installatie_onvolledig",

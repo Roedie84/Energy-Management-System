@@ -486,6 +486,7 @@ def test_a_current_store_keeps_the_balance_history(make_coordinator, hass):
 # precies één van drie bakken vallen. Wie er een nieuwe bijzet en niets
 # kiest, krijgt hier een rode test in plaats van stille dataverlies.
 VLUCHTIG_MET_REDEN = {
+    "_prijsstijging_gemeld": "welke prijsstijging al is gemeld; hoort bij de handmatige stand, die een herstart ook niet overleeft",
     "handmatige_stand": "de handmatige stand vanuit het dashboard; na een herstart hoort de accu NIET uren later nog handmatig te laden zonder dat iemand eraan denkt",
     "handmatige_stand_sinds": "hoort bij handmatige_stand",
     "_handmatige_stand_laatste_herinnering": "hoort bij handmatige_stand",

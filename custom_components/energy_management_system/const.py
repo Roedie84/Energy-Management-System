@@ -1926,6 +1926,7 @@ LOG_PRIORITEITEN = {
     "koeling_te_scherp": LOG_PRIO_AANDACHT,
     "celspanning_laag": LOG_PRIO_AANDACHT,
     "handmatige_stand": LOG_PRIO_AANDACHT,
+    "prijsstijging_handmatig": LOG_PRIO_AANDACHT,
     "installatie_onvolledig": LOG_PRIO_KRITIEK,
     # Aandacht - het vraagt een beslissing.
     "plan_verkoop_geblokkeerd": LOG_PRIO_AANDACHT,
@@ -2806,6 +2807,15 @@ NOTIFICATION_TYPES: tuple[tuple[str, str, str, bool, int], ...] = (
         "een vergeten bestand de nieuwe manier om het mis te laten gaan.",
         True,
         1440,
+    ),
+    (
+        "prijsstijging_handmatig",
+        "De stroomprijs gaat omhoog",
+        "Wanneer de prijs binnen anderhalf uur merkbaar stijgt terwijl "
+        "de knop voor handmatig laden aan staat - dan wordt het bijkopen "
+        "duurder.",
+        True,
+        60,
     ),
     (
         "handmatige_stand",
@@ -4738,6 +4748,7 @@ ACHTERHOEKS_TITELS = {
     "koeling_te_scherp": "De koeling geet te vaak an",
     "celspanning_laag": "n Cel steet te lege",
     "handmatige_stand": "De accu steet nog met de hand",
+    "prijsstijging_handmatig": "De stroom wordt duurder",
     "installatie_onvolledig": "De installatie is neet compleet",
     "appliance_ready": "'n Apparaat is klaor",
     "appliance_cheap_moment": "Good moment veur 'n apparaat",
@@ -5197,3 +5208,19 @@ PLATFORM_MINIMUM_ENTITEITEN = {
     "switch": 5,
     "button": 1,
 }
+
+# Waarschuwen als de prijs stijgt terwijl er handmatig geladen wordt
+# (v3.82.0).
+#
+# Gevraagd: "Als de prijs gaat stijgen en manual laden knop is
+# ingeschakeld wil ik daar ook een melding van hebben."
+#
+# Vooruitkijken en niet achteraf melden: wie hoort dat de prijs een uur
+# geleden is gestegen, heeft er niets meer aan. Negentig minuten is ver
+# genoeg om de knop nog uit te kunnen zetten voordat het duur wordt.
+PRIJSSTIJGING_VENSTER_MINUTEN = 90
+
+# Vanaf welke stijging het melden waard is. Op 30 augustus liep de prijs
+# van 13,0 naar 38,8 ct - dat is 25,8 ct. Vijf cent vangt de echte
+# sprongen en laat de ruis van een paar tienden liggen.
+PRIJSSTIJGING_MELDGRENS_CT = 5.0

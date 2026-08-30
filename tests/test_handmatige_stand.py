@@ -302,3 +302,130 @@ def test_the_real_guard_would_have_blocked_it(make_coordinator, hass):
     bron = inspect.getsource(C._async_apply_manual)
 
     assert "if self.learning_only:" in bron
+
+
+# --- waarschuwen bij een stijgende prijs (v3.82.0) -------------------
+
+
+def _prijzen(c, reeks, start=None):
+    from custom_components.energy_management_system.const import (
+        PRICE_SCALE_FACTOR,
+    )
+
+    begin = start or NU
+    c._get_forecast_entries = lambda **kw: [
+        (
+            begin + timedelta(minutes=15 * i),
+            begin + timedelta(minutes=15 * (i + 1)),
+            p * PRICE_SCALE_FACTOR,
+        )
+        for i, p in enumerate(reeks)
+    ]
+    c.huidige_prijs_eur_per_kwh = lambda now=None: reeks[0]
+    return c
+
+
+def test_a_rising_price_is_reported(make_coordinator, hass):
+    """De prijzen van 30 augustus: 13,0 ct nu, 38,8 ct 's avonds."""
+    c = _coordinator(make_coordinator)
+    c.accustand_procent = lambda: 60.0
+    meldingen = []
+    c._dispatch_notification = lambda **kw: meldingen.append(kw)
+    _prijzen(c, [0.130, 0.135, 0.200, 0.388])
+
+    _run(c.async_set_handmatige_stand(HANDMATIGE_STAND_LADEN, NU))
+    _run(c._waarschuw_bij_stijgende_prijs(NU))
+
+    assert len(meldingen) == 1
+    assert "38.8" in meldingen[0]["message"]
+    assert "13.0" in meldingen[0]["message"]
+
+
+def test_a_flat_price_is_not_reported(make_coordinator, hass):
+    """Acht uur vlak 13 cent - daar valt niets over te melden."""
+    c = _coordinator(make_coordinator)
+    meldingen = []
+    c._dispatch_notification = lambda **kw: meldingen.append(kw)
+    _prijzen(c, [0.130, 0.131, 0.130, 0.132])
+
+    _run(c.async_set_handmatige_stand(HANDMATIGE_STAND_LADEN, NU))
+    _run(c._waarschuw_bij_stijgende_prijs(NU))
+
+    assert meldingen == []
+
+
+def test_smart_charge_is_not_warned(make_coordinator, hass):
+    """`smart_charge` laadt uit de zon en koopt niets, dus daar maakt de
+
+    prijs niet uit - een waarschuwing zou alleen ruis zijn.
+    """
+    c = _coordinator(make_coordinator)
+    meldingen = []
+    c._dispatch_notification = lambda **kw: meldingen.append(kw)
+    _prijzen(c, [0.130, 0.388])
+
+    _run(c.async_set_handmatige_stand(HANDMATIGE_STAND_SMART_CHARGE, NU))
+    _run(c._waarschuw_bij_stijgende_prijs(NU))
+
+    assert meldingen == []
+
+
+def test_nothing_is_warned_when_nothing_is_manual(make_coordinator, hass):
+    c = _coordinator(make_coordinator)
+    meldingen = []
+    c._dispatch_notification = lambda **kw: meldingen.append(kw)
+    _prijzen(c, [0.130, 0.388])
+
+    _run(c._waarschuw_bij_stijgende_prijs(NU))
+
+    assert meldingen == []
+
+
+def test_it_warns_once_per_rise(make_coordinator, hass):
+    """Niet elke ronde opnieuw - dat is precies de ruis waar de
+
+    herinnering per uur voor is gebouwd.
+    """
+    c = _coordinator(make_coordinator)
+    meldingen = []
+    c._dispatch_notification = lambda **kw: meldingen.append(kw)
+    _prijzen(c, [0.130, 0.388])
+
+    _run(c.async_set_handmatige_stand(HANDMATIGE_STAND_LADEN, NU))
+    for minuut in range(0, 40, 5):
+        _run(c._waarschuw_bij_stijgende_prijs(NU + timedelta(minutes=minuut)))
+
+    assert len(meldingen) == 1
+
+
+def test_a_higher_peak_warns_again(make_coordinator, hass):
+    """Wordt de piek later hoger, dan is dat nieuwe informatie."""
+    c = _coordinator(make_coordinator)
+    meldingen = []
+    c._dispatch_notification = lambda **kw: meldingen.append(kw)
+    _prijzen(c, [0.130, 0.300])
+
+    _run(c.async_set_handmatige_stand(HANDMATIGE_STAND_LADEN, NU))
+    _run(c._waarschuw_bij_stijgende_prijs(NU))
+    _prijzen(c, [0.130, 0.450])
+    _run(c._waarschuw_bij_stijgende_prijs(NU))
+
+    assert len(meldingen) == 2
+
+
+def test_it_looks_ahead_not_back(make_coordinator, hass):
+    """Wie hoort dat de prijs een uur geleden is gestegen, heeft er niets
+
+    meer aan.
+    """
+    c = _coordinator(make_coordinator)
+    meldingen = []
+    c._dispatch_notification = lambda **kw: meldingen.append(kw)
+    # De hoge prijs ligt in het VERLEDEN.
+    _prijzen(c, [0.388, 0.130], start=NU - timedelta(hours=1))
+    c.huidige_prijs_eur_per_kwh = lambda now=None: 0.130
+
+    _run(c.async_set_handmatige_stand(HANDMATIGE_STAND_LADEN, NU))
+    _run(c._waarschuw_bij_stijgende_prijs(NU))
+
+    assert meldingen == []
