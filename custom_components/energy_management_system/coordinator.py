@@ -8616,8 +8616,29 @@ class EnergyManagementSystemCoordinator:
         werkelijk = staat.state
         gewenst = self.last_applied_operation
 
-        # Zonder een gewenste stand valt er niets te vergelijken - vlak
-        # na het opstarten, of in leermodus waarin EMS niets schrijft.
+        # v3.76.0: terugvallen op de laatste BESLISSING als er nog niets
+        # is geschreven.
+        #
+        # Gemeten in de export van 30 augustus 10:16:
+        #
+        #     select.zendure_manager_operation = off
+        #     last_applied_operation           = None
+        #     handmatige ingrepen              = 0
+        #
+        # De accu stond handmatig op laden, en juist die ingreep werd
+        # niet vastgelegd. `last_applied_operation` wordt pas gevuld
+        # zodra EMS zelf schrijft, en dat was sinds de herstart niet
+        # gebeurd - want de gebruiker had de manager op `off` gezet.
+        #
+        # Dat is precies verkeerd om: een ingreep die vóór of tijdens een
+        # herstart begint, is er een die je juist wilt zien. De laatste
+        # beslissing weet wel wat EMS wilde, ook als hij niet aan
+        # schrijven toekwam.
+        if not gewenst:
+            gewenst = self._modus_bij_beslissing(self.last_reason)
+
+        # Zonder een gewenste stand valt er nog steeds niets te
+        # vergelijken - vlak na het opstarten, vóór de eerste ronde.
         if not gewenst or werkelijk == gewenst:
             self._handmatig_sinds = None
             return
@@ -8632,6 +8653,9 @@ class EnergyManagementSystemCoordinator:
             {
                 "moment": now.isoformat(),
                 "ems_wilde": gewenst,
+                # Of dat uit een werkelijke schrijfactie kwam of uit de
+                # beslissing - dat scheelt bij het uitzoeken.
+                "uit_beslissing": self.last_applied_operation is None,
                 "werkelijk": werkelijk,
                 "reden_ems": self.last_reason,
                 # De omstandigheden, want daar zit de mogelijke regel in.
@@ -8655,6 +8679,24 @@ class EnergyManagementSystemCoordinator:
             gewenst,
             werkelijk,
         )
+
+    @staticmethod
+    def _modus_bij_beslissing(reden: str | None) -> str | None:
+        """Welke stand hoort bij deze beslissing? (v3.76.0)
+
+        Alleen voor de gevallen waarin EMS nog niet aan schrijven
+        toekwam. De vertaling is bewust grof: het gaat erom of de accu
+        ergens ANDERS staat dan bedoeld, niet om het precieze verschil.
+        """
+        if not reden:
+            return None
+        if "manual" in reden or "verkoop" in reden or "expensive" in reden:
+            return OPTION_MANUAL
+        if "discharging" in reden:
+            return OPTION_SMART_DISCHARGING
+        if "charging" in reden:
+            return OPTION_SMART_CHARGING
+        return OPTION_SMART
 
     def _duurste_prijs_vandaag_ct(self, now: datetime) -> float | None:
         """De duurste prijs die vandaag nog komt (v3.75.0)."""

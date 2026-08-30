@@ -20121,3 +20121,47 @@ minder dan 8 kWh verwachte zon en een avondprijs boven 35 ct" — dan is
 dat een proefstandkandidaat, en die moet zijn eigen bewijs leveren.
 
 **Volledige testsuite**: 3219 tests, allemaal groen.
+
+## v3.76.0 — Een ingreep vóór de eerste schrijfactie telde niet mee
+
+**Gemeten** in de export van 30 augustus 10:16, één uur na het bouwen
+van de ingrepenlijst:
+
+```
+select.zendure_manager_operation = off
+last_applied_operation           = None
+handmatige ingrepen              = 0
+```
+
+De accu stond op dat moment handmatig te laden op 2000 W, en juist die
+ingreep werd **niet** vastgelegd.
+
+`last_applied_operation` wordt pas gevuld zodra EMS zelf naar de accu
+schrijft, en dat was sinds de herstart niet gebeurd — want de manager
+stond op `off`. Precies verkeerd om: een ingreep die vóór of tijdens een
+herstart begint, is er een die je juist wilt zien.
+
+De laatste **beslissing** weet wel wat EMS wilde, ook als hij niet aan
+schrijven toekwam. Die is nu de terugval, met een grove vertaling van
+beslissing naar stand — het gaat erom of de accu ergens *anders* staat
+dan bedoeld, niet om het precieze verschil. De regel meldt
+`uit_beslissing`, zodat bij het uitzoeken te zien is waar het vandaan
+kwam.
+
+### En verder gezocht naar gaten
+
+Dertien functies stoppen vroeg op een veld dat pas later gevuld raakt.
+Alle dertien terecht: schakelaars en geleerde reeksen die nog leeg zijn.
+
+Vijfendertig velden staan leeg in de draaiende export, met één
+gemeenschappelijke oorzaak: de beslissingstak draait niet zolang de
+manager op `off` staat. Dat is geen fout — het leren loopt gewoon door,
+met 24 uren in het verbruiksprofiel en veertien laadmetingen voor het
+rendement.
+
+Dat laatste kostte wel een omweg: die reeksen staan in
+`persisted_state_snapshot` en niet los onder `coordinator`, en ik las de
+lege plek als "niets geleerd". **De zesde keer deze week** dat ik op de
+verkeerde plek zoek en een verkeerde conclusie meld.
+
+**Volledige testsuite**: 3226 tests, allemaal groen.

@@ -189,3 +189,90 @@ def test_it_reaches_the_export():
     bron = (Path(pkg.__file__).parent / "diagnostics.py").read_text()
 
     assert '"handmatige_ingrepen"' in bron
+
+
+# --- het gat van 30 augustus (v3.76.0) -------------------------------
+
+
+def test_an_intervention_before_the_first_write_is_recorded(
+    make_coordinator, hass
+):
+    """Gemeten in de export van 30 augustus 10:16:
+
+        select.zendure_manager_operation = off
+        last_applied_operation           = None
+        handmatige ingrepen              = 0
+
+    De accu stond handmatig op laden, en juist die ingreep werd niet
+    vastgelegd. `last_applied_operation` wordt pas gevuld zodra EMS zelf
+    schrijft, en dat was sinds de herstart niet gebeurd - want de manager
+    stond op `off`.
+
+    Precies verkeerd om: een ingreep die vóór of tijdens een herstart
+    begint, is er een die je juist wilt zien.
+    """
+    c = make_coordinator({CONF_OPERATION_SELECT: "select.modus"})
+    hass.states.set("select.modus", "off")
+    c.last_applied_operation = None
+    c.last_reason = "default_smart"
+
+    c._volg_handmatige_ingrepen(NU)
+
+    assert len(c.handmatige_ingrepen) == 1
+    regel = c.handmatige_ingrepen[0]
+    assert regel["werkelijk"] == "off"
+    assert regel["uit_beslissing"] is True
+
+
+def test_a_written_mode_still_wins(make_coordinator, hass):
+    """Wat EMS werkelijk heeft geschreven is nauwkeuriger dan wat uit de
+
+    beslissing valt af te leiden.
+    """
+    c = make_coordinator({CONF_OPERATION_SELECT: "select.modus"})
+    hass.states.set("select.modus", "manual")
+    c.last_applied_operation = "smart_discharging"
+    c.last_reason = "default_smart"
+
+    c._volg_handmatige_ingrepen(NU)
+
+    assert c.handmatige_ingrepen[0]["ems_wilde"] == "smart_discharging"
+    assert c.handmatige_ingrepen[0]["uit_beslissing"] is False
+
+
+def test_without_a_decision_either_nothing_is_recorded(
+    make_coordinator, hass
+):
+    """Vlak na het opstarten, vóór de eerste ronde: dan is er niets om
+
+    tegen te vergelijken en is zwijgen het juiste.
+    """
+    c = make_coordinator({CONF_OPERATION_SELECT: "select.modus"})
+    hass.states.set("select.modus", "off")
+    c.last_applied_operation = None
+    c.last_reason = None
+
+    c._volg_handmatige_ingrepen(NU)
+
+    assert c.handmatige_ingrepen == []
+
+
+@pytest.mark.parametrize(
+    "reden,verwacht",
+    [
+        ("default_smart", "smart"),
+        ("expensive_quarter", "manual"),
+        ("discharging_window", "smart_discharging"),
+        ("arbitrage_solar_capture", "smart"),
+    ],
+)
+def test_the_decision_maps_to_a_mode(
+    make_coordinator, hass, reden, verwacht
+):
+    """De vertaling is bewust grof: het gaat erom of de accu ergens
+
+    ANDERS staat dan bedoeld, niet om het precieze verschil.
+    """
+    c = make_coordinator({})
+
+    assert c._modus_bij_beslissing(reden) == verwacht

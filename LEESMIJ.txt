@@ -1,50 +1,42 @@
-v3.74.0 en v3.75.0 - alleen de gewijzigde bestanden sinds v3.73.0
-
-INSTALLEER DIT VANDAAG NOG. De reservebodem uit v3.74.0 is precies wat
-er vanavond nodig is: weinig zon, hoge avondprijzen, en een planning die
-vijftien kwartieren wil verkopen.
+v3.76.0 - alleen de gewijzigde bestanden sinds v3.75.0
 
 CODE (naar Home Assistant, daarna herstarten)
   custom_components/energy_management_system/
-    coordinator.py            de reservebodem en het vastleggen
-    const.py                  drie nieuwe constanten
-    diagnostics.py            handmatige ingrepen in de export
-    manifest.json             versienummer 3.75.0
+    coordinator.py            de terugval op de laatste beslissing
+    manifest.json             versienummer 3.76.0
     bestandscontrole.json     bijgewerkte hashlijst  (MOET mee)
 
 TOETSEN (repository)
-  tests/test_handmatige_ingrepen.py    nieuw
-  tests/test_reserve_bodem.py          nieuw
-  en acht bestaande toetsbestanden
+  tests/test_handmatige_ingrepen.py
 
 DOCUMENTEN
   CHANGELOG.md  README.md  OVERDRACHT.md
 
-DE HOOFDZAAK (v3.74.0)
-----------------------
+WAT ER FOUT WAS
+---------------
 
-De reserve hield structureel NIETS achter. De marge van 55% wordt
-vermenigvuldigd met het diepste tekort onderweg, en dat tekort is nul
-zodra de voorspelling zegt dat de zon het huis morgen dekt.
+De ingrepenlijst van v3.75.0 ving jouw ingreep van vanochtend NIET.
 
-Er staat nu een bodem van 15% onder: 1,17 kWh, ongeveer vijf uur
-basislast. Die zit in de RESERVE, dus hij werkt door in het ontladen, de
-verkooptoets en de kwartierplanning tegelijk.
+`last_applied_operation` wordt pas gevuld zodra EMS zelf naar de accu
+schrijft, en dat was sinds de herstart niet gebeurd - want de manager
+stond op `off` omdat jij handmatig stuurde.
 
-EN VASTLEGGEN VAN JOUW INGREPEN (v3.75.0)
------------------------------------------
+Precies verkeerd om: een ingreep die vóór of tijdens een herstart
+begint, is er een die je juist wilt zien.
 
-Elke keer dat de accu anders staat dan EMS wilde, komt er een regel met
-de omstandigheden erbij: accustand, prijs nu, duurste prijs die nog
-komt, verwachte zon.
+Er wordt nu teruggevallen op de laatste BESLISSING. De regel meldt
+`uit_beslissing`, zodat te zien is waar de vergelijking vandaan kwam.
 
-Er wordt niets uit geconcludeerd en niets mee gestuurd. Vanaf tien
-ingrepen valt te kijken of er een lijn in zit.
+VERDER GEZOCHT
+--------------
 
-Zet je vandaag handmatig op laden, dan staat dat er straks in.
+Dertien functies stoppen vroeg op een veld dat pas later gevuld raakt -
+alle dertien terecht. Vijfendertig velden staan leeg in de export, met
+één oorzaak: de beslissingstak draait niet zolang de manager op `off`
+staat. Het leren loopt gewoon door.
 
 WAT JE ZELF MOET DOEN
 ---------------------
 
-Installeren, en zet EMS daarna weer op automatisch als je klaar bent met
-handmatig laden. Morgenochtend is de proef op de reservebodem.
+Installeren. Daarna wordt jouw handmatige stand alsnog vastgelegd,
+zolang die afwijkt van wat EMS wilde.
