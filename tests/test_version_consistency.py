@@ -116,10 +116,23 @@ def test_the_test_count_in_the_readme_is_plausible():
 
     assert genoemd, "geen testaantal in de README"
 
+    # v3.92.0: geteld op de toetsFUNCTIES, niet op vijf per bestand.
+    #
+    # Die oude ondergrens - 330 bestanden maal vijf - lag op 1650,
+    # terwijl de badge op 3161 stond en de suite er 3350 draaide. Een
+    # verschil van bijna tweehonderd bleef zo staan, en dat is precies
+    # waar deze toets voor gemaakt is.
+    #
+    # Een functie tellen kan statisch; een geparametriseerde functie
+    # levert er meer dan één op, dus dit is een ONDERgrens die niet vals
+    # kan afgaan.
     bestanden = list((WORTEL / "tests").glob("test_*.py"))
-    ondergrens = len(bestanden) * 5
+    ondergrens = sum(
+        len(re.findall(r"^\s*def test_", pad.read_text(), re.MULTILINE))
+        for pad in bestanden
+    )
 
     assert int(genoemd.group(1)) >= ondergrens, (
-        f"{genoemd.group(1)} genoemd bij {len(bestanden)} testbestanden - "
-        "dat loopt te ver achter"
+        f"{genoemd.group(1)} genoemd bij {ondergrens} toetsfuncties in "
+        f"{len(bestanden)} bestanden - dat loopt achter"
     )

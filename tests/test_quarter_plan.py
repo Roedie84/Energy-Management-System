@@ -672,8 +672,16 @@ def test_both_percentages_are_available(make_coordinator, hass):
 
 
 def test_an_empty_battery_reads_as_the_floor(make_coordinator, hass):
-    """0% bruikbaar hoort samen te vallen met de harde ondergrens."""
+    """0% bruikbaar hoort samen te vallen met de harde ondergrens.
+
+    v3.92.1: de accu kwam hier vroeger vanzelf op nul uit doordat de
+    planning 's avonds tot leeg verkocht. Dat doet hij niet meer - de
+    reservebodem staat er nu onder. Deze toets gaat over de WEERGAVE,
+    dus de lege accu wordt hier rechtstreeks gezet: geen zon, niets
+    binnen, en dan blijft hij leeg.
+    """
     c = _coordinator(make_coordinator, hass, beschikbaar=0.0)
+    c._estimate_pv_kwh_for_period = lambda a, b: 0.0
 
     plan = c.get_quarter_plan(NU)
     leeg = [r for r in plan if r["soc_bruikbaar_procent"] == 0]

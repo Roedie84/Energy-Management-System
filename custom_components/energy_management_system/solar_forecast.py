@@ -262,20 +262,66 @@ class SolarForecastAccuracyTracker:
 
         Geeft None zolang er te weinig dagen in het betreffende vakje
         zitten. Dan blijft de bestaande terugval gelden: geen correctie.
+
+        v3.92.2: en ook None zolang de dagen in dat vakje niet bij elkaar
+        horen. Zie `_vak_ingehouden_reden`.
         """
         if bewolking_percent is None:
             return None
         vak = self._bewolkingsvak(bewolking_percent)
-        metingen = [
+        metingen = self._metingen_in_vak(vak)
+        if len(metingen) < SOLAR_BIAS_MIN_PER_VAK:
+            return None
+        if self._vak_ingehouden_reden(metingen):
+            return None
+        return round(statistics.median(metingen), 1)
+
+    def _metingen_in_vak(self, vak: str) -> list[float]:
+        """De bruikbare afwijkingen die in dit bewolkingsvak vallen."""
+        return [
             r["afwijking"]
             for r in (self.deviation_context or [])
             if r.get("bewolking") is not None
             and self._bewolkingsvak(r["bewolking"]) == vak
             and abs(r["afwijking"]) <= MAX_REASONABLE_DEVIATION_PERCENT
         ]
-        if len(metingen) < SOLAR_BIAS_MIN_PER_VAK:
-            return None
-        return round(statistics.median(metingen), 1)
+
+    @staticmethod
+    def _vak_ingehouden_reden(metingen: list[float]) -> str | None:
+        """Horen de dagen in dit vakje wel bij elkaar? (v3.92.2)
+
+        Gemeten in de export van 31 augustus:
+
+            datum    bewolking   afwijking   vak
+            27-08       100,0 %     -10,2 %  bewolkt
+            29-08        74,9 %      +0,9 %  bewolkt
+            30-08        84,8 %     -43,9 %  bewolkt
+
+        De beste dag van de week en de slechtste zitten in hetzelfde
+        vakje, tien procentpunt bewolking uit elkaar. Over de hele reeks
+        is de correlatie tussen bewolking en afwijking -0,23: vrijwel
+        afwezig.
+
+        `bias_voor_bewolking` keek alleen naar het AANTAL dagen. Bij een
+        vierde bewolkte dag was hij gaan corrigeren met de mediaan van
+        een verzameling die 44,8 procentpunt spant - en dat is geen
+        correctie maar een gok, precies wat de vlakke bias in v3.33.0
+        werd verweten.
+
+        Dus dezelfde toets, alleen per vak. De redenering is er niet
+        anders; hij was er alleen nooit op toegepast.
+        """
+        goed = [v for v in metingen if abs(v) <= SOLAR_DAG_GOED_PERCENT]
+        ver_mis = [v for v in metingen if abs(v) >= SOLAR_DAG_VER_MIS_PERCENT]
+        if goed and ver_mis:
+            return (
+                f"Dit vakje bevat {len(goed)} dag(en) binnen "
+                f"{SOLAR_DAG_GOED_PERCENT:.0f}% en {len(ver_mis)} meer dan "
+                f"{SOLAR_DAG_VER_MIS_PERCENT:.0f}% ernaast. De bewolking "
+                "scheidt deze dagen dus niet, en een mediaan over allebei "
+                "corrigeert de goede dagen kapot."
+            )
+        return None
 
     @staticmethod
     def _bewolkingsvak(percent: float) -> str:
@@ -300,12 +346,22 @@ class SolarForecastAccuracyTracker:
                 if r.get("bewolking") is not None
                 and self._bewolkingsvak(r["bewolking"]) == vak
             ]
+            genoeg = len(metingen) >= SOLAR_BIAS_MIN_PER_VAK
             uit[vak] = {
                 "dagen": len(metingen),
                 "mediaan_afwijking_procent": (
                     round(statistics.median(metingen), 1) if metingen else None
                 ),
-                "genoeg": len(metingen) >= SOLAR_BIAS_MIN_PER_VAK,
+                "genoeg": genoeg,
+                # v3.92.2: genoeg dagen is niet hetzelfde als bruikbaar.
+                # Een correctie die stilzwijgend uitblijft, is niet na te
+                # kijken - dezelfde reden waarom de vlakke correctie sinds
+                # v3.33.0 een reden meelevert.
+                "ingehouden_reden": (
+                    self._vak_ingehouden_reden(self._metingen_in_vak(vak))
+                    if genoeg
+                    else None
+                ),
             }
         return uit
 

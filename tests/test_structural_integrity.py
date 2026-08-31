@@ -774,3 +774,113 @@ def test_every_self_attribute_exists_on_the_class():
         "deze attributen worden gelezen maar nergens gezet - dat werpt "
         f"een AttributeError zodra die tak loopt: {onbekend}"
     )
+
+
+# --- structuurscan 23: geeft de functie terug wat ze berekend heeft? --
+
+
+def _herberekende_returns(boom):
+    """Functies die een uitdrukking teruggeven die eerder al aan een
+
+    variabele is toegekend, terwijl die variabele daarna is bijgesteld.
+
+    Precies de vorm van de reservebodem: `reserve_kwh = needed_kwh *
+    margin`, dan `reserve_kwh = max(reserve_kwh, bodem_kwh)`, en aan het
+    eind `return needed_kwh * margin`. De correctie wordt dan overgeslagen
+    zonder dat er ergens dode code staat.
+    """
+    fouten = []
+    for functie in ast.walk(boom):
+        if not isinstance(functie, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+
+        # Per variabele: de vormen die eraan zijn toegekend, met de regel
+        # waarop dat gebeurde.
+        toekenningen: dict[str, list[tuple[int, str]]] = {}
+        for knoop in ast.walk(functie):
+            if not isinstance(knoop, ast.Assign) or len(knoop.targets) != 1:
+                continue
+            doel = knoop.targets[0]
+            if not isinstance(doel, ast.Name):
+                continue
+            toekenningen.setdefault(doel.id, []).append(
+                (knoop.lineno, ast.dump(knoop.value))
+            )
+
+        for knoop in ast.walk(functie):
+            if not isinstance(knoop, ast.Return) or knoop.value is None:
+                continue
+            # Een kale naam of een letterlijke waarde teruggeven is nooit
+            # een herberekening. Zonder deze regel matcht elke `return
+            # 0.0` op elke `teller = 0.0` verderop.
+            if isinstance(knoop.value, (ast.Name, ast.Constant)):
+                continue
+            vorm = ast.dump(knoop.value)
+            for naam, vormen in toekenningen.items():
+                if len(vormen) < 2 or vorm != vormen[0][1]:
+                    continue
+                # En de bijstelling moet vóór de return staan, anders is
+                # er niets overgeslagen.
+                if knoop.lineno <= vormen[-1][0]:
+                    continue
+                fouten.append(
+                    f"{functie.name}: geeft de beginwaarde van '{naam}' "
+                    f"opnieuw terug terwijl die daarna nog "
+                    f"{len(vormen) - 1}x is bijgesteld"
+                )
+    return fouten
+
+
+def test_no_function_returns_a_value_it_has_since_corrected():
+    """De fout van 31 augustus (v3.92.1).
+
+    `_get_dynamic_discharge_reserve_kwh` rekende de reservebodem uit, zette
+    hem in `last_reserve_margin_breakdown` - dat is wat het dashboard toont
+    - en gaf daarna `needed_kwh * margin` terug: de waarde van vóór de
+    bodem. Gemeten bij een diepste tekort van 0,001 kWh en 7,78 kWh
+    bruikbaar:
+
+        gemeld aan het dashboard    1,167 kWh   bodem bindend: true
+        teruggegeven aan de sturing 0,00125 kWh
+
+    De hele bodem van v3.74.0 heeft daardoor nooit gewerkt, terwijl alles
+    wat je erover kon aflezen klopte. Structuurscan 4 vangt dit niet: de
+    bijgestelde waarde WORDT gelezen, alleen niet door de return.
+
+    De zeven toetsen van v3.74.0 keken allemaal naar de uitsplitsing of
+    naar de constante - geen enkele naar wat de functie teruggaf. Vierde
+    keer dat een toets de aanname bevestigde in plaats van de code.
+    """
+    fouten = []
+    for pad in _iter_python_files():
+        boom = ast.parse(pad.read_text())
+        fouten.extend(f"{pad.name}:{regel}" for regel in _herberekende_returns(boom))
+
+    assert not fouten, (
+        "deze functies geven een herberekening terug in plaats van de "
+        f"bijgestelde variabele: {fouten}"
+    )
+
+
+def test_the_scan_catches_the_original_fault():
+    """De fout terugzetten en controleren dat de scan afgaat."""
+    bron = (
+        "def reserve(needed, margin, bodem):\n"
+        "    reserve_kwh = needed * margin\n"
+        "    reserve_kwh = max(reserve_kwh, bodem)\n"
+        "    return needed * margin\n"
+    )
+
+    assert _herberekende_returns(ast.parse(bron))
+
+
+def test_the_scan_accepts_the_repair():
+    """En dat hij zwijgt zodra de correctie wél wordt teruggegeven."""
+    bron = (
+        "def reserve(needed, margin, bodem):\n"
+        "    reserve_kwh = needed * margin\n"
+        "    reserve_kwh = max(reserve_kwh, bodem)\n"
+        "    return reserve_kwh\n"
+    )
+
+    assert not _herberekende_returns(ast.parse(bron))

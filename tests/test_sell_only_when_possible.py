@@ -15,6 +15,8 @@ de bodem, en daar bleef hij.
 """
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 from custom_components.energy_management_system.const import (
     CONF_SOLAR_TODAY_FORECAST_SENSOR,
     SELL_RESERVE_SAFETY_FACTOR,
@@ -473,16 +475,24 @@ def test_the_plan_simulation_uses_the_same_margin(make_coordinator, hass):
     terwijl de kwartierplanning zijn eigen reserve simuleert - en die
     stond nog op de vaste 1,15. De simulatie plande dus meer verkoop dan
     de aansturing zou toestaan, en de tekortmelding leest die simulatie.
+
+    v3.92.1: dit was een tekstscan op de eerste 1400 tekens van
+    `reserve_op`. Die viel om zodra er commentaar bij kwam - hij toetste
+    de VORM van de code, niet wat eruit komt. Nu op de uitkomst, met de
+    reserveberekening van de planning rechtstreeks aangeroepen.
     """
-    from pathlib import Path
+    from datetime import datetime, timezone
 
-    import custom_components.energy_management_system as pkg
+    c = make_coordinator({})
+    moment = datetime(2026, 8, 30, 20, 0, tzinfo=timezone.utc)
+    c.last_cheap_block_start = moment + timedelta(hours=6)
+    c.bruikbare_capaciteit_kwh = lambda: 7.78
+    c._estimate_worst_case_deficit_kwh = lambda *a, **k: 4.0
+    c._reserve_margin_factor = lambda: 1.9
 
-    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
-    kop = bron.index("def reserve_op(")
-    blok = bron[kop : kop + 1400]
+    gesimuleerd = c._planning_reserve_kwh(moment, {})
 
-    assert "_reserve_margin_factor()" in blok
+    assert gesimuleerd == pytest.approx(4.0 * 1.9, abs=0.001)
 
 
 def test_no_place_applies_a_margin_of_its_own():

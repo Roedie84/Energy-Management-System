@@ -9694,14 +9694,19 @@ class EnergyManagementSystemCoordinator:
             _voeg("fout", "Onderdeel niet geladen", platforms["uitleg"])
 
         # 2. Klopt de invoer?
-        for regel in self.get_spiegelcontrole():
-            if regel["oordeel"] == "loopt_uiteen":
-                _voeg(
-                    "fout",
-                    f"Spiegel: {regel['naam']}",
-                    f"{regel['intern']} tegenover {regel['gemeten']} "
-                    f"{regel['eenheid']} uit {regel['bron']}",
-                )
+        #
+        # v3.92.0: via `_spiegelbevindingen`, niet meer rechtstreeks uit
+        # `get_spiegelcontrole`.
+        #
+        # Gemeld op 31 augustus: "Spiegel: Accustand - 43.0 tegenover
+        # 17.0 %", terwijl die melding sinds v3.74.0 onderdrukt hoort te
+        # worden zodra de kruistoets aansluit. De onderdrukking werkte
+        # wél, maar zat alleen in `_spiegelbevindingen`; deze lus las de
+        # ruwe controle en meldde hem alsnog. Verderop werd de
+        # onderdrukte versie dan overgeslagen met "hierboven al genoemd",
+        # dus won het pad zonder filter.
+        for bevinding in self._spiegelbevindingen():
+            _voeg("fout", bevinding["naam"], bevinding["uitleg"])
 
         configuratie = self.get_configuratiecontrole()
         for regel in configuratie.get("entiteiten", []):
@@ -17170,7 +17175,70 @@ class EnergyManagementSystemCoordinator:
                 (margin - 1) * 100,
             )
 
-        return needed_kwh * margin
+        # v3.92.1: en teruggeven wat er berekend IS.
+        #
+        # Hier stond `return needed_kwh * margin` - de waarde van vóór de
+        # bodem. De bodem werd uitgerekend, in de uitsplitsing gezet en
+        # daarna weggegooid. Gemeten bij een diepste tekort van 0,001 kWh
+        # en 7,78 kWh bruikbaar:
+        #
+        #     gemeld aan het dashboard    1,167 kWh   bodem bindend: true
+        #     teruggegeven aan de sturing 0,00125 kWh
+        #
+        # De hele bodem van v3.74.0 heeft dus nooit gewerkt. Wat op het
+        # dashboard stond klopte, alleen rekende er niets mee.
+        return reserve_kwh
+
+    def _planning_reserve_kwh(
+        self, moment: datetime, cache: dict[str, float]
+    ) -> float:
+        """De reserve waar de kwartierplanning mee simuleert (v3.92.1).
+
+        Stond als binnenfunctie in `get_quarter_plan`. Daar uit gehaald
+        omdat die functie op de ratel van v3.35.0 staat: er iets aan
+        toevoegen betekent er eerst iets uit halen.
+
+        Per uur berekend en onthouden - de wandeling is niet gratis en
+        binnen een uur verandert het dieptepunt nauwelijks.
+
+        v3.92.1: de bodem geldt hier ook, en hij heeft het goedkope blok
+        niet nodig.
+
+        Hier stond `return 0.0` zodra dat blok onbekend was of al
+        begonnen. Vanaf dat moment plande de simulatie verkoop tot de
+        accu leeg was - en dat is het gat waar de nacht van 30 op 31
+        augustus doorheen viel: 's avonds 3,65 kWh naar het net, 's
+        ochtends 17% in plaats van de voorspelde 52%.
+
+        De bodem is geen voorspelling maar een vaste marge, dus hij hoort
+        te gelden op elk kwartier van de planning.
+        """
+        bodem = (self.bruikbare_capaciteit_kwh() or 0.0) * RESERVE_BODEM_FRACTIE
+        blok = self.last_cheap_block_start
+        if blok is None or blok <= moment:
+            return bodem
+
+        sleutel = moment.strftime("%Y-%m-%d %H")
+        if sleutel not in cache:
+            diepste = self._estimate_worst_case_deficit_kwh(moment, blok)
+            # v1.88.0: dezelfde marge als de verkooptoets en de
+            # ontlaadreserve.
+            #
+            # Gemeld direct na de installatie van v1.87.0: "Krijg de
+            # melding na installatie direct weer." Terecht - ik had in
+            # v1.86.0 alleen de VERKOOPTOETS gelijkgetrokken, en de
+            # kwartierplanning simuleert zijn eigen reserve. Die stond
+            # nog op de vaste 1,15, dus plande de simulatie meer verkoop
+            # dan de aansturing zou toestaan - en de tekortmelding leest
+            # die simulatie.
+            marge = max(
+                self._reserve_margin_factor(),
+                SELL_RESERVE_DEEPEST_SAFETY_FACTOR,
+            )
+            cache[sleutel] = max(
+                bodem, 0.0 if diepste is None else diepste * marge
+            )
+        return cache[sleutel]
 
     def get_quarter_plan(self, now: datetime | None = None) -> list[dict]:
         """Verwachte planning per kwartier (v1.22.2).
@@ -17267,35 +17335,7 @@ class EnergyManagementSystemCoordinator:
         reserve_cache: dict[str, float] = {}
 
         def reserve_op(moment: datetime) -> float:
-            blok = self.last_cheap_block_start
-            if blok is None or blok <= moment:
-                return 0.0
-            sleutel = moment.strftime("%Y-%m-%d %H")
-            if sleutel not in reserve_cache:
-                diepste = self._estimate_worst_case_deficit_kwh(moment, blok)
-                # v1.88.0: dezelfde marge als de verkooptoets en de
-                # ontlaadreserve.
-                #
-                # Gemeld direct na de installatie van v1.87.0: "Krijg de
-                # melding na installatie direct weer." Terecht - ik had
-                # in v1.86.0 alleen de VERKOOPTOETS gelijkgetrokken, en
-                # de kwartierplanning simuleert zijn eigen reserve.
-                #
-                # Die stond nog op de vaste 1,15, dus plande de
-                # simulatie meer verkoop dan de aansturing zou
-                # toestaan - en de tekortmelding leest die simulatie.
-                #
-                # Derde plek waar dezelfde marge apart was
-                # gedefinieerd. Nu alle drie via
-                # `_reserve_margin_factor`.
-                marge = max(
-                    self._reserve_margin_factor(),
-                    SELL_RESERVE_DEEPEST_SAFETY_FACTOR,
-                )
-                reserve_cache[sleutel] = (
-                    0.0 if diepste is None else diepste * marge
-                )
-            return reserve_cache[sleutel]
+            return self._planning_reserve_kwh(moment, reserve_cache)
 
         for start, einde, prijs_ruw in entries:
             # v1.24.2: `_get_forecast_entries` geeft de RAUWE waarde
@@ -30664,6 +30704,19 @@ class EnergyManagementSystemCoordinator:
             self.first_seen_date = now.date()
         entries = self._get_forecast_entries()
 
+        # v3.92.0: de kijkvelden eerst, en ALTIJD.
+        #
+        # Gemeten op 31 augustus 06:51: `last_soc_percent` stond op 43%
+        # terwijl de sensor 17% aangaf, op een ronde die gewoon slaagde.
+        # Het veld wordt op drie plaatsen geschreven en alle drie zitten
+        # in een tak; deze ronde bereikte er geen van.
+        #
+        # `_ververs_toestandsvelden` is in v3.29.0 juist daarvoor gemaakt,
+        # maar stond alleen in de kalibratietak. Hier staat hij vóór elke
+        # terugkeer die er is - ook die van een lege prijsreeks, want daar
+        # staan de velden het langst stil.
+        self._ververs_toestandsvelden(now, entries)
+
         if not entries:
             _LOGGER.warning(
                 "No usable forecast entries found on %s (check that the "
@@ -31010,7 +31063,11 @@ class EnergyManagementSystemCoordinator:
             # bevroren tijdens een kalibratie omdat deze tak eerder
             # terugkeert, en dan staat het halve dashboard stil zonder
             # dat er iets mis is.
-            self._ververs_toestandsvelden(now, entries)
+            #
+            # v3.92.0: die verversing staat nu bovenaan de ronde, vóór
+            # elke terugkeer. Hier stond hij dubbel, en twee plekken die
+            # hetzelfde veld herstellen is precies de vorm van
+            # structuurscan 11.
             self.last_explanation = self._build_explanation()
             return
 

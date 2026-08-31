@@ -21001,3 +21001,258 @@ planning of reserve berekend" — een keurig antwoord op een tak die nooit
 werd bereikt.
 
 **Volledige testsuite**: 3345 tests, allemaal groen.
+
+## v3.92.0 — De accustand die twintig uur bleef staan
+
+**Gemeld**: "Spiegel: Accustand — 43.0 tegenover 17.0 % uit
+`sensor.solarflow_2400_ac_electric_level`", als enige fout in de analyse
+van 31 augustus 06:51.
+
+De overdracht ging ervan uit dat de onderdrukking uit v3.74.0 stuk was.
+Dat is niet zo. Er zijn twee losse fouten, en de eerste is de echte.
+
+### 1. Het veld liep werkelijk achter
+
+Uit de export van diezelfde ronde:
+
+```
+accustand_procent              17,0 %   (de sensor)
+last_soc_percent               43,0 %   (het kijkveld)
+kruistoets                     16,3 tegenover 17,0 -> sluit_aan
+last_used_soc_taper_fallback   false
+laatste geslaagde ronde        06:51:12
+```
+
+`last_soc_percent` wordt op drie plaatsen geschreven, en alle drie zitten
+in een tak: de dynamische reserve, de terugval op de SoC-helling en de
+kalibratie. Op deze ronde werd geen van de drie bereikt — dat is te zien
+aan `last_used_soc_taper_fallback`, die op zijn beginwaarde stond. Er
+bleef dus een getal uit de nacht staan.
+
+Precies de vorm die in v1.31.1 al beschreven is: een bijproduct van een
+berekening is geen accustand. Alleen ging het toen om `None`, en nu om
+een waarde die er twintig uur naast zit — en die is gevaarlijker, want er
+wordt zonder aarzeling mee gerekend.
+
+`_ververs_toestandsvelden` is in v3.29.0 juist hiervoor gemaakt, met in
+de eigen beschrijving "houdt de kijkvelden bij terwijl de sturing
+stilligt". Hij werd op één plek aangeroepen: in de kalibratietak. Elke
+andere vroege terugkeer liet de velden staan.
+
+Die aanroep staat nu bovenaan de ronde, vóór elke terugkeer die er is —
+ook die van een lege prijsreeks, want daar staan de velden het langst
+stil. De aanroep in de kalibratietak is weg; twee plekken die hetzelfde
+veld herstellen is de vorm van structuurscan 11.
+
+### 2. De onderdrukking werkte, maar werd omzeild
+
+De melding hoort sinds v3.74.0 te verdwijnen zodra de kruistoets
+aansluit, en die stond op 16,3 tegenover 17,0 — ruim binnen de marge van
+15. Toch stond hij er.
+
+De onderdrukking zit in `_spiegelbevindingen()`. `get_analyse()` las de
+ruwe `get_spiegelcontrole()` en meldde onvoorwaardelijk, en sloeg
+verderop de gefilterde versie over met "hierboven al genoemd". Het pad
+zónder filter won dus altijd, en de onderdrukking was in de praktijk
+dode code.
+
+De analyse loopt nu ook via `_spiegelbevindingen()`. Eén pad, één
+filter. Er staat een toets onder die controleert dat geen enkele
+spiegelregel twee keer in de analyse belandt.
+
+Met beide reparaties verdwijnt de melding omdat het getal klopt, niet
+omdat hij weggefilterd wordt.
+
+### Opgeruimd: twee toetsbestanden die niet meer laadden
+
+De suite was op v3.91.0 niet te draaien zoals hij in de repo stond:
+
+- `test_verkoop_bodem.py` importeerde `VERKOOP_BODEM_FRACTIE`, die in
+  v3.74.0 is opgegaan in `RESERVE_BODEM_FRACTIE`. Zes toetsen die door
+  een importfout de hele verzameling afbraken. `test_reserve_bodem.py`
+  dekt hetzelfde, en meer.
+- `test_steelstofzuiger_charging.py` verwachtte `laden_gestart` waar de
+  code sinds de polronde `test_aan` zet. Drie van de acht vielen om.
+  `test_scheduled_charge_appliances.py` is de opvolger, met dezelfde
+  namen en zestien toetsen.
+
+Beide zijn verwijderd. Dat ze bleven staan komt door de werkwijze met
+deelleveringen: een ZIP met alleen gewijzigde bestanden bevat geen
+verwijderingen.
+
+### En het testaantal in de README
+
+Die stond op 3161 terwijl de suite er 3350 draaide. De toets die daarop
+moest letten, rekende met vijf toetsen per bestand als ondergrens — bij
+330 bestanden is dat 1650, en daar komt een badge van 3161 makkelijk
+overheen. De ondergrens telt nu de werkelijke toetsfuncties in de
+bestanden.
+
+**Volledige testsuite**: 3351 tests, allemaal groen.
+
+## v3.92.1 — De reservebodem werd berekend en daarna weggegooid
+
+**Gemeld** (openstaand punt 1 uit de overdracht): "De reservebodem grijpt
+te laat in." Gemeten in de nacht van 30 op 31 augustus:
+
+```
+opwek 6,04   verbruik 9,03   import 9,74   ontladen 7,69
+naar het net 3,65
+accu 's ochtends: 17 %   (voorspeld was 52 %)
+```
+
+De aanname was dat de bodem op de momentopname werkt en niet in de
+vooruitberekening. Nagerekend klopt dat maar half: **de bodem werkte
+helemaal niet.**
+
+### 1. De functie gaf iets anders terug dan ze berekend had
+
+`_get_dynamic_discharge_reserve_kwh` rekent de bodem uit, zet hem in
+`last_reserve_margin_breakdown` — dat is wat het dashboard toont — en
+eindigde daarna op `return needed_kwh * margin`: de waarde van vóór de
+bodem. Gemeten bij een diepste tekort van 0,001 kWh en 7,78 kWh
+bruikbaar:
+
+```
+gemeld aan het dashboard     1,167 kWh    bodem bindend: true
+teruggegeven aan de sturing  0,00125 kWh
+```
+
+De hele bodem van v3.74.0 heeft dus nooit gewerkt, terwijl alles wat je
+erover kon aflezen klopte — `bodem_bindend: true` stond er gewoon.
+
+De zeven toetsen van v3.74.0 lazen allemaal de uitsplitsing, of rekenden
+met de constante, of scanden de brontekst. Geen enkele riep de functie
+aan en keek naar wat eruit kwam. Dat is de vierde keer dat een toets mijn
+aanname bevestigde in plaats van de code — na de klimaatsleutels
+(v3.47.0), de aandachtspunten (v3.70.0) en de kwartierplanning
+(v3.91.0).
+
+### 2. En de kwartierplanning kende de bodem sowieso niet
+
+De planning simuleert zijn eigen reserve. Die viel op **nul** zodra het
+goedkope blok onbekend was of al begonnen — en dat is 's avonds altijd
+het geval. Vanaf dat moment plande de tabel verkoop tot de accu leeg was.
+
+Gemeten in de simulatie, met 6,0 kWh beschikbaar en geen zon:
+
+| | oud | nieuw |
+|---|---|---|
+| verkoopkwartieren | 15 | 12 |
+| export | 5,10 kWh | 4,08 kWh |
+| laagste stand tijdens verkoop | 0,00 kWh | 1,20 kWh |
+
+De bodem is geen voorspelling maar een vaste marge, dus hij geldt nu op
+elk kwartier van de planning, ook zonder bekend blok.
+
+Wat de bodem nadrukkelijk **niet** doet: het huis afknijpen. De stand mag
+er nog steeds onder zakken door huishoudverbruik — een accu die het huis
+niet meer mag voeden, zet het net aan op precies het verkeerde moment.
+Daar staat een eigen toets op zodat dat niet per ongeluk verandert.
+
+`reserve_op` is uit `get_quarter_plan` gehaald en heet nu
+`_planning_reserve_kwh`. Die functie staat op de ratel van v3.35.0: er
+iets aan toevoegen betekent er eerst iets uit halen.
+
+### Structuurscan 23: geeft de functie terug wat ze berekend heeft?
+
+Scan 4 ("berekend maar nergens gelezen") vangt dit niet — de bijgestelde
+waarde wérd gelezen, alleen niet door de `return`.
+
+Deze scan kijkt of een functie een uitdrukking teruggeeft die eerder al
+aan een variabele is toegekend, terwijl die variabele daarna nog is
+bijgesteld. Losse constanten en kale namen tellen niet mee, en de return
+moet ná de bijstelling staan. Op de code van v3.92.0 vindt hij precies
+één plek: deze. Er staan twee proeven onder die de fout terugzetten en
+weer weghalen.
+
+### Twee toetsen die op de oude vorm leunden
+
+- `test_the_plan_simulation_uses_the_same_margin` scande de eerste 1400
+  tekens van `reserve_op` op de tekst `_reserve_margin_factor()`. Die
+  viel om zodra er commentaar bij kwam: hij toetste de vorm van de code,
+  niet de uitkomst. Nu roept hij de reserveberekening van de planning
+  aan en kijkt naar het getal.
+- `test_an_empty_battery_reads_as_the_floor` leunde erop dat de planning
+  's avonds tot leeg verkocht. Dat doet hij niet meer. De toets gaat over
+  de weergave, dus de lege accu wordt er nu rechtstreeks in gezet.
+
+### Wat je hiervan gaat merken
+
+Dit is de eerste keer dat de bodem werkelijk bijt. Op dagen met een
+optimistische zonvoorspelling — precies de dagen waarop het misging —
+blijft er nu ongeveer 1,3 kWh in de accu staan die eerder naar het net
+ging. Dat kost verkoopopbrengst op de dagen dat de voorspelling wél
+klopt. Dat is de afweging die in v3.74.0 is gemaakt; hij wordt nu pas
+uitgevoerd.
+
+**Volledige testsuite**: 3362 tests, allemaal groen.
+
+## v3.92.2 — Het bewolkingsvak scheidt de dagen niet
+
+**Gemeld** (openstaand punt 3 uit de overdracht): "De zonvoorspelling zat
+er twee dagen op rij 44% naast. De bias-correctie per bewolkingsvak heeft
+drie vakjes met 3, 1 en 1 dag data — te weinig om iets te betekenen, en
+toch corrigeert hij al."
+
+Dat laatste klopt niet, en het echte probleem is een ander.
+
+### De vakcorrectie stond helemaal niet aan
+
+Uit de export van 31 augustus staan de vakken op 2, 2 en 3 dagen, alle
+drie met `genoeg: false` — de drempel is vier. `bias_voor_bewolking`
+geeft dan None. De vlakke correctie is óók ingehouden
+(`learned_bias_percent: null`), met de reden uit v3.33.0 erbij.
+
+Wat er wél corrigeert is het UURPROFIEL: veertien uren met een eigen
+factor, van 0,586 om 8 uur tot 1,076 om 15 uur. Dat is een ander
+mechanisme, het gebruikt een mediaan met een eigen drempel, en de data
+geeft geen aanleiding daaraan te twijfelen. Maar het is goed om te weten
+dat dát de correctie is die draait, en niet de vakcorrectie.
+
+### Wat er wél mis is
+
+De hele reeks naast elkaar:
+
+```
+datum    bewolking   afwijking   vak
+24-08         0,0 %      -1,9 %  helder
+25-08        51,7 %     -13,7 %  half
+26-08        19,9 %      -6,6 %  helder
+27-08       100,0 %     -10,2 %  bewolkt
+28-08        37,4 %     -41,2 %  half
+29-08        74,9 %      +0,9 %  bewolkt
+30-08        84,8 %     -43,9 %  bewolkt
+```
+
+De correlatie tussen bewolking en afwijking is **-0,23**: vrijwel
+afwezig. De beste dag van de week (29-08, +0,9%) en de slechtste (30-08,
+-43,9%) zitten in hetzelfde vakje, tien procentpunt bewolking uit elkaar.
+Spreiding per vak: helder 4,7 punt, half 27,5 punt, bewolkt **44,8 punt**.
+
+De aanname onder v3.45.0 — "bij weinig bewolking hoort een correctie rond
+nul, bij veel bewolking een forse" — gaat op deze reeks niet op. De
+bewolking scheidt deze dagen niet.
+
+En `bias_voor_bewolking` telde alleen DAGEN. Bij een vierde bewolkte dag
+was hij gaan corrigeren met de mediaan van een verzameling die 44,8 punt
+spant. Dat is precies wat de vlakke bias in v3.33.0 werd verweten, alleen
+dan per vak — en daar was de toets nooit op toegepast.
+
+### Dezelfde toets, nu per vak
+
+Bevat een vakje zowel een dag binnen 10% als een dag die er meer dan 25%
+naast zit, dan wordt de correctie voor dát vakje ingehouden. Andere
+vakken blijven gewoon werken: heldere dagen die allemaal binnen een paar
+procent liggen, krijgen hun kleine correctie.
+
+De reden staat er per vak bij, in `bewolkingsvakken` op de kaart en in de
+export. Een correctie die stilzwijgend uitblijft is niet na te kijken —
+dezelfde reden waarom de vlakke correctie sinds v3.33.0 een reden
+meelevert.
+
+Wat dit **niet** oplost: waarom de voorspelling er op 28 en 30 augustus
+zo ver naast zat. Dat blijft open. Dit zorgt ervoor dat er straks geen
+correctie op wordt losgelaten die de goede dagen meesleept.
+
+**Volledige testsuite**: 3368 tests, allemaal groen.
