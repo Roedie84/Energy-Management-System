@@ -25097,18 +25097,37 @@ class EnergyManagementSystemCoordinator:
         if notify_title:
             notify_service = self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE)
             if notify_service:
-                duration_txt = (
-                    f"ongeveer {duration_minutes:.0f} minuten"
-                    if duration_minutes is not None
-                    else "onbekende tijd"
-                )
                 self._dispatch_notification(
                     notify_service=notify_service,
                     title=notify_title,
-                    message=f"Klaar na {duration_txt}.",
+                    message=self._cyclus_klaar_bericht(
+                        naam.capitalize(), duration_minutes
+                    ),
                     notification_id=f"ems_{state_attr}_cycle_done",
-            kind="appliance_ready",
+                    kind="appliance_ready",
                 )
+
+    @staticmethod
+    def _cyclus_klaar_bericht(
+        apparaat: str, duur_minuten: float | None
+    ) -> str:
+        """Het bericht bij een afgeronde cyclus (v3.93.1).
+
+        Gemeld: "'n Apparaat is klaor - Klaor na ongeveer 8 minuten
+        (...) Maar kan dan niet zien welk apparaat."
+
+        De titel noemt het apparaat weer sinds v3.93.1, maar een titel
+        wordt op een telefoon soms afgekapt. Dan is "Klaar na ongeveer 8
+        minuten" nog steeds nietszeggend, terwijl de naam gewoon
+        voorhanden is - hij werd er twee regels hoger al uit gehaald om
+        het cyclusverbruik te leren.
+        """
+        duur = (
+            f"ongeveer {duur_minuten:.0f} minuten"
+            if duur_minuten is not None
+            else "onbekende tijd"
+        )
+        return f"{apparaat} is klaar na {duur}."
 
     def _process_water_flow_sample(
         self, flow_l_per_min: float, now: datetime

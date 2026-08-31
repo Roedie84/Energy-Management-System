@@ -1,23 +1,31 @@
-v3.93.0 - alleen de gewijzigde bestanden sinds v3.91.0
+v3.93.1 - alleen de wijzigingen sinds v3.93.0
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
 
-    coordinator.py, const.py, diagnostics.py, solar_forecast.py
-    dashboard_template.yaml    de proefkaart is aangepast
-    manifest.json, bestandscontrole.json
+    coordinator.py            bericht noemt het apparaat
+    const.py                  geen vaste titel meer voor twee soorten
+    manifest.json             versienummer 3.93.1
+    bestandscontrole.json     hoort bij deze versie
 
 NAAR DE REPO
 
     README.md, CHANGELOG.md
-    dashboards/energy_management_system_dashboard.yaml
-    twaalf toetsbestanden (zie de zip)
+    tests/test_apparaatmelding_noemt_het_apparaat.py   nieuw
+    tests/test_achterhoeks.py                          aangepast
 
-TE VERWIJDEREN uit de repo
+WAT ER VERANDERT
 
-    tests/test_verkoop_bodem.py
-    tests/test_steelstofzuiger_charging.py
+De melding heet niet meer "'n Apparaat is klaor" maar noemt het
+apparaat:
 
-LET OP: het dashboard is gewijzigd. De kaart "Proef - zou
-smart_charging lonen?" heeft een kolom "Piek hierna" erbij en de kolom
-"Verbruik" eruit (zeven kolommen passen niet op een telefoon), plus een
-regel "Gedekt door de voorspelde zon".
+    was:  'n Apparaat is klaor
+          Klaor na ongeveer 8 minuten.
+
+    nu:   🍽️ Vaatwasser klaor
+          Vaatwasser is klaor na ongeveer 8 minuten.
+
+Ook "De accu staat nog handmatig" en "De accu is vol" zijn weer twee
+verschillende meldingen in plaats van één.
+
+Dit gaat UIT van v3.93.0. Draai je daar nog niet op, zeg het even en ik
+maak er een cumulatieve zip van.

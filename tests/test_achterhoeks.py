@@ -54,6 +54,11 @@ def test_longer_words_win(make_coordinator, hass):
     assert "neets" not in c._naar_achterhoeks("de accu kan niets meer leveren")
 
 
+# v3.93.1: soorten waaronder meer dan één boodschap valt, en die dus
+# geen vaste titel per soort kunnen hebben.
+MEERDERE_BOODSCHAPPEN = {"appliance_ready", "handmatige_stand"}
+
+
 def test_a_replacement_is_not_translated_again(make_coordinator, hass):
     """Dit ging bij de eerste poging mis: "goedkope blok" werd
     "goodkope blok", omdat "goed" -> "good" over het al vervangen woord
@@ -67,12 +72,35 @@ def test_a_replacement_is_not_translated_again(make_coordinator, hass):
 
 
 def test_every_notification_type_has_a_title():
-    """Een half vertaalde melding leest raarder dan een onvertaalde."""
+    """Een half vertaalde melding leest raarder dan een onvertaalde.
+
+    v3.93.1: behalve de soorten waaronder MEER DAN ÉÉN boodschap valt.
+
+    Gemeld: "'n Apparaat is klaor - Klaor na ongeveer 8 minuten (...)
+    Maar kan dan niet zien welk apparaat." Onder `appliance_ready`
+    vallen vier titels (vaatwasser, wasmachine, steelstofzuiger,
+    fietsen) en onder `handmatige_stand` twee. Eén vaste titel maakte
+    die onherkenbaar.
+
+    Voor die soorten is de vertaling woord voor woord juist het goede
+    antwoord: die laat de naam staan. Dat is geen half vertaalde melding
+    maar een volledig vertaalde met behoud van het onderwerp.
+    """
     soorten = {k for k, _, _, _, _ in NOTIFICATION_TYPES}
 
-    ontbreekt = soorten - set(ACHTERHOEKS_TITELS)
+    ontbreekt = soorten - set(ACHTERHOEKS_TITELS) - MEERDERE_BOODSCHAPPEN
 
     assert not ontbreekt, ontbreekt
+
+
+def test_a_kind_with_several_messages_has_no_fixed_title():
+    """En andersom: staat er wél een vaste titel voor zo'n soort, dan is
+
+    de oude fout stilletjes teruggezet.
+    """
+    dubbel = MEERDERE_BOODSCHAPPEN & set(ACHTERHOEKS_TITELS)
+
+    assert not dubbel, dubbel
 
 
 def test_empty_text_survives(make_coordinator, hass):

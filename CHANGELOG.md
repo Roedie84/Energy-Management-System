@@ -21558,3 +21558,63 @@ toets in de verzameling; alleen draaien slaagde, de volledige run niet.
 Nu via monkeypatch, die netjes terugzet.
 
 **Volledige testsuite**: 3391 tests, allemaal groen.
+
+## v3.93.1 — Welk apparaat is er nou klaar?
+
+**Gemeld** met vier voorbeelden van 31 augustus:
+
+```
+12:39  'n Apparaat is klaor   "Klaor na ongeveer 8 minuten."
+12:30  'n Apparaat is klaor   "Klaor na ongeveer 16 minuten."
+12:01  'n Apparaat is klaor   "De fietsladers bunt uitgeschakeld ..."
+11:53  'n Apparaat is klaor   "De steelstofzuiger is klaor ..."
+```
+
+"Maar kan dan niet zien welk apparaat."
+
+### De naam werd weggegooid in de vertaling
+
+De Nederlandse titels noemen het apparaat wel degelijk: "🍽️ Vaatwasser
+klaar", "🧺 Wasmachine klaar", "🧹 Steelstofzuiger opgeladen", "🚲
+Fietsen opgeladen". `_naar_achterhoeks` verving die door één vaste titel
+per SOORT, en daarmee was de naam weg.
+
+Dat de laatste twee meldingen tóch te herkennen zijn, is toeval: hun
+BERICHT noemt het apparaat. De twee cyclusmeldingen hebben alleen "Klaar
+na ongeveer X minuten" en zijn dus niet uit elkaar te houden.
+
+Dit is dezelfde fout die in v3.1.0 al is gerepareerd voor de accukoeling
+— "Accukoeling an of uut, terwijl het of aan of uit is" — maar toen
+alleen dáár, met een uitzonderingstabel per actie. De regel eronder is
+algemener: **een vaste titel per soort kan alleen als er ook maar één
+boodschap per soort is.**
+
+Nagelopen welke soorten meer dan één titel krijgen:
+
+- `appliance_ready` — vier (vaatwasser, wasmachine, steelstofzuiger,
+  fietsen)
+- `handmatige_stand` — twee: "✋ De accu staat nog handmatig" en "🔋 De
+  accu is vol"
+
+Beide hebben geen vaste titel meer en vallen terug op de vertaling woord
+voor woord. Die laat de naam staan: "🍽️ Vaatwasser klaar" wordt "🍽️
+Vaatwasser klaor". De andere soorten houden hun geschreven Achterhoekse
+zin, want daar is er maar één boodschap.
+
+### En het bericht noemt het apparaat nu ook
+
+Een titel wordt op een telefoon soms afgekapt; dan zegt "Klaar na
+ongeveer 8 minuten" nog steeds niets. Het bericht is nu "Vaatwasser is
+klaar na ongeveer 8 minuten" — de naam werd twee regels hoger al uit de
+code gehaald om het cyclusverbruik te leren, hij lag er dus gewoon.
+
+### De toets die dit toeliet
+
+`test_every_notification_type_has_a_title` eiste een vaste titel voor
+ELKE soort, met als reden "een half vertaalde melding leest raarder dan
+een onvertaalde". Die eis stond de reparatie letterlijk in de weg. Hij
+kent nu de soorten met meerdere boodschappen, en er staat een tweede
+toets naast die controleert dat er voor díé soorten géén vaste titel
+terugkomt.
+
+**Volledige testsuite**: 3400 tests, allemaal groen.

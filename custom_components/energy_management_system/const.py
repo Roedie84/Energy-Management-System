@@ -4801,12 +4801,26 @@ ACHTERHOEKS_TITELS = {
     "verbruiksleer_reset": "t Leren begint opnieuw",
     "koeling_te_scherp": "De koeling geet te vaak an",
     "celspanning_laag": "n Cel steet te lege",
-    "handmatige_stand": "De accu steet nog met de hand",
+    # v3.93.1: en om dezelfde reden geen vaste titel voor
+    # "handmatige_stand". Daaronder vielen twee verschillende
+    # boodschappen: "De accu staat nog handmatig" en "De accu is vol".
     "prijsstijging_handmatig": "De stroom wordt duurder",
     "leermodus_lang_aan": "De leermodus steet nog an",
     "opdracht_niet_aangekomen": "De accu luusterde neet",
     "installatie_onvolledig": "De installatie is neet compleet",
-    "appliance_ready": "'n Apparaat is klaor",
+    # v3.93.1: GEEN vaste titel meer voor "appliance_ready".
+    #
+    # Gemeld met vier voorbeelden: "'n Apparaat is klaor - Klaor na
+    # ongeveer 8 minuten", en: "Maar kan dan niet zien welk apparaat."
+    #
+    # De Nederlandse titels noemen het apparaat wel ("Vaatwasser klaar",
+    # "Wasmachine klaar", "Steelstofzuiger opgeladen", "Fietsen
+    # opgeladen"). Vier boodschappen die op één titel uitkwamen.
+    #
+    # Dezelfde fout als bij de accukoeling in v3.1.0, en om dezelfde
+    # reden: een vaste titel per soort kan alleen als er ook maar één
+    # boodschap per soort is. Deze soort valt nu terug op de vertaling
+    # woord voor woord, die de naam laat staan.
     "appliance_cheap_moment": "Good moment veur 'n apparaat",
     "device_drift": "'n Apparaat wiekt af",
 
