@@ -37,7 +37,7 @@ from custom_components.energy_management_system.const import (
 NU = datetime(2026, 8, 31, 13, 0, tzinfo=timezone.utc)
 
 
-def _vul_ijklijn(c, bakjes=(20.0, 30.0, 40.0), piek_per_bakje=None):
+def _vul_ijklijn(c, bakjes=(20.0, 30.0, 40.0), piek_per_bakje=None, extra=None):
     """Een ijklijn zoals hij na weken meten zou staan."""
     piek_per_bakje = piek_per_bakje or {20.0: 1500.0, 30.0: 3000.0, 40.0: 4500.0}
     c.helderheid_ijklijn = {
@@ -47,6 +47,8 @@ def _vul_ijklijn(c, bakjes=(20.0, 30.0, 40.0), piek_per_bakje=None):
         ]
         for b in bakjes
     }
+    if extra:
+        c.helderheid_ijklijn.update(extra)
 
 
 # --- 1. de ijklijn zelf ----------------------------------------------
@@ -112,8 +114,21 @@ def test_laag_aan_de_hemel_wordt_niet_gemeten(make_coordinator, hass):
 # --- 2. de bronnen op rangorde ---------------------------------------
 
 
+IJKLIJN_W = 1000.0
+
+
 def _paren(c, bron, paren):
-    c.weerbron_helderheid_paren = {bron: list(paren)}
+    """paren: (bewolking, helderheid) - hier omgezet naar het formaat
+
+    dat sinds v3.94.1 bewaard wordt: het gemeten vermogen en het bakje,
+    zodat de verhouding pas bij het scoren wordt uitgerekend.
+    """
+    c.helderheid_ijklijn = {
+        "30.0": [IJKLIJN_W] * HELDERHEID_MIN_METINGEN_PER_BAKJE
+    }
+    c.weerbron_helderheid_paren = {
+        bron: [[b, h * IJKLIJN_W, "30.0"] for b, h in paren]
+    }
 
 
 def test_een_bron_die_perfect_ordent_scoort_hoog(make_coordinator, hass):
@@ -189,9 +204,12 @@ def test_zonder_winnaar_mag_er_niets_geregeld_worden(make_coordinator, hass):
     hoort de zelfbeoordeling dat te zeggen en niet alsnog te kiezen.
     """
     c = make_coordinator({})
-    _vul_ijklijn(c)
     reeks = [(i, 1.0 - i / 150) for i in range(HELDERHEID_MIN_PAREN + 20)]
-    c.weerbron_helderheid_paren = {"weather.a": reeks, "weather.b": list(reeks)}
+    _paren(c, "weather.a", reeks)
+    _vul_ijklijn(c, extra=c.helderheid_ijklijn)
+    c.weerbron_helderheid_paren["weather.b"] = list(
+        c.weerbron_helderheid_paren["weather.a"]
+    )
 
     ijking = c.get_helderheid_ijking()
 
@@ -202,14 +220,18 @@ def test_zonder_winnaar_mag_er_niets_geregeld_worden(make_coordinator, hass):
 
 def test_met_een_duidelijke_winnaar_mag_het_wel(make_coordinator, hass):
     c = make_coordinator({})
-    _vul_ijklijn(c)
     goed = [(i, 1.0 - i / 150) for i in range(HELDERHEID_MIN_PAREN + 20)]
     # Ordent nog net beter dan toeval, maar met veel ruis.
     slecht = [
         (i, 1.0 - i / 150 + (0.35 if i % 3 else -0.35))
         for i in range(HELDERHEID_MIN_PAREN + 20)
     ]
-    c.weerbron_helderheid_paren = {"weather.goed": goed, "weather.slecht": slecht}
+    _paren(c, "weather.goed", goed)
+    bewaard = dict(c.weerbron_helderheid_paren)
+    _paren(c, "weather.slecht", slecht)
+    bewaard.update(c.weerbron_helderheid_paren)
+    c.weerbron_helderheid_paren = bewaard
+    _vul_ijklijn(c, extra=c.helderheid_ijklijn)
 
     ijking = c.get_helderheid_ijking()
 
@@ -273,3 +295,89 @@ def test_de_kaart_leest_de_juiste_sleutel():
 
     assert "helderheid_ijking" in kaart
     assert "mag_regelen" in kaart
+
+
+# --- 5. wat de eerste meetdag liet zien (v3.94.1) ---------------------
+#
+# Na 6,3 uur meten stond er in de export:
+#
+#     gevulde_bakjes    1 van 3          status "indicatief"
+#     paren per bron    12               unieke bewolkingswaarden: 1
+#     helderheid        0,366 tot 3,38
+#
+# Drie dingen kloppen daar niet.
+
+
+def test_een_helderheid_boven_een_wordt_niet_bevroren(make_coordinator, hass):
+    """De ijklijn begint te laag en groeit.
+
+    Bakje 40 stond na een halve dag op 3255 W terwijl de eerste
+    metingen van die ochtend uit een bewolkt uur kwamen. Een verhouding
+    die toen 3,38 was, is tegen de latere ijklijn 1,02 - maar hij stond
+    als 3,38 opgeslagen en zou dat voor altijd blijven.
+
+    Dus niet de UITKOMST bewaren maar de METING, en de verhouding
+    uitrekenen op het moment dat er gescoord wordt.
+    """
+    c = make_coordinator({})
+    c.helderheid_ijklijn = {"40.0": [1000.0] * HELDERHEID_MIN_METINGEN_PER_BAKJE}
+    c.weerbron_helderheid_paren = {"weather.a": [[50.0, 3400.0, "40.0"]]}
+
+    # De ijklijn groeit naar de werkelijke heldere waarde.
+    c.helderheid_ijklijn = {"40.0": [3300.0] * HELDERHEID_MIN_METINGEN_PER_BAKJE}
+
+    paren = c._helderheidsparen("weather.a")
+
+    assert paren[0][1] == pytest.approx(3400.0 / 3300.0, abs=0.01)
+
+
+def test_oude_paren_uit_het_oude_formaat_worden_overgeslagen(
+    make_coordinator, hass
+):
+    """Wat er al bewaard is, staat in het oude formaat en is tegen een
+
+    scheve ijklijn berekend. Weggooien is eerlijker dan omrekenen: het
+    paneelvermogen zit er niet meer in.
+    """
+    c = make_coordinator({})
+    c.helderheid_ijklijn = {"40.0": [3300.0] * HELDERHEID_MIN_METINGEN_PER_BAKJE}
+    c.weerbron_helderheid_paren = {
+        "weather.a": [[50.0, 3.38], [60.0, 2200.0, "40.0"]]
+    }
+
+    paren = c._helderheidsparen("weather.a")
+
+    assert len(paren) == 1
+
+
+def test_gelijke_bewolking_telt_niet_als_bruikbaar_paar(
+    make_coordinator, hass
+):
+    """Alle twaalf paren van de eerste dag hadden dezelfde bewolking.
+
+    Twee momenten met hetzelfde cijfer zeggen niets over de ordening, en
+    "12 paren" wekte de indruk dat er iets opgebouwd werd.
+    """
+    c = make_coordinator({})
+    c.helderheid_ijklijn = {"40.0": [3300.0] * HELDERHEID_MIN_METINGEN_PER_BAKJE}
+    c.weerbron_helderheid_paren = {
+        "weather.a": [[60.9, 1000.0 + i, "40.0"] for i in range(12)]
+    }
+
+    ijking = c.get_helderheid_ijking()
+
+    assert ijking["paren_per_bron"]["weather.a"] == 12
+    assert ijking["bruikbare_paren_per_bron"]["weather.a"] == 0
+
+
+def test_een_bakje_van_de_drie_is_nog_onvoldoende(make_coordinator, hass):
+    """De status stond op "indicatief" bij één gevuld bakje van de drie.
+
+    Indicatief wekt de indruk dat er iets te lezen valt.
+    """
+    c = make_coordinator({})
+    c.helderheid_ijklijn = {"40.0": [3300.0] * HELDERHEID_MIN_METINGEN_PER_BAKJE}
+
+    ijking = c.get_helderheid_ijking()
+
+    assert ijking["status"] == RELIABILITY_INSUFFICIENT

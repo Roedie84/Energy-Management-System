@@ -2654,7 +2654,7 @@ views:
 
         | Gevulde bakjes zonnestand | {{ h.gevulde_bakjes }} van {{ h.bakjes_nodig }} |
 
-        {% for b, n in (h.paren_per_bron or {}).items() %}| Paren {{ b.split(''.'')[-1] }} | {{ n }} |
+        {% for b, n in (h.bruikbare_paren_per_bron or {}).items() %}| Bruikbare paren {{ b.split(''.'')[-1] }} | {{ n }} van {{ (h.paren_per_bron or {}).get(b, 0) }} |
 
         {% endfor %}{% if h.helderheid_nu is not none %}| Helderheid nu | {{ (h.helderheid_nu * 100) | round(0) }}% |
 

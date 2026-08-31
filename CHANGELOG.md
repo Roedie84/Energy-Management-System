@@ -21794,3 +21794,94 @@ van de regels eronder. De regels worden nu op groep gesorteerd, stabiel,
 zodat de volgorde binnen een groep blijft zoals hij was.
 
 **Volledige testsuite**: 3421 tests, allemaal groen.
+
+## v3.94.1 — Wat de eerste meetdag liet zien
+
+Na 6,3 uur meten met v3.94.0 stond er in de export:
+
+```
+gevulde_bakjes    1 van 3          status "indicatief"
+paren per bron    12               unieke bewolkingswaarden: 1
+helderheid        0,366 tot 3,38
+```
+
+De ijklijn doet zijn werk, maar drie dingen eromheen kloppen niet.
+
+### 1. Een helderheid van 3,38 werd voor altijd vastgelegd
+
+Dat is geen meetfout maar een fout in het MOMENT van rekenen. Bakje 40
+begon met bewolkte ochtenduren, dus stond de ijklijn toen op een fractie
+van wat hij een halve dag later was — hij groeide van een paar honderd
+naar 3255 W. Een verhouding die om tien uur 3,38 leek, is tegen de
+latere ijklijn ongeveer 1,0. Maar hij lag als 3,38 opgeslagen en zou dat
+blijven, en de rangorde zou straks op die getallen worden bepaald.
+
+Er wordt nu het gemeten VERMOGEN en het bakje bewaard, en de verhouding
+wordt uitgerekend op het moment dat er gescoord wordt. Een betere ijklijn
+corrigeert daarmee de hele geschiedenis met terugwerkende kracht — en dat
+is precies wat je wil bij een lijn die maanden nodig heeft om vol te
+lopen.
+
+De paren die al bewaard zijn, staan in het oude formaat en worden
+overgeslagen. Omrekenen kan niet: het vermogen zit er niet meer in, en
+tegen welke ijklijn ze gedeeld zijn valt niet te achterhalen. Twaalf
+paren weggooien is goedkoper dan twaalf verkeerde paren meenemen.
+
+### 2. "12 paren" wekte de indruk dat er iets opgebouwd werd
+
+Alle twaalf hadden dezelfde bewolking: 60,9 voor forecast_thuis, 42,0
+voor openweathermap. De bronnen werken hun bewolking maar een paar keer
+per dag bij, en twee momenten met hetzelfde cijfer zeggen niets over de
+ordening — die worden bij het scoren dan ook overgeslagen. Er waren dus
+nul bruikbare paren.
+
+De export en de kaart tonen nu `bruikbare_paren_per_bron` naast het ruwe
+aantal. Dit betekent ook dat de opbouw langer duurt dan gedacht: niet het
+aantal metingen is de rem, maar het aantal keer dat een bron zijn
+bewolkingscijfer bijwerkt.
+
+### 3. "Indicatief" bij één gevuld bakje van de drie
+
+Dat wekt de indruk dat er iets te lezen valt. Zonder ijklijn over het
+hele bereik is elke helderheid een verhouding tegen een toevallige
+noemer. De status blijft nu "onvoldoende data" tot alle vereiste bakjes
+gevuld zijn.
+
+**Volledige testsuite**: 3425 tests, allemaal groen.
+
+## v3.94.2 — Gerealiseerde zon die "verwacht" heette
+
+**Gemeten** in de export van 31 augustus 21:02:
+
+```
+sell_check.verwachte_zon_kwh   12,8
+solar_today.opgewekt_kwh       12,8
+solar_today.voorspeld_kwh      13,8
+```
+
+Om 21:02 valt er niets meer te verwachten.
+
+Het getal is de HELE DAG: wat er al is opgewekt plus wat er nog komt. Dat
+is precies goed voor waar het voor dient — de zonarme-dagtoets van
+v1.24.2 kijkt bewust naar de hele dag, want anders leest een avond als
+een zonarme dag terwijl er 20 kWh in zat. Dat blijft zo.
+
+Alleen heette het veld in de uitvoer `verwachte_zon_kwh`, en dat leest
+'s avonds als een voorspelling die nergens op slaat. Geen rekenfout —
+maar een naam die iets anders belooft dan hij levert, is precies hoe
+`available_kwh` en `gemeten_kwh` maandenlang verkeerd zijn gelezen.
+
+De verkooptoets levert nu drie velden in plaats van één:
+
+```
+zon_hele_dag_kwh       12,8
+zon_opgewekt_kwh       12,8
+zon_nog_te_komen_kwh    0,0
+```
+
+Zo is te zien of het een meting is of een voorspelling, in plaats van dat
+te moeten raden. De andere plekken waar `verwachte_zon_kwh` voorkomt —
+de planopname, de handmatige ingrepen, de MPC-vergelijking — houden hun
+naam: daar gáát het om een voorspelling.
+
+**Volledige testsuite**: 3430 tests, allemaal groen.

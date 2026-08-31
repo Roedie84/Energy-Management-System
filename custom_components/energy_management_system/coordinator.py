@@ -4536,19 +4536,53 @@ class EnergyManagementSystemCoordinator:
         reeks.append(round(float(pv_w), 1))
         self.helderheid_ijklijn[bakje] = reeks[-HELDERHEID_BAKJE_LENGTE:]
 
-        # De paren pas vastleggen als er een ijklijn IS - anders staan er
-        # straks honderden paren met een helderheid die nergens op sloeg.
-        helderheid = self.gemeten_helderheid()
-        if helderheid is None:
-            self.schedule_persisted_state_save()
-            return
+        # v3.94.1: de METING bewaren, niet de uitkomst.
+        #
+        # Na 6,3 uur meten stonden er helderheden van 0,366 tot 3,38 in
+        # de reeks. Dat is geen fout in de meting maar in het moment van
+        # rekenen: bakje 40 begon met bewolkte ochtenduren, dus stond de
+        # ijklijn toen op een fractie van wat hij een halve dag later
+        # was. Een verhouding die om tien uur 3,38 leek, is tegen de
+        # latere ijklijn 1,02 - maar hij lag als 3,38 vast en zou dat
+        # blijven.
+        #
+        # Vermogen en bakje bewaren, en de verhouding uitrekenen op het
+        # moment dat er gescoord wordt. Dan corrigeert een betere ijklijn
+        # met terugwerkende kracht de hele geschiedenis.
         for bron, bewolking in (self.weather_ensemble_readings or {}).items():
             paren = self.weerbron_helderheid_paren.setdefault(bron, [])
-            paren.append([round(float(bewolking), 1), helderheid])
+            paren.append([round(float(bewolking), 1), round(float(pv_w), 1), bakje])
             self.weerbron_helderheid_paren[bron] = paren[
                 -HELDERHEID_PAREN_LENGTE:
             ]
         self.schedule_persisted_state_save()
+
+    def _helderheidsparen(self, bron: str) -> list[tuple[float, float]]:
+        """(bewolking, helderheid) tegen de HUIDIGE ijklijn (v3.94.1).
+
+        Paren uit het oude formaat - waar de helderheid al uitgerekend
+        was - worden overgeslagen. Omrekenen kan niet: het paneelvermogen
+        zit er niet meer in, en de ijklijn waartegen ze gedeeld zijn is
+        niet te achterhalen.
+        """
+        uit = []
+        for paar in self.weerbron_helderheid_paren.get(bron) or []:
+            if len(paar) != 3:
+                continue
+            bewolking, pv_w, bakje = paar
+            metingen = self.helderheid_ijklijn.get(str(bakje))
+            if not metingen or len(metingen) < HELDERHEID_MIN_METINGEN_PER_BAKJE:
+                continue
+            gesorteerd = sorted(metingen)
+            index = min(
+                len(gesorteerd) - 1,
+                int(len(gesorteerd) * HELDERHEID_IJKLIJN_PERCENTIEL),
+            )
+            ijklijn = gesorteerd[index]
+            if not ijklijn:
+                continue
+            uit.append((float(bewolking), max(0.0, float(pv_w)) / ijklijn))
+        return uit
 
     def weerbron_rangorde_score(self, bron: str) -> float | None:
         """Hoe vaak ordent deze bron twee momenten goed? (v3.94.0)
@@ -4566,7 +4600,7 @@ class EnergyManagementSystemCoordinator:
         kansniveau, 0 is stelselmatig omgekeerd - dat laatste zou een
         bron zijn die onbewolkt meldt waar bewolkt bedoeld is.
         """
-        paren = self.weerbron_helderheid_paren.get(bron) or []
+        paren = self._helderheidsparen(bron)
         if len(paren) < HELDERHEID_MIN_PAREN:
             return None
         eens = 0
@@ -4584,6 +4618,19 @@ class EnergyManagementSystemCoordinator:
         if not totaal:
             return None
         return round(100 * eens / totaal, 1)
+
+    def _bruikbare_paren(self, bron: str) -> int:
+        """Paren die iets over de ORDENING kunnen zeggen (v3.94.1).
+
+        Twee momenten met dezelfde bewolking zeggen niets. Alle twaalf
+        paren van de eerste meetdag hadden hetzelfde cijfer - de bronnen
+        werken hun bewolking maar een paar keer per dag bij - en toch
+        stond er "12 paren", alsof er iets opgebouwd werd.
+        """
+        paren = self._helderheidsparen(bron)
+        if len({bewolking for bewolking, _ in paren}) < 2:
+            return 0
+        return len(paren)
 
     def get_helderheid_ijking(self) -> dict:
         """Werkt de ijklijn al, en valt er iets mee te sturen? (v3.94.0)
@@ -4639,7 +4686,13 @@ class EnergyManagementSystemCoordinator:
                 "is minder niet van toeval te onderscheiden."
             )
 
-        if ontbreekt and not gevuld:
+        # v3.94.1: onvoldoende zolang de BAKJES niet vol zijn.
+        #
+        # Bij één gevuld bakje van de drie stond er "indicatief", en dat
+        # wekt de indruk dat er iets te lezen valt. Er valt dan nog
+        # niets te lezen: zonder ijklijn over het hele bereik is elke
+        # helderheid een verhouding tegen een toevallige noemer.
+        if len(gevuld) < HELDERHEID_MIN_GEVULDE_BAKJES:
             status = RELIABILITY_INSUFFICIENT
         elif ontbreekt:
             status = RELIABILITY_INDICATIVE
@@ -4660,6 +4713,12 @@ class EnergyManagementSystemCoordinator:
             "paren_per_bron": {
                 bron: len(paren)
                 for bron, paren in (self.weerbron_helderheid_paren or {}).items()
+            },
+            # v3.94.1: en hoeveel daarvan iets zeggen. Zie
+            # `_bruikbare_paren`.
+            "bruikbare_paren_per_bron": {
+                bron: self._bruikbare_paren(bron)
+                for bron in (self.weerbron_helderheid_paren or {})
             },
             "beste_bron": beste_bron,
             "voorsprong_procentpunt": voorsprong,
@@ -18780,6 +18839,27 @@ class EnergyManagementSystemCoordinator:
             ),
         }
 
+    @staticmethod
+    def _zonvelden(
+        hele_dag: float | None,
+        opgewekt: float | None,
+        nog_te_komen: float,
+    ) -> dict:
+        """De zon van vandaag, gesplitst (v3.94.2).
+
+        Zonder splitsing is niet te zien of het getal een voorspelling
+        was of een meting - en 's avonds is het bijna helemaal meting.
+        """
+        if hele_dag is None:
+            return {}
+        return {
+            "zon_hele_dag_kwh": round(hele_dag, 1),
+            "zon_opgewekt_kwh": (
+                round(opgewekt, 1) if opgewekt is not None else None
+            ),
+            "zon_nog_te_komen_kwh": round(nog_te_komen, 1),
+        }
+
     def may_sell_now(
         self, now: datetime, beschikbaar: float | None = None
     ) -> dict:
@@ -18842,7 +18922,18 @@ class EnergyManagementSystemCoordinator:
         #
         # Wat telt is de hele dag: wat er al is opgewekt PLUS wat er nog
         # komt. De meter weet het eerste, de voorspelling het tweede.
+        #
+        # v3.94.2: en het heet in de uitvoer niet meer "verwacht".
+        #
+        # Gemeten om 21:02: `verwachte_zon_kwh: 12.8`, exact gelijk aan
+        # `solar_today.opgewekt_kwh`. Om die tijd valt er niets meer te
+        # verwachten. Het cijfer klopt - het is de hele dag, en daar
+        # hoort deze toets naar te kijken - maar de naam belooft iets
+        # anders dan hij levert. Dat is hoe `available_kwh` en
+        # `gemeten_kwh` maandenlang verkeerd gelezen zijn.
         verwacht_vandaag = None
+        al_opgewekt = None
+        nog_te_komen = 0.0
         if heeft_voorspelling:
             nog_te_komen = (
                 self._estimate_pv_kwh_for_period(
@@ -18865,7 +18956,7 @@ class EnergyManagementSystemCoordinator:
         if verwacht_vandaag is not None and verwacht_vandaag < SOLAR_POOR_DAY_KWH:
             return {
                 "mag_verkopen": False,
-                "verwachte_zon_kwh": round(verwacht_vandaag, 1),
+                **self._zonvelden(verwacht_vandaag, al_opgewekt, nog_te_komen),
                 "reden": (
                     f"Zonarme dag ({verwacht_vandaag:.1f} kWh over de hele dag, "
                     f"onder "
@@ -19041,9 +19132,7 @@ class EnergyManagementSystemCoordinator:
             "beschikbaar_kwh": round(beschikbaar, 2),
             "vrij_te_verkopen_kwh": round(beschikbaar - veilig, 2),
             "methode": methode,
-            "verwachte_zon_kwh": (
-                round(verwacht_vandaag, 1) if verwacht_vandaag is not None else None
-            ),
+            **self._zonvelden(verwacht_vandaag, al_opgewekt, nog_te_komen),
             "reden": (
                 f"{beschikbaar - veilig:.2f} kWh vrij te verkopen: de woning "
                 f"houdt {veilig:.2f} kWh over tot het goedkope blok."
