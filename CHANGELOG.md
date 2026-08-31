@@ -21256,3 +21256,84 @@ zo ver naast zat. Dat blijft open. Dit zorgt ervoor dat er straks geen
 correctie op wordt losgelaten die de goede dagen meesleept.
 
 **Volledige testsuite**: 3368 tests, allemaal groen.
+
+## v3.92.3 — De bodem stond op vier plekken, of nergens
+
+**Gemeten** in de export van 31 augustus 10:11, met v3.92.2 al
+geïnstalleerd en draaiend:
+
+```
+reserve (bodem bindend)   1,296 kWh
+beschikbaar               0,69 kWh
+sell_check                mag_verkopen: true
+                          vrij_te_verkopen_kwh: 0,69
+                          nodig_voor_woning_kwh: 0,00
+```
+
+Er zat minder in de accu dan de reserve voorschreef, en de verkooptoets
+gaf alles vrij.
+
+### Wat er eerst goed ging
+
+De twee reparaties van v3.92.0 en v3.92.1 zijn in bedrijf bevestigd. Geen
+spiegelmelding meer, nul fouten in de analyse, en het kijkveld volgt de
+sensor: 18,0 tegen 19,0 waar het 43,0 tegen 17,0 was. De reserve geeft nu
+terug wat hij berekent — `needed_kwh_before_margin: 0.0` en
+`reserve_kwh_after_margin: 1.296`; op de oude code was dat 0,0 × 1,75 =
+nul. De kwartierplanning zakt niet meer door: laagste stand 21% tegen 11%
+de dag ervoor, laagste bruikbaar 13% tegen 1%.
+
+### De vierde reserveberekening
+
+`may_sell_now` rekent `veilig = diepste × marge` zélf uit en kende de
+bodem niet. Dat is de vierde onafhankelijke reserve, na de sturing, de
+kwartierplanning en de uitsplitsing.
+
+Het commentaar bij de bodem beweert sinds v3.74.0 dat hij "op ÉÉN plek
+staat zodat hij doorwerkt in het ontladen, de verkooptoets en de
+kwartierplanning tegelijk". Dat was de bedoeling; in de code stond hij
+alleen in de reserveberekening, en die gaf tot v3.92.1 de waarde van vóór
+de bodem terug. Drie van de vier gebruikers hebben de bodem dus nooit
+gezien.
+
+De bodem staat nu in `_reserve_bodem_kwh()` en wordt van daaruit gebruikt
+door alle drie. In de verkooptoets geldt hij onder BEIDE takken: de
+wandeling langs het diepste tekort én de nettosom-terugval voor als het
+uurprofiel onvolledig is.
+
+Dat de overdracht dacht dat de bodem het verkopen wél stopte, komt
+doordat op 31 augustus 06:51 een andere poort dichtstond: "planning
+voorziet een tekort". Om 10:11 stond die open, en dan lag er niets onder.
+
+### Structuurscan 24: elke reserve houdt de bodem aan
+
+Een functie die `_reserve_margin_factor()` of
+`SELL_RESERVE_DEEPEST_SAFETY_FACTOR` gebruikt, rekent een reserve uit —
+en moet dan ook `_reserve_bodem_kwh()` aanroepen. Een commentaarregel die
+belooft dat iets op één plek staat, gaat niet om als de code verandert.
+Deze scan wel. Twee proeven eronder die een vijfde reserve toevoegen en
+weer weghalen.
+
+### Het trackerblok viel stil weg uit de export
+
+`solar_forecast_tracker` ontbrak volledig in de export, terwijl
+`solar_forecast_health` in diezelfde export gewoon vijf dagen historie
+liet zien. Dat kan alleen als de coordinator de tracker wél heeft en
+`hass.data` niet: twee verwijzingen naar hetzelfde object, en de export
+las de enige die kan verdwijnen.
+
+Uitgerekend het blok waarmee de zonvoorspelling na te rekenen is. De
+export valt nu terug op `coordinator.solar_tracker`.
+
+### Het label op de meetkwaliteitskaart
+
+Gemeld met schermafdruk: "1 van de 27 gemeten grootheden is
+onbetrouwbaar: Zonvoorspelling (klopt de correctie nog?)".
+
+De melding klopt — twee soorten dagen, 2 van 5 binnen 10% en 2 meer dan
+25% ernaast. Het label niet: de vlakke bias is sinds v3.33.0 ingehouden
+en de vakcorrectie sinds v3.92.2 ook. Er ís geen correctie om naar te
+vragen, en die vraag stuurt het zoeken de verkeerde kant op. De kaart
+heet nu "Zonvoorspelling (klopt hij nog met de panelen?)".
+
+**Volledige testsuite**: 3380 tests, allemaal groen.

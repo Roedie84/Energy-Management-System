@@ -14504,7 +14504,18 @@ class EnergyManagementSystemCoordinator:
         gezondheid = self.get_solar_forecast_health()
         voeg_toe(
             "Metingen",
-            "Zonvoorspelling (klopt de correctie nog?)",
+            # v3.92.3: niet meer "klopt de correctie nog?".
+            #
+            # Gemeld met schermafdruk: "1 van de 27 gemeten grootheden is
+            # onbetrouwbaar: Zonvoorspelling (klopt de correctie nog?)".
+            # De melding klopte, het label niet - de vlakke bias is sinds
+            # v3.33.0 ingehouden en de vakcorrectie sinds v3.92.2 ook. Er
+            # was geen correctie om naar te vragen, en dat stuurt het
+            # zoeken de verkeerde kant op.
+            #
+            # Deze kaart gaat over de voorspelling zelf: klopt hij nog
+            # met wat de panelen doen?
+            "Zonvoorspelling (klopt hij nog met de panelen?)",
             {"niveau": gezondheid["status"], "reden": gezondheid["reden"]},
             gezondheid.get("drift_percent"),
             "%",
@@ -17007,6 +17018,34 @@ class EnergyManagementSystemCoordinator:
             return SELL_RESERVE_DEEPEST_SAFETY_FACTOR
         return 1.0 + totaal / 100
 
+    def _reserve_bodem_kwh(self) -> float:
+        """De ondergrens onder elke reserve (v3.74.0, één plek v3.92.3).
+
+        Geen voorspelling maar een vaste marge: een percentage van de
+        bruikbare capaciteit. Bestaat omdat de reserve een marge
+        VERMENIGVULDIGT met het diepste tekort, en dat tekort nul is
+        zodra de voorspelling zegt dat de zon het huis morgen dekt.
+        Vijfenvijftig procent van nul is nul.
+
+        v3.92.3: op één plek, want het waren er vier.
+
+        Het commentaar bij de bodem beweerde sinds v3.74.0 al dat hij "op
+        ÉÉN plek staat zodat hij doorwerkt in het ontladen, de
+        verkooptoets en de kwartierplanning tegelijk". Dat was de
+        bedoeling; in de code stond hij alleen in de reserveberekening,
+        en die gaf tot v3.92.1 de waarde van vóór de bodem terug.
+
+        Gemeten op 31 augustus 10:11, met v3.92.2 al geïnstalleerd:
+
+            reserve (bodem bindend)   1,296 kWh
+            beschikbaar               0,69 kWh
+            verkooptoets              alles vrij te verkopen
+
+        Zonder capaciteit geen bodem: een grens uit het niets is erger
+        dan geen grens.
+        """
+        return (self.bruikbare_capaciteit_kwh() or 0.0) * RESERVE_BODEM_FRACTIE
+
     def _get_dynamic_discharge_reserve_kwh(
         self, now: datetime, cheap_block_start: datetime | None
     ) -> float | None:
@@ -17135,7 +17174,7 @@ class EnergyManagementSystemCoordinator:
         # verschil met de bodem die in v3.71.0 is gebouwd en weer
         # verwijderd: die zat alleen in de verkooptoets.
         capaciteit = self.bruikbare_capaciteit_kwh() or 0.0
-        bodem_kwh = capaciteit * RESERVE_BODEM_FRACTIE
+        bodem_kwh = self._reserve_bodem_kwh()
         bodem_bindend = bodem_kwh > reserve_kwh
         reserve_kwh = max(reserve_kwh, bodem_kwh)
 
@@ -17213,7 +17252,7 @@ class EnergyManagementSystemCoordinator:
         De bodem is geen voorspelling maar een vaste marge, dus hij hoort
         te gelden op elk kwartier van de planning.
         """
-        bodem = (self.bruikbare_capaciteit_kwh() or 0.0) * RESERVE_BODEM_FRACTIE
+        bodem = self._reserve_bodem_kwh()
         blok = self.last_cheap_block_start
         if blok is None or blok <= moment:
             return bodem
@@ -18595,6 +18634,25 @@ class EnergyManagementSystemCoordinator:
                 # verkooptoets negeert de bonus, volgende tekortdag.
                 marge = self._reserve_margin_factor()
                 veilig = diepste * max(marge, SELL_RESERVE_DEEPEST_SAFETY_FACTOR)
+
+        # v3.92.3: en dan de bodem eronder, net als bij het ontladen en de
+        # kwartierplanning.
+        #
+        # Gemeten op 31 augustus 10:11, met de bodem al gerepareerd in de
+        # sturing:
+        #
+        #     reserve (bodem bindend)   1,296 kWh
+        #     beschikbaar               0,69 kWh
+        #     mag_verkopen              true, alles vrij
+        #
+        # Er zat minder in de accu dan de reserve voorschreef en deze
+        # toets gaf alles vrij, omdat hij `veilig` zelf uitrekent uit het
+        # diepste tekort maal de marge. Vijfenvijftig procent van nul is
+        # nul, en dat is precies waar de bodem voor bestaat.
+        #
+        # Dit gold voor BEIDE takken hierboven: de wandeling én de
+        # nettosom-terugval.
+        veilig = max(veilig, self._reserve_bodem_kwh())
 
         if beschikbaar <= veilig:
             return {

@@ -372,7 +372,21 @@ async def async_get_config_entry_diagnostics(
 ) -> dict[str, Any]:
     """Return diagnostics for a config entry."""
     coordinator = hass.data[DOMAIN][entry.entry_id]
-    solar_tracker = hass.data[DOMAIN].get(f"{entry.entry_id}_solar_tracker")
+    # v3.92.3: en als die er niet is, de verwijzing van de coordinator.
+    #
+    # Gemeten in de export van 31 augustus 10:11: `solar_forecast_tracker`
+    # ontbrak volledig, terwijl `solar_forecast_health` in dezelfde export
+    # gewoon vijf dagen historie liet zien. Dat kan alleen als de
+    # coordinator de tracker wél heeft en `hass.data` niet - twee
+    # verwijzingen naar hetzelfde object, en de export las de enige die
+    # kan verdwijnen.
+    #
+    # Uitgerekend het blok waarmee de zonvoorspelling na te rekenen is,
+    # viel daarmee stil weg. Dezelfde vorm als structuurscan 11: twee
+    # paden naar hetzelfde veld, waarvan er één ongemerkt faalt.
+    solar_tracker = hass.data[DOMAIN].get(
+        f"{entry.entry_id}_solar_tracker"
+    ) or getattr(coordinator, "solar_tracker", None)
 
     config = {**entry.data, **entry.options}
 

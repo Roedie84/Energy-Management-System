@@ -1,53 +1,47 @@
-v3.92.2 - alleen de gewijzigde bestanden sinds v3.91.0
+v3.92.3 - alleen de gewijzigde bestanden sinds v3.91.0
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
 
-    coordinator.py            kijkvelden, spiegelmelding, reservebodem
+    coordinator.py            bodem op één plek, kijkvelden, label
+    diagnostics.py            terugval voor het trackerblok
     solar_forecast.py         samenhangtoets per bewolkingsvak
-    manifest.json             versienummer 3.92.2
-    bestandscontrole.json     hoort bij deze versie - anders meldt de
-                              integratie zelf "onvolledige installatie"
+    manifest.json             versienummer 3.92.3
+    bestandscontrole.json     hoort bij deze versie
 
 NAAR DE REPO (draaien niet mee in Home Assistant)
 
-    README.md                              versiebadge en testaantal
-    CHANGELOG.md                           v3.92.0 t/m v3.92.2
+    README.md                                      badge en testaantal
+    CHANGELOG.md                                   v3.92.0 t/m v3.92.3
+    tests/test_bodem_bereikt_de_verkooptoets.py    nieuw
     tests/test_accustand_kijkveld.py               nieuw
     tests/test_reserve_bodem_bereikt_de_sturing.py nieuw
     tests/test_zonbias_samenhang_per_vak.py        nieuw
-    tests/test_structural_integrity.py             structuurscan 23
+    tests/test_structural_integrity.py             scan 23 en 24
+    tests/test_solar_forecast_health.py            nieuw label
+    tests/test_quarter_plan.py                     aangepast
+    tests/test_sell_only_when_possible.py          aangepast
     tests/test_version_consistency.py              scherpere ondergrens
-    tests/test_quarter_plan.py                     losgemaakt van het
-                                                   oude leegverkoopgedrag
-    tests/test_sell_only_when_possible.py          tekstscan vervangen
-                                                   door een gedragstoets
 
 TE VERWIJDEREN uit de repo (die laadden niet meer)
 
     tests/test_verkoop_bodem.py
     tests/test_steelstofzuiger_charging.py
 
-Een ZIP met alleen wijzigingen kan geen verwijderingen bevatten; deze
-twee moeten met de hand weg, anders blijft de suite omvallen.
-
 WAT ER VERANDERT IN BEDRIJF
 
-1. De melding "Spiegel: Accustand" hoort weg te zijn, en dan omdat het
-   getal klopt: last_soc_percent volgt nu elke ronde de sensor.
+1. De verkooptoets houdt nu de bodem aan. Met 0,69 kWh in de accu en een
+   bodem van 1,296 komt er GEEN verkoop meer uit - waar vandaag om 10:11
+   alles vrijgegeven werd.
 
-2. De reservebodem van v3.74.0 werkt nu werkelijk. Op dagen met een
-   optimistische zonvoorspelling blijft er ongeveer 1,3 kWh in de accu
-   staan die eerder naar het net ging. De GETALLEN op het dashboard
-   veranderen niet - die klopten al - maar de sturing volgt ze nu.
+2. Het trackerblok staat weer in de diagnostiek-export. Zonder dat blok
+   is de zonvoorspelling niet na te rekenen.
 
-3. De kwartierplanning verkoopt 's avonds niet meer tot leeg.
-
-4. De zonbias per bewolkingsvak wordt ingehouden zolang een vakje twee
-   soorten dagen bevat. Nu nog niet zichtbaar: alle drie de vakken
-   staan onder de drempel van vier dagen. Het gaat om wat er gebeurt
-   zodra ze vollopen.
+3. De meetkwaliteitskaart heet "Zonvoorspelling (klopt hij nog met de
+   panelen?)". De melding zelf blijft staan en klopt: de voorspelling is
+   onbetrouwbaar op wisselvallige dagen.
 
 WAAR OP TE LETTEN
 
-De accustand 's ochtends. Die stond op 17% waar 52% voorspeld was; met
-een werkende bodem hoort daar minstens de bodem van te blijven staan.
+De accustand morgenochtend, en of er vanavond nog verkocht wordt. Vier
+poorten hielden de bodem tot nu toe niet aan; drie zijn nu dicht en de
+vierde bestaat niet meer als aparte berekening.

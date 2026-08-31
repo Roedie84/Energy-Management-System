@@ -97,11 +97,18 @@ def test_no_tracker_means_not_configured(make_coordinator, hass):
 
 
 def test_it_appears_in_the_reliability_overview(make_coordinator, hass):
+    """v3.92.3: het label heette "klopt de correctie nog?".
+
+    Gemeld met schermafdruk terwijl er geen correctie liep: de vlakke
+    bias is sinds v3.33.0 ingehouden en de vakcorrectie sinds v3.92.2
+    ook. De kaart gaat over de voorspelling zelf.
+    """
     c = _coordinator(make_coordinator, _Tracker([-10.0] * 7, -11.6))
 
     namen = {r["naam"] for r in c.get_reliability_overview()}
 
-    assert "Zonvoorspelling (klopt de correctie nog?)" in namen
+    assert "Zonvoorspelling (klopt hij nog met de panelen?)" in namen
+    assert "Zonvoorspelling (klopt de correctie nog?)" not in namen
 
 
 # --- hoe dicht bij de weinig-zon-drempel -----------------------------

@@ -884,3 +884,88 @@ def test_the_scan_accepts_the_repair():
     )
 
     assert not _herberekende_returns(ast.parse(bron))
+
+
+# --- structuurscan 24: elke reserve houdt de bodem aan ----------------
+
+
+def _reserves_zonder_bodem(boom):
+    """Functies die een reserve uitrekenen zonder de bodem toe te passen.
+
+    Een reserve is hier: iets dat de marge uit `_reserve_margin_factor`
+    of `SELL_RESERVE_DEEPEST_SAFETY_FACTOR` gebruikt. Wie dat doet,
+    vermenigvuldigt een marge met het diepste tekort - en dat tekort is
+    nul zodra de voorspelling zegt dat de zon het huis morgen dekt.
+    """
+    fouten = []
+    for functie in ast.walk(boom):
+        if not isinstance(functie, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+
+        namen = set()
+        for knoop in ast.walk(functie):
+            if isinstance(knoop, ast.Name):
+                namen.add(knoop.id)
+            elif isinstance(knoop, ast.Attribute):
+                namen.add(knoop.attr)
+
+        rekent_reserve = (
+            "_reserve_margin_factor" in namen
+            or "SELL_RESERVE_DEEPEST_SAFETY_FACTOR" in namen
+        )
+        # De marge-functie zelf komt in haar eigen naamverzameling voor;
+        # die LEVERT de marge en rekent geen reserve uit.
+        if functie.name == "_reserve_margin_factor":
+            continue
+        if rekent_reserve and "_reserve_bodem_kwh" not in namen:
+            fouten.append(functie.name)
+    return fouten
+
+
+def test_every_reserve_calculation_applies_the_floor():
+    """De fout van 31 augustus, de tweede helft (v3.92.3).
+
+    De bodem stond op vier plekken los uitgerekend of helemaal niet
+    toegepast: de sturing, de kwartierplanning, de uitsplitsing en de
+    verkooptoets. Gemeten om 10:11, met de sturing al gerepareerd:
+
+        reserve (bodem bindend)   1,296 kWh
+        beschikbaar               0,69 kWh
+        verkooptoets              alles vrij te verkopen
+
+    Het commentaar bij de bodem beweerde sinds v3.74.0 dat hij "op ÉÉN
+    plek staat zodat hij doorwerkt in het ontladen, de verkooptoets en
+    de kwartierplanning tegelijk". Dat was de bedoeling, niet de code -
+    en een commentaarregel gaat niet om als de code verandert.
+
+    Deze scan wel.
+    """
+    fouten = []
+    for pad in _iter_python_files():
+        boom = ast.parse(pad.read_text())
+        fouten.extend(f"{pad.name}:{naam}" for naam in _reserves_zonder_bodem(boom))
+
+    assert not fouten, (
+        "deze functies rekenen een reserve uit zonder de bodem: " f"{fouten}"
+    )
+
+
+def test_the_floor_scan_catches_a_new_reserve():
+    """Een vijfde reserveberekening erbij, en de scan gaat af."""
+    bron = (
+        "def verkoop(self, diepste):\n"
+        "    marge = self._reserve_margin_factor()\n"
+        "    return diepste * marge\n"
+    )
+
+    assert _reserves_zonder_bodem(ast.parse(bron)) == ["verkoop"]
+
+
+def test_the_floor_scan_accepts_a_reserve_with_the_floor():
+    bron = (
+        "def verkoop(self, diepste):\n"
+        "    marge = self._reserve_margin_factor()\n"
+        "    return max(diepste * marge, self._reserve_bodem_kwh())\n"
+    )
+
+    assert not _reserves_zonder_bodem(ast.parse(bron))
