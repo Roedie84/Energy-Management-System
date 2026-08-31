@@ -1214,6 +1214,14 @@ CAPACITY_MEASURE_WINDOW_DAYS = 30
 # blokkeren.
 CAPACITY_MEASURE_MIN_FRACTION = 0.65
 
+# Hoeveel de reeks van nominaal moet afwijken voordat het een METING is
+# (v3.92.5).
+#
+# De capaciteitstrend legt elke dag de nominale capaciteitssensor vast.
+# Wijkt die niet af, dan is er niets gemeten - en dan hoort er geen
+# "degradatie 0%" op de kaart te staan alsof dat een uitkomst is.
+CAPACITY_MEASURE_MIN_VERSCHIL_KWH = 0.05
+
 EIGEN_LOG_REGELS = 100
 
 # Hoe ver de wijzigingsmomenten van de bronbestanden uit elkaar mogen

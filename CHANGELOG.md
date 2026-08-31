@@ -21392,3 +21392,169 @@ Kijkveld en sensor staan allebei op 21,0. Nul fouten in de analyse. De
 omdat geen enkel vak de drempel van vier dagen haalt.
 
 **Volledige testsuite**: 3380 tests, allemaal groen.
+
+## v3.92.5 — De gemeten capaciteit is nooit gemeten
+
+**Gemeten** in de export van 31 augustus 10:40, 153 dagen na installatie:
+
+```
+nominaal_kwh    8,64
+gemeten_kwh     null
+dagen_gemeten   153
+```
+
+De kaart belooft dat de reserve met de gemeten capaciteit rekent "zodra
+die er is - na 30 dagen". Vijf keer dertig dagen later staat er niets.
+
+### 1. De sleutel heeft nooit bestaan
+
+`gemeten_capaciteit_kwh` las `r.get("bruikbaar_kwh")` uit
+`capacity_trend_history`. De schrijver, `_update_proefstand`, legt vast:
+
+```
+{"datum": "2026-08-31", "capaciteit_kwh": 8.64, "doorzet_kwh": 168.3}
+```
+
+De lijst met waarden was dus altijd leeg en de functie gaf altijd None
+terug. Dood sinds v3.5.0.
+
+Wat het onzichtbaar hield: de zeven toetsen van v3.5.0 bouwden hun eigen
+reeks met `{"bruikbaar_kwh": ...}` — dezelfde verzonnen sleutel als de
+lezer. Ze bevestigden de aanname en niet de code, en daardoor viel er
+niets om. **Vijfde keer** dat dit gebeurt, na de klimaatsleutels
+(v3.47.0), de aandachtspunten (v3.70.0), de kwartierplanning (v3.91.0) en
+de reservebodem (v3.92.1).
+
+### 2. En zelfs met de goede sleutel wordt er niets gemeten
+
+De schrijver legt de NOMINALE capaciteitssensor vast, elke dag opnieuw.
+Alleen de sleutel repareren zou `gemeten_kwh` op 8,64 zetten tegenover
+een nominale 8,64, en de kaart zou "degradatie 0%" melden alsof dat een
+uitkomst was. Dat is erger dan null: het ziet eruit als bewijs dat de
+accu gezond is.
+
+Wijkt de reeks minder dan 0,05 kWh van nominaal af, dan wordt er niets
+gemeld, en zegt de kaart in `meet_niets_reden` waaróm. Komt er ooit een
+bron die wél afwijkt, dan telt die gewoon mee — de rem zit op verzonnen
+metingen, niet op metingen.
+
+### 3. `available_kwh` kan die bron niet zijn
+
+Uit de audit stond nog open of `available_kwh` de bruikbare of de
+nominale energie is. Vier momenten uit vier exports, op vier decimalen:
+
+```
+SoC 17 %  ->  0,6048 kWh      (17-10)/100 * 8,64 = 0,6048
+SoC 19 %  ->  0,7776 kWh      (19-10)/100 * 8,64 = 0,7776
+SoC 21 %  ->  0,9504 kWh      (21-10)/100 * 8,64 = 0,9504
+```
+
+De sensor is geen meting maar een rekensom op de laadstand en dezelfde
+nominale capaciteit, met een vaste bodem van 10%. Er kan per definitie
+geen slijtage uit blijken, en alles wat erop rust erft de nominale
+aanname — inclusief de reservebodem, die 15% van dat getal is.
+
+Dat is geen fout in deze integratie, maar het hoort geweten te zijn.
+
+### 4. Het kijkveld voor de beschikbare energie
+
+Zelfde vorm als `last_soc_percent` in v3.92.0, en toen over het hoofd
+gezien. In de exports van 10:27 en 10:40 stond `last_available_kwh` op
+null terwijl de sensor 0,9504 gaf.
+
+Twee oorzaken: het veld werd alleen in de ontlaadtak gezet, en de
+energiebrug zette het expliciet op None om "de brug is niet van
+toepassing" te betekenen — terwijl de naam zegt hoeveel er in de accu
+zit, en de spiegelcontrole en de export het als het tweede lezen. Dat de
+brug niet loopt staat al in `last_needed_kwh_to_bridge`.
+
+Het veld wordt nu elke ronde bijgewerkt en niet meer leeggemaakt.
+
+### Wat er NIET in zit: structuurscan 25
+
+Ik heb geprobeerd hier een scan onder te zetten: een reeks die gelezen
+wordt met een sleutel die de schrijver nooit schrijft. Die is
+teruggetrokken.
+
+Op de echte code gaf hij eerst 41 treffers, na drie rondes aanscherpen
+nog twee — allebei vals, door lussen die dezelfde variabelenaam over
+verschillende reeksen gebruiken en door appends met een `**`-spread. Een
+scan die drie uitzonderingen nodig heeft om te zwijgen, gaat later
+afgaan op iets onschuldigs en wordt dan gedempt. Dan is hij erger dan
+niets.
+
+Het patroon blijft dus onbewaakt. Dat is een openstaand punt, geen
+opgelost punt.
+
+**Volledige testsuite**: 3385 tests, allemaal groen.
+
+## v3.93.0 — De smart_charging-proef rekende met een prijs uit het verleden
+
+**Gemeld**: "deze proef wil ik nog eens herzien, smart_charging zou ik
+vooral overdag tijdens PV verwachten graag nagaan en eventueel
+optimaliseren."
+
+Uit de kaart van 31 augustus:
+
+```
+Kwartieren met een tekort      20 van 54
+Waarvan het net goedkoper was   0
+Duurste prijs vandaag          38,3 ct   (om 19:45)
+Waard om vast te houden        20,2 ct/kWh
+```
+
+De twintig rijen lopen van 19:00 tot 23:45. Overdag staat er niets.
+
+### 1. De piek moet nog komen
+
+`waarde_later` werd één keer berekend, uit de duurste prijs van de HELE
+tabel. Voor het kwartier van 23:45 werd dus gerekend met de 38,3 ct van
+19:45 — vier uur eerder. Je kunt geen energie vasthouden om hem eerder te
+verkopen.
+
+Per kwartier telt nu alleen wat er ná dat kwartier nog aan prijzen komt.
+Voor de rij van 19:45 zakt de waarde daarmee van 20,2 naar 13,8 ct/kWh,
+en voor de laatste rij naar nul: na het laatste kwartier is vasthouden
+per definitie niets waard.
+
+De oude opzet was stelselmatig te gúnstig voor smart_charging. Dat de
+uitkomst toch overal "nee" was, maakt de conclusie niet verkeerd — wel
+minder waard dan hij leek. De kolom "Piek hierna" staat nu in de tabel,
+zodat na te kijken is waar elk oordeel vandaan komt.
+
+### 2. Een vergelijking van een getal met zichzelf
+
+`uit_accu_kosten_ct` en `uit_net_kosten_ct` stonden allebei op
+`prijs * tekort`. Wat het kwartier kost is één getal; het verschil zit in
+wat de accu daarna nog waard is. Nu één veld, `kosten_nu_ct`.
+
+### 3. Waarom er overdag niets staat
+
+`tekort = verbruik - zon`, met de VOORSPELDE zon uit de kwartierplanning.
+Dekt die voorspelling het huis, dan doen beide modi hetzelfde en valt er
+niets te kiezen. Overdag is dat vrijwel altijd zo, en daarom staat er
+geen enkele dagrij.
+
+Op zichzelf klopt dat. Maar op 30 augustus zei de voorspelling 10,78 kWh
+en werd het 6,04 — 44% ernaast. Op zo'n dag hingen er overdag wél
+kwartieren aan het net, en de proef zou er geen enkele van laten zien.
+**De tabel meet de voorspelling, niet de dag.**
+
+De kaart telt nu hoeveel kwartieren buiten de tabel vallen omdat de zon
+ze zou dekken (vandaag 34 van de 54), en zegt erbij wat dat betekent als
+de voorspelling ernaast zit. Dat is geen oplossing, het is het einde van
+een stille aanname.
+
+### 4. "Duurste prijs vandaag"
+
+De tabel loopt zover als er prijzen zijn, tot in de nacht en soms tot
+morgen. Heet nu "Duurste prijs in dit venster".
+
+### Wat ik in mijn eigen toets fout deed
+
+De eerste versie zette `learned_battery_efficiency_percent` — een
+property op de KLASSE — rechtstreeks om. Dat lekte naar elke volgende
+toets in de verzameling; alleen draaien slaagde, de volledige run niet.
+Nu via monkeypatch, die netjes terugzet.
+
+**Volledige testsuite**: 3391 tests, allemaal groen.

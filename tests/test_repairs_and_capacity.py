@@ -101,9 +101,19 @@ def _met_trend(make_coordinator, hass, gemeten, nominaal=8.6, dagen=None):
         {CONF_BATTERY_TOTAL_CAPACITY_SENSOR: "sensor.capaciteit"}
     )
     hass.states.set("sensor.capaciteit", str(nominaal))
+    # v3.92.5: de sleutel die `_update_proefstand` werkelijk schrijft.
+    #
+    # Hier stond `bruikbaar_kwh` - dezelfde sleutel die de lezer
+    # gebruikte, en die de schrijver nooit heeft gezet. Deze zeven
+    # toetsen bevestigden dus de aanname en niet de code, en daardoor
+    # bleef `gemeten_kwh` 153 dagen op null zonder dat er iets omviel.
     c.capacity_trend_history = [
-        {"bruikbaar_kwh": gemeten}
-        for _ in range(dagen or PROEFSTAND_MIN_TREND_DAYS)
+        {
+            "datum": f"2026-01-{1 + i:02d}",
+            "capaciteit_kwh": gemeten,
+            "doorzet_kwh": 1.1 * i,
+        }
+        for i in range(dagen or PROEFSTAND_MIN_TREND_DAYS)
     ]
     return c
 

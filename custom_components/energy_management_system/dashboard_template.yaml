@@ -2682,19 +2682,21 @@ views:
 
         | Samen | {{ t.totaal_voordeel_eur }} euro |
 
-        | Duurste prijs vandaag | {{ t.duurste_prijs_ct }} ct |
+        | Duurste prijs in dit venster | {{ t.duurste_prijs_venster_ct }} ct |
 
-        | Waard om vast te houden | {{ t.waarde_later_ct_per_kwh }} ct/kWh |
+        | Gedekt door de voorspelde zon | {{ t.kwartieren_gedekt_door_zon }} kwartieren |
+
+        | Waard om vast te houden | tot {{ t.waarde_later_ct_per_kwh }} ct/kWh |
 
 
         _Na {{ t.rendement_procent }}% rendement en {{ t.slijtage_ct_per_kwh }} ct slijtage._
 
 
-        | Tijd | Prijs | Zon | Verbruik | Tekort | Beter? |
+        | Tijd | Prijs | Zon | Tekort | Piek hierna | Beter? |
 
         |---|---|---|---|---|---|
 
-        {% for r in t.rijen %}{% if r.tekort_kwh > 0 %}| {{ r.van }} | {{ r.prijs_ct }} ct | {{ r.zon_kwh }} kWh | {{ r.verbruik_kwh }} kWh | {{ r.tekort_kwh }} kWh | {% if r.smart_charging_beter %}**ja** {{ (r.voordeel_eur * 100) | round(1) }} ct{% else %}nee{% endif %} |
+        {% for r in t.rijen %}{% if r.tekort_kwh > 0 %}| {{ r.van }} | {{ r.prijs_ct }} ct | {{ r.zon_kwh }} kWh | {{ r.tekort_kwh }} kWh | {{ r.hoogste_prijs_hierna_ct }} ct | {% if r.smart_charging_beter %}**ja** {{ (r.voordeel_eur * 100) | round(1) }} ct{% else %}nee{% endif %} |
 
         {% endif %}{% endfor %}{% endif %}
 

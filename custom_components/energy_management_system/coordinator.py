@@ -202,6 +202,7 @@ from .const import (
     MAX_PLAUSIBLE_EFFICIENCY_PERCENT,
     CONF_MANUAL_DISCHARGE_POWER,
     CAPACITY_MEASURE_MIN_FRACTION,
+    CAPACITY_MEASURE_MIN_VERSCHIL_KWH,
     CAPACITY_MEASURE_WINDOW_DAYS,
     CONF_BATTERY_TOTAL_CAPACITY_SENSOR,
     CONSISTENCY_MAX_COOLING_SWITCHES_PER_WINDOW,
@@ -9797,21 +9798,42 @@ class EnergyManagementSystemCoordinator:
             (self.get_wear_cost_overview() or {}).get("slijtage_ct_per_kwh")
             or 0.0
         )
-        # Wat een vastgehouden kWh straks waard is, na de kosten om hem
-        # door de accu te halen.
-        waarde_later = duurste * rendement - slijtage
+
+        # v3.93.0: de piek moet nog KOMEN.
+        #
+        # Hier stond één `waarde_later`, berekend uit de duurste prijs van
+        # de hele tabel. Voor het kwartier van 23:45 werd dus gerekend met
+        # de 38,3 ct van 19:45 - vier uur eerder. Je kunt geen energie
+        # vasthouden om hem eerder te verkopen, en de proef kwam daardoor
+        # stelselmatig te gunstig uit voor smart_charging.
+        #
+        # Per kwartier telt alleen wat er ná dat kwartier nog aan prijzen
+        # komt. Voor de laatste rij is dat niets, en dan is vasthouden per
+        # definitie niets waard.
+        met_prijs = [r for r in plan if r.get("prijs_ct") is not None]
+        hoogste_hierna = [0.0] * len(met_prijs)
+        loop = 0.0
+        for i in range(len(met_prijs) - 1, -1, -1):
+            hoogste_hierna[i] = loop
+            loop = max(loop, met_prijs[i]["prijs_ct"])
 
         rijen = []
         totaal_voordeel = 0.0
-        for r in plan:
+        gedekt_door_zon = 0
+        for i, r in enumerate(met_prijs):
             zon = r.get("zon_kwh") or 0.0
             verbruik = r.get("verbruik_kwh") or 0.0
-            prijs = r.get("prijs_ct")
-            if prijs is None:
-                continue
+            prijs = r["prijs_ct"]
             tekort = max(0.0, verbruik - zon)
-            # Zonder tekort dekt de zon het huis en doen beide modi
-            # hetzelfde - dan valt er niets te kiezen.
+            if not tekort:
+                # Zonder tekort dekt de VOORSPELDE zon het huis en doen
+                # beide modi hetzelfde. Geteld, want dat er overdag niets
+                # in de tabel staat is een uitkomst van die voorspelling
+                # en geen eigenschap van smart_charging.
+                gedekt_door_zon += 1
+            waarde_later = max(
+                0.0, hoogste_hierna[i] * rendement - slijtage
+            )
             voordeel = (waarde_later - prijs) * tekort / 100 if tekort else 0.0
             totaal_voordeel += voordeel
             rijen.append(
@@ -9821,8 +9843,13 @@ class EnergyManagementSystemCoordinator:
                     "zon_kwh": round(zon, 3),
                     "verbruik_kwh": round(verbruik, 3),
                     "tekort_kwh": round(tekort, 3),
-                    "uit_accu_kosten_ct": round(prijs * tekort, 2),
-                    "uit_net_kosten_ct": round(prijs * tekort, 2),
+                    # v3.93.0: `uit_accu_kosten_ct` en `uit_net_kosten_ct`
+                    # stonden hier allebei op `prijs * tekort` - een
+                    # vergelijking van een getal met zichzelf. Wat het
+                    # kwartier kost is één getal; het verschil zit in wat
+                    # de accu daarna nog waard is.
+                    "kosten_nu_ct": round(prijs * tekort, 2),
+                    "hoogste_prijs_hierna_ct": round(hoogste_hierna[i], 1),
                     "waarde_later_ct_per_kwh": round(waarde_later, 1),
                     "voordeel_eur": round(voordeel, 4),
                     "smart_charging_beter": voordeel > 0,
@@ -9833,21 +9860,34 @@ class EnergyManagementSystemCoordinator:
         return {
             "beschikbaar": True,
             "kwartieren": len(rijen),
+            # v3.93.0: "vandaag" klopte niet - de tabel loopt zover als er
+            # prijzen zijn, tot in de nacht en soms tot morgen.
             "duurste_prijs_ct": round(duurste, 1),
+            "duurste_prijs_venster_ct": round(duurste, 1),
             "rendement_procent": round(rendement * 100, 1),
             "slijtage_ct_per_kwh": round(slijtage, 1),
-            "waarde_later_ct_per_kwh": round(waarde_later, 1),
+            # Geen enkel getal meer voor de hele tabel: dat verschilt nu
+            # per kwartier. Dit is de bovengrens, van het eerste kwartier.
+            "waarde_later_ct_per_kwh": (
+                rijen[0]["waarde_later_ct_per_kwh"] if rijen else 0.0
+            ),
             "kwartieren_met_tekort": sum(1 for r in rijen if r["tekort_kwh"] > 0),
+            "kwartieren_gedekt_door_zon": gedekt_door_zon,
             "kwartieren_smart_charging_beter": len(beter),
             "totaal_voordeel_eur": round(totaal_voordeel, 2),
             "rijen": rijen,
             "toelichting": (
                 "Per kwartier: dekt de zon het huis niet, dan springt de "
-                "accu bij in `smart`. Deze tabel zet daar tegenover wat "
-                "diezelfde kWh later waard is, na "
+                "accu bij in `smart`. Deze tabel zet daar tegenover de "
+                "hoogste prijs die daarNA nog komt, na "
                 f"{rendement * 100:.0f}% rendement en {slijtage:.1f} ct "
                 "slijtage. Positief voordeel betekent dat het gat beter "
-                "van het net had kunnen komen. Stuurt niets."
+                "van het net had kunnen komen. "
+                f"{gedekt_door_zon} van de {len(rijen)} kwartieren staan "
+                "niet in de tabel omdat de VOORSPELDE zon het huis daar "
+                "dekt - overdag dus meestal allemaal. Zit die "
+                "voorspelling ernaast, dan ontbreken er kwartieren die er "
+                "in werkelijkheid wel waren. Stuurt niets."
             ),
         }
 
@@ -11031,10 +11071,17 @@ class EnergyManagementSystemCoordinator:
         if len(reeks) < PROEFSTAND_MIN_TREND_DAYS:
             return None
 
+        # v3.92.5: de sleutel die de schrijver werkelijk gebruikt.
+        #
+        # Hier stond `r.get("bruikbaar_kwh")`. Die sleutel is nooit
+        # geschreven: `_update_proefstand` legt `datum`, `capaciteit_kwh`
+        # en `doorzet_kwh` vast. De lijst was dus altijd leeg en deze
+        # functie gaf altijd None terug - 153 dagen lang, terwijl de
+        # kaart beloofde dat er na 30 gemeten zou worden.
         waarden = [
-            r.get("bruikbaar_kwh")
+            r.get("capaciteit_kwh")
             for r in reeks[-CAPACITY_MEASURE_WINDOW_DAYS:]
-            if r.get("bruikbaar_kwh")
+            if r.get("capaciteit_kwh")
         ]
         if len(waarden) < PROEFSTAND_MIN_TREND_DAYS:
             return None
@@ -11044,6 +11091,19 @@ class EnergyManagementSystemCoordinator:
             self.config.get(CONF_BATTERY_TOTAL_CAPACITY_SENSOR)
         )
         if not nominaal:
+            return None
+
+        # v3.92.5: en niet doen alsof dit een meting is als het er geen
+        # is.
+        #
+        # De schrijver legt de NOMINALE capaciteitssensor vast, elke dag
+        # opnieuw. Alleen de sleutel repareren zou hier 8,64 opleveren
+        # tegenover een nominale 8,64, en de kaart zou 0% degradatie
+        # melden alsof dat een uitkomst was. Dat is erger dan null: het
+        # ziet eruit als bewijs dat de accu gezond is.
+        #
+        # Wijkt de reeks niet af van nominaal, dan is er niets gemeten.
+        if abs(gemeten - nominaal) < CAPACITY_MEASURE_MIN_VERSCHIL_KWH:
             return None
 
         ondergrens = nominaal * CAPACITY_MEASURE_MIN_FRACTION
@@ -11080,6 +11140,25 @@ class EnergyManagementSystemCoordinator:
                 round(100 * (1 - gemeten / nominaal), 1) if gemeten else None
             ),
             "dagen_gemeten": len(self.capacity_trend_history or []),
+            # v3.92.5: en waarom er niets staat.
+            #
+            # `gemeten_kwh` stond 153 dagen op null terwijl de toelichting
+            # beloofde dat er na 30 gemeten zou worden. Null zonder uitleg
+            # is al die tijd voor "nog even wachten" aangezien.
+            "meet_niets_reden": (
+                None
+                if gemeten
+                else (
+                    "De capaciteitstrend legt elke dag de NOMINALE "
+                    "capaciteitssensor vast, en die verandert niet. Er "
+                    "wordt dus geen slijtage gemeten, hoeveel dagen er "
+                    "ook bijkomen. Daarvoor is een bron nodig die de "
+                    "werkelijk geleverde energie over een volle cyclus "
+                    "meet; `available_kwh` is dat niet - die is een "
+                    "rekensom op de laadstand en dezelfde nominale "
+                    "capaciteit."
+                )
+            ),
             "toelichting": (
                 "De reserve rekent met de gemeten capaciteit zodra die er "
                 f"is - na {PROEFSTAND_MIN_TREND_DAYS} dagen. Daaronder de "
@@ -19826,7 +19905,20 @@ class EnergyManagementSystemCoordinator:
         quarters) if no available-energy sensor is configured.
         """
         if cheap_block_start is None or now >= cheap_block_start:
-            self.last_available_kwh = None
+            # v3.92.5: `last_available_kwh` NIET meer leegmaken.
+            #
+            # Hier betekende None "de energiebrug is niet van
+            # toepassing", terwijl de naam van het veld zegt hoeveel er
+            # in de accu zit. De spiegelcontrole en de export lezen het
+            # als het tweede, en zagen dus null bij een volle accu - in
+            # de exports van 10:27 en 10:40 stond er niets terwijl de
+            # sensor 0,9504 gaf.
+            #
+            # Dat de brug niet loopt staat al in
+            # `last_needed_kwh_to_bridge`; geen enkele lezer gebruikt
+            # `last_available_kwh is None` voor die betekenis. Al in
+            # v1.24.1 stond hierover: "dat veld is een bijproduct van die
+            # check, geen betrouwbare accustand".
             self.last_needed_kwh_to_bridge = None
             self.last_has_enough_energy = None
             return False
@@ -19953,7 +20045,8 @@ class EnergyManagementSystemCoordinator:
         # Fallback: no available-energy sensor (or no consumption
         # estimate) configured - use the old time-based rule
         # (self.last_discharge_start is already computed for this tick).
-        self.last_available_kwh = None
+        #
+        # v3.92.5: ook hier blijft de gemeten waarde staan; zie hierboven.
         self.last_needed_kwh_to_bridge = None
         self.last_has_enough_energy = None
         return (
@@ -22296,6 +22389,17 @@ class EnergyManagementSystemCoordinator:
             entries, now
         )
         self.last_household_load_w = self._read_corrected_consumption_power()
+
+        # v3.92.5: en de beschikbare energie.
+        #
+        # Zelfde vorm als `last_soc_percent` in v3.92.0, en toen over het
+        # hoofd gezien: dit veld wordt alleen in de ontlaadtak gezet. In
+        # de exports van 10:27 en 10:40 stond het op null terwijl de
+        # sensor gewoon 0,9504 gaf - die ronden namen een andere tak.
+        beschikbaar_entity = self.config.get(CONF_AVAILABLE_ENERGY_SENSOR)
+        if beschikbaar_entity:
+            self.last_available_kwh = self._read_sensor_float(beschikbaar_entity)
+            self._onthoud_meting("last_available_kwh")
 
     def _goedkope_koeling_op_slot(self, now: datetime) -> bool:
         """Heeft de goedkope koeling zijn dagportie op? (v3.33.0)
