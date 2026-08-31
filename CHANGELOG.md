@@ -21316,14 +21316,13 @@ weer weghalen.
 
 ### Het trackerblok viel stil weg uit de export
 
-`solar_forecast_tracker` ontbrak volledig in de export, terwijl
-`solar_forecast_health` in diezelfde export gewoon vijf dagen historie
-liet zien. Dat kan alleen als de coordinator de tracker wél heeft en
-`hass.data` niet: twee verwijzingen naar hetzelfde object, en de export
-las de enige die kan verdwijnen.
+**Deze bevinding was fout. Zie de rechtzetting in v3.92.4.**
 
-Uitgerekend het blok waarmee de zonvoorspelling na te rekenen is. De
-export valt nu terug op `coordinator.solar_tracker`.
+Gemeld was dat `solar_forecast_tracker` volledig uit de export ontbrak.
+Dat klopte niet: het blok stond er gewoon, alleen op het hoogste niveau
+van `data` en niet onder `coordinator` - waar ik keek. De terugval op
+`coordinator.solar_tracker` is blijven staan omdat hij onschadelijk is,
+maar hij repareert niets.
 
 ### Het label op de meetkwaliteitskaart
 
@@ -21335,5 +21334,61 @@ De melding klopt — twee soorten dagen, 2 van 5 binnen 10% en 2 meer dan
 en de vakcorrectie sinds v3.92.2 ook. Er ís geen correctie om naar te
 vragen, en die vraag stuurt het zoeken de verkeerde kant op. De kaart
 heet nu "Zonvoorspelling (klopt hij nog met de panelen?)".
+
+**Volledige testsuite**: 3380 tests, allemaal groen.
+
+## v3.92.4 — Rechtzetting: het trackerblok was nooit weg
+
+In v3.92.3 staat als bevinding dat `solar_forecast_tracker` volledig uit
+de export van 31 augustus 10:11 ontbrak, met een verklaring erbij over
+twee verwijzingen naar dezelfde tracker waarvan er één stil kan
+verdwijnen.
+
+**Dat was fout.** Het blok stond er gewoon. Het staat op het hoogste
+niveau van `data`, niet onder `data.coordinator` — en daar had ik
+gekeken. In de export van 09:00 keek ik nog op de juiste plek en vond
+hem; twee uur later niet meer, kreeg `null` terug, en concludeerde dat
+hij ontbrak.
+
+Dat is het patroon dat in de overdracht als grootste foutenbron staat:
+negen keer in één week een conclusie getrokken uit de verkeerde plek in
+de export, een sleutel gezocht onder `coordinator` die onder `data`
+staat. Nu tien.
+
+Wat het erger maakt dan een misgrijp: er is een sluitende verklaring
+omheen gebouwd — `hass.data` tegenover `coordinator.solar_tracker`, twee
+paden, structuurscan 11 — en die verklaring was overtuigend genoeg om
+niet meer te controleren óf het probleem er wel was. Een kloppend verhaal
+is geen bewijs.
+
+### Wat er blijft en wat er verandert
+
+De terugval op `coordinator.solar_tracker` in `diagnostics.py` blijft
+staan. Hij is onschadelijk en laat de export niet van één verwijzing
+afhangen. Maar hij repareert niets, en dat hoort in het dossier te staan.
+
+De toets eronder is herschreven: hij legt vast dat de terugval er is, en
+zegt er expliciet bij dat hij geen gemelde fout vangt. Anders leest een
+opvolger hem als bewijs dat er een fout was.
+
+Bij de betreffende alinea in v3.92.3 staat nu een verwijzing hierheen.
+De oorspronkelijke tekst is niet stilzwijgend aangepast — een changelog
+die zichzelf schoonpoetst is geen dossier meer.
+
+### Wat er wél is bevestigd, in dezelfde export
+
+De verkooptoets van v3.92.3 doet zijn werk:
+
+```
+nodig_voor_woning_kwh   1,30 kWh   (de bodem)
+beschikbaar             0,95 kWh
+mag_verkopen            false
+reden                   "verkopen zou het huis aan het net leggen"
+```
+
+Om 10:11, vóór deze versie, gaf diezelfde toets bij 0,69 kWh alles vrij.
+Kijkveld en sensor staan allebei op 21,0. Nul fouten in de analyse. De
+`ingehouden_reden` per bewolkingsvak staat in de export, overal nog null
+omdat geen enkel vak de drempel van vier dagen haalt.
 
 **Volledige testsuite**: 3380 tests, allemaal groen.

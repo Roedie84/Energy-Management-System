@@ -1,17 +1,16 @@
-v3.92.3 - alleen de gewijzigde bestanden sinds v3.91.0
+v3.92.4 - alleen de gewijzigde bestanden sinds v3.91.0
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
 
     coordinator.py            bodem op één plek, kijkvelden, label
-    diagnostics.py            terugval voor het trackerblok
+    diagnostics.py            terugval voor de trackerverwijzing
     solar_forecast.py         samenhangtoets per bewolkingsvak
-    manifest.json             versienummer 3.92.3
+    manifest.json             versienummer 3.92.4
     bestandscontrole.json     hoort bij deze versie
 
-NAAR DE REPO (draaien niet mee in Home Assistant)
+NAAR DE REPO
 
-    README.md                                      badge en testaantal
-    CHANGELOG.md                                   v3.92.0 t/m v3.92.3
+    README.md, CHANGELOG.md
     tests/test_bodem_bereikt_de_verkooptoets.py    nieuw
     tests/test_accustand_kijkveld.py               nieuw
     tests/test_reserve_bodem_bereikt_de_sturing.py nieuw
@@ -27,21 +26,11 @@ TE VERWIJDEREN uit de repo (die laadden niet meer)
     tests/test_verkoop_bodem.py
     tests/test_steelstofzuiger_charging.py
 
-WAT ER VERANDERT IN BEDRIJF
+WAT ER IN v3.92.4 VERANDERT
 
-1. De verkooptoets houdt nu de bodem aan. Met 0,69 kWh in de accu en een
-   bodem van 1,296 komt er GEEN verkoop meer uit - waar vandaag om 10:11
-   alles vrijgegeven werd.
+Alleen de changelog en één toetsbeschrijving. De code is gelijk aan
+v3.92.3 op het versienummer na. De bevinding over het "weggevallen"
+trackerblok in v3.92.3 was onjuist en is rechtgezet; de oorspronkelijke
+tekst is blijven staan met een verwijzing erbij.
 
-2. Het trackerblok staat weer in de diagnostiek-export. Zonder dat blok
-   is de zonvoorspelling niet na te rekenen.
-
-3. De meetkwaliteitskaart heet "Zonvoorspelling (klopt hij nog met de
-   panelen?)". De melding zelf blijft staan en klopt: de voorspelling is
-   onbetrouwbaar op wisselvallige dagen.
-
-WAAR OP TE LETTEN
-
-De accustand morgenochtend, en of er vanavond nog verkocht wordt. Vier
-poorten hielden de bodem tot nu toe niet aan; drie zijn nu dicht en de
-vierde bestaat niet meer als aparte berekening.
+Er is dus geen haast bij deze installatie als v3.92.3 al draait.

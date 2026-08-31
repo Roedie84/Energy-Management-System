@@ -157,16 +157,18 @@ def test_de_kaart_vraagt_niet_naar_een_correctie_die_er_niet_is(
 # --- 4. het trackerblok in de export ---------------------------------
 
 
-def test_de_export_valt_terug_op_de_verwijzing_van_de_coordinator():
-    """Gemeten in de export van 31 augustus 10:11:
-    `solar_forecast_tracker` ontbrak volledig, terwijl
-    `solar_forecast_health` in diezelfde export vijf dagen historie liet
-    zien.
+def test_de_export_leest_de_verwijzing_die_altijd_bestaat():
+    """v3.92.4, rechtzetting.
 
-    Dat kan alleen als de coordinator de tracker wél heeft en
-    `hass.data` niet. Twee verwijzingen naar hetzelfde object, en de
-    export las de enige die kan verdwijnen - uitgerekend het blok
-    waarmee de zonvoorspelling na te rekenen is.
+    In v3.92.3 stond hier dat `solar_forecast_tracker` uit de export van
+    31 augustus 10:11 ontbrak. Dat was fout: het blok stond er wel,
+    alleen op het hoogste niveau van `data` en niet onder `coordinator`.
+    Er is nooit iets weggevallen.
+
+    De terugval op `coordinator.solar_tracker` blijft staan omdat hij
+    onschadelijk is en de export niet van één verwijzing laat afhangen.
+    Deze toets legt alleen dat vast - hij vangt geen gemelde fout, en
+    hoort dus niet gelezen te worden als bewijs dat er een was.
     """
     import ast
     from pathlib import Path
@@ -188,9 +190,5 @@ def test_de_export_valt_terug_op_de_verwijzing_van_de_coordinator():
             break
 
     assert toekenning is not None, "geen toekenning van solar_tracker gevonden"
-    tekst = ast.dump(toekenning.value)
-    assert "hass" in tekst
-    assert "solar_tracker" in tekst
-    # De terugval: `... or getattr(coordinator, "solar_tracker", None)`
     assert isinstance(toekenning.value, ast.BoolOp)
     assert isinstance(toekenning.value.op, ast.Or)
