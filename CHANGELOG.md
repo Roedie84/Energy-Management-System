@@ -21618,3 +21618,179 @@ toets naast die controleert dat er voor díé soorten géén vaste titel
 terugkomt.
 
 **Volledige testsuite**: 3400 tests, allemaal groen.
+
+## v3.93.2 — Het gemiddelde dat geen gemiddelde was
+
+**Gemeld**:
+
+> Weerbronnen lopen 41 procentpunt uiteen over de bewolking
+> (weather.forecast_thuis: 93%, weather.openweathermap: 52%). Het
+> gemiddelde (52.0%) zegt dan weinig - controleer welke bron klopt met
+> wat je buiten ziet.
+
+### 52,0 is geen gemiddelde
+
+Van 93 en 52 is dat 72,5. Uit de export van dezelfde dag:
+
+```
+weather_ensemble_readings        thuis 82,0   owm 44,0
+weather_ensemble_cloud_cover     44,0
+weather_ensemble_chosen_source   weather.openweathermap
+weather_ensemble_weighted        true
+```
+
+Bij een verschil van 25 procentpunt of meer middelt de code niet meer,
+maar KIEST hij de bron die het aantoonbaar vaker bij het rechte eind
+heeft. Dat is precies de bedoeling van v1.9.2 en het werkt — alleen heet
+het in de melding nog steeds "het gemiddelde", en dat getal past dan bij
+één bron in plaats van bij geen van beide.
+
+### En het advies gaf het werk terug
+
+"Controleer welke bron klopt met wat je buiten ziet" — terwijl het
+antwoord er al lag: openweathermap komt in 82,0% van 200 waarnemingen
+overeen met wat de panelen deden, forecast_thuis in 76,5%. Tweehonderd
+waarnemingen tegen één blik naar buiten.
+
+De melding zegt nu wat er gebeurt, met de onderbouwing erbij:
+
+> Weerbronnen lopen 38 procentpunt uiteen over de bewolking
+> (weather.forecast_thuis: 82%, weather.openweathermap: 44%). Er wordt
+> daarom niet gemiddeld maar gerekend met weather.openweathermap (komt
+> in 82.0% van 200 waarnemingen overeen met wat de panelen deden).
+
+Is er géén duidelijke winnaar, dan is het wél een gemiddelde, en dan is
+"kijk zelf even naar buiten" ook een eerlijk advies. Die variant blijft
+staan.
+
+### De drempel stond op de verkeerde plek
+
+De melding verscheen pas bij 40 procentpunt verschil, terwijl de code al
+bij 25 overstapt van middelen naar kiezen. Daartussen veranderde het
+gedrag zonder dat er iets over gezegd werd — en dan is het getal op het
+dashboard geen gemiddelde meer terwijl niemand dat kan weten. In de
+export van 31 augustus was dat precies het geval: spreiding 38, en toch
+de meting van één bron.
+
+Er wordt nu gemeld zodra er een bron gekozen is, ongeacht de spreiding.
+Het moment waarop het gedrag verandert, is het moment waarop je het hoort.
+
+### Nog niet opgelost
+
+`_vergelijking` meldt in dezelfde export "Beide bronnen presteren
+vergelijkbaar" bij een verschil van 5,5 procentpunt, terwijl de
+ensemblecode datzelfde verschil groot genoeg vindt om een winnaar aan te
+wijzen — de drempels staan op 20 en op 5. Twee oordelen over dezelfde
+vraag, naast elkaar in dezelfde export. Dat is een aparte keuze
+(wanneer heet een bron beter?) en die verdient een eigen ronde, niet een
+haastige gelijkstelling.
+
+`_weerbron_melding` is uit `get_diagnostic_summary` gehaald: die functie
+staat op de ratel van v3.35.0.
+
+**Volledige testsuite**: 3406 tests, allemaal groen.
+
+## v3.94.0 — Een derde waarde die gemeten is
+
+**Gevraagd**: "Kunnen we nog een derde waarde ergens vandaan halen om te
+kijken welke echt goed zou zijn?" en "zelf middels diagnostiek aangeven
+of het werkt of niet en of het kan gaan regelen".
+
+De aanleiding: twee weerbronnen die 38 tot 72 procentpunt uiteenlopen
+over dezelfde lucht.
+
+### De bestaande scheidsrechter is niet neutraal
+
+De overeenstemming per bron wordt gemeten met:
+
+```python
+ratio = (live_pv_w / 1000) / solcast_kw
+```
+
+Dat is niet "wat deden de panelen", maar "hadden de panelen gelijk
+tegenover Solcast" — en Solcast heeft zijn eigen bewolkingsinschatting al
+ingebakken. Op 30 augustus zat Solcast er 44% naast; die hele dag telt
+elke bron die "helder" zei als fout, ook als hij gelijk had. De 76,5% en
+82,0% uit de export zijn dus gemeten tegen een meetlat die zelf scheef
+staat.
+
+### De ijklijn
+
+Per bakje zonnestand van vijf graden wordt het paneelvermogen
+vastgelegd. Het 95e percentiel daarvan benadert een wolkeloze hemel op
+die stand. Niet het maximum: randverstrooiing kan de opbrengst kort bóven
+de heldere waarde tillen, en dan zou één meting de hele lijn optillen.
+
+```
+helderheid = huidig vermogen / ijklijn(zonnestand)
+```
+
+Nul is dicht, één is wolkeloos. Geen voorspelling, geen API, geen
+sleutel — alleen de eigen panelen en `sun.sun`. Onder tien graden
+zonnestand wordt er niet gemeten: daar is een paar tientallen watt al een
+factor twee.
+
+### De bronnen worden op RANGORDE gescoord
+
+Niet op afwijking in procentpunten. De relatie tussen bewolkingsgraad en
+opbrengst is niet lineair — dunne sluierbewolking op 100% dekking geeft
+nog altijd 0,7 helderheid. Op procentpunten afrekenen zou een bron
+straffen voor een schaalfout die niet van hem is.
+
+Wat je wél mag verwachten: meldt hij meer bewolking, dan is er minder
+zon. Over alle paren momenten wordt geteld hoe vaak dat klopt. 100% is
+elke keer goed geordend, 50% is kansniveau, en onder de 50% ordent een
+bron omgekeerd — dat zou een bron zijn die onbewolkt meldt waar bewolkt
+bedoeld is. Precies de vraag van vanochtend, en die valt hier vanzelf uit.
+
+### En hij beoordeelt zichzelf
+
+`get_helderheid_ijking` staat in de diagnostiek-export en op de
+Betrouwbaarheid-kaart, met:
+
+- hoeveel bakjes zonnestand er gevuld zijn, en hoeveel er nodig zijn
+- hoeveel paren er per bron liggen
+- de rangorde-score per bron
+- de beste bron en de voorsprong in procentpunten
+- **`mag_regelen`**: of er genoeg bewijs ligt om ermee te gaan sturen
+- **`wat_ontbreekt`**: en zo niet, wat er precies mist
+
+`mag_regelen` is een OORDEEL, geen schakelaar. Vaste afspraak:
+proefstandkandidaten sturen pas na bewijs, één tegelijk, en met de hand
+aangezet. Er staat een toets onder die controleert dat deze functie
+niets aanstuurt.
+
+### Wat je de eerste weken ziet
+
+Niets bruikbaars, en dat staat er dan ook. De ijklijn heeft zestig
+metingen per bakje nodig en drie gevulde bakjes, en de zonnestanden
+schuiven met het seizoen. Reken op weken. In de winter blijven de hoge
+bakjes leeg; die vullen zich pas volgend voorjaar.
+
+Beide reeksen worden bewaard over herstarts heen, anders begint de
+telling elke keer opnieuw en komt er nooit iets uit — dezelfde reden als
+bij het PV-installatieprofiel in v1.4.0.
+
+### Waar het te zien is
+
+Gevraagd: "waar kan ik de resultaten op het dashboard vinden?" — en:
+"ergens onder, niet op de landingspagina".
+
+Op **Weerbronnen** (`detail-weer`), onder de bestaande bronvergelijking.
+De kaart toont zolang er nog niets ligt wat er ontbreekt en hoe ver de
+bakjes en de paren zijn; daarna de rangorde-score per bron, de winnaar,
+en of er geregeld mag worden. Eén regel staat ook op **Betrouwbaarheid**
+onder de adviesmodules, en het volledige beeld staat in de export onder
+`data.coordinator.helderheid_ijking`.
+
+Niets hiervan raakt de landingspagina.
+
+### En de betrouwbaarheidspagina zette elke kop twee keer
+
+Bij het plaatsen van die regel bleek de lijst door elkaar te lopen:
+Metingen, Geleerde waarden, Metingen, Geleerde waarden. De kaart zet een
+kop bij elke groepswissel, dus stond elke kop er twee keer met de helft
+van de regels eronder. De regels worden nu op groep gesorteerd, stabiel,
+zodat de volgorde binnen een groep blijft zoals hij was.
+
+**Volledige testsuite**: 3421 tests, allemaal groen.

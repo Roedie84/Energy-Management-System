@@ -1,31 +1,30 @@
-v3.93.1 - alleen de wijzigingen sinds v3.93.0
+v3.94.0 - alleen de wijzigingen sinds v3.93.0
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
 
-    coordinator.py            bericht noemt het apparaat
-    const.py                  geen vaste titel meer voor twee soorten
-    manifest.json             versienummer 3.93.1
-    bestandscontrole.json     hoort bij deze versie
+    coordinator.py, const.py, diagnostics.py, sensor.py
+    dashboard_template.yaml    LET OP: dashboard is gewijzigd
+    manifest.json, bestandscontrole.json
 
 NAAR DE REPO
 
     README.md, CHANGELOG.md
-    tests/test_apparaatmelding_noemt_het_apparaat.py   nieuw
-    tests/test_achterhoeks.py                          aangepast
+    dashboards/energy_management_system_dashboard.yaml
+    vijf toetsbestanden (zie de zip)
 
-WAT ER VERANDERT
+Bevat ook v3.93.1 en v3.93.2.
 
-De melding heet niet meer "'n Apparaat is klaor" maar noemt het
-apparaat:
+WAAR JE HET VINDT
 
-    was:  'n Apparaat is klaor
-          Klaor na ongeveer 8 minuten.
+    Weerbronnen (detail-weer) -> kaart "Heldere-hemel-ijklijn"
+    Betrouwbaarheid           -> regel onder Adviesmodules
+    Diagnostiek-export        -> data.coordinator.helderheid_ijking
 
-    nu:   🍽️ Vaatwasser klaor
-          Vaatwasser is klaor na ongeveer 8 minuten.
+Niets op de landingspagina.
 
-Ook "De accu staat nog handmatig" en "De accu is vol" zijn weer twee
-verschillende meldingen in plaats van één.
+De eerste weken staat er "Nog niet bruikbaar" met daarbij hoeveel
+bakjes zonnestand en hoeveel paren er nog ontbreken. Dat is de
+bedoeling, geen storing.
 
-Dit gaat UIT van v3.93.0. Draai je daar nog niet op, zeg het even en ik
-maak er een cumulatieve zip van.
+Er wordt niets aangestuurd. `mag_regelen` is een oordeel; aanzetten
+blijft handwerk.

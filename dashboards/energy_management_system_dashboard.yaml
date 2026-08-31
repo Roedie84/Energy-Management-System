@@ -2644,6 +2644,34 @@ views:
       grid_options:
         columns: 12
         rows: auto
+    - type: markdown
+      title: Heldere-hemel-ijklijn - wat de panelen zelf zeggen
+      content: '{% set h = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''helderheid_ijking'') or {} %}{% if not h %}Nog geen ijklijn.{% elif h.get(''wat_ontbreekt'') %}**Nog niet bruikbaar.** {{ h.wat_ontbreekt }}
+
+        | | |
+
+        |---|---|
+
+        | Gevulde bakjes zonnestand | {{ h.gevulde_bakjes }} van {{ h.bakjes_nodig }} |
+
+        {% for b, n in (h.paren_per_bron or {}).items() %}| Paren {{ b.split(''.'')[-1] }} | {{ n }} |
+
+        {% endfor %}{% if h.helderheid_nu is not none %}| Helderheid nu | {{ (h.helderheid_nu * 100) | round(0) }}% |
+
+        {% endif %}{% else %}**Bruikbaar.** {{ h.beste_bron.split(''.'')[-1] }} ordent de bewolking het best, met {{ h.voorsprong_procentpunt }} procentpunt voorsprong.
+
+        | Bron | Ordent goed |
+
+        |---|---|
+
+        {% for b, s in (h.rangorde_score_per_bron or {}).items() %}| {{ b.split(''.'')[-1] }} | {{ s }}% |
+
+        {% endfor %}{% endif %}
+
+        _De ijklijn is het hoge percentiel van de eigen paneelopbrengst per bakje zonnestand - bij benadering een wolkeloze hemel. Bronnen worden gescoord op RANGORDE: meldt een bron meer bewolking, is er dan minder zon? 50% is kansniveau, onder de 50% ordent een bron omgekeerd. Mag regelen: **{{ ''ja'' if h.get(''mag_regelen'') else ''nog niet'' }}** - en dat aanzetten blijft handwerk._'
+      grid_options:
+        columns: 12
+        rows: auto
 - title: Kwartierplanning
   path: detail-kwartier
   subview: true

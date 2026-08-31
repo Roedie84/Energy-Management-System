@@ -202,6 +202,15 @@ from .const import (
     MAX_PLAUSIBLE_EFFICIENCY_PERCENT,
     CONF_MANUAL_DISCHARGE_POWER,
     CAPACITY_MEASURE_MIN_FRACTION,
+    HELDERHEID_BAKJE_GRADEN,
+    HELDERHEID_BAKJE_LENGTE,
+    HELDERHEID_IJKLIJN_PERCENTIEL,
+    HELDERHEID_MIN_ELEVATIE_GRADEN,
+    HELDERHEID_MIN_GEVULDE_BAKJES,
+    HELDERHEID_MIN_METINGEN_PER_BAKJE,
+    HELDERHEID_MIN_PAREN,
+    HELDERHEID_MIN_VOORSPRONG_PP,
+    HELDERHEID_PAREN_LENGTE,
     CAPACITY_MEASURE_MIN_VERSCHIL_KWH,
     CAPACITY_MEASURE_WINDOW_DAYS,
     CONF_BATTERY_TOTAL_CAPACITY_SENSOR,
@@ -1402,7 +1411,12 @@ class EnergyManagementSystemCoordinator:
         # per dag, plus de verhouding werkelijk/verwacht per
         # azimut-vakje voor de beschaduwingskaart.
         self.pv_peak_azimuth_history: list[float] = []
-        self.pv_azimuth_performance: dict[str, list[float]] = {}
+        # v3.94.0: samen met de heldere-hemel-ijklijn en de paren per
+        # weerbron in één aanroep. `__init__` staat op de ratel van
+        # v3.35.0: er iets aan toevoegen betekent er eerst iets uit
+        # halen, en deze drie horen bij elkaar - ze gaan alle drie over
+        # wat de panelen werkelijk doen tegenover wat er verwacht werd.
+        self._init_pv_leervelden()
         self._pv_geometry_day_key: date | None = None
         self._pv_geometry_day_peak_w: float = 0.0
         self._pv_geometry_day_peak_azimuth: float | None = None
@@ -4421,6 +4435,248 @@ class EnergyManagementSystemCoordinator:
         self.pv_peak_azimuth_history = self.pv_peak_azimuth_history[
             -PV_GEOMETRY_HISTORY_DAYS:
         ]
+
+    # --- Heldere-hemel-ijklijn (v3.94.0) -----------------------------
+    #
+    # Gevraagd: "Kunnen we nog een derde waarde ergens vandaan halen om
+    # te kijken welke echt goed zou zijn?"
+    #
+    # De aanleiding: twee weerbronnen die 38 tot 72 procentpunt uiteen
+    # lopen over dezelfde lucht. Een derde weerbron zou een derde MENING
+    # zijn; de panelen zijn een METING.
+    #
+    # Alleen: de bestaande scheidsrechter is niet neutraal. Die rekent
+    # `live_pv_w / solcast_kw`, en Solcast heeft zijn eigen
+    # bewolkingsinschatting al ingebakken. Op 30 augustus zat Solcast er
+    # 44% naast; die hele dag telt elke bron die "helder" zei als fout,
+    # ook als hij gelijk had.
+    #
+    # Deze ijklijn kent geen voorspelling. Per bakje zonnestand het hoge
+    # percentiel van wat de panelen ooit leverden - dat is bij benadering
+    # een wolkeloze hemel op die stand. Alles eronder is bewolking.
+
+    def _init_pv_leervelden(self) -> None:
+        """Wat de panelen deden tegenover wat er verwacht werd (v3.94.0).
+
+        Apart gezet omdat `__init__` op de ratel van v3.35.0 staat: er
+        iets aan toevoegen betekent er eerst iets uit halen.
+        """
+        # De verhouding werkelijk/verwacht per azimut-vakje, voor de
+        # beschaduwingskaart (v1.4.0).
+        self.pv_azimuth_performance: dict[str, list[float]] = {}
+        # Per bakje zonnestand de gemeten paneelvermogens; het hoge
+        # percentiel daarvan benadert een wolkeloze hemel op die stand.
+        self.helderheid_ijklijn: dict[str, list[float]] = {}
+        # Per weerbron: (bewolking die de bron meldde, gemeten helderheid)
+        # op datzelfde moment.
+        self.weerbron_helderheid_paren: dict[str, list[list[float]]] = {}
+
+    def _lees_pv_vermogen_w(self) -> float | None:
+        """Het huidige paneelvermogen, of None."""
+        entity = self.config.get(CONF_PV_POWER_SENSOR)
+        return self._read_sensor_float(entity) if entity else None
+
+    @staticmethod
+    def _helderheid_bakje(elevatie: float) -> str:
+        return str(
+            round(
+                (elevatie // HELDERHEID_BAKJE_GRADEN) * HELDERHEID_BAKJE_GRADEN,
+                1,
+            )
+        )
+
+    def ijklijn_vermogen_w(self, elevatie: float | None) -> float | None:
+        """Wat een wolkeloze hemel op deze zonnestand zou geven.
+
+        None zolang het bakje te weinig metingen heeft. Beter geen noemer
+        dan een verzonnen noemer - een verhouding tegen een half gevuld
+        bakje ziet eruit als een meting en is het niet.
+        """
+        if elevatie is None or elevatie < HELDERHEID_MIN_ELEVATIE_GRADEN:
+            return None
+        metingen = self.helderheid_ijklijn.get(self._helderheid_bakje(elevatie))
+        if not metingen or len(metingen) < HELDERHEID_MIN_METINGEN_PER_BAKJE:
+            return None
+        gesorteerd = sorted(metingen)
+        index = min(
+            len(gesorteerd) - 1,
+            int(len(gesorteerd) * HELDERHEID_IJKLIJN_PERCENTIEL),
+        )
+        return gesorteerd[index]
+
+    def gemeten_helderheid(self) -> float | None:
+        """Nu gedeeld door een wolkeloze hemel. 0 is dicht, 1 is helder."""
+        if self.is_daylight_now() is not True:
+            return None
+        elevatie = self.get_sun_elevation_degrees()
+        ijklijn = self.ijklijn_vermogen_w(elevatie)
+        if not ijklijn:
+            return None
+        pv_w = self._lees_pv_vermogen_w()
+        if pv_w is None:
+            return None
+        return round(max(0.0, pv_w) / ijklijn, 3)
+
+    def _update_helderheid_ijklijn(self, now: datetime) -> None:
+        """Eén meting per ronde, en de paren per weerbron erbij.
+
+        Alleen lezen en vastleggen; hier wordt niets aangestuurd.
+        """
+        if self.is_daylight_now() is not True:
+            return
+        elevatie = self.get_sun_elevation_degrees()
+        if elevatie is None or elevatie < HELDERHEID_MIN_ELEVATIE_GRADEN:
+            return
+        pv_w = self._lees_pv_vermogen_w()
+        if pv_w is None or pv_w < 0:
+            return
+
+        bakje = self._helderheid_bakje(elevatie)
+        reeks = self.helderheid_ijklijn.setdefault(bakje, [])
+        reeks.append(round(float(pv_w), 1))
+        self.helderheid_ijklijn[bakje] = reeks[-HELDERHEID_BAKJE_LENGTE:]
+
+        # De paren pas vastleggen als er een ijklijn IS - anders staan er
+        # straks honderden paren met een helderheid die nergens op sloeg.
+        helderheid = self.gemeten_helderheid()
+        if helderheid is None:
+            self.schedule_persisted_state_save()
+            return
+        for bron, bewolking in (self.weather_ensemble_readings or {}).items():
+            paren = self.weerbron_helderheid_paren.setdefault(bron, [])
+            paren.append([round(float(bewolking), 1), helderheid])
+            self.weerbron_helderheid_paren[bron] = paren[
+                -HELDERHEID_PAREN_LENGTE:
+            ]
+        self.schedule_persisted_state_save()
+
+    def weerbron_rangorde_score(self, bron: str) -> float | None:
+        """Hoe vaak ordent deze bron twee momenten goed? (v3.94.0)
+
+        Bewust de RANGORDE en niet de afwijking in procentpunten. De
+        relatie tussen bewolkingsgraad en opbrengst is niet lineair -
+        dunne sluierbewolking op 100% dekking geeft nog altijd 0,7
+        helderheid. Op procentpunten afrekenen zou een bron straffen voor
+        een schaalfout die niet van hem is.
+
+        Wat je wél mag verwachten: meldt hij meer bewolking, dan is er
+        minder zon. Alleen de richting, geen geijkte schaal nodig.
+
+        Uitkomst in procenten: 100 is elke keer goed geordend, 50 is
+        kansniveau, 0 is stelselmatig omgekeerd - dat laatste zou een
+        bron zijn die onbewolkt meldt waar bewolkt bedoeld is.
+        """
+        paren = self.weerbron_helderheid_paren.get(bron) or []
+        if len(paren) < HELDERHEID_MIN_PAREN:
+            return None
+        eens = 0
+        totaal = 0
+        for i in range(len(paren)):
+            bewolking_i, helder_i = paren[i]
+            for j in range(i + 1, len(paren)):
+                bewolking_j, helder_j = paren[j]
+                if bewolking_i == bewolking_j or helder_i == helder_j:
+                    # Gelijkspel zegt niets over de ordening.
+                    continue
+                totaal += 1
+                if (bewolking_i > bewolking_j) == (helder_i < helder_j):
+                    eens += 1
+        if not totaal:
+            return None
+        return round(100 * eens / totaal, 1)
+
+    def get_helderheid_ijking(self) -> dict:
+        """Werkt de ijklijn al, en valt er iets mee te sturen? (v3.94.0)
+
+        Gevraagd: "zelf middels diagnostiek aangeven of het werkt of niet
+        en of het kan gaan regelen".
+
+        `mag_regelen` is een OORDEEL, geen schakelaar. Vaste afspraak:
+        proefstandkandidaten sturen pas na bewijs, één tegelijk, en met
+        de hand aangezet. Deze functie zet niets aan.
+        """
+        gevuld = [
+            bakje
+            for bakje, metingen in (self.helderheid_ijklijn or {}).items()
+            if len(metingen) >= HELDERHEID_MIN_METINGEN_PER_BAKJE
+        ]
+        scores = {
+            bron: self.weerbron_rangorde_score(bron)
+            for bron in (self.weerbron_helderheid_paren or {})
+        }
+        becijferd = {b: s for b, s in scores.items() if s is not None}
+
+        beste_bron = None
+        voorsprong = None
+        if len(becijferd) > 1:
+            gerangschikt = sorted(becijferd.items(), key=lambda kv: -kv[1])
+            voorsprong = round(gerangschikt[0][1] - gerangschikt[1][1], 1)
+            if voorsprong >= HELDERHEID_MIN_VOORSPRONG_PP:
+                beste_bron = gerangschikt[0][0]
+
+        ontbreekt = None
+        if len(gevuld) < HELDERHEID_MIN_GEVULDE_BAKJES:
+            ontbreekt = (
+                f"{len(gevuld)}/{HELDERHEID_MIN_GEVULDE_BAKJES} bakjes "
+                f"zonnestand hebben {HELDERHEID_MIN_METINGEN_PER_BAKJE} "
+                "metingen. De zonnestanden schuiven met het seizoen, dus "
+                "dit duurt weken."
+            )
+        elif not becijferd:
+            ontbreekt = (
+                f"Nog geen enkele bron heeft {HELDERHEID_MIN_PAREN} paren "
+                "bewolking-tegen-helderheid."
+            )
+        elif len(becijferd) < 2:
+            ontbreekt = (
+                "Er is maar één becijferde bron; vergelijken kan pas met "
+                "twee."
+            )
+        elif beste_bron is None:
+            ontbreekt = (
+                f"De voorsprong is {voorsprong} procentpunt en moet "
+                f"{HELDERHEID_MIN_VOORSPRONG_PP} zijn. Bij deze aantallen "
+                "is minder niet van toeval te onderscheiden."
+            )
+
+        if ontbreekt and not gevuld:
+            status = RELIABILITY_INSUFFICIENT
+        elif ontbreekt:
+            status = RELIABILITY_INDICATIVE
+        else:
+            status = RELIABILITY_RELIABLE
+
+        return {
+            "beschikbaar": bool(gevuld),
+            "status": status,
+            "gevulde_bakjes": len(gevuld),
+            "bakjes_nodig": HELDERHEID_MIN_GEVULDE_BAKJES,
+            "metingen_per_bakje_nodig": HELDERHEID_MIN_METINGEN_PER_BAKJE,
+            "helderheid_nu": self.gemeten_helderheid(),
+            "ijklijn_nu_w": self.ijklijn_vermogen_w(
+                self.get_sun_elevation_degrees()
+            ),
+            "rangorde_score_per_bron": scores,
+            "paren_per_bron": {
+                bron: len(paren)
+                for bron, paren in (self.weerbron_helderheid_paren or {}).items()
+            },
+            "beste_bron": beste_bron,
+            "voorsprong_procentpunt": voorsprong,
+            "mag_regelen": beste_bron is not None,
+            "wat_ontbreekt": ontbreekt,
+            "toelichting": (
+                "De ijklijn is het hoge percentiel van de eigen "
+                "paneelopbrengst per bakje zonnestand - bij benadering een "
+                "wolkeloze hemel. Helderheid is nu gedeeld door die lijn. "
+                "Weerbronnen worden gescoord op RANGORDE (meldt hij meer "
+                "bewolking, is er dan minder zon?) en niet op "
+                "procentpunten, want de relatie is niet lineair. 50% is "
+                "kansniveau, onder de 50% ordent een bron omgekeerd. "
+                "`mag_regelen` zegt of er genoeg bewijs ligt; aanzetten "
+                "gebeurt met de hand. Deze meting stuurt zelf niets."
+            ),
+        }
 
     def get_pv_installation_profile(self) -> dict:
         """Wat er over de opstelling te zeggen valt (v1.4.0).
@@ -14456,6 +14712,30 @@ class EnergyManagementSystemCoordinator:
                 },
             )
 
+        # v3.94.0: de heldere-hemel-ijklijn hoort BIJ de adviesmodules.
+        #
+        # Hij stond eerst tussen de metingen in, en dan zet de kaart een
+        # tweede kop "Adviesmodules" halverwege - de regels worden in
+        # invoegvolgorde getoond, met een kop bij elke wisseling.
+        # v3.94.0: en de heldere-hemel-ijklijn, met zijn eigen oordeel
+        # over de vraag of er al iets mee te sturen valt.
+        ijking = self.get_helderheid_ijking()
+        voeg_toe(
+            "Adviesmodules",
+            "Heldere-hemel-ijklijn",
+            {
+                "niveau": ijking["status"],
+                "reden": ijking["wat_ontbreekt"]
+                or (
+                    f"{ijking['beste_bron']} ordent de bewolking het best "
+                    f"({ijking['voorsprong_procentpunt']} procentpunt "
+                    "voorsprong). Klaar om mee te sturen zodra je dat "
+                    "aanzet."
+                ),
+            },
+            ijking.get("helderheid_nu"),
+        )
+
         # --- metingen ---
         voeg_toe(
             "Metingen",
@@ -14599,6 +14879,7 @@ class EnergyManagementSystemCoordinator:
             gezondheid.get("drift_percent"),
             "%",
         )
+
         voeg_toe(
             "Geleerde waarden",
             "PV-installatieprofiel (oriëntatie)",
@@ -14625,7 +14906,15 @@ class EnergyManagementSystemCoordinator:
             ),
         )
 
-        return rijen
+        # v3.94.0: op groep, in een vaste volgorde.
+        #
+        # De kaart zet een kop bij elke groepswissel en toont de regels in
+        # invoegvolgorde. Die liep door elkaar - Metingen, Geleerde
+        # waarden, Metingen, Geleerde waarden - dus stond elke kop er
+        # twee keer, met de helft van de regels eronder. Sorteren is
+        # STABIEL, dus binnen een groep blijft de volgorde zoals hij was.
+        volgorde = {"Adviesmodules": 0, "Metingen": 1, "Geleerde waarden": 2}
+        return sorted(rijen, key=lambda r: volgorde.get(r["groep"], 99))
 
     def get_notification_overview(self) -> list[dict]:
         """Alles wat het meldingen-tabblad nodig heeft (v1.2.0)."""
@@ -27294,6 +27583,73 @@ class EnergyManagementSystemCoordinator:
             )
         return uit
 
+    def _weerbron_melding(self) -> str | None:
+        """Wat er met de weerbronnen gebeurt als ze uiteenlopen (v3.93.2).
+
+        Uit `get_diagnostic_summary` gehaald: die functie staat op de
+        ratel van v3.35.0, en er iets aan toevoegen betekent er eerst
+        iets uit halen.
+        """
+        spreiding = self.weather_ensemble_spread_percent
+        # v3.93.2: ook melden zodra er een bron GEKOZEN is.
+        #
+        # De aandachtsdrempel staat op 40 procentpunt, maar de code stapt
+        # al bij 25 over van middelen naar kiezen. Tussen die twee
+        # veranderde het gedrag zonder dat er iets over gezegd werd - en
+        # dan is het getal op het dashboard geen gemiddelde meer terwijl
+        # niemand dat kan weten. In de export van 31 augustus was dat het
+        # geval: spreiding 38, en toch de meting van één bron.
+        gekozen = self.weather_ensemble_chosen_source
+        if spreiding is not None and (
+            spreiding >= WEATHER_ENSEMBLE_SPREAD_ATTENTION_PERCENT or gekozen
+        ):
+            metingen = ", ".join(
+                f"{eid}: {waarde:.0f}%"
+                for eid, waarde in self.weather_ensemble_readings.items()
+            )
+            # v3.93.2: zeggen wat er WERKELIJK gebeurt.
+            #
+            # Gemeld: "Weerbronnen lopen 41 procentpunt uiteen (...) Het
+            # gemiddelde (52.0%) zegt dan weinig - controleer welke bron
+            # klopt met wat je buiten ziet."
+            #
+            # Twee dingen klopten niet. 52,0 was geen gemiddelde: bij een
+            # verschil van 25 procentpunt of meer middelt de code niet
+            # maar KIEST hij de bron die het aantoonbaar vaker bij het
+            # rechte eind heeft, en dat stond in
+            # `weather_ensemble_chosen_source`. En het advies gaf het
+            # werk terug aan de gebruiker terwijl het antwoord er al lag:
+            # tweehonderd waarnemingen tegen één blik naar buiten.
+
+            if gekozen:
+                beoordeling = (self.get_weather_source_reliability() or {}).get(
+                    gekozen
+                ) or {}
+                score = beoordeling.get("overeenstemming_percent")
+                aantal = beoordeling.get("aantal_waarnemingen")
+                onderbouwing = (
+                    f" (komt in {score}% van {aantal} waarnemingen overeen "
+                    "met wat de panelen deden)"
+                    if score is not None and aantal
+                    else ""
+                )
+                return (
+                    f"Weerbronnen lopen {spreiding:.0f} procentpunt uiteen "
+                    f"over de bewolking ({metingen}). Er wordt daarom niet "
+                    f"gemiddeld maar gerekend met {gekozen}"
+                    f"{onderbouwing}."
+                )
+            else:
+                return (
+                    f"Weerbronnen lopen {spreiding:.0f} procentpunt uiteen "
+                    f"over de bewolking ({metingen}). Geen van beide is "
+                    "aantoonbaar beter, dus wordt er gemiddeld "
+                    f"({self.weather_ensemble_cloud_cover_percent}%) - en "
+                    "dat gemiddelde past bij geen van de twee. Wat je "
+                    "buiten ziet zegt hier meer dan de cijfers."
+                )
+        return None
+
     def get_diagnostic_summary(self) -> dict:
         """Snelle gezondheidscheck-samenvatting (v0.63.91, gevraagd:
         "zijn er nog zaken om de integratie te verbeteren, bijvoorbeeld
@@ -27613,18 +27969,10 @@ class EnergyManagementSystemCoordinator:
                     f"({percentages}). {vergelijking['advies']}"
                 )
 
-        spreiding = self.weather_ensemble_spread_percent
-        if spreiding is not None and spreiding >= WEATHER_ENSEMBLE_SPREAD_ATTENTION_PERCENT:
-            metingen = ", ".join(
-                f"{eid}: {waarde:.0f}%"
-                for eid, waarde in self.weather_ensemble_readings.items()
-            )
-            informatief.append(
-                f"Weerbronnen lopen {spreiding:.0f} procentpunt uiteen over de "
-                f"bewolking ({metingen}). Het gemiddelde "
-                f"({self.weather_ensemble_cloud_cover_percent}%) zegt dan "
-                "weinig - controleer welke bron klopt met wat je buiten ziet."
-            )
+        weerregel = self._weerbron_melding()
+        if weerregel:
+            informatief.append(weerregel)
+
 
         duplicate_pairs = self.get_nilm_duplicate_pairs()
         if duplicate_pairs:
@@ -31062,6 +31410,7 @@ class EnergyManagementSystemCoordinator:
             ("beslislogboek", lambda: self._record_decision_log(now)),
             ("dagrapport", lambda: self._update_daily_report(now)),
             ("pv-geometrie", lambda: self._update_pv_geometry_learning(now)),
+            ("helderheid-ijklijn", lambda: self._update_helderheid_ijklijn(now)),
             ("meldingen", lambda: self._evaluate_new_notifications(now)),
             ("opslag", self.schedule_persisted_state_save),
         ):

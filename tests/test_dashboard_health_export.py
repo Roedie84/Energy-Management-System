@@ -149,6 +149,8 @@ def test_present_attributes_are_not_reported(make_coordinator, hass):
             "aanwezigheid": {},
             "uitbreidingsadvies": {},
             "weerbronnen": {},
+            # v3.94.0: de heldere-hemel-ijklijn op de weerpagina.
+            "helderheid_ijking": {},
             "zon_uitstelplan": {},
             "kwartierplanning": [],
             # v3.67.0: de proefplanning op de kwartierpagina.

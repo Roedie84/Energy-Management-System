@@ -874,6 +874,12 @@ async def async_get_config_entry_diagnostics(
                 _veilig("get_weather_source_reliability", coordinator.get_weather_source_reliability)
             ),
             "solar_forecast_health": _veilig("get_solar_forecast_health", coordinator.get_solar_forecast_health),
+            # v3.94.0: de heldere-hemel-ijklijn en wat hij over de
+            # weerbronnen zegt. Inclusief `mag_regelen` - het oordeel of
+            # er genoeg bewijs ligt om ermee te gaan sturen.
+            "helderheid_ijking": _veilig(
+                "get_helderheid_ijking", coordinator.get_helderheid_ijking
+            ),
             "low_solar_margin": _veilig("get_low_solar_margin", coordinator.get_low_solar_margin),
             "pv_installation_profile": _veilig("get_pv_installation_profile", coordinator.get_pv_installation_profile),
             "pv_peak_azimuth_history": coordinator.pv_peak_azimuth_history,

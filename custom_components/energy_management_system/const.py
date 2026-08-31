@@ -2477,6 +2477,11 @@ PERSISTED_PLAIN_FIELDS = (
     # foutreeks zelf wél bewaard blijft.
     "balance_missing_by_entity",
     "pv_azimuth_performance",
+    # v3.94.0: de heldere-hemel-ijklijn bouwt over WEKEN op, en de
+    # zonnestanden schuiven met het seizoen. Zonder bewaren begint de
+    # telling na elke herstart opnieuw en komt er nooit iets uit.
+    "helderheid_ijklijn",
+    "weerbron_helderheid_paren",
     # Meldingen (v1.2.0): de aan/uit-standen zijn een gebruikerskeuze en
     # mogen bij een herstart niet terugspringen naar de standaard. De
     # verzendmomenten horen er ook bij, anders zou het dempingsvenster na
@@ -4233,6 +4238,48 @@ WEATHER_WEIGHT_MIN_OBSERVATIONS = 50
 # gemiddelde past dan bij geen van beide. Gemeten geval: 78,1% tegen
 # 46,0% - dat is geen ruis maar onenigheid, en dan hoort de bron te
 # winnen die het aantoonbaar vaker bij het rechte eind heeft.
+# --- Heldere-hemel-ijklijn (v3.94.0) -------------------------------
+#
+# Gevraagd: "Kunnen we nog een derde waarde ergens vandaan halen om te
+# kijken welke echt goed zou zijn?"
+#
+# Die derde waarde is geen derde mening maar een METING: wat de panelen
+# leveren tegenover wat een wolkeloze hemel op diezelfde zonnestand zou
+# geven. Die ijklijn wordt uit de eigen geschiedenis geleerd - het hoge
+# percentiel per bakje zonnestand is bij benadering een heldere dag.
+#
+# Bakjes van vijf graden: fijner en ze lopen niet vol, grover en een
+# bakje spant te veel zonnestand om nog iets te zeggen.
+HELDERHEID_BAKJE_GRADEN = 5.0
+
+# Onder deze zonnestand is de opbrengst zo klein dat de verhouding ruis
+# wordt: een paar tientallen watt verschil is dan al een factor twee.
+HELDERHEID_MIN_ELEVATIE_GRADEN = 10.0
+
+# Het percentiel dat als "wolkeloos" geldt. Niet het maximum: één
+# meting met wolkenversterking (randverstrooiing kan de paneelopbrengst
+# kort boven de heldere waarde tillen) zou de hele ijklijn optillen.
+HELDERHEID_IJKLIJN_PERCENTIEL = 0.95
+
+# Hoeveel metingen een bakje nodig heeft voordat het percentiel iets
+# betekent, en hoeveel bakjes er gevuld moeten zijn voordat de ijklijn
+# als geheel bruikbaar is.
+HELDERHEID_MIN_METINGEN_PER_BAKJE = 60
+HELDERHEID_MIN_GEVULDE_BAKJES = 3
+
+# Hoeveel metingen per bakje bewaard blijven.
+HELDERHEID_BAKJE_LENGTE = 400
+
+# Paren (bewolking van de bron, gemeten helderheid) per weerbron, en
+# hoeveel er nodig zijn voordat de rangorde iets zegt.
+HELDERHEID_PAREN_LENGTE = 300
+HELDERHEID_MIN_PAREN = 100
+
+# Hoeveel procentpunt de ene bron beter moet ordenen dan de andere
+# voordat er van een winnaar gesproken wordt. Onder deze grens is het
+# verschil niet te onderscheiden van toeval bij deze aantallen.
+HELDERHEID_MIN_VOORSPRONG_PP = 5.0
+
 WEATHER_DISAGREEMENT_PREFER_BEST_PP = 25.0
 
 # Hoeveel betrouwbaarder die bron dan minstens moet zijn. Zonder marge

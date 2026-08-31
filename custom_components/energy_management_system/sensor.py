@@ -3903,6 +3903,8 @@ class GacsAssessmentSensor(SensorEntity):
             "aanwezigheid",
             "uitbreidingsadvies",
             "weerbronnen",
+            # v3.94.0: de heldere-hemel-ijklijn, voor de weerpagina.
+            "helderheid_ijking",
             "zon_uitstelplan",
             "kwartierplanning",
             "verkooptoets",
@@ -3979,6 +3981,7 @@ class GacsAssessmentSensor(SensorEntity):
             ("aanwezigheid", self._coordinator.get_presence_overview),
             ("uitbreidingsadvies", self._coordinator.get_expansion_advice),
             ("weerbronnen", self._coordinator.get_weather_source_overview),
+            ("helderheid_ijking", self._coordinator.get_helderheid_ijking),
             ("zon_uitstelplan", lambda: self._coordinator.last_solar_defer_plan),
             ("kwartierplanning", self._coordinator.get_quarter_plan_compact),
             ("verkooptoets", lambda: self._coordinator.last_sell_check),
