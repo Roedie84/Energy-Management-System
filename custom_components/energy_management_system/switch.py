@@ -113,11 +113,18 @@ class KalibratieSwitch(SwitchEntity, RestoreEntity):
     def extra_state_attributes(self) -> dict:
         opname = self._coordinator.kalibratie_momentopname
         if not opname:
-            return {"momentopname": "nog niet vol geweest"}
+            return {
+                "momentopname": "nog niet vol geweest",
+                "sinds": self._coordinator.kalibratie_sinds,
+            }
         return {
             "moment": opname.get("moment"),
             "soc_percent": opname.get("soc_percent"),
             "modules": opname.get("modules"),
+            # v3.98.0: sinds wanneer de kalibratie loopt. De kaart toonde
+            # `last-changed`, en dat is na een herstart het startmoment
+            # van de integratie - geen uitspraak over de kalibratie.
+            "sinds": self._coordinator.kalibratie_sinds,
         }
 
     async def async_added_to_hass(self) -> None:

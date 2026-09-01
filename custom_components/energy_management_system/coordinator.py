@@ -788,7 +788,9 @@ class EnergyManagementSystemCoordinator:
         # handmatige overname, maar de KOELING blijft wél schakelen -
         # bij 2000 W is dat bescherming, geen optimalisatie.
         self.kalibratie: bool = False
-        self.kalibratie_momentopname: dict | None = None
+        # v3.98.0: `kalibratie_sinds` erbij, in dezelfde regel - `__init__`
+        # staat op de ratel van v3.35.0.
+        self.kalibratie_momentopname, self.kalibratie_sinds = None, None
         self.kalibratie_meting: dict | None = None
         # v3.30.0: wanneer de verbruiksleer voor het laatst opnieuw is
         # begonnen, en wat er toen is weggegooid.
@@ -2475,32 +2477,61 @@ class EnergyManagementSystemCoordinator:
         self._notify_listeners()
         return gewist
 
-    async def async_set_kalibratie(self, value: bool) -> None:
+    async def _handmatig_gezet(self) -> None:
+        """Na een knopdruk: direct wegschrijven (v3.98.0).
+
+        Gemeld: "kalibratie wordt gereset na herstart."
+
+        De gewone opslag is met opzet vertraagd - één ronde raakt
+        tientallen velden en de live luisteraars vuren meermaals per
+        minuut. Maar een BEWUSTE knopdruk hoort daar niet in mee te
+        liften: gaat Home Assistant binnen die dertig seconden onderuit,
+        dan is de stand weg.
+
+        Dat weegt bij de kalibratie het zwaarst, want dat is de enige
+        schakelaar die zijn stand niet uit de entiteit terugzet: sinds
+        v3.42.1 is de opslag daar leidend, juist om twee bronnen voor
+        dezelfde vlag te vermijden. Dan moet die opslag ook meteen
+        kloppen.
+        """
+        await self.async_update()
+        await self.async_save_persisted_state_now()
+
+    async def async_set_kalibratie(
+        self, value: bool, now: datetime | None = None
+    ) -> None:
         """Zet de kalibratiestand aan of uit (v3.27.0).
 
         Bij het aanzetten wordt de vorige momentopname gewist: anders
         toont de volgende kalibratie de celspreiding van de vorige.
+
+        v3.98.0: en het moment wordt vastgelegd. De kaart toonde
+        `last-changed`, en dat is na een herstart het startmoment van de
+        integratie - een getal dat niets over de kalibratie zegt.
         """
         if value and not self.kalibratie:
             self.kalibratie_momentopname = None
+            self.kalibratie_sinds = (now or dt_util.now()).isoformat()
+        elif not value:
+            self.kalibratie_sinds = None
         self.kalibratie = value
-        await self.async_update()
+        await self._handmatig_gezet()
 
     async def async_set_force_manual(self, value: bool) -> None:
         self.force_manual = value
-        await self.async_update()
+        await self._handmatig_gezet()
 
     async def async_set_steelstofzuiger_override(self, value: bool) -> None:
         self.steelstofzuiger_override = value
-        await self.async_update()
+        await self._handmatig_gezet()
 
     async def async_set_fietsladers_override(self, value: bool) -> None:
         self.fietsladers_override = value
-        await self.async_update()
+        await self._handmatig_gezet()
 
     async def async_set_appliance_ready_notifications_enabled(self, value: bool) -> None:
         self.appliance_ready_notifications_enabled = value
-        await self.async_update()
+        await self._handmatig_gezet()
 
     async def async_set_learning_only(self, value: bool) -> None:
         # v3.84.0: onthouden SINDS wanneer, zodat een leermodus die blijft
@@ -2511,7 +2542,7 @@ class EnergyManagementSystemCoordinator:
             self.leermodus_sinds = None
             self._leermodus_laatste_herinnering = None
         self.learning_only = value
-        await self.async_update()
+        await self._handmatig_gezet()
 
     async def _waarschuw_bij_lange_leermodus(self, now: datetime) -> None:
         """Melden als de leermodus blijft hangen (v3.84.0).

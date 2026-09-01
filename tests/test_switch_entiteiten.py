@@ -34,6 +34,7 @@ class _Coordinator:
         self.vacation_mode = False
         self.kalibratie = False
         self.kalibratie_momentopname = None
+        self.kalibratie_sinds = None
         self.achterhoeks = False
         self.steelstofzuiger_override = False
         self.fietsladers_override = False

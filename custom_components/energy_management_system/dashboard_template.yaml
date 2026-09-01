@@ -210,11 +210,14 @@ views:
       grid_options:
         columns: 12
         rows: auto
-    - type: custom:mushroom-entity-card
+    - type: custom:mushroom-template-card
       entity: switch.woonkamer_energy_management_system_kalibratie
-      name: Kalibratie
+      primary: Kalibratie
+      secondary: '{% set s = state_attr(''switch.woonkamer_energy_management_system_kalibratie'', ''sinds'') %}{{ (''loopt sinds '' ~ (as_timestamp(s) | timestamp_custom(''%-d %b %H:%M''))) if s else ''uit'' }}'
       icon: mdi:battery-sync
-      secondary_info: last-changed
+      icon_color: '{{ ''orange'' if is_state(''switch.woonkamer_energy_management_system_kalibratie'', ''on'') else ''grey'' }}'
+      tap_action:
+        action: toggle
       grid_options:
         columns: 12
         rows: auto

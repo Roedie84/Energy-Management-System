@@ -2352,6 +2352,10 @@ PERSISTED_PLAIN_FIELDS = (
     # door de integratie te herladen.
     "goedkope_koeling_teller",
     "kalibratie_momentopname",
+    # v3.98.0: sinds wanneer de kalibratie loopt. De kaart toonde
+    # `last-changed`, en dat is na een herstart het startmoment van de
+    # integratie.
+    "kalibratie_sinds",
     # v3.33.1: de lopende capaciteitsmeting. Een kalibratie duurt uren
     # en wordt zelden gedaan; één herstart mag hem niet kosten. Bij de
     # kalibratie van 19 augustus gebeurde precies dat - de meting begon

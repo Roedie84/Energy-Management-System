@@ -22318,3 +22318,69 @@ Assistant 2026.9. Niets dat het EMS raakt — wel handig om te hebben
 voordat je naar HA 2026.9 gaat.
 
 **Volledige testsuite**: 3479 tests, allemaal groen.
+
+## v3.98.0 — De kalibratie na een herstart, en de diagnostiek doorgelicht
+
+**Gemeld** met een schermafdruk van de knoppenkaart: "kalibratie wordt
+gereset na herstart", bij een schakelaar die "9 minuten geleden" toonde
+terwijl de integratie negen minuten eerder startte.
+
+### Die "9 minuten geleden" zei niets
+
+De kaart toonde `secondary_info: last-changed`. Bij een herstart wordt de
+entiteit opnieuw aangemaakt en is dat het startmoment. Het getal ging dus
+over de herstart, niet over de kalibratie.
+
+Er is nu `kalibratie_sinds`, dat vastlegt wanneer de stand is aangezet en
+mee wordt bewaard. De kaart toont "loopt sinds 1 sep 09:30" of "uit".
+Nog eens aanzetten terwijl hij al aan staat verschuift dat moment niet —
+anders zou elke bevestigende ronde de teller op nul zetten.
+
+### En een echt gat in de opslag
+
+Een handmatige schakeling plande een opslag over dertig seconden. Die
+vertraging is terecht voor de tientallen velden die elke ronde
+veranderen, maar een bewuste knopdruk hoort daar niet in mee te liften:
+gaat Home Assistant binnen die dertig seconden onderuit, dan is de stand
+weg.
+
+Dat weegt bij de kalibratie het zwaarst, want dat is de enige schakelaar
+die zijn stand NIET uit de entiteit terugzet. Sinds v3.42.1 is de opslag
+daar leidend, juist om twee bronnen voor dezelfde vlag te vermijden —
+maar dan moet die opslag ook meteen kloppen. Alle handmatige schakelaars
+schrijven nu direct weg.
+
+Bij een nette herstart via de interface was er overigens niets aan de
+hand: bij het afsluiten wordt sowieso weggeschreven. Dit dekt het geval
+waarin het niet netjes gaat.
+
+### De diagnostiek doorgelicht
+
+**Gevraagd**: "tevens nog een gehele check van de diagnostiek."
+
+25 blokken op het hoogste niveau, 293 velden in de coordinator.
+
+De vijf kruiscontroles staan alle vijf op `in_orde`/`klopt`: fasen tegen
+P1 (159 W verschil op een marge van 200), modules tegen accu,
+entiteittype, platform, en de bestandscontrole met 21 van 21.
+
+31 velden zijn leeg, en dat is er geen enkele te veel:
+
+- `internal_failures`, `last_error`, `plausibility_warnings`,
+  `input_health`, `self_evaluation`, `fallback_overview` — leeg betekent
+  hier "niets te melden", en dat is het goede antwoord.
+- `own_log`, `plan_snapshot` — 0,1 uur na de start nog niet gevuld.
+- `last_discharge_power_applied` staat op None terwijl de reden
+  `discharging_window` is. Dat lijkt een vergeten veld, maar is het
+  niet: bij 18% laadstand is er geen ruimte boven de reserve, en dan
+  wordt er bewust géén handmatige opdracht gegeven. De reservebodem doet
+  hier zijn werk.
+
+Eén ding valt op zonder dat het fout is: `water_source_profiles` en
+`water_source_overview` zijn leeg omdat die zich pas vullen als je een
+waterbron met de hand BEVESTIGT. Dat staat nergens, en een leeg veld
+leest als kapot — dezelfde vorm als de capaciteitskaart die 161 dagen
+null toonde. Opgeschreven, niet gerepareerd: het raakt een kaart die je
+kent, en het is de moeite van een eigen ronde waard.
+
+**Volledige testsuite**: 3487 tests, allemaal groen.
