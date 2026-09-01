@@ -472,6 +472,9 @@ class SystemStatusSensor(_CoordinatorDiagnosticSensor):
             "informatief": self._coordinator.get_diagnostic_summary()[
                 "informatief"
             ],
+            # v3.95.3: de onderregel van de statuskaart, zodat hij niet
+            # herhaalt wat er in de kaart eronder staat.
+            "statuskop": self._coordinator.statuskop_zin(),
             # v1.2.0: voor het Meldingen-tabblad.
             # v1.6.3: dertig in plaats van vijftien, en mét het
             # bericht - de titel alleen zegt niet WELKE sensor wegviel.
@@ -3914,6 +3917,9 @@ class GacsAssessmentSensor(SensorEntity):
             "geschiedenisbronnen",
             "accu_tegen_net",
             "kwartier_samenvatting",
+            # v3.95.2: de zin van de tegel "Haalt de accu het?", zodat
+            # hij te toetsen is in plaats van in een sjabloon te staan.
+            "haalt_de_accu_het",
             "plantoetsing",
             "rendement",
             "prijstoets",
@@ -3981,6 +3987,7 @@ class GacsAssessmentSensor(SensorEntity):
             ("aanwezigheid", self._coordinator.get_presence_overview),
             ("uitbreidingsadvies", self._coordinator.get_expansion_advice),
             ("weerbronnen", self._coordinator.get_weather_source_overview),
+            ("haalt_de_accu_het", self._coordinator.haalt_de_accu_het_zin),
             ("helderheid_ijking", self._coordinator.get_helderheid_ijking),
             ("zon_uitstelplan", lambda: self._coordinator.last_solar_defer_plan),
             ("kwartierplanning", self._coordinator.get_quarter_plan_compact),

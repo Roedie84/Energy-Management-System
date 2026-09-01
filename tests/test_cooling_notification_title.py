@@ -67,9 +67,12 @@ def test_without_an_action_it_falls_back(make_coordinator, hass):
 
     c = make_coordinator({CONF_ACHTERHOEKS: True})
 
-    titel = c._naar_achterhoeks("Iets anders", "mode_change")
+    # v3.95.0: `mode_change` heeft geen vaste titel meer - die bouwt de
+    # stand er zelf in. Een soort die er nog WEL een heeft, doet het
+    # hier voor.
+    titel = c._naar_achterhoeks("Iets anders", "battery_wont_last_night")
 
-    assert titel == ACHTERHOEKS_TITELS["mode_change"]
+    assert titel == ACHTERHOEKS_TITELS["battery_wont_last_night"]
 
 
 def test_the_action_is_derived_from_the_dutch_title():

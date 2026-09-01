@@ -8,7 +8,7 @@ views:
     cards:
     - type: custom:mushroom-template-card
       primary: '{% set p = state_attr(''sensor.woonkamer_energy_management_system_system_status'', ''aandachtspunten'') or [] %}{{ ''✅ Geen aandachtspunten'' if p | length == 0 else ''⚠️ '' ~ p | length ~ '' aandachtspunt(en)'' }}'
-      secondary: '{% set p = state_attr(''sensor.woonkamer_energy_management_system_system_status'', ''aandachtspunten'') or [] %}{{ ''Alles in orde.'' if p | length == 0 else (p[0].split(''.'')[0] ~ ''. Tik voor alle details.'') }}'
+      secondary: '{{ state_attr(''sensor.woonkamer_energy_management_system_system_status'', ''statuskop'') or ''Alles in orde.'' }}'
       multiline_secondary: true
       icon: '{% set p = state_attr(''sensor.woonkamer_energy_management_system_system_status'', ''aandachtspunten'') or [] %}{{ ''mdi:check-circle-outline'' if p | length == 0 else ''mdi:alert-outline'' }}'
       icon_color: '{% set p = state_attr(''sensor.woonkamer_energy_management_system_system_status'', ''aandachtspunten'') or [] %}{{ ''green'' if p | length == 0 else ''orange'' }}'
@@ -185,7 +185,7 @@ views:
       heading: Haalt de accu het?
       heading_style: title
     - type: markdown
-      content: '{% set q = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''kwartier_samenvatting'') or {} %}{% if not q.get(''beschikbaar'') %}Nog geen planning.{% else %}{% set t = q.get(''tekort_kwartieren'', 0) %}{% if t > 0 %}**Nee: {{ t }} kwartier(en) aan het net** — {{ (q.get(''tekort_perioden'') or [])[:2] | join('', '') }}.{% else %}**Ja**, geen kwartier zonder accu.{% endif %} Laagste {{ q.get(''laagste_soc_tot_bijladen_procent'', ''—'') }}%, eind {{ q.get(''eind_soc_procent'', ''—'') }}%, € {{ q.get(''verwachte_opbrengst_eur'', ''—'') }} over {{ ((q.get(''kwartieren'', 0) / 4) | int) }} uur.{% endif %}'
+      content: '{% set z = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''haalt_de_accu_het'') %}{% if not z %}Nog geen planning.{% else %}{{ z | replace(''Ja,'', ''**Ja**,'') | replace(''Nee:'', ''**Nee:**'') | replace(''EUR'', ''€'') }}{% endif %}'
       grid_options:
         columns: 12
         rows: auto
@@ -611,7 +611,7 @@ views:
     hold_action:
       action: more-info
   - type: custom:mushroom-template-card
-    primary: Accu haalt de nacht niet
+    primary: Accu haalt de nacht mogelijk niet
     secondary: '{% set e = ''switch.woonkamer_energy_management_system_melding_plan_tekort'' %}{% set last = state_attr(e, ''laatst_verstuurd'') %}{{ ''AAN'' if is_state(e, ''on'') else ''uit'' }} · demping 60 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom(''%-d %b %H:%M'') }}{% endif %}'
     icon: mdi:battery-alert-variant
     icon_color: '{{ ''green'' if is_state(''switch.woonkamer_energy_management_system_melding_plan_tekort'', ''on'') else ''grey'' }}'
@@ -631,7 +631,7 @@ views:
     hold_action:
       action: more-info
   - type: custom:mushroom-template-card
-    primary: Verkopen geblokkeerd
+    primary: Verkopen geblokkeerd voor de woning
     secondary: '{% set e = ''switch.woonkamer_energy_management_system_melding_plan_verkoop_geblokkeerd'' %}{% set last = state_attr(e, ''laatst_verstuurd'') %}{{ ''AAN'' if is_state(e, ''on'') else ''uit'' }} · demping 120 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom(''%-d %b %H:%M'') }}{% endif %}'
     icon: mdi:cash-remove
     icon_color: '{{ ''green'' if is_state(''switch.woonkamer_energy_management_system_melding_plan_verkoop_geblokkeerd'', ''on'') else ''grey'' }}'
@@ -1305,7 +1305,7 @@ views:
 
         {% endfor %}| Besparing (EUR) | {% for naam, w in p.items() %}{{ w.get(''besparing_eur'') if w.get(''besparing_eur'') is not none else ''niet te bepalen'' }} | {% endfor %}
 
-        | _gemiddeld per dag_ | {% for naam, w in p.items() %}{% set g = w.get(''gemiddeld_per_dag'') %}{{ (g.verbruik_kwh ~ '' kWh'') if g else ''—'' }} | {% endfor %}
+        | _gemiddeld per dag_ | {% for naam, w in p.items() %}{% set gem = w.get(''gemiddeld_per_dag'') %}{{ (gem.verbruik_kwh ~ '' kWh'') if gem else ''—'' }} | {% endfor %}
 
         {% else %}Nog geen afgesloten dag in de reeks.{% endif %}{% if o.get(''contractjaar_begin'') %}
 
@@ -2210,16 +2210,6 @@ views:
       tap_action:
         action: more-info
       icon: mdi:function-variant
-    - type: custom:mushroom-template-card
-      primary: Zelflerende waarden
-      secondary: '{% set s = (state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''samenvattingen'') or {}).get(''zelflerend'') or {} %}{{ s.get(''zin'', ''Nog geen gegevens.'') }}'
-      multiline_secondary: true
-      icon: mdi:information-outline
-      icon_color: '{% set n = ((state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''samenvattingen'') or {}).get(''zelflerend'') or {}).get(''niveau'') %}{{ ''red'' if n == ''onbetrouwbaar'' else (''green'' if n == ''betrouwbaar'' else ''orange'') }}'
-      entity: sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling
-      tap_action:
-        action: navigate
-        navigation_path: /energy-management-system/detail-advies
 - title: Meetkwaliteit
   path: detail-kwaliteit
   subview: true

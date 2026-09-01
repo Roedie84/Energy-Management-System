@@ -877,6 +877,10 @@ async def async_get_config_entry_diagnostics(
             # v3.94.0: de heldere-hemel-ijklijn en wat hij over de
             # weerbronnen zegt. Inclusief `mag_regelen` - het oordeel of
             # er genoeg bewijs ligt om ermee te gaan sturen.
+            # v3.97.0: verklaart Powercalc een stuk van het huisverbruik?
+            "powercalc_proef": _veilig(
+                "get_powercalc_proef", coordinator.get_powercalc_proef
+            ),
             "helderheid_ijking": _veilig(
                 "get_helderheid_ijking", coordinator.get_helderheid_ijking
             ),

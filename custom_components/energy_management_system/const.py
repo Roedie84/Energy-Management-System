@@ -109,6 +109,65 @@ CONF_WATER_TOTAL_USAGE_SENSOR = "water_total_usage_sensor_entity"
 # those later checks can downgrade an "expensive, should discharge"
 # guess back to smart - without this correction, the displayed
 # "Verwachte modus" could disagree with what was actually decided.
+# Korte Nederlandse naam per accustand (v3.95.0).
+#
+# Gevraagd: "is het mogelijk dat ik alleen een korte titel krijg? Waarin
+# kort kan zien naar welke stand?"
+#
+# De titel bevatte de stand al - "Accu naar smart_discharging" - maar de
+# Achterhoekse vertaling verving hem door één vaste zin. En zelfs met de
+# naam erin is `smart_discharging` geen woord dat je op een telefoon wil
+# lezen.
+# Instellingen die bij een APPARAAT horen (v3.95.0).
+#
+# Gemeld: "Welke entiteiten zijn stuk?" bij `entiteiten_stuk: 2` naast
+# "Geen bijzonderheden" in dezelfde regel. Het waren
+# `sensor.wasmachine_programma_eindtijd` en
+# `binary_sensor.wasmachine_start_op_afstand`, allebei `unavailable`.
+#
+# Veel apparaatintegraties zetten hun entiteiten op unavailable zodra
+# het apparaat uit staat - een programma-eindtijd bestaat niet als er
+# geen programma loopt. Dat verklaarde ook het oplopen over drie
+# exports op één avond: 0, 1, 2. Geen kapotgaande entiteiten maar een
+# wasmachine die aanstond, draaide en klaar was.
+#
+# Voor deze instellingen is "geen waarde" dus geen storing. Voor de
+# prijssensor of de accusensor wél: daar hangt de sturing aan.
+APPARAAT_INSTELLINGEN = (
+    "dishwasher_power_sensor_entity",
+    "dishwasher_ready_sensor_entity",
+    "dishwasher_energy_sensor_entity",
+    "dishwasher_start_in_entity",
+    "washing_machine_power_sensor_entity",
+    "washing_machine_ready_sensor_entity",
+    "washing_machine_energy_sensor_entity",
+    "washing_machine_end_at_entity",
+    "steelstofzuiger_switch_entity",
+    "steelstofzuiger_power_sensor_entity",
+    "fietsladers_switch_entity",
+    "fietsladers_power_sensor_entity",
+    "oven_state_sensor_entity",
+    "quooker_power_sensor_entity",
+)
+
+# Hoe dicht de bias bij de absolute fout moet liggen voordat de fout
+# EENZIJDIG heet (v3.95.1).
+#
+# Bij 0,7 betekent het: zeventig procent van de gemiddelde misser wijst
+# dezelfde kant op. Lager en je noemt een richting die er niet is; veel
+# hoger en een enkele goede dag wist het patroon uit.
+PV_FOUT_EENZIJDIG_AANDEEL = 0.7
+
+MODUS_KORTE_NAAM = {
+    "smart_discharging": "ontladen",
+    "smart_charging": "laden uit het net",
+    "smart": "slim",
+    "manual": "handmatig",
+    "idle": "stil",
+    "charging": "laden",
+    "discharging": "ontladen",
+}
+
 MODE_CHANGE_EMOJI = {
     "expensive_quarter": "💰⬇️",
     "expensive_quarter_soc_protected": "🛡️",
@@ -2482,6 +2541,8 @@ PERSISTED_PLAIN_FIELDS = (
     # telling na elke herstart opnieuw en komt er nooit iets uit.
     "helderheid_ijklijn",
     "weerbron_helderheid_paren",
+    # v3.97.0: de Powercalc-proef heeft 200 metingen nodig.
+    "powercalc_paren",
     # Meldingen (v1.2.0): de aan/uit-standen zijn een gebruikerskeuze en
     # mogen bij een herstart niet terugspringen naar de standaard. De
     # verzendmomenten horen er ook bij, anders zou het dempingsvenster na
@@ -4059,6 +4120,49 @@ PRESENCE_MIN_OBSERVATIONS = 3
 # MITS er net nog iemand thuis was. Ruim genomen: wie om 22:30 naar bed
 # gaat hoort erin te vallen, en wie om 06:30 opstaat maakt vanzelf weer
 # beweging.
+# Hoe lang beweging moet AANHOUDEN voordat het de nachtrust beeindigt
+# (v3.96.0).
+#
+# Gemeld met de tijdlijn: "er gaat wel eens iemand snachts naar de wc,
+# hoe kunnen we dit borgen?" Drie nachten met een blok van 30 tot 40
+# minuten "thuis" ertussen - dat is twee minuten lopen plus de dertig
+# minuten stilte die daarna nodig zijn om terug te vallen.
+#
+# Twintig minuten: ruim boven een wc-bezoek, ruim onder het opstaan.
+# Powercalc-proef (v3.97.0).
+#
+# Gevraagd: "Deze integratie heb ik ook, kunnen we daar nog wat mee" -
+# met sensoren als `sensor.eetkamer_lamp_3_power`.
+#
+# Powercalc MEET niet, het SCHAT uit een profielbibliotheek. Zo'n getal
+# in de reserve stoppen zou dezelfde fout zijn als `available_kwh` en
+# `gemeten_kwh`. Waar het wel iets kan opleveren is het residu voor
+# NILM: verlichting is continu wisselende ruis, en die eruit halen maakt
+# een apparaatstart duidelijker zichtbaar.
+#
+# Of dat werkt, is te meten - en daarom staat het hier als proef.
+POWERCALC_MIN_METINGEN = 200
+POWERCALC_PAREN_LENGTE = 600
+
+# Hoeveel rustiger het residu moet zijn voordat het de moeite waard
+# heet. Vijf procent minder spreiding is binnen deze aantallen niet van
+# toeval te onderscheiden.
+POWERCALC_MIN_WINST_FRACTIE = 0.10
+
+PRESENCE_NIGHT_INTERRUPTION_MINUTES = 20.0
+
+# Hoeveel stilte er na een nacht nodig is voordat het weg heet
+# (v3.96.0).
+#
+# In de tijdlijn stond drie keer exact 07:00 een omslag naar "weg". Dat
+# is geen sensor maar PRESENCE_NIGHT_END_HOUR: op dat tijdstip vervalt
+# de nachtregel en valt een stilte van dertig minuten door naar "weg" -
+# terwijl er iemand onder de douche staat.
+#
+# Na een nacht is stilte pas afwezigheid als hij lang genoeg duurt om
+# een ochtendroutine uit te sluiten.
+PRESENCE_MORNING_AWAY_MINUTES = 90.0
+
 PRESENCE_NIGHT_START_HOUR = 22
 PRESENCE_NIGHT_END_HOUR = 7
 
@@ -4785,12 +4889,28 @@ PLAN_CHANGE_MIN_QUARTERS = 1
 CONF_ACHTERHOEKS = "achterhoeks_meldingen"
 
 # Titels per meldingsoort.
+# v3.95.0: soorten met een OPGEBOUWDE titel horen hier niet in.
+#
+# De regel staat sinds v3.93.1 in de changelog - "een vaste titel per
+# soort kan alleen als er ook maar één boodschap per soort is" - maar is
+# toen op twee soorten toegepast terwijl er zes waren.
+#
+# Gemeld twee dagen later: "De stand is veranderd (...) is het mogelijk
+# dat ik alleen een korte titel krijg? Waarin kort kan zien naar welke
+# stand?" De titel bevatte de stand al; de vertaling gooide hem weg.
+#
+# Weggehaald: mode_change ("Accu naar {stand}"), device_drift
+# ("Mogelijk defect: {apparaat}"), appliance_cheap_moment ("Goedkoop
+# moment voor de {apparaat}") en proefstand_rijp ("{n} kandidaat(en)
+# klaar"). Alle vier dragen ze een naam of een getal in de titel.
+#
+# Er staat nu een toets op die zelf uitzoekt welke soorten een
+# opgebouwde titel hebben, zodat dit niet een vierde keer misgaat.
 ACHTERHOEKS_TITELS = {
     "plan_tekort": "Den accu kump tekort",
     "plan_uitstel": "Zunne opvangen wödt uut-esteld",
     "plan_verkoop_geblokkeerd": "Verkopen geet neet, 't huus geet veur",
     "vakantie_beweging": "Der beweeg wat, terwiel gi-j weg bunt",
-    "proefstand_rijp": "'n Kandidaat is now zo wied",
     "zelfcontrole": "Der klopt wat neet in de sommen",
     # v3.1.0: NIET "an of uut" - dat zegt niet wat er gebeurt.
     #
@@ -4804,7 +4924,6 @@ ACHTERHOEKS_TITELS = {
     "sluipverbruik": "'t Lik of der wat stiekem stroom vret",
     # v2.0.7: "veranderd", niet "verandert" - voltooid deelwoord na "is",
     # geen persoonsvorm. Gevonden bij het nakijken van de meldingen.
-    "mode_change": "De stand is veranderd",
     "battery_wont_last_night": "Den accu haalt de nacht neet",
     "battery_full_with_sun": "Accu vol en de zunne schient nog",
     "low_soc_before_peak": "Weinig in den accu veur de duurte",
@@ -4868,8 +4987,6 @@ ACHTERHOEKS_TITELS = {
     # reden: een vaste titel per soort kan alleen als er ook maar één
     # boodschap per soort is. Deze soort valt nu terug op de vertaling
     # woord voor woord, die de naam laat staan.
-    "appliance_cheap_moment": "Good moment veur 'n apparaat",
-    "device_drift": "'n Apparaat wiekt af",
 
 }
 

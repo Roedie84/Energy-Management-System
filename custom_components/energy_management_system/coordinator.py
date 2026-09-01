@@ -180,7 +180,10 @@ from .const import (
     BACKYARD_TEMP_SPIKE_TOLERANCE_C,
     HOME_CONNECT_ACTIVE_STATES,
     CONF_APPLIANCE_NOTIFY_SERVICE,
+    APPARAAT_INSTELLINGEN,
     MODE_CHANGE_EMOJI,
+    PV_FOUT_EENZIJDIG_AANDEEL,
+    MODUS_KORTE_NAAM,
     REASON_TO_MODE,
     ACHTERHOEKS_TITELS,
     ACHTERHOEKS_TITELS_PER_ACTIE,
@@ -412,6 +415,11 @@ from .const import (
     PRESENCE_HISTORY_WEEKS,
     PRESENCE_MIN_OBSERVATIONS,
     PRESENCE_NIGHT_END_HOUR,
+    POWERCALC_MIN_METINGEN,
+    POWERCALC_MIN_WINST_FRACTIE,
+    POWERCALC_PAREN_LENGTE,
+    PRESENCE_MORNING_AWAY_MINUTES,
+    PRESENCE_NIGHT_INTERRUPTION_MINUTES,
     PRESENCE_NIGHT_START_HOUR,
     PRESENCE_TIMELINE_LENGTH,
     PRESENCE_TIMELINE_SHOWN,
@@ -746,6 +754,17 @@ class _KalmanFilter1D:
         self.estimate = self.estimate + gain * (measurement - self.estimate)
         self.uncertainty = (1 - gain) * predicted_uncertainty
         return self.estimate
+
+
+_POWERCALC_TOELICHTING = (
+    "Powercalc SCHAT vermogen uit een profielbibliotheek; het meet niet. "
+    "Deze proef vraagt niet of die schatting klopt, maar of aftrekken "
+    "helpt: wordt het residu (gemeten min geschat) rustiger dan het "
+    "gemeten totaal zelf? Zo ja, dan is verlichtingsruis eruit gehaald en "
+    "wordt een apparaatstart beter zichtbaar voor de NILM-herkenning. Zo "
+    "nee, dan voegt de schatting ruis toe en is aftrekken schadelijk. "
+    "Stuurt niets."
+)
 
 
 class EnergyManagementSystemCoordinator:
@@ -4455,6 +4474,9 @@ class EnergyManagementSystemCoordinator:
     # percentiel van wat de panelen ooit leverden - dat is bij benadering
     # een wolkeloze hemel op die stand. Alles eronder is bewolking.
 
+    # v3.97.0: (gemeten huisverbruik, geschat vermogen) per ronde.
+    powercalc_paren: list[list[float]] = []
+
     def _init_pv_leervelden(self) -> None:
         """Wat de panelen deden tegenover wat er verwacht werd (v3.94.0).
 
@@ -5944,7 +5966,16 @@ class EnergyManagementSystemCoordinator:
                 "zin": (
                     f"{opwek:.1f} kWh opgewekt vandaag{_voorspeld_erbij()}. "
                     f"De voorspelling zit er over {kwaliteit_pv['dagen']} "
-                    f"dagen gemiddeld {fout:.0f}% naast."
+                    f"dagen gemiddeld {fout:.0f}% "
+                    + (
+                        (
+                            "te hoog."
+                            if kwaliteit_pv["bias_procent"] < 0
+                            else "te laag."
+                        )
+                        if kwaliteit_pv.get("eenzijdig")
+                        else "naast."
+                    )
                 ),
             }
 
@@ -6033,6 +6064,26 @@ class EnergyManagementSystemCoordinator:
             # De absolute fout zegt de GROOTTE, ongeacht richting. Die
             # blijft over als je de bias corrigeert.
             "gemiddelde_fout_procent": round(statistics.mean(absoluut), 1),
+            # v3.95.1: wijst de fout één kant op?
+            #
+            # Gemeld met een schermafdruk: "De voorspelling zit er over 7
+            # dagen gemiddeld 17% naast." Dat getal klopte, maar de zeven
+            # afwijkingen waren -1,9 -13,7 -6,6 -10,2 -41,2 +0,9 -43,9:
+            # zes van de zeven eronder, en de bias -16,7 tegen een
+            # absolute fout van 16,9.
+            #
+            # "Naast" leest als spreiding. Dit was een voorspelling die
+            # stelselmatig te hoog stond - het mechanisme dat de accu in
+            # de nacht van 30 op 31 augustus leeg trok.
+            #
+            # Ligt de bias dicht bij de absolute fout, dan valt vrijwel
+            # alles aan één kant en mag de richting genoemd worden.
+            "eenzijdig": (
+                abs(statistics.mean(afwijkingen))
+                >= PV_FOUT_EENZIJDIG_AANDEEL * statistics.mean(absoluut)
+                if statistics.mean(absoluut)
+                else False
+            ),
             "mediaan_fout_procent": round(statistics.median(absoluut), 1),
             "slechtste_dag_procent": round(max(absoluut), 1),
             "beste_dag_procent": round(min(absoluut), 1),
@@ -6332,6 +6383,44 @@ class EnergyManagementSystemCoordinator:
             }
         return overzicht
 
+    # v3.96.0: sinds wanneer de nachtrust onderbroken is.
+    #
+    # Als klasse-attribuut, niet in `__init__`: die staat op de ratel van
+    # v3.35.0, en er iets aan toevoegen betekent er eerst iets uit halen.
+    # Een tijdstempel dat op None begint en nooit bewaard hoeft te
+    # worden, kan hier net zo goed staan.
+    _nachtrust_onderbroken_sinds: datetime | None = None
+
+    def _is_nachtelijke_onderbreking(
+        self, now: datetime, vorige: str | None
+    ) -> bool:
+        """Is deze beweging een wc-bezoek of het opstaan? (v3.96.0)
+
+        Alleen tijdens een nacht die al liep. De onderbreking krijgt een
+        tijdstempel; houdt de beweging langer aan dan
+        PRESENCE_NIGHT_INTERRUPTION_MINUTES, dan is er iemand op en
+        eindigt de nacht.
+
+        Wordt het weer stil voordat die grens gehaald is, dan valt de
+        staat vanzelf terug op "slaapt" via de gewone slaapregels, en
+        wordt de teller hieronder gewist - twee wc-bezoeken in een nacht
+        tellen niet bij elkaar op.
+        """
+        if vorige != "slaapt":
+            return False
+        if not self._stilte_is_nacht(now, vorige):
+            return False
+        if self._nachtrust_onderbroken_sinds is None:
+            self._nachtrust_onderbroken_sinds = now
+            return True
+        duur = (
+            now - self._nachtrust_onderbroken_sinds
+        ).total_seconds() / 60
+        if duur >= PRESENCE_NIGHT_INTERRUPTION_MINUTES:
+            self._nachtrust_onderbroken_sinds = None
+            return False
+        return True
+
     def _update_presence(self, now: datetime) -> None:
         """Is er iemand thuis? (v1.18.2)
 
@@ -6409,10 +6498,26 @@ class EnergyManagementSystemCoordinator:
                 # aanwezig, net als de tv. Niet tijdens de vakantiestand.
                 self.presence_state = "thuis"
             elif stil_minuten < self._afwezigheidsdrempel_minuten():
-                self.presence_state = "thuis"
+                # v3.96.0: tenzij dit een nachtelijke onderbreking is.
+                #
+                # Gemeld: "er gaat wel eens iemand snachts naar de wc,
+                # hoe kunnen we dit borgen?" Deze regel stond VOOR de
+                # slaapregels, dus elke beweging beeindigde de nacht
+                # meteen - en de dertig minuten stilte die daarna nodig
+                # waren, kwamen als een blok "thuis" in de tijdlijn.
+                if self._is_nachtelijke_onderbreking(now, vorige):
+                    self.presence_state = "slaapt"
+                else:
+                    self._nachtrust_onderbroken_sinds = None
+                    self.presence_state = "thuis"
             elif self._slaapt_waarschijnlijk(now):
                 # Was de slaapsensor de LAATSTE beweging, dan is de
                 # stilte die erop volgt geen afwezigheid maar een nacht.
+                #
+                # v3.96.0: en dan is een eerdere onderbreking voorbij.
+                # Twee wc-bezoeken in een nacht tellen niet bij elkaar
+                # op tot een wakker geworden huishouden.
+                self._nachtrust_onderbroken_sinds = None
                 self.presence_state = "slaapt"
             elif self._stilte_is_nacht(now, vorige):
                 # v1.30.0, gemeld: "Ik ging om 23:15 slapen, was snachts
@@ -6430,7 +6535,25 @@ class EnergyManagementSystemCoordinator:
                 # uitzondering - en "slaapt" is bovendien de veilige
                 # aanname, want dan blijft de nachtreserve staan.
                 self.presence_state = "slaapt"
+            elif (
+                vorige == "slaapt"
+                and stil_minuten < PRESENCE_MORNING_AWAY_MINUTES
+            ):
+                # v3.96.0: de klok trekt geen conclusie.
+                #
+                # In de tijdlijn stond drie keer exact 07:00 een omslag
+                # naar "weg" - dat is PRESENCE_NIGHT_END_HOUR, geen
+                # sensor. Op dat tijdstip vervalt de nachtregel en valt
+                # een stilte van dertig minuten door naar afwezig,
+                # terwijl er iemand onder de douche staat.
+                #
+                # Kwam de staat van een nacht, dan is stilte pas
+                # afwezigheid als hij lang genoeg duurt om een
+                # ochtendroutine uit te sluiten. En "slaapt" is de
+                # veilige aanname: dan blijft de nachtreserve staan.
+                self.presence_state = "slaapt"
             else:
+                self._nachtrust_onderbroken_sinds = None
                 self.presence_state = "weg"
 
         # Leren: per kwartier van de week bijhouden hoe vaak er iemand
@@ -13464,7 +13587,23 @@ class EnergyManagementSystemCoordinator:
                     "hoort hij bij een integratie die weg is?"
                 )
             elif staat.state in ("unavailable", "unknown"):
-                regel["oordeel"] = "geen_waarde"
+                # v3.95.0: een apparaat dat uit staat, is niet stuk.
+                #
+                # Zie APPARAAT_INSTELLINGEN. Voor een kernsensor blijft
+                # dit wél een storing - aan de prijssensor en de
+                # accusensor hangt de hele sturing.
+                if sleutel in APPARAAT_INSTELLINGEN:
+                    regel["oordeel"] = "slaapt"
+                    regel["uitleg"] = (
+                        "Het apparaat staat uit of is van het netwerk. "
+                        "Veel apparaatintegraties melden dan niets, en "
+                        "een programma-eindtijd bestaat nu eenmaal niet "
+                        "als er geen programma loopt. Pas als dit blijft "
+                        "staan terwijl het apparaat aan is, is er iets "
+                        "aan de hand."
+                    )
+                else:
+                    regel["oordeel"] = "geen_waarde"
                 regel["waarde"] = staat.state
             else:
                 regel["waarde"] = staat.state
@@ -13492,7 +13631,14 @@ class EnergyManagementSystemCoordinator:
                 1 for r in entiteiten if r["oordeel"] == "in_orde"
             ),
             "aantal_stuk": sum(
-                1 for r in entiteiten if r["oordeel"] != "in_orde"
+                1
+                for r in entiteiten
+                if r["oordeel"] not in ("in_orde", "slaapt")
+            ),
+            # v3.95.0: apart geteld, want "2 stuk" naast "Geen
+            # bijzonderheden" leest als een tegenspraak.
+            "aantal_slaapt": sum(
+                1 for r in entiteiten if r["oordeel"] == "slaapt"
             ),
             "lege_instellingen": leeg,
             "toelichting": (
@@ -14778,6 +14924,25 @@ class EnergyManagementSystemCoordinator:
         # invoegvolgorde getoond, met een kop bij elke wisseling.
         # v3.94.0: en de heldere-hemel-ijklijn, met zijn eigen oordeel
         # over de vraag of er al iets mee te sturen valt.
+        # v3.97.0: en de Powercalc-proef.
+        powercalc = self.get_powercalc_proef()
+        if powercalc.get("beschikbaar"):
+            voeg_toe(
+                "Adviesmodules",
+                "Powercalc als NILM-hulp",
+                {
+                    "niveau": powercalc["status"],
+                    "reden": powercalc["wat_ontbreekt"]
+                    or (
+                        f"Verklaart {powercalc['aandeel_procent']}% van het "
+                        f"huisverbruik en maakt het residu "
+                        f"{powercalc['winst_procent']}% rustiger."
+                    ),
+                },
+                powercalc.get("aandeel_procent"),
+                "%",
+            )
+
         ijking = self.get_helderheid_ijking()
         voeg_toe(
             "Adviesmodules",
@@ -18561,6 +18726,203 @@ class EnergyManagementSystemCoordinator:
             "als er wél verkocht werd - dat is de vergelijking waarop de "
             "rem berust."
         )
+
+    def haalt_de_accu_het_zin(self, samenvatting: dict | None = None) -> str | None:
+        """De zin op de tegel "Haalt de accu het?" (v3.95.2).
+
+        Gemeld met een schermafdruk: "Ja, geen kwartier zonder accu.
+        Laagste 19%, eind 10%, EUR 0.8 over 26 uur."
+
+        Een eindstand die LAGER is dan de laagste stand kan niet - tenzij
+        je weet dat het over twee vensters gaat, en dat stond er niet.
+        `laagste_soc_tot_bijladen_procent` loopt tot het volgende
+        goedkope blok (bewust zo sinds v1.48.0), `eind_soc_procent` staat
+        aan het eind van de hele planning. Allebei goed berekend; naast
+        elkaar op een regel spraken ze elkaar tegen.
+
+        De zin stond in het dashboardsjabloon, waar hij niet te toetsen
+        was. Nu hier, met toetsen eronder.
+        """
+        q = samenvatting if samenvatting is not None else (
+            self.get_quarter_plan_summary() or {}
+        )
+        if not q.get("beschikbaar"):
+            return None
+
+        uren = int((q.get("kwartieren") or 0) / 4)
+        opbrengst = q.get("verwachte_opbrengst_eur")
+        eind = q.get("eind_soc_procent")
+        bodem = q.get("min_soc_procent_hard")
+        laagste = q.get("laagste_soc_tot_bijladen_procent")
+
+        tekorten = q.get("tekort_kwartieren") or 0
+        if tekorten:
+            perioden = ", ".join((q.get("tekort_perioden") or [])[:2])
+            kop = f"Nee: {tekorten} kwartier(en) aan het net"
+            kop += f" - {perioden}." if perioden else "."
+        else:
+            kop = "Ja, geen kwartier zonder accu tot het bijladen."
+
+        staart = f"Laagste {laagste}% tot het bijladen"
+        if eind is not None:
+            staart += f", {eind}% na {uren} uur"
+            # v3.95.2: eindigen OP de ondergrens is een ander antwoord
+            # dan eindigen met ruimte over.
+            if bodem is not None and eind <= bodem:
+                staart += " - dat is de ondergrens zelf, dus zonder marge"
+        staart += "."
+        if opbrengst is not None:
+            staart += f" EUR {opbrengst} over {uren} uur."
+        return f"{kop} {staart}"
+
+    def statuskop_zin(self) -> str:
+        """De onderregel van de statuskaart (v3.95.3).
+
+        Gemeld met een schermafdruk: dezelfde zin twee keer onder
+        elkaar. De bovenste kaart toonde het aantal plus de eerste ZIN
+        van het eerste punt, de onderste somde alle punten op - en bij
+        één punt van één zin is dat hetzelfde.
+
+        Een samenvatting hoort samen te vatten: het aantal en de
+        verdeling. De inhoud staat er al onder.
+        """
+        samenvatting = self.get_diagnostic_summary() or {}
+        punten = samenvatting.get("aandachtspunten") or []
+        informatief = samenvatting.get("informatief") or []
+
+        if not punten and not informatief:
+            return "Alles in orde."
+
+        delen = []
+        if punten:
+            delen.append(f"{len(punten)} aandachtspunt(en)")
+        if informatief:
+            delen.append(f"{len(informatief)} informatief")
+        return " en ".join(delen) + ". Tik voor alle details."
+
+    # --- Powercalc-proef (v3.97.0) -----------------------------------
+
+    def powercalc_sensoren(self) -> list[str]:
+        """Welke vermogenssensoren komen van Powercalc?
+
+        Herkend aan het attribuut `source_entity`, dat Powercalc op elke
+        sensor zet die het maakt. De NAAM zegt niets - een
+        `sensor.eetkamer_lamp_3_power` is niet van een echte meter te
+        onderscheiden, en die twee door elkaar halen zou een schatting
+        als meting laten tellen.
+
+        Alleen vermogen, geen energie: naast elke `_power` staat een
+        `_energy` in kWh, en die bij watts optellen levert onzin op.
+        """
+        uit = []
+        # `async_all()` zonder domeinfilter: de nep-hass in de toetsen
+        # kent dat argument niet, en filteren op het voorvoegsel doet
+        # hetzelfde.
+        for staat in self.hass.states.async_all():
+            if not str(staat.entity_id).startswith("sensor."):
+                continue
+            if not staat.entity_id.endswith("_power"):
+                continue
+            if staat.attributes.get("source_entity") is None:
+                continue
+            uit.append(staat.entity_id)
+        return sorted(uit)
+
+    def powercalc_geschat_vermogen_w(self) -> float | None:
+        """Het geschatte vermogen van alles wat Powercalc kent.
+
+        None als er geen enkele sensor is - liever niets dan nul, want
+        nul leest als "verlichting uit".
+        """
+        sensoren = self.powercalc_sensoren()
+        if not sensoren:
+            return None
+        totaal = 0.0
+        for entity_id in sensoren:
+            waarde = self._read_sensor_float(entity_id)
+            if waarde is not None:
+                totaal += waarde
+        return round(totaal, 1)
+
+    def _update_powercalc_proef(self, now: datetime) -> None:
+        """Eén paar per ronde: wat de meter zag en wat Powercalc schatte."""
+        geschat = self.powercalc_geschat_vermogen_w()
+        if geschat is None:
+            return
+        gemeten = self._read_corrected_consumption_power()
+        if gemeten is None:
+            return
+        self.powercalc_paren.append([round(gemeten, 1), geschat])
+        self.powercalc_paren = self.powercalc_paren[-POWERCALC_PAREN_LENGTE:]
+        self.schedule_persisted_state_save()
+
+    def get_powercalc_proef(self) -> dict:
+        """Maakt Powercalc het residu rustiger? (v3.97.0)
+
+        De vraag die ertoe doet is niet of de schatting klopt, maar of
+        aftrekken helpt. Is de spreiding van (gemeten - geschat) kleiner
+        dan die van het gemeten totaal zelf, dan neemt de schatting ruis
+        weg. Is hij groter, dan voegt ze ruis toe en is aftrekken
+        schadelijk.
+
+        `mag_regelen` is een OORDEEL. Deze functie zet niets aan.
+        """
+        paren = [p for p in (self.powercalc_paren or []) if len(p) == 2]
+        if len(paren) < POWERCALC_MIN_METINGEN:
+            return {
+                "beschikbaar": bool(paren),
+                "status": RELIABILITY_INSUFFICIENT,
+                "metingen": len(paren),
+                "metingen_nodig": POWERCALC_MIN_METINGEN,
+                "sensoren": len(self.powercalc_sensoren()),
+                "mag_regelen": False,
+                "wat_ontbreekt": (
+                    f"{len(paren)} van de {POWERCALC_MIN_METINGEN} metingen. "
+                    "Er komt er een per ronde bij zolang er zowel een "
+                    "Powercalc-schatting als een gemeten huisverbruik is."
+                ),
+                "toelichting": _POWERCALC_TOELICHTING,
+            }
+
+        gemeten = [p[0] for p in paren]
+        residu = [p[0] - p[1] for p in paren]
+        spreiding_gemeten = statistics.pstdev(gemeten)
+        spreiding_residu = statistics.pstdev(residu)
+        winst = (
+            (spreiding_gemeten - spreiding_residu) / spreiding_gemeten
+            if spreiding_gemeten
+            else 0.0
+        )
+        rustiger = winst >= POWERCALC_MIN_WINST_FRACTIE
+        gemiddeld_gemeten = statistics.mean(gemeten)
+        aandeel = (
+            100 * statistics.mean([p[1] for p in paren]) / gemiddeld_gemeten
+            if gemiddeld_gemeten
+            else None
+        )
+        return {
+            "beschikbaar": True,
+            "status": RELIABILITY_RELIABLE if rustiger else RELIABILITY_INDICATIVE,
+            "metingen": len(paren),
+            "sensoren": len(self.powercalc_sensoren()),
+            "aandeel_procent": round(aandeel, 1) if aandeel is not None else None,
+            "spreiding_gemeten_w": round(spreiding_gemeten, 1),
+            "spreiding_residu_w": round(spreiding_residu, 1),
+            "winst_procent": round(100 * winst, 1),
+            "residu_rustiger": rustiger,
+            "mag_regelen": False,
+            "wat_ontbreekt": (
+                None
+                if rustiger
+                else (
+                    "Het residu wordt niet rustiger van de schatting "
+                    f"({round(100 * winst, 1)}% tegen de vereiste "
+                    f"{100 * POWERCALC_MIN_WINST_FRACTIE:.0f}%). Aftrekken "
+                    "zou dan ruis toevoegen in plaats van wegnemen."
+                )
+            ),
+            "toelichting": _POWERCALC_TOELICHTING,
+        }
 
     def get_quarter_plan_summary(
         self, now: datetime | None = None, tot: datetime | None = None
@@ -31000,7 +31362,20 @@ class EnergyManagementSystemCoordinator:
             else self.last_charge_power_applied
         )
         power_txt = f"{power:.0f} W" if power is not None else "n.v.t."
-        title = f"{emoji} Accu naar {self.last_expected_mode}"
+        # v3.95.0: kort, en met de stand erin.
+        #
+        # Gevraagd: "is het mogelijk dat ik alleen een korte titel krijg?
+        # Waarin kort kan zien naar welke stand?"
+        #
+        # De stand stond er al in, maar de Achterhoekse vertaling verving
+        # de hele titel door "De stand is veranderd" - dezelfde fout als
+        # bij de apparaatmeldingen in v3.93.1. En `smart_discharging` is
+        # ook met de beste vertaling geen woord dat je op een telefoon
+        # wil lezen.
+        stand = MODUS_KORTE_NAAM.get(
+            self.last_expected_mode, self.last_expected_mode or "onbekend"
+        )
+        title = f"{emoji} Accu: {stand}"
         message = (
             f"🔌 Vermogen: {power_txt}\n"
             f"🕒 {now.strftime('%H:%M:%S')}\n\n"
@@ -31500,6 +31875,7 @@ class EnergyManagementSystemCoordinator:
             ("dagrapport", lambda: self._update_daily_report(now)),
             ("pv-geometrie", lambda: self._update_pv_geometry_learning(now)),
             ("helderheid-ijklijn", lambda: self._update_helderheid_ijklijn(now)),
+            ("powercalc-proef", lambda: self._update_powercalc_proef(now)),
             ("meldingen", lambda: self._evaluate_new_notifications(now)),
             ("opslag", self.schedule_persisted_state_save),
         ):

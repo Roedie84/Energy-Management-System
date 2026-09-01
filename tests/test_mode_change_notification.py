@@ -96,7 +96,9 @@ def test_notification_sent_on_genuine_mode_change(make_coordinator, hass):
     domain, service, data = calls[0]
     assert domain == "notify"
     assert service == "mobile_app_test"
-    assert "Accu naar" in data["title"]
+    # v3.95.0: kort, met de stand erin ("Accu: ontladen").
+    assert data["title"].startswith(("🎁⬆️", "🔄")) or "Accu:" in data["title"]
+    assert "Accu:" in data["title"]
     assert coordinator.last_explanation in data["message"]
 
 

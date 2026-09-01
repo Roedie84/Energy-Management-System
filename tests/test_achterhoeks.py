@@ -13,6 +13,7 @@ Nadrukkelijk een benadering, geen gecontroleerde streektaal - alles staat
 in één tabel in const.py.
 """
 from custom_components.energy_management_system.const import (
+    ACHTERHOEKS_TITELS_PER_ACTIE,
     ACHTERHOEKS_TITELS,
     ACHTERHOEKS_WOORDEN,
     NOTIFICATION_TYPES,
@@ -54,9 +55,21 @@ def test_longer_words_win(make_coordinator, hass):
     assert "neets" not in c._naar_achterhoeks("de accu kan niets meer leveren")
 
 
-# v3.93.1: soorten waaronder meer dan één boodschap valt, en die dus
-# geen vaste titel per soort kunnen hebben.
-MEERDERE_BOODSCHAPPEN = {"appliance_ready", "handmatige_stand"}
+# v3.93.1, uitgebreid in v3.95.0: soorten waaronder meer dan één
+# boodschap valt, en die dus geen vaste titel per soort kunnen hebben.
+#
+# De eerste twee dragen vier respectievelijk twee vaste titels; de
+# andere vier bouwen hun titel op met een naam of een getal erin.
+# `test_a_kind_with_a_built_title_has_no_fixed_one` zoekt die laatste
+# groep zelf op, zodat deze lijst niet de enige bewaker is.
+MEERDERE_BOODSCHAPPEN = {
+    "appliance_ready",
+    "handmatige_stand",
+    "mode_change",
+    "device_drift",
+    "appliance_cheap_moment",
+    "proefstand_rijp",
+}
 
 
 def test_a_replacement_is_not_translated_again(make_coordinator, hass):
@@ -395,3 +408,83 @@ def test_the_action_also_appears_in_the_message():
     blok = bron[kop - 1200 : kop]
 
     assert "De ventilator gaat" in blok
+
+
+# --- v3.95.0: de regel zelf toetsen, niet de uitzonderingen ----------
+
+
+def _soorten_met_opgebouwde_titel() -> set[str]:
+    """Soorten waarvan de titel per melding verschilt.
+
+    Zoekt elke `_dispatch_notification` op en kijkt of `title` een
+    letterlijke tekst is of iets dat wordt opgebouwd - een f-string of
+    een variabele.
+    """
+    import ast
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    boom = ast.parse((Path(pkg.__file__).parent / "coordinator.py").read_text())
+    uit = set()
+    for knoop in ast.walk(boom):
+        if not (
+            isinstance(knoop, ast.Call)
+            and isinstance(knoop.func, ast.Attribute)
+            and knoop.func.attr == "_dispatch_notification"
+        ):
+            continue
+        argumenten = {a.arg: a.value for a in knoop.keywords}
+        soort = argumenten.get("kind")
+        titel = argumenten.get("title")
+        if not (isinstance(soort, ast.Constant) and soort.value):
+            continue
+        if titel is None or isinstance(titel, ast.Constant):
+            continue
+        uit.add(soort.value)
+    return uit
+
+
+def test_a_kind_with_a_built_title_has_no_fixed_one():
+    """v3.95.0. De regel staat sinds v3.93.1 in de changelog - "een
+
+    vaste titel per soort kan alleen als er ook maar één boodschap per
+    soort is" - maar is toen op twee soorten toegepast terwijl er zes
+    waren.
+
+    Gemeld twee dagen later: "De stand is veranderd (...) is het
+    mogelijk dat ik alleen een korte titel krijg? Waarin kort kan zien
+    naar welke stand?" De titel bevatte de stand al; de vertaling gooide
+    hem weg.
+
+    Deze toets zoekt zelf uit welke soorten een opgebouwde titel hebben,
+    zodat de volgende die erbij komt niet weer stilletjes zijn naam
+    verliest.
+    """
+    opgebouwd = _soorten_met_opgebouwde_titel()
+
+    assert opgebouwd, "geen enkele soort met een opgebouwde titel gevonden"
+
+    # Uitgezonderd: soorten die per ACTIE een eigen titel hebben. Dat is
+    # de reparatie van v3.1.0 voor de accukoeling - "Accukoeling an of
+    # uut, terwijl het of aan of uit is" - en daar is het onderscheid
+    # wél gemaakt, alleen op een andere plek.
+    per_actie = {soort for soort, _ in ACHTERHOEKS_TITELS_PER_ACTIE}
+    botsing = opgebouwd & set(ACHTERHOEKS_TITELS) - per_actie
+
+    assert not botsing, (
+        "deze soorten bouwen hun titel op en verliezen die in de "
+        f"vertaling: {sorted(botsing)}"
+    )
+
+
+def test_the_mode_change_title_names_the_mode(make_coordinator, hass):
+    """"Accu: ontladen" leest beter dan "Accu naar smart_discharging",
+
+    en veel beter dan "De stand is veranderd".
+    """
+    c = make_coordinator({})
+
+    titel = c._naar_achterhoeks("🔄 Accu: ontladen", "mode_change")
+
+    assert "ontladen" in titel

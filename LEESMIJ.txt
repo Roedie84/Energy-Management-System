@@ -1,32 +1,102 @@
-v3.94.2 - alleen de wijzigingen sinds v3.94.0
+EMS v3.97.0 - alle wijzigingen sinds v3.91.0
 
-Bevat v3.94.1 en v3.94.2 samen. Een keer herstarten volstaat.
+Je draaide voor het laatst v3.94.0. Deze levering bevat v3.94.1 tot en
+met v3.97.0. Een keer herstarten volstaat.
 
+=====================================================================
 TE KOPIEREN naar config/custom_components/energy_management_system/
+=====================================================================
 
+    const.py
     coordinator.py
-    dashboard_template.yaml    kaart toont nu bruikbare paren
+    dashboard_template.yaml       LET OP: dashboard is gewijzigd
+    diagnostics.py
+    sensor.py
+    solar_forecast.py
     manifest.json
-    bestandscontrole.json
+    bestandscontrole.json         hoort bij deze versie - anders meldt
+                                  de integratie zelf "onvolledige
+                                  installatie"
 
-NAAR DE REPO
+=====================================================================
+NAAR DE REPO (draaien niet mee in Home Assistant)
+=====================================================================
 
-    README.md, CHANGELOG.md
+    README.md
+    CHANGELOG.md
     dashboards/energy_management_system_dashboard.yaml
-    tests/test_helderheid_ijklijn.py      aangevuld
-    tests/test_verkooptoets_zonveld.py    nieuw
+    tests/   31 bestanden, waarvan 16 nieuw
 
-WAT ER GEBEURT NA INSTALLATIE
+=====================================================================
+TE VERWIJDEREN uit de repo
+=====================================================================
 
-De twaalf bewaarde paren worden overgeslagen: oud formaat, en berekend
-tegen een ijklijn die toen te laag stond. De teller begint op nul. De
-IJKLIJN zelf blijft staan - die 327 metingen over acht bakjes lopen
-gewoon door.
+    tests/test_verkoop_bodem.py
+    tests/test_steelstofzuiger_charging.py
 
-De status gaat van "indicatief" naar "onvoldoende data". Dat is een
-correctie: bij een gevuld bakje van de drie viel er niets te lezen.
+Die laadden al niet meer op v3.91.0 en braken de hele verzameling af.
+Een ZIP met alleen wijzigingen kan geen verwijderingen bevatten, dus
+deze twee moeten met de hand weg.
 
-De verkooptoets levert `zon_hele_dag_kwh`, `zon_opgewekt_kwh` en
-`zon_nog_te_komen_kwh` in plaats van `verwachte_zon_kwh`. Als je die
-oude sleutel ergens in een eigen automatisering of sjabloon gebruikt,
-moet die mee - in het dashboard komt hij niet voor.
+=====================================================================
+WAT ER VERANDERT IN BEDRIJF
+=====================================================================
+
+DE STURING
+
+  - De reservebodem werkt nu op alle vier de plekken. Op dagen met een
+    optimistische zonvoorspelling blijft er ongeveer 1,3 kWh staan die
+    eerder naar het net ging.
+  - De kwartierplanning verkoopt 's avonds niet meer tot leeg.
+  - De verkooptoets houdt de bodem aan.
+
+DE MELDINGEN
+
+  - "'n Apparaat is klaor" heet nu "Vaatwasser klaor" - de titel noemt
+    het apparaat, het bericht ook.
+  - De moduswissel heet "Accu: ontladen" in plaats van "De stand is
+    veranderd".
+  - De weerbronmelding zegt welke bron gevolgd wordt en waarom, en
+    verschijnt vaker: zodra er gekozen wordt, niet pas bij 40
+    procentpunt verschil. Dat is met opzet.
+
+DE TIJDLIJN
+
+  - Een wc-bezoek 's nachts knipt de nacht niet meer in stukken.
+  - Om 07:00 slaat de staat niet meer om naar "weg" terwijl er iemand
+    onder de douche staat.
+
+HET DASHBOARD
+
+  - Nieuwe kaart op Weerbronnen: "Heldere-hemel-ijklijn".
+  - De proefkaart smart_charging heeft een kolom "Piek hierna" erbij en
+    "Verbruik" eraf.
+  - De statuskaart herhaalt het aandachtspunt eronder niet meer.
+  - "Haalt de accu het?" noemt nu bij welk venster elk getal hoort.
+  - Op detail-advies is een dubbele kaart verwijderd.
+
+NIEUW EN ALLEEN METEND (stuurt niets)
+
+  - Heldere-hemel-ijklijn: leert uit je eigen paneelopbrengst wat een
+    wolkeloze hemel geeft, en scoort de weerbronnen daarop.
+  - Powercalc-proef: meet of het aftrekken van de geschatte
+    verlichting het residu rustiger maakt voor NILM.
+
+  Allebei staan ze weken op "onvoldoende data" met daarbij wat er
+  ontbreekt. Dat is de bedoeling, geen storing. `mag_regelen` blijft
+  false tot er bewijs is, en aanzetten blijft handwerk.
+
+=====================================================================
+LET OP NA DE HERSTART
+=====================================================================
+
+  - De twaalf bewaarde helderheidsparen worden overgeslagen: oud
+    formaat, berekend tegen een te lage ijklijn. De teller begint op
+    nul. De IJKLIJN zelf blijft staan.
+  - De capaciteitskaart toont geen degradatiepercentage meer. Dat zou
+    0% zijn geweest en dat is geen meting - er staat nu uitleg waarom.
+  - De verkooptoets levert `zon_hele_dag_kwh`, `zon_opgewekt_kwh` en
+    `zon_nog_te_komen_kwh` in plaats van `verwachte_zon_kwh`. Gebruik
+    je die oude sleutel in een eigen automatisering, dan moet die mee.
+
+3479 tests groen.

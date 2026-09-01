@@ -95,6 +95,27 @@ def _ongezette_attributen(klasse: ast.ClassDef, bron: str) -> list[str]:
             else:
                 gelezen.add(n.attr)
 
+    # v3.96.0: een klasse-attribuut met een beginwaarde telt ook.
+    #
+    # `_nachtrust_onderbroken_sinds: datetime | None = None` staat op de
+    # klasse en niet in `__init__` - omdat die op de ratel van v3.35.0
+    # staat. Zo'n veld IS geinitialiseerd; deze scan keek alleen naar
+    # `__init__`, net als in v3.58.0 met de hulpfuncties.
+    gezet |= {
+        n.target.id
+        for n in klasse.body
+        if isinstance(n, ast.AnnAssign)
+        and isinstance(n.target, ast.Name)
+        and n.value is not None
+    }
+    gezet |= {
+        doel.id
+        for n in klasse.body
+        if isinstance(n, ast.Assign)
+        for doel in n.targets
+        if isinstance(doel, ast.Name)
+    }
+
     # Methoden en eigenschappen zijn geen toestand.
     namen = {
         n.name

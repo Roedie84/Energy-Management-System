@@ -84,9 +84,21 @@ def test_the_plural_in_t_is_correct_dialect():
 
 def test_the_dutch_title_uses_the_right_participle():
     """"De stand is verandert" moet "veranderd" zijn - voltooid deelwoord
-    na "is", geen persoonsvorm."""
+    na "is", geen persoonsvorm.
+
+    v3.95.0: die vaste titel bestaat niet meer. Gemeld: "is het mogelijk
+    dat ik alleen een korte titel krijg? Waarin kort kan zien naar welke
+    stand?" De moduswissel bouwt zijn titel nu op - "Accu: ontladen" -
+    en verliest die niet meer in de vertaling.
+
+    De spellingsregel geldt nog wel voor elke titel die er WEL staat.
+    """
     from custom_components.energy_management_system.const import (
         ACHTERHOEKS_TITELS,
     )
 
-    assert ACHTERHOEKS_TITELS["mode_change"] == "De stand is veranderd"
+    assert "mode_change" not in ACHTERHOEKS_TITELS
+
+    fout = [t for t in ACHTERHOEKS_TITELS.values() if "is verandert" in t]
+
+    assert not fout, fout

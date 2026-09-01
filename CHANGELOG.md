@@ -21885,3 +21885,436 @@ de planopname, de handmatige ingrepen, de MPC-vergelijking — houden hun
 naam: daar gáát het om een voorspelling.
 
 **Volledige testsuite**: 3430 tests, allemaal groen.
+
+## v3.95.0 — Een korte titel bij de moduswissel, en een slapende wasmachine
+
+### De titel zei niet naar welke stand
+
+**Gemeld**: "De stand is veranderd (...) is het mogelijk dat ik alleen
+een korte titel krijg? Waarin kort kan zien naar welke stand?"
+
+De Nederlandse titel bevatte de stand al — `Accu naar smart_discharging`
+— maar `ACHTERHOEKS_TITELS` verving hem door één vaste zin per soort.
+
+**Dat is dezelfde fout als v3.93.1, twee dagen na de regel die daar zelf
+is opgeschreven**: "een vaste titel per soort kan alleen als er ook maar
+één boodschap per soort is." Ik heb die regel toen op twee soorten
+toegepast en de rest laten staan, terwijl ik in dezelfde ronde had
+opgesomd welke soorten een opgebouwde titel hadden. Vier stonden er nog:
+
+- `mode_change` — "Accu naar {stand}"
+- `device_drift` — "Mogelijk defect: {apparaat}" (welk apparaat?)
+- `appliance_cheap_moment` — "Goedkoop moment voor de {apparaat}"
+- `proefstand_rijp` — "{n} kandidaat(en) klaar om mee te doen"
+
+Alle vier zijn uit de vaste titels gehaald.
+
+Er staat nu een toets op die zelf uitzoekt welke soorten hun titel
+opbouwen — hij leest de aanroepen van `_dispatch_notification` en kijkt
+of `title` een letterlijke tekst is of niet. Soorten met een titel per
+ACTIE, zoals de accukoeling uit v3.1.0, zijn uitgezonderd: daar is het
+onderscheid wél gemaakt, alleen op een andere plek. Een lijst met de
+hand bijhouden is precies wat drie keer is misgegaan.
+
+En `smart_discharging` is ook met de beste vertaling geen woord dat je op
+een telefoon wil lezen. Er is een korte Nederlandse naam per stand
+bijgekomen, dus de titel luidt nu:
+
+```
+🎁⬆️ Accu: ontladen
+```
+
+### "2 entiteiten stuk" naast "Geen bijzonderheden"
+
+**Gemeld**: "Welke entiteiten zijn stuk?"
+
+Het waren `sensor.wasmachine_programma_eindtijd` en
+`binary_sensor.wasmachine_start_op_afstand`, allebei `unavailable`, en
+allebei van de wasmachine. Veel apparaatintegraties zetten hun
+entiteiten op unavailable zodra het apparaat uit staat — een
+programma-eindtijd bestaat nu eenmaal niet als er geen programma loopt.
+
+Dat verklaart ook het oplopen over drie exports op één avond: 0, 1, 2.
+Geen kapotgaande entiteiten, maar een wasmachine die aanstond, draaide en
+klaar was.
+
+De analyse noemde het terecht geen probleem, maar het getal ernaast
+suggereerde het wel. Er is een derde oordeel bijgekomen, `slaapt`, naast
+`bestaat_niet` en `geen_waarde`, met een eigen teller `aantal_slaapt`.
+Het geldt alleen voor de veertien instellingen die bij een APPARAAT
+horen; een prijssensor of accusensor zonder waarde blijft gewoon stuk,
+want daar hangt de sturing aan.
+
+**Volledige testsuite**: 3439 tests, allemaal groen.
+
+## v3.95.1 — "17% naast" terwijl het 17% te hoog was
+
+**Gemeld** met een schermafdruk van de PV/zon-kaart:
+
+> 12.8 kWh opgewekt vandaag (voorspeld 13.8). De voorspelling zit er over
+> 7 dagen gemiddeld 17% naast.
+
+Dat getal klopt. De zeven afwijkingen:
+
+```
+-1,9   -13,7   -6,6   -10,2   -41,2   +0,9   -43,9
+```
+
+Gemiddelde absolute fout 16,9, afgerond 17. Maar de gemiddelde afwijking
+MET teken is -16,7, en zes van de zeven dagen zaten eronder.
+
+"Naast" leest als spreiding: soms te hoog, soms te laag. De
+werkelijkheid is een voorspelling die stelselmatig te hoog staat — en
+dat is precies het mechanisme dat de accu in de nacht van 30 op 31
+augustus leeg trok. De reserve rekende met een dag die niet kwam.
+
+Het pijnlijke: `bias_procent` wordt al berekend, met in de code de
+opmerking "De bias zegt de RICHTING: structureel te hoog of te laag". Het
+getal lag er, het kwam alleen niet in de zin terecht. Twee getallen naast
+elkaar waarvan er één op het dashboard staat, en dat is niet degene die
+je moet weten.
+
+Ligt de bias op zeventig procent of meer van de absolute fout, dan wijst
+de fout één kant op en noemt de zin de richting:
+
+> De voorspelling zit er over 7 dagen gemiddeld 17% te hoog.
+
+Wisselt hij van kant, dan blijft "naast" staan — een richting suggereren
+die er niet is, is net zo misleidend. In de kwaliteitskaart staat er
+`eenzijdig` bij, zodat na te kijken is waar het oordeel vandaan komt.
+
+**Volledige testsuite**: 3444 tests, allemaal groen.
+
+## v3.95.2 — Laagste 19% en toch eind 10%
+
+**Gemeld** met een schermafdruk van de tegel "Haalt de accu het?":
+
+> Ja, geen kwartier zonder accu. Laagste 19%, eind 10%, € 0.8 over 26
+> uur.
+
+Een eindstand die LAGER is dan de laagste stand kan niet.
+
+Tenzij je weet dat het over twee vensters gaat, en dat stond er niet:
+
+- `laagste_soc_tot_bijladen_procent` loopt tot het volgende goedkope
+  blok. Bewust zo sinds v1.48.0: "Laagste 10% op de landingstegel ging
+  over morgenochtend laat, niet over vannacht — en dat is wel wat je
+  erin leest."
+- `eind_soc_procent` staat aan het eind van de HELE planning, hier 26
+  uur verderop.
+
+Allebei goed berekend. Naast elkaar op één regel spreken ze elkaar tegen.
+Dezelfde vorm als "17% naast" van een uur geleden: twee getallen die
+naast elkaar iets anders zeggen dan ze los betekenen.
+
+De zin noemt nu het venster:
+
+> Ja, geen kwartier zonder accu tot het bijladen. Laagste 19% tot het
+> bijladen, 10% na 26 uur — dat is de ondergrens zelf, dus zonder marge.
+> EUR 0.8 over 26 uur.
+
+### En dat laatste stukje is er ook bij gekomen
+
+Die 10% is de harde ondergrens. "Ja" met nul marge aan het eind is een
+ander antwoord dan "Ja" met ruimte over, en dat verschil hoort er te
+staan. Eindigt de planning boven de ondergrens, dan blijft die
+toevoeging weg.
+
+### De zin stond in het sjabloon
+
+Waar hij niet te toetsen was — een Jinja-regel van vierhonderd tekens met
+de logica erin verweven. Hij staat nu in `haalt_de_accu_het_zin()` met
+zes toetsen eronder; het sjabloon haalt alleen nog de tekst op en zet er
+vetdruk in. Dat is dezelfde reden als bij structuurscan 19: logica in een
+dashboardveld gaat stil kapot.
+
+**Volledige testsuite**: 3450 tests, allemaal groen.
+
+## v3.95.3 — Hetzelfde aandachtspunt twee keer onder elkaar
+
+**Gemeld** met een schermafdruk van de landingspagina:
+
+```
+⚠️ 1 aandachtspunt(en)
+5 onverwachte tekort-dag(en) in de laatste 7 dagen. Tik voor alle details.
+
+5 onverwachte tekort-dag(en) in de laatste 7 dagen.
+```
+
+Twee kaarten onder elkaar, dezelfde zin.
+
+De bovenste is een samenvattingskaart: het aantal, plus de eerste ZIN van
+het eerste punt. De onderste somt alle punten op. Bij één punt van één
+zin zijn die identiek — en dat is precies de situatie waarin je zo'n
+kaart het meest bekijkt.
+
+Een samenvatting hoort samen te vatten. De onderregel geeft nu het aantal
+en de verdeling, en laat de inhoud aan de kaart eronder:
+
+```
+⚠️ 1 aandachtspunt(en)
+1 aandachtspunt(en). Tik voor alle details.
+```
+
+Zijn er ook informatieve regels, dan worden die apart geteld — anders
+lijkt het aantal te laag tegenover wat eronder staat. En bij nul punten
+verdwijnt "Tik voor alle details", want dat stuurde je naar een lege
+pagina.
+
+Ook deze zin stond in het sjabloon, met `p[0].split('.')[0]` als logica.
+Hij staat nu in `statuskop_zin()` met vijf toetsen eronder. Derde keer
+vandaag dat een dashboardregel logica bleek te bevatten die nergens werd
+getoetst.
+
+**Volledige testsuite**: 3455 tests, allemaal groen.
+
+## v3.95.4 — Alle kaarten nagelopen
+
+**Gevraagd**: "Kun je alle kaarten nakijken?"
+
+282 kaarten over 32 pagina's, mechanisch nagelopen op de fouten van deze
+avond.
+
+### Wat er schoon was
+
+- **Verwijzingen.** 70 unieke combinaties van sensor en attribuut, alle
+  70 bestaan. Vier leken te ontbreken (`kandidaat_naam`,
+  `kandidaat_vermogen_w`, `bevestiging_nodig`, `verbetermogelijkheden`)
+  maar komen uit `button.py` of uit een geneste dict.
+- **Dubbele inhoud.** Op één pagina na geen twee kaarten die hetzelfde
+  tonen. Die ene was de landingspagina uit v3.95.3.
+
+### Wat er niet schoon was
+
+`detail-perioden` gebruikt `{% set g = ... %}` twee keer in hetzelfde
+sjabloon, met een andere betekenis: eerst de grootheden, verderop het
+gemiddelde per dag. Het gáát goed omdat de eerste lus al klaar is
+voordat de tweede toekenning komt — maar dat is geen eigenschap van de
+code, dat is geluk met de volgorde. Hernoemd naar `gem`.
+
+### En een ratel op sjabloonlogica
+
+Alle drie de fouten van vanavond zaten in een Jinja-sjabloon en niet in
+de code:
+
+- "Laagste 19%, eind 10%" — twee vensters naast elkaar (v3.95.2)
+- Hetzelfde aandachtspunt twee keer, door `p[0].split('.')[0]` naast een
+  lus over dezelfde lijst (v3.95.3)
+- De dubbele `g` hierboven
+
+Een sjabloon draait alleen in Home Assistant, faalt daar stil, en er
+staat geen toets onder. Dezelfde reden als structuurscan 19.
+
+De ratel telt per pagina hoeveel BESLISSINGEN er in een sjabloon staan —
+`if`, `for`, `split`, afronden, rekenen met getallen — en laat dat niet
+groeien. Opmaken is prima; kiezen wát er getoond wordt en rekenen hoort
+in de coordinator, met een toets eronder. De grenzen zijn gemeten op
+v3.95.4 en mogen alleen omlaag.
+
+Er staat een tweede toets naast die controleert dat de ratel geen
+pagina's bewaakt die niet meer bestaan, en een derde op hergebruikte
+variabelenamen.
+
+### Wat deze ronde NIET oplevert
+
+De drie echte fouten van vanavond waren geen van drieën met een scan te
+vinden: het waren getallen die klopten met een label dat iets anders
+beloofde. Dat vergt lezen, en dat heb ik voor twaalf zware sjablonen
+gedaan — niet voor alle 282 kaarten. Wat ik daar zag, zag er goed uit,
+maar dat is een zwakkere uitspraak dan "nagekeken".
+
+**Volledige testsuite**: 3458 tests, allemaal groen.
+
+## v3.95.5 — De rest van de kaarten gelezen
+
+**Gevraagd**: "ja graag de rest ook controleren."
+
+Alle 32 pagina's doorgelezen, niet alleen mechanisch getoetst. Drie
+vondsten.
+
+### Twee meldingen met dezelfde naam
+
+Op de meldingenpagina stonden twee schakelaars met exact dezelfde tekst:
+
+```
+Accu haalt de nacht niet   ... demping 60 min
+Accu haalt de nacht niet   ... demping 180 min
+```
+
+Het zijn twee verschillende meldingen:
+
+- `plan_tekort` — "Accu haalt de nacht **mogelijk** niet": de
+  kwartierplanning voorziet dat de woning aan het net komt
+- `battery_wont_last_night` — "Accu haalt de nacht niet": de
+  overnachtingsbehoefte is groter dan wat er in de accu zit
+
+De kaart van `plan_tekort` had het woord "mogelijk" verloren. Daarmee
+zijn de twee niet uit elkaar te houden, en weet je bij het aantikken niet
+wat je uitzet.
+
+Een tweede kaart was ook afgedwaald: `plan_verkoop_geblokkeerd` heet
+"Verkopen geblokkeerd voor de woning" en stond op het dashboard als
+"Verkopen geblokkeerd".
+
+De namen op de kaarten zijn met de hand overgeschreven uit
+NOTIFICATION_TYPES. Er staat nu een toets die ze vergelijkt, plus één die
+controleert dat geen twee kaarten dezelfde tekst dragen.
+
+### Een kaart die er twee keer stond
+
+Op `detail-advies` stond "Zelflerende waarden" twee keer, letterlijk
+identiek: bovenaan als samenvatting en verderop nog eens tussen de
+modules. Dat is het patroon van de landingspagina uit v3.95.3, maar dan
+volledig — geen halve overlap maar dezelfde kaart. Verwijderd, met een
+toets eronder.
+
+### Een variabele die zichzelf overschreef
+
+Al gemeld in v3.95.4: `detail-perioden` gebruikte `{% set g = ... %}`
+twee keer met een andere betekenis.
+
+### Wat er verder in orde was
+
+De 70 verwijzingen naar sensoren en attributen kloppen allemaal. Geen
+enkele andere pagina toont hetzelfde twee keer. De getallen die ik heb
+nagelopen dragen labels die zeggen wat ze zijn — met één kanttekening:
+`reserve_shortfall_days` heet op de verlooppagina "Netimport-dagen (7d)"
+en in het aandachtspunt "onverwachte tekort-dag(en)". Twee namen voor
+hetzelfde getal, allebei correct, op verschillende pagina's. Dat is
+verwarrend maar niet fout, en samenvoegen raakt de tekst van een melding
+die je kent — dus laten staan, wel opgeschreven.
+
+**Volledige testsuite**: 3462 tests, allemaal groen.
+
+## v3.96.0 — Een wc-bezoek knipt de nacht niet meer in stukken
+
+**Gevraagd**, met de aanwezigheidstijdlijn erbij: "Normaal slapen we op
+weekdagen van ongeveer 23:00 tot 06:00 echter gaat er wel eens iemand
+snachts naar de wc, hoe kunnen we dit borgen?"
+
+### Het middenstuk
+
+```
+27-08  02:49-06:16 slaapt   06:16-06:48 thuis (32 min)
+28-08  01:33-02:27 slaapt   02:27-02:59 thuis (32 min)
+30-08  00:41-03:04 slaapt   03:04-03:44 thuis (40 min)
+```
+
+Die blokken van 30 tot 40 minuten zijn geen wakker liggen. Het zijn twee
+minuten lopen naar de wc, plus de dertig minuten stilte die daarna nodig
+zijn voordat de staat terugvalt.
+
+De oorzaak staat in de volgorde van `_update_presence`. Eerst komt "was
+er recent beweging?" — en dat is `thuis`. Pas daarna komen de
+slaapregels. Elke beweging beëindigde de nacht dus onmiddellijk.
+
+Een korte onderbreking tijdens een lopende nacht houdt de staat nu op
+`slaapt`. Houdt de beweging langer dan twintig minuten aan, dan is er
+iemand op en eindigt de nacht alsnog — ruim boven een wc-bezoek, ruim
+onder het opstaan. Wordt het eerder weer stil, dan is de onderbreking
+voorbij en begint de teller opnieuw: twee wc-bezoeken in één nacht
+tellen niet bij elkaar op.
+
+### En de andere kant
+
+```
+27-08  07:00-08:01  weg (62 min)
+29-08  07:00-07:53  weg (53 min)
+30-08  07:00-07:37  weg (38 min)
+```
+
+Drie keer exact 07:00. Dat is geen sensor maar `PRESENCE_NIGHT_END_HOUR`.
+Op dat tijdstip vervalt de nachtregel, en dan valt een stilte van dertig
+minuten door naar "weg" — terwijl er iemand onder de douche staat. De
+klok trekt daar een conclusie waar het bewijs ontbreekt.
+
+Kwam de staat van een nacht, dan is stilte pas afwezigheid als hij
+negentig minuten duurt. Lang genoeg om een ochtendroutine uit te
+sluiten, en `slaapt` is bovendien de veilige aanname: dan blijft de
+nachtreserve staan. Wie na het opstaan werkelijk vertrekt, telt na
+anderhalf uur gewoon als weg.
+
+### Structuurscan 13 leerde iets bij
+
+Het nieuwe tijdstempel staat als klasse-attribuut en niet in `__init__`,
+want die staat op de ratel van v3.35.0. De scan op
+"attributen die gelezen worden maar niet in `__init__` staan" sloeg
+daarop aan, terwijl zo'n veld met beginwaarde wel degelijk
+geïnitialiseerd is. Dezelfde correctie als in v3.58.0, toen de scan de
+hulpfuncties van `__init__` leerde kennen.
+
+### Wat dit niet doet
+
+Het leert je slaaptijden niet. Je zegt zelf 23:00 tot 06:00 op
+weekdagen; de code gebruikt een vast nachtvenster van 22:00 tot 07:00 en
+weet niets van weekdagen tegenover weekend. Dat kan beter, en de
+gegevens liggen er — 119 overgangen — maar dat is een aparte ronde, en
+één die begint met meten of het patroon werkelijk zo strak is.
+
+**Volledige testsuite**: 3470 tests, allemaal groen.
+
+## v3.97.0 — Powercalc als proefstandkandidaat
+
+**Gevraagd**: "Deze integratie heb ik ook, kunnen we daar nog wat mee" —
+met sensoren als `sensor.eetkamer_lamp_3_power`.
+
+### Eerst wat er NIET mee gebeurt
+
+Powercalc meet niet. Het schat vermogen uit een profielbibliotheek of
+een lineair model. Zo'n getal in de reserve, de kwartierplanning of de
+verkooptoets stoppen zou dezelfde fout zijn als `available_kwh` — een
+rekensom die als meting werd gelezen — en `gemeten_kwh`, de nominale
+sensor die als gemeten capaciteit gold. Aan de sturing verandert deze
+versie dan ook niets.
+
+### Waar het wel iets kan opleveren
+
+Het residu voor NILM. De apparaatherkenning leest het totaal van de
+meter en zoekt daarin startsprongen. Alles wat je ONAFHANKELIJK van dat
+totaal kunt verklaren, maakt de rest rustiger — en verlichting is precies
+het soort continu wisselende ruis waar een startdetectie last van heeft.
+
+### De vraag die de proef stelt
+
+Niet "klopt de schatting", maar "helpt aftrekken". Per ronde wordt een
+paar vastgelegd: het gemeten huisverbruik en het geschatte vermogen van
+alles wat Powercalc kent. Na 200 metingen wordt de spreiding van het
+residu (gemeten min geschat) vergeleken met die van het gemeten totaal
+zelf.
+
+- Wordt het residu minstens 10% rustiger, dan is er verlichtingsruis uit
+  gehaald en is het de moeite waard.
+- Wordt het niet rustiger, dan voegt de schatting ruis toe in plaats van
+  dat ze die wegneemt, en is aftrekken schadelijk.
+
+Dat laatste is de uitkomst die deze proef vooral moet kunnen geven. Een
+schatting die met de werkelijkheid meebeweegt lijkt nuttig; een die er
+langs beweegt, maakt het slechter — en dat verschil is van buitenaf niet
+te zien.
+
+### Hoe de sensoren gevonden worden
+
+Aan het attribuut `source_entity`, dat Powercalc op elke sensor zet die
+het maakt. Niet aan de naam: `sensor.eetkamer_lamp_3_power` is nergens
+aan te onderscheiden van een echte meter, en die twee door elkaar halen
+zou een schatting als meting laten tellen. Alleen `_power`, geen
+`_energy` — die staat in kWh en optellen bij watts levert onzin op.
+
+Het aantal gevonden sensoren staat in de export, zodat je kunt nakijken
+of hij ze allemaal ziet.
+
+### Waar het staat
+
+Betrouwbaarheid → Adviesmodules → "Powercalc als NILM-hulp", en volledig
+in de export onder `data.coordinator.powercalc_proef`. `mag_regelen`
+staat op false en blijft daar: ook als het residu rustiger wordt, is
+aanzetten een aparte keuze met een eigen ronde.
+
+### Over de release zelf
+
+v1.25.2 bevat nieuwe stroomprofielen, wat correcties in de
+modelherkenning en een aanpassing aan de child device API van Home
+Assistant 2026.9. Niets dat het EMS raakt — wel handig om te hebben
+voordat je naar HA 2026.9 gaat.
+
+**Volledige testsuite**: 3479 tests, allemaal groen.

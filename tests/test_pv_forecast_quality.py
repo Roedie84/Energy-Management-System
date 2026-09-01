@@ -173,7 +173,9 @@ def test_there_is_a_pv_topic_summary(make_coordinator, hass):
     zon = c.get_topic_summaries()["zon"]
 
     assert "15.5 kWh opgewekt" in zon["zin"]
-    assert "15% naast" in zon["zin"]
+    # v3.95.1: de fout in deze opzet wijst één kant op, en dan noemt de
+    # zin de richting. "Naast" leest als spreiding, en dat was het niet.
+    assert "15% te hoog" in zon["zin"]
 
 
 def test_the_level_follows_the_forecast_quality(make_coordinator, hass):
