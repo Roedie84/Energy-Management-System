@@ -135,6 +135,9 @@ from .const import (
     NILM_TREND_RISING_THRESHOLD_PERCENT,
     NILM_TREND_FALLING_THRESHOLD_PERCENT,
     APPLIANCE_CYCLE_COMPLETE_SUSTAINED_MINUTES,
+    APPLIANCE_CYCLE_MAX_SPREIDING_FRACTIE,
+    APPLIANCE_CYCLE_MIN_CYCLI,
+    APPLIANCE_CYCLE_MIN_LEARN_MINUTES,
     WATER_USAGE_ACTIVE_THRESHOLD_L_PER_MIN,
     WATER_SESSION_COMPLETE_SUSTAINED_MINUTES,
     WATER_BOILER_ACTIVE_W,
@@ -625,6 +628,8 @@ from .const import (
     CONF_WASHING_MACHINE_END_AT,
     DEFAULT_DISHWASHER_CYCLE_KWH,
     DEFAULT_WASHING_MACHINE_CYCLE_KWH,
+    LOPEND_APPARAAT_VASTE_POST_KWH,
+    LOPEND_APPARAAT_VASTE_POST_UREN,
     DECISION_REASON_LABELS,
     SOLAR_CAPTURE_FULL_MARGIN_KWH,
     SUN_AZIMUTH_TOLERANCE_DEGREES,
@@ -2638,20 +2643,41 @@ class EnergyManagementSystemCoordinator:
             return None
         return statistics.median(self.fietsladers_charge_duration_history)
 
+    @staticmethod
+    def _geleerde_cyclusduur(reeks: list[float]) -> float | None:
+        """De geleerde duur - als de reeks er een is (v3.99.3).
+
+        Zie APPLIANCE_CYCLE_MIN_CYCLI: 16, 36 en 153 hebben een mediaan
+        van 36 en dat is geen wasmachine. Pas bij vijf cycli waarvan de
+        helft binnen een kwart van de mediaan ligt, is het een duur.
+        Anders "onbekende tijd" - eerlijker dan een getal.
+        """
+        if not reeks:
+            return None
+        mediaan = statistics.median(reeks)
+        # Onder de drempel geldt de mediaan zoals sinds v0.62.0: één
+        # gemeten cyclus is beter dan geen. Vanaf de drempel moet de reeks
+        # ook bij elkaar liggen, anders is het geen duur.
+        if len(reeks) < APPLIANCE_CYCLE_MIN_CYCLI:
+            return mediaan
+        dichtbij = sum(
+            1 for d in reeks
+            if abs(d - mediaan) <= APPLIANCE_CYCLE_MAX_SPREIDING_FRACTIE * mediaan
+        )
+        if dichtbij * 2 < len(reeks):
+            return None
+        return mediaan
+
     @property
     def learned_dishwasher_cycle_duration_minutes(self) -> float | None:
         """Median cycle duration (minutes) from the RUSTEND/ACTIEF/KLAAR
         state machine (v0.63.32) - informational, and used for the
         rough "how far along" progress estimate on the sensor."""
-        if not self.dishwasher_cycle_duration_history:
-            return None
-        return statistics.median(self.dishwasher_cycle_duration_history)
+        return self._geleerde_cyclusduur(self.dishwasher_cycle_duration_history)
 
     @property
     def learned_washing_machine_cycle_duration_minutes(self) -> float | None:
-        if not self.washing_machine_cycle_duration_history:
-            return None
-        return statistics.median(self.washing_machine_cycle_duration_history)
+        return self._geleerde_cyclusduur(self.washing_machine_cycle_duration_history)
 
     # -- Forecast parsing -------------------------------------------------
 
@@ -3707,6 +3733,45 @@ class EnergyManagementSystemCoordinator:
         setattr(self, charge_started_attr, None)
         setattr(self, below_threshold_since_attr, None)
 
+    def _leer_cyclusduur(
+        self,
+        now: datetime,
+        *,
+        cycle_started_attr: str,
+        duration_history_attr: str,
+    ) -> None:
+        """Legt een afgeronde cyclusduur vast - als het er een was (v3.99.1).
+
+        Zie APPLIANCE_CYCLE_MIN_LEARN_MINUTES: zes minuten is geen was,
+        en zeven van die metingen maken van "een cyclus" acht minuten.
+        """
+        started_at = getattr(self, cycle_started_attr)
+        if started_at is None:
+            return
+        duur = (now - started_at).total_seconds() / 60
+        if duur < APPLIANCE_CYCLE_MIN_LEARN_MINUTES:
+            return
+        history = getattr(self, duration_history_attr)
+        history.append(round(duur, 1))
+        setattr(self, duration_history_attr, history[-LEARNING_HISTORY_DAYS:])
+
+    def _schoon_cyclusduren_op(self) -> None:
+        """Haalt bij het laden de niet-cycli uit de bewaarde reeksen.
+
+        De zeven metingen van 2 september blijven anders zeven dagen
+        lang de mediaan bepalen.
+        """
+        for attr in (
+            "dishwasher_cycle_duration_history",
+            "washing_machine_cycle_duration_history",
+        ):
+            reeks = getattr(self, attr, None) or []
+            setattr(
+                self,
+                attr,
+                [d for d in reeks if d >= APPLIANCE_CYCLE_MIN_LEARN_MINUTES],
+            )
+
     def _get_learned_completion_threshold_w(
         self, idle_history_attr: str, fallback_w: float
     ) -> float:
@@ -4509,9 +4574,6 @@ class EnergyManagementSystemCoordinator:
     # percentiel van wat de panelen ooit leverden - dat is bij benadering
     # een wolkeloze hemel op die stand. Alles eronder is bewolking.
 
-    # v3.97.0: (gemeten huisverbruik, geschat vermogen) per ronde.
-    powercalc_paren: list[list[float]] = []
-
     def _init_pv_leervelden(self) -> None:
         """Wat de panelen deden tegenover wat er verwacht werd (v3.94.0).
 
@@ -4529,6 +4591,9 @@ class EnergyManagementSystemCoordinator:
         self.weerbron_helderheid_paren: dict[str, list[list[float]]] = {}
         # v3.99.0: hoogste ontlaadvermogen vandaag, per stand.
         self._max_ontlaad_w_vandaag: dict[str, float] = {}
+        # v3.97.0, per exemplaar sinds v3.99.1: (gemeten huisverbruik,
+        # geschat vermogen) per ronde. Stond als lijst op de klasse.
+        self.powercalc_paren: list[list[float]] = []
         # v3.98.1: per bakje de dagen waarop gemeten is. Zonder dit is uit
         # de export niet te zien of zestig metingen één dag of tien dagen
         # beslaan.
@@ -8112,6 +8177,66 @@ class EnergyManagementSystemCoordinator:
         )
         self.schedule_persisted_state_save()
 
+    def lopend_witgoed_kwh_in_periode(
+        self, start: datetime, einde: datetime
+    ) -> float:
+        """Hoeveel van een LOPENDE cyclus valt er nog in deze periode?
+        (v3.99.3)
+
+        Vervolg op v3.99.2: daar werd de vaatwasser uit de
+        correctieverhouding gehaald, omdat viermaal het profiel over
+        vier uur een afwas van een uur tot een tekort van tien
+        kilowattuur maakte. Sindsdien telde hij voor nul. Beide fout.
+
+        Een lopende cyclus heeft een geleerde energie en een geleerde
+        duur. Wat er nog rest, wordt verspreid over de tijd die de
+        cyclus nog nodig heeft. Een oven zonder cyclusteller krijgt een
+        vaste post voor het komende uur.
+        """
+        nu = dt_util.now()
+        totaal = 0.0
+
+        def _overlap(van: datetime, tot: datetime) -> float:
+            duur = (tot - van).total_seconds()
+            if duur <= 0:
+                return 0.0
+            a, b = max(van, start), min(tot, einde)
+            return max(0.0, (b - a).total_seconds()) / duur
+
+        for naam, staat, gestart, duur_geleerd, standaard in (
+            (
+                "vaatwasser",
+                self._dishwasher_state,
+                self._dishwasher_cycle_started_at,
+                self.learned_dishwasher_cycle_duration_minutes,
+                DEFAULT_DISHWASHER_CYCLE_KWH,
+            ),
+            (
+                "wasmachine",
+                self._washing_machine_state,
+                self._washing_machine_cycle_started_at,
+                self.learned_washing_machine_cycle_duration_minutes,
+                DEFAULT_WASHING_MACHINE_CYCLE_KWH,
+            ),
+        ):
+            if staat != "actief" or gestart is None:
+                continue
+            cyclus_kwh, _ = self._cyclus_kwh(naam, standaard)
+            tot_nu = self._cyclus_energie_kwh(naam, gestart, nu) or 0.0
+            rest_kwh = max(0.0, cyclus_kwh - tot_nu)
+            if rest_kwh <= 0:
+                continue
+            verstreken_min = (nu - gestart).total_seconds() / 60
+            rest_min = max(5.0, (duur_geleerd or 60.0) - verstreken_min)
+            totaal += rest_kwh * _overlap(nu, nu + timedelta(minutes=rest_min))
+
+        bron = self.last_heavy_load_source
+        if bron in LOPEND_APPARAAT_VASTE_POST_KWH:
+            totaal += LOPEND_APPARAAT_VASTE_POST_KWH[bron] * _overlap(
+                nu, nu + timedelta(hours=LOPEND_APPARAAT_VASTE_POST_UREN)
+            )
+        return totaal
+
     def geplande_witgoed_kwh_in_periode(
         self, start: datetime, einde: datetime
     ) -> float:
@@ -11574,24 +11699,26 @@ class EnergyManagementSystemCoordinator:
         de reserve niet op gaan rekenen.
         """
         reeks = self.capacity_trend_history or []
-        if len(reeks) < PROEFSTAND_MIN_TREND_DAYS:
-            return None
-
-        # v3.92.5: de sleutel die de schrijver werkelijk gebruikt.
-        #
-        # Hier stond `r.get("bruikbaar_kwh")`. Die sleutel is nooit
-        # geschreven: `_update_proefstand` legt `datum`, `capaciteit_kwh`
-        # en `doorzet_kwh` vast. De lijst was dus altijd leeg en deze
-        # functie gaf altijd None terug - 153 dagen lang, terwijl de
-        # kaart beloofde dat er na 30 gemeten zou worden.
-        waarden = [
-            r.get("capaciteit_kwh")
-            for r in reeks[-CAPACITY_MEASURE_WINDOW_DAYS:]
-            if r.get("capaciteit_kwh")
+        # v3.99.3: kalibratieregels winnen. De dagelijkse regels zijn de
+        # nominale sensor (v3.92.5) en zeggen niets; één echte meting
+        # tussen negenentwintig nominale verdwijnt in de mediaan.
+        kalibraties = [
+            r["capaciteit_kwh"]
+            for r in reeks
+            if r.get("bron") == "kalibratie" and r.get("capaciteit_kwh")
         ]
-        if len(waarden) < PROEFSTAND_MIN_TREND_DAYS:
-            return None
-
+        if kalibraties:
+            waarden = kalibraties[-CAPACITY_MEASURE_WINDOW_DAYS:]
+        else:
+            if len(reeks) < PROEFSTAND_MIN_TREND_DAYS:
+                return None
+            waarden = [
+                r.get("capaciteit_kwh")
+                for r in reeks[-CAPACITY_MEASURE_WINDOW_DAYS:]
+                if r.get("capaciteit_kwh")
+            ]
+            if len(waarden) < PROEFSTAND_MIN_TREND_DAYS:
+                return None
         gemeten = statistics.median(waarden)
         nominaal = self._read_sensor_float(
             self.config.get(CONF_BATTERY_TOTAL_CAPACITY_SENSOR)
@@ -15712,6 +15839,28 @@ class EnergyManagementSystemCoordinator:
         if not current_hour_learned_kw or current_hour_learned_kw <= 0:
             return 1.0
 
+        # v3.99.2: een bevestigd KORTLOPEND apparaat schaalt niets.
+        #
+        # Gemeld om 13:36: "Den accu haalt de nacht neet ... 9.74 kWh
+        # neudeg", met de opmerking "waarschijnlijk komt dit omdat de
+        # vaatwasser aan staat". Klopt: 2414 W live tegen 559 W profiel,
+        # verhouding 4,3, en die vervaagt pas over vier uur. Een afwas
+        # van een uur werd zo een tekort van tien kilowattuur, en een
+        # reserve van 16,8 kWh in een accu van 8,64.
+        #
+        # v0.63.78 haalde deze apparaten al uit het "direct vertrouwen"-
+        # pad, maar de mediaan van vier metingen vangt een
+        # verwarmingsfase van twintig minuten net zo goed. Een bevestigde
+        # vaatwasser is geen verandering in het verbruiksniveau van het
+        # huis; het is een cyclus met een bekende energie. Die hoort er
+        # één keer bij (zie `_gepland_witgoed`, v1.61.0), niet als
+        # vermenigvuldiger.
+        if (
+            self.last_heavy_load_source
+            and self.last_heavy_load_source not in SUSTAINED_HEAVY_LOAD_SOURCES
+        ):
+            return 1.0
+
         if self.last_heavy_load_source in SUSTAINED_HEAVY_LOAD_SOURCES:
             # v0.63.78, reported: "Basisverbruik ... schiet tussen ca.
             # 16:00 en 17:00 omhoog door koken etc." - a known heavy
@@ -16792,6 +16941,15 @@ class EnergyManagementSystemCoordinator:
                     start, segment_end, consumption_correction_ratio
                 )
             )
+            # v3.99.3: witgoed erbij, per segment. Gepland witgoed
+            # (v1.61.0) zat alleen in de TERUGVAL van de reserve, niet in
+            # deze wandeling - "telt mee in de reserve" gold dus alleen
+            # als het uurprofiel een gat had. En lopend witgoed zat
+            # nergens, sinds v3.99.2 de correctieverhouding niet meer
+            # schaalt.
+            consumption_kwh += self.geplande_witgoed_kwh_in_periode(
+                cursor, segment_end
+            ) + self.lopend_witgoed_kwh_in_periode(cursor, segment_end)
             pv_kwh = (
                 self._estimate_pv_kwh_for_period(cursor, segment_end)
                 * efficiency_factor
@@ -17838,6 +17996,18 @@ class EnergyManagementSystemCoordinator:
         bodem_bindend = bodem_kwh > reserve_kwh
         reserve_kwh = max(reserve_kwh, bodem_kwh)
 
+        # v3.99.2: en niet boven de accu.
+        #
+        # Op 2 september 13:37 stond de reserve op 16,8 kWh in een accu
+        # van 8,64. Dat is geen reserve: de accu kan de periode dan per
+        # definitie niet overbruggen, hoeveel er ook in zit. Alles wat
+        # daarop volgde - "haalt de nacht niet", bijladen - vergeleek een
+        # voorraad met een getal dat nooit gehaald kan worden.
+        ongekapt_kwh = reserve_kwh
+        boven_capaciteit = bool(capaciteit) and reserve_kwh > capaciteit
+        if boven_capaciteit:
+            reserve_kwh = capaciteit
+
         self.last_reserve_margin_breakdown = {
             "base_percent": round((DYNAMIC_DISCHARGE_RESERVE_MARGIN - 1) * 100, 1),
             "low_solar_bonus_percent": round(low_solar_bonus_percent, 1),
@@ -17856,6 +18026,8 @@ class EnergyManagementSystemCoordinator:
             # v3.74.0: en of die bodem het is die bindt.
             "bodem_kwh": round(bodem_kwh, 3),
             "bodem_bindend": bodem_bindend,
+            "boven_capaciteit": boven_capaciteit,
+            "ongekapt_kwh": round(ongekapt_kwh, 3),
             "bodem_procent": round(RESERVE_BODEM_FRACTIE * 100, 1),
         }
 
@@ -23973,6 +24145,45 @@ class EnergyManagementSystemCoordinator:
                 meting["kwh_in"] / deel, 2
             )
 
+    def _kalibratie_naar_trend(self, now: datetime) -> None:
+        """Zet een geldige kalibratiemeting in de capaciteitstrend
+        (v3.99.3).
+
+        v3.29.0 meet tijdens een kalibratie hoeveel kWh er in gaat en
+        over welk deel van de schaal. Die meting landde in
+        `kalibratie_momentopname` en nergens anders; de trend kreeg elke
+        dag de nominale sensor. De bron bestond, de verbinding niet.
+
+        Wat er in gaat is meer dan wat er in blijft. De correctie is de
+        wortel van het geleerde rondgangsrendement - de AANNAME dat laden
+        en ontladen elk de helft van het verlies dragen. Staat erbij.
+        """
+        meting = self.kalibratie_meting or {}
+        gemeten = meting.get("gemeten_capaciteit_kwh")
+        if not gemeten:
+            return
+        sleutel = f"{meting.get('begin_soc')}-{meting.get('eind_soc')}-{meting.get('kwh_in')}"
+        reeks = self.capacity_trend_history or []
+        if any(r.get("kalibratie_sleutel") == sleutel for r in reeks):
+            return
+        rendement = (self.learned_battery_efficiency_percent or 90.0) / 100
+        laadrendement = rendement ** 0.5
+        reeks.append(
+            {
+                "datum": now.date().isoformat(),
+                "capaciteit_kwh": round(gemeten * laadrendement, 2),
+                "doorzet_kwh": None,
+                "bron": "kalibratie",
+                "kalibratie_sleutel": sleutel,
+                "begin_soc": meting.get("begin_soc"),
+                "eind_soc": meting.get("eind_soc"),
+                "kwh_in": meting.get("kwh_in"),
+                "laadrendement_aanname": round(laadrendement, 3),
+            }
+        )
+        self.capacity_trend_history = reeks[-CAPACITY_TREND_HISTORY_DAYS:]
+        self.schedule_persisted_state_save()
+
     def _leg_kalibratie_vast(
         self, now: datetime, soc_percent: float | None
     ) -> None:
@@ -23999,6 +24210,7 @@ class EnergyManagementSystemCoordinator:
             return
 
         meting = self.kalibratie_meting or {}
+        self._kalibratie_naar_trend(now)
         self.kalibratie_momentopname = {
             "moment": now.isoformat(),
             "soc_percent": soc_percent,
@@ -25959,10 +26171,12 @@ class EnergyManagementSystemCoordinator:
         duration_minutes = None
         if started_at is not None:
             duration_minutes = (now - started_at).total_seconds() / 60
+            self._leer_cyclusduur(
+                now,
+                cycle_started_attr=cycle_started_attr,
+                duration_history_attr=duration_history_attr,
+            )
             if duration_minutes > 0:
-                history = getattr(self, duration_history_attr)
-                history.append(round(duration_minutes, 1))
-                setattr(self, duration_history_attr, history[-LEARNING_HISTORY_DAYS:])
 
                 # v1.61.0: ook vastleggen wat de cyclus KOSTTE. Schatten
                 # is een noodgreep; zodra een hele cyclus gemeten is, is
@@ -27689,6 +27903,7 @@ class EnergyManagementSystemCoordinator:
         self._discard_history_from_an_older_method()
         self._migreer_dagreeks_kosten()
         self._ruim_oude_klimaatcellen_op()
+        self._schoon_cyclusduren_op()
         # v1.15.0: het oordeel over de meetkwaliteit volgt uit de
         # herstelde foutreeks. Zonder deze aanroep blijft het None tot
         # de eerste nieuwe meting, en verdwijnt het aandachtspunt na een

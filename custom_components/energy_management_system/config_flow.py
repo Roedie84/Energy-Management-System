@@ -16,6 +16,10 @@ from .const import (
     CONF_CONSUMPTION_POWER_SENSOR,
     CONF_EXPENSIVE_QUARTERS_COUNT,
     CONF_INVERT_BATTERY_POWER_SIGN,
+    CONF_BATTERY_CALENDAR_YEARS,
+    CONF_BATTERY_CYCLE_LIFE,
+    CONF_BATTERY_INVERTER_PRICE_EUR,
+    CONF_BATTERY_MODULE_PRICE_EUR,
     CONF_LOW_SOLAR_THRESHOLD_KWH,
     CONF_MANUAL_CHARGE_POWER,
     CONF_NEGATIVE_PRICE_CHARGE_POWER,
@@ -113,6 +117,10 @@ from .const import (
     CONF_SOLAR_REMAINING_TODAY_SENSOR,
     CONF_SOLAR_TODAY_FORECAST_SENSOR,
     DEFAULT_EXPENSIVE_QUARTERS_COUNT,
+    DEFAULT_BATTERY_CALENDAR_YEARS,
+    DEFAULT_BATTERY_CYCLE_LIFE,
+    DEFAULT_BATTERY_INVERTER_PRICE_EUR,
+    DEFAULT_BATTERY_MODULE_PRICE_EUR,
     DEFAULT_LOW_SOLAR_THRESHOLD_KWH,
     DEFAULT_MANUAL_CHARGE_POWER,
     DEFAULT_NEGATIVE_PRICE_CHARGE_POWER,
@@ -628,6 +636,56 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
             ): selector.NumberSelector(
                 selector.NumberSelectorConfig(
                     min=0, max=100, step=0.5, mode=selector.NumberSelectorMode.BOX
+                )
+            ),
+            # v3.99.1: de vier aannames onder de slijtageberekening.
+            #
+            # Uit de audit van 31 augustus: "6000 cycli is fabrikantopgave,
+            # 12 kalenderjaren is een aanname. Bij 4000 cycli zou de
+            # slijtage 18 ct zijn in plaats van 12." Die vier waarden
+            # bestonden als instelling, werden in de berekening gelezen,
+            # maar stonden nergens in de configuratie - dus stonden ze
+            # altijd op hun standaard, en was de aanname niet eens te
+            # corrigeren zonder de code aan te passen.
+            vol.Optional(
+                CONF_BATTERY_MODULE_PRICE_EUR,
+                default=defaults.get(
+                    CONF_BATTERY_MODULE_PRICE_EUR, DEFAULT_BATTERY_MODULE_PRICE_EUR
+                ),
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=0, max=10000, step=1, mode=selector.NumberSelectorMode.BOX
+                )
+            ),
+            vol.Optional(
+                CONF_BATTERY_INVERTER_PRICE_EUR,
+                default=defaults.get(
+                    CONF_BATTERY_INVERTER_PRICE_EUR,
+                    DEFAULT_BATTERY_INVERTER_PRICE_EUR,
+                ),
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=0, max=10000, step=1, mode=selector.NumberSelectorMode.BOX
+                )
+            ),
+            vol.Optional(
+                CONF_BATTERY_CYCLE_LIFE,
+                default=defaults.get(
+                    CONF_BATTERY_CYCLE_LIFE, DEFAULT_BATTERY_CYCLE_LIFE
+                ),
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=500, max=20000, step=100, mode=selector.NumberSelectorMode.BOX
+                )
+            ),
+            vol.Optional(
+                CONF_BATTERY_CALENDAR_YEARS,
+                default=defaults.get(
+                    CONF_BATTERY_CALENDAR_YEARS, DEFAULT_BATTERY_CALENDAR_YEARS
+                ),
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=1, max=30, step=1, mode=selector.NumberSelectorMode.BOX
                 )
             ),
         }

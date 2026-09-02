@@ -893,6 +893,30 @@ NILM_SENSOR_ATTRIBUTE_PREVIEW_LIMIT = 20
 # halverwege ten onrechte als "klaar" kunnen markeren.
 APPLIANCE_CYCLE_COMPLETE_SUSTAINED_MINUTES = 5
 
+# Korter dan dit is geen cyclus en wordt niet geleerd (v3.99.1).
+#
+# Uit de export van 2 september:
+#
+#     wasmachine   16, 8, 6, 36, 6, 153, 6   -> "geleerd": 8 minuten
+#     vaatwasser   70, 50, 52, 51, 51, 51, 50 -> geleerd: 51 minuten
+#
+# Zes minuten is een spoel- of pompslag, geen was. De ene echte cyclus
+# van 153 minuten verdween in de mediaan, en daar kwam "Klaor na
+# ongeveer 8 minuten" vandaan. Het apparaat wordt nog gewoon gemeld als
+# het klaar is; alleen de DUUR wordt niet meegeteld.
+APPLIANCE_CYCLE_MIN_LEARN_MINUTES = 15.0
+
+# Hoeveel echte cycli er nodig zijn voordat de geleerde duur GEBRUIKT
+# wordt, en hoe dicht ze bij elkaar moeten liggen (v3.99.3).
+#
+# Na opschoning bleef van de wasmachine 16, 36 en 153 over: mediaan 36,
+# spreiding 137 minuten. Dat is geen wasmachine, dat is drie losse
+# getallen. Vanaf drie cycli moet de helft binnen 25% van de mediaan
+# liggen; daaronder geldt de mediaan zoals sinds v0.62.0 - één gemeten
+# cyclus is beter dan geen.
+APPLIANCE_CYCLE_MIN_CYCLI = 3
+APPLIANCE_CYCLE_MAX_SPREIDING_FRACTIE = 0.25
+
 # Water-tabblad (v0.63.85). Bewust een lage drempel - de gebruiker wil
 # juist volledig inzicht ("wat het verbruikt"), inclusief kleinere
 # kranen en de nachtelijke waterontharder-regeneratie (een relatief kort,
@@ -1629,6 +1653,19 @@ CONF_WASHING_MACHINE_END_AT = "washing_machine_end_at_entity"
 # waarde - schatten is een noodgreep, geen uitgangspunt.
 DEFAULT_DISHWASHER_CYCLE_KWH = 1.0
 DEFAULT_WASHING_MACHINE_CYCLE_KWH = 0.8
+
+# Vaste post voor een bevestigd apparaat ZONDER cyclusteller (v3.99.3).
+#
+# Oven, kookplaat en Quooker hebben geen begin- en eindtijd; er is
+# alleen "staat aan". Dan is dit wat er in het komende uur nog bij komt.
+# Grof, maar één keer grof is beter dan viermaal het profiel over vier
+# uur (v3.99.2) of nul (v3.99.2, de andere kant).
+LOPEND_APPARAAT_VASTE_POST_KWH = {
+    "oven": 1.0,
+    "kookplaat": 0.6,
+    "quooker": 0.2,
+}
+LOPEND_APPARAAT_VASTE_POST_UREN = 1.0
 
 # Verder vooruit dan dit is de planning zelf niet betrouwbaar genoeg om
 # er een geplande cyclus in te hangen.
@@ -2559,6 +2596,12 @@ PERSISTED_PLAIN_FIELDS = (
     "helderheid_ijklijn",
     "weerbron_helderheid_paren",
     "helderheid_dagen",
+    # v3.99.1: de dagrecords van de reserve. Die overleefden een herstart
+    # alleen via twee sensoren die elk hun helft in hun attributen
+    # bewaren - en de velden uit v3.99.0 (`vermogensgrens`,
+    # `max_ontlaad_w`) stonden in geen van beide. Zie v3.42.1 voor waarom
+    # twee bronnen voor hetzelfde gegeven een slecht idee is.
+    "reserve_daily_records",
     # v3.97.0: de Powercalc-proef heeft 200 metingen nodig.
     "powercalc_paren",
     # Meldingen (v1.2.0): de aan/uit-standen zijn een gebruikerskeuze en

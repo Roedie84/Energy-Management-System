@@ -44,6 +44,14 @@ BEWUST = {
     # zodat een opruiming niet ongedaan wordt gemaakt.
     "climate_rate_history": "entiteit herstelt alleen het nieuwe formaat",
     "climate_forecast_bias_history": "staat los van de sleutelwijziging",
+    # v3.99.1: de dagrecords gaan naar de Store, want de sensoren bewaren
+    # alleen shortfall/excess en de velden uit v3.99.0 (vermogensgrens,
+    # max_ontlaad_w) gingen bij elke herstart verloren. De sensorroute
+    # blijft één keer als vangnet: bij de eerste herstart na deze versie
+    # is de Store nog leeg en zou de historie van zeven dagen anders weg
+    # zijn. De samenvoeging overschrijft niets uit de Store.
+    # Weghalen zodra de Store de records een keer heeft weggeschreven.
+    "reserve_daily_records": "vangnet voor de eerste herstart na v3.99.1",
 }
 
 

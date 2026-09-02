@@ -22533,3 +22533,237 @@ KLASSE, en een dict als klasse-attribuut wordt door alle exemplaren
 gedeeld. De losse toets slaagde, de volledige run niet. Nu per exemplaar.
 
 **Volledige testsuite**: 3503 tests, allemaal groen.
+
+
+## v3.99.1 — De hele integratie doorgelicht
+
+**Gevraagd**: "de integratie nog eens volledig, diepgaand en tot op de
+puntjes controleren. Dus niet alleen de diagnostiek maar echt alles."
+
+Zeven mechanische scans over alle bronbestanden, daarna de export van
+12:22 nagerekend. Vier vondsten, waarvan twee van mijzelf.
+
+### 1. De dagrecords overleefden een herstart maar half
+
+`reserve_daily_records` staat in geen enkele bewaarlijst. Hij overleeft
+een herstart doordat twee SENSOREN elk hun helft in hun eigen
+entiteitsattributen bewaren — de shortfall-sensor de tekortdagen, de
+excess-sensor de overschotdagen — en die bij het opstarten samenvoegen.
+Dat werkte, voor die twee velden.
+
+De velden uit v3.99.0 — `vermogensgrens` en `max_ontlaad_w` — stonden in
+geen van beide sensoren. Na elke herstart waren ze weg. Uitgerekend de
+informatie waarmee de kookpieken van de echte tekortdagen onderscheiden
+moesten worden, en dat na één herstart op de dag dat ze erbij kwamen.
+
+De records gaan nu in de Store. Structuurscan 11 sloeg meteen aan (twee
+herstelpaden voor hetzelfde veld) en terecht; de sensorroute blijft één
+keer staan als vangnet, want bij de eerste herstart is de Store nog leeg
+en zou de historie van zeven dagen anders weg zijn. Weghalen zodra de
+Store ze een keer heeft weggeschreven.
+
+Breder: 19 geleerde reeksen komen op deze manier terug — via
+entiteitsattributen in plaats van via de Store. Dat is de opzet die
+v3.42.1 al voor de kalibratie afkeurde, en het hangt bovendien aan de
+attribuutlimiet van de recorder. Werkt nu, is niet stevig. Opgeschreven,
+niet in één keer omgebouwd: dat raakt 19 sensoren tegelijk.
+
+### 2. `powercalc_paren` stond op de klasse
+
+Dezelfde fout die in v3.99.0 werd gevangen voor `_max_ontlaad_w_vandaag`,
+toen over het hoofd gezien voor dit veld uit v3.97.0. Een lijst als
+klasse-attribuut wordt door alle exemplaren gedeeld. Nu per exemplaar,
+met een toets die twee coördinators naast elkaar zet.
+
+### 3. De slijtageaannames waren niet in te stellen
+
+Uit de audit van 31 augustus: "6000 cycli is fabrikantopgave, 12
+kalenderjaren is een aanname. Bij 4000 cycli zou de slijtage 18 ct zijn
+in plaats van 12." Vier instellingen bestonden voor precies dit —
+moduleprijs, omvormerprijs, cycli, kalenderjaren — en werden in de
+berekening gelezen. Maar ze stonden nergens in de configuratie. Dus
+stonden ze altijd op hun standaard, en was de aanname niet te corrigeren
+zonder de code aan te passen.
+
+En het is de aanname die bijt. Uit de export:
+
+```
+cyclus_doorzet_kwh      51840    6000 cycli x 8,64
+kalender_doorzet_kwh    18317    12 jaar x 1526 kWh/jaar gemeten
+bindende_grens          kalender
+```
+
+Bij jouw doorzet halen de 6000 cycli pas na 34 jaar; de 12 kalenderjaren
+zijn dus de grens die telt. De 11,9 ct/kWh die overal terugkomt, rust
+volledig op dat ene getal — en dat stond nergens instelbaar. Nu wel,
+alle vier, op de instellingenpagina naast de zondrempel.
+
+### 4. "Klaor na ongeveer 8 minuten" — het getal was al fout
+
+```
+wasmachine   16, 8, 6, 36, 6, 153, 6    -> "geleerd": 8 minuten
+vaatwasser   70, 50, 52, 51, 51, 51, 50 -> geleerd: 51 minuten
+```
+
+De vaatwasser leert netjes. De wasmachine "leert" acht minuten omdat
+vijf van de zeven metingen geen wascyclus zijn: zes tot zestien minuten
+is een spoel- of pompslag. De ene echte cyclus van 153 minuten verdwijnt
+in de mediaan.
+
+Dit is de melding waarover op 31 augustus werd geklaagd. De titel is in
+v3.93.1 gerepareerd; het getal erin was nog steeds onzin. Een cyclus
+korter dan een kwartier wordt niet meer geleerd — het apparaat wordt
+gewoon gemeld als het klaar is, alleen de DUUR telt niet mee. De
+bewaarde reeksen worden bij het laden opgeschoond; van de wasmachine
+blijven 16, 36 en 153 over.
+
+### Wat er verder in orde bleek
+
+- Vertalingen: `strings.json`, `nl.json` en `en.json` hebben identieke
+  sleutels.
+- Diensten: alles in `services.yaml` is geregistreerd, en omgekeerd.
+- Twee `except Exception: pass` — beide terecht: een logopvanger mag
+  nooit zelf breken, en het weghalen van een Repairs-melding is best
+  effort.
+- 617 van de 622 constanten worden gebruikt. De vijf andere zijn
+  restanten, geen fouten.
+- De vier kijkvelden lopen gelijk met hun sensoren. `available_kwh` is
+  nog steeds exact `(SoC - 10) / 100 x 8,64`, bij 62% net zo als bij 17.
+- De zonvelden van de verkooptoets tellen op: 5,9 + 9,4 = 15,3.
+
+En twee valse treffers van mijn eigen scans, opgeschreven zodat ze de
+volgende keer niet als vondst gelden: de dienstenscan miste de
+registraties omdat die over meerdere regels staan, en "vandaag",
+"helder", "opgelost" en "onbekend" bleken woorden in commentaar, geen
+bewaarde velden.
+
+**Volledige testsuite**: 3510 tests, allemaal groen.
+
+
+## v3.99.2 — Een afwas is geen tekort van tien kilowattuur
+
+**Gemeld** om 13:36:
+
+> Den accu haalt de nacht neet. D'r is 5.27 kWh beschikbaor, terwiel er
+> 9.74 kWh neudeg is om tot 't goedkope blok te overbruggen. Er wödt zo
+> neudeg bi-j-elaojen.
+
+Met de opmerking: "Waarschijnlijk komt dit omdat de vaatwasser aan
+staat." Dat klopt precies.
+
+### Nagerekend
+
+```
+huisverbruik nu               2414 W     (vaatwasser, bevestigd)
+geleerd profiel uur 13         559 W
+verhouding                    4,3x
+diepste tekort                10,39 kWh
+reserve na 61,6% marge        16,80 kWh  accu: 8,64 kWh
+volgende goedkope blok        morgen 12:15, 23 uur verderop
+```
+
+De correctieverhouding — live verbruik gedeeld door het geleerde
+uurprofiel — vervaagt over vier uur, maar de eerste uren tellen bijna
+vol. Viermaal het middagverbruik is meer dan de zon van een bewolkte
+middag dekt, en dus telt de wandeling de hele middag als tekort, en
+daarna de nacht erbovenop. Zo werd een afwas van een uur een tekort van
+tien kilowattuur, en een reserve van bijna twee accu's.
+
+v0.63.78 had de vaatwasser al uit het "direct vertrouwen"-pad gehaald
+("een kooksessie duurt korter dan een uur"). Maar de mediaan van vier
+metingen vangt een verwarmingsfase van twintig minuten net zo goed, en
+dan is de uitkomst hetzelfde.
+
+### Wat er verandert
+
+**Een bevestigd kortlopend apparaat schaalt het profiel niet.** Een
+vaatwasser is geen verandering in het verbruiksniveau van het huis; het
+is een cyclus met een bekende energie. Die hoort er één keer bij — zoals
+`_gepland_witgoed` uit v1.61.0 al doet voor een uitgestelde start — en
+niet als vermenigvuldiger over vier uur. Is er geen bevestigd apparaat,
+dan geldt de verhouding nog gewoon: dan weet de code niet hoe lang het
+duurt. Airco en slaapkamerverwarming blijven schalen, want koelen duurt
+uren.
+
+**De reserve gaat niet boven de accu.** 16,8 kWh in een accu van 8,64 is
+geen reserve. Dan kan de accu de periode per definitie niet overbruggen,
+en alles wat erop volgde — "haalt de nacht niet", bijladen — vergeleek
+een voorraad met een getal dat nooit gehaald kan worden. De reserve is nu
+begrensd op de capaciteit; het ongekapte getal blijft in de uitsplitsing
+staan als `ongekapt_kwh` met `boven_capaciteit: true`, zodat te zien is
+dat de wandeling ergens uit de bocht vloog.
+
+### Wat er niet is opgelost
+
+De lopende vaatwasser telt nu voor nul in plaats van voor vier uur
+viermaal het profiel. Beide zijn fout; nul is minder fout. De eerlijke
+oplossing — de resterende cyclusenergie er één keer bij optellen — vergt
+dat de code weet hoever de cyclus is, en dat is een aparte ronde.
+
+En de melding zelf zegt "er wordt zo nodig bijgeladen" — om half twee
+'s middags, voor een blok van morgenmiddag. Of dat bijladen ooit heeft
+plaatsgevonden is uit de export niet op te maken. Als de accu vanavond
+onverwacht vol zit, is dat waar het vandaan komt.
+
+**Volledige testsuite**: 3515 tests, allemaal groen.
+
+
+## v3.99.3 — Drie van de vier openstaande punten
+
+**Gevraagd**: "Kunnen we dit nu niet oppakken dan?"
+
+### 1. De lopende vaatwasser telt weer mee — één keer, met wat er rest
+
+v3.99.2 haalde de vaatwasser uit de correctieverhouding: viermaal het
+profiel over vier uur was fout. Maar nul was ook fout. Een lopende
+cyclus heeft een geleerde energie en een geleerde duur; wat er nog rest
+wordt nu verspreid over de tijd die de cyclus nog nodig heeft. Een oven,
+kookplaat of Quooker zonder cyclusteller krijgt een vaste post voor het
+komende uur — grof, maar één keer grof.
+
+En onderweg gevonden: `geplande_witgoed_kwh_in_periode` (v1.61.0) werd
+alleen aangeroepen in de TERUGVAL van de reserve, niet in de wandeling
+langs het diepste tekort. "Telt mee in de reserve, de verkooptoets en de
+kwartierplanning" gold dus alleen als het uurprofiel een gat had — en dat
+heeft het vrijwel nooit. Gepland én lopend witgoed zitten nu in de
+wandeling zelf, per segment.
+
+### 2. De kalibratiemeting bereikt de capaciteitstrend
+
+v3.29.0 meet tijdens een kalibratie hoeveel kWh er in de accu gaat en
+over welk deel van de schaal. Die meting landde in
+`kalibratie_momentopname` — en nergens anders. De trend waar
+`gemeten_capaciteit_kwh()` uit leest, kreeg elke dag de nominale sensor
+(v3.92.5). De bron bestond al drie maanden; de verbinding niet.
+
+Nu: een geldige meting komt als regel met `bron: kalibratie` in de trend,
+en kalibratieregels winnen van de dagelijkse nominale. Wat er in gaat is
+meer dan wat er in blijft, dus de correctie is de wortel van het
+geleerde rondgangsrendement — de aanname dat laden en ontladen elk de
+helft van het verlies dragen. Die aanname staat in de regel zelf.
+
+De kalibratie van 19 augustus telt niet: 71 naar 99 procent is 28% van
+de schaal, onder de eis van 70%. **Een volgende kalibratie moet onder de
+30% beginnen om een meting op te leveren.** Dat is de eerste keer dat er
+een echte bron voor de capaciteit is.
+
+### 3. "Klaor na ongeveer 36 minuten" is ook nog geen was
+
+Na de opschoning van v3.99.1 bleef van de wasmachine 16, 36 en 153 over.
+Mediaan 36, spreiding 137 minuten — dat zijn drie losse getallen, geen
+duur. Vanaf drie cycli moet de helft binnen een kwart van de mediaan
+liggen, anders is het "onbekende tijd". Onder de drie geldt de mediaan
+zoals sinds v0.62.0: één gemeten cyclus is beter dan geen. De vaatwasser
+(50 tot 70) blijft gewoon bekend.
+
+### 4. Niet gedaan: de negentien reeksen via sensorattributen
+
+Twee-en-twintig sensoren zetten elk hun reeks terug in
+`async_added_to_hass`, de meeste onvoorwaardelijk. Alles naar de Store
+verhuizen betekent 22 herstelpaden omzetten in "alleen als de Store leeg
+is", 22 uitzonderingen in structuurscan 11, en één fout in die 22 kost
+een reeks van weken. Er is geen symptoom. Dat is een aparte ronde met
+eigen toetsen per sensor, niet iets om vanmiddag tussen drie andere
+dingen door te doen.
+
+**Volledige testsuite**: 3529 tests, allemaal groen.

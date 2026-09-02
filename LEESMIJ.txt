@@ -1,38 +1,34 @@
-EMS v3.99.0 - alle wijzigingen sinds v3.98.0
+EMS v3.99.3 - alle wijzigingen sinds v3.99.0
 
-Bevat v3.98.1 en v3.99.0. Je draait v3.98.0, dus dit is alles wat je
-mist. Een keer herstarten volstaat.
+Bevat v3.99.1, v3.99.2 en v3.99.3. Je draait v3.99.0. Een keer herstarten.
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
 
-    const.py
-    coordinator.py
-    dashboard_template.yaml    kaart toont nu dagen per bakje
-    manifest.json
-    bestandscontrole.json
+    const.py, coordinator.py, config_flow.py, strings.json
+    translations/nl.json, translations/en.json
+    manifest.json, bestandscontrole.json
+
+Geen dashboardwijziging.
 
 NAAR DE REPO
 
     README.md, CHANGELOG.md
-    dashboards/energy_management_system_dashboard.yaml
-    tests/test_helderheid_ijklijn.py          aangevuld
-    tests/test_tekortdag_vermogensgrens.py    nieuw
-    tests/test_haalt_de_accu_het.py           aangevuld
+    tests/ - zeven bestanden, vijf nieuw
 
 WAT ER VERANDERT IN BEDRIJF
 
-1. Een kookpiek boven de ontlaadgrens telt niet meer als tekortdag.
-   Grens per stand: handmatig 1600 W, slim 2000 W. Het aantal
-   tekortdagen (nu 5 van 7) gaat waarschijnlijk omlaag, en daarmee de
-   25 procentpunt extra marge op de reserve.
-
-2. De heldere-hemel-ijklijn gaat terug naar "onvoldoende data": mijn
-   drempels telden metingen in plaats van dagen. Reken op tien dagen.
-
-3. "Haalt de accu het?" noemt de ondergrens ook bij de laagste stand.
+1. Een lopende vaatwasser telt EEN keer mee met wat er nog rest, en
+   blaast de reserve niet meer op. Gepland witgoed telt nu ook echt mee
+   in de reserve - dat deed het alleen in de terugval.
+2. De reserve gaat niet boven de accucapaciteit.
+3. De capaciteitsmeting heeft een bron: de kalibratie. Eerstvolgende
+   kalibratie onder de 30% laadstand beginnen, anders telt hij niet.
+4. Vier slijtage-instellingen op de instellingenpagina (ongewijzigd).
+5. De wasmachine meldt "onbekende tijd" tot er drie cycli zijn die bij
+   elkaar liggen. Nu is dat eerlijker dan 8 of 36 minuten.
 
 WAAR OP TE LETTEN
 
-    reserve_daily_records -> per dag "vermogensgrens" en "max_ontlaad_w"
-    per stand. Daaraan is te zien of de 1600/2000 kloppen, en welke
-    tekortdagen kookpieken waren.
+    last_reserve_margin_breakdown.boven_capaciteit - hoort false te zijn.
+    Bij een lopende vaatwasser: needed_kwh_before_margin hoort in de
+    buurt van het gewone tekort plus hooguit een kilowattuur te liggen.

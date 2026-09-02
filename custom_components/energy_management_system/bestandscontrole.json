@@ -3,12 +3,12 @@
   "brand/icon.png": "07df281da7da0080",
   "brand/icon@2x.png": "0d2e1d114f877501",
   "button.py": "ca005ec84424eb98",
-  "config_flow.py": "fc5ea34b478227b0",
-  "const.py": "e3ada213cad66831",
-  "coordinator.py": "123d3becbbde39bc",
+  "config_flow.py": "1f7934c997d183c7",
+  "const.py": "54226cb2b072cffb",
+  "coordinator.py": "8a44b6b7dd2b6ec2",
   "dashboard_template.yaml": "651b10696d73e32d",
   "diagnostics.py": "02328c6e3771317a",
-  "manifest.json": "c155d55395e9e832",
+  "manifest.json": "29c306c909111337",
   "overview_background.svg": "0839174ff8db12f7",
   "overview_svg.py": "373a87d80d7d3d37",
   "pv_model.py": "56c4410d272e7219",
@@ -16,8 +16,8 @@
   "sensor.py": "5ee22469c094722b",
   "services.yaml": "173dafdcca29d160",
   "solar_forecast.py": "67bbe5c6a3ffef7b",
-  "strings.json": "279cb4278b79aea3",
+  "strings.json": "b2e061c06133be43",
   "switch.py": "bdd615e8672eb7ad",
-  "translations/en.json": "fc9322b0a57f1761",
-  "translations/nl.json": "b2234a639f8b78d9"
+  "translations/en.json": "4a2327c166177d68",
+  "translations/nl.json": "00dbc3d261b3d5df"
 }

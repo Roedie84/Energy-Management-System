@@ -95,7 +95,11 @@
           "battery_max_discharge_power_entity": "Battery maximum discharge power (optional)",
           "dishwasher_energy_sensor_entity": "Dishwasher energy meter (optional)",
           "washing_machine_energy_sensor_entity": "Washing machine energy meter (optional)",
-          "phase_power_sensor_entities": "Power per phase (optional, in order L1 L2 L3)"
+          "phase_power_sensor_entities": "Power per phase (optional, in order L1 L2 L3)",
+          "battery_module_price_eur": "Battery module price (EUR) - for wear cost per kWh",
+          "battery_inverter_price_eur": "Inverter price (EUR) - for wear cost per kWh",
+          "battery_cycle_life": "Cycle life - manufacturer figure, 6000 for the SolarFlow",
+          "battery_calendar_years": "Calendar life in years - an ASSUMPTION, not a figure"
         }
       }
     },
@@ -204,7 +208,11 @@
           "battery_max_discharge_power_entity": "Battery maximum discharge power (optional)",
           "dishwasher_energy_sensor_entity": "Dishwasher energy meter (optional)",
           "washing_machine_energy_sensor_entity": "Washing machine energy meter (optional)",
-          "phase_power_sensor_entities": "Power per phase (optional, in order L1 L2 L3)"
+          "phase_power_sensor_entities": "Power per phase (optional, in order L1 L2 L3)",
+          "battery_module_price_eur": "Battery module price (EUR) - for wear cost per kWh",
+          "battery_inverter_price_eur": "Inverter price (EUR) - for wear cost per kWh",
+          "battery_cycle_life": "Cycle life - manufacturer figure, 6000 for the SolarFlow",
+          "battery_calendar_years": "Calendar life in years - an ASSUMPTION, not a figure"
         }
       }
     },
