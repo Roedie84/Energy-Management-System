@@ -22384,3 +22384,152 @@ null toonde. Opgeschreven, niet gerepareerd: het raakt een kaart die je
 kent, en het is de moeite van een eigen ronde waard.
 
 **Volledige testsuite**: 3487 tests, allemaal groen.
+
+
+## v3.98.1 — Metingen zijn geen dagen
+
+Na 22,7 uur op v3.98.0 stond er in de export:
+
+```
+gevulde_bakjes     8 van 3        status "betrouwbaar"
+paren per bron     300 en 300     alle bruikbaar
+rangorde           thuis 62,5     openweathermap 41,7
+mag_regelen        True
+```
+
+Dat is mijn fout in het ontwerp van v3.94.0, en het is een serieuze.
+
+### Wat er misging
+
+De drempels — zestig metingen per bakje, honderd paren — waren bedoeld
+voor "weken", maar een ronde per twee minuten haalt ze in een halve dag.
+Zestig metingen uit één dag zeggen iets over die dag, niet over een
+wolkeloze hemel: het 95e percentiel van een bewolkte dinsdag is de beste
+dinsdagwolk, geen ijklijn. En driehonderd paren uit anderhalve dag
+bevatten anderhalve dag weer.
+
+Metingen binnen een dag hangen samen. Wat telt is het aantal DAGEN — en
+dat werd nergens geteld. Uit de export viel niet eens op te maken
+hoeveel dagen een bakje besloeg, want de metingen hadden geen datum.
+
+### Wat er verandert
+
+- Per bakje worden de dagen bijgehouden waarop gemeten is. Een bakje is
+  pas gevuld bij zestig metingen over **tien dagen**.
+- Elk paar krijgt een dag. Een bron krijgt pas een rangorde-score als
+  zijn paren tien dagen omspannen.
+- `dagen_per_bakje` staat in de export en op de kaart, zodat dit voortaan
+  te controleren is.
+
+De 600 paren van 1 september hebben geen dag en gaan eruit — het was toch
+één dag weer. De ijklijnmetingen zelf blijven staan; die worden alleen
+nuttiger naarmate er dagen bijkomen.
+
+### En over die uitkomst
+
+forecast_thuis 62,5 tegen openweathermap 41,7 — waarbij die laatste onder
+kansniveau zit, dus de lucht vaker omgekeerd ordent dan goed — spreekt de
+bestaande betrouwbaarheidsmeting tegen (82,0 tegen 76,5, andersom). Dat
+is precies de tegenspraak die de ijklijn moest kunnen opleveren. Maar
+één dag weer is geen bewijs, en `mag_regelen: True` na anderhalve dag was
+een fout in mijn drempels, niet een bevinding over de bronnen. Over tien
+dagen weten we het.
+
+**Volledige testsuite**: 3493 tests, allemaal groen.
+
+
+## v3.99.0 — Een kookpiek is geen tekortdag
+
+**Gevraagd**: "diepgaand kijken of er nog meer gevonden kan worden zodat
+ik maar 1x een versie hoef te installeren."
+
+### Uit het eigen logboek
+
+```
+18:56  WARNING  Unexpected grid import detected (2064W) during a
+                supposedly self-sufficient period
+                (expensive_quarter_soc_protected) - the reserve estimate
+                for today may have been too optimistic.
+```
+
+Om 18:56 trekt de keuken 2064 W. De accu levert hooguit 1600 W. Het
+verschil komt van het net — dat kan niet anders, hoeveel energie er ook
+in de accu zit. Dat is een VERMOGENSgrens, geen ENERGIEtekort.
+
+En toch telde het als tekortdag. De regel was: netimport boven 100 W in
+een zelfvoorzienende periode, klaar. Er werd niet gekeken of de accu wel
+kón leveren. Vijf van de zeven dagen stonden zo op "tekort", en die vijf
+tellen samen voor **25 procentpunt extra marge** op de reserve. De reserve
+werd dus opgehoogd om een probleem dat hij niet kan oplossen: een grotere
+reserve maakt de accu niet sterker.
+
+Een tekort is nu pas een tekort als de accu MINDER levert dan hij kan en
+er toch import is. Levert hij op zijn grens (met een marge van 100 W voor
+regelfouten), dan is de import verklaard.
+
+Welke grens dat is, hangt van de stand af. Gemeld: "in de smart modus mag
+de accu 2000W leveren, in de manual max 1600 W leveren." Handmatig
+ontladen — `expensive_quarter` en de SoC-beschermde variant — telt tegen
+de geconfigureerde 1600 W; de slimme stand tegen 2000 W, wat het apparaat
+zelf regelt. Diezelfde 1600 W die handmatig de grens is, laat slim nog
+400 W ruimte, en dan is import wél onverklaard. In het dagrecord staat
+`vermogensgrens` erbij, zodat achteraf te zien is waarom een dag geen
+tekortdag was.
+
+Ik weet niet hoeveel van die vijf dagen kookpieken waren. De nacht van 30
+op 31 augustus was een echt energietekort. Van de andere vier weet ik het
+niet, en dat is precies waarom het dagrecord die soort nu vastlegt.
+
+### "Ja" op de ondergrens
+
+```
+laagste_soc_tot_bijladen_procent   10
+eind_soc_procent                   51
+tekort_kwartieren                  0
+```
+
+"Ja, geen kwartier zonder accu" — terwijl de planning tot het bijladen
+precies op de harde ondergrens uitkomt. Mijn toets van v3.95.2 keek
+alleen naar het EIND, en dat stond op 51%. Op 10% is er nul bruikbare
+energie; dat de tabel geen tekortkwartier telt, komt doordat het huis er
+op het laatste kwartier net mee toe kan. De zin noemt de ondergrens nu
+ook als de laagste stand erop uitkomt.
+
+### Wat er verder in de export stond
+
+- **De zonvoorspelling zat gisteren 77% te LAAG**: 7,3 verwacht, 12,9
+  gekregen. Twee dagen eerder 44% te hoog. De reeks heeft nu beide
+  tekens, en de kaart zegt daarmee weer "naast" in plaats van "te hoog"
+  — de regel uit v3.95.1 doet wat hij moet. De vlakke bias blijft
+  ingehouden met "3 binnen 10% en 3 meer dan 25% ernaast". Dat is het
+  goede antwoord op een voorspelling die beide kanten op mist.
+- **Opdrachtcontrole**: 12 gelukt, 0 mislukt.
+- **De vier kijkvelden** lopen gelijk met hun sensoren.
+- `sensor.solaredge_production_energy` stond om 06:57 op `unknown`. Dat is
+  de cloudkoppeling die de dagteller 's nachts nog niet heeft; als hij
+  overdag in orde is, is het ruis.
+
+### De grens hangt van de stand af
+
+**Gemeld** na de eerste versie van deze regel: "in de smart modus mag de
+accu 2000W leveren, in de manual max 1600 W leveren."
+
+De eerste versie hield 1600 W aan voor elke stand. In de slimme stand
+regelt het apparaat zelf, en daar ligt de grens op 2000 W — dezelfde
+waarde als `inverse_max_power` op de Zendure, die in v3.55.0 al als
+"vermoedelijk fabrieksgrens" was opgeschreven. Nu per stand: handmatig de
+geconfigureerde 1600, slim 2000. Een accu op 1600 W in de slimme stand
+heeft dus nog 400 W ruimte, en import is dan wél onverklaard.
+
+**Gevraagd**: "Als het goed is kun je dit ook in de data zien." Dat kon
+niet: de export is een momentopname zonder vermogensgeschiedenis. Het
+enige spoor was die ene notitie uit v3.55.0. Vanaf nu staat per dag het
+hoogste gemeten ontlaadvermogen per stand in `reserve_daily_records`, en
+dat wordt elke ronde bijgehouden — niet alleen bij een kookpiek — zodat
+de twee grenzen uit de eigen gegevens te controleren zijn.
+
+En een fout van mij onderweg: dat veld stond eerst als dict op de
+KLASSE, en een dict als klasse-attribuut wordt door alle exemplaren
+gedeeld. De losse toets slaagde, de volledige run niet. Nu per exemplaar.
+
+**Volledige testsuite**: 3503 tests, allemaal groen.

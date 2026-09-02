@@ -1151,6 +1151,19 @@ SOLAR_RAMP_STEPS = 10
 # that day turned out too optimistic. Set above typical sensor noise.
 GRID_IMPORT_SHORTFALL_THRESHOLD_W = 100.0
 
+# Hoe ver de accu onder zijn ontlaadgrens mag zitten en toch als "op de
+# grens" telt (v3.99.0). Regelfouten van tientallen watt zijn normaal;
+# 1550 W bij een grens van 1600 is de grens.
+ONTLAADGRENS_MARGE_W = 100.0
+
+# Wat de accu in de SLIMME stand mag leveren (v3.99.0).
+#
+# Gemeld: "in de smart modus mag de accu 2000W leveren, in de manual max
+# 1600 W leveren." De handmatige grens staat in de configuratie
+# (CONF_MANUAL_DISCHARGE_POWER); de slimme grens regelt het apparaat
+# zelf en komt overeen met `inverse_max_power` op de Zendure.
+SMART_MAX_DISCHARGE_W = 2000.0
+
 # Battery cost-basis tracking (v0.63.24): the smallest available_kwh
 # change (kWh) between ticks that counts as a genuine charge/discharge
 # event, rather than sensor noise/rounding jitter - below this, the
@@ -2545,6 +2558,7 @@ PERSISTED_PLAIN_FIELDS = (
     # telling na elke herstart opnieuw en komt er nooit iets uit.
     "helderheid_ijklijn",
     "weerbron_helderheid_paren",
+    "helderheid_dagen",
     # v3.97.0: de Powercalc-proef heeft 200 metingen nodig.
     "powercalc_paren",
     # Meldingen (v1.2.0): de aan/uit-standen zijn een gebruikerskeuze en
@@ -4377,6 +4391,18 @@ HELDERHEID_MIN_GEVULDE_BAKJES = 3
 
 # Hoeveel metingen per bakje bewaard blijven.
 HELDERHEID_BAKJE_LENGTE = 400
+
+# Hoeveel DAGEN een bakje en de paren moeten omspannen (v3.98.1).
+#
+# Na 22,7 uur op v3.98.0 stond de ijklijn op "betrouwbaar" met
+# `mag_regelen: True`. Een ronde per twee minuten vult zestig metingen
+# per bakje in een halve dag - maar zestig metingen uit één dag zeggen
+# iets over die dag, niet over een wolkeloze hemel. Het 95e percentiel
+# van een bewolkte dinsdag is de beste dinsdagwolk, geen ijklijn.
+#
+# Metingen binnen een dag hangen samen. Wat telt is het aantal dagen.
+HELDERHEID_MIN_DAGEN_PER_BAKJE = 10
+HELDERHEID_MIN_DAGEN_PAREN = 10
 
 # Paren (bewolking van de bron, gemeten helderheid) per weerbron, en
 # hoeveel er nodig zijn voordat de rangorde iets zegt.

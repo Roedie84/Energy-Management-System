@@ -208,6 +208,8 @@ from .const import (
     HELDERHEID_BAKJE_GRADEN,
     HELDERHEID_BAKJE_LENGTE,
     HELDERHEID_IJKLIJN_PERCENTIEL,
+    HELDERHEID_MIN_DAGEN_PAREN,
+    HELDERHEID_MIN_DAGEN_PER_BAKJE,
     HELDERHEID_MIN_ELEVATIE_GRADEN,
     HELDERHEID_MIN_GEVULDE_BAKJES,
     HELDERHEID_MIN_METINGEN_PER_BAKJE,
@@ -255,6 +257,8 @@ from .const import (
     DEFAULT_LOW_SOLAR_THRESHOLD_KWH,
     DEFAULT_MANUAL_CHARGE_POWER,
     DEFAULT_MANUAL_DISCHARGE_POWER,
+    ONTLAADGRENS_MARGE_W,
+    SMART_MAX_DISCHARGE_W,
     DEFAULT_MIN_SOC_PERCENT,
     DEFAULT_FEEDIN_COST_EUR_PER_KWH,
     DEFAULT_FEEDIN_PRICE_ATTRIBUTE,
@@ -4523,6 +4527,12 @@ class EnergyManagementSystemCoordinator:
         # Per weerbron: (bewolking die de bron meldde, gemeten helderheid)
         # op datzelfde moment.
         self.weerbron_helderheid_paren: dict[str, list[list[float]]] = {}
+        # v3.99.0: hoogste ontlaadvermogen vandaag, per stand.
+        self._max_ontlaad_w_vandaag: dict[str, float] = {}
+        # v3.98.1: per bakje de dagen waarop gemeten is. Zonder dit is uit
+        # de export niet te zien of zestig metingen één dag of tien dagen
+        # beslaan.
+        self.helderheid_dagen: dict[str, list[str]] = {}
 
     def _lees_pv_vermogen_w(self) -> float | None:
         """Het huidige paneelvermogen, of None."""
@@ -4588,6 +4598,11 @@ class EnergyManagementSystemCoordinator:
         reeks = self.helderheid_ijklijn.setdefault(bakje, [])
         reeks.append(round(float(pv_w), 1))
         self.helderheid_ijklijn[bakje] = reeks[-HELDERHEID_BAKJE_LENGTE:]
+        dag = now.date().isoformat()
+        dagen = self.helderheid_dagen.setdefault(bakje, [])
+        if dag not in dagen:
+            dagen.append(dag)
+            self.helderheid_dagen[bakje] = dagen[-60:]
 
         # v3.94.1: de METING bewaren, niet de uitkomst.
         #
@@ -4604,7 +4619,9 @@ class EnergyManagementSystemCoordinator:
         # met terugwerkende kracht de hele geschiedenis.
         for bron, bewolking in (self.weather_ensemble_readings or {}).items():
             paren = self.weerbron_helderheid_paren.setdefault(bron, [])
-            paren.append([round(float(bewolking), 1), round(float(pv_w), 1), bakje])
+            paren.append(
+                [round(float(bewolking), 1), round(float(pv_w), 1), bakje, dag]
+            )
             self.weerbron_helderheid_paren[bron] = paren[
                 -HELDERHEID_PAREN_LENGTE:
             ]
@@ -4620,9 +4637,12 @@ class EnergyManagementSystemCoordinator:
         """
         uit = []
         for paar in self.weerbron_helderheid_paren.get(bron) or []:
-            if len(paar) != 3:
+            # v3.98.1: alleen paren MET een dag. De 600 van 1 september
+            # hebben er geen en zijn niet te plaatsen; het was toch een
+            # dag weer.
+            if len(paar) != 4:
                 continue
-            bewolking, pv_w, bakje = paar
+            bewolking, pv_w, bakje, _dag = paar
             metingen = self.helderheid_ijklijn.get(str(bakje))
             if not metingen or len(metingen) < HELDERHEID_MIN_METINGEN_PER_BAKJE:
                 continue
@@ -4655,6 +4675,14 @@ class EnergyManagementSystemCoordinator:
         """
         paren = self._helderheidsparen(bron)
         if len(paren) < HELDERHEID_MIN_PAREN:
+            return None
+        # v3.98.1: en over genoeg DAGEN. Driehonderd paren uit anderhalve
+        # dag bevatten anderhalve dag weer.
+        dagen = {
+            p[3] for p in (self.weerbron_helderheid_paren.get(bron) or [])
+            if len(p) == 4
+        }
+        if len(dagen) < HELDERHEID_MIN_DAGEN_PAREN:
             return None
         eens = 0
         totaal = 0
@@ -4699,6 +4727,8 @@ class EnergyManagementSystemCoordinator:
             bakje
             for bakje, metingen in (self.helderheid_ijklijn or {}).items()
             if len(metingen) >= HELDERHEID_MIN_METINGEN_PER_BAKJE
+            and len((self.helderheid_dagen or {}).get(bakje) or [])
+            >= HELDERHEID_MIN_DAGEN_PER_BAKJE
         ]
         scores = {
             bron: self.weerbron_rangorde_score(bron)
@@ -4719,8 +4749,9 @@ class EnergyManagementSystemCoordinator:
             ontbreekt = (
                 f"{len(gevuld)}/{HELDERHEID_MIN_GEVULDE_BAKJES} bakjes "
                 f"zonnestand hebben {HELDERHEID_MIN_METINGEN_PER_BAKJE} "
-                "metingen. De zonnestanden schuiven met het seizoen, dus "
-                "dit duurt weken."
+                f"metingen over {HELDERHEID_MIN_DAGEN_PER_BAKJE} dagen. "
+                "Metingen binnen een dag hangen samen; wat telt is het "
+                "aantal dagen, en de zonnestanden schuiven met het seizoen."
             )
         elif not becijferd:
             ontbreekt = (
@@ -4756,6 +4787,12 @@ class EnergyManagementSystemCoordinator:
             "beschikbaar": bool(gevuld),
             "status": status,
             "gevulde_bakjes": len(gevuld),
+            "dagen_per_bakje": {
+                bakje: len(dagen)
+                for bakje, dagen in sorted(
+                    (self.helderheid_dagen or {}).items(), key=lambda kv: float(kv[0])
+                )
+            },
             "bakjes_nodig": HELDERHEID_MIN_GEVULDE_BAKJES,
             "metingen_per_bakje_nodig": HELDERHEID_MIN_METINGEN_PER_BAKJE,
             "helderheid_nu": self.gemeten_helderheid(),
@@ -18795,6 +18832,12 @@ class EnergyManagementSystemCoordinator:
             kop = "Ja, geen kwartier zonder accu tot het bijladen."
 
         staart = f"Laagste {laagste}% tot het bijladen"
+        # v3.99.0: de laagste stand OP de ondergrens is net zo goed nul
+        # marge als een eindstand erop. Uit de export van 2 september:
+        # laagste 10, eind 51, "Ja" - terwijl het huis tot het bijladen
+        # op het laatste kwartier net toe kon.
+        if bodem is not None and laagste is not None and laagste <= bodem:
+            staart += " - dat is de ondergrens zelf, dus zonder marge"
         if eind is not None:
             staart += f", {eind}% na {uren} uur"
             # v3.95.2: eindigen OP de ondergrens is een ander antwoord
@@ -20029,6 +20072,64 @@ class EnergyManagementSystemCoordinator:
 
         return False
 
+    # v3.99.0: is er vandaag een kookpiek boven de ontlaadgrens gezien?
+    _vermogensgrens_gezien_today: bool = False
+    # Hoogste gemeten ontlaadvermogen vandaag, per stand. Als INSTANTIE-
+    # veld gezet in `_init_pv_leervelden`: een dict als klasse-attribuut
+    # wordt door alle exemplaren gedeeld, en dat viel in de volledige
+    # toetsrun meteen door de mand.
+
+    def _import_verklaard_door_ontlaadgrens(self, reason: str) -> bool:
+        """Levert de accu al op zijn grens? Dan is netimport geen tekort.
+
+        Uit het eigen logboek van 1 september 18:56: "Unexpected grid
+        import detected (2064W)". De keuken trok 2064 W, de accu levert
+        hooguit 1600 W, en het verschil kwam van het net - hoeveel
+        energie er ook in de accu zat. Dat is een VERMOGENSgrens, geen
+        ENERGIEtekort.
+
+        Toch telde het als tekortdag: vijf van de zeven dagen, samen goed
+        voor 25 procentpunt extra marge op de reserve. Een grotere
+        reserve maakt de accu niet sterker; de marge werd opgehoogd om
+        een probleem dat hij niet kan oplossen.
+
+        Een tekort is pas een tekort als de accu MINDER levert dan hij
+        kan en er toch import is. Regelfouten van tientallen watt zijn
+        normaal, dus de grens heeft een kleine marge.
+        """
+        battery_entity = self.config.get(CONF_BATTERY_POWER_SENSOR)
+        if not battery_entity:
+            return False
+        accu_w = self._read_sensor_float(battery_entity)
+        if accu_w is None:
+            return False
+        if self.config.get(CONF_INVERT_BATTERY_POWER_SIGN, False):
+            accu_w = -accu_w
+        # Gemeld: "in de smart modus mag de accu 2000W leveren, in de
+        # manual max 1600 W leveren." Welke grens geldt, hangt dus van
+        # de stand af waarin de accu op dit moment staat.
+        if reason == "smart_discharging":
+            grens_w = SMART_MAX_DISCHARGE_W
+        else:
+            grens_w = abs(
+                self.config.get(CONF_MANUAL_DISCHARGE_POWER)
+                or DEFAULT_MANUAL_DISCHARGE_POWER
+            )
+        op_de_grens = accu_w >= grens_w - ONTLAADGRENS_MARGE_W
+        if op_de_grens:
+            self._vermogensgrens_gezien_today = True
+        # Gevraagd: "Als het goed is kun je dit ook in de data zien." Dat
+        # kon niet - de export is een momentopname zonder
+        # vermogensgeschiedenis. Vanaf nu staat per dag het hoogste
+        # ontlaadvermogen per stand in het dagrecord, zodat de twee
+        # grenzen (1600 handmatig, 2000 slim) uit de eigen gegevens te
+        # controleren zijn.
+        stand = "slim" if reason == "smart_discharging" else "handmatig"
+        self._max_ontlaad_w_vandaag[stand] = max(
+            self._max_ontlaad_w_vandaag.get(stand, 0.0), accu_w
+        )
+        return op_de_grens
+
     def _update_shortfall_detection(
         self,
         now: datetime,
@@ -20058,6 +20159,14 @@ class EnergyManagementSystemCoordinator:
                     {
                         "date": self._shortfall_check_date.isoformat(),
                         "shortfall": self._shortfall_detected_today,
+                        # v3.99.0: was er een kookpiek boven de
+                        # ontlaadgrens? Die telt niet als tekort, maar
+                        # hoort wel zichtbaar te zijn - anders is achteraf
+                        # niet te zien waarom een dag geen tekortdag was.
+                        "vermogensgrens": self._vermogensgrens_gezien_today,
+                        "max_ontlaad_w": {
+                            k: round(v) for k, v in self._max_ontlaad_w_vandaag.items()
+                        },
                         "excess": self._excess_detected_today,
                     }
                 )
@@ -20072,6 +20181,8 @@ class EnergyManagementSystemCoordinator:
                     self.current_month_excess_days += 1
             self._shortfall_detected_today = False
             self._excess_detected_today = False
+            self._vermogensgrens_gezien_today = False
+            self._max_ontlaad_w_vandaag = {}
             self._shortfall_check_date = now.date()
 
         self_sufficient_reasons = (
@@ -20089,12 +20200,16 @@ class EnergyManagementSystemCoordinator:
         if getattr(self, "kalibratie", False):
             return
 
+        # Elke ronde meten wat de accu levert, ook zonder import - anders
+        # staat er alleen het vermogen van de kookpieken in het record.
+        verklaard = self._import_verklaard_door_ontlaadgrens(reason)
         if not self._shortfall_detected_today:
             grid_entity = self.config.get(CONF_CONSUMPTION_POWER_SENSOR)
             grid_power_w = self._read_sensor_float(grid_entity)
             if (
                 grid_power_w is not None
                 and grid_power_w > GRID_IMPORT_SHORTFALL_THRESHOLD_W
+                and not verklaard
             ):
                 self._shortfall_detected_today = True
                 _LOGGER.warning(

@@ -101,3 +101,30 @@ def test_zonder_planning_geen_zin(make_coordinator, hass):
     c = make_coordinator({})
 
     assert c.haalt_de_accu_het_zin({"beschikbaar": False}) is None
+
+
+def test_de_laagste_stand_op_de_ondergrens_wordt_ook_benoemd(
+    make_coordinator, hass
+):
+    """v3.99.0. Uit de export van 2 september 06:57:
+
+        laagste_soc_tot_bijladen_procent   10
+        eind_soc_procent                   51
+        tekort_kwartieren                  0
+
+    "Ja, geen kwartier zonder accu" - terwijl de planning tot het
+    bijladen precies op de harde ondergrens uitkomt. De toets van
+    v3.95.2 keek alleen naar het EIND, en dat stond op 51%.
+
+    Op 10% is er nul bruikbare energie. Dat de tabel geen tekortkwartier
+    telt, komt doordat het huis er tot op het laatste kwartier net mee
+    toe kan. Dat is geen "ja" zonder meer.
+    """
+    c = make_coordinator({})
+
+    zin = c.haalt_de_accu_het_zin(
+        _samenvatting(c, laagste_soc_tot_bijladen_procent=10, eind_soc_procent=51)
+    )
+
+    assert "ondergrens" in zin
+    assert "51%" in zin

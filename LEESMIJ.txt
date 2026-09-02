@@ -1,11 +1,13 @@
-EMS v3.98.0 - alleen de wijzigingen sinds v3.97.0
+EMS v3.99.0 - alle wijzigingen sinds v3.98.0
+
+Bevat v3.98.1 en v3.99.0. Je draait v3.98.0, dus dit is alles wat je
+mist. Een keer herstarten volstaat.
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
 
     const.py
     coordinator.py
-    switch.py
-    dashboard_template.yaml    LET OP: dashboard is gewijzigd
+    dashboard_template.yaml    kaart toont nu dagen per bakje
     manifest.json
     bestandscontrole.json
 
@@ -13,18 +15,24 @@ NAAR DE REPO
 
     README.md, CHANGELOG.md
     dashboards/energy_management_system_dashboard.yaml
-    tests/test_kalibratie_bewaren.py    nieuw
-    tests/test_switch_entiteiten.py     aangevuld
+    tests/test_helderheid_ijklijn.py          aangevuld
+    tests/test_tekortdag_vermogensgrens.py    nieuw
+    tests/test_haalt_de_accu_het.py           aangevuld
 
-WAT ER VERANDERT
+WAT ER VERANDERT IN BEDRIJF
 
-1. De kalibratiekaart toont niet meer "last-changed" - dat was na een
-   herstart het startmoment van de integratie en zei niets over de
-   kalibratie. Er staat nu "loopt sinds <tijd>" of "uit".
+1. Een kookpiek boven de ontlaadgrens telt niet meer als tekortdag.
+   Grens per stand: handmatig 1600 W, slim 2000 W. Het aantal
+   tekortdagen (nu 5 van 7) gaat waarschijnlijk omlaag, en daarmee de
+   25 procentpunt extra marge op de reserve.
 
-2. Alle handmatige schakelaars schrijven direct naar de opslag in
-   plaats van na dertig seconden. Zet je iets aan en gaat HA binnen die
-   dertig seconden onderuit, dan bleef de stand anders achter.
+2. De heldere-hemel-ijklijn gaat terug naar "onvoldoende data": mijn
+   drempels telden metingen in plaats van dagen. Reken op tien dagen.
 
-Bij een nette herstart was er niets aan de hand: bij het afsluiten
-wordt sowieso weggeschreven.
+3. "Haalt de accu het?" noemt de ondergrens ook bij de laagste stand.
+
+WAAR OP TE LETTEN
+
+    reserve_daily_records -> per dag "vermogensgrens" en "max_ontlaad_w"
+    per stand. Daaraan is te zien of de 1600/2000 kloppen, en welke
+    tekortdagen kookpieken waren.

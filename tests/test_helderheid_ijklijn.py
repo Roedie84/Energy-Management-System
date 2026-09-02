@@ -49,6 +49,11 @@ def _vul_ijklijn(c, bakjes=(20.0, 30.0, 40.0), piek_per_bakje=None, extra=None):
     }
     if extra:
         c.helderheid_ijklijn.update(extra)
+    # v3.98.1: een gevuld bakje heeft ook genoeg DAGEN.
+    c.helderheid_dagen = {
+        b: [f"2026-09-{d:02d}" for d in range(1, HELDERHEID_MIN_DAGEN_PER_BAKJE + 1)]
+        for b in c.helderheid_ijklijn
+    }
 
 
 # --- 1. de ijklijn zelf ----------------------------------------------
@@ -127,7 +132,13 @@ def _paren(c, bron, paren):
         "30.0": [IJKLIJN_W] * HELDERHEID_MIN_METINGEN_PER_BAKJE
     }
     c.weerbron_helderheid_paren = {
-        bron: [[b, h * IJKLIJN_W, "30.0"] for b, h in paren]
+        bron: [
+            [b, h * IJKLIJN_W, "30.0", f"2026-09-{1 + i % HELDERHEID_MIN_DAGEN_PAREN:02d}"]
+            for i, (b, h) in enumerate(paren)
+        ]
+    }
+    c.helderheid_dagen = {
+        "30.0": [f"2026-09-{d:02d}" for d in range(1, HELDERHEID_MIN_DAGEN_PER_BAKJE + 1)]
     }
 
 
@@ -321,7 +332,7 @@ def test_een_helderheid_boven_een_wordt_niet_bevroren(make_coordinator, hass):
     """
     c = make_coordinator({})
     c.helderheid_ijklijn = {"40.0": [1000.0] * HELDERHEID_MIN_METINGEN_PER_BAKJE}
-    c.weerbron_helderheid_paren = {"weather.a": [[50.0, 3400.0, "40.0"]]}
+    c.weerbron_helderheid_paren = {"weather.a": [[50.0, 3400.0, "40.0", "2026-09-01"]]}
 
     # De ijklijn groeit naar de werkelijke heldere waarde.
     c.helderheid_ijklijn = {"40.0": [3300.0] * HELDERHEID_MIN_METINGEN_PER_BAKJE}
@@ -342,7 +353,7 @@ def test_oude_paren_uit_het_oude_formaat_worden_overgeslagen(
     c = make_coordinator({})
     c.helderheid_ijklijn = {"40.0": [3300.0] * HELDERHEID_MIN_METINGEN_PER_BAKJE}
     c.weerbron_helderheid_paren = {
-        "weather.a": [[50.0, 3.38], [60.0, 2200.0, "40.0"]]
+        "weather.a": [[50.0, 3.38], [60.0, 2200.0, "40.0", "2026-09-01"]]
     }
 
     paren = c._helderheidsparen("weather.a")
@@ -361,7 +372,7 @@ def test_gelijke_bewolking_telt_niet_als_bruikbaar_paar(
     c = make_coordinator({})
     c.helderheid_ijklijn = {"40.0": [3300.0] * HELDERHEID_MIN_METINGEN_PER_BAKJE}
     c.weerbron_helderheid_paren = {
-        "weather.a": [[60.9, 1000.0 + i, "40.0"] for i in range(12)]
+        "weather.a": [[60.9, 1000.0 + i, "40.0", "2026-09-01"] for i in range(12)]
     }
 
     ijking = c.get_helderheid_ijking()
@@ -381,3 +392,112 @@ def test_een_bakje_van_de_drie_is_nog_onvoldoende(make_coordinator, hass):
     ijking = c.get_helderheid_ijking()
 
     assert ijking["status"] == RELIABILITY_INSUFFICIENT
+
+
+# --- 6. metingen zijn geen dagen (v3.98.1) -----------------------------
+#
+# Na 22,7 uur op v3.98.0 stond er in de export:
+#
+#     gevulde_bakjes     8 van 3        status "betrouwbaar"
+#     paren per bron     300 en 300     alle bruikbaar
+#     rangorde           thuis 62,5     owm 41,7
+#     mag_regelen        True
+#
+# Een ronde per twee minuten vult zestig metingen per bakje in een
+# halve dag. Maar zestig metingen uit EEN dag zeggen iets over die dag,
+# niet over een wolkeloze hemel: het 95e percentiel van een bewolkte
+# dinsdag is de beste dinsdagwolk, geen ijklijn. En driehonderd paren uit
+# anderhalve dag bevatten anderhalve dag weer.
+#
+# Metingen binnen een dag hangen samen. Wat telt is het aantal DAGEN.
+
+from custom_components.energy_management_system.const import (
+    HELDERHEID_MIN_DAGEN_PAREN,
+    HELDERHEID_MIN_DAGEN_PER_BAKJE,
+)
+
+
+def _vul_dagen(c, bakjes, dagen):
+    c.helderheid_dagen = {
+        str(b): [f"2026-09-{d:02d}" for d in range(1, dagen + 1)] for b in bakjes
+    }
+
+
+def test_een_bakje_uit_een_dag_is_niet_gevuld(make_coordinator, hass):
+    """Het geval van 2 september: zestig metingen, één dag."""
+    c = make_coordinator({})
+    _vul_ijklijn(c)
+    _vul_dagen(c, (20.0, 30.0, 40.0), dagen=1)  # overschrijft de tien dagen
+
+    ijking = c.get_helderheid_ijking()
+
+    assert ijking["gevulde_bakjes"] == 0
+    assert ijking["mag_regelen"] is False
+    assert "dagen" in ijking["wat_ontbreekt"]
+
+
+def test_een_bakje_met_genoeg_dagen_telt_wel(make_coordinator, hass):
+    c = make_coordinator({})
+    _vul_ijklijn(c)
+    _vul_dagen(c, (20.0, 30.0, 40.0), dagen=HELDERHEID_MIN_DAGEN_PER_BAKJE)
+
+    assert c.get_helderheid_ijking()["gevulde_bakjes"] == 3
+
+
+def test_paren_uit_te_weinig_dagen_geven_geen_score(make_coordinator, hass):
+    """Driehonderd paren uit anderhalve dag: dat is geen bewijs, dat is
+
+    anderhalve dag.
+    """
+    c = make_coordinator({})
+    reeks = [(i, 1.0 - i / 150) for i in range(HELDERHEID_MIN_PAREN + 20)]
+    _paren(c, "weather.a", reeks)
+    # alle paren op dezelfde dag
+    for paar in c.weerbron_helderheid_paren["weather.a"]:
+        paar[3] = "2026-09-01"
+
+    assert c.weerbron_rangorde_score("weather.a") is None
+
+
+def test_paren_over_genoeg_dagen_geven_wel_een_score(make_coordinator, hass):
+    c = make_coordinator({})
+    reeks = [(i, 1.0 - i / 150) for i in range(HELDERHEID_MIN_PAREN + 20)]
+    _paren(c, "weather.a", reeks)
+
+    assert c.weerbron_rangorde_score("weather.a") is not None
+
+
+def test_oude_paren_zonder_dag_tellen_niet_mee(make_coordinator, hass):
+    """De 600 paren van 1 september hebben geen dag. Die zijn niet te
+
+    plaatsen en gaan eruit - het was toch één dag weer.
+    """
+    c = make_coordinator({})
+    reeks = [(i, 1.0 - i / 150) for i in range(HELDERHEID_MIN_PAREN + 20)]
+    _paren(c, "weather.a", reeks)
+    c.weerbron_helderheid_paren["weather.a"] = [
+        p[:3] for p in c.weerbron_helderheid_paren["weather.a"]
+    ]
+
+    assert c._helderheidsparen("weather.a") == []
+
+
+def test_de_dagen_worden_bijgehouden(make_coordinator, hass):
+    """Zonder datum per meting is uit de export niet te zien hoeveel
+
+    dagen een bakje omspant - dat was precies wat op 2 september niet
+    te controleren viel.
+    """
+    from datetime import datetime, timezone
+
+    c = make_coordinator({})
+    c.is_daylight_now = lambda: True
+    c.get_sun_elevation_degrees = lambda: 32.0
+    c._lees_pv_vermogen_w = lambda: 2500.0
+    c.weather_ensemble_readings = {}
+
+    c._update_helderheid_ijklijn(datetime(2026, 9, 2, 12, 0, tzinfo=timezone.utc))
+    c._update_helderheid_ijklijn(datetime(2026, 9, 2, 12, 5, tzinfo=timezone.utc))
+    c._update_helderheid_ijklijn(datetime(2026, 9, 3, 12, 0, tzinfo=timezone.utc))
+
+    assert c.helderheid_dagen["30.0"] == ["2026-09-02", "2026-09-03"]
