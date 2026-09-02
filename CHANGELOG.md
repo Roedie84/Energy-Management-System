@@ -22767,3 +22767,187 @@ eigen toetsen per sensor, niet iets om vanmiddag tussen drie andere
 dingen door te doen.
 
 **Volledige testsuite**: 3529 tests, allemaal groen.
+
+
+## v3.99.4 — Heen en weer schakelen
+
+**Gemeld** met een schermafdruk van de Zendure Manager: "Slim ontladen"
+en "Handmatig Vermogen" om en om — 19:58, 20:04, 20:05, 20:12, 20:13. En
+overdag een fijn gestreepte balk van 08:00 tot 16:00.
+
+Uit de export van 20:19: 68 wissels op één dag, 14 in het laatste uur,
+`te_vaak: true`. Twee paren doen het:
+
+```
+overdag    arbitrage_solar_capture  <->  discharging_window    23x
+'s avonds  expensive_quarter        <->  discharging_window     8x
+```
+
+Allebei dezelfde vorm: een ja/nee-besluit op een getal dat continu
+beweegt, zonder dode zone.
+
+### De verkooptoets
+
+`beschikbaar <= veilig`. Om 20:19: 5,01 tegen 5,02. Verkopen kost 0,03
+kWh per minuut, dus na één minuut is het 4,98 tegen 5,02 → dicht → slim
+ontladen → de reserve zakt met de klok → weer ruimte → verkopen. De twee
+lijnen kruisen elkaar elke paar minuten, en elke kruising is een
+schakeling op de Zendure.
+
+Eenmaal dicht door de reserve gaat de poort pas weer open als er 0,25
+kWh bovenop de reserve staat — tien minuten verkopen op 1600 W. Eenmaal
+open blijft hij open tot de reserve zelf, niet tot de reserve plus marge.
+De reden vermeldt de dode zone, zodat "5,05 beschikbaar, 5,02 nodig, en
+toch niet verkopen" niet als fout leest.
+
+### De zonvangst
+
+`overschot > 0`, met het overschot als verwachte zon min het LIVE
+huisverbruik. De verwachting is glad — dat was de reparatie van
+v0.63.71 — maar het huisverbruik niet: een koelkastcompressor van 100 W
+is genoeg om het teken om te laten slaan als de zon net het huis dekt.
+Dat is elke ochtend en elke middag een uur lang het geval.
+
+Aan boven +150 W, uit onder −150 W. Een waterkoker van 2000 W zet hem
+nog steeds even uit, en dat is terecht.
+
+### Wat er niet is gedaan
+
+Geen algemene minimale duur per stand. De toelichting bij de
+wisselteller zegt daar al over: "een minimale duur kan een noodstop
+tegenhouden". Een dode zone op de poort die het veroorzaakt, laat de
+noodstop met rust.
+
+De energiebrug had sinds v0.63.x al zo'n dode zone (10%, minimaal 0,15
+kWh). Het is dezelfde les, twee poorten later toegepast.
+
+### Het derde paar, en een vierde dat nog niet vuurde
+
+**Gevraagd**: "wil weten of dergelijke schakelingen elders ook zo vaak
+voorkomen."
+
+Uit hetzelfde logboek: `default_smart` en `discharging_window` vier keer
+heen en terug binnen tien minuten, geclusterd rond 13:33–13:53 en
+17:29–17:37. Etenstijd. Hier zit geen poort zonder dode zone — de
+energiebrug heeft er een — maar de INVOER springt: een kookplaat wordt
+bevestigd (+0,6 kWh vaste post uit v3.99.3), de volgende ronde niet meer
+(−0,6), de ronde erna wel. Een dode zone van 10% vangt geen stap van
+0,6 kWh. De vaste post blijft nu het hele uur staan, ook als de
+bevestiging tussendoor wegvalt; een nieuwe bevestiging verlengt.
+
+En één die vandaag niet vuurde maar dezelfde vorm heeft: de noodlading
+(winter, weinig zon verwacht) gaat aan bij `soc <= min` en stopte zodra
+de laadstand er een procent boven stond — waarna het huis hem er weer
+onder trekt. Aan op de ondergrens, pas uit vijf punten erboven. Dat is
+ruim een halve kilowattuur, en het scheelt in januari.
+
+De code is afgezocht op elke plek waar een reden wordt gezet met een
+vergelijking erboven; dit waren de vier poorten op een bewegend getal.
+De prijsgrenzen (duur kwartier, goedkoop blok) liggen per kwartier vast
+en hebben geen dode zone nodig.
+
+**Volledige testsuite**: 3545 tests, allemaal groen.
+
+
+## v3.99.5 — Vijftig ingrepen die niemand deed
+
+**Gevraagd**: "Kun je verder nog wat vinden in de diagnostiek? Niet
+alleen vanmorgen, alles graag nakijken."
+
+### De integratie merkte haar eigen schakelingen op
+
+```
+handmatige_ingrepen   50, over drie dagen
+alle 20 getoonde      ems_wilde: smart_discharging of smart
+                      werkelijk: manual
+                      reden_ems: expensive_quarter
+```
+
+Dat laatste is intern tegenstrijdig: `expensive_quarter` BETEKENT
+handmatig. De integratie had de accu dus zelf op handmatig gezet, en
+merkte een ronde later dat hij op handmatig stond.
+
+`_volg_handmatige_ingrepen` loopt aan het eind van dezelfde ronde
+waarin de opdracht is gegeven. De Zendure heeft de nieuwe stand dan nog
+niet doorgegeven — dat duurt seconden tot een minuut — dus het select
+staat nog op de vorige stand. Met 68 wissels op een dag levert dat
+vijftig ingrepen op die er geen zijn.
+
+En dat had gevolgen gehad. Sinds v3.82.0 geldt: drie verschillende dagen
+en er is een patroon. Die drie dagen waren er (31-08, 01-09, 02-09). De
+integratie stond op het punt uit haar eigen schakelingen een regel te
+leren over wat de bewoner wil.
+
+Een verschil telt nu pas als het drie minuten aanhoudt — ruim boven de
+opdrachtcontrole van negentig seconden. De vijftig bewaarde gaan eruit
+bij het laden; ze zijn herkenbaar aan een reden die een andere stand
+impliceert dan wat er "gewild" werd. Een echte ingreep blijft staan.
+
+### 86 kwartieren "onder de reserve" die er niet onder zitten
+
+```
+planning_tegen_sturing   reserve_kwh 5,02
+                         kwartieren_onder_de_reserve 86
+                         laagste 08:45, 28%, 1,73 kWh
+```
+
+De kaart vergeleek elk kwartier met de reserve VAN NU: 5,02 kWh, wat de
+woning nodig heeft tot morgen 12:15. Maar die reserve krimpt met de
+klok. Om 08:45 is er nog drieënhalf uur te overbruggen, geen zestien, en
+dan is 1,73 kWh geen tekort. De planning rekent zelf al per moment
+(v3.92.1); de kaart vergeleek er niet tegen. Nu wel, en de reserve van
+dat moment staat bij elk kwartier.
+
+### De buitensensor is weg
+
+`sensor.hue_outdoor_motion_sensor_1_temperatuur` staat op `unavailable`,
+en hij wordt op twee plekken gebruikt: de tuintemperatuur en de
+buitentemperatuur voor de accukoeling. Dat is geen code — waarschijnlijk
+een lege batterij of buiten bereik — maar zolang hij weg is, is de
+koeling blind voor de buitentemperatuur. Wel gemeld, niet te repareren
+vanuit de integratie.
+
+### Drie antwoorden op dezelfde vraag
+
+```
+mpc_doel_soc.nu_nodig_kwh       3,07
+last_needed_kwh_to_bridge       4,21
+reserve_kwh_after_margin        5,02
+```
+
+Drie getallen voor "hoeveel moet er nu in de accu blijven", uit drie
+berekeningen met elk een eigen marge. Geen van drieën is fout; ze
+beantwoorden net andere vragen. Maar naast elkaar in dezelfde export
+zijn ze niet uit te leggen zonder de code erbij. Opgeschreven, niet
+gelijkgetrokken: dat is de ronde waarin de reserve één definitie krijgt,
+en die hoort niet tussen andere dingen door.
+
+**Volledige testsuite**: 3551 tests, allemaal groen.
+
+
+## v3.99.6 — Een uitgeschakelde sensor gaf geen melding
+
+**Gemeld**: "De Hue sensor had ik per ongeluk uitgeschakeld" — en
+daarna: "Maar dan had ik toch een melding moeten hebben, 'Sensor xxx is
+unavailable' of iets dergelijks?"
+
+Terecht. De melding "Sensor niet uitleesbaar" (v1.6.6) bewaakte precies
+VIER sensoren: beschikbare energie, accuvermogen, netvermogen en
+PV-vermogen. Alles daarbuiten viel weg zonder een woord — de
+buitentemperatuur voor de accukoeling, de laadstand, de prijssensor, de
+weerbronnen, Solcast. De configuratiecontrole zag het wél (twee regels
+`geen_waarde` in de export), maar die controle voedt alleen de export.
+De koeling was een dag lang blind voor buiten en niemand wist het.
+
+De melding bewaakt nu elke ingestelde entiteit, met dezelfde
+bevestigingstijd van vijftien minuten — een gemiste uitlezing is geen
+storing — en met uitzondering van de apparaatinstellingen: een
+wasmachine die uit staat, slaapt (v3.95.0). Een entiteit die niet meer
+BESTAAT telt ook: een hernoeming komt niet vanzelf terug.
+
+En de melding zegt waar de sensor voor diende, met de naam uit het
+instellingenscherm: "sensor.hue_outdoor_motion_sensor_1_temperatuur
+(Buitentemperatuur voor accu-koeling) geeft al minstens 15 minuten geen
+waarde." Dat scheelt zoeken.
+
+**Volledige testsuite**: 3556 tests, allemaal groen.

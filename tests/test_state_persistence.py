@@ -556,6 +556,9 @@ VLUCHTIG_MET_REDEN = {
     "notification_suppressed_count": "demping begint na een herstart opnieuw",
     "_unavailable_entities": "blijkt opnieuw uit de sensoren",
     "_sensor_unavailable_since": "blijkt opnieuw uit de sensoren",
+    # v3.99.6: waar elke bewaakte entiteit voor dient - komt elke ronde
+    # opnieuw uit de configuratiecontrole.
+    "_invoer_gebruik": "blijkt opnieuw uit de configuratiecontrole",
     "battery_cooling_state": "blijkt opnieuw uit de sensoren",
     # Halve metingen. Een stuk dat door een herstart een gat heeft, is
     # geen meting meer - beter opnieuw beginnen dan een verminkt getal

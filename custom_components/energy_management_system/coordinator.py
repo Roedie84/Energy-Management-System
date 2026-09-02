@@ -507,7 +507,11 @@ from .const import (
     SELF_CONSUMPTION_MIN_KWH,
     SELF_CONSUMPTION_WINDOW_DAYS,
     SELL_RESERVE_SAFETY_FACTOR,
+    EMERGENCY_LOW_BATTERY_EXIT_MARGIN_PERCENT,
+    HANDMATIGE_INGREEP_MIN_DUUR_MINUTEN,
+    SELL_HYSTERESIS_KWH,
     SELL_RESERVE_DEEPEST_SAFETY_FACTOR,
+    SOLAR_CAPTURE_HYSTERESIS_W,
     SOLAR_DEFER_SAFETY_FACTOR,
     MPC_MIN_METINGEN,
     SOLAR_DEFER_TARGET_FULL_HOUR,
@@ -1200,7 +1204,9 @@ class EnergyManagementSystemCoordinator:
         self.balance_missing_by_entity: dict[str, int] = {}
         # v1.11.0: sinds wanneer elke sensor onbeschikbaar is, om echte
         # uitval te onderscheiden van een enkele gemiste uitlezing.
-        self._sensor_unavailable_since: dict[str, datetime] = {}
+        # v3.99.6: `_invoer_gebruik` erbij (waar elke bewaakte entiteit voor
+        # dient) in dezelfde regel - `__init__` staat op de ratel.
+        self._sensor_unavailable_since, self._invoer_gebruik = {}, {}
         # v1.1.6: met welke meetmethode de bewaarde foutreeks tot stand
         # is gekomen. Verandert de methode, dan wordt die reeks eenmalig
         # gewist - zie ENERGY_BALANCE_METHOD_VERSION.
@@ -4190,36 +4196,27 @@ class EnergyManagementSystemCoordinator:
         # pas melden als dat aanhoudt. Een enkele gemiste uitlezing komt
         # voor bij elke cloudgebonden integratie - daarover melden leert
         # je meldingen te negeren.
-        for entity_id in (
-            self.config.get(CONF_AVAILABLE_ENERGY_SENSOR),
-            self.config.get(CONF_BATTERY_POWER_SENSOR),
-            self.config.get(CONF_CONSUMPTION_POWER_SENSOR),
-            self.config.get(CONF_PV_POWER_SENSOR),
-        ):
-            if entity_id:
-                self._track_sensor_availability(
-                    now, entity_id, self._read_sensor_float(entity_id) is not None
-                )
-
-        ontbrekend = [
-            entity_id
-            for entity_id in (
-                self.config.get(CONF_AVAILABLE_ENERGY_SENSOR),
-                self.config.get(CONF_BATTERY_POWER_SENSOR),
-                self.config.get(CONF_CONSUMPTION_POWER_SENSOR),
-                self.config.get(CONF_PV_POWER_SENSOR),
-            )
-            if entity_id and self.is_sensor_genuinely_unavailable(now, entity_id)
-        ]
+        # v3.99.6: ELKE ingestelde entiteit, niet alleen deze vier.
+        #
+        # Gemeld: "De Hue sensor had ik per ongeluk uitgeschakeld" - en
+        # daarna: "Maar dan had ik toch een melding moeten hebben?" De
+        # buitentemperatuur voor de accukoeling, de laadstand, de prijs,
+        # de weerbronnen: die vielen allemaal weg zonder een woord.
+        self._volg_beschikbaarheid_van_de_invoer(now)
+        weggevallen = self.weggevallen_invoer(now)
+        ontbrekend = [r["entiteit"] for r in weggevallen]
         if ontbrekend:
             # v1.6.6: onthouden WELKE, zodat de herstelmelding dat ook
             # kan noemen. Gerapporteerd: "Sensor is weer uitleesbaar"
             # gaf niet aan om welke sensor het ging.
             self._unavailable_entities = ontbrekend
+            regels = "; ".join(
+                f"{r['entiteit']} ({r['gebruikt_voor']})" for r in weggevallen
+            )
             stuur(
                 "sensor_unavailable",
                 "⚠️ Sensor niet uitleesbaar",
-                f"{', '.join(ontbrekend)} geeft al minstens "
+                f"{regels} geeft al minstens "
                 f"{SENSOR_UNAVAILABLE_CONFIRM_MINUTES} minuten geen waarde. "
                 "De aansturing valt terug op voorzichtige aannames zolang "
                 "dat duurt.",
@@ -8230,11 +8227,27 @@ class EnergyManagementSystemCoordinator:
             rest_min = max(5.0, (duur_geleerd or 60.0) - verstreken_min)
             totaal += rest_kwh * _overlap(nu, nu + timedelta(minutes=rest_min))
 
+        # v3.99.4: de vaste post blijft het hele uur staan, ook als de
+        # bevestiging tussendoor even wegvalt. In het logboek van 2
+        # september wisselde `default_smart` vier keer binnen tien
+        # minuten met `discharging_window`, rond etenstijd: kookplaat
+        # bevestigd (+0,6 kWh), volgende ronde niet (-0,6), de ronde erna
+        # wel. De dode zone van de energiebrug (10%) vangt geen stap van
+        # 0,6 kWh. De invoer moet dus stil staan, niet de poort.
         bron = self.last_heavy_load_source
         if bron in LOPEND_APPARAAT_VASTE_POST_KWH:
-            totaal += LOPEND_APPARAAT_VASTE_POST_KWH[bron] * _overlap(
-                nu, nu + timedelta(hours=LOPEND_APPARAAT_VASTE_POST_UREN)
+            self._vaste_post_bron = bron
+            self._vaste_post_tot = nu + timedelta(
+                hours=LOPEND_APPARAAT_VASTE_POST_UREN
             )
+        if (
+            self._vaste_post_bron is not None
+            and self._vaste_post_tot is not None
+            and nu < self._vaste_post_tot
+        ):
+            totaal += LOPEND_APPARAAT_VASTE_POST_KWH[
+                self._vaste_post_bron
+            ] * _overlap(nu, self._vaste_post_tot)
         return totaal
 
     def geplande_witgoed_kwh_in_periode(
@@ -9749,6 +9762,21 @@ class EnergyManagementSystemCoordinator:
             kind="prijsstijging_handmatig",
         )
 
+    def _ruim_valse_ingrepen_op(self) -> None:
+        """Haalt de eigen schakelingen uit de bewaarde ingrepen (v3.99.5).
+
+        Herkenbaar aan een reden die een andere stand impliceert dan wat
+        er "gewild" werd: `expensive_quarter` met `ems_wilde: smart` is
+        geen bewoner, dat is de vorige ronde.
+        """
+        schoon = []
+        for regel in self.handmatige_ingrepen or []:
+            uit_reden = self._modus_bij_beslissing(regel.get("reden_ems"))
+            if uit_reden and uit_reden != regel.get("ems_wilde"):
+                continue
+            schoon.append(regel)
+        self.handmatige_ingrepen = schoon
+
     def _volg_handmatige_ingrepen(self, now: datetime) -> None:
         """Legt vast wanneer de accu anders staat dan EMS wilde
         (v3.75.0).
@@ -9826,6 +9854,7 @@ class EnergyManagementSystemCoordinator:
         # vergelijken - vlak na het opstarten, vóór de eerste ronde.
         if not gewenst or werkelijk == gewenst:
             self._handmatig_sinds = None
+            self._handmatig_verschil = None
             return
 
         # Eén regel per aaneengesloten periode, niet per ronde. Anders
@@ -9842,6 +9871,22 @@ class EnergyManagementSystemCoordinator:
         # duurt, en dat is precies de vraag die hier beantwoord moet
         # worden.
         vergelijking = f"{gewenst}->{werkelijk}"
+        # v3.99.5: een verschil telt pas als het AANHOUDT.
+        #
+        # Deze controle loopt aan het eind van dezelfde ronde waarin de
+        # opdracht is gegeven, en de Zendure heeft de nieuwe stand dan
+        # nog niet doorgegeven. Vijftig "ingrepen" in drie dagen, alle
+        # met `reden_ems: expensive_quarter` (dat handmatig BETEKENT) en
+        # `ems_wilde: smart_discharging` - de integratie merkte haar
+        # eigen schakeling op. En sinds v3.82.0 is drie dagen een
+        # patroon; ze stond op het punt daar een regel uit te leren.
+        if self._handmatig_verschil != vergelijking:
+            self._handmatig_verschil = vergelijking
+            self._handmatig_verschil_sinds = now
+            return
+        duur = (now - self._handmatig_verschil_sinds).total_seconds() / 60
+        if duur < HANDMATIGE_INGREEP_MIN_DUUR_MINUTEN:
+            return
         if self._handmatig_sinds == vergelijking:
             return
         self._handmatig_sinds = vergelijking
@@ -19721,7 +19766,15 @@ class EnergyManagementSystemCoordinator:
         # nettosom-terugval.
         veilig = max(veilig, self._reserve_bodem_kwh())
 
-        if beschikbaar <= veilig:
+        # v3.99.4: dode zone. Eenmaal dicht door de reserve, pas weer open
+        # als er SELL_HYSTERESIS_KWH bovenop staat. Anders: verkopen kost
+        # 0,03 kWh per minuut, de reserve zakt met de klok, en de twee
+        # kruisen elkaar elke paar minuten - 68 wissels op een dag.
+        drempel = veilig
+        if self._verkoop_geblokkeerd_door_reserve:
+            drempel = veilig + SELL_HYSTERESIS_KWH
+        if beschikbaar <= drempel:
+            self._verkoop_geblokkeerd_door_reserve = True
             return {
                 "mag_verkopen": False,
                 "nodig_voor_woning_kwh": round(veilig, 2),
@@ -19731,9 +19784,16 @@ class EnergyManagementSystemCoordinator:
                     f"De woning heeft {veilig:.2f} kWh nodig tot het goedkope "
                     f"blok en er is {beschikbaar:.2f} kWh - verkopen zou het "
                     "huis aan het net leggen."
+                    + (
+                        f" Pas weer verkopen met {SELL_HYSTERESIS_KWH:.2f} kWh "
+                        "ruimte erbovenop (dode zone tegen het schakelen)."
+                        if beschikbaar > veilig
+                        else ""
+                    )
                 ),
             }
 
+        self._verkoop_geblokkeerd_door_reserve = False
         return {
             "mag_verkopen": True,
             "nodig_voor_woning_kwh": round(veilig, 2),
@@ -20117,12 +20177,22 @@ class EnergyManagementSystemCoordinator:
         else:
             pv_power_w = self._read_sensor_float(pv_entity) if pv_entity else None
         household_load_w = self._read_corrected_consumption_power()
-        solar_surplus_w = 0.0
-        if pv_power_w is not None and household_load_w is not None:
-            solar_surplus_w = max(0.0, pv_power_w - household_load_w)
-        self.last_arbitrage_solar_surplus_w = round(solar_surplus_w, 1)
-
-        return solar_surplus_w > 0
+        # v3.99.4: dode zone. Het overschot is verwachte zon (glad) min
+        # het live huisverbruik (niet glad); een koelkastcompressor is
+        # genoeg om het teken om te laten slaan. Aan boven +150 W, uit
+        # onder -150 W - 23 wissels op een dag tussen zonvangst en slim
+        # ontladen kwamen hiervandaan.
+        netto_w = (
+            (pv_power_w - household_load_w)
+            if pv_power_w is not None and household_load_w is not None
+            else 0.0
+        )
+        self.last_arbitrage_solar_surplus_w = round(max(0.0, netto_w), 1)
+        if self._zonvangst_actief:
+            self._zonvangst_actief = netto_w > -SOLAR_CAPTURE_HYSTERESIS_W
+        else:
+            self._zonvangst_actief = netto_w > SOLAR_CAPTURE_HYSTERESIS_W
+        return self._zonvangst_actief
 
     def should_capture_surplus_over_selling(self, now: datetime) -> bool:
         """Na saldering: is er genoeg zonoverschot om opvangen te
@@ -20234,7 +20304,18 @@ class EnergyManagementSystemCoordinator:
                 min_soc = float(
                     self.effective_min_soc_percent()
                 )
-                return soc <= min_soc
+                # v3.99.4: dode zone. Aan op de ondergrens, pas uit als
+                # de laadstand er EMERGENCY_LOW_BATTERY_EXIT_MARGIN_PERCENT
+                # boven staat. Anders: laden tot een procent erboven,
+                # stoppen, het huis trekt hem eronder, weer laden - op het
+                # moment in de winter dat het er het meest toe doet.
+                if self._noodlading_actief:
+                    self._noodlading_actief = (
+                        soc < min_soc + EMERGENCY_LOW_BATTERY_EXIT_MARGIN_PERCENT
+                    )
+                else:
+                    self._noodlading_actief = soc <= min_soc
+                return self._noodlading_actief
 
         available_entity = self.config.get(CONF_AVAILABLE_ENERGY_SENSOR)
         if available_entity:
@@ -20246,6 +20327,19 @@ class EnergyManagementSystemCoordinator:
 
     # v3.99.0: is er vandaag een kookpiek boven de ontlaadgrens gezien?
     _vermogensgrens_gezien_today: bool = False
+    # v3.99.4: de twee dode zones. Booleans zijn onveranderlijk, dus als
+    # klasse-attribuut per exemplaar veilig.
+    _verkoop_geblokkeerd_door_reserve: bool = False
+    _zonvangst_actief: bool = False
+    # v3.99.4: de vaste post voor oven/kookplaat/quooker, en tot wanneer.
+    # Onveranderlijke waarden, dus als klasse-attribuut veilig.
+    _vaste_post_bron: str | None = None
+    _vaste_post_tot: datetime | None = None
+    _noodlading_actief: bool = False
+    # v3.99.5: welk verschil tussen gevraagd en werkelijk er nu staat, en
+    # sinds wanneer. Onveranderlijk, dus als klasse-attribuut veilig.
+    _handmatig_verschil: str | None = None
+    _handmatig_verschil_sinds: datetime | None = None
     # Hoogste gemeten ontlaadvermogen vandaag, per stand. Als INSTANTIE-
     # veld gezet in `_init_pv_leervelden`: een dict als klasse-attribuut
     # wordt door alle exemplaren gedeeld, en dat viel in de volledige
@@ -25437,6 +25531,78 @@ class EnergyManagementSystemCoordinator:
         verstreken = (now - self._started_at).total_seconds() / 60
         return verstreken < SENSOR_STARTUP_GRACE_MINUTES
 
+    def _volg_beschikbaarheid_van_de_invoer(self, now: datetime) -> None:
+        """Houdt van ELKE ingestelde entiteit bij sinds wanneer hij weg is
+        (v3.99.6).
+
+        Gemeld: "De Hue sensor had ik per ongeluk uitgeschakeld" - en:
+        "Maar dan had ik toch een melding moeten hebben?" Terecht. De
+        melding bewaakte vier sensoren; de buitentemperatuur voor de
+        accukoeling hoorde daar niet bij, en de laadstand, de prijs en de
+        weerbronnen ook niet. De configuratiecontrole zag het wel, maar
+        die voedt alleen de export.
+
+        Apparaatinstellingen doen niet mee: een wasmachine die uit staat,
+        slaapt (v3.95.0).
+        """
+        for regel in self.get_configuratiecontrole().get("entiteiten") or []:
+            if regel.get("instelling") in APPARAAT_INSTELLINGEN:
+                continue
+            entity_id = regel.get("entiteit")
+            if not entity_id:
+                continue
+            self._track_sensor_availability(
+                now, entity_id, regel.get("oordeel") == "in_orde"
+            )
+            self._invoer_gebruik[entity_id] = self._instelling_leesbaar(
+                regel.get("instelling") or ""
+            )
+
+    _instelling_labels: dict[str, str] | None = None
+
+    def _instelling_leesbaar(self, sleutel: str) -> str:
+        """De Nederlandse naam van een instelling, uit de vertaling.
+
+        "battery_cooling_outdoor_sensor_entity" zegt de bewoner niets;
+        "Buitentemperatuur voor de accukoeling" wel. De labels staan al
+        in translations/nl.json voor het instellingenscherm.
+        """
+        if EnergyManagementSystemCoordinator._instelling_labels is None:
+            labels: dict[str, str] = {}
+            try:
+                pad = Path(__file__).parent / "translations" / "nl.json"
+                boom = json.loads(pad.read_text(encoding="utf-8"))
+
+                def loop(o):
+                    if isinstance(o, dict):
+                        for k, v in o.items():
+                            if isinstance(v, str) and k.endswith("_entity"):
+                                labels.setdefault(k, v.split(" - ")[0])
+                            else:
+                                loop(v)
+
+                loop(boom)
+            except Exception:  # noqa: BLE001
+                pass
+            EnergyManagementSystemCoordinator._instelling_labels = labels
+        return EnergyManagementSystemCoordinator._instelling_labels.get(sleutel, sleutel)
+
+    def weggevallen_invoer(self, now: datetime) -> list[dict]:
+        """Welke ingestelde entiteiten zijn al minstens de bevestigingstijd
+        weg, en waar dienden ze voor? (v3.99.6)"""
+        uit = []
+        for entity_id in sorted(self._sensor_unavailable_since):
+            if entity_id in self._invoer_gebruik and self.is_sensor_genuinely_unavailable(
+                now, entity_id
+            ):
+                uit.append(
+                    {
+                        "entiteit": entity_id,
+                        "gebruikt_voor": self._invoer_gebruik.get(entity_id, ""),
+                    }
+                )
+        return uit
+
     def _track_sensor_availability(
         self, now: datetime, entity_id: str, beschikbaar: bool
     ) -> None:
@@ -27904,6 +28070,7 @@ class EnergyManagementSystemCoordinator:
         self._migreer_dagreeks_kosten()
         self._ruim_oude_klimaatcellen_op()
         self._schoon_cyclusduren_op()
+        self._ruim_valse_ingrepen_op()
         # v1.15.0: het oordeel over de meetkwaliteit volgt uit de
         # herstelde foutreeks. Zonder deze aanroep blijft het None tot
         # de eerste nieuwe meting, en verdwijnt het aandachtspunt na een
@@ -33365,18 +33532,37 @@ class EnergyManagementSystemCoordinator:
 
         bodem = self.effective_min_soc_percent() or 0.0
         schaal = max(1.0, 100.0 - bodem)
+        # v3.99.5: per MOMENT vergelijken, niet tegen de reserve van nu.
+        #
+        # Uit de export van 2 september 20:19: 86 kwartieren "onder de
+        # reserve" van 5,02 kWh. Maar die 5,02 is wat de woning nodig
+        # heeft tot het goedkope blok van morgen 12:15 - en dat krimpt
+        # met de klok. Om 08:45 is er nog drieenhalf uur te overbruggen,
+        # geen zestien, en dan is 1,73 kWh geen tekort. De planning
+        # rekent zelf al per moment (`_planning_reserve_kwh`, v3.92.1);
+        # de kaart vergeleek er niet tegen.
         onder = []
+        cache: dict[str, float] = {}
         for q in plan:
             soc = q.get("soc_procent")
             if soc is None:
                 continue
             kwh = (soc - bodem) / schaal * capaciteit
-            if kwh < reserve:
+            moment = q.get("start")
+            if isinstance(moment, str):
+                moment = dt_util.parse_datetime(moment)
+            reserve_dan = (
+                self._planning_reserve_kwh(moment, cache)
+                if moment is not None
+                else reserve
+            )
+            if kwh < reserve_dan:
                 onder.append(
                     {
                         "van": q.get("van"),
                         "soc_procent": soc,
                         "beschikbaar_kwh": round(kwh, 2),
+                        "reserve_op_dat_moment_kwh": round(reserve_dan, 2),
                         "modus": q.get("modus"),
                     }
                 )
@@ -33394,10 +33580,11 @@ class EnergyManagementSystemCoordinator:
             "toelichting": (
                 "De planning rekent op prijs; de verkooptoets grendelt "
                 "elk moment op de reserve. Deze kwartieren staan in de "
-                "planning onder die reserve en gaan in bedrijf dus NIET "
-                "gebeuren - er wordt eerder gestopt met verkopen. Wie de "
-                "planning leest zonder dat te weten, denkt dat de accu "
-                "leeg gaat."
+                "planning onder de reserve VAN DAT MOMENT - die krimpt "
+                "naarmate het goedkope blok nadert - en gaan in bedrijf "
+                "dus NIET gebeuren: er wordt eerder gestopt met verkopen. "
+                "Wie de planning leest zonder dat te weten, denkt dat de "
+                "accu leeg gaat."
             ),
         }
 

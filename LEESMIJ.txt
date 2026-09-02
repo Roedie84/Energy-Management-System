@@ -1,34 +1,24 @@
-EMS v3.99.3 - alle wijzigingen sinds v3.99.0
+EMS v3.99.6 - alle wijzigingen sinds v3.99.3
 
-Bevat v3.99.1, v3.99.2 en v3.99.3. Je draait v3.99.0. Een keer herstarten.
+Bevat v3.99.4 t/m v3.99.6. Je draait v3.99.3. Een keer herstarten.
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
 
-    const.py, coordinator.py, config_flow.py, strings.json
-    translations/nl.json, translations/en.json
-    manifest.json, bestandscontrole.json
-
-Geen dashboardwijziging.
+    const.py, coordinator.py, manifest.json, bestandscontrole.json
 
 NAAR DE REPO
 
-    README.md, CHANGELOG.md
-    tests/ - zeven bestanden, vijf nieuw
+    README.md, CHANGELOG.md, zes toetsbestanden (vier nieuw)
 
-WAT ER VERANDERT IN BEDRIJF
+WAT ER VERANDERT
 
-1. Een lopende vaatwasser telt EEN keer mee met wat er nog rest, en
-   blaast de reserve niet meer op. Gepland witgoed telt nu ook echt mee
-   in de reserve - dat deed het alleen in de terugval.
-2. De reserve gaat niet boven de accucapaciteit.
-3. De capaciteitsmeting heeft een bron: de kalibratie. Eerstvolgende
-   kalibratie onder de 30% laadstand beginnen, anders telt hij niet.
-4. Vier slijtage-instellingen op de instellingenpagina (ongewijzigd).
-5. De wasmachine meldt "onbekende tijd" tot er drie cycli zijn die bij
-   elkaar liggen. Nu is dat eerlijker dan 8 of 36 minuten.
+1. Vier dode zones tegen het heen-en-weer schakelen.
+2. Valse "handmatige ingrepen" gaan eruit; nieuwe tellen pas na drie
+   minuten aanhoudend verschil.
+3. "Planning tegen sturing" vergelijkt per moment.
+4. De melding "Sensor niet uitleesbaar" bewaakt nu ELKE ingestelde
+   entiteit (behalve apparaten die uit staan) en zegt waar de sensor
+   voor diende.
 
-WAAR OP TE LETTEN
-
-    last_reserve_margin_breakdown.boven_capaciteit - hoort false te zijn.
-    Bij een lopende vaatwasser: needed_kwh_before_margin hoort in de
-    buurt van het gewone tekort plus hooguit een kilowattuur te liggen.
+Verwacht: bij een uitgeschakelde sensor komt na vijftien minuten een
+melding. Zet de Hue-sensor weer aan; anders krijg je die vanavond.

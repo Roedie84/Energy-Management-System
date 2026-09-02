@@ -4848,6 +4848,36 @@ SELL_RESERVE_SAFETY_FACTOR = 1.5
 # structureel te laag was. Het diepste tekort is zelf al voorzichtig (zon
 # telt met rendement, live verbruik telt mee), dus 1,15 - gelijk aan wat
 # de energiebrug aanhoudt.
+# Dode zones tegen het heen-en-weer schakelen (v3.99.4).
+#
+# Gemeld met een schermafdruk: "Slim ontladen" en "Handmatig Vermogen" om
+# en om, elke paar minuten. 68 wissels op een dag, 14 in het laatste
+# uur. Twee poorten zonder dode zone: de verkooptoets (beschikbaar tegen
+# veilig, op 5,01 tegen 5,02) en de zonvangst (overschot > 0, met het
+# live huisverbruik erin).
+#
+# Verkopen: eenmaal dicht door de reserve, pas weer open als er dit
+# bovenop de reserve staat. 0,25 kWh is tien minuten verkopen op 1600 W.
+SELL_HYSTERESIS_KWH = 0.25
+# Zonvangst: aan boven +150 W, uit onder -150 W. Een koelkastcompressor
+# is 100 W, een waterkoker kort 2000 - dat laatste mag hem best even
+# uitzetten, het eerste niet.
+SOLAR_CAPTURE_HYSTERESIS_W = 150.0
+# Noodlading: aan op de ondergrens, pas uit als de laadstand er dit
+# aantal punten boven staat. Vijf punten is ruim een halve kilowattuur -
+# genoeg dat het huis hem niet binnen een kwartier weer onder de grens
+# trekt.
+EMERGENCY_LOW_BATTERY_EXIT_MARGIN_PERCENT = 5.0
+
+# Hoe lang de accu anders moet staan dan gevraagd voordat het een
+# INGREEP heet (v3.99.5).
+#
+# Vijftig "handmatige ingrepen" in drie dagen, alle met een reden die
+# handmatig impliceert en een wens die dat niet was: de integratie had
+# de stand zelf net gezet en de Zendure had hem nog niet doorgegeven.
+# Drie minuten is ruim boven de opdrachtcontrole (90 seconden).
+HANDMATIGE_INGREEP_MIN_DUUR_MINUTEN = 3.0
+
 SELL_RESERVE_DEEPEST_SAFETY_FACTOR = 1.15
 
 # --- Kwartierplanning: vooruitkijken en wijzigingen (v1.23.2) --------

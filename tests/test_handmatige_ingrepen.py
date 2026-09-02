@@ -22,6 +22,17 @@ from custom_components.energy_management_system.const import (
     HANDMATIGE_INGREPEN_MIN_VOOR_PATROON,
 )
 
+def _volg_aanhoudend(c, wanneer):
+    """v3.99.5: een verschil telt pas als het minstens drie minuten
+
+    aanhoudt - de Zendure heeft even nodig om een opdracht te
+    verwerken, en anders merkt de integratie haar eigen schakelingen op.
+    Twee rondes, vier minuten uit elkaar.
+    """
+    c._volg_handmatige_ingrepen(wanneer)
+    c._volg_handmatige_ingrepen(wanneer + timedelta(minutes=4))
+
+
 NU = datetime(2026, 8, 30, 11, 0)
 
 
@@ -42,7 +53,7 @@ def test_a_manual_change_is_recorded(make_coordinator, hass):
     """
     c = _coordinator(make_coordinator, hass, "manual", "smart")
 
-    c._volg_handmatige_ingrepen(NU)
+    _volg_aanhoudend(c, NU)
 
     assert len(c.handmatige_ingrepen) == 1
     regel = c.handmatige_ingrepen[0]
@@ -58,7 +69,7 @@ def test_the_circumstances_are_recorded_too(make_coordinator, hass):
     c = _coordinator(make_coordinator, hass, "manual", "smart")
     c.voorspelde_zon_vandaag_kwh = lambda now=None: (10.2, "toets")
 
-    c._volg_handmatige_ingrepen(NU)
+    _volg_aanhoudend(c, NU)
 
     regel = c.handmatige_ingrepen[0]
     for sleutel in (
@@ -76,7 +87,7 @@ def test_the_circumstances_are_recorded_too(make_coordinator, hass):
 def test_matching_modes_record_nothing(make_coordinator, hass):
     c = _coordinator(make_coordinator, hass, "smart", "smart")
 
-    c._volg_handmatige_ingrepen(NU)
+    _volg_aanhoudend(c, NU)
 
     assert c.handmatige_ingrepen == []
 
@@ -103,13 +114,13 @@ def test_a_new_period_is_recorded_again(make_coordinator, hass):
     waarneming.
     """
     c = _coordinator(make_coordinator, hass, "manual", "smart")
-    c._volg_handmatige_ingrepen(NU)
+    _volg_aanhoudend(c, NU)
 
     hass.states.set("select.modus", "smart")
     c._volg_handmatige_ingrepen(NU + timedelta(hours=3))
 
     hass.states.set("select.modus", "manual")
-    c._volg_handmatige_ingrepen(NU + timedelta(hours=4))
+    _volg_aanhoudend(c, NU + timedelta(hours=4))
 
     assert len(c.handmatige_ingrepen) == 2
 
@@ -123,7 +134,7 @@ def test_without_a_desired_mode_nothing_is_recorded(
     """Vlak na het opstarten, of in leermodus waarin EMS niets schrijft."""
     c = _coordinator(make_coordinator, hass, "manual", None)
 
-    c._volg_handmatige_ingrepen(NU)
+    _volg_aanhoudend(c, NU)
 
     assert c.handmatige_ingrepen == []
 
@@ -131,7 +142,7 @@ def test_without_a_desired_mode_nothing_is_recorded(
 def test_an_unavailable_entity_records_nothing(make_coordinator, hass):
     c = _coordinator(make_coordinator, hass, "unavailable", "smart")
 
-    c._volg_handmatige_ingrepen(NU)
+    _volg_aanhoudend(c, NU)
 
     assert c.handmatige_ingrepen == []
 
@@ -145,7 +156,7 @@ def test_it_draws_no_conclusion_from_one_case(make_coordinator, hass):
     misgegaan dat er iets werd gebouwd op grond van één geval.
     """
     c = _coordinator(make_coordinator, hass, "manual", "smart")
-    c._volg_handmatige_ingrepen(NU)
+    _volg_aanhoudend(c, NU)
 
     overzicht = c.get_handmatige_ingrepen()
 
@@ -216,7 +227,7 @@ def test_an_intervention_before_the_first_write_is_recorded(
     c.last_applied_operation = None
     c.last_reason = "default_smart"
 
-    c._volg_handmatige_ingrepen(NU)
+    _volg_aanhoudend(c, NU)
 
     assert len(c.handmatige_ingrepen) == 1
     regel = c.handmatige_ingrepen[0]
@@ -234,7 +245,7 @@ def test_a_written_mode_still_wins(make_coordinator, hass):
     c.last_applied_operation = "smart_discharging"
     c.last_reason = "default_smart"
 
-    c._volg_handmatige_ingrepen(NU)
+    _volg_aanhoudend(c, NU)
 
     assert c.handmatige_ingrepen[0]["ems_wilde"] == "smart_discharging"
     assert c.handmatige_ingrepen[0]["uit_beslissing"] is False
@@ -252,7 +263,7 @@ def test_without_a_decision_either_nothing_is_recorded(
     c.last_applied_operation = None
     c.last_reason = None
 
-    c._volg_handmatige_ingrepen(NU)
+    _volg_aanhoudend(c, NU)
 
     assert c.handmatige_ingrepen == []
 
@@ -297,7 +308,7 @@ def test_learning_mode_is_not_an_intervention(make_coordinator, hass):
     c.last_reason = "discharging_window"
     c.learning_only = True
 
-    c._volg_handmatige_ingrepen(NU)
+    _volg_aanhoudend(c, NU)
 
     assert c.handmatige_ingrepen == []
 
@@ -310,7 +321,7 @@ def test_force_manual_is_not_an_intervention(make_coordinator, hass):
     c = _coordinator(make_coordinator, hass, "manual", "smart")
     c.force_manual = True
 
-    c._volg_handmatige_ingrepen(NU)
+    _volg_aanhoudend(c, NU)
 
     assert c.handmatige_ingrepen == []
 
@@ -332,10 +343,10 @@ def test_the_same_pair_is_recorded_once(make_coordinator, hass):
 
 def test_a_different_pair_is_a_new_period(make_coordinator, hass):
     c = _coordinator(make_coordinator, hass, "manual", "smart")
-    c._volg_handmatige_ingrepen(NU)
+    _volg_aanhoudend(c, NU)
 
     hass.states.set("select.modus", "smart_charging")
-    c._volg_handmatige_ingrepen(NU + timedelta(minutes=5))
+    _volg_aanhoudend(c, NU + timedelta(minutes=5))
 
     assert len(c.handmatige_ingrepen) == 2
 
@@ -580,7 +591,7 @@ def test_a_missing_sun_counter_does_not_break_the_record(
     c = _coordinator(make_coordinator, hass, "manual", "smart")
     c.pv_production_today_kwh = None
 
-    c._volg_handmatige_ingrepen(NU)
+    _volg_aanhoudend(c, NU)
 
     assert len(c.handmatige_ingrepen) == 1
     regel = c.handmatige_ingrepen[0]
@@ -602,7 +613,7 @@ def test_the_sun_shortfall_is_recorded(make_coordinator, hass):
     c.voorspelde_zon_vandaag_kwh = lambda now=None: (10.8, "toets")
     c.pv_production_today_kwh = 6.04
 
-    c._volg_handmatige_ingrepen(NU)
+    _volg_aanhoudend(c, NU)
 
     regel = c.handmatige_ingrepen[0]
     assert regel["zon_tot_nu_kwh"] == 6.04
