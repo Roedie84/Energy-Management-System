@@ -187,6 +187,7 @@ from .const import (
     MODE_CHANGE_EMOJI,
     PV_FOUT_EENZIJDIG_AANDEEL,
     MODUS_KORTE_NAAM,
+    REDEN_KORTE_NAAM,
     REASON_TO_MODE,
     ACHTERHOEKS_TITELS,
     ACHTERHOEKS_TITELS_PER_ACTIE,
@@ -510,6 +511,7 @@ from .const import (
     EMERGENCY_LOW_BATTERY_EXIT_MARGIN_PERCENT,
     HANDMATIGE_INGREEP_MIN_DUUR_MINUTEN,
     SELL_HYSTERESIS_KWH,
+    SELL_REOPEN_MIN_MINUTES,
     SELL_RESERVE_DEEPEST_SAFETY_FACTOR,
     SOLAR_CAPTURE_HYSTERESIS_W,
     SOLAR_DEFER_SAFETY_FACTOR,
@@ -19773,7 +19775,18 @@ class EnergyManagementSystemCoordinator:
         drempel = veilig
         if self._verkoop_geblokkeerd_door_reserve:
             drempel = veilig + SELL_HYSTERESIS_KWH
-        if beschikbaar <= drempel:
+        # v3.99.7: en minstens een kwartier dicht. De reserve springt
+        # zelf tussen rondes; een dode zone op de voorraad helpt niet
+        # tegen een drempel die beweegt.
+        te_snel = (
+            self._verkoop_geblokkeerd_door_reserve
+            and self._verkoop_dicht_sinds is not None
+            and (now - self._verkoop_dicht_sinds).total_seconds() / 60
+            < SELL_REOPEN_MIN_MINUTES
+        )
+        if beschikbaar <= drempel or te_snel:
+            if not self._verkoop_geblokkeerd_door_reserve:
+                self._verkoop_dicht_sinds = now
             self._verkoop_geblokkeerd_door_reserve = True
             return {
                 "mag_verkopen": False,
@@ -20330,6 +20343,7 @@ class EnergyManagementSystemCoordinator:
     # v3.99.4: de twee dode zones. Booleans zijn onveranderlijk, dus als
     # klasse-attribuut per exemplaar veilig.
     _verkoop_geblokkeerd_door_reserve: bool = False
+    _verkoop_dicht_sinds: datetime | None = None
     _zonvangst_actief: bool = False
     # v3.99.4: de vaste post voor oven/kookplaat/quooker, en tot wanneer.
     # Onveranderlijke waarden, dus als klasse-attribuut veilig.
@@ -31884,12 +31898,10 @@ class EnergyManagementSystemCoordinator:
             return
 
         emoji = MODE_CHANGE_EMOJI.get(self.last_reason, "🔄")
-        power = (
-            self.last_discharge_power_applied
-            if self.last_discharge_power_applied is not None
-            else self.last_charge_power_applied
-        )
-        power_txt = f"{power:.0f} W" if power is not None else "n.v.t."
+        # v3.99.7: het vermogen alleen in een handmatige stand. In een
+        # slimme stand regelt het apparaat het zelf, en "1600 W" was dan
+        # wat er nog stond van de handmatige stand ervoor.
+        power_txt = self._modusmelding_vermogen()
         # v3.95.0: kort, en met de stand erin.
         #
         # Gevraagd: "is het mogelijk dat ik alleen een korte titel krijg?
@@ -31900,14 +31912,11 @@ class EnergyManagementSystemCoordinator:
         # bij de apparaatmeldingen in v3.93.1. En `smart_discharging` is
         # ook met de beste vertaling geen woord dat je op een telefoon
         # wil lezen.
-        stand = MODUS_KORTE_NAAM.get(
-            self.last_expected_mode, self.last_expected_mode or "onbekend"
-        )
-        title = f"{emoji} Accu: {stand}"
+        title = self._modusmelding_titel()
         message = (
-            f"🔌 Vermogen: {power_txt}\n"
-            f"🕒 {now.strftime('%H:%M:%S')}\n\n"
-            f"{self.last_explanation}"
+            (f"🔌 Vermogen: {power_txt}\n" if power_txt else "")
+            + f"🕒 {now.strftime('%H:%M:%S')}\n\n"
+            + f"{self.last_explanation}"
         )
         self._dispatch_notification(
             notify_service=notify_service,
@@ -31916,6 +31925,32 @@ class EnergyManagementSystemCoordinator:
             notification_id="ems_mode_change",
             kind="mode_change",
         )
+
+    def _modusmelding_titel(self) -> str:
+        """De titel van de moduswissel: wat de accu DOET (v3.99.7).
+
+        Gemeld: "Accu: handmatig" bij een bericht dat zegt dat de accu
+        op 1600 W verkoopt. Handmatig is de stand; laden en verkopen
+        hebben allebei die stand. De reden weet wel welke van de twee.
+        """
+        emoji = MODE_CHANGE_EMOJI.get(self.last_reason, "🔄")
+        doet = REDEN_KORTE_NAAM.get(self.last_reason or "")
+        if not doet:
+            doet = MODUS_KORTE_NAAM.get(
+                self.last_expected_mode, self.last_expected_mode or "onbekend"
+            )
+        return f"{emoji} Accu: {doet}"
+
+    def _modusmelding_vermogen(self) -> str | None:
+        """Het vermogen voor de melding, alleen in een handmatige stand."""
+        if self.last_expected_mode != OPTION_MANUAL:
+            return None
+        power = (
+            self.last_discharge_power_applied
+            if self.last_discharge_power_applied is not None
+            else self.last_charge_power_applied
+        )
+        return f"{power:.0f} W" if power is not None else None
 
     def _build_explanation(self) -> str:
         """Build a plain-language (Dutch) explanation of the current

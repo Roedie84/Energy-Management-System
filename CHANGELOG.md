@@ -22951,3 +22951,63 @@ instellingenscherm: "sensor.hue_outdoor_motion_sensor_1_temperatuur
 waarde." Dat scheelt zoeken.
 
 **Volledige testsuite**: 3556 tests, allemaal groen.
+
+
+## v3.99.7 — "Accu: handmatig" zegt niet wat de accu doet
+
+**Gemeld** met de export van 21:18: "Meldingen accu status lijken nog
+niet correct: zie laatste melding accu modus."
+
+```
+20:04  💰⬇️ Accu: handmatig   "de accu ontlaadt nu actief op 1600W"
+21:17  ⏳ Accu: ontladen      "🔌 Vermogen: 1600 W" ...
+                              "zonder actief te verkopen"
+```
+
+### De stand is niet wat de accu doet
+
+"Handmatig" is de STAND. Laden uit het net en verkopen tegen de dure
+prijs hebben allebei die stand — tegengestelde dingen met dezelfde naam.
+Het emoji wist het (💰⬇️), het woord niet. De reden weet het wel:
+`expensive_quarter` is verkopen, `grid_charging_low_solar` is laden. De
+titel volgt nu de reden:
+
+```
+💰⬇️ Accu: verkopen
+⚡⬆️ Accu: laden uit het net
+⏳ Accu: huis dekken
+☀️ Accu: zon opvangen
+```
+
+"Huis dekken" in plaats van "ontladen", want "ontladen" naast "verkopen"
+leest als hetzelfde — en het verschil tussen die twee is precies waar de
+melding om gaat.
+
+### 1600 W bij slim ontladen
+
+Dat was het ontlaadvermogen dat nog stond van de handmatige stand ervoor.
+In een slimme stand regelt het apparaat het vermogen zelf; er is dan
+niets te melden. De regel verdwijnt buiten de handmatige stand.
+
+### En het schakelen was nog niet over
+
+Met v3.99.6 draaiend, uit hetzelfde logboek:
+
+```
+21:03  verkopen   21:08  slim   21:15  verkopen   21:17  slim
+```
+
+De dode zone op de voorraad (0,25 kWh) hield niet. De reserve springt
+namelijk zelf tussen twee rondes — op een kwartiergrens verschuift de
+wandeling een kwartier, en de correctieverhouding ververst. Zakt de
+reserve 0,3 kWh, dan is de dode zone weg. Een dode zone op de voorraad
+helpt niet tegen een drempel die beweegt.
+
+Daarom ook een dode zone in de tijd: eenmaal dicht, blijft de
+verkooptoets minstens een kwartier dicht, wat de reserve ook doet.
+Stoppen blijft direct — dat is de veilige kant.
+
+Dat de reserve zelf zo springt, is het eigenlijke probleem. Dat staat
+op de lijst voor de ronde waarin de reserve één definitie krijgt.
+
+**Volledige testsuite**: 3563 tests, allemaal groen.

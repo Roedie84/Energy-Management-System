@@ -1,6 +1,4 @@
-EMS v3.99.6 - alle wijzigingen sinds v3.99.3
-
-Bevat v3.99.4 t/m v3.99.6. Je draait v3.99.3. Een keer herstarten.
+EMS v3.99.7 - alleen de wijzigingen sinds v3.99.6
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
 
@@ -8,17 +6,19 @@ TE KOPIEREN naar config/custom_components/energy_management_system/
 
 NAAR DE REPO
 
-    README.md, CHANGELOG.md, zes toetsbestanden (vier nieuw)
+    README.md, CHANGELOG.md
+    tests/test_modusmelding_richting.py   nieuw
+    tests/test_schakelhysterese.py        aangevuld
 
 WAT ER VERANDERT
 
-1. Vier dode zones tegen het heen-en-weer schakelen.
-2. Valse "handmatige ingrepen" gaan eruit; nieuwe tellen pas na drie
-   minuten aanhoudend verschil.
-3. "Planning tegen sturing" vergelijkt per moment.
-4. De melding "Sensor niet uitleesbaar" bewaakt nu ELKE ingestelde
-   entiteit (behalve apparaten die uit staan) en zegt waar de sensor
-   voor diende.
+1. De titel van de moduswissel zegt wat de accu DOET:
+   "Accu: verkopen", "Accu: laden uit het net", "Accu: huis dekken".
+   Niet meer "handmatig" - dat is de stand, en laden en verkopen
+   hebben allebei die stand.
+2. "Vermogen: 1600 W" staat alleen nog bij een handmatige stand.
+3. De verkooptoets blijft na een blokkering minstens een kwartier
+   dicht. De dode zone op de voorraad alleen hield niet, want de
+   reserve springt zelf tussen rondes.
 
-Verwacht: bij een uitgeschakelde sensor komt na vijftien minuten een
-melding. Zet de Hue-sensor weer aan; anders krijg je die vanavond.
+Verwacht: geen wissel meer binnen een kwartier na een "huis dekken".

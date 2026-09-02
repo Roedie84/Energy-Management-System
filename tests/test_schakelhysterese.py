@@ -59,10 +59,11 @@ def test_eenmaal_geblokkeerd_blijft_hij_dicht_tot_er_ruimte_is(
 
 
 def test_met_genoeg_ruimte_gaat_hij_weer_open(make_coordinator, hass):
+    """... en na het kwartier (v3.99.7)."""
     c = make_coordinator({})
     _verkoop(c, beschikbaar=5.01, veilig=5.02)
 
-    assert _verkoop(c, beschikbaar=5.40, veilig=5.02) is True
+    assert _verkoop_op(c, NU + timedelta(minutes=20), beschikbaar=5.40, veilig=5.02) is True
 
 
 def test_eenmaal_open_blijft_hij_open_tot_de_grens(make_coordinator, hass):
@@ -238,3 +239,41 @@ def test_zonder_lopende_noodlading_geldt_de_ondergrens(make_coordinator, hass):
     c = make_coordinator({})
 
     assert _nood(c, 14.0) is False
+
+
+# --- v3.99.7: de reserve zelf springt, dus ook een tijd-dode-zone -------
+#
+# Met v3.99.6 draaiend, uit het logboek van 21:18:
+#
+#     21:03  verkopen   21:08  slim   21:15  verkopen   21:17  slim
+#
+# De dode zone op de VOORRAAD (0,25 kWh) hield niet. De reserve springt
+# namelijk zelf tussen twee rondes: op een kwartiergrens verschuift de
+# wandeling een kwartier, en de correctieverhouding ververst. Zakt de
+# reserve 0,3 kWh, dan is de dode zone weg. Een dode zone op de voorraad
+# helpt niet tegen een drempel die beweegt.
+#
+# Daarom ook een dode zone in de TIJD: eenmaal dicht, blijft hij minstens
+# een kwartier dicht, wat de reserve ook doet. Stoppen blijft direct.
+
+
+def test_binnen_een_kwartier_gaat_hij_niet_weer_open(make_coordinator, hass):
+    from custom_components.energy_management_system.const import (
+        SELL_REOPEN_MIN_MINUTES,
+    )
+
+    c = make_coordinator({})
+    assert _verkoop(c, beschikbaar=5.01, veilig=5.02) is False
+    # Volgende ronde zakt de reserve fors: ruimte zat, maar te snel.
+    c._verkoop_dicht_sinds = NU
+    assert _verkoop_op(c, NU + timedelta(minutes=5), beschikbaar=5.01, veilig=4.40) is False
+    assert _verkoop_op(c, NU + timedelta(minutes=SELL_REOPEN_MIN_MINUTES + 1), beschikbaar=5.01, veilig=4.40) is True
+
+
+def _verkoop_op(c, wanneer, beschikbaar, veilig):
+    c.bruikbare_capaciteit_kwh = lambda: 8.64
+    c.beschikbare_energie_kwh = lambda: beschikbaar
+    c._estimate_worst_case_deficit_kwh = lambda *a, **k: veilig / 1.616
+    c._reserve_margin_factor = lambda: 1.616
+    c.last_cheap_block_start = BLOK
+    return c.may_sell_now(wanneer)["mag_verkopen"]

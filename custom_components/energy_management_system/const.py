@@ -158,6 +158,26 @@ APPARAAT_INSTELLINGEN = (
 # hoger en een enkele goede dag wist het patroon uit.
 PV_FOUT_EENZIJDIG_AANDEEL = 0.7
 
+# Wat de accu DOET, per reden (v3.99.7).
+#
+# Gemeld: "Accu: handmatig" bij een melding die zegt dat de accu
+# verkoopt. Handmatig is de stand; laden uit het net en verkopen tegen
+# de dure prijs hebben allebei die stand, en dat zijn tegengestelde
+# dingen. De reden weet het wel.
+REDEN_KORTE_NAAM = {
+    "expensive_quarter": "verkopen",
+    "expensive_quarter_soc_protected": "verkopen (met reserve)",
+    "grid_charging_low_solar": "laden uit het net",
+    "grid_charging_low_solar_extra_dip": "laden uit het net (dip)",
+    "emergency_low_battery": "noodlading",
+    "negative_price": "laden, negatieve prijs",
+    "discharging_window": "huis dekken",
+    "default_smart": "slim",
+    "arbitrage_solar_capture": "zon opvangen",
+    "solar_capture_deferred": "huis dekken, zon later",
+    "no_forecast_data": "geen prijsdata",
+}
+
 MODUS_KORTE_NAAM = {
     "smart_discharging": "ontladen",
     "smart_charging": "laden uit het net",
@@ -4859,6 +4879,12 @@ SELL_RESERVE_SAFETY_FACTOR = 1.5
 # Verkopen: eenmaal dicht door de reserve, pas weer open als er dit
 # bovenop de reserve staat. 0,25 kWh is tien minuten verkopen op 1600 W.
 SELL_HYSTERESIS_KWH = 0.25
+# En in de TIJD (v3.99.7): eenmaal dicht, minstens een kwartier dicht.
+# Met v3.99.6 draaiend ging hij om 21:03, 21:08, 21:15 en 21:17 om: de
+# reserve zelf springt tussen rondes (kwartiergrens, verversing van de
+# correctieverhouding), en een dode zone op de voorraad helpt niet
+# tegen een drempel die beweegt.
+SELL_REOPEN_MIN_MINUTES = 15.0
 # Zonvangst: aan boven +150 W, uit onder -150 W. Een koelkastcompressor
 # is 100 W, een waterkoker kort 2000 - dat laatste mag hem best even
 # uitzetten, het eerste niet.
