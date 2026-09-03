@@ -23011,3 +23011,38 @@ Dat de reserve zelf zo springt, is het eigenlijke probleem. Dat staat
 op de lijst voor de ronde waarin de reserve één definitie krijgt.
 
 **Volledige testsuite**: 3563 tests, allemaal groen.
+
+
+## v3.99.8 — Een dagteller die nog niets heeft geteld is niet weg
+
+**Gemeld**: "Ik krijg nu vaak de volgende melding: 'n Sensor is d'r neet
+meer — sensor.solaredge_production_energy geeft al minstens 15 minuten
+geen waarde."
+
+Vier keer in één nacht:
+
+```
+00:18  sensor.zonneplan_electricity_delivery_costs_today
+02:18  sensor.solaredge_production_energy
+04:18  sensor.solaredge_production_energy
+06:18  sensor.solaredge_production_energy
+```
+
+Allebei dagtellers. De Zonneplan-kostenteller springt om middernacht op
+`unknown` tot de eerste cent; de SolarEdge-energieteller tot de eerste
+kWh. Dat is geen storing — dat is een teller die nog niets heeft geteld.
+Het was een voorspelbaar gevolg van v3.99.6, dat de bewaking van vier
+sensoren naar alle ingestelde entiteiten uitbreidde: de dagtellers
+kwamen mee, en die zijn elke nacht een paar uur leeg.
+
+Voor de zeven dagteller-instellingen telt `unknown` nu als "nog niets
+geteld". `unavailable` blijft wél tellen — dan is de koppeling zelf weg,
+en dat is precies het geval waarvoor de melding bestaat. Een kernsensor
+op `unknown` — de laadstand, de prijs — blijft ook een melding: dat is
+geen teller die wacht, dat is een accu waar de integratie niets van weet.
+
+De herhaling elke twee uur is de bestaande demping voor een aanhoudende
+storing en blijft zo: voor een koppeling die echt weg is, is dat het
+goede gedrag.
+
+**Volledige testsuite**: 3567 tests, allemaal groen.

@@ -1,4 +1,4 @@
-EMS v3.99.7 - alleen de wijzigingen sinds v3.99.6
+EMS v3.99.8 - alleen de wijzigingen sinds v3.99.7
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
 
@@ -6,19 +6,11 @@ TE KOPIEREN naar config/custom_components/energy_management_system/
 
 NAAR DE REPO
 
-    README.md, CHANGELOG.md
-    tests/test_modusmelding_richting.py   nieuw
-    tests/test_schakelhysterese.py        aangevuld
+    README.md, CHANGELOG.md, tests/test_melding_weggevallen_invoer.py
 
 WAT ER VERANDERT
 
-1. De titel van de moduswissel zegt wat de accu DOET:
-   "Accu: verkopen", "Accu: laden uit het net", "Accu: huis dekken".
-   Niet meer "handmatig" - dat is de stand, en laden en verkopen
-   hebben allebei die stand.
-2. "Vermogen: 1600 W" staat alleen nog bij een handmatige stand.
-3. De verkooptoets blijft na een blokkering minstens een kwartier
-   dicht. De dode zone op de voorraad alleen hield niet, want de
-   reserve springt zelf tussen rondes.
-
-Verwacht: geen wissel meer binnen een kwartier na een "huis dekken".
+Dagtellers (PV-energie, kosten, netimport/-export, apparaatenergie) die
+'s nachts op "unknown" staan, geven geen melding meer. Ze hebben nog
+niets geteld. "unavailable" - de koppeling zelf weg - blijft wel een
+melding, ook voor deze sensoren.

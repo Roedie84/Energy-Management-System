@@ -133,6 +133,24 @@ CONF_WATER_TOTAL_USAGE_SENSOR = "water_total_usage_sensor_entity"
 #
 # Voor deze instellingen is "geen waarde" dus geen storing. Voor de
 # prijssensor of de accusensor wél: daar hangt de sturing aan.
+# Dagtellers: instellingen waarvan `unknown` betekent "nog niets geteld"
+# en niet "weg" (v3.99.8).
+#
+# Gemeld: vier meldingen in een nacht, om 00:18, 02:18, 04:18 en 06:18.
+# De Zonneplan-kostenteller springt om middernacht op unknown tot de
+# eerste cent; de SolarEdge-energieteller tot de eerste kWh. Dat is geen
+# storing. `unavailable` blijft wel een storing: dan is de koppeling
+# zelf weg.
+DAGTELLER_INSTELLINGEN = (
+    "pv_energy_sensor_entity",
+    "cost_energy_sensor_entity",
+    "grid_import_energy_sensor_entity",
+    "grid_export_energy_sensor_entity",
+    "battery_discharge_energy_sensor_entity",
+    "dishwasher_energy_sensor_entity",
+    "washing_machine_energy_sensor_entity",
+)
+
 APPARAAT_INSTELLINGEN = (
     "dishwasher_power_sensor_entity",
     "dishwasher_ready_sensor_entity",

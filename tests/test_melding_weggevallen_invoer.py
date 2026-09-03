@@ -107,3 +107,65 @@ def test_terug_is_terug(make_coordinator, hass):
     c._volg_beschikbaarheid_van_de_invoer(LATER + timedelta(minutes=1))
 
     assert _weggevallen(c, LATER + timedelta(minutes=1)) == []
+
+
+# --- v3.99.8: een dagteller die nog niets heeft geteld is niet weg ------
+#
+# Gemeld: "Ik krijg nu vaak de volgende melding: 'n Sensor is d'r neet
+# meer - sensor.solaredge_production_energy geeft al minstens 15 minuten
+# geen waarde." Vier keer in een nacht, om 00:18, 02:18, 04:18 en 06:18.
+#
+# Om 00:18 was het de Zonneplan-kostenteller, daarna de SolarEdge-
+# energieteller. Allebei dagtellers die om middernacht op `unknown`
+# springen en pas een waarde krijgen bij de eerste kWh of de eerste
+# cent. Dat is geen storing; dat is een teller die nog niets heeft
+# geteld. `unavailable` is iets anders: dan is de koppeling weg.
+
+
+def test_een_dagteller_op_unknown_is_niet_weg(make_coordinator, hass):
+    """SolarEdge om 02:18: unknown, want nog geen zon."""
+    c = make_coordinator({})
+    _opzet(c, hass, {"pv_energy_sensor_entity": "sensor.solaredge_production_energy"},
+           {"sensor.solaredge_production_energy": "unknown"})
+
+    c._volg_beschikbaarheid_van_de_invoer(NU)
+    c._volg_beschikbaarheid_van_de_invoer(LATER)
+
+    assert _weggevallen(c, LATER) == []
+
+
+def test_een_dagteller_op_unavailable_is_wel_weg(make_coordinator, hass):
+    """De koppeling zelf weg: dat blijft een melding."""
+    c = make_coordinator({})
+    _opzet(c, hass, {"pv_energy_sensor_entity": "sensor.solaredge_production_energy"},
+           {"sensor.solaredge_production_energy": "unavailable"})
+
+    c._volg_beschikbaarheid_van_de_invoer(NU)
+    c._volg_beschikbaarheid_van_de_invoer(LATER)
+
+    assert [r["entiteit"] for r in _weggevallen(c, LATER)] == ["sensor.solaredge_production_energy"]
+
+
+def test_de_kostenteller_ook(make_coordinator, hass):
+    c = make_coordinator({})
+    _opzet(c, hass, {"cost_energy_sensor_entity": "sensor.zonneplan_kosten"},
+           {"sensor.zonneplan_kosten": "unknown"})
+
+    c._volg_beschikbaarheid_van_de_invoer(NU)
+    c._volg_beschikbaarheid_van_de_invoer(LATER)
+
+    assert _weggevallen(c, LATER) == []
+
+
+def test_een_kernsensor_op_unknown_blijft_een_melding(make_coordinator, hass):
+    """De laadstand die unknown is, is geen teller die wacht - dat is
+
+    een accu waar de integratie niets van weet.
+    """
+    c = make_coordinator({})
+    _opzet(c, hass, {"battery_soc_sensor_entity": "sensor.soc"}, {"sensor.soc": "unknown"})
+
+    c._volg_beschikbaarheid_van_de_invoer(NU)
+    c._volg_beschikbaarheid_van_de_invoer(LATER)
+
+    assert [r["entiteit"] for r in _weggevallen(c, LATER)] == ["sensor.soc"]

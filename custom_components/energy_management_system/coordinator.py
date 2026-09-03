@@ -184,6 +184,7 @@ from .const import (
     HOME_CONNECT_ACTIVE_STATES,
     CONF_APPLIANCE_NOTIFY_SERVICE,
     APPARAAT_INSTELLINGEN,
+    DAGTELLER_INSTELLINGEN,
     MODE_CHANGE_EMOJI,
     PV_FOUT_EENZIJDIG_AANDEEL,
     MODUS_KORTE_NAAM,
@@ -25565,9 +25566,18 @@ class EnergyManagementSystemCoordinator:
             entity_id = regel.get("entiteit")
             if not entity_id:
                 continue
-            self._track_sensor_availability(
-                now, entity_id, regel.get("oordeel") == "in_orde"
-            )
+            in_orde = regel.get("oordeel") == "in_orde"
+            # v3.99.8: een dagteller op `unknown` heeft nog niets geteld.
+            # Vier meldingen in een nacht over de SolarEdge-energieteller
+            # en de Zonneplan-kostenteller, die allebei om middernacht op
+            # unknown springen. `unavailable` blijft wel tellen.
+            if (
+                not in_orde
+                and regel.get("instelling") in DAGTELLER_INSTELLINGEN
+                and regel.get("waarde") == "unknown"
+            ):
+                in_orde = True
+            self._track_sensor_availability(now, entity_id, in_orde)
             self._invoer_gebruik[entity_id] = self._instelling_leesbaar(
                 regel.get("instelling") or ""
             )
