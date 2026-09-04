@@ -169,3 +169,43 @@ def test_een_kernsensor_op_unknown_blijft_een_melding(make_coordinator, hass):
     c._volg_beschikbaarheid_van_de_invoer(LATER)
 
     assert [r["entiteit"] for r in _weggevallen(c, LATER)] == ["sensor.soc"]
+
+
+# --- v3.99.9: een cloudkoppeling valt wel eens een half uur weg --------
+#
+# 3 september, twee meldingen overdag:
+#
+#     10:09  weather.openweathermap       (bewolkingsgraad-tegencheck)
+#     14:43  sensor.co2_signal_co2_intensity (CO2-intensiteit)
+#
+# Allebei optionele cloudkoppelingen die een tegencheck of een
+# nevenwaarde leveren, allebei binnen een uur terug. Vijftien minuten is
+# de goede bevestigingstijd voor een sensor waar de sturing van afhangt;
+# voor een tegencheck uit de cloud is dat elke API-hik een melding.
+
+
+def test_een_cloudkoppeling_krijgt_een_uur(make_coordinator, hass):
+    from custom_components.energy_management_system.const import (
+        CLOUD_INVOER_CONFIRM_MINUTES,
+    )
+
+    c = make_coordinator({})
+    _opzet(c, hass, {"openweathermap_weather_entity": "weather.owm"},
+           {"weather.owm": "unavailable"})
+
+    c._volg_beschikbaarheid_van_de_invoer(NU)
+    c._volg_beschikbaarheid_van_de_invoer(NU + timedelta(minutes=20))
+    assert _weggevallen(c, NU + timedelta(minutes=20)) == []
+
+    c._volg_beschikbaarheid_van_de_invoer(NU + timedelta(minutes=CLOUD_INVOER_CONFIRM_MINUTES + 1))
+    assert [r["entiteit"] for r in _weggevallen(c, NU + timedelta(minutes=CLOUD_INVOER_CONFIRM_MINUTES + 1))] == ["weather.owm"]
+
+
+def test_een_kernsensor_houdt_het_kwartier(make_coordinator, hass):
+    c = make_coordinator({})
+    _opzet(c, hass, {"battery_soc_sensor_entity": "sensor.soc"}, {"sensor.soc": "unavailable"})
+
+    c._volg_beschikbaarheid_van_de_invoer(NU)
+    c._volg_beschikbaarheid_van_de_invoer(NU + timedelta(minutes=16))
+
+    assert [r["entiteit"] for r in _weggevallen(c, NU + timedelta(minutes=16))] == ["sensor.soc"]

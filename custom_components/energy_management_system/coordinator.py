@@ -184,6 +184,8 @@ from .const import (
     HOME_CONNECT_ACTIVE_STATES,
     CONF_APPLIANCE_NOTIFY_SERVICE,
     APPARAAT_INSTELLINGEN,
+    CLOUD_INVOER_CONFIRM_MINUTES,
+    CLOUD_INVOER_INSTELLINGEN,
     DAGTELLER_INSTELLINGEN,
     MODE_CHANGE_EMOJI,
     PV_FOUT_EENZIJDIG_AANDEEL,
@@ -1209,7 +1211,10 @@ class EnergyManagementSystemCoordinator:
         # uitval te onderscheiden van een enkele gemiste uitlezing.
         # v3.99.6: `_invoer_gebruik` erbij (waar elke bewaakte entiteit voor
         # dient) in dezelfde regel - `__init__` staat op de ratel.
-        self._sensor_unavailable_since, self._invoer_gebruik = {}, {}
+        # v3.99.9: `_invoer_instelling` erbij (de instellingssleutel per
+        # bewaakte entiteit, voor de bevestigingstijd per soort). Drie in
+        # een regel - `__init__` staat op de ratel.
+        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling = {}, {}, {}
         # v1.1.6: met welke meetmethode de bewaarde foutreeks tot stand
         # is gekomen. Verandert de methode, dan wordt die reeks eenmalig
         # gewist - zie ENERGY_BALANCE_METHOD_VERSION.
@@ -6621,6 +6626,13 @@ class EnergyManagementSystemCoordinator:
             # zie je sneller dat er niemand is.
             if self._tv_staat_aan():
                 self.presence_state = "thuis"
+            # v3.99.9: water en licht zijn onderdeel van een wc-bezoek.
+            # De onderbrekingsregel (v3.96.0) stond pas na deze regels,
+            # en het wc-licht maakte er "thuis" van voordat hij aan de
+            # beurt was - waarna de vorige staat geen "slaapt" meer was.
+            # 02:39-03:12 op 3 september, 33 minuten.
+            elif self._is_nachtelijke_onderbreking(now, vorige):
+                self.presence_state = "slaapt"
             elif self._stromend_water():
                 # v3.29.0: een lopende kraan is het sterkste signaal dat
                 # er is, en het enige dat een simulatie-automatisering
@@ -6638,11 +6650,12 @@ class EnergyManagementSystemCoordinator:
                 # slaapregels, dus elke beweging beeindigde de nacht
                 # meteen - en de dertig minuten stilte die daarna nodig
                 # waren, kwamen als een blok "thuis" in de tijdlijn.
-                if self._is_nachtelijke_onderbreking(now, vorige):
-                    self.presence_state = "slaapt"
-                else:
-                    self._nachtrust_onderbroken_sinds = None
-                    self.presence_state = "thuis"
+                # v3.99.9: de onderbrekingsregel staat nu VOOR water en
+                # licht (zie hierboven) en is deze ronde al beoordeeld.
+                # Twee keer beoordelen in een ronde zette de teller weer
+                # op nul zodra de eerste beoordeling hem had gewist.
+                self._nachtrust_onderbroken_sinds = None
+                self.presence_state = "thuis"
             elif self._slaapt_waarschijnlijk(now):
                 # Was de slaapsensor de LAATSTE beweging, dan is de
                 # stilte die erop volgt geen afwezigheid maar een nacht.
@@ -9809,7 +9822,14 @@ class EnergyManagementSystemCoordinator:
         if staat is None or staat.state in ("unavailable", "unknown"):
             return
         werkelijk = staat.state
-        gewenst = self.last_applied_operation
+        # v3.99.9: wat de EMS WIL staat in de reden van deze ronde.
+        # `last_applied_operation` is de laatste VERSTUURDE opdracht;
+        # kiest de EMS handmatig terwijl de accu al op handmatig staat,
+        # dan wordt er niets verstuurd en blijft dat veld op de vorige
+        # opdracht staan. Vier "ingrepen" op 3 september kwamen daar
+        # vandaan, alle met een reden die de tegenovergestelde stand
+        # impliceerde. De reden is altijd van deze ronde.
+        gewenst = self._modus_bij_beslissing(self.last_reason) or self.last_applied_operation
 
         # v3.76.0: terugvallen op de laatste BESLISSING als er nog niets
         # is geschreven.
@@ -20546,6 +20566,11 @@ class EnergyManagementSystemCoordinator:
         primary_needed_kwh = len(remaining_primary) * energy_per_quarter_kwh
         return max(0.0, headroom_kwh - primary_needed_kwh)
 
+    def _secundaire_laag_toegestaan(self) -> bool:
+        """Mag de secundaire prijslaag verkopen? Alleen als de verkooptoets
+        niet door de reserve dicht staat (v3.99.9)."""
+        return not self._verkoop_geblokkeerd_door_reserve
+
     def _is_worth_discharging_at_secondary_tier(
         self,
         entries: list[PriceEntry],
@@ -25581,6 +25606,7 @@ class EnergyManagementSystemCoordinator:
             self._invoer_gebruik[entity_id] = self._instelling_leesbaar(
                 regel.get("instelling") or ""
             )
+            self._invoer_instelling[entity_id] = regel.get("instelling") or ""
 
     _instelling_labels: dict[str, str] | None = None
 
@@ -25651,6 +25677,11 @@ class EnergyManagementSystemCoordinator:
         if sinds is None:
             return False
         weg_minuten = (now - sinds).total_seconds() / 60
+        # v3.99.9: een cloudkoppeling die alleen een tegencheck levert,
+        # krijgt een uur. Twee meldingen op 3 september over koppelingen
+        # die binnen het uur terug waren.
+        if self._invoer_instelling.get(entity_id) in CLOUD_INVOER_INSTELLINGEN:
+            return weg_minuten >= CLOUD_INVOER_CONFIRM_MINUTES
         return weg_minuten >= SENSOR_UNAVAILABLE_CONFIRM_MINUTES
 
     def get_sensor_health_breakdown(self) -> dict:
@@ -32752,8 +32783,17 @@ class EnergyManagementSystemCoordinator:
                         0.0, secondary_available_kwh - secondary_reserve_kwh
                     )
                     secondary_discharge_power = self.instelling(CONF_MANUAL_DISCHARGE_POWER, DEFAULT_MANUAL_DISCHARGE_POWER)
-                    if self._is_worth_discharging_at_secondary_tier(
-                        entries, now, secondary_headroom_kwh, secondary_discharge_power
+                    # v3.99.9: en alleen als de verkooptoets niet dicht
+                    # staat. Elke minuut om op 3 september, 23:35-23:38:
+                    # de dode zones zitten in `may_sell_now`, maar zegt
+                    # die nee, dan viel de code hier door en rekende deze
+                    # laag zijn eigen ruimte uit - zonder rem. Twee
+                    # poorten voor dezelfde vraag, waarvan er een geremd
+                    # was.
+                    if self._secundaire_laag_toegestaan() and (
+                        self._is_worth_discharging_at_secondary_tier(
+                            entries, now, secondary_headroom_kwh, secondary_discharge_power
+                        )
                     ):
                         is_expensive = True
                         expensive_tier = "secondary"

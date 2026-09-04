@@ -277,3 +277,38 @@ def _verkoop_op(c, wanneer, beschikbaar, veilig):
     c._reserve_margin_factor = lambda: 1.616
     c.last_cheap_block_start = BLOK
     return c.may_sell_now(wanneer)["mag_verkopen"]
+
+
+# --- v3.99.9: de secundaire laag liep om de poort heen ------------------
+#
+# Eerste volle dag op v3.99.8, uit het logboek van 4 september:
+#
+#     23:35  verkopen   23:36  slim   23:37  verkopen   23:38  slim
+#
+# Elke MINUUT om. De dode zones van v3.99.4 en v3.99.7 zitten in
+# `may_sell_now`. Maar zegt die nee, dan valt de code door naar de
+# SECUNDAIRE prijslaag (v0.x), en die rekent zijn eigen ruimte uit:
+# beschikbaar min reserve, direct, zonder dode zone. Die ruimte is bij
+# 4,15 tegen 4,17 een paar honderd watt - positief in de ene ronde,
+# negatief in de volgende. Twee poorten voor dezelfde vraag, waarvan er
+# maar een geremd was.
+
+
+def test_de_secundaire_laag_respecteert_een_dichte_verkooptoets(
+    make_coordinator, hass
+):
+    """Zegt de verkooptoets nee door de reserve, dan mag de secundaire
+
+    laag niet alsnog gaan verkopen - anders is de dode zone dood.
+    """
+    c = make_coordinator({})
+    _verkoop(c, beschikbaar=5.01, veilig=5.02)  # dicht door de reserve
+
+    assert c._secundaire_laag_toegestaan() is False
+
+
+def test_zonder_blokkering_mag_de_secundaire_laag_wel(make_coordinator, hass):
+    c = make_coordinator({})
+    _verkoop(c, beschikbaar=5.40, veilig=5.02)
+
+    assert c._secundaire_laag_toegestaan() is True

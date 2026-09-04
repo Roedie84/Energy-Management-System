@@ -23046,3 +23046,82 @@ storing en blijft zo: voor een koppeling die echt weg is, is dat het
 goede gedrag.
 
 **Volledige testsuite**: 3567 tests, allemaal groen.
+
+
+## v3.99.9 — De eerste volle dag, en wat die liet zien
+
+Export van 4 september 07:04, 24 uur op v3.99.8. Bestandscontrole
+schoon, nul fouten. Maar het logboek van gisteravond:
+
+```
+23:35  verkopen   23:36  slim   23:37  verkopen   23:38  slim
+```
+
+Elke minuut om. De dode zones van v3.99.4 en v3.99.7 hielden niet.
+
+### De secundaire prijslaag liep om de poort heen
+
+De dode zones zitten in `may_sell_now`. Maar zegt die nee, dan viel de
+code door naar de SECUNDAIRE prijslaag — die rekent zijn eigen ruimte
+uit, beschikbaar min reserve, direct en zonder rem. Bij 4,15 tegen 4,17
+is dat een paar honderd watt: positief in de ene ronde, negatief in de
+volgende. Twee poorten voor dezelfde vraag, waarvan er één geremd was.
+De secundaire laag respecteert nu een dichte verkooptoets.
+
+Dit is de vierde keer deze week dat "één regel, meerdere plekken"
+misgaat: de bodem (v3.92.1, vier plekken), de reserve (v3.99.5, drie
+getallen), en nu de verkooppoort. Het patroon is duidelijk genoeg om er
+een aparte ronde aan te wijden.
+
+### Vier nieuwe valse ingrepen, ondanks de drie minuten
+
+```
+19:48  wilde smart_discharging  werkelijk manual  reden expensive_quarter
+```
+
+Nog steeds tegenstrijdig. `gewenst` kwam uit `last_applied_operation`:
+de laatste VERSTUURDE opdracht. Kiest de EMS handmatig terwijl de accu al
+op handmatig staat, dan wordt er niets verstuurd en blijft dat veld op
+de vorige opdracht staan — minuten oud. De detector vergeleek de accu
+(handmatig, correct) met een opdracht die niet meer gold. De reden is
+altijd van deze ronde; die wint nu. De toets uit v3.76.0 die het
+omgekeerde vastlegde, is omgedraaid.
+
+### Het wc-licht brak de nacht alsnog
+
+```
+02:39 - 03:12  thuis   33 min   beweging (Gang Beweging)
+03:12 - 05:27  slaapt
+```
+
+De onderbrekingsregel van v3.96.0 hing aan "was er recent beweging?" —
+maar die regel komt pas NA de regels voor tv, water en licht. Wie 's
+nachts het wc-licht aandoet, werd door de lichtregel "thuis", en de
+ronde erna was de vorige staat geen "slaapt" meer. Water en licht zijn
+onderdeel van een wc-bezoek; de onderbrekingsregel staat nu vóór die
+twee. Tv niet: wie om drie uur tv aanzet, is op.
+
+En een fout die daarbij bloot kwam: de regel werd twee keer per ronde
+beoordeeld, en de tweede beoordeling zette de teller weer op nul zodra
+de eerste hem had gewist. Nu één keer.
+
+### Twee cloudkoppelingen die een half uur weg waren
+
+```
+10:09  weather.openweathermap
+14:43  sensor.co2_signal_co2_intensity
+```
+
+Allebei optioneel, allebei een tegencheck, allebei binnen een uur
+terug. Vijftien minuten is de goede bevestigingstijd voor een sensor
+waar de sturing van afhangt; voor een tegencheck uit de cloud is dat
+elke API-hik een melding. Die drie krijgen een uur.
+
+### Wat er goed ging
+
+De nacht van 3 op 4 september: 23:45 tot 05:41, één blok. De
+wisselteller over het laatste uur: nul. De dagtellers: geen meldingen
+meer. En de secundaire laag was de laatste poort — vanaf nu is er geen
+pad meer naar "verkopen" dat niet door dezelfde rem loopt.
+
+**Volledige testsuite**: 3577 tests, allemaal groen.

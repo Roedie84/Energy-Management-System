@@ -155,3 +155,56 @@ def test_vanuit_weg_verandert_er_niets(make_coordinator, hass):
     c.presence_state = "weg"
 
     assert _bepaal(c, OCHTEND) == "weg"
+
+
+# --- v3.99.9: het licht op de wc brak de nacht alsnog ------------------
+#
+# Uit de tijdlijn van 3 september, op v3.99.7:
+#
+#     02:39 - 03:12  thuis   33 min   beweging (Gang Beweging)
+#     03:12 - 05:27  slaapt
+#
+# De onderbrekingsregel van v3.96.0 hangt aan "was er recent beweging?"
+# - maar die regel komt pas NA de regels voor tv, water en licht. Wie
+# 's nachts het wc-licht aandoet, wordt door de lichtregel "thuis", en
+# de ronde erna is de vorige staat geen "slaapt" meer. De onderbreking
+# kan dan niet meer aangrijpen, en de dertig minuten stilte erna
+# verschijnen weer als blok "thuis".
+#
+# Water en licht zijn onderdeel van een wc-bezoek. Tv niet: wie om drie
+# uur tv kijkt, is wakker.
+
+
+def test_het_wc_licht_beeindigt_de_nacht_niet(make_coordinator, hass):
+    c = make_coordinator({})
+    _slapend(c, NACHT, beweging_geleden_min=1, slaapsensor_geleden_min=140)
+    c._brandend_licht = lambda: "light.wc"
+
+    assert _bepaal(c, NACHT) == "slaapt"
+
+
+def test_stromend_water_ook_niet(make_coordinator, hass):
+    c = make_coordinator({})
+    _slapend(c, NACHT, beweging_geleden_min=1, slaapsensor_geleden_min=140)
+    c._stromend_water = lambda: True
+
+    assert _bepaal(c, NACHT) == "slaapt"
+
+
+def test_de_tv_wel(make_coordinator, hass):
+    """Wie om drie uur tv aanzet, is op."""
+    c = make_coordinator({})
+    _slapend(c, NACHT, beweging_geleden_min=1, slaapsensor_geleden_min=140)
+    c._tv_staat_aan = lambda: True
+
+    assert _bepaal(c, NACHT) == "thuis"
+
+
+def test_licht_dat_lang_aan_blijft_is_wel_opstaan(make_coordinator, hass):
+    """Twintig minuten licht plus beweging: er is iemand op."""
+    c = make_coordinator({})
+    _slapend(c, NACHT, beweging_geleden_min=0, slaapsensor_geleden_min=140)
+    c._brandend_licht = lambda: "light.keuken"
+    c._nachtrust_onderbroken_sinds = NACHT - timedelta(minutes=25)
+
+    assert _bepaal(c, NACHT) == "thuis"

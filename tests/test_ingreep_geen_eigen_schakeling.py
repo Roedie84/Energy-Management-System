@@ -103,3 +103,40 @@ def test_de_oude_valse_ingrepen_worden_opgeruimd(make_coordinator, hass):
 
     assert len(c.handmatige_ingrepen) == 1
     assert c.handmatige_ingrepen[0]["reden_ems"] == "discharging_window"
+
+
+# --- v3.99.9: vergelijken met wat de EMS WIL, niet met wat hij stuurde --
+#
+# Vier nieuwe "ingrepen" op 3 september, ondanks de drie minuten:
+#
+#     19:48  wilde smart_discharging  werkelijk manual  reden expensive_quarter
+#
+# Nog steeds tegenstrijdig. `gewenst` komt uit `last_applied_operation`:
+# de laatste opdracht die VERSTUURD is. Kiest de EMS handmatig terwijl de
+# accu al op handmatig staat, dan wordt er niets verstuurd en blijft dat
+# veld op de vorige opdracht staan - smart_discharging. De detector
+# vergelijkt dan de accu (handmatig, correct) met een opdracht van
+# minuten geleden.
+#
+# Wat de EMS wil, staat in de reden. Die is altijd van deze ronde.
+
+
+def test_de_reden_wint_van_de_verstuurde_opdracht(make_coordinator, hass):
+    c = make_coordinator({})
+    _opzet(c, hass, werkelijk="manual", gewenst="smart_discharging", reden="expensive_quarter")
+
+    c._volg_handmatige_ingrepen(T0)
+    c._volg_handmatige_ingrepen(T0 + timedelta(minutes=5))
+
+    assert c.handmatige_ingrepen == []
+
+
+def test_een_echte_ingreep_tegen_de_reden_telt_wel(make_coordinator, hass):
+    """EMS wil huis dekken (slim), bewoner zet handmatig laden aan."""
+    c = make_coordinator({})
+    _opzet(c, hass, werkelijk="manual", gewenst="smart_discharging", reden="discharging_window")
+
+    c._volg_handmatige_ingrepen(T0)
+    c._volg_handmatige_ingrepen(T0 + timedelta(minutes=5))
+
+    assert len(c.handmatige_ingrepen) == 1

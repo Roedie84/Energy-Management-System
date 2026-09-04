@@ -1,4 +1,4 @@
-EMS v3.99.8 - alleen de wijzigingen sinds v3.99.7
+EMS v3.99.9 - alleen de wijzigingen sinds v3.99.8
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
 
@@ -6,11 +6,19 @@ TE KOPIEREN naar config/custom_components/energy_management_system/
 
 NAAR DE REPO
 
-    README.md, CHANGELOG.md, tests/test_melding_weggevallen_invoer.py
+    README.md, CHANGELOG.md, zes toetsbestanden
 
 WAT ER VERANDERT
 
-Dagtellers (PV-energie, kosten, netimport/-export, apparaatenergie) die
-'s nachts op "unknown" staan, geven geen melding meer. Ze hebben nog
-niets geteld. "unavailable" - de koppeling zelf weg - blijft wel een
-melding, ook voor deze sensoren.
+1. De secundaire prijslaag liep om de verkooppoort heen - elke minuut
+   om, gisteravond 23:35-23:38. Dicht.
+2. Valse "handmatige ingrepen" door een verouderde verstuurde opdracht:
+   de reden van deze ronde wint nu.
+3. Het wc-licht brak de nacht alsnog (02:39-03:12). Water en licht
+   tellen nu als onderdeel van een wc-bezoek.
+4. Cloudkoppelingen (OpenWeatherMap, KNMI, CO2) krijgen een uur voor
+   er een melding komt.
+
+Verwacht vanavond: geen wissel binnen een kwartier meer, ook niet via
+de secundaire laag. Staat de teller morgen weer boven de 20, stuur de
+export.

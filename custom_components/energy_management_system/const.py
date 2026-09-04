@@ -141,6 +141,20 @@ CONF_WATER_TOTAL_USAGE_SENSOR = "water_total_usage_sensor_entity"
 # eerste cent; de SolarEdge-energieteller tot de eerste kWh. Dat is geen
 # storing. `unavailable` blijft wel een storing: dan is de koppeling
 # zelf weg.
+# Cloudkoppelingen die een tegencheck of nevenwaarde leveren (v3.99.9).
+#
+# 3 september: om 10:09 een melding over weather.openweathermap, om
+# 14:43 over sensor.co2_signal_co2_intensity. Allebei binnen een uur
+# terug. Vijftien minuten is de goede bevestigingstijd voor een sensor
+# waar de sturing van afhangt; voor een tegencheck uit de cloud is dat
+# elke API-hik een melding.
+CLOUD_INVOER_INSTELLINGEN = (
+    "openweathermap_weather_entity",
+    "knmi_weather_entity",
+    "co2_intensity_sensor_entity",
+)
+CLOUD_INVOER_CONFIRM_MINUTES = 60
+
 DAGTELLER_INSTELLINGEN = (
     "pv_energy_sensor_entity",
     "cost_energy_sensor_entity",

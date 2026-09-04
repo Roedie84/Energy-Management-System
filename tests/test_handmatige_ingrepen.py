@@ -235,10 +235,14 @@ def test_an_intervention_before_the_first_write_is_recorded(
     assert regel["uit_beslissing"] is True
 
 
-def test_a_written_mode_still_wins(make_coordinator, hass):
-    """Wat EMS werkelijk heeft geschreven is nauwkeuriger dan wat uit de
+def test_the_decision_wins_over_the_written_mode(make_coordinator, hass):
+    """v3.99.9: andersom dan v3.76.0 aannam.
 
-    beslissing valt af te leiden.
+    `last_applied_operation` is de laatste VERSTUURDE opdracht. Kiest de
+    EMS een stand die de accu al heeft, dan wordt er niets verstuurd en
+    blijft dat veld op de vorige opdracht staan - minuten oud. De reden
+    is altijd van deze ronde. Vier valse ingrepen op 3 september kwamen
+    hiervandaan.
     """
     c = make_coordinator({CONF_OPERATION_SELECT: "select.modus"})
     hass.states.set("select.modus", "manual")
@@ -247,8 +251,7 @@ def test_a_written_mode_still_wins(make_coordinator, hass):
 
     _volg_aanhoudend(c, NU)
 
-    assert c.handmatige_ingrepen[0]["ems_wilde"] == "smart_discharging"
-    assert c.handmatige_ingrepen[0]["uit_beslissing"] is False
+    assert c.handmatige_ingrepen[0]["ems_wilde"] == "smart"
 
 
 def test_without_a_decision_either_nothing_is_recorded(
