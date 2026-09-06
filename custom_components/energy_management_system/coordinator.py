@@ -513,6 +513,7 @@ from .const import (
     SELL_RESERVE_SAFETY_FACTOR,
     EMERGENCY_LOW_BATTERY_EXIT_MARGIN_PERCENT,
     HANDMATIGE_INGREEP_MIN_DUUR_MINUTEN,
+    HERSTEL_BEVESTIGING_MINUTEN,
     SELL_HYSTERESIS_KWH,
     SELL_REOPEN_MIN_MINUTES,
     SELL_RESERVE_DEEPEST_SAFETY_FACTOR,
@@ -3747,6 +3748,18 @@ class EnergyManagementSystemCoordinator:
         setattr(self, charge_started_attr, None)
         setattr(self, below_threshold_since_attr, None)
 
+    @staticmethod
+    def _cyclus_de_moeite_van_melden(
+        started_at: datetime | None, now: datetime
+    ) -> bool:
+        """Is dit een cyclus, of een pompslag erna? (v3.99.10)
+
+        Zonder begintijd is er niets te beoordelen en wordt er gemeld.
+        """
+        if started_at is None:
+            return True
+        return (now - started_at).total_seconds() / 60 >= APPLIANCE_CYCLE_MIN_LEARN_MINUTES
+
     def _leer_cyclusduur(
         self,
         now: datetime,
@@ -4316,7 +4329,12 @@ class EnergyManagementSystemCoordinator:
 
         self._dispatch_recovery_notifications(actief_nu)
 
-    def _dispatch_recovery_notifications(self, actief_nu: list[str]) -> None:
+    # v3.99.10: sinds wanneer een gemelde voorwaarde weg is, per soort.
+    _voorwaarde_weg_sinds: dict[str, datetime] | None = None
+
+    def _dispatch_recovery_notifications(
+        self, actief_nu: list[str], now: datetime | None = None
+    ) -> None:
         """Meldt wat er is opgelost (v1.6.2).
 
         Gerapporteerd: "Er is nu een melding verstuurd dat een sensor
@@ -4335,11 +4353,28 @@ class EnergyManagementSystemCoordinator:
         opgelost zou anders stilzwijgend verdwijnen, en juist dan wil je
         het horen.
         """
-        opgelost = [
-            kind
-            for kind in self.notification_active_conditions
-            if kind not in actief_nu
-        ]
+        # v3.99.10: pas herstel melden als de voorwaarde een half uur weg
+        # is. Melding, hersteld, melding, hersteld - drie keer in een
+        # nacht, omdat de reserve tussen rondes springt en het herstel
+        # in de eerste rustige ronde vuurde. Tot die tijd blijft de
+        # voorwaarde als actief geboekt, zodat een terugval ook geen
+        # nieuwe probleemmelding geeft.
+        nu = now or dt_util.now()
+        if self._voorwaarde_weg_sinds is None:
+            self._voorwaarde_weg_sinds = {}
+        opgelost = []
+        nog_niet = []
+        for kind in self.notification_active_conditions:
+            if kind in actief_nu:
+                self._voorwaarde_weg_sinds.pop(kind, None)
+                continue
+            sinds = self._voorwaarde_weg_sinds.setdefault(kind, nu)
+            if (nu - sinds).total_seconds() / 60 >= HERSTEL_BEVESTIGING_MINUTEN:
+                opgelost.append(kind)
+                self._voorwaarde_weg_sinds.pop(kind, None)
+            else:
+                nog_niet.append(kind)
+        actief_nu = sorted(set(actief_nu) | set(nog_niet))
         for kind in opgelost:
             titel, bericht = NOTIFICATION_RECOVERY_KINDS[kind]
             # v1.6.6: bij de sensor-herstelmelding noemen WELKE sensor
@@ -17417,6 +17452,11 @@ class EnergyManagementSystemCoordinator:
                 "reden": "Te weinig dagen om eerlijk te kunnen toetsen.",
             }
 
+        # v3.99.10: de import stond er nooit. Deze regel werd pas bereikt
+        # toen het PV-model genoeg monsters had, op 6 september - en toen
+        # vielen drie onderdelen van de export om met een NameError.
+        from .pv_model import RegressieWoud
+
         woud = RegressieWoud()
         woud.leer(
             [self._model_rij(m, kenmerken) for m in leer],
@@ -26415,7 +26455,10 @@ class EnergyManagementSystemCoordinator:
         setattr(self, below_threshold_since_attr, None)
         setattr(self, cycle_started_attr, None)
 
-        if notify_title:
+        # v3.99.10: een pompslag na de was is geen tweede was. "Klaor na
+        # ongeveer 6 minuten", een half uur na "klaor na 52 minuten" -
+        # v3.99.1 hield dat uit het leren, maar de melding kwam nog.
+        if notify_title and self._cyclus_de_moeite_van_melden(started_at, now):
             notify_service = self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE)
             if notify_service:
                 self._dispatch_notification(

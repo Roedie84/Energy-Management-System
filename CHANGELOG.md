@@ -23125,3 +23125,128 @@ meer. En de secundaire laag was de laatste poort — vanaf nu is er geen
 pad meer naar "verkopen" dat niet door dezelfde rem loopt.
 
 **Volledige testsuite**: 3577 tests, allemaal groen.
+
+
+## v3.99.10 — Een NameError die drie maanden wachtte
+
+Export van 6 september 11:32, met de opmerking dat de accu gisteren een
+periode uit stond vanwege werkzaamheden.
+
+### Eerst het goede nieuws
+
+Het schakelen is over. Wissels per dag in het logboek: 4 september 45
+(nog op v3.99.8), 5 september **2**, 6 september **3**. Nul snelle
+omslagen sinds v3.99.9. De secundaire laag was inderdaad de laatste
+poort.
+
+De nacht van 5 op 6 september: één blok. De dagtellers: stil. En de
+werkzaamheden aan de accu zijn netjes als handmatige ingrepen geboekt —
+"Stand: laden, sinds 12:15" — precies waar die telling voor is.
+
+### `NameError: name 'RegressieWoud' is not defined`
+
+Sinds 09:01 vanochtend elk uur een melding: drie onderdelen van de
+export kapot, `aantal_fouten: 1`.
+
+`woud = RegressieWoud()` stond in `coordinator.py` zonder import. Niet
+sinds gisteren — sinds de eerste versie van `pv_model`. De regel werd
+alleen nooit bereikt: het PV-model heeft een minimum aantal monsters
+nodig, en dat werd op 6 september voor het eerst gehaald. Toen viel hij
+om.
+
+Structuurscan 18 bestaat precies hiervoor — "namen die gebruikt worden
+maar nergens geïmporteerd zijn" — en zag het niet, want hij keek alleen
+naar HOOFDLETTERS. Klassenamen zijn CamelCase. De scan kijkt nu ook
+daarnaar, en op de originele code vindt hij exact deze ene regel. De
+scan had bovendien een tweede gebrek: `__builtins__` is binnen pytest een
+dict, geen module, waardoor `Exception` en `ValueError` als "ontbrekend"
+zouden gelden. Ook hersteld.
+
+### Melding, hersteld, melding, hersteld
+
+```
+01:00  Accu haalt de nacht niet   nodig 1,78  beschikbaar 1,04
+02:01  hersteld
+02:08  Accu haalt de nacht niet   nodig 1,56
+02:12  hersteld
+03:03  Accu haalt de nacht niet   nodig 1,66
+03:13  hersteld
+```
+
+De herstelmelding omzeilt de demping bewust (v1.6.2) — terecht — maar
+vuurde in de eerste ronde waarin de voorwaarde wegviel. En de reserve
+springt tussen rondes. `plan_tekort` deed het al goed met "al een half
+uur geen kwartieren meer"; nu geldt die regel voor élk herstel: een
+voorwaarde moet een half uur weg zijn. Tot die tijd blijft hij als
+actief geboekt, zodat een terugval ook geen nieuwe probleemmelding
+geeft.
+
+### "Klaor na ongeveer 6 minuten"
+
+4 september 19:47, een half uur na "klaor na 52 minuten". 5 september
+09:00 en 16:20 voor de wasmachine. v3.99.1 hield de zes minuten uit het
+LEREN; de melding kwam nog gewoon. Een pompslag na de was is geen tweede
+was, en wordt niet meer gemeld.
+
+### Niet gerepareerd
+
+De koelventilator sloeg op 4 september vier keer aan en uit binnen een
+uur, en de bestaande melding `koeling_te_scherp` zag dat. Dat is
+dezelfde vorm als het schakelen — een drempel zonder dode zone — maar
+het raakt de accutemperatuur, en daar wil ik de logica van v1.x eerst
+volledig lezen voordat ik er een rem op zet.
+
+**Volledige testsuite**: 3580 tests, allemaal groen.
+
+
+## v3.99.11 — De sensor zette de zes minuten weer terug
+
+**Gevraagd**: "Kon je nog meer zaken uit de export halen?"
+
+### Het dubbele herstelpad beet, precies zoals opgeschreven
+
+```
+wasmachine   6, 36, 6, 153, 6, 186, 157
+```
+
+Drie keer zes minuten — terwijl v3.99.1 die uit het leren houdt en bij
+het laden opschoont. De opschoning loopt bij het laden van de Store.
+Daarna komt de SENSOR, en die zet zijn eigen bewaarde reeks
+onvoorwaardelijk terug, inclusief de zes minuten. Twee herstelpaden, en
+de tweede maakte ongedaan wat de eerste opruimde.
+
+Dit is het risico dat in v3.99.1 is opgeschreven over de 22 sensoren
+met een eigen herstelroute, met de opmerking "geen symptoom". Dit is
+het symptoom. Voor deze twee reeksen is de Store nu leidend en zet de
+sensor alleen iets terug als de Store niets had — en dan opgeschoond.
+Voor de andere twintig blijft de aparte ronde staan; die is hiermee wel
+een trede omhoog gegaan.
+
+Het goede nieuws in dezelfde reeks: 153, 186 en 157 zijn drie echte
+wasbeurten, dicht bij elkaar. Zodra de zes minuten weg zijn, wordt de
+geleerde duur 157 minuten, en dan klopt "klaor na ongeveer" voor het
+eerst.
+
+### De dagrecords stonden niet in de export
+
+`reserve_daily_records` — sinds v3.99.0 met `vermogensgrens` en
+`max_ontlaad_w` per dag — is beloofd als controlemiddel voor de
+kookpieken, en nooit in de export gezet. Nu wel. De vraag "hoeveel van
+de vier tekortdagen waren kookpieken" is daarmee vanaf morgen te
+beantwoorden.
+
+### Wat er verder in de export stond
+
+- **De ijklijn**: vijf dagen per bakje, halverwege. Status terecht nog
+  "onvoldoende data"; de rangorde komt na tien dagen.
+- **Powercalc**: 4,2% van het verbruik, 0,1% winst. Het antwoord blijft
+  nee, en dat is stabiel.
+- **De marge**: 4 tekortdagen, 20 procentpunt. Of dat kookpieken waren,
+  is zonder de dagrecords niet te zeggen — vandaar het punt hierboven.
+- **Besparing per dag**: 0,61 / 0,17 / 0,44 euro tegenover een huis
+  zonder accu. Dat is het getal waar het uiteindelijk om gaat, en het
+  staat elke avond om tien uur in de melding.
+- **Water**: twaalf sessies vandaag, nul bevestigingen. Die kaart
+  blijft leeg tot je er een bevestigt.
+
+**Volledige testsuite**: 3582 tests, allemaal groen.

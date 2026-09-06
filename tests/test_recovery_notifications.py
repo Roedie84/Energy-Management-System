@@ -45,6 +45,23 @@ def _weg_sinds(c, entity_id, moment):
     )
 
 
+# v3.99.10: het herstel wordt pas gemeld als de voorwaarde een half uur
+# weg is (HERSTEL_BEVESTIGING_MINUTEN). In de nacht van 5 op 6 september
+# ging het drie keer melding-hersteld-melding, omdat het herstel in de
+# eerste rustige ronde vuurde. De toetsen draaien daarom na de "terug"-
+# ronde nog een ronde na die bevestigingstijd.
+from custom_components.energy_management_system.const import (
+    HERSTEL_BEVESTIGING_MINUTEN,
+)
+
+BEVESTIGD = timedelta(minutes=HERSTEL_BEVESTIGING_MINUTEN + 1)
+
+
+def _ronde_en_bevestig(c, moment):
+    _ronde(c, moment)
+    _ronde(c, moment + BEVESTIGD)
+
+
 def _ronde(c, moment=NOW):
     from custom_components.energy_management_system import coordinator as mod
 
@@ -74,7 +91,7 @@ def test_a_recovered_sensor_is_reported(make_coordinator, hass):
 
     # Sensor terug: herstelmelding.
     hass.states.set("sensor.beschikbaar", "6.5")
-    _ronde(c, NOW + timedelta(minutes=5))
+    _ronde_en_bevestig(c, NOW + timedelta(minutes=5))
 
     assert any("weer uitleesbaar" in t for t in _titels(c))
 
@@ -91,7 +108,7 @@ def test_the_recovery_ignores_the_throttle(make_coordinator, hass):
     _weg_sinds(c, "sensor.beschikbaar", NOW)
     _ronde(c)
     hass.states.set("sensor.beschikbaar", "6.5")
-    _ronde(c, NOW + timedelta(minutes=1))
+    _ronde_en_bevestig(c, NOW + timedelta(minutes=1))
 
     assert venster > 1
     assert any("weer uitleesbaar" in t for t in _titels(c))
@@ -114,8 +131,8 @@ def test_no_repeated_recovery(make_coordinator, hass):
     _weg_sinds(c, "sensor.beschikbaar", NOW)
     _ronde(c)
     hass.states.set("sensor.beschikbaar", "6.5")
-    _ronde(c, NOW + timedelta(minutes=5))
-    _ronde(c, NOW + timedelta(minutes=10))
+    _ronde_en_bevestig(c, NOW + timedelta(minutes=5))
+    _ronde_en_bevestig(c, NOW + timedelta(minutes=10))
 
     assert len([t for t in _titels(c) if "weer uitleesbaar" in t]) == 1
 
@@ -165,10 +182,10 @@ def test_a_returning_problem_is_reported_immediately(make_coordinator, hass):
     _weg_sinds(c, "sensor.beschikbaar", NOW)
     _ronde(c)
     hass.states.set("sensor.beschikbaar", "6.5")
-    _ronde(c, NOW + timedelta(minutes=5))
+    _ronde_en_bevestig(c, NOW + timedelta(minutes=5))
     hass.states.set("sensor.beschikbaar", "unavailable")
     _weg_sinds(c, "sensor.beschikbaar", NOW)
-    _ronde(c, NOW + timedelta(minutes=10))
+    _ronde_en_bevestig(c, NOW + timedelta(minutes=10))
 
     assert len([t for t in _titels(c) if "niet uitleesbaar" in t]) == 2
 
@@ -255,7 +272,7 @@ def test_the_recovery_also_stores_its_message(make_coordinator, hass):
     _weg_sinds(c, "sensor.beschikbaar", NOW)
     _ronde(c)
     hass.states.set("sensor.beschikbaar", "6.5")
-    _ronde(c, NOW + timedelta(minutes=5))
+    _ronde_en_bevestig(c, NOW + timedelta(minutes=5))
 
     regel = next(
         m for m in c.notification_history if "weer uitleesbaar" in m["titel"]
@@ -307,7 +324,7 @@ def test_the_recovery_names_the_sensor(make_coordinator, hass):
     _weg_sinds(c, "sensor.beschikbaar", NOW)
     _ronde(c)
     hass.states.set("sensor.beschikbaar", "6.5")
-    _ronde(c, NOW + timedelta(minutes=5))
+    _ronde_en_bevestig(c, NOW + timedelta(minutes=5))
 
     herstel = next(
         m for m in c.notification_history if "weer uitleesbaar" in m["titel"]
@@ -326,7 +343,7 @@ def test_the_names_are_cleared_after_the_recovery(make_coordinator, hass):
     _weg_sinds(c, "sensor.beschikbaar", NOW)
     _ronde(c)
     hass.states.set("sensor.beschikbaar", "6.5")
-    _ronde(c, NOW + timedelta(minutes=5))
+    _ronde_en_bevestig(c, NOW + timedelta(minutes=5))
 
     assert c._unavailable_entities == []
 

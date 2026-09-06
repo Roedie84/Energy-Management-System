@@ -1074,6 +1074,12 @@ async def async_get_config_entry_diagnostics(
             "grid_charged_today": coordinator._grid_charged_today,
             "is_negative_price_active": coordinator._is_negative_price_active,
             "reserve_shortfall_history": coordinator.reserve_shortfall_history,
+            # v3.99.11: de dagrecords zelf, met sinds v3.99.0 per dag
+            # `vermogensgrens` en `max_ontlaad_w`. Beloofd als controle-
+            # middel, maar nooit in de export gezet.
+            "reserve_daily_records": _veilig(
+                "reserve_daily_records", lambda: coordinator.reserve_daily_records
+            ),
             "reserve_shortfall_dates": coordinator.reserve_shortfall_dates,
             "shortfall_detected_today_so_far": (
                 coordinator._shortfall_detected_today

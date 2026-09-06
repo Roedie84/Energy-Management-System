@@ -113,3 +113,56 @@ def test_de_vaatwasser_blijft_gewoon_bekend(make_coordinator, hass):
     c.dishwasher_cycle_duration_history = [70.0, 50.0, 52.0, 51.0, 51.2, 51.0, 50.0]
 
     assert c.learned_dishwasher_cycle_duration_minutes == 51.0
+
+
+# --- v3.99.10: en een cyclus van zes minuten wordt ook niet GEMELD -----
+#
+# 4 september 19:47: "Vaatwasser is klaor na ongeveer 6 minuten", een
+# half uur na "Vaatwasser is klaor na ongeveer 52 minuten". 5 september
+# 09:00 en 16:20: "Wasmachine is klaor na ongeveer 6 minuten". v3.99.1
+# hield die zes minuten uit het LEREN, maar de melding kwam nog gewoon.
+# Een pompslag na de was is geen tweede was.
+
+
+def test_een_korte_cyclus_wordt_niet_gemeld(make_coordinator, hass):
+    from datetime import datetime, timedelta, timezone
+
+    c = make_coordinator({})
+    c.config = dict(c.config or {})
+    c.config["appliance_notify_service"] = "notify.test"
+    c.gestuurd = []
+    c._dispatch_notification = lambda **kw: c.gestuurd.append(kw)
+    nu = datetime(2026, 9, 5, 9, 0, tzinfo=timezone.utc)
+
+    assert c._cyclus_de_moeite_van_melden(nu - timedelta(minutes=6), nu) is False
+    assert c._cyclus_de_moeite_van_melden(nu - timedelta(minutes=52), nu) is True
+    assert c._cyclus_de_moeite_van_melden(None, nu) is True
+
+
+# --- v3.99.11: de sensor zette de zes minuten weer terug ----------------
+#
+# Export van 6 september: wasmachine [6, 36, 6, 153, 6, 186, 157]. Drie
+# keer 6,0, terwijl v3.99.1 die uit het leren houdt en bij het laden
+# opschoont. De opschoning loopt bij het laden van de Store; daarna komt
+# de SENSOR en die zet zijn eigen bewaarde reeks onvoorwaardelijk terug
+# - inclusief de zes minuten. Twee herstelpaden, en de tweede maakt
+# ongedaan wat de eerste opruimde. Precies het risico dat in v3.99.1 is
+# opgeschreven en "geen symptoom" heette.
+
+
+def test_de_sensor_zet_geen_korte_cycli_terug():
+    from custom_components.energy_management_system.sensor import (
+        _schone_cyclusduren,
+    )
+
+    assert _schone_cyclusduren([6.0, 36.0, 6.0, 153.0, 6.0]) == [36.0, 153.0]
+
+
+def test_de_sensor_overschrijft_geen_gevulde_reeks():
+    """Heeft de Store al een reeks hersteld, dan is die leidend."""
+    from custom_components.energy_management_system.sensor import (
+        _herstel_cyclusduren,
+    )
+
+    assert _herstel_cyclusduren(bestaand=[36.0, 153.0], uit_sensor=[6.0, 36.0]) == [36.0, 153.0]
+    assert _herstel_cyclusduren(bestaand=[], uit_sensor=[6.0, 36.0]) == [36.0]

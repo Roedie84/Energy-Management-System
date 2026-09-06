@@ -17,6 +17,7 @@ from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    APPLIANCE_CYCLE_MIN_LEARN_MINUTES,
     CONF_BATTERY_COOLING_FAN_SWITCH,
     RELIABILITY_LABELS,
     RELIABILITY_RELIABLE,
@@ -148,6 +149,31 @@ async def async_setup_entry(
 
     async_add_entities(entities)
 
+
+
+def _schone_cyclusduren(reeks: list[float]) -> list[float]:
+    """Alleen echte cycli (v3.99.11); zie APPLIANCE_CYCLE_MIN_LEARN_MINUTES."""
+    return [d for d in reeks if d >= APPLIANCE_CYCLE_MIN_LEARN_MINUTES]
+
+
+def _herstel_cyclusduren(
+    bestaand: list[float], uit_sensor: list[float]
+) -> list[float]:
+    """De reeks na een herstart: de Store is leidend (v3.99.11).
+
+    Export van 6 september: [6, 36, 6, 153, 6, 186, 157] - drie keer zes
+    minuten, terwijl v3.99.1 die uit het leren houdt en bij het laden
+    opschoont. De opschoning loopt bij het laden van de Store; daarna
+    komt de sensor en zette hij zijn eigen bewaarde reeks onvoorwaardelijk
+    terug. Twee herstelpaden, en de tweede maakte ongedaan wat de eerste
+    opruimde.
+
+    Heeft de Store al een reeks, dan blijft die. Anders de reeks van de
+    sensor, opgeschoond.
+    """
+    if bestaand:
+        return list(bestaand)
+    return _schone_cyclusduren(uit_sensor)
 
 class PvForecastAccuracySensor(SensorEntity, RestoreEntity):
     """Deviation (%) between yesterday's Solcast forecast and today's actual yield."""
@@ -1332,10 +1358,19 @@ class _ApplianceCycleStateSensor(SensorEntity, RestoreEntity):
         raw_history = last_state.attributes.get("cyclusduur_geschiedenis")
         if isinstance(raw_history, list):
             try:
+                # v3.99.11: niet onvoorwaardelijk. De Store ruimt bij het
+                # laden de zes-minuten-"cycli" op (v3.99.1); deze regel
+                # kwam daarna en zette ze weer terug. Zie
+                # `_herstel_cyclusduren`.
                 setattr(
                     self._coordinator,
                     self._duration_history_attr,
-                    [float(v) for v in raw_history],
+                    _herstel_cyclusduren(
+                        bestaand=getattr(
+                            self._coordinator, self._duration_history_attr, []
+                        ),
+                        uit_sensor=[float(v) for v in raw_history],
+                    ),
                 )
             except (TypeError, ValueError):
                 pass

@@ -3938,6 +3938,18 @@ SENSOR_STARTUP_GRACE_MINUTES = 10
 # aanhoudt is er iets aan de hand.
 SENSOR_UNAVAILABLE_CONFIRM_MINUTES = 15
 
+# Hoe lang een voorwaarde weg moet zijn voordat het HERSTEL gemeld
+# wordt (v3.99.10).
+#
+# In de nacht van 5 op 6 september: "haalt de nacht niet" om 01:00,
+# hersteld om 02:01, opnieuw om 02:08, hersteld om 02:12, opnieuw om
+# 03:03. De herstelmelding omzeilt de demping bewust (v1.6.2), maar
+# vuurde in de eerste ronde waarin de voorwaarde wegviel - en de
+# reserve springt tussen rondes. Een probleem dat na tien minuten
+# terugkomt, was niet opgelost. `plan_tekort` deed dit al goed met
+# "al een half uur".
+HERSTEL_BEVESTIGING_MINUTEN = 30
+
 # --- Stilstaande geleerde waarden opsporen (v1.11.1) -----------------
 # Gevraagd: "kijken naar alle waarden welke gegenereerd worden en
 # mogelijk niet goed werken doordat ze lang stilstaan of juist al zo

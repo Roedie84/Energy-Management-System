@@ -549,15 +549,30 @@ def test_every_module_imports_what_it_uses():
             elif isinstance(n, ast.AnnAssign) and isinstance(n.target, ast.Name):
                 beschikbaar.add(n.target.id)
 
+        # v3.99.10: ook KLASSENAMEN (CamelCase), niet alleen constanten.
+        #
+        # `woud = RegressieWoud()` stond sinds de eerste versie van
+        # pv_model in coordinator.py zonder import. Deze scan keek alleen
+        # naar HOOFDLETTERS, dus zag hij het niet. Het viel pas om op 6
+        # september, toen het PV-model voor het eerst genoeg monsters
+        # had om die regel te bereiken: drie onderdelen van de export
+        # kapot, elk uur een melding.
+        for n in ast.walk(boom):
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                beschikbaar.add(n.name)
         gebruikt = {
             n.id
             for n in ast.walk(boom)
             if isinstance(n, ast.Name)
             and isinstance(n.ctx, ast.Load)
-            and n.id.isupper()
             and len(n.id) > 3
+            and (n.id.isupper() or (n.id[0].isupper() and "_" not in n.id))
         }
-        ontbreekt = sorted(gebruikt - beschikbaar - set(dir(__builtins__)))
+        # `__builtins__` is binnen pytest een dict, geen module; dan
+        # ontbreken Exception, ValueError en de rest. Via de module zelf.
+        import builtins
+
+        ontbreekt = sorted(gebruikt - beschikbaar - set(dir(builtins)))
         if ontbreekt:
             fouten.append(f"{pad.name}: {ontbreekt}")
 
