@@ -151,4 +151,17 @@ def test_het_hoogste_ontlaadvermogen_per_stand_wordt_vastgelegd(
     _opzet(c, hass, net_w=0, accu_w=1940)
     _toets_slim(c)
 
-    assert c._max_ontlaad_w_vandaag == {"handmatig": 1580.0, "slim": 1940.0}
+    # v3.99.12: per richting. Een positief accuvermogen is ontladen.
+    assert c._max_ontlaad_w_vandaag == {"handmatig_ontladen": 1580.0, "slim_ontladen": 1940.0}
+
+
+def test_laden_wordt_apart_geteld(make_coordinator, hass):
+    """3 en 4 september: "handmatig: 2032 W" bij een ontlaadgrens van
+
+    1600. Dat was laden - of niet; het getal zei het niet.
+    """
+    c = make_coordinator({})
+    _opzet(c, hass, net_w=0, accu_w=-2032)
+    _toets(c)
+
+    assert c._max_ontlaad_w_vandaag == {"handmatig_laden": 2032.0}

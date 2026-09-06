@@ -17455,7 +17455,12 @@ class EnergyManagementSystemCoordinator:
         # v3.99.10: de import stond er nooit. Deze regel werd pas bereikt
         # toen het PV-model genoeg monsters had, op 6 september - en toen
         # vielen drie onderdelen van de export om met een NameError.
-        from .pv_model import RegressieWoud
+        # v3.99.12: en de tweede naam uit dezelfde module. v3.99.10
+        # repareerde `RegressieWoud` en liet `gemiddelde_absolute_fout`
+        # dertig regels verderop staan - dezelfde fout, een uur na de
+        # installatie. Ik had de hele functie moeten nalopen, niet de
+        # ene regel uit de foutmelding.
+        from .pv_model import RegressieWoud, gemiddelde_absolute_fout
 
         woud = RegressieWoud()
         woud.leer(
@@ -20465,9 +20470,15 @@ class EnergyManagementSystemCoordinator:
         # ontlaadvermogen per stand in het dagrecord, zodat de twee
         # grenzen (1600 handmatig, 2000 slim) uit de eigen gegevens te
         # controleren zijn.
+        # v3.99.12: laden en ontladen APART. Op 3 en 4 september stond er
+        # "handmatig: 2032 W" - terwijl de handmatige ontlaadgrens 1600 is.
+        # Of dat 2032 W ontladen was of 2032 W laden (de laadgrens is
+        # 2000), was uit een enkel getal niet op te maken. Nu wel.
         stand = "slim" if reason == "smart_discharging" else "handmatig"
-        self._max_ontlaad_w_vandaag[stand] = max(
-            self._max_ontlaad_w_vandaag.get(stand, 0.0), accu_w
+        richting = "ontladen" if accu_w >= 0 else "laden"
+        sleutel = f"{stand}_{richting}"
+        self._max_ontlaad_w_vandaag[sleutel] = max(
+            self._max_ontlaad_w_vandaag.get(sleutel, 0.0), abs(accu_w)
         )
         return op_de_grens
 

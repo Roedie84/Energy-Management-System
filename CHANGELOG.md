@@ -23250,3 +23250,63 @@ beantwoorden.
   blijft leeg tot je er een bevestigt.
 
 **Volledige testsuite**: 3582 tests, allemaal groen.
+
+
+## v3.99.12 — Dezelfde fout, dertig regels verderop
+
+Export van 6 september 12:41, 47 minuten na v3.99.11:
+
+```
+NameError: name 'gemiddelde_absolute_fout' is not defined
+```
+
+Dezelfde functie, dezelfde module, dezelfde soort fout als v3.99.10.
+Ik repareerde toen de regel uit de foutmelding en las de rest van de
+functie niet. Dertig regels verderop stond de tweede naam uit
+`pv_model.py` die nooit geïmporteerd was. Dat is niet de code die
+faalde; dat ben ik.
+
+Beide namen zijn nu geïmporteerd, en `pv_model.py` is nagelopen op alles
+wat coordinator.py ervan gebruikt — twee namen, meer niet.
+
+### Structuurscan 26: namen uit een zustermodule
+
+Scan 18 kijkt naar hoofdletters (constanten) en sinds v3.99.10 naar
+CamelCase (klassen). `gemiddelde_absolute_fout` is geen van beide, en
+zou dat nooit worden. Wat scan 18 niet kan zien, ziet scan 26 wel: hij
+weet welke functies en klassen elke module van het pakket aanbiedt, en
+meldt elke module die zo'n naam gebruikt zonder hem te importeren of
+zelf te definiëren. Op de originele code vindt hij precies deze twee.
+
+### Laden en ontladen apart
+
+Uit de dagrecords, nu voor het eerst in de export:
+
+```
+03-09  handmatig: 2032 W
+04-09  handmatig: 2038 W
+```
+
+Bij een handmatige ontlaadgrens van 1600. Of dat 2032 W ontladen was of
+2032 W laden — de laadgrens is 2000 — was uit één getal niet op te
+maken. Op 4 september stond de accu van 12:15 handmatig te laden, dus
+laden ligt voor de hand. Maar dat is een vermoeden. Het record telt nu
+`handmatig_laden` en `handmatig_ontladen` apart, en dan zegt het getal
+het zelf.
+
+Wat de dagrecords verder al laten zien: 3 en 4 september waren
+tekortdagen MET een vermogensgrens — de accu leverde op zijn maximum en
+er kwam toch iets van het net. Sinds v3.99.0 tellen die niet meer als
+tekort; deze twee stammen van vóór die versie en verdwijnen over een
+week uit het venster.
+
+### En de wasmachine
+
+```
+36, 153, 186, 157   ->   155 minuten
+```
+
+De zes minuten zijn weg, de sensor zet ze niet meer terug, en de
+geleerde duur is voor het eerst een wasbeurt.
+
+**Volledige testsuite**: 3586 tests, allemaal groen.

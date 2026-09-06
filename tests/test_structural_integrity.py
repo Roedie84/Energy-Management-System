@@ -984,3 +984,80 @@ def test_the_floor_scan_accepts_a_reserve_with_the_floor():
     )
 
     assert not _reserves_zonder_bodem(ast.parse(bron))
+
+
+# --- structuurscan 26: namen uit een zustermodule zonder import --------
+
+
+def _gebruikt_zonder_import(map_pad):
+    """Per module: namen die in een ANDERE module van het pakket op het
+    hoogste niveau gedefinieerd zijn, hier als naam gebruikt worden, en
+    niet geïmporteerd of lokaal gedefinieerd zijn.
+
+    Scan 18 kijkt naar hoofdletters (constanten) en sinds v3.99.10 naar
+    CamelCase (klassen). `gemiddelde_absolute_fout` is geen van beide -
+    en stond een uur na v3.99.10 alsnog als NameError in de export.
+    Wat scan 18 niet kan zien, ziet deze wel: hij weet welke namen de
+    zustermodules aanbieden.
+    """
+    modules = {}
+    for pad in sorted(map_pad.glob("*.py")):
+        modules[pad.stem] = ast.parse(pad.read_text())
+
+    aanbod: dict[str, set[str]] = {}
+    for naam, boom in modules.items():
+        aanbod[naam] = {
+            n.name
+            for n in boom.body
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+        }
+
+    fouten = []
+    for naam, boom in modules.items():
+        eigen = set(aanbod[naam])
+        geimporteerd = set()
+        for n in ast.walk(boom):
+            if isinstance(n, (ast.Import, ast.ImportFrom)):
+                geimporteerd |= {(a.asname or a.name).split(".")[0] for a in n.names}
+            elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                eigen.add(n.name)
+                eigen |= {a.arg for a in n.args.args} if hasattr(n, "args") else set()
+            elif isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store):
+                eigen.add(n.id)
+        elders = set()
+        for ander, namen in aanbod.items():
+            if ander != naam:
+                elders |= namen
+        gebruikt = {
+            n.id for n in ast.walk(boom)
+            if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)
+        }
+        for sym in sorted((gebruikt & elders) - eigen - geimporteerd):
+            fouten.append(f"{naam}.py gebruikt '{sym}' zonder import")
+    return fouten
+
+
+def test_no_module_uses_a_sibling_symbol_without_importing_it():
+    """v3.99.12. Twee NameErrors in een dag uit dezelfde functie:
+    `RegressieWoud` (v3.99.10) en dertig regels verderop
+    `gemiddelde_absolute_fout`. Allebei uit `pv_model.py`, allebei nooit
+    geïmporteerd, allebei pas zichtbaar toen het PV-model voor het eerst
+    genoeg monsters had.
+    """
+    fouten = _gebruikt_zonder_import(INTEGRATION_DIR)
+
+    assert not fouten, fouten
+
+
+def test_the_sibling_scan_catches_the_original_fault(tmp_path):
+    (tmp_path / "a.py").write_text("def helper():\n    return 1\n")
+    (tmp_path / "b.py").write_text("def gebruik():\n    return helper()\n")
+
+    assert _gebruikt_zonder_import(tmp_path) == ["b.py gebruikt 'helper' zonder import"]
+
+
+def test_the_sibling_scan_accepts_an_import(tmp_path):
+    (tmp_path / "a.py").write_text("def helper():\n    return 1\n")
+    (tmp_path / "b.py").write_text("from .a import helper\n\ndef gebruik():\n    return helper()\n")
+
+    assert _gebruikt_zonder_import(tmp_path) == []

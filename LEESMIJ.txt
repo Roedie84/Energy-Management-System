@@ -1,24 +1,18 @@
-EMS v3.99.11 - alle wijzigingen sinds v3.99.9
-
-Bevat v3.99.10 en v3.99.11. Je draait v3.99.9. Een keer herstarten.
+EMS v3.99.12 - alleen de wijzigingen sinds v3.99.11
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
 
-    const.py, coordinator.py, sensor.py, diagnostics.py
-    manifest.json, bestandscontrole.json
+    coordinator.py, manifest.json, bestandscontrole.json
 
 NAAR DE REPO
 
-    README.md, CHANGELOG.md, vier toetsbestanden
+    README.md, CHANGELOG.md
+    tests/test_structural_integrity.py, tests/test_tekortdag_vermogensgrens.py
 
 WAT ER VERANDERT
 
-1. De interne fout "RegressieWoud is not defined" is weg.
-2. Herstelmeldingen pas na een half uur rust.
-3. Cycli korter dan een kwartier worden niet gemeld EN niet meer
-   teruggezet door de sensor na een herstart. De wasmachine leert dan
-   157 minuten.
-4. reserve_daily_records staat in de export, met vermogensgrens en
-   max_ontlaad_w per dag.
+1. De tweede NameError uit dezelfde functie is weg. Structuurscan 26
+   vangt voortaan elke naam uit een zustermodule zonder import.
+2. Het dagrecord telt laden en ontladen apart.
 
-Installeren zodra het uitkomt - de interne fout meldt anders elk uur.
+Installeren: de interne fout meldt anders elk uur.
