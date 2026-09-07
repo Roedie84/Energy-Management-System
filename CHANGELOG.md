@@ -23375,3 +23375,61 @@ alleen nog het thermisch beheer, de accu boven zijn eigen grens.
   volgende ronde kan die naar "één keer per episode".
 
 **Volledige testsuite**: 3592 tests, allemaal groen.
+
+
+## v3.99.14 — Het vijfde paar, en een nul die als meting gold
+
+**Gevraagd**: "Diagnostiek graag analyseren." Export van 7 september
+09:51, een half uur op v3.99.13.
+
+### Wat de export laat zien
+
+- **De zonvoorspelling is weer "betrouwbaar."** De laatste vier dagen:
+  −19, +9, −11, −4. De drie dagen met 40 tot 77% zijn uit het venster
+  van zeven dagen gerold. Dat is eerlijk gerapporteerd — niet omdat er
+  iets is gerepareerd, maar omdat het weer rustiger werd. Vandaag begint
+  overigens slecht: 0,6 van 17,4 kWh om 09:51.
+- **De weerbronnen** staan nu op 90% en 97% overeenstemming, tegen 76,5
+  en 82 een week geleden. Zelfde kanttekening als toen: de meetlat is
+  Solcast, en die was deze week rustiger.
+- **De reserve**: diepste tekort 0,0 (de zon dekt het huis tot het
+  goedkope blok van 12:45), bodem bindend op 1,30. Verkopen dicht: 0,43
+  beschikbaar. De accu stond om 09:51 op 16% — onder de bodem, en dat is
+  de vierde ochtend op rij. De verkooptoets blokkeerde gisteravond bij
+  4,67 tegen 4,67; het huis gebruikte 3,9 kWh. De reserve haalt de nacht
+  met nul marge, elke nacht. Dat is geen fout, dat is de afweging.
+- **De ijklijn**: zes dagen per bakje, halverwege. Vier dagen te gaan.
+- **Gisteren**: 17,1 kWh opgewekt, 7,4 verbruikt, 2,0 van het net. Met
+  accu 0,34 euro goedkoper dan zonder.
+- **De proefstand** heeft nu zeven kandidaten becijferd. Vasthouden voor
+  morgen: −16,2 ct/kWh. Bijkopen bij tekort: −22,5. Niet ontladen bij
+  lage prijs: −10,4. Drie keer nee, met cijfers. Verder vooruitkijken
+  bij de reserve: +1,48 kWh reserve — dat is een ja, en het is de enige.
+
+### Het vijfde paar
+
+```
+09:32 opvangen  09:34 uitstellen  09:35 opvangen  09:36 uitstellen
+```
+
+`plan_solar_capture_moment` kijkt of het overschot vanaf het beste uur
+genoeg is om de resterende ruimte te vullen: `haalbaar >= ruimte ×
+veiligheid`. Die ruimte krimpt zolang er wordt opgevangen en staat stil
+zolang er wordt uitgesteld; het overschot schuift met elke verversing
+van de voorspelling. Rond de grens slaat het elke minuut om. Dezelfde
+vorm als de vier van v3.99.4; nu met een dode zone van 10% aan beide
+kanten.
+
+De code is opnieuw afgezocht op poorten met een vergelijking op een
+bewegend getal. Dit was de laatste.
+
+### "+0,00 kWh sinds 11 augustus" als meting
+
+De proefstandkandidaat "Accugezondheid over de tijd" las dezelfde
+nominale reeks als de capaciteitskaart, en toonde "8,64 kWh nu, +0,00
+kWh sinds 2026-08-11 — indicatief". Dat is precies de "degradatie 0%"
+die v3.92.5 van de kaart haalde. Twee lezers van dezelfde reeks; de
+eerste was gerepareerd, de tweede niet. De kandidaat zegt nu dat er
+niets gemeten is tot er een kalibratieregel in de reeks staat.
+
+**Volledige testsuite**: 3598 tests, allemaal groen.

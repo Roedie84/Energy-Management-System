@@ -312,3 +312,61 @@ def test_zonder_blokkering_mag_de_secundaire_laag_wel(make_coordinator, hass):
     _verkoop(c, beschikbaar=5.40, veilig=5.02)
 
     assert c._secundaire_laag_toegestaan() is True
+
+
+# --- v3.99.14: het vijfde paar - zon opvangen of uitstellen -------------
+#
+# Export van 7 september 09:51:
+#
+#     09:32 opvangen  09:34 uitstellen  09:35 opvangen  09:36 uitstellen
+#
+# `plan_solar_capture_moment` kijkt of het overschot vanaf het beste uur
+# genoeg is om de resterende ruimte in de accu te vullen: `haalbaar >=
+# ruimte x veiligheid`. Die ruimte krimpt zolang er wordt opgevangen en
+# staat stil zolang er wordt uitgesteld; het overschot verschuift met
+# elke ronde van de zonvoorspelling. Rond de grens slaat het elke minuut
+# om. Zelfde vorm als de vier van v3.99.4.
+
+
+def _uitstel(c, haalbaar_factor, hass=None):
+    """haalbaar_factor: het haalbare overschot als factor van wat er
+    nodig is (ruimte x veiligheid). 1,0 is precies op de grens."""
+    from datetime import datetime, timezone
+    from custom_components.energy_management_system import const as K
+
+    nu = datetime(2026, 9, 7, 9, 30, tzinfo=timezone.utc)
+    c.beschikbare_energie_kwh = lambda: 4.0
+    c.effective_min_soc_percent = lambda: 15.0        # ruimte 8,64*0,85-4,0 = 3,34
+    c.nu_laden_actief = lambda now: False
+    c.config = dict(c.config or {})
+    c.config["manual_charge_power"] = -2000
+    c.config["battery_total_capacity_sensor_entity"] = "sensor.cap"
+    hass.states.set("sensor.cap", "8.64")
+    nodig = (8.64 * 0.85 - 4.0) * K.SOLAR_DEFER_SAFETY_FACTOR
+    c._estimate_pv_kwh_for_period = lambda a, b: nodig * haalbaar_factor + 1.0
+    c._estimate_consumption_kwh_for_period = lambda a, b: 1.0
+    c.huidige_prijs_eur_per_kwh = lambda: 0.30
+    c._price_at_hour = lambda now, uur: 0.05
+    return c.plan_solar_capture_moment(nu)["uitstellen"]
+
+
+def test_net_boven_de_grens_zet_het_uitstel_niet_aan(make_coordinator, hass):
+    c = make_coordinator({})
+    assert _uitstel(c, 1.02, hass) is False
+
+
+def test_duidelijk_boven_de_grens_wel(make_coordinator, hass):
+    c = make_coordinator({})
+    assert _uitstel(c, 1.20, hass) is True
+
+
+def test_eenmaal_uitgesteld_blijft_het_bij_een_kleine_dip(make_coordinator, hass):
+    c = make_coordinator({})
+    _uitstel(c, 1.20, hass)
+    assert _uitstel(c, 0.95, hass) is True
+
+
+def test_een_duidelijke_dip_zet_het_uitstel_uit(make_coordinator, hass):
+    c = make_coordinator({})
+    _uitstel(c, 1.20, hass)
+    assert _uitstel(c, 0.80, hass) is False

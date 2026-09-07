@@ -4945,6 +4945,11 @@ SELL_REOPEN_MIN_MINUTES = 15.0
 # is 100 W, een waterkoker kort 2000 - dat laatste mag hem best even
 # uitzetten, het eerste niet.
 SOLAR_CAPTURE_HYSTERESIS_W = 150.0
+# Zon opvangen of uitstellen (v3.99.14): uitstel gaat aan als het
+# haalbare overschot 10% BOVEN wat er nodig is ligt, en uit als het
+# 10% ERONDER zakt. Op 7 september sloeg het om 09:32, 09:34, 09:35 en
+# 09:36 om, precies op de grens.
+SOLAR_DEFER_HYSTERESIS_FRACTIE = 0.10
 # Noodlading: aan op de ondergrens, pas uit als de laadstand er dit
 # aantal punten boven staat. Vijf punten is ruim een halve kilowattuur -
 # genoeg dat het huis hem niet binnen een kwartier weer onder de grens

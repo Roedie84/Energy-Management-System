@@ -155,3 +155,35 @@ def test_de_beschikbare_energie_volgt_ook_elke_ronde(make_coordinator, hass):
     asyncio.run(c._async_update_locked())
 
     assert c.last_available_kwh == pytest.approx(0.9504, abs=0.001)
+
+
+# --- v3.99.14: de proefstandkandidaat las dezelfde nominale reeks -------
+#
+# Export van 7 september: "Accugezondheid over de tijd: 8.64 kWh nu,
+# +0.00 kWh sinds 2026-08-11 - indicatief". Precies de "degradatie 0%"
+# die v3.92.5 van de capaciteitskaart haalde, alleen dan op de
+# proefstand. Twee lezers van dezelfde reeks; de eerste was gerepareerd,
+# de tweede niet.
+
+
+def test_de_kandidaat_toont_geen_verschil_van_nul_als_meting(make_coordinator, hass):
+    c = _met_capaciteitssensor(make_coordinator, hass)
+    c.capacity_trend_history = _reeks(181)
+
+    k = c._kandidaat_capaciteit()
+
+    assert k["waarde"] is None
+    assert "nominale" in k["onderbouwing"]
+
+
+def test_met_een_kalibratieregel_telt_hij_wel(make_coordinator, hass):
+    c = _met_capaciteitssensor(make_coordinator, hass)
+    reeks = _reeks(181)
+    reeks[0]["bron"] = "kalibratie"; reeks[0]["capaciteit_kwh"] = 8.2
+    reeks[-1]["bron"] = "kalibratie"; reeks[-1]["capaciteit_kwh"] = 7.9
+    c.capacity_trend_history = reeks
+
+    k = c._kandidaat_capaciteit()
+
+    assert k["waarde"] is not None
+    assert "-0.30" in k["waarde"]

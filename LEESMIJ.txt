@@ -1,4 +1,4 @@
-EMS v3.99.13 - alleen de wijzigingen sinds v3.99.12
+EMS v3.99.14 - alleen de wijzigingen sinds v3.99.13
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
 
@@ -6,13 +6,13 @@ TE KOPIEREN naar config/custom_components/energy_management_system/
 
 NAAR DE REPO
 
-    README.md, CHANGELOG.md, drie toetsbestanden (een nieuw)
+    README.md, CHANGELOG.md, twee toetsbestanden
 
 WAT ER VERANDERT
 
-1. De ingreepdetector gebruikt de echte vertaaltabel (REASON_TO_MODE).
-   De vijf valse ingrepen van gisteren gaan eruit bij het laden.
-2. Goedkope koeling ('s nachts, elke twee uur) komt niet meer op de
-   telefoon. Thermisch beheer nog wel. De geschiedenis houdt alles bij.
+1. Dode zone op "zon opvangen of uitstellen" - het vijfde en laatste
+   paar dat elke minuut kon omslaan.
+2. De proefstandkandidaat "Accugezondheid" toont geen +0,00 meer als
+   meting zolang er geen kalibratie is geweest.
 
-Geen haast. Dit zijn meldingen en tellingen, geen sturing.
+Geen haast.

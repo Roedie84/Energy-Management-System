@@ -518,6 +518,7 @@ from .const import (
     SELL_REOPEN_MIN_MINUTES,
     SELL_RESERVE_DEEPEST_SAFETY_FACTOR,
     SOLAR_CAPTURE_HYSTERESIS_W,
+    SOLAR_DEFER_HYSTERESIS_FRACTIE,
     SOLAR_DEFER_SAFETY_FACTOR,
     MPC_MIN_METINGEN,
     SOLAR_DEFER_TARGET_FULL_HOUR,
@@ -11937,6 +11938,40 @@ class EnergyManagementSystemCoordinator:
                 ),
             }
         eerste, laatste = reeks[0], reeks[-1]
+        # v3.99.14: dezelfde valkuil als de capaciteitskaart in v3.92.5.
+        # De dagelijkse regels zijn de NOMINALE sensor; "+0,00 kWh sinds
+        # 11 augustus" is dan geen meting maar een sensor die niet
+        # verandert. Zolang er geen kalibratieregel in de reeks staat,
+        # zegt deze kandidaat dat, in plaats van een verschil van nul
+        # als uitkomst te tonen.
+        if not any(r.get("bron") == "kalibratie" for r in reeks):
+            return {
+                "naam": "Accugezondheid over de tijd",
+                "status": RELIABILITY_INSUFFICIENT,
+                "waarde": None,
+                "onderbouwing": (
+                    f"{len(reeks)} dagmetingen, maar allemaal van de nominale "
+                    "capaciteitssensor - die verandert niet en meet dus "
+                    "niets. Een kalibratie vanaf onder de 30% laadstand "
+                    "levert de eerste echte meting (v3.99.3)."
+                ),
+                "betrouwbaarheid": (
+                    "Er is nog geen gemeten capaciteit; alles wat hier zou "
+                    "staan is de fabrieksopgave tegen zichzelf."
+                ),
+                "zou_veranderen": (
+                    "Het uitbreidingsadvies en de reserve rekenen met de "
+                    "nominale capaciteit."
+                ),
+                "zou_hebben_opgeleverd": {
+                    "te_becijferen": False,
+                    "reden": (
+                        "Geen meting om mee te rekenen; deze kandidaat "
+                        "levert geen euro's op maar voorkomt een verkeerde "
+                        "aanname over de capaciteit."
+                    ),
+                },
+            }
         verschil = laatste["capaciteit_kwh"] - eerste["capaciteit_kwh"]
         doorzet = laatste["doorzet_kwh"] - eerste["doorzet_kwh"]
         return {
@@ -20025,7 +20060,15 @@ class EnergyManagementSystemCoordinator:
             return None
         return dt_util.parse_datetime(self.nu_laden_omslag)
 
+    _zonuitstel_actief: bool = False
+
     def plan_solar_capture_moment(self, now: datetime) -> dict:
+        uitkomst = self._plan_solar_capture_moment(now)
+        # v3.99.14: onthouden of het uitstel loopt, voor de dode zone.
+        self._zonuitstel_actief = bool(uitkomst.get("uitstellen"))
+        return uitkomst
+
+    def _plan_solar_capture_moment(self, now: datetime) -> dict:
         """Wanneer is het beste moment om zon te gaan opvangen?
         (v1.22.0)
 
@@ -20170,7 +20213,17 @@ class EnergyManagementSystemCoordinator:
             uren = (deadline - start).total_seconds() / 3600
             opnamegrens = laad_w / 1000 * uren if laad_w else float("inf")
             haalbaar = min(overschot, opnamegrens)
-            if haalbaar >= ruimte * SOLAR_DEFER_SAFETY_FACTOR:
+            # v3.99.14: dode zone. Uitstel gaat aan boven 110% van wat
+            # er nodig is, en pas uit onder 90%. Op 7 september sloeg
+            # het vier keer in vier minuten om, precies op de grens -
+            # de ruimte krimpt zolang er wordt opgevangen, en het
+            # overschot schuift met elke verversing van de voorspelling.
+            drempel = ruimte * SOLAR_DEFER_SAFETY_FACTOR * (
+                1.0 - SOLAR_DEFER_HYSTERESIS_FRACTIE
+                if self._zonuitstel_actief
+                else 1.0 + SOLAR_DEFER_HYSTERESIS_FRACTIE
+            )
+            if haalbaar >= drempel:
                 beste_uur = uur
                 break
 
