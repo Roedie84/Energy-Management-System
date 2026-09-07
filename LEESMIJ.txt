@@ -1,18 +1,18 @@
-EMS v3.99.12 - alleen de wijzigingen sinds v3.99.11
+EMS v3.99.13 - alleen de wijzigingen sinds v3.99.12
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
 
-    coordinator.py, manifest.json, bestandscontrole.json
+    const.py, coordinator.py, manifest.json, bestandscontrole.json
 
 NAAR DE REPO
 
-    README.md, CHANGELOG.md
-    tests/test_structural_integrity.py, tests/test_tekortdag_vermogensgrens.py
+    README.md, CHANGELOG.md, drie toetsbestanden (een nieuw)
 
 WAT ER VERANDERT
 
-1. De tweede NameError uit dezelfde functie is weg. Structuurscan 26
-   vangt voortaan elke naam uit een zustermodule zonder import.
-2. Het dagrecord telt laden en ontladen apart.
+1. De ingreepdetector gebruikt de echte vertaaltabel (REASON_TO_MODE).
+   De vijf valse ingrepen van gisteren gaan eruit bij het laden.
+2. Goedkope koeling ('s nachts, elke twee uur) komt niet meer op de
+   telefoon. Thermisch beheer nog wel. De geschiedenis houdt alles bij.
 
-Installeren: de interne fout meldt anders elk uur.
+Geen haast. Dit zijn meldingen en tellingen, geen sturing.

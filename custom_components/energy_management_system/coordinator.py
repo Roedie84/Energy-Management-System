@@ -9822,8 +9822,14 @@ class EnergyManagementSystemCoordinator:
         """
         schoon = []
         for regel in self.handmatige_ingrepen or []:
-            uit_reden = self._modus_bij_beslissing(regel.get("reden_ems"))
+            uit_reden = REASON_TO_MODE.get(regel.get("reden_ems") or "")
+            # v3.99.13: ook de regels waarvan de reden een andere stand
+            # toepast dan wat er "gewild" werd, EN de regels waarvan de
+            # accu precies in de stand van de reden stond - dat is geen
+            # ingreep, dat is de accu die deed wat er gevraagd was.
             if uit_reden and uit_reden != regel.get("ems_wilde"):
+                continue
+            if uit_reden and uit_reden == regel.get("werkelijk"):
                 continue
             schoon.append(regel)
         self.handmatige_ingrepen = schoon
@@ -9864,7 +9870,14 @@ class EnergyManagementSystemCoordinator:
         # opdracht staan. Vier "ingrepen" op 3 september kwamen daar
         # vandaan, alle met een reden die de tegenovergestelde stand
         # impliceerde. De reden is altijd van deze ronde.
-        gewenst = self._modus_bij_beslissing(self.last_reason) or self.last_applied_operation
+        # v3.99.13: uit REASON_TO_MODE, via `last_expected_mode`. De
+        # tekstheuristiek `_modus_bij_beslissing` zei "expensive ->
+        # handmatig", maar `expensive_quarter_soc_protected` past juist
+        # de SLIMME stand toe. Vier valse ingrepen op 6 september, en
+        # een vijfde om 00:03 door `solar_capture_deferred`, dat in
+        # geen van beide tabellen stond. Twee vertaaltabellen voor
+        # dezelfde vraag; de code gebruikt vanaf nu de echte.
+        gewenst = self.last_expected_mode or self.last_applied_operation
 
         # v3.76.0: terugvallen op de laatste BESLISSING als er nog niets
         # is geschreven.
@@ -23584,6 +23597,75 @@ class EnergyManagementSystemCoordinator:
             return None
         return accu_c, buiten_c, abs(vermogen_w)
 
+    @staticmethod
+    def _is_goedkope_koeling(besluit: dict) -> bool:
+        """Was dit een opportunistische koelbeurt (v3.6.0) of thermisch
+        beheer? De reden zegt het: "zolang het goedkoop is" bij het
+        aanzetten, en bij het uitzetten een accu die alweer onder de
+        thermische ondergrens zit."""
+        reden = besluit.get("reden") or ""
+        if "zolang het goedkoop is" in reden:
+            return True
+        accu_c = besluit.get("accu_c")
+        return (
+            besluit.get("actie") == "uit"
+            and accu_c is not None
+            and accu_c < BATTERY_COOLING_MIN_ABSOLUTE_C
+        )
+
+    def _leg_koelbesluit_vast(self, besluit: dict) -> None:
+        """Geschiedenis bijwerken en - als het thermisch beheer was -
+        melden (v3.99.13). Uit `_async_apply_battery_cooling_locked`
+        gehaald zodat dit te toetsen is zonder een ventilator."""
+        self.battery_cooling_history.append(
+            {
+                "moment": self.battery_cooling_last_change.isoformat(),
+                "actie": besluit["actie"],
+                "reden": besluit["reden"],
+                "accu_c": besluit["accu_c"],
+                "buiten_c": besluit["buiten_c"],
+                "vermogen_w": besluit["vermogen_w"],
+            }
+        )
+        self.battery_cooling_history = self.battery_cooling_history[
+            -BATTERY_COOLING_HISTORY_LENGTH:
+        ]
+
+        titel = (
+            "🔋 Accu: koeling AAN" if besluit["actie"] == "aan"
+            else "🔋 Accu: koeling UIT"
+        )
+        # v3.99.13: goedkope koeling niet pushen. In de nacht van 6 op 7
+        # september ging de ventilator zes keer aan en uit - 01:12,
+        # 01:42, 03:42, 04:12, 06:12, 06:42 - allemaal "koelen zolang het
+        # goedkoop is", en elke keer een melding. Dat is het ritme dat
+        # v3.14.0 en v3.23.1 erin hebben gelegd: een half uur koelen,
+        # anderhalf uur opwarmen. Het doet wat het moet. Twaalf meldingen
+        # per etmaal erover is geen informatie meer. De geschiedenis en
+        # het logboek houden ze bij; alleen de THERMISCHE koeling - de
+        # accu boven zijn eigen grens - komt nog op de telefoon.
+        if self._is_goedkope_koeling(besluit):
+            return
+        self._dispatch_notification(
+            notify_service=self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE),
+            title=titel,
+            message=(
+                # v3.0.2: de ACTIE voorop, niet alleen in de titel.
+                #
+                # Gemeld: de melding somde de meetwaarden op zonder te
+                # zeggen wat er gebeurde. Staat de actie ook in het
+                # bericht, dan gaat hij niet verloren als de titel wordt
+                # vervangen of afgekapt.
+                f"De ventilator gaat "
+                f"{'AAN' if besluit['actie'] == 'aan' else 'UIT'}. "
+                f"Accu {besluit['accu_c']}°C, buiten {besluit['buiten_c']}°C, "
+                f"delta {besluit['delta_c']}°C, vermogen "
+                f"{besluit['vermogen_w']:.0f}W — {besluit['reden']}."
+            ),
+            notification_id="ems_battery_cooling",
+            kind="battery_cooling",
+        )
+
     def _koelen_is_goedkoop(self, accu_c: float, buiten_c: float) -> bool:
         """Valt er veel te koelen voor weinig? (v3.6.0)
 
@@ -24144,43 +24226,7 @@ class EnergyManagementSystemCoordinator:
                 self.goedkope_koeling_teller = 0
                 self._goedkope_koeling_gemeld = False
             self.goedkope_koeling_teller += 1
-        self.battery_cooling_history.append(
-            {
-                "moment": self.battery_cooling_last_change.isoformat(),
-                "actie": besluit["actie"],
-                "reden": besluit["reden"],
-                "accu_c": besluit["accu_c"],
-                "buiten_c": besluit["buiten_c"],
-                "vermogen_w": besluit["vermogen_w"],
-            }
-        )
-        self.battery_cooling_history = self.battery_cooling_history[
-            -BATTERY_COOLING_HISTORY_LENGTH:
-        ]
-
-        titel = (
-            "🔋 Accu: koeling AAN" if besluit["actie"] == "aan"
-            else "🔋 Accu: koeling UIT"
-        )
-        self._dispatch_notification(
-            notify_service=self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE),
-            title=titel,
-            message=(
-                # v3.0.2: de ACTIE voorop, niet alleen in de titel.
-                #
-                # Gemeld: de melding somde de meetwaarden op zonder te
-                # zeggen wat er gebeurde. Staat de actie ook in het
-                # bericht, dan gaat hij niet verloren als de titel wordt
-                # vervangen of afgekapt.
-                f"De ventilator gaat "
-                f"{'AAN' if besluit['actie'] == 'aan' else 'UIT'}. "
-                f"Accu {besluit['accu_c']}°C, buiten {besluit['buiten_c']}°C, "
-                f"delta {besluit['delta_c']}°C, vermogen "
-                f"{besluit['vermogen_w']:.0f}W — {besluit['reden']}."
-            ),
-            notification_id="ems_battery_cooling",
-            kind="battery_cooling",
-        )
+        self._leg_koelbesluit_vast(besluit)
         self._notify_listeners()
 
     def _read_battery_modules(self) -> list[dict]:

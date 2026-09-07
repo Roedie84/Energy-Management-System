@@ -44,6 +44,11 @@ def _opzet(c, hass, werkelijk, gewenst, reden):
     hass.states.set("select.op", werkelijk)
     c.last_applied_operation = gewenst
     c.last_reason = reden
+    # v3.99.13: de detector leest `last_expected_mode` (uit
+    # REASON_TO_MODE); de opzet zet hem zoals de beslissing dat zou doen.
+    from custom_components.energy_management_system.const import REASON_TO_MODE
+
+    c.last_expected_mode = REASON_TO_MODE.get(reden, gewenst)
     c.learning_only = False
     c.force_manual = False
     c.handmatige_ingrepen = []
@@ -140,3 +145,60 @@ def test_een_echte_ingreep_tegen_de_reden_telt_wel(make_coordinator, hass):
     c._volg_handmatige_ingrepen(T0 + timedelta(minutes=5))
 
     assert len(c.handmatige_ingrepen) == 1
+
+
+# --- v3.99.13: twee vertaaltabellen, en de code gebruikte de verkeerde --
+#
+# 6 september, vier nieuwe "ingrepen":
+#
+#     18:33  wilde manual  werkelijk smart  reden expensive_quarter_soc_protected
+#
+# `expensive_quarter_soc_protected` past de SLIMME stand toe (de
+# laadstand is te laag om handmatig te verkopen). REASON_TO_MODE weet
+# dat. De tekstheuristiek `_modus_bij_beslissing` - "expensive" staat
+# erin, dus handmatig - niet. En om 00:03: `solar_capture_deferred`, dat
+# in geen van beide stond.
+
+
+def test_soc_protected_is_de_slimme_stand(make_coordinator, hass):
+    c = make_coordinator({})
+    _opzet(c, hass, werkelijk="smart", gewenst="manual", reden="expensive_quarter_soc_protected")
+    c.last_expected_mode = "smart"
+
+    c._volg_handmatige_ingrepen(T0)
+    c._volg_handmatige_ingrepen(T0 + timedelta(minutes=5))
+
+    assert c.handmatige_ingrepen == []
+
+
+def test_elke_reden_heeft_een_stand():
+    """Ontbreekt een reden in REASON_TO_MODE, dan blijft
+    `last_expected_mode` op de vorige ronde staan en vergelijkt de
+    detector met een stand van een andere reden."""
+    import re
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+    from custom_components.energy_management_system.const import (
+        REASON_TO_MODE,
+        REDENEN_ZONDER_STAND,
+    )
+
+    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    redenen = set(re.findall(r'last_reason = "(\w+)"', bron))
+
+    ontbreekt = redenen - set(REASON_TO_MODE) - set(REDENEN_ZONDER_STAND)
+    assert not ontbreekt, sorted(ontbreekt)
+
+
+def test_de_opruiming_kent_de_echte_tabel(make_coordinator, hass):
+    c = make_coordinator({})
+    c.handmatige_ingrepen = [
+        {"ems_wilde": "manual", "werkelijk": "smart", "reden_ems": "expensive_quarter_soc_protected"},
+        {"ems_wilde": "smart", "werkelijk": "smart_discharging", "reden_ems": "solar_capture_deferred"},
+        {"ems_wilde": "smart_discharging", "werkelijk": "manual", "reden_ems": "discharging_window", "richting": "laden"},
+    ]
+
+    c._ruim_valse_ingrepen_op()
+
+    assert [r["reden_ems"] for r in c.handmatige_ingrepen] == ["discharging_window"]

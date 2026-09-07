@@ -1784,7 +1784,19 @@ REASON_TO_MODE = {
     "discharging_window": OPTION_SMART_DISCHARGING,
     "arbitrage_solar_capture": OPTION_SMART,
     "default_smart": OPTION_SMART,
+    # v3.99.13: de vier die ontbraken. Zonder deze bleef
+    # `last_expected_mode` op de vorige ronde staan, en de ingreep-
+    # detector vergeleek de accu dan met een stand van een andere reden.
+    "solar_capture_deferred": OPTION_SMART_DISCHARGING,
+    "post_salderen_solar_capture": OPTION_SMART,
+    "expensive_quarter_no_own_load": OPTION_SMART,
+    "kalibratie": OPTION_MANUAL,
+    "force_manual": OPTION_MANUAL,
 }
+
+# Redenen die NIETS toepassen (v3.99.13): de accu blijft staan waar hij
+# stond, en `last_expected_mode` blijft dan terecht op de vorige ronde.
+REDENEN_ZONDER_STAND = ("no_forecast_data",)
 
 # --- Accu-koeling (v0.63.122) ---------------------------------------
 # Overgenomen uit een losse HA-automatisering ("Accu: Temperatuurbeheer

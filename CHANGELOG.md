@@ -23310,3 +23310,68 @@ De zes minuten zijn weg, de sensor zet ze niet meer terug, en de
 geleerde duur is voor het eerst een wasbeurt.
 
 **Volledige testsuite**: 3586 tests, allemaal groen.
+
+
+## v3.99.13 — Twee vertaaltabellen, en de code gebruikte de verkeerde
+
+Export van 7 september 07:05, 18 uur op v3.99.12. Nul fouten, bestanden
+in orde, en de wisselteller op 29 met maar twee snelle omslagen — het
+schakelen blijft over.
+
+### Vijf valse ingrepen, van een andere makelij
+
+```
+18:33  wilde manual  werkelijk smart  reden expensive_quarter_soc_protected
+00:03  wilde smart   werkelijk smart_discharging  reden solar_capture_deferred
+```
+
+`expensive_quarter_soc_protected` past de SLIMME stand toe: de laadstand
+is te laag om handmatig te verkopen, dus dekt de accu het huis. Dat weet
+`REASON_TO_MODE`. De tekstheuristiek `_modus_bij_beslissing` — "er staat
+expensive in, dus handmatig" — weet het niet. En `solar_capture_deferred`
+stond in geen van beide tabellen, waardoor de verwachte stand op die van
+de vorige ronde bleef staan.
+
+Twee vertaaltabellen voor dezelfde vraag, en v3.99.9 koos de verkeerde.
+De detector leest nu `last_expected_mode`, dat elke ronde uit
+`REASON_TO_MODE` wordt gezet. Vier redenen die daarin ontbraken zijn
+toegevoegd, met een toets die controleert dat elke reden in de code een
+stand heeft. De opruiming bij het laden kent de echte tabel ook, en haalt
+er nu bovendien de regels uit waarbij de accu precies in de stand van de
+reden stond — dat is geen ingreep, dat is de accu die deed wat er
+gevraagd was.
+
+### Twaalf koelmeldingen per etmaal
+
+```
+01:12 AAN  01:42 UIT  03:42 AAN  04:12 UIT  06:12 AAN  06:42 UIT
+```
+
+Allemaal "koelen zolang het goedkoop is": de opportunistische koeling van
+v3.6.0, met het ritme dat v3.14.0 en v3.23.1 erin hebben gelegd — een half
+uur koelen, anderhalf uur opwarmen. Het doet precies wat het moet. Er
+twaalf keer per etmaal over vertellen is geen informatie meer. De
+geschiedenis en het logboek houden elke beurt bij; op de telefoon komt
+alleen nog het thermisch beheer, de accu boven zijn eigen grens.
+
+### Wat er verder stond
+
+- **De nacht**: 23:37 slaapt, 00:15 thuis (32 min), 00:47 slaapt tot
+  06:01. Die 32 minuten om kwart over twaalf lijkt op iemand die later
+  naar bed gaat dan de slaapsensor — twintig minuten tandenpoetsen en
+  rondlopen is voor de regel "iemand is op". Dat is een ander geval dan
+  een wc-bezoek en ik laat het staan; het raakt de sturing niet.
+- **De dagrecords** zeggen nu wat 2032 W was: op 6 september
+  `handmatig_ontladen: 1639`. De handmatige ontlaadgrens van 1600 klopt,
+  met een paar procent regelmarge. De 2032 van 3 en 4 september was dus
+  laden.
+- **Ochtendstand**: 19%, 0,78 kWh, onder de bodem van 1,30. De
+  verkooptoets stond om 21:11 op 4,67 tegen 4,67 en blokkeerde; het huis
+  gebruikte daarna 3,9 kWh. De reserve had het dus goed — de nacht werd
+  gehaald, met nul marge. Dat is de afweging die de 61,6% marge maakt.
+- **`plan_verkoop_geblokkeerd`** vijf keer in de nacht, elke twee uur.
+  Dat is de demping voor een aanhoudende voorwaarde die haar werk doet
+  op een moment dat niemand het hoeft te weten. Opgeschreven; een
+  volgende ronde kan die naar "één keer per episode".
+
+**Volledige testsuite**: 3592 tests, allemaal groen.

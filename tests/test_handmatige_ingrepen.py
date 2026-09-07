@@ -248,6 +248,7 @@ def test_the_decision_wins_over_the_written_mode(make_coordinator, hass):
     hass.states.set("select.modus", "manual")
     c.last_applied_operation = "smart_discharging"
     c.last_reason = "default_smart"
+    c.last_expected_mode = "smart"  # wat de beslissing uit REASON_TO_MODE zet
 
     _volg_aanhoudend(c, NU)
 
