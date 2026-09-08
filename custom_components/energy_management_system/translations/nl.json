@@ -99,7 +99,8 @@
           "battery_module_price_eur": "Prijs accumodule (EUR) - voor de slijtagekosten per kWh",
           "battery_inverter_price_eur": "Prijs omvormer (EUR) - voor de slijtagekosten per kWh",
           "battery_cycle_life": "Levensduur in cycli - fabrikantopgave, 6000 voor de SolarFlow",
-          "battery_calendar_years": "Levensduur in kalenderjaren - een AANNAME, geen opgave"
+          "battery_calendar_years": "Levensduur in kalenderjaren - een AANNAME, geen opgave",
+          "lange_horizon_actief": "Lange horizon bij de reserve - kijkt voorbij het eerstvolgende goedkope blok (aan sinds v3.99.18)"
         }
       }
     },
@@ -212,7 +213,8 @@
           "battery_module_price_eur": "Prijs accumodule (EUR) - voor de slijtagekosten per kWh",
           "battery_inverter_price_eur": "Prijs omvormer (EUR) - voor de slijtagekosten per kWh",
           "battery_cycle_life": "Levensduur in cycli - fabrikantopgave, 6000 voor de SolarFlow",
-          "battery_calendar_years": "Levensduur in kalenderjaren - een AANNAME, geen opgave"
+          "battery_calendar_years": "Levensduur in kalenderjaren - een AANNAME, geen opgave",
+          "lange_horizon_actief": "Lange horizon bij de reserve - kijkt voorbij het eerstvolgende goedkope blok (aan sinds v3.99.18)"
         }
       }
     },

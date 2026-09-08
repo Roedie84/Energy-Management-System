@@ -81,6 +81,7 @@ from .const import (
     CONF_CONSUMPTION_POWER_SENSOR,
     CONF_EXPENSIVE_QUARTERS_COUNT,
     CONF_INVERT_BATTERY_POWER_SIGN,
+    CONF_LANGE_HORIZON,
     CONF_LOW_SOLAR_THRESHOLD_KWH,
     CONF_MANUAL_CHARGE_POWER,
     CONF_NEGATIVE_PRICE_CHARGE_POWER,
@@ -10881,6 +10882,8 @@ class EnergyManagementSystemCoordinator:
         laadprijs = min(in_blok) / rendement + slijtage
         vermeden = max(na_blok)
 
+        # v3.99.18: het verschil is nu ook wat de reserve erbij neemt.
+        self._lange_reserve_extra_kwh = round(max(0.0, lang - kort), 3)
         self.lange_reserve_history.append(
             {
                 "moment": now.isoformat(),
@@ -11397,6 +11400,12 @@ class EnergyManagementSystemCoordinator:
                 else "geen verschil"
             ),
             "status": RELIABILITY_RELIABLE,
+            # v3.99.18: deze kandidaat stuurt nu. De meting hieronder is
+            # het tegenfeitelijke (wat de korte reserve zou zijn); het
+            # werkelijke effect staat per dag in reserve_daily_records
+            # en samengevat in `lange_horizon_effect` in de export.
+            "stuurt_sinds": "v3.99.18",
+            "mag_regelen": self.lange_horizon_actief,
             "zou_hebben_opgeleverd": {
                 "te_becijferen": bool(voordelen),
                 "extra_reserve_kwh": round(mediaan_extra, 2),
@@ -18060,6 +18069,24 @@ class EnergyManagementSystemCoordinator:
             return None
 
         needed_kwh = self._estimate_worst_case_deficit_kwh(now, cheap_block_start)
+        # v3.99.18: de lange horizon stuurt. De proefstandkandidaat van
+        # v3.11.0 mat twee weken lang wat de reserve zou zijn tot het
+        # EIND van de bekende prijzen in plaats van tot het eerstvolgende
+        # goedkope blok: mediaan 1,48 kWh meer, en op die momenten was
+        # extra laden in het blok goedkoper dan later van het net kopen.
+        # De enige kandidaat die ja zei. Het verklaart de vier ochtenden
+        # onder de bodem: een goedkoop blok om twaalf uur, een bewolkte
+        # dag, en om vijf uur is er niets meer voor de nacht daarna.
+        #
+        # `_lange_reserve_extra_kwh` wordt elke ronde door de meting
+        # zelf gezet, zodat de kandidaat het tegenfeitelijke blijft meten.
+        lange_horizon_extra = 0.0
+        if needed_kwh is not None and self.lange_horizon_actief:
+            lange_horizon_extra = max(0.0, float(self._lange_reserve_extra_kwh or 0.0))
+            needed_kwh += lange_horizon_extra
+            self._lange_horizon_extra_vandaag = max(
+                self._lange_horizon_extra_vandaag, lange_horizon_extra
+            )
         if needed_kwh is None:
             needed_kwh = self._estimate_consumption_kwh_for_period(
                 now, cheap_block_start
@@ -18190,6 +18217,7 @@ class EnergyManagementSystemCoordinator:
             ),
             "total_percent": round((margin - 1) * 100, 1),
             "needed_kwh_before_margin": round(needed_kwh, 3),
+            "lange_horizon_extra_kwh": round(lange_horizon_extra, 3),
             "reserve_kwh_after_margin": round(reserve_kwh, 3),
             # v3.74.0: en of die bodem het is die bindt.
             "bodem_kwh": round(bodem_kwh, 3),
@@ -19336,6 +19364,42 @@ class EnergyManagementSystemCoordinator:
                 )
             ),
             "toelichting": _POWERCALC_TOELICHTING,
+        }
+
+    def get_lange_horizon_effect(self) -> dict:
+        """Wat heeft de lange horizon werkelijk opgeleverd? (v3.99.18)
+
+        Gevraagd: "monitoren middels de diagnostiek wat het werkelijk
+        heeft opgeleverd." Per dag staat in het dagrecord wat de horizon
+        extra vasthield, de laagste laadstand in de ochtend en de
+        netimport 's nachts. Hier de vergelijking: de dagen VOOR de
+        inschakeling (geen extra) tegen de dagen erna.
+        """
+        records = [r for r in (self.reserve_daily_records or []) if "laagste_soc_ochtend" in r]
+        voor = [r for r in records if not r.get("lange_horizon_extra_kwh")]
+        na = [r for r in records if r.get("lange_horizon_extra_kwh")]
+
+        def _samen(rs):
+            socs = [r["laagste_soc_ochtend"] for r in rs if r.get("laagste_soc_ochtend") is not None]
+            imports = [r.get("netimport_nacht_kwh") or 0.0 for r in rs]
+            return {
+                "dagen": len(rs),
+                "laagste_soc_ochtend_mediaan": round(statistics.median(socs), 1) if socs else None,
+                "netimport_nacht_kwh_gemiddeld": round(sum(imports) / len(imports), 2) if imports else None,
+            }
+
+        return {
+            "actief": self.lange_horizon_actief,
+            "extra_kwh_nu": round(float(self._lange_reserve_extra_kwh or 0.0), 2),
+            "zonder_lange_horizon": _samen(voor),
+            "met_lange_horizon": _samen(na),
+            "toelichting": (
+                "Vergelijk de laagste laadstand in de ochtend en de netimport "
+                "'s nachts tussen de dagen zonder en met lange horizon. De "
+                "prijs van de horizon is minder verkopen 's avonds; dat staat "
+                "in de dagsamenvatting (besparing tegenover zonder accu). "
+                "Pas na minstens zeven dagen met zegt de vergelijking iets."
+            ),
         }
 
     def get_quarter_plan_summary(
@@ -20496,6 +20560,13 @@ class EnergyManagementSystemCoordinator:
     _vaste_post_bron: str | None = None
     _vaste_post_tot: datetime | None = None
     _noodlading_actief: bool = False
+    # v3.99.18: de lange horizon. Aan sinds v3.99.18, op verzoek; de
+    # schakelaar zit in de configuratie (lange_horizon_actief).
+    _lange_reserve_extra_kwh: float = 0.0
+    _lange_horizon_extra_vandaag: float = 0.0
+    _laagste_soc_ochtend: float | None = None
+    _netimport_nacht_kwh: float = 0.0
+    _netimport_nacht_laatste: datetime | None = None
     # v3.99.5: welk verschil tussen gevraagd en werkelijk er nu staat, en
     # sinds wanneer. Onveranderlijk, dus als klasse-attribuut veilig.
     _handmatig_verschil: str | None = None
@@ -20567,6 +20638,45 @@ class EnergyManagementSystemCoordinator:
         )
         return op_de_grens
 
+    @property
+    def lange_horizon_actief(self) -> bool:
+        """Stuurt de lange horizon mee? (v3.99.18) Standaard aan; uit te
+        zetten in de configuratie."""
+        return bool(self.instelling(CONF_LANGE_HORIZON, True))
+
+    @lange_horizon_actief.setter
+    def lange_horizon_actief(self, waarde: bool) -> None:
+        self.config = dict(self.config or {})
+        self.config[CONF_LANGE_HORIZON] = bool(waarde)
+
+    def _lange_horizon_dagrecord(self) -> dict:
+        """Wat de lange horizon vandaag deed en wat de ochtend bracht
+        (v3.99.18): de meting waarmee over een week te zeggen is of het
+        heeft geloond."""
+        return {
+            "lange_horizon_extra_kwh": round(self._lange_horizon_extra_vandaag, 2),
+            "laagste_soc_ochtend": self._laagste_soc_ochtend,
+            "netimport_nacht_kwh": round(self._netimport_nacht_kwh, 2),
+        }
+
+    def _volg_de_ochtend(self, now: datetime) -> None:
+        """Laagste laadstand tussen 03:00 en 09:00, en netimport tussen
+        22:00 en 09:00 (v3.99.18)."""
+        soc = self.accustand_procent
+        if 3 <= now.hour < 9 and soc is not None:
+            self._laagste_soc_ochtend = (
+                soc if self._laagste_soc_ochtend is None else min(self._laagste_soc_ochtend, soc)
+            )
+        if now.hour >= 22 or now.hour < 9:
+            net_w = self._read_sensor_float(self.config.get(CONF_CONSUMPTION_POWER_SENSOR))
+            if net_w is not None and net_w > 0 and self._netimport_nacht_laatste is not None:
+                uren = (now - self._netimport_nacht_laatste).total_seconds() / 3600
+                if 0 < uren < 0.5:
+                    self._netimport_nacht_kwh += net_w / 1000 * uren
+            self._netimport_nacht_laatste = now
+        else:
+            self._netimport_nacht_laatste = None
+
     def _update_shortfall_detection(
         self,
         now: datetime,
@@ -20604,6 +20714,8 @@ class EnergyManagementSystemCoordinator:
                         "max_ontlaad_w": {
                             k: round(v) for k, v in self._max_ontlaad_w_vandaag.items()
                         },
+                        # v3.99.18: de meting van de lange horizon.
+                        **self._lange_horizon_dagrecord(),
                         "excess": self._excess_detected_today,
                     }
                 )
@@ -20620,6 +20732,9 @@ class EnergyManagementSystemCoordinator:
             self._excess_detected_today = False
             self._vermogensgrens_gezien_today = False
             self._max_ontlaad_w_vandaag = {}
+            self._lange_horizon_extra_vandaag = 0.0
+            self._laagste_soc_ochtend = None
+            self._netimport_nacht_kwh = 0.0
             self._shortfall_check_date = now.date()
 
         # v3.99.16: "smart_discharging" was een STAND, geen reden - en
@@ -25793,25 +25908,42 @@ class EnergyManagementSystemCoordinator:
         "Buitentemperatuur voor de accukoeling" wel. De labels staan al
         in translations/nl.json voor het instellingenscherm.
         """
+        # v3.99.17: niet meer hier laden. Gemeld uit het logboek: een
+        # blokkerende leesactie in de event loop, op deze regel.
+        # De labels worden bij het opstarten in een executor gelezen
+        # (`async_laad_instellingslabels`); is dat nog niet gebeurd, dan
+        # blijft het de sleutel.
+        labels = EnergyManagementSystemCoordinator._instelling_labels or {}
+        return labels.get(sleutel, sleutel)
+
+    @staticmethod
+    def _lees_instellingslabels() -> dict[str, str]:
+        """Leest translations/nl.json - in een executor, niet in de loop."""
+        labels: dict[str, str] = {}
+        try:
+            pad = Path(__file__).parent / "translations" / "nl.json"
+            boom = json.loads(pad.read_text(encoding="utf-8"))
+
+            def loop(o):
+                if isinstance(o, dict):
+                    for k, v in o.items():
+                        if isinstance(v, str) and k.endswith("_entity"):
+                            labels.setdefault(k, v.split(" - ")[0])
+                        else:
+                            loop(v)
+
+            loop(boom)
+        except Exception:  # noqa: BLE001
+            pass
+        return labels
+
+    async def async_laad_instellingslabels(self) -> None:
+        """De leesbare namen van instellingen, eenmalig bij het opstarten
+        (v3.99.17)."""
         if EnergyManagementSystemCoordinator._instelling_labels is None:
-            labels: dict[str, str] = {}
-            try:
-                pad = Path(__file__).parent / "translations" / "nl.json"
-                boom = json.loads(pad.read_text(encoding="utf-8"))
-
-                def loop(o):
-                    if isinstance(o, dict):
-                        for k, v in o.items():
-                            if isinstance(v, str) and k.endswith("_entity"):
-                                labels.setdefault(k, v.split(" - ")[0])
-                            else:
-                                loop(v)
-
-                loop(boom)
-            except Exception:  # noqa: BLE001
-                pass
-            EnergyManagementSystemCoordinator._instelling_labels = labels
-        return EnergyManagementSystemCoordinator._instelling_labels.get(sleutel, sleutel)
+            EnergyManagementSystemCoordinator._instelling_labels = (
+                await self.hass.async_add_executor_job(self._lees_instellingslabels)
+            )
 
     def weggevallen_invoer(self, now: datetime) -> list[dict]:
         """Welke ingestelde entiteiten zijn al minstens de bevestigingstijd
@@ -28280,6 +28412,10 @@ class EnergyManagementSystemCoordinator:
         self.energy_balance_method_version = ENERGY_BALANCE_METHOD_VERSION
 
     async def async_load_persisted_state(self) -> None:
+        await self.async_laad_instellingslabels()
+        await self._async_load_persisted_state_zonder_labels()
+
+    async def _async_load_persisted_state_zonder_labels(self) -> None:
         """Laadt de opgebouwde toestand uit de Store (v1.0.4).
 
         Wordt in `async_setup_entry` aangeroepen VÓÓR de platforms, om
@@ -32673,6 +32809,7 @@ class EnergyManagementSystemCoordinator:
             # v3.10.0: de reserve met een lange horizon, hier omdat
             # `entries` pas in het staartstuk bestaat.
             ("lange reserve", lambda: self._meet_lange_reserve(now, entries)),
+            ("ochtend", lambda: self._volg_de_ochtend(now)),
             # v3.68.0: het MPC-plan naast de eigen planning.
             ("mpc tegen de planning", lambda: self._meet_mpc(now)),
             # v3.60.0: wat het kost dat de accu bijspringt in een

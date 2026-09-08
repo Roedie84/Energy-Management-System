@@ -99,7 +99,8 @@
           "battery_module_price_eur": "Battery module price (EUR) - for wear cost per kWh",
           "battery_inverter_price_eur": "Inverter price (EUR) - for wear cost per kWh",
           "battery_cycle_life": "Cycle life - manufacturer figure, 6000 for the SolarFlow",
-          "battery_calendar_years": "Calendar life in years - an ASSUMPTION, not a figure"
+          "battery_calendar_years": "Calendar life in years - an ASSUMPTION, not a figure",
+          "lange_horizon_actief": "Long horizon for the reserve - looks past the next cheap block (on since v3.99.18)"
         }
       }
     },
@@ -212,7 +213,8 @@
           "battery_module_price_eur": "Battery module price (EUR) - for wear cost per kWh",
           "battery_inverter_price_eur": "Inverter price (EUR) - for wear cost per kWh",
           "battery_cycle_life": "Cycle life - manufacturer figure, 6000 for the SolarFlow",
-          "battery_calendar_years": "Calendar life in years - an ASSUMPTION, not a figure"
+          "battery_calendar_years": "Calendar life in years - an ASSUMPTION, not a figure",
+          "lange_horizon_actief": "Long horizon for the reserve - looks past the next cheap block (on since v3.99.18)"
         }
       }
     },

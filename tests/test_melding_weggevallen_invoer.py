@@ -32,6 +32,9 @@ def _opzet(c, hass, extra_config, staten):
     c.gestuurd = []
     c._dispatch_notification = lambda **kw: c.gestuurd.append(kw)
     c._verstuur_meldingen_indien_nodig = getattr(c, "_verstuur_meldingen_indien_nodig", None)
+    # v3.99.17: de labels komen bij het opstarten uit een executor; in de
+    # toets direct.
+    type(c)._instelling_labels = c._lees_instellingslabels()
 
 
 def _weggevallen(c, now):

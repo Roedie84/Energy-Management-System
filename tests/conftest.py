@@ -378,6 +378,11 @@ class FakeHass:
         self.state = core_state
         self.created_tasks: list = []
 
+    async def async_add_executor_job(self, func, *args):
+        """v3.99.17: de vertaallabels worden bij het opstarten via een
+        executor gelezen. In de toets gewoon direct."""
+        return func(*args)
+
     def async_create_task(self, coro):
         # Actually schedule it (best-effort) so nothing is left as an
         # un-awaited coroutine; tests that need to assert on the result

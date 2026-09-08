@@ -270,6 +270,8 @@ CONF_MIN_SOC_PERCENT = "min_soc_percent"
 # Fallback threshold, only used until enough learning history exists to
 # derive a dynamic "low solar" threshold from the installation's own data.
 CONF_LOW_SOLAR_THRESHOLD_KWH = "low_solar_threshold_kwh"
+# v3.99.18: de lange horizon bij de reserve. Standaard aan.
+CONF_LANGE_HORIZON = "lange_horizon_actief"
 
 DEFAULT_LOW_SOLAR_THRESHOLD_KWH = 5.0
 LEARNING_HISTORY_DAYS = 7

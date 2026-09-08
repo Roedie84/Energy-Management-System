@@ -1,24 +1,31 @@
-EMS v3.99.16 - alle wijzigingen sinds v3.99.14
+EMS v3.99.18 - alle wijzigingen sinds v3.99.14
 
-Bevat v3.99.15 en v3.99.16. Je draait v3.99.14. Een keer herstarten.
+Bevat v3.99.15 t/m v3.99.18. Je draait v3.99.14. Een keer herstarten.
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
 
-    const.py, coordinator.py, sensor.py, manifest.json, bestandscontrole.json
+    const.py, coordinator.py, sensor.py, diagnostics.py, config_flow.py
+    strings.json, translations/nl.json, translations/en.json
+    manifest.json, bestandscontrole.json
 
 NAAR DE REPO
 
-    README.md, CHANGELOG.md, zes toetsbestanden
+    README.md, CHANGELOG.md, tests/conftest.py en acht toetsbestanden
 
-WAT ER VERANDERT
+WAT ER VERANDERT IN BEDRIJF
 
-1. De recorder-waarschuwing over de statussensor verdwijnt: de
-   meldingsgeschiedenis op de sensor is ingekort.
-2. De tekortdetectie loopt nu ook 's NACHTS. Dat deed hij nooit; hij
-   liep alleen in de verkoopvensters. Het aantal tekortdagen gaat
-   waarschijnlijk eerst omhoog - dat is voor het eerst het goede getal.
-3. De onderbrekingsteller van de nacht wordt goed gewist.
-4. De verkooptoets gaat niet boven de accucapaciteit.
+1. De lange horizon stuurt: de reserve kijkt voorbij het eerstvolgende
+   goedkope blok. Verwacht: hogere laadstand in de ochtend, minder
+   verkopen 's avonds. Uit te zetten in de configuratie.
+2. De tekortdetectie loopt nu ook 's nachts.
+3. De statussensor is klein (recorder-waarschuwing weg), en de
+   blokkerende leesactie in de event loop is weg.
+4. De nachtelijke onderbrekingsteller wordt goed gewist; de verkooptoets
+   gaat niet boven de accucapaciteit.
 
-Na installatie: de recorder-regel mag niet meer terugkomen. Komt hij
-wel terug, dan is er nog een sensor boven de 16 kB.
+MONITOREN
+
+    data.coordinator.lange_horizon_effect  - zonder tegenover met
+    reserve_daily_records                  - per dag de drie getallen
+
+Over een week weten we of het loont. Stuur dan de export.

@@ -20,6 +20,7 @@ from .const import (
     CONF_BATTERY_CYCLE_LIFE,
     CONF_BATTERY_INVERTER_PRICE_EUR,
     CONF_BATTERY_MODULE_PRICE_EUR,
+    CONF_LANGE_HORIZON,
     CONF_LOW_SOLAR_THRESHOLD_KWH,
     CONF_MANUAL_CHARGE_POWER,
     CONF_NEGATIVE_PRICE_CHARGE_POWER,
@@ -638,6 +639,11 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
                     min=0, max=100, step=0.5, mode=selector.NumberSelectorMode.BOX
                 )
             ),
+            # v3.99.18: de lange horizon bij de reserve, standaard aan.
+            vol.Optional(
+                CONF_LANGE_HORIZON,
+                default=defaults.get(CONF_LANGE_HORIZON, True),
+            ): selector.BooleanSelector(),
             # v3.99.1: de vier aannames onder de slijtageberekening.
             #
             # Uit de audit van 31 augustus: "6000 cycli is fabrikantopgave,

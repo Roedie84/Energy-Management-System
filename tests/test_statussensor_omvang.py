@@ -34,9 +34,9 @@ def test_de_historie_op_de_sensor_is_klein(make_coordinator, hass):
     klein = _meldingen_voor_de_kaart(historie)
 
     assert len(klein) <= 20
-    assert len(json.dumps(klein, ensure_ascii=False)) < 6000
-    assert all(len(m["bericht"]) <= 160 for m in klein)
-    assert set(klein[0]) == {"moment", "titel", "soort", "verstuurd", "bericht"}
+    # v3.99.17: zonder bericht - de kaart gebruikt het niet.
+    assert len(json.dumps(klein, ensure_ascii=False)) < 3000
+    assert set(klein[0]) == {"moment", "titel", "soort", "verstuurd", "reden_niet_verstuurd"}
 
 
 def test_de_kaartvelden_blijven_intact(make_coordinator, hass):
@@ -44,6 +44,25 @@ def test_de_kaartvelden_blijven_intact(make_coordinator, hass):
         _meldingen_voor_de_kaart,
     )
 
-    m = _meldingen_voor_de_kaart([{"moment": "m", "titel": "t", "soort": "s", "verstuurd": False, "bericht": "kort"}])[0]
+    m = _meldingen_voor_de_kaart([{"moment": "m", "titel": "t", "soort": "s", "verstuurd": False,
+                                  "reden_niet_verstuurd": "gedempt", "bericht": "lang"}])[0]
 
-    assert m == {"moment": "m", "titel": "t", "soort": "s", "verstuurd": False, "bericht": "kort"}
+    assert m == {"moment": "m", "titel": "t", "soort": "s", "verstuurd": False, "reden_niet_verstuurd": "gedempt"}
+
+
+def test_geen_leesactie_in_de_event_loop():
+    """Gemeld uit het logboek: "Detected blocking call to read_text inside
+
+    the event loop" - de vertaallabels werden bij de eerste melding
+    synchroon gelezen. Nu bij het opstarten in een executor.
+    """
+    import re
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    i = bron.index("def _instelling_leesbaar")
+    j = bron.index("\n    def ", i + 10)
+    assert "read_text" not in bron[i:j]
+    assert "async_add_executor_job(self._lees_instellingslabels)" in bron

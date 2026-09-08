@@ -177,7 +177,6 @@ def _herstel_cyclusduren(
 
 
 MELDINGEN_OP_DE_KAART = 20
-MELDING_BERICHT_MAX_TEKENS = 160
 
 
 def _meldingen_voor_de_kaart(historie: list[dict]) -> list[dict]:
@@ -193,18 +192,20 @@ def _meldingen_voor_de_kaart(historie: list[dict]) -> list[dict]:
     ingekort mee voor wie erop tikt; de volledige tekst staat in de
     diagnostiek-export.
     """
+    # v3.99.17: het bericht gaat er helemaal af (optie A uit de
+    # foutmelding). De kaart gebruikt moment, titel en verstuurd; de
+    # volledige tekst is al als notificatie verstuurd en staat in de
+    # export. En een harde grens op het aantal (optie C), zodat dit niet
+    # terugkomt als de teksten groeien.
     uit = []
     for m in (historie or [])[-MELDINGEN_OP_DE_KAART:]:
-        bericht = str(m.get("bericht") or "")
-        if len(bericht) > MELDING_BERICHT_MAX_TEKENS:
-            bericht = bericht[: MELDING_BERICHT_MAX_TEKENS - 1] + "…"
         uit.append(
             {
                 "moment": m.get("moment"),
                 "titel": m.get("titel"),
                 "soort": m.get("soort"),
                 "verstuurd": m.get("verstuurd"),
-                "bericht": bericht,
+                "reden_niet_verstuurd": m.get("reden_niet_verstuurd"),
             }
         )
     return uit

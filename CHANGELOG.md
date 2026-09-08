@@ -23552,3 +23552,99 @@ handmatig. Het aantal tekortdagen gaat de komende week waarschijnlijk
 eerst omhoog, en dat is dan voor het eerst het goede getal.
 
 **Volledige testsuite**: 3606 tests, allemaal groen.
+
+
+## v3.99.17 — De foutmelding, opgevolgd
+
+**Gemeld** als foutmelding met symptoom, oorzaak, gevolg en drie opties.
+Dat is de vorm waarin een probleem het snelst is opgelost.
+
+### Optie A, plus C
+
+De vraag in de melding — "leest het dashboard `bericht` uit?" — is
+nagekeken: de meldingenkaart gebruikt `moment`, `titel` en `verstuurd`,
+en meer niet. Optie A is dus haalbaar: het bericht gaat van de sensor af.
+De volledige tekst is al als notificatie verstuurd en staat in de export.
+`reden_niet_verstuurd` gaat wél mee, zoals voorgesteld — dat is waar 🔕 op
+de kaart vandaan komt.
+
+En optie C erbovenop: een harde grens van twintig meldingen, zodat dit
+niet terugkomt als de teksten groeien. Van 15,6 kB naar onder de 3.
+
+v3.99.16 had het bericht ingekort tot 160 tekens; dat was de halve
+oplossing.
+
+### De blokkerende leesactie
+
+```
+Detected blocking call to read_text inside the event loop
+coordinator.py:25774
+```
+
+Dat is `_instelling_leesbaar` uit v3.99.6: de Nederlandse namen van
+instellingen voor de melding "Sensor niet uitleesbaar", gelezen uit
+`translations/nl.json` — bij de eerste aanroep, synchroon, midden in de
+event loop. Home Assistant meldt dat terecht. De labels worden nu bij
+het opstarten in een executor gelezen; is dat nog niet gebeurd, dan
+staat de sleutel in de melding in plaats van de naam.
+
+### Wat er verder in de melding stond
+
+"Ook `aandachtspunten`, `informatief`, `statuskop` verdwijnen uit de
+recorder" — klopt, en dat is de reden dat deze sensor kleiner moest en
+niet alleen `meldingen_historie`. Deze sensor herstelt zelf niets, dus
+er is niets verloren gegaan; maar de twintig sensoren die dat wél doen,
+hangen aan dezelfde grens.
+
+**Volledige testsuite**: 3607 tests, allemaal groen.
+
+
+## v3.99.18 — De lange horizon gaat sturen
+
+**Gevraagd**: "Kunnen we de rijpe integreren? En dan monitoren middels de
+diagnostiek wat het werkelijk heeft opgeleverd?"
+
+### Wat er gaat sturen
+
+De proefstandkandidaat "Verder vooruitkijken bij de reserve" (v3.11.0)
+rekent elke ronde twee reserves uit: tot het eerstvolgende goedkope blok
+en tot het eind van de bekende prijzen. Na twee weken meten: mediaan 1,48
+kWh meer, en op de momenten met verschil was extra laden in het blok
+goedkoper dan later van het net kopen. De enige kandidaat die ja zei.
+
+Het verklaart de vier ochtenden onder de bodem. Een goedkoop blok om
+twaalf uur 's middags, een bewolkte dag, en om vijf uur 's ochtends is
+er niets meer voor de nacht daarna — de wandeling zag die nacht niet,
+want hij stopte bij het blok.
+
+De reserve neemt het verschil nu mee. De meting zelf verandert niet:
+de kandidaat blijft uitrekenen wat de korte reserve zou zijn geweest,
+zodat het tegenfeitelijke zichtbaar blijft. `mag_regelen` staat bij de
+kandidaat op true met `stuurt_sinds: v3.99.18`.
+
+Uit te zetten in de configuratie: "Lange horizon bij de reserve".
+Standaard aan, want daarom is hij gevraagd.
+
+### Hoe het gemeten wordt
+
+Per dag komt in `reserve_daily_records`:
+
+```
+lange_horizon_extra_kwh    wat de horizon die dag extra vasthield
+laagste_soc_ochtend        laagste laadstand tussen 03:00 en 09:00
+netimport_nacht_kwh        van het net tussen 22:00 en 09:00
+```
+
+En `lange_horizon_effect` in de export zet de dagen zonder tegenover de
+dagen met: mediaan van de laagste ochtendstand, gemiddelde nachtimport.
+De prijs van de horizon — minder verkopen 's avonds — staat al in de
+dagsamenvatting als besparing tegenover zonder accu. Pas na een week
+met zegt de vergelijking iets.
+
+Wat de vergelijking eerlijk maakt: de dagen "zonder" zijn de laatste
+dagen op de oude reserve, met dezelfde nachtdetectie van v3.99.16. Wat
+haar oneerlijk kan maken: het weer. Een week met zon tegenover een week
+zonder zegt meer over de zon dan over de horizon. Daarom staan beide
+weken in de export, met de zonopbrengst ernaast in de dagsamenvatting.
+
+**Volledige testsuite**: 3612 tests, allemaal groen.
