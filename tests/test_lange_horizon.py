@@ -94,3 +94,23 @@ def test_het_dagrecord_legt_de_ochtend_vast(make_coordinator, hass):
     record = c._lange_horizon_dagrecord()
 
     assert record == {"lange_horizon_extra_kwh": 1.5, "laagste_soc_ochtend": 31.0, "netimport_nacht_kwh": 0.4}
+
+
+def test_de_ochtendmeting_leest_de_sensor(make_coordinator, hass):
+    """v3.99.19: `accustand_procent` is een METHODE, en de ochtendmeting
+
+    van v3.99.18 las hem als veld - een methode-object, en dan een
+    TypeError bij de eerste ronde tussen 03:00 en 09:00. De volledige
+    suite ving dat niet, omdat niets die ronde met echte waarden draaide.
+    """
+    c = make_coordinator({})
+    c.config = dict(c.config or {})
+    c.config["battery_soc_sensor_entity"] = "sensor.soc"
+    hass.states.set("sensor.soc", "31")
+    c._laagste_soc_ochtend = None
+
+    c._volg_de_ochtend(datetime(2026, 9, 9, 4, 0, tzinfo=timezone.utc))
+    hass.states.set("sensor.soc", "28")
+    c._volg_de_ochtend(datetime(2026, 9, 9, 5, 0, tzinfo=timezone.utc))
+
+    assert c._laagste_soc_ochtend == 28.0

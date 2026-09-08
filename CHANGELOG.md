@@ -23648,3 +23648,66 @@ zonder zegt meer over de zon dan over de horizon. Daarom staan beide
 weken in de export, met de zonopbrengst ernaast in de dagsamenvatting.
 
 **Volledige testsuite**: 3612 tests, allemaal groen.
+
+
+## v3.99.19 — Het verloop per dag, en wat de accu het best had kunnen doen
+
+**Gevraagd**: "in de diagnostiek opnemen wat het verloop per dag is [...]
+Het gaat er mij om of het verstandiger was geweest om de accu in een
+andere modus te hebben gezet, en of dit financieel dan meer had
+opgeleverd. De integratie moet immers super slim en goed worden."
+
+### Het dagverloop
+
+Per kwartier één regel: tijd, reden, stand, laadstand, zon, huisverbruik,
+netvermogen, accuvermogen en prijs. De laatste ronde in het kwartier
+wint. Zeven dagen bewaard, in de opslag en in de export als
+`dagverloop`. Daarmee is een dag achteraf na te lopen zonder de
+geschiedenis van Home Assistant erbij te halen.
+
+### De nabeschouwing
+
+Nieuwe module `nabeschouwing.py`. Ze rekent met wat er WERKELIJK
+gebeurde — zon, verbruik en prijs per kwartier — en berekent daarmee de
+goedkoopste accuplanning die er die dag was: een dynamisch programma
+over de laadstand, per kwartier, met de fysieke grenzen van de accu,
+het geleerde rendement aan beide kanten en de slijtage per ontladen
+kWh. Zuiver Python, geen afhankelijkheden, ruim onder een seconde.
+
+Per dag komt er in `nabeschouwingen`:
+
+```
+kosten_zonder_accu_eur       huis min zon, tegen de prijs
+kosten_werkelijk_eur         wat er werkelijk is afgerekend
+kosten_best_mogelijk_eur     de ondergrens met perfecte kennis vooraf
+accu_leverde_op_eur          zonder min werkelijk
+had_kunnen_opleveren_eur     zonder min best mogelijk
+gemist_eur                   werkelijk min best mogelijk
+grootste_verschillen         de acht kwartieren waar het verschil zat
+```
+
+En `nabeschouwing_vandaag` in de export voor de lopende dag.
+
+Wat het antwoord betekent: "best mogelijk" is een ONDERGRENS die geen
+sturing haalt, want geen sturing weet 's ochtends wat de zon 's middags
+doet. Het gemiste bedrag is de som van twee dingen: niet vooruit kunnen
+kijken, en de regels die de integratie volgde. De grootste verschillen
+zeggen waar het zat — een kwartier waarin de beste planning ontlaadde
+en de integratie niet, met de prijs erbij. Dat is de vraag "had een
+andere stand meer opgeleverd" per kwartier beantwoord.
+
+Wat het niet doet: het weegt de reserve niet. De beste planning mag de
+accu leegtrekken als dat die dag goedkoper is; de integratie houdt een
+reserve voor de nacht daarna. Op een dag die goed afloopt is de reserve
+gemiste winst; op een dag die slecht afloopt is hij de redding. Dat
+verschil zie je pas over een week nabeschouwingen, en de eindstand van
+de accu wordt daarom tegen de gemiddelde dagprijs gewaardeerd.
+
+### En een fout in v3.99.18
+
+`accustand_procent` is een methode. De ochtendmeting van v3.99.18 las
+hem als veld — een methode-object — en zou bij de eerste ronde tussen
+03:00 en 09:00 een TypeError hebben gegeven. De volledige suite ving
+dat niet, omdat niets die ronde met echte waarden draaide. Nu wel.
+
+**Volledige testsuite**: 3624 tests, allemaal groen.

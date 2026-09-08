@@ -155,6 +155,11 @@ CLOUD_INVOER_INSTELLINGEN = (
 )
 CLOUD_INVOER_CONFIRM_MINUTES = 60
 
+# Hoeveel dagen het kwartierverloop en de nabeschouwingen bewaard
+# blijven (v3.99.19). 96 kwartieren x 9 velden x 7 dagen past ruim in
+# de opslag.
+DAGVERLOOP_DAGEN = 7
+
 DAGTELLER_INSTELLINGEN = (
     "pv_energy_sensor_entity",
     "cost_energy_sensor_entity",
@@ -2668,6 +2673,9 @@ PERSISTED_PLAIN_FIELDS = (
     # `max_ontlaad_w`) stonden in geen van beide. Zie v3.42.1 voor waarom
     # twee bronnen voor hetzelfde gegeven een slecht idee is.
     "reserve_daily_records",
+    # v3.99.19: het verloop per kwartier en de nabeschouwingen.
+    "dagverloop",
+    "nabeschouwingen",
     # v3.97.0: de Powercalc-proef heeft 200 metingen nodig.
     "powercalc_paren",
     # Meldingen (v1.2.0): de aan/uit-standen zijn een gebruikerskeuze en

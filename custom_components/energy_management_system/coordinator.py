@@ -188,6 +188,7 @@ from .const import (
     CLOUD_INVOER_CONFIRM_MINUTES,
     CLOUD_INVOER_INSTELLINGEN,
     DAGTELLER_INSTELLINGEN,
+    DAGVERLOOP_DAGEN,
     MODE_CHANGE_EMOJI,
     PV_FOUT_EENZIJDIG_AANDEEL,
     MODUS_KORTE_NAAM,
@@ -1217,7 +1218,9 @@ class EnergyManagementSystemCoordinator:
         # v3.99.9: `_invoer_instelling` erbij (de instellingssleutel per
         # bewaakte entiteit, voor de bevestigingstijd per soort). Drie in
         # een regel - `__init__` staat op de ratel.
-        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling = {}, {}, {}
+        # v3.99.19: `dagverloop` en `nabeschouwingen` erbij, in dezelfde
+        # regel - `__init__` staat op de ratel.
+        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen = {}, {}, {}, {}, []
         # v1.1.6: met welke meetmethode de bewaarde foutreeks tot stand
         # is gekomen. Verandert de methode, dan wordt die reeks eenmalig
         # gewist - zie ENERGY_BALANCE_METHOD_VERSION.
@@ -19402,6 +19405,106 @@ class EnergyManagementSystemCoordinator:
             ),
         }
 
+    # --- Dagverloop en nabeschouwing (v3.99.19) --------------------------
+
+    def _leg_dagverloop_vast(self, now: datetime) -> None:
+        """Eén regel per kwartier: wat de integratie deed en wat er
+        gebeurde. Gevraagd: "in de diagnostiek opnemen wat het verloop
+        per dag is." De laatste ronde in het kwartier wint; zeven dagen
+        bewaard."""
+        dag = now.date().isoformat()
+        kwartier = now.replace(minute=(now.minute // 15) * 15, second=0, microsecond=0)
+        regel = {
+            "tijd": kwartier.strftime("%H:%M"),
+            "reden": self.last_reason,
+            "stand": self.last_expected_mode,
+            "soc": self.accustand_procent(),
+            "pv_w": self._lees_pv_vermogen_w(),
+            "huis_w": self._read_corrected_consumption_power(),
+            "net_w": self._read_sensor_float(self.config.get(CONF_CONSUMPTION_POWER_SENSOR)),
+            "accu_w": self._read_corrected_battery_power(),
+            "prijs_ct": (
+                round(p * 100, 1) if (p := self.huidige_prijs_eur_per_kwh(now)) is not None else None
+            ),
+        }
+        reeks = self.dagverloop.setdefault(dag, [])
+        if reeks and reeks[-1]["tijd"] == regel["tijd"]:
+            reeks[-1] = regel
+        else:
+            reeks.append(regel)
+        for oud in sorted(self.dagverloop)[:-DAGVERLOOP_DAGEN]:
+            self.dagverloop.pop(oud, None)
+
+    def get_nabeschouwing(self, datum: str | None = None) -> dict:
+        """Wat had de accu die dag het best kunnen doen, en wat deed ze?
+        (v3.99.19) Zie nabeschouwing.py. Standaard de laatste volledige
+        dag in het verloop."""
+        from .nabeschouwing import Kwartier, nabeschouwing
+
+        dagen = sorted(self.dagverloop or {})
+        if datum is None:
+            volledige = [d for d in dagen if len(self.dagverloop[d]) >= 90]
+            if not volledige:
+                return {"te_becijferen": False, "reden": "nog geen volledige dag in het verloop"}
+            datum = volledige[-1]
+        reeks = (self.dagverloop or {}).get(datum) or []
+        if len(reeks) < 8:
+            return {"te_becijferen": False, "reden": f"{len(reeks)} kwartieren voor {datum}"}
+        kwartieren, tijden = [], []
+        for r in reeks:
+            if r.get("huis_w") is None or r.get("prijs_ct") is None:
+                continue
+            kwartieren.append(
+                Kwartier(
+                    huis_kwh=r["huis_w"] / 4000,
+                    pv_kwh=(r.get("pv_w") or 0.0) / 4000,
+                    prijs_eur=r["prijs_ct"] / 100,
+                    accu_kwh=(r.get("accu_w") or 0.0) / 4000,
+                )
+            )
+            tijden.append(r["tijd"])
+        if len(kwartieren) < 8:
+            return {"te_becijferen": False, "reden": "te weinig kwartieren met verbruik en prijs"}
+        capaciteit = self.bruikbare_capaciteit_kwh() or 0.0
+        bodem = self._reserve_bodem_kwh() if hasattr(self, "_reserve_bodem_kwh") else 0.0
+        socs = [r["soc"] for r in reeks if r.get("soc") is not None]
+        min_soc = float(self.effective_min_soc_percent())
+        schaal = max(1.0, 100.0 - min_soc)
+
+        def _kwh(soc):
+            return max(0.0, (soc - min_soc) / schaal * capaciteit)
+
+        begin = _kwh(socs[0]) if socs else 0.0
+        eind = _kwh(socs[-1]) if socs else begin
+        rendement = (self.learned_battery_efficiency_percent or 84.0) / 100
+        slijtage = ((self.get_wear_cost_overview() or {}).get("slijtage_ct_per_kwh") or 0.0) / 100
+        uit = nabeschouwing(
+            kwartieren,
+            capaciteit_kwh=capaciteit,
+            begin_kwh=begin,
+            eind_kwh=eind,
+            bodem_kwh=min(bodem, capaciteit * 0.5),
+            laad_kw=abs(self.instelling(CONF_MANUAL_CHARGE_POWER, DEFAULT_MANUAL_CHARGE_POWER)) / 1000,
+            ontlaad_kw=SMART_MAX_DISCHARGE_W / 1000,
+            rendement=rendement,
+            slijtage_eur_per_kwh=slijtage,
+            tijdstippen=tijden,
+        )
+        uit["datum"] = datum
+        uit["kwartieren"] = len(kwartieren)
+        uit["begin_kwh"] = round(begin, 2)
+        uit["eind_kwh"] = round(eind, 2)
+        return uit
+
+    def _sluit_dag_af_met_nabeschouwing(self, gisteren: str) -> None:
+        """Bij dagwissel: de nabeschouwing van gisteren bewaren."""
+        try:
+            uit = self.get_nabeschouwing(gisteren)
+        except Exception as fout:  # noqa: BLE001
+            uit = {"te_becijferen": False, "reden": f"{type(fout).__name__}: {fout}"}
+        self.nabeschouwingen.append(uit)
+        self.nabeschouwingen = self.nabeschouwingen[-DAGVERLOOP_DAGEN:]
+
     def get_quarter_plan_summary(
         self, now: datetime | None = None, tot: datetime | None = None
     ) -> dict:
@@ -20662,7 +20765,7 @@ class EnergyManagementSystemCoordinator:
     def _volg_de_ochtend(self, now: datetime) -> None:
         """Laagste laadstand tussen 03:00 en 09:00, en netimport tussen
         22:00 en 09:00 (v3.99.18)."""
-        soc = self.accustand_procent
+        soc = self.accustand_procent()
         if 3 <= now.hour < 9 and soc is not None:
             self._laagste_soc_ochtend = (
                 soc if self._laagste_soc_ochtend is None else min(self._laagste_soc_ochtend, soc)
@@ -20735,6 +20838,9 @@ class EnergyManagementSystemCoordinator:
             self._lange_horizon_extra_vandaag = 0.0
             self._laagste_soc_ochtend = None
             self._netimport_nacht_kwh = 0.0
+            # v3.99.19: de dag die voorbij is, nabeschouwen.
+            if self._shortfall_check_date is not None:
+                self._sluit_dag_af_met_nabeschouwing(self._shortfall_check_date.isoformat())
             self._shortfall_check_date = now.date()
 
         # v3.99.16: "smart_discharging" was een STAND, geen reden - en
@@ -32810,6 +32916,7 @@ class EnergyManagementSystemCoordinator:
             # `entries` pas in het staartstuk bestaat.
             ("lange reserve", lambda: self._meet_lange_reserve(now, entries)),
             ("ochtend", lambda: self._volg_de_ochtend(now)),
+            ("dagverloop", lambda: self._leg_dagverloop_vast(now)),
             # v3.68.0: het MPC-plan naast de eigen planning.
             ("mpc tegen de planning", lambda: self._meet_mpc(now)),
             # v3.60.0: wat het kost dat de accu bijspringt in een
