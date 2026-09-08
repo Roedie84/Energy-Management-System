@@ -1,31 +1,24 @@
-EMS v3.99.20 - alle wijzigingen sinds v3.99.14
+EMS v4.0 - alle wijzigingen sinds v3.99.20
 
-Bevat v3.99.15 t/m v3.99.20. Je draait v3.99.14. Een keer herstarten.
+v4.0 is inhoudelijk v3.99.22 plus de nieuwe nummering. Vanaf hier
+4.1, 4.2, 4.3 - een getal per oplevering.
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
 
-    const.py, coordinator.py, sensor.py, diagnostics.py, config_flow.py
-    nabeschouwing.py                 NIEUW BESTAND
-    strings.json, translations/nl.json, translations/en.json
-    manifest.json, bestandscontrole.json
+    const.py, coordinator.py, diagnostics.py, manifest.json,
+    bestandscontrole.json
 
 NAAR DE REPO
 
-    README.md, CHANGELOG.md, tests/conftest.py en elf toetsbestanden
+    README.md, CHANGELOG.md, vier toetsbestanden
 
-WAT ER VERANDERT - EERST DIT
+WAT ER VERANDERT
 
-Het PV-model trainde vijf keer per minuut in de event loop, 2,7 seconden
-per keer. HA stond daardoor een vijfde van de tijd stil. Nu: eens per
-uur, in een achtergrondthread, en iedereen leest de cache. Dit is de
-reden om deze versie NIET uit te stellen.
+1. De correctieverhouding mag hooguit 1,5 kWh toevoegen, ook zonder
+   bevestigd apparaat; de brug is gekapt op de accu.
+2. "Verkopen geblokkeerd" een keer per episode.
+3. lange_reserve_per_uur in de export.
+4. "Bestaat niet" zegt sinds wanneer, en of het nog een storing kan zijn.
+5. Versienummer 4.0.
 
-VERDER
-
-1. dagverloop per kwartier en nabeschouwingen per dag in de export.
-2. De lange horizon stuurt, met effectmeting.
-3. Tekortdetectie ook 's nachts; statussensor klein; blokkerende
-   leesactie weg; nachtteller; verkooptoets gekapt.
-
-Na installatie: draai de Profiler nog eens 60 seconden. Verwacht:
-energy_management_system onder een halve seconde eigen tijd.
+GitHub-release: maak de tag "v4.0" aan.

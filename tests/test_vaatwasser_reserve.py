@@ -124,3 +124,63 @@ def test_de_verkooptoets_gaat_niet_boven_de_accu(make_coordinator, hass):
 
     assert uitkomst["nodig_voor_woning_kwh"] <= 8.64
     assert uitkomst["mag_verkopen"] is False
+
+
+# --- v3.99.21: de verhouding zonder bevestigd apparaat, begrensd -------
+#
+# 8 september 15:18, met de Home Connect-cloud in storing:
+#
+#     battery_wont_last_night   5,53 beschikbaar, 12,24 kWh nodig
+#     plan_verkoop_geblokkeerd  6,01 nodig
+#     15:40                     "Vaatwasser is klaor na ongeveer 51 minuten"
+#
+# De vaatwasser draaide, maar `binary_sensor.vaatwasser_remote_start`
+# bestond niet (cloudstoring), dus was hij niet BEVESTIGD. Dan geldt de
+# regel van v3.99.2 niet en schaalt de verhouding het profiel weer 4x
+# over vier uur: 10,6 kWh tekort, exact het geval van 2 september. De
+# brug is bovendien niet gekapt op de accu, vandaar 12,24 in een accu
+# van 8,64.
+#
+# Een onbekende zware last is hooguit een apparaat. Wat de verhouding er
+# over de hele wandeling bij mag doen, is begrensd op wat een apparaat
+# kost - en de brug wordt gekapt zoals de reserve en de verkooptoets.
+
+
+def test_de_verhouding_voegt_hooguit_een_apparaat_toe(make_coordinator, hass):
+    from custom_components.energy_management_system.const import (
+        CONSUMPTION_CORRECTION_MAX_EXTRA_KWH,
+    )
+
+    from custom_components.energy_management_system import coordinator as mod
+
+    mod.dt_util.now = lambda: NU  # de uitdemping rekent vanaf "nu"
+    c = make_coordinator({})
+    c.hourly_consumption_profile = {h: [0.4] * 7 for h in range(24)}
+    c._estimate_pv_kwh_for_period = lambda a, b: 0.0
+    c._get_smoothed_consumption_correction_ratio = lambda h: 4.3
+    c.lopend_witgoed_kwh_in_periode = lambda a, b: 0.0
+    c.geplande_witgoed_kwh_in_periode = lambda a, b: 0.0
+    c.last_heavy_load_source = None
+
+    met = c._estimate_worst_case_deficit_kwh(NU, NU + timedelta(hours=20))
+    c._get_smoothed_consumption_correction_ratio = lambda h: 1.0
+    zonder = c._estimate_worst_case_deficit_kwh(NU, NU + timedelta(hours=20))
+
+    assert met - zonder <= CONSUMPTION_CORRECTION_MAX_EXTRA_KWH + 0.01
+    assert met > zonder
+
+
+def test_de_brug_gaat_niet_boven_de_accu(make_coordinator, hass):
+    c = make_coordinator({"available_energy_sensor_entity": "sensor.avail"})
+    hass.states.set("sensor.avail", "5.53")
+    c.bruikbare_capaciteit_kwh = lambda: 8.64
+    c._estimate_worst_case_deficit_kwh = lambda *a, **k: 10.6
+    c.last_cheap_block_start = NU + timedelta(hours=20)
+    c.last_cheap_block_end = NU + timedelta(hours=22)
+
+    c._should_postpone_charging(
+        [(NU + timedelta(hours=20), NU + timedelta(hours=22), 500)], NU, NU + timedelta(hours=20)
+    )
+
+    assert c.last_needed_kwh_to_bridge is not None
+    assert c.last_needed_kwh_to_bridge <= 8.64

@@ -23763,3 +23763,107 @@ De blokkerende leesactie op `nl.json` uit dezelfde melding is in v3.99.17
 al naar een executor verplaatst; die versie was nog niet geïnstalleerd.
 
 **Volledige testsuite**: 3630 tests, allemaal groen.
+
+
+## v3.99.21 — Een cloudstoring zette de oude fout weer aan
+
+Export van 8 september 21:04, 5,3 uur op v3.99.20. Het PV-model:
+één keer berekend, om 13:56:48. Geen interne fouten.
+
+### 12,24 kWh nodig in een accu van 8,64 — alweer, en waarom
+
+```
+15:18  battery_wont_last_night   5,53 beschikbaar, 12,24 kWh nodig
+15:28  plan_verkoop_geblokkeerd  6,01 nodig
+15:40  "Vaatwasser is klaor na ongeveer 51 minuten"
+```
+
+De vaatwasser draaide. Maar `binary_sensor.vaatwasser_remote_start`
+bestond die middag niet — de Home Connect-cloud was in storing — dus was
+hij niet BEVESTIGD. Zonder bevestiging geldt de regel van v3.99.2 niet,
+en schaalt de correctieverhouding het profiel weer 4,3 keer over vier
+uur: 10,6 kWh tekort, exact het geval van 2 september. Alleen was het
+toen de regel die ontbrak, en nu de bevestiging.
+
+De regel van v3.99.2 hing dus aan een cloudkoppeling. Dat is niet stevig
+genoeg. Wat de verhouding er over de hele wandeling bij mag doen, is nu
+begrensd op wat een apparaat kost: 1,5 kWh. Een onbekende zware last is
+hooguit een oven. Meer dan dat is nooit een verandering in het
+verbruiksniveau van het huis, ook niet als de code niet weet wélk
+apparaat het is.
+
+En de brug — de derde reserveberekening — was als enige nog niet gekapt
+op de accu. Nu wel, net als de reserve (v3.99.2) en de verkooptoets
+(v3.99.15). Alle drie de getallen die "nodig" heten, blijven vanaf nu
+onder de capaciteit.
+
+### De nabeschouwing van vandaag
+
+Vijfendertig kwartieren sinds de herstart, dus geen volledige dag. Wat
+er staat: zonder accu −0,64, werkelijk −1,38, best mogelijk −1,33.
+Werkelijk beter dan best mogelijk is een teken dat de waardering van de
+eindstand tussen de twee berekeningen nog niet exact gelijk loopt op een
+halve dag. Morgen is de eerste hele dag; dan zegt het getal iets.
+
+### Wat er niet in de export te zien was
+
+`lange_reserve_history` bewaart dertig regels — een half uur. Om 15:18
+te kunnen nakijken hoe groot het lange-horizon-verschil toen was, is
+dat te kort. Opgeschreven; de dagrecords vangen het per dag op.
+
+**Volledige testsuite**: 3632 tests, allemaal groen.
+
+
+## v3.99.22 — Drie kleine dingen van de lijst
+
+**Gevraagd**: "Verder nog zaken welke verbeterd dienen te worden, heb nog
+wel even tijd."
+
+### "Verkopen geblokkeerd" één keer per episode
+
+Zes keer op 8 september, drie 's nachts. De ontdubbelsleutel was de
+redentekst, en daar staan de getallen in: "2,35 kWh nodig en 2,51
+beschikbaar". Elke ronde nieuwe getallen, dus elke keer dat de demping
+het toeliet een "nieuwe" melding. Een blokkering is een episode: een
+melding als hij begint, en pas weer een als hij na een vrije periode
+opnieuw begint.
+
+### De lange-reservegeschiedenis in de export
+
+Om 15:18 was niet meer na te kijken hoe groot het verschil tussen de
+korte en de lange reserve was: de export toonde de laatste dertig
+regels, een half uur. De coördinator bewaart er driehonderd.
+`lange_reserve_per_uur` toont nu per uur de regel met het grootste
+verschil, over de hele reeks — dat is wat er nodig is om een middag als
+die van gisteren te reconstrueren.
+
+### "Bestaat niet" sinds wanneer
+
+Een cloudstoring laat een entiteit verdwijnen; een hernoeming ook. De
+configuratiecontrole zei bij beide "bestaat niet (meer), is hij
+hernoemd?" — en dat leest bij een storing van Home Connect als een
+opdracht om de instelling aan te passen. Het verschil zit in de duur.
+De regel meldt nu sinds wanneer, en tot een dag zegt hij "vaak een
+storing die vanzelf overgaat"; daarna "geen storing meer, pas de
+instelling aan". De teller begint bij de herstart; een storing die een
+herstart overleeft, is geen storing.
+
+**Volledige testsuite**: 3636 tests, allemaal groen.
+
+
+## v4.0 — Nieuwe nummering
+
+**Gevraagd**: "Kunnen we vanaf nu versienummering als volgt doen? Nu 4.0,
+dan 4.1, 4.2 etc, niet zoveel nummers."
+
+v4.0 is inhoudelijk v3.99.22. Er verandert niets aan de code; alleen het
+nummer. Vanaf hier: 4.1, 4.2, 4.3 — één getal per oplevering, geen derde
+cijfer meer. De versietoetsen accepteren twee- en driedelige nummers,
+zodat de oude changelog blijft kloppen.
+
+Wat de 3.x-reeks heeft gebracht, staat hierboven in 99 versies. De
+kortste samenvatting: de reserve hield de bodem niet aan op vier
+plekken, de nacht werd nooit als tekort gezien, het PV-model blokkeerde
+Home Assistant, en de accu schakelde 68 keer per dag. Dat is allemaal
+weg. Wat er nog staat, staat op de lijst — met de reserve één definitie
+bovenaan.

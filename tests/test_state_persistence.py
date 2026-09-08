@@ -560,6 +560,9 @@ VLUCHTIG_MET_REDEN = {
     # opnieuw uit de configuratiecontrole.
     "_invoer_gebruik": "blijkt opnieuw uit de configuratiecontrole",
     "_invoer_instelling": "blijkt opnieuw uit de configuratiecontrole",
+    # v3.99.22: sinds wanneer een entiteit niet bestaat - telt vanaf de
+    # herstart; een storing die een herstart overleeft, is geen storing.
+    "_bestaat_niet_sinds": "telt vanaf de herstart",
     "battery_cooling_state": "blijkt opnieuw uit de sensoren",
     # Halve metingen. Een stuk dat door een herstart een gat heeft, is
     # geen meting meer - beter opnieuw beginnen dan een verminkt getal

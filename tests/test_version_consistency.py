@@ -25,13 +25,17 @@ PAKKET = Path(pkg.__file__).parent
 WORTEL = PAKKET.parent.parent
 
 
+# v4.0: vanaf hier tweedelige versienummers (4.0, 4.1, 4.2 ...). Gevraagd:
+# "niet zoveel nummers". De toetsen accepteren twee en drie delen.
+
+
 def _manifest_versie() -> str:
     return json.loads((PAKKET / "manifest.json").read_text())["version"]
 
 
 def _changelog_versies() -> list[str]:
     return re.findall(
-        r"^## v(\d+\.\d+\.\d+)", (WORTEL / "CHANGELOG.md").read_text(), re.M
+        r"^## v(\d+\.\d+(?:\.\d+)?)", (WORTEL / "CHANGELOG.md").read_text(), re.M
     )
 
 
@@ -42,7 +46,7 @@ def test_the_manifest_matches_the_changelog():
 
 def test_the_readme_badge_matches_the_manifest():
     tekst = (WORTEL / "README.md").read_text()
-    badge = re.search(r"versie-(\d+\.\d+\.\d+)-blue", tekst)
+    badge = re.search(r"versie-(\d+\.\d+(?:\.\d+)?)-blue", tekst)
 
     assert badge, "geen versiebadge in de README"
     assert badge.group(1) == _manifest_versie()

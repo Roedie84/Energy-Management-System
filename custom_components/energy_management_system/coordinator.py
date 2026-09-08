@@ -137,6 +137,7 @@ from .const import (
     NILM_TREND_FALLING_THRESHOLD_PERCENT,
     APPLIANCE_CYCLE_COMPLETE_SUSTAINED_MINUTES,
     APPLIANCE_CYCLE_MAX_SPREIDING_FRACTIE,
+    BESTAAT_NIET_STORING_UREN,
     APPLIANCE_CYCLE_MIN_CYCLI,
     APPLIANCE_CYCLE_MIN_LEARN_MINUTES,
     WATER_USAGE_ACTIVE_THRESHOLD_L_PER_MIN,
@@ -200,6 +201,7 @@ from .const import (
     APPLIANCE_RUNNING_POWER_THRESHOLD_W,
     CONSUMPTION_CORRECTION_SMOOTHING_SAMPLES,
     CONSUMPTION_CORRECTION_FADE_HOURS,
+    CONSUMPTION_CORRECTION_MAX_EXTRA_KWH,
     CONSUMPTION_CORRECTION_FULL_HOURS,
     MAX_CONSUMPTION_CORRECTION_RATIO,
     MIN_CHARGED_KWH_FOR_EFFICIENCY_SAMPLE,
@@ -1221,7 +1223,7 @@ class EnergyManagementSystemCoordinator:
         # een regel - `__init__` staat op de ratel.
         # v3.99.19: `dagverloop` en `nabeschouwingen` erbij, in dezelfde
         # regel - `__init__` staat op de ratel.
-        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen = {}, {}, {}, {}, []
+        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds = {}, {}, {}, {}, [], {}
         # v1.1.6: met welke meetmethode de bewaarde foutreeks tot stand
         # is gekomen. Verandert de methode, dan wordt die reeks eenmalig
         # gewist - zie ENERGY_BALANCE_METHOD_VERSION.
@@ -13946,12 +13948,31 @@ class EnergyManagementSystemCoordinator:
                 continue
             staat = self.hass.states.get(waarde)
             regel = {"instelling": sleutel, "entiteit": waarde}
+            if staat is not None:
+                self._bestaat_niet_sinds.pop(waarde, None)
             if staat is None:
                 regel["oordeel"] = "bestaat_niet"
-                regel["uitleg"] = (
-                    "Deze entiteit bestaat niet (meer). Is hij hernoemd of "
-                    "hoort hij bij een integratie die weg is?"
-                )
+                # v3.99.22: sinds wanneer. Een cloudstoring laat een
+                # entiteit ook verdwijnen; het verschil met een
+                # hernoeming zit in de duur.
+                nu = dt_util.now()
+                sinds = self._bestaat_niet_sinds.setdefault(waarde, nu)
+                uren = (nu - sinds).total_seconds() / 3600
+                regel["bestaat_niet_sinds"] = sinds.isoformat()
+                regel["bestaat_niet_uren"] = round(uren, 1)
+                if uren < BESTAAT_NIET_STORING_UREN:
+                    regel["uitleg"] = (
+                        f"Deze entiteit bestaat sinds {uren:.1f} uur niet. Bij een "
+                        "cloudkoppeling is dat vaak een storing die vanzelf "
+                        "overgaat; pas na een dag is het waarschijnlijk een "
+                        "hernoeming."
+                    )
+                else:
+                    regel["uitleg"] = (
+                        f"Deze entiteit bestaat al {uren:.0f} uur niet. Dat is "
+                        "geen storing meer: waarschijnlijk hernoemd, of van een "
+                        "integratie die weg is. Pas de instelling aan."
+                    )
             elif staat.state in ("unavailable", "unknown"):
                 # v3.95.0: een apparaat dat uit staat, is niet stuk.
                 #
@@ -17099,6 +17120,7 @@ class EnergyManagementSystemCoordinator:
         # over a short rolling window and capped (see
         # _get_smoothed_consumption_correction_ratio) so a brief spike
         # can't scale a 15+ hour estimate to an absurd value.
+        correctie_extra_totaal = 0.0
         consumption_correction_ratio = self._get_smoothed_consumption_correction_ratio(
             start.hour
         )
@@ -17117,17 +17139,24 @@ class EnergyManagementSystemCoordinator:
             if avg_kw is None:
                 return None
 
-            consumption_kwh = self._vacation_adjusted_kwh(
-                avg_kw
-                * fraction_hours
-                # v1.68.0: ook hier uitdempen. De wandeling naar het
-                # diepste tekort loopt tot het goedkope blok - vannacht
-                # was dat zeventien uur - en die hele periode werd met
-                # de kookpiek van dit moment opgeschaald.
-                * self._uitgedempte_correctie(
-                    start, segment_end, consumption_correction_ratio
-                )
+            basis_kwh = self._vacation_adjusted_kwh(avg_kw * fraction_hours)
+            # v1.68.0: ook hier uitdempen. De wandeling naar het diepste
+            # tekort loopt tot het goedkope blok - vannacht was dat
+            # zeventien uur - en die hele periode werd met de kookpiek
+            # van dit moment opgeschaald.
+            factor = self._uitgedempte_correctie(
+                start, segment_end, consumption_correction_ratio
             )
+            # v3.99.21: en wat de verhouding er in totaal bij doet, is
+            # begrensd op wat een apparaat kost. Met de Home Connect-
+            # cloud in storing was de vaatwasser niet bevestigd, en deed
+            # de verhouding er 7 kWh bij: 12,24 nodig in een accu van
+            # 8,64. Een onbekende last is hooguit een apparaat.
+            extra_kwh = basis_kwh * (factor - 1.0)
+            ruimte = CONSUMPTION_CORRECTION_MAX_EXTRA_KWH - correctie_extra_totaal
+            extra_kwh = max(0.0, min(extra_kwh, ruimte))
+            correctie_extra_totaal += extra_kwh
+            consumption_kwh = basis_kwh + extra_kwh
             # v3.99.3: witgoed erbij, per segment. Gepland witgoed
             # (v1.61.0) zat alleen in de TERUGVAL van de reserve, niet in
             # deze wandeling - "telt mee in de reserve" gold dus alleen
@@ -19182,9 +19211,13 @@ class EnergyManagementSystemCoordinator:
 
         verkoop = self.last_sell_check or {}
         if verkoop and not verkoop.get("mag_verkopen"):
+            # v3.99.22: een blokkering is een EPISODE. De sleutel was de
+            # redentekst, met de getallen erin - elke ronde anders, dus
+            # zes meldingen op een dag, drie 's nachts. Nu een melding
+            # als hij begint, en pas weer een na een vrije periode.
             _meld(
                 "plan_verkoop_geblokkeerd",
-                str(verkoop.get("reden"))[:60],
+                "geblokkeerd",
                 "Verkopen geblokkeerd voor de woning",
                 verkoop.get("reden", ""),
             )
@@ -19552,6 +19585,24 @@ class EnergyManagementSystemCoordinator:
             uit = {"te_becijferen": False, "reden": f"{type(fout).__name__}: {fout}"}
         self.nabeschouwingen.append(uit)
         self.nabeschouwingen = self.nabeschouwingen[-DAGVERLOOP_DAGEN:]
+
+    def lange_reserve_per_uur(self) -> list[dict]:
+        """Per uur de regel met het grootste verschil tussen korte en
+        lange reserve (v3.99.22). De export toonde de laatste dertig
+        regels - een half uur - en daarmee was 15:18 niet meer na te
+        kijken. De coordinator bewaart driehonderd regels; dit is de
+        samenvatting daarvan."""
+        per_uur: dict[str, dict] = {}
+        for r in self.lange_reserve_history or []:
+            uur = (r.get("moment") or "")[:13] + ":00"
+            if uur not in per_uur or r.get("extra_kwh", 0) > per_uur[uur].get("extra_kwh", 0):
+                per_uur[uur] = {
+                    "uur": uur,
+                    "reserve_kort_kwh": r.get("reserve_kort_kwh"),
+                    "reserve_lang_kwh": r.get("reserve_lang_kwh"),
+                    "extra_kwh": r.get("extra_kwh"),
+                }
+        return [per_uur[k] for k in sorted(per_uur)]
 
     def get_quarter_plan_summary(
         self, now: datetime | None = None, tot: datetime | None = None
@@ -20711,6 +20762,8 @@ class EnergyManagementSystemCoordinator:
     _vaste_post_bron: str | None = None
     _vaste_post_tot: datetime | None = None
     _noodlading_actief: bool = False
+    # v3.99.22: sinds wanneer een ingestelde entiteit niet bestaat.
+    # Als dict per exemplaar gezet in de ratelregel van __init__.
     # v3.99.18: de lange horizon. Aan sinds v3.99.18, op verzoek; de
     # schakelaar zit in de configuratie (lange_horizon_actief).
     _lange_reserve_extra_kwh: float = 0.0
@@ -21591,6 +21644,12 @@ class EnergyManagementSystemCoordinator:
                 )
 
                 needed_kwh = needed_kwh_raw * ENERGY_BRIDGE_SAFETY_MARGIN
+                # v3.99.21: niet boven de accu - net als de reserve
+                # (v3.99.2) en de verkooptoets (v3.99.15). Dit was de
+                # derde berekening, en de laatste zonder kap.
+                capaciteit_kap = self.bruikbare_capaciteit_kwh()
+                if capaciteit_kap:
+                    needed_kwh = min(needed_kwh, capaciteit_kap)
 
                 self.last_needed_kwh_breakdown = {
                     "basisverbruik_kwh": (

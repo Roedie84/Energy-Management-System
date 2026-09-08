@@ -754,6 +754,10 @@ async def async_get_config_entry_diagnostics(
             # v3.5.0: nominale tegenover gemeten capaciteit.
             # v3.10.0: reserve met korte tegenover lange horizon.
             "lange_reserve_history": coordinator.lange_reserve_history[-30:],
+            # v3.99.22: per uur het grootste verschil, over de hele reeks.
+            "lange_reserve_per_uur": _veilig(
+                "lange_reserve_per_uur", coordinator.lange_reserve_per_uur
+            ),
             # v3.11.0: was bijkopen bij een tekort goedkoper geweest?
             "bijkoop_history": coordinator.bijkoop_history[-30:],
             # v3.25.0: wat er werkelijk van het net de accu in ging.

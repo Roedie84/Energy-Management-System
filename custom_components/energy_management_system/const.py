@@ -453,6 +453,11 @@ BIJKOOP_HISTORY_LENGTH = 300
 BIJKOOP_MIN_METINGEN = 30
 
 LANGE_RESERVE_HISTORY_LENGTH = 300
+
+# Vanaf hoeveel uur "bestaat niet" geen storing meer is maar een
+# hernoeming (v3.99.22). Een cloudstoring is uren; een hernoeming is
+# voorgoed.
+BESTAAT_NIET_STORING_UREN = 24
 LANGE_RESERVE_MIN_METINGEN = 50
 
 LANGERE_HORIZON_HISTORY_LENGTH = 200
@@ -738,6 +743,14 @@ CONSUMPTION_CORRECTION_SMOOTHING_SAMPLES = 4
 # learned average - an uncapped ratio beyond this is more likely a
 # sensor glitch than a genuine sustained change like the airco running.
 MAX_CONSUMPTION_CORRECTION_RATIO = 5.0
+
+# Wat de live correctieverhouding er over de HELE wandeling bij mag doen
+# (v3.99.21). Een onbekende zware last is hooguit een apparaat: een
+# vaatwasser is 1,2 kWh, een oven 1,5. Op 8 september 15:18 - met de
+# Home Connect-cloud in storing, dus de vaatwasser niet bevestigd -
+# deed de verhouding er 7 kWh bij en stond de brug op 12,24 in een accu
+# van 8,64.
+CONSUMPTION_CORRECTION_MAX_EXTRA_KWH = 1.5
 
 # --- Hoe ver reikt de live correctie? (v1.68.0) ----------------------
 # Gemeld: "Nee: 34 kwartier(en) aan het net - morgen 01:00-09:30.
