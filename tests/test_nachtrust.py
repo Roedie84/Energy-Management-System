@@ -208,3 +208,47 @@ def test_licht_dat_lang_aan_blijft_is_wel_opstaan(make_coordinator, hass):
     c._nachtrust_onderbroken_sinds = NACHT - timedelta(minutes=25)
 
     assert _bepaal(c, NACHT) == "thuis"
+
+
+# --- v3.99.15: een oude teller uit een eerdere nacht -------------------
+#
+# 8 september 04:24: overloop, en meteen "thuis" voor 32 minuten. De
+# onderbrekingsregel vuurde niet - terwijl de vorige staat "slaapt" was
+# en het nacht was. Oorzaak: `_nachtrust_onderbroken_sinds` stond nog op
+# een moment van UREN eerder. Die teller wordt gewist als de staat via
+# de slaapsensor-regel terugvalt, maar niet als hij via de nachtregel
+# terugvalt. Bij de volgende onderbreking was de "duur" dan meteen
+# uren, dus opstaan.
+
+
+def test_de_teller_is_weg_na_een_hele_nacht(make_coordinator, hass):
+    """Onderbreking om 01:00, terug naar slaapt via de nachtregel om
+
+    01:30, nieuwe onderbreking om 04:24: dat is een NIEUWE onderbreking.
+    """
+    c = make_coordinator({})
+    # 01:00 - onderbreking, slaapt via de regel
+    _slapend(c, NACHT - timedelta(hours=2), beweging_geleden_min=1, slaapsensor_geleden_min=200)
+    assert _bepaal(c, NACHT - timedelta(hours=2)) == "slaapt"
+    # 01:30 - stil, slaapsensor niet de laatste: via de nachtregel
+    _slapend(c, NACHT - timedelta(hours=1, minutes=30), beweging_geleden_min=60, slaapsensor_geleden_min=230)
+    c.last_bedtime_motion_at = None
+    assert _bepaal(c, NACHT - timedelta(hours=1, minutes=30)) == "slaapt"
+    assert c._nachtrust_onderbroken_sinds is None
+    # 04:24 - nieuwe onderbreking
+    _slapend(c, NACHT, beweging_geleden_min=1, slaapsensor_geleden_min=140)
+    assert _bepaal(c, NACHT) == "slaapt"
+
+
+def test_terugvallen_via_de_nachtregel_wist_de_teller(make_coordinator, hass):
+    """Stil, nacht, geen slaapsensor als laatste: `_stilte_is_nacht`
+
+    zet slaapt. Ook dan moet de teller weg.
+    """
+    c = make_coordinator({})
+    _slapend(c, NACHT, beweging_geleden_min=60, slaapsensor_geleden_min=300)
+    c.last_bedtime_motion_at = None
+    c._nachtrust_onderbroken_sinds = NACHT - timedelta(minutes=50)
+
+    assert _bepaal(c, NACHT) == "slaapt"
+    assert c._nachtrust_onderbroken_sinds is None

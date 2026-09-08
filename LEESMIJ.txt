@@ -1,18 +1,24 @@
-EMS v3.99.14 - alleen de wijzigingen sinds v3.99.13
+EMS v3.99.16 - alle wijzigingen sinds v3.99.14
+
+Bevat v3.99.15 en v3.99.16. Je draait v3.99.14. Een keer herstarten.
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
 
-    const.py, coordinator.py, manifest.json, bestandscontrole.json
+    const.py, coordinator.py, sensor.py, manifest.json, bestandscontrole.json
 
 NAAR DE REPO
 
-    README.md, CHANGELOG.md, twee toetsbestanden
+    README.md, CHANGELOG.md, zes toetsbestanden
 
 WAT ER VERANDERT
 
-1. Dode zone op "zon opvangen of uitstellen" - het vijfde en laatste
-   paar dat elke minuut kon omslaan.
-2. De proefstandkandidaat "Accugezondheid" toont geen +0,00 meer als
-   meting zolang er geen kalibratie is geweest.
+1. De recorder-waarschuwing over de statussensor verdwijnt: de
+   meldingsgeschiedenis op de sensor is ingekort.
+2. De tekortdetectie loopt nu ook 's NACHTS. Dat deed hij nooit; hij
+   liep alleen in de verkoopvensters. Het aantal tekortdagen gaat
+   waarschijnlijk eerst omhoog - dat is voor het eerst het goede getal.
+3. De onderbrekingsteller van de nacht wordt goed gewist.
+4. De verkooptoets gaat niet boven de accucapaciteit.
 
-Geen haast.
+Na installatie: de recorder-regel mag niet meer terugkomen. Komt hij
+wel terug, dan is er nog een sensor boven de 16 kB.

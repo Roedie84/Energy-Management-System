@@ -6584,6 +6584,10 @@ class EnergyManagementSystemCoordinator:
             return False
         if not self._stilte_is_nacht(now, vorige):
             return False
+        # v3.99.15: de teller wordt nu op ELKE terugkeer naar "slaapt"
+        # gewist (ook via de nachtregel; die deed dat niet). Op 8
+        # september 04:24 stond hij nog op uren eerder, en dan is de
+        # "duur" van een nieuwe onderbreking meteen uren: opstaan.
         if self._nachtrust_onderbroken_sinds is None:
             self._nachtrust_onderbroken_sinds = now
             return True
@@ -6716,6 +6720,9 @@ class EnergyManagementSystemCoordinator:
                 # slaapt die persoon. Weggaan kan, maar is de
                 # uitzondering - en "slaapt" is bovendien de veilige
                 # aanname, want dan blijft de nachtreserve staan.
+                # v3.99.15: ook hier de onderbrekingsteller wissen; de
+                # slaapsensor-regel deed dat al, deze tak niet.
+                self._nachtrust_onderbroken_sinds = None
                 self.presence_state = "slaapt"
             elif (
                 vorige == "slaapt"
@@ -19881,6 +19888,13 @@ class EnergyManagementSystemCoordinator:
         # Dit gold voor BEIDE takken hierboven: de wandeling én de
         # nettosom-terugval.
         veilig = max(veilig, self._reserve_bodem_kwh())
+        # v3.99.15: en niet boven de accu. 7 september 16:37: "17,96 kWh
+        # nodig" in een accu van 8,64. v3.99.2 kapte de reserve, maar deze
+        # toets rekent `veilig` zelf uit - de vierde berekening uit
+        # v3.92.3, en de enige die de kap miste.
+        capaciteit = self.bruikbare_capaciteit_kwh()
+        if capaciteit:
+            veilig = min(veilig, capaciteit)
 
         # v3.99.4: dode zone. Eenmaal dicht door de reserve, pas weer open
         # als er SELL_HYSTERESIS_KWH bovenop staat. Anders: verkopen kost
@@ -20520,7 +20534,12 @@ class EnergyManagementSystemCoordinator:
         # Gemeld: "in de smart modus mag de accu 2000W leveren, in de
         # manual max 1600 W leveren." Welke grens geldt, hangt dus van
         # de stand af waarin de accu op dit moment staat.
-        if reason == "smart_discharging":
+        # v3.99.16: via REASON_TO_MODE. `expensive_quarter_soc_protected`
+        # past de slimme stand toe; de tekst "smart_discharging" zag dat
+        # niet, en op 7 september 17:48 gold daardoor de handmatige grens
+        # voor een accu in de slimme stand.
+        slim = REASON_TO_MODE.get(reason) in (OPTION_SMART, OPTION_SMART_DISCHARGING)
+        if slim:
             grens_w = SMART_MAX_DISCHARGE_W
         else:
             grens_w = abs(
@@ -20540,7 +20559,7 @@ class EnergyManagementSystemCoordinator:
         # "handmatig: 2032 W" - terwijl de handmatige ontlaadgrens 1600 is.
         # Of dat 2032 W ontladen was of 2032 W laden (de laadgrens is
         # 2000), was uit een enkel getal niet op te maken. Nu wel.
-        stand = "slim" if reason == "smart_discharging" else "handmatig"
+        stand = "slim" if slim else "handmatig"
         richting = "ontladen" if accu_w >= 0 else "laden"
         sleutel = f"{stand}_{richting}"
         self._max_ontlaad_w_vandaag[sleutel] = max(
@@ -20603,12 +20622,19 @@ class EnergyManagementSystemCoordinator:
             self._max_ontlaad_w_vandaag = {}
             self._shortfall_check_date = now.date()
 
-        self_sufficient_reasons = (
-            "smart_discharging",
-            "expensive_quarter",
-            "expensive_quarter_soc_protected",
+        # v3.99.16: "smart_discharging" was een STAND, geen reden - en
+        # `last_reason` heet 's nachts `discharging_window`. De detectie
+        # liep dus alleen in de verkoopvensters 's avonds, precies
+        # wanneer de accu op zijn 1600 W staat en de keuken eroverheen
+        # gaat. De nacht zelf is nooit als tekort gezien. "Vijf van de
+        # zeven dagen tekort" waren vijf avondmaaltijden.
+        #
+        # Zelfvoorzienend is: de accu ontlaadt (slim of handmatig).
+        zelfvoorzienend = (
+            REASON_TO_MODE.get(reason) == OPTION_SMART_DISCHARGING
+            or reason in ("expensive_quarter", "expensive_quarter_soc_protected")
         )
-        if reason not in self_sufficient_reasons:
+        if not zelfvoorzienend:
             return
 
         # v3.27.0: netstroom tijdens een kalibratie is niet onverwacht -

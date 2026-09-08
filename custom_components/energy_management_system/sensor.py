@@ -175,6 +175,40 @@ def _herstel_cyclusduren(
         return list(bestaand)
     return _schone_cyclusduren(uit_sensor)
 
+
+MELDINGEN_OP_DE_KAART = 20
+MELDING_BERICHT_MAX_TEKENS = 160
+
+
+def _meldingen_voor_de_kaart(historie: list[dict]) -> list[dict]:
+    """De laatste meldingen, ingekort voor de sensor (v3.99.16).
+
+    776 keer in het logboek: "State attributes for
+    sensor.woonkamer_energy_management_system_system_status exceed
+    maximum size of 16384 bytes. Attributes will not be stored." Een
+    moduswisselmelding is tot 924 tekens - de volledige uitleg van de
+    energiebrug - en dertig daarvan zijn 15,6 kB.
+
+    De kaart gebruikt moment, titel en verstuurd. Het bericht gaat
+    ingekort mee voor wie erop tikt; de volledige tekst staat in de
+    diagnostiek-export.
+    """
+    uit = []
+    for m in (historie or [])[-MELDINGEN_OP_DE_KAART:]:
+        bericht = str(m.get("bericht") or "")
+        if len(bericht) > MELDING_BERICHT_MAX_TEKENS:
+            bericht = bericht[: MELDING_BERICHT_MAX_TEKENS - 1] + "…"
+        uit.append(
+            {
+                "moment": m.get("moment"),
+                "titel": m.get("titel"),
+                "soort": m.get("soort"),
+                "verstuurd": m.get("verstuurd"),
+                "bericht": bericht,
+            }
+        )
+    return uit
+
 class PvForecastAccuracySensor(SensorEntity, RestoreEntity):
     """Deviation (%) between yesterday's Solcast forecast and today's actual yield."""
 
@@ -504,7 +538,12 @@ class SystemStatusSensor(_CoordinatorDiagnosticSensor):
             # v1.2.0: voor het Meldingen-tabblad.
             # v1.6.3: dertig in plaats van vijftien, en mét het
             # bericht - de titel alleen zegt niet WELKE sensor wegviel.
-            "meldingen_historie": self._coordinator.notification_history[-30:],
+            # v3.99.16: alleen wat de kaart nodig heeft. Dertig volledige
+            # berichten waren 15,6 kB en tilden de sensor over de 16 kB
+            # van de recorder - die slaat de attributen dan niet meer op.
+            "meldingen_historie": _meldingen_voor_de_kaart(
+                self._coordinator.notification_history
+            ),
         }
 
 

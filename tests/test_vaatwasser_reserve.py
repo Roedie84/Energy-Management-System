@@ -101,3 +101,26 @@ def test_een_gewone_reserve_wordt_niet_geraakt(make_coordinator, hass):
     assert 2.0 <= reserve < 8.64
     assert c.last_reserve_margin_breakdown["boven_capaciteit"] is False
     assert c.last_reserve_margin_breakdown["ongekapt_kwh"] == pytest.approx(reserve, abs=0.001)
+
+
+# --- v3.99.15: de verkooptoets was niet gekapt -------------------------
+#
+# 7 september 16:37: "'t huus heeft 17.96 kWh neudeg tot 't goedkope blok
+# en d'r is 7.52 kWh". Een accu van 8,64. v3.99.2 kapte
+# `_get_dynamic_discharge_reserve_kwh` op de capaciteit; `may_sell_now`
+# rekent `veilig` zelf uit en was niet gekapt. Twee minuten later zei de
+# nachtmelding 13,44 - derde getal.
+
+
+def test_de_verkooptoets_gaat_niet_boven_de_accu(make_coordinator, hass):
+    c = make_coordinator({})
+    c.bruikbare_capaciteit_kwh = lambda: 8.64
+    c.beschikbare_energie_kwh = lambda: 7.52
+    c._estimate_worst_case_deficit_kwh = lambda *a, **k: 11.1
+    c._reserve_margin_factor = lambda: 1.616
+    c.last_cheap_block_start = NU + timedelta(hours=20)
+
+    uitkomst = c.may_sell_now(NU)
+
+    assert uitkomst["nodig_voor_woning_kwh"] <= 8.64
+    assert uitkomst["mag_verkopen"] is False

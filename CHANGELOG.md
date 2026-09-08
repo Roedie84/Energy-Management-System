@@ -23433,3 +23433,122 @@ eerste was gerepareerd, de tweede niet. De kandidaat zegt nu dat er
 niets gemeten is tot er een kalibratieregel in de reeks staat.
 
 **Volledige testsuite**: 3598 tests, allemaal groen.
+
+
+## v3.99.15 — Een teller uit de vorige nacht, en 17,96 kWh in een accu van 8,64
+
+Export van 8 september 07:04, 16 uur op v3.99.14.
+
+### De onderbrekingsteller bleef staan
+
+```
+04:24 - 04:56  thuis   32 min   beweging (Overloop Beweging)
+04:56 - 06:02  slaapt
+```
+
+Weer 32 minuten, terwijl de onderbrekingsregel er sinds v3.96.0 op zit
+en sinds v3.99.9 vóór water en licht staat. De regel vuurde wél — maar
+`_nachtrust_onderbroken_sinds` stond nog op een moment van uren eerder.
+Die teller wordt gewist als de staat via de slaapsensor-regel naar
+"slaapt" terugvalt, niet als dat via de nachtregel gebeurt. Bij de
+volgende onderbreking was de "duur" dan meteen uren: opstaan.
+
+De teller wordt nu op elke terugkeer naar "slaapt" gewist. Een eerste
+poging met een heuristiek — "ligt de teller vóór de laatste beweging
+minus twintig minuten, dan is hij oud" — brak de detectie van echt
+opstaan, want bij aanhoudende beweging is de laatste beweging altijd
+nu. Weggehaald; de wis-punten zijn genoeg.
+
+### 17,96 kWh nodig in een accu van 8,64
+
+```
+16:37  plan_verkoop_geblokkeerd   17,96 kWh nodig, 7,52 beschikbaar
+16:38  battery_wont_last_night    13,44 kWh nodig, 7,52 beschikbaar
+```
+
+Twee meldingen, één minuut, twee getallen boven de capaciteit. v3.99.2
+kapte `_get_dynamic_discharge_reserve_kwh` op de accu; `may_sell_now`
+rekent `veilig` zelf uit — de vierde berekening uit v3.92.3 — en was
+niet gekapt. Nu wel. Het derde getal (de brug, 13,44) komt uit een derde
+berekening, en dat is het punt op de lijst dat "de reserve één
+definitie" heet.
+
+Waarom de wandeling 16:37 op 11 kWh tekort uitkwam, is uit de export
+niet te zien. Het was 30°C buiten en de airco liep; die is bewust een
+AANHOUDENDE last (v3.99.2) en schaalt het profiel. Dat is de bedoeling,
+maar 11 kWh is meer dan een airco in een avond. De uurwaarden van de
+wandeling staan niet in de export; dat is de volgende stap als het
+terugkomt.
+
+### Wat er verder stond
+
+- Het schakelen: 50 wissels, 5 snel. Dat is geen 68 en geen 2; op een
+  dag met airco en zon opvangen is 50 plausibel. Blijft in het oog.
+- `binary_sensor.vaatwasser_remote_start` bestaat niet meer. Dat is een
+  hernoeming aan jouw kant; de melding daarover is terecht.
+- Gisteren: 17,1 kWh opgewekt, 0,6 van het net, 0,61 euro goedkoper dan
+  zonder accu.
+- De ochtend: 29% om 04:44, 8 tekortkwartieren voorzien om 06:15,
+  hersteld om 06:47 toen de zon kwam. Het beeld van de vraag van
+  gisteren.
+
+**Volledige testsuite**: 3601 tests, allemaal groen.
+
+
+## v3.99.16 — Twee logboekregels, en een fout die de hele week verklaart
+
+**Gemeld** met twee regels uit het Home Assistant-logboek.
+
+### De statussensor was te groot voor de recorder
+
+```
+State attributes for sensor.woonkamer_energy_management_system_system_status
+exceed maximum size of 16384 bytes. Attributes will not be stored.
+```
+
+776 keer sinds 7 september 18:00. `meldingen_historie` bevatte de laatste
+dertig meldingen volledig, en een moduswisselmelding is tot 924 tekens —
+de hele uitleg van de energiebrug zit erin. Dertig daarvan zijn 15,6 kB;
+met de aandachtspunten erbij gaat het over de grens.
+
+Dat de recorder de attributen dan niet opslaat, is precies het mechanisme
+waar de reeksen van twintig sensoren aan hangen (v3.99.1, v3.99.11).
+Deze sensor herstelt zelf niets, dus er is niets verloren — maar het is
+de eerste keer dat de grens werkelijk geraakt werd, en het bewijst dat
+het risico niet theoretisch is.
+
+De kaart gebruikt drie velden: moment, titel en verstuurd. De sensor
+geeft nu de laatste twintig, met een ingekort bericht. Van 15,6 kB naar
+onder de 6.
+
+### "smart_discharging" was een stand, geen reden
+
+```
+Unexpected grid import detected (1543W) during a supposedly
+self-sufficient period (expensive_quarter_soc_protected)
+```
+
+Twee dingen aan deze regel.
+
+Het kleine: `expensive_quarter_soc_protected` past de slimme stand toe
+(REASON_TO_MODE), dus geldt de grens van 2000 W. De grens werd gekozen op
+de tekst `reason == "smart_discharging"`, en dat is de derde plek waar
+een reden met de hand naar een stand werd vertaald in plaats van via de
+tabel. Nu via de tabel.
+
+Het grote: `self_sufficient_reasons` bevatte `"smart_discharging"`. Dat
+is een STAND. `last_reason` heet 's nachts `discharging_window`, en dat
+stond er niet in. De tekortdetectie liep dus alleen tijdens
+`expensive_quarter` en `expensive_quarter_soc_protected` — de
+verkoopvensters 's avonds, precies wanneer de accu op zijn 1600 W staat
+en de keuken eroverheen gaat. De nacht zelf, het huis dat de accu om vijf
+uur leegtrekt, is nooit als tekort gezien.
+
+"Vijf van de zeven dagen tekort", de 25 procentpunt marge, de
+kookpiek-analyse van v3.99.0: dat waren vijf avondmaaltijden. De echte
+tekorten — vier ochtenden op rij onder de bodem — telden niet mee. De
+detectie loopt nu tijdens elke periode waarin de accu ontlaadt, slim of
+handmatig. Het aantal tekortdagen gaat de komende week waarschijnlijk
+eerst omhoog, en dat is dan voor het eerst het goede getal.
+
+**Volledige testsuite**: 3606 tests, allemaal groen.
