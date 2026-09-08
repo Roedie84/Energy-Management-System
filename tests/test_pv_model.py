@@ -82,7 +82,7 @@ def test_the_split_is_on_time_not_at_random(make_coordinator, hass):
     import custom_components.energy_management_system as pkg
 
     bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
-    kop = bron.index("def get_pv_model_evaluation")
+    kop = bron.index("def _bereken_pv_model_evaluatie")  # v3.99.20: het trainen zit hier
     blok = bron[kop : bron.index("\n    def ", kop + 10)]
 
     assert 'm["datum"] < grens' in blok
@@ -97,7 +97,7 @@ def test_it_is_compared_against_the_current_method(make_coordinator, hass):
     import custom_components.energy_management_system as pkg
 
     bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
-    kop = bron.index("def get_pv_model_evaluation")
+    kop = bron.index("def _bereken_pv_model_evaluatie")  # v3.99.20: het trainen zit hier
     blok = bron[kop : bron.index("\n    def ", kop + 10)]
 
     assert "door_huidig" in blok
@@ -121,7 +121,7 @@ def test_it_steers_nothing():
     import custom_components.energy_management_system as pkg
 
     bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
-    kop = bron.index("def get_pv_model_evaluation")
+    kop = bron.index("def _bereken_pv_model_evaluatie")  # v3.99.20: het trainen zit hier
     blok = bron[kop : bron.index("\n    def ", kop + 10)]
     code = "\n".join(r.split("#")[0] for r in blok.splitlines())
 

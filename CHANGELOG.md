@@ -23711,3 +23711,55 @@ hem als veld — een methode-object — en zou bij de eerste ronde tussen
 dat niet, omdat niets die ronde met echte waarden draaide. Nu wel.
 
 **Volledige testsuite**: 3624 tests, allemaal groen.
+
+
+## v3.99.20 — Het PV-model blokkeerde Home Assistant
+
+**Gemeld** met een cProfile-meting van zestig seconden via de
+Profiler-integratie, normale bedrijfssituatie:
+
+```
+9,567 s   energy_management_system     (nummer twee: 0,135 s)
+5 calls   get_proefstand               2,72 s per aanroep
+10 calls  pv_model.leer                1,04 s per aanroep
+```
+
+`get_proefstand` traint het regressiewoud — synchroon, in de event loop —
+en wordt aangeroepen door de zelfbeoordelingssensor, het
+"nog-niet-bepaald"-overzicht, de rijpheidsmelding en de diagnostiek.
+Vijf keer per minuut een woud van 18.900 boomopbouwen: Home Assistant
+stond dertien van die zestig seconden stil. Geen automatiseringen, geen
+sensorupdates. "Updating state for sensor...gacs_zelfbeoordeling took
+2.624 seconds" was dezelfde klacht in een andere jas.
+
+Dit is de fout die v3.99.10 en v3.99.12 zichtbaar maakten: die
+NameErrors kwamen uit precies deze functie, die pas ging draaien toen
+het model genoeg monsters had. Sindsdien draaide hij dus — elke minuut,
+meerdere keren.
+
+### Wat er verandert
+
+Precies de drie voorstellen uit de melding, in die volgorde.
+
+1. **Uit de event loop.** Het trainen zit in `_bereken_pv_model_evaluatie`
+   en draait via `async_add_executor_job`. HA blokkeert niet meer,
+   ongeacht hoe lang het duurt.
+2. **Eens per uur.** `async_ververs_pv_model` traint hooguit elke zestig
+   minuten. Het model maakt een dagvoorspelling; vaker is zinloos.
+3. **Iedereen leest de cache.** `get_pv_model_evaluation` leest alleen nog
+   het laatst berekende resultaat, met `berekend_op` erbij. Is er nog
+   niets berekend, dan zegt het dat. Een toets controleert dat de lezer
+   nooit meer zelf leert.
+
+En het kleinere punt uit de melding: `_get_pv_forecast_entries`, 1.425
+aanroepen per minuut, wordt per ronde één keer gelezen en daarna uit een
+rondecache gehaald.
+
+Het derde voorstel — het woud zelf versnellen — is niet gedaan. Na 1 en
+2 is een seconde per uur in een achtergrondthread geen probleem meer,
+en de code wordt er niet eenvoudiger van.
+
+De blokkerende leesactie op `nl.json` uit dezelfde melding is in v3.99.17
+al naar een executor verplaatst; die versie was nog niet geïnstalleerd.
+
+**Volledige testsuite**: 3630 tests, allemaal groen.

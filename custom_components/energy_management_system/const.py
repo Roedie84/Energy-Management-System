@@ -160,6 +160,12 @@ CLOUD_INVOER_CONFIRM_MINUTES = 60
 # de opslag.
 DAGVERLOOP_DAGEN = 7
 
+# Hoe vaak het PV-model opnieuw getraind wordt (v3.99.20). Uit een
+# cProfile-meting: vijf keer per minuut, 2,72 seconden per keer, in de
+# event loop - HA stond dertien van de zestig seconden stil. Het model
+# maakt een dagvoorspelling; eens per uur is ruim.
+PV_MODEL_VERVERS_MINUTEN = 60
+
 DAGTELLER_INSTELLINGEN = (
     "pv_energy_sensor_entity",
     "cost_energy_sensor_entity",

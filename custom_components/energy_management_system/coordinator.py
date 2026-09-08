@@ -624,6 +624,7 @@ from .const import (
     PV_MODEL_MAX_SAMPLES,
     PV_MODEL_MIN_DAGEN,
     PV_MODEL_MIN_SAMPLES,
+    PV_MODEL_VERVERS_MINUTEN,
     PV_MODEL_MIN_WINST_PROCENT,
     PV_BAND_MIN_DAGEN,
     PV_BAND_SAFE_QUANTILE,
@@ -16749,7 +16750,23 @@ class EnergyManagementSystemCoordinator:
 
     # -- Solcast hourly PV production forecast -----------------------------
 
+    _forecast_cache: tuple[datetime, list] | None = None
+
+    def _begin_ronde_cache(self, now: datetime) -> None:
+        """Wist de rondecache (v3.99.20). Aan het begin van elke ronde."""
+        self._forecast_cache = None
+        self._forecast_cache_ronde = now
+
     def _get_pv_forecast_entries(self) -> list[tuple[datetime, datetime, float]]:
+        """Per ronde één keer gelezen (v3.99.20): 1.425 aanroepen in
+        zestig seconden voor een reeks die per half uur verandert."""
+        if self._forecast_cache is not None:
+            return self._forecast_cache[1]
+        reeks = self._lees_pv_forecast_entries()
+        self._forecast_cache = (getattr(self, "_forecast_cache_ronde", None), reeks)
+        return reeks
+
+    def _lees_pv_forecast_entries(self) -> list[tuple[datetime, datetime, float]]:
         """Parse the Solcast "detailedForecast" attribute (today + tomorrow
         sensors, if configured) into a merged, chronologically sorted list
         of (start, end, kwh) tuples - the expected PV production for each
@@ -17482,7 +17499,38 @@ class EnergyManagementSystemCoordinator:
             rij.append(float(waarde))
         return rij
 
+    _pv_model_evaluatie: dict | None = None
+    _pv_model_berekend_op: datetime | None = None
+
     def get_pv_model_evaluation(self) -> dict:
+        """Leest de CACHE (v3.99.20). Het trainen zit in
+        `_bereken_pv_model_evaluatie`, en dat draait in een executor -
+        gemeten: 2,72 seconden per aanroep in de event loop, vijf keer
+        per minuut, omdat drie sensoren en de diagnostiek deze functie
+        aanroepen."""
+        if self._pv_model_evaluatie is None:
+            return {
+                "beschikbaar": False,
+                "reden": "nog niet berekend; het model wordt eens per uur in de achtergrond getraind",
+            }
+        return self._pv_model_evaluatie
+
+    async def async_ververs_pv_model(self, now: datetime) -> None:
+        """Traint hooguit eens per PV_MODEL_VERVERS_MINUTEN, in een
+        executor (v3.99.20)."""
+        if (
+            self._pv_model_berekend_op is not None
+            and (now - self._pv_model_berekend_op).total_seconds() / 60
+            < PV_MODEL_VERVERS_MINUTEN
+        ):
+            return
+        self._pv_model_berekend_op = now
+        uit = await self.hass.async_add_executor_job(self._bereken_pv_model_evaluatie)
+        uit = dict(uit or {})
+        uit["berekend_op"] = now.isoformat()
+        self._pv_model_evaluatie = uit
+
+    def _bereken_pv_model_evaluatie(self) -> dict:
         """Haalt een woud het bij de huidige methode? (v2.9.0)
 
         Getoetst op dagen die het model NIET heeft gezien, en vergeleken
@@ -31968,7 +32016,11 @@ class EnergyManagementSystemCoordinator:
         rekentijd_begin = time.process_time()
         try:
             async with self._lock:
+                self._begin_ronde_cache(dt_util.now())
                 await self._async_update_locked()
+                # v3.99.20: het PV-model in de achtergrond, hooguit eens
+                # per uur. Nooit meer inline.
+                await self.async_ververs_pv_model(dt_util.now())
         except Exception as err:  # noqa: BLE001 - must never crash silently
             self.last_error = str(err)
             self.last_error_time = dt_util.now()
