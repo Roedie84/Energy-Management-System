@@ -469,6 +469,11 @@ async def async_get_config_entry_diagnostics(
         # v3.65.0: uitkomsten die logisch niet kunnen. Elke bevinding
         # hier is een fout in de integratie zelf.
         "zelftoets": _veilig("get_zelftoets", coordinator.get_zelftoets),
+        # v4.1: invarianten tijdens bedrijf - een reserve, de nacht
+        # gecontroleerd, padbereik.
+        "zelfcontroles": _veilig("get_zelfcontroles", coordinator.get_zelfcontroles),
+        # v4.1: alles wat meet en nog niet stuurt, rijp bovenaan.
+        "meet_stuurt_niet": _veilig("get_meet_stuurt_niet", coordinator.get_meet_stuurt_niet),
         # v3.75.0: wanneer de accu anders stond dan de integratie wilde.
         "handmatige_ingrepen": _veilig(
             "handmatige_ingrepen", coordinator.get_handmatige_ingrepen

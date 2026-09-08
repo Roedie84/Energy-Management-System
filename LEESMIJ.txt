@@ -1,24 +1,30 @@
-EMS v4.0 - alle wijzigingen sinds v3.99.20
-
-v4.0 is inhoudelijk v3.99.22 plus de nieuwe nummering. Vanaf hier
-4.1, 4.2, 4.3 - een getal per oplevering.
+EMS v4.1 - alle wijzigingen sinds v3.99.20 (wat je draait)
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
 
-    const.py, coordinator.py, diagnostics.py, manifest.json,
-    bestandscontrole.json
+    const.py, coordinator.py, sensor.py, diagnostics.py
+    nabeschouwing.py, pv_model.py
+    dashboard_template.yaml          LET OP: dashboard gewijzigd
+    manifest.json, bestandscontrole.json
 
 NAAR DE REPO
 
-    README.md, CHANGELOG.md, vier toetsbestanden
+    README.md, CHANGELOG.md
+    dashboards/energy_management_system_dashboard.yaml
+    alle gewijzigde toetsbestanden
 
-WAT ER VERANDERT
+WAT ER VERANDERT IN BEDRIJF
 
-1. De correctieverhouding mag hooguit 1,5 kWh toevoegen, ook zonder
-   bevestigd apparaat; de brug is gekapt op de accu.
-2. "Verkopen geblokkeerd" een keer per episode.
-3. lange_reserve_per_uur in de export.
-4. "Bestaat niet" zegt sinds wanneer, en of het nog een storing kan zijn.
-5. Versienummer 4.0.
-
-GitHub-release: maak de tag "v4.0" aan.
+1. Een reserve: brug, verkooptoets, planning en sturing zien hetzelfde
+   getal. De brug wordt voorzichtiger.
+2. De reserve rekent met de bandpositie van Solcast.
+3. De Store is leidend voor alle geleerde reeksen.
+4. Drie zelfcontroles in de export en op de landingspagina.
+5. Het regressiewoud is honderd keer sneller (zelfde uitkomst).
+6. Proefstandkandidaat "Reserve uit de nabeschouwing": de eerste
+   gesloten lus.
+7. Kaart "Meet, stuurt niet" op de proefstandpagina, en elke maandag
+   om 09:00 een melding met wat er klaar staat. Nieuwe schakelaar op de
+   meldingenpagina (staat aan).
+8. Van v3.99.21/22: correctieverhouding begrensd, brug gekapt,
+   verkoopblokkering een keer per episode, "bestaat niet sinds".

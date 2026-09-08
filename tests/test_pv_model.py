@@ -8,6 +8,8 @@ zo'n 100 MB op een Raspberry Pi), niet over de techniek.
 """
 import random
 
+import pytest
+
 from custom_components.energy_management_system.pv_model import (
     RegressieWoud,
     gemiddelde_absolute_fout,
@@ -241,3 +243,60 @@ def test_a_required_feature_still_drops_the_row(make_coordinator, hass):
     assert c._model_rij(
         {"uur": 12, "hoogte": 50.0, "maand": 8}, ("voorspeld_kwh", "uur")
     ) is None
+
+
+# --- v4.1: dezelfde boom, honderd keer sneller --------------------------
+
+
+def test_de_snelle_splitsing_vindt_dezelfde_grens():
+    """De lopende sommen moeten precies de grens en score van de oude
+    lijstopbouw opleveren. Hier de oude berekening naast de nieuwe."""
+    import random
+
+    from custom_components.energy_management_system.pv_model import (
+        _bouw_boom,
+        _spreiding,
+    )
+
+    rng = random.Random(7)
+    rijen = [[rng.uniform(0, 10), rng.uniform(0, 5)] for _ in range(120)]
+    doelen = [r[0] * 2 + (1.0 if r[1] > 2.5 else 0.0) + rng.gauss(0, 0.1) for r in rijen]
+
+    # oude methode, met de hand
+    beste_oud, score_oud = None, _spreiding(doelen)
+    for k in (0, 1):
+        for a, b in zip(sorted({r[k] for r in rijen}), sorted({r[k] for r in rijen})[1:]):
+            g = (a + b) / 2
+            l = [d for r, d in zip(rijen, doelen) if r[k] <= g]
+            rr = [d for r, d in zip(rijen, doelen) if r[k] > g]
+            if len(l) < 3 or len(rr) < 3:
+                continue
+            s = _spreiding(l) + _spreiding(rr)
+            if s < score_oud:
+                score_oud, beste_oud = s, (k, g)
+
+    boom = _bouw_boom(rijen, doelen, kenmerken_per_splitsing=2, min_blad=3,
+                      diepte=0, max_diepte=1, rng=random.Random(7))
+
+    assert boom.kenmerk == beste_oud[0]
+    assert boom.grens == pytest.approx(beste_oud[1], abs=1e-9)
+
+
+def test_leren_is_snel_genoeg():
+    """200 monsters, 8 kenmerken, het woud van de integratie: onder een
+    halve seconde. Gemeten voor v4.1: ruim een seconde per aanroep."""
+    import random
+    import time
+
+    from custom_components.energy_management_system.pv_model import RegressieWoud
+
+    rng = random.Random(1)
+    rijen = [[rng.uniform(0, 10) for _ in range(8)] for _ in range(200)]
+    doelen = [sum(r[:3]) + rng.gauss(0, 0.5) for r in rijen]
+    woud = RegressieWoud()
+
+    t0 = time.perf_counter()
+    woud.leer(rijen, doelen)
+    duur = time.perf_counter() - t0
+
+    assert duur < 0.5, duur

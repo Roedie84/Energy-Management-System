@@ -80,21 +80,44 @@ def _bouw_boom(
 
     beste = None
     beste_score = _spreiding(doelen)
+    # v4.1: de beste splitsing per kenmerk in EEN doorgang.
+    #
+    # Gemeten met cProfile (8 september): 22,4 miljoen aanroepen van de
+    # generator in `_spreiding` in zestig seconden. Per kandidaat-grens
+    # werden links en rechts opnieuw opgebouwd en hun spreiding opnieuw
+    # gesommeerd: O(n) per grens, O(n) grenzen, per kenmerk, per knoop.
+    #
+    # Nu: sorteer op het kenmerk, en schuif de grens van links naar
+    # rechts terwijl som en kwadratensom van beide kanten worden
+    # bijgehouden. De spreiding van elke kant is dan
+    # som_kwadraten - som**2 / n, zonder een enkele lijst te bouwen.
+    # O(n log n) per kenmerk in plaats van O(n**2). De uitkomst is
+    # dezelfde grens met dezelfde score, tot op afrondingsfouten.
+    n = len(doelen)
     for kenmerk in kandidaten:
-        waarden = sorted({rij[kenmerk] for rij in rijen})
-        if len(waarden) < 2:
-            continue
-        # Grenzen tussen opeenvolgende unieke waarden.
-        for a, b in zip(waarden, waarden[1:]):
-            grens = (a + b) / 2
-            links_d = [d for rij, d in zip(rijen, doelen) if rij[kenmerk] <= grens]
-            rechts_d = [d for rij, d in zip(rijen, doelen) if rij[kenmerk] > grens]
-            if len(links_d) < min_blad or len(rechts_d) < min_blad:
+        volgorde = sorted(range(n), key=lambda i: rijen[i][kenmerk])
+        xs = [rijen[i][kenmerk] for i in volgorde]
+        ys = [doelen[i] for i in volgorde]
+        som_r = sum(ys)
+        kw_r = sum(y * y for y in ys)
+        som_l = 0.0
+        kw_l = 0.0
+        for i in range(n - 1):
+            y = ys[i]
+            som_l += y
+            kw_l += y * y
+            som_r -= y
+            kw_r -= y * y
+            if xs[i] == xs[i + 1]:
+                continue  # geen grens tussen gelijke waarden
+            n_l = i + 1
+            n_r = n - n_l
+            if n_l < min_blad or n_r < min_blad:
                 continue
-            score = _spreiding(links_d) + _spreiding(rechts_d)
+            score = (kw_l - som_l * som_l / n_l) + (kw_r - som_r * som_r / n_r)
             if score < beste_score:
                 beste_score = score
-                beste = (kenmerk, grens)
+                beste = (kenmerk, (xs[i] + xs[i + 1]) / 2)
 
     if beste is None:
         return _Blad(_gemiddelde(doelen))

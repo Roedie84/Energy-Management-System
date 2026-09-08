@@ -34,10 +34,11 @@ BLOK = datetime(2026, 9, 3, 12, 15, tzinfo=timezone.utc)
 
 
 def _verkoop(c, beschikbaar, veilig):
+    # v4.1: de verkooptoets leest de ene reserve; die stubben we direct.
     c.bruikbare_capaciteit_kwh = lambda: 8.64
     c.beschikbare_energie_kwh = lambda: beschikbaar
-    c._estimate_worst_case_deficit_kwh = lambda *a, **k: veilig / 1.616
-    c._reserve_margin_factor = lambda: 1.616
+    c._get_dynamic_discharge_reserve_kwh = lambda now, blok, bewaar=True: veilig
+    c._reserve_bodem_kwh = lambda: 0.0
     c.last_cheap_block_start = BLOK
     return c.may_sell_now(NU)["mag_verkopen"]
 
@@ -273,8 +274,8 @@ def test_binnen_een_kwartier_gaat_hij_niet_weer_open(make_coordinator, hass):
 def _verkoop_op(c, wanneer, beschikbaar, veilig):
     c.bruikbare_capaciteit_kwh = lambda: 8.64
     c.beschikbare_energie_kwh = lambda: beschikbaar
-    c._estimate_worst_case_deficit_kwh = lambda *a, **k: veilig / 1.616
-    c._reserve_margin_factor = lambda: 1.616
+    c._get_dynamic_discharge_reserve_kwh = lambda now, blok, bewaar=True: veilig
+    c._reserve_bodem_kwh = lambda: 0.0
     c.last_cheap_block_start = BLOK
     return c.may_sell_now(wanneer)["mag_verkopen"]
 
@@ -343,7 +344,7 @@ def _uitstel(c, haalbaar_factor, hass=None):
     c.config["battery_total_capacity_sensor_entity"] = "sensor.cap"
     hass.states.set("sensor.cap", "8.64")
     nodig = (8.64 * 0.85 - 4.0) * K.SOLAR_DEFER_SAFETY_FACTOR
-    c._estimate_pv_kwh_for_period = lambda a, b: nodig * haalbaar_factor + 1.0
+    c._estimate_pv_kwh_for_period = lambda a, b, veilig=False: nodig * haalbaar_factor + 1.0
     c._estimate_consumption_kwh_for_period = lambda a, b: 1.0
     c.huidige_prijs_eur_per_kwh = lambda: 0.30
     c._price_at_hour = lambda now, uur: 0.05

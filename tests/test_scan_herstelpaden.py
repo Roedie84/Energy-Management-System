@@ -42,8 +42,6 @@ BEWUST = {
     "nilm_rejected_entities": "migratiepad van vóór de Store",
     # v3.42.1: hersteld pad, maar nu met een filter op het sleutelformaat
     # zodat een opruiming niet ongedaan wordt gemaakt.
-    "climate_rate_history": "entiteit herstelt alleen het nieuwe formaat",
-    "climate_forecast_bias_history": "staat los van de sleutelwijziging",
     # v3.99.1: de dagrecords gaan naar de Store, want de sensoren bewaren
     # alleen shortfall/excess en de velden uit v3.99.0 (vermogensgrens,
     # max_ontlaad_w) gingen bij elke herstart verloren. De sensorroute
@@ -65,6 +63,12 @@ def _hersteld_uit_entiteit() -> set[str]:
                 isinstance(knoop, ast.AsyncFunctionDef)
                 and knoop.name == "async_added_to_hass"
             ):
+                continue
+            # v4.1: onder `_store_wint` is de entiteitsroute per
+            # constructie het vangnet - de Store wint. Dat is precies de
+            # regel die deze scan wilde afdwingen; die velden zijn dus
+            # geen dubbel pad meer.
+            if any(getattr(d, "id", "") == "_store_wint" for d in knoop.decorator_list):
                 continue
             for binnen in ast.walk(knoop):
                 if (

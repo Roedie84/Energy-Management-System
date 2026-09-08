@@ -46,16 +46,21 @@ def test_expected_mode_corrected_to_smart_when_reserve_exhausted(
         }
     )
     monkeypatch.setattr(
-        coordinator, "_get_dynamic_discharge_reserve_kwh", lambda now, cbs: 3.0
+        coordinator, "_get_dynamic_discharge_reserve_kwh", lambda now, cbs, bewaar=True: 3.0
     )
 
     with_now(coordinator, DAY0.replace(hour=20, minute=0))
     asyncio.run(coordinator._async_update_locked())
 
-    assert coordinator.last_reason == "expensive_quarter_soc_protected"
+    # v4.1: met één reserve zegt de verkooptoets al "nee" zodra de
+    # voorraad onder de reserve zit, dus komt de code niet meer bij de
+    # soc-beschermde verkoop: die tak bestond alleen omdat de
+    # verkooptoets en de reserve verschillende getallen gebruikten. De
+    # uitkomst is dezelfde - de accu dekt het huis in de slimme stand.
+    assert coordinator.last_reason == "discharging_window"
     # Without the fix, this stayed "manual" (the pre-check guess based
     # purely on is_expensive), disagreeing with the actual decision.
-    assert coordinator.last_expected_mode == "smart"
+    assert coordinator.last_expected_mode == "smart_discharging"  # v4.1: discharging_window
 
 
 def test_expected_mode_matches_manual_for_a_genuine_discharge(make_coordinator, hass):

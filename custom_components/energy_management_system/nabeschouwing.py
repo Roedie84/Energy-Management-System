@@ -189,7 +189,27 @@ def nabeschouwing(
                 }
             )
     verschillen.sort(key=lambda r: -abs(r["verschil_eur"]))
+    # v4.1: de gerichte som, voor het zelflerende deel. Positief: de
+    # beste planning ontlaadde meer dan wij (wij hielden te veel vast).
+    # Negatief: wij ontlaadden meer dan de beste planning (te veel
+    # verkocht, of te vroeg).
+    # Alleen de ONTLAADkant: vastgehouden = de beste planning ontlaadde
+    # en wij minder; te veel ontladen = wij ontlaadden en de beste
+    # planning minder. Laden dat de beste planning wel deed en wij niet,
+    # is een vraag voor de brug, niet voor de reserve.
+    te_veel_vastgehouden = sum(
+        max(0.0, (a["ontladen_kwh"] - a["laden_kwh"]) - max(0.0, k.accu_kwh))
+        for k, a in zip(kwartieren, beste["acties"])
+        if a["ontladen_kwh"] > a["laden_kwh"]
+    )
+    te_veel_ontladen = sum(
+        max(0.0, k.accu_kwh - max(0.0, a["ontladen_kwh"] - a["laden_kwh"]))
+        for k, a in zip(kwartieren, beste["acties"])
+        if k.accu_kwh > 0
+    )
     return {
+        "te_veel_vastgehouden_kwh": round(te_veel_vastgehouden, 2),
+        "te_veel_ontladen_kwh": round(te_veel_ontladen, 2),
         "te_becijferen": True,
         "kosten_zonder_accu_eur": round(zonder, 2),
         "kosten_werkelijk_eur": round(werkelijk, 2),

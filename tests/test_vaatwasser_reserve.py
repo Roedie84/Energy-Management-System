@@ -156,7 +156,7 @@ def test_de_verhouding_voegt_hooguit_een_apparaat_toe(make_coordinator, hass):
     mod.dt_util.now = lambda: NU  # de uitdemping rekent vanaf "nu"
     c = make_coordinator({})
     c.hourly_consumption_profile = {h: [0.4] * 7 for h in range(24)}
-    c._estimate_pv_kwh_for_period = lambda a, b: 0.0
+    c._estimate_pv_kwh_for_period = lambda a, b, veilig=False: 0.0
     c._get_smoothed_consumption_correction_ratio = lambda h: 4.3
     c.lopend_witgoed_kwh_in_periode = lambda a, b: 0.0
     c.geplande_witgoed_kwh_in_periode = lambda a, b: 0.0

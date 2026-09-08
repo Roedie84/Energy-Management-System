@@ -119,9 +119,13 @@ def test_the_margin_follows_the_learned_shortfall(make_coordinator, hass):
     # Veilig = 2,4 + 0,25 x 15,9 = 6,4 kWh, dus 35% onder 9,8 - maar het
     # plafond van 25 procentpunt grijpt in. Zonder plafond zou zo'n
     # brede band de hele accu blokkeren.
+    # v4.1: zit de band eenmaal in de wandeling zelf (per halfuur op de
+    # veilige positie), dan vervalt deze opslag - anders telt de
+    # onzekerheid dubbel. Wat er in de reserve overblijft is de zon op
+    # de bandpositie, geen percentage erbovenop.
     marge = c._pv_onzekerheidsmarge_procent()
 
-    assert marge == PV_SPREAD_MARGIN_MAX_PERCENT
+    assert marge == 0.0
 
 
 def test_the_margin_is_capped(make_coordinator, hass):
@@ -151,4 +155,5 @@ def test_a_modest_shortfall_stays_under_the_cap(make_coordinator, hass):
     _vul(c, [0.25] * PV_BAND_MIN_DAGEN)
 
     # Veilig = 8,0 + 0,25 x 4,0 = 9,0 kWh, dus 10% onder 10,0.
-    assert c._pv_onzekerheidsmarge_procent() == 10.0
+    # v4.1: de band zit in de wandeling; het percentage vervalt.
+    assert c._pv_onzekerheidsmarge_procent() == 0.0

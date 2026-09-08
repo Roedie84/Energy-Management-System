@@ -19,7 +19,7 @@ def _coordinator(make_coordinator, opgewekt=16.4, rest=6.6):
     mod.dt_util.now = lambda: NU
     c = make_coordinator({})
     c.pv_production_today_kwh = opgewekt
-    c._estimate_pv_kwh_for_period = lambda a, b: rest
+    c._estimate_pv_kwh_for_period = lambda a, b, veilig=False: rest
     return c
 
 
@@ -107,7 +107,7 @@ def test_the_deviation_is_computed(make_coordinator, hass):
 
 def test_without_a_forecast_nothing_is_claimed(make_coordinator, hass):
     c = _coordinator(make_coordinator)
-    c._estimate_pv_kwh_for_period = lambda a, b: None
+    c._estimate_pv_kwh_for_period = lambda a, b, veilig=False: None
 
     waarde, herkomst = c.voorspelde_zon_vandaag_kwh(NU)
 

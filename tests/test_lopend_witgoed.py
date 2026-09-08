@@ -99,7 +99,7 @@ def test_de_wandeling_telt_lopend_en_gepland_witgoed_mee(make_coordinator, hass)
     """
     c = make_coordinator({})
     c.hourly_consumption_profile = {h: [0.3] * 7 for h in range(24)}
-    c._estimate_pv_kwh_for_period = lambda a, b: 0.0
+    c._estimate_pv_kwh_for_period = lambda a, b, veilig=False: 0.0
     c._get_smoothed_consumption_correction_ratio = lambda h: 1.0
     c.lopend_witgoed_kwh_in_periode = lambda a, b: 0.8 if a <= NU + timedelta(minutes=30) < b or a < NU + timedelta(minutes=30) <= b else 0.0
     c.geplande_witgoed_kwh_in_periode = lambda a, b: 0.8 if a <= NU + timedelta(hours=3) < b else 0.0

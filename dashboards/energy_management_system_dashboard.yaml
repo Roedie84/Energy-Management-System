@@ -904,6 +904,16 @@ views:
     hold_action:
       action: more-info
   - type: custom:mushroom-template-card
+    primary: Wat meet en nog niet stuurt
+    secondary: '{% set e = ''switch.woonkamer_energy_management_system_melding_meet_stuurt_niet'' %}{% set last = state_attr(e, ''laatst_verstuurd'') %}{{ ''AAN'' if is_state(e, ''on'') else ''uit'' }} · elke maandag 09:00{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom(''%-d %b %H:%M'') }}{% endif %}'
+    icon: mdi:clipboard-list-outline
+    icon_color: '{{ ''green'' if is_state(''switch.woonkamer_energy_management_system_melding_meet_stuurt_niet'', ''on'') else ''grey'' }}'
+    entity: switch.woonkamer_energy_management_system_melding_meet_stuurt_niet
+    tap_action:
+      action: toggle
+    hold_action:
+      action: more-info
+  - type: custom:mushroom-template-card
     primary: Zelfcontrole vond een fout
     secondary: '{% set e = ''switch.woonkamer_energy_management_system_melding_zelfcontrole'' %}{% set last = state_attr(e, ''laatst_verstuurd'') %}{{ ''AAN'' if is_state(e, ''on'') else ''uit'' }} · demping 120 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom(''%-d %b %H:%M'') }}{% endif %}'
     icon: mdi:calculator-variant-outline

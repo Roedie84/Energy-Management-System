@@ -44,7 +44,7 @@ def _coordinator(make_coordinator, hass, beschikbaar=0.4, prijs=0.36):
         )
         for i in range(40)
     ]
-    c._estimate_pv_kwh_for_period = lambda a, b: 0.0
+    c._estimate_pv_kwh_for_period = lambda a, b, veilig=False: 0.0
     c._estimate_consumption_kwh_for_period = lambda a, b: 0.08
     return c
 

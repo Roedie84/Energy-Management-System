@@ -96,7 +96,7 @@ def test_ook_de_terugval_zonder_uurprofiel_houdt_de_bodem(
     c.beschikbare_energie_kwh = lambda: 0.69
     c._estimate_worst_case_deficit_kwh = lambda *a, **k: None
     c._estimate_consumption_kwh_for_period = lambda a, b: 0.0
-    c._estimate_pv_kwh_for_period = lambda a, b: 0.0
+    c._estimate_pv_kwh_for_period = lambda a, b, veilig=False: 0.0
     c.last_cheap_block_start = BLOK
 
     assert c.may_sell_now(NU)["mag_verkopen"] is False

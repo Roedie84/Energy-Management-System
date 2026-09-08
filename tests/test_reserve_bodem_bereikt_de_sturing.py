@@ -119,7 +119,7 @@ def _plan_situatie(c, hass, beschikbaar_kwh, capaciteit=8.64):
     c.bruikbare_capaciteit_kwh = lambda: capaciteit
     c._estimate_worst_case_deficit_kwh = lambda *a, **k: 0.001
     c._verbruik_met_terugval = lambda start, einde: 0.06
-    c._estimate_pv_kwh_for_period = lambda start, einde: 0.0
+    c._estimate_pv_kwh_for_period = lambda start, einde, veilig=False: 0.0
     c.last_expensive_price_threshold = 0.30
     c._grid_charged_today = False
 

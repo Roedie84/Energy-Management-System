@@ -51,6 +51,10 @@ def _vul_alles(c):
     c.forgone_feedin_eur_total = 0.55
     c.co2_emitted_today_kg = 1.75
     c.pv_production_today_kwh = 15.0
+    # v4.1: de datumvelden die uit de sensorattributen naar de Store zijn
+    # verhuisd.
+    c.first_seen_date = NOW.date()
+    c.water_softener_last_regeneration = NOW
     c.pv_export_today_kwh = 6.0
     c.gross_consumption_today_kwh = 9.0
     c.grid_import_today_kwh = 2.0

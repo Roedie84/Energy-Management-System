@@ -210,6 +210,53 @@ def _meldingen_voor_de_kaart(historie: list[dict]) -> list[dict]:
         )
     return uit
 
+
+def _store_wint(methode):
+    """De Store is leidend; de sensor is het vangnet (v4.1).
+
+    Tweeentwintig sensoren zetten bij het opstarten hun geleerde reeks
+    terug uit hun eigen attributen - onvoorwaardelijk, dus ook over wat
+    de Store net had teruggezet heen. Dat beet in v3.99.11 (de wasmachine
+    kreeg zijn zes-minuten-cycli terug) en hangt aan de 16 kB-grens van
+    de recorder (v3.99.16).
+
+    Deze omhulling neemt voor het herstel een afdruk van de coordinator,
+    laat de sensor zijn gang gaan, en zet daarna elk veld dat de sensor
+    veranderde terug naar de Store-waarde - tenzij die nog de
+    beginwaarde was. De sensor wint dus alleen als de Store niets had.
+    """
+    import copy
+    import functools
+
+    @functools.wraps(methode)
+    async def omhulling(self):
+        c = self._coordinator
+        begin = getattr(c, "_beginwaarden", None) or {}
+        voor = {}
+        for k, v in list(c.__dict__.items()):
+            if k in ("hass", "config", "_beginwaarden") or k.startswith("_unsub"):
+                continue
+            try:
+                voor[k] = copy.copy(v)
+            except Exception:  # noqa: BLE001
+                voor[k] = v
+        await methode(self)
+        for k, oud in voor.items():
+            nieuw = c.__dict__.get(k, oud)
+            if nieuw is oud:
+                continue
+            try:
+                veranderd = nieuw != oud
+            except Exception:  # noqa: BLE001
+                veranderd = True
+            if not veranderd:
+                continue
+            store_had_iets = k in begin and oud != begin[k]
+            if store_had_iets:
+                setattr(c, k, oud)
+
+    return omhulling
+
 class PvForecastAccuracySensor(SensorEntity, RestoreEntity):
     """Deviation (%) between yesterday's Solcast forecast and today's actual yield."""
 
@@ -604,6 +651,7 @@ class MonthlySummarySensor(_CoordinatorDiagnosticSensor, RestoreEntity):
             "previous_month_net_eur": previous_net,
         }
 
+    @_store_wint
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         last_state = await self.async_get_last_state()
@@ -792,6 +840,7 @@ class EnergyBridgeCheckSensor(_CoordinatorDiagnosticSensor, RestoreEntity):
             "transition_log": self._coordinator.energy_bridge_transition_log,
         }
 
+    @_store_wint
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         last_state = await self.async_get_last_state()
@@ -866,6 +915,7 @@ class SteelstofzuigerStatusSensor(_CoordinatorDiagnosticSensor, RestoreEntity):
             ),
         }
 
+    @_store_wint
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         last_state = await self.async_get_last_state()
@@ -919,6 +969,7 @@ class FietsladersStatusSensor(_CoordinatorDiagnosticSensor, RestoreEntity):
             ),
         }
 
+    @_store_wint
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         last_state = await self.async_get_last_state()
@@ -966,6 +1017,7 @@ class DischargeValueSensor(SensorEntity, RestoreEntity):
     def native_value(self) -> float:
         return round(self._coordinator.total_discharge_value_eur, 4)
 
+    @_store_wint
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         last_state = await self.async_get_last_state()
@@ -1001,6 +1053,7 @@ class ChargeCostSensor(SensorEntity, RestoreEntity):
     def native_value(self) -> float:
         return round(self._coordinator.total_charge_cost_eur, 4)
 
+    @_store_wint
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         last_state = await self.async_get_last_state()
@@ -1100,6 +1153,7 @@ class BatterySavingsSensor(SensorEntity, RestoreEntity):
             ),
         }
 
+    @_store_wint
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         last_state = await self.async_get_last_state()
@@ -1221,6 +1275,7 @@ class SluipverbruikSensor(SensorEntity, RestoreEntity):
             ),
         }
 
+    @_store_wint
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         last_state = await self.async_get_last_state()
@@ -1334,6 +1389,7 @@ class WeatherEnsembleSensor(SensorEntity, RestoreEntity):
             return f"{label} (betrouwbaarheid nog onbekend)"
         return f"{label} (bronnen kloppen in {percentage:.0f}% van de gevallen)"
 
+    @_store_wint
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         last_state = await self.async_get_last_state()
@@ -1390,6 +1446,7 @@ class _ApplianceCycleStateSensor(SensorEntity, RestoreEntity):
             "cyclusduur_geschiedenis": history,
         }
 
+    @_store_wint
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         last_state = await self.async_get_last_state()
@@ -1824,6 +1881,9 @@ class NilmConfirmedDevicesSensor(SensorEntity, RestoreEntity):
             ),
         }
 
+    # v4.1: geen `_store_wint` - deze sensor VOEGT SAMEN (vereniging van
+    # Store en entiteit, v1.x), en dat is bewust: de lijst mag alleen
+    # groeien. Zie SAMENVOEGERS in tests/test_store_wint.py.
     async def async_added_to_hass(self) -> None:
         """One-time migration path (v0.63.66) for installs upgrading
         from before the dedicated Store existed. The Store is loaded
@@ -2048,6 +2108,7 @@ class LivingRoomAircoPredictionSensor(SensorEntity, RestoreEntity):
             ),
         }
 
+    @_store_wint
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         last_state = await self.async_get_last_state()
@@ -2134,6 +2195,7 @@ class ClimateForecastSensor(SensorEntity, RestoreEntity):
             ),
         }
 
+    @_store_wint
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         last_state = await self.async_get_last_state()
@@ -2338,6 +2400,7 @@ class BatteryHealthSensor(SensorEntity, RestoreEntity):
             ),
         }
 
+    @_store_wint
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         last_state = await self.async_get_last_state()
@@ -2399,6 +2462,7 @@ class SelfConsumptionSensor(SensorEntity):
             ),
         }
 
+    @_store_wint
     async def async_added_to_hass(self) -> None:
         self._coordinator.register_listener(self.async_write_ha_state)
 
@@ -2522,6 +2586,7 @@ class CounterfactualSavingsSensor(SensorEntity, RestoreEntity):
             ),
         }
 
+    @_store_wint
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         last_state = await self.async_get_last_state()
@@ -2612,6 +2677,7 @@ class PeakPowerSensor(SensorEntity, RestoreEntity):
             ),
         }
 
+    @_store_wint
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         last_state = await self.async_get_last_state()
@@ -2699,6 +2765,7 @@ class WaterUsageSensor(SensorEntity, RestoreEntity):
             ),
         }
 
+    @_store_wint
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         last_state = await self.async_get_last_state()
@@ -2845,6 +2912,7 @@ class ModelTrendInsightSensor(SensorEntity, RestoreEntity):
             ),
         }
 
+    @_store_wint
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         last_state = await self.async_get_last_state()
@@ -2952,6 +3020,9 @@ class ReserveShortfallSensor(SensorEntity, RestoreEntity):
             "detected_today_so_far": self._coordinator._shortfall_detected_today,
         }
 
+    # v4.1: geen `_store_wint` - deze sensor VOEGT SAMEN (vereniging van
+    # Store en entiteit, v1.x), en dat is bewust: de lijst mag alleen
+    # groeien. Zie SAMENVOEGERS in tests/test_store_wint.py.
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         last_state = await self.async_get_last_state()
@@ -3004,6 +3075,9 @@ class ReserveExcessSensor(SensorEntity, RestoreEntity):
             "detected_today_so_far": self._coordinator._excess_detected_today,
         }
 
+    # v4.1: geen `_store_wint` - deze sensor VOEGT SAMEN (vereniging van
+    # Store en entiteit, v1.x), en dat is bewust: de lijst mag alleen
+    # groeien. Zie SAMENVOEGERS in tests/test_store_wint.py.
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         last_state = await self.async_get_last_state()
@@ -3054,6 +3128,7 @@ class LearnedBatteryEfficiencySensor(SensorEntity, RestoreEntity):
     def extra_state_attributes(self) -> dict:
         return {"history": self._coordinator.learned_efficiency_history}
 
+    @_store_wint
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         last_state = await self.async_get_last_state()
@@ -3118,6 +3193,7 @@ class ApplianceUsageHoursSensor(SensorEntity, RestoreEntity):
             "hourly_averages": compact_averages,
         }
 
+    @_store_wint
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         last_state = await self.async_get_last_state()
@@ -3234,6 +3310,7 @@ class LearnedNightConsumptionSensor(SensorEntity, RestoreEntity):
             ),
         }
 
+    @_store_wint
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         last_state = await self.async_get_last_state()
@@ -3356,6 +3433,7 @@ class HourlyConsumptionProfileSensor(SensorEntity, RestoreEntity):
             "hours_with_data": len(profile_kw),
         }
 
+    @_store_wint
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         last_state = await self.async_get_last_state()
@@ -3519,6 +3597,7 @@ class PvHourlyBiasSensor(SensorEntity, RestoreEntity):
             "hours_with_confident_data": len(profile_confident),
         }
 
+    @_store_wint
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         last_state = await self.async_get_last_state()
@@ -3807,6 +3886,7 @@ class DigitalTwinAccuracySensor(SensorEntity, RestoreEntity):
             ),
         }
 
+    @_store_wint
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         last_state = await self.async_get_last_state()
@@ -4000,6 +4080,7 @@ class GacsAssessmentSensor(SensorEntity):
             "prijstoets",
             "besparingscorrectie",
             "proefstand",
+            "meet_stuurt_niet",
             "smart_charging_proef",
             "terugvallen",
             "zonstand",
@@ -4082,6 +4163,8 @@ class GacsAssessmentSensor(SensorEntity):
             ("prijstoets", self._coordinator.get_price_attribute_check),
             ("besparingscorrectie", self._coordinator.get_savings_correction),
             ("proefstand", self._coordinator.get_proefstand),
+            # v4.1: alles wat meet en nog niet stuurt, rijp bovenaan.
+            ("meet_stuurt_niet", self._coordinator.get_meet_stuurt_niet),
             # v3.61.0: de proefpagina waarop beide modi naast elkaar
             # staan, om zelf te beoordelen.
             (

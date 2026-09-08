@@ -41,7 +41,7 @@ def _entries(prijzen):
 
 def _opstelling(make_coordinator, zon=0.0, huis=0.0):
     c = make_coordinator({})
-    c._estimate_pv_kwh_for_period = lambda s, e: zon
+    c._estimate_pv_kwh_for_period = lambda s, e, veilig=False: zon
     c._estimate_consumption_kwh_for_period = lambda s, e: huis
     return c
 

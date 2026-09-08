@@ -29,7 +29,7 @@ NU = datetime(2026, 8, 31, 21, 2, tzinfo=timezone.utc)
 
 def _toets(c, opgewekt=12.8, nog_te_komen=0.0):
     c.pv_production_today_kwh = opgewekt
-    c._estimate_pv_kwh_for_period = lambda a, b: nog_te_komen
+    c._estimate_pv_kwh_for_period = lambda a, b, veilig=False: nog_te_komen
     c._estimate_worst_case_deficit_kwh = lambda *a, **k: 2.0
     c.bruikbare_capaciteit_kwh = lambda: 8.64
     c.beschikbare_energie_kwh = lambda: 5.79

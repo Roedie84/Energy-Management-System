@@ -147,3 +147,36 @@ def test_de_nabeschouwing_van_een_dag_uit_het_verloop(make_coordinator, hass):
     assert uit["te_becijferen"]
     assert uit["kwartieren"] == 96
     assert uit["gemist_eur"] > 0          # er was winst te halen, we deden niets
+
+
+# --- v4.1: de gesloten lus ------------------------------------------------
+
+
+def test_de_richting_wordt_geteld():
+    kw = _dag()
+    uit = nabeschouwing(kw, eind_kwh=0.5, tijdstippen=[str(i) for i in range(16)], slijtage_eur_per_kwh=0.0, **ACCU)
+    # wij deden niets; de beste planning ontlaadde in het dure blok
+    assert uit["te_veel_vastgehouden_kwh"] > 0
+    assert uit["te_veel_ontladen_kwh"] == 0
+
+
+def test_de_kandidaat_zegt_te_hoog_bij_vasthouden(make_coordinator, hass):
+    c = make_coordinator({})
+    c.nabeschouwingen = [
+        {"te_becijferen": True, "kwartieren": 96, "datum": f"2026-09-0{d}",
+         "te_veel_vastgehouden_kwh": 1.2, "te_veel_ontladen_kwh": 0.1, "gemist_eur": 0.30}
+        for d in range(1, 5)
+    ]
+
+    k = c._kandidaat_reserve_uit_nabeschouwing()
+
+    assert "te hoog" in k["waarde"]
+    assert k["mag_regelen"] is False
+    assert k["zou_hebben_opgeleverd"]["eur"] == pytest.approx(1.2, abs=0.01)
+
+
+def test_te_weinig_dagen_geen_oordeel(make_coordinator, hass):
+    c = make_coordinator({})
+    c.nabeschouwingen = [{"te_becijferen": True, "kwartieren": 96}]
+
+    assert c._kandidaat_reserve_uit_nabeschouwing()["waarde"] is None

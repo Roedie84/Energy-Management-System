@@ -166,6 +166,15 @@ DAGVERLOOP_DAGEN = 7
 # maakt een dagvoorspelling; eens per uur is ruim.
 PV_MODEL_VERVERS_MINUTEN = 60
 
+# Zelfcontroles tijdens bedrijf (v4.1). Zie test_zelfcontroles.py.
+# Hoeveel de drie lezers van de reserve van elkaar mogen verschillen: de
+# verkooptoets kapt en houdt de bodem aan, dat is een rem, geen andere
+# reserve.
+ZELFCONTROLE_RESERVE_TOLERANTIE_KWH = 0.10
+# Hoeveel dagen een reden ongebruikt mag blijven voordat hij "nooit
+# gevuurd" heet in het padbereik.
+PADBEREIK_VENSTER_DAGEN = 30
+
 DAGTELLER_INSTELLINGEN = (
     "pv_energy_sensor_entity",
     "cost_energy_sensor_entity",
@@ -2117,6 +2126,8 @@ LOG_PRIORITEITEN = {
     # Kritiek - hier gaat iets mis.
     "interne_fout": LOG_PRIO_KRITIEK,
     "proefstand_rijp": LOG_PRIO_INFO,
+    # v4.1: de wekelijkse herinnering aan wat meet en niet stuurt.
+    "meet_stuurt_niet": LOG_PRIO_INFO,
     "zelfcontrole": LOG_PRIO_KRITIEK,
     "plan_tekort": LOG_PRIO_KRITIEK,
     "battery_wont_last_night": LOG_PRIO_KRITIEK,
@@ -2692,9 +2703,47 @@ PERSISTED_PLAIN_FIELDS = (
     # `max_ontlaad_w`) stonden in geen van beide. Zie v3.42.1 voor waarom
     # twee bronnen voor hetzelfde gegeven een slecht idee is.
     "reserve_daily_records",
+    # v4.1: de reeksen die tot nu toe ALLEEN via sensorattributen
+    # terugkwamen. De Store is nu leidend; de sensor is het vangnet
+    # (`_store_wint` in sensor.py). Twee dicts met uursleutels staan in
+    # PERSISTED_INTKEY_DICT_FIELDS, want JSON maakt van 13 "13".
+    "baseline_load_history",
+    "climate_forecast_bias_history",
+    "climate_rate_history",
+    "digital_twin_accuracy_history",
+    "extra_dip_margin_history",
+    "fietsladers_charge_duration_history",
+    "learned_efficiency_history",
+    "living_room_temp_bucket_history",
+    "night_consumption_history",
+    "peak_power_daily_history",
+    "steelstofzuiger_charge_duration_history",
+    "temp_consumption_history",
+    "temp_consumption_prediction_error_history",
+    "water_daily_history",
+    "water_session_history",
+    "weather_ensemble_agreement_history",
+    "energy_bridge_transition_log",
+    "total_discharge_value_eur",
+    "total_charge_cost_eur",
+    "battery_cost_basis_eur_per_kwh",
+    "total_battery_savings_eur",
+    "total_feedin_premium_eur",
+    "cusum_accumulator_kw",
+    "sluipverbruik_detected",
+    "battery_cumulative_discharged_kwh",
+    "peak_power_all_time_w",
+    "peak_power_all_time_date",
+    "peak_power_current_month_w",
+    "peak_power_previous_month_w",
+    "water_daily_total_l",
+    "last_extra_dip_margin_eur_per_kwh",
+    "last_temp_consumption_note",
     # v3.99.19: het verloop per kwartier en de nabeschouwingen.
     "dagverloop",
     "nabeschouwingen",
+    # v4.1: het padbereik - per reden en kandidaat hoe vaak en wanneer.
+    "padbereik",
     # v3.97.0: de Powercalc-proef heeft 200 metingen nodig.
     "powercalc_paren",
     # Meldingen (v1.2.0): de aan/uit-standen zijn een gebruikerskeuze en
@@ -2747,6 +2796,8 @@ PERSISTED_PLAIN_FIELDS = (
 # tick meteen worden gewist, omdat de coordinator dan denkt dat er een
 # nieuwe dag is begonnen - dan was het terugzetten zinloos geweest.
 PERSISTED_DATE_FIELDS = (
+    # v4.1: uit de sensorattributen naar de Store.
+    "first_seen_date",
     "goedkope_koeling_teldag",
     # v1.74.0: bij welke dag de plantoetsing staat. Zonder dit veld
     # begon elke herstart met een lege sleutel en werd de momentopname
@@ -2769,8 +2820,18 @@ PERSISTED_INT_FIELDS = (
     "_summary_month_key",
 )
 
+# v4.1: dicts met UURSLEUTELS (int). JSON maakt daar tekst van; bij het
+# laden gaan ze terug naar int, anders vindt `learned_hourly_avg_kw(13)`
+# niets meer.
+PERSISTED_INTKEY_DICT_FIELDS = (
+    "hourly_consumption_profile",
+    "pv_hourly_bias_history",
+)
+
 PERSISTED_DATETIME_FIELDS = (
     "battery_cooling_last_change",
+    # v4.1: uit de sensorattributen naar de Store.
+    "water_softener_last_regeneration",
     # v1.30.0, gevraagd: "Let op alle gecreeerde data dient na een
     # herstart niet verloren te gaan."
     #
@@ -3039,6 +3100,15 @@ NOTIFICATION_TYPES: tuple[tuple[str, str, str, bool, int], ...] = (
         "te doen' springt - dus meting én winst zijn allebei becijferd.",
         True,
         1440,
+    ),
+    (
+        "meet_stuurt_niet",
+        "Wat meet en nog niet stuurt",
+        "Elke maandagochtend: welke metingen klaar staan om mee te sturen "
+        "en al langer wachten. Niet alleen bij de omslag - zodat het niet "
+        "uit het oog raakt.",
+        True,
+        10080,
     ),
     (
         "zelfcontrole",
@@ -5128,6 +5198,7 @@ CONF_ACHTERHOEKS = "achterhoeks_meldingen"
 ACHTERHOEKS_TITELS = {
     "plan_tekort": "Den accu kump tekort",
     "plan_uitstel": "Zunne opvangen wödt uut-esteld",
+    "meet_stuurt_niet": "Wat met en nog neet stuurt",
     "plan_verkoop_geblokkeerd": "Verkopen geet neet, 't huus geet veur",
     "vakantie_beweging": "Der beweeg wat, terwiel gi-j weg bunt",
     "zelfcontrole": "Der klopt wat neet in de sommen",

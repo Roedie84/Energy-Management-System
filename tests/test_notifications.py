@@ -220,6 +220,7 @@ def test_only_the_pre_existing_kinds_default_to_on():
         # dat hij over drie weken moet kijken. Staat deze uit, dan
         # gebeurt dat niet en blijft de kandidaat ongebruikt staan.
         "proefstand_rijp",
+        "meet_stuurt_niet",  # v4.1
     }
 
 

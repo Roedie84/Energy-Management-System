@@ -56,7 +56,7 @@ def _coordinator(
     c.last_current_price_per_kwh = prijs_nu
 
     uren = lambda a, b: max(0.0, (b - a).total_seconds() / 3600)
-    c._estimate_pv_kwh_for_period = lambda a, b: uren(a, b) * zon_per_uur
+    c._estimate_pv_kwh_for_period = lambda a, b, veilig=False: uren(a, b) * zon_per_uur
     c._estimate_consumption_kwh_for_period = (
         lambda a, b: uren(a, b) * verbruik_per_uur
     )

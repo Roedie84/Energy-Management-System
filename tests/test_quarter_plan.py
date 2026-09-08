@@ -46,7 +46,7 @@ def _coordinator(make_coordinator, hass, van_net=False, beschikbaar=7.0):
         ) * PRICE_SCALE_FACTOR
         entries.append((start, start + timedelta(minutes=15), prijs))
     c._get_forecast_entries = lambda: entries
-    c._estimate_pv_kwh_for_period = lambda a, b: (
+    c._estimate_pv_kwh_for_period = lambda a, b, veilig=False: (
         0.6 * (b - a).total_seconds() / 3600 if 9 <= a.hour < 18 else 0.0
     )
     c._estimate_consumption_kwh_for_period = (
@@ -98,7 +98,7 @@ def test_an_empty_battery_does_not_sell(make_coordinator, hass):
     beweert.
     """
     c = _coordinator(make_coordinator, hass, beschikbaar=0.05)
-    c._estimate_pv_kwh_for_period = lambda a, b: 0.0
+    c._estimate_pv_kwh_for_period = lambda a, b, veilig=False: 0.0
 
     plan = c.get_quarter_plan(NU)
 
@@ -681,7 +681,7 @@ def test_an_empty_battery_reads_as_the_floor(make_coordinator, hass):
     binnen, en dan blijft hij leeg.
     """
     c = _coordinator(make_coordinator, hass, beschikbaar=0.0)
-    c._estimate_pv_kwh_for_period = lambda a, b: 0.0
+    c._estimate_pv_kwh_for_period = lambda a, b, veilig=False: 0.0
 
     plan = c.get_quarter_plan(NU)
     leeg = [r for r in plan if r["soc_bruikbaar_procent"] == 0]
@@ -719,7 +719,7 @@ def _zonnig(make_coordinator, hass, zon_kw=8.0):
 
     c = _coordinator(make_coordinator, hass, beschikbaar=0.1)
     c.config[CONF_MANUAL_CHARGE_POWER] = -2000.0
-    c._estimate_pv_kwh_for_period = lambda a, b: (
+    c._estimate_pv_kwh_for_period = lambda a, b, veilig=False: (
         zon_kw * (b - a).total_seconds() / 3600 if 9 <= a.hour < 18 else 0.0
     )
     return c
@@ -763,7 +763,7 @@ def test_surplus_above_the_limit_goes_to_the_grid(make_coordinator, hass):
 def test_discharging_respects_the_power_limit(make_coordinator, hass):
     """1600 W is 0,4 kWh per kwartier; meer kan de accu niet leveren."""
     c = _coordinator(make_coordinator, hass)
-    c._estimate_pv_kwh_for_period = lambda a, b: 0.0
+    c._estimate_pv_kwh_for_period = lambda a, b, veilig=False: 0.0
     c._estimate_consumption_kwh_for_period = (
         lambda a, b: 3.0 * (b - a).total_seconds() / 3600
     )
@@ -794,7 +794,7 @@ def test_shortfalls_are_counted_until_the_cheap_block(
     dan geen storing maar rekenkunde.
     """
     c = _coordinator(make_coordinator, hass, beschikbaar=0.4)
-    c._estimate_pv_kwh_for_period = lambda a, b: 0.0
+    c._estimate_pv_kwh_for_period = lambda a, b, veilig=False: 0.0
     c._estimate_consumption_kwh_for_period = (
         lambda a, b: 0.5 * (b - a).total_seconds() / 3600
     )
@@ -815,7 +815,7 @@ def test_shortfalls_are_counted_until_the_cheap_block(
 def test_inside_the_cheap_block_nothing_counts(make_coordinator, hass):
     """Staan we er al in, dan is de belofte ingelost."""
     c = _coordinator(make_coordinator, hass, beschikbaar=0.4)
-    c._estimate_pv_kwh_for_period = lambda a, b: 0.0
+    c._estimate_pv_kwh_for_period = lambda a, b, veilig=False: 0.0
     c._estimate_consumption_kwh_for_period = (
         lambda a, b: 0.5 * (b - a).total_seconds() / 3600
     )
@@ -829,7 +829,7 @@ def test_without_a_cheap_block_everything_counts(make_coordinator, hass):
     """Zonder blok is er niets om op te wachten, dus telt de hele
     planning - net als voorheen."""
     c = _coordinator(make_coordinator, hass, beschikbaar=0.4)
-    c._estimate_pv_kwh_for_period = lambda a, b: 0.0
+    c._estimate_pv_kwh_for_period = lambda a, b, veilig=False: 0.0
     c._estimate_consumption_kwh_for_period = (
         lambda a, b: 0.5 * (b - a).total_seconds() / 3600
     )
@@ -848,7 +848,7 @@ def test_without_a_cheap_block_everything_counts(make_coordinator, hass):
 
 def _leeglopend(make_coordinator, hass):
     c = _coordinator(make_coordinator, hass, beschikbaar=0.4)
-    c._estimate_pv_kwh_for_period = lambda a, b: 0.0
+    c._estimate_pv_kwh_for_period = lambda a, b, veilig=False: 0.0
     c._estimate_consumption_kwh_for_period = (
         lambda a, b: 0.5 * (b - a).total_seconds() / 3600
     )
@@ -935,7 +935,7 @@ def test_the_lowest_soc_is_bounded_too(make_coordinator, hass):
     vannacht - en dat is wel wat je erin leest."""
     c = _lange_reeks(make_coordinator, hass, 109)
     c.last_available_kwh = 3.0
-    c._estimate_pv_kwh_for_period = lambda a, b: 0.0
+    c._estimate_pv_kwh_for_period = lambda a, b, veilig=False: 0.0
     c._estimate_consumption_kwh_for_period = (
         lambda a, b: 0.4 * (b - a).total_seconds() / 3600
     )

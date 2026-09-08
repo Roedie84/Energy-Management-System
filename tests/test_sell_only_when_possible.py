@@ -45,7 +45,7 @@ def _coordinator(make_coordinator, hass, zon=22.0, met_voorspelling=True):
     # geheel. Het korte venster tot het goedkope blok (vier uur) krijgt
     # een klein deel, zodat de reservetoets iets te toetsen heeft.
     c.pv_production_today_kwh = 0.0
-    c._estimate_pv_kwh_for_period = lambda a, b: (
+    c._estimate_pv_kwh_for_period = lambda a, b, veilig=False: (
         zon if (b - a).total_seconds() > 10 * 3600 else 0.0
     )
     return c
@@ -114,7 +114,7 @@ def test_solar_before_the_cheap_block_counts(make_coordinator, hass):
     """Komt er nog zon vóór het goedkope blok, dan hoeft de accu dat
     deel niet te dekken."""
     c = _coordinator(make_coordinator, hass)
-    c._estimate_pv_kwh_for_period = lambda a, b: (
+    c._estimate_pv_kwh_for_period = lambda a, b, veilig=False: (
         22.0 if (b - a).total_seconds() > 20 * 3600 else 5.0
     )
 
@@ -181,7 +181,7 @@ def test_a_good_day_is_not_poor_in_the_evening(make_coordinator, hass):
 
     c = _coordinator(make_coordinator, hass, zon=0.1)
     c.pv_production_today_kwh = 20.4
-    c._estimate_pv_kwh_for_period = lambda a, b: 0.1
+    c._estimate_pv_kwh_for_period = lambda a, b, veilig=False: 0.1
     avond = datetime(2026, 8, 12, 20, 23, tzinfo=timezone.utc)
     c.last_cheap_block_start = avond.replace(hour=23)
 
@@ -197,7 +197,7 @@ def test_a_genuinely_poor_day_still_blocks(make_coordinator, hass):
 
     c = _coordinator(make_coordinator, hass, zon=0.1)
     c.pv_production_today_kwh = 3.2
-    c._estimate_pv_kwh_for_period = lambda a, b: 0.1
+    c._estimate_pv_kwh_for_period = lambda a, b, veilig=False: 0.1
     avond = datetime(2026, 8, 12, 20, 23, tzinfo=timezone.utc)
 
     resultaat = c.may_sell_now(avond, 6.5)
@@ -241,7 +241,7 @@ def _nacht(make_coordinator, hass):
     c.pv_production_today_kwh = 21.0
     c.learned_hourly_avg_kw = lambda uur: 0.35
     # Zon komt overdag; 's nachts niets.
-    c._estimate_pv_kwh_for_period = lambda a, b: (
+    c._estimate_pv_kwh_for_period = lambda a, b, veilig=False: (
         0.0
         if a.hour >= 20 or a.hour < 7
         else 1.0 * (b - a).total_seconds() / 3600
@@ -300,7 +300,13 @@ def test_without_an_hourly_profile_it_falls_back(make_coordinator, hass):
 
     resultaat = c.may_sell_now(avond, 6.91)
 
-    assert resultaat["methode"].startswith("nettosom")
+    # v4.1: de verkooptoets leest de ene reserve, en die valt zelf al
+    # terug op de nettosom als het uurprofiel ontbreekt. De methode is
+    # dan nog steeds "de reserve"; de nettosom-tak in de verkooptoets
+    # zelf bestaat alleen nog als de reserve niets teruggeeft.
+    assert resultaat["nodig_voor_woning_kwh"] == pytest.approx(
+        max(c._get_dynamic_discharge_reserve_kwh(avond, c.last_cheap_block_start, bewaar=False),
+            c._reserve_bodem_kwh()), abs=0.01)
 
 
 def test_the_deepest_margin_matches_the_energy_bridge():
@@ -361,9 +367,12 @@ def test_the_margin_never_drops_below_the_old_floor(make_coordinator, hass):
     import custom_components.energy_management_system as pkg
 
     bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
-    kop = bron.index("marge = self._reserve_margin_factor()")
+    # v4.1: de vloer zit in de ene reserve, niet meer apart in de
+    # verkooptoets.
+    kop = bron.index("def _get_dynamic_discharge_reserve_kwh")
+    einde = bron.index("def _planning_reserve_kwh", kop)
 
-    assert "max(marge, SELL_RESERVE_DEEPEST_SAFETY_FACTOR)" in bron[kop : kop + 200]
+    assert "margin = max(margin, SELL_RESERVE_DEEPEST_SAFETY_FACTOR)" in bron[kop:einde]
 
 
 def test_three_shortfall_days_actually_reduce_selling(
@@ -488,11 +497,13 @@ def test_the_plan_simulation_uses_the_same_margin(make_coordinator, hass):
     c.last_cheap_block_start = moment + timedelta(hours=6)
     c.bruikbare_capaciteit_kwh = lambda: 7.78
     c._estimate_worst_case_deficit_kwh = lambda *a, **k: 4.0
-    c._reserve_margin_factor = lambda: 1.9
 
+    # v4.1: de planning leest de ene reserve. Niet "dezelfde marge" -
+    # hetzelfde GETAL.
     gesimuleerd = c._planning_reserve_kwh(moment, {})
+    reserve = c._get_dynamic_discharge_reserve_kwh(moment, c.last_cheap_block_start, bewaar=False)
 
-    assert gesimuleerd == pytest.approx(4.0 * 1.9, abs=0.001)
+    assert gesimuleerd == pytest.approx(max(reserve, c._reserve_bodem_kwh()), abs=0.001)
 
 
 def test_no_place_applies_a_margin_of_its_own():

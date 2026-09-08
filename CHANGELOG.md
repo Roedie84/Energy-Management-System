@@ -23867,3 +23867,188 @@ plekken, de nacht werd nooit als tekort gezien, het PV-model blokkeerde
 Home Assistant, en de accu schakelde 68 keer per dag. Dat is allemaal
 weg. Wat er nog staat, staat op de lijst — met de reserve één definitie
 bovenaan.
+
+
+## v4.1 — Eén reserve
+
+**Gevraagd**: "Alles oplossen wat noodzakelijk is, ook al kost het veel
+tijd. Standpunt is en blijft dat het uiteindelijk een perfect EMS dient
+te worden, hoeveel tijd het ook kost."
+
+Bovenaan de lijst stond dit. Vier berekeningen voor "hoeveel moet er in
+de accu blijven", elk met een eigen marge:
+
+```
+reserve        diepste tekort + witgoed + lange horizon,
+               marge 62%, bodem, gekapt              6,13 kWh
+brug           diepste tekort × 1,15, eigen buffer      4,42 kWh
+verkooptoets   diepste tekort × margefactor, bodem     6,34 kWh
+planning       diepste tekort × max(factor, 1,25), bodem
+```
+
+Op 7 september 16:37 stonden twee van die getallen een minuut na
+elkaar in twee meldingen: 17,96 en 13,44. Elke dode zone van de
+afgelopen week — vijf stuks — was symptoombestrijding van een reserve
+die van plek tot plek verschilt. En de secundaire prijslaag, de
+soc-beschermde verkoop, de aparte kap in v3.99.2, v3.99.15 en v3.99.21:
+allemaal gevolgen van hetzelfde.
+
+### Wat er verandert
+
+`_get_dynamic_discharge_reserve_kwh` is de definitie. De brug, de
+verkooptoets en de planning lezen die — met een vlag `bewaar=False`,
+zodat een planningskwartier van morgen de uitsplitsing van nu niet
+overschrijft. Wat elke lezer eraan toevoegt is alleen zijn eigen
+hysterese: de brug zijn buffer van 10%, de verkooptoets zijn dode zone
+en kwartier. Het getal is hetzelfde. Een toets legt dat vast: drie
+lezers, één getal.
+
+De vloer die de verkooptoets apart aanhield (v1.88.0) zit nu in de
+reserve zelf: de zelfcorrigerende marge mag na overschotdagen zakken,
+maar niet onder de oude vaste factor.
+
+### Wat je gaat merken
+
+- **De brug wordt voorzichtiger.** Die rekende met 15% marge; de reserve
+  met 40 tot 60. "Genoeg om te overbruggen" komt dus later, en er wordt
+  vaker in het goedkope blok bijgeladen. Dat is de bedoeling: de brug
+  zei "genoeg" terwijl de sturing al aan het inhouden was.
+- **`expensive_quarter_soc_protected` komt bijna niet meer voor.** Die
+  tak bestond omdat de verkooptoets ja zei op een reserve die de sturing
+  nee vond. Met één getal zegt de verkooptoets nee zodra de voorraad
+  onder de reserve zit, en dekt de accu het huis via
+  `discharging_window`. Zelfde uitkomst, één reden minder.
+- **De meldingen noemen één getal.** "Nodig" in de nachtmelding, de
+  verkoopblokkering en de planning is vanaf nu hetzelfde bedrag.
+
+### Wat er niet mee is gedaan
+
+De MPC-doelstand (`mpc_doel_soc`) rekent nog apart. Dat is bewust: hij
+stuurt niet en staat naast de reserve om het verschil te laten zien —
+een lijn per kwartier tegenover één getal. Dat is een meting, geen
+vierde definitie.
+
+### De band in de wandeling
+
+Derde structurele punt, in dezelfde versie. In zestien gemeten dagen viel
+de opwek nul keer onder p10 van Solcast; de veilige positie in de band is
+0,29. De reserve rekende met het MIDDEN van de voorspelling en legde er
+een percentage bovenop — een vlakke opslag op het hele tekort, ook op
+het deel dat verbruik is.
+
+De parser leest nu p10 en p90 per halfuur (die stonden al in de lijst,
+maar werden alleen als dagtotaal gebruikt). De wandeling naar het
+diepste tekort rekent met `p10 + 0,29 × (p90 − p10)`: de onzekerheid zit
+waar hij hoort, in de zon, op de uren dat er zon verwacht wordt. Het
+percentage erbovenop vervalt, anders telt het dubbel. Zonvangst,
+planning en uitstel blijven het midden gebruiken — die vragen niet
+"hoeveel is er minstens" maar "hoeveel is er waarschijnlijk".
+
+### De Store is leidend
+
+Tweede structurele punt. Tweeëntwintig sensoren zetten bij het opstarten
+hun reeks terug uit hun eigen attributen, onvoorwaardelijk — ook over
+wat de Store net had teruggezet heen. Dat beet in v3.99.11, en het hangt
+aan de 16 kB-grens van de recorder.
+
+Niet 57 toekenningen stuk voor stuk omgebouwd. Eén omhulling,
+`_store_wint`, op elke herstelroute: een afdruk van de coördinator
+vooraf, de sensor doet zijn gang, en daarna wint de Store voor elk veld
+dat de sensor veranderde — tenzij de Store nog op de beginwaarde stond.
+De sensor wint dus alleen als de Store niets had. Drie sensoren die
+bewust SAMENVOEGEN (NILM, tekort- en overschotdagen) zijn uitgezonderd.
+
+Dertig velden zijn aan de Store toegevoegd. Twee daarvan zijn dicts met
+uursleutels; JSON maakt van 13 "13", dus die gaan bij het laden terug
+naar int — anders vindt `learned_hourly_avg_kw(13)` niets meer.
+Structuurscan 11 herkent de omhulling en telt die velden niet meer als
+dubbel pad.
+
+### Zelfcontroles tijdens bedrijf
+
+**Gevraagd**: "Wordt nu ook echt elke minuscuul foutje gevonden middels
+de diagnostiek?" Nee. De grootste fouten van de afgelopen week hadden
+geen foutmelding. Dit zijn de drie controles die ze wél hadden gezien:
+
+1. **Eén reserve.** Elke ronde: zien de brug, de verkooptoets en de
+   sturing hetzelfde getal? Zo niet, dan is er een tweede definitie
+   ingeslopen — de fout van v3.92 tot v4.1.
+2. **Nacht gecontroleerd.** Tussen 22:00 en 06:00 wordt geteld hoeveel
+   rondes zelfvoorzienend waren. Nul is de fout van v3.99.16.
+3. **Padbereik.** Per beslissingsreden hoe vaak en wanneer hij gevuurd
+   heeft, met de lijst van redenen die nooit of niet in dertig dagen
+   vuurden. Een tak die nooit bereikt wordt, is een tak waar een
+   NameError drie maanden kan wachten.
+
+De eerste twee komen als aandachtspunt op de landingspagina zodra ze
+niet in orde zijn. Alle drie staan in de export onder `zelfcontroles`.
+
+Wat er nooit komt: een diagnostiek die een verkeerde regel herkent als
+verkeerd. Daar blijven jouw ogen voor nodig, en de nabeschouwing —
+het enige getal dat niet aan de aannames van de code hangt.
+
+### Het regressiewoud: dezelfde boom, honderd keer sneller
+
+Laatste punt van de structurele lijst. De hete regel was `_spreiding`,
+22,4 miljoen aanroepen per minuut: per kandidaat-grens werden links en
+rechts opnieuw opgebouwd en hun spreiding opnieuw gesommeerd. Nu wordt
+per kenmerk één keer gesorteerd en schuift de grens van links naar
+rechts met lopende sommen en kwadratensommen; de spreiding van elke kant
+is `Σx² − (Σx)²/n`, zonder een lijst te bouwen. Dezelfde grens, dezelfde
+score — een toets rekent het oude en het nieuwe naast elkaar uit. Van
+ruim een seconde per training naar onder een halve seconde voor het
+hele woud.
+
+### De eerste gesloten lus
+
+**Gevraagd**: "of de integratie nog slimmer kan worden door zelf
+analyses te doen, mogelijk iets AI-achtigs."
+
+Het eerlijke antwoord over "AI": de integratie leert al op zes plekken
+— uurprofiel, zoncorrectie, band, weerbronnen, NILM, het regressiewoud.
+Wat er ontbrak was niet een model, maar een LUS: iets dat de uitkomst
+van een dag terugvoert naar de regels die die dag hebben bepaald. Alle
+marges zijn met de hand gezet en met de hand bijgesteld — door mij, na
+een export lezen.
+
+De nabeschouwing (v3.99.19) is die uitkomst. Ze rekent met wat er
+werkelijk gebeurde uit wat de accu het best had kunnen doen. Vanaf nu
+telt ze ook de RICHTING: hielden we te veel vast (de beste planning
+ontlaadde meer), of ontlaadden we te veel (te vroeg verkocht)? Alleen de
+ontlaadkant — laden dat de beste planning wel deed en wij niet, is een
+vraag voor de brug, niet voor de reserve.
+
+De proefstandkandidaat "Reserve uit de nabeschouwing" middelt dat over
+de dagen: "reserve te hoog: mediaan +0,8 kWh per dag". Gemeten uit de
+uitkomst, niet uit een aanname. Het stuurt niet. Als het over twee weken
+consequent één kant op wijst, is dat de eerste marge die uit de
+uitkomst geleerd kan worden in plaats van met de hand gezet — en dat is
+het patroon voor alle andere marges daarna.
+
+Wat ik niet zou doen: een taalmodel in de sturing. Niet-deterministisch,
+extern, en het weet niets over dit huis dat de nabeschouwing niet
+scherper weet. Voor de dagsamenvatting in gewone woorden zou het kunnen;
+voor de vraag hoeveel er in de accu moet blijven, niet.
+
+### Wat meet, raakt niet uit het oog
+
+**Gevraagd**: "Hoe weet ik zeker dat zaken die nu alleen meten niet uit
+het oog verloren raken?"
+
+Er was een melding bij de OMSLAG naar "klaar om mee te doen" (v3.61.0).
+Mis je die, dan is hij weg. En de ijklijn, Powercalc, het PV-model, de
+capaciteit en de waterbronnen zijn geen proefstandkandidaat en hadden
+helemaal geen plek.
+
+Nu twee dingen. Eén overzicht — `meet_stuurt_niet` in de export, en de
+kaart "Meet, stuurt niet" bovenaan de proefstandpagina — met alles wat
+meet en nog niet stuurt: status, wat het nu zegt, en wat het zou
+veranderen als het mee gaat doen. Rijp bovenaan, met een ✅. En elke
+maandag om negen uur een melding met de rijpe lijst: niet alleen bij de
+omslag, elke week opnieuw zolang er iets klaarstaat. Nieuwe
+meldingssoort, met een eigen schakelaar op de meldingenpagina.
+
+Niets gaat vanzelf sturen. Dat blijft een keuze — maar de keuze wordt
+elke week opnieuw voorgelegd.
+
+**Volledige testsuite**: 3667 tests, allemaal groen.

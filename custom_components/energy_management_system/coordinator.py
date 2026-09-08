@@ -193,6 +193,7 @@ from .const import (
     MODE_CHANGE_EMOJI,
     PV_FOUT_EENZIJDIG_AANDEEL,
     MODUS_KORTE_NAAM,
+    REDENEN_ZONDER_STAND,
     REDEN_KORTE_NAAM,
     REASON_TO_MODE,
     ACHTERHOEKS_TITELS,
@@ -568,6 +569,7 @@ from .const import (
     PERSISTED_DATE_FIELDS,
     PERSISTED_DATETIME_FIELDS,
     PERSISTED_INT_FIELDS,
+    PERSISTED_INTKEY_DICT_FIELDS,
     PERSISTED_PLAIN_FIELDS,
     PERSISTED_STATE_SAVE_DELAY_SECONDS,
     WATER_VOLUME_AGREEMENT_TOLERANCE,
@@ -626,7 +628,9 @@ from .const import (
     PV_MODEL_MAX_SAMPLES,
     PV_MODEL_MIN_DAGEN,
     PV_MODEL_MIN_SAMPLES,
+    PADBEREIK_VENSTER_DAGEN,
     PV_MODEL_VERVERS_MINUTEN,
+    ZELFCONTROLE_RESERVE_TOLERANTIE_KWH,
     PV_MODEL_MIN_WINST_PROCENT,
     PV_BAND_MIN_DAGEN,
     PV_BAND_SAFE_QUANTILE,
@@ -1223,7 +1227,7 @@ class EnergyManagementSystemCoordinator:
         # een regel - `__init__` staat op de ratel.
         # v3.99.19: `dagverloop` en `nabeschouwingen` erbij, in dezelfde
         # regel - `__init__` staat op de ratel.
-        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds = {}, {}, {}, {}, [], {}
+        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik = {}, {}, {}, {}, [], {}, {}
         # v1.1.6: met welke meetmethode de bewaarde foutreeks tot stand
         # is gekomen. Verandert de methode, dan wordt die reeks eenmalig
         # gewist - zie ENERGY_BALANCE_METHOD_VERSION.
@@ -1665,7 +1669,24 @@ class EnergyManagementSystemCoordinator:
         self._unsub_state = None
         self._unsub_water_state = None
         self._unsub_motion_state = None
-        self._unsub_battery_cooling_state = None
+        # v4.1: afdruk van de beginwaarden, zodat `_store_wint` (sensor.py)
+        # kan zien of een veld nog leeg is of al uit de Store komt. In
+        # dezelfde regel als de laatste unsub - __init__ staat op de ratel.
+        self._unsub_battery_cooling_state, self._beginwaarden = None, self._maak_beginwaarden()
+
+    def _maak_beginwaarden(self) -> dict:
+        """Een ondiepe afdruk van alle velden vlak na __init__ (v4.1)."""
+        import copy
+
+        uit = {}
+        for k, v in self.__dict__.items():
+            if k == "_beginwaarden" or k.startswith("_unsub") or k in ("hass", "config", "_lock", "_cooling_lock"):
+                continue
+            try:
+                uit[k] = copy.copy(v)
+            except Exception:  # noqa: BLE001
+                uit[k] = v
+        return uit
 
     def _init_laatste_beslissing(self) -> None:
         """De velden die de LAATSTE beslissing beschrijven (v3.58.0).
@@ -9192,6 +9213,7 @@ class EnergyManagementSystemCoordinator:
                     self._kandidaat_prijsvorm(),
                     self._kandidaat_langere_horizon(),
                     self._kandidaat_pv_model(),
+                    self._kandidaat_reserve_uit_nabeschouwing(),
                     self._kandidaat_lange_reserve(),
                     self._kandidaat_bijkopen(),
                     self._kandidaat_niet_ontladen_bij_lage_prijs(),
@@ -16798,6 +16820,7 @@ class EnergyManagementSystemCoordinator:
         the energy (kWh) produced during it.
         """
         entries: list[tuple[datetime, datetime, float]] = []
+        band: dict[datetime, tuple[float, float]] = {}
 
         for entity_id in (
             self.config.get(CONF_SOLAR_TODAY_FORECAST_SENSOR),
@@ -16834,7 +16857,17 @@ class EnergyManagementSystemCoordinator:
                     continue
 
                 entries.append((period_start, pv_estimate_kw))
+                # v4.1: de band per halfuur, voor de reserve. Solcast
+                # levert p10 en p90 in dezelfde lijst; tot nu toe werden
+                # die alleen als DAGtotaal gelezen.
+                lo, hi = item.get("pv_estimate10"), item.get("pv_estimate90")
+                if lo is not None and hi is not None:
+                    try:
+                        band[period_start] = (float(lo), float(hi))
+                    except (TypeError, ValueError):
+                        pass
 
+        self._pv_band_kw_per_start = band
         if not entries:
             return []
 
@@ -16960,7 +16993,21 @@ class EnergyManagementSystemCoordinator:
 
         return remaining_value / sum_today_remaining
 
-    def _estimate_pv_kwh_for_period(self, start: datetime, end: datetime) -> float:
+    _pv_band_kw_per_start: dict | None = None
+
+    def _pv_band_per_interval(self) -> dict[datetime, tuple[float, float]]:
+        """Per halfuur (p10_kwh, p90_kwh), gelezen naast de entries (v4.1)."""
+        entries = self._get_pv_forecast_entries()
+        band_kw = self._pv_band_kw_per_start or {}
+        uit = {}
+        for start, end, _kwh in entries:
+            if start in band_kw:
+                uren = max((end - start).total_seconds() / 3600, 0)
+                lo, hi = band_kw[start]
+                uit[start] = (lo * uren, hi * uren)
+        return uit
+
+    def _estimate_pv_kwh_for_period(self, start: datetime, end: datetime, veilig: bool = False) -> float:
         """Estimate expected PV production (kWh) over a period, from the
         Solcast hourly/half-hourly forecast.
 
@@ -16981,6 +17028,13 @@ class EnergyManagementSystemCoordinator:
         pv_entries = self._get_pv_forecast_entries()
         if not pv_entries:
             return 0.0
+        positie = None
+        band = {}
+        if veilig:
+            ijking = self.get_pv_band_calibration()
+            if ijking.get("beschikbaar"):
+                positie = ijking.get("veilige_positie")
+                band = self._pv_band_per_interval()
 
         # v3.45.0: per soort dag als dat kan, anders de vlakke.
         daily_bias_percent = self.zonbias_percent()
@@ -17024,6 +17078,14 @@ class EnergyManagementSystemCoordinator:
             overlap_fraction = (
                 overlap_end - overlap_start
             ).total_seconds() / entry_duration
+            # v4.1: veilig = de bandpositie per halfuur in plaats van
+            # het midden. In zestien dagen viel de opwek nul keer onder
+            # p10; de veilige positie is geleerd (0,29). Alleen de
+            # reserve vraagt hierom; de zonvangst en de planning vragen
+            # naar het waarschijnlijke, niet naar het minste.
+            if veilig and positie is not None and entry_start in band:
+                lo, hi = band[entry_start]
+                entry_kwh = max(0.0, lo + positie * (hi - lo))
             segment_kwh = entry_kwh * overlap_fraction
 
             # De live teller gaat over wat er van vandaag NOG komt. Een
@@ -17167,7 +17229,7 @@ class EnergyManagementSystemCoordinator:
                 cursor, segment_end
             ) + self.lopend_witgoed_kwh_in_periode(cursor, segment_end)
             pv_kwh = (
-                self._estimate_pv_kwh_for_period(cursor, segment_end)
+                self._estimate_pv_kwh_for_period(cursor, segment_end, veilig=True)  # v4.1: de bandpositie
                 * efficiency_factor
             )
 
@@ -17665,6 +17727,70 @@ class EnergyManagementSystemCoordinator:
             ),
         }
 
+    def _kandidaat_reserve_uit_nabeschouwing(self) -> dict:
+        """Zegt de nabeschouwing dat de reserve te hoog of te laag stond?
+        (v4.1)
+
+        Gevraagd: "of de integratie nog slimmer kan worden door zelf
+        analyses te doen." Dit is de eerste gesloten lus: de
+        nabeschouwing rekent per dag met wat er WERKELIJK gebeurde uit
+        wat de accu het best had kunnen doen. Het verschil met wat wij
+        deden, in de richting: hielden we te veel vast (de beste
+        planning ontlaadde meer) of ontlaadden we te veel (te vroeg
+        verkocht, 's nachts aan het net)?
+
+        Over een reeks dagen is dat de gemeten fout van de reserve - niet
+        uit een aanname, uit de uitkomst. Dit meet; het stuurt niet. Als
+        het over twee weken consequent een kant op wijst, is dat de
+        eerste marge die uit de uitkomst geleerd kan worden in plaats
+        van met de hand gezet.
+        """
+        dagen = [
+            n for n in (self.nabeschouwingen or [])
+            if n.get("te_becijferen") and n.get("kwartieren", 0) >= 90
+        ]
+        if len(dagen) < 3:
+            return {
+                "naam": "Reserve uit de nabeschouwing",
+                "status": RELIABILITY_INSUFFICIENT,
+                "waarde": None,
+                "onderbouwing": f"{len(dagen)} volledige dag(en) nabeschouwd; minstens 3 nodig.",
+                "betrouwbaarheid": "Een dag zegt niets; het weer bepaalt de dag.",
+                "zou_veranderen": "De reservemarge, als de richting over weken consequent is.",
+                "zou_hebben_opgeleverd": {"te_becijferen": False, "reden": "Nog geen reeks."},
+                "mag_regelen": False,
+            }
+        vast = [n.get("te_veel_vastgehouden_kwh", 0.0) for n in dagen]
+        ont = [n.get("te_veel_ontladen_kwh", 0.0) for n in dagen]
+        gemist = [n.get("gemist_eur", 0.0) for n in dagen]
+        netto = statistics.median(v - o for v, o in zip(vast, ont))
+        richting = "te hoog" if netto > 0.2 else ("te laag" if netto < -0.2 else "goed")
+        return {
+            "naam": "Reserve uit de nabeschouwing",
+            "status": RELIABILITY_INDICATIVE if len(dagen) < 14 else RELIABILITY_RELIABLE,
+            "waarde": f"reserve {richting}: mediaan {netto:+.2f} kWh per dag",
+            "onderbouwing": (
+                f"{len(dagen)} dagen. Te veel vastgehouden: mediaan {statistics.median(vast):.2f} kWh; "
+                f"te veel ontladen: mediaan {statistics.median(ont):.2f} kWh; "
+                f"gemist: gemiddeld {sum(gemist)/len(gemist):.2f} euro per dag."
+            ),
+            "betrouwbaarheid": (
+                "Gemeten uit de uitkomst, niet uit een aanname. Maar 'best mogelijk' "
+                "kent de zon van morgen; een deel van het verschil is onvermijdelijk."
+            ),
+            "zou_veranderen": "De reservemarge.",
+            "zou_hebben_opgeleverd": {
+                "te_becijferen": True,
+                "eur": round(sum(gemist), 2),
+                "reden": "De som van 'gemist' over de dagen: de bovengrens van wat er te halen was.",
+            },
+            "mag_regelen": False,
+            "dagen": [
+                {"datum": n.get("datum"), "vast": v, "ontladen": o, "gemist": g}
+                for n, v, o, g in zip(dagen, vast, ont, gemist)
+            ][-14:],
+        }
+
     def _kandidaat_pv_model(self) -> dict:
         """7. Haalt een regressiewoud het bij de huidige uurcorrectie?"""
         uitkomst = self.get_pv_model_evaluation()
@@ -17845,6 +17971,9 @@ class EnergyManagementSystemCoordinator:
         #
         # Zonder genoeg metingen valt hij terug op de vaste bonus, zodat
         # er vanaf dag één iets gebeurt.
+        # v4.1: zit de band in de wandeling, dan is deze opslag dubbel.
+        if self.get_pv_band_calibration().get("beschikbaar"):
+            return 0.0
         veilig = self.veilige_pv_verwachting_kwh()
         spreiding = self.get_pv_forecast_spread()
         if not spreiding.get("beschikbaar"):
@@ -18122,7 +18251,10 @@ class EnergyManagementSystemCoordinator:
         return (self.bruikbare_capaciteit_kwh() or 0.0) * RESERVE_BODEM_FRACTIE
 
     def _get_dynamic_discharge_reserve_kwh(
-        self, now: datetime, cheap_block_start: datetime | None
+        self,
+        now: datetime,
+        cheap_block_start: datetime | None,
+        bewaar: bool = True,
     ) -> float | None:
         """How much energy (kWh) actually needs to stay in the battery
         right now: the estimated baseline household consumption until the
@@ -18164,9 +18296,10 @@ class EnergyManagementSystemCoordinator:
         if needed_kwh is not None and self.lange_horizon_actief:
             lange_horizon_extra = max(0.0, float(self._lange_reserve_extra_kwh or 0.0))
             needed_kwh += lange_horizon_extra
-            self._lange_horizon_extra_vandaag = max(
-                self._lange_horizon_extra_vandaag, lange_horizon_extra
-            )
+            if bewaar:
+                self._lange_horizon_extra_vandaag = max(
+                    self._lange_horizon_extra_vandaag, lange_horizon_extra
+                )
         if needed_kwh is None:
             needed_kwh = self._estimate_consumption_kwh_for_period(
                 now, cheap_block_start
@@ -18239,6 +18372,11 @@ class EnergyManagementSystemCoordinator:
             + UNPROTECTED_AFTERMATH_MARGIN_PERCENT,
         )
         margin = DYNAMIC_DISCHARGE_RESERVE_MARGIN + margin_bonus_percent / 100
+        # v4.1: de vloer die de verkooptoets apart aanhield (v1.88.0,
+        # SELL_RESERVE_DEEPEST_SAFETY_FACTOR) geldt nu in de ene reserve:
+        # de zelfcorrigerende marge mag na overschotdagen zakken, maar
+        # niet onder de oude vaste factor.
+        margin = max(margin, SELL_RESERVE_DEEPEST_SAFETY_FACTOR)
         reserve_kwh = needed_kwh * margin
 
         # v3.74.0: een ondergrens die NIET van de voorspelling afhangt.
@@ -18283,7 +18421,7 @@ class EnergyManagementSystemCoordinator:
         if boven_capaciteit:
             reserve_kwh = capaciteit
 
-        self.last_reserve_margin_breakdown = {
+        uitsplitsing = {
             "base_percent": round((DYNAMIC_DISCHARGE_RESERVE_MARGIN - 1) * 100, 1),
             "low_solar_bonus_percent": round(low_solar_bonus_percent, 1),
             "consecutive_low_solar_days": consecutive_low_solar_days,
@@ -18306,6 +18444,12 @@ class EnergyManagementSystemCoordinator:
             "ongekapt_kwh": round(ongekapt_kwh, 3),
             "bodem_procent": round(RESERVE_BODEM_FRACTIE * 100, 1),
         }
+        # v4.1: alleen de sturing schrijft de uitsplitsing. De brug, de
+        # verkooptoets en de planning lezen dezelfde reserve, maar een
+        # planningskwartier van morgen mag de uitsplitsing van nu niet
+        # overschrijven.
+        if bewaar:
+            self.last_reserve_margin_breakdown = uitsplitsing
 
         if margin_bonus_percent != 0:
             _LOGGER.debug(
@@ -18367,24 +18511,14 @@ class EnergyManagementSystemCoordinator:
 
         sleutel = moment.strftime("%Y-%m-%d %H")
         if sleutel not in cache:
-            diepste = self._estimate_worst_case_deficit_kwh(moment, blok)
-            # v1.88.0: dezelfde marge als de verkooptoets en de
-            # ontlaadreserve.
-            #
-            # Gemeld direct na de installatie van v1.87.0: "Krijg de
-            # melding na installatie direct weer." Terecht - ik had in
-            # v1.86.0 alleen de VERKOOPTOETS gelijkgetrokken, en de
-            # kwartierplanning simuleert zijn eigen reserve. Die stond
-            # nog op de vaste 1,15, dus plande de simulatie meer verkoop
-            # dan de aansturing zou toestaan - en de tekortmelding leest
-            # die simulatie.
-            marge = max(
-                self._reserve_margin_factor(),
-                SELL_RESERVE_DEEPEST_SAFETY_FACTOR,
+            # v4.1: de ene reserve. Hier stond een eigen berekening -
+            # diepste x max(margefactor, 1,25) - de vierde definitie van
+            # hetzelfde getal. De toelichting van v1.88.0 die hier stond,
+            # beschreef precies dit gevaar en loste het toen half op.
+            reserve = self._get_dynamic_discharge_reserve_kwh(
+                moment, blok, bewaar=False
             )
-            cache[sleutel] = max(
-                bodem, 0.0 if diepste is None else diepste * marge
-            )
+            cache[sleutel] = max(bodem, reserve or 0.0)
         return cache[sleutel]
 
     def get_quarter_plan(self, now: datetime | None = None) -> list[dict]:
@@ -19604,6 +19738,87 @@ class EnergyManagementSystemCoordinator:
                 }
         return [per_uur[k] for k in sorted(per_uur)]
 
+    # --- Wat meet en niet stuurt (v4.1) --------------------------------
+
+    _laatste_meetherinnering: date | None = None
+
+    def get_meet_stuurt_niet(self) -> dict:
+        """Alles wat meet en (nog) niet stuurt, op één plek (v4.1).
+
+        Gevraagd: "Hoe weet ik zeker dat zaken die nu alleen meten niet
+        uit het oog verloren raken?" De proefstand meldde de OMSLAG naar
+        rijp (v3.61.0); mis je die, dan is hij weg. En de ijklijn,
+        Powercalc, het PV-model, de capaciteit en de waterbronnen zijn
+        geen proefstandkandidaat en hadden geen plek. Nu een lijst, met
+        de rijpe bovenaan.
+        """
+        items = []
+        try:
+            for k in (self.get_proefstand() or {}).get("kandidaten") or []:
+                if k.get("stuurt_sinds"):
+                    continue
+                items.append(
+                    {
+                        "naam": k.get("naam"),
+                        "bron": "proefstand",
+                        "status": k.get("status"),
+                        "rijp": k.get("gereedheid") == "klaar om mee te doen",
+                        "waarde": k.get("waarde"),
+                        "zou_veranderen": k.get("zou_veranderen"),
+                    }
+                )
+        except Exception as fout:  # noqa: BLE001
+            self.internal_failures["meet_stuurt_niet"] = f"{type(fout).__name__}: {fout}"
+        ijk = self.get_helderheid_ijking() or {}
+        items.append({"naam": "Heldere-hemel-ijklijn", "bron": "ijklijn", "status": ijk.get("status"),
+                      "rijp": bool(ijk.get("mag_regelen")), "waarde": ijk.get("wat_ontbreekt") or "klaar",
+                      "zou_veranderen": "de weerbron voor de bewolkingsinschatting"})
+        pc = self.get_powercalc_proef() or {}
+        items.append({"naam": "Powercalc als NILM-hulp", "bron": "proef", "status": pc.get("status"),
+                      "rijp": bool(pc.get("residu_rustiger")), "waarde": pc.get("wat_ontbreekt") or "nee",
+                      "zou_veranderen": "het residu voor de apparaatherkenning"})
+        pv = self.get_pv_model_evaluation() or {}
+        items.append({"naam": "PV-model (regressiewoud)", "bron": "proef", "status": "betrouwbaar" if pv.get("beter") else "indicatief",
+                      "rijp": bool(pv.get("beter")), "waarde": f"{pv.get('winst_procent')}% tegenover de uurcorrectie" if pv.get("beschikbaar") else "nog niet berekend",
+                      "zou_veranderen": "de zoncorrectie per uur"})
+        items.append({"naam": "Gemeten capaciteit", "bron": "kalibratie", "status": "betrouwbaar" if self.gemeten_capaciteit_kwh() else "onvoldoende_data",
+                      "rijp": bool(self.gemeten_capaciteit_kwh()), "waarde": self.gemeten_capaciteit_kwh() or "wacht op een kalibratie vanaf onder de 30%",
+                      "zou_veranderen": "de capaciteit waarmee de reserve rekent"})
+        water = self.get_water_source_overview() or {}
+        items.append({"naam": "Waterbronprofielen", "bron": "bevestigingen", "status": "betrouwbaar" if water else "onvoldoende_data",
+                      "rijp": bool(water), "waarde": f"{len(water)} bron(nen) geleerd" if water else "wacht op bevestigingen",
+                      "zou_veranderen": "de herkenning van watersessies"})
+        items.sort(key=lambda r: (not r["rijp"], r["naam"] or ""))
+        return {
+            "items": items,
+            "rijp": [r["naam"] for r in items if r["rijp"]],
+            "toelichting": (
+                "Alles wat meet en nog niet stuurt. Rijp bovenaan: daar is de meting "
+                "klaar en wacht het op een keuze. Elke maandag om negen uur komt de "
+                "rijpe lijst als melding, zodat hij niet uit het oog raakt."
+            ),
+        }
+
+    def _herinner_wat_meet(self, now: datetime) -> None:
+        """Maandag negen uur: wat er klaar staat (v4.1)."""
+        if now.weekday() != 0 or now.hour != 9:
+            return
+        if self._laatste_meetherinnering == now.date():
+            return
+        self._laatste_meetherinnering = now.date()
+        rijp = self.get_meet_stuurt_niet().get("rijp") or []
+        if not rijp:
+            return
+        self._dispatch_notification(
+            self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE),
+            "📋 Wat meet en nog niet stuurt",
+            f"{len(rijp)} meting(en) staan klaar om mee te sturen: "
+            + ", ".join(rijp)
+            + ". Zie de proefstandpagina; niets gebeurt vanzelf.",
+            "ems_meet_stuurt_niet",
+            kind="meet_stuurt_niet",
+        )
+
     def get_quarter_plan_summary(
         self, now: datetime | None = None, tot: datetime | None = None
     ) -> dict:
@@ -20082,26 +20297,20 @@ class EnergyManagementSystemCoordinator:
         # Rem 2: houdt de woning het tot het goedkope blok?
         blok_start = self.last_cheap_block_start
         methode = "diepste tekort onderweg"
+        # v4.1: de ene reserve. Hier stond een eigen berekening - diepste
+        # tekort maal de margefactor, met een terugval op de nettosom -
+        # en die gaf op 7 september 16:37 een ander getal dan de brug
+        # een minuut later (17,96 tegen 13,44). De verkooptoets leest nu
+        # dezelfde reserve als de sturing en de planning; wat hij eraan
+        # toevoegt is de dode zone en de zonvelden.
         if blok_start is None or blok_start <= now:
             nodig = 0.0
             veilig = 0.0
         else:
-            # v1.27.0, gevonden in de export van 10 augustus: de
-            # nettosom over de hele periode trok de zon van
-            # MORGENOCHTEND af van het verbruik van VANNACHT. Nodig
-            # kwam op 1,77 kWh terwijl het diepste moment onderweg
-            # 5,23 kWh vroeg; de planning verkocht 10 kwartieren en
-            # voorzag daarna twee kwartieren waarin het huis aan het
-            # net hing.
-            #
-            # Dezelfde wandeling als de energiebrug gebruikt: uur voor
-            # uur, met het dieptepunt vlak voor zonsopkomst als
-            # uitkomst.
-            diepste = self._estimate_worst_case_deficit_kwh(now, blok_start)
-            if diepste is None:
-                # Zonder volledig uurprofiel valt die wandeling niet te
-                # maken. Dan de oude nettosom met de oude, ruimere
-                # marge - die was op dít getal gekalibreerd.
+            reserve = self._get_dynamic_discharge_reserve_kwh(
+                now, blok_start, bewaar=False
+            )
+            if reserve is None:
                 nodig = (
                     self._estimate_consumption_kwh_for_period(now, blok_start) or 0.0
                 )
@@ -20110,49 +20319,10 @@ class EnergyManagementSystemCoordinator:
                 veilig = nodig * SELL_RESERVE_SAFETY_FACTOR
                 methode = "nettosom (geen volledig uurprofiel)"
             else:
-                nodig = diepste
-                # v1.86.0: dezelfde marge als de ontlaadreserve, niet een
-                # vaste 1,15.
-                #
-                # Gevraagd: "Maar dan worden toch simpelweg de manual
-                # ontlaadkwartieren tegen een hoge prijs gereduceerd om
-                # de nacht te halen?"
-                #
-                # Precies - en dat gebeurde niet, omdat er twee
-                # verschillende reserves in omloop waren. De
-                # ontlaadreserve stond op 40% marge (10% basis plus 15%
-                # wegens drie tekortdagen plus 15% voor de onbeschermde
-                # nacht erna), de verkooptoets op een vaste 15%.
-                #
-                # Op 13 augustus 17:05: diepste tekort 3,69 kWh. De
-                # ontlaadreserve wilde 5,16 kWh achterhouden, de
-                # verkooptoets liet los bij 4,24 - en verkocht dus
-                # precies de buffer weg die de tekortbonus had
-                # opgebouwd. Met 13 tekortkwartieren de volgende ochtend
-                # als gevolg.
-                #
-                # Dat is een lus: tekortdag verhoogt de bonus, de
-                # verkooptoets negeert de bonus, volgende tekortdag.
-                marge = self._reserve_margin_factor()
-                veilig = diepste * max(marge, SELL_RESERVE_DEEPEST_SAFETY_FACTOR)
-
-        # v3.92.3: en dan de bodem eronder, net als bij het ontladen en de
-        # kwartierplanning.
-        #
-        # Gemeten op 31 augustus 10:11, met de bodem al gerepareerd in de
-        # sturing:
-        #
-        #     reserve (bodem bindend)   1,296 kWh
-        #     beschikbaar               0,69 kWh
-        #     mag_verkopen              true, alles vrij
-        #
-        # Er zat minder in de accu dan de reserve voorschreef en deze
-        # toets gaf alles vrij, omdat hij `veilig` zelf uitrekent uit het
-        # diepste tekort maal de marge. Vijfenvijftig procent van nul is
-        # nul, en dat is precies waar de bodem voor bestaat.
-        #
-        # Dit gold voor BEIDE takken hierboven: de wandeling én de
-        # nettosom-terugval.
+                nodig = (self.last_reserve_margin_breakdown or {}).get(
+                    "needed_kwh_before_margin", reserve
+                )
+                veilig = reserve
         veilig = max(veilig, self._reserve_bodem_kwh())
         # v3.99.15: en niet boven de accu. 7 september 16:37: "17,96 kWh
         # nodig" in een accu van 8,64. v3.99.2 kapte de reserve, maar deze
@@ -21642,15 +21812,18 @@ class EnergyManagementSystemCoordinator:
                 expected_pv_kwh = self._get_efficiency_discounted_pv_offset(
                     now, cheap_block_start
                 )
-
-                needed_kwh = needed_kwh_raw * ENERGY_BRIDGE_SAFETY_MARGIN
-                # v3.99.21: niet boven de accu - net als de reserve
-                # (v3.99.2) en de verkooptoets (v3.99.15). Dit was de
-                # derde berekening, en de laatste zonder kap.
-                capaciteit_kap = self.bruikbare_capaciteit_kwh()
-                if capaciteit_kap:
-                    needed_kwh = min(needed_kwh, capaciteit_kap)
-
+                # v4.1: de ene reserve. Hier stond `diepste x 1,15`, de
+                # eigen marge van de brug - de derde definitie, en de
+                # kleinste. Daardoor zei de brug "genoeg" terwijl de
+                # sturing er al 60% marge op legde, en andersom. De
+                # brug leest nu dezelfde reserve als de sturing, de
+                # verkooptoets en de planning; wat hij eraan toevoegt is
+                # zijn eigen hysterese van 10%.
+                reserve = self._get_dynamic_discharge_reserve_kwh(
+                    now, cheap_block_start, bewaar=False
+                )
+                needed_kwh = reserve if reserve is not None else needed_kwh_raw
+                uitsplitsing = self.last_reserve_margin_breakdown or {}
                 self.last_needed_kwh_breakdown = {
                     "basisverbruik_kwh": (
                         round(baseline_consumption_kwh, 3)
@@ -21659,9 +21832,8 @@ class EnergyManagementSystemCoordinator:
                     ),
                     "verwachte_pv_kwh": round(expected_pv_kwh, 3),
                     "diepste_tekort_kwh": round(needed_kwh_raw, 3),
-                    "veiligheidsmarge_procent": round(
-                        (ENERGY_BRIDGE_SAFETY_MARGIN - 1) * 100, 1
-                    ),
+                    "veiligheidsmarge_procent": uitsplitsing.get("total_percent"),
+                    "reserve_kwh": round(needed_kwh, 3),
                 }
             else:
                 needed_kwh = None
@@ -28570,6 +28742,8 @@ class EnergyManagementSystemCoordinator:
         data = {veld: getattr(self, veld, None) for veld in PERSISTED_PLAIN_FIELDS}
         for veld in PERSISTED_INT_FIELDS:
             data[veld] = getattr(self, veld, None)
+        for veld in PERSISTED_INTKEY_DICT_FIELDS:
+            data[veld] = getattr(self, veld, None)
         for veld in PERSISTED_DATE_FIELDS + PERSISTED_DATETIME_FIELDS:
             waarde = getattr(self, veld, None)
             data[veld] = waarde.isoformat() if waarde is not None else None
@@ -28587,6 +28761,14 @@ class EnergyManagementSystemCoordinator:
         for veld in PERSISTED_PLAIN_FIELDS + PERSISTED_INT_FIELDS:
             if veld in stored and stored[veld] is not None:
                 setattr(self, veld, stored[veld])
+        # v4.1: uursleutels terug naar int.
+        for veld in PERSISTED_INTKEY_DICT_FIELDS:
+            rauw = stored.get(veld)
+            if isinstance(rauw, dict):
+                try:
+                    setattr(self, veld, {int(k): v for k, v in rauw.items()})
+                except (TypeError, ValueError):
+                    pass
         for veld in PERSISTED_DATE_FIELDS:
             rauw = stored.get(veld)
             if not rauw:
@@ -29212,6 +29394,22 @@ class EnergyManagementSystemCoordinator:
                 )
         return None
 
+    def _zelfcontrole_aandachtspunten(self) -> list[str]:
+        """De zelfcontroles die een fout melden, als aandachtspunt (v4.1).
+        Dit is wat "de diagnostiek vindt het" moet betekenen: niet alleen
+        sensoren die wegvallen, ook regels die uiteenlopen."""
+        uit = []
+        try:
+            for naam, uitkomst in (
+                ("Eén reserve", self.zelfcontrole_een_reserve()),
+                ("Nacht gecontroleerd", self.zelfcontrole_nacht_gecontroleerd()),
+            ):
+                if not uitkomst.get("in_orde", True):
+                    uit.append(f"{naam}: {uitkomst.get('uitleg', '')}")
+        except Exception as fout:  # noqa: BLE001
+            self.internal_failures["zelfcontroles"] = f"{type(fout).__name__}: {fout}"
+        return uit
+
     def get_diagnostic_summary(self) -> dict:
         """Snelle gezondheidscheck-samenvatting (v0.63.91, gevraagd:
         "zijn er nog zaken om de integratie te verbeteren, bijvoorbeeld
@@ -29731,6 +29929,10 @@ class EnergyManagementSystemCoordinator:
         if self.last_error:
             aandachtspunten.append(f"Laatste fout: {self.last_error}")
 
+        # v4.1: de zelfcontroles die een fout melden, komen bij de
+        # aandachtspunten. Als hulpfunctie, want deze functie staat op
+        # de ratel.
+        aandachtspunten.extend(self._zelfcontrole_aandachtspunten())
         return {
             "status": "aandacht_gewenst" if aandachtspunten else "nominaal",
             "aandachtspunten": aandachtspunten,
@@ -32292,6 +32494,115 @@ class EnergyManagementSystemCoordinator:
         lines.extend(f"| {label} | {value} |" for label, value in rows)
         return "\n".join(lines)
 
+    # --- Zelfcontroles tijdens bedrijf (v4.1) ---------------------------
+    #
+    # Gevraagd: "Wordt nu ook echt elke minuscuul foutje gevonden middels
+    # de diagnostiek?" Nee - de grootste fouten van de afgelopen week
+    # hadden geen foutmelding, het waren getallen die er plausibel
+    # uitzagen. Dit zijn de drie controles die die fouten wel hadden
+    # gezien: uiteenlopende reserves, een nacht die nooit gecontroleerd
+    # werd, en een tak die nooit bereikt wordt.
+
+    _nachtrondes: dict | None = None
+
+    def zelfcontrole_een_reserve(self) -> dict:
+        """Zien de brug, de verkooptoets en de sturing hetzelfde getal?"""
+        sturing = (self.last_reserve_margin_breakdown or {}).get("reserve_kwh_after_margin")
+        brug = self.last_needed_kwh_to_bridge
+        verkoop = (self.last_sell_check or {}).get("nodig_voor_woning_kwh")
+        lezers = {"sturing": sturing, "brug": brug, "verkooptoets": verkoop}
+        aanwezig = {k: v for k, v in lezers.items() if v is not None}
+        if len(aanwezig) < 2:
+            return {"in_orde": True, "lezers": lezers, "uitleg": "Nog niet alle lezers hebben gerekend."}
+        referentie = aanwezig.get("sturing", next(iter(aanwezig.values())))
+        afwijkend = [
+            k for k, v in aanwezig.items()
+            if abs(v - referentie) > ZELFCONTROLE_RESERVE_TOLERANTIE_KWH
+        ]
+        return {
+            "in_orde": not afwijkend,
+            "lezers": {k: round(v, 3) if v is not None else None for k, v in lezers.items()},
+            "afwijkend": afwijkend,
+            "uitleg": (
+                "Alle lezers zien dezelfde reserve."
+                if not afwijkend
+                else "Er is een tweede reservedefinitie ingeslopen: " + ", ".join(afwijkend)
+                + " wijkt af van de sturing. Dat was de fout van v3.92 tot v4.1."
+            ),
+        }
+
+    def _tel_nachtronde(self, now: datetime, reason: str | None) -> None:
+        """Telt de rondes tussen 22:00 en 06:00, en hoeveel daarvan
+        zelfvoorzienend waren (accu ontlaadt)."""
+        if not (now.hour >= 22 or now.hour < 6):
+            return
+        if self._nachtrondes is None:
+            self._nachtrondes = {"totaal": 0, "zelfvoorzienend": 0}
+        self._nachtrondes["totaal"] += 1
+        if REASON_TO_MODE.get(reason or "") == OPTION_SMART_DISCHARGING or reason in (
+            "expensive_quarter", "expensive_quarter_soc_protected"
+        ):
+            self._nachtrondes["zelfvoorzienend"] += 1
+
+    def zelfcontrole_nacht_gecontroleerd(self) -> dict:
+        """Heeft de tekortdetectie vannacht gedraaid?"""
+        n = self._nachtrondes or {"totaal": 0, "zelfvoorzienend": 0}
+        if n["totaal"] < 60:
+            return {"in_orde": True, **n, "uitleg": "Nog geen volledige nacht geteld."}
+        in_orde = n["zelfvoorzienend"] > 0
+        return {
+            "in_orde": in_orde,
+            **n,
+            "uitleg": (
+                f"{n['zelfvoorzienend']} van {n['totaal']} nachtrondes waren zelfvoorzienend; "
+                "de tekortdetectie heeft gedraaid."
+                if in_orde
+                else f"Nul van {n['totaal']} nachtrondes waren zelfvoorzienend. Dan draait de "
+                "tekortdetectie niet 's nachts - precies de fout van v3.99.16, toen "
+                "'smart_discharging' als reden in de lijst stond en geen enkele nacht telde."
+            ),
+        }
+
+    def _tel_pad(self, soort: str, naam: str, now: datetime) -> None:
+        """Padbereik: hoe vaak en wanneer een reden of kandidaat gevuurd
+        heeft. Een tak die nooit bereikt wordt, is een tak waar een
+        NameError drie maanden kan wachten (v3.99.10)."""
+        sleutel = f"{soort}:{naam}"
+        regel = self.padbereik.setdefault(sleutel, {"aantal": 0, "laatst": None})
+        regel["aantal"] += 1
+        regel["laatst"] = now.isoformat()
+
+    def get_padbereik(self) -> dict:
+        """Welke redenen hebben nooit gevuurd, en welke niet recent?"""
+        alle_redenen = sorted(set(REASON_TO_MODE) | set(REDENEN_ZONDER_STAND))
+        nooit = [r for r in alle_redenen if f"reden:{r}" not in self.padbereik]
+        nu = dt_util.now()
+        oud = []
+        for r in alle_redenen:
+            regel = self.padbereik.get(f"reden:{r}")
+            if regel and regel.get("laatst"):
+                laatst = dt_util.parse_datetime(regel["laatst"])
+                if laatst and (nu - laatst).days > PADBEREIK_VENSTER_DAGEN:
+                    oud.append(r)
+        return {
+            "geteld": {k: v for k, v in sorted(self.padbereik.items())},
+            "nooit_gevuurd": nooit,
+            "niet_recent": oud,
+            "toelichting": (
+                "Per reden en per kandidaat hoe vaak en wanneer hij gevuurd heeft. Een "
+                "reden die nooit vuurt is niet per se fout - 'noodlading' hoort in de "
+                "zomer nooit te vuren - maar het is een tak die nog nooit in bedrijf is "
+                "geweest, en daar kan een fout onopgemerkt in zitten."
+            ),
+        }
+
+    def get_zelfcontroles(self) -> dict:
+        return {
+            "een_reserve": self.zelfcontrole_een_reserve(),
+            "nacht_gecontroleerd": self.zelfcontrole_nacht_gecontroleerd(),
+            "padbereik": self.get_padbereik(),
+        }
+
     def _finish_decision_tick(self, now: datetime) -> None:
         """Common tail for every branch of the decision tree that actually
         applied something to the device: correct last_expected_mode to
@@ -32306,6 +32617,9 @@ class EnergyManagementSystemCoordinator:
         just build the explanation directly, since there's nothing the
         integration did to notify about.
         """
+        # v4.1: padbereik en nachtrondes.
+        self._tel_pad("reden", self.last_reason or "onbekend", now)
+        self._tel_nachtronde(now, self.last_reason)
         # v3.89.0: de afwegingen van deze ronde vasthouden.
         #
         # Gevraagd bij de duivelsadvocaat-audit: "Kan ik zien welke
@@ -33028,6 +33342,7 @@ class EnergyManagementSystemCoordinator:
             ("lange reserve", lambda: self._meet_lange_reserve(now, entries)),
             ("ochtend", lambda: self._volg_de_ochtend(now)),
             ("dagverloop", lambda: self._leg_dagverloop_vast(now)),
+            ("meetherinnering", lambda: self._herinner_wat_meet(now)),
             # v3.68.0: het MPC-plan naast de eigen planning.
             ("mpc tegen de planning", lambda: self._meet_mpc(now)),
             # v3.60.0: wat het kost dat de accu bijspringt in een

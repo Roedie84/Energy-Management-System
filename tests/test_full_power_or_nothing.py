@@ -33,7 +33,7 @@ def test_full_base_power_applied_once_deemed_affordable(make_coordinator, hass, 
     # is monkeypatched to confirm affordability regardless - isolating
     # exactly the mechanism under test.
     monkeypatch.setattr(
-        coordinator, "_get_dynamic_discharge_reserve_kwh", lambda now, cbs: 5.7375
+        coordinator, "_get_dynamic_discharge_reserve_kwh", lambda now, cbs, bewaar=True: 5.7375
     )
     monkeypatch.setattr(
         coordinator, "_is_worth_discharging_now", lambda *a, **k: True
@@ -54,7 +54,7 @@ def test_still_capped_by_what_is_physically_available(make_coordinator, hass, mo
     hass.states.set("sensor.available_energy", "0.05")  # 0.05 kWh left
 
     monkeypatch.setattr(
-        coordinator, "_get_dynamic_discharge_reserve_kwh", lambda now, cbs: 0.0
+        coordinator, "_get_dynamic_discharge_reserve_kwh", lambda now, cbs, bewaar=True: 0.0
     )
     monkeypatch.setattr(
         coordinator, "_is_worth_discharging_now", lambda *a, **k: True
@@ -77,7 +77,7 @@ def test_still_returns_none_when_not_worth_it(make_coordinator, hass, monkeypatc
     hass.states.set("sensor.available_energy", "5.75")
 
     monkeypatch.setattr(
-        coordinator, "_get_dynamic_discharge_reserve_kwh", lambda now, cbs: 5.7375
+        coordinator, "_get_dynamic_discharge_reserve_kwh", lambda now, cbs, bewaar=True: 5.7375
     )
     monkeypatch.setattr(
         coordinator, "_is_worth_discharging_now", lambda *a, **k: False
@@ -105,7 +105,7 @@ def test_household_floor_still_applies_as_a_minimum(make_coordinator, hass, monk
     hass.states.set("sensor.p1", "1800")
 
     monkeypatch.setattr(
-        coordinator, "_get_dynamic_discharge_reserve_kwh", lambda now, cbs: 5.7375
+        coordinator, "_get_dynamic_discharge_reserve_kwh", lambda now, cbs, bewaar=True: 5.7375
     )
     monkeypatch.setattr(
         coordinator, "_is_worth_discharging_now", lambda *a, **k: True
@@ -129,7 +129,7 @@ def test_household_floor_covered_when_below_base_power(make_coordinator, hass, m
     hass.states.set("sensor.p1", "340")
 
     monkeypatch.setattr(
-        coordinator, "_get_dynamic_discharge_reserve_kwh", lambda now, cbs: 0.5
+        coordinator, "_get_dynamic_discharge_reserve_kwh", lambda now, cbs, bewaar=True: 0.5
     )
     monkeypatch.setattr(
         coordinator, "_is_worth_discharging_now", lambda *a, **k: True
@@ -176,7 +176,7 @@ def test_no_headroom_falls_through_to_smart_mode_end_to_end(make_coordinator, ha
         }
     )
     monkeypatch.setattr(
-        coordinator, "_get_dynamic_discharge_reserve_kwh", lambda now, cbs: 3.0
+        coordinator, "_get_dynamic_discharge_reserve_kwh", lambda now, cbs, bewaar=True: 3.0
     )
 
     from custom_components.energy_management_system import coordinator as coord_mod
@@ -184,8 +184,14 @@ def test_no_headroom_falls_through_to_smart_mode_end_to_end(make_coordinator, ha
     coord_mod.dt_util.now = lambda: DAY0.replace(hour=20, minute=0)
     asyncio.run(coordinator._async_update_locked())
 
-    assert coordinator.last_reason == "expensive_quarter_soc_protected"
+    # v4.1: met één reserve zegt de verkooptoets al "nee" zodra de
+    # voorraad onder de reserve zit, dus komt de code niet meer bij de
+    # soc-beschermde verkoop: die tak bestond alleen omdat de
+    # verkooptoets en de reserve verschillende getallen gebruikten. De
+    # uitkomst is dezelfde - de accu dekt het huis in de slimme stand.
+    assert coordinator.last_reason == "discharging_window"
     assert coordinator.last_discharge_power_applied is None
 
     select_calls = [c for c in hass.services.calls if c[0] == "select"]
-    assert any(c[2].get("option") == "smart" for c in select_calls)
+    # v4.1: via discharging_window is dat smart_discharging.
+    assert any(c[2].get("option") == "smart_discharging" for c in select_calls)
