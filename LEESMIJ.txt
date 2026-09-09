@@ -1,30 +1,22 @@
-EMS v4.1 - alle wijzigingen sinds v3.99.20 (wat je draait)
+EMS v4.2 - alleen de wijzigingen sinds v4.1.1
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
 
-    const.py, coordinator.py, sensor.py, diagnostics.py
-    nabeschouwing.py, pv_model.py
-    dashboard_template.yaml          LET OP: dashboard gewijzigd
+    const.py, coordinator.py, nabeschouwing.py
     manifest.json, bestandscontrole.json
 
 NAAR DE REPO
 
-    README.md, CHANGELOG.md
-    dashboards/energy_management_system_dashboard.yaml
-    alle gewijzigde toetsbestanden
+    README.md, CHANGELOG.md, twee toetsbestanden
 
-WAT ER VERANDERT IN BEDRIJF
+WAT ER VERANDERT
 
-1. Een reserve: brug, verkooptoets, planning en sturing zien hetzelfde
-   getal. De brug wordt voorzichtiger.
-2. De reserve rekent met de bandpositie van Solcast.
-3. De Store is leidend voor alle geleerde reeksen.
-4. Drie zelfcontroles in de export en op de landingspagina.
-5. Het regressiewoud is honderd keer sneller (zelfde uitkomst).
-6. Proefstandkandidaat "Reserve uit de nabeschouwing": de eerste
-   gesloten lus.
-7. Kaart "Meet, stuurt niet" op de proefstandpagina, en elke maandag
-   om 09:00 een melding met wat er klaar staat. Nieuwe schakelaar op de
-   meldingenpagina (staat aan).
-8. Van v3.99.21/22: correctieverhouding begrensd, brug gekapt,
-   verkoopblokkering een keer per episode, "bestaat niet sinds".
+1. Een schrijver van de kaarttabel "diepste tekort".
+2. De nabeschouwing splitst "gemist" in reserve en voorspelling.
+3. De logregel over onverwachte netimport noemt de leesbare reden,
+   het accuvermogen en de laadstand.
+4. De proefstand wordt een keer per ronde gerekend; rekentijd per
+   kandidaat in de export.
+
+Na installatie: proefstand.rekentijd_ms - als daar iets ver boven de
+100 ms staat, is dat de volgende.

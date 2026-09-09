@@ -24051,4 +24051,94 @@ meldingssoort, met een eigen schakelaar op de meldingenpagina.
 Niets gaat vanzelf sturen. Dat blijft een keuze — maar de keuze wordt
 elke week opnieuw voorgelegd.
 
+## v4.1.1 — De zelfcontrole vond meteen iets
+
+Export van 8 september 22:43, een minuut na de installatie van v4.1:
+
+```
+een_reserve   in_orde: false
+              sturing 3,922   brug 4,038   verkooptoets 3,92
+              afwijkend: brug
+```
+
+De brug rekent dezelfde reserve, maar seconden later in de ronde, en de
+wandeling gebruikt de uitdemping van de correctieverhouding vanaf "nu".
+Dat scheelt 0,12 kWh op 3,9: meetruis, geen tweede definitie. De
+tolerantie stond op 0,10 en is nu 0,25 — ruim boven die ruis, en ver
+onder het verschil dat een echte tweede definitie geeft (13,44 tegen
+17,96 op 7 september).
+
+Wat de controle wél echt vond: de brug TOONDE nog zijn oude marge van
+15% in de uitsplitsing — een weergavefunctie die de uitsplitsing voor
+het dashboard opnieuw opbouwde, buiten de beslissing om. De beslissing
+zelf gebruikte al de ene reserve; alleen het getal op de kaart loog.
+Nu toont hij dezelfde marge.
+
+Dat is precies wat de zelfcontrole moest doen: binnen een minuut een
+rest van de oude opzet aanwijzen die ik zelf niet had gezien.
+
 **Volledige testsuite**: 3667 tests, allemaal groen.
+
+
+## v4.2 — De laatste dubbele tabel, en de prijs van de reserve
+
+**Gevraagd**: "Graag alles oplossen uiteraard."
+
+### Eén schrijver van de kaarttabel
+
+`last_needed_kwh_breakdown` — de tabel op de uitlegkaart — werd op twee
+plekken geschreven: in de brug, en in een weergavefunctie uit v0.63.76
+die hem "altijd" opnieuw berekende met een eigen wandeling en de oude
+marge van 15%. Dat was de rest die de zelfcontrole in v4.1 aanwees.
+v4.1.1 zette de juiste marge in de tabel; v4.2 haalt de tweede
+berekening weg. Het venster is het goedkope blok als dat in zicht is,
+anders 24 uur; het tekort en de marge komen uit de reserve-uitsplitsing
+van deze ronde. De brug schrijft de tabel niet meer.
+
+### Gemist door de reserve, apart van gemist door de voorspelling
+
+"Best mogelijk" kent de zon van morgen. Een deel van het gemiste bedrag
+is dus onvermijdelijk — geen sturing weet 's ochtends wat de middag
+doet. Wat wél te beïnvloeden is, is de reserve: de energie die de
+integratie 's avonds vasthield terwijl de beste planning die verkocht,
+omdat de nacht achteraf minder bleek te kosten.
+
+De scheiding: de beste planning wordt nog een keer gerekend, met de
+reserve van die dag (mediaan over de avondkwartieren, nu vastgelegd in
+het dagverloop) als harde ondergrens. Het verschil tussen die twee
+planningen is precies wat de reserve heeft gekost. De rest is
+voorspelling en regels. Per dag staan nu `gemist_door_reserve_eur` en
+`gemist_door_voorspelling_eur` in de nabeschouwing, en de kandidaat
+"Reserve uit de nabeschouwing" rekent alleen nog met het eerste. Dat
+maakt hem eerlijk: een reserve die geld kostte omdat het bewolkt werd,
+wordt niet aangerekend aan de reserve.
+
+### Twee logregels van vannacht
+
+```
+23:12  Unexpected grid import detected (270W) during discharging_window
+00:45  Unexpected grid import detected (1739W) during solar_capture
+```
+
+De eerste is precies wat v3.99.16 moest opleveren: de nacht wordt nu
+gecontroleerd, en 270 W van het net om 23:12 terwijl de accu het huis
+dekt, is een tekort. Dat had de integratie tot v3.99.16 nooit gezien.
+
+De tweede leest als onzin — 's nachts is er geen zon — maar dat is de
+regel, niet de gebeurtenis. De reden heet `solar_capture_deferred` en
+betekent "huis dekken, zon later": de accu dekt het huis in de slimme
+stand en het opvangen van zon is uitgesteld tot de ochtend. Om 00:45
+kwam er 1739 W van het net terwijl de accu had moeten leveren. Of de
+accu leeg was of niet leverde, stond niet in de regel. Nu wel: de regel
+noemt de leesbare reden, het accuvermogen en de laadstand.
+
+### De GACS-sensor bij het opstarten
+
+`get_proefstand` werd per ronde drie keer aangeroepen — door de sensor,
+door `meet_stuurt_niet` en door de rijpheidsmelding — en elke kandidaat
+rekent zelf. Nu een keer per ronde, uit een rondecache. En de rekentijd
+per kandidaat staat in de export (`proefstand.rekentijd_ms`), zodat een
+trage kandidaat de volgende keer meteen te zien is in plaats van
+geraden.
+
+**Volledige testsuite**: 3670 tests, allemaal groen.

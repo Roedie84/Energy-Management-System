@@ -151,9 +151,18 @@ def nabeschouwing(
     rendement: float,
     slijtage_eur_per_kwh: float,
     tijdstippen: list[str],
+    reserve_kwh: float | None = None,
 ) -> dict:
     """Werkelijk tegenover best mogelijk, met de plekken waar het
-    verschil zat."""
+    verschil zat.
+
+    v4.2: `reserve_kwh` is de reserve die de integratie die dag aanhield
+    (de mediaan over de dag). Met die reserve als harde ondergrens wordt
+    de beste planning nog een keer gerekend; het verschil met de vrije
+    beste planning is wat de RESERVE heeft gekost. De rest van het
+    gemiste bedrag is voorspelling en regels - dat deel is grotendeels
+    onvermijdelijk, want de beste planning kent de zon van morgen.
+    """
     zonder = kosten_zonder_accu(kwartieren)
     gemiddelde_prijs = sum(k.prijs_eur for k in kwartieren) / len(kwartieren)
     eta = rendement ** 0.5
@@ -171,6 +180,22 @@ def nabeschouwing(
     )
     if not beste.get("te_becijferen"):
         return {"te_becijferen": False, "reden": beste.get("reden")}
+
+    # v4.2: de prijs van de reserve, apart.
+    gemist_door_reserve = 0.0
+    if reserve_kwh is not None and reserve_kwh > bodem_kwh:
+        met_reserve = beste_planning(
+            kwartieren,
+            capaciteit_kwh=capaciteit_kwh,
+            begin_kwh=max(begin_kwh, reserve_kwh),
+            bodem_kwh=min(reserve_kwh, capaciteit_kwh - 0.2),
+            laad_kw=laad_kw,
+            ontlaad_kw=ontlaad_kw,
+            rendement=rendement,
+            slijtage_eur_per_kwh=slijtage_eur_per_kwh,
+        )
+        if met_reserve.get("te_becijferen"):
+            gemist_door_reserve = max(0.0, met_reserve["kosten_eur"] - beste["kosten_eur"])
 
     # waar zat het grootste verschil?
     verschillen = []
@@ -217,6 +242,11 @@ def nabeschouwing(
         "accu_leverde_op_eur": round(zonder - werkelijk, 2),
         "had_kunnen_opleveren_eur": round(zonder - beste["kosten_eur"], 2),
         "gemist_eur": round(werkelijk - beste["kosten_eur"], 2),
+        "gemist_door_reserve_eur": round(min(gemist_door_reserve, max(0.0, werkelijk - beste["kosten_eur"])), 2),
+        "gemist_door_voorspelling_eur": round(
+            max(0.0, werkelijk - beste["kosten_eur"]) - min(gemist_door_reserve, max(0.0, werkelijk - beste["kosten_eur"])), 2
+        ),
+        "reserve_kwh": reserve_kwh,
         "grootste_verschillen": verschillen[:8],
         "toelichting": (
             "Best mogelijk rekent met PERFECTE kennis vooraf van zon, "

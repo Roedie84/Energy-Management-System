@@ -9182,7 +9182,24 @@ class EnergyManagementSystemCoordinator:
             "per_jaar_eur": round(sum(bedragen) / len(bedragen) * 365, 2),
         }
 
+    _proefstand_cache: tuple[object, dict] | None = None
+
     def get_proefstand(self) -> dict:
+        """Per ronde één keer gerekend (v4.2). Gemeld: de GACS-sensor deed
+        er bij het opstarten nog lang over. Deze functie werd per ronde
+        drie keer aangeroepen - door de sensor, door `meet_stuurt_niet`
+        en door de rijpheidsmelding - en elke kandidaat rekent zelf.
+        Nu een keer; de rest leest de cache. De rekentijd per kandidaat
+        staat erbij, zodat een trage kandidaat de volgende keer meteen
+        te zien is."""
+        ronde = getattr(self, "_forecast_cache_ronde", None)
+        if self._proefstand_cache is not None and self._proefstand_cache[0] is ronde:
+            return self._proefstand_cache[1]
+        uit = self._bereken_proefstand()
+        self._proefstand_cache = (ronde, uit)
+        return uit
+
+    def _bereken_proefstand(self) -> dict:
         """De vijf kandidaten, met hoe betrouwbaar ze zijn (v1.38.0).
 
         Niets hiervan stuurt iets aan. Elk onderdeel meldt zelf wat het
@@ -9191,6 +9208,26 @@ class EnergyManagementSystemCoordinator:
         dan één tegelijk, zodat bij een afwijking te zien is welke het
         deed.
         """
+        kandidaten = []
+        rekentijd = {}
+        for maak in (
+            self._kandidaat_slijtage,
+            self._kandidaat_na_saldering,
+            self._kandidaat_dagtype,
+            self._kandidaat_capaciteit,
+            self._kandidaat_prijsvorm,
+            self._kandidaat_langere_horizon,
+            self._kandidaat_pv_model,
+            self._kandidaat_reserve_uit_nabeschouwing,
+            self._kandidaat_lange_reserve,
+            self._kandidaat_bijkopen,
+            self._kandidaat_niet_ontladen_bij_lage_prijs,
+            self._kandidaat_mpc,
+        ):
+            t0 = time.perf_counter()
+            k = maak()
+            rekentijd[k.get("naam", maak.__name__)] = round((time.perf_counter() - t0) * 1000, 1)
+            kandidaten.append(self._met_gereedheid(k))
         return {
             "toelichting": (
                 "Deze pagina stuurt niets aan. Elke kandidaat rekent mee en "
@@ -9203,23 +9240,10 @@ class EnergyManagementSystemCoordinator:
                 "allebei rond is."
             ),
             "samenvatting": self._proefstand_samenvatting(),
-            "kandidaten": [
-                self._met_gereedheid(k)
-                for k in (
-                    self._kandidaat_slijtage(),
-                    self._kandidaat_na_saldering(),
-                    self._kandidaat_dagtype(),
-                    self._kandidaat_capaciteit(),
-                    self._kandidaat_prijsvorm(),
-                    self._kandidaat_langere_horizon(),
-                    self._kandidaat_pv_model(),
-                    self._kandidaat_reserve_uit_nabeschouwing(),
-                    self._kandidaat_lange_reserve(),
-                    self._kandidaat_bijkopen(),
-                    self._kandidaat_niet_ontladen_bij_lage_prijs(),
-                    self._kandidaat_mpc(),
-                )
-            ],
+            "kandidaten": kandidaten,
+            # v4.2: rekentijd per kandidaat, zodat een trage meteen te
+            # zien is.
+            "rekentijd_ms": rekentijd,
         }
 
     def _proefstand_samenvatting(self) -> dict:
@@ -17762,7 +17786,9 @@ class EnergyManagementSystemCoordinator:
             }
         vast = [n.get("te_veel_vastgehouden_kwh", 0.0) for n in dagen]
         ont = [n.get("te_veel_ontladen_kwh", 0.0) for n in dagen]
-        gemist = [n.get("gemist_eur", 0.0) for n in dagen]
+        # v4.2: alleen het deel dat de RESERVE kostte, niet de
+        # voorspelling - dat deel is grotendeels onvermijdelijk.
+        gemist = [n.get("gemist_door_reserve_eur", n.get("gemist_eur", 0.0)) for n in dagen]
         netto = statistics.median(v - o for v, o in zip(vast, ont))
         richting = "te hoog" if netto > 0.2 else ("te laag" if netto < -0.2 else "goed")
         return {
@@ -17782,7 +17808,7 @@ class EnergyManagementSystemCoordinator:
             "zou_hebben_opgeleverd": {
                 "te_becijferen": True,
                 "eur": round(sum(gemist), 2),
-                "reden": "De som van 'gemist' over de dagen: de bovengrens van wat er te halen was.",
+                "reden": "De som van 'gemist door de reserve' over de dagen: wat de reserve heeft gekost, los van de voorspelling.",
             },
             "mag_regelen": False,
             "dagen": [
@@ -19641,6 +19667,8 @@ class EnergyManagementSystemCoordinator:
             "prijs_ct": (
                 round(p * 100, 1) if (p := self.huidige_prijs_eur_per_kwh(now)) is not None else None
             ),
+            # v4.2: de reserve van dit kwartier, voor de nabeschouwing.
+            "reserve_kwh": (self.last_reserve_margin_breakdown or {}).get("reserve_kwh_after_margin"),
         }
         reeks = self.dagverloop.setdefault(dag, [])
         if reeks and reeks[-1]["tijd"] == regel["tijd"]:
@@ -19704,6 +19732,15 @@ class EnergyManagementSystemCoordinator:
             rendement=rendement,
             slijtage_eur_per_kwh=slijtage,
             tijdstippen=tijden,
+            # v4.2: de reserve die die dag gold - de mediaan over de
+            # avondkwartieren (18:00-23:00), want dat is wanneer hij
+            # verkopen tegenhoudt.
+            reserve_kwh=(
+                statistics.median(rs)
+                if (rs := [r["reserve_kwh"] for r in reeks
+                           if r.get("reserve_kwh") is not None and 18 <= int(r["tijd"][:2]) < 23])
+                else None
+            ),
         )
         uit["datum"] = datum
         uit["kwartieren"] = len(kwartieren)
@@ -21148,14 +21185,22 @@ class EnergyManagementSystemCoordinator:
                 and not verklaard
             ):
                 self._shortfall_detected_today = True
+                # v4.2: de regel zegt wat er te zien was. "1739 W tijdens
+                # solar_capture om 00:45" leest als onzin - 's nachts is er
+                # geen zon. De reden heet `solar_capture_deferred` en
+                # betekent "huis dekken, zon later"; dat staat er nu, met
+                # het accuvermogen en de laadstand erbij. Dan is uit de
+                # regel zelf te lezen of de accu leeg was of niet leverde.
+                accu_w = self._read_corrected_battery_power()
                 _LOGGER.warning(
-                    "Unexpected grid import detected (%.0fW) during a "
-                    "supposedly self-sufficient period (%s) - the reserve "
-                    "estimate for today may have been too optimistic. This "
-                    "will increase the learned safety margin if it keeps "
-                    "happening.",
+                    "Onverwachte netimport van %.0f W terwijl de accu het huis "
+                    "hoorde te dekken (%s). Accu: %s W, laadstand %s%%. Telt als "
+                    "tekortdag; de marge op de reserve gaat omhoog als dit "
+                    "vaker gebeurt.",
                     grid_power_w,
-                    reason,
+                    REDEN_KORTE_NAAM.get(reason, reason),
+                    f"{accu_w:.0f}" if accu_w is not None else "?",
+                    self.accustand_procent(),
                 )
 
         if (
@@ -21823,18 +21868,9 @@ class EnergyManagementSystemCoordinator:
                     now, cheap_block_start, bewaar=False
                 )
                 needed_kwh = reserve if reserve is not None else needed_kwh_raw
-                uitsplitsing = self.last_reserve_margin_breakdown or {}
-                self.last_needed_kwh_breakdown = {
-                    "basisverbruik_kwh": (
-                        round(baseline_consumption_kwh, 3)
-                        if baseline_consumption_kwh is not None
-                        else None
-                    ),
-                    "verwachte_pv_kwh": round(expected_pv_kwh, 3),
-                    "diepste_tekort_kwh": round(needed_kwh_raw, 3),
-                    "veiligheidsmarge_procent": uitsplitsing.get("total_percent"),
-                    "reserve_kwh": round(needed_kwh, 3),
-                }
+                # v4.2: de tabel voor de kaart komt uit een plek
+                # (`_update_needed_kwh_breakdown_for_display`), niet meer
+                # ook hier.
             else:
                 needed_kwh = None
                 self.last_needed_kwh_breakdown = {}
@@ -32382,68 +32418,40 @@ class EnergyManagementSystemCoordinator:
     def _update_needed_kwh_breakdown_for_display(
         self, now: datetime, cheap_block_start: datetime | None
     ) -> None:
-        """Always (re)computes the "capacity expectations" breakdown
-        shown in the explanation card (basisverbruik/verwachte zon/
-        diepste tekort/veiligheidsmarge) - v0.63.76, requested ("ik wil
-        daarom ook altijd de tabel zien").
+        """De tabel op de uitlegkaart, altijd gevuld (v0.63.76) - sinds
+        v4.2 uit de ENE reserve, niet uit een eigen wandeling.
 
-        Previously this only ever got computed inside
-        `_should_postpone_charging`'s own narrow "before today's cheap
-        block" scope (`now < cheap_block_start`) - once past that point,
-        or whenever there simply wasn't a cheap block identifiable
-        (`cheap_block_start is None`), that function takes an early
-        return without touching `last_needed_kwh_breakdown` at all, so
-        it silently kept whatever stale value it had (often empty, e.g.
-        right after a restart) - even though a decision like
-        arbitrage_charging (reported, v0.63.73) can perfectly well be
-        the live outcome in that same window, with no breakdown shown
-        for it at all.
-
-        Uses `cheap_block_start` as the reference end-of-window if it's
-        meaningfully ahead of `now`; otherwise falls back to a generic
-        24-hour outlook, so there's always something meaningful to show
-        regardless of reason or timing. Deliberately independent of
-        `_should_postpone_charging`'s own copy of this same computation
-        (kept there unchanged, for its own decision-making) - this is
-        purely for display, called unconditionally every tick.
+        Deze functie rekende het diepste tekort zelf nog een keer uit,
+        met de oude marge van 15%. De zelfcontrole van v4.1 zag dat
+        binnen een minuut. Nu: het venster is het goedkope blok als dat
+        in zicht is, anders 24 uur; het tekort en de marge komen uit de
+        reserve-uitsplitsing van deze ronde. Is die er niet (geen blok,
+        of een ronde direct na de start), dan alleen het kale tekort,
+        zonder marge - er is dan geen reserve om mee te vergelijken.
         """
-        target_time = (
-            cheap_block_start
-            if cheap_block_start is not None and cheap_block_start > now
-            else now + timedelta(hours=24)
-        )
+        blok_in_zicht = cheap_block_start is not None and cheap_block_start > now
+        target_time = cheap_block_start if blok_in_zicht else now + timedelta(hours=24)
         self.last_needed_kwh_breakdown_end_time = target_time
-
-        baseline_consumption_kwh = self._estimate_consumption_kwh_for_period(
-            now, target_time
+        u = self.last_reserve_margin_breakdown or {} if blok_in_zicht else {}
+        if blok_in_zicht and not u:
+            self._get_dynamic_discharge_reserve_kwh(now, cheap_block_start)
+            u = self.last_reserve_margin_breakdown or {}
+        basis = self._estimate_consumption_kwh_for_period(now, target_time)
+        diepste = (
+            u.get("needed_kwh_before_margin")
+            if u
+            else self._estimate_worst_case_deficit_kwh(now, target_time)
         )
-        needed_kwh_raw = self._estimate_worst_case_deficit_kwh(now, target_time)
-        if needed_kwh_raw is None:
-            hours = max((target_time - now).total_seconds() / 3600, 0)
-            learned_kw = self.learned_night_consumption_kw
-            if learned_kw is not None:
-                power_kw = learned_kw
-            else:
-                power_w = self._read_corrected_consumption_power()
-                power_kw = power_w / 1000 if power_w is not None else None
-            needed_kwh_raw = power_kw * hours if power_kw is not None else None
-
-        if needed_kwh_raw is None:
-            self.last_needed_kwh_breakdown = {}
-            return
-
-        expected_pv_kwh = self._get_efficiency_discounted_pv_offset(now, target_time)
         self.last_needed_kwh_breakdown = {
-            "basisverbruik_kwh": (
-                round(baseline_consumption_kwh, 3)
-                if baseline_consumption_kwh is not None
-                else None
+            "basisverbruik_kwh": round(basis, 3) if basis is not None else None,
+            "verwachte_pv_kwh": round(
+                self._get_efficiency_discounted_pv_offset(now, target_time), 3
             ),
-            "verwachte_pv_kwh": round(expected_pv_kwh, 3),
-            "diepste_tekort_kwh": round(needed_kwh_raw, 3),
-            "veiligheidsmarge_procent": round(
-                (ENERGY_BRIDGE_SAFETY_MARGIN - 1) * 100, 1
-            ),
+            "diepste_tekort_kwh": round(diepste, 3) if diepste is not None else None,
+            "veiligheidsmarge_procent": u.get("total_percent") if u else None,
+            "reserve_kwh": u.get("reserve_kwh_after_margin") if u else None,
+            "lange_horizon_extra_kwh": u.get("lange_horizon_extra_kwh") if u else None,
+            **({} if blok_in_zicht else {"opmerking": "Geen goedkoop blok in zicht; blik van 24 uur zonder reserve."}),
         }
 
     def _build_needed_kwh_breakdown_table(self) -> str:

@@ -10,6 +10,7 @@ solved exactly this "abundant solar hides a real overnight shortfall"
 problem for the discharge-power cap. It just hadn't been wired into
 this postpone-charging decision too.
 """
+import pytest
 from datetime import datetime, timedelta, timezone
 
 
@@ -68,6 +69,12 @@ def test_postpone_decision_uses_worst_case_deficit_not_net_balance(
     # same worst-case figure (via last_needed_kwh_breakdown), not the
     # old near-zero net balance.
     coordinator._should_postpone_charging([], start, end)
-    breakdown = coordinator.last_needed_kwh_breakdown
-    assert breakdown["diepste_tekort_kwh"] == round(worst_case, 3)
-    assert breakdown["diepste_tekort_kwh"] > 2.0
+    # v4.2: de brug schrijft de kaarttabel niet meer zelf; het tekort dat
+    # de beslissing droeg staat in de uitsplitsing van de ene reserve.
+    # De brug beslist op de ene reserve, die op het diepste tekort bouwt.
+    nodig = coordinator.last_needed_kwh_to_bridge
+    assert nodig is not None
+    assert nodig >= worst_case
+    assert nodig == pytest.approx(
+        coordinator._get_dynamic_discharge_reserve_kwh(start, end, bewaar=False), abs=0.01
+    )

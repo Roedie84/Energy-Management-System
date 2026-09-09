@@ -180,3 +180,51 @@ def test_te_weinig_dagen_geen_oordeel(make_coordinator, hass):
     c.nabeschouwingen = [{"te_becijferen": True, "kwartieren": 96}]
 
     assert c._kandidaat_reserve_uit_nabeschouwing()["waarde"] is None
+
+
+# --- v4.2: gemist door de reserve, apart van gemist door de voorspelling
+#
+# "Best mogelijk" kent de zon van morgen. Een deel van het gemiste bedrag
+# is dus onvermijdelijk: geen sturing weet 's ochtends wat de middag
+# doet. Wat WEL te beinvloeden is, is de reserve - de energie die de
+# integratie 's avonds vasthield terwijl de beste planning die
+# verkocht, omdat de nacht achteraf minder bleek te kosten.
+#
+# De scheiding: reken de beste planning nog een keer, maar dan met de
+# reserve als HARDE ondergrens (de accu mag 's avonds niet onder wat de
+# integratie als reserve aanhield). Het verschil tussen die twee
+# planningen is precies wat de reserve heeft gekost. De rest is
+# voorspelling en regels.
+
+from custom_components.energy_management_system.nabeschouwing import (
+    beste_planning,
+)
+
+
+def test_een_hardere_bodem_kost_geld():
+    """Zelfde dag, maar de accu mag niet onder 1,0 kWh: duurder."""
+    kw = _dag()
+    vrij = beste_planning(kw, **ACCU)
+    met_bodem = beste_planning(kw, **{**ACCU, "bodem_kwh": 1.0})
+
+    assert met_bodem["kosten_eur"] >= vrij["kosten_eur"] - 0.001
+
+
+def test_de_nabeschouwing_splitst_het_gemiste_bedrag():
+    kw = _dag()
+    uit = nabeschouwing(
+        kw, eind_kwh=0.5, tijdstippen=[str(i) for i in range(16)],
+        slijtage_eur_per_kwh=0.0, reserve_kwh=1.0, **ACCU,
+    )
+
+    assert "gemist_door_reserve_eur" in uit
+    assert "gemist_door_voorspelling_eur" in uit
+    assert uit["gemist_door_reserve_eur"] + uit["gemist_door_voorspelling_eur"] == pytest.approx(uit["gemist_eur"], abs=0.01)
+    assert uit["gemist_door_reserve_eur"] >= 0
+
+
+def test_zonder_reserve_is_alles_voorspelling():
+    kw = _dag()
+    uit = nabeschouwing(kw, eind_kwh=0.5, tijdstippen=[str(i) for i in range(16)], slijtage_eur_per_kwh=0.0, **ACCU)
+
+    assert uit["gemist_door_reserve_eur"] == 0.0

@@ -170,7 +170,13 @@ PV_MODEL_VERVERS_MINUTEN = 60
 # Hoeveel de drie lezers van de reserve van elkaar mogen verschillen: de
 # verkooptoets kapt en houdt de bodem aan, dat is een rem, geen andere
 # reserve.
-ZELFCONTROLE_RESERVE_TOLERANTIE_KWH = 0.10
+ZELFCONTROLE_RESERVE_TOLERANTIE_KWH = 0.25
+# De drie lezers rekenen binnen dezelfde ronde, maar niet op hetzelfde
+# moment: de wandeling gebruikt de uitdemping vanaf "nu", en tussen twee
+# aanroepen zitten seconden. Op 8 september 22:43 scheelde dat 0,12 kWh
+# op 3,9 - geen tweede definitie, wel meetruis. Een kwart kilowattuur
+# is ruim boven die ruis en ver onder het verschil dat een echte tweede
+# definitie geeft (v3.99.5: 13,44 tegen 17,96).
 # Hoeveel dagen een reden ongebruikt mag blijven voordat hij "nooit
 # gevuurd" heet in het padbereik.
 PADBEREIK_VENSTER_DAGEN = 30
