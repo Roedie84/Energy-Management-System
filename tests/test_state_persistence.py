@@ -567,6 +567,9 @@ VLUCHTIG_MET_REDEN = {
     # v3.99.22: sinds wanneer een entiteit niet bestaat - telt vanaf de
     # herstart; een storing die een herstart overleeft, is geen storing.
     "_bestaat_niet_sinds": "telt vanaf de herstart",
+    # v4.4: de losse metingen van de lopende nacht; de mediaan per nacht
+    # gaat wel naar de Store (nachtlast_per_apparaat).
+    "_nachtlast_monsters": "de mediaan per nacht wordt wel bewaard",
     "battery_cooling_state": "blijkt opnieuw uit de sensoren",
     # Halve metingen. Een stuk dat door een herstart een gat heeft, is
     # geen meting meer - beter opnieuw beginnen dan een verminkt getal

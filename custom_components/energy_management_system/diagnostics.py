@@ -474,6 +474,10 @@ async def async_get_config_entry_diagnostics(
         "zelfcontroles": _veilig("get_zelfcontroles", coordinator.get_zelfcontroles),
         # v4.1: alles wat meet en nog niet stuurt, rijp bovenaan.
         "meet_stuurt_niet": _veilig("get_meet_stuurt_niet", coordinator.get_meet_stuurt_niet),
+        # v4.4: welke vermogenssensor is 's nachts meer gaan gebruiken?
+        "welke_apparaten_stegen": _veilig(
+            "welke_apparaten_stegen", coordinator.welke_apparaten_stegen
+        ),
         # v3.75.0: wanneer de accu anders stond dan de integratie wilde.
         "handmatige_ingrepen": _veilig(
             "handmatige_ingrepen", coordinator.get_handmatige_ingrepen

@@ -228,3 +228,23 @@ def test_zonder_reserve_is_alles_voorspelling():
     uit = nabeschouwing(kw, eind_kwh=0.5, tijdstippen=[str(i) for i in range(16)], slijtage_eur_per_kwh=0.0, **ACCU)
 
     assert uit["gemist_door_reserve_eur"] == 0.0
+
+
+def test_een_halve_dag_krijgt_geen_oordeel(make_coordinator, hass):
+    """v4.3. Op 8 september liep het verloop van 12:30 tot 23:45 en stond
+    er "2,68 kWh te veel ontladen" - terwijl de accu de nacht ruim
+    haalde, van 45% naar 20%, zonder een watt van het net. De
+    eindwaardering tegen de dagmediaan woog zwaarder dan de dag."""
+    from datetime import datetime, timedelta, timezone
+
+    c = make_coordinator({})
+    c.dagverloop = {}
+    t0 = datetime(2026, 9, 8, 12, 30, tzinfo=timezone.utc)
+    for q in range(46):
+        _ronde(c, hass, t0 + timedelta(minutes=15 * q))
+
+    uit = c.get_nabeschouwing("2026-09-08")
+
+    assert uit["te_becijferen"] is False
+    assert uit["kwartieren"] == 46
+    assert "eind" in uit["reden"]

@@ -190,6 +190,14 @@ from .const import (
     CLOUD_INVOER_INSTELLINGEN,
     DAGTELLER_INSTELLINGEN,
     DAGVERLOOP_DAGEN,
+    NABESCHOUWING_MIN_KWARTIEREN,
+    NACHTLAST_MIN_NACHTEN,
+    NACHTLAST_MIN_STIJGING_FRACTIE,
+    NACHTLAST_MIN_STIJGING_W,
+    NACHTLAST_NACHTEN,
+    NACHTLAST_RECENT,
+    NACHTLAST_REFERENTIE,
+    NACHTLAST_VENSTER,
     MODE_CHANGE_EMOJI,
     PV_FOUT_EENZIJDIG_AANDEEL,
     MODUS_KORTE_NAAM,
@@ -403,6 +411,7 @@ from .const import (
     SENSOR_CADENCE_SLOW_PERCENT,
     SENSOR_CADENCE_COARSE_STEP,
     MEASUREMENT_QUALITY_MIN_SAMPLES,
+    MELDING_ADVIES,
     NOTIFICATION_HISTORY_LENGTH,
     NOTIFICATION_RECOVERY_KINDS,
     GACS_EFFICIENCY_ADVICE_PERCENT,
@@ -1227,7 +1236,7 @@ class EnergyManagementSystemCoordinator:
         # een regel - `__init__` staat op de ratel.
         # v3.99.19: `dagverloop` en `nabeschouwingen` erbij, in dezelfde
         # regel - `__init__` staat op de ratel.
-        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik = {}, {}, {}, {}, [], {}, {}
+        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters = {}, {}, {}, {}, [], {}, {}, {}, {}
         # v1.1.6: met welke meetmethode de bewaarde foutreeks tot stand
         # is gekomen. Verandert de methode, dan wordt die reeks eenmalig
         # gewist - zie ENERGY_BALANCE_METHOD_VERSION.
@@ -15686,6 +15695,15 @@ class EnergyManagementSystemCoordinator:
         later bijkomt niet, zolang hij deze functie gebruikt. Er is een
         test die vastlegt dat elke aanroep een `kind` meegeeft.
         """
+        # v4.3: waardoor, en wat te doen. Gevraagd: "wat kan ik ermee -
+        # niet alleen voor deze melding maar voor alles." Elke soort in
+        # NOTIFICATION_TYPES heeft twee zinnen in MELDING_ADVIES; een
+        # toets houdt bij dat er geen soort zonder advies bijkomt. Het
+        # advies gaat ook in de geschiedenis, zodat je het op de kaart
+        # terugleest.
+        advies = MELDING_ADVIES.get(kind or "")
+        if advies:
+            message = f"{message}\n\nWaardoor: {advies[0]}\n\nWat te doen: {advies[1]}"
         now = dt_util.now()
         # v1.24.0: alles wat de deur uitgaat, gaat door de vertaling -
         # ook de geschiedenis, zodat het meldingenoverzicht en de
@@ -19691,8 +19709,24 @@ class EnergyManagementSystemCoordinator:
                 return {"te_becijferen": False, "reden": "nog geen volledige dag in het verloop"}
             datum = volledige[-1]
         reeks = (self.dagverloop or {}).get(datum) or []
-        if len(reeks) < 8:
-            return {"te_becijferen": False, "reden": f"{len(reeks)} kwartieren voor {datum}"}
+        # v4.3: een HELE dag, of geen oordeel. Op 8 september liep het
+        # verloop van 12:30 tot 23:45 - 46 kwartieren - en de eindstand
+        # werd tegen de gemiddelde dagprijs gewaardeerd. Die energie is
+        # 's nachts werkelijk gebruikt tegen 30 tot 37 ct. Op een halve
+        # dag domineert die waardering de hele uitkomst: verkopen op 44
+        # ct leek verlies terwijl het winst was, en er stond "2,68 kWh te
+        # veel ontladen" terwijl de accu de nacht ruim haalde.
+        if len(reeks) < NABESCHOUWING_MIN_KWARTIEREN:
+            return {
+                "te_becijferen": False,
+                "kwartieren": len(reeks),
+                "reden": (
+                    f"{len(reeks)} van de {NABESCHOUWING_MIN_KWARTIEREN} kwartieren "
+                    f"voor {datum}. Een deel van een dag geeft geen eerlijk oordeel: "
+                    "de waardering van wat er aan het eind in de accu zit, weegt dan "
+                    "zwaarder dan wat er die dag gebeurde."
+                ),
+            }
         kwartieren, tijden = [], []
         for r in reeks:
             if r.get("huis_w") is None or r.get("prijs_ct") is None:
@@ -26656,11 +26690,135 @@ class EnergyManagementSystemCoordinator:
                         f"dan de langere-termijn-referentie "
                         f"({self.sluipverbruik_reference_w:.0f}W) - "
                         f"mogelijk een nieuw sluimerend apparaat. Gebaseerd "
-                        f"op een aanhoudende trend, niet één losse nacht."
+                        f"op een aanhoudende trend, niet één losse nacht.\n\n"
+                        + self._sluipverbruik_verdachten_zin()
                     ),
                     notification_id="ems_sluipverbruik_detected",
                     kind="sluipverbruik",
                 )
+
+    # --- Welk apparaat is meer gaan gebruiken? (v4.4) -------------------
+
+    def _meet_nachtelijke_basislast(self, now: datetime) -> None:
+        """De mediaan per vermogenssensor over het rustigste venster.
+
+        Gevraagd: "De integratie heeft bijna alle entiteiten binnen HA,
+        dan kan de integratie toch ook aangeven welk apparaat plots meer
+        is gaan gebruiken?" Elke ronde tussen 02:00 en 05:00 wordt van
+        elke sensor in W de waarde bijgehouden; aan het eind van de
+        nacht is de mediaan de basislast van dat apparaat. Geen
+        recorder, geen databasevraag - de rondes zijn er toch al.
+
+        De mediaan en niet het gemiddelde: een vriezer die een keer
+        aanslaat mag de nacht niet bepalen.
+        """
+        begin, eind = NACHTLAST_VENSTER
+        if not (begin <= now.hour < eind):
+            return
+        dag = now.date().isoformat()
+        monsters = self._nachtlast_monsters.setdefault(dag, {})
+        for staat in self.hass.states.async_all():
+            entity_id = str(staat.entity_id)
+            if not entity_id.startswith("sensor."):
+                continue
+            if staat.attributes.get("unit_of_measurement") != "W":
+                continue
+            try:
+                watt = float(staat.state)
+            except (TypeError, ValueError):
+                continue
+            reeks = monsters.setdefault(entity_id, [])
+            reeks.append(watt)
+            if len(reeks) > 240:
+                del reeks[0]
+        self.nachtlast_per_apparaat[dag] = {
+            e: round(statistics.median(r), 1) for e, r in monsters.items() if r
+        }
+        for oud in sorted(self.nachtlast_per_apparaat)[:-NACHTLAST_NACHTEN]:
+            self.nachtlast_per_apparaat.pop(oud, None)
+            self._nachtlast_monsters.pop(oud, None)
+
+    def welke_apparaten_stegen(self) -> dict:
+        """Welke vermogenssensoren staan 's nachts hoger dan een week
+        geleden? (v4.4)
+
+        De laatste drie nachten tegen de zeven daarvoor, per sensor de
+        mediaan. Een sensor die er toen nog niet was, is het duidelijkste
+        geval en staat vooraan.
+
+        Dit is een STARTPUNT, geen bewijs: een sensor die stijgt kan de
+        oorzaak zijn of een gevolg. Maar "de vriezer van 12 naar 48 W" is
+        iets om te bekijken, en "structureel 40 W hoger" is dat niet.
+        """
+        nachten = sorted(self.nachtlast_per_apparaat or {})
+        if len(nachten) < NACHTLAST_MIN_NACHTEN:
+            return {
+                "beschikbaar": False,
+                "nachten": len(nachten),
+                "reden": (
+                    f"{len(nachten)} van de {NACHTLAST_MIN_NACHTEN} nachten gemeten. "
+                    "Elke nacht tussen 02:00 en 05:00 komt er een bij."
+                ),
+            }
+        recent = nachten[-NACHTLAST_RECENT:]
+        eerder = nachten[-(NACHTLAST_RECENT + NACHTLAST_REFERENTIE):-NACHTLAST_RECENT]
+
+        def _mediaan(reeks_nachten, entiteit):
+            waarden = [
+                self.nachtlast_per_apparaat[n][entiteit]
+                for n in reeks_nachten
+                if entiteit in self.nachtlast_per_apparaat[n]
+            ]
+            return statistics.median(waarden) if waarden else None
+
+        entiteiten = {e for n in recent for e in self.nachtlast_per_apparaat[n]}
+        stijgers = []
+        for e in entiteiten:
+            nu = _mediaan(recent, e)
+            toen = _mediaan(eerder, e)
+            if nu is None:
+                continue
+            if toen is None:
+                if nu >= NACHTLAST_MIN_STIJGING_W:
+                    stijgers.append({"entiteit": e, "toen_w": None, "nu_w": nu,
+                                     "stijging_w": round(nu, 1), "nieuw": True})
+                continue
+            stijging = nu - toen
+            if stijging >= NACHTLAST_MIN_STIJGING_W and stijging >= toen * NACHTLAST_MIN_STIJGING_FRACTIE:
+                stijgers.append({"entiteit": e, "toen_w": toen, "nu_w": nu,
+                                 "stijging_w": round(stijging, 1), "nieuw": False})
+        stijgers.sort(key=lambda r: (-r["stijging_w"]))
+        return {
+            "beschikbaar": True,
+            "nachten": len(nachten),
+            "venster": f"{NACHTLAST_VENSTER[0]:02d}:00-{NACHTLAST_VENSTER[1]:02d}:00",
+            "vergelijking": f"laatste {len(recent)} nachten tegen de {len(eerder)} daarvoor",
+            "stijgers": stijgers[:8],
+            "toelichting": (
+                "De mediaan per vermogenssensor in het rustigste venster van de "
+                "nacht. Een startpunt, geen bewijs: een sensor die stijgt kan de "
+                "oorzaak zijn of een gevolg."
+            ),
+        }
+
+    def _sluipverbruik_verdachten_zin(self) -> str:
+        """De regel die bij de sluipverbruikmelding gaat (v4.4)."""
+        uit = self.welke_apparaten_stegen()
+        if not uit.get("beschikbaar"):
+            return f"Nog geen aanwijzing welk apparaat: {uit.get('reden', '')}"
+        stijgers = uit.get("stijgers") or []
+        if not stijgers:
+            return (
+                "Geen enkele vermogenssensor staat 's nachts hoger dan een week "
+                "geleden. Het gaat dus om iets zonder eigen meting."
+            )
+        delen = []
+        for r in stijgers[:3]:
+            if r["nieuw"]:
+                delen.append(f"{r['entiteit']} (nieuw, {r['nu_w']:.0f} W)")
+            else:
+                delen.append(f"{r['entiteit']} ({r['toen_w']:.0f} → {r['nu_w']:.0f} W)")
+        return "Grootste stijgers 's nachts: " + "; ".join(delen) + "."
 
     def _deel_bewolking_met_de_zontracker(self) -> None:
         """Schuift de huidige bewolking door naar de zonvoorspelling.
@@ -33350,6 +33508,7 @@ class EnergyManagementSystemCoordinator:
             ("lange reserve", lambda: self._meet_lange_reserve(now, entries)),
             ("ochtend", lambda: self._volg_de_ochtend(now)),
             ("dagverloop", lambda: self._leg_dagverloop_vast(now)),
+            ("nachtlast", lambda: self._meet_nachtelijke_basislast(now)),
             ("meetherinnering", lambda: self._herinner_wat_meet(now)),
             # v3.68.0: het MPC-plan naast de eigen planning.
             ("mpc tegen de planning", lambda: self._meet_mpc(now)),

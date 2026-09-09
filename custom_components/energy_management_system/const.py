@@ -160,6 +160,29 @@ CLOUD_INVOER_CONFIRM_MINUTES = 60
 # de opslag.
 DAGVERLOOP_DAGEN = 7
 
+# Hoeveel kwartieren een dag moet hebben voordat de nabeschouwing een
+# oordeel geeft (v4.3). Zie get_nabeschouwing: op een halve dag weegt de
+# waardering van de eindstand zwaarder dan de dag zelf.
+NABESCHOUWING_MIN_KWARTIEREN = 88
+
+# Welk apparaat is meer gaan gebruiken? (v4.4)
+#
+# Gevraagd: "De integratie heeft bijna alle entiteiten binnen HA, dan
+# kan de integratie toch ook aangeven welk apparaat plots meer is gaan
+# gebruiken?" Elke nacht tussen 02:00 en 05:00 wordt van elke
+# vermogenssensor in W de mediaan bewaard; daarna is te vergelijken.
+NACHTLAST_VENSTER = (2, 5)
+NACHTLAST_NACHTEN = 14
+# Hoeveel nachten er minstens moeten zijn, en hoe de vergelijking loopt:
+# de laatste drie tegen de zeven daarvoor.
+NACHTLAST_MIN_NACHTEN = 8
+NACHTLAST_RECENT = 3
+NACHTLAST_REFERENTIE = 7
+# Een stijging telt mee vanaf 5 W en 20% - onder die grenzen is het ruis
+# of een sensor die anders afrondt.
+NACHTLAST_MIN_STIJGING_W = 5.0
+NACHTLAST_MIN_STIJGING_FRACTIE = 0.20
+
 # Hoe vaak het PV-model opnieuw getraind wordt (v3.99.20). Uit een
 # cProfile-meting: vijf keer per minuut, 2,72 seconden per keer, in de
 # event loop - HA stond dertien van de zestig seconden stil. Het model
@@ -2750,6 +2773,8 @@ PERSISTED_PLAIN_FIELDS = (
     "nabeschouwingen",
     # v4.1: het padbereik - per reden en kandidaat hoe vaak en wanneer.
     "padbereik",
+    # v4.4: de nachtelijke basislast per vermogenssensor.
+    "nachtlast_per_apparaat",
     # v3.97.0: de Powercalc-proef heeft 200 metingen nodig.
     "powercalc_paren",
     # Meldingen (v1.2.0): de aan/uit-standen zijn een gebruikerskeuze en
@@ -3041,6 +3066,247 @@ WEATHER_ENSEMBLE_SPREAD_ATTENTION_PERCENT = 40.0
 #
 # Velden per melding: sleutel, label, uitleg, standaard aan/uit,
 # dempingsvenster in minuten.
+# Waardoor komt een melding, en wat kun je ermee? (v4.3)
+#
+# Gevraagd: "Maar wat kan ik er mee, dat geldt eigenlijk voor alle
+# meldingen, ik wil graag dat de integratie ook aangeeft waardoor, wat te
+# doen. Niet alleen specifiek voor deze melding maar voor alles."
+#
+# Terecht. "Sluipverbruik-detectie staat aan: structurele stijging in het
+# dagelijkse basisverbruik" vertelt WAT er is gezien en niets over waar
+# het vandaan komt of wat er te doen valt. Dat gold voor bijna alle
+# negenendertig soorten.
+#
+# Per soort twee zinnen. WAARDOOR: wat de integratie heeft gemeten en
+# welke oorzaken daarbij horen - inclusief de onschuldige, want de meeste
+# meldingen zijn geen storing. WAT TE DOEN: de eerstvolgende handeling,
+# of uitdrukkelijk "niets, dit is ter kennisgeving".
+#
+# Een toets houdt bij dat elke soort een advies heeft; een nieuwe soort
+# zonder advies laat de suite omvallen.
+MELDING_ADVIES: dict[str, tuple[str, str]] = {
+    "plan_tekort": (
+        "De kwartierplanning voorziet dat de woning aan het net komt voor het "
+        "goedkope blok. Meestal een tegenvallende zonvoorspelling of een "
+        "zwaarder verbruik dan het geleerde profiel.",
+        "Niets. De integratie laadt zo nodig zelf bij in het goedkope blok. "
+        "Komt dit dagelijks, kijk dan op de kaart Planning welk kwartier het is.",
+    ),
+    "plan_uitstel": (
+        "Er komt vandaag genoeg zon om de accu later op de dag te vullen, en "
+        "tot dan levert het overschot meer op tegen de huidige prijs.",
+        "Niets. Dit is de normale gang van zaken op een zonnige dag.",
+    ),
+    "plan_verkoop_geblokkeerd": (
+        "De woning heeft de resterende accu-energie nodig tot het goedkope "
+        "blok, dus wordt er niet verkocht.",
+        "Niets. Verkopen zou het huis aan het net leggen tegen een hogere prijs "
+        "dan de opbrengst.",
+    ),
+    "vakantie_beweging": (
+        "Een bewegingssensor zag beweging terwijl de vakantiestand aan staat.",
+        "Ben je thuis: zet de vakantiestand uit, anders rekent de integratie "
+        "met een te laag verbruik. Ben je weg: kijk wie er in huis is.",
+    ),
+    "appliance_cheap_moment": (
+        "De prijs is nu laag genoeg dat een cyclus meetbaar goedkoper is dan op "
+        "een gemiddeld moment.",
+        "Zet het apparaat aan als je het toch vandaag wilde draaien. Anders "
+        "niets; er komt een volgend moment.",
+    ),
+    "appliance_ready": (
+        "Het vermogen van het apparaat is teruggevallen en blijft laag: de "
+        "cyclus is klaar.",
+        "Ruim het apparaat leeg. Klopt de melding niet, dan staat de "
+        "vermogensdrempel te hoog of te laag - zie de kaart Apparaten.",
+    ),
+    "proefstand_rijp": (
+        "Een proefstandkandidaat heeft genoeg gemeten om een uitspraak te doen.",
+        "Bekijk de proefstandpagina. Aanzetten is een keuze; er gebeurt niets "
+        "vanzelf.",
+    ),
+    "meet_stuurt_niet": (
+        "Er staan metingen klaar die nog niet meesturen.",
+        "Bekijk de kaart 'Meet, stuurt niet' op de proefstandpagina en beslis "
+        "per meting of hij mee mag doen.",
+    ),
+    "zelfcontrole": (
+        "Een invariant in de integratie klopt niet meer - bijvoorbeeld twee "
+        "onderdelen die een verschillende reserve zien.",
+        "Dit is een fout in de integratie, niet in je installatie. Stuur de "
+        "diagnostiek-export door; de melding zegt welke controle het betreft.",
+    ),
+    "battery_cooling": (
+        "De accu staat warmer dan buiten en de ventilator kan dat verschil "
+        "wegwerken.",
+        "Niets. Schakelt hij te vaak, dan staan de drempels te scherp - dat "
+        "meldt de integratie apart.",
+    ),
+    "installatie_onvolledig": (
+        "Een of meer bestanden van de integratie horen niet bij deze versie: "
+        "een halve kopieeractie of een oude versie ernaast.",
+        "Kopieer alle bestanden uit de laatste levering opnieuw en herstart. "
+        "De melding noemt welke bestanden afwijken.",
+    ),
+    "opdracht_niet_aangekomen": (
+        "De accu staat na een opdracht nog in de oude stand. Meestal een "
+        "cloudkoppeling die traag is, soms een apparaat dat niet reageert.",
+        "Kijk of de Zendure-integratie werkt. Blijft het staan, herstart die "
+        "integratie; de sturing valt intussen terug op de slimme stand.",
+    ),
+    "leermodus_lang_aan": (
+        "De leermodus staat aan; de integratie rekent wel maar stuurt niet.",
+        "Zet de leermodus uit als je wilt dat de accu wordt aangestuurd.",
+    ),
+    "prijsstijging_handmatig": (
+        "De prijs gaat binnen enkele uren fors omhoog terwijl de accu handmatig "
+        "staat.",
+        "Overweeg de handmatige stand uit te zetten, zodat de integratie de "
+        "piek kan opvangen.",
+    ),
+    "handmatige_stand": (
+        "De accu staat langer handmatig dan gebruikelijk.",
+        "Was dat de bedoeling, dan niets. Zo niet: zet de stand terug op slim, "
+        "anders stuurt de integratie niet.",
+    ),
+    "celspanning_laag": (
+        "Een cel staat lager dan de rest. Bij een volle accu wijst dat op "
+        "veroudering of een module die uit de pas loopt.",
+        "Noteer het en volg het een paar weken. Blijft het verschil groeien, "
+        "meld het bij de leverancier; de export bevat de celspanningen.",
+    ),
+    "koeling_te_scherp": (
+        "De ventilator schakelde meerdere keren binnen een uur aan en uit.",
+        "Niets urgents. Wil je het rustiger, dan kan de drempel voor goedkope "
+        "koeling ruimer; dat is een instelling.",
+    ),
+    "verbruiksleer_reset": (
+        "De geleerde verbruiksprofielen zijn gewist, met de hand of na een "
+        "wijziging in de configuratie.",
+        "Niets. De integratie leert opnieuw; reken op een week voor de eerste "
+        "bruikbare profielen.",
+    ),
+    "kalibratie_vol": (
+        "De accu heeft tijdens een kalibratie de bovengrens bereikt. Dit is het "
+        "moment waarop de celspreiding het meest zegt.",
+        "Zet de kalibratie uit. De gemeten capaciteit staat in de export onder "
+        "capacity_overview.",
+    ),
+    "sluipverbruik": (
+        "Het dagelijkse basisverbruik - het laagste niveau van de dag, meestal "
+        "'s nachts - is structureel gestegen. Vaak een apparaat dat aan blijft "
+        "staan, een lader, een pomp of vloerverwarming die eerder uit stond.",
+        "De melding noemt zelf welke vermogenssensoren 's nachts hoger staan "
+        "dan een week geleden - begin daar. Staat er geen enkele bij, dan gaat "
+        "het om iets zonder eigen meting; kijk dan in Home Assistant naar het "
+        "totaalverbruik tussen 02:00 en 05:00.",
+    ),
+    "device_drift": (
+        "Een apparaat gebruikt structureel meer dan wat ervoor geleerd is.",
+        "Kijk of het apparaat anders wordt gebruikt (ander programma, voller) "
+        "of dat er iets mis is. Klopt het nieuwe niveau, dan kun je de "
+        "afwijking accepteren; dan leert de integratie opnieuw.",
+    ),
+    "mode_change": (
+        "De integratie heeft de accu in een andere stand gezet, op grond van "
+        "prijs, zon en de reserve.",
+        "Niets. Dit is ter kennisgeving; de reden staat in de titel.",
+    ),
+    "battery_wont_last_night": (
+        "Wat er in de accu zit is minder dan wat de woning nodig heeft tot het "
+        "goedkope blok.",
+        "Niets. Er wordt zo nodig bijgeladen. Komt dit elke avond, dan is de "
+        "accu te klein voor de nacht of staat de reserve te ruim - de "
+        "proefstand meet dat.",
+    ),
+    "battery_full_with_sun": (
+        "De accu is vol terwijl er nog zon komt; het overschot gaat naar het "
+        "net.",
+        "Wil je die zon gebruiken: zet nu een apparaat aan. Anders niets.",
+    ),
+    "low_soc_before_peak": (
+        "De accu staat laag vlak voor de duurste uren van de dag.",
+        "Niets. De integratie houdt de rest vast voor de piek. Gebeurt dit "
+        "vaak, dan is de dagopbrengst te klein voor het verbruik.",
+    ),
+    "cheap_block_soon": (
+        "Het goedkoopste blok van de komende periode begint bijna.",
+        "Een goed moment voor apparaten die je toch wilde draaien.",
+    ),
+    "negative_prices": (
+        "De prijs wordt negatief: je krijgt betaald voor verbruik.",
+        "Zet apparaten aan die je toch nodig hebt. De integratie laadt de accu "
+        "zelf bij.",
+    ),
+    "exceptional_peak_price": (
+        "Er zit vandaag een kwartier met een uitzonderlijk hoge prijs in.",
+        "Vermijd zwaar verbruik in dat kwartier; de tijd staat in de melding.",
+    ),
+    "solar_underperforming": (
+        "De opbrengst blijft achter bij de voorspelling, meer dan de gewone "
+        "onzekerheid. Meestal bewolking, soms vuil, sneeuw of schaduw.",
+        "Kijk of het bewolkt is. Is de lucht helder en blijft de opbrengst "
+        "achter, controleer dan de panelen en de omvormer.",
+    ),
+    "low_solar_day": (
+        "De voorspelling voor vandaag ligt ver onder wat voor jouw installatie "
+        "normaal is.",
+        "Niets. De integratie houdt meer reserve aan en laadt eerder bij.",
+    ),
+    "sensor_unavailable": (
+        "Een ingestelde entiteit geeft al een kwartier geen waarde. Bij een "
+        "cloudkoppeling is dat vaak een storing; bij een lokale sensor een lege "
+        "batterij of een apparaat buiten bereik.",
+        "Kijk of de entiteit in Home Assistant nog bestaat en een waarde geeft. "
+        "De melding noemt waar de sensor voor dient.",
+    ),
+    "integration_error": (
+        "De integratie liep vast tijdens een ronde en heeft de sturing "
+        "stilgezet.",
+        "Herstart de integratie. Blijft het terugkomen, stuur de "
+        "diagnostiek-export met de foutmelding uit het logboek.",
+    ),
+    "interne_fout": (
+        "Een onderdeel van de integratie wierp een fout. De rest draait door, "
+        "maar dat onderdeel levert geen gegevens.",
+        "Stuur de diagnostiek-export door; internal_failures noemt het "
+        "onderdeel en de fout.",
+    ),
+    "battery_module_drift": (
+        "Een accumodule wijkt af van de andere in laadstand of spanning.",
+        "Volg het een paar weken. Groeit het verschil, meld het bij de "
+        "leverancier; de export bevat de gegevens per module.",
+    ),
+    "module_became_ready": (
+        "Een adviesmodule heeft genoeg gemeten om een uitspraak te doen.",
+        "Bekijk de betrouwbaarheidspagina om te zien wat de module nu zegt.",
+    ),
+    "pv_orientation_mismatch": (
+        "De gemeten piek van de dag ligt op een andere zonstand dan bij de "
+        "opgegeven oriëntatie hoort.",
+        "Controleer azimut en helling in de configuratie en bij Solcast. Klopt "
+        "de opgave, dan is er waarschijnlijk beschaduwing.",
+    ),
+    "cost_mismatch": (
+        "De berekende kosten wijken af van wat de energieleverancier meldt.",
+        "Controleer of de prijssensor alle opslagen bevat (belasting, btw, "
+        "leveringskosten). Een structureel verschil zit meestal daar.",
+    ),
+    "daily_summary": (
+        "Een samenvatting van de dag: opwek, verbruik, en wat de accu heeft "
+        "opgeleverd tegenover een huis zonder accu.",
+        "Niets. Ter kennisgeving; de nabeschouwing in de export zegt wat er "
+        "beter had gekund.",
+    ),
+    "monthly_summary": (
+        "Een samenvatting van de maand: opwek, verbruik en opbrengst, met de "
+        "vergelijking tegenover de maand ervoor.",
+        "Niets. Ter kennisgeving; de trend over meerdere maanden zegt meer dan "
+        "een enkele.",
+    ),
+}
+
+
 NOTIFICATION_TYPES: tuple[tuple[str, str, str, bool, int], ...] = (
     # v1.23.4: meldingen over de planning. Alleen wat er werkelijk toe
     # doet - elke moduswissel zou tientallen berichten per dag opleveren,

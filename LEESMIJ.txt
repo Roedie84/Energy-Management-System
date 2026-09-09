@@ -1,22 +1,24 @@
-EMS v4.2 - alleen de wijzigingen sinds v4.1.1
+EMS v4.4 - alle wijzigingen sinds v4.2
+
+Bevat v4.3 en v4.4.
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
 
-    const.py, coordinator.py, nabeschouwing.py
+    const.py, coordinator.py, diagnostics.py
     manifest.json, bestandscontrole.json
 
 NAAR DE REPO
 
-    README.md, CHANGELOG.md, twee toetsbestanden
+    README.md, CHANGELOG.md, vier toetsbestanden (twee nieuw)
 
 WAT ER VERANDERT
 
-1. Een schrijver van de kaarttabel "diepste tekort".
-2. De nabeschouwing splitst "gemist" in reserve en voorspelling.
-3. De logregel over onverwachte netimport noemt de leesbare reden,
-   het accuvermogen en de laadstand.
-4. De proefstand wordt een keer per ronde gerekend; rekentijd per
-   kandidaat in de export.
+1. Elke melding zegt "Waardoor" en "Wat te doen" - alle 39 soorten.
+2. De sluipverbruikmelding noemt WELKE vermogenssensoren 's nachts
+   hoger staan dan een week geleden.
+3. Een nabeschouwing over minder dan 88 kwartieren geeft geen oordeel.
 
-Na installatie: proefstand.rekentijd_ms - als daar iets ver boven de
-100 ms staat, is dat de volgende.
+WAT ER TIJD KOST
+
+De apparaataanwijzing heeft acht nachten nodig voordat hij iets zegt.
+Tot dan meldt hij dat zelf. In de export: welke_apparaten_stegen.

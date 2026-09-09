@@ -24142,3 +24142,106 @@ trage kandidaat de volgende keer meteen te zien is in plaats van
 geraden.
 
 **Volledige testsuite**: 3670 tests, allemaal groen.
+
+
+## v4.3 — Waardoor, en wat te doen
+
+**Gevraagd**: "Mooi dat deze melding er nu staat: sluipverbruik-detectie
+staat aan. Maar wat kan ik ermee? Dat geldt eigenlijk voor alle
+meldingen — ik wil graag dat de integratie ook aangeeft waardoor, wat te
+doen. Niet alleen specifiek voor deze melding maar voor alles."
+
+Terecht. "Structurele stijging in het dagelijkse basisverbruik" vertelt
+WAT er is gezien en niets over waar het vandaan komt of wat er te doen
+valt. Dat gold voor bijna alle negenendertig soorten.
+
+Elke melding krijgt nu twee zinnen mee:
+
+```
+⚠️ Mogelijk sluipverbruik
+Het basisverbruik steeg met 40 W.
+
+Waardoor: Het dagelijkse basisverbruik — het laagste niveau van de dag,
+meestal 's nachts — is structureel gestegen. Vaak een apparaat dat aan
+blijft staan, een lader, een pomp of vloerverwarming die eerder uit
+stond.
+
+Wat te doen: Kijk in Home Assistant naar het verbruik tussen 02:00 en
+05:00 en vergelijk met een week eerder. De kaart Verbruik toont het
+basisniveau per dag; het verschil is wat je zoekt.
+```
+
+Bij WAARDOOR staan ook de onschuldige oorzaken, want de meeste meldingen
+zijn geen storing. Bij WAT TE DOEN staat de eerstvolgende handeling — of
+uitdrukkelijk "niets, dit is ter kennisgeving", want dat is bij veertien
+van de negenendertig het eerlijke antwoord.
+
+Het advies gaat op één plek aan het bericht vast, in de verzendfunctie,
+en staat dus ook in de geschiedenis op de kaart. Een toets houdt bij dat
+elke soort een advies heeft en dat geen advies de titel herhaalt: een
+nieuwe meldingssoort zonder advies laat de suite omvallen.
+
+### En de nabeschouwing van een halve dag
+
+Gemeld: "Maar de accu was niet leeg vanmorgen toch?" Nee. Van 45% om
+middernacht naar 20% om zeven uur, het hele nacht met het net op −40 W:
+de accu dekte het huis volledig, zonder één watt in te kopen.
+
+Toch stond er in de nabeschouwing van 8 september "2,68 kWh te veel
+ontladen". Dat komt door het venster: het verloop liep van 12:30 tot
+23:45, 46 kwartieren, en wat er aan het eind in de accu zit wordt tegen
+de gemiddelde dagprijs gewaardeerd. Die energie is 's nachts werkelijk
+gebruikt tegen 30 tot 37 ct. Op een halve dag domineert die waardering
+de hele uitkomst — verkopen op 44 ct leek verlies terwijl het winst was.
+
+Ik heb dat getal gelezen alsof het over een dag ging. Een nabeschouwing
+over minder dan 88 kwartieren geeft nu geen oordeel meer, alleen de
+vaststelling dat het venster te kort is. Dat is nodig voordat de
+kandidaat "Reserve uit de nabeschouwing" zijn eerste getal geeft, anders
+leert die van dezelfde vertekening.
+
+Wat wél overeind blijft van die dag: tussen 14:30 en 15:15 ging er 1263
+W zon naar het net terwijl de accu met 695 W laadde, bij 25 ct. Dat is
+niet vensterafhankelijk.
+
+**Volledige testsuite**: 3676 tests, allemaal groen.
+
+
+## v4.4 — Welk apparaat is meer gaan gebruiken?
+
+**Gevraagd**: "De integratie heeft bijna alle entiteiten binnen HA, dan
+kan de integratie toch ook aangeven welk apparaat plots meer is gaan
+gebruiken?"
+
+Terecht, en het is te doen zonder de recorder aan te spreken. Elke ronde
+tussen 02:00 en 05:00 — het rustigste venster, en precies het venster
+waarin de sluipverbruikmeting zelf rekent — wordt van élke
+vermogenssensor in W de waarde bijgehouden. De mediaan daarvan is de
+basislast van dat apparaat die nacht. De rondes draaien er toch al; er
+komt geen databasevraag bij.
+
+De mediaan en niet het gemiddelde: een vriezer die één keer aanslaat mag
+de nacht niet bepalen.
+
+Na acht nachten is de vergelijking te maken: de laatste drie nachten
+tegen de zeven daarvoor, per sensor. Wat er dan in de melding staat:
+
+```
+Grootste stijgers 's nachts: sensor.vriezer_garage (12 → 48 W);
+sensor.nieuwe_lader (nieuw, 25 W).
+```
+
+Een sensor die er een week geleden nog niet was, is het duidelijkste
+geval en staat vooraan. Drempels: vijf watt en twintig procent — daaronder
+is het ruis of een sensor die anders afrondt.
+
+**Wat het niet is: een bewijs.** Een sensor die stijgt kan de oorzaak
+zijn of een gevolg, en een apparaat zonder eigen meting valt buiten
+beeld. Dat zegt de melding ook: "geen enkele vermogenssensor staat 's
+nachts hoger — het gaat dus om iets zonder eigen meting." Dat is een
+ander antwoord dan geen antwoord.
+
+Volledig in de export onder `welke_apparaten_stegen`, met alle stijgers
+en de vergelijking die eronder ligt.
+
+**Volledige testsuite**: 3683 tests, allemaal groen.
