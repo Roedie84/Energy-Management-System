@@ -50,7 +50,9 @@ def test_best_mogelijk_is_nooit_duurder_dan_werkelijk():
 def test_een_perfecte_dag_mist_niets():
     """Doe werkelijk wat de beste planning doet: gemist is nul."""
     kw = _dag()
-    beste = beste_planning(kw, **ACCU)
+    # v4.5: de meetlat is de planning ZONDER netarbitrage; doe precies
+    # wat die doet en er valt niets te missen.
+    beste = beste_planning(kw, sta_netladen_toe=False, **ACCU)
     # `accu_kwh` is wat het NET ziet (de sensor meet aan de AC-kant):
     # ontladen komt er met rendement uit, laden gaat er met rendement in.
     eta = ACCU["rendement"] ** 0.5
@@ -248,3 +250,90 @@ def test_een_halve_dag_krijgt_geen_oordeel(make_coordinator, hass):
     assert uit["te_becijferen"] is False
     assert uit["kwartieren"] == 46
     assert "eind" in uit["reden"]
+
+
+# --- v4.5: netarbitrage apart ------------------------------------------
+#
+# Op 8 september zei de beste planning: laad 0,5 kWh per kwartier om
+# 14:45, 15:00 en 15:15. Het huis trok daar 2,2 kW en de zon leverde
+# 2,3 kW - er was geen overschot. "Laden" betekende dus INKOPEN van het
+# net tegen 27 ct om 's avonds tegen 44 te verkopen. Dat is
+# netarbitrage, en die is bewust uit deze integratie gehaald.
+#
+# De meetlat moet zijn hoe de integratie werkt: laden uit overschot.
+# Wat netarbitrage zou opleveren, is een apart getal - en meteen een
+# gemeten antwoord op de vraag of het terecht was dat arbitrage eruit
+# ging.
+
+
+def _zonnedag():
+    """Vier kwartieren goedkoop zonder zon, vier duur zonder zon.
+    Arbitrage is winstgevend; laden uit overschot kan niet."""
+    return [
+        Kwartier(huis_kwh=0.1, pv_kwh=0.0, prijs_eur=p, accu_kwh=0.0)
+        for p in [0.10] * 4 + [0.25] * 4 + [0.40] * 4 + [0.25] * 4
+    ]
+
+
+def test_zonder_netladen_wordt_er_niet_geladen_zonder_zon():
+    beste = beste_planning(_zonnedag(), sta_netladen_toe=False, **ACCU)
+
+    assert sum(a["laden_kwh"] for a in beste["acties"]) == 0.0
+
+
+def test_met_netladen_wel():
+    beste = beste_planning(_zonnedag(), sta_netladen_toe=True, **ACCU)
+
+    assert sum(a["laden_kwh"] for a in beste["acties"]) > 0.5
+
+
+def test_er_wordt_uit_overschot_geladen():
+    """Zon boven het huisverbruik: dat mag wel de accu in."""
+    kw = _zonnedag()
+    for k in kw[:4]:
+        k.pv_kwh = 0.7            # 0,6 kWh overschot per kwartier
+    beste = beste_planning(kw, sta_netladen_toe=False, **ACCU)
+
+    assert sum(a["laden_kwh"] for a in beste["acties"][:4]) > 0.3
+
+
+def test_de_nabeschouwing_meet_tegen_de_eigen_werkwijze():
+    kw = _zonnedag()
+    uit = nabeschouwing(
+        kw, eind_kwh=0.5, tijdstippen=[str(i) for i in range(16)],
+        slijtage_eur_per_kwh=0.0, **ACCU,
+    )
+
+    # De meetlat: geen netarbitrage. Wij deden niets en konden niets
+    # (geen zon), dus valt er vrijwel niets te missen - wat er overblijft
+    # is de waardering van de eindstand, geen gemiste sturing.
+    assert uit["gemist_eur"] < 0.10
+    # En apart: wat arbitrage zou hebben opgeleverd.
+    assert uit["netarbitrage_eur"] > 0.05
+    assert "netarbitrage" in uit["toelichting"].lower()
+
+
+def test_de_kandidaat_netarbitrage_telt_over_de_dagen(make_coordinator, hass):
+    """v4.5. Arbitrage is heel vroeg uit de integratie gehaald, uit
+    principe en zonder cijfers. De nabeschouwing rekent nu per dag uit
+    wat het WEL zou hebben opgeleverd - met de prijzen die er waren."""
+    c = make_coordinator({})
+    c.nabeschouwingen = [
+        {"te_becijferen": True, "kwartieren": 96, "datum": f"2026-09-0{d}",
+         "netarbitrage_eur": 0.12, "gemist_eur": 0.05}
+        for d in range(1, 6)
+    ]
+
+    k = c._kandidaat_netarbitrage()
+
+    assert k["waarde"] is not None
+    assert k["zou_hebben_opgeleverd"]["eur_totaal"] == pytest.approx(0.60, abs=0.01)
+    assert k["zou_hebben_opgeleverd"]["eur_per_dag"] == pytest.approx(0.12, abs=0.01)
+    assert k["mag_regelen"] is False
+
+
+def test_te_weinig_dagen_geen_oordeel_over_arbitrage(make_coordinator, hass):
+    c = make_coordinator({})
+    c.nabeschouwingen = [{"te_becijferen": True, "kwartieren": 96, "netarbitrage_eur": 0.12}]
+
+    assert c._kandidaat_netarbitrage()["waarde"] is None

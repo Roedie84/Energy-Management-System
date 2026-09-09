@@ -166,3 +166,15 @@ def test_de_sensor_overschrijft_geen_gevulde_reeks():
 
     assert _herstel_cyclusduren(bestaand=[36.0, 153.0], uit_sensor=[6.0, 36.0]) == [36.0, 153.0]
     assert _herstel_cyclusduren(bestaand=[], uit_sensor=[6.0, 36.0]) == [36.0]
+
+
+def test_zonder_duur_geen_zin_erover(make_coordinator, hass):
+    """v4.5. "Wasmachine is klaor na onbekende tied" - gezien op 9
+    september. Het klopt (twee cycli is te weinig voor een duur), maar
+    het leest als een fout. Dan liever niets zeggen."""
+    c = make_coordinator({})
+
+    assert c._cyclus_klaar_bericht("Wasmachine", None) == "Wasmachine is klaar."
+    assert c._cyclus_klaar_bericht("Vaatwasser", 51.0) == (
+        "Vaatwasser is klaar na ongeveer 51 minuten."
+    )

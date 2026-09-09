@@ -128,4 +128,7 @@ def test_zonder_bekende_duur_blijft_het_bericht_kloppen(
     bericht = c._cyclus_klaar_bericht("Wasmachine", None)
 
     assert "Wasmachine" in bericht
-    assert "onbekende tijd" in bericht
+    # v4.5: geen duur, geen zin erover. "na onbekende tijd" leest als een
+    # fout terwijl het klopt.
+    assert "onbekende" not in bericht
+    assert bericht == "Wasmachine is klaar."

@@ -101,7 +101,7 @@ def test_every_candidate_reports_its_own_reliability(
     # v3.10.0: plus "Verder vooruitkijken bij de reserve".
     # v3.60.0: "Niet ontladen bij een lage prijs" erbij.
     # v3.68.0: "Vooruitplannen over 24 uur" erbij.
-    assert len(kandidaten) == 12  # v4.1: reserve uit de nabeschouwing erbij
+    assert len(kandidaten) == 13  # v4.5: netarbitrage erbij
     for kandidaat in kandidaten:
         assert kandidaat["naam"]
         assert kandidaat["status"]

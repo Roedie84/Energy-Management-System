@@ -24245,3 +24245,80 @@ Volledig in de export onder `welke_apparaten_stegen`, met alle stijgers
 en de vergelijking die eronder ligt.
 
 **Volledige testsuite**: 3683 tests, allemaal groen.
+
+
+## v4.5 — "Klaor na onbekende tied"
+
+Uit de export van 9 september 13:20:
+
+```
+🧺 Wasmachine klaor
+Wasmachine is klaor na onbekende tied.
+```
+
+Het klopt: sinds v3.99.3 wordt de geleerde cyclusduur pas gebruikt bij
+drie cycli die bij elkaar liggen, en na het opschonen van de
+zes-minuten-"cycli" waren dat er nog twee. Er is dus niets over de duur
+te zeggen — maar "na onbekende tijd" leest als een fout.
+
+Geen duur, geen zin erover: "Wasmachine is klaar." De toets uit v3.93.1
+die het omgekeerde vastlegde, is omgedraaid.
+
+### De meetlat mat de verkeerde strategie
+
+**Gemeld**: "Dit komt waarschijnlijk door stapelwolken in combinatie met
+harde wind, waardoor de PV-opbrengst fluctueert en de Zendure zelf dit
+niet kan bijbenen."
+
+Die verklaring dwong me het na te rekenen, en toen bleek mijn conclusie
+van gisteren op twee punten fout.
+
+```
+        pv      Δpv     accu     net    huis
+14:15  2999    +465   −2024    −534     442
+14:30  2232    −767    −695   −1263     274
+14:45  2382    +149     +56     +60    2498
+15:00  2387      +5       0    −153    2234
+```
+
+Om 14:30 heb je gelijk: de zon zakt 767 W en het laadvermogen zakt 1329
+W. Dat is geen beslissing maar een regellus die doorschiet op een snelle
+verandering — precies wat stapelwolken met wind doen. Eén kwartier, geen
+patroon.
+
+En om 14:45 tot 15:15 was er geen overschot: het huis trok 2,2 tot 2,5
+kW. De accu stopte met laden en liet de zon naar het huis gaan, en dat
+is goed. Maar de "beste planning" zei daar: laad 0,5 kWh per kwartier —
+wat met dat huisverbruik betekent: INKOPEN van het net tegen 27 ct om 's
+avonds tegen 44 te verkopen.
+
+Dat is netarbitrage, en die is heel vroeg uit deze integratie gehaald.
+De nabeschouwing mat dus tegen een strategie die bewust is afgewezen, en
+ik heb dat getal overgenomen zonder te kijken wat de beste planning daar
+deed.
+
+### Twee planningen in plaats van één
+
+`beste_planning` kent nu `sta_netladen_toe`. Staat die uit, dan mag er
+per kwartier hooguit zoveel geladen worden als er OVERSCHOT is — zon
+boven het huisverbruik. Dat is de meetlat, want zo werkt de integratie.
+
+De nabeschouwing rekent er twee: de meetlat, en dezelfde dag mét
+netladen. Het verschil staat als `netarbitrage_eur` per dag in de
+export.
+
+### En daarmee een oud besluit gemeten
+
+Arbitrageladen ging eruit uit principe: de accu is er voor de eigen zon,
+niet om met stroom te handelen. Dat is nooit met cijfers getoetst. De
+nieuwe proefstandkandidaat "Laden uit het net (arbitrage)" telt de
+dagbedragen op: wat het zou hebben opgeleverd met de prijzen die er
+werkelijk waren, slijtage inbegrepen.
+
+Met de eerlijke kanttekening erbij: het is een ONDERGRENS van wat
+aanzetten zou kosten aan misrekeningen, want de beste planning kent de
+prijzen en de zon van de hele dag vooraf. In bedrijf haal je hier
+hooguit een deel van. Maar over twee weken is er een getal in plaats van
+een principe.
+
+**Volledige testsuite**: 3690 tests, allemaal groen.

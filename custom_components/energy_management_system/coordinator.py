@@ -9228,6 +9228,7 @@ class EnergyManagementSystemCoordinator:
             self._kandidaat_langere_horizon,
             self._kandidaat_pv_model,
             self._kandidaat_reserve_uit_nabeschouwing,
+            self._kandidaat_netarbitrage,
             self._kandidaat_lange_reserve,
             self._kandidaat_bijkopen,
             self._kandidaat_niet_ontladen_bij_lage_prijs,
@@ -17767,6 +17768,67 @@ class EnergyManagementSystemCoordinator:
                 "aantoonbare winst op ongeziene dagen is dat een slechte "
                 "ruil."
             ),
+        }
+
+    def _kandidaat_netarbitrage(self) -> dict:
+        """Wat zou laden uit het NET hebben opgeleverd? (v4.5)
+
+        Arbitrageladen is heel vroeg uit deze integratie gehaald, uit
+        principe: de accu is er voor de eigen zon, niet om met stroom te
+        handelen. Dat is nooit met cijfers getoetst.
+
+        De nabeschouwing rekent per dag twee beste planningen: een die
+        alleen uit overschot laadt (de meetlat, want zo werkt de
+        integratie) en een die ook uit het net mag laden. Het verschil is
+        wat arbitrage die dag had opgeleverd - met de prijzen die er
+        werkelijk waren, de slijtage inbegrepen.
+
+        Dit meet; het stuurt niet. En het is een ONDERGRENS van wat het
+        zou kosten om het aan te zetten: de beste planning kent de
+        prijzen en de zon van de hele dag vooraf, en die kennis heeft de
+        sturing niet.
+        """
+        dagen = [
+            n for n in (self.nabeschouwingen or [])
+            if n.get("te_becijferen") and n.get("netarbitrage_eur") is not None
+        ]
+        if len(dagen) < 3:
+            return {
+                "naam": "Laden uit het net (arbitrage)",
+                "status": RELIABILITY_INSUFFICIENT,
+                "waarde": None,
+                "onderbouwing": f"{len(dagen)} nabeschouwde dag(en); minstens 3 nodig.",
+                "betrouwbaarheid": "Een dag zegt niets; de prijsspreiding verschilt per dag.",
+                "zou_veranderen": "Laden uit het net bij een groot prijsverschil.",
+                "zou_hebben_opgeleverd": {"te_becijferen": False, "reden": "Nog geen reeks."},
+                "mag_regelen": False,
+            }
+        bedragen = [n["netarbitrage_eur"] for n in dagen]
+        totaal = sum(bedragen)
+        per_dag = totaal / len(dagen)
+        return {
+            "naam": "Laden uit het net (arbitrage)",
+            "status": RELIABILITY_INDICATIVE if len(dagen) < 14 else RELIABILITY_RELIABLE,
+            "waarde": f"{per_dag:.2f} euro per dag, met perfecte kennis vooraf",
+            "onderbouwing": (
+                f"{len(dagen)} dagen, samen {totaal:.2f} euro. Beste dag "
+                f"{max(bedragen):.2f}, slechtste {min(bedragen):.2f}. Dit is het "
+                "verschil tussen de beste planning met en zonder laden uit het net, "
+                "slijtage inbegrepen."
+            ),
+            "betrouwbaarheid": (
+                "Een ONDERGRENS van wat aanzetten zou kosten aan misrekeningen: de "
+                "beste planning kent de prijzen en de zon van de hele dag vooraf. "
+                "In bedrijf haal je hier hooguit een deel van."
+            ),
+            "zou_veranderen": "Laden uit het net bij een groot prijsverschil.",
+            "zou_hebben_opgeleverd": {
+                "te_becijferen": True,
+                "eur_totaal": round(totaal, 2),
+                "eur_per_dag": round(per_dag, 2),
+                "reden": "Het verschil met en zonder netladen, over de nabeschouwde dagen.",
+            },
+            "mag_regelen": False,
         }
 
     def _kandidaat_reserve_uit_nabeschouwing(self) -> dict:
@@ -27333,12 +27395,15 @@ class EnergyManagementSystemCoordinator:
         voorhanden is - hij werd er twee regels hoger al uit gehaald om
         het cyclusverbruik te leren.
         """
-        duur = (
-            f"ongeveer {duur_minuten:.0f} minuten"
-            if duur_minuten is not None
-            else "onbekende tijd"
-        )
-        return f"{apparaat} is klaar na {duur}."
+        # v4.5: geen duur, geen zin erover. "Wasmachine is klaar na
+        # onbekende tijd" leest als een fout, terwijl het klopt: sinds
+        # v3.99.3 wordt de geleerde duur pas gebruikt bij drie cycli die
+        # bij elkaar liggen, en na het opschonen van de zes-minuten-
+        # "cycli" waren dat er nog twee. Dan is er niets over de duur te
+        # zeggen, en dat is een reden om het niet te zeggen.
+        if duur_minuten is None:
+            return f"{apparaat} is klaar."
+        return f"{apparaat} is klaar na ongeveer {duur_minuten:.0f} minuten."
 
     def _process_water_flow_sample(
         self, flow_l_per_min: float, now: datetime

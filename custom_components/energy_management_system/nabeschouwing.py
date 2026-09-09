@@ -50,6 +50,7 @@ def beste_planning(
     rendement: float,
     slijtage_eur_per_kwh: float = 0.0,
     stap_kwh: float = 0.1,
+    sta_netladen_toe: bool = True,
 ) -> dict:
     """De goedkoopste accuplanning met kennis achteraf.
 
@@ -82,10 +83,19 @@ def beste_planning(
         nieuw = [INF] * n_stappen
         herkomst: list[int | None] = [None] * n_stappen
         netto_huis = k.huis_kwh - k.pv_kwh
+        # v4.5: zonder netladen mag er alleen uit OVERSCHOT geladen
+        # worden - zon boven het huisverbruik. Zo werkt de integratie
+        # (arbitrage is er vroeg uit gehaald), dus zo hoort de meetlat.
+        laad_grens = laad_stap_max
+        if not sta_netladen_toe:
+            overschot_kwh = max(0.0, k.pv_kwh - k.huis_kwh)
+            laad_grens = min(
+                laad_stap_max, int(round(overschot_kwh * eta / stap_kwh))
+            )
         for s, c in enumerate(kosten):
             if c == INF:
                 continue
-            for d in range(-ontlaad_stap_max, laad_stap_max + 1):
+            for d in range(-ontlaad_stap_max, laad_grens + 1):
                 s2 = s + d
                 if s2 < 0 or s2 >= n_stappen:
                     continue
@@ -168,6 +178,8 @@ def nabeschouwing(
     eta = rendement ** 0.5
     werkelijk = kosten_werkelijk(kwartieren) - (eind_kwh - bodem_kwh) * gemiddelde_prijs * eta \
         + sum(max(0.0, k.accu_kwh) for k in kwartieren) * slijtage_eur_per_kwh
+    # v4.5: de meetlat is hoe de integratie werkt - laden uit overschot,
+    # geen netarbitrage. Wat arbitrage zou opleveren staat er apart bij.
     beste = beste_planning(
         kwartieren,
         capaciteit_kwh=capaciteit_kwh,
@@ -177,6 +189,18 @@ def nabeschouwing(
         ontlaad_kw=ontlaad_kw,
         rendement=rendement,
         slijtage_eur_per_kwh=slijtage_eur_per_kwh,
+        sta_netladen_toe=False,
+    )
+    met_arbitrage = beste_planning(
+        kwartieren,
+        capaciteit_kwh=capaciteit_kwh,
+        begin_kwh=begin_kwh,
+        bodem_kwh=bodem_kwh,
+        laad_kw=laad_kw,
+        ontlaad_kw=ontlaad_kw,
+        rendement=rendement,
+        slijtage_eur_per_kwh=slijtage_eur_per_kwh,
+        sta_netladen_toe=True,
     )
     if not beste.get("te_becijferen"):
         return {"te_becijferen": False, "reden": beste.get("reden")}
@@ -247,9 +271,15 @@ def nabeschouwing(
             max(0.0, werkelijk - beste["kosten_eur"]) - min(gemist_door_reserve, max(0.0, werkelijk - beste["kosten_eur"])), 2
         ),
         "reserve_kwh": reserve_kwh,
+        "netarbitrage_eur": round(
+            max(0.0, beste["kosten_eur"] - met_arbitrage["kosten_eur"]), 2
+        ),
         "grootste_verschillen": verschillen[:8],
         "toelichting": (
-            "Best mogelijk rekent met PERFECTE kennis vooraf van zon, "
+            "Best mogelijk laadt alleen uit OVERSCHOT - geen netarbitrage, "
+            "want die is uit de integratie gehaald. Wat netarbitrage zou "
+            "opleveren staat apart in `netarbitrage_eur`. Best mogelijk "
+            "rekent met PERFECTE kennis vooraf van zon, "
             "verbruik en prijs; dat is een ondergrens die geen sturing "
             "haalt. Het gemiste bedrag is de som van niet vooruit kunnen "
             "kijken en van de regels die de integratie volgde. De "
