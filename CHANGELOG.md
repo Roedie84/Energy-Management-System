@@ -24322,3 +24322,41 @@ hooguit een deel van. Maar over twee weken is er een getal in plaats van
 een principe.
 
 **Volledige testsuite**: 3690 tests, allemaal groen.
+
+
+## v4.6 — Uursleutels als tekst
+
+**Gemeld** uit het logboek, twintig keer tussen 14:44 en 14:53:
+
+```
+File "coordinator.py", line 3472, in learned_appliance_usage_hours
+  return sorted(typical_hours)
+TypeError: '<' not supported between instances of 'int' and 'str'
+```
+
+`dishwasher_usage_hourly_history` heeft uren als sleutel. In v4.1 is die
+reeks van de sensorattributen naar de Store verhuisd, en JSON maakt van
+13 een "13". Bij het laden kwamen de oude uren terug als tekst; de uren
+van vandaag werden als int toegevoegd. Sorteren op zo'n gemengde lijst
+werpt een TypeError, en de sensor viel om.
+
+### Waarom ik het niet had gezien
+
+Ik hád het voorzien: `PERSISTED_INTKEY_DICT_FIELDS` bestaat sinds v4.1
+juist hiervoor, en `hourly_consumption_profile` en
+`pv_hourly_bias_history` staan erin. De kandidaten zocht ik met een scan
+op `self.X.setdefault(now.hour` — en deze twee reeksen worden als
+PARAMETER doorgegeven: `history.setdefault(now.hour, [])`. De scan keek
+naar de vorm van de aanroep en miste daardoor precies het geval waarvoor
+hij bedoeld was.
+
+De toets kijkt nu niet meer naar de aanroep maar naar de
+TYPE-ANNOTATIE in `__init__`: elk veld dat als `dict[int, ...]` is
+aangekondigd én naar de Store gaat, moet in de omzetlijst staan. Daar
+kan een nieuw veld niet omheen, hoe het ook wordt geschreven.
+
+En `learned_appliance_usage_hours` is bestand tegen wat er nu in de
+opslag staat: sleutels worden naar int gehaald, wat er ook staat. Een
+reeks die half tekst is, mag de sensor niet omgooien.
+
+**Volledige testsuite**: 3695 tests, allemaal groen.

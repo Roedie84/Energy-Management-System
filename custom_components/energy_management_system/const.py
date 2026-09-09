@@ -2857,6 +2857,13 @@ PERSISTED_INT_FIELDS = (
 PERSISTED_INTKEY_DICT_FIELDS = (
     "hourly_consumption_profile",
     "pv_hourly_bias_history",
+    # v4.6: deze twee ontbraken, en de sensor viel er twintig keer op om
+    # met "'<' not supported between instances of 'int' and 'str'". Ze
+    # worden als PARAMETER doorgegeven (`history.setdefault(now.hour)`),
+    # dus de scan die op `self.X.setdefault(now.hour` keek, zag ze niet.
+    # De toets kijkt nu naar de type-annotatie in `__init__`.
+    "dishwasher_usage_hourly_history",
+    "washing_machine_usage_hourly_history",
 )
 
 PERSISTED_DATETIME_FIELDS = (

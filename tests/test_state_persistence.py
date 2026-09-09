@@ -34,9 +34,10 @@ def _vul_alles(c):
     c.mode_change_log = [{"moment": "2026-08-06T10:00:00", "modus": "manual"}]
     c.discharge_floor_events = [{"moment": "2026-08-06T11:00:00"}]
     c.dishwasher_cycle_duration_history = [120.0, 130.0]
-    c.dishwasher_usage_hourly_history = {"18": 4}
+    c.dishwasher_usage_hourly_history = {18: 4}  # v4.6: uursleutels als int
     c.washing_machine_cycle_duration_history = [90.0]
-    c.washing_machine_usage_hourly_history = {"9": 2}
+    # v4.6: uursleutels komen als int terug.
+    c.washing_machine_usage_hourly_history = {9: 2}
     c.living_room_temp_bucket_humidity = {"24.0": [45.0, 46.0]}
     c.battery_cooling_history = [{"actie": "aan", "reden": "test"}]
     c.actual_cost_today_eur = 1.11
@@ -138,7 +139,7 @@ def test_appliance_learning_survives(make_coordinator, hass):
     verse = _herstart(make_coordinator, bron)
 
     assert verse.dishwasher_cycle_duration_history == [120.0, 130.0]
-    assert verse.washing_machine_usage_hourly_history == {"9": 2}
+    assert verse.washing_machine_usage_hourly_history == {9: 2}
 
 
 def test_mode_change_log_survives(make_coordinator, hass):

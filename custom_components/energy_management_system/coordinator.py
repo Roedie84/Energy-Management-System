@@ -3463,13 +3463,20 @@ class EnergyManagementSystemCoordinator:
         active at least `threshold` fraction of the time, sorted.
         Informational only.
         """
+        # v4.6: sleutels als int, wat er ook in de opslag staat. Wat er
+        # al bewaard is, is deels tekst (JSON); een reeks die half tekst
+        # is mag deze sensor niet omgooien.
         typical_hours = []
-        for hour, samples in history.items():
+        for hour, samples in (history or {}).items():
             if not samples:
                 continue
+            try:
+                uur = int(hour)
+            except (TypeError, ValueError):
+                continue
             if sum(samples) / len(samples) >= threshold:
-                typical_hours.append(hour)
-        return sorted(typical_hours)
+                typical_hours.append(uur)
+        return sorted(set(typical_hours))
 
     def _check_and_notify_appliance_ready(
         self,
