@@ -1567,49 +1567,22 @@ views:
         **Hoe dit werkt.** Draait de vaatwasser of wasmachine, dan gaat het water daarheen. Maakt de CV-ketel warm water, dan is het douchen (langer dan 3 minuten) of handen wassen. Is de Quooker actief, dan is het de keuken. Staat er niets aan, dan blijft het volumepatroon over - een wc-spoeling is opvallend constant.
 
 
-        _Klopt een toewijzing niet? Tik hieronder op de juiste bron; dat bevestigt de laatste sessie met een vraagteken. Een andere sessie: actie `confirm_water_source`, veld `sessie` (`08:06`)._'
+        _Klopt een toewijzing niet? Bevestig hieronder, net als bij de apparaten. Andere sessie: actie `confirm_water_source`, veld `sessie` (`08:06`)._'
       grid_options:
         columns: 12
         rows: auto
-    - type: custom:mushroom-chips-card
-      alignment: start
-      chips:
-      - type: entity
-        entity: button.woonkamer_energy_management_system_water_was_toilet
-        icon: mdi:toilet
-        content_info: name
-        tap_action:
-          action: toggle
-      - type: entity
-        entity: button.woonkamer_energy_management_system_water_was_douche
-        icon: mdi:shower
-        content_info: name
-        tap_action:
-          action: toggle
-      - type: entity
-        entity: button.woonkamer_energy_management_system_water_was_keuken
-        icon: mdi:silverware-fork-knife
-        content_info: name
-        tap_action:
-          action: toggle
-      - type: entity
-        entity: button.woonkamer_energy_management_system_water_was_vaatwasser
-        icon: mdi:dishwasher
-        content_info: name
-        tap_action:
-          action: toggle
-      - type: entity
-        entity: button.woonkamer_energy_management_system_water_was_wasmachine
-        icon: mdi:washing-machine
-        content_info: name
-        tap_action:
-          action: toggle
-      - type: entity
-        entity: button.woonkamer_energy_management_system_water_was_waterontharder
-        icon: mdi:water-opacity
-        content_info: name
-        tap_action:
-          action: toggle
+    - type: entities
+      title: Bevestig de laatste onbekende watersessie
+      entities:
+      - entity: button.woonkamer_energy_management_system_water_was_toilet
+      - entity: button.woonkamer_energy_management_system_water_was_douche
+      - entity: button.woonkamer_energy_management_system_water_was_keuken
+      - entity: button.woonkamer_energy_management_system_water_was_vaatwasser
+      - entity: button.woonkamer_energy_management_system_water_was_wasmachine
+      - entity: button.woonkamer_energy_management_system_water_was_waterontharder
+      grid_options:
+        columns: 12
+        rows: auto
 - title: Klimaat
   path: detail-klimaat
   subview: true
