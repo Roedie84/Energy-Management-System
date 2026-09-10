@@ -204,3 +204,48 @@ def test_de_bevestigingskaart_is_een_kernkaart_met_een_kop():
     tabel = next(n for n, k in enumerate(kaarten) if "Waar ging het water heen" in str(k.get("title") or ""))
     assert kaarten.index(kaart) == tabel + 1
     assert not any(k.get("type") == "custom:mushroom-chips-card" for k in kaarten)
+
+
+def test_het_unique_id_is_opgehoogd_na_de_verkeerde_registratie(make_coordinator, hass):
+    """v4.9.4. Gemeld: de kaart toont zes keer "Entiteit niet gevonden".
+
+    De knoppen van v4.9.1 registreerden zonder `device_info` als
+    `button.water_was_*`, en die toewijzing van unique_id naar entity_id
+    is permanent in het register. Het entity_id in v4.9.2 met de hand
+    zetten hielp dus niet - het register hield vast wat het al wist.
+
+    Precies wat er bij de NILM-knoppen staat, met "_v3" als uitkomst.
+    Een nieuw unique_id heeft niets om mee te botsen.
+    """
+    from custom_components.energy_management_system.button import WaterbronKnop
+
+    knop = WaterbronKnop(make_coordinator({}), "entry1", "toilet")
+
+    assert knop._attr_unique_id.endswith("_v2")
+    assert knop.entity_id == (
+        "button.woonkamer_energy_management_system_water_was_toilet"
+    )
+
+
+def test_elke_knop_met_een_vast_entity_id_heeft_een_versiesuffix():
+    """De ratel: zet een knop zijn entity_id met de hand, dan hoort het
+    unique_id een generatiesuffix te hebben - anders is een verkeerde
+    eerste registratie niet meer te herstellen."""
+    import re
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    bron = (Path(pkg.__file__).parent / "button.py").read_text()
+    # De duplicaatknoppen (v0.63.118) zijn hun eerste generatie en zijn
+    # nooit verkeerd geregistreerd; die hebben geen suffix nodig. Zodra
+    # er WEL een generatie bij komt, hoort hij er te staan - vandaar de
+    # lijst met wat al gecontroleerd is.
+    ZONDER_SUFFIX = {"_NilmDuplicateSlotButton"}
+    for blok in re.split(r"\nclass ", bron)[1:]:
+        naam = blok.split("(")[0]
+        if "self.entity_id = " not in blok or naam in ZONDER_SUFFIX:
+            continue
+        m = re.search(r"_attr_unique_id = f\"([^\"]+)\"", blok)
+        assert m, naam
+        assert re.search(r"_v\d$", m.group(1)), f"{naam}: {m.group(1)}"

@@ -557,7 +557,23 @@ class WaterbronKnop(ButtonEntity):
         self._coordinator = coordinator
         self._bron = bron
         self._attr_name = f"Water was {bron}"
-        self._attr_unique_id = f"{entry_id}_water_bevestig_{bron}"
+        # v4.9.4: "_v2". De knoppen van v4.9.1 hadden geen `device_info`,
+        # dus registreerde Home Assistant ze als `button.water_was_*` -
+        # en zo'n toewijzing van unique_id naar entity_id is PERMANENT in
+        # het register. Het entity_id in v4.9.2 met de hand zetten hielp
+        # daarom niet: het register hield vast wat het al wist, en de
+        # kaart bleef "Entiteit niet gevonden" tonen.
+        #
+        # Dat staat precies zo beschreven bij de NILM-knoppen, dertig
+        # regels hierboven, met "_v3" als uitkomst. Dit is de derde keer
+        # in deze knoppen dat ik een les negeerde die in dit bestand al
+        # was opgeschreven.
+        #
+        # Met een nieuw unique_id is er niets om mee te botsen en komen
+        # de knoppen bij de eerstvolgende herstart onder het juiste
+        # entity_id. De oude entiteiten worden niet meer aangeboden en
+        # kunnen weg wanneer het uitkomt.
+        self._attr_unique_id = f"{entry_id}_water_bevestig_{bron}_v2"
         # v4.9.2: het apparaat en het entiteits-id expliciet. Zonder
         # `device_info` leidt Home Assistant met `has_entity_name = True`
         # het id af zonder apparaatnaam - `button.water_was_toilet` - en

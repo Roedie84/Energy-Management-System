@@ -24695,3 +24695,37 @@ meekomt, en dat is nu ook zo: elke levering bevat
 `dashboard_template.yaml`.
 
 **Volledige testsuite**: 3749 tests, allemaal groen.
+
+
+## v4.9.4 — Het register hield de verkeerde naam vast
+
+**Gemeld**: de kaart staat er, en toont zes keer "Entiteit niet
+gevonden".
+
+De knoppen van v4.9.1 registreerden zonder `device_info`, dus gaf Home
+Assistant ze het entiteits-id `button.water_was_*`. Zo'n toewijzing van
+unique_id naar entity_id is PERMANENT in het entiteitenregister. Het
+entity_id in v4.9.2 met de hand zetten hielp daarom niet: het register
+hield vast wat het al wist, en de kaart bleef naar een niet-bestaande
+naam wijzen.
+
+Met een nieuw unique_id (`_v2`) is er niets om mee te botsen en komen de
+knoppen bij de eerstvolgende herstart onder het juiste id. De oude
+entiteiten worden niet meer aangeboden en kunnen weg wanneer het
+uitkomt.
+
+### Dit staat al in hetzelfde bestand
+
+Dertig regels boven mijn klasse staat de hele geschiedenis van de
+NILM-knoppen: het dynamische id, `suggested_object_id` dat niet werkte,
+de "_v2"-generatie die met een gededupliceerd id in het register kwam,
+en "_v3" als uitkomst - met de uitleg dat zo'n toewijzing nooit meer
+wordt opgewaardeerd. Drie keer op rij heb ik in deze knoppen een les
+genegeerd die er al stond: eerst `device_info`, toen het expliciete
+entity_id, nu de generatiesuffix.
+
+Er staat nu een ratel onder: zet een knop zijn entity_id met de hand,
+dan moet het unique_id een generatiesuffix hebben. Anders is een
+verkeerde eerste registratie niet meer te herstellen.
+
+**Volledige testsuite**: 3751 tests, allemaal groen.
