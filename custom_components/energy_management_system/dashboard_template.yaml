@@ -1574,12 +1574,12 @@ views:
     - type: entities
       title: Bevestig de laatste onbekende watersessie
       entities:
-      - entity: button.woonkamer_energy_management_system_water_was_toilet
-      - entity: button.woonkamer_energy_management_system_water_was_douche
-      - entity: button.woonkamer_energy_management_system_water_was_keuken
-      - entity: button.woonkamer_energy_management_system_water_was_vaatwasser
-      - entity: button.woonkamer_energy_management_system_water_was_wasmachine
-      - entity: button.woonkamer_energy_management_system_water_was_waterontharder
+      - entity: button.water_was_toilet
+      - entity: button.water_was_douche
+      - entity: button.water_was_keuken
+      - entity: button.water_was_vaatwasser
+      - entity: button.water_was_wasmachine
+      - entity: button.water_was_waterontharder
       grid_options:
         columns: 12
         rows: auto

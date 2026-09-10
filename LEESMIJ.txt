@@ -1,10 +1,9 @@
-EMS v4.9.4 - alleen de wijzigingen sinds v4.9.3
+EMS v4.9.5 - alleen de wijzigingen sinds v4.9.4
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
 
-    button.py
-    dashboard_template.yaml     (gaat altijd mee, ook ongewijzigd)
-    manifest.json, bestandscontrole.json
+    button.py, dashboard_template.yaml, manifest.json,
+    bestandscontrole.json
 
 NAAR DE REPO
 
@@ -14,17 +13,14 @@ NAAR DE REPO
 
 WAT ER VERANDERT
 
-De zes waterknoppen krijgen een nieuw unique_id (_v2). Het register had
-de verkeerde naam uit v4.9.1 permanent vastgelegd - button.water_was_*
-in plaats van button.woonkamer_energy_management_system_water_was_*.
-Een nieuw unique_id heeft niets om mee te botsen.
+De kaart wijst nu naar button.water_was_<bron> - de entiteiten die je
+al hebt en die werken. Geen nieuwe entiteiten, geen wezen. De _v2 van
+v4.9.4 is teruggedraaid.
 
 NA DE HERSTART
 
 De kaart "Bevestig de laatste onbekende watersessie" hoort zes werkende
-regels te tonen. Blijft er "Entiteit niet gevonden" staan, kijk dan in
-Instellingen > Apparaten en diensten > Entiteiten (filter: water_was)
-welke ids er nu zijn - stuur die dan door.
-
-De zes oude entiteiten button.water_was_* worden niet meer aangeboden
-en kun je daar verwijderen wanneer het uitkomt.
+regels te tonen. Zes entiteiten die v4.9.4 mogelijk heeft aangemaakt
+(button.woonkamer_energy_management_system_water_was_*) worden niet
+meer aangeboden; die kun je verwijderen via Instellingen > Apparaten en
+diensten > Entiteiten.

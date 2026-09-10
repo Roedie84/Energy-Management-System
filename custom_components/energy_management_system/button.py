@@ -557,32 +557,24 @@ class WaterbronKnop(ButtonEntity):
         self._coordinator = coordinator
         self._bron = bron
         self._attr_name = f"Water was {bron}"
-        # v4.9.4: "_v2". De knoppen van v4.9.1 hadden geen `device_info`,
-        # dus registreerde Home Assistant ze als `button.water_was_*` -
-        # en zo'n toewijzing van unique_id naar entity_id is PERMANENT in
-        # het register. Het entity_id in v4.9.2 met de hand zetten hielp
-        # daarom niet: het register hield vast wat het al wist, en de
-        # kaart bleef "Entiteit niet gevonden" tonen.
+        # v4.9.5: het unique_id blijft dat van v4.9.1, en het entity_id
+        # is de naam die Home Assistant er toen aan gaf. Dat is de omgekeerde
+        # weg van v4.9.2 tot v4.9.4: niet de entiteiten naar de kaart
+        # verplaatsen, maar de kaart naar de entiteiten.
         #
-        # Dat staat precies zo beschreven bij de NILM-knoppen, dertig
-        # regels hierboven, met "_v3" als uitkomst. Dit is de derde keer
-        # in deze knoppen dat ik een les negeerde die in dit bestand al
-        # was opgeschreven.
+        # De zes knoppen werkten al vanaf v4.9.1 - ze zitten aan het
+        # apparaat, hebben de goede naam en doen wat ze moeten. Alleen
+        # het ID week af van wat de kaart verwachtte, omdat de eerste
+        # registratie zonder `device_info` gebeurde en het register die
+        # toewijzing voorgoed vasthoudt. Drie leveringen heb ik geprobeerd
+        # het register te overtuigen; dat had er nul moeten zijn.
         #
-        # Met een nieuw unique_id is er niets om mee te botsen en komen
-        # de knoppen bij de eerstvolgende herstart onder het juiste
-        # entity_id. De oude entiteiten worden niet meer aangeboden en
-        # kunnen weg wanneer het uitkomt.
-        self._attr_unique_id = f"{entry_id}_water_bevestig_{bron}_v2"
-        # v4.9.2: het apparaat en het entiteits-id expliciet. Zonder
-        # `device_info` leidt Home Assistant met `has_entity_name = True`
-        # het id af zonder apparaatnaam - `button.water_was_toilet` - en
-        # dan wijzen de zes kaarten naar niets. De NILM-knoppen zetten
-        # het id om dezelfde reden met de hand: het hangt anders af van
-        # de naam die het apparaat bij de gebruiker heeft.
-        self.entity_id = (
-            f"button.woonkamer_energy_management_system_water_was_{bron}"
-        )
+        # Expliciet gezet, dus deterministisch: op een nieuwe installatie
+        # heten ze precies hetzelfde als hier.
+        self.entity_id = f"button.water_was_{bron}"
+        self._attr_unique_id = f"{entry_id}_water_bevestig_{bron}"
+        # v4.9.2: het apparaat erbij, zodat de knop bij de integratie
+        # hoort in plaats van los in de lijst te staan.
         self._attr_device_info = {
             "identifiers": {(DOMAIN, entry_id)},
             "name": DEFAULT_NAME,

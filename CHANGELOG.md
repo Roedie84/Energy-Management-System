@@ -24729,3 +24729,36 @@ dan moet het unique_id een generatiesuffix hebben. Anders is een
 verkeerde eerste registratie niet meer te herstellen.
 
 **Volledige testsuite**: 3751 tests, allemaal groen.
+
+
+## v4.9.5 — De kaart naar de knoppen, niet de knoppen naar de kaart
+
+**Gemeld** met een lijst uit Ontwikkelhulpmiddelen:
+
+```
+button.water_was_douche    Energy Management System   Woonkamer
+button.water_was_keuken    Energy Management System   Woonkamer
+button.water_was_toilet    ...
+```
+
+Zes entiteiten, aan het apparaat, met de goede naam, met de juiste
+attributen. Werkend. Ze bestaan sinds v4.9.1.
+
+Het enige dat niet klopte, was dat het ID afwijkt van wat de kaart
+verwachtte - omdat de eerste registratie zonder `device_info` gebeurde
+en het entiteitenregister die toewijzing voorgoed vasthoudt. In v4.9.2,
+v4.9.3 en v4.9.4 heb ik geprobeerd de entiteiten naar de kaart te
+verplaatsen: `device_info` erbij, het entity_id met de hand zetten, het
+unique_id ophogen. Drie leveringen, drie herstarts.
+
+De kaart naar de entiteiten brengen is één regel. Dat had de eerste
+zet moeten zijn: er werkte iets, en ik ben aan de werkende kant gaan
+schuiven in plaats van aan de kant die het probleem had.
+
+Het entity_id staat nu expliciet op `button.water_was_<bron>` - gelijk
+aan wat er geregistreerd staat, en deterministisch, dus op een nieuwe
+installatie heten ze precies hetzelfde. Het unique_id is dat van
+v4.9.1, dus er komen geen nieuwe entiteiten bij en er blijven geen
+wezen achter. De `_v2` van v4.9.4 is teruggedraaid.
+
+**Volledige testsuite**: 3751 tests, allemaal groen.

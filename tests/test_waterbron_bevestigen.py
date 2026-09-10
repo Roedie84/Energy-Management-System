@@ -131,9 +131,7 @@ def test_de_knop_hangt_aan_het_apparaat_en_heeft_een_vaste_entiteit(make_coordin
     knop = WaterbronKnop(make_coordinator({}), "entry1", "toilet")
 
     assert knop._attr_device_info["identifiers"] == {(DOMAIN, "entry1")}
-    assert knop.entity_id == (
-        "button.woonkamer_energy_management_system_water_was_toilet"
-    )
+    assert knop.entity_id == "button.water_was_toilet"
 
 
 def test_elke_bron_krijgt_een_eigen_entiteit(make_coordinator, hass):
@@ -206,8 +204,17 @@ def test_de_bevestigingskaart_is_een_kernkaart_met_een_kop():
     assert not any(k.get("type") == "custom:mushroom-chips-card" for k in kaarten)
 
 
-def test_het_unique_id_is_opgehoogd_na_de_verkeerde_registratie(make_coordinator, hass):
-    """v4.9.4. Gemeld: de kaart toont zes keer "Entiteit niet gevonden".
+def test_de_kaart_wijst_naar_de_bestaande_entiteiten(make_coordinator, hass):
+    """v4.9.5. Gemeld met een lijst uit Ontwikkelhulpmiddelen:
+    `button.water_was_toilet` en vijf soortgenoten, aan het apparaat, met
+    de goede naam - werkend.
+
+    Die knoppen bestaan sinds v4.9.1. Alleen het ID week af van wat de
+    kaart verwachtte, omdat de eerste registratie zonder `device_info`
+    gebeurde en het register die toewijzing voorgoed vasthoudt. In
+    v4.9.2 tot v4.9.4 heb ik geprobeerd de entiteiten naar de kaart te
+    verplaatsen - drie leveringen. De kaart naar de entiteiten brengen
+    was één regel.
 
     De knoppen van v4.9.1 registreerden zonder `device_info` als
     `button.water_was_*`, en die toewijzing van unique_id naar entity_id
@@ -221,10 +228,10 @@ def test_het_unique_id_is_opgehoogd_na_de_verkeerde_registratie(make_coordinator
 
     knop = WaterbronKnop(make_coordinator({}), "entry1", "toilet")
 
-    assert knop._attr_unique_id.endswith("_v2")
-    assert knop.entity_id == (
-        "button.woonkamer_energy_management_system_water_was_toilet"
-    )
+    # v4.9.5: geen nieuwe generatie. De entiteiten van v4.9.1 werken;
+    # de KAART is naar hun naam toe gegaan in plaats van andersom.
+    assert knop._attr_unique_id == "entry1_water_bevestig_toilet"
+    assert knop.entity_id == "button.water_was_toilet"
 
 
 def test_elke_knop_met_een_vast_entity_id_heeft_een_versiesuffix():
@@ -248,4 +255,8 @@ def test_elke_knop_met_een_vast_entity_id_heeft_een_versiesuffix():
             continue
         m = re.search(r"_attr_unique_id = f\"([^\"]+)\"", blok)
         assert m, naam
+        # v4.9.5: WaterbronKnop heeft geen suffix nodig - zijn
+        # entity_id is juist gelijk aan wat er al geregistreerd staat.
+        if naam == "WaterbronKnop":
+            continue
         assert re.search(r"_v\d$", m.group(1)), f"{naam}: {m.group(1)}"
