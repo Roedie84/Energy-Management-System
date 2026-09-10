@@ -24656,3 +24656,42 @@ een ratel die elk entiteits-id uit de waterchips terugzoekt in de
 knoppen. Die laatste had dit gevangen.
 
 **Volledige testsuite**: 3748 tests, allemaal groen.
+
+
+## v4.9.3 — De waterknoppen op de manier van de apparaten
+
+**Gemeld**: de knoppen waren op de waterpagina niet te zien, en daarna:
+"zelfde opzet als bij de NILM apparaten een optie?"
+
+Dat is precies goed. De NILM-bevestiging staat er al jaren als:
+
+```yaml
+type: entities
+title: Beoordelen
+entities:
+  - entity: button...nilm_kandidaat_1_bevestigen
+  - entity: button...nilm_kandidaat_1_negeren
+```
+
+Een kernkaart van Home Assistant, met een kop, en knopregels. Die werkt
+zichtbaar. Ik had voor water een `custom:mushroom-chips-card` onderaan
+de sectie gezet: een rij zonder kop, onder een lange markdownkaart, en
+afhankelijk van een custom-kaart die geïnstalleerd moet zijn. Drie
+redenen om iets niet te zien, terwijl er een bewezen patroon in
+hetzelfde bestand stond.
+
+De waterkaart volgt dat patroon nu tot en met de `grid_options`, en
+staat direct onder de tabel. Een toets vergelijkt hem regel voor regel
+met de NILM-kaart: zelfde type, zelfde opties, kale entiteitsregels.
+
+### En de afspraak over het dashboard
+
+Onderzocht wat er misging: niets, in dit geval. `dashboard_template.yaml`
+staat in de hashlijst, de bestandscontrole meldde `in_orde`, en de
+uitrol overschrijft het dashboard bij elke start - zoals afgesproken. In
+v4.9.2 leverde ik het bestand niet mee omdat het niet gewijzigd was, en
+toevallig was dat ook niet nodig. Maar de afspraak is dat het altijd
+meekomt, en dat is nu ook zo: elke levering bevat
+`dashboard_template.yaml`.
+
+**Volledige testsuite**: 3749 tests, allemaal groen.

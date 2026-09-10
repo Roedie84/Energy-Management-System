@@ -1,25 +1,30 @@
-EMS v4.9.2 - alleen de wijzigingen sinds v4.9.1
+EMS v4.9.3 - VOLLEDIGE integratiemap
 
-TE KOPIEREN naar config/custom_components/energy_management_system/
+Deze levering bevat ALLE bestanden van de integratie, niet alleen de
+gewijzigde. Zo kan het dashboard niet meer achterlopen op de code -
+dat is de afspraak, en die heb ik in v4.9.2 niet nagekomen.
 
-    button.py, manifest.json, bestandscontrole.json
+TE KOPIEREN
+
+    De hele map custom_components/energy_management_system/ over de
+    bestaande heen. Daarna Home Assistant herstarten.
 
 NAAR DE REPO
 
-    README.md, CHANGELOG.md, tests/test_waterbron_bevestigen.py
+    README.md, CHANGELOG.md
+    dashboards/energy_management_system_dashboard.yaml
+    alle gewijzigde toetsbestanden
 
 WAT ER VERANDERT
 
-De zes waterknoppen krijgen het juiste entiteits-id. Ze werden wel
-aangemaakt, maar zonder apparaatkoppeling - en dan heet de entiteit
-button.water_was_toilet in plaats van
-button.woonkamer_energy_management_system_water_was_toilet. Vandaar
-"6 dashboardkaart(en) wijzen naar niets".
+De waterbevestiging staat nu als kaart op de waterpagina, in dezelfde
+opzet als de NILM-beoordeling: type entities, met een kop, direct onder
+de tabel. Geen mushroom-chips meer, want die kaart moet geinstalleerd
+zijn en stond zonder kop onderaan.
 
-NA DE HERSTART
+CONTROLE NA DE HERSTART
 
-De waarschuwing over de zes kaarten hoort weg te zijn en de chips op de
-waterpagina moeten werken. Mogelijk staan er nog zes verweesde
-entiteiten button.water_was_* in het entiteitenregister van de vorige
-poging; die kun je verwijderen via Instellingen > Apparaten en diensten
-> Entiteiten (filter op "water_was").
+    versie:            4.9.3
+    bestandscontrole:  in_orde true, 22 bestanden
+    waterpagina:       kaart "Bevestig de laatste onbekende watersessie"
+                       met zes regels, direct onder de tabel

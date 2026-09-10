@@ -159,3 +159,48 @@ def test_de_kaart_wijst_naar_bestaande_entiteiten():
     for bron in WATERBRONNEN:
         entiteit = WaterbronKnop(None, "entry1", bron).entity_id
         assert entiteit in kaart, entiteit
+
+
+def test_de_bevestigingskaart_is_een_kernkaart_met_een_kop():
+    """v4.9.3. Gemeld: de knoppen waren op de waterpagina niet te zien.
+
+    Ze stonden er wel, als `custom:mushroom-chips-card` onderaan de
+    sectie - een chipsrij zonder kop, onder een lange markdownkaart, en
+    afhankelijk van een custom-kaart die geïnstalleerd moet zijn. Drie
+    redenen om iets niet te zien.
+
+    Gevraagd: "zelfde opzet als bij de NILM apparaten een optie?" - en
+    dat is precies goed: de NILM-bevestiging gebruikt `type: entities`
+    met de kop "Beoordelen" en knopregels, en die werkt zichtbaar. Deze
+    kaart volgt die opzet tot en met de grid_options; geen custom-kaart
+    die geïnstalleerd moet zijn.
+    """
+    import yaml
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    d = yaml.safe_load((Path(pkg.__file__).parent / "dashboard_template.yaml").read_text())
+    water = next(v for v in d["views"] if v.get("title") == "Water")
+    kaarten = water["sections"][0]["cards"]
+    kaart = next(
+        k for k in kaarten
+        if k.get("title") == "Bevestig de laatste onbekende watersessie"
+    )
+    # exact de opzet van de NILM-beoordelingskaart: kern-`entities`, een
+    # kop, kale entiteitsregels, dezelfde grid_options.
+    nilm = next(
+        k
+        for v in d["views"]
+        for s in v.get("sections") or []
+        for k in (s.get("cards") or [])
+        if k.get("type") == "entities" and k.get("title") == "Beoordelen"
+    )
+    assert kaart["type"] == nilm["type"]
+    assert kaart.get("grid_options") == nilm.get("grid_options")
+    assert len(kaart["entities"]) == len(WATERBRONNEN)
+    assert all(set(r) == {"entity"} for r in kaart["entities"])
+    # direct onder de tabel, niet onderaan de pagina
+    tabel = next(n for n, k in enumerate(kaarten) if "Waar ging het water heen" in str(k.get("title") or ""))
+    assert kaarten.index(kaart) == tabel + 1
+    assert not any(k.get("type") == "custom:mushroom-chips-card" for k in kaarten)
