@@ -223,17 +223,9 @@ views:
         rows: auto
     - type: custom:mushroom-template-card
       primary: Verbruiksleer opnieuw beginnen
-      secondary: >-
-        {% set e = 'button.woonkamer_energy_management_system_verbruiksleer_opnieuw_beginnen'
-        %}{% set wacht = state_attr(e, 'seconden_resterend') %}{% if wacht %}DRUK
-        NOGMAALS binnen {{ wacht }} s om te bevestigen{% else %}{% set l =
-        state_attr(e, 'laatste_reset') %}{{ 'laatst ' ~
-        (as_timestamp(l) | timestamp_custom('%-d %b %H:%M')) if l and l !=
-        'nog niet gebruikt' else 'nog niet gebruikt' }}{% endif %}
+      secondary: '{% set e = ''button.woonkamer_energy_management_system_verbruiksleer_opnieuw_beginnen'' %}{% set wacht = state_attr(e, ''seconden_resterend'') %}{% if wacht %}DRUK NOGMAALS binnen {{ wacht }} s om te bevestigen{% else %}{% set l = state_attr(e, ''laatste_reset'') %}{{ ''laatst '' ~ (as_timestamp(l) | timestamp_custom(''%-d %b %H:%M'')) if l and l != ''nog niet gebruikt'' else ''nog niet gebruikt'' }}{% endif %}'
       icon: mdi:broom
-      icon_color: >-
-        {{ 'red' if state_attr('button.woonkamer_energy_management_system_verbruiksleer_opnieuw_beginnen',
-        'bevestiging_nodig') else 'grey' }}
+      icon_color: '{{ ''red'' if state_attr(''button.woonkamer_energy_management_system_verbruiksleer_opnieuw_beginnen'', ''bevestiging_nodig'') else ''grey'' }}'
       entity: button.woonkamer_energy_management_system_verbruiksleer_opnieuw_beginnen
       tap_action:
         action: toggle
@@ -1575,10 +1567,49 @@ views:
         **Hoe dit werkt.** Draait de vaatwasser of wasmachine, dan gaat het water daarheen. Maakt de CV-ketel warm water, dan is het douchen (langer dan 3 minuten) of handen wassen. Is de Quooker actief, dan is het de keuken. Staat er niets aan, dan blijft het volumepatroon over - een wc-spoeling is opvallend constant.
 
 
-        _Klopt een toewijzing niet? Roep de actie `confirm_water_source` aan met de juiste bron. Na een paar bevestigingen herkent de integratie jouw eigen patroon in plaats van een vuistregel._'
+        _Klopt een toewijzing niet? Tik hieronder op de juiste bron; dat bevestigt de laatste sessie met een vraagteken. Een andere sessie: actie `confirm_water_source`, veld `sessie` (`08:06`)._'
       grid_options:
         columns: 12
         rows: auto
+    - type: custom:mushroom-chips-card
+      alignment: start
+      chips:
+      - type: entity
+        entity: button.woonkamer_energy_management_system_water_was_toilet
+        icon: mdi:toilet
+        content_info: name
+        tap_action:
+          action: toggle
+      - type: entity
+        entity: button.woonkamer_energy_management_system_water_was_douche
+        icon: mdi:shower
+        content_info: name
+        tap_action:
+          action: toggle
+      - type: entity
+        entity: button.woonkamer_energy_management_system_water_was_keuken
+        icon: mdi:silverware-fork-knife
+        content_info: name
+        tap_action:
+          action: toggle
+      - type: entity
+        entity: button.woonkamer_energy_management_system_water_was_vaatwasser
+        icon: mdi:dishwasher
+        content_info: name
+        tap_action:
+          action: toggle
+      - type: entity
+        entity: button.woonkamer_energy_management_system_water_was_wasmachine
+        icon: mdi:washing-machine
+        content_info: name
+        tap_action:
+          action: toggle
+      - type: entity
+        entity: button.woonkamer_energy_management_system_water_was_waterontharder
+        icon: mdi:water-opacity
+        content_info: name
+        tap_action:
+          action: toggle
 - title: Klimaat
   path: detail-klimaat
   subview: true
