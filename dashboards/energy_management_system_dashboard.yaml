@@ -996,13 +996,13 @@ views:
   - type: custom:mushroom-title-card
     title: Laatst verstuurd
   - type: markdown
-    content: '{% set hist = state_attr(''sensor.woonkamer_energy_management_system_system_status'', ''meldingen_historie'') or [] %}{% if hist | length == 0 %}Nog geen meldingen verstuurd.{% else %}De laatste {{ hist | length }} meldingen, nieuwste bovenaan. Er worden er 200 bewaard; ze verdwijnen alleen als er nieuwere bijkomen, niet na een bepaalde tijd. 🔕 = wel vastgelegd, niet naar je telefoon gestuurd.
+    content: '{% set hist = state_attr(''sensor.woonkamer_energy_management_system_meldingen'', ''meldingen'') or [] %}{% if hist | length == 0 %}Nog geen meldingen verstuurd.{% else %}De laatste {{ hist | length }} meldingen, nieuwste bovenaan. Er worden er 200 bewaard; ze verdwijnen alleen als er nieuwere bijkomen, niet na een bepaalde tijd. 🔕 = wel vastgelegd, niet naar je telefoon gestuurd.
 
 
       {% for m in hist | reverse %}**{{ as_timestamp(m.moment) | timestamp_custom(''%-d %b %H:%M'') }} · {{ m.titel }}**{% if m.verstuurd is defined and not m.verstuurd %} 🔕{% endif %}
 
 
-      {{ m.bericht if m.bericht is defined and m.bericht else ''_(bericht niet bewaard — melding van vóór v1.6.3)_'' }}
+      {{ m.bericht if m.bericht is defined and m.bericht else ''_(geen tekst bewaard)_'' }}
 
 
       {% endfor %}{% endif %}

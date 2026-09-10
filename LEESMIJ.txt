@@ -1,26 +1,21 @@
-EMS v4.7 - alleen de wijzigingen sinds v4.6
+EMS v4.8 - alleen de wijzigingen sinds v4.7
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
 
-    const.py, coordinator.py, diagnostics.py
+    sensor.py
+    dashboard_template.yaml          LET OP: dashboard gewijzigd
     manifest.json, bestandscontrole.json
 
 NAAR DE REPO
 
-    README.md, CHANGELOG.md, vier toetsbestanden (twee nieuw)
+    README.md, CHANGELOG.md
+    dashboards/energy_management_system_dashboard.yaml
+    tests/test_meldingensensor.py (nieuw)
 
 WAT ER VERANDERT
 
-1. De dagmetingen overleven een herstart: laagste ochtendstand,
-   netimport 's nachts, kookpiek-vlag, hoogste ontlaadvermogen, wat de
-   lange horizon extra vasthield, en de dag waarop geteld wordt.
-   Zonder die bewaring wiste elke herstart ze stilzwijgend - en dat is
-   waarom "laagste_soc_ochtend" op null stond.
-2. Nieuwe proefstandkandidaat "Sneller laden bij zonoverschot": hoeveel
-   zon er naar het net ging terwijl de accu ruimte had. Meet, stuurt
-   niet, en is een bovengrens.
-3. nachtlast_per_apparaat staat in de export.
+Er komt een nieuwe entiteit bij: sensor.<naam>_meldingen. Die draagt de
+laatste twaalf meldingen met tekst, en de meldingenkaart leest hem.
+"(bericht niet bewaard - melding van voor v1.6.3)" is daarmee weg.
 
-De vaatwasser-entiteit: als het IP-conflict weg is, verdwijnt die
-foutregel bij de eerste ronde na de herstart. Blijft hij staan, dan is
-de entiteit toch hernoemd.
+Na de herstart heb je 118 entiteiten in plaats van 117.

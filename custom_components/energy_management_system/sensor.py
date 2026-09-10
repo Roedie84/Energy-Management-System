@@ -65,6 +65,7 @@ async def async_setup_entry(
         EffectiveExpensiveQuartersSensor(coordinator, entry.entry_id),
         LastDecisionReasonSensor(coordinator, entry.entry_id),
         SystemStatusSensor(coordinator, entry.entry_id),
+        MeldingenSensor(coordinator, entry.entry_id),
         MonthlySummarySensor(coordinator, entry.entry_id),
         ExplanationSensor(coordinator, entry.entry_id),
         SimulatedActionSensor(coordinator, entry.entry_id),
@@ -512,6 +513,71 @@ class LastDecisionReasonSensor(_CoordinatorDiagnosticSensor):
     @property
     def native_value(self) -> str | None:
         return self._coordinator.last_reason
+
+
+# Twintig volledige moduswisselberichten - het langste soort, tot 950
+# tekens - zijn 22 kB en dus zelf boven de recorder-grens. Twaalf past
+# ruim, en dat is nog steeds een halve dag aan meldingen.
+def _ingekort(tekst, maximum):
+    tekst = str(tekst or "")
+    return tekst if len(tekst) <= maximum else tekst[: maximum - 1] + "…"
+
+
+MELDINGEN_OP_DE_SENSOR = 12
+# Het bericht kan lang zijn (de uitleg van de energiebrug plus het
+# advies van v4.3). Voor de kaart is de kern genoeg; de volledige tekst
+# staat in de export en is al als notificatie verstuurd.
+MELDING_TEKST_MAX = 600
+
+
+class MeldingenSensor(_CoordinatorDiagnosticSensor):
+    """De meldingsgeschiedenis met de volledige tekst (v4.8).
+
+    Gemeld: "(bericht niet bewaard — melding van vóór v1.6.3)" bij een
+    melding van vanochtend. In v3.99.17 is het bericht van de
+    statussensor gehaald omdat het attributenblok boven de 16 kB van de
+    recorder kwam; de kaart verloor daarmee zijn tekst.
+
+    Dit is optie B uit die foutmelding: een aparte sensor. Twintig
+    meldingen met tekst blijft ruim onder de grens, `system_status`
+    blijft klein, en deze sensor herstelt niets - gaat de recorder hem
+    voorbij, dan is er niets verloren. De geschiedenis staat in de Store.
+    """
+
+    _attr_name = "Meldingen"
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        super().__init__(coordinator, entry_id, "meldingen")
+
+    @property
+    def native_value(self) -> int:
+        return len(self._coordinator.notification_history or [])
+
+    @property
+    def icon(self) -> str:
+        return "mdi:bell-outline"
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        historie = list(self._coordinator.notification_history or [])
+        return {
+            "meldingen": [
+                {
+                    "moment": m.get("moment"),
+                    "soort": m.get("soort"),
+                    "titel": m.get("titel"),
+                    "bericht": _ingekort(m.get("bericht"), MELDING_TEKST_MAX),
+                    "verstuurd": m.get("verstuurd"),
+                    "reden_niet_verstuurd": m.get("reden_niet_verstuurd"),
+                }
+                for m in reversed(historie[-MELDINGEN_OP_DE_SENSOR:])
+            ],
+            "bewaard": len(historie),
+            "toelichting": (
+                "De laatste meldingen met de volledige tekst. Er worden er 200 "
+                "bewaard in de opslag; deze sensor toont de laatste twintig."
+            ),
+        }
 
 
 class SystemStatusSensor(_CoordinatorDiagnosticSensor):

@@ -24419,3 +24419,42 @@ Ook `nachtlast_per_apparaat` staat nu in de export, zodat de
 apparaataanwijzing na te rekenen is in plaats van alleen af te lezen.
 
 **Volledige testsuite**: 3704 tests, allemaal groen.
+
+
+## v4.8 — De meldingskaart had zijn tekst verloren
+
+**Gemeld** met een schermafdruk van de meldingenpagina:
+
+```
+10 Sep 09:15 · 't Goedkope blok begint zo
+(bericht niet bewaard — melding van vóór v1.6.3)
+```
+
+Die melding is van vanochtend. Wat er staat, is een terugvaltekst uit
+v1.6.3 die nergens meer op slaat.
+
+De oorzaak is v3.99.17. Toen is het bericht van de statussensor gehaald
+— het attributenblok kwam boven de 16 kB van de recorder, waardoor Home
+Assistant de attributen van die sensor helemaal niet meer opsloeg. Ik
+heb de gegevens weggehaald en de kaart die ze gebruikt niet aangepast.
+De kaart viel terug op de tekst voor oude meldingen, en die was in dit
+geval onzin.
+
+### Optie B alsnog
+
+In je eigen foutmelding van 8 september stonden drie opties. Ik koos A
+(historie afslanken) plus C (begrenzen), en dat loste de recorder op ten
+koste van de kaart. Optie B was: een aparte sensor voor de meldingen.
+
+Die is er nu. `sensor.…_meldingen` draagt de laatste twaalf meldingen
+met tekst; `system_status` blijft klein en wordt weer opgeslagen. Twaalf
+en niet twintig, want twintig volledige moduswisselberichten zijn 22 kB
+— dan zou de nieuwe sensor zelf over de grens gaan. De tekst wordt op
+600 tekens afgekapt; de volledige versie staat in de export en is al als
+notificatie verstuurd.
+
+En de sensor herstelt niets bij het opstarten. Gaat de recorder hem
+voorbij, dan is er niets verloren: de geschiedenis staat in de Store.
+Een toets houdt dat vast.
+
+**Volledige testsuite**: 3710 tests, allemaal groen.
