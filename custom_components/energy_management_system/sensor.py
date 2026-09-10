@@ -229,6 +229,18 @@ def _store_wint(methode):
     import copy
     import functools
 
+    # v4.9: alleen velden met GEWONE gegevens. De omhulling nam eerst een
+    # kopie van elk veld, ook van objecten - en een kopie van een object
+    # is nooit hetzelfde object, dus leek het altijd veranderd en werd de
+    # coordinator op de kopie gezet. Daardoor las de coordinator een
+    # bevroren afdruk van de zonvoorspellingstracker, terwijl de
+    # originele de metingen bijhield: twee kaarten meldden "nog geen
+    # voltooide dagen" bij zeven dagen geschiedenis.
+    #
+    # Alle geleerde reeksen zijn lijst, dict, set, getal, tekst of datum.
+    # Objecten - trackers, Store, locks - blijven onaangeroerd.
+    GEWONE_GEGEVENS = (list, dict, set, tuple, int, float, str, bool, type(None))
+
     @functools.wraps(methode)
     async def omhulling(self):
         c = self._coordinator
@@ -236,6 +248,8 @@ def _store_wint(methode):
         voor = {}
         for k, v in list(c.__dict__.items()):
             if k in ("hass", "config", "_beginwaarden") or k.startswith("_unsub"):
+                continue
+            if not isinstance(v, GEWONE_GEGEVENS):
                 continue
             try:
                 voor[k] = copy.copy(v)
@@ -2246,7 +2260,11 @@ class ClimateForecastSensor(SensorEntity, RestoreEntity):
             ),
             "rolluikstand": self._coordinator.climate_shutter_state,
             "airco_status": self._coordinator.climate_airco_state,
-            "traject": self._coordinator.climate_forecast_trajectory,
+            # v4.9: met de gemeten temperatuur en de afwijking erbij.
+            "traject": self._coordinator._traject_met_metingen(
+                self._coordinator.climate_forecast_trajectory
+            ),
+            "kwaliteit": self._coordinator.get_klimaat_projectie_kwaliteit(),
             "geleerde_cellen": self._coordinator.climate_rate_history,
             "note": self._coordinator.climate_forecast_note,
             # v0.63.95, gevraagd: "zijn er zaken waardoor ik de
