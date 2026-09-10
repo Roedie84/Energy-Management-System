@@ -105,3 +105,57 @@ def test_de_knop_bevestigt_de_laatste_onbekende(make_coordinator, hass):
     asyncio.run(knop.async_press())
 
     assert c.water_session_history[1]["bron"] == "toilet"
+
+
+def test_de_knop_hangt_aan_het_apparaat_en_heeft_een_vaste_entiteit(make_coordinator, hass):
+    """v4.9.2. Gemeld na de installatie:
+
+        6 dashboardkaart(en) wijzen naar niets
+        Deze entiteiten bestaan niet (meer):
+        button.woonkamer_energy_management_system_water_was_douche ...
+
+    De knoppen werden wel aangemaakt, maar zonder `device_info`. Met
+    `has_entity_name = True` en geen apparaat leidt Home Assistant het
+    entiteits-id af zonder de apparaatnaam ervoor:
+    `button.water_was_toilet` in plaats van
+    `button.woonkamer_energy_management_system_water_was_toilet`. De
+    kaarten wezen dus naar iets dat niet bestond.
+
+    De bestaande knoppen doen twee dingen die ik oversloeg: ze zetten
+    `_attr_device_info`, en de NILM-knoppen zetten het entiteits-id
+    expliciet - juist omdat het anders van de apparaatnaam afhangt.
+    """
+    from custom_components.energy_management_system.button import WaterbronKnop
+    from custom_components.energy_management_system.const import DOMAIN
+
+    knop = WaterbronKnop(make_coordinator({}), "entry1", "toilet")
+
+    assert knop._attr_device_info["identifiers"] == {(DOMAIN, "entry1")}
+    assert knop.entity_id == (
+        "button.woonkamer_energy_management_system_water_was_toilet"
+    )
+
+
+def test_elke_bron_krijgt_een_eigen_entiteit(make_coordinator, hass):
+    from custom_components.energy_management_system.button import WaterbronKnop
+
+    c = make_coordinator({})
+    ids = {
+        WaterbronKnop(c, "entry1", bron).entity_id for bron in WATERBRONNEN
+    }
+
+    assert len(ids) == len(WATERBRONNEN)
+
+
+def test_de_kaart_wijst_naar_bestaande_entiteiten():
+    """De ratel: elk entiteits-id dat de waterchips gebruiken, moet door
+    een knop worden gezet."""
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+    from custom_components.energy_management_system.button import WaterbronKnop
+
+    kaart = (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
+    for bron in WATERBRONNEN:
+        entiteit = WaterbronKnop(None, "entry1", bron).entity_id
+        assert entiteit in kaart, entiteit

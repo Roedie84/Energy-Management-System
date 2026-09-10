@@ -558,6 +558,19 @@ class WaterbronKnop(ButtonEntity):
         self._bron = bron
         self._attr_name = f"Water was {bron}"
         self._attr_unique_id = f"{entry_id}_water_bevestig_{bron}"
+        # v4.9.2: het apparaat en het entiteits-id expliciet. Zonder
+        # `device_info` leidt Home Assistant met `has_entity_name = True`
+        # het id af zonder apparaatnaam - `button.water_was_toilet` - en
+        # dan wijzen de zes kaarten naar niets. De NILM-knoppen zetten
+        # het id om dezelfde reden met de hand: het hangt anders af van
+        # de naam die het apparaat bij de gebruiker heeft.
+        self.entity_id = (
+            f"button.woonkamer_energy_management_system_water_was_{bron}"
+        )
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
 
     def _open_sessie(self) -> dict | None:
         return next(

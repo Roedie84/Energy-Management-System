@@ -1,29 +1,25 @@
-EMS v4.9.1 - alle wijzigingen sinds v4.8
-
-Je draait v4.9. Het verschil met wat je hebt: de zes waterknoppen staan
-nu op de waterpagina, en de instructietekst wijst ernaar in plaats van
-naar Ontwikkelhulpmiddelen. De rest is gelijk.
-
-Dat het vorige pakket hetzelfde nummer had als wat er al draaide, was
-mijn fout - vandaar dit nummer.
+EMS v4.9.2 - alleen de wijzigingen sinds v4.9.1
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
 
-    const.py, coordinator.py, sensor.py, button.py, diagnostics.py
-    nabeschouwing.py
-    dashboard_template.yaml          LET OP: dashboard gewijzigd
-    manifest.json, bestandscontrole.json
+    button.py, manifest.json, bestandscontrole.json
 
 NAAR DE REPO
 
-    README.md, CHANGELOG.md
-    dashboards/energy_management_system_dashboard.yaml
-    alle gewijzigde toetsbestanden
+    README.md, CHANGELOG.md, tests/test_waterbron_bevestigen.py
 
-CONTROLE NA DE HERSTART
+WAT ER VERANDERT
 
-    manifest / diagnostiek: versie 4.9.1
-    bestandscontrole:       in_orde true, 22 bestanden
-    waterpagina:            zes chips onder de tabel
+De zes waterknoppen krijgen het juiste entiteits-id. Ze werden wel
+aangemaakt, maar zonder apparaatkoppeling - en dan heet de entiteit
+button.water_was_toilet in plaats van
+button.woonkamer_energy_management_system_water_was_toilet. Vandaar
+"6 dashboardkaart(en) wijzen naar niets".
 
-Staat er 4.9, dan is het dashboard niet meegekomen.
+NA DE HERSTART
+
+De waarschuwing over de zes kaarten hoort weg te zijn en de chips op de
+waterpagina moeten werken. Mogelijk staan er nog zes verweesde
+entiteiten button.water_was_* in het entiteitenregister van de vorige
+poging; die kun je verwijderen via Instellingen > Apparaten en diensten
+> Entiteiten (filter op "water_was").

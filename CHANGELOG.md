@@ -24625,3 +24625,34 @@ aanpak moeten zijn — een indeling met secties is geen tekst waarin je
 regels tussenvoegt.
 
 **Volledige testsuite**: 3745 tests, allemaal groen.
+
+
+## v4.9.2 — De zes knoppen bestonden niet
+
+**Gemeld** direct na de installatie:
+
+```
+6 dashboardkaart(en) wijzen naar niets
+Deze entiteiten bestaan niet (meer):
+button.woonkamer_energy_management_system_water_was_douche,
+..._water_was_keuken, ..._water_was_toilet
+```
+
+De knoppen werden wel aangemaakt, maar zonder `device_info`. Met
+`has_entity_name = True` en geen apparaat leidt Home Assistant het
+entiteits-id af zonder de apparaatnaam ervoor: `button.water_was_toilet`
+in plaats van `button.woonkamer_energy_management_system_water_was_toilet`.
+De kaarten wezen dus naar iets dat er niet was.
+
+Wat me had moeten waarschuwen: de bestaande knoppen in hetzelfde bestand
+doen twee dingen die ik oversloeg. Ze zetten `_attr_device_info`, en de
+NILM-knoppen zetten het entiteits-id met de hand — met een opmerking
+erbij dat het anders afhangt van de naam die het apparaat bij de
+gebruiker heeft. Ik heb een nieuwe klasse in een bestaand bestand gezet
+zonder het patroon van de buren te volgen.
+
+Beide staan er nu, met drie toetsen: het apparaat, het id per bron, en
+een ratel die elk entiteits-id uit de waterchips terugzoekt in de
+knoppen. Die laatste had dit gevangen.
+
+**Volledige testsuite**: 3748 tests, allemaal groen.
