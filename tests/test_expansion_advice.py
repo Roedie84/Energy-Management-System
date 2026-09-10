@@ -14,6 +14,9 @@ ontlaadvermogen (40% benutting), maar 7,7 kWh dagverbruik tegen 7,3 kWh
 bruikbare capaciteit en twee tekort-nachten. Het vermogen knelt dus niet,
 de capaciteit wel.
 """
+
+from datetime import date
+
 from custom_components.energy_management_system.const import (
     CONF_BATTERY_TOTAL_CAPACITY_SENSOR,
     CONF_MANUAL_DISCHARGE_POWER,
@@ -46,6 +49,9 @@ def _coordinator(make_coordinator, hass, profiel=None, tekorten=True,
     c.hourly_consumption_profile = {
         uur: [waarde] * 3 for uur, waarde in (profiel or ECHT_PROFIEL).items()
     }
+    # v4.9: de jaaropbrengst rekent met de LOOPTIJD (first_seen_date),
+    # niet met het leervenster van zeven dagen.
+    c.first_seen_date = date(2026, 4, 1)
     c.reserve_daily_records = [
         {"date": f"2026-08-0{d}", "shortfall": tekorten and d >= 7, "excess": False}
         for d in range(4, 9)
@@ -286,6 +292,9 @@ def _met_kosten(make_coordinator, hass):
     c.hourly_consumption_profile = {
         uur: [waarde] * 3 for uur, waarde in ECHT_PROFIEL.items()
     }
+    # v4.9: de jaaropbrengst rekent met de LOOPTIJD (first_seen_date),
+    # niet met het leervenster van zeven dagen.
+    c.first_seen_date = date(2026, 4, 1)
     c.reserve_daily_records = [
         {"date": f"2026-08-{x:02d}", "shortfall": x >= 8, "excess": False}
         for x in range(5, 11)

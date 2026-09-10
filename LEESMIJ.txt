@@ -1,8 +1,9 @@
-EMS v4.8 - alleen de wijzigingen sinds v4.7
+EMS v4.9 - alle wijzigingen sinds v4.8
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
 
-    sensor.py
+    const.py, coordinator.py, sensor.py, button.py, diagnostics.py
+    nabeschouwing.py
     dashboard_template.yaml          LET OP: dashboard gewijzigd
     manifest.json, bestandscontrole.json
 
@@ -10,12 +11,30 @@ NAAR DE REPO
 
     README.md, CHANGELOG.md
     dashboards/energy_management_system_dashboard.yaml
-    tests/test_meldingensensor.py (nieuw)
+    alle gewijzigde toetsbestanden
 
-WAT ER VERANDERT
+WAT ER VERANDERT IN BEDRIJF
 
-Er komt een nieuwe entiteit bij: sensor.<naam>_meldingen. Die draagt de
-laatste twaalf meldingen met tekst, en de meldingenkaart leest hem.
-"(bericht niet bewaard - melding van voor v1.6.3)" is daarmee weg.
+1. De piekprijsmelding noemt euro's in plaats van 8631642.
+2. De zonvoorspelling-kaarten werken weer: _store_wint maakte kopieen
+   van objecten, waardoor de coordinator een bevroren tracker las.
+3. Jaaropbrengst accu: gedeeld door de LOOPTIJD, niet door zeven dagen.
+   Verwacht ongeveer 165 EUR in plaats van 1222; de terugverdientijden
+   schuiven mee en het advies over uitbreiden verandert daarmee.
+4. Woonkamertemperatuur: gemeten waarde in de tabel, en een oordeel
+   over de projectie.
+5. ZES NIEUWE KNOPPEN: "Water was toilet/douche/keuken/vaatwasser/
+   wasmachine/waterontharder". Een tik bevestigt de laatste onbekende
+   sessie.
+6. De zelfcontrole meldt geen tweede reserve meer tijdens het goedkope
+   blok; de uitsplitsing veroudert niet.
+7. De proefstand telt 14 van 14.
+8. "Verder vooruitkijken bij de reserve" staat op "stuurt mee".
+9. De ijklijnkaart toont de eisen en de rangordescores.
 
-Na de herstart heb je 118 entiteiten in plaats van 117.
+NA DE HERSTART
+
+Je hebt zes entiteiten meer (de waterknoppen). Kijk op de weerpagina
+naar de rangordescores: die spreken de betrouwbaarheidsmeting mogelijk
+tegen, en dat is de eerste vraag als de ijklijn morgen zijn oordeel
+geeft.

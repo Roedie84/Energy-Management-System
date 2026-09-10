@@ -573,6 +573,9 @@ VLUCHTIG_MET_REDEN = {
     # v4.4: de losse metingen van de lopende nacht; de mediaan per nacht
     # gaat wel naar de Store (nachtlast_per_apparaat).
     "_nachtlast_monsters": "de mediaan per nacht wordt wel bewaard",
+    # v4.9: de losse metingen van het lopende uur; de mediaan per uur
+    # gaat wel naar de Store (woonkamertemp_gemeten_per_uur).
+    "_woonkamertemp_monsters": "de mediaan per uur wordt wel bewaard",
     "battery_cooling_state": "blijkt opnieuw uit de sensoren",
     # Halve metingen. Een stuk dat door een herstart een gat heeft, is
     # geen meting meer - beter opnieuw beginnen dan een verminkt getal

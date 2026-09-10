@@ -107,3 +107,88 @@ def test_de_beginwaarden_worden_vastgelegd(make_coordinator, hass):
     c = make_coordinator({})
     assert isinstance(c._beginwaarden, dict)
     assert "reserve_daily_records" in c._beginwaarden
+
+
+# --- v4.9: de omhulling maakte kopieën van objecten --------------------
+#
+# Twee kaarten meldden "Nog geen voltooide dagen om mee te vergelijken"
+# terwijl `deviation_history_percent` in de export zeven dagen bevatte.
+# Twee lezers, twee uitkomsten - want de coordinator keek naar een ANDER
+# object dan de export.
+#
+# De oorzaak is `_store_wint` zelf (v4.1). Die neemt vóór het herstel
+# een `copy.copy()` van elk veld en zet daarna elk veld terug dat
+# veranderd lijkt. Voor een lijst of dict is dat precies de bedoeling.
+# Voor een OBJECT - de zonvoorspellingstracker, een Store, een lock -
+# is de kopie nooit hetzelfde object, dus leek het altijd veranderd, en
+# werd de coordinator op de kopie gezet. Die kopie leeft daarna zijn
+# eigen leven: de tracker die de metingen bijhoudt is de originele, de
+# tracker die de coordinator leest is een bevroren afdruk.
+#
+# De omhulling kijkt nu alleen naar velden met GEWONE gegevens - lijst,
+# dict, set, getal, tekst, datum. Alle geleerde reeksen zijn dat; de
+# objecten blijven onaangeroerd.
+
+
+class _Tracker:
+    def __init__(self):
+        self.deviation_history = []
+
+
+def test_objecten_worden_niet_gekopieerd():
+    from custom_components.energy_management_system.sensor import _store_wint
+
+    class _Kaal2:
+        def __init__(self):
+            self.tracker = _Tracker()
+            self.reeks = []
+            self._beginwaarden = {"tracker": None, "reeks": []}
+
+    c = _Kaal2()
+    origineel = c.tracker
+    s = _Sensor(c, {"reeks": [1, 2]})
+
+    asyncio.run(_store_wint(s.__class__._herstel)(s))
+
+    assert c.tracker is origineel
+    assert c.reeks == [1, 2]
+
+
+def test_de_tracker_blijft_dezelfde_na_het_herstel():
+    """Het gemelde geval: de reeks van de tracker moet blijven groeien
+    op het object dat de coordinator leest."""
+    from custom_components.energy_management_system.sensor import _store_wint
+
+    class _Kaal3:
+        def __init__(self):
+            self.solar_tracker = _Tracker()
+            self._beginwaarden = {"solar_tracker": None}
+
+    c = _Kaal3()
+    s = _Sensor(c, {})
+
+    asyncio.run(_store_wint(s.__class__._herstel)(s))
+    c.solar_tracker.deviation_history.append(-19.1)
+
+    assert c.solar_tracker.deviation_history == [-19.1]
+
+
+def test_alle_objectvelden_zijn_beschermd():
+    """De ratel: elk veld op de coordinator dat een OBJECT is, moet
+    buiten de omhulling blijven. Naast de zonvoorspellingstracker zijn
+    dat de twee Stores en de twee locks - en die door een kopie
+    vervangen zou stiller en erger zijn dan een lege kaart.
+    """
+    import re
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    bron = (Path(pkg.__file__).parent / "sensor.py").read_text()
+    i = bron.index("def _store_wint")
+    j = bron.index("\ndef ", i + 10)
+    blok = bron[i:j]
+
+    assert "isinstance(v, GEWONE_GEGEVENS)" in blok
+    for soort in ("list", "dict", "set", "int", "float", "str", "bool"):
+        assert soort in blok, soort

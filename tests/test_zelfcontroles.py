@@ -26,8 +26,18 @@ NU = datetime(2026, 9, 9, 7, 0, tzinfo=timezone.utc)
 # --- 1. één reserve ----------------------------------------------------
 
 
+def _met_blok(c):
+    """v4.9: zonder goedkoop blok in zicht is er geen reserve, en dan
+    zwijgt de controle - zie test_reserve_uitsplitsing_vers.py."""
+    from custom_components.energy_management_system import coordinator as mod
+
+    mod.dt_util.now = lambda: NU
+    c.last_cheap_block_start = NU + timedelta(hours=8)
+
+
 def test_de_drie_lezers_worden_vergeleken(make_coordinator, hass):
     c = make_coordinator({})
+    _met_blok(c)
     c.last_reserve_margin_breakdown = {"reserve_kwh_after_margin": 6.13}
     c.last_needed_kwh_to_bridge = 6.13
     c.last_sell_check = {"nodig_voor_woning_kwh": 6.13}
@@ -39,6 +49,7 @@ def test_de_drie_lezers_worden_vergeleken(make_coordinator, hass):
 
 def test_een_afwijkende_lezer_wordt_gemeld(make_coordinator, hass):
     c = make_coordinator({})
+    _met_blok(c)
     c.last_reserve_margin_breakdown = {"reserve_kwh_after_margin": 6.13}
     c.last_needed_kwh_to_bridge = 4.42
     c.last_sell_check = {"nodig_voor_woning_kwh": 6.13}
@@ -54,6 +65,7 @@ def test_de_dode_zone_van_de_verkooptoets_telt_niet_als_afwijking(make_coordinat
     dezelfde reserve met een rem, geen andere reserve. Een verschil
     onder de tolerantie is in orde."""
     c = make_coordinator({})
+    _met_blok(c)
     c.last_reserve_margin_breakdown = {"reserve_kwh_after_margin": 6.13}
     c.last_needed_kwh_to_bridge = 6.13
     c.last_sell_check = {"nodig_voor_woning_kwh": 6.10}

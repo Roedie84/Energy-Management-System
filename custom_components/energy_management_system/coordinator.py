@@ -288,6 +288,7 @@ from .const import (
     DYNAMIC_DISCHARGE_RESERVE_MARGIN,
     EXTENDED_LOW_SOLAR_MARGIN_BONUS_PER_DAY,
     MIN_ACTIVE_SOLAR_PRODUCTION_W,
+    JAAROPBRENGST_MIN_DAGEN,
     LEARNING_HISTORY_DAYS,
     CUSUM_BASELINE_HISTORY_DAYS,
     COOLING_DEVICE_NAME_HINTS,
@@ -639,6 +640,8 @@ from .const import (
     PV_MODEL_MIN_SAMPLES,
     PADBEREIK_VENSTER_DAGEN,
     PV_MODEL_VERVERS_MINUTEN,
+    WOONKAMERTEMP_MIN_UREN,
+    WOONKAMERTEMP_UREN,
     ZELFCONTROLE_RESERVE_TOLERANTIE_KWH,
     PV_MODEL_MIN_WINST_PROCENT,
     PV_BAND_MIN_DAGEN,
@@ -1236,7 +1239,7 @@ class EnergyManagementSystemCoordinator:
         # een regel - `__init__` staat op de ratel.
         # v3.99.19: `dagverloop` en `nabeschouwingen` erbij, in dezelfde
         # regel - `__init__` staat op de ratel.
-        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters = {}, {}, {}, {}, [], {}, {}, {}, {}
+        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}
         # v1.1.6: met welke meetmethode de bewaarde foutreeks tot stand
         # is gekomen. Verandert de methode, dan wordt die reeks eenmalig
         # gewist - zie ENERGY_BALANCE_METHOD_VERSION.
@@ -3971,6 +3974,24 @@ class EnergyManagementSystemCoordinator:
                     )
         return True, "toegestaan"
 
+    def _uitzonderlijke_piekprijs_bericht(
+        self, entries: list[PriceEntry], now: datetime
+    ) -> str | None:
+        """De tekst van de piekprijsmelding, in EUR/kWh (v4.9)."""
+        vandaag = [e for e in (entries or []) if e[0].date() == now.date()]
+        if not vandaag:
+            return None
+        prijzen = [e[2] / PRICE_SCALE_FACTOR for e in vandaag]
+        piek = max(prijzen)
+        mediaan = statistics.median(prijzen)
+        if not (mediaan > 0 and piek > mediaan * 2.5):
+            return None
+        duurste = max(vandaag, key=lambda e: e[2])
+        return (
+            f"Om {duurste[0]:%H:%M} kost stroom {piek:.4f} EUR/kWh, ruim het "
+            f"dubbele van de mediaan van vandaag ({mediaan:.4f} EUR/kWh)."
+        )
+
     def _evaluate_new_notifications(self, now: datetime) -> None:
         """De meldingen die in v1.2.0 zijn toegevoegd (v1.2.0).
 
@@ -4124,17 +4145,17 @@ class EnergyManagementSystemCoordinator:
         if entries:
             vandaag = [e for e in entries if e[0].date() == now.date()]
             if vandaag:
-                prijzen = [e[2] for e in vandaag]
-                piek = max(prijzen)
-                mediaan = statistics.median(prijzen)
-                if mediaan > 0 and piek > mediaan * 2.5:
-                    duurste = max(vandaag, key=lambda e: e[2])
+                # v4.9: in EUR/kWh. De reeks staat in eenheden van 1e-7
+                # euro (PRICE_SCALE_FACTOR); overal waar een absoluut
+                # bedrag telt wordt er door gedeeld - behalve hier, in de
+                # tekst. Gemeld: "Om 19:45 kost stroom 8631642.0000
+                # EUR/kWh".
+                bericht = self._uitzonderlijke_piekprijs_bericht(entries, now)
+                if bericht:
                     stuur(
                         "exceptional_peak_price",
                         "💸 Uitzonderlijk duur kwartier vandaag",
-                        f"Om {duurste[0]:%H:%M} kost stroom "
-                        f"{piek:.4f} €/kWh, ruim het dubbele van de "
-                        f"mediaan van vandaag ({mediaan:.4f} €/kWh).",
+                        bericht,
                     )
 
         if cheap_block_start is not None:
@@ -4896,12 +4917,24 @@ class EnergyManagementSystemCoordinator:
 
         ontbreekt = None
         if len(gevuld) < HELDERHEID_MIN_GEVULDE_BAKJES:
+            bijna = sum(
+                1
+                for dagen in (self.helderheid_dagen or {}).values()
+                if HELDERHEID_MIN_DAGEN_PER_BAKJE - len(dagen) == 1
+            )
             ontbreekt = (
                 f"{len(gevuld)}/{HELDERHEID_MIN_GEVULDE_BAKJES} bakjes "
                 f"zonnestand hebben {HELDERHEID_MIN_METINGEN_PER_BAKJE} "
                 f"metingen over {HELDERHEID_MIN_DAGEN_PER_BAKJE} dagen. "
                 "Metingen binnen een dag hangen samen; wat telt is het "
                 "aantal dagen, en de zonnestanden schuiven met het seizoen."
+                # v4.9: hoe dichtbij het is. Anders leest een nul als
+                # stilstand.
+                + (
+                    f" {bijna} bakje(s) hebben nog 1 dag nodig."
+                    if bijna
+                    else ""
+                )
             )
         elif not becijferd:
             ontbreekt = (
@@ -4945,6 +4978,48 @@ class EnergyManagementSystemCoordinator:
             },
             "bakjes_nodig": HELDERHEID_MIN_GEVULDE_BAKJES,
             "metingen_per_bakje_nodig": HELDERHEID_MIN_METINGEN_PER_BAKJE,
+            # v4.9: de EISEN erbij. Op de kaart stond "0 van 3" naast
+            # rijen van acht en negen dagen, zonder dat er ergens stond
+            # dat een bakje tien dagen nodig heeft - dat leest als
+            # stilstand terwijl het morgen omslaat. En "300 van 300" was
+            # de bewaargrens, niet een gehaalde eis.
+            "dagen_per_bakje_nodig": HELDERHEID_MIN_DAGEN_PER_BAKJE,
+            "paren_nodig": HELDERHEID_MIN_PAREN,
+            "dagen_per_bakje_met_eis": {
+                bakje: f"{len(dagen)}/{HELDERHEID_MIN_DAGEN_PER_BAKJE}"
+                for bakje, dagen in sorted(
+                    (self.helderheid_dagen or {}).items(), key=lambda kv: float(kv[0])
+                )
+            },
+            # v4.9: de rangorde als klaar opgemaakte regels. De kaart had
+            # er anders een tweede lus bij gekregen, en die staat op de
+            # ratel: logica hoort in de coordinator.
+            "voortgang_regels": [
+                (
+                    f"Paren {bron.split('.')[-1]}",
+                    f"{self._bruikbare_paren(bron)}, {HELDERHEID_MIN_PAREN} nodig",
+                )
+                for bron in (self.weerbron_helderheid_paren or {})
+            ]
+            + [
+                (
+                    f"Rangorde {bron.split('.')[-1]}",
+                    f"{score:.1f}%" if score is not None else "nog niet te becijferen",
+                )
+                for bron, score in scores.items()
+            ],
+            "rangorde_regels": [
+                (
+                    bron.split(".")[-1],
+                    f"{score:.1f}%" if score is not None else "nog niet te becijferen",
+                )
+                for bron, score in scores.items()
+            ],
+            "bakjes_bijna_gevuld": sum(
+                1
+                for dagen in (self.helderheid_dagen or {}).values()
+                if HELDERHEID_MIN_DAGEN_PER_BAKJE - len(dagen) == 1
+            ),
             "helderheid_nu": self.gemeten_helderheid(),
             "ijklijn_nu_w": self.ijklijn_vermogen_w(
                 self.get_sun_elevation_degrees()
@@ -6544,7 +6619,7 @@ class EnergyManagementSystemCoordinator:
             "reden": "Geen apparaat actief en geen herkenbaar patroon.",
         }
 
-    def confirm_water_source(self, bron: str) -> None:
+    def confirm_water_source(self, bron: str, sessie: str | None = None) -> None:
         """Bevestigt waar de laatste watersessie heen ging (v1.18.0).
 
         Gevraagd: "Misschien is er een mechanisme te bedenken zodat ik
@@ -6560,23 +6635,45 @@ class EnergyManagementSystemCoordinator:
         bevestigingen betrouwbaarder herkend te worden dan met de vaste
         marge waarmee het begint.
         """
+        sessie_tijd = sessie
         if not self.water_session_history:
             return
-        sessie = self.water_session_history[-1]
-        sessie["bron"] = bron
-        sessie["zekerheid"] = "bevestigd"
-        sessie["reden"] = "Door jou bevestigd."
+        # v4.9: standaard de laatste ONBEKENDE sessie, niet de laatste.
+        # Gemeld: de onbekende staat meestal een paar regels lager - die
+        # van 08:06, niet die van 08:34. En met `sessie` (een tijd zoals
+        # "08:06") is een bepaalde sessie te kiezen.
+        gekozen = None
+        if sessie_tijd:
+            for s in reversed(self.water_session_history):
+                moment = str(s.get("moment") or "")
+                if moment[11:16] == sessie_tijd:
+                    gekozen = s
+                    break
+            if gekozen is None:
+                return
+        else:
+            gekozen = next(
+                (
+                    s for s in reversed(self.water_session_history)
+                    if s.get("zekerheid") != "bevestigd"
+                    and (s.get("zekerheid") == "onbekend" or not s.get("bron"))
+                ),
+                self.water_session_history[-1],
+            )
+        gekozen["bron"] = bron
+        gekozen["zekerheid"] = "bevestigd"
+        gekozen["reden"] = "Door jou bevestigd."
 
         geschiedenis = self.water_source_profiles.setdefault(
             bron, {"liters": [], "duur_minuten": []}
         )
-        if sessie.get("liter") is not None:
-            geschiedenis["liters"].append(sessie["liter"])
+        if gekozen.get("liter") is not None:
+            geschiedenis["liters"].append(gekozen["liter"])
             geschiedenis["liters"] = geschiedenis["liters"][
                 -WATER_SOURCE_HISTORY_LENGTH:
             ]
-        if sessie.get("duur_minuten") is not None:
-            geschiedenis["duur_minuten"].append(sessie["duur_minuten"])
+        if gekozen.get("duur_minuten") is not None:
+            geschiedenis["duur_minuten"].append(gekozen["duur_minuten"])
             geschiedenis["duur_minuten"] = geschiedenis["duur_minuten"][
                 -WATER_SOURCE_HISTORY_LENGTH:
             ]
@@ -9215,6 +9312,92 @@ class EnergyManagementSystemCoordinator:
         self._proefstand_cache = (ronde, uit)
         return uit
 
+    def _meet_woonkamertemperatuur(self, now: datetime) -> None:
+        """De gemeten woonkamertemperatuur per uur (v4.9).
+
+        Gemeld: de tabel "Woonkamertemperatuur per uur" toont wat de
+        projectie voorspelt en niet wat de thermometer aanwees - dan is
+        de projectie niet te beoordelen. De mediaan per uur: een deur die
+        opengaat mag het uur niet bepalen.
+        """
+        temp = self._read_sensor_float(
+            self.config.get(CONF_LIVING_ROOM_TEMPERATURE_SENSOR)
+        )
+        if temp is None:
+            return
+        sleutel = now.strftime("%Y-%m-%dT%H")
+        reeks = self._woonkamertemp_monsters.setdefault(sleutel, [])
+        reeks.append(temp)
+        if len(reeks) > 120:
+            del reeks[0]
+        self.woonkamertemp_gemeten_per_uur[sleutel] = round(
+            statistics.median(reeks), 1
+        )
+        for oud in sorted(self.woonkamertemp_gemeten_per_uur)[:-WOONKAMERTEMP_UREN]:
+            self.woonkamertemp_gemeten_per_uur.pop(oud, None)
+            self._woonkamertemp_monsters.pop(oud, None)
+
+    def _traject_met_metingen(self, traject: list[dict]) -> list[dict]:
+        """Zet de gemeten temperatuur en de afwijking bij elke regel van
+        het traject (v4.9). Voor uren die nog komen blijft het leeg."""
+        uit = []
+        for regel in traject or []:
+            nieuw = dict(regel)
+            sleutel = str(regel.get("tijd") or "")[:13]
+            gemeten = (self.woonkamertemp_gemeten_per_uur or {}).get(sleutel)
+            nieuw["gemeten_temp_c"] = gemeten
+            voorspeld = regel.get("kort_termijn_temp_c")
+            nieuw["afwijking_c"] = (
+                round(voorspeld - gemeten, 1)
+                if gemeten is not None and voorspeld is not None
+                else None
+            )
+            uit.append(nieuw)
+        return uit
+
+    def get_klimaat_projectie_kwaliteit(self) -> dict:
+        """Hoe goed is de woonkamerprojectie? (v4.9)
+
+        Dezelfde vraag die de zonvoorspelling al van zichzelf stelt: wat
+        was de afwijking op de uren die voorbij zijn?
+        """
+        regels = [
+            r for r in self._traject_met_metingen(self.climate_forecast_trajectory)
+            if r.get("afwijking_c") is not None
+        ]
+        if len(regels) < WOONKAMERTEMP_MIN_UREN:
+            return {
+                "beschikbaar": False,
+                "uren": len(regels),
+                "reden": (
+                    f"{len(regels)} van de {WOONKAMERTEMP_MIN_UREN} uren met zowel een "
+                    "projectie als een meting."
+                ),
+            }
+        afwijkingen = [abs(r["afwijking_c"]) for r in regels]
+        gemiddeld = sum(afwijkingen) / len(afwijkingen)
+        grootste = max(afwijkingen)
+        return {
+            "beschikbaar": True,
+            "uren": len(regels),
+            "gemiddelde_afwijking_c": round(gemiddeld, 2),
+            "grootste_afwijking_c": round(grootste, 1),
+            "oordeel": (
+                f"Gemiddeld {gemiddeld:.1f} °C ernaast over {len(regels)} uren, "
+                f"grootste afwijking {grootste:.1f} °C. "
+                + (
+                    "Dat is nauwkeurig genoeg om op te bouwen."
+                    if gemiddeld <= 0.5
+                    else "Dat is te grof om op te bouwen; de projectie meet nog."
+                )
+            ),
+            "toelichting": (
+                "De afwijking is de projectie min de meting, over de uren die "
+                "voorbij zijn. Een positieve afwijking betekent dat de projectie "
+                "te warm was."
+            ),
+        }
+
     def _bereken_proefstand(self) -> dict:
         """De vijf kandidaten, met hoe betrouwbaar ze zijn (v1.38.0).
 
@@ -9257,38 +9440,32 @@ class EnergyManagementSystemCoordinator:
                 "meesturen oplevert, en \"klaar om mee te doen\" dat "
                 "allebei rond is."
             ),
-            "samenvatting": self._proefstand_samenvatting(),
+            "samenvatting": self._proefstand_samenvatting(kandidaten),
             "kandidaten": kandidaten,
             # v4.2: rekentijd per kandidaat, zodat een trage meteen te
             # zien is.
             "rekentijd_ms": rekentijd,
         }
 
-    def _proefstand_samenvatting(self) -> dict:
+    def _proefstand_samenvatting(self, kandidaten: list[dict]) -> dict:
         """Hoeveel kandidaten staan er klaar? (v3.0.0)
 
         Zodat de vraag "is er al iets rijp?" met één blik te
-        beantwoorden is, in plaats van door zeven kandidaten te lezen.
+        beantwoorden is, in plaats van door veertien kandidaten te lezen.
+
+        v4.9: de kandidaten komen NU MEE. Deze functie had zijn eigen
+        lijst met elf aanroepen, naast de veertien van
+        `_bereken_proefstand`; de drie kandidaten van v4.1, v4.5 en v4.7
+        stonden er niet in. Vandaar "Van de 11 kandidaten" onder een
+        lijst van veertien. Twee lijsten van hetzelfde, en de ene liep
+        achter - hetzelfde patroon als de reserves.
         """
-        kandidaten = [
-            self._met_gereedheid(k)
-            for k in (
-                self._kandidaat_slijtage(),
-                self._kandidaat_na_saldering(),
-                self._kandidaat_dagtype(),
-                self._kandidaat_capaciteit(),
-                self._kandidaat_prijsvorm(),
-                self._kandidaat_langere_horizon(),
-                self._kandidaat_pv_model(),
-                self._kandidaat_lange_reserve(),
-                self._kandidaat_bijkopen(),
-                self._kandidaat_niet_ontladen_bij_lage_prijs(),
-                self._kandidaat_mpc(),
-            )
-        ]
         klaar = [k for k in kandidaten if k.get("mag_meesturen")]
+        stuurt = [k for k in kandidaten if k.get("gereedheid") == "stuurt mee"]
         return {
             "aantal": len(kandidaten),
+            # v4.9: wie al meestuurt, staat niet meer op de wachtlijst.
+            "stuurt_mee": len(stuurt),
             "meet_nog": sum(
                 1 for k in kandidaten if k["gereedheid"] == "meet nog"
             ),
@@ -9346,7 +9523,17 @@ class EnergyManagementSystemCoordinator:
         #
         # Er is nu één antwoord op de vraag "mag dit meesturen", en de
         # tussenstanden zeggen alleen nog iets over de meting.
-        if not meting_betrouwbaar:
+        # v4.9: stuurt hij al mee, dan is de vraag "voldoet hij aan de
+        # eis" niet meer aan de orde - die is met ja beantwoord toen hij
+        # werd aangezet. "Verder vooruitkijken bij de reserve" stuurt
+        # sinds v3.99.18 en stond op "voldoet nog niet aan de eis".
+        if kandidaat.get("stuurt_sinds"):
+            gereed = "stuurt mee"
+            uitleg = (
+                f"Stuurt mee sinds {kandidaat['stuurt_sinds']}. De meting loopt "
+                "door, zodat het effect zichtbaar blijft."
+            )
+        elif not meting_betrouwbaar:
             gereed = "meet nog"
             uitleg = "De meting zelf is nog niet betrouwbaar genoeg."
         elif not winst_becijferd:
@@ -12353,6 +12540,27 @@ class EnergyManagementSystemCoordinator:
             ),
         }
 
+    def _dagen_in_bedrijf(self) -> int | None:
+        """Hoeveel dagen de integratie draait (v4.9)."""
+        if not self.first_seen_date:
+            return None
+        return (dt_util.now().date() - self.first_seen_date).days + 1
+
+    def _opbrengst_accu_per_jaar_eur(self) -> float | None:
+        """Wat de accu per jaar oplevert, geëxtrapoleerd uit de looptijd.
+
+        Zie de toelichting bij `dagen_gemeten` in `get_expansion_advice`.
+        """
+        dagen = self._dagen_in_bedrijf()
+        if not dagen or dagen < JAAROPBRENGST_MIN_DAGEN:
+            return None
+        voordeel = (self.counterfactual_cost_all_time_eur or 0) - (
+            self.actual_cost_all_time_eur or 0
+        )
+        if not voordeel:
+            return None
+        return voordeel / dagen * 365
+
     def get_expansion_advice(self) -> dict:
         """Loont het om de accu uit te breiden? (v1.19.0)
 
@@ -12498,11 +12706,15 @@ class EnergyManagementSystemCoordinator:
         # bestaande: de eerste kilowattuur vangt de grootste
         # prijsverschillen, wat daarna komt wordt alleen op dure dagen
         # benut. Vandaar de helft als schatting.
-        dagen_gemeten = max(1, len(self.reserve_daily_records or []))
-        voordeel = (self.counterfactual_cost_all_time_eur or 0) - (
-            self.actual_cost_all_time_eur or 0
-        )
-        per_jaar = voordeel / dagen_gemeten * 365 if voordeel else None
+        # v4.9: de deler is de LOOPTIJD, niet het leervenster. Hier stond
+        # `len(self.reserve_daily_records)` - dat is zeven dagen
+        # (LEARNING_HISTORY_DAYS), het venster voor de tekortdagen -
+        # terwijl `voordeel` de alle-tijden besparing is. De opbrengst
+        # van maanden werd door zeven gedeeld: 1222 EUR/jaar op de kaart
+        # bij een gemeten besparing van ongeveer 165. En het liep weg:
+        # de teller groeide, de deler bleef zeven.
+        dagen_gemeten = self._dagen_in_bedrijf()
+        per_jaar = self._opbrengst_accu_per_jaar_eur()
         modules_nu = len(self.config.get(CONF_BATTERY_MODULE_TEMPERATURE_SENSORS) or [])
         per_module = per_jaar / modules_nu if per_jaar and modules_nu else None
         extra_module_per_jaar = per_module * 0.5 if per_module else None
@@ -12527,6 +12739,19 @@ class EnergyManagementSystemCoordinator:
             "gemeten_piekvermogen_w": round(gemeten_piek_w),
             "opbrengst_accu_per_jaar_eur": (
                 round(per_jaar, 0) if per_jaar else None
+            ),
+            # v4.9: een jaarcijfer uit een paar maanden is een
+            # extrapolatie; dat hoort erbij te staan.
+            "gemeten_dagen": dagen_gemeten,
+            "jaaropbrengst_toelichting": (
+                f"Geschat uit {dagen_gemeten} dagen in bedrijf. De winter zit "
+                "er nog niet in: dan is er minder zon om mee te laden, maar "
+                "zijn de prijsverschillen groter."
+                if per_jaar
+                else (
+                    f"Nog geen jaarcijfer: {dagen_gemeten or 0} dagen in bedrijf, "
+                    f"minstens {JAAROPBRENGST_MIN_DAGEN} nodig."
+                )
             ),
             "opbrengst_extra_module_per_jaar_eur": (
                 round(extra_module_per_jaar, 0) if extra_module_per_jaar else None
@@ -18491,6 +18716,12 @@ class EnergyManagementSystemCoordinator:
         callers should fall back to the flat SoC percentage in that case.
         """
         if cheap_block_start is None or now >= cheap_block_start:
+            # v4.9: geen reserve, dus ook geen uitsplitsing. Die bleef
+            # staan op de waarde van vóór het goedkope blok, en dan
+            # toont het dashboard een reserve die niet meer geldt en
+            # meldt de zelfcontrole een tweede definitie die er niet is.
+            if bewaar:
+                self.last_reserve_margin_breakdown = {}
             return None
 
         hours_until_cheap = max((cheap_block_start - now).total_seconds() / 3600, 0)
@@ -32849,6 +33080,20 @@ class EnergyManagementSystemCoordinator:
 
     def zelfcontrole_een_reserve(self) -> dict:
         """Zien de brug, de verkooptoets en de sturing hetzelfde getal?"""
+        # v4.9: is er geen goedkoop blok in zicht, dan is er geen reserve
+        # en valt er niets te vergelijken - de verkooptoets houdt dan de
+        # bodem aan en de sturing niets. Dat is geen tweede definitie.
+        blok = self.last_cheap_block_start
+        if blok is None or blok <= dt_util.now():
+            return {
+                "in_orde": True,
+                "lezers": {},
+                "afwijkend": [],
+                "uitleg": (
+                    "Geen goedkoop blok in zicht, dus geen reserve om te "
+                    "vergelijken; de verkooptoets houdt de bodem aan."
+                ),
+            }
         sturing = (self.last_reserve_margin_breakdown or {}).get("reserve_kwh_after_margin")
         brug = self.last_needed_kwh_to_bridge
         verkoop = (self.last_sell_check or {}).get("nodig_voor_woning_kwh")
@@ -33685,6 +33930,7 @@ class EnergyManagementSystemCoordinator:
             ("ochtend", lambda: self._volg_de_ochtend(now)),
             ("dagverloop", lambda: self._leg_dagverloop_vast(now)),
             ("nachtlast", lambda: self._meet_nachtelijke_basislast(now)),
+            ("woonkamertemperatuur", lambda: self._meet_woonkamertemperatuur(now)),
             ("meetherinnering", lambda: self._herinner_wat_meet(now)),
             # v3.68.0: het MPC-plan naast de eigen planning.
             ("mpc tegen de planning", lambda: self._meet_mpc(now)),

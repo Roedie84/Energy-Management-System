@@ -528,7 +528,9 @@ def test_the_summary_answers_the_question_at_a_glance(
 
     s = c.get_proefstand()["samenvatting"]
 
-    assert s["aantal"] == 11
+    # v4.9: de samenvatting telt de kandidaten die haar worden
+    # meegegeven, niet een eigen lijst die achterliep.
+    assert s["aantal"] == len(c.get_proefstand()["kandidaten"])
     assert isinstance(s["klaar"], list)
     assert s["oordeel"]
 

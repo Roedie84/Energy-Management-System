@@ -325,6 +325,31 @@ CONF_LANGE_HORIZON = "lange_horizon_actief"
 DEFAULT_LOW_SOLAR_THRESHOLD_KWH = 5.0
 LEARNING_HISTORY_DAYS = 7
 
+# Vanaf hoeveel dagen looptijd de jaaropbrengst van de accu wordt
+# geëxtrapoleerd (v4.9). Een week naar een jaar rekenen zegt niets - de
+# winter zit er niet in, en juist dan zijn de prijsverschillen groter en
+# de opbrengst kleiner. Dertig dagen is het minimum om iets te zeggen,
+# en ook dan blijft het een extrapolatie; de kaart noemt de looptijd.
+JAAROPBRENGST_MIN_DAGEN = 30
+
+# De gemeten woonkamertemperatuur per uur (v4.9), naast de projectie.
+# Hoeveel uren bewaard blijven, en hoeveel er minstens nodig zijn voor
+# een oordeel over de projectie.
+# De waterbronnen die te bevestigen zijn (v4.9). Gevraagd: "Bevestigen
+# water verbruik moet gebruiks vriendelijker" - er komt een knop per
+# bron, zodat het één tik is in plaats van vijf handelingen.
+WATERBRONNEN = (
+    "toilet",
+    "douche",
+    "keuken",
+    "vaatwasser",
+    "wasmachine",
+    "waterontharder",
+)
+
+WOONKAMERTEMP_UREN = 48
+WOONKAMERTEMP_MIN_UREN = 6
+
 # CUSUM sluipverbruik-detectie (v0.63.29): detects a sustained shift in
 # the household's daily "floor load" (lowest consumption reading of the
 # day - phantom/standby loads dominate there), distinct from the
@@ -2775,6 +2800,8 @@ PERSISTED_PLAIN_FIELDS = (
     "padbereik",
     # v4.4: de nachtelijke basislast per vermogenssensor.
     "nachtlast_per_apparaat",
+    # v4.9: de gemeten woonkamertemperatuur per uur.
+    "woonkamertemp_gemeten_per_uur",
     # v4.7: de metingen die een DAG beslaan en pas bij de dagwissel in
     # het dagrecord komen. Ze werden niet bewaard, dus wiste elke
     # herstart ze stilzwijgend - en dan staat er `laagste_soc_ochtend:

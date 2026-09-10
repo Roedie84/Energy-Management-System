@@ -8,6 +8,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
+    WATERBRONNEN,
     CONF_APPLIANCE_NOTIFY_SERVICE,
     DEFAULT_NAME,
     DOMAIN,
@@ -32,6 +33,11 @@ async def async_setup_entry(
     for slot in range(NILM_DUPLICATE_DASHBOARD_SLOT_COUNT):
         entities.append(NilmConfirmDuplicateButton(coordinator, entry.entry_id, slot))
         entities.append(NilmDismissDuplicateButton(coordinator, entry.entry_id, slot))
+    # v4.9: een knop per waterbron. Gevraagd: "Bevestigen water verbruik
+    # moet gebruiks vriendelijker" - één tik in plaats van vijf
+    # handelingen via Ontwikkelhulpmiddelen.
+    for waterbron in WATERBRONNEN:
+        entities.append(WaterbronKnop(coordinator, entry.entry_id, waterbron))
     async_add_entities(entities)
 
 
@@ -528,3 +534,56 @@ class NilmDismissDuplicateButton(_NilmDuplicateSlotButton):
             self._coordinator.dismiss_nilm_duplicate_pair(
                 pair["entity_id_1"], pair["entity_id_2"]
             )
+
+
+class WaterbronKnop(ButtonEntity):
+    """Bevestigt dat de laatste ONBEKENDE watersessie van deze bron was
+    (v4.9).
+
+    Gevraagd: "Bevestigen water verbruik moet gebruiks vriendelijker."
+    Het kostte vijf handelingen, en de actie bevestigde altijd de
+    laatste sessie - terwijl de onbekende meestal een paar regels lager
+    staat. Deze knop pakt de sessie die nog een vraagteken heeft, want
+    daar levert de bevestiging iets op.
+
+    Een andere sessie kiezen kan nog met de actie
+    `confirm_water_source` en het veld `sessie` (een tijd als "08:06").
+    """
+
+    _attr_has_entity_name = True
+    _attr_icon = "mdi:water-check"
+
+    def __init__(self, coordinator, entry_id: str, bron: str) -> None:
+        self._coordinator = coordinator
+        self._bron = bron
+        self._attr_name = f"Water was {bron}"
+        self._attr_unique_id = f"{entry_id}_water_bevestig_{bron}"
+
+    def _open_sessie(self) -> dict | None:
+        return next(
+            (
+                s for s in reversed(self._coordinator.water_session_history or [])
+                if s.get("zekerheid") != "bevestigd"
+                and (s.get("zekerheid") == "onbekend" or not s.get("bron"))
+            ),
+            None,
+        )
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        open_sessie = self._open_sessie()
+        return {
+            "bevestigt": (
+                f"{str(open_sessie.get('moment') or '')[11:16]} "
+                f"({open_sessie.get('liters')} L)"
+                if open_sessie
+                else "geen onbekende sessie"
+            ),
+            "toelichting": (
+                "Eén tik bevestigt dat die sessie van deze bron was. Een andere "
+                "sessie kiezen kan met de actie confirm_water_source."
+            ),
+        }
+
+    async def async_press(self) -> None:
+        self._coordinator.confirm_water_source(self._bron)

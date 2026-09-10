@@ -24458,3 +24458,142 @@ voorbij, dan is er niets verloren: de geschiedenis staat in de Store.
 Een toets houdt dat vast.
 
 **Volledige testsuite**: 3710 tests, allemaal groen.
+
+
+## v4.9 — Negen punten van de dashboardronde
+
+**Gemeld** met negen schermafdrukken en waarnemingen. Alles wat volgt
+komt daaruit.
+
+### 1. Een prijs van 8.631.642 euro per kWh
+
+```
+Om 19:45 kost stroom 8631642.0000 EUR/kWh, ruim het dubbele van de
+mediaan van vandage (3406983.0000 EUR/kWh).
+```
+
+De prijsreeks staat intern in eenheden van 1e-7 euro
+(`PRICE_SCALE_FACTOR`) en overal waar een absoluut bedrag telt, wordt
+er door gedeeld. Ik dacht eerst dat die deling structureel ontbrak en
+heb de reeks bij de bron willen omrekenen — waarna vier toetsen rond de
+reservebodem omvielen, omdat de kwartierplanning daarna twee keer
+deelde. Dat was het bewijs dat de deling er wél stond, op alle
+vijfentwintig plekken.
+
+Mijn conclusie van die dag was dus onjuist: de slijtagepoort en de
+laadmarge stonden **niet** altijd open. Eén plek deelde niet: de tekst
+van deze melding. Die is nu een eigen functie in euro's, met een scan
+per functie die elke functie afkeurt die een bedrag in €/kWh opmaakt,
+een rauwe reeksprijs gebruikt en `PRICE_SCALE_FACTOR` niet noemt.
+
+### 2. "Nog geen voltooide dagen" bij zeven dagen geschiedenis
+
+Twee kaarten meldden dat er geen zonvoorspelling-geschiedenis was,
+terwijl `deviation_history_percent` in de export zeven dagen bevatte.
+
+De oorzaak is `_store_wint` uit v4.1 — mijn eigen omhulling. Die nam
+vóór het herstel een `copy.copy()` van élk coördinatorveld en zette
+daarna elk veld terug dat veranderd leek. Voor een lijst of dict is dat
+de bedoeling. Voor een OBJECT is een kopie nooit hetzelfde object, dus
+leek het altijd veranderd, en werd de coördinator op de kopie gezet.
+De tracker die de metingen bijhield was de originele; de tracker die de
+kaart las een bevroren afdruk.
+
+De omhulling kijkt nu alleen naar velden met gewone gegevens. Een toets
+houdt vast dat de objectvelden — de tracker, twee Stores, twee locks —
+erbuiten blijven.
+
+### 3. 1222 euro per jaar bij een gemeten 165
+
+```
+dagen_gemeten = max(1, len(self.reserve_daily_records))
+per_jaar      = voordeel / dagen_gemeten * 365
+```
+
+`reserve_daily_records` wordt op zeven dagen afgekapt — dat is het
+venster voor de tekortdagen, en daarom staat er op dezelfde kaart
+"Tekort-nachten 6 van 7". Maar `voordeel` is de alle-tijden besparing.
+De opbrengst van maanden werd door zeven gedeeld en met 365
+vermenigvuldigd. En het liep weg: de teller groeide, de deler bleef
+zeven.
+
+De deler is nu de looptijd sinds `first_seen_date`, met een minimum van
+dertig dagen — een week naar een jaar rekenen zegt niets, want de winter
+zit er niet in. De kaart noemt de looptijd erbij. De terugverdientijden
+van module en omvormer schuiven mee.
+
+### 4. De projectie zonder de meting
+
+De tabel "Woonkamertemperatuur per uur" toonde wat de projectie
+voorspelt en niet wat de thermometer aanwees — dan is de projectie niet
+te beoordelen. De gemeten temperatuur wordt nu per uur bewaard (de
+mediaan: een deur die opengaat mag het uur niet bepalen), staat in de
+tabel, en `get_klimaat_projectie_kwaliteit` geeft een oordeel over de
+uren die voorbij zijn. Dezelfde vraag die de zonvoorspelling al van
+zichzelf stelt.
+
+### 5. Waterbron bevestigen
+
+Het kostte vijf handelingen via Ontwikkelhulpmiddelen, en de actie
+bevestigde altijd de LAATSTE sessie — terwijl de onbekende meestal een
+paar regels lager staat: die van 08:06, niet die van 08:34.
+
+Zes knoppen, één per bron, met in de attributen welke sessie ze zouden
+bevestigen. De actie kiest standaard de laatste sessie die nog een
+vraagteken heeft, en met het veld `sessie` (een tijd als "08:06") is een
+bepaalde sessie te kiezen.
+
+### 6. Een tweede reservedefinitie die er niet was
+
+Tijdens het goedkope blok meldde de zelfcontrole "verkooptoets wijkt af
+van de sturing". Ze had gelijk dát ze uiteenliepen: in het blok geeft de
+reserve `None` terug en schrijft ze geen nieuwe uitsplitsing, dus bleef
+`last_reserve_margin_breakdown` de waarde van vóór het blok vasthouden.
+De verkooptoets kwam vers op de bodem uit.
+
+Nu wordt de uitsplitsing leeggemaakt als er geen reserve is — een
+dashboard dat een reserve toont die niet meer geldt is erger dan een
+leeg vak — en zwijgt de zelfcontrole als er geen blok in zicht is.
+Dezelfde klasse als de kijkvelden van v3.92.
+
+### 7. Van de 11 kandidaten, bij een lijst van 14
+
+De samenvatting had haar eigen lijst met elf aanroepen, naast de
+veertien van `_bereken_proefstand`. De kandidaten van v4.1, v4.5 en
+v4.7 stonden er niet in. Twee lijsten van hetzelfde, en de ene liep
+achter. De samenvatting krijgt de kandidaten nu mee; een toets verbiedt
+een eigen lijst.
+
+### 8. Een kandidaat die stuurt en zegt dat hij niet klaar is
+
+"Verder vooruitkijken bij de reserve — voldoet nog niet aan de eis",
+terwijl die sinds v3.99.18 meestuurt. Op verzoek zelfs. `stuurt_sinds`
+stond er wel in, maar de gereedheidstekst keek er niet naar. Nieuwe
+stand: "stuurt mee sinds v3.99.18", en de samenvatting telt hem niet
+meer als wachtend.
+
+### 9. De ijklijnkaart
+
+"0 van 3" naast rijen van acht en negen dagen, zonder dat er stond dat
+een bakje tien dagen nodig heeft — dat leest als stilstand terwijl het
+morgen omslaat. "300 van 300" was de bewaargrens, niet een gehaalde
+eis (die is honderd). En de uitkomst waar de hele meting voor is
+gebouwd — de rangordescore per bron — stond er niet, terwijl ze wel
+werd berekend.
+
+De kaart toont nu de eisen bij de voortgang, de scores per bron, en
+"nog 1 dag nodig" als een bakje bijna vol is. De regels worden in de
+coördinator opgemaakt: het sjabloon staat op de ratel voor logica.
+
+### Wat er onderweg misging
+
+Ik heb twee bestanden overschreven die ik niet had gelezen:
+`dashboard_template.yaml` met een `git checkout` (het laatste commit is
+van v3.91, dus al het dashboardwerk sindsdien viel weg) en `button.py`
+volledig — 530 regels met negen bestaande knopklassen. Beide zijn
+hersteld en nagelopen: het dashboard uit de v4.8-levering, `button.py`
+uit git omdat het deze reeks niet gewijzigd was. De controle staat in de
+levering: alle 22 bestanden, negen knopklassen, en elk kaartkenmerk van
+v4.1 tot v4.8 nageteld.
+
+**Volledige testsuite**: 3745 tests, allemaal groen.

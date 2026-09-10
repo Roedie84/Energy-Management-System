@@ -117,6 +117,7 @@ def test_setup_registers_all_slot_buttons(make_coordinator, hass):
 
     from custom_components.energy_management_system.button import async_setup_entry
     from custom_components.energy_management_system.const import (
+    WATERBRONNEN,
         DOMAIN,
         NILM_DASHBOARD_SLOT_COUNT,
         NILM_DUPLICATE_DASHBOARD_SLOT_COUNT,
@@ -142,6 +143,8 @@ def test_setup_registers_all_slot_buttons(make_coordinator, hass):
         2
         + 2 * NILM_DASHBOARD_SLOT_COUNT
         + 2 * NILM_DUPLICATE_DASHBOARD_SLOT_COUNT
+        # v4.9: een knop per waterbron - bevestigen in één tik.
+        + len(WATERBRONNEN)
     )
 
 
