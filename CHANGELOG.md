@@ -24596,4 +24596,32 @@ uit git omdat het deze reeks niet gewijzigd was. De controle staat in de
 levering: alle 22 bestanden, negen knopklassen, en elk kaartkenmerk van
 v4.1 tot v4.8 nageteld.
 
+## v4.9.1 — De zes knoppen staan nu ook op de kaart
+
+**Gemeld**: de vorige levering had hetzelfde nummer als wat er al
+draaide, terwijl de inhoud verschilde. Dat is mijn fout: ik heb de
+changelog aangevuld in plaats van het nummer op te hogen, en daarmee de
+versietoets omzeild die daar juist voor is. Vandaar 4.9.1 - nu is aan
+het manifest te zien wat er binnen is: staat er 4.9, dan mist de
+knoppenrij.
+
+
+Gemeld met de regel die er stond:
+
+```
+Klopt een toewijzing niet? Roep de actie confirm_water_source aan met
+de juiste bron.
+```
+
+Dat was het advies dat de zes knoppen juist moesten vervangen — en de
+knoppen bestonden wel, maar stonden nergens op het dashboard. Ze zitten
+nu als chipsrij onder de watertabel, en de tekst wijst ernaar in plaats
+van naar Ontwikkelhulpmiddelen.
+
+Bij het plaatsen heb ik het sjabloon drie keer stukgemaakt met
+tekstvervangingen op inspringniveau. Uiteindelijk via de YAML-structuur
+zelf: inlezen, kaart toevoegen, terugschrijven. Dat had de eerste
+aanpak moeten zijn — een indeling met secties is geen tekst waarin je
+regels tussenvoegt.
+
 **Volledige testsuite**: 3745 tests, allemaal groen.

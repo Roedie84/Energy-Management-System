@@ -1,4 +1,11 @@
-EMS v4.9 - alle wijzigingen sinds v4.8
+EMS v4.9.1 - alle wijzigingen sinds v4.8
+
+Je draait v4.9. Het verschil met wat je hebt: de zes waterknoppen staan
+nu op de waterpagina, en de instructietekst wijst ernaar in plaats van
+naar Ontwikkelhulpmiddelen. De rest is gelijk.
+
+Dat het vorige pakket hetzelfde nummer had als wat er al draaide, was
+mijn fout - vandaar dit nummer.
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
 
@@ -13,28 +20,10 @@ NAAR DE REPO
     dashboards/energy_management_system_dashboard.yaml
     alle gewijzigde toetsbestanden
 
-WAT ER VERANDERT IN BEDRIJF
+CONTROLE NA DE HERSTART
 
-1. De piekprijsmelding noemt euro's in plaats van 8631642.
-2. De zonvoorspelling-kaarten werken weer: _store_wint maakte kopieen
-   van objecten, waardoor de coordinator een bevroren tracker las.
-3. Jaaropbrengst accu: gedeeld door de LOOPTIJD, niet door zeven dagen.
-   Verwacht ongeveer 165 EUR in plaats van 1222; de terugverdientijden
-   schuiven mee en het advies over uitbreiden verandert daarmee.
-4. Woonkamertemperatuur: gemeten waarde in de tabel, en een oordeel
-   over de projectie.
-5. ZES NIEUWE KNOPPEN: "Water was toilet/douche/keuken/vaatwasser/
-   wasmachine/waterontharder". Een tik bevestigt de laatste onbekende
-   sessie.
-6. De zelfcontrole meldt geen tweede reserve meer tijdens het goedkope
-   blok; de uitsplitsing veroudert niet.
-7. De proefstand telt 14 van 14.
-8. "Verder vooruitkijken bij de reserve" staat op "stuurt mee".
-9. De ijklijnkaart toont de eisen en de rangordescores.
+    manifest / diagnostiek: versie 4.9.1
+    bestandscontrole:       in_orde true, 22 bestanden
+    waterpagina:            zes chips onder de tabel
 
-NA DE HERSTART
-
-Je hebt zes entiteiten meer (de waterknoppen). Kijk op de weerpagina
-naar de rangordescores: die spreken de betrouwbaarheidsmeting mogelijk
-tegen, en dat is de eerste vraag als de ijklijn morgen zijn oordeel
-geeft.
+Staat er 4.9, dan is het dashboard niet meegekomen.
