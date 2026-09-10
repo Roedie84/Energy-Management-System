@@ -1,24 +1,26 @@
-EMS v4.6 - alle wijzigingen sinds v4.4
-
-Bevat v4.5 en v4.6. Je draait v4.4.
+EMS v4.7 - alleen de wijzigingen sinds v4.6
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
 
-    const.py, coordinator.py, nabeschouwing.py
+    const.py, coordinator.py, diagnostics.py
     manifest.json, bestandscontrole.json
 
 NAAR DE REPO
 
-    README.md, CHANGELOG.md, zes toetsbestanden (een nieuw)
+    README.md, CHANGELOG.md, vier toetsbestanden (twee nieuw)
 
 WAT ER VERANDERT
 
-1. De TypeError in de apparaatsensor is weg: uursleutels komen weer als
-   int terug uit de opslag. Wat er nu als tekst in staat, wordt bij het
-   laden omgezet - je hoeft niets te wissen.
-2. De nabeschouwing meet tegen laden UIT OVERSCHOT, niet tegen een
-   planning die uit het net laadt.
-3. Nieuwe proefstandkandidaat "Laden uit het net (arbitrage)".
-4. "Wasmachine is klaor" zonder "na onbekende tied".
+1. De dagmetingen overleven een herstart: laagste ochtendstand,
+   netimport 's nachts, kookpiek-vlag, hoogste ontlaadvermogen, wat de
+   lange horizon extra vasthield, en de dag waarop geteld wordt.
+   Zonder die bewaring wiste elke herstart ze stilzwijgend - en dat is
+   waarom "laagste_soc_ochtend" op null stond.
+2. Nieuwe proefstandkandidaat "Sneller laden bij zonoverschot": hoeveel
+   zon er naar het net ging terwijl de accu ruimte had. Meet, stuurt
+   niet, en is een bovengrens.
+3. nachtlast_per_apparaat staat in de export.
 
-Deze wel installeren: de sensor valt nu elke ronde om.
+De vaatwasser-entiteit: als het IP-conflict weg is, verdwijnt die
+foutregel bij de eerste ronde na de herstart. Blijft hij staan, dan is
+de entiteit toch hernoemd.

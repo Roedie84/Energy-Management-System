@@ -24360,3 +24360,62 @@ opslag staat: sleutels worden naar int gehaald, wat er ook staat. Een
 reeks die half tekst is, mag de sensor niet omgooien.
 
 **Volledige testsuite**: 3695 tests, allemaal groen.
+
+
+## v4.7 — Dagmetingen die een herstart niet overleefden
+
+**Gevraagd**: "Graag alle openstaande zaken oplossen."
+
+### De eerste hele dag nagerekend
+
+```
+9 september, 96 kwartieren
+zonder accu          −0,44
+werkelijk            −1,18     de accu leverde 74 cent op
+best mogelijk        −1,21
+gemist                0,03
+netarbitrage          0,11
+```
+
+Drie cent gemist op een hele dag, tegen een planning die de zon en de
+prijzen van de hele dag vooraf kende. De sturing zat vrijwel op het
+optimum.
+
+### Maar `laagste_soc_ochtend` stond op null
+
+In beide dagrecords. De meting loopt tussen 03:00 en 09:00 en het record
+wordt om middernacht geschreven; daartussen zaten twee herstarts, en
+geen van de dagvelden werd bewaard. Elke herstart wiste ze stilzwijgend.
+
+Dat gold voor alles wat een DAG beslaat en pas bij de dagwissel wordt
+vastgelegd: de laagste ochtendstand, de netimport 's nachts, de
+kookpiek-vlag, het hoogste ontlaadvermogen per stand, wat de lange
+horizon extra vasthield, en de tekort- en overschotvlag zelf. Plus de
+datum waarop geteld wordt — zonder die begint de teller na een herstart
+aan een "nieuwe" dag en zijn de waarden meteen weg.
+
+Zonder die metingen kan `lange_horizon_effect` niet zeggen of de horizon
+de ochtenden heeft geholpen, en dat is precies waarvoor hij is gebouwd.
+
+Dit is dezelfde klasse als de kijkvelden van v3.92: een veld dat maar op
+één plek wordt gezet en nergens bewaard. Ik heb die klasse deze week
+opgeruimd en hem in v3.99.18 zelf opnieuw ingebouwd.
+
+### En de laadsnelheid, gemeten in plaats van vermoed
+
+De verklaring van 9 september — stapelwolken met wind, en de Zendure die
+de fluctuatie niet bijbeent — is nu een proefstandkandidaat. Per
+kwartier: ging er stroom naar het net, had de accu nog ruimte, en zat
+hij niet op zijn laadgrens? Dan was dat opvangbaar. "Sneller laden bij
+zonoverschot" telt dat op over de nabeschouwde dagen, in kWh en in
+euro's.
+
+Met de kanttekening in de kandidaat zelf: het is een BOVENGRENS.
+Handmatig laden op een vast vermogen haalt stroom van het net zodra de
+zon wegvalt — juist op de dagen met stapelwolken waar dit om gaat. Wat
+er netto overblijft is minder.
+
+Ook `nachtlast_per_apparaat` staat nu in de export, zodat de
+apparaataanwijzing na te rekenen is in plaats van alleen af te lezen.
+
+**Volledige testsuite**: 3704 tests, allemaal groen.

@@ -2775,6 +2775,17 @@ PERSISTED_PLAIN_FIELDS = (
     "padbereik",
     # v4.4: de nachtelijke basislast per vermogenssensor.
     "nachtlast_per_apparaat",
+    # v4.7: de metingen die een DAG beslaan en pas bij de dagwissel in
+    # het dagrecord komen. Ze werden niet bewaard, dus wiste elke
+    # herstart ze stilzwijgend - en dan staat er `laagste_soc_ochtend:
+    # null` in het record, zoals op 9 en 10 september.
+    "_laagste_soc_ochtend",
+    "_netimport_nacht_kwh",
+    "_lange_horizon_extra_vandaag",
+    "_max_ontlaad_w_vandaag",
+    "_vermogensgrens_gezien_today",
+    "_shortfall_detected_today",
+    "_excess_detected_today",
     # v3.97.0: de Powercalc-proef heeft 200 metingen nodig.
     "powercalc_paren",
     # Meldingen (v1.2.0): de aan/uit-standen zijn een gebruikerskeuze en
@@ -2827,6 +2838,9 @@ PERSISTED_PLAIN_FIELDS = (
 # tick meteen worden gewist, omdat de coordinator dan denkt dat er een
 # nieuwe dag is begonnen - dan was het terugzetten zinloos geweest.
 PERSISTED_DATE_FIELDS = (
+    # v4.7: zonder de dag waarop geteld wordt, begint de teller na een
+    # herstart aan een "nieuwe" dag en zijn de waarden meteen weg.
+    "_shortfall_check_date",
     # v4.1: uit de sensorattributen naar de Store.
     "first_seen_date",
     "goedkope_koeling_teldag",

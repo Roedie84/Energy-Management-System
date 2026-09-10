@@ -55,6 +55,8 @@ def _vul_alles(c):
     # v4.1: de datumvelden die uit de sensorattributen naar de Store zijn
     # verhuisd.
     c.first_seen_date = NOW.date()
+    # v4.7: de dag waarop de dagmetingen tellen.
+    c._shortfall_check_date = NOW.date()
     c.water_softener_last_regeneration = NOW
     c.pv_export_today_kwh = 6.0
     c.gross_consumption_today_kwh = 9.0

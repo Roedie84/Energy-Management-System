@@ -475,6 +475,10 @@ async def async_get_config_entry_diagnostics(
         # v4.1: alles wat meet en nog niet stuurt, rijp bovenaan.
         "meet_stuurt_niet": _veilig("get_meet_stuurt_niet", coordinator.get_meet_stuurt_niet),
         # v4.4: welke vermogenssensor is 's nachts meer gaan gebruiken?
+        # v4.7: de nachtlast per apparaat, waar de aanwijzing op rust.
+        "nachtlast_per_apparaat": _veilig(
+            "nachtlast_per_apparaat", lambda: coordinator.nachtlast_per_apparaat
+        ),
         "welke_apparaten_stegen": _veilig(
             "welke_apparaten_stegen", coordinator.welke_apparaten_stegen
         ),

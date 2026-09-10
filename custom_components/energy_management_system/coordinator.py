@@ -9236,6 +9236,7 @@ class EnergyManagementSystemCoordinator:
             self._kandidaat_pv_model,
             self._kandidaat_reserve_uit_nabeschouwing,
             self._kandidaat_netarbitrage,
+            self._kandidaat_laadsnelheid,
             self._kandidaat_lange_reserve,
             self._kandidaat_bijkopen,
             self._kandidaat_niet_ontladen_bij_lage_prijs,
@@ -17775,6 +17776,109 @@ class EnergyManagementSystemCoordinator:
                 "aantoonbare winst op ongeziene dagen is dat een slechte "
                 "ruil."
             ),
+        }
+
+    def gemiste_zonlading(self, datum: str) -> dict:
+        """Hoeveel zon ging er naar het net terwijl de accu ruimte had?
+        (v4.7)
+
+        Gemeld op 9 september: stapelwolken met wind, en de Zendure kan
+        de fluctuatie niet bijbenen. Uit het verloop van 8 september:
+        de zon zakt 767 W en het laadvermogen zakt 1329 W - een regellus
+        die doorschiet. In de slimme stand bepaalt het apparaat zelf hoe
+        hard het laadt.
+
+        Per kwartier: ging er stroom naar het NET, had de accu nog ruimte,
+        en zat hij niet op zijn laadgrens? Dan is wat er naar het net
+        ging - hooguit de resterende laadruimte - opvangbaar geweest.
+        Dat is een BOVENGRENS: het apparaat had de fluctuatie ook
+        handmatig niet perfect gevolgd.
+        """
+        reeks = (self.dagverloop or {}).get(datum) or []
+        capaciteit = self.bruikbare_capaciteit_kwh() or 0.0
+        min_soc = float(self.effective_min_soc_percent())
+        laadgrens_w = abs(
+            self.instelling(CONF_MANUAL_CHARGE_POWER, DEFAULT_MANUAL_CHARGE_POWER)
+        )
+        kwh = 0.0
+        eur = 0.0
+        kwartieren = 0
+        for r in reeks:
+            net_w = r.get("net_w")
+            soc = r.get("soc")
+            accu_w = r.get("accu_w")
+            if net_w is None or soc is None or accu_w is None:
+                continue
+            naar_het_net = -net_w
+            if naar_het_net <= 0:
+                continue
+            ruimte_kwh = max(0.0, (100.0 - soc) / max(1.0, 100.0 - min_soc) * capaciteit)
+            if ruimte_kwh <= 0.05:
+                continue
+            laadruimte_w = max(0.0, laadgrens_w - max(0.0, -accu_w))
+            if laadruimte_w <= 50:
+                continue
+            opvangbaar_w = min(naar_het_net, laadruimte_w)
+            deel = min(opvangbaar_w / 4000, ruimte_kwh)
+            if deel <= 0:
+                continue
+            kwh += deel
+            prijs = r.get("prijs_ct")
+            if prijs is not None:
+                eur += deel * prijs / 100
+            kwartieren += 1
+        return {"kwh": round(kwh, 2), "eur": round(eur, 2), "kwartieren": kwartieren}
+
+    def _kandidaat_laadsnelheid(self) -> dict:
+        """Zou handmatig laden bij zonoverschot geld opleveren? (v4.7)
+
+        Meet; stuurt niet. En het is een BOVENGRENS - handmatig laden op
+        een vast vermogen haalt stroom van het net zodra de zon wegvalt,
+        en dat kost weer.
+        """
+        dagen = [
+            n["datum"] for n in (self.nabeschouwingen or [])
+            if n.get("te_becijferen") and n.get("datum")
+        ]
+        if len(dagen) < 3:
+            return {
+                "naam": "Sneller laden bij zonoverschot",
+                "status": RELIABILITY_INSUFFICIENT,
+                "waarde": None,
+                "onderbouwing": f"{len(dagen)} volledige dag(en); minstens 3 nodig.",
+                "betrouwbaarheid": "Een dag met stapelwolken zegt niets over een heldere.",
+                "zou_veranderen": "Handmatig laden zodra er een gemeten zonoverschot is.",
+                "zou_hebben_opgeleverd": {"te_becijferen": False, "reden": "Nog geen reeks."},
+                "mag_regelen": False,
+            }
+        metingen = [self.gemiste_zonlading(d) for d in dagen]
+        kwh = sum(m["kwh"] for m in metingen)
+        eur = sum(m["eur"] for m in metingen)
+        kwartieren = sum(m["kwartieren"] for m in metingen)
+        return {
+            "naam": "Sneller laden bij zonoverschot",
+            "status": RELIABILITY_INDICATIVE if len(dagen) < 14 else RELIABILITY_RELIABLE,
+            "waarde": (
+                f"{kwh:.1f} kWh naar het net terwijl de accu ruimte had "
+                f"({eur:.2f} euro over {len(dagen)} dagen)"
+            ),
+            "onderbouwing": (
+                f"{kwartieren} kwartieren waarin er stroom naar het net ging, de accu "
+                "nog ruimte had en niet op zijn laadgrens zat."
+            ),
+            "betrouwbaarheid": (
+                "Een BOVENGRENS. Handmatig laden op een vast vermogen haalt stroom "
+                "van het net zodra de zon wegvalt - juist op de dagen met "
+                "stapelwolken waar dit om gaat. Wat er netto overblijft is minder."
+            ),
+            "zou_veranderen": "Handmatig laden zodra er een gemeten zonoverschot is.",
+            "zou_hebben_opgeleverd": {
+                "te_becijferen": True,
+                "eur_totaal": round(eur, 2),
+                "kwh_totaal": round(kwh, 2),
+                "reden": "De zon die naar het net ging terwijl de accu hem had kunnen opnemen.",
+            },
+            "mag_regelen": False,
         }
 
     def _kandidaat_netarbitrage(self) -> dict:
