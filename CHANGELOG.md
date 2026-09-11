@@ -24808,3 +24808,32 @@ herkende in plaats van op de meting. De koelgeschiedenis stond de hele
 tijd in de export.
 
 **Volledige testsuite**: 3755 tests, allemaal groen.
+
+
+## v4.9.7 — Eerst meten welk attribuut de tijd kost
+
+**Gemeld** uit het logboek, één keer om 07:46:
+
+```
+Updating state for sensor...gacs_zelfbeoordeling took 0.425 seconds
+```
+
+Dat was 2,624 seconden voor v3.99.20, toen het PV-model nog in de event
+loop trainde. De grote oorzaak is dus weg; wat er nu over is, is 0,4
+seconde bij het opstarten - net boven de grens waarbij Home Assistant
+waarschuwt, en één keer.
+
+Deze sensor bouwt veertig attributen op, elk met een eigen aanroep.
+Welke daarvan de tijd kost, is te meten in plaats van te vermoeden -
+precies wat de proefstand in v4.2 kreeg. De rekentijd per attribuut
+staat nu in de export onder `rekentijd_ms`: het totaal en de tien
+traagste, met de traagste vooraan. Een attribuut dat omvalt krijgt geen
+tijd, zodat een fout niet als 0,0 ms in de lijst verschijnt.
+
+Aan de sensor zelf is niets veranderd. Dat wacht op de meting.
+
+Stuur na de volgende herstart de export; dan staat er welk attribuut
+het is en kan ik daar precies iets aan doen in plaats van veertig
+aanroepen te gaan verbouwen.
+
+**Volledige testsuite**: 3757 tests, allemaal groen.

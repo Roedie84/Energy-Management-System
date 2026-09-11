@@ -1,22 +1,23 @@
-EMS v4.9.6 - alleen de wijzigingen sinds v4.9.5
+EMS v4.9.7 - alleen de wijzigingen sinds v4.9.6
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
 
-    const.py, coordinator.py, dashboard_template.yaml,
-    manifest.json, bestandscontrole.json
+    sensor.py, dashboard_template.yaml, manifest.json,
+    bestandscontrole.json
 
 NAAR DE REPO
 
     README.md, CHANGELOG.md
     dashboards/energy_management_system_dashboard.yaml
-    tests/test_koelcyclus_doet_zijn_werk.py (nieuw)
-    tests/test_consistency_checks.py
+    tests/test_gacs_rekentijd.py (nieuw)
 
 WAT ER VERANDERT
 
-Het aandachtspunt over de accukoeling verdwijnt. Acht schakelingen in
-zes uur is geen pendelen als de accu elke beurt acht graden zakt - en
-dat doet hij. De melding kijkt nu naar de daling per beurt in plaats
-van naar het aantal schakelingen.
+Alleen een meting: de zelfbeoordelingssensor legt per attribuut vast
+hoe lang het duurde. In de export onder:
 
-Aan de koeling zelf is NIETS veranderd. Die deed het goed.
+    attributen van sensor.<naam>_gacs_zelfbeoordeling -> rekentijd_ms
+
+Aan de sensor zelf is niets veranderd - dat wacht op wat de meting
+zegt. Stuur na de herstart de export, dan zie ik welk van de veertig
+attributen de 0,4 seconde kost.

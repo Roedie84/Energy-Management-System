@@ -3,6 +3,8 @@
 """
 from __future__ import annotations
 
+import time
+
 import logging
 
 import statistics
@@ -4220,6 +4222,13 @@ class GacsAssessmentSensor(SensorEntity):
         van stilte.
         """
         attributen: dict = {}
+        # v4.9.7: rekentijd per attribuut. Gemeld: "Updating state for
+        # ...gacs_zelfbeoordeling took 0.425 seconds" - één keer, bij het
+        # opstarten. Dat was 2,624 seconden voor v3.99.20, dus de grote
+        # oorzaak (het PV-model in de event loop) is weg. Wat er nu over
+        # is, wil ik meten voordat ik er iets aan doe: deze sensor bouwt
+        # veertig attributen met elk een eigen aanroep.
+        rekentijd: dict[str, float] = {}
         for sleutel, functie in (
             ("samenvattingen", self._coordinator.get_topic_summaries),
             ("pv_voorspelkwaliteit", self._coordinator.get_pv_forecast_quality),
@@ -4287,7 +4296,9 @@ class GacsAssessmentSensor(SensorEntity):
             ("nog_niet_bepaald", self._coordinator.get_pending_overview),
         ):
             try:
+                _t0 = time.perf_counter()
                 attributen[sleutel] = functie()
+                rekentijd[sleutel] = round((time.perf_counter() - _t0) * 1000, 1)
                 # v1.29.0: ook weer opruimen als het wél lukt. Zonder dit
                 # blijft een fout van weken geleden voor altijd staan en
                 # gaat de herstelmelding nooit af.
@@ -4315,6 +4326,14 @@ class GacsAssessmentSensor(SensorEntity):
             )
         return {
             **attributen,
+            # v4.9.7: het totaal en de tien traagste, zodat de volgende
+            # keer niet geraden hoeft te worden welk attribuut de tijd kost.
+            "rekentijd_ms": {
+                "totaal": round(sum(rekentijd.values()), 1),
+                "traagste": dict(
+                    sorted(rekentijd.items(), key=lambda kv: -kv[1])[:10]
+                ),
+            },
             "note": (
                 "De vier eisen komen uit het Besluit Bouwwerken "
                 "Leefomgeving (art. 3.145/3.146). Voor woningen geldt geen "
