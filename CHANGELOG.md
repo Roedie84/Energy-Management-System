@@ -24762,3 +24762,49 @@ v4.9.1, dus er komen geen nieuwe entiteiten bij en er blijven geen
 wezen achter. De `_v2` van v4.9.4 is teruggedraaid.
 
 **Volledige testsuite**: 3751 tests, allemaal groen.
+
+
+## v4.9.6 — Bijna een rem gezet op iets dat werkte
+
+**Gemeld** twee dagen op rij op de landingspagina:
+
+```
+Accukoeling: 8 schakelingen in de laatste 6 uur - dat wijst op
+pendelen rond een drempel.
+```
+
+Ik stond op het punt er een dode zone in te bouwen, zoals bij de vijf
+schakelparen van v3.99.4 en v3.99.14. Eerst de koelgeschiedenis gelezen:
+
+```
+12:05  aan   accu 36 °C   buiten 18,4
+12:57  uit   accu 26 °C   buiten 18,7
+13:27  aan   accu 35 °C   buiten 18,7
+14:10  uit   accu 27 °C   buiten 19,6
+14:41  aan   accu 35 °C   buiten 19,4
+15:38  uit   accu 26 °C   buiten 20,9
+```
+
+Elke beurt duurt een uur en haalt de accu ACHT TOT DERTIEN GRADEN
+omlaag. Daarna warmt hij in anderhalf uur weer op en gaat de ventilator
+opnieuw aan. Dat is geen pendelen rond een drempel; dat is een
+koelcyclus die werkt. Pendelen zou zijn: aan bij 28,1 en uit bij 27,9.
+
+De telling keek alleen naar het AANTAL schakelingen — precies de fout
+die in v2.0.3 bij dezelfde melding al eens is gemaakt ("18 schakelingen
+vandaag. Dat klopte, maar het telde..."). `koeling_pendelt()` kijkt nu
+naar de daling per beurt: haalt een cyclus mediaan meer dan drie graden,
+dan doet hij zijn werk en is er niets te melden. De melding zegt het ook:
+"Elke koelbeurt haalt de accu mediaan 8,5 °C omlaag - de cyclus werkt;
+vaak schakelen hoort daarbij."
+
+De oude toets uit v2.0.3 legde vast dat dertien schakelingen gemeld
+worden. Die is nu aangevuld met temperaturen die wél pendelen — 28,1
+naar 27,9 — zodat hij meet wat hij bedoelde te meten.
+
+Dat ik dit bijna verkeerd had gedaan, komt doordat ik vijf keer op rij
+een pendelprobleem had gerepareerd en het zesde geval op de vorm
+herkende in plaats van op de meting. De koelgeschiedenis stond de hele
+tijd in de export.
+
+**Volledige testsuite**: 3755 tests, allemaal groen.

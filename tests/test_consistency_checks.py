@@ -112,13 +112,20 @@ def test_a_flapping_fan_is_reported(make_coordinator, hass):
     keer."""
     c = _coordinator(make_coordinator, hass)
     # v2.0.3: over een venster van zes uur, niet vanaf middernacht.
-    c.battery_cooling_history = [
-        {
-            "moment": (NU - timedelta(minutes=20 * i)).isoformat(),
-            "actie": "aan",
-        }
-        for i in range(15)
-    ]
+    # v4.9.6: aan EN uit, met de temperatuur erbij - want vaak schakelen
+    # is alleen pendelen als de accu er niet koeler van wordt. Hier
+    # schakelt hij dertien keer met nauwelijks daling: 28,1 naar 27,9.
+    c.battery_cooling_history = []
+    for i in range(15):
+        moment = NU - timedelta(minutes=20 * i)
+        c.battery_cooling_history += [
+            {"moment": moment.isoformat(), "actie": "aan", "accu_c": 28.1},
+            {
+                "moment": (moment + timedelta(minutes=4)).isoformat(),
+                "actie": "uit",
+                "accu_c": 27.9,
+            },
+        ]
 
     bevindingen = c.get_consistency_checks(NU)["bevindingen"]
 

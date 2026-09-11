@@ -1,26 +1,22 @@
-EMS v4.9.5 - alleen de wijzigingen sinds v4.9.4
+EMS v4.9.6 - alleen de wijzigingen sinds v4.9.5
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
 
-    button.py, dashboard_template.yaml, manifest.json,
-    bestandscontrole.json
+    const.py, coordinator.py, dashboard_template.yaml,
+    manifest.json, bestandscontrole.json
 
 NAAR DE REPO
 
     README.md, CHANGELOG.md
     dashboards/energy_management_system_dashboard.yaml
-    tests/test_waterbron_bevestigen.py
+    tests/test_koelcyclus_doet_zijn_werk.py (nieuw)
+    tests/test_consistency_checks.py
 
 WAT ER VERANDERT
 
-De kaart wijst nu naar button.water_was_<bron> - de entiteiten die je
-al hebt en die werken. Geen nieuwe entiteiten, geen wezen. De _v2 van
-v4.9.4 is teruggedraaid.
+Het aandachtspunt over de accukoeling verdwijnt. Acht schakelingen in
+zes uur is geen pendelen als de accu elke beurt acht graden zakt - en
+dat doet hij. De melding kijkt nu naar de daling per beurt in plaats
+van naar het aantal schakelingen.
 
-NA DE HERSTART
-
-De kaart "Bevestig de laatste onbekende watersessie" hoort zes werkende
-regels te tonen. Zes entiteiten die v4.9.4 mogelijk heeft aangemaakt
-(button.woonkamer_energy_management_system_water_was_*) worden niet
-meer aangeboden; die kun je verwijderen via Instellingen > Apparaten en
-diensten > Entiteiten.
+Aan de koeling zelf is NIETS veranderd. Die deed het goed.

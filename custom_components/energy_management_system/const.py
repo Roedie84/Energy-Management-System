@@ -338,6 +338,14 @@ JAAROPBRENGST_MIN_DAGEN = 30
 # De waterbronnen die te bevestigen zijn (v4.9). Gevraagd: "Bevestigen
 # water verbruik moet gebruiks vriendelijker" - er komt een knop per
 # bron, zodat het één tik is in plaats van vijf handelingen.
+# Hoeveel de accu per koelbeurt minstens moet dalen voordat het geen
+# pendelen meer heet (v4.9.6). Gemeten op 10 september: elke beurt
+# haalde 8 tot 13 graden omlaag in een uur. Dat is een cyclus die werkt;
+# pendelen zou zijn: aan bij 28,1 en uit bij 27,9.
+KOELING_MIN_DALING_C = 3.0
+# En hoeveel beurten er minstens moeten zijn voor een oordeel.
+KOELING_MIN_BEURTEN = 3
+
 WATERBRONNEN = (
     "toilet",
     "douche",

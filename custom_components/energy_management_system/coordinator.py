@@ -289,6 +289,8 @@ from .const import (
     EXTENDED_LOW_SOLAR_MARGIN_BONUS_PER_DAY,
     MIN_ACTIVE_SOLAR_PRODUCTION_W,
     JAAROPBRENGST_MIN_DAGEN,
+    KOELING_MIN_BEURTEN,
+    KOELING_MIN_DALING_C,
     LEARNING_HISTORY_DAYS,
     CUSUM_BASELINE_HISTORY_DAYS,
     COOLING_DEVICE_NAME_HINTS,
@@ -14505,6 +14507,56 @@ class EnergyManagementSystemCoordinator:
 
         return uit
 
+    def koeling_pendelt(self) -> dict:
+        """Pendelt de koeling, of doet ze haar werk? (v4.9.6)
+
+        De landingspagina meldde "8 schakelingen in de laatste 6 uur -
+        dat wijst op pendelen rond een drempel", en ik stond op het punt
+        er een dode zone in te bouwen. Maar de koelgeschiedenis van 10
+        september laat zien dat elke beurt de accu acht tot dertien
+        graden omlaag haalt in een uur, waarna hij in anderhalf uur weer
+        opwarmt. Dat is een koelcyclus, niet een drempel waar iets
+        omheen trilt.
+
+        Wat telt is dus niet het aantal schakelingen maar de daling per
+        beurt. Korte beurten zonder temperatuurverschil zijn pendelen;
+        een beurt die graden haalt, doet wat hij moet.
+        """
+        dalingen = []
+        aan = None
+        for regel in self.battery_cooling_history or []:
+            if regel.get("actie") == "aan":
+                aan = regel.get("accu_c")
+            elif regel.get("actie") == "uit" and aan is not None:
+                uit_c = regel.get("accu_c")
+                if uit_c is not None:
+                    dalingen.append(aan - uit_c)
+                aan = None
+        if len(dalingen) < KOELING_MIN_BEURTEN:
+            return {
+                "pendelt": False,
+                "beurten": len(dalingen),
+                "mediaan_daling_c": None,
+                "uitleg": (
+                    f"{len(dalingen)} volledige beurt(en) in de geschiedenis; "
+                    f"minstens {KOELING_MIN_BEURTEN} nodig voor een oordeel."
+                ),
+            }
+        mediaan = statistics.median(dalingen)
+        pendelt = mediaan < KOELING_MIN_DALING_C
+        return {
+            "pendelt": pendelt,
+            "beurten": len(dalingen),
+            "mediaan_daling_c": round(mediaan, 1),
+            "uitleg": (
+                f"Elke koelbeurt haalt de accu mediaan {mediaan:.1f} °C omlaag "
+                "- de cyclus werkt; vaak schakelen hoort daarbij."
+                if not pendelt
+                else f"De koelbeurten halen mediaan maar {mediaan:.1f} °C omlaag. "
+                "Dat is pendelen rond een drempel, niet koelen."
+            ),
+        }
+
     def get_consistency_checks(self, now: datetime | None = None) -> dict:
         """Rekent na of getallen die elkaar moeten kloppen dat ook doen
         (v2.0.0).
@@ -14845,12 +14897,16 @@ class EnergyManagementSystemCoordinator:
                 ernst="aandacht",
             )
 
+        # v4.9.6: het AANTAL schakelingen zegt niets zonder de daling per
+        # beurt. Acht schakelingen in zes uur waarbij de accu elke keer
+        # acht graden zakt, is een cyclus die werkt.
+        koeling = self.koeling_pendelt()
         _toets(
             "Accukoeling",
-            schakelingen <= CONSISTENCY_MAX_COOLING_SWITCHES_PER_WINDOW,
+            schakelingen <= CONSISTENCY_MAX_COOLING_SWITCHES_PER_WINDOW
+            or not koeling["pendelt"],
             f"{schakelingen} schakelingen in de laatste "
-            f"{COOLING_SWITCH_WINDOW_HOURS:.0f} uur - dat wijst op pendelen "
-            "rond een drempel.",
+            f"{COOLING_SWITCH_WINDOW_HOURS:.0f} uur. {koeling['uitleg']}",
             ernst="aandacht",
         )
 

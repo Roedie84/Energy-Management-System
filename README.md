@@ -5,9 +5,9 @@
 **Home Assistant-integratie die een thuisaccu aanstuurt op dynamische energieprijzen — en zichzelf bijleert.**
 
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=flat-square)](https://hacs.xyz)
-[![Version](https://img.shields.io/badge/versie-4.9.5-blue.svg?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/versie-4.9.6-blue.svg?style=flat-square)](CHANGELOG.md)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2024.6.0%2B-41BDF5.svg?style=flat-square)](https://www.home-assistant.io)
-[![Tests](https://img.shields.io/badge/tests-3751%20groen-brightgreen.svg?style=flat-square)](tests)
+[![Tests](https://img.shields.io/badge/tests-3755%20groen-brightgreen.svg?style=flat-square)](tests)
 [![License](https://img.shields.io/badge/licentie-MIT-lightgrey.svg?style=flat-square)](LICENSE)
 
 </div>
