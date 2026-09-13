@@ -1,0 +1,1071 @@
+"""Structural integrity checks via static analysis (AST).
+
+These exist specifically because of two real incidents in this project
+where a str_replace-style edit accidentally merged two classes/functions
+together while inserting new code nearby:
+
+1. `_read_corrected_consumption_power`'s `def` line was overwritten,
+   leaving its body as dead code inside a different property (v0.34.3).
+2. `CheapestBlockStartSensor`'s `__init__`/`native_value` were displaced
+   into the newly-added `CurrentPricePerKwhSensor`, crashing the entire
+   sensor platform setup at Home Assistant startup (v0.40.1).
+
+Both bugs still *compiled* fine (no syntax error) and were only caught
+by actually running the code. These tests catch the same class of bug
+automatically, without needing a live Home Assistant instance.
+"""
+import ast
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+INTEGRATION_DIR = REPO_ROOT / "custom_components" / "energy_management_system"
+
+# Base classes (from sensor.py) that require the subclass to supply its
+# own __init__ (the base class's __init__ takes a unique_suffix argument
+# that differs per subclass, so subclasses can never just inherit it).
+BASES_REQUIRING_OWN_INIT = {"_CoordinatorDiagnosticSensor"}
+
+# Known-benign "self.<name>(...)" calls that don't correspond to a method
+# defined in this codebase - either inherited from a Home Assistant base
+# class, or a callable instance attribute (not a method).
+KNOWN_FRAMEWORK_OR_ATTRIBUTE_CALLS = {
+    "async_get_last_state",
+    "async_write_ha_state",
+    "async_added_to_hass",
+    "_unsub_interval",
+    "_unsub_state",
+    "_unsub_water_state",
+    # v0.63.122: callable attribuut (unsubscribe van de accu-koeling-
+    # listener), geen methode - zelfde soort als _unsub_water_state.
+    "_unsub_battery_cooling_state",
+    "_unsub_compare",
+    "_unsub_capture",
+    "_abort_if_unique_id_configured",
+    "async_create_entry",
+    "async_show_form",
+    "async_set_unique_id",
+}
+
+
+def _iter_python_files():
+    for path in INTEGRATION_DIR.glob("*.py"):
+        yield path
+
+
+def test_every_file_parses_and_compiles():
+    """A syntax-level sanity check - both real incidents still passed
+    this, so it's necessary but not sufficient on its own (see the
+    other tests below for what actually caught them)."""
+    for path in _iter_python_files():
+        source = path.read_text()
+        compile(source, str(path), "exec")  # raises SyntaxError if broken
+
+
+def test_no_orphaned_self_method_calls():
+    """Every `self.<name>(...)` call must correspond to either a method
+    defined somewhere in this file, or a known framework/attribute
+    exception. This is what would have caught the
+    `_read_corrected_consumption_power` incident: the call site survived
+    intact, but the method definition it pointed to had been
+    accidentally merged into a different function."""
+    for path in _iter_python_files():
+        tree = ast.parse(path.read_text(), filename=str(path))
+
+        defined_methods = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ClassDef):
+                for item in node.body:
+                    if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                        defined_methods.add(item.name)
+
+        called_methods = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+                if isinstance(node.func.value, ast.Name) and node.func.value.id == "self":
+                    called_methods.add(node.func.attr)
+
+        # v4.11: `self._unsub_*()` is geen methode maar een opgeslagen
+        # opzegfunctie van Home Assistant, die als functie wordt
+        # aangeroepen. Die hoort niet als ontbrekende methode te gelden.
+        missing = {
+            naam
+            for naam in called_methods - defined_methods
+            - KNOWN_FRAMEWORK_OR_ATTRIBUTE_CALLS
+            if not naam.startswith("_unsub_")
+        }
+        assert not missing, f"{path.name}: calls to undefined self.<method>(): {missing}"
+
+
+def test_sensor_subclasses_have_their_own_init():
+    """Every class inheriting from a base that requires a per-subclass
+    __init__ must define one directly in its own body. This is what
+    would have caught the CheapestBlockStartSensor/CurrentPricePerKwhSensor
+    incident: the class survived with the right name and bases, but its
+    __init__ had been displaced into the wrong class entirely."""
+    sensor_path = INTEGRATION_DIR / "sensor.py"
+    tree = ast.parse(sensor_path.read_text(), filename=str(sensor_path))
+
+    offenders = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ClassDef):
+            continue
+        base_names = {b.id for b in node.bases if isinstance(b, ast.Name)}
+        if base_names & BASES_REQUIRING_OWN_INIT:
+            has_own_init = any(
+                isinstance(item, ast.FunctionDef) and item.name == "__init__"
+                for item in node.body
+            )
+            if not has_own_init:
+                offenders.append(node.name)
+
+    assert not offenders, f"classes missing their own __init__: {offenders}"
+
+
+def test_sensor_platform_setup_instantiates_every_registered_sensor():
+    """The strongest version of the regression test: actually import
+    sensor.py and instantiate every class passed to a `*Sensor(...)`
+    style constructor inside async_setup_entry, exactly like Home
+    Assistant would at startup. A displaced __init__ raises a
+    TypeError here, exactly as it did in production."""
+    import inspect
+    import re
+
+    from custom_components.energy_management_system import sensor as sensor_mod
+
+    sensor_path = INTEGRATION_DIR / "sensor.py"
+    source = sensor_path.read_text()
+
+    # Find every "SomeSensor(coordinator, ...)" construction inside the
+    # file (the pattern used throughout async_setup_entry). DOTALL so a
+    # constructor call spanning multiple lines (extra positional args on
+    # their own line) still matches - this is what would have missed
+    # ApplianceUsageHoursSensor/ApplianceReadyNotificationSensor, which
+    # take extra args beyond (coordinator, entry_id).
+    class_names = set(
+        re.findall(r"\b([A-Z]\w*Sensor)\(\s*coordinator", source, re.DOTALL)
+    )
+    assert class_names, "no sensor classes found - check the regex still matches"
+
+    class _StubCoordinator:
+        last_cheap_block_start = None
+        last_cheap_block_end = None
+        last_current_price_per_kwh = None
+        last_reason = "default_smart"
+        last_expected_mode = "smart"
+        last_simulated_action = None
+        last_is_expensive = False
+        last_effective_expensive_quarters_count = 0
+        last_discharge_start = None
+        last_soc_percent = None
+        last_available_kwh = None
+        last_needed_kwh_to_bridge = None
+        last_has_enough_energy = None
+        energy_bridge_transition_log = []
+        last_timeline = []
+        last_transitions = []
+        night_consumption_history = []
+        was_bootstrapped_from_history = False
+        total_discharge_value_eur = 0.0
+        total_charge_cost_eur = 0.0
+        reserve_shortfall_history = []
+        _shortfall_detected_today = False
+        reserve_excess_history = []
+        _excess_detected_today = False
+        learned_efficiency_history = []
+        dishwasher_usage_hourly_history = {}
+        washing_machine_usage_hourly_history = {}
+        last_dishwasher_notification = None
+        last_washing_machine_notification = None
+
+        def learned_hourly_avg_kw(self, hour):
+            return None
+
+        def learned_pv_hourly_ratio(self, hour):
+            return None
+
+        def raw_pv_hourly_avg(self, hour):
+            return None
+
+        def learned_appliance_usage_hours(self, history, threshold=0.15):
+            return []
+
+        @property
+        def learned_night_consumption_kw(self):
+            return None
+
+        @property
+        def learned_battery_efficiency_percent(self):
+            return None
+
+    stub = _StubCoordinator()
+    failures = {}
+    for class_name in class_names:
+        cls = getattr(sensor_mod, class_name)
+        # Build a plausible argument list from the __init__ signature,
+        # instead of assuming every sensor takes exactly (coordinator,
+        # entry_id) - some take extra positional args (e.g. which
+        # appliance, a display name, an icon).
+        try:
+            params = list(inspect.signature(cls.__init__).parameters.values())[1:]
+        except (TypeError, ValueError):
+            params = []
+        args = []
+        for param in params:
+            if param.name == "coordinator":
+                args.append(stub)
+            elif param.name == "entry_id":
+                args.append("test_entry_id")
+            elif param.default is not inspect.Parameter.empty:
+                break  # remaining params are optional - stop here
+            else:
+                args.append("test_value")  # generic filler for str-typed extras
+
+        try:
+            cls(*args)
+        except Exception as exc:  # noqa: BLE001 - we want to see every failure
+            failures[class_name] = repr(exc)
+
+    assert not failures, f"sensor classes failed to instantiate: {failures}"
+
+
+def test_no_call_uses_an_undefined_local_name():
+    """v3.6.1: `self._leg_pv_modelmonster_vast(hour, ...)` gebruikte een
+    naam die in die functie niet bestond.
+
+    Elke afgesloten lichte uur gaf een NameError, netjes opgevangen door
+    de try/except eromheen - dus het regressiewoud verzamelde NUL
+    monsters, en de drie weken wachten waren voor niets geweest.
+
+    Gevonden door het logboek uit v3.4.0, binnen een dag. De AST-scan
+    hierboven kijkt naar METHODEN die niet bestaan; deze naar
+    VARIABELEN.
+    """
+    import ast
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    fouten = []
+    for bestand in ("coordinator.py", "sensor.py", "solar_forecast.py"):
+        pad = Path(pkg.__file__).parent / bestand
+        if not pad.exists():
+            continue
+        boom = ast.parse(pad.read_text())
+        # Alleen toewijzingen op het HOOGSTE niveau. `boom.body` bevat
+        # ook de klasse, en `ast.walk` daarop levert elke naam uit elke
+        # methode - waardoor `hour` als bekend gold en de fout niet werd
+        # gezien.
+        modulenamen = {
+            doel.id
+            for knoop in boom.body
+            if isinstance(knoop, (ast.Assign, ast.AnnAssign, ast.AugAssign))
+            for doel in (
+                knoop.targets if isinstance(knoop, ast.Assign) else [knoop.target]
+            )
+            if isinstance(doel, ast.Name)
+        } | {
+            (alias.asname or alias.name).split(".")[0]
+            for knoop in boom.body
+            if isinstance(knoop, (ast.Import, ast.ImportFrom))
+            for alias in knoop.names
+        }
+
+        # Per functie ook de namen uit de OMSLUITENDE functies, want een
+        # geneste functie ziet die. Zonder dat worden `moment` en `tekst`
+        # ten onrechte als onbekend gemeld.
+        omhullend: dict[int, set[str]] = {}
+
+        def _verzamel(knoop, buiten: set[str]) -> None:
+            for kind in ast.iter_child_nodes(knoop):
+                if isinstance(kind, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    omhullend[id(kind)] = set(buiten)
+                    eigen = set(buiten)
+                    eigen |= {a.arg for a in kind.args.args}
+                    eigen |= {a.arg for a in kind.args.kwonlyargs}
+                    for n in ast.walk(kind):
+                        if isinstance(n, ast.Name) and isinstance(
+                            n.ctx, (ast.Store, ast.Del)
+                        ):
+                            eigen.add(n.id)
+                    _verzamel(kind, eigen)
+                else:
+                    _verzamel(kind, buiten)
+
+        _verzamel(boom, set())
+
+        for functie in ast.walk(boom):
+            if not isinstance(functie, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+
+            # Namen die in deze functie beschikbaar zijn.
+            bekend = set(omhullend.get(id(functie), set()))
+            bekend |= {a.arg for a in functie.args.args}
+            bekend |= {a.arg for a in functie.args.kwonlyargs}
+            if functie.args.vararg:
+                bekend.add(functie.args.vararg.arg)
+            if functie.args.kwarg:
+                bekend.add(functie.args.kwarg.arg)
+            for knoop in ast.walk(functie):
+                if isinstance(knoop, ast.Name) and isinstance(
+                    knoop.ctx, (ast.Store, ast.Del)
+                ):
+                    bekend.add(knoop.id)
+                elif isinstance(knoop, (ast.Import, ast.ImportFrom)):
+                    for alias in knoop.names:
+                        bekend.add((alias.asname or alias.name).split(".")[0])
+                elif isinstance(knoop, ast.ExceptHandler) and knoop.name:
+                    bekend.add(knoop.name)
+                elif isinstance(
+                    knoop, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+                ):
+                    bekend.add(knoop.name)
+                elif isinstance(knoop, (ast.comprehension,)):
+                    for n in ast.walk(knoop.target):
+                        if isinstance(n, ast.Name):
+                            bekend.add(n.id)
+
+            # Namen die als ARGUMENT aan een eigen methode worden
+            # meegegeven: die moeten bestaan.
+            # Alleen aanroepen die bij DEZE functie horen. `ast.walk`
+            # daalt af in geneste functies, en dan werd een aanroep in
+            # een binnenfunctie ook vanuit de buitenste beoordeeld -
+            # waar de parameter van de binnenfunctie niet bestaat.
+            def _eigen_aanroepen(knoop):
+                for kind in ast.iter_child_nodes(knoop):
+                    if isinstance(
+                        kind, (ast.FunctionDef, ast.AsyncFunctionDef)
+                    ):
+                        continue
+                    if isinstance(kind, ast.Call):
+                        yield kind
+                    yield from _eigen_aanroepen(kind)
+
+            for aanroep in _eigen_aanroepen(functie):
+                if not isinstance(aanroep, ast.Call):
+                    continue
+                doel = aanroep.func
+                if not (
+                    isinstance(doel, ast.Attribute)
+                    and isinstance(doel.value, ast.Name)
+                    and doel.value.id == "self"
+                ):
+                    continue
+                for arg in aanroep.args:
+                    if isinstance(arg, ast.Name) and arg.id not in bekend:
+                        # Ingebouwde namen en modulevariabelen overslaan.
+                        if arg.id in dir(__builtins__) or arg.id.isupper():
+                            continue
+                        # NIET overslaan omdat de naam elders in het
+                        # bestand bestaat: `hour` bestond in twintig
+                        # andere functies, en juist daardoor viel deze
+                        # fout niet op. Alleen namen op MODULENIVEAU
+                        # tellen als bekend.
+                        if arg.id in modulenamen:
+                            continue
+                        fouten.append(
+                            f"{bestand}:{arg.lineno}: "
+                            f"self.{doel.attr}(... {arg.id} ...) - "
+                            f"{arg.id!r} bestaat hier niet"
+                        )
+
+    assert not fouten, fouten
+
+
+def test_no_staticmethod_uses_self():
+    """v3.7.1: een `@staticmethod` met `self` als eerste parameter.
+
+    Gemeld met een screenshot: twee tegels op "unknown". De oorzaak was
+    ernstiger dan de tegels: `last_successful_update` stond op None - er
+    had sinds het opstarten geen ENKELE ronde gedraaid.
+
+        TypeError: _koelen_is_goedkoop() missing 1 required positional
+        argument: 'buiten_c'
+
+    In v3.6.0 is `_koelen_is_goedkoop` ingevoegd TUSSEN een
+    `@staticmethod`-decorator en de functie waar die bij hoorde. De
+    decorator plakte daardoor aan de nieuwe functie: `self` werd de
+    eerste echte parameter, en er bleef er één over.
+
+    Alle 2375 tests bleven groen, want geen enkele riep die functie aan
+    via een echt object - de testhulpfunctie plakte hem los op een kale
+    klasse. In bedrijf viel elke ronde om.
+    """
+    import ast
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    fouten = []
+    for bestand in ("coordinator.py", "sensor.py", "switch.py", "button.py"):
+        pad = Path(pkg.__file__).parent / bestand
+        if not pad.exists():
+            continue
+        for knoop in ast.walk(ast.parse(pad.read_text())):
+            if not isinstance(knoop, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            statisch = any(
+                isinstance(d, ast.Name) and d.id == "staticmethod"
+                for d in knoop.decorator_list
+            )
+            eerste = knoop.args.args[0].arg if knoop.args.args else None
+            if statisch and eerste == "self":
+                fouten.append(f"{bestand}:{knoop.lineno}: {knoop.name}")
+
+    assert not fouten, (
+        "deze functies zijn @staticmethod maar hebben `self` als eerste "
+        f"parameter: {fouten}"
+    )
+
+
+def test_no_method_with_self_is_called_as_static():
+    """De andere kant: een gewone methode die zonder object wordt
+    aangeroepen. Dat gaf in v3.6.0 achttien testfouten voordat het in
+    bedrijf kwam."""
+    import ast
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    pad = Path(pkg.__file__).parent / "coordinator.py"
+    boom = ast.parse(pad.read_text())
+
+    # Namen van gewone methoden (met self, zonder staticmethod).
+    gewoon = {
+        k.name
+        for k in ast.walk(boom)
+        if isinstance(k, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and k.args.args
+        and k.args.args[0].arg == "self"
+        and not any(
+            isinstance(d, ast.Name) and d.id in ("staticmethod", "classmethod")
+            for d in k.decorator_list
+        )
+    }
+
+    fouten = [
+        f"{aanroep.lineno}: {aanroep.func.attr}"
+        for aanroep in ast.walk(boom)
+        if isinstance(aanroep, ast.Call)
+        and isinstance(aanroep.func, ast.Attribute)
+        and isinstance(aanroep.func.value, ast.Name)
+        and aanroep.func.value.id
+        == "EnergyManagementSystemCoordinator"
+        and aanroep.func.attr in gewoon
+    ]
+
+    assert not fouten, fouten
+
+
+def test_no_staticmethod_uses_self():
+    """v3.7.1: `_koelen_is_goedkoop` kreeg per ongeluk een
+    `@staticmethod` boven zich.
+
+    Bij het invoegen van die functie schoof de decorator van de
+    ONDERLIGGENDE functie naar de nieuwe. Gevolg in bedrijf:
+
+        _koelen_is_goedkoop() missing 1 required positional argument:
+        'buiten_c'
+
+    Want `self._koelen_is_goedkoop(accu_c, buiten_c)` geeft bij een
+    statische methode twee argumenten aan een functie die er drie
+    verwacht - `self` telt dan mee als gewone parameter.
+
+    Deze soort fout is met het blote oog nauwelijks te zien: de
+    decorator staat een regel hoger en hoort visueel bij de vorige
+    functie.
+    """
+    import ast
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    fouten = []
+    for bestand in ("coordinator.py", "sensor.py", "switch.py", "solar_forecast.py"):
+        pad = Path(pkg.__file__).parent / bestand
+        if not pad.exists():
+            continue
+
+        for knoop in ast.walk(ast.parse(pad.read_text())):
+            if not isinstance(knoop, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+
+            statisch = any(
+                isinstance(d, ast.Name) and d.id == "staticmethod"
+                for d in knoop.decorator_list
+            )
+            if not statisch:
+                continue
+
+            # Een statische methode mag `self` niet als parameter hebben,
+            # en mag hem ook niet gebruiken.
+            if knoop.args.args and knoop.args.args[0].arg == "self":
+                fouten.append(
+                    f"{bestand}:{knoop.lineno}: {knoop.name} is statisch "
+                    "maar heeft `self` als eerste parameter"
+                )
+                continue
+            for n in ast.walk(knoop):
+                if isinstance(n, ast.Name) and n.id == "self":
+                    fouten.append(
+                        f"{bestand}:{knoop.lineno}: {knoop.name} is statisch "
+                        "maar gebruikt `self`"
+                    )
+                    break
+
+    assert not fouten, fouten
+
+
+# --- structuurscan 18: elke gebruikte naam is geïmporteerd -----------
+
+
+def test_every_module_imports_what_it_uses():
+    """De fout van 30 augustus (v3.78.0).
+
+    De twee handmatige schakelaars verschenen niet in Home Assistant,
+    terwijl de bestandscontrole zei dat alle bestanden klopten en er
+    geen logboekmelding was.
+
+    De oorzaak: `HANDMATIGE_STAND_LADEN` werd in `switch.py` gebruikt
+    maar nooit geïmporteerd. Bij het opzetten van de schakelaars werpt
+    dat een NameError, en dan wordt die hele stap stil overgeslagen -
+    geen entiteiten, geen zichtbare fout.
+
+    Mijn toetsen misten het volledig: die controleerden of de KLASSE in
+    het bestand stond, niet of hij ook opgezet kon worden.
+
+    Deze scan kijkt per bestand of elke naam in HOOFDLETTERS die
+    gebruikt wordt, ook geïmporteerd of gedefinieerd is.
+    """
+    import ast
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    fouten = []
+    for pad in sorted(Path(pkg.__file__).parent.glob("*.py")):
+        boom = ast.parse(pad.read_text())
+        beschikbaar = set()
+        for n in ast.walk(boom):
+            if isinstance(n, (ast.Import, ast.ImportFrom)):
+                beschikbaar |= {
+                    (a.asname or a.name).split(".")[0] for a in n.names
+                }
+            elif isinstance(n, ast.Assign):
+                beschikbaar |= {
+                    t.id for t in n.targets if isinstance(t, ast.Name)
+                }
+            elif isinstance(n, ast.AnnAssign) and isinstance(n.target, ast.Name):
+                beschikbaar.add(n.target.id)
+
+        # v3.99.10: ook KLASSENAMEN (CamelCase), niet alleen constanten.
+        #
+        # `woud = RegressieWoud()` stond sinds de eerste versie van
+        # pv_model in coordinator.py zonder import. Deze scan keek alleen
+        # naar HOOFDLETTERS, dus zag hij het niet. Het viel pas om op 6
+        # september, toen het PV-model voor het eerst genoeg monsters
+        # had om die regel te bereiken: drie onderdelen van de export
+        # kapot, elk uur een melding.
+        for n in ast.walk(boom):
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                beschikbaar.add(n.name)
+        gebruikt = {
+            n.id
+            for n in ast.walk(boom)
+            if isinstance(n, ast.Name)
+            and isinstance(n.ctx, ast.Load)
+            and len(n.id) > 3
+            and (n.id.isupper() or (n.id[0].isupper() and "_" not in n.id))
+        }
+        # `__builtins__` is binnen pytest een dict, geen module; dan
+        # ontbreken Exception, ValueError en de rest. Via de module zelf.
+        import builtins
+
+        ontbreekt = sorted(gebruikt - beschikbaar - set(dir(builtins)))
+        if ontbreekt:
+            fouten.append(f"{pad.name}: {ontbreekt}")
+
+    assert not fouten, (
+        "namen die gebruikt worden maar nergens vandaan komen - dat "
+        f"werpt een NameError bij het opstarten: {fouten}"
+    )
+
+
+# --- structuurscan 20: schakelaars luisteren mee ---------------------
+
+
+def test_every_switch_that_reads_the_coordinator_listens():
+    """De fout van 30 augustus (v3.83.0).
+
+    Gemeld met een schermafdruk: "Handmatig laden 2000 W - Aan", terwijl
+    de export op datzelfde moment `handmatige_stand: None` gaf.
+
+    Die twee spraken elkaar tegen omdat de schakelaar zich nergens op
+    abonneerde. `is_on` leest het juiste veld, maar Home Assistant vraagt
+    dat alleen opnieuw op als iemand het zegt - en dat gebeurt pas als je
+    de knop aanraakt.
+
+    Gevolg: de integratie zet de stand uit - bij een herstart, of omdat
+    de accu vol is - en het dashboard blijft "Aan" tonen. Dan denk je dat
+    je aan het laden bent terwijl er niets gebeurt.
+
+    Twee andere schakelaars hadden hetzelfde: de kalibratie, die vanzelf
+    afrondt bij een volle accu, en `Nu laden`, waarvan het uitstel
+    afloopt.
+
+    Een schakelaar die zijn stand uit de coordinator leest, moet
+    meeluisteren. Tenzij hij zijn stand uit de Store herstelt - dan is
+    hij zelf de bron.
+    """
+    import ast
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    bron = (Path(pkg.__file__).parent / "switch.py").read_text()
+    boom = ast.parse(bron)
+
+    fouten = []
+    for kl in ast.walk(boom):
+        if not isinstance(kl, ast.ClassDef) or not kl.name.endswith("Switch"):
+            continue
+        tekst = ast.get_source_segment(bron, kl) or ""
+        leest = "self._coordinator." in tekst
+        luistert = "register_listener" in tekst
+        eigen_bron = "async_get_last_state" in tekst
+        if leest and not luistert and not eigen_bron:
+            fouten.append(kl.name)
+
+    assert not fouten, (
+        "deze schakelaars lezen hun stand uit de coordinator maar "
+        f"luisteren niet mee - dan blijft het dashboard hangen: {fouten}"
+    )
+
+
+# --- structuurscan 21: het accuvermogen via de juiste helper ---------
+
+
+def test_battery_power_is_always_read_sign_corrected():
+    """De fout van 30 augustus (v3.88.0).
+
+    `_richting_van_de_accu` las de vermogenssensor RECHTSTREEKS en
+    negeerde daarmee `invert_battery_power_sign` - een instelling die bij
+    deze installatie aan staat. Laden en ontladen zouden precies
+    omgekeerd zijn vastgelegd, en dan meet de hele patroonanalyse het
+    tegenovergestelde van wat er gebeurde.
+
+    `_read_corrected_battery_power` bestaat sinds v0.39.0 en doet het
+    goed: positief is ontladen, negatief is laden.
+
+    Deze scan zoekt naar plekken die `CONF_BATTERY_POWER_SENSOR` zelf
+    lezen in plaats van die helper te gebruiken.
+    """
+    import ast
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    boom = ast.parse(bron)
+
+    # Wie de sensor rechtstreeks leest, MOET het teken zelf verrekenen.
+    #
+    # Acht functies doen dat laatste al met dezelfde vier regels als de
+    # helper. Dat is dubbele code - een van de punten uit de
+    # doorlichting - maar geen fout: het teken klopt er.
+    #
+    # Deze scan slaat alleen aan als de correctie ONTBREEKT, want dan
+    # staat er stilzwijgend een omgekeerde waarde.
+    fouten = []
+    for fn in ast.walk(boom):
+        if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if fn.name == "_read_corrected_battery_power":
+            continue
+        tekst = ast.get_source_segment(bron, fn) or ""
+        code = "\n".join(
+            r for r in tekst.split("\n") if not r.strip().startswith("#")
+        )
+        if "CONF_INVERT_BATTERY_POWER_SIGN" in code:
+            continue
+        if "_read_corrected_battery_power" in code:
+            continue
+
+        # Alleen waar de WAARDE wordt gelezen, niet waar alleen wordt
+        # gekeken of de sensor bestaat. Twee functies controleren de
+        # beschikbaarheid van vier sensoren tegelijk in een lus - die
+        # lezen wel `_read_sensor_float`, maar op een andere entiteit.
+        import re
+
+        rechtstreeks = re.search(
+            r"_read_sensor_float\(\s*\n?\s*(self\.config\.get\()?"
+            r"CONF_BATTERY_POWER_SENSOR",
+            code,
+        ) or re.search(
+            r"battery_entity\s*=\s*self\.config\.get\("
+            r"CONF_BATTERY_POWER_SENSOR\)[\s\S]{0,400}"
+            r"_read_sensor_float\(battery_entity\)",
+            code,
+        )
+        if rechtstreeks:
+            fouten.append(fn.name)
+
+    assert not fouten, (
+        "deze functies lezen de accuvermogenssensor rechtstreeks en "
+        "negeren daarmee `invert_battery_power_sign` - gebruik "
+        f"`_read_corrected_battery_power`: {fouten}"
+    )
+
+
+# --- structuurscan 22: bestaan de gelezen attributen? ---------------
+
+
+def test_every_self_attribute_exists_on_the_class():
+    """De fout van 31 augustus (v3.91.0).
+
+    Gemeld: "1 onderdeel(en) vallen om -
+    diagnostiek:get_planning_tegen_sturing", met in de export:
+
+        AttributeError: object has no attribute 'quarter_plan'
+
+    Ik las die naam uit de EXPORT - daar heet de sleutel wel
+    `quarter_plan` - en nam aan dat de coordinator hem net zo noemt. Het
+    is een FUNCTIE, `get_quarter_plan()`.
+
+    De toets die ik erbij schreef zette `c.quarter_plan` gewoon als
+    attribuut, en bevestigde daarmee mijn aanname in plaats van de code
+    te toetsen. Dezelfde vorm als bij de klimaatsleutels (v3.47.0) en de
+    aandachtspunten (v3.70.0).
+
+    Deze scan kijkt of elk `self.<naam>` dat gelezen wordt, ook ergens
+    wordt gezet of als methode bestaat.
+    """
+    import ast
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    boom = ast.parse(bron)
+    kl = next(
+        n
+        for n in ast.walk(boom)
+        if isinstance(n, ast.ClassDef) and "Coordinator" in n.name
+    )
+
+    methoden = {
+        n.name
+        for n in kl.body
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+    geschreven = {
+        n.attr
+        for n in ast.walk(kl)
+        if isinstance(n, ast.Attribute)
+        and isinstance(n.value, ast.Name)
+        and n.value.id == "self"
+        and isinstance(n.ctx, ast.Store)
+    }
+    # Sommige velden komen van de basisklasse of via getattr.
+    import re
+
+    via_getattr = set(re.findall(r'getattr\(self,\s*"([a-z_]+)"', bron))
+    van_de_basis = {
+        "hass", "config", "data", "logger", "name", "update_interval",
+        "last_update_success", "config_entry", "async_update_listeners",
+        "_unsub_interval", "_listeners",
+    }
+
+    gelezen = {
+        n.attr
+        for n in ast.walk(kl)
+        if isinstance(n, ast.Attribute)
+        and isinstance(n.value, ast.Name)
+        and n.value.id == "self"
+        and isinstance(n.ctx, ast.Load)
+    }
+
+    onbekend = sorted(
+        gelezen - geschreven - methoden - via_getattr - van_de_basis
+    )
+    # Alleen namen die eruitzien als een eigen veld; alles wat met een
+    # hoofdletter of dunder begint komt ergens anders vandaan.
+    onbekend = [
+        n for n in onbekend if n.islower() and not n.startswith("__")
+    ]
+
+    assert not onbekend, (
+        "deze attributen worden gelezen maar nergens gezet - dat werpt "
+        f"een AttributeError zodra die tak loopt: {onbekend}"
+    )
+
+
+# --- structuurscan 23: geeft de functie terug wat ze berekend heeft? --
+
+
+def _herberekende_returns(boom):
+    """Functies die een uitdrukking teruggeven die eerder al aan een
+
+    variabele is toegekend, terwijl die variabele daarna is bijgesteld.
+
+    Precies de vorm van de reservebodem: `reserve_kwh = needed_kwh *
+    margin`, dan `reserve_kwh = max(reserve_kwh, bodem_kwh)`, en aan het
+    eind `return needed_kwh * margin`. De correctie wordt dan overgeslagen
+    zonder dat er ergens dode code staat.
+    """
+    fouten = []
+    for functie in ast.walk(boom):
+        if not isinstance(functie, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+
+        # Per variabele: de vormen die eraan zijn toegekend, met de regel
+        # waarop dat gebeurde.
+        toekenningen: dict[str, list[tuple[int, str]]] = {}
+        for knoop in ast.walk(functie):
+            if not isinstance(knoop, ast.Assign) or len(knoop.targets) != 1:
+                continue
+            doel = knoop.targets[0]
+            if not isinstance(doel, ast.Name):
+                continue
+            toekenningen.setdefault(doel.id, []).append(
+                (knoop.lineno, ast.dump(knoop.value))
+            )
+
+        for knoop in ast.walk(functie):
+            if not isinstance(knoop, ast.Return) or knoop.value is None:
+                continue
+            # Een kale naam of een letterlijke waarde teruggeven is nooit
+            # een herberekening. Zonder deze regel matcht elke `return
+            # 0.0` op elke `teller = 0.0` verderop.
+            if isinstance(knoop.value, (ast.Name, ast.Constant)):
+                continue
+            vorm = ast.dump(knoop.value)
+            for naam, vormen in toekenningen.items():
+                if len(vormen) < 2 or vorm != vormen[0][1]:
+                    continue
+                # En de bijstelling moet vóór de return staan, anders is
+                # er niets overgeslagen.
+                if knoop.lineno <= vormen[-1][0]:
+                    continue
+                fouten.append(
+                    f"{functie.name}: geeft de beginwaarde van '{naam}' "
+                    f"opnieuw terug terwijl die daarna nog "
+                    f"{len(vormen) - 1}x is bijgesteld"
+                )
+    return fouten
+
+
+def test_no_function_returns_a_value_it_has_since_corrected():
+    """De fout van 31 augustus (v3.92.1).
+
+    `_get_dynamic_discharge_reserve_kwh` rekende de reservebodem uit, zette
+    hem in `last_reserve_margin_breakdown` - dat is wat het dashboard toont
+    - en gaf daarna `needed_kwh * margin` terug: de waarde van vóór de
+    bodem. Gemeten bij een diepste tekort van 0,001 kWh en 7,78 kWh
+    bruikbaar:
+
+        gemeld aan het dashboard    1,167 kWh   bodem bindend: true
+        teruggegeven aan de sturing 0,00125 kWh
+
+    De hele bodem van v3.74.0 heeft daardoor nooit gewerkt, terwijl alles
+    wat je erover kon aflezen klopte. Structuurscan 4 vangt dit niet: de
+    bijgestelde waarde WORDT gelezen, alleen niet door de return.
+
+    De zeven toetsen van v3.74.0 keken allemaal naar de uitsplitsing of
+    naar de constante - geen enkele naar wat de functie teruggaf. Vierde
+    keer dat een toets de aanname bevestigde in plaats van de code.
+    """
+    fouten = []
+    for pad in _iter_python_files():
+        boom = ast.parse(pad.read_text())
+        fouten.extend(f"{pad.name}:{regel}" for regel in _herberekende_returns(boom))
+
+    assert not fouten, (
+        "deze functies geven een herberekening terug in plaats van de "
+        f"bijgestelde variabele: {fouten}"
+    )
+
+
+def test_the_scan_catches_the_original_fault():
+    """De fout terugzetten en controleren dat de scan afgaat."""
+    bron = (
+        "def reserve(needed, margin, bodem):\n"
+        "    reserve_kwh = needed * margin\n"
+        "    reserve_kwh = max(reserve_kwh, bodem)\n"
+        "    return needed * margin\n"
+    )
+
+    assert _herberekende_returns(ast.parse(bron))
+
+
+def test_the_scan_accepts_the_repair():
+    """En dat hij zwijgt zodra de correctie wél wordt teruggegeven."""
+    bron = (
+        "def reserve(needed, margin, bodem):\n"
+        "    reserve_kwh = needed * margin\n"
+        "    reserve_kwh = max(reserve_kwh, bodem)\n"
+        "    return reserve_kwh\n"
+    )
+
+    assert not _herberekende_returns(ast.parse(bron))
+
+
+# --- structuurscan 24: elke reserve houdt de bodem aan ----------------
+
+
+def _reserves_zonder_bodem(boom):
+    """Functies die een reserve uitrekenen zonder de bodem toe te passen.
+
+    Een reserve is hier: iets dat de marge uit `_reserve_margin_factor`
+    of `SELL_RESERVE_DEEPEST_SAFETY_FACTOR` gebruikt. Wie dat doet,
+    vermenigvuldigt een marge met het diepste tekort - en dat tekort is
+    nul zodra de voorspelling zegt dat de zon het huis morgen dekt.
+    """
+    fouten = []
+    for functie in ast.walk(boom):
+        if not isinstance(functie, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+
+        namen = set()
+        for knoop in ast.walk(functie):
+            if isinstance(knoop, ast.Name):
+                namen.add(knoop.id)
+            elif isinstance(knoop, ast.Attribute):
+                namen.add(knoop.attr)
+
+        rekent_reserve = (
+            "_reserve_margin_factor" in namen
+            or "SELL_RESERVE_DEEPEST_SAFETY_FACTOR" in namen
+        )
+        # De marge-functie zelf komt in haar eigen naamverzameling voor;
+        # die LEVERT de marge en rekent geen reserve uit.
+        if functie.name == "_reserve_margin_factor":
+            continue
+        if rekent_reserve and "_reserve_bodem_kwh" not in namen:
+            fouten.append(functie.name)
+    return fouten
+
+
+def test_every_reserve_calculation_applies_the_floor():
+    """De fout van 31 augustus, de tweede helft (v3.92.3).
+
+    De bodem stond op vier plekken los uitgerekend of helemaal niet
+    toegepast: de sturing, de kwartierplanning, de uitsplitsing en de
+    verkooptoets. Gemeten om 10:11, met de sturing al gerepareerd:
+
+        reserve (bodem bindend)   1,296 kWh
+        beschikbaar               0,69 kWh
+        verkooptoets              alles vrij te verkopen
+
+    Het commentaar bij de bodem beweerde sinds v3.74.0 dat hij "op ÉÉN
+    plek staat zodat hij doorwerkt in het ontladen, de verkooptoets en
+    de kwartierplanning tegelijk". Dat was de bedoeling, niet de code -
+    en een commentaarregel gaat niet om als de code verandert.
+
+    Deze scan wel.
+    """
+    fouten = []
+    for pad in _iter_python_files():
+        boom = ast.parse(pad.read_text())
+        fouten.extend(f"{pad.name}:{naam}" for naam in _reserves_zonder_bodem(boom))
+
+    assert not fouten, (
+        "deze functies rekenen een reserve uit zonder de bodem: " f"{fouten}"
+    )
+
+
+def test_the_floor_scan_catches_a_new_reserve():
+    """Een vijfde reserveberekening erbij, en de scan gaat af."""
+    bron = (
+        "def verkoop(self, diepste):\n"
+        "    marge = self._reserve_margin_factor()\n"
+        "    return diepste * marge\n"
+    )
+
+    assert _reserves_zonder_bodem(ast.parse(bron)) == ["verkoop"]
+
+
+def test_the_floor_scan_accepts_a_reserve_with_the_floor():
+    bron = (
+        "def verkoop(self, diepste):\n"
+        "    marge = self._reserve_margin_factor()\n"
+        "    return max(diepste * marge, self._reserve_bodem_kwh())\n"
+    )
+
+    assert not _reserves_zonder_bodem(ast.parse(bron))
+
+
+# --- structuurscan 26: namen uit een zustermodule zonder import --------
+
+
+def _gebruikt_zonder_import(map_pad):
+    """Per module: namen die in een ANDERE module van het pakket op het
+    hoogste niveau gedefinieerd zijn, hier als naam gebruikt worden, en
+    niet geïmporteerd of lokaal gedefinieerd zijn.
+
+    Scan 18 kijkt naar hoofdletters (constanten) en sinds v3.99.10 naar
+    CamelCase (klassen). `gemiddelde_absolute_fout` is geen van beide -
+    en stond een uur na v3.99.10 alsnog als NameError in de export.
+    Wat scan 18 niet kan zien, ziet deze wel: hij weet welke namen de
+    zustermodules aanbieden.
+    """
+    modules = {}
+    for pad in sorted(map_pad.glob("*.py")):
+        modules[pad.stem] = ast.parse(pad.read_text())
+
+    aanbod: dict[str, set[str]] = {}
+    for naam, boom in modules.items():
+        aanbod[naam] = {
+            n.name
+            for n in boom.body
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+        }
+
+    fouten = []
+    for naam, boom in modules.items():
+        eigen = set(aanbod[naam])
+        geimporteerd = set()
+        for n in ast.walk(boom):
+            if isinstance(n, (ast.Import, ast.ImportFrom)):
+                geimporteerd |= {(a.asname or a.name).split(".")[0] for a in n.names}
+            elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                eigen.add(n.name)
+                eigen |= {a.arg for a in n.args.args} if hasattr(n, "args") else set()
+            elif isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store):
+                eigen.add(n.id)
+        elders = set()
+        for ander, namen in aanbod.items():
+            if ander != naam:
+                elders |= namen
+        gebruikt = {
+            n.id for n in ast.walk(boom)
+            if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)
+        }
+        for sym in sorted((gebruikt & elders) - eigen - geimporteerd):
+            fouten.append(f"{naam}.py gebruikt '{sym}' zonder import")
+    return fouten
+
+
+def test_no_module_uses_a_sibling_symbol_without_importing_it():
+    """v3.99.12. Twee NameErrors in een dag uit dezelfde functie:
+    `RegressieWoud` (v3.99.10) en dertig regels verderop
+    `gemiddelde_absolute_fout`. Allebei uit `pv_model.py`, allebei nooit
+    geïmporteerd, allebei pas zichtbaar toen het PV-model voor het eerst
+    genoeg monsters had.
+    """
+    fouten = _gebruikt_zonder_import(INTEGRATION_DIR)
+
+    assert not fouten, fouten
+
+
+def test_the_sibling_scan_catches_the_original_fault(tmp_path):
+    (tmp_path / "a.py").write_text("def helper():\n    return 1\n")
+    (tmp_path / "b.py").write_text("def gebruik():\n    return helper()\n")
+
+    assert _gebruikt_zonder_import(tmp_path) == ["b.py gebruikt 'helper' zonder import"]
+
+
+def test_the_sibling_scan_accepts_an_import(tmp_path):
+    (tmp_path / "a.py").write_text("def helper():\n    return 1\n")
+    (tmp_path / "b.py").write_text("from .a import helper\n\ndef gebruik():\n    return helper()\n")
+
+    assert _gebruikt_zonder_import(tmp_path) == []

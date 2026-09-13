@@ -1,0 +1,427 @@
+"""Koeling: meetuitval en buitentemperatuur (v1.21.0).
+
+Gemeld: "Voor het verbruik van de koelkast/diepvries is het misschien
+goed de buitentemperaturen mee te wegen, dit gezien ze in een relatief
+warme schuur staan, welke sterk wordt beïnvloed door de
+buitentemperatuur."
+
+Terecht - maar er zat een groter probleem onder. De dagreeks van de
+diepvries wisselde tussen 0,8 W en 90 W: dertien dagen onder 5 W, twaalf
+boven 60. Een dagGEMIDDELDE van 0,8 W betekent dat de compressor die hele
+dag niet draaide, wat voor een gevulde diepvries onmogelijk is. Dat zijn
+dagen waarop de meter niets doorgaf.
+
+De mediaan over álle dagen belandde daardoor op 19,68 W - precies tussen
+beide groepen in - en meldde "+57,4% drift" terwijl 40,8 W een normale
+dag was.
+"""
+import statistics
+
+from custom_components.energy_management_system.const import (
+    CONF_BACKYARD_TEMPERATURE_SENSOR,
+    COOLING_DRIFT_PERCENT_PER_DEGREE,
+    COOLING_TEMP_MIN_DAYS,
+)
+
+# De werkelijke dagreeks uit de export.
+DIEPVRIES = [
+    0.7, 0.7, 0.8, 76.3, 1.0, 0.7, 77.2, 0.9, 77.8, 78.3,
+    19.7, 19.7, 0.9, 81.2, 0.8, 0.8, 79.8, 78.8, 41.5, 0.9,
+    75.2, 228.6, 19.4, 75.5, 0.8, 0.7, 75.6, 0.9, 79.5, 31.0,
+]
+
+
+# --- meetuitval ------------------------------------------------------
+
+
+def test_dropout_days_are_excluded(make_coordinator, hass):
+    """Het gerapporteerde geval: de referentie kwam uit het niemandsland
+    tussen twee groepen."""
+    c = make_coordinator({})
+
+    schoon = c._zonder_meetuitval(DIEPVRIES)
+
+    assert statistics.median(DIEPVRIES) < 25
+    assert statistics.median(schoon) > 70
+
+
+def test_the_reference_becomes_realistic(make_coordinator, hass):
+    """Een diepvries die 76 W trekt is normaal; 19,68 W was het
+    gemiddelde van werken en niets doorgeven."""
+    c = make_coordinator({})
+
+    referentie = statistics.median(c._zonder_meetuitval(DIEPVRIES))
+
+    assert 70 <= referentie <= 85
+
+
+def test_a_genuinely_low_device_is_left_alone(make_coordinator, hass):
+    """Te streng filteren zou een apparaat dat werkelijk weinig
+    verbruikt onterecht opschonen."""
+    c = make_coordinator({})
+    lamp = [0.17, 0.18, 0.17, 0.16, 0.18, 0.17]
+
+    assert c._zonder_meetuitval(lamp) == lamp
+
+
+def test_a_short_history_is_kept(make_coordinator, hass):
+    """Met twee metingen valt niet te zeggen wat uitval is."""
+    c = make_coordinator({})
+
+    assert c._zonder_meetuitval([0.8, 76.0]) == [0.8, 76.0]
+
+
+def test_zero_days_are_dropped(make_coordinator, hass):
+    """Nul is per definitie geen meting."""
+    c = make_coordinator({})
+
+    assert 0.0 not in c._zonder_meetuitval([0.0, 70.0, 68.0, 71.0, 0.0])
+
+
+# --- buitentemperatuur -----------------------------------------------
+
+
+def _koelkast(make_coordinator, hass, buiten, dagen=7):
+    c = make_coordinator({CONF_BACKYARD_TEMPERATURE_SENSOR: "sensor.buiten"})
+    hass.states.set("sensor.buiten", str(buiten))
+    apparaat = {
+        "friendly_name": "Diepvries schuur Vermogen",
+        "outdoor_temp_history": [19.0] * dagen,
+    }
+    return c, apparaat
+
+
+def test_warm_weather_gives_margin(make_coordinator, hass):
+    """Een koelkast in een schuur werkt harder als het buiten warm is;
+    zonder correctie leest een warme week als een defect."""
+    c, apparaat = _koelkast(make_coordinator, hass, 25.0)
+
+    marge = c._koeling_temperatuurmarge_procent(apparaat)
+
+    assert marge == 6 * COOLING_DRIFT_PERCENT_PER_DEGREE
+
+
+def test_cool_weather_gives_no_margin(make_coordinator, hass):
+    """Alleen naar boven: koeler weer mag geen drift verbergen."""
+    c, apparaat = _koelkast(make_coordinator, hass, 12.0)
+
+    assert c._koeling_temperatuurmarge_procent(apparaat) == 0.0
+
+
+def test_only_cooling_devices_get_a_margin(make_coordinator, hass):
+    """Een lamp verbruikt niet meer omdat het warm is."""
+    c, _ = _koelkast(make_coordinator, hass, 32.0)
+
+    marge = c._koeling_temperatuurmarge_procent(
+        {"friendly_name": "Eetkamer lamp 1 Power"}
+    )
+
+    assert marge == 0.0
+
+
+def test_too_little_temperature_history_gives_no_margin(
+    make_coordinator, hass
+):
+    """Zonder geschiedenis is er geen referentiepunt om tegen af te
+    zetten."""
+    c, apparaat = _koelkast(
+        make_coordinator, hass, 30.0, dagen=COOLING_TEMP_MIN_DAYS - 1
+    )
+
+    assert c._koeling_temperatuurmarge_procent(apparaat) == 0.0
+
+
+def test_without_a_temperature_sensor_there_is_no_margin(
+    make_coordinator, hass
+):
+    c = make_coordinator({})
+
+    marge = c._koeling_temperatuurmarge_procent(
+        {
+            "friendly_name": "Diepvries schuur Vermogen",
+            "outdoor_temp_history": [19.0] * 7,
+        }
+    )
+
+    assert marge == 0.0
+
+
+def test_the_margin_is_modest_per_degree():
+    """Rond 3% per graad is de vuistregel uit de koeltechniek; veel
+    hoger zou een echt defect verbergen."""
+    assert 1.0 <= COOLING_DRIFT_PERCENT_PER_DEGREE <= 5.0
+
+
+# --- inbedding -------------------------------------------------------
+
+
+def test_the_temperature_is_recorded_per_day():
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+
+    assert "outdoor_temp_history" in bron
+
+
+def test_the_margin_is_used_in_the_drift_check():
+    """Meten zonder toepassen zou het probleem niet oplossen."""
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    start = bron.index("groot_genoeg = reference_avg_w")
+    blok = bron[start : start + 1200]
+
+    assert "_koeling_temperatuurmarge_procent" in blok
+    assert "verschil_w = max(0.0, verschil_w - verklaard_w)" in blok
+
+
+# --- v1.21.3: een halve dag aan metingen ----------------------------
+
+
+def test_a_day_needs_enough_samples():
+    """Gevonden in de export ná v1.21.2: de diepvries meldde "-98,8%
+    drift, mogelijk defect" op basis van VIJF metingen.
+
+    Bij een tick van vijf minuten is dat 25 minuten - de integratie was
+    net herstart, en een compressor die in dat kwartier net niet draaide
+    geeft een laag gemiddelde.
+
+    De uitvalfilter uit v1.21.0 werkt op de GESCHIEDENIS; de dag die nog
+    liep werd zonder ondergrens meegewogen. Eén meting volstond.
+    """
+    from custom_components.energy_management_system.const import (
+        NILM_MIN_SAMPLES_FOR_DAY,
+    )
+
+    # Ruim acht uur bij vijf minuten per tick.
+    assert NILM_MIN_SAMPLES_FOR_DAY >= 96
+
+
+def test_a_short_day_is_not_finalised(make_coordinator, hass):
+    """Het gerapporteerde geval: vijf metingen mogen geen dagcijfer
+    opleveren."""
+    from datetime import datetime, timedelta, timezone
+
+    c = make_coordinator({})
+    hass.states.set("sensor.diepvries", "0")
+    c.nilm_confirmed_devices["sensor.diepvries"] = {
+        "friendly_name": "Diepvries schuur Vermogen",
+        "confirmed_at": "2026-08-05",
+        "daily_avg_history": [],
+        "cusum_accumulator": 0.0,
+        "anomaly_detected": False,
+        "estimated_drift_percent": None,
+        "reference_avg_w": 76.34,
+        "_today_sum": 81.5,
+        "_today_count": 5,
+        "_check_date": datetime(2026, 8, 10, tzinfo=timezone.utc).date(),
+    }
+
+    c._update_nilm_confirmed_devices(
+        datetime(2026, 8, 11, 0, 5, tzinfo=timezone.utc)
+    )
+
+    assert c.nilm_confirmed_devices["sensor.diepvries"]["daily_avg_history"] == []
+
+
+def test_a_full_day_is_finalised(make_coordinator, hass):
+    """De drempel mag een echte dag niet tegenhouden."""
+    from datetime import datetime, timezone
+
+    from custom_components.energy_management_system.const import (
+        NILM_MIN_SAMPLES_FOR_DAY,
+    )
+
+    c = make_coordinator({})
+    hass.states.set("sensor.diepvries", "0")
+    c.nilm_confirmed_devices["sensor.diepvries"] = {
+        "friendly_name": "Diepvries schuur Vermogen",
+        "confirmed_at": "2026-08-05",
+        "daily_avg_history": [],
+        "cusum_accumulator": 0.0,
+        "anomaly_detected": False,
+        "estimated_drift_percent": None,
+        "reference_avg_w": 76.34,
+        "_today_sum": 76.0 * NILM_MIN_SAMPLES_FOR_DAY,
+        "_today_count": NILM_MIN_SAMPLES_FOR_DAY,
+        # v1.50.0: een koelapparaat wordt nu ook op INSCHAKELDUUR
+        # beoordeeld. Een dag waarop de compressor nooit aansloeg is
+        # meetuitval, geen dag - dus die telling hoort erbij.
+        "_today_on_count": int(NILM_MIN_SAMPLES_FOR_DAY * 0.35),
+        "_today_on_sum": 220.0 * int(NILM_MIN_SAMPLES_FOR_DAY * 0.35),
+        "_check_date": datetime(2026, 8, 10, tzinfo=timezone.utc).date(),
+    }
+
+    c._update_nilm_confirmed_devices(
+        datetime(2026, 8, 11, 0, 5, tzinfo=timezone.utc)
+    )
+
+    geschiedenis = c.nilm_confirmed_devices["sensor.diepvries"][
+        "daily_avg_history"
+    ]
+
+    assert geschiedenis == [76.0]
+
+
+# --- v1.50.0: een diepvries is aan/uit -------------------------------
+
+
+def _koelapparaat(c, hass, **extra):
+    from datetime import datetime, timezone
+
+    hass.states.set("sensor.diepvries", "0")
+    apparaat = {
+        "friendly_name": "Diepvries schuur Vermogen",
+        "daily_avg_history": [],
+        "cusum_accumulator": 0.0,
+        "anomaly_detected": False,
+        "estimated_drift_percent": None,
+        "reference_avg_w": 76.34,
+        "_check_date": datetime(2026, 8, 10, tzinfo=timezone.utc).date(),
+    }
+    apparaat.update(extra)
+    c.nilm_confirmed_devices["sensor.diepvries"] = apparaat
+    return apparaat
+
+
+def test_a_day_without_the_compressor_is_measurement_failure(
+    make_coordinator, hass
+):
+    """Gevraagd: "Het is toch simpelweg, aan/uit?"
+
+    Precies - en op een dag waarop de compressor vrijwel nooit aansloeg
+    heeft het daggemiddelde niets te maken met hoe de diepvries het
+    doet. In de reeks van 11 augustus staan 12 van de 30 dagen op 0,8 W
+    en 13 op 76-81 W; elke 0,8-dag werd gelezen als "-98,8% drift,
+    mogelijk defect".
+    """
+    from datetime import datetime, timezone
+
+    c = make_coordinator({})
+    apparaat = _koelapparaat(
+        c,
+        hass,
+        _today_sum=0.8 * 200,
+        _today_count=200,
+        _today_on_count=0,
+        _today_on_sum=0.0,
+    )
+
+    c._update_nilm_confirmed_devices(
+        datetime(2026, 8, 11, 0, 5, tzinfo=timezone.utc)
+    )
+
+    assert apparaat["daily_avg_history"] == []
+    assert apparaat["meetuitval_dagen"] == 1
+
+
+def test_a_normal_day_records_duty_cycle_and_running_power(
+    make_coordinator, hass
+):
+    """Het daggemiddelde is het product van twee dingen; die horen apart
+    zichtbaar te zijn. Loopt het draaivermogen op, dan is er mechanisch
+    iets; loopt de inschakelduur op, dan is er meer warmte."""
+    from datetime import datetime, timezone
+
+    c = make_coordinator({})
+    apparaat = _koelapparaat(
+        c,
+        hass,
+        _today_sum=76.0 * 200,
+        _today_count=200,
+        _today_on_count=70,
+        _today_on_sum=217.0 * 70,
+    )
+
+    c._update_nilm_confirmed_devices(
+        datetime(2026, 8, 11, 0, 5, tzinfo=timezone.utc)
+    )
+
+    assert apparaat["daily_avg_history"] == [76.0]
+    assert apparaat["inschakelduur_procent"] == 35.0
+    assert apparaat["draaivermogen_w"] == 217.0
+
+
+def test_the_drift_ignores_dropout_days(make_coordinator, hass):
+    """De referentie filterde uitvaldagen al weg, maar de drift keek naar
+    de laatste regel - en die kon zelf een uitvaldag zijn."""
+    c = make_coordinator({})
+    apparaat = _koelapparaat(c, hass)
+    apparaat["daily_avg_history"] = [76.3, 80.6, 0.9]
+
+    tekst = c._describe_nilm_trend(apparaat)
+
+    # 80,6 tegen een referentie van 76,34 is een kleine stijging; 0,9
+    # zou "-98,8%" hebben opgeleverd.
+    assert "-98" not in tekst
+
+
+def test_devices_from_before_this_version_keep_working(
+    make_coordinator, hass
+):
+    """Een dag die al liep tijdens de opwaardering heeft de tellers niet.
+    Zonder vangnet zou élke dag als meetuitval gelden en zou het hele
+    apparaat stilvallen."""
+    c = make_coordinator({})
+    apparaat = _koelapparaat(c, hass)
+
+    c._finalize_nilm_device_day("sensor.diepvries", apparaat, 76.0)
+
+    assert apparaat["daily_avg_history"] == [76.0]
+
+
+def test_a_stored_alarm_built_on_dropouts_is_recomputed(
+    make_coordinator, hass
+):
+    """Het opgebouwde alarm rust op een reeks waarin 12 van de 30 dagen
+    meetuitval waren. Vanaf nu komen die er niet meer in, maar wat er al
+    staat blijft staan - en dan blijft "mogelijk defect" hangen op een
+    apparaat dat het gewoon doet.
+    """
+    c = make_coordinator({})
+    apparaat = _koelapparaat(c, hass)
+    apparaat["daily_avg_history"] = [
+        0.8, 76.34, 0.97, 0.73, 77.24, 0.94, 77.85, 78.31, 0.87, 81.15,
+        0.77, 0.81, 79.84, 78.78, 0.93, 75.2, 75.51, 0.83, 0.71, 75.64,
+        0.91, 79.51, 80.57, 0.9,
+    ]
+    apparaat["cusum_accumulator"] = 5.13
+    apparaat["anomaly_detected"] = True
+    apparaat["estimated_drift_percent"] = -98.8
+
+    c._herijk_koelapparaten_na_meetuitval()
+
+    assert apparaat["anomaly_detected"] is False
+    assert len(apparaat["daily_avg_history"]) == 12
+    assert 74 < apparaat["reference_avg_w"] < 82
+
+
+def test_a_real_rise_keeps_its_alarm(make_coordinator, hass):
+    """Bewust geen blinde reset: de opgeschoonde reeks wordt opnieuw
+    afgespeeld, zodat een apparaat dat écht meer verbruikt zijn alarm
+    houdt."""
+    c = make_coordinator({})
+    apparaat = _koelapparaat(c, hass)
+    apparaat["daily_avg_history"] = [0.5] + [76.0] * 10 + [130.0] * 10
+    apparaat["cusum_accumulator"] = 6.0
+    apparaat["anomaly_detected"] = True
+
+    c._herijk_koelapparaten_na_meetuitval()
+
+    assert apparaat["anomaly_detected"] is True
+
+
+def test_the_recompute_happens_only_once(make_coordinator, hass):
+    c = make_coordinator({})
+    apparaat = _koelapparaat(c, hass)
+    apparaat["daily_avg_history"] = [0.8, 76.0, 77.0, 78.0, 0.9, 79.0]
+
+    c._herijk_koelapparaten_na_meetuitval()
+    apparaat["daily_avg_history"] = [0.8] + apparaat["daily_avg_history"]
+    c._herijk_koelapparaten_na_meetuitval()
+
+    assert apparaat["daily_avg_history"][0] == 0.8
