@@ -275,6 +275,7 @@ from .const import (
     CONF_SOLAR_REMAINING_TODAY_SENSOR,
     DEFAULT_EXPENSIVE_QUARTERS_COUNT,
     DEFAULT_LOW_SOLAR_THRESHOLD_KWH,
+    CYCLUSKOSTEN_LENGTE,
     DEFAULT_MANUAL_CHARGE_POWER,
     DEFAULT_MANUAL_DISCHARGE_POWER,
     ONTLAADGRENS_MARGE_W,
@@ -1245,7 +1246,7 @@ class EnergyManagementSystemCoordinator:
         # een regel - `__init__` staat op de ratel.
         # v3.99.19: `dagverloop` en `nabeschouwingen` erbij, in dezelfde
         # regel - `__init__` staat op de ratel.
-        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}
+        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}
         # v1.1.6: met welke meetmethode de bewaarde foutreeks tot stand
         # is gekomen. Verandert de methode, dan wordt die reeks eenmalig
         # gewist - zie ENERGY_BALANCE_METHOD_VERSION.
@@ -8440,6 +8441,186 @@ class EnergyManagementSystemCoordinator:
         if uren <= 0:
             return None
         return sum(binnen) / len(binnen) / 1000 * uren
+
+    def _entiteitenregister(self):
+        """Het entiteitenregister, of None (v4.14)."""
+        from homeassistant.helpers import entity_registry as er
+
+        return er.async_get(self.hass)
+
+    def _gebiedenregister(self):
+        """Het gebiedenregister, of None (v4.14)."""
+        from homeassistant.helpers import area_registry as ar
+
+        return ar.async_get(self.hass)
+
+    def gebied_van(self, entity_id: str | None) -> str | None:
+        """In welke kamer staat deze sensor? (v4.14)
+
+        Overgenomen van ha-home-energy-advisor: het gebied staat al in
+        het entiteitenregister van Home Assistant, dus per kamer werken
+        hoeft niets te kosten aan instellingen. Dit EMS gebruikte dat
+        register nergens - het kent 22 NILM-apparaten en wist van geen
+        van hen in welke kamer ze staan.
+
+        Het register kan ontbreken (een sensor die er los van staat, of
+        een toetsopzet zonder register), en dan is er gewoon geen gebied.
+        Nooit een storing: een melding zonder kamernaam is beter dan geen
+        melding.
+        """
+        if not entity_id:
+            return None
+        try:
+            register = self._entiteitenregister()
+            if register is None:
+                return None
+            item = register.async_get(entity_id)
+            if item is None:
+                return None
+            gebied_id = getattr(item, "area_id", None)
+            if gebied_id is None and getattr(item, "device_id", None):
+                from homeassistant.helpers import device_registry as dr
+
+                apparaat = dr.async_get(self.hass).async_get(item.device_id)
+                gebied_id = getattr(apparaat, "area_id", None) if apparaat else None
+            if not gebied_id:
+                return None
+            gebieden = self._gebiedenregister()
+            if gebieden is None:
+                return None
+            gebied = gebieden.async_get_area(gebied_id)
+            return getattr(gebied, "name", None) if gebied else None
+        except Exception:  # noqa: BLE001 - een melding mag hier niet op vallen
+            return None
+
+    def met_gebied(self, entity_id: str | None) -> str:
+        """De entiteitsnaam met de kamer erachter, als die bekend is
+        (v4.14). "sensor.koelkast_vermogen (Keuken)" scheelt zoeken."""
+        naam = str(entity_id or "")
+        gebied = self.gebied_van(entity_id)
+        return f"{naam} ({gebied})" if gebied else naam
+
+    def cycluskosten(
+        self, apparaat: str, start: datetime, einde: datetime, kwh: float
+    ) -> dict:
+        """Wat kostte deze beurt, en wat scheelde de eigen opwek? (v4.14)
+
+        Het EMS rekende de tegenfeitelijke kosten alleen op HUISNIVEAU.
+        Daardoor waren de uitstelbeslissingen niet te controleren: het
+        zegt "wasmachine uitstellen tot 13:00" en kon niet zeggen wat dat
+        opleverde.
+
+        Per kwartier van de cyclus: welk deel van het verbruik kwam uit
+        het net en welk deel uit de zon, en wat kostte dat. Daarnaast wat
+        dezelfde kWh op het duurste en het goedkoopste moment van die dag
+        zou hebben gekost - dat maakt het uitstel becijferbaar.
+        """
+        leeg = {
+            "te_becijferen": False,
+            "reden": "Geen dagverloop voor die dag.",
+            "apparaat": apparaat,
+            "kwh": round(kwh, 3),
+        }
+        dag = start.date().isoformat()
+        reeks = [
+            r for r in ((self.dagverloop or {}).get(dag) or [])
+            if r.get("prijs_ct") is not None
+        ]
+        if not reeks or kwh <= 0:
+            return leeg
+        duur_uren = (einde - start).total_seconds() / 3600
+        if duur_uren <= 0:
+            return leeg
+
+        def minuut(r: dict) -> int:
+            tijd = str(r.get("tijd") or "00:00")
+            return int(tijd[:2]) * 60 + int(tijd[3:5])
+
+        begin_min, eind_min = minuut({"tijd": start.strftime("%H:%M")}), minuut(
+            {"tijd": einde.strftime("%H:%M")}
+        )
+        binnen = [r for r in reeks if begin_min <= minuut(r) < max(eind_min, begin_min + 1)]
+        if not binnen:
+            return leeg
+        # het verbruik gelijk over de cyclus verdelen; fijner kan niet,
+        # want het EMS bewaart geen vermogensverloop per beurt
+        per_kwartier = kwh / len(binnen)
+        kosten = 0.0
+        op_netstroom = 0.0
+        uit_de_zon_kwh = 0.0
+        for r in binnen:
+            prijs = r["prijs_ct"] / 100
+            overschot_kwh = max(0.0, ((r.get("pv_w") or 0) - (r.get("huis_w") or 0)) / 4000)
+            uit_de_zon = min(per_kwartier, overschot_kwh)
+            uit_de_zon_kwh += uit_de_zon
+            kosten += (per_kwartier - uit_de_zon) * prijs
+            op_netstroom += per_kwartier * prijs
+        # hetzelfde verbruik op het duurste en goedkoopste venster
+        n = len(binnen)
+        vensters = [
+            (
+                sum(r["prijs_ct"] for r in reeks[i : i + n]) / n / 100,
+                reeks[i].get("tijd"),
+            )
+            for i in range(max(1, len(reeks) - n + 1))
+        ]
+        duurste = max(vensters)
+        goedkoopste = min(vensters)
+        return {
+            "te_becijferen": True,
+            "apparaat": apparaat,
+            "moment": start.isoformat(),
+            "kwh": round(kwh, 3),
+            "kosten_eur": round(kosten, 3),
+            "op_netstroom_eur": round(op_netstroom, 3),
+            "eigen_opwek_eur": round(op_netstroom - kosten, 3),
+            "uit_de_zon_kwh": round(uit_de_zon_kwh, 3),
+            "duurste_moment_eur": round(duurste[0] * kwh, 3),
+            "duurste_moment": duurste[1],
+            "goedkoopste_moment_eur": round(goedkoopste[0] * kwh, 3),
+            "goedkoopste_moment": goedkoopste[1],
+            "uitstel_leverde_op_eur": round(duurste[0] * kwh - kosten, 3),
+            "toelichting": (
+                "Wat deze beurt kostte, wat hij op pure netstroom had gekost, en "
+                "wat dezelfde kWh op het duurste moment van die dag zou hebben "
+                "gekost. Het verbruik is gelijk over de looptijd verdeeld."
+            ),
+        }
+
+    def noteer_cycluskosten(
+        self, apparaat: str, start: datetime, einde: datetime, kwh: float
+    ) -> None:
+        """Legt de kosten van een afgeronde beurt vast (v4.14)."""
+        uit = self.cycluskosten(apparaat, start, einde, kwh)
+        if not uit.get("te_becijferen"):
+            return
+        reeks = self.cycluskosten_geschiedenis.setdefault(apparaat, [])
+        reeks.append(uit)
+        self.cycluskosten_geschiedenis[apparaat] = reeks[-CYCLUSKOSTEN_LENGTE:]
+        self.schedule_persisted_state_save()
+
+    def get_cycluskosten_overzicht(self) -> dict:
+        """Per apparaat: hoeveel beurten, wat ze kostten, en wat de eigen
+        opwek scheelde (v4.14)."""
+        uit = {}
+        for apparaat, beurten in (self.cycluskosten_geschiedenis or {}).items():
+            if not beurten:
+                continue
+            kosten = [b["kosten_eur"] for b in beurten]
+            uit[apparaat] = {
+                "beurten": len(beurten),
+                "gemiddeld_eur": round(statistics.mean(kosten), 3),
+                "duurste_beurt_eur": round(max(kosten), 3),
+                "goedkoopste_beurt_eur": round(min(kosten), 3),
+                "eigen_opwek_eur_totaal": round(
+                    sum(b["eigen_opwek_eur"] for b in beurten), 2
+                ),
+                "uitstel_leverde_op_eur_totaal": round(
+                    sum(b["uitstel_leverde_op_eur"] for b in beurten), 2
+                ),
+                "laatste": beurten[-1].get("moment"),
+            }
+        return uit
 
     def _leer_cyclusverbruik(self, apparaat: str, kwh: float) -> None:
         """Legt vast wat een cyclus werkelijk kostte (v1.61.0).
@@ -27482,12 +27663,15 @@ class EnergyManagementSystemCoordinator:
                 "Geen enkele vermogenssensor staat 's nachts hoger dan een week "
                 "geleden. Het gaat dus om iets zonder eigen meting."
             )
+        # v4.14: met de kamer erbij, uit het entiteitenregister van Home
+        # Assistant. "sensor.koelkast_vermogen (Keuken)" scheelt zoeken.
         delen = []
         for r in stijgers[:3]:
+            naam = self.met_gebied(r["entiteit"])
             if r["nieuw"]:
-                delen.append(f"{r['entiteit']} (nieuw, {r['nu_w']:.0f} W)")
+                delen.append(f"{naam} (nieuw, {r['nu_w']:.0f} W)")
             else:
-                delen.append(f"{r['entiteit']} ({r['toen_w']:.0f} → {r['nu_w']:.0f} W)")
+                delen.append(f"{naam} ({r['toen_w']:.0f} → {r['nu_w']:.0f} W)")
         return "Grootste stijgers 's nachts: " + "; ".join(delen) + "."
 
     def _deel_bewolking_met_de_zontracker(self) -> None:
@@ -27966,6 +28150,8 @@ class EnergyManagementSystemCoordinator:
                     gemeten = self._cyclus_energie_kwh(naam, started_at, now)
                 if gemeten:
                     self._leer_cyclusverbruik(naam, gemeten)
+                    # v4.14: en wat de beurt kostte.
+                    self.noteer_cycluskosten(naam, started_at, now, gemeten)
                 self._appliance_power_samples[naam] = []
 
         setattr(self, state_attr, "klaar")

@@ -479,6 +479,12 @@ async def async_get_config_entry_diagnostics(
         "nachtlast_per_apparaat": _veilig(
             "nachtlast_per_apparaat", lambda: coordinator.nachtlast_per_apparaat
         ),
+        # v4.14: wat elke apparaatbeurt kostte en wat de eigen opwek
+        # scheelde - de vraag die ha-home-energy-advisor stelt, met de
+        # gegevens die dit EMS al had.
+        "cycluskosten": _veilig(
+            "get_cycluskosten_overzicht", coordinator.get_cycluskosten_overzicht
+        ),
         "welke_apparaten_stegen": _veilig(
             "welke_apparaten_stegen", coordinator.welke_apparaten_stegen
         ),

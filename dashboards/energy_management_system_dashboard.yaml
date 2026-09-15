@@ -1726,6 +1726,24 @@ views:
         {% endfor %}{% endif %}
 
         '
+    - type: markdown
+      title: Wat kostte elke beurt?
+      content: '{% set o = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''cycluskosten'') or {} %}{% if o %}| Apparaat | Beurten | Gemiddeld | Zon scheelde | Uitstel leverde op |
+
+
+        |---|---|---|---|---|
+
+
+        {% for naam, r in o.items() %}| {{ naam }} | {{ r.beurten }} | {{ ''%.2f''|format(r.gemiddeld_eur) }} EUR | {{ ''%.2f''|format(r.eigen_opwek_eur_totaal) }} EUR | {{ ''%.2f''|format(r.uitstel_leverde_op_eur_totaal) }} EUR |
+
+
+        {% endfor %}
+
+
+        _Wat een beurt kostte, wat hij op pure netstroom had gekost, en wat hetzelfde verbruik op het duurste moment van die dag zou hebben gekost. Het verbruik is gelijk over de looptijd verdeeld._{% else %}Nog geen afgeronde beurten met kosten - die komen erbij zodra de vaatwasser of wasmachine een cyclus afrondt.{% endif %}'
+      grid_options:
+        columns: 12
+        rows: auto
 - title: Vaatwasser & wasmachine
   path: detail-witgoed
   subview: true

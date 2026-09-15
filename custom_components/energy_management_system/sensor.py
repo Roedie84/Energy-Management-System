@@ -4234,6 +4234,11 @@ class GacsAssessmentSensor(SensorEntity):
         rekentijd: dict[str, float] = {}
         for sleutel, functie in (
             ("samenvattingen", self._coordinator.get_topic_summaries),
+            # v4.14: wat elke apparaatbeurt kostte. De dashboardgezondheid
+            # ving het toen de kaart hem las en de sensor hem niet had -
+            # dezelfde klasse als de meldingskaart in v4.8 en de
+            # waterknoppen in v4.9.2.
+            ("cycluskosten", self._coordinator.get_cycluskosten_overzicht),
             ("pv_voorspelkwaliteit", self._coordinator.get_pv_forecast_quality),
             ("pv_correctie", self._coordinator.get_pv_correction_status),
             ("aanwezigheid", self._coordinator.get_presence_overview),

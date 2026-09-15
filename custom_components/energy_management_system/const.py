@@ -359,6 +359,10 @@ KOELING_MIN_BEURTEN = 3
 # de Zendure 's nachts structureel te veel levert.
 ZONLADING_MIN_EXPORT_W = 200.0
 
+# Hoeveel afgeronde apparaatbeurten er per apparaat bewaard blijven met
+# hun kosten (v4.14). Twintig is ruim een maand vaatwassen.
+CYCLUSKOSTEN_LENGTE = 20
+
 WATERBRONNEN = (
     "toilet",
     "douche",
@@ -2823,6 +2827,8 @@ PERSISTED_PLAIN_FIELDS = (
     "nachtlast_per_apparaat",
     # v4.9: de gemeten woonkamertemperatuur per uur.
     "woonkamertemp_gemeten_per_uur",
+    # v4.14: de kosten per afgeronde apparaatbeurt.
+    "cycluskosten_geschiedenis",
     # v4.7: de metingen die een DAG beslaan en pas bij de dagwissel in
     # het dagrecord komen. Ze werden niet bewaard, dus wiste elke
     # herstart ze stilzwijgend - en dan staat er `laagste_soc_ochtend:

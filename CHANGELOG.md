@@ -25109,3 +25109,65 @@ knoppen werken en het profiel leert. Nul fouten, geen aandachtspunten,
 42 uur zonder herstart.
 
 **Volledige testsuite**: 3797 tests, allemaal groen.
+
+
+## v4.14 — Twee ideeën uit ha-home-energy-advisor
+
+Aangedragen: een integratie die per apparaat uitrekent wat het kostte en
+hoeveel de eigen opwek scheelde. Twee dingen daaruit zijn het overnemen
+waard; de rest niet, en dat staat onderaan.
+
+### Wat kostte deze beurt, en wat scheelde de zon?
+
+Dit EMS rekende de tegenfeitelijke kosten alleen op HUISNIVEAU
+(`counterfactual_cost_all_time_eur`). Het kent 22 NILM-apparaten en
+weet hun cyclusduur en nachtlast, maar kon niet zeggen wat een
+vaatwasbeurt kostte.
+
+Daardoor waren de uitstelbeslissingen niet te controleren: het EMS zegt
+"wasmachine uitstellen tot 13:00" en kon niet zeggen wat dat opleverde.
+
+Bij het afsluiten van een cyclus is alles al bekend - starttijd,
+eindtijd, gemeten kWh - en het dagverloop heeft per kwartier de prijs en
+het zonoverschot. `cycluskosten()` rekent daarmee vier getallen uit:
+
+- wat de beurt KOSTTE: het deel uit het net maal de prijs per kwartier
+- wat hij op pure NETSTROOM had gekost
+- het verschil: wat de zon en de accu scheelden
+- wat dezelfde kWh op het DUURSTE moment van die dag zou hebben gekost,
+  en dus wat het uitstel opleverde
+
+Twintig beurten per apparaat blijven bewaard, met een overzicht per
+apparaat op de apparatenpagina. Eén beperking staat in de toelichting:
+het verbruik wordt gelijk over de looptijd verdeeld, want het EMS
+bewaart geen vermogensverloop per beurt.
+
+### Het gebied uit het entiteitenregister
+
+Home Assistant weet in welke kamer een sensor staat, en dit EMS
+gebruikte het entiteitenregister nergens - het kent 22 apparaten en van
+geen van hen de kamer. In de sluipverbruikmelding levert dat direct iets
+op: "sensor.koelkast_vermogen (12 → 52 W)" wordt
+"sensor.koelkast_vermogen (Keuken) (12 → 52 W)". Dat is het verschil
+tussen zoeken en weten.
+
+Het register kan ontbreken - een sensor die er los van staat - en dan
+is er gewoon geen kamernaam. Nooit een storing: een melding zonder
+kamer is beter dan geen melding.
+
+### Wat ik NIET heb overgenomen
+
+Het costeren van alle apparaten in huis. Dat is een tweede financiële
+boekhouding naast de bestaande, en die kan andere getallen geven -
+precies de fout van twee lijsten die uiteenlopen, hier nu drie keer
+langsgekomen. Wie dat wil, kan die integratie ernaast zetten; hij
+stuurt niets en botst dus niet.
+
+### En de dashboardgezondheid deed zijn werk
+
+De kaart las `cycluskosten` van de zelfbeoordelingssensor terwijl dat
+attribuut daar nog niet stond. De toets ving dat af - dezelfde klasse
+als de meldingskaart in v4.8 en de waterknoppen in v4.9.2, en dit keer
+voordat het geleverd werd.
+
+**Volledige testsuite**: 3811 tests, allemaal groen.

@@ -1,41 +1,44 @@
-EMS v4.13 - alleen de wijzigingen sinds v4.12
+EMS v4.14 - alle wijzigingen sinds v4.12
 
-Dit zijn de reparaties die kort als "1.0.1" langskwamen tijdens de
-poging de repository opnieuw te beginnen. Die herstart is niet
-doorgezet; de nummering loopt door vanaf v4.12.
+Bevat v4.13 en v4.14. Maak na het pushen een release met tag v4.14.
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
 
-    const.py, coordinator.py
-    dashboard_template.yaml     (gaat altijd mee, ongewijzigd)
+    const.py, coordinator.py, sensor.py, diagnostics.py
+    dashboard_template.yaml     LET OP: dashboard gewijzigd
     manifest.json, bestandscontrole.json
 
 NAAR DE REPO
 
     README.md, CHANGELOG.md
     dashboards/energy_management_system_dashboard.yaml
-    tests/ (vier bestanden, twee nieuw)
-
-Voor HACS: maak na het pushen een release aan met tag v4.13.
+    tests/ (acht bestanden, vier nieuw)
 
 WAT ER VERANDERT
 
-1. De ijklijn kon nooit klaar komen. De paren werden per RONDE
-   toegevoegd en op 300 afgekapt - dat is vijf uur - terwijl de
-   rangorde tien DAGEN in de paren eist. Nu een paar per bron per uur,
-   480 bewaard (veertig dagen zonuren). De teller begint opnieuw; over
-   tien dagen komt het eerste oordeel over welke weerbron de bewolking
-   goed ordent.
-2. "Sneller laden bij zonoverschot" telde de -40 W mee die 's nachts
-   naar het net gaat. 505 kwartieren in zeven dagen was achttien uur
-   per dag. Nu alleen bij zon en boven 200 W; het bedrag wordt veel
-   lager en eerlijk.
-3. "Reserve uit de nabeschouwing" telt alleen dagen die met het
-   poortmodel van v4.12 zijn nabeschouwd, en zegt hoeveel oude dagen
-   hij buiten beschouwing laat.
-4. Elke kandidaat wordt tegen de nabeschouwing gehouden. Wie meer
-   belooft dan het theoretisch maximum wordt "indicatief" met uitleg.
-   "Vooruitplannen over 24 uur" (+2,39/dag tegen een maximum van 0,54)
-   valt daaronder.
+Uit v4.13:
+1. De ijklijn kon nooit klaar komen - de paren werden per minuut
+   toegevoegd en op 300 afgekapt (vijf uur), terwijl de rangorde tien
+   DAGEN eist. Nu een paar per uur, veertig dagen bewaard. De teller
+   begint opnieuw; over tien dagen het eerste oordeel over de
+   weerbronnen.
+2. Drie kandidaten telden verkeerd: zonoverschot telde de -40 W van
+   's nachts mee, de reservekandidaat mengde oude en nieuwe modellen, en
+   "Vooruitplannen over 24 uur" beloofde meer dan het theoretisch
+   maximum. Elke kandidaat wordt nu tegen de nabeschouwing gehouden.
+
+Uit v4.14:
+3. NIEUW: kosten per apparaatbeurt. Zodra de vaatwasser of wasmachine
+   een cyclus afrondt, staat er wat die kostte, wat hij op pure
+   netstroom had gekost, wat de zon scheelde, en wat het uitstel
+   opleverde. Nieuwe kaart "Wat kostte elke beurt?" op de
+   apparatenpagina.
+4. De sluipverbruikmelding noemt nu de KAMER van de sensor, uit het
+   entiteitenregister van Home Assistant. Geen instelling nodig.
 
 Aan de sturing verandert niets.
+
+NA DE HERSTART
+
+De kaart "Wat kostte elke beurt?" is leeg tot de eerste vaatwas- of
+wasbeurt is afgerond. Daarna vult hij zich per beurt.
