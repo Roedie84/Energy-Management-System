@@ -58,10 +58,7 @@ def test_the_readme_badge_matches_the_manifest():
 #
 # Die geschiedenis wordt NIET herschreven - dat zou verslaglegging
 # vervalsen. De toets bewaakt alleen wat er vanaf hier bij komt.
-# Sinds de herstart van de repository (13 september 2026) telt de
-# changelog opnieuw vanaf 1.0.0. De oude reeks met zijn dubbele nummers
-# staat in docs/GESCHIEDENIS.md en wordt hier niet meer getoetst.
-BEKENDE_DUBBELEN: set[str] = set()
+BEKENDE_DUBBELEN = {"1.46.0", "2.1.0", "2.2.0", "2.2.2", "2.3.0"}
 
 
 def test_the_changelog_only_goes_up():

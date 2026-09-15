@@ -354,6 +354,11 @@ KOELING_MIN_DALING_C = 3.0
 # En hoeveel beurten er minstens moeten zijn voor een oordeel.
 KOELING_MIN_BEURTEN = 3
 
+# Vanaf hoeveel watt export een kwartier meetelt als "zon die de accu
+# had kunnen opnemen" (v1.0.1). Daaronder is het regelruis: de -40 W die
+# de Zendure 's nachts structureel te veel levert.
+ZONLADING_MIN_EXPORT_W = 200.0
+
 WATERBRONNEN = (
     "toilet",
     "douche",
@@ -4960,7 +4965,11 @@ HELDERHEID_MIN_DAGEN_PAREN = 10
 
 # Paren (bewolking van de bron, gemeten helderheid) per weerbron, en
 # hoeveel er nodig zijn voordat de rangorde iets zegt.
-HELDERHEID_PAREN_LENGTE = 300
+# v1.0.1: was 300 met een paar per RONDE - dat is vijf uur, en de
+# rangorde eist tien dagen in de paren. De ijklijn kon zo nooit klaar
+# komen. Nu een paar per bron per uur (de bakjes zijn toch per uur
+# zonnestand), en veertig dagen bewaard: 40 x 12 zonuren = 480.
+HELDERHEID_PAREN_LENGTE = 480
 HELDERHEID_MIN_PAREN = 100
 
 # Hoeveel procentpunt de ene bron beter moet ordenen dan de andere

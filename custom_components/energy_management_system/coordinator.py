@@ -648,6 +648,7 @@ from .const import (
     WOONKAMERTEMP_MIN_UREN,
     WOONKAMERTEMP_UREN,
     ZELFCONTROLE_RESERVE_TOLERANTIE_KWH,
+    ZONLADING_MIN_EXPORT_W,
     PV_MODEL_MIN_WINST_PROCENT,
     PV_BAND_MIN_DAGEN,
     PV_BAND_SAFE_QUANTILE,
@@ -4833,15 +4834,32 @@ class EnergyManagementSystemCoordinator:
         # Vermogen en bakje bewaren, en de verhouding uitrekenen op het
         # moment dat er gescoord wordt. Dan corrigeert een betere ijklijn
         # met terugwerkende kracht de hele geschiedenis.
+        self._voeg_helderheidspaar_toe(now, pv_w, bakje)
+        self.schedule_persisted_state_save()
+
+    def _voeg_helderheidspaar_toe(self, now: datetime, pv_w: float, bakje: str) -> None:
+        """Eén paar (bewolking, opbrengst) per bron per UUR (v1.0.1).
+
+        Dit voegde elke ronde een paar toe en kapte op 300 af: vijf uur
+        aan paren, terwijl de rangorde tien dagen eist. Na twintig dagen
+        meten stond er "300 bruikbare paren" naast een score van None,
+        en de uitleg noemde de verkeerde eis. De ijklijn kon zo nooit
+        klaar komen - hoe langer hij draaide, hoe zekerder.
+
+        Een paar per uur is genoeg: de bakjes zijn per uur zonnestand,
+        en de bronnen werken hun bewolking maar een paar keer per dag
+        bij.
+        """
+        dag = now.date().isoformat()
+        uur = now.strftime("%Y-%m-%dT%H")
         for bron, bewolking in (self.weather_ensemble_readings or {}).items():
             paren = self.weerbron_helderheid_paren.setdefault(bron, [])
+            if paren and len(paren[-1]) == 5 and paren[-1][4] == uur:
+                continue
             paren.append(
-                [round(float(bewolking), 1), round(float(pv_w), 1), bakje, dag]
+                [round(float(bewolking), 1), round(float(pv_w), 1), bakje, dag, uur]
             )
-            self.weerbron_helderheid_paren[bron] = paren[
-                -HELDERHEID_PAREN_LENGTE:
-            ]
-        self.schedule_persisted_state_save()
+            self.weerbron_helderheid_paren[bron] = paren[-HELDERHEID_PAREN_LENGTE:]
 
     def _helderheidsparen(self, bron: str) -> list[tuple[float, float]]:
         """(bewolking, helderheid) tegen de HUIDIGE ijklijn (v3.94.1).
@@ -4896,7 +4914,7 @@ class EnergyManagementSystemCoordinator:
         # dag bevatten anderhalve dag weer.
         dagen = {
             p[3] for p in (self.weerbron_helderheid_paren.get(bron) or [])
-            if len(p) == 4
+            if len(p) in (4, 5)
         }
         if len(dagen) < HELDERHEID_MIN_DAGEN_PAREN:
             return None
@@ -4982,10 +5000,32 @@ class EnergyManagementSystemCoordinator:
                 )
             )
         elif not becijferd:
-            ontbreekt = (
-                f"Nog geen enkele bron heeft {HELDERHEID_MIN_PAREN} paren "
-                "bewolking-tegen-helderheid."
+            # v1.0.1: de ECHTE reden noemen. De rangorde eist naast
+            # honderd paren ook tien dagen in die paren; hier stond
+            # altijd de parentekst, ook als de paren er waren en de dagen
+            # niet. Zo stond er twintig dagen "nog geen 100 paren" naast
+            # "300 bruikbare paren".
+            dagen_per_bron = {
+                bron: len({p[3] for p in (self.weerbron_helderheid_paren.get(bron) or [])
+                           if len(p) in (4, 5)})
+                for bron in (self.weerbron_helderheid_paren or {})
+            }
+            meeste_dagen = max(dagen_per_bron.values(), default=0)
+            meeste_paren = max(
+                (self._bruikbare_paren(b) for b in (self.weerbron_helderheid_paren or {})),
+                default=0,
             )
+            if meeste_paren >= HELDERHEID_MIN_PAREN:
+                ontbreekt = (
+                    f"De paren zijn er ({meeste_paren}), maar ze beslaan pas "
+                    f"{meeste_dagen} dag(en); {HELDERHEID_MIN_DAGEN_PAREN} nodig. "
+                    "Er komt per bron één paar per zonuur bij."
+                )
+            else:
+                ontbreekt = (
+                    f"Nog geen enkele bron heeft {HELDERHEID_MIN_PAREN} paren "
+                    f"bewolking-tegen-helderheid (meeste: {meeste_paren})."
+                )
         elif len(becijferd) < 2:
             ontbreekt = (
                 "Er is maar één becijferde bron; vergelijken kan pas met "
@@ -9443,6 +9483,44 @@ class EnergyManagementSystemCoordinator:
             ),
         }
 
+    def _toets_tegen_de_nabeschouwing(self, kandidaat: dict) -> dict:
+        """Belooft een kandidaat meer dan het theoretisch maximum? (v1.0.1)
+
+        De nabeschouwing is de beste planning met volledige kennis
+        vooraf - de bovengrens van wat er te winnen was. "Vooruitplannen
+        over 24 uur" stond op +2,39 euro per dag als betrouwbaar, terwijl
+        de nabeschouwing zei dat er 0,54 per dag te winnen was. Een
+        kandidaat die boven die grens zit, rekent fout of rekent iets mee
+        dat het EMS bewust niet doet. In beide gevallen mag dat bedrag
+        niet als betrouwbaar op de proefstand staan.
+        """
+        uit = dict(kandidaat)
+        uit["boven_theoretisch_maximum"] = False
+        opbrengst = kandidaat.get("zou_hebben_opgeleverd") or {}
+        per_dag = opbrengst.get("bedrag_per_dag_eur")
+        if per_dag is None and opbrengst.get("eur_per_dag") is not None:
+            per_dag = opbrengst["eur_per_dag"]
+        dagen = [
+            n for n in (self.nabeschouwingen or [])
+            if n.get("te_becijferen") and n.get("kwartieren", 0) >= 90
+            and n.get("gemist_eur") is not None
+        ]
+        if per_dag is None or len(dagen) < 3:
+            return uit
+        maximum = statistics.mean(n["gemist_eur"] for n in dagen)
+        if per_dag > maximum * 1.5 + 0.05:
+            uit["boven_theoretisch_maximum"] = True
+            if uit.get("status") == RELIABILITY_RELIABLE:
+                uit["status"] = RELIABILITY_INDICATIVE
+            uit["betrouwbaarheid"] = (
+                f"Belooft {per_dag:.2f} euro per dag, maar de nabeschouwing zegt dat "
+                f"er met volledige kennis vooraf {maximum:.2f} per dag te winnen was. "
+                "Dat kan niet allebei waar zijn: de kandidaat rekent iets mee dat "
+                "het EMS bewust niet doet, of rekent fout. "
+                + str(kandidaat.get("betrouwbaarheid") or "")
+            )
+        return uit
+
     def _bereken_proefstand(self) -> dict:
         """De vijf kandidaten, met hoe betrouwbaar ze zijn (v1.38.0).
 
@@ -9473,7 +9551,9 @@ class EnergyManagementSystemCoordinator:
             t0 = time.perf_counter()
             k = maak()
             rekentijd[k.get("naam", maak.__name__)] = round((time.perf_counter() - t0) * 1000, 1)
-            kandidaten.append(self._met_gereedheid(k))
+            kandidaten.append(
+                self._met_gereedheid(self._toets_tegen_de_nabeschouwing(k))
+            )
         return {
             "toelichting": (
                 "Deze pagina stuurt niets aan. Elke kandidaat rekent mee en "
@@ -18135,7 +18215,10 @@ class EnergyManagementSystemCoordinator:
             if net_w is None or soc is None or accu_w is None:
                 continue
             naar_het_net = -net_w
-            if naar_het_net <= 0:
+            # v1.0.1: alleen bij ZON en boven de regelruis. Zonder deze
+            # twee telde de -40 W die 's nachts naar het net gaat mee -
+            # 505 kwartieren in zeven dagen, achttien uur per dag.
+            if naar_het_net < ZONLADING_MIN_EXPORT_W or (r.get("pv_w") or 0) <= 0:
                 continue
             ruimte_kwh = max(0.0, (100.0 - soc) / max(1.0, 100.0 - min_soc) * capaciteit)
             if ruimte_kwh <= 0.05:
@@ -18285,16 +18368,36 @@ class EnergyManagementSystemCoordinator:
         eerste marge die uit de uitkomst geleerd kan worden in plaats
         van met de hand gezet.
         """
+        # v1.0.1: alleen dagen die met de reserve als POORT zijn nabeschouwd
+        # (v4.12). Eerdere dagen rekenden hem als bodem - twintig keer te
+        # hoge bedragen - en die mogen hier niet meetellen. Anders zegt de
+        # kandidaat "reserve te laag, 4,5 kWh te veel ontladen" op grond
+        # van een model dat het huis niet uit de accu mocht dekken.
+        oud_model = sum(
+            1 for n in (self.nabeschouwingen or [])
+            if n.get("te_becijferen") and n.get("kwartieren", 0) >= 90
+            and n.get("reserve_als") != "verkooppoort"
+        )
         dagen = [
             n for n in (self.nabeschouwingen or [])
             if n.get("te_becijferen") and n.get("kwartieren", 0) >= 90
+            and n.get("reserve_als") == "verkooppoort"
         ]
         if len(dagen) < 3:
             return {
                 "naam": "Reserve uit de nabeschouwing",
                 "status": RELIABILITY_INSUFFICIENT,
                 "waarde": None,
-                "onderbouwing": f"{len(dagen)} volledige dag(en) nabeschouwd; minstens 3 nodig.",
+                "onderbouwing": (
+                    f"{len(dagen)} volledige dag(en) nabeschouwd met het poortmodel; "
+                    "minstens 3 nodig."
+                    + (
+                        f" {oud_model} dag(en) van het oude model (reserve als bodem) "
+                        "tellen niet mee."
+                        if oud_model
+                        else ""
+                    )
+                ),
                 "betrouwbaarheid": "Een dag zegt niets; het weer bepaalt de dag.",
                 "zou_veranderen": "De reservemarge, als de richting over weken consequent is.",
                 "zou_hebben_opgeleverd": {"te_becijferen": False, "reden": "Nog geen reeks."},

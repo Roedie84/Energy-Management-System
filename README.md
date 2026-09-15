@@ -5,9 +5,9 @@
 **Home Assistant-integratie die een thuisaccu aanstuurt op dynamische energieprijzen — en zichzelf bijleert.**
 
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=flat-square)](https://hacs.xyz)
-[![Version](https://img.shields.io/badge/versie-1.0.0-blue.svg?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/versie-4.13-blue.svg?style=flat-square)](CHANGELOG.md)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2024.6.0%2B-41BDF5.svg?style=flat-square)](https://www.home-assistant.io)
-[![Tests](https://img.shields.io/badge/tests-3789%20groen-brightgreen.svg?style=flat-square)](tests)
+[![Tests](https://img.shields.io/badge/tests-3797%20groen-brightgreen.svg?style=flat-square)](tests)
 [![License](https://img.shields.io/badge/licentie-MIT-lightgrey.svg?style=flat-square)](LICENSE)
 
 </div>
@@ -416,9 +416,6 @@ Structurele bewaking die permanent meeloopt:
 Zie [`CHANGELOG.md`](CHANGELOG.md) voor alle wijzigingen en
 [`docs/ONTWIKKELING.md`](docs/ONTWIKKELING.md) voor de achtergrond per
 beslissing — waarom een regel er kwam, welke waarneming eraan voorafging.
-De volledige geschiedenis van de oude reeks (v0.x tot v4.12) staat in
-[`docs/GESCHIEDENIS.md`](docs/GESCHIEDENIS.md); de versienummers in de
-code-opmerkingen verwijzen daarnaar
 en welke aannames onderweg fout bleken.
 
 ---

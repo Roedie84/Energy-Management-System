@@ -166,6 +166,7 @@ def test_de_kandidaat_zegt_te_hoog_bij_vasthouden(make_coordinator, hass):
     c = make_coordinator({})
     c.nabeschouwingen = [
         {"te_becijferen": True, "kwartieren": 96, "datum": f"2026-09-0{d}",
+         "reserve_als": "verkooppoort",  # v1.0.1: alleen het poortmodel telt
          "te_veel_vastgehouden_kwh": 1.2, "te_veel_ontladen_kwh": 0.1, "gemist_eur": 0.30}
         for d in range(1, 5)
     ]
@@ -320,6 +321,7 @@ def test_de_kandidaat_netarbitrage_telt_over_de_dagen(make_coordinator, hass):
     c = make_coordinator({})
     c.nabeschouwingen = [
         {"te_becijferen": True, "kwartieren": 96, "datum": f"2026-09-0{d}",
+         "reserve_als": "verkooppoort",  # v1.0.1: alleen het poortmodel telt
          "netarbitrage_eur": 0.12, "gemist_eur": 0.05}
         for d in range(1, 6)
     ]
