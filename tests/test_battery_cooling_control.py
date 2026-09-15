@@ -676,7 +676,11 @@ def test_it_waits_before_starting_again(make_coordinator, hass):
     nu = datetime(2026, 8, 15, 2, 0, tzinfo=timezone.utc)
     mod.dt_util.now = lambda: nu
     coordinator.battery_cooling_last_change = nu - timedelta(minutes=5)
-    _situatie(hass, accu=36.0, buiten=25.0, vermogen=300)
+    # v4.17: boven de 35 graden geldt de rusttijd niet meer - dan
+    # gaat het om bescherming. Deze toets gaat over de rusttijd zelf,
+    # dus met een accu ERONDER; dat de bescherming niet meer wacht,
+    # staat in test_koeling_bescherming_wacht_niet.py.
+    _situatie(hass, accu=33.0, buiten=18.0, vermogen=50)
     hass.states.set(FAN, "off")
 
     besluit = coordinator.evaluate_battery_cooling()

@@ -2829,6 +2829,12 @@ PERSISTED_PLAIN_FIELDS = (
     "woonkamertemp_gemeten_per_uur",
     # v4.14: de kosten per afgeronde apparaatbeurt.
     "cycluskosten_geschiedenis",
+    # v4.15: "vandaag al klaar" per apparaat. Zonder bewaring begint het
+    # laden na een herstart opnieuw en komt de melding opnieuw - twee
+    # keer "Steelstofzuiger opgeladen" binnen een half uur op 15
+    # september, met de installatie van v4.14 ertussen.
+    "_steelstofzuiger_complete_today",
+    "_fietsladers_complete_today",
     # v4.7: de metingen die een DAG beslaan en pas bij de dagwissel in
     # het dagrecord komen. Ze werden niet bewaard, dus wiste elke
     # herstart ze stilzwijgend - en dan staat er `laagste_soc_ochtend:
@@ -2892,6 +2898,9 @@ PERSISTED_PLAIN_FIELDS = (
 # tick meteen worden gewist, omdat de coordinator dan denkt dat er een
 # nieuwe dag is begonnen - dan was het terugzetten zinloos geweest.
 PERSISTED_DATE_FIELDS = (
+    # v4.15: de dag waarop die vlag geldt.
+    "_steelstofzuiger_complete_date",
+    "_fietsladers_complete_date",
     # v4.7: zonder de dag waarop geteld wordt, begint de teller na een
     # herstart aan een "nieuwe" dag en zijn de waarden meteen weg.
     "_shortfall_check_date",
@@ -3392,7 +3401,7 @@ NOTIFICATION_TYPES: tuple[tuple[str, str, str, bool, int], ...] = (
         "Wanneer de kwartierplanning voorziet dat de accu leegraakt en de "
         "woning aan het net komt te hangen.",
         True,
-        60,
+        360,
     ),
     (
         "plan_uitstel",
@@ -3408,7 +3417,7 @@ NOTIFICATION_TYPES: tuple[tuple[str, str, str, bool, int], ...] = (
         "Wanneer er niet verkocht wordt omdat de eigen woning die energie "
         "nodig heeft.",
         False,
-        120,
+        720,
     ),
     # v1.20.1, gevraagd: "Als de vakantieknop actief is moeten er
     # meldingen bij beweging worden gestuurd (maximaal 1 per 5 minuten,
@@ -3470,7 +3479,7 @@ NOTIFICATION_TYPES: tuple[tuple[str, str, str, bool, int], ...] = (
         "Accu-koeling aan/uit",
         "Wanneer de koelventilator van de thuisaccu schakelt.",
         True,
-        15,
+        720,
     ),
     (
         "installatie_onvolledig",
@@ -3571,7 +3580,7 @@ NOTIFICATION_TYPES: tuple[tuple[str, str, str, bool, int], ...] = (
         "Wanneer de accu van bedrijfsmodus wisselt. Kan bij wisselende "
         "prijzen meerdere keren per dag afgaan.",
         True,
-        30,
+        480,
     ),
     # --- nieuw, standaard uit ---
     (
@@ -3580,7 +3589,7 @@ NOTIFICATION_TYPES: tuple[tuple[str, str, str, bool, int], ...] = (
         "Wanneer de verwachte overnachtingsbehoefte groter is dan wat er "
         "in de accu zit.",
         False,
-        180,
+        720,
     ),
     (
         "battery_full_with_sun",
@@ -3625,7 +3634,7 @@ NOTIFICATION_TYPES: tuple[tuple[str, str, str, bool, int], ...] = (
         "Wanneer de opbrengst structureel onder de voorspelling blijft - "
         "kan op vervuiling of een storing wijzen.",
         False,
-        360,
+        1440,
     ),
     (
         "low_solar_day",
@@ -3988,6 +3997,27 @@ SOLAR_BIAS_DRIFT_ATTENTION_PERCENT = 15.0
 # er 25% of meer naast zit, is meer dan dagruis.
 SOLAR_DAG_GOED_PERCENT = 10.0
 SOLAR_DAG_VER_MIS_PERCENT = 25.0
+
+# Hoeveel dagen van elke soort er minstens moeten zijn voordat "twee
+# soorten dagen" een uitspraak is en geen toeval (v4.15). Op 15 september
+# stond die melding er met één goede en één missende dag van de vijf, met
+# een oordeel over de bewolkingsinschatting erbij.
+SOLAR_TWEE_SOORTEN_MIN_PER_SOORT = 2
+
+# Hoe lang dezelfde probleemmelding zwijgt nadat het herstel is gemeld
+# (v4.16). Gemeten op 15 september: 00:00 tekort, 00:31 hersteld, 00:46
+# opnieuw tekort, 01:26 opnieuw hersteld - vier meldingen in negentig
+# minuten over dezelfde vraag. Het herstel omzeilt het dempingsvenster
+# bewust (v1.40.0), en dat is juist, maar het gold niet voor een toestand
+# die heen en weer gaat.
+MELDING_MIN_EPISODE_MINUTEN = 120
+
+# Meldingen die over dezelfde vraag gaan als een andere: zolang die
+# andere loopt, zwijgen ze. `plan_tekort` en `battery_wont_last_night`
+# waren samen veertig procent van alle meldingen.
+MELDING_OVERLAPT_MET = {
+    "plan_tekort": "battery_wont_last_night",
+}
 
 # Vanaf hoeveel dagen het oordeel "twee soorten dagen" mag vallen
 # (v3.33.0). Met drie dagen is één uitschieter al genoeg om de correctie

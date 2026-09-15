@@ -65,6 +65,7 @@ def _uit(accu, buiten, vermogen):
 # --- de nachtstand uit de export -------------------------------------
 
 
+
 def test_the_fan_stops_when_the_battery_is_truly_idle():
     """v3.33.0: de stilstandgrens is van 300 naar 100 W gegaan.
 
@@ -237,6 +238,14 @@ class _MetTeller(_Kaal):
 
     def _dispatch_notification(self, **kwargs):
         self.verstuurd.append(kwargs)
+
+    def koeling_pendelt(self):
+        """v4.15: de dagrantsoenering geldt alleen als de beurten NIET
+        werken. Deze toetsen gaan over de rantsoenering zelf, dus doen
+        ze alsof de koeling pendelt - aan bij 28,1 en uit bij 27,9. Dat
+        een WERKENDE koellus niet meer wordt stilgelegd, staat in
+        test_meldingen_15sep.py."""
+        return {"pendelt": True, "mediaan_daling_c": 0.2}
 
     _goedkope_koeling_op_slot = C._goedkope_koeling_op_slot
 

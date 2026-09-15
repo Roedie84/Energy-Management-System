@@ -1,44 +1,45 @@
-EMS v4.14 - alle wijzigingen sinds v4.12
+EMS v4.17 - alle wijzigingen sinds v4.14
 
-Bevat v4.13 en v4.14. Maak na het pushen een release met tag v4.14.
+Bevat v4.15, v4.16 en v4.17. Je draait v4.14.
+Voor HACS: maak na het pushen een release met tag v4.17.
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
 
-    const.py, coordinator.py, sensor.py, diagnostics.py
-    dashboard_template.yaml     LET OP: dashboard gewijzigd
+    const.py, coordinator.py
+    dashboard_template.yaml     (gaat altijd mee, ongewijzigd)
     manifest.json, bestandscontrole.json
 
 NAAR DE REPO
 
     README.md, CHANGELOG.md
     dashboards/energy_management_system_dashboard.yaml
-    tests/ (acht bestanden, vier nieuw)
+    tests/ (zeven bestanden, drie nieuw)
 
-WAT ER VERANDERT
+DE 39 GRADEN (v4.17)
 
-Uit v4.13:
-1. De ijklijn kon nooit klaar komen - de paren werden per minuut
-   toegevoegd en op 300 afgekapt (vijf uur), terwijl de rangorde tien
-   DAGEN eist. Nu een paar per uur, veertig dagen bewaard. De teller
-   begint opnieuw; over tien dagen het eerste oordeel over de
-   weerbronnen.
-2. Drie kandidaten telden verkeerd: zonoverschot telde de -40 W van
-   's nachts mee, de reservekandidaat mengde oude en nieuwe modellen, en
-   "Vooruitplannen over 24 uur" beloofde meer dan het theoretisch
-   maximum. Elke kandidaat wordt nu tegen de nabeschouwing gehouden.
+De minimale rusttijd van dertig minuten na het uitzetten blokkeerde ook
+het aanzetten boven de 35 graden. Die rusttijd is bedoeld tegen
+pendelen; boven 35 gaat het om bescherming en die hoort niet te wachten.
+Boven 35 geldt hij nu niet meer voor AANzetten. Voor uitzetten blijft de
+minimale looptijd staan.
 
-Uit v4.14:
-3. NIEUW: kosten per apparaatbeurt. Zodra de vaatwasser of wasmachine
-   een cyclus afrondt, staat er wat die kostte, wat hij op pure
-   netstroom had gekost, wat de zon scheelde, en wat het uitstel
-   opleverde. Nieuwe kaart "Wat kostte elke beurt?" op de
-   apparatenpagina.
-4. De sluipverbruikmelding noemt nu de KAMER van de sensor, uit het
-   entiteitenregister van Home Assistant. Geen instelling nodig.
+Blijft de ventilator toch uit bij een warme accu, kijk dan in de
+diagnostiek bij battery_cooling_state -> reden. Daar staat letterlijk
+waarom.
 
-Aan de sturing verandert niets.
+MINDER MELDINGEN (v4.16)
 
-NA DE HERSTART
+Nagerekend op jouw 200 bewaarde meldingen: van 28 naar 13 per dag, 54%
+minder. Na een gemeld herstel zwijgt dezelfde melding twee uur;
+"plan_tekort" zwijgt zolang de nachtmelding loopt; ruimere vensters voor
+moduswissel, koeling, geblokkeerde verkoop en de zonmelding. Wat luid
+moet blijven blijft luid.
 
-De kaart "Wat kostte elke beurt?" is leeg tot de eerste vaatwas- of
-wasbeurt is afgerond. Daarna vult hij zich per beurt.
+UIT v4.15
+
+- De koeling wordt niet meer stilgelegd als de beurten WERKEN.
+- De veroudering rekent met de MEDIAAN over de accumodules in plaats van
+  het maximum (module 1 zit onder de omvormer). Verwacht dat de
+  slijtagekosten iets ZAKKEN.
+- "Steelstofzuiger opgeladen" komt niet twee keer meer na een herstart.
+- "Twee soorten dagen" vereist twee dagen van elke soort.

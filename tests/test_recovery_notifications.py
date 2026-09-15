@@ -486,7 +486,10 @@ def test_after_the_window_it_records_again(make_coordinator, hass):
     c = _coordinator(make_coordinator, hass)
     c.notification_enabled["battery_cooling"] = False
 
-    for minuut in (0, 20):
+    # v4.16: het venster van battery_cooling is van 15 naar 720 minuten
+    # gegaan - vijftien meldingen in zes dagen over een ventilator die
+    # aan en uit gaat. De tweede tick moet er dus ruim voorbij liggen.
+    for minuut in (0, 800):
         mod.dt_util.now = lambda m=minuut: NOW + timedelta(minutes=m)
         c._dispatch_notification(
             notify_service=None,

@@ -57,6 +57,11 @@ def _vul_alles(c):
     c.first_seen_date = NOW.date()
     # v4.7: de dag waarop de dagmetingen tellen.
     c._shortfall_check_date = NOW.date()
+    # v4.15: de dagvlaggen van de geplande apparaten.
+    c._steelstofzuiger_complete_today = True
+    c._steelstofzuiger_complete_date = NOW.date()
+    c._fietsladers_complete_today = True
+    c._fietsladers_complete_date = NOW.date()
     c.water_softener_last_regeneration = NOW
     c.pv_export_today_kwh = 6.0
     c.gross_consumption_today_kwh = 9.0
@@ -576,6 +581,10 @@ VLUCHTIG_MET_REDEN = {
     # v4.9: de losse metingen van het lopende uur; de mediaan per uur
     # gaat wel naar de Store (woonkamertemp_gemeten_per_uur).
     "_woonkamertemp_monsters": "de mediaan per uur wordt wel bewaard",
+    # v4.16: het moment waarop een herstel is gemeld. Bewust vluchtig:
+    # na een herstart is de episode voorbij en mag de melding weer, want
+    # de toestand is dan opnieuw onbekend.
+    "_herstel_gemeld": "vluchtig; na een herstart mag de melding weer",
     "battery_cooling_state": "blijkt opnieuw uit de sensoren",
     # Halve metingen. Een stuk dat door een herstart een gat heeft, is
     # geen meting meer - beter opnieuw beginnen dan een verminkt getal

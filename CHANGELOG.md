@@ -25171,3 +25171,220 @@ als de meldingskaart in v4.8 en de waterknoppen in v4.9.2, en dit keer
 voordat het geleverd werd.
 
 **Volledige testsuite**: 3811 tests, allemaal groen.
+
+
+## v4.15 — Vier dingen uit twaalf meldingen
+
+De volledige meldingenlijst van 15 september, plus het antwoord op de
+vraag van de integratie zelf: "staat er iets warms boven, zoals de
+omvormer?" - "Module 1 zit direct onder de omvormer."
+
+### De koelgrens liet de accu oplopen tot de bescherming (hoog)
+
+```
+10:27  De koeling geet te vaak an ... De koeling ligt tot middernacht
+       stil - de bescherming boven 35 °C blijft warken.
+10:36  De koeling geet an. Accu 35.0 °C, buiten 20.4 °C.
+```
+
+Negen minuten na het stilleggen stond de accu op precies de
+beschermingsdrempel. De grens van vier goedkope koelbeurten per dag is
+bedoeld tegen pendelen, maar v4.9.6 heeft al gemeten dat de beurten op
+deze installatie WERKEN: acht tot dertien graden daling per keer. De
+grens legde dus een werkende koellus stil, waarna het pakket opliep tot
+de bescherming het moest overnemen.
+
+De grens geldt nu alleen als de beurten niet werken. `koeling_pendelt()`
+uit v4.9.6 beslist dat, met dezelfde meting die daar al voor bestaat.
+
+### De veroudering rekende met de omvormerwarmte (hoog)
+
+De verouderingstelling pakte `max(temperaturen)` over de accumodules.
+Met module 1 direct onder de omvormer is dat maximum altijd de
+omvormerwarmte - 35,0 tegen 27,0 °C voor de andere modules - en de
+teller "uren boven 30 graden" rekende die mee als celveroudering. Dat
+getal zit onder de slijtagekosten van 11,6 ct/kWh, en dus onder elke
+verkoopbeslissing die het EMS neemt.
+
+Nu de MEDIAAN over de modules. De hoogste blijft apart beschikbaar, want
+die hoort bij de bescherming en niet bij de veroudering.
+
+**De koelingssensor laat ik staan.** Die leest
+`sensor.solarflow_2400_ac_hyper_tmp` - de omvormer zelf, het warmste
+punt. Dat is de veilige keuze: de ventilator koelt dan het ding dat het
+warmst wordt, en de omvormer is het duurste onderdeel van de opstelling.
+Op de cellen sturen zou de ventilator minder laten lopen, maar dan blijft
+de omvormerwarmte staan. De veroudering rekent nu met de cellen, de
+koeling beschermt het warmste punt - dat is de juiste verdeling.
+
+### Twee keer "Steelstofzuiger opgeladen" (middel)
+
+```
+12:34  Steelstofzuiger opgeladen
+13:01  Steelstofzuiger opgeladen
+```
+
+Daartussen zat de installatie van v4.14 (de export zegt: gestart om
+12:57). De vlag "vandaag al klaar" wordt niet bewaard, dus na de
+herstart begon het laden opnieuw en kwam de melding opnieuw.
+
+Dezelfde klasse als de dagmetingen van v4.7. Daar repareerde ik zes
+velden en miste deze vier: de vlaggen en de datums van de
+steelstofzuiger en de fietsladers. Er staat nu een ratel onder: elk
+`_complete_today`-veld moet in de bewaarlijst staan.
+
+### "Twee soorten dagen" bij één dag van elk (laag)
+
+```
+Twee soorten dagen: 1 van de 5 binnen 10% en 1 meer dan 25% ernaast.
+```
+
+Eén goede dag en één missende van de vijf, en daaruit een uitspraak over
+de bewolkingsinschatting van de voorspelling plus een advies om de
+panelen te controleren. `spreiding = bool(goed) and bool(ver_mis)` - één
+van elk was genoeg. Nu twee van elke soort; daaronder blijft de melding
+"de opbrengst blijft achter" zonder de verklaring erbij.
+
+### Wat ik NIET heb aangepast
+
+```
+08:34  Den accu haalt de nacht neet (0.78 van 3.21 kWh nodig)
+08:36  Den accu kump neet meer tekort
+```
+
+Dat leest als een tegenspraak binnen twee minuten, maar het zijn twee
+verschillende dingen: de eerste gaat over wat er in de accu zit, de
+tweede over wat de planning voorziet - en die planning laadt bij, wat de
+eerste melding ook zegt ("Er wödt zo neudeg bi-j-elaojen"). Inhoudelijk
+kloppen ze samen. Een samenvoeging zou de meldingen vager maken in
+plaats van duidelijker, dus die laat ik.
+
+**Volledige testsuite**: 3821 tests, allemaal groen.
+
+
+## v4.16 — Van 28 naar 13 meldingen per dag
+
+**Gevraagd**: "wil je eens kijken of het aantal meldingen niet wat
+gereduceerd kan worden?"
+
+Eerst gemeten, op de 200 bewaarde meldingen van 10 tot 15 september.
+170 daarvan gingen naar de telefoon - achtentwintig per dag:
+
+```
+33  battery_wont_last_night
+30  mode_change
+19  plan_tekort
+17  appliance_ready
+15  battery_cooling
+14  plan_verkoop_geblokkeerd
+12  solar_underperforming
+```
+
+Twee dingen vielen op. `battery_wont_last_night` en `plan_tekort` gaan
+over dezelfde vraag - haalt de accu het - en zijn samen 52 van de 170.
+En het paar tekort/hersteld klapperde:
+
+```
+09-15 00:00  TEKORT
+09-15 00:31  hersteld   (+31 min)
+09-15 00:46  TEKORT     (+15 min)
+09-15 01:26  hersteld   (+40 min)
+```
+
+Vier meldingen in negentig minuten over één vraag. De oorzaak zit in
+v1.40.0: `_meld_herstel` omzeilt het dempingsvenster BEWUST, omdat "een
+probleem dat tien minuten na de waarschuwing is opgelost anders
+stilzwijgend verdwijnt". Die reden klopt nog - maar hij gold niet voor
+een toestand die heen en weer gaat.
+
+### Vier ingrepen
+
+**Een episode duurt minstens twee uur.** Na een gemeld herstel zwijgt
+dezelfde probleemmelding 120 minuten. Het herstel zelf blijft
+ongehinderd - dat was de reden van v1.40.0 en die blijft gelden.
+
+**Meldingen over dezelfde vraag zwijgen voor elkaar.** `plan_tekort`
+zegt niets zolang `battery_wont_last_night` loopt. 19 → 1.
+
+**Ruimere vensters voor de praatzieke soorten**: moduswissel 30 → 480
+min, koeling 15 → 720, verkoop geblokkeerd 120 → 720, zon blijft achter
+360 → 1440, nacht 180 → 720.
+
+**Wat luid mag blijven, blijft luid**: een afgeronde vaatwas (5 min),
+een niet-aangekomen opdracht, een lage celspanning, een interne fout.
+
+### Nagerekend, niet geschat
+
+Dezelfde 170 meldingen door de nieuwe poorten:
+
+```
+nu      170 over 6 dagen  = 28 per dag
+straks   78 over 6 dagen  = 13 per dag        54% minder
+
+battery_wont_last_night   33 →  8
+mode_change               30 →  7
+plan_tekort               19 →  1
+appliance_ready           17 → 17
+battery_cooling           15 →  6
+plan_verkoop_geblokkeerd  14 →  5
+solar_underperforming     12 →  4
+```
+
+De grootste rest is `appliance_ready` met 17, en dat is juist de soort
+die je wilt houden: de vaatwasser is klaar.
+
+### Een klasseveld dat instanties deelde
+
+`_herstel_gemeld` stond eerst als klasseveld, en een mutable dict op de
+klasse wordt tussen alle instanties gedeeld. De structuurtoets ving dat
+af voordat het geleverd werd. Het staat nu in `__init__`, en bewust
+vluchtig: na een herstart is de toestand opnieuw onbekend en mag de
+melding weer.
+
+**Volledige testsuite**: 3829 tests, allemaal groen.
+
+
+## v4.17 — De rusttijd blokkeerde ook de bescherming
+
+**Gemeld**: "zag net dat de accu 39 graden was, waarom was de koeling
+niet aan?" Buiten 26,1 °C, dus een verschil van 12,9 graden - ruim boven
+de aanzetdrempel van 5. De ventilator had aan moeten staan.
+
+Van alle poorten in `evaluate_battery_cooling` past er dan één: de
+minimale RUSTTIJD van dertig minuten na het uitzetten. Die is bedoeld
+tegen pendelen (v1.99.0, na de ventilator die op 15 augustus dertien keer
+schakelde), en onder de 35 graden is dat precies goed.
+
+Maar boven die grens gaat het om bescherming - en de opmerking bij
+`_is_goedkope_koelreden` zegt dat zelf al: *"boven die grens gaat het om
+bescherming van de omvormer, en die wacht nergens op"*. De code liet hem
+wel wachten.
+
+Dat is dezelfde vorm als de dagrantsoenering in v4.15: een rem tegen
+pendelen die ook de bescherming remde. Daar liep de accu op tot 35 °C
+voordat de bescherming het overnam; hier stond hij op 39 terwijl de
+ventilator uit bleef. Twee remmen, dezelfde fout, twee versies achter
+elkaar gevonden.
+
+Boven `BATTERY_COOLING_PROTECT_ALWAYS_C` (35 °C) geldt de rusttijd niet
+meer voor AANzetten. Voor uitzetten blijft de minimale looptijd staan -
+een ventilator die meteen weer uit mag, koelt nooit iets weg.
+
+### Wat ik hierbij nog steeds niet zeker weet
+
+De rusttijd is de enige poort die past bij 12,9 graden verschil, maar ik
+heb het veld `battery_cooling_state.reden` van dat moment niet gezien.
+Blijft de ventilator na deze versie uit bij een warme accu, dan staat in
+dat veld letterlijk waarom - bijvoorbeeld een ventilatorschakelaar die
+niet uitleesbaar is, of een handmatige stand die het schakelen blokkeert.
+
+### Een tak die nog wel kan blijven hangen
+
+Boven de 35 °C gelden nog twee redenen om aan te gaan: meer dan 5 graden
+boven buiten, of boven de 50 °C absoluut. Tussen 35 en 50 met minder dan
+5 graden verschil gaat de ventilator dus niet aan - bij 39 °C en buiten
+36 blijft hij uit. Dat is bij jou niet het geval (buiten was 26,1) en ik
+heb het daarom niet aangepast; het staat hier zodat het opvalt als het
+zich ooit voordoet.
+
+**Volledige testsuite**: 3834 tests, allemaal groen.

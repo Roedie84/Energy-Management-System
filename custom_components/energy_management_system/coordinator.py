@@ -497,6 +497,7 @@ from .const import (
     SOLAR_BIAS_DRIFT_ATTENTION_PERCENT,
     SOLAR_DAG_GOED_PERCENT,
     SOLAR_DAG_VER_MIS_PERCENT,
+    SOLAR_TWEE_SOORTEN_MIN_PER_SOORT,
     SPIEGEL_MARGE_SOC_PROCENT,
     METING_MAX_LEEFTIJD_MINUTEN,
     CELSPANNING_AANDACHT_V,
@@ -613,6 +614,8 @@ from .const import (
     LANGERE_HORIZON_MIN_METINGEN,
     FEEDIN_PREMIUM_EUR_PER_KWH,
     MPC_HORIZON_HOURS,
+    MELDING_MIN_EPISODE_MINUTEN,
+    MELDING_OVERLAPT_MET,
     MPC_MIN_MARGIN_EUR_PER_KWH,
     NEGATIEVE_PRIJS_AAN_EUR,
     NEGATIEVE_PRIJS_MIN_MINUTEN,
@@ -1246,7 +1249,7 @@ class EnergyManagementSystemCoordinator:
         # een regel - `__init__` staat op de ratel.
         # v3.99.19: `dagverloop` en `nabeschouwingen` erbij, in dezelfde
         # regel - `__init__` staat op de ratel.
-        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}
+        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}
         # v1.1.6: met welke meetmethode de bewaarde foutreeks tot stand
         # is gekomen. Verandert de methode, dan wordt die reeks eenmalig
         # gewist - zie ENERGY_BALANCE_METHOD_VERSION.
@@ -4006,6 +4009,34 @@ class EnergyManagementSystemCoordinator:
             return False, "hoofdschakelaar staat uit"
         if not self.notification_enabled.get(kind, definitie[3]):
             return False, "deze melding staat uit"
+        # v4.16: na een gemeld herstel zwijgt dezelfde probleemmelding
+        # een episode lang. Gemeten: 00:00 tekort, 00:31 hersteld, 00:46
+        # opnieuw tekort - vier meldingen in negentig minuten over
+        # dezelfde vraag.
+        hersteld = self._herstel_gemeld.get(kind)
+        if hersteld:
+            sinds = (now - dt_util.parse_datetime(hersteld)).total_seconds() / 60
+            if 0 <= sinds < MELDING_MIN_EPISODE_MINUTEN:
+                return (
+                    False,
+                    f"herstel {sinds:.0f} min geleden gemeld; een episode duurt "
+                    f"minstens {MELDING_MIN_EPISODE_MINUTEN} min",
+                )
+        # v4.16: en meldingen die over dezelfde vraag gaan als een andere
+        # zwijgen zolang die andere loopt.
+        ander = MELDING_OVERLAPT_MET.get(kind)
+        if ander:
+            laatst = self.notification_last_sent.get(ander)
+            if laatst:
+                andere_definitie = self.notification_definition(ander)
+                venster = andere_definitie[4] if andere_definitie else 360
+                sinds = (now - dt_util.parse_datetime(laatst)).total_seconds() / 60
+                if 0 <= sinds < venster:
+                    return (
+                        False,
+                        f"gaat over dezelfde vraag als '{ander}', die {sinds:.0f} "
+                        "min geleden is verstuurd",
+                    )
 
         venster_minuten = definitie[4]
         laatste = self.notification_last_sent.get(kind)
@@ -4546,6 +4577,9 @@ class EnergyManagementSystemCoordinator:
         definitie = self.notification_definition(kind)
         if not self.notifications_master_enabled:
             return
+        # v4.16: vastleggen dat het herstel is gemeld, zodat de
+        # probleemmelding een episode lang zwijgt.
+        self._herstel_gemeld[kind] = dt_util.now().isoformat()
         if not self.notification_enabled.get(
             kind, definitie[3] if definitie else False
         ):
@@ -8197,13 +8231,11 @@ class EnergyManagementSystemCoordinator:
                     + uren
                 )
 
-        temperaturen = [
-            m.get("temperatuur_c")
-            for m in (self.battery_module_live or [])
-            if m.get("temperatuur_c") is not None
-        ]
-        if temperaturen:
-            hoogste = max(temperaturen)
+        # v4.15: de MEDIAAN, niet het maximum - zie
+        # `celtemperatuur_voor_veroudering_c`.
+        mediaan = self.celtemperatuur_voor_veroudering_c()
+        if mediaan is not None:
+            hoogste = mediaan
 
             # v1.80.0: hoeveel de cellen bóven de buitentemperatuur
             # zaten, en hoe warm het buiten was.
@@ -8499,6 +8531,39 @@ class EnergyManagementSystemCoordinator:
         naam = str(entity_id or "")
         gebied = self.gebied_van(entity_id)
         return f"{naam} ({gebied})" if gebied else naam
+
+    def celtemperatuur_voor_veroudering_c(self) -> float | None:
+        """De temperatuur die de veroudering bepaalt (v4.15).
+
+        Hier stond `max(temperaturen)` over de modules. Gemeld: "Module 1
+        zit direct onder de omvormer" - dus dat maximum was altijd de
+        omvormerwarmte, en de teller "uren boven 30 graden" rekende die
+        mee als celveroudering. Dat getal zit onder de slijtagekosten van
+        11,6 ct/kWh en dus onder elke verkoopbeslissing.
+
+        De mediaan over de modules: één module die van buiten wordt
+        opgewarmd bepaalt de veroudering van het pakket niet. De hoogste
+        blijft apart beschikbaar - die hoort bij de bescherming, niet bij
+        de veroudering.
+        """
+        temperaturen = [
+            m.get("temperatuur_c")
+            for m in (self.battery_module_live or [])
+            if m.get("temperatuur_c") is not None
+        ]
+        if not temperaturen:
+            return None
+        return round(statistics.median(temperaturen), 1)
+
+    def hoogste_moduletemperatuur_c(self) -> float | None:
+        """De warmste module (v4.15). Voor de bescherming, niet voor de
+        veroudering."""
+        temperaturen = [
+            m.get("temperatuur_c")
+            for m in (self.battery_module_live or [])
+            if m.get("temperatuur_c") is not None
+        ]
+        return max(temperaturen) if temperaturen else None
 
     def cycluskosten(
         self, apparaat: str, start: datetime, einde: datetime, kwh: float
@@ -15821,7 +15886,14 @@ class EnergyManagementSystemCoordinator:
         # het dak.
         goed = [v for v in recent if abs(v) <= SOLAR_DAG_GOED_PERCENT]
         ver_mis = [v for v in recent if abs(v) >= SOLAR_DAG_VER_MIS_PERCENT]
-        spreiding = bool(goed) and bool(ver_mis)
+        # v4.15: twee van elke soort. Met één van elk is het toeval dat
+        # als patroon werd gepresenteerd - "Twee soorten dagen: 1 van de
+        # 5 binnen 10% en 1 meer dan 25% ernaast", met een oordeel over
+        # de voorspelling erbij.
+        spreiding = (
+            len(goed) >= SOLAR_TWEE_SOORTEN_MIN_PER_SOORT
+            and len(ver_mis) >= SOLAR_TWEE_SOORTEN_MIN_PER_SOORT
+        )
 
         if abs(drift) <= SOLAR_BIAS_DRIFT_ATTENTION_PERCENT and not spreiding:
             return {
@@ -25243,6 +25315,15 @@ class EnergyManagementSystemCoordinator:
 
         if self.goedkope_koeling_teller < BATTERY_COOLING_OPPORTUNITY_MAX_PER_DAG:
             return False
+        # v4.15: de grens geldt alleen als de beurten NIET werken. Op 15
+        # september werd de koeling om 10:27 stilgelegd na vier beurten,
+        # en om 10:36 stond de accu op 35,0 °C - precies de
+        # beschermingsdrempel. De grens legde een werkende koellus stil,
+        # waarna het pakket opliep tot de bescherming het moest
+        # overnemen. v4.9.6 heeft al gemeten dat de beurten hier acht tot
+        # dertien graden halen; datzelfde oordeel beslist nu.
+        if not self.koeling_pendelt().get("pendelt", False):
+            return False
 
         if not self._goedkope_koeling_gemeld:
             self._goedkope_koeling_gemeld = True
@@ -25454,6 +25535,7 @@ class EnergyManagementSystemCoordinator:
         now: datetime,
         aanzetten: bool,
         grens_minuten: float | None = None,
+        accu_c: float | None = None,
     ) -> bool:
         """Is de laatste schakeling te kort geleden? (v1.99.0)
 
@@ -25466,6 +25548,26 @@ class EnergyManagementSystemCoordinator:
         Een minimale loop- en rusttijd lost dat op zonder aan de
         temperatuurgrenzen te sleutelen.
         """
+        # v4.17: boven de beschermingsgrens geldt de rusttijd niet voor
+        # AANzetten. Gemeld: "de accu was 39 graden, waarom was de
+        # koeling niet aan?" - buiten 26,1, dus 12,9 graden verschil, en
+        # de ventilator stond uit omdat hij vijf minuten eerder was
+        # uitgezet. De rusttijd is bedoeld tegen pendelen, en onder de 35
+        # is dat precies goed; daarboven gaat het om bescherming, en de
+        # opmerking bij `_is_goedkope_koelreden` zegt zelf al dat die
+        # "nergens op wacht".
+        #
+        # Dezelfde vorm als de dagrantsoenering in v4.15: een rem tegen
+        # pendelen die ook de bescherming remde.
+        #
+        # Voor UITzetten blijft de minimale looptijd gelden - een
+        # ventilator die meteen weer uit mag, koelt nooit iets weg.
+        if (
+            aanzetten
+            and accu_c is not None
+            and accu_c >= BATTERY_COOLING_PROTECT_ALWAYS_C
+        ):
+            return False
         moment = self.battery_cooling_last_change
         if moment is None:
             return False
@@ -25584,7 +25686,7 @@ class EnergyManagementSystemCoordinator:
 
                 # v1.99.0: pas na de minimale rusttijd.
                 if self._cooling_switch_too_recent(
-                    nu, aanzetten=True, grens_minuten=grens
+                    nu, aanzetten=True, grens_minuten=grens, accu_c=accu_c
                 ):
                     resultaat["reden"] = (
                         f"{reden} - maar de ventilator is net uitgezet; "
