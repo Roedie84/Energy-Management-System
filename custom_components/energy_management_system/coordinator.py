@@ -4909,9 +4909,15 @@ class EnergyManagementSystemCoordinator:
             # v3.98.1: alleen paren MET een dag. De 600 van 1 september
             # hebben er geen en zijn niet te plaatsen; het was toch een
             # dag weer.
-            if len(paar) != 4:
+            # v4.17.1: één vorm - vijf velden, met de uursleutel. De
+            # oude vier-velds paren worden bij het laden opgeruimd, dus
+            # een lezer die beide toelaat verbergt alleen dat er nog
+            # oude in de voorraad zitten. Die tolerantie verborg
+            # driehonderd paren van één dag, en die blokkeerden de
+            # rangorde wekenlang zonder dat er iets over klaagde.
+            if len(paar) < 5:
                 continue
-            bewolking, pv_w, bakje, _dag = paar
+            bewolking, pv_w, bakje = paar[0], paar[1], paar[2]
             metingen = self.helderheid_ijklijn.get(str(bakje))
             if not metingen or len(metingen) < HELDERHEID_MIN_METINGEN_PER_BAKJE:
                 continue
@@ -4949,7 +4955,7 @@ class EnergyManagementSystemCoordinator:
         # dag bevatten anderhalve dag weer.
         dagen = {
             p[3] for p in (self.weerbron_helderheid_paren.get(bron) or [])
-            if len(p) in (4, 5)
+            if len(p) >= 5
         }
         if len(dagen) < HELDERHEID_MIN_DAGEN_PAREN:
             return None
@@ -5042,7 +5048,7 @@ class EnergyManagementSystemCoordinator:
             # "300 bruikbare paren".
             dagen_per_bron = {
                 bron: len({p[3] for p in (self.weerbron_helderheid_paren.get(bron) or [])
-                           if len(p) in (4, 5)})
+                           if len(p) >= 5})
                 for bron in (self.weerbron_helderheid_paren or {})
             }
             meeste_dagen = max(dagen_per_bron.values(), default=0)
@@ -29917,6 +29923,20 @@ class EnergyManagementSystemCoordinator:
             if veld in stored and stored[veld] is not None:
                 setattr(self, veld, stored[veld])
         # v4.1: uursleutels terug naar int.
+        # v4.17.1: paren zonder uursleutel gaan weg. In v4.13 is de
+        # instroom teruggebracht van één per ronde naar één per uur,
+        # maar de driehonderd oude paren bleven staan - en die zijn
+        # allemaal van één dag. Met twaalf nieuwe per dag schoven ze er
+        # pas na vijfentwintig dagen uit, en tot die tijd bleef de
+        # rangorde "nog niet te becijferen" met als reden dat de paren
+        # één dag beslaan. Instroom gerepareerd, voorraad vergeten.
+        #
+        # Herkenbaar aan de lengte: vier velden is oud, vijf is nieuw.
+        if isinstance(self.weerbron_helderheid_paren, dict):
+            self.weerbron_helderheid_paren = {
+                bron: [p for p in (paren or []) if len(p) >= 5]
+                for bron, paren in self.weerbron_helderheid_paren.items()
+            }
         for veld in PERSISTED_INTKEY_DICT_FIELDS:
             rauw = stored.get(veld)
             if isinstance(rauw, dict):

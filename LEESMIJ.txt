@@ -1,11 +1,8 @@
-EMS v4.17 - alle wijzigingen sinds v4.14
-
-Bevat v4.15, v4.16 en v4.17. Je draait v4.14.
-Voor HACS: maak na het pushen een release met tag v4.17.
+EMS v4.17.1 - alleen de wijzigingen sinds v4.17
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
 
-    const.py, coordinator.py
+    coordinator.py
     dashboard_template.yaml     (gaat altijd mee, ongewijzigd)
     manifest.json, bestandscontrole.json
 
@@ -13,33 +10,20 @@ NAAR DE REPO
 
     README.md, CHANGELOG.md
     dashboards/energy_management_system_dashboard.yaml
-    tests/ (zeven bestanden, drie nieuw)
+    tests/ (drie bestanden, een nieuw)
 
-DE 39 GRADEN (v4.17)
+Voor HACS: release met tag v4.17.1.
 
-De minimale rusttijd van dertig minuten na het uitzetten blokkeerde ook
-het aanzetten boven de 35 graden. Die rusttijd is bedoeld tegen
-pendelen; boven 35 gaat het om bescherming en die hoort niet te wachten.
-Boven 35 geldt hij nu niet meer voor AANzetten. Voor uitzetten blijft de
-minimale looptijd staan.
+WAT ER VERANDERT
 
-Blijft de ventilator toch uit bij een warme accu, kijk dan in de
-diagnostiek bij battery_cooling_state -> reden. Daar staat letterlijk
-waarom.
+De driehonderd oude helderheidsparen worden bij het laden opgeruimd.
+Die waren allemaal van een dag (uit de tijd dat er een paar per minuut
+bij kwam) en blokkeerden de rangorde: met twaalf nieuwe per dag zouden
+ze er pas na vijfentwintig dagen uit zijn geschoven.
 
-MINDER MELDINGEN (v4.16)
+NA DE HERSTART
 
-Nagerekend op jouw 200 bewaarde meldingen: van 28 naar 13 per dag, 54%
-minder. Na een gemeld herstel zwijgt dezelfde melding twee uur;
-"plan_tekort" zwijgt zolang de nachtmelding loopt; ruimere vensters voor
-moduswissel, koeling, geblokkeerde verkoop en de zonmelding. Wat luid
-moet blijven blijft luid.
-
-UIT v4.15
-
-- De koeling wordt niet meer stilgelegd als de beurten WERKEN.
-- De veroudering rekent met de MEDIAAN over de accumodules in plaats van
-  het maximum (module 1 zit onder de omvormer). Verwacht dat de
-  slijtagekosten iets ZAKKEN.
-- "Steelstofzuiger opgeladen" komt niet twee keer meer na een herstart.
-- "Twee soorten dagen" vereist twee dagen van elke soort.
+De teller "bruikbare paren" springt van 300 naar bijna 0. Dat is geen
+verlies - die 300 waren onbruikbaar, ze besloegen een dag. Over tien
+dagen staat er voor het eerst een rangordescore per weerbron, en dan
+weet je welke bron de bewolking goed ordent.

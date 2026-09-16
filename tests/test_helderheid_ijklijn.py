@@ -133,7 +133,16 @@ def _paren(c, bron, paren):
     }
     c.weerbron_helderheid_paren = {
         bron: [
-            [b, h * IJKLIJN_W, "30.0", f"2026-09-{1 + i % HELDERHEID_MIN_DAGEN_PAREN:02d}"]
+            # v4.17.1: met uursleutel als vijfde veld. De oude vier-velds
+            # vorm wordt bij het laden opgeruimd, dus een toets die die
+            # vorm gebruikt meet iets wat niet meer bestaat.
+            [
+                b,
+                h * IJKLIJN_W,
+                "30.0",
+                f"2026-09-{1 + i % HELDERHEID_MIN_DAGEN_PAREN:02d}",
+                f"2026-09-{1 + i % HELDERHEID_MIN_DAGEN_PAREN:02d}T{8 + i % 12:02d}",
+            ]
             for i, (b, h) in enumerate(paren)
         ]
     }
@@ -332,7 +341,9 @@ def test_een_helderheid_boven_een_wordt_niet_bevroren(make_coordinator, hass):
     """
     c = make_coordinator({})
     c.helderheid_ijklijn = {"40.0": [1000.0] * HELDERHEID_MIN_METINGEN_PER_BAKJE}
-    c.weerbron_helderheid_paren = {"weather.a": [[50.0, 3400.0, "40.0", "2026-09-01"]]}
+    c.weerbron_helderheid_paren = {
+        "weather.a": [[50.0, 3400.0, "40.0", "2026-09-01", "2026-09-01T12"]]
+    }
 
     # De ijklijn groeit naar de werkelijke heldere waarde.
     c.helderheid_ijklijn = {"40.0": [3300.0] * HELDERHEID_MIN_METINGEN_PER_BAKJE}
@@ -342,23 +353,18 @@ def test_een_helderheid_boven_een_wordt_niet_bevroren(make_coordinator, hass):
     assert paren[0][1] == pytest.approx(3400.0 / 3300.0, abs=0.01)
 
 
-def test_oude_paren_uit_het_oude_formaat_worden_overgeslagen(
-    make_coordinator, hass
-):
-    """Wat er al bewaard is, staat in het oude formaat en is tegen een
-
-    scheve ijklijn berekend. Weggooien is eerlijker dan omrekenen: het
-    paneelvermogen zit er niet meer in.
-    """
+def test_oude_paren_uit_het_oude_formaat_worden_overgeslagen(make_coordinator, hass):
+    """v4.17.1: het oude vier-velds formaat wordt nu bij het LADEN
+    opgeruimd (zie test_oude_paren_opruimen.py) in plaats van bij het
+    lezen overgeslagen. De lezer eist één vorm; komt er toch een oude
+    binnen, dan valt hij weg."""
     c = make_coordinator({})
-    c.helderheid_ijklijn = {"40.0": [3300.0] * HELDERHEID_MIN_METINGEN_PER_BAKJE}
+    _vul_ijklijn(c)
     c.weerbron_helderheid_paren = {
-        "weather.a": [[50.0, 3.38], [60.0, 2200.0, "40.0", "2026-09-01"]]
+        "weather.a": [[40.0, 1800.0, "30.0", "2026-09-15"]] * 120
     }
 
-    paren = c._helderheidsparen("weather.a")
-
-    assert len(paren) == 1
+    assert c._helderheidsparen("weather.a") == []
 
 
 def test_gelijke_bewolking_telt_niet_als_bruikbaar_paar(

@@ -72,8 +72,13 @@ def test_de_uitleg_noemt_de_echte_reden(make_coordinator, hass):
     c.helderheid_ijklijn = {b: [1500.0 + i for i in range(60)] for b in ("20.0", "30.0", "40.0")}
     c.helderheid_dagen = {b: [f"d{i}" for i in range(10)] for b in ("20.0", "30.0", "40.0")}
     # 120 paren, maar allemaal van één dag
+    # v4.17.1: met uursleutel; de vier-velds vorm wordt bij het laden
+    # opgeruimd en door de lezer niet meer geaccepteerd.
     c.weerbron_helderheid_paren = {
-        "weather.a": [[40.0 + (i % 5), 1800.0, "30.0", "2026-09-15"] for i in range(120)]
+        "weather.a": [
+            [40.0 + (i % 5), 1800.0, "30.0", "2026-09-15", f"2026-09-15T{i:02d}"]
+            for i in range(120)
+        ]
     }
 
     uit = c.get_helderheid_ijking()

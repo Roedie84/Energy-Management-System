@@ -25388,3 +25388,47 @@ heb het daarom niet aangepast; het staat hier zodat het opvalt als het
 zich ooit voordoet.
 
 **Volledige testsuite**: 3834 tests, allemaal groen.
+
+
+## v4.17.1 — De oude paren blokkeerden de ijklijn
+
+**Gemeld** met een diagnostiek die zichzelf tegenspreekt:
+
+```
+gevulde bakjes      7 van 3 nodig
+dagen per bakje     14/10  (zeven keer gehaald)
+bruikbare paren     300 van 100 nodig
+rangordescore       nog niet te becijferen
+wat ontbreekt       "de paren beslaan pas 1 dag; 10 nodig"
+```
+
+Alles gehaald, en toch geen oordeel.
+
+In v4.13 heb ik de INSTROOM van paren teruggebracht van één per ronde
+naar één per uur, en de bewaargrens naar 480 gezet. Maar de driehonderd
+OUDE paren zijn niet opgeruimd, en die zijn allemaal van één dag - het
+per-minuut-tijdperk. Met twaalf nieuwe per dag schoven ze er pas na
+vijfentwintig dagen uit. Tot die tijd bleef "de paren beslaan 1 dag"
+staan, hoe lang je ook wachtte.
+
+Instroom gerepareerd, voorraad vergeten. Dezelfde fout als de vier
+kandidaten die oude en nieuwe modellen mengden - in diezelfde versie wél
+gescheiden.
+
+De oude paren zijn nu bij het laden weg: vier velden is oud, vijf is
+nieuw (het uur kwam er in v4.13 bij). De teller begint op nul en over
+tien dagen komt het eerste oordeel.
+
+### En de tolerantie die het verborg
+
+Bij die vormwijziging heb ik de lezers tolerant gemaakt voor BEIDE
+vormen - `len(paar) in (4, 5)`. Dat leek voorzichtig, maar het verborg
+precies dat er driehonderd oude in de voorraad zaten. Een vormwijziging
+hoort bij het LADEN te worden opgeruimd, niet bij het lezen te worden
+getolereerd; dan valt het op als het misgaat.
+
+De lezers eisen nu één vorm, en er staat een ratel onder die elke
+`len(x) in (...)`-constructie in de coordinator afkeurt. Een scan over
+alle bewaarde velden vond geen tweede geval.
+
+**Volledige testsuite**: 3839 tests, allemaal groen.
