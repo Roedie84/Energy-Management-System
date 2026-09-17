@@ -664,6 +664,7 @@ from .const import (
     WOONKAMERTEMP_UREN,
     ZELFCONTROLE_RESERVE_TOLERANTIE_KWH,
     ZONLADING_MIN_EXPORT_W,
+    ZONPERSISTENTIE_MIN_DAGEN,
     PV_MODEL_MIN_WINST_PROCENT,
     PV_BAND_MIN_DAGEN,
     PV_BAND_SAFE_QUANTILE,
@@ -36386,6 +36387,160 @@ class EnergyManagementSystemCoordinator:
                 "accu leeg gaat."
             ),
         }
+
+    def _zon_per_dagdeel(self, dag: str) -> dict[str, float] | None:
+        """De gerealiseerde opwek per dagdeel (v5.1)."""
+        reeks = (self.dagverloop or {}).get(dag) or []
+        if len(reeks) < 88:
+            return None
+        per = {"ochtend": 0.0, "middag1": 0.0, "middag2": 0.0, "avond": 0.0}
+        for r in reeks:
+            pv = r.get("pv_w")
+            if pv is None:
+                continue
+            uur = int(str(r.get("tijd") or "00:00")[:2])
+            kwh = pv / 4000
+            if uur < 11:
+                per["ochtend"] += kwh
+            elif uur < 14:
+                per["middag1"] += kwh
+            elif uur < 17:
+                per["middag2"] += kwh
+            else:
+                per["avond"] += kwh
+        return per
+
+    def get_zonpersistentie(self) -> dict:
+        """Voorspelt de ochtend de rest van de dag? (v5.1)
+
+        De vraag onder uitstelwaarde: komt er gedurende de dag
+        informatie bij? Zo niet, dan weet het EMS om 11:00 niets extra
+        over de middag en heeft wachten geen waarde.
+
+        NIET gemeten met de p10/p90-band per moment, om twee redenen.
+        Die band wordt altijd smaller omdat de resterende dag korter
+        wordt - om 17:00 dekt hij twee uur in plaats van veertien, en dat
+        is geen informatie maar de dag die opraakt. En de band wordt niet
+        bewaard; er is één voorspellingsmomentopname per dag.
+
+        Wel gemeten met de GEREALISEERDE opwek: hoe verhoudt de ochtend
+        zich tot de mediane ochtend, en de rest van de dag tot de mediane
+        rest. Lopen die samen, dan zegt de ochtend iets over de middag.
+
+        Meet; stuurt niets.
+        """
+        delen = {
+            dag: p
+            for dag in sorted(self.dagverloop or {})
+            if (p := self._zon_per_dagdeel(dag)) is not None
+        }
+        leeg = {
+            "dagen": len(delen),
+            "correlatie": None,
+            "betrouwbaar": False,
+            "oordeel": (
+                f"{len(delen)} volledige dag(en) in het dagverloop; minstens "
+                f"{ZONPERSISTENTIE_MIN_DAGEN} nodig."
+            ),
+            "toelichting": self._zonpersistentie_toelichting(),
+        }
+        if not delen:
+            return leeg
+        mediaan = {
+            k: statistics.median(p[k] for p in delen.values())
+            for k in ("ochtend", "middag1", "middag2", "avond")
+        }
+        rest_mediaan = mediaan["middag1"] + mediaan["middag2"] + mediaan["avond"]
+        if not mediaan["ochtend"] or not rest_mediaan:
+            return leeg
+        paren = []
+        tegengesteld = 0
+        for p in delen.values():
+            o = p["ochtend"] / mediaan["ochtend"]
+            r = (p["middag1"] + p["middag2"] + p["avond"]) / rest_mediaan
+            paren.append((o, r))
+            if (o - 1) * (r - 1) < 0:
+                tegengesteld += 1
+        correlatie = self._correlatie(paren)
+        genoeg = len(paren) >= ZONPERSISTENTIE_MIN_DAGEN
+        return {
+            "dagen": len(paren),
+            "mediane_vorm_kwh": {k: round(v, 2) for k, v in mediaan.items()},
+            "correlatie": round(correlatie, 2) if correlatie is not None else None,
+            "dagen_tegengesteld": tegengesteld,
+            "betrouwbaar": genoeg and correlatie is not None,
+            "oordeel": self._zonpersistentie_oordeel(
+                len(paren), correlatie, tegengesteld, genoeg
+            ),
+            "toelichting": self._zonpersistentie_toelichting(),
+        }
+
+    @staticmethod
+    def _correlatie(paren: list) -> float | None:
+        """Pearson over (ochtend, rest), of None als er geen spreiding is."""
+        if len(paren) < 3:
+            return None
+        xs = [a for a, _ in paren]
+        ys = [b for _, b in paren]
+        mx, my = statistics.mean(xs), statistics.mean(ys)
+        noemer = (
+            sum((x - mx) ** 2 for x in xs) * sum((y - my) ** 2 for y in ys)
+        ) ** 0.5
+        if not noemer:
+            return None
+        return sum((x - mx) * (y - my) for x, y in paren) / noemer
+
+    def _zonpersistentie_oordeel(
+        self, dagen: int, correlatie: float | None, tegengesteld: int, genoeg: bool
+    ) -> str:
+        if correlatie is None:
+            kern = f"{dagen} dag(en), maar te weinig spreiding om iets te zeggen."
+            return (
+                kern
+                if genoeg
+                else kern + f" Minstens {ZONPERSISTENTIE_MIN_DAGEN} dagen nodig."
+            )
+        staart = (
+            f" Op {tegengesteld} van de {dagen} dagen wees de ochtend de "
+            "verkeerde kant op - juist daar zou een uitstelregel het verkeerde "
+            "besluit versterken."
+            if tegengesteld
+            else ""
+        )
+        if not genoeg:
+            return (
+                f"{dagen} dagen, correlatie {correlatie:+.2f} - een aanwijzing, "
+                f"geen bewijs. Minstens {ZONPERSISTENTIE_MIN_DAGEN} dagen nodig."
+                + staart
+            )
+        if correlatie >= 0.5:
+            return (
+                f"De ochtend voorspelt de rest van de dag: correlatie "
+                f"{correlatie:+.2f} over {dagen} dagen. Er komt dus informatie "
+                "bij gedurende de dag." + staart
+            )
+        if correlatie <= -0.3:
+            return (
+                f"De ochtend wijst tegengesteld aan de rest van de dag "
+                f"(correlatie {correlatie:+.2f} over {dagen} dagen). Dan komt er "
+                "geen bruikbare informatie bij en heeft wachten geen waarde."
+                + staart
+            )
+        return (
+            f"Geen samenhang tussen de ochtend en de rest van de dag "
+            f"(correlatie {correlatie:+.2f} over {dagen} dagen). Dan zegt de "
+            "ochtend niets over de middag en levert wachten niets op." + staart
+        )
+
+    @staticmethod
+    def _zonpersistentie_toelichting() -> str:
+        return (
+            "Voorspelt de ochtend de rest van de dag? Dat is de vraag onder "
+            "uitstelwaarde: komt er informatie bij. Gemeten met de GEREALISEERDE "
+            "opwek per dagdeel tegen de mediane vorm, niet met de p10/p90-band "
+            "per moment - die band wordt altijd smaller omdat de dag opraakt, en "
+            "dat is geen informatie. Meet; stuurt niets."
+        )
 
     def get_moduswissels(self) -> dict:
         """Hoe vaak wisselt de accu van modus? (v3.87.0)

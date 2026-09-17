@@ -123,14 +123,24 @@ def test_een_regel_per_kwartier(make_coordinator, hass):
     assert dag[0]["soc"] == 51.0   # de laatste ronde in het kwartier
 
 
-def test_zeven_dagen_bewaard(make_coordinator, hass):
+def test_het_dagverloop_wordt_afgekapt(make_coordinator, hass):
+    """v5.1: veertig dagen in plaats van zeven. De zonpersistentiemeting
+    rekent over de dagen in het dagverloop, en met zeven kon die nooit
+    boven een aanwijzing uitkomen - de achtdaagse meting van september
+    kon alleen door meerdere exports samen te voegen."""
+    from custom_components.energy_management_system.const import (
+        DAGVERLOOP_DAGEN,
+    )
+
     c = make_coordinator({})
     c.dagverloop = {}
-    for d in range(9):
-        _ronde(c, hass, datetime(2026, 9, 1 + d, 12, 0, tzinfo=timezone.utc))
+    for d in range(DAGVERLOOP_DAGEN + 2):
+        _ronde(c, hass, datetime(2026, 9, 1, 12, 0, tzinfo=timezone.utc)
+               + timedelta(days=d))
 
-    assert len(c.dagverloop) == 7
+    assert len(c.dagverloop) == DAGVERLOOP_DAGEN
     assert "2026-09-01" not in c.dagverloop
+    assert DAGVERLOOP_DAGEN >= 40
 
 
 def test_de_nabeschouwing_van_een_dag_uit_het_verloop(make_coordinator, hass):

@@ -162,6 +162,8 @@ def test_present_attributes_are_not_reported(make_coordinator, hass):
             # v4.19: de redenwissels.
             "redenwissels": {},
             # v4.22
+            # v5.1
+            "zonpersistentie": {},
             "reden_afwijkingen": {},
             "safe_sell_shadow": {},
             "kwartierplanning": [],

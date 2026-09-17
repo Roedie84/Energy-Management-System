@@ -4242,6 +4242,7 @@ class GacsAssessmentSensor(SensorEntity):
             # v4.18: wat er gebeurde toen de gebruiker zelf stuurde.
             ("redenwissels", self._coordinator.get_redenwissels),
             # v4.22: de kWh-afwijking per reden en de verkoopschaduw.
+            ("zonpersistentie", self._coordinator.get_zonpersistentie),
             ("reden_afwijkingen", self._coordinator.get_reden_afwijkingen),
             (
                 "safe_sell_shadow",

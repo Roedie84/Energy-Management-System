@@ -1,59 +1,41 @@
-EMS v5.0 - VOLLEDIGE repository
+EMS v5.1 - alleen de wijzigingen sinds v5.0
 
-Dit is de hele boom, niet alleen de gewijzigde bestanden - omdat de
-release op GitHub nu v5.0 is en alles daarmee moet overeenkomen.
+TE KOPIEREN naar config/custom_components/energy_management_system/
 
-WAT ER IN ZIT
+    const.py, coordinator.py, sensor.py, diagnostics.py
+    dashboard_template.yaml     (gaat altijd mee, ongewijzigd)
+    manifest.json, bestandscontrole.json
 
-    custom_components/energy_management_system/   22 bestanden
-    tests/                                        363 toetsbestanden
+NAAR DE REPO
+
+    README.md, CHANGELOG.md
     dashboards/energy_management_system_dashboard.yaml
-    docs/ONTWIKKELING.md                          het registry-ontwerp
-    README.md, CHANGELOG.md, LICENSE
-    hacs.json, pytest.ini, tools_maak_bestandslijst.py
+    tests/ (drie bestanden, een nieuw)
 
-VERSIENUMMERS - LET HIEROP
+Voor HACS: release met tag v5.1.
 
-    manifest.json      5.0
-    README-badge       versie-5.0
-    CHANGELOG          ## v5.0 bovenaan de laatste sectie
+AAN DE STURING VERANDERT NIETS.
 
-Als je alleen de git-tag op v5.0 had gezet en niet het manifest, dan
-bleef HACS een update aanbieden die je al had. Met deze zip komen alle
-drie overeen. De toetsen test_the_manifest_matches_the_changelog en
-test_the_readme_badge_matches_the_manifest controleren dat.
+WAT ER VERANDERT
 
-INSTALLEREN
+1. NIEUW in de export: "zonpersistentie" - voorspelt de ochtend de rest
+   van de dag? Dat is de vraag onder uitstelwaarde: komt er informatie
+   bij. Gemeten met de gerealiseerde opwek per dagdeel, NIET met de
+   p10/p90-band per moment (die wordt altijd smaller omdat de dag
+   opraakt, en dat is geen informatie).
 
-    De map custom_components/energy_management_system/ over de bestaande
-    heen, daarna Home Assistant herstarten.
+   Gemeten over acht septemberdagen: correlatie +0,69, met twee dagen
+   die de verkeerde kant op gingen. Een aanwijzing, geen bewijs - de
+   meting noemt pas een richting bij twintig dagen.
 
-NA DE HERSTART CONTROLEREN
+2. Het dagverloop bewaart veertig dagen in plaats van zeven. Dat was de
+   echte blokkade: met zeven dagen kon deze meting nooit boven een
+   aanwijzing uitkomen. Komt ook de nabeschouwing, de redenafwijking en
+   de laadsnelheid ten goede - die rekenen alle drie over het
+   dagverloop.
 
-    versie:            5.0
-    bestandscontrole:  in_orde true, 22 bestanden
-    waterpagina:       kaart met zes regels onder de tabel
+NA DE HERSTART
 
-WAT V5.0 IS
-
-Het grote nummer gaat naar het architectuurwerk, niet naar een nieuwe
-regel in de accusturing:
-
-- REASON_REGISTRY is de enige plaats waar een beslisreden bestaat.
-  Vijf tabellen zijn afgeleiden en kunnen niet meer uiteenlopen.
-- Ratels tegen dubbele waarheden: dubbele methodenamen, dubbel gezette
-  velden, dubbele exportsleutels, datasets met twee recordvormen, elke
-  gebruikte reden geregistreerd en omgekeerd.
-- Vier metingen rond de accubeslissing die NIETS sturen:
-  reden_afwijkingen, safe_sell_shadow (met de nacht erna in drie
-  banden), redenwissels, eigen_ingrepen.
-
-AAN DE STURING IS SINDS v4.17 NIETS VERANDERD.
-
-WAT ER NOG OPENSTAAT
-
-- de kalibratie: alles rekent nog met 8,64 kWh fabrieksopgave
-- PERSISTED_FIELDS declaratief maken en de vier bestaande
-  laadconversies expliciteren (fase A2/A3)
-- de vier metingen vullen zich; expensive_quarter vuurt zeldzaam, dus
-  reken op maanden voordat daar een richting uit komt
+Het dagverloop begint bij de zeven dagen die je nu hebt en groeit naar
+veertig. Over een maand staat er in "zonpersistentie" een getal op
+veertig dagen.

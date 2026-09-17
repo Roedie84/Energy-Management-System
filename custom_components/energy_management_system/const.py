@@ -158,7 +158,17 @@ CLOUD_INVOER_CONFIRM_MINUTES = 60
 # Hoeveel dagen het kwartierverloop en de nabeschouwingen bewaard
 # blijven (v3.99.19). 96 kwartieren x 9 velden x 7 dagen past ruim in
 # de opslag.
-DAGVERLOOP_DAGEN = 7
+# v5.1: veertig dagen in plaats van zeven. De zonpersistentiemeting
+# rekent over de dagen in het dagverloop, en met zeven dagen kon die
+# nooit boven een aanwijzing uitkomen - mijn achtdaagse meting kon
+# alleen door meerdere exports samen te voegen. Eén dag is 96 compacte
+# regels, dus veertig dagen is nog geen 4000 regels.
+DAGVERLOOP_DAGEN = 40
+
+# Hoeveel dagen er minstens nodig zijn voordat de zonpersistentie een
+# richting noemt. Bij acht dagen was r=0,69 een aanwijzing en geen
+# bewijs; twintig is het minimum waarbij een correlatie iets zegt.
+ZONPERSISTENTIE_MIN_DAGEN = 20
 
 # Hoeveel kwartieren een dag moet hebben voordat de nabeschouwing een
 # oordeel geeft (v4.3). Zie get_nabeschouwing: op een halve dag weegt de

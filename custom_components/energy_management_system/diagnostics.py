@@ -486,6 +486,11 @@ async def async_get_config_entry_diagnostics(
         # v4.19: hoe vaak het EMS van reden wisselt, en de vaakst
         # wisselende paren - zodat dat niet meer met een script hoeft.
         # v4.22: de twee metingen rond de verkoopbeslissing.
+        # v5.1: komt er gedurende de dag informatie bij? De vraag onder
+        # uitstelwaarde.
+        "zonpersistentie": _veilig(
+            "get_zonpersistentie", coordinator.get_zonpersistentie
+        ),
         "reden_afwijkingen": _veilig(
             "get_reden_afwijkingen", coordinator.get_reden_afwijkingen
         ),

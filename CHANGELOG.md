@@ -26051,3 +26051,83 @@ verandert. Op dit moment wijzen 1 en 2 dezelfde kant op; 3 en 4 beginnen
 nu te vullen.
 
 **Volledige testsuite**: 3919 tests, allemaal groen.
+
+
+## v5.1 — Komt er gedurende de dag informatie bij?
+
+De vraag onder uitstelwaarde: wachten heeft alleen zin als de
+informatiekwaliteit werkelijk verbetert. Gevraagd als FORECAST
+RESOLUTION ANALYSIS - de p10/p90-band vergelijken op 08:00, 11:00, 14:00
+en 17:00.
+
+### Waarom die opzet het verkeerde meet
+
+Twee problemen, en beide zijn fundamenteel.
+
+De band wordt ALTIJD smaller, grotendeels om een triviale reden: om
+17:00 dekt de voorspelling nog twee uur in plaats van veertien. Dat is
+geen informatie, dat is de dag die opraakt. Meet je de absolute breedte,
+dan krijg je gegarandeerd "veel onzekerheidsreductie" en is de conclusie
+onbruikbaar.
+
+En `_pv_band_kw_per_start` wordt niet bewaard; er is één
+voorspellingsmomentopname per dag (`PLAN_SNAPSHOT_HOUR = 8`). De
+bandversie is dus niet terug te toetsen.
+
+### Wat wel te meten is, en wat het zegt
+
+De onderliggende vraag kan zonder Solcast: voorspelt de ochtend de rest
+van de dag? Zo niet, dan weet het EMS om 11:00 niets extra over de
+middag en heeft wachten geen waarde, wat de band ook doet.
+
+Gemeten over acht septemberdagen, gerealiseerde opwek per dagdeel tegen
+de mediane vorm:
+
+```
+dag           ochtend/mediaan   rest/mediaan
+09-09                0,89           1,27
+09-10                1,27           1,62
+09-11                0,98           0,59
+09-12                0,84           0,90
+09-13                0,27           0,56
+09-14                1,33           1,07
+09-15                1,27           1,56
+09-16                1,02           0,92
+
+correlatie r = +0,69   (n = 8)
+```
+
+Er komt informatie bij: een ochtend op 27% van normaal wordt gevolgd
+door een rest van de dag op 56%. Bij r = 0,69 verklaart de ochtend
+ongeveer de helft van de variatie in de middag.
+
+Met twee voorbehouden die in de meting staan: twee van de acht dagen
+gingen de VERKEERDE kant op (09-09 en 09-11), en bij n=8 is r=0,69 een
+aanwijzing en geen bewijs. `get_zonpersistentie` noemt daarom pas een
+richting bij twintig dagen, en telt de tegengestelde dagen apart - juist
+daar zou een uitstelregel het verkeerde besluit versterken.
+
+### Het dagverloop bewaarde zeven dagen
+
+Dat was de echte blokkade: mijn achtdaagse meting kon alleen door
+meerdere exports samen te voegen. Met zeven dagen zou deze meting nooit
+boven een aanwijzing uitkomen.
+
+`DAGVERLOOP_DAGEN` gaat van 7 naar 40. Eén dag is 96 compacte regels,
+dus veertig dagen is nog geen 4000 regels. Over een maand staat er een
+getal op veertig dagen in plaats van mijn achtdaagse aanwijzing.
+
+Dat komt ook de nabeschouwing, de redenafwijking en de laadsnelheid ten
+goede: alle vier rekenen over het dagverloop.
+
+### Wat dit voor DDV betekent
+
+Voorlopige uitkomst: er komt genoeg informatie bij om uitstelwaarde
+interessant te houden. Maar de analyse daarvan liet ook zien dat het
+alleen geldt voor beslissingen waar de onzekerheid oplost VOORDAT de
+optie verloopt - dus het netladen en de zonopvang midden op de dag, en
+niet de avondverkoop waar de huidige bevinding zit.
+
+Aan de sturing verandert niets.
+
+**Volledige testsuite**: 3926 tests, allemaal groen.
