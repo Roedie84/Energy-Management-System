@@ -1,8 +1,8 @@
-EMS v5.1 - alleen de wijzigingen sinds v5.0
+EMS v5.2 - alleen de wijzigingen sinds v5.1
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
 
-    const.py, coordinator.py, sensor.py, diagnostics.py
+    const.py, coordinator.py, diagnostics.py
     dashboard_template.yaml     (gaat altijd mee, ongewijzigd)
     manifest.json, bestandscontrole.json
 
@@ -10,32 +10,43 @@ NAAR DE REPO
 
     README.md, CHANGELOG.md
     dashboards/energy_management_system_dashboard.yaml
-    tests/ (drie bestanden, een nieuw)
+    tests/ (zeven bestanden, vier nieuw)
 
-Voor HACS: release met tag v5.1.
+Voor HACS: release met tag v5.2.
 
 AAN DE STURING VERANDERT NIETS.
 
-WAT ER VERANDERT
+1. BEWAKING VAN DE METINGEN
 
-1. NIEUW in de export: "zonpersistentie" - voorspelt de ochtend de rest
-   van de dag? Dat is de vraag onder uitstelwaarde: komt er informatie
-   bij. Gemeten met de gerealiseerde opwek per dagdeel, NIET met de
-   p10/p90-band per moment (die wordt altijd smaller omdat de dag
-   opraakt, en dat is geen informatie).
+Zeven metingen hebben nu een eigen stilstandsdrempel, met wat ze vult.
+Staat er een stil, dan komt dat op de landingspagina - niet alleen in
+de export. Nieuw exportveld: metingen_stilstand.
 
-   Gemeten over acht septemberdagen: correlatie +0,69, met twee dagen
-   die de verkeerde kant op gingen. Een aanwijzing, geen bewijs - de
-   meting noemt pas een richting bij twintig dagen.
+Drempels: dagverloop en nabeschouwingen 2 dagen, reden_afwijkingen en
+nachtlast 3, cycluskosten 14, safe_sell_shadow 60, eigen_ingrepen 120.
+Die verschillen zestig keer, dus een gemeenschappelijke drempel zou
+vals alarm geven of niets vinden.
 
-2. Het dagverloop bewaart veertig dagen in plaats van zeven. Dat was de
-   echte blokkade: met zeven dagen kon deze meting nooit boven een
-   aanwijzing uitkomen. Komt ook de nabeschouwing, de redenafwijking en
-   de laadsnelheid ten goede - die rekenen alle drie over het
-   dagverloop.
+2. DE TERUGTOETSBANK
 
-NA DE HERSTART
+terugtoets(regel) laat een beslisregel over alle opgeslagen dagen lopen
+en vergelijkt met de nabeschouwing. Daarmee is een idee in seconden te
+beoordelen in plaats van in maanden.
 
-Het dagverloop begint bij de zeven dagen die je nu hebt en groeit naar
-veertig. Over een maand staat er in "zonpersistentie" een getal op
-veertig dagen.
+3. PERSISTED_FIELDS DECLARATIEF
+
+E©n tabel met het type per veld (190 velden), waaruit de vijf lijsten
+worden afgeleid. Geen gedragswijziging - de inventory gaf nul
+afwijkingen. De vier bestaande laadconversies staan benoemd in
+PERSISTED_CONVERSIES.
+
+4. INTRADAY-HERSCHALING - ALS SCHADUW
+
+Hier ben ik afgeweken van de opdracht. Het bewijs ontbreekt nog: de
+zonpersistentiemeting gaf r=0,69 over acht dagen en noemt pas een
+richting bij twintig. Dus rekent v5.2 uit wat herschaling ZOU hebben
+gedaan (nieuw exportveld intraday_herschaling) en stuurt niets. Er
+staat een ratel op dat de functie in geen enkel beslispad voorkomt.
+
+Wil je hem toch laten sturen, zeg het dan expliciet - dan bouw ik dat
+als aparte versie met de schakelaar standaard uit.

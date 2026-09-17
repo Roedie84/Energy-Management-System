@@ -488,6 +488,16 @@ async def async_get_config_entry_diagnostics(
         # v4.22: de twee metingen rond de verkoopbeslissing.
         # v5.1: komt er gedurende de dag informatie bij? De vraag onder
         # uitstelwaarde.
+        # v5.2: welke metingen staan stil?
+        # v5.2: de terugtoets van de intraday-herschaling. Meet; stuurt
+        # niets - het bewijs uit de zonpersistentie ontbreekt nog.
+        "intraday_herschaling": _veilig(
+            "terugtoets_intraday_herschaling",
+            coordinator.terugtoets_intraday_herschaling,
+        ),
+        "metingen_stilstand": _veilig(
+            "get_metingen_stilstand", coordinator.get_metingen_stilstand
+        ),
         "zonpersistentie": _veilig(
             "get_zonpersistentie", coordinator.get_zonpersistentie
         ),

@@ -170,6 +170,50 @@ DAGVERLOOP_DAGEN = 40
 # bewijs; twintig is het minimum waarbij een correlatie iets zegt.
 ZONPERSISTENTIE_MIN_DAGEN = 20
 
+# Hoe lang een meting stil mag staan voordat het verdacht is (v5.2), met
+# wat hem vult. De stilstandcontrole van v1.11.1 keek alleen naar
+# lijsten van GETALLEN; de metingen van v4.14 tot v5.1 zijn lijsten van
+# dicts of dicts van lijsten en vielen er buiten.
+#
+# Een verwachting per meting is nodig omdat de vulfrequentie tien keer
+# verschilt: het dagverloop vult elke ronde, safe_sell_shadow alleen bij
+# avondverkoop in het terugvalpad - zeventien momenten per acht
+# zomerdagen. Eén drempel voor alles geeft vals alarm of vindt niets.
+METING_VERWACHTE_STILTE_DAGEN = {
+    "dagverloop": 2,
+    "nabeschouwingen": 2,
+    "reden_afwijkingen": 3,
+    "nachtlast_per_apparaat": 3,
+    "cycluskosten_geschiedenis": 14,
+    "eigen_ingrepen": 120,
+    "safe_sell_shadow": 60,
+}
+
+METING_WAT_VULT_HEM = {
+    "dagverloop": "elke ronde, zolang de prijsreeks er is",
+    "nabeschouwingen": "de dagwissel, als de dag te becijferen was",
+    "reden_afwijkingen": "de dagwissel, uit de nabeschouwing",
+    "nachtlast_per_apparaat": "elke nacht tussen 02:00 en 05:00",
+    "cycluskosten_geschiedenis": "een afgeronde vaatwas- of wasbeurt",
+    "eigen_ingrepen": "een handmatige stand aan- of uitzetten",
+    "safe_sell_shadow": "verkoop in het terugvalpad, dus 's avonds",
+}
+
+# Hoe lang na het opstarten er niets wordt gemeld: een verse installatie
+# heeft nog niets gevuld en dat is normaal.
+METING_AANLOOPTIJD_UREN = 24.0
+
+# Grenzen voor de intraday-herschaling (v5.2). Bewust smal: de
+# zonpersistentiemeting gaf r=0,69 over acht dagen, niet r=1,0, en twee
+# van de acht dagen wees de ochtend de verkeerde kant op. Een ochtend
+# die 300% doet mag de middag dus niet verdrievoudigen.
+HERSCHALING_MAX_FACTOR = 1.4
+HERSCHALING_MIN_FACTOR = 0.6
+
+# Hoeveel er voorspeld moest zijn voordat de verhouding iets zegt. Om
+# 08:00 is er vrijwel niets binnen; dan is herschalen ruis versterken.
+HERSCHALING_MIN_VOORSPELD_KWH = 1.0
+
 # Hoeveel kwartieren een dag moet hebben voordat de nabeschouwing een
 # oordeel geeft (v4.3). Zie get_nabeschouwing: op een halve dag weegt de
 # waardering van de eindstand zwaarder dan de dag zelf.
@@ -2867,412 +2911,285 @@ KALIBRATIE_MIN_SCHAALDEEL = 0.7
 # genoeg om niet per ongeluk scherp te blijven staan.
 VERBRUIKSLEER_RESET_BEVESTIGING_SECONDEN = 60
 
-PERSISTED_PLAIN_FIELDS = (
-    # v3.27.0: de kalibratiestand en de momentopname bovenin. Een
-    # kalibratie duurt uren; een herstart halverwege mag hem niet
-    # stilzwijgend afbreken, en de meting op vol mag niet verdwijnen.
-    "kalibratie",
-    "dagreeks_verwijderd",
-    # v3.29.0: de meetfrequentie-teller. Die begon bij elke herstart
-    # opnieuw op nul, dus wie zijn integratie vaak bijwerkt zag altijd
-    # "onvoldoende data" en nooit een oordeel. Gevonden op 19 augustus,
-    # toen vier sensoren na zes herstarts nog steeds op 23/30 stonden.
-    "sensor_cadence",
-    # v3.30.0: wanneer de verbruiksleer opnieuw is begonnen, en wat er
-    # toen is weggegooid. Zonder dat is later niet te verklaren waarom
-    # een profiel maar drie dagen oud is.
-    "verbruiksleer_reset_op",
-    "verbruiksleer_reset_historie",
-    # v3.33.0: de dagportie van de goedkope koeling. Een herstart mag
-    # de teller niet op nul zetten - dan is de bovengrens te omzeilen
-    # door de integratie te herladen.
-    "goedkope_koeling_teller",
-    "kalibratie_momentopname",
-    # v3.98.0: sinds wanneer de kalibratie loopt. De kaart toonde
-    # `last-changed`, en dat is na een herstart het startmoment van de
-    # integratie.
-    "kalibratie_sinds",
-    # v3.33.1: de lopende capaciteitsmeting. Een kalibratie duurt uren
-    # en wordt zelden gedaan; één herstart mag hem niet kosten. Bij de
-    # kalibratie van 19 augustus gebeurde precies dat - de meting begon
-    # opnieuw bij 71% en haalde de drempel van 70% van de schaal niet.
-    "kalibratie_meting",
-    # v1.16.5, gemeld: "Vandaag: 0.0 kWh opgewekt" terwijl de omvormer
-    # 15,5 kWh had geproduceerd.
-    #
-    # De dagsleutel en `pv_production_today_kwh` werden wél bewaard, maar
-    # het IJKPUNT van de kWh-meter niet. Na een herstart klopt de
-    # dagsleutel dus - geen dagwissel, geen reset - maar
-    # `_pv_energy_meter_day_start` is None, waarna
-    # `_verwerk_pv_meterstand` opnieuw ijkt op de huidige meterstand. De
-    # opwek wordt dan meterstand min huidige stand = 0,0, en dat
-    # overschrijft de bewaarde waarde.
-    #
-    # Zonder ijkpunt is een cumulatieve meter waardeloos: je weet niet
-    # meer waar de dag begon.
-    "_pv_energy_meter_day_start",
-    "_pv_energy_meter_last",
-    # Geleerde/opgebouwde geschiedenis
-    "battery_module_health",
-    "energy_balance_error_history",
-    "energy_balance_method_version",
-    "mode_change_log",
-    "discharge_floor_events",
-    "dishwasher_cycle_duration_history",
-    "dishwasher_usage_hourly_history",
-    "washing_machine_cycle_duration_history",
-    "washing_machine_usage_hourly_history",
-    "living_room_temp_bucket_humidity",
-    # v1.18.1: verwarmen of koelen per bin. Zonder bewaren zou na elke
-    # herstart onbekend zijn welke kant de airco op ging.
-    "living_room_temp_bucket_direction",
-    # v1.18.2: het weekprofiel van aanwezigheid. Zonder bewaren zou elke
-    # herstart het leren opnieuw laten beginnen.
-    "presence_week_profile",
-    # v1.20.5: welke sensor wanneer als laatste bewoog. Zonder bewaren
-    # is de tabel na elke herstart leeg, terwijl juist die tabel moet
-    # verklaren waarom de status is wat hij is.
-    "presence_last_seen",
-    # v1.26.0: het verloop thuis/weg/slaapt. Een tabel die na elke
-    # herstart leeg is, valt niet achteraf te controleren - en dat is
-    # precies waarvoor hij gevraagd werd.
-    # v1.56.0: tot wanneer de knop "Nu laden" loopt. Een eindtijd, geen
-    # teller - anders zet een herstart de klok terug op de volle
-    # looptijd.
-    "nu_laden_tot",
-    "nu_laden_omslag",
-    # v1.58.0: hoe lang een terugval al draait. Bij elke herstart
-    # opnieuw beginnen zou "al drie dagen" onmogelijk maken - en dat is
-    # precies het getal waar het om gaat.
-    "fallback_since",
-    # v1.59.0: de dagreeks van verouderingsdrijvers.
-    "veroudering_history",
-    "langere_horizon_history",
-    "lange_reserve_history",
-    "niet_ontladen_history",
-    "mpc_vergelijking_history",
-    "handmatige_ingrepen",
-    "moduswissels",
-    "bijkoop_history",
-    "netlading_vandaag_kwh",
-    "netlading_kosten_eur",
-    "netlading_history",
-    "_eerder_rijpe_kandidaten",
-    "pv_band_history",
-    "pv_model_samples",
-    # v1.90.0: de dagreeks waar zelfconsumptie per week/maand/jaar op
-    # rust.
-    "energy_daily_history",
-    # v1.98.0: de stand van de laatste tick, zodat een herstart vlak voor
-    # middernacht de dag niet met lege tellers afsluit.
-    "_energiedagstand",
-    # v2.3.0: de stand van de kostenmeter bij dagbegin, zodat "vandaag"
-    # de aangroei toont en niet het totaal-ooit.
-    "_kosten_meter_dagbegin",
-    # v1.61.0: wat een cyclus werkelijk kostte, per apparaat gemeten.
-    "appliance_cycle_kwh",
-    "_appliance_cycle_history",
-    "presence_timeline",
-    # v1.30.0: de staat zelf ook. Zonder dat begint elke herstart op
-    # "onbekend" en schrijft de eerste tick een nieuwe regel in de
-    # tijdlijn, ook al is er niets veranderd.
-    "presence_state",
-    # v1.30.0: waarmee de rode "was ..."-markering wordt bepaald. Ging
-    # verloren bij elke herstart, waarna elke wijziging weer als
-    # "eerste voorspelling" gold.
-    "quarter_plan_first_seen",
-    # v1.31.0: het rapport plan-tegen-werkelijkheid. Juist dit mag geen
-    # herstart verliezen - het gaat over dagen, niet over een tick.
-    "charge_efficiency_history",
-    "discharge_efficiency_history",
-    # v1.38.0: de proefstand. Deze reeksen zijn het hele punt van
-    # kandidaten die zich eerst moeten bewijzen - na een herstart
-    # opnieuw beginnen zou dat onmogelijk maken.
-    "daytype_consumption_profile",
-    "capacity_trend_history",
-    "price_shape_history",
-    "proefstand_ledger",
-    # --- v1.43.0 -----------------------------------------------------
-    # Gevraagd: "Wordt nu echt alle data opgeslagen, zodat een herstart
-    # nergens meer invloed op heeft?" Nagerekend, en het antwoord was
-    # nee. Deze stonden er nog niet in:
-    #
-    # Beslissingen die JIJ hebt genomen. Een afgewezen dubbelpaar
-    # opnieuw voorgeschoteld krijgen na elke herstart is het ergste van
-    # de drie - dan doet wegklikken er niet toe.
-    "nilm_dismissed_duplicate_pairs",
-    # Apparaten die nog in de gaten worden gehouden maar nog niet
-    # bevestigd zijn. Bevestigde apparaten werden al bewaard; de
-    # kandidaten begonnen elke keer opnieuw.
-    "nilm_unconfirmed_candidates",
-    # Welke kraan of welk apparaat bij welk waterverbruik hoort.
-    "water_source_profiles",
-    # Maandtellers. Deze lopen per definitie over dagen; een herstart
-    # halverwege de maand gooide ze op nul en daarmee ook het
-    # maandoverzicht.
-    "current_month_discharge_value_eur",
-    "current_month_charge_cost_eur",
-    "current_month_shortfall_days",
-    "current_month_excess_days",
-    "current_month_days_tracked",
-    # De dagteller en de dagrapportage.
-    "battery_discharge_today_kwh",
-    "_daily_report_counters",
-    # Welke planningswaarschuwing er al uit is. Zonder dit begint elke
-    # herstart met een schone lei en gaat "Accu haalt de nacht mogelijk
-    # niet" opnieuw af - te zien in de export van 11 augustus, waar hij
-    # om 14:30, 15:31 en 16:31 langskwam.
-    "_last_plan_alert",
-    # v1.52.0: de accustand bij het begin van de dag, voor de correctie
-    # op de dagbesparing. Gaat die verloren, dan valt de correctie weg op
-    # precies de dagen waarop er herstart is.
-    "_savings_day_start_available_kwh",
-    # --- v1.49.0 -----------------------------------------------------
-    # De dagstand van de PV-geometrie. `_finalize_pv_geometry_day` sluit
-    # de dag af zodra de datum wisselt - maar na een herstart staat de
-    # piek op 0 en wordt de dag stilzwijgend weggegooid. Met een herstart
-    # ná de middagpiek is de rest van de dag bovendien te donker om als
-    # "helder" door te komen, en telt die dag dus nooit mee.
-    #
-    # Dat maakt "0/5 heldere dagen" op een strakblauwe dag een
-    # zelfvervullende voorspelling: elke versie die je installeert wist
-    # de dag waarop gemeten werd.
-    "_pv_geometry_day_peak_w",
-    "_pv_geometry_day_peak_azimuth",
-    "_pv_geometry_day_expected_peak_w",
-    "plan_review_history",
-    "plan_snapshot",
-    # v1.74.0: de eindstand van de lopende dag, zodat een herstart vlak
-    # voor middernacht de toetsing niet met lege tellers laat rekenen.
-    "_plan_review_dagstand",
-    # v1.20.0: wanneer er doorgaans naar bed wordt gegaan. Zonder
-    # bewaren begint het leren na elke herstart opnieuw.
-    "bedtime_history",
-    "battery_cooling_history",
-    "kalman_divergence_history",
-    # v1.3.1: de geleerde blootstellingsrichting van de achtertuinsensor.
-    # Vijf flitsen zijn nodig voordat die iets doet; zonder bewaren zou
-    # die telling na elke herstart opnieuw beginnen.
-    "backyard_sun_exposure_azimuths",
-    # v1.5.2: twintig waarnemingen bij daglicht per bron voordat er iets
-    # te zeggen valt. Zonder bewaren zou die telling na elke herstart
-    # opnieuw beginnen.
-    "weather_source_agreement",
-    # v1.4.0: het PV-installatieprofiel bouwt over WEKEN op (vijf
-    # heldere dagen voor een eerste schatting, twintig voor een
-    # betrouwbare). Zonder bewaren zou die telling na elke herstart
-    # opnieuw beginnen en nooit iets opleveren.
-    "pv_peak_azimuth_history",
-    # v1.8.0: dagtotalen stroom en gas. Zonder bewaren zou er nooit een
-    # week-, maand- of jaarcijfer ontstaan.
-    "daily_cost_history",
-    # v1.9.0: de dagsamenvattingen. Het beslislogboek bewust NIET: dat
-    # is een momentopname van twee dagen die na een herstart weinig
-    # waarde meer heeft, en het zou de opslag met honderden regels per
-    # herstart belasten.
-    "daily_report_history",
-    # v1.8.2: welke sensor hoe vaak wegviel. Zonder bewaren zou de
-    # melding na een herstart weer generiek worden, terwijl de
-    # foutreeks zelf wél bewaard blijft.
-    "balance_missing_by_entity",
-    "pv_azimuth_performance",
-    # v3.94.0: de heldere-hemel-ijklijn bouwt over WEKEN op, en de
-    # zonnestanden schuiven met het seizoen. Zonder bewaren begint de
-    # telling na elke herstart opnieuw en komt er nooit iets uit.
-    "helderheid_ijklijn",
-    "weerbron_helderheid_paren",
-    "helderheid_dagen",
-    # v3.99.1: de dagrecords van de reserve. Die overleefden een herstart
-    # alleen via twee sensoren die elk hun helft in hun attributen
-    # bewaren - en de velden uit v3.99.0 (`vermogensgrens`,
-    # `max_ontlaad_w`) stonden in geen van beide. Zie v3.42.1 voor waarom
-    # twee bronnen voor hetzelfde gegeven een slecht idee is.
-    "reserve_daily_records",
-    # v4.1: de reeksen die tot nu toe ALLEEN via sensorattributen
-    # terugkwamen. De Store is nu leidend; de sensor is het vangnet
-    # (`_store_wint` in sensor.py). Twee dicts met uursleutels staan in
-    # PERSISTED_INTKEY_DICT_FIELDS, want JSON maakt van 13 "13".
-    "baseline_load_history",
-    "climate_forecast_bias_history",
-    "climate_rate_history",
-    "digital_twin_accuracy_history",
-    "extra_dip_margin_history",
-    "fietsladers_charge_duration_history",
-    "learned_efficiency_history",
-    "living_room_temp_bucket_history",
-    "night_consumption_history",
-    "peak_power_daily_history",
-    "steelstofzuiger_charge_duration_history",
-    "temp_consumption_history",
-    "temp_consumption_prediction_error_history",
-    "water_daily_history",
-    "water_session_history",
-    "weather_ensemble_agreement_history",
-    "energy_bridge_transition_log",
-    "total_discharge_value_eur",
-    "total_charge_cost_eur",
-    "battery_cost_basis_eur_per_kwh",
-    "total_battery_savings_eur",
-    "total_feedin_premium_eur",
-    "cusum_accumulator_kw",
-    "sluipverbruik_detected",
-    "battery_cumulative_discharged_kwh",
-    "peak_power_all_time_w",
-    "peak_power_all_time_date",
-    "peak_power_current_month_w",
-    "peak_power_previous_month_w",
-    "water_daily_total_l",
-    "last_extra_dip_margin_eur_per_kwh",
-    "last_temp_consumption_note",
-    # v3.99.19: het verloop per kwartier en de nabeschouwingen.
-    "dagverloop",
-    "nabeschouwingen",
-    # v4.1: het padbereik - per reden en kandidaat hoe vaak en wanneer.
-    "padbereik",
-    # v4.4: de nachtelijke basislast per vermogenssensor.
-    "nachtlast_per_apparaat",
-    # v4.9: de gemeten woonkamertemperatuur per uur.
-    "woonkamertemp_gemeten_per_uur",
-    # v4.14: de kosten per afgeronde apparaatbeurt.
-    "cycluskosten_geschiedenis",
-    # v4.22: de schaduwmeting van de verkooptoets.
-    "safe_sell_shadow",
-    # v4.22: de kWh-afwijking per reden ten opzichte van het optimum.
-    "reden_afwijkingen",
-    # v4.18: wat de gebruiker zelf deed, met de omstandigheden.
-    # NIET "handmatige_ingrepen": die naam is sinds v3.99.9 in gebruik
-    # voor de VALSE ingrepen (accustand wijkt af van wat het EMS wilde).
-    "eigen_ingrepen",
-    # v4.15: "vandaag al klaar" per apparaat. Zonder bewaring begint het
-    # laden na een herstart opnieuw en komt de melding opnieuw - twee
-    # keer "Steelstofzuiger opgeladen" binnen een half uur op 15
-    # september, met de installatie van v4.14 ertussen.
-    "_steelstofzuiger_complete_today",
-    "_fietsladers_complete_today",
-    # v4.7: de metingen die een DAG beslaan en pas bij de dagwissel in
-    # het dagrecord komen. Ze werden niet bewaard, dus wiste elke
-    # herstart ze stilzwijgend - en dan staat er `laagste_soc_ochtend:
-    # null` in het record, zoals op 9 en 10 september.
-    "_laagste_soc_ochtend",
-    "_netimport_nacht_kwh",
-    "_lange_horizon_extra_vandaag",
-    "_max_ontlaad_w_vandaag",
-    "_vermogensgrens_gezien_today",
-    "_shortfall_detected_today",
-    "_excess_detected_today",
-    # v3.97.0: de Powercalc-proef heeft 200 metingen nodig.
-    "powercalc_paren",
-    # Meldingen (v1.2.0): de aan/uit-standen zijn een gebruikerskeuze en
-    # mogen bij een herstart niet terugspringen naar de standaard. De
-    # verzendmomenten horen er ook bij, anders zou het dempingsvenster na
-    # elke herstart opnieuw beginnen en kon dezelfde melding alsnog
-    # meteen weer afgaan.
-    "notification_enabled",
-    "notification_last_sent",
-    "_notification_history_last",
-    "notification_history",
-    "notifications_master_enabled",
-    # v1.5.1: welke modules al klaar waren, zodat alleen de OVERGANG
-    # wordt gemeld. Zonder bewaren zou elke herstart die overgang
-    # opnieuw melden.
-    "previously_ready_modules",
-    # v1.6.2: welke toestandsmeldingen actief zijn. Zonder bewaren zou
-    # een herstart als "opgelost" gelden en meteen een herstelmelding
-    # sturen voor een probleem dat nog gewoon speelt.
-    "notification_active_conditions",
-    # Cumulatieve financiële en KPI-tellers
-    "actual_cost_today_eur",
-    "actual_cost_current_month_eur",
-    "actual_cost_all_time_eur",
-    "counterfactual_cost_today_eur",
-    "counterfactual_cost_current_month_eur",
-    "counterfactual_cost_all_time_eur",
-    "charge_pv_kwh_total",
-    "charge_grid_kwh_total",
-    "discharge_export_kwh_total",
-    "forgone_feedin_eur_total",
-    "co2_emitted_today_kg",
-    "pv_production_today_kwh",
-    "pv_export_today_kwh",
-    # v1.90.0: de dagreeks voor de zelfconsumptie over een week.
-    "pv_daily_history",
-    # v1.76.0: de export gesplitst in zon en accu, per tick gemeten.
-    "solar_export_today_kwh",
-    "battery_export_today_kwh",
-    "gross_consumption_today_kwh",
-    "grid_import_today_kwh",
-    "grid_charge_today_kwh",
-    "peak_power_today_w",
-    "water_sessions_today_l",
-    "water_sessions_today_count",
+
+# --- Wat er bewaard wordt: één verklaring per veld ------------------
+#
+# Fase A1 uit de architectuurafspraak. De semantiek zat in de LIJSTNAAM -
+# PLAIN, INT, DATE, DATETIME, INTKEY_DICT - en daardoor waren de fouten
+# van v4.6 (uursleutels die als tekst terugkwamen) en v4.7 (dagmetingen
+# in geen enkele lijst) bijna onvermijdelijk: je moest onthouden in welke
+# lijst een veld hoorde, en vergeten was stil.
+#
+# De vijf lijsten worden hieronder AFGELEID. Een veld vergeten is dan een
+# ontbrekende sleutel in plaats van een veld dat nergens staat.
+#
+# De inventory over alle 187 velden gaf nul afwijkingen, dus dit
+# verandert geen gedrag - het maakt de fout architectonisch moeilijk in
+# plaats van bewaakt.
+#
+#   type         plain | int | date | datetime | uurdict
+#   uursleutels  True als de sleutels ints zijn die JSON als tekst
+#                teruggeeft (v4.6). Twee van de vier staan daarnaast als
+#                `plain` - die worden eerst gewoon teruggezet en dan
+#                omgezet; de andere twee (`uurdict`) alleen omgezet. Dat
+#                onderscheid bestond al en is hier bewaard, want de
+#                laadorde hangt eraan.
+PERSISTED_FIELDS: dict[str, dict] = {
+    "kalibratie": {"type": "plain"},
+    "dagreeks_verwijderd": {"type": "plain"},
+    "sensor_cadence": {"type": "plain"},
+    "verbruiksleer_reset_op": {"type": "plain"},
+    "verbruiksleer_reset_historie": {"type": "plain"},
+    "goedkope_koeling_teller": {"type": "plain"},
+    "kalibratie_momentopname": {"type": "plain"},
+    "kalibratie_sinds": {"type": "plain"},
+    "kalibratie_meting": {"type": "plain"},
+    "_pv_energy_meter_day_start": {"type": "plain"},
+    "_pv_energy_meter_last": {"type": "plain"},
+    "battery_module_health": {"type": "plain"},
+    "energy_balance_error_history": {"type": "plain"},
+    "energy_balance_method_version": {"type": "plain"},
+    "mode_change_log": {"type": "plain"},
+    "discharge_floor_events": {"type": "plain"},
+    "dishwasher_cycle_duration_history": {"type": "plain"},
+    "dishwasher_usage_hourly_history": {"type": "plain", "uursleutels": True},
+    "washing_machine_cycle_duration_history": {"type": "plain"},
+    "washing_machine_usage_hourly_history": {"type": "plain", "uursleutels": True},
+    "living_room_temp_bucket_humidity": {"type": "plain"},
+    "living_room_temp_bucket_direction": {"type": "plain"},
+    "presence_week_profile": {"type": "plain"},
+    "presence_last_seen": {"type": "plain"},
+    "nu_laden_tot": {"type": "plain"},
+    "nu_laden_omslag": {"type": "plain"},
+    "fallback_since": {"type": "plain"},
+    "veroudering_history": {"type": "plain"},
+    "langere_horizon_history": {"type": "plain"},
+    "lange_reserve_history": {"type": "plain"},
+    "niet_ontladen_history": {"type": "plain"},
+    "mpc_vergelijking_history": {"type": "plain"},
+    "handmatige_ingrepen": {"type": "plain"},
+    "moduswissels": {"type": "plain"},
+    "bijkoop_history": {"type": "plain"},
+    "netlading_vandaag_kwh": {"type": "plain"},
+    "netlading_kosten_eur": {"type": "plain"},
+    "netlading_history": {"type": "plain"},
+    "_eerder_rijpe_kandidaten": {"type": "plain"},
+    "pv_band_history": {"type": "plain"},
+    "pv_model_samples": {"type": "plain"},
+    "energy_daily_history": {"type": "plain"},
+    "_energiedagstand": {"type": "plain"},
+    "_kosten_meter_dagbegin": {"type": "plain"},
+    "appliance_cycle_kwh": {"type": "plain"},
+    "_appliance_cycle_history": {"type": "plain"},
+    "presence_timeline": {"type": "plain"},
+    "presence_state": {"type": "plain"},
+    "quarter_plan_first_seen": {"type": "plain"},
+    "charge_efficiency_history": {"type": "plain"},
+    "discharge_efficiency_history": {"type": "plain"},
+    "daytype_consumption_profile": {"type": "plain"},
+    "capacity_trend_history": {"type": "plain"},
+    "price_shape_history": {"type": "plain"},
+    "proefstand_ledger": {"type": "plain"},
+    "nilm_dismissed_duplicate_pairs": {"type": "plain"},
+    "nilm_unconfirmed_candidates": {"type": "plain"},
+    "water_source_profiles": {"type": "plain"},
+    "current_month_discharge_value_eur": {"type": "plain"},
+    "current_month_charge_cost_eur": {"type": "plain"},
+    "current_month_shortfall_days": {"type": "plain"},
+    "current_month_excess_days": {"type": "plain"},
+    "current_month_days_tracked": {"type": "plain"},
+    "battery_discharge_today_kwh": {"type": "plain"},
+    "_daily_report_counters": {"type": "plain"},
+    "_last_plan_alert": {"type": "plain"},
+    "_savings_day_start_available_kwh": {"type": "plain"},
+    "_pv_geometry_day_peak_w": {"type": "plain"},
+    "_pv_geometry_day_peak_azimuth": {"type": "plain"},
+    "_pv_geometry_day_expected_peak_w": {"type": "plain"},
+    "plan_review_history": {"type": "plain"},
+    "plan_snapshot": {"type": "plain"},
+    "_plan_review_dagstand": {"type": "plain"},
+    "bedtime_history": {"type": "plain"},
+    "battery_cooling_history": {"type": "plain"},
+    "kalman_divergence_history": {"type": "plain"},
+    "backyard_sun_exposure_azimuths": {"type": "plain"},
+    "weather_source_agreement": {"type": "plain"},
+    "pv_peak_azimuth_history": {"type": "plain"},
+    "daily_cost_history": {"type": "plain"},
+    "daily_report_history": {"type": "plain"},
+    "balance_missing_by_entity": {"type": "plain"},
+    "pv_azimuth_performance": {"type": "plain"},
+    "helderheid_ijklijn": {"type": "plain"},
+    "weerbron_helderheid_paren": {"type": "plain"},
+    "helderheid_dagen": {"type": "plain"},
+    "reserve_daily_records": {"type": "plain"},
+    "baseline_load_history": {"type": "plain"},
+    "climate_forecast_bias_history": {"type": "plain"},
+    "climate_rate_history": {"type": "plain"},
+    "digital_twin_accuracy_history": {"type": "plain"},
+    "extra_dip_margin_history": {"type": "plain"},
+    "fietsladers_charge_duration_history": {"type": "plain"},
+    "learned_efficiency_history": {"type": "plain"},
+    "living_room_temp_bucket_history": {"type": "plain"},
+    "night_consumption_history": {"type": "plain"},
+    "peak_power_daily_history": {"type": "plain"},
+    "steelstofzuiger_charge_duration_history": {"type": "plain"},
+    "temp_consumption_history": {"type": "plain"},
+    "temp_consumption_prediction_error_history": {"type": "plain"},
+    "water_daily_history": {"type": "plain"},
+    "water_session_history": {"type": "plain"},
+    "weather_ensemble_agreement_history": {"type": "plain"},
+    "energy_bridge_transition_log": {"type": "plain"},
+    "total_discharge_value_eur": {"type": "plain"},
+    "total_charge_cost_eur": {"type": "plain"},
+    "battery_cost_basis_eur_per_kwh": {"type": "plain"},
+    "total_battery_savings_eur": {"type": "plain"},
+    "total_feedin_premium_eur": {"type": "plain"},
+    "cusum_accumulator_kw": {"type": "plain"},
+    "sluipverbruik_detected": {"type": "plain"},
+    "battery_cumulative_discharged_kwh": {"type": "plain"},
+    "peak_power_all_time_w": {"type": "plain"},
+    "peak_power_all_time_date": {"type": "plain"},
+    "peak_power_current_month_w": {"type": "plain"},
+    "peak_power_previous_month_w": {"type": "plain"},
+    "water_daily_total_l": {"type": "plain"},
+    "last_extra_dip_margin_eur_per_kwh": {"type": "plain"},
+    "last_temp_consumption_note": {"type": "plain"},
+    "dagverloop": {"type": "plain"},
+    "nabeschouwingen": {"type": "plain"},
+    "padbereik": {"type": "plain"},
+    "nachtlast_per_apparaat": {"type": "plain"},
+    "woonkamertemp_gemeten_per_uur": {"type": "plain"},
+    "cycluskosten_geschiedenis": {"type": "plain"},
+    "safe_sell_shadow": {"type": "plain"},
+    "reden_afwijkingen": {"type": "plain"},
+    "meting_laatst_gevuld": {"type": "plain"},
+    "eigen_ingrepen": {"type": "plain"},
+    "_steelstofzuiger_complete_today": {"type": "plain"},
+    "_fietsladers_complete_today": {"type": "plain"},
+    "_laagste_soc_ochtend": {"type": "plain"},
+    "_netimport_nacht_kwh": {"type": "plain"},
+    "_lange_horizon_extra_vandaag": {"type": "plain"},
+    "_max_ontlaad_w_vandaag": {"type": "plain"},
+    "_vermogensgrens_gezien_today": {"type": "plain"},
+    "_shortfall_detected_today": {"type": "plain"},
+    "_excess_detected_today": {"type": "plain"},
+    "powercalc_paren": {"type": "plain"},
+    "notification_enabled": {"type": "plain"},
+    "notification_last_sent": {"type": "plain"},
+    "_notification_history_last": {"type": "plain"},
+    "notification_history": {"type": "plain"},
+    "notifications_master_enabled": {"type": "plain"},
+    "previously_ready_modules": {"type": "plain"},
+    "notification_active_conditions": {"type": "plain"},
+    "actual_cost_today_eur": {"type": "plain"},
+    "actual_cost_current_month_eur": {"type": "plain"},
+    "actual_cost_all_time_eur": {"type": "plain"},
+    "counterfactual_cost_today_eur": {"type": "plain"},
+    "counterfactual_cost_current_month_eur": {"type": "plain"},
+    "counterfactual_cost_all_time_eur": {"type": "plain"},
+    "charge_pv_kwh_total": {"type": "plain"},
+    "charge_grid_kwh_total": {"type": "plain"},
+    "discharge_export_kwh_total": {"type": "plain"},
+    "forgone_feedin_eur_total": {"type": "plain"},
+    "co2_emitted_today_kg": {"type": "plain"},
+    "pv_production_today_kwh": {"type": "plain"},
+    "pv_export_today_kwh": {"type": "plain"},
+    "pv_daily_history": {"type": "plain"},
+    "solar_export_today_kwh": {"type": "plain"},
+    "battery_export_today_kwh": {"type": "plain"},
+    "gross_consumption_today_kwh": {"type": "plain"},
+    "grid_import_today_kwh": {"type": "plain"},
+    "grid_charge_today_kwh": {"type": "plain"},
+    "peak_power_today_w": {"type": "plain"},
+    "water_sessions_today_l": {"type": "plain"},
+    "water_sessions_today_count": {"type": "plain"},
+    "_peak_power_month_key": {"type": "int"},
+    "_counterfactual_month_key": {"type": "int"},
+    "_summary_month_key": {"type": "int"},
+    "_steelstofzuiger_complete_date": {"type": "date"},
+    "_fietsladers_complete_date": {"type": "date"},
+    "_shortfall_check_date": {"type": "date"},
+    "first_seen_date": {"type": "date"},
+    "goedkope_koeling_teldag": {"type": "date"},
+    "_plan_review_day_key": {"type": "date"},
+    "_pv_geometry_day_key": {"type": "date"},
+    "_water_sessions_day_key": {"type": "date"},
+    "_battery_module_day_key": {"type": "date"},
+    "_peak_power_day_key": {"type": "date"},
+    "_counterfactual_day_key": {"type": "date"},
+    "_self_sufficiency_day_key": {"type": "date"},
+    "_co2_day_key": {"type": "date"},
+    "battery_cooling_last_change": {"type": "datetime"},
+    "water_softener_last_regeneration": {"type": "datetime"},
+    "last_motion_at": {"type": "datetime"},
+    "last_bedtime_motion_at": {"type": "datetime"},
+    "hourly_consumption_profile": {"type": "uurdict", "uursleutels": True},
+    "pv_hourly_bias_history": {"type": "uurdict", "uursleutels": True},
+}
+
+# Afgeleid, geen eigen lijsten meer.
+PERSISTED_PLAIN_FIELDS = tuple(
+    veld for veld, g in PERSISTED_FIELDS.items() if g["type"] == "plain"
 )
+PERSISTED_INT_FIELDS = tuple(
+    veld for veld, g in PERSISTED_FIELDS.items() if g["type"] == "int"
+)
+PERSISTED_DATE_FIELDS = tuple(
+    veld for veld, g in PERSISTED_FIELDS.items() if g["type"] == "date"
+)
+PERSISTED_DATETIME_FIELDS = tuple(
+    veld for veld, g in PERSISTED_FIELDS.items() if g["type"] == "datetime"
+)
+PERSISTED_INTKEY_DICT_FIELDS = tuple(
+    veld for veld, g in PERSISTED_FIELDS.items() if g.get("uursleutels")
+)
+
+# De conversies die bij het LADEN gebeuren. Die bestonden al jarenlang
+# als gedrag - vier `if`-jes in `_apply_persisted_state` - maar niet als
+# contract. Benoemd betekent dat een volgende vormwijziging niet
+# stilzwijgend de vijfde wordt.
+#
+# De meting die hierbij hoort: van de 74 velden die in de export zichtbaar
+# zijn, week er nul af van zijn verklaring. De waarschijnlijkste
+# verklaring is dat deze vier conversies hun werk doen.
+PERSISTED_CONVERSIES = (
+    {
+        "veld_of_type": "uursleutels",
+        "sinds": "v4.6",
+        "wat": "JSON geeft int-sleutels als tekst terug; {int(k): v} zet ze om",
+    },
+    {
+        "veld_of_type": "date",
+        "sinds": "v1.x",
+        "wat": "ISO-tekst terug naar een date, anders is de dagvergelijking altijd ongelijk",
+    },
+    {
+        "veld_of_type": "datetime",
+        "sinds": "v1.x",
+        "wat": "ISO-tekst terug naar een datetime met tijdzone",
+    },
+    {
+        "veld_of_type": "weerbron_helderheid_paren",
+        "sinds": "v4.17.1",
+        "wat": "paren met minder dan vijf velden weggooien - die zijn van voor de uursleutel",
+    },
+)
+
 
 # Datum-sleutels van de dag/maand-rollovers. Zonder deze zouden de
 # "vandaag"-tellers hierboven wél terugkomen maar bij de eerstvolgende
 # tick meteen worden gewist, omdat de coordinator dan denkt dat er een
 # nieuwe dag is begonnen - dan was het terugzetten zinloos geweest.
-PERSISTED_DATE_FIELDS = (
-    # v4.15: de dag waarop die vlag geldt.
-    "_steelstofzuiger_complete_date",
-    "_fietsladers_complete_date",
-    # v4.7: zonder de dag waarop geteld wordt, begint de teller na een
-    # herstart aan een "nieuwe" dag en zijn de waarden meteen weg.
-    "_shortfall_check_date",
-    # v4.1: uit de sensorattributen naar de Store.
-    "first_seen_date",
-    "goedkope_koeling_teldag",
-    # v1.74.0: bij welke dag de plantoetsing staat. Zonder dit veld
-    # begon elke herstart met een lege sleutel en werd de momentopname
-    # van vanochtend weggegooid. Als DATUM bewaard, niet als tekst -
-    # anders is de vergelijking met `now.date()` altijd ongelijk.
-    "_plan_review_day_key",
-    # v1.49.0: bij welke dag de piekgegevens hierboven horen.
-    "_pv_geometry_day_key",
-    "_water_sessions_day_key",
-    "_battery_module_day_key",
-    "_peak_power_day_key",
-    "_counterfactual_day_key",
-    "_self_sufficiency_day_key",
-    "_co2_day_key",
-)
 
-PERSISTED_INT_FIELDS = (
-    "_peak_power_month_key",
-    "_counterfactual_month_key",
-    "_summary_month_key",
-)
+
+
 
 # v4.1: dicts met UURSLEUTELS (int). JSON maakt daar tekst van; bij het
 # laden gaan ze terug naar int, anders vindt `learned_hourly_avg_kw(13)`
 # niets meer.
-PERSISTED_INTKEY_DICT_FIELDS = (
-    "hourly_consumption_profile",
-    "pv_hourly_bias_history",
-    # v4.6: deze twee ontbraken, en de sensor viel er twintig keer op om
-    # met "'<' not supported between instances of 'int' and 'str'". Ze
-    # worden als PARAMETER doorgegeven (`history.setdefault(now.hour)`),
-    # dus de scan die op `self.X.setdefault(now.hour` keek, zag ze niet.
-    # De toets kijkt nu naar de type-annotatie in `__init__`.
-    "dishwasher_usage_hourly_history",
-    "washing_machine_usage_hourly_history",
-)
 
-PERSISTED_DATETIME_FIELDS = (
-    "battery_cooling_last_change",
-    # v4.1: uit de sensorattributen naar de Store.
-    "water_softener_last_regeneration",
-    # v1.30.0, gevraagd: "Let op alle gecreeerde data dient na een
-    # herstart niet verloren te gaan."
-    #
-    # Deze twee stonden er niet in, en dat is te zien in de tijdlijn van
-    # 11 augustus: de hele nacht "weg" terwijl er iemand lag te slapen.
-    # De slaapherkenning kijkt of de slaapsensor de LAATSTE beweging
-    # was; na een herstart was `last_bedtime_motion_at` leeg en kon die
-    # vraag niet meer beantwoord worden. Wie al in bed ligt, loopt niet
-    # opnieuw langs die sensor.
-    "last_motion_at",
-    "last_bedtime_motion_at",
-)
+
+
 
 # De opslag wordt vertraagd weggeschreven: een tick kan meerdere velden
 # raken, en bij een live listener (water, accu-koeling) zelfs meermaals

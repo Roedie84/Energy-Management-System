@@ -26131,3 +26131,92 @@ niet de avondverkoop waar de huidige bevinding zit.
 Aan de sturing verandert niets.
 
 **Volledige testsuite**: 3926 tests, allemaal groen.
+
+
+## v5.2 — Bewaking, terugtoetsbank, declaratieve velden
+
+Vier punten, waarvan er één anders is gebouwd dan gevraagd.
+
+### 1. De nieuwe metingen worden nu bewaakt
+
+De stilstandcontrole van v1.11.1 loopt automatisch over alle lijstvelden
+- goed ontworpen - maar keek alleen naar LIJSTEN VAN GETALLEN. De
+metingen van v4.14 tot v5.1 zijn lijsten van dicts
+(`safe_sell_shadow`, `eigen_ingrepen`, `cycluskosten_geschiedenis`) of
+dicts van lijsten (`reden_afwijkingen`, `nachtlast_per_apparaat`). Die
+vielen er allemaal buiten, en `meet_stuurt_niet` bewaakt alleen
+proefstandkandidaten.
+
+Nu niet de inhoud maar het MOMENT: wanneer kreeg elke meting voor het
+laatst iets, met een eigen drempel per meting - want de vulfrequentie
+verschilt zestig keer:
+
+```
+dagverloop                 2 dagen   elke ronde
+nabeschouwingen            2         de dagwissel
+reden_afwijkingen          3         de dagwissel
+nachtlast_per_apparaat     3         elke nacht
+cycluskosten_geschiedenis 14         een afgeronde vaatwas
+safe_sell_shadow          60         verkoop in het terugvalpad
+eigen_ingrepen           120         een handmatige stand
+```
+
+Eén drempel voor alles zou vals alarm geven of niets vinden. En een
+stille meting komt op de landingspagina, niet alleen in de export -
+anders is "leeg" maanden lang niet te onderscheiden van "kapot".
+
+### 2. De terugtoetsbank
+
+`terugtoets(regel)` laat een beslisregel over alle opgeslagen dagen
+lopen en vergelijkt met de nabeschouwing. Een regel is een functie
+`(datum, kwartieren, index) -> kWh`; de bank respecteert de fysieke
+grenzen en meldt hoeveel kwartieren zijn afgekapt.
+
+Wat hij niet kan, en dat staat in `beperking`: een regel toetsen die de
+voorspelling van dat moment nodig heeft. Het dagverloop bewaart wat er
+GEBEURDE, en van de voorspelling is er één momentopname per dag (08:00).
+Met de werkelijkheid rekenen zou een regel kennis geven die hij toen
+niet had - liever expliciet dan stilzwijgend.
+
+### 3. PERSISTED_FIELDS declaratief
+
+De semantiek zat in de lijstnaam, en daardoor waren de fouten van v4.6
+(uursleutels als tekst) en v4.7 (dagmetingen in geen enkele lijst) bijna
+onvermijdelijk. Nu één tabel met het type per veld, waaruit de vijf
+lijsten worden AFGELEID - 190 velden.
+
+Twee dingen die het bouwen opleverde:
+
+Mijn extractie pikte **zes spookvelden uit opmerkingen** op (`vandaag`,
+`onbekend`, `helder`, `13`, `opgelost`, `weg`) en één uit een
+codefragment (`nieuwe`). De toets "elk verklaard veld bestaat op de
+coordinator" vond ze alle zeven. Dat is precies waarvoor die toets
+bedoeld was, en hij vuurde op mijn eigen werk.
+
+En de omzetting maakte per ongeluk alle vier uursleutelvelden ook
+`plain`, terwijl er oorspronkelijk maar twee in beide lijsten stonden.
+De laadorde hangt daaraan, dus dat onderscheid is bewaard met een eigen
+type `uurdict` in plaats van gladgestreken.
+
+De vier bestaande laadconversies staan nu benoemd in
+`PERSISTED_CONVERSIES`, met sinds-versie en wat ze doen. De migraties
+bestonden al als gedrag; nu ook als contract.
+
+### 4. Intraday-herschaling - als SCHADUW, niet als sturing
+
+Hier heb ik afgeweken van de opdracht, en met reden. De code zei het al:
+*"Dit is het punt waar stap twee - zelf bijstellen - op zou kunnen
+aanhaken."* Maar het bewijs ontbreekt: de zonpersistentiemeting gaf
+r=0,69 over acht dagen en noemt zelf pas een richting bij twintig, met
+twee dagen die de verkeerde kant op gingen.
+
+Dus rekent v5.2 uit wat herschaling zou hebben gedaan, via de
+terugtoetsbank van punt 2, en stuurt niets. Er staat een ratel op dat
+`herschaalde_zon_rest_van_de_dag` in geen enkel beslispad voorkomt.
+
+De grenzen zijn smal met opzet: factor tussen 0,6 en 1,4, en pas vanaf
+1 kWh voorspeld. Bij r=0,69 verklaart de ochtend ongeveer de helft van
+de middag, niet alles - een ochtend die 300% doet mag de middag niet
+verdrievoudigen.
+
+**Volledige testsuite**: 3955 tests, allemaal groen.

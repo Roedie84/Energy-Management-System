@@ -18,8 +18,15 @@ import custom_components.energy_management_system.const as C
 def _persisted() -> set[str]:
     velden: set[str] = set()
     for naam in dir(C):
-        if naam.startswith("PERSISTED_") and isinstance(getattr(C, naam), tuple):
-            velden |= set(getattr(C, naam))
+        waarde = getattr(C, naam)
+        # v5.2: PERSISTED_CONVERSIES is een tuple van DICTS en geen
+        # veldenlijst. Alleen tuples van tekst meenemen.
+        if (
+            naam.startswith("PERSISTED_")
+            and isinstance(waarde, tuple)
+            and all(isinstance(x, str) for x in waarde)
+        ):
+            velden |= set(waarde)
     return velden
 
 

@@ -237,8 +237,15 @@ def test_the_table_survives_a_restart():
 
     bewaard = set()
     for naam in dir(C):
-        if naam.startswith("PERSISTED_") and isinstance(getattr(C, naam), tuple):
-            bewaard |= set(getattr(C, naam))
+        waarde = getattr(C, naam)
+        # v5.2: PERSISTED_CONVERSIES is een tuple van DICTS en geen
+        # veldenlijst. Alleen tuples van tekst meenemen.
+        if (
+            naam.startswith("PERSISTED_")
+            and isinstance(waarde, tuple)
+            and all(isinstance(x, str) for x in waarde)
+        ):
+            bewaard |= set(waarde)
 
     assert "presence_last_seen" in bewaard
 

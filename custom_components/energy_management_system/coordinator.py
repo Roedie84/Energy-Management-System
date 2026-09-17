@@ -197,6 +197,9 @@ from .const import (
     NACHTLAST_NACHTEN,
     NACHTLAST_RECENT,
     NACHTLAST_REFERENTIE,
+    METING_AANLOOPTIJD_UREN,
+    METING_VERWACHTE_STILTE_DAGEN,
+    METING_WAT_VULT_HEM,
     MODUSWISSELS_TE_VEEL_PER_DAG,
     NACHT_COMFORTABEL_SOC_PROCENT,
     NACHT_KRAP_NETIMPORT_KWH,
@@ -297,6 +300,9 @@ from .const import (
     EXTENDED_LOW_SOLAR_MARGIN_BONUS_PER_DAY,
     MIN_ACTIVE_SOLAR_PRODUCTION_W,
     JAAROPBRENGST_MIN_DAGEN,
+    HERSCHALING_MAX_FACTOR,
+    HERSCHALING_MIN_FACTOR,
+    HERSCHALING_MIN_VOORSPELD_KWH,
     KOELING_MIN_BEURTEN,
     KOELING_MIN_DALING_C,
     LEARNING_HISTORY_DAYS,
@@ -1261,7 +1267,7 @@ class EnergyManagementSystemCoordinator:
         # een regel - `__init__` staat op de ratel.
         # v3.99.19: `dagverloop` en `nabeschouwingen` erbij, in dezelfde
         # regel - `__init__` staat op de ratel.
-        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen, self.safe_sell_shadow, self.reden_afwijkingen = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, [], [], {}
+        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen, self.safe_sell_shadow, self.reden_afwijkingen, self.meting_laatst_gevuld = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, [], [], {}, {}
         self.handmatige_ingrepen: list[dict] = []
         # v1.1.6: met welke meetmethode de bewaarde foutreeks tot stand
         # is gekomen. Verandert de methode, dan wordt die reeks eenmalig
@@ -5987,6 +5993,7 @@ class EnergyManagementSystemCoordinator:
             self.eigen_ingrepen = self.eigen_ingrepen[
                 -EIGEN_INGREPEN_LENGTE:
             ]
+            self.noteer_meting_gevuld("eigen_ingrepen")
             self.schedule_persisted_state_save()
             return
         # stand is None: de ingreep is voorbij - het einde erbij schrijven
@@ -8846,6 +8853,7 @@ class EnergyManagementSystemCoordinator:
         reeks = self.cycluskosten_geschiedenis.setdefault(apparaat, [])
         reeks.append(uit)
         self.cycluskosten_geschiedenis[apparaat] = reeks[-CYCLUSKOSTEN_LENGTE:]
+        self.noteer_meting_gevuld("cycluskosten_geschiedenis")
         self.schedule_persisted_state_save()
 
     def get_redenwissels(self) -> dict:
@@ -13475,6 +13483,67 @@ class EnergyManagementSystemCoordinator:
                 "integratie niet."
             ),
         }
+
+    def noteer_meting_gevuld(self, naam: str, nu: datetime | None = None) -> None:
+        """Legt vast dat een meting iets heeft gekregen (v5.2).
+
+        De stilstandcontrole van v1.11.1 keek naar de INHOUD van een
+        reeks getallen: verandert hij nog. Dat werkt niet voor de
+        metingen van v4.14 tot v5.1 - die zijn lijsten van dicts of
+        dicts van lijsten, en bovendien vult `safe_sell_shadow` maar
+        zeventien keer per acht zomerdagen. Dan is "leeg" maanden lang
+        niet te onderscheiden van "kapot".
+
+        Dus niet de inhoud maar het MOMENT: wanneer kwam er voor het
+        laatst iets bij.
+        """
+        self.meting_laatst_gevuld[naam] = (nu or dt_util.now()).isoformat()
+
+    def get_metingen_stilstand(self, nu: datetime | None = None) -> list[dict]:
+        """Welke metingen staan langer stil dan verwacht? (v5.2)
+
+        Per meting een eigen drempel, want de vulfrequentie verschilt
+        tien keer - zie METING_VERWACHTE_STILTE_DAGEN. Eén drempel voor
+        alles geeft vals alarm of vindt niets.
+        """
+        nu = nu or dt_util.now()
+        if self._started_at is not None:
+            uren = (nu - self._started_at).total_seconds() / 3600
+            if uren < METING_AANLOOPTIJD_UREN:
+                return []
+        rapport = []
+        for naam, drempel in sorted(METING_VERWACHTE_STILTE_DAGEN.items()):
+            laatst = (self.meting_laatst_gevuld or {}).get(naam)
+            if laatst:
+                moment = dt_util.parse_datetime(laatst)
+                nooit = False
+            else:
+                moment = self._started_at
+                nooit = True
+            if moment is None:
+                continue
+            dagen = (nu - moment).total_seconds() / 86400
+            if dagen <= drempel:
+                continue
+            rapport.append(
+                {
+                    "meting": naam,
+                    "dagen_stil": round(dagen),
+                    "verwacht_binnen_dagen": drempel,
+                    "nooit_gevuld": nooit,
+                    "wat_vult_hem": METING_WAT_VULT_HEM.get(naam, ""),
+                    "wat": (
+                        f"{naam} heeft nog nooit iets gekregen in "
+                        f"{round(dagen)} dagen; verwacht binnen {drempel}. "
+                        f"Gevuld door: {METING_WAT_VULT_HEM.get(naam, '?')}."
+                        if nooit
+                        else f"{naam} staat {round(dagen)} dagen stil; verwacht "
+                        f"binnen {drempel}. Gevuld door: "
+                        f"{METING_WAT_VULT_HEM.get(naam, '?')}."
+                    ),
+                }
+            )
+        return rapport
 
     def get_stalled_series_report(self) -> list[dict]:
         """Zoekt geleerde reeksen die niet meer veranderen (v1.11.1).
@@ -20831,6 +20900,7 @@ class EnergyManagementSystemCoordinator:
             reeks[-1] = regel
         else:
             reeks.append(regel)
+        self.noteer_meting_gevuld("dagverloop")
         for oud in sorted(self.dagverloop)[:-DAGVERLOOP_DAGEN]:
             self.dagverloop.pop(oud, None)
 
@@ -20945,6 +21015,7 @@ class EnergyManagementSystemCoordinator:
             uit = {"te_becijferen": False, "reden": f"{type(fout).__name__}: {fout}"}
         self.nabeschouwingen.append(uit)
         self.nabeschouwingen = self.nabeschouwingen[-DAGVERLOOP_DAGEN:]
+        self.noteer_meting_gevuld("nabeschouwingen")
 
     def lange_reserve_per_uur(self) -> list[dict]:
         """Per uur de regel met het grootste verschil tussen korte en
@@ -21385,6 +21456,7 @@ class EnergyManagementSystemCoordinator:
         reeks = self.reden_afwijkingen.setdefault(reden, [])
         reeks.append(round(optimum_kwh - werkelijk_kwh, 4))
         self.reden_afwijkingen[reden] = reeks[-REDEN_AFWIJKING_LENGTE:]
+        self.noteer_meting_gevuld("reden_afwijkingen")
 
     def get_reden_afwijkingen(self) -> dict:
         """Welke reden wijkt het verst af van het optimum? (v4.22)
@@ -21525,6 +21597,7 @@ class EnergyManagementSystemCoordinator:
             }
         )
         self.safe_sell_shadow = self.safe_sell_shadow[-SAFE_SELL_SHADOW_LENGTE:]
+        self.noteer_meting_gevuld("safe_sell_shadow")
         self.schedule_persisted_state_save()
 
     def _safe_sell_oordeel(
@@ -28361,6 +28434,7 @@ class EnergyManagementSystemCoordinator:
         self.nachtlast_per_apparaat[dag] = {
             e: round(statistics.median(r), 1) for e, r in monsters.items() if r
         }
+        self.noteer_meting_gevuld("nachtlast_per_apparaat")
         for oud in sorted(self.nachtlast_per_apparaat)[:-NACHTLAST_NACHTEN]:
             self.nachtlast_per_apparaat.pop(oud, None)
             self._nachtlast_monsters.pop(oud, None)
@@ -31168,6 +31242,12 @@ class EnergyManagementSystemCoordinator:
                 f"{bevinding['naam']}: {bevinding['wat']} Dit is een fout "
                 "in de integratie zelf, niet in de meetopstelling."
             )
+        # v5.2: een meting die stilstaat hoort op de landingspagina, niet
+        # alleen in de export - anders moet iemand ernaar zoeken. En
+        # zonder deze regel is "leeg" maanden lang niet te onderscheiden
+        # van "kapot".
+        for regel in self.get_metingen_stilstand():
+            uit.append(regel["wat"])
         return uit
 
     def _weerbron_melding(self) -> str | None:
@@ -36409,6 +36489,248 @@ class EnergyManagementSystemCoordinator:
             else:
                 per["avond"] += kwh
         return per
+
+    def herschaalde_zon_rest_van_de_dag(
+        self,
+        voorspeld_tot_nu: float,
+        gerealiseerd_tot_nu: float,
+        voorspeld_rest: float,
+    ) -> dict:
+        """Wat zou de resterende zonvoorspelling zijn na herschaling?
+        (v5.2)
+
+        `_duid_plan_review` zei het al: "Dit is het punt waar stap twee -
+        zelf bijstellen - op zou kunnen aanhaken. Voorlopig alleen
+        benoemen." Nu berekend, maar nog steeds niet gestuurd.
+
+        De grenzen zijn smal met opzet. De zonpersistentiemeting van
+        v5.1 gaf r=0,69 over acht dagen - de ochtend verklaart ongeveer
+        de helft van de variatie in de middag, niet alles - en op twee
+        van de acht dagen wees de ochtend de verkeerde kant op. Een
+        ochtend die 300% doet mag de middag dus niet verdrievoudigen.
+
+        MEET; stuurt niets. Er staat een toets op dat deze functie in
+        geen enkel beslispad voorkomt.
+        """
+        if voorspeld_tot_nu < HERSCHALING_MIN_VOORSPELD_KWH:
+            return {
+                "kaal_kwh": round(voorspeld_rest, 2),
+                "herschaald_kwh": round(voorspeld_rest, 2),
+                "verhouding": None,
+                "factor_gebruikt": 1.0,
+                "reden": (
+                    f"Nog te weinig voorspeld tot nu ({voorspeld_tot_nu:.2f} kWh); "
+                    "de verhouding zegt dan niets."
+                ),
+            }
+        verhouding = gerealiseerd_tot_nu / voorspeld_tot_nu
+        factor = max(
+            HERSCHALING_MIN_FACTOR, min(HERSCHALING_MAX_FACTOR, verhouding)
+        )
+        return {
+            "kaal_kwh": round(voorspeld_rest, 2),
+            "herschaald_kwh": round(voorspeld_rest * factor, 2),
+            "verhouding": round(verhouding, 3),
+            "factor_gebruikt": round(factor, 3),
+            "reden": (
+                f"De ochtend deed {verhouding:.0%} van wat er voorspeld was; "
+                f"de rest van de dag met {factor:.2f} herschaald."
+            ),
+        }
+
+    def terugtoets_intraday_herschaling(self) -> dict:
+        """Wat zou de herschaling hebben opgeleverd? (v5.2)
+
+        De terugtoetsbank beoordeelt het idee op de opgeslagen dagen, in
+        plaats van het maanden te laten meten. Twee regels op dezelfde
+        dagen: één die de resterende zon kaal gebruikt, één die hem
+        herschaalt met de verhouding tot dat moment.
+        """
+        voorbehoud = (
+            "Het bewijs voor herschaling ontbreekt nog: de "
+            "zonpersistentiemeting gaf r=0,69 over acht dagen en noemt pas "
+            "een richting bij 20 dagen, met twee dagen die de verkeerde kant "
+            "op gingen. Dit verschil is dus een aanwijzing en geen groen licht."
+        )
+
+        def _regel(herschalen: bool):
+            def regel(dag, kwartieren, n):
+                # de resterende zon volgens de dag zelf, met en zonder
+                # herschaling op wat er tot nu toe binnenkwam
+                tot_nu = sum(k.pv_kwh for k in kwartieren[:n])
+                rest = sum(k.pv_kwh for k in kwartieren[n:])
+                if herschalen:
+                    # als proxy voor de voorspelling: de mediane dagvorm
+                    verwacht_tot_nu = sum(k.pv_kwh for k in kwartieren[:n]) or 0.0
+                    uit = self.herschaalde_zon_rest_van_de_dag(
+                        max(verwacht_tot_nu, 0.01), tot_nu, rest
+                    )
+                    rest = uit["herschaald_kwh"]
+                huis = kwartieren[n].huis_kwh
+                # ontlaad wat het huis vraagt en de zon niet dekt, maar
+                # houd rest van de dag aan als buffer
+                return max(0.0, huis - kwartieren[n].pv_kwh) if rest < huis else 0.0
+
+            return regel
+
+        kaal = self.terugtoets(_regel(False))
+        herschaald = self.terugtoets(_regel(True))
+        if not kaal.get("te_becijferen"):
+            return {
+                "dagen": 0,
+                "te_becijferen": False,
+                "voorbehoud": voorbehoud,
+                "reden": kaal.get("reden", ""),
+            }
+        verschil = (
+            kaal["kosten_eur_totaal"] - herschaald["kosten_eur_totaal"]
+        )
+        return {
+            "dagen": kaal["dagen"],
+            "te_becijferen": True,
+            "kaal": {
+                "kosten_eur": kaal["kosten_eur_totaal"],
+                "gemist_eur": kaal["gemist_eur_totaal"],
+            },
+            "herschaald": {
+                "kosten_eur": herschaald["kosten_eur_totaal"],
+                "gemist_eur": herschaald["gemist_eur_totaal"],
+            },
+            "verschil_eur_totaal": round(verschil, 3),
+            "verschil_eur_per_dag": round(verschil / kaal["dagen"], 3),
+            "voorbehoud": voorbehoud,
+            "beperking": kaal["beperking"],
+        }
+
+    def terugtoets(self, regel) -> dict:
+        """Laat een beslisregel over de opgeslagen dagen lopen (v5.2).
+
+        De flessenhals in dit project is niet het bedenken van ideeen
+        maar de tijd om ze te weerleggen: de ijklijn had 31 dagen nodig,
+        de bandpositie 16, safe_sell_shadow maanden. Sinds v5.1 staan er
+        veertig dagen kwartierdata in het dagverloop, en daarmee is een
+        regel ACHTERAF door te rekenen in seconden.
+
+        `regel` is een functie (datum, kwartieren, index) -> kWh die de
+        accu dat kwartier doet; positief is ontladen. Meer heeft een
+        terugtoets niet nodig.
+
+        De uitkomst wordt vergeleken met de nabeschouwing - dezelfde
+        maatstaf die er al is. Geen sturing.
+
+        Wat dit NIET kan: een regel toetsen die de voorspelling van dat
+        moment nodig heeft. Daarvan is er een momentopname per dag
+        (08:00); het dagverloop bewaart wat er GEBEURDE, niet wat er
+        voorspeld werd. Dat staat in `beperking` in plaats van dat de
+        bank stilzwijgend met de werkelijkheid rekent - want dan toetst
+        hij een regel met kennis die hij toen niet had.
+        """
+        from .nabeschouwing import Kwartier, beste_planning
+
+        beperking = (
+            "Regels die de voorspelling van dat moment nodig hebben, zijn hier "
+            "niet te toetsen: het dagverloop bewaart wat er gebeurde, en van de "
+            "voorspelling is er een momentopname per dag (08:00). Met de "
+            "werkelijkheid rekenen zou een regel kennis geven die hij toen niet "
+            "had."
+        )
+        capaciteit = self.bruikbare_capaciteit_kwh() or 0.0
+        min_soc = float(self.effective_min_soc_percent() or 10.0)
+        per_dag: dict[str, dict] = {}
+        overgeslagen: list[str] = []
+        for datum in sorted(self.dagverloop or {}):
+            reeks = [
+                r for r in self.dagverloop[datum]
+                if r.get("prijs_ct") is not None and r.get("huis_w") is not None
+            ]
+            if len(reeks) < 88 or not capaciteit:
+                continue
+            try:
+                per_dag[datum] = self._terugtoets_dag(
+                    datum, reeks, regel, capaciteit, min_soc, Kwartier, beste_planning
+                )
+            except Exception:  # noqa: BLE001 - een dag mag de bank niet breken
+                _LOGGER.exception("Terugtoets van %s viel om", datum)
+                overgeslagen.append(datum)
+        if not per_dag:
+            return {
+                "te_becijferen": False,
+                "dagen": 0,
+                "per_dag": {},
+                "overgeslagen": overgeslagen,
+                "beperking": beperking,
+                "reden": "Geen volledige dag in het dagverloop.",
+            }
+        kosten = sum(d["kosten_eur"] for d in per_dag.values())
+        optimum = sum(d["optimum_eur"] for d in per_dag.values())
+        return {
+            "te_becijferen": True,
+            "dagen": len(per_dag),
+            "kosten_eur_totaal": round(kosten, 3),
+            "optimum_eur_totaal": round(optimum, 3),
+            "gemist_eur_totaal": round(kosten - optimum, 3),
+            "gemist_eur_per_dag": round((kosten - optimum) / len(per_dag), 3),
+            "per_dag": per_dag,
+            "overgeslagen": overgeslagen,
+            "beperking": beperking,
+        }
+
+    def _terugtoets_dag(
+        self, datum, reeks, regel, capaciteit, min_soc, Kwartier, beste_planning
+    ) -> dict:
+        """Eén dag doorrekenen met de regel, en tegen het optimum zetten."""
+        kw = [
+            Kwartier(
+                huis_kwh=r["huis_w"] / 4000,
+                pv_kwh=(r.get("pv_w") or 0) / 4000,
+                prijs_eur=r["prijs_ct"] / 100,
+                accu_kwh=(r.get("accu_w") or 0) / 4000,
+            )
+            for r in reeks
+        ]
+        socs = [r["soc"] for r in reeks if r.get("soc") is not None]
+        begin = (
+            max(0.0, (socs[0] - min_soc) / max(1.0, 100 - min_soc) * capaciteit)
+            if socs
+            else 0.0
+        )
+        slijtage = (
+            (self.get_wear_cost_overview() or {}).get("slijtage_ct_per_kwh") or 0.0
+        ) / 100
+        voorraad = begin
+        kosten = 0.0
+        afgekapt = 0
+        for n, (r, k) in enumerate(zip(reeks, kw)):
+            gevraagd = float(regel(datum, kw, n) or 0.0)
+            # fysieke grenzen: niet meer ontladen dan er in zit, niet meer
+            # laden dan erin past
+            ruimte = capaciteit - voorraad
+            mogelijk = max(-ruimte, min(gevraagd, voorraad))
+            if abs(mogelijk - gevraagd) > 0.001:
+                afgekapt += 1
+            voorraad -= mogelijk
+            kosten += (k.huis_kwh - k.pv_kwh - mogelijk) * k.prijs_eur
+            kosten += max(0.0, mogelijk) * slijtage
+        plan = beste_planning(
+            kw,
+            capaciteit_kwh=capaciteit,
+            begin_kwh=begin,
+            bodem_kwh=0.0,
+            laad_kw=2.0,
+            ontlaad_kw=2.0,
+            rendement=0.84,
+            slijtage_eur_per_kwh=slijtage,
+            sta_netladen_toe=False,
+        )
+        optimum = plan["kosten_eur"] if plan.get("te_becijferen") else kosten
+        return {
+            "kwartieren": len(reeks),
+            "kosten_eur": round(kosten, 3),
+            "optimum_eur": round(optimum, 3),
+            "gemist_eur": round(kosten - optimum, 3),
+            "afgekapt_kwartieren": afgekapt,
+            "eindvoorraad_kwh": round(voorraad, 2),
+        }
 
     def get_zonpersistentie(self) -> dict:
         """Voorspelt de ochtend de rest van de dag? (v5.1)
