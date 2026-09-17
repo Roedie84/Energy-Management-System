@@ -338,6 +338,13 @@ SAFE_SELL_SHADOW_LENGTE = 60
 # weken aan kwartieren voor de drukste reden.
 REDEN_AFWIJKING_LENGTE = 400
 
+# Wanneer een nacht "krap" heet (v4.23): de laagste laadstand in de
+# ochtend dicht bij de bodem, of noemenswaardige netimport 's nachts.
+# Gemeten in september: 18% met 0,01 kWh en 37% met 0,11 kWh waren ruim;
+# 10% met 1,05 kWh was krap.
+NACHT_KRAP_SOC_PROCENT = 15.0
+NACHT_KRAP_NETIMPORT_KWH = 0.5
+
 # Hoeveel handmatige ingrepen er met hun omstandigheden bewaard blijven
 # (v4.18). Gemeld: "Gister moest ik even manueel bijladen, omdat ik de
 # wasmachine en vaatwasser aan had. Hoe kun je hier van leren?" - en toen

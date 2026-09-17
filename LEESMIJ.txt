@@ -1,7 +1,7 @@
-EMS v4.22 - alle wijzigingen sinds v4.18
+EMS v4.23 - alle wijzigingen sinds v4.18
 
-Bevat v4.18.1 tot en met v4.22.
-Voor HACS: release met tag v4.22.
+Bevat v4.18.1 tot en met v4.23.
+Voor HACS: release met tag v4.23.
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
 
@@ -17,27 +17,26 @@ NAAR DE REPO
 
 AAN DE STURING VERANDERT NIETS.
 
-NIEUW IN DE EXPORT (v4.22)
+DRIE METINGEN IN DE EXPORT
 
     reden_afwijkingen   per reden: hoeveel kWh het optimum anders wilde
-                        doen, met mediaan, p10 en p90, gerangschikt op
-                        absolute afwijking
+                        doen (mediaan, p10, p90), op absolute afwijking
     safe_sell_shadow    per verkoopmoment: wat er zou zijn besloten met
-                        de VEILIGE zon in plaats van de verwachting
+                        de VEILIGE zon - EN hoe de nacht erna liep
+    redenwissels        wissels per dag, vaakste paren, tijd per reden
 
-Waarom: gemeten over acht dagen wijkt expensive_quarter het verst af
-(mediaan -0,408 kWh, altijd richting "meer vasthouden"), en er blijkt
-een codepad in may_sell_now dat met de verwachte zon rekent terwijl de
-reserve met de veilige positie rekent. Twee onafhankelijke signalen,
-dezelfde kant op.
+WAAROM DE NACHT ERNA ERBIJ STAAT
 
-Dat is genoeg voor een proefstand en NIET voor een wijziging. Blijven
-beide over een paar weken hetzelfde zeggen, dan is dat de eerste
-ingreep die op twee metingen rust.
+De veilige positie is bewust pessimistisch (geijkt op 20% van de dagen),
+dus "minder verkoop" is te verwachten en zegt alleen dat er iets zou
+VERANDEREN. Of het BETER was, staat in de nacht erna: liep die krap
+(laadstand onder 15% of meer dan 0,5 kWh netimport), dan was minder
+verkopen goed; liep die ruim, dan zou de veilige positie geld hebben
+gekost.
 
-UIT DE EERDERE VERSIES
+WAT TE VERWACHTEN
 
-v4.18.1  mijn registratie van jouw ingrepen heet "eigen_ingrepen"
-v4.19    "Onbekende reden" weg; vier architectuurratels
-v4.20    REASON_REGISTRY als enige bron, REASON_TO_MODE afgeleid
-v4.21    vier redentabellen afgeleid; meldingstabellen met ratels
+expensive_quarter vuurde zeventien keer in acht dagen, alleen op dagen
+met een echte prijspiek. In oktober en november kan dat wekenlang niet
+gebeuren. Reken op maanden voordat er genoeg momenten zijn om iets te
+besluiten - dit is een winterproject.

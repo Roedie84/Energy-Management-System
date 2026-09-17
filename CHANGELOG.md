@@ -25934,3 +25934,47 @@ plaats van de grens op te hogen staat de schaduwmeting nu in
 `_schaduw_na_de_verkooptoets`.
 
 **Volledige testsuite**: 3905 tests, allemaal groen.
+
+
+## v4.23 — De nacht erna sluit de lus
+
+De schaduwmeting van v4.22 zegt hoeveel er zou VERANDEREN, niet of het
+BETER zou zijn. Dat is een belangrijk verschil, en zonder de derde
+meting zou het ding het verkeerde meten.
+
+De veilige positie van 0,29 is geijkt als de waarde die in 20% van de
+dagen werd gehaald - bewust pessimistisch. Gebruik je die in de
+verkooptoets, dan zal hij vrijwel altijd "minder verkoop" zeggen. Dat is
+dan een eigenschap van de ijking en geen bevinding.
+
+Of minder verkopen beter was, hangt af van hoe de nacht erna liep. En
+dat staat al in de dagrecords sinds v4.7:
+
+```
+09-10   laagste ochtendstand 18 %   netimport 's nachts 0,01 kWh
+09-11   laagste ochtendstand 37 %   netimport 's nachts 0,11 kWh
+09-12   laagste ochtendstand 10 %   netimport 's nachts 1,05 kWh
+```
+
+Elk schaduwmoment krijgt nu de nacht erna erbij, met een oordeel `krap`
+(laadstand onder 15% of meer dan 0,5 kWh netimport). Het overzicht zegt
+dan niet "vier keer minder verkoop" maar "vier keer minder verkoop,
+waarvan de nacht erna twee keer krap liep en twee keer ruim".
+
+Dat is het verschil tussen een verandering en een verbetering. Liep de
+nacht ruim, dan was verkopen goed en zou de veilige positie geld hebben
+gekost - precies wat doorloop 5 voor de reserve als geheel aantoonde.
+
+### Een waarschuwing over het tempo
+
+`expensive_quarter` vuurde zeventien keer in acht dagen, en alleen op
+dagen met een echte prijspiek. September gaf uitzonderlijke pieken; in
+oktober en november kan die reden wekenlang niet vuren.
+
+Bij dit tempo duurt het MAANDEN voordat er genoeg momenten zijn om iets
+te besluiten - niet weken. De ijklijn had 31 dagen nodig, de
+bandpositie 16, de nabeschouwing 8, en dit is zeldzamer dan alle drie.
+Dat is geen reden om het niet te meten, wel om de verwachting bij te
+stellen: dit is een winterproject.
+
+**Volledige testsuite**: 3909 tests, allemaal groen.

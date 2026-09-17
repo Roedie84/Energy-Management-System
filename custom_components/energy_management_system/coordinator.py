@@ -198,6 +198,8 @@ from .const import (
     NACHTLAST_RECENT,
     NACHTLAST_REFERENTIE,
     MODUSWISSELS_TE_VEEL_PER_DAG,
+    NACHT_KRAP_NETIMPORT_KWH,
+    NACHT_KRAP_SOC_PROCENT,
     NACHT_ZELFVOORZIENEND_MARGE_W,
     NACHTLAST_VENSTER,
     MODE_CHANGE_EMOJI,
@@ -21522,6 +21524,44 @@ class EnergyManagementSystemCoordinator:
         self.safe_sell_shadow = self.safe_sell_shadow[-SAFE_SELL_SHADOW_LENGTE:]
         self.schedule_persisted_state_save()
 
+    def _nacht_na_de_schaduw(self, moment: str) -> dict | None:
+        """De nacht die volgde op een schaduwmoment (v4.23).
+
+        De schaduw zegt hoeveel er zou VERANDEREN, niet of het BETER zou
+        zijn. De veilige positie van 0,29 is geijkt als de waarde die in
+        20% van de dagen werd gehaald - bewust pessimistisch - dus in de
+        verkooptoets zal die vrijwel altijd "minder verkoop" zeggen. Dat
+        is dan een eigenschap van de ijking en geen bevinding.
+
+        Of minder verkopen beter was, hangt af van hoe de nacht erna
+        liep. Dat staat al in de dagrecords sinds v4.7: de laagste
+        laadstand in de ochtend en de netimport 's nachts. Gemeten:
+        18% met 0,01 kWh en 37% met 0,11 kWh waren ruim, 10% met 1,05
+        kWh was krap.
+        """
+        begin = dt_util.parse_datetime(moment)
+        if begin is None:
+            return None
+        dag_erna = (begin + timedelta(days=1)).date().isoformat()
+        for r in reversed(self.reserve_daily_records or []):
+            if r.get("date") != dag_erna:
+                continue
+            stand = r.get("laagste_soc_ochtend")
+            netimport = r.get("netimport_nacht_kwh")
+            if stand is None and netimport is None:
+                return None
+            krap = bool(
+                (stand is not None and stand <= NACHT_KRAP_SOC_PROCENT)
+                or (netimport is not None and netimport >= NACHT_KRAP_NETIMPORT_KWH)
+            )
+            return {
+                "datum": dag_erna,
+                "laagste_soc_ochtend": stand,
+                "netimport_nacht_kwh": netimport,
+                "krap": krap,
+            }
+        return None
+
     def get_safe_sell_shadow_overzicht(self) -> dict:
         """Wat de schaduwmeting tot nu toe zegt (v4.22). Stuurt niets."""
         momenten = self.safe_sell_shadow or []
@@ -21534,8 +21574,21 @@ class EnergyManagementSystemCoordinator:
                 ),
             }
         tellers = {"zelfde beslissing": 0, "minder verkoop": 0, "geen verkoop": 0}
+        # v4.23: de nacht erna erbij - anders meet de schaduw een
+        # verandering en niet een verbetering.
+        krap = onbekend = 0
+        verrijkt = []
         for m in momenten:
             tellers[m["uitkomst"]] = tellers.get(m["uitkomst"], 0) + 1
+            nacht = self._nacht_na_de_schaduw(m["moment"])
+            verrijkt.append({**m, "nacht_erna": nacht})
+            if m["uitkomst"] == "zelfde beslissing":
+                continue
+            if nacht is None:
+                onbekend += 1
+            elif nacht["krap"]:
+                krap += 1
+        momenten = verrijkt
         verschil_kwh = sum(m["verschil_kwh"] for m in momenten)
         verschil_eur = sum(
             m["verschil_kwh"] * (m["prijs_ct"] or 0) / 100 for m in momenten
@@ -21547,12 +21600,16 @@ class EnergyManagementSystemCoordinator:
             "minder_verkoop": tellers["minder verkoop"],
             "geen_verkoop": tellers["geen verkoop"],
             "verschil_kwh_totaal": round(verschil_kwh, 2),
+            "daarvan_krappe_nacht": krap,
+            "nacht_nog_onbekend": onbekend,
             "verschil_eur_totaal": round(verschil_eur, 2),
             "laatste": momenten[-1],
             "oordeel": (
                 f"{anders} van {len(momenten)} verkoopmomenten zouden anders zijn "
                 f"gegaan met de veilige zon: {verschil_kwh:.2f} kWh minder verkocht, "
-                f"grofweg {verschil_eur:.2f} euro."
+                f"grofweg {verschil_eur:.2f} euro. Daarvan liep de nacht erna "
+                f"{krap} keer krap"
+                + (f" en {onbekend} keer nog onbekend." if onbekend else ".")
                 if anders
                 else f"{len(momenten)} verkoopmomenten, allemaal dezelfde beslissing. "
                 "De band maakt hier geen verschil."
@@ -21562,7 +21619,12 @@ class EnergyManagementSystemCoordinator:
                 "de Solcast-band in plaats van de verwachting. Dit meet en stuurt "
                 "niets. Blijft dit dezelfde kant op wijzen als de kWh-afwijking per "
                 "reden, dan is dat de eerste ingreep die op twee onafhankelijke "
-                "metingen rust."
+                "metingen rust.\n\n"
+                "De veilige positie is bewust pessimistisch (geijkt op 20% van de "
+                "dagen), dus \"minder verkoop\" is te verwachten en zegt alleen dat "
+                "er iets zou VERANDEREN. Of het BETER was, staat in de nacht erna: "
+                "liep die krap, dan was minder verkopen goed; liep die ruim, dan "
+                "zou de veilige positie geld hebben gekost."
             ),
         }
 

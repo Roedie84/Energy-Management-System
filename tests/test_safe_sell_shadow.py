@@ -154,3 +154,105 @@ def test_de_geschiedenis_blijft_begrensd(make_coordinator, hass):
         )
 
     assert len(c.safe_sell_shadow) == SAFE_SELL_SHADOW_LENGTE
+
+
+# --- v4.23: de nacht erna erbij --------------------------------------
+#
+# De schaduw zegt hoeveel er zou VERANDEREN, niet of het BETER zou zijn.
+# De veilige positie van 0,29 is geijkt als de waarde die in 20% van de
+# dagen werd gehaald - bewust pessimistisch. In de verkooptoets zal die
+# dus vrijwel altijd "minder verkoop" zeggen, en dat is dan een
+# eigenschap van de ijking en geen bevinding.
+#
+# Om te weten of minder verkopen beter was, moet je weten of de nacht
+# erna krap liep. Dat staat al in de dagrecords sinds v4.7:
+#
+#     09-10   ochtendstand 18 %   netimport 's nachts 0,01 kWh
+#     09-11   ochtendstand 37 %   netimport 's nachts 0,11 kWh
+#     09-12   ochtendstand 10 %   netimport 's nachts 1,05 kWh
+#
+# Dat is de derde meting die de lus sluit: ging de nacht slecht op de
+# avonden waar de schaduw "minder verkoop" zei? Zo niet, dan was
+# verkopen goed en zou de veilige positie geld hebben gekost - precies
+# wat doorloop 5 voor de reserve als geheel aantoonde.
+
+
+def _met_nacht(c, datum, ochtendstand, netimport):
+    c.reserve_daily_records = (c.reserve_daily_records or []) + [
+        {
+            "date": datum,
+            "laagste_soc_ochtend": ochtendstand,
+            "netimport_nacht_kwh": netimport,
+        }
+    ]
+
+
+def test_de_nacht_erna_wordt_erbij_geschreven(make_coordinator, hass):
+    """De schaduw van 18 september kijkt naar het dagrecord van 19
+    september - de nacht die erop volgde."""
+    c = make_coordinator({})
+    _situatie(c)
+    c.safe_sell_shadow = []
+    c.reserve_daily_records = []
+    c.noteer_safe_sell_shadow(NU, verkocht_kwh=1.8, nodig_verwacht=0.0, nodig_veilig=0.6)
+    _met_nacht(c, "2026-09-19", ochtendstand=11.0, netimport=0.9)
+
+    o = c.get_safe_sell_shadow_overzicht()
+
+    assert o["laatste"]["nacht_erna"]["laagste_soc_ochtend"] == 11.0
+    assert o["laatste"]["nacht_erna"]["krap"] is True
+
+
+def test_een_ruime_nacht_is_niet_krap(make_coordinator, hass):
+    c = make_coordinator({})
+    _situatie(c)
+    c.safe_sell_shadow = []
+    c.reserve_daily_records = []
+    c.noteer_safe_sell_shadow(NU, verkocht_kwh=1.8, nodig_verwacht=0.0, nodig_veilig=0.6)
+    _met_nacht(c, "2026-09-19", ochtendstand=37.0, netimport=0.11)
+
+    o = c.get_safe_sell_shadow_overzicht()
+
+    assert o["laatste"]["nacht_erna"]["krap"] is False
+
+
+def test_het_oordeel_scheidt_verandering_van_verbetering(make_coordinator, hass):
+    """Niet "acht keer minder verkoop" maar "acht keer minder verkoop,
+    waarvan twee nachten krap". Dat is het verschil tussen een
+    verandering en een verbetering."""
+    c = make_coordinator({})
+    _situatie(c)
+    c.safe_sell_shadow = []
+    c.reserve_daily_records = []
+    for n, (stand, netimport) in enumerate(
+        ((37.0, 0.1), (11.0, 0.9), (30.0, 0.0), (9.0, 1.2))
+    ):
+        moment = NU + timedelta(days=n)
+        c.noteer_safe_sell_shadow(
+            moment, verkocht_kwh=1.8, nodig_verwacht=0.0, nodig_veilig=0.6
+        )
+        _met_nacht(c, (moment + timedelta(days=1)).date().isoformat(), stand, netimport)
+
+    o = c.get_safe_sell_shadow_overzicht()
+
+    assert o["minder_verkoop"] == 4
+    assert o["daarvan_krappe_nacht"] == 2
+    assert "krap" in o["oordeel"]
+    uitleg = o["toelichting"].lower()
+    assert "veranderen" in uitleg and "beter" in uitleg
+
+
+def test_zonder_dagrecord_blijft_de_nacht_onbekend(make_coordinator, hass):
+    """De nacht erna komt pas bij de dagwissel; tot dan is hij leeg en
+    dat mag geen conclusie worden."""
+    c = make_coordinator({})
+    _situatie(c)
+    c.safe_sell_shadow = []
+    c.reserve_daily_records = []
+    c.noteer_safe_sell_shadow(NU, verkocht_kwh=1.8, nodig_verwacht=0.0, nodig_veilig=0.6)
+
+    o = c.get_safe_sell_shadow_overzicht()
+
+    assert o["laatste"]["nacht_erna"] is None
+    assert o["daarvan_krappe_nacht"] == 0
+    assert o["nacht_nog_onbekend"] == 1
