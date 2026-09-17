@@ -198,6 +198,7 @@ from .const import (
     NACHTLAST_RECENT,
     NACHTLAST_REFERENTIE,
     MODUSWISSELS_TE_VEEL_PER_DAG,
+    NACHT_COMFORTABEL_SOC_PROCENT,
     NACHT_KRAP_NETIMPORT_KWH,
     NACHT_KRAP_SOC_PROCENT,
     NACHT_ZELFVOORZIENEND_MARGE_W,
@@ -539,6 +540,7 @@ from .const import (
     EMERGENCY_LOW_BATTERY_EXIT_MARGIN_PERCENT,
     HANDMATIGE_INGREEP_MIN_DUUR_MINUTEN,
     HERSTEL_BEVESTIGING_MINUTEN,
+    SAFE_SELL_MIN_MOMENTEN,
     SAFE_SELL_SHADOW_LENGTE,
     SELL_HYSTERESIS_KWH,
     SELL_REOPEN_MIN_MINUTES,
@@ -21524,6 +21526,60 @@ class EnergyManagementSystemCoordinator:
         self.safe_sell_shadow = self.safe_sell_shadow[-SAFE_SELL_SHADOW_LENGTE:]
         self.schedule_persisted_state_save()
 
+    def _safe_sell_oordeel(
+        self,
+        momenten: list,
+        anders: int,
+        verschil_kwh: float,
+        verschil_eur: float,
+        banden: dict,
+        netimport_n: int,
+        onbekend: int,
+    ) -> str:
+        """De richting, maar alleen met genoeg uitkomsten (v4.24).
+
+        De veilige positie is bewust pessimistisch, dus "minder verkoop"
+        is te verwachten. Wat het zegt, hangt af van de nachten erna:
+        comfortabele nachten betekenen dat die energie niet nodig was en
+        de veilige positie winst had gekost; krappe nachten betekenen dat
+        de verkooptoets te optimistisch is.
+        """
+        kop = (
+            f"{anders} van {len(momenten)} verkoopmomenten zouden anders zijn "
+            f"gegaan met de veilige zon: {verschil_kwh:.2f} kWh minder verkocht, "
+            f"grofweg {verschil_eur:.2f} euro. "
+        )
+        met_uitkomst = sum(banden.values())
+        if met_uitkomst < SAFE_SELL_MIN_MOMENTEN:
+            return (
+                kop
+                + f"Van {met_uitkomst} daarvan is de nacht erna bekend"
+                + (f" ({onbekend} nog niet)" if onbekend else "")
+                + f"; minstens {SAFE_SELL_MIN_MOMENTEN} nodig voordat hier een "
+                "richting uit te lezen is."
+                if met_uitkomst
+                else kop
+                + "Nog geen uitkomst bekend: de nacht erna moet eerst voorbij zijn."
+            )
+        deel = (
+            f"Van de {met_uitkomst} waarvan de nacht bekend is: "
+            f"{banden['comfortabel']} comfortabel, {banden['normaal']} normaal, "
+            f"{banden['krap']} krap, {netimport_n} met netimport. "
+        )
+        if banden["comfortabel"] >= 2 * (banden["krap"] + banden["normaal"]):
+            return (
+                kop + deel + "Die energie was 's nachts dus meestal niet nodig - "
+                "de veilige positie zou hier vooral winst hebben gekost."
+            )
+        if banden["krap"] + netimport_n >= met_uitkomst / 2:
+            return (
+                kop + deel + "Die energie had 's nachts dus waarde - dit is een "
+                "aanwijzing dat de verkooptoets te optimistisch rekent."
+            )
+        return (
+            kop + deel + "Geen duidelijke richting: de nachten lopen door elkaar."
+        )
+
     def _nacht_na_de_schaduw(self, moment: str) -> dict | None:
         """De nacht die volgde op een schaduwmoment (v4.23).
 
@@ -21550,15 +21606,31 @@ class EnergyManagementSystemCoordinator:
             netimport = r.get("netimport_nacht_kwh")
             if stand is None and netimport is None:
                 return None
-            krap = bool(
-                (stand is not None and stand <= NACHT_KRAP_SOC_PROCENT)
-                or (netimport is not None and netimport >= NACHT_KRAP_NETIMPORT_KWH)
+            # v4.24: drie banden in plaats van één grens - zie
+            # NACHT_COMFORTABEL_SOC_PROCENT. De vraag is niet of de nacht
+            # krap was maar of de energie waarde had.
+            if stand is None:
+                band = "onbekend"
+            elif stand > NACHT_COMFORTABEL_SOC_PROCENT:
+                band = "comfortabel"
+            elif stand >= NACHT_KRAP_SOC_PROCENT:
+                band = "normaal"
+            else:
+                band = "krap"
+            krap = band == "krap" or bool(
+                netimport is not None and netimport >= NACHT_KRAP_NETIMPORT_KWH
             )
             return {
                 "datum": dag_erna,
                 "laagste_soc_ochtend": stand,
                 "netimport_nacht_kwh": netimport,
+                "band": band,
                 "krap": krap,
+                "netimport": bool(
+                    netimport is not None
+                    and netimport >= NACHT_KRAP_NETIMPORT_KWH
+                ),
+                "tekort": bool(r.get("shortfall")),
             }
         return None
 
@@ -21576,7 +21648,8 @@ class EnergyManagementSystemCoordinator:
         tellers = {"zelfde beslissing": 0, "minder verkoop": 0, "geen verkoop": 0}
         # v4.23: de nacht erna erbij - anders meet de schaduw een
         # verandering en niet een verbetering.
-        krap = onbekend = 0
+        banden = {"comfortabel": 0, "normaal": 0, "krap": 0}
+        netimport_n = tekort_n = onbekend = 0
         verrijkt = []
         for m in momenten:
             tellers[m["uitkomst"]] = tellers.get(m["uitkomst"], 0) + 1
@@ -21586,9 +21659,14 @@ class EnergyManagementSystemCoordinator:
                 continue
             if nacht is None:
                 onbekend += 1
-            elif nacht["krap"]:
-                krap += 1
+                continue
+            banden[nacht["band"]] = banden.get(nacht["band"], 0) + 1
+            if nacht["netimport"]:
+                netimport_n += 1
+            if nacht["tekort"]:
+                tekort_n += 1
         momenten = verrijkt
+        krap = banden["krap"]
         verschil_kwh = sum(m["verschil_kwh"] for m in momenten)
         verschil_eur = sum(
             m["verschil_kwh"] * (m["prijs_ct"] or 0) / 100 for m in momenten
@@ -21601,15 +21679,19 @@ class EnergyManagementSystemCoordinator:
             "geen_verkoop": tellers["geen verkoop"],
             "verschil_kwh_totaal": round(verschil_kwh, 2),
             "daarvan_krappe_nacht": krap,
+            "nacht_comfortabel": banden["comfortabel"],
+            "nacht_normaal": banden["normaal"],
+            "nacht_krap": banden["krap"],
+            "nacht_met_netimport": netimport_n,
+            "nacht_met_tekort": tekort_n,
             "nacht_nog_onbekend": onbekend,
             "verschil_eur_totaal": round(verschil_eur, 2),
             "laatste": momenten[-1],
             "oordeel": (
-                f"{anders} van {len(momenten)} verkoopmomenten zouden anders zijn "
-                f"gegaan met de veilige zon: {verschil_kwh:.2f} kWh minder verkocht, "
-                f"grofweg {verschil_eur:.2f} euro. Daarvan liep de nacht erna "
-                f"{krap} keer krap"
-                + (f" en {onbekend} keer nog onbekend." if onbekend else ".")
+                self._safe_sell_oordeel(
+                    momenten, anders, verschil_kwh, verschil_eur, banden,
+                    netimport_n, onbekend,
+                )
                 if anders
                 else f"{len(momenten)} verkoopmomenten, allemaal dezelfde beslissing. "
                 "De band maakt hier geen verschil."

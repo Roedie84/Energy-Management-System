@@ -237,7 +237,13 @@ def test_het_oordeel_scheidt_verandering_van_verbetering(make_coordinator, hass)
 
     assert o["minder_verkoop"] == 4
     assert o["daarvan_krappe_nacht"] == 2
-    assert "krap" in o["oordeel"]
+    # v4.24: met vier momenten noemt de meting bewust geen richting -
+    # de drempel staat op twaalf. Wat er wel staat is de telling.
+    # 37% comfortabel, 30% normaal (de grens is BOVEN 30), 11% en 9% krap
+    assert o["nacht_krap"] == 2
+    assert o["nacht_comfortabel"] == 1
+    assert o["nacht_normaal"] == 1
+    assert "minstens" in o["oordeel"]
     uitleg = o["toelichting"].lower()
     assert "veranderen" in uitleg and "beter" in uitleg
 
@@ -256,3 +262,151 @@ def test_zonder_dagrecord_blijft_de_nacht_onbekend(make_coordinator, hass):
     assert o["laatste"]["nacht_erna"] is None
     assert o["daarvan_krappe_nacht"] == 0
     assert o["nacht_nog_onbekend"] == 1
+
+
+# --- v4.24: van veranderanalyse naar verbeteranalyse -----------------
+#
+# v4.23 zette de nacht erna erbij met een binair `krap`. Dat is nog te
+# grof. De vraag is niet "hoe vaak zou de schaduw minder verkopen" maar
+# "op hoeveel van die momenten bleek die energie de volgende nacht
+# werkelijk waarde te hebben gehad".
+#
+# Dus drie banden in plaats van één grens, plus de netimport en de
+# tekortvlag uit het dagrecord:
+#
+#   comfortabel   ochtendstand > 30 %
+#   normaal       15 - 30 %
+#   krap          < 15 %
+#
+# 12 keer minder verkoop, 9 nachten boven 30% -> de veilige positie had
+# vooral winst gekost.
+# 12 keer minder verkoop, 7 nachten onder 15% + 5 met netimport -> de
+# verkooptoets is te optimistisch.
+#
+# Dat onderscheid maakt het verschil tussen "er zou iets veranderen" en
+# "het zou beter zijn".
+
+
+def _nacht(c, datum, stand, netimport=0.0, shortfall=False):
+    c.reserve_daily_records = (c.reserve_daily_records or []) + [
+        {
+            "date": datum,
+            "laagste_soc_ochtend": stand,
+            "netimport_nacht_kwh": netimport,
+            "shortfall": shortfall,
+        }
+    ]
+
+
+@pytest.mark.parametrize(
+    "stand,band",
+    [(45.0, "comfortabel"), (31.0, "comfortabel"), (30.0, "normaal"),
+     (15.0, "normaal"), (14.9, "krap"), (8.0, "krap")],
+)
+def test_de_drie_banden(make_coordinator, hass, stand, band):
+    c = make_coordinator({})
+    _situatie(c)
+    c.safe_sell_shadow = []
+    c.reserve_daily_records = []
+    c.noteer_safe_sell_shadow(NU, verkocht_kwh=1.8, nodig_verwacht=0.0, nodig_veilig=0.6)
+    _nacht(c, "2026-09-19", stand)
+
+    o = c.get_safe_sell_shadow_overzicht()
+
+    assert o["laatste"]["nacht_erna"]["band"] == band
+
+
+def test_de_uitkomstmaat_splitst_de_veranderingen(make_coordinator, hass):
+    """Het geval waarin de veilige positie winst had gekost: negen van de
+    twaalf nachten liepen comfortabel."""
+    c = make_coordinator({})
+    _situatie(c)
+    c.safe_sell_shadow = []
+    c.reserve_daily_records = []
+    standen = [45.0] * 9 + [22.0, 20.0] + [9.0]
+    for n, stand in enumerate(standen):
+        moment = NU + timedelta(days=n)
+        c.noteer_safe_sell_shadow(
+            moment, verkocht_kwh=1.8, nodig_verwacht=0.0, nodig_veilig=0.6
+        )
+        _nacht(c, (moment + timedelta(days=1)).date().isoformat(), stand)
+
+    o = c.get_safe_sell_shadow_overzicht()
+
+    assert o["minder_verkoop"] == 12
+    assert o["nacht_comfortabel"] == 9
+    assert o["nacht_normaal"] == 2
+    assert o["nacht_krap"] == 1
+    assert "winst" in o["oordeel"] or "gekost" in o["oordeel"]
+
+
+def test_het_omgekeerde_geval_zegt_het_omgekeerde(make_coordinator, hass):
+    """Zeven nachten onder 15% en vijf met netimport: dan is de
+    verkooptoets te optimistisch."""
+    c = make_coordinator({})
+    _situatie(c)
+    c.safe_sell_shadow = []
+    c.reserve_daily_records = []
+    for n in range(12):
+        moment = NU + timedelta(days=n)
+        c.noteer_safe_sell_shadow(
+            moment, verkocht_kwh=1.8, nodig_verwacht=0.0, nodig_veilig=0.6
+        )
+        _nacht(
+            c,
+            (moment + timedelta(days=1)).date().isoformat(),
+            9.0 if n < 7 else 35.0,
+            netimport=0.9 if n < 5 else 0.0,
+            shortfall=n < 3,
+        )
+
+    o = c.get_safe_sell_shadow_overzicht()
+
+    assert o["nacht_krap"] == 7
+    assert o["nacht_met_netimport"] == 5
+    assert o["nacht_met_tekort"] == 3
+    assert "optimistisch" in o["oordeel"]
+
+
+def test_geen_oordeel_zolang_de_nachten_onbekend_zijn(make_coordinator, hass):
+    """De uitkomstmaat mag niets zeggen voordat er nachten bij horen -
+    anders trekt hij een conclusie uit nul waarnemingen."""
+    c = make_coordinator({})
+    _situatie(c)
+    c.safe_sell_shadow = []
+    c.reserve_daily_records = []
+    for n in range(4):
+        c.noteer_safe_sell_shadow(
+            NU + timedelta(days=n), verkocht_kwh=1.8,
+            nodig_verwacht=0.0, nodig_veilig=0.6,
+        )
+
+    o = c.get_safe_sell_shadow_overzicht()
+
+    assert o["nacht_nog_onbekend"] == 4
+    assert "nog geen uitkomst" in o["oordeel"].lower()
+
+
+def test_er_zijn_genoeg_momenten_nodig_voor_een_richting(make_coordinator, hass):
+    """Met drie momenten hoort er geen richting uit te komen. Gemeten
+    tempo: zeventien expensive_quarter-kwartieren in acht dagen, en in
+    de winter kan die reden wekenlang niet vuren."""
+    from custom_components.energy_management_system.const import (
+        SAFE_SELL_MIN_MOMENTEN,
+    )
+
+    c = make_coordinator({})
+    _situatie(c)
+    c.safe_sell_shadow = []
+    c.reserve_daily_records = []
+    for n in range(3):
+        moment = NU + timedelta(days=n)
+        c.noteer_safe_sell_shadow(
+            moment, verkocht_kwh=1.8, nodig_verwacht=0.0, nodig_veilig=0.6
+        )
+        _nacht(c, (moment + timedelta(days=1)).date().isoformat(), 45.0)
+
+    o = c.get_safe_sell_shadow_overzicht()
+
+    assert SAFE_SELL_MIN_MOMENTEN >= 10
+    assert "minstens" in o["oordeel"]

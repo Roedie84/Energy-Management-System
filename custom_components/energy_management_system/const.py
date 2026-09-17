@@ -345,6 +345,24 @@ REDEN_AFWIJKING_LENGTE = 400
 NACHT_KRAP_SOC_PROCENT = 15.0
 NACHT_KRAP_NETIMPORT_KWH = 0.5
 
+# v4.24: drie banden in plaats van één grens, zodat de schaduwmeting een
+# VERBETERanalyse wordt en niet alleen een veranderanalyse.
+#
+#   comfortabel  > 30 %   de energie was niet nodig
+#   normaal      15-30 %
+#   krap         < 15 %   de energie had waarde
+#
+# Twaalf keer minder verkoop met negen comfortabele nachten betekent dat
+# de veilige positie winst had gekost; met zeven krappe nachten betekent
+# het dat de verkooptoets te optimistisch is.
+NACHT_COMFORTABEL_SOC_PROCENT = 30.0
+
+# Hoeveel momenten er minstens moeten zijn voordat de meting een
+# richting noemt. Gemeten tempo: zeventien expensive_quarter-kwartieren
+# in acht zomerdagen, en in de winter kan die reden wekenlang niet
+# vuren. Dit is een seizoenstraject, geen weekanalyse.
+SAFE_SELL_MIN_MOMENTEN = 12
+
 # Hoeveel handmatige ingrepen er met hun omstandigheden bewaard blijven
 # (v4.18). Gemeld: "Gister moest ik even manueel bijladen, omdat ik de
 # wasmachine en vaatwasser aan had. Hoe kun je hier van leren?" - en toen

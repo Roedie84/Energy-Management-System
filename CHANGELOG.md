@@ -25978,3 +25978,70 @@ Dat is geen reden om het niet te meten, wel om de verwachting bij te
 stellen: dit is een winterproject.
 
 **Volledige testsuite**: 3909 tests, allemaal groen.
+
+
+## v4.24 — Van veranderanalyse naar verbeteranalyse
+
+v4.23 zette de nacht erna erbij met een binair `krap`. Te grof. De vraag
+is niet "hoe vaak zou de schaduw minder verkopen" maar "op hoeveel van
+die momenten bleek die energie 's nachts werkelijk waarde te hebben
+gehad".
+
+### Drie banden in plaats van één grens
+
+```
+comfortabel   ochtendstand > 30 %    de energie was niet nodig
+normaal       15 - 30 %
+krap          < 15 %                 de energie had waarde
+```
+
+Plus per moment de netimport 's nachts en de tekortvlag uit het
+dagrecord. Het overzicht telt nu:
+
+```
+minder verkoop / geen verkoop
+  waarvan nacht comfortabel
+          nacht normaal
+          nacht krap
+          nacht met netimport
+          nacht met tekort
+          nacht nog onbekend
+```
+
+Daarmee zegt de meting iets verschillends in de twee gevallen die je
+schetste. Twaalf keer minder verkoop met negen comfortabele nachten:
+*"Die energie was 's nachts dus meestal niet nodig - de veilige positie
+zou hier vooral winst hebben gekost."* Twaalf keer met zeven krappe
+nachten en vijf met netimport: *"Die energie had 's nachts dus waarde -
+dit is een aanwijzing dat de verkooptoets te optimistisch rekent."*
+
+### Een drempel voordat er een richting uit komt
+
+`SAFE_SELL_MIN_MOMENTEN = 12`. Daaronder noemt de meting alleen de
+telling en zegt ze hoeveel er nog nodig zijn. Zonder die drempel zou
+hij bij drie momenten al een richting suggereren, en dat is precies de
+fout die deze hele opzet moet voorkomen.
+
+Dat is ook een eerlijke vertaling van het tempo:
+`expensive_quarter` vuurde zeventien keer in acht zomerdagen en kan in
+de winter wekenlang niet vuren. Twaalf momenten mét een bekende nacht
+erna is een seizoenstraject.
+
+### De bewijsstandaard, compleet
+
+```
+1  codebevinding      may_sell_now rekent in het terugvalpad met de
+                      verwachting terwijl de reserve de veilige positie
+                      gebruikt
+2  afwijkingsmeting   reden_afwijkingen: expensive_quarter mediaan
+                      -0,408 kWh over 17 kwartieren
+3  shadow-analyse     safe_sell_shadow: wat de veilige zon anders had
+                      gedaan
+4  uitkomstmeting     de nacht erna in drie banden
+```
+
+Alle vier moeten dezelfde kant op wijzen voordat er iets aan de sturing
+verandert. Op dit moment wijzen 1 en 2 dezelfde kant op; 3 en 4 beginnen
+nu te vullen.
+
+**Volledige testsuite**: 3919 tests, allemaal groen.

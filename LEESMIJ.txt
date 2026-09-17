@@ -1,7 +1,7 @@
-EMS v4.23 - alle wijzigingen sinds v4.18
+EMS v4.24 - alle wijzigingen sinds v4.18
 
-Bevat v4.18.1 tot en met v4.23.
-Voor HACS: release met tag v4.23.
+Bevat v4.18.1 tot en met v4.24.
+Voor HACS: release met tag v4.24.
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
 
@@ -17,26 +17,31 @@ NAAR DE REPO
 
 AAN DE STURING VERANDERT NIETS.
 
-DRIE METINGEN IN DE EXPORT
+DRIE METINGEN, EN DE VIERDE SLUIT DE LUS
 
-    reden_afwijkingen   per reden: hoeveel kWh het optimum anders wilde
-                        doen (mediaan, p10, p90), op absolute afwijking
-    safe_sell_shadow    per verkoopmoment: wat er zou zijn besloten met
-                        de VEILIGE zon - EN hoe de nacht erna liep
+    reden_afwijkingen   per reden hoeveel kWh het optimum anders wilde
+                        doen (mediaan, p10, p90)
+    safe_sell_shadow    per verkoopmoment wat de VEILIGE zon anders had
+                        gedaan, EN hoe de nacht erna liep:
+                          comfortabel  ochtendstand > 30 %
+                          normaal      15-30 %
+                          krap         < 15 %
+                        plus netimport 's nachts en de tekortvlag
     redenwissels        wissels per dag, vaakste paren, tijd per reden
 
-WAAROM DE NACHT ERNA ERBIJ STAAT
+WAAROM DIE BANDEN
 
-De veilige positie is bewust pessimistisch (geijkt op 20% van de dagen),
-dus "minder verkoop" is te verwachten en zegt alleen dat er iets zou
-VERANDEREN. Of het BETER was, staat in de nacht erna: liep die krap
-(laadstand onder 15% of meer dan 0,5 kWh netimport), dan was minder
-verkopen goed; liep die ruim, dan zou de veilige positie geld hebben
-gekost.
+De veilige positie is bewust pessimistisch, dus "minder verkoop" is te
+verwachten. Twaalf keer minder verkoop met negen comfortabele nachten
+betekent dat de veilige positie winst had gekost. Met zeven krappe
+nachten betekent het dat de verkooptoets te optimistisch is. Zonder de
+nacht erna meet de schaduw alleen een verandering, geen verbetering.
 
-WAT TE VERWACHTEN
+De meting noemt pas een richting bij twaalf momenten waarvan de nacht
+bekend is. Daaronder staat er alleen de telling, en hoeveel er nog
+nodig zijn.
 
-expensive_quarter vuurde zeventien keer in acht dagen, alleen op dagen
-met een echte prijspiek. In oktober en november kan dat wekenlang niet
-gebeuren. Reken op maanden voordat er genoeg momenten zijn om iets te
-besluiten - dit is een winterproject.
+TEMPO
+
+expensive_quarter vuurde zeventien keer in acht zomerdagen en kan in de
+winter wekenlang niet vuren. Reken op maanden.
