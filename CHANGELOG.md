@@ -26220,3 +26220,33 @@ de middag, niet alles - een ochtend die 300% doet mag de middag niet
 verdrievoudigen.
 
 **Volledige testsuite**: 3955 tests, allemaal groen.
+
+
+## v5.2.1 — Volledige levering na een mislukte installatie
+
+Geen codewijziging ten opzichte van v5.2. Een nieuw nummer zodat HACS de
+release oppakt en de geïnstalleerde versie weer klopt.
+
+Aanleiding:
+
+```
+Setup failed for custom integration 'energy_management_system':
+No setup or config entry setup function defined.
+```
+
+Die melding betekent dat Home Assistant `__init__.py` niet vindt - dan
+ziet het geen `async_setup_entry`. Dat bestand zat niet in de
+v5.2-deellevering omdat het ongewijzigd was; wordt de map eerst geleegd
+en daarna alleen de zes bestanden uit die zip erin gezet, dan missen de
+overige zestien.
+
+De code van v5.2 was in orde: 3955 tests groen en de bestandscontrole op
+22 van 22. Het ging mis in de levering, niet in de integratie.
+
+Deze release bevat de hele boom, dus het maakt niet uit welk bestand er
+precies weg was. En de bestandscontrole van v3.63.0 zou dit gemeld
+hebben - maar die draait pas als de integratie laadt, en dat was precies
+wat niet gebeurde. Dat is de grens van die controle: hij dekt oude of
+ontbrekende bestanden, niet een integratie die niet start.
+
+**Volledige testsuite**: 3955 tests, allemaal groen.

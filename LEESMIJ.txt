@@ -1,52 +1,54 @@
-EMS v5.2 - alleen de wijzigingen sinds v5.1
+EMS v5.2.1 - VOLLEDIGE boom
 
-TE KOPIEREN naar config/custom_components/energy_management_system/
+Geen codewijziging ten opzichte van v5.2. Nieuw nummer zodat HACS de
+release oppakt en de geinstalleerde versie weer klopt.
 
-    const.py, coordinator.py, diagnostics.py
-    dashboard_template.yaml     (gaat altijd mee, ongewijzigd)
-    manifest.json, bestandscontrole.json
+WAAROM
+
+    Setup failed for custom integration 'energy_management_system':
+    No setup or config entry setup function defined.
+
+Home Assistant vond __init__.py niet. Dat bestand zat niet in de
+v5.2-deellevering omdat het ongewijzigd was; is de map eerst geleegd en
+daarna alleen de zes bestanden uit die zip erin gezet, dan missen de
+overige zestien.
+
+De code van v5.2 was in orde - 3955 tests groen, bestandscontrole 22 van
+22. Het ging mis in de levering.
+
+INSTALLEREN
+
+1. De HELE map custom_components/energy_management_system/ vervangen
+   door die uit deze zip - 22 bestanden, inclusief __init__.py.
+2. Home Assistant herstarten.
+
+CONTROLEREN
+
+    versie:            5.2.1
+    bestandscontrole:  in_orde true, 22 bestanden
+    fouten:            0
 
 NAAR DE REPO
 
-    README.md, CHANGELOG.md
+    README.md, CHANGELOG.md, LICENSE, hacs.json, pytest.ini
+    tools_maak_bestandslijst.py
+    docs/ONTWIKKELING.md
     dashboards/energy_management_system_dashboard.yaml
-    tests/ (zeven bestanden, vier nieuw)
+    tests/
 
-Voor HACS: release met tag v5.2.
+Voor HACS: release met tag v5.2.1. Let op dat manifest.json ook 5.2.1
+zegt - die staat in deze zip goed.
 
-AAN DE STURING VERANDERT NIETS.
+WAT ER IN v5.2 ZAT
 
-1. BEWAKING VAN DE METINGEN
+1. Bewaking van zeven metingen met een eigen stilstandsdrempel; een
+   stille meting komt op de landingspagina.
+2. De terugtoetsbank: een beslisregel over alle opgeslagen dagen laten
+   lopen en met de nabeschouwing vergelijken. Seconden in plaats van
+   maanden.
+3. PERSISTED_FIELDS declaratief - 190 velden, vijf lijsten afgeleid, de
+   vier laadconversies benoemd.
+4. Intraday-herschaling als SCHADUW, niet als sturing: het bewijs uit de
+   zonpersistentie (r=0,69 over acht dagen) is nog niet genoeg.
 
-Zeven metingen hebben nu een eigen stilstandsdrempel, met wat ze vult.
-Staat er een stil, dan komt dat op de landingspagina - niet alleen in
-de export. Nieuw exportveld: metingen_stilstand.
-
-Drempels: dagverloop en nabeschouwingen 2 dagen, reden_afwijkingen en
-nachtlast 3, cycluskosten 14, safe_sell_shadow 60, eigen_ingrepen 120.
-Die verschillen zestig keer, dus een gemeenschappelijke drempel zou
-vals alarm geven of niets vinden.
-
-2. DE TERUGTOETSBANK
-
-terugtoets(regel) laat een beslisregel over alle opgeslagen dagen lopen
-en vergelijkt met de nabeschouwing. Daarmee is een idee in seconden te
-beoordelen in plaats van in maanden.
-
-3. PERSISTED_FIELDS DECLARATIEF
-
-E©n tabel met het type per veld (190 velden), waaruit de vijf lijsten
-worden afgeleid. Geen gedragswijziging - de inventory gaf nul
-afwijkingen. De vier bestaande laadconversies staan benoemd in
-PERSISTED_CONVERSIES.
-
-4. INTRADAY-HERSCHALING - ALS SCHADUW
-
-Hier ben ik afgeweken van de opdracht. Het bewijs ontbreekt nog: de
-zonpersistentiemeting gaf r=0,69 over acht dagen en noemt pas een
-richting bij twintig. Dus rekent v5.2 uit wat herschaling ZOU hebben
-gedaan (nieuw exportveld intraday_herschaling) en stuurt niets. Er
-staat een ratel op dat de functie in geen enkel beslispad voorkomt.
-
-Wil je hem toch laten sturen, zeg het dan expliciet - dan bouw ik dat
-als aparte versie met de schakelaar standaard uit.
+AAN DE STURING IS SINDS v4.17 NIETS VERANDERD.
