@@ -1,47 +1,59 @@
-EMS v4.24 - alle wijzigingen sinds v4.18
+EMS v5.0 - VOLLEDIGE repository
 
-Bevat v4.18.1 tot en met v4.24.
-Voor HACS: release met tag v4.24.
+Dit is de hele boom, niet alleen de gewijzigde bestanden - omdat de
+release op GitHub nu v5.0 is en alles daarmee moet overeenkomen.
 
-TE KOPIEREN naar config/custom_components/energy_management_system/
+WAT ER IN ZIT
 
-    const.py, coordinator.py, sensor.py, diagnostics.py
-    dashboard_template.yaml     LET OP: dashboard gewijzigd
-    manifest.json, bestandscontrole.json
-
-NAAR DE REPO
-
-    README.md, CHANGELOG.md, docs/ONTWIKKELING.md
+    custom_components/energy_management_system/   22 bestanden
+    tests/                                        363 toetsbestanden
     dashboards/energy_management_system_dashboard.yaml
-    tests/ (acht bestanden, zes nieuw)
+    docs/ONTWIKKELING.md                          het registry-ontwerp
+    README.md, CHANGELOG.md, LICENSE
+    hacs.json, pytest.ini, tools_maak_bestandslijst.py
 
-AAN DE STURING VERANDERT NIETS.
+VERSIENUMMERS - LET HIEROP
 
-DRIE METINGEN, EN DE VIERDE SLUIT DE LUS
+    manifest.json      5.0
+    README-badge       versie-5.0
+    CHANGELOG          ## v5.0 bovenaan de laatste sectie
 
-    reden_afwijkingen   per reden hoeveel kWh het optimum anders wilde
-                        doen (mediaan, p10, p90)
-    safe_sell_shadow    per verkoopmoment wat de VEILIGE zon anders had
-                        gedaan, EN hoe de nacht erna liep:
-                          comfortabel  ochtendstand > 30 %
-                          normaal      15-30 %
-                          krap         < 15 %
-                        plus netimport 's nachts en de tekortvlag
-    redenwissels        wissels per dag, vaakste paren, tijd per reden
+Als je alleen de git-tag op v5.0 had gezet en niet het manifest, dan
+bleef HACS een update aanbieden die je al had. Met deze zip komen alle
+drie overeen. De toetsen test_the_manifest_matches_the_changelog en
+test_the_readme_badge_matches_the_manifest controleren dat.
 
-WAAROM DIE BANDEN
+INSTALLEREN
 
-De veilige positie is bewust pessimistisch, dus "minder verkoop" is te
-verwachten. Twaalf keer minder verkoop met negen comfortabele nachten
-betekent dat de veilige positie winst had gekost. Met zeven krappe
-nachten betekent het dat de verkooptoets te optimistisch is. Zonder de
-nacht erna meet de schaduw alleen een verandering, geen verbetering.
+    De map custom_components/energy_management_system/ over de bestaande
+    heen, daarna Home Assistant herstarten.
 
-De meting noemt pas een richting bij twaalf momenten waarvan de nacht
-bekend is. Daaronder staat er alleen de telling, en hoeveel er nog
-nodig zijn.
+NA DE HERSTART CONTROLEREN
 
-TEMPO
+    versie:            5.0
+    bestandscontrole:  in_orde true, 22 bestanden
+    waterpagina:       kaart met zes regels onder de tabel
 
-expensive_quarter vuurde zeventien keer in acht zomerdagen en kan in de
-winter wekenlang niet vuren. Reken op maanden.
+WAT V5.0 IS
+
+Het grote nummer gaat naar het architectuurwerk, niet naar een nieuwe
+regel in de accusturing:
+
+- REASON_REGISTRY is de enige plaats waar een beslisreden bestaat.
+  Vijf tabellen zijn afgeleiden en kunnen niet meer uiteenlopen.
+- Ratels tegen dubbele waarheden: dubbele methodenamen, dubbel gezette
+  velden, dubbele exportsleutels, datasets met twee recordvormen, elke
+  gebruikte reden geregistreerd en omgekeerd.
+- Vier metingen rond de accubeslissing die NIETS sturen:
+  reden_afwijkingen, safe_sell_shadow (met de nacht erna in drie
+  banden), redenwissels, eigen_ingrepen.
+
+AAN DE STURING IS SINDS v4.17 NIETS VERANDERD.
+
+WAT ER NOG OPENSTAAT
+
+- de kalibratie: alles rekent nog met 8,64 kWh fabrieksopgave
+- PERSISTED_FIELDS declaratief maken en de vier bestaande
+  laadconversies expliciteren (fase A2/A3)
+- de vier metingen vullen zich; expensive_quarter vuurt zeldzaam, dus
+  reken op maanden voordat daar een richting uit komt

@@ -25980,7 +25980,13 @@ stellen: dit is een winterproject.
 **Volledige testsuite**: 3909 tests, allemaal groen.
 
 
-## v4.24 — Van veranderanalyse naar verbeteranalyse
+## v5.0 — Van veranderanalyse naar verbeteranalyse
+
+Uitgebracht als 5.0 in plaats van 4.24. Dat past: het grote nummer gaat
+naar het architectuurwerk van v4.19 tot v4.24, niet naar een nieuwe
+regel in de accusturing. "Geen tweede waarheid meer" was het doel dat we
+v5 noemden, en dat is waar deze reeks over ging - de registries, de
+ratels, en de bewijsstandaard voordat er iets aan de sturing verandert.
 
 v4.23 zette de nacht erna erbij met een binair `krap`. Te grof. De vraag
 is niet "hoe vaak zou de schaduw minder verkopen" maar "op hoeveel van
