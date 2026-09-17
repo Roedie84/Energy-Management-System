@@ -25834,3 +25834,103 @@ de lijst. De inventory over alle 187 velden is gedaan en gaf nul
 afwijkingen, dus daar is geen haast.
 
 **Volledige testsuite**: 3891 tests, allemaal groen.
+
+
+## v4.22 — Twee metingen rond de verkoopbeslissing
+
+Voor het eerst deze reeks wijzen een meting en een codeinspectie
+dezelfde kant op. Beide zijn nu vaste diagnostiek. **Er verandert niets
+aan de sturing.**
+
+### Waarom "welke reden levert geld op?" niet te beantwoorden is
+
+Die vraag is uitgevoerd. De uitkomst:
+
+```
+default_smart        efficiëntie  -137%
+expensive_quarter    efficiëntie  +272%
+emergency_low_batt   efficiëntie -1138%
+```
+
+Dat is geen rekenfout. De waarde van een optimale planning zit in de
+REEKS, niet in het kwartier: een kwartier waarin het optimum laadt, kost
+daar geld en levert het later op. Per kwartier toerekenen breekt dat, en
+dan krijg je efficiënties boven honderd procent en onder nul.
+
+Een euro-efficiëntie per reden bestaat dus niet op een wiskundig
+consistente manier. Dat had ik in doorloop 4 moeten zeggen, in plaats
+van er een rangorde in euro's op te zetten.
+
+### Wat wel valide is: de kWh-afwijking
+
+`REASON_DEVIATION_ANALYSIS`, over acht nabeschouwde dagen:
+
+```
+reden                            kwart  te weinig  te veel  mediaan
+default_smart                      559    29,89     27,75    -0,048
+discharging_window                  97     2,06      7,23    -0,067
+expensive_quarter                   17     0,46      4,91    -0,408
+expensive_quarter_soc_protected     23     2,04      1,62    -0,060
+arbitrage_solar_capture             43     2,18      1,37    +0,004
+solar_capture_deferred              27     0,00      1,68    -0,056
+```
+
+Deze maat is fysiek en lokaal - hoeveel wilde het optimum dit kwartier
+anders doen - en heeft dus geen reekswaarde nodig.
+
+`expensive_quarter` springt eruit: mediaan -0,408 kWh over zeventien
+kwartieren, en 4,91 kWh dat het optimum méér wilde vasthouden tegen
+0,46 dat het meer wilde ontladen. Steeds dezelfde richting.
+
+### Het codesignaal
+
+In `may_sell_now` staat een terugvalpad:
+
+```python
+reserve = self._get_dynamic_discharge_reserve_kwh(now, blok_start)
+if reserve is None:
+    nodig = self._estimate_consumption_kwh_for_period(now, blok_start)
+    zon = self._estimate_pv_kwh_for_period(now, blok_start)   # geen band
+```
+
+De reserve rekent met de VEILIGE positie in de Solcast-band (p10 + 0,29
+x de breedte, geleerd over 31 dagen, nul keer onder p10 uitgekomen). Dit
+pad rekent met de VERWACHTING. Bij een bandbreedte van 59% is dat 30 tot
+40% verschil.
+
+En dat pad geldt precies wanneer er geen goedkoop blok in zicht is - dus
+'s avonds en 's nachts, wanneer verkopen aan de orde is en de nacht nog
+moet worden gehaald. Hetzelfde beslispad rekent daar voorzichtig voor de
+reserve en optimistisch voor de verkoop.
+
+Uit de bredere audit: van de tien plekken die de PV-verwachting lezen,
+gebruikt er ÉÉN de band - `_estimate_worst_case_deficit_kwh`. De rest
+(arbitrage, zonuitstel, de planning, de noodlading, Monte Carlo, de MPC,
+de digital twin) rekent met de verwachting.
+
+### SAFE_SELL_SHADOW
+
+Bij elk verkoopmoment waar het terugvalpad wordt gebruikt, legt de
+integratie nu vast wat er zou zijn besloten met de veilige zon: zelfde
+beslissing, minder verkoop, of geen verkoop - met het kWh-verschil en
+een grove euro-indicatie.
+
+### Wat hier NIET staat
+
+Dat `expensive_quarter` te veel verkoopt. Dat is niet bewezen. Wat
+bewezen is: de afwijking is negatief, relatief groot, en er bestaat een
+codepad dat optimistischer rekent dan de rest van de
+onzekerheidsarchitectuur. Dat is genoeg voor een proefstand en niet voor
+een wijziging van de sturing.
+
+Blijft de schaduwmeting over een paar weken dezelfde kant op wijzen als
+de kWh-afwijking, dan is dat de eerste ingreep in deze hele reeks die op
+twee onafhankelijke metingen rust.
+
+### En de ratel had weer gelijk
+
+`may_sell_now` kwam door mijn toevoeging boven de groottegrens. In
+plaats van de grens op te hogen staat de schaduwmeting nu in
+`_schaduw_na_de_verkooptoets`.
+
+**Volledige testsuite**: 3905 tests, allemaal groen.

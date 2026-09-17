@@ -330,6 +330,14 @@ ZONLADING_MIN_EXPORT_W = 200.0
 # hun kosten (v4.14). Twintig is ruim een maand vaatwassen.
 CYCLUSKOSTEN_LENGTE = 20
 
+# Hoeveel verkoopmomenten de schaduwmeting bewaart (v4.22). Vier per
+# avond in een dure week is ruim een maand.
+SAFE_SELL_SHADOW_LENGTE = 60
+
+# Hoeveel kwartierafwijkingen per reden bewaard blijven (v4.22). Twee
+# weken aan kwartieren voor de drukste reden.
+REDEN_AFWIJKING_LENGTE = 400
+
 # Hoeveel handmatige ingrepen er met hun omstandigheden bewaard blijven
 # (v4.18). Gemeld: "Gister moest ik even manueel bijladen, omdat ik de
 # wasmachine en vaatwasser aan had. Hoe kun je hier van leren?" - en toen
@@ -3092,6 +3100,10 @@ PERSISTED_PLAIN_FIELDS = (
     "woonkamertemp_gemeten_per_uur",
     # v4.14: de kosten per afgeronde apparaatbeurt.
     "cycluskosten_geschiedenis",
+    # v4.22: de schaduwmeting van de verkooptoets.
+    "safe_sell_shadow",
+    # v4.22: de kWh-afwijking per reden ten opzichte van het optimum.
+    "reden_afwijkingen",
     # v4.18: wat de gebruiker zelf deed, met de omstandigheden.
     # NIET "handmatige_ingrepen": die naam is sinds v3.99.9 in gebruik
     # voor de VALSE ingrepen (accustand wijkt af van wat het EMS wilde).

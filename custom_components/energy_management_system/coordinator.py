@@ -204,6 +204,7 @@ from .const import (
     PV_FOUT_EENZIJDIG_AANDEEL,
     MODUS_KORTE_NAAM,
     REASON_REGISTRY,
+    REDEN_AFWIJKING_LENGTE,
     REDENEN_ZONDER_STAND,
     REDEN_KORTE_NAAM,
     REASON_TO_MODE,
@@ -536,6 +537,7 @@ from .const import (
     EMERGENCY_LOW_BATTERY_EXIT_MARGIN_PERCENT,
     HANDMATIGE_INGREEP_MIN_DUUR_MINUTEN,
     HERSTEL_BEVESTIGING_MINUTEN,
+    SAFE_SELL_SHADOW_LENGTE,
     SELL_HYSTERESIS_KWH,
     SELL_REOPEN_MIN_MINUTES,
     SELL_RESERVE_DEEPEST_SAFETY_FACTOR,
@@ -1254,7 +1256,7 @@ class EnergyManagementSystemCoordinator:
         # een regel - `__init__` staat op de ratel.
         # v3.99.19: `dagverloop` en `nabeschouwingen` erbij, in dezelfde
         # regel - `__init__` staat op de ratel.
-        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, []
+        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen, self.safe_sell_shadow, self.reden_afwijkingen = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, [], [], {}
         self.handmatige_ingrepen: list[dict] = []
         # v1.1.6: met welke meetmethode de bewaarde foutreeks tot stand
         # is gekomen. Verandert de methode, dan wordt die reeks eenmalig
@@ -20919,6 +20921,9 @@ class EnergyManagementSystemCoordinator:
         # stil te verrekenen - dan blijft het cijfer navolgbaar.
         handmatig = self.handmatige_kwartieren(datum)
         uit["handmatige_kwartieren"] = handmatig
+        # v4.22: de kWh-afwijking per reden, uit dezelfde planning die de
+        # nabeschouwing net heeft gemaakt. Geen tweede berekening.
+        self._leer_reden_afwijkingen(datum, kwartieren, uit)
         if handmatig:
             uit["let_op"] = (
                 f"{handmatig} van de {len(kwartieren)} kwartieren zijn met de hand "
@@ -21333,6 +21338,234 @@ class EnergyManagementSystemCoordinator:
             "zon_nog_te_komen_kwh": round(nog_te_komen, 1),
         }
 
+    _safe_sell_nodig_veilig: float | None = None
+
+    def _leer_reden_afwijkingen(
+        self, datum: str, kwartieren: list, uit: dict
+    ) -> None:
+        """Vult de kWh-afwijking per reden uit de nabeschouwing (v4.22).
+
+        De acties van de beste planning staan in de uitkomst; de reden
+        per kwartier staat in het dagverloop. Samen geven ze per kwartier
+        hoeveel het optimum anders wilde doen.
+        """
+        acties = uit.get("acties") or []
+        reeks = (self.dagverloop or {}).get(datum) or []
+        if not acties or len(acties) != len(kwartieren):
+            return
+        for n, (k, a) in enumerate(zip(kwartieren, acties)):
+            if n >= len(reeks):
+                break
+            reden = reeks[n].get("reden")
+            if not reden or str(reden).startswith("handmatig"):
+                continue
+            optimum = a.get("ontladen_kwh", 0.0) - a.get("laden_kwh", 0.0)
+            self.noteer_reden_afwijking(datum, reden, k.accu_kwh, optimum)
+
+    def noteer_reden_afwijking(
+        self, datum: str, reden: str, werkelijk_kwh: float, optimum_kwh: float
+    ) -> None:
+        """Legt vast hoeveel het optimum dit kwartier anders wilde doen
+        (v4.22).
+
+        De vraag "welke reden levert geld op?" is niet te beantwoorden: de
+        waarde van een optimale planning zit in de REEKS, niet in het
+        kwartier. Per kwartier toerekenen gaf efficiënties van -137% en
+        +272%, en dat is een methodefout, niet een rekenfout.
+
+        De kWh-afwijking is wel valide, want die is fysiek en lokaal.
+        Positief = het optimum wilde MEER ontladen dan wij deden;
+        negatief = meer vasthouden.
+        """
+        reeks = self.reden_afwijkingen.setdefault(reden, [])
+        reeks.append(round(optimum_kwh - werkelijk_kwh, 4))
+        self.reden_afwijkingen[reden] = reeks[-REDEN_AFWIJKING_LENGTE:]
+
+    def get_reden_afwijkingen(self) -> dict:
+        """Welke reden wijkt het verst af van het optimum? (v4.22)
+
+        Gerangschikt op absolute afwijking, want dat is de vraag: niet
+        welke reden geld kost, maar welke reden het vaakst iets anders
+        doet dan de beste planning zou hebben gedaan. Stuurt niets.
+        """
+        uit = []
+        for reden, reeks in (self.reden_afwijkingen or {}).items():
+            if not reeks:
+                continue
+            gesorteerd = sorted(reeks)
+            n = len(gesorteerd)
+            uit.append(
+                {
+                    "reden": reden,
+                    "kwartieren": n,
+                    "te_weinig_ontladen_kwh": round(
+                        sum(a for a in reeks if a > 0.005), 2
+                    ),
+                    "te_veel_ontladen_kwh": round(
+                        -sum(a for a in reeks if a < -0.005), 2
+                    ),
+                    "mediaan_kwh": round(statistics.median(gesorteerd), 3),
+                    "p10_kwh": round(gesorteerd[int(0.1 * (n - 1))], 3),
+                    "p90_kwh": round(gesorteerd[int(0.9 * (n - 1))], 3),
+                    "absoluut_kwh": round(sum(abs(a) for a in reeks), 2),
+                }
+            )
+        uit.sort(key=lambda r: -r["absoluut_kwh"])
+        if not uit:
+            return {
+                "redenen": [],
+                "oordeel": (
+                    "Nog geen afwijkingen gemeten. Die komen erbij zodra er een "
+                    "dag is nabeschouwd."
+                ),
+            }
+        grootste = max(uit, key=lambda r: abs(r["mediaan_kwh"]))
+        richting = (
+            "meer vasthouden" if grootste["mediaan_kwh"] < 0 else "meer ontladen"
+        )
+        return {
+            "redenen": uit,
+            "grootste_afwijker": grootste["reden"],
+            "oordeel": (
+                f"{grootste['reden']} wijkt het verst af: mediaan "
+                f"{grootste['mediaan_kwh']:+.3f} kWh per kwartier over "
+                f"{grootste['kwartieren']} kwartieren - het optimum wilde daar "
+                f"{richting}."
+            ),
+            "toelichting": (
+                "De afwijking in kWh tussen wat de accu deed en wat de beste "
+                "planning had gedaan, per kwartier, gegroepeerd per reden. In kWh "
+                "en niet in euro's: de waarde van een planning zit in de REEKS, "
+                "niet in het kwartier, dus een euro-bedrag per kwartier is niet "
+                "consistent toe te rekenen. Positief = het optimum wilde meer "
+                "ontladen. Dit meet en stuurt niets."
+            ),
+        }
+
+    def _schaduw_na_de_verkooptoets(
+        self, now: datetime, beschikbaar: float, veilig: float
+    ) -> None:
+        """Noteert de schaduwmeting als het terugvalpad is gebruikt
+        (v4.22).
+
+        Een eigen functie omdat `may_sell_now` op de groottescan staat
+        en die had meteen gelijk toen ik dit erin zette.
+        """
+        nodig_veilig = self._safe_sell_nodig_veilig
+        if nodig_veilig is None:
+            return
+        self._safe_sell_nodig_veilig = None
+        self.noteer_safe_sell_shadow(
+            now,
+            verkocht_kwh=max(0.0, beschikbaar - veilig),
+            nodig_verwacht=veilig,
+            nodig_veilig=nodig_veilig,
+        )
+
+    def noteer_safe_sell_shadow(
+        self,
+        nu: datetime,
+        verkocht_kwh: float,
+        nodig_verwacht: float,
+        nodig_veilig: float,
+    ) -> None:
+        """Wat zou de verkooptoets met de VEILIGE zon hebben besloten?
+        (v4.22)
+
+        Twee signalen wijzen dezelfde kant op. Gemeten over acht dagen:
+        `expensive_quarter` week met een mediaan van -0,408 kWh af van
+        het optimum - steeds richting "meer vasthouden". En in
+        `may_sell_now` staat een terugvalpad dat met de VERWACHTE zon
+        rekent terwijl de reserve met de VEILIGE positie in de
+        Solcast-band rekent (p10 + 0,29 x de breedte, geleerd over 31
+        dagen). Bij een bandbreedte van 59% is dat 30 tot 40% verschil.
+
+        Dat pad geldt precies 's avonds en 's nachts, als er geen
+        goedkoop blok in zicht is - dus wanneer verkopen aan de orde is
+        en de nacht nog moet worden gehaald. Hetzelfde beslispad rekent
+        daar voorzichtig voor de reserve en optimistisch voor de verkoop.
+
+        Dit MEET en stuurt niets. Dat `expensive_quarter` te veel
+        verkoopt, is niet bewezen; alleen dat de afwijking negatief is,
+        relatief groot, en dat er een codepad bestaat dat optimistischer
+        rekent dan de rest.
+        """
+        beschikbaar = self.last_available_kwh
+        if beschikbaar is None:
+            return
+        ruimte_veilig = max(0.0, beschikbaar - nodig_veilig)
+        if nodig_veilig <= nodig_verwacht + 0.05:
+            uitkomst, verschil = "zelfde beslissing", 0.0
+        elif ruimte_veilig <= 0.05:
+            uitkomst, verschil = "geen verkoop", verkocht_kwh
+        elif ruimte_veilig < verkocht_kwh:
+            uitkomst, verschil = "minder verkoop", verkocht_kwh - ruimte_veilig
+        else:
+            uitkomst, verschil = "zelfde beslissing", 0.0
+        self.safe_sell_shadow.append(
+            {
+                "moment": nu.isoformat(),
+                "reden": self.last_reason,
+                "verkocht_kwh": round(verkocht_kwh, 3),
+                "nodig_verwacht_kwh": round(nodig_verwacht, 3),
+                "nodig_veilig_kwh": round(nodig_veilig, 3),
+                "beschikbaar_kwh": round(beschikbaar, 3),
+                "uitkomst": uitkomst,
+                "verschil_kwh": round(verschil, 3),
+                "prijs_ct": (
+                    round(p * 100, 1)
+                    if (p := self.huidige_prijs_eur_per_kwh(nu)) is not None
+                    else None
+                ),
+            }
+        )
+        self.safe_sell_shadow = self.safe_sell_shadow[-SAFE_SELL_SHADOW_LENGTE:]
+        self.schedule_persisted_state_save()
+
+    def get_safe_sell_shadow_overzicht(self) -> dict:
+        """Wat de schaduwmeting tot nu toe zegt (v4.22). Stuurt niets."""
+        momenten = self.safe_sell_shadow or []
+        if not momenten:
+            return {
+                "momenten": 0,
+                "oordeel": (
+                    "Nog geen verkoopmoment gemeten. Er komt een regel bij zodra "
+                    "de accu aan het net levert."
+                ),
+            }
+        tellers = {"zelfde beslissing": 0, "minder verkoop": 0, "geen verkoop": 0}
+        for m in momenten:
+            tellers[m["uitkomst"]] = tellers.get(m["uitkomst"], 0) + 1
+        verschil_kwh = sum(m["verschil_kwh"] for m in momenten)
+        verschil_eur = sum(
+            m["verschil_kwh"] * (m["prijs_ct"] or 0) / 100 for m in momenten
+        )
+        anders = tellers["minder verkoop"] + tellers["geen verkoop"]
+        return {
+            "momenten": len(momenten),
+            "zelfde_beslissing": tellers["zelfde beslissing"],
+            "minder_verkoop": tellers["minder verkoop"],
+            "geen_verkoop": tellers["geen verkoop"],
+            "verschil_kwh_totaal": round(verschil_kwh, 2),
+            "verschil_eur_totaal": round(verschil_eur, 2),
+            "laatste": momenten[-1],
+            "oordeel": (
+                f"{anders} van {len(momenten)} verkoopmomenten zouden anders zijn "
+                f"gegaan met de veilige zon: {verschil_kwh:.2f} kWh minder verkocht, "
+                f"grofweg {verschil_eur:.2f} euro."
+                if anders
+                else f"{len(momenten)} verkoopmomenten, allemaal dezelfde beslissing. "
+                "De band maakt hier geen verschil."
+            ),
+            "toelichting": (
+                "Wat de verkooptoets zou hebben besloten met de veilige positie in "
+                "de Solcast-band in plaats van de verwachting. Dit meet en stuurt "
+                "niets. Blijft dit dezelfde kant op wijzen als de kWh-afwijking per "
+                "reden, dan is dat de eerste ingreep die op twee onafhankelijke "
+                "metingen rust."
+            ),
+        }
+
     def may_sell_now(
         self, now: datetime, beschikbaar: float | None = None
     ) -> dict:
@@ -21531,6 +21764,16 @@ class EnergyManagementSystemCoordinator:
                     self._estimate_consumption_kwh_for_period(now, blok_start) or 0.0
                 )
                 zon = self._estimate_pv_kwh_for_period(now, blok_start) or 0.0
+                # v4.22: schaduwmeting - wat zou hier zijn uitgekomen met
+                # de VEILIGE positie in de band? Dit pad rekent met de
+                # verwachting terwijl de reserve met de veilige positie
+                # rekent; die inconsistentie wordt nu gemeten, niet
+                # gerepareerd. Zie `noteer_safe_sell_shadow`.
+                zon_veilig = (
+                    self._estimate_pv_kwh_for_period(now, blok_start, veilig=True)
+                    or 0.0
+                )
+                self._safe_sell_nodig_veilig = max(0.0, nodig - zon_veilig)
                 nodig = max(0.0, nodig - zon)
                 veilig = nodig * SELL_RESERVE_SAFETY_FACTOR
                 methode = "nettosom (geen volledig uurprofiel)"
@@ -21564,6 +21807,7 @@ class EnergyManagementSystemCoordinator:
             and (now - self._verkoop_dicht_sinds).total_seconds() / 60
             < SELL_REOPEN_MIN_MINUTES
         )
+        self._schaduw_na_de_verkooptoets(now, beschikbaar, veilig)
         if beschikbaar <= drempel or te_snel:
             if not self._verkoop_geblokkeerd_door_reserve:
                 self._verkoop_dicht_sinds = now

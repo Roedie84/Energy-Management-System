@@ -485,6 +485,14 @@ async def async_get_config_entry_diagnostics(
         # v4.18: wat er gebeurde toen de gebruiker zelf stuurde.
         # v4.19: hoe vaak het EMS van reden wisselt, en de vaakst
         # wisselende paren - zodat dat niet meer met een script hoeft.
+        # v4.22: de twee metingen rond de verkoopbeslissing.
+        "reden_afwijkingen": _veilig(
+            "get_reden_afwijkingen", coordinator.get_reden_afwijkingen
+        ),
+        "safe_sell_shadow": _veilig(
+            "get_safe_sell_shadow_overzicht",
+            coordinator.get_safe_sell_shadow_overzicht,
+        ),
         "redenwissels": _veilig(
             "get_redenwissels", coordinator.get_redenwissels
         ),

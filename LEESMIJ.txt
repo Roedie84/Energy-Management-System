@@ -1,7 +1,7 @@
-EMS v4.21 - alle wijzigingen sinds v4.18
+EMS v4.22 - alle wijzigingen sinds v4.18
 
-Bevat v4.18.1, v4.19, v4.20 en v4.21.
-Voor HACS: release met tag v4.21.
+Bevat v4.18.1 tot en met v4.22.
+Voor HACS: release met tag v4.22.
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
 
@@ -11,49 +11,33 @@ TE KOPIEREN naar config/custom_components/energy_management_system/
 
 NAAR DE REPO
 
-    README.md, CHANGELOG.md
-    docs/ONTWIKKELING.md        (het registry-ontwerp)
+    README.md, CHANGELOG.md, docs/ONTWIKKELING.md
     dashboards/energy_management_system_dashboard.yaml
-    tests/ (zes bestanden, vier nieuw)
+    tests/ (acht bestanden, zes nieuw)
 
-WAT ER VERANDERT IN BEDRIJF
+AAN DE STURING VERANDERT NIETS.
 
-1. "Onbekende reden: solar_capture_deferred" is weg.
-2. Mijn registratie van jouw ingrepen heet "eigen_ingrepen" - de naam
-   "handmatige_ingrepen" was al in gebruik voor de VALSE ingrepen.
-3. NIEUW in de export: "redenwissels" met vijf meters - wissels over 24
-   uur en 7 dagen, de vaakste paren, de gemiddelde tijd per reden en de
-   tijd per reden apart. Er wordt niets op gestuurd.
+NIEUW IN DE EXPORT (v4.22)
 
-DE ARCHITECTUUR
+    reden_afwijkingen   per reden: hoeveel kWh het optimum anders wilde
+                        doen, met mediaan, p10 en p90, gerangschikt op
+                        absolute afwijking
+    safe_sell_shadow    per verkoopmoment: wat er zou zijn besloten met
+                        de VEILIGE zon in plaats van de verwachting
 
-REASON_REGISTRY is de enige plaats waar een beslisreden bestaat: stand,
-titel, uitleg, ernst, label, waarom-vraag, korte naam, emoji. Vijf
-tabellen zijn nu afgeleiden (REASON_TO_MODE, DECISION_REASON_LABELS,
-WHY_QUESTIONS, REDEN_KORTE_NAAM, MODE_CHANGE_EMOJI). Uiteenlopen kan
-niet meer.
+Waarom: gemeten over acht dagen wijkt expensive_quarter het verst af
+(mediaan -0,408 kWh, altijd richting "meer vasthouden"), en er blijkt
+een codepad in may_sell_now dat met de verwachte zon rekent terwijl de
+reserve met de veilige positie rekent. Twee onafhankelijke signalen,
+dezelfde kant op.
 
-NIEUWE RATELS
+Dat is genoeg voor een proefstand en NIET voor een wijziging. Blijven
+beide over een paar weken hetzelfde zeggen, dan is dat de eerste
+ingreep die op twee metingen rust.
 
-- elke gebruikte reden staat in de registry, en omgekeerd
-- elke reden komt door de uitlegfunctie zonder "Onbekende reden"
-- de vijf afgeleiden zijn echt afgeleid, geen handmatige kopie
-- elke melding heeft advies, logprioriteit en een titel (of bouwt hem op)
-- geen dubbele methodenamen per klasse
-- geen dubbel gezette velden in __init__
-- geen dubbele exportsleutels
-- geen dataset met twee recordvormen
+UIT DE EERDERE VERSIES
 
-TWEE FOUTEN VAN MIJ DIE DE TOETSEN VINGEN
-
-- get_moduswissels bestond al sinds v3.87.0; mijn nieuwe functie heet nu
-  get_redenwissels.
-- Ik wilde zes "ontbrekende" Achterhoekse titels toevoegen, maar die zes
-  bouwen hun titel op uit wat er gebeurde. Een bestaande toets keurde het
-  af. Ze staan nu benoemd in TITEL_WORDT_OPGEBOUWD.
-
-NOG OP DE LIJST
-
-PERSISTED_FIELDS declaratief maken en de vier bestaande laadconversies
-expliciteren. De inventory over alle 187 velden gaf nul afwijkingen, dus
-daar is geen haast.
+v4.18.1  mijn registratie van jouw ingrepen heet "eigen_ingrepen"
+v4.19    "Onbekende reden" weg; vier architectuurratels
+v4.20    REASON_REGISTRY als enige bron, REASON_TO_MODE afgeleid
+v4.21    vier redentabellen afgeleid; meldingstabellen met ratels
