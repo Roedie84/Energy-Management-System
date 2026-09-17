@@ -4239,6 +4239,11 @@ class GacsAssessmentSensor(SensorEntity):
             # dezelfde klasse als de meldingskaart in v4.8 en de
             # waterknoppen in v4.9.2.
             ("cycluskosten", self._coordinator.get_cycluskosten_overzicht),
+            # v4.18: wat er gebeurde toen de gebruiker zelf stuurde.
+            (
+                "handmatige_ingrepen",
+                self._coordinator.get_handmatige_ingrepen_overzicht,
+            ),
             ("pv_voorspelkwaliteit", self._coordinator.get_pv_forecast_quality),
             ("pv_correctie", self._coordinator.get_pv_correction_status),
             ("aanwezigheid", self._coordinator.get_presence_overview),

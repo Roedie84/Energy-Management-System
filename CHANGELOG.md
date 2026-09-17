@@ -25432,3 +25432,79 @@ De lezers eisen nu één vorm, en er staat een ratel onder die elke
 alle bewaarde velden vond geen tweede geval.
 
 **Volledige testsuite**: 3839 tests, allemaal groen.
+
+
+## v4.18 — Leren van wat jij zelf doet
+
+**Gemeld**: "Gister moest ik even manueel bijladen, omdat ik de
+wasmachine en vaatwasser aan had. Hoe kun je hier van leren?" En daarna,
+terecht: "Dit kun je toch uit de diagnostiek halen?"
+
+Nee. Wat er van de ingreep van 13 september in de export stond:
+
+```
+12:31  handmatige_stand: laden, accu 38%
+13:31  nog aan, accu 38%
+14:31  nog aan, accu 59%
+```
+
+Twee meldingen, en verder niets. Niet de reserve die het EMS op dat
+moment aanhield, niet het beschikbare, niet welke apparaten liepen, niet
+hoeveel er is bijgeladen. En in het dagverloop stond bij die kwartieren
+`default_smart` - want het EMS stuurde niet - dus uit de kwartierregels
+was niet te zien dat de gebruiker aan het stuur stond.
+
+Daardoor heb ik de netpiek van die dag eerst verkeerd verklaard: ik
+schreef dat het `grid_charging_low_solar` was en dus bewust EMS-gedrag.
+Het was een handmatige lading. En de nabeschouwing van 13 september
+heeft die kwartieren beoordeeld als beslissing van de integratie, dus ze
+zitten in het gemiste bedrag van die dag.
+
+### Wat er nu wordt vastgelegd
+
+Bij elke handmatige ingreep: het moment, de stand, de laadstand, de
+reserve die het EMS aanhield, het beschikbare, het TEKORT tussen die
+twee, welke apparaten boven de 100 W stonden, de reden die het EMS zelf
+had, en de prijs. Bij het uitzetten komen de duur, de eindstand en het
+bijgeladen percentage erbij.
+
+Twintig ingrepen blijven bewaard, met een overzicht dat zegt hoeveel
+ervan bij een tekort gebeurden en bij hoeveel er witgoed aanstond. Dat
+is het eerste bewijs dat de reserve iets mist - en dan hoort het als
+proefstandkandidaat te worden becijferd voordat er iets aan verandert.
+Deze versie meet; ze stuurt niets.
+
+### En het dagverloop weet nu wie er stuurde
+
+De kwartierregel krijgt `handmatig_<stand>` in plaats van de
+EMS-reden, en de nabeschouwing MELDT hoeveel kwartieren met de hand zijn
+gestuurd:
+
+> "3 van de 96 kwartieren zijn met de hand gestuurd. Het gemiste bedrag
+> rekent die mee als beslissing van de integratie, dus het is in
+> werkelijkheid lager."
+
+Melden en niet stil verrekenen: dan blijft het cijfer navolgbaar.
+
+### De nachtcontrole keek naar de stand in plaats van naar het net
+
+Uit dezelfde export:
+
+```
+nacht_gecontroleerd: false
+"Nul van 521 nachtrondes waren zelfvoorzienend."
+```
+
+Terwijl de nacht perfect was - elk kwartier dekte de accu het huis en er
+ging 50 W naar het net, van 42% naar 19%. De teller keek of de STAND
+`smart_discharging` was; de reden was de hele nacht `default_smart`, wat
+stand `smart` geeft. Dus telde geen enkele ronde.
+
+Dat is dezelfde fout die deze controle moest opsporen, met een andere
+naam: in v3.99.16 miste `smart_discharging` in de lijst, hier
+`default_smart`. Een controle die naar de stand kijkt moet elke redennaam
+kennen. De vraag is of er stroom van het net kwam, en dat staat in
+dezelfde regel - dus kijkt de teller nu daarnaar. Geen enkele naam meer
+nodig, en deze fout kan niet een derde keer terugkomen.
+
+**Volledige testsuite**: 3855 tests, allemaal groen.

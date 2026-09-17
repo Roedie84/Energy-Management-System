@@ -1197,6 +1197,15 @@ views:
       grid_options:
         columns: 12
         rows: auto
+    - type: markdown
+      title: Toen jij zelf stuurde
+      content: '{% set o = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''handmatige_ingrepen'') or {} %}{% if o.get(''aantal'', 0) > 0 %}{{ o.patroon }}
+
+
+        {% set l = o.laatste %}**Laatste:** {{ l.stand }}, accu {{ l.soc }}%{% if l.tekort_kwh and l.tekort_kwh > 0 %}, {{ ''%.2f''|format(l.tekort_kwh) }} kWh onder de reserve{% endif %}{% if l.apparaten_aan %} — aan: {{ l.apparaten_aan.keys() | join('', '') }}{% endif %}.{% else %}Nog geen handmatige ingreep vastgelegd.{% endif %}'
+      grid_options:
+        columns: 12
+        rows: auto
 - title: Rendement
   path: detail-rendement
   subview: true

@@ -80,8 +80,11 @@ def test_zelfvoorzienende_rondes_worden_geteld(make_coordinator, hass):
     c = make_coordinator({})
     c._nachtrondes = {"totaal": 0, "zelfvoorzienend": 0}
 
-    c._tel_nachtronde(NU.replace(hour=2), "discharging_window")
-    c._tel_nachtronde(NU.replace(hour=3), "arbitrage_solar_capture")
+    # v4.18: het NET beslist, niet de reden. Een ronde waarin de accu
+    # het huis dekt is zelfvoorzienend, welke reden er ook staat; een
+    # ronde met netafname niet.
+    c._tel_nachtronde(NU.replace(hour=2), "discharging_window", net_w=-40.0)
+    c._tel_nachtronde(NU.replace(hour=3), "arbitrage_solar_capture", net_w=900.0)
 
     assert c._nachtrondes == {"totaal": 2, "zelfvoorzienend": 1}
 

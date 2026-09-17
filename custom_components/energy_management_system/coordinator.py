@@ -197,6 +197,7 @@ from .const import (
     NACHTLAST_NACHTEN,
     NACHTLAST_RECENT,
     NACHTLAST_REFERENTIE,
+    NACHT_ZELFVOORZIENEND_MARGE_W,
     NACHTLAST_VENSTER,
     MODE_CHANGE_EMOJI,
     PV_FOUT_EENZIJDIG_AANDEEL,
@@ -551,11 +552,13 @@ from .const import (
     RESERVE_BODEM_FRACTIE,
     PV_GEOMETRY_MULTI_ORIENTATION_SPREAD_DEGREES,
     PV_GEOMETRY_MULTI_ORIENTATION_MIN_DAYS,
+    APPARAAT_AAN_DREMPEL_W,
     HANDMATIGE_INGREPEN_LENGTE,
     HANDMATIGE_INGREPEN_MIN_VOOR_PATROON,
     HANDMATIGE_INGREPEN_MIN_DAGEN,
     HANDMATIGE_RICHTING_DREMPEL_W,
     PV_GEOMETRY_RELIABLE_DAYS,
+    HANDMATIGE_INGREPEN_LENGTE,
     HANDMATIGE_STAND_LADEN,
     HANDMATIGE_STAND_SMART_CHARGE,
     HANDMATIG_LAADVERMOGEN_W,
@@ -1249,7 +1252,7 @@ class EnergyManagementSystemCoordinator:
         # een regel - `__init__` staat op de ratel.
         # v3.99.19: `dagverloop` en `nabeschouwingen` erbij, in dezelfde
         # regel - `__init__` staat op de ratel.
-        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}
+        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.handmatige_ingrepen = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, []
         # v1.1.6: met welke meetmethode de bewaarde foutreeks tot stand
         # is gekomen. Verandert de methode, dan wordt die reeks eenmalig
         # gewist - zie ENERGY_BALANCE_METHOD_VERSION.
@@ -5902,6 +5905,166 @@ class EnergyManagementSystemCoordinator:
         """Nieuwe dag: opnieuw ijken op de huidige meterstand
         (v1.9.1)."""
         self._pv_energy_meter_day_start = self._pv_energy_meter_last
+
+    def _apparaten_die_aanstaan(self) -> dict[str, float]:
+        """Welke apparaten trekken nu vermogen? (v4.18)"""
+        uit = {}
+        for naam, sleutel in (
+            ("vaatwasser", CONF_DISHWASHER_POWER_SENSOR),
+            ("wasmachine", CONF_WASHING_MACHINE_POWER_SENSOR),
+        ):
+            w = self._read_sensor_float(self.config.get(sleutel))
+            if w is not None and w > APPARAAT_AAN_DREMPEL_W:
+                uit[naam] = round(w, 1)
+        return uit
+
+    def noteer_handmatige_ingreep(
+        self, stand: str | None, nu: datetime | None = None
+    ) -> None:
+        """Legt vast dat de gebruiker zelf stuurde, met de
+        omstandigheden (v4.18).
+
+        Gemeld: "Gister moest ik even manueel bijladen, omdat ik de
+        wasmachine en vaatwasser aan had. Hoe kun je hier van leren?" -
+        en daarna: "Dit kun je toch uit de diagnostiek halen?"
+
+        Dat kon niet. Van de ingreep van 13 september stonden er twee
+        meldingen in de export ("Stand: laden, sinds 12:31, accu 38%")
+        en verder niets: niet de reserve die het EMS aanhield, niet het
+        beschikbare, niet welke apparaten liepen. Daardoor heb ik de
+        netpiek van die dag eerst verkeerd verklaard als bewust
+        EMS-gedrag.
+
+        Een handmatige ingreep is het waardevolste signaal dat er is: de
+        gebruiker zegt "je zat ernaast". Wat er bij hoort is het verschil
+        tussen wat het EMS nodig dacht te hebben en wat er lag, en wat er
+        op dat moment aanstond - dan is over een handvol keren te zien of
+        de reserve stelselmatig te laag staat als er witgoed loopt.
+        """
+        nu = nu or dt_util.now()
+        if stand:
+            soc = self.accustand_procent()
+            beschikbaar = self.last_available_kwh
+            reserve = (self.last_reserve_margin_breakdown or {}).get(
+                "reserve_kwh_after_margin"
+            )
+            self.handmatige_ingrepen.append(
+                {
+                    "moment": nu.isoformat(),
+                    "stand": stand,
+                    "soc": soc,
+                    "beschikbaar_kwh": beschikbaar,
+                    "reserve_kwh": reserve,
+                    "tekort_kwh": (
+                        round(reserve - beschikbaar, 2)
+                        if reserve is not None and beschikbaar is not None
+                        else None
+                    ),
+                    "apparaten_aan": self._apparaten_die_aanstaan(),
+                    "reden_ems": self.last_reason,
+                    "prijs_ct": (
+                        round(p * 100, 1)
+                        if (p := self.huidige_prijs_eur_per_kwh(nu)) is not None
+                        else None
+                    ),
+                }
+            )
+            self.handmatige_ingrepen = self.handmatige_ingrepen[
+                -HANDMATIGE_INGREPEN_LENGTE:
+            ]
+            self.schedule_persisted_state_save()
+            return
+        # stand is None: de ingreep is voorbij - het einde erbij schrijven
+        if not self.handmatige_ingrepen:
+            return
+        laatste = self.handmatige_ingrepen[-1]
+        if laatste.get("geeindigd"):
+            return
+        begin = dt_util.parse_datetime(laatste["moment"])
+        soc_eind = self.accustand_procent()
+        laatste["geeindigd"] = nu.isoformat()
+        laatste["duur_minuten"] = (
+            round((nu - begin).total_seconds() / 60) if begin else None
+        )
+        laatste["soc_eind"] = soc_eind
+        laatste["bijgeladen_procent"] = (
+            round(soc_eind - laatste["soc"], 1)
+            if soc_eind is not None and laatste.get("soc") is not None
+            else None
+        )
+        self.schedule_persisted_state_save()
+
+    def reden_voor_het_dagverloop(self) -> str | None:
+        """De reden zoals die in het dagverloop hoort (v4.18).
+
+        Stuurde de gebruiker zelf, dan stond er `default_smart` in de
+        kwartierregel - want het EMS stuurde niet. De nabeschouwing
+        beoordeelde die kwartieren daardoor als EMS-beslissing, en de
+        handmatige lading van 13 september zit dus in het gemiste bedrag
+        van die dag. Nu staat er `handmatig_<stand>`.
+        """
+        if self.force_manual and self.handmatige_stand:
+            return f"handmatig_{self.handmatige_stand}"
+        return self.last_reason
+
+    def handmatige_kwartieren(self, datum: str) -> int:
+        """Hoeveel kwartieren van die dag door de gebruiker zijn
+        gestuurd (v4.18)."""
+        return sum(
+            1
+            for r in ((self.dagverloop or {}).get(datum) or [])
+            if str(r.get("reden") or "").startswith("handmatig")
+        )
+
+    def get_handmatige_ingrepen_overzicht(self) -> dict:
+        """Wat de handmatige ingrepen samen zeggen (v4.18).
+
+        Meet; stuurt niets. Wijst de reeks één kant op, dan is dat het
+        eerste bewijs dat de reserve iets mist - en dan hoort dat als
+        proefstandkandidaat te worden becijferd voordat er iets aan
+        verandert.
+        """
+        afgerond = [i for i in (self.handmatige_ingrepen or []) if i.get("geeindigd")]
+        if not afgerond:
+            return {
+                "aantal": 0,
+                "patroon": "Nog geen afgeronde handmatige ingreep vastgelegd.",
+            }
+        met_tekort = [
+            i for i in afgerond if (i.get("tekort_kwh") or 0) > 0
+        ]
+        met_apparaten = [i for i in afgerond if i.get("apparaten_aan")]
+        return {
+            "aantal": len(afgerond),
+            "laatste": afgerond[-1],
+            "met_tekort": len(met_tekort),
+            "met_witgoed_aan": len(met_apparaten),
+            "gemiddeld_bijgeladen_procent": (
+                round(
+                    statistics.mean(
+                        i["bijgeladen_procent"]
+                        for i in afgerond
+                        if i.get("bijgeladen_procent") is not None
+                    ),
+                    1,
+                )
+                if any(i.get("bijgeladen_procent") is not None for i in afgerond)
+                else None
+            ),
+            "patroon": (
+                f"{len(met_tekort)} van {len(afgerond)} ingrepen gebeurden terwijl "
+                "het EMS meer reserve nodig achtte dan er lag - een tekort dus. "
+                f"Bij {len(met_apparaten)} stond er witgoed aan."
+                if met_tekort
+                else f"{len(afgerond)} ingrepen, geen ervan bij een tekort. Dan gaat "
+                "het om iets anders dan de reserve."
+            ),
+            "toelichting": (
+                "Wat er gebeurde toen je zelf stuurde. Dit meet en stuurt niets: "
+                "wijst de reeks één kant op, dan wordt dat eerst becijferd als "
+                "proefstandkandidaat voordat de reserve verandert."
+            ),
+        }
 
     def _record_decision_log(self, now: datetime) -> None:
         """Legt elke tick het verloop vast (v1.9.0).
@@ -20541,7 +20704,8 @@ class EnergyManagementSystemCoordinator:
         kwartier = now.replace(minute=(now.minute // 15) * 15, second=0, microsecond=0)
         regel = {
             "tijd": kwartier.strftime("%H:%M"),
-            "reden": self.last_reason,
+            # v4.18: `handmatig_<stand>` als de gebruiker stuurt.
+            "reden": self.reden_voor_het_dagverloop(),
             "stand": self.last_expected_mode,
             "soc": self.accustand_procent(),
             "pv_w": self._lees_pv_vermogen_w(),
@@ -20646,6 +20810,20 @@ class EnergyManagementSystemCoordinator:
         uit["kwartieren"] = len(kwartieren)
         uit["begin_kwh"] = round(begin, 2)
         uit["eind_kwh"] = round(eind, 2)
+        # v4.18: hoeveel kwartieren door de GEBRUIKER zijn gestuurd. Die
+        # zitten in het gemiste bedrag, en dat is onverdiend: de
+        # handmatige lading van 13 september werd beoordeeld als
+        # EMS-beslissing. Zolang de planning niet per kwartier kan weten
+        # wie er stuurde, is het eerlijkste dit te MELDEN in plaats van
+        # stil te verrekenen - dan blijft het cijfer navolgbaar.
+        handmatig = self.handmatige_kwartieren(datum)
+        uit["handmatige_kwartieren"] = handmatig
+        if handmatig:
+            uit["let_op"] = (
+                f"{handmatig} van de {len(kwartieren)} kwartieren zijn met de hand "
+                "gestuurd. Het gemiste bedrag rekent die mee als beslissing van de "
+                "integratie, dus het is in werkelijkheid lager."
+            )
         return uit
 
     def _sluit_dag_af_met_nabeschouwing(self, gisteren: str) -> None:
@@ -33692,17 +33870,30 @@ class EnergyManagementSystemCoordinator:
             ),
         }
 
-    def _tel_nachtronde(self, now: datetime, reason: str | None) -> None:
+    def _tel_nachtronde(
+        self, now: datetime, reason: str | None, net_w: float | None = None
+    ) -> None:
         """Telt de rondes tussen 22:00 en 06:00, en hoeveel daarvan
-        zelfvoorzienend waren (accu ontlaadt)."""
+        zelfvoorzienend waren.
+
+        v4.18: naar het NET kijken, niet naar de stand. Dit keek of de
+        stand `smart_discharging` was; op 17 september was de reden de
+        hele nacht `default_smart` - stand `smart` - terwijl de accu het
+        huis volledig dekte en er 50 W naar het net ging. Nul van 521
+        rondes telde, en de controle meldde precies de fout die hij moest
+        opsporen: in v3.99.16 miste `smart_discharging` in de lijst, hier
+        `default_smart`.
+
+        Een controle die naar de STAND kijkt, moet elke redennaam kennen.
+        De vraag is of er stroom van het net kwam, en dat staat in
+        dezelfde regel. Dan is geen enkele naam meer nodig.
+        """
         if not (now.hour >= 22 or now.hour < 6):
             return
         if self._nachtrondes is None:
             self._nachtrondes = {"totaal": 0, "zelfvoorzienend": 0}
         self._nachtrondes["totaal"] += 1
-        if REASON_TO_MODE.get(reason or "") == OPTION_SMART_DISCHARGING or reason in (
-            "expensive_quarter", "expensive_quarter_soc_protected"
-        ):
+        if net_w is not None and net_w < NACHT_ZELFVOORZIENEND_MARGE_W:
             self._nachtrondes["zelfvoorzienend"] += 1
 
     def zelfcontrole_nacht_gecontroleerd(self) -> dict:
@@ -33780,7 +33971,13 @@ class EnergyManagementSystemCoordinator:
         """
         # v4.1: padbereik en nachtrondes.
         self._tel_pad("reden", self.last_reason or "onbekend", now)
-        self._tel_nachtronde(now, self.last_reason)
+        self._tel_nachtronde(
+            now,
+            self.last_reason,
+            net_w=self._read_sensor_float(
+                self.config.get(CONF_CONSUMPTION_POWER_SENSOR)
+            ),
+        )
         # v3.89.0: de afwegingen van deze ronde vasthouden.
         #
         # Gevraagd bij de duivelsadvocaat-audit: "Kan ik zien welke

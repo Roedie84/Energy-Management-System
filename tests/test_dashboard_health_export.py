@@ -157,6 +157,8 @@ def test_present_attributes_are_not_reported(make_coordinator, hass):
             "zon_uitstelplan": {},
             # v4.14: wat elke apparaatbeurt kostte.
             "cycluskosten": {},
+            # v4.18: de handmatige ingrepen.
+            "handmatige_ingrepen": {},
             "kwartierplanning": [],
             # v3.67.0: de proefplanning op de kwartierpagina.
             "smart_charging_proef": {},

@@ -1,29 +1,39 @@
-EMS v4.17.1 - alleen de wijzigingen sinds v4.17
+EMS v4.18 - alleen de wijzigingen sinds v4.17.1
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
 
-    coordinator.py
-    dashboard_template.yaml     (gaat altijd mee, ongewijzigd)
+    const.py, coordinator.py, sensor.py, diagnostics.py
+    dashboard_template.yaml     LET OP: dashboard gewijzigd
     manifest.json, bestandscontrole.json
 
 NAAR DE REPO
 
     README.md, CHANGELOG.md
     dashboards/energy_management_system_dashboard.yaml
-    tests/ (drie bestanden, een nieuw)
+    tests/ (vier bestanden, twee nieuw)
 
-Voor HACS: release met tag v4.17.1.
+Voor HACS: release met tag v4.18.
 
 WAT ER VERANDERT
 
-De driehonderd oude helderheidsparen worden bij het laden opgeruimd.
-Die waren allemaal van een dag (uit de tijd dat er een paar per minuut
-bij kwam) en blokkeerden de rangorde: met twaalf nieuwe per dag zouden
-ze er pas na vijfentwintig dagen uit zijn geschoven.
+1. Zet je de accu zelf op laden of ontladen, dan legt het EMS vast wat
+   er op dat moment aan de hand was: laadstand, de reserve die het
+   nodig achtte, het beschikbare, het TEKORT tussen die twee, welke
+   apparaten aanstonden, en bij het uitzetten hoeveel je hebt
+   bijgeladen. Nieuwe kaart "Toen jij zelf stuurde" op de accupagina.
 
-NA DE HERSTART
+   Dit MEET en stuurt niets. Na een handvol keren zegt het of de
+   reserve stelselmatig te laag staat als er witgoed loopt - en dan
+   wordt dat eerst becijferd als proefstandkandidaat.
 
-De teller "bruikbare paren" springt van 300 naar bijna 0. Dat is geen
-verlies - die 300 waren onbruikbaar, ze besloegen een dag. Over tien
-dagen staat er voor het eerst een rangordescore per weerbron, en dan
-weet je welke bron de bewolking goed ordent.
+2. Het dagverloop zet "handmatig_<stand>" in de kwartierregel zolang
+   jij stuurt, en de nabeschouwing meldt hoeveel kwartieren dat waren.
+   Jouw handmatige lading van 13 september zat in het gemiste bedrag
+   van die dag als EMS-beslissing; dat gebeurt niet meer.
+
+3. De zelfcontrole "nacht gecontroleerd" stond onterecht op fout. Die
+   keek naar de accustand in plaats van naar het net, en jouw nacht van
+   17 september was juist perfect - elk kwartier uit de accu, nul
+   netafname. De teller kijkt nu naar het net.
+
+Aan de sturing verandert niets.

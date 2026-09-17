@@ -482,6 +482,11 @@ async def async_get_config_entry_diagnostics(
         # v4.14: wat elke apparaatbeurt kostte en wat de eigen opwek
         # scheelde - de vraag die ha-home-energy-advisor stelt, met de
         # gegevens die dit EMS al had.
+        # v4.18: wat er gebeurde toen de gebruiker zelf stuurde.
+        "handmatige_ingrepen": _veilig(
+            "get_handmatige_ingrepen_overzicht",
+            coordinator.get_handmatige_ingrepen_overzicht,
+        ),
         "cycluskosten": _veilig(
             "get_cycluskosten_overzicht", coordinator.get_cycluskosten_overzicht
         ),

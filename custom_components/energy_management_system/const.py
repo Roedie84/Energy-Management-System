@@ -363,6 +363,24 @@ ZONLADING_MIN_EXPORT_W = 200.0
 # hun kosten (v4.14). Twintig is ruim een maand vaatwassen.
 CYCLUSKOSTEN_LENGTE = 20
 
+# Hoeveel handmatige ingrepen er met hun omstandigheden bewaard blijven
+# (v4.18). Gemeld: "Gister moest ik even manueel bijladen, omdat ik de
+# wasmachine en vaatwasser aan had. Hoe kun je hier van leren?" - en toen
+# bleek dat de export alleen twee meldingen bewaarde, zonder de reserve,
+# het beschikbare of de lopende apparaten. Twintig ingrepen is genoeg om
+# een patroon te zien zonder de opslag te laten groeien.
+HANDMATIGE_INGREPEN_LENGTE = 20
+
+# Vanaf hoeveel watt een apparaat als "aan" geldt bij het vastleggen van
+# een handmatige ingreep (v4.18). Laag genoeg voor een vaatwasser die
+# net begint, hoog genoeg om standby niet mee te tellen.
+APPARAAT_AAN_DREMPEL_W = 100.0
+
+# Vanaf hoeveel watt netafname een nachtronde niet meer zelfvoorzienend
+# is (v4.18). Vijftig watt is meetruis - de Zendure levert structureel
+# iets meer dan het huis vraagt, dus het net staat dan licht negatief.
+NACHT_ZELFVOORZIENEND_MARGE_W = 50.0
+
 WATERBRONNEN = (
     "toilet",
     "douche",
@@ -2829,6 +2847,8 @@ PERSISTED_PLAIN_FIELDS = (
     "woonkamertemp_gemeten_per_uur",
     # v4.14: de kosten per afgeronde apparaatbeurt.
     "cycluskosten_geschiedenis",
+    # v4.18: de handmatige ingrepen met hun omstandigheden.
+    "handmatige_ingrepen",
     # v4.15: "vandaag al klaar" per apparaat. Zonder bewaring begint het
     # laden na een herstart opnieuw en komt de melding opnieuw - twee
     # keer "Steelstofzuiger opgeladen" binnen een half uur op 15
