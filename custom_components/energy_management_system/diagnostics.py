@@ -483,9 +483,14 @@ async def async_get_config_entry_diagnostics(
         # scheelde - de vraag die ha-home-energy-advisor stelt, met de
         # gegevens die dit EMS al had.
         # v4.18: wat er gebeurde toen de gebruiker zelf stuurde.
-        "handmatige_ingrepen": _veilig(
-            "get_handmatige_ingrepen_overzicht",
-            coordinator.get_handmatige_ingrepen_overzicht,
+        # v4.19: hoe vaak het EMS van reden wisselt, en de vaakst
+        # wisselende paren - zodat dat niet meer met een script hoeft.
+        "redenwissels": _veilig(
+            "get_redenwissels", coordinator.get_redenwissels
+        ),
+        "eigen_ingrepen": _veilig(
+            "get_eigen_ingrepen_overzicht",
+            coordinator.get_eigen_ingrepen_overzicht,
         ),
         "cycluskosten": _veilig(
             "get_cycluskosten_overzicht", coordinator.get_cycluskosten_overzicht

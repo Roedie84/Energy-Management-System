@@ -25508,3 +25508,329 @@ dezelfde regel - dus kijkt de teller nu daarnaar. Geen enkele naam meer
 nodig, en deze fout kan niet een derde keer terugkomen.
 
 **Volledige testsuite**: 3855 tests, allemaal groen.
+
+
+## v4.18.1 — Twee dingen in één veld
+
+Gevonden in de export, één uur na de installatie van v4.18:
+
+```
+handmatige_ingrepen: {"aantal": 7, "ingrepen": [
+  {"moment": "2026-08-30T13:54", "ems_wilde": "smart_discharging",
+   "werkelijk": "smart", "reden_ems": "discharging_window", ...
+```
+
+Dat is niet wat v4.18 vastlegt. De naam `handmatige_ingrepen` bestaat
+sinds v3.99.9 al, voor de VALSE ingrepen: rondes waarin de accustand
+afwijkt van wat het EMS wilde. Mijn registratie van wat de GEBRUIKER
+doet schreef in diezelfde lijst, en in de export stond de sleutel twee
+keer - de ene overschreef de andere.
+
+Twee schrijvers in één veld. Dat is precies het patroon dat ik deze
+week vier keer heb aangewezen: twee reserves, twee kandidatenlijsten,
+twee modellen in de nabeschouwing, twee parenvormen. En toen ik er zelf
+een vijfde bij maakte, viel het pas op in de eerste export.
+
+Mijn registratie heet nu `eigen_ingrepen`: wat de gebruiker zelf deed.
+De valse ingrepen houden hun naam en hun lezers.
+
+### En bij het omdopen verwijderde ik de verkeerde regel
+
+De initialisatie `self.handmatige_ingrepen: list[dict] = []` stond op
+een eigen regel, die van v3.99.9. Bij het opruimen van mijn eigen
+toevoeging heb ik die weggehaald, en vier toetsen over herstarten
+vielen om met "object has no attribute". De suite ving het; hij staat
+weer terug.
+
+### De ratel
+
+Twee dingen: geen dubbele sleutel in enig dict in `diagnostics.py`, en
+precies één schrijver per lijst. Dat had dit gevangen voordat het
+geleverd werd.
+
+**Volledige testsuite**: 3856 tests, allemaal groen.
+
+
+## v4.19 — Ratels tegen de naamcollisies, en één echt gat
+
+Gevraagd na v4.18: niet alleen de naam repareren, maar het EMS
+structureel harder maken tegen dit soort fouten. Zeven punten. Wat
+daarvan gebouwd is, wat niet, en waarom.
+
+### Eerst de waarnemingen nagekeken
+
+**Punt 3 klopte.** In de export van 17 september om 00:04 stond
+"Onbekende reden: solar_capture_deferred". Die reden zat in
+REASON_TO_MODE en in de Nederlandse woordenlijst, maar
+`_build_explanation` kende hem niet. Beslisboom en uitleglaag stonden
+inderdaad niet synchroon.
+
+**Punt 4 klopte niet.** Gemeten over zes dagen dagverloop: 1, 2, 2, 5,
+12 en 12 redenwissels per dag. Het paar arbitrage/discharging komt
+maximaal vier keer per dag voor, niet tientallen. Twaalf wissels op 96
+kwartieren is een dag met wolkenvelden. Maar dat was niet te zien zonder
+een script erbij - dus de diagnostiek komt er wel.
+
+**Punt 5 kon ik niet nakijken**: `digital_twin` is `null` in deze
+export. De genoemde 0,481 en 1,61 kWh komen ergens anders vandaan.
+
+### De gevraagde ratel keurde 41 terechte plekken af
+
+`assert_exactly_one_writer` over alle persistente datasets: 41 velden
+hebben meer dan één schrijvende functie, en vrijwel allemaal terecht -
+een resetter, een bootstrapper, een dagwisselaar, een bevestig/verwerp-
+paar. Zo'n ratel wordt binnen een dag uitgezet.
+
+Het gemeenschappelijke in de zes incidenten is niet het aantal
+schrijvers maar TWEE BETEKENISSEN IN ÉÉN BAK:
+
+```
+v4.18    handmatige_ingrepen: valse ingrepen + eigen ingrepen
+v4.17.1  weerbron_helderheid_paren: vier- en vijf-velds paren
+v4.12    nabeschouwing: bodem-model en poort-model
+v4.13    kandidaten: oude en nieuwe telling
+v4.1     reserve: drie lezers met elk hun eigen berekening
+```
+
+Dus toetst de ratel de VORM: records in één bewaarde lijst moeten een
+overlappende sleutelverzameling hebben. Disjuncte sleutels betekent twee
+eigenaren.
+
+### En daar kwam de derde collisie uit
+
+Bij het bouwen van de wisseldiagnostiek noemde ik de functie
+`get_moduswissels` - een naam die sinds v3.87.0 al bestond voor het
+overzicht van de moduswisselmeldingen. Python neemt stilzwijgend de
+laatste en de eerste verdwijnt zonder waarschuwing. Zeven toetsen vielen
+om met `KeyError`.
+
+Dat is dezelfde fout als `handmatige_ingrepen` in v4.18, twee dagen
+eerder, terwijl ik aan de ratel daartegen werkte. Mijn functie heet nu
+`get_redenwissels`.
+
+Er staat nu een ratel op dubbele methodenamen per klasse en op dubbel
+gezette velden in `__init__`, met properties en hun setters uitgezonderd.
+Die twee toetsen kosten een seconde en hadden twee van de drie collisies
+gevangen.
+
+### Punt 3: één tabel in plaats van een tak
+
+De grootte-ratel op `_build_explanation` dwong de goede oplossing af: hij
+mag niet groeien, dus kon er geen tak bij. In plaats daarvan is er nu
+`REDEN_UITLEG` in `const.py` - een tabel voor redenen waarvan de uitleg
+geen getallen nodig heeft. Een nieuwe reden toevoegen is daar één regel.
+
+De redenen waarvan de uitleg wél getallen nodig heeft (prijzen, kWh,
+tijden) houden hun eigen tak; die kunnen geen tabel worden zonder de
+getallen kwijt te raken.
+
+Daaronder een GEDRAGSTOETS: elke reden uit REASON_TO_MODE en
+REDENEN_ZONDER_STAND wordt door `_build_explanation` gehaald, en er mag
+geen "Onbekende reden" uit komen. Een tekstuele toets op de redennaam
+slaagde ten onrechte - de naam kan in een opmerking staan.
+
+### Punt 4: de diagnostiek
+
+`get_redenwissels` geeft de wissels over 24 uur en zeven dagen, de drie
+vaakst wisselende paren, en een oordeel. De grens staat op dertig per
+dag - ruim boven de twaalf die gemeten is, want anders waarschuwt de
+integratie over normaal weer.
+
+### Punt 2: de exportcontrole
+
+Dubbele sleutels in enig dict in `diagnostics.py`, `coordinator.py` en
+`sensor.py`; verweesde datasets (bewaard maar nergens gelezen);
+dataset-vormen. Alle drie als toets, niet als runtime-controle: een
+export die zichzelf valideert meldt de fout aan de gebruiker, een toets
+voorkomt dat hij geleverd wordt.
+
+### Wat NIET gebouwd is, en waarom
+
+**"Geen component mag rechtstreeks coordinator-attributen benaderen."**
+Dat is een herschrijving van 35.000 regels en 344 toetsbestanden, en het
+lost niets op wat de vormratel en de naamratels niet al vangen. Het staat
+in het v5-ontwerp als doel.
+
+**Punt 6, dashboard-contracttests.** De bestaande
+`get_dashboard_health` controleert al of elke gelezen sensor en elk
+attribuut bestaat - dat ving deze week de kaart die `cycluskosten` las
+voordat het attribuut er was. Wat er niet is, is een controle op de
+STRUCTUUR binnen een attribuut. Dat is zinvol, maar het vergt een
+beschrijving per kaart van wat hij verwacht, en die beschrijving is een
+tweede bron van waarheid naast de kaart zelf - precies het patroon dat
+we hier bestrijden. Dat hoort bij v5, waar de kaart uit de registry
+wordt gegenereerd.
+
+**Punt 5, de forecastprioriteit.** Daar ben ik het mee eens, en de
+meting steunt het: na v4.12 valt het gemiste bedrag vrijwel volledig op
+de voorspelling (0,87 van 0,92 euro op 10 september) en niet op de
+reserve. Dat is geen code maar een afspraak: geen optimalisatie aan de
+accusimulatie zolang de voorspelfout niet aantoonbaar daalt.
+
+**Punt 7, de Decision Registry.** Het ontwerp staat in
+`docs/ONTWIKKELING.md`. `REDEN_UITLEG` is de eerste steen: één plek voor
+de uitleg. De volgende stappen zijn de stand, de meldingstitel en het
+advies daar naartoe brengen, en dan de kaart eruit genereren. Dat is een
+reeks van vier of vijf versies, geen enkele wijziging.
+
+**Volledige testsuite**: 3870 tests, allemaal groen.
+
+
+## v4.20 — REASON_REGISTRY: één bron, geen tabel erbij
+
+Gevraagd: "Ik wil dat je dit niet oplost met nóg een mapping."
+
+Dat was precies wat ik in v4.19 deed. `REDEN_UITLEG` was een vijfde
+kopie van hetzelfde begrip - het patroon vergroot in plaats van
+opgeheven. Terechte correctie.
+
+### Wat er nu is
+
+`REASON_REGISTRY` in `const.py`: vijftien redenen, elk met `mode`,
+`titel`, `uitleg` en `ernst`. Alles wat een reden BESCHRIJFT staat daar.
+
+En het belangrijkste: `REASON_TO_MODE` is geen eigen lijst meer maar
+wordt eruit AFGELEID:
+
+```python
+REASON_TO_MODE = {
+    reden: g["mode"]
+    for reden, g in REASON_REGISTRY.items()
+    if g["mode"] is not None
+}
+```
+
+Dat is het verschil tussen een tabel erbij en een tabel eruit. Een toets
+vergelijkt de afgeleide met de registry en eist dat de toewijzing zelf
+uit de registry komt - niet uit een handmatige lijst die er toevallig
+gelijk aan is.
+
+`REDEN_UITLEG` bestaat niet meer. `_build_explanation` leest de registry.
+
+### De gevraagde ratel
+
+`test_all_reasons_registered()` leest de CODE in plaats van een lijst te
+onderhouden: elke `self.last_reason = "..."` in de coordinator moet in de
+registry staan. En de andere kant ook - een reden in de registry die
+nergens wordt gezet, is dode uitleg die bij een hernoeming meeliegt.
+
+Daarnaast blijft de gedragstoets: elke reden door `_build_explanation`
+halen en eisen dat er geen "Onbekende reden" uit komt.
+
+### Wat de registry nog NIET levert
+
+Eerlijk over de grens van deze versie. De registry levert de stand, de
+uitleg, de titel en de ernst. Wat er nog niet uit komt:
+
+- de meldingssoort per reden (die zit in `NOTIFICATION_TYPES`)
+- het advies "waardoor / wat te doen" (dat zit in `MELDING_ADVIES`)
+- de dashboardregel
+
+Voor tien van de vijftien redenen is de uitleg bovendien opgebouwd MET
+GETALLEN - prijzen, kWh, tijden. Die hebben naast hun registry-tekst nog
+een eigen tak in `_build_explanation` die de getallen toevoegt; dat is
+in de registry gemarkeerd met `"getallen": True`. Die takken kunnen geen
+vaste tekst worden zonder de uitleg zijn waarde te ontnemen.
+
+Dus: een nieuwe reden toevoegen is nu één regel in de registry in plaats
+van vier plekken, mits de uitleg geen getallen nodig heeft. Heeft hij die
+wel, dan is het twee plekken. Dat is de eerlijke stand; het ontwerp voor
+de rest staat in `docs/ONTWIKKELING.md`.
+
+### Punt 4: vier observatiemeters, geen ratel
+
+Zoals afgesproken - eerst meten:
+
+```
+wissels_24h                       redenwissels vandaag
+wissels_7d                        over zeven dagen
+meest_gewisselde_paren            de drie vaakste paren
+gemiddelde_tijd_in_reden_minuten  1440 / het aantal blokken
+tijd_per_reden_minuten            per reden apart
+```
+
+Dat vierde getal is het getal dat zegt of wissels geklapper zijn. Vier
+wissels op een dag is gemiddeld zes uur per reden - rustig.
+Vierentwintig wissels is een uur, en dan is er iets aan de hand. Op
+jouw drukste dag (12 wissels) is het ongeveer twee uur.
+
+Er wordt niets op gestuurd. Geen hysterese voordat bewezen is dat die
+nodig is.
+
+**Volledige testsuite**: 3882 tests, allemaal groen.
+
+
+## v4.21 — De vier redentabellen zijn afgeleiden
+
+Uit de architectuuraudit: `REASON_REGISTRY` uit v4.20 bleek zelf één van
+vijf tabellen die op dezelfde sleutel indexeerden.
+
+```
+DECISION_REASON_LABELS  16   "Zon opvangen uitgesteld (betere prijs nu)"
+WHY_QUESTIONS           16   "Waarom laad je nu nog niet?"
+REDEN_KORTE_NAAM        11   "huis dekken, zon later"
+MODE_CHANGE_EMOJI       10   "⏳"
+```
+
+Alle vier met 100% sleuteloverlap. Ze zijn nu comprehensies over de
+registry: `label`, `waarom_vraag`, `korte_naam` en `emoji` staan per
+reden in `REASON_REGISTRY`, en de vier tabellen worden eruit afgeleid.
+Uiteenlopen kan niet meer. Een toets eist dat de definitie zelf de
+registry noemt - een handmatige lijst die toevallig gelijk is, is geen
+afgeleide.
+
+### Een onderscheid dat ik pas bij het bouwen vond
+
+`DECISION_REASON_LABELS` en `WHY_QUESTIONS` hadden zestien sleutels
+tegen vijftien in de registry, en ik noemde dat in de audit "al één
+afwijking". Dat was het niet.
+
+De zestiende is `grid_cheaper_than_battery`, en die wordt GEMETEN en
+UITGELEGD maar stuurt nooit - er staat sinds v1.x een toets op die eist
+dat hij nooit als `last_reason` wordt gezet. Die twee tabellen indexeren
+dus VERKLAARBARE TOESTANDEN, en dat is een ruimere verzameling dan
+stuurredenen.
+
+Hij staat nu in de registry met `stuurt: False`, buiten
+`REASON_TO_MODE`, met een toets die vasthoudt dat hij daar niet in komt.
+
+### En een auditbevinding die fout was
+
+De audit meldde zes meldingen zonder Achterhoekse titel:
+`appliance_ready`, `appliance_cheap_moment`, `device_drift`,
+`handmatige_stand`, `mode_change`, `proefstand_rijp`. Ik heb er titels
+bij gezet - en de bestaande toets keurde dat meteen af.
+
+Die zes BOUWEN hun titel op uit wat er gebeurde: "🧹 Steelstofzuiger
+opgeladen" noemt het apparaat, `mode_change` noemt de stand. Een vaste
+titel gooit die informatie weg, en daar staat sinds v1.x een toets op.
+
+Dat is precies waar die audit zelf voor waarschuwde: *een
+verschillenrapport vertelt je waar je moet kijken, niet hoe belangrijk
+het probleem is.* Ik heb het rapport gelezen als een gatenlijst en mijn
+eigen les genegeerd. De toets ving het.
+
+De zes staan nu in `TITEL_WORDT_OPGEBOUWD` en de drie logcategorieën
+(`besluit`, `energiebrug`, `terugval`) in `LOG_CATEGORIEEN_GEEN_MELDING`
+- benoemd, zodat een volgende audit ze niet opnieuw als divergentie
+leest.
+
+### Wat de meldingstabellen nu afdwingen
+
+- elke melding heeft een advies (sloot al precies)
+- elke melding heeft een logprioriteit
+- elke melding heeft een Achterhoekse titel óf bouwt hem op
+- geen titel voor iets dat geen melding is
+
+Dat is FASE A3 uit de afspraak, zonder `NOTIFICATION_REGISTRY` te
+bouwen. De contracten leveren de winst; de registry zou vooral
+verplaatsing zijn.
+
+### Wat er niet in zit
+
+`PERSISTED_FIELDS` declaratief maken en de vier bestaande laadconversies
+expliciteren - fase A2 en A3 in jouw nummering. Die staan ongewijzigd op
+de lijst. De inventory over alle 187 velden is gedaan en gaf nul
+afwijkingen, dus daar is geen haast.
+
+**Volledige testsuite**: 3891 tests, allemaal groen.

@@ -239,26 +239,6 @@ APPARAAT_INSTELLINGEN = (
 # hoger en een enkele goede dag wist het patroon uit.
 PV_FOUT_EENZIJDIG_AANDEEL = 0.7
 
-# Wat de accu DOET, per reden (v3.99.7).
-#
-# Gemeld: "Accu: handmatig" bij een melding die zegt dat de accu
-# verkoopt. Handmatig is de stand; laden uit het net en verkopen tegen
-# de dure prijs hebben allebei die stand, en dat zijn tegengestelde
-# dingen. De reden weet het wel.
-REDEN_KORTE_NAAM = {
-    "expensive_quarter": "verkopen",
-    "expensive_quarter_soc_protected": "verkopen (met reserve)",
-    "grid_charging_low_solar": "laden uit het net",
-    "grid_charging_low_solar_extra_dip": "laden uit het net (dip)",
-    "emergency_low_battery": "noodlading",
-    "negative_price": "laden, negatieve prijs",
-    "discharging_window": "huis dekken",
-    "default_smart": "slim",
-    "arbitrage_solar_capture": "zon opvangen",
-    "solar_capture_deferred": "huis dekken, zon later",
-    "no_forecast_data": "geen prijsdata",
-}
-
 MODUS_KORTE_NAAM = {
     "smart_discharging": "ontladen",
     "smart_charging": "laden uit het net",
@@ -267,19 +247,6 @@ MODUS_KORTE_NAAM = {
     "idle": "stil",
     "charging": "laden",
     "discharging": "ontladen",
-}
-
-MODE_CHANGE_EMOJI = {
-    "expensive_quarter": "💰⬇️",
-    "expensive_quarter_soc_protected": "🛡️",
-    "grid_charging_low_solar": "⚡⬆️",
-    "grid_charging_low_solar_extra_dip": "⚡🔎",
-    "emergency_low_battery": "🚨",
-    "negative_price": "🎁⬆️",
-    "discharging_window": "⏳",
-    "arbitrage_solar_capture": "☀️",
-    "default_smart": "🤖",
-    "no_forecast_data": "⚠️",
 }
 CONF_SOLAR_FORECAST_SENSOR = "solar_forecast_sensor_entity"
 CONF_SOLAR_TODAY_FORECAST_SENSOR = "solar_today_forecast_sensor_entity"
@@ -369,7 +336,7 @@ CYCLUSKOSTEN_LENGTE = 20
 # bleek dat de export alleen twee meldingen bewaarde, zonder de reserve,
 # het beschikbare of de lopende apparaten. Twintig ingrepen is genoeg om
 # een patroon te zien zonder de opslag te laten groeien.
-HANDMATIGE_INGREPEN_LENGTE = 20
+EIGEN_INGREPEN_LENGTE = 20
 
 # Vanaf hoeveel watt een apparaat als "aan" geldt bij het vastleggen van
 # een handmatige ingreep (v4.18). Laag genoeg voor een vaatwasser die
@@ -380,6 +347,13 @@ APPARAAT_AAN_DREMPEL_W = 100.0
 # is (v4.18). Vijftig watt is meetruis - de Zendure levert structureel
 # iets meer dan het huis vraagt, dus het net staat dan licht negatief.
 NACHT_ZELFVOORZIENEND_MARGE_W = 50.0
+
+# Vanaf hoeveel redenwissels per dag het geklapper heet (v4.19).
+# Gemeten over zes dagen: 1, 2, 2, 5, 12, 12. Twaalf wissels op 96
+# kwartieren is een dag met wolkenvelden, geen geklapper - de grens
+# staat daar bewust ruim boven.
+MODUSWISSELS_TE_VEEL_PER_DAG = 30
+
 
 WATERBRONNEN = (
     "toilet",
@@ -1874,28 +1848,6 @@ APPLIANCE_POWER_SAMPLE_LIMIT = 60
 # vertrouwen en blijft de eindtijd staan, mét kanttekening - een duur
 # verzinnen is erger dan een moment dat een uur naast zit.
 APPLIANCE_MIN_PLAUSIBLE_CYCLE_MINUTES = 30.0
-
-# De vraag boven het antwoord, per beslisreden - "Waarom laad je nu?"
-# leest anders dan "Waarom verkoop je nu?", en dat verschil is het halve
-# antwoord.
-WHY_QUESTIONS = {
-    "expensive_quarter": "Waarom verkoop je nu?",
-    "expensive_quarter_no_own_load": "Waarom verkoop je nu?",
-    "expensive_quarter_soc_protected": "Waarom verkoop je nu niet?",
-    "solar_capture_deferred": "Waarom laad je nu nog niet?",
-    "grid_cheaper_than_battery": "Waarom gebruik je de accu nu niet?",
-    "grid_charging_low_solar": "Waarom laad je nu uit het net?",
-    "grid_charging_low_solar_extra_dip": "Waarom laad je nu uit het net?",
-    "discharging_window": "Waarom ontlaad je nu?",
-    "emergency_low_battery": "Waarom laad je met spoed?",
-    "negative_price": "Waarom laad je nu hard?",
-    "arbitrage_solar_capture": "Waarom laad je nu?",
-    "post_salderen_solar_capture": "Waarom laad je nu?",
-    "force_manual": "Waarom doet de aansturing niets?",
-    "kalibratie": "Waarom doet de aansturing niets?",
-    "no_forecast_data": "Waarom gebeurt er niets?",
-    "default_smart": "Waarom doet de accu dit nu?",
-}
 OPTION_MANUAL = "manual"
 
 # Maps the final coordinator.last_reason (decided only after headroom/
@@ -1906,25 +1858,292 @@ OPTION_MANUAL = "manual"
 # discharge" guess back to smart - without this correction, the
 # displayed "Verwachte modus" could disagree with what was actually
 # decided.
-REASON_TO_MODE = {
-    "expensive_quarter": OPTION_MANUAL,
-    "expensive_quarter_soc_protected": OPTION_SMART,
-    "negative_price": OPTION_MANUAL,
-    "emergency_low_battery": OPTION_MANUAL,
-    "grid_charging_low_solar": OPTION_MANUAL,
-    "grid_charging_low_solar_extra_dip": OPTION_MANUAL,
-    "discharging_window": OPTION_SMART_DISCHARGING,
-    "arbitrage_solar_capture": OPTION_SMART,
-    "default_smart": OPTION_SMART,
-    # v3.99.13: de vier die ontbraken. Zonder deze bleef
-    # `last_expected_mode` op de vorige ronde staan, en de ingreep-
-    # detector vergeleek de accu dan met een stand van een andere reden.
-    "solar_capture_deferred": OPTION_SMART_DISCHARGING,
-    "post_salderen_solar_capture": OPTION_SMART,
-    "expensive_quarter_no_own_load": OPTION_SMART,
-    "kalibratie": OPTION_MANUAL,
-    "force_manual": OPTION_MANUAL,
+# --- De beslisredenen: één bron ------------------------------------
+#
+# Gevraagd na "Onbekende reden: solar_capture_deferred" in de export:
+# "Ik wil dat je dit niet oplost met nóg een mapping. Ontwerp een
+# centrale REASON_REGISTRY als enige waarheid."
+#
+# Dat begrip lag op vier plekken: de tak die de reden zet,
+# `REASON_TO_MODE` voor de accustand, `_build_explanation` voor de
+# uitleg, en de woordenlijst voor de titel. In v4.19 voegde ik daar
+# `REDEN_UITLEG` aan toe - een vijfde kopie, dus het patroon vergroot
+# in plaats van opgeheven.
+#
+# Hier staat nu alles wat een reden BESCHRIJFT. `REASON_TO_MODE` wordt
+# hieronder AFGELEID; het is geen eigen lijst meer.
+#
+# Velden:
+#   mode    welke accustand erbij hoort
+#   titel   korte naam, voor kaart en melding
+#   uitleg  de basistekst. Redenen waarvan de uitleg GETALLEN nodig
+#           heeft (prijzen, kWh, tijden) hebben daarnaast een eigen tak
+#           in `_build_explanation` die hier bovenop komt; dat is
+#           gemarkeerd met "getallen": True.
+#   ernst   info | aandacht | ingrijpend - hoe zwaar de ingreep is
+#
+# Een reden toevoegen is één regel hier. Een vergeten veld is een fout
+# in de toets, niet een stille misser in een export.
+REASON_REGISTRY: dict[str, dict] = {
+    "no_forecast_data": {
+        "mode": None,
+        "titel": "Geen prijsgegevens",
+        "uitleg": (
+            "Er is geen prijsreeks beschikbaar, dus er valt niets te "
+            "plannen. De accu blijft staan waar hij stond."
+        ),
+        "ernst": "aandacht",
+        "label": "geen prijsvoorspelling",
+        "waarom_vraag": "Waarom gebeurt er niets?",
+        "korte_naam": "geen prijsdata",
+        "emoji": "⚠️",
+    },
+    "kalibratie": {
+        "mode": OPTION_MANUAL,
+        "titel": "Kalibratie",
+        "uitleg": (
+            "De kalibratie loopt: de accu wordt in één keer volgeladen om "
+            "de werkelijke capaciteit te meten. Zolang dit aan staat "
+            "stuurt de integratie niet op prijs."
+        ),
+        "ernst": "ingrijpend",
+        "label": "kalibratie van de accu",
+        "waarom_vraag": "Waarom doet de aansturing niets?",
+    },
+    "force_manual": {
+        "mode": OPTION_MANUAL,
+        "titel": "Handmatige overname",
+        "uitleg": (
+            "De handmatige schakelaar staat aan: de integratie doet nu "
+            "niets en laat de accu ongemoeid."
+        ),
+        "ernst": "ingrijpend",
+        "label": "handmatig overschreven",
+        "waarom_vraag": "Waarom doet de aansturing niets?",
+    },
+    "negative_price": {
+        "mode": OPTION_MANUAL,
+        "titel": "Negatieve prijs",
+        "uitleg": (
+            "De stroomprijs is negatief: opnemen levert geld op, dus de "
+            "accu laadt op vol vermogen."
+        ),
+        "ernst": "ingrijpend",
+        "getallen": True,
+        "label": "negatieve prijs",
+        "waarom_vraag": "Waarom laad je nu hard?",
+        "korte_naam": "laden, negatieve prijs",
+        "emoji": "🎁⬆️",
+    },
+    "post_salderen_solar_capture": {
+        "mode": OPTION_SMART,
+        "titel": "Zon opvangen na de saldering",
+        "uitleg": (
+            "Terugleveren levert minder op dan zelf gebruiken, dus het "
+            "overschot gaat naar de accu in plaats van naar het net."
+        ),
+        "ernst": "info",
+        "getallen": True,
+        "label": "zon opvangen na saldering",
+        "waarom_vraag": "Waarom laad je nu?",
+    },
+    "emergency_low_battery": {
+        "mode": OPTION_MANUAL,
+        "titel": "Accu bijna leeg",
+        "uitleg": (
+            "De accu staat op zijn ondergrens. Er wordt bijgeladen, ook "
+            "als de prijs niet gunstig is - leeg blijven is duurder."
+        ),
+        "ernst": "ingrijpend",
+        "getallen": True,
+        "label": "noodladen bij lage accu",
+        "waarom_vraag": "Waarom laad je met spoed?",
+        "korte_naam": "noodlading",
+        "emoji": "🚨",
+    },
+    "expensive_quarter_no_own_load": {
+        "mode": OPTION_SMART,
+        "titel": "Duur kwartier, geen eigen verbruik",
+        "uitleg": (
+            "Het kwartier is duur, maar het huis vraagt vrijwel niets. "
+            "Verkopen levert dan minder op dan de slijtage kost."
+        ),
+        "ernst": "info",
+        "getallen": True,
+        "label": "duur kwartier, geen eigen verbruik",
+        "waarom_vraag": "Waarom verkoop je nu?",
+    },
+    "expensive_quarter_soc_protected": {
+        "mode": OPTION_SMART,
+        "titel": "Duur kwartier, reserve beschermd",
+        "uitleg": (
+            "Het kwartier is duur, maar er is te weinig boven de reserve "
+            "om te verkopen zonder de nacht in gevaar te brengen."
+        ),
+        "ernst": "info",
+        "getallen": True,
+        "label": "duur kwartier, accu beschermd",
+        "waarom_vraag": "Waarom verkoop je nu niet?",
+        "korte_naam": "verkopen (met reserve)",
+        "emoji": "🛡️",
+    },
+    "expensive_quarter": {
+        "mode": OPTION_MANUAL,
+        "titel": "Duur kwartier",
+        "uitleg": (
+            "Het kwartier is duur genoeg om te verkopen: de accu levert "
+            "aan het net."
+        ),
+        "ernst": "ingrijpend",
+        "getallen": True,
+        "label": "duur kwartier",
+        "waarom_vraag": "Waarom verkoop je nu?",
+        "korte_naam": "verkopen",
+        "emoji": "💰⬇️",
+    },
+    "grid_charging_low_solar": {
+        "mode": OPTION_MANUAL,
+        "titel": "Bijladen bij weinig zon",
+        "uitleg": (
+            "Er komt vandaag te weinig zon om de accu te vullen, dus er "
+            "wordt in het goedkope blok uit het net bijgeladen."
+        ),
+        "ernst": "ingrijpend",
+        "getallen": True,
+        "label": "bijladen bij weinig zon",
+        "waarom_vraag": "Waarom laad je nu uit het net?",
+        "korte_naam": "laden uit het net",
+        "emoji": "⚡⬆️",
+    },
+    "grid_charging_low_solar_extra_dip": {
+        "mode": OPTION_MANUAL,
+        "titel": "Bijladen bij een extra prijsdip",
+        "uitleg": (
+            "Bovenop het bijladen bij weinig zon is er een extra dip in "
+            "de prijs die het de moeite waard maakt."
+        ),
+        "ernst": "ingrijpend",
+        "getallen": True,
+        "label": "bijladen bij extra prijsdip",
+        "waarom_vraag": "Waarom laad je nu uit het net?",
+        "korte_naam": "laden uit het net (dip)",
+        "emoji": "⚡🔎",
+    },
+    "solar_capture_deferred": {
+        "mode": OPTION_SMART_DISCHARGING,
+        "titel": "Zon opvangen uitgesteld",
+        "uitleg": (
+            "Zon opvangen is bewust uitgesteld: er komt later vandaag "
+            "genoeg zon om de accu te vullen, en tot dan levert het "
+            "overschot meer op tegen de huidige prijs. De accu dekt "
+            "intussen het huis."
+        ),
+        "ernst": "info",
+        "label": "Zon opvangen uitgesteld (betere prijs nu)",
+        "waarom_vraag": "Waarom laad je nu nog niet?",
+        "korte_naam": "huis dekken, zon later",
+    },
+    "arbitrage_solar_capture": {
+        "mode": OPTION_SMART,
+        "titel": "Zon opvangen",
+        "uitleg": (
+            "Er is een zonoverschot en de accu heeft ruimte: het "
+            "overschot gaat naar de accu."
+        ),
+        "ernst": "info",
+        "getallen": True,
+        "label": "zonoverschot opvangen",
+        "waarom_vraag": "Waarom laad je nu?",
+        "korte_naam": "zon opvangen",
+        "emoji": "☀️",
+    },
+    "discharging_window": {
+        "mode": OPTION_SMART_DISCHARGING,
+        "titel": "Huis dekken uit de accu",
+        "uitleg": (
+            "De accu dekt het huisverbruik: dat is nu goedkoper dan van "
+            "het net afnemen."
+        ),
+        "ernst": "info",
+        "getallen": True,
+        "label": "ontladen in duur blok",
+        "waarom_vraag": "Waarom ontlaad je nu?",
+        "korte_naam": "huis dekken",
+        "emoji": "⏳",
+    },
+    "default_smart": {
+        "mode": OPTION_SMART,
+        "titel": "Accu beslist zelf",
+        "uitleg": (
+            "Er is geen bijzondere reden om in te grijpen: de prijs is "
+            "niet uitzonderlijk en het goedkope blok is gaande of "
+            "voorbij. De accu regelt dit zelf."
+        ),
+        "ernst": "info",
+        "getallen": True,
+        "label": "standaard slim laden",
+        "waarom_vraag": "Waarom doet de accu dit nu?",
+        "korte_naam": "slim",
+        "emoji": "🤖",
+    },
+    # v4.21: GEEN stuurreden - `_net_is_goedkoper_dan_de_accu` MEET deze
+    # vergelijking en legt hem uit, maar zet hem nooit als `last_reason`;
+    # daar staat een toets op sinds v1.x. Hij hoort wel in deze tabel,
+    # want de uitleglaag indexeert VERKLAARBARE TOESTANDEN en dat is een
+    # ruimere verzameling dan stuurredenen. Vandaar `stuurt: False`.
+    "grid_cheaper_than_battery": {
+        "mode": None,
+        "stuurt": False,
+        "titel": "Net goedkoper dan de accu",
+        "uitleg": (
+            "Stroom van het net is nu goedkoper dan wat er in de accu "
+            "zit: de accu wordt vastgehouden voor later."
+        ),
+        "ernst": "info",
+        "label": "net goedkoper dan de accu (accu vasthouden)",
+        "waarom_vraag": "Waarom gebruik je de accu nu niet?",
+    },
 }
+
+# Afgeleid, geen eigen lijst: de standvertaling komt uit de registry.
+# Redenen met `mode: None` passen niets toe en blijven daarbuiten -
+# dat is wat REDENEN_ZONDER_STAND uitdrukt.
+REASON_TO_MODE = {
+    reden: gegevens["mode"]
+    for reden, gegevens in REASON_REGISTRY.items()
+    if gegevens["mode"] is not None
+}
+
+# v4.21: de vier tabellen die op dezelfde sleutel indexeerden, zijn nu
+# AFGELEIDEN van de registry. Ze blijven bestaan omdat er lezers op
+# zitten, maar uiteenlopen kan niet meer.
+#
+# Dat `DECISION_REASON_LABELS` en `WHY_QUESTIONS` zestien sleutels
+# hadden tegen vijftien in de registry, was GEEN fout: ze indexeren
+# VERKLAARBARE TOESTANDEN, en dat is een ruimere verzameling dan
+# stuurredenen. `grid_cheaper_than_battery` wordt gemeten en uitgelegd
+# maar stuurt nooit - daar staat sinds v1.x een toets op. Die staat nu
+# in de registry met `stuurt: False`.
+DECISION_REASON_LABELS = {
+    reden: g["label"] for reden, g in REASON_REGISTRY.items() if g.get("label")
+}
+
+WHY_QUESTIONS = {
+    reden: g["waarom_vraag"]
+    for reden, g in REASON_REGISTRY.items()
+    if g.get("waarom_vraag")
+}
+
+REDEN_KORTE_NAAM = {
+    reden: g["korte_naam"]
+    for reden, g in REASON_REGISTRY.items()
+    if g.get("korte_naam")
+}
+
+MODE_CHANGE_EMOJI = {
+    reden: g["emoji"] for reden, g in REASON_REGISTRY.items() if g.get("emoji")
+}
+
 
 # Redenen die NIETS toepassen (v3.99.13): de accu blijft staan waar hij
 # stond, en `last_expected_mode` blijft dan terecht op de vorige ronde.
@@ -2219,6 +2438,32 @@ LOG_PRIO_INFO = "info"
 # geld of comfort verloren, of de integratie doet iets anders dan
 # bedoeld. Aandacht: het vraagt een beslissing maar niet nu. Info: het
 # hoort erbij en is achteraf nuttig.
+
+# v4.21: drie sleutels in LOG_PRIORITEITEN zijn logCATEGORIEËN en geen
+# meldingen. Die tabel indexeert dus twee dingen. Dat mag, maar het
+# hoort benoemd te zijn - anders leest een volgende audit het als
+# divergentie, precies wat er bij de 43-tegen-39 gebeurde.
+LOG_CATEGORIEEN_GEEN_MELDING = ("besluit", "energiebrug", "terugval")
+
+# v4.21: en deze zes meldingen hebben BEWUST geen vaste Achterhoekse
+# titel, want ze bouwen hun titel op uit wat er gebeurde: "Steelstofzuiger
+# opgeladen" noemt het apparaat, `mode_change` noemt de stand. Een vaste
+# titel zou die informatie weggooien; daar staat sinds v1.x een toets op.
+#
+# De architectuuraudit meldde ze als "zes ontbrekende titels" en ik heb
+# ze er bijna ingezet. Dat is precies waar die audit zelf voor
+# waarschuwde: een verschillenrapport zegt waar je moet kijken, niet hoe
+# belangrijk het is. Nu staan ze hier, zodat de volgende audit het niet
+# opnieuw als divergentie leest.
+TITEL_WORDT_OPGEBOUWD = (
+    "appliance_ready",
+    "appliance_cheap_moment",
+    "device_drift",
+    "handmatige_stand",
+    "mode_change",
+    "proefstand_rijp",
+)
+
 LOG_PRIORITEITEN = {
     # Kritiek - hier gaat iets mis.
     "interne_fout": LOG_PRIO_KRITIEK,
@@ -2847,8 +3092,10 @@ PERSISTED_PLAIN_FIELDS = (
     "woonkamertemp_gemeten_per_uur",
     # v4.14: de kosten per afgeronde apparaatbeurt.
     "cycluskosten_geschiedenis",
-    # v4.18: de handmatige ingrepen met hun omstandigheden.
-    "handmatige_ingrepen",
+    # v4.18: wat de gebruiker zelf deed, met de omstandigheden.
+    # NIET "handmatige_ingrepen": die naam is sinds v3.99.9 in gebruik
+    # voor de VALSE ingrepen (accustand wijkt af van wat het EMS wilde).
+    "eigen_ingrepen",
     # v4.15: "vandaag al klaar" per apparaat. Zonder bewaring begint het
     # laden na een herstart opnieuw en komt de melding opnieuw - twee
     # keer "Steelstofzuiger opgeladen" binnen een half uur op 15
@@ -4544,40 +4791,6 @@ SELF_EVAL_RESERVE_TOO_WIDE_RATIO = 0.9
 # Een adviesmodule die na zoveel dagen nog niets heeft opgeleverd, doet
 # vermoedelijk niets - of mist een sensor die niemand heeft opgemerkt.
 SELF_EVAL_IDLE_MODULE_DAYS = 30
-
-# --- Interne codes leesbaar maken (v1.16.2) --------------------------
-# Gevraagd na een reeks kapotte kaarten: "Vooral kijken of er nog meer
-# zaken gerepareerd dienen te worden."
-#
-# Bij een systematische controle bleken drie sensoren interne codes te
-# tonen: "expensive_quarter", "wacht_op_goedkoop_blok". Prima als waarde
-# in de logica - daar wordt op vergeleken - maar op een Nederlands
-# dashboard zegt het niets.
-#
-# Dezelfde fout als bij de energie-check (v1.15.9), die
-# "enough_to_postpone" toonde. Vertalen gebeurt in de WEERGAVE, niet in
-# de sensor: de codes blijven de interne waarheid.
-DECISION_REASON_LABELS = {
-    # v1.22.0: zon opvangen bewust uitgesteld naar een goedkoper uur.
-    "solar_capture_deferred": "Zon opvangen uitgesteld (betere prijs nu)",
-    # v1.55.0: de accu vasthouden omdat het net op dit moment goedkoper
-    # is dan wat een kWh uit de accu kost.
-    "grid_cheaper_than_battery": "net goedkoper dan de accu (accu vasthouden)",
-    "arbitrage_solar_capture": "zonoverschot opvangen",
-    "default_smart": "standaard slim laden",
-    "discharging_window": "ontladen in duur blok",
-    "emergency_low_battery": "noodladen bij lage accu",
-    "expensive_quarter": "duur kwartier",
-    "expensive_quarter_no_own_load": "duur kwartier, geen eigen verbruik",
-    "expensive_quarter_soc_protected": "duur kwartier, accu beschermd",
-    "force_manual": "handmatig overschreven",
-    "kalibratie": "kalibratie van de accu",
-    "grid_charging_low_solar": "bijladen bij weinig zon",
-    "grid_charging_low_solar_extra_dip": "bijladen bij extra prijsdip",
-    "negative_price": "negatieve prijs",
-    "no_forecast_data": "geen prijsvoorspelling",
-    "post_salderen_solar_capture": "zon opvangen na saldering",
-}
 
 APPLIANCE_STATE_LABELS = {
     "wacht_op_goedkoop_blok": "wacht op goedkoop blok",

@@ -1,4 +1,7 @@
-EMS v4.18 - alleen de wijzigingen sinds v4.17.1
+EMS v4.21 - alle wijzigingen sinds v4.18
+
+Bevat v4.18.1, v4.19, v4.20 en v4.21.
+Voor HACS: release met tag v4.21.
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
 
@@ -9,31 +12,48 @@ TE KOPIEREN naar config/custom_components/energy_management_system/
 NAAR DE REPO
 
     README.md, CHANGELOG.md
+    docs/ONTWIKKELING.md        (het registry-ontwerp)
     dashboards/energy_management_system_dashboard.yaml
-    tests/ (vier bestanden, twee nieuw)
+    tests/ (zes bestanden, vier nieuw)
 
-Voor HACS: release met tag v4.18.
+WAT ER VERANDERT IN BEDRIJF
 
-WAT ER VERANDERT
+1. "Onbekende reden: solar_capture_deferred" is weg.
+2. Mijn registratie van jouw ingrepen heet "eigen_ingrepen" - de naam
+   "handmatige_ingrepen" was al in gebruik voor de VALSE ingrepen.
+3. NIEUW in de export: "redenwissels" met vijf meters - wissels over 24
+   uur en 7 dagen, de vaakste paren, de gemiddelde tijd per reden en de
+   tijd per reden apart. Er wordt niets op gestuurd.
 
-1. Zet je de accu zelf op laden of ontladen, dan legt het EMS vast wat
-   er op dat moment aan de hand was: laadstand, de reserve die het
-   nodig achtte, het beschikbare, het TEKORT tussen die twee, welke
-   apparaten aanstonden, en bij het uitzetten hoeveel je hebt
-   bijgeladen. Nieuwe kaart "Toen jij zelf stuurde" op de accupagina.
+DE ARCHITECTUUR
 
-   Dit MEET en stuurt niets. Na een handvol keren zegt het of de
-   reserve stelselmatig te laag staat als er witgoed loopt - en dan
-   wordt dat eerst becijferd als proefstandkandidaat.
+REASON_REGISTRY is de enige plaats waar een beslisreden bestaat: stand,
+titel, uitleg, ernst, label, waarom-vraag, korte naam, emoji. Vijf
+tabellen zijn nu afgeleiden (REASON_TO_MODE, DECISION_REASON_LABELS,
+WHY_QUESTIONS, REDEN_KORTE_NAAM, MODE_CHANGE_EMOJI). Uiteenlopen kan
+niet meer.
 
-2. Het dagverloop zet "handmatig_<stand>" in de kwartierregel zolang
-   jij stuurt, en de nabeschouwing meldt hoeveel kwartieren dat waren.
-   Jouw handmatige lading van 13 september zat in het gemiste bedrag
-   van die dag als EMS-beslissing; dat gebeurt niet meer.
+NIEUWE RATELS
 
-3. De zelfcontrole "nacht gecontroleerd" stond onterecht op fout. Die
-   keek naar de accustand in plaats van naar het net, en jouw nacht van
-   17 september was juist perfect - elk kwartier uit de accu, nul
-   netafname. De teller kijkt nu naar het net.
+- elke gebruikte reden staat in de registry, en omgekeerd
+- elke reden komt door de uitlegfunctie zonder "Onbekende reden"
+- de vijf afgeleiden zijn echt afgeleid, geen handmatige kopie
+- elke melding heeft advies, logprioriteit en een titel (of bouwt hem op)
+- geen dubbele methodenamen per klasse
+- geen dubbel gezette velden in __init__
+- geen dubbele exportsleutels
+- geen dataset met twee recordvormen
 
-Aan de sturing verandert niets.
+TWEE FOUTEN VAN MIJ DIE DE TOETSEN VINGEN
+
+- get_moduswissels bestond al sinds v3.87.0; mijn nieuwe functie heet nu
+  get_redenwissels.
+- Ik wilde zes "ontbrekende" Achterhoekse titels toevoegen, maar die zes
+  bouwen hun titel op uit wat er gebeurde. Een bestaande toets keurde het
+  af. Ze staan nu benoemd in TITEL_WORDT_OPGEBOUWD.
+
+NOG OP DE LIJST
+
+PERSISTED_FIELDS declaratief maken en de vier bestaande laadconversies
+expliciteren. De inventory over alle 187 velden gaf nul afwijkingen, dus
+daar is geen haast.

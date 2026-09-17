@@ -51,11 +51,11 @@ def _situatie(c, hass):
 def test_de_ingreep_wordt_vastgelegd_met_omstandigheden(make_coordinator, hass):
     c = make_coordinator({})
     _situatie(c, hass)
-    c.handmatige_ingrepen = []
+    c.eigen_ingrepen = []
 
-    c.noteer_handmatige_ingreep("laden", NU)
+    c.noteer_eigen_ingreep("laden", NU)
 
-    ingreep = c.handmatige_ingrepen[-1]
+    ingreep = c.eigen_ingrepen[-1]
     assert ingreep["stand"] == "laden"
     assert ingreep["soc"] == 38.0
     assert ingreep["beschikbaar_kwh"] == 3.32
@@ -69,11 +69,11 @@ def test_de_lopende_apparaten_staan_erbij(make_coordinator, hass):
     vaatwasser stonden aan."""
     c = make_coordinator({})
     _situatie(c, hass)
-    c.handmatige_ingrepen = []
+    c.eigen_ingrepen = []
 
-    c.noteer_handmatige_ingreep("laden", NU)
+    c.noteer_eigen_ingreep("laden", NU)
 
-    apparaten = c.handmatige_ingrepen[-1]["apparaten_aan"]
+    apparaten = c.eigen_ingrepen[-1]["apparaten_aan"]
     assert "vaatwasser" in apparaten
     assert apparaten["vaatwasser"] == 1850.0
 
@@ -81,13 +81,13 @@ def test_de_lopende_apparaten_staan_erbij(make_coordinator, hass):
 def test_het_einde_wordt_erbij_geschreven(make_coordinator, hass):
     c = make_coordinator({})
     _situatie(c, hass)
-    c.handmatige_ingrepen = []
-    c.noteer_handmatige_ingreep("laden", NU)
+    c.eigen_ingrepen = []
+    c.noteer_eigen_ingreep("laden", NU)
 
     c.accustand_procent = lambda: 59.0
-    c.noteer_handmatige_ingreep(None, NU + timedelta(hours=2))
+    c.noteer_eigen_ingreep(None, NU + timedelta(hours=2))
 
-    ingreep = c.handmatige_ingrepen[-1]
+    ingreep = c.eigen_ingrepen[-1]
     assert ingreep["geeindigd"] == (NU + timedelta(hours=2)).isoformat()
     assert ingreep["duur_minuten"] == 120
     assert ingreep["soc_eind"] == 59.0
@@ -133,11 +133,11 @@ def test_de_nabeschouwing_slaat_handmatige_kwartieren_over(make_coordinator, has
 def test_het_overzicht_telt_de_ingrepen(make_coordinator, hass):
     c = make_coordinator({})
     _situatie(c, hass)
-    c.handmatige_ingrepen = []
-    c.noteer_handmatige_ingreep("laden", NU)
-    c.noteer_handmatige_ingreep(None, NU + timedelta(hours=1))
+    c.eigen_ingrepen = []
+    c.noteer_eigen_ingreep("laden", NU)
+    c.noteer_eigen_ingreep(None, NU + timedelta(hours=1))
 
-    o = c.get_handmatige_ingrepen_overzicht()
+    o = c.get_eigen_ingrepen_overzicht()
 
     assert o["aantal"] == 1
     assert o["laatste"]["stand"] == "laden"
@@ -146,17 +146,17 @@ def test_het_overzicht_telt_de_ingrepen(make_coordinator, hass):
 
 def test_de_geschiedenis_blijft_begrensd(make_coordinator, hass):
     from custom_components.energy_management_system.const import (
-        HANDMATIGE_INGREPEN_LENGTE,
+        EIGEN_INGREPEN_LENGTE,
     )
 
     c = make_coordinator({})
     _situatie(c, hass)
-    c.handmatige_ingrepen = []
-    for n in range(HANDMATIGE_INGREPEN_LENGTE + 5):
-        c.noteer_handmatige_ingreep("laden", NU + timedelta(hours=n))
-        c.noteer_handmatige_ingreep(None, NU + timedelta(hours=n, minutes=30))
+    c.eigen_ingrepen = []
+    for n in range(EIGEN_INGREPEN_LENGTE + 5):
+        c.noteer_eigen_ingreep("laden", NU + timedelta(hours=n))
+        c.noteer_eigen_ingreep(None, NU + timedelta(hours=n, minutes=30))
 
-    assert len(c.handmatige_ingrepen) == HANDMATIGE_INGREPEN_LENGTE
+    assert len(c.eigen_ingrepen) == EIGEN_INGREPEN_LENGTE
 
 
 def test_de_nabeschouwing_meldt_de_handmatige_kwartieren(make_coordinator, hass):
@@ -173,3 +173,42 @@ def test_de_nabeschouwing_meldt_de_handmatige_kwartieren(make_coordinator, hass)
     }
 
     assert c.handmatige_kwartieren("2026-09-16") == 3
+
+
+def test_geen_twee_dingen_in_een_veld():
+    """v4.18.1. De naam `handmatige_ingrepen` bestaat sinds v3.99.9 voor
+    de VALSE ingrepen: rondes waarin de accustand afwijkt van wat het EMS
+    wilde. Mijn registratie van wat de GEBRUIKER doet schreef in
+    diezelfde lijst, en in de export stond de sleutel twee keer - de ene
+    overschreef de andere.
+
+    Deze ratel vangt de klasse: geen twee schrijvers in één bewaard veld,
+    en geen dubbele sleutel in de export.
+    """
+    import ast
+    import collections
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    # 1. geen dubbele sleutel in de diagnostiek
+    bron = (Path(pkg.__file__).parent / "diagnostics.py").read_text()
+    boom = ast.parse(bron)
+    for knoop in ast.walk(boom):
+        if not isinstance(knoop, ast.Dict):
+            continue
+        sleutels = [
+            k.value for k in knoop.keys
+            if isinstance(k, ast.Constant) and isinstance(k.value, str)
+        ]
+        dubbel = {s for s in sleutels if sleutels.count(s) > 1}
+        assert not dubbel, f"diagnostics.py:{knoop.lineno} {dubbel}"
+
+    # 2. de twee lijsten zijn echt gescheiden
+    coord = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    schrijvers = collections.Counter(
+        m for m in ("self.handmatige_ingrepen.append", "self.eigen_ingrepen.append")
+        for _ in range(coord.count(m))
+    )
+    assert schrijvers["self.handmatige_ingrepen.append"] == 1
+    assert schrijvers["self.eigen_ingrepen.append"] == 1

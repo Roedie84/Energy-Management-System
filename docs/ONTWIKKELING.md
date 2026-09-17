@@ -11881,3 +11881,78 @@ python3 -m pytest -v
 ```
 
 Zie `tests/README.md` voor een overzicht per testbestand.
+
+## Ontwerp: de Decision Registry (doel voor v5)
+
+Aanleiding: drie naamcollisies in één week (`handmatige_ingrepen`,
+`get_moduswissels`, twee parenvormen) en een reden die in de beslisboom
+zat maar niet in de uitleglaag. Elke keer was de oorzaak dat één begrip
+op meerdere plekken los wordt onderhouden.
+
+### Wat een reden nu op vijf plekken nodig heeft
+
+Een nieuwe beslisreden toevoegen vraagt vandaag:
+
+1. de tak in `_async_update_locked` die hem zet
+2. `REASON_TO_MODE` - welke accustand hoort erbij
+3. `_build_explanation` of `REDEN_UITLEG` - de uitleg
+4. `translations/nl.json` - de Nederlandse naam
+5. `MELDING_ADVIES` - waardoor en wat te doen
+6. eventueel het dashboard
+
+Vergeet er één, en het valt pas op in een export. Zo kwam "Onbekende
+reden: solar_capture_deferred" aan het licht: punten 2, 4 en 5 waren
+gedaan, punt 3 niet.
+
+### Waar het naartoe moet
+
+Eén tabel, één regel per reden:
+
+```python
+BESLISREDENEN = {
+    "solar_capture_deferred": Reden(
+        stand=OPTION_SMART_DISCHARGING,
+        titel_nl="Zunne opvangen wödt uut-esteld",
+        uitleg="Zon opvangen is bewust uitgesteld: ...",
+        waardoor="Er komt vandaag genoeg zon om de accu later te vullen.",
+        wat_te_doen="Niks. Dit is de normale gang van zaken.",
+        meldingssoort="plan_uitstel",
+    ),
+    ...
+}
+```
+
+Daaruit worden gegenereerd: de standvertaling, de uitleg, de
+meldingstitel, het advies, de exportsleutel en de dashboardregel. Een
+nieuwe reden is dan één regel op één plek, en een vergeten veld is een
+typefout in plaats van een stille misser.
+
+### Waarom dat geen enkele wijziging is
+
+De vijftien bestaande redenen hebben uitleg met GETALLEN erin - prijzen,
+kWh, tijden, tijdstippen. Die kunnen niet zomaar een vaste tekst worden
+zonder dat de uitleg zijn waarde verliest. Elke reden heeft dus een
+`uitleg`-veld dat óf een tekst óf een functie is, en het overzetten van
+vijftien takken met hun getallen is werk dat per reden gecontroleerd
+moet worden tegen wat er nu uit komt.
+
+Voorgestelde reeks:
+
+1. `REDEN_UITLEG` voor de statische redenen (gedaan in v4.19)
+2. De standvertaling en de meldingssoort erbij in dezelfde tabel
+3. Het advies (waardoor / wat te doen) erbij
+4. De redenen met getallen omzetten naar een functie per reden, één per
+   keer, met de bestaande uitvoer als toets
+5. De dashboardregel eruit genereren
+
+Na stap 3 is de winst al grotendeels binnen: dan zit alles wat een reden
+BESCHRIJFT op één plek, en alleen de berekening blijft verspreid.
+
+### Wat er niet in hoort
+
+Het idee dat geen component nog rechtstreeks een coordinator-attribuut
+mag lezen. Dat is een aparte, veel grotere herschrijving, en de
+naamcollisies die hem motiveerden worden al gevangen door de ratels van
+v4.19: dubbele methodenamen, dubbel gezette velden, dubbele
+exportsleutels en datasets met twee vormen. Die kosten samen een
+seconde per suite-run.

@@ -197,11 +197,13 @@ from .const import (
     NACHTLAST_NACHTEN,
     NACHTLAST_RECENT,
     NACHTLAST_REFERENTIE,
+    MODUSWISSELS_TE_VEEL_PER_DAG,
     NACHT_ZELFVOORZIENEND_MARGE_W,
     NACHTLAST_VENSTER,
     MODE_CHANGE_EMOJI,
     PV_FOUT_EENZIJDIG_AANDEEL,
     MODUS_KORTE_NAAM,
+    REASON_REGISTRY,
     REDENEN_ZONDER_STAND,
     REDEN_KORTE_NAAM,
     REASON_TO_MODE,
@@ -553,7 +555,7 @@ from .const import (
     PV_GEOMETRY_MULTI_ORIENTATION_SPREAD_DEGREES,
     PV_GEOMETRY_MULTI_ORIENTATION_MIN_DAYS,
     APPARAAT_AAN_DREMPEL_W,
-    HANDMATIGE_INGREPEN_LENGTE,
+    EIGEN_INGREPEN_LENGTE,
     HANDMATIGE_INGREPEN_MIN_VOOR_PATROON,
     HANDMATIGE_INGREPEN_MIN_DAGEN,
     HANDMATIGE_RICHTING_DREMPEL_W,
@@ -1252,7 +1254,8 @@ class EnergyManagementSystemCoordinator:
         # een regel - `__init__` staat op de ratel.
         # v3.99.19: `dagverloop` en `nabeschouwingen` erbij, in dezelfde
         # regel - `__init__` staat op de ratel.
-        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.handmatige_ingrepen = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, []
+        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, []
+        self.handmatige_ingrepen: list[dict] = []
         # v1.1.6: met welke meetmethode de bewaarde foutreeks tot stand
         # is gekomen. Verandert de methode, dan wordt die reeks eenmalig
         # gewist - zie ENERGY_BALANCE_METHOD_VERSION.
@@ -1354,7 +1357,6 @@ class EnergyManagementSystemCoordinator:
 
         # v3.75.0: wanneer de accu anders stond dan EMS wilde.
         self.last_applied_operation: str | None = None
-        self.handmatige_ingrepen: list[dict] = []
         self._handmatig_sinds: str | None = None
         # Monte Carlo advisory engine (v0.63.34).
         self.monte_carlo_median_deficit_kwh: float | None = None
@@ -5918,11 +5920,17 @@ class EnergyManagementSystemCoordinator:
                 uit[naam] = round(w, 1)
         return uit
 
-    def noteer_handmatige_ingreep(
+    def noteer_eigen_ingreep(
         self, stand: str | None, nu: datetime | None = None
     ) -> None:
         """Legt vast dat de gebruiker zelf stuurde, met de
         omstandigheden (v4.18).
+
+        v4.18.1: dit heette eerst `handmatige_ingrepen` - een naam die
+        sinds v3.99.9 al bestond voor de VALSE ingrepen, waar de
+        accustand afwijkt van wat het EMS wilde. Mijn registratie
+        schreef in diezelfde lijst, en in de export stond de sleutel
+        twee keer. Nu `eigen_ingrepen`: wat de gebruiker zelf deed.
 
         Gemeld: "Gister moest ik even manueel bijladen, omdat ik de
         wasmachine en vaatwasser aan had. Hoe kun je hier van leren?" -
@@ -5948,7 +5956,7 @@ class EnergyManagementSystemCoordinator:
             reserve = (self.last_reserve_margin_breakdown or {}).get(
                 "reserve_kwh_after_margin"
             )
-            self.handmatige_ingrepen.append(
+            self.eigen_ingrepen.append(
                 {
                     "moment": nu.isoformat(),
                     "stand": stand,
@@ -5969,15 +5977,15 @@ class EnergyManagementSystemCoordinator:
                     ),
                 }
             )
-            self.handmatige_ingrepen = self.handmatige_ingrepen[
-                -HANDMATIGE_INGREPEN_LENGTE:
+            self.eigen_ingrepen = self.eigen_ingrepen[
+                -EIGEN_INGREPEN_LENGTE:
             ]
             self.schedule_persisted_state_save()
             return
         # stand is None: de ingreep is voorbij - het einde erbij schrijven
-        if not self.handmatige_ingrepen:
+        if not self.eigen_ingrepen:
             return
-        laatste = self.handmatige_ingrepen[-1]
+        laatste = self.eigen_ingrepen[-1]
         if laatste.get("geeindigd"):
             return
         begin = dt_util.parse_datetime(laatste["moment"])
@@ -6016,7 +6024,7 @@ class EnergyManagementSystemCoordinator:
             if str(r.get("reden") or "").startswith("handmatig")
         )
 
-    def get_handmatige_ingrepen_overzicht(self) -> dict:
+    def get_eigen_ingrepen_overzicht(self) -> dict:
         """Wat de handmatige ingrepen samen zeggen (v4.18).
 
         Meet; stuurt niets. Wijst de reeks één kant op, dan is dat het
@@ -6024,7 +6032,7 @@ class EnergyManagementSystemCoordinator:
         proefstandkandidaat te worden becijferd voordat er iets aan
         verandert.
         """
-        afgerond = [i for i in (self.handmatige_ingrepen or []) if i.get("geeindigd")]
+        afgerond = [i for i in (self.eigen_ingrepen or []) if i.get("geeindigd")]
         if not afgerond:
             return {
                 "aantal": 0,
@@ -8832,6 +8840,99 @@ class EnergyManagementSystemCoordinator:
         reeks.append(uit)
         self.cycluskosten_geschiedenis[apparaat] = reeks[-CYCLUSKOSTEN_LENGTE:]
         self.schedule_persisted_state_save()
+
+    def get_redenwissels(self) -> dict:
+        """Hoe vaak wisselt het EMS van reden? (v4.19)
+
+        Gevraagd naar aanleiding van "tientallen wissels tussen
+        arbitrage_solar_capture en discharging_window op dezelfde
+        middag". Nagerekend was het maximaal vier keer per dag voor dat
+        paar, en twaalf wissels in totaal op de drukste dag - maar dat
+        was niet te zien zonder er een script bij te schrijven.
+
+        v4.19: deze heette eerst `get_moduswissels` - en die naam
+        bestond al, voor het overzicht van de moduswisselmeldingen. De
+        derde naamcollisie in deze reeks, na `handmatige_ingrepen` en de
+        parenvormen. Er staat nu een ratel onder die dubbele
+        methodenamen in de klasse afkeurt; Python neemt stilzwijgend de
+        laatste en de eerste verdwijnt zonder waarschuwing.
+
+        Nu in de export: de wissels over 24 uur en over zeven dagen, de
+        paren die het vaakst wisselen, en een oordeel. De grens staat
+        bewust hoog: twaalf wissels op 96 kwartieren is een dag met
+        wolkenvelden.
+        """
+        dagen = sorted(self.dagverloop or {})
+        if not dagen:
+            return {
+                "wissels_24h": 0,
+                "wissels_7d": 0,
+                "dagen_geteld": 0,
+                "meest_gewisselde_paren": [],
+                "te_veel": False,
+                "oordeel": "Nog geen dagverloop om wissels in te tellen.",
+            }
+        paren: dict[tuple[str, str], int] = {}
+        per_dag: dict[str, int] = {}
+        for dag in dagen[-7:]:
+            redenen = [r.get("reden") for r in self.dagverloop[dag] if r.get("reden")]
+            wissels = 0
+            for a, b in zip(redenen, redenen[1:]):
+                if a == b:
+                    continue
+                wissels += 1
+                sleutel = (a, b) if a < b else (b, a)
+                paren[sleutel] = paren.get(sleutel, 0) + 1
+            per_dag[dag] = wissels
+        # de laatste dag apart: het gemiddelde en de tijd per reden
+        laatste_reeks = [
+            r.get("reden") for r in self.dagverloop[dagen[-1]] if r.get("reden")
+        ]
+        blokken = 1 + sum(
+            1 for a, b in zip(laatste_reeks, laatste_reeks[1:]) if a != b
+        )
+        per_reden: dict[str, int] = {}
+        for reden in laatste_reeks:
+            per_reden[reden] = per_reden.get(reden, 0) + 1
+        laatste = per_dag.get(dagen[-1], 0)
+        te_veel = laatste > MODUSWISSELS_TE_VEEL_PER_DAG
+        top = sorted(paren.items(), key=lambda kv: -kv[1])[:3]
+        return {
+            "wissels_24h": laatste,
+            "wissels_7d": sum(per_dag.values()),
+            "dagen_geteld": len(per_dag),
+            "per_dag": per_dag,
+            "meest_gewisselde_paren": [
+                {"paar": list(p), "aantal": n} for p, n in top
+            ],
+            # v4.20: het getal dat zegt of wissels geklapper zijn. Vier
+            # wissels op een dag is gemiddeld zes uur per reden - rustig.
+            # Vierentwintig wissels is een uur, en dan is er iets aan de
+            # hand. Observatiemeter: er wordt niets op gestuurd.
+            "gemiddelde_tijd_in_reden_minuten": (
+                round(len(laatste_reeks) * 15 / max(1, blokken), 1)
+                if laatste_reeks
+                else None
+            ),
+            "tijd_per_reden_minuten": {
+                reden: n * 15 for reden, n in sorted(per_reden.items())
+            },
+            "te_veel": te_veel,
+            "oordeel": (
+                f"{laatste} redenwissels vandaag. Boven de "
+                f"{MODUSWISSELS_TE_VEEL_PER_DAG} gaat het om geklapper; "
+                "hier wisselt de reden mee met de wolken en dat is normaal."
+                if not te_veel
+                else f"{laatste} redenwissels vandaag - meer dan "
+                f"{MODUSWISSELS_TE_VEEL_PER_DAG}. Dat is geen weer meer maar "
+                "een drempel waar iets omheen trilt."
+            ),
+            "toelichting": (
+                "Een wissel is een kwartier waarin de reden anders is dan in het "
+                "vorige. Wolkenvelden geven er een paar per dag; een drempel "
+                "zonder dode zone geeft er tientallen."
+            ),
+        }
 
     def get_cycluskosten_overzicht(self) -> dict:
         """Per apparaat: hoeveel beurten, wat ze kostten, en wat de eigen
@@ -34464,7 +34565,23 @@ class EnergyManagementSystemCoordinator:
                     )
 
         else:
-            parts.append(f"Onbekende reden: {reason}.")
+            # v4.19: eerst de tabel, dan pas opgeven. `REDEN_UITLEG`
+            # bevat de redenen waarvan de uitleg geen getallen nodig
+            # heeft - een nieuwe reden toevoegen is daar één regel, in
+            # plaats van een tak in deze functie. Dat is de eerste steen
+            # van één bron voor beslissing en uitleg.
+            #
+            # De aanleiding: "Onbekende reden: solar_capture_deferred"
+            # stond in de export van 17 september. Die reden zat in
+            # REASON_TO_MODE en in de woordenlijst, maar niet hier.
+            # v4.20: de uitleg komt uit REASON_REGISTRY - de enige bron
+            # voor wat een reden betekent. Hier stond eerst een eigen
+            # tabel `REDEN_UITLEG`, en dat was een vijfde kopie van
+            # hetzelfde begrip.
+            parts.append(
+                (REASON_REGISTRY.get(reason) or {}).get("uitleg")
+                or f"Onbekende reden: {reason}."
+            )
 
         # v0.63.22: shown for every reason where it's meaningful context
         # (reported: only visible for discharging_window before this -

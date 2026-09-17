@@ -158,7 +158,9 @@ def test_present_attributes_are_not_reported(make_coordinator, hass):
             # v4.14: wat elke apparaatbeurt kostte.
             "cycluskosten": {},
             # v4.18: de handmatige ingrepen.
-            "handmatige_ingrepen": {},
+            "eigen_ingrepen": {},
+            # v4.19: de redenwissels.
+            "redenwissels": {},
             "kwartierplanning": [],
             # v3.67.0: de proefplanning op de kwartierpagina.
             "smart_charging_proef": {},
