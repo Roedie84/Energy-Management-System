@@ -26386,3 +26386,48 @@ aanroept, moet ook in de diagnostiek staan. Anders is een kaart alleen
 te beoordelen met een foto ervan.
 
 **Volledige testsuite**: 3970 tests, allemaal groen.
+
+
+## v5.5 — De airco in ontvochtigingsstand werd niet gezien
+
+Vier standen uitgelezen in de ontwikkelaarstools:
+
+```
+stand              hvac_action      gezien als zware verbruiker?
+off                'off'            nee, terecht
+cool, net gestart  idle             nee, compressor staat stil
+cool, koelend      cooling          JA
+heat, stokend      heating          JA
+dry                ONTBREEKT        nee - en dat is het gat
+```
+
+In ontvochtigingsstand levert deze unit **helemaal geen**
+`hvac_action`; het attribuut is er niet. De herkenning las `None`, en
+dat zit niet in `{"heating", "cooling"}`. De airco draaide, gebruikte
+stroom, en de integratie zag hem niet.
+
+`drying` aan de lijst toevoegen zou niet helpen - er komt niets. De
+regel is nu: ontbreekt `hvac_action` terwijl de STAND koelt of stookt,
+dan telt de airco als actief. Ontbrekende informatie is geen bewijs van
+stilstand.
+
+Staat er wél een actie, dan is die leidend: `idle` betekent echt dat de
+compressor stilstaat, en `fan_only` blijft eruit - dat is een ventilator
+van enkele tientallen watts en geen zware verbruiker.
+
+### Dit raakt de sturing
+
+De reserve houdt rekening met wat er aan staat. Draaide de airco in dry
+tijdens een overbruggingsperiode, dan rekende het EMS met een te laag
+huisverbruik. Hoe vaak dat gebeurde is niet terug te halen - de
+herkenning zag het immers niet.
+
+### Wat onderweg bleek
+
+De nullen in de aircovoorspellingstabel - twintig waarnemingen, 0,0% in
+elk bakje - zijn hiermee beter te duiden. Voor KOELEN werkt de detectie
+wel, dus die nullen betekenen dat de airco in die twintig waarnemingen
+niet heeft gekoeld. In september is dat plausibel. Het was dus geen
+kapotte detectie voor koelen, maar wel een gat voor dry.
+
+**Volledige testsuite**: 3981 tests, allemaal groen.

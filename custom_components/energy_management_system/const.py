@@ -1229,6 +1229,23 @@ FIETSLADERS_COMPLETE_THRESHOLD_W = 20.0
 # count (thermostat satisfied / unit switched off).
 AIRCO_ACTIVE_HVAC_ACTIONS = {"heating", "cooling"}
 
+# Standen die als actief tellen wanneer `hvac_action` ONTBREEKT (v5.5).
+#
+# Uitgelezen in de ontwikkelaarstools:
+#
+#   cool + cooling    -> hvac_action: cooling     wordt gezien
+#   heat + heating    -> hvac_action: heating     wordt gezien
+#   cool net gestart  -> hvac_action: idle        compressor stil, terecht
+#   dry               -> hvac_action ONTBREEKT    werd NIET gezien
+#
+# In ontvochtigingsstand levert deze unit helemaal geen `hvac_action`.
+# `drying` aan de lijst hierboven toevoegen helpt dus niet - er komt
+# niets. Ontbrekende informatie is hier geen bewijs van stilstand.
+#
+# `fan_only` staat er bewust NIET bij: dat is een ventilator van enkele
+# tientallen watts en geen zware verbruiker.
+AIRCO_ACTIEVE_STANDEN_ZONDER_ACTIE = {"dry", "cool", "heat", "heat_cool"}
+
 # v0.63.78, reported ("Basisverbruik ... schiet tussen ca. 16:00 en
 # 17:00 omhoog door koken etc."): of the confirmed-heavy-load sources
 # in _get_confirmed_heavy_load_source, only these two represent a

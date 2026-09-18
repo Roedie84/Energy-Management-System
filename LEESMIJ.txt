@@ -1,48 +1,36 @@
-EMS v5.4 - alleen de wijzigingen sinds v5.2.1
+EMS v5.5 - alle wijzigingen sinds v5.2.1 (bevat v5.4)
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
 (ER OVERHEEN, de map niet legen)
 
     const.py, coordinator.py, diagnostics.py
-    dashboard_template.yaml     LET OP: dashboard gewijzigd
+    dashboard_template.yaml     LET OP: dashboard gewijzigd in v5.4
     manifest.json, bestandscontrole.json
 
 NAAR DE REPO
 
     README.md, CHANGELOG.md
     dashboards/energy_management_system_dashboard.yaml
-    tests/ (vijf bestanden, twee nieuw)
+    tests/ (zes bestanden, drie nieuw)
 
-Voor HACS: release met tag v5.4.
+Voor HACS: release met tag v5.5.
 
-1. EEN ONBETROUWBARE WEERBRON VALT UIT HET ENSEMBLE
+NIEUW IN v5.5 - DE AIRCO IN DRY-STAND
 
-Onder de 60% overeenstemming weegt een bron niet meer mee. Die
-beoordeling bestond al sinds v1.5.2 maar werd nergens gebruikt - het
-was een label en geen poort. Twee veiligheidsregels: vanaf 50
-waarnemingen, en nooit de laatste bron.
+Jouw unit levert in ontvochtigingsstand HELEMAAL GEEN hvac_action. De
+herkenning van zware verbruikers zag de airco dan niet, terwijl hij wel
+stroom gebruikt. Nu telt de STAND mee als de actie ontbreekt.
 
-VANDAAG VERANDERT ER NIETS AAN DE STURING: beide bronnen staan op 74,5%.
-De poort grijpt pas in als een bron wegzakt. Valt er een uit, dan komt
-dat op de landingspagina; de telefoonmelding staat standaard uit.
+Koelen (cooling) en verwarmen (heating) werkten al. idle en fan_only
+tellen bewust niet mee.
 
-2. HET VERLOOP VAN DE ZONVOORSPELLING WORDT BEWAARD
+DIT RAAKT DE STURING: de reserve houdt rekening met wat er aan staat.
 
-Om 08:00, 11:00 en 14:00: wat er voor de REST van de dag werd verwacht
-en wat er tot dan binnen was. Veertien dagen. Zonder deze data rustte de
-terugtoets van de herschaling op een benadering - zie 18 september, 2,9
-kWh opgewekt tegen 14,0 voorspeld.
+UIT v5.4
 
-3. ACHT OVERZICHTEN STONDEN ALLEEN OP HET DASHBOARD
-
-Die staan nu ook in de export, waaronder de klimaatprojectiekwaliteit.
-Anders is een kaart alleen te beoordelen met een schermafdruk.
-
-NIEUWE EXPORTVELDEN
-
-    weerbron_keuze                 welke bronnen meewegen
-    voorspellingsverloop           schoof de voorspelling mee?
-    klimaat_projectie_kwaliteit    plus zeven andere overzichten
-
-Alles meet; alleen de weerbronpoort kan ooit sturen, en dan pas als een
-bron echt wegzakt.
+1. Een weerbron onder de 60% overeenstemming valt uit het ensemble.
+   Vandaag verandert dat niets - beide bronnen staan op 74,5%.
+2. Het verloop van de zonvoorspelling wordt bewaard (08:00, 11:00,
+   14:00), veertien dagen.
+3. Acht overzichten die alleen op het dashboard stonden, staan nu ook in
+   de export.

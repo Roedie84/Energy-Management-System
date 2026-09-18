@@ -157,6 +157,7 @@ from .const import (
     WATER_SOFTENER_NIGHT_WINDOW_END_HOUR,
     FIETSLADERS_COMPLETE_THRESHOLD_W,
     QUOOKER_SUSTAINED_MINUTES,
+    AIRCO_ACTIEVE_STANDEN_ZONDER_ACTIE,
     AIRCO_ACTIVE_HVAC_ACTIONS,
     SUSTAINED_HEAVY_LOAD_SOURCES,
     LIVING_ROOM_TEMP_BUCKET_SIZE_C,
@@ -16931,6 +16932,37 @@ class EnergyManagementSystemCoordinator:
         elapsed_minutes = (now - self._quooker_active_since).total_seconds() / 60
         return elapsed_minutes >= QUOOKER_SUSTAINED_MINUTES
 
+    def _airco_draait(self, entity_id: str | None) -> bool:
+        """Gebruikt deze airco nu noemenswaardig stroom? (v5.5)
+
+        Hier stond alleen een toets op `hvac_action in {"heating",
+        "cooling"}`. Uitgelezen in de ontwikkelaarstools:
+
+            cool + koelend    hvac_action: cooling     gezien
+            heat + stokend    hvac_action: heating     gezien
+            cool net gestart  hvac_action: idle        compressor stil
+            dry               hvac_action ONTBREEKT    NIET gezien
+
+        In ontvochtigingsstand levert deze unit helemaal geen
+        `hvac_action`. De herkenning las dan `None` en zag de airco niet,
+        terwijl hij wel stroom gebruikt. `drying` toevoegen helpt niet -
+        er komt niets.
+
+        Dus: ontbreekt `hvac_action`, kijk dan naar de STAND.
+        Ontbrekende informatie is geen bewijs van stilstand. Staat er wel
+        een actie, dan is die leidend - `idle` betekent echt dat de
+        compressor stilstaat.
+        """
+        if not entity_id:
+            return False
+        state = self.hass.states.get(entity_id)
+        if state is None:
+            return False
+        hvac_action = state.attributes.get("hvac_action")
+        if hvac_action is not None:
+            return hvac_action in AIRCO_ACTIVE_HVAC_ACTIONS
+        return state.state in AIRCO_ACTIEVE_STANDEN_ZONDER_ACTIE
+
     def _get_confirmed_heavy_load_source(self, now: datetime) -> str | None:
         """Is a known heavy load (vaatwasser, wasmachine, Quooker, airco,
         oven, kookplaat) genuinely, confirmably active right now? Returns
@@ -16970,21 +17002,14 @@ class EnergyManagementSystemCoordinator:
         if self._is_quooker_sustained_active(now):
             return "quooker"
 
-        airco_entity = self.config.get(CONF_AIRCO_CLIMATE_ENTITY)
-        if airco_entity:
-            state = self.hass.states.get(airco_entity)
-            if state is not None:
-                hvac_action = state.attributes.get("hvac_action")
-                if hvac_action in AIRCO_ACTIVE_HVAC_ACTIONS:
-                    return "airco"
-
-        slaapkamer_entity = self.config.get(CONF_SLAAPKAMER_CLIMATE_ENTITY)
-        if slaapkamer_entity:
-            state = self.hass.states.get(slaapkamer_entity)
-            if state is not None:
-                hvac_action = state.attributes.get("hvac_action")
-                if hvac_action in AIRCO_ACTIVE_HVAC_ACTIONS:
-                    return "slaapkamer"
+        # v5.5: via `_airco_draait`, want in ontvochtigingsstand levert
+        # deze unit helemaal geen `hvac_action`.
+        for entity_sleutel, bron in (
+            (CONF_AIRCO_CLIMATE_ENTITY, "airco"),
+            (CONF_SLAAPKAMER_CLIMATE_ENTITY, "slaapkamer"),
+        ):
+            if self._airco_draait(self.config.get(entity_sleutel)):
+                return bron
 
         oven_entity = self.config.get(CONF_OVEN_STATE_SENSOR)
         if oven_entity:
