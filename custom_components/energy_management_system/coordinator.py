@@ -206,6 +206,8 @@ from .const import (
     NACHT_KRAP_NETIMPORT_KWH,
     NACHT_KRAP_SOC_PROCENT,
     NACHT_ZELFVOORZIENEND_MARGE_W,
+    NACHTLAST_UITGESLOTEN_ACHTERVOEGSELS,
+    NACHTLAST_UITGESLOTEN_PATRONEN,
     NACHTLAST_VENSTER,
     MODE_CHANGE_EMOJI,
     PV_FOUT_EENZIJDIG_AANDEEL,
@@ -28428,6 +28430,28 @@ class EnergyManagementSystemCoordinator:
 
     # --- Welk apparaat is meer gaan gebruiken? (v4.4) -------------------
 
+    def _telt_mee_als_nachtlast(self, entity_id: str) -> bool:
+        """Is dit een APPARAAT, of iets anders met eenheid W? (v5.6)
+
+        De nachtlastmeting liep over alle vermogenssensoren en pakte er
+        122. De top: 2139 W piekvermogen (een sensor van deze integratie
+        zelf), 2037 W Solcast-voorspelling, 2000 W een instelling, en
+        vier accusensoren die dezelfde 254 W meldden.
+
+        Drie fouten door elkaar: de meting las haar eigen uitvoer terug,
+        voorspellingen telden als verbruik, en dezelfde stroom werd
+        meerdere keren geteld. Met dit filter blijven er 48 over, en dan
+        is de lijst meteen zinnig: meterkast 17,4 W, hoge kast 8,8 W,
+        cv-ketel 6,3 W.
+
+        De patronen staan in `const.py` MET de reden erbij, zodat over
+        een jaar nog te zien is waarom een sensor ontbreekt.
+        """
+        naam = str(entity_id)
+        if naam.endswith(NACHTLAST_UITGESLOTEN_ACHTERVOEGSELS):
+            return False
+        return not any(p in naam for p in NACHTLAST_UITGESLOTEN_PATRONEN)
+
     def _meet_nachtelijke_basislast(self, now: datetime) -> None:
         """De mediaan per vermogenssensor over het rustigste venster.
 
@@ -28449,6 +28473,9 @@ class EnergyManagementSystemCoordinator:
         for staat in self.hass.states.async_all():
             entity_id = str(staat.entity_id)
             if not entity_id.startswith("sensor."):
+                continue
+            # v5.6: alleen APPARATEN - zie `_telt_mee_als_nachtlast`.
+            if not self._telt_mee_als_nachtlast(entity_id):
                 continue
             if staat.attributes.get("unit_of_measurement") != "W":
                 continue
@@ -30806,6 +30833,25 @@ class EnergyManagementSystemCoordinator:
             if veld in stored and stored[veld] is not None:
                 setattr(self, veld, stored[veld])
         # v4.1: uursleutels terug naar int.
+        # v5.6: de al gemeten nachten opschonen met hetzelfde filter.
+        # De les van v4.17.1: instroom repareren en de voorraad laten
+        # staan is half werk - daar blokkeerden driehonderd oude paren de
+        # ijklijn wekenlang. Hier bevatten de acht gemeten nachten elk
+        # 122 sensoren, waarvan de grootste een voorspelling is.
+        if isinstance(self.nachtlast_per_apparaat, dict):
+            opgeschoond = {}
+            for nacht, meting in self.nachtlast_per_apparaat.items():
+                if not isinstance(meting, dict):
+                    continue
+                over = {
+                    s: w
+                    for s, w in meting.items()
+                    if self._telt_mee_als_nachtlast(s)
+                }
+                if over:
+                    opgeschoond[nacht] = over
+            self.nachtlast_per_apparaat = opgeschoond
+
         # v4.17.1: paren zonder uursleutel gaan weg. In v4.13 is de
         # instroom teruggebracht van één per ronde naar één per uur,
         # maar de driehonderd oude paren bleven staan - en die zijn

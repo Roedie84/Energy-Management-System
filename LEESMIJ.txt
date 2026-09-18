@@ -1,36 +1,40 @@
-EMS v5.5 - alle wijzigingen sinds v5.2.1 (bevat v5.4)
+EMS v5.6 - alleen de wijzigingen sinds v5.5
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
 (ER OVERHEEN, de map niet legen)
 
-    const.py, coordinator.py, diagnostics.py
-    dashboard_template.yaml     LET OP: dashboard gewijzigd in v5.4
+    const.py, coordinator.py
+    dashboard_template.yaml     (gaat altijd mee, ongewijzigd)
     manifest.json, bestandscontrole.json
 
 NAAR DE REPO
 
     README.md, CHANGELOG.md
     dashboards/energy_management_system_dashboard.yaml
-    tests/ (zes bestanden, drie nieuw)
+    tests/test_nachtlast_filter.py (nieuw)
 
-Voor HACS: release met tag v5.5.
+Voor HACS: release met tag v5.6.
 
-NIEUW IN v5.5 - DE AIRCO IN DRY-STAND
+WAT ER VERANDERT
 
-Jouw unit levert in ontvochtigingsstand HELEMAAL GEEN hvac_action. De
-herkenning van zware verbruikers zag de airco dan niet, terwijl hij wel
-stroom gebruikt. Nu telt de STAND mee als de actie ontbreekt.
+De nachtlastmeting pakte 122 vermogenssensoren, waarvan de grootste
+GEEN apparaten waren:
 
-Koelen (cooling) en verwarmen (heating) werkten al. idle en fan_only
-tellen bewust niet mee.
+    2139 W  piekvermogen                de integratie zelf
+    2037 W  Solcast piek vandaag        een voorspelling
+    2000 W  inverse_max_power           een instelling
+     254 W  vier accusensoren           een stroom, vier keer geteld
 
-DIT RAAKT DE STURING: de reserve houdt rekening met wat er aan staat.
+Met het filter blijven er 48 over, en dan is de lijst meteen zinnig:
+meterkast 17,4 W, hoge kast 8,8 W, cv-ketel 6,3 W.
 
-UIT v5.4
+NA DE HERSTART
 
-1. Een weerbron onder de 60% overeenstemming valt uit het ensemble.
-   Vandaag verandert dat niets - beide bronnen staan op 74,5%.
-2. Het verloop van de zonvoorspelling wordt bewaard (08:00, 11:00,
-   14:00), veertien dagen.
-3. Acht overzichten die alleen op het dashboard stonden, staan nu ook in
-   de export.
+De acht al gemeten nachten worden door hetzelfde filter gehaald, dus de
+teller "6 van 8 nachten" blijft staan maar de inhoud klopt nu. Kijk in
+de export bij nachtlast_per_apparaat: daar horen alleen nog echte
+apparaten in te staan.
+
+Staat er een sensor tussen die er NIET hoort, of ontbreekt er juist een
+apparaat, laat het weten - de patronen staan met reden in const.py bij
+NACHTLAST_UITGESLOTEN_PATRONEN en zijn zo bij te stellen.

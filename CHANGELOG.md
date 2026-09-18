@@ -26431,3 +26431,68 @@ niet heeft gekoeld. In september is dat plausibel. Het was dus geen
 kapotte detectie voor koelen, maar wel een gat voor dry.
 
 **Volledige testsuite**: 3981 tests, allemaal groen.
+
+
+## v5.6 — De nachtlastmeting mat vooral zichzelf
+
+Uit de export van 18 september: **122 sensoren gemeten**, en de top
+bestond vrijwel volledig uit dingen die geen apparaat zijn.
+
+```
+2139 W   ..._piekvermogen                de integratie ZELF
+2037 W   solcast_..._piek_vandaag        een VOORSPELLING
+2000 W   ..._inverse_max_power           een INSTELLING
+1032 W   solcast_..._piek_morgen         voorspelling voor morgen
+ 274 W   ..._learned_night_consumption   de uitkomst van deze meting zelf
+ 268 W   accu_totaal_ontlaadvermogen
+ 254 W   pack_input / output_home / bat_in_out / net_power
+          - vier sensoren, EEN stroom
+```
+
+Drie fouten door elkaar:
+
+**De meting las haar eigen sensoren terug** als waren het apparaten.
+`piekvermogen`, `learned_night_consumption` en
+`huishoudverbruik_werkelijk` zijn uitvoer van deze integratie. Dat is
+dezelfde klasse als de naamcollisies van v4.18 en v4.19, maar dan tussen
+de meting en haar eigen sensor.
+
+**Voorspellingen telden als verbruik.** De Solcast-sensoren hebben
+`device_class: power` en eenheid W, maar ze voorspellen zonopbrengst.
+
+**Dezelfde stroom werd meerdere keren geteld**: vier accusensoren op
+254 W, plus achttien `_fase_1`-duplicaten naast hun totaal.
+
+### Wat dat betekende
+
+De apparaataanwijzing stond op zes van acht nachten. Was hij "klaar"
+gemeld, dan was de grootste nachtverbruiker een voorspellingssensor
+geweest.
+
+Met het filter blijven er 48 over, en die lijst is meteen zinnig:
+
+```
+17,4 W   meterkast
+ 8,8 W   hoge kast
+ 6,3 W   cv-ketel
+ 6,0 W   woonkamer
+ 5,2 W   shellyplug
+```
+
+Dát is het sluipverbruik waar de meting naar zocht.
+
+### De patronen staan benoemd
+
+`NACHTLAST_UITGESLOTEN_PATRONEN` is een tabel met de reden per patroon,
+niet een kale lijst - zodat over een jaar nog te zien is waarom een
+sensor ontbreekt.
+
+### En de voorraad is opgeschoond
+
+De les van v4.17.1: instroom repareren en de voorraad laten staan is half
+werk. Daar blokkeerden driehonderd oude paren de ijklijn wekenlang. Hier
+bevatten de acht al gemeten nachten elk 122 sensoren, dus die worden bij
+het laden door hetzelfde filter gehaald. Nachten die daarmee leeg raken
+verdwijnen, want anders tellen ze als gemeten.
+
+**Volledige testsuite**: 3991 tests, allemaal groen.

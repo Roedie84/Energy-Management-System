@@ -1244,6 +1244,42 @@ AIRCO_ACTIVE_HVAC_ACTIONS = {"heating", "cooling"}
 #
 # `fan_only` staat er bewust NIET bij: dat is een ventilator van enkele
 # tientallen watts en geen zware verbruiker.
+# Welke vermogenssensoren NIET meetellen in de nachtlastmeting (v5.6).
+#
+# Gemeten op 18 september: 122 sensoren, en de top bestond vrijwel
+# volledig uit dingen die geen apparaat zijn - de eigen sensoren van
+# deze integratie (2139 W piekvermogen), Solcast-voorspellingen (2037 W),
+# een instelling (2000 W inverse_max_power) en vier accusensoren die
+# dezelfde 254 W meldden.
+#
+# De sleutel is het patroon in de entity_id, de waarde de reden - zodat
+# over een jaar nog te zien is waarom een sensor ontbreekt.
+NACHTLAST_UITGESLOTEN_PATRONEN = {
+    "energy_management_system": (
+        "de eigen sensoren van deze integratie - anders leest de meting "
+        "haar eigen uitvoer terug als was het een apparaat"
+    ),
+    "solcast": "voorspelling van zonopbrengst, geen verbruik",
+    "power_production": "voorspelling van opwek, geen verbruik",
+    "solarflow": "de accu zelf, niet een apparaat",
+    "zendure": "de accu zelf",
+    "energy_battery": "de accu zelf",
+    "accu_": "afgeleide accusensoren",
+    "vermogen_accu": "afgeleide accusensoren",
+    "p1_meter": "de netmeter: het TOTAAL, geen apparaat",
+    "hw_p1": "de netmeter",
+    "solaredge": "omvormer en netmeting, geen apparaat",
+    "connect_energiemeter": "netmeting",
+    "zonneplan": "netmeting",
+    "all_standby": "een optelling van andere sensoren",
+    "energy_socket": "aggregaat van de meterkast",
+    "ab3000": "accumodules",
+}
+
+# Achtervoegsel van per-fase sensoren: die staan naast het totaal van
+# dezelfde meter en zouden dus dubbel tellen. Achttien van de 122.
+NACHTLAST_UITGESLOTEN_ACHTERVOEGSELS = ("_fase_1", "_fase_2", "_fase_3")
+
 AIRCO_ACTIEVE_STANDEN_ZONDER_ACTIE = {"dry", "cool", "heat", "heat_cool"}
 
 # v0.63.78, reported ("Basisverbruik ... schiet tussen ca. 16:00 en
