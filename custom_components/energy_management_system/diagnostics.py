@@ -503,6 +503,37 @@ async def async_get_config_entry_diagnostics(
             "weerbron_keuze", lambda: coordinator.weerbron_keuze
         ),
         # v5.3: schoof de voorspelling mee met de werkelijkheid?
+        # v5.3: acht overzichten die alleen op de sensor stonden en dus
+        # alleen op het dashboard. Toen er een vraag kwam over de
+        # klimaatprojectiekaart, waren de cijfers niet na te kijken - dat
+        # is een gat in de waarneembaarheid. De SVG's blijven eruit: dat
+        # zijn plaatjes, geen gegevens.
+        "klimaat_projectie_kwaliteit": _veilig(
+            "get_klimaat_projectie_kwaliteit",
+            coordinator.get_klimaat_projectie_kwaliteit,
+        ),
+        "accumodules": _veilig(
+            "get_battery_module_table", coordinator.get_battery_module_table
+        ),
+        "accuvermogen": _veilig(
+            "get_battery_power_display", coordinator.get_battery_power_display
+        ),
+        "verbetervoorstellen": _veilig(
+            "get_improvement_suggestions", coordinator.get_improvement_suggestions
+        ),
+        "grootste_bekende_verbruiker": _veilig(
+            "get_largest_known_consumer", coordinator.get_largest_known_consumer
+        ),
+        "airco_kans": _veilig(
+            "get_airco_activation_probability",
+            coordinator.get_airco_activation_probability,
+        ),
+        "kwartierplan_compact": _veilig(
+            "get_quarter_plan_compact", coordinator.get_quarter_plan_compact
+        ),
+        "weerbron_overzicht": _veilig(
+            "get_weather_source_overview", coordinator.get_weather_source_overview
+        ),
         "voorspellingsverloop": _veilig(
             "get_voorspellingsverloop", coordinator.get_voorspellingsverloop
         ),

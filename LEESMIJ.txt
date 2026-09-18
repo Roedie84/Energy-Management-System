@@ -11,7 +11,7 @@ NAAR DE REPO
 
     README.md, CHANGELOG.md
     dashboards/energy_management_system_dashboard.yaml
-    tests/ (vier bestanden, twee nieuw)
+    tests/ (vijf bestanden, twee nieuw)
 
 Voor HACS: release met tag v5.3.
 
@@ -19,27 +19,28 @@ Voor HACS: release met tag v5.3.
 
 Onder de 60% overeenstemming weegt een bron niet meer mee. Die
 beoordeling bestond al sinds v1.5.2 maar werd nergens gebruikt - het
-was een label en geen poort.
-
-Twee veiligheidsregels: vanaf 50 waarnemingen, en nooit de laatste bron.
+was een label en geen poort. Twee veiligheidsregels: vanaf 50
+waarnemingen, en nooit de laatste bron.
 
 VANDAAG VERANDERT ER NIETS AAN DE STURING: beide bronnen staan op 74,5%.
-De poort grijpt pas in als een bron wegzakt. Valt er een uit, dan komt
-dat op de landingspagina; de telefoonmelding staat standaard uit.
-
-Nieuw exportveld: weerbron_keuze.
 
 2. HET VERLOOP VAN DE ZONVOORSPELLING WORDT BEWAARD
 
-Om 08:00, 11:00 en 14:00 wordt vastgelegd wat er voor de REST van de dag
-werd verwacht en wat er tot dan binnen was. Veertien dagen.
+Om 08:00, 11:00 en 14:00: wat er voor de REST van de dag werd verwacht
+en wat er tot dan binnen was. Veertien dagen. Zonder deze data rustte de
+terugtoets van de herschaling op een benadering - zie 18 september, 2,9
+kWh opgewekt tegen 14,0 voorspeld.
 
-Waarom: op 18 september stond er 2,9 kWh opgewekt tegen 14,0 voorspeld.
-De terugtoetsbank kon die dag niet beoordelen, want die gebruikt de
-gerealiseerde zon als proxy. Mijn conclusie "herschaling is een dood
-spoor" (-0,001 euro/dag) rustte dus op een benadering.
+3. ACHT OVERZICHTEN STONDEN ALLEEN OP HET DASHBOARD
 
-Nieuw exportveld: voorspellingsverloop - met per dag of de voorspelling
-MEESCHOOF met de werkelijkheid of op de ochtendwaarde bleef staan.
+Die staan nu ook in de export, waaronder de klimaatprojectiekwaliteit.
+Anders is een kaart alleen te beoordelen met een schermafdruk.
 
-Meet; stuurt niets.
+NIEUWE EXPORTVELDEN
+
+    weerbron_keuze                 welke bronnen meewegen
+    voorspellingsverloop           schoof de voorspelling mee?
+    klimaat_projectie_kwaliteit    plus zeven andere overzichten
+
+Alles meet; alleen de weerbronpoort kan ooit sturen, en dan pas als een
+bron echt wegzakt.

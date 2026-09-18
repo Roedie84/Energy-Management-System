@@ -394,3 +394,37 @@ def test_no_template_in_a_field_that_does_not_render_one():
         "sjabloon in een veld dat er geen verwerkt - dat komt letterlijk "
         f"op het dashboard te staan: {fouten}"
     )
+
+
+def test_elk_sensorattribuut_staat_ook_in_de_export():
+    """v5.3. `get_klimaat_projectie_kwaliteit` stond alleen op de sensor
+    en dus alleen op het dashboard - niet in de diagnostiek. Toen er een
+    vraag kwam over die kaart, waren de cijfers niet na te kijken.
+
+    Dat is een gat in de WAARNEEMBAARHEID, niet in de sturing: alles wat
+    een kaart toont, hoort ook in een export te staan, anders is het
+    alleen te beoordelen met een schermafdruk.
+    """
+    import re
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    pakket = Path(pkg.__file__).parent
+    sensor = (pakket / "sensor.py").read_text()
+    export = (pakket / "diagnostics.py").read_text()
+
+    # de coordinator-functies die de zelfbeoordelingssensor aanroept
+    # De SVG's zijn plaatjes en geen gegevens; die horen niet in een
+    # export thuis.
+    PLAATJES = {
+        "get_overview_svg",
+        "get_overview_sections_svg",
+        "get_overview_status_svg",
+    }
+    op_de_sensor = set(re.findall(r"self\._coordinator\.(get_\w+)", sensor)) - PLAATJES
+    ontbreekt = sorted(
+        fn for fn in op_de_sensor if fn not in export and fn.replace("get_", "") not in export
+    )
+
+    assert not ontbreekt, ontbreekt

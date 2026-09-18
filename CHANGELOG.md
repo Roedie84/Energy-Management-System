@@ -26356,4 +26356,33 @@ En het voorbehoud bij de terugtoets noemt nu hoeveel dagen er een
 verloop hebben, zodat zichtbaar is wanneer de echte vraag gesteld kan
 worden in plaats van de benadering.
 
-**Volledige testsuite**: 3969 tests, allemaal groen.
+### Acht overzichten stonden alleen op het dashboard
+
+Gevraagd of er meer gaten van dit soort zijn. Ik heb alle achttien
+oordeelfuncties gescand op de vraag of ze in een BESLISpad zitten of
+alleen in een overzicht. Uitkomst: zeventien horen alleen te melden -
+bestandscontrole, platformcontrole, zelftoets, spiegelcontrole - en dat
+is correct, geen gat. De weerbron was de enige echte, en die is
+hierboven gedicht.
+
+Maar de scan vond iets anders: `get_klimaat_projectie_kwaliteit` stond
+alleen op de sensor en dus alleen op het dashboard. Toen er een vraag
+kwam over die kaart, waren de cijfers niet na te kijken - alleen met een
+schermafdruk.
+
+Elf functies bleken zo. Acht daarvan staan nu in de export:
+
+```
+klimaat_projectie_kwaliteit    accumodules
+accuvermogen                   verbetervoorstellen
+grootste_bekende_verbruiker    airco_kans
+kwartierplan_compact           weerbron_overzicht
+```
+
+De drie SVG's blijven eruit: dat zijn plaatjes, geen gegevens.
+
+Er staat een ratel onder: elke coordinator-functie die de sensor
+aanroept, moet ook in de diagnostiek staan. Anders is een kaart alleen
+te beoordelen met een foto ervan.
+
+**Volledige testsuite**: 3970 tests, allemaal groen.
