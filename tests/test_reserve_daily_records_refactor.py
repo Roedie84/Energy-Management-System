@@ -26,6 +26,11 @@ def test_update_shortfall_detection_appends_one_atomic_record(make_coordinator, 
     coordinator = make_coordinator({})
     coordinator._shortfall_check_date = DAY0.date()
     coordinator._shortfall_detected_today = True
+    # v5.6: de vlag alleen is niet genoeg meer - er moet over de nacht
+    # ook werkelijk zijn bijgekocht. Zonder deze regel telde een nacht
+    # met 0,10 kWh netafname als tekortdag, en dat zette vijf procent
+    # opslag op de reserve.
+    coordinator._netimport_nacht_kwh = 1.05
     coordinator._excess_detected_today = False
 
     next_day = DAY0.replace(day=5)

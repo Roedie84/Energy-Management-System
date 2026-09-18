@@ -370,6 +370,7 @@ from .const import (
     WEATHER_ENSEMBLE_SPREAD_ATTENTION_PERCENT,
     WEATHER_ENSEMBLE_AGREEMENT_HISTORY_LENGTH,
     WEATHER_ENSEMBLE_AGREEMENT_MIN_SAMPLES,
+    WEERBRON_WEREN_MIN_VOORSPRONG_PP,
     WEERBRON_WEREN_MIN_WAARNEMINGEN,
     WEATHER_ENSEMBLE_AGREEMENT_USABLE_PERCENT,
     DIGITAL_TWIN_ACCURACY_HISTORY_LENGTH,
@@ -655,6 +656,7 @@ from .const import (
     KALMAN_LOAD_MEASUREMENT_NOISE_W2,
     DIGITAL_TWIN_HORIZON_HOURS,
     SHORTFALL_MARGIN_BONUS_PER_RECENT_DAY,
+    SHORTFALL_MIN_NETIMPORT_KWH,
     EMERGENCY_LOW_BATTERY_KWH_THRESHOLD,
     RESERVE_EXCESS_RATIO_THRESHOLD,
     EXCESS_MARGIN_REDUCTION_PER_RECENT_DAY,
@@ -19703,6 +19705,12 @@ class EnergyManagementSystemCoordinator:
             reserve_kwh = capaciteit
 
         uitsplitsing = {
+            # v5.6: het stempel van de ronde waarin dit is gerekend. Zonder
+            # dit is niet te zien of twee getallen bij elkaar horen, en dat
+            # was de hele oorzaak van de valse "tweede reserve"-melding.
+            # v5.6: veilig uitlezen - dit veld wordt pas bij de eerste
+            # ronde gezet.
+            "ronde": self._ronde_stempel(),
             "base_percent": round((DYNAMIC_DISCHARGE_RESERVE_MARGIN - 1) * 100, 1),
             "low_solar_bonus_percent": round(low_solar_bonus_percent, 1),
             "consecutive_low_solar_days": consecutive_low_solar_days,
@@ -22853,7 +22861,10 @@ class EnergyManagementSystemCoordinator:
                 self.reserve_daily_records.append(
                     {
                         "date": self._shortfall_check_date.isoformat(),
-                        "shortfall": self._shortfall_detected_today,
+                        # v5.6: de vlag ALLEEN is niet genoeg - zie
+                        # `_telt_als_tekortdag`.
+                        "shortfall": self._shortfall_detected_today
+                        and self._telt_als_tekortdag(self._netimport_nacht_kwh),
                         # v3.99.0: was er een kookpiek boven de
                         # ontlaadgrens? Die telt niet als tekort, maar
                         # hoort wel zichtbaar te zijn - anders is achteraf
@@ -25958,6 +25969,26 @@ class EnergyManagementSystemCoordinator:
             and accu_c < BATTERY_COOLING_MIN_ABSOLUTE_C
         )
 
+    def _telt_als_tekortdag(self, netimport_kwh: float | None) -> bool:
+        """Was er werkelijk een tekort, of één moment van honderd watt?
+        (v5.6)
+
+        De vlag `_shortfall_detected_today` gaat aan zodra de netafname
+        één keer boven 100 W komt terwijl de accu het huis hoorde te
+        dekken. Dat is een goed SIGNAAL, maar geen tekortDAG.
+
+        Gemeten op 18 september: zeven tekortnachten op rij, waarvan er
+        zes geen tekort waren - een nacht met 37% laadstand over en 0,11
+        kWh netafname telde mee. En elke tekortdag zet vijf procent
+        opslag op de reserve, dus dat kostte verkoopruimte.
+
+        Nu telt een dag pas als tekortdag als er over de nacht ook
+        werkelijk is bijgekocht.
+        """
+        if netimport_kwh is None:
+            return False
+        return netimport_kwh >= SHORTFALL_MIN_NETIMPORT_KWH
+
     def _leg_koelbesluit_vast(self, besluit: dict) -> None:
         """Geschiedenis bijwerken en - als het thermisch beheer was -
         melden (v3.99.13). Uit `_async_apply_battery_cooling_locked`
@@ -28683,6 +28714,32 @@ class EnergyManagementSystemCoordinator:
                 gebruikt.append(bron)
             else:
                 geweerd.append(bron)
+        # v5.6: weren vraagt ook een BETERE overblijver. Op 18 september
+        # werd een bron van 58,0% geweerd terwijl de andere op 60,0%
+        # stond - twee procentpunt is geen bewijs, en het ensemble dat
+        # overbleef deed het met 50,5% slechter dan een muntje.
+        if gebruikt and geweerd:
+            beste_over = max(
+                (beoordeling.get(b) or {}).get("overeenstemming_percent") or 0
+                for b in gebruikt
+            )
+            beste_geweerd = max(
+                (beoordeling.get(b) or {}).get("overeenstemming_percent") or 0
+                for b in geweerd
+            )
+            if beste_over - beste_geweerd < WEERBRON_WEREN_MIN_VOORSPRONG_PP:
+                return {
+                    "gebruikt": list(bronnen),
+                    "geweerd": [],
+                    "reden": (
+                        f"Niets geweerd: de beste overblijver ({beste_over:.1f}%) "
+                        f"heeft te weinig voorsprong op de slechtste "
+                        f"({beste_geweerd:.1f}%) - minstens "
+                        f"{WEERBRON_WEREN_MIN_VOORSPRONG_PP:.0f} procentpunt "
+                        "nodig. Weren heeft alleen zin als wat overblijft "
+                        "aantoonbaar beter is."
+                    ),
+                }
         if not gebruikt and bronnen:
             return {
                 "gebruikt": list(bronnen),
@@ -34517,8 +34574,16 @@ class EnergyManagementSystemCoordinator:
         blok_in_zicht = cheap_block_start is not None and cheap_block_start > now
         target_time = cheap_block_start if blok_in_zicht else now + timedelta(hours=24)
         self.last_needed_kwh_breakdown_end_time = target_time
-        u = self.last_reserve_margin_breakdown or {} if blok_in_zicht else {}
-        if blok_in_zicht and not u:
+        # v5.6: ELKE ronde verse berekenen als er een blok in zicht is.
+        # Hier stond `if blok_in_zicht and not u`, waardoor de sturing de
+        # bewaarde uitsplitsing hergebruikte terwijl de brug elke ronde
+        # vers rekende. Dan komen de twee uit verschillende rondes, met
+        # een andere zonverwachting en een ander aantal tekortdagen erin -
+        # en dat is wat de zelfcontrole als "tweede reservedefinitie"
+        # meldde. Dezelfde `last_*`-verjaring als punt 4 uit de
+        # architectuuraudit.
+        u = {}
+        if blok_in_zicht:
             self._get_dynamic_discharge_reserve_kwh(now, cheap_block_start)
             u = self.last_reserve_margin_breakdown or {}
         basis = self._estimate_consumption_kwh_for_period(now, target_time)
@@ -34598,6 +34663,16 @@ class EnergyManagementSystemCoordinator:
 
     _nachtrondes: dict | None = None
 
+    def _ronde_stempel(self) -> str | None:
+        """Het stempel van de ronde waarin nu wordt gerekend (v5.6).
+
+        Gebruikt de bestaande rondemarkering van v3.99.20 in plaats van
+        er een tweede bij te bedenken. Veilig uitgelezen, want het veld
+        wordt pas bij de eerste ronde gezet.
+        """
+        moment = getattr(self, "_forecast_cache_ronde", None)
+        return moment.isoformat() if moment is not None else None
+
     def zelfcontrole_een_reserve(self) -> dict:
         """Zien de brug, de verkooptoets en de sturing hetzelfde getal?"""
         # v4.9: is er geen goedkoop blok in zicht, dan is er geen reserve
@@ -34614,7 +34689,28 @@ class EnergyManagementSystemCoordinator:
                     "vergelijken; de verkooptoets houdt de bodem aan."
                 ),
             }
-        sturing = (self.last_reserve_margin_breakdown or {}).get("reserve_kwh_after_margin")
+        # v5.6: niet over rondes heen vergelijken. Twee getallen uit
+        # verschillende rondes zeggen niets over één definitie - dan hoort
+        # de controle te zwijgen in plaats van alarm te slaan.
+        uitsplitsing = self.last_reserve_margin_breakdown or {}
+        ronde_van_de_sturing = uitsplitsing.get("ronde")
+        nu_ronde = self._ronde_stempel()
+        if (
+            ronde_van_de_sturing is not None
+            and nu_ronde is not None
+            and ronde_van_de_sturing != nu_ronde
+        ):
+            return {
+                "in_orde": True,
+                "lezers": {},
+                "afwijkend": [],
+                "uitleg": (
+                    "De sturing is in een eerdere ronde gerekend dan de brug; "
+                    "twee getallen uit verschillende rondes zeggen niets over "
+                    "één definitie."
+                ),
+            }
+        sturing = uitsplitsing.get("reserve_kwh_after_margin")
         brug = self.last_needed_kwh_to_bridge
         verkoop = (self.last_sell_check or {}).get("nodig_voor_woning_kwh")
         lezers = {"sturing": sturing, "brug": brug, "verkooptoets": verkoop}

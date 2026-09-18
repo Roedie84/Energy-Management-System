@@ -1,4 +1,4 @@
-EMS v5.6 - alleen de wijzigingen sinds v5.5
+EMS v5.7 - alle wijzigingen sinds v5.6
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
 (ER OVERHEEN, de map niet legen)
@@ -11,30 +11,51 @@ NAAR DE REPO
 
     README.md, CHANGELOG.md
     dashboards/energy_management_system_dashboard.yaml
-    tests/test_nachtlast_filter.py (nieuw)
+    tests/ (vijf bestanden, drie nieuw)
 
-Voor HACS: release met tag v5.6.
+Voor HACS: release met tag v5.7.
 
-WAT ER VERANDERT
+DRIE REPARATIES
 
-De nachtlastmeting pakte 122 vermogenssensoren, waarvan de grootste
-GEEN apparaten waren:
+1. DE TEKORTDETECTIE - dit kostte geld
 
-    2139 W  piekvermogen                de integratie zelf
-    2037 W  Solcast piek vandaag        een voorspelling
-    2000 W  inverse_max_power           een instelling
-     254 W  vier accusensoren           een stroom, vier keer geteld
+Een dag telde als tekortdag zodra de netafname EEN keer boven 100 W
+kwam. Een nacht met 37% laadstand over en 0,11 kWh netafname telde dus
+mee. Zes van je zeven tekortnachten waren er geen.
 
-Met het filter blijven er 48 over, en dan is de lijst meteen zinnig:
-meterkast 17,4 W, hoge kast 8,8 W, cv-ketel 6,3 W.
+Elke tekortdag zet 5% opslag op de reserve. Jouw uitsplitsing liet 35%
+shortfall_bonus zien op een totaal van 60%. Een hogere reserve betekent
+MINDER VERKOPEN.
 
-NA DE HERSTART
+VERWACHT: de opslag zakt van 60% naar ongeveer 25%, je reserve wordt
+lager en het EMS verkoopt vaker.
 
-De acht al gemeten nachten worden door hetzelfde filter gehaald, dus de
-teller "6 van 8 nachten" blijft staan maar de inhoud klopt nu. Kijk in
-de export bij nachtlast_per_apparaat: daar horen alleen nog echte
-apparaten in te staan.
+2. DE ZELFCONTROLE "EEN RESERVE"
 
-Staat er een sensor tussen die er NIET hoort, of ontbreekt er juist een
-apparaat, laat het weten - de patronen staan met reden in const.py bij
-NACHTLAST_UITGESLOTEN_PATRONEN en zijn zo bij te stellen.
+Die meldde een tweede reservedefinitie. De sturing hergebruikte een
+bewaarde berekening terwijl de brug elke ronde vers rekende - twee
+getallen uit verschillende rondes. De uitsplitsing wordt nu elke ronde
+vers berekend en draagt het rondestempel; de controle weigert over
+rondes te vergelijken.
+
+3. DE WEERBRONPOORT
+
+Weerde een bron van 58,0% terwijl de andere op 60,0% stond. Er geldt nu
+ook een minimale voorsprong van tien procentpunt, dus met jouw cijfers
+wordt er niets meer geweerd.
+
+(Het nachtlastfilter zat al in v5.6 en staat hier alleen in de
+changelog.)
+
+NA DE HERSTART CONTROLEREN
+
+- de melding "reserve kwam meerdere nachten tekort" hoort te verdwijnen
+- de zelfcontrole "een reserve" hoort groen te staan
+- shortfall_bonus_percent in de uitsplitsing hoort flink lager
+
+NOG NIET OPGELOST, VRAAGT EEN EXPORT
+
+De logregel "Accukoeling uit - accu 18.5C boven buiten - wel uitgevoerd
+ondanks" van 13:15. Die combinatie kan volgens de code niet bestaan:
+die tekst wordt alleen gezet als de actie "aan" is. Stuur een export
+als die regel opnieuw verschijnt.

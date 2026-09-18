@@ -1495,6 +1495,26 @@ SOLAR_RAMP_STEPS = 10
 # that day turned out too optimistic. Set above typical sensor noise.
 GRID_IMPORT_SHORTFALL_THRESHOLD_W = 100.0
 
+# Hoeveel er over de nacht werkelijk bijgekocht moet zijn voordat een dag
+# als TEKORTDAG telt (v5.6).
+#
+# De drempel hierboven zet de vlag zodra de netafname één keer boven 100
+# W komt - geen minimale duur, geen minimale hoeveelheid. Gemeten op 18
+# september: zeven tekortnachten op rij, waarvan er zes er geen waren.
+#
+#   09-11   37% laadstand over, 0,11 kWh bijgekocht  -> telde als tekort
+#   09-13   33% over,           0,10 kWh             -> telde als tekort
+#   09-12   10% over,           1,05 kWh             -> ECHT tekort
+#
+# Dat is niet cosmetisch: SHORTFALL_MARGIN_BONUS_PER_RECENT_DAY is 5
+# procent per recente tekortdag, dus zes valse tekorten zetten dertig
+# procent opslag op de reserve. Een hogere reserve betekent minder
+# verkopen - er werd betaald voor een tekort dat er niet was.
+#
+# Deze waarde sluit aan bij BATTERY_NIGHT_SHORTFALL_MIN_KWH, die al
+# bestond maar op deze plek niet werd gebruikt.
+SHORTFALL_MIN_NETIMPORT_KWH = 0.5
+
 # Hoe ver de accu onder zijn ontlaadgrens mag zitten en toch als "op de
 # grens" telt (v3.99.0). Regelfouten van tientallen watt zijn normaal;
 # 1550 W bij een grens van 1600 is de grens.
@@ -2949,6 +2969,18 @@ WEATHER_ENSEMBLE_AGREEMENT_USABLE_PERCENT = 60.0
 # worden (v5.3). Een bron met tien waarnemingen op 40% is geen slechte
 # bron maar een bron die nog niets heeft bewezen.
 WEERBRON_WEREN_MIN_WAARNEMINGEN = 50
+
+# Hoeveel procentpunt beter de overblijvende bronnen moeten zijn voordat
+# er een geweerd wordt (v5.6).
+#
+# De poort van v5.4 vuurde op 18 september om 13:06 en weerde
+# `weather.forecast_thuis` op 58,0%, terwijl de andere bron op 60,0%
+# stond. Twee procentpunt op 200 waarnemingen is geen bewijs van iets -
+# en het ensemble dat overbleef deed het met 50,5% slechter dan een
+# muntje opgooien.
+#
+# Weren heeft alleen zin als wat overblijft aantoonbaar beter is.
+WEERBRON_WEREN_MIN_VOORSPRONG_PP = 10.0
 
 # --- Volledige toestandspersistentie (v1.0.4) ------------------------
 # Gevraagd: "algeheel geen verliezen na een herstart". Een inventarisatie

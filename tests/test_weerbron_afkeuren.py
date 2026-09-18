@@ -126,3 +126,64 @@ def test_de_poort_zit_in_het_ensemble(make_coordinator, hass):
     j = bron.index("\n    def ", i + 10)
 
     assert "weerbronnen_voor_het_ensemble" in bron[i:j]
+
+
+# --- v5.6: weren vraagt ook een BETERE alternatief -------------------
+#
+# De poort van v5.4 vuurde op 18 september om 13:06 en weerde
+# `weather.forecast_thuis`. De cijfers van dat moment:
+#
+#     weather.forecast_thuis      58,0%   -> geweerd
+#     weather.openweathermap      60,0%   -> blijft
+#     het ensemble als geheel     50,5%
+#
+# Twee procentpunt verschil op 200 waarnemingen is geen bewijs van iets.
+# Je weert een bron van 58 en houdt er een van 60, en het ensemble dat
+# overblijft doet het slechter dan een muntje.
+#
+# Weren heeft alleen zin als wat overblijft aantoonbaar beter is. Dus
+# naast de drempel van 60% nu ook een MINIMALE VOORSPRONG: de bronnen
+# die blijven moeten er merkbaar bovenuit steken.
+
+
+def test_twee_procentpunt_verschil_weert_niemand(make_coordinator, hass):
+    """Het gemeten geval van 13:06."""
+    from custom_components.energy_management_system.const import (
+        WEERBRON_WEREN_MIN_VOORSPRONG_PP,
+    )
+
+    c = make_coordinator({})
+    _bron(c, "weather.forecast_thuis", 58.0)
+    _bron(c, "weather.openweathermap", 60.0)
+
+    uit = c.weerbronnen_voor_het_ensemble(
+        ["weather.forecast_thuis", "weather.openweathermap"]
+    )
+
+    assert uit["geweerd"] == []
+    assert len(uit["gebruikt"]) == 2
+    assert WEERBRON_WEREN_MIN_VOORSPRONG_PP >= 10.0
+    assert "voorsprong" in uit["reden"].lower()
+
+
+def test_een_duidelijk_slechtere_bron_valt_nog_steeds_uit(make_coordinator, hass):
+    """Waar de poort voor bedoeld was: 85 tegen 40 is wel een verschil."""
+    c = make_coordinator({})
+    _bron(c, "weather.goed", 85.0)
+    _bron(c, "weather.slecht", 40.0)
+
+    uit = c.weerbronnen_voor_het_ensemble(["weather.goed", "weather.slecht"])
+
+    assert uit["geweerd"] == ["weather.slecht"]
+
+
+def test_het_oordeel_noemt_de_voorsprong(make_coordinator, hass):
+    """Anders lijkt "niets geweerd" hetzelfde als "alles is goed", en
+    beide bronnen op 59% is bepaald niet goed."""
+    c = make_coordinator({})
+    _bron(c, "weather.a", 58.0)
+    _bron(c, "weather.b", 60.0)
+
+    uit = c.weerbronnen_voor_het_ensemble(["weather.a", "weather.b"])
+
+    assert "58" in uit["reden"] or "60" in uit["reden"] or "voorsprong" in uit["reden"]

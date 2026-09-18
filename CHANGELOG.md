@@ -26433,7 +26433,13 @@ kapotte detectie voor koelen, maar wel een gat voor dry.
 **Volledige testsuite**: 3981 tests, allemaal groen.
 
 
-## v5.6 — De nachtlastmeting mat vooral zichzelf
+## v5.7 — Tekortdetectie, reserveverjaring, weerbrongrens en de nachtlast
+
+Het nachtlastfilter was al als v5.6 geleverd en geïnstalleerd; de drie
+reparaties daarna staan hieronder in dezelfde versie, zodat er één
+herstart nodig is.
+
+### De nachtlastmeting mat vooral zichzelf
 
 Uit de export van 18 september: **122 sensoren gemeten**, en de top
 bestond vrijwel volledig uit dingen die geen apparaat zijn.
@@ -26495,4 +26501,116 @@ bevatten de acht al gemeten nachten elk 122 sensoren, dus die worden bij
 het laden door hetzelfde filter gehaald. Nachten die daarmee leeg raken
 verdwijnen, want anders tellen ze als gemeten.
 
-**Volledige testsuite**: 3991 tests, allemaal groen.
+### De tekortdetectie vuurde op één moment van 100 W
+
+Dit is de bevinding die geld kostte. Uit de export van 18 september:
+zeven tekortnachten op rij, met de dashboardtekst *"de veiligheidsmarge
+staat mogelijk te krap"*. De onderliggende cijfers:
+
+```
+09-11   ochtendstand 37%   netimport 0,11 kWh   -> telde als tekort
+09-12   ochtendstand 10%   netimport 1,05 kWh   -> ECHT tekort
+09-13   ochtendstand 33%   netimport 0,10 kWh   -> telde als tekort
+09-14   ochtendstand 18%   netimport 0,10 kWh   -> telde als tekort
+09-15   ochtendstand 18%   netimport 0,10 kWh   -> telde als tekort
+09-16   ochtendstand 15%   netimport 0,26 kWh   -> telde als tekort
+09-17   ochtendstand 13%   netimport 0,21 kWh   -> telde als tekort
+```
+
+Een nacht met 37% laadstand OVER en 0,11 kWh netafname telde als tekort.
+Honderd watt-uur over een hele nacht.
+
+De oorzaak: een dag telde als tekortdag zodra de netafname ÉÉN keer
+boven 100 W kwam. Geen minimale duur, geen minimale hoeveelheid.
+
+**En dat is niet cosmetisch.** `SHORTFALL_MARGIN_BONUS_PER_RECENT_DAY`
+is vijf procent per recente tekortdag, dus zes valse tekorten zetten
+dertig procent opslag op de reserve. Dat is de factor 1,295 waar de
+zelfcontrole van v4.1 op afging. Een hogere reserve betekent MINDER
+VERKOPEN - er werd betaald voor een tekort dat er niet was.
+
+De maat die hier hoort bestond al in `const.py`
+(`BATTERY_NIGHT_SHORTFALL_MIN_KWH = 0.5`) maar werd op deze plek niet
+gebruikt. De 100 W-drempel blijft als signaal; een dag telt pas als
+tekortdag als er over de nacht ook werkelijk is bijgekocht.
+
+### Weren vraagt ook een betere overblijver
+
+De poort van v5.4 vuurde op 18 september om 13:06 en weerde
+`weather.forecast_thuis`:
+
+```
+weather.forecast_thuis      58,0%   -> geweerd
+weather.openweathermap      60,0%   -> bleef
+het ensemble als geheel     50,5%
+```
+
+Twee procentpunt op 200 waarnemingen is geen bewijs, en het ensemble dat
+overbleef deed het slechter dan een muntje opgooien. Weren heeft alleen
+zin als wat overblijft aantoonbaar beter is: naast de drempel van 60%
+geldt nu een minimale voorsprong van tien procentpunt.
+
+### Wat NIET gebouwd is, en waarom
+
+**De koelregel van 13:15.** Het logboek toont *"Accukoeling uit - accu
+18.5°C boven buiten - wél uitgevoerd ondanks"*. Die tekst wordt volgens
+de code alleen gezet als de actie "aan" is. Ofwel de schermafdruk is
+verkeerd gelezen, ofwel er is een echte fout - dat is met een export te
+beslechten en niet met een gok.
+
+**De klimaatprojectie** staat op 0 van 6 uren met zowel een projectie
+als een meting. De tabel toont alleen toekomstige uren, dus dat kan een
+teloorzaak zijn en geen gat. Ook dit vraagt data.
+
+**"2 van de 6 geleerde waarden is betrouwbaar"** was geen bevinding: dat
+telt alleen de groep Geleerde waarden, en daar staan er precies twee op
+betrouwbaar. Mijn eerdere opmerking dat de lijst er vier toonde, telde
+over alle groepen.
+
+### De zelfcontrole "één reserve" vergeleek twee rondes
+
+Gemeld met een schermafdruk: *"Er is een tweede reservedefinitie
+ingeslopen: brug wijkt af van de sturing."*
+
+```
+sturing         3,240 kWh
+brug            2,501 kWh
+verkooptoets    3,240 kWh
+```
+
+Eerst leek dit appels met peren - de sturing na de marge, de brug
+ervoor. Dat was mijn eerste conclusie en die was fout: de brug gebruikt
+DEZELFDE functie `_get_dynamic_discharge_reserve_kwh`, dus beide zijn na
+de marge en ze zouden gelijk moeten zijn.
+
+De echte oorzaak zat in `_update_needed_kwh_breakdown_for_display`:
+
+```python
+u = self.last_reserve_margin_breakdown or {} if blok_in_zicht else {}
+if blok_in_zicht and not u:
+    self._get_dynamic_discharge_reserve_kwh(now, cheap_block_start)
+```
+
+De sturing **hergebruikte de bewaarde uitsplitsing** en rekende alleen
+opnieuw als die leeg was. De brug rekent elke ronde vers. Dus de twee
+kwamen uit verschillende rondes, met een andere zonverwachting en een
+ander aantal tekortdagen erin.
+
+Dat is precies de `last_*`-verjaring die in de architectuuraudit als
+punt 4 op de lijst stond - snapshots zonder levensduurbeheer. Hier was
+het geen theorie meer.
+
+Twee reparaties, en samen maken ze de fout onmogelijk in plaats van
+bewaakt:
+
+- de uitsplitsing wordt **elke ronde vers berekend** als er een blok in
+  zicht is;
+- de uitsplitsing draagt nu het **stempel van de ronde** waarin ze is
+  gerekend, en de zelfcontrole weigert over rondes heen te vergelijken.
+  Twee getallen uit verschillende rondes zeggen niets over één
+  definitie.
+
+Het stempel gebruikt de bestaande rondemarkering van v3.99.20 in plaats
+van er een tweede bij te bedenken.
+
+**Volledige testsuite**: 4005 tests, allemaal groen.
