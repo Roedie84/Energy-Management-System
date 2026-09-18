@@ -360,10 +360,14 @@ from .const import (
     KALMAN_DIVERGENCE_MEANINGFUL_PERCENT,
     KALMAN_DIVERGENCE_MIN_SAMPLES,
     KALMAN_DIVERGENCE_NEGLIGIBLE_PERCENT,
+    VOORSPELLINGSVERLOOP_DAGEN,
+    VOORSPELLING_MOMENTEN,
+    VOORSPELLING_SCHUIFT_MEE_KWH,
     WEATHER_ENSEMBLE_AGREEMENT_GOOD_PERCENT,
     WEATHER_ENSEMBLE_SPREAD_ATTENTION_PERCENT,
     WEATHER_ENSEMBLE_AGREEMENT_HISTORY_LENGTH,
     WEATHER_ENSEMBLE_AGREEMENT_MIN_SAMPLES,
+    WEERBRON_WEREN_MIN_WAARNEMINGEN,
     WEATHER_ENSEMBLE_AGREEMENT_USABLE_PERCENT,
     DIGITAL_TWIN_ACCURACY_HISTORY_LENGTH,
     DIGITAL_TWIN_ACCURACY_HORIZON_HOURS,
@@ -1267,7 +1271,7 @@ class EnergyManagementSystemCoordinator:
         # een regel - `__init__` staat op de ratel.
         # v3.99.19: `dagverloop` en `nabeschouwingen` erbij, in dezelfde
         # regel - `__init__` staat op de ratel.
-        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen, self.safe_sell_shadow, self.reden_afwijkingen, self.meting_laatst_gevuld = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, [], [], {}, {}
+        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen, self.safe_sell_shadow, self.reden_afwijkingen, self.meting_laatst_gevuld, self.weerbron_keuze, self.voorspellingsverloop = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, [], [], {}, {}, {}, {}
         self.handmatige_ingrepen: list[dict] = []
         # v1.1.6: met welke meetmethode de bewaarde foutreeks tot stand
         # is gekomen. Verandert de methode, dan wordt die reeks eenmalig
@@ -28541,6 +28545,113 @@ class EnergyManagementSystemCoordinator:
                 self._weather_cloud_cover_percent()
             )
 
+    def _weer_de_slechte_bronnen(
+        self, sources_used: list, cloud_readings: list
+    ) -> tuple[list, list]:
+        """Haalt de onbetrouwbare bronnen uit het ensemble (v5.3).
+
+        Een eigen functie omdat `_update_weather_ensemble_check` op de
+        groottescan staat, en die had meteen gelijk toen ik dit er
+        rechtstreeks in zette.
+        """
+        if cloud_readings and len(sources_used) > 1:
+            keuze = self.weerbronnen_voor_het_ensemble(sources_used)
+            if keuze["geweerd"]:
+                houden = [
+                    (b, w)
+                    for b, w in zip(sources_used, cloud_readings)
+                    if b in keuze["gebruikt"]
+                ]
+                sources_used = [b for b, _ in houden]
+                cloud_readings = [w for _, w in houden]
+                self._meld_geweerde_weerbronnen(keuze)
+        self.weerbron_keuze = (
+            self.weerbronnen_voor_het_ensemble(sources_used)
+            if sources_used
+            else {"gebruikt": [], "geweerd": [], "reden": "Geen bron met een meting."}
+        )
+        return sources_used, cloud_readings
+
+    def _meld_geweerde_weerbronnen(self, keuze: dict) -> None:
+        """Meldt dat een bron uit het ensemble valt (v5.3).
+
+        Niet stil: anders verandert de bewolkingsinschatting - en
+        daarmee de reserve en de planning - zonder dat iemand weet
+        waarom. Het dempingsvenster staat op een etmaal, want dit is
+        geen toestand die heen en weer gaat.
+        """
+        self._dispatch_notification(
+            notify_service=self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE),
+            title="🌥️ Weerbron valt uit het ensemble",
+            message=(
+                f"{keuze['reden']} De bewolkingsinschatting gebruikt nu "
+                f"{len(keuze['gebruikt'])} bron(nen): "
+                f"{', '.join(keuze['gebruikt'])}."
+            ),
+            notification_id="ems_weerbron_geweerd",
+            kind="weerbron_geweerd",
+        )
+
+    def weerbronnen_voor_het_ensemble(self, bronnen: list[str]) -> dict:
+        """Welke bronnen mogen meewegen in de bewolkingsinschatting?
+        (v5.3)
+
+        De beoordeling bestond al sinds v1.5.2 - 80% goed, 60%
+        bruikbaar, daaronder onbetrouwbaar - maar
+        `RELIABILITY_UNRELIABLE` werd NERGENS gebruikt om een bron te
+        weren. Elke bron met een bewolkingsmeting kwam in
+        `cloud_readings`, ongeacht zijn oordeel. De status was een label
+        en geen poort.
+
+        Het tweede gat: de tak die de BESTE bron kiest, werkt alleen als
+        de bronnen ONDERLING meer dan 25 procentpunt verschillen. Twee
+        slechte bronnen die het met elkaar eens zijn werden dus allebei
+        meegenomen en nooit bevraagd - precies de situatie van 18
+        september, toen beide op 74,5% stonden.
+
+        Dat is de tegenhanger van wat hier zes keer is opgeruimd: een
+        controle die maar één kant op kan. Er was een drempel die
+        goedkeurt en geen die afkeurt.
+
+        Twee veiligheidsregels: genoeg waarnemingen voordat een bron kan
+        wegvallen, en de laatste bron valt nooit uit - geen voorspelling
+        is erger dan een matige.
+        """
+        beoordeling = self.get_weather_source_reliability() or {}
+        gebruikt, geweerd = [], []
+        for bron in bronnen:
+            g = beoordeling.get(bron) or {}
+            percentage = g.get("overeenstemming_percent")
+            waarnemingen = g.get("aantal_waarnemingen") or 0
+            if (
+                percentage is None
+                or waarnemingen < WEERBRON_WEREN_MIN_WAARNEMINGEN
+                or percentage >= WEATHER_ENSEMBLE_AGREEMENT_USABLE_PERCENT
+            ):
+                gebruikt.append(bron)
+            else:
+                geweerd.append(bron)
+        if not gebruikt and bronnen:
+            return {
+                "gebruikt": list(bronnen),
+                "geweerd": [],
+                "reden": (
+                    "Geen enkele bron haalt de bruikbaarheidsgrens, dus doen ze "
+                    "allemaal mee - geen voorspelling is erger dan een matige."
+                ),
+            }
+        return {
+            "gebruikt": gebruikt,
+            "geweerd": geweerd,
+            "reden": (
+                f"{len(geweerd)} bron(nen) geweerd onder de "
+                f"{WEATHER_ENSEMBLE_AGREEMENT_USABLE_PERCENT:.0f}% "
+                f"overeenstemming: {', '.join(geweerd)}."
+                if geweerd
+                else "Alle bronnen halen de bruikbaarheidsgrens."
+            ),
+        }
+
     def _update_weather_ensemble_check(self, now: datetime) -> None:
         """Weather ensemble cross-check (v0.63.30): compares live PV
         output against what Solcast's own forecast predicts for right
@@ -28590,6 +28701,11 @@ class EnergyManagementSystemCoordinator:
             except (TypeError, ValueError):
                 continue
 
+        # v5.3: de poort. Hier stond niets - elke bron met een meting kwam
+        # in `cloud_readings`, ongeacht zijn beoordeling.
+        sources_used, cloud_readings = self._weer_de_slechte_bronnen(
+            sources_used, cloud_readings
+        )
         if not cloud_readings:
             self.weather_ensemble_cloud_cover_percent = None
             self.weather_ensemble_sources_used = []
@@ -31248,6 +31364,17 @@ class EnergyManagementSystemCoordinator:
         # van "kapot".
         for regel in self.get_metingen_stilstand():
             uit.append(regel["wat"])
+        # v5.3: een geweerde weerbron hoort hier, niet als telefoonmelding.
+        # De bewolkingsinschatting bepaalt de reserve en de planning, dus
+        # dat mag niet stil veranderen - maar het is ook geen melding om
+        # 's nachts van te wakker te worden.
+        geweerd = (self.weerbron_keuze or {}).get("geweerd") or []
+        if geweerd:
+            uit.append(
+                f"Weerbron(nen) {', '.join(geweerd)} wegen niet meer mee in de "
+                "bewolkingsinschatting: ze komen te vaak niet overeen met wat de "
+                "panelen deden. De overige bronnen bepalen de voorspelling."
+            )
         return uit
 
     def _weerbron_melding(self) -> str | None:
@@ -35287,6 +35414,8 @@ class EnergyManagementSystemCoordinator:
             ("dagverloop", lambda: self._leg_dagverloop_vast(now)),
             ("nachtlast", lambda: self._meet_nachtelijke_basislast(now)),
             ("woonkamertemperatuur", lambda: self._meet_woonkamertemperatuur(now)),
+            # v5.3: het verloop van de zonvoorspelling, drie keer per dag.
+            ("voorspellingsverloop", lambda: self.noteer_voorspellingsverloop(now)),
             ("meetherinnering", lambda: self._herinner_wat_meet(now)),
             # v3.68.0: het MPC-plan naast de eigen planning.
             ("mpc tegen de planning", lambda: self._meet_mpc(now)),
@@ -36490,6 +36619,116 @@ class EnergyManagementSystemCoordinator:
                 per["avond"] += kwh
         return per
 
+    def noteer_voorspellingsverloop(self, nu: datetime | None = None) -> None:
+        """Legt vast wat er voor de REST van de dag werd verwacht (v5.3).
+
+        Aanleiding, 18 september rond 11:15: 2,9 kWh opgewekt tegen 14,0
+        voorspeld - 79% ernaast terwijl het al over elven was. Precies de
+        dag waarop intraday-herschaling had moeten helpen, en precies de
+        dag die de terugtoetsbank NIET kan beoordelen: die gebruikt de
+        gerealiseerde zon als proxy, omdat het verloop van de
+        voorspelling niet werd bewaard.
+
+        Daarom was mijn conclusie "herschaling is een dood spoor"
+        (-0,001 euro per dag) te snel: de bank meet niet wat we willen
+        weten, en dat stond als `beperking` bij de uitkomst.
+
+        Drie momenten per dag, veertien dagen. Het eerste van een uur
+        telt - anders schuift de meting mee met de ronde en leg je 11:59
+        vast in plaats van 11:00. Stuurt niets.
+        """
+        nu = nu or dt_util.now()
+        if nu.hour not in VOORSPELLING_MOMENTEN:
+            return
+        dag = nu.date().isoformat()
+        uur = str(nu.hour)
+        per_dag = self.voorspellingsverloop.setdefault(dag, {})
+        if uur in per_dag:
+            return
+        einde = nu.replace(hour=23, minute=59, second=59, microsecond=0)
+        rest = self._estimate_pv_kwh_for_period(nu, einde)
+        dagvoorspelling, _herkomst = self.voorspelde_zon_vandaag_kwh(nu)
+        per_dag[uur] = {
+            "rest_van_de_dag_kwh": round(rest, 2) if rest is not None else None,
+            "gerealiseerd_tot_nu_kwh": (
+                round(self.pv_production_today_kwh, 2)
+                if self.pv_production_today_kwh is not None
+                else None
+            ),
+            "dagvoorspelling_kwh": (
+                round(dagvoorspelling, 2) if dagvoorspelling is not None else None
+            ),
+        }
+        for oud in sorted(self.voorspellingsverloop)[:-VOORSPELLINGSVERLOOP_DAGEN]:
+            self.voorspellingsverloop.pop(oud, None)
+        self.noteer_meting_gevuld("voorspellingsverloop", nu)
+        self.schedule_persisted_state_save()
+
+    def get_voorspellingsverloop(self) -> dict:
+        """Schoof de voorspelling mee met de werkelijkheid? (v5.3)
+
+        De vraag onder uitstelwaarde en herschaling. Bleef de som
+        gerealiseerd + nog-verwacht de hele dag op de ochtendvoorspelling
+        staan, dan stelt de bron niet bij en moet het EMS dat zelf doen.
+        Zakte hij mee, dan is herschalen dubbel werk.
+
+        Meet; stuurt niets.
+        """
+        dagen = {}
+        for dag, per_uur in sorted((self.voorspellingsverloop or {}).items()):
+            metingen = sorted(per_uur.items(), key=lambda kv: int(kv[0]))
+            if len(metingen) < 2:
+                continue
+            eerste, laatste = metingen[0][1], metingen[-1][1]
+            dagvoorspelling = eerste.get("dagvoorspelling_kwh")
+            som_laat = (laatste.get("rest_van_de_dag_kwh") or 0) + (
+                laatste.get("gerealiseerd_tot_nu_kwh") or 0
+            )
+            schoof_mee = (
+                dagvoorspelling is not None
+                and abs(som_laat - dagvoorspelling)
+                > VOORSPELLING_SCHUIFT_MEE_KWH
+            )
+            dagen[dag] = {
+                "momenten": {u: g for u, g in metingen},
+                "dagvoorspelling_kwh": dagvoorspelling,
+                "som_bij_laatste_meting_kwh": round(som_laat, 2),
+                "schoof_mee": schoof_mee,
+            }
+        if not dagen:
+            return {
+                "dagen": {},
+                "oordeel": (
+                    "Nog geen dag met twee momentopnames. Die komen om 08:00, "
+                    "11:00 en 14:00."
+                ),
+                "toelichting": self._voorspellingsverloop_toelichting(),
+            }
+        meegeschoven = sum(1 for d in dagen.values() if d["schoof_mee"])
+        return {
+            "dagen": dagen,
+            "dagen_geteld": len(dagen),
+            "dagen_meegeschoven": meegeschoven,
+            "oordeel": (
+                f"Op {meegeschoven} van {len(dagen)} dagen stelde de bron zijn "
+                "verwachting gedurende de dag bij. Op de overige bleef de som "
+                "van wat er al was en wat er nog kwam op de ochtendvoorspelling "
+                "staan - daar zou zelf herschalen iets kunnen toevoegen."
+            ),
+            "toelichting": self._voorspellingsverloop_toelichting(),
+        }
+
+    @staticmethod
+    def _voorspellingsverloop_toelichting() -> str:
+        return (
+            "Wat er op 08:00, 11:00 en 14:00 nog voor de REST van de dag werd "
+            "verwacht, met wat er tot dan toe binnen was. Zonder dit verloop kan "
+            "de terugtoetsbank de uitstelvraag niet beantwoorden: die gebruikt "
+            "anders de gerealiseerde zon als proxy, en juist op een dag met een "
+            "grote voorspelfout is het verschil tussen voorspelling en "
+            "werkelijkheid de hele vraag. Meet; stuurt niets."
+        )
+
     def herschaalde_zon_rest_van_de_dag(
         self,
         voorspeld_tot_nu: float,
@@ -36546,11 +36785,31 @@ class EnergyManagementSystemCoordinator:
         dagen: één die de resterende zon kaal gebruikt, één die hem
         herschaalt met de verhouding tot dat moment.
         """
+        # v5.3: zodra er dagen met een voorspellingsverloop zijn, kan de
+        # echte vraag worden gesteld in plaats van de benadering. Tot die
+        # tijd staat er expliciet bij dat dit met de gerealiseerde zon
+        # rekent - op 18 september (2,9 binnen tegen 14,0 voorspeld) is
+        # juist dat verschil de hele vraag.
+        met_verloop = sum(
+            1
+            for per_uur in (self.voorspellingsverloop or {}).values()
+            if len(per_uur) >= 2
+        )
         voorbehoud = (
             "Het bewijs voor herschaling ontbreekt nog: de "
             "zonpersistentiemeting gaf r=0,69 over acht dagen en noemt pas "
             "een richting bij 20 dagen, met twee dagen die de verkeerde kant "
             "op gingen. Dit verschil is dus een aanwijzing en geen groen licht."
+            + (
+                f" En deze terugtoets rekent nog met de GEREALISEERDE zon als "
+                f"proxy voor de voorspelling; er zijn {met_verloop} dag(en) met "
+                "een vastgelegd voorspellingsverloop, en pas daarmee is de echte "
+                "vraag te stellen."
+                if met_verloop < 7
+                else f" Er zijn {met_verloop} dagen met een vastgelegd "
+                "voorspellingsverloop - genoeg om de echte vraag te stellen in "
+                "plaats van de benadering."
+            )
         )
 
         def _regel(herschalen: bool):

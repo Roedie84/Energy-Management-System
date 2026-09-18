@@ -1,54 +1,45 @@
-EMS v5.2.1 - VOLLEDIGE boom
+EMS v5.3 - alleen de wijzigingen sinds v5.2.1
 
-Geen codewijziging ten opzichte van v5.2. Nieuw nummer zodat HACS de
-release oppakt en de geinstalleerde versie weer klopt.
+TE KOPIEREN naar config/custom_components/energy_management_system/
+(ER OVERHEEN, de map niet legen)
 
-WAAROM
-
-    Setup failed for custom integration 'energy_management_system':
-    No setup or config entry setup function defined.
-
-Home Assistant vond __init__.py niet. Dat bestand zat niet in de
-v5.2-deellevering omdat het ongewijzigd was; is de map eerst geleegd en
-daarna alleen de zes bestanden uit die zip erin gezet, dan missen de
-overige zestien.
-
-De code van v5.2 was in orde - 3955 tests groen, bestandscontrole 22 van
-22. Het ging mis in de levering.
-
-INSTALLEREN
-
-1. De HELE map custom_components/energy_management_system/ vervangen
-   door die uit deze zip - 22 bestanden, inclusief __init__.py.
-2. Home Assistant herstarten.
-
-CONTROLEREN
-
-    versie:            5.2.1
-    bestandscontrole:  in_orde true, 22 bestanden
-    fouten:            0
+    const.py, coordinator.py, diagnostics.py
+    dashboard_template.yaml     LET OP: dashboard gewijzigd
+    manifest.json, bestandscontrole.json
 
 NAAR DE REPO
 
-    README.md, CHANGELOG.md, LICENSE, hacs.json, pytest.ini
-    tools_maak_bestandslijst.py
-    docs/ONTWIKKELING.md
+    README.md, CHANGELOG.md
     dashboards/energy_management_system_dashboard.yaml
-    tests/
+    tests/ (vier bestanden, twee nieuw)
 
-Voor HACS: release met tag v5.2.1. Let op dat manifest.json ook 5.2.1
-zegt - die staat in deze zip goed.
+Voor HACS: release met tag v5.3.
 
-WAT ER IN v5.2 ZAT
+1. EEN ONBETROUWBARE WEERBRON VALT UIT HET ENSEMBLE
 
-1. Bewaking van zeven metingen met een eigen stilstandsdrempel; een
-   stille meting komt op de landingspagina.
-2. De terugtoetsbank: een beslisregel over alle opgeslagen dagen laten
-   lopen en met de nabeschouwing vergelijken. Seconden in plaats van
-   maanden.
-3. PERSISTED_FIELDS declaratief - 190 velden, vijf lijsten afgeleid, de
-   vier laadconversies benoemd.
-4. Intraday-herschaling als SCHADUW, niet als sturing: het bewijs uit de
-   zonpersistentie (r=0,69 over acht dagen) is nog niet genoeg.
+Onder de 60% overeenstemming weegt een bron niet meer mee. Die
+beoordeling bestond al sinds v1.5.2 maar werd nergens gebruikt - het
+was een label en geen poort.
 
-AAN DE STURING IS SINDS v4.17 NIETS VERANDERD.
+Twee veiligheidsregels: vanaf 50 waarnemingen, en nooit de laatste bron.
+
+VANDAAG VERANDERT ER NIETS AAN DE STURING: beide bronnen staan op 74,5%.
+De poort grijpt pas in als een bron wegzakt. Valt er een uit, dan komt
+dat op de landingspagina; de telefoonmelding staat standaard uit.
+
+Nieuw exportveld: weerbron_keuze.
+
+2. HET VERLOOP VAN DE ZONVOORSPELLING WORDT BEWAARD
+
+Om 08:00, 11:00 en 14:00 wordt vastgelegd wat er voor de REST van de dag
+werd verwacht en wat er tot dan binnen was. Veertien dagen.
+
+Waarom: op 18 september stond er 2,9 kWh opgewekt tegen 14,0 voorspeld.
+De terugtoetsbank kon die dag niet beoordelen, want die gebruikt de
+gerealiseerde zon als proxy. Mijn conclusie "herschaling is een dood
+spoor" (-0,001 euro/dag) rustte dus op een benadering.
+
+Nieuw exportveld: voorspellingsverloop - met per dag of de voorspelling
+MEESCHOOF met de werkelijkheid of op de ochtendwaarde bleef staan.
+
+Meet; stuurt niets.

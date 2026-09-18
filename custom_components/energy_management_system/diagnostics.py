@@ -498,6 +498,14 @@ async def async_get_config_entry_diagnostics(
         "metingen_stilstand": _veilig(
             "get_metingen_stilstand", coordinator.get_metingen_stilstand
         ),
+        # v5.3: welke weerbronnen meewegen en welke geweerd zijn.
+        "weerbron_keuze": _veilig(
+            "weerbron_keuze", lambda: coordinator.weerbron_keuze
+        ),
+        # v5.3: schoof de voorspelling mee met de werkelijkheid?
+        "voorspellingsverloop": _veilig(
+            "get_voorspellingsverloop", coordinator.get_voorspellingsverloop
+        ),
         "zonpersistentie": _veilig(
             "get_zonpersistentie", coordinator.get_zonpersistentie
         ),

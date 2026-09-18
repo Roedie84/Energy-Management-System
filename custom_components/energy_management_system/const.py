@@ -187,6 +187,8 @@ METING_VERWACHTE_STILTE_DAGEN = {
     "cycluskosten_geschiedenis": 14,
     "eigen_ingrepen": 120,
     "safe_sell_shadow": 60,
+    # v5.3: drie momenten per dag, dus stil na twee dagen is verdacht.
+    "voorspellingsverloop": 2,
 }
 
 METING_WAT_VULT_HEM = {
@@ -197,6 +199,7 @@ METING_WAT_VULT_HEM = {
     "cycluskosten_geschiedenis": "een afgeronde vaatwas- of wasbeurt",
     "eigen_ingrepen": "een handmatige stand aan- of uitzetten",
     "safe_sell_shadow": "verkoop in het terugvalpad, dus 's avonds",
+    "voorspellingsverloop": "de rondes van 08:00, 11:00 en 14:00",
 }
 
 # Hoe lang na het opstarten er niets wordt gemeld: een verse installatie
@@ -213,6 +216,25 @@ HERSCHALING_MIN_FACTOR = 0.6
 # Hoeveel er voorspeld moest zijn voordat de verhouding iets zegt. Om
 # 08:00 is er vrijwel niets binnen; dan is herschalen ruis versterken.
 HERSCHALING_MIN_VOORSPELD_KWH = 1.0
+
+# Op welke uren de voorspelling voor de REST van de dag wordt vastgelegd
+# (v5.3). Zonder dit verloop kan de terugtoetsbank de uitstelvraag niet
+# beantwoorden: die gebruikt nu de gerealiseerde zon als proxy, en juist
+# op een dag als 18 september - 2,9 kWh binnen tegen 14,0 voorspeld - is
+# het verschil tussen voorspelling en werkelijkheid de hele vraag.
+#
+# Drie momenten: vroeg (naast de bestaande momentopname van 08:00),
+# halverwege de ochtend en na de middagpiek.
+VOORSPELLING_MOMENTEN = (8, 11, 14)
+
+# Hoeveel dagen het verloop bewaard blijft. Veertien dagen x drie
+# momenten is 42 regels - verwaarloosbaar naast het dagverloop.
+VOORSPELLINGSVERLOOP_DAGEN = 14
+
+# Vanaf welk verschil de voorspelling "meeschoof": als gerealiseerd plus
+# nog-verwacht bij de laatste meting meer dan dit van de
+# ochtendvoorspelling afwijkt, heeft de bron zelf bijgesteld.
+VOORSPELLING_SCHUIFT_MEE_KWH = 1.0
 
 # Hoeveel kwartieren een dag moet hebben voordat de nabeschouwing een
 # oordeel geeft (v4.3). Zie get_nabeschouwing: op een halve dag weegt de
@@ -2628,7 +2650,8 @@ LOG_PRIORITEITEN = {
     "appliance_cheap_moment": LOG_PRIO_INFO,
     "daily_summary": LOG_PRIO_INFO,
     "monthly_summary": LOG_PRIO_INFO,
-    "besluit": LOG_PRIO_INFO,
+    "besluit": LOG_PRIO_INFO,    "weerbron_geweerd": "belangrijk",
+
 }
 
 # Hoeveel regels het logboek toont. Meer dan dit leest niemand, en de
@@ -2869,6 +2892,11 @@ WEATHER_ENSEMBLE_AGREEMENT_MIN_SAMPLES = 20
 WEATHER_ENSEMBLE_AGREEMENT_GOOD_PERCENT = 80.0
 WEATHER_ENSEMBLE_AGREEMENT_USABLE_PERCENT = 60.0
 
+# Hoeveel waarnemingen een bron nodig heeft voordat hij GEWEERD kan
+# worden (v5.3). Een bron met tien waarnemingen op 40% is geen slechte
+# bron maar een bron die nog niets heeft bewezen.
+WEERBRON_WEREN_MIN_WAARNEMINGEN = 50
+
 # --- Volledige toestandspersistentie (v1.0.4) ------------------------
 # Gevraagd: "algeheel geen verliezen na een herstart". Een inventarisatie
 # van alle 286 attributen in de coordinator liet zien dat het overgrote
@@ -3062,6 +3090,8 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "cycluskosten_geschiedenis": {"type": "plain"},
     "safe_sell_shadow": {"type": "plain"},
     "reden_afwijkingen": {"type": "plain"},
+    # v5.3: het verloop van de zonvoorspelling per dag.
+    "voorspellingsverloop": {"type": "plain"},
     "meting_laatst_gevuld": {"type": "plain"},
     "eigen_ingrepen": {"type": "plain"},
     "_steelstofzuiger_complete_today": {"type": "plain"},
@@ -3618,7 +3648,14 @@ MELDING_ADVIES: dict[str, tuple[str, str]] = {
         "vergelijking tegenover de maand ervoor.",
         "Niets. Ter kennisgeving; de trend over meerdere maanden zegt meer dan "
         "een enkele.",
+    ),    "weerbron_geweerd": (
+        "Een weerbron kwam te vaak niet overeen met wat de panelen "
+        "werkelijk deden en zakte onder de bruikbaarheidsgrens.",
+        "Niks. De bewolkingsinschatting gebruikt de overige bronnen. "
+        "Blijft er één bron over, dan blijft die meedoen ook als hij "
+        "matig is - geen voorspelling is erger dan een matige.",
     ),
+
 }
 
 
@@ -3679,6 +3716,21 @@ NOTIFICATION_TYPES: tuple[tuple[str, str, str, bool, int], ...] = (
         "Wanneer de vaatwasser of wasmachine zijn cyclus heeft afgerond.",
         True,
         5,
+    ),
+    # v5.3: een bron die uit het ensemble valt. Niet stil: dan verandert
+    # de voorspelling zonder dat iemand weet waarom.
+    (
+        "weerbron_geweerd",
+        "Weerbron valt uit het ensemble",
+        "Wanneer een weerbron onder de bruikbaarheidsgrens zakt en niet "
+        "meer meeweegt in de bewolkingsinschatting.",
+        # v5.3: standaard UIT. De toets van v1.20.1 heeft gelijk -
+        # meldingen die zichzelf aanzetten worden ruis, en v4.16 bracht
+        # het aantal terug van 28 naar 13 per dag. Dit komt in plaats
+        # daarvan op de landingspagina bij de aandachtspunten, want de
+        # bewolkingsinschatting hoort niet stil te veranderen.
+        False,
+        1440,
     ),
     (
         "proefstand_rijp",
@@ -5863,6 +5915,7 @@ ACHTERHOEKS_TITELS = {
     # reden: een vaste titel per soort kan alleen als er ook maar één
     # boodschap per soort is. Deze soort valt nu terug op de vertaling
     # woord voor woord, die de naam laat staan.
+    "weerbron_geweerd": "'n Weerbron dut neet meer mee",
 
 }
 

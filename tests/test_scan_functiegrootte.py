@@ -88,7 +88,12 @@ BEVROREN = {
     "coordinator.py:_run_monte_carlo_simulation": 61,
     "coordinator.py:_update_advisory_readiness": 68,
     "coordinator.py:_update_self_sufficiency_tracking": 67,
-    "coordinator.py:_update_weather_ensemble_check": 87,
+    # v5.3: 87 -> 88. Bewust verhoogd, niet weggemoffeld: de functie heeft
+    # een echte nieuwe verantwoordelijkheid gekregen (de poort die
+    # onbetrouwbare bronnen weert). Het rekenwerk zelf staat in
+    # `_weer_de_slechte_bronnen`; wat hier bij komt is de aanroep, en die
+    # hoort in dit pad omdat hier de bewolking wordt bepaald.
+    "coordinator.py:_update_weather_ensemble_check": 88,
     "coordinator.py:_waarom_regels": 100,
     "coordinator.py:async_bootstrap_energy_history": 83,
     "coordinator.py:async_bootstrap_night_consumption_from_history": 99,

@@ -585,6 +585,9 @@ VLUCHTIG_MET_REDEN = {
     # na een herstart is de episode voorbij en mag de melding weer, want
     # de toestand is dan opnieuw onbekend.
     "_herstel_gemeld": "vluchtig; na een herstart mag de melding weer",
+    # v5.3: de keuze wordt elke ronde opnieuw bepaald uit de
+    # beoordeling, die zelf wel bewaard wordt.
+    "weerbron_keuze": "elke ronde opnieuw bepaald uit weather_source_agreement",
     "battery_cooling_state": "blijkt opnieuw uit de sensoren",
     # Halve metingen. Een stuk dat door een herstart een gat heeft, is
     # geen meting meer - beter opnieuw beginnen dan een verminkt getal
