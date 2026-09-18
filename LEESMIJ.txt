@@ -1,4 +1,4 @@
-EMS v5.3 - alleen de wijzigingen sinds v5.2.1
+EMS v5.4 - alleen de wijzigingen sinds v5.2.1
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
 (ER OVERHEEN, de map niet legen)
@@ -13,7 +13,7 @@ NAAR DE REPO
     dashboards/energy_management_system_dashboard.yaml
     tests/ (vijf bestanden, twee nieuw)
 
-Voor HACS: release met tag v5.3.
+Voor HACS: release met tag v5.4.
 
 1. EEN ONBETROUWBARE WEERBRON VALT UIT HET ENSEMBLE
 
@@ -23,6 +23,8 @@ was een label en geen poort. Twee veiligheidsregels: vanaf 50
 waarnemingen, en nooit de laatste bron.
 
 VANDAAG VERANDERT ER NIETS AAN DE STURING: beide bronnen staan op 74,5%.
+De poort grijpt pas in als een bron wegzakt. Valt er een uit, dan komt
+dat op de landingspagina; de telefoonmelding staat standaard uit.
 
 2. HET VERLOOP VAN DE ZONVOORSPELLING WORDT BEWAARD
 

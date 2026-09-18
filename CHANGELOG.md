@@ -26252,7 +26252,7 @@ ontbrekende bestanden, niet een integratie die niet start.
 **Volledige testsuite**: 3955 tests, allemaal groen.
 
 
-## v5.3 — Een onbetrouwbare weerbron valt uit het ensemble
+## v5.4 — Een onbetrouwbare weerbron valt uit het ensemble
 
 Gemeten op 18 september, beide bronnen:
 
