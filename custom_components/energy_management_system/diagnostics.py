@@ -538,6 +538,10 @@ async def async_get_config_entry_diagnostics(
         "voorspellingsverloop": _veilig(
             "get_voorspellingsverloop", coordinator.get_voorspellingsverloop
         ),
+        # v5.9: waarom het rendementsleren niets oplevert.
+        "rendement_afwijzingen": _veilig(
+            "get_rendement_afwijzingen", coordinator.get_rendement_afwijzingen
+        ),
         "zonpersistentie": _veilig(
             "get_zonpersistentie", coordinator.get_zonpersistentie
         ),

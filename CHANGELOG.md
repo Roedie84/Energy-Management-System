@@ -26683,3 +26683,110 @@ De nachtcontrole meldt 1533 van 1557 rondes zelfvoorzienend. De opslag
 zakte al van 60% naar 45%.
 
 **Volledige testsuite**: 4012 tests, allemaal groen.
+
+
+## v5.9 — Diep in de integratie: vier dingen die fout gingen
+
+Gevraagd: *"verder nog kijken of er diep in de integratie ergens iets
+mis gaat"*. Het begon bij één onmogelijke combinatie en leidde naar drie
+fouten die al lang bestonden.
+
+### 1. De sensoren overschreven de opslag van de coördinator
+
+In de export van 21 september stonden de tekortdagen van v5.8 op
+`herbeoordeeld: v5.8` én `shortfall=True`. Volgens de code kan dat niet:
+die twee worden tegelijk gezet.
+
+De oorzaak zat in de opstartvolgorde:
+
+```
+await coordinator.async_load_persisted_state()          # 1. opslag laden
+await hass.config_entries.async_forward_entry_setups()  # 2. sensoren
+```
+
+In stap 1 laadt en herbeoordeelt de coördinator. In stap 2 herstelt elke
+sensor in `async_added_to_hass` zijn door Home Assistant bewaarde
+toestand - en zet die eroverheen. De sensor wint altijd, want hij komt
+later.
+
+**38 velden hebben zo twee bronnen**, via 22 sensoren. Het commentaar in
+`__init__.py` noemde zelf waarom dat gevaarlijk is: *"die entiteit-
+attributen zijn met opzet afgekapt op 20 items"*. Voor NILM was dat in
+v0.63.115 opgelost, voor de andere 22 niet.
+
+Sinds v1.0.4 bewaart de coördinator zijn toestand zelf, dus het herstel
+via de sensoren is een tweede bron die bij elke herstart elke correctie
+ongedaan maakt. Nu wordt de opslag na de sensoren nog een keer teruggezet
+- de opslag wint. Bij een allereerste installatie zonder opslag blijft
+het sensorherstel de enige bron.
+
+Mijn toets van v5.8 zag dit niet: die bouwde alleen de coördinator, zonder
+sensoren die zich daarna toevoegen.
+
+### 2. De leermodus bleef na een herstart aanstaan
+
+Export van 17 september 14:25:
+
+```
+learning_only = True
+handmatige_stand = None
+```
+
+Leermodus aan, zonder handmatige stand. **Zolang die aanstond, stuurde het
+EMS de accu niet.**
+
+Een handmatige stand zet ook de leermodus aan, en onthoudt dat in een
+vlag. Na een herstart herstelde de schakelaar de leermodus, maar de
+handmatige stand en de vlag waren weg - en de leermodus bleef staan tot
+iemand hem uitzette.
+
+Dat verklaart ook de logregel van 18 september 13:15, *"Accukoeling aan -
+wél uitgevoerd ondanks learning only"*. Dat gedrag was correct. Ik las die
+regel eerst als "uit" en noemde hem onmogelijk; dat was de regel van
+12:12 erboven.
+
+**En hier behoedde een ratel me voor een echte fout.** Mijn eerste
+reparatie bewaarde de handmatige stand. De toets over vluchtige velden
+keurde dat af, met de reden erbij:
+
+> *"na een herstart hoort de accu NIET uren later nog handmatig te laden
+> zonder dat iemand eraan denkt"*
+
+Een vergeten handmatige lading hoort bij een herstart te stoppen. Ik
+draaide een veiligheidskeuze om. Nu wordt alleen de VLAG bewaard, en die
+laat de integratie na een herstart de verweesde leermodus opruimen. De
+handmatige stand zelf blijft vluchtig.
+
+De vlag stond met opzet op de vluchtige lijst, met als reden *"na een
+herstart is die stand er toch niet meer"*. Dat klopte voor de stand, maar
+vergat dat de leermodus via de schakelaar wél overleeft.
+
+### 3. Het accurendement werd gemeten op een dode reeks
+
+De betrouwbaarheidskaart meldde al negen dagen *"7 laadcycli, betrouwbaar
+vanaf 20"*. Die zeven komen uit `learned_efficiency_history`, en in de
+code staat: *"wordt sinds de invoering van de halve cycli NERGENS meer
+bijgeschreven"*. De kaart telde een reeks die nooit groeit.
+
+Erger: het echte leren - laden en ontladen apart - had na negenenveertig
+dagen **nul metingen**. Het retourrendement van 84,6% komt uit de bevroren
+oude reeks, met waarden van 56,4% en 97,6% die de huidige grenzen als
+onmogelijk afwijzen. En dat getal stuurt de reserve en de kostprijs.
+
+De kaart telt nu de halve cycli.
+
+### 4. Waarom het rendementsleren niets oplevert: nog niet bekend
+
+Nagekeken: de logica WERKT. Over het echte dagverloop, met de voorraad
+afgeleid uit de laadstand, levert hij tien ontlaad- en negen laadmetingen
+rond de 84%. Het signaal is dus goed. Maar elke afwijzing ging alleen
+naar DEBUG, en daardoor is uit een export niet te zien waar het in bedrijf
+vastloopt.
+
+Dat heb ik niet blind gerepareerd. Elke afwijzing wordt nu geteld met de
+reden erbij (`te_kort`, `te_weinig_voorraadverschil`, `te_hoog`,
+`te_laag`), staat in de export als `rendement_afwijzingen`, en na twintig
+afwijzingen zonder één acceptatie komt er een aandachtspunt. De volgende
+export laat de oorzaak zien.
+
+**Volledige testsuite**: 4021 tests, allemaal groen.

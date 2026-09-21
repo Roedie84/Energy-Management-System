@@ -510,7 +510,6 @@ VLUCHTIG_MET_REDEN = {
     "handmatige_stand": "de handmatige stand vanuit het dashboard; na een herstart hoort de accu NIET uren later nog handmatig te laden zonder dat iemand eraan denkt",
     "handmatige_stand_sinds": "hoort bij handmatige_stand",
     "_handmatige_stand_laatste_herinnering": "hoort bij handmatige_stand",
-    "_leermodus_door_handmatige_stand": "of de leermodus door de handmatige schakelaar is aangezet; na een herstart is die stand er toch niet meer",
     "mpc_doel_soc": "de doel-SOC-lijn over de MPC-horizon; elke ronde opnieuw achteruit gerekend uit zon en verbruik",
     "_mpc_gemeten_op": "welke dag de MPC-vergelijking al is vastgelegd; na een herstart mag die dag opnieuw gemeten worden",
     "mpc_balans": "de energiebalans over de MPC-horizon; elke ronde opnieuw berekend uit prijzen, zon en verbruik",

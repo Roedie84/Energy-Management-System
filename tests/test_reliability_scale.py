@@ -170,13 +170,20 @@ def test_learned_efficiency_reports_its_maturity(make_coordinator, hass):
     # concludeerde dat er x100 moest. In een echte export stond daardoor
     # 8290% waar `learning_health` 82,9 meldde.
     c.learned_efficiency_history = [82.9] * 8
+    # v5.9: de kaart telt de HALVE CYCLI, niet de oude reeks - die werd
+    # sinds v1.32.0 nergens meer bijgeschreven en stond al negen dagen op
+    # zeven. Acht per richting is "indicatief", net als acht oude cycli.
+    c.charge_efficiency_history = [91.0] * 8
+    c.discharge_efficiency_history = [91.0] * 8
 
     rij = next(
         r for r in c.get_reliability_overview() if r["naam"] == "Accu-rendement"
     )
 
     assert rij["niveau"] == RELIABILITY_INDICATIVE
-    assert rij["waarde"] == 82.9
+    # v5.9: met halve cycli rekent het rendement ze samen: 91 x 91 = 82,81.
+    # De 82,9 was de mediaan van de oude terugvalreeks.
+    assert rij["waarde"] == 82.81
 
 
 def test_every_row_has_a_readable_label(make_coordinator, hass):

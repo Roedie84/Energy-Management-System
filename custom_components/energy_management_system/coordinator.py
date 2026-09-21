@@ -41,6 +41,7 @@ import logging
 import math
 import json
 import time
+import copy
 import statistics
 import sys
 import time
@@ -1276,7 +1277,7 @@ class EnergyManagementSystemCoordinator:
         # een regel - `__init__` staat op de ratel.
         # v3.99.19: `dagverloop` en `nabeschouwingen` erbij, in dezelfde
         # regel - `__init__` staat op de ratel.
-        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen, self.safe_sell_shadow, self.reden_afwijkingen, self.meting_laatst_gevuld, self.weerbron_keuze, self.voorspellingsverloop = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, [], [], {}, {}, {}, {}
+        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen, self.safe_sell_shadow, self.reden_afwijkingen, self.meting_laatst_gevuld, self.weerbron_keuze, self.voorspellingsverloop, self._geladen_opslag, self.rendement_afwijzingen = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, [], [], {}, {}, {}, {}, None, {}
         self.handmatige_ingrepen: list[dict] = []
         # v1.1.6: met welke meetmethode de bewaarde foutreeks tot stand
         # is gekomen. Verandert de methode, dan wordt die reeks eenmalig
@@ -3324,6 +3325,46 @@ class EnergyManagementSystemCoordinator:
         self._efficiency_segment_ac_kwh = 0.0
         self._efficiency_segment_start_kwh = voorraad_kwh
 
+    def _tel_afwijzing(
+        self,
+        soort: str,
+        percentage: float | None,
+        richting: int,
+        ac_kwh: float,
+        verschil: float,
+    ) -> None:
+        """Telt waarom een rendementsstuk niet meetelde (v5.9).
+
+        Het echte rendementsleren - laden en ontladen apart - had na
+        negenenveertig dagen nul metingen, en elke afwijzing ging alleen
+        naar DEBUG. Stil falen was daardoor niet te onderscheiden van
+        een meting die nog wacht. Over het echte dagverloop werkt de
+        logica wél; wat er in bedrijf misgaat, laat deze telling zien.
+        """
+        a = self.rendement_afwijzingen
+        a[soort] = a.get(soort, 0) + 1
+        a["laatste"] = {
+            "soort": soort,
+            "percentage": round(percentage, 1) if percentage is not None else None,
+            "richting": "ontladen" if richting > 0 else "laden",
+            "ac_kwh": round(ac_kwh, 3),
+            "voorraadverschil_kwh": round(verschil, 3),
+        }
+
+    def get_rendement_afwijzingen(self) -> dict:
+        """Waarom het rendementsleren niets oplevert (v5.9)."""
+        return {
+            "metingen_laden": len(self.charge_efficiency_history or []),
+            "metingen_ontladen": len(self.discharge_efficiency_history or []),
+            "afwijzingen": dict(self.rendement_afwijzingen or {}),
+            "toelichting": (
+                "Waarom een laad- of ontlaadstuk niet meetelde. te_kort: minder "
+                "dan 1,5 kWh omgezet. te_weinig_voorraadverschil: de voorraad "
+                "bewoog te weinig of de verkeerde kant op. te_hoog of te_laag: "
+                "buiten de 70-100% die fysiek mogelijk is."
+            ),
+        }
+
     def _sluit_rendementsstuk(self, voorraad_kwh: float | None) -> None:
         """Reken een afgesloten stuk om naar een rendement (v1.32.0)."""
         richting = self._efficiency_segment_direction
@@ -3333,12 +3374,11 @@ class EnergyManagementSystemCoordinator:
         self._efficiency_segment_ac_kwh = 0.0
         self._efficiency_segment_start_kwh = None
 
-        if (
-            richting == 0
-            or voorraad_kwh is None
-            or begin is None
-            or ac_kwh < EFFICIENCY_SEGMENT_MIN_KWH
-        ):
+        if richting == 0 or voorraad_kwh is None or begin is None:
+            return
+        if ac_kwh < EFFICIENCY_SEGMENT_MIN_KWH:
+            # v5.9: tellen, niet stil terugkeren - zie `_tel_afwijzing`.
+            self._tel_afwijzing("te_kort", None, richting, ac_kwh, voorraad_kwh - begin)
             return
 
         verschil = voorraad_kwh - begin
@@ -3346,12 +3386,14 @@ class EnergyManagementSystemCoordinator:
             # Ontladen: eruit gekomen gedeeld door wat de accu kwijtraakte.
             gedaald = -verschil
             if gedaald < EFFICIENCY_SEGMENT_MIN_KWH:
+                self._tel_afwijzing("te_weinig_voorraadverschil", None, richting, ac_kwh, verschil)
                 return
             percentage = 100 * ac_kwh / gedaald
             geschiedenis = self.discharge_efficiency_history
         else:
             # Laden: erbij gekomen gedeeld door wat erin ging.
             if verschil < EFFICIENCY_SEGMENT_MIN_KWH:
+                self._tel_afwijzing("te_weinig_voorraadverschil", None, richting, ac_kwh, verschil)
                 return
             percentage = 100 * verschil / ac_kwh
             geschiedenis = self.charge_efficiency_history
@@ -3368,6 +3410,15 @@ class EnergyManagementSystemCoordinator:
             _LOGGER.debug(
                 "Rendementsstuk verworpen: %.1f%% (richting %s, ac %.2f kWh, "
                 "voorraadverschil %.2f kWh)",
+                percentage,
+                richting,
+                ac_kwh,
+                verschil,
+            )
+            self._tel_afwijzing(
+                "te_hoog"
+                if percentage > MAX_PLAUSIBLE_HALF_EFFICIENCY_PERCENT
+                else "te_laag",
                 percentage,
                 richting,
                 ac_kwh,
@@ -16493,8 +16544,19 @@ class EnergyManagementSystemCoordinator:
         voeg_toe(
             "Geleerde waarden",
             "Accu-rendement",
+            # v5.9: de HALVE CYCLI tellen, niet de oude reeks. Die werd
+            # sinds v1.32.0 nergens meer bijgeschreven en stond al negen
+            # dagen op zeven - hij kon nooit betrouwbaar worden. Het echte
+            # leren gebeurt per richting; de kleinste van de twee bepaalt
+            # hoe ver het is.
             self.reliability_from_samples(
-                len(self.learned_efficiency_history or []), 5, 20, "laadcycli"
+                min(
+                    len(self.charge_efficiency_history or []),
+                    len(self.discharge_efficiency_history or []),
+                ),
+                5,
+                20,
+                "halve cycli per richting",
             ),
             # v1.9.4: NIET omrekenen. In v1.3.0 stond hier een
             # vermenigvuldiging met 100, op basis van een testwaarde van
@@ -30984,6 +31046,66 @@ class EnergyManagementSystemCoordinator:
         self.measurement_quality = None
         self.energy_balance_method_version = ENERGY_BALANCE_METHOD_VERSION
 
+    def _bewaar_geladen_opslag(self, stored: dict | None) -> None:
+        """Houdt de geladen opslag vast tot de sensoren zijn toegevoegd
+        (v5.9)."""
+        self._geladen_opslag = copy.deepcopy(stored) if stored else None
+
+    def ruim_vastgelopen_leermodus_op(self) -> bool:
+        """Zet een leermodus uit die bij een verdwenen handmatige stand
+        hoorde (v5.9).
+
+        Op 17 september 14:25 stond `learning_only = True` met
+        `handmatige_stand = None`. De handmatige stand had de leermodus
+        aangezet; na de herstart herstelde de schakelaar de leermodus,
+        maar de handmatige stand en de vlag die zei "ik zette hem aan"
+        waren weg. Het EMS stuurde niet, en niemand wist waarom.
+
+        Alleen opruimen als de VLAG zegt dat de handmatige stand hem
+        aanzette. Heeft de gebruiker de leermodus zelf aangezet, dan
+        blijft hij staan.
+        """
+        if not (
+            self.learning_only
+            and self._leermodus_door_handmatige_stand
+            and not self.handmatige_stand
+        ):
+            return False
+        self.learning_only = False
+        self._leermodus_door_handmatige_stand = False
+        _LOGGER.warning(
+            "De leermodus stond aan voor een handmatige stand die er niet "
+            "meer is - uitgezet, het EMS stuurt weer."
+        )
+        return True
+
+    def herstel_de_opslag_na_de_sensoren(self) -> None:
+        """Zet de opslag terug nadat de sensoren hebben hersteld (v5.9).
+
+        De opstartvolgorde is: opslag laden, dan sensoren toevoegen. Elke
+        sensor herstelt in `async_added_to_hass` zijn door Home Assistant
+        bewaarde toestand en zette die over de coördinator heen - 38
+        velden met twee bronnen, waarbij de sensor altijd won omdat hij
+        later kwam.
+
+        Dat maakte elke correctie ongedaan die de coördinator bij het
+        laden doet: de herbeoordeelde tekortdagen van v5.8 stonden op
+        21 september met `herbeoordeeld: v5.8` én `shortfall=True`. En de
+        sensorattributen zijn afgekapt op 20 items, dus een ingekorte
+        kopie kon een volledige reeks overschrijven.
+
+        Sinds v1.0.4 is de opslag de bron. Deze stap maakt dat waar: na
+        de sensoren wordt de opslag nog een keer toegepast. Bij een
+        allereerste installatie zonder opslag gebeurt er niets, en blijft
+        het sensorherstel de enige bron.
+        """
+        opslag = self._geladen_opslag
+        self._geladen_opslag = None
+        if opslag:
+            self._apply_persisted_state(copy.deepcopy(opslag))
+        # v5.9: pas nu weet de integratie wat de schakelaars herstelden.
+        self.ruim_vastgelopen_leermodus_op()
+
     async def async_load_persisted_state(self) -> None:
         await self.async_laad_instellingslabels()
         await self._async_load_persisted_state_zonder_labels()
@@ -31009,6 +31131,9 @@ class EnergyManagementSystemCoordinator:
         self._state_store_loaded = True
         if isinstance(stored, dict):
             self._apply_persisted_state(stored)
+        # v5.9: onthouden wat er geladen is, zodat het na de sensoren nog
+        # een keer teruggezet kan worden - zie `herstel_de_opslag_na_de_sensoren`.
+        self._bewaar_geladen_opslag(stored)
         self._discard_history_from_an_older_method()
         self._migreer_dagreeks_kosten()
         self._ruim_oude_klimaatcellen_op()
@@ -31519,6 +31644,23 @@ class EnergyManagementSystemCoordinator:
                 f"Weerbron(nen) {', '.join(geweerd)} wegen niet meer mee in de "
                 "bewolkingsinschatting: ze komen te vaak niet overeen met wat de "
                 "panelen deden. De overige bronnen bepalen de voorspelling."
+            )
+        # v5.9: een rendementsmeting die niets oplevert, hoort gezien te
+        # worden. Hij stond negenenveertig dagen op nul, stil.
+        afwijzingen = sum(
+            v for v in (self.rendement_afwijzingen or {}).values()
+            if isinstance(v, int)
+        )
+        if (
+            not self.charge_efficiency_history
+            and not self.discharge_efficiency_history
+            and afwijzingen >= 20
+        ):
+            uit.append(
+                f"Het accurendement leert niets: {afwijzingen} laad- en "
+                "ontlaadstukken afgewezen en nul geaccepteerd. Het dashboard "
+                "rekent daardoor met een oude, bevroren waarde. Zie "
+                "rendement_afwijzingen in de export voor de reden."
             )
         return uit
 

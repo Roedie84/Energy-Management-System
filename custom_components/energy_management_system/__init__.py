@@ -185,6 +185,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await coordinator.async_load_persisted_state()
     await coordinator.async_load_persisted_nilm_state()
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    # v5.9: de opslag wint van het sensorherstel. Elke sensor zette in
+    # `async_added_to_hass` zijn door HA bewaarde toestand over de
+    # coördinator heen - 38 velden, met attributen die afgekapt zijn op
+    # 20 items. Nu wordt de opslag daarna nog een keer teruggezet.
+    coordinator.herstel_de_opslag_na_de_sensoren()
     await coordinator.async_setup()
     await solar_tracker.async_setup()
     await hass.async_add_executor_job(_copy_dashboard_template, hass)

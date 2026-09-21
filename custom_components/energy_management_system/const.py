@@ -3177,6 +3177,16 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "reden_afwijkingen": {"type": "plain"},
     # v5.3: het verloop van de zonvoorspelling per dag.
     "voorspellingsverloop": {"type": "plain"},
+    # v5.9: ALLEEN de vlag, niet de handmatige stand zelf. Die overleeft
+    # met opzet geen herstart - "na een herstart hoort de accu NIET uren
+    # later nog handmatig te laden zonder dat iemand eraan denkt". Maar de
+    # leermodus die hij aanzette, overleefde wél (via de schakelaar), en
+    # op 17 september stond die daardoor aan zonder handmatige stand. Met
+    # de vlag bewaard weet de integratie na een herstart dat die
+    # leermodus bij een verdwenen stand hoorde, en kan hij weg.
+    "_leermodus_door_handmatige_stand": {"type": "plain"},
+    # v5.9: waarom het rendementsleren niets oplevert.
+    "rendement_afwijzingen": {"type": "plain"},
     "meting_laatst_gevuld": {"type": "plain"},
     "eigen_ingrepen": {"type": "plain"},
     "_steelstofzuiger_complete_today": {"type": "plain"},
