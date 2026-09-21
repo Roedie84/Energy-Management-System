@@ -78,3 +78,34 @@ def test_de_meldingensensor_en_de_regel_delen_een_bron(make_coordinator, hass):
 
     assert MeldingenSensor(c, "x").native_value == 7
     assert "meld24u 7" in c.diagnose_regel("leren")
+
+
+def test_de_nieuwe_bronnen_tellen_mee_als_optionele_functie(make_coordinator, hass):
+    """In de LEESMIJ van v5.14 stond dat "Optionele functies nog niet
+    geconfigureerd" de vier nieuwe bronnen zou meetellen. Dat was niet zo:
+    ze stonden niet in de vaste lijst. Een 0 zei daardoor niets."""
+    c = make_coordinator(_verplicht())
+    namen = " ".join(f["naam"] for f in c.get_missing_optional_features())
+
+    for deel in ("Tweede zonvoorspelling", "instraling", "Gasprijs", "accuventilatoren"):
+        assert deel in namen, deel
+
+    # en zodra ze zijn ingesteld, verdwijnen ze uit de lijst
+    c.config = dict(c.config)
+    c.config.update(
+        {
+            "second_pv_forecast_today_sensor_entity": "sensor.energy_production_today",
+            "irradiance_sensor_entity": "sensor.straling",
+            "gas_price_sensor_entity": "sensor.gasprijs",
+            "battery_cooling_fan_power_sensor_entity": "sensor.ventilatoren",
+        }
+    )
+    namen = " ".join(f["naam"] for f in c.get_missing_optional_features())
+    for deel in ("Tweede zonvoorspelling", "instraling", "Gasprijs", "accuventilatoren"):
+        assert deel not in namen, deel
+
+
+def test_de_gezondheidsregel_toont_wat_er_nog_mist(make_coordinator, hass):
+    c = make_coordinator(_verplicht())
+
+    assert "optioneel_mist" in c.diagnose_regel("gezondheid")

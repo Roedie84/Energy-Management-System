@@ -27433,3 +27433,26 @@ sensor valt dan terug op `unknown`. Dat gold altijd al voor elke sensor,
 maar werd pas zichtbaar nu de diagnoseregels die ruimte bewust vullen.
 
 **Volledige testsuite**: 4108 tests, allemaal groen.
+
+
+## v5.14.1 — De teller voor optionele functies kende de nieuwe vier niet
+
+Gevraagd, na de installatie van v5.14: *"Nu zou je moeten kunnen zien dat
+alles goed staat?"*
+
+Via de connector kon ik zien dat v5.14 draait - de meldingensensor stond op
+18 in plaats van de 200 van vóór v5.13 - maar niet of de vier nieuwe bronnen
+waren ingesteld. De sensor "Optionele functies nog niet geconfigureerd"
+stond op 0.
+
+**En die 0 zei niets.** In de LEESMIJ van v5.14 schreef ik dat die sensor de
+vier nieuwe bronnen zou meetellen tot ze waren gekozen. Dat was niet zo: hij
+werkt met een vaste lijst, en daar had ik ze nooit aan toegevoegd. Een
+bewering in de instructies die ik niet had nagegaan.
+
+Nu staan ze in die lijst: tweede zonvoorspelling, gemeten instraling,
+gasprijs en ventilatorvermogen. En de diagnoseregel "gezondheid" toont
+`optioneel_mist N`, zodat via de connector te zien is of er nog iets moet
+worden ingesteld.
+
+**Volledige testsuite**: 4110 tests, allemaal groen.

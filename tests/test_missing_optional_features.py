@@ -68,6 +68,11 @@ def test_empty_when_everything_configured(make_coordinator, hass):
             "dishwasher_power_sensor_entity": "sensor.vaatwasser",
             "washing_machine_power_sensor_entity": "sensor.wasmachine",
             "knmi_weather_entity": "weather.knmi",
+            # v5.14.1: de vier bronnen van v5.14 horen er ook bij.
+            "second_pv_forecast_today_sensor_entity": "sensor.energy_production_today",
+            "irradiance_sensor_entity": "sensor.straling",
+            "gas_price_sensor_entity": "sensor.gasprijs",
+            "battery_cooling_fan_power_sensor_entity": "sensor.ventilatoren",
         }
     )
 

@@ -31727,6 +31727,31 @@ class EnergyManagementSystemCoordinator:
                 "Live-gecorrigeerde zonverwachting i.p.v. een trage, "
                 "langetermijn-gemiddelde schatting.",
             ),
+            # v5.14.1: de vier bronnen van v5.14. In de LEESMIJ van v5.14 stond
+            # dat deze sensor ze zou meetellen - dat was niet zo, ze stonden
+            # hier niet. Een 0 zei daardoor niets over de nieuwe vier.
+            (
+                CONF_TWEEDE_PV_VOORSPELLING_SENSOR,
+                "Tweede zonvoorspelling (bv. Forecast.Solar)",
+                "Solcast naast een tweede voorspelling leggen: welke zit "
+                "dichter bij, en voorspelt onenigheid een onzekere dag?",
+            ),
+            (
+                CONF_INSTRALING_SENSOR,
+                "Gemeten instraling (bv. Buienradar 'Straling')",
+                "Het dak per zonrichting tegen gemeten licht - bevestigt of "
+                "weerlegt beschaduwing.",
+            ),
+            (
+                CONF_GAS_PRICE_SENSOR,
+                "Gasprijs in euro per m3",
+                "Verwarmingsadvies: airco of cv, wat is nu goedkoper?",
+            ),
+            (
+                CONF_BATTERY_COOLING_FAN_POWER_SENSOR,
+                "Vermogen van de accuventilatoren",
+                "Wat de accukoeling werkelijk verbruikt en kost per jaar.",
+            ),
             (
                 CONF_CO2_INTENSITY_SENSOR,
                 "CO2-intensiteit-sensor",
@@ -35285,6 +35310,8 @@ class EnergyManagementSystemCoordinator:
             ("zelfctl", zelfcontroles),
             ("bestand", lambda: "ok" if self.get_bestandscontrole().get("in_orde") else "AFWIJKEND"),
             ("config", config),
+            # v5.14.1: zo is via de connector te zien of alles is ingesteld.
+            ("optioneel_mist", lambda: len(self.get_missing_optional_features())),
             ("", modus),
         ]
 

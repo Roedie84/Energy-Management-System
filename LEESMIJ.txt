@@ -1,61 +1,36 @@
-EMS v5.14 - alle wijzigingen sinds v5.12 (bevat v5.13)
+EMS v5.14.1 - alleen de wijzigingen sinds v5.14
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
 (ER OVERHEEN, de map niet legen)
 
-    const.py, coordinator.py, sensor.py, config_flow.py, diagnostics.py
-    slimme_bronnen.py            NIEUW BESTAND
-    strings.json
-    translations/en.json, translations/nl.json
-    dashboard_template.yaml      GEWIJZIGD (diagnose in de kaart Bewaking)
+    coordinator.py
+    dashboard_template.yaml     (gaat altijd mee, ongewijzigd)
     manifest.json, bestandscontrole.json
 
 NAAR DE REPO
 
     README.md, CHANGELOG.md
-    .gitignore, tools_maak_toestand.py
-    dashboards/energy_management_system_dashboard.yaml   GEWIJZIGD
-    tests/ (twaalf bestanden)
+    dashboards/energy_management_system_dashboard.yaml
+    tests/ (twee bestanden)
 
-NIET NAAR DE REPO
+Voor HACS: release met tag v5.14.1.
 
-    tests/fixtures/opslag_echt.json   (je verbruik per kwartier, in .gitignore)
+WAT ER VERANDERT
 
-Voor HACS: release met tag v5.14.
+"Optionele functies nog niet geconfigureerd" telt nu ook de vier bronnen
+van v5.14 mee. In de vorige LEESMIJ stond dat dat al zo was - dat klopte
+niet.
 
-NA DE HERSTART - TWEE DINGEN
+VERWACHT: staat een van de vier nog leeg, dan telt de sensor hem nu mee.
 
-1. VIER SENSOREN KIEZEN
-   Instellingen > Apparaten en diensten > Energy Management System >
-   Configureren:
-     Tweede zonvoorspelling  -> "Solar production forecast ... - vandaag"
-     Gemeten instraling      -> "Straling"
-     Gasprijs                -> "Gas tegen dagprijzen Huidig gastarief"
-     Ventilatorvermogen      -> "Ventilatoren Thuisaccu Vermogen"
+DAN NOG DIT, ZODAT IK HET ZELF KAN ZIEN
 
-2. DRIE DIAGNOSESENSOREN VRIJGEVEN VOOR DE ASSISTENT
-   Instellingen > Spraakassistenten > Vrijgeven (tabblad), zoek op
-   "Diagnose" en zet deze drie aan:
-     Diagnose gezondheid
-     Diagnose sturing
-     Diagnose leren
-   Dan kan ik ze via de connector lezen, en hoef je voor een snelle check
-   geen export meer te downloaden.
+De drie diagnosesensoren zijn nog niet vrijgegeven voor de assistent.
+Instellingen > Spraakassistenten > tabblad Vrijgeven, zoek op "Diagnose"
+en zet aan:
+    Diagnose gezondheid
+    Diagnose sturing
+    Diagnose leren
 
-WAT DE DIAGNOSESENSOREN LATEN ZIEN
-
-   gezondheid  versie, fouten, storingen, zelfcontroles, bestandscontrole,
-               configuratie (in orde / kapot / slaapt), stuurt of leermodus
-   sturing     reden, accustand, beschikbaar, reserve met opslag,
-               tekortdagen, volgend goedkoop blok
-   leren       weerbronnen, meldingen in 24 uur, rendementsmetingen,
-               nachtverbruik, PV-bias, tweede voorspelling, instraling
-
-   "-" = geen waarde, "?" = dat onderdeel viel om.
-
-Voor diepgaand zoekwerk blijft de export nodig.
-
-VERDER IN v5.14
-- tweede zonvoorspelling, instraling, verwarmingsadvies, ventilatorverbruik
-- het uitvraagmechanisme tegen fouten zoals deze week
-- GACS-attributen niet meer boven de recordergrens
+Daarna lees ik bij elke vraag de toestand rechtstreeks, inclusief
+"optioneel_mist" - dan zie ik of alle vier de bronnen zijn ingesteld.
