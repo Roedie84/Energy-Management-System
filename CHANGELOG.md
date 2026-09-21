@@ -26614,3 +26614,72 @@ Het stempel gebruikt de bestaande rondemarkering van v3.99.20 in plaats
 van er een tweede bij te bedenken.
 
 **Volledige testsuite**: 4005 tests, allemaal groen.
+
+
+## v5.8 — Twee fouten van mij uit v5.4 en v5.7
+
+Beide gevonden in de export van 21 september, na 63 uur in bedrijf.
+
+### De export riep een functie verkeerd aan
+
+```
+1 onderdeel(en) vallen om
+diagnostiek:get_airco_activation_probability
+TypeError: missing 1 required positional argument: 'bucket_key'
+```
+
+In v5.4 zette ik acht overzichten in de diagnostiek. Een daarvan vraagt
+een argument - het temperatuurbakje - en ik riep hem zonder aan. De
+export vangt dat af, maar het veld bleef leeg, de storing stond drie
+dagen in de interne fouten en er kwam een melding op het dashboard.
+
+Nu staat er `get_airco_kansen_per_bakje`: alle geleerde bakjes, zoals de
+sensor ze ook toont, zonder argument.
+
+**En de ratel die ik erbij zette, controleerde de NAAM en niet het
+GEDRAG.** Hij zocht of de functie in de export stond - en dat deed hij.
+Dat is precies de les van v4.19, *"een contract moet gedrag toetsen,
+niet tekst"*, en ik heb hem geschonden in de versie waarin ik de ratel
+bouwde.
+
+De nieuwe ratel roept elke exportfunctie echt aan, op een verse
+coordinator, en keurt elke functie af die een verplicht argument vraagt.
+Dit had de fout in de suite gevangen in plaats van na drie dagen in
+bedrijf.
+
+### De oude tekortdagen stonden er nog
+
+v5.7 repareerde de INSTROOM. Uit dezelfde export:
+
+```
+09-14  shortfall=True   netimport 0,10   <- opgeslagen met de OUDE regel
+09-15  shortfall=True   netimport 0,10
+09-16  shortfall=True   netimport 0,26
+09-17  shortfall=True   netimport 0,21
+09-18  shortfall=False  netimport 0,23   <- nieuwe regel, klopt
+09-19  shortfall=False  netimport 0,06
+09-20  shortfall=False  netimport 0,18
+```
+
+De drie nachten sinds v5.7 zijn goed beoordeeld. De vier daarvoor stonden
+er nog met de oude regel en hielden de tekortbonus op 20%, terwijl er
+geen enkel echt tekort tussen zat.
+
+Dat is de **derde keer** dezelfde fout: in v4.17.1 de parenvoorraad, in
+v5.6 bij de nachtlast wél opgeschoond, en hier weer vergeten.
+
+De netimport staat in elk record sinds v4.7, dus de opgeslagen dagen
+worden nu bij het laden herbeoordeeld. Een herbeoordeeld record krijgt
+`herbeoordeeld: v5.8`, zodat later te zien is dat dit niet het
+oorspronkelijke oordeel was. Records zonder netimport blijven ongemoeid.
+
+**Verwacht**: de tekortbonus gaat naar nul en de opslag zakt van 45%
+naar ongeveer 25%.
+
+### Wat v5.7 wel goed deed
+
+De zelfcontrole "één reserve" staat groen: de verjaringsreparatie werkt.
+De nachtcontrole meldt 1533 van 1557 rondes zelfvoorzienend. De opslag
+zakte al van 60% naar 45%.
+
+**Volledige testsuite**: 4012 tests, allemaal groen.

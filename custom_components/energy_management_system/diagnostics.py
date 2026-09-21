@@ -524,9 +524,10 @@ async def async_get_config_entry_diagnostics(
         "grootste_bekende_verbruiker": _veilig(
             "get_largest_known_consumer", coordinator.get_largest_known_consumer
         ),
+        # v5.8: per bakje. `get_airco_activation_probability` vraagt een
+        # bakje als argument en viel hier drie dagen om.
         "airco_kans": _veilig(
-            "get_airco_activation_probability",
-            coordinator.get_airco_activation_probability,
+            "get_airco_kansen_per_bakje", coordinator.get_airco_kansen_per_bakje
         ),
         "kwartierplan_compact": _veilig(
             "get_quarter_plan_compact", coordinator.get_quarter_plan_compact

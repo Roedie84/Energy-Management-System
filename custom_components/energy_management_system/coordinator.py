@@ -30890,6 +30890,23 @@ class EnergyManagementSystemCoordinator:
             if veld in stored and stored[veld] is not None:
                 setattr(self, veld, stored[veld])
         # v4.1: uursleutels terug naar int.
+        # v5.8: de opgeslagen tekortdagen herbeoordelen. v5.7 repareerde
+        # de INSTROOM - nieuwe dagen worden met de drempel beoordeeld -
+        # maar de dagen daarvoor stonden er nog met de oude regel. Vier
+        # daarvan hielden de tekortbonus op 20% terwijl er geen echt
+        # tekort tussen zat. De derde keer instroom-maar-niet-voorraad,
+        # na de parenvoorraad van v4.17.1. De netimport staat in elk
+        # record sinds v4.7, dus herbeoordelen kan gewoon.
+        for record in self.reserve_daily_records or []:
+            if not isinstance(record, dict) or not record.get("shortfall"):
+                continue
+            netimport = record.get("netimport_nacht_kwh")
+            if netimport is None:
+                continue
+            if not self._telt_als_tekortdag(netimport):
+                record["shortfall"] = False
+                record["herbeoordeeld"] = "v5.8"
+
         # v5.6: de al gemeten nachten opschonen met hetzelfde filter.
         # De les van v4.17.1: instroom repareren en de voorraad laten
         # staan is half werk - daar blokkeerden driehonderd oude paren de
@@ -32747,6 +32764,24 @@ class EnergyManagementSystemCoordinator:
             self.living_room_temp_bucket_humidity[bucket_key] = humidity_history[
                 -AIRCO_PREDICTION_HISTORY_LENGTH:
             ]
+
+    def get_airco_kansen_per_bakje(self) -> dict:
+        """De aircokans voor alle geleerde temperatuurbakjes (v5.8).
+
+        Voor de export. `get_airco_activation_probability` vraagt één
+        bakje als argument; in v5.4 riep ik hem zonder aan en viel hij
+        drie dagen om met "missing 1 required positional argument". Dit
+        geeft wat de sensor ook toont - alle bakjes - zonder argument.
+        """
+        return {
+            "bakjes": {
+                sleutel: self.get_airco_activation_probability(sleutel)
+                for sleutel in sorted(
+                    self.living_room_temp_bucket_history or {},
+                    key=lambda x: float(x),
+                )
+            }
+        }
 
     def get_airco_activation_probability(self, bucket_key: str) -> dict:
         """Learned probability the airco activates within

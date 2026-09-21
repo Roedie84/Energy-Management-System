@@ -109,3 +109,79 @@ def test_de_marge_reageert_op_de_nieuwe_telling(make_coordinator, hass):
 
     assert recent == 0
     assert SHORTFALL_MARGIN_BONUS_PER_RECENT_DAY == 5.0
+
+
+# --- v5.8: de voorraad ook ----------------------------------------------
+#
+# v5.7 repareerde de INSTROOM: nieuwe dagen worden met de drempel
+# beoordeeld. Uit de export van 21 september:
+#
+#     09-14  shortfall=True   netimport 0,10   <- opgeslagen met de OUDE regel
+#     09-15  shortfall=True   netimport 0,10
+#     09-16  shortfall=True   netimport 0,26
+#     09-17  shortfall=True   netimport 0,21
+#     09-18  shortfall=False  netimport 0,23   <- nieuwe regel, klopt
+#     09-19  shortfall=False  netimport 0,06
+#     09-20  shortfall=False  netimport 0,18
+#
+# De vier oude records hielden de tekortbonus op 20% terwijl er geen enkel
+# echt tekort tussen zat. Ze zouden vanzelf uit het venster rollen, maar
+# tot die tijd kostte het verkoopruimte.
+#
+# Dat is de DERDE keer dezelfde fout: v4.17.1 de parenvoorraad, v5.6 bij
+# de nachtlast wel opgeschoond, en hier weer vergeten. Instroom
+# gerepareerd, voorraad laten staan.
+#
+# De netimport staat in elk record, dus herbeoordelen kan gewoon.
+
+
+def test_oude_tekortdagen_worden_herbeoordeeld(make_coordinator, hass):
+    c = make_coordinator({})
+
+    c._apply_persisted_state(
+        {
+            "reserve_daily_records": [
+                {"date": "2026-09-14", "shortfall": True, "netimport_nacht_kwh": 0.10},
+                {"date": "2026-09-15", "shortfall": True, "netimport_nacht_kwh": 0.10},
+                {"date": "2026-09-16", "shortfall": True, "netimport_nacht_kwh": 0.26},
+                {"date": "2026-09-12", "shortfall": True, "netimport_nacht_kwh": 1.05},
+            ]
+        }
+    )
+
+    tekort = {r["date"]: r["shortfall"] for r in c.reserve_daily_records}
+    assert tekort["2026-09-14"] is False
+    assert tekort["2026-09-15"] is False
+    assert tekort["2026-09-16"] is False
+    # het ene echte tekort blijft staan
+    assert tekort["2026-09-12"] is True
+
+
+def test_een_record_zonder_netimport_blijft_ongemoeid(make_coordinator, hass):
+    """Records van voor v4.7 hebben geen netimport. Dan is er niets om
+    op te herbeoordelen, en het oordeel dat er stond blijft staan - geen
+    meting is geen bewijs dat het goed was, maar ook niet dat het fout
+    was."""
+    c = make_coordinator({})
+
+    c._apply_persisted_state(
+        {"reserve_daily_records": [{"date": "2026-08-01", "shortfall": True}]}
+    )
+
+    assert c.reserve_daily_records[0]["shortfall"] is True
+
+
+def test_herbeoordelen_wordt_vastgelegd(make_coordinator, hass):
+    """Zodat later te zien is dat dit oordeel niet het oorspronkelijke
+    was."""
+    c = make_coordinator({})
+
+    c._apply_persisted_state(
+        {
+            "reserve_daily_records": [
+                {"date": "2026-09-14", "shortfall": True, "netimport_nacht_kwh": 0.10},
+            ]
+        }
+    )
+
+    assert c.reserve_daily_records[0].get("herbeoordeeld") == "v5.8"

@@ -1,9 +1,9 @@
-EMS v5.7 - alle wijzigingen sinds v5.6
+EMS v5.8 - alleen de wijzigingen sinds v5.7
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
 (ER OVERHEEN, de map niet legen)
 
-    const.py, coordinator.py
+    coordinator.py, diagnostics.py
     dashboard_template.yaml     (gaat altijd mee, ongewijzigd)
     manifest.json, bestandscontrole.json
 
@@ -11,51 +11,32 @@ NAAR DE REPO
 
     README.md, CHANGELOG.md
     dashboards/energy_management_system_dashboard.yaml
-    tests/ (vijf bestanden, drie nieuw)
+    tests/ (twee bestanden, een nieuw)
 
-Voor HACS: release met tag v5.7.
+Voor HACS: release met tag v5.8.
 
-DRIE REPARATIES
+TWEE REPARATIES, BEIDE FOUTEN VAN MIJ
 
-1. DE TEKORTDETECTIE - dit kostte geld
+1. "1 ONDERDEEL VALT OM" - get_airco_activation_probability
 
-Een dag telde als tekortdag zodra de netafname EEN keer boven 100 W
-kwam. Een nacht met 37% laadstand over en 0,11 kWh netafname telde dus
-mee. Zes van je zeven tekortnachten waren er geen.
+In v5.4 riep de export een functie aan die een argument vraagt, zonder
+dat argument. De melding verdwijnt; de aircokansen staan nu per bakje in
+de export.
 
-Elke tekortdag zet 5% opslag op de reserve. Jouw uitsplitsing liet 35%
-shortfall_bonus zien op een totaal van 60%. Een hogere reserve betekent
-MINDER VERKOPEN.
+Er staat een nieuwe ratel onder die elke exportfunctie ECHT aanroept in
+plaats van alleen de naam te zoeken - de vorige ratel controleerde tekst
+in plaats van gedrag, en daardoor glipte dit erdoor.
 
-VERWACHT: de opslag zakt van 60% naar ongeveer 25%, je reserve wordt
-lager en het EMS verkoopt vaker.
+2. DE OUDE TEKORTDAGEN
 
-2. DE ZELFCONTROLE "EEN RESERVE"
+v5.7 beoordeelde nieuwe dagen goed, maar vier oude dagen stonden er nog
+met de oude regel. Die worden bij het laden herbeoordeeld met hun eigen
+netimport.
 
-Die meldde een tweede reservedefinitie. De sturing hergebruikte een
-bewaarde berekening terwijl de brug elke ronde vers rekende - twee
-getallen uit verschillende rondes. De uitsplitsing wordt nu elke ronde
-vers berekend en draagt het rondestempel; de controle weigert over
-rondes te vergelijken.
+VERWACHT NA DE HERSTART
 
-3. DE WEERBRONPOORT
-
-Weerde een bron van 58,0% terwijl de andere op 60,0% stond. Er geldt nu
-ook een minimale voorsprong van tien procentpunt, dus met jouw cijfers
-wordt er niets meer geweerd.
-
-(Het nachtlastfilter zat al in v5.6 en staat hier alleen in de
-changelog.)
-
-NA DE HERSTART CONTROLEREN
-
-- de melding "reserve kwam meerdere nachten tekort" hoort te verdwijnen
-- de zelfcontrole "een reserve" hoort groen te staan
-- shortfall_bonus_percent in de uitsplitsing hoort flink lager
-
-NOG NIET OPGELOST, VRAAGT EEN EXPORT
-
-De logregel "Accukoeling uit - accu 18.5C boven buiten - wel uitgevoerd
-ondanks" van 13:15. Die combinatie kan volgens de code niet bestaan:
-die tekst wordt alleen gezet als de actie "aan" is. Stuur een export
-als die regel opnieuw verschijnt.
+- de melding "1 onderdeel valt om" verdwijnt
+- de interne storingen staan op nul
+- shortfall_bonus_percent gaat naar 0
+- de totale opslag op de reserve zakt van 45% naar ongeveer 25%
+- de reserve wordt lager, het EMS verkoopt vaker
