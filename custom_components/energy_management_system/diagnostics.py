@@ -541,6 +541,10 @@ async def async_get_config_entry_diagnostics(
         # v5.9: waarom het rendementsleren niets oplevert.
         # v5.10: elk bewaard veld, met hoeveel erin zit. Afwezig in de
         # export was niet van leeg te onderscheiden - zie v5.9.
+        # v5.12: welke weerbron levert, en waarom niet.
+        "weerbron_levering": _veilig(
+            "get_weerbron_levering", coordinator.get_weerbron_levering
+        ),
         "opslag_overzicht": _veilig(
             "get_opslag_overzicht", coordinator.get_opslag_overzicht
         ),

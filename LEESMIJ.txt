@@ -1,9 +1,11 @@
-EMS v5.10 - alleen de wijzigingen sinds v5.9
+EMS v5.12 - alle wijzigingen sinds v5.9 (bevat v5.10 en v5.11)
+
+Je laatst geinstalleerde versie is v5.9. Deze zip bevat alles daarna.
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
 (ER OVERHEEN, de map niet legen)
 
-    coordinator.py, diagnostics.py
+    const.py, coordinator.py, sensor.py, diagnostics.py
     dashboard_template.yaml     (gaat altijd mee, ongewijzigd)
     manifest.json, bestandscontrole.json
 
@@ -11,27 +13,33 @@ NAAR DE REPO
 
     README.md, CHANGELOG.md
     dashboards/energy_management_system_dashboard.yaml
-    tests/ (twee bestanden, een nieuw)
+    tests/ (vijf bestanden)
 
-Voor HACS: release met tag v5.10.
+Voor HACS: release met tag v5.12.
 
-AAN DE STURING VERANDERT NIETS.
+NIEUW IN v5.12 - EEN WEERBRON VIEL STIL UIT
 
-EEN CORRECTIE OP v5.9
+weather.forecast_thuis levert sinds ~19 september geen cloud_coverage
+meer. Het weer-ensemble draaide drie dagen op een enkele bron, en de
+configuratiecontrole noemde hem "in orde" omdat hij wel bestond.
 
-In v5.9 schreef ik dat het accurendement na 49 dagen nul metingen had.
-Dat was fout: het had er twintig per richting, maar het veld stond niet
-in de export. Je retourrendement van 84,6% komt uit echte metingen. De
-changelog van v5.9 is met een correctie gemarkeerd.
+Nu ziet de controle het ("levert_niet", telt als kapot), en staat per
+bron in de export waarom hij wel of niet meedoet (weerbron_levering).
 
-WAT ER NU BIJKOMT
+ZELF NAKIJKEN: in Ontwikkelaarstools > Toestanden, zoek
+weather.forecast_thuis. Heeft hij nog een cloud_coverage-attribuut? Zo
+niet, dan ligt het aan de weerintegratie zelf.
 
-Van de 193 bewaarde velden stonden er 119 niet in de export. Daardoor
-was "afwezig" niet te onderscheiden van "leeg" - en dat is precies waar
-ik op struikelde.
+UIT v5.11
+- accucycli uit de teller van de accu (~34 wordt ~205), met eenheid
+- nachtverbruik en ontlaadreserve kunnen nu betrouwbaar worden
+- het nachtvenster overleeft een herstart
+- twee unknown-sensoren zeggen waarom
 
-Nieuw exportveld: opslag_overzicht. Daarin staat ELK bewaard veld, met
-hoeveel erin zit. Een veld dat daar leeg staat, IS leeg.
+UIT v5.10
+- opslag_overzicht: elk bewaard veld met hoeveel erin zit
+- correctie op v5.9: het rendement leerde wel
 
-De twee rendementsreeksen staan er ook volledig in, onder
-rendement_afwijzingen.
+ZELF OPRUIMEN
+Zes waterknoppen staan dubbel. Verwijder de "unavailable"-exemplaren via
+Instellingen > Entiteiten, zoek op "Water was".

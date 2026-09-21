@@ -371,6 +371,7 @@ from .const import (
     WEATHER_ENSEMBLE_SPREAD_ATTENTION_PERCENT,
     WEATHER_ENSEMBLE_AGREEMENT_HISTORY_LENGTH,
     WEATHER_ENSEMBLE_AGREEMENT_MIN_SAMPLES,
+    WEERBRON_INSTELLINGEN,
     WEERBRON_WEREN_MIN_VOORSPRONG_PP,
     WEERBRON_WEREN_MIN_WAARNEMINGEN,
     WEATHER_ENSEMBLE_AGREEMENT_USABLE_PERCENT,
@@ -1278,7 +1279,7 @@ class EnergyManagementSystemCoordinator:
         # een regel - `__init__` staat op de ratel.
         # v3.99.19: `dagverloop` en `nabeschouwingen` erbij, in dezelfde
         # regel - `__init__` staat op de ratel.
-        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen, self.safe_sell_shadow, self.reden_afwijkingen, self.meting_laatst_gevuld, self.weerbron_keuze, self.voorspellingsverloop, self._geladen_opslag, self.rendement_afwijzingen = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, [], [], {}, {}, {}, {}, None, {}
+        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen, self.safe_sell_shadow, self.reden_afwijkingen, self.meting_laatst_gevuld, self.weerbron_keuze, self.voorspellingsverloop, self._geladen_opslag, self.rendement_afwijzingen, self.weerbron_levering = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, [], [], {}, {}, {}, {}, None, {}, {}
         self.handmatige_ingrepen: list[dict] = []
         # v1.1.6: met welke meetmethode de bewaarde foutreeks tot stand
         # is gekomen. Verandert de methode, dan wordt die reeks eenmalig
@@ -15032,6 +15033,27 @@ class EnergyManagementSystemCoordinator:
             ),
         }
 
+    def get_weerbron_levering(self) -> dict:
+        """Welke ingestelde weerbron levert, en waarom niet (v5.12).
+
+        `weerbron_keuze` zegt welke bronnen meewegen, maar een bron die
+        niets levert, komt daar niet eens in. Zo verdween
+        `weather.forecast_thuis` op 21 september stil: hij bestond, maar
+        leverde geen `cloud_coverage`.
+        """
+        levering = dict(self.weerbron_levering or {})
+        return {
+            "bronnen": levering,
+            "aantal_ingesteld": len(levering),
+            "aantal_leverend": sum(1 for v in levering.values() if v == "levert"),
+            "toelichting": (
+                "levert: geeft een bewolkingsgraad. geen_cloud_coverage: de "
+                "entiteit bestaat, maar heeft het attribuut niet - vaak na een "
+                "update van de weerintegratie. bestaat_niet: de entiteit is weg "
+                "of hernoemd. geen_getal: het attribuut is er, maar is geen getal."
+            ),
+        }
+
     def get_configuratiecontrole(self) -> dict:
         """Elke ingestelde entiteit: bestaat hij, en zegt hij iets?
         (v3.56.0)
@@ -15127,7 +15149,30 @@ class EnergyManagementSystemCoordinator:
                     if getattr(staat, "last_changed", None)
                     else None
                 )
-                regel["oordeel"] = "in_orde"
+                # v5.12: een weerbron hoort BEWOLKING te leveren, niet
+                # alleen te bestaan. Op 21 september stond
+                # `weather.forecast_thuis` hier "in orde" met de toestand
+                # `partlycloudy`, terwijl hij geen `cloud_coverage` meer gaf
+                # en al drie dagen uit het ensemble was. Dezelfde les als
+                # bij de contracten: toets wat hij DOET, niet dat hij er is.
+                if sleutel in WEERBRON_INSTELLINGEN:
+                    wolken = staat.attributes.get("cloud_coverage")
+                    try:
+                        float(wolken)
+                    except (TypeError, ValueError):
+                        regel["oordeel"] = "levert_niet"
+                        regel["uitleg"] = (
+                            "De entiteit bestaat, maar levert geen "
+                            "`cloud_coverage` - en dat is waarvoor hij is "
+                            "ingesteld. Hij valt daardoor uit het weer-"
+                            "ensemble. Vaak na een update van de weer"
+                            "integratie; kijk in Ontwikkelaarstools welke "
+                            "attributen hij nog heeft."
+                        )
+                # v5.12: alleen "in orde" als de weerbrontoets hierboven het
+                # oordeel niet al heeft gezet - die kwam eerst NA deze regel
+                # te staan en werd direct weer overschreven.
+                regel.setdefault("oordeel", "in_orde")
             entiteiten.append(regel)
 
         # Getalsinstellingen die leeg staan terwijl er op een standaard
@@ -16631,7 +16676,10 @@ class EnergyManagementSystemCoordinator:
             "Geleerde waarden",
             "Nachtverbruik",
             self.reliability_from_samples(
-                len(self.night_consumption_history or []), 3, 14, "nachten"
+                # v5.11: LEARNING_HISTORY_DAYS, niet 14. De reeks wordt op 7
+                # afgekapt, dus 14 was onhaalbaar - hij bleef voor altijd op
+                # "7 nachten, betrouwbaar vanaf 14" staan.
+                len(self.night_consumption_history or []), 3, LEARNING_HISTORY_DAYS, "nachten"
             ),
             self.learned_night_consumption_kw,
             "kW",
@@ -16713,7 +16761,9 @@ class EnergyManagementSystemCoordinator:
             "Geleerde waarden",
             "Ontlaadreserve (shortfall/excess)",
             self.reliability_from_samples(
-                len(self.reserve_shortfall_history or []), 3, 14, "dagen"
+                # v5.11: idem - de dagrecords worden op LEARNING_HISTORY_DAYS
+                # afgekapt.
+                len(self.reserve_shortfall_history or []), 3, LEARNING_HISTORY_DAYS, "dagen"
             ),
         )
 
@@ -24502,13 +24552,38 @@ class EnergyManagementSystemCoordinator:
 
     @property
     def battery_estimated_full_cycles(self) -> float | None:
+        """Geschat aantal volledige cycli.
+
+        v5.11: eerst de levenslange teller VAN DE ACCU. Live bekeken op 21
+        september stond hier 34,3, terwijl de Zendure zelf
+        `Totaal geleverd: 1768,70 kWh` meldde - bij 8,64 kWh ongeveer 205
+        cycli. De eigen telling begon pas bij de installatie van het EMS.
+        De accu weet het zelf beter; dat is de bron.
+        """
         capacity_entity = self.config.get(CONF_BATTERY_TOTAL_CAPACITY_SENSOR)
         if not capacity_entity:
             return None
         capacity_kwh = self._read_sensor_float(capacity_entity)
         if capacity_kwh is None or capacity_kwh <= 0:
             return None
+        geleverd = self._levenslang_geleverd_kwh()
+        if geleverd is not None:
+            return round(geleverd / capacity_kwh, 1)
         return round(self.battery_cumulative_discharged_kwh / capacity_kwh, 1)
+
+    def _levenslang_geleverd_kwh(self) -> float | None:
+        """Wat de accu in zijn hele leven heeft geleverd (v5.11)."""
+        entity = self.config.get(CONF_BATTERY_DISCHARGE_ENERGY_SENSOR)
+        if not entity:
+            return None
+        waarde = self._read_sensor_float(entity)
+        return waarde if waarde is not None and waarde > 0 else None
+
+    def battery_cycli_bron(self) -> str:
+        """Waar het cycliaantal vandaan komt (v5.11)."""
+        if self._levenslang_geleverd_kwh() is not None:
+            return "levenslange teller van de accu"
+        return "eigen telling sinds de installatie van het EMS"
 
     @property
     def battery_estimated_capacity_percent(self) -> float | None:
@@ -28884,6 +28959,41 @@ class EnergyManagementSystemCoordinator:
             ),
         }
 
+    def _lees_weerbronnen(
+        self, source_entities: list[str]
+    ) -> tuple[list[str], list[float]]:
+        """Leest de bewolking van elke ingestelde bron (v5.12).
+
+        Legt per bron vast WAAROM hij wel of niet meedoet. Hier stonden
+        drie stille `continue`s, en op 21 september bleek
+        `weather.forecast_thuis` drie dagen lang uit het ensemble
+        verdwenen - hij bestond nog, maar leverde geen `cloud_coverage`
+        meer. Niemand zag het.
+
+        Uit `_update_weather_ensemble_check` gehaald: die functie mocht
+        niet groeien.
+        """
+        cloud_readings: list[float] = []
+        sources_used: list[str] = []
+        levering: dict[str, str] = {}
+        for entity_id in source_entities:
+            state = self.hass.states.get(entity_id)
+            if state is None:
+                levering[entity_id] = "bestaat_niet"
+                continue
+            cloud_pct = state.attributes.get("cloud_coverage")
+            if cloud_pct is None:
+                levering[entity_id] = "geen_cloud_coverage"
+                continue
+            try:
+                cloud_readings.append(float(cloud_pct))
+                sources_used.append(entity_id)
+                levering[entity_id] = "levert"
+            except (TypeError, ValueError):
+                levering[entity_id] = "geen_getal"
+        self.weerbron_levering = levering
+        return sources_used, cloud_readings
+
     def _update_weather_ensemble_check(self, now: datetime) -> None:
         """Weather ensemble cross-check (v0.63.30): compares live PV
         output against what Solcast's own forecast predicts for right
@@ -28918,20 +29028,7 @@ class EnergyManagementSystemCoordinator:
         if not source_entities:
             return
 
-        cloud_readings: list[float] = []
-        sources_used: list[str] = []
-        for entity_id in source_entities:
-            state = self.hass.states.get(entity_id)
-            if state is None:
-                continue
-            cloud_pct = state.attributes.get("cloud_coverage")
-            if cloud_pct is None:
-                continue
-            try:
-                cloud_readings.append(float(cloud_pct))
-                sources_used.append(entity_id)
-            except (TypeError, ValueError):
-                continue
+        sources_used, cloud_readings = self._lees_weerbronnen(source_entities)
 
         # v5.3: de poort. Hier stond niets - elke bron met een meting kwam
         # in `cloud_readings`, ongeacht zijn beoordeling.

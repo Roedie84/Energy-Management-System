@@ -865,7 +865,12 @@ class SimulatedActionSensor(_CoordinatorDiagnosticSensor):
 
     @property
     def native_value(self) -> str | None:
-        return self._coordinator.last_simulated_action
+        # v5.11: de gesimuleerde actie vult alleen in leermodus. Daarbuiten
+        # stond er `unknown`, en dat ziet eruit als kapot.
+        actie = self._coordinator.last_simulated_action
+        if actie is None and not self._coordinator.learning_only:
+            return "leermodus_uit"
+        return actie
 
 
 class ExpectedOperationModeSensor(_CoordinatorDiagnosticSensor):
@@ -914,7 +919,9 @@ class EnergyBridgeCheckSensor(_CoordinatorDiagnosticSensor, RestoreEntity):
     def native_value(self) -> str | None:
         result = self._coordinator.last_has_enough_energy
         if result is None:
-            return None
+            # v5.11: niet `unknown` - dat ziet eruit als kapot, terwijl er
+            # gewoon geen goedkoop blok in zicht is om naar te overbruggen.
+            return "geen_blok_in_zicht"
         return "enough_to_postpone" if result else "top_up_needed"
 
     @property
@@ -2456,6 +2463,11 @@ class BatteryHealthSensor(SensorEntity, RestoreEntity):
 
     _attr_has_entity_name = True
     _attr_name = "Accu-gezondheid (geschat)"
+    # v5.11: de state is een aantal CYCLI. Zonder eenheid las 34,3 als "34%
+    # gezond". De NAAM blijft staan: de entity_id wordt ervan afgeleid, en
+    # het dashboard verwijst naar `accu_gezondheid_geschat` - hernoemen zou
+    # een nieuwe installatie breken. De eenheid alleen lost het op.
+    _attr_native_unit_of_measurement = "cycli"
     _attr_icon = "mdi:battery-heart-variant"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
@@ -2477,6 +2489,8 @@ class BatteryHealthSensor(SensorEntity, RestoreEntity):
             "cumulatief_ontladen_kwh": round(
                 self._coordinator.battery_cumulative_discharged_kwh, 2
             ),
+            # v5.11: waar het cycliaantal vandaan komt.
+            "bron": self._coordinator.battery_cycli_bron(),
             "geschatte_resterende_capaciteit_procent": (
                 self._coordinator.battery_estimated_capacity_percent
             ),

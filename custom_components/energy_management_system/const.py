@@ -2982,6 +2982,13 @@ WEERBRON_WEREN_MIN_WAARNEMINGEN = 50
 # Weren heeft alleen zin als wat overblijft aantoonbaar beter is.
 WEERBRON_WEREN_MIN_VOORSPRONG_PP = 10.0
 
+# De instellingen die naar een weerbron wijzen (v5.12). Voor die
+# entiteiten toetst de configuratiecontrole niet alleen OF ze bestaan,
+# maar ook of ze `cloud_coverage` leveren - daarvoor zijn ze ingesteld.
+WEERBRON_INSTELLINGEN = frozenset(
+    {"knmi_weather_entity", "openweathermap_weather_entity"}
+)
+
 # --- Volledige toestandspersistentie (v1.0.4) ------------------------
 # Gevraagd: "algeheel geen verliezen na een herstart". Een inventarisatie
 # van alle 286 attributen in de coordinator liet zien dat het overgrote
@@ -3187,6 +3194,15 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "_leermodus_door_handmatige_stand": {"type": "plain"},
     # v5.9: waarom het rendementsleren niets oplevert.
     "rendement_afwijzingen": {"type": "plain"},
+    # v5.11: het nachtelijke ontlaadvenster. Werd niet bewaard, dus een
+    # herstart halverwege gooide het deel vóór de herstart weg en bleef er
+    # een te kort restant over ("venster van 0,3 uur is te kort").
+    # `_window_last_sample` bewust NIET: wat er tijdens de herstart is
+    # verbruikt, weet niemand.
+    "_tracking_window_end": {"type": "datetime"},
+    "_window_energy_kwh": {"type": "plain"},
+    "_window_duration_hours": {"type": "plain"},
+    "_window_temp_samples": {"type": "plain"},
     "meting_laatst_gevuld": {"type": "plain"},
     "eigen_ingrepen": {"type": "plain"},
     "_steelstofzuiger_complete_today": {"type": "plain"},

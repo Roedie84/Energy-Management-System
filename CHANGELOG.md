@@ -26858,3 +26858,155 @@ is de tekst-in-plaats-van-gedrag-fout van v4.19, die ik hier bijna
 opnieuw maakte. De toets roept nu de functie aan.
 
 **Volledige testsuite**: 4027 tests, allemaal groen.
+
+
+## v5.11 — Vier dingen, gezien door live mee te kijken
+
+Voor het eerst niet via een export maar via de Home Assistant-connector.
+Die geeft alleen de TOESTAND van elke entiteit, geen attributen - dus geen
+versienummer of `opslag_overzicht` - maar wel ruim 850 entiteiten tegelijk.
+Wat dat opleverde:
+
+### 1. De accugezondheid was geen gezondheid, en klopte niet
+
+`Accu-gezondheid (geschat)` stond op 34,3, zonder eenheid. Dat leest als
+"34% gezond", en zo las ik het zelf ook. Het is een aantal volledige
+CYCLI.
+
+En het getal klopte niet. De Zendure meldt zelf `Totaal geleverd: 1768,70
+kWh`, bij 8,64 kWh ongeveer **205 cycli**. Het EMS telde er 34, omdat het
+pas begon te tellen bij zijn eigen installatie.
+
+Nu komen de cycli uit de levenslange teller van de accu
+(`battery_discharge_energy_sensor_entity`, die al was ingesteld), met de
+eigen telling als terugval. De sensor heeft de eenheid `cycli` en een
+attribuut `bron`.
+
+**De naam bleef staan, en daar ging bijna iets mis.** Mijn eerste poging
+hernoemde hem naar "Accu-cycli (geschat)". Twee toetsen keurden dat af: de
+entity_id wordt van de naam afgeleid, en het dashboard verwijst naar
+`accu_gezondheid_geschat`. Op een bestaande installatie blijft de oude
+entity_id staan, maar een nieuwe installatie zou een kaart zonder sensor
+krijgen. De eenheid alleen lost de misleiding al op.
+
+### 2. Vier sensoren op `unknown`
+
+Battery protection, Energy bridge check, Monte Carlo risico en Simulated
+action. Alle vier TERECHT leeg in die situatie - geen ontlaadgrens in
+smart-modus, geen goedkoop blok in zicht, geen simulatie buiten de
+leermodus. Maar `unknown` ziet er in Home Assistant uit als kapot.
+
+De twee tekstsensoren zeggen nu waarom: `geen_blok_in_zicht` en
+`leermodus_uit`. De twee getalsensoren blijven `unknown`, want een
+getalsensor kan in Home Assistant geen tekst tonen.
+
+### 3. Het nachtelijke ontlaadvenster overleefde geen herstart
+
+`Model- en parameternauwkeurigheid: Venster van 0,3 uur is te kort om iets
+over het verbruik te zeggen`. Het venster werd niet bewaard. Na een
+herstart was `_tracking_window_end` leeg, dus de eerste ronde dacht dat er
+een nieuw venster begon: het deel van vóór de herstart ging weg, en het
+restant was te kort.
+
+De reden stond er zelf bij: *"half meetvenster"*. Maar juist dat weggooien
+was de oorzaak. Het venster meet een GEMIDDELD vermogen - energie gedeeld
+door duur, beide alleen over de tijd dat HA draaide - dus een herstart
+halverwege verandert dat niet. Nu worden vier velden bewaard.
+`_window_last_sample` bewust niet: wat er tijdens de herstart verbruikt
+werd, weet niemand, en dat hoort er niet bij verzonnen te worden.
+
+### 4. Twee reeksen konden nooit betrouwbaar worden
+
+```
+nachtverbruik     opgeslagen max 7   -  betrouwbaar vanaf 14
+ontlaadreserve    opgeslagen max 7   -  betrouwbaar vanaf 14
+```
+
+Beide worden op `LEARNING_HISTORY_DAYS` = 7 afgekapt, maar de
+betrouwbaarheidskaart eiste 14. Ze bleven voor altijd op "7, betrouwbaar
+vanaf 14" staan - dezelfde klasse als de ijklijn van v4.13, die tien dagen
+eiste van paren die één dag besloegen.
+
+De drempel is nu `LEARNING_HISTORY_DAYS` zelf, zodat de twee niet meer
+uiteen kunnen lopen. Er staat een ratel op.
+
+### Niet in de code opgelost
+
+**Zes verweesde waterknoppen.** Live zichtbaar, in geen export: elke
+waterknop staat twee keer, één werkend en één `unavailable`. Nasleep van
+de registratieproblemen van v4.9.2 tot v4.9.5. Automatisch verwijderen doe
+ik niet - de connector toont geen unique_id's, en verwijderen is niet
+terug te draaien. Handmatig via Instellingen → Entiteiten.
+
+**Klimaat, lampen en rolluiken** zijn niet vrijgegeven voor de assistent,
+dus de airco is live niet uit te lezen.
+
+**Volledige testsuite**: 4038 tests, allemaal groen.
+
+
+## v5.12 — Een weerbron viel drie dagen stil uit het ensemble
+
+Gevraagd: *"Kloppen alle sensoren nog met de EMS-integratie?"*
+
+De configuratiecontrole zei ja: 55 in orde, 0 kapot, 4 slapend (de Home
+Connect-entiteiten van vaatwasser en wasmachine, die op `unavailable` gaan
+als het apparaat uit staat - dat is normaal).
+
+Maar in dezelfde export:
+
+```
+weerbron_keuze:  gebruikt: ["weather.openweathermap"]   geweerd: []
+```
+
+**`weather.forecast_thuis` was uit het ensemble verdwenen** - niet geweerd,
+gewoon weg. Tussen 18 september 11:15 (nog twee bronnen) en 21 september
+06:53 (één bron). Drie dagen lang was het weer-ensemble een eenmansensemble,
+zonder dat er iets over werd gezegd.
+
+### Waarom de configuratiecontrole het niet zag
+
+Die noemde de entiteit in orde:
+
+```
+knmi_weather_entity   weather.forecast_thuis   waarde=partlycloudy   in_orde
+```
+
+Hij bestaat en heeft een toestand. Maar de integratie gebruikt hem voor zijn
+`cloud_coverage`-attribuut, en dat levert hij niet meer. De controle keek of
+een entiteit BESTAAT, niet of hij levert waarvoor hij is ingesteld - de
+tekst-tegen-gedrag-les van v4.19, nu op de configuratie.
+
+Voor weerbronnen kijkt de controle nu ook naar `cloud_coverage`. Zonder
+bruikbare bewolking heet hij `levert_niet`, en dat telt als kapot, zodat hij
+bij de aandachtspunten verschijnt.
+
+**Onderweg een tweede fout**: mijn eerste versie van die toets stond vóór de
+regel `regel["oordeel"] = "in_orde"`, en werd dus direct weer overschreven.
+De toets ving het.
+
+### Waarom het verzamelen het stil liet vallen
+
+```python
+cloud_pct = state.attributes.get("cloud_coverage")
+if cloud_pct is None:
+    continue
+```
+
+Drie stille `continue`s, zonder spoor. Nu wordt per ingestelde bron
+vastgelegd waarom hij wel of niet meedoet (`levert`, `geen_cloud_coverage`,
+`bestaat_niet`, `geen_getal`), en dat staat in de export als
+`weerbron_levering`.
+
+Dit waarschuwde ik eerder al: *"levert een bron het ooit niet meer, dan
+verdwijnt hij stilzwijgend uit sources_used zonder dat er iets over wordt
+gezegd."* Nu gebeurde het, en ik had de waarschuwing niet omgezet in een
+toets.
+
+### Wat je zelf moet nakijken
+
+Waarom `weather.forecast_thuis` geen `cloud_coverage` meer levert, is niet
+vanuit de integratie te zien - dat ligt aan de weerintegratie zelf, vaak na
+een update. Kijk in Ontwikkelaarstools → Toestanden welke attributen hij nog
+heeft.
+
+**Volledige testsuite**: 4044 tests, allemaal groen.

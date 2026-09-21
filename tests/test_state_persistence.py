@@ -584,6 +584,13 @@ VLUCHTIG_MET_REDEN = {
     # na een herstart is de episode voorbij en mag de melding weer, want
     # de toestand is dan opnieuw onbekend.
     "_herstel_gemeld": "vluchtig; na een herstart mag de melding weer",
+    # v5.12: wordt elke ronde opnieuw bepaald uit de weerentiteiten.
+    "weerbron_levering": "elke ronde opnieuw bepaald uit de weerentiteiten",
+    # v5.11: het ontlaadvenster wordt nu WEL bewaard. De reden stond hier
+    # als "half meetvenster" - maar juist dat weggooien maakte het restant
+    # na de herstart te kort, en dan werd er niets geleerd. Het venster
+    # meet een gemiddelde (energie gedeeld door duur, beide alleen over de
+    # tijd dat HA draaide), dus een herstart halverwege verandert dat niet.
     # v5.3: de keuze wordt elke ronde opnieuw bepaald uit de
     # beoordeling, die zelf wel bewaard wordt.
     "weerbron_keuze": "elke ronde opnieuw bepaald uit weather_source_agreement",
@@ -600,9 +607,6 @@ VLUCHTIG_MET_REDEN = {
     # terugzetten zou een verkeerd kWh-getal opleveren; de UITKOMST
     # (`appliance_cycle_kwh`) wordt wel bewaard.
     "_appliance_power_samples": "halve cyclus, hoort te vervallen",
-    "_window_energy_kwh": "half meetvenster",
-    "_window_duration_hours": "half meetvenster",
-    "_window_temp_samples": "half meetvenster",
     "_temp_prediction_pending": "openstaande voorspelling zonder waarde",
     # v1.59.0: de tellers van de lopende dag. Die worden bij middernacht
     # in `veroudering_history` weggeschreven; halverwege bewaren zou een
