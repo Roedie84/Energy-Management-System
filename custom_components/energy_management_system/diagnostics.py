@@ -539,6 +539,11 @@ async def async_get_config_entry_diagnostics(
             "get_voorspellingsverloop", coordinator.get_voorspellingsverloop
         ),
         # v5.9: waarom het rendementsleren niets oplevert.
+        # v5.10: elk bewaard veld, met hoeveel erin zit. Afwezig in de
+        # export was niet van leeg te onderscheiden - zie v5.9.
+        "opslag_overzicht": _veilig(
+            "get_opslag_overzicht", coordinator.get_opslag_overzicht
+        ),
         "rendement_afwijzingen": _veilig(
             "get_rendement_afwijzingen", coordinator.get_rendement_afwijzingen
         ),

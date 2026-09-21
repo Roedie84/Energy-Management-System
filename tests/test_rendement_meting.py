@@ -11,27 +11,16 @@ bijgeschreven - hij staat alleen nog in de opslag en dient als
 terugval"*. De kaart telde dus een reeks die nooit groeit. Hij blijft
 voor altijd op zeven en kan nooit betrouwbaar worden.
 
-Erger: het echte leren - laden en ontladen apart, sinds v1.32.0 - heeft
-na negenenveertig dagen NUL metingen:
+CORRECTIE (v5.10). In v5.9 stond hier dat het echte leren - laden en
+ontladen apart - na negenenveertig dagen NUL metingen had. Dat was fout.
+`charge_efficiency_history` stond niet in de export, en ik las afwezig
+als leeg. De volgende export liet twintig per richting zien - het
+plafond. Het leren werkte al die tijd, en het retourrendement van 84,6%
+komt uit die echte metingen.
 
-    charge_efficiency_history      0
-    discharge_efficiency_history   0
-    learned_efficiency_history     7  (bevroren)
-
-Het retourrendement van 84,6% op het dashboard komt dus uit die bevroren
-reeks - met waarden van 56,4% en 97,6% die de huidige grenzen als
-onmogelijk afwijzen. En dat getal stuurt de reserve en de kostprijs.
-
-Wat er is nagekeken: de logica WERKT. Over het echte dagverloop, met de
-voorraad afgeleid uit de laadstand, levert hij tien ontlaad- en negen
-laadmetingen op, rond de 84%. Dus het signaal is goed; wat er in bedrijf
-misgaat, is uit een export niet te zien, want elke afwijzing werd
-alleen op DEBUG-niveau gelogd.
-
-Deze versie repareert dat blind niet. Ze maakt het zichtbaar: de kaart
-telt de echte reeksen, elke afwijzing wordt geteld met de laatste reden
-erbij, en na zeven dagen zonder meting komt er een aandachtspunt. De
-volgende export laat dan zien waar het vastloopt.
+Wat wél klopte: de kaart telde de oude, dode reeks. Dat is hier
+gerepareerd. De afwijzingsteller blijft staan, omdat afwijzingen alleen
+naar DEBUG sturen hoe dan ook onzichtbaar is.
 """
 import pytest
 

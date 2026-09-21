@@ -1,10 +1,9 @@
-EMS v5.9 - alleen de wijzigingen sinds v5.8
+EMS v5.10 - alleen de wijzigingen sinds v5.9
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
 (ER OVERHEEN, de map niet legen)
 
-    __init__.py                 LET OP: deze keer WEL gewijzigd
-    const.py, coordinator.py, diagnostics.py
+    coordinator.py, diagnostics.py
     dashboard_template.yaml     (gaat altijd mee, ongewijzigd)
     manifest.json, bestandscontrole.json
 
@@ -12,51 +11,27 @@ NAAR DE REPO
 
     README.md, CHANGELOG.md
     dashboards/energy_management_system_dashboard.yaml
-    tests/ (vijf bestanden, drie nieuw)
+    tests/ (twee bestanden, een nieuw)
 
-Voor HACS: release met tag v5.9.
+Voor HACS: release met tag v5.10.
 
-VIER DINGEN, GEVONDEN DOOR DIEP TE ZOEKEN
+AAN DE STURING VERANDERT NIETS.
 
-1. DE SENSOREN OVERSCHREVEN DE OPSLAG
+EEN CORRECTIE OP v5.9
 
-22 sensoren zetten bij elke herstart hun door Home Assistant bewaarde
-toestand over de opslag van de integratie heen - 38 velden. Daardoor
-werd elke correctie ongedaan gemaakt, zoals de herbeoordeelde
-tekortdagen van v5.8. Nu wint de opslag.
+In v5.9 schreef ik dat het accurendement na 49 dagen nul metingen had.
+Dat was fout: het had er twintig per richting, maar het veld stond niet
+in de export. Je retourrendement van 84,6% komt uit echte metingen. De
+changelog van v5.9 is met een correctie gemarkeerd.
 
-VERWACHT: de tekortbonus gaat nu echt naar 0, want de vier valse
-tekortdagen komen niet meer terug.
+WAT ER NU BIJKOMT
 
-2. DE LEERMODUS LIEP VAST NA EEN HERSTART
+Van de 193 bewaarde velden stonden er 119 niet in de export. Daardoor
+was "afwezig" niet te onderscheiden van "leeg" - en dat is precies waar
+ik op struikelde.
 
-Op 17 september stond de leermodus aan zonder handmatige stand. Zolang
-dat zo was, stuurde het EMS je accu NIET. Een handmatige stand zet de
-leermodus aan; na een herstart bleef die hangen. Nu ruimt de integratie
-dat bij het opstarten op.
+Nieuw exportveld: opslag_overzicht. Daarin staat ELK bewaard veld, met
+hoeveel erin zit. Een veld dat daar leeg staat, IS leeg.
 
-De handmatige stand zelf overleeft een herstart nog steeds NIET - dat is
-een bewuste veiligheidskeuze: een vergeten handmatige lading hoort bij
-een herstart te stoppen.
-
-3. HET ACCURENDEMENT TELDE EEN DODE REEKS
-
-"7 laadcycli, betrouwbaar vanaf 20" - al negen dagen. Die reeks wordt
-nergens meer bijgeschreven. De kaart telt nu de echte metingen.
-
-4. WAAROM HET RENDEMENT NIETS LEERT
-
-Het echte rendementsleren heeft na 49 dagen nul metingen. De logica werkt
-op je echte gegevens, maar in bedrijf wordt alles afgewezen, en dat werd
-alleen op debugniveau gelogd. Nu wordt elke afwijzing geteld met de
-reden erbij.
-
-STUUR OVER EEN DAG EEN EXPORT. Onder rendement_afwijzingen staat dan
-waarom het niets leert, en dan kan ik het wel repareren.
-
-NA DE HERSTART CONTROLEREN
-
-- shortfall_bonus_percent op 0
-- learning_only uit (tenzij je hem zelf aanzette)
-- de kaart "Accu-rendement" toont 0 halve cycli, niet meer 7 laadcycli
-- de export bevat rendement_afwijzingen
+De twee rendementsreeksen staan er ook volledig in, onder
+rendement_afwijzingen.

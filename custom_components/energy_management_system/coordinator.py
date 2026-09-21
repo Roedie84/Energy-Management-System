@@ -607,6 +607,7 @@ from .const import (
     WEATHER_ENSEMBLE_AGREEMENT_USABLE_PERCENT,
     NOTIFICATION_TYPES,
     PERSISTED_DATE_FIELDS,
+    PERSISTED_FIELDS,
     PERSISTED_DATETIME_FIELDS,
     PERSISTED_INT_FIELDS,
     PERSISTED_INTKEY_DICT_FIELDS,
@@ -3335,11 +3336,14 @@ class EnergyManagementSystemCoordinator:
     ) -> None:
         """Telt waarom een rendementsstuk niet meetelde (v5.9).
 
-        Het echte rendementsleren - laden en ontladen apart - had na
-        negenenveertig dagen nul metingen, en elke afwijzing ging alleen
-        naar DEBUG. Stil falen was daardoor niet te onderscheiden van
-        een meting die nog wacht. Over het echte dagverloop werkt de
-        logica wél; wat er in bedrijf misgaat, laat deze telling zien.
+        Elke afwijzing ging alleen naar DEBUG, dus stil falen was niet te
+        onderscheiden van een meting die gewoon werkt.
+
+        CORRECTIE (v5.10): de aanleiding klopte niet. Ik dacht dat het
+        rendementsleren na negenenveertig dagen nul metingen had; dat was
+        omdat `charge_efficiency_history` niet in de export stond. Het
+        had er twintig per richting. De telling blijft staan, want
+        afwijzingen alleen naar DEBUG sturen is hoe dan ook onzichtbaar.
         """
         a = self.rendement_afwijzingen
         a[soort] = a.get(soort, 0) + 1
@@ -3351,11 +3355,68 @@ class EnergyManagementSystemCoordinator:
             "voorraadverschil_kwh": round(verschil, 3),
         }
 
+    def get_opslag_overzicht(self) -> dict:
+        """Elk bewaard veld, met hoeveel erin zit (v5.10).
+
+        In v5.9 concludeerde ik dat het rendementsleren nul metingen had,
+        omdat `charge_efficiency_history` niet in de export stond. De
+        volgende export liet 20 per richting zien - het leren werkte al
+        die tijd. Van de 193 bewaarde velden stonden er 119 niet in de
+        export, dus afwezig was niet van leeg te onderscheiden.
+
+        Niet de volledige inhoud - het dagverloop is duizenden regels -
+        maar genoeg om te zien dAT een veld bestaat en hoe vol het is.
+        """
+        velden = {}
+        for veld, verklaring in sorted(PERSISTED_FIELDS.items()):
+            waarde = getattr(self, veld, None)
+            if isinstance(waarde, (list, tuple, set)):
+                velden[veld] = {
+                    "soort": "lijst",
+                    "aantal": len(waarde),
+                    "leeg": not waarde,
+                }
+            elif isinstance(waarde, dict):
+                velden[veld] = {
+                    "soort": "tabel",
+                    "aantal": len(waarde),
+                    "leeg": not waarde,
+                }
+            elif isinstance(waarde, (int, float, bool)) or waarde is None:
+                velden[veld] = {
+                    "soort": verklaring["type"],
+                    "waarde": waarde,
+                    "leeg": waarde is None,
+                }
+            else:
+                velden[veld] = {
+                    "soort": verklaring["type"],
+                    "waarde": str(waarde)[:80],
+                    "leeg": False,
+                }
+        return {
+            "velden": velden,
+            "aantal_velden": len(velden),
+            "aantal_leeg": sum(1 for v in velden.values() if v["leeg"]),
+            "toelichting": (
+                "Elk veld dat de integratie over een herstart heen bewaart, met "
+                "hoeveel erin zit. Een veld dat hier leeg staat, IS leeg; een "
+                "veld dat elders in de export ontbreekt, is alleen niet "
+                "volledig meegestuurd."
+            ),
+        }
+
     def get_rendement_afwijzingen(self) -> dict:
         """Waarom het rendementsleren niets oplevert (v5.9)."""
         return {
             "metingen_laden": len(self.charge_efficiency_history or []),
             "metingen_ontladen": len(self.discharge_efficiency_history or []),
+            # v5.10: de reeksen zelf. Ze stuurden de reserve en de
+            # kostprijs en stonden niet in de export - zie v5.9.
+            "charge_efficiency_history": list(self.charge_efficiency_history or []),
+            "discharge_efficiency_history": list(
+                self.discharge_efficiency_history or []
+            ),
             "afwijzingen": dict(self.rendement_afwijzingen or {}),
             "toelichting": (
                 "Waarom een laad- of ontlaadstuk niet meetelde. te_kort: minder "
@@ -31646,7 +31707,9 @@ class EnergyManagementSystemCoordinator:
                 "panelen deden. De overige bronnen bepalen de voorspelling."
             )
         # v5.9: een rendementsmeting die niets oplevert, hoort gezien te
-        # worden. Hij stond negenenveertig dagen op nul, stil.
+        # worden. (Correctie v5.10: bij Ruud leerde hij wél - twintig per
+        # richting. Deze regel is een vangnet, geen reactie op een
+        # gemeten storing.)
         afwijzingen = sum(
             v for v in (self.rendement_afwijzingen or {}).values()
             if isinstance(v, int)

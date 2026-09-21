@@ -26763,6 +26763,11 @@ vergat dat de leermodus via de schakelaar wél overleeft.
 
 ### 3. Het accurendement werd gemeten op een dode reeks
 
+> **Correctie in v5.10**: de bewering hieronder dat het echte leren "nul
+> metingen" had, is fout. Het had twintig per richting; het veld stond
+> alleen niet in de export. Zie v5.10.
+
+
 De betrouwbaarheidskaart meldde al negen dagen *"7 laadcycli, betrouwbaar
 vanaf 20"*. Die zeven komen uit `learned_efficiency_history`, en in de
 code staat: *"wordt sinds de invoering van de halve cycli NERGENS meer
@@ -26777,6 +26782,9 @@ De kaart telt nu de halve cycli.
 
 ### 4. Waarom het rendementsleren niets oplevert: nog niet bekend
 
+> **Correctie in v5.10**: het leverde wél op. Dit punt had geen aanleiding.
+
+
 Nagekeken: de logica WERKT. Over het echte dagverloop, met de voorraad
 afgeleid uit de laadstand, levert hij tien ontlaad- en negen laadmetingen
 rond de 84%. Het signaal is dus goed. Maar elke afwijzing ging alleen
@@ -26790,3 +26798,63 @@ afwijzingen zonder één acceptatie komt er een aandachtspunt. De volgende
 export laat de oorzaak zien.
 
 **Volledige testsuite**: 4021 tests, allemaal groen.
+
+
+## v5.10 — Afwezig in de export is niet hetzelfde als leeg
+
+### Een fout van mij in v5.9
+
+In v5.9 schreef ik dat het rendementsleren na negenenveertig dagen **nul
+metingen** had, en dat het retourrendement van 84,6% uit een bevroren oude
+reeks kwam. De eerste export met v5.9 liet dit zien:
+
+```
+metingen_laden     20
+metingen_ontladen  20
+```
+
+Twintig per richting - het plafond. Het leren werkte al die tijd, en de
+84,6% komt uit die echte metingen.
+
+Ik las `charge_efficiency_history` uit de export, kreeg niets terug en
+bouwde er een diagnose op. Het veld stond gewoon niet in de export. Dat
+had ik moeten nagaan voordat ik "nul" opschreef.
+
+Wat in v5.9 WEL klopte: de betrouwbaarheidskaart telde de oude, dode
+reeks (7) in plaats van de halve cycli. Die toont nu 20. De afwijzingsteller
+blijft staan, want afwijzingen alleen naar DEBUG sturen is hoe dan ook
+onzichtbaar. De onjuiste passages in de changelog van v5.9 zijn met een
+correctie gemarkeerd in plaats van weggehaald.
+
+### En het gat dat die fout mogelijk maakte
+
+Van de **193 bewaarde velden stonden er 119 niet in de export** - waaronder
+beide rendementsreeksen, de capaciteitstrend, de cycluskosten en de
+kostentellers. Afwezig was dus niet van leeg te onderscheiden, en de
+volgende keer maak ik dezelfde vergissing met een ander veld.
+
+Nu staat elk bewaard veld in `opslag_overzicht`, met het soort en hoeveel
+erin zit:
+
+```
+charge_efficiency_history    lijst   20
+dagverloop                   tabel   40
+battery_cumulative_...       float   1234,5
+```
+
+Niet de volledige inhoud - het dagverloop alleen al is duizenden regels -
+maar genoeg om te zien dat een veld bestaat en hoe vol het is. Een veld
+dat daar leeg staat, IS leeg.
+
+De twee rendementsreeksen staan er daarnaast volledig bij, want ze sturen
+de reserve en de kostprijs.
+
+### Een toets die ik bijna fout schreef
+
+De toets die controleert of de rendementsreeksen in de export staan,
+zocht in eerste instantie hun naam in `diagnostics.py`. Maar ze komen via
+een functie in de export, en de naam staat dus niet in dat bestand. Dat
+is de tekst-in-plaats-van-gedrag-fout van v4.19, die ik hier bijna
+opnieuw maakte. De toets roept nu de functie aan.
+
+**Volledige testsuite**: 4027 tests, allemaal groen.
