@@ -29,6 +29,10 @@ from .const import (
     CONF_OPENWEATHERMAP_WEATHER_ENTITY,
     CONF_BACKYARD_TEMPERATURE_SENSOR,
     CONF_CO2_INTENSITY_SENSOR,
+    CONF_TWEEDE_PV_VOORSPELLING_SENSOR,
+    CONF_INSTRALING_SENSOR,
+    CONF_GAS_PRICE_SENSOR,
+    CONF_BATTERY_COOLING_FAN_POWER_SENSOR,
     CONF_BATTERY_ROUND_TRIP_EFFICIENCY,
     DEFAULT_BATTERY_ROUND_TRIP_EFFICIENCY_PERCENT,
     CONF_VACATION_CONSUMPTION_REDUCTION_PERCENT,
@@ -361,6 +365,11 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
             _optioneel(CONF_OPENWEATHERMAP_WEATHER_ENTITY, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="weather")),
             _optioneel(CONF_BACKYARD_TEMPERATURE_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
             _optioneel(CONF_CO2_INTENSITY_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            # v5.14: bronnen die er al stonden maar niet werden gebruikt.
+            _optioneel(CONF_TWEEDE_PV_VOORSPELLING_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            _optioneel(CONF_INSTRALING_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            _optioneel(CONF_GAS_PRICE_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            _optioneel(CONF_BATTERY_COOLING_FAN_POWER_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
             vol.Optional(
                 CONF_BATTERY_ROUND_TRIP_EFFICIENCY,
                 default=defaults.get(

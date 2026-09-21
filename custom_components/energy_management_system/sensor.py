@@ -145,6 +145,10 @@ async def async_setup_entry(
         ),
         SteelstofzuigerStatusSensor(coordinator, entry.entry_id),
         FietsladersStatusSensor(coordinator, entry.entry_id),
+        # v5.14: de kern van de diagnostiek, leesbaar voor de assistent.
+        DiagnoseGezondheidSensor(coordinator, entry.entry_id),
+        DiagnoseSturingSensor(coordinator, entry.entry_id),
+        DiagnoseLerenSensor(coordinator, entry.entry_id),
     ]
 
     if tracker.enabled:
@@ -567,23 +571,9 @@ class MeldingenSensor(_CoordinatorDiagnosticSensor):
 
     @property
     def native_value(self) -> int:
-        """Verstuurde meldingen in de laatste 24 uur (v5.13).
-
-        Hier stond de lengte van de geschiedenis. Die wordt op 200
-        afgekapt, dus zodra hij vol was stond er altijd 200 - een getal
-        dat niets zei. Het aantal PER DAG was waar het in v4.16 om ging
-        (van 28 naar 13), en precies dat was teruggekropen naar twintig
-        zonder dat deze sensor het liet zien.
-        """
-        grens = dt_util.now() - timedelta(hours=24)
-        aantal = 0
-        for m in self._coordinator.notification_history or []:
-            if not m.get("verstuurd"):
-                continue
-            moment = dt_util.parse_datetime(m.get("moment") or "")
-            if moment is not None and moment >= grens:
-                aantal += 1
-        return aantal
+        """Verstuurde meldingen in de laatste 24 uur (v5.13). Sinds v5.14
+        uit `meldingen_laatste_24u`, dezelfde bron als de diagnoseregel."""
+        return self._coordinator.meldingen_laatste_24u()
 
     @property
     def icon(self) -> str:
@@ -2276,6 +2266,8 @@ class ClimateForecastSensor(SensorEntity, RestoreEntity):
     @property
     def extra_state_attributes(self) -> dict:
         return {
+            # v5.14: verwarmen met de airco of met de cv.
+            "verwarmingsadvies": self._coordinator.get_verwarmingsadvies(),
             "buitentemperatuur_live_c": self._coordinator.climate_live_outdoor_temp_c,
             # v1.1.1: welke entiteit die waarde levert. Het dashboard
             # noemde hardgecodeerd "KNMI/OpenWeatherMap", ook nadat de
@@ -3694,6 +3686,10 @@ class PvHourlyBiasSensor(SensorEntity, RestoreEntity):
             if self._coordinator.previous_pv_hourly_ratio(hour) is not None
         }
         return {
+            # v5.14: Solcast naast een tweede zonvoorspelling. Hier en niet
+            # op 'PV forecast accuracy': die sensor krijgt de zonvolger mee,
+            # niet de coördinator, en viel daardoor met dit attribuut om.
+            "tweede_voorspelling": self._coordinator.get_pv_ensemble(),
             "profile": profile,
             "profile_confident": profile_confident,
             "previous_profile": previous_profile,
@@ -3876,6 +3872,8 @@ class BatteryCoolingSensor(SensorEntity):
         laatste = self._coordinator.battery_cooling_last_change
         state["laatste_wijziging"] = laatste.isoformat() if laatste else None
         state["geschiedenis"] = self._coordinator.battery_cooling_history[-10:]
+        # v5.14: wat de ventilatoren werkelijk verbruiken.
+        state["ventilatorverbruik"] = self._coordinator.get_ventilator_verbruik()
         return state
 
 
@@ -4127,6 +4125,8 @@ class PvInstallationProfileSensor(SensorEntity):
     def extra_state_attributes(self) -> dict:
         profiel = self._coordinator.get_pv_installation_profile()
         return {
+            # v5.14: het dak tegen gemeten licht, per zonrichting.
+            "instraling_per_richting": self._coordinator.get_instraling_analyse(),
             **profiel,
             "note": (
                 "De oriëntatie wordt afgeleid uit waar de zon stond op het "
@@ -4162,6 +4162,29 @@ class GacsAssessmentSensor(SensorEntity):
     _attr_has_entity_name = True
     _attr_name = "GACS-zelfbeoordeling"
     _attr_icon = "mdi:clipboard-check-outline"
+    # v5.14: deze blokken NIET naar de recorder. Samen waren de attributen
+    # 56 kB op een lege installatie en 87 kB op de echte - vier tot vijf
+    # keer de 16 kB die de recorder bewaart. Daarboven slaat Home Assistant
+    # ze niet meer op en schrijft bij elke wijziging een waarschuwing in het
+    # log. Het zijn live dashboardgegevens - een logboek, de proefstand, drie
+    # SVG-afbeeldingen - en geschiedenis ervan heeft niemand nodig. Ze
+    # blijven live beschikbaar; alleen de database slaat ze over.
+    # Gevonden door `test_alles_uitgevraagd.py`, dat bewaakt ook dat het
+    # bewaarde deel onder de 16 kB blijft.
+    _unrecorded_attributes = frozenset(
+        {
+            "logboek",
+            "proefstand",
+            "nog_niet_bepaald",
+            "overzichtsplaat",
+            "overzichtstatus",
+            "overzichtsecties",
+            "meet_stuurt_niet",
+            "perioden",
+            "eisen",
+            "helderheid_ijking",
+        }
+    )
 
     # v1.25.0: deze sensor draagt de tekst voor een stuk of tien
     # dashboardpagina's. Met 36 planregels stond hij al op ruim 21 kB,
@@ -4394,3 +4417,53 @@ class GacsAssessmentSensor(SensorEntity):
                 "een systeem sterk en zwak staat."
             ),
         }
+
+
+class DiagnoseSensor(_CoordinatorDiagnosticSensor):
+    """De kern van de diagnostiek in de TOESTAND van een sensor (v5.14).
+
+    Gevraagd: *"Nu moet ik telkens de diagnostiek downloaden, je hebt al
+    toegang tot vele entiteiten van HA, kunnen we het zo maken dat jij de
+    diagnostiek rechtstreeks uitleest?"*
+
+    De connector van de assistent geeft alleen toestanden door, geen
+    attributen of bestanden. Daarom staat de kern hier in de toestand zelf,
+    hoogstens 255 tekens. Drie sensoren: gezondheid, sturing en leren. Geef
+    ze vrij voor de assistent, dan is bij elke vraag meteen te zien of alles
+    goed draait - achter de inlog van Home Assistant.
+    """
+
+    _soort = ""
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        super().__init__(coordinator, entry_id, f"diagnose_{self._soort}")
+
+    @property
+    def native_value(self) -> str:
+        return self._coordinator.diagnose_regel(self._soort)
+
+    @property
+    def icon(self) -> str:
+        return "mdi:stethoscope"
+
+
+class DiagnoseGezondheidSensor(DiagnoseSensor):
+    """Versie, fouten, storingen, zelfcontroles, bestanden, configuratie."""
+
+    _attr_name = "Diagnose gezondheid"
+    _soort = "gezondheid"
+
+
+class DiagnoseSturingSensor(DiagnoseSensor):
+    """Reden, accustand, beschikbaar, reserve, tekortdagen, goedkoop blok."""
+
+    _attr_name = "Diagnose sturing"
+    _soort = "sturing"
+
+
+class DiagnoseLerenSensor(DiagnoseSensor):
+    """Weerbronnen, meldingen, rendement, nachtverbruik, bias, voorspelling."""
+
+    _attr_name = "Diagnose leren"
+    _soort = "leren"
+

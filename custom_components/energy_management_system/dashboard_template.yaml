@@ -1440,6 +1440,12 @@ views:
         name: Sluipverbruik
       - entity: sensor.woonkamer_energy_management_system_weather_ensemble_bewolkingsgraad
         name: Bewolkingsgraad
+      - entity: sensor.woonkamer_energy_management_system_diagnose_gezondheid
+        name: Diagnose gezondheid
+      - entity: sensor.woonkamer_energy_management_system_diagnose_sturing
+        name: Diagnose sturing
+      - entity: sensor.woonkamer_energy_management_system_diagnose_leren
+        name: Diagnose leren
       grid_options:
         columns: 12
         rows: auto

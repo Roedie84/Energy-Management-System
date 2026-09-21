@@ -100,7 +100,11 @@
           "battery_inverter_price_eur": "Prijs omvormer (EUR) - voor de slijtagekosten per kWh",
           "battery_cycle_life": "Levensduur in cycli - fabrikantopgave, 6000 voor de SolarFlow",
           "battery_calendar_years": "Levensduur in kalenderjaren - een AANNAME, geen opgave",
-          "lange_horizon_actief": "Lange horizon bij de reserve - kijkt voorbij het eerstvolgende goedkope blok (aan sinds v3.99.18)"
+          "lange_horizon_actief": "Lange horizon bij de reserve - kijkt voorbij het eerstvolgende goedkope blok (aan sinds v3.99.18)",
+          "second_pv_forecast_today_sensor_entity": "Tweede zonvoorspelling voor vandaag in kWh, bv. Forecast.Solar (optioneel)",
+          "irradiance_sensor_entity": "Gemeten instraling in W/m2, bv. een KNMI-station (optioneel)",
+          "gas_price_sensor_entity": "Gasprijs in euro per m3 (optioneel)",
+          "battery_cooling_fan_power_sensor_entity": "Vermogen van de accuventilatoren in W (optioneel)"
         }
       }
     },
@@ -214,7 +218,11 @@
           "battery_inverter_price_eur": "Prijs omvormer (EUR) - voor de slijtagekosten per kWh",
           "battery_cycle_life": "Levensduur in cycli - fabrikantopgave, 6000 voor de SolarFlow",
           "battery_calendar_years": "Levensduur in kalenderjaren - een AANNAME, geen opgave",
-          "lange_horizon_actief": "Lange horizon bij de reserve - kijkt voorbij het eerstvolgende goedkope blok (aan sinds v3.99.18)"
+          "lange_horizon_actief": "Lange horizon bij de reserve - kijkt voorbij het eerstvolgende goedkope blok (aan sinds v3.99.18)",
+          "second_pv_forecast_today_sensor_entity": "Tweede zonvoorspelling voor vandaag in kWh, bv. Forecast.Solar (optioneel)",
+          "irradiance_sensor_entity": "Gemeten instraling in W/m2, bv. een KNMI-station (optioneel)",
+          "gas_price_sensor_entity": "Gasprijs in euro per m3 (optioneel)",
+          "battery_cooling_fan_power_sensor_entity": "Vermogen van de accuventilatoren in W (optioneel)"
         }
       }
     },

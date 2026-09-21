@@ -47,6 +47,17 @@ CONF_BACKYARD_TEMPERATURE_SENSOR = "backyard_temperature_sensor_entity"
 # CO2-intensiteit van het net rapporteert (g CO2/kWh). Zonder
 # configuratie blijft alles exact zoals voorheen.
 CONF_CO2_INTENSITY_SENSOR = "co2_intensity_sensor_entity"
+# v5.14: bronnen die er al stonden maar niet werden gebruikt - gevonden door
+# live in Home Assistant mee te kijken. Zie slimme_bronnen.py.
+CONF_TWEEDE_PV_VOORSPELLING_SENSOR = "second_pv_forecast_today_sensor_entity"
+CONF_INSTRALING_SENSOR = "irradiance_sensor_entity"
+CONF_GAS_PRICE_SENSOR = "gas_price_sensor_entity"
+CONF_BATTERY_COOLING_FAN_POWER_SENSOR = "battery_cooling_fan_power_sensor_entity"
+
+# Hoe lang de toestand van een sensor mag zijn (v5.14). Home Assistant
+# weigert een toestand boven de 255 tekens - de sensor valt dan terug op
+# "unknown". De diagnoseregels passen er daarom altijd in.
+DIAGNOSE_REGEL_MAX_TEKENS = 255
 CONF_BATTERY_ROUND_TRIP_EFFICIENCY = "battery_round_trip_efficiency_percent"
 CONF_VACATION_CONSUMPTION_REDUCTION_PERCENT = "vacation_consumption_reduction_percent"
 
@@ -3192,6 +3203,10 @@ PERSISTED_FIELDS: dict[str, dict] = {
     # de vlag bewaard weet de integratie na een herstart dat die
     # leermodus bij een verdwenen stand hoorde, en kan hij weg.
     "_leermodus_door_handmatige_stand": {"type": "plain"},
+    # v5.14: metingen op bronnen die eerder niet werden gebruikt.
+    "instraling_verhouding": {"type": "plain"},
+    "ventilator_kwh_per_dag": {"type": "plain"},
+    "_ventilator_vermogens_aan": {"type": "plain"},
     # v5.9: waarom het rendementsleren niets oplevert.
     "rendement_afwijzingen": {"type": "plain"},
     # v5.11: het nachtelijke ontlaadvenster. Werd niet bewaard, dus een

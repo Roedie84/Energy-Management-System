@@ -100,7 +100,11 @@
           "battery_inverter_price_eur": "Inverter price (EUR) - for wear cost per kWh",
           "battery_cycle_life": "Cycle life - manufacturer figure, 6000 for the SolarFlow",
           "battery_calendar_years": "Calendar life in years - an ASSUMPTION, not a figure",
-          "lange_horizon_actief": "Long horizon for the reserve - looks past the next cheap block (on since v3.99.18)"
+          "lange_horizon_actief": "Long horizon for the reserve - looks past the next cheap block (on since v3.99.18)",
+          "second_pv_forecast_today_sensor_entity": "Second solar forecast for today in kWh, e.g. Forecast.Solar (optional)",
+          "irradiance_sensor_entity": "Measured irradiance in W/m2, e.g. a weather station (optional)",
+          "gas_price_sensor_entity": "Gas price in euro per m3 (optional)",
+          "battery_cooling_fan_power_sensor_entity": "Power of the battery cooling fans in W (optional)"
         }
       }
     },
@@ -214,7 +218,11 @@
           "battery_inverter_price_eur": "Inverter price (EUR) - for wear cost per kWh",
           "battery_cycle_life": "Cycle life - manufacturer figure, 6000 for the SolarFlow",
           "battery_calendar_years": "Calendar life in years - an ASSUMPTION, not a figure",
-          "lange_horizon_actief": "Long horizon for the reserve - looks past the next cheap block (on since v3.99.18)"
+          "lange_horizon_actief": "Long horizon for the reserve - looks past the next cheap block (on since v3.99.18)",
+          "second_pv_forecast_today_sensor_entity": "Second solar forecast for today in kWh, e.g. Forecast.Solar (optional)",
+          "irradiance_sensor_entity": "Measured irradiance in W/m2, e.g. a weather station (optional)",
+          "gas_price_sensor_entity": "Gas price in euro per m3 (optional)",
+          "battery_cooling_fan_power_sensor_entity": "Power of the battery cooling fans in W (optional)"
         }
       }
     },

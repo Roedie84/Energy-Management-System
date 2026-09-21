@@ -542,6 +542,17 @@ async def async_get_config_entry_diagnostics(
         # v5.10: elk bewaard veld, met hoeveel erin zit. Afwezig in de
         # export was niet van leeg te onderscheiden - zie v5.9.
         # v5.12: welke weerbron levert, en waarom niet.
+        # v5.14: bronnen die er al stonden maar niet werden gebruikt.
+        "pv_ensemble": _veilig("get_pv_ensemble", coordinator.get_pv_ensemble),
+        "instraling": _veilig(
+            "get_instraling_analyse", coordinator.get_instraling_analyse
+        ),
+        "verwarmingsadvies": _veilig(
+            "get_verwarmingsadvies", coordinator.get_verwarmingsadvies
+        ),
+        "ventilatorverbruik": _veilig(
+            "get_ventilator_verbruik", coordinator.get_ventilator_verbruik
+        ),
         "weerbron_levering": _veilig(
             "get_weerbron_levering", coordinator.get_weerbron_levering
         ),
@@ -1048,7 +1059,7 @@ async def async_get_config_entry_diagnostics(
             # v0.63.119: losstaande dagteller, niet begrensd door de
             # weergavelijst van 20 momenten - dit is wat de
             # "verklaart maar X L"-check nu gebruikt.
-            "water_sessions_today_l": coordinator.water_sessions_today_l,
+            "water_sessions_today_l": round(coordinator.water_sessions_today_l, 2),
             "water_sessions_today_count": coordinator.water_sessions_today_count,
             "water_daily_history": coordinator.water_daily_history,
             "water_session_history": coordinator.water_session_history,

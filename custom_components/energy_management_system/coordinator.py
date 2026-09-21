@@ -59,7 +59,9 @@ from homeassistant.helpers.event import (
 from homeassistant.util import dt as dt_util
 from homeassistant.helpers.storage import Store
 
+from . import slimme_bronnen
 from .const import (
+    DIAGNOSE_REGEL_MAX_TEKENS,
     DOMAIN,
     DEFAULT_NAME,
     CHEAP_BLOCK_THRESHOLD_MARGIN_FRACTION,
@@ -323,6 +325,10 @@ from .const import (
     CONF_OPENWEATHERMAP_WEATHER_ENTITY,
     CONF_BACKYARD_TEMPERATURE_SENSOR,
     CONF_CO2_INTENSITY_SENSOR,
+    CONF_TWEEDE_PV_VOORSPELLING_SENSOR,
+    CONF_INSTRALING_SENSOR,
+    CONF_GAS_PRICE_SENSOR,
+    CONF_BATTERY_COOLING_FAN_POWER_SENSOR,
     WEATHER_ENSEMBLE_CLEAR_THRESHOLD_PERCENT,
     WEATHER_ENSEMBLE_OVERCAST_THRESHOLD_PERCENT,
     WEATHER_ENSEMBLE_UNDERPERFORM_RATIO,
@@ -1279,7 +1285,7 @@ class EnergyManagementSystemCoordinator:
         # een regel - `__init__` staat op de ratel.
         # v3.99.19: `dagverloop` en `nabeschouwingen` erbij, in dezelfde
         # regel - `__init__` staat op de ratel.
-        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen, self.safe_sell_shadow, self.reden_afwijkingen, self.meting_laatst_gevuld, self.weerbron_keuze, self.voorspellingsverloop, self._geladen_opslag, self.rendement_afwijzingen, self.weerbron_levering, self.weather_ensemble_readings_alle = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, [], [], {}, {}, {}, {}, None, {}, {}, {}
+        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen, self.safe_sell_shadow, self.reden_afwijkingen, self.meting_laatst_gevuld, self.weerbron_keuze, self.voorspellingsverloop, self._geladen_opslag, self.rendement_afwijzingen, self.weerbron_levering, self.weather_ensemble_readings_alle, self.instraling_verhouding, self.ventilator_kwh_per_dag, self._ventilator_vermogens_aan = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, [], [], {}, {}, {}, {}, None, {}, {}, {}, {}, {}, []
         self.handmatige_ingrepen: list[dict] = []
         # v1.1.6: met welke meetmethode de bewaarde foutreeks tot stand
         # is gekomen. Verandert de methode, dan wordt die reeks eenmalig
@@ -26411,8 +26417,12 @@ class EnergyManagementSystemCoordinator:
             if self._koelen_is_goedkoop(accu_c, buiten_c):
                 return (
                     f"accu {accu_c:.0f}°C met {buiten_c:.0f}°C buiten - "
-                    f"{accu_c - buiten_c:.0f}°C te halen voor een paar watt "
-                    "ventilator, dus koelen zolang het goedkoop is"
+                    f"{accu_c - buiten_c:.0f}°C te halen voor "
+                    # v5.14: het GEMETEN vermogen, niet "een paar watt". De
+                    # stekker stond op 325 kWh.
+                    f"{getattr(self, '_ventilator_omschrijving', lambda: 'de ventilator')()}"
+                    ", dus koelen zolang "
+                    "het goedkoop is"
                 )
             return None
 
@@ -29843,9 +29853,11 @@ class EnergyManagementSystemCoordinator:
             self.water_sessions_today_count = 0
         self.water_sessions_today_count += 1
         if liters is not None:
-            self.water_sessions_today_l = round(
-                self.water_sessions_today_l + liters, 2
-            )
+            # v5.14: onafgerond optellen, zie
+            # `test_geen_afronding_bij_optellen`. Hier was de fout klein -
+            # een paar tapbeurten per dag - maar de regel geldt zonder
+            # uitzonderingen. Afronden hoort bij het tonen.
+            self.water_sessions_today_l = self.water_sessions_today_l + liters
 
     @callback
     def _handle_battery_cooling_change(self, event) -> None:
@@ -31141,6 +31153,19 @@ class EnergyManagementSystemCoordinator:
             if veld in stored and stored[veld] is not None:
                 setattr(self, veld, stored[veld])
         # v4.1: uursleutels terug naar int.
+        # v5.14: `sensor_cadence` valideren bij binnenkomst. Een regel zonder
+        # `ticks` en `wijzigingen` liet vier sensoren omvallen met een
+        # KeyError - gevonden toen het uitvraagmechanisme voor het eerst op
+        # een echte toestand draaide. Een opslag is een externe bron.
+        if isinstance(self.sensor_cadence, dict):
+            self.sensor_cadence = {
+                entity: gegevens
+                for entity, gegevens in self.sensor_cadence.items()
+                if isinstance(gegevens, dict)
+                and isinstance(gegevens.get("ticks"), int)
+                and isinstance(gegevens.get("wijzigingen"), int)
+            }
+
         # v5.8: de opgeslagen tekortdagen herbeoordelen. v5.7 repareerde
         # de INSTROOM - nieuwe dagen worden met de drempel beoordeeld -
         # maar de dagen daarvoor stonden er nog met de oude regel. Vier
@@ -35187,6 +35212,151 @@ class EnergyManagementSystemCoordinator:
             ),
         }
 
+    def meldingen_laatste_24u(self) -> int:
+        """Verstuurde meldingen in de laatste 24 uur (v5.14).
+
+        Eén bron: de meldingensensor en de diagnoseregel lezen allebei deze
+        functie, zodat ze nooit uiteen kunnen lopen.
+        """
+        grens = dt_util.now() - timedelta(hours=24)
+        aantal = 0
+        for melding in self.notification_history or []:
+            if not melding.get("verstuurd"):
+                continue
+            moment = dt_util.parse_datetime(melding.get("moment") or "")
+            if moment is not None and moment >= grens:
+                aantal += 1
+        return aantal
+
+    def diagnose_regel(self, soort: str) -> str:
+        """Een diagnoseregel die in de TOESTAND van een sensor past (v5.14).
+
+        Gevraagd: *"Nu moet ik telkens de diagnostiek downloaden, je hebt al
+        toegang tot vele entiteiten van HA."* De connector van de assistent
+        geeft alleen toestanden door - geen attributen, geen bestanden - en
+        een toestand mag hoogstens 255 tekens zijn. Deze regels zetten de
+        kern van de export in die ruimte, zodat bij elke vraag meteen te
+        zien is of alles goed draait. Achter de inlog van Home Assistant;
+        de export blijft nodig voor diepgaand zoekwerk.
+
+        Elk onderdeel wordt apart opgehaald: valt er een om, dan staat daar
+        een vraagteken en blijft de rest leesbaar.
+        """
+        bouwers = {
+            "gezondheid": self._diagnose_gezondheid,
+            "sturing": self._diagnose_sturing,
+            "leren": self._diagnose_leren,
+        }
+        delen = []
+        for label, ophalen in bouwers.get(soort, lambda: [])():
+            try:
+                waarde = ophalen()
+            except Exception:  # noqa: BLE001 - een regel mag nooit omvallen
+                waarde = "?"
+            delen.append(f"{label} {waarde}" if label else f"{waarde}")
+        return " · ".join(delen)[:DIAGNOSE_REGEL_MAX_TEKENS]
+
+    def _diagnose_gezondheid(self) -> list:
+        def zelfcontroles():
+            controles = self.get_zelfcontroles()
+            beoordeeld = [
+                c for c in controles.values()
+                if isinstance(c, dict) and "in_orde" in c
+            ]
+            goed = sum(1 for c in beoordeeld if c.get("in_orde"))
+            return f"{goed}/{len(beoordeeld)}"
+
+        def config():
+            cc = self.get_configuratiecontrole()
+            return (
+                f"{cc.get('aantal_in_orde')}/{cc.get('aantal_stuk')}/"
+                f"{cc.get('aantal_slaapt')}"
+            )
+
+        def modus():
+            if self.force_manual:
+                return "handmatig"
+            return "leermodus" if self.learning_only else "stuurt"
+
+        return [
+            ("", lambda: f"v{self.get_installation_facts().get('versie') or '-'}"),
+            ("fout", lambda: self.get_analyse().get("aantal_fouten")),
+            ("storing", lambda: len(self.internal_failures or {})),
+            ("zelfctl", zelfcontroles),
+            ("bestand", lambda: "ok" if self.get_bestandscontrole().get("in_orde") else "AFWIJKEND"),
+            ("config", config),
+            ("", modus),
+        ]
+
+    def _diagnose_sturing(self) -> list:
+        def reserve():
+            b = self.last_reserve_margin_breakdown or {}
+            kwh = b.get("reserve_kwh_after_margin")
+            if kwh is None:
+                return "geen blok"
+            return (
+                f"{kwh:.2f}kWh +{b.get('total_percent')}%"
+                f" (tekort {b.get('shortfall_bonus_percent')}%)"
+            )
+
+        def blok():
+            start = self.last_cheap_block_start
+            return start.strftime("%H:%M") if start else "-"
+
+        def tekortdagen():
+            return sum(
+                1 for r in (self.reserve_daily_records or []) if r.get("shortfall")
+            )
+
+        # "-" betekent geen waarde, "?" betekent dat het ophalen omviel. Dat
+        # onderscheid is waar een lezer op let.
+        def accu():
+            stand = self.accustand_procent()
+            return f"{stand:.0f}%" if stand is not None else "-"
+
+        def beschikbaar():
+            kwh = self.last_available_kwh
+            return f"{kwh:.2f}kWh" if kwh is not None else "-"
+
+        return [
+            ("", lambda: self.last_reason or "-"),
+            ("accu", accu),
+            ("beschikbaar", beschikbaar),
+            ("reserve", reserve),
+            ("tekortdagen", tekortdagen),
+            ("blok", blok),
+        ]
+
+    def _diagnose_leren(self) -> list:
+        def weer():
+            lev = self.get_weerbron_levering()
+            keuze = self.weerbron_keuze or {}
+            return (
+                f"{lev.get('aantal_leverend')}/{lev.get('aantal_ingesteld')}"
+                f" geweerd {len(keuze.get('geweerd') or [])}"
+            )
+
+        def rendement():
+            return (
+                f"{len(self.charge_efficiency_history or [])}/"
+                f"{len(self.discharge_efficiency_history or [])}"
+            )
+
+        return [
+            ("weer", weer),
+            ("meld24u", self.meldingen_laatste_24u),
+            ("rendement", rendement),
+            ("nacht", lambda: len(self.night_consumption_history or [])),
+            (
+                "pvbias",
+                lambda: len(self.solar_tracker.deviation_history)
+                if self.solar_tracker
+                else "-",
+            ),
+            ("2eVoorsp", lambda: self.get_pv_ensemble().get("dagen")),
+            ("instraling", lambda: sum(len(r) for r in (self.instraling_verhouding or {}).values())),
+        ]
+
     def get_zelfcontroles(self) -> dict:
         return {
             "een_reserve": self.zelfcontrole_een_reserve(),
@@ -35958,6 +36128,8 @@ class EnergyManagementSystemCoordinator:
             ("woonkamertemperatuur", lambda: self._meet_woonkamertemperatuur(now)),
             # v5.3: het verloop van de zonvoorspelling, drie keer per dag.
             ("voorspellingsverloop", lambda: self.noteer_voorspellingsverloop(now)),
+            # v5.14: instraling en ventilatoren.
+            ("slimme_bronnen", lambda: self._meet_slimme_bronnen(now)),
             ("meetherinnering", lambda: self._herinner_wat_meet(now)),
             # v3.68.0: het MPC-plan naast de eigen planning.
             ("mpc tegen de planning", lambda: self._meet_mpc(now)),
@@ -37161,6 +37333,142 @@ class EnergyManagementSystemCoordinator:
                 per["avond"] += kwh
         return per
 
+    def _lees_optionele_sensor(self, sleutel: str) -> float | None:
+        """Leest een optionele sensor, of None als die niet is ingesteld
+        (v5.14)."""
+        entity = self.config.get(sleutel)
+        if not entity:
+            return None
+        return self._read_sensor_float(entity)
+
+    def _meet_slimme_bronnen(self, now: datetime) -> None:
+        """Instraling en ventilatorverbruik, elke ronde (v5.14).
+
+        Twee bronnen die er al stonden, maar niet werden gebruikt. Meet;
+        stuurt niets.
+        """
+        self._meet_instraling(now)
+        self._meet_ventilator(now)
+
+    def _meet_instraling(self, now: datetime) -> None:
+        """Legt het PV-vermogen naast de gemeten instraling, per zonrichting.
+
+        Om de tien minuten een monster, alleen bij genoeg licht en de zon
+        hoog genoeg. Het dak tegen gemeten licht, niet tegen een
+        voorspelling - een voorspelfout lijkt anders op schaduw.
+        """
+        instraling = self._lees_optionele_sensor(CONF_INSTRALING_SENSOR)
+        if instraling is None:
+            return
+        laatste = getattr(self, "_instraling_laatste_monster", None)
+        if laatste is not None and (now - laatste).total_seconds() < 600:
+            return
+        zonhoogte = self.get_sun_elevation_degrees()
+        azimut = self.get_sun_azimuth_degrees()
+        pv_w = self._read_sensor_float(self.config.get(CONF_PV_POWER_SENSOR))
+        if azimut is None or not slimme_bronnen.instraling_telt(
+            instraling, zonhoogte, pv_w
+        ):
+            return
+        self._instraling_laatste_monster = now
+        vak = str(slimme_bronnen.azimut_vak(azimut))
+        reeks = self.instraling_verhouding.setdefault(vak, [])
+        reeks.append(round(pv_w / instraling, 3))
+        del reeks[: -slimme_bronnen.INSTRALING_MONSTERS_PER_VAK]
+        self.schedule_persisted_state_save()
+
+    def _meet_ventilator(self, now: datetime) -> None:
+        """Telt het verbruik van de accuventilatoren op, per dag.
+
+        De stekker stond op 325 kWh, terwijl de koellogica sprak van "een
+        paar watt ventilator". Alleen de ventilatoren hangen eraan.
+        """
+        vermogen = self._lees_optionele_sensor(CONF_BATTERY_COOLING_FAN_POWER_SENSOR)
+        vorige = getattr(self, "_ventilator_laatste", None)
+        self._ventilator_laatste = (now, vermogen)
+        if vermogen is None or vorige is None or vorige[1] is None:
+            return
+        uren = (now - vorige[0]).total_seconds() / 3600
+        if uren <= 0 or uren > 0.5:
+            return
+        dag = now.date().isoformat()
+        # Onafgerond optellen: afronden per stap telde 40 W per minuut als
+        # 0,0007 in plaats van 0,000667 kWh - over een uur 5% te veel.
+        # Afronden hoort bij het tonen, niet bij het opslaan.
+        self.ventilator_kwh_per_dag[dag] = (
+            self.ventilator_kwh_per_dag.get(dag, 0.0) + vorige[1] / 1000 * uren
+        )
+        for oud in sorted(self.ventilator_kwh_per_dag)[
+            : -slimme_bronnen.VENTILATOR_HISTORIE_DAGEN
+        ]:
+            self.ventilator_kwh_per_dag.pop(oud, None)
+        if vermogen >= slimme_bronnen.VENTILATOR_AAN_W:
+            self._ventilator_vermogens_aan.append(round(vermogen, 1))
+            del self._ventilator_vermogens_aan[:-200]
+
+    def ventilator_vermogen_aan_w(self) -> float | None:
+        """Het gemeten vermogen van de ventilatoren als ze draaien (v5.14)."""
+        if not self._ventilator_vermogens_aan:
+            return None
+        from statistics import median
+
+        return round(median(self._ventilator_vermogens_aan), 1)
+
+    def _ventilator_omschrijving(self) -> str:
+        """Hoe de koeltekst de ventilator noemt (v5.14)."""
+        vermogen = self.ventilator_vermogen_aan_w()
+        return f"{vermogen:.0f} W ventilator" if vermogen else "de ventilator"
+
+    def get_verwarmingsadvies(self) -> dict:
+        """Verwarmen met de airco of met de cv? (v5.14)"""
+        return slimme_bronnen.verwarmingsadvies(
+            self._lees_optionele_sensor(CONF_GAS_PRICE_SENSOR),
+            self.huidige_prijs_eur_per_kwh(),
+            self._get_live_outdoor_temp_c(dt_util.now()),
+        )
+
+    def get_pv_ensemble(self) -> dict:
+        """Solcast naast een tweede zonvoorspelling (v5.14)."""
+        opwek = {
+            r.get("datum"): r.get("opwek_kwh")
+            for r in (self.energy_daily_history or [])
+        }
+        vandaag = dt_util.now().date().isoformat()
+        dagen = []
+        for dag, per_uur in sorted((self.voorspellingsverloop or {}).items()):
+            if dag >= vandaag:
+                continue
+            ochtend = per_uur.get("8") or next(iter(per_uur.values()), {})
+            dagen.append(
+                {
+                    "datum": dag,
+                    "solcast_kwh": ochtend.get("dagvoorspelling_kwh"),
+                    "tweede_kwh": ochtend.get("tweede_dagvoorspelling_kwh"),
+                    "werkelijk_kwh": opwek.get(dag),
+                }
+            )
+        uit = slimme_bronnen.pv_ensemble_analyse(dagen)
+        solcast_nu, _ = self.voorspelde_zon_vandaag_kwh()
+        tweede_nu = self._lees_optionele_sensor(CONF_TWEEDE_PV_VOORSPELLING_SENSOR)
+        uit["vandaag"] = {
+            "solcast_kwh": solcast_nu,
+            "tweede_kwh": tweede_nu,
+            "oneens_procent": slimme_bronnen.oneens_procent(solcast_nu, tweede_nu),
+        }
+        return uit
+
+    def get_instraling_analyse(self) -> dict:
+        """Het dak tegen gemeten licht, per zonrichting (v5.14)."""
+        return slimme_bronnen.instraling_analyse(self.instraling_verhouding)
+
+    def get_ventilator_verbruik(self) -> dict:
+        """Wat de accukoeling werkelijk verbruikt (v5.14)."""
+        return slimme_bronnen.ventilator_overzicht(
+            self.ventilator_kwh_per_dag,
+            self._ventilator_vermogens_aan,
+            self.huidige_prijs_eur_per_kwh(),
+        )
+
     def noteer_voorspellingsverloop(self, nu: datetime | None = None) -> None:
         """Legt vast wat er voor de REST van de dag werd verwacht (v5.3).
 
@@ -37199,6 +37507,11 @@ class EnergyManagementSystemCoordinator:
             ),
             "dagvoorspelling_kwh": (
                 round(dagvoorspelling, 2) if dagvoorspelling is not None else None
+            ),
+            # v5.14: de tweede voorspelling op hetzelfde moment, zodat de
+            # twee later naast de werkelijke opbrengst gelegd kunnen worden.
+            "tweede_dagvoorspelling_kwh": self._lees_optionele_sensor(
+                CONF_TWEEDE_PV_VOORSPELLING_SENSOR
             ),
         }
         for oud in sorted(self.voorspellingsverloop)[:-VOORSPELLINGSVERLOOP_DAGEN]:

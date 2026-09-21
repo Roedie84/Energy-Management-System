@@ -27214,3 +27214,222 @@ waarnemingen waar er nu terecht 3 zijn.
 
 **Volledige testsuite**: 4060 tests, allemaal groen.
 
+
+
+## v5.14 — Bronnen die er al stonden, maar niet werden gebruikt
+
+Gevraagd: *"Kunnen we nog wat slims bedenken met alle entiteiten die nu
+live door jou in te zien zijn?"* Door via de connector mee te kijken bleek
+Home Assistant een aantal bronnen te hebben waar de integratie niets mee
+deed. Drie daarvan zijn nu gekoppeld, plus het verbruik van de
+accuventilatoren. De kalibratie via de Zendure is op verzoek blijven
+liggen.
+
+Niets hiervan STUURT. De bewijsstandaard van dit project is: eerst een
+bevinding, dan een meting, dan een schaduwanalyse, dan pas sturen. Dit is
+de meting. De rekenlogica staat in een eigen module, `slimme_bronnen.py`,
+zodat hij los te toetsen is en de coördinator niet verder groeit.
+
+Alle vier zijn optioneel en worden gekozen in de instellingen van de
+integratie.
+
+### 1. Een tweede zonvoorspelling naast Solcast
+
+Bij Ruud draait naast Solcast ook Forecast.Solar. De voorspelfout is de
+grootste verliespost van de installatie, en op 18 september zat Solcast er
+79% naast. Twee onafhankelijke voorspellingen kunnen iets wat één niet kan:
+zijn ze het oneens, dan is de dag onzeker.
+
+De tweede voorspelling wordt nu op dezelfde vaste momenten vastgelegd als
+Solcast (08:00, 11:00, 14:00), en na afloop naast de werkelijke opbrengst
+gelegd. `pv_ensemble` zegt welke het dichtst bij zat - Solcast, de tweede,
+of hun gemiddelde - en of onenigheid een grotere fout voorspelt. Pas als
+dat laatste zo blijkt, is het verantwoord de reserve erop aan te passen.
+
+### 2. Gemeten instraling
+
+Het KNMI-station Groenlo-Hupsel meet de instraling, een paar kilometer van
+het dak. De bestaande beschaduwingsanalyse legt de opbrengst naast een
+VOORSPELLING, en daar lijkt een voorspelfout op schaduw. Nu wordt het
+PV-vermogen per zonrichting naast gemeten licht gelegd, om de tien minuten,
+alleen bij genoeg licht en de zon boven de tien graden.
+
+`instraling` toont per richting hoeveel procent het dak haalt van zijn
+beste richting. Blijft west ver achter bij gemeten licht, dan is dat geen
+voorspelfout maar iets wat het licht tegenhoudt.
+
+### 3. Verwarmen met de airco of met de cv
+
+De gasprijs stond in Home Assistant, naast de stroomprijs en de airco. Een
+lucht-lucht warmtepomp verwarmt met een rendement van 3 tot 4. Bij de
+prijzen van 21 september - gas 1,74 euro per m3, stroom 0,24 per kWh -
+kost warmte uit gas ongeveer 0,20 euro per kWh en uit de airco ongeveer
+0,08. De cv wint pas boven een stroomprijs van ruwweg 0,70 euro.
+
+`verwarmingsadvies` rekent dat elk moment uit, met een COP die daalt als
+het buiten kouder wordt. **Die COP is een benadering uit gangbare
+fabriekswaarden, geen meting van deze airco** - dat staat ook zo in het
+advies.
+
+### 4. De accuventilatoren verbruiken meer dan "een paar watt"
+
+De stekker van de ventilatoren stond op 325 kWh, en alleen de
+ventilatoren hangen eraan. De koellogica sprak in zijn uitleg van "een paar
+watt ventilator". Nu wordt het vermogen gemeten, per dag opgeteld en in
+euro per jaar uitgedrukt, en noemt de koeluitleg het gemeten vermogen.
+
+### Zichtbaar in Home Assistant
+
+Als attribuut op een sensor waar het inhoudelijk bij hoort, zodat er geen
+nieuwe entiteiten bijkomen:
+
+```
+verwarmingsadvies         op  Klimaat-projectie (woonkamertemperatuur)
+tweede_voorspelling       op  PV hourly forecast bias
+instraling_per_richting   op  PV-installatieprofiel
+ventilatorverbruik        op  Accu-koeling
+```
+
+### Drie fouten van mij, gevangen tijdens het bouwen
+
+- **Afronden bij elke optelling.** Het ventilatorverbruik rondde elke stap
+  af op vier decimalen: 40 W per minuut werd 0,0007 in plaats van 0,000667
+  kWh, over een uur 5% te veel. Afronden hoort bij het tonen, niet bij het
+  opslaan.
+- **Een attribuut op een sensor zonder coördinator.** `PV forecast
+  accuracy` krijgt de zonvolger mee, niet de coördinator. Het attribuut
+  daar zou in Home Assistant de hele attributenlijst van die sensor laten
+  omvallen. Geen enkele bestaande toets vroeg die attributen op.
+- **Een attribuut in de verkeerde klasse.** Ik voegde in op regelnummer;
+  de koelsensor heeft geen `return {`, dus kwam het ventilatorverbruik bij
+  de accumodulegezondheid terecht. Dezelfde breekbare aanpak als een
+  tekstscan.
+
+Alle drie gevangen door een toets die het echte gedrag opvraagt - de
+laatste twee door één nieuwe toets die van elke sensor de attributen
+ophaalt.
+
+
+### Het mechanisme: alles uitvragen zoals Home Assistant dat doet
+
+Gevraagd: *"Kunnen we een mechanisme bedenken om ten allertijde dit soort
+fouten te voorkomen?"*
+
+De fouten van de afgelopen weken hadden één ding gemeen: de code werd nooit
+uitgevoerd zoals Home Assistant hem uitvoert.
+
+```
+v5.8   de export riep een functie aan zonder zijn argument   - 3 dagen in bedrijf
+v5.14  een attribuut op een sensor zonder coördinator         - geen toets vroeg het op
+v5.14  een attribuut in de verkeerde klasse                   - ingevoegd op regelnummer
+v5.9   "nul metingen" - een veld dat niet in de export stond
+```
+
+Een tekstscan had geen van deze gevonden. Wat ze allemaal had gevonden:
+alles AANROEPEN, precies zoals Home Assistant het aanroept.
+
+`tests/test_alles_uitgevraagd.py` maakt elke entiteit aan via de echte
+`async_setup_entry` van elk platform, vraagt van elke entiteit de waarde,
+de attributen, het icoon en de beschikbaarheid op, en draait de volledige
+export. Twee keer: op een net ingestelde installatie en op de ECHTE
+opgeslagen toestand van deze installatie.
+
+Per entiteit: geen uitzondering, attributen om te zetten naar JSON, en het
+deel dat naar de recorder gaat onder de 16 kB. Voor de export: geen enkel
+onderdeel in `internal_failures`.
+
+**Bewezen, niet aangenomen.** Toen ik de fout van v5.14 er opzettelijk weer
+in zette, bleef de eerste versie groen. `PvForecastAccuracySensor` wordt
+alleen aangemaakt als de zonvolger aanstaat, en in de toets stond hij uit -
+een voorwaardelijke entiteit ontsnapte. Twee reparaties: het mechanisme
+draait nu met een maximale configuratie, en een volledigheidscontrole eist
+dat elke klasse die een platform KAN aanmaken ook echt is uitgevraagd.
+Daarna vingen beide opnieuw ingebouwde fouten - die van v5.14 en die van
+v5.8 - direct.
+
+### Wat het mechanisme meteen vond
+
+**De GACS-zelfbeoordeling had 56 tot 87 kB aan attributen** - vier tot vijf
+keer de 16 kB die de recorder van Home Assistant bewaart. Het dashboard
+werkte gewoon, want de live toestand houdt alles; maar de recorder sloeg ze
+niet op en schreef bij elke wijziging een waarschuwing in het log. Het
+grootst: het logboek (25 kB), de proefstand (17 kB) en drie SVG-afbeeldingen
+(samen 17 kB) - live dashboardgegevens waar geen geschiedenis van nodig is.
+Nu met `_unrecorded_attributes`, het mechanisme van Home Assistant zelf:
+live beschikbaar, maar niet naar de database.
+
+**Een opslag in de verkeerde vorm liet vier sensoren omvallen.** De export
+zet onder `sensor_cadence` het RAPPORT in plaats van de opgeslagen
+toestand; zo geladen vielen System status, de betrouwbaarheid, GACS en het
+live verhaal om met `KeyError: 'wijzigingen'`. In bedrijf komt de opslag
+nooit in die vorm - maar het principe van dit project is dat een opslag
+een externe bron is, en externe waarheid wordt gevalideerd bij
+binnenkomst. Nu worden regels zonder `ticks` en `wijzigingen` bij het laden
+overgeslagen.
+
+### De afrondfout als klasse
+
+Het mechanisme vangt crashes, niet een optelling die bij elke stap wordt
+afgerond - de fout van het ventilatorverbruik. Daarvoor een structurele
+regel op de syntaxboom: een waarde die op zichzelf wordt opgeteld, wordt
+niet afgerond (`x = round(x + stap)` en `x += round(stap)` zijn verboden).
+Bij de eerste keer draaien vond hij nog een geval: het waterverbruik per
+dag, afgerond op 0,01 liter per tapbeurt. Daar was de fout klein, maar de
+regel geldt zonder uitzonderingen.
+
+### De echte toestand
+
+`tools_maak_toestand.py` maakt `tests/fixtures/opslag_echt.json`, het liefst
+uit het opslagbestand in `config/.storage/`, anders uit een
+diagnostiek-export. Dat bestand staat in `.gitignore`: het is het
+huishoudelijk verbruik per kwartier en hoort niet in een openbare
+repository. Ontbreekt het, dan slaat het deel met de echte toestand over.
+
+
+### De kern van de diagnostiek, rechtstreeks leesbaar
+
+Gevraagd: *"Nu moet ik telkens de diagnostiek downloaden, je hebt al toegang
+tot vele entiteiten van HA, kunnen we het zo maken dat jij de diagnostiek
+rechtstreeks uitleest?"*
+
+De connector van de assistent geeft alleen de TOESTAND van een entiteit
+door, geen attributen en geen bestanden, en een toestand mag hoogstens 255
+tekens zijn. De export zelf is een bestand van zo'n 500 kB achter de inlog -
+daar kan de connector niet bij. Een route via `config/www/` zou de volledige
+export geven, maar `/local/` werkt zonder inlog; daar is bewust niet voor
+gekozen.
+
+Drie sensoren zetten de kern van de export in hun toestand:
+
+```
+Diagnose gezondheid   v5.14 · fout 0 · storing 0 · zelfctl 2/2 · bestand ok
+                      · config 55/0/4 · stuurt
+Diagnose sturing      default_smart · accu 63% · beschikbaar 4.58kWh
+                      · reserve 2.18kWh +25% (tekort 0%) · tekortdagen 0 · blok 23:00
+Diagnose leren        weer 2/2 geweerd 0 · meld24u 9 · rendement 20/20 · nacht 7
+                      · pvbias 12 · 2eVoorsp 3 · instraling 140
+```
+
+Ze blijven achter de inlog van Home Assistant: de connector gebruikt de
+autorisatie van de gebruiker. De export blijft nodig voor diepgaand
+zoekwerk.
+
+Twee keuzes daarin:
+
+- **Een "-" is iets anders dan een "?".** "-" betekent dat er geen waarde
+  is; "?" dat het ophalen omviel. Elk onderdeel wordt apart opgehaald, zodat
+  een storing de rest van de regel niet meeneemt - anders viel precies bij
+  een storing de sensor om die hem had moeten laten zien.
+- **Eén bron voor de meldingen.** De meldingensensor en de diagnoseregel
+  tellen allebei via `meldingen_laatste_24u`. Twee plekken die hetzelfde
+  tellen, lopen vroeg of laat uiteen.
+
+De drie sensoren staan op het dashboard in de kaart Bewaking, op de pagina
+Integratiegezondheid.
+
+**En het mechanisme kreeg er een controle bij:** geen enkele sensor mag een
+toestand boven de 255 tekens hebben. Home Assistant weigert die, en de
+sensor valt dan terug op `unknown`. Dat gold altijd al voor elke sensor,
+maar werd pas zichtbaar nu de diagnoseregels die ruimte bewust vullen.
+
+**Volledige testsuite**: 4108 tests, allemaal groen.
