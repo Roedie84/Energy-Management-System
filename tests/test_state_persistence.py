@@ -586,6 +586,8 @@ VLUCHTIG_MET_REDEN = {
     "_herstel_gemeld": "vluchtig; na een herstart mag de melding weer",
     # v5.12: wordt elke ronde opnieuw bepaald uit de weerentiteiten.
     "weerbron_levering": "elke ronde opnieuw bepaald uit de weerentiteiten",
+    # v5.13: idem, de metingen van alle leverende bronnen vóór de poort.
+    "weather_ensemble_readings_alle": "elke ronde opnieuw bepaald, vóór de weerbronpoort",
     # v5.11: het ontlaadvenster wordt nu WEL bewaard. De reden stond hier
     # als "half meetvenster" - maar juist dat weggooien maakte het restant
     # na de herstart te kort, en dan werd er niets geleerd. Het venster

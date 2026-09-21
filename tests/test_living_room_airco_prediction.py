@@ -1,3 +1,4 @@
+import pytest
 """Living-room-temperature airco activation predictor (v0.63.55,
 requested: "verwacht wanneer ik de airco aanzet"). Uses the same
 "queue an observation, confirm it later" technique as
@@ -117,8 +118,13 @@ def test_probability_averages_over_the_rolling_window(make_coordinator, hass):
     coordinator._update_living_room_airco_prediction(DAY0 + timedelta(hours=12))
 
     result = coordinator.get_airco_activation_probability("20.0")
-    assert result["sample_count"] == 4
-    assert result["probability_percent"] == 50.0
+    # v5.13: 3 waarnemingen, niet 4. De vierde startte om 9 uur terwijl de
+    # airco al draaide, en telde dan meteen als "aan" - precies de
+    # zelfbeinvloeding die hier is weggehaald: de vraag "gaat hij aan?"
+    # bestaat niet meer zodra hij al aan staat. Van de drie die overblijven
+    # is die van 6 uur terecht "aan": die liep nog toen de airco aanging.
+    assert result["sample_count"] == 3
+    assert result["probability_percent"] == pytest.approx(33.3, abs=0.1)
 
 
 def test_not_enough_data_flag(make_coordinator, hass):

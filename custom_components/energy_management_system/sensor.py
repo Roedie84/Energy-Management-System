@@ -567,7 +567,23 @@ class MeldingenSensor(_CoordinatorDiagnosticSensor):
 
     @property
     def native_value(self) -> int:
-        return len(self._coordinator.notification_history or [])
+        """Verstuurde meldingen in de laatste 24 uur (v5.13).
+
+        Hier stond de lengte van de geschiedenis. Die wordt op 200
+        afgekapt, dus zodra hij vol was stond er altijd 200 - een getal
+        dat niets zei. Het aantal PER DAG was waar het in v4.16 om ging
+        (van 28 naar 13), en precies dat was teruggekropen naar twintig
+        zonder dat deze sensor het liet zien.
+        """
+        grens = dt_util.now() - timedelta(hours=24)
+        aantal = 0
+        for m in self._coordinator.notification_history or []:
+            if not m.get("verstuurd"):
+                continue
+            moment = dt_util.parse_datetime(m.get("moment") or "")
+            if moment is not None and moment >= grens:
+                aantal += 1
+        return aantal
 
     @property
     def icon(self) -> str:
@@ -589,6 +605,8 @@ class MeldingenSensor(_CoordinatorDiagnosticSensor):
                 for m in reversed(historie[-MELDINGEN_OP_DE_SENSOR:])
             ],
             "bewaard": len(historie),
+            # v5.13: de oude betekenis van de state, nu als attribuut.
+            "in_geschiedenis": len(historie),
             "toelichting": (
                 "De laatste meldingen met de volledige tekst. Er worden er 200 "
                 "bewaard in de opslag; deze sensor toont de laatste twintig."

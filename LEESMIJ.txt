@@ -1,11 +1,9 @@
-EMS v5.12 - alle wijzigingen sinds v5.9 (bevat v5.10 en v5.11)
-
-Je laatst geinstalleerde versie is v5.9. Deze zip bevat alles daarna.
+EMS v5.13 - alle wijzigingen sinds v5.12
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
 (ER OVERHEEN, de map niet legen)
 
-    const.py, coordinator.py, sensor.py, diagnostics.py
+    coordinator.py, sensor.py
     dashboard_template.yaml     (gaat altijd mee, ongewijzigd)
     manifest.json, bestandscontrole.json
 
@@ -13,33 +11,26 @@ NAAR DE REPO
 
     README.md, CHANGELOG.md
     dashboards/energy_management_system_dashboard.yaml
-    tests/ (vijf bestanden)
+    tests/ (zeven bestanden, vier nieuw)
 
-Voor HACS: release met tag v5.12.
+Voor HACS: release met tag v5.13.
 
-NIEUW IN v5.12 - EEN WEERBRON VIEL STIL UIT
+1. DE WEERBRON WAS OPGESLOTEN, NIET STUK (correctie op v5.12)
+   Wordt nu doorgemeten en kan terugkomen; de export toont de echte keuze.
 
-weather.forecast_thuis levert sinds ~19 september geen cloud_coverage
-meer. Het weer-ensemble draaide drie dagen op een enkele bron, en de
-configuratiecontrole noemde hem "in orde" omdat hij wel bestond.
+2. "ACCU HAALT DE NACHT NIET" WAS VOORAL VALS ALARM
+   Vergelijkt nu met wat er werkelijk nodig is, met hysterese.
+   VERWACHT: veel minder nachtmeldingen.
 
-Nu ziet de controle het ("levert_niet", telt als kapot), en staat per
-bron in de export waarom hij wel of niet meedoet (weerbron_levering).
+3. DE MELDINGENSENSOR
+   Toont nu de verstuurde meldingen van de laatste 24 uur (stond vast op 200).
 
-ZELF NAKIJKEN: in Ontwikkelaarstools > Toestanden, zoek
-weather.forecast_thuis. Heeft hij nog een cloud_coverage-attribuut? Zo
-niet, dan ligt het aan de weerintegratie zelf.
+4. DE AIRCOVOORSPELLING LEERDE VAN ZIJN EIGEN EFFECT
+   Terwijl de airco al koelde, leerde hij "hier gaat hij aan" bij de
+   temperatuur die hij zelf veroorzaakte. Nu alleen waarnemingen met de
+   airco uit. Je huidige gegevens zijn schoon; dit voorkomt het voor de
+   volgende zomer.
 
-UIT v5.11
-- accucycli uit de teller van de accu (~34 wordt ~205), met eenheid
-- nachtverbruik en ontlaadreserve kunnen nu betrouwbaar worden
-- het nachtvenster overleeft een herstart
-- twee unknown-sensoren zeggen waarom
-
-UIT v5.10
-- opslag_overzicht: elk bewaard veld met hoeveel erin zit
-- correctie op v5.9: het rendement leerde wel
-
-ZELF OPRUIMEN
-Zes waterknoppen staan dubbel. Verwijder de "unavailable"-exemplaren via
-Instellingen > Entiteiten, zoek op "Water was".
+5. BEWAKING: EEN CORRECTIE LEERT NIET VAN ZICHZELF
+   Geen codewijziging. De vier zonvoorspellingsleerders en alle leerders
+   op het huisverbruik zijn nagelopen en in orde; toetsen houden dat zo.

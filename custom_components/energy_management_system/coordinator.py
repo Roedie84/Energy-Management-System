@@ -1279,7 +1279,7 @@ class EnergyManagementSystemCoordinator:
         # een regel - `__init__` staat op de ratel.
         # v3.99.19: `dagverloop` en `nabeschouwingen` erbij, in dezelfde
         # regel - `__init__` staat op de ratel.
-        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen, self.safe_sell_shadow, self.reden_afwijkingen, self.meting_laatst_gevuld, self.weerbron_keuze, self.voorspellingsverloop, self._geladen_opslag, self.rendement_afwijzingen, self.weerbron_levering = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, [], [], {}, {}, {}, {}, None, {}, {}
+        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen, self.safe_sell_shadow, self.reden_afwijkingen, self.meting_laatst_gevuld, self.weerbron_keuze, self.voorspellingsverloop, self._geladen_opslag, self.rendement_afwijzingen, self.weerbron_levering, self.weather_ensemble_readings_alle = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, [], [], {}, {}, {}, {}, None, {}, {}, {}
         self.handmatige_ingrepen: list[dict] = []
         # v1.1.6: met welke meetmethode de bewaarde foutreeks tot stand
         # is gekomen. Verandert de methode, dan wordt die reeks eenmalig
@@ -4244,7 +4244,15 @@ class EnergyManagementSystemCoordinator:
 
         # --- accu en energie ---
         beschikbaar = self.last_available_kwh
-        nodig = self.last_needed_kwh_to_bridge
+        # v5.13: vergelijken met wat er WERKELIJK nodig is, niet met de
+        # reserve inclusief veiligheidsmarge. Op 18 september 06:58 was er
+        # 1,21 kWh, "nodig met marge" 2,43, werkelijk nodig 1,52 - en de
+        # accu haalde de nacht met 18% over. De marge stond op 60% en was
+        # zelf opgeblazen door de valse tekortdagen. Die marge is er om te
+        # sturen, niet om te waarschuwen.
+        nodig = (self.last_reserve_margin_breakdown or {}).get(
+            "needed_kwh_before_margin"
+        )
         if beschikbaar is not None and nodig is not None and nodig > 0:
             # v1.9.3: pas melden bij een ECHT gat. In één nacht ging deze
             # melding zeven keer af met tekorten van 0,01 tot 0,21 kWh,
@@ -4258,13 +4266,22 @@ class EnergyManagementSystemCoordinator:
                 BATTERY_NIGHT_SHORTFALL_MIN_KWH,
                 nodig * BATTERY_NIGHT_SHORTFALL_MIN_FRACTION,
             )
-            if tekort >= drempel:
+            # v5.13: hysterese. Waarschuwen vanaf de drempel, herstellen pas
+            # als er echt genoeg is. Met één grens voor beide kanten op
+            # zweefde het tekort 's nachts eromheen - probleem, herstel,
+            # probleem - tot 3,2 waarschuwingen per dag plus evenveel
+            # herstelmeldingen, over dezelfde vraag.
+            al_actief = "battery_wont_last_night" in (
+                self.notification_active_conditions or []
+            )
+            if tekort >= drempel or (al_actief and tekort > 0):
                 stuur(
                     "battery_wont_last_night",
                     "🔋 Accu haalt de nacht waarschijnlijk niet",
                     f"Er is {beschikbaar:.2f} kWh beschikbaar, terwijl er "
                     f"{nodig:.2f} kWh nodig is om tot het goedkope blok te "
-                    "overbruggen. Er wordt zo nodig bijgeladen.",
+                    "overbruggen - zonder de veiligheidsmarge die de sturing "
+                    "aanhoudt. Er wordt zo nodig bijgeladen.",
                 )
 
         # v1.31.1: rechtstreeks, zie `accustand_procent`.
@@ -28835,22 +28852,27 @@ class EnergyManagementSystemCoordinator:
         groottescan staat, en die had meteen gelijk toen ik dit er
         rechtstreeks in zette.
         """
-        if cloud_readings and len(sources_used) > 1:
-            keuze = self.weerbronnen_voor_het_ensemble(sources_used)
-            if keuze["geweerd"]:
-                houden = [
-                    (b, w)
-                    for b, w in zip(sources_used, cloud_readings)
-                    if b in keuze["gebruikt"]
-                ]
-                sources_used = [b for b, _ in houden]
-                cloud_readings = [w for _, w in houden]
-                self._meld_geweerde_weerbronnen(keuze)
-        self.weerbron_keuze = (
-            self.weerbronnen_voor_het_ensemble(sources_used)
-            if sources_used
-            else {"gebruikt": [], "geweerd": [], "reden": "Geen bron met een meting."}
-        )
+        # v5.13: de beslissing EEN keer nemen, over de volledige lijst, en
+        # die bewaren. Hier werd na het weren opnieuw beslist over de al
+        # gefilterde lijst - met een bron over valt er niets te weren, dus
+        # zei de export altijd "geweerd: []". De echte beslissing ging
+        # verloren, en daardoor zocht ik in v5.12 op de verkeerde plek.
+        if not sources_used:
+            self.weerbron_keuze = {
+                "gebruikt": [], "geweerd": [], "reden": "Geen bron met een meting."
+            }
+            return sources_used, cloud_readings
+        keuze = self.weerbronnen_voor_het_ensemble(sources_used)
+        self.weerbron_keuze = keuze
+        if cloud_readings and len(sources_used) > 1 and keuze["geweerd"]:
+            houden = [
+                (b, w)
+                for b, w in zip(sources_used, cloud_readings)
+                if b in keuze["gebruikt"]
+            ]
+            sources_used = [b for b, _ in houden]
+            cloud_readings = [w for _, w in houden]
+            self._meld_geweerde_weerbronnen(keuze)
         return sources_used, cloud_readings
 
     def _meld_geweerde_weerbronnen(self, keuze: dict) -> None:
@@ -29029,6 +29051,8 @@ class EnergyManagementSystemCoordinator:
             return
 
         sources_used, cloud_readings = self._lees_weerbronnen(source_entities)
+        # v5.13: vóór de poort, zodat ook een geweerde bron doorleert.
+        self.weather_ensemble_readings_alle = dict(zip(sources_used, cloud_readings))
 
         # v5.3: de poort. Hier stond niets - elke bron met een meting kwam
         # in `cloud_readings`, ongeacht zijn beoordeling.
@@ -29227,7 +29251,14 @@ class EnergyManagementSystemCoordinator:
         #
         # Bewust meten en niet meteen wegen: één dag zegt niets, en een
         # bron die vandaag beter is kan morgen slechter zijn.
-        for entity_id, eigen_pct in self.weather_ensemble_readings.items():
+        # v5.13: over ALLE leverende bronnen, niet alleen over wat de poort
+        # doorliet. Anders kreeg een geweerde bron nooit meer een
+        # waarneming, bevroor zijn score, en was één slechte meetperiode
+        # een permanente buitensluiting - `weather.forecast_thuis` zat zo
+        # vast op 58% terwijl de andere bron doorleerde.
+        for entity_id, eigen_pct in (
+            self.weather_ensemble_readings_alle or self.weather_ensemble_readings
+        ).items():
             bron_oneens = (
                 ratio < WEATHER_ENSEMBLE_UNDERPERFORM_RATIO
                 and eigen_pct < WEATHER_ENSEMBLE_CLEAR_THRESHOLD_PERCENT
@@ -33049,14 +33080,21 @@ class EnergyManagementSystemCoordinator:
                 still_pending.append(pending)
         self._temp_prediction_pending = still_pending
 
-        # Queue this tick's own observation.
-        self._temp_prediction_pending.append(
-            {
-                "bucket": bucket_key,
-                "deadline": now + timedelta(minutes=AIRCO_PREDICTION_LOOKAHEAD_MINUTES),
-                "airco_seen_active": airco_active_now,
-            }
-        )
+        # v5.13: alleen een waarneming starten als de airco UIT staat. De
+        # vraag is "gaat hij aan?", en die bestaat niet meer zodra hij al
+        # draait. Hier werd elke ronde een waarneming gestart, en stond de
+        # airco al aan, dan kreeg die meteen het label "aan" - bij de
+        # temperatuur die de airco zelf had veroorzaakt. Koelen van 25
+        # naar 21 °C leerde zo dat je bij 21 °C aanzet.
+        if not airco_active_now:
+            self._temp_prediction_pending.append(
+                {
+                    "bucket": bucket_key,
+                    "deadline": now
+                    + timedelta(minutes=AIRCO_PREDICTION_LOOKAHEAD_MINUTES),
+                    "airco_seen_active": False,
+                }
+            )
 
         if humidity_percent is not None:
             humidity_history = self.living_room_temp_bucket_humidity.setdefault(

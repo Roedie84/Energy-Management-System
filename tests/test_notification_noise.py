@@ -88,6 +88,10 @@ def _nacht(make_coordinator, hass, beschikbaar, nodig):
     c.set_notification_enabled("battery_wont_last_night", True)
     c.last_available_kwh = beschikbaar
     c.last_needed_kwh_to_bridge = nodig
+    # v5.13: de nachtwaarschuwing vergelijkt met wat er WERKELIJK nodig is,
+    # niet met de reserve inclusief marge. "nodig" in deze toetsen is dat
+    # werkelijke nodig.
+    c.last_reserve_margin_breakdown = {"needed_kwh_before_margin": nodig}
     c._evaluate_new_notifications(datetime(2026, 8, 7, 22, 0, tzinfo=timezone.utc))
     return [m["titel"] for m in c.notification_history]
 

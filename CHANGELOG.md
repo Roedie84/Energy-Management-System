@@ -26946,6 +26946,9 @@ dus de airco is live niet uit te lezen.
 
 ## v5.12 — Een weerbron viel drie dagen stil uit het ensemble
 
+> **Correctie in v5.13**: de oorzaak hieronder klopt niet. `weather.forecast_thuis`
+> leverde wél `cloud_coverage`; de weerbronpoort van v5.4 sloot hem op. Zie v5.13.
+
 Gevraagd: *"Kloppen alle sensoren nog met de EMS-integratie?"*
 
 De configuratiecontrole zei ja: 55 in orde, 0 kapot, 4 slapend (de Home
@@ -27010,3 +27013,204 @@ een update. Kijk in Ontwikkelaarstools → Toestanden welke attributen hij nog
 heeft.
 
 **Volledige testsuite**: 4044 tests, allemaal groen.
+
+
+## v5.13 — De weerbron was opgesloten, niet stuk
+
+### Een fout van mij in v5.12
+
+In v5.12 schreef ik dat `weather.forecast_thuis` uit het ensemble viel
+omdat hij geen `cloud_coverage` meer leverde. De eerste export met v5.12
+liet via de nieuwe `weerbron_levering` iets anders zien:
+
+```
+weerbron_levering:  forecast_thuis levert,  openweathermap levert
+sources_used:       alleen openweathermap
+```
+
+Hij leverde wél. De poort van v5.4 weerde hem, en twee fouten uit mijn
+eigen v5.3-code hielden hem daar vast.
+
+### 1. Een geweerde bron werd nooit meer gemeten
+
+De metingen werden NA de poort vastgelegd, en de overeenstemming werd
+bijgewerkt over die metingen. Een geweerde bron kreeg dus geen nieuwe
+waarnemingen meer: zijn score bevroor op de 58% van 18 september, terwijl
+de overgebleven bron doorleerde en zijn voorsprong zag groeien.
+
+Eén slechte meetperiode werd zo een permanente buitensluiting. Zelfs de
+tien procentpunt voorsprong van v5.7 hielp niet: de voorsprong groeide
+juist, omdat alleen de ene bron nog punten kon halen.
+
+Nu worden de metingen van alle leverende bronnen vóór de poort vastgelegd
+(`weather_ensemble_readings_alle`), en leert de overeenstemming over die.
+Een geweerde bron doet niet mee aan de ensemblewaarde, maar wordt wel
+gemeten, en kan zich terugverdienen.
+
+### 2. De export verborg het
+
+Na het weren werd `weerbron_keuze` opnieuw berekend over de al gefilterde
+lijst. Met één bron over valt er niets te weren, dus zei de export altijd:
+
+```
+weerbron_keuze:  gebruikt: [openweathermap]   geweerd: []
+                 "Alle bronnen halen de bruikbaarheidsgrens."
+```
+
+De echte beslissing werd weggegooid. Daardoor zocht ik in v5.12 op de
+verkeerde plek - en schreef ik een oorzaak op die er niet was.
+
+Nu wordt de beslissing één keer genomen, over de volledige lijst, en die
+wordt bewaard.
+
+### Wat v5.12 wel opleverde
+
+`weerbron_levering` was nuttig, alleen niet om de reden die ik noemde: hij
+liet zien dat de bron WEL leverde, en daarmee dat de oorzaak elders zat. De
+uitbreiding van de configuratiecontrole (`levert_niet`) klopt ook en blijft
+staan - hij vangt een ontbrekend attribuut, dat hier alleen niet de
+oorzaak was.
+
+### En weer een toets die ik bijna fout schreef
+
+De ratel op de overeenstemmingslus zocht eerst de variabelenaam op de regel
+van de `for` - en viel om zodra die over twee regels liep. Nu roept hij de
+functie aan en controleert of een geweerde bron een nieuwe waarneming
+krijgt.
+
+### En "accu haalt de nacht niet" was vooral vals alarm
+
+Gevraagd: *"Heb je nog meer zaken gevonden?"* Live stond de sensor
+**Meldingen** op precies 200. Dat bleek de afkapgrens van de
+meldingengeschiedenis: zodra die vol is, staat er altijd 200. En
+daarachter zat dit:
+
+```
+verstuurd per dag:  18  30  12  19  23  20  20
+```
+
+In v4.16 gingen we van 28 naar 13 per dag. Het was teruggekropen naar
+ongeveer twintig - en de sensor die dat had moeten laten zien, stond vast.
+
+De grootste post: `battery_wont_last_night`, 3,2 keer per dag, en binnen
+één nacht telkens opnieuw:
+
+```
+18 sep  18:28 -> 21:28 -> 23:20 -> 00:00 -> ...
+          180 min    112 min    40 min
+```
+
+**Twee fouten.** De waarschuwing vergeleek het beschikbare met de reserve
+INCLUSIEF veiligheidsmarge. Op 18 september 06:58:
+
+```
+beschikbaar          1,21 kWh
+nodig (met marge)    2,43 kWh   -> "haalt de nacht niet"
+nodig (werkelijk)    1,52 kWh   -> onder de drempel
+```
+
+De accu haalde die nacht met 18% over. De marge stond op 60%, en die was
+zelf opgeblazen door de valse tekortdagen van v5.7. Een dubbele
+opblazing. De marge is er om te sturen, niet om te waarschuwen - nu wordt
+vergeleken met wat er werkelijk nodig is.
+
+En er was geen hysterese. Een herstelmelding wist het dempingsvenster
+van de probleemmelding, zodat een terugkerend probleem direct weer gemeld
+wordt. Met één grens voor beide kanten op zweefde het tekort 's nachts
+eromheen: probleem, herstel, probleem, herstel. Nu waarschuwt hij vanaf de
+drempel, maar herstelt hij pas als er werkelijk genoeg is.
+
+**De meldingensensor** telt nu de verstuurde meldingen van de laatste 24
+uur - het getal waar het in v4.16 om ging. De oude waarde staat als
+attribuut `in_geschiedenis`.
+
+### Wat ik ook naliep en in orde vond
+
+- **Opslaggrens lager dan de drempel** - na nachtverbruik en
+  ontlaadreserve (v5.11) breder gezocht. Twee treffers, allebei het
+  inkorten zelf en geen drempel.
+- **Een correctie die van zichzelf leert** - nagegaan voor alle vier de
+  leerders, en nu met een bewaking eronder (zie hieronder).
+- **Meetvensters die bij een herstart verdwijnen** - het rendementsstuk
+  lijkt op het nachtvenster, maar hoort wél te vervallen: tijdens een
+  herstart daalt de voorraad door terwijl de afgegeven energie niet
+  meetelt, dus een bewaard stuk zou een verkeerd rendement geven. Bij het
+  nachtvenster tellen energie en duur allebei alleen de draaitijd.
+
+### Bewaking: een correctie leert niet van zichzelf
+
+Gevraagd: *"Dit is een belangrijke, nu met 5.13 opgelost?"* Er was niets
+kapot. Maar mijn eerste controle was een tekstscan - zoeken naar "bias" en
+"correct" in de functie - en dat is precies wat deze week steeds tekortschoot.
+Nu nagegaan op gedrag of op de werkelijke bron, voor alle vier:
+
+```
+PV-uurbias          leert tegen de ruwe voorspelling   (op gedrag getoetst)
+PV-dagbias          leest de Solcast-sensor rechtstreeks
+bewolkingsvakken    gebruikt dezelfde afwijking als de dagbias
+klimaatbias         weather.get_forecasts, ruw
+```
+
+Een correctie die van zijn eigen gecorrigeerde uitkomst leert, jaagt zichzelf
+na: leert hij dat de zon 10% te hoog wordt voorspeld, dan vergelijkt hij de
+volgende keer al met de gecorrigeerde waarde, ziet een kleinere afwijking,
+corrigeert minder - en loopt naar een willekeurig punt in plaats van naar de
+waarheid. Drie toetsen houden dat nu dicht.
+
+
+### De aircovoorspelling leerde van zijn eigen effect
+
+Gevraagd: *"Gaat dit misschien op meerdere locaties in de integratie
+fout?"* - een leerder die iets leert wat hij zelf beïnvloedt. Twee vormen
+nagelopen.
+
+**Vorm 1: het EMS leert zijn eigen laden als verbruik.** Het gevaarlijkste
+geval in een EMS: leert het uurprofiel het laden uit het net als
+huisverbruik, dan plant het de volgende keer nog meer laden. Maar het
+verbruik wordt berekend als net + accu + zon, en laden telt als negatief
+accuvermogen - dus het wordt afgetrokken. Dat staat of valt met het teken
+van de accusensor, en dat bleek goed ingesteld (`invert_battery_power_sign:
+True`; het dagverloop geeft 's nachts positief ontladen en overdag negatief
+laden, met een plausibel huisverbruik van 170 tot 370 W). Alle leerders op
+het huisverbruik zijn daarmee veilig: nachtverbruik, uurprofiel,
+sluipverbruik, temperatuurregressie en NILM.
+
+**Vorm 2: een voorspeller die zijn eigen invoer verandert.** Hier zat hij.
+De aircovoorspelling beantwoordt "gaat de airco binnen een uur aan, bij
+deze kamertemperatuur?" Elke ronde startte hij een waarneming bij de
+huidige temperatuur, en stond de airco al aan, dan kreeg die meteen het
+label "aan":
+
+```python
+self._temp_prediction_pending.append({
+    "bucket": bucket_key,                    # de temperatuur NU
+    "airco_seen_active": airco_active_now,   # al aan -> meteen True
+})
+```
+
+Zet je aan bij 25 °C en koelt de airco naar 21 °C, dan vullen de bakjes
+24, 23, 22 en 21 zich met "de airco ging aan". De voorspeller leert dat je
+bij 21 °C aanzet - terwijl de airco die 21 °C zelf veroorzaakte. In
+september zag je het niet: alle bakjes op 0%. Na een zomer had hij gezegd
+dat je bij 21 °C gaat koelen.
+
+Nu start een waarneming alleen als de airco UIT staat. De opgeslagen
+bakjes bevatten geen enkele "aan", dus opschonen hoeft niet.
+
+Een bestaande toets legde de fout letterlijk vast - *"elke aanroep start
+een eigen waarneming"*, ook met de airco al aan - en verwachtte 4
+waarnemingen waar er nu terecht 3 zijn.
+
+### Wat ik nog naliep in deze klasse, en in orde vond
+
+- **De klimaatprojectie** heeft de aircostand in de situatiesleutel, dus
+  leert airco aan en uit als aparte situaties. Zo hoort het.
+- **De reservemarge** beïnvloedt zijn eigen tekort- en overschotdagen -
+  maar als tegenkoppeling: meer reserve geeft minder tekort, en dus weer
+  minder marge. Dat convergeert; het is een regelaar, geen schatter die
+  zichzelf naloopt.
+- **De accukoeling** meet bewust het effect van zijn eigen ingreep - of de
+  temperatuur daalt na het aanzetten. Dat is de bedoeling.
+
+**Volledige testsuite**: 4060 tests, allemaal groen.
+
