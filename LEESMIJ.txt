@@ -1,9 +1,9 @@
-EMS v5.14.1 - alleen de wijzigingen sinds v5.14
+EMS v5.14.3 - alle wijzigingen sinds v5.14.1 (bevat v5.14.2)
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
 (ER OVERHEEN, de map niet legen)
 
-    coordinator.py
+    const.py, coordinator.py, sensor.py
     dashboard_template.yaml     (gaat altijd mee, ongewijzigd)
     manifest.json, bestandscontrole.json
 
@@ -11,26 +11,22 @@ NAAR DE REPO
 
     README.md, CHANGELOG.md
     dashboards/energy_management_system_dashboard.yaml
-    tests/ (twee bestanden)
+    tests/ (vier bestanden)
 
-Voor HACS: release met tag v5.14.1.
+Voor HACS: release met tag v5.14.3.
 
-WAT ER VERANDERT
+UIT v5.14.2 - DIT RAAKT DE STURING
+De verwachte behoefte sprong 's nachts heen en weer door een compressor van
+een paar minuten. De demping was 4 minuten geworden in plaats van 20. Nu een
+half uur. Ook de kosten per wasbeurt en het NILM-dagminimum waren geraakt.
 
-"Optionele functies nog niet geconfigureerd" telt nu ook de vier bronnen
-van v5.14 mee. In de vorige LEESMIJ stond dat dat al zo was - dat klopte
-niet.
-
-VERWACHT: staat een van de vier nog leeg, dan telt de sensor hem nu mee.
-
-DAN NOG DIT, ZODAT IK HET ZELF KAN ZIEN
-
-De drie diagnosesensoren zijn nog niet vrijgegeven voor de assistent.
-Instellingen > Spraakassistenten > tabblad Vrijgeven, zoek op "Diagnose"
-en zet aan:
-    Diagnose gezondheid
-    Diagnose sturing
-    Diagnose leren
-
-Daarna lees ik bij elke vraag de toestand rechtstreeks, inclusief
-"optioneel_mist" - dan zie ik of alle vier de bronnen zijn ingesteld.
+NIEUW IN v5.14.3
+1. De logregel "Telt als tekortdag" klopte sinds v5.7 niet meer. Nu juist,
+   en een informatieregel in plaats van een waarschuwing.
+2. Een proefstandreeks mat per ronde in plaats van per kwartier: 11.520
+   regels, 8 dagen in plaats van 120. Nu per kwartier; de voorraad wordt
+   bij het laden teruggebracht.
+3. De trage GACS-sensor (2,6 s) wordt nu GEMETEN. In de diagnoseregel
+   "gezondheid" staat straks bijvoorbeeld:  gacs 5ms max 2622 woud
+   "woud" betekent: het regressiewoud trainde op dat moment. Dat lees ik
+   morgen zelf, en dan repareer ik wat de meting laat zien.

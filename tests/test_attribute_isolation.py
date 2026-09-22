@@ -130,7 +130,9 @@ def test_the_block_is_built_incrementally():
     import custom_components.energy_management_system as pkg
 
     bron = (Path(pkg.__file__).parent / "sensor.py").read_text()
-    start = bron.index("def extra_state_attributes(self) -> dict:\n        \"\"\"Alle samenvattingen")
+    # v5.14.3: de opbouw staat in `_bouw_attributen`; de eigenschap meet
+    # alleen nog hoe lang die duurt.
+    start = bron.index("def _bouw_attributen(self) -> dict:\n        \"\"\"Alle samenvattingen")
     # v3.61.0: tot het EINDE van de functie in plaats van een vast
     # aantal tekens.
     #

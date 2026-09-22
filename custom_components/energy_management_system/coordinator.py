@@ -62,6 +62,7 @@ from homeassistant.helpers.storage import Store
 from . import slimme_bronnen
 from .const import (
     DIAGNOSE_REGEL_MAX_TEKENS,
+    GACS_TRAAG_MS,
     DOMAIN,
     DEFAULT_NAME,
     CHEAP_BLOCK_THRESHOLD_MARGIN_FRACTION,
@@ -129,6 +130,7 @@ from .const import (
     NILM_COMPRESSOR_ON_THRESHOLD_W,
     NILM_COOLING_MIN_DUTY_CYCLE,
     NILM_MIN_SAMPLES_FOR_DAY,
+    NILM_MIN_UREN_VOOR_DAG,
     NILM_CUSUM_MAX_DAILY_CONTRIBUTION,
     NILM_CUSUM_RESET_STREAK_DAYS,
     NILM_CANDIDATE_COUNT_ATTENTION_THRESHOLD,
@@ -225,6 +227,7 @@ from .const import (
     ACHTERHOEKS_WOORDEN,
     APPLIANCE_RUNNING_POWER_THRESHOLD_W,
     CONSUMPTION_CORRECTION_SMOOTHING_SAMPLES,
+    CONSUMPTION_CORRECTION_WINDOW_MINUTES,
     CONSUMPTION_CORRECTION_FADE_HOURS,
     CONSUMPTION_CORRECTION_MAX_EXTRA_KWH,
     CONSUMPTION_CORRECTION_FULL_HOURS,
@@ -701,6 +704,7 @@ from .const import (
     APPLIANCE_MIN_PLAUSIBLE_CYCLE_MINUTES,
     APPLIANCE_PLAN_MAX_HOURS,
     APPLIANCE_POWER_SAMPLE_LIMIT,
+    APPLIANCE_POWER_SAMPLE_UREN,
     AGING_HIGH_SOC_PERCENT,
     CONF_DISHWASHER_START_IN,
     CONF_WASHING_MACHINE_END_AT,
@@ -1285,7 +1289,7 @@ class EnergyManagementSystemCoordinator:
         # een regel - `__init__` staat op de ratel.
         # v3.99.19: `dagverloop` en `nabeschouwingen` erbij, in dezelfde
         # regel - `__init__` staat op de ratel.
-        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen, self.safe_sell_shadow, self.reden_afwijkingen, self.meting_laatst_gevuld, self.weerbron_keuze, self.voorspellingsverloop, self._geladen_opslag, self.rendement_afwijzingen, self.weerbron_levering, self.weather_ensemble_readings_alle, self.instraling_verhouding, self.ventilator_kwh_per_dag, self._ventilator_vermogens_aan = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, [], [], {}, {}, {}, {}, None, {}, {}, {}, {}, {}, []
+        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen, self.safe_sell_shadow, self.reden_afwijkingen, self.meting_laatst_gevuld, self.weerbron_keuze, self.voorspellingsverloop, self._geladen_opslag, self.rendement_afwijzingen, self.weerbron_levering, self.weather_ensemble_readings_alle, self.instraling_verhouding, self.ventilator_kwh_per_dag, self._ventilator_vermogens_aan, self.gacs_traag, self.gacs_duur_ms, self._pv_model_bezig = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, [], [], {}, {}, {}, {}, None, {}, {}, {}, {}, {}, [], [], None, False
         self.handmatige_ingrepen: list[dict] = []
         # v1.1.6: met welke meetmethode de bewaarde foutreeks tot stand
         # is gekomen. Verandert de methode, dan wordt die reeks eenmalig
@@ -11872,7 +11876,8 @@ class EnergyManagementSystemCoordinator:
         later = duurste * rendement - slijtage
         voordeel = later - prijs_nu
 
-        self.niet_ontladen_history.append(
+        self._noteer_niet_ontladen(
+            now,
             {
                 "moment": now.isoformat(),
                 "prijs_nu_ct": round(prijs_nu * 100, 1),
@@ -11881,8 +11886,30 @@ class EnergyManagementSystemCoordinator:
                 "voordeel_ct_per_kwh": round(voordeel * 100, 1),
                 "vermogen_w": round(vermogen),
                 "tekort_w": round(tekort_w),
-            }
+            },
         )
+
+    @staticmethod
+    def _kwartier_van(moment: datetime) -> str:
+        """De sleutel van het kwartier waarin een moment valt (v5.14.3)."""
+        return moment.replace(
+            minute=moment.minute - moment.minute % 15, second=0, microsecond=0
+        ).isoformat()
+
+    def _noteer_niet_ontladen(self, now: datetime, regel: dict) -> None:
+        """Eén meting per KWARTIER (v5.14.3).
+
+        De grens hieronder rekent met 96 per dag. Maar er werd elke ronde
+        gemeten, en bij 60 seconden zijn dat er 1440: de reeks stond op
+        11.520 regels en besloeg 8 dagen in plaats van de bedoelde 120.
+        """
+        if self.niet_ontladen_history:
+            laatste = dt_util.parse_datetime(
+                self.niet_ontladen_history[-1].get("moment") or ""
+            )
+            if laatste is not None and self._kwartier_van(laatste) == self._kwartier_van(now):
+                return
+        self.niet_ontladen_history.append(regel)
         self.niet_ontladen_history = self.niet_ontladen_history[
             -PROEFSTAND_LEDGER_DAYS * 96 :
         ]
@@ -17093,6 +17120,30 @@ class EnergyManagementSystemCoordinator:
         except Exception:  # noqa: BLE001 - a failed notification must never crash the update
             _LOGGER.exception("Failed to send notification: %s", title)
 
+    def _metingen_voor(self, uren: float, minimum: int) -> int:
+        """Hoeveel rondes een tijdsduur beslaat (v5.14.2).
+
+        Eén omrekening voor elk venster dat een TIJD is. Drie constanten
+        telden rondes terwijl ze een duur bedoelden - hun eigen commentaar
+        zei "bij een tick van vijf minuten is dat ..." - en veranderden stil
+        van betekenis toen de ronde naar 60 seconden ging:
+
+            verbruikscorrectie   20 minuten  ->  4 minuten
+            cyclusmetingen        5 uur      ->  1 uur
+            NILM-dagminimum       8 uur      ->  1,7 uur
+
+        Nu rekenen ze allemaal via deze functie met het werkelijke interval.
+        """
+        interval = max(1, int(self.update_interval_seconds or 60))
+        return max(minimum, math.ceil(uren * 3600 / interval))
+
+    def _correctie_monsters(self) -> int:
+        """Hoeveel metingen het correctievenster beslaat (v5.14.2)."""
+        return self._metingen_voor(
+            CONSUMPTION_CORRECTION_WINDOW_MINUTES / 60,
+            CONSUMPTION_CORRECTION_SMOOTHING_SAMPLES,
+        )
+
     def _track_recent_consumption_reading(self, now: datetime) -> None:
         """Append the current live consumption reading (kW) to a short
         rolling buffer, used to smooth the live-consumption correction
@@ -17105,8 +17156,9 @@ class EnergyManagementSystemCoordinator:
         if live_power_w is None:
             return
         self._recent_consumption_readings_kw.append(live_power_w / 1000)
+        # v5.14.2: een venster in TIJD - zie `_correctie_monsters`.
         self._recent_consumption_readings_kw = self._recent_consumption_readings_kw[
-            -CONSUMPTION_CORRECTION_SMOOTHING_SAMPLES:
+            -self._correctie_monsters():
         ]
 
     def _update_quooker_tracking(self, now: datetime) -> None:
@@ -18890,6 +18942,27 @@ class EnergyManagementSystemCoordinator:
             }
         return self._pv_model_evaluatie
 
+    def _noteer_gacs_duur(self, ms: float) -> None:
+        """Hoe lang de GACS-sensor over zijn attributen deed (v5.14.3).
+
+        Op 22 september: "took 2.622 seconds". Hier niet na te spelen - 5
+        milliseconden. Vermoeden: het regressiewoud trainde tegelijk in een
+        executor, en Python laat één thread tegelijk rekenen. Eerst meten,
+        dan repareren: elke trage keer wordt bewaard, met of het woud op
+        dat moment trainde.
+        """
+        self.gacs_duur_ms = round(ms, 1)
+        if ms < GACS_TRAAG_MS:
+            return
+        self.gacs_traag.append(
+            {
+                "moment": dt_util.now().isoformat(),
+                "ms": round(ms, 1),
+                "woud_trainde": bool(self._pv_model_bezig),
+            }
+        )
+        del self.gacs_traag[:-20]
+
     async def async_ververs_pv_model(self, now: datetime) -> None:
         """Traint hooguit eens per PV_MODEL_VERVERS_MINUTEN, in een
         executor (v3.99.20)."""
@@ -18900,7 +18973,15 @@ class EnergyManagementSystemCoordinator:
         ):
             return
         self._pv_model_berekend_op = now
-        uit = await self.hass.async_add_executor_job(self._bereken_pv_model_evaluatie)
+        # v5.14.3: bijhouden WANNEER het woud traint, zodat een trage
+        # GACS-sensor daarnaast gelegd kan worden - zie `_noteer_gacs_duur`.
+        self._pv_model_bezig = True
+        try:
+            uit = await self.hass.async_add_executor_job(
+                self._bereken_pv_model_evaluatie
+            )
+        finally:
+            self._pv_model_bezig = False
         uit = dict(uit or {})
         uit["berekend_op"] = now.isoformat()
         self._pv_model_evaluatie = uit
@@ -23136,11 +23217,11 @@ class EnergyManagementSystemCoordinator:
                 # het accuvermogen en de laadstand erbij. Dan is uit de
                 # regel zelf te lezen of de accu leeg was of niet leverde.
                 accu_w = self._read_corrected_battery_power()
-                _LOGGER.warning(
+                _LOGGER.info(
                     "Onverwachte netimport van %.0f W terwijl de accu het huis "
-                    "hoorde te dekken (%s). Accu: %s W, laadstand %s%%. Telt als "
-                    "tekortdag; de marge op de reserve gaat omhoog als dit "
-                    "vaker gebeurt.",
+                    "hoorde te dekken (%s). Accu: %s W, laadstand %s%%. Een "
+                    "los moment telt niet als tekortdag - pas als er over de "
+                    "nacht meer dan 0,5 kWh is bijgekocht (v5.7).",
                     grid_power_w,
                     REDEN_KORTE_NAAM.get(reason, reason),
                     f"{accu_w:.0f}" if accu_w is not None else "?",
@@ -29436,8 +29517,11 @@ class EnergyManagementSystemCoordinator:
         naam = "vaatwasser" if "dishwasher" in state_attr else "wasmachine"
         monsters = self._appliance_power_samples.setdefault(naam, [])
         monsters.append((now, power_w))
+        # v5.14.2: vijf uur, omgerekend met het werkelijke interval.
         self._appliance_power_samples[naam] = monsters[
-            -APPLIANCE_POWER_SAMPLE_LIMIT:
+            -self._metingen_voor(
+                APPLIANCE_POWER_SAMPLE_UREN, APPLIANCE_POWER_SAMPLE_LIMIT
+            ):
         ]
 
         current_state = getattr(self, state_attr)
@@ -31153,6 +31237,23 @@ class EnergyManagementSystemCoordinator:
             if veld in stored and stored[veld] is not None:
                 setattr(self, veld, stored[veld])
         # v4.1: uursleutels terug naar int.
+        # v5.14.3: `niet_ontladen_history` terug naar een per kwartier. Er
+        # werd per ronde gemeten; de voorraad stond op 11.520 regels.
+        if isinstance(self.niet_ontladen_history, list):
+            per_kwartier, gezien = [], set()
+            for regel in self.niet_ontladen_history:
+                moment = dt_util.parse_datetime(
+                    (regel or {}).get("moment") or ""
+                ) if isinstance(regel, dict) else None
+                if moment is None:
+                    continue
+                sleutel = self._kwartier_van(moment)
+                if sleutel in gezien:
+                    continue
+                gezien.add(sleutel)
+                per_kwartier.append(regel)
+            self.niet_ontladen_history = per_kwartier
+
         # v5.14: `sensor_cadence` valideren bij binnenkomst. Een regel zonder
         # `ticks` en `wijzigingen` liet vier sensoren omvallen met een
         # KeyError - gevonden toen het uitvraagmechanisme voor het eerst op
@@ -32738,7 +32839,11 @@ class EnergyManagementSystemCoordinator:
                 # nodig voordat een dagcijfer iets zegt.
                 if (
                     check_date is not None
-                    and device.get("_today_count", 0) >= NILM_MIN_SAMPLES_FOR_DAY
+                    # v5.14.2: acht uur, omgerekend met het interval.
+                    and device.get("_today_count", 0)
+                    >= self._metingen_voor(
+                        NILM_MIN_UREN_VOOR_DAG, NILM_MIN_SAMPLES_FOR_DAY
+                    )
                 ):
                     daily_avg_w = device["_today_sum"] / device["_today_count"]
                     self._finalize_nilm_device_day(entity_id, device, daily_avg_w)
@@ -35281,6 +35386,15 @@ class EnergyManagementSystemCoordinator:
             delen.append(f"{label} {waarde}" if label else f"{waarde}")
         return " · ".join(delen)[:DIAGNOSE_REGEL_MAX_TEKENS]
 
+    def _diagnose_gacs(self) -> str:
+        """De GACS-duur voor de diagnoseregel (v5.14.3)."""
+        nu = f"{self.gacs_duur_ms:.0f}ms" if self.gacs_duur_ms is not None else "-"
+        if not self.gacs_traag:
+            return nu
+        traagste = max(self.gacs_traag, key=lambda r: r["ms"])
+        waarom = " woud" if traagste.get("woud_trainde") else ""
+        return f"{nu} max {traagste['ms']:.0f}{waarom}"
+
     def _diagnose_gezondheid(self) -> list:
         def zelfcontroles():
             controles = self.get_zelfcontroles()
@@ -35312,6 +35426,8 @@ class EnergyManagementSystemCoordinator:
             ("config", config),
             # v5.14.1: zo is via de connector te zien of alles is ingesteld.
             ("optioneel_mist", lambda: len(self.get_missing_optional_features())),
+            # v5.14.3: hoe lang de GACS-sensor erover deed, en de traagste keer.
+            ("gacs", self._diagnose_gacs),
             ("", modus),
         ]
 

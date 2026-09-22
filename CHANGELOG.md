@@ -27456,3 +27456,145 @@ gasprijs en ventilatorvermogen. En de diagnoseregel "gezondheid" toont
 worden ingesteld.
 
 **Volledige testsuite**: 4110 tests, allemaal groen.
+
+
+## v5.14.2 — Drie tijdvensters die in rondes telden
+
+Gevonden in de export van 22 september 07:02, na de eerste volle nacht met
+alle reparaties. De nacht ging goed - de accu zakte van 65% naar 44%, geen
+tekortdagen - en toch ging "accu haalt de nacht niet" twee keer af, telkens
+met een herstelmelding erachteraan.
+
+### Wat de energiebrug liet zien
+
+```
+02:23  nodig 4,74 -> bijladen nodig        (beschikbaar 4,23)
+02:27  nodig 3,84 -> genoeg                 4 minuten later
+04:12  nodig 4,15 -> bijladen nodig
+04:21  nodig 3,12 -> genoeg                 9 minuten later
+04:33  nodig 4,68 -> bijladen nodig
+04:46  nodig 3,01 -> genoeg                 13 minuten later
+```
+
+De behoefte sprong 1 tot 1,7 kWh in een paar minuten, en de beslissing
+wisselde elk kwartier tussen `discharging_window` en `default_smart`. Uit
+het net laden deed hij niet - in beide standen dekte de accu het huis - maar
+er was een moduswissel om 04:12, een geblokkeerde verkoop om 04:32 en één
+kwartier met 68 W netafname.
+
+**De reparatie van v5.13 aan de nachtwaarschuwing was dus niet genoeg**: die
+haalde de veiligheidsmarge eruit, maar de behoefte zelf sprong.
+
+### De oorzaak
+
+De live verbruikscorrectie telt verbruik boven het geleerde profiel door
+over de hele overbruggingsperiode, tot 1,5 kWh extra. Ze dempt met een
+mediaan over een aantal metingen, en het commentaar erbij zei:
+
+> *"at the ~5 minute update interval, this is roughly 15-25 minutes"*
+
+Vier metingen waren 15 tot 25 minuten, toen de ronde elke vijf minuten
+liep. Nu loopt hij elke 60 seconden, en werden het **4 minuten**. Een
+koelkast- of vriezercompressor draait 10 tot 20 minuten en telde toen al als
+"aanhoudend". De sprongen duurden 4, 9 en 13 minuten: precies een
+compressorbeurt.
+
+De constante telde rondes terwijl hij een duur bedoelde, en veranderde stil
+van betekenis toen het interval veranderde.
+
+### Een klasse, niet een losse fout
+
+Daarna gezocht naar elke constante die rondes telt terwijl hij een tijd
+bedoelt. Nog twee, allebei met de oorzaak in hun eigen commentaar:
+
+```
+verbruikscorrectie   bedoeld 20 minuten  ->  werd 4 minuten
+cyclusmetingen       bedoeld 5 uur       ->  werd 1 uur
+NILM-dagminimum      bedoeld 8 uur       ->  werd 1,7 uur
+```
+
+- **De cyclusmetingen** bepalen wat een wasbeurt of vaatwasbeurt kostte.
+  Met een buffer van één uur werden de kosten van een beurt van twee à drie
+  uur alleen over het laatste uur berekend - een beurt leek dan goedkoper.
+- **Het NILM-dagminimum** moest voorkomen dat een dag die net na een
+  herstart begint te vroeg meetelt. Het was vijf keer zwakker geworden.
+
+Alle drie rekenen nu via één functie, `_metingen_voor`, die een duur in
+uren omzet met het werkelijke interval. De verbruikscorrectie kijkt nu over
+een half uur: langer dan een compressorbeurt, kort genoeg om een echte
+aanhoudende verandering - een airco die een uur draait - binnen een half
+uur te volgen.
+
+Nagegaan en in orde: de klimaatsnelheid rekent al in uren; de gezondheids-
+en cadansmetingen tellen bewust in rondes, want ze gaan over rondes.
+
+**Een ratel op de hele klasse**: verander het interval, en elk tijdvenster
+moet dezelfde tijd blijven beslaan.
+
+### Dit raakt de sturing
+
+De reserve wordt stabieler. Verwacht: geen wisselingen meer tussen
+`discharging_window` en `default_smart` elk kwartier, en "accu haalt de nacht
+niet" alleen nog als het echt krap is.
+
+**Volledige testsuite**: 4118 tests, allemaal groen.
+
+
+## v5.14.3 — Twee waarschuwingen uit het log, en eerst meten
+
+Gemeld met een schermafdruk van het log van 22 september:
+
+```
+00:35:40  Updating state for sensor...gacs_zelfbeoordeling took 2.622 seconds.
+00:40:40  Onverwachte netimport van 211 W ... Telt als tekortdag; de marge op
+          de reserve gaat omhoog als dit vaker gebeurt.
+```
+
+### De netimport van 00:40 was één moment
+
+De kwartiergemiddelden eromheen zijn normaal: de accu leverde zo'n 200 W,
+het net stond op -50 W. De 211 W was één moment waarop de accu heel kort
+0 W gaf. Maar de logtekst zei *"Telt als tekortdag; de marge gaat omhoog"* -
+en dat klopt sinds v5.7 niet meer. Een los moment telt niet; pas meer dan
+0,5 kWh bijgekocht over de nacht. De tekst zegt dat nu, en het is een
+informatieregel in plaats van een waarschuwing: het moment heeft op zichzelf
+geen gevolg.
+
+### De kwartierreeks die per ronde mat
+
+Bij het zoeken naar de trage GACS-sensor bleek `niet_ontladen_history` op
+**11.520 regels** te staan - honderd keer groter dan al het andere in de
+opslag, en te zien dankzij `opslag_overzicht` van v5.10. De grens:
+
+```python
+self.niet_ontladen_history[-PROEFSTAND_LEDGER_DAYS * 96:]    # 96 per dag
+```
+
+96 per dag is één per kwartier. Maar er werd elke RONDE gemeten, en bij 60
+seconden zijn dat er 1440. Bedoeld was 120 dagen aan kwartieren; het werden
+8 dagen, met vijftien keer zoveel regels. Dezelfde klasse als de
+tijdvensters van v5.14.2 - een aantal dat een tijd bedoelde.
+
+Nu één meting per kwartier, en de bestaande 11.520 regels worden bij het
+laden teruggebracht naar één per kwartier.
+
+### De GACS-sensor, 2,6 seconden - eerst meten
+
+Niet na te spelen: in de toetsomgeving duurt het 5 milliseconden, ook met
+de reeks van 11.520 regels erin. Niet het woud, dat traint sinds v3.99.20
+netjes in een executor; niet de overzichtsafbeeldingen; niet de lus over
+alle entiteiten.
+
+Wel één sterk verband. In v3.99.20 kostte het trainen van het regressiewoud
+**2,72 seconden**, en de waarschuwing toen was *"took 2.624 seconds"*. Nu
+**2,622**. Het woud traint in een executor, maar Python laat één thread
+tegelijk rekenen: loopt de training precies terwijl de sensor bijwerkt, dan
+kan die wachten.
+
+Een vermoeden, en deze week is te vaak op een vermoeden gebouwd. Daarom nu
+eerst meten: de sensor meet hoe lang hij erover doet, elke keer boven de
+200 ms wordt bewaard met of het woud op dat moment trainde, en de
+diagnoseregel "gezondheid" toont `gacs 5ms max 2622 woud`. Na een dag is
+daarmee te zien of het vermoeden klopt - en pas dan wordt er gerepareerd.
+
+**Volledige testsuite**: 4127 tests, allemaal groen.

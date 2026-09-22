@@ -58,6 +58,11 @@ CONF_BATTERY_COOLING_FAN_POWER_SENSOR = "battery_cooling_fan_power_sensor_entity
 # weigert een toestand boven de 255 tekens - de sensor valt dan terug op
 # "unknown". De diagnoseregels passen er daarom altijd in.
 DIAGNOSE_REGEL_MAX_TEKENS = 255
+
+# Vanaf hoeveel milliseconden het opbouwen van de GACS-attributen als traag
+# telt (v5.14.3). Home Assistant zelf waarschuwt vanaf 400 ms; deze grens
+# ligt lager, zodat ook een beginnende vertraging zichtbaar wordt.
+GACS_TRAAG_MS = 200.0
 CONF_BATTERY_ROUND_TRIP_EFFICIENCY = "battery_round_trip_efficiency_percent"
 CONF_VACATION_CONSUMPTION_REDUCTION_PERCENT = "vacation_consumption_reduction_percent"
 
@@ -933,10 +938,22 @@ DEFAULT_VACATION_CONSUMPTION_REDUCTION_PERCENT = 60.0
 APPLIANCE_RUNNING_POWER_THRESHOLD_W = 15.0
 
 # Smoothing for the live-consumption correction (see
-# _get_smoothed_consumption_correction_ratio): average over this many
-# recent samples (at the ~5 minute update interval, this is roughly
-# 15-25 minutes) instead of a single instantaneous reading, so a brief
-# spike doesn't scale a 15+ hour reserve estimate to an absurd value.
+# _get_smoothed_consumption_correction_ratio).
+#
+# v5.14.2: een venster in MINUTEN, niet in metingen. Hier stond een aantal
+# metingen (4), met als toelichting "at the ~5 minute update interval, this
+# is roughly 15-25 minutes". Toen de ronde naar 60 seconden ging, werden
+# die 4 metingen stil 4 MINUTEN - korter dan een koelkast- of
+# vriezercompressor draait. Op 22 september tilde zo'n compressorbeurt de
+# verwachting voor de hele nacht 1 tot 1,7 kWh op, en wisselde de
+# beslissing elk kwartier.
+#
+# Een half uur: langer dan een compressorbeurt (10-20 minuten), kort genoeg
+# om een echte aanhoudende verandering - een airco die een uur draait -
+# nog binnen een half uur te volgen.
+CONSUMPTION_CORRECTION_WINDOW_MINUTES = 30
+
+# Het minimum aantal metingen, ook bij een heel langzaam interval.
 CONSUMPTION_CORRECTION_SMOOTHING_SAMPLES = 4
 
 # Even after smoothing, cap the correction ratio at this multiple of the
@@ -2022,9 +2039,15 @@ LOPEND_APPARAAT_VASTE_POST_UREN = 1.0
 # er een geplande cyclus in te hangen.
 APPLIANCE_PLAN_MAX_HOURS = 24.0
 
-# Hoeveel vermogensmetingen er van een lopende cyclus worden bewaard.
-# Bij een tick van vijf minuten is 60 gelijk aan vijf uur - ruim genoeg
-# voor de langste wasbeurt, en klein genoeg om niet in de weg te zitten.
+# Hoe lang de vermogensmetingen van een lopende cyclus worden bewaard.
+#
+# v5.14.2: in UREN. Hier stond 60 metingen, met als toelichting "bij een
+# tick van vijf minuten is 60 gelijk aan vijf uur". Toen de ronde naar 60
+# seconden ging, werd dat stil EEN uur - en werden de kosten van een
+# wasbeurt van twee a drie uur alleen over het laatste uur berekend.
+APPLIANCE_POWER_SAMPLE_UREN = 5.0
+
+# De ondergrens in metingen, ook bij een heel langzaam interval.
 APPLIANCE_POWER_SAMPLE_LIMIT = 60
 
 # --- Terugrekenen vanaf een eindtijd (v1.70.0) -----------------------
@@ -3207,6 +3230,9 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "instraling_verhouding": {"type": "plain"},
     "ventilator_kwh_per_dag": {"type": "plain"},
     "_ventilator_vermogens_aan": {"type": "plain"},
+    # v5.14.3: trage keren van de GACS-sensor - bewaard, zodat het bewijs
+    # een herstart overleeft.
+    "gacs_traag": {"type": "plain"},
     # v5.9: waarom het rendementsleren niets oplevert.
     "rendement_afwijzingen": {"type": "plain"},
     # v5.11: het nachtelijke ontlaadvenster. Werd niet bewaard, dus een
@@ -5624,8 +5650,14 @@ CONF_POWER_LIMITS_INTENTIONAL = "power_limits_intentional"
 # loopt werd zonder ondergrens meegewogen. Eén meting volstond.
 #
 # Een halve dag aan metingen is nodig voordat een dagcijfer iets zegt
-# over een apparaat dat in cycli werkt. Bij vijf minuten per tick zijn
-# dat ruim acht uur.
+# over een apparaat dat in cycli werkt.
+#
+# v5.14.2: in UREN. Hier stond alleen 100 metingen, met als toelichting
+# "bij vijf minuten per tick zijn dat ruim acht uur". Bij 60 seconden werd
+# dat stil 1,7 uur - vijf keer zwakker dan bedoeld.
+NILM_MIN_UREN_VOOR_DAG = 8.0
+
+# De ondergrens in metingen, ook bij een heel langzaam interval.
 NILM_MIN_SAMPLES_FOR_DAY = 100
 
 # --- Koelapparaten meten als aan/uit (v1.50.0) -----------------------

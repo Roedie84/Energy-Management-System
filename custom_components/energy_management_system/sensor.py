@@ -4262,6 +4262,22 @@ class GacsAssessmentSensor(SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict:
+        """Meet hoe lang het opbouwen duurt (v5.14.3).
+
+        Op 22 september: "took 2.622 seconds" - hier niet na te spelen.
+        Eerst meten, dan repareren: de duur gaat naar de coördinator, die
+        een trage keer bewaart met of het regressiewoud op dat moment
+        trainde, en dat in de diagnoseregel zet.
+        """
+        start = time.perf_counter()
+        try:
+            return self._bouw_attributen()
+        finally:
+            self._coordinator._noteer_gacs_duur(
+                (time.perf_counter() - start) * 1000
+            )
+
+    def _bouw_attributen(self) -> dict:
         """Alle samenvattingen, elk apart afgeschermd (v1.19.1).
 
         Gemeld: alle acht tegels onder "Status per onderwerp" toonden
