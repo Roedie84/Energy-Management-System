@@ -1289,7 +1289,7 @@ class EnergyManagementSystemCoordinator:
         # een regel - `__init__` staat op de ratel.
         # v3.99.19: `dagverloop` en `nabeschouwingen` erbij, in dezelfde
         # regel - `__init__` staat op de ratel.
-        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen, self.safe_sell_shadow, self.reden_afwijkingen, self.meting_laatst_gevuld, self.weerbron_keuze, self.voorspellingsverloop, self._geladen_opslag, self.rendement_afwijzingen, self.weerbron_levering, self.weather_ensemble_readings_alle, self.instraling_verhouding, self.ventilator_kwh_per_dag, self._ventilator_vermogens_aan, self.gacs_traag, self.gacs_duur_ms, self._pv_model_bezig = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, [], [], {}, {}, {}, {}, None, {}, {}, {}, {}, {}, [], [], None, False
+        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen, self.safe_sell_shadow, self.reden_afwijkingen, self.meting_laatst_gevuld, self.weerbron_keuze, self.voorspellingsverloop, self._geladen_opslag, self.rendement_afwijzingen, self.weerbron_levering, self.weather_ensemble_readings_alle, self.instraling_verhouding, self.ventilator_kwh_per_dag, self._ventilator_vermogens_aan, self.gacs_traag, self.gacs_duur_ms, self._pv_model_bezig, self.gacs_traagste = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, [], [], {}, {}, {}, {}, None, {}, {}, {}, {}, {}, [], [], None, False, None
         self.handmatige_ingrepen: list[dict] = []
         # v1.1.6: met welke meetmethode de bewaarde foutreeks tot stand
         # is gekomen. Verandert de methode, dan wordt die reeks eenmalig
@@ -18942,26 +18942,38 @@ class EnergyManagementSystemCoordinator:
             }
         return self._pv_model_evaluatie
 
-    def _noteer_gacs_duur(self, ms: float) -> None:
+    def _noteer_gacs_duur(self, ms: float, onderdelen: dict | None = None) -> None:
         """Hoe lang de GACS-sensor over zijn attributen deed (v5.14.3).
 
         Op 22 september: "took 2.622 seconds". Hier niet na te spelen - 5
         milliseconden. Vermoeden: het regressiewoud trainde tegelijk in een
-        executor, en Python laat één thread tegelijk rekenen. Eerst meten,
-        dan repareren: elke trage keer wordt bewaard, met of het woud op
-        dat moment trainde.
+        executor. Eerst meten, dan repareren.
+
+        v5.14.4 - de eerste versie van deze meting zou de uitschieter
+        MISSEN. In bedrijf is de normaalwaarde 191 ms, net onder de toen
+        gekozen grens van 200 ms; bijna elke ronde kwam in de lijst van 20,
+        en een uitschieter was na twintig minuten verdrongen. Drie
+        reparaties: de grens is 400 ms (die van Home Assistant zelf), de
+        traagste keer wordt APART bewaard en kan niet worden verdrongen, en
+        de drie traagste onderdelen gaan mee - dan hoeft er niet opnieuw
+        geraden te worden welk onderdeel de tijd kost.
         """
         self.gacs_duur_ms = round(ms, 1)
         if ms < GACS_TRAAG_MS:
             return
-        self.gacs_traag.append(
-            {
-                "moment": dt_util.now().isoformat(),
-                "ms": round(ms, 1),
-                "woud_trainde": bool(self._pv_model_bezig),
-            }
-        )
+        traagst = sorted(
+            (onderdelen or {}).items(), key=lambda kv: -(kv[1] or 0)
+        )[:3]
+        record = {
+            "moment": dt_util.now().isoformat(),
+            "ms": round(ms, 1),
+            "woud_trainde": bool(self._pv_model_bezig),
+            "traagste_onderdelen": {k: v for k, v in traagst},
+        }
+        self.gacs_traag.append(record)
         del self.gacs_traag[:-20]
+        if self.gacs_traagste is None or ms > self.gacs_traagste.get("ms", 0):
+            self.gacs_traagste = record
 
     async def async_ververs_pv_model(self, now: datetime) -> None:
         """Traint hooguit eens per PV_MODEL_VERVERS_MINUTEN, in een
@@ -35389,11 +35401,14 @@ class EnergyManagementSystemCoordinator:
     def _diagnose_gacs(self) -> str:
         """De GACS-duur voor de diagnoseregel (v5.14.3)."""
         nu = f"{self.gacs_duur_ms:.0f}ms" if self.gacs_duur_ms is not None else "-"
-        if not self.gacs_traag:
+        traagste = self.gacs_traagste
+        if not traagste:
             return nu
-        traagste = max(self.gacs_traag, key=lambda r: r["ms"])
         waarom = " woud" if traagste.get("woud_trainde") else ""
-        return f"{nu} max {traagste['ms']:.0f}{waarom}"
+        onderdelen = traagste.get("traagste_onderdelen") or {}
+        grootste = next(iter(onderdelen), None)
+        deel = f" ({grootste} {onderdelen[grootste]:.0f})" if grootste else ""
+        return f"{nu} max {traagste['ms']:.0f}{waarom}{deel}"
 
     def _diagnose_gezondheid(self) -> list:
         def zelfcontroles():

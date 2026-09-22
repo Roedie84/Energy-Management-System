@@ -1,4 +1,4 @@
-EMS v5.14.3 - alle wijzigingen sinds v5.14.1 (bevat v5.14.2)
+EMS v5.14.4 - alleen de wijzigingen sinds v5.14.3
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
 (ER OVERHEEN, de map niet legen)
@@ -11,22 +11,22 @@ NAAR DE REPO
 
     README.md, CHANGELOG.md
     dashboards/energy_management_system_dashboard.yaml
-    tests/ (vier bestanden)
+    tests/test_gacs_traagheid_en_kwartierreeks.py
 
-Voor HACS: release met tag v5.14.3.
+Voor HACS: release met tag v5.14.4.
 
-UIT v5.14.2 - DIT RAAKT DE STURING
-De verwachte behoefte sprong 's nachts heen en weer door een compressor van
-een paar minuten. De demping was 4 minuten geworden in plaats van 20. Nu een
-half uur. Ook de kosten per wasbeurt en het NILM-dagminimum waren geraakt.
+WAT ER VERANDERT
 
-NIEUW IN v5.14.3
-1. De logregel "Telt als tekortdag" klopte sinds v5.7 niet meer. Nu juist,
-   en een informatieregel in plaats van een waarschuwing.
-2. Een proefstandreeks mat per ronde in plaats van per kwartier: 11.520
-   regels, 8 dagen in plaats van 120. Nu per kwartier; de voorraad wordt
-   bij het laden teruggebracht.
-3. De trage GACS-sensor (2,6 s) wordt nu GEMETEN. In de diagnoseregel
-   "gezondheid" staat straks bijvoorbeeld:  gacs 5ms max 2622 woud
-   "woud" betekent: het regressiewoud trainde op dat moment. Dat lees ik
-   morgen zelf, en dan repareer ik wat de meting laat zien.
+Alleen de meting van de trage GACS-sensor. De eerste versie (v5.14.3)
+zou een uitschieter van 2,6 seconden missen: de normaalwaarde bij jou is
+191 ms, net onder de grens van 200, en de lijst liep vol met gewone rondes.
+
+Nu:
+- grens 400 ms (die van Home Assistant zelf)
+- de traagste keer apart bewaard, kan niet verdrongen worden
+- de traagste onderdelen erbij
+
+De diagnoseregel "gezondheid" toont dan bijvoorbeeld:
+    gacs 191ms max 2622 woud (proefstand 2400)
+
+Dat lees ik morgen zelf, en dan repareer ik wat de meting laat zien.

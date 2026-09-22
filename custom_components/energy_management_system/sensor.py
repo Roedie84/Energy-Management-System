@@ -4270,11 +4270,17 @@ class GacsAssessmentSensor(SensorEntity):
         trainde, en dat in de diagnoseregel zet.
         """
         start = time.perf_counter()
+        attributen: dict = {}
         try:
-            return self._bouw_attributen()
+            attributen = self._bouw_attributen()
+            return attributen
         finally:
+            # v5.14.4: de traagste onderdelen meegeven. Die worden sinds
+            # v4.9.7 al gemeten (`rekentijd_ms`), maar alleen als attribuut -
+            # onleesbaar voor de connector, en niet gebruikt door de meting.
             self._coordinator._noteer_gacs_duur(
-                (time.perf_counter() - start) * 1000
+                (time.perf_counter() - start) * 1000,
+                (attributen.get("rekentijd_ms") or {}).get("traagste") or {},
             )
 
     def _bouw_attributen(self) -> dict:

@@ -60,9 +60,12 @@ CONF_BATTERY_COOLING_FAN_POWER_SENSOR = "battery_cooling_fan_power_sensor_entity
 DIAGNOSE_REGEL_MAX_TEKENS = 255
 
 # Vanaf hoeveel milliseconden het opbouwen van de GACS-attributen als traag
-# telt (v5.14.3). Home Assistant zelf waarschuwt vanaf 400 ms; deze grens
-# ligt lager, zodat ook een beginnende vertraging zichtbaar wordt.
-GACS_TRAAG_MS = 200.0
+# telt. Home Assistant zelf waarschuwt vanaf 400 ms.
+#
+# v5.14.4: was 200 ms. In bedrijf is de normaalwaarde 191 ms - bijna elke
+# ronde kwam over die grens, de lijst liep vol met gewone rondes, en een
+# echte uitschieter werd binnen twintig minuten verdrongen.
+GACS_TRAAG_MS = 400.0
 CONF_BATTERY_ROUND_TRIP_EFFICIENCY = "battery_round_trip_efficiency_percent"
 CONF_VACATION_CONSUMPTION_REDUCTION_PERCENT = "vacation_consumption_reduction_percent"
 
@@ -3233,6 +3236,8 @@ PERSISTED_FIELDS: dict[str, dict] = {
     # v5.14.3: trage keren van de GACS-sensor - bewaard, zodat het bewijs
     # een herstart overleeft.
     "gacs_traag": {"type": "plain"},
+    # v5.14.4: de traagste keer apart, zodat hij niet kan worden verdrongen.
+    "gacs_traagste": {"type": "plain"},
     # v5.9: waarom het rendementsleren niets oplevert.
     "rendement_afwijzingen": {"type": "plain"},
     # v5.11: het nachtelijke ontlaadvenster. Werd niet bewaard, dus een

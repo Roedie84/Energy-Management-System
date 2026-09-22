@@ -120,6 +120,47 @@ def test_een_snelle_keer_wordt_niet_bewaard(make_coordinator, hass):
     assert c.gacs_traag == []
 
 
+def test_de_normaalwaarde_in_bedrijf_telt_niet_als_traag(make_coordinator, hass):
+    """v5.14.4. Live op 22 september: `gacs 191ms`. Met de eerste grens van
+    200 ms kwam bijna elke ronde in de lijst."""
+    c = make_coordinator({})
+    c.gacs_traag = []
+
+    for ms in (191.0, 202.0, 195.0):
+        c._noteer_gacs_duur(ms)
+
+    assert c.gacs_traag == []
+
+
+def test_een_uitschieter_wordt_niet_verdrongen(make_coordinator, hass):
+    """Het scenario dat de eerste meting zou missen: één uitschieter van
+    2,6 seconden, en daarna honderd gewone trage rondes. De lijst houdt er
+    twintig - de traagste moet er toch blijven."""
+    c = make_coordinator({})
+    c.gacs_traag, c.gacs_traagste = [], None
+    c._pv_model_bezig = True
+
+    c._noteer_gacs_duur(2622.0, {"proefstand": 2400.0, "logboek": 90.0})
+    c._pv_model_bezig = False
+    for _ in range(100):
+        c._noteer_gacs_duur(450.0, {"logboek": 300.0})
+
+    assert c.gacs_traagste["ms"] == 2622.0
+    assert c.gacs_traagste["woud_trainde"] is True
+    assert "max 2622" in c._diagnose_gacs()
+
+
+def test_de_diagnoseregel_noemt_het_traagste_onderdeel(make_coordinator, hass):
+    """Dan hoeft er niet opnieuw geraden te worden welk onderdeel de tijd
+    kost - dat werd sinds v4.9.7 al gemeten, maar alleen als attribuut."""
+    c = make_coordinator({})
+    c.gacs_traagste = None
+
+    c._noteer_gacs_duur(2622.0, {"proefstand": 2400.0, "logboek": 90.0, "eisen": 12.0})
+
+    assert "proefstand 2400" in c._diagnose_gacs()
+
+
 def test_de_diagnoseregel_toont_de_traagste_keer(make_coordinator, hass):
     from test_alles_uitgevraagd import _maximaal
 

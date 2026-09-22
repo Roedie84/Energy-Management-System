@@ -27598,3 +27598,54 @@ diagnoseregel "gezondheid" toont `gacs 5ms max 2622 woud`. Na een dag is
 daarmee te zien of het vermoeden klopt - en pas dan wordt er gerepareerd.
 
 **Volledige testsuite**: 4127 tests, allemaal groen.
+
+
+## v5.14.4 — De meting van v5.14.3 zou de uitschieter missen
+
+Gevraagd: *"Kan je alles nog eens controleren middels de live verbinding?"*
+Live om 09:48 op 22 september, via de diagnosesensoren:
+
+```
+gezondheid  v5.14.3 · fout 0 · storing 0 · zelfctl 2/2 · bestand ok
+            · config 61/0/2 · optioneel_mist 0 · gacs 191ms max 202 · stuurt
+sturing     default_smart · accu 42% · beschikbaar 2.76kWh · reserve geen blok
+            · tekortdagen 0 · blok 09:45
+leren       weer 2/2 geweerd 0 · meld24u 20 · rendement 20/20 · nacht 7
+            · pvbias 16 · 2eVoorsp 0 · instraling 4
+```
+
+Alles in orde, met een paar dingen om te zien:
+
+- **`geweerd 0`**: `weather.forecast_thuis` is teruggekomen in het ensemble.
+  Dat is de reparatie van v5.13 in werking: een geweerde bron wordt
+  doorgemeten en kan zich terugverdienen.
+- **`reserve geen blok` naast `blok 09:45`** klopt: het goedkope blok was
+  drie minuten eerder begonnen, er was geen volgend blok om naar te
+  overbruggen.
+- **`instraling 4`** klopt: de zon stond pas sinds 09:00 boven de tien
+  graden, en de straling was 169 W/m², net boven de ondergrens.
+
+### Wat niet klopte: mijn eigen meting
+
+De GACS-sensor doet er in bedrijf **191 ms** over - veertig keer zo lang als
+in de toetsomgeving. De meting van v5.14.3 bewaarde elke keer boven de
+200 ms, maar alleen de laatste twintig. Met een normaalwaarde van 191 ms
+kwam bijna elke ronde net over die grens, en een uitschieter van 2,6
+seconden zou binnen twintig minuten uit de lijst zijn verdrongen. "max" had
+hem dan nooit laten zien.
+
+Drie reparaties:
+
+- de grens is **400 ms**, die van Home Assistant zelf;
+- de **traagste keer wordt apart bewaard** en kan niet worden verdrongen;
+- de **drie traagste onderdelen gaan mee**. Die worden sinds v4.9.7 al
+  gemeten, naar aanleiding van precies deze waarschuwing - maar alleen als
+  attribuut, onleesbaar voor de connector, en de meting van v5.14.3
+  gebruikte ze niet.
+
+De diagnoseregel toont nu bijvoorbeeld `gacs 191ms max 2622 woud
+(proefstand 2400)`: hoe lang nu, de traagste keer, of het woud toen trainde,
+en welk onderdeel de tijd kostte. Dan hoeft er niet opnieuw geraden te
+worden.
+
+**Volledige testsuite**: 4130 tests, allemaal groen.
