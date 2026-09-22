@@ -7,11 +7,11 @@ views:
   - type: grid
     cards:
     - type: custom:mushroom-template-card
-      primary: '{% set p = state_attr(''sensor.woonkamer_energy_management_system_system_status'', ''aandachtspunten'') or [] %}{{ ''✅ Geen aandachtspunten'' if p | length == 0 else ''⚠️ '' ~ p | length ~ '' aandachtspunt(en)'' }}'
-      secondary: '{{ state_attr(''sensor.woonkamer_energy_management_system_system_status'', ''statuskop'') or ''Alles in orde.'' }}'
+      primary: '{% if is_state(''sensor.woonkamer_energy_management_system_system_status'', ''Opstarten'') %}⏳ Energy Management System is nog aan het opstarten{% else %}{% set p = state_attr(''sensor.woonkamer_energy_management_system_system_status'', ''aandachtspunten'') or [] %}{{ ''✅ Geen aandachtspunten'' if p | length == 0 else ''⚠️ '' ~ p | length ~ '' aandachtspunt(en)'' }}{% endif %}'
+      secondary: '{% if is_state(''sensor.woonkamer_energy_management_system_system_status'', ''Opstarten'') %}{{ state_attr(''sensor.woonkamer_energy_management_system_system_status'', ''opstarten'') or ''Wacht tot de andere integraties zijn geladen.'' }}{% else %}{{ state_attr(''sensor.woonkamer_energy_management_system_system_status'', ''statuskop'') or ''Alles in orde.'' }}{% endif %}'
       multiline_secondary: true
-      icon: '{% set p = state_attr(''sensor.woonkamer_energy_management_system_system_status'', ''aandachtspunten'') or [] %}{{ ''mdi:check-circle-outline'' if p | length == 0 else ''mdi:alert-outline'' }}'
-      icon_color: '{% set p = state_attr(''sensor.woonkamer_energy_management_system_system_status'', ''aandachtspunten'') or [] %}{{ ''green'' if p | length == 0 else ''orange'' }}'
+      icon: '{% if is_state(''sensor.woonkamer_energy_management_system_system_status'', ''Opstarten'') %}mdi:timer-sand{% else %}{% set p = state_attr(''sensor.woonkamer_energy_management_system_system_status'', ''aandachtspunten'') or [] %}{{ ''mdi:check-circle-outline'' if p | length == 0 else ''mdi:alert-outline'' }}{% endif %}'
+      icon_color: '{% if is_state(''sensor.woonkamer_energy_management_system_system_status'', ''Opstarten'') %}blue{% else %}{% set p = state_attr(''sensor.woonkamer_energy_management_system_system_status'', ''aandachtspunten'') or [] %}{{ ''green'' if p | length == 0 else ''orange'' }}{% endif %}'
       entity: sensor.woonkamer_energy_management_system_system_status
       tap_action:
         action: navigate

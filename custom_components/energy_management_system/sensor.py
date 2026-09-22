@@ -623,6 +623,9 @@ class SystemStatusSensor(_CoordinatorDiagnosticSensor):
     @property
     def icon(self) -> str:
         status = self._coordinator.system_status
+        # v5.14.5: tijdens het opstarten een zandloper.
+        if status == "Opstarten":
+            return "mdi:timer-sand"
         if status == "OK":
             return "mdi:check-circle-outline"
         if status == "Fout":
@@ -637,6 +640,8 @@ class SystemStatusSensor(_CoordinatorDiagnosticSensor):
         # attributenopbouw.
         samenvatting = self._coordinator.get_diagnostic_summary()
         return {
+            # v5.14.5: de zin die het dashboard tijdens het opstarten toont.
+            "opstarten": self._coordinator.opstart_tekst(),
             "last_error": self._coordinator.last_error,
             "last_error_time": (
                 self._coordinator.last_error_time.isoformat()

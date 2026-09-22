@@ -27649,3 +27649,39 @@ en welk onderdeel de tijd kostte. Dan hoeft er niet opnieuw geraden te
 worden.
 
 **Volledige testsuite**: 4130 tests, allemaal groen.
+
+
+## v5.14.5 — Zichtbaar dat de integratie nog opstart
+
+Gevraagd: *"Tevens zou ik graag tijdens het opstarten zien dat onder Energy
+Management System is nog aan het opstarten."*
+
+Aanleiding, live direct na de installatie van v5.14.4:
+
+```
+v- · fout 64 · storing 0 · zelfctl 2/2 · bestand AFWIJKEND · config 0/63/0
+```
+
+Een minuut later:
+
+```
+v5.14.4 · fout 0 · storing 0 · zelfctl 2/2 · bestand ok · config 61/0/2
+```
+
+Het eerste beeld was schijn. De andere integraties - Zendure, SolarEdge, de
+P1-meter - waren nog niet geladen, dus hun entiteiten bestonden even niet en
+elke controle erop leek kapot. Ik trapte er zelf bijna in.
+
+De integratie kende die aanloop al: sinds v1.6.6 dempt `STARTUP_GRACE_SECONDS`
+(180 seconden) beschikbaarheidsmeldingen in die periode. Alleen was hij
+nergens zichtbaar. Nu op drie plekken:
+
+- **System status** toont `Opstarten`, met een zandloper als icoon - te zien
+  onder het apparaat Energy Management System in Home Assistant;
+- **de landingskaart** van het dashboard toont *"⏳ Energy Management System
+  is nog aan het opstarten"*, met hoeveel seconden nog, in plaats van
+  aandachtspunten die schijn zijn;
+- **de diagnoseregels** tonen `opstarten · nog 120s` in plaats van "fout 64"
+  - een lezer ziet meteen dat het nog geen oordeel is.
+
+**Volledige testsuite**: 4137 tests, allemaal groen.

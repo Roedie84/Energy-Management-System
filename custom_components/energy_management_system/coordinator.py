@@ -35048,6 +35048,40 @@ class EnergyManagementSystemCoordinator:
                 -TICK_DURATION_HISTORY_LENGTH:
             ]
 
+    def opstart_resterend_s(self, now: datetime | None = None) -> float | None:
+        """Hoeveel seconden de opstartfase nog duurt, of None (v5.14.5).
+
+        Direct na een herstart zijn de andere integraties - Zendure,
+        SolarEdge, de P1-meter - nog niet geladen. Hun entiteiten bestaan
+        dan even niet, en alles wat erop controleert, lijkt kapot. Op 22
+        september toonde de diagnoseregel daardoor "v- · fout 64 · bestand
+        AFWIJKEND · config 0/63/0" - een minuut later "v5.14.4 · fout 0".
+
+        Dezelfde aanlooptijd die sinds v1.6.6 al beschikbaarheidsmeldingen
+        dempt (STARTUP_GRACE_SECONDS), nu ook zichtbaar gemaakt.
+        """
+        if self._started_at is None:
+            return None
+        verstreken = ((now or dt_util.now()) - self._started_at).total_seconds()
+        resterend = STARTUP_GRACE_SECONDS - verstreken
+        return resterend if resterend > 0 else None
+
+    def in_opstartfase(self, now: datetime | None = None) -> bool:
+        """Draait de integratie nog maar net? (v5.14.5)"""
+        return self.opstart_resterend_s(now) is not None
+
+    def opstart_tekst(self) -> str | None:
+        """De zin die tijdens het opstarten wordt getoond (v5.14.5)."""
+        resterend = self.opstart_resterend_s()
+        if resterend is None:
+            return None
+        return (
+            f"Energy Management System is nog aan het opstarten - nog "
+            f"{resterend:.0f} seconden. Tot dan kunnen de andere "
+            "integraties nog aan het laden zijn, en lijken controles op hun "
+            "entiteiten kapot terwijl ze dat niet zijn."
+        )
+
     @property
     def system_status(self) -> str:
         """A single, simple health status: 'OK' if the integration is
@@ -35066,7 +35100,11 @@ class EnergyManagementSystemCoordinator:
         aandachtspunten - bewust apart van "Fout"/"Mogelijk
         vastgelopen" (die zijn ernstiger: de integratie zelf werkt dan
         niet correct, i.p.v. gewoon iets om even naar te kijken).
+
+        v5.14.5: tijdens de opstartfase "Opstarten". Zie `opstart_resterend_s`.
         """
+        if self.in_opstartfase():
+            return "Opstarten"
         if (
             self.last_error_time is not None
             and (
@@ -35384,6 +35422,16 @@ class EnergyManagementSystemCoordinator:
         Elk onderdeel wordt apart opgehaald: valt er een om, dan staat daar
         een vraagteken en blijft de rest leesbaar.
         """
+        # v5.14.5: tijdens het opstarten geen waarden die op een storing
+        # lijken. Op 22 september stond hier direct na een herstart "fout 64
+        # · bestand AFWIJKEND · config 0/63/0" - schijn, want de andere
+        # integraties waren nog niet geladen.
+        resterend = self.opstart_resterend_s()
+        if resterend is not None:
+            versie = (self.get_installation_facts() or {}).get("versie")
+            return f"opstarten · nog {resterend:.0f}s" + (
+                f" · v{versie}" if versie and soort == "gezondheid" else ""
+            )
         bouwers = {
             "gezondheid": self._diagnose_gezondheid,
             "sturing": self._diagnose_sturing,

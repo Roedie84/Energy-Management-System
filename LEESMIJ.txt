@@ -1,32 +1,28 @@
-EMS v5.14.4 - alleen de wijzigingen sinds v5.14.3
+EMS v5.14.5 - alleen de wijzigingen sinds v5.14.4
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
 (ER OVERHEEN, de map niet legen)
 
-    const.py, coordinator.py, sensor.py
-    dashboard_template.yaml     (gaat altijd mee, ongewijzigd)
+    coordinator.py, sensor.py
+    dashboard_template.yaml     GEWIJZIGD (landingskaart toont het opstarten)
     manifest.json, bestandscontrole.json
 
 NAAR DE REPO
 
     README.md, CHANGELOG.md
-    dashboards/energy_management_system_dashboard.yaml
-    tests/test_gacs_traagheid_en_kwartierreeks.py
+    dashboards/energy_management_system_dashboard.yaml   GEWIJZIGD
+    tests/test_opstartfase.py (nieuw)
 
-Voor HACS: release met tag v5.14.4.
+Voor HACS: release met tag v5.14.5.
 
-WAT ER VERANDERT
+WAT JE ZIET DE EERSTE 3 MINUTEN NA EEN HERSTART
 
-Alleen de meting van de trage GACS-sensor. De eerste versie (v5.14.3)
-zou een uitschieter van 2,6 seconden missen: de normaalwaarde bij jou is
-191 ms, net onder de grens van 200, en de lijst liep vol met gewone rondes.
+- System status:   Opstarten   (zandloper)
+- Dashboard:       "Energy Management System is nog aan het opstarten"
+                   met hoeveel seconden nog
+- Diagnoseregels:  opstarten · nog 120s
 
-Nu:
-- grens 400 ms (die van Home Assistant zelf)
-- de traagste keer apart bewaard, kan niet verdrongen worden
-- de traagste onderdelen erbij
+Daarna het normale beeld. Zo zie je niet meer "fout 64" terwijl er niets
+mis is - de andere integraties zijn dan gewoon nog aan het laden.
 
-De diagnoseregel "gezondheid" toont dan bijvoorbeeld:
-    gacs 191ms max 2622 woud (proefstand 2400)
-
-Dat lees ik morgen zelf, en dan repareer ik wat de meting laat zien.
+De GACS-meting van v5.14.4 blijft gewoon lopen.
