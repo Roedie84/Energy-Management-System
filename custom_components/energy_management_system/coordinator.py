@@ -192,6 +192,7 @@ from .const import (
     HOME_CONNECT_ACTIVE_STATES,
     CONF_APPLIANCE_NOTIFY_SERVICE,
     APPARAAT_INSTELLINGEN,
+    OMVORMER_INSTELLINGEN,
     CLOUD_INVOER_CONFIRM_MINUTES,
     CLOUD_INVOER_INSTELLINGEN,
     DAGTELLER_INSTELLINGEN,
@@ -616,6 +617,10 @@ from .const import (
     RELIABILITY_UNVERIFIABLE,
     WEATHER_ENSEMBLE_AGREEMENT_USABLE_PERCENT,
     NOTIFICATION_TYPES,
+    CONF_INKOOP_EUR_VANDAAG_SENSOR,
+    CONF_TERUGLEVER_EUR_VANDAAG_SENSOR,
+    CONF_GAS_M3_VANDAAG_SENSOR,
+    PRIJSDAG_VELDEN,
     PERSISTED_DATE_FIELDS,
     PERSISTED_FIELDS,
     PERSISTED_DATETIME_FIELDS,
@@ -1289,7 +1294,7 @@ class EnergyManagementSystemCoordinator:
         # een regel - `__init__` staat op de ratel.
         # v3.99.19: `dagverloop` en `nabeschouwingen` erbij, in dezelfde
         # regel - `__init__` staat op de ratel.
-        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen, self.safe_sell_shadow, self.reden_afwijkingen, self.meting_laatst_gevuld, self.weerbron_keuze, self.voorspellingsverloop, self._geladen_opslag, self.rendement_afwijzingen, self.weerbron_levering, self.weather_ensemble_readings_alle, self.instraling_verhouding, self.ventilator_kwh_per_dag, self._ventilator_vermogens_aan, self.gacs_traag, self.gacs_duur_ms, self._pv_model_bezig, self.gacs_traagste = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, [], [], {}, {}, {}, {}, None, {}, {}, {}, {}, {}, [], [], None, False, None
+        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen, self.safe_sell_shadow, self.reden_afwijkingen, self.meting_laatst_gevuld, self.weerbron_keuze, self.voorspellingsverloop, self._geladen_opslag, self.rendement_afwijzingen, self.weerbron_levering, self.weather_ensemble_readings_alle, self.instraling_verhouding, self.ventilator_kwh_per_dag, self._ventilator_vermogens_aan, self.gacs_traag, self.gacs_duur_ms, self._pv_model_bezig, self.gacs_traagste, self.prijs_vandaag = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, [], [], {}, {}, {}, {}, None, {}, {}, {}, {}, {}, [], [], None, False, None, {}
         self.handmatige_ingrepen: list[dict] = []
         # v1.1.6: met welke meetmethode de bewaarde foutreeks tot stand
         # is gekomen. Verandert de methode, dan wordt die reeks eenmalig
@@ -15189,6 +15194,20 @@ class EnergyManagementSystemCoordinator:
                         "staan terwijl het apparaat aan is, is er iets "
                         "aan de hand."
                     )
+                elif sleutel in OMVORMER_INSTELLINGEN and (
+                    (self.get_sun_elevation_degrees() or 0) <= 0
+                ):
+                    # v5.14.6: een omvormer zonder zon slaapt. Op 23
+                    # september 06:56 stond `solaredge_production_energy`
+                    # op `unknown`, telde dat als kapot, en ging de
+                    # systeemstatus naar "Aandacht gewenst".
+                    regel["oordeel"] = "slaapt"
+                    regel["uitleg"] = (
+                        "De omvormer schakelt zichzelf uit als er geen zon "
+                        "is, en meldt dan niets. De zon staat nu onder de "
+                        "horizon. Blijft dit staan terwijl de zon op is, "
+                        "dan is er wél iets aan de hand."
+                    )
                 else:
                     regel["oordeel"] = "geen_waarde"
                 regel["waarde"] = staat.state
@@ -25094,6 +25113,32 @@ class EnergyManagementSystemCoordinator:
             )
         return "voldeed niet aan de fysieke controle."
 
+    def _werk_prijsdag_bij(self, now: datetime) -> None:
+        """Houdt de dagbedragen van de leverancier bij (v5.15).
+
+        De sensoren van de leverancier lopen per DAG op en springen om
+        middernacht terug. Elke ronde de laatste stand onthouden, zodat de
+        dag bij het afsluiten compleet is - ook als de sensor eerder
+        terugspringt dan dat de dag hier wordt afgesloten.
+        """
+        dag = now.date().isoformat()
+        stand = self.prijs_vandaag or {}
+        if stand.get("dag") != dag:
+            stand = {"dag": dag}
+        for veld, sleutel in PRIJSDAG_VELDEN.items():
+            waarde = self._lees_optionele_sensor(sleutel)
+            if waarde is not None:
+                stand[veld] = round(waarde, 4)
+        self.prijs_vandaag = stand
+
+    def _prijsdag_velden(self, dag) -> dict:
+        """De dagbedragen voor de dagregel van `dag` (v5.15)."""
+        dag_tekst = dag.isoformat() if hasattr(dag, "isoformat") else str(dag)
+        stand = self.prijs_vandaag or {}
+        if stand.get("dag") != dag_tekst:
+            return {}
+        return {v: stand[v] for v in PRIJSDAG_VELDEN if v in stand}
+
     def _sluit_energiedag_af(self, dag) -> None:
         """Legt de energiecijfers van een afgesloten dag vast (v1.90.0)."""
         # v1.98.0: de stand van de laatste tick van DIE dag, niet de
@@ -25113,6 +25158,8 @@ class EnergyManagementSystemCoordinator:
             return
         self.energy_daily_history.append(
             {
+                # v5.15: de bedragen van de leverancier, incl en excl btw.
+                **self._prijsdag_velden(dag),
                 "datum": dag.isoformat() if hasattr(dag, "isoformat") else str(dag),
                 "opwek_kwh": round(opwek, 3),
                 "zon_export_kwh": round(
@@ -25209,6 +25256,15 @@ class EnergyManagementSystemCoordinator:
         ("accu_ontladen_kwh", "Uit de accu", "kWh"),
         ("kosten_eur", "Kosten", "EUR"),
         ("co2_kg", "CO2", "kg"),
+        # v5.15: de bedragen van de leverancier, incl en excl btw. Zo tellen
+        # week en contractjaar vanzelf mee - die kent de leverancier niet.
+        ("inkoop_eur", "Inkoop", "EUR"),
+        ("inkoop_eur_excl", "Inkoop (excl. btw)", "EUR"),
+        ("teruglever_eur", "Teruglevering", "EUR"),
+        ("teruglever_eur_excl", "Teruglevering (excl. btw)", "EUR"),
+        ("gas_m3", "Gas", "m3"),
+        ("gas_eur", "Gas", "EUR"),
+        ("gas_eur_excl", "Gas (excl. btw)", "EUR"),
     )
 
     def get_outdoor_sensor_check(self) -> dict:
@@ -25833,6 +25889,51 @@ class EnergyManagementSystemCoordinator:
             # meterwissel): de stand zelf is dan de aangroei.
             return round(waarde, 2)
         return round(waarde - begin, 2)
+
+    def get_prijsoverzicht(self, now: datetime | None = None) -> dict:
+        """Gemiddelde in- en verkoopprijzen, incl en excl btw (v5.15).
+
+        Gevraagd: *"houdt de integratie ook de gemiddelde prijzen per uur,
+        dag, week, maand, jaar bij voor in- en verkoop van electra en
+        inkoop van gas?"*
+
+        De leverancier levert zelf al vandaag, deze maand en dit jaar. Wat
+        daar niet bij zat: per UUR, per WEEK, het contractjaar, en gas over
+        langere perioden dan vandaag. Die komen hier uit de eigen dagreeks.
+
+        Het verschil tussen incl en excl btw is bij dynamische tarieven geen
+        vast percentage maar een vast BEDRAG per kWh: energiebelasting plus
+        btw. Gemeten op 23 september 0,3494 tegen 0,2386 euro. Daarom staan
+        beide los, en wordt er nergens met een percentage omgerekend.
+        """
+        nu = now or dt_util.now()
+        perioden = (self.get_period_overview(nu) or {}).get("perioden") or {}
+        vandaag = perioden.get("vandaag") or {}
+        belastingdeel = None
+        if vandaag.get("import_kwh"):
+            incl = vandaag.get("inkoop_eur")
+            excl = vandaag.get("inkoop_eur_excl")
+            if incl is not None and excl is not None:
+                belastingdeel = (incl - excl) / vandaag["import_kwh"]
+        entries = [
+            (start, prijs) for start, _eind, prijs in (self._get_forecast_entries() or [])
+            if start.date() == nu.date()
+        ]
+        return {
+            "per_periode": slimme_bronnen.prijzen_per_periode(perioden),
+            "per_uur_vandaag": slimme_bronnen.prijzen_per_uur(entries, belastingdeel),
+            "belastingdeel_eur_per_kwh": (
+                round(belastingdeel, 4) if belastingdeel is not None else None
+            ),
+            "toelichting": (
+                "Inkoop en teruglevering per kWh, gas per m3, incl en excl "
+                "btw. De perioden komen uit de eigen dagreeks; de leverancier "
+                "kent zelf geen week en geen contractjaar. Het bedrag dat "
+                "voor 'excl' per kWh wegvalt is energiebelasting plus btw - "
+                "een vast bedrag, geen percentage, dus bij een lage prijs "
+                "valt er verhoudingsgewijs veel meer weg."
+            ),
+        }
 
     def get_period_overview(self, now: datetime | None = None) -> dict:
         """Alle dagcijfers over dag, week, maand, jaar en contractjaar
@@ -31843,6 +31944,27 @@ class EnergyManagementSystemCoordinator:
             # v5.14.1: de vier bronnen van v5.14. In de LEESMIJ van v5.14 stond
             # dat deze sensor ze zou meetellen - dat was niet zo, ze stonden
             # hier niet. Een 0 zei daardoor niets over de nieuwe vier.
+            # v5.15: de dagbedragen van de leverancier. Les van v5.14.1:
+            # nieuwe optionele bronnen horen hier ook in, anders zegt een 0
+            # bij "Optionele functies nog niet geconfigureerd" niets.
+            (
+                CONF_INKOOP_EUR_VANDAAG_SENSOR,
+                "Kosten afname vandaag (incl. btw)",
+                "Gemiddelde inkoopprijs per kWh over week, maand, jaar en "
+                "contractjaar - perioden die de leverancier zelf niet kent.",
+            ),
+            (
+                CONF_TERUGLEVER_EUR_VANDAAG_SENSOR,
+                "Opbrengst teruglevering vandaag (incl. btw)",
+                "Gemiddelde opbrengst per teruggeleverde kWh over dezelfde "
+                "perioden.",
+            ),
+            (
+                CONF_GAS_M3_VANDAAG_SENSOR,
+                "Gasverbruik vandaag (m3)",
+                "Gas over week, maand en jaar - de leverancier levert alleen "
+                "vandaag.",
+            ),
             (
                 CONF_TWEEDE_PV_VOORSPELLING_SENSOR,
                 "Tweede zonvoorspelling (bv. Forecast.Solar)",
@@ -36336,6 +36458,8 @@ class EnergyManagementSystemCoordinator:
             ("voorspellingsverloop", lambda: self.noteer_voorspellingsverloop(now)),
             # v5.14: instraling en ventilatoren.
             ("slimme_bronnen", lambda: self._meet_slimme_bronnen(now)),
+            # v5.15: de dagbedragen van de leverancier.
+            ("prijsdag", lambda: self._werk_prijsdag_bij(now)),
             ("meetherinnering", lambda: self._herinner_wat_meet(now)),
             # v3.68.0: het MPC-plan naast de eigen planning.
             ("mpc tegen de planning", lambda: self._meet_mpc(now)),

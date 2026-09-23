@@ -33,6 +33,13 @@ from .const import (
     CONF_INSTRALING_SENSOR,
     CONF_GAS_PRICE_SENSOR,
     CONF_BATTERY_COOLING_FAN_POWER_SENSOR,
+    CONF_INKOOP_EUR_VANDAAG_SENSOR,
+    CONF_INKOOP_EUR_VANDAAG_EXCL_SENSOR,
+    CONF_TERUGLEVER_EUR_VANDAAG_SENSOR,
+    CONF_TERUGLEVER_EUR_VANDAAG_EXCL_SENSOR,
+    CONF_GAS_M3_VANDAAG_SENSOR,
+    CONF_GAS_EUR_VANDAAG_SENSOR,
+    CONF_GAS_EUR_VANDAAG_EXCL_SENSOR,
     CONF_BATTERY_ROUND_TRIP_EFFICIENCY,
     DEFAULT_BATTERY_ROUND_TRIP_EFFICIENCY_PERCENT,
     CONF_VACATION_CONSUMPTION_REDUCTION_PERCENT,
@@ -370,6 +377,14 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
             _optioneel(CONF_INSTRALING_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
             _optioneel(CONF_GAS_PRICE_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
             _optioneel(CONF_BATTERY_COOLING_FAN_POWER_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            # v5.15: de dagbedragen van de leverancier, incl en excl btw.
+            _optioneel(CONF_INKOOP_EUR_VANDAAG_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            _optioneel(CONF_INKOOP_EUR_VANDAAG_EXCL_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            _optioneel(CONF_TERUGLEVER_EUR_VANDAAG_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            _optioneel(CONF_TERUGLEVER_EUR_VANDAAG_EXCL_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            _optioneel(CONF_GAS_M3_VANDAAG_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            _optioneel(CONF_GAS_EUR_VANDAAG_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            _optioneel(CONF_GAS_EUR_VANDAAG_EXCL_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
             vol.Optional(
                 CONF_BATTERY_ROUND_TRIP_EFFICIENCY,
                 default=defaults.get(

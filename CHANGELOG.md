@@ -27685,3 +27685,109 @@ nergens zichtbaar. Nu op drie plekken:
   - een lezer ziet meteen dat het nog geen oordeel is.
 
 **Volledige testsuite**: 4137 tests, allemaal groen.
+
+
+## v5.14.6 — Een omvormer zonder zon is niet kapot
+
+Uit de export van 23 september 06:56:
+
+```
+fout 1 · config 61/1/1              System status: Aandacht gewenst
+geen_waarde  pv_energy_sensor_entity  sensor.solaredge_production_energy
+             waarde: unknown
+```
+
+De SolarEdge-omvormer schakelt zichzelf uit als er geen zon is en meldt dan
+niets. Om 06:56 stond de zon onder de horizon. De integratie noemde dat
+"geen_waarde", telde het als kapot en zette de systeemstatus op "Aandacht
+gewenst" - elke nacht opnieuw.
+
+Sinds v3.95.0 geldt al dat een apparaat dat uit staat niet stuk is: de
+vaatwasser en de wasmachine krijgen dan "slaapt". Een omvormer zonder zon
+hoort in diezelfde categorie. Overdag blijft het wél een storing, want dan
+hoort hij te leveren.
+
+Dezelfde soort als de opstartweergave van v5.14.5: het verschil tussen "nu
+even niet" en "kapot".
+
+### De tweede melding is echt
+
+```
+fout · Celspanning · Module 1 staat op 2.95 V. Onder 3.00 V grijpt de BMS in
+op deze ene cel terwijl de rest nog ruimte heeft. Nu bijladen, ongeacht de
+prijs.
+```
+
+Dat klopt: de accu stond op 16%. Deze melding blijft een melding - de
+integratie STUURT er niet op. Dat is een bewuste keuze: de Zendure heeft een
+eigen BMS dat bij echte celproblemen ingrijpt, en een tweede beveiliging
+bovenop een bestaande is precies het patroon waar deze reeks vanaf wilde.
+
+**Volledige testsuite**: 4141 tests, allemaal groen.
+
+
+## v5.15 — Gemiddelde prijzen per periode, incl en excl btw
+
+Gevraagd: *"houdt de integratie ook de gemiddelde prijzen per uur, dag,
+week, maand, jaar bij voor in- en verkoop van electra en inkoop van gas?"*
+Het antwoord was nee: er stonden hoeveelheden en totale kosten, geen
+prijzen, en gas helemaal niet.
+
+### Wat er al bleek te zijn
+
+Live nagekeken onder de Zonneplan-entiteiten, en dat scheelde veel werk.
+De leverancier levert zelf al, incl EN excl btw:
+
+```
+Afname / Teruglevering   vandaag · deze maand · dit jaar
+                         (euro en gemiddelde prijs per kWh)
+Gas                      alleen vandaag (m3 en euro)
+```
+
+Daar is dus niets voor gebouwd.
+
+### Wat ontbrak
+
+Per **uur**, per **week**, het **contractjaar**, en **gas** over langere
+perioden dan vandaag. Die komen nu uit de eigen dagreeks: de dagbedragen
+van de leverancier worden elke ronde bijgehouden en bij het afsluiten van
+de dag vastgelegd, net zoals opwek en verbruik dat al werden. Daarna tellen
+ze vanzelf mee in week, maand, jaar en contractjaar, omdat de optelling
+over `PERIODE_GROOTHEDEN` loopt.
+
+`prijsoverzicht` in de export en als attribuut op de maandsensor:
+
+```
+per_periode      inkoop en teruglevering in euro per kWh, gas per m3,
+                 elk incl en excl btw
+per_uur_vandaag  de gemiddelde prijs per uur, uit de kwartierprijzen
+```
+
+### Waarom incl en excl allebei worden gelezen
+
+Het verschil is bij dynamische tarieven **geen vast percentage maar een
+vast bedrag** per kWh: energiebelasting plus btw. Gemeten op 23 september
+0,3494 tegen 0,2386 euro - een verschil van 0,1108. Delen door 1,21 zou
+0,2888 geven, en dat is fout. Bij een lage prijs valt er verhoudingsgewijs
+veel meer weg.
+
+Voor de prijs per uur wordt dat bedrag gemeten uit de dagbedragen van
+vandaag. Is die meting er niet, dan blijft de excl-kolom leeg in plaats van
+dat er een percentage wordt geraden.
+
+### Zeven nieuwe optionele sensoren
+
+Afname vandaag (incl en excl), teruglevering vandaag (incl en excl),
+gasverbruik vandaag, gaskosten vandaag (incl en excl). Ze tellen mee in
+"Optionele functies nog niet geconfigureerd" - de les van v5.14.1.
+
+### Een fout van mij, gevangen door het mechanisme
+
+Bij het toevoegen aan die lijst haalde mijn opschoning de constante uit de
+LIJST in plaats van uit de importregel, waardoor er een regel met twee in
+plaats van drie velden overbleef. `test_alles_uitgevraagd.py` meldde het
+direct: *"MissingOptionalFeaturesSensor.native_value: ValueError: not enough
+values to unpack"*. Zonder dat mechanisme was die sensor in bedrijf
+omgevallen.
+
+**Volledige testsuite**: 4150 tests, allemaal groen.

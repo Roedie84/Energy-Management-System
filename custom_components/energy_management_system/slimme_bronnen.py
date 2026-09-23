@@ -296,3 +296,84 @@ def ventilator_overzicht(
             + (f" - ongeveer {gem * 365 * prijs:.0f} euro per jaar." if prijs else ".")
         ),
     }
+
+
+# --- gemiddelde prijzen per periode ---------------------------------------
+
+
+def _deel(teller: float | None, noemer: float | None) -> float | None:
+    """Gemiddelde prijs, of None als een van beide ontbreekt."""
+    if teller is None or not noemer:
+        return None
+    return round(teller / noemer, 4)
+
+
+def prijzen_per_periode(perioden: dict) -> dict:
+    """Gemiddelde in- en verkoopprijzen per periode, incl en excl btw.
+
+    `perioden`: de optelling per vandaag/week/maand/jaar/contractjaar, met
+    per periode de bedragen (inkoop_eur, teruglever_eur, gas_eur) en de
+    hoeveelheden (import_kwh, export_kwh, gas_m3).
+
+    Het verschil tussen incl en excl is bij dynamische tarieven geen vast
+    percentage maar een vast BEDRAG per kWh - energiebelasting plus btw.
+    Gemeten op 23 september: 0,3494 tegen 0,2386 euro per kWh. Bij een lage
+    prijs valt er dus verhoudingsgewijs veel meer weg, en daarom staan
+    beide er los bij in plaats van één met een omrekening.
+    """
+    uit = {}
+    for naam, p in (perioden or {}).items():
+        if not isinstance(p, dict):
+            continue
+        uit[naam] = {
+            "dagen": p.get("dagen"),
+            "van": p.get("van"),
+            "inkoop_eur_per_kwh": _deel(p.get("inkoop_eur"), p.get("import_kwh")),
+            "inkoop_eur_per_kwh_excl": _deel(
+                p.get("inkoop_eur_excl"), p.get("import_kwh")
+            ),
+            "teruglever_eur_per_kwh": _deel(
+                p.get("teruglever_eur"), p.get("export_kwh")
+            ),
+            "teruglever_eur_per_kwh_excl": _deel(
+                p.get("teruglever_eur_excl"), p.get("export_kwh")
+            ),
+            "gas_eur_per_m3": _deel(p.get("gas_eur"), p.get("gas_m3")),
+            "gas_eur_per_m3_excl": _deel(p.get("gas_eur_excl"), p.get("gas_m3")),
+            "inkoop_eur": p.get("inkoop_eur"),
+            "teruglever_eur": p.get("teruglever_eur"),
+            "gas_eur": p.get("gas_eur"),
+            "gas_m3": p.get("gas_m3"),
+        }
+    return uit
+
+
+def prijzen_per_uur(kwartierprijzen: list, belastingdeel_eur: float | None) -> dict:
+    """De gemiddelde prijs per uur van vandaag, incl en excl btw.
+
+    `kwartierprijzen`: paren (moment, prijs incl. belasting en btw) - de
+    prijs waarmee de integratie ook stuurt.
+
+    Het bedrag dat er voor excl btw af gaat is per kWh gelijk, en wordt
+    gemeten uit de dagbedragen van de leverancier: het verschil tussen de
+    gemiddelde prijs incl en excl van vandaag. Is dat er niet, dan blijft
+    de excl-kolom leeg in plaats van dat er een percentage wordt geraden.
+    """
+    per_uur: dict[int, list] = {}
+    for moment, prijs in kwartierprijzen or []:
+        if prijs is None:
+            continue
+        per_uur.setdefault(getattr(moment, "hour", None), []).append(prijs)
+    uit = {}
+    for uur in sorted(u for u in per_uur if u is not None):
+        gemiddeld = sum(per_uur[uur]) / len(per_uur[uur])
+        uit[uur] = {
+            "eur_per_kwh": round(gemiddeld, 4),
+            "eur_per_kwh_excl": (
+                round(gemiddeld - belastingdeel_eur, 4)
+                if belastingdeel_eur is not None
+                else None
+            ),
+            "kwartieren": len(per_uur[uur]),
+        }
+    return uit

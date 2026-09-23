@@ -553,6 +553,10 @@ async def async_get_config_entry_diagnostics(
         "ventilatorverbruik": _veilig(
             "get_ventilator_verbruik", coordinator.get_ventilator_verbruik
         ),
+        # v5.15: gemiddelde in- en verkoopprijzen, incl en excl btw.
+        "prijsoverzicht": _veilig(
+            "get_prijsoverzicht", coordinator.get_prijsoverzicht
+        ),
         "weerbron_levering": _veilig(
             "get_weerbron_levering", coordinator.get_weerbron_levering
         ),

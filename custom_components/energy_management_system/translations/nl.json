@@ -104,7 +104,14 @@
           "second_pv_forecast_today_sensor_entity": "Tweede zonvoorspelling voor vandaag in kWh, bv. Forecast.Solar (optioneel)",
           "irradiance_sensor_entity": "Gemeten instraling in W/m2, bv. een KNMI-station (optioneel)",
           "gas_price_sensor_entity": "Gasprijs in euro per m3 (optioneel)",
-          "battery_cooling_fan_power_sensor_entity": "Vermogen van de accuventilatoren in W (optioneel)"
+          "battery_cooling_fan_power_sensor_entity": "Vermogen van de accuventilatoren in W (optioneel)",
+          "inkoop_eur_vandaag_sensor_entity": "Kosten afname vandaag in euro, incl. btw (optioneel)",
+          "inkoop_eur_vandaag_excl_sensor_entity": "Kosten afname vandaag in euro, excl. btw (optioneel)",
+          "teruglever_eur_vandaag_sensor_entity": "Opbrengst teruglevering vandaag in euro, incl. btw (optioneel)",
+          "teruglever_eur_vandaag_excl_sensor_entity": "Opbrengst teruglevering vandaag in euro, excl. btw (optioneel)",
+          "gas_m3_vandaag_sensor_entity": "Gasverbruik vandaag in m3 (optioneel)",
+          "gas_eur_vandaag_sensor_entity": "Gaskosten vandaag in euro, incl. btw (optioneel)",
+          "gas_eur_vandaag_excl_sensor_entity": "Gaskosten vandaag in euro, excl. btw (optioneel)"
         }
       }
     },
@@ -222,7 +229,14 @@
           "second_pv_forecast_today_sensor_entity": "Tweede zonvoorspelling voor vandaag in kWh, bv. Forecast.Solar (optioneel)",
           "irradiance_sensor_entity": "Gemeten instraling in W/m2, bv. een KNMI-station (optioneel)",
           "gas_price_sensor_entity": "Gasprijs in euro per m3 (optioneel)",
-          "battery_cooling_fan_power_sensor_entity": "Vermogen van de accuventilatoren in W (optioneel)"
+          "battery_cooling_fan_power_sensor_entity": "Vermogen van de accuventilatoren in W (optioneel)",
+          "inkoop_eur_vandaag_sensor_entity": "Kosten afname vandaag in euro, incl. btw (optioneel)",
+          "inkoop_eur_vandaag_excl_sensor_entity": "Kosten afname vandaag in euro, excl. btw (optioneel)",
+          "teruglever_eur_vandaag_sensor_entity": "Opbrengst teruglevering vandaag in euro, incl. btw (optioneel)",
+          "teruglever_eur_vandaag_excl_sensor_entity": "Opbrengst teruglevering vandaag in euro, excl. btw (optioneel)",
+          "gas_m3_vandaag_sensor_entity": "Gasverbruik vandaag in m3 (optioneel)",
+          "gas_eur_vandaag_sensor_entity": "Gaskosten vandaag in euro, incl. btw (optioneel)",
+          "gas_eur_vandaag_excl_sensor_entity": "Gaskosten vandaag in euro, excl. btw (optioneel)"
         }
       }
     },

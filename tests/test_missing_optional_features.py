@@ -73,6 +73,10 @@ def test_empty_when_everything_configured(make_coordinator, hass):
             "irradiance_sensor_entity": "sensor.straling",
             "gas_price_sensor_entity": "sensor.gasprijs",
             "battery_cooling_fan_power_sensor_entity": "sensor.ventilatoren",
+            # v5.15: de dagbedragen van de leverancier.
+            "inkoop_eur_vandaag_sensor_entity": "sensor.afname_vandaag",
+            "teruglever_eur_vandaag_sensor_entity": "sensor.terug_vandaag",
+            "gas_m3_vandaag_sensor_entity": "sensor.gas_m3_vandaag",
         }
     )
 

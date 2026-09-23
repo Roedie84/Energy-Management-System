@@ -104,7 +104,14 @@
           "second_pv_forecast_today_sensor_entity": "Second solar forecast for today in kWh, e.g. Forecast.Solar (optional)",
           "irradiance_sensor_entity": "Measured irradiance in W/m2, e.g. a weather station (optional)",
           "gas_price_sensor_entity": "Gas price in euro per m3 (optional)",
-          "battery_cooling_fan_power_sensor_entity": "Power of the battery cooling fans in W (optional)"
+          "battery_cooling_fan_power_sensor_entity": "Power of the battery cooling fans in W (optional)",
+          "inkoop_eur_vandaag_sensor_entity": "Import cost today in euro, incl. VAT (optional)",
+          "inkoop_eur_vandaag_excl_sensor_entity": "Import cost today in euro, excl. VAT (optional)",
+          "teruglever_eur_vandaag_sensor_entity": "Feed-in revenue today in euro, incl. VAT (optional)",
+          "teruglever_eur_vandaag_excl_sensor_entity": "Feed-in revenue today in euro, excl. VAT (optional)",
+          "gas_m3_vandaag_sensor_entity": "Gas usage today in m3 (optional)",
+          "gas_eur_vandaag_sensor_entity": "Gas cost today in euro, incl. VAT (optional)",
+          "gas_eur_vandaag_excl_sensor_entity": "Gas cost today in euro, excl. VAT (optional)"
         }
       }
     },
@@ -222,7 +229,14 @@
           "second_pv_forecast_today_sensor_entity": "Second solar forecast for today in kWh, e.g. Forecast.Solar (optional)",
           "irradiance_sensor_entity": "Measured irradiance in W/m2, e.g. a weather station (optional)",
           "gas_price_sensor_entity": "Gas price in euro per m3 (optional)",
-          "battery_cooling_fan_power_sensor_entity": "Power of the battery cooling fans in W (optional)"
+          "battery_cooling_fan_power_sensor_entity": "Power of the battery cooling fans in W (optional)",
+          "inkoop_eur_vandaag_sensor_entity": "Import cost today in euro, incl. VAT (optional)",
+          "inkoop_eur_vandaag_excl_sensor_entity": "Import cost today in euro, excl. VAT (optional)",
+          "teruglever_eur_vandaag_sensor_entity": "Feed-in revenue today in euro, incl. VAT (optional)",
+          "teruglever_eur_vandaag_excl_sensor_entity": "Feed-in revenue today in euro, excl. VAT (optional)",
+          "gas_m3_vandaag_sensor_entity": "Gas usage today in m3 (optional)",
+          "gas_eur_vandaag_sensor_entity": "Gas cost today in euro, incl. VAT (optional)",
+          "gas_eur_vandaag_excl_sensor_entity": "Gas cost today in euro, excl. VAT (optional)"
         }
       }
     },

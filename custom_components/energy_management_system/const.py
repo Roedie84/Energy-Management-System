@@ -54,6 +54,35 @@ CONF_INSTRALING_SENSOR = "irradiance_sensor_entity"
 CONF_GAS_PRICE_SENSOR = "gas_price_sensor_entity"
 CONF_BATTERY_COOLING_FAN_POWER_SENSOR = "battery_cooling_fan_power_sensor_entity"
 
+# v5.15: de dagbedragen van de energieleverancier, incl EN excl btw. De
+# leverancier levert zelf al vandaag, deze maand en dit jaar; door de
+# DAGwaarden vast te leggen komen daar week en contractjaar bij, en gas
+# over langere perioden dan vandaag.
+#
+# Waarom beide: het verschil tussen incl en excl is bij dynamische
+# tarieven geen vast percentage. Gemeten op 23 september: 0,3494 tegen
+# 0,2386 euro per kWh - dat verschil is energiebelasting plus btw, een
+# vast BEDRAG per kWh, dus bij een lage prijs valt er verhoudingsgewijs
+# veel meer weg.
+CONF_INKOOP_EUR_VANDAAG_SENSOR = "inkoop_eur_vandaag_sensor_entity"
+CONF_INKOOP_EUR_VANDAAG_EXCL_SENSOR = "inkoop_eur_vandaag_excl_sensor_entity"
+CONF_TERUGLEVER_EUR_VANDAAG_SENSOR = "teruglever_eur_vandaag_sensor_entity"
+CONF_TERUGLEVER_EUR_VANDAAG_EXCL_SENSOR = "teruglever_eur_vandaag_excl_sensor_entity"
+CONF_GAS_M3_VANDAAG_SENSOR = "gas_m3_vandaag_sensor_entity"
+CONF_GAS_EUR_VANDAAG_SENSOR = "gas_eur_vandaag_sensor_entity"
+CONF_GAS_EUR_VANDAAG_EXCL_SENSOR = "gas_eur_vandaag_excl_sensor_entity"
+
+# De dagvelden die daaruit worden vastgelegd, met hun instelling.
+PRIJSDAG_VELDEN = {
+    "inkoop_eur": CONF_INKOOP_EUR_VANDAAG_SENSOR,
+    "inkoop_eur_excl": CONF_INKOOP_EUR_VANDAAG_EXCL_SENSOR,
+    "teruglever_eur": CONF_TERUGLEVER_EUR_VANDAAG_SENSOR,
+    "teruglever_eur_excl": CONF_TERUGLEVER_EUR_VANDAAG_EXCL_SENSOR,
+    "gas_m3": CONF_GAS_M3_VANDAAG_SENSOR,
+    "gas_eur": CONF_GAS_EUR_VANDAAG_SENSOR,
+    "gas_eur_excl": CONF_GAS_EUR_VANDAAG_EXCL_SENSOR,
+}
+
 # Hoe lang de toestand van een sensor mag zijn (v5.14). Home Assistant
 # weigert een toestand boven de 255 tekens - de sensor valt dan terug op
 # "unknown". De diagnoseregels passen er daarom altijd in.
@@ -307,6 +336,15 @@ DAGTELLER_INSTELLINGEN = (
     "battery_discharge_energy_sensor_entity",
     "dishwasher_energy_sensor_entity",
     "washing_machine_energy_sensor_entity",
+)
+
+# v5.14.6: sensoren van de omvormer. Die schakelt zichzelf uit als er geen
+# zon is en meldt dan niets - dat is geen storing, net zomin als een
+# vaatwasser die uit staat. Overdag blijft het wél een storing.
+OMVORMER_INSTELLINGEN = (
+    "pv_energy_sensor_entity",
+    "pv_power_sensor_entity",
+    "solar_actual_sensor_entity",
 )
 
 APPARAAT_INSTELLINGEN = (
@@ -3238,6 +3276,8 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "gacs_traag": {"type": "plain"},
     # v5.14.4: de traagste keer apart, zodat hij niet kan worden verdrongen.
     "gacs_traagste": {"type": "plain"},
+    # v5.15: de dagbedragen van vandaag, tot de dag wordt afgesloten.
+    "prijs_vandaag": {"type": "plain"},
     # v5.9: waarom het rendementsleren niets oplevert.
     "rendement_afwijzingen": {"type": "plain"},
     # v5.11: het nachtelijke ontlaadvenster. Werd niet bewaard, dus een

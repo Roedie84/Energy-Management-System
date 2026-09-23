@@ -732,6 +732,9 @@ class MonthlySummarySensor(_CoordinatorDiagnosticSensor, RestoreEntity):
                 2,
             )
         return {
+            # v5.15: gemiddelde in- en verkoopprijzen per periode, incl en
+            # excl btw - ook zonder een diagnostiek-export te downloaden.
+            "prijsoverzicht": self._coordinator.get_prijsoverzicht(),
             "current_month_discharge_value_eur": round(
                 c.current_month_discharge_value_eur, 2
             ),
