@@ -554,6 +554,11 @@ async def async_get_config_entry_diagnostics(
             "get_ventilator_verbruik", coordinator.get_ventilator_verbruik
         ),
         # v5.15: gemiddelde in- en verkoopprijzen, incl en excl btw.
+        # v5.15.1: de trage keren van de GACS-sensor, met de verdeling over
+        # de onderdelen. Werden wel bewaard maar niet geexporteerd.
+        "gacs_traagheid": _veilig(
+            "get_gacs_traagheid", coordinator.get_gacs_traagheid
+        ),
         "prijsoverzicht": _veilig(
             "get_prijsoverzicht", coordinator.get_prijsoverzicht
         ),

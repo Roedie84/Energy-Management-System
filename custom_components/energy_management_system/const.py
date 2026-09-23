@@ -361,6 +361,13 @@ APPARAAT_INSTELLINGEN = (
     "fietsladers_switch_entity",
     "fietsladers_power_sensor_entity",
     "oven_state_sensor_entity",
+    # v5.15.1: de kookplaat stond hier niet in, terwijl de oven er wel in
+    # staat - een vergeten regel. Home Connect meldt niets als het apparaat
+    # uit staat, dus op 23 september 08:31 kwam er een waarschuwing over
+    # `sensor.kookplaat_operation_state` terwijl de kookplaat gewoon uit
+    # stond. (De airco hoort hier NIET in: die blijft "off" melden als hij
+    # uit staat, dus als die wegvalt is er echt iets aan de hand.)
+    "kookplaat_state_sensor_entity",
     "quooker_power_sensor_entity",
 )
 

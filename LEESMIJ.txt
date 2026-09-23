@@ -1,46 +1,38 @@
-EMS v5.15 - VOLLEDIGE INTEGRATIE
+EMS v5.15.1 - alleen de wijzigingen sinds v5.15
 
-Dit is de HELE map, niet alleen de wijzigingen. Gebruik deze na de fout
-"No setup or config entry setup function defined": die betekent dat
-__init__.py ontbrak.
+TE KOPIEREN naar config/custom_components/energy_management_system/
+(ER OVERHEEN, de map niet legen)
 
-ZO ZET JE HEM TERUG
-
-1. Stop Home Assistant (of ga verder, herstart volgt toch).
-2. Verwijder de map config/custom_components/energy_management_system
-   VOLLEDIG.
-3. Zet de map energy_management_system uit deze zip op die plek terug.
-4. Herstart Home Assistant.
-
-De map hoort deze 21 bestanden te bevatten:
-
-    __init__.py            <- deze ontbrak
-    bestandscontrole.json  button.py            config_flow.py
-    const.py               coordinator.py       dashboard_template.yaml
-    diagnostics.py         manifest.json        nabeschouwing.py
-    overview_svg.py        overview_background.svg
-    pv_model.py            repairs.py           sensor.py
-    services.yaml          slimme_bronnen.py    solar_forecast.py
-    strings.json           switch.py
-    brand/                 translations/  (en.json, nl.json)
-
-Controleer na de herstart de sensor "Diagnose gezondheid": daar hoort
-v5.15 te staan met "bestand ok".
-
-NA DE HERSTART: ZEVEN SENSOREN KIEZEN
-
-Instellingen > Apparaten en diensten > Energy Management System >
-Configureren:
-
-  Kosten afname vandaag (incl. btw)     -> Zonneplan Afname vandaag
-  Kosten afname vandaag (excl. btw)     -> Zonneplan Afname vandaag (excl. btw)
-  Opbrengst teruglevering (incl. btw)   -> Zonneplan Teruglevering vandaag
-  Opbrengst teruglevering (excl. btw)   -> Zonneplan Teruglevering vandaag (excl. btw)
-  Gasverbruik vandaag (m3)              -> Zonneplan Gasverbruik vandaag
-  Gaskosten vandaag (incl. btw)         -> Zonneplan Gas afname vandaag
-  Gaskosten vandaag (excl. btw)         -> Zonneplan Gas afname vandaag (excl. btw)
+    const.py, coordinator.py, diagnostics.py
+    dashboard_template.yaml     (gaat altijd mee, ongewijzigd)
+    manifest.json, bestandscontrole.json
 
 NAAR DE REPO
 
     README.md, CHANGELOG.md
     dashboards/energy_management_system_dashboard.yaml
+    tests/test_slapende_invoer_geen_melding.py (nieuw)
+
+Voor HACS: release met tag v5.15.1.
+
+WAT ER VERANDERT
+
+1. Geen waarschuwing meer over een apparaat dat uit staat. Vanmorgen om
+   08:31 kwam er een melding over sensor.kookplaat_operation_state terwijl
+   je kookplaat gewoon uit stond. De kookplaat ontbrak in de lijst met
+   apparaten - de oven stond er wel in.
+
+2. De trage keren van de GACS-sensor staan nu IN de export, onder
+   gacs_traagheid, met per keer de drie traagste onderdelen. Die werden al
+   bewaard maar waren niet te lezen. Daarmee kan ik de vertraging bij de
+   volgende export echt verklaren.
+
+3. Een onbekende zonstand geldt niet meer als nacht. Anders zou een echt
+   weggevallen omvormer stil blijven.
+
+WAT ER GOED GING (uit dezelfde export)
+
+- Beide zelfcontroles groen.
+- De nachtwaarschuwing: van 3,2 naar 2 per dag. De twintig meldingen per
+  dag zijn nu verdeeld over tien soorten, geen enkele boosdoener meer.
+- De tweede zonvoorspelling heeft zijn eerste volledige dag.

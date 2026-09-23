@@ -15194,8 +15194,11 @@ class EnergyManagementSystemCoordinator:
                         "staan terwijl het apparaat aan is, is er iets "
                         "aan de hand."
                     )
-                elif sleutel in OMVORMER_INSTELLINGEN and (
-                    (self.get_sun_elevation_degrees() or 0) <= 0
+                elif (
+                    sleutel in OMVORMER_INSTELLINGEN
+                    # v5.15.1: de zonhoogte moet BEKEND zijn; `None or 0`
+                    # maakte van een onbekende zonstand een nacht.
+                    and (self.get_sun_elevation_degrees() or 1) <= 0
                 ):
                     # v5.14.6: een omvormer zonder zon slaapt. Op 23
                     # september 06:56 stond `solaredge_production_energy`
@@ -28581,11 +28584,64 @@ class EnergyManagementSystemCoordinator:
                 await self.hass.async_add_executor_job(self._lees_instellingslabels)
             )
 
+    def _mag_slapen(self, entity_id: str) -> bool:
+        """Hoort deze entiteit soms te zwijgen? (v5.15.1)
+
+        Apparaten die uit staan melden niets - Home Connect doet dat bij een
+        kookplaat, een vaatwasser en een wasmachine. En een omvormer zwijgt
+        zonder zon. Dat is geen storing, en de configuratiecontrole noemt
+        het sinds v3.95.0 ook zo. Deze functie geeft de melding dezelfde
+        kennis, zodat er niet twee oordelen over één toestand bestaan.
+
+        Een sensor die hoort te leveren - de prijs, de P1-meter, de accu -
+        slaapt niet en blijft dus melden.
+        """
+        instelling = (self._invoer_instelling or {}).get(entity_id)
+        if not instelling:
+            return False
+        if instelling in APPARAAT_INSTELLINGEN:
+            return True
+        # De zonhoogte moet BEKEND zijn. `None or 0` werd 0, en dan gold een
+        # onbekende zonstand als nacht - onbekend is geen nacht.
+        hoogte = self.get_sun_elevation_degrees()
+        return (
+            instelling in OMVORMER_INSTELLINGEN
+            and hoogte is not None
+            and hoogte <= 0
+        )
+
+    def get_gacs_traagheid(self) -> dict:
+        """Hoe lang de GACS-sensor erover doet, en wanneer het traag was
+        (v5.15.1).
+
+        De metingen van v5.14.3 werden wel BEWAARD maar stonden niet in de
+        export - dus juist de verdeling over de onderdelen, die nodig is om
+        de vertraging te verklaren, was niet te lezen. Hetzelfde gat dat
+        v5.10 voor 119 andere velden dichtte.
+        """
+        return {
+            "nu_ms": self.gacs_duur_ms,
+            "traagste": self.gacs_traagste,
+            "trage_keren": list(self.gacs_traag or []),
+            "toelichting": (
+                "Per trage keer de drie traagste onderdelen, en of het "
+                "regressiewoud op dat moment trainde. Home Assistant "
+                "waarschuwt zelf vanaf 400 ms."
+            ),
+        }
+
     def weggevallen_invoer(self, now: datetime) -> list[dict]:
         """Welke ingestelde entiteiten zijn al minstens de bevestigingstijd
         weg, en waar dienden ze voor? (v3.99.6)"""
         uit = []
         for entity_id in sorted(self._sensor_unavailable_since):
+            # v5.15.1: een apparaat dat uit staat is geen weggevallen sensor.
+            # Op 23 september 08:31 kwam er een waarschuwing over
+            # `sensor.kookplaat_operation_state` terwijl de kookplaat gewoon
+            # uit stond. De configuratiecontrole noemde datzelfde "slaapt";
+            # de melding gebruikte die kennis niet.
+            if self._mag_slapen(entity_id):
+                continue
             if entity_id in self._invoer_gebruik and self.is_sensor_genuinely_unavailable(
                 now, entity_id
             ):

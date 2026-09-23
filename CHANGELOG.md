@@ -27791,3 +27791,53 @@ values to unpack"*. Zonder dat mechanisme was die sensor in bedrijf
 omgevallen.
 
 **Volledige testsuite**: 4150 tests, allemaal groen.
+
+
+## v5.15.1 — Een apparaat dat uit staat is geen weggevallen sensor
+
+Uit de export van 23 september 20:17, na een live controle waarbij één
+zelfcontrole op fout stond en het aantal meldingen niet daalde.
+
+### Wat er goed bleek
+
+- **Beide zelfcontroles groen.** De fout die de diagnoseregel even toonde,
+  was er bij het uitlezen van de export niet meer.
+- **De nachtwaarschuwing werkt.** Van 3,2 per dag naar 2. De twintig
+  meldingen per dag zijn nu verdeeld over tien soorten, met als grootste
+  post 4 - er is geen enkele boosdoener meer.
+- **De tweede zonvoorspelling telt**: eerste volledige dag binnen.
+
+### Een waarschuwing over een kookplaat die uit stond
+
+```
+08:31  sensor_unavailable | sensor.kookplaat_operation_state geeft al
+       minstens 15 minuten geen waarde.
+```
+
+Home Connect meldt niets als een apparaat uit staat. De
+configuratiecontrole weet dat sinds v3.95.0 en noemt het "slaapt" - maar de
+MELDING gebruikte die kennis niet. Twee oordelen over dezelfde toestand.
+
+Onderweg bleek waarom: **de kookplaat stond niet in
+`APPARAAT_INSTELLINGEN`**, terwijl de oven er wel in staat. Een vergeten
+regel. Nu staat hij erin, en de melding gebruikt dezelfde kennis als de
+controle. De airco hoort er bewust NIET in: die blijft "off" melden als hij
+uit staat, dus als die wegvalt is er echt iets aan de hand.
+
+### Mijn eigen exportgat uit v5.14.3
+
+`gacs_traag` (20 regels) en `gacs_traagste` werden wel bewaard maar stonden
+**niet in de export** - dus juist de verdeling over de onderdelen, die nodig
+is om de vertraging te verklaren, was niet te lezen. Precies het gat dat
+v5.10 voor 119 andere velden dichtte. Nu in de export als
+`gacs_traagheid`.
+
+### En een fout in mijn eerste poging
+
+Mijn regel schreef `(zonhoogte or 0) <= 0`, en dan gold een ONBEKENDE
+zonstand als nacht - een echt weggevallen omvormer zou dan stil blijven.
+Een bestaande toets ving het: *"De koppeling zelf weg: dat blijft een
+melding."* Dezelfde fout zat in v5.14.6, en is daar nu ook rechtgezet.
+Onbekend is geen nacht.
+
+**Volledige testsuite**: 4157 tests, allemaal groen.
