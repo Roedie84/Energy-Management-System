@@ -28493,3 +28493,24 @@ De ventilator verhuisde naar de titelregel van de accukaart, zodat hij niet
 met de tijd botst.
 
 **Volledige testsuite**: 4262 tests, allemaal groen.
+
+
+## v5.19.7 — De langste uitleg past
+
+Gemeld met een schermafdruk: *"tekst nog niet volledig zichtbaar"*. De uitleg
+van de beslislogica kan langer zijn dan twee regels:
+
+> Er is nu geen speciale reden om in te grijpen: de huidige prijs
+> (€0.191/kWh) haalt de drempel voor 'duur' vandaag (€0.417/kWh) niet, en het
+> goedkoopste blok is al gaande of voorbij. De Zendure regelt dit zelf
+> (smart-modus). Ook de ruimere secundaire drempel (€0.339/kWh, top 45%)
+> wordt niet gehaald, dus er is geen reden om te ontladen.
+
+De uitleg krijgt nu drie regels, het besluitblok is 172 hoog en het doek
+582. En de regels houden marge aan de rechterkant: bij 148 tekens raakte de
+tweede regel de rand van het kader.
+
+De toets met echte zinnen gebruikt nu deze - de langste die in bedrijf
+gezien is.
+
+**Volledige testsuite**: 4262 tests, allemaal groen.

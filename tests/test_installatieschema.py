@@ -450,10 +450,14 @@ def test_geen_enkele_tekst_wordt_afgekapt_bij_echte_zinnen():
     plaat = bouw_scada(
         {
             "besluit": "Standaard slim laden",
+            # v5.19.7: de langste die in bedrijf gezien is - drie regels.
             "besluit_uitleg": (
                 "Er is nu geen speciale reden om in te grijpen: de huidige "
-                "prijs (0.196/kWh) haalt de drempel voor 'duur' vandaag "
-                "(0.417/kWh) niet, en het loont niet om nu bij te laden."
+                "prijs (€0.191/kWh) haalt de drempel voor 'duur' vandaag "
+                "(€0.417/kWh) niet, en het goedkoopste blok is al gaande of "
+                "voorbij. De Zendure regelt dit zelf (smart-modus). Ook de "
+                "ruimere secundaire drempel (€0.339/kWh, top 45%) wordt niet "
+                "gehaald, dus er is geen reden om te ontladen."
             ),
             "waarom": [
                 "de prijs is nu 19.6 ct, de drempel voor 'duur' ligt op 41.7 ct",

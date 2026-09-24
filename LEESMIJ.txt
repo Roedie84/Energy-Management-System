@@ -1,4 +1,4 @@
-EMS v5.19.6 - alle wijzigingen sinds v5.19.1 (bevat v5.19.2 t/m v5.19.5)
+EMS v5.19.7 - alle wijzigingen sinds v5.19.1 (bevat v5.19.2 t/m v5.19.6)
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
     coordinator.py, overview_svg.py
@@ -10,19 +10,15 @@ NAAR DE REPO
     dashboards/energy_management_system_dashboard.yaml
     tests/ (drie bestanden)
 
-Voor HACS: release met tag v5.19.6.
+Voor HACS: release met tag v5.19.7.
 
-NIEUW IN v5.19.6
-
-1. Resterende laad- of ontlaadtijd in de accukaart, bijvoorbeeld
-   "vol over 2u17" of "ondergrens over 12u24". Bij het huidige vermogen;
-   geen tijd als de accu stilstaat (binnen 25 W).
-2. Geen lege waarden meer: zonder goedkoop blok staat er "reserve geen
-   blok" en is alle beschikbare energie vrij.
-3. De reservemarkering in de balk verdwijnt als er geen reserve is.
+NIEUW IN v5.19.7
+De uitleg krijgt drie regels: ook de langste zin die de beslislogica
+maakt, staat er nu volledig. Met marge aan de rechterkant.
 
 OOK IN DEZE ZIP (sinds v5.19.1)
-- de voorspelling staat maar een keer op de plaat (v5.19.5)
-- legenda bij de grafiek: geel zon, grijs verbruik (v5.19.4)
-- geen afgekapte zinnen in het besluitblok (v5.19.3)
-- de reden staat vooraan zodra de stand niet GOED is (v5.19.2)
+- resterende laad-/ontlaadtijd, en geen lege waarden meer (v5.19.6)
+- de voorspelling maar een keer op de plaat (v5.19.5)
+- legenda bij de grafiek (v5.19.4)
+- twee regels voor het waarom (v5.19.3)
+- de reden vooraan zodra de stand niet GOED is (v5.19.2)
