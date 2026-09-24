@@ -878,6 +878,7 @@ def _soc_balk(x, y, b, soc_deel, reserve_deel, kleur, ondergrens_deel=None):
     soc_deel = max(0.0, min(1.0, soc_deel or 0.0))
     # NIET afkappen op de laadstand: staat de reserve hoger dan wat erin
     # zit, dan is dat juist het nieuws - de accu staat onder zijn reserve.
+    heeft_reserve = reserve_deel is not None
     reserve_echt = max(0.0, min(1.0, reserve_deel or 0.0))
     reserve_deel = min(soc_deel, reserve_echt)
     d = [
@@ -908,11 +909,14 @@ def _soc_balk(x, y, b, soc_deel, reserve_deel, kleur, ondergrens_deel=None):
             f'width="{(reserve_echt - soc_deel) * b:.0f}" height="10" rx="5" '
             f'fill="{KLEUR_ALARM}" opacity="0.25"/>'
         )
-    d.append(
-        f'<line x1="{x + reserve_echt * b:.0f}" y1="{y - 4}" '
-        f'x2="{x + reserve_echt * b:.0f}" y2="{y + 14}" stroke="#f4f7fa" '
-        f'stroke-width="2"/>'
-    )
+    # Geen reserve, geen markering: een streepje op 0% zou een reserve van
+    # nul suggereren, terwijl er gewoon niets te overbruggen is.
+    if heeft_reserve:
+        d.append(
+            f'<line x1="{x + reserve_echt * b:.0f}" y1="{y - 4}" '
+            f'x2="{x + reserve_echt * b:.0f}" y2="{y + 14}" stroke="#f4f7fa" '
+            f'stroke-width="2"/>'
+        )
     return "".join(d)
 
 
@@ -964,7 +968,7 @@ def _besluitblok(x, y, b, h, besluit, uitleg, waarom):
         f"{_kort(str(besluit).upper() if besluit else ONBEKEND, 34)}</text>",
     ]
     hoogte = y + 80
-    for regel in _regels(uitleg, 148, 1):
+    for regel in _regels(uitleg, 148, 2):
         d.append(
             f'<text x="{x + 24}" y="{hoogte}" fill="#8b98a5" '
             f'font-size="13">{regel}</text>'
@@ -973,15 +977,19 @@ def _besluitblok(x, y, b, h, besluit, uitleg, waarom):
     if waarom:
         eerste = True
         for regel in _regels(" · ".join(waarom), 146, 2):
-            kop = (
-                '<tspan fill="#b088f9" font-weight="600">WAAROM  </tspan>'
-                if eerste
-                else '<tspan fill="#171f28">WAAROM  </tspan>'
-            )
-            d.append(
-                f'<text x="{x + 24}" y="{hoogte + 4}" fill="#6f7d8c" '
-                f'font-size="12">{kop}{regel}</text>'
-            )
+            # De vervolgregel springt in, met een LEGE plek in plaats van
+            # een donker "WAAROM" - dat was een truc die je zag.
+            if eerste:
+                d.append(
+                    f'<text x="{x + 24}" y="{hoogte + 4}" fill="#6f7d8c" '
+                    f'font-size="12"><tspan fill="#b088f9" '
+                    f'font-weight="600">WAAROM  </tspan>{regel}</text>'
+                )
+            else:
+                d.append(
+                    f'<text x="{x + 86}" y="{hoogte + 4}" fill="#6f7d8c" '
+                    f'font-size="12">{regel}</text>'
+                )
             hoogte += 18
             eerste = False
     return "".join(d)
@@ -1041,7 +1049,7 @@ def bouw_scada(g: dict) -> str:
         "@media (max-width: 760px) {"
         "  .bijzaak { display: none; }"
         "  #stroomschema { transform: translate(0px, -120px) scale(1.5);"
-        "                  transform-origin: 700px 268px; }"
+        "                  transform-origin: 700px 240px; }"
         "}"
         "</style>"
         "<defs>"
@@ -1080,31 +1088,46 @@ def bouw_scada(g: dict) -> str:
                 ],
             )
         )
-        d.append(
-            '<text x="1564" y="100" fill="#6f7d8c" font-size="10" '
-            'text-anchor="end" letter-spacing="1">'
-            "VANDAAG · WERKELIJK TEGEN VERWACHT</text>"
+        # v5.19.4: de lijnen bij hun KLEUR benoemen. Gevraagd: "welke kleur
+        # is werkelijk/verwacht?" - en dat legde een fout bloot: het
+        # dagverloop levert alleen gemeten waarden, dus er was helemaal geen
+        # verwachte lijn. Het label beloofde iets wat er niet stond.
+        #
+        # Als LOSSE stukken op vaste plekken, niet als een regel met
+        # gekleurde tspans: die lijnt niet betrouwbaar uit.
+        heeft_verwacht = any(
+            len([x for x in (verloop.get(sleutel) or []) if x is not None]) >= 2
+            for sleutel in ("pv_verwacht", "huis_verwacht")
         )
+        legenda = [(1240, "VANDAAG", "#6f7d8c"), (1318, "— ZON", "#f0b429"),
+                   (1372, "— VERBRUIK", "#8b98a5")]
+        if heeft_verwacht:
+            legenda.append((1462, "· VERWACHT GESTIPPELD", "#6f7d8c"))
+        for lx, tekst, kleur in legenda:
+            d.append(
+                f'<text x="{lx}" y="100" fill="{kleur}" font-size="10" '
+                f'letter-spacing="1" font-weight="600">{tekst}</text>'
+            )
         d.append("</g>")
     d += [
         '<g id="stroomschema">',
-        '<circle cx="700" cy="268" r="22" fill="none" stroke="#2c3846">'
+        '<circle cx="700" cy="240" r="22" fill="none" stroke="#2c3846">'
         '<animate attributeName="r" values="20;26;20" dur="3.4s" '
         'repeatCount="indefinite"/>'
         '<animate attributeName="opacity" values="0.9;0.25;0.9" dur="3.4s" '
         'repeatCount="indefinite"/></circle>',
-        '<circle cx="700" cy="268" r="7" fill="#f4f7fa"/>',
-        _stroom(700, 200, 700, 244, pv or 0, 744, 228, "#f0b429"),
-        _stroom(430, 268, 674, 268, net or 0, 552, 254, netkleur),
-        _stroom(726, 268, 970, 268, huis or 0, 848, 254, "#f4f7fa"),
-        _stroom(700, 302, 700, 292, accu or 0, 648, 300, KLEUR_GOED),
-        _knoop(563, 88, 274, 112, "ZONNEPANELEN", _primair(pv, _vermogen),
+        '<circle cx="700" cy="240" r="7" fill="#f4f7fa"/>',
+        _stroom(700, 182, 700, 216, pv or 0, 744, 204, "#f0b429"),
+        _stroom(430, 240, 674, 240, net or 0, 552, 226, netkleur),
+        _stroom(726, 240, 970, 240, huis or 0, 848, 226, "#f4f7fa"),
+        _stroom(700, 282, 700, 264, accu or 0, 646, 276, KLEUR_GOED),
+        _knoop(563, 70, 274, 112, "ZONNEPANELEN", _primair(pv, _vermogen),
                g.get("zon_onder") or "—", "#f0b429", g.get("zon_vandaag"),
                icoon="zon"),
         # De pijl hoort bij de RICHTING, niet bij het getal: stond hij
         # ervoor, dan werd bij precies nul uitwisseling het bolletje het
         # hoofdgetal - de opmaak splitst op de eerste spatie.
-        _knoop(120, 212, 310, 112, "NET",
+        _knoop(120, 184, 310, 112, "NET",
                _primair(None if net is None else abs(net), _vermogen),
                g.get("net_onder")
                or (
@@ -1114,15 +1137,15 @@ def bouw_scada(g: dict) -> str:
                ),
                netkleur, g.get("net_vandaag"), icoon="net",
                rechtsonder=f"{netpijl} {netrichting}".strip()),
-        _knoop(970, 212, 310, 112, "HUIS", _primair(huis, _vermogen),
+        _knoop(970, 184, 310, 112, "HUIS", _primair(huis, _vermogen),
                g.get("huis_onder") or "—", "#f4f7fa", g.get("huis_vandaag"),
                icoon="huis"),
-        _accukaart(563, 302, 274, 112, accu, accustand, g, koeling),
+        _accukaart(563, 282, 274, 112, accu, accustand, g, koeling),
         "</g>",
         '<g class="bijzaak">',
-        _besluitblok(120, 424, 1010, 130, g.get("besluit"), g.get("besluit_uitleg"),
+        _besluitblok(120, 398, 1010, 152, g.get("besluit"), g.get("besluit_uitleg"),
                      g.get("waarom")),
-        _infobalk(1160, 424, 320, g.get("balk") or [], hoog=130),
+        _infobalk(1160, 398, 320, g.get("balk") or [], hoog=152),
         "</g>",
         "</svg>",
     ]
@@ -1152,10 +1175,18 @@ def _accukaart(x, y, b, h, accu_w, accustand, g, koeling=None):
         f'{ONBEKEND if accu_w is None else _vermogen(abs(accu_w))}</text>',
         f'<text x="{x + 20}" y="{y + 78}" fill="{kleur}" font-size="12" '
         f'letter-spacing="1.4" font-weight="600">{accustand}</text>',
-        f'<text x="{x + b - 20}" y="{y + 78}" fill="#6f7d8c" font-size="12" '
+        # v5.19.6: de ventilator op de titelregel; op de standregel staat nu
+        # de resterende tijd.
+        f'<text x="{x + b - 20}" y="{y + 24}" fill="#6f7d8c" font-size="11" '
         f'text-anchor="end">{_kort(str(koeling or ""), 20)}</text>',
+        (
+            f'<text x="{x + b - 20}" y="{y + 78}" fill="#8b98a5" font-size="12" '
+            f'text-anchor="end">{g.get("resttijd")}</text>'
+            if g.get("resttijd")
+            else ""
+        ),
         f'<text x="{x + 20}" y="{y + 94}" fill="#8b98a5" font-size="12">'
-        f'reserve {_getal(g.get("reserve_kwh"), "kWh", 2)}</text>',
+        f'reserve {g.get("reserve_tekst") or _getal(g.get("reserve_kwh"), "kWh", 2)}</text>',
 
         # Is er een tekort, dan staat dat hier in plaats van "vrij 0,0" -
         # anders lagen ze over elkaar heen, en "vrij 0,0" zegt minder.

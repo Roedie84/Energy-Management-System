@@ -1,36 +1,28 @@
-EMS v5.19.1 - alle wijzigingen sinds v5.18.6 (bevat v5.19)
+EMS v5.19.6 - alle wijzigingen sinds v5.19.1 (bevat v5.19.2 t/m v5.19.5)
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
-    const.py, coordinator.py, sensor.py, overview_svg.py, diagnostics.py
-    dashboard_template.yaml   GEWIJZIGD - leest de nieuwe cockpitsensor
+    coordinator.py, overview_svg.py
+    dashboard_template.yaml   (gaat altijd mee, ongewijzigd)
     manifest.json, bestandscontrole.json
 
 NAAR DE REPO
     README.md, CHANGELOG.md
-    dashboards/energy_management_system_dashboard.yaml   GEWIJZIGD
-    tests/ (zeven bestanden)
+    dashboards/energy_management_system_dashboard.yaml
+    tests/ (drie bestanden)
 
-Voor HACS: release met tag v5.19.1.
+Voor HACS: release met tag v5.19.6.
 
-DE COCKPIT LOOPT LIVE MEE (v5.19)
+NIEUW IN v5.19.6
 
-Nieuwe sensor "Energy Management System Cockpit". Die luistert naar je
-P1-meter, de zon, het accuvermogen en de laadstand en tekent de plaat
-opnieuw zodra er iets verandert - hoogstens eens per twee seconden.
+1. Resterende laad- of ontlaadtijd in de accukaart, bijvoorbeeld
+   "vol over 2u17" of "ondergrens over 12u24". Bij het huidige vermogen;
+   geen tijd als de accu stilstaat (binnen 25 W).
+2. Geen lege waarden meer: zonder goedkoop blok staat er "reserve geen
+   blok" en is alle beschikbare energie vrij.
+3. De reservemarkering in de balk verdwijnt als er geen reserve is.
 
-Gemeten: de context verzamelen kost 1,9 ms en gebeurt een keer per ronde;
-tekenen kost 0,1 ms.
-
-LET OP HET DASHBOARD
-De plaat komt nu van:
-    sensor.woonkamer_energy_management_system_cockpit, attribuut 'plaat'
-Draai je het dashboard uit dashboard_template.yaml, dan gaat dat vanzelf.
-Heb je het handmatig aangepast, pas dan die markdown-kaart aan.
-
-NIEUW IN v5.19.1
-1. Het besluitblok is breder: de uitleg past op een regel, de waarom-regel
-   krijgt er twee. Geen afgekapte zinnen meer.
-2. Twee keer ONBEKEND is weg. Nu:
-     volgende actie -> "geen wisseling"  (het plan voorziet er geen)
-     reserve        -> "geen blok"       (niets om naar te overbruggen)
-   ONBEKEND blijft voor het geval dat we het werkelijk niet weten.
+OOK IN DEZE ZIP (sinds v5.19.1)
+- de voorspelling staat maar een keer op de plaat (v5.19.5)
+- legenda bij de grafiek: geel zon, grijs verbruik (v5.19.4)
+- geen afgekapte zinnen in het besluitblok (v5.19.3)
+- de reden staat vooraan zodra de stand niet GOED is (v5.19.2)

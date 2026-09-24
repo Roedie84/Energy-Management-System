@@ -865,6 +865,12 @@ _POWERCALC_TOELICHTING = (
 )
 
 
+def _kort_punt(tekst) -> str:
+    """De kern van een aandachtspunt, kort genoeg voor de statusregel."""
+    zin = str(tekst or "").strip()
+    return zin if len(zin) <= 60 else zin[:57].rstrip() + "…"
+
+
 class EnergyManagementSystemCoordinator:
     """Runs the control loop that decides the Zendure operation mode."""
 
@@ -14722,6 +14728,13 @@ class EnergyManagementSystemCoordinator:
             verschil = beschikbaar - reserve
             uit["vrij_kwh"] = verschil if verschil >= 0 else 0.0
             uit["tekort_kwh"] = 0.0 if verschil >= 0 else abs(verschil)
+        elif beschikbaar is not None and reserve is None:
+            # v5.19.6: geen reserve betekent dat er niets te overbruggen is -
+            # het goedkope blok is bezig of er komt er geen. Dan legt niets
+            # beslag op de beschikbare energie: die is helemaal vrij. Gemeld:
+            # "waardes leeg" - er stond "vrij —" terwijl dat bekend is.
+            uit["vrij_kwh"] = beschikbaar
+            uit["tekort_kwh"] = 0.0
         if reserve is not None and nominaal and reserve > nominaal:
             # Fysiek onmogelijk: er wordt meer reserve gevraagd dan er in
             # de accu past. Niet wegpoetsen - zie get_diagnostic_summary.
@@ -14784,11 +14797,21 @@ class EnergyManagementSystemCoordinator:
         delen = [f"koppelingen {totaal - len(kapot)}/{totaal}"]
         if balans_klopt is not None:
             delen.append("balans ✓" if balans_klopt else "balans wijkt af")
-        if spreiding is not None:
-            delen.append(f"voorspelling ±{spreiding:.0f}%")
+        # v5.19.5: de spreiding van de zonvoorspelling staat NIET in de
+        # statusregel. Gemeld: "2x voorspelling?" - hij stond hier en in de
+        # balk onderaan. De statusregel gaat over de GEZONDHEID van het EMS,
+        # en een onzekere zonverwachting is geen storing; daarom telt hij
+        # ook niet mee in de statusmatrix. In de balk staat hij als context.
+        _ = spreiding
         if punten:
             delen.append(f"{len(punten)} aandachtspunt(en)")
         regel = " · ".join(delen)
+        # v5.19.2: staat er iets anders dan GOED, dan hoort de REDEN vooraan.
+        # Gemeld: "waarop letten? niet geheel duidelijk" - de aanleiding
+        # stond verstopt tussen de andere cijfers.
+        def met_reden(reden: str) -> str:
+            return " · ".join([reden] + [d for d in delen if d != reden])
+
         if (
             self.last_successful_update is None
             or (dt_util.now() - self.last_successful_update).total_seconds() / 60
@@ -14801,9 +14824,23 @@ class EnergyManagementSystemCoordinator:
             namen = ", ".join(str(r.get("instelling")) for r in kapot_noodzakelijk)
             return "STORING", f"noodzakelijke koppeling kapot: {namen}"
         if fouten:
-            return "INGRIJPEN", regel
-        if punten or balans_klopt is False or kapot:
-            return "LET OP", regel
+            onderwerp = (fouten[0] or {}).get("onderwerp")
+            return "INGRIJPEN", met_reden(
+                f"fout: {onderwerp}" if onderwerp else f"{len(fouten)} fout(en)"
+            )
+        if kapot:
+            namen = ", ".join(str(r.get("instelling")) for r in kapot[:2])
+            return "LET OP", met_reden(f"koppeling kapot: {namen}")
+        if balans_klopt is False:
+            return "LET OP", met_reden("de energiebalans wijkt af")
+        if punten:
+            eerste = punten[0]
+            onderwerp = (
+                eerste.get("onderwerp") if isinstance(eerste, dict) else str(eerste)
+            )
+            return "LET OP", met_reden(
+                f"{_kort_punt(onderwerp)}" if onderwerp else f"{len(punten)} aandachtspunt(en)"
+            )
         return "GOED", regel
 
     def ververs_cockpit_context(self) -> None:
@@ -14823,6 +14860,46 @@ class EnergyManagementSystemCoordinator:
         """
         self._cockpit_context = self._schema_gegevens()
 
+    def accu_resttijd(self) -> str | None:
+        """Hoe lang tot vol of tot de ondergrens, bij dit vermogen (v5.19.6).
+
+        Gevraagd: "zou graag resterende laad/ontlaadtijd zien".
+
+            laden     ruimte tot vol / laadvermogen
+                      ruimte = nominale capaciteit x (100 - laadstand) / 100
+            ontladen  beschikbare energie / ontlaadvermogen
+                      (de Zendure rekent die boven zijn EIGEN ondergrens)
+
+        Een momentopname: bij een ander vermogen verandert de uitkomst, en
+        dat zegt de tekst er ook bij. Binnen de dode band
+        (MIN_BATTERY_POWER_IDLE_W) is er geen tijd - de accu staat stil.
+        Ontbreekt een invoer, dan geen tijd in plaats van een gok.
+        """
+        vermogen = self._read_corrected_battery_power()
+        if vermogen is None or abs(vermogen) < MIN_BATTERY_POWER_IDLE_W:
+            return None
+        if vermogen < 0:
+            soc = self.accustand_procent()
+            nominaal = self._read_sensor_float(
+                self.config.get(CONF_BATTERY_TOTAL_CAPACITY_SENSOR)
+            )
+            if soc is None or not nominaal:
+                return None
+            kwh = nominaal * max(0.0, 100 - soc) / 100
+            doel = "vol"
+        else:
+            kwh = self.beschikbare_energie_kwh()
+            if kwh is None:
+                return None
+            doel = "ondergrens"
+        uren = kwh / (abs(vermogen) / 1000)
+        if uren > 48:
+            return None
+        u, m = int(uren), int(round((uren - int(uren)) * 60))
+        if m == 60:
+            u, m = u + 1, 0
+        return f"{doel} over {u}u{m:02d}"
+
     def cockpit_gegevens(self) -> dict:
         """De bewaarde context met de LIVE metingen erbovenop (v5.19)."""
         gegevens = dict(self._cockpit_context or self._schema_gegevens())
@@ -14839,6 +14916,7 @@ class EnergyManagementSystemCoordinator:
                 "accu_w": self._read_corrected_battery_power(),
                 "accustand": self.accu_stand(),
                 "soc": self.accustand_procent(),
+                "resttijd": self.accu_resttijd(),
             }
         )
         return gegevens
@@ -14885,6 +14963,12 @@ class EnergyManagementSystemCoordinator:
             "soc": accu.get("soc"),
             "accustand": self.accu_stand(),
             "reserve_kwh": accu.get("reserve_kwh"),
+            "reserve_tekst": (
+                "geen blok"
+                if accu.get("reserve_kwh") is None
+                and (blok is None or blok <= dt_util.now())
+                else None
+            ),
             "vrij_kwh": accu.get("vrij_kwh"),
             "tekort_kwh": accu.get("tekort_kwh"),
             "accu_balk": accu.get("balk"),
@@ -14953,7 +15037,13 @@ class EnergyManagementSystemCoordinator:
                     # volgend goedkoop blok is om naar te overbruggen. Dat
                     # weten we, dus zeg het - ONBEKEND zou suggereren dat we
                     # het niet weten.
-                    else ("geen blok" if blok is None else None),
+                    # v5.19.2: ook als het blok AL BEZIG of voorbij is - er
+                    # is dan geen volgend blok om naar te overbruggen.
+                    else (
+                        "geen blok"
+                        if blok is None or blok <= dt_util.now()
+                        else None
+                    ),
                     "#f4f7fa",
                     None,
                 ),

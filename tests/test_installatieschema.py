@@ -436,3 +436,58 @@ def test_geen_tekst_buiten_zijn_kader():
                 break
 
     assert not buiten
+
+
+def test_geen_enkele_tekst_wordt_afgekapt_bij_echte_zinnen():
+    """Gemeld, drie keer op rij: "tekst valt weg", "tekst niet volledig
+    zichtbaar", "tekst valt nog weg".
+
+    Deze toets gebruikt de WERKELIJKE uitleg en waarom-regels van de
+    beslislogica - de langste die in de praktijk voorkomen - en eist dat
+    er geen beletselteken in de plaat staat."""
+    from custom_components.energy_management_system.overview_svg import bouw_scada
+
+    plaat = bouw_scada(
+        {
+            "besluit": "Standaard slim laden",
+            "besluit_uitleg": (
+                "Er is nu geen speciale reden om in te grijpen: de huidige "
+                "prijs (0.196/kWh) haalt de drempel voor 'duur' vandaag "
+                "(0.417/kWh) niet, en het loont niet om nu bij te laden."
+            ),
+            "waarom": [
+                "de prijs is nu 19.6 ct, de drempel voor 'duur' ligt op 41.7 ct",
+                "de accu staat op 43% (2.9 kWh bruikbaar)",
+                "geen bijzondere reden om iets anders te doen: de accu vangt "
+                "zon op en voedt het huis",
+            ],
+        }
+    )
+
+    assert "…" not in plaat
+
+
+def test_de_grafiek_belooft_geen_verwachting_die_er_niet_is():
+    """Gevraagd: "welke kleur is werkelijk/verwacht?" - en dat legde een
+    fout bloot: het dagverloop levert alleen GEMETEN waarden, dus er was
+    helemaal geen verwachte lijn. Het label beloofde iets wat er niet
+    stond."""
+    from custom_components.energy_management_system.overview_svg import bouw_scada
+
+    alleen_gemeten = bouw_scada({"verloop": {"pv": [0, 1, 2], "huis": [1, 1, 1]}})
+    met_verwachting = bouw_scada(
+        {"verloop": {"pv": [0, 1, 2], "huis": [1, 1, 1], "pv_verwacht": [None, 2, 3]}}
+    )
+
+    assert "VERWACHT" not in alleen_gemeten
+    assert "VERWACHT" in met_verwachting
+
+
+def test_de_lijnen_worden_bij_hun_kleur_benoemd():
+    """Zonder legenda kon je niet zien welke lijn wat was."""
+    from custom_components.energy_management_system.overview_svg import bouw_scada
+
+    plaat = bouw_scada({"verloop": {"pv": [0, 1, 2], "huis": [1, 1, 1]}})
+    # de legenda staat als losse stukken op vaste plekken
+    assert 'fill="#f0b429" font-size="10"' in plaat and "— ZON" in plaat
+    assert 'fill="#8b98a5" font-size="10"' in plaat and "— VERBRUIK" in plaat

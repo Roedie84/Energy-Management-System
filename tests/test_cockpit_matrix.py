@@ -241,12 +241,19 @@ def test_een_onmogelijke_reserve_is_een_aandachtspunt(make_coordinator, hass):
     assert "past niet in de accu" in punten
 
 
-def test_zonder_reserve_geen_vrij_en_geen_tekort(make_coordinator, hass):
+def test_zonder_reserve_is_er_geen_tekort(make_coordinator, hass):
+    """v5.19.6 - VERWACHTING BEWUST GEWIJZIGD, en dat hoort gemeld.
+
+    Eerst stond hier dat vrij en tekort allebei leeg blijven zonder
+    reserve. Gemeld: "waardes leeg". Zonder reserve is er niets te
+    overbruggen, dus legt niets beslag op de beschikbare energie: die is
+    helemaal vrij, en een tekort bestaat niet. Leeg laten was een weergave
+    van onwetendheid die er niet was."""
     c = _accu(make_coordinator({}), hass, 50.0, 3.0, None)
 
     uit = c.cockpit_accu()
 
-    assert uit["vrij_kwh"] is None and uit["tekort_kwh"] is None
+    assert uit["vrij_kwh"] == 3.0 and uit["tekort_kwh"] == 0.0
 
 
 # --- de volgende actie ----------------------------------------------------
@@ -470,8 +477,11 @@ def test_de_spreiding_is_een_eigenschap_geen_functie(make_coordinator, hass):
 
     stand, regel = c._ems_status()
 
+    # De bug zat in het AANROEPEN van de eigenschap; dat een zonvolger met
+    # spreiding de status niet laat omvallen, is wat hier telt. De spreiding
+    # zelf staat sinds v5.19.5 alleen nog in de balk, niet in de statusregel.
     assert stand == "GOED"
-    assert "voorspelling ±12%" in regel
+    assert "voorspelling" not in regel
 
 
 def test_de_plaat_komt_er_met_een_zonvolger_erbij(make_coordinator, hass):
@@ -578,3 +588,134 @@ def test_zonder_goedkoop_blok_heet_de_reserve_geen_blok(make_coordinator, hass):
     balk = dict((label, waarde) for label, waarde, _k, _p in c._schema_gegevens()["balk"])
 
     assert balk["RESERVE"] == "geen blok"
+
+
+def test_de_reden_staat_vooraan_zodra_het_niet_goed_is(make_coordinator, hass):
+    """Gemeld met een schermafdruk: "waarop letten? niet geheel duidelijk".
+    Er stond LET OP, en de aanleiding stond verstopt tussen de andere
+    cijfers."""
+    c = _gezond(make_coordinator({}), hass)
+    c.get_energiebalans_controle = lambda: {"beschikbaar": True, "alles_klopt": False}
+
+    stand, regel = c._ems_status()
+
+    assert stand == "LET OP"
+    assert regel.startswith("de energiebalans wijkt af")
+
+
+def test_bij_ingrijpen_staat_het_onderwerp_vooraan(make_coordinator, hass):
+    c = _gezond(make_coordinator({}), hass)
+    c.get_diagnostic_summary = lambda: {
+        "aandachtspunten": [{"ernst": "fout", "onderwerp": "Celspanning"}]
+    }
+
+    stand, regel = c._ems_status()
+
+    assert stand == "INGRIJPEN"
+    assert regel.startswith("fout: Celspanning")
+
+
+def test_een_kapotte_koppeling_wordt_bij_naam_genoemd(make_coordinator, hass):
+    c = _gezond(make_coordinator({}), hass)
+    c.get_configuratiecontrole = lambda: {
+        "entiteiten": [
+            {"oordeel": "geen_waarde", "instelling": "dishwasher_power_sensor_entity"}
+        ]
+    }
+
+    stand, regel = c._ems_status()
+
+    assert stand == "LET OP"
+    assert regel.startswith("koppeling kapot: dishwasher_power_sensor_entity")
+
+
+def test_een_lopend_blok_geeft_geen_reserve_maar_ook_geen_onbekend(
+    make_coordinator, hass
+):
+    """Gemeld: RESERVE stond op ONBEKEND terwijl het goedkope blok om 12:00
+    al was begonnen. Er is dan geen volgend blok om naar te overbruggen."""
+    from homeassistant.util import dt as dt_util
+
+    c = _gezond(make_coordinator({}), hass)
+    c.last_cheap_block_start = dt_util.now() - timedelta(minutes=5)
+    c.last_reserve_margin_breakdown = {}
+
+    balk = dict((label, waarde) for label, waarde, _k, _p in c._schema_gegevens()["balk"])
+
+    assert balk["RESERVE"] == "geen blok"
+
+
+
+def test_de_voorspelling_staat_maar_een_keer_op_de_plaat(make_coordinator, hass):
+    """Gemeld: "2x voorspelling?" - hij stond in de statusregel en in de
+    balk. De statusregel gaat over gezondheid; de spreiding van de
+    zonvoorspelling is context en hoort in de balk."""
+
+    class Volger:
+        enabled = True
+        deviation_stdev_percent = 18.0
+        deviation_history = [1.0, 2.0]
+
+    c = _gezond(make_coordinator({}), hass)
+    c.solar_tracker = Volger()
+
+    _stand, regel = c._ems_status()
+    balk = dict((label, waarde) for label, waarde, _k, _p in c._schema_gegevens()["balk"])
+
+    assert "voorspelling" not in regel
+    assert balk["VOORSPELLING"] == "±18%"
+
+
+# --- v5.19.6: resterende tijd en lege waarden ----------------------------
+
+
+def _resttijd(c, hass, vermogen, soc=47.0, beschikbaar=3.1, nominaal="8.64"):
+    c.config = dict(c.config or {})
+    c.config["battery_total_capacity_sensor_entity"] = "sensor.cap"
+    hass.states.set("sensor.cap", nominaal)
+    c._read_corrected_battery_power = lambda: vermogen
+    c.accustand_procent = lambda: soc
+    c.beschikbare_energie_kwh = lambda: beschikbaar
+    return c.accu_resttijd()
+
+
+def test_laden_rekent_de_tijd_tot_vol(make_coordinator, hass):
+    """8,64 kWh x (100 - 47)% = 4,58 kWh, bij 2,0 kW laden = 2u17."""
+    assert _resttijd(make_coordinator({}), hass, -2000.0) == "vol over 2u17"
+
+
+def test_ontladen_rekent_de_tijd_tot_de_ondergrens(make_coordinator, hass):
+    """3,1 kWh beschikbaar bij 250 W ontladen = 12u24."""
+    assert _resttijd(make_coordinator({}), hass, 250.0) == "ondergrens over 12u24"
+
+
+def test_binnen_de_dode_band_is_er_geen_tijd(make_coordinator, hass):
+    """De accu staat stil; een tijd van dagen zou onzin zijn."""
+    assert _resttijd(make_coordinator({}), hass, 12.0) is None
+
+
+def test_zonder_meting_geen_tijd(make_coordinator, hass):
+    assert _resttijd(make_coordinator({}), hass, None) is None
+    assert _resttijd(make_coordinator({}), hass, -2000.0, soc=None) is None
+
+
+def test_zonder_reserve_is_alle_beschikbare_energie_vrij(make_coordinator, hass):
+    """Gemeld: "waardes leeg" - er stond "vrij —" terwijl er niets te
+    overbruggen was en alle beschikbare energie dus vrij is."""
+    c = _accu(make_coordinator({}), hass, 47.0, 3.1, None)
+
+    uit = c.cockpit_accu()
+
+    assert uit["vrij_kwh"] == 3.1
+    assert uit["tekort_kwh"] == 0.0
+
+
+def test_zonder_reserve_geen_markering_in_de_balk():
+    """Een streepje op 0% zou een reserve van nul suggereren."""
+    from custom_components.energy_management_system.overview_svg import _soc_balk
+
+    zonder = _soc_balk(0, 0, 200, 0.47, None, "#fff", 0.10)
+    met = _soc_balk(0, 0, 200, 0.47, 0.33, "#fff", 0.10)
+
+    assert 'stroke="#f4f7fa"' not in zonder
+    assert 'stroke="#f4f7fa"' in met

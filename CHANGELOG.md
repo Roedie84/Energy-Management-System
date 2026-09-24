@@ -28363,3 +28363,133 @@ kwartierplan. Dat onderscheid is precies wat deze cockpit moet maken - niet
 weten is iets anders dan weten dat er niets is.
 
 **Volledige testsuite**: 4248 tests, allemaal groen.
+
+
+## v5.19.2 — "Waarop letten?"
+
+Gemeld met een schermafdruk: er stond **LET OP**, en de aanleiding stond
+verstopt tussen de andere cijfers:
+
+```
+koppelingen 70/70 · balans wijkt af · voorspelling ±18%
+```
+
+Zodra de stand iets anders is dan GOED, staat de REDEN nu vooraan:
+
+```
+LET OP      de energiebalans wijkt af · koppelingen 70/70 · voorspelling ±18%
+LET OP      koppeling kapot: dishwasher_power_sensor_entity · ...
+INGRIJPEN   fout: Celspanning · ...
+```
+
+Een stand zonder aanwijsbare aanleiding is geen stand; hij hoort te zeggen
+waar je naar moet kijken.
+
+### En nog een ONBEKEND die er niet hoorde
+
+RESERVE stond op ONBEKEND terwijl het goedkope blok van 12:00 al was
+begonnen. De regel keek alleen of er een blok BEKEND was, niet of het nog
+moest komen. Is het blok bezig of voorbij, dan is er niets om naar te
+overbruggen: **geen blok**.
+
+**Volledige testsuite**: 4252 tests, allemaal groen.
+
+
+## v5.19.3 — De zinnen passen nu echt
+
+Derde melding op rij over hetzelfde: *"tekst valt nog weg"*. Twee keer had
+ik de ruimte iets vergroot en gehoopt dat het genoeg was. Dat is geen
+methode.
+
+Nu:
+
+- de uitleg krijgt **twee** regels, de waarom-regel ook;
+- het besluitblok is 152 hoog, en het schema erboven is naar boven
+  geschoven om die ruimte te maken;
+- de vervolgregel van WAAROM **springt in** in plaats van een donker
+  "WAAROM" te tonen - dat was een truc die je op het scherm kon zien.
+
+En een toets met de WERKELIJKE zinnen van de beslislogica - de langste die
+in de praktijk voorkomen - die eist dat er nergens een beletselteken in de
+plaat staat. Die had de eerste twee pogingen laten falen.
+
+**Volledige testsuite**: 4253 tests, allemaal groen.
+
+
+## v5.19.4 — "Welke kleur is werkelijk/verwacht?"
+
+Die vraag legde een fout bloot: **er was helemaal geen verwachte lijn.** Het
+dagverloop levert alleen GEMETEN zon en verbruik; een voorspelling per uur
+zit er niet in. Het label beloofde dus iets wat er niet stond.
+
+Nu:
+
+```
+VANDAAG   — ZON (geel)   — VERBRUIK (grijs)
+```
+
+en de toevoeging "· VERWACHT GESTIPPELD" verschijnt alleen als er
+werkelijk een verwachte reeks wordt meegegeven. Een toets bewaakt dat in
+beide richtingen.
+
+De legenda staat als LOSSE stukken op vaste plekken, niet als een regel met
+gekleurde tspans - die lijnt niet betrouwbaar uit.
+
+**Volledige testsuite**: 4254 tests, allemaal groen.
+
+
+## v5.19.5 — Twee keer de voorspelling
+
+Gemeld met een schermafdruk: *"2x voorspelling?"* De spreiding van de
+zonvoorspelling stond in de statusregel linksboven én in de balk rechtsonder.
+
+Hij staat nu alleen in de balk. De statusregel gaat over de GEZONDHEID van
+het EMS - koppelingen, energiebalans, aandachtspunten - en een onzekere
+zonverwachting is geen storing. Daarom telde hij in v5.18 ook al niet mee
+in de statusmatrix; in de regel eronder hoorde hij dus evenmin.
+
+**Volledige testsuite**: 4256 tests, allemaal groen.
+
+
+## v5.19.6 — Resterende tijd, en geen lege waarden meer
+
+Gemeld met een schermafdruk: *"waardes leeg + zou graag resterende
+laad/ontlaadtijd zien"*.
+
+### "reserve —" en "vrij —"
+
+Na het begin van het goedkope blok is er geen reserve berekend: er valt
+niets te overbruggen. Dan stond er "reserve —", en omdat "vrij" beschikbaar
+min reserve is, werd dat ook een streepje. Maar dat is geen onwetendheid:
+
+```
+reserve   geen blok        er is niets om naar te overbruggen
+vrij      3,1 kWh          niets legt beslag op de beschikbare energie
+```
+
+**Verwachting bewust gewijzigd**: een toets eiste eerder dat vrij en tekort
+leeg bleven zonder reserve. Die is aangepast, met de reden erbij in de toets.
+
+En de reservemarkering in de laadbalk verdwijnt zonder reserve - een
+streepje op 0% suggereerde een reserve van nul.
+
+### Resterende laad- of ontlaadtijd
+
+Uit bestaande metingen, met een formule die in de code staat:
+
+```
+laden     ruimte tot vol / laadvermogen
+          ruimte = nominale capaciteit x (100 - laadstand) / 100
+ontladen  beschikbare energie / ontlaadvermogen
+```
+
+Voorbeeld: 8,64 kWh x 53% = 4,58 kWh bij 2,0 kW laden is "vol over 2u17".
+
+Een momentopname bij het huidige vermogen. Binnen de dode band van 25 W
+komt er geen tijd - de accu staat dan stil. Ontbreekt een invoer, dan geen
+tijd in plaats van een gok.
+
+De ventilator verhuisde naar de titelregel van de accukaart, zodat hij niet
+met de tijd botst.
+
+**Volledige testsuite**: 4262 tests, allemaal groen.
