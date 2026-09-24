@@ -27841,3 +27841,38 @@ melding."* Dezelfde fout zat in v5.14.6, en is daar nu ook rechtgezet.
 Onbekend is geen nacht.
 
 **Volledige testsuite**: 4157 tests, allemaal groen.
+
+
+## v5.15.2 — De dagbedragen gingen verloren bij de dagwissel
+
+De eerste dagregel met het prijsoverzicht, uit de export van 24 september
+06:58:
+
+```
+{"datum": "2026-09-23", "opwek_kwh": 14.13, ... "co2_kg": 0.2087}
+```
+
+Geen van de zeven bedragen. De oorzaak staat in de volgorde van de ronde:
+
+```
+("prijsdag", ...)          <- zet de dagstand op de NIEUWE dag
+("zelfvoorziening", ...)   <- sluit de OUDE dag af
+```
+
+Na middernacht wordt de dagstand dus eerst doorgezet, en pas daarna wordt de
+oude dag weggeschreven - die bedragen zijn dan al weg. En de sensoren van de
+leverancier springen om middernacht zelf naar nul, dus opnieuw uitlezen
+helpt niet.
+
+Niet opgelost door de volgorde om te draaien: dan hangt het geheel aan een
+regelnummer, en dat breekt bij de volgende wijziging. In plaats daarvan
+wordt de laatste stand van de vorige dag bewaard, zodat het afsluiten hem
+nog kan gebruiken - ongeacht de volgorde.
+
+**23 september blijft zonder bedragen**; die zijn niet meer op te halen. Het
+weekgemiddelde begint bij 24 september.
+
+En een fout in mijn eigen toets: één minuut na 23:59 is de volgende dag.
+Daar struikelde de toets over, niet de code.
+
+**Volledige testsuite**: 4161 tests, allemaal groen.

@@ -1294,7 +1294,7 @@ class EnergyManagementSystemCoordinator:
         # een regel - `__init__` staat op de ratel.
         # v3.99.19: `dagverloop` en `nabeschouwingen` erbij, in dezelfde
         # regel - `__init__` staat op de ratel.
-        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen, self.safe_sell_shadow, self.reden_afwijkingen, self.meting_laatst_gevuld, self.weerbron_keuze, self.voorspellingsverloop, self._geladen_opslag, self.rendement_afwijzingen, self.weerbron_levering, self.weather_ensemble_readings_alle, self.instraling_verhouding, self.ventilator_kwh_per_dag, self._ventilator_vermogens_aan, self.gacs_traag, self.gacs_duur_ms, self._pv_model_bezig, self.gacs_traagste, self.prijs_vandaag = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, [], [], {}, {}, {}, {}, None, {}, {}, {}, {}, {}, [], [], None, False, None, {}
+        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen, self.safe_sell_shadow, self.reden_afwijkingen, self.meting_laatst_gevuld, self.weerbron_keuze, self.voorspellingsverloop, self._geladen_opslag, self.rendement_afwijzingen, self.weerbron_levering, self.weather_ensemble_readings_alle, self.instraling_verhouding, self.ventilator_kwh_per_dag, self._ventilator_vermogens_aan, self.gacs_traag, self.gacs_duur_ms, self._pv_model_bezig, self.gacs_traagste, self.prijs_vandaag, self.prijs_gisteren = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, [], [], {}, {}, {}, {}, None, {}, {}, {}, {}, {}, [], [], None, False, None, {}, {}
         self.handmatige_ingrepen: list[dict] = []
         # v1.1.6: met welke meetmethode de bewaarde foutreeks tot stand
         # is gekomen. Verandert de methode, dan wordt die reeks eenmalig
@@ -25127,6 +25127,18 @@ class EnergyManagementSystemCoordinator:
         dag = now.date().isoformat()
         stand = self.prijs_vandaag or {}
         if stand.get("dag") != dag:
+            # v5.15.2: de laatste stand van de vorige dag bewaren. In de
+            # ronde staat "prijsdag" VOOR "zelfvoorziening", die de dag
+            # afsluit - dus na middernacht was de oude stand al weg voordat
+            # de dagregel werd geschreven, en de dagregel van 23 september
+            # kreeg geen van de zeven bedragen. De sensoren van de
+            # leverancier springen om middernacht zelf naar nul, dus opnieuw
+            # uitlezen helpt niet.
+            #
+            # Niet opgelost door de volgorde om te draaien: dan hangt het aan
+            # een regelnummer en breekt het bij de volgende wijziging.
+            if stand.get("dag"):
+                self.prijs_gisteren = stand
             stand = {"dag": dag}
         for veld, sleutel in PRIJSDAG_VELDEN.items():
             waarde = self._lees_optionele_sensor(sleutel)
@@ -25137,10 +25149,10 @@ class EnergyManagementSystemCoordinator:
     def _prijsdag_velden(self, dag) -> dict:
         """De dagbedragen voor de dagregel van `dag` (v5.15)."""
         dag_tekst = dag.isoformat() if hasattr(dag, "isoformat") else str(dag)
-        stand = self.prijs_vandaag or {}
-        if stand.get("dag") != dag_tekst:
-            return {}
-        return {v: stand[v] for v in PRIJSDAG_VELDEN if v in stand}
+        for stand in (self.prijs_vandaag or {}, self.prijs_gisteren or {}):
+            if stand.get("dag") == dag_tekst:
+                return {v: stand[v] for v in PRIJSDAG_VELDEN if v in stand}
+        return {}
 
     def _sluit_energiedag_af(self, dag) -> None:
         """Legt de energiecijfers van een afgesloten dag vast (v1.90.0)."""

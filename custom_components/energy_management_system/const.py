@@ -3285,6 +3285,9 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "gacs_traagste": {"type": "plain"},
     # v5.15: de dagbedragen van vandaag, tot de dag wordt afgesloten.
     "prijs_vandaag": {"type": "plain"},
+    # v5.15.2: de laatste stand van gisteren, zodat het afsluiten van de dag
+    # hem nog kan gebruiken - ongeacht de volgorde in de ronde.
+    "prijs_gisteren": {"type": "plain"},
     # v5.9: waarom het rendementsleren niets oplevert.
     "rendement_afwijzingen": {"type": "plain"},
     # v5.11: het nachtelijke ontlaadvenster. Werd niet bewaard, dus een

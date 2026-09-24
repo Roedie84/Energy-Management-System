@@ -1,4 +1,4 @@
-EMS v5.15.1 - alleen de wijzigingen sinds v5.15
+EMS v5.15.2 - alle wijzigingen sinds v5.15 (bevat v5.15.1)
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
 (ER OVERHEEN, de map niet legen)
@@ -11,28 +11,30 @@ NAAR DE REPO
 
     README.md, CHANGELOG.md
     dashboards/energy_management_system_dashboard.yaml
-    tests/test_slapende_invoer_geen_melding.py (nieuw)
+    tests/ (twee bestanden, beide nieuw)
 
-Voor HACS: release met tag v5.15.1.
+Voor HACS: release met tag v5.15.2.
 
-WAT ER VERANDERT
+NIEUW IN v5.15.2 - DE DAGBEDRAGEN
 
-1. Geen waarschuwing meer over een apparaat dat uit staat. Vanmorgen om
-   08:31 kwam er een melding over sensor.kookplaat_operation_state terwijl
-   je kookplaat gewoon uit stond. De kookplaat ontbrak in de lijst met
-   apparaten - de oven stond er wel in.
+De dagregel van 23 september kreeg geen van de zeven bedragen: na
+middernacht werd de dagstand doorgezet voordat de oude dag werd
+weggeschreven. Nu wordt de stand van de vorige dag bewaard.
 
-2. De trage keren van de GACS-sensor staan nu IN de export, onder
-   gacs_traagheid, met per keer de drie traagste onderdelen. Die werden al
-   bewaard maar waren niet te lezen. Daarmee kan ik de vertraging bij de
-   volgende export echt verklaren.
+23 september blijft leeg; die bedragen zijn niet meer op te halen. Het
+weekgemiddelde begint bij 24 september. Installeer dit dus VOOR
+middernacht, anders mist 24 september ook.
 
-3. Een onbekende zonstand geldt niet meer als nacht. Anders zou een echt
-   weggevallen omvormer stil blijven.
+UIT v5.15.1
+- geen waarschuwing meer over een apparaat dat uit staat (de kookplaat
+  ontbrak in de lijst met apparaten)
+- de trage keren van de GACS-sensor staan nu in de export
+- een onbekende zonstand geldt niet meer als nacht
 
-WAT ER GOED GING (uit dezelfde export)
+NOG TE BESPREKEN
 
-- Beide zelfcontroles groen.
-- De nachtwaarschuwing: van 3,2 naar 2 per dag. De twintig meldingen per
-  dag zijn nu verdeeld over tien soorten, geen enkele boosdoener meer.
-- De tweede zonvoorspelling heeft zijn eerste volledige dag.
+De celspanningsmelding kwam drie ochtenden op rij, bij 16% en 12%
+laadstand met de laagste cel op 2,99 en 2,87 V. Dat is geen dubbeling van
+"accu bijna leeg": de melding kijkt bewust naar de celspanning omdat de
+laadstand onderin weinig zegt. Het zegt dat je accu 's nachts dieper
+leegloopt dan de cellen prettig vinden. Daar hoort een keuze bij.
