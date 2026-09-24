@@ -14748,7 +14748,7 @@ class EnergyManagementSystemCoordinator:
         balans = self.get_energiebalans_controle() or {}
         balans_klopt = balans.get("alles_klopt") if balans.get("beschikbaar") else None
         spreiding = (
-            self.solar_tracker.deviation_stdev_percent()
+            self.solar_tracker.deviation_stdev_percent
             if self.solar_tracker and self.solar_tracker.enabled
             else None
         )
@@ -14805,7 +14805,7 @@ class EnergyManagementSystemCoordinator:
         accu = self.cockpit_accu()
         snapshot = self.get_besluit_snapshot()
         spreiding = (
-            self.solar_tracker.deviation_stdev_percent()
+            self.solar_tracker.deviation_stdev_percent
             if self.solar_tracker and self.solar_tracker.enabled
             else None
         )

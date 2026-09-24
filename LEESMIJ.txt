@@ -1,30 +1,23 @@
-EMS v5.18 - alle wijzigingen sinds v5.15 (bevat v5.15.1, .2, v5.16, v5.17)
+EMS v5.18.1 - alleen de wijzigingen sinds v5.18
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
-    const.py, coordinator.py, overview_svg.py, diagnostics.py
-    dashboard_template.yaml   GEWIJZIGD (plaat op de landingspagina)
+    coordinator.py
+    dashboard_template.yaml   (gaat altijd mee, ongewijzigd)
     manifest.json, bestandscontrole.json
 
 NAAR DE REPO
     README.md, CHANGELOG.md
-    docs/cockpit-dataketen.md, docs/cockpit-review.md   (nieuw)
     dashboards/energy_management_system_dashboard.yaml
-    tests/ (drie bestanden)
+    tests/test_cockpit_matrix.py, tests/test_alles_uitgevraagd.py
 
-Voor HACS: release met tag v5.18.
+Voor HACS: release met tag v5.18.1.
 
-ZEVEN FOUTEN ERUIT - drie ervan raken wat je op het scherm zag:
+WAT ER VERANDERT
 
-1. Huisverbruik toonde 's nachts 0 W (formule telde de accu eraf in
-   plaats van erbij).
-2. "Volgende actie" kwam nooit uit het kwartierplan, altijd uit een
-   terugval op het goedkope blok.
-3. De reservegrens in de accubalk stond tien procentpunt te laag.
+De overzichtsplaat viel om: deviation_stdev_percent is een eigenschap, en
+ik riep hem aan als functie. Twee plekken, allebei uit v5.17.
 
 VERWACHT NA DE HERSTART
-- huisverbruik klopt ook 's nachts
-- "volgende actie" kan ONBEKEND zijn: dat betekent dat het kwartierplan
-  geen wisseling meer voorziet - dat is eerlijker dan het oude getal
-- de statusregel begint met "koppelingen X/Y"
-
-Zie docs/cockpit-review.md voor alle bevindingen met bron.
+- de melding "1 onderdeel(en) vallen om" verdwijnt
+- de plaat staat weer op de landingspagina, met in de statusregel
+  "voorspelling ±X%"

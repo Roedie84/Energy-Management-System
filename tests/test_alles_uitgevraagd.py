@@ -220,6 +220,7 @@ async def test_elke_entiteit_op_een_lege_installatie(make_coordinator, hass):
     assert len(entiteiten) > 100, len(entiteiten)
     fouten = [f for e in entiteiten for f in _vraag_uit(e)]
     assert not fouten, "\n".join(fouten)
+    _geen_stille_fouten(c)
 
 
 @pytest.mark.asyncio
@@ -235,6 +236,23 @@ async def test_de_export_op_een_lege_installatie(make_coordinator, hass):
 # --- de echte opgeslagen toestand ---------------------------------------
 
 
+def _geen_stille_fouten(c):
+    """Een onderdeel dat omvalt maar wordt afgeschermd (v5.18.1).
+
+    Gemeld in bedrijf: "1 onderdeel(en) vallen om - overzichtsplaat", met
+    in de export `TypeError: 'float' object is not callable`. Dit
+    mechanisme zag dat NIET: de GACS-sensor schermt elk onderdeel apart af,
+    dus de fout werd een tekst in het attribuut in plaats van een
+    uitzondering, en de uitvraag slaagde gewoon.
+
+    De coordinator legt zo'n fout wel vast in `internal_failures`. Dat is
+    vanaf nu onderdeel van de uitvraag: alles opvragen EN daarna kijken of
+    er onderweg iets stil is omgevallen.
+    """
+    stil = dict(c.internal_failures or {})
+    assert not stil, f"onderdelen vielen stil om: {stil}"
+
+
 @pytest.mark.asyncio
 async def test_elke_entiteit_op_de_echte_toestand(make_coordinator, hass):
     toestand = _echte_toestand()
@@ -244,6 +262,7 @@ async def test_elke_entiteit_op_de_echte_toestand(make_coordinator, hass):
 
     fouten = [f for e in entiteiten for f in _vraag_uit(e)]
     assert not fouten, "\n".join(fouten)
+    _geen_stille_fouten(c)
 
 
 @pytest.mark.asyncio

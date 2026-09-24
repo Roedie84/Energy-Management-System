@@ -443,3 +443,43 @@ def test_geen_enkele_lege_waarde_belandt_als_none_op_de_plaat():
 
     assert ">None<" not in plaat
     assert plaat.count(ONBEKEND) >= 3
+
+
+def test_de_spreiding_is_een_eigenschap_geen_functie(make_coordinator, hass):
+    """Gemeld in bedrijf: "1 onderdeel(en) vallen om - overzichtsplaat",
+    met in de export: TypeError: 'float' object is not callable.
+
+    `deviation_stdev_percent` is een @property. Met haakjes erachter
+    probeert Python het GETAL aan te roepen. In de toetsen ontbrak de
+    zonvolger, dus die regel werd nooit bereikt - deze toets zet er wel
+    een neer."""
+    from homeassistant.util import dt as dt_util
+
+    class Volger:
+        enabled = True
+        deviation_stdev_percent = 12.4
+
+    c = _gezond(make_coordinator({}), hass)
+    c.solar_tracker = Volger()
+    c.last_successful_update = dt_util.now()
+
+    stand, regel = c._ems_status()
+
+    assert stand == "GOED"
+    assert "voorspelling ±12%" in regel
+
+
+def test_de_plaat_komt_er_met_een_zonvolger_erbij(make_coordinator, hass):
+    """Het geval dat in bedrijf omviel: een coordinator MET zonvolger."""
+
+    class Volger:
+        enabled = True
+        deviation_stdev_percent = 12.4
+        deviation_history = [1.0, 2.0]
+
+    c = _gezond(make_coordinator({}), hass)
+    c.solar_tracker = Volger()
+
+    plaat = c.get_overview_svg()
+
+    assert plaat.startswith("<img")

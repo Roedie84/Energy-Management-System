@@ -28129,3 +28129,45 @@ er wél is: de wegval-detectie en de cadansmeting per sensor, beide op de
 gezondheidspagina.
 
 **Volledige testsuite**: 4223 tests, waarvan 46 de cockpitmatrix.
+
+
+## v5.18.1 — Een eigenschap met haakjes erachter
+
+Gemeld in bedrijf, direct na v5.18:
+
+```
+1 onderdeel(en) vallen om
+Deze onderdelen geven een fout: overzichtsplaat.
+```
+
+Uit de export:
+
+```
+internal_failures: {"overzichtsplaat": "TypeError: 'float' object is not callable"}
+```
+
+`deviation_stdev_percent` is een `@property`, geen functie. Met haakjes
+erachter probeert Python het GETAL aan te roepen. Twee plekken, allebei uit
+v5.17.
+
+### Waarom het mechanisme dit niet ving
+
+`test_alles_uitgevraagd.py` vraagt elke entiteit volledig uit - en slaagde.
+De GACS-sensor schermt namelijk elk onderdeel apart af (v1.19.1, zodat één
+kapot blok niet alle tegels leegmaakt). De fout werd daardoor een TEKST in
+het attribuut in plaats van een uitzondering.
+
+In de toetsen ontbrak bovendien de zonvolger, dus die regel werd nooit
+bereikt: `self.solar_tracker and ...` sloeg hem over.
+
+Twee reparaties aan het mechanisme:
+
+- na het uitvragen wordt `internal_failures` nagekeken - daar legt de
+  coordinator zo'n stil omgevallen onderdeel wél in vast;
+- een toets bouwt de plaat MET een zonvolger, het geval dat in bedrijf
+  omviel.
+
+Bewezen: met de haakjes terug vallen beide toetsen om; zonder de haakjes
+draaien ze groen.
+
+**Volledige testsuite**: 4225 tests, allemaal groen.
