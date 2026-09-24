@@ -28539,3 +28539,87 @@ Als reden vooraan ("de energiebalans wijkt af") en in de opsomming
 maar een keer staat.
 
 **Volledige testsuite**: 4262 tests, allemaal groen.
+
+
+## v5.19.9 — "Het is juist geen duur blok"
+
+Gemeld met twee schermafdrukken: het besluit luidde **ONTLADEN IN DUUR
+BLOK**, terwijl de waarom-regel eronder zei: prijs 18,0 ct, drempel voor
+duur 41,7 ct, het goedkope blok begint morgen om 12:15.
+
+### Het register sprak zichzelf tegen
+
+Voor `discharging_window`:
+
+```
+titel       "Huis dekken uit de accu"
+uitleg      "De accu dekt het huisverbruik: dat is nu goedkoper dan van
+             het net afnemen."
+korte naam  "huis dekken"
+label       "ontladen in duur blok"      <- het buitenbeentje
+```
+
+Drie van de vier zeiden "huis dekken"; precies het label dat op de cockpit
+kwam zei iets anders. Het label is rechtgezet, en een toets bewaakt dat het
+niet meer tegen zijn titel ingaat.
+
+Alle zestien labels zijn daarbij naast hun titel gelegd. Er was er nog een
+die misleidde: `default_smart` heette "standaard slim laden", terwijl de
+accu in die stand net zo goed ontlaadt of stilstaat - de titel zegt "Accu
+beslist zelf". De cockpit toont daarom voortaan de **titel** uit het
+register: de eigen woorden van het EMS, en die kloppen allemaal.
+
+### Meer ruimte
+
+Gevraagd: *"ruimte ziet er niet strak uit, hoogte van de pagina mag wat
+meer."* De accukaart en het besluitblok zaten tegen elkaar aan. Er zit nu
+24 pixels tussen, en het doek is 1600 bij 578.
+
+**Volledige testsuite**: 4264 tests, allemaal groen.
+
+
+## v5.19.10 — "Vrij" betekende het verkeerde
+
+Gemeld met een schermafdruk waarop twee getallen omcirkeld waren: in de
+accukaart **"vrij 0,2 kWh"**, en in de waarom-regel **"nog 3.4 kWh ruimte"**.
+
+Twee verschillende grootheden, en het woord "vrij" dekte de verkeerde:
+
+```
+ruimte   3,4 kWh   wat er nog BIJ KAN        8,64 kWh x 39% leeg
+vrij     0,2 kWh   wat er BOVEN DE RESERVE   4,4 beschikbaar - 4,24 reserve
+                   zit
+```
+
+In de oorspronkelijke opdracht heette het eerste "vrij voor zon": de
+capaciteit om voorspelde zonne-energie op te vangen. Die had ik de
+verkeerde betekenis gegeven.
+
+De kaart toont nu de **ruimte**, uit `_resterende_laadruimte_kwh()` - dezelfde
+functie die de waarom-regel vult, en hetzelfde woord. Staat de accu onder
+zijn reserve, dan gaat het tekort voor.
+
+Wat er boven de reserve zit, blijft zichtbaar in de laadbalk: het verschil
+tussen de laadstand en de reservemarkering.
+
+**Volledige testsuite**: 4267 tests, allemaal groen.
+
+
+## v5.19.11 — De vaatwasser telde niet mee
+
+Gemeld: *"grootste nu: Meterkast (18 W)"* - *"klopt niet, want ik weet dat de
+vaatwasser aan staat en het grote vermogen verbruikt"*.
+
+Live gemeten: `sensor.vaatwasser_vermogen` stond op **2013 W**.
+
+`get_largest_known_consumer()` keek alleen naar de apparatentabel van de
+verbruiksherkenning. De vaatwasser staat daar niet als actief apparaat in;
+die is apart ingesteld met een eigen vermogenssensor. Pas als NIETS in de
+tabel iets verbruikte, viel de functie terug op de zware apparaten - en de
+meterkast verbruikt altijd wel wat.
+
+Nu tellen alle apparaten met een eigen vermogenssensor uit
+`APPARAAT_INSTELLINGEN` gewoon mee in de vergelijking: vaatwasser,
+wasmachine en de rest, met de naam van hun eigen sensor.
+
+**Volledige testsuite**: 4269 tests, allemaal groen.

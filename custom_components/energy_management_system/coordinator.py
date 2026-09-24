@@ -14572,10 +14572,17 @@ class EnergyManagementSystemCoordinator:
         if not waarom.get("beschikbaar"):
             self.besluit_snapshot = {}
             return
+        code = waarom.get("code")
         self.besluit_snapshot = {
             "moment": now.isoformat(),
-            "code": waarom.get("code"),
+            "code": code,
             "kort": waarom.get("kort"),
+            # v5.19.9: de TITEL uit het register is wat de cockpit toont. Het
+            # label van `discharging_window` zei "ontladen in duur blok" en
+            # dat van `default_smart` "standaard slim laden" - terwijl de
+            # accu in die standen net zo goed ontlaadt of stilstaat. De
+            # titels zijn de eigen woorden van het EMS en kloppen allemaal.
+            "titel": (REASON_REGISTRY.get(code) or {}).get("titel"),
             "uitleg": self.last_explanation,
             "redenen": list(waarom.get("redenen") or []),
         }
@@ -14973,6 +14980,12 @@ class EnergyManagementSystemCoordinator:
                 else None
             ),
             "vrij_kwh": accu.get("vrij_kwh"),
+            # v5.19.10: de RUIMTE om bij te laden - dezelfde functie die de
+            # waarom-regel vult ("nog 3.4 kWh ruimte"). Gemeld: de kaart zei
+            # "vrij 0,2 kWh" en de waarom-regel "nog 3,4 kWh ruimte". Het
+            # eerste was wat er boven de reserve zit, het tweede wat er nog
+            # bij kan - twee dingen, en het woord "vrij" dekte de verkeerde.
+            "ruimte_kwh": self._resterende_laadruimte_kwh(),
             "tekort_kwh": accu.get("tekort_kwh"),
             "accu_balk": accu.get("balk"),
             "onmogelijke_reserve": accu.get("onmogelijke_reserve"),
@@ -15027,7 +15040,7 @@ class EnergyManagementSystemCoordinator:
             ),
             "verloop": self._verloop_van_vandaag(),
             # v5.18: besluit, uitleg en redenen uit EEN momentopname.
-            "besluit": snapshot.get("kort"),
+            "besluit": snapshot.get("titel") or snapshot.get("kort"),
             "besluit_uitleg": snapshot.get("uitleg"),
             "waarom": (snapshot.get("redenen") or [])[:3],
             "balk": [
@@ -32345,6 +32358,29 @@ class EnergyManagementSystemCoordinator:
             )
         return rows
 
+    def _gemeten_apparaten(self) -> list[tuple[str, float]]:
+        """Apparaten met een eigen, ingestelde vermogenssensor (v5.19.11).
+
+        Vaatwasser, wasmachine en de andere uit APPARAAT_INSTELLINGEN: naam
+        uit de sensor zelf, vermogen zoals hij nu meet. Alleen wat
+        werkelijk iets verbruikt.
+        """
+        uit = []
+        for sleutel in APPARAAT_INSTELLINGEN:
+            if not sleutel.endswith("_power_sensor_entity"):
+                continue
+            entiteit = self.config.get(sleutel)
+            vermogen = self._read_sensor_float(entiteit) if entiteit else None
+            if vermogen is None or vermogen <= 0:
+                continue
+            toestand = self.hass.states.get(entiteit)
+            naam = (
+                (toestand.attributes.get("friendly_name") if toestand else None)
+                or entiteit
+            )
+            uit.append((str(naam), float(vermogen)))
+        return uit
+
     def get_largest_known_consumer(self) -> str:
         """Welk bekend apparaat op dit moment het meeste verbruikt
         (v0.63.130, gerapporteerd: "in de visual is nu de zwaarste bron
@@ -32388,6 +32424,15 @@ class EnergyManagementSystemCoordinator:
             if vermogen > beste_vermogen:
                 beste_vermogen = vermogen
                 beste_naam = rij["naam"]
+
+        # v5.19.11: ook de apparaten met een EIGEN vermogenssensor. Gemeld:
+        # "grootste nu: Meterkast (18 W)" terwijl de vaatwasser 2013 W trok.
+        # Die staat niet in de apparatentabel van de verbruiksherkenning,
+        # maar is apart ingesteld - en werd daardoor alleen bekeken als NIETS
+        # in de tabel iets verbruikte. De meterkast verbruikt altijd wel wat.
+        for naam, vermogen in self._gemeten_apparaten():
+            if vermogen > beste_vermogen:
+                beste_vermogen, beste_naam = vermogen, naam
 
         if beste_naam is not None:
             return f"{beste_naam} ({beste_vermogen:.0f} W)"

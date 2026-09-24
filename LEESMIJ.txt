@@ -1,19 +1,19 @@
-EMS v5.19.8 - alleen de wijzigingen sinds v5.19.7
+EMS v5.19.11 - alleen de wijziging sinds v5.19.10
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
-    coordinator.py, overview_svg.py
+    coordinator.py
     dashboard_template.yaml   (gaat altijd mee, ongewijzigd)
     manifest.json, bestandscontrole.json
 
 NAAR DE REPO
     README.md, CHANGELOG.md
     dashboards/energy_management_system_dashboard.yaml
-    tests/ (drie bestanden)
+    tests/test_cockpit_matrix.py
 
-Voor HACS: release met tag v5.19.8.
+Voor HACS: release met tag v5.19.11.
 
 WAT ER VERANDERT
-1. Het besluitblok is compact: de titel en daaronder alleen de redenen
-   uit de beslislogica, als opsomming. De lange uitleg staat op de
-   detailpagina's. De plaat is weer lager (1600 bij 530).
-2. "balans wijkt af" stond er twee keer in de statusregel; nu een keer.
+"Grootste nu" telt ook de apparaten met een eigen vermogenssensor mee -
+vaatwasser, wasmachine en de rest. Die werden alleen bekeken als niets in
+de apparatentabel iets verbruikte, en de meterkast verbruikt altijd wel
+wat. Bij een draaiende vaatwasser staat er nu "Vaatwasser (2013 W)".

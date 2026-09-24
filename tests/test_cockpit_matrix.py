@@ -722,3 +722,103 @@ def test_zonder_reserve_geen_markering_in_de_balk():
 
     assert 'stroke="#f4f7fa"' not in zonder
     assert 'stroke="#f4f7fa"' in met
+
+
+# --- v5.19.9: de woorden van het besluit --------------------------------
+
+
+def test_geen_label_spreekt_zijn_eigen_titel_tegen():
+    """Gemeld: "EMS besluit klopt niet nu? Het is juist geen duur blok."
+
+    `discharging_window` had als label "ontladen in duur blok", terwijl de
+    eigen titel "Huis dekken uit de accu" zei en de uitleg "de accu dekt
+    het huisverbruik". Het EMS overbrugde naar het goedkope blok van
+    morgen, bij een prijs van 18 ct tegen een drempel van 41,7."""
+    from custom_components.energy_management_system.const import REASON_REGISTRY
+
+    label = REASON_REGISTRY["discharging_window"]["label"]
+
+    assert "duur" not in label
+
+
+def test_de_cockpit_toont_de_titel_uit_het_register(make_coordinator, hass):
+    """De titels zijn de eigen woorden van het EMS en kloppen allemaal;
+    labels als "standaard slim laden" suggereerden laden terwijl de accu in
+    die stand net zo goed ontlaadt."""
+    from homeassistant.util import dt as dt_util
+
+    c = _gezond(make_coordinator({}), hass)
+    c.get_why_now = lambda now=None: {
+        "beschikbaar": True, "code": "default_smart",
+        "kort": "standaard slim laden", "redenen": ["de prijs is gewoon"],
+    }
+
+    c._besluit_snapshot_vastleggen(dt_util.now())
+
+    assert c._schema_gegevens()["besluit"] == "Accu beslist zelf"
+
+
+def test_de_kaart_noemt_de_ruimte_zoals_de_waarom_regel(make_coordinator, hass):
+    """Gemeld met een schermafdruk: de kaart zei "vrij 0,2 kWh" en de
+    waarom-regel "nog 3.4 kWh ruimte". Het eerste was wat er boven de
+    reserve zit, het tweede wat er nog bij kan. De kaart toont nu de
+    ruimte, uit dezelfde functie als de waarom-regel."""
+    c = _gezond(make_coordinator({}), hass)
+    c._resterende_laadruimte_kwh = lambda: 3.37
+
+    assert c._schema_gegevens()["ruimte_kwh"] == 3.37
+
+
+def test_de_plaat_zegt_ruimte_en_niet_vrij():
+    from custom_components.energy_management_system.overview_svg import bouw_scada
+
+    plaat = bouw_scada({"soc": 61.0, "ruimte_kwh": 3.37, "vrij_kwh": 0.2,
+                        "tekort_kwh": 0.0, "accustand": "LADEN"})
+
+    assert "ruimte 3,4 kWh" in plaat
+    assert "vrij 0,2" not in plaat
+
+
+def test_een_tekort_gaat_voor_de_ruimte():
+    """Staat de accu onder zijn reserve, dan is dat het nieuws."""
+    from custom_components.energy_management_system.overview_svg import bouw_scada
+
+    plaat = bouw_scada({"soc": 15.0, "ruimte_kwh": 7.3, "tekort_kwh": 1.57,
+                        "accustand": "LADEN"})
+
+    assert "tekort 1,57 kWh" in plaat
+    assert "ruimte 7,3" not in plaat
+
+
+def test_de_vaatwasser_telt_mee_als_grootste_verbruiker(make_coordinator, hass):
+    """Gemeld: "grootste nu: Meterkast (18 W)" - "klopt niet, want ik weet
+    dat de vaatwasser aan staat en het grote vermogen verbruikt". Live
+    gemeten: Vaatwasser Vermogen 2013 W.
+
+    De vaatwasser heeft een eigen ingestelde vermogenssensor en stond niet
+    in de apparatentabel van de verbruiksherkenning."""
+    c = make_coordinator({})
+    c.config = dict(c.config or {})
+    c.config["dishwasher_power_sensor_entity"] = "sensor.vaatwasser_vermogen"
+    hass.states.set(
+        "sensor.vaatwasser_vermogen", "2013", {"friendly_name": "Vaatwasser Vermogen"}
+    )
+    c.get_nilm_devices_table = lambda: [
+        {"naam": "Meterkast", "huidig_vermogen_w": 18.0}
+    ]
+
+    grootste = c.apparaatnaam_zonder_meetwoord(c.get_largest_known_consumer())
+
+    assert grootste == "Vaatwasser (2013 W)"
+
+
+def test_een_apparaat_dat_uit_staat_telt_niet(make_coordinator, hass):
+    c = make_coordinator({})
+    c.config = dict(c.config or {})
+    c.config["dishwasher_power_sensor_entity"] = "sensor.vaatwasser_vermogen"
+    hass.states.set("sensor.vaatwasser_vermogen", "0", {"friendly_name": "Vaatwasser Vermogen"})
+    c.get_nilm_devices_table = lambda: [
+        {"naam": "Meterkast", "huidig_vermogen_w": 18.0}
+    ]
+
+    assert c.get_largest_known_consumer() == "Meterkast (18 W)"
