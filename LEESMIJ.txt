@@ -1,4 +1,4 @@
-EMS v5.18.2 - alleen de wijzigingen sinds v5.18.1
+EMS v5.18.3 - alle wijzigingen sinds v5.18.1 (bevat v5.18.2)
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
     const.py, coordinator.py, overview_svg.py
@@ -8,18 +8,21 @@ TE KOPIEREN naar config/custom_components/energy_management_system/
 NAAR DE REPO
     README.md, CHANGELOG.md
     dashboards/energy_management_system_dashboard.yaml   GEWIJZIGD
-    tests/ (drie bestanden)
+    tests/ (vier bestanden)
 
-Voor HACS: release met tag v5.18.2.
+Voor HACS: release met tag v5.18.3.
 
-VIER DINGEN
-1. De plaat rekt mee met de kaart in plaats van te blijven hangen op
-   1000 pixels - nu volledig scherm op de pagina Visueel.
-2. De plaat staat niet meer op de landingspagina.
-3. De uitleg en de waarom-regel lopen over twee regels, afgebroken op een
-   woord in plaats van midden in een zin.
-4. "Diepvries schuur Vermogen" wordt "Diepvries schuur": het meetwoord uit
-   de entiteitnaam gaat eraf.
+WAT ER VERANDERT
 
-LET OP: heb je het dashboard handmatig aangepast, haal dan zelf de
-markdown-kaart met 'overzichtsplaat' weg uit de pagina Overzicht.
+1. Het doek is breed geworden: 1600 bij 700 in plaats van 1000 bij 790.
+   Op een monitor past de plaat daarmee in een beeld.
+2. De plaat past zich zelf aan een smal scherm aan: onder 760 pixels
+   vallen de grafiek, het besluitblok en de statusbalk weg, en wordt het
+   stroomschema groter getekend.
+3. De uitleg en de waarom-regel breken af op een woord.
+4. "Diepvries schuur Vermogen" wordt "Diepvries schuur".
+5. De plaat staat niet meer op de landingspagina.
+
+CONTROLEREN NA DE HERSTART
+- op de monitor: past de plaat in een beeld?
+- op de telefoon: zie je alleen het stroomschema, groter getekend?

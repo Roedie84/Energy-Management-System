@@ -960,12 +960,12 @@ def _besluitblok(x, y, b, h, besluit, uitleg, waarom):
         f'<rect x="{x}" y="{y}" width="4" height="{h}" rx="2" fill="#b088f9"/>',
         f'<text x="{x + 24}" y="{y + 28}" fill="#6f7d8c" font-size="11" '
         f'letter-spacing="1.8" font-weight="600">EMS BESLUIT</text>',
-        f'<text x="{x + 24}" y="{y + 62}" fill="#f4f7fa" font-size="26" '
+        f'<text x="{x + 24}" y="{y + 58}" fill="#f4f7fa" font-size="24" '
         f'font-weight="650" letter-spacing="0.5">'
-        f"{_kort(str(besluit).upper() if besluit else ONBEKEND, 30)}</text>",
+        f"{_kort(str(besluit).upper() if besluit else ONBEKEND, 34)}</text>",
     ]
-    hoogte = y + 88
-    for regel in _regels(uitleg, 78, 2):
+    hoogte = y + 80
+    for regel in _regels(uitleg, 96, 1):
         d.append(
             f'<text x="{x + 24}" y="{hoogte}" fill="#8b98a5" '
             f'font-size="13">{regel}</text>'
@@ -973,7 +973,7 @@ def _besluitblok(x, y, b, h, besluit, uitleg, waarom):
         hoogte += 20
     if waarom:
         eerste = True
-        for regel in _regels(" · ".join(waarom), 76, 2):
+        for regel in _regels(" · ".join(waarom), 96, 1):
             kop = (
                 '<tspan fill="#b088f9" font-weight="600">WAAROM  </tspan>'
                 if eerste
@@ -1031,9 +1031,20 @@ def bouw_scada(g: dict) -> str:
             else None
         )
     d = [
-        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 790" '
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 700" '
         'width="100%" font-family="system-ui, -apple-system, Segoe UI, '
         'sans-serif">',
+        # v5.18.3: een SVG in een `<img>` kent zijn EIGEN breedte, dus hij
+        # kan zelf zien of hij op een telefoon staat. Op een smal scherm
+        # vallen de bijzaken weg en wordt het schema groter getekend - dan
+        # blijven de cijfers leesbaar in plaats van mee te krimpen.
+        "<style>"
+        "@media (max-width: 760px) {"
+        "  .bijzaak { display: none; }"
+        "  #stroomschema { transform: translate(0px, -120px) scale(1.5);"
+        "                  transform-origin: 700px 330px; }"
+        "}"
+        "</style>"
         "<defs>"
         '<linearGradient id="doek" x1="0" y1="0" x2="0" y2="1">'
         '<stop offset="0" stop-color="#151d26"/>'
@@ -1042,7 +1053,7 @@ def bouw_scada(g: dict) -> str:
         '<stop offset="0" stop-color="#1e2731"/>'
         '<stop offset="1" stop-color="#171f28"/></linearGradient>'
         "</defs>",
-        '<rect width="1000" height="790" rx="18" fill="url(#doek)"/>',
+        '<rect width="1600" height="700" rx="18" fill="url(#doek)"/>',
         '<text x="36" y="40" fill="#6f7d8c" font-size="11" letter-spacing="2.4" '
         'font-weight="600">ENERGY MANAGEMENT SYSTEM</text>',
         f'<circle cx="42" cy="70" r="6" fill="{statuskleur}"/>',
@@ -1050,14 +1061,15 @@ def bouw_scada(g: dict) -> str:
         f'font-weight="700" letter-spacing="0.5">{status}</text>',
         f'<text x="36" y="102" fill="#6f7d8c" font-size="12">'
         f"{_kort(str(g.get('status_regel') or ''), 90)}</text>",
-        f'<text x="964" y="40" fill="#6f7d8c" font-size="11" '
+        f'<text x="1564" y="40" fill="#6f7d8c" font-size="11" '
         f'text-anchor="end" letter-spacing="1">{g.get("moment") or ""}</text>',
     ]
     verloop = g.get("verloop") or {}
     if verloop:
+        d.append('<g class="bijzaak">')
         d.append(
             _sparkline(
-                688, 52, 276, 40,
+                1240, 46, 324, 40,
                 [
                     (verloop.get("pv") or [], "#f0b429", True),
                     (verloop.get("huis") or [], "#8b98a5", False),
@@ -1070,28 +1082,30 @@ def bouw_scada(g: dict) -> str:
             )
         )
         d.append(
-            '<text x="964" y="106" fill="#6f7d8c" font-size="10" '
+            '<text x="1564" y="100" fill="#6f7d8c" font-size="10" '
             'text-anchor="end" letter-spacing="1">'
             "VANDAAG · WERKELIJK TEGEN VERWACHT</text>"
         )
+        d.append("</g>")
     d += [
-        '<circle cx="500" cy="352" r="22" fill="none" stroke="#2c3846">'
+        '<g id="stroomschema">',
+        '<circle cx="700" cy="330" r="22" fill="none" stroke="#2c3846">'
         '<animate attributeName="r" values="20;26;20" dur="3.4s" '
         'repeatCount="indefinite"/>'
         '<animate attributeName="opacity" values="0.9;0.25;0.9" dur="3.4s" '
         'repeatCount="indefinite"/></circle>',
-        '<circle cx="500" cy="352" r="7" fill="#f4f7fa"/>',
-        _stroom(500, 274, 500, 328, pv or 0, 540, 306, "#f0b429"),
-        _stroom(330, 352, 474, 352, net or 0, 402, 338, netkleur),
-        _stroom(526, 352, 670, 352, huis or 0, 598, 338, "#f4f7fa"),
-        _stroom(500, 442, 500, 376, accu or 0, 452, 414, KLEUR_GOED),
-        _knoop(363, 144, 274, 126, "ZONNEPANELEN", _primair(pv, _vermogen),
+        '<circle cx="700" cy="330" r="7" fill="#f4f7fa"/>',
+        _stroom(700, 252, 700, 306, pv or 0, 744, 284, "#f0b429"),
+        _stroom(430, 330, 674, 330, net or 0, 552, 316, netkleur),
+        _stroom(726, 330, 970, 330, huis or 0, 848, 316, "#f4f7fa"),
+        _stroom(700, 412, 700, 354, accu or 0, 652, 386, KLEUR_GOED),
+        _knoop(563, 122, 274, 126, "ZONNEPANELEN", _primair(pv, _vermogen),
                g.get("zon_onder") or "—", "#f0b429", g.get("zon_vandaag"),
                icoon="zon"),
         # De pijl hoort bij de RICHTING, niet bij het getal: stond hij
         # ervoor, dan werd bij precies nul uitwisseling het bolletje het
         # hoofdgetal - de opmaak splitst op de eerste spatie.
-        _knoop(56, 290, 274, 126, "NET",
+        _knoop(120, 268, 310, 126, "NET",
                _primair(None if net is None else abs(net), _vermogen),
                g.get("net_onder")
                or (
@@ -1101,13 +1115,16 @@ def bouw_scada(g: dict) -> str:
                ),
                netkleur, g.get("net_vandaag"), icoon="net",
                rechtsonder=f"{netpijl} {netrichting}".strip()),
-        _knoop(670, 290, 274, 126, "HUIS", _primair(huis, _vermogen),
+        _knoop(970, 268, 310, 126, "HUIS", _primair(huis, _vermogen),
                g.get("huis_onder") or "—", "#f4f7fa", g.get("huis_vandaag"),
                icoon="huis"),
-        _accukaart(363, 442, 274, 150, accu, accustand, g, koeling),
-        _besluitblok(56, 616, 560, 152, g.get("besluit"), g.get("besluit_uitleg"),
+        _accukaart(563, 412, 274, 150, accu, accustand, g, koeling),
+        "</g>",
+        '<g class="bijzaak">',
+        _besluitblok(120, 566, 800, 112, g.get("besluit"), g.get("besluit_uitleg"),
                      g.get("waarom")),
-        _infobalk(632, 616, 312, g.get("balk") or [], hoog=152),
+        _infobalk(950, 566, 530, g.get("balk") or [], hoog=112),
+        "</g>",
         "</svg>",
     ]
     return "".join(d)

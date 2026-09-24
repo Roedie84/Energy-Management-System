@@ -28209,3 +28209,37 @@ lijst met meetwoorden - vermogen, power, stroom, energie, en de fasevarianten
 - haalt dat eraf.
 
 **Volledige testsuite**: 4235 tests, allemaal groen.
+
+
+## v5.18.3 — Automatische schaling
+
+Gemeld met een schermafdruk: *"schaling werkt niet"*, en daarna: *"ik wil
+graag automatische schaling, zodat hij op meerdere devices goed te zien
+is."*
+
+### De vorm was het probleem
+
+1000 bij 790 is bijna vierkant. Rekt zo'n plaat mee met een breed scherm,
+dan wordt hij vanzelf hoger dan het scherm zelf: op 1900 pixels breed werd
+hij 1500 hoog. Het doek is nu **1600 bij 700** - dezelfde indeling, maar
+breed. Op een monitor past hij daarmee in één beeld.
+
+### De plaat past zich zelf aan
+
+Een SVG in een `<img>` kent zijn EIGEN breedte. Hij kan dus zelf zien of
+hij op een telefoon staat, met een mediaregel in de plaat:
+
+```
+@media (max-width: 760px) {
+  .bijzaak      { display: none; }      /* grafiek, besluitblok, statusbalk */
+  #stroomschema { scale(1.5) }          /* het schema groter getekend */
+}
+```
+
+Op een smal scherm vallen de bijzaken weg en wordt het schema groter
+getekend, in plaats van dat alles evenredig meekrimpt tot het onleesbaar is.
+
+Een toets bewaakt dat wat wegvalt géén antwoord op de vijf vragen is: het
+stroomschema met zon, net, huis en accu blijft staan.
+
+**Volledige testsuite**: 4238 tests, allemaal groen.

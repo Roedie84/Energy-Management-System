@@ -87,7 +87,7 @@ def test_elke_knoop_heeft_een_eigen_regel_per_gegeven(make_coordinator, hass):
     # de twee regels van het NET-kader staan onder elkaar, niet naast elkaar
     hoogtes = {
         int(m.group(1))
-        for m in re.finditer(r'<text x="76" y="(\d+)"', plaat)
+        for m in re.finditer(r'<text x="140" y="(\d+)"', plaat)
     }
 
     assert len(hoogtes) >= 3, hoogtes
@@ -158,7 +158,8 @@ def test_het_grafiekje_beslaat_altijd_de_hele_dag(make_coordinator, hass):
     ]
 
     # vier uur van de dag: de curve loopt tot ongeveer een zesde van de breedte
-    assert max(xs) < 700 + 264 / 3, max(xs)
+    # v5.18.3: het grafiekje staat rechtsboven op een doek van 1600 breed.
+    assert max(xs) < 1240 + 324 / 3, max(xs)
 
 
 def test_de_plaat_staat_alleen_op_de_pagina_visueel():
@@ -290,3 +291,51 @@ def test_het_waarom_komt_uit_de_beslislogica(make_coordinator, hass):
     assert gegevens["waarom"] == [
         "hoge zonverwachting", "reserve voldoende", "vierde regel",
     ]
+
+
+def test_de_plaat_is_breed_genoeg_voor_een_beeldscherm():
+    """Gemeld: "schaling werkt niet" - bij 1000 bij 790 werd de plaat op
+    een breed scherm hoger dan het scherm zelf. Breed doek, lage
+    verhouding."""
+    import re
+
+    from custom_components.energy_management_system.overview_svg import bouw_scada
+
+    breedte, hoogte = (
+        int(x)
+        for x in re.search(r'viewBox="0 0 (\d+) (\d+)"', bouw_scada({})).groups()
+    )
+
+    assert breedte / hoogte >= 2.2, f"{breedte}x{hoogte}"
+
+
+def test_de_plaat_past_zich_aan_een_smal_scherm_aan():
+    """Automatische schaling: een SVG in een `<img>` kent zijn eigen
+    breedte, dus hij ziet zelf of hij op een telefoon staat. Dan vallen de
+    bijzaken weg en wordt het schema groter getekend."""
+    from custom_components.energy_management_system.overview_svg import bouw_scada
+
+    plaat = bouw_scada({"status_kort": "GOED", "verloop": {"pv": [0, 1]}})
+
+    assert "@media (max-width: 760px)" in plaat
+    assert 'class="bijzaak"' in plaat
+    assert 'id="stroomschema"' in plaat
+
+
+def test_de_mediaregel_verbergt_geen_primaire_waarde():
+    """Wat wegvalt op een telefoon mag geen antwoord op de vijf vragen
+    zijn: het schema zelf blijft staan."""
+    from custom_components.energy_management_system.overview_svg import bouw_scada
+
+    plaat = bouw_scada(
+        {"pv_w": 653.0, "net_w": -60.0, "huis_w": 132.0, "accu_w": -461.0,
+         "accustand": "LADEN", "soc": 10.0}
+    )
+    # Het schema loopt van zijn eigen opening tot de bijzaken eronder; op
+    # de eerste </g> knippen zou midden in een icoon eindigen.
+    begin = plaat.index('<g id="stroomschema">')
+    eind = plaat.index('<g class="bijzaak">', begin)
+    schema = plaat[begin:eind]
+
+    for stuk in ("ZONNEPANELEN", "NET", "HUIS", "THUISACCU", "653", "132"):
+        assert stuk in schema, stuk
