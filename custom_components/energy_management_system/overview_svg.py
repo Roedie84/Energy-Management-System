@@ -1035,7 +1035,7 @@ def bouw_scada(g: dict) -> str:
             else None
         )
     d = [
-        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 530" '
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 578" '
         'width="100%" font-family="system-ui, -apple-system, Segoe UI, '
         'sans-serif">',
         # v5.18.3: een SVG in een `<img>` kent zijn EIGEN breedte, dus hij
@@ -1057,7 +1057,7 @@ def bouw_scada(g: dict) -> str:
         '<stop offset="0" stop-color="#1e2731"/>'
         '<stop offset="1" stop-color="#171f28"/></linearGradient>'
         "</defs>",
-        '<rect width="1600" height="530" rx="18" fill="url(#doek)"/>',
+        '<rect width="1600" height="578" rx="18" fill="url(#doek)"/>',
         '<text x="36" y="40" fill="#6f7d8c" font-size="11" letter-spacing="2.4" '
         'font-weight="600">ENERGY MANAGEMENT SYSTEM</text>',
         f'<circle cx="42" cy="70" r="6" fill="{statuskleur}"/>',
@@ -1140,9 +1140,9 @@ def bouw_scada(g: dict) -> str:
         _accukaart(563, 282, 274, 112, accu, accustand, g, koeling),
         "</g>",
         '<g class="bijzaak">',
-        _besluitblok(120, 398, 1010, 116, g.get("besluit"), g.get("besluit_uitleg"),
+        _besluitblok(120, 418, 1010, 128, g.get("besluit"), g.get("besluit_uitleg"),
                      g.get("waarom")),
-        _infobalk(1160, 398, 320, g.get("balk") or [], hoog=116),
+        _infobalk(1160, 418, 320, g.get("balk") or [], hoog=128),
         "</g>",
         "</svg>",
     ]
@@ -1192,9 +1192,11 @@ def _accukaart(x, y, b, h, accu_w, accustand, g, koeling=None):
             f'font-size="12" font-weight="600" text-anchor="end">tekort '
             f'{_getal(g.get("tekort_kwh"), "kWh", 2)}</text>'
             if g.get("tekort_kwh")
+            # v5.19.10: RUIMTE om bij te laden, niet "vrij" boven de reserve -
+            # hetzelfde getal en woord als in de waarom-regel.
             else f'<text x="{x + b - 20}" y="{y + 94}" fill="#8b98a5" '
-            f'font-size="12" text-anchor="end">vrij '
-            f'{_getal(g.get("vrij_kwh"), "kWh", 1)}</text>'
+            f'font-size="12" text-anchor="end">ruimte '
+            f'{_getal(g.get("ruimte_kwh"), "kWh", 1)}</text>'
         ),
         # Geen balk zonder nominale capaciteit en ondergrens - zie
         # `cockpit_accu`. Liever niets dan een geloofwaardige benadering.

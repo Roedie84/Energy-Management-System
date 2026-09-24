@@ -1,19 +1,28 @@
-EMS v5.19.11 - alleen de wijziging sinds v5.19.10
+EMS v5.19.12 - ALLE wijzigingen sinds v5.19.8
+
+Waarom: van v5.19.8 naar v5.19.11 bleven const.py en overview_svg.py op
+v5.19.8 staan - de zip van v5.19.11 bevatte alleen coordinator.py. Deze zip
+bevat alles sinds v5.19.8.
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
-    coordinator.py
+    const.py, coordinator.py, overview_svg.py
     dashboard_template.yaml   (gaat altijd mee, ongewijzigd)
     manifest.json, bestandscontrole.json
 
 NAAR DE REPO
     README.md, CHANGELOG.md
     dashboards/energy_management_system_dashboard.yaml
-    tests/test_cockpit_matrix.py
+    tests/ (drie bestanden)
 
-Voor HACS: release met tag v5.19.11.
+Voor HACS: release met tag v5.19.12.
 
-WAT ER VERANDERT
-"Grootste nu" telt ook de apparaten met een eigen vermogenssensor mee -
-vaatwasser, wasmachine en de rest. Die werden alleen bekeken als niets in
-de apparatentabel iets verbruikte, en de meterkast verbruikt altijd wel
-wat. Bij een draaiende vaatwasser staat er nu "Vaatwasser (2013 W)".
+WAT ER SINDS v5.19.8 IN ZIT
+- v5.19.9   "Ontladen in duur blok" was een fout label; de cockpit toont
+            de titel uit het register. Meer ruimte tussen de kaarten.
+- v5.19.10  de accukaart zegt "ruimte" (wat er nog bij kan) in plaats
+            van "vrij".
+- v5.19.11  de vaatwasser telt mee als grootste verbruiker.
+
+NA DE HERSTART
+De melding "Onvolledige installatie" hoort weg te zijn, en in Diagnose
+gezondheid staat weer "bestand ok".

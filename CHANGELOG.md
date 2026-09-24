@@ -28623,3 +28623,27 @@ Nu tellen alle apparaten met een eigen vermogenssensor uit
 wasmachine en de rest, met de naam van hun eigen sensor.
 
 **Volledige testsuite**: 4269 tests, allemaal groen.
+
+
+## v5.19.12 — Een volledige levering sinds v5.19.8
+
+Gemeld na installatie van v5.19.11:
+
+```
+Onvolledige installatie: 2 bestand(en) wijken af en 0 ontbreken.
+```
+
+De bestandscontrole had gelijk. De stap ging van v5.19.8 naar v5.19.11, en de
+zip van v5.19.11 bevatte alleen wat in DIE versie veranderde. Daardoor bleven
+twee bestanden op v5.19.8 staan:
+
+```
+const.py         gewijzigd in v5.19.9   het rechtgezette label
+overview_svg.py  gewijzigd in v5.19.9   meer ruimte
+                 en in v5.19.10         "ruimte" in plaats van "vrij"
+```
+
+Geen codewijziging in deze versie. Een nieuw nummer omdat de tag v5.19.11
+al bestond met een onvolledige inhoud; deze release bevat alles sinds v5.19.8.
+
+**Volledige testsuite**: 4269 tests, allemaal groen.

@@ -2367,7 +2367,10 @@ REASON_REGISTRY: dict[str, dict] = {
         ),
         "ernst": "info",
         "getallen": True,
-        "label": "ontladen in duur blok",
+        # v5.19.9: was "ontladen in duur blok" - in tegenspraak met de eigen
+        # titel ("Huis dekken uit de accu") en uitleg van deze reden. Gemeld:
+        # "EMS besluit klopt niet nu? Het is juist geen duur blok."
+        "label": "huis dekken uit de accu",
         "waarom_vraag": "Waarom ontlaad je nu?",
         "korte_naam": "huis dekken",
         "emoji": "⏳",
