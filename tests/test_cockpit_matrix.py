@@ -275,7 +275,11 @@ def test_de_volgende_actie_komt_uit_het_kwartierplan(make_coordinator, hass):
 
 def test_geen_wisseling_in_het_plan_is_geen_volgende_actie(make_coordinator, hass):
     """De oude terugval zette hier het goedkope blok neer - geloofwaardig
-    maar onjuist."""
+    maar onjuist.
+
+    v5.19.1: het antwoord is niet meer None maar "geen wisseling". Gemeld:
+    "2 onbekenden?" - het plan bestaat wél en voorziet geen wisseling, en
+    dat is iets anders dan niet weten."""
     from homeassistant.util import dt as dt_util
 
     nu = dt_util.now()
@@ -288,7 +292,7 @@ def test_geen_wisseling_in_het_plan_is_geen_volgende_actie(make_coordinator, has
     )
     c.last_cheap_block_start = nu + timedelta(hours=4)
 
-    assert c.volgende_actie(nu) is None
+    assert c.volgende_actie(nu) == "geen wisseling"
 
 
 def test_een_actie_in_het_verleden_telt_niet(make_coordinator, hass):
@@ -300,7 +304,8 @@ def test_een_actie_in_het_verleden_telt_niet(make_coordinator, hass):
         [{"van": (nu - timedelta(minutes=30)).isoformat(), "modus": "laden"}],
     )
 
-    assert c.volgende_actie(nu) is None
+    # v5.19.1: het plan bestaat, maar er komt niets meer - "geen wisseling".
+    assert c.volgende_actie(nu) == "geen wisseling"
 
 
 def test_zonder_plan_geen_volgende_actie(make_coordinator, hass):
@@ -537,3 +542,39 @@ def test_een_te_lange_zin_krijgt_een_beletselteken_op_de_laatste_regel():
     assert len(regels) == 2
     assert regels[-1].endswith("…")
     assert not regels[0].endswith("…")
+
+
+def test_geen_wisseling_in_het_plan_zegt_dat_ook(make_coordinator, hass):
+    """v5.19.1 - gemeld: "2 onbekenden?". Het plan bestaat wél en voorziet
+    geen wisseling; dat is iets anders dan "ik weet het niet"."""
+    from homeassistant.util import dt as dt_util
+
+    nu = dt_util.now()
+    c = _plan(
+        make_coordinator({}),
+        [
+            {"van": (nu - timedelta(minutes=10)).isoformat(), "modus": "smart"},
+            {"van": (nu + timedelta(minutes=20)).isoformat(), "modus": "smart"},
+        ],
+    )
+
+    assert c.volgende_actie(nu) == "geen wisseling"
+
+
+def test_zonder_plan_blijft_het_onbekend(make_coordinator, hass):
+    """Geen plan is wél "ik weet het niet"."""
+    c = _plan(make_coordinator({}), [])
+
+    assert c.volgende_actie() is None
+
+
+def test_zonder_goedkoop_blok_heet_de_reserve_geen_blok(make_coordinator, hass):
+    """Er is geen volgend blok om naar te overbruggen - dat weten we, dus
+    zeggen we het."""
+    c = _gezond(make_coordinator({}), hass)
+    c.last_cheap_block_start = None
+    c.last_reserve_margin_breakdown = {}
+
+    balk = dict((label, waarde) for label, waarde, _k, _p in c._schema_gegevens()["balk"])
+
+    assert balk["RESERVE"] == "geen blok"

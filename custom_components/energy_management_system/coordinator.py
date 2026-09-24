@@ -14626,7 +14626,9 @@ class EnergyManagementSystemCoordinator:
                 continue
             if regel.get("modus") and regel.get("modus") != huidige:
                 return f"{regel['modus']} {van:%H:%M}"
-        return None
+        # v5.19.1: het plan bestaat WEL en voorziet geen wisseling. Dat is
+        # iets anders dan "ik weet het niet" - en dat hoort er te staan.
+        return "geen wisseling"
 
     def cockpit_huisverbruik_w(self) -> float | None:
         """Het huisverbruik voor de cockpit, of None (v5.18).
@@ -14947,7 +14949,11 @@ class EnergyManagementSystemCoordinator:
                     "RESERVE",
                     f"{accu['reserve_kwh']:.2f} kWh".replace(".", ",")
                     if accu.get("reserve_kwh") is not None
-                    else None,
+                    # v5.19.1: geen reserve betekent bijna altijd dat er geen
+                    # volgend goedkoop blok is om naar te overbruggen. Dat
+                    # weten we, dus zeg het - ONBEKEND zou suggereren dat we
+                    # het niet weten.
+                    else ("geen blok" if blok is None else None),
                     "#f4f7fa",
                     None,
                 ),

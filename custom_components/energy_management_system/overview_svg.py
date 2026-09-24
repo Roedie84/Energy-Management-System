@@ -964,7 +964,7 @@ def _besluitblok(x, y, b, h, besluit, uitleg, waarom):
         f"{_kort(str(besluit).upper() if besluit else ONBEKEND, 34)}</text>",
     ]
     hoogte = y + 80
-    for regel in _regels(uitleg, 96, 1):
+    for regel in _regels(uitleg, 148, 1):
         d.append(
             f'<text x="{x + 24}" y="{hoogte}" fill="#8b98a5" '
             f'font-size="13">{regel}</text>'
@@ -972,7 +972,7 @@ def _besluitblok(x, y, b, h, besluit, uitleg, waarom):
         hoogte += 20
     if waarom:
         eerste = True
-        for regel in _regels(" · ".join(waarom), 96, 1):
+        for regel in _regels(" · ".join(waarom), 146, 2):
             kop = (
                 '<tspan fill="#b088f9" font-weight="600">WAAROM  </tspan>'
                 if eerste
@@ -1097,7 +1097,7 @@ def bouw_scada(g: dict) -> str:
         _stroom(700, 200, 700, 244, pv or 0, 744, 228, "#f0b429"),
         _stroom(430, 268, 674, 268, net or 0, 552, 254, netkleur),
         _stroom(726, 268, 970, 268, huis or 0, 848, 254, "#f4f7fa"),
-        _stroom(700, 314, 700, 292, accu or 0, 652, 308, KLEUR_GOED),
+        _stroom(700, 302, 700, 292, accu or 0, 648, 300, KLEUR_GOED),
         _knoop(563, 88, 274, 112, "ZONNEPANELEN", _primair(pv, _vermogen),
                g.get("zon_onder") or "—", "#f0b429", g.get("zon_vandaag"),
                icoon="zon"),
@@ -1117,12 +1117,12 @@ def bouw_scada(g: dict) -> str:
         _knoop(970, 212, 310, 112, "HUIS", _primair(huis, _vermogen),
                g.get("huis_onder") or "—", "#f4f7fa", g.get("huis_vandaag"),
                icoon="huis"),
-        _accukaart(563, 314, 274, 112, accu, accustand, g, koeling),
+        _accukaart(563, 302, 274, 112, accu, accustand, g, koeling),
         "</g>",
         '<g class="bijzaak">',
-        _besluitblok(120, 436, 800, 112, g.get("besluit"), g.get("besluit_uitleg"),
+        _besluitblok(120, 424, 1010, 130, g.get("besluit"), g.get("besluit_uitleg"),
                      g.get("waarom")),
-        _infobalk(950, 436, 530, g.get("balk") or [], hoog=112),
+        _infobalk(1160, 424, 320, g.get("balk") or [], hoog=130),
         "</g>",
         "</svg>",
     ]
@@ -1150,28 +1150,28 @@ def _accukaart(x, y, b, h, accu_w, accustand, g, koeling=None):
         f'<text x="{x + b - 20}" y="{y + 58}" fill="{kleur}" font-size="20" '
         f'font-weight="600" text-anchor="end">'
         f'{ONBEKEND if accu_w is None else _vermogen(abs(accu_w))}</text>',
-        f'<text x="{x + 20}" y="{y + 80}" fill="{kleur}" font-size="12" '
+        f'<text x="{x + 20}" y="{y + 78}" fill="{kleur}" font-size="12" '
         f'letter-spacing="1.4" font-weight="600">{accustand}</text>',
-        f'<text x="{x + b - 20}" y="{y + 80}" fill="#6f7d8c" font-size="12" '
+        f'<text x="{x + b - 20}" y="{y + 78}" fill="#6f7d8c" font-size="12" '
         f'text-anchor="end">{_kort(str(koeling or ""), 20)}</text>',
-        f'<text x="{x + 20}" y="{y + 96}" fill="#8b98a5" font-size="12">'
+        f'<text x="{x + 20}" y="{y + 94}" fill="#8b98a5" font-size="12">'
         f'reserve {_getal(g.get("reserve_kwh"), "kWh", 2)}</text>',
 
         # Is er een tekort, dan staat dat hier in plaats van "vrij 0,0" -
         # anders lagen ze over elkaar heen, en "vrij 0,0" zegt minder.
         (
-            f'<text x="{x + b - 20}" y="{y + 96}" fill="{KLEUR_ALARM}" '
+            f'<text x="{x + b - 20}" y="{y + 94}" fill="{KLEUR_ALARM}" '
             f'font-size="12" font-weight="600" text-anchor="end">tekort '
             f'{_getal(g.get("tekort_kwh"), "kWh", 2)}</text>'
             if g.get("tekort_kwh")
-            else f'<text x="{x + b - 20}" y="{y + 96}" fill="#8b98a5" '
+            else f'<text x="{x + b - 20}" y="{y + 94}" fill="#8b98a5" '
             f'font-size="12" text-anchor="end">vrij '
             f'{_getal(g.get("vrij_kwh"), "kWh", 1)}</text>'
         ),
         # Geen balk zonder nominale capaciteit en ondergrens - zie
         # `cockpit_accu`. Liever niets dan een geloofwaardige benadering.
         (
-            _soc_balk(x + 20, y + h - 11, b - 40, balk.get("soc_deel"),
+            _soc_balk(x + 20, y + h - 10, b - 40, balk.get("soc_deel"),
                       balk.get("reserve_deel"), kleur, balk.get("ondergrens_deel"))
             if (balk := g.get("accu_balk") or {})
             else ""

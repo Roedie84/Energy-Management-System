@@ -1,4 +1,4 @@
-EMS v5.19 - alle wijzigingen sinds v5.18.6
+EMS v5.19.1 - alle wijzigingen sinds v5.18.6 (bevat v5.19)
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
     const.py, coordinator.py, sensor.py, overview_svg.py, diagnostics.py
@@ -10,25 +10,27 @@ NAAR DE REPO
     dashboards/energy_management_system_dashboard.yaml   GEWIJZIGD
     tests/ (zeven bestanden)
 
-Voor HACS: release met tag v5.19.
+Voor HACS: release met tag v5.19.1.
 
-DE COCKPIT LOOPT NU LIVE MEE
+DE COCKPIT LOOPT LIVE MEE (v5.19)
 
-Er is een nieuwe sensor bijgekomen: "Energy Management System Cockpit".
-Die luistert naar je P1-meter, de zon, het accuvermogen en de laadstand,
-en tekent de plaat opnieuw zodra er iets verandert - hoogstens eens per
-twee seconden.
+Nieuwe sensor "Energy Management System Cockpit". Die luistert naar je
+P1-meter, de zon, het accuvermogen en de laadstand en tekent de plaat
+opnieuw zodra er iets verandert - hoogstens eens per twee seconden.
 
 Gemeten: de context verzamelen kost 1,9 ms en gebeurt een keer per ronde;
-het tekenen zelf kost 0,1 ms.
+tekenen kost 0,1 ms.
 
 LET OP HET DASHBOARD
 De plaat komt nu van:
     sensor.woonkamer_energy_management_system_cockpit, attribuut 'plaat'
-en niet meer van het attribuut 'overzichtsplaat' van de GACS-sensor.
 Draai je het dashboard uit dashboard_template.yaml, dan gaat dat vanzelf.
 Heb je het handmatig aangepast, pas dan die markdown-kaart aan.
 
-OOK IN DEZE VERSIE
-- de waarom-regel viel onder zijn kader: opgelost, met een toets die
-  narekent dat geen tekst buiten zijn kader valt.
+NIEUW IN v5.19.1
+1. Het besluitblok is breder: de uitleg past op een regel, de waarom-regel
+   krijgt er twee. Geen afgekapte zinnen meer.
+2. Twee keer ONBEKEND is weg. Nu:
+     volgende actie -> "geen wisseling"  (het plan voorziet er geen)
+     reserve        -> "geen blok"       (niets om naar te overbruggen)
+   ONBEKEND blijft voor het geval dat we het werkelijk niet weten.

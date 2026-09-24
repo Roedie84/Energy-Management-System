@@ -272,8 +272,9 @@ def test_the_bottom_bar_spans_the_full_width():
     plaat = _plaat(balk=[("BESLUIT", "slim", "#e8edf2", None)])
 
     # v5.16: de balk loopt tot dezelfde rand als de kaders links en rechts.
-    # v5.18.3: de balk staat rechts naast het besluitblok op een breed doek.
-    assert 'width="530"' in plaat
+    # v5.19.1: het besluitblok is breder geworden zodat de uitleg en de
+    # waarom-regel volledig passen; de balk ernaast is daardoor smaller.
+    assert 'width="320"' in plaat
 
 
 # --- v3.22.0: balkjes in plaats van meters ---------------------------

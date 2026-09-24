@@ -28338,3 +28338,28 @@ verwaarloosbaar, en de zware GACS-sensor wordt er juist lichter van.
 Het dashboard leest de plaat nu van `sensor...cockpit`, attribuut `plaat`.
 
 **Volledige testsuite**: 4245 tests, allemaal groen.
+
+
+## v5.19.1 — "Tekst niet volledig zichtbaar, en 2 onbekenden?"
+
+### De zinnen passen nu
+
+Het besluitblok was 800 breed en gaf de uitleg en de waarom-regel elk één
+regel. Beide werden afgekapt. Het blok is nu 1010 breed en 130 hoog: de
+uitleg past op één regel, de waarom-regel krijgt er twee.
+
+### Twee keer ONBEKEND was te makkelijk
+
+Op het scherm stond ONBEKEND bij zowel "volgende actie" als "reserve",
+terwijl het EMS in beide gevallen wél iets weet:
+
+```
+volgende actie   het kwartierplan bestaat en voorziet GEEN WISSELING
+reserve          er is GEEN BLOK om naar te overbruggen
+```
+
+ONBEKEND blijft voor het geval dat we het werkelijk niet weten: geen
+kwartierplan. Dat onderscheid is precies wat deze cockpit moet maken - niet
+weten is iets anders dan weten dat er niets is.
+
+**Volledige testsuite**: 4248 tests, allemaal groen.
