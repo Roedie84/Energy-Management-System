@@ -132,7 +132,9 @@ def test_the_plate_gets_a_real_size_instead_of_a_percentage():
     wortel = ET.fromstring(svg)
 
     assert 'width="100%"' not in svg
-    assert wortel.get("width") == "760"
+    # v5.16: de plaat is 1000 breed met het installatieschema; de maat
+    # komt uit de viewBox, niet uit een vast getal.
+    assert wortel.get("width") == wortel.get("viewBox").split()[2]
     assert wortel.get("height") == wortel.get("viewBox").split()[3]
 
 
@@ -210,3 +212,18 @@ def test_the_dashboard_reads_those_attributes_unchanged():
 
     assert "overzichtsplaat" in inhoud
     assert "overzichtsecties" in inhoud
+
+
+def test_de_afbeelding_rekt_mee_met_de_kaart():
+    """Gemeld met een schermafdruk: "geen volledig scherm".
+
+    De vaste maat op de SVG blijft nodig - zonder eigen afmeting valt een
+    `<img>` terug op 300 bij 150 pixels (v3.26.0). Maar zonder rek op de
+    AFBEELDING bleef de plaat hangen op de 1000 pixels uit de viewBox,
+    midden op een breed scherm.
+    """
+    from overview_svg import als_afbeelding
+
+    tag = als_afbeelding('<svg viewBox="0 0 1000 774"><rect/></svg>')
+
+    assert 'width="100%"' in tag.split("src=")[0]

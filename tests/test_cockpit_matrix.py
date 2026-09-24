@@ -483,3 +483,52 @@ def test_de_plaat_komt_er_met_een_zonvolger_erbij(make_coordinator, hass):
     plaat = c.get_overview_svg()
 
     assert plaat.startswith("<img")
+
+
+@pytest.mark.parametrize(
+    "naam,verwacht",
+    [
+        ("Diepvries schuur Vermogen", "Diepvries schuur"),
+        ("Diepvries schuur Vermogen fase 1", "Diepvries schuur"),
+        ("Koelkast schuur Power", "Koelkast schuur"),
+        ("Wasmachine Energie", "Wasmachine"),
+        ("Vaatwasser", "Vaatwasser"),
+        ("Quooker", "Quooker"),
+        (None, None),
+    ],
+)
+def test_de_naam_van_het_apparaat_zonder_meetwoord(
+    make_coordinator, hass, naam, verwacht
+):
+    """Gemeld: "grootste nu: Diepvries schuur Vermogen..." - het apparaat
+    heet "Diepvries schuur"."""
+    c = make_coordinator({})
+
+    assert c.apparaatnaam_zonder_meetwoord(naam) == verwacht
+
+
+def test_de_uitleg_breekt_af_op_een_woord():
+    """Midden in een zin afkappen leest slecht, en juist die zin is de
+    motivatie van het besluit."""
+    from custom_components.energy_management_system.overview_svg import _regels
+
+    zin = (
+        "De accu heeft niet genoeg beschikbare energie (0.00 kWh) om zowel "
+        "het huis te dekken als het dure blok te overbruggen."
+    )
+
+    regels = _regels(zin, 78, 2)
+
+    assert len(regels) == 2
+    assert all(not r.endswith(" ") for r in regels)
+    assert "…" not in " ".join(regels)
+
+
+def test_een_te_lange_zin_krijgt_een_beletselteken_op_de_laatste_regel():
+    from custom_components.energy_management_system.overview_svg import _regels
+
+    regels = _regels(" ".join(["woord"] * 60), 40, 2)
+
+    assert len(regels) == 2
+    assert regels[-1].endswith("…")
+    assert not regels[0].endswith("…")

@@ -86,6 +86,22 @@ PRIJSDAG_VELDEN = {
 # Hoe lang de toestand van een sensor mag zijn (v5.14). Home Assistant
 # weigert een toestand boven de 255 tekens - de sensor valt dan terug op
 # "unknown". De diagnoseregels passen er daarom altijd in.
+# v5.18.2: woorden achter een entiteitnaam die het MEETPUNT aanduiden, niet
+# het apparaat. "Diepvries schuur Vermogen" is het apparaat "Diepvries
+# schuur"; het woord erachter zegt wat de sensor meet.
+MEETWOORDEN_ACHTER_EEN_NAAM = (
+    "vermogen fase 1",
+    "vermogen fase 2",
+    "vermogen fase 3",
+    "vermogen",
+    "power",
+    "stroom",
+    "current",
+    "energie import",
+    "energie",
+    "energy",
+)
+
 DIAGNOSE_REGEL_MAX_TEKENS = 255
 
 # Vanaf hoeveel milliseconden het opbouwen van de GACS-attributen als traag

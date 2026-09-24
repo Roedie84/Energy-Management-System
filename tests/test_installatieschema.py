@@ -161,17 +161,19 @@ def test_het_grafiekje_beslaat_altijd_de_hele_dag(make_coordinator, hass):
     assert max(xs) < 700 + 264 / 3, max(xs)
 
 
-def test_de_plaat_staat_op_de_landingspagina():
-    """Gevraagd: "ik wil in 1 oogopslag (dashboard) de status van het EMS
-    kunnen zien"."""
+def test_de_plaat_staat_alleen_op_de_pagina_visueel():
+    """v5.18.2 - gemeld: "op de landingpage moet hij weg". De cockpit heeft
+    een eigen pagina; op de landingspagina stond hij dubbel."""
     from pathlib import Path
 
     import custom_components.energy_management_system as pkg
 
     sjabloon = (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
     overzicht = sjabloon[sjabloon.index("- title: Overzicht") : sjabloon.index("- title: Visueel")]
+    visueel = sjabloon[sjabloon.index("- title: Visueel") :]
 
-    assert "overzichtsplaat" in overzicht
+    assert "overzichtsplaat" not in overzicht
+    assert "overzichtsplaat" in visueel
 
 
 # --- v5.17: de cockpit ---------------------------------------------------

@@ -50,7 +50,15 @@ def als_afbeelding(svg: str | None, beschrijving: str = "Overzicht") -> str:
     blok = base64.b64encode(plaat.encode("utf-8")).decode("ascii")
     tekst = beschrijving.replace('"', "'")
 
-    return f'<img alt="{tekst}" src="data:image/svg+xml;base64,{blok}">'
+    # v5.18.2: de vaste maat blijft op de SVG staan - daar is hij voor, want
+    # zonder eigen afmeting valt een `<img>` terug op 300 bij 150 pixels.
+    # De REK hoort op de afbeelding: `width="100%"` laat hem de volle
+    # breedte van de kaart pakken, ook op een breed scherm. Zonder dat bleef
+    # hij hangen op de 1000 pixels uit de viewBox.
+    return (
+        f'<img alt="{tekst}" width="100%" '
+        f'src="data:image/svg+xml;base64,{blok}">'
+    )
 
 
 def _vaste_maten(svg: str) -> str:
@@ -909,6 +917,36 @@ def _soc_balk(x, y, b, soc_deel, reserve_deel, kleur, ondergrens_deel=None):
     return "".join(d)
 
 
+def _regels(tekst: str, tekens: int, maximaal: int) -> list[str]:
+    """Breekt een zin af op WOORDEN, over hoogstens zoveel regels (v5.18.2).
+
+    Gemeld: de uitleg en de waarom-regel werden afgekapt op "om zowel
+    het...". Midden in een zin afkappen leest slecht, en juist die zin is
+    de motivatie van het besluit.
+    """
+    woorden = str(tekst or "").split()
+    regels: list[str] = []
+    huidig = ""
+    for woord in woorden:
+        kandidaat = f"{huidig} {woord}".strip()
+        if len(kandidaat) <= tekens:
+            huidig = kandidaat
+            continue
+        regels.append(huidig)
+        huidig = woord
+        if len(regels) == maximaal:
+            break
+    if huidig and len(regels) < maximaal:
+        regels.append(huidig)
+    if not regels:
+        return []
+    # Past het niet, dan alleen op de LAATSTE regel een beletselteken.
+    gebruikt = sum(len(r) + 1 for r in regels)
+    if gebruikt < len(" ".join(woorden)):
+        regels[-1] = regels[-1][: tekens - 1].rstrip() + "…"
+    return regels
+
+
 def _besluitblok(x, y, b, h, besluit, uitleg, waarom):
     """Het EMS-besluit met zijn eigen motivatie (v5.17).
 
@@ -926,17 +964,27 @@ def _besluitblok(x, y, b, h, besluit, uitleg, waarom):
         f'font-weight="650" letter-spacing="0.5">'
         f"{_kort(str(besluit).upper() if besluit else ONBEKEND, 30)}</text>",
     ]
-    if uitleg:
+    hoogte = y + 88
+    for regel in _regels(uitleg, 78, 2):
         d.append(
-            f'<text x="{x + 24}" y="{y + 88}" fill="#8b98a5" font-size="13">'
-            f"{_kort(str(uitleg), 74)}</text>"
+            f'<text x="{x + 24}" y="{hoogte}" fill="#8b98a5" '
+            f'font-size="13">{regel}</text>'
         )
+        hoogte += 20
     if waarom:
-        d.append(
-            f'<text x="{x + 24}" y="{y + 112}" fill="#6f7d8c" font-size="12">'
-            f"<tspan fill=\"#b088f9\" font-weight=\"600\">WAAROM  </tspan>"
-            f"{_kort(' · '.join(waarom), 86)}</text>"
-        )
+        eerste = True
+        for regel in _regels(" · ".join(waarom), 76, 2):
+            kop = (
+                '<tspan fill="#b088f9" font-weight="600">WAAROM  </tspan>'
+                if eerste
+                else '<tspan fill="#171f28">WAAROM  </tspan>'
+            )
+            d.append(
+                f'<text x="{x + 24}" y="{hoogte + 4}" fill="#6f7d8c" '
+                f'font-size="12">{kop}{regel}</text>'
+            )
+            hoogte += 18
+            eerste = False
     return "".join(d)
 
 
@@ -983,7 +1031,7 @@ def bouw_scada(g: dict) -> str:
             else None
         )
     d = [
-        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 774" '
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 790" '
         'width="100%" font-family="system-ui, -apple-system, Segoe UI, '
         'sans-serif">',
         "<defs>"
@@ -994,7 +1042,7 @@ def bouw_scada(g: dict) -> str:
         '<stop offset="0" stop-color="#1e2731"/>'
         '<stop offset="1" stop-color="#171f28"/></linearGradient>'
         "</defs>",
-        '<rect width="1000" height="774" rx="18" fill="url(#doek)"/>',
+        '<rect width="1000" height="790" rx="18" fill="url(#doek)"/>',
         '<text x="36" y="40" fill="#6f7d8c" font-size="11" letter-spacing="2.4" '
         'font-weight="600">ENERGY MANAGEMENT SYSTEM</text>',
         f'<circle cx="42" cy="70" r="6" fill="{statuskleur}"/>',
@@ -1057,9 +1105,9 @@ def bouw_scada(g: dict) -> str:
                g.get("huis_onder") or "—", "#f4f7fa", g.get("huis_vandaag"),
                icoon="huis"),
         _accukaart(363, 442, 274, 150, accu, accustand, g, koeling),
-        _besluitblok(56, 616, 560, 140, g.get("besluit"), g.get("besluit_uitleg"),
+        _besluitblok(56, 616, 560, 152, g.get("besluit"), g.get("besluit_uitleg"),
                      g.get("waarom")),
-        _infobalk(632, 616, 312, g.get("balk") or [], hoog=140),
+        _infobalk(632, 616, 312, g.get("balk") or [], hoog=152),
         "</svg>",
     ]
     return "".join(d)

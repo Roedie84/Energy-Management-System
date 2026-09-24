@@ -28171,3 +28171,41 @@ Bewezen: met de haakjes terug vallen beide toetsen om; zonder de haakjes
 draaien ze groen.
 
 **Volledige testsuite**: 4225 tests, allemaal groen.
+
+
+## v5.18.2 — De plaat rekt mee, en staat niet meer dubbel
+
+Gemeld met twee schermafdrukken: *"geen volledig scherm, en op de
+landingpage moet hij weg."*
+
+### De plaat bleef hangen op 1000 pixels
+
+De oorzaak stamt uit v3.26.0: de SVG kreeg toen een vaste maat, omdat een
+`<img>` zonder eigen afmeting terugvalt op 300 bij 150 pixels. Die vaste
+maat is nodig - maar hij hoort op de SVG, en de REK hoort op de afbeelding.
+Zonder `width="100%"` op de `<img>` bleef de plaat staan op de breedte uit
+zijn viewBox, midden op een breed scherm.
+
+### Van de landingspagina af
+
+De cockpit heeft een eigen pagina. Op de landingspagina stond hij ernaast,
+en dat is dubbel.
+
+### De uitleg werd midden in een zin afgekapt
+
+Opgemerkt in dezelfde schermafdruk: *"om zowel het..."* en *"de accu staat
+op 10%..."*. Juist die zin is de motivatie van het besluit, en dan is
+afkappen op een halve zin het slechtst denkbare punt.
+
+De uitleg en de waarom-regel lopen nu over hoogstens twee regels, afgebroken
+op een WOORD. Past het dan nog niet, dan staat het beletselteken alleen op
+de laatste regel.
+
+### "Diepvries schuur Vermogen"
+
+De grootste verbruiker kwam uit de entiteitnaam, inclusief het woord dat
+zegt wat de sensor meet. Het apparaat heet "Diepvries schuur". Een vaste
+lijst met meetwoorden - vermogen, power, stroom, energie, en de fasevarianten
+- haalt dat eraf.
+
+**Volledige testsuite**: 4235 tests, allemaal groen.

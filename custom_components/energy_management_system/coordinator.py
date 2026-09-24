@@ -393,6 +393,7 @@ from .const import (
     DIGITAL_TWIN_ACCURACY_MIN_SAMPLES,
     DIGITAL_TWIN_ACCURACY_QUEUE_INTERVAL_MINUTES,
     DIGITAL_TWIN_ACCURACY_USABLE_FRACTION,
+    MEETWOORDEN_ACHTER_EEN_NAAM,
     MIN_BATTERY_POWER_IDLE_W,
     BATTERY_MODULE_CELL_DELTA_SERIOUS_V,
     BATTERY_MODULE_CUSUM_SLACK_C,
@@ -14651,6 +14652,22 @@ class EnergyManagementSystemCoordinator:
             return None
         return self._read_corrected_consumption_power()
 
+    def apparaatnaam_zonder_meetwoord(self, naam: str | None) -> str | None:
+        """De naam van het APPARAAT, zonder wat de sensor meet (v5.18.2).
+
+        Gemeld met een schermafdruk: "grootste nu: Diepvries schuur
+        Vermogen...". Het apparaat heet "Diepvries schuur"; het woord
+        erachter komt uit de entiteitnaam en zegt wat er gemeten wordt.
+        """
+        if not naam:
+            return None
+        schoon = str(naam).strip()
+        laag = schoon.lower()
+        for woord in MEETWOORDEN_ACHTER_EEN_NAAM:
+            if laag.endswith(" " + woord):
+                return schoon[: -len(woord) - 1].strip()
+        return schoon
+
     def cockpit_accu(self) -> dict:
         """Laadstand, reserve en vrije ruimte op EEN referentie (v5.18).
 
@@ -14858,7 +14875,11 @@ class EnergyManagementSystemCoordinator:
             ),
             "huis_onder": (
                 f"grootste nu: {grootste}"
-                if (grootste := self.get_largest_known_consumer())
+                if (
+                    grootste := self.apparaatnaam_zonder_meetwoord(
+                        self.get_largest_known_consumer()
+                    )
+                )
                 else None
             ),
             "koeling": (

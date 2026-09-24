@@ -1,23 +1,25 @@
-EMS v5.18.1 - alleen de wijzigingen sinds v5.18
+EMS v5.18.2 - alleen de wijzigingen sinds v5.18.1
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
-    coordinator.py
-    dashboard_template.yaml   (gaat altijd mee, ongewijzigd)
+    const.py, coordinator.py, overview_svg.py
+    dashboard_template.yaml   GEWIJZIGD - plaat van de landingspagina af
     manifest.json, bestandscontrole.json
 
 NAAR DE REPO
     README.md, CHANGELOG.md
-    dashboards/energy_management_system_dashboard.yaml
-    tests/test_cockpit_matrix.py, tests/test_alles_uitgevraagd.py
+    dashboards/energy_management_system_dashboard.yaml   GEWIJZIGD
+    tests/ (drie bestanden)
 
-Voor HACS: release met tag v5.18.1.
+Voor HACS: release met tag v5.18.2.
 
-WAT ER VERANDERT
+VIER DINGEN
+1. De plaat rekt mee met de kaart in plaats van te blijven hangen op
+   1000 pixels - nu volledig scherm op de pagina Visueel.
+2. De plaat staat niet meer op de landingspagina.
+3. De uitleg en de waarom-regel lopen over twee regels, afgebroken op een
+   woord in plaats van midden in een zin.
+4. "Diepvries schuur Vermogen" wordt "Diepvries schuur": het meetwoord uit
+   de entiteitnaam gaat eraf.
 
-De overzichtsplaat viel om: deviation_stdev_percent is een eigenschap, en
-ik riep hem aan als functie. Twee plekken, allebei uit v5.17.
-
-VERWACHT NA DE HERSTART
-- de melding "1 onderdeel(en) vallen om" verdwijnt
-- de plaat staat weer op de landingspagina, met in de statusregel
-  "voorspelling ±X%"
+LET OP: heb je het dashboard handmatig aangepast, haal dan zelf de
+markdown-kaart met 'overzichtsplaat' weg uit de pagina Overzicht.
