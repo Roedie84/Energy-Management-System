@@ -450,7 +450,14 @@ def test_the_visual_page_is_a_panel_again():
     assert all(k["type"] == "markdown" for k in stapel["cards"])
 
 
-def test_the_plate_and_the_sections_are_both_shown():
+def test_only_the_cockpit_is_shown_on_the_visual_page():
+    """v5.18.6 - gemeld: "nog te groot, en 2 gescheiden velden?"
+
+    Op Visueel stonden twee platen onder elkaar: de cockpit en het blok
+    met VANDAAG, VOORUIT en KOSTEN. Samen pasten ze niet op een scherm, en
+    dan begint het scrollen. De cockpit staat er nu alleen; de sectieplaat
+    blijft beschikbaar als attribuut voor wie hem elders wil tonen.
+    """
     import yaml
     from pathlib import Path
 
@@ -463,7 +470,7 @@ def test_the_plate_and_the_sections_are_both_shown():
     inhoud = [k["content"] for k in pagina["cards"][0]["cards"]]
 
     assert any("overzichtsplaat" in c for c in inhoud)
-    assert any("overzichtsecties" in c for c in inhoud)
+    assert not any("overzichtsecties" in c for c in inhoud)
 
 
 def test_no_card_holds_two_svgs():

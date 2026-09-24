@@ -1,19 +1,26 @@
-EMS v5.18.5 - alleen de wijziging sinds v5.18.4
+EMS v5.18.6 - alle wijzigingen sinds v5.18.4 (bevat v5.18.5)
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
     coordinator.py
-    dashboard_template.yaml   (gaat altijd mee, ongewijzigd)
+    dashboard_template.yaml   GEWIJZIGD - alleen de cockpit op Visueel
     manifest.json, bestandscontrole.json
 
 NAAR DE REPO
     README.md, CHANGELOG.md
-    dashboards/energy_management_system_dashboard.yaml
-    tests/test_cockpit_matrix.py
+    dashboards/energy_management_system_dashboard.yaml   GEWIJZIGD
+    tests/ (drie bestanden)
 
-Voor HACS: release met tag v5.18.5.
+Voor HACS: release met tag v5.18.6.
 
 WAT ER VERANDERT
 
-"Meterkast Vermogen (18 W)" wordt "Meterkast (18 W)". De opschoning keek
-naar het einde van de naam, en daar staat het vermogen tussen haakjes -
-dus het meetwoord bleef staan.
+1. Op de pagina Visueel stonden TWEE platen onder elkaar: de cockpit en
+   het blok met VANDAAG / VOORUIT / KOSTEN. Daarom bleef je scrollen. De
+   cockpit staat er nu alleen.
+2. "Meterkast Vermogen (18 W)" wordt "Meterkast (18 W)" (uit v5.18.5).
+
+LET OP: heb je het dashboard handmatig aangepast, haal dan zelf de tweede
+markdown-kaart met 'overzichtsecties' weg van de pagina Visueel.
+
+De sectieplaat blijft beschikbaar als attribuut 'overzichtsecties' op de
+GACS-sensor, voor als je hem ergens anders wilt tonen.

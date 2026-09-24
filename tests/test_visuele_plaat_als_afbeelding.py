@@ -211,7 +211,10 @@ def test_the_dashboard_reads_those_attributes_unchanged():
     inhoud = yaml.dump(visueel)
 
     assert "overzichtsplaat" in inhoud
-    assert "overzichtsecties" in inhoud
+    # v5.18.6: de sectieplaat staat NIET meer op Visueel. Gemeld: "nog te
+    # groot, en 2 gescheiden velden?" - twee platen onder elkaar pasten
+    # niet op een scherm. De cockpit staat er alleen.
+    assert "overzichtsecties" not in inhoud
 
 
 def test_de_afbeelding_rekt_mee_met_de_kaart():

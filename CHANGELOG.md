@@ -28284,3 +28284,18 @@ Koelkast schuur Vermogen fase 1 (77 W) ->  Koelkast schuur (77 W)
 ```
 
 **Volledige testsuite**: 4242 tests, allemaal groen.
+
+
+## v5.18.6 — Twee platen onder elkaar
+
+Gemeld met een schermafdruk: *"nog te groot, en 2 gescheiden velden?"*
+
+Die tweede kaart was een aparte plaat: het blok met VANDAAG, VOORUIT en
+KOSTEN EN KWALITEIT. Op de pagina Visueel stonden dus twee markdown-kaarten
+onder elkaar, en samen pasten ze niet op een scherm - vandaar het scrollen,
+ook nadat de cockpit zelf al was verkleind.
+
+De cockpit staat er nu alleen. De sectieplaat blijft gewoon beschikbaar als
+attribuut, voor wie hem ergens anders wil tonen.
+
+**Volledige testsuite**: 4242 tests, allemaal groen.

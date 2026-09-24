@@ -540,8 +540,6 @@ views:
     cards:
     - type: markdown
       content: '{{ state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''overzichtsplaat'') }}'
-    - type: markdown
-      content: '{{ state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''overzichtsecties'') }}'
 - title: Meldingen
   path: meldingen
   subview: true
