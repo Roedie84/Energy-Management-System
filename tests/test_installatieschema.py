@@ -339,3 +339,50 @@ def test_de_mediaregel_verbergt_geen_primaire_waarde():
 
     for stuk in ("ZONNEPANELEN", "NET", "HUIS", "THUISACCU", "653", "132"):
         assert stuk in schema, stuk
+
+
+def test_geen_twee_teksten_over_elkaar():
+    """Narekenen in plaats van met het oog beoordelen (v5.18.3).
+
+    Bij elke herindeling liep er iets over iets anders heen: het dagtotaal
+    over de contextregel, de tekortregel over de koeltekst, de balk over de
+    reserveregel. Deze toets groepeert de teksten per kolom en eist tussen
+    twee regels in dezelfde kolom minstens 13 pixels.
+    """
+    import re
+    from collections import defaultdict
+
+    from custom_components.energy_management_system.overview_svg import bouw_scada
+
+    plaat = bouw_scada(
+        {
+            "status_kort": "GOED", "status_regel": "koppelingen 70/70 · balans ✓",
+            "pv_w": 1500.0, "accu_w": -1100.0, "net_w": -53.0, "huis_w": 301.0,
+            "accustand": "LADEN", "soc": 15.0, "reserve_kwh": 2.0,
+            "tekort_kwh": 1.57, "vrij_kwh": 0.0,
+            "accu_balk": {"soc_deel": 0.15, "reserve_deel": 0.33,
+                          "ondergrens_deel": 0.10},
+            "zon_onder": "14,9 kWh verwacht", "zon_vandaag": "0,9 kWh",
+            "huis_onder": "grootste nu: Koelkast schuur", "huis_vandaag": "2,3 kWh",
+            "net_onder": "29,4 ct/kWh · goedkoopste blok 11:30",
+            "net_vandaag": "+0,4 / -0,6 kWh",
+            "besluit": "Standaard slim laden",
+            "besluit_uitleg": "De accu heeft niet genoeg beschikbare energie.",
+            "waarom": ["de prijs is nu 29,4 ct"],
+            "balk": [("RESERVE", "2,00 kWh", "#f4f7fa", None)],
+        }
+    )
+    kolommen = defaultdict(list)
+    for m in re.finditer(r'<text x="([\d.]+)" y="([\d.]+)"[^>]*>([^<]*)', plaat):
+        x, y, tekst = float(m.group(1)), float(m.group(2)), m.group(3)
+        if tekst.strip():
+            kolommen[round(x / 80)].append((y, tekst.strip()[:24]))
+
+    botsingen = []
+    for regels in kolommen.values():
+        regels.sort()
+        for (y1, t1), (y2, t2) in zip(regels, regels[1:]):
+            if 0 < y2 - y1 < 13:
+                botsingen.append(f"{t1!r} en {t2!r} op {y1} en {y2}")
+
+    assert not botsingen, "\n".join(botsingen)

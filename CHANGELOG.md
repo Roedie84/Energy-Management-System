@@ -28243,3 +28243,26 @@ Een toets bewaakt dat wat wegvalt géén antwoord op de vijf vragen is: het
 stroomschema met zon, net, huis en accu blijft staan.
 
 **Volledige testsuite**: 4238 tests, allemaal groen.
+
+## v5.18.4 — Te groot als dashboard
+
+Gemeld met een schermafdruk: *"te groot als dashboard? moet nu scrollen."*
+
+1600 bij 700 was nog te hoog: op een breed scherm werd de plaat 745 pixels,
+en dan begint het scrollen. Het doek is nu **1600 bij 560** - verhouding
+bijna 3:1.
+
+Bij die herindeling liep er telkens iets over iets anders heen: het
+dagtotaal over de contextregel, de tekortregel over de koeltekst, de
+laadbalk over de reserveregel. Twee oorzaken, allebei weg:
+
+- de regels in een kaart stonden op VASTE hoogtes, dus ze vielen buiten een
+  lagere kaart. Ze meten nu vanaf de onderkant van hun kaart;
+- het tekort stond naast "vrij 0,0" in plaats van erin. Is er een tekort,
+  dan staat dat er nu IN PLAATS VAN de vrije ruimte - die is dan toch nul.
+
+En er is een toets bij die dit narekent in plaats van dat het met het oog
+moet worden gezien: geen twee teksten in dezelfde kolom binnen 13 pixels.
+Die had alle drie de overlappingen gevangen.
+
+**Volledige testsuite**: 4239 tests, allemaal groen.

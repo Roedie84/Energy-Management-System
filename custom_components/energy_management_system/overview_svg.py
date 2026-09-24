@@ -715,10 +715,9 @@ def _knoop(x, y, b, h, titel, waarde, onder=None, kleur="#e8edf2",
     if icoon:
         d.append(_icoon(x + b - 30, y + 28, icoon, kleur))
     if vandaag:
-        # Staat er rechtsonder al iets (INKOOP/TERUGLEVERING), dan gaat het
-        # dagtotaal naar de titelregel - anders botsen ze.
-        hoogte, anker = ((y + 27, "end") if rechtsonder else (y + 104, "start"))
-        # 48 in plaats van 20: het icoon staat rechtsboven.
+        # Vanaf de ONDERKANT van de kaart: een vaste hoogte viel bij een
+        # lagere kaart buiten het kader.
+        hoogte, anker = ((y + 27, "end") if rechtsonder else (y + h - 14, "start"))
         px = (x + b - 48) if rechtsonder else (x + 20)
         d.append(
             f'<text x="{px}" y="{hoogte}" fill="#6f7d8c" font-size="11" '
@@ -726,8 +725,8 @@ def _knoop(x, y, b, h, titel, waarde, onder=None, kleur="#e8edf2",
         )
     if onder:
         d.append(
-            f'<text x="{x + 20}" y="{y + (108 if rechtsonder else 84)}" '
-            f'fill="#8b98a5" font-size="12">{_kort(str(onder), 40)}</text>'
+            f'<text x="{x + 20}" y="{y + h - (4 if rechtsonder else 32)}" '
+            f'fill="#8b98a5" font-size="12">{_kort(str(onder), 42)}</text>'
         )
     if rechtsonder:
         d.append(
@@ -1031,7 +1030,7 @@ def bouw_scada(g: dict) -> str:
             else None
         )
     d = [
-        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 700" '
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 560" '
         'width="100%" font-family="system-ui, -apple-system, Segoe UI, '
         'sans-serif">',
         # v5.18.3: een SVG in een `<img>` kent zijn EIGEN breedte, dus hij
@@ -1042,7 +1041,7 @@ def bouw_scada(g: dict) -> str:
         "@media (max-width: 760px) {"
         "  .bijzaak { display: none; }"
         "  #stroomschema { transform: translate(0px, -120px) scale(1.5);"
-        "                  transform-origin: 700px 330px; }"
+        "                  transform-origin: 700px 268px; }"
         "}"
         "</style>"
         "<defs>"
@@ -1053,7 +1052,7 @@ def bouw_scada(g: dict) -> str:
         '<stop offset="0" stop-color="#1e2731"/>'
         '<stop offset="1" stop-color="#171f28"/></linearGradient>'
         "</defs>",
-        '<rect width="1600" height="700" rx="18" fill="url(#doek)"/>',
+        '<rect width="1600" height="560" rx="18" fill="url(#doek)"/>',
         '<text x="36" y="40" fill="#6f7d8c" font-size="11" letter-spacing="2.4" '
         'font-weight="600">ENERGY MANAGEMENT SYSTEM</text>',
         f'<circle cx="42" cy="70" r="6" fill="{statuskleur}"/>',
@@ -1089,23 +1088,23 @@ def bouw_scada(g: dict) -> str:
         d.append("</g>")
     d += [
         '<g id="stroomschema">',
-        '<circle cx="700" cy="330" r="22" fill="none" stroke="#2c3846">'
+        '<circle cx="700" cy="268" r="22" fill="none" stroke="#2c3846">'
         '<animate attributeName="r" values="20;26;20" dur="3.4s" '
         'repeatCount="indefinite"/>'
         '<animate attributeName="opacity" values="0.9;0.25;0.9" dur="3.4s" '
         'repeatCount="indefinite"/></circle>',
-        '<circle cx="700" cy="330" r="7" fill="#f4f7fa"/>',
-        _stroom(700, 252, 700, 306, pv or 0, 744, 284, "#f0b429"),
-        _stroom(430, 330, 674, 330, net or 0, 552, 316, netkleur),
-        _stroom(726, 330, 970, 330, huis or 0, 848, 316, "#f4f7fa"),
-        _stroom(700, 412, 700, 354, accu or 0, 652, 386, KLEUR_GOED),
-        _knoop(563, 122, 274, 126, "ZONNEPANELEN", _primair(pv, _vermogen),
+        '<circle cx="700" cy="268" r="7" fill="#f4f7fa"/>',
+        _stroom(700, 200, 700, 244, pv or 0, 744, 228, "#f0b429"),
+        _stroom(430, 268, 674, 268, net or 0, 552, 254, netkleur),
+        _stroom(726, 268, 970, 268, huis or 0, 848, 254, "#f4f7fa"),
+        _stroom(700, 326, 700, 292, accu or 0, 652, 314, KLEUR_GOED),
+        _knoop(563, 88, 274, 112, "ZONNEPANELEN", _primair(pv, _vermogen),
                g.get("zon_onder") or "—", "#f0b429", g.get("zon_vandaag"),
                icoon="zon"),
         # De pijl hoort bij de RICHTING, niet bij het getal: stond hij
         # ervoor, dan werd bij precies nul uitwisseling het bolletje het
         # hoofdgetal - de opmaak splitst op de eerste spatie.
-        _knoop(120, 268, 310, 126, "NET",
+        _knoop(120, 212, 310, 112, "NET",
                _primair(None if net is None else abs(net), _vermogen),
                g.get("net_onder")
                or (
@@ -1115,15 +1114,15 @@ def bouw_scada(g: dict) -> str:
                ),
                netkleur, g.get("net_vandaag"), icoon="net",
                rechtsonder=f"{netpijl} {netrichting}".strip()),
-        _knoop(970, 268, 310, 126, "HUIS", _primair(huis, _vermogen),
+        _knoop(970, 212, 310, 112, "HUIS", _primair(huis, _vermogen),
                g.get("huis_onder") or "—", "#f4f7fa", g.get("huis_vandaag"),
                icoon="huis"),
-        _accukaart(563, 412, 274, 150, accu, accustand, g, koeling),
+        _accukaart(563, 326, 274, 114, accu, accustand, g, koeling),
         "</g>",
         '<g class="bijzaak">',
-        _besluitblok(120, 566, 800, 112, g.get("besluit"), g.get("besluit_uitleg"),
+        _besluitblok(120, 452, 800, 92, g.get("besluit"), g.get("besluit_uitleg"),
                      g.get("waarom")),
-        _infobalk(950, 566, 530, g.get("balk") or [], hoog=112),
+        _infobalk(950, 452, 530, g.get("balk") or [], hoog=92),
         "</g>",
         "</svg>",
     ]
@@ -1138,40 +1137,41 @@ def _accukaart(x, y, b, h, accu_w, accustand, g, koeling=None):
         f'<rect x="{x}" y="{y}" width="{b}" height="{h}" rx="14" '
         f'fill="url(#kaart)" stroke="#2c3846"/>',
         f'<rect x="{x}" y="{y}" width="4" height="{h}" rx="2" fill="{kleur}"/>',
-        f'<text x="{x + 20}" y="{y + 27}" fill="#6f7d8c" font-size="11" '
+        f'<text x="{x + 20}" y="{y + 24}" fill="#6f7d8c" font-size="11" '
         f'letter-spacing="1.8" font-weight="600">THUISACCU</text>',
-        f'<text x="{x + 20}" y="{y + 64}" fill="#f4f7fa" '
-        f'font-size="{32 if soc is not None else 18}" font-weight="650">'
+        f'<text x="{x + 20}" y="{y + 58}" fill="#f4f7fa" '
+        f'font-size="{30 if soc is not None else 18}" font-weight="650">'
         + (
             f'{_getal(soc, "", 0)}<tspan font-size="16" fill="#8b98a5">%</tspan>'
             if soc is not None
             else ONBEKEND
         )
         + "</text>",
-        f'<text x="{x + b - 20}" y="{y + 64}" fill="{kleur}" font-size="20" '
+        f'<text x="{x + b - 20}" y="{y + 58}" fill="{kleur}" font-size="20" '
         f'font-weight="600" text-anchor="end">'
         f'{ONBEKEND if accu_w is None else _vermogen(abs(accu_w))}</text>',
-        f'<text x="{x + 20}" y="{y + 88}" fill="{kleur}" font-size="12" '
+        f'<text x="{x + 20}" y="{y + 80}" fill="{kleur}" font-size="12" '
         f'letter-spacing="1.4" font-weight="600">{accustand}</text>',
-        f'<text x="{x + b - 20}" y="{y + 88}" fill="#6f7d8c" font-size="12" '
+        f'<text x="{x + b - 20}" y="{y + 80}" fill="#6f7d8c" font-size="12" '
         f'text-anchor="end">{_kort(str(koeling or ""), 20)}</text>',
-        f'<text x="{x + 20}" y="{y + 112}" fill="#8b98a5" font-size="12">'
+        f'<text x="{x + 20}" y="{y + 96}" fill="#8b98a5" font-size="12">'
         f'reserve {_getal(g.get("reserve_kwh"), "kWh", 2)}</text>',
-        # Het tekort: wat er te kort is ten opzichte van de reserve. Dat
-        # getal mag niet verdwijnen achter een vrij van 0,0.
+
+        # Is er een tekort, dan staat dat hier in plaats van "vrij 0,0" -
+        # anders lagen ze over elkaar heen, en "vrij 0,0" zegt minder.
         (
-            f'<text x="{x + b - 20}" y="{y + 88}" fill="{KLEUR_ALARM}" '
+            f'<text x="{x + b - 20}" y="{y + 96}" fill="{KLEUR_ALARM}" '
             f'font-size="12" font-weight="600" text-anchor="end">tekort '
             f'{_getal(g.get("tekort_kwh"), "kWh", 2)}</text>'
             if g.get("tekort_kwh")
-            else ""
+            else f'<text x="{x + b - 20}" y="{y + 96}" fill="#8b98a5" '
+            f'font-size="12" text-anchor="end">vrij '
+            f'{_getal(g.get("vrij_kwh"), "kWh", 1)}</text>'
         ),
-        f'<text x="{x + b - 20}" y="{y + 112}" fill="#8b98a5" font-size="12" '
-        f'text-anchor="end">vrij {_getal(g.get("vrij_kwh"), "kWh", 1)}</text>',
         # Geen balk zonder nominale capaciteit en ondergrens - zie
         # `cockpit_accu`. Liever niets dan een geloofwaardige benadering.
         (
-            _soc_balk(x + 20, y + h - 26, b - 40, balk.get("soc_deel"),
+            _soc_balk(x + 20, y + h - 11, b - 40, balk.get("soc_deel"),
                       balk.get("reserve_deel"), kleur, balk.get("ondergrens_deel"))
             if (balk := g.get("accu_balk") or {})
             else ""

@@ -1,28 +1,29 @@
-EMS v5.18.3 - alle wijzigingen sinds v5.18.1 (bevat v5.18.2)
+EMS v5.18.4 - alleen de wijzigingen sinds v5.18.3
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
-    const.py, coordinator.py, overview_svg.py
-    dashboard_template.yaml   GEWIJZIGD - plaat van de landingspagina af
+    overview_svg.py
+    dashboard_template.yaml   (gaat altijd mee, ongewijzigd sinds v5.18.3)
     manifest.json, bestandscontrole.json
 
 NAAR DE REPO
     README.md, CHANGELOG.md
-    dashboards/energy_management_system_dashboard.yaml   GEWIJZIGD
-    tests/ (vier bestanden)
+    dashboards/energy_management_system_dashboard.yaml
+    tests/test_installatieschema.py
 
-Voor HACS: release met tag v5.18.3.
+Voor HACS: release met tag v5.18.4.
 
 WAT ER VERANDERT
 
-1. Het doek is breed geworden: 1600 bij 700 in plaats van 1000 bij 790.
-   Op een monitor past de plaat daarmee in een beeld.
-2. De plaat past zich zelf aan een smal scherm aan: onder 760 pixels
-   vallen de grafiek, het besluitblok en de statusbalk weg, en wordt het
-   stroomschema groter getekend.
-3. De uitleg en de waarom-regel breken af op een woord.
-4. "Diepvries schuur Vermogen" wordt "Diepvries schuur".
-5. De plaat staat niet meer op de landingspagina.
+1. Het doek is 1600 bij 560 in plaats van 1600 bij 700 - verhouding bijna
+   3:1. Op een breed scherm past de plaat daarmee zonder scrollen.
+2. Drie overlappingen weg:
+   - het dagtotaal liep over de contextregel;
+   - "tekort 1,57 kWh" lag over de koeltekst heen;
+   - de laadbalk lag op de reserveregel.
+   Is er een tekort, dan staat dat er nu IN PLAATS VAN "vrij 0,0".
+3. Een nieuwe toets rekent na dat er geen twee teksten in dezelfde kolom
+   binnen 13 pixels van elkaar staan.
 
 CONTROLEREN NA DE HERSTART
-- op de monitor: past de plaat in een beeld?
-- op de telefoon: zie je alleen het stroomschema, groter getekend?
+- past de plaat zonder scrollen op je monitor?
+- op de telefoon: alleen het stroomschema, groter getekend?
