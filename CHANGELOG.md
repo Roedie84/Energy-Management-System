@@ -27876,3 +27876,256 @@ En een fout in mijn eigen toets: één minuut na 23:59 is de volgende dag.
 Daar struikelde de toets over, niet de code.
 
 **Volledige testsuite**: 4161 tests, allemaal groen.
+
+
+## v5.16 — De visuele pagina is een installatieschema geworden
+
+Gemeld: *"ik vind hem er niet professioneel uitzien"*, *"op de landingpage
+staat info welke niet op het visuele gedeelte zichtbaar is"* en *"ik wil
+graag een professioneel overzicht waar de stroom heen gaat"*.
+
+### Eerst gekeken, toen pas getekend
+
+Deze keer is de plaat niet blind gebouwd: met `cairosvg` is de SVG naar een
+afbeelding omgezet en bekeken. Dat legde meteen fouten bloot die in de
+code niet opvallen:
+
+- op de oude variant liepen "8,3 kWh", "34,2 ct/kWh" en "0,00 kWh" BUITEN
+  hun kader, en overlapte "Koeling 0,20 °C" met de regel erboven;
+- op de plaat die daadwerkelijk werd getoond, overlapte de kop VANDAAG met
+  zijn eerste regel, was het schema linksonder krap en stonden de pijlen
+  door elkaar, terwijl het grote vlak rechtsboven vrijwel leeg was.
+
+### Het nieuwe schema
+
+Vier apparaten rond één koppelpunt, met pijlen die tonen waar de stroom
+heen gaat: dikte naar vermogen, richting naar het teken, en een stippellijn
+als er niets loopt - dan bestaat de verbinding wel, maar gaat er niets
+doorheen.
+
+Per apparaat het vermogen NU, het dagtotaal, en een regel context: de
+verwachte zon, de stroomprijs, de grootste verbruiker, de laadstand met de
+reserve als streepje in de balk.
+
+Onderaan een balk met wat tot nu toe alleen op de landingspagina stond:
+besluit, goedkoop blok, reserve, meldingen in 24 uur en aandachtspunten.
+
+### Een fout die de oude toets vastlegde
+
+`test_charging_and_discharging_are_named` eiste dat `accu_w=800` als
+**"LADEN"** werd getoond. In de code geldt het omgekeerde:
+`_read_corrected_battery_power` is positief bij ONTLADEN, en
+`get_battery_power_display` schrijft dat ook zo. De oude plaat noemde een
+ontladende accu dus "laden", en de toets hield die fout in stand.
+
+### Wat uit het oude ontwerp is meegenomen
+
+De eisen bleken hout te snijden en staan er nog in: de richting met zoveel
+woorden naast de pijl, de koelstand zichtbaar, rood alleen voor een tekort,
+geen links op de plaat (die wordt als afbeelding getoond, en daarin klikt
+niets), en een berekening die nareken dat niets buiten het doek valt.
+
+### "Dit is echt wel de top"
+
+Gevraagd: *"het moet zo zijn dat wanneer bezoek, een EMS-specialist of een
+grafisch ontwerper het dashboard ziet, ze denken: dit is echt wel de top"*.
+
+Daarop is de plaat verder aangezet: een lijnfiguur per onderdeel, een
+verticale accentstreep in de kleur van dat onderdeel, verlopen in doek en
+kaders, een grotere cijferhierarchie met de eenheid als kleinere tspan, en
+rechtsboven het verloop van zon en verbruik van vandaag - uit het
+dagverloop dat er al lag, geen nieuwe meting.
+
+Elk gegeven kreeg een eigen regelhoogte. Dat klinkt klein, maar bij het
+renderen bleek telkens iets te botsen: het dagtotaal liep over de
+contextregel, de titel over het dagtotaal, en het label KOPPELPUNT lag op
+de huispijl.
+
+### Een toets die een dashboard redde
+
+De eerste versie had BEWEGENDE stippen langs de actieve lijnen. Mooi - en
+fataal: `test_the_plate_uses_only_plain_svg` legt vast dat Home Assistant
+SMIL-animatie uit de markdown-kaart filtert, waarna er geen geldige SVG
+meer overblijft en de plaat terugvalt op een lap tekst. Dat is in v3.22.1
+precies zo gebeurd. De animatie is eruit; de stippen staan stil en de
+richting blijkt uit de punt.
+
+### De stromen bewegen weer
+
+Gevraagd: *"bewegen de lijnen nu ook in de richting waar de stroom naar toe
+gaat?"* en *"ik wil beweging zien"*.
+
+Het verbod op beweging stamt uit v3.25.4, toen de plaat rechtstreeks in de
+markdown-kaart stond: Home Assistant filterde de SMIL-animatie eruit, en
+wat overbleef was geen geldige SVG meer - de plaat viel terug op een lap
+tekst.
+
+**Dat verbod is verouderd.** Sinds v3.26.0 gaat de plaat als base64 in een
+`<img>`, en de opschoner kan niet in base64 kijken; er wordt niets meer
+gefilterd. De terugval is bovendien mild geworden: negeert een browser de
+animatie, dan staan de stippen stil en blijft de plaat heel.
+
+De ratel is daarom VERLEGD, niet opgeheven. Verboden blijft wat een browser
+echt kan uitvoeren of inladen (`script`, `foreignObject`, `iframe`, en `a`,
+want in een afbeelding klikt niets), en er is een nieuwe eis bij:
+`test_every_plate_is_delivered_as_a_base64_image`. Zet iemand ooit een
+plaat rechtstreeks in de kaart, dan valt die toets om voordat de pagina
+terugvalt op tekst.
+
+### Gelijke lijnen
+
+Gemeld: *"lijnen even dik/format"*. De dikte volgde het vermogen, en dan
+oogt elke lijn anders terwijl het getal er toch al bij staat. Alle vier de
+stromen zijn nu even dik met hetzelfde stippatroon; alleen de kleur en de
+loopsnelheid verschillen nog.
+
+### Drie dingen die bij het RENDEREN opvielen
+
+- de accuregel kapte af zodra de ventilator draaide - die staat nu rechts
+  op de onderste regel;
+- de balk onderaan kapte "net dekt het huis" af - meer ruimte per veld;
+- het grafiekje rekte een halve ochtend uit over de volle breedte, en de
+  vulling liep door tot de rechterrand over een deel van de dag dat nog
+  moest komen. De as beslaat nu altijd de hele dag en de vulling stopt waar
+  de meting stopt.
+
+### In één oogopslag
+
+Gevraagd: *"ik wil in 1 oogopslag (dashboard) de status van het EMS kunnen
+zien"*. De plaat staat nu bovenaan de landingspagina, niet alleen op de
+pagina Visueel.
+
+**Volledige testsuite**: 4170 tests, allemaal groen.
+
+
+## v5.17 — De EMS-cockpit
+
+Gevraagd: het scherm moet binnen enkele seconden vijf vragen beantwoorden -
+is mijn EMS gezond, waar komt de energie vandaan, waar gaat hij heen, wat
+heeft het EMS besloten, en waarom. Uitdrukkelijk NIET zoveel mogelijk
+informatie.
+
+De centrale opbouw is gebleven: zon boven, net links, huis rechts, accu
+onder, met stromen die meelopen.
+
+### Alles komt uit bestaande grootheden
+
+Geen enkel getal is nieuw verzonnen:
+
+```
+sensoren %        get_sensor_health_breakdown()   uitval tegen totaal
+balans            get_energiebalans_controle()    twee onafhankelijke meters
+voorspelling ±%   zonvolger.deviation_stdev_percent()
+besluit + waarom  get_why_now()                   de echte beslisregels
+volgende actie    get_quarter_plan()
+```
+
+**Eén ding bestond niet: een "confidence 94%".** Niet bij het besluit en
+niet bij de voorspelling. In plaats van een percentage te verzinnen staat
+er nu de GEMETEN spreiding van de zonvoorspelling: `voorspelling ±12%`.
+
+### Wat er veranderd is
+
+- **Status in vier standen** - GOED, LET OP, INGRIJPEN, STORING - met een
+  compacte regel eronder: `sensoren 100% · balans ✓ · voorspelling ±12%`.
+- **Het net vertaalt het teken naar taal**: `↓ 620 W · INKOOP` of
+  `↑ 620 W · TERUGLEVERING`, met de prijs en het goedkoopste blok.
+- **De accu** zet de laadstand voorop, met LADEN/ONTLADEN/STANDBY, de
+  reserve en de vrije ruimte. De balk toont drie zones: reserve, vrij te
+  gebruiken, en nog te vullen. Staat de accu ONDER zijn reserve, dan is dat
+  gat rood - dat was eerder onzichtbaar omdat de reserve werd afgekapt op
+  de laadstand.
+- **Het besluit kreeg een eigen blok**, met de uitleg en een verplichte
+  WAAROM-regel uit de werkelijke beslisparameters.
+- **De grafiek** toont werkelijk tegen verwacht, met een NU-streep: links
+  de werkelijkheid, rechts de voorspelling in stippellijn.
+- **De onderste balk is herzien**: volgende actie, reserve, voorspelling,
+  aandacht. "Meldingen 24u" is eraf - dat getal verwart naast een status
+  GOED.
+
+**Volledige testsuite**: 4177 tests, allemaal groen.
+
+
+## v5.18 — De datalaag onder de cockpit, zeven fouten eruit
+
+Gevraagd: *"niet bewijzen dat de cockpit mooi werkt, maar proberen hem
+doelgericht stuk te krijgen"*. Dat lukte zeven keer.
+
+### 1. De dode band bestond al
+
+`MIN_BATTERY_POWER_IDLE_W = 25.0`, gebruikt door `get_battery_power_display`
+en de regellogica. De cockpit had een eigen definitie met exact nul, dus bij
+12 W zei de sensor "rust" en de cockpit "ONTLADEN". Nu één bron:
+`accu_stand()`, met een toets die beide tegen elkaar houdt over de hele
+reeks van -800 tot +800 W.
+
+### 2. De volgende actie kwam nooit uit het kwartierplan
+
+De code zocht naar de sleutels `moment`, `tijd` en `reden`; het plan kent
+`van`, `tot`, `modus` en `gewijzigd`. De lus vond dus nooit iets en viel
+**altijd** terug op het goedkope blok - geloofwaardig, en onjuist. Die
+terugval is weg: geen wisseling in het plan betekent geen volgende actie.
+
+### 3. Het huisverbruik was 's nachts 0 W
+
+`_huisverbruik_w()` rekende `net + zon - accu`, terwijl positief
+accuvermogen ONTLADEN betekent. Bij de gemeten nacht van 24 september
+03:00 - net -49 W, accu +212 W - gaf dat -261, en `max(0, ...)` maakte er
+**0 W** van. Het dagverloop toont 163 W. De bestaande
+`_read_corrected_consumption_power()` rekent `net + accu + zon` en klopt
+wel.
+
+### 4. De reserve stond tien procentpunt te laag in de balk
+
+De laadstand is een percentage van het hele pakket, de reserve is energie
+boven de ondergrens. Bij 8,64 kWh en een ondergrens van 10% hoort 4,60 kWh
+reserve bij **63%**, niet bij 53%.
+
+`bruikbare_capaciteit_kwh()` is hiervoor niet bruikbaar: die geeft de ene
+keer de gemeten bruikbare capaciteit en de andere keer de nominale, en
+schakelt stilzwijgend om. De balk rekent nu uitsluitend met de nominale
+capaciteitssensor en de echte ondergrens-entiteit - en verdwijnt als een
+van beide ontbreekt.
+
+### 5. Een kapotte kookplaat zou STORING opleveren
+
+`aantal_stuk` telde élke ingestelde entiteit. `NOODZAKELIJKE_KOPPELINGEN`
+legt nu vast wat de aansturing werkelijk nodig heeft: prijs, bedrijfsmodus,
+handmatig vermogen, P1-meter en accuvermogen. Die kapot is STORING; de rest
+is LET OP.
+
+### 6. Besluit en uitleg kwamen uit twee momenten
+
+Het besluit werd berekend bij het tekenen, de uitleg kwam uit de laatste
+ronde. Nu legt elke ronde één `besluit_snapshot` vast met tijdstip, besluit,
+uitleg en redenen. Ouder dan vijf minuten telt niet meer, en dan staat er
+ONBEKEND.
+
+### 7. Bij nul uitwisseling werd het bolletje het hoofdgetal
+
+De richtingpijl stond vóór het getal, en de opmaak splitst op de eerste
+spatie. De pijl hoort bij de richting: `↓ INKOOP`.
+
+### Verder
+
+- **ONBEKEND consequent**: 0 is een meting, ONBEKEND is geen meting, "—"
+  alleen voor bijzaken. Geen enkele lege waarde belandt nog als "None" op
+  de plaat.
+- **Afgeleide waarden erven betrouwbaarheid**: `cockpit_huisverbruik_w()`
+  geeft None zodra een noodzakelijke invoer ontbreekt, in plaats van
+  stilzwijgend de netafname te tonen.
+- **Vrij tegenover tekort**: een reserve die niet gehaald wordt, verdwijnt
+  niet meer achter `vrij 0,00`. Het tekort staat er in alarmkleur bij.
+- **Een reserve die niet in de accu past** wordt een aandachtspunt, geen
+  afgekapt getal.
+- **Het label** bij `get_configuratiecontrole()` is KOPPELINGEN - dat is wat
+  de functie werkelijk nagaat.
+
+### Bekende beperking
+
+Er is geen bestaande grens voor een sensor die beschikbaar blijft maar
+bevriest op zijn laatste waarde. Er is er bewust ook geen verzonnen. Wat
+er wél is: de wegval-detectie en de cadansmeting per sensor, beide op de
+gezondheidspagina.
+
+**Volledige testsuite**: 4223 tests, waarvan 46 de cockpitmatrix.

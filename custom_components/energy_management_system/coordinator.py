@@ -129,6 +129,7 @@ from .const import (
     NILM_DRIFT_MIN_REFERENCE_W,
     NILM_COMPRESSOR_ON_THRESHOLD_W,
     NILM_COOLING_MIN_DUTY_CYCLE,
+    NOODZAKELIJKE_KOPPELINGEN,
     NILM_MIN_SAMPLES_FOR_DAY,
     NILM_MIN_UREN_VOOR_DAG,
     NILM_CUSUM_MAX_DAILY_CONTRIBUTION,
@@ -1294,7 +1295,7 @@ class EnergyManagementSystemCoordinator:
         # een regel - `__init__` staat op de ratel.
         # v3.99.19: `dagverloop` en `nabeschouwingen` erbij, in dezelfde
         # regel - `__init__` staat op de ratel.
-        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen, self.safe_sell_shadow, self.reden_afwijkingen, self.meting_laatst_gevuld, self.weerbron_keuze, self.voorspellingsverloop, self._geladen_opslag, self.rendement_afwijzingen, self.weerbron_levering, self.weather_ensemble_readings_alle, self.instraling_verhouding, self.ventilator_kwh_per_dag, self._ventilator_vermogens_aan, self.gacs_traag, self.gacs_duur_ms, self._pv_model_bezig, self.gacs_traagste, self.prijs_vandaag, self.prijs_gisteren = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, [], [], {}, {}, {}, {}, None, {}, {}, {}, {}, {}, [], [], None, False, None, {}, {}
+        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen, self.safe_sell_shadow, self.reden_afwijkingen, self.meting_laatst_gevuld, self.weerbron_keuze, self.voorspellingsverloop, self._geladen_opslag, self.rendement_afwijzingen, self.weerbron_levering, self.weather_ensemble_readings_alle, self.instraling_verhouding, self.ventilator_kwh_per_dag, self._ventilator_vermogens_aan, self.gacs_traag, self.gacs_duur_ms, self._pv_model_bezig, self.gacs_traagste, self.prijs_vandaag, self.prijs_gisteren, self.besluit_snapshot = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, [], [], {}, {}, {}, {}, None, {}, {}, {}, {}, {}, [], [], None, False, None, {}, {}, {}
         self.handmatige_ingrepen: list[dict] = []
         # v1.1.6: met welke meetmethode de bewaarde foutreeks tot stand
         # is gekomen. Verandert de methode, dan wordt die reeks eenmalig
@@ -7635,8 +7636,8 @@ class EnergyManagementSystemCoordinator:
         # Zegt de sensor niets, dan liever afleiden uit de beschikbare
         # energie - dat is een VERSE meting - en anders niets.
         # Laatste terugval: afleiden uit de beschikbare energie.
-        beschikbaar = self.beschikbare_energie_kwh()
         # v3.5.0: de GEMETEN capaciteit zodra die er is.
+        beschikbaar = self.beschikbare_energie_kwh()
         capaciteit = self.bruikbare_capaciteit_kwh()
         if beschikbaar is None or not capaciteit:
             return None
@@ -14516,6 +14517,383 @@ class EnergyManagementSystemCoordinator:
             self._log_handler = None
 
 
+    def _verloop_van_vandaag(self) -> dict:
+        """Zon en verbruik per uur van vandaag, voor het grafiekje (v5.16).
+
+        De plaat toonde tot nu toe alleen het NU, en dan mis je of een getal
+        hoog of laag is voor dit moment van de dag. Uit het dagverloop dat
+        er al ligt - geen nieuwe meting.
+        """
+        rijen = (self.dagverloop or {}).get(dt_util.now().date().isoformat())
+        if not rijen:
+            return {}
+        per_uur: dict[int, dict] = {}
+        for rij in rijen:
+            tijd = str(rij.get("tijd") or "")
+            if len(tijd) < 2 or not tijd[:2].isdigit():
+                continue
+            vak = per_uur.setdefault(int(tijd[:2]), {"pv": [], "huis": []})
+            for sleutel, veld in (("pv", "pv_w"), ("huis", "huis_w")):
+                waarde = rij.get(veld)
+                if isinstance(waarde, (int, float)):
+                    vak[sleutel].append(waarde)
+        if not per_uur:
+            return {}
+        laatste = max(per_uur)
+        uit = {"pv": [], "huis": []}
+        for uur in range(laatste + 1):
+            vak = per_uur.get(uur) or {}
+            for sleutel in ("pv", "huis"):
+                metingen = vak.get(sleutel) or []
+                uit[sleutel].append(
+                    round(sum(metingen) / len(metingen)) if metingen else None
+                )
+        return uit
+
+    def _besluit_snapshot_vastleggen(self, now: datetime) -> None:
+        """Besluit, uitleg en redenen als EEN momentopname (v5.18).
+
+        Gevonden bij de review: het besluit werd berekend op het moment dat
+        de plaat werd getekend, terwijl de uitleg uit de laatste ronde kwam.
+        Bij een wissel op het kwartier kon er dus een nieuw besluit naast
+        een oude verklaring staan.
+
+        Geen nieuwe beslislogica: dezelfde `get_why_now()` en dezelfde
+        `last_explanation`, alleen op hetzelfde tijdstip vastgelegd.
+        """
+        waarom = self.get_why_now(now) or {}
+        if not waarom.get("beschikbaar"):
+            self.besluit_snapshot = {}
+            return
+        self.besluit_snapshot = {
+            "moment": now.isoformat(),
+            "code": waarom.get("code"),
+            "kort": waarom.get("kort"),
+            "uitleg": self.last_explanation,
+            "redenen": list(waarom.get("redenen") or []),
+        }
+
+    def get_besluit_snapshot(self) -> dict:
+        """De momentopname, of leeg als hij te oud is (v5.18)."""
+        snapshot = self.besluit_snapshot or {}
+        moment = dt_util.parse_datetime(snapshot.get("moment") or "")
+        if moment is None:
+            return {}
+        leeftijd = (dt_util.now() - moment).total_seconds() / 60
+        return snapshot if leeftijd <= METING_MAX_LEEFTIJD_MINUTEN else {}
+
+    def accu_stand(self) -> str | None:
+        """LADEN, ONTLADEN of STANDBY (v5.18).
+
+        Dezelfde dode band als `get_battery_power_display` en de
+        regellogica: MIN_BATTERY_POWER_IDLE_W. De cockpit had een eigen
+        definitie met exact nul als grens, en bij 12 W zei de sensor "rust"
+        terwijl de cockpit "ONTLADEN" zou zeggen.
+
+        None betekent: geen betrouwbare meting - niet "stilstand".
+        """
+        vermogen = self._read_corrected_battery_power()
+        if vermogen is None:
+            return None
+        if abs(vermogen) < MIN_BATTERY_POWER_IDLE_W:
+            return "STANDBY"
+        return "ONTLADEN" if vermogen > 0 else "LADEN"
+
+    def volgende_actie(self, now: datetime | None = None) -> str | None:
+        """De eerstvolgende GEPLANDE verandering uit het kwartierplan (v5.18).
+
+        Gevonden bij de review: hier werd gezocht naar sleutels `moment`,
+        `tijd` en `reden`, die het kwartierplan niet kent. De lus vond dus
+        nooit iets en viel altijd terug op het goedkope blok - geloofwaardig
+        maar onjuist. Die terugval is weg.
+
+        De eerstvolgende actie is de eerste planregel NA nu waarvan de modus
+        verschilt van de huidige. Geen wisseling in het plan betekent geen
+        volgende actie.
+        """
+        nu = now or dt_util.now()
+        plan = self.get_quarter_plan(nu)
+        if not plan:
+            return None
+        huidige = None
+        for regel in plan:
+            van = dt_util.parse_datetime(str(regel.get("van") or ""))
+            if van is None:
+                continue
+            if van <= nu:
+                huidige = regel.get("modus")
+                continue
+            if regel.get("modus") and regel.get("modus") != huidige:
+                return f"{regel['modus']} {van:%H:%M}"
+        return None
+
+    def cockpit_huisverbruik_w(self) -> float | None:
+        """Het huisverbruik voor de cockpit, of None (v5.18).
+
+        `_read_corrected_consumption_power()` rekent net + accu + zon, maar
+        slaat een ontbrekende accu- of zonsensor stilzwijgend over. Dan is
+        de uitkomst geen huisverbruik meer, terwijl hij er wel zo uitziet.
+
+        Gevraagd: "als een noodzakelijke invoer ONBEKEND is, mag de
+        afgeleide waarde niet als betrouwbaar exact getal worden
+        weergegeven". Een afgeleide waarde is zo betrouwbaar als zijn minst
+        betrouwbare invoer.
+        """
+        nodig = [self.config.get(CONF_CONSUMPTION_POWER_SENSOR)]
+        for sleutel in (CONF_BATTERY_POWER_SENSOR, CONF_PV_POWER_SENSOR):
+            entiteit = self.config.get(sleutel)
+            if entiteit:
+                nodig.append(entiteit)
+        if any(
+            entiteit is None or self._read_sensor_float(entiteit) is None
+            for entiteit in nodig
+        ):
+            return None
+        return self._read_corrected_consumption_power()
+
+    def cockpit_accu(self) -> dict:
+        """Laadstand, reserve en vrije ruimte op EEN referentie (v5.18).
+
+        De balk zet drie dingen naast elkaar: de ondergrens van de accu, de
+        reserve die daarboven nodig is, en de laadstand. Dat mag alleen als
+        ze dezelfde nul en dezelfde schaal hebben.
+
+        Daarom uitsluitend de NOMINALE capaciteit (0-100% van het pakket)
+        en de werkelijke ondergrens-entiteit. Niet
+        `bruikbare_capaciteit_kwh()`: die geeft de ene keer de gemeten
+        bruikbare capaciteit en de andere keer de nominale, en schakelt
+        stilzwijgend om - dan zou de ondergrens er een tweede keer bij
+        opgeteld kunnen worden.
+
+        Ontbreekt de capaciteit of de ondergrens, dan komt er geen balk.
+        Liever niets dan een balk die er geloofwaardig uitziet.
+        """
+        soc = self.accustand_procent()
+        beschikbaar = self.beschikbare_energie_kwh()
+        reserve = (self.last_reserve_margin_breakdown or {}).get(
+            "reserve_kwh_after_margin"
+        )
+        nominaal = self._read_sensor_float(
+            self.config.get(CONF_BATTERY_TOTAL_CAPACITY_SENSOR)
+        )
+        ondergrens = self._read_sensor_float(
+            self.config.get(CONF_BATTERY_MIN_SOC_NUMBER)
+        )
+        uit: dict = {
+            "soc": soc,
+            "beschikbaar_kwh": beschikbaar,
+            "reserve_kwh": reserve,
+            "vrij_kwh": None,
+            "tekort_kwh": None,
+            "onmogelijke_reserve": False,
+            "balk": None,
+        }
+        if beschikbaar is not None and reserve is not None:
+            # Het tekort mag NIET verdwijnen achter een max(0, ...): juist
+            # een negatieve uitkomst is het nieuws.
+            verschil = beschikbaar - reserve
+            uit["vrij_kwh"] = verschil if verschil >= 0 else 0.0
+            uit["tekort_kwh"] = 0.0 if verschil >= 0 else abs(verschil)
+        if reserve is not None and nominaal and reserve > nominaal:
+            # Fysiek onmogelijk: er wordt meer reserve gevraagd dan er in
+            # de accu past. Niet wegpoetsen - zie get_diagnostic_summary.
+            uit["onmogelijke_reserve"] = True
+        if soc is None or not nominaal or ondergrens is None:
+            return uit
+        uit["balk"] = {
+            "soc_deel": soc / 100,
+            "ondergrens_deel": ondergrens / 100,
+            "reserve_deel": (
+                ondergrens / 100 + reserve / nominaal if reserve is not None else None
+            ),
+        }
+        return uit
+
+    def _ems_status(self) -> tuple[str, str]:
+        """De gezondheid van het HELE EMS, als matrix (v5.18).
+
+        De eerste regel die past bepaalt de stand; elke regel komt uit een
+        bestaand signaal, zodat later te verklaren is waarom er INGRIJPEN
+        staat.
+
+            1. ONBEKEND    de diagnostiek zelf is niet op te halen
+            2. STORING     ronde ouder dan CONSISTENCY_TICK_STALE_MINUTES
+            3. STORING     interne storing
+            4. STORING     een NOODZAKELIJKE koppeling is kapot
+            5. INGRIJPEN   aandachtspunt met ernst "fout"
+            6. LET OP      overige punten, afwijkende balans, of een
+                           niet-noodzakelijke koppeling kapot
+            7. GOED        geen van bovenstaande
+
+        Regel 4 tegenover 6 is de correctie uit de review: hier werd élke
+        kapotte ingestelde entiteit als STORING geteld, dus een weggevallen
+        vaatwassersensor zette het hele EMS op STORING terwijl de aansturing
+        perfect draaide.
+        """
+        try:
+            samenvatting = self.get_diagnostic_summary() or {}
+            controle = self.get_configuratiecontrole() or {}
+        except Exception:  # noqa: BLE001 - zonder diagnostiek geen oordeel
+            return "ONBEKEND", "de diagnostiek is niet op te halen"
+        punten = samenvatting.get("aandachtspunten") or []
+        fouten = [p for p in punten if isinstance(p, dict) and p.get("ernst") == "fout"]
+        kapot = [
+            r
+            for r in (controle.get("entiteiten") or [])
+            if r.get("oordeel") not in ("in_orde", "slaapt", "niet_ingesteld")
+        ]
+        kapot_noodzakelijk = [
+            r for r in kapot if r.get("instelling") in NOODZAKELIJKE_KOPPELINGEN
+        ]
+        balans = self.get_energiebalans_controle() or {}
+        balans_klopt = balans.get("alles_klopt") if balans.get("beschikbaar") else None
+        spreiding = (
+            self.solar_tracker.deviation_stdev_percent()
+            if self.solar_tracker and self.solar_tracker.enabled
+            else None
+        )
+        totaal = len(controle.get("entiteiten") or [])
+        delen = [f"koppelingen {totaal - len(kapot)}/{totaal}"]
+        if balans_klopt is not None:
+            delen.append("balans ✓" if balans_klopt else "balans wijkt af")
+        if spreiding is not None:
+            delen.append(f"voorspelling ±{spreiding:.0f}%")
+        if punten:
+            delen.append(f"{len(punten)} aandachtspunt(en)")
+        regel = " · ".join(delen)
+        if (
+            self.last_successful_update is None
+            or (dt_util.now() - self.last_successful_update).total_seconds() / 60
+            > CONSISTENCY_TICK_STALE_MINUTES
+        ):
+            return "STORING", "de laatste ronde is te lang geleden gelukt"
+        if self.internal_failures:
+            return "STORING", regel
+        if kapot_noodzakelijk:
+            namen = ", ".join(str(r.get("instelling")) for r in kapot_noodzakelijk)
+            return "STORING", f"noodzakelijke koppeling kapot: {namen}"
+        if fouten:
+            return "INGRIJPEN", regel
+        if punten or balans_klopt is False or kapot:
+            return "LET OP", regel
+        return "GOED", regel
+
+    def _schema_gegevens(self) -> dict:
+        """De extra gegevens voor het installatieschema (v5.16).
+
+        Gemeld: "op de landingspagina staat info die niet op het visuele
+        gedeelte zichtbaar is". Dit haalt die erbij: dagtotalen per
+        onderdeel, de laadstand met de reserve als streepje, en onderaan
+        het besluit, het goedkope blok, de reserve, de meldingen en de
+        aandachtspunten.
+        """
+
+        def kwh(waarde, achter=" kWh"):
+            return (
+                f"{waarde:.1f}{achter}".replace(".", ",")
+                if isinstance(waarde, (int, float))
+                else None
+            )
+
+        vandaag = (self.get_period_overview() or {}).get("perioden", {}).get(
+            "vandaag"
+        ) or {}
+        blok = self.last_cheap_block_start
+        punten = (self.get_diagnostic_summary() or {}).get("aandachtspunten") or []
+        stand, statusregel = self._ems_status()
+        prijs = self.huidige_prijs_eur_per_kwh()
+        accu = self.cockpit_accu()
+        snapshot = self.get_besluit_snapshot()
+        spreiding = (
+            self.solar_tracker.deviation_stdev_percent()
+            if self.solar_tracker and self.solar_tracker.enabled
+            else None
+        )
+        punten = (self.get_diagnostic_summary() or {}).get("aandachtspunten") or []
+        return {
+            "moment": dt_util.now().strftime("%d-%m %H:%M"),
+            "status_kort": stand,
+            "status_regel": statusregel,
+            # v5.18: primaire waarden zijn None als ze er niet zijn - de
+            # plaat maakt daar ONBEKEND van. Nooit een nul, want 0 W is een
+            # echte meting.
+            "soc": accu.get("soc"),
+            "accustand": self.accu_stand(),
+            "reserve_kwh": accu.get("reserve_kwh"),
+            "vrij_kwh": accu.get("vrij_kwh"),
+            "tekort_kwh": accu.get("tekort_kwh"),
+            "accu_balk": accu.get("balk"),
+            "onmogelijke_reserve": accu.get("onmogelijke_reserve"),
+            "zon_vandaag": kwh(vandaag.get("opwek_kwh")),
+            "huis_vandaag": kwh(vandaag.get("verbruik_kwh")),
+            "net_vandaag": (
+                f"+{vandaag.get('import_kwh', 0):.1f} / "
+                f"-{vandaag.get('export_kwh', 0):.1f} kWh".replace(".", ",")
+                if vandaag.get("import_kwh") is not None
+                else None
+            ),
+            "accu_vandaag": kwh(accu.get("beschikbaar_kwh"), " kWh vrij"),
+            "zon_onder": (
+                f"{rest:.1f} kWh verwacht".replace(".", ",")
+                if (
+                    rest := self._read_sensor_float(
+                        self.config.get(CONF_SOLAR_REMAINING_TODAY_SENSOR)
+                    )
+                )
+                is not None
+                else None
+            ),
+            "net_onder": (
+                " · ".join(
+                    deel
+                    for deel in (
+                        f"{prijs * 100:.1f} ct/kWh".replace(".", ",")
+                        if prijs is not None
+                        else None,
+                        f"goedkoopste blok {blok:%H:%M}" if blok else None,
+                    )
+                    if deel
+                )
+                or None
+            ),
+            "huis_onder": (
+                f"grootste nu: {grootste}"
+                if (grootste := self.get_largest_known_consumer())
+                else None
+            ),
+            "koeling": (
+                "ventilator draait"
+                if (self.battery_cooling_state or {}).get("actie") == "aan"
+                else None
+            ),
+            "tekort_kwartieren": len(
+                [r for r in (self.reserve_daily_records or []) if r.get("shortfall")]
+            ),
+            "verloop": self._verloop_van_vandaag(),
+            # v5.18: besluit, uitleg en redenen uit EEN momentopname.
+            "besluit": snapshot.get("kort"),
+            "besluit_uitleg": snapshot.get("uitleg"),
+            "waarom": (snapshot.get("redenen") or [])[:3],
+            "balk": [
+                ("VOLGENDE ACTIE", self.volgende_actie(), "#f4f7fa", None),
+                (
+                    "RESERVE",
+                    f"{accu['reserve_kwh']:.2f} kWh".replace(".", ",")
+                    if accu.get("reserve_kwh") is not None
+                    else None,
+                    "#f4f7fa",
+                    None,
+                ),
+                (
+                    "VOORSPELLING",
+                    f"±{spreiding:.0f}%" if spreiding is not None else None,
+                    "#f4f7fa",
+                    None,
+                ),
+                ("AANDACHT", len(punten), "#f0b429" if punten else "#5fd38d", None),
+            ],
+        }
+
     def get_overview_svg(self) -> str:
         """Het dynamische overzichtsplaatje (v3.17.0).
 
@@ -14553,7 +14931,15 @@ class EnergyManagementSystemCoordinator:
                 "net_w": self._read_sensor_float(
                     self.config.get(CONF_CONSUMPTION_POWER_SENSOR)
                 ),
-                "huis_w": self._huisverbruik_w(),
+                # v5.18: `_huisverbruik_w()` rekende net + zon - accu,
+                # terwijl positief accuvermogen ONTLADEN is. 's Nachts gaf
+                # dat via max(0, ...) een huisverbruik van 0 W. De bestaande
+                # `_read_corrected_consumption_power()` rekent net + accu +
+                # zon - dat is wat ook in het dagverloop staat.
+                "huis_w": self.cockpit_huisverbruik_w(),
+                # v5.16: wat het schema erbij toont - dagtotalen per
+                # onderdeel, en onderaan wat er op de landingspagina staat.
+                **self._schema_gegevens(),
                 # NIET `last_heavy_load_source` - dat is een
                 # beslislogica-signaal, geen verbruikersaanduiding.
                 "grootverbruiker": self.get_largest_known_consumer(),
@@ -32206,6 +32592,19 @@ class EnergyManagementSystemCoordinator:
                 "rekent daardoor met een oude, bevroren waarde. Zie "
                 "rendement_afwijzingen in de export voor de reden."
             )
+        # v5.18: een reserve die niet in de accu past is een rekenfout, geen
+        # weergaveprobleem. Uit de review: niet stilzwijgend afkappen.
+        reserve = (self.last_reserve_margin_breakdown or {}).get(
+            "reserve_kwh_after_margin"
+        )
+        nominaal = self._read_sensor_float(
+            self.config.get(CONF_BATTERY_TOTAL_CAPACITY_SENSOR)
+        )
+        if reserve is not None and nominaal and reserve > nominaal:
+            uit.append(
+                f"Reserve: de gevraagde {reserve:.2f} kWh past niet in de accu "
+                f"van {nominaal:.2f} kWh - de reserveberekening klopt dan niet."
+            )
         return uit
 
     def _weerbron_melding(self) -> str | None:
@@ -32315,6 +32714,7 @@ class EnergyManagementSystemCoordinator:
         waarde verliest.
         """
         aandachtspunten = []
+
         informatief = []
 
         aandachtspunten.extend(self._aandachtspunten_over_de_integratie())
@@ -36528,6 +36928,8 @@ class EnergyManagementSystemCoordinator:
             ("slimme_bronnen", lambda: self._meet_slimme_bronnen(now)),
             # v5.15: de dagbedragen van de leverancier.
             ("prijsdag", lambda: self._werk_prijsdag_bij(now)),
+            # v5.18: besluit, uitleg en redenen als EEN momentopname.
+            ("besluit_snapshot", lambda: self._besluit_snapshot_vastleggen(now)),
             ("meetherinnering", lambda: self._herinner_wat_meet(now)),
             # v3.68.0: het MPC-plan naast de eigen planning.
             ("mpc tegen de planning", lambda: self._meet_mpc(now)),

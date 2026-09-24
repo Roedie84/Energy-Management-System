@@ -6,6 +6,10 @@ views:
   sections:
   - type: grid
     cards:
+    - type: markdown
+      content: '{{ state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''overzichtsplaat'') }}'
+      grid_options:
+        columns: 12
     - type: custom:mushroom-template-card
       primary: '{% if is_state(''sensor.woonkamer_energy_management_system_system_status'', ''Opstarten'') %}⏳ Energy Management System is nog aan het opstarten{% else %}{% set p = state_attr(''sensor.woonkamer_energy_management_system_system_status'', ''aandachtspunten'') or [] %}{{ ''✅ Geen aandachtspunten'' if p | length == 0 else ''⚠️ '' ~ p | length ~ '' aandachtspunt(en)'' }}{% endif %}'
       secondary: '{% if is_state(''sensor.woonkamer_energy_management_system_system_status'', ''Opstarten'') %}{{ state_attr(''sensor.woonkamer_energy_management_system_system_status'', ''opstarten'') or ''Wacht tot de andere integraties zijn geladen.'' }}{% else %}{{ state_attr(''sensor.woonkamer_energy_management_system_system_status'', ''statuskop'') or ''Alles in orde.'' }}{% endif %}'

@@ -7,6 +7,7 @@ Unit: "Deze style vind ik wel mooi" - en daarna: "Ik wil alleen de
 Overgenomen wat daar werkt: halve-cirkelmeters met één groot getal,
 staafjes per accupakket, één kleur met rood alleen voor alarmen.
 """
+import re
 import sys
 from pathlib import Path
 
@@ -14,7 +15,7 @@ import custom_components.energy_management_system as pkg
 
 sys.path.insert(0, str(Path(pkg.__file__).parent))
 
-from overview_svg import bouw_scada  # noqa: E402
+from overview_svg import KLEUR_ALARM, KLEUR_GOED, bouw_scada  # noqa: E402
 
 
 def _plaat(**overrides):
@@ -60,22 +61,32 @@ def test_no_meter_for_a_fixed_number():
 
 
 def test_charging_and_discharging_are_named():
-    assert "LADEN" in _plaat(accu_w=800.0)
-    assert "ONTLADEN" in _plaat(accu_w=-800.0)
-    assert "RUST" in _plaat(accu_w=0.0)
+    """De richting met zoveel woorden, naast de pijl.
 
+    v5.16 - hier stond de richting OMGEKEERD: bij accu_w=800 verwachtte
+    deze toets "LADEN". In de code geldt het tegenovergestelde:
+    `_read_corrected_battery_power` is positief bij ONTLADEN, en
+    `get_battery_power_display` schrijft dat ook zo. De oude plaat
+    noemde een ontladende accu dus "laden".
+    """
+    # v5.18: de stand komt uit `accu_stand()` van de coordinator, met
+    # dezelfde dode band als de regellogica. De plaat bepaalt hem niet zelf.
+    assert "ONTLADEN" in _plaat(accu_w=800.0, accustand="ONTLADEN")
+    assert "LADEN" in _plaat(accu_w=-800.0, accustand="LADEN")
+    assert "STANDBY" in _plaat(accu_w=0.0, accustand="STANDBY")
 
 def test_the_cooling_state_is_visible():
-    assert "ventilator draait" in _plaat()
-    assert "ventilator uit" in _plaat(koeling={"ventilator_aan": False})
+    assert "ventilator draait" in _plaat(koeling={"ventilator_aan": True})
+    # v5.16: alleen als hij DRAAIT - dat is het nieuws. "Ventilator uit" is
+    # de normale toestand en duwde de regel over zijn breedte heen.
+    assert "ventilator" not in _plaat(koeling={"ventilator_aan": False})
 
 
 def test_a_shortfall_is_marked_red():
-    from overview_svg import KLEUR_ALARM, KLEUR_GOED
-
+    """Rood is voorbehouden aan een tekort - het enige waarvoor deze
+    plaat alarm slaat."""
     assert KLEUR_GOED in _plaat(tekort_kwartieren=0)
     assert KLEUR_ALARM in _plaat(tekort_kwartieren=6)
-
 
 def test_empty_data_does_not_crash():
     """Vlak na een herstart is er nog niets gemeten."""
@@ -103,20 +114,19 @@ def test_the_canvas_fits_its_content():
 
 
 def test_the_power_block_carries_context():
-    """Gemeld: "hier bijvoorbeeld veel loze ruimte". Een kader van 128
-    hoog voor één getal is verspilling."""
-    plaat = _plaat(prijs_ct=28.9, accu_ct=43.2, reden="Zon opvangen")
+    """Gemeld: "hier bijvoorbeeld veel loze ruimte". Elk kader draagt
+    naast het vermogen iets dat je erbij wilt weten - bij het net is dat
+    de prijs."""
+    plaat = _plaat(prijs_ct=28.9)
 
     assert "stroomprijs nu" in plaat
-    assert "kWh uit de accu" in plaat
-    assert "Zon opvangen" in plaat
-
+    assert "28,9" in plaat
 
 def test_missing_context_shows_a_dash():
-    plaat = _plaat()
+    """Een leeg kader is verwarrender dan een streepje."""
+    plaat = _plaat(prijs_ct=None)
 
-    assert "--" in plaat
-
+    assert "—" in plaat
 
 def test_the_sections_have_three_columns():
     """Gevraagd: "misschien 3 secties naast elkaar welke wat meer info
@@ -164,18 +174,16 @@ def test_the_modules_are_gone():
 
 
 def test_the_day_figures_took_their_place():
-    """Loze ruimte is geen verbetering: er staat nu iets dat op een
-    overzichtspagina hoort."""
+    """Loze ruimte is geen verbetering: naast het vermogen NU staat wat
+    het vandaag werd."""
     plaat = _plaat(
-        opgewekt_kwh=2.7,
-        voorspeld_kwh=9.1,
-        verbruik_kwh=2.9,
-        import_kwh=5.9,
+        zon_vandaag="14,1 kWh",
+        huis_vandaag="8,3 kWh",
+        net_vandaag="+0,7 / -4,7 kWh",
     )
 
-    assert "opgewekt" in plaat
-    assert "van het net" in plaat
-
+    assert "14,1 kWh" in plaat
+    assert "+0,7 / -4,7 kWh" in plaat
 
 def test_the_module_bars_helper_still_works():
     """De bouwsteen blijft, want de accupagina gebruikt hem. Alleen op
@@ -248,7 +256,7 @@ def test_everything_still_fits_the_canvas():
             "zon": {"niveau": "betrouwbaar", "zin": "test"},
         }
     )
-    hoogte = int(re.search(r'viewBox="0 0 760 (\d+)"', plaat).group(1))
+    hoogte = int(re.search(r'viewBox="0 0 \d+ (\d+)"', plaat).group(1))
     ys = [float(y) for y in re.findall(r'y="(\d+(?:\.\d+)?)"', plaat)]
 
     assert max(ys) < hoogte
@@ -261,9 +269,11 @@ def test_everything_still_fits_the_canvas():
 
 
 def test_the_bottom_bar_spans_the_full_width():
-    plaat = _plaat()
+    plaat = _plaat(balk=[("BESLUIT", "slim", "#e8edf2", None)])
 
-    assert 'width="728"' in plaat
+    # v5.16: de balk loopt tot dezelfde rand als de kaders links en rechts.
+    # v5.17: de balk staat rechts naast het besluitblok.
+    assert 'width="312"' in plaat
 
 
 # --- v3.22.0: balkjes in plaats van meters ---------------------------
@@ -283,12 +293,10 @@ def test_the_gauges_are_gone():
 
 
 def test_the_number_is_what_stands_out():
-    """Het getal blijft het belangrijkste, en dat is nu ook wat
-    opvalt."""
-    plaat = _plaat(soc=87.0)
+    """Het vermogen is het grootste op de plaat."""
+    plaat = _plaat(pv_w=210.0)
 
-    assert 'font-size="17" font-weight="600"' in plaat
-
+    assert 'font-size="30" font-weight="650"' in plaat
 
 def test_a_bar_shows_the_position_on_the_scale():
     """Een balkje van drie pixels zegt hetzelfde als een halve cirkel:
@@ -329,9 +337,12 @@ def test_the_plate_got_shorter():
             )
         }
     )
-    hoogte = int(re.search(r'viewBox="0 0 760 (\d+)"', plaat).group(1))
+    hoogte = int(re.search(r'viewBox="0 0 \d+ (\d+)"', plaat).group(1))
 
-    assert hoogte < 400, f"{hoogte} hoog - dat was 464 met de meters"
+    # v5.16: het schema is hoger dan de oude kolommen, maar past binnen
+    # een scherm zonder scrollen.
+    # v5.17: er is een besluitblok bij gekomen.
+    assert hoogte < 820, f"{hoogte} hoog"
 
 
 def test_nothing_falls_outside_the_canvas():
@@ -345,12 +356,14 @@ def test_nothing_falls_outside_the_canvas():
             for sleutel in ("water", "zon", "apparaten")
         }
     )
-    hoogte = int(re.search(r'viewBox="0 0 760 (\d+)"', plaat).group(1))
+    hoogte = int(re.search(r'viewBox="0 0 \d+ (\d+)"', plaat).group(1))
     ys = [float(y) for y in re.findall(r'y="(\d+(?:\.\d+)?)"', plaat)]
     xs = [float(x) for x in re.findall(r'x="(\d+(?:\.\d+)?)"', plaat)]
 
     assert max(ys) < hoogte
-    assert max(xs) <= 760
+    # v5.16: de plaat is 1000 breed geworden met het schema.
+    breedte = int(re.search(r'viewBox="0 0 (\d+) ', plaat).group(1))
+    assert max(xs) <= breedte
 
 
 # --- v3.22.1: bewegende stroompijlen ---------------------------------
@@ -396,16 +409,13 @@ def test_the_svg_has_no_links():
 
 
 
-def test_the_plate_has_two_columns_now():
-    """De statuskolom is eruit, dus de twee die overblijven mogen
-    breder."""
+def test_the_plate_names_every_part_of_the_installation():
+    """v5.16: een schema in plaats van kolommen. Gevraagd: "ik wil graag
+    een professioneel overzicht waar de stroom heen gaat"."""
     plaat = _plaat()
 
-    for titel in ("ACCU", "INSTALLATIE", "VERMOGEN", "VANDAAG"):
+    for titel in ("ZONNEPANELEN", "NET", "HUIS", "THUISACCU"):
         assert titel in plaat
-    assert "STATUS" not in plaat
-
-
 
 def test_the_visual_page_is_a_panel_again():
     """v3.25.2: teruggezet naar de paneelweergave met alleen de plaat.
@@ -495,21 +505,33 @@ def test_no_card_holds_two_svgs():
 # --- v3.25.4: geen SMIL-animatie meer --------------------------------
 
 
-def test_the_plate_uses_only_plain_svg():
-    """Gemeld: "Visueel is nog steeds een lap tekst."
+def test_the_plate_uses_only_dangerous_free_svg():
+    """Wat de opschoner van Home Assistant kan weren, blijft eruit.
 
-    De tijdlijn wijst één kant op: de beweging kwam er in v3.22.1, en
-    precies daarna begon dit. Daarvoor renderde de plaat.
+    v5.16.1: BEWEGING mag weer. Het verbod stamt uit v3.25.4, toen de
+    plaat rechtstreeks in de markdown-kaart stond: die filterde SMIL
+    eruit, en wat overbleef was geen geldige SVG meer - de plaat viel
+    terug op een lap tekst.
 
-    Home Assistant filtert SMIL-animatie uit de markdown-kaart; wat
-    overblijft is geen geldige SVG meer en valt terug op tekst.
+    Sinds v3.26.0 gaat de plaat als base64 in een `<img>`, en de
+    opschoner kan niet in base64 kijken. Er wordt dus niets meer
+    gefilterd. De terugval is ook mild geworden: negeert een browser de
+    animatie, dan staan de stippen stil en blijft de plaat heel.
+
+    Wat verboden blijft is alles wat een browser wél kan uitvoeren of
+    inladen: script, foreignObject, iframe. En `a`, want in een
+    afbeelding klikt niets.
+
+    De bijbehorende eis staat in
+    `test_every_plate_is_delivered_as_a_base64_image`: zodra een plaat
+    NIET meer als afbeelding wordt geleverd, komt het oude probleem terug.
     """
     import re
 
     plaat = _plaat(pv_w=210.0, net_w=180.0, huis_w=820.0, accu_w=-430.0)
     elementen = set(re.findall(r"<([a-z]+)", plaat))
+    verboden = {"script", "foreignobject", "iframe", "a"}
 
-    verboden = {"animate", "animatetransform", "animatemotion", "set", "script"}
     assert not (elementen & verboden), elementen & verboden
 
 
@@ -528,23 +550,19 @@ def test_no_flow_no_arrowhead():
 
 
 def test_the_arrowhead_turns_with_the_flow():
-    """Bij teruglevering wijst de punt omhoog in plaats van omlaag."""
-    import re
+    """Bij teruglevering wijst de punt naar het net in plaats van ervan
+    weg. De netpijl loopt horizontaal, dus de x van de tip beslist."""
 
-    def _punt_y(plaat):
-        # De eerste coördinaat is de TIP van de driehoek; die wijst de
-        # kant op waar de stroom heen gaat.
-        m = re.search(r'<polygon points="[\d.]+,([\d.]+) ', plaat)
+    def _punt_x(plaat):
+        # De eerste coordinaat is de TIP van de driehoek.
+        m = re.search(r'<polygon points="([\d.]+),', plaat)
         return float(m.group(1)) if m else None
 
-    # Alleen de NETpijl: de plaat bevat er meer, en dan pakt een zoekactie
-    # op het eerste voorkomen de verkeerde.
-    omlaag = _punt_y(_plaat(net_w=800.0, pv_w=0.0, huis_w=0.0, accu_w=0.0))
-    omhoog = _punt_y(_plaat(net_w=-800.0, pv_w=0.0, huis_w=0.0, accu_w=0.0))
+    invoer = _punt_x(_plaat(net_w=800.0, pv_w=0.0, huis_w=0.0, accu_w=0.0))
+    uitvoer = _punt_x(_plaat(net_w=-800.0, pv_w=0.0, huis_w=0.0, accu_w=0.0))
 
-    assert omlaag is not None and omhoog is not None
-    assert omlaag > omhoog
-
+    assert invoer is not None and uitvoer is not None
+    assert invoer > uitvoer
 
 def test_the_thickness_still_follows_the_power():
     import re
@@ -575,11 +593,9 @@ def test_no_svg_anywhere_uses_unsafe_elements():
 
     from overview_svg import bouw_scada, bouw_secties, bouw_status
 
+    # v5.16.1: `animate` mag weer - zie
+    # `test_the_plate_uses_only_dangerous_free_svg`. De rest blijft eruit.
     verboden = {
-        "animate",
-        "animatetransform",
-        "animatemotion",
-        "set",
         "script",
         "foreignobject",
         "iframe",
@@ -612,3 +628,27 @@ def test_no_svg_anywhere_uses_unsafe_elements():
         elementen = {m.lower() for m in re.findall(r"<([a-zA-Z]+)", svg)}
         fout = elementen & verboden
         assert not fout, f"onveilig element in een plaat: {fout}"
+
+
+def test_every_plate_is_delivered_as_a_base64_image():
+    """Elke plaat gaat als base64 in een `<img>` (v5.16.1).
+
+    Dat is de voorwaarde waaronder beweging veilig is: de opschoner van
+    Home Assistant kan niet in base64 kijken. Zet iemand een plaat ooit
+    rechtstreeks in de markdown-kaart, dan filtert die de animatie eruit
+    en valt de plaat terug op een lap tekst - precies wat er in v3.22.1
+    gebeurde.
+    """
+    import re
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    for functie in re.findall(
+        r"def (get_\w*svg\w*)\(self.*?(?=\n    def )", bron, re.S
+    ):
+        pass
+    for blok in re.findall(r"    def get_\w*svg\w*\(self.*?(?=\n    def )", bron, re.S):
+        naam = blok.split("(")[0].split()[-1]
+        assert "als_afbeelding(" in blok, f"{naam} levert de plaat niet als afbeelding"

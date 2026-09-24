@@ -1,0 +1,290 @@
+"""Het installatieschema op de visuele pagina (v5.16).
+
+Gemeld: *"ik vind hem er niet professioneel uitzien"*, *"op de landingpage
+staat info welke niet op het visuele gedeelte zichtbaar is"*, *"ik wil
+graag een professioneel overzicht waar de stroom heen gaat"* en *"het moet
+zo zijn dat wanneer bezoek, een EMS-specialist of een grafisch ontwerper
+het dashboard ziet, ze denken: dit is echt wel de top"*.
+
+Deze keer is de plaat niet blind gebouwd: met `cairosvg` omgezet naar een
+afbeelding en bekeken. Dat legde fouten bloot die in de code niet opvallen
+- tekst buiten zijn kader, een kop over zijn eerste regel, labels op
+pijlen.
+"""
+from datetime import datetime, timezone
+
+import pytest
+
+
+def _gegevens(c):
+    return c._schema_gegevens()
+
+
+def test_het_verloop_van_vandaag_komt_uit_het_dagverloop(make_coordinator, hass):
+    """Geen nieuwe meting: het dagverloop ligt er al."""
+    c = make_coordinator({})
+    dag = __import__("homeassistant.util.dt", fromlist=["dt"]).now().date().isoformat()
+    c.dagverloop = {
+        dag: [
+            {"tijd": "08:00", "pv_w": 100, "huis_w": 300},
+            {"tijd": "08:15", "pv_w": 300, "huis_w": 500},
+            {"tijd": "09:00", "pv_w": 900, "huis_w": 400},
+        ]
+    }
+
+    verloop = c._verloop_van_vandaag()
+
+    assert verloop["pv"][8] == 200      # gemiddelde van 100 en 300
+    assert verloop["pv"][9] == 900
+    assert verloop["huis"][8] == 400
+    assert verloop["pv"][0] is None     # voor zonsopkomst: geen meting
+
+
+def test_zonder_dagverloop_geen_grafiekje(make_coordinator, hass):
+    c = make_coordinator({})
+    c.dagverloop = {}
+
+    assert c._verloop_van_vandaag() == {}
+
+
+def test_de_plaat_toont_de_landingspaginagegevens(make_coordinator, hass):
+    """De aanleiding: die stonden er niet op."""
+    from custom_components.energy_management_system.overview_svg import bouw_scada
+
+    plaat = bouw_scada(
+        {
+            "status": "goed",
+            "balk": [
+                ("BESLUIT", "zon opvangen", "#f4f7fa", None),
+                ("GOEDKOOP BLOK", "23:00", "#5fd38d", None),
+                ("RESERVE", "2,01 kWh", "#f4f7fa", None),
+                ("MELDINGEN 24U", "12", "#f4f7fa", None),
+                ("AANDACHTSPUNTEN", "0", "#5fd38d", None),
+            ],
+        }
+    )
+
+    for veld in ("BESLUIT", "GOEDKOOP BLOK", "RESERVE", "MELDINGEN 24U",
+                 "AANDACHTSPUNTEN"):
+        assert veld in plaat
+
+
+def test_elke_knoop_heeft_een_eigen_regel_per_gegeven(make_coordinator, hass):
+    """De botsingen die bij het RENDEREN zichtbaar werden: het dagtotaal
+    liep over de contextregel heen. Elk gegeven staat nu op een eigen
+    hoogte."""
+    import re
+
+    from custom_components.energy_management_system.overview_svg import bouw_scada
+
+    plaat = bouw_scada(
+        {
+            "status": "goed", "net_w": 620.0,
+            "net_onder": "stroomprijs nu 12,4 ct/kWh",
+            "net_vandaag": "+0,7 / -4,7 kWh",
+        }
+    )
+    # de twee regels van het NET-kader staan onder elkaar, niet naast elkaar
+    hoogtes = {
+        int(m.group(1))
+        for m in re.finditer(r'<text x="76" y="(\d+)"', plaat)
+    }
+
+    assert len(hoogtes) >= 3, hoogtes
+
+
+def test_de_plaat_past_op_het_doek(make_coordinator, hass):
+    """Narekenen in plaats van met het oog beoordelen."""
+    import re
+
+    from custom_components.energy_management_system.overview_svg import bouw_scada
+
+    plaat = bouw_scada({"status": "goed", "pv_w": 2480.0, "accu_w": -1350.0})
+    breedte, hoogte = (
+        int(x) for x in re.search(r'viewBox="0 0 (\d+) (\d+)"', plaat).groups()
+    )
+    xs = [float(x) for x in re.findall(r'x="(\d+(?:\.\d+)?)"', plaat)]
+    ys = [float(y) for y in re.findall(r'y="(\d+(?:\.\d+)?)"', plaat)]
+
+    assert max(xs) <= breedte
+    assert max(ys) < hoogte
+
+
+def test_de_accuregel_past_ook_met_draaiende_ventilator(make_coordinator, hass):
+    """Gemeld bij het bekijken: de regel kapte af op "... reserve 2,01 kWh
+    ·…". De ventilator staat nu rechts op de onderste regel."""
+    from custom_components.energy_management_system.overview_svg import bouw_scada
+
+    plaat = bouw_scada(
+        {
+            "status": "goed", "accu_w": -1350.0, "accustand": "LADEN",
+            "soc": 68.0, "reserve_kwh": 2.01, "vrij_kwh": 4.9,
+            "accu_vandaag": "4,9 kWh vrij",
+            "koeling": {"ventilator_aan": True},
+        }
+    )
+
+    # v5.17: de accukaart is opnieuw ingedeeld - laadstand voorop,
+    # daaronder de stand, de reserve en de vrije ruimte.
+    assert "LADEN" in plaat
+    assert "reserve 2,01 kWh" in plaat
+    assert "ventilator draait" in plaat
+    assert "…" not in plaat
+
+
+def test_de_balk_onderaan_kapt_een_besluit_niet_af(make_coordinator, hass):
+    from custom_components.energy_management_system.overview_svg import bouw_scada
+
+    plaat = bouw_scada(
+        {"status": "goed", "balk": [("BESLUIT", "net dekt het huis", "#fff", None)]}
+    )
+
+    assert "net dekt het huis" in plaat
+
+
+def test_het_grafiekje_beslaat_altijd_de_hele_dag(make_coordinator, hass):
+    """Anders wordt een half uur zon over de volle breedte uitgerekt en
+    lijkt een vlakke ochtend een vlakke dag."""
+    import re
+
+    from custom_components.energy_management_system.overview_svg import bouw_scada
+
+    ochtend = bouw_scada(
+        {"status": "goed", "verloop": {"pv": [0, 0.2, 0.6, 1.2], "huis": []}}
+    )
+    xs = [
+        float(m)
+        for m in re.findall(r"[ML](\d+),", ochtend)
+    ]
+
+    # vier uur van de dag: de curve loopt tot ongeveer een zesde van de breedte
+    assert max(xs) < 700 + 264 / 3, max(xs)
+
+
+def test_de_plaat_staat_op_de_landingspagina():
+    """Gevraagd: "ik wil in 1 oogopslag (dashboard) de status van het EMS
+    kunnen zien"."""
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    sjabloon = (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
+    overzicht = sjabloon[sjabloon.index("- title: Overzicht") : sjabloon.index("- title: Visueel")]
+
+    assert "overzichtsplaat" in overzicht
+
+
+# --- v5.17: de cockpit ---------------------------------------------------
+
+
+def test_de_vier_statussen(make_coordinator, hass):
+    """Gevraagd: GOED, LET OP, INGRIJPEN, STORING - en representatief voor
+    het hele EMS, niet cosmetisch."""
+    from custom_components.energy_management_system.overview_svg import STATUSKLEUREN
+
+    assert set(STATUSKLEUREN) == {"GOED", "LET OP", "INGRIJPEN", "STORING"}
+
+
+def _gezonde_basis(c):
+    """Een draaiende installatie: geslaagde ronde, niets kapot.
+
+    v5.18 - zonder geslaagde ronde is de stand terecht STORING (regel 2 van
+    de matrix). Dat is de opzet van de toets die onvolledig was, niet de
+    verwachting."""
+    from homeassistant.util import dt as dt_util
+
+    c.last_successful_update = dt_util.now()
+    c.internal_failures = {}
+    c.get_configuratiecontrole = lambda: {"entiteiten": []}
+    c.get_energiebalans_controle = lambda: {"beschikbaar": True, "alles_klopt": True}
+    c.get_diagnostic_summary = lambda: {"aandachtspunten": []}
+    return c
+
+
+def test_een_storing_weegt_zwaarder_dan_een_aandachtspunt(make_coordinator, hass):
+    c = _gezonde_basis(make_coordinator({}))
+    c.get_diagnostic_summary = lambda: {"aandachtspunten": [{"ernst": "let_op"}]}
+
+    assert c._ems_status()[0] == "LET OP"
+
+    c.get_diagnostic_summary = lambda: {"aandachtspunten": [{"ernst": "fout"}]}
+    assert c._ems_status()[0] == "INGRIJPEN"
+
+    c.internal_failures = {"iets": "stuk"}
+    assert c._ems_status()[0] == "STORING"
+
+
+def test_de_statusregel_noemt_alleen_gemeten_grootheden(make_coordinator, hass):
+    """Nooit een verzonnen "confidence": wel de GEMETEN spreiding van de
+    zonvoorspelling, de energiebalans en de sensoruitval."""
+    c = _gezonde_basis(make_coordinator({}))
+    c.get_configuratiecontrole = lambda: {
+        "entiteiten": [{"oordeel": "in_orde", "instelling": "price_sensor_entity"}]
+    }
+
+    stand, regel = c._ems_status()
+
+    assert stand == "GOED"
+    assert "koppelingen 1/1" in regel
+    assert "balans ✓" in regel
+    assert "confidence" not in regel.lower()
+
+
+def test_het_net_zegt_inkoop_of_teruglevering(make_coordinator, hass):
+    """Gevraagd: "ik wil nooit hoeven onthouden of een positieve of
+    negatieve sensorwaarde import of export betekent"."""
+    from custom_components.energy_management_system.overview_svg import bouw_scada
+
+    assert "INKOOP" in bouw_scada({"net_w": 620.0})
+    assert "TERUGLEVERING" in bouw_scada({"net_w": -620.0})
+
+
+def test_de_accubalk_toont_reserve_ook_als_de_accu_eronder_zit(make_coordinator, hass):
+    """Dan is dat juist het nieuws."""
+    from custom_components.energy_management_system.overview_svg import (
+        KLEUR_ALARM,
+        bouw_scada,
+    )
+
+    plaat = bouw_scada(
+        {"soc": 10.0, "soc_deel": 0.10, "reserve_deel": 0.53, "tekort_kwartieren": 6}
+    )
+
+    assert KLEUR_ALARM in plaat
+
+
+def test_het_besluit_draagt_zijn_eigen_waarom(make_coordinator, hass):
+    """Explainability: de verklaring komt uit `get_why_now`, de
+    werkelijke beslisparameters - nooit achteraf verzonnen."""
+    from custom_components.energy_management_system.overview_svg import bouw_scada
+
+    plaat = bouw_scada(
+        {
+            "besluit": "zon opvangen",
+            "besluit_uitleg": "De accu houdt ruimte vrij.",
+            "waarom": ["hoge zonverwachting", "reserve voldoende"],
+        }
+    )
+
+    assert "ZON OPVANGEN" in plaat
+    assert "WAAROM" in plaat
+    assert "hoge zonverwachting · reserve voldoende" in plaat
+
+
+def test_het_waarom_komt_uit_de_beslislogica(make_coordinator, hass):
+    from homeassistant.util import dt as dt_util
+
+    c = _gezonde_basis(make_coordinator({}))
+    c.get_why_now = lambda now=None: {
+        "beschikbaar": True, "kort": "Zon opvangen",
+        "redenen": ["hoge zonverwachting", "reserve voldoende", "vierde regel", "vijfde"],
+    }
+
+    # v5.18: de cockpit leest het SNAPSHOT, niet de losse functies.
+    c._besluit_snapshot_vastleggen(dt_util.now())
+    gegevens = c._schema_gegevens()
+
+    assert gegevens["besluit"] == "Zon opvangen"
+    assert gegevens["waarom"] == [
+        "hoge zonverwachting", "reserve voldoende", "vierde regel",
+    ]

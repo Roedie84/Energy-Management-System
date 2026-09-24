@@ -341,6 +341,21 @@ DAGTELLER_INSTELLINGEN = (
 # v5.14.6: sensoren van de omvormer. Die schakelt zichzelf uit als er geen
 # zon is en meldt dan niets - dat is geen storing, net zomin als een
 # vaatwasser die uit staat. Overdag blijft het wél een storing.
+# v5.18: welke koppelingen de AANSTURING nodig heeft. Valt een van deze
+# weg, dan kan het EMS niet meer sturen - dat is een STORING. Valt een
+# andere ingestelde entiteit weg, bijvoorbeeld een vaatwassersensor, dan
+# blijft de aansturing gewoon werken en is het LET OP.
+#
+# Gemeld: "voorkom dat bijvoorbeeld een optionele apparaat- of NILM-sensor
+# het volledige EMS onterecht op STORING zet."
+NOODZAKELIJKE_KOPPELINGEN = (
+    "price_sensor_entity",          # zonder prijs geen enkele afweging
+    "operation_select_entity",      # hiermee wordt de stand gezet
+    "manual_power_number_entity",   # hiermee wordt het vermogen gezet
+    "consumption_power_sensor_entity",  # de P1-meter: de stand van het net
+    "battery_power_sensor_entity",  # wat de accu doet
+)
+
 OMVORMER_INSTELLINGEN = (
     "pv_energy_sensor_entity",
     "pv_power_sensor_entity",
@@ -3288,6 +3303,8 @@ PERSISTED_FIELDS: dict[str, dict] = {
     # v5.15.2: de laatste stand van gisteren, zodat het afsluiten van de dag
     # hem nog kan gebruiken - ongeacht de volgorde in de ronde.
     "prijs_gisteren": {"type": "plain"},
+    # v5.18: besluit, uitleg en redenen als EEN momentopname.
+    "besluit_snapshot": {"type": "plain"},
     # v5.9: waarom het rendementsleren niets oplevert.
     "rendement_afwijzingen": {"type": "plain"},
     # v5.11: het nachtelijke ontlaadvenster. Werd niet bewaard, dus een

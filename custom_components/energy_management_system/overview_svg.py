@@ -99,6 +99,19 @@ def _getal(waarde, eenheid: str = "", decimalen: int = 1) -> str:
     return f"{tekst} {eenheid}".strip()
 
 
+def _primair(waarde, opmaak) -> str:
+    """Een primaire waarde, of ONBEKEND (v5.18).
+
+    Gevraagd: "een ontbrekende primaire vermogenswaarde mag nooit visueel
+    lijken op 0 W". 0 is een meting - de accu die stilstaat, de zon die
+    niet schijnt. Ontbreekt de meting, dan staat er ONBEKEND.
+    """
+    return ONBEKEND if waarde is None else opmaak(waarde)
+
+
+ONBEKEND = "ONBEKEND"
+
+
 def _vermogen(watt) -> str:
     """Watt onder de kilowatt, anders kilowatt met één decimaal."""
     if watt is None:
@@ -561,235 +574,544 @@ def _kader(x, y, b, h, titel: str) -> str:
         f'fill="{KLEUR_ZWAK}" letter-spacing="1">{titel.upper()}</text>'
     )
 
-def bouw_scada(g: dict) -> str:
-    """Het overzicht in drie kolommen (v3.21.0).
+_ICONEN = {
+    # Eenvoudige lijnfiguren; geen letterlijke afbeeldingen, alleen vorm.
+    "zon": (
+        '<circle cx="0" cy="0" r="6" fill="none" stroke="{k}" stroke-width="2"/>'
+        + "".join(
+            f'<line x1="{9 * __import__("math").cos(h * 0.7854):.1f}" '
+            f'y1="{9 * __import__("math").sin(h * 0.7854):.1f}" '
+            f'x2="{13 * __import__("math").cos(h * 0.7854):.1f}" '
+            f'y2="{13 * __import__("math").sin(h * 0.7854):.1f}" '
+            f'stroke="{{k}}" stroke-width="2" stroke-linecap="round"/>'
+            for h in range(8)
+        )
+    ),
+    "huis": (
+        '<path d="M-11,1 L0,-9 L11,1 M-8,1 L-8,11 L8,11 L8,1" fill="none" '
+        'stroke="{k}" stroke-width="2" stroke-linejoin="round" '
+        'stroke-linecap="round"/>'
+    ),
+    "net": (
+        '<path d="M-9,-10 L-3,10 M9,-10 L3,10 M-7,-3 L7,-3 M-5,4 L5,4 '
+        'M-9,-10 L9,-10" fill="none" stroke="{k}" stroke-width="2" '
+        'stroke-linecap="round"/>'
+    ),
+    "accu": (
+        '<rect x="-11" y="-7" width="20" height="14" rx="3" fill="none" '
+        'stroke="{k}" stroke-width="2"/>'
+        '<rect x="9" y="-3" width="3" height="6" rx="1" fill="{k}"/>'
+        '<rect x="-8" y="-4" width="6" height="8" rx="1" fill="{k}"/>'
+    ),
+}
 
-    Indeling op verzoek: "2 blokken links, 2 blokken midden, status per
-    onderwerp rechts."
 
-    Links accu en installatie, midden vermogen en vandaag, rechts de
-    statuslijst over de volle hoogte. Onderaan een balk over de hele
-    breedte voor koeling en planning.
+def _icoon(x: float, y: float, soort: str, kleur: str) -> str:
+    """Een lijnfiguur bij een knoop - herkenbaar voordat je leest."""
+    vorm = _ICONEN.get(soort, "")
+    return f'<g transform="translate({x},{y})">{vorm.format(k=kleur)}</g>'
 
-    Alles wat hier staat BEWEEGT. Een meter voor een vast getal is
-    versiering, en die staat er dus niet in.
+
+def _sparkline(x, y, b, h, reeksen, nu_uur=None, verwacht=None) -> str:
+    """Het verloop van vandaag, klein en zonder assen.
+
+    Een dag in een oogopslag naast de momentopname: de plaat toonde tot nu
+    toe alleen het NU, en dan mis je of een getal hoog of laag is voor dit
+    moment van de dag.
     """
-    accu_w = g.get("accu_w")
-    laadt = accu_w is not None and accu_w > 0
+    delen = []
+    # De as beslaat altijd de HELE dag, ook 's ochtends. Anders wordt een
+    # half uur zon over de volle breedte uitgerekt en lijkt een vlakke
+    # ochtend een vlakke dag.
+    uren = max([24] + [len(p) for p, _k, _v in reeksen]
+               + [len(p) for p, _k in (verwacht or [])])
+    for punten, kleur, vullen in reeksen:
+        waarden = [p for p in punten if p is not None]
+        if len(waarden) < 2:
+            continue
+        top = max(max(waarden), 1.0)
+        stap = b / max(1, uren - 1)
+        pad = []
+        for i, waarde in enumerate(punten):
+            if waarde is None:
+                continue
+            px = x + i * stap
+            py = y + h - (waarde / top) * h
+            pad.append(f"{'M' if not pad else 'L'}{px:.0f},{py:.0f}")
+        if not pad:
+            continue
+        lijn = " ".join(pad)
+        if vullen:
+            # De vulling stopt waar de METING stopt. Doorlopen tot de
+            # rechterrand tekende 's ochtends een grote driehoek over een
+            # deel van de dag dat nog moet komen.
+            eind_x = x + (len(punten) - 1) * stap
+            delen.append(
+                f'<path d="{lijn} L{eind_x:.0f},{y + h:.0f} L{x:.0f},'
+                f'{y + h:.0f} Z" fill="{kleur}" opacity="0.12"/>'
+            )
+        delen.append(
+            f'<path d="{lijn}" fill="none" stroke="{kleur}" stroke-width="2" '
+            f'stroke-linejoin="round" stroke-linecap="round"/>'
+        )
+    # Rechts van NU de VERWACHTING, met een stippellijn - zodat zichtbaar
+    # is wat er nog komt zonder dat het op een meting lijkt.
+    stap = b / max(1, uren - 1)
+    for punten, kleur in verwacht or []:
+        waarden = [p for p in punten if p is not None]
+        if len(waarden) < 2:
+            continue
+        top = max(max(waarden), 1.0)
+        pad = []
+        for i, waarde in enumerate(punten):
+            if waarde is None:
+                continue
+            pad.append(
+                f"{'M' if not pad else 'L'}{x + i * stap:.0f},"
+                f"{y + h - (waarde / top) * h:.0f}"
+            )
+        if pad:
+            delen.append(
+                f'<path d="{" ".join(pad)}" fill="none" stroke="{kleur}" '
+                f'stroke-width="1.5" stroke-dasharray="3 4" opacity="0.55"/>'
+            )
+    if nu_uur is not None:
+        nx = x + max(0, min(uren - 1, nu_uur)) * stap
+        delen.append(
+            f'<line x1="{nx:.0f}" y1="{y - 4}" x2="{nx:.0f}" y2="{y + h + 4}" '
+            f'stroke="#6f7d8c" stroke-width="1" stroke-dasharray="2 3"/>'
+            f'<text x="{nx:.0f}" y="{y - 8}" fill="#6f7d8c" font-size="9" '
+            f'text-anchor="middle" letter-spacing="1">NU</text>'
+        )
+    return "".join(delen)
 
-    # Drie kolommen binnen 760: 232 + 232 + 232 met 16 marge en 12
-    # tussenruimte.
-    # Twee kolommen van 360 breed, want de status staat er niet meer
-    # naast.
-    L, M, KB = 16, 392, 352
 
-    inhoud_h = 240
-    hoogte = 44 + inhoud_h + 64
-
+def _knoop(x, y, b, h, titel, waarde, onder=None, kleur="#e8edf2",
+           vandaag=None, balk=None, icoon=None, rechtsonder=None):
+    """Een apparaat in het schema: naam, vermogen nu, dagtotaal, context."""
+    eenheid = ""
+    if " " in str(waarde):
+        waarde, eenheid = str(waarde).split(" ", 1)
     d = [
-        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 {hoogte}" '
-        f'width="100%" role="img" aria-label="Overzicht accu-installatie">',
-        f'<rect width="760" height="{hoogte}" rx="10" fill="#081820"/>',
+        f'<rect x="{x}" y="{y}" width="{b}" height="{h}" rx="14" '
+        f'fill="url(#kaart)" stroke="#2c3846"/>',
+        f'<rect x="{x}" y="{y}" width="4" height="{h}" rx="2" fill="{kleur}" '
+        f'opacity="0.9"/>',
+        f'<text x="{x + 20}" y="{y + 27}" fill="#8b98a5" font-size="11" '
+        f'letter-spacing="1.8" font-weight="600">{titel}</text>',
+        f'<text x="{x + 20}" y="{y + 60}" fill="#f4f7fa" font-size="30" '
+        f'font-weight="650" letter-spacing="-0.5">{waarde}'
+        f'<tspan font-size="15" font-weight="500" fill="#8b98a5"> {eenheid}'
+        f"</tspan></text>",
     ]
-
-    # --- kop --------------------------------------------------------
-    d.append(
-        f'<text x="20" y="27" font-size="11.5" fill="{KLEUR_ACCENT}" '
-        f'letter-spacing="2">ENERGY MANAGEMENT SYSTEM</text>'
-    )
-    status = (g.get("status") or "").replace("_", " ")
-    statuskleur = KLEUR_GOED if status == "goed" else KLEUR_ALARM
-    d.append(
-        f'<circle cx="732" cy="23" r="4.5" fill="{statuskleur}"/>'
-        f'<text x="722" y="27" text-anchor="end" font-size="9.5" '
-        f'fill="{KLEUR_ZWAK}">{status or "onbekend"}</text>'
-    )
-
-    # ================= LINKS: accu + installatie ====================
-    # v3.21.1: drie meters op ÉÉN rij.
-    #
-    # Gemeld: "dat ziet er al een heel stuk beter uit, alleen nog steeds
-    # die gauges." Twee boven en één eronder was asymmetrisch, en het
-    # label van de onderste viel bovendien BUITEN het kader: y 176 + 26
-    # is 202, terwijl het kader op 194 eindigt.
-    #
-    # Drie meters van straal 22 op 56/120/184 binnen een kolom van 240:
-    # elk 44 breed, met 20 pixels tussenruimte. De schaalgrenzen staan
-    # ernaast en die hebben ook plek nodig, dus kleiner dan hiervoor.
-    # v3.22.0: getallen met een balkje, geen halve cirkels meer.
-    d.append(_kader(L, 44, KB, 84, "accu"))
-    for x, waarde, mn, mx, label, eenheid, alarm in (
-        (L + 16, g.get("soc"), 0, 100, "accustand", "%", None),
-        (L + 130, g.get("omvormer_c"), 10, 55, "omvormer", "°C", 45),
-        (L + 244, g.get("beschikbaar_kwh"), 0, 8.6, "beschikbaar", "kWh", None),
-    ):
+    if icoon:
+        d.append(_icoon(x + b - 30, y + 28, icoon, kleur))
+    if vandaag:
+        # Staat er rechtsonder al iets (INKOOP/TERUGLEVERING), dan gaat het
+        # dagtotaal naar de titelregel - anders botsen ze.
+        hoogte, anker = ((y + 27, "end") if rechtsonder else (y + 104, "start"))
+        # 48 in plaats van 20: het icoon staat rechtsboven.
+        px = (x + b - 48) if rechtsonder else (x + 20)
         d.append(
-            _balkje(
-                x, 84, waarde, mn, mx, label, eenheid,
-                breedte=92.0, alarm_boven=alarm,
+            f'<text x="{px}" y="{hoogte}" fill="#6f7d8c" font-size="11" '
+            f'text-anchor="{anker}">vandaag {vandaag}</text>'
+        )
+    if onder:
+        d.append(
+            f'<text x="{x + 20}" y="{y + (108 if rechtsonder else 84)}" '
+            f'fill="#8b98a5" font-size="12">{_kort(str(onder), 40)}</text>'
+        )
+    if rechtsonder:
+        d.append(
+            f'<text x="{x + 20}" y="{y + 88}" fill="{kleur}" font-size="12" '
+            f'letter-spacing="1.4" font-weight="600">'
+            f"{_kort(str(rechtsonder), 22)}</text>"
+        )
+    if balk is not None:
+        d.append(_laadbalk(x + 20, y + h - 20, b - 40, balk[0], kleur, balk[1]))
+    return "".join(d)
+
+
+def _laadbalk(x, y, b, deel, kleur, reservedeel=None):
+    """Laadstand als balk; het streepje markeert de reserve."""
+    d = [
+        f'<rect x="{x}" y="{y}" width="{b}" height="9" rx="4.5" '
+        f'fill="#141b23" stroke="#2c3846" stroke-width="0.5"/>',
+        f'<rect x="{x}" y="{y}" width="{max(0.0, min(1.0, deel)) * b:.0f}" '
+        f'height="9" rx="4.5" fill="{kleur}"/>',
+    ]
+    if reservedeel is not None:
+        rx = x + max(0.0, min(1.0, reservedeel)) * b
+        d.append(
+            f'<line x1="{rx:.0f}" y1="{y - 4}" x2="{rx:.0f}" y2="{y + 13}" '
+            f'stroke="#f4f7fa" stroke-width="2"/>'
+        )
+    return "".join(d)
+
+
+def _stroom(x1, y1, x2, y2, watt, label_x=None, label_y=None, kleur="#3ecf8e"):
+    """Een stroompijl: overal even dik, richting naar het teken.
+
+    De pijlPUNT is een polygon en geen marker: zonder beweging moet de
+    richting uit de punt blijken. Een actieve lijn krijgt stippen over een
+    doorlopende baan; loopt er niets, dan alleen een matte stippellijn - de
+    verbinding bestaat wel, er gaat niets doorheen.
+    """
+    if not watt:
+        return (
+            f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="#222c37" '
+            f'stroke-width="2" stroke-dasharray="3 6"/>'
+        )
+    # v5.16.1: alle lijnen even dik en hetzelfde stippatroon. De dikte
+    # volgde eerst het vermogen, en dan oogt elke lijn anders - gemeld:
+    # "lijnen even dik/format". Hoeveel er loopt staat er als getal bij;
+    # hoe hard de stippen lopen volgt nog wel het vermogen.
+    dik = 3.0
+    if watt < 0:
+        x1, y1, x2, y2 = x2, y2, x1, y1
+    lengte = max(1.0, ((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5)
+    ex, ey = (x2 - x1) / lengte, (y2 - y1) / lengte
+    punt = 10.0
+    bx, by = x2 - ex * punt, y2 - ey * punt
+    label = (
+        f'<text x="{label_x}" y="{label_y}" fill="#f4f7fa" font-size="12" '
+        f'font-weight="600" text-anchor="middle">{_vermogen(abs(watt))}</text>'
+        if label_x is not None
+        else ""
+    )
+    return (
+        f'<line x1="{x1}" y1="{y1}" x2="{bx:.0f}" y2="{by:.0f}" '
+        f'stroke="{kleur}" stroke-width="{dik:.1f}" stroke-linecap="round" '
+        f'opacity="0.35"/>'
+        # De stippen LOPEN mee met de stroom (v5.16.1).
+        #
+        # Beweging was verboden sinds v3.25.4: Home Assistant filterde SMIL
+        # uit de markdown-kaart, en wat overbleef was geen geldige SVG meer
+        # - de plaat viel terug op een lap tekst. Dat verbod is verouderd.
+        # Sinds v3.26.0 gaat de plaat als base64 in een `<img>`, en de
+        # opschoner kan niet in base64 kijken; er wordt dus niets meer
+        # gefilterd.
+        #
+        # De terugval is bovendien mild geworden: negeert een browser de
+        # animatie, dan staan de stippen stil en blijft de plaat heel.
+        # Toen sloopte het filter de HELE plaat.
+        f'<line x1="{x1}" y1="{y1}" x2="{bx:.0f}" y2="{by:.0f}" '
+        f'stroke="{kleur}" stroke-width="{dik:.1f}" stroke-linecap="round" '
+        f'stroke-dasharray="1 9">'
+        f'<animate attributeName="stroke-dashoffset" from="10" to="0" '
+        f'dur="{max(0.5, min(2.2, 900 / max(120, abs(watt)))):.2f}s" '
+        f'repeatCount="indefinite"/></line>'
+        f'<polygon points="{x2:.0f},{y2:.0f} '
+        f'{bx - ey * 5.5:.0f},{by + ex * 5.5:.0f} '
+        f'{bx + ey * 5.5:.0f},{by - ex * 5.5:.0f}" fill="{kleur}"/>' + label
+    )
+
+
+def _infobalk(x, y, b, velden, hoog=88):
+    """De balk onderaan met wat er op de landingspagina staat."""
+    if not velden:
+        return ""
+    d = [
+        f'<rect x="{x}" y="{y}" width="{b}" height="{hoog}" rx="14" '
+        f'fill="url(#kaart)" stroke="#2c3846"/>'
+    ]
+    if hoog > 100:
+        # Smal en hoog: onder elkaar, label links en waarde rechts.
+        regel = (hoog - 24) / len(velden)
+        for i, (label, waarde, kleur, _pad) in enumerate(velden):
+            ry = y + 32 + i * regel
+            d.append(
+                f'<text x="{x + 22}" y="{ry:.0f}" fill="#6f7d8c" '
+                f'font-size="10" letter-spacing="1.4" '
+                f'font-weight="600">{label}</text>'
+                f'<text x="{x + b - 22}" y="{ry:.0f}" fill="{kleur}" '
+                f'font-size="17" font-weight="650" text-anchor="end">'
+                f"{_kort(ONBEKEND if waarde is None else str(waarde), 18)}</text>"
+            )
+        return "".join(d)
+    kolom = b / len(velden)
+    for i, (label, waarde, kleur, pad) in enumerate(velden):
+        _ = pad  # geen links: de plaat wordt als afbeelding getoond
+        mx = x + kolom * i + kolom / 2
+        d.append(
+            f'<text x="{mx:.0f}" y="{y + 32}" fill="#6f7d8c" font-size="10" '
+            f'letter-spacing="1.6" font-weight="600" '
+            f'text-anchor="middle">{label}</text>'
+            f'<text x="{mx:.0f}" y="{y + 63}" fill="{kleur}" font-size="18" '
+            f'font-weight="650" text-anchor="middle">'
+            f"{_kort(ONBEKEND if waarde is None else str(waarde), 21)}</text>"
+        )
+        if i:
+            lx = x + kolom * i
+            d.append(
+                f'<line x1="{lx:.0f}" y1="{y + 18}" x2="{lx:.0f}" '
+                f'y2="{y + 70}" stroke="#222c37"/>'
+            )
+    return "".join(d)
+
+
+
+STATUSKLEUREN = {
+    "GOED": "#5fd38d",
+    "LET OP": "#f0b429",
+    "INGRIJPEN": "#e08a3c",
+    "STORING": "#e05252",
+}
+
+
+def _soc_balk(x, y, b, soc_deel, reserve_deel, kleur, ondergrens_deel=None):
+    """De laadstand in DRIE zones (v5.17).
+
+    Gevraagd: "ik wil in een oogopslag kunnen zien hoeveel energie
+    aanwezig is, hoeveel daarvan als reserve wordt aangehouden en hoeveel
+    vrije capaciteit nog beschikbaar is".
+
+        [ reserve | vrij te gebruiken | nog te vullen ]
+    """
+    soc_deel = max(0.0, min(1.0, soc_deel or 0.0))
+    # NIET afkappen op de laadstand: staat de reserve hoger dan wat erin
+    # zit, dan is dat juist het nieuws - de accu staat onder zijn reserve.
+    reserve_echt = max(0.0, min(1.0, reserve_deel or 0.0))
+    reserve_deel = min(soc_deel, reserve_echt)
+    d = [
+        f'<rect x="{x}" y="{y}" width="{b}" height="10" rx="5" '
+        f'fill="#141b23" stroke="#2c3846" stroke-width="0.5"/>'
+    ]
+    if reserve_deel:
+        d.append(
+            f'<rect x="{x}" y="{y}" width="{reserve_deel * b:.0f}" height="10" '
+            f'rx="5" fill="{kleur}" opacity="0.38"/>'
+        )
+    if soc_deel > reserve_deel:
+        d.append(
+            f'<rect x="{x + reserve_deel * b:.0f}" y="{y}" '
+            f'width="{(soc_deel - reserve_deel) * b:.0f}" height="10" rx="5" '
+            f'fill="{kleur}"/>'
+        )
+    if ondergrens_deel:
+        # De absolute ondergrens van de accu: daaronder komt hij nooit.
+        d.append(
+            f'<rect x="{x}" y="{y}" width="{ondergrens_deel * b:.0f}" '
+            f'height="10" rx="5" fill="#2c3846"/>'
+        )
+    if reserve_echt > soc_deel:
+        # Het tekort: van wat erin zit tot waar de reserve staat.
+        d.append(
+            f'<rect x="{x + soc_deel * b:.0f}" y="{y}" '
+            f'width="{(reserve_echt - soc_deel) * b:.0f}" height="10" rx="5" '
+            f'fill="{KLEUR_ALARM}" opacity="0.25"/>'
+        )
+    d.append(
+        f'<line x1="{x + reserve_echt * b:.0f}" y1="{y - 4}" '
+        f'x2="{x + reserve_echt * b:.0f}" y2="{y + 14}" stroke="#f4f7fa" '
+        f'stroke-width="2"/>'
+    )
+    return "".join(d)
+
+
+def _besluitblok(x, y, b, h, besluit, uitleg, waarom):
+    """Het EMS-besluit met zijn eigen motivatie (v5.17).
+
+    Gevraagd: "dit is een van de intelligentste onderdelen van het hele
+    EMS en verdient meer visueel gewicht", met een verplichte waarom-regel
+    uit de werkelijke beslisparameters.
+    """
+    d = [
+        f'<rect x="{x}" y="{y}" width="{b}" height="{h}" rx="14" '
+        f'fill="url(#kaart)" stroke="#2c3846"/>',
+        f'<rect x="{x}" y="{y}" width="4" height="{h}" rx="2" fill="#b088f9"/>',
+        f'<text x="{x + 24}" y="{y + 28}" fill="#6f7d8c" font-size="11" '
+        f'letter-spacing="1.8" font-weight="600">EMS BESLUIT</text>',
+        f'<text x="{x + 24}" y="{y + 62}" fill="#f4f7fa" font-size="26" '
+        f'font-weight="650" letter-spacing="0.5">'
+        f"{_kort(str(besluit).upper() if besluit else ONBEKEND, 30)}</text>",
+    ]
+    if uitleg:
+        d.append(
+            f'<text x="{x + 24}" y="{y + 88}" fill="#8b98a5" font-size="13">'
+            f"{_kort(str(uitleg), 74)}</text>"
+        )
+    if waarom:
+        d.append(
+            f'<text x="{x + 24}" y="{y + 112}" fill="#6f7d8c" font-size="12">'
+            f"<tspan fill=\"#b088f9\" font-weight=\"600\">WAAROM  </tspan>"
+            f"{_kort(' · '.join(waarom), 86)}</text>"
+        )
+    return "".join(d)
+
+
+def bouw_scada(g: dict) -> str:
+    """De EMS-cockpit (v5.17).
+
+    Gevraagd: het scherm moet binnen enkele seconden vijf vragen
+    beantwoorden - is mijn EMS gezond, waar komt de energie vandaan, waar
+    gaat hij heen, wat heeft het EMS besloten, en waarom.
+
+    Uitdrukkelijk NIET zoveel mogelijk informatie: de centrale opbouw
+    blijft (zon boven, net links, huis rechts, accu onder), en alles wat
+    erbij komt moet een van die vijf vragen beantwoorden.
+
+    Alles komt uit werkelijke grootheden van het EMS. Waar iets niet
+    bestaat - een "confidence" van het besluit bijvoorbeeld - staat er
+    niets, in plaats van een getal dat achteraf is verzonnen.
+    """
+    # v5.18: GEEN `or 0` meer - dat maakte van een ontbrekende meting een
+    # nul, en een nul is een echte meting.
+    pv, accu, net, huis = (
+        g.get("pv_w"), g.get("accu_w"), g.get("net_w"), g.get("huis_w")
+    )
+    status = str(g.get("status_kort") or "GOED").upper()
+    statuskleur = STATUSKLEUREN.get(status, KLEUR_ZWAK)
+    netkleur = "#5aa9e6"
+    if net is None:
+        netrichting, netpijl = ONBEKEND, ""
+    elif net > 0:
+        netrichting, netpijl = "INKOOP", "↓"
+    elif net < 0:
+        netrichting, netpijl = "TERUGLEVERING", "↑"
+    else:
+        netrichting, netpijl = "GEEN UITWISSELING", "·"
+    # De stand komt uit de coordinator, met dezelfde dode band als de
+    # regellogica (MIN_BATTERY_POWER_IDLE_W). De plaat bepaalt hem niet zelf.
+    accustand = g.get("accustand") or ONBEKEND
+    koeling = g.get("koeling")
+    if isinstance(koeling, dict):
+        # Alleen als hij DRAAIT: dat is het nieuws.
+        koeling = (
+            "ventilator draait"
+            if koeling.get("ventilator_aan") or koeling.get("actie") == "aan"
+            else None
+        )
+    d = [
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 774" '
+        'width="100%" font-family="system-ui, -apple-system, Segoe UI, '
+        'sans-serif">',
+        "<defs>"
+        '<linearGradient id="doek" x1="0" y1="0" x2="0" y2="1">'
+        '<stop offset="0" stop-color="#151d26"/>'
+        '<stop offset="1" stop-color="#0d1218"/></linearGradient>'
+        '<linearGradient id="kaart" x1="0" y1="0" x2="0" y2="1">'
+        '<stop offset="0" stop-color="#1e2731"/>'
+        '<stop offset="1" stop-color="#171f28"/></linearGradient>'
+        "</defs>",
+        '<rect width="1000" height="774" rx="18" fill="url(#doek)"/>',
+        '<text x="36" y="40" fill="#6f7d8c" font-size="11" letter-spacing="2.4" '
+        'font-weight="600">ENERGY MANAGEMENT SYSTEM</text>',
+        f'<circle cx="42" cy="70" r="6" fill="{statuskleur}"/>',
+        f'<text x="58" y="77" fill="{statuskleur}" font-size="26" '
+        f'font-weight="700" letter-spacing="0.5">{status}</text>',
+        f'<text x="36" y="102" fill="#6f7d8c" font-size="12">'
+        f"{_kort(str(g.get('status_regel') or ''), 90)}</text>",
+        f'<text x="964" y="40" fill="#6f7d8c" font-size="11" '
+        f'text-anchor="end" letter-spacing="1">{g.get("moment") or ""}</text>',
+    ]
+    verloop = g.get("verloop") or {}
+    if verloop:
+        d.append(
+            _sparkline(
+                688, 52, 276, 40,
+                [
+                    (verloop.get("pv") or [], "#f0b429", True),
+                    (verloop.get("huis") or [], "#8b98a5", False),
+                ],
+                nu_uur=verloop.get("nu_uur"),
+                verwacht=[
+                    (verloop.get("pv_verwacht") or [], "#f0b429"),
+                    (verloop.get("huis_verwacht") or [], "#8b98a5"),
+                ],
             )
         )
-
-    # v3.22.0: het schema compacter. Drie blokken op een rij met de
-    # accu eronder gaf veel lucht; nu twee rijen dicht op elkaar.
-    d.append(_kader(L, 136, KB, 148, "installatie"))
-    for naam, x, y, w in (
-        ("zon", L + 92, 178, g.get("pv_w")),
-        ("net", L + 260, 178, g.get("net_w")),
-        ("huis", L + 92, 244, g.get("huis_w")),
-        ("accu", L + 260, 244, g.get("accu_w")),
-    ):
-        kleur = KLEUR_ACCENT if naam == "accu" else KLEUR_LIJN
         d.append(
-            f'<rect x="{x - 44}" y="{y - 18}" width="88" height="36" rx="5" '
-            f'fill="none" stroke="{kleur}" stroke-opacity="0.7"/>'
-            f'<text x="{x}" y="{y}" text-anchor="middle" font-size="12.5" '
-            f'fill="{KLEUR_TEKST}">{_vermogen(w)}</text>'
-            f'<text x="{x}" y="{y + 13}" text-anchor="middle" '
-            f'font-size="8.5" fill="{KLEUR_ZWAK}">{naam}</text>'
+            '<text x="964" y="106" fill="#6f7d8c" font-size="10" '
+            'text-anchor="end" letter-spacing="1">'
+            "VANDAAG · WERKELIJK TEGEN VERWACHT</text>"
         )
-    # v3.22.1: bewegende stroompijlen tussen de blokken.
-    #
-    # Gevraagd: "Bewegen er nu ook richtingspijlen in het installatie
-    # gedeelte?" - nee, en dat was een gemis. De pijlfunctie bestond al
-    # sinds v3.17.0 maar werd na de herindeling niet meer gebruikt.
-    #
-    # De DIKTE volgt het vermogen en de SNELHEID ook: bij veel stroom
-    # lopen de streepjes sneller. Onder 25 W wordt er niets getekend -
-    # een pijl die altijd staat zegt niets.
-    #
-    # De richting volgt de werkelijkheid: levert het net (import), dan
-    # loopt de pijl naar beneden; lever je terug, dan omhoog. Hetzelfde
-    # voor de accu.
-    net_w = g.get("net_w")
-    accu_w = g.get("accu_w")
-    d.append(
-        f'<line x1="{L + 92}" y1="196" x2="{L + 92}" y2="226" '
-        f'stroke="{KLEUR_LIJN}" stroke-opacity="0.25" stroke-width="1"/>'
-        f'<line x1="{L + 260}" y1="196" x2="{L + 260}" y2="226" '
-        f'stroke="{KLEUR_LIJN}" stroke-opacity="0.25" stroke-width="1"/>'
-        f'<line x1="{L + 92}" y1="211" x2="{L + 260}" y2="211" '
-        f'stroke="{KLEUR_LIJN}" stroke-opacity="0.25" stroke-width="1"/>'
-    )
-    # Zon naar beneden: die levert altijd.
-    d.append(_pijl(L + 92, 196, L + 92, 226, g.get("pv_w"), KLEUR_GOED))
-    # Net: naar beneden bij afname, omhoog bij teruglevering.
-    if net_w:
-        if net_w > 0:
-            d.append(_pijl(L + 260, 196, L + 260, 226, net_w, "#e0a852"))
-        else:
-            d.append(_pijl(L + 260, 226, L + 260, 196, net_w, KLEUR_GOED))
-    # Accu: naar het blok toe bij laden, ervandaan bij ontladen.
-    if accu_w:
-        if accu_w > 0:
-            d.append(_pijl(L + 176, 211, L + 260, 226, accu_w, KLEUR_ACCENT))
-        else:
-            d.append(_pijl(L + 260, 226, L + 176, 211, accu_w, KLEUR_ACCENT))
-    # En naar het huis.
-    d.append(_pijl(L + 176, 211, L + 92, 226, g.get("huis_w"), KLEUR_TEKST))
+    d += [
+        '<circle cx="500" cy="352" r="22" fill="none" stroke="#2c3846">'
+        '<animate attributeName="r" values="20;26;20" dur="3.4s" '
+        'repeatCount="indefinite"/>'
+        '<animate attributeName="opacity" values="0.9;0.25;0.9" dur="3.4s" '
+        'repeatCount="indefinite"/></circle>',
+        '<circle cx="500" cy="352" r="7" fill="#f4f7fa"/>',
+        _stroom(500, 274, 500, 328, pv or 0, 540, 306, "#f0b429"),
+        _stroom(330, 352, 474, 352, net or 0, 402, 338, netkleur),
+        _stroom(526, 352, 670, 352, huis or 0, 598, 338, "#f4f7fa"),
+        _stroom(500, 442, 500, 376, accu or 0, 452, 414, KLEUR_GOED),
+        _knoop(363, 144, 274, 126, "ZONNEPANELEN", _primair(pv, _vermogen),
+               g.get("zon_onder") or "—", "#f0b429", g.get("zon_vandaag"),
+               icoon="zon"),
+        # De pijl hoort bij de RICHTING, niet bij het getal: stond hij
+        # ervoor, dan werd bij precies nul uitwisseling het bolletje het
+        # hoofdgetal - de opmaak splitst op de eerste spatie.
+        _knoop(56, 290, 274, 126, "NET",
+               _primair(None if net is None else abs(net), _vermogen),
+               g.get("net_onder")
+               or (
+                   f'stroomprijs nu {_getal(g.get("prijs_ct"), " ct/kWh", 1)}'
+                   if g.get("prijs_ct") is not None
+                   else "stroomprijs nu —"
+               ),
+               netkleur, g.get("net_vandaag"), icoon="net",
+               rechtsonder=f"{netpijl} {netrichting}".strip()),
+        _knoop(670, 290, 274, 126, "HUIS", _primair(huis, _vermogen),
+               g.get("huis_onder") or "—", "#f4f7fa", g.get("huis_vandaag"),
+               icoon="huis"),
+        _accukaart(363, 442, 274, 150, accu, accustand, g, koeling),
+        _besluitblok(56, 616, 560, 140, g.get("besluit"), g.get("besluit_uitleg"),
+                     g.get("waarom")),
+        _infobalk(632, 616, 312, g.get("balk") or [], hoog=140),
+        "</svg>",
+    ]
+    return "".join(d)
 
-    # ================= MIDDEN: vermogen + vandaag ===================
-    d.append(_kader(M, 44, KB, 122, "vermogen"))
-    d.append(
-        f'<text x="{M + 176}" y="98" text-anchor="middle" font-size="32" '
-        f'font-weight="600" fill="{KLEUR_TEKST}">'
-        f'{abs(accu_w or 0):.0f}<tspan font-size="14" fill="{KLEUR_ZWAK}">'
-        " W</tspan></text>"
-    )
-    d.append(
-        f'<text x="{M + 176}" y="116" text-anchor="middle" font-size="10" '
-        f'fill="{KLEUR_ACCENT}">'
-        f'{"LADEN" if laadt else "ONTLADEN" if accu_w else "RUST"}</text>'
-    )
-    prijs, accu_ct = g.get("prijs_ct"), g.get("accu_ct")
-    for j, (label, waarde) in enumerate(
-        (("stroomprijs nu", prijs), ("kWh uit de accu", accu_ct))
-    ):
-        d.append(
-            f'<text x="{M + 14}" y="{136 + j * 14}" font-size="9" '
-            f'fill="{KLEUR_ZWAK}">{label}</text>'
-            f'<text x="{M + KB - 14}" y="{136 + j * 14}" text-anchor="end" '
-            f'font-size="9.5" fill="{KLEUR_TEKST}">'
-            f'{_getal(waarde, "ct", 1) if waarde else "--"}</text>'
+
+def _accukaart(x, y, b, h, accu_w, accustand, g, koeling=None):
+    """De accu: laadstand voorop, vermogen ernaast, drie zones in de balk."""
+    soc = g.get("soc")
+    kleur = KLEUR_ALARM if g.get("tekort_kwartieren") else KLEUR_GOED
+    d = [
+        f'<rect x="{x}" y="{y}" width="{b}" height="{h}" rx="14" '
+        f'fill="url(#kaart)" stroke="#2c3846"/>',
+        f'<rect x="{x}" y="{y}" width="4" height="{h}" rx="2" fill="{kleur}"/>',
+        f'<text x="{x + 20}" y="{y + 27}" fill="#6f7d8c" font-size="11" '
+        f'letter-spacing="1.8" font-weight="600">THUISACCU</text>',
+        f'<text x="{x + 20}" y="{y + 64}" fill="#f4f7fa" '
+        f'font-size="{32 if soc is not None else 18}" font-weight="650">'
+        + (
+            f'{_getal(soc, "", 0)}<tspan font-size="16" fill="#8b98a5">%</tspan>'
+            if soc is not None
+            else ONBEKEND
         )
-    d.append(
-        f'<text x="{M + 14}" y="160" font-size="9" fill="{KLEUR_LIJN}">'
-        f'{_kort(str(g.get("reden") or ""), 36)}</text>'
-    )
-
-    d.append(_kader(M, 176, KB, 108, "vandaag"))
-    for j, (label, waarde, naast) in enumerate(
+        + "</text>",
+        f'<text x="{x + b - 20}" y="{y + 64}" fill="{kleur}" font-size="20" '
+        f'font-weight="600" text-anchor="end">'
+        f'{ONBEKEND if accu_w is None else _vermogen(abs(accu_w))}</text>',
+        f'<text x="{x + 20}" y="{y + 88}" fill="{kleur}" font-size="12" '
+        f'letter-spacing="1.4" font-weight="600">{accustand}</text>',
+        f'<text x="{x + b - 20}" y="{y + 88}" fill="#6f7d8c" font-size="12" '
+        f'text-anchor="end">{_kort(str(koeling or ""), 20)}</text>',
+        f'<text x="{x + 20}" y="{y + 112}" fill="#8b98a5" font-size="12">'
+        f'reserve {_getal(g.get("reserve_kwh"), "kWh", 2)}</text>',
+        # Het tekort: wat er te kort is ten opzichte van de reserve. Dat
+        # getal mag niet verdwijnen achter een vrij van 0,0.
         (
-            ("opgewekt", g.get("opgewekt_kwh"), g.get("voorspeld_kwh")),
-            ("verbruikt", g.get("verbruik_kwh"), None),
-            ("van het net", g.get("import_kwh"), None),
-            ("waarvan in de accu", g.get("netlading_kwh"), None),
-            ("teruggeleverd", g.get("export_kwh"), None),
-            ("zelfvoorziening", g.get("zelfvoorziening_pct"), None),
-        )
-    ):
-        yy = 200 + j * 15
-        if label == "zelfvoorziening":
-            tekst = _getal(waarde, "%", 0) if waarde is not None else "--"
-        else:
-            tekst = _getal(waarde, "kWh", 1) if waarde is not None else "--"
-            if naast:
-                tekst += f' / {_getal(naast, "", 1)}'
-        d.append(
-            f'<text x="{M + 14}" y="{yy}" font-size="9.5" '
-            f'fill="{KLEUR_ZWAK}">{label}</text>'
-            f'<text x="{M + KB - 14}" y="{yy}" text-anchor="end" '
-            f'font-size="10" fill="{KLEUR_TEKST}">{tekst}</text>'
-        )
-
-    # v3.23.0: de statuskolom staat niet meer IN de plaat.
-    #
-    # De opschoner van de markdown-kaart accepteert `<a>` binnen SVG
-    # niet en toont dan het hele blok als platte tekst. Gevraagd is om
-    # het klikbaar te HOUDEN, dus staan de statusblokken nu als echte
-    # tegels onder de plaat - die werken gegarandeerd.
-
-    # ================= ONDERBALK ====================================
-    balk_y = 44 + inhoud_h + 8
-    d.append(_kader(16, balk_y, 728, 50, "koeling en planning"))
-    koeling = g.get("koeling") or {}
-    aan = koeling.get("ventilator_aan")
-    d.append(
-        f'<circle cx="40" cy="{balk_y + 33}" r="6" fill="'
-        f'{KLEUR_ACCENT if aan else KLEUR_VLAK}" stroke="{KLEUR_LIJN}"/>'
-        f'<text x="56" y="{balk_y + 37}" font-size="10" fill="{KLEUR_TEKST}">'
-        f'ventilator {"draait" if aan else "uit"}</text>'
-    )
-    buiten = koeling.get("buiten_c")
-    if buiten is not None:
-        d.append(
-            f'<text x="190" y="{balk_y + 37}" font-size="10" '
-            f'fill="{KLEUR_ZWAK}">buiten {_getal(buiten, "°C", 1)}</text>'
-        )
-    tekort = g.get("tekort_kwartieren")
-    if tekort is not None:
-        kleur = KLEUR_ALARM if tekort else KLEUR_GOED
-        d.append(
-            f'<text x="310" y="{balk_y + 37}" font-size="10" fill="{kleur}">'
-            f'{tekort} tekortkwartier(en)</text>'
-        )
-    verkoop = g.get("verkoopkwartieren")
-    if verkoop is not None:
-        d.append(
-            f'<text x="460" y="{balk_y + 37}" font-size="10" '
-            f'fill="{KLEUR_ZWAK}">{verkoop} verkoopkwartieren</text>'
-        )
-    groot = g.get("grootverbruiker")
-    if isinstance(groot, dict):
-        groot = groot.get("naam")
-    if groot:
-        d.append(
-            f'<text x="728" y="{balk_y + 37}" text-anchor="end" '
-            f'font-size="10" fill="{KLEUR_ZWAK}">grootste: '
-            f'{_kort(str(groot), 20)}</text>'
-        )
-
-    d.append("</svg>")
+            f'<text x="{x + b - 20}" y="{y + 88}" fill="{KLEUR_ALARM}" '
+            f'font-size="12" font-weight="600" text-anchor="end">tekort '
+            f'{_getal(g.get("tekort_kwh"), "kWh", 2)}</text>'
+            if g.get("tekort_kwh")
+            else ""
+        ),
+        f'<text x="{x + b - 20}" y="{y + 112}" fill="#8b98a5" font-size="12" '
+        f'text-anchor="end">vrij {_getal(g.get("vrij_kwh"), "kWh", 1)}</text>',
+        # Geen balk zonder nominale capaciteit en ondergrens - zie
+        # `cockpit_accu`. Liever niets dan een geloofwaardige benadering.
+        (
+            _soc_balk(x + 20, y + h - 26, b - 40, balk.get("soc_deel"),
+                      balk.get("reserve_deel"), kleur, balk.get("ondergrens_deel"))
+            if (balk := g.get("accu_balk") or {})
+            else ""
+        ),
+    ]
     return "".join(d)
 
 
@@ -942,7 +1264,7 @@ def bouw_status(g: dict) -> str:
             f'<text x="728" y="{y + 24}" text-anchor="end" font-size="12" '
             f'fill="{KLEUR_LIJN}">›</text>'
         )
-        d.append(_wikkel(blok, pad))
+        d.append(blok)
 
     d.append("</svg>")
     return "".join(d)
