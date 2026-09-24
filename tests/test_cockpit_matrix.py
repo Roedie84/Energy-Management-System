@@ -600,7 +600,10 @@ def test_de_reden_staat_vooraan_zodra_het_niet_goed_is(make_coordinator, hass):
     stand, regel = c._ems_status()
 
     assert stand == "LET OP"
-    assert regel.startswith("de energiebalans wijkt af")
+    assert regel.startswith("balans wijkt af")
+    # v5.19.8: en maar EEN keer - hij stond er dubbel ("de energiebalans
+    # wijkt af · koppelingen 70/70 · balans wijkt af").
+    assert regel.count("balans wijkt af") == 1
 
 
 def test_bij_ingrijpen_staat_het_onderwerp_vooraan(make_coordinator, hass):

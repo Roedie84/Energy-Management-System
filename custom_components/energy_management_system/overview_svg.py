@@ -967,32 +967,28 @@ def _besluitblok(x, y, b, h, besluit, uitleg, waarom):
         f'font-weight="650" letter-spacing="0.5">'
         f"{_kort(str(besluit).upper() if besluit else ONBEKEND, 34)}</text>",
     ]
-    hoogte = y + 80
-    # Marge aan de rechterkant: bij 148 tekens raakte de regel de rand.
-    for regel in _regels(uitleg, 138, 3):
-        d.append(
-            f'<text x="{x + 24}" y="{hoogte}" fill="#8b98a5" '
-            f'font-size="13">{regel}</text>'
-        )
-        hoogte += 20
-    if waarom:
-        eerste = True
-        for regel in _regels(" · ".join(waarom), 136, 2):
-            # De vervolgregel springt in, met een LEGE plek in plaats van
-            # een donker "WAAROM" - dat was een truc die je zag.
-            if eerste:
-                d.append(
-                    f'<text x="{x + 24}" y="{hoogte + 4}" fill="#6f7d8c" '
-                    f'font-size="12"><tspan fill="#b088f9" '
-                    f'font-weight="600">WAAROM  </tspan>{regel}</text>'
-                )
-            else:
-                d.append(
-                    f'<text x="{x + 86}" y="{hoogte + 4}" fill="#6f7d8c" '
-                    f'font-size="12">{regel}</text>'
-                )
-            hoogte += 18
-            eerste = False
+    # v5.19.8: compact. Gemeld: "EMS besluit is te nadrukkelijk aanwezig
+    # nu? Mogelijk een korte opsomming maken, duidelijk maar compacter."
+    # De redenen uit de beslislogica ZIJN die opsomming; de lange uitleg
+    # staat op de detailpagina's en komt hier alleen als er geen redenen
+    # zijn.
+    hoogte = y + 82
+    regels = (
+        _regels(" · ".join(waarom), 136, 2) if waarom else _regels(uitleg, 136, 2)
+    )
+    for i, regel in enumerate(regels):
+        if i == 0 and waarom:
+            d.append(
+                f'<text x="{x + 24}" y="{hoogte}" fill="#8b98a5" '
+                f'font-size="13"><tspan fill="#b088f9" '
+                f'font-weight="600">WAAROM  </tspan>{regel}</text>'
+            )
+        else:
+            d.append(
+                f'<text x="{x + (92 if waarom else 24)}" y="{hoogte}" '
+                f'fill="#8b98a5" font-size="13">{regel}</text>'
+            )
+        hoogte += 19
     return "".join(d)
 
 
@@ -1039,7 +1035,7 @@ def bouw_scada(g: dict) -> str:
             else None
         )
     d = [
-        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 582" '
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 530" '
         'width="100%" font-family="system-ui, -apple-system, Segoe UI, '
         'sans-serif">',
         # v5.18.3: een SVG in een `<img>` kent zijn EIGEN breedte, dus hij
@@ -1061,7 +1057,7 @@ def bouw_scada(g: dict) -> str:
         '<stop offset="0" stop-color="#1e2731"/>'
         '<stop offset="1" stop-color="#171f28"/></linearGradient>'
         "</defs>",
-        '<rect width="1600" height="582" rx="18" fill="url(#doek)"/>',
+        '<rect width="1600" height="530" rx="18" fill="url(#doek)"/>',
         '<text x="36" y="40" fill="#6f7d8c" font-size="11" letter-spacing="2.4" '
         'font-weight="600">ENERGY MANAGEMENT SYSTEM</text>',
         f'<circle cx="42" cy="70" r="6" fill="{statuskleur}"/>',
@@ -1144,9 +1140,9 @@ def bouw_scada(g: dict) -> str:
         _accukaart(563, 282, 274, 112, accu, accustand, g, koeling),
         "</g>",
         '<g class="bijzaak">',
-        _besluitblok(120, 398, 1010, 172, g.get("besluit"), g.get("besluit_uitleg"),
+        _besluitblok(120, 398, 1010, 116, g.get("besluit"), g.get("besluit_uitleg"),
                      g.get("waarom")),
-        _infobalk(1160, 398, 320, g.get("balk") or [], hoog=172),
+        _infobalk(1160, 398, 320, g.get("balk") or [], hoog=116),
         "</g>",
         "</svg>",
     ]

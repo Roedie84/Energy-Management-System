@@ -14832,7 +14832,10 @@ class EnergyManagementSystemCoordinator:
             namen = ", ".join(str(r.get("instelling")) for r in kapot[:2])
             return "LET OP", met_reden(f"koppeling kapot: {namen}")
         if balans_klopt is False:
-            return "LET OP", met_reden("de energiebalans wijkt af")
+            # v5.19.8: dezelfde tekst als in de opsomming, zodat hij er niet
+            # twee keer staat ("de energiebalans wijkt af · ... · balans
+            # wijkt af").
+            return "LET OP", met_reden("balans wijkt af")
         if punten:
             eerste = punten[0]
             onderwerp = (

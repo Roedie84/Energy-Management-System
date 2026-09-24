@@ -28514,3 +28514,28 @@ De toets met echte zinnen gebruikt nu deze - de langste die in bedrijf
 gezien is.
 
 **Volledige testsuite**: 4262 tests, allemaal groen.
+
+
+## v5.19.8 — Het besluit compacter
+
+Gemeld: *"EMS besluit is te nadrukkelijk aanwezig nu? Mogelijk een korte
+opsomming maken, duidelijk maar compacter."*
+
+Na drie rondes "tekst valt weg" was het besluitblok het grootste element op
+de plaat geworden: drie regels uitleg plus twee regels waarom. Terwijl het
+in een oogopslag moet zeggen wat en waarom.
+
+Nu: de titel, en daaronder alleen de **redenen uit de beslislogica** als
+een opsomming. Die redenen ZIJN de korte samenvatting - ze komen uit
+`get_why_now()`, niet uit de cockpit. De lange uitleg staat op de
+detailpagina's en verschijnt hier alleen als er geen redenen zijn.
+
+De plaat is weer lager: 1600 bij 530.
+
+### En "balans wijkt af" stond er twee keer
+
+Als reden vooraan ("de energiebalans wijkt af") en in de opsomming
+("balans wijkt af"). De reden gebruikt nu dezelfde woorden, zodat hij er
+maar een keer staat.
+
+**Volledige testsuite**: 4262 tests, allemaal groen.

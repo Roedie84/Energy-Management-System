@@ -1,4 +1,4 @@
-EMS v5.19.7 - alle wijzigingen sinds v5.19.1 (bevat v5.19.2 t/m v5.19.6)
+EMS v5.19.8 - alleen de wijzigingen sinds v5.19.7
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
     coordinator.py, overview_svg.py
@@ -10,15 +10,10 @@ NAAR DE REPO
     dashboards/energy_management_system_dashboard.yaml
     tests/ (drie bestanden)
 
-Voor HACS: release met tag v5.19.7.
+Voor HACS: release met tag v5.19.8.
 
-NIEUW IN v5.19.7
-De uitleg krijgt drie regels: ook de langste zin die de beslislogica
-maakt, staat er nu volledig. Met marge aan de rechterkant.
-
-OOK IN DEZE ZIP (sinds v5.19.1)
-- resterende laad-/ontlaadtijd, en geen lege waarden meer (v5.19.6)
-- de voorspelling maar een keer op de plaat (v5.19.5)
-- legenda bij de grafiek (v5.19.4)
-- twee regels voor het waarom (v5.19.3)
-- de reden vooraan zodra de stand niet GOED is (v5.19.2)
+WAT ER VERANDERT
+1. Het besluitblok is compact: de titel en daaronder alleen de redenen
+   uit de beslislogica, als opsomming. De lange uitleg staat op de
+   detailpagina's. De plaat is weer lager (1600 bij 530).
+2. "balans wijkt af" stond er twee keer in de statusregel; nu een keer.
