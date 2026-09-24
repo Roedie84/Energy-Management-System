@@ -12,13 +12,20 @@ from datetime import date, datetime, timedelta
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    COCKPIT_MIN_INTERVAL_S,
+    CONF_BATTERY_POWER_SENSOR,
+    CONF_CONSUMPTION_POWER_SENSOR,
+    CONF_PV_POWER_SENSOR,
+    CONF_SOC_SENSOR,
+    COCKPIT_MIN_INTERVAL_S,
     APPLIANCE_CYCLE_MIN_LEARN_MINUTES,
     CONF_BATTERY_COOLING_FAN_SWITCH,
     RELIABILITY_LABELS,
@@ -146,6 +153,8 @@ async def async_setup_entry(
         SteelstofzuigerStatusSensor(coordinator, entry.entry_id),
         FietsladersStatusSensor(coordinator, entry.entry_id),
         # v5.14: de kern van de diagnostiek, leesbaar voor de assistent.
+        # v5.19: de cockpit, die meebeweegt met de metingen.
+        CockpitSensor(coordinator, entry.entry_id),
         DiagnoseGezondheidSensor(coordinator, entry.entry_id),
         DiagnoseSturingSensor(coordinator, entry.entry_id),
         DiagnoseLerenSensor(coordinator, entry.entry_id),
@@ -4447,6 +4456,80 @@ class GacsAssessmentSensor(SensorEntity):
                 "een systeem sterk en zwak staat."
             ),
         }
+
+
+class CockpitSensor(_CoordinatorDiagnosticSensor):
+    """De cockpit, die MEEBEWEEGT met de metingen (v5.19).
+
+    Gemeld: "tevens lopen alle waardes niet live mee", en daarna: "nee ik
+    wil live, en professioneel".
+
+    De oorzaak: dit zijn gewone sensoren zonder eigen ververstijd, dus
+    Home Assistant haalde ze op met zijn standaardtempo van 30 seconden.
+    De vermogens klopten wel - ze worden bij het opbouwen live gelezen -
+    maar ze stonden tot een halve minuut stil.
+
+    Deze sensor luistert naar de metingen zelf: de P1-meter, de zon, het
+    accuvermogen en de laadstand. Verandert er een, dan wordt de plaat
+    opnieuw getekend. Dat kost 1 a 2 ms, want de trage helft - de
+    periodetotalen, het kwartierplan, het besluit - staat al klaar uit de
+    ronde (zie `ververs_cockpit_context`).
+
+    Met een ondergrens van COCKPIT_MIN_INTERVAL_S tussen twee tekeningen,
+    zodat een sensor die per seconde meet geen tekenmachine wordt.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Cockpit"
+    _attr_icon = "mdi:view-dashboard-outline"
+    _unrecorded_attributes = frozenset({"plaat"})
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        super().__init__(coordinator, entry_id, "cockpit")
+        self._laatst = None
+
+    @property
+    def native_value(self) -> str:
+        return (self._coordinator.cockpit_gegevens() or {}).get(
+            "status_kort"
+        ) or "onbekend"
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return {"plaat": self._coordinator.get_cockpit_svg()}
+
+    async def async_added_to_hass(self) -> None:
+        """Luisteren naar de metingen die de plaat laten bewegen."""
+        await super().async_added_to_hass()
+        entiteiten = [
+            self._coordinator.config.get(sleutel)
+            for sleutel in (
+                CONF_CONSUMPTION_POWER_SENSOR,
+                CONF_PV_POWER_SENSOR,
+                CONF_BATTERY_POWER_SENSOR,
+                CONF_SOC_SENSOR,
+            )
+        ]
+        entiteiten = [e for e in entiteiten if e]
+        if not entiteiten:
+            return
+        self.async_on_remove(
+            async_track_state_change_event(self.hass, entiteiten, self._meting)
+        )
+
+    @callback
+    def _meting(self, _gebeurtenis) -> None:
+        """Een meting veranderde: opnieuw tekenen, maar niet vaker dan de
+        ondergrens - anders wordt een P1-meter die per seconde meet een
+        tekenmachine."""
+        nu = dt_util.utcnow()
+        if (
+            self._laatst is not None
+            and (nu - self._laatst).total_seconds() < COCKPIT_MIN_INTERVAL_S
+        ):
+            return
+        self._laatst = nu
+        self.async_write_ha_state()
 
 
 class DiagnoseSensor(_CoordinatorDiagnosticSensor):

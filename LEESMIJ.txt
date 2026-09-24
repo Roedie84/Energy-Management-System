@@ -1,26 +1,34 @@
-EMS v5.18.6 - alle wijzigingen sinds v5.18.4 (bevat v5.18.5)
+EMS v5.19 - alle wijzigingen sinds v5.18.6
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
-    coordinator.py
-    dashboard_template.yaml   GEWIJZIGD - alleen de cockpit op Visueel
+    const.py, coordinator.py, sensor.py, overview_svg.py, diagnostics.py
+    dashboard_template.yaml   GEWIJZIGD - leest de nieuwe cockpitsensor
     manifest.json, bestandscontrole.json
 
 NAAR DE REPO
     README.md, CHANGELOG.md
     dashboards/energy_management_system_dashboard.yaml   GEWIJZIGD
-    tests/ (drie bestanden)
+    tests/ (zeven bestanden)
 
-Voor HACS: release met tag v5.18.6.
+Voor HACS: release met tag v5.19.
 
-WAT ER VERANDERT
+DE COCKPIT LOOPT NU LIVE MEE
 
-1. Op de pagina Visueel stonden TWEE platen onder elkaar: de cockpit en
-   het blok met VANDAAG / VOORUIT / KOSTEN. Daarom bleef je scrollen. De
-   cockpit staat er nu alleen.
-2. "Meterkast Vermogen (18 W)" wordt "Meterkast (18 W)" (uit v5.18.5).
+Er is een nieuwe sensor bijgekomen: "Energy Management System Cockpit".
+Die luistert naar je P1-meter, de zon, het accuvermogen en de laadstand,
+en tekent de plaat opnieuw zodra er iets verandert - hoogstens eens per
+twee seconden.
 
-LET OP: heb je het dashboard handmatig aangepast, haal dan zelf de tweede
-markdown-kaart met 'overzichtsecties' weg van de pagina Visueel.
+Gemeten: de context verzamelen kost 1,9 ms en gebeurt een keer per ronde;
+het tekenen zelf kost 0,1 ms.
 
-De sectieplaat blijft beschikbaar als attribuut 'overzichtsecties' op de
-GACS-sensor, voor als je hem ergens anders wilt tonen.
+LET OP HET DASHBOARD
+De plaat komt nu van:
+    sensor.woonkamer_energy_management_system_cockpit, attribuut 'plaat'
+en niet meer van het attribuut 'overzichtsplaat' van de GACS-sensor.
+Draai je het dashboard uit dashboard_template.yaml, dan gaat dat vanzelf.
+Heb je het handmatig aangepast, pas dan die markdown-kaart aan.
+
+OOK IN DEZE VERSIE
+- de waarom-regel viel onder zijn kader: opgelost, met een toets die
+  narekent dat geen tekst buiten zijn kader valt.

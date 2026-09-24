@@ -210,10 +210,10 @@ def test_the_dashboard_reads_those_attributes_unchanged():
     visueel = next(v for v in data["views"] if v.get("title") == "Visueel")
     inhoud = yaml.dump(visueel)
 
-    assert "overzichtsplaat" in inhoud
-    # v5.18.6: de sectieplaat staat NIET meer op Visueel. Gemeld: "nog te
-    # groot, en 2 gescheiden velden?" - twee platen onder elkaar pasten
-    # niet op een scherm. De cockpit staat er alleen.
+    # v5.19: de pagina leest de COCKPITSENSOR, die meebeweegt met de
+    # metingen. De zware GACS-sensor werd maar eens per 30 seconden
+    # opgehaald, en dan staat de plaat stil.
+    assert "_cockpit" in inhoud and "plaat" in inhoud
     assert "overzichtsecties" not in inhoud
 
 

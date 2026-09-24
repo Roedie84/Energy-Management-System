@@ -92,6 +92,10 @@ def test_no_orphaned_self_method_calls():
             for naam in called_methods - defined_methods
             - KNOWN_FRAMEWORK_OR_ATTRIBUTE_CALLS
             if not naam.startswith("_unsub_")
+            # v5.19: `async_on_remove` komt van Entity zelf, net als
+            # `async_write_ha_state`. Die staan niet in dit bestand maar
+            # bestaan wel degelijk.
+            and naam not in ("async_on_remove", "async_write_ha_state")
         }
         assert not missing, f"{path.name}: calls to undefined self.<method>(): {missing}"
 

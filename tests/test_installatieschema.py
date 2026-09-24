@@ -174,7 +174,8 @@ def test_de_plaat_staat_alleen_op_de_pagina_visueel():
     visueel = sjabloon[sjabloon.index("- title: Visueel") :]
 
     assert "overzichtsplaat" not in overzicht
-    assert "overzichtsplaat" in visueel
+    # v5.19: de cockpitsensor, niet het attribuut van de GACS-sensor.
+    assert "_cockpit'', ''plaat''" in visueel
 
 
 # --- v5.17: de cockpit ---------------------------------------------------
@@ -386,3 +387,52 @@ def test_geen_twee_teksten_over_elkaar():
                 botsingen.append(f"{t1!r} en {t2!r} op {y1} en {y2}")
 
     assert not botsingen, "\n".join(botsingen)
+
+
+def test_geen_tekst_buiten_zijn_kader():
+    """Gemeld met een schermafdruk: "tekst valt er buiten" - de
+    waarom-regel stond onder het besluitblok.
+
+    Deze toets rekent per kader na dat elke tekst erbinnen valt, in plaats
+    van dat het met het oog moet worden gezien."""
+    import re
+
+    from custom_components.energy_management_system.overview_svg import bouw_scada
+
+    plaat = bouw_scada(
+        {
+            "besluit": "Standaard slim laden",
+            "besluit_uitleg": (
+                "Er is nu geen speciale reden om in te grijpen: de huidige "
+                "prijs haalt de drempel voor duur niet."
+            ),
+            "waarom": [
+                "de prijs is nu 25.3 ct, de drempel voor 'duur' ligt op 41.7 ct",
+                "de accu staat op 27% (1.5 kWh bruikbaar)",
+            ],
+            "balk": [("RESERVE", "1,99 kWh", "#f4f7fa", None)],
+            "soc": 27.0, "accustand": "STANDBY", "reserve_kwh": 1.99,
+            "tekort_kwh": 0.52,
+            "accu_balk": {"soc_deel": 0.27, "reserve_deel": 0.33,
+                          "ondergrens_deel": 0.10},
+        }
+    )
+    kaders = [
+        (float(m.group(1)), float(m.group(2)), float(m.group(3)), float(m.group(4)))
+        for m in re.finditer(
+            r'<rect x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)" rx="1[24]"',
+            plaat,
+        )
+    ]
+    buiten = []
+    for m in re.finditer(r'<text x="([\d.]+)" y="([\d.]+)"[^>]*>([^<]*)', plaat):
+        tx, ty, tekst = float(m.group(1)), float(m.group(2)), m.group(3).strip()
+        if not tekst:
+            continue
+        for kx, ky, kb, kh in kaders:
+            # hoort de tekst bij dit kader? dan moet hij er ook in vallen
+            if kx <= tx <= kx + kb and ky <= ty <= ky + kh + 40:
+                assert ty <= ky + kh - 4, f"{tekst!r} valt onder zijn kader"
+                break
+
+    assert not buiten

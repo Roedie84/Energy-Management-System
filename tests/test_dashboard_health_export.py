@@ -418,6 +418,9 @@ def test_elk_sensorattribuut_staat_ook_in_de_export():
     # De SVG's zijn plaatjes en geen gegevens; die horen niet in een
     # export thuis.
     PLAATJES = {
+        # v5.19: de cockpit is ook een plaatje; de GEGEVENS erachter staan
+        # wel in de export, als "cockpit".
+        "get_cockpit_svg",
         "get_overview_svg",
         "get_overview_sections_svg",
         "get_overview_status_svg",

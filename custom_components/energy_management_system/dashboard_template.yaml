@@ -539,7 +539,7 @@ views:
   - type: vertical-stack
     cards:
     - type: markdown
-      content: '{{ state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''overzichtsplaat'') }}'
+      content: '{{ state_attr(''sensor.woonkamer_energy_management_system_cockpit'', ''plaat'') }}'
 - title: Meldingen
   path: meldingen
   subview: true

@@ -554,6 +554,10 @@ async def async_get_config_entry_diagnostics(
             "get_ventilator_verbruik", coordinator.get_ventilator_verbruik
         ),
         # v5.15: gemiddelde in- en verkoopprijzen, incl en excl btw.
+        # v5.19: de gegevens achter de cockpit. Wat een kaart toont, hoort
+        # ook in een export te staan - anders is het alleen te beoordelen
+        # met een schermafdruk.
+        "cockpit": _veilig("cockpit_gegevens", coordinator.cockpit_gegevens),
         # v5.15.1: de trage keren van de GACS-sensor, met de verdeling over
         # de onderdelen. Werden wel bewaard maar niet geexporteerd.
         "gacs_traagheid": _veilig(

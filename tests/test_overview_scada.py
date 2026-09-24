@@ -469,7 +469,8 @@ def test_only_the_cockpit_is_shown_on_the_visual_page():
     pagina = next(v for v in data["views"] if v.get("path") == "visueel")
     inhoud = [k["content"] for k in pagina["cards"][0]["cards"]]
 
-    assert any("overzichtsplaat" in c for c in inhoud)
+    # v5.19: de cockpitsensor beweegt mee met de metingen.
+    assert any("_cockpit" in c and "plaat" in c for c in inhoud)
     assert not any("overzichtsecties" in c for c in inhoud)
 
 

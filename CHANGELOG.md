@@ -28299,3 +28299,42 @@ De cockpit staat er nu alleen. De sectieplaat blijft gewoon beschikbaar als
 attribuut, voor wie hem ergens anders wil tonen.
 
 **Volledige testsuite**: 4242 tests, allemaal groen.
+
+
+## v5.19 — De cockpit loopt live mee
+
+Gemeld: *"tevens lopen alle waardes niet live mee"*, en daarna: *"nee ik wil
+live, en professioneel."*
+
+### Waarom hij stilstond
+
+De sensoren van deze integratie zijn gewone sensoren zonder eigen
+ververstijd, dus Home Assistant haalde ze op met zijn standaardtempo van
+**30 seconden**. De vermogens klopten wel - die worden bij het opbouwen
+live gelezen - maar ze stonden tot een halve minuut stil, terwijl de
+kaarten ernaast de P1-meter per seconde volgen.
+
+### Gemeten waar de tijd in zat
+
+```
+de context verzamelen   1,9 ms   periodetotalen, dagverloop, kwartierplan,
+                                 status, besluit - verandert per RONDE
+de plaat tekenen        0,1 ms   per meting
+```
+
+Het tekenen was nooit het probleem. Daarom wordt de context nu eenmaal per
+ronde vastgelegd, en tekent de cockpit opnieuw zodra een meting verandert.
+
+### Een eigen sensor die meeluistert
+
+`CockpitSensor` luistert naar de P1-meter, de zon, het accuvermogen en de
+laadstand. Verandert er een, dan wordt de plaat opnieuw getekend - met een
+ondergrens van twee seconden, zodat een meter die per seconde meet geen
+tekenmachine wordt.
+
+Bij 0,1 ms per tekening en hoogstens één per twee seconden is dat
+verwaarloosbaar, en de zware GACS-sensor wordt er juist lichter van.
+
+Het dashboard leest de plaat nu van `sensor...cockpit`, attribuut `plaat`.
+
+**Volledige testsuite**: 4245 tests, allemaal groen.

@@ -957,9 +957,9 @@ def _besluitblok(x, y, b, h, besluit, uitleg, waarom):
         f'<rect x="{x}" y="{y}" width="{b}" height="{h}" rx="14" '
         f'fill="url(#kaart)" stroke="#2c3846"/>',
         f'<rect x="{x}" y="{y}" width="4" height="{h}" rx="2" fill="#b088f9"/>',
-        f'<text x="{x + 24}" y="{y + 28}" fill="#6f7d8c" font-size="11" '
+        f'<text x="{x + 24}" y="{y + 26}" fill="#6f7d8c" font-size="11" '
         f'letter-spacing="1.8" font-weight="600">EMS BESLUIT</text>',
-        f'<text x="{x + 24}" y="{y + 58}" fill="#f4f7fa" font-size="24" '
+        f'<text x="{x + 24}" y="{y + 56}" fill="#f4f7fa" font-size="24" '
         f'font-weight="650" letter-spacing="0.5">'
         f"{_kort(str(besluit).upper() if besluit else ONBEKEND, 34)}</text>",
     ]
@@ -1097,7 +1097,7 @@ def bouw_scada(g: dict) -> str:
         _stroom(700, 200, 700, 244, pv or 0, 744, 228, "#f0b429"),
         _stroom(430, 268, 674, 268, net or 0, 552, 254, netkleur),
         _stroom(726, 268, 970, 268, huis or 0, 848, 254, "#f4f7fa"),
-        _stroom(700, 326, 700, 292, accu or 0, 652, 314, KLEUR_GOED),
+        _stroom(700, 314, 700, 292, accu or 0, 652, 308, KLEUR_GOED),
         _knoop(563, 88, 274, 112, "ZONNEPANELEN", _primair(pv, _vermogen),
                g.get("zon_onder") or "—", "#f0b429", g.get("zon_vandaag"),
                icoon="zon"),
@@ -1117,12 +1117,12 @@ def bouw_scada(g: dict) -> str:
         _knoop(970, 212, 310, 112, "HUIS", _primair(huis, _vermogen),
                g.get("huis_onder") or "—", "#f4f7fa", g.get("huis_vandaag"),
                icoon="huis"),
-        _accukaart(563, 326, 274, 114, accu, accustand, g, koeling),
+        _accukaart(563, 314, 274, 112, accu, accustand, g, koeling),
         "</g>",
         '<g class="bijzaak">',
-        _besluitblok(120, 452, 800, 92, g.get("besluit"), g.get("besluit_uitleg"),
+        _besluitblok(120, 436, 800, 112, g.get("besluit"), g.get("besluit_uitleg"),
                      g.get("waarom")),
-        _infobalk(950, 452, 530, g.get("balk") or [], hoog=92),
+        _infobalk(950, 436, 530, g.get("balk") or [], hoog=112),
         "</g>",
         "</svg>",
     ]

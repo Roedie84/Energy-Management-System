@@ -1296,7 +1296,7 @@ class EnergyManagementSystemCoordinator:
         # een regel - `__init__` staat op de ratel.
         # v3.99.19: `dagverloop` en `nabeschouwingen` erbij, in dezelfde
         # regel - `__init__` staat op de ratel.
-        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen, self.safe_sell_shadow, self.reden_afwijkingen, self.meting_laatst_gevuld, self.weerbron_keuze, self.voorspellingsverloop, self._geladen_opslag, self.rendement_afwijzingen, self.weerbron_levering, self.weather_ensemble_readings_alle, self.instraling_verhouding, self.ventilator_kwh_per_dag, self._ventilator_vermogens_aan, self.gacs_traag, self.gacs_duur_ms, self._pv_model_bezig, self.gacs_traagste, self.prijs_vandaag, self.prijs_gisteren, self.besluit_snapshot = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, [], [], {}, {}, {}, {}, None, {}, {}, {}, {}, {}, [], [], None, False, None, {}, {}, {}
+        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen, self.safe_sell_shadow, self.reden_afwijkingen, self.meting_laatst_gevuld, self.weerbron_keuze, self.voorspellingsverloop, self._geladen_opslag, self.rendement_afwijzingen, self.weerbron_levering, self.weather_ensemble_readings_alle, self.instraling_verhouding, self.ventilator_kwh_per_dag, self._ventilator_vermogens_aan, self.gacs_traag, self.gacs_duur_ms, self._pv_model_bezig, self.gacs_traagste, self.prijs_vandaag, self.prijs_gisteren, self.besluit_snapshot, self._cockpit_context = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, [], [], {}, {}, {}, {}, None, {}, {}, {}, {}, {}, [], [], None, False, None, {}, {}, {}, {}
         self.handmatige_ingrepen: list[dict] = []
         # v1.1.6: met welke meetmethode de bewaarde foutreeks tot stand
         # is gekomen. Verandert de methode, dan wordt die reeks eenmalig
@@ -14804,6 +14804,43 @@ class EnergyManagementSystemCoordinator:
             return "LET OP", regel
         return "GOED", regel
 
+    def ververs_cockpit_context(self) -> None:
+        """De trage helft van de cockpit, een keer per ronde (v5.19).
+
+        Gemeld: "nee ik wil live". De plaat werd elke 30 seconden in zijn
+        geheel opnieuw opgebouwd - ongeveer 85 ms - en stond daartussen
+        stil.
+
+        Gemeten waar die tijd in zit: het TEKENEN kost 1 a 2 ms. De rest is
+        het verzamelen van periodetotalen, dagverloop, kwartierplan,
+        status en besluit. Die veranderen hooguit een keer per ronde.
+
+        Dus wordt dat hier eenmaal per ronde vastgelegd. De plaat kan dan
+        opnieuw getekend worden zodra een meting verandert, zonder dat er
+        iets herberekend hoeft te worden.
+        """
+        self._cockpit_context = self._schema_gegevens()
+
+    def cockpit_gegevens(self) -> dict:
+        """De bewaarde context met de LIVE metingen erbovenop (v5.19)."""
+        gegevens = dict(self._cockpit_context or self._schema_gegevens())
+        gegevens.update(
+            {
+                "moment": dt_util.now().strftime("%d-%m %H:%M:%S"),
+                "pv_w": self._read_sensor_float(
+                    self.config.get(CONF_PV_POWER_SENSOR)
+                ),
+                "net_w": self._read_sensor_float(
+                    self.config.get(CONF_CONSUMPTION_POWER_SENSOR)
+                ),
+                "huis_w": self.cockpit_huisverbruik_w(),
+                "accu_w": self._read_corrected_battery_power(),
+                "accustand": self.accu_stand(),
+                "soc": self.accustand_procent(),
+            }
+        )
+        return gegevens
+
     def _schema_gegevens(self) -> dict:
         """De extra gegevens voor het installatieschema (v5.16).
 
@@ -14923,6 +14960,12 @@ class EnergyManagementSystemCoordinator:
                 ("AANDACHT", len(punten), "#f0b429" if punten else "#5fd38d", None),
             ],
         }
+
+    def get_cockpit_svg(self) -> str:
+        """De cockpit, getekend uit de bewaarde context (v5.19)."""
+        from .overview_svg import als_afbeelding, bouw_scada
+
+        return als_afbeelding(bouw_scada(self.cockpit_gegevens()), "EMS-cockpit")
 
     def get_overview_svg(self) -> str:
         """Het dynamische overzichtsplaatje (v3.17.0).
@@ -36960,6 +37003,8 @@ class EnergyManagementSystemCoordinator:
             ("prijsdag", lambda: self._werk_prijsdag_bij(now)),
             # v5.18: besluit, uitleg en redenen als EEN momentopname.
             ("besluit_snapshot", lambda: self._besluit_snapshot_vastleggen(now)),
+            # v5.19: de trage helft van de cockpit een keer per ronde.
+            ("cockpit_context", self.ververs_cockpit_context),
             ("meetherinnering", lambda: self._herinner_wat_meet(now)),
             # v3.68.0: het MPC-plan naast de eigen planning.
             ("mpc tegen de planning", lambda: self._meet_mpc(now)),

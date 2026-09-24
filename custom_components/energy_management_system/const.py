@@ -111,6 +111,12 @@ DIAGNOSE_REGEL_MAX_TEKENS = 255
 # ronde kwam over die grens, de lijst liep vol met gewone rondes, en een
 # echte uitschieter werd binnen twintig minuten verdrongen.
 GACS_TRAAG_MS = 400.0
+
+# v5.19: de kortste tijd tussen twee keer tekenen van de cockpit. De
+# P1-meter meet per seconde; zonder ondergrens zou de plaat daarop
+# meedeinen en wordt tekenen een bezigheid op zich. Tekenen kost 1 a 2 ms,
+# dus bij twee seconden blijft dat onder een promille van de rekentijd.
+COCKPIT_MIN_INTERVAL_S = 2.0
 CONF_BATTERY_ROUND_TRIP_EFFICIENCY = "battery_round_trip_efficiency_percent"
 CONF_VACATION_CONSUMPTION_REDUCTION_PERCENT = "vacation_consumption_reduction_percent"
 
