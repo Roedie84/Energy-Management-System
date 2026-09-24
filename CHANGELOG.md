@@ -28266,3 +28266,21 @@ moet worden gezien: geen twee teksten in dezelfde kolom binnen 13 pixels.
 Die had alle drie de overlappingen gevangen.
 
 **Volledige testsuite**: 4239 tests, allemaal groen.
+
+
+## v5.18.5 — "Meterkast Vermogen (18 W)"
+
+Gemeld met een schermafdruk van de draaiende cockpit. Het meetwoord stond er
+nog, terwijl v5.18.2 dat juist zou weghalen.
+
+De opschoning keek naar het EINDE van de naam, en daar staat het vermogen
+tussen haakjes: `Meterkast Vermogen (18 W)`. Dat vermogen hoort erbij - de
+vraag was immers "grootste nu: vaatwasser · 420 W". Dus eerst het staartje
+apart zetten, dan het meetwoord weghalen, dan weer aan elkaar:
+
+```
+Meterkast Vermogen (18 W)              ->  Meterkast (18 W)
+Koelkast schuur Vermogen fase 1 (77 W) ->  Koelkast schuur (77 W)
+```
+
+**Volledige testsuite**: 4242 tests, allemaal groen.

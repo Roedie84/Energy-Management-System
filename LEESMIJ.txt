@@ -1,29 +1,19 @@
-EMS v5.18.4 - alleen de wijzigingen sinds v5.18.3
+EMS v5.18.5 - alleen de wijziging sinds v5.18.4
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
-    overview_svg.py
-    dashboard_template.yaml   (gaat altijd mee, ongewijzigd sinds v5.18.3)
+    coordinator.py
+    dashboard_template.yaml   (gaat altijd mee, ongewijzigd)
     manifest.json, bestandscontrole.json
 
 NAAR DE REPO
     README.md, CHANGELOG.md
     dashboards/energy_management_system_dashboard.yaml
-    tests/test_installatieschema.py
+    tests/test_cockpit_matrix.py
 
-Voor HACS: release met tag v5.18.4.
+Voor HACS: release met tag v5.18.5.
 
 WAT ER VERANDERT
 
-1. Het doek is 1600 bij 560 in plaats van 1600 bij 700 - verhouding bijna
-   3:1. Op een breed scherm past de plaat daarmee zonder scrollen.
-2. Drie overlappingen weg:
-   - het dagtotaal liep over de contextregel;
-   - "tekort 1,57 kWh" lag over de koeltekst heen;
-   - de laadbalk lag op de reserveregel.
-   Is er een tekort, dan staat dat er nu IN PLAATS VAN "vrij 0,0".
-3. Een nieuwe toets rekent na dat er geen twee teksten in dezelfde kolom
-   binnen 13 pixels van elkaar staan.
-
-CONTROLEREN NA DE HERSTART
-- past de plaat zonder scrollen op je monitor?
-- op de telefoon: alleen het stroomschema, groter getekend?
+"Meterkast Vermogen (18 W)" wordt "Meterkast (18 W)". De opschoning keek
+naar het einde van de naam, en daar staat het vermogen tussen haakjes -
+dus het meetwoord bleef staan.

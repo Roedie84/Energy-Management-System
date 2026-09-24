@@ -14662,11 +14662,20 @@ class EnergyManagementSystemCoordinator:
         if not naam:
             return None
         schoon = str(naam).strip()
+        # v5.18.5: het vermogen tussen haakjes hoort erbij en staat ACHTER
+        # het meetwoord: "Meterkast Vermogen (18 W)". Eerst dat staartje
+        # apart zetten, dan het meetwoord weghalen, dan weer aan elkaar.
+        staart = ""
+        if schoon.endswith(")") and "(" in schoon:
+            haakje = schoon.rindex("(")
+            staart = " " + schoon[haakje:]
+            schoon = schoon[:haakje].strip()
         laag = schoon.lower()
         for woord in MEETWOORDEN_ACHTER_EEN_NAAM:
             if laag.endswith(" " + woord):
-                return schoon[: -len(woord) - 1].strip()
-        return schoon
+                schoon = schoon[: -len(woord) - 1].strip()
+                break
+        return f"{schoon}{staart}"
 
     def cockpit_accu(self) -> dict:
         """Laadstand, reserve en vrije ruimte op EEN referentie (v5.18).

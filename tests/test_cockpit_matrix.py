@@ -493,6 +493,11 @@ def test_de_plaat_komt_er_met_een_zonvolger_erbij(make_coordinator, hass):
         ("Koelkast schuur Power", "Koelkast schuur"),
         ("Wasmachine Energie", "Wasmachine"),
         ("Vaatwasser", "Vaatwasser"),
+        # v5.18.5: het vermogen tussen haakjes hoort erbij en staat ACHTER
+        # het meetwoord - gemeld: "grootste nu: Meterkast Vermogen (18 W)".
+        ("Meterkast Vermogen (18 W)", "Meterkast (18 W)"),
+        ("Koelkast schuur Vermogen fase 1 (77 W)", "Koelkast schuur (77 W)"),
+        ("Vaatwasser (420 W)", "Vaatwasser (420 W)"),
         ("Quooker", "Quooker"),
         (None, None),
     ],
