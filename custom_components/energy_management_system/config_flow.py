@@ -32,6 +32,7 @@ from .const import (
     CONF_TWEEDE_PV_VOORSPELLING_SENSOR,
     CONF_INSTRALING_SENSOR,
     CONF_GAS_PRICE_SENSOR,
+    CONF_REGEL_P1_SENSOR,
     CONF_BATTERY_COOLING_FAN_POWER_SENSOR,
     CONF_INKOOP_EUR_VANDAAG_SENSOR,
     CONF_INKOOP_EUR_VANDAAG_EXCL_SENSOR,
@@ -376,6 +377,7 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
             _optioneel(CONF_TWEEDE_PV_VOORSPELLING_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
             _optioneel(CONF_INSTRALING_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
             _optioneel(CONF_GAS_PRICE_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            _optioneel(CONF_REGEL_P1_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
             _optioneel(CONF_BATTERY_COOLING_FAN_POWER_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
             # v5.15: de dagbedragen van de leverancier, incl en excl btw.
             _optioneel(CONF_INKOOP_EUR_VANDAAG_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),

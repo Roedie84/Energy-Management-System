@@ -28647,3 +28647,61 @@ Geen codewijziging in deze versie. Een nieuw nummer omdat de tag v5.19.11
 al bestond met een onvolledige inhoud; deze release bevat alles sinds v5.19.8.
 
 **Volledige testsuite**: 4269 tests, allemaal groen.
+
+
+## v5.20 — De reserve telt de verschuiving op de P1-meter mee
+
+Gemeld op 25 september om 06:53: *"accu weer bijna leeg"*.
+
+### Wat er gebeurde
+
+```
+16:30   96%    accu vol van de zon
+19:30   86%    verkopen in de avondpiek, 1,6 kW, 43-46 ct
+21:15   48%    verkoop stopt precies op de reserve
+nacht          accu dekt het huis, ~200 W
+06:53   12%    nog vijf uur tot het goedkope blok van 12:15
+```
+
+De reserve rekende tot het moment dat de zon het huis overneemt, en dat
+klopte bijna. Maar de hele nacht stond de P1-meter op **-48 W**:
+
+```
+00:00-06:45   48 W x 7 uur = 0,34 kWh teruggeleverd
+```
+
+Precies het tekort van die ochtend.
+
+### Waar die -48 W vandaan komt
+
+Een bewuste keuze: *"doelvermogen op de P1-meter = -50 W, zodat ik altijd
+iets teruglever"*. De Zendure regelt niet op de echte P1-meter maar op een
+template `P1 + 50`, en houdt die op nul. De accu levert daardoor het huis
+plus 50 W.
+
+### Wat er verandert
+
+Nieuwe optionele instelling: **"P1-sensor waarop de accu regelt"**. Het
+verschil tussen die sensor en de echte P1-meter IS de verschuiving - geen
+vaste 50 W in de code. Wordt hij ooit 30 of 80 W, dan rekent de reserve
+vanzelf mee.
+
+In `_estimate_worst_case_deficit_kwh` telt de verschuiving als extra
+verbruik in elk kwartier: 's nachts ontlaadt de accu daardoor meer, overdag
+laadt hij minder. Zonder instelling, zonder meting of bij een negatieve
+verschuiving is hij nul.
+
+Nagerekend: zeven uur nacht met 200 W huis gaf 1,40 kWh tekort; met 50 W
+verschuiving 1,75 kWh - 0,35 kWh meer, precies wat er vannacht ontbrak.
+
+De verschuiving staat in de export bij de reserve-uitsplitsing, als
+`regelverschuiving_w`.
+
+### En de GACS-sensor bouwt de oude plaat niet meer
+
+Het dashboard leest de plaat sinds v5.19 van de cockpitsensor. De
+GACS-sensor bouwde de oude `overzichtsplaat` nog steeds - zijn traagste
+onderdeel, 85 ms per keer, voor niets. Op 24 september om 18:51 ging hij
+daardoor over de grens van 400 ms. Die plaat is eruit.
+
+**Volledige testsuite**: 4275 tests, allemaal groen.

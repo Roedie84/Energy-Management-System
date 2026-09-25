@@ -1,28 +1,29 @@
-EMS v5.19.12 - ALLE wijzigingen sinds v5.19.8
-
-Waarom: van v5.19.8 naar v5.19.11 bleven const.py en overview_svg.py op
-v5.19.8 staan - de zip van v5.19.11 bevatte alleen coordinator.py. Deze zip
-bevat alles sinds v5.19.8.
+EMS v5.20 - alle wijzigingen sinds v5.19.12
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
-    const.py, coordinator.py, overview_svg.py
+    const.py, coordinator.py, config_flow.py, sensor.py, strings.json
+    translations/nl.json, translations/en.json
     dashboard_template.yaml   (gaat altijd mee, ongewijzigd)
     manifest.json, bestandscontrole.json
 
 NAAR DE REPO
     README.md, CHANGELOG.md
     dashboards/energy_management_system_dashboard.yaml
-    tests/ (drie bestanden)
+    tests/test_regelverschuiving.py
 
-Voor HACS: release met tag v5.19.12.
+Voor HACS: release met tag v5.20.
 
-WAT ER SINDS v5.19.8 IN ZIT
-- v5.19.9   "Ontladen in duur blok" was een fout label; de cockpit toont
-            de titel uit het register. Meer ruimte tussen de kaarten.
-- v5.19.10  de accukaart zegt "ruimte" (wat er nog bij kan) in plaats
-            van "vrij".
-- v5.19.11  de vaatwasser telt mee als grootste verbruiker.
+NA DE HERSTART: EEN INSTELLING
+EMS -> Configureren. Nieuw veld:
 
-NA DE HERSTART
-De melding "Onvolledige installatie" hoort weg te zijn, en in Diagnose
-gezondheid staat weer "bestand ok".
+    "P1-sensor waarop de accu regelt"   ->  sensor.hw_p1_vermogen_100w
+
+Zonder die instelling verandert er niets aan de reserve.
+
+WAT ER VERANDERT
+1. De reserve telt de verschuiving op de P1-meter mee (-50 W). Het verschil
+   tussen je twee sensoren is de verschuiving, geen vaste waarde in de code.
+   Nagerekend: 0,35 kWh per nacht extra - wat er vanochtend ontbrak.
+   Na te kijken in de export: regelverschuiving_w, hoort rond de 50 te staan.
+2. De GACS-sensor bouwt de oude "overzichtsplaat" niet meer. Het dashboard
+   gebruikt de cockpitsensor; dit was 85 ms per keer voor niets.

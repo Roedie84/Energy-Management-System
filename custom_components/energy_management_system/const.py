@@ -52,6 +52,12 @@ CONF_CO2_INTENSITY_SENSOR = "co2_intensity_sensor_entity"
 CONF_TWEEDE_PV_VOORSPELLING_SENSOR = "second_pv_forecast_today_sensor_entity"
 CONF_INSTRALING_SENSOR = "irradiance_sensor_entity"
 CONF_GAS_PRICE_SENSOR = "gas_price_sensor_entity"
+# v5.20: de P1-sensor waarop de ACCU regelt, als die afwijkt van de echte
+# P1-meter. Bij Ruud een template "P1 + 50", zodat de Zendure de echte meter
+# op -50 W houdt en er altijd iets teruggeleverd wordt. Het verschil tussen
+# deze sensor en de echte P1-meter is de verschuiving die de reserve mee
+# moet tellen.
+CONF_REGEL_P1_SENSOR = "control_p1_sensor_entity"
 CONF_BATTERY_COOLING_FAN_POWER_SENSOR = "battery_cooling_fan_power_sensor_entity"
 
 # v5.15: de dagbedragen van de energieleverancier, incl EN excl btw. De

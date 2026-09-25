@@ -333,6 +333,7 @@ from .const import (
     CONF_TWEEDE_PV_VOORSPELLING_SENSOR,
     CONF_INSTRALING_SENSOR,
     CONF_GAS_PRICE_SENSOR,
+    CONF_REGEL_P1_SENSOR,
     CONF_BATTERY_COOLING_FAN_POWER_SENSOR,
     WEATHER_ENSEMBLE_CLEAR_THRESHOLD_PERCENT,
     WEATHER_ENSEMBLE_OVERCAST_THRESHOLD_PERCENT,
@@ -19068,6 +19069,33 @@ class EnergyManagementSystemCoordinator:
             )
         return expected_pv_kwh * (efficiency_percent / 100)
 
+    def regelverschuiving_kw(self) -> float:
+        """Wat de accu STRUCTUREEL extra naar het net stuurt (v5.20).
+
+        Gemeld: "doelvermogen op de P1-meter = -50 W zodat ik altijd iets
+        teruglever". De Zendure regelt niet op de echte P1-meter maar op een
+        template "P1 + 50"; die houdt hij op nul, dus de echte meter staat op
+        -50 W. De accu levert daardoor het huis PLUS 50 W - ook de hele
+        nacht.
+
+        De reserve rekende de nacht door alsof de accu alleen het huis dekt.
+        Over zeven uur mist dan 0,34 kWh, en precies zoveel kwam de accu op
+        25 september tekort.
+
+        Geen vaste 50 W in de code: het verschil tussen de twee sensoren IS
+        de verschuiving. Wordt hij ooit 30 of 80 W, dan rekent dit vanzelf
+        mee. Alleen een positieve verschuiving telt; zonder instelling of
+        zonder meting is hij nul.
+        """
+        regel = self.config.get(CONF_REGEL_P1_SENSOR)
+        if not regel:
+            return 0.0
+        regel_w = self._read_sensor_float(regel)
+        echt_w = self._read_sensor_float(self.config.get(CONF_CONSUMPTION_POWER_SENSOR))
+        if regel_w is None or echt_w is None:
+            return 0.0
+        return max(0.0, regel_w - echt_w) / 1000
+
     def _estimate_worst_case_deficit_kwh(
         self, start: datetime, end: datetime
     ) -> float | None:
@@ -19118,6 +19146,7 @@ class EnergyManagementSystemCoordinator:
 
         cumulative_deficit = 0.0
         max_deficit = 0.0
+        verschuiving_kw = self.regelverschuiving_kw()
         cursor = start
         while cursor < end:
             hour_end = cursor.replace(minute=0, second=0, microsecond=0) + timedelta(
@@ -19157,6 +19186,10 @@ class EnergyManagementSystemCoordinator:
             consumption_kwh += self.geplande_witgoed_kwh_in_periode(
                 cursor, segment_end
             ) + self.lopend_witgoed_kwh_in_periode(cursor, segment_end)
+            # v5.20: de verschuiving op de P1-meter. 's Nachts ontlaadt de
+            # accu daardoor meer, overdag laadt hij minder - in beide
+            # gevallen telt hij als extra verbruik.
+            consumption_kwh += verschuiving_kw * fraction_hours
             pv_kwh = (
                 self._estimate_pv_kwh_for_period(cursor, segment_end, veilig=True)  # v4.1: de bandpositie
                 * efficiency_factor
@@ -20606,6 +20639,9 @@ class EnergyManagementSystemCoordinator:
             ),
             "total_percent": round((margin - 1) * 100, 1),
             "needed_kwh_before_margin": round(needed_kwh, 3),
+            # v5.20: de verschuiving op de P1-meter die in needed_kwh zit -
+            # zodat in de export na te kijken is waar de reserve op rust.
+            "regelverschuiving_w": round(self.regelverschuiving_kw() * 1000),
             "lange_horizon_extra_kwh": round(lange_horizon_extra, 3),
             "reserve_kwh_after_margin": round(reserve_kwh, 3),
             # v3.74.0: en of die bodem het is die bindt.

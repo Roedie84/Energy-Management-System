@@ -4193,7 +4193,6 @@ class GacsAssessmentSensor(SensorEntity):
             "logboek",
             "proefstand",
             "nog_niet_bepaald",
-            "overzichtsplaat",
             "overzichtstatus",
             "overzichtsecties",
             "meet_stuurt_niet",
@@ -4249,7 +4248,6 @@ class GacsAssessmentSensor(SensorEntity):
             "zelfcontrole",
             "rondeduur",
             "capaciteit",
-            "overzichtsplaat",
             "overzichtsecties",
             "overzichtstatus",
             "logboek",
@@ -4385,7 +4383,10 @@ class GacsAssessmentSensor(SensorEntity):
             ("zelfcontrole", self._coordinator.get_consistency_checks),
             ("rondeduur", self._coordinator.get_tick_performance),
             ("capaciteit", self._coordinator.get_capacity_overview),
-            ("overzichtsplaat", self._coordinator.get_overview_svg),
+            # v5.20: de oude "overzichtsplaat" wordt hier niet meer gebouwd.
+            # Het dashboard leest sinds v5.19 de plaat van de cockpitsensor;
+            # dit was het traagste onderdeel van deze sensor (85 ms) en werd
+            # voor niets gemaakt.
             (
                 "overzichtsecties",
                 self._coordinator.get_overview_sections_svg,
