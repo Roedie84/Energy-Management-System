@@ -19087,14 +19087,29 @@ class EnergyManagementSystemCoordinator:
         mee. Alleen een positieve verschuiving telt; zonder instelling of
         zonder meting is hij nul.
         """
+        # v5.20.1: EEN meting per ronde. Gemeld na de installatie van v5.20:
+        # de zelfcontrole "Eén reserve" sloeg aan - "brug wijkt af van de
+        # sturing". Beide gebruiken dezelfde functie, maar mat de
+        # verschuiving LIVE, op verschillende momenten in de ronde. Viel de
+        # template-sensor op dat ene moment even uit de pas met de P1-meter,
+        # dan rekende de brug met een andere verschuiving dan de sturing -
+        # twee reserves in een ronde, precies de fout van v3.92 tot v4.1.
+        stempel = self._ronde_stempel()
+        bewaard = getattr(self, "_regelverschuiving_ronde", None)
+        if stempel is not None and bewaard is not None and bewaard[0] == stempel:
+            return bewaard[1]
         regel = self.config.get(CONF_REGEL_P1_SENSOR)
-        if not regel:
-            return 0.0
-        regel_w = self._read_sensor_float(regel)
-        echt_w = self._read_sensor_float(self.config.get(CONF_CONSUMPTION_POWER_SENSOR))
-        if regel_w is None or echt_w is None:
-            return 0.0
-        return max(0.0, regel_w - echt_w) / 1000
+        waarde = 0.0
+        if regel:
+            regel_w = self._read_sensor_float(regel)
+            echt_w = self._read_sensor_float(
+                self.config.get(CONF_CONSUMPTION_POWER_SENSOR)
+            )
+            if regel_w is not None and echt_w is not None:
+                waarde = max(0.0, regel_w - echt_w) / 1000
+        if stempel is not None:
+            self._regelverschuiving_ronde = (stempel, waarde)
+        return waarde
 
     def _estimate_worst_case_deficit_kwh(
         self, start: datetime, end: datetime

@@ -1,29 +1,22 @@
-EMS v5.20 - alle wijzigingen sinds v5.19.12
+EMS v5.20.1 - alleen de wijziging sinds v5.20
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
-    const.py, coordinator.py, config_flow.py, sensor.py, strings.json
-    translations/nl.json, translations/en.json
+    coordinator.py
     dashboard_template.yaml   (gaat altijd mee, ongewijzigd)
     manifest.json, bestandscontrole.json
 
 NAAR DE REPO
     README.md, CHANGELOG.md
     dashboards/energy_management_system_dashboard.yaml
-    tests/test_regelverschuiving.py
+    tests/test_regelverschuiving.py, tests/test_state_persistence.py
 
-Voor HACS: release met tag v5.20.
-
-NA DE HERSTART: EEN INSTELLING
-EMS -> Configureren. Nieuw veld:
-
-    "P1-sensor waarop de accu regelt"   ->  sensor.hw_p1_vermogen_100w
-
-Zonder die instelling verandert er niets aan de reserve.
+Voor HACS: release met tag v5.20.1.
 
 WAT ER VERANDERT
-1. De reserve telt de verschuiving op de P1-meter mee (-50 W). Het verschil
-   tussen je twee sensoren is de verschuiving, geen vaste waarde in de code.
-   Nagerekend: 0,35 kWh per nacht extra - wat er vanochtend ontbrak.
-   Na te kijken in de export: regelverschuiving_w, hoort rond de 50 te staan.
-2. De GACS-sensor bouwt de oude "overzichtsplaat" niet meer. Het dashboard
-   gebruikt de cockpitsensor; dit was 85 ms per keer voor niets.
+De verschuiving op de P1-meter wordt een keer per ronde gemeten. De
+zelfcontrole "Eén reserve" sloeg aan omdat de brug en de sturing hem op
+verschillende momenten live maten, en dan niet hetzelfde getal zagen.
+
+NA DE HERSTART
+Het aandachtspunt "Eén reserve: brug wijkt af van de sturing" hoort binnen
+een paar rondes te verdwijnen.

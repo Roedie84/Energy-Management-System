@@ -592,6 +592,8 @@ VLUCHTIG_MET_REDEN = {
     "_pv_model_bezig": "staat alleen aan tijdens het trainen; na een herstart traint er niets",
     # v5.19: de trage helft van de cockpit, elke ronde opnieuw gevuld.
     "_cockpit_context": "wordt elke ronde opnieuw gevuld uit bestaande grootheden",
+    # v5.20.1: de verschuiving op de P1-meter, een keer per ronde gemeten.
+    "_regelverschuiving_ronde": "wordt elke ronde opnieuw gemeten",
     # v5.11: het ontlaadvenster wordt nu WEL bewaard. De reden stond hier
     # als "half meetvenster" - maar juist dat weggooien maakte het restant
     # na de herstart te kort, en dan werd er niets geleerd. Het venster

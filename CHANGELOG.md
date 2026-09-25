@@ -28705,3 +28705,32 @@ onderdeel, 85 ms per keer, voor niets. Op 24 september om 18:51 ging hij
 daardoor over de grens van 400 ms. Die plaat is eruit.
 
 **Volledige testsuite**: 4275 tests, allemaal groen.
+
+
+## v5.20.1 — Eén verschuiving per ronde
+
+Gecontroleerd na de installatie van v5.20. De verschuiving werkt:
+
+```
+regelverschuiving_w          50
+needed_kwh_before_margin     1,748 kWh
+reserve_kwh_after_margin     2,185 kWh   (was 1,8)
+GACS-sensor                  173 ms      (was 241, piek 427)
+```
+
+Maar de zelfcontrole uit v3.92 sloeg aan:
+
+> *"Eén reserve: er is een tweede reservedefinitie ingeslopen: brug wijkt
+> af van de sturing."*
+
+De brug en de sturing gebruiken dezelfde functie. Het verschil zat in het
+MOMENT: de verschuiving werd bij elke aanroep live gemeten als het verschil
+tussen twee sensoren, en de brug en de sturing rekenen op verschillende
+momenten in de ronde. De brug zag een verschuiving van nul - 1,92 kWh is
+precies 2,19 min 50 W x 4,2 uur x marge.
+
+Nu wordt de verschuiving **één keer per ronde** gemeten, op het bestaande
+rondestempel, en gebruiken alle lezers in die ronde hetzelfde getal. Precies
+waarvoor die zelfcontrole bestaat.
+
+**Volledige testsuite**: 4277 tests, allemaal groen.

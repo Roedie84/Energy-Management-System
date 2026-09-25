@@ -80,3 +80,36 @@ def test_de_gacs_sensor_bouwt_de_oude_plaat_niet_meer():
     sensor = (Path(pkg.__file__).parent / "sensor.py").read_text()
 
     assert '("overzichtsplaat", self._coordinator.get_overview_svg)' not in sensor
+
+
+def test_binnen_een_ronde_is_de_verschuiving_een_getal(make_coordinator, hass):
+    """Gemeld na installatie: "Eén reserve: brug wijkt af van de sturing".
+
+    De brug en de sturing gebruiken dezelfde functie, maar de verschuiving
+    werd bij elke aanroep LIVE gemeten. Veranderen de sensoren tussen twee
+    aanroepen in dezelfde ronde, dan rekenden ze met verschillende getallen.
+    """
+    from datetime import datetime, timezone
+
+    c = _met_regelsensor(make_coordinator({}), hass, echt=-48, regel=2)
+    c._forecast_cache_ronde = datetime(2026, 9, 25, 7, 25, tzinfo=timezone.utc)
+
+    eerste = c.regelverschuiving_kw()
+    # halverwege de ronde loopt de template even uit de pas
+    hass.states.set("sensor.hw_p1_vermogen_100w", "-48")
+    tweede = c.regelverschuiving_kw()
+
+    assert eerste == tweede == 0.05
+
+
+def test_een_nieuwe_ronde_meet_opnieuw(make_coordinator, hass):
+    from datetime import datetime, timedelta, timezone
+
+    c = _met_regelsensor(make_coordinator({}), hass, echt=-48, regel=2)
+    c._forecast_cache_ronde = datetime(2026, 9, 25, 7, 25, tzinfo=timezone.utc)
+    assert c.regelverschuiving_kw() == 0.05
+
+    hass.states.set("sensor.hw_p1_vermogen_100w", "32")
+    c._forecast_cache_ronde += timedelta(minutes=1)
+
+    assert round(c.regelverschuiving_kw(), 3) == 0.08
