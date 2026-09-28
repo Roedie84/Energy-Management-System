@@ -28955,3 +28955,43 @@ sjabloon: logica in een dashboardveld gaat stil kapot (v3.95.4), en de
 sjabloonratel hield dat tegen.
 
 **Volledige testsuite**: 4315 tests, allemaal groen.
+
+
+## v5.24 — De zoncorrectie per UTC-uur, vóór de wintertijd
+
+Gevraagd: *"wordt in de PV-verwachting ook de hoogte van de zon meegenomen?
+Seizoenen zeg maar."*
+
+Ja, via twee lagen. **Solcast** rekent zelf met de zonhoogte, de richting,
+het seizoen en de stand van de panelen. Het **EMS** legt daar een geleerde
+correctie per uur van de dag overheen, voor wat Solcast niet kent - schaduw
+van een boom of een dak. Die correctie schuift met de seizoenen mee, met een
+paar dagen vertraging.
+
+### De zwakke plek: de wintertijd
+
+Die correctie hing aan het **klokuur**. Na de omschakeling op zondag 25
+oktober staat de zon om 14:00 waar hij eerst om 15:00 stond. Een schaduw die
+aan 15:00 was gekoppeld, valt dan een uur vroeger dan de correctie denkt -
+tot de mediaan dat na zo'n week heeft rechtgetrokken. Tot die tijd ligt de
+zonverwachting per uur scheef, en daarmee de reserve en het laden.
+
+Nu hangt de correctie aan het **UTC-uur**, en dat verspringt niet:
+
+```
+15:00 zomertijd  =  13:00 UTC  =  14:00 wintertijd
+```
+
+Dezelfde stand van de zon, dezelfde sleutel.
+
+- Het METEN blijft per klokuur, zodat het werkelijke uur tegen de
+  voorspelling van datzelfde uur wordt gelegd.
+- De bestaande geschiedenis wordt **eenmalig omgezet** met de huidige
+  tijdzone; een kenmerk in de opslag voorkomt dat het twee keer gebeurt.
+- Het herstel via de sensor kent het kenmerk ook: een oudere toestand
+  met klokuren wordt eerst omgezet.
+- De export toont de correctie gewoon per klokuur - daar lees jij hem.
+
+Installeer vóór 25 oktober; de omzetting gaat uit van de huidige tijdzone.
+
+**Volledige testsuite**: 4322 tests, allemaal groen.

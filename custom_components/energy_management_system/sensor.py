@@ -3729,6 +3729,9 @@ class PvHourlyBiasSensor(SensorEntity, RestoreEntity):
             },
             "hours_with_data": len(profile),
             "hours_with_confident_data": len(profile_confident),
+            # v5.24: de uursleutels hierboven zijn UTC-uren. Een herstel
+            # zonder dit kenmerk heeft nog klokuren en wordt omgezet.
+            "sleutels": "utc",
         }
 
     @_store_wint
@@ -3764,6 +3767,8 @@ class PvHourlyBiasSensor(SensorEntity, RestoreEntity):
         # HourlyConsumptionProfileSensor for the full rationale. Falls
         # back to the old single-ratio duplication for state saved by a
         # pre-v0.60.1 version.
+        # v5.24: oudere toestanden hebben nog klokuren als sleutel.
+        klokuren = last_state.attributes.get("sleutels") != "utc"
         raw_history = last_state.attributes.get("profile_history")
         if isinstance(raw_history, dict):
             restored: dict[int, list[float]] = {}
@@ -3781,7 +3786,13 @@ class PvHourlyBiasSensor(SensorEntity, RestoreEntity):
                         parsed = parsed[1:]
                     restored[hour] = parsed[-LEARNING_HISTORY_DAYS:]
             if restored:
+                if klokuren:
+                    restored = {
+                        self._coordinator._utc_uur_van_lokaal(uur): waarden
+                        for uur, waarden in restored.items()
+                    }
                 self._coordinator.pv_hourly_bias_history = restored
+                self._coordinator.pv_uurbias_in_utc = True
                 return
 
         raw_profile = last_state.attributes.get("profile")

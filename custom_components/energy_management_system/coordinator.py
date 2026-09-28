@@ -1303,7 +1303,7 @@ class EnergyManagementSystemCoordinator:
         # een regel - `__init__` staat op de ratel.
         # v3.99.19: `dagverloop` en `nabeschouwingen` erbij, in dezelfde
         # regel - `__init__` staat op de ratel.
-        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen, self.safe_sell_shadow, self.reden_afwijkingen, self.meting_laatst_gevuld, self.weerbron_keuze, self.voorspellingsverloop, self._geladen_opslag, self.rendement_afwijzingen, self.weerbron_levering, self.weather_ensemble_readings_alle, self.instraling_verhouding, self.ventilator_kwh_per_dag, self._ventilator_vermogens_aan, self.gacs_traag, self.gacs_duur_ms, self._pv_model_bezig, self.gacs_traagste, self.prijs_vandaag, self.prijs_gisteren, self.besluit_snapshot, self._cockpit_context, self.last_laadbesluit, self.last_piekverkoop, self.piekverkoop_tot, self.richting_afwijking, self._richting_sinds = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, [], [], {}, {}, {}, {}, None, {}, {}, {}, {}, {}, [], [], None, False, None, {}, {}, {}, {}, {}, {}, None, None, None
+        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen, self.safe_sell_shadow, self.reden_afwijkingen, self.meting_laatst_gevuld, self.weerbron_keuze, self.voorspellingsverloop, self._geladen_opslag, self.rendement_afwijzingen, self.weerbron_levering, self.weather_ensemble_readings_alle, self.instraling_verhouding, self.ventilator_kwh_per_dag, self._ventilator_vermogens_aan, self.gacs_traag, self.gacs_duur_ms, self._pv_model_bezig, self.gacs_traagste, self.prijs_vandaag, self.prijs_gisteren, self.besluit_snapshot, self._cockpit_context, self.last_laadbesluit, self.last_piekverkoop, self.piekverkoop_tot, self.richting_afwijking, self._richting_sinds, self.pv_uurbias_in_utc = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, [], [], {}, {}, {}, {}, None, {}, {}, {}, {}, {}, [], [], None, False, None, {}, {}, {}, {}, {}, {}, None, None, None, True
         self.handmatige_ingrepen: list[dict] = []
         # v1.1.6: met welke meetmethode de bewaarde foutreeks tot stand
         # is gekomen. Verandert de methode, dan wordt die reeks eenmalig
@@ -6916,7 +6916,8 @@ class EnergyManagementSystemCoordinator:
         tracker = self.solar_tracker
         bias = getattr(tracker, "learned_bias_percent", None)
         uurcorrecties = {
-            uur: self.learned_pv_hourly_ratio(uur) for uur in range(24)
+            uur: self.learned_pv_hourly_ratio(self._utc_uur_van_lokaal(uur))
+            for uur in range(24)
         }
         geleerd = {u: r for u, r in uurcorrecties.items() if r is not None}
 
@@ -18942,7 +18943,7 @@ class EnergyManagementSystemCoordinator:
                 if remaining_ratio is not None:
                     corrected_kw = raw_kw * remaining_ratio
                 else:
-                    bias_ratio = self.learned_pv_hourly_ratio(now.hour)
+                    bias_ratio = self.learned_pv_hourly_ratio(self._utc_uur(now))
                     corrected_kw = (
                         raw_kw * bias_ratio if bias_ratio is not None else raw_kw
                     )
@@ -19102,7 +19103,7 @@ class EnergyManagementSystemCoordinator:
             ):
                 segment_kwh *= remaining_correction_ratio
             else:
-                hourly_ratio = self.learned_pv_hourly_ratio(entry_start.hour)
+                hourly_ratio = self.learned_pv_hourly_ratio(self._utc_uur(entry_start))
                 if hourly_ratio is not None:
                     segment_kwh *= hourly_ratio
                 elif daily_bias_percent is not None:
@@ -19605,6 +19606,49 @@ class EnergyManagementSystemCoordinator:
 
         return total if found else None
 
+    @staticmethod
+    def _utc_uur(moment: datetime) -> int:
+        """Het UTC-uur van een moment - de sleutel van de zoncorrectie (v5.24)."""
+        # Standaardbibliotheek, niet dt_util.as_utc: werkt voor elk moment
+        # met een tijdzone, en een moment zonder tijdzone is lokale tijd.
+        if moment.tzinfo is None:
+            moment = moment.replace(tzinfo=dt_util.now().tzinfo)
+        return moment.astimezone(timezone.utc).hour
+
+    @staticmethod
+    def _utc_uur_van_lokaal(uur: int) -> int:
+        """Een klokuur van vandaag als UTC-uur, met de huidige tijdzone (v5.24)."""
+        verschil = (dt_util.now().utcoffset() or timedelta(0)).total_seconds() / 3600
+        return int((uur - verschil) % 24)
+
+    def _migreer_pv_uurbias_naar_utc(self, stored: dict | None = None) -> None:
+        """Eenmalig: de zoncorrectie van klokuren naar UTC-uren (v5.24).
+
+        Gevraagd: "wordt in de PV-verwachting ook de hoogte van de zon
+        meegenomen? Seizoenen zeg maar." Solcast rekent zelf met de stand van
+        de zon; de geleerde correctie erbovenop hing aan het KLOKUUR. Na de
+        omschakeling naar wintertijd staat de zon om 14:00 waar hij eerst om
+        15:00 stond, en een schaduw die aan 15:00 was gekoppeld viel dan een
+        uur vroeger dan de correctie dacht - tot de mediaan dat na zo'n week
+        had rechtgetrokken. Het UTC-uur verspringt niet.
+
+        De bestaande geschiedenis wordt EEN keer omgezet met de huidige
+        tijdzone. Die geschiedenis beslaat hooguit een week, dus dat klopt -
+        behalve in de week direct na een omschakeling; dan is een deel van
+        de metingen een uur verschoven en trekt de mediaan dat recht.
+        """
+        # Oude opslag heeft het kenmerk niet: die sleutels zijn klokuren.
+        # Een verse installatie begint meteen in UTC.
+        if stored is not None and stored.get("pv_uurbias_in_utc") is not True:
+            self.pv_uurbias_in_utc = not self.pv_hourly_bias_history
+        if self.pv_uurbias_in_utc:
+            return
+        self.pv_hourly_bias_history = {
+            self._utc_uur_van_lokaal(uur): waarden
+            for uur, waarden in (self.pv_hourly_bias_history or {}).items()
+        }
+        self.pv_uurbias_in_utc = True
+
     def _update_pv_hourly_bias_tracking(self, now: datetime) -> None:
         """Sample actual PV production continuously, all day, and compare
         each completed hour's actual output against what was forecasted
@@ -19721,11 +19765,14 @@ class EnergyManagementSystemCoordinator:
 
             if forecast_kwh is not None and forecast_kwh >= PV_HOURLY_BIAS_MIN_KWH:
                 ratio = actual_kwh / forecast_kwh
-                bucket = self.pv_hourly_bias_history.setdefault(
-                    self._pv_current_tracked_hour, []
-                )
+                # v5.24: bewaard onder het UTC-uur, niet het klokuur - zie
+                # `_migreer_pv_uurbias_naar_utc`. Het METEN blijft per
+                # klokuur, zodat het werkelijke uur tegen de voorspelling
+                # van datzelfde uur wordt gelegd.
+                sleutel_utc = self._utc_uur_van_lokaal(self._pv_current_tracked_hour)
+                bucket = self.pv_hourly_bias_history.setdefault(sleutel_utc, [])
                 bucket.append(ratio)
-                self.pv_hourly_bias_history[self._pv_current_tracked_hour] = bucket[
+                self.pv_hourly_bias_history[sleutel_utc] = bucket[
                     -LEARNING_HISTORY_DAYS:
                 ]
                 _LOGGER.debug(
@@ -19735,7 +19782,7 @@ class EnergyManagementSystemCoordinator:
                     actual_kwh,
                     forecast_kwh,
                     ratio,
-                    self.pv_hourly_bias_history[self._pv_current_tracked_hour],
+                    self.pv_hourly_bias_history[sleutel_utc],
                 )
 
         self._pv_hour_energy_kwh = 0.0
@@ -31966,11 +32013,13 @@ class EnergyManagementSystemCoordinator:
                     consumption_kw = self.learned_hourly_avg_kw(hour) or 0.0
                 consumption_kwh = consumption_kw * fraction_hours
 
-                bias_samples = self.pv_hourly_bias_history.get(hour)
+                bias_samples = self.pv_hourly_bias_history.get(
+                    self._utc_uur_van_lokaal(hour)
+                )
                 if bias_samples:
                     bias = random.choice(bias_samples)
                 else:
-                    bias = self.learned_pv_hourly_ratio(hour)
+                    bias = self.learned_pv_hourly_ratio(self._utc_uur_van_lokaal(hour))
                     if bias is None:
                         bias = 1.0
                 pv_kwh = pv_base_kwh * bias * efficiency_factor
@@ -32755,6 +32804,8 @@ class EnergyManagementSystemCoordinator:
             moment = dt_util.parse_datetime(str(rauw))
             if moment is not None:
                 setattr(self, veld, moment)
+        # v5.24: de zoncorrectie een keer van klokuren naar UTC-uren.
+        self._migreer_pv_uurbias_naar_utc(stored)
 
     def _discard_history_from_an_older_method(self) -> None:
         """Wist de balansgeschiedenis als die met een oudere meetmethode

@@ -3455,6 +3455,9 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "last_bedtime_motion_at": {"type": "datetime"},
     "hourly_consumption_profile": {"type": "uurdict", "uursleutels": True},
     "pv_hourly_bias_history": {"type": "uurdict", "uursleutels": True},
+    # v5.24: de sleutels hierboven zijn UTC-uren; zonder dit kenmerk zijn
+    # het nog klokuren en worden ze bij het inlezen omgezet.
+    "pv_uurbias_in_utc": {"type": "plain"},
 }
 
 # Afgeleid, geen eigen lijsten meer.

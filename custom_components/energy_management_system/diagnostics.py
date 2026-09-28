@@ -1386,10 +1386,16 @@ async def async_get_config_entry_diagnostics(
             "pv_forecast_spread": _veilig(
                 "get_pv_forecast_spread", coordinator.get_pv_forecast_spread
             ),
+            # v5.24: opgeslagen per UTC-uur, hier getoond per KLOKuur.
             "pv_hourly_bias_profile_confident": {
-                str(hour): coordinator.learned_pv_hourly_ratio(hour)
+                str(hour): coordinator.learned_pv_hourly_ratio(
+                    coordinator._utc_uur_van_lokaal(hour)
+                )
                 for hour in range(24)
-                if coordinator.learned_pv_hourly_ratio(hour) is not None
+                if coordinator.learned_pv_hourly_ratio(
+                    coordinator._utc_uur_van_lokaal(hour)
+                )
+                is not None
             },
             "pv_hourly_bias_profile_raw": {
                 str(hour): coordinator.raw_pv_hourly_avg(hour)
