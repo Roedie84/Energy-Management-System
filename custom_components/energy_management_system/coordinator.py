@@ -14736,6 +14736,23 @@ class EnergyManagementSystemCoordinator:
             verschil = beschikbaar - reserve
             uit["vrij_kwh"] = verschil if verschil >= 0 else 0.0
             uit["tekort_kwh"] = 0.0 if verschil >= 0 else abs(verschil)
+            # v5.20.2: het tekort op de KAART rekent tot het begin van het
+            # goedkope blok. Gemeld: "tekort 2,85 kWh" in rood, terwijl de
+            # accu het blok ruim haalde. De reserve van de sturing kijkt
+            # verder - 2,62 kWh "lange horizon" na het blok, die het blok
+            # zelf aanvult. Voor de verkoopgrens is dat juist; op de kaart
+            # wekte het de indruk dat er nu iets misging.
+            #
+            # Zelfde bestaande functie als de sturing, alleen tot het blok:
+            # `_estimate_worst_case_deficit_kwh(nu, blokstart)`. De sturing
+            # verandert niet.
+            blok = self.last_cheap_block_start
+            nu = dt_util.now()
+            if blok is not None and blok > nu:
+                tot_blok = self._estimate_worst_case_deficit_kwh(nu, blok)
+                uit["tekort_kwh"] = max(0.0, tot_blok - beschikbaar)
+            else:
+                uit["tekort_kwh"] = 0.0
         elif beschikbaar is not None and reserve is None:
             # v5.19.6: geen reserve betekent dat er niets te overbruggen is -
             # het goedkope blok is bezig of er komt er geen. Dan legt niets
@@ -26658,6 +26675,22 @@ class EnergyManagementSystemCoordinator:
             # Besparing alleen waar de tegenfeitelijke kosten bekend
             # zijn. Ingelezen dagen hebben die niet: die wereld zonder
             # aansturing is nooit ergens vastgelegd.
+            # v5.20.2: de kWh van alleen de dagen waarvoor OOK een bedrag
+            # bestaat. Gevonden bij de systeemcontrole: de maand gaf 3,0
+            # ct/kWh en het jaar 0,2 ct/kWh, omdat de bedragen pas sinds 24
+            # september bestaan en de kWh sinds het begin. Een gemiddelde
+            # prijs mag alleen delen door de kWh waar een prijs bij hoort.
+            for kwh_sleutel, eur_sleutel, naam in (
+                ("import_kwh", "inkoop_eur", "import_kwh_met_prijs"),
+                ("export_kwh", "teruglever_eur", "export_kwh_met_prijs"),
+            ):
+                paren = [
+                    r[kwh_sleutel]
+                    for r in dagen
+                    if r.get(eur_sleutel) is not None
+                    and r.get(kwh_sleutel) is not None
+                ]
+                uitkomst[naam] = round(sum(paren), 3) if paren else None
             met_tegenfeit = [
                 r for r in dagen if r.get("zonder_sturing_eur") is not None
             ]

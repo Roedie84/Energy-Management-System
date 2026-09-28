@@ -308,6 +308,18 @@ def _deel(teller: float | None, noemer: float | None) -> float | None:
     return round(teller / noemer, 4)
 
 
+def _kwh(periode: dict, richting: str):
+    """De kWh waar een PRIJS bij hoort (v5.20.2).
+
+    Alleen de dagen waarvoor ook een bedrag bestaat; anders deelt een
+    gemiddelde door kWh van dagen zonder bedrag, en kwam de maand uit op 3,0
+    ct/kWh. Voor "vandaag" is er geen aparte telling - daar horen bedrag en
+    kWh bij dezelfde dag.
+    """
+    met_prijs = periode.get(f"{richting}_kwh_met_prijs")
+    return met_prijs if met_prijs is not None else periode.get(f"{richting}_kwh")
+
+
 def prijzen_per_periode(perioden: dict) -> dict:
     """Gemiddelde in- en verkoopprijzen per periode, incl en excl btw.
 
@@ -328,15 +340,15 @@ def prijzen_per_periode(perioden: dict) -> dict:
         uit[naam] = {
             "dagen": p.get("dagen"),
             "van": p.get("van"),
-            "inkoop_eur_per_kwh": _deel(p.get("inkoop_eur"), p.get("import_kwh")),
+            "inkoop_eur_per_kwh": _deel(p.get("inkoop_eur"), _kwh(p, "import")),
             "inkoop_eur_per_kwh_excl": _deel(
-                p.get("inkoop_eur_excl"), p.get("import_kwh")
+                p.get("inkoop_eur_excl"), _kwh(p, "import")
             ),
             "teruglever_eur_per_kwh": _deel(
-                p.get("teruglever_eur"), p.get("export_kwh")
+                p.get("teruglever_eur"), _kwh(p, "export")
             ),
             "teruglever_eur_per_kwh_excl": _deel(
-                p.get("teruglever_eur_excl"), p.get("export_kwh")
+                p.get("teruglever_eur_excl"), _kwh(p, "export")
             ),
             "gas_eur_per_m3": _deel(p.get("gas_eur"), p.get("gas_m3")),
             "gas_eur_per_m3_excl": _deel(p.get("gas_eur_excl"), p.get("gas_m3")),

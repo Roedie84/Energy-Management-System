@@ -28734,3 +28734,37 @@ rondestempel, en gebruiken alle lezers in die ronde hetzelfde getal. Precies
 waarvoor die zelfcontrole bestaat.
 
 **Volledige testsuite**: 4277 tests, allemaal groen.
+
+
+## v5.20.2 — Systeemcontrole: tekort op de kaart en het prijsoverzicht
+
+### Het tekort op de kaart rekent tot het blok
+
+Gemeld: "tekort 2,85 kWh" in rood, terwijl de accu het goedkope blok van
+10:30 ruim haalde. De reserve van de sturing kijkt verder: 2,62 kWh "lange
+horizon" na het blok, die het blok zelf aanvult. Voor de verkoopgrens is dat
+juist; op de kaart wekte het de indruk dat er nu iets misging.
+
+Het tekort op de kaart gebruikt nu dezelfde bestaande functie als de
+sturing, alleen tot het begin van het blok. De sturing verandert niet.
+
+**Verwachting bewust gewijzigd**: de toets met de vijf randgevallen rekende
+het tekort als reserve min beschikbaar. Hij rekent nu tot het blok, met
+de ochtend van 28 september als zesde geval.
+
+### Het prijsoverzicht gaf onmogelijke gemiddelden
+
+Gevonden bij de systeemcontrole:
+
+```
+week     6 dagen   inkoop 18,2 ct/kWh
+maand   27 dagen   inkoop  3,0 ct/kWh
+jaar   270 dagen   inkoop  0,2 ct/kWh
+```
+
+De bedragen bestaan pas sinds 24 september, de kWh sinds het begin, en het
+gemiddelde deelde door alle kWh. Nu telt de periode ook de kWh van alleen de
+dagen waarvoor een bedrag bestaat, en deelt het gemiddelde daardoor. Gas
+ging al goed: bedrag en m3 komen van dezelfde sensoren.
+
+**Volledige testsuite**: 4280 tests, allemaal groen.

@@ -205,20 +205,32 @@ def test_zonder_ondergrens_geen_balk(make_coordinator, hass):
 
 
 @pytest.mark.parametrize(
-    "beschikbaar,reserve,vrij,tekort",
+    "beschikbaar,reserve,tot_blok,vrij,tekort",
     [
-        (0.0, 2.01, 0.0, 2.01),      # A. laadstand op de ondergrens
-        (2.01, 2.01, 0.0, 0.0),      # B. precies op de reserve
-        (7.8, 2.01, 5.79, 0.0),      # C. ruim erboven
-        (4.9, 0.0, 4.9, 0.0),        # D. reserve nul
-        (0.95, 4.60, 0.0, 3.65),     # E. reserve groter dan beschikbaar
+        (0.0, 2.01, 1.20, 0.0, 1.20),     # A. laadstand op de ondergrens
+        (2.01, 2.01, 1.20, 0.0, 0.0),     # B. precies op de reserve
+        (7.8, 2.01, 1.20, 5.79, 0.0),     # C. ruim erboven
+        (4.9, 0.0, 0.0, 4.9, 0.0),        # D. reserve nul
+        (0.95, 4.60, 1.60, 0.0, 0.65),    # E. reserve groter dan beschikbaar
+        (0.86, 3.72, 0.24, 0.0, 0.0),     # F. 28 sep: haalt het blok wel
     ],
 )
 def test_vrij_en_tekort_zijn_allebei_zichtbaar(
-    make_coordinator, hass, beschikbaar, reserve, vrij, tekort
+    make_coordinator, hass, beschikbaar, reserve, tot_blok, vrij, tekort
 ):
-    """Het tekort mag niet verdwijnen achter een vrij van 0,00."""
+    """Het tekort mag niet verdwijnen achter een vrij van 0,00.
+
+    v5.20.2 - VERWACHTING BEWUST GEWIJZIGD. Het tekort op de kaart rekent
+    tot het begin van het goedkope blok, niet tot de volle reserve van de
+    sturing. Gemeld: "tekort 2,85 kWh" in rood terwijl de accu het blok
+    ruim haalde - de reserve bevatte 2,62 kWh "lange horizon" die het blok
+    zelf aanvult. Geval F is die ochtend: 0,86 beschikbaar, 0,24 nodig tot
+    het blok, dus geen tekort."""
+    from homeassistant.util import dt as dt_util
+
     c = _accu(make_coordinator({}), hass, 50.0, beschikbaar, reserve)
+    c.last_cheap_block_start = dt_util.now() + timedelta(hours=2)
+    c._estimate_worst_case_deficit_kwh = lambda nu, blok: tot_blok
 
     uit = c.cockpit_accu()
 

@@ -1,22 +1,20 @@
-EMS v5.20.1 - alleen de wijziging sinds v5.20
+EMS v5.20.2 - alle wijzigingen sinds v5.20.1
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
-    coordinator.py
+    coordinator.py, slimme_bronnen.py
     dashboard_template.yaml   (gaat altijd mee, ongewijzigd)
     manifest.json, bestandscontrole.json
 
 NAAR DE REPO
     README.md, CHANGELOG.md
     dashboards/energy_management_system_dashboard.yaml
-    tests/test_regelverschuiving.py, tests/test_state_persistence.py
+    tests/test_cockpit_matrix.py, tests/test_slimme_bronnen.py
 
-Voor HACS: release met tag v5.20.1.
+Voor HACS: release met tag v5.20.2.
 
 WAT ER VERANDERT
-De verschuiving op de P1-meter wordt een keer per ronde gemeten. De
-zelfcontrole "Eén reserve" sloeg aan omdat de brug en de sturing hem op
-verschillende momenten live maten, en dan niet hetzelfde getal zagen.
-
-NA DE HERSTART
-Het aandachtspunt "Eén reserve: brug wijkt af van de sturing" hoort binnen
-een paar rondes te verdwijnen.
+1. Het tekort op de accukaart rekent tot het begin van het goedkope blok,
+   niet tot de volle reserve. De sturing verandert niet.
+2. Het prijsoverzicht deelt een gemiddelde alleen door de kWh van dagen
+   waarvoor ook een bedrag bestaat. De maand gaf 3,0 ct/kWh; dat hoort
+   rond de 18 te liggen.

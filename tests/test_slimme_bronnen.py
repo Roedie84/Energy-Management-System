@@ -131,3 +131,39 @@ def test_het_ventilatorverbruik_wordt_zichtbaar():
     assert uit["gemiddeld_kwh_per_dag"] == pytest.approx(0.5)
     assert uit["vermogen_aan_w"] == 40.0
     assert uit["kosten_eur_per_jaar"] == pytest.approx(43.8, abs=0.1)
+
+
+def test_een_gemiddelde_prijs_deelt_alleen_door_kwh_met_een_bedrag():
+    """Gevonden bij de systeemcontrole van 28 september:
+
+        week    6 dagen   inkoop 18,2 ct/kWh
+        maand  27 dagen   inkoop  3,0 ct/kWh
+        jaar  270 dagen   inkoop  0,2 ct/kWh
+
+    De bedragen bestaan pas sinds 24 september, de kWh sinds het begin. Het
+    gemiddelde deelde door alle kWh."""
+    from custom_components.energy_management_system.slimme_bronnen import (
+        prijzen_per_periode,
+    )
+
+    maand = {
+        "dagen": 27,
+        "inkoop_eur": 1.82,
+        "import_kwh": 60.0,            # alle dagen
+        "import_kwh_met_prijs": 10.0,  # alleen de dagen met een bedrag
+    }
+
+    uit = prijzen_per_periode({"maand": maand})
+
+    assert uit["maand"]["inkoop_eur_per_kwh"] == 0.182
+
+
+def test_zonder_aparte_telling_blijft_de_gewone_kwh_gelden():
+    """Voor "vandaag" horen bedrag en kWh bij dezelfde dag."""
+    from custom_components.energy_management_system.slimme_bronnen import (
+        prijzen_per_periode,
+    )
+
+    uit = prijzen_per_periode({"vandaag": {"inkoop_eur": 0.5, "import_kwh": 2.5}})
+
+    assert uit["vandaag"]["inkoop_eur_per_kwh"] == 0.2
