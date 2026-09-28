@@ -26,12 +26,23 @@ NA_SALDERING = datetime(2027, 1, 15, 14, 0)
 
 
 def _prijzen(start: datetime, prijzen):
+    """De prijsreeks in de VORM die `_get_forecast_entries` werkelijk levert.
+
+    v5.21: deze hulp bouwde woordenboeken met "start" en "price_per_kwh",
+    terwijl de echte reeks uit tupels (start, eind, prijs x
+    PRICE_SCALE_FACTOR) bestaat. De toetsen bevestigden daardoor een vorm
+    die in bedrijf nooit voorkomt - en de verkooptoets las de reeks precies
+    zo verkeerd. Hij viel nooit om, omdat hij zolang de saldering loopt
+    meteen stopt. Na de saldering zou hij met een TypeError zijn omgevallen.
+    """
+    from custom_components.energy_management_system.const import PRICE_SCALE_FACTOR
+
     return [
-        {
-            "start": (start + timedelta(hours=i)).isoformat(),
-            "end": (start + timedelta(hours=i + 1)).isoformat(),
-            "price_per_kwh": p,
-        }
+        (
+            start + timedelta(hours=i),
+            start + timedelta(hours=i + 1),
+            p * PRICE_SCALE_FACTOR,
+        )
         for i, p in enumerate(prijzen)
     ]
 

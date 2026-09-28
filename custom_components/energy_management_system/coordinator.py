@@ -1303,7 +1303,7 @@ class EnergyManagementSystemCoordinator:
         # een regel - `__init__` staat op de ratel.
         # v3.99.19: `dagverloop` en `nabeschouwingen` erbij, in dezelfde
         # regel - `__init__` staat op de ratel.
-        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen, self.safe_sell_shadow, self.reden_afwijkingen, self.meting_laatst_gevuld, self.weerbron_keuze, self.voorspellingsverloop, self._geladen_opslag, self.rendement_afwijzingen, self.weerbron_levering, self.weather_ensemble_readings_alle, self.instraling_verhouding, self.ventilator_kwh_per_dag, self._ventilator_vermogens_aan, self.gacs_traag, self.gacs_duur_ms, self._pv_model_bezig, self.gacs_traagste, self.prijs_vandaag, self.prijs_gisteren, self.besluit_snapshot, self._cockpit_context = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, [], [], {}, {}, {}, {}, None, {}, {}, {}, {}, {}, [], [], None, False, None, {}, {}, {}, {}
+        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen, self.safe_sell_shadow, self.reden_afwijkingen, self.meting_laatst_gevuld, self.weerbron_keuze, self.voorspellingsverloop, self._geladen_opslag, self.rendement_afwijzingen, self.weerbron_levering, self.weather_ensemble_readings_alle, self.instraling_verhouding, self.ventilator_kwh_per_dag, self._ventilator_vermogens_aan, self.gacs_traag, self.gacs_duur_ms, self._pv_model_bezig, self.gacs_traagste, self.prijs_vandaag, self.prijs_gisteren, self.besluit_snapshot, self._cockpit_context, self.last_laadbesluit = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, [], [], {}, {}, {}, {}, None, {}, {}, {}, {}, {}, [], [], None, False, None, {}, {}, {}, {}, {}
         self.handmatige_ingrepen: list[dict] = []
         # v1.1.6: met welke meetmethode de bewaarde foutreeks tot stand
         # is gekomen. Verandert de methode, dan wordt die reeks eenmalig
@@ -9398,12 +9398,12 @@ class EnergyManagementSystemCoordinator:
             regels.append("de accu blijft dus vol voor een duurder moment")
             return regels
 
-        if reden in ("grid_charging_low_solar", "grid_charging_low_solar_extra_dip"):
-            regels = list(gemeenschappelijk)
-            regels.append("er wordt weinig zon verwacht, dus bijladen uit het net")
-            if _blok_tekst():
-                regels.append(_blok_tekst())
-            return regels
+        if reden in (
+            "grid_charging_low_solar",
+            "grid_charging_low_solar_extra_dip",
+            "grid_charging_profitable",
+        ):
+            return self._waarom_bij_laden(reden, gemeenschappelijk, _blok_tekst())
 
         if reden == "discharging_window":
             regels = list(gemeenschappelijk)
@@ -19128,30 +19128,22 @@ class EnergyManagementSystemCoordinator:
             self._regelverschuiving_ronde = (stempel, waarde)
         return waarde
 
-    def _estimate_worst_case_deficit_kwh(
-        self, start: datetime, end: datetime
-    ) -> float | None:
-        """The deepest cumulative shortfall reached at any point between
-        start and end, hour by hour - not just the net balance at the
-        end of the period.
+    def _segmenten_verbruik_zon(
+        self, start: datetime, end: datetime, veilig: bool = True
+    ) -> list[tuple[float, float]] | None:
+        """Verwacht verbruik en zon per uursegment (v5.21).
 
-        A simple net total (consumption - PV) over the whole bridging
-        window can look fine on paper while still hiding a real overnight
-        shortfall: solar credit is concentrated in daylight hours, so a
-        big expected PV total for tomorrow doesn't help *tonight*, before
-        it arrives. Walking hour by hour and tracking the running
-        cumulative deficit (clamped at 0 - surplus daytime PV can't
-        retroactively cover an earlier night's shortfall) finds the
-        actual worst moment, typically just before sunrise, which is
-        what the reserve genuinely needs to protect against.
+        Letterlijk de lus uit `_estimate_worst_case_deficit_kwh`, eruit
+        gehaald zodat het tekort (voor de reserve) en het zonoverschot (voor
+        het laden) op EXACT dezelfde inschatting rusten. Twee lussen met elk
+        hun eigen verbruik zou een tweede definitie zijn.
 
-        Returns None if the hourly consumption profile doesn't have data
-        for every hour the period spans, so the caller can fall back to
-        a simpler estimate.
+        De zon is al met het rendement vermenigvuldigd, zoals in het tekort.
+        `veilig` kiest de voorzichtige zonverwachting (de band).
+        None als het geleerde verbruik voor een uur ontbreekt.
         """
         if end <= start:
-            return 0.0
-
+            return []
         efficiency_percent = self.learned_battery_efficiency_percent
         if efficiency_percent is None:
             efficiency_percent = float(
@@ -19176,8 +19168,7 @@ class EnergyManagementSystemCoordinator:
             start.hour
         )
 
-        cumulative_deficit = 0.0
-        max_deficit = 0.0
+        segmenten = []
         verschuiving_kw = self.regelverschuiving_kw()
         cursor = start
         while cursor < end:
@@ -19223,14 +19214,265 @@ class EnergyManagementSystemCoordinator:
             # gevallen telt hij als extra verbruik.
             consumption_kwh += verschuiving_kw * fraction_hours
             pv_kwh = (
-                self._estimate_pv_kwh_for_period(cursor, segment_end, veilig=True)  # v4.1: de bandpositie
+                self._estimate_pv_kwh_for_period(cursor, segment_end, veilig=veilig)  # v4.1: de bandpositie
                 * efficiency_factor
             )
 
-            cumulative_deficit = max(0.0, cumulative_deficit + consumption_kwh - pv_kwh)
-            max_deficit = max(max_deficit, cumulative_deficit)
+            segmenten.append((consumption_kwh, pv_kwh))
             cursor = segment_end
 
+        return segmenten
+
+    async def _laad_uit_het_net_als_nodig(
+        self,
+        now: datetime,
+        entries,
+        should_force_charge: bool,
+        cheap_block_start: datetime | None,
+        cheap_block_end: datetime | None,
+    ) -> bool:
+        """Laden uit het net, als dat nu moet of loont (v5.21).
+
+        Eerst bij weinig zon (dat heeft voorrang, en zet `_grid_charged_today`
+        zodat die noodlading later niet wordt terugverkocht). Daarna omdat het
+        LOONT - bewust ZONDER die vlag: daar is de latere verkoop juist het
+        doel, en met de vlag zou het EMS laden voor de avondverkoop en die
+        vervolgens zelf verbieden.
+
+        True als er is geladen; de beslissing is dan klaar.
+        """
+        if should_force_charge:
+            reden = "grid_charging_low_solar"
+        else:
+            self.last_laadbesluit = self.laadbesluit_uit_het_net(
+                now, cheap_block_start, cheap_block_end
+            )
+            if not self.last_laadbesluit.get("laden"):
+                return False
+            reden = "grid_charging_profitable"
+        charge_power = self.instelling(CONF_MANUAL_CHARGE_POWER, DEFAULT_MANUAL_CHARGE_POWER)
+        await self._async_apply_manual(charge_power)
+        # Letterlijk toegewezen, zodat elke reden in de code terug te vinden
+        # is (test_geen_reden_in_de_registry_die_niemand_zet).
+        if reden == "grid_charging_low_solar":
+            self.last_reason = "grid_charging_low_solar"
+            self._grid_charged_today = True
+        else:
+            self.last_reason = "grid_charging_profitable"
+        self.last_charge_power_applied = charge_power
+        self._update_financial_tracking(now, entries, reden, None, charge_power)
+        self._update_shortfall_detection(
+            now, reden, self.last_available_kwh, self.last_needed_kwh_to_bridge
+        )
+        self._finish_decision_tick(now)
+        return True
+
+    def _waarom_bij_laden(
+        self, reden: str, gemeenschappelijk: list, blok_tekst: str | None
+    ) -> list[str]:
+        """De waarom-regels bij laden uit het net (v5.21).
+
+        Bij laden omdat het loont: de getallen van het laadbesluit ZELF -
+        dezelfde die de beslissing namen, niet achteraf opnieuw berekend.
+        """
+        if reden != "grid_charging_profitable":
+            regels = list(gemeenschappelijk)
+            regels.append("er wordt weinig zon verwacht, dus bijladen uit het net")
+            if blok_tekst:
+                regels.append(blok_tekst)
+            return regels
+        besluit = self.last_laadbesluit or {}
+        regels = []
+        if besluit.get("prijs_nu_eur") is not None:
+            regels.append(f"stroom kost nu {besluit['prijs_nu_eur'] * 100:.1f} ct")
+        if besluit.get("waarde_eur") is not None:
+            regels.append(
+                f"een kWh in de accu is straks {besluit['waarde_eur'] * 100:.1f} ct "
+                f"waard ({besluit['latere_prijs_eur'] * 100:.1f} ct x "
+                f"{besluit['rendement_procent']:.0f}% - "
+                f"{besluit['slijtage_ct']:.1f} ct slijtage)"
+            )
+        if besluit.get("gat_kwh") is not None:
+            regels.append(
+                f"de zon vult nog {besluit['zonoverschot_kwh']:.1f} kWh, "
+                f"er blijft {besluit['gat_kwh']:.1f} kWh over om bij te laden"
+            )
+        return regels
+
+    def _verwacht_zonoverschot_kwh(
+        self, start: datetime, end: datetime, veilig: bool = True
+    ) -> float | None:
+        """Hoeveel zon er naar verwachting de accu in gaat (v5.21).
+
+        Op dezelfde inschatting als het tekort (`_segmenten_verbruik_zon`):
+        per uur het deel van de zon dat boven het verbruik uitkomt.
+        """
+        segmenten = self._segmenten_verbruik_zon(start, end, veilig=veilig)
+        if segmenten is None:
+            return None
+        return sum(max(0.0, zon - verbruik) for verbruik, zon in segmenten)
+
+    def laadbesluit_uit_het_net(
+        self,
+        now: datetime,
+        blok_start: datetime | None,
+        blok_eind: datetime | None,
+    ) -> dict:
+        """Loont het om NU uit het net bij te laden? (v5.21)
+
+        Gemeld: "werkt het bijladen echt goed? Gezien ik dit nu regelmatig
+        handmatig doe." Het EMS laadde alleen van het net op dagen met
+        weinig zon. Op andere dagen rekende het erop dat de zon de accu
+        vulde - ook als dat niet genoeg was en het goedkope blok duidelijk
+        winst opleverde. Beide handmatige laadbeurten van de gebruiker
+        waren rendabel: 7,8 en 10,5 ct/kWh na rendement en slijtage.
+
+        Twee voorwaarden, allebei op bestaande grootheden:
+
+        1. HET GAT. Hoeveel ruimte blijft er over nadat de zon heeft gedaan
+           wat hij vandaag nog doet?
+               gat = laadruimte - verwacht zonoverschot
+           Zolang de saldering loopt met de VOORZICHTIGE zonverwachting:
+           te veel laden kost dan bijna niets (het middagoverschot gaat
+           tegen ongeveer dezelfde middagprijs het net op), te weinig laden
+           kost de marge. Na de saldering met de gewone verwachting.
+
+        2. DE MARGE. Is de VOLGENDE kWh straks meer waard dan hij nu kost?
+           Dezelfde rekenregel als de verkooptoets:
+               waarde = latere prijs x rendement - slijtage
+           De latere prijzen van hoog naar laag. Wat al in de accu zit gaat
+           naar de duurste kwartieren; de volgende kWh komt in het
+           eerstvolgende kwartier daarna terecht, en dat kwartier bepaalt
+           zijn waarde.
+
+        Wordt elke ronde opnieuw bekeken. Naarmate de accu vult schuift dat
+        kwartier naar goedkopere momenten, en het laden stopt precies waar
+        het niet meer loont - of eerder, als het gat dicht is.
+        """
+        uit: dict = {"laden": False}
+        if (
+            blok_start is None
+            or blok_eind is None
+            or not (blok_start <= now < blok_eind)
+        ):
+            uit["reden"] = "niet in het goedkope blok"
+            return uit
+        prijs_nu = self.huidige_prijs_eur_per_kwh()
+        ruimte = self._resterende_laadruimte_kwh()
+        rendement = self.learned_battery_efficiency_percent
+        if rendement is None:
+            rendement = float(
+                self.instelling(
+                    CONF_BATTERY_ROUND_TRIP_EFFICIENCY,
+                    DEFAULT_BATTERY_ROUND_TRIP_EFFICIENCY_PERCENT,
+                )
+            )
+        slijtage_ct = (self.get_wear_cost_overview() or {}).get("slijtage_ct_per_kwh")
+        if prijs_nu is None or ruimte is None or slijtage_ct is None:
+            uit["reden"] = "prijs, laadruimte of slijtage onbekend"
+            return uit
+        horizon_eind = now + timedelta(hours=24)
+        later = sorted(
+            (
+                (e[2] / PRICE_SCALE_FACTOR, e[0])
+                for e in (self._get_forecast_entries() or [])
+                if blok_eind <= e[0] < horizon_eind
+            ),
+            key=lambda paar: paar[0],
+            reverse=True,
+        )
+        if not later:
+            uit["reden"] = "geen prijzen na het blok"
+            return uit
+        ontlaad_kw = abs(
+            float(
+                self.instelling(
+                    CONF_MANUAL_DISCHARGE_POWER, DEFAULT_MANUAL_DISCHARGE_POWER
+                )
+            )
+        ) / 1000
+        per_kwartier = max(ontlaad_kw * 0.25, 0.05)
+        salderen = self._is_salderen_active(now)
+        # Het kwartier waarin de VOLGENDE kWh terechtkomt: na de kwartieren
+        # die de lading van nu al vult.
+        beschikbaar = self.beschikbare_energie_kwh() or 0.0
+        k = int(beschikbaar // per_kwartier) + 1
+        if k > len(later):
+            uit["reden"] = "de lading van nu dekt alle latere kwartieren al"
+            return uit
+        zon_tot = min(moment for _p, moment in later[:k])
+        overschot = (
+            self._verwacht_zonoverschot_kwh(now, zon_tot, veilig=salderen)
+            if zon_tot > now
+            else 0.0
+        )
+        if overschot is None:
+            uit["reden"] = "geen verbruiksinschatting"
+            return uit
+        gat = ruimte - overschot
+        uit.update(
+            {
+                "prijs_nu_eur": round(prijs_nu, 4),
+                "ruimte_kwh": round(ruimte, 2),
+                "zonoverschot_kwh": round(overschot, 2),
+                "gat_kwh": round(gat, 2),
+                "voorzichtige_zon": salderen,
+            }
+        )
+        if gat <= 0:
+            uit["reden"] = "de zon vult de accu vandaag vanzelf"
+            return uit
+        latere_prijs = later[k - 1][0]
+        waarde = latere_prijs * rendement / 100 - slijtage_ct / 100
+        uit.update(
+            {
+                "latere_prijs_eur": round(latere_prijs, 4),
+                "rendement_procent": round(rendement, 1),
+                "slijtage_ct": round(slijtage_ct, 2),
+                "waarde_eur": round(waarde, 4),
+                "marge_ct": round((waarde - prijs_nu) * 100, 1),
+                "laden": waarde > prijs_nu,
+                "reden": (
+                    "loont: straks meer waard dan hij nu kost"
+                    if waarde > prijs_nu
+                    else "loont niet: straks minder waard dan hij nu kost"
+                ),
+            }
+        )
+        return uit
+
+    def _estimate_worst_case_deficit_kwh(
+        self, start: datetime, end: datetime
+    ) -> float | None:
+        """The deepest cumulative shortfall reached at any point between
+        start and end, hour by hour - not just the net balance at the
+        end of the period.
+
+        A simple net total (consumption - PV) over the whole bridging
+        window can look fine on paper while still hiding a real overnight
+        shortfall: solar credit is concentrated in daylight hours, so a
+        big expected PV total for tomorrow doesn't help *tonight*, before
+        it arrives. Walking hour by hour and tracking the running
+        cumulative deficit (clamped at 0 - surplus daytime PV can't
+        retroactively cover an earlier night's shortfall) finds the
+        actual worst moment, typically just before sunrise, which is
+        what the reserve genuinely needs to protect against.
+
+        Returns None if the hourly consumption profile doesn't have data
+        for every hour the period spans, so the caller can fall back to
+        a simpler estimate.
+        """
+        if end <= start:
+            return 0.0
+
+        segmenten = self._segmenten_verbruik_zon(start, end, veilig=True)
+        if segmenten is None:
+            return None
+        cumulative_deficit = 0.0
+        max_deficit = 0.0
+        for consumption_kwh, pv_kwh in segmenten:
+            cumulative_deficit = max(0.0, cumulative_deficit + consumption_kwh - pv_kwh)
+            max_deficit = max(max_deficit, cumulative_deficit)
         return max_deficit
 
     def _get_forecast_kwh_for_hour(self, target_date, hour: int) -> float | None:
@@ -22344,11 +22586,14 @@ class EnergyManagementSystemCoordinator:
 
         # De duurste prijs die vandaag nog komt: dát is wat een
         # vastgehouden kWh straks bespaart.
+        # v5.21: de prijsreeks bestaat uit TUPELS (start, eind, prijs), niet
+        # uit woordenboeken. Deze regel las `e["price_per_kwh"]` en zou na de
+        # saldering met een TypeError omvallen - hij werd tot nu toe nooit
+        # bereikt, omdat de functie zolang de saldering loopt meteen stopt.
         rest = [
-            e["price_per_kwh"]
+            e[2] / PRICE_SCALE_FACTOR
             for e in entries
-            if datetime.fromisoformat(e["start"]) > now
-            and datetime.fromisoformat(e["start"]).date() == now.date()
+            if e[0] > now and e[0].date() == now.date()
         ]
         if not rest:
             return None
@@ -28591,6 +28836,7 @@ class EnergyManagementSystemCoordinator:
             in (
                 "grid_charging_low_solar",
                 "grid_charging_low_solar_extra_dip",
+                "grid_charging_profitable",
                 "emergency_low_battery",
             )
             and charge_power_w
@@ -37627,17 +37873,11 @@ class EnergyManagementSystemCoordinator:
             self._finish_decision_tick(now)
             return
 
-        if should_force_charge:
-            charge_power = self.instelling(CONF_MANUAL_CHARGE_POWER, DEFAULT_MANUAL_CHARGE_POWER)
-            await self._async_apply_manual(charge_power)
-            self.last_reason = "grid_charging_low_solar"
-            self._grid_charged_today = True
-            self.last_charge_power_applied = charge_power
-            self._update_financial_tracking(
-                now, entries, self.last_reason, None, charge_power
-            )
-            self._update_shortfall_detection(now, self.last_reason, self.last_available_kwh, self.last_needed_kwh_to_bridge)
-            self._finish_decision_tick(now)
+        # v5.21: beide laadtakken - bij weinig zon, en omdat het loont - in
+        # een hulpfunctie, zodat deze functie krimpt in plaats van groeit.
+        if await self._laad_uit_het_net_als_nodig(
+            now, entries, should_force_charge, cheap_block_start, cheap_block_end
+        ):
             return
 
         # Extra-dip laden op weinig-zon-dagen (v0.63.87, uitgebreid

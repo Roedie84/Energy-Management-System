@@ -558,6 +558,10 @@ async def async_get_config_entry_diagnostics(
         # ook in een export te staan - anders is het alleen te beoordelen
         # met een schermafdruk.
         "cockpit": _veilig("cockpit_gegevens", coordinator.cockpit_gegevens),
+        # v5.21: het laadbesluit van de laatste ronde, met alle getallen -
+        # prijs nu, latere prijs, rendement, slijtage, gat en marge. Een
+        # besluit dat stuurt, hoort na te kijken te zijn.
+        "laadbesluit": dict(getattr(coordinator, "last_laadbesluit", None) or {}),
         # v5.15.1: de trage keren van de GACS-sensor, met de verdeling over
         # de onderdelen. Werden wel bewaard maar niet geexporteerd.
         "gacs_traagheid": _veilig(

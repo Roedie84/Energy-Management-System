@@ -2322,6 +2322,27 @@ REASON_REGISTRY: dict[str, dict] = {
         "korte_naam": "laden uit het net",
         "emoji": "⚡⬆️",
     },
+    # v5.21: bijladen omdat het LOONT, niet alleen omdat er weinig zon is.
+    # Gemeld: "werkt het bijladen echt goed? Gezien ik dit nu regelmatig
+    # handmatig doe." In vijf dagen koos het EMS nooit zelf voor laden;
+    # beide handmatige laadbeurten van de gebruiker waren rendabel (7,8 en
+    # 10,5 ct/kWh marge na rendement en slijtage).
+    "grid_charging_profitable": {
+        "mode": OPTION_MANUAL,
+        "titel": "Bijladen omdat het loont",
+        "uitleg": (
+            "Stroom is nu goedkoop, en een kWh in de accu is straks meer "
+            "waard dan hij nu kost - ook na het verlies bij opslag en de "
+            "slijtage. De zon vult de accu vandaag niet vanzelf, dus wordt "
+            "het gat bijgeladen."
+        ),
+        "ernst": "ingrijpend",
+        "getallen": True,
+        "label": "bijladen omdat het loont",
+        "waarom_vraag": "Waarom laad je nu uit het net?",
+        "korte_naam": "laden uit het net",
+        "emoji": "⚡⬆️",
+    },
     "grid_charging_low_solar_extra_dip": {
         "mode": OPTION_MANUAL,
         "titel": "Bijladen bij een extra prijsdip",

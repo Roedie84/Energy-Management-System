@@ -28768,3 +28768,80 @@ dagen waarvoor een bedrag bestaat, en deelt het gemiddelde daardoor. Gas
 ging al goed: bedrag en m3 komen van dezelfde sensoren.
 
 **Volledige testsuite**: 4280 tests, allemaal groen.
+
+
+## v5.21 — Bijladen omdat het loont
+
+Gevraagd: *"werkt het bijladen echt goed? Gezien ik dit nu regelmatig
+handmatig doe"*, en daarna: *"het systeem moet zo slim mogelijk en kosten
+effectief zijn."*
+
+### Wat er misging
+
+Het EMS laadde alleen van het net op dagen met **weinig zon**. Op alle
+andere dagen rekende het erop dat de zon de accu vulde - ook als dat niet
+genoeg was en het goedkope blok duidelijk winst opleverde. In vijf dagen
+koos het nooit zelf voor laden. De twee handmatige laadbeurten van de
+gebruiker waren allebei rendabel:
+
+```
+         geladen   prijs     break-even   avondverkoop   marge
+26 sep   6,6 kWh   17,6 ct   32,4 ct      40,3 ct         7,8 ct/kWh
+27 sep   3,1 kWh   13,1 ct   27,1 ct      37,5 ct        10,5 ct/kWh
+```
+
+### De nieuwe regel
+
+In het goedkope blok laadt het EMS bij, zolang twee dingen gelden:
+
+1. **Er is een gat.** Laadruimte min het verwachte zonoverschot tot de
+   duurste kwartieren. Nooit kopen wat de zon gratis levert.
+2. **De volgende kWh loont.** Dezelfde rekenregel als de verkooptoets:
+   `latere prijs x rendement - slijtage`. Wat al in de accu zit gaat naar de
+   duurste kwartieren; de volgende kWh komt in het eerstvolgende kwartier
+   daarna, en dat kwartier bepaalt zijn waarde.
+
+Elke ronde opnieuw bekeken. Naarmate de accu vult schuift dat kwartier naar
+goedkopere momenten, en het laden stopt precies waar het niet meer loont.
+
+Alles op bestaande grootheden: het geleerde rendement, de slijtage uit
+`get_wear_cost_overview`, de prijsreeks, de laadruimte en dezelfde verbruiks-
+en zoninschatting als de reserve.
+
+### Twee keuzes, met reden
+
+- **De voorzichtige zonverwachting zolang de saldering loopt.** Te veel laden
+  kost dan bijna niets: het middagoverschot gaat tegen ongeveer dezelfde
+  middagprijs het net op. Te weinig laden kost de marge. Na de saldering de
+  gewone verwachting.
+- **Geen `_grid_charged_today`.** Die vlag schakelt later de verkoop in de
+  dure kwartieren uit - terecht na laden uit nood op een donkere dag. Hier
+  is die verkoop juist het doel; met de vlag zou het EMS laden voor de
+  avondverkoop en die vervolgens zelf verbieden.
+
+Laden bij weinig zon houdt voorrang. Nieuwe reden in het register:
+`grid_charging_profitable`, "Bijladen omdat het loont", met de getallen van
+het besluit zelf in de waarom-regel.
+
+### Eén definitie van verbruik en zon
+
+De lus uit `_estimate_worst_case_deficit_kwh` is eruit gehaald als
+`_segmenten_verbruik_zon`, zodat het tekort en het zonoverschot op exact
+dezelfde inschatting rusten. Alle tekorttoetsen bleven ongewijzigd groen.
+
+### Een verborgen fout in de verkooptoets
+
+`_verkoop_loont_na_saldering` las de prijsreeks als woordenboeken
+(`e["price_per_kwh"]`), terwijl hij uit tupels bestaat. Hij viel nooit om
+omdat hij zolang de saldering loopt meteen stopt - na de saldering zou het
+een TypeError zijn geweest. De toetsen bouwden hun prijsreeks in diezelfde
+verkeerde vorm en bevestigden de fout daardoor. Beide rechtgezet; met de
+echte vorm slagen alle oorspronkelijke verwachtingen.
+
+### Bekende beperking
+
+Het kwartierplan voorspelt laden uit het net niet - ook niet bij weinig zon,
+en dat was al zo. "Volgende actie" op de cockpit toont het laden dus pas als
+het gebeurt.
+
+**Volledige testsuite**: 4290 tests, allemaal groen.
