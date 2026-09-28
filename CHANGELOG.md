@@ -28845,3 +28845,113 @@ en dat was al zo. "Volgende actie" op de cockpit toont het laden dus pas als
 het gebeurt.
 
 **Volledige testsuite**: 4290 tests, allemaal groen.
+
+
+## v5.22 — Verkopen op prijs, laden in het plan, en besluit tegenover actie
+
+Gevraagd: *"zijn er nog zaken te verbeteren?"* - vijf punten - en daarna:
+*"nee, alles bouwen"*.
+
+### 1. Verkopen in de duurste piek
+
+Het laden rekent sinds v5.21 per kWh. Het verkopen stopte tot nu toe op de
+reserve, ongeacht wat de rest van de nacht kost.
+
+De kWh zit al in de accu. Rendement en slijtage zijn gelijk of hij nu
+verkocht wordt of later het huis dekt. Dus telt alleen: **wat is duurder,
+nu verkopen of later inkopen?** Het tekort dat de verkoop veroorzaakt wordt
+ergens tussen nu en het volgende goedkope blok ingekocht - hoogstens tegen
+het duurste kwartier dat nog komt. Is de prijs nu hoger dan dat, dan levert
+verkopen altijd meer op dan het inkopen kost.
+
+Twee grenzen:
+
+- **Nooit door de bodem.** De eerste versie deed dat wel - en twee
+  bestaande toetsen vielen erop om. De bodem kwam er na de nacht van 30 op
+  31 augustus (voorspeld 52% over, werkelijk 17%): hij is de buffer tegen
+  een voorspelling die ernaast zit. Is de bodem onbekend, dan geen
+  piekverkoop.
+- **De import daarna is verklaard** tot het volgende goedkope blok
+  (`piekverkoop_tot`, bewaard over een herstart). Anders telt hij als
+  onverwachte tekortdag, drijft hij de marge op, en straft het EMS zijn
+  eigen goede besluit de dagen erna af.
+
+Nieuwe reden: `expensive_quarter_peak`, "Verkopen in de duurste piek".
+
+### 2. De verbruiksinschatting - geen fout
+
+Onderzocht, niet veranderd. Mediaan tegen gemiddelde scheelt 3% (6,02 tegen
+6,22 kWh). Het profiel bevat het witgoed gewoon; de dag van het verschil
+was simpelweg zwaarder dan gemiddeld. De reserve (6,77 kWh) lag ruim boven
+wat werkelijk nodig was (5,81 kWh). Zonder aantoonbare reden verandert er
+niets.
+
+### 3. Alles wat pas na de saldering draait
+
+Vier paden gaan in 2027 anders. Alleen de verkooptoets was stuk (hersteld
+in v5.21). Een nieuwe toetsmodule, `test_na_de_saldering.py`, doorloopt ze
+alle vier met de saldering UIT en gegevens in hun echte vorm.
+
+### 4. Het kwartierplan voorspelt laden en piekverkoop
+
+De kern van het laadbesluit is nu één zuivere rekenregel, `_laadregel`,
+die zowel de beslissing (met de gemeten stand) als het plan (met de
+gesimuleerde stand) gebruikt. "Volgende actie" toont laden voortaan
+vooraf, niet pas als het gebeurt. De piekverkoop staat met dezelfde grenzen
+in het plan.
+
+### 5. Besluit tegenover actie
+
+Punt 9 uit de cockpit-opdracht. `_volg_handmatige_ingrepen` controleerde
+de STAND; `_volg_richting` controleert nu de RICHTING. Draagt het EMS laden
+op en ontlaadt de accu - of andersom - dan volgt na
+`HANDMATIGE_INGREEP_MIN_DUUR_MINUTEN` een aandachtspunt: dezelfde grens als
+de standcontrole, geen nieuwe. Stilstand telt niet (een volle accu kan niet
+laden); de slimme standen niet (daar volgt de Zendure zelf de P1-meter).
+
+De toets ving onderweg een `NameError` in het aandachtspunt - die zou pas
+zijn opgetreden op het moment dat de accu echt tegen het besluit in ging.
+
+**Volledige testsuite**: 4310 tests, allemaal groen.
+
+
+## v5.23 — De doorklik achter de cockpit
+
+Gevraagd: *"graag verwerken wat nog openstaat, zodat de integratie weer
+helemaal up to date is."* Twee punten uit de cockpit-opdracht stonden nog
+open:
+
+- AANDACHT aanklikbaar, *"zodat ik kan zien welke aandachtspunten actief
+  zijn"*;
+- *"als ik wil weten WAAROM de reserve 4,60 kWh bedraagt, moet dat via
+  doorklik beschikbaar zijn, gebaseerd op de daadwerkelijke Dynamic
+  Reserve-berekening."*
+
+### Twee knoppen onder de plaat
+
+De plaat staat in een markdown-kaart, en die kent geen tikactie. Daarom een
+rij van twee knoppen eronder:
+
+```
+Aandachtspunten   ->  Meetkwaliteit  (met de kaart Aandachtspunten)
+Reserve-opbouw    ->  Reservemarge   (met de uitsplitsing van de reserve)
+```
+
+Beide pagina's bestonden al. De eerste versie maakte een eigen
+detailpagina; de dashboardregels vingen dat - een pagina met twee kaarten
+hoort samengevoegd, en het aantal pagina's ligt vast. Die pagina was dubbel.
+
+### De reservekaart is compleet
+
+De verschuiving op de P1-meter (v5.20) en de bodem (v3.92.1) zaten wel in de
+berekening, maar niet in de uitsplitsing die de kaart toont. Nu wel:
+
+> In het diepste tekort zit de verschuiving op de P1-meter: 50 W, de hele
+> nacht. Bodem: 1,30 kWh - daaronder wordt nooit verkocht, ook niet in de
+> duurste piek.
+
+De zin komt uit de coordinator (`_verschuiving_en_bodem_zin`), niet uit het
+sjabloon: logica in een dashboardveld gaat stil kapot (v3.95.4), en de
+sjabloonratel hield dat tegen.
+
+**Volledige testsuite**: 4315 tests, allemaal groen.

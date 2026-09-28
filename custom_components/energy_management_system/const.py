@@ -2294,6 +2294,27 @@ REASON_REGISTRY: dict[str, dict] = {
         "korte_naam": "verkopen (met reserve)",
         "emoji": "🛡️",
     },
+    # v5.22: verkopen ONDER de reserve, alleen als de prijs nu hoger is dan
+    # elk kwartier dat nog komt tot het volgende goedkope blok. De kWh zit
+    # al in de accu: rendement en slijtage zijn voor nu verkopen of later
+    # het huis dekken gelijk. Dus telt alleen: nu verkopen of later inkopen,
+    # wat is duurder? Is nu het duurst, dan levert verkopen altijd meer op
+    # dan het inkopen later kost.
+    "expensive_quarter_peak": {
+        "mode": OPTION_MANUAL,
+        "titel": "Verkopen in de duurste piek",
+        "uitleg": (
+            "De prijs is nu hoger dan elk kwartier dat nog komt tot het "
+            "volgende goedkope blok. Nu verkopen en later inkopen levert dus "
+            "meer op dan de energie bewaren - ook onder de reserve."
+        ),
+        "ernst": "ingrijpend",
+        "getallen": True,
+        "label": "verkopen in de duurste piek",
+        "waarom_vraag": "Waarom verkoop je onder de reserve?",
+        "korte_naam": "piekverkoop",
+        "emoji": "💰⬇️",
+    },
     "expensive_quarter": {
         "mode": OPTION_MANUAL,
         "titel": "Duur kwartier",
@@ -3357,6 +3378,9 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "prijs_gisteren": {"type": "plain"},
     # v5.18: besluit, uitleg en redenen als EEN momentopname.
     "besluit_snapshot": {"type": "plain"},
+    # v5.22: tot wanneer import verklaard is na een bewuste piekverkoop -
+    # bewaard, zodat een herstart 's nachts geen valse tekortdag oplevert.
+    "piekverkoop_tot": {"type": "plain"},
     # v5.9: waarom het rendementsleren niets oplevert.
     "rendement_afwijzingen": {"type": "plain"},
     # v5.11: het nachtelijke ontlaadvenster. Werd niet bewaard, dus een

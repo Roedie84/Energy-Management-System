@@ -562,6 +562,12 @@ async def async_get_config_entry_diagnostics(
         # prijs nu, latere prijs, rendement, slijtage, gat en marge. Een
         # besluit dat stuurt, hoort na te kijken te zijn.
         "laadbesluit": dict(getattr(coordinator, "last_laadbesluit", None) or {}),
+        # v5.22: de piekverkoop en de richtingscontrole, met hun getallen.
+        "piekverkoop": {
+            **dict(getattr(coordinator, "last_piekverkoop", None) or {}),
+            "import_verklaard_tot": getattr(coordinator, "piekverkoop_tot", None),
+        },
+        "richting_afwijking": getattr(coordinator, "richting_afwijking", None),
         # v5.15.1: de trage keren van de GACS-sensor, met de verdeling over
         # de onderdelen. Werden wel bewaard maar niet geexporteerd.
         "gacs_traagheid": _veilig(

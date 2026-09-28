@@ -540,6 +540,22 @@ views:
     cards:
     - type: markdown
       content: '{{ state_attr(''sensor.woonkamer_energy_management_system_cockpit'', ''plaat'') }}'
+    - type: horizontal-stack
+      cards:
+      - type: button
+        name: Aandachtspunten
+        icon: mdi:alert-circle-outline
+        show_state: false
+        tap_action:
+          action: navigate
+          navigation_path: /energy-management-system/detail-kwaliteit
+      - type: button
+        name: Reserve-opbouw
+        icon: mdi:battery-lock
+        show_state: false
+        tap_action:
+          action: navigate
+          navigation_path: /energy-management-system/detail-reservemarge
 - title: Meldingen
   path: meldingen
   subview: true
@@ -1305,7 +1321,9 @@ views:
 
         {% for o in m.onderdelen %}| {{ o.naam }} | {{ o.procent }}% | {{ o.soort }} |
 
-        {% endfor %}{% endif %}'
+        {% endfor %}
+
+        {{ m.verschuiving_en_bodem_zin or '''' }}{% endif %}'
       grid_options:
         columns: 12
         rows: auto

@@ -448,7 +448,11 @@ def test_the_visual_page_is_a_panel_again():
     # herkent het tweede blok dan niet meer als HTML.
     stapel = pagina["cards"][0]
     assert stapel["type"] == "vertical-stack"
-    assert all(k["type"] == "markdown" for k in stapel["cards"])
+    # v5.23: de platen zijn markdown; daaronder mag EEN rij knoppen staan
+    # naar de details (aandachtspunten en reserve-opbouw) - dat is geen
+    # tweede plaat, en de plaat zelf kent geen tikactie.
+    platen = [k for k in stapel["cards"] if k["type"] != "horizontal-stack"]
+    assert all(k["type"] == "markdown" for k in platen)
 
 
 def test_only_the_cockpit_is_shown_on_the_visual_page():
@@ -468,7 +472,8 @@ def test_only_the_cockpit_is_shown_on_the_visual_page():
         (Path(pkg.__file__).parent / "dashboard_template.yaml").read_text()
     )
     pagina = next(v for v in data["views"] if v.get("path") == "visueel")
-    inhoud = [k["content"] for k in pagina["cards"][0]["cards"]]
+    # v5.23: alleen de kaarten met inhoud - de knoppenrij heeft geen inhoud.
+    inhoud = [k["content"] for k in pagina["cards"][0]["cards"] if "content" in k]
 
     # v5.19: de cockpitsensor beweegt mee met de metingen.
     assert any("_cockpit" in c and "plaat" in c for c in inhoud)

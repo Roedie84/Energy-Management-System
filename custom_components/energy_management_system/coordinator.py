@@ -1303,7 +1303,7 @@ class EnergyManagementSystemCoordinator:
         # een regel - `__init__` staat op de ratel.
         # v3.99.19: `dagverloop` en `nabeschouwingen` erbij, in dezelfde
         # regel - `__init__` staat op de ratel.
-        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen, self.safe_sell_shadow, self.reden_afwijkingen, self.meting_laatst_gevuld, self.weerbron_keuze, self.voorspellingsverloop, self._geladen_opslag, self.rendement_afwijzingen, self.weerbron_levering, self.weather_ensemble_readings_alle, self.instraling_verhouding, self.ventilator_kwh_per_dag, self._ventilator_vermogens_aan, self.gacs_traag, self.gacs_duur_ms, self._pv_model_bezig, self.gacs_traagste, self.prijs_vandaag, self.prijs_gisteren, self.besluit_snapshot, self._cockpit_context, self.last_laadbesluit = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, [], [], {}, {}, {}, {}, None, {}, {}, {}, {}, {}, [], [], None, False, None, {}, {}, {}, {}, {}
+        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen, self.safe_sell_shadow, self.reden_afwijkingen, self.meting_laatst_gevuld, self.weerbron_keuze, self.voorspellingsverloop, self._geladen_opslag, self.rendement_afwijzingen, self.weerbron_levering, self.weather_ensemble_readings_alle, self.instraling_verhouding, self.ventilator_kwh_per_dag, self._ventilator_vermogens_aan, self.gacs_traag, self.gacs_duur_ms, self._pv_model_bezig, self.gacs_traagste, self.prijs_vandaag, self.prijs_gisteren, self.besluit_snapshot, self._cockpit_context, self.last_laadbesluit, self.last_piekverkoop, self.piekverkoop_tot, self.richting_afwijking, self._richting_sinds = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, [], [], {}, {}, {}, {}, None, {}, {}, {}, {}, {}, [], [], None, False, None, {}, {}, {}, {}, {}, {}, None, None, None
         self.handmatige_ingrepen: list[dict] = []
         # v1.1.6: met welke meetmethode de bewaarde foutreeks tot stand
         # is gekomen. Verandert de methode, dan wordt die reeks eenmalig
@@ -9402,6 +9402,7 @@ class EnergyManagementSystemCoordinator:
             "grid_charging_low_solar",
             "grid_charging_low_solar_extra_dip",
             "grid_charging_profitable",
+            "expensive_quarter_peak",
         ):
             return self._waarom_bij_laden(reden, gemeenschappelijk, _blok_tekst())
 
@@ -10918,6 +10919,62 @@ class EnergyManagementSystemCoordinator:
                 continue
             schoon.append(regel)
         self.handmatige_ingrepen = schoon
+
+    # Welke redenen een richting OPDRAGEN (handmatig vermogen). In de
+    # slimme standen beslist de Zendure zelf over de richting - hij volgt de
+    # P1-meter - en is er niets te controleren.
+    _REDENEN_LADEN = (
+        "grid_charging_low_solar",
+        "grid_charging_low_solar_extra_dip",
+        "grid_charging_profitable",
+        "emergency_low_battery",
+    )
+    _REDENEN_ONTLADEN = ("expensive_quarter", "expensive_quarter_peak")
+
+    def _volg_richting(self, now: datetime) -> None:
+        """Doet de accu wat het EMS opdroeg? (v5.22)
+
+        Punt 9 uit de cockpit-opdracht: "RESERVE VASTHOUDEN terwijl de
+        feitelijke control action iets anders doet" mag niet stilzwijgend
+        getoond worden.
+
+        `_volg_handmatige_ingrepen` controleert de STAND van de Zendure. Dit
+        controleert de RICHTING: het EMS draagt laden op en de accu ontlaadt,
+        of andersom. Alleen bij redenen die een vermogen opdragen; in de
+        slimme standen volgt de Zendure zelf de P1-meter.
+
+        Stilstand telt niet als afwijking - een volle accu kan niet laden,
+        een lege niet ontladen. Alleen de TEGENOVERGESTELDE richting.
+
+        Dezelfde grens als de standcontrole: het verschil moet
+        HANDMATIGE_INGREEP_MIN_DUUR_MINUTEN aanhouden, zodat de ronde waarin
+        een commando net is verstuurd geen valse melding geeft.
+        """
+        reden = self.last_reason
+        if reden in self._REDENEN_LADEN:
+            verwacht = "LADEN"
+        elif reden in self._REDENEN_ONTLADEN:
+            verwacht = "ONTLADEN"
+        else:
+            verwacht = None
+        gemeten = self.accu_stand()
+        tegen = (verwacht, gemeten) in (("LADEN", "ONTLADEN"), ("ONTLADEN", "LADEN"))
+        if not tegen or self.learning_only or self.force_manual:
+            self._richting_sinds = None
+            self.richting_afwijking = None
+            return
+        if self._richting_sinds is None:
+            self._richting_sinds = now
+            return
+        duur = (now - self._richting_sinds).total_seconds() / 60
+        if duur >= HANDMATIGE_INGREEP_MIN_DUUR_MINUTEN:
+            self.richting_afwijking = {
+                "sinds": self._richting_sinds.isoformat(),
+                "reden": reden,
+                "verwacht": verwacht,
+                "gemeten": gemeten,
+                "accu_w": self._read_corrected_battery_power(),
+            }
 
     def _volg_handmatige_ingrepen(self, now: datetime) -> None:
         """Legt vast wanneer de accu anders staat dan EMS wilde
@@ -19275,6 +19332,17 @@ class EnergyManagementSystemCoordinator:
         Bij laden omdat het loont: de getallen van het laadbesluit ZELF -
         dezelfde die de beslissing namen, niet achteraf opnieuw berekend.
         """
+        if reden == "expensive_quarter_peak":
+            piek = self.last_piekverkoop or {}
+            if piek.get("prijs_nu_eur") is None:
+                return list(gemeenschappelijk)
+            return [
+                f"de prijs is nu {piek['prijs_nu_eur'] * 100:.1f} ct",
+                f"het duurste kwartier tot het volgende goedkope blok kost "
+                f"{piek['duurste_later_eur'] * 100:.1f} ct",
+                f"nu verkopen en later inkopen levert minstens "
+                f"{piek['winst_ct_per_kwh']:.1f} ct per kWh op, ook onder de reserve",
+            ]
         if reden != "grid_charging_profitable":
             regels = list(gemeenschappelijk)
             regels.append("er wordt weinig zon verwacht, dus bijladen uit het net")
@@ -19393,32 +19461,64 @@ class EnergyManagementSystemCoordinator:
         ) / 1000
         per_kwartier = max(ontlaad_kw * 0.25, 0.05)
         salderen = self._is_salderen_active(now)
+        def zonoverschot_tot(moment: datetime) -> float | None:
+            if moment <= now:
+                return 0.0
+            return self._verwacht_zonoverschot_kwh(now, moment, veilig=salderen)
+
+        uit.update(
+            self._laadregel(
+                prijs_nu=prijs_nu,
+                beschikbaar=self.beschikbare_energie_kwh() or 0.0,
+                ruimte=ruimte,
+                later=later,
+                rendement=rendement,
+                slijtage_ct=slijtage_ct,
+                per_kwartier=per_kwartier,
+                zonoverschot=zonoverschot_tot,
+            )
+        )
+        uit["voorzichtige_zon"] = salderen
+        return uit
+
+    @staticmethod
+    def _laadregel(
+        *,
+        prijs_nu: float,
+        beschikbaar: float,
+        ruimte: float,
+        later: list,
+        rendement: float,
+        slijtage_ct: float,
+        per_kwartier: float,
+        zonoverschot,
+    ) -> dict:
+        """De kern van het laadbesluit, zonder live gegevens (v5.22).
+
+        Eén rekenregel voor de BESLISSING (met de gemeten stand) en het
+        KWARTIERPLAN (met de gesimuleerde stand), zodat het plan precies
+        voorspelt wat de beslissing straks doet - geen tweede definitie.
+
+        `later` is een lijst (prijs, moment) van hoog naar laag;
+        `zonoverschot(tot)` geeft het verwachte zonoverschot tot `tot`.
+        """
         # Het kwartier waarin de VOLGENDE kWh terechtkomt: na de kwartieren
         # die de lading van nu al vult.
-        beschikbaar = self.beschikbare_energie_kwh() or 0.0
         k = int(beschikbaar // per_kwartier) + 1
         if k > len(later):
-            uit["reden"] = "de lading van nu dekt alle latere kwartieren al"
-            return uit
+            return {"laden": False, "reden": "de lading van nu dekt alle latere kwartieren al"}
         zon_tot = min(moment for _p, moment in later[:k])
-        overschot = (
-            self._verwacht_zonoverschot_kwh(now, zon_tot, veilig=salderen)
-            if zon_tot > now
-            else 0.0
-        )
+        overschot = zonoverschot(zon_tot)
         if overschot is None:
-            uit["reden"] = "geen verbruiksinschatting"
-            return uit
+            return {"laden": False, "reden": "geen verbruiksinschatting"}
         gat = ruimte - overschot
-        uit.update(
-            {
-                "prijs_nu_eur": round(prijs_nu, 4),
-                "ruimte_kwh": round(ruimte, 2),
-                "zonoverschot_kwh": round(overschot, 2),
-                "gat_kwh": round(gat, 2),
-                "voorzichtige_zon": salderen,
-            }
-        )
+        uit = {
+            "prijs_nu_eur": round(prijs_nu, 4),
+            "ruimte_kwh": round(ruimte, 2),
+            "zonoverschot_kwh": round(overschot, 2),
+            "gat_kwh": round(gat, 2),
+            "laden": False,
+        }
         if gat <= 0:
             uit["reden"] = "de zon vult de accu vandaag vanzelf"
             return uit
@@ -20555,6 +20655,23 @@ class EnergyManagementSystemCoordinator:
             return None
         return statistics.median(values)
 
+    @staticmethod
+    def _verschuiving_en_bodem_zin(u: dict) -> str:
+        """De verschuiving en de bodem in gewone taal, voor de reservekaart (v5.23)."""
+        delen = []
+        if u.get("regelverschuiving_w"):
+            delen.append(
+                f"In het diepste tekort zit de verschuiving op de P1-meter: "
+                f"{u['regelverschuiving_w']} W, de hele nacht."
+            )
+        if u.get("bodem_kwh") is not None:
+            delen.append(
+                f"Bodem: {u['bodem_kwh']:.2f} kWh".replace(".", ",")
+                + " - daaronder wordt nooit verkocht, ook niet in de duurste piek."
+                + (" De bodem is nu bindend." if u.get("bodem_bindend") else "")
+            )
+        return " ".join(delen)
+
     def get_reserve_margin_overview(self) -> dict:
         """Hoe de reservemarge is opgebouwd (v1.87.0).
 
@@ -20655,6 +20772,15 @@ class EnergyManagementSystemCoordinator:
             ],
             "diepste_tekort_kwh": u.get("needed_kwh_before_margin"),
             "reserve_kwh": u.get("reserve_kwh_after_margin"),
+            # v5.23: voor de doorklik "waarom is de reserve zo hoog" - de
+            # verschuiving op de P1-meter (v5.20) en de bodem (v3.92.1)
+            # stonden wel in de berekening, maar niet in deze uitsplitsing.
+            "regelverschuiving_w": u.get("regelverschuiving_w"),
+            "bodem_kwh": u.get("bodem_kwh"),
+            "bodem_bindend": u.get("bodem_bindend"),
+            # De zin voor de kaart komt HIER vandaan, niet uit een sjabloon:
+            # logica in een dashboardveld gaat stil kapot (v3.95.4).
+            "verschuiving_en_bodem_zin": self._verschuiving_en_bodem_zin(u),
             "toelichting": (
                 "De marge staat bovenop het diepste tekort onderweg. Elke "
                 "tekortdag verhoogt hem met 5 procentpunt, elke dag met "
@@ -21002,6 +21128,92 @@ class EnergyManagementSystemCoordinator:
             cache[sleutel] = max(bodem, reserve or 0.0)
         return cache[sleutel]
 
+    def _plan_netregels(self, now: datetime, entries, blok_drempel_voor) -> dict:
+        """Wat het plan nodig heeft om laden en piekverkoop te voorspellen (v5.22).
+
+        Dezelfde grootheden als de beslissing: het geleerde rendement, de
+        slijtage, de saldering, de prijsreeks. Plus per kwartier het
+        DUURSTE kwartier dat nog komt tot het volgende goedkope blok - de
+        grens voor de piekverkoop.
+        """
+        rendement = self.learned_battery_efficiency_percent
+        if rendement is None:
+            rendement = float(
+                self.instelling(
+                    CONF_BATTERY_ROUND_TRIP_EFFICIENCY,
+                    DEFAULT_BATTERY_ROUND_TRIP_EFFICIENCY_PERCENT,
+                )
+            )
+        reeks = [(b, p / PRICE_SCALE_FACTOR) for b, _e, p in entries]
+        duurste_tot_blok: dict = {}
+        duurste = float("-inf")
+        for begin, prijs in reversed(reeks):
+            # De grens voor dit kwartier is het duurste van wat ERNA komt,
+            # tot het volgende goedkope blok.
+            duurste_tot_blok[begin] = duurste
+            if prijs <= blok_drempel_voor(begin):
+                duurste = float("-inf")
+            else:
+                duurste = max(duurste, prijs)
+        return {
+            "rendement": rendement,
+            "slijtage_ct": (self.get_wear_cost_overview() or {}).get("slijtage_ct_per_kwh"),
+            "salderen": self._is_salderen_active(now),
+            "reeks": reeks,
+            "duurste_tot_blok": duurste_tot_blok,
+            # De bodem uit de reserveberekening; onbekend = geen piekverkoop.
+            "bodem_kwh": (self.last_reserve_margin_breakdown or {}).get(
+                "bodem_kwh", float("inf")
+            )
+            or float("inf"),
+        }
+
+    def _plan_laadt(
+        self,
+        netregels: dict,
+        einde: datetime,
+        prijs: float,
+        soc: float,
+        bruikbaar: float,
+        laad_kwh: float,
+        per_kwartier: float,
+    ) -> float:
+        """Hoeveel het plan in dit blokkwartier laadt - via `_laadregel` (v5.22)."""
+        if netregels.get("slijtage_ct") is None or per_kwartier <= 0:
+            return 0.0
+        later = sorted(
+            (
+                (p, b)
+                for b, p in netregels["reeks"]
+                if einde <= b < einde + timedelta(hours=24)
+            ),
+            key=lambda paar: paar[0],
+            reverse=True,
+        )
+        if not later:
+            return 0.0
+
+        def zonoverschot_tot(moment: datetime) -> float | None:
+            if moment <= einde:
+                return 0.0
+            return self._verwacht_zonoverschot_kwh(
+                einde, moment, veilig=netregels["salderen"]
+            )
+
+        regel = self._laadregel(
+            prijs_nu=prijs,
+            beschikbaar=soc,
+            ruimte=max(0.0, bruikbaar - soc),
+            later=later,
+            rendement=netregels["rendement"],
+            slijtage_ct=netregels["slijtage_ct"],
+            per_kwartier=per_kwartier,
+            zonoverschot=zonoverschot_tot,
+        )
+        if not regel.get("laden"):
+            return 0.0
+        return max(0.0, min(laad_kwh, regel["gat_kwh"], bruikbaar - soc))
+
     def get_quarter_plan(self, now: datetime | None = None) -> list[dict]:
         """Verwachte planning per kwartier (v1.22.2).
 
@@ -21099,6 +21311,9 @@ class EnergyManagementSystemCoordinator:
         def reserve_op(moment: datetime) -> float:
             return self._planning_reserve_kwh(moment, reserve_cache)
 
+        # v5.22: laden en piekverkoop in het plan, met DEZELFDE regels als de
+        # beslissing. "Volgende actie" toonde laden pas als het gebeurde.
+        netregels = self._plan_netregels(now, entries, _blok_drempel_voor)
         for start, einde, prijs_ruw in entries:
             # v1.24.2: `_get_forecast_entries` geeft de RAUWE waarde
             # (3181681), niet euro's. Zonder deling werd de verwachte
@@ -21172,9 +21387,19 @@ class EnergyManagementSystemCoordinator:
             # het net hangt. Dat is geen gewone regel in de tabel maar
             # een waarschuwing.
             tekort = False
-            if duur_kwartier and soc >= duur_kwh * 0.5 and soc > reserve_op(start):
+            if duur_kwartier and soc >= duur_kwh * 0.5 and (
+                soc > reserve_op(start)
+                or (
+                    prijs > netregels["duurste_tot_blok"].get(start, float("inf"))
+                    and soc > netregels["bodem_kwh"]
+                )
+            ):
                 modus = "manual (verkopen)"
-                uit = min(soc, duur_kwh)
+                # Onder de reserve (piekverkoop): nooit door de bodem heen.
+                uit = min(
+                    soc - (netregels["bodem_kwh"] if soc <= reserve_op(start) else 0.0),
+                    duur_kwh,
+                )
                 soc -= uit
                 net = round(-(uit - verbruik + zon), 3)
             elif uitstellen:
@@ -21185,6 +21410,14 @@ class EnergyManagementSystemCoordinator:
                 if uit < verbruik - zon:
                     tekort = True
                 net = round(-(zon - (verbruik - uit)), 3)
+            elif in_blok and (
+                geladen := self._plan_laadt(
+                    netregels, einde, prijs, soc, bruikbaar, laad_kwh, duur_kwh
+                )
+            ) > 0:
+                modus = "manual (laden)"
+                soc += geladen
+                net = round(geladen + verbruik - zon, 3)
             else:
                 modus = "smart"
                 over = max(0.0, zon - verbruik)
@@ -23945,6 +24178,13 @@ class EnergyManagementSystemCoordinator:
         kan en er toch import is. Regelfouten van tientallen watt zijn
         normaal, dus de grens heeft een kleine marge.
         """
+        # v5.22: na een bewuste piekverkoop onder de reserve is import tot
+        # het volgende goedkope blok VERKLAARD - dat was de afspraak van die
+        # verkoop. Anders telt hij als onverwachte tekortdag en drijft de
+        # marge op.
+        tot = dt_util.parse_datetime(self.piekverkoop_tot or "")
+        if tot is not None and dt_util.now() < tot:
+            return True
         battery_entity = self.config.get(CONF_BATTERY_POWER_SENSOR)
         if not battery_entity:
             return False
@@ -24104,7 +24344,11 @@ class EnergyManagementSystemCoordinator:
         # Zelfvoorzienend is: de accu ontlaadt (slim of handmatig).
         zelfvoorzienend = (
             REASON_TO_MODE.get(reason) == OPTION_SMART_DISCHARGING
-            or reason in ("expensive_quarter", "expensive_quarter_soc_protected")
+            or reason in (
+                "expensive_quarter",
+                "expensive_quarter_soc_protected",
+                "expensive_quarter_peak",
+            )
         )
         if not zelfvoorzienend:
             return
@@ -24337,6 +24581,100 @@ class EnergyManagementSystemCoordinator:
         # Bounded history, same window as energy_bridge_transition_log.
         self.discharge_floor_events = self.discharge_floor_events[-50:]
 
+    def _piekverkoop(
+        self,
+        now: datetime,
+        entries,
+        cheap_block_start: datetime | None,
+        beschikbaar_kwh: float | None,
+    ) -> dict:
+        """Loont het om nu ONDER de reserve te verkopen? (v5.22)
+
+        Gevraagd: "het systeem moet zo slim mogelijk en kosten effectief
+        zijn". Het laden rekent sinds v5.21 per kWh; het verkopen stopte
+        tot nu toe op de reserve, ongeacht wat de rest van de nacht kost.
+
+        De kWh zit al in de accu. Rendement en slijtage zijn gelijk of hij
+        nu verkocht wordt of later het huis dekt. Dus telt alleen: wat is
+        duurder, nu verkopen of later inkopen? Het tekort dat de verkoop
+        veroorzaakt, wordt ergens tussen nu en het volgende goedkope blok
+        ingekocht - hoogstens tegen het duurste kwartier dat nog komt. Ligt
+        de prijs NU daarboven, dan levert verkopen altijd meer op dan het
+        inkopen kost.
+        """
+        prijs_nu = self._get_current_price_per_kwh(entries or [], now)
+        if prijs_nu is None or not beschikbaar_kwh or beschikbaar_kwh <= 0:
+            return {"verkopen": False, "reden": "prijs of lading onbekend"}
+        tot = (
+            cheap_block_start
+            if cheap_block_start is not None and cheap_block_start > now
+            else now + timedelta(hours=24)
+        )
+        later = [
+            p / PRICE_SCALE_FACTOR
+            for begin, _eind, p in (entries or [])
+            if now + timedelta(minutes=15) <= begin < tot
+        ]
+        if not later:
+            return {"verkopen": False, "reden": "geen prijzen tot het blok"}
+        duurste_later = max(later)
+        return {
+            "verkopen": prijs_nu > duurste_later,
+            "prijs_nu_eur": round(prijs_nu, 4),
+            "duurste_later_eur": round(duurste_later, 4),
+            "winst_ct_per_kwh": round((prijs_nu - duurste_later) * 100, 1),
+            "tot": tot.isoformat(),
+            "reden": (
+                "nu duurder dan elk kwartier dat nog komt"
+                if prijs_nu > duurste_later
+                else "er komt nog een duurder kwartier"
+            ),
+        }
+
+    def _geen_ruimte_boven_reserve(
+        self,
+        now: datetime,
+        entries,
+        cheap_block_start: datetime | None,
+        available_kwh: float | None,
+        reserve_kwh: float | None,
+        base_power: float,
+        interval_hours: float,
+    ) -> float | None:
+        """Wat te doen als de reserve geen ruimte laat (v5.22).
+
+        Tot nu toe: niets, en de Zendure regelt zelf. Nu eerst de vraag of
+        dit het duurste kwartier is tot het volgende goedkope blok; dan
+        loont verkopen onder de reserve. De import die daarna volgt is
+        VERKLAARD tot dat blok (`piekverkoop_tot`), zodat hij niet als
+        onverwachte tekortdag telt en de marge opdrijft - anders zou het EMS
+        zijn eigen goede besluit de dagen erna afstraffen.
+        """
+        piek = self._piekverkoop(now, entries, cheap_block_start, available_kwh)
+        # NOOIT door de bodem heen. De bodem kwam er na de nacht van 30 op 31
+        # augustus (voorspeld 52% over, werkelijk 17%): hij is de buffer
+        # tegen een voorspelling die ernaast zit. Onder de reserve verkopen
+        # mag, tot de bodem - en is de bodem onbekend, dan niet.
+        bodem = (self.last_reserve_margin_breakdown or {}).get("bodem_kwh")
+        boven_bodem = (available_kwh or 0.0) - bodem if bodem is not None else 0.0
+        if piek.get("verkopen") and boven_bodem <= 0:
+            piek = {**piek, "verkopen": False, "reden": "de bodem is bereikt"}
+        self.last_piekverkoop = piek
+        if piek.get("verkopen"):
+            self.piekverkoop_tot = piek["tot"]
+            vermogen = min(base_power, boven_bodem / interval_hours * 1000)
+            self.last_discharge_power_applied = round(vermogen, 1)
+            return round(vermogen, 1)
+        self.last_discharge_power_applied = None
+        _LOGGER.debug(
+            "Dynamic discharge reserve: available=%.2f kWh, needed reserve=%.2f "
+            "kWh - no headroom, skipping forced discharge this tick (%s)",
+            available_kwh or 0.0,
+            reserve_kwh or 0.0,
+            piek.get("reden"),
+        )
+        return None
+
     def _get_soc_scaled_discharge_power(
         self,
         base_power: float,
@@ -24427,16 +24765,12 @@ class EnergyManagementSystemCoordinator:
                     # So: no headroom -> no manual command at all, let
                     # the caller fall through to smart mode (see
                     # `expensive_quarter_soc_protected`).
-                    self.last_discharge_power_applied = None
-                    _LOGGER.debug(
-                        "Dynamic discharge reserve: available=%.2f kWh, "
-                        "needed reserve=%.2f kWh - no headroom, skipping "
-                        "forced discharge this tick (smart mode's own "
-                        "P1-following already avoids import)",
-                        available_kwh,
-                        reserve_kwh,
+                    # v5.22: eerst kijken of dit het duurste kwartier is tot
+                    # het volgende goedkope blok - zie `_piekverkoop`.
+                    return self._geen_ruimte_boven_reserve(
+                        now, entries, cheap_block_start, available_kwh,
+                        reserve_kwh, base_power, interval_hours or 0.25,
                     )
-                    return None
 
                 if entries is not None and not self._is_worth_discharging_now(
                     entries, now, headroom_kwh, base_power
@@ -28811,7 +29145,7 @@ class EnergyManagementSystemCoordinator:
         if current_price is None:
             return
 
-        if reason == "expensive_quarter" and discharge_power_w:
+        if reason in ("expensive_quarter", "expensive_quarter_peak") and discharge_power_w:
             energy_kwh = (discharge_power_w / 1000) * elapsed_hours
 
             export_kwh, load_kwh = self._split_discharge_export_vs_load(
@@ -33139,6 +33473,17 @@ class EnergyManagementSystemCoordinator:
                 "rekent daardoor met een oude, bevroren waarde. Zie "
                 "rendement_afwijzingen in de export voor de reden."
             )
+        # v5.22: het EMS draagt een richting op en de accu doet het
+        # tegenovergestelde - zie `_volg_richting`.
+        afwijking = self.richting_afwijking
+        if afwijking:
+            uit.append(
+                f"Besluit en actie wijken af: het EMS wil "
+                f"{afwijking['verwacht'].lower()} "
+                f"({REDEN_KORTE_NAAM.get(afwijking['reden'], afwijking['reden'])}), "
+                f"maar de accu {afwijking['gemeten'].lower()} al "
+                f"{HANDMATIGE_INGREEP_MIN_DUUR_MINUTEN:.0f} minuten of langer."
+            )
         # v5.18: een reserve die niet in de accu past is een rekenfout, geen
         # weergaveprobleem. Uit de review: niet stilzwijgend afkappen.
         reserve = (self.last_reserve_margin_breakdown or {}).get(
@@ -36776,6 +37121,8 @@ class EnergyManagementSystemCoordinator:
                 "handmatige ingrepen",
                 lambda: self._volg_handmatige_ingrepen(now),
             )
+            # v5.22: en of de accu de RICHTING volgt die het EMS opdroeg.
+            self._klok("richting", lambda: self._volg_richting(now))
             self.hass.async_create_task(self._volg_handmatige_stand(now))
             # v3.84.0: en waarschuwen als de leermodus blijft staan.
             self.hass.async_create_task(
@@ -37866,6 +38213,8 @@ class EnergyManagementSystemCoordinator:
             else:
                 await self._async_apply_manual(scaled_power)
                 self.last_reason = "expensive_quarter"
+                if (self.last_piekverkoop or {}).get("verkopen"):
+                    self.last_reason = "expensive_quarter_peak"
             self._update_financial_tracking(
                 now, entries, self.last_reason, scaled_power, None
             )

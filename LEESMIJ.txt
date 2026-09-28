@@ -1,34 +1,31 @@
-EMS v5.21 - alle wijzigingen sinds v5.20.2
+EMS v5.23 - ALLE wijzigingen sinds v5.21 (bevat v5.22)
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
     const.py, coordinator.py, diagnostics.py
-    dashboard_template.yaml   (gaat altijd mee, ongewijzigd)
+    dashboard_template.yaml   GEWIJZIGD - knoppen onder de cockpit
     manifest.json, bestandscontrole.json
 
 NAAR DE REPO
     README.md, CHANGELOG.md
-    dashboards/energy_management_system_dashboard.yaml
-    tests/ (drie bestanden)
+    dashboards/energy_management_system_dashboard.yaml   GEWIJZIGD
+    tests/ (zes bestanden)
 
-Voor HACS: release met tag v5.21.
+Voor HACS: release met tag v5.23.
 
-BIJLADEN OMDAT HET LOONT
+WAT ER SINDS v5.21 IN ZIT
 
-In het goedkope blok laadt het EMS nu zelf bij, zolang:
-1. de zon de accu vandaag niet vanzelf vult, en
-2. de volgende kWh straks meer oplevert dan hij nu kost:
-       latere prijs x rendement - slijtage  >  prijs nu
+v5.22
+- verkopen in de duurste piek: onder de reserve, als de prijs nu hoger is
+  dan elk kwartier dat nog komt tot het volgende goedkope blok - nooit door
+  de bodem heen
+- het kwartierplan voorspelt laden en piekverkoop
+- besluit tegenover actie: een aandachtspunt als de accu drie minuten of
+  langer het tegenovergestelde doet van wat het EMS opdroeg
+- alle paden na de saldering getoetst
 
-Het stopt vanzelf waar het niet meer loont. Handmatig laden is dus niet
-meer nodig - laat de knop "Handmatig laden 2000 W" uit, anders neemt die
-het over.
+v5.23
+- twee knoppen onder de cockpit: Aandachtspunten en Reserve-opbouw
+- de reservekaart toont de verschuiving op de P1-meter en de bodem
 
-WAT JE ZIET
-- EMS BESLUIT: "BIJLADEN OMDAT HET LOONT"
-- WAAROM: stroom kost nu X ct - een kWh is straks Y ct waard
-  (prijs x rendement - slijtage) - de zon vult nog Z kWh
-- in de export: "laadbesluit", met alle getallen van het besluit
-
-EERST CONTROLEREN
-De eerste dag met een goedkoop blok: kijk of het EMS laadt, en of de
-avondverkoop daarna doorgaat. Stuur gerust een export.
+NA DE HERSTART
+In Diagnose gezondheid hoort "bestand ok" te staan.
