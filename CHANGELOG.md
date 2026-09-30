@@ -29104,3 +29104,67 @@ LET OP voor iets wat niet te verhelpen is. Het spaarplan handelt die
 situatie nu af en meldt hem.
 
 **Volledige testsuite**: 4349 tests, allemaal groen.
+
+
+## v5.25.1 — Laden op het goedkoopste moment, en een economische noodlading
+
+Gemeld direct na de installatie van v5.25: *"hij begint nu direct op een
+veel te duur moment te laden."*
+
+### Wat er werkelijk gebeurde
+
+Live: reden `emergency_low_battery`, accu op 8%, 0,00 kWh beschikbaar. Niet de
+nieuwe dipregel, maar de **noodlading uit v0.28.1**: bij weinig zon en een
+accu op zijn ondergrens laden tot 5% erboven - **ongeacht de prijs**. Dat had
+v5.24 net zo gedaan.
+
+Die noodlading kwam er na een nacht waarin de accu om 04:00 leeg raakte en
+er daarna van het net werd afgenomen. Maar bij een lege accu komt de stroom
+hoe dan ook van het net. Eerst van het net in de accu laden en hem er later
+weer uithalen, vermijdt geen netstroom - het voegt alleen rendementsverlies
+en slijtage toe.
+
+Gevraagd: *"het beste doen wat noodzakelijk en economisch het beste is."*
+
+- **Noodzakelijk** is de noodlading niet: de Zendure beschermt zijn cellen
+  zelf op zijn ondergrens.
+- **Economisch** helpt laden alleen als de kWh straks meer oplevert dan hij
+  nu kost, en er geen goedkoper moment meer komt. Dat is precies de
+  dipregel.
+
+Dus: de noodlading gaat alleen nog aan als de dipregel ja zegt. Het
+oorspronkelijke probleem - leeg om 04:00 met een dure ochtend - lost het
+spaarplan uit v5.25 op, zonder verlies.
+
+**Verwachting bewust gewijzigd** in drie toetsen die de noodlading zonder
+prijstoets verwachtten. Hun eigenlijke onderwerp - de dode zone rond de
+ondergrens, en alleen bij weinig zon - toetsen ze nog steeds; een nieuwe
+toets legt vast dat er bij een dure prijs geen noodlading meer is.
+
+### De dipregel laadde op het eerste lonende moment
+
+Onderweg gevonden, niet de oorzaak van de melding maar wel een fout. De regel
+vroeg alleen of laden nu winst oplevert, niet of er een goedkoper moment
+komt:
+
+```
+nu 20:45           31 ct
+vannacht 02:00     24 ct
+ochtendpiek 07:45  52 ct, niet gedekt  ->  52 x 83,7% - 11,4 = 32,1 ct waard
+oud:   32,1 > 31  ->  meteen laden, tegen 31 ct
+nu:    er komen goedkopere kwartieren  ->  laden om 02:00, tegen 24 ct
+```
+
+Laden in een dip gebeurt nu alleen als het huidige kwartier bij de
+goedkoopste kwartieren hoort tussen nu en het dure kwartier waarvoor geladen
+wordt - zoveel als nodig om het gat te vullen. In beslissing en kwartierplan.
+
+### Een eerdere beslissing
+
+In v0.63.77 werd laden van het net omdat er later een duurder kwartier komt
+bewust verwijderd: het laadde in de praktijk te vaak grotendeels van het net
+bij. v5.21 en v5.25 brachten het terug, op verzoek. Het blijft, met de
+waarborgen die toen ontbraken: alleen met winst na rendement en slijtage,
+alleen op de goedkoopste momenten, en nooit meer dan het gat.
+
+**Volledige testsuite**: 4353 tests, allemaal groen.

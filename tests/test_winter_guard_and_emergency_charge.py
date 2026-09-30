@@ -125,9 +125,11 @@ def test_emergency_charge_only_when_low_solar_expected(make_coordinator, hass):
     coordinator_summer = make_coordinator(config_base)
     assert coordinator_summer._is_emergency_low_battery() is False
 
-    # Winter: little solar forecast -> emergency charge should trigger.
+    # Winter: little solar forecast -> emergency charge should trigger -
+    # v5.25.1: mits het ook economisch loont (de dipregel zegt ja).
     hass.states.set("sensor.solcast", "2.0")
     coordinator_winter = make_coordinator(config_base)
+    coordinator_winter._dipbesluit = lambda now, blok: {"laden": True}
     assert coordinator_winter._is_emergency_low_battery() is True
 
 

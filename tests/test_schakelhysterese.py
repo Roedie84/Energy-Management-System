@@ -203,6 +203,10 @@ def test_een_nieuwe_bevestiging_verlengt(make_coordinator, hass):
 
 def _nood(c, soc):
     c._is_low_solar_expected = lambda: True
+    # v5.25.1: de noodlading is economisch getoetst via de dipregel. Deze
+    # toetsen gaan over de dode zone rond de ondergrens; de dipregel zegt
+    # hier ja, zodat alleen die dode zone overblijft.
+    c._dipbesluit = lambda now, blok: {"laden": True}
     c.config = dict(c.config or {})
     c.config["battery_soc_sensor_entity"] = "sensor.soc"
     c.hass.states.set("sensor.soc", str(soc))
@@ -371,3 +375,20 @@ def test_een_duidelijke_dip_zet_het_uitstel_uit(make_coordinator, hass):
     c = make_coordinator({})
     _uitstel(c, 1.20, hass)
     assert _uitstel(c, 0.80, hass) is False
+
+
+
+def test_bij_een_dure_prijs_geen_noodlading(make_coordinator, hass):
+    """v5.25.1 - gemeld: "hij begint nu direct op een veel te duur moment
+    te laden". Bij een lege accu komt de stroom hoe dan ook van het net;
+    eerst in de accu laden voegt alleen verlies toe - tenzij de dipregel
+    zegt dat het loont en er geen goedkoper moment meer komt."""
+    c = make_coordinator({})
+    c._is_low_solar_expected = lambda: True
+    c.config = dict(c.config or {})
+    c.config["battery_soc_sensor_entity"] = "sensor.soc"
+    c.hass.states.set("sensor.soc", "8")
+    c.effective_min_soc_percent = lambda: 10.0
+    c._dipbesluit = lambda now, blok: {"laden": False, "reden": "er komt een goedkoper moment om te laden"}
+
+    assert c._is_emergency_low_battery() is False

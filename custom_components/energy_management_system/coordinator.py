@@ -19419,6 +19419,41 @@ class EnergyManagementSystemCoordinator:
             return None
         return sum(max(0.0, zon - verbruik) for verbruik, zon in segmenten)
 
+    def _goedkoopste_laadmomenten(
+        self,
+        now: datetime,
+        prijs_nu: float,
+        tot_iso: str | None,
+        gat_kwh: float,
+    ) -> bool:
+        """Hoort NU bij de goedkoopste kwartieren om het gat te vullen? (v5.25.1)
+
+        Tussen nu en het dure kwartier waarvoor geladen wordt: zoveel van de
+        goedkoopste kwartieren als nodig zijn om het gat te vullen bij het
+        laadvermogen. Alleen als het huidige kwartier daarbij hoort. Een
+        gelijke prijs later telt niet als goedkoper, zodat het laden niet
+        eindeloos wordt uitgesteld.
+        """
+        tot = dt_util.parse_datetime(tot_iso or "")
+        if tot is None or tot <= now:
+            return False
+        laad_kw = abs(
+            float(self.instelling(CONF_MANUAL_CHARGE_POWER, DEFAULT_MANUAL_CHARGE_POWER))
+        ) / 1000
+        per_kwartier = laad_kw * 0.25
+        if per_kwartier <= 0:
+            return False
+        nodig = max(1, math.ceil(gat_kwh / per_kwartier))
+        later = sorted(
+            p / PRICE_SCALE_FACTOR
+            for begin, _eind, p in (self._get_forecast_entries() or [])
+            if now < begin < tot
+        )
+        # Het huidige kwartier telt mee; goedkoper zijn alleen de kwartieren
+        # die ECHT minder kosten dan nu.
+        goedkoper = [p for p in later if p < prijs_nu]
+        return len(goedkoper) < nodig
+
     def _dipbesluit(self, now: datetime, blok: datetime | None) -> dict:
         """Laden in een prijsdip, BUITEN het goedkope blok (v5.25).
 
@@ -19464,7 +19499,14 @@ class EnergyManagementSystemCoordinator:
             return uit
         waarde = duurste * rendement / 100 - slijtage_ct / 100
         gat = min(ruimte, plan["nodig_kwh"] - plan["beschikbaar_kwh"])
-        laden = waarde > prijs_nu and gat > 0
+        # v5.25.1: niet op het EERSTE moment dat het loont, maar op de
+        # GOEDKOOPSTE. Gemeld: "hij begint nu direct op een veel te duur
+        # moment te laden". Om 20:45 tegen 31 ct loonde het voor een
+        # ochtendpiek van 52 ct - terwijl om 02:00 de stroom 24 ct kostte.
+        goedkoopst = self._goedkoopste_laadmomenten(
+            now, prijs_nu, plan.get("duurste_ongedekt_om"), gat
+        )
+        laden = waarde > prijs_nu and gat > 0 and goedkoopst
         uit.update(
             {
                 "laden": laden,
@@ -19476,10 +19518,15 @@ class EnergyManagementSystemCoordinator:
                 "marge_ct": round((waarde - prijs_nu) * 100, 1),
                 "gat_kwh": round(gat, 2),
                 "blok": plan.get("blok"),
+                "nu_bij_de_goedkoopste": goedkoopst,
                 "reden": (
                     "prijsdip: straks meer waard dan hij nu kost"
                     if laden
-                    else "geen dip: straks minder waard dan hij nu kost"
+                    else (
+                        "er komt een goedkoper moment om te laden"
+                        if waarde > prijs_nu and gat > 0
+                        else "geen dip: straks minder waard dan hij nu kost"
+                    )
                 ),
             }
         )
@@ -21364,27 +21411,34 @@ class EnergyManagementSystemCoordinator:
         if volgend is None or slijtage is None:
             return 0.0
         toekomst = [
-            (p, d) for b, p, d in netregels.get("kwartieren", []) if start <= b < volgend
+            (b, p, d) for b, p, d in netregels.get("kwartieren", []) if start <= b < volgend
         ]
-        nodig = sum(d for _p, d in toekomst)
+        nodig = sum(d for _b, _p, d in toekomst)
         if not toekomst or soc >= nodig:
             return 0.0
         rest = soc
-        duurste_ongedekt = None
-        for p, d in sorted(toekomst, key=lambda paar: paar[0], reverse=True):
+        doel = None
+        for b, p, d in sorted(toekomst, key=lambda k: k[1], reverse=True):
             if d <= 0:
                 continue
             if rest > 0:
                 rest -= d
                 continue
-            duurste_ongedekt = p
+            doel = (b, p)
             break
-        if duurste_ongedekt is None:
+        if doel is None:
             return 0.0
-        waarde = duurste_ongedekt * netregels["rendement"] / 100 - slijtage / 100
+        waarde = doel[1] * netregels["rendement"] / 100 - slijtage / 100
         if waarde <= prijs:
             return 0.0
-        return max(0.0, min(laad_kwh, nodig - soc, bruikbaar - soc))
+        gat = min(nodig - soc, bruikbaar - soc)
+        # v5.25.1: alleen in de goedkoopste kwartieren vóór het doel - net
+        # als `_goedkoopste_laadmomenten` in de beslissing.
+        benodigd = max(1, math.ceil(gat / laad_kwh)) if laad_kwh > 0 else 1
+        goedkoper = [p for b, p, _d in toekomst if start < b < doel[0] and p < prijs]
+        if len(goedkoper) >= benodigd:
+            return 0.0
+        return max(0.0, min(laad_kwh, gat))
 
     def _plan_laadt(
         self,
@@ -24327,6 +24381,24 @@ class EnergyManagementSystemCoordinator:
         buffer on the available-energy sensor if no SoC sensor is set.
         """
         if not self._is_low_solar_expected():
+            return False
+        # v5.25.1: ECONOMISCH getoetst. Gemeld: "hij begint nu direct op een
+        # veel te duur moment te laden" - en dat was deze noodlading (v0.28.1):
+        # accu op 8%, dus laden tot 15%, ongeacht de prijs.
+        #
+        # Bij een lege accu komt de stroom hoe dan ook van het net. Eerst in
+        # de accu laden en hem er later weer uithalen vermijdt geen
+        # netstroom; het voegt alleen rendementsverlies en slijtage toe.
+        # Het helpt alleen als die kWh straks meer oplevert dan hij nu kost
+        # en er geen goedkoper moment meer komt - en dat is precies de
+        # dipregel. Noodzakelijk is het niet: de Zendure beschermt zijn
+        # cellen zelf op zijn ondergrens. Het oorspronkelijke probleem - leeg
+        # om 04:00 met een dure ochtend - lost het spaarplan (v5.25) op.
+        #
+        # Gevraagd: "het beste doen wat noodzakelijk en economisch het beste
+        # is."
+        if not self._dipbesluit(dt_util.now(), self.last_cheap_block_start).get("laden"):
+            self._noodlading_actief = False
             return False
 
         soc_entity = self.config.get(CONF_SOC_SENSOR)
@@ -38730,8 +38802,10 @@ class EnergyManagementSystemCoordinator:
             grens = prijs
         # v5.25: het duurste kwartier dat de accu NIET dekt - wat de
         # volgende kWh waard is. Grondslag voor laden in een prijsdip.
-        ongedekt = [k[2] for k in kwartieren if k[0] not in gedekt and k[3] > 0]
-        uit["duurste_ongedekt_eur"] = round(max(ongedekt), 4) if ongedekt else None
+        ongedekt = [k for k in kwartieren if k[0] not in gedekt and k[3] > 0]
+        duurste = max(ongedekt, key=lambda k: k[2]) if ongedekt else None
+        uit["duurste_ongedekt_eur"] = round(duurste[2], 4) if duurste else None
+        uit["duurste_ongedekt_om"] = duurste[0].isoformat() if duurste else None
         huidig = next((k for k in kwartieren if k[0] <= now < k[1]), None)
         sparen = (
             huidig is not None

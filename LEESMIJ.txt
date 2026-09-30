@@ -1,33 +1,20 @@
-EMS v5.25 - alle wijzigingen sinds v5.24
+EMS v5.25.1 - alleen de wijziging sinds v5.25
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
-    const.py, coordinator.py, diagnostics.py
-    dashboard_template.yaml   GEWIJZIGD - schakelaar voor de nieuwe melding
+    coordinator.py
+    dashboard_template.yaml   (gaat altijd mee, ongewijzigd)
     manifest.json, bestandscontrole.json
 
 NAAR DE REPO
     README.md, CHANGELOG.md
-    dashboards/energy_management_system_dashboard.yaml   GEWIJZIGD
-    tests/ (vijf bestanden)
+    dashboards/energy_management_system_dashboard.yaml
+    tests/ (drie bestanden)
 
-Voor HACS: release met tag v5.25.
+Voor HACS: release met tag v5.25.1.
 
-1. ACCU SPAREN VOOR DE DUURSTE UREN
-   Haalt de accu het volgende goedkope blok niet, dan dekt hij alleen de
-   duurste kwartieren. Daartussen neemt hij zon op maar geeft hij niets
-   af, en komt de stroom van het net.
-
-2. LADEN IN EEN PRIJSDIP
-   Buiten het goedkope blok, alleen als de accu het blok niet haalt en
-   het duurste kwartier dat hij niet dekt meer oplevert dan de stroom nu
-   kost (x rendement - slijtage). Bij 29 september loont dat niet (25 ct
-   tegen 22,1 ct waarde) - dan spaart hij. Op een winderige nacht van
-   15 ct wel.
-
-3. MELDINGEN - ZELF AANZETTEN
-   Pagina Meldingen -> "Accu gespaard voor de duurste uren" -> aan.
-   's avonds het plan, de volgende ochtend de uitkomst.
-
-VERVALLEN
-Het aandachtspunt "reserve past niet in de accu" - geen rekenfout, maar
-een blok dat te ver weg ligt. Het spaarplan handelt dat nu af.
+WAT ER VERANDERT
+1. De noodlading laadt niet meer ongeacht de prijs. Alleen als laden
+   economisch loont en er geen goedkoper moment meer komt. Bij een lege
+   accu dekt het net het huis anders direct - zonder verlies.
+2. Laden in een prijsdip gebeurt op het GOEDKOOPSTE moment voor het dure
+   kwartier, niet op het eerste moment dat het loont.

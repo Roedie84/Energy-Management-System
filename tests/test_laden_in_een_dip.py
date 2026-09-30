@@ -19,6 +19,9 @@ def _stel_in(c, *, prijs_nu, duurste_ongedekt, beschikbaar=1.0, nodig=3.0, actie
     c.spaarplan = lambda now, entries, blok: {
         "actief": actief, "beschikbaar_kwh": beschikbaar, "nodig_kwh": nodig,
         "duurste_ongedekt_eur": duurste_ongedekt, "blok": BLOK.isoformat(),
+        # v5.25.1: ook WANNEER - laden alleen op de goedkoopste momenten
+        # daarvoor. Zonder tijdstip weigert de regel terecht.
+        "duurste_ongedekt_om": (NU + timedelta(hours=5)).isoformat(),
     }
     c._get_forecast_entries = lambda **kw: []
     c.huidige_prijs_eur_per_kwh = lambda: prijs_nu
@@ -149,3 +152,71 @@ def test_het_plan_laadt_niet_bij_een_te_hoge_nachtprijs(make_coordinator, hass):
     netregels = _netregels([(0.25, 0.08)] * 4 + [(0.40, 0.1)] * 8, NU + timedelta(hours=3))
 
     assert c._plan_dip_laadt(netregels, NU, 0.25, soc=0.0, bruikbaar=7.78, laad_kwh=0.5) == 0.0
+
+
+# --- v5.25.1: het goedkoopste moment, niet het eerste ---------------------
+
+from custom_components.energy_management_system.const import PRICE_SCALE_FACTOR
+
+AVOND = datetime(2026, 9, 30, 20, 45, tzinfo=TZ)
+PIEK = datetime(2026, 10, 1, 7, 45, tzinfo=TZ)
+
+
+def _avond(c, prijs_nu, nu=AVOND):
+    """Gemeld: "hij begint nu direct op een veel te duur moment te laden".
+    Avond 31 ct, nacht 24 ct, ochtendpiek 52 ct niet gedekt."""
+    _stel_in(c, prijs_nu=prijs_nu, duurste_ongedekt=0.52)
+    c.spaarplan = lambda now, entries, blok: {
+        "actief": True, "beschikbaar_kwh": 1.0, "nodig_kwh": 2.0,
+        "duurste_ongedekt_eur": 0.52, "duurste_ongedekt_om": PIEK.isoformat(),
+        "blok": BLOK.isoformat(),
+    }
+    reeks = []
+    t = nu
+    while t < PIEK:
+        prijs = 0.24 if 1 <= t.hour < 5 else 0.31
+        reeks.append((t, t + timedelta(minutes=15), prijs * PRICE_SCALE_FACTOR))
+        t += timedelta(minutes=15)
+    c._get_forecast_entries = lambda **kw: reeks
+    return c
+
+
+def test_niet_op_het_eerste_moment_dat_het_loont(make_coordinator, hass):
+    """52 x 83,7% - 11,4 = 32,1 ct: 31 ct loont - maar om 02:00 kost het 24."""
+    c = _avond(make_coordinator({}), 0.31)
+
+    besluit = c._dipbesluit(AVOND, BLOK)
+
+    assert besluit["laden"] is False
+    assert besluit["reden"] == "er komt een goedkoper moment om te laden"
+
+
+def test_wel_op_het_goedkoopste_moment(make_coordinator, hass):
+    nacht = datetime(2026, 10, 1, 2, 0, tzinfo=TZ)
+    c = _avond(make_coordinator({}), 0.24, nu=nacht)
+
+    assert c._dipbesluit(nacht, BLOK)["laden"] is True
+
+
+def test_het_plan_laadt_ook_niet_op_het_eerste_moment(make_coordinator, hass):
+    """Avond 31 ct, daarna nacht 24 ct, dan de piek van 52 ct ongedekt."""
+    c = make_coordinator({})
+    start = AVOND
+    prijzen = [0.31] * 4 + [0.24] * 16 + [0.52] * 8
+    netregels = {
+        "kwartieren": [
+            (start + timedelta(minutes=15 * i), p, 0.1 if p == 0.52 else 0.05)
+            for i, p in enumerate(prijzen)
+        ],
+        "volgend_blok": {},
+        "rendement": 83.7, "slijtage_ct": 11.40,
+    }
+    einde = start + timedelta(hours=8)
+    netregels["volgend_blok"] = {b: einde for b, _p, _d in netregels["kwartieren"]}
+
+    avond = c._plan_dip_laadt(netregels, start, 0.31, soc=0.0, bruikbaar=7.78, laad_kwh=0.5)
+    nacht_start = start + timedelta(hours=1)
+    nacht = c._plan_dip_laadt(netregels, nacht_start, 0.24, soc=0.0, bruikbaar=7.78, laad_kwh=0.5)
+
+    assert avond == 0.0
+    assert nacht > 0
