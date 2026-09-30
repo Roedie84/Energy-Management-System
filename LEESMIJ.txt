@@ -1,4 +1,4 @@
-EMS v5.26.4 - alleen de wijziging sinds v5.26.3
+EMS v5.26.5 - ALLE wijzigingen sinds v5.26.3 (bevat v5.26.4)
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
     coordinator.py
@@ -10,12 +10,13 @@ NAAR DE REPO
     dashboards/energy_management_system_dashboard.yaml
     tests/ (twee bestanden)
 
-Voor HACS: release met tag v5.26.4.
+Voor HACS: release met tag v5.26.5.
 
 WAT ER VERANDERT
-Het kwartierplan rekent met dezelfde regels als de beslissing:
-- hetzelfde "volgende goedkope blok" (morgen 10:45, niet de nacht)
-- verkopen boven de reserve alleen in de duurste kwartieren van de dag,
-  met dezelfde functie als de beslissing
-"Komend schema" toont daardoor wat het EMS werkelijk gaat doen: vanavond
-bewaren voor 08:00 (44,8 ct), morgenavond verkopen bij 51,2 ct.
+(v5.26.4) Het kwartierplan rekent met de regels van de beslissing.
+(v5.26.5) De piekregel kijkt tot de accu weer wordt bijgevuld, niet
+alleen tot het goedkope blok. Vult het blok niet goedkoop bij, dan
+bewaart de ochtend voor de avond:
+
+    morgen 08:00-10:00  (40-45 ct)  bewaren
+    morgen 19:30-20:00  (47-51 ct)  verkopen

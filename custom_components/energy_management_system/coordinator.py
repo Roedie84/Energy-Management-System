@@ -21370,11 +21370,15 @@ class EnergyManagementSystemCoordinator:
         # rekent het plan met `last_cheap_block_start`, net als `_piekverkoop`:
         # tot dat blok, of 24 uur vooruit als het blok al voorbij is.
         blok = self.last_cheap_block_start
-        duurste_tot_blok: dict = {}
-        for i, (begin, _prijs) in enumerate(reeks):
-            tot = blok if blok is not None and blok > begin else begin + timedelta(hours=24)
-            later = [p for b, p in reeks[i + 1:] if b < tot]
-            duurste_tot_blok[begin] = max(later) if later else float("-inf")
+        # v5.26.5: dezelfde functie als de beslissing - zie `_duurste_later`.
+        vervangprijs = self._piek_vervangprijs(entries, blok)
+        duurste_tot_blok: dict = {
+            begin: self._duurste_later(
+                begin, reeks, blok if blok is not None and blok > begin else None,
+                vervangprijs if blok is not None and blok > begin else None,
+            )
+            for begin, _prijs in reeks
+        }
         # v5.25: voor laden in een dip - per kwartier het verwachte tekort
         # (dezelfde inschatting als het spaarplan) en het volgende blok.
         kwartieren = []
@@ -25001,6 +25005,72 @@ class EnergyManagementSystemCoordinator:
         # Bounded history, same window as energy_bridge_transition_log.
         self.discharge_floor_events = self.discharge_floor_events[-50:]
 
+    def _piek_vervangprijs(self, entries, blok_start: datetime | None) -> float | None:
+        """Wat het kost om een kWh via het goedkope blok te vervangen (v5.26.5).
+
+        Goedkoopste blokprijs / rendement + slijtage. None als het blok of
+        de rekengrootheden onbekend zijn - dan kijkt de piekregel, zoals
+        voorheen, alleen tot het blok.
+        """
+        blok_eind = self.last_cheap_block_end
+        if blok_start is None or blok_eind is None or blok_eind <= blok_start:
+            return None
+        blokprijzen = [
+            p / PRICE_SCALE_FACTOR
+            for b, _e, p in (entries or [])
+            if blok_start <= b < blok_eind
+        ]
+        rendement = self.learned_battery_efficiency_percent
+        slijtage_ct = (self.get_wear_cost_overview() or {}).get("slijtage_ct_per_kwh")
+        if not blokprijzen or not rendement or slijtage_ct is None:
+            return None
+        return min(blokprijzen) / (rendement / 100) + slijtage_ct / 100
+
+    @staticmethod
+    def _duurste_later(
+        moment: datetime,
+        reeks: list,
+        blok_start: datetime | None,
+        vervangprijs: float | None,
+    ) -> float:
+        """Het duurste kwartier dat een verkoop NU moet overtreffen (v5.26.5).
+
+        Gevraagd: "Nog 1 update dan :)" - na de export van 30 september
+        20:34. Het plan verkocht morgenochtend om 09:00 en 10:00 tegen 41,9
+        en 40,4 ct, omdat de piekregel alleen tot het goedkope blok van 10:45
+        keek - in de veronderstelling dat het blok de accu weer vult. Maar
+        in dat blok laden loonde niet, en 's avonds bleven kwartieren van
+        46,6 tot 49,4 ct onverkocht.
+
+        Wat je nu verkoopt, moet later vervangen worden. Voor het blok door
+        het net, tegen de prijs van dat kwartier. Na het blok ook door laden
+        in het blok - blokprijs / rendement + slijtage. Een kwartier na het
+        blok telt dus voor het goedkoopste van die twee. Morgen: 31,2 /
+        83,7% + 11,4 = 48,7 ct, dus de avond van 51,2 ct telt als 48,7 - en
+        de ochtend van 44,8 ct bewaart. Op een zonnige dag met een blok van
+        15 ct: 29,3 ct - en de ochtend verkoopt, want het blok vult goedkoop
+        bij.
+
+        Zonder vervangprijs (blok of rekengrootheden onbekend): zoals
+        voorheen, alleen tot het blok. Een functie voor beslissing en plan.
+        """
+        if vervangprijs is None:
+            horizon = (
+                blok_start
+                if blok_start is not None and blok_start > moment
+                else moment + timedelta(hours=24)
+            )
+        else:
+            horizon = moment + timedelta(hours=24)
+        later = []
+        for begin, prijs in reeks:
+            if not (moment + timedelta(minutes=15) <= begin < horizon):
+                continue
+            if vervangprijs is not None and blok_start is not None and begin >= blok_start > moment:
+                prijs = min(prijs, vervangprijs)
+            later.append(prijs)
+        return max(later) if later else float("-inf")
+
     def _piekverkoop(
         self,
         now: datetime,
@@ -25030,14 +25100,13 @@ class EnergyManagementSystemCoordinator:
             if cheap_block_start is not None and cheap_block_start > now
             else now + timedelta(hours=24)
         )
-        later = [
-            p / PRICE_SCALE_FACTOR
-            for begin, _eind, p in (entries or [])
-            if now + timedelta(minutes=15) <= begin < tot
-        ]
-        if not later:
+        reeks = [(b, p / PRICE_SCALE_FACTOR) for b, _e, p in (entries or [])]
+        blok = cheap_block_start if cheap_block_start is not None and cheap_block_start > now else None
+        duurste_later = self._duurste_later(
+            now, reeks, blok, self._piek_vervangprijs(entries, blok)
+        )
+        if duurste_later == float("-inf"):
             return {"verkopen": False, "reden": "geen prijzen tot het blok"}
-        duurste_later = max(later)
         return {
             "verkopen": prijs_nu > duurste_later,
             "prijs_nu_eur": round(prijs_nu, 4),

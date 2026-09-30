@@ -29433,3 +29433,41 @@ op een zonnige ochtend. Die verkoop is weg; de toets controleert nu de
 laadsnelheid zelf, per kwartier.
 
 **Volledige testsuite**: 4365 tests, allemaal groen.
+
+
+## v5.26.5 — De piekregel kijkt tot de accu weer wordt bijgevuld
+
+Gevraagd: *"Nog 1 update dan :)"* - na de export van 30 september 20:34. Het
+plan verkocht morgenochtend om 08:00, 09:00 en 10:00 tegen 44,8 / 41,9 /
+40,4 ct. De piekregel keek alleen tot het goedkope blok van 10:45, in de
+veronderstelling dat het blok de accu weer vult. Maar in dat blok loonde laden
+niet, de laadstand liep er maar van 34 naar 42% op - en 's avonds bleven
+kwartieren van 46,6 tot 49,4 ct onverkocht.
+
+### De regel
+
+Wat je nu verkoopt, moet later vervangen worden. Voor het blok door het net,
+tegen de prijs van dat kwartier. Na het blok ook door laden in het blok:
+**blokprijs / rendement + slijtage**. Een kwartier na het blok telt dus voor
+het goedkoopste van die twee (`_duurste_later`).
+
+Nagerekend met de prijzen van 1 oktober:
+
+```
+blok 31,2 ct  ->  31,2 / 83,7% + 11,4 = 48,7 ct om te vervangen
+08:00  44,8 ct   moet 48,7 ct overtreffen  -> bewaren
+09:00  41,9 ct                             -> bewaren
+10:00  40,4 ct                             -> bewaren
+19:30  51,2 ct   moet 49,1 ct overtreffen  -> verkopen
+19:45  49,1 ct                             -> verkopen
+20:00  47,0 ct                             -> verkopen
+```
+
+Op een zonnige dag met een blok van 15 ct is vervangen 29,3 ct, en verkoopt de
+ochtend wel - het blok vult dan goedkoop bij. Het volgt uit dezelfde
+rekenregel, zonder losse drempel.
+
+Een functie voor beslissing en plan. Zijn blok of rekengrootheden onbekend,
+dan kijkt de regel zoals voorheen alleen tot het blok.
+
+**Volledige testsuite**: 4369 tests, allemaal groen.

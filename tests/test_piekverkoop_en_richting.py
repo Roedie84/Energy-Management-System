@@ -235,3 +235,77 @@ def test_zonder_piek_blijft_de_huisgrens_staan(make_coordinator, hass):
 
     assert ruimte["mag_verkopen"] is False
     assert ruimte["reden"] == "huis gaat voor"
+
+
+# --- v5.26.5: tot de accu weer wordt bijgevuld -----------------------------
+
+TZ2 = timezone(timedelta(hours=2))
+OCHTEND = datetime(2026, 10, 1, 8, 0, tzinfo=TZ2)
+BLOK_1OKT = datetime(2026, 10, 1, 10, 45, tzinfo=TZ2)
+
+
+def _dag_1_oktober(blokprijs):
+    """Ochtend 44,8 / 41,9 / 40,4 ct, blok 10:45-16:30, avond tot 51,2 ct."""
+    reeks = []
+    t = OCHTEND
+    while t < OCHTEND + timedelta(hours=16):
+        h = t.hour + t.minute / 60
+        if h < 9: p = 0.448 if t.minute == 0 else 0.418
+        elif h < 10: p = 0.419 if t.minute == 0 else 0.397
+        elif h < 10.75: p = 0.404 if t.minute == 0 else 0.377
+        elif h < 16.5: p = blokprijs
+        elif h < 19.5: p = 0.46
+        elif h < 19.75: p = 0.512
+        else: p = 0.45
+        reeks.append((t, p))
+        t += timedelta(minutes=15)
+    return reeks
+
+
+def test_de_ochtend_bewaart_als_het_blok_niet_goedkoop_bijvult(make_coordinator, hass):
+    """1 oktober: het blok van 31,2 ct vult de accu niet zinvol bij -
+    31,2 / 83,7% + 11,4 = 48,7 ct om te vervangen. De avond van 51,2 ct telt
+    dus als 48,7, en de ochtend van 44,8 ct bewaart."""
+    c = make_coordinator({})
+    reeks = _dag_1_oktober(0.312)
+    vervang = 0.312 / 0.837 + 0.114
+
+    duurste = c._duurste_later(OCHTEND, reeks, BLOK_1OKT, vervang)
+
+    assert round(duurste, 3) == round(vervang, 3)
+    assert 0.448 < duurste  # dus bewaren
+
+
+def test_de_ochtend_verkoopt_als_het_blok_goedkoop_bijvult(make_coordinator, hass):
+    """Zonnige dag, blok van 15 ct: 15 / 83,7% + 11,4 = 29,3 ct. De ochtend
+    van 44,8 ct verkoopt - het blok vult goedkoop bij."""
+    c = make_coordinator({})
+    reeks = _dag_1_oktober(0.15)
+    vervang = 0.15 / 0.837 + 0.114
+
+    duurste = c._duurste_later(OCHTEND, reeks, BLOK_1OKT, vervang)
+
+    assert 0.448 > duurste  # dus verkopen
+
+
+def test_zonder_vervangprijs_zoals_voorheen_tot_het_blok(make_coordinator, hass):
+    c = make_coordinator({})
+    reeks = _dag_1_oktober(0.312)
+
+    duurste = c._duurste_later(OCHTEND, reeks, BLOK_1OKT, None)
+
+    assert duurste == 0.419  # alleen de ochtend telt
+
+
+def test_de_vervangprijs_uit_blok_rendement_en_slijtage(make_coordinator, hass):
+    c = make_coordinator({})
+    c.last_cheap_block_end = BLOK_1OKT + timedelta(hours=5, minutes=45)
+    c.charge_efficiency_history = [83.7] * 7
+    c.discharge_efficiency_history = [100.0] * 7
+    c.get_wear_cost_overview = lambda: {"slijtage_ct_per_kwh": 11.40}
+    entries = [
+        (b, b + timedelta(minutes=15), p * PRICE_SCALE_FACTOR)
+        for b, p in _dag_1_oktober(0.312)
+    ]
+
+    assert round(c._piek_vervangprijs(entries, BLOK_1OKT), 3) == round(0.312 / 0.837 + 0.114, 3)
