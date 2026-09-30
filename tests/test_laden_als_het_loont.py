@@ -183,3 +183,45 @@ def test_de_waarom_regels_tonen_de_getallen_van_het_besluit(make_coordinator, ha
     assert "stroom kost nu 13.1 ct" in regels
     assert "38.4 ct x 84%" in regels
     assert "11.4 ct slijtage" in regels
+
+
+
+@pytest.mark.asyncio
+async def test_bij_weinig_zon_alleen_laden_als_het_loont(make_coordinator, hass):
+    """v5.26.1 - 30 september: bij weinig zon laadde het EMS het hele blok vol,
+    ongeacht de marge, tot 28,1 ct. Nu door de rekenregel: loont het niet,
+    dan niet laden - ook niet op een donkere dag."""
+    c = _stel_in(make_coordinator({}), prijs_nu=0.30)
+    c._grid_charged_today = False
+    toegepast = []
+
+    async def pas_toe(vermogen):
+        toegepast.append(vermogen)
+
+    c._async_apply_manual = pas_toe
+    c._update_financial_tracking = lambda *a, **k: None
+    c._update_shortfall_detection = lambda *a, **k: None
+    c._finish_decision_tick = lambda now: None
+
+    geladen = await c._laad_uit_het_net_als_nodig(NU, [], True, *BLOK)
+
+    assert geladen is False
+    assert toegepast == []
+
+
+@pytest.mark.asyncio
+async def test_bij_weinig_zon_en_als_het_loont_heet_het_zo(make_coordinator, hass):
+    c = _stel_in(make_coordinator({}))
+    c._grid_charged_today = False
+
+    async def pas_toe(vermogen):
+        pass
+
+    c._async_apply_manual = pas_toe
+    c._update_financial_tracking = lambda *a, **k: None
+    c._update_shortfall_detection = lambda *a, **k: None
+    c._finish_decision_tick = lambda now: None
+
+    await c._laad_uit_het_net_als_nodig(NU, [], True, *BLOK)
+
+    assert c.last_reason == "grid_charging_low_solar"

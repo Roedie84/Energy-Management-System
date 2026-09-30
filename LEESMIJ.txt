@@ -1,27 +1,22 @@
-EMS v5.26 - alle wijzigingen sinds v5.25.2
+EMS v5.26.1 - alleen de wijziging sinds v5.26
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
-    coordinator.py, sensor.py, diagnostics.py
+    coordinator.py
     dashboard_template.yaml   (gaat altijd mee, ongewijzigd)
     manifest.json, bestandscontrole.json
 
 NAAR DE REPO
     README.md, CHANGELOG.md
     dashboards/energy_management_system_dashboard.yaml
-    tests/ (vijf bestanden)
+    tests/ (vier bestanden)
 
-Voor HACS: release met tag v5.26.
+Voor HACS: release met tag v5.26.1.
 
 WAT ER VERANDERT
-1. EEN PLAN. "Komend schema" en "blok(ken) gepland" tonen nu het
-   kwartierplan - niet meer een oudere, tweede simulatie die laden,
-   sparen en verkopen in de piek niet kende.
-2. Het kwartierplan kent laden bij weinig zon in het goedkope blok.
-3. De winterbeveiliging is vervallen: na laden van het net wordt er
-   gewoon verkocht in de dure kwartieren, boven de reserve. Op
-   30 september hield hij ruim 9 ct winst per kWh tegen.
+Laden bij weinig zon gebeurt alleen nog als het loont - dezelfde
+rekenregel als het laden in het blok. Het plan voorspelde voor vannacht
+laden tegen 31,5 ct, terwijl een kWh voor de avondpiek hoogstens 26,1 ct
+waard is. Dat verdwijnt.
 
-NA DE HERSTART
-"Komend schema" hoort hetzelfde te laten zien als wat het EMS doet.
-Vanavond, na het laden van vanmiddag: verkopen in de avondpiek, boven
-de reserve.
+INSTALLEER VOOR MIDDERNACHT
+Anders laadt hij vannacht nog volgens de oude regel.

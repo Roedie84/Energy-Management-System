@@ -19302,15 +19302,25 @@ class EnergyManagementSystemCoordinator:
 
         True als er is geladen; de beslissing is dan klaar.
         """
-        if should_force_charge:
-            reden = "grid_charging_low_solar"
-        else:
-            self.last_laadbesluit = self.laadbesluit_uit_het_net(
-                now, cheap_block_start, cheap_block_end
-            )
-            if not self.last_laadbesluit.get("laden"):
-                return False
-            reden = "grid_charging_profitable"
+        # v5.26.1: ook bij weinig zon door de REKENREGEL. Gemeld via de
+        # export van 30 september: bij weinig zon laadde het EMS het hele
+        # blok vol, ongeacht de marge - tot 28,1 ct, terwijl een kWh voor de
+        # avond 26,1 ct waard was; en het kwartierplan voorspelde voor de
+        # nacht laden tegen 31,5 ct (waard: 26,3 ct). Bij een lege accu
+        # draait het huis toch op het net; laden helpt alleen als het loont.
+        # Bij weinig zon wordt het gat vanzelf groot - de zon vult weinig -
+        # dus op donkere dagen laadt hij als het loont, en niet als het niet
+        # loont. Het noemen blijft: "bijladen bij weinig zon".
+        self.last_laadbesluit = self.laadbesluit_uit_het_net(
+            now, cheap_block_start, cheap_block_end
+        )
+        if not self.last_laadbesluit.get("laden"):
+            return False
+        reden = (
+            "grid_charging_low_solar"
+            if should_force_charge and self.last_laadbesluit.get("soort") != "dip"
+            else "grid_charging_profitable"
+        )
         charge_power = self.instelling(CONF_MANUAL_CHARGE_POWER, DEFAULT_MANUAL_CHARGE_POWER)
         await self._async_apply_manual(charge_power)
         # Letterlijk toegewezen, zodat elke reden in de code terug te vinden
@@ -21372,7 +21382,6 @@ class EnergyManagementSystemCoordinator:
             tekort = max(0.0, sum(v - z for v, z in segmenten))
             kwartieren.append((begin, prijs_ruw / PRICE_SCALE_FACTOR, tekort))
         return {
-            "weinig_zon": self._is_low_solar_expected(),
             "kwartieren": kwartieren,
             "volgend_blok": volgend_blok,
             "rendement": rendement,
@@ -21452,11 +21461,8 @@ class EnergyManagementSystemCoordinator:
         per_kwartier: float,
     ) -> float:
         """Hoeveel het plan in dit blokkwartier laadt - via `_laadregel` (v5.22)."""
-        # v5.26: op een dag met weinig zon laadt de beslissing het hele blok
-        # (`grid_charging_low_solar`), ongeacht de marge. Het plan deed dat
-        # niet na, en liep dan uit de pas met wat er werkelijk gebeurde.
-        if netregels.get("weinig_zon"):
-            return max(0.0, min(laad_kwh, bruikbaar - soc))
+        # v5.26.1: ook bij weinig zon door de rekenregel - net als de
+        # beslissing (`_laad_uit_het_net_als_nodig`).
         if netregels.get("slijtage_ct") is None or per_kwartier <= 0:
             return 0.0
         later = sorted(

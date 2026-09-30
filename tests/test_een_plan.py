@@ -59,14 +59,22 @@ def test_de_kaart_toont_het_kwartierplan(make_coordinator, hass):
     assert sensor.native_value == 1
 
 
-def test_het_plan_laadt_het_blok_bij_weinig_zon(make_coordinator, hass):
-    """Zoals de beslissing (`grid_charging_low_solar`): het hele blok,
-    ongeacht de marge - tot de accu vol is."""
+def test_ook_bij_weinig_zon_laadt_het_plan_alleen_als_het_loont(make_coordinator, hass):
+    """v5.26.1 - VERWACHTING BEWUST GEWIJZIGD. v5.26 liet het plan bij weinig
+    zon het hele blok laden, ongeacht de marge - en voorspelde zo voor de
+    nacht van 30 september laden tegen 31,5 ct, terwijl een kWh voor de
+    avondpiek 45 x 83,7% - 11,4 = 26,3 ct waard is. Nu dezelfde rekenregel
+    als de beslissing."""
     c = make_coordinator({})
-    netregels = {"weinig_zon": True, "slijtage_ct": 11.40, "rendement": 83.7, "reeks": []}
+    c._verwacht_zonoverschot_kwh = lambda a, b, veilig=True: 0.0
+    einde = START + timedelta(minutes=15)
+    netregels = {
+        "slijtage_ct": 11.40, "rendement": 83.7, "salderen": True,
+        "reeks": [(einde + timedelta(hours=6, minutes=15 * i), 0.45) for i in range(8)],
+    }
 
-    assert c._plan_laadt(netregels, START, 0.172, soc=4.0, bruikbaar=7.78, laad_kwh=0.5, per_kwartier=0.4) == 0.5
-    assert c._plan_laadt(netregels, START, 0.172, soc=7.6, bruikbaar=7.78, laad_kwh=0.5, per_kwartier=0.4) == pytest_approx(0.18)
+    assert c._plan_laadt(netregels, einde, 0.315, soc=0.4, bruikbaar=7.78, laad_kwh=0.5, per_kwartier=0.4) == 0.0
+    assert c._plan_laadt(netregels, einde, 0.172, soc=0.4, bruikbaar=7.78, laad_kwh=0.5, per_kwartier=0.4) == 0.5
 
 
 def pytest_approx(waarde):

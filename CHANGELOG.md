@@ -29260,3 +29260,42 @@ vastlegden: een van het net geladen accu mag nu wel verkopen, boven de
 reserve.
 
 **Volledige testsuite**: 4357 tests, allemaal groen.
+
+
+## v5.26.1 — Ook bij weinig zon alleen laden als het loont
+
+Uit de export van 30 september, 19:12. Het plan op het scherm werkte, maar
+liet zien:
+
+```
+00:00-02:00   laden   31,5-33 ct
+```
+
+terwijl een kWh voor de avondpiek hoogstens 44,8 x 83,7% - 11,4 = 26,1 ct
+waard is. En die middag gebeurde hetzelfde echt:
+
+```
+12:30-15:15  laden bij weinig zon, 17 -> 29 ct, tot 100%
+             - de zon leverde intussen 1 tot 2 kW
+15:15-16:15  accu vol, de middagzon gaat het net op
+```
+
+Rond 14:45 werd geladen tegen 28,1 ct, voor een kWh die 26,1 ct waard was.
+
+Laden bij weinig zon laadde het goedkope blok vol, **ongeacht de marge** -
+een regel van voor alle economische regels, net als de noodlading die in
+v5.25.1 werd rechtgezet. Bij een lege accu draait het huis toch op het net;
+laden helpt alleen als het loont.
+
+Nu gaat ook laden bij weinig zon door dezelfde rekenregel als het laden in
+het blok. Bij weinig zon wordt het gat vanzelf groot - de zon vult weinig -
+dus op donkere dagen laadt hij als het loont, en niet als het niet loont. De
+reden op de cockpit blijft "bijladen bij weinig zon". Het plan doet het
+precies zo na.
+
+**Verwachting bewust gewijzigd**: `test_een_plan.py` legde vast dat het plan
+bij weinig zon het hele blok laadt; nu dat het alleen laadt als het loont.
+Drie toetsen gebruikten de gedwongen lading als opstap voor iets anders; die
+opstap is vrijgelaten. Twee nieuwe toetsen leggen het nieuwe gedrag vast.
+
+**Volledige testsuite**: 4359 tests, allemaal groen.

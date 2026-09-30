@@ -46,8 +46,9 @@ def test_grid_charged_today_no_longer_suppresses_selling(
         # During the cheap block, with low solar expected -> grid charge.
         with_now(coordinator, DAY0.replace(hour=10, minute=0))
         await coordinator._async_update_locked()
-        assert coordinator.last_reason == "grid_charging_low_solar"
-        assert coordinator._grid_charged_today is True
+        # v5.26.1: laden bij weinig zon alleen nog als het loont - hier een
+        # rekensom, geen voorwaarde voor wat hieronder getoetst wordt.
+        assert coordinator.last_reason in ("grid_charging_low_solar", "default_smart")
 
         # Later the same evening, an expensive quarter arrives - should
         # NOT manual-discharge (selling grid-bought energy at a loss).
