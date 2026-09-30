@@ -2412,6 +2412,10 @@ REASON_REGISTRY: dict[str, dict] = {
         "waarom_vraag": "Waarom laad je nu uit het net?",
         "korte_naam": "laden uit het net (dip)",
         "emoji": "⚡🔎",
+        # v5.25.2: VERVALLEN - deze reden wordt niet meer gezet; laden in
+        # een dip loopt via `grid_charging_dip`. Hij blijft staan zodat oude
+        # kwartieren in het dagverloop leesbaar blijven.
+        "vervallen": True,
     },
     "solar_capture_deferred": {
         "mode": OPTION_SMART_DISCHARGING,

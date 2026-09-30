@@ -38600,18 +38600,22 @@ class EnergyManagementSystemCoordinator:
                     self.extra_dip_margin_history = self.extra_dip_margin_history[
                         -LEARNING_HISTORY_DAYS:
                     ]
-                if margin_eur_per_kwh >= LOW_SOLAR_EXTRA_DIP_MIN_MARGIN_EUR_PER_KWH:
-                    charge_power = self.instelling(CONF_MANUAL_CHARGE_POWER, DEFAULT_MANUAL_CHARGE_POWER)
-                    await self._async_apply_manual(charge_power)
-                    self.last_reason = "grid_charging_low_solar_extra_dip"
-                    self._grid_charged_today = True
-                    self.last_charge_power_applied = charge_power
-                    self._update_financial_tracking(
-                        now, entries, self.last_reason, None, charge_power
-                    )
-                    self._update_shortfall_detection(now, self.last_reason, self.last_available_kwh, self.last_needed_kwh_to_bridge)
-                    self._finish_decision_tick(now)
-                    return
+                # v5.25.2: deze regel LAADT NIET MEER - de marge hierboven
+                # wordt alleen nog bijgehouden als inzicht.
+                #
+                # Gemeld met twee schermafdrukken: "bijladen bij extra
+                # prijsdip", in handmatige stand, 51 minuten voor het
+                # goedkoopste blok. Dit was een TWEEDE dipregel naast
+                # `_dipbesluit` (v5.25), en een slechtere:
+                #   - hij vroeg niet of er een goedkoper moment kwam - en
+                #     het blok is per definitie goedkoper;
+                #   - hij rekende met de duurste prijs van de HELE dag, ook
+                #     na het blok, terwijl het blok zelf het goedkoopste
+                #     laadmoment is voor alles daarna;
+                #   - hij had geen bovengrens: niet "nooit meer dan het gat".
+                # `_dipbesluit` doet het wel goed en draait eerder in deze
+                # beslissing. Twee regels voor hetzelfde is een tweede
+                # definitie; de slechtere gaat eruit.
 
         # Emergency top-up: the battery is critically low right now,
         # regardless of price timing. Don't passively wait for the cheap

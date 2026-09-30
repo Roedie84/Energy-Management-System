@@ -343,11 +343,14 @@ def test_the_acting_module_actually_sends_a_command():
     import custom_components.energy_management_system as pkg
 
     bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
-    start = bron.index("LOW_SOLAR_EXTRA_DIP_MIN_MARGIN_EUR_PER_KWH:")
-    blok = bron[start : start + 900]
-
+    # v5.25.2: de oude extra-dipregel stuurt niet meer; laden in een dip
+    # loopt via `_dipbesluit` en `_laad_uit_het_net_als_nodig`. Die stuurt
+    # het commando en zet een eigen reden.
+    start = bron.index("    async def _laad_uit_het_net_als_nodig(")
+    blok = bron[start : start + 3000]
     assert "_async_apply_manual" in blok
-    assert "grid_charging_low_solar_extra_dip" in blok
+    assert '"grid_charging_dip"' in blok
+    assert "self._dipbesluit" in bron
 
 
 def test_advisory_modules_never_reach_the_decision_tree():

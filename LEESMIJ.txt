@@ -1,7 +1,7 @@
-EMS v5.25.1 - alleen de wijziging sinds v5.25
+EMS v5.25.2 - alle wijzigingen sinds v5.25.1
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
-    coordinator.py
+    const.py, coordinator.py
     dashboard_template.yaml   (gaat altijd mee, ongewijzigd)
     manifest.json, bestandscontrole.json
 
@@ -10,11 +10,15 @@ NAAR DE REPO
     dashboards/energy_management_system_dashboard.yaml
     tests/ (drie bestanden)
 
-Voor HACS: release met tag v5.25.1.
+Voor HACS: release met tag v5.25.2.
 
 WAT ER VERANDERT
-1. De noodlading laadt niet meer ongeacht de prijs. Alleen als laden
-   economisch loont en er geen goedkoper moment meer komt. Bij een lege
-   accu dekt het net het huis anders direct - zonder verlies.
-2. Laden in een prijsdip gebeurt op het GOEDKOOPSTE moment voor het dure
-   kwartier, niet op het eerste moment dat het loont.
+De oude regel "bijladen bij extra prijsdip" laadt niet meer. Hij laadde
+op het eerste lonende moment - ook vlak voor het goedkoopste blok - en
+zonder bovengrens. Laden in een dip loopt nu uitsluitend via de nieuwe
+regel: alleen als de accu het blok niet haalt, alleen op het goedkoopste
+moment, en nooit meer dan er ontbreekt.
+
+Zie je na de herstart nog steeds "bijladen bij extra prijsdip" als
+laatste reden, dan is dat het besluit van voor de update; het volgende
+besluit is het nieuwe.

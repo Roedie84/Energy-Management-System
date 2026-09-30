@@ -29168,3 +29168,39 @@ waarborgen die toen ontbraken: alleen met winst na rendement en slijtage,
 alleen op de goedkoopste momenten, en nooit meer dan het gat.
 
 **Volledige testsuite**: 4353 tests, allemaal groen.
+
+
+## v5.25.2 — De oude dipregel laadt niet meer
+
+Gemeld met twee schermafdrukken van de planningspagina: laatste reden
+**"bijladen bij extra prijsdip"**, in handmatige stand, terwijl het
+goedkoopste blok over 51 minuten begon.
+
+Dat was `grid_charging_low_solar_extra_dip`: een oudere, tweede dipregel naast
+`_dipbesluit` uit v5.25. Hij laadde op dagen met weinig zon buiten het blok
+zodra
+
+```
+rendement x duurste prijs later vandaag - prijs nu - slijtage  >=  3 ct
+```
+
+En daarin ontbraken drie dingen die de nieuwe regel wel heeft:
+
+1. **Hij vroeg niet of er een goedkoper moment kwam.** Het blok begon over 51
+   minuten, en is per definitie goedkoper.
+2. **Hij rekende met de duurste prijs van de hele dag**, ook na het blok. Voor
+   energie die pas vanavond nodig is, is het blok zelf het goedkoopste
+   laadmoment.
+3. **Hij had geen bovengrens** - niet "nooit meer dan het gat".
+
+Twee regels voor hetzelfde is een tweede definitie. De slechtere laadt niet
+meer; de marge wordt nog wel bijgehouden als inzicht (sensor en dashboard
+blijven kloppen). De reden blijft in het register, met het nieuwe kenmerk
+`vervallen`, zodat oude kwartieren in het dagverloop leesbaar blijven.
+
+**Verwachtingen bewust gewijzigd** in `test_low_solar_extra_dip_charging.py`:
+waar die eisten dat de regel laadt, eisen ze nu dat hij dat niet meer doet,
+en dat de marge er nog is. `test_advisory_readiness.py` legt nu vast dat
+`_dipbesluit` de module is die het laadcommando stuurt.
+
+**Volledige testsuite**: 4353 tests, allemaal groen.

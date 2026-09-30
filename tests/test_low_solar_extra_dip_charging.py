@@ -1,3 +1,14 @@
+"""v5.25.2 - DEZE REGEL LAADT NIET MEER.
+
+Gemeld: "bijladen bij extra prijsdip" in handmatige stand, 51 minuten voor
+het goedkoopste blok. Dit was een tweede dipregel naast `_dipbesluit`
+(v5.25), en een slechtere: hij vroeg niet of er een goedkoper moment kwam,
+rekende met de duurste prijs van de HELE dag (ook na het blok), en had geen
+bovengrens. De marge wordt nog wel bijgehouden, als inzicht.
+
+VERWACHTINGEN BEWUST GEWIJZIGD: waar deze toetsen eisten dat de regel laadt,
+eisen ze nu dat hij dat NIET meer doet - en dat de marge er nog is.
+"""
 """Extra-dip laden op weinig-zon-dagen (v0.63.87, uitgebreid besproken en
 ontworpen door de gebruiker).
 
@@ -103,8 +114,8 @@ def test_extra_dip_fires_with_sufficient_margin(make_coordinator, hass):
 
         with_now(coordinator, DAY0.replace(hour=13, minute=0))
         await coordinator._async_update_locked()
-        assert coordinator.last_reason == "grid_charging_low_solar_extra_dip"
-        assert coordinator._grid_charged_today is True
+        assert coordinator.last_reason != "grid_charging_low_solar_extra_dip"
+        # de marge wordt nog wel bijgehouden, als inzicht
         assert coordinator.last_extra_dip_margin_eur_per_kwh > 0.03
 
     asyncio.run(run())
@@ -127,8 +138,10 @@ def test_extra_dip_sets_winter_guard_suppressing_later_sale(make_coordinator, ha
 
         with_now(coordinator, DAY0.replace(hour=13, minute=0))
         await coordinator._async_update_locked()
-        assert coordinator.last_reason == "grid_charging_low_solar_extra_dip"
+        assert coordinator.last_reason != "grid_charging_low_solar_extra_dip"
 
+        # De winterbeveiliging staat nog steeds aan - maar nu door de lading
+        # in het hoofdblok om 04:00, niet door deze regel.
         with_now(coordinator, DAY0.replace(hour=18, minute=0))
         await coordinator._async_update_locked()
         assert coordinator.last_reason != "expensive_quarter"
@@ -211,7 +224,7 @@ def test_extra_dip_still_fires_even_after_main_block_already_charged(
         # already being set.
         with_now(coordinator, DAY0.replace(hour=13, minute=0))
         await coordinator._async_update_locked()
-        assert coordinator.last_reason == "grid_charging_low_solar_extra_dip"
+        assert coordinator.last_reason != "grid_charging_low_solar_extra_dip"
 
     asyncio.run(run())
 
@@ -241,7 +254,7 @@ def test_extra_dip_uses_learned_efficiency_when_available(make_coordinator, hass
         # would NOT have fired) - so a clean pass here demonstrates the
         # *learned* (much higher, ~90%) efficiency was actually used:
         # 0.9*0.35 - 0.15 = 0.165, comfortably above threshold.
-        assert coordinator.last_reason == "grid_charging_low_solar_extra_dip"
+        assert coordinator.last_reason != "grid_charging_low_solar_extra_dip"
         assert coordinator.last_extra_dip_margin_eur_per_kwh > 0.1
 
     asyncio.run(run())

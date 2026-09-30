@@ -117,7 +117,12 @@ def test_geen_reden_in_de_registry_die_niemand_zet():
     NIET_STUREND = {
         r for r, g in REASON_REGISTRY.items() if g.get("stuurt") is False
     }
-    ongebruikt = sorted(set(REASON_REGISTRY) - gebruikt - VIA_SCHAKELAAR - NIET_STUREND)
+    # v5.25.2: vervallen redenen worden niet meer gezet, maar blijven staan
+    # zodat oude kwartieren in het dagverloop leesbaar blijven.
+    VERVALLEN = {r for r, g in REASON_REGISTRY.items() if g.get("vervallen")}
+    ongebruikt = sorted(
+        set(REASON_REGISTRY) - gebruikt - VIA_SCHAKELAAR - NIET_STUREND - VERVALLEN
+    )
     assert not ongebruikt, ongebruikt
 
 
