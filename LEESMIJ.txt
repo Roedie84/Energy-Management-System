@@ -1,24 +1,27 @@
-EMS v5.25.2 - alle wijzigingen sinds v5.25.1
+EMS v5.26 - alle wijzigingen sinds v5.25.2
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
-    const.py, coordinator.py
+    coordinator.py, sensor.py, diagnostics.py
     dashboard_template.yaml   (gaat altijd mee, ongewijzigd)
     manifest.json, bestandscontrole.json
 
 NAAR DE REPO
     README.md, CHANGELOG.md
     dashboards/energy_management_system_dashboard.yaml
-    tests/ (drie bestanden)
+    tests/ (vijf bestanden)
 
-Voor HACS: release met tag v5.25.2.
+Voor HACS: release met tag v5.26.
 
 WAT ER VERANDERT
-De oude regel "bijladen bij extra prijsdip" laadt niet meer. Hij laadde
-op het eerste lonende moment - ook vlak voor het goedkoopste blok - en
-zonder bovengrens. Laden in een dip loopt nu uitsluitend via de nieuwe
-regel: alleen als de accu het blok niet haalt, alleen op het goedkoopste
-moment, en nooit meer dan er ontbreekt.
+1. EEN PLAN. "Komend schema" en "blok(ken) gepland" tonen nu het
+   kwartierplan - niet meer een oudere, tweede simulatie die laden,
+   sparen en verkopen in de piek niet kende.
+2. Het kwartierplan kent laden bij weinig zon in het goedkope blok.
+3. De winterbeveiliging is vervallen: na laden van het net wordt er
+   gewoon verkocht in de dure kwartieren, boven de reserve. Op
+   30 september hield hij ruim 9 ct winst per kWh tegen.
 
-Zie je na de herstart nog steeds "bijladen bij extra prijsdip" als
-laatste reden, dan is dat het besluit van voor de update; het volgende
-besluit is het nieuwe.
+NA DE HERSTART
+"Komend schema" hoort hetzelfde te laten zien als wat het EMS doet.
+Vanavond, na het laden van vanmiddag: verkopen in de avondpiek, boven
+de reserve.

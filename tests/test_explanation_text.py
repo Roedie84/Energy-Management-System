@@ -37,7 +37,8 @@ def test_default_smart_mentions_low_solar_narrowing(make_coordinator):
     assert "weinig zon" in text
 
 
-def test_default_smart_mentions_winter_guard_suppression(make_coordinator):
+def test_default_smart_no_longer_mentions_winter_guard(make_coordinator):
+    # v5.26 - VERWACHTING BEWUST GEWIJZIGD: de winterbeveiliging is vervallen. Die blokkeerde de hele dag de verkoop zodra er van het net was geladen - met de inkoopprijs als argument, terwijl die al betaald is. Of er verkocht wordt beslissen nu de reserve, de bodem en de piekregel.
     coordinator = make_coordinator({})
     coordinator.last_reason = "default_smart"
     coordinator.last_has_enough_energy = True
@@ -47,7 +48,7 @@ def test_default_smart_mentions_winter_guard_suppression(make_coordinator):
 
     text = coordinator._build_explanation()
 
-    assert "winter-guard" in text or "netgeladen" in text or "bijgeladen" in text
+    assert "winter-guard" not in text
 
 
 def test_default_smart_falls_back_without_threshold_data(make_coordinator):

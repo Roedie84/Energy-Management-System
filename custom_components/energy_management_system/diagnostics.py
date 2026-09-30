@@ -1408,7 +1408,8 @@ async def async_get_config_entry_diagnostics(
             "was_bootstrapped_from_history": (
                 coordinator.was_bootstrapped_from_history
             ),
-            "upcoming_transitions": coordinator.last_transitions,
+            # v5.26: het kwartierplan als blokken - wat de kaart toont.
+            "upcoming_transitions": _veilig("plan_blokken", coordinator.get_plan_blokken),
             # v1.22.1: de losse kwartierprijzen, niet alleen de
             # samengevoegde blokken met min en max.
             #

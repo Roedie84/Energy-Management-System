@@ -29204,3 +29204,59 @@ en dat de marge er nog is. `test_advisory_readiness.py` legt nu vast dat
 `_dipbesluit` de module is die het laadcommando stuurt.
 
 **Volledige testsuite**: 4353 tests, allemaal groen.
+
+
+## v5.26 — Een plan, en geen winterbeveiliging meer
+
+Gemeld met drie schermafdrukken: *"planning komt nog niet overeen met de
+werkelijkheid?"* Om 12:47 op 30 september laadde het EMS bij weinig zon,
+terwijl de kaart "Komend schema" iets anders toonde:
+
+```
+                        12:45-13:15    avond 18:15-21:15
+export (kwartierplan)   laden          slim - geen verkoop
+kaart "Komend schema"   slim           handmatig - verkopen
+werkelijk               laden
+```
+
+### Twee plannen naast elkaar
+
+De kaart heeft nooit het kwartierplan getoond. Hij las de oude tijdlijn
+(`_build_forecast_timeline`): een tweede, oudere simulatie met eigen regels,
+die laden bij weinig zon, sparen, de dip en de piekverkoop niet kende. Dat
+verklaart ook het "verdwenen" laden van die ochtend om 10:54 - het stond in
+het kwartierplan, alleen nooit op die kaart.
+
+De kaart, de teller "blok(ken) gepland" en de export tonen nu het
+**kwartierplan**, samengevoegd tot blokken (`get_plan_blokken`), in dezelfde
+velden als voorheen - het dashboard hoefde niet te veranderen.
+
+### Het plan kent laden bij weinig zon
+
+Op een donkere dag laadt de beslissing het hele goedkope blok
+(`grid_charging_low_solar`), ongeacht de marge. Het plan deed dat niet na.
+Nu wel: in het blok, tot de accu vol is.
+
+### De winterbeveiliging is vervallen
+
+Zodra er van het net was geladen, blokkeerde hij de rest van de dag de
+verkoop - in de beslissing en in het plan: *"die energie terugverkopen is
+verlies"*. Maar dat rekent met de inkoopprijs, en die is al betaald. De
+enige echte vraag is of je hem nu verkoopt of later zelf gebruikt - en die
+beantwoorden de reserve, de bodem en de piekregel al.
+
+Op 30 september hield hij precies de winst tegen:
+
+```
+laden in het blok     17,2 ct
+verkopen in de piek   44,8 x 83,7% - 11,4 slijtage = 26,1 ct waard
+                      -> ruim 9 ct per kWh
+```
+
+Gevraagd: *"het beste doen wat noodzakelijk en economisch het beste is."*
+
+**Verwachtingen bewust gewijzigd** in vijf toetsen die de winterbeveiliging
+vastlegden: een van het net geladen accu mag nu wel verkopen, boven de
+reserve.
+
+**Volledige testsuite**: 4357 tests, allemaal groen.

@@ -71,14 +71,15 @@ def test_solar_charged_battery_may_sell_at_high_prices(
     assert all(r["prijs_ct"] >= 32 for r in verkoop)
 
 
-def test_a_grid_charged_battery_never_sells(make_coordinator, hass):
+def test_a_grid_charged_battery_may_still_sell(make_coordinator, hass):
+    # v5.26 - VERWACHTING BEWUST GEWIJZIGD: de winterbeveiliging is vervallen. Die blokkeerde de hele dag de verkoop zodra er van het net was geladen - met de inkoopprijs als argument, terwijl die al betaald is. Of er verkocht wordt beslissen nu de reserve, de bodem en de piekregel.
     """Is de accu van het net geladen, dan zou verkopen dezelfde stroom
     met verlies terugverkopen - geen arbitrage."""
     plan = _coordinator(make_coordinator, hass, van_net=True).get_quarter_plan(
         NU
     )
 
-    assert not [r for r in plan if "manual" in r["modus"]]
+    assert [r for r in plan if "verkopen" in r["modus"]]
 
 
 def test_cheap_quarters_never_sell(make_coordinator, hass):

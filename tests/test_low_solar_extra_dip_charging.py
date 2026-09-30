@@ -121,7 +121,8 @@ def test_extra_dip_fires_with_sufficient_margin(make_coordinator, hass):
     asyncio.run(run())
 
 
-def test_extra_dip_sets_winter_guard_suppressing_later_sale(make_coordinator, hass):
+def test_after_grid_charging_selling_is_no_longer_suppressed(make_coordinator, hass):
+    # v5.26 - VERWACHTING BEWUST GEWIJZIGD: de winterbeveiliging is vervallen. Die blokkeerde de hele dag de verkoop zodra er van het net was geladen - met de inkoopprijs als argument, terwijl die al betaald is. Of er verkocht wordt beslissen nu de reserve, de bodem en de piekregel.
     """Energy bought via the extra-dip charge must not be resold later
     that same day - the winter guard must engage exactly like it does
     for the main block."""
@@ -140,12 +141,9 @@ def test_extra_dip_sets_winter_guard_suppressing_later_sale(make_coordinator, ha
         await coordinator._async_update_locked()
         assert coordinator.last_reason != "grid_charging_low_solar_extra_dip"
 
-        # De winterbeveiliging staat nog steeds aan - maar nu door de lading
-        # in het hoofdblok om 04:00, niet door deze regel.
         with_now(coordinator, DAY0.replace(hour=18, minute=0))
         await coordinator._async_update_locked()
-        assert coordinator.last_reason != "expensive_quarter"
-        assert coordinator.last_winter_guard_suppressed_today is True
+        assert coordinator.last_winter_guard_suppressed_today is False
 
     asyncio.run(run())
 

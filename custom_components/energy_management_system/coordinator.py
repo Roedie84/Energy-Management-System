@@ -21372,6 +21372,7 @@ class EnergyManagementSystemCoordinator:
             tekort = max(0.0, sum(v - z for v, z in segmenten))
             kwartieren.append((begin, prijs_ruw / PRICE_SCALE_FACTOR, tekort))
         return {
+            "weinig_zon": self._is_low_solar_expected(),
             "kwartieren": kwartieren,
             "volgend_blok": volgend_blok,
             "rendement": rendement,
@@ -21451,6 +21452,11 @@ class EnergyManagementSystemCoordinator:
         per_kwartier: float,
     ) -> float:
         """Hoeveel het plan in dit blokkwartier laadt - via `_laadregel` (v5.22)."""
+        # v5.26: op een dag met weinig zon laadt de beslissing het hele blok
+        # (`grid_charging_low_solar`), ongeacht de marge. Het plan deed dat
+        # niet na, en liep dan uit de pas met wat er werkelijk gebeurde.
+        if netregels.get("weinig_zon"):
+            return max(0.0, min(laad_kwh, bruikbaar - soc))
         if netregels.get("slijtage_ct") is None or per_kwartier <= 0:
             return 0.0
         later = sorted(
@@ -21530,7 +21536,6 @@ class EnergyManagementSystemCoordinator:
         # kwartier - ruim 6 kW.
         laad_w = abs(self.config.get(CONF_MANUAL_CHARGE_POWER) or 0)
         drempel = self.last_expensive_price_threshold
-        van_net_geladen = self._grid_charged_today
         uitstelplan = self.last_solar_defer_plan or {}
         omslag = uitstelplan.get("omslag_uur")
 
@@ -21638,7 +21643,7 @@ class EnergyManagementSystemCoordinator:
             duur_kwh = ontlaad_w / 1000 * duur
             laad_kwh = laad_w / 1000 * duur if laad_w else float("inf")
             duur_kwartier = (
-                drempel is not None and prijs >= drempel and not van_net_geladen
+                drempel is not None and prijs >= drempel
             )
             uitstellen = (
                 uitstelplan.get("uitstellen")
@@ -21805,6 +21810,53 @@ class EnergyManagementSystemCoordinator:
                 }
             )
         return plan
+
+    def get_plan_blokken(self, now: datetime | None = None) -> list[dict]:
+        """Het kwartierplan, samengevoegd tot blokken (v5.26).
+
+        Gemeld: "planning komt nog niet overeen met de werkelijkheid?" De
+        kaart "Komend schema" toonde de oude tijdlijn
+        (`_build_forecast_timeline`): een tweede, oudere simulatie met eigen
+        regels, die laden bij weinig zon, sparen, de dip en de piekverkoop
+        niet kende. Twee plannen naast elkaar - de kaart liep daardoor steeds
+        uit de pas. Nu komt er EEN plan op het scherm: het kwartierplan.
+
+        Dezelfde velden als de oude blokken, zodat het dashboard niet hoeft
+        te veranderen.
+        """
+        blokken: list[dict] = []
+        for rij in self.get_quarter_plan(now) or []:
+            begin = dt_util.parse_datetime(str(rij.get("start") or ""))
+            if begin is None:
+                continue
+            eind = begin + timedelta(minutes=15)
+            prijs = (rij.get("prijs_ct") or 0.0) / 100
+            modus = rij.get("modus")
+            vorige = blokken[-1] if blokken else None
+            if vorige and vorige["mode"] == modus and vorige["_eind"] == begin:
+                vorige["_eind"] = eind
+                vorige["min_price_per_kwh"] = min(vorige["min_price_per_kwh"], prijs)
+                vorige["max_price_per_kwh"] = max(vorige["max_price_per_kwh"], prijs)
+                continue
+            blokken.append(
+                {
+                    "mode": modus,
+                    "_begin": begin,
+                    "_eind": eind,
+                    "min_price_per_kwh": prijs,
+                    "max_price_per_kwh": prijs,
+                }
+            )
+        return [
+            {
+                "mode": b["mode"],
+                "start": b["_begin"].isoformat(),
+                "end": b["_eind"].isoformat(),
+                "min_price_per_kwh": round(b["min_price_per_kwh"], 4),
+                "max_price_per_kwh": round(b["max_price_per_kwh"], 4),
+            }
+            for b in blokken
+        ]
 
     def get_quarter_plan_compact(self, now: datetime | None = None) -> list[dict]:
         """Het kwartierplan met alleen wat de tabel toont (v1.25.0).
@@ -37851,13 +37903,6 @@ class EnergyManagementSystemCoordinator:
                         "blok is al gaande of voorbij. De Zendure regelt dit "
                         "zelf (smart-modus)."
                     )
-                if self.last_winter_guard_suppressed_today:
-                    parts.append(
-                        "Let op: er is vandaag al bijgeladen vanaf het net "
-                        "bij weinig zon (winter-guard), dus eventuele dure "
-                        "kwartieren worden vandaag bewust niet verkocht - "
-                        "dat zou anders met verlies zijn."
-                    )
 
         else:
             # v4.19: eerst de tabel, dan pas opgeven. `REDEN_UITLEG`
@@ -38368,15 +38413,14 @@ class EnergyManagementSystemCoordinator:
             )
             is_expensive = False
             expensive_tier = None
-        if is_expensive and self._grid_charged_today:
-            self.last_winter_guard_suppressed_today = True
-            _LOGGER.debug(
-                "Suppressing expensive_quarter discharge: the battery was "
-                "already grid-charged today (low solar) - selling that "
-                "same energy back would just be a loss, not arbitrage."
-            )
-            is_expensive = False
-            expensive_tier = None
+        # v5.26: de winterbeveiliging is VERVALLEN. Hij blokkeerde de hele
+        # dag de verkoop zodra er van het net was geladen: "die energie
+        # terugverkopen is verlies". Maar dat rekent met de inkoopprijs, en
+        # die is al betaald. De enige echte vraag is: nu verkopen of later
+        # zelf gebruiken - en die beantwoorden de reserve, de bodem en de
+        # piekregel al (`may_sell_now` hierboven). Op 30 september hield hij
+        # tegen: laden tegen 17,2 ct, verkopen tegen 44,8 ct - ruim 9 ct
+        # winst per kWh na rendement en slijtage.
 
         # Secondary tier: if 'now' doesn't clear the strict, primary
         # dynamic threshold, check whether there's genuinely *spare*
@@ -38391,7 +38435,7 @@ class EnergyManagementSystemCoordinator:
         # surrounding quarters at only a slightly lower price went
         # unused). Never applies if the winter guard above already
         # suppressed selling today, or while grid-charged.
-        if not is_expensive and not self._grid_charged_today:
+        if not is_expensive:
             secondary_threshold_raw = self._get_secondary_expensive_price_threshold(
                 entries, now
             )

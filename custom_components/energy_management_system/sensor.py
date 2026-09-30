@@ -3833,7 +3833,8 @@ class UpcomingTimelineSensor(_CoordinatorDiagnosticSensor):
     def native_value(self) -> int:
         """Number of upcoming intervals in the timeline (state is a count;
         use the 'transitions' attribute for the actual table)."""
-        return len(self._coordinator.last_timeline)
+        # v5.26: uit het kwartierplan - een plan op het scherm.
+        return len(self._coordinator.get_plan_blokken())
 
     @property
     def extra_state_attributes(self) -> dict:
@@ -3845,7 +3846,9 @@ class UpcomingTimelineSensor(_CoordinatorDiagnosticSensor):
         # 'timeline' (the dashboard only uses 'transitions'), so it's
         # dropped here entirely rather than trimmed.
         return {
-            "transitions": self._coordinator.last_transitions,
+            # v5.26: het kwartierplan, niet meer de oude tijdlijn - die liep
+            # uit de pas met wat het EMS werkelijk deed.
+            "transitions": self._coordinator.get_plan_blokken(),
         }
 
 

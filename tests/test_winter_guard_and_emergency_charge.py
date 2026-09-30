@@ -16,9 +16,10 @@ def _flat_price_with_cheap_block(hour, minute):
     return 2_500_000
 
 
-def test_grid_charged_today_suppresses_same_day_expensive_discharge(
+def test_grid_charged_today_no_longer_suppresses_selling(
     make_coordinator, hass
 ):
+    # v5.26 - VERWACHTING BEWUST GEWIJZIGD: de winterbeveiliging is vervallen. Die blokkeerde de hele dag de verkoop zodra er van het net was geladen - met de inkoopprijs als argument, terwijl die al betaald is. Of er verkocht wordt beslissen nu de reserve, de bodem en de piekregel.
     """If the battery force-charged from the grid today (low solar), it
     should not also manual-discharge at high prices that same day - and
     the very next day it should work normally again."""
@@ -52,7 +53,7 @@ def test_grid_charged_today_suppresses_same_day_expensive_discharge(
         # NOT manual-discharge (selling grid-bought energy at a loss).
         with_now(coordinator, DAY0.replace(hour=19, minute=15))
         await coordinator._async_update_locked()
-        assert coordinator.last_reason != "expensive_quarter"
+        assert coordinator.last_winter_guard_suppressed_today is False
 
         # The next day, a fresh expensive quarter should work normally.
         day1 = DAY0 + timedelta(days=1)
@@ -65,7 +66,8 @@ def test_grid_charged_today_suppresses_same_day_expensive_discharge(
     asyncio.run(run())
 
 
-def test_winter_guard_suppression_flag_visible_in_diagnostics(make_coordinator, hass):
+def test_winter_guard_flag_never_set_anymore(make_coordinator, hass):
+    # v5.26 - VERWACHTING BEWUST GEWIJZIGD: de winterbeveiliging is vervallen. Die blokkeerde de hele dag de verkoop zodra er van het net was geladen - met de inkoopprijs als argument, terwijl die al betaald is. Of er verkocht wordt beslissen nu de reserve, de bodem en de piekregel.
     """The v0.60.0 diagnostic flag mirrors the suppression itself: set
     for the rest of the day it happens, cleared again the next day."""
     forecast = make_price_forecast(DAY0, _flat_price_with_cheap_block)
@@ -94,7 +96,7 @@ def test_winter_guard_suppression_flag_visible_in_diagnostics(make_coordinator, 
 
         with_now(coordinator, DAY0.replace(hour=19, minute=15))
         await coordinator._async_update_locked()
-        assert coordinator.last_winter_guard_suppressed_today is True
+        assert coordinator.last_winter_guard_suppressed_today is False
 
         day1 = DAY0 + timedelta(days=1)
         forecast2 = make_price_forecast(day1, _flat_price_with_cheap_block)
