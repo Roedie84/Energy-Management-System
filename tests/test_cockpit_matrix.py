@@ -244,14 +244,20 @@ def test_een_tekort_staat_op_de_plaat():
     assert "tekort" in plaat and "3,65" in plaat
 
 
-def test_een_onmogelijke_reserve_is_een_aandachtspunt(make_coordinator, hass):
-    """Reserve groter dan de accu: dat is een rekenfout, geen weergave."""
+def test_een_reserve_groter_dan_de_accu_is_geen_aandachtspunt(make_coordinator, hass):
+    """v5.25 - VERWACHTING BEWUST GEWIJZIGD.
+
+    In v5.18 was een reserve groter dan de accu een aandachtspunt: "de
+    reserveberekening klopt dan niet". Dat was fout. Het betekent dat het
+    goedkope blok zo ver weg ligt dat zelfs een volle accu het niet haalt -
+    in de winter vaak. Als aandachtspunt zette het elke donkere nacht de
+    status op LET OP voor iets wat niet te verhelpen is. Het spaarplan
+    handelt die situatie af en meldt hem."""
     c = _accu(make_coordinator({}), hass, 50.0, 3.0, 9.9)
 
-    assert c.cockpit_accu()["onmogelijke_reserve"] is True
     punten = " ".join(str(p) for p in c._aandachtspunten_over_de_integratie())
-    assert "past niet in de accu" in punten
 
+    assert "past niet in de accu" not in punten
 
 def test_zonder_reserve_is_er_geen_tekort(make_coordinator, hass):
     """v5.19.6 - VERWACHTING BEWUST GEWIJZIGD, en dat hoort gemeld.

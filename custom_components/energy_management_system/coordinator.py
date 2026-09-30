@@ -1303,7 +1303,7 @@ class EnergyManagementSystemCoordinator:
         # een regel - `__init__` staat op de ratel.
         # v3.99.19: `dagverloop` en `nabeschouwingen` erbij, in dezelfde
         # regel - `__init__` staat op de ratel.
-        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen, self.safe_sell_shadow, self.reden_afwijkingen, self.meting_laatst_gevuld, self.weerbron_keuze, self.voorspellingsverloop, self._geladen_opslag, self.rendement_afwijzingen, self.weerbron_levering, self.weather_ensemble_readings_alle, self.instraling_verhouding, self.ventilator_kwh_per_dag, self._ventilator_vermogens_aan, self.gacs_traag, self.gacs_duur_ms, self._pv_model_bezig, self.gacs_traagste, self.prijs_vandaag, self.prijs_gisteren, self.besluit_snapshot, self._cockpit_context, self.last_laadbesluit, self.last_piekverkoop, self.piekverkoop_tot, self.richting_afwijking, self._richting_sinds, self.pv_uurbias_in_utc = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, [], [], {}, {}, {}, {}, None, {}, {}, {}, {}, {}, [], [], None, False, None, {}, {}, {}, {}, {}, {}, None, None, None, True
+        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen, self.safe_sell_shadow, self.reden_afwijkingen, self.meting_laatst_gevuld, self.weerbron_keuze, self.voorspellingsverloop, self._geladen_opslag, self.rendement_afwijzingen, self.weerbron_levering, self.weather_ensemble_readings_alle, self.instraling_verhouding, self.ventilator_kwh_per_dag, self._ventilator_vermogens_aan, self.gacs_traag, self.gacs_duur_ms, self._pv_model_bezig, self.gacs_traagste, self.prijs_vandaag, self.prijs_gisteren, self.besluit_snapshot, self._cockpit_context, self.last_laadbesluit, self.last_piekverkoop, self.piekverkoop_tot, self.richting_afwijking, self._richting_sinds, self.pv_uurbias_in_utc, self.last_spaarplan, self.spaar_uitkomst = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, [], [], {}, {}, {}, {}, None, {}, {}, {}, {}, {}, [], [], None, False, None, {}, {}, {}, {}, {}, {}, None, None, None, True, {}, {}
         self.handmatige_ingrepen: list[dict] = []
         # v1.1.6: met welke meetmethode de bewaarde foutreeks tot stand
         # is gekomen. Verandert de methode, dan wordt die reeks eenmalig
@@ -9403,7 +9403,9 @@ class EnergyManagementSystemCoordinator:
             "grid_charging_low_solar",
             "grid_charging_low_solar_extra_dip",
             "grid_charging_profitable",
+            "grid_charging_dip",
             "expensive_quarter_peak",
+            "battery_saved_for_peak",
         ):
             return self._waarom_bij_laden(reden, gemeenschappelijk, _blok_tekst())
 
@@ -10928,6 +10930,7 @@ class EnergyManagementSystemCoordinator:
         "grid_charging_low_solar",
         "grid_charging_low_solar_extra_dip",
         "grid_charging_profitable",
+        "grid_charging_dip",
         "emergency_low_battery",
     )
     _REDENEN_ONTLADEN = ("expensive_quarter", "expensive_quarter_peak")
@@ -19315,6 +19318,8 @@ class EnergyManagementSystemCoordinator:
         if reden == "grid_charging_low_solar":
             self.last_reason = "grid_charging_low_solar"
             self._grid_charged_today = True
+        elif (self.last_laadbesluit or {}).get("soort") == "dip":
+            self.last_reason = "grid_charging_dip"
         else:
             self.last_reason = "grid_charging_profitable"
         self.last_charge_power_applied = charge_power
@@ -19333,6 +19338,22 @@ class EnergyManagementSystemCoordinator:
         Bij laden omdat het loont: de getallen van het laadbesluit ZELF -
         dezelfde die de beslissing namen, niet achteraf opnieuw berekend.
         """
+        if reden == "battery_saved_for_peak":
+            plan = self.last_spaarplan or {}
+            if plan.get("nodig_kwh") is None:
+                return list(gemeenschappelijk)
+            regels = [
+                f"er zit {plan['beschikbaar_kwh']:.1f} kWh in de accu, tot het "
+                f"goedkope blok is {plan['nodig_kwh']:.1f} kWh nodig",
+            ]
+            if plan.get("prijs_nu_eur") is not None and plan.get("grensprijs_eur"):
+                regels.append(
+                    f"dit kwartier kost {plan['prijs_nu_eur'] * 100:.1f} ct, de "
+                    f"accu dekt alleen kwartieren vanaf {plan['grensprijs_eur'] * 100:.1f} ct"
+                )
+            if plan.get("gedekt"):
+                regels.append("gedekt: " + ", ".join(plan["gedekt"]))
+            return regels
         if reden == "expensive_quarter_peak":
             piek = self.last_piekverkoop or {}
             if piek.get("prijs_nu_eur") is None:
@@ -19343,6 +19364,23 @@ class EnergyManagementSystemCoordinator:
                 f"{piek['duurste_later_eur'] * 100:.1f} ct",
                 f"nu verkopen en later inkopen levert minstens "
                 f"{piek['winst_ct_per_kwh']:.1f} ct per kWh op, ook onder de reserve",
+            ]
+        if reden == "grid_charging_dip":
+            besluit = self.last_laadbesluit or {}
+            if besluit.get("waarde_eur") is None:
+                return list(gemeenschappelijk)
+            blok = dt_util.parse_datetime(besluit.get("blok") or "")
+            return [
+                f"stroom kost nu {besluit['prijs_nu_eur'] * 100:.1f} ct",
+                (
+                    f"de accu haalt het goedkope blok van {blok:%H:%M} niet: er "
+                    f"ontbreekt {besluit['gat_kwh']:.1f} kWh"
+                    if blok
+                    else f"er ontbreekt {besluit['gat_kwh']:.1f} kWh tot het goedkope blok"
+                ),
+                f"die kWh is straks {besluit['waarde_eur'] * 100:.1f} ct waard "
+                f"({besluit['latere_prijs_eur'] * 100:.1f} ct x "
+                f"{besluit['rendement_procent']:.0f}% - {besluit['slijtage_ct']:.1f} ct slijtage)",
             ]
         if reden != "grid_charging_profitable":
             regels = list(gemeenschappelijk)
@@ -19380,6 +19418,72 @@ class EnergyManagementSystemCoordinator:
         if segmenten is None:
             return None
         return sum(max(0.0, zon - verbruik) for verbruik, zon in segmenten)
+
+    def _dipbesluit(self, now: datetime, blok: datetime | None) -> dict:
+        """Laden in een prijsdip, BUITEN het goedkope blok (v5.25).
+
+        Gevraagd: "en wanneer het kosten efficient genoeg is gaat hij bij
+        laden van het net toch?" Tot nu toe: alleen in het goedkope blok.
+        Een winderige nacht van 15 ct, met de ochtendpiek op 40 ct en het
+        goedkope blok pas de volgende middag, liet winst liggen.
+
+        Alleen als de accu het volgende blok NIET haalt - anders koop je nu
+        wat het blok straks goedkoper levert. Het spaarplan weet welke
+        kwartieren tot het blok gedekt worden; het duurste kwartier dat NIET
+        gedekt wordt, bepaalt wat de volgende kWh waard is:
+
+            waarde = duurste ongedekte kwartier x rendement - slijtage
+
+        Dezelfde rekenregel als laden in het blok en verkopen. Nooit meer
+        dan er tot het blok ontbreekt; naarmate er bijgeladen wordt, wordt
+        dat duurste ongedekte kwartier goedkoper en stopt het vanzelf.
+
+        Bij de prijzen van 29 september loont het niet: 40 x 83,7% - 11,4 =
+        22,1 ct, tegen een nachtprijs van 25 ct. Dan spaart het EMS in
+        plaats daarvan - dat verschuift zonder rendementsverlies.
+        """
+        uit: dict = {"laden": False, "soort": "dip"}
+        plan = self.spaarplan(now, self._get_forecast_entries() or [], blok)
+        if not plan.get("actief"):
+            uit["reden"] = "niet in het goedkope blok, en de accu haalt het blok"
+            return uit
+        prijs_nu = self.huidige_prijs_eur_per_kwh()
+        ruimte = self._resterende_laadruimte_kwh()
+        slijtage_ct = (self.get_wear_cost_overview() or {}).get("slijtage_ct_per_kwh")
+        duurste = plan.get("duurste_ongedekt_eur")
+        rendement = self.learned_battery_efficiency_percent
+        if rendement is None:
+            rendement = float(
+                self.instelling(
+                    CONF_BATTERY_ROUND_TRIP_EFFICIENCY,
+                    DEFAULT_BATTERY_ROUND_TRIP_EFFICIENCY_PERCENT,
+                )
+            )
+        if None in (prijs_nu, ruimte, slijtage_ct, duurste):
+            uit["reden"] = "prijs, laadruimte, slijtage of ongedekt kwartier onbekend"
+            return uit
+        waarde = duurste * rendement / 100 - slijtage_ct / 100
+        gat = min(ruimte, plan["nodig_kwh"] - plan["beschikbaar_kwh"])
+        laden = waarde > prijs_nu and gat > 0
+        uit.update(
+            {
+                "laden": laden,
+                "prijs_nu_eur": round(prijs_nu, 4),
+                "latere_prijs_eur": round(duurste, 4),
+                "rendement_procent": round(rendement, 1),
+                "slijtage_ct": round(slijtage_ct, 2),
+                "waarde_eur": round(waarde, 4),
+                "marge_ct": round((waarde - prijs_nu) * 100, 1),
+                "gat_kwh": round(gat, 2),
+                "blok": plan.get("blok"),
+                "reden": (
+                    "prijsdip: straks meer waard dan hij nu kost"
+                    if laden
+                    else "geen dip: straks minder waard dan hij nu kost"
+                ),
+            }
+        )
+        return uit
 
     def laadbesluit_uit_het_net(
         self,
@@ -19424,8 +19528,8 @@ class EnergyManagementSystemCoordinator:
             or blok_eind is None
             or not (blok_start <= now < blok_eind)
         ):
-            uit["reden"] = "niet in het goedkope blok"
-            return uit
+            # v5.25: buiten het blok alleen in een prijsdip - zie `_dipbesluit`.
+            return self._dipbesluit(now, blok_start)
         prijs_nu = self.huidige_prijs_eur_per_kwh()
         ruimte = self._resterende_laadruimte_kwh()
         rendement = self.learned_battery_efficiency_percent
@@ -21202,18 +21306,85 @@ class EnergyManagementSystemCoordinator:
                 duurste = float("-inf")
             else:
                 duurste = max(duurste, prijs)
+        # v5.25: voor laden in een dip - per kwartier het verwachte tekort
+        # (dezelfde inschatting als het spaarplan) en het volgende blok.
+        kwartieren = []
+        volgend_blok: dict = {}
+        volgende = None
+        for begin, eind, prijs_ruw in reversed(entries):
+            volgend_blok[begin] = volgende
+            if prijs_ruw / PRICE_SCALE_FACTOR <= blok_drempel_voor(begin):
+                volgende = begin
+        for begin, eind, prijs_ruw in entries:
+            if eind <= now or begin >= now + timedelta(hours=24):
+                continue
+            segmenten = self._segmenten_verbruik_zon(max(begin, now), eind, veilig=True)
+            if segmenten is None:
+                kwartieren = []
+                break
+            tekort = max(0.0, sum(v - z for v, z in segmenten))
+            kwartieren.append((begin, prijs_ruw / PRICE_SCALE_FACTOR, tekort))
         return {
+            "kwartieren": kwartieren,
+            "volgend_blok": volgend_blok,
             "rendement": rendement,
             "slijtage_ct": (self.get_wear_cost_overview() or {}).get("slijtage_ct_per_kwh"),
             "salderen": self._is_salderen_active(now),
             "reeks": reeks,
             "duurste_tot_blok": duurste_tot_blok,
+            # v5.25: de kwartieren die het spaarplan van het net laat komen.
+            "gespaard": {
+                dt_util.parse_datetime(s)
+                for s in (self.last_spaarplan or {}).get("gespaard") or []
+            },
             # De bodem uit de reserveberekening; onbekend = geen piekverkoop.
             "bodem_kwh": (self.last_reserve_margin_breakdown or {}).get(
                 "bodem_kwh", float("inf")
             )
             or float("inf"),
         }
+
+    @staticmethod
+    def _plan_dip_laadt(
+        netregels: dict,
+        start: datetime,
+        prijs: float,
+        soc: float,
+        bruikbaar: float,
+        laad_kwh: float,
+    ) -> float:
+        """Hoeveel het plan in dit kwartier laadt in een prijsdip (v5.25).
+
+        Dezelfde regel als `_dipbesluit`: alleen als de gesimuleerde lading
+        het volgende blok niet haalt, en het duurste kwartier dat ze NIET
+        dekt meer oplevert dan dit kwartier kost.
+        """
+        volgend = netregels.get("volgend_blok", {}).get(start)
+        slijtage = netregels.get("slijtage_ct")
+        if volgend is None or slijtage is None:
+            return 0.0
+        toekomst = [
+            (p, d) for b, p, d in netregels.get("kwartieren", []) if start <= b < volgend
+        ]
+        nodig = sum(d for _p, d in toekomst)
+        if not toekomst or soc >= nodig:
+            return 0.0
+        rest = soc
+        duurste_ongedekt = None
+        for p, d in sorted(toekomst, key=lambda paar: paar[0], reverse=True):
+            if d <= 0:
+                continue
+            if rest > 0:
+                rest -= d
+                continue
+            duurste_ongedekt = p
+            break
+        if duurste_ongedekt is None:
+            return 0.0
+        waarde = duurste_ongedekt * netregels["rendement"] / 100 - slijtage / 100
+        if waarde <= prijs:
+            return 0.0
+        return max(0.0, min(laad_kwh, nodig - soc, bruikbaar - soc))
 
     def _plan_laadt(
         self,
@@ -21457,14 +21628,23 @@ class EnergyManagementSystemCoordinator:
                 if uit < verbruik - zon:
                     tekort = True
                 net = round(-(zon - (verbruik - uit)), 3)
-            elif in_blok and (
-                geladen := self._plan_laadt(
-                    netregels, einde, prijs, soc, bruikbaar, laad_kwh, duur_kwh
+            elif (
+                geladen := (
+                    self._plan_laadt(
+                        netregels, einde, prijs, soc, bruikbaar, laad_kwh, duur_kwh
+                    )
+                    if in_blok
+                    else self._plan_dip_laadt(
+                        netregels, start, prijs, soc, bruikbaar, laad_kwh
+                    )
                 )
             ) > 0:
                 modus = "manual (laden)"
                 soc += geladen
                 net = round(geladen + verbruik - zon, 3)
+            elif start in netregels["gespaard"]:
+                modus = "smart_charging (sparen)"
+                net = round(verbruik - zon, 3)
             else:
                 modus = "smart"
                 over = max(0.0, zon - verbruik)
@@ -29218,6 +29398,7 @@ class EnergyManagementSystemCoordinator:
                 "grid_charging_low_solar",
                 "grid_charging_low_solar_extra_dip",
                 "grid_charging_profitable",
+                "grid_charging_dip",
                 "emergency_low_battery",
             )
             and charge_power_w
@@ -33535,19 +33716,12 @@ class EnergyManagementSystemCoordinator:
                 f"maar de accu {afwijking['gemeten'].lower()} al "
                 f"{HANDMATIGE_INGREEP_MIN_DUUR_MINUTEN:.0f} minuten of langer."
             )
-        # v5.18: een reserve die niet in de accu past is een rekenfout, geen
-        # weergaveprobleem. Uit de review: niet stilzwijgend afkappen.
-        reserve = (self.last_reserve_margin_breakdown or {}).get(
-            "reserve_kwh_after_margin"
-        )
-        nominaal = self._read_sensor_float(
-            self.config.get(CONF_BATTERY_TOTAL_CAPACITY_SENSOR)
-        )
-        if reserve is not None and nominaal and reserve > nominaal:
-            uit.append(
-                f"Reserve: de gevraagde {reserve:.2f} kWh past niet in de accu "
-                f"van {nominaal:.2f} kWh - de reserveberekening klopt dan niet."
-            )
+        # v5.25: de controle "reserve past niet in de accu" (v5.18) is weg.
+        # Een reserve groter dan de accu is GEEN rekenfout: het goedkope blok
+        # ligt dan zo ver weg dat zelfs een volle accu het niet haalt - in de
+        # winter vaak. Als aandachtspunt zette hij elke donkere nacht de
+        # status op LET OP voor iets wat niet te verhelpen is. Het spaarplan
+        # handelt die situatie af en meldt hem (`_meld_spaarplan`).
         return uit
 
     def _weerbron_melding(self) -> str | None:
@@ -37877,6 +38051,8 @@ class EnergyManagementSystemCoordinator:
             ("besluit_snapshot", lambda: self._besluit_snapshot_vastleggen(now)),
             # v5.19: de trage helft van de cockpit een keer per ronde.
             ("cockpit_context", self.ververs_cockpit_context),
+            # v5.25: na afloop van een spaarnacht de uitkomst melden.
+            ("spaaruitkomst", lambda: self._meld_spaaruitkomst(now)),
             ("meetherinnering", lambda: self._herinner_wat_meet(now)),
             # v3.68.0: het MPC-plan naast de eigen planning.
             ("mpc tegen de planning", lambda: self._meet_mpc(now)),
@@ -38427,6 +38603,10 @@ class EnergyManagementSystemCoordinator:
             self._finish_decision_tick(now)
             return
 
+        # v5.25: haalt de accu het goedkope blok niet, dan gaat zijn lading
+        # naar de duurste kwartieren - zie `spaarplan`.
+        if await self._spaar_accu_als_nodig(now, entries, cheap_block_start):
+            return
         if should_postpone_charging:
             await self._async_apply_operation(OPTION_SMART_DISCHARGING)
             self.last_reason = "discharging_window"
@@ -38475,6 +38655,267 @@ class EnergyManagementSystemCoordinator:
         self._update_financial_tracking(now, entries, self.last_reason, None, None)
         self._update_shortfall_detection(now, self.last_reason, self.last_available_kwh, self.last_needed_kwh_to_bridge)
         self._finish_decision_tick(now)
+
+    def spaarplan(
+        self, now: datetime, entries, blok: datetime | None
+    ) -> dict:
+        """Waar gaat de lading heen als hij niet tot het blok reikt? (v5.25)
+
+        Gevraagd: "is het dan wijs om de accu alleen op de dure uren het huis
+        te laten ondersteunen, bijvoorbeeld vanavond tot 9 uur en morgenvroeg
+        van 7 tot 9?" - en daarna: "ik vind dit een must voor mijn EMS".
+
+        In `smart` ontlaadt de Zendure op volgorde van de klok. Haalt de
+        accu het goedkope blok niet, dan raakt hij leeg in de goedkopere
+        nacht en komt precies de dure ochtendpiek van het net. Rendement en
+        slijtage maken niet uit - het is dezelfde kWh die er een keer
+        uitgaat, alleen op een ander moment. Dus: de lading naar de
+        DUURSTE kwartieren, en daartussen van het net.
+
+        Per kwartier tot het blok het verwachte tekort (verbruik min zon),
+        met dezelfde inschatting als de reserve. Past alles, dan niets te
+        doen. Past het niet, dan krijgen de duurste kwartieren de lading tot
+        hij op is; de rest komt van het net.
+
+        De grendels van `_net_is_goedkoper_dan_de_accu`: alleen als
+        `smart_charging` op deze accu bestaat, alleen met gemeten getallen,
+        en alleen sparen als het kwartier ruim goedkoper is dan het
+        goedkoopste gedekte kwartier (GRID_CHEAPER_MARGIN_EUR), zodat het
+        niet heen en weer schakelt.
+        """
+        uit: dict = {"actief": False, "sparen_nu": False}
+        if not self.smart_charging_supported():
+            uit["reden"] = "deze accu kent geen smart_charging"
+            return uit
+        if blok is None or blok <= now:
+            uit["reden"] = "geen goedkoop blok in zicht"
+            return uit
+        beschikbaar = self.beschikbare_energie_kwh()
+        if beschikbaar is None:
+            uit["reden"] = "beschikbare energie onbekend"
+            return uit
+        kwartieren = []
+        for begin, eind, prijs in entries or []:
+            if eind <= now or begin >= blok:
+                continue
+            segmenten = self._segmenten_verbruik_zon(max(begin, now), eind, veilig=True)
+            if segmenten is None:
+                uit["reden"] = "geen verbruiksinschatting"
+                return uit
+            tekort = max(0.0, sum(verbruik - zon for verbruik, zon in segmenten))
+            kwartieren.append((begin, eind, prijs / PRICE_SCALE_FACTOR, tekort))
+        nodig = sum(k[3] for k in kwartieren)
+        uit.update(
+            {
+                "beschikbaar_kwh": round(beschikbaar, 2),
+                "nodig_kwh": round(nodig, 2),
+                "blok": blok.isoformat(),
+            }
+        )
+        if not kwartieren or beschikbaar >= nodig:
+            uit["reden"] = "de accu haalt het goedkope blok"
+            return uit
+        gedekt: set = set()
+        rest = beschikbaar
+        grens = None
+        for begin, _eind, prijs, tekort in sorted(
+            kwartieren, key=lambda k: k[2], reverse=True
+        ):
+            if rest <= 0:
+                break
+            if tekort <= 0:
+                continue
+            gedekt.add(begin)
+            rest -= tekort
+            grens = prijs
+        # v5.25: het duurste kwartier dat de accu NIET dekt - wat de
+        # volgende kWh waard is. Grondslag voor laden in een prijsdip.
+        ongedekt = [k[2] for k in kwartieren if k[0] not in gedekt and k[3] > 0]
+        uit["duurste_ongedekt_eur"] = round(max(ongedekt), 4) if ongedekt else None
+        huidig = next((k for k in kwartieren if k[0] <= now < k[1]), None)
+        sparen = (
+            huidig is not None
+            and huidig[0] not in gedekt
+            and huidig[3] > 0
+            and grens is not None
+            and huidig[2] + GRID_CHEAPER_MARGIN_EUR < grens
+        )
+        uit.update(
+            {
+                "actief": True,
+                "sparen_nu": sparen,
+                "tekort_kwh": round(nodig - beschikbaar, 2),
+                "grensprijs_eur": round(grens, 4) if grens is not None else None,
+                "prijs_nu_eur": round(huidig[2], 4) if huidig else None,
+                "gedekt": self._aaneengesloten_perioden(
+                    sorted(k for k in kwartieren if k[0] in gedekt)
+                ),
+                # Voor het kwartierplan: welke kwartieren van het net komen.
+                "gespaard": [
+                    k[0].isoformat() for k in kwartieren
+                    if k[0] not in gedekt and k[3] > 0
+                ],
+                "reden": (
+                    "dit kwartier is goedkoper - de lading gaat naar de duurste"
+                    if sparen
+                    else "dit kwartier hoort bij de duurste en wordt gedekt"
+                ),
+            }
+        )
+        return uit
+
+    @staticmethod
+    def _aaneengesloten_perioden(kwartieren: list) -> list[str]:
+        """Aaneengesloten kwartieren als "HH:MM-HH:MM" (v5.25)."""
+        perioden: list[list] = []
+        for begin, eind, *_rest in kwartieren:
+            if perioden and perioden[-1][1] == begin:
+                perioden[-1][1] = eind
+            else:
+                perioden.append([begin, eind])
+        return [f"{van:%H:%M}-{tot:%H:%M}" for van, tot in perioden]
+
+    async def _spaar_accu_als_nodig(
+        self, now: datetime, entries, cheap_block_start: datetime | None
+    ) -> bool:
+        """De accu op alleen-zon zetten in een goedkoper kwartier (v5.25).
+
+        True als er gespaard wordt; de beslissing is dan klaar.
+        """
+        plan = self.spaarplan(now, entries, cheap_block_start)
+        self.last_spaarplan = plan
+        self._meld_spaarplan(plan)
+        if not plan.get("sparen_nu"):
+            return False
+        await self._async_apply_operation(OPTION_SMART_CHARGING)
+        self.last_reason = "battery_saved_for_peak"
+        self._update_financial_tracking(now, entries, self.last_reason, None, None)
+        self._update_shortfall_detection(
+            now, self.last_reason, self.last_available_kwh, self.last_needed_kwh_to_bridge
+        )
+        self._finish_decision_tick(now)
+        return True
+
+    def _meld_spaaruitkomst(self, now: datetime) -> None:
+        """Na afloop: heeft het sparen gewerkt? (v5.25)
+
+        Gevraagd bij het spaarplan: "tevens bijbehorende meldingen". De
+        avondmelding zegt wat het plan is; deze zegt de volgende ochtend
+        hoe het liep - ook als het anders liep dan gepland.
+
+        Alles uit het bestaande dagverloop, per kwartier: de reden, de
+        laadstand, de netafname en de prijs. Gespaarde kwartieren zijn die
+        met reden `battery_saved_for_peak`; in de rest hoorde de accu het
+        huis te dekken. Kwam daar toch stroom van het net terwijl de accu op
+        zijn ondergrens stond, dan raakte hij eerder leeg dan gepland.
+
+        Onder dezelfde schakelaar als de avondmelding (`accu_sparen`), zodat
+        het een knop blijft.
+        """
+        stand = self.spaar_uitkomst or {}
+        if not stand or stand.get("gemeld"):
+            return
+        blok = dt_util.parse_datetime(stand.get("blok") or "")
+        vanaf = dt_util.parse_datetime(stand.get("vanaf") or "")
+        if blok is None or vanaf is None or now < blok:
+            return
+        stand["gemeld"] = True
+        ondergrens = self._read_sensor_float(
+            self.config.get(CONF_BATTERY_MIN_SOC_NUMBER)
+        )
+        gespaard_kwh = gespaard_eur = gedekt_net_kwh = 0.0
+        leeg_om = None
+        for dag, rijen in sorted((self.dagverloop or {}).items()):
+            for rij in rijen or []:
+                moment = dt_util.parse_datetime(f"{dag}T{rij.get('tijd')}:00")
+                if moment is None:
+                    continue
+                if moment.tzinfo is None:
+                    moment = moment.replace(tzinfo=now.tzinfo)
+                if not (vanaf <= moment < blok):
+                    continue
+                afname = max(0.0, rij.get("net_w") or 0.0) * 0.25 / 1000
+                if rij.get("reden") == "battery_saved_for_peak":
+                    gespaard_kwh += afname
+                    gespaard_eur += afname * (rij.get("prijs_ct") or 0.0) / 100
+                    continue
+                gedekt_net_kwh += afname
+                if (
+                    leeg_om is None
+                    and afname > 0
+                    and ondergrens is not None
+                    and (rij.get("soc") or 100.0) <= ondergrens
+                ):
+                    leeg_om = moment
+        if gespaard_kwh <= 0 and leeg_om is None:
+            return
+
+        def getal(waarde: float) -> str:
+            return f"{waarde:.1f}".replace(".", ",")
+
+        gemiddeld = (gespaard_eur / gespaard_kwh * 100) if gespaard_kwh else None
+        spaardeel = (
+            f"In de gespaarde kwartieren kwam {getal(gespaard_kwh)} kWh van het "
+            f"net, gemiddeld {getal(gemiddeld)} ct."
+            if gemiddeld is not None
+            else ""
+        )
+        if leeg_om is None:
+            tekst = (
+                f"Gelukt: de accu dekte de duurste kwartieren tot het goedkope "
+                f"blok van {blok:%H:%M}. " + spaardeel
+            )
+        else:
+            tekst = (
+                f"De accu raakte om {leeg_om:%H:%M} leeg, eerder dan gepland. In "
+                f"de dure kwartieren daarna kwam {getal(gedekt_net_kwh)} kWh van "
+                f"het net. " + spaardeel
+            )
+        self._dispatch_notification(
+            self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE),
+            "Uitkomst: accu gespaard voor de duurste uren",
+            tekst.strip(),
+            "ems_accu_sparen_uitkomst",
+            kind="accu_sparen",
+        )
+
+    def _meld_spaarplan(self, plan: dict) -> None:
+        """Een keer per overbrugging: de accu wordt gespaard (v5.25)."""
+        if not plan.get("actief"):
+            return
+        sleutel = plan.get("blok")
+        # v5.25: onthouden voor welk blok er gespaard wordt, zodat de
+        # uitkomst na afloop gemeld kan worden - zie `_meld_spaaruitkomst`.
+        if (self.spaar_uitkomst or {}).get("blok") != sleutel:
+            self.spaar_uitkomst = {
+                "blok": sleutel,
+                "vanaf": dt_util.now().isoformat(),
+                "gemeld": False,
+            }
+        if self._last_plan_alert.get("accu_sparen") == sleutel:
+            return
+        self._last_plan_alert["accu_sparen"] = sleutel
+        blok = dt_util.parse_datetime(sleutel or "")
+        grens = plan.get("grensprijs_eur")
+        def getal(waarde: float) -> str:
+            return f"{waarde:.1f}".replace(".", ",")
+
+        tekst = (
+            f"De accu haalt het goedkope blok van {blok:%H:%M} niet: er zit "
+            f"{getal(plan['beschikbaar_kwh'])} kWh in, er is "
+            f"{getal(plan['nodig_kwh'])} kWh nodig. Hij dekt daarom alleen de "
+            "duurste kwartieren"
+            + (f" ({getal(grens * 100)} ct en duurder)" if grens is not None else "")
+            + f": {', '.join(plan.get('gedekt') or [])}. Daartussen komt de "
+            "stroom van het net."
+        )
+        self._dispatch_notification(
+            self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE),
+            "Accu gespaard voor de duurste uren",
+            tekst,
+            "ems_accu_sparen",
+            kind="accu_sparen",
+        )
 
     def _net_is_goedkoper_dan_de_accu(
         self, now: datetime, entries: list[PriceEntry]

@@ -2300,6 +2300,24 @@ REASON_REGISTRY: dict[str, dict] = {
     # het huis dekken gelijk. Dus telt alleen: nu verkopen of later inkopen,
     # wat is duurder? Is nu het duurst, dan levert verkopen altijd meer op
     # dan het inkopen later kost.
+    # v5.25: de accu SPAREN voor de duurste kwartieren. Gevraagd: "is het
+    # dan wijs om de accu alleen op de dure uren het huis te laten
+    # ondersteunen?" - en daarna: "ik vind dit een must voor mijn EMS".
+    "battery_saved_for_peak": {
+        "mode": OPTION_SMART_CHARGING,
+        "titel": "Accu sparen voor de duurste uren",
+        "uitleg": (
+            "De accu haalt het volgende goedkope blok niet. Zijn lading gaat "
+            "daarom naar de duurste kwartieren; in dit goedkopere kwartier "
+            "komt de stroom van het net. De zon wordt nog wel opgevangen."
+        ),
+        "ernst": "info",
+        "getallen": True,
+        "label": "accu sparen voor de duurste uren",
+        "waarom_vraag": "Waarom gebruik je de accu nu niet?",
+        "korte_naam": "accu sparen",
+        "emoji": "🔋⏸️",
+    },
     "expensive_quarter_peak": {
         "mode": OPTION_MANUAL,
         "titel": "Verkopen in de duurste piek",
@@ -2348,6 +2366,23 @@ REASON_REGISTRY: dict[str, dict] = {
     # handmatig doe." In vijf dagen koos het EMS nooit zelf voor laden;
     # beide handmatige laadbeurten van de gebruiker waren rendabel (7,8 en
     # 10,5 ct/kWh marge na rendement en slijtage).
+    # v5.25: laden BUITEN het goedkope blok, in een prijsdip - alleen als de
+    # accu het volgende blok niet haalt en het straks meer oplevert.
+    "grid_charging_dip": {
+        "mode": OPTION_MANUAL,
+        "titel": "Bijladen in een prijsdip",
+        "uitleg": (
+            "De accu haalt het volgende goedkope blok niet, en stroom is nu "
+            "zo goedkoop dat een kWh straks meer waard is dan hij nu kost - "
+            "ook na het verlies bij opslag en de slijtage."
+        ),
+        "ernst": "ingrijpend",
+        "getallen": True,
+        "label": "bijladen in een prijsdip",
+        "waarom_vraag": "Waarom laad je nu, buiten het goedkope blok?",
+        "korte_naam": "laden in een dip",
+        "emoji": "⚡📉",
+    },
     "grid_charging_profitable": {
         "mode": OPTION_MANUAL,
         "titel": "Bijladen omdat het loont",
@@ -2824,6 +2859,7 @@ LOG_PRIORITEITEN = {
     "meet_stuurt_niet": LOG_PRIO_INFO,
     "zelfcontrole": LOG_PRIO_KRITIEK,
     "plan_tekort": LOG_PRIO_KRITIEK,
+    "accu_sparen": LOG_PRIO_INFO,
     "battery_wont_last_night": LOG_PRIO_KRITIEK,
     "sensor_unavailable": LOG_PRIO_KRITIEK,
     "integration_error": LOG_PRIO_KRITIEK,
@@ -3458,6 +3494,9 @@ PERSISTED_FIELDS: dict[str, dict] = {
     # v5.24: de sleutels hierboven zijn UTC-uren; zonder dit kenmerk zijn
     # het nog klokuren en worden ze bij het inlezen omgezet.
     "pv_uurbias_in_utc": {"type": "plain"},
+    # v5.25: voor welk blok er gespaard werd en sinds wanneer - bewaard, zodat
+    # een herstart 's nachts de ochtendmelding niet kost.
+    "spaar_uitkomst": {"type": "plain"},
 }
 
 # Afgeleid, geen eigen lijsten meer.
@@ -3733,6 +3772,15 @@ WEATHER_ENSEMBLE_SPREAD_ATTENTION_PERCENT = 40.0
 # Een toets houdt bij dat elke soort een advies heeft; een nieuwe soort
 # zonder advies laat de suite omvallen.
 MELDING_ADVIES: dict[str, tuple[str, str]] = {
+    "accu_sparen": (
+        "Er zit minder in de accu dan het huis nodig heeft tot het volgende "
+        "goedkope blok. Zonder ingrijpen raakt hij leeg in de goedkopere "
+        "nacht en komt de dure ochtendpiek van het net.",
+        "Niks. Het EMS zet de accu in de goedkopere kwartieren op alleen "
+        "zon opvangen en bewaart zijn lading voor de duurste. Wat je zelf "
+        "kunt doen: verbruik dat kan wachten, zoals een wasmachine, naar "
+        "het goedkope blok schuiven.",
+    ),
     "plan_tekort": (
         "De kwartierplanning voorziet dat de woning aan het net komt voor het "
         "goedkope blok. Meestal een tegenvallende zonvoorspelling of een "
@@ -3963,6 +4011,17 @@ MELDING_ADVIES: dict[str, tuple[str, str]] = {
 
 
 NOTIFICATION_TYPES: tuple[tuple[str, str, str, bool, int], ...] = (
+    # v5.25: een keer per overbrugging, als de accu gespaard wordt.
+    (
+        "accu_sparen",
+        "Accu gespaard voor de duurste uren",
+        "Wanneer de accu het volgende goedkope blok niet haalt en zijn "
+        "lading bewaart voor de duurste kwartieren.",
+        # Standaard UIT, zoals elke melding die iets meldt wat het EMS zelf
+        # oplost - zie test_only_the_pre_existing_kinds_default_to_on.
+        False,
+        360,
+    ),
     # v1.23.4: meldingen over de planning. Alleen wat er werkelijk toe
     # doet - elke moduswissel zou tientallen berichten per dag opleveren,
     # en dan zet je ze uit precies wanneer je ze nodig hebt.
@@ -4319,7 +4378,8 @@ NOTIFICATION_TYPES: tuple[tuple[str, str, str, bool, int], ...] = (
 # tweeëntwintig soorten en herstelmeldingen erbij was vijftig krap - een
 # drukke dag vulde de lijst en duwde de melding waar je naar zocht er
 # alweer uit.
-NOTIFICATION_HISTORY_LENGTH = 200
+# v5.25: 41 soorten x 5 - zie test_the_history_is_long_enough_for_a_busy_day.
+NOTIFICATION_HISTORY_LENGTH = 210
 
 # --- Eén betrouwbaarheidsschaal (v1.3.0) -----------------------------
 # Gevraagd: "ik wil dit eigenlijk voor vele data welke wordt gecreeerd,
@@ -6144,6 +6204,7 @@ CONF_ACHTERHOEKS = "achterhoeks_meldingen"
 # opgebouwde titel hebben, zodat dit niet een vierde keer misgaat.
 ACHTERHOEKS_TITELS = {
     "plan_tekort": "Den accu kump tekort",
+    "accu_sparen": "Den accu wödt bewaard veur de dure uren",
     "plan_uitstel": "Zunne opvangen wödt uut-esteld",
     "meet_stuurt_niet": "Wat met en nog neet stuurt",
     "plan_verkoop_geblokkeerd": "Verkopen geet neet, 't huus geet veur",

@@ -28995,3 +28995,112 @@ Dezelfde stand van de zon, dezelfde sleutel.
 Installeer vóór 25 oktober; de omzetting gaat uit van de huidige tijdzone.
 
 **Volledige testsuite**: 4322 tests, allemaal groen.
+
+
+## v5.25 — De accu sparen voor de duurste uren
+
+Gevraagd op 29 september, met een accu op 55% terwijl de vaatwasser draaide
+en er nog gekookt moest worden: *"is het dan wijs om de accu alleen op de
+dure uren het huis te laten ondersteunen, bijvoorbeeld vanavond tot 9 uur en
+morgenvroeg van 7 tot 9?"* - en daarna: *"ik vind dit een must voor mijn EMS,
+tevens bijbehorende meldingen."*
+
+### Het probleem
+
+In `smart` ontlaadt de Zendure op volgorde van de klok. Haalt de accu het
+goedkope blok niet, dan raakt hij leeg in de goedkopere nacht, en komt
+precies de dure ochtendpiek van het net. Rendement en slijtage maken niet
+uit: het is dezelfde kWh die er een keer uitgaat, alleen op een ander moment.
+
+### De regel
+
+Per kwartier tot het goedkope blok het verwachte tekort (verbruik min zon),
+op dezelfde inschatting als de reserve. Past alles, dan niets te doen. Past
+het niet, dan krijgen de **duurste kwartieren** de lading tot hij op is; in
+de rest staat de accu op `smart_charging` - zon opnemen, niets afgeven - en
+komt de stroom van het net.
+
+Nagerekend met die avond (3 kWh om 20:00, 4,05 kWh nodig tot de zon):
+
+```
+gedekt:    20:00-01:30  en  05:00-09:30
+gespaard:  01:30-05:00   (25 ct, de goedkoopste nachturen)
+```
+
+De drie grendels van de bestaande meting `_net_is_goedkoper_dan_de_accu`:
+alleen als `smart_charging` op deze accu bestaat, alleen met gemeten
+getallen, en alleen sparen als het kwartier ruim goedkoper is dan het
+goedkoopste gedekte (`GRID_CHEAPER_MARGIN_EUR`), tegen heen-en-weer schakelen.
+
+Die bestaande meting zelf stuurt nog steeds niet. Zij vergelijkt met wat een
+kWh uit de accu GEKOST heeft - een verzonken kost. Het spaarplan rekent met
+wat hij LATER uitspaart.
+
+Nieuwe reden: `battery_saved_for_peak`, "Accu sparen voor de duurste uren".
+Het kwartierplan toont de gespaarde kwartieren, dus "volgende actie" laat het
+vooraf zien.
+
+### De melding
+
+Nieuwe meldingssoort `accu_sparen`, een keer per overbrugging:
+
+> De accu haalt het goedkope blok van 11:45 niet: er zit 1,0 kWh in, er is
+> 1,9 kWh nodig. Hij dekt daarom alleen de duurste kwartieren (29,0 ct en
+> duurder): 05:00-06:00, 07:00-09:30. Daartussen komt de stroom van het net.
+
+En de volgende ochtend, als het goedkope blok begint, **de uitkomst** - ook
+als het anders liep dan gepland:
+
+> Gelukt: de accu dekte de duurste kwartieren tot het goedkope blok van
+> 11:45. In de gespaarde kwartieren kwam 2,1 kWh van het net, gemiddeld
+> 27,0 ct.
+
+> De accu raakte om 06:45 leeg, eerder dan gepland. In de dure kwartieren
+> daarna kwam 0,4 kWh van het net. ...
+
+Alles uit het bestaande dagverloop per kwartier - reden, laadstand,
+netafname, prijs - geen tweede teller. Voor welk blok er gespaard werd,
+wordt bewaard, zodat een herstart 's nachts de ochtendmelding niet kost.
+
+Beide meldingen vallen onder een schakelaar, `accu_sparen`. Standaard
+**uit**, zoals elke nieuwe melding (`test_only_the_pre_existing_kinds_
+default_to_on`), zodat andere gebruikers van de integratie niet ineens
+berichten krijgen. Aanzetten op de pagina Meldingen.
+
+### Laden in een prijsdip, buiten het goedkope blok
+
+Gevraagd: *"en wanneer het kosten efficient genoeg is gaat hij bij laden van
+het net toch?"* Tot nu toe laadde het EMS alleen in het goedkope blok. Een
+winderige nacht van 15 ct, met de ochtendpiek op 40 ct en het goedkope blok
+pas de volgende middag, liet winst liggen.
+
+Alleen als de accu het volgende blok **niet** haalt - anders koop je nu wat
+het blok straks goedkoper levert. Het spaarplan weet welke kwartieren tot het
+blok gedekt worden; het duurste kwartier dat NIET gedekt wordt, bepaalt wat
+de volgende kWh waard is:
+
+```
+waarde = duurste ongedekte kwartier x rendement - slijtage
+winderige nacht:   40 x 83,7% - 11,4 = 22,1 ct   tegen 15 ct nu  -> laden
+29 september:      22,1 ct                       tegen 25 ct nu  -> sparen
+```
+
+Dezelfde rekenregel als laden in het blok en verkopen. Nooit meer dan er tot
+het blok ontbreekt; naarmate er bijgeladen wordt, wordt het duurste
+ongedekte kwartier goedkoper en stopt het vanzelf. Sparen en laden werken
+samen: eerst wordt de lading verdeeld, en alleen wat dan nog tekortkomt in
+dure kwartieren, wordt bijgeladen als het loont.
+
+Nieuwe reden `grid_charging_dip`, "Bijladen in een prijsdip". Ook het
+kwartierplan kent de regel, dus "volgende actie" laat het vooraf zien.
+
+### De controle "reserve past niet in de accu" is weg
+
+In v5.18 was een reserve groter dan de accu een aandachtspunt: "de
+reserveberekening klopt dan niet". Dat was fout. Het betekent dat het
+goedkope blok zo ver weg ligt dat zelfs een volle accu het niet haalt - in
+de winter vaak. Als aandachtspunt zette het elke donkere nacht de status op
+LET OP voor iets wat niet te verhelpen is. Het spaarplan handelt die
+situatie nu af en meldt hem.
+
+**Volledige testsuite**: 4349 tests, allemaal groen.

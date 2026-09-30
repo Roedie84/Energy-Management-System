@@ -90,7 +90,10 @@ def test_het_laden_stopt_waar_het_niet_meer_loont(make_coordinator, hass):
     assert c.laadbesluit_uit_het_net(NU, *BLOK)["laden"] is False
 
 
-def test_buiten_het_blok_nooit(make_coordinator, hass):
+def test_buiten_het_blok_niet_als_de_accu_het_blok_haalt(make_coordinator, hass):
+    """v5.25: buiten het blok alleen in een prijsdip, en dan alleen als de
+    accu het volgende blok NIET haalt - zie test_laden_in_een_dip.py. Hier
+    is er geen spaarplan actief, dus geen dip."""
     c = _stel_in(make_coordinator({}))
 
     besluit = c.laadbesluit_uit_het_net(BLOK[1] + timedelta(minutes=5), *BLOK)

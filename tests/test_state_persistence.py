@@ -599,6 +599,8 @@ VLUCHTIG_MET_REDEN = {
     # v5.22: sinds wanneer de accu de opgedragen richting tegenwerkt. Na een
     # herstart begint de telling opnieuw - de grens is maar drie minuten.
     "_richting_sinds": "telt na een herstart opnieuw; de grens is drie minuten",
+    # v5.25: het spaarplan van deze ronde; elke ronde opnieuw berekend.
+    "last_spaarplan": "wordt elke ronde opnieuw berekend",
     # v5.11: het ontlaadvenster wordt nu WEL bewaard. De reden stond hier
     # als "half meetvenster" - maar juist dat weggooien maakte het restant
     # na de herstart te kort, en dan werd er niets geleerd. Het venster

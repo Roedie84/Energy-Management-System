@@ -1,34 +1,33 @@
-EMS v5.24 - ALLE wijzigingen sinds v5.21 (bevat v5.22 en v5.23)
+EMS v5.25 - alle wijzigingen sinds v5.24
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
-    const.py, coordinator.py, diagnostics.py, sensor.py
-    dashboard_template.yaml   GEWIJZIGD - knoppen onder de cockpit (v5.23)
+    const.py, coordinator.py, diagnostics.py
+    dashboard_template.yaml   GEWIJZIGD - schakelaar voor de nieuwe melding
     manifest.json, bestandscontrole.json
 
 NAAR DE REPO
     README.md, CHANGELOG.md
     dashboards/energy_management_system_dashboard.yaml   GEWIJZIGD
-    tests/ (zeven bestanden)
+    tests/ (vijf bestanden)
 
-Voor HACS: release met tag v5.24.
+Voor HACS: release met tag v5.25.
 
-INSTALLEER VOOR ZONDAG 25 OKTOBER
-De bestaande zoncorrectie wordt bij de eerste start eenmalig omgezet met
-de huidige tijdzone (zomertijd). Na de omschakeling zou dat een uur naast
-zitten.
+1. ACCU SPAREN VOOR DE DUURSTE UREN
+   Haalt de accu het volgende goedkope blok niet, dan dekt hij alleen de
+   duurste kwartieren. Daartussen neemt hij zon op maar geeft hij niets
+   af, en komt de stroom van het net.
 
-WAT ER SINDS v5.21 IN ZIT
+2. LADEN IN EEN PRIJSDIP
+   Buiten het goedkope blok, alleen als de accu het blok niet haalt en
+   het duurste kwartier dat hij niet dekt meer oplevert dan de stroom nu
+   kost (x rendement - slijtage). Bij 29 september loont dat niet (25 ct
+   tegen 22,1 ct waarde) - dan spaart hij. Op een winderige nacht van
+   15 ct wel.
 
-v5.24  de zoncorrectie hangt aan het UTC-uur in plaats van het klokuur:
-       na de wintertijd blijft de schaduwcorrectie bij dezelfde stand van
-       de zon horen
-v5.23  twee knoppen onder de cockpit (Aandachtspunten, Reserve-opbouw);
-       de reservekaart toont de verschuiving en de bodem
-v5.22  verkopen in de duurste piek (nooit door de bodem), het kwartierplan
-       voorspelt laden en piekverkoop, besluit tegenover actie, alle
-       paden na de saldering getoetst
+3. MELDINGEN - ZELF AANZETTEN
+   Pagina Meldingen -> "Accu gespaard voor de duurste uren" -> aan.
+   's avonds het plan, de volgende ochtend de uitkomst.
 
-NA DE HERSTART
-- Diagnose gezondheid: "bestand ok"
-- in de export: pv_hourly_bias_profile_confident staat per klokuur,
-  met dezelfde waarden als voorheen
+VERVALLEN
+Het aandachtspunt "reserve past niet in de accu" - geen rekenfout, maar
+een blok dat te ver weg ligt. Het spaarplan handelt dat nu af.

@@ -630,6 +630,16 @@ views:
     hold_action:
       action: more-info
   - type: custom:mushroom-template-card
+    primary: Accu gespaard voor de duurste uren
+    secondary: '{% set e = ''switch.woonkamer_energy_management_system_melding_accu_sparen'' %}{% set last = state_attr(e, ''laatst_verstuurd'') %}{{ ''AAN'' if is_state(e, ''on'') else ''uit'' }} · demping 360 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom(''%-d %b %H:%M'') }}{% endif %}'
+    icon: mdi:battery-clock
+    icon_color: '{{ ''green'' if is_state(''switch.woonkamer_energy_management_system_melding_accu_sparen'', ''on'') else ''grey'' }}'
+    entity: switch.woonkamer_energy_management_system_melding_accu_sparen
+    tap_action:
+      action: toggle
+    hold_action:
+      action: more-info
+  - type: custom:mushroom-template-card
     primary: Zon opvangen uitgesteld
     secondary: '{% set e = ''switch.woonkamer_energy_management_system_melding_plan_uitstel'' %}{% set last = state_attr(e, ''laatst_verstuurd'') %}{{ ''AAN'' if is_state(e, ''on'') else ''uit'' }} · demping 30 min{% if last %} · laatst {{ as_timestamp(last) | timestamp_custom(''%-d %b %H:%M'') }}{% endif %}'
     icon: mdi:clock-fast
