@@ -29349,3 +29349,40 @@ i.p.v. bovenaan."* De sensor levert de meldingen nieuwste-eerst; de kaart
 v5.19, onder de kop "nieuwste bovenaan". De tweede omkering is eruit.
 
 **Volledige testsuite**: 4363 tests, allemaal groen.
+
+
+## v5.26.3 — De piekregel gaat voor de huisgrens
+
+Uit de export van 30 september, 19:42:
+
+```
+19:30   44,7 ct   accu 86%   discharging_window - huis dekken, niet verkopen
+plan:   verkopen 19:45-20:30 en 21:00
+16:30   melding: "verkopen gaat niet, het huis gaat voor: 8,64 kWh nodig,
+        7,78 kWh beschikbaar"
+```
+
+Met een volle accu, in de duurste kwartieren van de dag, werd niets verkocht.
+
+`may_sell_now` heeft vier poorten die de woning beschermen: een zonarme dag,
+een voorzien tekort, de toets na de saldering, en "nodig tot het blok tegen
+beschikbaar". Die zetten het dure kwartier uit **voordat de piekregel aan bod
+kwam**. Het plan kent die volgorde niet en voorspelde de verkoop wel.
+
+En de redenering klopt niet in het duurste kwartier tot het blok: *"verkopen
+zou het huis aan het net leggen tegen een hogere prijs dan de opbrengst"*.
+Wat het huis later van het net haalt kost dan juist altijd **minder** dan de
+verkoop nu oplevert - precies wat `_piekverkoop` toetst.
+
+Nu gaat de piekregel voor (`_verkoopruimte_met_piek`); verkocht wordt tot de
+bodem, die blijft beschermen tegen een voorspelling die ernaast zit. De
+uitkomst staat in `last_sell_check`, dus ook de melding "verkopen
+geblokkeerd" zwijgt in die kwartieren. Nagerekend met de avond van 30
+september: verkopen om 19:45, 20:00, 20:15 en 21:00 - precies wat het plan
+voorspelde.
+
+Ook de tekst van de zonarme-dag-poort beloofde nog *"wat ontbreekt wordt in
+het goedkope blok bijgeladen"*; nu *"komt van het net, of wordt bijgeladen
+als dat loont"*.
+
+**Volledige testsuite**: 4365 tests, allemaal groen.

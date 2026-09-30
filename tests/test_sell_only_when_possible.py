@@ -162,7 +162,10 @@ def test_it_is_wired_into_the_expensive_quarter_decision():
 
     bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
 
-    assert "verkoopruimte = self.may_sell_now(" in bron
+    # v5.26.3: via `_verkoopruimte_met_piek`, die `may_sell_now` aanroept en
+    # de piekregel voor de huisgrens laat gaan.
+    assert "verkoopruimte = self._verkoopruimte_met_piek(" in bron
+    assert "ruimte = self.may_sell_now(now, beschikbaar)" in bron
     assert 'if is_expensive and not verkoopruimte.get("mag_verkopen")' in bron
 
 

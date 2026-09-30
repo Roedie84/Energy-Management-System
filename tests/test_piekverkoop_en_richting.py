@@ -197,3 +197,36 @@ def test_de_afwijking_verdwijnt_als_de_accu_weer_volgt(make_coordinator, hass):
     c._volg_richting(NU + timedelta(minutes=6))
 
     assert c.richting_afwijking is None
+
+
+# --- v5.26.3: de piekregel voor de huisgrens ------------------------------
+
+
+def test_de_piekregel_gaat_voor_de_huisgrens(make_coordinator, hass):
+    """30 september 19:30: accu 86%, 44,7 ct, niets verkocht - de huisgrens
+    ("8,64 kWh nodig, 7,78 kWh beschikbaar") zette het dure kwartier uit
+    voordat de piekregel aan bod kwam."""
+    c = make_coordinator({})
+    c.may_sell_now = lambda now, beschikbaar=None: {
+        "mag_verkopen": False,
+        "reden": "het huis heeft 8.64 kWh nodig tot het goedkope blok",
+    }
+    reeks = _reeks(NU, [0.448, 0.435, 0.433, 0.41, 0.38] + [0.30] * 40)
+
+    ruimte = c._verkoopruimte_met_piek(NU, reeks, BLOK, 6.6)
+
+    assert ruimte["mag_verkopen"] is True
+    assert ruimte["methode"] == "piekverkoop"
+    assert "8.64" in ruimte["geblokkeerd_door"]
+
+
+def test_zonder_piek_blijft_de_huisgrens_staan(make_coordinator, hass):
+    """Komt er nog een duurder kwartier, dan houdt de huisgrens stand."""
+    c = make_coordinator({})
+    c.may_sell_now = lambda now, beschikbaar=None: {"mag_verkopen": False, "reden": "huis gaat voor"}
+    reeks = _reeks(NU, [0.447, 0.448] + [0.30] * 40)
+
+    ruimte = c._verkoopruimte_met_piek(NU, reeks, BLOK, 6.6)
+
+    assert ruimte["mag_verkopen"] is False
+    assert ruimte["reden"] == "huis gaat voor"

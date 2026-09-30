@@ -23599,6 +23599,48 @@ class EnergyManagementSystemCoordinator:
             ),
         }
 
+    def _verkoopruimte_met_piek(
+        self,
+        now: datetime,
+        entries,
+        blok: datetime | None,
+        beschikbaar: float | None,
+    ) -> dict:
+        """De verkooptoets, met de piekregel VOOR de huisgrens (v5.26.3).
+
+        Gemeld via de export van 30 september, 19:42: om 19:30 stond de accu
+        op 86% in de duurste kwartieren van de dag - 44,7 ct - en werd er
+        niets verkocht. Het plan voorspelde verkopen van 19:45 tot 20:30. De
+        melding van 16:30 zei: "het huis heeft 8,64 kWh nodig tot het
+        goedkope blok en er is 7,78 kWh - verkopen zou het huis aan het net
+        leggen tegen een hogere prijs dan de opbrengst."
+
+        Maar dat laatste klopt niet in het duurste kwartier tot het blok:
+        wat het huis later van het net haalt, kost dan altijd MINDER dan de
+        verkoop nu oplevert. Dat is precies wat `_piekverkoop` toetst. De
+        huisgrens zette het dure kwartier uit voordat de piekregel aan bod
+        kwam - en het plan, dat die volgorde niet kent, voorspelde de verkoop
+        wel. De bodem beschermt nog steeds tegen een voorspelling die
+        ernaast zit (`_geen_ruimte_boven_reserve`).
+        """
+        ruimte = self.may_sell_now(now, beschikbaar)
+        if ruimte.get("mag_verkopen"):
+            return ruimte
+        piek = self._piekverkoop(now, entries, blok, beschikbaar)
+        if not piek.get("verkopen"):
+            return ruimte
+        return {
+            "mag_verkopen": True,
+            "methode": "piekverkoop",
+            "geblokkeerd_door": ruimte.get("reden"),
+            "reden": (
+                f"De prijs is nu {piek['prijs_nu_eur'] * 100:.1f} ct, hoger dan elk "
+                f"kwartier tot het goedkope blok ({piek['duurste_later_eur'] * 100:.1f} "
+                "ct). Wat de woning later van het net haalt kost minder dan wat "
+                "de verkoop nu oplevert; verkocht wordt tot de bodem."
+            ),
+        }
+
     def may_sell_now(
         self, now: datetime, beschikbaar: float | None = None
     ) -> dict:
@@ -23700,7 +23742,8 @@ class EnergyManagementSystemCoordinator:
                     f"Zonarme dag ({verwacht_vandaag:.1f} kWh over de hele dag, "
                     f"onder "
                     f"{SOLAR_POOR_DAY_KWH:.0f}). Wat er is, is voor de woning; "
-                    "wat ontbreekt wordt in het goedkope blok bijgeladen."
+                    "wat ontbreekt komt van het net, of wordt in het goedkope "
+                    "blok bijgeladen als dat loont."
                 ),
             }
 
@@ -38433,7 +38476,9 @@ class EnergyManagementSystemCoordinator:
         # aan het net te leggen. De bestaande reserve was passief - die
         # liet de accu tot de bodem zakken en daar bleef hij, terwijl het
         # huis vervolgens uren tegen 25-33 ct uit het net werd gevoed.
-        verkoopruimte = self.may_sell_now(now, projection_available_kwh)
+        verkoopruimte = self._verkoopruimte_met_piek(
+            now, entries, cheap_block_start, projection_available_kwh
+        )
         self.last_sell_check = verkoopruimte
         if is_expensive and not verkoopruimte.get("mag_verkopen"):
             _LOGGER.debug(

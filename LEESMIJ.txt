@@ -1,21 +1,19 @@
-EMS v5.26.2 - ALLE wijzigingen sinds v5.26 (bevat v5.26.1)
+EMS v5.26.3 - alleen de wijziging sinds v5.26.2
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
-    const.py, coordinator.py
-    dashboard_template.yaml   GEWIJZIGD - logboek meldingen nieuwste bovenaan
+    coordinator.py
+    dashboard_template.yaml   (gaat altijd mee, ongewijzigd)
     manifest.json, bestandscontrole.json
 
 NAAR DE REPO
     README.md, CHANGELOG.md
-    dashboards/energy_management_system_dashboard.yaml   GEWIJZIGD
-    tests/ (vijf bestanden)
+    dashboards/energy_management_system_dashboard.yaml
+    tests/ (twee bestanden)
 
-Voor HACS: release met tag v5.26.2.
+Voor HACS: release met tag v5.26.3.
 
 WAT ER VERANDERT
-1. (v5.26.1) Laden bij weinig zon alleen nog als het loont.
-2. De weinig-zon-melding noemt morgen, met de getallen van morgen, en
-   belooft niets meer wat het EMS niet doet.
-3. "Accu haalt de nacht niet": bijladen alleen als het loont, anders
-   sparen voor de duurste uren.
-4. "Laatst verstuurd" staat weer nieuwste bovenaan.
+In het duurste kwartier tot het volgende goedkope blok wordt verkocht,
+ook als de woning de energie tot het blok nodig heeft: wat de woning
+later van het net haalt, kost dan minder dan wat de verkoop oplevert.
+Nooit onder de bodem. De beslissing volgt nu het plan.
