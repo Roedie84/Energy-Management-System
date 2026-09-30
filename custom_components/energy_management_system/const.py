@@ -3915,7 +3915,8 @@ MELDING_ADVIES: dict[str, tuple[str, str]] = {
     "battery_wont_last_night": (
         "Wat er in de accu zit is minder dan wat de woning nodig heeft tot het "
         "goedkope blok.",
-        "Niets. Er wordt zo nodig bijgeladen. Komt dit elke avond, dan is de "
+        "Niets. Bijladen gebeurt alleen als het loont; anders spaart de accu "
+        "voor de duurste uren. Komt dit elke avond, dan is de "
         "accu te klein voor de nacht of staat de reserve te ruim - de "
         "proefstand meet dat.",
     ),
@@ -3949,9 +3950,10 @@ MELDING_ADVIES: dict[str, tuple[str, str]] = {
         "achter, controleer dan de panelen en de omvormer.",
     ),
     "low_solar_day": (
-        "De voorspelling voor vandaag ligt ver onder wat voor jouw installatie "
+        "De voorspelling voor morgen ligt ver onder wat voor jouw installatie "
         "normaal is.",
-        "Niets. De integratie houdt meer reserve aan en laadt eerder bij.",
+        "Niets. De reserve houdt meer marge aan; bijladen van het net gebeurt "
+        "alleen als het loont.",
     ),
     "sensor_unavailable": (
         "Een ingestelde entiteit geeft al een kwartier geen waarde. Bij een "

@@ -29299,3 +29299,53 @@ Drie toetsen gebruikten de gedwongen lading als opstap voor iets anders; die
 opstap is vrijgelaten. Twee nieuwe toetsen leggen het nieuwe gedrag vast.
 
 **Volledige testsuite**: 4359 tests, allemaal groen.
+
+
+## v5.26.2 — Meldingen die zeggen wat er gebeurt, en het logboek de goede kant op
+
+### De weinig-zon-melding
+
+Gemeld:
+
+> 30 Sep 19:25 · Weinig-zunne-dag - Vandage wödt 11.15 kWh verwacht, tegen
+> 12.62 kWh op een typische dag (88%). Er wödt daarom buiten 't goedkope
+> blok bi-j-elaojen als de prijsmarge dat rechtvaardigt.
+
+Drie fouten in een melding:
+
+1. **Het oordeel ging over morgen, de getallen over vandaag.** De ingestelde
+   sensor heet "Solcast PV-voorspelling sensor (morgen)"; de getallen kwamen
+   uit de verwachting voor vandaag. 88% is geen weinig zon - de grens ligt op
+   hooguit 60% van een typische dag.
+2. **"Vandaag"**, terwijl het om morgen ging.
+3. **Een belofte die niet meer klopt**: laden buiten het blok als de marge
+   het rechtvaardigt was de oude dipregel, vervallen in v5.25.2.
+
+Oordeel en melding komen nu uit dezelfde som (`_zon_tegen_drempel`):
+
+> Morgen wordt 4,0 kWh zon verwacht, tegen 12,6 kWh op een typische dag
+> (32%) - onder de grens van 7,6 kWh. De reserve houdt daarom meer marge aan;
+> bijladen van het net gebeurt alleen als het loont.
+
+Dat verklaart ook waarom het EMS die middag "weinig zon" zag terwijl er 1 tot
+2 kW binnenkwam: het oordeel ging over 1 oktober.
+
+### Twee andere beloftes
+
+- "Accu haalt de nacht niet": *"Er wordt zo nodig bijgeladen"* wordt
+  *"Bijladen gebeurt alleen als het loont; anders spaart de accu voor de
+  duurste uren."*
+- De waarom-regel bij laden bij weinig zon: *"morgen wordt weinig zon
+  verwacht, en bijladen uit het net loont nu"*.
+
+Een nieuwe toets verbiedt dat een melding nog belooft wat het EMS niet meer
+doet.
+
+### Het logboek van meldingen
+
+Gemeld: *"het logboek van meldingen staat nu verkeerd om, nieuwste onderaan
+i.p.v. bovenaan."* De sensor levert de meldingen nieuwste-eerst; de kaart
+"Laatst verstuurd" draaide ze daarna nog een keer om. Dat stond al zo sinds
+v5.19, onder de kop "nieuwste bovenaan". De tweede omkering is eruit.
+
+**Volledige testsuite**: 4363 tests, allemaal groen.

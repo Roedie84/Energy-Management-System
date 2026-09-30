@@ -4305,7 +4305,8 @@ class EnergyManagementSystemCoordinator:
                     f"Er is {beschikbaar:.2f} kWh beschikbaar, terwijl er "
                     f"{nodig:.2f} kWh nodig is om tot het goedkope blok te "
                     "overbruggen - zonder de veiligheidsmarge die de sturing "
-                    "aanhoudt. Er wordt zo nodig bijgeladen.",
+                    "aanhoudt. Bijladen gebeurt alleen als het loont; anders "
+                    "spaart de accu voor de duurste uren.",
                 )
 
         # v1.31.1: rechtstreeks, zie `accustand_procent`.
@@ -4388,16 +4389,24 @@ class EnergyManagementSystemCoordinator:
                 gezondheid["reden"],
             )
 
-        marge = self.get_low_solar_margin()
-        if marge.get("verhouding") is not None and self._is_low_solar_expected():
+        # v5.26.2: morgen - de ingestelde sensor is die voor MORGEN - met de
+        # getallen uit dezelfde som als het oordeel, en de huidige belofte.
+        ruw = self._read_sensor_float(self.config.get(CONF_SOLAR_FORECAST_SENSOR))
+        if ruw is not None and self._is_low_solar_expected():
+            zon = self._zon_tegen_drempel(ruw)
+            typisch = (
+                f", tegen {zon['typisch_kwh']:.1f} kWh op een typische dag "
+                f"({zon['verwacht_kwh'] / zon['typisch_kwh'] * 100:.0f}%)"
+                if zon.get("typisch_kwh")
+                else ""
+            )
             stuur(
                 "low_solar_day",
                 "🌥️ Weinig-zon-dag herkend",
-                f"Vandaag wordt {marge['verwacht_kwh']} kWh verwacht, tegen "
-                f"{marge['typisch_kwh']} kWh op een typische dag "
-                f"({marge['verhouding'] * 100:.0f}%). Er wordt daarom buiten "
-                "het goedkope blok bijgeladen als de prijsmarge dat "
-                "rechtvaardigt.",
+                f"Morgen wordt {zon['verwacht_kwh']:.1f} kWh zon verwacht{typisch} - "
+                f"onder de grens van {zon['drempel_kwh']:.1f} kWh. De reserve "
+                "houdt daarom meer marge aan; bijladen van het net gebeurt "
+                "alleen als het loont.",
             )
 
         # --- prijzen: piek en goedkoop blok ---
@@ -19394,7 +19403,7 @@ class EnergyManagementSystemCoordinator:
             ]
         if reden != "grid_charging_profitable":
             regels = list(gemeenschappelijk)
-            regels.append("er wordt weinig zon verwacht, dus bijladen uit het net")
+            regels.append("morgen wordt weinig zon verwacht, en bijladen uit het net loont nu")
             if blok_tekst:
                 regels.append(blok_tekst)
             return regels
@@ -25260,7 +25269,18 @@ class EnergyManagementSystemCoordinator:
         """
         if forecast_kwh_raw is None:
             return False
+        cijfers = self._zon_tegen_drempel(forecast_kwh_raw)
+        return cijfers["verwacht_kwh"] < cijfers["drempel_kwh"]
 
+    def _zon_tegen_drempel(self, forecast_kwh_raw: float) -> dict:
+        """De zonverwachting en de grens voor weinig zon (v5.26.2).
+
+        Een berekening voor het OORDEEL (`_is_forecast_value_low`) en de
+        MELDING. Gemeld: "Weinig-zunne-dag - vandaag wordt 11.15 kWh
+        verwacht, tegen 12.62 kWh op een typische dag (88%)". Het oordeel
+        ging over de sensor voor MORGEN, de getallen over vandaag - en 88%
+        is geen weinig zon. Nu komen oordeel en getallen uit dezelfde som.
+        """
         # v3.45.0: per soort dag als dat kan, anders de vlakke.
         bias_percent = self.zonbias_percent()
         corrected_forecast_kwh = (
@@ -25280,8 +25300,11 @@ class EnergyManagementSystemCoordinator:
             threshold_kwh = float(
                 self.instelling(CONF_LOW_SOLAR_THRESHOLD_KWH, DEFAULT_LOW_SOLAR_THRESHOLD_KWH)
             )
-
-        return corrected_forecast_kwh < threshold_kwh
+        return {
+            "verwacht_kwh": corrected_forecast_kwh,
+            "typisch_kwh": learned_typical_kwh,
+            "drempel_kwh": threshold_kwh,
+        }
 
     def _is_low_solar_expected(self) -> bool:
         """Is little solar yield expected tomorrow, based on the Solcast
