@@ -746,9 +746,16 @@ def test_the_battery_cannot_fill_in_an_hour(make_coordinator, hass):
         (i for i, r in enumerate(plan) if r["soc_procent"] >= 100), len(plan)
     )
 
-    # 7,7 kWh bruikbaar bij 0,5 kWh per kwartier is minstens vijftien
-    # kwartieren, niet vier.
-    assert vol >= 15
+    # v5.26.4 - VERWACHTING BEWUST GEWIJZIGD. De grens van vijftien
+    # kwartieren ging uit van een start op 10%; het plan start op 16%, en
+    # haalde de vijftien alleen omdat het om 09:45 verkocht tegen 35 ct -
+    # midden op een zonnige ochtend. Die verkoop is weg (dezelfde toets als
+    # de beslissing), dus nu de regel zelf: nooit meer dan het laadvermogen
+    # (0,5 kWh = 5,8% van 8,64 kWh) per kwartier erbij, en zeker niet vol in
+    # een uur.
+    assert vol >= 14
+    for vorige, huidige in zip(plan, plan[1:]):
+        assert huidige["soc_procent"] - vorige["soc_procent"] <= 7
 
 
 def test_surplus_above_the_limit_goes_to_the_grid(make_coordinator, hass):

@@ -21362,25 +21362,26 @@ class EnergyManagementSystemCoordinator:
                 )
             )
         reeks = [(b, p / PRICE_SCALE_FACTOR) for b, _e, p in entries]
+        # v5.26.4: HETZELFDE blok als de beslissing. Gemeld via de export van
+        # 30 september, 20:16: het plan zag de nachtkwartieren van 31,8 ct al
+        # als "goedkoop blok" (per-dagdrempel) en voorspelde verkopen om
+        # 20:15 tegen 43,3 ct; de beslissing kende het blok van 10:45 en zag
+        # daarvoor nog 08:00 tegen 44,8 ct - en verkocht terecht niet. Nu
+        # rekent het plan met `last_cheap_block_start`, net als `_piekverkoop`:
+        # tot dat blok, of 24 uur vooruit als het blok al voorbij is.
+        blok = self.last_cheap_block_start
         duurste_tot_blok: dict = {}
-        duurste = float("-inf")
-        for begin, prijs in reversed(reeks):
-            # De grens voor dit kwartier is het duurste van wat ERNA komt,
-            # tot het volgende goedkope blok.
-            duurste_tot_blok[begin] = duurste
-            if prijs <= blok_drempel_voor(begin):
-                duurste = float("-inf")
-            else:
-                duurste = max(duurste, prijs)
+        for i, (begin, _prijs) in enumerate(reeks):
+            tot = blok if blok is not None and blok > begin else begin + timedelta(hours=24)
+            later = [p for b, p in reeks[i + 1:] if b < tot]
+            duurste_tot_blok[begin] = max(later) if later else float("-inf")
         # v5.25: voor laden in een dip - per kwartier het verwachte tekort
         # (dezelfde inschatting als het spaarplan) en het volgende blok.
         kwartieren = []
         volgend_blok: dict = {}
-        volgende = None
         for begin, eind, prijs_ruw in reversed(entries):
-            volgend_blok[begin] = volgende
-            if prijs_ruw / PRICE_SCALE_FACTOR <= blok_drempel_voor(begin):
-                volgende = begin
+            # v5.26.4: hetzelfde blok als `_dipbesluit` in de beslissing.
+            volgend_blok[begin] = blok if blok is not None and blok > begin else None
         for begin, eind, prijs_ruw in entries:
             if eind <= now or begin >= now + timedelta(hours=24):
                 continue
@@ -21680,7 +21681,17 @@ class EnergyManagementSystemCoordinator:
             # een waarschuwing.
             tekort = False
             if duur_kwartier and soc >= duur_kwh * 0.5 and (
-                soc > reserve_op(start)
+                # v5.26.4: boven de reserve dezelfde toets als de beslissing
+                # (`_is_worth_discharging_now`): de ruimte gaat naar de
+                # duurste kwartieren van de dag. Het plan verkocht op volgorde
+                # van de klok - en had morgen om 16:45 en 17:15 (40-43 ct)
+                # niets meer over voor de piek van 51,2 ct.
+                (
+                    soc > reserve_op(start)
+                    and self._is_worth_discharging_now(
+                        entries, start, soc - reserve_op(start), ontlaad_w
+                    )
+                )
                 or (
                     prijs > netregels["duurste_tot_blok"].get(start, float("inf"))
                     and soc > netregels["bodem_kwh"]

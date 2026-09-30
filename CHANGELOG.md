@@ -29386,3 +29386,50 @@ het goedkope blok bijgeladen"*; nu *"komt van het net, of wordt bijgeladen
 als dat loont"*.
 
 **Volledige testsuite**: 4365 tests, allemaal groen.
+
+
+## v5.26.4 — Het plan rekent met de regels van de beslissing
+
+Gemeld met de planning van 30 september om 20:00, met de vraag of het plan
+meebeweegt als er niet meer verkocht kan worden:
+
+```
+20:00-20:30  verkopen  43,3-43,5 ct
+21:00        verkopen  42,7 ct
+morgen 16:45 verkopen  42,6 ct
+morgen 17:15 verkopen  40,1 ct
+17:30-00:00  slim      - met een piek van 51,2 ct
+```
+
+En de export van 20:16: om 20:15, tegen 43,3 ct, verkocht de beslissing
+**niet**. Terecht - maar het plan zei wel verkopen.
+
+### Twee verschillen tussen plan en beslissing
+
+1. **Een ander "volgende goedkope blok".** De beslissing kende het blok van
+   morgen 10:45, en zag daarvoor nog 08:00 tegen 44,8 ct: 43,3 ct nu is dan
+   niet het duurste, dus bewaren. Het plan gebruikte een drempel per dag, zag
+   de nachtkwartieren van 31,8 ct al als blok, en verloor de ochtendpiek uit
+   het oog. Nu rekenen de piekregel en de dipregel in het plan met
+   `last_cheap_block_start`, net als de beslissing.
+2. **Verkopen boven de reserve op volgorde van de klok.** Het plan verkocht
+   zodra een kwartier duur genoeg was, en had morgen om 16:45 en 17:15 niets
+   meer over voor de piek van 51,2 ct. De beslissing bewaart die ruimte voor
+   de duurste kwartieren van de dag (`_is_worth_discharging_now`). Het plan
+   roept nu **dezelfde functie** aan, met zijn gesimuleerde tijdstip en
+   ruimte - geen tweede definitie.
+
+### Het antwoord op de vraag
+
+Ja: het plan wordt elke ronde opnieuw berekend met de werkelijke laadstand,
+dus verkoopkwartieren verdwijnen als het huis meer gebruikt dan verwacht.
+Boven de reserve wordt verkocht; onder de reserve alleen in het duurste
+kwartier tot het volgende blok, en nooit onder de bodem.
+
+**Verwachting bewust gewijzigd** in `test_quarter_plan.py`: de toets op de
+laadsnelheid ("niet vol in een uur") haalde zijn grens van vijftien
+kwartieren alleen dankzij een verkeerde verkoop om 09:45 tegen 35 ct, midden
+op een zonnige ochtend. Die verkoop is weg; de toets controleert nu de
+laadsnelheid zelf, per kwartier.
+
+**Volledige testsuite**: 4365 tests, allemaal groen.

@@ -132,15 +132,20 @@ def test_het_plan_laadt_niet_als_het_niet_loont(make_coordinator, hass):
 
 def test_het_duurste_kwartier_tot_het_blok_per_kwartier(make_coordinator, hass):
     """De grens voor de piekverkoop in het plan: het duurste van wat ERNA
-    komt, tot het volgende goedkope blok."""
+    komt, tot het goedkope blok VAN DE BESLISSING (v5.26.4).
+
+    Gemeld via de export van 30 september 20:16: het plan zag de
+    nachtkwartieren al als "blok" en voorspelde verkopen om 20:15 tegen
+    43,3 ct; de beslissing kende het blok van 10:45 en zag daarvoor nog
+    08:00 tegen 44,8 ct."""
     c = make_coordinator({})
-    reeks = _reeks(NU, [0.48, 0.40, 0.44, 0.10, 0.50])
-    blok = lambda begin: 0.12  # alleen het kwartier van 0.10 is goedkoop
+    reeks = _reeks(NU, [0.433, 0.318, 0.318, 0.448, 0.30])
+    c.last_cheap_block_start = NU + timedelta(minutes=60)
 
-    netregels = c._plan_netregels(NU, reeks, blok)
+    netregels = c._plan_netregels(NU, reeks, lambda begin: 0.32)
 
-    assert netregels["duurste_tot_blok"][NU] == 0.44
-    assert netregels["duurste_tot_blok"][NU + timedelta(minutes=30)] == float("-inf")
+    assert netregels["duurste_tot_blok"][NU] == 0.448
+    assert 0.433 < netregels["duurste_tot_blok"][NU]  # dus niet verkopen om 20:15
 
 
 # --- besluit tegenover actie ---------------------------------------------
