@@ -29471,3 +29471,44 @@ Een functie voor beslissing en plan. Zijn blok of rekengrootheden onbekend,
 dan kijkt de regel zoals voorheen alleen tot het blok.
 
 **Volledige testsuite**: 4369 tests, allemaal groen.
+
+
+## v5.26.6 — Onbekend is niet verkopen
+
+Gemeld:
+
+> 30 Sep 20:35 · De accu luusterde neet - De handmatig vermogen zou op 1600.0
+> motten staan, maor steet op -2000.
+
+In de eerste ronde na de start van v5.26.4 (20:34:02) stuurde het EMS een
+verkoop van 1600 W, terwijl de regels - en het plan - zeiden: bewaren. De
+Zendure voerde hem niet uit: het kwartier van 20:30 laat alleen huisdekking
+zien (net -51 W). Er is niets verkocht; de melding klopte, alleen was het een
+opdracht die er niet had mogen zijn.
+
+De oorzaak is achteraf niet meer uit de toestand te halen (v5.26.5 herstartte
+sindsdien), maar de code laat twee terugvalpaden zien die precies dit doen
+zolang nog niet alles gemeten is:
+
+1. **De verkooptoets** liet bij een onbekende accustand door: *"de bestaande
+   reserve bewaakt de woning"* - terwijl ook die reserve zonder accustand niet
+   te toetsen is.
+2. **De vermogensfunctie** viel bij een onbekende beschikbare energie of een
+   nog niet berekende reserve terug op de laadstand: 79%, dus vol vermogen.
+
+Niet weten is iets anders dan weten dat er ruimte is. Is de sensor voor
+beschikbare energie **ingesteld** maar geeft hij (nog) geen waarde, of is de
+reserve niet te berekenen, dan wordt er nu niet verkocht; de Zendure dekt de
+woning in de stand slim. **Zonder** ingestelde sensor blijft het oude gedrag:
+daar is de laadstand de manier om te verkopen, en blokkeren zou die
+installaties stilzetten.
+
+De terugval op de laadstand staat nu in een eigen functie
+(`_soc_taper_vermogen`); `_get_soc_scaled_discharge_power` kromp daardoor onder
+de grootteratel en is van de bevroren lijst af.
+
+De opstartpauze van drie minuten houdt alleen meldingen tegen, niet de
+sturing - dat blijft zo; met deze twee regels kan de eerste ronde na een
+herstart niets meer verkopen op grond van ontbrekende metingen.
+
+**Volledige testsuite**: 4373 tests, allemaal groen.

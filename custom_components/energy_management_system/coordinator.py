@@ -23686,6 +23686,19 @@ class EnergyManagementSystemCoordinator:
         # voordat `last_available_kwh` is bijgewerkt.
         if beschikbaar is None:
             beschikbaar = self.beschikbare_energie_kwh()
+        if beschikbaar is None and self.config.get(CONF_AVAILABLE_ENERGY_SENSOR):
+            # v5.26.6: ONBEKEND = NIET VERKOPEN - als de sensor WEL is
+            # ingesteld maar (nog) geen waarde geeft. In de eerste ronde na
+            # een herstart ging er zo een verkoopcommando van 1600 W uit,
+            # terwijl de regels bewaren zeiden (30 september 20:34). Zonder
+            # ingestelde sensor blijft het oude gedrag hieronder.
+            return {
+                "mag_verkopen": False,
+                "reden": (
+                    "De accustand is (nog) niet gemeten; niet verkopen tot die "
+                    "er is. De accu dekt de woning intussen in de stand slim."
+                ),
+            }
         if beschikbaar is None:
             # Zonder accumeting valt niet te toetsen of er genoeg voor de
             # woning overblijft. Dan NIET blokkeren: het beproefde gedrag
@@ -25318,6 +25331,25 @@ class EnergyManagementSystemCoordinator:
                     )
                 return scaled
 
+        # v5.26.6: ONBEKEND = NIET VERKOPEN. Gemeld: "De accu luisterde niet -
+        # het handmatig vermogen zou op 1600 moeten staan" (30 september
+        # 20:35). In de eerste ronde na een herstart stuurde het EMS een
+        # verkoop van 1600 W terwijl de regels zeiden: bewaren. Staat de
+        # sensor voor beschikbare energie ingesteld maar geeft hij (nog) geen
+        # waarde, of is de reserve (nog) niet te berekenen, dan viel deze
+        # functie terug op de laadstand - 79%, dus vol vermogen. Niet weten
+        # is iets anders dan weten dat er ruimte is: dan niet verkopen; de
+        # Zendure dekt het huis in de stand slim. Alleen ZONDER ingestelde
+        # sensor blijft de terugval op de laadstand de manier om te verkopen.
+        if available_entity and now is not None:
+            self.last_discharge_power_applied = None
+            return None
+        return self._soc_taper_vermogen(base_power)
+
+    def _soc_taper_vermogen(self, base_power: float) -> float | None:
+        """Ontlaadvermogen uit alleen de laadstand (v5.26.6: verhuisd uit
+        `_get_soc_scaled_discharge_power`). Alleen voor installaties ZONDER
+        sensor voor beschikbare energie."""
         # Fallback: flat SoC-percentage taper (no available-energy sensor,
         # or the dynamic reserve couldn't be computed this tick).
         self.last_used_soc_taper_fallback = True

@@ -1,4 +1,4 @@
-EMS v5.26.5 - ALLE wijzigingen sinds v5.26.3 (bevat v5.26.4)
+EMS v5.26.6 - alleen de wijziging sinds v5.26.5
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
     coordinator.py
@@ -10,13 +10,10 @@ NAAR DE REPO
     dashboards/energy_management_system_dashboard.yaml
     tests/ (twee bestanden)
 
-Voor HACS: release met tag v5.26.5.
+Voor HACS: release met tag v5.26.6.
 
 WAT ER VERANDERT
-(v5.26.4) Het kwartierplan rekent met de regels van de beslissing.
-(v5.26.5) De piekregel kijkt tot de accu weer wordt bijgevuld, niet
-alleen tot het goedkope blok. Vult het blok niet goedkoop bij, dan
-bewaart de ochtend voor de avond:
-
-    morgen 08:00-10:00  (40-45 ct)  bewaren
-    morgen 19:30-20:00  (47-51 ct)  verkopen
+Onbekend = niet verkopen. Geeft de sensor voor beschikbare energie (nog)
+geen waarde - zoals vlak na een herstart - of is de reserve niet te
+berekenen, dan verkoopt het EMS niet; de Zendure dekt de woning in de
+stand slim. Installaties zonder die sensor houden het oude gedrag.

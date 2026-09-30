@@ -84,7 +84,6 @@ BEVROREN = {
     "coordinator.py:_finalize_nilm_device_day": 71,
     # v3.50.0: +2, de tijdstempels bij de twee schrijvers van
     # `last_soc_percent` in deze functie.
-    "coordinator.py:_get_soc_scaled_discharge_power": 66,
     "coordinator.py:_run_monte_carlo_simulation": 61,
     "coordinator.py:_update_advisory_readiness": 68,
     "coordinator.py:_update_self_sufficiency_tracking": 67,
@@ -104,7 +103,6 @@ BEVROREN = {
     # inhoud.
     "coordinator.py:get_diagnostic_summary": 121,
     "coordinator.py:get_quarter_plan": 95,
-    "overview_svg.py:bouw_scada": 69,
     "solar_forecast.py:async_bootstrap_from_history": 69,
 }
 
