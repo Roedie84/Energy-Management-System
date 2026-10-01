@@ -1,23 +1,21 @@
-EMS v5.27.1 - alle wijzigingen sinds v5.27
+EMS v5.27.2 - alleen de wijziging sinds v5.27.1
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
-    const.py, coordinator.py
-    dashboard_template.yaml   GEWIJZIGD - knop op Overzicht, besluit op Klimaat
+    coordinator.py
+    dashboard_template.yaml   (gaat altijd mee, ongewijzigd)
     manifest.json, bestandscontrole.json
 
 NAAR DE REPO
     README.md, CHANGELOG.md
-    dashboards/energy_management_system_dashboard.yaml   GEWIJZIGD
-    tests/ (twee bestanden)
+    dashboards/energy_management_system_dashboard.yaml
+    tests/test_v5272.py
 
-Voor HACS: release met tag v5.27.1.
+Voor HACS: release met tag v5.27.2.
 
 WAT ER VERANDERT
-1. "Airco automaat" staat op de pagina Overzicht, onder "Learning only".
-   Tikken schakelt; de tegel toont aan of uit.
-2. De tabel "Woonkamertemperatuur per uur" toont de laatste zes uren met
-   hun gemeten waarde, en wat de projectie vooraf voorspelde. Na zes uur
-   verschijnt het oordeel over de projectie.
-
-Heb je het dashboard handmatig aangepast, zet de tegel dan zelf op
-Overzicht (zie dashboard_template.yaml).
+1. Het kwartierplan is 9x sneller (41 -> 4,5 ms) en wordt nog maar een
+   keer per ronde opgebouwd. De GACS-sensor hoort weer onder de 400 ms
+   te komen. Geen enkele uitkomst verandert.
+2. Op een zonarme dag voorspelt het plan geen verkopen meer die de
+   beslissing niet doet.
+3. De diagnoseregel zegt tijdens het opstarten dat de sturing al draait.

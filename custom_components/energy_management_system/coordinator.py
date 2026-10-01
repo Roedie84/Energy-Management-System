@@ -21425,13 +21425,8 @@ class EnergyManagementSystemCoordinator:
         blok = self.last_cheap_block_start
         # v5.26.5: dezelfde functie als de beslissing - zie `_duurste_later`.
         vervangprijs = self._piek_vervangprijs(entries, blok)
-        duurste_tot_blok: dict = {
-            begin: self._duurste_later(
-                begin, reeks, blok if blok is not None and blok > begin else None,
-                vervangprijs if blok is not None and blok > begin else None,
-            )
-            for begin, _prijs in reeks
-        }
+        # v5.27.2: in een doorgang - zie `_duurste_later_alle`.
+        duurste_tot_blok = self._duurste_later_alle(reeks, blok, vervangprijs)
         # v5.25: voor laden in een dip - per kwartier het verwachte tekort
         # (dezelfde inschatting als het spaarplan) en het volgende blok.
         kwartieren = []
@@ -21449,6 +21444,8 @@ class EnergyManagementSystemCoordinator:
             tekort = max(0.0, sum(v - z for v, z in segmenten))
             kwartieren.append((begin, prijs_ruw / PRICE_SCALE_FACTOR, tekort))
         return {
+            # v5.27.2: de zonarme-dag-poort van de verkooptoets, per dag.
+            "zonarm": self._zonarme_dagen(now),
             "kwartieren": kwartieren,
             "volgend_blok": volgend_blok,
             "rendement": rendement,
@@ -21745,6 +21742,8 @@ class EnergyManagementSystemCoordinator:
                 # niets meer over voor de piek van 51,2 ct.
                 (
                     soc > reserve_op(start)
+                    # v5.27.2: niet op een zonarme dag - net als de beslissing.
+                    and not netregels["zonarm"].get(start.date(), False)
                     and self._is_worth_discharging_now(
                         entries, start, soc - reserve_op(start), ontlaad_w
                     )
@@ -21894,6 +21893,25 @@ class EnergyManagementSystemCoordinator:
             )
         return plan
 
+    def _kwartierplan_van_deze_ronde(self) -> list[dict]:
+        """Het kwartierplan, een keer per ronde en per kwartier (v5.27.2).
+
+        Het plan werd per ronde door meerdere onderdelen opnieuw opgebouwd.
+        Binnen een ronde en hetzelfde kwartier verandert er niets aan, dus een
+        keer is genoeg.
+        """
+        nu = dt_util.now()
+        sleutel = (
+            getattr(self, "_forecast_cache_ronde", None),
+            nu.replace(minute=nu.minute // 15 * 15, second=0, microsecond=0),
+        )
+        bewaard = getattr(self, "_kwartierplan_cache", None)
+        if sleutel[0] is not None and bewaard is not None and bewaard[0] == sleutel:
+            return bewaard[1]
+        plan = self.get_quarter_plan(nu)
+        self._kwartierplan_cache = (sleutel, plan)
+        return plan
+
     def get_plan_blokken(self, now: datetime | None = None) -> list[dict]:
         """Het kwartierplan, samengevoegd tot blokken (v5.26).
 
@@ -21908,7 +21926,8 @@ class EnergyManagementSystemCoordinator:
         te veranderen.
         """
         blokken: list[dict] = []
-        for rij in self.get_quarter_plan(now) or []:
+        rijen = self.get_quarter_plan(now) if now is not None else self._kwartierplan_van_deze_ronde()
+        for rij in rijen or []:
             begin = dt_util.parse_datetime(str(rij.get("start") or ""))
             if begin is None:
                 continue
@@ -23709,6 +23728,44 @@ class EnergyManagementSystemCoordinator:
             ),
         }
 
+    def _zon_vandaag_totaal(self, now: datetime) -> tuple:
+        """De zonopbrengst van vandaag: al opgewekt plus nog te komen (v5.27.2).
+
+        Uit `may_sell_now` gehaald, zodat het kwartierplan EXACT dezelfde
+        zonarme-dag-toets gebruikt als de beslissing.
+        """
+        verwacht_vandaag = None
+        al_opgewekt = None
+        nog_te_komen = 0.0
+        if self.config.get(CONF_SOLAR_TODAY_FORECAST_SENSOR):
+            nog_te_komen = (
+                self._estimate_pv_kwh_for_period(
+                    now,
+                    now.replace(hour=23, minute=59, second=59, microsecond=0),
+                )
+                or 0.0
+            )
+            al_opgewekt = self.pv_production_today_kwh
+            if al_opgewekt is None:
+                dag_sensor = self._read_sensor_float(
+                    self.config.get(CONF_SOLAR_TODAY_FORECAST_SENSOR)
+                )
+                verwacht_vandaag = dag_sensor if dag_sensor is not None else None
+            else:
+                verwacht_vandaag = al_opgewekt + nog_te_komen
+        return verwacht_vandaag, al_opgewekt, nog_te_komen
+
+    def _zonarme_dagen(self, now: datetime) -> dict:
+        """Per dag: is het een zonarme dag, zoals de verkooptoets dat ziet?
+        Vandaag uit `_zon_vandaag_totaal`, morgen uit de voorspelling voor
+        morgen (v5.27.2)."""
+        vandaag, _al, _nog = self._zon_vandaag_totaal(now)
+        morgen = self._read_sensor_float(self.config.get(CONF_SOLAR_FORECAST_SENSOR))
+        return {
+            now.date(): vandaag is not None and vandaag < SOLAR_POOR_DAY_KWH,
+            (now + timedelta(days=1)).date(): morgen is not None and morgen < SOLAR_POOR_DAY_KWH,
+        }
+
     def may_sell_now(
         self, now: datetime, beschikbaar: float | None = None
     ) -> dict:
@@ -23774,47 +23831,7 @@ class EnergyManagementSystemCoordinator:
         # Solcast-sensor geeft deze functie 0,0 terug, en dat zou elke
         # dag als zonarm bestempelen - dan zou er nooit meer verkocht
         # worden voor wie die sensor niet heeft.
-        heeft_voorspelling = bool(self.config.get(CONF_SOLAR_TODAY_FORECAST_SENSOR))
-        # v1.24.2, gemeld: "Zonarme dag is natuurlijk raar om 20:23, de
-        # zon is zo goed als weg en de dagopbrengst was goed."
-        #
-        # Klopt. `_estimate_pv_kwh_for_period` kijkt alleen VOORUIT, dus
-        # 's avonds bleef er 0,1 kWh over en dat las als een zonarme
-        # dag - terwijl er die dag ruim 20 kWh was opgewekt.
-        #
-        # Wat telt is de hele dag: wat er al is opgewekt PLUS wat er nog
-        # komt. De meter weet het eerste, de voorspelling het tweede.
-        #
-        # v3.94.2: en het heet in de uitvoer niet meer "verwacht".
-        #
-        # Gemeten om 21:02: `verwachte_zon_kwh: 12.8`, exact gelijk aan
-        # `solar_today.opgewekt_kwh`. Om die tijd valt er niets meer te
-        # verwachten. Het cijfer klopt - het is de hele dag, en daar
-        # hoort deze toets naar te kijken - maar de naam belooft iets
-        # anders dan hij levert. Dat is hoe `available_kwh` en
-        # `gemeten_kwh` maandenlang verkeerd gelezen zijn.
-        verwacht_vandaag = None
-        al_opgewekt = None
-        nog_te_komen = 0.0
-        if heeft_voorspelling:
-            nog_te_komen = (
-                self._estimate_pv_kwh_for_period(
-                    now,
-                    now.replace(hour=23, minute=59, second=59, microsecond=0),
-                )
-                or 0.0
-            )
-            al_opgewekt = self.pv_production_today_kwh
-            if al_opgewekt is None:
-                # Zonder dagmeter valt alleen over de rest iets te
-                # zeggen; dan is de voorspelling van vanochtend de beste
-                # schatting die er is.
-                dag_sensor = self._read_sensor_float(
-                    self.config.get(CONF_SOLAR_TODAY_FORECAST_SENSOR)
-                )
-                verwacht_vandaag = dag_sensor if dag_sensor is not None else None
-            else:
-                verwacht_vandaag = al_opgewekt + nog_te_komen
+        verwacht_vandaag, al_opgewekt, nog_te_komen = self._zon_vandaag_totaal(now)
         if verwacht_vandaag is not None and verwacht_vandaag < SOLAR_POOR_DAY_KWH:
             return {
                 "mag_verkopen": False,
@@ -25091,6 +25108,50 @@ class EnergyManagementSystemCoordinator:
         if not blokprijzen or not rendement or slijtage_ct is None:
             return None
         return min(blokprijzen) / (rendement / 100) + slijtage_ct / 100
+
+    @staticmethod
+    def _duurste_later_alle(
+        reeks: list, blok: datetime | None, vervangprijs: float | None
+    ) -> dict:
+        """`_duurste_later` voor ELK kwartier tegelijk (v5.27.2).
+
+        Gemeld bij de systeemcontrole: de GACS-sensor deed er 594 ms over,
+        boven de grens van 400 ms. Gemeten: 80% van het opbouwen van het plan
+        zat hier - per kwartier opnieuw alle kwartieren erna doorlopen, met
+        een datumvergelijking per stap. Zolang dat loopt staat Home Assistant
+        stil.
+
+        Dezelfde uitkomst - een toets legt dat vast tegen `_duurste_later` -
+        met de tijden een keer omgerekend, en per kwartier alleen een
+        zoekstap en een maximum over een stuk lijst.
+        """
+        import bisect
+
+        tijden = [b.timestamp() for b, _p in reeks]
+        prijzen = [p for _b, p in reeks]
+        blok_ts = blok.timestamp() if blok is not None else None
+        afgetopt = (
+            [
+                min(p, vervangprijs) if blok_ts is not None and ts >= blok_ts else p
+                for ts, p in zip(tijden, prijzen)
+            ]
+            if vervangprijs is not None
+            else prijzen
+        )
+        uit: dict = {}
+        for i, (begin, _p) in enumerate(reeks):
+            ts = tijden[i]
+            voor_het_blok = blok_ts is not None and blok_ts > ts
+            if voor_het_blok and vervangprijs is None:
+                horizon, lijst = blok_ts, prijzen
+            elif voor_het_blok:
+                horizon, lijst = ts + 24 * 3600, afgetopt
+            else:
+                horizon, lijst = ts + 24 * 3600, prijzen
+            lo = bisect.bisect_left(tijden, ts + 15 * 60)
+            hi = bisect.bisect_left(tijden, horizon)
+            uit[begin] = max(lijst[lo:hi]) if hi > lo else float("-inf")
+        return uit
 
     @staticmethod
     def _duurste_later(
@@ -37148,7 +37209,8 @@ class EnergyManagementSystemCoordinator:
             f"Energy Management System is nog aan het opstarten - nog "
             f"{resterend:.0f} seconden. Tot dan kunnen de andere "
             "integraties nog aan het laden zijn, en lijken controles op hun "
-            "entiteiten kapot terwijl ze dat niet zijn."
+            "entiteiten kapot terwijl ze dat niet zijn. De sturing draait al; "
+            "alleen controles en meldingen wachten."
         )
 
     @property
@@ -37498,8 +37560,13 @@ class EnergyManagementSystemCoordinator:
         resterend = self.opstart_resterend_s()
         if resterend is not None:
             versie = (self.get_installation_facts() or {}).get("versie")
-            return f"opstarten · nog {resterend:.0f}s" + (
-                f" · v{versie}" if versie and soort == "gezondheid" else ""
+            # v5.27.2: de sturing draait al - alleen controles en meldingen
+            # wachten. "Opstarten" alleen suggereerde dat er nog niets
+            # gebeurde, terwijl het EMS vanaf de eerste ronde stuurt.
+            return (
+                f"opstarten · nog {resterend:.0f}s"
+                + (f" · v{versie}" if versie and soort == "gezondheid" else "")
+                + " · stuurt al, controles wachten"
             )
         bouwers = {
             "gezondheid": self._diagnose_gezondheid,

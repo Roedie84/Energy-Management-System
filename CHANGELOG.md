@@ -29613,3 +29613,43 @@ dezelfde vorm: tikken schakelt, en de tegel toont aan of uit. Op de pagina
 Klimaat staat alleen nog het besluit, zonder schakelfunctie.
 
 **Volledige testsuite**: 4403 tests, allemaal groen.
+
+
+## v5.27.2 — Systeemcontrole: snelheid, de zonarme dag in het plan, de opstarttekst
+
+Gevraagd: *"Alles verwerken en nieuwe versie maken"* - na de systeemcontrole
+van 1 oktober. Eerst gecontroleerd dat de release v5.27.1 op GitHub exact
+gelijk is aan de werkkopie: integratie, dashboard en toetsen.
+
+### 1. De GACS-sensor deed er 594 ms over
+
+Boven de grens van 400 ms, sinds de planwijzigingen van v5.26.4 en v5.26.5 -
+en zolang die berekening loopt, staat heel Home Assistant stil. Gemeten:
+het kwartierplan kostte 41 ms per keer, en 80% daarvan zat in de piekgrens,
+die per kwartier opnieuw alle kwartieren erna doorliep. En het plan werd per
+ronde door meerdere onderdelen opnieuw opgebouwd.
+
+- `_duurste_later_alle`: de piekgrens voor alle kwartieren in een doorgang.
+  Een toets legt op twaalf willekeurige prijsreeksen - met gaten, met en
+  zonder blok en vervangprijs - vast dat de uitkomst **exact** die van
+  `_duurste_later` is.
+- `_kwartierplan_van_deze_ronde`: het plan een keer per ronde en per kwartier.
+
+Resultaat: 41 ms -> 4,5 ms per keer, en nog maar een keer per ronde.
+
+### 2. Op een zonarme dag liepen plan en beslissing uiteen
+
+De verkooptoets kent de poort "zonarme dag: wat er is, is voor de woning";
+het plan kende die niet, en kon op zo'n dag verkopen boven de reserve
+voorspellen die niet kwamen. De berekening staat nu in een eigen functie
+(`_zon_vandaag_totaal`), en het plan gebruikt exact dezelfde - voor morgen met
+de voorspelling voor morgen. De piekregel gaat er, net als in de beslissing,
+wel voor.
+
+### 3. "Opstarten" in de diagnose
+
+De opstartpauze houdt alleen controles en meldingen tegen; de sturing draait
+vanaf de eerste ronde. De regel zegt dat nu: *"opstarten · nog 85s · stuurt
+al, controles wachten"*.
+
+**Volledige testsuite**: 4419 tests, allemaal groen.
