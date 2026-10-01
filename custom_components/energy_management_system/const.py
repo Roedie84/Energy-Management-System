@@ -3389,6 +3389,9 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "padbereik": {"type": "plain"},
     "nachtlast_per_apparaat": {"type": "plain"},
     "woonkamertemp_gemeten_per_uur": {"type": "plain"},
+    # v5.27.1: wat de projectie VOORAF zei per uur - zodat hij na afloop naast
+    # de meting kan liggen.
+    "woonkamertemp_voorspeld_per_uur": {"type": "plain"},
     "cycluskosten_geschiedenis": {"type": "plain"},
     "safe_sell_shadow": {"type": "plain"},
     "reden_afwijkingen": {"type": "plain"},

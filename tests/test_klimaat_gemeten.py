@@ -22,6 +22,16 @@ import pytest
 NU = datetime(2026, 9, 10, 12, 0, tzinfo=timezone.utc)
 
 
+@pytest.fixture(autouse=True)
+def _klok_na_de_meeturen(monkeypatch):
+    """v5.27.1: een afwijking telt alleen voor VOORBIJE uren, dus de klok moet
+    na de meeturen staan. Deze toetsen leunden stilzwijgend op de echte klok;
+    nu staat hij vast - onafhankelijk van wat een andere toets achterlaat."""
+    import custom_components.energy_management_system.coordinator as coord
+
+    monkeypatch.setattr(coord.dt_util, "now", lambda: NU + timedelta(days=1))
+
+
 def _meet(c, hass, temp, wanneer):
     c.config = dict(c.config or {})
     c.config["living_room_temperature_sensor_entity"] = "sensor.woonkamer"

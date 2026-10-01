@@ -1,29 +1,23 @@
-EMS v5.27 - alle wijzigingen sinds v5.26.6
+EMS v5.27.1 - alle wijzigingen sinds v5.27
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
-    airco_sturing.py          NIEUW
-    const.py, coordinator.py, diagnostics.py, sensor.py, switch.py
-    dashboard_template.yaml   GEWIJZIGD - pagina Klimaat
+    const.py, coordinator.py
+    dashboard_template.yaml   GEWIJZIGD - knop op Overzicht, besluit op Klimaat
     manifest.json, bestandscontrole.json
 
 NAAR DE REPO
     README.md, CHANGELOG.md
     dashboards/energy_management_system_dashboard.yaml   GEWIJZIGD
-    tests/test_airco_sturing.py, tests/test_state_persistence.py
+    tests/ (twee bestanden)
 
-Voor HACS: release met tag v5.27.
+Voor HACS: release met tag v5.27.1.
 
-AIRCO-STURING IN SCHADUWMODUS
-Nieuw:
-- schakelaar  "Airco automaat"   standaard UIT
-- sensor      "Airco besluit"    wat het EMS zou doen, en waarom
-Op de pagina Klimaat staan ze bovenaan.
+WAT ER VERANDERT
+1. "Airco automaat" staat op de pagina Overzicht, onder "Learning only".
+   Tikken schakelt; de tegel toont aan of uit.
+2. De tabel "Woonkamertemperatuur per uur" toont de laatste zes uren met
+   hun gemeten waarde, en wat de projectie vooraf voorspelde. Na zes uur
+   verschijnt het oordeel over de projectie.
 
-Met de knop UIT berekent het EMS elke ronde het besluit en laat het zien,
-maar doet niets. Met de knop AAN voert het het besluit uit.
-
-Alleen de woonkamer-airco. De slaapkamer wordt nooit aangeraakt.
-
-NU NOG: "Leert nog". Het EMS moet eerst zien bij welke temperatuur jullie
-de airco op verwarmen zetten, en op welke temperatuur - dat leert het
-vanzelf zodra jullie hem dit stookseizoen gebruiken.
+Heb je het dashboard handmatig aangepast, zet de tegel dan zelf op
+Overzicht (zie dashboard_template.yaml).

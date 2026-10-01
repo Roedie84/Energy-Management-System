@@ -242,6 +242,13 @@ views:
         columns: 12
         rows: auto
     - type: custom:mushroom-entity-card
+      entity: switch.woonkamer_energy_management_system_airco_automaat
+      name: Airco automaat
+      icon: mdi:air-conditioner
+      grid_options:
+        columns: 12
+        rows: auto
+    - type: custom:mushroom-entity-card
       entity: switch.woonkamer_energy_management_system_handmatig_laden
       name: Handmatig laden 2000 W
       icon: mdi:battery-charging-high
@@ -1646,13 +1653,13 @@ views:
       title: Klimaat
       subtitle: Woonkamertemperatuur en airco-verwachting
     - type: custom:mushroom-template-card
-      entity: switch.woonkamer_energy_management_system_airco_automaat
-      primary: Airco automaat
+      entity: sensor.woonkamer_energy_management_system_airco_besluit
+      primary: Airco besluit
       secondary: '{{ state_attr(''sensor.woonkamer_energy_management_system_airco_besluit'', ''samenvatting'') }}'
       multiline_secondary: true
       icon: mdi:air-conditioner
       tap_action:
-        action: toggle
+        action: more-info
     - type: custom:mushroom-template-card
       primary: Klimaatmodel
       secondary: '{% set s = (state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''samenvattingen'') or {}).get(''klimaat'') or {} %}{{ s.get(''zin'', ''Nog geen gegevens.'') }}'

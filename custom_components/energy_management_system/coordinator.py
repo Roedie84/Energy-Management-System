@@ -1303,7 +1303,7 @@ class EnergyManagementSystemCoordinator:
         # een regel - `__init__` staat op de ratel.
         # v3.99.19: `dagverloop` en `nabeschouwingen` erbij, in dezelfde
         # regel - `__init__` staat op de ratel.
-        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen, self.safe_sell_shadow, self.reden_afwijkingen, self.meting_laatst_gevuld, self.weerbron_keuze, self.voorspellingsverloop, self._geladen_opslag, self.rendement_afwijzingen, self.weerbron_levering, self.weather_ensemble_readings_alle, self.instraling_verhouding, self.ventilator_kwh_per_dag, self._ventilator_vermogens_aan, self.gacs_traag, self.gacs_duur_ms, self._pv_model_bezig, self.gacs_traagste, self.prijs_vandaag, self.prijs_gisteren, self.besluit_snapshot, self._cockpit_context, self.last_laadbesluit, self.last_piekverkoop, self.piekverkoop_tot, self.richting_afwijking, self._richting_sinds, self.pv_uurbias_in_utc, self.last_spaarplan, self.spaar_uitkomst, self.airco_automaat_aan, self.airco_setpunten, self.airco_door_ems, self.last_airco_besluit, self._airco_laatste_ems, self._airco_laatst_gezien, self._airco_handmatig_bij = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, [], [], {}, {}, {}, {}, None, {}, {}, {}, {}, {}, [], [], None, False, None, {}, {}, {}, {}, {}, {}, None, None, None, True, {}, {}, False, [], False, {}, None, None, None
+        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen, self.safe_sell_shadow, self.reden_afwijkingen, self.meting_laatst_gevuld, self.weerbron_keuze, self.voorspellingsverloop, self._geladen_opslag, self.rendement_afwijzingen, self.weerbron_levering, self.weather_ensemble_readings_alle, self.instraling_verhouding, self.ventilator_kwh_per_dag, self._ventilator_vermogens_aan, self.gacs_traag, self.gacs_duur_ms, self._pv_model_bezig, self.gacs_traagste, self.prijs_vandaag, self.prijs_gisteren, self.besluit_snapshot, self._cockpit_context, self.last_laadbesluit, self.last_piekverkoop, self.piekverkoop_tot, self.richting_afwijking, self._richting_sinds, self.pv_uurbias_in_utc, self.last_spaarplan, self.spaar_uitkomst, self.airco_automaat_aan, self.airco_setpunten, self.airco_door_ems, self.last_airco_besluit, self._airco_laatste_ems, self._airco_laatst_gezien, self._airco_handmatig_bij, self.woonkamertemp_voorspeld_per_uur = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, [], [], {}, {}, {}, {}, None, {}, {}, {}, {}, {}, [], [], None, False, None, {}, {}, {}, {}, {}, {}, None, None, None, True, {}, {}, False, [], False, {}, None, None, None, {}
         self.handmatige_ingrepen: list[dict] = []
         # v1.1.6: met welke meetmethode de bewaarde foutreeks tot stand
         # is gekomen. Verandert de methode, dan wordt die reeks eenmalig
@@ -10129,19 +10129,72 @@ class EnergyManagementSystemCoordinator:
             self.woonkamertemp_gemeten_per_uur.pop(oud, None)
             self._woonkamertemp_monsters.pop(oud, None)
 
+    def _onthoud_projectie(self, traject: list[dict], now: datetime) -> None:
+        """Wat de projectie VOORAF zei, per uur bewaard (v5.27.1).
+
+        Gemeld met een schermafdruk van de pagina Klimaat: de kolom
+        "Gemeten" was overal leeg, met "0 van de 6 uren met zowel een
+        projectie als een meting". Het traject wordt elke keer opnieuw vanaf
+        NU gemaakt - voorbije uren zaten er nooit in, en voor uren die nog
+        komen bestaat geen meting. Zo kon de projectie nooit naast de meting
+        liggen.
+
+        Nu wordt per toekomstig uur de voorspelling bewaard, tot dat uur
+        begint: dan ligt vast wat het EMS vooraf dacht. Is het uur voorbij,
+        dan staat die naast de meting.
+        """
+        dit_uur = now.strftime("%Y-%m-%dT%H")
+        for regel in traject or []:
+            sleutel = str(regel.get("tijd") or "")[:13]
+            waarde = regel.get("kort_termijn_temp_c")
+            if sleutel > dit_uur and waarde is not None:
+                self.woonkamertemp_voorspeld_per_uur[sleutel] = waarde
+        for oud in sorted(self.woonkamertemp_voorspeld_per_uur)[:-WOONKAMERTEMP_UREN]:
+            self.woonkamertemp_voorspeld_per_uur.pop(oud, None)
+
+    def _voorbije_uren(self, now: datetime) -> list[dict]:
+        """De laatste uren met hun meting en wat er vooraf voorspeld was
+        (v5.27.1) - zodat de tabel ook de gemeten waarde toont."""
+        dit_uur = now.strftime("%Y-%m-%dT%H")
+        gemeten = self.woonkamertemp_gemeten_per_uur or {}
+        voorbij = [s for s in sorted(gemeten) if s < dit_uur][-WOONKAMERTEMP_MIN_UREN:]
+        uit = []
+        for sleutel in voorbij:
+            moment = datetime.strptime(sleutel, "%Y-%m-%dT%H").replace(tzinfo=now.tzinfo)
+            voorspeld = (self.woonkamertemp_voorspeld_per_uur or {}).get(sleutel)
+            uit.append(
+                {
+                    "tijd": moment.isoformat(),
+                    "kort_termijn_temp_c": voorspeld,
+                    "voorbij": True,
+                }
+            )
+        return uit
+
     def _traject_met_metingen(self, traject: list[dict]) -> list[dict]:
         """Zet de gemeten temperatuur en de afwijking bij elke regel van
         het traject (v4.9). Voor uren die nog komen blijft het leeg."""
         uit = []
-        for regel in traject or []:
+        # v5.27.1: eerst de voorbije uren met hun meting - behalve die al in
+        # het traject staan.
+        nu = dt_util.now()
+        dit_uur = nu.strftime("%Y-%m-%dT%H")
+        in_traject = {str(r.get("tijd") or "")[:13] for r in traject or []}
+        voorbij = [
+            r for r in self._voorbije_uren(nu)
+            if str(r.get("tijd") or "")[:13] not in in_traject
+        ]
+        for regel in voorbij + list(traject or []):
             nieuw = dict(regel)
             sleutel = str(regel.get("tijd") or "")[:13]
             gemeten = (self.woonkamertemp_gemeten_per_uur or {}).get(sleutel)
             nieuw["gemeten_temp_c"] = gemeten
             voorspeld = regel.get("kort_termijn_temp_c")
+            # v5.27.1: alleen voorbije uren - het lopende uur heeft een halve
+            # meting en een projectie die NU is gemaakt, niet vooraf.
             nieuw["afwijking_c"] = (
                 round(voorspeld - gemeten, 1)
-                if gemeten is not None and voorspeld is not None
+                if gemeten is not None and voorspeld is not None and sleutel < dit_uur
                 else None
             )
             uit.append(nieuw)
@@ -36258,6 +36311,7 @@ class EnergyManagementSystemCoordinator:
             )
 
         self.climate_forecast_trajectory = trajectory
+        self._onthoud_projectie(trajectory, now)
         self.climate_forecast_note = (
             "Adviserend - rolluikstand en airco-status worden voor de "
             "hele projectie constant gehouden op de huidige stand "

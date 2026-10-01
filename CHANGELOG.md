@@ -29573,3 +29573,43 @@ Op 1 oktober zegt het besluit: *"Leert nog"* - de leercurve heeft dit seizoen
 nog geen enkele keer verwarmen gezien.
 
 **Volledige testsuite**: 4397 tests, allemaal groen.
+
+
+## v5.27.1 — De gemeten woonkamertemperatuur, en de knop op Overzicht
+
+Gemeld met twee schermafdrukken: *"gemeten waarde op de klimaatpagina is
+niet zichtbaar, en ik zie geen specifieke aan/uit-schakelaar voor de
+automatisering van de airco"* - en daarna: *"Schakelaar hiervoor op de
+landingspage."*
+
+### De kolom "Gemeten" was altijd leeg
+
+De tabel "Woonkamertemperatuur per uur" toonde het traject vanaf NU, met
+eronder *"0 van de 6 uren met zowel een projectie als een meting"*. Voor
+uren die nog komen bestaat geen meting, en voorbije uren zaten er nooit in:
+het traject wordt elke keer opnieuw vanaf nu gemaakt. Zo kon de projectie
+nooit naast de meting liggen, en kwam de klimaatmodule nooit aan een oordeel.
+
+v4.9 ging ervan uit dat het traject ook terugliep; in de praktijk deed het
+dat niet - de toetsen gebruikten een nagemaakt traject met voorbije uren.
+
+Nu:
+
+- per toekomstig uur wordt bewaard wat de projectie **vooraf** zei, tot dat
+  uur begint (`woonkamertemp_voorspeld_per_uur`, bewaard);
+- de tabel begint met de **laatste zes uren**, met hun meting en de
+  voorspelling van vooraf;
+- de afwijking telt alleen voor **voorbije** uren - het lopende uur heeft een
+  halve meting en een projectie die nu is gemaakt, niet vooraf. De toets ving
+  dat: het gemiddelde werd 0,43 in plaats van 0,4 doordat het lopende uur
+  meetelde.
+
+Na zes uur verschijnt het oordeel over de projectie.
+
+### De knop op Overzicht
+
+**Airco automaat** staat nu op de landingspagina, onder "Learning only", in
+dezelfde vorm: tikken schakelt, en de tegel toont aan of uit. Op de pagina
+Klimaat staat alleen nog het besluit, zonder schakelfunctie.
+
+**Volledige testsuite**: 4403 tests, allemaal groen.
