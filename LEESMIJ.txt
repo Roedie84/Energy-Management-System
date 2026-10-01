@@ -1,4 +1,4 @@
-EMS v5.27.2 - alleen de wijziging sinds v5.27.1
+EMS v5.27.3 - alleen de wijziging sinds v5.27.2
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
     coordinator.py
@@ -8,14 +8,18 @@ TE KOPIEREN naar config/custom_components/energy_management_system/
 NAAR DE REPO
     README.md, CHANGELOG.md
     dashboards/energy_management_system_dashboard.yaml
-    tests/test_v5272.py
+    tests/ (drie bestanden)
 
-Voor HACS: release met tag v5.27.2.
+Voor HACS: release met tag v5.27.3.
 
 WAT ER VERANDERT
-1. Het kwartierplan is 9x sneller (41 -> 4,5 ms) en wordt nog maar een
-   keer per ronde opgebouwd. De GACS-sensor hoort weer onder de 400 ms
-   te komen. Geen enkele uitkomst verandert.
-2. Op een zonarme dag voorspelt het plan geen verkopen meer die de
-   beslissing niet doet.
-3. De diagnoseregel zegt tijdens het opstarten dat de sturing al draait.
+De GACS-sensor deed er 1,2 seconde over: zes onderdelen bouwden elk het
+kwartierplan opnieuw, en de zonschatting doorliep per kwartier zeven dagen
+Solcast. Nu een plan per ronde voor iedereen, en de zonschatting kijkt
+alleen naar de halfuren die het kwartier raken.
+
+    een plan opbouwen      24,3 -> 2,9 ms
+    zes onderdelen samen   146  -> 3,0 ms
+
+Geen enkele uitkomst verandert. Na een paar rondes hoort de GACS-tijd in
+Diagnose gezondheid ruim onder de 400 ms te liggen.

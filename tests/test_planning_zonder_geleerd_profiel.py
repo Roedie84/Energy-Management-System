@@ -109,7 +109,9 @@ def test_the_quarter_plan_uses_the_fallback():
         EnergyManagementSystemCoordinator as C,
     )
 
-    bron = inspect.getsource(C.get_quarter_plan)
+    # v5.27.2: het opbouwen staat in _bouw_kwartierplan; get_quarter_plan
+    # is een schil die het plan per ronde bewaart.
+    bron = inspect.getsource(C._bouw_kwartierplan)
 
     assert "_verbruik_met_terugval" in bron
     assert "self._estimate_consumption_kwh_for_period(start, einde)" not in bron

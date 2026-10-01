@@ -19077,6 +19077,62 @@ class EnergyManagementSystemCoordinator:
                 uit[start] = (lo * uren, hi * uren)
         return uit
 
+    def _pv_schatting_vast(self, pv_entries: list, veilig: bool) -> dict:
+        """Wat de zonschatting per aanroep opnieuw berekende, maar binnen een
+        ronde niet verandert (v5.27.2).
+
+        Gemeld bij de systeemcontrole: de GACS-sensor deed er 1,2 s over. Zes
+        onderdelen bouwden elk het kwartierplan, en het plan schat per
+        kwartier de zon - zo'n tweehonderd keer, met telkens opnieuw de
+        ijking van de band, de zonafwijking en de correctie voor de rest van
+        vandaag. Buiten een ronde (toetsen) wordt alles gewoon berekend.
+        """
+        ronde = getattr(self, "_forecast_cache_ronde", None)
+        sleutel = (ronde, id(pv_entries), veilig)
+        bewaard = getattr(self, "_pv_vast_cache", None)
+        if ronde is not None and bewaard is not None and bewaard[0] == sleutel:
+            return bewaard[1]
+        positie, band = None, {}
+        if veilig:
+            ijking = self.get_pv_band_calibration()
+            if ijking.get("beschikbaar"):
+                positie = ijking.get("veilige_positie")
+                band = self._pv_band_per_interval()
+        nu = dt_util.now()
+        vast = {
+            "positie": positie,
+            "band": band,
+            "bias": self.zonbias_percent(),
+            "nu": nu,
+            "rest": self._get_pv_remaining_correction_ratio(nu, pv_entries),
+        }
+        self._pv_vast_cache = (sleutel, vast)
+        return vast
+
+    def _pv_rakende_halfuren(self, pv_entries: list, start: datetime, end: datetime) -> list:
+        """Alleen de zonintervallen die [start, end) raken (v5.27.2).
+
+        De reeks loopt op in de tijd; met een zoekstap is het stuk dat
+        meetelt meteen gevonden, in plaats van zeven dagen Solcast per
+        kwartier te doorlopen. Loopt de reeks niet op, dan de hele reeks -
+        het antwoord moet hetzelfde blijven.
+        """
+        import bisect
+
+        bewaard = getattr(self, "_pv_starts_cache", None)
+        if bewaard is None or bewaard[0] is not pv_entries:
+            starts = [e[0] for e in pv_entries]
+            oplopend = all(a <= b for a, b in zip(starts, starts[1:]))
+            langste = max(((e[1] - e[0]) for e in pv_entries), default=timedelta(0))
+            bewaard = (pv_entries, starts, oplopend, langste)
+            self._pv_starts_cache = bewaard
+        _r, starts, oplopend, langste = bewaard
+        if not oplopend:
+            return pv_entries
+        lo = bisect.bisect_left(starts, start - langste)
+        hi = bisect.bisect_left(starts, end)
+        return pv_entries[lo:hi]
+
     def _estimate_pv_kwh_for_period(self, start: datetime, end: datetime, veilig: bool = False) -> float:
         """Estimate expected PV production (kWh) over a period, from the
         Solcast hourly/half-hourly forecast.
@@ -19098,16 +19154,12 @@ class EnergyManagementSystemCoordinator:
         pv_entries = self._get_pv_forecast_entries()
         if not pv_entries:
             return 0.0
-        positie = None
-        band = {}
-        if veilig:
-            ijking = self.get_pv_band_calibration()
-            if ijking.get("beschikbaar"):
-                positie = ijking.get("veilige_positie")
-                band = self._pv_band_per_interval()
+        # v5.27.2: per ronde een keer - zie `_pv_schatting_vast`.
+        vast = self._pv_schatting_vast(pv_entries, veilig)
+        positie, band = vast["positie"], vast["band"]
 
         # v3.45.0: per soort dag als dat kan, anders de vlakke.
-        daily_bias_percent = self.zonbias_percent()
+        daily_bias_percent = vast["bias"]
         # v1.27.0, gemeld: "Hier gaat wat mis de accu kan niet in 1 uur
         # vol zijn. Vermogen zonnepanelen is W en niet kWh dus hier gaat
         # iets niet goed."
@@ -19130,14 +19182,12 @@ class EnergyManagementSystemCoordinator:
         #
         # Deze fout raakt élke schatting vooruit: ook de reserve en de
         # verkooptoets lazen te veel zon.
-        nu = dt_util.now()
-        remaining_correction_ratio = self._get_pv_remaining_correction_ratio(
-            nu, pv_entries
-        )
+        nu = vast["nu"]
+        remaining_correction_ratio = vast["rest"]
         today = nu.date()
 
         total_kwh = 0.0
-        for entry_start, entry_end, entry_kwh in pv_entries:
+        for entry_start, entry_end, entry_kwh in self._pv_rakende_halfuren(pv_entries, start, end):
             overlap_start = max(entry_start, start)
             overlap_end = min(entry_end, end)
             if overlap_end <= overlap_start:
@@ -21563,6 +21613,31 @@ class EnergyManagementSystemCoordinator:
         return max(0.0, min(laad_kwh, regel["gat_kwh"], bruikbaar - soc))
 
     def get_quarter_plan(self, now: datetime | None = None) -> list[dict]:
+        """Het kwartierplan - een keer per ronde en per kwartier (v5.27.2).
+
+        Gemeld bij de systeemcontrole: zes onderdelen van de GACS-sensor
+        kostten elk 160 ms - overzichtsecties, waarom_nu, smart_charging_proef,
+        haalt_de_accu_het, kwartierplanning, kwartier_samenvatting. Ze bouwden
+        elk het plan opnieuw op. Binnen dezelfde ronde en hetzelfde kwartier
+        verandert het plan niet; dan geeft deze schil het bewaarde terug.
+        Buiten een ronde (toetsen) wordt het gewoon opgebouwd.
+        """
+        moment = now or dt_util.now()
+        ronde = getattr(self, "_forecast_cache_ronde", None)
+        sleutel = (
+            ronde,
+            moment.replace(minute=moment.minute // 15 * 15, second=0, microsecond=0),
+        )
+        bewaard = getattr(self, "_kwartierplan_cache", None)
+        if ronde is not None and bewaard is not None and bewaard[0] == sleutel:
+            return bewaard[1]
+        plan = self._bouw_kwartierplan(now)
+        if ronde is not None:
+            self._kwartierplan_cache = (sleutel, plan)
+        return plan
+
+    def _bouw_kwartierplan(self, now: datetime | None = None) -> list[dict]:
+
         """Verwachte planning per kwartier (v1.22.2).
 
         Gevraagd: "Tevens wil ik ergens op een dashboard deze
@@ -21893,25 +21968,6 @@ class EnergyManagementSystemCoordinator:
             )
         return plan
 
-    def _kwartierplan_van_deze_ronde(self) -> list[dict]:
-        """Het kwartierplan, een keer per ronde en per kwartier (v5.27.2).
-
-        Het plan werd per ronde door meerdere onderdelen opnieuw opgebouwd.
-        Binnen een ronde en hetzelfde kwartier verandert er niets aan, dus een
-        keer is genoeg.
-        """
-        nu = dt_util.now()
-        sleutel = (
-            getattr(self, "_forecast_cache_ronde", None),
-            nu.replace(minute=nu.minute // 15 * 15, second=0, microsecond=0),
-        )
-        bewaard = getattr(self, "_kwartierplan_cache", None)
-        if sleutel[0] is not None and bewaard is not None and bewaard[0] == sleutel:
-            return bewaard[1]
-        plan = self.get_quarter_plan(nu)
-        self._kwartierplan_cache = (sleutel, plan)
-        return plan
-
     def get_plan_blokken(self, now: datetime | None = None) -> list[dict]:
         """Het kwartierplan, samengevoegd tot blokken (v5.26).
 
@@ -21926,7 +21982,7 @@ class EnergyManagementSystemCoordinator:
         te veranderen.
         """
         blokken: list[dict] = []
-        rijen = self.get_quarter_plan(now) if now is not None else self._kwartierplan_van_deze_ronde()
+        rijen = self.get_quarter_plan(now)
         for rij in rijen or []:
             begin = dt_util.parse_datetime(str(rij.get("start") or ""))
             if begin is None:

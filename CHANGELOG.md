@@ -29653,3 +29653,52 @@ vanaf de eerste ronde. De regel zegt dat nu: *"opstarten · nog 85s · stuurt
 al, controles wachten"*.
 
 **Volledige testsuite**: 4419 tests, allemaal groen.
+
+
+## v5.27.3 — De GACS-sensor van 1,2 seconde naar een fractie
+
+Na de installatie van v5.27.2 werd de GACS-sensor niet sneller maar
+trager: 1191 ms, en tien minuten later nog 1164 ms - geen opstarteffect. De
+export liet een patroon zien:
+
+```
+overzichtsecties        160 ms
+waarom_nu               160 ms
+smart_charging_proef    160 ms
+haalt_de_accu_het       160 ms
+kwartierplanning        160 ms
+kwartier_samenvatting   160 ms
+```
+
+Zes onderdelen die elk precies even lang duurden: ze bouwden elk het
+kwartierplan opnieuw op. De bewaarplek uit v5.27.2 zat alleen in de blokken
+op het scherm; deze zes vroegen het plan rechtstreeks op en gingen er langs.
+
+En waarom kostte een plan bij jou 160 ms terwijl de meting 4,5 ms gaf? De
+proefopzet had geen zonverwachting. Met een realistische Solcast-reeks van
+zeven dagen ging 82% van de tijd naar de zonschatting: per kwartier - zo'n
+tweehonderd keer per plan - de hele reeks van 336 halfuren doorlopen, en
+telkens opnieuw de ijking van de band, de zonafwijking en de correctie voor
+de rest van vandaag berekenen.
+
+Drie aanpassingen, geen enkele uitkomst verandert:
+
+1. **`get_quarter_plan` bewaart het plan zelf** per ronde en per kwartier,
+   voor iedereen die erom vraagt. Het opbouwen staat in `_bouw_kwartierplan`
+   (op de grootteratel hernoemd, zelfde grens). Buiten een ronde - toetsen,
+   losse berekeningen - wordt niets bewaard.
+2. **De zonschatting zoekt alleen de halfuren op die het kwartier raken**
+   (`_pv_rakende_halfuren`). Een toets legt vast dat de uitkomst exact gelijk
+   is aan de hele reeks doorlopen, met en zonder voorzichtige band; een niet
+   oplopende reeks wordt gewoon helemaal doorlopen.
+3. **Wat binnen een ronde niet verandert, een keer per ronde**
+   (`_pv_schatting_vast`).
+
+Gemeten met zeven dagen Solcast:
+
+```
+een plan opbouwen            24,3 ms  ->  2,9 ms
+zes onderdelen samen         146 ms   ->  3,0 ms
+```
+
+**Volledige testsuite**: 4424 tests, allemaal groen.

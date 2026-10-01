@@ -102,7 +102,9 @@ BEVROREN = {
     # staan in die functie, dus dit is een aanroep en geen groei van de
     # inhoud.
     "coordinator.py:get_diagnostic_summary": 121,
-    "coordinator.py:get_quarter_plan": 95,
+    # v5.27.2: hernoemd - get_quarter_plan is nu een dunne schil die het plan
+    # per ronde bewaart; het opbouwen zelf staat in _bouw_kwartierplan.
+    "coordinator.py:_bouw_kwartierplan": 95,
     "solar_forecast.py:async_bootstrap_from_history": 69,
 }
 

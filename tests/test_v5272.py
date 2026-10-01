@@ -43,7 +43,7 @@ def test_het_plan_wordt_een_keer_per_ronde_opgebouwd(make_coordinator, hass):
     c = make_coordinator({})
     c._forecast_cache_ronde = START
     keer = []
-    c.get_quarter_plan = lambda now=None: keer.append(1) or []
+    c._bouw_kwartierplan = lambda now=None: keer.append(1) or []
 
     c.get_plan_blokken()
     c.get_plan_blokken()
@@ -86,3 +86,73 @@ def test_de_opstarttekst_zegt_dat_de_sturing_al_draait(make_coordinator, hass):
     c.opstart_resterend_s = lambda now=None: 60.0
 
     assert "De sturing draait al" in c.opstart_tekst()
+
+
+# --- de zonschatting: alleen de rakende halfuren, vaste waarden per ronde ---
+
+
+def _pv_reeks(dagen=7):
+    import math
+
+    start = START.replace(hour=0, minute=0)
+    uit = []
+    for i in range(48 * dagen):
+        b = start + timedelta(minutes=30 * i)
+        h = b.hour + b.minute / 60
+        uit.append((b, b + timedelta(minutes=30), round(max(0.0, math.sin((h - 7) / 12 * math.pi)) * 1.5, 4)))
+    return uit
+
+
+@pytest.mark.parametrize("veilig", [False, True])
+def test_de_zonschatting_geeft_exact_hetzelfde(make_coordinator, hass, veilig):
+    """Alleen de halfuren die het kwartier raken - zelfde uitkomst als de
+    hele reeks doorlopen."""
+    c = make_coordinator({})
+    pv = _pv_reeks()
+    c._get_pv_forecast_entries = lambda: pv
+
+    snel = [
+        c._estimate_pv_kwh_for_period(START + timedelta(minutes=15 * i),
+                                      START + timedelta(minutes=15 * (i + 1)), veilig=veilig)
+        for i in range(200)
+    ]
+    c._pv_rakende_halfuren = lambda reeks, a, b: reeks   # de oude manier: alles
+    oud = [
+        c._estimate_pv_kwh_for_period(START + timedelta(minutes=15 * i),
+                                      START + timedelta(minutes=15 * (i + 1)), veilig=veilig)
+        for i in range(200)
+    ]
+
+    assert snel == oud
+
+
+def test_een_ongesorteerde_reeks_wordt_helemaal_doorlopen(make_coordinator, hass):
+    c = make_coordinator({})
+    pv = list(reversed(_pv_reeks(1)))
+
+    assert c._pv_rakende_halfuren(pv, START, START + timedelta(minutes=15)) is pv
+
+
+def test_het_plan_wordt_voor_iedereen_een_keer_per_ronde_gebouwd(make_coordinator, hass):
+    """De zes onderdelen van de GACS-sensor vroegen het elk opnieuw op."""
+    c = make_coordinator({})
+    c._forecast_cache_ronde = START
+    keer = []
+    c._bouw_kwartierplan = lambda now=None: keer.append(1) or []
+
+    for _ in range(6):
+        c.get_quarter_plan(START)
+    c.get_quarter_plan()
+    assert len(keer) <= 2      # zelfde ronde: een keer per kwartier-sleutel
+
+
+def test_buiten_een_ronde_wordt_niets_bewaard(make_coordinator, hass):
+    """Toetsen en losse berekeningen krijgen altijd een vers plan."""
+    c = make_coordinator({})
+    c._forecast_cache_ronde = None
+    keer = []
+    c._bouw_kwartierplan = lambda now=None: keer.append(1) or []
+
+    c.get_quarter_plan(START)
+    c.get_quarter_plan(START)
+    assert len(keer) == 2
