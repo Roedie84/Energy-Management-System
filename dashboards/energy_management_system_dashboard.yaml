@@ -1646,6 +1646,14 @@ views:
       title: Klimaat
       subtitle: Woonkamertemperatuur en airco-verwachting
     - type: custom:mushroom-template-card
+      entity: switch.woonkamer_energy_management_system_airco_automaat
+      primary: Airco automaat
+      secondary: '{{ state_attr(''sensor.woonkamer_energy_management_system_airco_besluit'', ''samenvatting'') }}'
+      multiline_secondary: true
+      icon: mdi:air-conditioner
+      tap_action:
+        action: toggle
+    - type: custom:mushroom-template-card
       primary: Klimaatmodel
       secondary: '{% set s = (state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''samenvattingen'') or {}).get(''klimaat'') or {} %}{{ s.get(''zin'', ''Nog geen gegevens.'') }}'
       multiline_secondary: true

@@ -29512,3 +29512,64 @@ sturing - dat blijft zo; met deze twee regels kan de eerste ronde na een
 herstart niets meer verkopen op grond van ontbrekende metingen.
 
 **Volledige testsuite**: 4373 tests, allemaal groen.
+
+
+## v5.27 — Airco-sturing voor de woonkamer, in schaduwmodus
+
+Gevraagd: *"Ik wil dat het EMS al wel geschikt wordt voor automatische airco
+sturing, echter nog niet actief (dus met aan/uit-knop)."* En: *"voor zowel
+stand aan als uit kunnen zien wat de besluitvorming van het EMS zou zijn,
+zodat ik hier al met jou over kan sparren. Standaard zou de sturing uit
+moeten staan."*
+
+### Waarom
+
+Het verwarmingsadvies rekent het al uit: warmte uit de airco kost bij een COP
+van 4,4 ongeveer 9,4 ct per kWh, warmte uit gas 18,9 ct. De airco is
+goedkoper tot een stroomprijs van zo'n 83 ct. Zolang de airco de woonkamer op
+temperatuur houdt, slaat de cv-thermostaat niet aan.
+
+### Het besluit (`airco_sturing.py`)
+
+Zuivere regels, los van Home Assistant, in volgorde van voorrang:
+
+1. geen meting -> niets
+2. jullie bedienen de airco zelf -> niets, tot de aanwezigheid verandert
+3. nog niet geleerd wanneer of waarop -> niets ("leert nog")
+4. niemand thuis, of iedereen slaapt -> uit - alleen als het EMS hem aanzette
+5. gas nu goedkoper -> uit - idem
+6. kouder dan de aanzettemperatuur -> verwarmen tot de gewenste temperatuur
+7. anders -> niets
+
+- **Geen rooster.** *"Ik heb een standaard werkweek maar mijn vrouw en
+  dochter niet."* De bestaande aanwezigheidsdetectie (bewegingssensoren,
+  lampen, tv) ziet wie er thuis is - wie dat ook is.
+- **Wanneer**: de aanzettemperatuur komt uit de bestaande leercurve - de
+  hoogste temperatuur waarbij jullie de airco in meer dan de helft van de
+  gevallen op verwarmen zetten.
+- **Waarop**: de mediaan van de temperatuur die jullie zelf kiezen als hij
+  verwarmt. Dat leert het EMS vanaf nu (`airco_setpunten`, bewaard).
+- **Jullie gaan voor.** Bedient iemand de airco zelf, dan blijft het EMS eraf
+  tot de aanwezigheid verandert. Wat een mens aanzette, zet het EMS nooit uit.
+- **Alleen de woonkamer.** *"De airco in de slaapkamer verwarmt sowieso
+  nooit."* De slaapkamer wordt nooit aangeraakt - ook niet als hij per ongeluk
+  als woonkamer-airco is ingesteld.
+
+Vooruit stoken in goedkope of zonnige uren zit er bewust nog niet in: dat
+raakt het comfort het meest, en kan pas betrouwbaar als het warmtemodel een
+stookseizoen heeft meegedraaid.
+
+### Schaduwmodus
+
+- Knop **Airco automaat**, standaard **uit**.
+- Sensor **Airco besluit**: elke ronde wat het EMS zou doen, met de redenen en
+  of het is uitgevoerd - ook met de knop uit. In de export als
+  `airco_besluit`, met de geleerde `airco_setpunten`.
+- Op de pagina Klimaat: de knop met het besluit eronder.
+- De opdracht aan de airco is afgeschermd: een onbereikbare airco breekt de
+  ronde niet af.
+
+Op 1 oktober zegt het besluit: *"Leert nog"* - de leercurve heeft dit seizoen
+nog geen enkele keer verwarmen gezien.
+
+**Volledige testsuite**: 4397 tests, allemaal groen.

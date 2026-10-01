@@ -599,6 +599,13 @@ VLUCHTIG_MET_REDEN = {
     # v5.22: sinds wanneer de accu de opgedragen richting tegenwerkt. Na een
     # herstart begint de telling opnieuw - de grens is maar drie minuten.
     "_richting_sinds": "telt na een herstart opnieuw; de grens is drie minuten",
+    # v5.27: het airco-besluit en wat het EMS van de airco zag - elke ronde
+    # opnieuw; de knop zelf herstelt via de schakelaar.
+    "last_airco_besluit": "wordt elke ronde opnieuw berekend",
+    "_airco_laatste_ems": "de laatste opdracht; na een herstart begint het EMS opnieuw",
+    "_airco_laatst_gezien": "de stand van de vorige ronde",
+    "_airco_handmatig_bij": "handmatig geldt tot de aanwezigheid verandert",
+    "airco_automaat_aan": "wordt hersteld door de schakelaar zelf",
     # v5.25: het spaarplan van deze ronde; elke ronde opnieuw berekend.
     "last_spaarplan": "wordt elke ronde opnieuw berekend",
     # v5.11: het ontlaadvenster wordt nu WEL bewaard. De reden stond hier

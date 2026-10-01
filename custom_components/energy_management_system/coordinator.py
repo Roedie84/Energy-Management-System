@@ -59,7 +59,7 @@ from homeassistant.helpers.event import (
 from homeassistant.util import dt as dt_util
 from homeassistant.helpers.storage import Store
 
-from . import slimme_bronnen
+from . import airco_sturing, slimme_bronnen
 from .const import (
     DIAGNOSE_REGEL_MAX_TEKENS,
     GACS_TRAAG_MS,
@@ -1303,7 +1303,7 @@ class EnergyManagementSystemCoordinator:
         # een regel - `__init__` staat op de ratel.
         # v3.99.19: `dagverloop` en `nabeschouwingen` erbij, in dezelfde
         # regel - `__init__` staat op de ratel.
-        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen, self.safe_sell_shadow, self.reden_afwijkingen, self.meting_laatst_gevuld, self.weerbron_keuze, self.voorspellingsverloop, self._geladen_opslag, self.rendement_afwijzingen, self.weerbron_levering, self.weather_ensemble_readings_alle, self.instraling_verhouding, self.ventilator_kwh_per_dag, self._ventilator_vermogens_aan, self.gacs_traag, self.gacs_duur_ms, self._pv_model_bezig, self.gacs_traagste, self.prijs_vandaag, self.prijs_gisteren, self.besluit_snapshot, self._cockpit_context, self.last_laadbesluit, self.last_piekverkoop, self.piekverkoop_tot, self.richting_afwijking, self._richting_sinds, self.pv_uurbias_in_utc, self.last_spaarplan, self.spaar_uitkomst = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, [], [], {}, {}, {}, {}, None, {}, {}, {}, {}, {}, [], [], None, False, None, {}, {}, {}, {}, {}, {}, None, None, None, True, {}, {}
+        self._sensor_unavailable_since, self._invoer_gebruik, self._invoer_instelling, self.dagverloop, self.nabeschouwingen, self._bestaat_niet_sinds, self.padbereik, self.nachtlast_per_apparaat, self._nachtlast_monsters, self.woonkamertemp_gemeten_per_uur, self._woonkamertemp_monsters, self.cycluskosten_geschiedenis, self._herstel_gemeld, self.eigen_ingrepen, self.safe_sell_shadow, self.reden_afwijkingen, self.meting_laatst_gevuld, self.weerbron_keuze, self.voorspellingsverloop, self._geladen_opslag, self.rendement_afwijzingen, self.weerbron_levering, self.weather_ensemble_readings_alle, self.instraling_verhouding, self.ventilator_kwh_per_dag, self._ventilator_vermogens_aan, self.gacs_traag, self.gacs_duur_ms, self._pv_model_bezig, self.gacs_traagste, self.prijs_vandaag, self.prijs_gisteren, self.besluit_snapshot, self._cockpit_context, self.last_laadbesluit, self.last_piekverkoop, self.piekverkoop_tot, self.richting_afwijking, self._richting_sinds, self.pv_uurbias_in_utc, self.last_spaarplan, self.spaar_uitkomst, self.airco_automaat_aan, self.airco_setpunten, self.airco_door_ems, self.last_airco_besluit, self._airco_laatste_ems, self._airco_laatst_gezien, self._airco_handmatig_bij = {}, {}, {}, {}, [], {}, {}, {}, {}, {}, {}, {}, {}, [], [], {}, {}, {}, {}, None, {}, {}, {}, {}, {}, [], [], None, False, None, {}, {}, {}, {}, {}, {}, None, None, None, True, {}, {}, False, [], False, {}, None, None, None
         self.handmatige_ingrepen: list[dict] = []
         # v1.1.6: met welke meetmethode de bewaarde foutreeks tot stand
         # is gekomen. Verandert de methode, dan wordt die reeks eenmalig
@@ -38354,6 +38354,9 @@ class EnergyManagementSystemCoordinator:
             ("cockpit_context", self.ververs_cockpit_context),
             # v5.25: na afloop van een spaarnacht de uitkomst melden.
             ("spaaruitkomst", lambda: self._meld_spaaruitkomst(now)),
+            # v5.27: het besluit over de woonkamer-airco - altijd berekend,
+            # alleen met de knop aan uitgevoerd.
+            ("airco_besluit", lambda: self._airco_ronde(now)),
             ("meetherinnering", lambda: self._herinner_wat_meet(now)),
             # v3.68.0: het MPC-plan naast de eigen planning.
             ("mpc tegen de planning", lambda: self._meet_mpc(now)),
@@ -39910,6 +39913,112 @@ class EnergyManagementSystemCoordinator:
         """Hoe de koeltekst de ventilator noemt (v5.14)."""
         vermogen = self.ventilator_vermogen_aan_w()
         return f"{vermogen:.0f} W ventilator" if vermogen else "de ventilator"
+
+    def _airco_ronde(self, now: datetime) -> None:
+        """Het airco-besluit van deze ronde (v5.27) - zie `airco_sturing`.
+
+        Altijd berekend en zichtbaar; alleen met de knop "Airco automaat"
+        aan wordt het uitgevoerd. Leert onderweg op welke temperatuur jullie
+        de airco zetten als hij verwarmt, en herkent wanneer iemand hem zelf
+        bedient: dan blijft het EMS eraf tot de aanwezigheid verandert.
+
+        Alleen de woonkamer. De slaapkamer-airco wordt nooit aangeraakt.
+        """
+        entiteit = self.config.get(CONF_AIRCO_CLIMATE_ENTITY)
+        if not entiteit or entiteit == self.config.get(CONF_SLAAPKAMER_CLIMATE_ENTITY):
+            self.last_airco_besluit = {
+                "actie": "niets",
+                "tekst": "Geen woonkamer-airco ingesteld.",
+                "redenen": [], "redenen_tekst": "", "knop": self.airco_automaat_aan,
+                "toegepast": False,
+            }
+            return
+        toestand = self.hass.states.get(entiteit)
+        stand = toestand.state if toestand else None
+        doel_nu = toestand.attributes.get("temperature") if toestand else None
+        gezien = (stand, doel_nu)
+        vorige = self._airco_laatst_gezien
+        self._airco_laatst_gezien = gezien
+        ems = self._airco_laatste_ems
+        door_ems = ems is not None and (ems.get("stand"), ems.get("doel")) == gezien
+        if vorige is not None and gezien != vorige and not door_ems:
+            # Iemand bediende de airco zelf: dat gaat voor, tot de
+            # aanwezigheid verandert - en wat hij nu doet is niet meer van het
+            # EMS.
+            self._airco_handmatig_bij = self.presence_state
+            self.airco_door_ems = False
+            if stand == "heat" and doel_nu is not None:
+                self.airco_setpunten = (list(self.airco_setpunten or []) + [float(doel_nu)])[
+                    -AIRCO_PREDICTION_HISTORY_LENGTH:
+                ]
+        if self._airco_handmatig_bij is not None and self.presence_state != self._airco_handmatig_bij:
+            self._airco_handmatig_bij = None
+        bakjes = (self.get_airco_kansen_per_bakje() or {}).get("bakjes") or {}
+        uit = airco_sturing.besluit(
+            woonkamer_c=self.living_room_current_temp_c,
+            aanwezigheid=self.presence_state,
+            aanzet_c=airco_sturing.aanzettemperatuur(bakjes),
+            doel_c=airco_sturing.gewenste_temperatuur(
+                self.airco_setpunten, AIRCO_PREDICTION_MIN_SAMPLES
+            ),
+            advies=(self.get_verwarmingsadvies() or {}).get("advies"),
+            handmatig=self._airco_handmatig_bij is not None,
+            airco_stand=stand,
+            door_ems_aan=self.airco_door_ems,
+            setpunten_gezien=len(self.airco_setpunten or []),
+            setpunten_nodig=AIRCO_PREDICTION_MIN_SAMPLES,
+        )
+        uit["knop"] = self.airco_automaat_aan
+        uit["toegepast"] = bool(self.airco_automaat_aan and uit["actie"] in ("verwarmen", "uit"))
+        # Een regel voor het dashboard - tekst uit de code, niet uit een sjabloon.
+        uit["status_tekst"] = (
+            "Uitgevoerd."
+            if uit["toegepast"]
+            else (
+                "Niet uitgevoerd: de knop Airco automaat staat uit."
+                if uit["actie"] in ("verwarmen", "uit")
+                else ("Knop aan." if self.airco_automaat_aan else "Knop uit.")
+            )
+        )
+        uit["samenvatting"] = f"{uit['tekst']} {uit['status_tekst']} ({uit['redenen_tekst']})"
+        uit["moment"] = now.isoformat()
+        self.last_airco_besluit = uit
+        if uit["toegepast"]:
+            self.hass.async_create_task(self._async_pas_airco_toe(entiteit, uit))
+
+    async def _async_pas_airco_toe(self, entiteit: str, besluit: dict) -> None:
+        """Het besluit uitvoeren - alleen met de knop aan (v5.27)."""
+        if entiteit == self.config.get(CONF_SLAAPKAMER_CLIMATE_ENTITY):
+            return
+        if besluit["actie"] == "verwarmen":
+            # Afgeschermd: een onbereikbare airco breekt de ronde niet af.
+            try:
+                await self.hass.services.async_call(
+                    "climate",
+                    "set_temperature",
+                    {"entity_id": entiteit, "temperature": besluit["doel_c"], "hvac_mode": "heat"},
+                    blocking=False,
+                )
+            except Exception as err:  # noqa: BLE001
+                besluit["fout"] = f"opdracht kwam niet aan: {err}"
+                return
+            self._airco_laatste_ems = {"stand": "heat", "doel": besluit["doel_c"]}
+            self.airco_door_ems = True
+        elif besluit["actie"] == "uit":
+            try:
+                await self.hass.services.async_call(
+                    "climate", "set_hvac_mode", {"entity_id": entiteit, "hvac_mode": "off"},
+                    blocking=False,
+                )
+            except Exception as err:  # noqa: BLE001
+                besluit["fout"] = f"opdracht kwam niet aan: {err}"
+                return
+            toestand = self.hass.states.get(entiteit)
+            self._airco_laatste_ems = {
+                "stand": "off",
+                "doel": toestand.attributes.get("temperature") if toestand else None,
+            }
+            self.airco_door_ems = False
 
     def get_verwarmingsadvies(self) -> dict:
         """Verwarmen met de airco of met de cv? (v5.14)"""

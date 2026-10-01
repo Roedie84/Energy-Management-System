@@ -3501,6 +3501,11 @@ PERSISTED_FIELDS: dict[str, dict] = {
     # v5.25: voor welk blok er gespaard werd en sinds wanneer - bewaard, zodat
     # een herstart 's nachts de ochtendmelding niet kost.
     "spaar_uitkomst": {"type": "plain"},
+    # v5.27: welke temperatuur jullie kiezen als de airco verwarmt, en of het
+    # EMS hem zelf aanzette - zodat het hem na een herstart nooit uitzet als
+    # een mens hem aanzette.
+    "airco_setpunten": {"type": "plain"},
+    "airco_door_ems": {"type": "plain"},
 }
 
 # Afgeleid, geen eigen lijsten meer.

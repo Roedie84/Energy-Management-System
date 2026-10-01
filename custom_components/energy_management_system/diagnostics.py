@@ -568,6 +568,9 @@ async def async_get_config_entry_diagnostics(
             "import_verklaard_tot": getattr(coordinator, "piekverkoop_tot", None),
         },
         "richting_afwijking": getattr(coordinator, "richting_afwijking", None),
+        # v5.27: het airco-besluit, met redenen - ook met de knop uit.
+        "airco_besluit": dict(getattr(coordinator, "last_airco_besluit", None) or {}),
+        "airco_setpunten": list(getattr(coordinator, "airco_setpunten", None) or []),
         # v5.25: het spaarplan - welke kwartieren de accu dekt als hij het
         # goedkope blok niet haalt.
         "spaarplan": dict(getattr(coordinator, "last_spaarplan", None) or {}),

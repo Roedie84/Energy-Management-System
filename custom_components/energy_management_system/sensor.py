@@ -155,6 +155,7 @@ async def async_setup_entry(
         # v5.14: de kern van de diagnostiek, leesbaar voor de assistent.
         # v5.19: de cockpit, die meebeweegt met de metingen.
         CockpitSensor(coordinator, entry.entry_id),
+        AircoBesluitSensor(coordinator, entry.entry_id),
         DiagnoseGezondheidSensor(coordinator, entry.entry_id),
         DiagnoseSturingSensor(coordinator, entry.entry_id),
         DiagnoseLerenSensor(coordinator, entry.entry_id),
@@ -4471,6 +4472,32 @@ class GacsAssessmentSensor(SensorEntity):
                 "een systeem sterk en zwak staat."
             ),
         }
+
+
+class AircoBesluitSensor(_CoordinatorDiagnosticSensor):
+    """Wat het EMS met de woonkamer-airco zou doen, en waarom (v5.27).
+
+    Gevraagd: "voor zowel stand aan als uit kunnen zien wat de
+    besluitvorming van het EMS zou zijn, zodat ik hier al met jou over kan
+    sparren." Altijd berekend; de attributen zeggen of het ook is
+    uitgevoerd (`toegepast`) en hoe de knop staat (`knop`).
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Airco besluit"
+    _attr_icon = "mdi:air-conditioner"
+    _unrecorded_attributes = frozenset({"redenen", "redenen_tekst", "tekst"})
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        super().__init__(coordinator, entry_id, "airco_besluit")
+
+    @property
+    def native_value(self) -> str:
+        return (self._coordinator.last_airco_besluit or {}).get("actie") or "niets"
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return dict(self._coordinator.last_airco_besluit or {})
 
 
 class CockpitSensor(_CoordinatorDiagnosticSensor):

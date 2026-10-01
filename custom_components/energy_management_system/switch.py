@@ -54,6 +54,7 @@ async def async_setup_entry(
                 icoon="mdi:solar-power-variant",
             ),
             VacationModeSwitch(coordinator, entry_id=entry.entry_id),
+            AircoAutomaatSwitch(coordinator, entry_id=entry.entry_id),
             NuLadenSwitch(coordinator, entry_id=entry.entry_id),
             AchterhoeksSwitch(coordinator, entry_id=entry.entry_id),
             SteelstofzuigerOverrideSwitch(coordinator, entry_id=entry.entry_id),
@@ -426,6 +427,48 @@ class VacationModeSwitch(SwitchEntity, RestoreEntity):
 
     async def async_turn_off(self, **kwargs) -> None:
         self._coordinator.vacation_mode = False
+        self.async_write_ha_state()
+
+
+
+class AircoAutomaatSwitch(SwitchEntity, RestoreEntity):
+    """Automatische airco-sturing voor de woonkamer (v5.27).
+
+    Gevraagd: "Standaard zou de sturing uit moeten staan." Het besluit wordt
+    altijd berekend en getoond (sensor "Airco besluit"); alleen met deze
+    knop aan wordt het uitgevoerd.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Airco automaat"
+    _attr_icon = "mdi:air-conditioner"
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        self._coordinator = coordinator
+        self._attr_unique_id = f"{entry_id}_airco_automaat"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry_id)},
+            "name": DEFAULT_NAME,
+        }
+
+    @property
+    def is_on(self) -> bool:
+        return self._coordinator.airco_automaat_aan
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        # Standaard UIT: alleen aan als hij eerder bewust aan is gezet.
+        self._coordinator.airco_automaat_aan = (
+            last_state is not None and last_state.state == "on"
+        )
+
+    async def async_turn_on(self, **kwargs) -> None:
+        self._coordinator.airco_automaat_aan = True
+        self.async_write_ha_state()
+
+    async def async_turn_off(self, **kwargs) -> None:
+        self._coordinator.airco_automaat_aan = False
         self.async_write_ha_state()
 
 
