@@ -40293,7 +40293,11 @@ class EnergyManagementSystemCoordinator:
         except Exception:  # noqa: BLE001
             pass
 
+    @callback
     def _meetlaag_kwartier(self, now: datetime) -> None:
+        # v5.28.1: @callback - op de event loop, net als de ronde die
+        # dezelfde meetlog beschrijft. Zonder liet Home Assistant dit in een
+        # werkthread draaien.
         laag = self._meetlaag_object()
         if laag is not None:
             laag.kwartiergrens(now)

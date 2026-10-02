@@ -27,17 +27,30 @@ VERS_SECONDEN = 60
 _RANG = {"measured": 0, "partially_estimated": 1, "estimated": 2, "invalid": 3}
 
 
-def stand(waarde, laatst_bijgewerkt: datetime | None, grens: datetime) -> dict:
-    """Een tellerstand op een kwartiergrens, met of hij vers is."""
+# v5.28.1: de SolarEdge-teller meldt in Wh; elke stand wordt naar kWh omgezet.
+# Een onbekende eenheid is geen meting.
+_NAAR_KWH = {"Wh": 0.001, "kWh": 1.0, "MWh": 1000.0}
+
+
+def stand(waarde, laatst_bijgewerkt: datetime | None, grens: datetime, eenheid: str | None = "kWh") -> dict:
+    """Een tellerstand op een kwartiergrens, in kWh, met zijn leeftijd.
+
+    Vers: gemeld binnen 60 s vóór of ná de grens - een melding net na de grens
+    is even dichtbij als een net ervoor.
+    """
+    factor = _NAAR_KWH.get(eenheid or "")
     try:
         getal = float(waarde)
     except (TypeError, ValueError):
-        return {"waarde": None, "vers": False}
-    vers = (
-        laatst_bijgewerkt is not None
-        and 0 <= (grens - laatst_bijgewerkt).total_seconds() <= VERS_SECONDEN
-    )
-    return {"waarde": getal, "vers": vers}
+        return {"waarde": None, "vers": False, "leeftijd_s": None}
+    if factor is None:
+        return {"waarde": None, "vers": False, "leeftijd_s": None, "reden": f"eenheid {eenheid!r}"}
+    leeftijd = (grens - laatst_bijgewerkt).total_seconds() if laatst_bijgewerkt is not None else None
+    return {
+        "waarde": getal * factor,
+        "vers": leeftijd is not None and abs(leeftijd) <= VERS_SECONDEN,
+        "leeftijd_s": round(leeftijd) if leeftijd is not None else None,
+    }
 
 
 def _delta(begin: dict | None, eind: dict | None) -> tuple[float | None, str]:
@@ -63,6 +76,7 @@ def kwartier(
     """
     waarden: dict = {}
     kwaliteit: dict = {}
+    leeftijd = {t: (eind.get(t) or {}).get("leeftijd_s") for t in TELLERS}
     for teller in TELLERS:
         if teller == "battery_in" and begin.get(teller) is None and eind.get(teller) is None:
             if accu_in_geschat_kwh is not None:
@@ -92,6 +106,7 @@ def kwartier(
         "house_kwh": huis,
         "prijs_eur": prijs_eur,
         "kwaliteit_per_teller": kwaliteit,
+        "leeftijd_s": leeftijd,
         "quality": max(kwaliteit.values(), key=lambda k: _RANG[k]),
         "coverage_percent": dekking,
     }
@@ -106,7 +121,8 @@ def compact(record: dict) -> dict:
     """Opslagvorm (± 130 bytes): korte sleutels, kwaliteit als code per teller."""
     uit = {"t": record["kwartier"], "h": record["house_kwh"], "pr": record["prijs_eur"],
            "q": "".join(_CODE[record["kwaliteit_per_teller"][t]] for t in TELLERS),
-           "cov": record["coverage_percent"]}
+           "cov": record["coverage_percent"],
+           "a": [(record.get("leeftijd_s") or {}).get(t) for t in TELLERS]}
     for teller, kort in _KORT.items():
         uit[kort] = record[f"{teller}_kwh"]
     return uit
@@ -122,4 +138,5 @@ def uitpakken(kort: dict) -> dict:
         "kwaliteit_per_teller": kwaliteit,
         "quality": max(kwaliteit.values(), key=lambda q: _RANG[q]),
         "coverage_percent": kort["cov"],
+        "leeftijd_s": dict(zip(TELLERS, kort.get("a") or [None] * len(TELLERS))),
     }

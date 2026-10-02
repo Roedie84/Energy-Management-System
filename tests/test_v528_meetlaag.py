@@ -505,7 +505,7 @@ def test_een_stilstaande_teller_met_recente_melding_is_gemeten(make_coordinator,
     c = make_coordinator({"grid_export_energy_sensor_entity": "sensor.terug"})
     laag = Meetlaag(c)
     for grens, stand in ((GRENS - timedelta(minutes=15), "50.000"), (GRENS, "50.000")):
-        hass.states.set("sensor.terug", stand)
+        hass.states.set("sensor.terug", stand, {"unit_of_measurement": "kWh"})
         toestand = hass.states.get("sensor.terug")
         toestand.last_updated = GRENS - timedelta(hours=6)
         toestand.last_reported = grens - timedelta(seconds=5)
@@ -538,3 +538,57 @@ def test_de_risicoreserve_van_het_volgende_kwartier_wordt_vooruit_gerekend(make_
     hass.async_create_task = lambda coro: coro.close()
     laag._risico(NU + timedelta(minutes=2), 0.31)
     assert ("s", 0) in laag._risico_cache and ("s", 1) in laag._risico_cache
+
+
+# =========================================================================
+# v5.28.1 - gevonden in de eerste echte export (2 oktober 09:15)
+# =========================================================================
+
+def test_een_teller_in_wh_wordt_naar_kwh_omgezet():
+    """De SolarEdge-teller meldt in Wh: 57 Wh in een kwartier las als 57 kWh."""
+    begin = {"pv": kwartierenergie.stand("107", GRENS - timedelta(minutes=15, seconds=5), GRENS - timedelta(minutes=15), "Wh")}
+    eind = {"pv": kwartierenergie.stand("164", GRENS - timedelta(seconds=5), GRENS, "Wh")}
+    k = kwartierenergie.kwartier(GRENS - timedelta(minutes=15), begin, eind, 0.44)
+    assert k["pv_kwh"] == pytest.approx(0.057)
+
+
+def test_een_onbekende_eenheid_is_geen_meting():
+    assert kwartierenergie.stand("12", GRENS, GRENS, "kWh/h")["waarde"] is None
+
+
+def test_de_dagelijkse_reset_van_de_solaredge_teller_is_invalid():
+    begin = {"pv": kwartierenergie.stand("6400", GRENS - timedelta(minutes=15), GRENS - timedelta(minutes=15), "Wh")}
+    eind = {"pv": kwartierenergie.stand("0", GRENS, GRENS, "Wh")}
+    k = kwartierenergie.kwartier(GRENS - timedelta(minutes=15), begin, eind, 0.30)
+    assert k["pv_kwh"] is None and k["kwaliteit_per_teller"]["pv"] == "invalid"
+
+
+def test_een_melding_net_na_de_grens_is_ook_vers():
+    s = kwartierenergie.stand("10", GRENS + timedelta(seconds=8), GRENS)
+    assert s["vers"] is True and s["leeftijd_s"] == -8
+
+
+def test_de_leeftijd_per_teller_wordt_bewaard():
+    eind = dict(BEGIN, pv=200.4)
+    k = kwartierenergie.kwartier(GRENS, _standen(BEGIN, grens=GRENS - timedelta(minutes=15)), _standen(eind, vers=False), 0.25)
+    assert k["leeftijd_s"]["pv"] == 600
+    assert kwartierenergie.uitpakken(kwartierenergie.compact(k))["leeftijd_s"]["pv"] == 600
+
+
+def test_de_kwartiertimer_draait_op_de_event_loop():
+    bron = (MAP / "coordinator.py").read_text()
+    assert "    @callback\n    def _meetlaag_kwartier(" in bron
+
+
+def test_de_bron_van_accu_in_wordt_niet_afgekapt(make_coordinator, hass):
+    from custom_components.energy_management_system.meetlaag import Meetlaag
+
+    c = make_coordinator({"battery_discharge_energy_sensor_entity": "sensor.solarflow_2400_ac_aggr_discharge"})
+    laag = Meetlaag(c)
+    for grens, waarde in ((GRENS - timedelta(minutes=15), "2270.000"), (GRENS, "2270.050")):
+        hass.states.set("sensor.solarflow_2400_ac_aggr_charge", waarde,
+                        {"unit_of_measurement": "kWh", "state_class": "total_increasing"})
+        hass.states.get("sensor.solarflow_2400_ac_aggr_charge").last_reported = grens
+        laag.kwartiergrens(grens)
+    opgeslagen = laag.log.regels("kwartier", GRENS.date())[-1]
+    assert opgeslagen["bron"] == "n"            # naamgenoot van de ontlaadteller

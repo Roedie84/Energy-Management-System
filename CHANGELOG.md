@@ -29833,3 +29833,29 @@ stilstaande tellers als onvolledig gemarkeerd; de risicoreserve telde
 verleden kwartieren mee.
 
 **Volledige testsuite**: 4545 tests, allemaal groen.
+
+
+## v5.28.1 — Meetlaag: tellers in Wh, leeftijd per teller, timer op de event loop
+
+Gevonden in de eerste echte export (2 oktober 09:15). De sturing is
+ongewijzigd.
+
+- **Eenheden.** De SolarEdge-teller meldt in **Wh**; de meetlaag las elke
+  teller als kWh. Het eerste kwartier toonde daardoor 57,0 kWh zon (werkelijk
+  0,057 kWh) en een huisverbruik van 56,98 kWh. Elke stand wordt nu naar kWh
+  omgezet (Wh, kWh, MWh); een onbekende eenheid is geen meting.
+- **Leeftijd per teller.** De zon- en accutellers melden zich minder vaak
+  dan elke 60 s; die kwartieren zijn terecht `partially_estimated` (de
+  energie van de laatste seconden valt in het volgende kwartier; het
+  dagtotaal blijft exact). Per teller wordt nu de leeftijd van de stand
+  bewaard, zodat de benchmark dat kan wegen. Een melding net ná de grens
+  telt ook als vers.
+- **Kwartiertimer met `@callback`.** Zonder liet Home Assistant hem in een
+  werkthread draaien, terwijl de ronde dezelfde meetlog beschrijft.
+- **Bron van accu-in** in de compacte opslag als code (`t` teller, `n`
+  naamgenoot van de ontlaadteller, `g` geschat) in plaats van afgekapt.
+
+De dagelijkse reset van de SolarEdge-teller om middernacht geeft voor dat
+ene kwartier `invalid`, zoals bedoeld.
+
+**Volledige testsuite**: 4552 tests, allemaal groen.

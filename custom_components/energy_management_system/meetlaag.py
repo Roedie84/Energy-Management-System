@@ -485,7 +485,8 @@ class Meetlaag:
             # gelijk blijft; last_updated alleen bij een andere waarde - een
             # stilstaande teller (teruglevering 's nachts) is wel exact.
             gemeld = (getattr(toestand, "last_reported", None) or getattr(toestand, "last_updated", None)) if toestand else None
-            standen[naam] = kwartierenergie.stand(toestand.state if toestand else None, gemeld, grens)
+            eenheid = (getattr(toestand, "attributes", None) or {}).get("unit_of_measurement") if toestand else None
+            standen[naam] = kwartierenergie.stand(toestand.state if toestand else None, gemeld, grens, eenheid)
         vorige, vorige_grens = self._vorige_standen, self._vorige_grens
         self._vorige_standen, self._vorige_grens = standen, grens
         geschat = (sum(self._accu_in_monsters) / len(self._accu_in_monsters) / 4000) if self._accu_in_monsters else None
@@ -508,7 +509,7 @@ class Meetlaag:
         )
         self.laatste_kwartier = record
         opslag = kwartierenergie.compact(record)
-        opslag["bron_accu_in"] = record["bron_accu_in"][:5]
+        opslag["bron"] = {"teller": "t", "teller (naamgenoot van de ontlaadteller)": "n"}.get(record["bron_accu_in"], "g")
         self.log.voeg_toe("kwartier", vorige_grens, opslag)
 
     # =====================================================================
