@@ -39142,6 +39142,71 @@ class EnergyManagementSystemCoordinator:
         self._update_shortfall_detection(now, self.last_reason, self.last_available_kwh, self.last_needed_kwh_to_bridge)
         self._finish_decision_tick(now)
 
+    def _spaarkwartieren(self, now: datetime, entries, blok: datetime) -> list | None:
+        """De kwartieren die de huidige lading moet dekken, met hun prijs en
+        tekort - tot de accu werkelijk weer wordt bijgevuld (v5.27.4).
+        None als het geleerde verbruik ontbreekt."""
+        kwartieren = []
+        # v5.27.4: tot de accu WERKELIJK weer wordt bijgevuld, niet alleen tot
+        # het blok. Gevraagd na de terugblik op 1 oktober: 's nachts dekte de
+        # accu het huis tegen 33 ct, terwijl hij laat op de avond tegen 38 ct
+        # leeg was - het blok van 10:45 vulde hem niet bij (weinig zon, laden
+        # loonde niet). Dezelfde denkfout die de piekregel in v5.26.5 al
+        # rechtzette.
+        #
+        # Per kwartier NA het blok: kost bijladen in het blok (blokprijs /
+        # rendement + slijtage) minder dan stroom in dat kwartier, dan vult het
+        # blok bij en hoeft de huidige lading er niet voor bewaard te worden.
+        # Kost het meer, dan telt het kwartier mee, tegen zijn eigen prijs.
+        # Zonoverschot na het blok vult ook bij en gaat er eerst af. Zonder
+        # vervangprijs: zoals voorheen, alleen tot het blok.
+        vervangprijs = self._piek_vervangprijs(entries, blok)
+        horizon = now + timedelta(hours=24) if vervangprijs is not None else blok
+        blok_eind = self.last_cheap_block_end or blok
+        zon_na_blok = 0.0
+        for begin, eind, prijs in entries or []:
+            if eind <= now or begin >= horizon:
+                continue
+            segmenten = self._segmenten_verbruik_zon(max(begin, now), eind, veilig=True)
+            if segmenten is None:
+                return None
+            saldo = sum(verbruik - zon for verbruik, zon in segmenten)
+            tekort = max(0.0, saldo)
+            prijs_eur = prijs / PRICE_SCALE_FACTOR
+            if begin >= blok:
+                zon_na_blok += max(0.0, -saldo)
+                if begin < blok_eind:
+                    continue  # in het blok zelf: goedkoop van het net, accu laadt bij
+                if prijs_eur > vervangprijs:
+                    continue  # het blok vult hiervoor zinvol bij
+                gedekt_door_zon = min(tekort, zon_na_blok)
+                zon_na_blok -= gedekt_door_zon
+                tekort -= gedekt_door_zon
+            kwartieren.append((begin, eind, prijs_eur, tekort))
+        return kwartieren
+
+    def _spaarbesluit_dit_kwartier(self, huidig, gedekt: set, grens) -> bool:
+        """Sparen in dit kwartier? Een besluit per kwartier (v5.27.4).
+
+        Vervangt de marge van 2 ct, die met het verkeerde kwartier vergeleek
+        en het tekort elke ronde liet doorschuiven naar de late avond. Binnen
+        een kwartier verandert het besluit niet meer - dat voorkomt het
+        heen-en-weer schakelen zonder het tekort te verplaatsen.
+        """
+        if huidig is None:
+            return False
+        bewaard = getattr(self, "_spaar_kwartier", None)
+        if bewaard is not None and bewaard[0] == huidig[0]:
+            return bewaard[1]
+        sparen = (
+            huidig[0] not in gedekt
+            and huidig[3] > 0
+            and grens is not None
+            and huidig[2] < grens
+        )
+        self._spaar_kwartier = (huidig[0], sparen)
+        return sparen
+
     def spaarplan(
         self, now: datetime, entries, blok: datetime | None
     ) -> dict:
@@ -39180,16 +39245,10 @@ class EnergyManagementSystemCoordinator:
         if beschikbaar is None:
             uit["reden"] = "beschikbare energie onbekend"
             return uit
-        kwartieren = []
-        for begin, eind, prijs in entries or []:
-            if eind <= now or begin >= blok:
-                continue
-            segmenten = self._segmenten_verbruik_zon(max(begin, now), eind, veilig=True)
-            if segmenten is None:
-                uit["reden"] = "geen verbruiksinschatting"
-                return uit
-            tekort = max(0.0, sum(verbruik - zon for verbruik, zon in segmenten))
-            kwartieren.append((begin, eind, prijs / PRICE_SCALE_FACTOR, tekort))
+        kwartieren = self._spaarkwartieren(now, entries, blok)
+        if kwartieren is None:
+            uit["reden"] = "geen verbruiksinschatting"
+            return uit
         nodig = sum(k[3] for k in kwartieren)
         uit.update(
             {
@@ -39221,13 +39280,15 @@ class EnergyManagementSystemCoordinator:
         uit["duurste_ongedekt_eur"] = round(duurste[2], 4) if duurste else None
         uit["duurste_ongedekt_om"] = duurste[0].isoformat() if duurste else None
         huidig = next((k for k in kwartieren if k[0] <= now < k[1]), None)
-        sparen = (
-            huidig is not None
-            and huidig[0] not in gedekt
-            and huidig[3] > 0
-            and grens is not None
-            and huidig[2] + GRID_CHEAPER_MARGIN_EUR < grens
-        )
+        # v5.27.4: GEEN marge meer, maar EEN besluit per kwartier. De marge van
+        # 2 ct moest heen-en-weer schakelen voorkomen, maar vergeleek met het
+        # verkeerde kwartier. Op 1 oktober dekte het plan om middernacht tot
+        # 32,5 ct; de nachtkwartieren van 31,8-32,4 ct hoorden gespaard te
+        # worden, maar vielen binnen de marge. Het tekort verdween daar niet
+        # mee - het schoof elke ronde verder door, naar de late avond tegen
+        # 38-43 ct. Een besluit per kwartier voorkomt het schakelen ook, en
+        # laat het tekort komen waar het hoort.
+        sparen = self._spaarbesluit_dit_kwartier(huidig, gedekt, grens)
         uit.update(
             {
                 "actief": True,

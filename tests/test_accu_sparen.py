@@ -103,28 +103,29 @@ def test_in_de_ochtendpiek_dekt_de_accu(make_coordinator, hass):
     assert plan["sparen_nu"] is False
 
 
-def test_de_marge_voorkomt_heen_en_weer_schakelen(make_coordinator, hass):
-    """Een kwartier dat nauwelijks goedkoper is dan het goedkoopste gedekte,
-    wordt niet gespaard - de marge is die van `_net_is_goedkoper_dan_de_accu`."""
-    c = _stel_in(make_coordinator({}), beschikbaar=1.0)
-    plan = c.spaarplan(datetime(2026, 9, 30, 3, 0, tzinfo=TZ), _reeks(), BLOK)
-    grens = plan["grensprijs_eur"]
+def test_een_besluit_per_kwartier_voorkomt_heen_en_weer_schakelen(make_coordinator, hass):
+    """v5.27.4 - VERWACHTING BEWUST GEWIJZIGD. De marge van 2 ct is vervangen
+    door een besluit per kwartier: binnen een kwartier blijft het besluit
+    staan, ook als de berekening wat verschuift."""
+    c = make_coordinator({})
+    kwartier = (datetime(2026, 10, 1, 0, 0, tzinfo=timezone.utc),
+                datetime(2026, 10, 1, 0, 15, tzinfo=timezone.utc), 0.318, 0.07)
 
-    def reeks_met(prijs_nu):
-        uit = []
-        for begin, eind, p in _reeks():
-            if begin == datetime(2026, 9, 30, 3, 0, tzinfo=TZ):
-                p = prijs_nu * PRICE_SCALE_FACTOR
-            uit.append((begin, eind, p))
-        return uit
+    eerst = c._spaarbesluit_dit_kwartier(kwartier, set(), 0.325)
+    dan = c._spaarbesluit_dit_kwartier(kwartier, {kwartier[0]}, 0.30)
 
-    net_onder = c.spaarplan(
-        datetime(2026, 9, 30, 3, 0, tzinfo=TZ),
-        reeks_met(grens - GRID_CHEAPER_MARGIN_EUR / 2),
-        BLOK,
-    )
-    assert net_onder["sparen_nu"] is False
+    assert eerst is True
+    assert dan is True        # zelfde kwartier: zelfde besluit
 
+
+def test_ook_een_klein_verschil_wordt_gespaard(make_coordinator, hass):
+    """1 oktober: 31,8 ct tegen een grens van 32,5 ct viel binnen de marge -
+    en het tekort schoof door naar de late avond tegen 38-43 ct."""
+    c = make_coordinator({})
+    kwartier = (datetime(2026, 10, 1, 0, 0, tzinfo=timezone.utc),
+                datetime(2026, 10, 1, 0, 15, tzinfo=timezone.utc), 0.318, 0.07)
+
+    assert c._spaarbesluit_dit_kwartier(kwartier, set(), 0.325) is True
 
 def test_zonder_smart_charging_geen_sparen(make_coordinator, hass):
     """De eerste grendel: de stand moet op deze accu bestaan."""
@@ -305,3 +306,76 @@ def test_het_plan_onthoudt_zijn_blok_voor_de_uitkomst(make_coordinator, hass):
 
     assert c.spaar_uitkomst["blok"] == _BLOK.isoformat()
     assert c.spaar_uitkomst["gemeld"] is False
+
+
+# --- v5.27.4: tot de accu werkelijk weer wordt bijgevuld ------------------
+
+from datetime import timedelta as _td2
+from custom_components.energy_management_system.const import PRICE_SCALE_FACTOR as _PSF
+
+_NACHT = datetime(2026, 10, 1, 0, 0, tzinfo=timezone.utc)
+_BLOK = _NACHT + _td2(hours=10, minutes=45)
+
+
+def _plan(make_coordinator, *, blokprijs, avondprijs, zon_na_blok=0.0, met_einde=True):
+    c = make_coordinator({})
+    c.smart_charging_supported = lambda: True
+    c.charge_efficiency_history = [83.7] * 7
+    c.discharge_efficiency_history = [100.0] * 7
+    c.get_wear_cost_overview = lambda: {"slijtage_ct_per_kwh": 11.40}
+    c.beschikbare_energie_kwh = lambda: 1.0
+    c.last_cheap_block_end = _BLOK + _td2(hours=4) if met_einde else None
+    entries = []
+    for i in range(96):
+        b = _NACHT + _td2(minutes=15 * i)
+        uur = b.hour + b.minute / 60
+        if uur < 10.75: p = 0.33
+        elif uur < 14.75: p = blokprijs
+        else: p = avondprijs
+        entries.append((b, b + _td2(minutes=15), p * _PSF))
+
+    def segmenten(a, b, veilig=True):
+        uur = a.hour + a.minute / 60
+        zon = zon_na_blok / 16 if 10.75 <= uur < 14.75 else 0.0
+        return [(0.1, zon)]
+
+    c._segmenten_verbruik_zon = segmenten
+    return c, entries
+
+
+def test_vult_het_blok_niet_bij_dan_telt_de_avond_mee(make_coordinator, hass):
+    """Blok 31,2 ct: bijladen kost 31,2 / 83,7% + 11,4 = 48,7 ct. Een avond
+    van 42 ct vult het blok dus niet zinvol bij - die telt mee."""
+    c, entries = _plan(make_coordinator, blokprijs=0.312, avondprijs=0.42)
+
+    plan = c.spaarplan(_NACHT, entries, _BLOK)
+
+    assert plan["actief"] is True
+    assert plan["nodig_kwh"] > 4.3          # nacht + ochtend + avond
+    assert plan["sparen_nu"] is True        # de nacht van 33 ct wordt gespaard
+
+
+def test_vult_het_blok_goedkoop_bij_dan_telt_de_avond_niet(make_coordinator, hass):
+    """Zonnige dag, blok 15 ct: bijladen kost 29,3 ct - de avond van 42 ct
+    wordt door het blok gedekt; zoals voorheen alleen tot het blok."""
+    c, entries = _plan(make_coordinator, blokprijs=0.15, avondprijs=0.42)
+
+    plan = c.spaarplan(_NACHT, entries, _BLOK)
+
+    assert plan["nodig_kwh"] < 4.4          # alleen nacht en ochtend
+
+
+def test_zon_na_het_blok_vult_ook_bij(make_coordinator, hass):
+    c, entries = _plan(make_coordinator, blokprijs=0.312, avondprijs=0.42, zon_na_blok=5.0)
+    zonder, _ = _plan(make_coordinator, blokprijs=0.312, avondprijs=0.42)
+
+    met_zon = c.spaarplan(_NACHT, entries, _BLOK)["nodig_kwh"]
+    zonder_zon = zonder.spaarplan(_NACHT, entries, _BLOK)["nodig_kwh"]
+
+    assert met_zon < zonder_zon
+
+
+def test_zonder_bloktijden_zoals_voorheen(make_coordinator, hass):
+    c, entries = _plan(make_coordinator, blokprijs=0.312, avondprijs=0.42, met_einde=False)
+
+    assert c.spaarplan(_NACHT, entries, _BLOK)["nodig_kwh"] < 4.4

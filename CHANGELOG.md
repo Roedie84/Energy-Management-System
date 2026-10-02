@@ -29702,3 +29702,65 @@ zes onderdelen samen         146 ms   ->  3,0 ms
 ```
 
 **Volledige testsuite**: 4424 tests, allemaal groen.
+
+
+## v5.27.4 — Het spaarplan kijkt tot de accu werkelijk weer wordt bijgevuld
+
+Gevraagd: *"Heeft het EMS nu echt economisch het beste gedaan?"* - met de
+export van 2 oktober. De terugblik op 1 oktober liet een patroon zien: 's
+nachts dekte de accu het huis tegen zo'n 33 ct, terwijl hij laat op de avond
+leeg was en het huis tegen 38-43 ct van het net haalde. Daarna: *"Ja want het
+moet een zo goed mogelijke integratie worden, voor mij economisch het
+voordeligste."*
+
+### 1. De horizon
+
+Het spaarplan keek tot het volgende goedkope blok (10:45), en de accu haalde
+dat blok - dus sparen leek niet nodig. Maar dat blok vulde de accu niet bij:
+weinig zon, en laden loonde niet. Dezelfde denkfout die de piekregel in
+v5.26.5 al rechtzette.
+
+Nu per kwartier na het blok (`_spaarkwartieren`):
+
+- kost bijladen in het blok (blokprijs / rendement + slijtage) **minder** dan
+  stroom in dat kwartier, dan vult het blok bij en hoeft de huidige lading er
+  niet voor bewaard te worden;
+- kost het **meer**, dan telt het kwartier mee, tegen zijn eigen prijs;
+- zonoverschot vanaf het blok vult ook bij en gaat er eerst af;
+- de kwartieren in het blok zelf tellen niet: dan komt de stroom goedkoop van
+  het net en laadt de accu bij. Een toets ving dat: op een zonnige dag telde
+  het blok mee als behoefte, en zou het EMS ten onrechte melden dat de accu
+  het niet haalt.
+
+1 oktober: bijladen kostte 31,2 / 83,7% + 11,4 = 48,7 ct, dus de avond van
+38-47 ct telde mee. Een zonnige dag met een blok van 15 ct (29,3 ct om bij te
+laden): zoals voorheen.
+
+### 2. De marge die het tekort liet doorschuiven
+
+Een kwartier werd alleen gespaard als het minstens 2 ct goedkoper was dan het
+goedkoopste kwartier dat de accu dekt - tegen heen-en-weer schakelen. Maar die
+marge vergeleek met het verkeerde kwartier. Om middernacht dekte het plan tot
+32,5 ct; de nachtkwartieren van 31,8-32,4 ct hoorden gespaard te worden,
+vielen binnen de marge, en het tekort verdween daar niet mee: het schoof elke
+ronde verder door, naar het einde - de late avond.
+
+Nu **een besluit per kwartier** (`_spaarbesluit_dit_kwartier`), zonder marge:
+binnen een kwartier verandert het besluit niet meer. Dat voorkomt het
+schakelen ook, en laat het tekort komen waar het hoort.
+
+**Verwachting bewust gewijzigd**: de toets op de marge is vervangen door een
+toets op een besluit per kwartier.
+
+### Wat het oplevert
+
+1 oktober opnieuw afgespeeld met het werkelijke verbruik, de zon en de
+prijzen: de nieuwe regel spaart de goedkoopste nachtkwartieren (00:00-05:00)
+en dekt daarmee de duurdere momenten later. Het verschil was die dag klein -
+minder dan een halve cent - omdat de nacht en de vervangen kwartieren dicht
+bij elkaar lagen (31,8 tegen 32,5 ct). De eerdere schatting van 4 cent
+vergeleek gemiddelden en was te ruim. Op een dag met een groter verschil
+tussen nacht en avond telt het wel - en dan belandt het tekort niet meer in de
+duurste uren aan het eind.
+
+**Volledige testsuite**: 4429 tests, allemaal groen.

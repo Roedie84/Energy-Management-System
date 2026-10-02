@@ -1,4 +1,4 @@
-EMS v5.27.3 - alleen de wijziging sinds v5.27.2
+EMS v5.27.4 - alleen de wijziging sinds v5.27.3
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
     coordinator.py
@@ -8,18 +8,16 @@ TE KOPIEREN naar config/custom_components/energy_management_system/
 NAAR DE REPO
     README.md, CHANGELOG.md
     dashboards/energy_management_system_dashboard.yaml
-    tests/ (drie bestanden)
+    tests/test_accu_sparen.py
 
-Voor HACS: release met tag v5.27.3.
+Voor HACS: release met tag v5.27.4.
 
 WAT ER VERANDERT
-De GACS-sensor deed er 1,2 seconde over: zes onderdelen bouwden elk het
-kwartierplan opnieuw, en de zonschatting doorliep per kwartier zeven dagen
-Solcast. Nu een plan per ronde voor iedereen, en de zonschatting kijkt
-alleen naar de halfuren die het kwartier raken.
+1. Het spaarplan kijkt tot de accu werkelijk weer wordt bijgevuld, niet
+   alleen tot het goedkope blok - dezelfde regel als de piekverkoop.
+   Vult het blok niet goedkoop bij, dan telt de avond mee.
+2. Geen marge van 2 ct meer, maar een besluit per kwartier. De marge liet
+   het tekort doorschuiven naar de duurste uren aan het eind van de dag.
 
-    een plan opbouwen      24,3 -> 2,9 ms
-    zes onderdelen samen   146  -> 3,0 ms
-
-Geen enkele uitkomst verandert. Na een paar rondes hoort de GACS-tijd in
-Diagnose gezondheid ruim onder de 400 ms te liggen.
+Op 1 oktober scheelde het weinig (nacht en avond lagen dicht bij elkaar);
+op dagen met een groter verschil telt het.
