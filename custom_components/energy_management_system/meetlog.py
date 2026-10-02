@@ -157,15 +157,36 @@ class MeetLog:
         return uit
 
     def laad_dag(self, soort: str, dag: str, inhoud: dict | None) -> None:
-        """Een bewaard dagbestand terugzetten na een herstart."""
+        """Een bewaard dagbestand terugzetten na een herstart - SAMENVOEGEN met
+        wat er sinds de herstart al is vastgelegd (v5.28.2). Vervangen liet
+        records uit de eerste rondes na de herstart verdwijnen.
+
+        Snapshots: beide verzamelingen; zelfde id moet zelfde inhoud hebben.
+        Regels: eerst de bewaarde, dan de nieuwe, zonder dubbele.
+        """
         if not inhoud:
             return
         sleutel = (soort, dag)
-        self._dagen[sleutel] = copy.deepcopy(inhoud)
-        self._groottes[sleutel] = len(_json(inhoud))
+        huidig = self._dagen.get(sleutel, {})
         if soort == "snapshot":
-            for sid in inhoud:
+            samen = copy.deepcopy(inhoud)
+            for sid, regel in huidig.items():
+                if sid in samen and _json(samen[sid]["inhoud"]) != _json(regel["inhoud"]):
+                    self.fouten += 1
+                    self.laatste_fout = f"snapshot {sid}: bewaarde en nieuwe inhoud verschillen"
+                    continue
+                samen.setdefault(sid, regel)
+            for sid in samen:
                 self._snapshot_dag[sid] = dag
+        else:
+            bewaard = copy.deepcopy(inhoud.get("regels", []))
+            gezien = {_json(r) for r in bewaard}
+            nieuw = [r for r in huidig.get("regels", []) if _json(r) not in gezien]
+            samen = {"regels": bewaard + nieuw}
+        self._dagen[sleutel] = samen
+        self._groottes[sleutel] = len(_json(samen))
+        if huidig:
+            self._gewijzigd.add(sleutel)   # de samengevoegde dag opnieuw bewaren
 
     @staticmethod
     def opslagsleutel(soort: str, dag: str) -> str:

@@ -592,3 +592,99 @@ def test_de_bron_van_accu_in_wordt_niet_afgekapt(make_coordinator, hass):
         laag.kwartiergrens(grens)
     opgeslagen = laag.log.regels("kwartier", GRENS.date())[-1]
     assert opgeslagen["bron"] == "n"            # naamgenoot van de ontlaadteller
+
+
+# =========================================================================
+# v5.28.2 - terugladen na een herstart
+# =========================================================================
+
+class _Opslag:
+    """Nep-opslag die bijhoudt wat er geladen en bewaard wordt."""
+    bestanden: dict = {}
+    log: list = []
+
+    def __init__(self, sleutel):
+        self.sleutel = sleutel
+
+    async def async_load(self):
+        _Opslag.log.append(("laden", self.sleutel))
+        return copy.deepcopy(_Opslag.bestanden.get(self.sleutel))
+
+    async def async_save(self, inhoud):
+        _Opslag.log.append(("bewaren", self.sleutel))
+        _Opslag.bestanden[self.sleutel] = copy.deepcopy(inhoud)
+
+    async def async_remove(self):
+        _Opslag.bestanden.pop(self.sleutel, None)
+
+
+def test_terugladen_voegt_samen_in_plaats_van_te_vervangen():
+    log = meetlog.MeetLog()
+    log.voeg_toe("evaluatie", NU + timedelta(hours=2), {"t": "na de herstart"})
+    log.laad_dag("evaluatie", NU.date().isoformat(), {"regels": [{"t": "08:40"}, {"t": "09:15"}]})
+    regels = [r["t"] for r in log.regels("evaluatie", NU.date())]
+    assert regels == ["08:40", "09:15", "na de herstart"]
+    log.laad_dag("evaluatie", NU.date().isoformat(), {"regels": [{"t": "08:40"}, {"t": "09:15"}]})
+    assert len(log.regels("evaluatie", NU.date())) == 3      # geen dubbele
+
+
+def test_niets_wegschrijven_voordat_het_terugladen_klaar_is(make_coordinator, hass):
+    """De oorzaak van '3 evaluaties': het eerste wegschrijven na de herstart
+    kon het terugladen inhalen en het bestand van vandaag overschrijven."""
+    import asyncio
+
+    from custom_components.energy_management_system.meetlaag import Meetlaag
+
+    sleutel = meetlog.MeetLog.opslagsleutel("evaluatie", NU.date().isoformat())
+    _Opslag.bestanden = {sleutel: {"regels": [{"evaluation_timestamp": f"oud {i}"} for i in range(23)]}}
+    _Opslag.log = []
+    c = make_coordinator({})
+    laag = Meetlaag(c, opslag_factory=_Opslag)
+    taken = []
+    hass.async_create_task = lambda coro: taken.append(coro)
+    laag._start_laden(NU)
+    laag.log.voeg_toe("evaluatie", NU, {"evaluation_timestamp": "nieuw"})
+    laag._bewaar_af_en_toe()                                 # terugladen loopt nog
+    assert not any(soort == "bewaren" for soort, _ in _Opslag.log)
+    for taak in taken:
+        asyncio.run(taak)
+    taken.clear()
+    laag._bewaar_af_en_toe()
+    for taak in taken:
+        asyncio.run(taak)
+    assert len(_Opslag.bestanden[sleutel]["regels"]) == 24   # 23 bewaarde + 1 nieuwe
+
+
+def test_terugladen_op_de_datum_van_de_ronde(make_coordinator, hass):
+    import asyncio
+
+    from custom_components.energy_management_system.meetlaag import Meetlaag
+
+    _Opslag.bestanden, _Opslag.log = {}, []
+    laag = Meetlaag(make_coordinator({}), opslag_factory=_Opslag)
+    taken = []
+    hass.async_create_task = lambda coro: taken.append(coro)
+    laag._start_laden(datetime(2026, 10, 2, 0, 30, tzinfo=TZ))
+    for taak in taken:
+        asyncio.run(taak)
+    assert ("laden", "energy_management_system_meetlog_evaluatie_20261002") in _Opslag.log
+
+
+def test_kwartieren_van_v528_tellen_als_ongeldig_en_niet_mee():
+    oud = {"t": "2026-10-02T09:00:00+02:00", "i": 0.006, "e": 0.017, "p": 57.0, "o": 0.0, "c": 0.009,
+           "h": 56.98, "pr": 0.4456, "q": "mmppp", "cov": 0.0}
+    terug = kwartierenergie.uitpakken(oud)
+    assert terug["quality"] == "invalid" and terug["pv_kwh"] is None
+    assert oud["p"] == 57.0                                   # het record zelf blijft ongewijzigd
+
+
+def test_de_dekking_in_de_status_slaat_v528_kwartieren_over(make_coordinator, hass):
+    from custom_components.energy_management_system.meetlaag import Meetlaag
+
+    laag = Meetlaag(make_coordinator({}))
+    laag._dag = NU.date()
+    laag.log.voeg_toe("kwartier", NU, {"t": "x", "i": 0.0, "e": 0.0, "p": 57.0, "o": 0.0, "c": 0.0,
+                                         "h": 57.0, "pr": 0.4, "q": "mmppp", "cov": 0.0})
+    laag.log.voeg_toe("kwartier", NU, {"t": "y", "i": 0.1, "e": 0.0, "p": 0.0, "o": 0.0, "c": 0.0,
+                                         "h": 0.1, "pr": 0.4, "q": "mmmmm", "cov": 100.0, "a": [5, 5, 5, 5, 5]})
+    assert "dekking 100%" in laag.status_tekst()

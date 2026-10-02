@@ -29859,3 +29859,34 @@ De dagelijkse reset van de SolarEdge-teller om middernacht geeft voor dat
 ene kwartier `invalid`, zoals bedoeld.
 
 **Volledige testsuite**: 4552 tests, allemaal groen.
+
+
+## v5.28.2 — Meetlaag: terugladen na een herstart, in één keer goed
+
+Na de installatie van v5.28.1 toonde de Meetlog *"3 evaluaties · dekking
+0%"*, terwijl er die ochtend al tientallen waren. Gevraagd: *"In 1 keer goed
+repareren."* De sturing is ongewijzigd.
+
+Vier fouten in het terugladen, allemaal tegelijk hersteld:
+
+1. **Wegschrijven haalde het terugladen in.** Bij de eerste ronde na een
+   herstart werden het terugladen én het eerste wegschrijven tegelijk
+   gestart. Won het wegschrijven, dan overschreef het het bestand van vandaag
+   met alleen de paar nieuwe records - en daarna laadde het terugladen dat
+   uitgeklede bestand. Nu wordt er niets weggeschreven of verwijderd voordat
+   het terugladen klaar is.
+2. **Vervangen in plaats van samenvoegen.** Het terugladen verving de dag in
+   het geheugen; records uit de eerste rondes na de herstart verdwenen. Nu:
+   eerst wat bewaard was, dan wat er sindsdien bij kwam, zonder dubbele.
+   Snapshots: beide verzamelingen, en zelfde id moet zelfde inhoud hebben.
+3. **Kwartieren van v5.28** (toen een teller in Wh als kWh werd gelezen)
+   worden als `invalid` gelezen en tellen niet mee in dekking of benchmark.
+   Het record zelf blijft ongewijzigd.
+4. **Datum van de ronde** voor het terugladen, niet de systeemklok - die kan
+   in een container op UTC staan, en dan wordt rond middernacht de verkeerde
+   dag geladen.
+
+Onderweg: de eerste bewaring hing af van hoe lang de machine al aanstond
+(`_laatste_bewaring = 0`); nu gebeurt die meteen.
+
+**Volledige testsuite**: 4557 tests, allemaal groen.

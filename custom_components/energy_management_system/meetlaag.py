@@ -49,8 +49,9 @@ class Meetlaag:
         self._vorige_grens = None
         self._vorige_standen = None
         self._accu_in_monsters: list[float] = []
-        self._laatste_bewaring = 0.0
+        self._laatste_bewaring = float("-inf")   # eerste keer meteen, ongeacht de uptime
         self._geladen = False
+        self._laden_klaar = False
         self._dag = None
         self.laatste_evaluatie: dict | None = None
         self.laatste_kwartier: dict | None = None
@@ -76,7 +77,7 @@ class Meetlaag:
             self.duur_ms = (self.duur_ms + [round((time.perf_counter() - begin) * 1000, 2)])[-288:]
 
     def _ronde(self, now: datetime, entries) -> None:
-        self._start_laden()
+        self._start_laden(now)
         if self._dag is not None and now.date() != self._dag:
             self._nieuwe_dag(self._dag)
         self._dag = now.date()
@@ -541,27 +542,43 @@ class Meetlaag:
         for soort, dagstr in self.log.opruimen(dag + timedelta(days=1)):
             self._verwijder(soort, dagstr)
 
-    def _start_laden(self) -> None:
-        if self._geladen or self._opslag_factory is None:
-            self._geladen = True
+    def _start_laden(self, now: datetime) -> None:
+        """Na een herstart de bewaarde dagen terugladen.
+
+        v5.28.2: zolang dat loopt wordt er niets weggeschreven of verwijderd.
+        Het eerste wegschrijven na een herstart kon het terugladen inhalen en
+        het bestand van vandaag overschrijven met alleen de paar nieuwe
+        records - daarmee was de geschiedenis van die dag weg. En de datum
+        komt van de ronde, niet van de systeemklok (die in een container op
+        UTC kan staan).
+        """
+        if self._geladen:
             return
         self._geladen = True
+        if self._opslag_factory is None:
+            self._laden_klaar = True
+            return
+        vandaag = now.date()
 
         async def laden():
-            vandaag = datetime.now().date()
-            for terug in range(OPSLAG_DAGEN_TERUG):
-                dag = (vandaag - timedelta(days=terug)).isoformat()
-                for soort in meetlog.SOORTEN:
-                    try:
-                        inhoud = await self._opslag(meetlog.MeetLog.opslagsleutel(soort, dag)).async_load()
-                        self.log.laad_dag(soort, dag, inhoud)
-                    except Exception:  # noqa: BLE001
-                        continue
+            try:
+                for terug in range(OPSLAG_DAGEN_TERUG):
+                    dag = (vandaag - timedelta(days=terug)).isoformat()
+                    for soort in meetlog.SOORTEN:
+                        try:
+                            inhoud = await self._opslag(meetlog.MeetLog.opslagsleutel(soort, dag)).async_load()
+                            self.log.laad_dag(soort, dag, inhoud)
+                        except Exception:  # noqa: BLE001
+                            continue
+            finally:
+                self._laden_klaar = True
 
         self.c.hass.async_create_task(laden())
 
     def _bewaar_af_en_toe(self) -> None:
-        if self._opslag_factory is None or time.monotonic() - self._laatste_bewaring < BEWAAR_INTERVAL_S:
+        if self._opslag_factory is None or not self._laden_klaar:
+            return
+        if time.monotonic() - self._laatste_bewaring < BEWAAR_INTERVAL_S:
             return
         self._laatste_bewaring = time.monotonic()
         te_bewaren = self.log.te_bewaren()
@@ -577,7 +594,7 @@ class Meetlaag:
         self.c.hass.async_create_task(bewaren())
 
     def _verwijder(self, soort: str, dag: str) -> None:
-        if self._opslag_factory is None:
+        if self._opslag_factory is None or not self._laden_klaar:
             return
 
         async def weg():
@@ -594,6 +611,7 @@ class Meetlaag:
         vandaag = self._dag
         evaluaties = self.log.regels("evaluatie", vandaag) if vandaag else []
         kwartieren = [kwartierenergie.uitpakken(k) for k in self.log.regels("kwartier", vandaag)] if vandaag else []
+        kwartieren = [k for k in kwartieren if "reden" not in k]   # v5.28-formaat telt niet mee
         met_spiegel = [e for e in evaluaties if e.get("mirror_matches_production") is not None]
         spiegel = (
             f"spiegel {round(100 * sum(1 for e in met_spiegel if e['mirror_matches_production']) / len(met_spiegel))}%"
@@ -701,6 +719,8 @@ def schaduw_dagrapport(evaluaties: list[dict], kwartieren: list[dict], emax: flo
         sleutel = e["evaluation_timestamp"][:16]
         kwartier = sleutel[:14] + f"{int(sleutel[14:16]) // 15 * 15:02d}"
         per_kwartier.setdefault(kwartier, e)
+    meting = {k["kwartier"][:16]: k for k in kwartieren}
+    kwartieren = [k for k in kwartieren if "reden" not in k]   # v5.28-formaat telt niet mee
     meting = {k["kwartier"][:16]: k for k in kwartieren}
     uit = {"varianten": {}, "kwartieren_gemeten": len(meting),
            "dekking_procent": round(statistics.mean([k.get("coverage_percent") or 0 for k in kwartieren]), 1) if kwartieren else None}

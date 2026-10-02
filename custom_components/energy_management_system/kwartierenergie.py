@@ -129,7 +129,23 @@ def compact(record: dict) -> dict:
 
 
 def uitpakken(kort: dict) -> dict:
-    """Terug naar de volledige vorm."""
+    """Terug naar de volledige vorm.
+
+    v5.28.2: een record zonder leeftijd per teller komt van v5.28, toen een
+    teller in Wh nog als kWh werd gelezen (57 kWh zon in een kwartier). Het
+    record blijft zoals het is, maar wordt als `invalid` gelezen en telt niet
+    mee in dekking of benchmark.
+    """
+    if "a" not in kort:
+        return {
+            "kwartier": kort.get("t"),
+            **{f"{t}_kwh": None for t in TELLERS},
+            "house_kwh": None, "prijs_eur": kort.get("pr"),
+            "kwaliteit_per_teller": {t: "invalid" for t in TELLERS},
+            "leeftijd_s": {t: None for t in TELLERS},
+            "quality": "invalid", "coverage_percent": 0.0,
+            "reden": "v5.28: eenheid niet omgezet",
+        }
     kwaliteit = {t: _TERUG[c] for t, c in zip(TELLERS, kort["q"])}
     return {
         "kwartier": kort["t"],
