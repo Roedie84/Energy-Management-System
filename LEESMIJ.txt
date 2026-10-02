@@ -1,23 +1,29 @@
-EMS v5.27.4 - alleen de wijziging sinds v5.27.3
+EMS v5.28 - alle wijzigingen sinds v5.27.4
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
-    coordinator.py
-    dashboard_template.yaml   (gaat altijd mee, ongewijzigd)
-    manifest.json, bestandscontrole.json
+    NIEUW:     meetlaag.py, meetlog.py, schaduw.py, tarief.py, kwartierenergie.py
+    GEWIJZIGD: coordinator.py, const.py, sensor.py, diagnostics.py
+               dashboard_template.yaml   (Meetlog op de pagina Proefstand)
+               manifest.json, bestandscontrole.json
 
 NAAR DE REPO
     README.md, CHANGELOG.md
     dashboards/energy_management_system_dashboard.yaml
-    tests/test_accu_sparen.py
+    tests/gouden_scenarios.py, tests/test_v528_gouden_standaard.py,
+    tests/test_v528_meetlaag.py, tests/fixtures/gouden_v5274.json
 
-Voor HACS: release met tag v5.27.4.
+Voor HACS: release met tag v5.28.
 
 WAT ER VERANDERT
-1. Het spaarplan kijkt tot de accu werkelijk weer wordt bijgevuld, niet
-   alleen tot het goedkope blok - dezelfde regel als de piekverkoop.
-   Vult het blok niet goedkoop bij, dan telt de avond mee.
-2. Geen marge van 2 ct meer, maar een besluit per kwartier. De marge liet
-   het tekort doorschuiven naar de duurste uren aan het eind van de dag.
+Niets aan de sturing. Nieuw is een meetlaag die na elk besluit vastlegt
+wat het EMS wist, besloot en verstuurde, wat een productiespiegel en een
+economisch schaduwoptimum zouden doen, en per kwartier de energie uit de
+tellers.
 
-Op 1 oktober scheelde het weinig (nacht en avond lagen dicht bij elkaar);
-op dagen met een groter verschil telt het.
+NA DE INSTALLATIE
+- Sensor "Meetlog" (pagina Proefstand) hoort na een paar rondes te tonen:
+  "ok · N evaluaties · spiegel 100% · dekking ..%".
+- De laadteller sensor.solarflow_2400_ac_aggr_charge wordt automatisch
+  gevonden als naamgenoot van de ontlaadteller.
+- Opslag: dagbestanden energy_management_system_meetlog_* in .storage,
+  samen naar verwachting onder 20 MB.

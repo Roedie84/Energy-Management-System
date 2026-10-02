@@ -54,6 +54,7 @@ from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import CoreState, Event, HomeAssistant, callback
 from homeassistant.helpers.event import (
     async_track_state_change_event,
+    async_track_time_change,
     async_track_time_interval,
 )
 from homeassistant.util import dt as dt_util
@@ -2046,6 +2047,11 @@ class EnergyManagementSystemCoordinator:
         # v2.2.0: een eigen klok voor de watchdog. Op dezelfde klok
         # meeliften zou betekenen dat hij zwijgt als juist die klok het
         # begeeft.
+        # v5.28: een eigen klok op de kwartiergrenzen voor de kwartierenergie,
+        # los van de ronde van vijf minuten.
+        self._unsub_meetlaag_kwartier = async_track_time_change(
+            self.hass, self._meetlaag_kwartier, minute=[0, 15, 30, 45], second=0
+        )
         self._unsub_watchdog = async_track_time_interval(
             self.hass,
             self._watchdog,
@@ -2341,6 +2347,10 @@ class EnergyManagementSystemCoordinator:
         if opzeggen:
             opzeggen()
             self._unsub_watchdog = None
+        opzeggen = getattr(self, "_unsub_meetlaag_kwartier", None)
+        if opzeggen:
+            opzeggen()
+            self._unsub_meetlaag_kwartier = None
         if self._unsub_interval:
             self._unsub_interval()
         if self._unsub_state:
@@ -37185,6 +37195,9 @@ class EnergyManagementSystemCoordinator:
             async with self._lock:
                 self._begin_ronde_cache(dt_util.now())
                 await self._async_update_locked()
+                # v5.28: de meetlaag, NA het besluit en het sturen van de
+                # Zendure. Leest alleen; een fout blijft daarbinnen.
+                self._meetlaag_na_besluit()
                 # v3.99.20: het PV-model in de achtergrond, hooguit eens
                 # per uur. Nooit meer inline.
                 await self.async_ververs_pv_model(dt_util.now())
@@ -38534,6 +38547,9 @@ class EnergyManagementSystemCoordinator:
             # v5.27: het besluit over de woonkamer-airco - altijd berekend,
             # alleen met de knop aan uitgevoerd.
             ("airco_besluit", lambda: self._airco_ronde(now)),
+            # v5.28: alleen de invoer van deze ronde klaarleggen voor de
+            # meetlaag; die draait pas NA het besluit (zie _async_update_data).
+            ("meetlaag-invoer", lambda: self._meetlaag_onthoud(now, entries)),
             ("meetherinnering", lambda: self._herinner_wat_meet(now)),
             # v3.68.0: het MPC-plan naast de eigen planning.
             ("mpc tegen de planning", lambda: self._meet_mpc(now)),
@@ -40257,6 +40273,48 @@ class EnergyManagementSystemCoordinator:
                 "doel": toestand.attributes.get("temperature") if toestand else None,
             }
             self.airco_door_ems = False
+
+    def _meetlaag_onthoud(self, now: datetime, entries) -> None:
+        """De invoer van deze ronde, voor de meetlaag (v5.28)."""
+        laag = self._meetlaag_object()
+        if laag is not None:
+            laag.invoer = (now, entries)
+
+    def _meetlaag_na_besluit(self) -> None:
+        """De meetlaag van v5.28 - zie `meetlaag.py`. Draait NA het besluit
+        en het sturen; leest de coördinator, schrijft alleen in zichzelf.
+        Een fout blijft daarbinnen: deze aanroep kan niet mislukken."""
+        try:
+            laag = getattr(self, "_meetlaag", None)
+            if laag is not None and getattr(laag, "invoer", None) is not None:
+                now, entries = laag.invoer
+                laag.invoer = None
+                laag.ronde(now, entries)
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _meetlaag_kwartier(self, now: datetime) -> None:
+        laag = self._meetlaag_object()
+        if laag is not None:
+            laag.kwartiergrens(now)
+
+    def _meetlaag_object(self):
+        laag = getattr(self, "_meetlaag", None)
+        if laag is None:
+            try:
+                from .meetlaag import Meetlaag
+
+                hass = self.hass
+                laag = Meetlaag(self, opslag_factory=lambda sleutel: Store(hass, version=1, key=sleutel))
+                self._meetlaag = laag
+            except Exception:  # noqa: BLE001 - zonder meetlaag stuurt productie gewoon door
+                return None
+        return laag
+
+    def get_meetlog(self) -> dict:
+        """Samenvatting van de meetlaag voor export en sensor (v5.28)."""
+        laag = getattr(self, "_meetlaag", None)
+        return laag.samenvatting() if laag is not None else {"status": "start nog"}
 
     def get_verwarmingsadvies(self) -> dict:
         """Verwarmen met de airco of met de cv? (v5.14)"""

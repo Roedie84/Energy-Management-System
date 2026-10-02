@@ -4939,6 +4939,10 @@ CONF_GRID_EXPORT_ENERGY_SENSOR = "grid_export_energy_sensor_entity"
 # en een geschat verschil naast echte cijfers zetten is erger dan een
 # leeg vakje.
 CONF_BATTERY_DISCHARGE_ENERGY_SENSOR = "battery_discharge_energy_sensor_entity"
+# v5.28: de tegenhanger - geladen energie. Ontbreekt hij, dan zoekt de
+# meetlaag de naamgenoot van de ontlaadteller (kWh, total_increasing);
+# anders wordt accu-in geschat en zo gemarkeerd.
+CONF_BATTERY_CHARGE_ENERGY_SENSOR = "battery_charge_energy_sensor_entity"
 CONF_COST_ENERGY_SENSOR = "cost_energy_sensor_entity"
 
 # Een meterstand hoort te stijgen. Daalt hij, dan is de omvormer

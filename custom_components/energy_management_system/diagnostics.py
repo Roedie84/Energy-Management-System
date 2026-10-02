@@ -568,6 +568,10 @@ async def async_get_config_entry_diagnostics(
             "import_verklaard_tot": getattr(coordinator, "piekverkoop_tot", None),
         },
         "richting_afwijking": getattr(coordinator, "richting_afwijking", None),
+        # v5.28: de meetlaag - samenvatting, laatste evaluatie, kwartier en
+        # dagrapport. Volledige snapshots staan niet in de export: ze tonen
+        # het verbruik per kwartier, en daaruit valt aanwezigheid af te leiden.
+        "meetlog": _veilig("meetlog", coordinator.get_meetlog),
         # v5.27: het airco-besluit, met redenen - ook met de knop uit.
         "airco_besluit": dict(getattr(coordinator, "last_airco_besluit", None) or {}),
         "airco_setpunten": list(getattr(coordinator, "airco_setpunten", None) or []),

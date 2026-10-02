@@ -1,0 +1,158 @@
+{
+ "nacht_03u_accu_half": {
+  "reden": "discharging_window",
+  "stand": "smart_discharging",
+  "opdrachten": [
+   [
+    "select",
+    "select_option",
+    {
+     "entity_id": "select.op",
+     "option": "smart_discharging"
+    }
+   ]
+  ]
+ },
+ "ochtendpiek_08u": {
+  "reden": "discharging_window",
+  "stand": "smart_discharging",
+  "opdrachten": [
+   [
+    "select",
+    "select_option",
+    {
+     "entity_id": "select.op",
+     "option": "smart_discharging"
+    }
+   ]
+  ]
+ },
+ "middag_zon_overschot": {
+  "reden": "default_smart",
+  "stand": "smart",
+  "opdrachten": [
+   [
+    "select",
+    "select_option",
+    {
+     "entity_id": "select.op",
+     "option": "smart"
+    }
+   ]
+  ]
+ },
+ "middag_goedkoop_leeg": {
+  "reden": "default_smart",
+  "stand": "smart",
+  "opdrachten": [
+   [
+    "select",
+    "select_option",
+    {
+     "entity_id": "select.op",
+     "option": "smart"
+    }
+   ]
+  ]
+ },
+ "avondpiek_vol": {
+  "reden": "expensive_quarter",
+  "stand": "manual",
+  "opdrachten": [
+   [
+    "select",
+    "select_option",
+    {
+     "entity_id": "select.op",
+     "option": "manual"
+    }
+   ],
+   [
+    "number",
+    "set_value",
+    {
+     "entity_id": "number.pow",
+     "value": 1600
+    }
+   ]
+  ]
+ },
+ "avondpiek_laag": {
+  "reden": "default_smart",
+  "stand": "smart",
+  "opdrachten": [
+   [
+    "select",
+    "select_option",
+    {
+     "entity_id": "select.op",
+     "option": "smart"
+    }
+   ]
+  ]
+ },
+ "avond_22u_bijna_leeg": {
+  "reden": "default_smart",
+  "stand": "smart",
+  "opdrachten": [
+   [
+    "select",
+    "select_option",
+    {
+     "entity_id": "select.op",
+     "option": "smart"
+    }
+   ]
+  ]
+ },
+ "negatieve_prijs": {
+  "reden": "negative_price",
+  "stand": "manual",
+  "opdrachten": [
+   [
+    "select",
+    "select_option",
+    {
+     "entity_id": "select.op",
+     "option": "manual"
+    }
+   ],
+   [
+    "number",
+    "set_value",
+    {
+     "entity_id": "number.pow",
+     "value": -2000
+    }
+   ]
+  ]
+ },
+ "accustand_onbekend_piek": {
+  "reden": "default_smart",
+  "stand": "smart",
+  "opdrachten": [
+   [
+    "select",
+    "select_option",
+    {
+     "entity_id": "select.op",
+     "option": "smart"
+    }
+   ]
+  ]
+ },
+ "middag_16u_vol": {
+  "reden": "default_smart",
+  "stand": "smart",
+  "opdrachten": [
+   [
+    "select",
+    "select_option",
+    {
+     "entity_id": "select.op",
+     "option": "smart"
+    }
+   ]
+  ]
+ }
+}

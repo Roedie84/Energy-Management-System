@@ -156,6 +156,7 @@ async def async_setup_entry(
         # v5.19: de cockpit, die meebeweegt met de metingen.
         CockpitSensor(coordinator, entry.entry_id),
         AircoBesluitSensor(coordinator, entry.entry_id),
+        MeetlogSensor(coordinator, entry.entry_id),
         DiagnoseGezondheidSensor(coordinator, entry.entry_id),
         DiagnoseSturingSensor(coordinator, entry.entry_id),
         DiagnoseLerenSensor(coordinator, entry.entry_id),
@@ -4472,6 +4473,29 @@ class GacsAssessmentSensor(SensorEntity):
                 "een systeem sterk en zwak staat."
             ),
         }
+
+
+class MeetlogSensor(_CoordinatorDiagnosticSensor):
+    """De meetlaag van v5.28: draait hij, klopt de productiespiegel, hoeveel
+    van de energie komt rechtstreeks uit tellers."""
+
+    _attr_has_entity_name = True
+    _attr_name = "Meetlog"
+    _attr_icon = "mdi:database-eye-outline"
+    _unrecorded_attributes = frozenset({"laatste_evaluatie", "laatste_kwartier", "laatste_dagrapport", "opslag"})
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        super().__init__(coordinator, entry_id, "meetlog")
+
+    @property
+    def native_value(self) -> str:
+        laag = getattr(self._coordinator, "_meetlaag", None)
+        return laag.status_tekst() if laag is not None else "start nog"
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        laag = getattr(self._coordinator, "_meetlaag", None)
+        return laag.samenvatting() if laag is not None else {}
 
 
 class AircoBesluitSensor(_CoordinatorDiagnosticSensor):

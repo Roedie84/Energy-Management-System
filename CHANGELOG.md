@@ -29764,3 +29764,72 @@ tussen nacht en avond telt het wel - en dan belandt het tekort niet meer in de
 duurste uren aan het eind.
 
 **Volledige testsuite**: 4429 tests, allemaal groen.
+
+
+## v5.28 — Meet- en benchmarkrelease
+
+Na de economische audit en twee reviewrondes met Microsoft Copilot:
+*"Vanaf nu betrouwbaar vastleggen wat het EMS op ieder beslismoment wist,
+wat het besloot, welke alternatieven mogelijk waren, wat
+shadow-strategieën zouden hebben gedaan en wat er daarna werkelijk
+gebeurde."*
+
+**De actieve batterijstrategie is ongewijzigd.** Geen wijziging aan
+slijtage, reserve, laden, ontladen, zonopslag, verkoop, P1-doel of
+Zendure-aansturing.
+
+### Nieuw
+
+- `meetlaag.py` — leest de coördinator, schrijft alleen in zichzelf. Draait
+  **na** het besluit en het sturen (direct na `_async_update_locked`); een
+  fout blijft daarbinnen en wordt geteld.
+- `meetlog.py` — dagbestanden per soort. Snapshots worden eenmaal
+  geschreven onder de hash van hun inhoud; zelfde id met andere inhoud is
+  een fout, nooit een overschrijving. Bewaren: details 30 dagen,
+  kwartierenergie en dagrapporten 400 dagen; harde limiet 25 MB.
+- `tarief.py` — importwaarde, exportwaarde, regime, kwaliteit en modelversie,
+  los van de strategie. Saldeerruimte is in deze versie nog `unknown`, dus de
+  exportwaarde heeft kwaliteit "onzeker".
+- `kwartierenergie.py` — energie per kwartier uit tellerdelta's op de
+  kwartiergrenzen (eigen timer), met `measured` / `partially_estimated` /
+  `estimated` / `invalid` en `coverage_percent`. Versheid via
+  `last_reported`: een stilstaande teller is wel exact.
+- `schaduw.py` — twee strikt gescheiden dingen:
+  - **productiespiegel**: rekent de laadregel en de piekverkoop opnieuw uit
+    met een expliciete slijtage; met 11,28 ct MOET hij hetzelfde besluit
+    geven (`mirror_matches_production`). Overige takken worden doorgegeven;
+  - **economisch schaduwoptimum**: dynamisch programmeren over de horizon
+    met import- en exportwaarde, rendement en een eindwaarde, voor 0 / 2 /
+    4,22 / 11,28 ct slijtage, in de executor. Mag en moet afwijken - dat
+    verschil is een meetresultaat;
+  - **kansgewogen reserve**: per 0,25 kWh, uit de verbruiks- en zonband, per
+    kwartier in de executor (het volgende kwartier alvast).
+- Sensor **Meetlog** op de pagina Proefstand; `meetlog` in de export (zonder
+  volledige snapshots: die tonen het verbruik per kwartier).
+- Instelling voor de laadteller; ontbreekt hij, dan wordt de naamgenoot van
+  de ontlaadteller gebruikt als die in kWh en `total_increasing` is.
+
+### Bewijs dat productie ongewijzigd is
+
+- Gouden standaard: tien scenario's, vastgelegd met v5.27.4 vóór er een regel
+  van de meetlaag bestond - reden, stand en elke Zendure-opdracht exact gelijk.
+- De haak verandert geen productiekenmerk (alleen rekencaches).
+- Een fout in spiegel, tarief of executor verandert het besluit niet.
+- 50 tweelingtoetsen: de spiegel rekent `_piekverkoop` en `_laadregel` exact
+  na.
+
+### Gemeten op een gesimuleerde dag (288 rondes)
+
+- Opslag: 441 kB per dag (snapshots 247 kB, evaluaties 180 kB, kwartieren
+  14 kB). Over de bewaartermijnen ± 18,5 MB, onder de limiet.
+- Event loop per ronde: mediaan 1,5 ms, p95 13 ms, maximum 26 ms (de ronde
+  waarin een snapshot wordt opgebouwd).
+- Spiegel 288 van 288 gelijk (24 met een echte laad- of piekafweging);
+  dekking 100%; 0 fouten.
+
+Onderweg gevonden en hersteld: de staartlijst draait vóór het besluit (de
+haak zag geen besluit); snapshots per uur door het uur in de vingerafdruk;
+stilstaande tellers als onvolledig gemarkeerd; de risicoreserve telde
+verleden kwartieren mee.
+
+**Volledige testsuite**: 4545 tests, allemaal groen.
