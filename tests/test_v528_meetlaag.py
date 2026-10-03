@@ -688,3 +688,25 @@ def test_de_dekking_in_de_status_slaat_v528_kwartieren_over(make_coordinator, ha
     laag.log.voeg_toe("kwartier", NU, {"t": "y", "i": 0.1, "e": 0.0, "p": 0.0, "o": 0.0, "c": 0.0,
                                          "h": 0.1, "pr": 0.4, "q": "mmmmm", "cov": 100.0, "a": [5, 5, 5, 5, 5]})
     assert "dekking 100%" in laag.status_tekst()
+
+
+# =========================================================================
+# v5.28.3 - accu op een eigen groep: 2400 W
+# =========================================================================
+
+def test_nu_laden_volgt_het_ingestelde_laadvermogen(make_coordinator, hass):
+    """'Nu laden' had een eigen vaste 2000 W; nu volgt hij de instelling."""
+    assert make_coordinator({"manual_charge_power": -2400}).handmatig_laadvermogen_w() == 2400.0
+    assert make_coordinator({}).handmatig_laadvermogen_w() == 2000.0          # terugval
+
+
+def test_het_dagrapport_rekent_met_de_ingestelde_grenzen():
+    from custom_components.energy_management_system.meetlaag import schaduw_dagrapport
+
+    ev = [{"evaluation_timestamp": "2026-10-02T19:00:00+02:00", "production_action": {"categorie": "huis_dekken"},
+           "economic_per_slijtage": {ct: "verkopen" for ct in schaduw.SLIJTAGEVARIANTEN_CT},
+           "measurements": {"beschikbaar_kwh": 5.0}}]
+    kw = [{"kwartier": "2026-10-02T19:00:00+02:00", "house_kwh": 0.1, "pv_kwh": 0.0, "prijs_eur": 0.5, "coverage_percent": 100}]
+    langzaam = schaduw_dagrapport(ev, kw, 7.78, 83.8, laad_kwh=0.5, ontlaad_kwh=0.4)
+    snel = schaduw_dagrapport(ev, kw, 7.78, 83.8, laad_kwh=0.6, ontlaad_kwh=0.6)
+    assert snel["varianten"][11.28]["doorzet_kwh"] > langzaam["varianten"][11.28]["doorzet_kwh"]

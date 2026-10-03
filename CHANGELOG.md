@@ -29890,3 +29890,28 @@ Onderweg: de eerste bewaring hing af van hoe lang de machine al aanstond
 (`_laatste_bewaring = 0`); nu gebeurt die meteen.
 
 **Volledige testsuite**: 4557 tests, allemaal groen.
+
+
+## v5.28.3 — Accu op een eigen groep: vermogens volgen de instelling
+
+Gevraagd: *"Ik heb de batterij nu op een volledig aparte groep aangesloten.
+Daarmee mogen alle laad- en ontlaadvermogens naar 2400 W."*
+
+Laad- en ontlaadvermogen staan in de EMS-instellingen
+(`manual_charge_power`, `manual_discharge_power`,
+`negative_price_charge_power`) - die past de gebruiker zelf aan. Twee plekken
+stonden vast in de code:
+
+- **"Nu laden"** gebruikte een eigen vaste 2000 W, los van de instelling. Nu
+  volgt hij het ingestelde laadvermogen (`handmatig_laadvermogen_w`); de vaste
+  waarde blijft alleen als terugval.
+- **Het dagrapport van de meetlaag** rekende met vaste 2,0 kW laden en 1,6 kW
+  ontladen. Nu met de grenzen uit het snapshot, zodat de schaduwsimulatie na
+  een wijziging klopt.
+
+Zolang de instellingen ongewijzigd zijn, beslist productie exact als v5.28.2
+(gouden standaard groen). Een gewijzigde instelling geeft in de meetlog
+vanzelf een nieuw snapshot (andere configuratiehash), zodat vergelijkingen
+voor en na de wijziging gescheiden blijven.
+
+**Volledige testsuite**: 4559 tests, allemaal groen.

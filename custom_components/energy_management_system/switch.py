@@ -11,7 +11,6 @@ from .const import (
     DEFAULT_NAME,
     DOMAIN,
     HANDMATIG_LAADVERMOGEN_W,
-    HANDMATIG_LAADVERMOGEN_W,
     HANDMATIGE_STAND_LADEN,
     HANDMATIGE_STAND_SMART_CHARGE,
     NOTIFICATION_TYPES,
@@ -317,7 +316,7 @@ class HandmatigeStandSwitch(SwitchEntity, RestoreEntity):
             # niet in de identiteit: wijzigt het ooit, dan klopt elke
             # verwijzing niet meer.
             "vermogen_w": (
-                HANDMATIG_LAADVERMOGEN_W
+                self._coordinator.handmatig_laadvermogen_w()
                 if self._stand == HANDMATIGE_STAND_LADEN
                 else None
             ),

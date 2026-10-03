@@ -10850,7 +10850,7 @@ class EnergyManagementSystemCoordinator:
         # terwijl EMS nog mag schrijven, en pas daarna wordt de sturing
         # stilgezet zodat de volgende ronde er niet overheen gaat.
         if stand == HANDMATIGE_STAND_LADEN:
-            await self._async_apply_manual(-HANDMATIG_LAADVERMOGEN_W)
+            await self._async_apply_manual(-self.handmatig_laadvermogen_w())
         else:
             await self._async_apply_operation(OPTION_SMART_CHARGING)
 
@@ -40314,6 +40314,20 @@ class EnergyManagementSystemCoordinator:
             except Exception:  # noqa: BLE001 - zonder meetlaag stuurt productie gewoon door
                 return None
         return laag
+
+    def handmatig_laadvermogen_w(self) -> float:
+        """Het vermogen voor "Nu laden" (v5.28.3): het ingestelde laadvermogen.
+
+        Gevraagd: "Ik heb de batterij nu op een volledig aparte groep
+        aangesloten. Daarmee mogen alle laad- en ontlaadvermogens naar
+        2400 W." "Nu laden" had een eigen vaste 2000 W, los van de
+        instelling - nu een bron. De vaste waarde blijft alleen als terugval.
+        """
+        ingesteld = (self.config or {}).get(CONF_MANUAL_CHARGE_POWER)
+        try:
+            return abs(float(ingesteld)) if ingesteld not in (None, "") else float(HANDMATIG_LAADVERMOGEN_W)
+        except (TypeError, ValueError):
+            return float(HANDMATIG_LAADVERMOGEN_W)
 
     def get_meetlog(self) -> dict:
         """Samenvatting van de meetlaag voor export en sensor (v5.28)."""

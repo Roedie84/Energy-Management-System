@@ -1,7 +1,7 @@
-EMS v5.28.2 - alleen de wijziging sinds v5.28.1
+EMS v5.28.3 - alleen de wijziging sinds v5.28.2
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
-    meetlaag.py, meetlog.py, kwartierenergie.py
+    coordinator.py, switch.py, meetlaag.py
     dashboard_template.yaml   (gaat altijd mee, ongewijzigd)
     manifest.json, bestandscontrole.json
 
@@ -10,14 +10,15 @@ NAAR DE REPO
     dashboards/energy_management_system_dashboard.yaml
     tests/test_v528_meetlaag.py
 
-Voor HACS: release met tag v5.28.2.
+Voor HACS: release met tag v5.28.3.
 
-WAT ER VERANDERT
-Alleen de meetlaag; de sturing is ongewijzigd.
-Het terugladen na een herstart wist de geschiedenis van die dag niet
-meer: eerst laden, dan pas wegschrijven, en samenvoegen in plaats van
-vervangen. Kwartieren van v5.28 (Wh als kWh gelezen) tellen niet meer mee.
+NA DE INSTALLATIE ZELF AANPASSEN
+Instellingen -> Apparaten en diensten -> Energy Management System ->
+Configureren:
+    Handmatig ontlaadvermogen          1600  ->  2400
+    Handmatig laadvermogen            -2000  -> -2400
+    Laadvermogen bij negatieve prijs  -2000  -> -2400
+"Nu laden" volgt daarna vanzelf het laadvermogen.
 
-LET OP
-De geschiedenis van vanochtend die bij de herstart voor v5.28.1 al is
-overschreven, komt niet terug. Vanaf deze versie blijft hij bewaard.
+Controleer ook de grenzen in de Zendure zelf (invoer- en uitvoerlimiet);
+staan die lager, dan knijpt de Zendure de opdracht van het EMS af.

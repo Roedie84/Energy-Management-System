@@ -525,8 +525,13 @@ class Meetlaag:
         min_soc = (snapshot or {}).get("inhoud", {}).get("min_soc") or 10.0
         rendement = self.c.learned_battery_efficiency_percent or 83.8
 
+        inhoud = (snapshot or {}).get("inhoud", {})
+        laad = (inhoud.get("max_charge_kw") or 2.0) / 4
+        ontlaad = (inhoud.get("max_discharge_kw") or 1.6) / 4
+
         def rekenen():
-            return schaduw_dagrapport(evaluaties, kwartieren, capaciteit * (100 - min_soc) / 100, rendement)
+            return schaduw_dagrapport(evaluaties, kwartieren, capaciteit * (100 - min_soc) / 100, rendement,
+                                      laad_kwh=laad, ontlaad_kwh=ontlaad)
 
         async def klaar():
             try:
@@ -707,7 +712,8 @@ def _zonband(band: dict, pv_reeks: list, begin: datetime, eind: datetime) -> tup
     return round(laag, 4), round(hoog, 4)
 
 
-def schaduw_dagrapport(evaluaties: list[dict], kwartieren: list[dict], emax: float, rendement: float) -> dict:
+def schaduw_dagrapport(evaluaties: list[dict], kwartieren: list[dict], emax: float, rendement: float,
+                       laad_kwh: float = 0.5, ontlaad_kwh: float = 0.4) -> dict:
     """Per slijtagevariant: wat het economische schaduwoptimum met de gemeten
     energie van de dag had opgeleverd, en hoe vaak het afweek van productie.
 
@@ -740,7 +746,7 @@ def schaduw_dagrapport(evaluaties: list[dict], kwartieren: list[dict], emax: flo
                 e_kwh = (ev.get("measurements") or {}).get("beschikbaar_kwh") or 0.0
             tekort = max(0.0, m["house_kwh"] - m["pv_kwh"])
             overschot = max(0.0, m["pv_kwh"] - m["house_kwh"])
-            laad, ontlaad = 0.5, 0.4
+            laad, ontlaad = laad_kwh, ontlaad_kwh   # v5.28.3: de ingestelde grenzen
             ac_in = ac_uit = 0.0
             if actie in ("huis_dekken", "bewaren"):
                 ac_in = min(overschot, laad, (emax - e_kwh) / eta)
