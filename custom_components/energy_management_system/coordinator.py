@@ -21825,25 +21825,19 @@ class EnergyManagementSystemCoordinator:
                 # duurste kwartieren van de dag. Het plan verkocht op volgorde
                 # van de klok - en had morgen om 16:45 en 17:15 (40-43 ct)
                 # niets meer over voor de piek van 51,2 ct.
-                (
-                    soc > reserve_op(start)
-                    # v5.27.2: niet op een zonarme dag - net als de beslissing.
-                    and not netregels["zonarm"].get(start.date(), False)
-                    and self._is_worth_discharging_now(
-                        entries, start, soc - reserve_op(start), ontlaad_w
-                    )
+                soc > reserve_op(start)
+                # v5.27.2: niet op een zonarme dag - net als de beslissing.
+                and not netregels["zonarm"].get(start.date(), False)
+                and self._is_worth_discharging_now(
+                    entries, start, soc - reserve_op(start), ontlaad_w
                 )
-                or (
-                    prijs > netregels["duurste_tot_blok"].get(start, float("inf"))
-                    and soc > netregels["bodem_kwh"]
-                )
+                # v5.28.4: geen piekverkoop onder de reserve meer - het huis
+                # gaat voor, net als in de beslissing.
             ):
                 modus = "manual (verkopen)"
-                # Onder de reserve (piekverkoop): nooit door de bodem heen.
-                uit = min(
-                    soc - (netregels["bodem_kwh"] if soc <= reserve_op(start) else 0.0),
-                    duur_kwh,
-                )
+                # v5.28.4: alleen wat BOVEN de reserve zit, ook binnen een
+                # kwartier - een vol kwartier verkopen zakte er anders onder.
+                uit = min(soc - reserve_op(start), duur_kwh)
                 soc -= uit
                 net = round(-(uit - verbruik + zon), 3)
             elif uitstellen:
@@ -23759,40 +23753,20 @@ class EnergyManagementSystemCoordinator:
         blok: datetime | None,
         beschikbaar: float | None,
     ) -> dict:
-        """De verkooptoets, met de piekregel VOOR de huisgrens (v5.26.3).
+        """Mag er verkocht worden? (v5.28.4: het huis gaat voor.)
 
-        Gemeld via de export van 30 september, 19:42: om 19:30 stond de accu
-        op 86% in de duurste kwartieren van de dag - 44,7 ct - en werd er
-        niets verkocht. Het plan voorspelde verkopen van 19:45 tot 20:30. De
-        melding van 16:30 zei: "het huis heeft 8,64 kWh nodig tot het
-        goedkope blok en er is 7,78 kWh - verkopen zou het huis aan het net
-        leggen tegen een hogere prijs dan de opbrengst."
+        Gemeld op 4 oktober: "Weer een lege batterij vanmorgen, huis dient
+        altijd voor te gaan." Sinds v5.26.3 passeerde de piekregel de
+        huisgrens: als de prijs nu hoger was dan elk kwartier tot het
+        bijvullen, mocht er verkocht worden tot de bodem. Op 3 oktober verkocht
+        hij zo 19:45-22:00 onder de reserve (5,5-6,7 kWh) tot 25%; het huis
+        haalde daarna 2,9 kWh van het net tegen 35 ct - netto zo'n 15 cent
+        winst, voor een lege accu.
 
-        Maar dat laatste klopt niet in het duurste kwartier tot het blok:
-        wat het huis later van het net haalt, kost dan altijd MINDER dan de
-        verkoop nu oplevert. Dat is precies wat `_piekverkoop` toetst. De
-        huisgrens zette het dure kwartier uit voordat de piekregel aan bod
-        kwam - en het plan, dat die volgorde niet kent, voorspelde de verkoop
-        wel. De bodem beschermt nog steeds tegen een voorspelling die
-        ernaast zit (`_geen_ruimte_boven_reserve`).
+        Nu geldt de huisgrens altijd: alleen `may_sell_now` beslist. De naam
+        blijft voor de aanroepers.
         """
-        ruimte = self.may_sell_now(now, beschikbaar)
-        if ruimte.get("mag_verkopen"):
-            return ruimte
-        piek = self._piekverkoop(now, entries, blok, beschikbaar)
-        if not piek.get("verkopen"):
-            return ruimte
-        return {
-            "mag_verkopen": True,
-            "methode": "piekverkoop",
-            "geblokkeerd_door": ruimte.get("reden"),
-            "reden": (
-                f"De prijs is nu {piek['prijs_nu_eur'] * 100:.1f} ct, hoger dan elk "
-                f"kwartier tot het goedkope blok ({piek['duurste_later_eur'] * 100:.1f} "
-                "ct). Wat de woning later van het net haalt kost minder dan wat "
-                "de verkoop nu oplevert; verkocht wordt tot de bodem."
-            ),
-        }
+        return self.may_sell_now(now, beschikbaar)
 
     def _zon_vandaag_totaal(self, now: datetime) -> tuple:
         """De zonopbrengst van vandaag: al opgewekt plus nog te komen (v5.27.2).
@@ -25323,37 +25297,21 @@ class EnergyManagementSystemCoordinator:
         base_power: float,
         interval_hours: float,
     ) -> float | None:
-        """Wat te doen als de reserve geen ruimte laat (v5.22).
+        """Geen ruimte boven de reserve: dan wordt er niet verkocht.
 
-        Tot nu toe: niets, en de Zendure regelt zelf. Nu eerst de vraag of
-        dit het duurste kwartier is tot het volgende goedkope blok; dan
-        loont verkopen onder de reserve. De import die daarna volgt is
-        VERKLAARD tot dat blok (`piekverkoop_tot`), zodat hij niet als
-        onverwachte tekortdag telt en de marge opdrijft - anders zou het EMS
-        zijn eigen goede besluit de dagen erna afstraffen.
+        v5.28.4: HET HUIS GAAT VOOR. Hier verkocht de piekregel onder de
+        reserve tot de bodem. De energie onder de reserve is voor de woning
+        tot het volgende bijvullen - die wordt niet meer verkocht.
         """
-        piek = self._piekverkoop(now, entries, cheap_block_start, available_kwh)
-        # NOOIT door de bodem heen. De bodem kwam er na de nacht van 30 op 31
-        # augustus (voorspeld 52% over, werkelijk 17%): hij is de buffer
-        # tegen een voorspelling die ernaast zit. Onder de reserve verkopen
-        # mag, tot de bodem - en is de bodem onbekend, dan niet.
-        bodem = (self.last_reserve_margin_breakdown or {}).get("bodem_kwh")
-        boven_bodem = (available_kwh or 0.0) - bodem if bodem is not None else 0.0
-        if piek.get("verkopen") and boven_bodem <= 0:
-            piek = {**piek, "verkopen": False, "reden": "de bodem is bereikt"}
-        self.last_piekverkoop = piek
-        if piek.get("verkopen"):
-            self.piekverkoop_tot = piek["tot"]
-            vermogen = min(base_power, boven_bodem / interval_hours * 1000)
-            self.last_discharge_power_applied = round(vermogen, 1)
-            return round(vermogen, 1)
+        self.last_piekverkoop = {
+            "verkopen": False,
+            "reden": "het huis gaat voor: onder de reserve wordt niet verkocht",
+        }
         self.last_discharge_power_applied = None
         _LOGGER.debug(
-            "Dynamic discharge reserve: available=%.2f kWh, needed reserve=%.2f "
-            "kWh - no headroom, skipping forced discharge this tick (%s)",
+            "Geen ruimte boven de reserve: beschikbaar %.2f kWh, reserve %.2f kWh - niet verkopen",
             available_kwh or 0.0,
             reserve_kwh or 0.0,
-            piek.get("reden"),
         )
         return None
 

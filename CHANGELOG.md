@@ -29915,3 +29915,45 @@ vanzelf een nieuw snapshot (andere configuratiehash), zodat vergelijkingen
 voor en na de wijziging gescheiden blijven.
 
 **Volledige testsuite**: 4559 tests, allemaal groen.
+
+
+## v5.28.4 — Het huis gaat voor
+
+Gemeld op 4 oktober: *"Weer een lege batterij vanmorgen, huis dient altijd
+voor te gaan."*
+
+Nagerekend, 3 oktober: de accu stond om 18:30 op 98%. Tussen 18:45 en 22:15
+werd in 13 kwartieren verkocht; vanaf 19:45 als `expensive_quarter_peak` -
+**onder de reserve** (5,5-6,7 kWh) - tot 25%. Daarna hield het spaarplan de
+rest vast voor de ochtend; om 07:30 stond de accu op de bodem. Verkocht:
+5,7 kWh tegen gemiddeld 40,5 ct. Teruggekocht door het huis: 2,9 kWh tegen
+gemiddeld 35,3 ct. Netto zo'n 15 cent - voor een lege accu en een huis op het
+net.
+
+De oorzaak was de piekregel: verkopen onder de reserve tot de bodem, zolang de
+prijs nu hoger is dan elk kwartier tot het bijvullen (v5.22), en sinds v5.26.3
+zelfs vóór de huisgrens. Met 2400 W ging dat sneller dan voorheen.
+
+**De huisgrens geldt nu altijd.** Een productiewijziging, op uitdrukkelijk
+besluit van de gebruiker - geen economische optimalisatie:
+
+- `_verkoopruimte_met_piek` laat alleen `may_sell_now` beslissen; de
+  piekregel passeert de huisgrens niet meer.
+- `_geen_ruimte_boven_reserve` verkoopt niet: onder de reserve wordt nooit
+  verkocht.
+- Het kwartierplan doet hetzelfde, en verkoopt alleen wat **boven** de
+  reserve zit - ook binnen een kwartier; een vol kwartier verkopen zakte er
+  anders onder.
+
+Verkopen boven de reserve (`_is_worth_discharging_now`, naar de duurste
+kwartieren van de dag) blijft zoals het was.
+
+**Verwachting bewust gewijzigd**: drie toetsen legden de piekverkoop onder de
+reserve vast; ze toetsen nu dat het huis voorgaat. De gouden standaard van de
+meetlaag is ongewijzigd groen (geen van de tien scenario's verkocht onder de
+reserve).
+
+Gezien: de accu leverde 3 oktober ±2040 W, niet 2400 W - vermoedelijk staat
+de uitvoerlimiet in de Zendure zelf nog op 2000 W.
+
+**Volledige testsuite**: 4561 tests, allemaal groen.

@@ -49,12 +49,15 @@ def test_nooit_door_de_bodem(make_coordinator, hass):
     c.last_reserve_margin_breakdown = {"bodem_kwh": 1.30}
     reeks = _reeks(NU, [0.48] + [0.30] * 50)
 
+    # v5.28.4 - VERWACHTING BEWUST GEWIJZIGD: "huis dient altijd voor te
+    # gaan". Onder de reserve wordt helemaal niet meer verkocht - dus ook
+    # nooit door de bodem.
     op_de_bodem = c._geen_ruimte_boven_reserve(NU, reeks, BLOK, 1.30, 4.0, 1600.0, 0.25)
     assert op_de_bodem is None
-    assert c.last_piekverkoop["reden"] == "de bodem is bereikt"
 
     erboven = c._geen_ruimte_boven_reserve(NU, reeks, BLOK, 2.0, 4.0, 1600.0, 0.25)
-    assert erboven == 1600.0
+    assert erboven is None
+    assert "het huis gaat voor" in c.last_piekverkoop["reden"]
 
 
 def test_zonder_bekende_bodem_geen_piekverkoop(make_coordinator, hass):
@@ -207,10 +210,12 @@ def test_de_afwijking_verdwijnt_als_de_accu_weer_volgt(make_coordinator, hass):
 # --- v5.26.3: de piekregel voor de huisgrens ------------------------------
 
 
-def test_de_piekregel_gaat_voor_de_huisgrens(make_coordinator, hass):
-    """30 september 19:30: accu 86%, 44,7 ct, niets verkocht - de huisgrens
-    ("8,64 kWh nodig, 7,78 kWh beschikbaar") zette het dure kwartier uit
-    voordat de piekregel aan bod kwam."""
+def test_de_huisgrens_gaat_voor_de_piekregel(make_coordinator, hass):
+    """v5.28.4 - VERWACHTING BEWUST GEWIJZIGD. v5.26.3 liet de piekregel
+    voor de huisgrens gaan (30 september: 86%, 44,7 ct, niets verkocht). Op
+    3 oktober verkocht die regel de accu leeg tot 25% en haalde het huis
+    vannacht 2,9 kWh van het net. "Huis dient altijd voor te gaan": de
+    huisgrens beslist."""
     c = make_coordinator({})
     c.may_sell_now = lambda now, beschikbaar=None: {
         "mag_verkopen": False,
@@ -220,9 +225,8 @@ def test_de_piekregel_gaat_voor_de_huisgrens(make_coordinator, hass):
 
     ruimte = c._verkoopruimte_met_piek(NU, reeks, BLOK, 6.6)
 
-    assert ruimte["mag_verkopen"] is True
-    assert ruimte["methode"] == "piekverkoop"
-    assert "8.64" in ruimte["geblokkeerd_door"]
+    assert ruimte["mag_verkopen"] is False
+    assert "8.64" in ruimte["reden"]
 
 
 def test_zonder_piek_blijft_de_huisgrens_staan(make_coordinator, hass):

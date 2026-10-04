@@ -710,3 +710,23 @@ def test_het_dagrapport_rekent_met_de_ingestelde_grenzen():
     langzaam = schaduw_dagrapport(ev, kw, 7.78, 83.8, laad_kwh=0.5, ontlaad_kwh=0.4)
     snel = schaduw_dagrapport(ev, kw, 7.78, 83.8, laad_kwh=0.6, ontlaad_kwh=0.6)
     assert snel["varianten"][11.28]["doorzet_kwh"] > langzaam["varianten"][11.28]["doorzet_kwh"]
+
+
+# =========================================================================
+# v5.28.4 - het huis gaat voor
+# =========================================================================
+
+def test_onder_de_reserve_wordt_nooit_verkocht(make_coordinator, hass):
+    """3 oktober: 19:45-22:00 'expensive_quarter_peak' onder de reserve tot 25%;
+    vannacht en vanochtend 2,9 kWh van het net."""
+    c = make_coordinator({})
+    c.last_reserve_margin_breakdown = {"bodem_kwh": 1.30}
+    reeks = [(NU + timedelta(minutes=15 * i), NU + timedelta(minutes=15 * (i + 1)),
+              (0.413 if i == 0 else 0.35) * PRICE_SCALE_FACTOR) for i in range(60)]
+    assert c._geen_ruimte_boven_reserve(NU, reeks, NU + timedelta(hours=14), 4.3, 5.8, 2400.0, 0.25) is None
+
+
+def test_het_plan_verkoopt_alleen_boven_de_reserve():
+    bron = (MAP / "coordinator.py").read_text()
+    assert "uit = min(soc - reserve_op(start), duur_kwh)" in bron
+    assert 'prijs > netregels["duurste_tot_blok"]' not in bron

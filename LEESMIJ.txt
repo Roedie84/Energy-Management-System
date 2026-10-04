@@ -1,24 +1,22 @@
-EMS v5.28.3 - alleen de wijziging sinds v5.28.2
+EMS v5.28.4 - alleen de wijziging sinds v5.28.3
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
-    coordinator.py, switch.py, meetlaag.py
+    coordinator.py
     dashboard_template.yaml   (gaat altijd mee, ongewijzigd)
     manifest.json, bestandscontrole.json
 
 NAAR DE REPO
     README.md, CHANGELOG.md
     dashboards/energy_management_system_dashboard.yaml
-    tests/test_v528_meetlaag.py
+    tests/ (drie bestanden)
 
-Voor HACS: release met tag v5.28.3.
+Voor HACS: release met tag v5.28.4.
 
-NA DE INSTALLATIE ZELF AANPASSEN
-Instellingen -> Apparaten en diensten -> Energy Management System ->
-Configureren:
-    Handmatig ontlaadvermogen          1600  ->  2400
-    Handmatig laadvermogen            -2000  -> -2400
-    Laadvermogen bij negatieve prijs  -2000  -> -2400
-"Nu laden" volgt daarna vanzelf het laadvermogen.
+WAT ER VERANDERT
+Het huis gaat voor: onder de reserve wordt nooit meer verkocht. Alleen
+wat boven de reserve zit is overschot en mag in de duurste kwartieren weg.
+Het kwartierplan doet hetzelfde.
 
-Controleer ook de grenzen in de Zendure zelf (invoer- en uitvoerlimiet);
-staan die lager, dan knijpt de Zendure de opdracht van het EMS af.
+ZENDURE
+De accu leverde gisteravond ±2040 W in plaats van 2400 W. Zet de
+uitvoerlimiet in de Zendure zelf op 2400 W.
