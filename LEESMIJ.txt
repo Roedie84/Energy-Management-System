@@ -1,4 +1,4 @@
-EMS v5.28.4 - alleen de wijziging sinds v5.28.3
+EMS v5.28.5 - alleen de wijziging sinds v5.28.4
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
     coordinator.py
@@ -8,15 +8,13 @@ TE KOPIEREN naar config/custom_components/energy_management_system/
 NAAR DE REPO
     README.md, CHANGELOG.md
     dashboards/energy_management_system_dashboard.yaml
-    tests/ (drie bestanden)
+    tests/test_v5285_lopend_blok.py
 
-Voor HACS: release met tag v5.28.4.
+Voor HACS: release met tag v5.28.5.
 
 WAT ER VERANDERT
-Het huis gaat voor: onder de reserve wordt nooit meer verkocht. Alleen
-wat boven de reserve zit is overschot en mag in de duurste kwartieren weg.
-Het kwartierplan doet hetzelfde.
-
-ZENDURE
-De accu leverde gisteravond ±2040 W in plaats van 2400 W. Zet de
-uitvoerlimiet in de Zendure zelf op 2400 W.
+1. Een goedkoop blok dat bezig is, blijft het blok tot het eindigt - ook
+   als de prijzen van morgen binnenkomen. Plan en sturing laden dan weer
+   gelijk.
+2. Laden gebeurt alleen in de goedkoopste kwartieren tot het moment dat de
+   lading nodig is - ook binnen het blok. Niet meer, alleen goedkoper.

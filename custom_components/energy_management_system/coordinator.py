@@ -19763,6 +19763,51 @@ class EnergyManagementSystemCoordinator:
             )
         )
         uit["voorzichtige_zon"] = salderen
+        return self._laad_op_goedkoopste(now, uit)
+
+    def _lopend_blok(self, now: datetime, nieuw_start, nieuw_eind, entries=None) -> tuple:
+        """Het lopende blok houden tot het eindigt (v5.28.5).
+
+        Eerst uit het geheugen; anders uit de prijzen van vandaag: het blok
+        van vandaag over de HELE dag bepaald (zoals het om middernacht al
+        vaststond). Ligt nu daarin, dan is dat het lopende blok - ook direct
+        na een herstart. Een laat duur kwartier wordt zo nooit per ongeluk
+        een blok.
+        """
+        oud_start = getattr(self, "last_cheap_block_start", None)
+        oud_eind = getattr(self, "last_cheap_block_end", None)
+        if oud_start is not None and oud_eind is not None and oud_start <= now < oud_eind:
+            return oud_start, oud_eind
+        if nieuw_start is not None and nieuw_start <= now:
+            return nieuw_start, nieuw_eind
+        vandaag = [e for e in (entries or []) if e[0].date() == now.date()]
+        if vandaag:
+            dag_begin = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            start, eind = self._cheapest_block_range(vandaag, dag_begin)
+            if start is not None and eind is not None and start <= now < eind:
+                return start, eind
+        return nieuw_start, nieuw_eind
+
+    def _laad_op_goedkoopste(self, moment: datetime, regel: dict) -> dict:
+        """Loont laden, laad dan alleen in de goedkoopste kwartieren (v5.28.5).
+
+        Gemeld op 4 oktober: "Waarom straks bij duurdere goedkope uren wel
+        manueel laden en nu niet??" Het plan laadde om 14:45 tegen 21,9 ct,
+        terwijl er om 14:00 kwartieren van 18,5 ct waren: de laadregel laadde
+        zodra het loonde. De dipregel kiest sinds v5.25.1 al de goedkoopste
+        kwartieren; nu de laadregel in het blok ook - met dezelfde functie,
+        voor de beslissing en het plan. Er wordt niet meer geladen, alleen
+        goedkoper.
+        """
+        if not regel.get("laden"):
+            return regel
+        goedkoopst = self._goedkoopste_laadmomenten(
+            moment, regel["prijs_nu_eur"], regel.get("nodig_vanaf"), regel.get("gat_kwh") or 0.0
+        )
+        uit = {**regel, "nu_bij_de_goedkoopste": goedkoopst}
+        if not goedkoopst:
+            uit["laden"] = False
+            uit["reden"] = "loont, maar er komen goedkopere kwartieren voordat de lading nodig is"
         return uit
 
     @staticmethod
@@ -19802,6 +19847,9 @@ class EnergyManagementSystemCoordinator:
             "zonoverschot_kwh": round(overschot, 2),
             "gat_kwh": round(gat, 2),
             "laden": False,
+            # v5.28.5: tot wanneer het laden mag wachten - het vroegste
+            # kwartier waartegen de lading wordt gewaardeerd.
+            "nodig_vanaf": zon_tot.isoformat(),
         }
         if gat <= 0:
             uit["reden"] = "de zon vult de accu vandaag vanzelf"
@@ -21618,6 +21666,7 @@ class EnergyManagementSystemCoordinator:
             per_kwartier=per_kwartier,
             zonoverschot=zonoverschot_tot,
         )
+        regel = self._laad_op_goedkoopste(einde - timedelta(minutes=15), regel)
         if not regel.get("laden"):
             return 0.0
         return max(0.0, min(laad_kwh, regel["gat_kwh"], bruikbaar - soc))
@@ -38320,6 +38369,15 @@ class EnergyManagementSystemCoordinator:
             return
 
         cheap_block_start, cheap_block_end = self._cheapest_block_range(entries, now)
+        # v5.28.5: een blok dat bezig is, blijft het blok tot het eindigt.
+        # Kwamen de prijzen van morgen binnen terwijl je midden in de
+        # goedkope uren zat, dan sprong het blok naar morgen - en gold vanaf
+        # dat moment de dipregel, die alleen naar het eigen tekort van het huis
+        # kijkt. Het plan zag de middag nog wel als blok; plan en sturing
+        # liepen uiteen (4 oktober 13:22).
+        cheap_block_start, cheap_block_end = self._lopend_blok(
+            now, cheap_block_start, cheap_block_end, entries
+        )
         self.last_cheap_block_start = cheap_block_start
         self.last_cheap_block_end = cheap_block_end
 

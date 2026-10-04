@@ -29957,3 +29957,40 @@ Gezien: de accu leverde 3 oktober ±2040 W, niet 2400 W - vermoedelijk staat
 de uitvoerlimiet in de Zendure zelf nog op 2000 W.
 
 **Volledige testsuite**: 4561 tests, allemaal groen.
+
+
+## v5.28.5 — Een lopend blok blijft het blok; laden in de goedkoopste kwartieren
+
+Gemeld op 4 oktober 13:22: *"Waarom straks bij duurdere goedkope uren wel
+manueel laden en nu niet??"* Daarna: *"Levert dat goedkoper manueel laden op,
+economisch moet het optimaal blijven"* - *"Ja als het EMS er beter van wordt
+graag."*
+
+### 1. Het blok sprong naar morgen
+
+Rond 13:00 kwamen de prijzen van morgen binnen. Het goedkoopste kwartier lag
+daarna morgen, dus werd morgen 12:30-15:15 "het blok" - midden in de goedkope
+uren van vandaag (18,5-21,9 ct). Buiten het blok geldt de dipregel, die alleen
+het eigen tekort van het huis waardeert (32,0 ct x 84,6% - 11,26 ct = 15,8 ct,
+minder dan 19,8 ct: niet laden). Het plan zag de middag nog wel als blok en
+laadde voor de verkoop van vanavond (42 ct -> 24,3 ct waard): plan en sturing
+liepen uiteen.
+
+Nu (`_lopend_blok`): een blok dat bezig is, blijft het blok tot het eindigt -
+uit het geheugen, en anders uit de prijzen van vandaag (het blok van vandaag
+over de hele dag bepaald). Dat werkt ook direct na een herstart, en een laat
+duur kwartier wordt zo nooit per ongeluk een blok.
+
+### 2. Laden in de goedkoopste kwartieren, ook in het blok
+
+De laadregel laadde zodra het loonde: in het plan om 14:45 tegen 21,9 ct,
+terwijl er om 14:00 kwartieren van 18,5 ct waren. De dipregel kiest sinds
+v5.25.1 al de goedkoopste kwartieren; nu de laadregel ook, met dezelfde functie
+(`_laad_op_goedkoopste` -> `_goedkoopste_laadmomenten`), voor de beslissing én
+het plan. De grens is het vroegste kwartier waartegen de lading wordt
+gewaardeerd (`nodig_vanaf`). Er wordt niet meer geladen, alleen goedkoper.
+
+Nagerekend op 4 oktober: met een gat van 2,2 kWh wacht het EMS om 13:15
+(19,8 ct) - er komen nog vier goedkopere kwartieren - en laadt het vanaf 13:30.
+
+**Volledige testsuite**: 4568 tests, allemaal groen.
