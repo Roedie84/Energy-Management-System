@@ -30067,3 +30067,44 @@ verwacht de melding nu na de eerste lege kwartiercontrole, niet direct bij
 
 **Volledige testsuite**: 4592 tests, allemaal groen.
 
+
+
+## v5.31 — Grootverbruikers herkennen aan hun eigen meting (schaduw)
+
+Gevraagd: *"Ik wil dat het EMS aan de hand van vermogensmetingen definieert of
+iets een grootverbruiker is of niet, buiten de door mij aangegeven
+grootverbruikers om."* En: *"Alleen apparaten met een eigen vermogensmeting."*
+
+Tot nu toe is een grootverbruiker alleen wat in de vaste lijst staat
+(vaatwasser, wasmachine, Quooker, airco, slaapkamer, oven, kookplaat). Een
+ander zwaar apparaat ziet het EMS als "het huis verbruikt ineens meer".
+
+### Wat het leert (`grootverbruikers.py`)
+
+Voor elk apparaat met een eigen vermogensmeting (de bevestigde apparaten van
+de verbruiksherkenning en de apart ingestelde vermogenssensoren - geen
+sprongen in het totale huisverbruik):
+
+- **Een keer gebruik**: minstens 3 minuten boven 1000 W. Korter is een piek.
+  Een pauze onder de drempel korter dan 10 minuten (thermostaat van een oven
+  of droger) hoort bij dezelfde keer.
+- **Per keer**: duur, energie en piekvermogen. Een meetgat van meer dan 10
+  minuten telt niet als verbruik.
+- **Indeling na 3 keer**: mediaanduur korter dan 90 minuten is
+  *kortlopend* (zou meetellen als één cyclus met de geleerde energie),
+  langer is *aanhoudend* (zou direct meetellen, zoals de airco).
+
+Wat er geleerd is, blijft bewaard over een herstart.
+
+### Schaduw
+
+Dit stuurt niets. De Proefstand toont een nieuwe kaart *Grootverbruikers
+(schaduw)*: per apparaat het vermogen nu, het aantal keren, de mediaanduur en
+-energie, de indeling, en wat het EMS zou doen. Ook in de export
+(`grootverbruikers_schaduw`). Apparaten uit je eigen lijst staan erbij, met
+"verandert niets": die lijst blijft altijd gelden.
+
+Volgende stap, na enkele weken meten: beoordelen of de indeling klopt, en pas
+dan laten meetellen.
+
+**Volledige testsuite**: 4611 tests, allemaal groen.

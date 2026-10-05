@@ -2687,6 +2687,12 @@ views:
       tap_action:
         action: more-info
     - type: markdown
+      title: Grootverbruikers (schaduw)
+      content: '{{ (state_attr(''sensor.woonkamer_energy_management_system_meetlog'', ''grootverbruikers'') or {}).get(''tekst'', ''_Nog geen gegevens._'') }}'
+      grid_options:
+        columns: 12
+        rows: auto
+    - type: markdown
       title: Wie staat er klaar?
       content: '{% set p = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''proefstand'') or {} %}{% set s = p.get(''samenvatting'') or {} %}**{{ s.get(''oordeel'', ''Nog niet bepaald.'') }}**
 

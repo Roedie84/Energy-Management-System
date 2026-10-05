@@ -3359,6 +3359,8 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "digital_twin_accuracy_history": {"type": "plain"},
     "extra_dip_margin_history": {"type": "plain"},
     "fietsladers_charge_duration_history": {"type": "plain"},
+    # v5.31: wat er per apparaat over grootverbruik is geleerd (schaduw).
+    "grootverbruiker_leer": {"type": "plain"},
     "learned_efficiency_history": {"type": "plain"},
     "living_room_temp_bucket_history": {"type": "plain"},
     "night_consumption_history": {"type": "plain"},

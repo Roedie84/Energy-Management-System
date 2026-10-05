@@ -4482,7 +4482,7 @@ class MeetlogSensor(_CoordinatorDiagnosticSensor):
     _attr_has_entity_name = True
     _attr_name = "Meetlog"
     _attr_icon = "mdi:database-eye-outline"
-    _unrecorded_attributes = frozenset({"laatste_evaluatie", "laatste_kwartier", "laatste_dagrapport", "opslag"})
+    _unrecorded_attributes = frozenset({"laatste_evaluatie", "laatste_kwartier", "laatste_dagrapport", "opslag", "grootverbruikers"})
 
     def __init__(self, coordinator, entry_id: str) -> None:
         super().__init__(coordinator, entry_id, "meetlog")
@@ -4495,7 +4495,13 @@ class MeetlogSensor(_CoordinatorDiagnosticSensor):
     @property
     def extra_state_attributes(self) -> dict:
         laag = getattr(self._coordinator, "_meetlaag", None)
-        return laag.samenvatting() if laag is not None else {}
+        uit = dict(laag.samenvatting()) if laag is not None else {}
+        # v5.31: de grootverbruikers in de schaduw, voor de Proefstand.
+        try:
+            uit["grootverbruikers"] = self._coordinator.get_grootverbruikers_schaduw()
+        except Exception:  # noqa: BLE001 - schaduw mag de sensor niet breken
+            uit["grootverbruikers"] = {}
+        return uit
 
 
 class AircoBesluitSensor(_CoordinatorDiagnosticSensor):

@@ -572,6 +572,9 @@ async def async_get_config_entry_diagnostics(
         # dagrapport. Volledige snapshots staan niet in de export: ze tonen
         # het verbruik per kwartier, en daaruit valt aanwezigheid af te leiden.
         "meetlog": _veilig("meetlog", coordinator.get_meetlog),
+        "grootverbruikers_schaduw": _veilig(
+            "grootverbruikers_schaduw", coordinator.get_grootverbruikers_schaduw
+        ),
         # v5.27: het airco-besluit, met redenen - ook met de knop uit.
         "airco_besluit": dict(getattr(coordinator, "last_airco_besluit", None) or {}),
         "airco_setpunten": list(getattr(coordinator, "airco_setpunten", None) or []),

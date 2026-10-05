@@ -1,9 +1,12 @@
-EMS v5.30 - alle wijzigingen sinds v5.28.5 (bevat ook v5.29)
+EMS v5.31 - alle wijzigingen sinds v5.28.5 (bevat ook v5.29 en v5.30)
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
     coordinator.py
     const.py
+    sensor.py
+    diagnostics.py
     zendure_status.py         (nieuw, v5.29)
+    grootverbruikers.py       (nieuw, v5.31)
     manifest.json
     dashboard_template.yaml
     bestandscontrole.json
@@ -11,6 +14,7 @@ TE KOPIEREN naar config/custom_components/energy_management_system/
 NAAR DE REPO
     README.md, CHANGELOG.md, LEESMIJ.txt
     dashboards/energy_management_system_dashboard.yaml
+    tests/test_v531_grootverbruikers_schaduw.py (nieuw)
     tests/test_v530_fietsen_kwartiercontrole.py (nieuw)
     tests/test_v529_zendure_offline.py (nieuw)
     tests/test_scheduled_charge_appliances.py
@@ -18,17 +22,13 @@ NAAR DE REPO
     tests/test_grid_cheaper_than_battery.py
     tests/test_notifications.py
 
-Voor HACS: release met tag v5.30.
+Voor HACS: release met tag v5.31.
 
-v5.30 - fietsladers
-- Na "klaar" niet meer uit voor de rest van de dag: tot het goedkope blok
-  voorbij is, op elk kwartierbegin een korte controle of er weer een fiets
-  aan hangt. Ook het zoeken vooraf loopt op het kwartier.
-- Melding "Fietsen opgeladen" pas na een lege controle, een keer per dag.
-- Steelstofzuiger ongewijzigd.
+v5.31 - grootverbruikers (schaduw)
+- Elk apparaat met een eigen vermogensmeting: minstens 3 minuten boven
+  1000 W telt als een keer gebruik. Na 3 keer de indeling kortlopend
+  (< 90 min) of aanhoudend.
+- Proefstand: kaart "Grootverbruikers (schaduw)". Stuurt niets.
 
-v5.29 - accu niet aanstuurbaar
-- Ziet de Zendure-integratie de accu als offline (connection_status onder
-  10), dan schrijft het EMS niets en noemt de analyse reden en oplossing.
-- Melding "De accu is niet aanstuurbaar" na tien minuten.
-- Modus en handmatig vermogen alleen schrijven als ze veranderen.
+v5.30 - fietsladers elk kwartier controleren
+v5.29 - accu niet aanstuurbaar herkennen, niet herhalen wat al staat

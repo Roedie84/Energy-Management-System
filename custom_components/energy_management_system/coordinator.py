@@ -33901,6 +33901,82 @@ class EnergyManagementSystemCoordinator:
             uit.append((str(naam), float(vermogen)))
         return uit
 
+    # v5.31: wat er per apparaat over grootverbruik is geleerd (schaduw).
+    # Hier en niet in `__init__` (functiegrootte-ratel); `_leer_grootverbruikers`
+    # zet altijd een eigen dict op de instantie, de klasse-waarde wordt nooit
+    # gewijzigd.
+    grootverbruiker_leer: dict | None = None
+
+    # Apparaten met een eigen meting die al in de vaste lijst staan
+    # (`_get_confirmed_heavy_load_source`).
+    _AL_GROOTVERBRUIKER = (
+        "dishwasher_power_sensor_entity",
+        "washing_machine_power_sensor_entity",
+        "quooker_power_sensor_entity",
+    )
+
+    def _grootverbruiker_bronnen(self) -> list[tuple[str, str, float | None]]:
+        """Alle apparaten met een eigen vermogensmeting (v5.31).
+
+        De bevestigde apparaten van de verbruiksherkenning en de apart
+        ingestelde vermogenssensoren. Alleen eigen metingen - geen sprongen
+        in het totale huisverbruik (gevraagd).
+        """
+        bronnen: dict[str, tuple[str, float | None]] = {}
+        for entiteit, apparaat in (self.nilm_confirmed_devices or {}).items():
+            bronnen[entiteit] = (
+                apparaat.get("friendly_name") or entiteit,
+                self._read_sensor_float(entiteit),
+            )
+        for sleutel in APPARAAT_INSTELLINGEN:
+            entiteit = self.config.get(sleutel)
+            if not sleutel.endswith("_power_sensor_entity") or not entiteit:
+                continue
+            toestand = self.hass.states.get(entiteit)
+            naam = (toestand.attributes.get("friendly_name") if toestand else None) or entiteit
+            bronnen[entiteit] = (str(naam), self._read_sensor_float(entiteit))
+        return [(e, n, v) for e, (n, v) in sorted(bronnen.items())]
+
+    def _leer_grootverbruikers(self, now: datetime) -> None:
+        """Eén leerstap voor de grootverbruikers (v5.31, schaduw)."""
+        from .grootverbruikers import werk_bij
+
+        leer = dict(self.grootverbruiker_leer or {})
+        for entiteit, naam, vermogen in self._grootverbruiker_bronnen():
+            werk_bij(leer, entiteit, naam, vermogen, now)
+        self.grootverbruiker_leer = leer
+
+    def get_grootverbruikers_schaduw(self) -> dict:
+        """Wat het EMS als grootverbruiker herkent - schaduw (v5.31)."""
+        from .grootverbruikers import (
+            DREMPEL_W,
+            KORTLOPEND_TOT_MINUTEN,
+            MIN_KEREN,
+            als_tekst,
+            overzicht,
+        )
+
+        ingesteld = {
+            self.config.get(s) for s in self._AL_GROOTVERBRUIKER if self.config.get(s)
+        }
+        vermogens = {e: v for e, _n, v in self._grootverbruiker_bronnen()}
+        apparaten = overzicht(self.grootverbruiker_leer or {}, ingesteld, vermogens)
+        toelichting = (
+            f"Een apparaat met een eigen meting telt als grootverbruiker "
+            f"als het minstens een paar minuten boven {DREMPEL_W:.0f} W "
+            f"trekt. Na {MIN_KEREN} keer volgt de indeling: korter dan "
+            f"{KORTLOPEND_TOT_MINUTEN:.0f} minuten is kortlopend (telt mee "
+            "als één cyclus), langer is aanhoudend (telt direct mee). "
+            "Schaduw: dit stuurt nog niets; je eigen lijst blijft gelden."
+        )
+        return {
+            "stuurt": False,
+            "drempel_w": DREMPEL_W,
+            "apparaten": apparaten,
+            "toelichting": toelichting,
+            "tekst": als_tekst(apparaten, DREMPEL_W, toelichting),
+        }
+
     def get_largest_known_consumer(self) -> str:
         """Welk bekend apparaat op dit moment het meeste verbruikt
         (v0.63.130, gerapporteerd: "in de visual is nu de zwaarste bron
@@ -38660,6 +38736,8 @@ class EnergyManagementSystemCoordinator:
             ("helderheid-ijklijn", lambda: self._update_helderheid_ijklijn(now)),
             ("powercalc-proef", lambda: self._update_powercalc_proef(now)),
             ("meldingen", lambda: self._evaluate_new_notifications(now)),
+            # v5.31: schaduw - leert, stuurt niets.
+            ("grootverbruikers", lambda: self._leer_grootverbruikers(now)),
             ("opslag", self.schedule_persisted_state_save),
         ):
             self._voer_staartstap_uit(naam, stap)
