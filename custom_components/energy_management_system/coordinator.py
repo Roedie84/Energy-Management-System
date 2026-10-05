@@ -513,6 +513,8 @@ from .const import (
     CONF_PRESENCE_ABSENCE_MINUTES,
     CONF_PRESENCE_TV_ENTITY,
     CONF_BATTERY_DISCHARGE_ENERGY_SENSOR,
+    CONF_BATTERY_CHARGE_ENERGY_SENSOR,
+    ACCU_NIET_AANSTUURBAAR_MELDING_MINUTEN,
     CONF_COST_ENERGY_SENSOR,
     CONF_GRID_EXPORT_ENERGY_SENSOR,
     CONF_GRID_IMPORT_ENERGY_SENSOR,
@@ -3776,6 +3778,7 @@ class EnergyManagementSystemCoordinator:
         notify_title: str | None = None,
         notify_message: str | None = None,
         override_attr: str | None = None,
+        kwartiercontrole: bool = False,
     ) -> None:
         """Shared logic (v0.63.13, generalised from the steelstofzuiger-
         only v0.63.12) for any appliance that should charge only during
@@ -3867,7 +3870,11 @@ class EnergyManagementSystemCoordinator:
                     duration_history_attr,
                     completed=False,
                 )
-            setattr(self, next_poll_attr, None)
+            # v5.30: een wachtende opgeladen-melding gaat nu de deur uit.
+            self._stop_controles(
+                now, next_poll_attr, last_action_attr,
+                kwartiercontrole, notify_title, notify_message,
+            )
             setattr(
                 self,
                 last_action_attr,
@@ -3908,7 +3915,9 @@ class EnergyManagementSystemCoordinator:
             if not ever_active:
                 # Genuine charging just confirmed - start the duration
                 # timer now, not from whenever polling first began.
-                setattr(self, charge_started_attr, now)
+                # v5.30: hing er weer iets aan, dan vervalt ook een
+                # wachtende opgeladen-melding.
+                self._sessie_begint(now, charge_started_attr, last_action_attr)
             setattr(self, ever_active_this_session_attr, True)
             ever_active = True
 
@@ -3918,10 +3927,10 @@ class EnergyManagementSystemCoordinator:
             poll_deadline = getattr(self, next_poll_attr)
             if poll_deadline is not None and now >= poll_deadline:
                 await self._async_set_switch(switch_entity, turn_on=False)
-                setattr(
-                    self,
-                    next_poll_attr,
-                    now + timedelta(minutes=SCHEDULED_CHARGE_POLL_OFF_MINUTES),
+                # v5.30: fietsladers op het kwartier, elk kwartier.
+                self._plan_volgende_test(
+                    now, next_poll_attr, last_action_attr,
+                    kwartiercontrole, notify_title, notify_message,
                 )
                 setattr(self, last_action_attr, "wacht_op_apparaat")
                 return
@@ -3944,24 +3953,144 @@ class EnergyManagementSystemCoordinator:
                     duration_history_attr,
                     completed=True,
                 )
+                # v5.30: fietsladers zijn niet klaar voor de rest van de dag.
+                if self._kwartiercontrole_na_klaar(
+                    kwartiercontrole, now, ever_active_this_session_attr,
+                    next_poll_attr, last_action_attr,
+                ):
+                    return
                 setattr(self, complete_today_attr, True)
                 setattr(self, next_poll_attr, None)
                 setattr(self, last_action_attr, "voltooid")
-                if notify_title and notify_message:
-                    notify_service = self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE)
-                    if notify_service:
-                        self._dispatch_notification(
-                            notify_service=notify_service,
-                            title=notify_title,
-                            message=notify_message,
-                            notification_id=f"ems_{last_action_attr}_complete",
-            kind="appliance_ready",
-                        )
+                self._meld_opgeladen(last_action_attr, notify_title, notify_message)
                 return
         else:
             setattr(self, below_threshold_since_attr, None)
 
         setattr(self, last_action_attr, "aan_het_laden")
+
+    @staticmethod
+    def _volgend_kwartier(now: datetime) -> datetime:
+        """Het eerstvolgende kwartierbegin na `now` (v5.30)."""
+        begin = now.replace(minute=now.minute - now.minute % 15, second=0, microsecond=0)
+        return begin + timedelta(minutes=15)
+
+    def _kwartiercontrole_status(self, last_action_attr: str) -> dict:
+        """Per apparaat: wacht er een opgeladen-melding, en wanneer gemeld."""
+        alles = getattr(self, "_kwartiercontrole", None)
+        if alles is None:
+            alles = {}
+            self._kwartiercontrole = alles
+        return alles.setdefault(last_action_attr, {})
+
+    def _kwartiercontrole_klaar(
+        self,
+        now: datetime,
+        last_action_attr: str,
+        notify_title: str | None,
+        notify_message: str | None,
+    ) -> None:
+        """Een controle vond niets, of het blok is voorbij: nu melden (v5.30).
+
+        Eén keer per dag, en pas na een lege controle - zodat een fiets
+        die even van de lader was geen "opgeladen" oplevert.
+        """
+        status = self._kwartiercontrole_status(last_action_attr)
+        if not status.get("melding_wacht"):
+            return
+        status["melding_wacht"] = False
+        status["gemeld_op"] = now.date()
+        self._meld_opgeladen(last_action_attr, notify_title, notify_message)
+
+    def _meld_opgeladen(
+        self, last_action_attr: str, notify_title: str | None, notify_message: str | None
+    ) -> None:
+        """De opgeladen-melding van een gepland laadapparaat."""
+        notify_service = self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE)
+        if notify_title and notify_message and notify_service:
+            self._dispatch_notification(
+                notify_service=notify_service,
+                title=notify_title,
+                message=notify_message,
+                notification_id=f"ems_{last_action_attr}_complete",
+                kind="appliance_ready",
+            )
+
+    def _sessie_begint(
+        self, now: datetime, charge_started_attr: str, last_action_attr: str
+    ) -> None:
+        """Er is echt vermogen: de laadsessie begint (v5.30).
+
+        Hing er na een "klaar" weer een fiets aan, dan was dat klaar te vroeg
+        - de wachtende melding vervalt.
+        """
+        setattr(self, charge_started_attr, now)
+        status = (getattr(self, "_kwartiercontrole", None) or {}).get(last_action_attr)
+        if status:
+            status["melding_wacht"] = False
+
+    def _stop_controles(
+        self,
+        now: datetime,
+        next_poll_attr: str,
+        last_action_attr: str,
+        kwartiercontrole: bool,
+        notify_title: str | None,
+        notify_message: str | None,
+    ) -> None:
+        """Buiten het blok: geen controles meer, wachtende melding versturen."""
+        setattr(self, next_poll_attr, None)
+        if kwartiercontrole:
+            self._kwartiercontrole_klaar(now, last_action_attr, notify_title, notify_message)
+
+    def _plan_volgende_test(
+        self,
+        now: datetime,
+        next_poll_attr: str,
+        last_action_attr: str,
+        kwartiercontrole: bool,
+        notify_title: str | None,
+        notify_message: str | None,
+    ) -> None:
+        """Een test vond niets: wanneer de volgende (v5.30).
+
+        Fietsladers op het volgende kwartierbegin, en een wachtende melding
+        gaat nu de deur uit. De rest zoals voorheen: vijftien minuten uit.
+        """
+        if not kwartiercontrole:
+            setattr(
+                self,
+                next_poll_attr,
+                now + timedelta(minutes=SCHEDULED_CHARGE_POLL_OFF_MINUTES),
+            )
+            return
+        setattr(self, next_poll_attr, self._volgend_kwartier(now))
+        self._kwartiercontrole_klaar(now, last_action_attr, notify_title, notify_message)
+
+    def _kwartiercontrole_na_klaar(
+        self,
+        kwartiercontrole: bool,
+        now: datetime,
+        ever_active_this_session_attr: str,
+        next_poll_attr: str,
+        last_action_attr: str,
+    ) -> bool:
+        """Na "klaar": verder met kwartiercontroles in plaats van uit voor de dag.
+
+        Werd er even een fiets van de lader gehaald, dan zakt het vermogen
+        net zo. Tot het blok eindigt wordt elk kwartier gekeken of er weer
+        iets aan hangt; de melding wacht tot een controle niets vindt.
+        Geeft True als dit het afhandelde.
+        """
+        if not kwartiercontrole:
+            return False
+        setattr(self, ever_active_this_session_attr, False)
+        setattr(self, next_poll_attr, self._volgend_kwartier(now))
+        setattr(self, last_action_attr, "voltooid")
+        status = self._kwartiercontrole_status(last_action_attr)
+        if status.get("gemeld_op") != now.date():
+            status["melding_wacht"] = True
+        return True
 
     def _finish_scheduled_charge_session(
         self,
@@ -38648,8 +38777,13 @@ class EnergyManagementSystemCoordinator:
             next_poll_attr="_fietsladers_next_poll_at",
             idle_history_attr="_fietsladers_idle_power_history",
             notify_title="🚲 Fietsen opgeladen",
-            notify_message="De fietsladers zijn uitgeschakeld omdat de accu's vol zijn.",
+            notify_message=(
+                "De fietsladers zijn uitgeschakeld omdat de accu's vol zijn. "
+                "Tot het goedkope blok voorbij is, kijkt het EMS elk kwartier "
+                "of er weer een fiets aan hangt."
+            ),
             override_attr="fietsladers_override",
+            kwartiercontrole=True,
         )
 
         self.last_is_expensive = is_expensive
@@ -39631,6 +39765,11 @@ class EnergyManagementSystemCoordinator:
         # v3.75.0: onthouden WAT er is geschreven, zodat een ingreep van
         # buitenaf herkenbaar is.
         self.last_applied_operation = option
+        # v5.29: staat hij er al, dan niet opnieuw schrijven. Elke schrijf-
+        # actie start in de Zendure-integratie de operatie opnieuw - en
+        # leverde op 5 oktober elke minuut een melding op.
+        if self._staat_al_op(self.config[CONF_OPERATION_SELECT], option):
+            return
         # v4.11: afgeschermd - zie `_stuur_naar_de_accu`.
         await self._stuur_naar_de_accu(
             "select",
@@ -41001,9 +41140,44 @@ class EnergyManagementSystemCoordinator:
         # kritieke melding "onderdeel van de integratie faalt" aan, en
         # die zou hier het verkeerde verhaal vertellen.
         self.aansturing_onbereikbaar["reden"] = reden
+        self._meld_accu_niet_aanstuurbaar()
+
+    def _meld_accu_niet_aanstuurbaar(self) -> None:
+        """Eén telefoonmelding als het langer dan tien minuten duurt (v5.29).
+
+        Op 5 oktober stond de accu ruim twee uur stil zonder dat het EMS
+        het meldde. Tien minuten wachten, omdat een losse time-out van de
+        Zendure-integratie vaak binnen een minuut vanzelf herstelt.
+        """
+        if self.aansturing_onbereikbaar.get("gemeld"):
+            return
+        sinds = self.aansturing_onbereikbaar.get("sinds")
+        if sinds is None:
+            return
+        try:
+            moment = datetime.fromisoformat(sinds)
+            minuten = (dt_util.now() - moment).total_seconds() / 60
+        except (TypeError, ValueError):
+            return
+        if minuten < ACCU_NIET_AANSTUURBAAR_MELDING_MINUTEN:
+            return
+        self.aansturing_onbereikbaar["gemeld"] = True
+        self._dispatch_notification(
+            notify_service=self.config.get(CONF_APPLIANCE_NOTIFY_SERVICE),
+            title="⚠️ De accu is niet aanstuurbaar",
+            message=(
+                f"Sinds {moment.strftime('%H:%M')}: "
+                f"{self.aansturing_onbereikbaar.get('reden')} "
+                "Het EMS rekent door, maar stuurt de accu niet aan tot dit "
+                "is opgelost."
+            ),
+            notification_id="ems_accu_niet_aanstuurbaar",
+            kind="accu_niet_aanstuurbaar",
+        )
 
     def _aansturing_hersteld(self) -> None:
         """Opruimen zodra er weer geschreven kan worden."""
+        self.aansturing_onbereikbaar.pop("gemeld", None)
         sinds = self.aansturing_onbereikbaar.get("sinds")
         if sinds is not None:
             duur = (
@@ -41080,8 +41254,76 @@ class EnergyManagementSystemCoordinator:
                     f"{entity_id} is {staat.state} - de accu-integratie "
                     "heeft geen verbinding"
                 )
+        # v5.29: de select kan beschikbaar zijn terwijl de Zendure-
+        # integratie elk apparaat als offline ziet en elke opdracht
+        # weigert (5 oktober: zekeringgroep op "unused").
+        zendure = self._zendure_offline_reden()
+        if zendure:
+            return zendure
         self._aansturing_hersteld()
         return None
+
+    def _zendure_statusentiteiten(self) -> list[str]:
+        """De `connection_status`-sensoren van de Zendure-apparaten (v5.29).
+
+        Automatisch gevonden: dezelfde apparaatnaam als een ingestelde
+        accu-entiteit. Onthouden, en pas na tien minuten opnieuw gezocht als
+        er niets was - `async_all` elke ronde is zonde.
+        """
+        from .zendure_status import hoort_bij_accu, is_statusentiteit
+
+        cache = getattr(self, "_zendure_status_cache", None)
+        nu = time.monotonic()
+        if cache and (
+            cache["entiteiten"]
+            and all(self.hass.states.get(e) is not None for e in cache["entiteiten"])
+            or (not cache["entiteiten"] and nu - cache["gezocht"] < 600)
+        ):
+            return cache["entiteiten"]
+        accu = [
+            self.config.get(sleutel)
+            for sleutel in (
+                CONF_SOC_SENSOR,
+                CONF_BATTERY_POWER_SENSOR,
+                CONF_AVAILABLE_ENERGY_SENSOR,
+                CONF_BATTERY_DISCHARGE_ENERGY_SENSOR,
+                CONF_BATTERY_CHARGE_ENERGY_SENSOR,
+                CONF_BATTERY_STATE_SENSOR,
+            )
+        ]
+        gevonden = []
+        try:
+            for staat in self.hass.states.async_all():
+                eid = getattr(staat, "entity_id", "")
+                if is_statusentiteit(eid) and hoort_bij_accu(eid, accu):
+                    gevonden.append(eid)
+        except Exception:  # noqa: BLE001 - dit mag de aansturing nooit raken
+            gevonden = []
+        self._zendure_status_cache = {
+            "entiteiten": sorted(gevonden),
+            "gezocht": nu,
+        }
+        return self._zendure_status_cache["entiteiten"]
+
+    def zendure_verbinding(self) -> dict:
+        """Ziet de Zendure-integratie de accu als online? (v5.29)"""
+        from .zendure_status import beoordeel
+
+        standen = {}
+        for eid in self._zendure_statusentiteiten():
+            staat = self.hass.states.get(eid)
+            standen[eid] = getattr(staat, "state", None)
+        return beoordeel(standen)
+
+    def _zendure_offline_reden(self) -> str | None:
+        oordeel = self.zendure_verbinding()
+        if oordeel.get("online") is not False:
+            return None
+        return (
+            f"De Zendure-integratie ziet de accu als offline "
+            f"(status {oordeel['status']}): {oordeel['reden']}. "
+            f"{oordeel['oplossing']}"
+        )
 
     async def _async_apply_manual(self, power: float) -> None:
         """Set manual mode with the given power, unless in learning_only
@@ -41103,7 +41345,9 @@ class EnergyManagementSystemCoordinator:
         # eerste is aangekomen - een vermogen zetten terwijl de stand
         # nog slim is, laat de accu op dat vermogen staan zodra hij
         # later handmatig wordt.
-        if await self._stuur_naar_de_accu(
+        # v5.29: alleen schrijven wat nog niet zo staat.
+        modus_al = self._staat_al_op(self.config[CONF_OPERATION_SELECT], OPTION_MANUAL)
+        if modus_al or await self._stuur_naar_de_accu(
             "select",
             "select_option",
             {
@@ -41112,20 +41356,42 @@ class EnergyManagementSystemCoordinator:
             },
             "handmatige stand",
         ):
-            await self._stuur_naar_de_accu(
-                "number",
-                "set_value",
-                {
-                    "entity_id": self.config[CONF_MANUAL_POWER_NUMBER],
-                    "value": power,
-                },
-                f"vermogen {power:.0f} W",
-            )
+            if not self._staat_al_op(self.config[CONF_MANUAL_POWER_NUMBER], power):
+                await self._stuur_naar_de_accu(
+                    "number",
+                    "set_value",
+                    {
+                        "entity_id": self.config[CONF_MANUAL_POWER_NUMBER],
+                        "value": power,
+                    },
+                    f"vermogen {power:.0f} W",
+                )
+                self._noteer_opdracht(
+                    self.config[CONF_MANUAL_POWER_NUMBER], power, "handmatig vermogen"
+                )
         # v3.87.0: allebei nakijken - de modus én het vermogen. Op 30
         # augustus stond de modus goed maar deed het vermogen niets.
-        self._noteer_opdracht(
-            self.config[CONF_OPERATION_SELECT], OPTION_MANUAL, "modus"
-        )
-        self._noteer_opdracht(
-            self.config[CONF_MANUAL_POWER_NUMBER], power, "handmatig vermogen"
-        )
+        if not modus_al:
+            self._noteer_opdracht(
+                self.config[CONF_OPERATION_SELECT], OPTION_MANUAL, "modus"
+            )
+
+    def _staat_al_op(self, entity_id: str | None, waarde) -> bool:
+        """Staat de entiteit al op deze waarde? (v5.29)
+
+        Bij twijfel nee: een ontbrekende of onleesbare stand wordt gewoon
+        geschreven, zoals voorheen.
+        """
+        staat = self.hass.states.get(entity_id) if entity_id else None
+        if staat is None or staat.state in ("unavailable", "unknown", None):
+            return False
+        if isinstance(waarde, (int, float)) and not isinstance(waarde, bool):
+            try:
+                gelijk = abs(float(staat.state) - float(waarde)) < 1.0
+            except (TypeError, ValueError):
+                return False
+        else:
+            gelijk = str(staat.state) == str(waarde)
+        if gelijk:
+            self.internal_failures.pop("accu_aansturing", None)
+        return gelijk

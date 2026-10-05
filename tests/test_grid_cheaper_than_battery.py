@@ -116,7 +116,9 @@ def test_an_unknown_mode_falls_back_and_is_reported(make_coordinator, hass):
     import asyncio
 
     c = make_coordinator({CONF_OPERATION_SELECT: "select.op"})
-    hass.states.set("select.op", "smart", {"options": ["manual", "smart"]})
+    # v5.29: start op manual - op smart is de terugval al bereikt en wordt
+    # er terecht niets meer geschreven.
+    hass.states.set("select.op", "manual", {"options": ["manual", "smart"]})
 
     asyncio.run(c._async_apply_operation(OPTION_SMART_CHARGING))
 

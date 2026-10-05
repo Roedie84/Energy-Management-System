@@ -2906,6 +2906,7 @@ LOG_PRIORITEITEN = {
     # er ligt een toets op die dat vastlegt. Zoiets hoort niet
     # stilzwijgend teruggedraaid te worden om een grens te halen.
     "opdracht_niet_aangekomen": LOG_PRIO_KRITIEK,
+    "accu_niet_aanstuurbaar": LOG_PRIO_AANDACHT,
     "installatie_onvolledig": LOG_PRIO_KRITIEK,
     # Aandacht - het vraagt een beslissing.
     "plan_verkoop_geblokkeerd": LOG_PRIO_AANDACHT,
@@ -3862,6 +3863,13 @@ MELDING_ADVIES: dict[str, tuple[str, str]] = {
         "Kijk of de Zendure-integratie werkt. Blijft het staan, herstart die "
         "integratie; de sturing valt intussen terug op de slimme stand.",
     ),
+    "accu_niet_aanstuurbaar": (
+        "De accu neemt al minstens tien minuten geen opdrachten aan. De "
+        "melding noemt de reden, bijvoorbeeld een Zendure-integratie die de "
+        "accu als offline ziet.",
+        "Volg de oplossing in de melding. Het EMS stuurt vanzelf weer zodra "
+        "de accu bereikbaar is.",
+    ),
     "leermodus_lang_aan": (
         "De leermodus staat aan; de integratie rekent wel maar stuurt niet.",
         "Zet de leermodus uit als je wilt dat de accu wordt aangestuurd.",
@@ -4157,6 +4165,16 @@ NOTIFICATION_TYPES: tuple[tuple[str, str, str, bool, int], ...] = (
         "luchtledige, en dat is niet aan de meters te zien.",
         True,
         30,
+    ),
+    # v5.29: de accu staat stil terwijl het EMS denkt te sturen.
+    (
+        "accu_niet_aanstuurbaar",
+        "De accu is niet aanstuurbaar",
+        "Wanneer de accu langer dan tien minuten geen opdrachten aanneemt, "
+        "bijvoorbeeld omdat de Zendure-integratie hem als offline ziet. Het "
+        "EMS rekent dan door maar stuurt niets.",
+        True,
+        360,
     ),
     (
         "leermodus_lang_aan",
@@ -6289,6 +6307,7 @@ ACHTERHOEKS_TITELS = {
     "prijsstijging_handmatig": "De stroom wordt duurder",
     "leermodus_lang_aan": "De leermodus steet nog an",
     "opdracht_niet_aangekomen": "De accu luusterde neet",
+    "accu_niet_aanstuurbaar": "De accu is neet te stuurn",
     "installatie_onvolledig": "De installatie is neet compleet",
     # v3.93.1: GEEN vaste titel meer voor "appliance_ready".
     #
@@ -6856,3 +6875,8 @@ MODUSWISSEL_DREMPEL_PER_UUR = 4
 # geen fout.
 ENERGIEBALANS_MARGE_W = 200.0
 ENERGIEBALANS_MARGE_FRACTIE = 0.10
+
+
+# v5.29: pas melden als de accu zo lang niet aanstuurbaar is. Een losse
+# time-out van de Zendure-integratie herstelt meestal binnen een minuut.
+ACCU_NIET_AANSTUURBAAR_MELDING_MINUTEN = 10

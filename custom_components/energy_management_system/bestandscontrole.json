@@ -5,12 +5,12 @@
   "brand/icon@2x.png": "0d2e1d114f877501",
   "button.py": "958a5b679b204416",
   "config_flow.py": "04f60306d1720a52",
-  "const.py": "b6b29a7063f4c83e",
-  "coordinator.py": "ec4e501fc01ffa03",
-  "dashboard_template.yaml": "e9fe3063f6c33858",
+  "const.py": "59f1a3e7272bc8fd",
+  "coordinator.py": "99dd6f655f63d93d",
+  "dashboard_template.yaml": "c0eb3f63e5d24e51",
   "diagnostics.py": "61bcd7926780e025",
   "kwartierenergie.py": "ebe5bea9fe73e7b2",
-  "manifest.json": "17ce5c4467bedfd1",
+  "manifest.json": "0918dfc6aa210552",
   "meetlaag.py": "ea68c03b5f414c4e",
   "meetlog.py": "48e351944317d051",
   "nabeschouwing.py": "e80f0438caab08f5",
@@ -27,5 +27,6 @@
   "switch.py": "663f6a5fda3ef331",
   "tarief.py": "e1434ebb93d2f88b",
   "translations/en.json": "10becac027b5e4fa",
-  "translations/nl.json": "77d481486c3fa59a"
+  "translations/nl.json": "77d481486c3fa59a",
+  "zendure_status.py": "6cd688d4695f6dff"
 }

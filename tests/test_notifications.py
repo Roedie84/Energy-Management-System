@@ -195,6 +195,8 @@ def test_only_the_pre_existing_kinds_default_to_on():
         "leermodus_lang_aan",
         # v3.87.0: en dat een opdracht niet is aangekomen.
         "opdracht_niet_aangekomen",
+        # v5.29: en dat de accu helemaal geen opdrachten aanneemt.
+        "accu_niet_aanstuurbaar",
         # v3.67.0: een onvolledige installatie hoort te melden - dat is
         # het hele punt van de bestandscontrole.
         "installatie_onvolledig",

@@ -261,13 +261,23 @@ def test_fietsladers_sends_notification_on_completion(make_coordinator, hass):
 
         with_now(coordinator, DAY0.replace(hour=12, minute=6))
         await coordinator._async_update_locked()  # sustained low -> complete
+        assert coordinator.last_fietsladers_action == "voltooid"
+        hass.states.set("switch.fietsladers", "off")
+        # v5.30: de melding wacht op een lege kwartiercontrole - een fiets
+        # die even van de lader was, is geen opgeladen fiets.
+        assert [c for c in hass.services.calls if c[0] == "notify"] == []
+
+        with_now(coordinator, DAY0.replace(hour=12, minute=15))
+        await coordinator._async_update_locked()  # controle: aan
+        hass.states.set("switch.fietsladers", "on")
+        with_now(coordinator, DAY0.replace(hour=12, minute=20))
+        await coordinator._async_update_locked()  # niets gevonden: uit + melden
 
     asyncio.run(run())
 
     notify_calls = [c for c in hass.services.calls if c[0] == "notify"]
     assert len(notify_calls) == 1
     assert "Fietsen opgeladen" in notify_calls[0][2]["title"]
-    assert coordinator.last_fietsladers_action == "voltooid"
 
 
 def test_steelstofzuiger_and_fietsladers_are_independent(make_coordinator, hass):

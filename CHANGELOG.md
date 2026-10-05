@@ -29994,3 +29994,76 @@ Nagerekend op 4 oktober: met een gat van 2,2 kWh wacht het EMS om 13:15
 (19,8 ct) - er komen nog vier goedkopere kwartieren - en laadt het vanaf 13:30.
 
 **Volledige testsuite**: 4568 tests, allemaal groen.
+
+
+## v5.29 — De accu staat stil: het EMS ziet het, zegt het en stopt met schrijven
+
+Gemeld op 5 oktober: vanaf 07:10 elke minuut *"No devices online, not possible
+to start the operation"*, terwijl de accu in de Zendure-app online was en
+lokaal gewoon antwoordde. Ruim twee uur stuurde het EMS in het luchtledige.
+
+Oorzaak: de zekeringgroep van de SolarFlow stond op "unused". De
+Zendure-integratie (`setStatus`) zet het apparaat dan op `connection_status` 3,
+behandelt het als offline en weigert elke opdracht. De modus-select bleef
+beschikbaar, dus de controle van v3.46.0 (select `unavailable`) zag niets.
+
+### 1. Zendure-status meelezen (`zendure_status.py`)
+
+De sensor `connection_status` van de Zendure-integratie wordt automatisch
+gevonden (dezelfde apparaatnaam als een ingestelde accu-entiteit). Onder 10 is
+offline, met reden en oplossing: 0 geen verbinding, 1 kalibratie, 2 HEMS,
+3 geen zekeringgroep. Zoals de Zendure-manager: offline pas als *alle*
+apparaten offline zijn. Onbekend blokkeert niets; 0 is een meting.
+
+Offline: het EMS schrijft niets, rekent door, en de analyse toont "Accu niet
+aanstuurbaar" met de reden.
+
+### 2. Melding `accu_niet_aanstuurbaar`
+
+Eén keer, na tien minuten (een losse time-out herstelt meestal binnen een
+minuut), met tijdstip, reden en oplossing. Standaard aan.
+
+### 3. Niet herhalen wat al staat
+
+De modus-select en het handmatige vermogen worden alleen geschreven als de
+waarde verandert. Elke schrijfactie start in de Zendure-integratie de operatie
+opnieuw, en gaf bij een offline apparaat elke minuut een melding.
+
+**Verwachting bewust gewijzigd**: de gouden standaard telt een opdracht naar
+een entiteit die al op die waarde staat niet meer mee (de fixture zelf en
+alle standen en redenen zijn ongewijzigd); één toets start op `manual` omdat
+de terugval naar `smart` anders al bereikt is.
+
+**Volledige testsuite**: 4586 tests, allemaal groen.
+
+
+## v5.30 — Fietsladers: elk kwartier controleren
+
+Gevraagd: *"Fietsen laden moet elk kwartier worden gecontroleerd, het kan zijn
+dat er tussentijds kort een fiets van de lader is gehaald."*
+
+Tot nu toe gold twee minuten laag vermogen als "klaar voor vandaag": de lader
+ging uit en bleef de rest van de dag uit. Een fiets die even van de lader
+werd gehaald, zakte het vermogen net zo - en werd daarna niet meer geladen.
+
+Nu, alleen voor de fietsladers:
+
+- Na "klaar" blijft de lader niet de hele dag uit. Tot het goedkope blok
+  voorbij is, gaat hij op elk kwartierbegin (:00, :15, :30, :45) kort aan om
+  te kijken of er weer een fiets aan hangt. Vindt hij vermogen, dan laadt
+  hij door.
+- Ook het zoeken naar een fiets vóór het laden loopt nu op het kwartier, in
+  plaats van om de twintig minuten (vijf aan, vijftien uit).
+- De melding "Fietsen opgeladen" wacht tot een controle niets vindt (of het
+  blok voorbij is), en komt één keer per dag. Een fiets die even van de lader
+  was, geeft dus geen melding meer.
+- Buiten het goedkope blok verandert niets: dan blijft de lader uit.
+
+De steelstofzuiger houdt het oude gedrag.
+
+**Verwachting bewust gewijzigd**: `test_fietsladers_sends_notification_on_completion`
+verwacht de melding nu na de eerste lege kwartiercontrole, niet direct bij
+"klaar".
+
+**Volledige testsuite**: 4592 tests, allemaal groen.
+

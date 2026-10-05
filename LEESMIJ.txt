@@ -1,20 +1,34 @@
-EMS v5.28.5 - alleen de wijziging sinds v5.28.4
+EMS v5.30 - alle wijzigingen sinds v5.28.5 (bevat ook v5.29)
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
     coordinator.py
-    dashboard_template.yaml   (gaat altijd mee, ongewijzigd)
-    manifest.json, bestandscontrole.json
+    const.py
+    zendure_status.py         (nieuw, v5.29)
+    manifest.json
+    dashboard_template.yaml
+    bestandscontrole.json
 
 NAAR DE REPO
-    README.md, CHANGELOG.md
+    README.md, CHANGELOG.md, LEESMIJ.txt
     dashboards/energy_management_system_dashboard.yaml
-    tests/test_v5285_lopend_blok.py
+    tests/test_v530_fietsen_kwartiercontrole.py (nieuw)
+    tests/test_v529_zendure_offline.py (nieuw)
+    tests/test_scheduled_charge_appliances.py
+    tests/test_v528_gouden_standaard.py
+    tests/test_grid_cheaper_than_battery.py
+    tests/test_notifications.py
 
-Voor HACS: release met tag v5.28.5.
+Voor HACS: release met tag v5.30.
 
-WAT ER VERANDERT
-1. Een goedkoop blok dat bezig is, blijft het blok tot het eindigt - ook
-   als de prijzen van morgen binnenkomen. Plan en sturing laden dan weer
-   gelijk.
-2. Laden gebeurt alleen in de goedkoopste kwartieren tot het moment dat de
-   lading nodig is - ook binnen het blok. Niet meer, alleen goedkoper.
+v5.30 - fietsladers
+- Na "klaar" niet meer uit voor de rest van de dag: tot het goedkope blok
+  voorbij is, op elk kwartierbegin een korte controle of er weer een fiets
+  aan hangt. Ook het zoeken vooraf loopt op het kwartier.
+- Melding "Fietsen opgeladen" pas na een lege controle, een keer per dag.
+- Steelstofzuiger ongewijzigd.
+
+v5.29 - accu niet aanstuurbaar
+- Ziet de Zendure-integratie de accu als offline (connection_status onder
+  10), dan schrijft het EMS niets en noemt de analyse reden en oplossing.
+- Melding "De accu is niet aanstuurbaar" na tien minuten.
+- Modus en handmatig vermogen alleen schrijven als ze veranderen.
