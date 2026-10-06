@@ -1,20 +1,9 @@
-EMS v5.31.1 - alleen de wijziging sinds v5.31
+EMS v5.31.2 - de accu stond op manual en deed niets
 
-TE KOPIEREN naar config/custom_components/energy_management_system/
-    coordinator.py
-    const.py
-    manifest.json
-    dashboard_template.yaml   (gaat altijd mee, ongewijzigd)
-    bestandscontrole.json
-
-NAAR DE REPO
-    README.md, CHANGELOG.md, LEESMIJ.txt
-    tests/test_v5311_module_soc_drift.py (nieuw)
-
-Voor HACS: release met tag v5.31.1.
+Installeren: via HACS bijwerken en Home Assistant herstarten.
 
 WAT ER VERANDERT
-Geen valse drift meer op de laadstand van een accumodule. Een
-SoC-afwijking telt pas vanaf 3% mee (was 0,5%). De opgeslagen drift van
-module 2 wordt direct na de herstart opnieuw doorgerekend en verdwijnt;
-de drift van module 1 (celspreiding) blijft.
+- Na een nieuwe stand schrijft het EMS altijd ook het vermogen.
+- Alleen wat het EMS zelf schreef telt als "staat er al"; een na een
+  herstart herstelde stand wordt opnieuw verstuurd.
+- Elke 10 minuten wordt de opdracht herhaald.

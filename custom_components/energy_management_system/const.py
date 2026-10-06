@@ -6888,3 +6888,13 @@ ENERGIEBALANS_MARGE_FRACTIE = 0.10
 # v5.29: pas melden als de accu zo lang niet aanstuurbaar is. Een losse
 # time-out van de Zendure-integratie herstelt meestal binnen een minuut.
 ACCU_NIET_AANSTUURBAAR_MELDING_MINUTEN = 10
+
+# v5.31.2: een stand die het EMS zelf al schreef, wordt pas na zoveel seconden
+# opnieuw geschreven. Op 6 oktober stond de select na een herstart op
+# "manual" en het vermogen op -2400 - hersteld door Zendure, niet
+# uitgevoerd: in- en uitvoerlimiet van het apparaat stonden op 0. Sinds
+# v5.29 schreef het EMS niets meer omdat de stand al "goed" stond, en de
+# accu deed niets. Alleen wat het EMS deze sessie zelf schreef, telt als
+# "staat er al"; en ook dat wordt elke tien minuten herhaald.
+OPDRACHT_HERHAAL_SECONDEN = 600
+

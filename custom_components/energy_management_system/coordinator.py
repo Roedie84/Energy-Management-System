@@ -515,6 +515,7 @@ from .const import (
     CONF_BATTERY_DISCHARGE_ENERGY_SENSOR,
     CONF_BATTERY_CHARGE_ENERGY_SENSOR,
     ACCU_NIET_AANSTUURBAAR_MELDING_MINUTEN,
+    OPDRACHT_HERHAAL_SECONDEN,
     CONF_COST_ENERGY_SENSOR,
     CONF_GRID_EXPORT_ENERGY_SENSOR,
     CONF_GRID_IMPORT_ENERGY_SENSOR,
@@ -39892,7 +39893,7 @@ class EnergyManagementSystemCoordinator:
         if self._staat_al_op(self.config[CONF_OPERATION_SELECT], option):
             return
         # v4.11: afgeschermd - zie `_stuur_naar_de_accu`.
-        await self._stuur_naar_de_accu(
+        if await self._stuur_naar_de_accu(
             "select",
             "select_option",
             {
@@ -39900,7 +39901,8 @@ class EnergyManagementSystemCoordinator:
                 "option": option,
             },
             f"stand {option}",
-        )
+        ):
+            self._onthoud_geschreven(self.config[CONF_OPERATION_SELECT], option)
         # v3.87.0: en controleren of het ook is aangekomen.
         self._noteer_opdracht(
             self.config[CONF_OPERATION_SELECT], option, "modus"
@@ -41477,8 +41479,14 @@ class EnergyManagementSystemCoordinator:
             },
             "handmatige stand",
         ):
-            if not self._staat_al_op(self.config[CONF_MANUAL_POWER_NUMBER], power):
-                await self._stuur_naar_de_accu(
+            if not modus_al:
+                self._onthoud_geschreven(self.config[CONF_OPERATION_SELECT], OPTION_MANUAL)
+            # v5.31.2: na een nieuwe stand altijd ook het vermogen - de
+            # Zendure-manager start de handmatige stand pas met een vermogen.
+            if not modus_al or not self._staat_al_op(
+                self.config[CONF_MANUAL_POWER_NUMBER], power
+            ):
+                if await self._stuur_naar_de_accu(
                     "number",
                     "set_value",
                     {
@@ -41486,7 +41494,8 @@ class EnergyManagementSystemCoordinator:
                         "value": power,
                     },
                     f"vermogen {power:.0f} W",
-                )
+                ):
+                    self._onthoud_geschreven(self.config[CONF_MANUAL_POWER_NUMBER], power)
                 self._noteer_opdracht(
                     self.config[CONF_MANUAL_POWER_NUMBER], power, "handmatig vermogen"
                 )
@@ -41497,12 +41506,42 @@ class EnergyManagementSystemCoordinator:
                 self.config[CONF_OPERATION_SELECT], OPTION_MANUAL, "modus"
             )
 
+    @staticmethod
+    def _zelfde(a, b) -> bool:
+        if isinstance(b, (int, float)) and not isinstance(b, bool):
+            try:
+                return abs(float(a) - float(b)) < 1.0
+            except (TypeError, ValueError):
+                return False
+        return str(a) == str(b)
+
+    def _onthoud_geschreven(self, entity_id: str | None, waarde) -> None:
+        """Wat het EMS zelf schreef, en wanneer (v5.31.2)."""
+        if not entity_id:
+            return
+        geschreven = getattr(self, "_zelf_geschreven", None)
+        if geschreven is None:
+            geschreven = self._zelf_geschreven = {}
+        geschreven[entity_id] = (waarde, time.monotonic())
+
     def _staat_al_op(self, entity_id: str | None, waarde) -> bool:
-        """Staat de entiteit al op deze waarde? (v5.29)
+        """Staat de entiteit al op deze waarde, door het EMS zelf? (v5.29,
+        v5.31.2)
+
+        Alleen als het EMS deze waarde in deze sessie zelf schreef, minder
+        dan OPDRACHT_HERHAAL_SECONDEN geleden. Een stand die er al stond -
+        hersteld na een herstart, of door iemand anders gezet - wordt
+        gewoon geschreven: de Zendure-manager voert alleen uit wat hij
+        krijgt toegestuurd.
 
         Bij twijfel nee: een ontbrekende of onleesbare stand wordt gewoon
         geschreven, zoals voorheen.
         """
+        zelf = (getattr(self, "_zelf_geschreven", None) or {}).get(entity_id)
+        if zelf is None or not self._zelfde(zelf[0], waarde):
+            return False
+        if time.monotonic() - zelf[1] >= OPDRACHT_HERHAAL_SECONDEN:
+            return False
         staat = self.hass.states.get(entity_id) if entity_id else None
         if staat is None or staat.state in ("unavailable", "unknown", None):
             return False

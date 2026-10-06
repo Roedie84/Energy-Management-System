@@ -141,15 +141,20 @@ def test_herstel_heft_de_blokkade_op(make_coordinator, hass):
 
 
 def test_dezelfde_stand_wordt_niet_opnieuw_geschreven(make_coordinator, hass):
+    """v5.31.2: de eerste keer wordt altijd geschreven - ook als de select
+    er al op staat. Daarna niet meer, zolang het EMS het zelf schreef."""
     c = _opzet(make_coordinator, hass, "12", stand=OPTION_SMART)
     for _ in range(5):
         asyncio.run(c._async_apply_operation(OPTION_SMART))
-    assert _schrijfacties(hass) == []
+    assert len(_schrijfacties(hass)) == 1
     assert c.last_applied_operation == OPTION_SMART
 
 
 def test_handmatig_schrijft_alleen_wat_verandert(make_coordinator, hass):
     c = _opzet(make_coordinator, hass, "12", stand="manual", vermogen="-2400")
+    asyncio.run(c._async_apply_manual(-2400))
+    assert [x[0] for x in _schrijfacties(hass)] == ["select", "number"]
+    hass.services.calls.clear()
     asyncio.run(c._async_apply_manual(-2400))
     assert _schrijfacties(hass) == []
     asyncio.run(c._async_apply_manual(-1500))

@@ -30135,3 +30135,34 @@ Getoetst met de echte dagwaarden van module 1 en 2 uit de export van
 6 oktober.
 
 **Volledige testsuite**: 4620 tests, allemaal groen.
+
+
+## v5.31.2 — De accu stond op manual en deed niets
+
+Gemeld op 6 oktober 12:20: *"Modus accu staat op manual maar er gebeurt
+niets?"* Het apparaat meldde `acMode 1`, `inputLimit 0`, `outputLimit 0` bij
+30%. Daarna: *"Naar smart gezet, laden begon; daarna door EMS naar manual
+gebeurt er niets."*
+
+Oorzaak (sinds v5.29): het EMS schreef alleen wat afweek van de stand in Home
+Assistant. Bij de wissel naar `manual` ging de select wel, maar het vermogen
+niet - dat stond al op −2400, door Zendure hersteld na een herstart. De
+Zendure-manager start de handmatige stand pas met een vermogen, dus bleef de
+accu op 0 W. De opdrachtcontrole zag niets, want de select stond goed.
+
+Nu:
+- Na een nieuwe stand schrijft het EMS altijd ook het vermogen.
+- Alleen wat het EMS deze sessie **zelf** schreef, telt als "staat er al".
+  Een stand die er al stond (hersteld na een herstart, of door iemand anders
+  gezet) wordt opnieuw verstuurd.
+- Ook wat het EMS zelf schreef, wordt elke 10 minuten herhaald.
+- Een mislukte schrijfactie telt niet als geschreven.
+
+Bij een accu die offline is, blijft het EMS zwijgen (v5.29): dat staat los
+hiervan en verandert niet.
+
+**Verwachting bewust gewijzigd**: de gouden standaard toetst weer tegen de
+volledige opdrachten van v5.27.4 (de v5.29-filter is weg); twee v5.29-toetsen
+verwachten nu eerst één schrijfactie.
+
+**Volledige testsuite**: 4626 tests, allemaal groen.

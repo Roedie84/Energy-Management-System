@@ -14,22 +14,9 @@ from gouden_scenarios import SCENARIOS, draai
 
 GOUD = json.loads((Path(__file__).parent / "fixtures" / "gouden_v5274.json").read_text())
 
-# v5.29: een opdracht naar een entiteit die al op die waarde staat, wordt niet
-# meer verstuurd. De scenario's starten met select.op = smart en number.pow = 0.
-# Het besluit (stand, reden) is ongewijzigd; alleen het herhalen verdwijnt.
-# Verwachting bewust aangepast - de fixture zelf blijft zoals v5.27.4 hem schreef.
-BEGINSTAND = {"select.op": "smart", "number.pow": 0}
-
-
-def _verstuurd(opdrachten):
-    uit = []
-    for domein, dienst, data in opdrachten:
-        waarde = data.get("option", data.get("value"))
-        begin = BEGINSTAND.get(data.get("entity_id"))
-        if begin is not None and str(begin) == str(waarde):
-            continue
-        uit.append([domein, dienst, data])
-    return uit
+# v5.29 filterde hier opdrachten weg die "al zo stonden". Sinds v5.31.2 telt
+# alleen wat het EMS zelf schreef als "staat er al" - de scenario's starten
+# zonder eerdere opdrachten, dus alles wordt verstuurd, zoals in v5.27.4.
 
 
 @pytest.mark.parametrize("naam", sorted(SCENARIOS))
@@ -38,7 +25,7 @@ def test_productie_beslist_als_v5274(make_coordinator, hass, naam):
 
     assert nu["reden"] == GOUD[naam]["reden"]
     assert nu["stand"] == GOUD[naam]["stand"]
-    assert nu["opdrachten"] == _verstuurd(GOUD[naam]["opdrachten"])   # Zendure-stand en vermogen
+    assert nu["opdrachten"] == GOUD[naam]["opdrachten"]   # Zendure-stand en vermogen
 
 
 def test_de_gouden_standaard_dekt_alle_soorten_besluiten():
