@@ -1,9 +1,5 @@
-EMS v5.31.2 - de accu stond op manual en deed niets
+EMS v5.31.3 - "Komend schema" toont de dag
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
-
-WAT ER VERANDERT
-- Na een nieuwe stand schrijft het EMS altijd ook het vermogen.
-- Alleen wat het EMS zelf schreef telt als "staat er al"; een na een
-  herstart herstelde stand wordt opnieuw verstuurd.
-- Elke 10 minuten wordt de opdracht herhaald.
+Het dashboard volgt de nieuwe dashboard_template.yaml automatisch; heb je een
+eigen kopie (dashboards/energy_management_system_dashboard.yaml), vervang die.

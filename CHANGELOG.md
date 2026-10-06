@@ -30166,3 +30166,18 @@ volledige opdrachten van v5.27.4 (de v5.29-filter is weg); twee v5.29-toetsen
 verwachten nu eerst één schrijfactie.
 
 **Volledige testsuite**: 4626 tests, allemaal groen.
+
+
+## v5.31.3 — "Komend schema" toont de dag
+
+Gemeld op 6 oktober 18:38: *"Waarom maar tot 00:00?"* Het plan liep wel door
+tot morgen 23:45 (118 kwartieren; prijzen tot 8 oktober 00:00) en stond
+helemaal op smart. Dat werd één blok van 18:30 tot middernacht van **morgen**,
+maar de kaart toonde alleen het uur.
+
+Nu geeft elk blok `van_tekst` en `tot_tekst` mee, met de dag erbij als het
+niet vandaag is: "18:30 – morgen 24:00". Een eindtijd om middernacht heet
+"24:00" van de dag die dan afloopt. De tekst komt uit de code (met toetsen),
+niet uit het sjabloon; ook "Nu smart tot …" gebruikt hem.
+
+**Volledige testsuite**: 4630 tests, allemaal groen.

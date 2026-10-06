@@ -22151,6 +22151,31 @@ class EnergyManagementSystemCoordinator:
             )
         return plan
 
+    @staticmethod
+    def _plan_tijd_tekst(moment: datetime, vandaag, eind: bool = False) -> str:
+        """Een tijd voor de kaart, met de dag erbij als het niet vandaag is
+        (v5.31.3).
+
+        Gemeld op 6 oktober: "Waarom maar tot 00:00?" Het blok liep van
+        18:30 tot middernacht van MORGEN (8 oktober) - het hele plan stond op
+        smart - maar de kaart toonde alleen het uur. Een eindtijd van 00:00
+        hoort bij de dag die dan afloopt: "24:00", of "morgen 24:00".
+        """
+        lokaal = dt_util.as_local(moment) if moment.tzinfo else moment
+        dag = lokaal.date()
+        tekst = lokaal.strftime("%H:%M")
+        if eind and tekst == "00:00":
+            dag = dag - timedelta(days=1)
+            tekst = "24:00"
+        verschil = (dag - vandaag).days
+        if verschil == 0:
+            return tekst
+        if verschil == 1:
+            return f"morgen {tekst}"
+        if verschil == 2:
+            return f"overmorgen {tekst}"
+        return f"{lokaal.strftime('%d-%m')} {tekst}"
+
     def get_plan_blokken(self, now: datetime | None = None) -> list[dict]:
         """Het kwartierplan, samengevoegd tot blokken (v5.26).
 
@@ -22165,6 +22190,7 @@ class EnergyManagementSystemCoordinator:
         te veranderen.
         """
         blokken: list[dict] = []
+        vandaag = (now or dt_util.now()).date()
         rijen = self.get_quarter_plan(now)
         for rij in rijen or []:
             begin = dt_util.parse_datetime(str(rij.get("start") or ""))
@@ -22193,6 +22219,10 @@ class EnergyManagementSystemCoordinator:
                 "mode": b["mode"],
                 "start": b["_begin"].isoformat(),
                 "end": b["_eind"].isoformat(),
+                # v5.31.3: met de dag erbij - "18:30 tot 00:00" was in
+                # werkelijkheid tot morgen middernacht.
+                "van_tekst": self._plan_tijd_tekst(b["_begin"], vandaag),
+                "tot_tekst": self._plan_tijd_tekst(b["_eind"], vandaag, eind=True),
                 "min_price_per_kwh": round(b["min_price_per_kwh"], 4),
                 "max_price_per_kwh": round(b["max_price_per_kwh"], 4),
             }

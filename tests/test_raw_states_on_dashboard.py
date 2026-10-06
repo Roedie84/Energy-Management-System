@@ -136,7 +136,8 @@ def test_the_full_schedule_is_on_the_detail_page():
 
     kaart = next(k for k in kaarten if k.get("title") == "Komend schema")
 
-    for veld in ("start", "end", "mode", "max_price_per_kwh"):
+    # v5.31.3: van/tot als tekst met de dag erbij, in plaats van ruwe tijden.
+    for veld in ("van_tekst", "tot_tekst", "mode", "max_price_per_kwh"):
         assert f"'{veld}'" in kaart["content"], veld
 
 
