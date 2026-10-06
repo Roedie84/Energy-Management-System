@@ -30108,3 +30108,30 @@ Volgende stap, na enkele weken meten: beoordelen of de indeling klopt, en pas
 dan laten meetellen.
 
 **Volledige testsuite**: 4611 tests, allemaal groen.
+
+
+## v5.31.1 — Geen valse drift op de laadstand van een accumodule
+
+Gemeld op 6 oktober: *"Module 2 is niets mis mee?"* De diagnose meldde
+"Accumodule 2 loopt aanhoudend uit de pas (soc_afwijking_percent)", terwijl
+de celdelta 0,00 V was en de temperatuur gelijk aan module 3.
+
+Oorzaak: de laadstand komt per hele procent binnen, dus de afwijking van het
+gemiddelde van de andere modules springt in stappen van een half procent. De
+driftdetectie (CUSUM) telde alles boven 0,5% op. Een paar dagen +1 à +1,5%
+bracht module 2 op 5,5, boven de drempel van 5.
+
+- De speling voor de laadstand is nu 2,5%: een afwijking telt pas vanaf 3%
+  mee. Een module die echt capaciteit verliest, wijkt meerdere procenten af
+  en wordt nog steeds gezien.
+- Elke CUSUM onthoudt met welke speling en drempel hij is opgebouwd. Wijken
+  die af, dan wordt de dagelijkse geschiedenis met de nieuwe waarden opnieuw
+  doorgerekend. De valse drift van module 2 verdwijnt daardoor direct na de
+  update; de echte drift van module 1 (celspreiding) blijft staan. Alleen de
+laadstand wordt opnieuw doorgerekend; temperatuur en celdelta blijven zoals
+ze waren opgeslagen.
+
+Getoetst met de echte dagwaarden van module 1 en 2 uit de export van
+6 oktober.
+
+**Volledige testsuite**: 4620 tests, allemaal groen.

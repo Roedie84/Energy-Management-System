@@ -3094,7 +3094,13 @@ BATTERY_MODULE_CUSUM_SLACK_V = 0.005
 BATTERY_MODULE_CUSUM_THRESHOLD_V = 0.05
 BATTERY_MODULE_CUSUM_SLACK_C = 0.5
 BATTERY_MODULE_CUSUM_THRESHOLD_C = 5.0
-BATTERY_MODULE_CUSUM_SLACK_PERCENT = 0.5
+# v5.31.1: de laadstand komt per hele procent binnen, dus de afwijking van
+# het gemiddelde van de andere modules springt in stappen van een half
+# procent. Met 0,5% speling telde module 2 in oktober 2026 een paar dagen
+# +1 à +1,5% op tot "drift", terwijl de celdelta 0,00 V was. Een module die
+# echt capaciteit verliest wijkt meerdere procenten af: pas vanaf 3% telt
+# het mee.
+BATTERY_MODULE_CUSUM_SLACK_PERCENT = 2.5
 BATTERY_MODULE_CUSUM_THRESHOLD_PERCENT = 5.0
 
 # Hoeveel dagen geleerde geschiedenis per module/grootheid.

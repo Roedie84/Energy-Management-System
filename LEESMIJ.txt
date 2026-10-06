@@ -1,34 +1,20 @@
-EMS v5.31 - alle wijzigingen sinds v5.28.5 (bevat ook v5.29 en v5.30)
+EMS v5.31.1 - alleen de wijziging sinds v5.31
 
 TE KOPIEREN naar config/custom_components/energy_management_system/
     coordinator.py
     const.py
-    sensor.py
-    diagnostics.py
-    zendure_status.py         (nieuw, v5.29)
-    grootverbruikers.py       (nieuw, v5.31)
     manifest.json
-    dashboard_template.yaml
+    dashboard_template.yaml   (gaat altijd mee, ongewijzigd)
     bestandscontrole.json
 
 NAAR DE REPO
     README.md, CHANGELOG.md, LEESMIJ.txt
-    dashboards/energy_management_system_dashboard.yaml
-    tests/test_v531_grootverbruikers_schaduw.py (nieuw)
-    tests/test_v530_fietsen_kwartiercontrole.py (nieuw)
-    tests/test_v529_zendure_offline.py (nieuw)
-    tests/test_scheduled_charge_appliances.py
-    tests/test_v528_gouden_standaard.py
-    tests/test_grid_cheaper_than_battery.py
-    tests/test_notifications.py
+    tests/test_v5311_module_soc_drift.py (nieuw)
 
-Voor HACS: release met tag v5.31.
+Voor HACS: release met tag v5.31.1.
 
-v5.31 - grootverbruikers (schaduw)
-- Elk apparaat met een eigen vermogensmeting: minstens 3 minuten boven
-  1000 W telt als een keer gebruik. Na 3 keer de indeling kortlopend
-  (< 90 min) of aanhoudend.
-- Proefstand: kaart "Grootverbruikers (schaduw)". Stuurt niets.
-
-v5.30 - fietsladers elk kwartier controleren
-v5.29 - accu niet aanstuurbaar herkennen, niet herhalen wat al staat
+WAT ER VERANDERT
+Geen valse drift meer op de laadstand van een accumodule. Een
+SoC-afwijking telt pas vanaf 3% mee (was 0,5%). De opgeslagen drift van
+module 2 wordt direct na de herstart opnieuw doorgerekend en verdwijnt;
+de drift van module 1 (celspreiding) blijft.

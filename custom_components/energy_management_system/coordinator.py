@@ -29438,6 +29438,9 @@ class EnergyManagementSystemCoordinator:
         project: één laadpiek of een moment met direct zonlicht op één
         module mag een dagwaarde niet verslepen.
         """
+        # v5.31.1: een CUSUM die met andere parameters is opgebouwd, eerst
+        # opnieuw berekenen - anders blijft een oude valse drift staan.
+        self._herijk_module_cusums()
         modules = self._read_battery_modules()
         if not modules:
             self.battery_module_live = []
@@ -29587,8 +29590,46 @@ class EnergyManagementSystemCoordinator:
             )
         return None
 
+    def _herijk_module_cusums(self) -> None:
+        """Bouw een module-CUSUM opnieuw op als de parameters veranderden
+        (v5.31.1).
+
+        De speling en drempel worden bij elke CUSUM bewaard. Wijken die af
+        van de huidige, dan wordt de hele dagelijkse geschiedenis met de
+        nieuwe parameters opnieuw doorgerekend, dag voor dag zoals hij
+        destijds binnenkwam. Zo verdwijnt een valse drift meteen, en blijft
+        een echte drift staan.
+        """
+        # Een CUSUM van vóór v5.31.1 draagt geen parameters; die is
+        # opgebouwd met de waarden van toen. Alleen de laadstand is
+        # veranderd - de andere velden blijven zoals ze zijn.
+        vroeger = {"soc_afwijking_percent": [0.5, 5.0]}
+        for staat in (self.battery_module_health or {}).values():
+            for veld, cusum in list((staat.get("cusum") or {}).items()):
+                parameters = self._battery_module_cusum_parameters(veld)
+                if parameters is None:
+                    continue
+                opgebouwd = cusum.get("parameters") or vroeger.get(veld, list(parameters))
+                if list(opgebouwd) == list(parameters):
+                    cusum["parameters"] = list(parameters)
+                    continue
+                reeks = list((staat.get("geschiedenis") or {}).get(veld) or [])
+                staat["cusum"].pop(veld, None)
+                for dag in range(len(reeks)):
+                    self._update_battery_module_cusum(
+                        staat, veld, reeks[dag], geschiedenis=reeks[: dag + 1]
+                    )
+                staat["cusum"].setdefault(
+                    veld,
+                    {"accumulator": 0.0, "referentie": None, "drift": False, "streak": 0},
+                )["parameters"] = list(parameters)
+
     def _update_battery_module_cusum(
-        self, staat: dict, veld: str, dagwaarde: float
+        self,
+        staat: dict,
+        veld: str,
+        dagwaarde: float,
+        geschiedenis: list | None = None,
     ) -> None:
         """Klassieke eenzijdige CUSUM op de dagelijkse afwijking
         (v0.63.123).
@@ -29604,7 +29645,8 @@ class EnergyManagementSystemCoordinator:
             return
         slack, drempel = parameters
 
-        geschiedenis = staat["geschiedenis"].get(veld, [])
+        if geschiedenis is None:
+            geschiedenis = staat["geschiedenis"].get(veld, [])
         if len(geschiedenis) < CUSUM_MIN_HISTORY_FOR_REFERENCE:
             return
         if len(geschiedenis) > CUSUM_REFERENCE_EXCLUDE_RECENT_DAYS:
@@ -29620,6 +29662,7 @@ class EnergyManagementSystemCoordinator:
             {"accumulator": 0.0, "referentie": None, "drift": False, "streak": 0},
         )
         cusum["referentie"] = round(referentie, 4)
+        cusum["parameters"] = [slack, drempel]
 
         bijdrage = (dagwaarde - referentie) - slack
         cusum["accumulator"] = max(0.0, cusum["accumulator"] + max(0.0, bijdrage))
