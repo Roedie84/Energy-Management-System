@@ -1,11 +1,16 @@
-# Maakt bij elke tag v* automatisch een GitHub-release, met het stuk uit
-# CHANGELOG.md als omschrijving. HACS ziet de update dan meteen.
+# Maakt automatisch een GitHub-release zodra de versie in manifest.json
+# verandert op main, met tag v<versie> en het stuk uit CHANGELOG.md als
+# omschrijving. HACS ziet de update dan meteen; er hoeft niets met de hand.
 name: Release
 
 on:
   push:
-    tags:
-      - "v*"
+    branches:
+      - main
+    paths:
+      - custom_components/energy_management_system/manifest.json
+      - .github/workflows/release.yml
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -16,9 +21,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Omschrijving uit CHANGELOG.md
+      - name: Versie en omschrijving
+        id: versie
         run: |
-          versie="${GITHUB_REF_NAME#v}"
+          versie=$(python3 -c "import json;print(json.load(open('custom_components/energy_management_system/manifest.json'))['version'])")
+          echo "tag=v${versie}" >> "$GITHUB_OUTPUT"
           awk -v kop="## v${versie} " '
             index($0, kop) == 1 { bezig = 1; next }
             bezig && /^## v/ { exit }
@@ -26,12 +33,16 @@ jobs:
           ' CHANGELOG.md > release_notes.md
           [ -s release_notes.md ] || echo "Zie CHANGELOG.md." > release_notes.md
 
-      - name: Release maken
+      - name: Release maken (als hij er nog niet is)
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.versie.outputs.tag }}
         run: |
-          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 \
-            || gh release create "$GITHUB_REF_NAME" \
-                 --title "$GITHUB_REF_NAME" \
-                 --notes-file release_notes.md \
-                 --verify-tag
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG bestaat al."
+          else
+            gh release create "$TAG" \
+              --target "$GITHUB_SHA" \
+              --title "$TAG" \
+              --notes-file release_notes.md
+          fi
