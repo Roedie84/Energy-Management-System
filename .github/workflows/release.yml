@@ -1,0 +1,37 @@
+# Maakt bij elke tag v* automatisch een GitHub-release, met het stuk uit
+# CHANGELOG.md als omschrijving. HACS ziet de update dan meteen.
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Omschrijving uit CHANGELOG.md
+        run: |
+          versie="${GITHUB_REF_NAME#v}"
+          awk -v kop="## v${versie} " '
+            index($0, kop) == 1 { bezig = 1; next }
+            bezig && /^## v/ { exit }
+            bezig { print }
+          ' CHANGELOG.md > release_notes.md
+          [ -s release_notes.md ] || echo "Zie CHANGELOG.md." > release_notes.md
+
+      - name: Release maken
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 \
+            || gh release create "$GITHUB_REF_NAME" \
+                 --title "$GITHUB_REF_NAME" \
+                 --notes-file release_notes.md \
+                 --verify-tag
