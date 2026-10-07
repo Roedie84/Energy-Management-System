@@ -30489,3 +30489,26 @@ vergeten.
 
 De diagnose zei "config 70/0/1", de cockpit "koppelingen 71/71". De cockpit
 noemt nu "(1 slaapt)", zodat de twee niet tegenstrijdig lijken.
+
+## v5.39 — Monte Carlo met dezelfde extra's als de reserve
+
+Uit de controle van 7 oktober 18:05.
+
+De Monte-Carlo-tekortkans trok per uur een verbruik uit de geschiedenis, maar
+miste wat de vaste wandeling (`_segmenten_verbruik_zon`) daar bovenop telt:
+de P1-verschuiving (~50 W, ruim 0,9 kWh over een nacht van 18 uur), gepland en
+lopend witgoed, de begrensde live-verbruikscorrectie en vakantie. De docstring
+beloofde "exact dezelfde wandeling"; de kans lag daardoor structureel te laag
+naast de reserve.
+
+Nu draagt elk traject per uur hetzelfde vaste extra als de vaste wandeling
+(het verschil tussen haar verbruik en het geleerde uurgemiddelde - geen
+tweede definitie), en vakantie werkt als factor op de trekking. Het attribuut
+`vaste_extra_kwh` van de Monte Carlo-sensor toont hoeveel dat over de horizon
+is.
+
+De zon blijft bewust de gewone verwachting: de trekkingen uit de
+PV-afwijkingsgeschiedenis zijn verhoudingen tegenover die verwachting; met de
+voorzichtige band eronder zou de onzekerheid dubbel tellen.
+
+Adviserend, zoals altijd: stuurt niets.

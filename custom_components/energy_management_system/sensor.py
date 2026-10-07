@@ -1725,6 +1725,8 @@ class MonteCarloAdvisorySensor(SensorEntity):
             ),
             "p90_diepste_tekort_kwh": self._coordinator.monte_carlo_p90_deficit_kwh,
             "p10_diepste_tekort_kwh": self._coordinator.monte_carlo_p10_deficit_kwh,
+            # v5.39: vaste extra's (witgoed, P1-verschuiving, live-correctie) per traject
+            "vaste_extra_kwh": getattr(self._coordinator, "monte_carlo_extra_kwh", None),
             "aantal_simulaties": self._coordinator.monte_carlo_simulations_run,
             "uren_gesimuleerd": self._coordinator.monte_carlo_hours_simulated,
             "note": self._coordinator.monte_carlo_note,

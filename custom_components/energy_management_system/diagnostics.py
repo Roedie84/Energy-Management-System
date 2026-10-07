@@ -1327,6 +1327,7 @@ async def async_get_config_entry_diagnostics(
             ),
             "monte_carlo_p90_deficit_kwh": coordinator.monte_carlo_p90_deficit_kwh,
             "monte_carlo_p10_deficit_kwh": coordinator.monte_carlo_p10_deficit_kwh,
+            "monte_carlo_extra_kwh": getattr(coordinator, "monte_carlo_extra_kwh", None),
             "monte_carlo_shortfall_probability_percent": (
                 coordinator.monte_carlo_shortfall_probability_percent
             ),

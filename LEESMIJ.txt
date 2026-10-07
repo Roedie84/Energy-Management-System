@@ -1,7 +1,6 @@
-EMS v5.38 - tellingen die kloppen
+EMS v5.39 - Monte Carlo met dezelfde extra's als de reserve
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
-Stuurt niet anders. De tekortdag-sensor laat zien wat de lopende nacht echt
-bijkocht, oude tekortnachten hebben weer een kWh-waarde, de eigen
-accustekker staat niet meer bij de grootverbruikers en de cockpit noemt
-slapende koppelingen.
+Stuurt niet anders. De Monte-Carlo-tekortkans telt nu ook de P1-verschuiving,
+gepland en lopend witgoed, de live-correctie en vakantie mee, net als de
+reserve. Het attribuut vaste_extra_kwh laat zien hoeveel dat scheelt.

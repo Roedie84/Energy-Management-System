@@ -33120,6 +33120,9 @@ class EnergyManagementSystemCoordinator:
         calculation does, each trajectory drawing one random historical
         sample per hour (with replacement) instead of using the median,
         producing a spread of plausible outcomes instead of one number.
+        Since v5.39 each trajectory also carries the same fixed extras as
+        the deterministic walk (`_monte_carlo_extras`): P1 shift, planned
+        and running appliances, the capped live correction and vacation.
 
         Deliberately doesn't invent occupancy or weather randomness on
         top - the PV bias history already implicitly reflects weather
@@ -33138,6 +33141,7 @@ class EnergyManagementSystemCoordinator:
         self.monte_carlo_median_deficit_kwh = None
         self.monte_carlo_p90_deficit_kwh = None
         self.monte_carlo_p10_deficit_kwh = None
+        self.monte_carlo_extra_kwh = None
         self.monte_carlo_shortfall_probability_percent = None
         self.monte_carlo_simulations_run, self.monte_carlo_hours_simulated = 0, 0
 
@@ -33169,35 +33173,17 @@ class EnergyManagementSystemCoordinator:
             return
         self.monte_carlo_hours_simulated = len(segments)
 
-        deepest_deficits = []
-        for _ in range(MONTE_CARLO_SIMULATIONS):
-            cumulative_deficit = 0.0
-            max_deficit = 0.0
-            for hour, fraction_hours, pv_base_kwh in segments:
-                samples = self.hourly_consumption_profile.get(hour)
-                if samples:
-                    consumption_kw = random.choice(samples)
-                else:
-                    consumption_kw = self.learned_hourly_avg_kw(hour) or 0.0
-                consumption_kwh = consumption_kw * fraction_hours
+        # v5.39: dezelfde extra's als de vaste wandeling. De docstring
+        # belooft "exact dezelfde wandeling", maar de trekkingen misten wat
+        # `_segmenten_verbruik_zon` bovenop het geleerde uurprofiel telt.
+        vakantie_factor, extras = self._monte_carlo_extras(
+            now, cheap_block_start, segments
+        )
+        self.monte_carlo_extra_kwh = round(sum(extras), 3)
 
-                bias_samples = self.pv_hourly_bias_history.get(
-                    self._utc_uur_van_lokaal(hour)
-                )
-                if bias_samples:
-                    bias = random.choice(bias_samples)
-                else:
-                    bias = self.learned_pv_hourly_ratio(self._utc_uur_van_lokaal(hour))
-                    if bias is None:
-                        bias = 1.0
-                pv_kwh = pv_base_kwh * bias * efficiency_factor
-
-                cumulative_deficit = max(
-                    0.0, cumulative_deficit + consumption_kwh - pv_kwh
-                )
-                max_deficit = max(max_deficit, cumulative_deficit)
-            deepest_deficits.append(max_deficit)
-
+        deepest_deficits = self._monte_carlo_trajecten(
+            segments, extras, vakantie_factor, efficiency_factor
+        )
         deepest_deficits.sort()
         n = len(deepest_deficits)
         self.monte_carlo_simulations_run = n
@@ -33234,6 +33220,85 @@ class EnergyManagementSystemCoordinator:
             "PV-voorspellingsfout-geschiedenis. Stuurt nooit een "
             "commando en past de werkelijke reserve-marge niet aan."
         )
+
+    def _monte_carlo_trajecten(
+        self, segments: list, extras: list, vakantie_factor: float,
+        efficiency_factor: float,
+    ) -> list[float]:
+        """De gesimuleerde trajecten: per traject het diepste tekort (v5.39).
+
+        Uit `_run_monte_carlo_simulation` gehaald om die onder de grens te
+        houden; inhoudelijk ongewijzigd, plus de vaste extra's per segment.
+        """
+        deepest_deficits = []
+        for _ in range(MONTE_CARLO_SIMULATIONS):
+            cumulative_deficit = 0.0
+            max_deficit = 0.0
+            for (hour, fraction_hours, pv_base_kwh), extra_kwh in zip(
+                segments, extras
+            ):
+                samples = self.hourly_consumption_profile.get(hour)
+                if samples:
+                    consumption_kw = random.choice(samples)
+                else:
+                    consumption_kw = self.learned_hourly_avg_kw(hour) or 0.0
+                consumption_kwh = (
+                    consumption_kw * fraction_hours * vakantie_factor + extra_kwh
+                )
+
+                bias_samples = self.pv_hourly_bias_history.get(
+                    self._utc_uur_van_lokaal(hour)
+                )
+                if bias_samples:
+                    bias = random.choice(bias_samples)
+                else:
+                    bias = self.learned_pv_hourly_ratio(self._utc_uur_van_lokaal(hour))
+                    if bias is None:
+                        bias = 1.0
+                pv_kwh = pv_base_kwh * bias * efficiency_factor
+
+                cumulative_deficit = max(
+                    0.0, cumulative_deficit + consumption_kwh - pv_kwh
+                )
+                max_deficit = max(max_deficit, cumulative_deficit)
+            deepest_deficits.append(max_deficit)
+        return deepest_deficits
+
+    def _monte_carlo_extras(
+        self, now: datetime, eind: datetime, segments: list
+    ) -> tuple[float, list[float]]:
+        """Vaste extra's per uursegment voor Monte Carlo (v5.39).
+
+        De vaste wandeling (`_segmenten_verbruik_zon`) telt bovenop het
+        geleerde uurprofiel: vakantie, de live-verbruikscorrectie (begrensd),
+        gepland en lopend witgoed en de P1-verschuiving. De trekkingen misten
+        dat, waardoor Monte Carlo het tekort structureel lager inschatte dan
+        de reserve waarmee hij vergeleken wordt.
+
+        Het extra per segment is precies het verschil tussen het verbruik van
+        de vaste wandeling en het (vakantie-gecorrigeerde) uurgemiddelde -
+        geen tweede definitie. Vakantie is een factor op de trekking zelf.
+
+        De zon blijft bewust de gewone verwachting: de trekkingen uit
+        `pv_hourly_bias_history` zijn verhoudingen werkelijk/verwachting
+        tegenover die gewone verwachting. Met de voorzichtige band eronder
+        zou de onzekerheid dubbel tellen.
+        """
+        vakantie_factor = self._vacation_adjusted_kwh(1.0)
+        nul = [0.0] * len(segments)
+        vast = self._segmenten_verbruik_zon(now, eind, veilig=False)
+        if not vast:
+            return vakantie_factor, nul
+        extras = []
+        for (hour, fraction_hours, _pv), (verbruik_kwh, _zon) in zip(segments, vast):
+            avg_kw = self.learned_hourly_avg_kw(hour)
+            if avg_kw is None:
+                return vakantie_factor, nul
+            extras.append(
+                max(0.0, verbruik_kwh - avg_kw * fraction_hours * vakantie_factor)
+            )
+        extras += [0.0] * (len(segments) - len(extras))
+        return vakantie_factor, extras
 
     def _monte_carlo_horizon_kiezen(
         self, now: datetime, cheap_block_start: datetime | None
