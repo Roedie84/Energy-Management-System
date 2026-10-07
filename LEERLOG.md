@@ -2,7 +2,7 @@
 
 Doorlopende leerronde (elke 4 uur). Alleen gemeten getallen; KPI's in KPI.csv, referenties in BASELINE.md, voorstellen in VOORSTELLEN.md.
 
-## 07-10 23:30 · tussenronde (eerste ronde, baseline uit ~10 dagen historie)
+## 07-10 23:15 · tussenronde (eerste ronde, baseline uit ~10 dagen historie)
 - Gemeten: PV, net, accu per dag 28-09..06-10 (statistics); PV-voorspelling 31 dagen (pv_forecast_accuracy); tekortnachten 7 n; uurlijkse teruglevering 's nachts.
 - PV-voorspelling: MAE 10,5% (30 d) → 5,2% (7 d); bias −4,4% / −1,7% (voorspelling iets te hoog). Geen duidelijk verschil bewolkt >70% vs ≤70% (bias −6,8 vs −4,6, n=16/13).
 - Tekortnachten 4 van 7 (5,68 kWh): 2 economisch, 2 planning, 0 capaciteit. Reserve te hoog: 0 van 7.
@@ -13,4 +13,10 @@ Doorlopende leerronde (elke 4 uur). Alleen gemeten getallen; KPI's in KPI.csv, r
 - Niet gemeten (meetbaarheid): uurlijkse PV-voorspelling per uur (geen historie van uurvoorspelling in attributen gevonden; volgt), kwartierbeslissingen tegen achteraf-optimum (nog geen replay gebouwd), SoC-voorspelling tegen werkelijk.
 - Geen release (tussenronde; 10 releases vandaag door andere sessies, v5.44 geïnstalleerd).
 
-laatste ronde: 07-10 23:30, gemeten t/m 07-10 23:00
+laatste ronde: 07-10 23:15, gemeten t/m 07-10 23:00
+
+## 07-10 23:40 · tussenronde (handmatig gestart)
+- Correctie: de vorige ronde was om 23:15, niet 23:30 (tijdstempels aangepast).
+- Sinds 23:15 geen nieuwe gebeurtenis om te meten; geen release.
+
+laatste ronde: 07-10 23:40, gemeten t/m 07-10 23:40

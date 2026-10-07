@@ -69,11 +69,11 @@ datumtijd,type,kpi,waarde,n,opmerking
 2026-10-06,DAG,ems_nacht_export_00_07_kwh,0.432,7,uren 00-07; smart-modus P1-doel ~-50W
 2026-10-06,DAG,ems_pv_afwijking_pct,10.7,1,(werkelijk-voorsp)/voorsp; bewolking 33.1%; bron pv_forecast_accuracy
 2026-10-06,DAG,ems_tekort_nacht_kwh,0,1,geen tekort
-2026-10-07 23:30,TUSSEN,ems_pv_mae_pct_30d,10.5,31,bias -4.4
-2026-10-07 23:30,TUSSEN,ems_pv_mae_pct_7d,5.2,7,bias -1.7
-2026-10-07 23:30,TUSSEN,ems_tekortnachten_7d,4,7,"2 economisch, 2 planning, 0 capaciteit; 5.68 kWh"
-2026-10-07 23:30,TUSSEN,ems_reserve_te_hoog_7d,0,7,reserve_excess_days
-2026-10-07 23:30,TUSSEN,ems_nacht_export_wh_per_uur_mediaan,60,50,"uren 00-07 met accu-ontlading, 28-09..07-10"
-2026-10-07 23:30,TUSSEN,ems_nachtverbruik_venster_w,306,7,learned_night_consumption mediaan
-2026-10-07 23:30,TUSSEN,ems_mc_tekortkans_pct,100.0,1000,verwacht tekort 0.8 kWh economisch; werkelijke freq 57.1% 7n
-2026-10-07 23:30,TUSSEN,ems_versie,5.44,1,geinstalleerd = beschikbaar
+2026-10-07 23:15,TUSSEN,ems_pv_mae_pct_30d,10.5,31,bias -4.4
+2026-10-07 23:15,TUSSEN,ems_pv_mae_pct_7d,5.2,7,bias -1.7
+2026-10-07 23:15,TUSSEN,ems_tekortnachten_7d,4,7,"2 economisch, 2 planning, 0 capaciteit; 5.68 kWh"
+2026-10-07 23:15,TUSSEN,ems_reserve_te_hoog_7d,0,7,reserve_excess_days
+2026-10-07 23:15,TUSSEN,ems_nacht_export_wh_per_uur_mediaan,60,50,"uren 00-07 met accu-ontlading, 28-09..07-10"
+2026-10-07 23:15,TUSSEN,ems_nachtverbruik_venster_w,306,7,learned_night_consumption mediaan
+2026-10-07 23:15,TUSSEN,ems_mc_tekortkans_pct,100.0,1000,verwacht tekort 0.8 kWh economisch; werkelijke freq 57.1% 7n
+2026-10-07 23:15,TUSSEN,ems_versie,5.44,1,geinstalleerd = beschikbaar
