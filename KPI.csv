@@ -77,3 +77,10 @@ datumtijd,type,kpi,waarde,n,opmerking
 2026-10-07 23:15,TUSSEN,ems_nachtverbruik_venster_w,306,7,learned_night_consumption mediaan
 2026-10-07 23:15,TUSSEN,ems_mc_tekortkans_pct,100.0,1000,verwacht tekort 0.8 kWh economisch; werkelijke freq 57.1% 7n
 2026-10-07 23:15,TUSSEN,ems_versie,5.44,1,geinstalleerd = beschikbaar
+2026-10-07 23:45,TUSSEN,ems_regelverschuiving_w,50,1,in reserve sinds v5.20 (gacs_zelfbeoordeling)
+2026-10-07 23:45,TUSSEN,ems_planningtekort_na_piekverkoop,2,2,"03-10 1.37 kWh verkocht -> 0.68 tekort; 04-10 5.14 -> 1.68; hersteld v5.28.4"
+2026-10-07 23:45,TUSSEN,ems_piekverkoop_sinds_v5.28.4,0,4,"expensive_quarter_peak 0x sinds 04-10 10:32; 4 nachten zonder tekort"
+2026-10-07 23:45,TUSSEN,ems_mc_brier_22u,0.038,8,"30-09..07-10; tekortnachten 98/100/45/97%, overige 0%"
+2026-10-07 23:45,TUSSEN,ems_pv_uurratio_middag,0.94,7,"mediaan 09-13 UTC werkelijk/Solcast; 06-07 UTC 0.52-0.69; 15-17 UTC 0.55-0.69"
+2026-10-07 23:45,TUSSEN,ems_pv_mediaanfout_solcast_pct,6.1,13,tweede voorspelling 31.6%
+2026-10-07 23:45,TUSSEN,ems_verwacht_tekort_nacht_kwh,0.31,1,"nacht ->08-10: beschikbaar 4.23, nodig 4.54; MC 41.7%"

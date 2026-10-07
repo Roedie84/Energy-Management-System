@@ -20,3 +20,15 @@ laatste ronde: 07-10 23:15, gemeten t/m 07-10 23:00
 - Sinds 23:15 geen nieuwe gebeurtenis om te meten; geen release.
 
 laatste ronde: 07-10 23:40, gemeten t/m 07-10 23:40
+
+## 07-10 23:45 · tussenronde
+- **Correctie 23:15:** de −50 W op de P1 ("nachtlek") is een bewuste instelling (Zendure regelt op P1+50) en zit sinds v5.20 in de reserve (`regelverschuiving_w` = 50, live gecontroleerd in gacs_zelfbeoordeling); de tekorttelling telt hem niet als verkoop (v5.42). Geen schending HARDE REGEL. L-EMS-001 vervallen.
+- H-EMS-1 getoetst met uurdata 29-09..07-10 (9 nachten): beide planning-tekortnachten volgden op avondverkoop via `expensive_quarter_peak` onder de reserve (03-10: 1,37 kWh → 0,68 kWh tekort; 04-10: 5,14 kWh, vanaf 19:55 beschikbaar < reserve → 1,68 kWh tekort). Al gevonden en hersteld in v5.28.4 (04-10 10:32). H-EMS-1 verworpen; oorzaak = piekregel.
+- Effect v5.28.4 gemeten: sinds 04-10 10:32 0× `expensive_quarter_peak`; 4 nachten (05-10..07-10 + 04→05) zonder tekort; avondverkoop 04-10 alleen boven de reserve (`expensive_quarter`).
+- MC-kalibratie (nieuw): tekortkans om 22:00 vs uitkomst, 8 nachten 30-09..07-10: tekortnachten 98/100/45/97%, overige 0/0/0/0% → Brier 0,038 (n=8). Goed onderscheid, n klein → H-EMS-3.
+- PV per uur (meetbaar via attribuut `profile` van pv_hourly_forecast_bias): werkelijk/Solcast mediaan 0,90-0,98 rond de middag, 0,52-0,69 om 06-07 en 15-17 UTC. De integratie leert en gebruikt dit profiel al zelf. Tweede voorspelling 13 d: Solcast 6,1% mediaanfout, tweede bron 31,6%.
+- Lopend vannacht (→08-10): beschikbaar 4,23 kWh, nodig 4,54 kWh tot blok 12:15 → verwacht tekort 0,31 kWh; MC 41,7%. Toetsen in de dagafsluiting van 09-10.
+- Meetbaarheid: MC-tekortkans heeft geen state_class → geen lange statistiek, alleen ~10 d historie. Kandidaat (zelf te bouwen, dagafsluiting): MC-waarde om 22:00 in het dagrecord bewaren.
+- Geen release (tussenronde, geen acute bug).
+
+laatste ronde: 07-10 23:45, gemeten t/m 07-10 23:44
