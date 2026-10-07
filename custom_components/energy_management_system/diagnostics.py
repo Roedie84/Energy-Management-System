@@ -1328,6 +1328,12 @@ async def async_get_config_entry_diagnostics(
             "monte_carlo_p90_deficit_kwh": coordinator.monte_carlo_p90_deficit_kwh,
             "monte_carlo_p10_deficit_kwh": coordinator.monte_carlo_p10_deficit_kwh,
             "monte_carlo_extra_kwh": getattr(coordinator, "monte_carlo_extra_kwh", None),
+            "monte_carlo_deterministisch_kwh": getattr(
+                coordinator, "monte_carlo_deterministisch_kwh", None
+            ),
+            "monte_carlo_lange_extra_kwh": getattr(
+                coordinator, "monte_carlo_lange_extra_kwh", None
+            ),
             "monte_carlo_shortfall_probability_percent": (
                 coordinator.monte_carlo_shortfall_probability_percent
             ),
@@ -1338,6 +1344,10 @@ async def async_get_config_entry_diagnostics(
             "monte_carlo_vergelijking": _veilig(
                 "get_monte_carlo_vergelijking",
                 coordinator.get_monte_carlo_vergelijking,
+            ),
+            # v5.40: tekortnachten per soort (capaciteit of planning).
+            "tekortsoorten": _veilig(
+                "get_tekortsoorten", coordinator.get_tekortsoorten
             ),
             "kalman_soc_filtered_kwh": coordinator.kalman_soc_filtered_kwh,
             "kalman_soc_raw_kwh": coordinator.kalman_soc_raw_kwh,

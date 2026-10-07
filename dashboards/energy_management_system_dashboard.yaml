@@ -2144,7 +2144,7 @@ views:
           action: more-info
       - type: custom:mushroom-template-card
         primary: €{{ states('sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing') }}
-        secondary: Besparing vandaag
+        secondary: 'Besparing vandaag, incl. accu-inhoud{% if state_attr(''sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing'', ''soc_correctie_toegepast'') %} · zonder correctie €{{ state_attr(''sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing'', ''besparing_ongecorrigeerd'') }}{% endif %}'
         icon: mdi:cash-check
         icon_color: green
         entity: sensor.woonkamer_energy_management_system_besparing_t_o_v_zonder_accu_sturing
@@ -2486,9 +2486,9 @@ views:
       cards:
       - type: custom:mushroom-template-card
         primary: '{{ states(''sensor.woonkamer_energy_management_system_reserve_shortfall_days'') }}'
-        secondary: Netimport-dagen (7d)
+        secondary: 'Netimport-dagen (7d) · {{ state_attr(''sensor.woonkamer_energy_management_system_reserve_shortfall_days'', ''tekortnachten_planning'') or 0 }} planning / {{ state_attr(''sensor.woonkamer_energy_management_system_reserve_shortfall_days'', ''tekortnachten_capaciteit'') or 0 }} capaciteit'
         icon: mdi:alert-outline
-        icon_color: '{{ ''red'' if states(''sensor.woonkamer_energy_management_system_reserve_shortfall_days'') | int(0) > 0 else ''grey'' }}'
+        icon_color: '{{ ''red'' if (state_attr(''sensor.woonkamer_energy_management_system_reserve_shortfall_days'', ''tekortnachten_planning'') or 0) | int(0) > 0 else (''amber'' if states(''sensor.woonkamer_energy_management_system_reserve_shortfall_days'') | int(0) > 0 else ''grey'') }}'
         entity: sensor.woonkamer_energy_management_system_reserve_shortfall_days
         tap_action:
           action: more-info

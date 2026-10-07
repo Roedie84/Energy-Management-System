@@ -1727,6 +1727,14 @@ class MonteCarloAdvisorySensor(SensorEntity):
             "p10_diepste_tekort_kwh": self._coordinator.monte_carlo_p10_deficit_kwh,
             # v5.39: vaste extra's (witgoed, P1-verschuiving, live-correctie) per traject
             "vaste_extra_kwh": getattr(self._coordinator, "monte_carlo_extra_kwh", None),
+            # v5.40: het deterministische diepste tekort van de reserve, waar
+            # de trajecten omheen liggen - de twee naast elkaar.
+            "deterministisch_diepste_tekort_kwh": getattr(
+                self._coordinator, "monte_carlo_deterministisch_kwh", None
+            ),
+            "lange_horizon_extra_kwh": getattr(
+                self._coordinator, "monte_carlo_lange_extra_kwh", None
+            ),
             "aantal_simulaties": self._coordinator.monte_carlo_simulations_run,
             "uren_gesimuleerd": self._coordinator.monte_carlo_hours_simulated,
             "note": self._coordinator.monte_carlo_note,
@@ -2703,6 +2711,14 @@ class CounterfactualSavingsSensor(SensorEntity, RestoreEntity):
 
     @property
     def native_value(self) -> float:
+        # v5.40: gecorrigeerd voor wat er sinds het begin van de dag in de
+        # accu bij kwam of eruit ging (`get_savings_correction`). Gemeld:
+        # 's avonds -0,70 euro, terwijl de energie die eerder geladen was nog
+        # in de accu zat en niet gewaardeerd werd. Zonder beginstand of
+        # waarde per kWh het rauwe cijfer.
+        correctie = self._coordinator.get_savings_correction() or {}
+        if correctie.get("correctie_beschikbaar"):
+            return correctie["besparing_gecorrigeerd_eur"]
         return round(
             self._coordinator.counterfactual_cost_today_eur
             - self._coordinator.actual_cost_today_eur,
@@ -2723,6 +2739,9 @@ class CounterfactualSavingsSensor(SensorEntity, RestoreEntity):
             "tegenfeitelijke_kosten_vandaag_eur": round(
                 c.counterfactual_cost_today_eur, 2
             ),
+            # v5.40: de toestand is gecorrigeerd voor de accu-inhoud; het
+            # rauwe dagcijfer en de correctie staan hier.
+            **self._accu_correctie(),
             "werkelijke_kosten_deze_maand_eur": round(
                 c.actual_cost_current_month_eur, 2
             ),
@@ -2745,8 +2764,36 @@ class CounterfactualSavingsSensor(SensorEntity, RestoreEntity):
                 "Tegenfeitelijk scenario: zelfde PV-opbrengst als nu, maar "
                 "geen accu-sturing (accu-vermogen bij de netmeter-aflezing "
                 "opgeteld) - beide scenario's tegen dezelfde dynamische "
-                "prijs afgerekend."
+                "prijs afgerekend. De dagwaarde is gecorrigeerd voor de "
+                "accu-inhoud: (beschikbare energie nu - bij het begin van de "
+                "dag) x wat een kWh nu waard is (de terugleverwaarde; zolang "
+                "salderen geldt de inkoopprijs plus premie). Laden telt op "
+                "het moment zelf als kosten en de opbrengst volgt pas bij het "
+                "ontladen; zonder correctie leek de besparing 's avonds "
+                "negatief. Het rauwe cijfer staat in besparing_ongecorrigeerd. "
+                "Maand- en all-time-totalen zijn rauw."
             ),
+        }
+
+    def _accu_correctie(self) -> dict:
+        """Rauw dagcijfer en accucorrectie als attributen (v5.40)."""
+        correctie = self._coordinator.get_savings_correction() or {}
+        beschikbaar = bool(correctie.get("correctie_beschikbaar"))
+        return {
+            "besparing_ongecorrigeerd": correctie.get("besparing_vandaag_eur"),
+            "soc_correctie_eur": (
+                correctie.get("voorraadwaarde_eur") if beschikbaar else None
+            ),
+            "opgeslagen_kwh_verschil": (
+                correctie.get("voorraadverschil_kwh") if beschikbaar else None
+            ),
+            "accu_bij_dagbegin_kwh": correctie.get("accu_bij_dagbegin_kwh"),
+            "kwh_waarde_nu_eur": (
+                self._coordinator.current_feedin_value_eur_per_kwh
+                if beschikbaar
+                else None
+            ),
+            "soc_correctie_toegepast": beschikbaar,
         }
 
     @_store_wint
@@ -3189,6 +3236,9 @@ class ReserveShortfallSensor(SensorEntity, RestoreEntity):
             "detected_today_so_far": self._coordinator._shortfall_detected_today,
             # v5.38: wat wel beslist - de lopende nacht (22:00-09:00).
             **self._coordinator.tekortnacht_tot_nu(),
+            # v5.40: capaciteit (de accu was vol, het huis vroeg meer) of
+            # planning (er was ruimte of kans). Alleen planning is LET OP.
+            **self._coordinator.get_tekortsoorten(),
         }
 
     # v4.1: geen `_store_wint` - deze sensor VOEGT SAMEN (vereniging van

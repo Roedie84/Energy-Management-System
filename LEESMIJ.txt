@@ -1,6 +1,8 @@
-EMS v5.39 - Monte Carlo met dezelfde extra's als de reserve
+EMS v5.40 - Monte Carlo op het echte tekort, capaciteit tegenover planning, besparing met accu-inhoud
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
-Stuurt niet anders. De Monte-Carlo-tekortkans telt nu ook de P1-verschuiving,
-gepland en lopend witgoed, de live-correctie en vakantie mee, net als de
-reserve. Het attribuut vaste_extra_kwh laat zien hoeveel dat scheelt.
+Stuurt niet anders. Monte Carlo ligt nu rond het diepste tekort van de reserve
+(attribuut deterministisch_diepste_tekort_kwh ernaast). Een tekortnacht waarin
+de accu vol was en niets verkocht, telt als capaciteit en zet de cockpit
+niet meer op LET OP. De dagbesparing telt de energie mee die nog in de accu zit
+(besparing_ongecorrigeerd staat als attribuut).

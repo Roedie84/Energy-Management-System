@@ -30512,3 +30512,78 @@ PV-afwijkingsgeschiedenis zijn verhoudingen tegenover die verwachting; met de
 voorzichtige band eronder zou de onzekerheid dubbel tellen.
 
 Adviserend, zoals altijd: stuurt niets.
+
+## v5.40 — Monte Carlo op het echte tekort, capaciteit tegenover planning, besparing met accu-inhoud
+
+Uit de controle van 7 oktober 20:24.
+
+### 1. Monte Carlo gecentreerd op het deterministische diepste tekort
+
+Om 20:24 gaf Monte Carlo een mediaan van 4,12 kWh en 0% tekortkans, terwijl
+de planning een diepste tekort van 6,11 kWh rekende tegen 5,96 kWh
+beschikbaar - en 4 van de 7 nachten tekort kwamen. Na v5.39 bleven er drie
+verschillen met de wandeling van de reserve:
+
+- **De lange horizon ontbrak.** Sinds v3.99.18 telt de reserve het tekort na
+  het goedkope blok mee (`lange_horizon_extra_kwh`, die avond ~1,7 kWh).
+  Monte Carlo liep alleen tot het blok. Dit was het grootste deel van het
+  verschil.
+- **De gewone zonverwachting in plaats van de voorzichtige.** De reserve
+  rekent met de band (v4.1), Monte Carlo met het midden.
+- **De zonverhouding telde dubbel.** De zonschatting past de mediane
+  uurverhouding al toe; de trekking vermenigvuldigde daar nog een verhouding
+  overheen.
+
+Nu is het midden van elk traject letterlijk de wandeling van de reserve
+(`_segmenten_verbruik_zon`, voorzichtige zon) plus de lange horizon, en
+trekt Monte Carlo per uur alleen de AFWIJKING: verbruik ten opzichte van de
+mediaan van dat uur, zon ten opzichte van de mediane verhouding. Zonder
+spreiding valt de mediaan precies op het deterministische getal (getoetst).
+Nieuwe attributen op de Monte-Carlo-sensor: `deterministisch_diepste_tekort_kwh`
+en `lange_horizon_extra_kwh`, naast de mediaan. Adviserend, stuurt niets.
+
+### 2. Tekort door capaciteit of door planning
+
+De cockpit ging naar LET OP bij elke tekortnacht, ook als de accu vol was en
+het huis simpelweg meer vroeg dan erin past. Nu wordt elke nacht ingedeeld:
+
+- **capaciteit** - de accu is sinds 09:00 vol geweest (bovengrens min
+  `TEKORT_VOL_MARGE_PROCENT`) en stuurde daarna vrijwel niets naar het net
+  (hooguit `SHORTFALL_MIN_NETIMPORT_KWH`), of het diepste tekort is groter
+  dan wat er tussen onder- en bovengrens past. De sturing kon niets doen:
+  het huis gaat voor en energie onder de reserve wordt nooit verkocht.
+- **planning** - de accu had ruimte of kans (niet vol, of wel vol en daarna
+  verkocht) en kwam toch tekort.
+
+Alleen planningstekorten zijn nog een aandachtspunt (LET OP). Een
+capaciteitstekort staat bij de informatieve punten. Een verwacht tekort
+tot het goedkope blok wordt op dezelfde manier ingedeeld; de nachtmelding
+zegt erbij als het om capaciteit gaat. Nachten van vóór v5.40 hebben geen
+soort en tellen als planning (`onbekend`) - ze lopen binnen een week uit
+het venster.
+
+Nieuwe attributen op de tekortdagen-sensor en de Monte-Carlo-sensor:
+`tekort_soort_per_nacht`, `tekortnachten_capaciteit`,
+`tekortnachten_planning` en `verwacht_tekort`. Het dagrecord krijgt
+`tekort_soort`. De sturing en de zelfcorrigerende marge veranderen niet.
+
+### 3. Dagbesparing gecorrigeerd voor de accu-inhoud
+
+"Besparing t.o.v. zonder accu-sturing" stond 's avonds op -0,70 euro, deels
+omdat energie die eerder geladen was en nog in de accu zat niet werd
+gewaardeerd. De correctie bestond al sinds v1.52.0 (`get_savings_correction`),
+maar de sensor toonde het rauwe cijfer. Nu is de toestand:
+
+    rauw + (beschikbaar nu - beschikbaar bij dagbegin) x waarde per kWh nu
+
+met als waarde per kWh de bestaande terugleverwaarde
+(`current_feedin_value_eur_per_kwh`; zolang salderen geldt de inkoopprijs
+plus premie). Nieuwe attributen: `besparing_ongecorrigeerd`,
+`soc_correctie_eur`, `opgeslagen_kwh_verschil`, `accu_bij_dagbegin_kwh`,
+`kwh_waarde_nu_eur` en `soc_correctie_toegepast`. De beginstand wordt bij de
+dagwissel bewaard (overleeft een herstart); was hij er op dat moment even
+niet, dan de eerste meting in het eerste uur. Maand- en all-time-totalen
+blijven rauw.
+
+Dashboard: de besparingskaart toont het cijfer zonder correctie erbij, de
+kaart met netimport-dagen splitst planning en capaciteit.

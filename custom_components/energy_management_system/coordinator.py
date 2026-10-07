@@ -526,6 +526,9 @@ from .const import (
     BATTERY_NIGHT_SHORTFALL_MIN_FRACTION,
     BATTERY_NIGHT_SHORTFALL_MIN_KWH,
     MONTE_CARLO_TERUGVAL_UUR,
+    TEKORT_VOL_MARGE_PROCENT,
+    TEKORTSOORT_CAPACITEIT,
+    TEKORTSOORT_PLANNING,
     NACHT_MELDING_EIND_UUR,
     NACHT_MELDING_START_UUR,
     NACHT_TEKORT_AANHOUDEND_MIN,
@@ -4495,7 +4498,8 @@ class EnergyManagementSystemCoordinator:
                     f"{nodig:.2f} kWh nodig is om tot het goedkope blok te "
                     "overbruggen - zonder de veiligheidsmarge die de sturing "
                     "aanhoudt. Bijladen gebeurt alleen als het loont; anders "
-                    "spaart de accu voor de duurste uren.",
+                    "spaart de accu voor de duurste uren."
+                    + self._tekort_soort_zin(),
                 )
 
         # v1.31.1: rechtstreeks, zie `accustand_procent`.
@@ -25060,6 +25064,12 @@ class EnergyManagementSystemCoordinator:
     # 09:00 afliep en gaat bij het afsluiten van de dag in het dagrecord.
     _tekortnacht_lopend_kwh: float | None = None
     _tekortnacht_vandaag_kwh: float | None = None
+    # v5.40: zie `_volg_vol_en_verkoop`.
+    _vol_voor_nacht: bool = False
+    _verkocht_na_vol_kwh: float = 0.0
+    _verkoop_laatste: datetime | None = None
+    _tekort_soort_vandaag: str | None = None
+    _nacht_geclassificeerd_op: str | None = None
     # v3.99.5: welk verschil tussen gevraagd en werkelijk er nu staat, en
     # sinds wanneer. Onveranderlijk, dus als klasse-attribuut veilig.
     _handmatig_verschil: str | None = None
@@ -25261,6 +25271,8 @@ class EnergyManagementSystemCoordinator:
                         "date": self._shortfall_check_date.isoformat(),
                         "shortfall": tekortdag,
                         "tekortnacht_kwh": tekortnacht,
+                        # v5.40: capaciteit of planning (None: geen tekort).
+                        "tekort_soort": self._tekort_soort_vandaag,
                         "tekortvlag": self._shortfall_detected_today,
                         # v3.99.0: was er een kookpiek boven de
                         # ontlaadgrens? Die telt niet als tekort, maar
@@ -25297,6 +25309,7 @@ class EnergyManagementSystemCoordinator:
             # v5.33: alleen de afgelopen nacht; de lopende loopt door over
             # middernacht.
             self._tekortnacht_vandaag_kwh = None
+            self._tekort_soort_vandaag = None
             # v3.99.19: de dag die voorbij is, nabeschouwen.
             if self._shortfall_check_date is not None:
                 self._sluit_dag_af_met_nabeschouwing(self._shortfall_check_date.isoformat())
@@ -26870,6 +26883,11 @@ class EnergyManagementSystemCoordinator:
             self._savings_day_start_available_kwh = (
                 self.beschikbare_energie_kwh()
             )
+        elif self._savings_day_start_available_kwh is None and now.hour == 0:
+            # v5.40: was de accustand er bij de daggrens even niet, dan de
+            # eerste meting in het eerste uur - anders bleef de correctie de
+            # hele dag uit. Later op de dag niet: dan is het geen dagbegin.
+            self._savings_day_start_available_kwh = self.beschikbare_energie_kwh()
 
         month_key = now.year * 100 + now.month
         if self._counterfactual_month_key is None:
@@ -28764,6 +28782,169 @@ class EnergyManagementSystemCoordinator:
             "tekortnacht_tot_nu_kwh": round(lopend, 3) if lopend is not None else None,
             "telt_als_tekortdag_tot_nu": self._telt_als_tekortdag(lopend),
         }
+
+    def _bovengrens_procent(self) -> float:
+        """De bovengrens van de accu in procent (v5.40); zonder entiteit 100."""
+        waarde = self._read_sensor_float(self.config.get(CONF_BATTERY_MAX_SOC_NUMBER))
+        return waarde if waarde is not None and 0 < waarde <= 100 else 100.0
+
+    def bruikbaar_tussen_grenzen_kwh(self) -> float | None:
+        """Wat er tussen onder- en bovengrens in de accu past (v5.40)."""
+        capaciteit = self.bruikbare_capaciteit_kwh()
+        if not capaciteit:
+            return None
+        bereik = self._bovengrens_procent() - self.effective_min_soc_percent()
+        return max(0.0, capaciteit * bereik / 100)
+
+    def _volg_vol_en_verkoop(self, now: datetime) -> None:
+        """Was de accu vol voor de nacht, en wat ging er daarna naar het
+        net? (v5.40)
+
+        Gemeld: de cockpit stond op LET OP bij een verwacht tekort, ook als
+        de sturing klopte - de accu was vol en het huis vroeg meer dan erin
+        past. Het venster loopt van 09:00 (einde van een tekortnacht) tot
+        de volgende 09:00. Zodra de nacht om is (`_volg_de_ochtend` zet dan
+        `_tekortnacht_vandaag_kwh`) wordt die nacht ingedeeld en begint een
+        nieuw venster.
+
+        Verkocht na vol: wat de accu na het laatste volle moment naar het
+        net stuurde, benaderd als min(teruglevering, ontlaadvermogen). Was
+        dat meer dan een tekortdag-drempel, dan had vasthouden geholpen -
+        dan is het planning, ook als de accu vol was.
+        """
+        vandaag = now.date().isoformat()
+        if not (now.hour >= 22 or now.hour < 9) and self._nacht_geclassificeerd_op != vandaag:
+            self._tekort_soort_vandaag = self._tekort_soort(
+                self._tekortnacht_vandaag_kwh,
+                self._vol_voor_nacht,
+                self._verkocht_na_vol_kwh,
+            )
+            self._nacht_geclassificeerd_op = vandaag
+            self._vol_voor_nacht = False
+            self._verkocht_na_vol_kwh = 0.0
+        soc = self.accustand_procent()
+        if soc is not None and soc >= self._bovengrens_procent() - TEKORT_VOL_MARGE_PROCENT:
+            self._vol_voor_nacht = True
+            self._verkocht_na_vol_kwh = 0.0
+        elif self._vol_voor_nacht and self._verkoop_laatste is not None:
+            uren = (now - self._verkoop_laatste).total_seconds() / 3600
+            net_w = self._read_sensor_float(self.config.get(CONF_CONSUMPTION_POWER_SENSOR))
+            accu_w = self._read_corrected_battery_power()
+            if 0 < uren < 0.5 and net_w is not None and accu_w is not None:
+                naar_net_w = min(max(0.0, -net_w), max(0.0, accu_w))
+                self._verkocht_na_vol_kwh += naar_net_w / 1000 * uren
+        self._verkoop_laatste = now
+
+    def _tekort_soort(
+        self, tekort_kwh: float | None, vol: bool, verkocht_kwh: float,
+        nodig_kwh: float | None = None,
+    ) -> str | None:
+        """Capaciteit of planning, of None als er geen tekort is (v5.40).
+
+        Capaciteit: het diepste tekort is groter dan wat er tussen de
+        grenzen in de accu past, of de accu was vol en er ging daarna
+        (vrijwel) niets naar het net. Dan kon de sturing niets doen: het
+        huis gaat voor, en energie onder de reserve wordt nooit verkocht.
+        Planning: de accu had ruimte of kans (niet vol, of wel vol maar
+        daarna verkocht) en kwam toch tekort.
+        """
+        if not self._telt_als_tekortdag(tekort_kwh):
+            return None
+        bruikbaar = self.bruikbaar_tussen_grenzen_kwh()
+        if nodig_kwh is not None and bruikbaar and nodig_kwh > bruikbaar:
+            return TEKORTSOORT_CAPACITEIT
+        if vol and verkocht_kwh <= SHORTFALL_MIN_NETIMPORT_KWH:
+            return TEKORTSOORT_CAPACITEIT
+        return TEKORTSOORT_PLANNING
+
+    def verwacht_tekort(self) -> dict:
+        """Het verwachte tekort tot het goedkope blok, ingedeeld (v5.40).
+
+        Hetzelfde getal als de nachtmelding: het diepste tekort zonder
+        marge tegen de beschikbare energie.
+        """
+        nodig = (self.last_reserve_margin_breakdown or {}).get(
+            "needed_kwh_before_margin"
+        )
+        beschikbaar = self.beschikbare_energie_kwh()
+        if nodig is None or beschikbaar is None:
+            return {"tekort_kwh": None, "tekort_soort": None}
+        tekort = max(0.0, nodig - beschikbaar)
+        soort = self._tekort_soort(
+            tekort, self._vol_voor_nacht, self._verkocht_na_vol_kwh, nodig
+        )
+        return {
+            "tekort_kwh": round(tekort, 2),
+            "tekort_soort": soort,
+            "nodig_kwh": round(nodig, 2),
+            "past_tussen_grenzen_kwh": (
+                round(self.bruikbaar_tussen_grenzen_kwh(), 2)
+                if self.bruikbaar_tussen_grenzen_kwh() is not None
+                else None
+            ),
+            "vol_geweest_sinds_9u": self._vol_voor_nacht,
+            "verkocht_na_vol_kwh": round(self._verkocht_na_vol_kwh, 2),
+        }
+
+    def get_tekortsoorten(self) -> dict:
+        """De tekortnachten per soort, voor sensoren en cockpit (v5.40).
+
+        Records van vóór v5.40 hebben geen soort; die tellen als planning
+        (onbekend), zodat er niets stil verdwijnt - ze lopen binnen een week
+        uit het venster.
+        """
+        records = list(self.reserve_daily_records or [])
+        soorten = [
+            (r.get("tekort_soort") or "onbekend") if r.get("shortfall") else None
+            for r in records
+        ]
+        return {
+            "tekort_soort_per_nacht": soorten,
+            "tekortnachten_capaciteit": soorten.count(TEKORTSOORT_CAPACITEIT),
+            "tekortnachten_planning": soorten.count(TEKORTSOORT_PLANNING)
+            + soorten.count("onbekend"),
+            "verwacht_tekort": self.verwacht_tekort(),
+        }
+
+    def _tekortnachten_meldingen(self) -> tuple[list[str], list[str]]:
+        """Aandachtspunt alleen voor planningstekorten (v5.40).
+
+        Een capaciteitstekort is geen stuurfout en zette de cockpit toch op
+        LET OP. Het blijft zichtbaar, als informatief.
+        """
+        soorten = self.get_tekortsoorten()
+        dagen = len(self.reserve_daily_records or [])
+        aandacht, info = [], []
+        planning = soorten["tekortnachten_planning"]
+        if planning:
+            aandacht.append(
+                f"{planning} onverwachte tekort-dag(en) in de laatste {dagen} dagen."
+            )
+        capaciteit = soorten["tekortnachten_capaciteit"]
+        if capaciteit:
+            info.append(
+                f"{capaciteit} tekortnacht(en) door capaciteit in de laatste "
+                f"{dagen} dagen: de accu was vol en hield vast, het huis vroeg "
+                "meer dan erin past. Geen stuurfout."
+            )
+        verwacht = soorten["verwacht_tekort"]
+        if verwacht.get("tekort_soort") == TEKORTSOORT_CAPACITEIT:
+            info.append(
+                f"Verwacht tekort tot het goedkope blok: {verwacht['tekort_kwh']:.2f} "
+                "kWh, door capaciteit - de accu is vol geweest en het huis vraagt "
+                "meer dan erin past."
+            )
+        return aandacht, info
+
+    def _tekort_soort_zin(self) -> str:
+        """De extra zin in de nachtmelding (v5.40)."""
+        if self.verwacht_tekort().get("tekort_soort") == TEKORTSOORT_CAPACITEIT:
+            return (
+                " Dit is een capaciteitstekort: de accu is vol geweest en het "
+                "huis vraagt meer dan erin past - de sturing kan hier niets aan "
+                "doen."
+            )
+        return ""
 
     def _telt_als_tekortdag(self, netimport_kwh: float | None) -> bool:
         """Was er werkelijk een tekort, of één moment van honderd watt?
@@ -33124,6 +33305,12 @@ class EnergyManagementSystemCoordinator:
         the deterministic walk (`_monte_carlo_extras`): P1 shift, planned
         and running appliances, the capped live correction and vacation.
 
+        v5.40: elk traject is het deterministische diepste tekort van de
+        reserve (dezelfde wandeling, voorzichtige zon, plus de lange
+        horizon) met per uur een getrokken AFWIJKING eromheen - niet meer
+        een losse trekking. Zonder spreiding valt de mediaan precies op het
+        deterministische getal (`monte_carlo_deterministisch_kwh`).
+
         Deliberately doesn't invent occupancy or weather randomness on
         top - the PV bias history already implicitly reflects weather
         variability (that's *why* the actual/forecast ratio varies day
@@ -33142,6 +33329,7 @@ class EnergyManagementSystemCoordinator:
         self.monte_carlo_p90_deficit_kwh = None
         self.monte_carlo_p10_deficit_kwh = None
         self.monte_carlo_extra_kwh = None
+        self.monte_carlo_deterministisch_kwh = self.monte_carlo_lange_extra_kwh = None
         self.monte_carlo_shortfall_probability_percent = None
         self.monte_carlo_simulations_run, self.monte_carlo_hours_simulated = 0, 0
 
@@ -33162,8 +33350,7 @@ class EnergyManagementSystemCoordinator:
             ) + timedelta(hours=1)
             segment_end = min(hour_end, cheap_block_start)
             fraction_hours = (segment_end - cursor).total_seconds() / 3600
-            pv_base_kwh = self._estimate_pv_kwh_for_period(cursor, segment_end)
-            segments.append((cursor.hour, fraction_hours, pv_base_kwh))
+            segments.append((cursor.hour, fraction_hours, segment_end))
             cursor = segment_end
             if len(segments) >= MONTE_CARLO_MAX_HOURS:
                 break
@@ -33173,16 +33360,25 @@ class EnergyManagementSystemCoordinator:
             return
         self.monte_carlo_hours_simulated = len(segments)
 
-        # v5.39: dezelfde extra's als de vaste wandeling. De docstring
-        # belooft "exact dezelfde wandeling", maar de trekkingen misten wat
-        # `_segmenten_verbruik_zon` bovenop het geleerde uurprofiel telt.
-        vakantie_factor, extras = self._monte_carlo_extras(
-            now, cheap_block_start, segments
+        # v5.40: gecentreerd op de vaste wandeling van de reserve zelf
+        # (`_segmenten_verbruik_zon`, voorzichtige zon) - zie
+        # `_monte_carlo_centrum`. Alleen de geleerde spreiding komt erbij.
+        vakantie_factor, centrum, uit_de_wandeling = self._monte_carlo_centrum(
+            now, cursor, segments, efficiency_factor
         )
-        self.monte_carlo_extra_kwh = round(sum(extras), 3)
+        self.monte_carlo_extra_kwh = round(
+            self._monte_carlo_extras(segments, centrum, vakantie_factor), 3
+        )
+        lange_extra = self._monte_carlo_lange_extra()
+        self.monte_carlo_lange_extra_kwh = round(lange_extra, 3)
+        self.monte_carlo_deterministisch_kwh = (
+            round(self._diepste_van(centrum) + lange_extra, 3)
+            if uit_de_wandeling
+            else None
+        )
 
         deepest_deficits = self._monte_carlo_trajecten(
-            segments, extras, vakantie_factor, efficiency_factor
+            segments, centrum, vakantie_factor, lange_extra
         )
         deepest_deficits.sort()
         n = len(deepest_deficits)
@@ -33213,92 +33409,157 @@ class EnergyManagementSystemCoordinator:
             )
 
         self.monte_carlo_note = (
-            "Adviserend - vergelijkt het bestaande, deterministieke "
-            "diepste-tekort-cijfer (mediaan-gebaseerd) met een "
-            "kansverdeling uit 1000 gesimuleerde trajecten, elk "
-            "getrokken uit de al bestaande, geleerde verbruiks- en "
-            "PV-voorspellingsfout-geschiedenis. Stuurt nooit een "
-            "commando en past de werkelijke reserve-marge niet aan."
+            "Adviserend - gecentreerd op het deterministische diepste "
+            "tekort van de reserve (zelfde wandeling, voorzichtige zon, "
+            "inclusief lange horizon), met daaromheen de spreiding uit "
+            "1000 gesimuleerde trajecten: per uur een afwijking van het "
+            "geleerde verbruik ten opzichte van de mediaan, en een "
+            "afwijking van de zonvoorspelling ten opzichte van de mediane "
+            "verhouding. Stuurt nooit een commando en past de werkelijke "
+            "reserve-marge niet aan."
         )
 
-    def _monte_carlo_trajecten(
-        self, segments: list, extras: list, vakantie_factor: float,
-        efficiency_factor: float,
-    ) -> list[float]:
-        """De gesimuleerde trajecten: per traject het diepste tekort (v5.39).
+    # v5.40: zie `_run_monte_carlo_simulation`. Onveranderlijk, dus als
+    # klasse-attribuut veilig (en `__init__` staat op de ratel).
+    monte_carlo_deterministisch_kwh: float | None = None
+    monte_carlo_lange_extra_kwh: float | None = None
 
-        Uit `_run_monte_carlo_simulation` gehaald om die onder de grens te
-        houden; inhoudelijk ongewijzigd, plus de vaste extra's per segment.
+    @staticmethod
+    def _diepste_van(segmenten: list) -> float:
+        """Het diepste cumulatieve tekort van (verbruik, zon)-paren (v5.40).
+
+        Dezelfde lus als `_estimate_worst_case_deficit_kwh`.
         """
+        cumulatief, diepste = 0.0, 0.0
+        for verbruik_kwh, zon_kwh in segmenten:
+            cumulatief = max(0.0, cumulatief + verbruik_kwh - zon_kwh)
+            diepste = max(diepste, cumulatief)
+        return diepste
+
+    def _monte_carlo_lange_extra(self) -> float:
+        """Het deel van de reserve NA het goedkope blok (v5.40).
+
+        Sinds v3.99.18 telt de reserve er het verschil tussen de lange en
+        de korte horizon bij op (`_lange_reserve_extra_kwh`). Monte Carlo
+        liep alleen tot het blok en miste dat - op 7 oktober 20:24 zo'n
+        1,7 kWh. Alleen als Monte Carlo tot hetzelfde blok rekent; de
+        terugval tot 09:00 heeft geen reserve om mee te vergelijken.
+        """
+        if self.monte_carlo_horizon_basis != "goedkoopste blok":
+            return 0.0
+        if not self.lange_horizon_actief:
+            return 0.0
+        if self.monte_carlo_horizon != self.last_cheap_block_start:
+            return 0.0
+        return max(0.0, float(self._lange_reserve_extra_kwh or 0.0))
+
+    def _monte_carlo_centrum(
+        self, now: datetime, eind: datetime, segments: list,
+        efficiency_factor: float,
+    ) -> tuple[float, list[tuple[float, float]], bool]:
+        """Het midden van elk traject: verbruik en zon per uursegment (v5.40).
+
+        Gemeld op 7 oktober 20:24: mediaan 4,12 kWh tegen een diepste tekort
+        van 6,11 in de planning, en 0% tekortkans terwijl 4 van de 7 nachten
+        tekort kwamen. Drie oorzaken:
+
+        1. de lange horizon (`_monte_carlo_lange_extra`) ontbrak;
+        2. de zon was de GEWONE verwachting, de reserve rekent met de
+           voorzichtige (de band, v4.1);
+        3. de geleerde zonverhouding telde dubbel: `_estimate_pv_kwh_for_
+           period` past de mediane uurverhouding al toe, en de trekking
+           vermenigvuldigde daar nog een verhouding overheen.
+
+        Nu is het midden letterlijk de wandeling van de reserve. Zonder
+        geleerd uurprofiel (de wandeling geeft dan None) de mediaan van de
+        metingen per uur; dan is er geen deterministisch getal.
+        """
+        vakantie_factor = self._vacation_adjusted_kwh(1.0)
+        wandeling = self._segmenten_verbruik_zon(now, eind, veilig=True)
+        if wandeling is not None and len(wandeling) == len(segments):
+            return vakantie_factor, list(wandeling), True
+        centrum = []
+        for hour, fraction_hours, segment_end in segments:
+            samples = self.hourly_consumption_profile.get(hour)
+            kw = (
+                statistics.median(samples)
+                if samples
+                else (self.learned_hourly_avg_kw(hour) or 0.0)
+            )
+            start = segment_end - timedelta(hours=fraction_hours)
+            zon = self._estimate_pv_kwh_for_period(start, segment_end, veilig=True)
+            centrum.append(
+                (kw * fraction_hours * vakantie_factor, zon * efficiency_factor)
+            )
+        return vakantie_factor, centrum, False
+
+    def _monte_carlo_trajecten(
+        self, segments: list, centrum: list, vakantie_factor: float,
+        lange_extra: float,
+    ) -> list[float]:
+        """De gesimuleerde trajecten: per traject het diepste tekort (v5.40).
+
+        Elk traject is het deterministische midden plus per uur een
+        getrokken AFWIJKING: verbruik als (trekking - mediaan) van dat uur,
+        zon als verhouding (trekking / mediane verhouding). Zonder spreiding
+        zijn alle afwijkingen nul en is elk traject precies het
+        deterministische diepste tekort. Het deel na het goedkope blok
+        (`lange_extra`) telt vast mee, zoals in de reserve.
+        """
+        afwijkingen = []
+        for hour, fraction_hours, _eind in segments:
+            samples = self.hourly_consumption_profile.get(hour) or []
+            verbruik_fouten = (
+                [
+                    (s - statistics.median(samples)) * fraction_hours * vakantie_factor
+                    for s in samples
+                ]
+                if samples
+                else [0.0]
+            )
+            ratios = self.pv_hourly_bias_history.get(self._utc_uur_van_lokaal(hour)) or []
+            mediaan_ratio = statistics.median(ratios) if ratios else 0.0
+            zon_factoren = (
+                [r / mediaan_ratio for r in ratios] if mediaan_ratio > 0 else [1.0]
+            )
+            afwijkingen.append((verbruik_fouten, zon_factoren))
+
         deepest_deficits = []
         for _ in range(MONTE_CARLO_SIMULATIONS):
             cumulative_deficit = 0.0
             max_deficit = 0.0
-            for (hour, fraction_hours, pv_base_kwh), extra_kwh in zip(
-                segments, extras
+            for (verbruik_kwh, zon_kwh), (verbruik_fouten, zon_factoren) in zip(
+                centrum, afwijkingen
             ):
-                samples = self.hourly_consumption_profile.get(hour)
-                if samples:
-                    consumption_kw = random.choice(samples)
-                else:
-                    consumption_kw = self.learned_hourly_avg_kw(hour) or 0.0
-                consumption_kwh = (
-                    consumption_kw * fraction_hours * vakantie_factor + extra_kwh
-                )
-
-                bias_samples = self.pv_hourly_bias_history.get(
-                    self._utc_uur_van_lokaal(hour)
-                )
-                if bias_samples:
-                    bias = random.choice(bias_samples)
-                else:
-                    bias = self.learned_pv_hourly_ratio(self._utc_uur_van_lokaal(hour))
-                    if bias is None:
-                        bias = 1.0
-                pv_kwh = pv_base_kwh * bias * efficiency_factor
-
-                cumulative_deficit = max(
-                    0.0, cumulative_deficit + consumption_kwh - pv_kwh
-                )
+                verbruik = max(0.0, verbruik_kwh + random.choice(verbruik_fouten))
+                zon = zon_kwh * random.choice(zon_factoren)
+                cumulative_deficit = max(0.0, cumulative_deficit + verbruik - zon)
                 max_deficit = max(max_deficit, cumulative_deficit)
-            deepest_deficits.append(max_deficit)
+            deepest_deficits.append(max_deficit + lange_extra)
         return deepest_deficits
 
     def _monte_carlo_extras(
-        self, now: datetime, eind: datetime, segments: list
-    ) -> tuple[float, list[float]]:
-        """Vaste extra's per uursegment voor Monte Carlo (v5.39).
+        self, segments: list, centrum: list, vakantie_factor: float
+    ) -> float:
+        """Wat de vaste wandeling bovenop het geleerde uurgemiddelde telt
+        (v5.39, sinds v5.40 alleen nog ter weergave).
 
-        De vaste wandeling (`_segmenten_verbruik_zon`) telt bovenop het
-        geleerde uurprofiel: vakantie, de live-verbruikscorrectie (begrensd),
-        gepland en lopend witgoed en de P1-verschuiving. De trekkingen misten
-        dat, waardoor Monte Carlo het tekort structureel lager inschatte dan
-        de reserve waarmee hij vergeleken wordt.
-
-        Het extra per segment is precies het verschil tussen het verbruik van
-        de vaste wandeling en het (vakantie-gecorrigeerde) uurgemiddelde -
-        geen tweede definitie. Vakantie is een factor op de trekking zelf.
-
-        De zon blijft bewust de gewone verwachting: de trekkingen uit
-        `pv_hourly_bias_history` zijn verhoudingen werkelijk/verwachting
-        tegenover die gewone verwachting. Met de voorzichtige band eronder
-        zou de onzekerheid dubbel tellen.
+        Vakantie, de live-verbruikscorrectie (begrensd), gepland en lopend
+        witgoed en de P1-verschuiving. Sinds v5.40 zit dat vanzelf in het
+        midden van elk traject (`_monte_carlo_centrum`); dit getal laat
+        zien hoeveel het over de horizon is.
         """
-        vakantie_factor = self._vacation_adjusted_kwh(1.0)
-        nul = [0.0] * len(segments)
-        vast = self._segmenten_verbruik_zon(now, eind, veilig=False)
-        if not vast:
-            return vakantie_factor, nul
-        extras = []
-        for (hour, fraction_hours, _pv), (verbruik_kwh, _zon) in zip(segments, vast):
+        totaal = 0.0
+        for (hour, fraction_hours, _eind), (verbruik_kwh, _zon) in zip(
+            segments, centrum
+        ):
             avg_kw = self.learned_hourly_avg_kw(hour)
             if avg_kw is None:
-                return vakantie_factor, nul
-            extras.append(
-                max(0.0, verbruik_kwh - avg_kw * fraction_hours * vakantie_factor)
+                return 0.0
+            totaal += max(
+                0.0, verbruik_kwh - avg_kw * fraction_hours * vakantie_factor
             )
-        extras += [0.0] * (len(segments) - len(extras))
-        return vakantie_factor, extras
+        return totaal
 
     def _monte_carlo_horizon_kiezen(
         self, now: datetime, cheap_block_start: datetime | None
@@ -33382,6 +33643,16 @@ class EnergyManagementSystemCoordinator:
             # v5.38: dagrecords van vóór v5.33 hebben geen tekortnacht_kwh;
             # daar staat de netimport van de hele nacht (een bovengrens).
             "tekort_kwh_benaderd": [self._tekort_kwh_van(r)[1] for r in records],
+            # v5.40: per nacht capaciteit of planning, en het verwachte tekort.
+            **{
+                k: v
+                for k, v in self.get_tekortsoorten().items()
+                if k != "tekort_soort_per_nacht"
+            },
+            "tekort_soort_per_nacht": [
+                (r.get("tekort_soort") or "onbekend") if r.get("shortfall") else None
+                for r in records
+            ],
             "dagen_gemeten": len(records),
             "werkelijke_tekortfrequentie_procent": (
                 round(100 * tekort / len(records), 1) if records else None
@@ -35397,12 +35668,11 @@ class EnergyManagementSystemCoordinator:
                 f"paar/paren gevonden (zie 'waarschijnlijke_duplicaten')."
             )
 
-        recent_shortfalls = sum(1 for r in self.reserve_daily_records if r["shortfall"])
-        if recent_shortfalls > 0:
-            aandachtspunten.append(
-                f"{recent_shortfalls} onverwachte tekort-dag(en) in de "
-                f"laatste {len(self.reserve_daily_records)} dagen."
-            )
+        # v5.40: alleen planningstekorten als aandachtspunt; capaciteit is
+        # informatief (zie `_tekortnachten_meldingen`).
+        tekort_aandacht, tekort_info = self._tekortnachten_meldingen()
+        aandachtspunten.extend(tekort_aandacht)
+        informatief.extend(tekort_info)
 
         if self.sluipverbruik_detected:
             aandachtspunten.append(
@@ -39318,6 +39588,8 @@ class EnergyManagementSystemCoordinator:
             # `entries` pas in het staartstuk bestaat.
             ("lange reserve", lambda: self._meet_lange_reserve(now, entries)),
             ("ochtend", lambda: self._volg_de_ochtend(now)),
+            # v5.40: na de ochtend, die de nacht afsluit.
+            ("tekortsoort", lambda: self._volg_vol_en_verkoop(now)),
             ("dagverloop", lambda: self._leg_dagverloop_vast(now)),
             ("nachtlast", lambda: self._meet_nachtelijke_basislast(now)),
             ("woonkamertemperatuur", lambda: self._meet_woonkamertemperatuur(now)),

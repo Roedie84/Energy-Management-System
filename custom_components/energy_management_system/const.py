@@ -3514,6 +3514,13 @@ PERSISTED_FIELDS: dict[str, dict] = {
     # vanochtend afliep. Bewaard, zodat een herstart de nacht niet kost.
     "_tekortnacht_lopend_kwh": {"type": "plain"},
     "_tekortnacht_vandaag_kwh": {"type": "plain"},
+    # v5.40: tekort door capaciteit of door planning - of de accu sinds
+    # 09:00 vol is geweest, wat hij daarna naar het net stuurde, en de
+    # uitkomst voor de nacht die vanochtend afliep.
+    "_vol_voor_nacht": {"type": "plain"},
+    "_verkocht_na_vol_kwh": {"type": "plain"},
+    "_tekort_soort_vandaag": {"type": "plain"},
+    "_nacht_geclassificeerd_op": {"type": "plain"},
     "_lange_horizon_extra_vandaag": {"type": "plain"},
     "_max_ontlaad_w_vandaag": {"type": "plain"},
     "_vermogensgrens_gezien_today": {"type": "plain"},
@@ -5092,6 +5099,15 @@ NACHT_TEKORT_AANHOUDEND_MIN = 30
 # v5.37: horizon van Monte Carlo als er geen toekomstig goedkoopste blok
 # bekend is - het einde van een tekortnacht (22:00-09:00).
 MONTE_CARLO_TERUGVAL_UUR = 9
+
+# v5.40: een tekort door CAPACITEIT tegenover een tekort door PLANNING.
+# Gemeld: de cockpit stond op LET OP voor een nacht waarin de accu vol was
+# en het huis simpelweg meer vroeg dan erin past - daar kan de sturing
+# niets aan doen. Vol is de bovengrens min deze marge (de Zendure meldt
+# vaak 98-99% als hij klaar is met laden).
+TEKORT_VOL_MARGE_PROCENT = 3.0
+TEKORTSOORT_CAPACITEIT = "capaciteit"
+TEKORTSOORT_PLANNING = "planning"
 
 # --- Plausibiliteitsscan op de eigen waarden (v1.9.5) ----------------
 # Gevraagd: "Heb je de diagnostiek nu zo goed nagekeken dat daar niets
