@@ -3088,6 +3088,9 @@ CONF_BATTERY_MODULE_POWER_SENSORS = "battery_module_power_sensor_entities"
 # hierboven verdienen aandacht (niet: zijn direct gevaarlijk).
 BATTERY_MODULE_CELL_DELTA_ATTENTION_V = 0.10
 BATTERY_MODULE_CELL_DELTA_SERIOUS_V = 0.20
+# v5.36: onder dit verschil telt een celdelta-drift niet als "uit de pas".
+# 10-30 mV balanceert een BMS gewoon weg; de helft van de aandachtsgrens.
+BATTERY_MODULE_CELL_DELTA_MATERIEEL_V = 0.05
 
 # --- Waar die drempels wél en niet gelden (v1.64.0) ------------------
 # Gemeld: "Accumodule 1: celspanningsverschil 0.190 V - hoger dan

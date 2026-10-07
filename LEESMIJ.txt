@@ -1,7 +1,8 @@
-EMS v5.35 - rustiger status, minder logboekruis
+EMS v5.36 - schone lei: opstartfase, moduledrift, Monte Carlo
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
-Bevat ook v5.34 (dashboardattributen niet meer in de database).
-Stuurt niet anders. Een kernsensor die even wegvalt zet de cockpit pas na
-3 minuten op STORING, de cockpit bewaart de reden, de diagnoseregel
-verandert niet meer elke ronde, en accumodules heten naar hun apparaat.
+Bevat ook v5.34 en v5.35.
+Stuurt niet anders. Geen STORING meer tijdens het opstarten, een stekker die
+even wegvalt telt niet als kapot, een paar millivolt celverschil is geen
+moduledrift meer, en de Monte-Carlo-tekortkans staat naast de tekortdagen
+met uitleg wat elk getal meet.

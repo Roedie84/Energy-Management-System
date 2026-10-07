@@ -1333,6 +1333,11 @@ async def async_get_config_entry_diagnostics(
             "monte_carlo_simulations_run": coordinator.monte_carlo_simulations_run,
             "monte_carlo_hours_simulated": coordinator.monte_carlo_hours_simulated,
             "monte_carlo_note": coordinator.monte_carlo_note,
+            # v5.36: naast de tekortdagen gelegd.
+            "monte_carlo_vergelijking": _veilig(
+                "get_monte_carlo_vergelijking",
+                coordinator.get_monte_carlo_vergelijking,
+            ),
             "kalman_soc_filtered_kwh": coordinator.kalman_soc_filtered_kwh,
             "kalman_soc_raw_kwh": coordinator.kalman_soc_raw_kwh,
             "kalman_pv_filtered_w": coordinator.kalman_pv_filtered_w,

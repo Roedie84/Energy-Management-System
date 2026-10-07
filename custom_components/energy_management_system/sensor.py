@@ -1728,6 +1728,8 @@ class MonteCarloAdvisorySensor(SensorEntity):
             "aantal_simulaties": self._coordinator.monte_carlo_simulations_run,
             "uren_gesimuleerd": self._coordinator.monte_carlo_hours_simulated,
             "note": self._coordinator.monte_carlo_note,
+            # v5.36: naast de tekortdagen, met wat elk getal meet.
+            **self._coordinator.get_monte_carlo_vergelijking(),
         }
 
 

@@ -366,6 +366,7 @@ from .const import (
     BATTERY_MODULE_BUCKET_DELTA_MARGIN_V,
     BATTERY_MODULE_BUCKET_MIN_SAMPLES,
     BATTERY_MODULE_CELL_DELTA_ATTENTION_V,
+    BATTERY_MODULE_CELL_DELTA_MATERIEEL_V,
     BATTERY_MODULE_FLAT_SOC_MAX_PERCENT,
     BATTERY_MODULE_FLAT_SOC_MIN_PERCENT,
     DIGITAL_TWIN_ACCURACY_GOOD_FRACTION,
@@ -872,6 +873,20 @@ _POWERCALC_TOELICHTING = (
     "nee, dan voegt de schatting ruis toe en is aftrekken schadelijk. "
     "Stuurt niets."
 )
+
+
+def koppeling_hapert(regel: dict) -> bool:
+    """Is deze koppeling maar kort weg? (v5.35/v5.36)
+
+    Een wifi-stekker valt soms 10-20 s weg. Pas na KOPPELING_HAPERT_S
+    zonder waarde telt dat als kapot.
+    """
+    # Een entiteit die NIET BESTAAT telt meteen: dat is meestal een
+    # hernoeming, en direct na een herstart dekt de opstartfase het af.
+    if regel.get("oordeel") != "geen_waarde":
+        return False
+    duur = regel.get("geen_waarde_s")
+    return duur is not None and duur < KOPPELING_HAPERT_S
 
 
 def _kort_punt(tekst) -> str:
@@ -4794,7 +4809,7 @@ class EnergyManagementSystemCoordinator:
         modules_met_drift = [
             nummer
             for nummer, gegevens in (self.battery_module_health or {}).items()
-            if any(v.get("drift") for v in (gegevens.get("cusum") or {}).values())
+            if self._module_drift_velden(nummer, gegevens)
         ]
         if modules_met_drift:
             stuur(
@@ -15088,6 +15103,16 @@ class EnergyManagementSystemCoordinator:
         vaatwassersensor zette het hele EMS op STORING terwijl de aansturing
         perfect draaide.
         """
+        # v5.36: tijdens de opstartfase nooit STORING. Op 7 oktober stond de
+        # cockpit 10:49:24-10:50:26 op STORING direct na de herstart: de
+        # eerste ronde was nog niet gelukt en de andere integraties waren nog
+        # niet geladen. De diagnoseregels wachtten al (v5.14.5), de
+        # statusmatrix niet.
+        resterend = self.opstart_resterend_s()
+        if resterend is not None:
+            return "LET OP", (
+                f"opstarten · nog {resterend:.0f}s · stuurt al, status volgt"
+            )
         try:
             samenvatting = self.get_diagnostic_summary() or {}
             controle = self.get_configuratiecontrole() or {}
@@ -15103,11 +15128,7 @@ class EnergyManagementSystemCoordinator:
             r
             for r in (controle.get("entiteiten") or [])
             if r.get("oordeel") not in ("in_orde", "slaapt", "niet_ingesteld")
-            and not (
-                r.get("oordeel") == "geen_waarde"
-                and r.get("geen_waarde_s") is not None
-                and r["geen_waarde_s"] < KOPPELING_HAPERT_S
-            )
+            and not koppeling_hapert(r)
         ]
         kapot_noodzakelijk = [
             r for r in kapot if r.get("instelling") in NOODZAKELIJKE_KOPPELINGEN
@@ -16055,6 +16076,7 @@ class EnergyManagementSystemCoordinator:
                 uren = (nu - sinds).total_seconds() / 3600
                 regel["bestaat_niet_sinds"] = sinds.isoformat()
                 regel["bestaat_niet_uren"] = round(uren, 1)
+                regel["bestaat_niet_s"] = round((nu - sinds).total_seconds())
                 if uren < BESTAAT_NIET_STORING_UREN:
                     regel["uitleg"] = (
                         f"Deze entiteit bestaat sinds {uren:.1f} uur niet. Bij een "
@@ -16159,11 +16181,17 @@ class EnergyManagementSystemCoordinator:
             "aantal_in_orde": sum(
                 1 for r in entiteiten if r["oordeel"] == "in_orde"
             ),
+            # v5.36: een koppeling die nog geen KOPPELING_HAPERT_S weg is,
+            # telt niet als stuk maar als haperend - net als in de cockpit.
+            # Op 7 oktober stond diagnose_gezondheid 30 s op "config 68/2/1"
+            # door een stekker die even wegviel.
             "aantal_stuk": sum(
                 1
                 for r in entiteiten
                 if r["oordeel"] not in ("in_orde", "slaapt")
+                and not koppeling_hapert(r)
             ),
+            "aantal_hapert": sum(1 for r in entiteiten if koppeling_hapert(r)),
             # v3.95.0: apart geteld, want "2 stuk" naast "Geen
             # bijzonderheden" leest als een tegenspraak.
             "aantal_slaapt": sum(
@@ -30019,16 +30047,45 @@ class EnergyManagementSystemCoordinator:
             f"{maanden[lokaal.month - 1]} {lokaal:%H:%M}"
         )
 
+    def _module_drift_velden(
+        self, nummer: str, staat: dict, live: dict | None = None
+    ) -> list[str]:
+        """De velden waarop een module MATERIEEL uit de pas loopt (v5.36).
+
+        De CUSUM kijkt naar de afwijking tegenover de andere modules, en
+        die kan statistisch aanhoudend zijn terwijl hij in volt niets
+        betekent. Op 7 oktober: AB3000 00996 met een celdelta van 0,01-0,03
+        V tegen 0,00 V bij de andere twee - meerdaags gemeld als "loopt uit
+        de pas", terwijl een BMS dat verschil gewoon wegbalanceert. Een
+        celdelta-drift telt pas vanaf BATTERY_MODULE_CELL_DELTA_MATERIEEL_V.
+        """
+        velden = [
+            veld
+            for veld, waarde in (staat.get("cusum") or {}).items()
+            if waarde.get("drift")
+        ]
+        if "cel_delta_afwijking_v" not in velden:
+            return velden
+        if live is None:
+            live = next(
+                (m for m in (self.battery_module_live or []) if str(m.get("module")) == str(nummer)),
+                None,
+            )
+        delta = (live or {}).get("cel_delta_v")
+        if delta is None:
+            reeks = (staat.get("geschiedenis") or {}).get("cel_delta_v") or []
+            delta = max(reeks[-3:]) if reeks else None
+        if delta is not None and delta < BATTERY_MODULE_CELL_DELTA_MATERIEEL_V:
+            velden.remove("cel_delta_afwijking_v")
+        return velden
+
     def get_battery_module_table(self) -> list[dict]:
         """Overzicht per module voor het dashboard (v0.63.123) - live
         waarden plus de status van de drift-detectie."""
         tabel = []
         for module in self.battery_module_live:
             staat = self.battery_module_health.get(str(module["module"]), {})
-            cusum = staat.get("cusum", {})
-            drift = [
-                veld for veld, waarde in cusum.items() if waarde.get("drift")
-            ]
+            drift = self._module_drift_velden(str(module["module"]), staat, module)
             tabel.append(
                 {
                     **module,
@@ -33030,8 +33087,7 @@ class EnergyManagementSystemCoordinator:
         self.monte_carlo_p90_deficit_kwh = None
         self.monte_carlo_p10_deficit_kwh = None
         self.monte_carlo_shortfall_probability_percent = None
-        self.monte_carlo_simulations_run = 0
-        self.monte_carlo_hours_simulated = 0
+        self.monte_carlo_simulations_run, self.monte_carlo_hours_simulated = 0, 0
 
         if cheap_block_start is None or cheap_block_start <= now:
             self.monte_carlo_note = (
@@ -33111,7 +33167,14 @@ class EnergyManagementSystemCoordinator:
             self._read_sensor_float(available_entity) if available_entity else None
         )
         if available_kwh is not None:
-            shortfall_count = sum(1 for d in deepest_deficits if d > available_kwh)
+            # v5.36: dezelfde drempel als een tekortdag. Een tekortdag is pas
+            # meer dan SHORTFALL_MIN_NETIMPORT_KWH bijgekocht; een tekort van
+            # een paar honderd Wh telde hier al wel.
+            shortfall_count = sum(
+                1
+                for d in deepest_deficits
+                if d > available_kwh + SHORTFALL_MIN_NETIMPORT_KWH
+            )
             self.monte_carlo_shortfall_probability_percent = round(
                 100 * shortfall_count / n, 1
             )
@@ -33124,6 +33187,43 @@ class EnergyManagementSystemCoordinator:
             "PV-voorspellingsfout-geschiedenis. Stuurt nooit een "
             "commando en past de werkelijke reserve-marge niet aan."
         )
+
+    def get_monte_carlo_vergelijking(self) -> dict:
+        """Monte Carlo naast de tekortdagen (v5.36).
+
+        Gemeld op 7 oktober: 4 tekortdagen in 7 dagen en de marge al op
+        +45%, terwijl de Monte-Carlo-tekortkans op 0,0 bleef. Dat spreekt
+        elkaar niet tegen - het zijn twee vragen:
+
+        - de tekortkans kijkt van NU tot het volgende goedkoopste blok,
+          vanaf de energie die nu in de accu zit. Overdag, na een
+          laadblok, is dat vrijwel altijd 0.
+        - een tekortdag is een NACHT (22:00-09:00) waarin meer dan
+          SHORTFALL_MIN_NETIMPORT_KWH werd bijgekocht met een lege accu.
+
+        Hier staan beide naast elkaar, met de werkelijke frequentie.
+        """
+        records = list(self.reserve_daily_records or [])[-7:]
+        tekort = sum(1 for r in records if r.get("shortfall"))
+        horizon = self.last_cheap_block_start
+        return {
+            "basis": "nu tot goedkoopste blok, vanaf de huidige accu-inhoud",
+            "horizon_tot": horizon.isoformat() if horizon else None,
+            "tekortdag_basis": (
+                "nacht 22:00-09:00, meer dan "
+                f"{SHORTFALL_MIN_NETIMPORT_KWH:.1f} kWh bijgekocht met lege accu"
+            ),
+            "tekortdagen_laatste_7": tekort,
+            "dagen_gemeten": len(records),
+            "werkelijke_tekortfrequentie_procent": (
+                round(100 * tekort / len(records), 1) if records else None
+            ),
+            "uitleg": (
+                "Niet hetzelfde getal: de tekortkans gaat over de periode tot "
+                "het volgende laadblok, de tekortfrequentie over afgelopen "
+                "nachten. Overdag na het laden is de kans vrijwel altijd 0."
+            ),
+        }
 
     def _update_kalman_filters(self) -> None:
         """Kalman filtering advisory engine (v0.63.35).

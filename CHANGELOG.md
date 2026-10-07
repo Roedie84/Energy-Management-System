@@ -30375,3 +30375,56 @@ een meting, geen snelle schakelaar.
 Nieuw: `test_v535_haperen_en_ruis.py`.
 
 **Volledige testsuite**: 4678 tests, allemaal groen.
+
+## v5.36 — Schone lei: opstartfase, moduledrift, Monte Carlo
+
+Uit de uuranalyse van 7 oktober, na de installatie van v5.35.
+
+### 1. Geen STORING tijdens het opstarten
+
+De cockpit stond 10:49:24-10:50:26 op STORING direct na de herstart: de
+eerste ronde was nog niet gelukt en andere integraties waren nog niet
+geladen. De diagnoseregels wachtten al sinds v5.14.5 op de opstartfase
+(`STARTUP_GRACE_SECONDS`), de statusmatrix niet. Nu staat er tijdens het
+opstarten "LET OP · opstarten · nog Ns · stuurt al, status volgt".
+
+### 2. Haperende koppelingen tellen niet als stuk
+
+`diagnose_gezondheid` stond 10:53:54 30 s op `config 68/2/1` door een
+stekker die even wegviel. De configuratiecontrole telt een koppeling die
+korter dan `KOPPELING_HAPERT_S` geen waarde geeft nu apart
+(`aantal_hapert`), net als de cockpit sinds v5.35. Een entiteit die niet
+bestaat, telt wel meteen: dat is meestal een hernoeming.
+
+### 3. Moduledrift alleen als hij er in volt toe doet
+
+AB3000 00996 "liep uit de pas" met een celdelta van 0,01-0,03 V tegen
+0,00 V bij de andere modules. Statistisch aanhoudend, maar een BMS
+balanceert dat gewoon weg. Een celdelta-drift telt nu pas vanaf
+`BATTERY_MODULE_CELL_DELTA_MATERIEEL_V` (0,05 V, de helft van de
+aandachtsgrens).
+
+### 4. Monte Carlo naast de tekortdagen
+
+4 tekortdagen in 7 dagen en de marge op +45%, terwijl de Monte-Carlo-
+tekortkans 0,0 bleef. Dat zijn twee vragen: de tekortkans kijkt van nu
+tot het volgende goedkoopste blok vanaf de huidige accu-inhoud (overdag
+na het laden vrijwel altijd 0), een tekortdag is een nacht waarin meer
+dan 0,5 kWh werd bijgekocht. De tekortkans gebruikt nu dezelfde drempel
+van 0,5 kWh, en de sensor (en de export) zet beide naast elkaar:
+`basis`, `tekortdag_basis`, `tekortdagen_laatste_7`,
+`werkelijke_tekortfrequentie_procent`, `uitleg`.
+
+**Niet veranderd**: de nachtontlading. De vergelijking "nachtprijs tegen
+laadprijs ÷ rendement" rekent met de prijs van energie die er al in zit.
+Wat telt is wat die kWh LATER waard is: niet gebruikt, zit hij er bij het
+volgende laadblok nog en hoeft er dan minder te worden geladen - tegen de
+prijs van dat blok (vandaag 12-15 u: 30 ct). 's Nachts 34,5-37 ct uit de
+accu besparen is dus beter dan bewaren. Duurdere kwartieren vóór het
+bijladen worden al vrijgehouden (`_spaarkwartieren`, v5.27.4), en laden
+van het net vraagt al een marge na rendement en slijtage.
+
+Nieuw: `test_v536_schone_lei.py`.
+
+
+**Volledige testsuite**: 4686 tests, allemaal groen.

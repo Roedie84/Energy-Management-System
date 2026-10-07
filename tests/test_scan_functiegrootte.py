@@ -84,7 +84,6 @@ BEVROREN = {
     "coordinator.py:_finalize_nilm_device_day": 71,
     # v3.50.0: +2, de tijdstempels bij de twee schrijvers van
     # `last_soc_percent` in deze functie.
-    "coordinator.py:_run_monte_carlo_simulation": 61,
     "coordinator.py:_update_advisory_readiness": 68,
     "coordinator.py:_update_self_sufficiency_tracking": 67,
     # v5.3: 87 -> 88. Bewust verhoogd, niet weggemoffeld: de functie heeft
