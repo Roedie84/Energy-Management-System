@@ -78,7 +78,10 @@ def test_een_echt_tekort_geeft_wel_een_waarschuwing(make_coordinator, hass):
     _situatie(c, beschikbaar=0.4, met_marge=2.4, ruw=1.5)
     gestuurd = _verstuurd(c)
 
-    c._evaluate_new_notifications(NU)
+    # v5.37: alleen 's avonds/'s nachts en na een half uur aanhouden.
+    avond = NU.replace(hour=22)
+    c._evaluate_new_notifications(avond)
+    c._evaluate_new_notifications(avond + timedelta(minutes=30))
 
     assert "battery_wont_last_night" in gestuurd
 

@@ -525,6 +525,10 @@ from .const import (
     CONF_PV_ACTUAL_TILT_DEGREES,
     BATTERY_NIGHT_SHORTFALL_MIN_FRACTION,
     BATTERY_NIGHT_SHORTFALL_MIN_KWH,
+    MONTE_CARLO_TERUGVAL_UUR,
+    NACHT_MELDING_EIND_UUR,
+    NACHT_MELDING_START_UUR,
+    NACHT_TEKORT_AANHOUDEND_MIN,
     COST_TREND_MIN_EUR,
     DAILY_COST_HISTORY_DAYS,
     DAILY_REPORT_HISTORY_DAYS,
@@ -4393,6 +4397,32 @@ class EnergyManagementSystemCoordinator:
             f"dubbele van de mediaan van vandaag ({mediaan:.4f} EUR/kWh)."
         )
 
+    def _nacht_tekort_melden(
+        self, now: datetime, tekort: float, drempel: float, al_actief: bool
+    ) -> bool:
+        """Of "accu haalt de nacht niet" nu af mag gaan (v5.37).
+
+        Op 7 oktober ging hij om 00:00 en 07:48 af terwijl de accu de
+        ochtend zonder netimport haalde. Het tekort zweefde rond de drempel
+        en na zessen is de nacht voorbij. Nu: alleen tussen 15:00 en 06:00,
+        en pas als het tekort een half uur aanhoudt. Eenmaal actief blijft
+        de hysterese van v5.13 gelden.
+        """
+        if al_actief:
+            return tekort > 0
+        uur = now.hour
+        if NACHT_MELDING_EIND_UUR <= uur < NACHT_MELDING_START_UUR:
+            self._nacht_tekort_sinds = None
+            return False
+        if tekort < drempel:
+            self._nacht_tekort_sinds = None
+            return False
+        sinds = getattr(self, "_nacht_tekort_sinds", None)
+        if sinds is None:
+            self._nacht_tekort_sinds = now
+            return False
+        return (now - sinds).total_seconds() >= NACHT_TEKORT_AANHOUDEND_MIN * 60
+
     def _evaluate_new_notifications(self, now: datetime) -> None:
         """De meldingen die in v1.2.0 zijn toegevoegd (v1.2.0).
 
@@ -4457,7 +4487,7 @@ class EnergyManagementSystemCoordinator:
             al_actief = "battery_wont_last_night" in (
                 self.notification_active_conditions or []
             )
-            if tekort >= drempel or (al_actief and tekort > 0):
+            if self._nacht_tekort_melden(now, tekort, drempel, al_actief):
                 stuur(
                     "battery_wont_last_night",
                     "🔋 Accu haalt de nacht waarschijnlijk niet",
@@ -33089,12 +33119,7 @@ class EnergyManagementSystemCoordinator:
         self.monte_carlo_shortfall_probability_percent = None
         self.monte_carlo_simulations_run, self.monte_carlo_hours_simulated = 0, 0
 
-        if cheap_block_start is None or cheap_block_start <= now:
-            self.monte_carlo_note = (
-                "Geen (toekomstig) goedkoopste blok bekend om naartoe te "
-                "simuleren."
-            )
-            return
+        cheap_block_start = self._monte_carlo_horizon_kiezen(now, cheap_block_start)
 
         efficiency_percent = self.learned_battery_efficiency_percent
         if efficiency_percent is None:
@@ -33188,6 +33213,35 @@ class EnergyManagementSystemCoordinator:
             "commando en past de werkelijke reserve-marge niet aan."
         )
 
+    def _monte_carlo_horizon_kiezen(
+        self, now: datetime, cheap_block_start: datetime | None
+    ) -> datetime:
+        """Tot waar Monte Carlo simuleert (v5.37).
+
+        Zonder toekomstig goedkoopste blok (tussen het laadblok en de
+        publicatie van de prijzen voor morgen) stond de kans op unknown,
+        juist 's middags. Dan doorsimuleren tot 09:00 - het einde van een
+        tekortnacht.
+        """
+        self.monte_carlo_horizon_basis = "goedkoopste blok"
+        if cheap_block_start is None or cheap_block_start <= now:
+            cheap_block_start = self._monte_carlo_terugval_horizon(now)
+            self.monte_carlo_horizon_basis = (
+                f"tot {MONTE_CARLO_TERUGVAL_UUR:02d}:00 (prijzen morgen nog onbekend)"
+            )
+        self.monte_carlo_horizon = cheap_block_start
+        return cheap_block_start
+
+    @staticmethod
+    def _monte_carlo_terugval_horizon(now: datetime) -> datetime:
+        """Het eerstvolgende 09:00 (lokale tijd van `now`)."""
+        doel = now.replace(
+            hour=MONTE_CARLO_TERUGVAL_UUR, minute=0, second=0, microsecond=0
+        )
+        if doel <= now:
+            doel += timedelta(days=1)
+        return doel
+
     def get_monte_carlo_vergelijking(self) -> dict:
         """Monte Carlo naast de tekortdagen (v5.36).
 
@@ -33205,15 +33259,24 @@ class EnergyManagementSystemCoordinator:
         """
         records = list(self.reserve_daily_records or [])[-7:]
         tekort = sum(1 for r in records if r.get("shortfall"))
-        horizon = self.last_cheap_block_start
+        horizon = getattr(self, "monte_carlo_horizon", None) or self.last_cheap_block_start
         return {
             "basis": "nu tot goedkoopste blok, vanaf de huidige accu-inhoud",
+            "horizon_basis": getattr(self, "monte_carlo_horizon_basis", None),
             "horizon_tot": horizon.isoformat() if horizon else None,
             "tekortdag_basis": (
                 "nacht 22:00-09:00, meer dan "
                 f"{SHORTFALL_MIN_NETIMPORT_KWH:.1f} kWh bijgekocht met lege accu"
             ),
             "tekortdagen_laatste_7": tekort,
+            # v5.37: ook de omvang, zodat te zien is of de marge het tekort
+            # kleiner maakt en niet alleen de telling.
+            "tekort_kwh_laatste_7": round(
+                sum((r.get("tekortnacht_kwh") or 0.0) for r in records), 2
+            ),
+            "tekort_kwh_per_nacht": [
+                round(r.get("tekortnacht_kwh") or 0.0, 2) for r in records
+            ],
             "dagen_gemeten": len(records),
             "werkelijke_tekortfrequentie_procent": (
                 round(100 * tekort / len(records), 1) if records else None
@@ -38931,7 +38994,7 @@ class EnergyManagementSystemCoordinator:
         self._ververs_toestandsvelden(now, entries)
 
         if not entries:
-            _LOGGER.warning(
+            (_LOGGER.debug if self.opstart_resterend_s() is not None else _LOGGER.warning)(
                 "No usable forecast entries found on %s (check that the "
                 "'forecast' attribute exists and the selected price "
                 "attribute (%s) is present on its items)",

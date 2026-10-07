@@ -20,20 +20,21 @@ def _seed_history(coordinator, consumption_kw=0.3, pv_bias=1.0, hours=range(24))
         coordinator.pv_hourly_bias_history[h] = [pv_bias] * 7
 
 
-def test_no_cheap_block_start_produces_no_simulation(make_coordinator, hass):
+def test_no_cheap_block_start_simulates_until_nine(make_coordinator, hass):
+    """v5.37: zonder toekomstig blok doorsimuleren tot 09:00."""
     coordinator = make_coordinator({})
     coordinator._run_monte_carlo_simulation(DAY0, None)
 
-    assert coordinator.monte_carlo_simulations_run == 0
-    assert coordinator.monte_carlo_median_deficit_kwh is None
-    assert "geen" in coordinator.monte_carlo_note.lower()
+    assert coordinator.monte_carlo_simulations_run == 1000
+    assert coordinator.monte_carlo_horizon.hour == 9
+    assert "onbekend" in coordinator.monte_carlo_horizon_basis
 
 
-def test_cheap_block_in_the_past_produces_no_simulation(make_coordinator, hass):
+def test_cheap_block_in_the_past_also_falls_back(make_coordinator, hass):
     coordinator = make_coordinator({})
     coordinator._run_monte_carlo_simulation(DAY0, DAY0 - timedelta(hours=1))
 
-    assert coordinator.monte_carlo_simulations_run == 0
+    assert coordinator.monte_carlo_horizon.hour == 9
 
 
 def test_runs_the_full_1000_simulations(make_coordinator, hass):

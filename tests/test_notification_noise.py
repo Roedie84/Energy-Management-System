@@ -92,7 +92,9 @@ def _nacht(make_coordinator, hass, beschikbaar, nodig):
     # niet met de reserve inclusief marge. "nodig" in deze toetsen is dat
     # werkelijke nodig.
     c.last_reserve_margin_breakdown = {"needed_kwh_before_margin": nodig}
+    # v5.37: pas melden als het tekort een half uur aanhoudt.
     c._evaluate_new_notifications(datetime(2026, 8, 7, 22, 0, tzinfo=timezone.utc))
+    c._evaluate_new_notifications(datetime(2026, 8, 7, 22, 30, tzinfo=timezone.utc))
     return [m["titel"] for m in c.notification_history]
 
 

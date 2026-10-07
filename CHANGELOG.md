@@ -30428,3 +30428,33 @@ Nieuw: `test_v536_schone_lei.py`.
 
 
 **Volledige testsuite**: 4686 tests, allemaal groen.
+
+## v5.37 — Nachtmelding, Monte Carlo zonder prijzen voor morgen, tekort in kWh
+
+Uit de uuranalyse van 7 oktober 12:22.
+
+### 1. "Accu haalt de nacht niet" klopt weer
+
+Op 7 oktober om 00:00 en 07:48 verstuurd, terwijl de accu de ochtend zonder
+netimport haalde. De melding gaat nu alleen af tussen 15:00 en 06:00
+(`NACHT_MELDING_START_UUR`/`NACHT_MELDING_EIND_UUR`) en pas als het tekort
+boven de drempel een half uur aanhoudt (`NACHT_TEKORT_AANHOUDEND_MIN`). Een
+actieve melding houdt de hysterese van v5.13.
+
+### 2. Monte Carlo ook zonder prijzen voor morgen
+
+Tussen het laadblok en de publicatie van de prijzen voor morgen stond de
+tekortkans op unknown. Nu simuleert hij dan door tot 09:00, het einde van
+een tekortnacht (`MONTE_CARLO_TERUGVAL_UUR`). `horizon_basis` zegt welke
+horizon gebruikt is.
+
+### 3. Tekort in kWh
+
+De Monte-Carlo-vergelijking toont naast de telling ook
+`tekort_kwh_laatste_7` en `tekort_kwh_per_nacht`: of de marge de omvang van
+het tekort kleiner maakt, niet alleen de telling.
+
+### 4. Geen prijswaarschuwing tijdens het opstarten
+
+"No usable forecast entries" kwam bij elke herstart, omdat Zonneplan nog niet
+geladen was. Tijdens de opstartfase is het nu een debugregel.

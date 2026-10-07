@@ -5082,6 +5082,17 @@ ZONNEPLAN_ROLLOVER_GRACE_MINUTES = 30
 BATTERY_NIGHT_SHORTFALL_MIN_KWH = 0.5
 BATTERY_NIGHT_SHORTFALL_MIN_FRACTION = 0.10
 
+# v5.37: de melding alleen 's avonds en 's nachts, en pas als het tekort
+# een half uur aanhoudt. Op 7 oktober ging hij om 07:48 af terwijl de accu
+# de ochtend zonder netimport haalde.
+NACHT_MELDING_START_UUR = 15
+NACHT_MELDING_EIND_UUR = 6
+NACHT_TEKORT_AANHOUDEND_MIN = 30
+
+# v5.37: horizon van Monte Carlo als er geen toekomstig goedkoopste blok
+# bekend is - het einde van een tekortnacht (22:00-09:00).
+MONTE_CARLO_TERUGVAL_UUR = 9
+
 # --- Plausibiliteitsscan op de eigen waarden (v1.9.5) ----------------
 # Gevraagd: "Heb je de diagnostiek nu zo goed nagekeken dat daar niets
 # meer uit te herleiden valt?" Eerlijke antwoord: nee. De export heeft
