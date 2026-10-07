@@ -132,6 +132,7 @@ def optimaliseer(
     rendement_procent: float,
     slijtage_ct: float,
     stap: float = 0.1,
+    eindwaarde_eur: float | None = None,
 ) -> dict:
     """Kosten-tot-het-einde per kwartier en energie-inhoud (dynamisch programmeren).
 
@@ -139,6 +140,10 @@ def optimaliseer(
     Eindwaarde: resterende energie gewaardeerd tegen de mediaan van de
     importwaarde x rendement - slijtage (niet negatief) - zo mag het optimum
     de accu niet leegtrekken om beter te lijken.
+
+    v5.32: `eindwaarde_eur` vervangt die vaste mediaan door de waarde die
+    `eindwaarde_meerdaags` uitrekent uit de zon van de dag(en) na de
+    bekende prijzen.
     """
     if not kwartieren or emax_kwh <= 0:
         return {"V": [], "stap": stap, "ns": 0}
@@ -148,7 +153,10 @@ def optimaliseer(
     k_min = -int(ontlaad_kwh / eta / stap)
     k_max = int(laad_kwh * eta / stap)
     importen = [k["import"] for k in kwartieren if k["import"] is not None]
-    eindwaarde = max(0.0, statistics.median(importen) * (rendement_procent / 100) - slijt) if importen else 0.0
+    if eindwaarde_eur is not None:
+        eindwaarde = max(0.0, float(eindwaarde_eur))
+    else:
+        eindwaarde = max(0.0, statistics.median(importen) * (rendement_procent / 100) - slijt) if importen else 0.0
     V = [[0.0] * (ns + 1) for _ in range(len(kwartieren) + 1)]
     V[-1] = [-(s * stap) * eindwaarde for s in range(ns + 1)]
     for q in range(len(kwartieren) - 1, -1, -1):
@@ -190,6 +198,96 @@ def alternatieven(opt: dict, kwartieren: list[dict], q: int, energie_kwh: float)
         kosten = _stap_kosten(kw, werkelijk_in, werkelijk_uit, opt["slijtage_eur"]) + opt["V"][q + 1][t]
         uit[actie] = round(-kosten, 4)
     return uit
+
+
+# --- meerdaags (v5.32) ------------------------------------------------------
+
+def eindwaarde_meerdaags(
+    kwartieren: list[dict],
+    *,
+    rendement_procent: float,
+    slijtage_ct: float,
+    zon_na_horizon_kwh: float | None,
+    verbruik_na_horizon_kwh: float | None,
+) -> dict:
+    """Wat een kWh in de accu waard is aan het eind van de bekende prijzen.
+
+    Gevraagd: "vandaag stroomprijs minimum rond 15 ct en morgen niet lager
+    dan 30 ct, maar vandaag veel zon en morgen weinig zon." Na de laatste
+    bekende prijs gaat het leven door. Een kWh die dan nog in de accu zit,
+    is zoveel waard als wat hij de dag erna uitspaart:
+
+    - weinig zon die dag: hij voorkomt inkoop - waarde = importprijs x
+      rendement - slijtage;
+    - genoeg zon om het huis en de accu zelf te vullen: de zon had hem toch
+      geleverd - waarde = wat hij nu aan het net zou opbrengen (export).
+
+    Daartussen naar rato van het deel dat de zon dekt. Zonder zonverwachting
+    blijft het de oude, vaste waarde (mediaan import x rendement - slijtage).
+    De prijzen van na de horizon zijn onbekend; de mediaan van de bekende
+    importwaarde staat ervoor.
+    """
+    importen = [k["import"] for k in kwartieren if k.get("import") is not None]
+    exporten = [k["export"] for k in kwartieren if k.get("export") is not None]
+    slijt = slijtage_ct / 100
+    eta = rendement_procent / 100
+    importwaarde = max(0.0, statistics.median(importen) * eta - slijt) if importen else 0.0
+    exportwaarde = max(0.0, statistics.median(exporten)) if exporten else 0.0
+    if zon_na_horizon_kwh is None or not verbruik_na_horizon_kwh:
+        return {"eindwaarde_eur": round(importwaarde, 4), "zon_dekking": None,
+                "importwaarde_eur": round(importwaarde, 4), "exportwaarde_eur": round(exportwaarde, 4),
+                "bron": "vast"}
+    dekking = max(0.0, min(1.0, zon_na_horizon_kwh / verbruik_na_horizon_kwh))
+    # Zon dekt pas echt als hij ook het huis 's nachts haalt: het
+    # overschot moet in de accu passen. Daarom lineair en niet sprongsgewijs.
+    waarde = (1 - dekking) * importwaarde + dekking * min(exportwaarde, importwaarde)
+    return {
+        "eindwaarde_eur": round(waarde, 4),
+        "zon_dekking": round(dekking, 2),
+        "importwaarde_eur": round(importwaarde, 4),
+        "exportwaarde_eur": round(exportwaarde, 4),
+        "bron": "zon na de horizon",
+    }
+
+
+def waarde_per_kwh(opt: dict, q: int, energie_kwh: float) -> float | None:
+    """Marginale waarde (€/kWh) van energie in de accu bij het begin van
+    kwartier q: hoeveel goedkoper de rest van de horizon wordt met een kWh
+    meer. Dit is de "prijs" waartegen laden of verkopen zich moet meten."""
+    V = opt.get("V")
+    if not V or q < 0 or q >= len(V):
+        return None
+    stap, ns = opt["stap"], opt["ns"]
+    s = max(0, min(ns - 1, int(round(energie_kwh / stap))))
+    rij = V[q]
+    # centraal verschil waar het kan, anders eenzijdig
+    if 0 < s < ns:
+        return round((rij[s - 1] - rij[s + 1]) / (2 * stap), 4)
+    return round((rij[s] - rij[s + 1]) / stap, 4)
+
+
+def optimaal_pad(opt: dict, kwartieren: list[dict], q0: int, energie_kwh: float, tot: int) -> float | None:
+    """De energie-inhoud bij het begin van kwartier `tot` als het optimum
+    vanaf `q0` wordt gevolgd (v5.32). Nodig om de waarde van een kWh om
+    middernacht te geven bij de stand die de accu dan werkelijk zou hebben,
+    niet bij de stand van nu."""
+    V = opt.get("V")
+    if not V or q0 < 0 or tot < q0 or tot >= len(V):
+        return None
+    stap, ns, eta, slijt = opt["stap"], opt["ns"], opt["eta"], opt["slijtage_eur"]
+    k_min = -int(opt["ontlaad_kwh"] / eta / stap)
+    k_max = int(opt["laad_kwh"] * eta / stap)
+    s = max(0, min(ns, int(round(energie_kwh / stap))))
+    for q in range(q0, tot):
+        kw = kwartieren[q]
+        beste_k, beste = 0, float("inf")
+        for k in range(max(k_min, -s), min(k_max, ns - s) + 1):
+            d = k * stap
+            kosten = _stap_kosten(kw, d / eta if d > 0 else 0.0, -d * eta if d < 0 else 0.0, slijt) + V[q + 1][s + k]
+            if kosten < beste:
+                beste, beste_k = kosten, k
+        s += beste_k
+    return round(s * stap, 2)
 
 
 def beste_twee(waarden: dict) -> tuple:
@@ -282,3 +380,61 @@ def oorzaak(
     if vertrouwen == "laag":
         return "forecast"
     return "andere_regel"
+
+
+# --- tekst voor de Proefstand (v5.32) --------------------------------------
+
+_ACTIE_TEKST = {
+    "huis_dekken": "het huis voeden",
+    "bewaren": "bewaren (zon opvangen, niets afgeven)",
+    "verkopen": "verkopen aan het net",
+    "laden": "laden uit het net",
+}
+
+
+def _euro(waarde) -> str:
+    return "–" if waarde is None else f"€ {waarde:.2f}".replace(".", ",")
+
+
+def _ct(waarde) -> str:
+    return f"{waarde:g}".replace(".", ",") + " ct"
+
+
+def meerdaags_tekst(m: dict) -> str:
+    """De meerdaagse afweging in gewone taal. Logica hoort niet in het
+    dashboardsjabloon (sjabloonratel); daarom komt de tekst hier vandaan."""
+    if not m.get("beschikbaar"):
+        return f"_Nog geen meerdaagse berekening: {m.get('reden', 'onbekend')}._"
+    regels = []
+    for ct, v in (m.get("varianten") or {}).items():
+        kop = "productie" if ct == m.get("slijtage_productie_ct") else "cyclusslijtage"
+        regel = (
+            f"**Slijtage {_ct(ct)} ({kop})** — een kWh in de accu is nu "
+            f"**{_euro(v.get('waarde_nu_eur'))}** waard"
+        )
+        if v.get("waarde_middernacht_eur") is not None:
+            regel += (
+                f", om middernacht {_euro(v.get('waarde_middernacht_eur'))} "
+                f"(dan nog ± {str(v.get('accu_middernacht_kwh')).replace('.', ',')} kWh in de accu)"
+            )
+        regel += f". Het optimum zou nu: **{_ACTIE_TEKST.get(v.get('schaduwactie'), v.get('schaduwactie') or '–')}**."
+        regels.append(regel)
+    prijs = (
+        f"Inkoop nu {_euro(m.get('prijs_nu_eur'))}, teruglevering nu {_euro(m.get('export_nu_eur'))}. "
+        "Laden loont als een kWh later meer waard is dan hij nu kost; verkopen loont als hij nu meer opbrengt "
+        "dan hij later waard is."
+    )
+    na = m.get("na_horizon") or {}
+    eind = next(iter((m.get("varianten") or {}).values()), {}).get("eindwaarde") or {}
+    if na.get("datum") and na.get("zon_kwh") is not None and eind.get("zon_dekking") is not None:
+        horizon = (
+            f"De bekende prijzen lopen tot {str(m.get('horizon_tot') or '')[:16].replace('T', ' ')}. "
+            f"Op {na['datum']} wordt {str(na['zon_kwh']).replace('.', ',')} kWh zon verwacht tegen "
+            f"± {str(na.get('verbruik_kwh')).replace('.', ',')} kWh verbruik: de zon dekt dan "
+            f"{round(100 * eind['zon_dekking'])}%. Een kWh die aan het eind nog in de accu zit, telt daarom voor "
+            f"{_euro(eind.get('eindwaarde_eur'))} (bij weinig zon {_euro(eind.get('importwaarde_eur'))}, "
+            f"bij volle zon {_euro(min(eind.get('exportwaarde_eur') or 0, eind.get('importwaarde_eur') or 0))})."
+        )
+    else:
+        horizon = "Voor de dag na de bekende prijzen is geen zonverwachting; het eind telt met een vaste waarde."
+    return "\n\n".join(regels + [prijs, horizon, "_Schaduw: dit stuurt niets._"])

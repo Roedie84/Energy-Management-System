@@ -4482,7 +4482,7 @@ class MeetlogSensor(_CoordinatorDiagnosticSensor):
     _attr_has_entity_name = True
     _attr_name = "Meetlog"
     _attr_icon = "mdi:database-eye-outline"
-    _unrecorded_attributes = frozenset({"laatste_evaluatie", "laatste_kwartier", "laatste_dagrapport", "opslag", "grootverbruikers"})
+    _unrecorded_attributes = frozenset({"laatste_evaluatie", "laatste_kwartier", "laatste_dagrapport", "opslag", "grootverbruikers", "meerdaags"})
 
     def __init__(self, coordinator, entry_id: str) -> None:
         super().__init__(coordinator, entry_id, "meetlog")

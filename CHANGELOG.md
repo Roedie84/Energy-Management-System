@@ -30181,3 +30181,48 @@ niet vandaag is: "18:30 – morgen 24:00". Een eindtijd om middernacht heet
 niet uit het sjabloon; ook "Nu smart tot …" gebruikt hem.
 
 **Volledige testsuite**: 4630 tests, allemaal groen.
+
+
+## v5.32 — Meerdaags kijken (schaduw)
+
+Gevraagd: *"Kunnen we het EMS nog slimmer maken, dus ook de volgende dagen
+bekijken, bijvoorbeeld vandaag stroomprijs minimum rond 15 ct en morgen niet
+lager dan 30 ct, maar vandaag veel zon en morgen weinig zon."*
+
+Wat er al was: de lange horizon (de reserve rekent tot het eind van de
+bekende prijzen), een hogere marge bij meerdere sombere dagen, en het
+economische schaduwoptimum over alle bekende kwartieren. Dat optimum
+waardeerde wat er aan het eind in de accu zat met een vaste waarde (mediaan
+inkoop x rendement - slijtage), ongeacht wat de dag erna brengt.
+
+### 1. De dag na de bekende prijzen telt mee
+
+`schaduw.eindwaarde_meerdaags`: een kWh die aan het eind van de bekende
+prijzen nog in de accu zit, is zoveel waard als wat hij de dag erna
+uitspaart. Weinig zon die dag: inkoop x rendement - slijtage. Genoeg zon om
+het huis te dekken: alleen wat terugleveren opbrengt. Daartussen naar rato
+(Solcast-dagtotalen vandaag, morgen, dag 3-7; verbruik uit het geleerde
+profiel). Zonder zonverwachting blijft het de oude vaste waarde.
+
+### 2. Wat een kWh waard is - nu en om middernacht
+
+`schaduw.waarde_per_kwh` en `schaduw.optimaal_pad`: de marginale waarde van
+energie in de accu volgt uit het optimum, nu en om middernacht (bij de stand
+die de accu dan volgens het optimum heeft). Voor de productieslijtage en voor
+cyclusslijtage (4,22 ct), met wat het optimum nu zou doen.
+
+Proefstand: nieuwe kaart **Meerdaags (schaduw)**, in gewone taal. Elke
+evaluatie in de meetlog legt `kwh_value_now_eur` en `kwh_value_midnight_eur`
+vast, zodat de dagrapporten het over weken kunnen vergelijken.
+
+### Gevonden: slijtage op twee manieren
+
+Productie rekent `latere prijs x rendement - slijtage` (slijtage per gekochte
+kWh); het optimum rekent slijtage per kWh die de accu afgeeft:
+`(latere prijs - slijtage) x rendement`. Bij 11,28 ct scheelt dat 1,7 ct per
+kWh. In de schaduw blijft het zoals het was; vóór productie hoort er één
+definitie te komen.
+
+Schaduw: dit stuurt niets. Productie ongewijzigd (gouden standaard groen).
+
+**Volledige testsuite**: 4643 tests, allemaal groen.

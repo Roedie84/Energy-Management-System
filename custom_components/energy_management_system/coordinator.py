@@ -40637,6 +40637,43 @@ class EnergyManagementSystemCoordinator:
         except (TypeError, ValueError):
             return float(HANDMATIG_LAADVERMOGEN_W)
 
+    def zon_per_dag_kwh(self, vandaag) -> dict:
+        """De Solcast-dagtotalen per datum: vandaag, morgen, dag 3 t/m 7
+        (v5.32). Alleen wat een getal geeft."""
+        bronnen = [
+            self.config.get(CONF_SOLAR_TODAY_FORECAST_SENSOR),
+            self.config.get(CONF_SOLAR_FORECAST_SENSOR),
+            *(self.config.get(CONF_SOLAR_EXTENDED_FORECAST_SENSORS) or []),
+        ]
+        uit = {}
+        for dag, entiteit in enumerate(bronnen):
+            if not entiteit:
+                continue
+            waarde = self._read_sensor_float(entiteit)
+            if waarde is not None and waarde >= 0:
+                uit[vandaag + timedelta(days=dag)] = waarde
+        return uit
+
+    def zon_na_horizon(self, now: datetime, eind: datetime | None) -> dict:
+        """De dag na de laatste bekende prijs: verwachte zon en verbruik
+        (v5.32). Daarmee weegt het schaduwoptimum wat een kWh die dan nog in
+        de accu zit, waard is."""
+        if eind is None:
+            return {"datum": None, "zon_kwh": None, "verbruik_kwh": None}
+        dag = dt_util.as_local(eind).date() if eind.tzinfo else eind.date()
+        zon = self.zon_per_dag_kwh(now.date()).get(dag)
+        verbruik = None
+        try:
+            begin = datetime.combine(dag, datetime.min.time(), tzinfo=eind.tzinfo)
+            verbruik = self._estimate_consumption_kwh_for_period(begin, begin + timedelta(days=1))
+        except Exception:  # noqa: BLE001 - meetcode mag productie nooit raken
+            verbruik = None
+        return {
+            "datum": dag.isoformat(),
+            "zon_kwh": round(zon, 2) if zon is not None else None,
+            "verbruik_kwh": round(verbruik, 2) if verbruik else None,
+        }
+
     def get_meetlog(self) -> dict:
         """Samenvatting van de meetlaag voor export en sensor (v5.28)."""
         laag = getattr(self, "_meetlaag", None)

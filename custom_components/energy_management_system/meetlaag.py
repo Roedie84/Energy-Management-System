@@ -59,6 +59,7 @@ class Meetlaag:
         self.duur_ms: list[float] = []
         self.invoer = None
         self._risico_cache: dict = {}
+        self.meerdaags: dict | None = None
 
     # =====================================================================
     # ronde
@@ -103,8 +104,17 @@ class Meetlaag:
             self._productie_slijtage_ct(),
             self._config_hash(),
             self._versie(),
+            self._zon_na_horizon_sleutel(now, entries),
         )
         return hashlib.sha1(repr(onderdelen).encode()).hexdigest()
+
+    def _zon_na_horizon_sleutel(self, now: datetime, entries) -> tuple:
+        """v5.32: de zon na de horizon hoort bij de invoer van het snapshot."""
+        try:
+            na = self.c.zon_na_horizon(now, max(e for _b, e, _p in entries) if entries else None)
+        except Exception:  # noqa: BLE001
+            return ()
+        return (na.get("datum"), na.get("zon_kwh"))
 
     def _config_hash(self) -> str:
         return hashlib.sha1(repr(sorted((self.c.config or {}).items())).encode()).hexdigest()[:10]
@@ -173,6 +183,11 @@ class Meetlaag:
             "ems_version": self._versie(),
             "quality": kwaliteit,
         }
+        # v5.32: de dag na de laatste bekende prijs - voor de eindwaarde.
+        try:
+            inhoud["na_horizon"] = c.zon_na_horizon(now, max(e for _b, e, _p in entries) if entries else None)
+        except Exception:  # noqa: BLE001
+            inhoud["na_horizon"] = {"datum": None, "zon_kwh": None, "verbruik_kwh": None}
         inhoud["forecast_hash"] = meetlog.snapshot_id({"k": kwartieren})
         return inhoud, kwartieren
 
@@ -210,10 +225,25 @@ class Meetlaag:
         }
         self._schaduw[sid] = {"beschikbaar": False, "reden": "wordt berekend"}
 
+        na = inhoud.get("na_horizon") or {}
+
         def rekenen():
-            uit = {"beschikbaar": True, "parameters": parameters, "varianten": {}}
+            uit = {"beschikbaar": True, "parameters": parameters, "varianten": {}, "eindwaarden": {},
+                   "na_horizon": na}
             for ct in schaduw.SLIJTAGEVARIANTEN_CT:
-                uit["varianten"][ct] = schaduw.optimaliseer(kwartieren, slijtage_ct=ct, **parameters)
+                # v5.32: wat er aan het eind overblijft, gewogen naar de zon
+                # van de dag erna.
+                eind = schaduw.eindwaarde_meerdaags(
+                    kwartieren,
+                    rendement_procent=parameters["rendement_procent"],
+                    slijtage_ct=ct,
+                    zon_na_horizon_kwh=na.get("zon_kwh"),
+                    verbruik_na_horizon_kwh=na.get("verbruik_kwh"),
+                )
+                uit["eindwaarden"][ct] = eind
+                uit["varianten"][ct] = schaduw.optimaliseer(
+                    kwartieren, slijtage_ct=ct, eindwaarde_eur=eind["eindwaarde_eur"], **parameters
+                )
             return uit
 
         async def klaar():
@@ -289,6 +319,7 @@ class Meetlaag:
         spiegel = schaduw.spiegel(invoer, prod_ct) if prod_ct is not None else None
         spiegel_varianten = {ct: schaduw.spiegel(invoer, ct)["actie"] for ct in schaduw.SLIJTAGEVARIANTEN_CT}
         economisch = self._economisch(now, beschikbaar, prod_ct)
+        self.meerdaags = self._meerdaags(now, beschikbaar, prod_ct)
         risico = self._risico(now, prijs_nu)
         snapshot = self.log.snapshot(self._snapshot_id) if self._snapshot_id else None
         onvolledig = bool(snapshot) and any(
@@ -312,6 +343,8 @@ class Meetlaag:
             "mirror_per_slijtage": spiegel_varianten,
         }
         record.update(economisch)
+        record["kwh_value_now_eur"] = (self.meerdaags or {}).get("waarde_nu_eur")
+        record["kwh_value_midnight_eur"] = (self.meerdaags or {}).get("waarde_middernacht_eur")
         record.update({
             "production_reserve_kwh": reserve,
             "shadow_risk_reserve_kwh": risico.get("kwh"),
@@ -364,6 +397,55 @@ class Meetlaag:
             "economic_per_slijtage": {ct: v["actie"] for ct, v in per_variant.items()},
             "economic_status": "ok",
         }
+
+    def _meerdaags(self, now: datetime, beschikbaar, prod_ct) -> dict:
+        """Wat een kWh in de accu waard is - nu en om middernacht - over
+        alle bekende dagen heen (v5.32, schaduw)."""
+        res = self._schaduw.get(self._snapshot_id) or {}
+        if not res.get("beschikbaar") or beschikbaar is None:
+            return {"beschikbaar": False, "reden": res.get("reden") or "geen schaduw"}
+        q = self._kwartier_index(now)
+        if q is None:
+            return {"beschikbaar": False, "reden": "kwartier buiten het snapshot"}
+        middernacht = next(
+            (i for i, k in enumerate(self._kwartieren)
+             if datetime.fromisoformat(k["begin"]).date() > now.date()),
+            None,
+        )
+        kw = self._kwartieren[q]
+        per_variant = {}
+        for ct in sorted({c for c in (prod_ct, 4.22) if c in res["varianten"]}, reverse=True):
+            opt = res["varianten"][ct]
+            waarden = schaduw.alternatieven(opt, self._kwartieren, q, beschikbaar)
+            beste, _tweede = schaduw.beste_twee(waarden)
+            nacht_kwh = (
+                schaduw.optimaal_pad(opt, self._kwartieren, q, beschikbaar, middernacht)
+                if middernacht is not None else None
+            )
+            per_variant[ct] = {
+                "waarde_nu_eur": schaduw.waarde_per_kwh(opt, q, beschikbaar),
+                "waarde_middernacht_eur": (
+                    schaduw.waarde_per_kwh(opt, middernacht, nacht_kwh)
+                    if nacht_kwh is not None else None
+                ),
+                "accu_middernacht_kwh": nacht_kwh,
+                "schaduwactie": beste,
+                "eindwaarde": res.get("eindwaarden", {}).get(ct),
+            }
+        hoofd = per_variant.get(prod_ct) or next(iter(per_variant.values()), {})
+        uit = {
+            "beschikbaar": True,
+            "slijtage_productie_ct": prod_ct,
+            "prijs_nu_eur": kw.get("import"),
+            "export_nu_eur": kw.get("export"),
+            "na_horizon": res.get("na_horizon"),
+            "horizon_tot": self._kwartieren[-1]["begin"] if self._kwartieren else None,
+            "waarde_nu_eur": hoofd.get("waarde_nu_eur"),
+            "waarde_middernacht_eur": hoofd.get("waarde_middernacht_eur"),
+            "varianten": per_variant,
+        }
+        uit["tekst"] = schaduw.meerdaags_tekst(uit)
+        return uit
 
     def _risico(self, now: datetime, prijs_nu) -> dict:
         """De tekortverdeling vanaf het huidige kwartier tot het blok, een keer
@@ -649,6 +731,7 @@ class Meetlaag:
             "laatste_evaluatie": self.laatste_evaluatie,
             "laatste_kwartier": self.laatste_kwartier,
             "laatste_dagrapport": self.laatste_dagrapport,
+            "meerdaags": self.meerdaags,
         }
 
 

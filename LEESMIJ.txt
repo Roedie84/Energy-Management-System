@@ -1,5 +1,4 @@
-EMS v5.31.3 - "Komend schema" toont de dag
+EMS v5.32 - meerdaags kijken (schaduw)
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
-Het dashboard volgt de nieuwe dashboard_template.yaml automatisch; heb je een
-eigen kopie (dashboards/energy_management_system_dashboard.yaml), vervang die.
+Nieuw op de Proefstand: kaart "Meerdaags (schaduw)". Stuurt niets.
