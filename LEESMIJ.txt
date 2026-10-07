@@ -1,9 +1,9 @@
-EMS v5.42 - één reserve per ronde, de oude tekortnachten nagerekend
+EMS v5.43 - het huis gaat voor, ook in de eerste ronde
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
-Stuurt niet anders. De melding "Eén reserve: brug wijkt af van de sturing" na
-een herstart is weg: brug, sturing, verkooptoets, projectie en Monte Carlo
-lezen in een ronde hetzelfde reservegetal. De vier oude tekortnachten zijn
-nagerekend: 30 september en 2 oktober waren economisch (laden loonde niet
-tegen wat het tekort kostte), 3 en 4 oktober planning (verkocht in de dure
-kwartieren). Het aandachtspunt noemt nu welke nachten, en waarom.
+Verkopen stopt altijd op de reserve, inclusief marge en lange horizon. De
+lange horizon wordt nu gemeten vóór de beslissing (stond erna: een ronde te
+laat, na een herstart nul). De secundaire prijslaag verkoopt niet meer als
+de verkooptoets nee zegt om een andere reden dan de reserve (zonarme dag,
+voorzien tekort). "Wat doet de integratie nu" eindigt op een hele zin; de
+volledige tekst staat in het attribuut volledige_tekst.

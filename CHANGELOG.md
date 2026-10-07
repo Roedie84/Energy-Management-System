@@ -30726,3 +30726,76 @@ Planning - nacht naar 3 okt: 1,4 kWh verkocht terwijl de accu niet vol was
 
 `shortfall` blijft overal staan, dus de zelfcorrigerende marge telt alle
 tekortnachten mee zoals voorheen. De sturing verandert niet.
+
+## v5.43 — Het huis gaat voor, ook in de eerste ronde
+
+Gevraagd na v5.42: kan de sturing nog onder de reserve verkopen? De regel
+staat al lang: energie onder de reserve wordt nooit verkocht, ook niet als
+het net iets meer zou opleveren.
+
+### 1. De twee planningsnachten: de piekregel, verholpen in v5.28.4
+
+Nagerekend met de beslisreden in de geschiedenis van Home Assistant:
+
+```
+2 okt  19:00-20:00  expensive_quarter_peak   (v5.28.2 geïnstalleerd)
+3 okt  18:45-19:55  expensive_quarter        (boven de reserve)
+       19:55-22:26  expensive_quarter_peak   (onder de reserve, tot 25%)
+```
+
+Beide nachten verkocht de piekregel (v5.22, sinds v5.26.3 vóór de
+huisgrens) onder de reserve zolang de prijs hoger was dan elk kwartier tot
+het bijvullen. Verholpen in v5.28.4 (4 oktober): `_verkoopruimte_met_piek`
+laat alleen `may_sell_now` beslissen en `_geen_ruimte_boven_reserve`
+verkoopt niet. Sinds de installatie op 4 oktober 10:32 kwam
+`expensive_quarter_peak` niet meer voor. Nu ook vastgelegd met een volledige
+ronde (avondpiek, accu onder de reserve: geen verkoop).
+
+### 2. De lange horizon liep een ronde achter - na een herstart nul
+
+v5.42 maakte de eerste reserve van een ronde dé reserve voor brug, sturing
+en verkooptoets. Maar het deel na het goedkope blok
+(`_meet_lange_reserve`) werd pas in het staartstuk gemeten, ná de brug. De
+verkooptoets rekende dus met de lange horizon van de vorige ronde - en in de
+eerste ronde na een herstart met nul (op 7 oktober 1,87 kWh te laag). Met
+7,5 kWh tegen een korte reserve van 6,78 en 1,9 kWh lange horizon ging er
+in die ronde 1600 W naar het net, onder de echte reserve van 8,6 kWh.
+
+Nu wordt de lange horizon gemeten direct nadat het blok bekend is, vóór de
+eerste reserve van de ronde. Brug, sturing en verkooptoets lezen nog steeds
+hetzelfde getal - nu met de lange horizon van deze ronde. Verkopen boven de
+reserve verandert niet.
+
+### 3. De secundaire prijslaag luistert naar elk nee van de verkooptoets
+
+`_secundaire_laag_toegestaan` keek alleen naar de reservevlag. Zei
+`may_sell_now` nee om een andere reden - een zonarme dag, een tekort dat de
+planning voorziet, verkopen dat na de saldering niet loont - dan rekende de
+secundaire laag zijn eigen ruimte boven de reserve uit en kon hij alsnog
+verkopen. Een voorzien tekort betekent juist dat de echte nachtbehoefte
+boven de reserve ligt. Nu: één poort, de verkooptoets van de ronde.
+
+### Wat geen verkopen is
+
+- **De smart-modus** ontlaadt alleen voor het huis (P1-volgend) en laadt bij
+  zonoverschot; het EMS stuurt dan geen vermogen.
+- **De vaste -50 W op de P1-meter** is de eigen instelling van de Zendure
+  (regelt op "P1 + 50"). De reserve rekent hem mee als verbruik (v5.20), de
+  tekorttelling telt hem niet als verkoop (v5.42).
+- Een verkoopronde duurt hooguit één ronde (een minuut): elke ronde toetst de
+  verkooptoets opnieuw, met de dode zone van v3.99.4.
+
+### 4. "Wat doet de integratie nu" eindigt op een hele zin
+
+De toestand werd hard afgekapt op 255 tekens, midden in een zin
+("Diepste-tekort-berekening (het"). Nu eindigt hij na de laatste hele zin
+met " …" (zonder zinsgrens op een spatie). De volledige tekst staat in het
+nieuwe attribuut `volledige_tekst` (naast `verhaal`), met `ingekort`. De
+Explanation-sensor kort op dezelfde manier in.
+
+En de tekst bij `default_smart` zei "mag de Zendure nu zelf bijladen
+(smart-modus)" terwijl de accu 300 W ontlaadde. Nu: "Daarom wordt er niet
+verkocht en regelt de Zendure het zelf (smart-modus: laden bij zonoverschot,
+ontladen voor het huis)."
+
+**Volledige testsuite**: 4788 tests, allemaal groen.

@@ -818,6 +818,34 @@ class MonthlySummarySensor(_CoordinatorDiagnosticSensor, RestoreEntity):
             pass
 
 
+HA_STATE_MAX_TEKENS = 255
+
+
+def kort_op_zinsgrens(tekst: str | None, limiet: int = HA_STATE_MAX_TEKENS) -> str | None:
+    """Kort een tekst in tot `limiet` tekens, op de laatste zinsgrens (v5.43).
+
+    Gemeld: de toestand van "Wat doet de integratie nu" eindigde midden in
+    een zin - "Diepste-tekort-berekening (het". HA begrenst een toestand op
+    255 tekens; de volledige tekst staat in een attribuut. Past hij niet,
+    dan eindigt de toestand na de laatste hele zin, gevolgd door "…". Is er
+    geen zinsgrens, dan op de laatste spatie, en anders hard.
+    """
+    if tekst is None or len(tekst) <= limiet:
+        return tekst
+    ruimte = tekst[: limiet - 2]
+    einde = -1
+    for i, teken in enumerate(ruimte):
+        if teken in ".!?" and (i + 1 >= len(tekst) or tekst[i + 1].isspace()):
+            einde = i
+    if einde >= 0:
+        return tekst[: einde + 1] + " …"
+    ruimte = tekst[: limiet - 1]
+    spatie = ruimte.rfind(" ")
+    if spatie > 0:
+        return ruimte[:spatie].rstrip() + "…"
+    return ruimte + "…"
+
+
 class ExplanationSensor(_CoordinatorDiagnosticSensor):
     """Plain-language (Dutch) explanation of what the integration is
     doing right now and why - so you can read in the dashboard what's
@@ -842,7 +870,8 @@ class ExplanationSensor(_CoordinatorDiagnosticSensor):
         text = self._coordinator.last_explanation
         if text is None:
             return None
-        return text if len(text) <= 255 else text[:252] + "..."
+        # v5.43: op een zinsgrens, net als "Wat doet de integratie nu".
+        return kort_op_zinsgrens(text)
 
     @property
     def extra_state_attributes(self) -> dict:
@@ -3042,13 +3071,19 @@ class LiveNarrativeSensor(SensorEntity):
     def native_value(self) -> str:
         narrative = self._coordinator.get_live_narrative(dt_util.now())
         # HA-sensorstatussen zijn begrensd tot 255 tekens - de volledige
-        # tekst staat altijd in het "verhaal"-attribuut hieronder.
-        return narrative[:255]
+        # tekst staat altijd in de attributen hieronder.
+        # v5.43: afkappen op een zinsgrens, niet midden in een woord.
+        return kort_op_zinsgrens(narrative)
 
     @property
     def extra_state_attributes(self) -> dict:
+        narrative = self._coordinator.get_live_narrative(dt_util.now())
         return {
-            "verhaal": self._coordinator.get_live_narrative(dt_util.now()),
+            "verhaal": narrative,
+            # v5.43: de volledige tekst onder een naam die zegt wat hij is,
+            # en of de toestand is ingekort.
+            "volledige_tekst": narrative,
+            "ingekort": len(narrative or "") > HA_STATE_MAX_TEKENS,
         }
 
 

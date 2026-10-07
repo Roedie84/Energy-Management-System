@@ -25488,8 +25488,21 @@ class EnergyManagementSystemCoordinator:
 
     def _secundaire_laag_toegestaan(self) -> bool:
         """Mag de secundaire prijslaag verkopen? Alleen als de verkooptoets
-        niet door de reserve dicht staat (v3.99.9)."""
-        return not self._verkoop_geblokkeerd_door_reserve
+        niet door de reserve dicht staat (v3.99.9).
+
+        v5.43: en alleen als de verkooptoets van deze ronde niet NEE zei. De
+        reservevlag hierboven wordt alleen gezet als de reserve-toets zelf
+        sluit. Zei `may_sell_now` nee om een andere reden - een zonarme dag,
+        een tekort dat de planning voorziet, verkopen dat na de saldering
+        niet loont, een onbekende accustand - dan rekende deze laag zijn
+        eigen ruimte uit en kon hij alsnog verkopen. Een voorzien tekort
+        betekent juist dat de werkelijke nachtbehoefte boven de reserve ligt.
+        Eén poort voor de vraag "mag er verkocht worden".
+        """
+        if self._verkoop_geblokkeerd_door_reserve:
+            return False
+        toets = self.last_sell_check
+        return not (isinstance(toets, dict) and toets.get("mag_verkopen") is False)
 
     def _is_worth_discharging_at_secondary_tier(
         self,
@@ -39773,8 +39786,10 @@ class EnergyManagementSystemCoordinator:
                     f"De accu heeft niet genoeg beschikbare energie "
                     f"({avail_txt} kWh) om zowel het basisverbruik als de "
                     f"nog-komende dure kwartieren van vandaag te overbruggen "
-                    f"(geschat nodig: {needed_txt} kWh), dus mag de Zendure "
-                    f"nu zelf bijladen (smart-modus)."
+                    f"(geschat nodig: {needed_txt} kWh). Daarom wordt er "
+                    f"niet verkocht en regelt de Zendure het zelf "
+                    f"(smart-modus: laden bij zonoverschot, ontladen voor "
+                    f"het huis)."
                 )
             else:
                 price_txt = (
@@ -39906,6 +39921,16 @@ class EnergyManagementSystemCoordinator:
         )
         self.last_cheap_block_start = cheap_block_start
         self.last_cheap_block_end = cheap_block_end
+        # v5.43: de lange horizon meten VÓÓR de eerste reserve van de ronde.
+        # Stond in het staartstuk, na de brug: de reserve van de ronde (v5.42)
+        # rekende dan met het deel na het blok van de VORIGE ronde - en na een
+        # herstart met nul. De verkooptoets kon zo een ronde lang verkopen
+        # tot een reserve zonder de lange horizon (op 7 oktober 1,87 kWh te
+        # laag). Het huis gaat voor: de reserve is compleet voordat er
+        # verkocht wordt.
+        self._voer_staartstap_uit(
+            "lange reserve", lambda: self._meet_lange_reserve(now, entries)
+        )
 
         effective_count = self._count_expensive_quarters_today(entries, now)
         is_expensive = self._is_expensive_now(entries, now)
@@ -40069,9 +40094,8 @@ class EnergyManagementSystemCoordinator:
             self._noteer_staartfout("accukoeling")
 
         for naam, stap in (
-            # v3.10.0: de reserve met een lange horizon, hier omdat
-            # `entries` pas in het staartstuk bestaat.
-            ("lange reserve", lambda: self._meet_lange_reserve(now, entries)),
+            # v5.43: de lange reserve wordt gemeten vóór de beslissing,
+            # direct nadat het blok bekend is - zie daar.
             ("ochtend", lambda: self._volg_de_ochtend(now)),
             # v5.40: na de ochtend, die de nacht afsluit.
             ("tekortsoort", lambda: self._volg_vol_en_verkoop(now)),
