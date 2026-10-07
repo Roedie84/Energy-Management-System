@@ -134,19 +134,20 @@ def test_planning_blijft_een_aandachtspunt(make_coordinator, hass):
     c.reserve_daily_records = [
         _record("2026-10-01", "capaciteit"),
         _record("2026-10-02", "planning"),
-        # van voor v5.40: geen soort, telt als planning
+        # van voor v5.40: geen soort; sinds v5.41 informatief (onbekend)
         {"date": "2026-10-03", "shortfall": True, "excess": False},
     ]
 
     samenvatting = c.get_diagnostic_summary()
 
-    assert "2 onverwachte tekort-dag(en) in de laatste 3 dagen." in samenvatting[
+    assert "1 onverwachte tekort-dag(en) in de laatste 3 dagen." in samenvatting[
         "aandachtspunten"
     ]
     soorten = c.get_tekortsoorten()
     assert soorten["tekort_soort_per_nacht"] == ["capaciteit", "planning", "onbekend"]
     assert soorten["tekortnachten_capaciteit"] == 1
-    assert soorten["tekortnachten_planning"] == 2
+    assert soorten["tekortnachten_planning"] == 1
+    assert soorten["tekortnachten_onbekend"] == 1
 
 
 def test_verwacht_capaciteitstekort_is_informatief(make_coordinator, hass):

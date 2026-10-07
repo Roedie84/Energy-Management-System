@@ -30587,3 +30587,62 @@ blijven rauw.
 
 Dashboard: de besparingskaart toont het cijfer zonder correctie erbij, de
 kaart met netimport-dagen splitst planning en capaciteit.
+
+## v5.41 — economisch tekort, oude tekortnachten ingedeeld
+
+Uit de controle van 7 oktober.
+
+### 1. Een derde tekortsoort: economisch
+
+De accu kwam die dag tot 93% en laadde niet verder uit het net: 30 ct gedeeld
+door het rendement plus 11,2 ct slijtage is meer dan de avondpiek van 44 ct.
+Dat was goed, maar het tekort dat volgde telde als planning en zette de
+cockpit op LET OP. Nu is er naast capaciteit en planning een derde soort:
+
+- **economisch** - de accu is sinds 09:00 niet vol geweest, het laatste
+  laadbesluit uit het net met een marge wees het laden af (in het blok de
+  laadregel, erbuiten de dipregel - allebei `latere prijs x rendement -
+  slijtage` tegen de prijs nu), en het zonoverschot ging de accu in: er ging
+  hooguit `SHORTFALL_MIN_NETIMPORT_KWH` zon naar het net terwijl de accu
+  ruimte had. Teruglevering terwijl de accu al op (bijna) vol laadvermogen
+  laadde telt niet - daar kon niets meer bij.
+
+Planning blijft het als de zon met ruimte in de accu het net op ging, als
+laden wel loonde, of als het blok op de zon rekende ("de zon vult de accu
+vandaag vanzelf") en de accu toch niet vol werd - een dipbesluit buiten het
+blok overschrijft dat laatste niet. Vol geweest blijft capaciteit of planning
+zoals in v5.40.
+
+Economisch is informatief, net als capaciteit. Het verwachte tekort wordt op
+dezelfde manier ingedeeld; de nachtmelding zegt het erbij. Nieuwe attributen:
+`tekortnachten_economisch` (tekortdagen- en Monte-Carlo-sensor), en in
+`verwacht_tekort` `laadbesluit_sinds_9u` en `zon_naar_net_met_ruimte_kwh`.
+
+### 2. De oude tekortnachten ingedeeld
+
+De vier tekortnachten van vóór v5.40 hadden geen soort en telden als
+planning, dus de cockpit bleef tot een week op LET OP. Bij het laden van de
+opslag (en daarna eens per uur zolang er nachten zonder soort zijn) worden
+ze uit het dagverloop ingedeeld - per kwartier laadstand, net, accu, prijs en
+reden, van 09:00 tot 09:00 - met dezelfde regels:
+
+- vol geweest en daarna vrijwel niets verkocht: capaciteit; wel verkocht:
+  planning;
+- niet vol en zon het net op met ruimte in de accu: planning;
+- niet vol en in geen enkel kwartier loonde laden tegen het duurste latere
+  kwartier: economisch;
+- wel een kwartier dat loonde en niet uit het net geladen: planning.
+
+Wat niet te bepalen is (te weinig verloop, geen prijzen of slijtage, of wel
+geladen - waar dat stopte is achteraf niet na te rekenen) blijft `onbekend`.
+Onbekend is nu informatief in plaats van LET OP: het is niet bewezen
+planning. Nieuw attribuut `tekortnachten_onbekend`; `tekortnachten_planning`
+telt onbekend niet meer mee. Een ingedeelde nacht krijgt
+`tekort_soort_herleid: v5.41` in het dagrecord.
+
+`shortfall` blijft overal staan, dus de zelfcorrigerende marge telt alle
+tekortnachten mee zoals voorheen. De sturing verandert niet: het huis gaat
+voor, en energie onder de reserve wordt nooit verkocht.
+
+Dashboard: de kaart met netimport-dagen toont planning, economisch en
+capaciteit, en onbekend als die er is.

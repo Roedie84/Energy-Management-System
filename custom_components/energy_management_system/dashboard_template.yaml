@@ -2486,7 +2486,7 @@ views:
       cards:
       - type: custom:mushroom-template-card
         primary: '{{ states(''sensor.woonkamer_energy_management_system_reserve_shortfall_days'') }}'
-        secondary: 'Netimport-dagen (7d) · {{ state_attr(''sensor.woonkamer_energy_management_system_reserve_shortfall_days'', ''tekortnachten_planning'') or 0 }} planning / {{ state_attr(''sensor.woonkamer_energy_management_system_reserve_shortfall_days'', ''tekortnachten_capaciteit'') or 0 }} capaciteit'
+        secondary: 'Netimport-dagen (7d) · {{ state_attr(''sensor.woonkamer_energy_management_system_reserve_shortfall_days'', ''tekortnachten_planning'') or 0 }} planning / {{ state_attr(''sensor.woonkamer_energy_management_system_reserve_shortfall_days'', ''tekortnachten_economisch'') or 0 }} economisch / {{ state_attr(''sensor.woonkamer_energy_management_system_reserve_shortfall_days'', ''tekortnachten_capaciteit'') or 0 }} capaciteit{% if (state_attr(''sensor.woonkamer_energy_management_system_reserve_shortfall_days'', ''tekortnachten_onbekend'') or 0) | int(0) > 0 %} / {{ state_attr(''sensor.woonkamer_energy_management_system_reserve_shortfall_days'', ''tekortnachten_onbekend'') }} onbekend{% endif %}'
         icon: mdi:alert-outline
         icon_color: '{{ ''red'' if (state_attr(''sensor.woonkamer_energy_management_system_reserve_shortfall_days'', ''tekortnachten_planning'') or 0) | int(0) > 0 else (''amber'' if states(''sensor.woonkamer_energy_management_system_reserve_shortfall_days'') | int(0) > 0 else ''grey'') }}'
         entity: sensor.woonkamer_energy_management_system_reserve_shortfall_days

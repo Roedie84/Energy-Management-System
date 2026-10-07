@@ -101,7 +101,8 @@ def test_flags_recent_shortfall_days(make_coordinator, hass):
     coordinator = make_coordinator({})
     coordinator.reserve_daily_records = [
         {"date": "2026-08-01", "shortfall": False, "excess": False},
-        {"date": "2026-08-02", "shortfall": True, "excess": False},
+        # v5.41: alleen een planningstekort is een aandachtspunt.
+        {"date": "2026-08-02", "shortfall": True, "tekort_soort": "planning", "excess": False},
     ]
 
     summary = coordinator.get_diagnostic_summary()

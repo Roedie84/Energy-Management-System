@@ -3521,6 +3521,10 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "_verkocht_na_vol_kwh": {"type": "plain"},
     "_tekort_soort_vandaag": {"type": "plain"},
     "_nacht_geclassificeerd_op": {"type": "plain"},
+    # v5.41: het laatste laadbesluit met een marge sinds 09:00, en wat de zon
+    # naar het net stuurde terwijl de accu ruimte had.
+    "_laadbesluit_stand": {"type": "plain"},
+    "_pv_export_met_ruimte_kwh": {"type": "plain"},
     "_lange_horizon_extra_vandaag": {"type": "plain"},
     "_max_ontlaad_w_vandaag": {"type": "plain"},
     "_vermogensgrens_gezien_today": {"type": "plain"},
@@ -5108,6 +5112,21 @@ MONTE_CARLO_TERUGVAL_UUR = 9
 TEKORT_VOL_MARGE_PROCENT = 3.0
 TEKORTSOORT_CAPACITEIT = "capaciteit"
 TEKORTSOORT_PLANNING = "planning"
+# v5.41: een derde soort. Gemeld op 7 oktober: de accu stond op 93% en laadde
+# niet verder uit het net, omdat dat niet loonde (30 ct gedeeld door het
+# rendement plus 11,2 ct slijtage is meer dan de avondpiek van 44 ct). Dat
+# was goed, maar het tekort dat volgde telde als planning. Economisch: niet
+# vol, netladen afgewezen op de marge, en het zonoverschot ging de accu in.
+TEKORTSOORT_ECONOMISCH = "economisch"
+# Nachten van vóór v5.40 die niet uit het dagverloop te herleiden zijn.
+TEKORTSOORT_ONBEKEND = "onbekend"
+# Het deel van de teruglevering dat telt als "zon het net op terwijl de accu
+# ruimte had": niet als de accu al bijna op zijn laadvermogen laadde - dan
+# kon er niet meer in.
+TEKORT_LAADT_OP_VOL_VERMOGEN_FRACTIE = 0.9
+# Het dagverloop van het venster (09:00-09:00, 96 kwartieren) moet minstens
+# zoveel kwartieren hebben om een oude nacht achteraf in te delen.
+TEKORT_HERLEIDING_MIN_KWARTIEREN = 48
 
 # --- Plausibiliteitsscan op de eigen waarden (v1.9.5) ----------------
 # Gevraagd: "Heb je de diagnostiek nu zo goed nagekeken dat daar niets
