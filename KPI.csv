@@ -1,0 +1,79 @@
+datumtijd,type,kpi,waarde,n,opmerking
+2026-09-28,DAG,ems_pv_kwh,9.651,1,solaredge statistics
+2026-09-28,DAG,ems_net_import_kwh,0.568,1,p1 statistics
+2026-09-28,DAG,ems_net_export_kwh,1.706,1,p1 statistics
+2026-09-28,DAG,ems_accu_ontladen_kwh,5.339,1,solarflow aggr
+2026-09-28,DAG,ems_accu_laden_kwh,5.857,1,solarflow aggr
+2026-09-28,DAG,ems_nacht_export_00_07_kwh,0.419,7,uren 00-07; smart-modus P1-doel ~-50W
+2026-09-28,DAG,ems_pv_afwijking_pct,-0.3,1,(werkelijk-voorsp)/voorsp; bewolking 90.15%; bron pv_forecast_accuracy
+2026-09-29,DAG,ems_pv_kwh,11.168,1,solaredge statistics
+2026-09-29,DAG,ems_net_import_kwh,0.761,1,p1 statistics
+2026-09-29,DAG,ems_net_export_kwh,2.161,1,p1 statistics
+2026-09-29,DAG,ems_accu_ontladen_kwh,5.898,1,solarflow aggr
+2026-09-29,DAG,ems_accu_laden_kwh,5.542,1,solarflow aggr
+2026-09-29,DAG,ems_nacht_export_00_07_kwh,0.407,7,uren 00-07; smart-modus P1-doel ~-50W
+2026-09-29,DAG,ems_pv_afwijking_pct,1.6,1,(werkelijk-voorsp)/voorsp; bewolking 21.55%; bron pv_forecast_accuracy
+2026-09-30,DAG,ems_pv_kwh,10.901,1,solaredge statistics
+2026-09-30,DAG,ems_net_import_kwh,5.443,1,p1 statistics
+2026-09-30,DAG,ems_net_export_kwh,1.954,1,p1 statistics
+2026-09-30,DAG,ems_accu_ontladen_kwh,4.111,1,solarflow aggr
+2026-09-30,DAG,ems_accu_laden_kwh,9.27,1,solarflow aggr
+2026-09-30,DAG,ems_nacht_export_00_07_kwh,0.247,7,uren 00-07; smart-modus P1-doel ~-50W
+2026-09-30,DAG,ems_pv_afwijking_pct,-2.2,1,(werkelijk-voorsp)/voorsp; bewolking 100%; bron pv_forecast_accuracy
+2026-09-30,DAG,ems_tekort_nacht_kwh,1.44,1,soort economisch
+2026-10-01,DAG,ems_pv_kwh,4.341,1,solaredge statistics
+2026-10-01,DAG,ems_net_import_kwh,2.234,1,p1 statistics
+2026-10-01,DAG,ems_net_export_kwh,1.336,1,p1 statistics
+2026-10-01,DAG,ems_accu_ontladen_kwh,5.266,1,solarflow aggr
+2026-10-01,DAG,ems_accu_laden_kwh,1.443,1,solarflow aggr
+2026-10-01,DAG,ems_nacht_export_00_07_kwh,0.438,7,uren 00-07; smart-modus P1-doel ~-50W
+2026-10-01,DAG,ems_pv_afwijking_pct,-5.8,1,(werkelijk-voorsp)/voorsp; bewolking 67.2%; bron pv_forecast_accuracy
+2026-10-01,DAG,ems_tekort_nacht_kwh,0,1,geen tekort
+2026-10-02,DAG,ems_pv_kwh,12.324,1,solaredge statistics
+2026-10-02,DAG,ems_net_import_kwh,2.733,1,p1 statistics
+2026-10-02,DAG,ems_net_export_kwh,2.577,1,p1 statistics
+2026-10-02,DAG,ems_accu_ontladen_kwh,3.624,1,solarflow aggr
+2026-10-02,DAG,ems_accu_laden_kwh,6.353,1,solarflow aggr
+2026-10-02,DAG,ems_nacht_export_00_07_kwh,0.0,7,uren 00-07; smart-modus P1-doel ~-50W
+2026-10-02,DAG,ems_pv_afwijking_pct,-5.7,1,(werkelijk-voorsp)/voorsp; bewolking 4.4%; bron pv_forecast_accuracy
+2026-10-02,DAG,ems_tekort_nacht_kwh,1.88,1,soort economisch
+2026-10-03,DAG,ems_pv_kwh,12.505,1,solaredge statistics
+2026-10-03,DAG,ems_net_import_kwh,1.787,1,p1 statistics
+2026-10-03,DAG,ems_net_export_kwh,6.512,1,p1 statistics
+2026-10-03,DAG,ems_accu_ontladen_kwh,8.592,1,solarflow aggr
+2026-10-03,DAG,ems_accu_laden_kwh,8.609,1,solarflow aggr
+2026-10-03,DAG,ems_nacht_export_00_07_kwh,0.282,7,uren 00-07; smart-modus P1-doel ~-50W
+2026-10-03,DAG,ems_pv_afwijking_pct,-4.0,1,(werkelijk-voorsp)/voorsp; bewolking 99.6%; bron pv_forecast_accuracy
+2026-10-03,DAG,ems_tekort_nacht_kwh,0.68,1,soort planning
+2026-10-04,DAG,ems_pv_kwh,12.754,1,solaredge statistics
+2026-10-04,DAG,ems_net_import_kwh,5.503,1,p1 statistics
+2026-10-04,DAG,ems_net_export_kwh,3.483,1,p1 statistics
+2026-10-04,DAG,ems_accu_ontladen_kwh,4.386,1,solarflow aggr
+2026-10-04,DAG,ems_accu_laden_kwh,8.749,1,solarflow aggr
+2026-10-04,DAG,ems_nacht_export_00_07_kwh,0.061,7,uren 00-07; smart-modus P1-doel ~-50W
+2026-10-04,DAG,ems_pv_afwijking_pct,1.6,1,(werkelijk-voorsp)/voorsp; bewolking 75.05%; bron pv_forecast_accuracy
+2026-10-04,DAG,ems_tekort_nacht_kwh,1.68,1,soort planning
+2026-10-05,DAG,ems_pv_kwh,12.177,1,solaredge statistics
+2026-10-05,DAG,ems_net_import_kwh,1.036,1,p1 statistics
+2026-10-05,DAG,ems_net_export_kwh,3.423,1,p1 statistics
+2026-10-05,DAG,ems_accu_ontladen_kwh,5.619,1,solarflow aggr
+2026-10-05,DAG,ems_accu_laden_kwh,6.863,1,solarflow aggr
+2026-10-05,DAG,ems_nacht_export_00_07_kwh,0.414,7,uren 00-07; smart-modus P1-doel ~-50W
+2026-10-05,DAG,ems_pv_afwijking_pct,-6.3,1,(werkelijk-voorsp)/voorsp; bewolking 8.2%; bron pv_forecast_accuracy
+2026-10-05,DAG,ems_tekort_nacht_kwh,0,1,geen tekort
+2026-10-06,DAG,ems_pv_kwh,9.408,1,solaredge statistics
+2026-10-06,DAG,ems_net_import_kwh,2.93,1,p1 statistics
+2026-10-06,DAG,ems_net_export_kwh,1.848,1,p1 statistics
+2026-10-06,DAG,ems_accu_ontladen_kwh,5.25,1,solarflow aggr
+2026-10-06,DAG,ems_accu_laden_kwh,7.089,1,solarflow aggr
+2026-10-06,DAG,ems_nacht_export_00_07_kwh,0.432,7,uren 00-07; smart-modus P1-doel ~-50W
+2026-10-06,DAG,ems_pv_afwijking_pct,10.7,1,(werkelijk-voorsp)/voorsp; bewolking 33.1%; bron pv_forecast_accuracy
+2026-10-06,DAG,ems_tekort_nacht_kwh,0,1,geen tekort
+2026-10-07 23:30,TUSSEN,ems_pv_mae_pct_30d,10.5,31,bias -4.4
+2026-10-07 23:30,TUSSEN,ems_pv_mae_pct_7d,5.2,7,bias -1.7
+2026-10-07 23:30,TUSSEN,ems_tekortnachten_7d,4,7,"2 economisch, 2 planning, 0 capaciteit; 5.68 kWh"
+2026-10-07 23:30,TUSSEN,ems_reserve_te_hoog_7d,0,7,reserve_excess_days
+2026-10-07 23:30,TUSSEN,ems_nacht_export_wh_per_uur_mediaan,60,50,"uren 00-07 met accu-ontlading, 28-09..07-10"
+2026-10-07 23:30,TUSSEN,ems_nachtverbruik_venster_w,306,7,learned_night_consumption mediaan
+2026-10-07 23:30,TUSSEN,ems_mc_tekortkans_pct,100.0,1000,verwacht tekort 0.8 kWh economisch; werkelijke freq 57.1% 7n
+2026-10-07 23:30,TUSSEN,ems_versie,5.44,1,geinstalleerd = beschikbaar
