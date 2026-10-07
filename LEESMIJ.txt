@@ -1,8 +1,9 @@
-EMS v5.41 - economisch tekort, oude tekortnachten ingedeeld
+EMS v5.42 - één reserve per ronde, de oude tekortnachten nagerekend
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
-Stuurt niet anders. Een tekortnacht waarin de accu niet vol was omdat
-bijladen uit het net niet loonde (en de zon de accu in ging), telt als
-economisch en zet de cockpit niet meer op LET OP. De oude tekortnachten
-zonder soort worden uit het dagverloop ingedeeld; wat niet te bepalen is,
-heet onbekend en is ook informatief. De reservemarge telt ze allemaal mee.
+Stuurt niet anders. De melding "Eén reserve: brug wijkt af van de sturing" na
+een herstart is weg: brug, sturing, verkooptoets, projectie en Monte Carlo
+lezen in een ronde hetzelfde reservegetal. De vier oude tekortnachten zijn
+nagerekend: 30 september en 2 oktober waren economisch (laden loonde niet
+tegen wat het tekort kostte), 3 en 4 oktober planning (verkocht in de dure
+kwartieren). Het aandachtspunt noemt nu welke nachten, en waarom.

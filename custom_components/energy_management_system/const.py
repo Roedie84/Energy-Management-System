@@ -3525,6 +3525,8 @@ PERSISTED_FIELDS: dict[str, dict] = {
     # naar het net stuurde terwijl de accu ruimte had.
     "_laadbesluit_stand": {"type": "plain"},
     "_pv_export_met_ruimte_kwh": {"type": "plain"},
+    # v5.42: waarom de nacht die vanochtend afliep die soort kreeg.
+    "_tekort_reden_vandaag": {"type": "plain"},
     "_lange_horizon_extra_vandaag": {"type": "plain"},
     "_max_ontlaad_w_vandaag": {"type": "plain"},
     "_vermogensgrens_gezien_today": {"type": "plain"},
@@ -5127,6 +5129,19 @@ TEKORT_LAADT_OP_VOL_VERMOGEN_FRACTIE = 0.9
 # Het dagverloop van het venster (09:00-09:00, 96 kwartieren) moet minstens
 # zoveel kwartieren hebben om een oude nacht achteraf in te delen.
 TEKORT_HERLEIDING_MIN_KWARTIEREN = 48
+# v5.42: de standen waarin het EMS de zon BUITEN de accu houdt (uitstel van
+# laden: de zon gaat dan naar het net). Alleen daar telt "zon het net op
+# terwijl de accu ruimte had" als planning. In `smart` vangt de Zendure de zon
+# zelf op; wat er dan het net op gaat is de vaste verschuiving op de P1-meter
+# en de regelvertraging bij een wolk - op 29 september 1,0 kWh in de
+# momentopnamen, terwijl de P1-meter buiten de verschuiving bijna niets zag.
+TEKORT_STANDEN_ZON_BUITEN_DE_ACCU = ("smart_discharging",)
+# v5.42: het nachtdeel van het venster, voor de prijs van het tekort: vanaf
+# dit kwartier op de eerste dag tot 09:00.
+TEKORT_NACHT_VANAF = "18:00"
+# v5.42: een kwartier telt als tekortkwartier bij meer import dan dit, met
+# een accu die niet levert en niet laadt (|accu| hooguit even veel).
+TEKORT_IMPORT_MIN_W = 50.0
 
 # --- Plausibiliteitsscan op de eigen waarden (v1.9.5) ----------------
 # Gevraagd: "Heb je de diagnostiek nu zo goed nagekeken dat daar niets

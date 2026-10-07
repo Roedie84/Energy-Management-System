@@ -533,6 +533,9 @@ from .const import (
     TEKORTSOORT_ONBEKEND,
     TEKORT_LAADT_OP_VOL_VERMOGEN_FRACTIE,
     TEKORT_HERLEIDING_MIN_KWARTIEREN,
+    TEKORT_STANDEN_ZON_BUITEN_DE_ACCU,
+    TEKORT_NACHT_VANAF,
+    TEKORT_IMPORT_MIN_W,
     NACHT_MELDING_EIND_UUR,
     NACHT_MELDING_START_UUR,
     NACHT_TEKORT_AANHOUDEND_MIN,
@@ -898,6 +901,11 @@ def koppeling_hapert(regel: dict) -> bool:
         return False
     duur = regel.get("geen_waarde_s")
     return duur is not None and duur < KOPPELING_HAPERT_S
+
+
+def _nl(getal: float, decimalen: int = 1) -> str:
+    """Een getal met een komma (v5.42)."""
+    return f"{getal:.{decimalen}f}".replace(".", ",")
 
 
 def _kort_punt(tekst) -> str:
@@ -21474,6 +21482,61 @@ class EnergyManagementSystemCoordinator:
         cheap_block_start: datetime | None,
         bewaar: bool = True,
     ) -> float | None:
+        """De ene reserve, één keer per ronde per (moment, blok) (v5.42).
+
+        Gemeld na de herstart op v5.41 (21:43): "Eén reserve: brug wijkt af
+        van de sturing". Geen tweede formule, maar dezelfde functie op twee
+        momenten in de ronde met andere invoer. De brug rekent vóór het
+        staartstuk, de schemaprojectie erna - en daartussen zet
+        `_meet_lange_reserve` het deel na het goedkope blok. Na een herstart
+        staat dat op nul (niet bewaard): de brug rekende zonder de 1,87 kWh
+        lange horizon, de projectie mét, en de projectie schreef de
+        uitsplitsing. Hetzelfde kan bij het afsluiten van de nacht, als een
+        nieuwe tekortdag de marge halverwege de ronde verandert.
+
+        Nu is de eerste berekening in een ronde DE reserve van die ronde:
+        brug, sturing, verkooptoets, projectie en Monte Carlo lezen
+        hetzelfde getal en dezelfde uitsplitsing. Wat het staartstuk
+        verandert, telt vanaf de volgende ronde - voor iedereen tegelijk.
+        Zonder rondestempel (tests, opstarten) wordt er gewoon gerekend.
+        """
+        stempel = self._ronde_stempel()
+        sleutel = (
+            (stempel, now.isoformat(), cheap_block_start.isoformat())
+            if stempel is not None and cheap_block_start is not None
+            else None
+        )
+        cache = self._reserve_ronde_cache
+        if sleutel is None or cache is None or cache[0] != stempel:
+            cache = self._reserve_ronde_cache = (stempel, {})
+        if sleutel is not None and sleutel in cache[1]:
+            reserve_kwh, uitsplitsing = cache[1][sleutel]
+        else:
+            self._reserve_laatste_uitsplitsing = None
+            reserve_kwh = self._bereken_dynamische_reserve_kwh(
+                now, cheap_block_start, bewaar
+            )
+            uitsplitsing = self._reserve_laatste_uitsplitsing
+            if sleutel is not None and uitsplitsing is not None:
+                cache[1][sleutel] = (reserve_kwh, uitsplitsing)
+        if bewaar and uitsplitsing is not None:
+            self.last_reserve_margin_breakdown = uitsplitsing
+            self._lange_horizon_extra_vandaag = max(
+                self._lange_horizon_extra_vandaag,
+                uitsplitsing.get("lange_horizon_extra_kwh") or 0.0,
+            )
+        return reserve_kwh
+
+    # v5.42: zie `_get_dynamic_discharge_reserve_kwh`.
+    _reserve_ronde_cache: tuple | None = None
+    _reserve_laatste_uitsplitsing: dict | None = None
+
+    def _bereken_dynamische_reserve_kwh(
+        self,
+        now: datetime,
+        cheap_block_start: datetime | None,
+        bewaar: bool = True,
+    ) -> float | None:
         """How much energy (kWh) actually needs to stay in the battery
         right now: the estimated baseline household consumption until the
         cheap block, minus expected PV production over that period, plus
@@ -21520,10 +21583,7 @@ class EnergyManagementSystemCoordinator:
         if needed_kwh is not None and self.lange_horizon_actief:
             lange_horizon_extra = max(0.0, float(self._lange_reserve_extra_kwh or 0.0))
             needed_kwh += lange_horizon_extra
-            if bewaar:
-                self._lange_horizon_extra_vandaag = max(
-                    self._lange_horizon_extra_vandaag, lange_horizon_extra
-                )
+            # v5.42: `_lange_horizon_extra_vandaag` zet de omhulling.
         if needed_kwh is None:
             needed_kwh = self._estimate_consumption_kwh_for_period(
                 now, cheap_block_start
@@ -21681,8 +21741,8 @@ class EnergyManagementSystemCoordinator:
         # verkooptoets en de planning lezen dezelfde reserve, maar een
         # planningskwartier van morgen mag de uitsplitsing van nu niet
         # overschrijven.
-        if bewaar:
-            self.last_reserve_margin_breakdown = uitsplitsing
+        # v5.42: de omhulling bewaart (en onthoudt per ronde).
+        self._reserve_laatste_uitsplitsing = uitsplitsing
 
         if margin_bonus_percent != 0:
             _LOGGER.debug(
@@ -25078,6 +25138,8 @@ class EnergyManagementSystemCoordinator:
     _laadbesluit_stand: str | None = None
     _pv_export_met_ruimte_kwh: float = 0.0
     _herleiding_geprobeerd_op: str | None = None
+    # v5.42: zie `_tekort_reden`.
+    _tekort_reden_vandaag: str | None = None
     # v3.99.5: welk verschil tussen gevraagd en werkelijk er nu staat, en
     # sinds wanneer. Onveranderlijk, dus als klasse-attribuut veilig.
     _handmatig_verschil: str | None = None
@@ -25281,6 +25343,8 @@ class EnergyManagementSystemCoordinator:
                         "tekortnacht_kwh": tekortnacht,
                         # v5.40: capaciteit of planning (None: geen tekort).
                         "tekort_soort": self._tekort_soort_vandaag,
+                        # v5.42: en waarom, voor het aandachtspunt.
+                        "tekort_reden": self._tekort_reden_vandaag,
                         "tekortvlag": self._shortfall_detected_today,
                         # v3.99.0: was er een kookpiek boven de
                         # ontlaadgrens? Die telt niet als tekort, maar
@@ -25317,7 +25381,7 @@ class EnergyManagementSystemCoordinator:
             # v5.33: alleen de afgelopen nacht; de lopende loopt door over
             # middernacht.
             self._tekortnacht_vandaag_kwh = None
-            self._tekort_soort_vandaag = None
+            self._tekort_soort_vandaag = self._tekort_reden_vandaag = None
             # v3.99.19: de dag die voorbij is, nabeschouwen.
             if self._shortfall_check_date is not None:
                 self._sluit_dag_af_met_nabeschouwing(self._shortfall_check_date.isoformat())
@@ -28833,6 +28897,7 @@ class EnergyManagementSystemCoordinator:
                 self._verkocht_na_vol_kwh,
                 economisch=self._netladen_economisch_afgewezen(),
             )
+            self._tekort_reden_vandaag = self._tekort_reden(self._tekort_soort_vandaag)
             self._nacht_geclassificeerd_op = vandaag
             self._vol_voor_nacht = False
             self._verkocht_na_vol_kwh = 0.0
@@ -28854,7 +28919,10 @@ class EnergyManagementSystemCoordinator:
             net_w = self._read_sensor_float(self.config.get(CONF_CONSUMPTION_POWER_SENSOR))
             accu_w = self._read_corrected_battery_power()
             if 0 < uren < 0.5 and net_w is not None and accu_w is not None:
-                naar_net_w = min(max(0.0, -net_w), max(0.0, accu_w))
+                # v5.42: zonder de vaste verschuiving op de P1-meter (v5.20).
+                # Die 50 W gaat de hele avond het net op en telde als
+                # verkoop: na elke volle dag 0,6 kWh, boven de drempel.
+                naar_net_w = min(self._export_zonder_verschuiving_w(net_w), max(0.0, accu_w))
                 self._verkocht_na_vol_kwh += naar_net_w / 1000 * uren
         elif soc is not None:
             self._volg_laadbesluit_en_zon(uren)
@@ -28896,9 +28964,17 @@ class EnergyManagementSystemCoordinator:
         laad_max_w = abs(
             float(self.instelling(CONF_MANUAL_CHARGE_POWER, DEFAULT_MANUAL_CHARGE_POWER))
         )
+        export_w = self._export_zonder_verschuiving_w(net_w)
+        # v5.42: verkopen terwijl de accu niet vol is, telt net als na vol.
+        self._verkocht_na_vol_kwh += min(export_w, max(0.0, accu_w)) / 1000 * uren
         if laad_max_w and -accu_w >= TEKORT_LAADT_OP_VOL_VERMOGEN_FRACTIE * laad_max_w:
             return
-        zon_naar_net_w = max(0.0, max(0.0, -net_w) - max(0.0, accu_w))
+        # v5.42: alleen als het EMS de zon BUITEN de accu hield. In `smart`
+        # vangt de Zendure de zon zelf op; wat er dan het net op gaat is de
+        # verschuiving en de regelvertraging bij een wolk, geen besluit.
+        if self.last_expected_mode not in TEKORT_STANDEN_ZON_BUITEN_DE_ACCU:
+            return
+        zon_naar_net_w = max(0.0, export_w - max(0.0, accu_w))
         self._pv_export_met_ruimte_kwh += zon_naar_net_w / 1000 * uren
 
     def _netladen_economisch_afgewezen(self) -> bool:
@@ -28907,7 +28983,39 @@ class EnergyManagementSystemCoordinator:
         return (
             self._laadbesluit_stand == "loont_niet"
             and self._pv_export_met_ruimte_kwh <= SHORTFALL_MIN_NETIMPORT_KWH
+            # v5.42: wie verkocht en daarna tekortkwam, had kunnen houden.
+            and self._verkocht_na_vol_kwh <= SHORTFALL_MIN_NETIMPORT_KWH
         )
+
+    def _export_zonder_verschuiving_w(self, net_w: float) -> float:
+        """Teruglevering min de vaste verschuiving op de P1-meter (v5.42).
+
+        Minstens `TEKORT_IMPORT_MIN_W` eraf: valt de verschuiving op dit
+        moment even weg (de template-sensor), dan telt de -50 W niet alsnog.
+        """
+        vloer = max(self.regelverschuiving_kw() * 1000, TEKORT_IMPORT_MIN_W)
+        return max(0.0, -net_w - vloer)
+
+    def _tekort_reden(self, soort: str | None) -> str | None:
+        """Waarom de nacht die soort kreeg, in een halve zin (v5.42)."""
+        if soort is None:
+            return None
+        verkocht = self._verkocht_na_vol_kwh
+        if soort == TEKORTSOORT_CAPACITEIT:
+            return "vol geweest, daarna niets verkocht"
+        if soort == TEKORTSOORT_ECONOMISCH:
+            return "bijladen uit het net loonde niet"
+        if verkocht > SHORTFALL_MIN_NETIMPORT_KWH:
+            return f"{_nl(verkocht)} kWh verkocht" + (
+                " na vol" if self._vol_voor_nacht else " terwijl de accu niet vol was"
+            )
+        if self._pv_export_met_ruimte_kwh > SHORTFALL_MIN_NETIMPORT_KWH:
+            return f"{_nl(self._pv_export_met_ruimte_kwh)} kWh zon het net op terwijl de accu ruimte had"
+        if self._laadbesluit_stand == "zon":
+            return "de zon zou de accu vullen en deed dat niet"
+        if self._laadbesluit_stand == "loont":
+            return "bijladen loonde, maar de accu werd niet vol"
+        return "niet vol geworden"
 
     def _tekort_soort(
         self, tekort_kwh: float | None, vol: bool, verkocht_kwh: float,
@@ -28936,74 +29044,152 @@ class EnergyManagementSystemCoordinator:
             return TEKORTSOORT_ECONOMISCH
         return TEKORTSOORT_PLANNING
 
-    @staticmethod
+    @classmethod
     def _deel_nacht_in_uit_verloop(
+        cls,
         rijen: list,
         vol_grens: float,
         rendement: float | None,
         slijtage_ct: float | None,
+        verschuiving_w: float = 0.0,
     ) -> str | None:
         """Een tekortnacht achteraf indelen uit het dagverloop (v5.41).
 
+        Alleen de soort; zie `_deel_nacht_in_met_reden`.
+        """
+        return cls._deel_nacht_in_met_reden(
+            rijen, vol_grens, rendement, slijtage_ct, verschuiving_w
+        )[0]
+
+    @staticmethod
+    def _verkocht_uit_verloop(rijen: list, verschuiving_w: float) -> tuple[float, float | None]:
+        """Wat de accu naar het net stuurde, en tegen welke gemiddelde prijs
+        (v5.42). Zonder de vaste verschuiving op de P1-meter."""
+        kwh, ct_kwh = 0.0, 0.0
+        vloer = max(verschuiving_w, TEKORT_IMPORT_MIN_W)
+        for r in rijen:
+            net_w, accu_w = r.get("net_w"), r.get("accu_w")
+            if net_w is None or accu_w is None:
+                continue
+            deel = min(max(0.0, -net_w - vloer), max(0.0, accu_w)) / 1000 * 0.25
+            kwh += deel
+            ct_kwh += deel * (r.get("prijs_ct") or 0.0)
+        return kwh, (ct_kwh / kwh if kwh > 0 else None)
+
+    @staticmethod
+    def _tekortkwartieren(rijen: list) -> tuple[int | None, float | None]:
+        """Waar het tekort begon, en tegen welke prijs het werd betaald (v5.42).
+
+        Tekortkwartieren: in het nachtdeel (vanaf `TEKORT_NACHT_VANAF` tot
+        09:00) import uit het net terwijl de accu niet levert en niet laadt.
+        Gewogen naar de import. Dat is wat een extra kWh in de accu die nacht
+        werkelijk had uitgespaard - niet de duurste prijs van het venster:
+        die dekte de accu zelf al.
+        """
+        eerste, kwh, ct_kwh = None, 0.0, 0.0
+        for i, r in enumerate(rijen):
+            tijd = str(r.get("tijd") or "")
+            if not (tijd >= TEKORT_NACHT_VANAF or tijd < "09:00"):
+                continue
+            net_w, accu_w, prijs = r.get("net_w"), r.get("accu_w"), r.get("prijs_ct")
+            if net_w is None or accu_w is None or prijs is None:
+                continue
+            if net_w > TEKORT_IMPORT_MIN_W and abs(accu_w) <= TEKORT_IMPORT_MIN_W:
+                eerste = i if eerste is None else eerste
+                kwh += net_w
+                ct_kwh += net_w * prijs
+        return eerste, (ct_kwh / kwh if kwh > 0 else None)
+
+    @classmethod
+    def _deel_nacht_in_met_reden(
+        cls,
+        rijen: list,
+        vol_grens: float,
+        rendement: float | None,
+        slijtage_ct: float | None,
+        verschuiving_w: float = 0.0,
+    ) -> tuple[str | None, str | None]:
+        """Een tekortnacht achteraf indelen, met de reden (v5.41, v5.42).
+
         `rijen` zijn de kwartieren van 09:00 tot 09:00 (soc, net_w, accu_w,
-        prijs_ct, reden). Dezelfde regels als live, op kwartierbasis:
+        prijs_ct, reden, stand). Dezelfde regels als live:
 
-        - vol geweest en daarna (vrijwel) niets verkocht: capaciteit;
-          vol en wel verkocht: planning.
-        - niet vol en zon naar het net terwijl er ruimte was: planning.
-        - niet vol, en in GEEN kwartier loonde laden tegen het duurste
-          latere kwartier (later x rendement - slijtage <= prijs nu):
-          economisch.
-        - wel een kwartier dat loonde en er is niet uit het net geladen:
-          planning. Wel geladen: niet te bepalen (None) - waar het laden
-          stopte, is achteraf niet na te rekenen.
+        - vol geweest en daarna (vrijwel) niets verkocht: capaciteit; vol en
+          wel verkocht: planning.
+        - niet vol en verkocht vóór het tekort: planning (v5.42 - stond er
+          niet in; een verkoop telde alleen na vol).
+        - niet vol en zon naar het net in een stand die de zon buiten de accu
+          houdt: planning. v5.42: niet meer in `smart` - zie
+          `TEKORT_STANDEN_ZON_BUITEN_DE_ACCU`.
+        - v5.42: loonde laden vóór het tekort, tegen de prijs waartegen het
+          tekort werkelijk werd betaald (`_tekortkwartieren`)? Waarde =
+          tekortprijs x rendement - slijtage, net als de laadregel. In v5.41
+          stond hier de duurste latere prijs van het venster: die kWh dekte
+          de accu zelf al, dus een extra kWh was zoveel niet waard - en
+          daardoor werd elke dag met een avondpiek planning.
+          Nergens geloond: economisch. Wel geloond en niet uit het net
+          geladen: planning. Wel geladen: niet te bepalen (None).
 
-        None als het verloop te dun is of de prijzen ontbreken.
+        Verkoop en zon zonder de vaste verschuiving op de P1-meter (v5.20),
+        en minstens `TEKORT_IMPORT_MIN_W` eraf als ruisvloer.
+        (None, None) als het verloop te dun is of prijzen ontbreken.
         """
         rijen = [r for r in rijen if isinstance(r, dict) and r.get("soc") is not None]
         if len(rijen) < TEKORT_HERLEIDING_MIN_KWARTIEREN:
-            return None
-        kwartier = 0.25
-        vol, verkocht = False, 0.0
-        for r in rijen:
-            if r["soc"] >= vol_grens:
-                vol, verkocht = True, 0.0
-            elif vol:
-                net_w, accu_w = r.get("net_w"), r.get("accu_w")
-                if net_w is not None and accu_w is not None:
-                    verkocht += min(max(0.0, -net_w), max(0.0, accu_w)) / 1000 * kwartier
-        if vol:
-            return (
-                TEKORTSOORT_CAPACITEIT
-                if verkocht <= SHORTFALL_MIN_NETIMPORT_KWH
-                else TEKORTSOORT_PLANNING
+            return None, None
+        laatste_vol = max(
+            (i for i, r in enumerate(rijen) if r["soc"] >= vol_grens), default=None
+        )
+        if laatste_vol is not None:
+            verkocht, prijs = cls._verkocht_uit_verloop(rijen[laatste_vol + 1 :], verschuiving_w)
+            if verkocht <= SHORTFALL_MIN_NETIMPORT_KWH:
+                return TEKORTSOORT_CAPACITEIT, "vol geweest, daarna niets verkocht"
+            return TEKORTSOORT_PLANNING, (
+                f"vol geweest, daarna {_nl(verkocht)} kWh verkocht"
+                + (f" (gem. {_nl(prijs)} ct)" if prijs is not None else "")
             )
+        eerste, tekortprijs = cls._tekortkwartieren(rijen)
+        voor = rijen[:eerste] if eerste is not None else rijen
+        verkocht, prijs = cls._verkocht_uit_verloop(voor, verschuiving_w)
+        if verkocht > SHORTFALL_MIN_NETIMPORT_KWH:
+            return TEKORTSOORT_PLANNING, (
+                f"{_nl(verkocht)} kWh verkocht terwijl de accu niet vol was"
+                + (f" (gem. {_nl(prijs)} ct, tekort tegen {_nl(tekortprijs)} ct)"
+                   if prijs is not None and tekortprijs is not None else "")
+            )
+        vloer = max(verschuiving_w, TEKORT_IMPORT_MIN_W)
         zon_naar_net = sum(
-            max(0.0, max(0.0, -r["net_w"]) - max(0.0, r["accu_w"])) / 1000 * kwartier
-            for r in rijen
+            max(0.0, max(0.0, -r["net_w"] - vloer) - max(0.0, r["accu_w"])) / 1000 * 0.25
+            for r in voor
             if r.get("net_w") is not None and r.get("accu_w") is not None
+            and r.get("stand") in TEKORT_STANDEN_ZON_BUITEN_DE_ACCU
         )
         if zon_naar_net > SHORTFALL_MIN_NETIMPORT_KWH:
-            return TEKORTSOORT_PLANNING
-        if rendement is None or slijtage_ct is None:
-            return None
-        prijzen = [r.get("prijs_ct") for r in rijen]
-        if sum(p is not None for p in prijzen) < TEKORT_HERLEIDING_MIN_KWARTIEREN:
-            return None
-        loonde = False
-        for i, prijs in enumerate(prijzen):
-            later = [p for p in prijzen[i + 1 :] if p is not None]
-            if prijs is None or not later:
-                continue
-            if max(later) * rendement / 100 - slijtage_ct > prijs:
-                loonde = True
-                break
-        if not loonde:
-            return TEKORTSOORT_ECONOMISCH
-        geladen = any(
-            str(r.get("reden") or "").startswith("grid_charging") for r in rijen
+            return TEKORTSOORT_PLANNING, (
+                f"{_nl(zon_naar_net)} kWh zon het net op terwijl de accu ruimte had"
+            )
+        if rendement is None or slijtage_ct is None or tekortprijs is None:
+            return None, None
+        waarde = tekortprijs * rendement / 100 - slijtage_ct
+        prijzen = [
+            r.get("prijs_ct") for r in voor
+            if r.get("prijs_ct") is not None and r["soc"] < vol_grens
+        ]
+        if not prijzen:
+            return None, None
+        goedkoopst = min(prijzen)
+        if goedkoopst >= waarde:
+            return TEKORTSOORT_ECONOMISCH, (
+                f"laden loonde nergens: goedkoopst {_nl(goedkoopst)} ct, tekort "
+                f"betaald tegen {_nl(tekortprijs)} ct (waard {_nl(waarde)} ct na "
+                "rendement en slijtage)"
+            )
+        if any(str(r.get("reden") or "").startswith("grid_charging") for r in rijen):
+            return None, None
+        return TEKORTSOORT_PLANNING, (
+            f"laden tegen {_nl(goedkoopst)} ct had geloond tegen het tekort van "
+            f"{_nl(tekortprijs)} ct, en er werd niet geladen"
         )
-        return None if geladen else TEKORTSOORT_PLANNING
 
     def _herleid_onbekende_tekortnachten(self) -> int:
         """Tekortnachten zonder soort achteraf indelen (v5.41).
@@ -29018,6 +29204,12 @@ class EnergyManagementSystemCoordinator:
         Alleen de soort; `shortfall` blijft staan, dus de zelfcorrigerende
         marge telt deze nachten mee zoals voorheen. Geeft het aantal
         ingedeelde nachten.
+
+        v5.42: ook de nachten die v5.41 indeelde, opnieuw - die regels telden
+        de vaste verschuiving op de P1-meter als zon en als verkoop, en
+        rekenden een extra kWh tegen de duurste prijs van het venster. Is
+        een nacht nu niet te bepalen, dan vervalt de oude soort (onbekend,
+        later opnieuw geprobeerd) in plaats van dat hij blijft staan.
         """
         verloop = self.dagverloop or {}
         if not isinstance(verloop, dict):
@@ -29035,12 +29227,13 @@ class EnergyManagementSystemCoordinator:
         except Exception:  # noqa: BLE001 - bij het opstarten kan er nog iets ontbreken
             slijtage_ct = None
         vol_grens = self._bovengrens_procent() - TEKORT_VOL_MARGE_PROCENT
+        verschuiving_w = self.regelverschuiving_kw() * 1000
         ingedeeld = 0
         for record in self.reserve_daily_records or []:
             if (
                 not isinstance(record, dict)
                 or not record.get("shortfall")
-                or record.get("tekort_soort")
+                or (record.get("tekort_soort") and record.get("tekort_soort_herleid") != "v5.41")
             ):
                 continue
             try:
@@ -29055,11 +29248,16 @@ class EnergyManagementSystemCoordinator:
                 r for r in (verloop.get(dag.isoformat()) or [])
                 if isinstance(r, dict) and str(r.get("tijd") or "") < "09:00"
             ]
-            soort = self._deel_nacht_in_uit_verloop(rijen, vol_grens, rendement, slijtage_ct)
+            soort, reden = self._deel_nacht_in_met_reden(
+                rijen, vol_grens, rendement, slijtage_ct, verschuiving_w
+            )
             if soort is not None:
-                record["tekort_soort"] = soort
-                record["tekort_soort_herleid"] = "v5.41"
+                record.update(
+                    tekort_soort=soort, tekort_reden=reden, tekort_soort_herleid="v5.42"
+                )
                 ingedeeld += 1
+            else:
+                record.pop("tekort_soort", None)
         return ingedeeld
 
     def _probeer_herleiding(self, now: datetime) -> None:
@@ -29126,6 +29324,10 @@ class EnergyManagementSystemCoordinator:
             "tekortnachten_economisch": soorten.count(TEKORTSOORT_ECONOMISCH),
             "tekortnachten_planning": soorten.count(TEKORTSOORT_PLANNING),
             "tekortnachten_onbekend": soorten.count(TEKORTSOORT_ONBEKEND),
+            # v5.42: waarom elke tekortnacht die soort kreeg.
+            "tekort_reden_per_nacht": [
+                r.get("tekort_reden") if r.get("shortfall") else None for r in records
+            ],
             "verwacht_tekort": self.verwacht_tekort(),
         }
 
@@ -29143,6 +29345,7 @@ class EnergyManagementSystemCoordinator:
         if planning:
             aandacht.append(
                 f"{planning} onverwachte tekort-dag(en) in de laatste {dagen} dagen."
+                + self._planningsnachten_toelichting()
             )
         capaciteit = soorten["tekortnachten_capaciteit"]
         if capaciteit:
@@ -29179,6 +29382,32 @@ class EnergyManagementSystemCoordinator:
                 "kWh, economisch - bijladen uit het net loont niet."
             )
         return aandacht, info
+
+    def _planningsnachten_toelichting(self) -> str:
+        """Welke nachten planning waren, en waarom (v5.42).
+
+        Gemeld na v5.41: "4 onverwachte tekort-dag(en)" zonder te zeggen
+        welke, of waarom - niet na te gaan. Alleen als er een reden is
+        vastgelegd; oude records zonder reden houden de korte zin.
+        """
+        maanden = "jan feb mrt apr mei jun jul aug sep okt nov dec".split()
+        delen = []
+        for r in self.reserve_daily_records or []:
+            if not (isinstance(r, dict) and r.get("shortfall")):
+                continue
+            if r.get("tekort_soort") != TEKORTSOORT_PLANNING:
+                continue
+            try:
+                dag = date.fromisoformat(str(r.get("date")))
+            except ValueError:
+                continue
+            delen.append(
+                f"nacht naar {dag.day} {maanden[dag.month - 1]}: "
+                + (r.get("tekort_reden") or "reden niet vastgelegd")
+            )
+        if not any(isinstance(r, dict) and r.get("tekort_reden") for r in self.reserve_daily_records or []):
+            return ""
+        return " Planning - " + "; ".join(delen) + "."
 
     def _tekort_soort_zin(self) -> str:
         """De extra zin in de nachtmelding (v5.40)."""
@@ -33701,6 +33930,12 @@ class EnergyManagementSystemCoordinator:
             return 0.0
         if self.monte_carlo_horizon != self.last_cheap_block_start:
             return 0.0
+        # v5.42: het getal UIT de reserve van deze ronde, niet opnieuw
+        # gelezen - dan kan Monte Carlo nooit een ander deel na het blok
+        # tellen dan de sturing.
+        u = self.last_reserve_margin_breakdown or {}
+        if u.get("ronde") is not None and u.get("ronde") == self._ronde_stempel():
+            return max(0.0, float(u.get("lange_horizon_extra_kwh") or 0.0))
         return max(0.0, float(self._lange_reserve_extra_kwh or 0.0))
 
     def _monte_carlo_centrum(

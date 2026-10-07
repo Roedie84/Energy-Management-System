@@ -30646,3 +30646,83 @@ voor, en energie onder de reserve wordt nooit verkocht.
 
 Dashboard: de kaart met netimport-dagen toont planning, economisch en
 capaciteit, en onbekend als die er is.
+
+## v5.42 — één reserve per ronde, de oude tekortnachten nagerekend
+
+Uit de controle na de herstart op v5.41 (7 oktober 21:43).
+
+### 1. "Eén reserve: brug wijkt af van de sturing" - één reserve per ronde
+
+Geen tweede formule, en ook niet door Monte Carlo: dezelfde functie
+(`_get_dynamic_discharge_reserve_kwh`) op twee momenten in de ronde, met
+andere invoer. De brug rekent vóór het staartstuk, de schemaprojectie erna -
+en daartussen zet `_meet_lange_reserve` het deel van de reserve na het
+goedkope blok. Dat getal wordt niet bewaard en staat na een herstart op nul.
+In de eerste ronde rekende de brug dus zonder de 1,87 kWh lange horizon en de
+projectie mét, en de projectie schreef de uitsplitsing waar de zelfcontrole
+mee vergelijkt. Een ronde later klopte het weer; de melding bleef staan tot
+de sensor ververste. Bestond al sinds v3.99.18, maar viel pas op bij een
+herstart 's avonds, als de lange horizon groot is. Hetzelfde kon bij het
+afsluiten van de nacht, als een nieuwe tekortdag de marge halverwege de
+ronde verandert.
+
+Nu is de eerste berekening in een ronde voor een (moment, blok) DE reserve
+van die ronde: brug, sturing, verkooptoets, projectie en Monte Carlo lezen
+hetzelfde getal en dezelfde uitsplitsing. Wat het staartstuk bijwerkt, telt
+vanaf de volgende ronde - voor iedereen tegelijk. Monte Carlo neemt het deel
+na het blok uit de uitsplitsing van de reserve van die ronde en blijft
+adviserend. De zelfcontrole is ongewijzigd en mag blijven aanslaan: er is nu
+geen weg meer waarlangs twee lezers in één ronde iets anders zien.
+
+### 2. De oude tekortnachten nagerekend
+
+v5.41 deelde de vier nachten van 30 september tot 4 oktober allemaal in als
+planning. Nagerekend tegen het dagverloop klopten twee daarvan niet, en bij
+de andere twee klopte de reden niet:
+
+- **30 september - economisch.** "Zon het net op terwijl de accu ruimte had"
+  was 1,0 kWh in de kwartiermomentopnamen: de vaste -50 W op de P1-meter
+  (v5.20) en twee kwartieren waarin de Zendure in `smart` achterliep bij een
+  wolk. Buiten de verschuiving zag de P1-meter die dag bijna niets. En
+  "laden loonde" rekende een extra kWh tegen de avondpiek van 42,8 ct -
+  maar die piek dekte de accu zelf al. Het tekort werd van 04:00 tot 07:00
+  betaald tegen gemiddeld 29 ct; met 84% rendement en 11,2 ct slijtage is
+  een extra kWh dan 13 ct waard, en de goedkoopste laadkans was 21 ct.
+- **2 oktober - economisch.** Een donkere dag, nergens onder de 31 ct. Ook
+  hier telde de avondpiek van 51 ct; het tekort kostte 33 tot 41 ct.
+- **3 oktober - planning.** De accu werd niet vol (73%) en verkocht om 19:00
+  1,4 kWh tegen 51 ct, onder de reserve. v5.41 keek bij een niet-volle accu
+  niet naar verkoop.
+- **4 oktober - planning.** Vol om 17:00, daarna 4,6 kWh verkocht tegen
+  39-42 ct; het tekort kostte 34-37 ct.
+
+De regels, live en achteraf gelijk:
+
+- Verkoop en zon tellen zonder de vaste verschuiving op de P1-meter, en
+  minstens 50 W eraf als ruisvloer (valt de verschuiving even weg, dan telt
+  de -50 W niet alsnog). Na een volle dag telde die 50 W de hele avond als
+  verkoop: 0,6 kWh, boven de drempel - elke vol-nacht werd planning.
+- Verkopen terwijl de accu niet vol was, telt nu ook: planning.
+- Zon het net op telt alleen in een stand die de zon buiten de accu houdt
+  (`smart_discharging`). In `smart` vangt de Zendure de zon zelf op.
+- Achteraf: een extra kWh is waard wat het tekort werkelijk kostte -
+  `tekortprijs x rendement - slijtage`, net als de laadregel - niet de
+  duurste prijs van het venster. Tekortkwartieren: vanaf 18:00 tot 09:00
+  import terwijl de accu niet levert en niet laadt, gewogen naar de import.
+
+De nachten die v5.41 indeelde worden één keer opnieuw ingedeeld
+(`tekort_soort_herleid: v5.42`); live ingedeelde nachten blijven staan. Is
+een nacht nu niet te bepalen, dan vervalt de oude soort (onbekend, later
+opnieuw geprobeerd) in plaats van dat hij als planning blijft staan.
+
+### 3. Het aandachtspunt zegt welke nachten, en waarom
+
+Elke tekortnacht krijgt een reden (`tekort_reden` in het dagrecord, live en
+achteraf; attribuut `tekort_reden_per_nacht`). Het aandachtspunt noemt de
+planningsnachten: "2 onverwachte tekort-dag(en) in de laatste 7 dagen.
+Planning - nacht naar 3 okt: 1,4 kWh verkocht terwijl de accu niet vol was
+(gem. ... ct, tekort tegen ... ct); nacht naar 4 okt: vol geweest, daarna
+4,6 kWh verkocht (gem. ... ct)." De prijzen komen uit het dagverloop.
+
+`shortfall` blijft overal staan, dus de zelfcorrigerende marge telt alle
+tekortnachten mee zoals voorheen. De sturing verandert niet.

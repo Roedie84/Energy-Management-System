@@ -59,11 +59,24 @@ def test_netladen_afgewezen_op_de_marge_is_economisch(make_coordinator, hass):
 
 
 def test_zon_het_net_op_met_ruimte_is_planning(make_coordinator, hass):
+    # v5.42: alleen als het EMS de zon buiten de accu hield.
     c = _c(make_coordinator, hass, soc="70", net="-1500", accu="-500")
+    c.last_expected_mode = "smart_discharging"
     _rondes(c, LOONT_NIET)
 
     assert c._pv_export_met_ruimte_kwh > 1.0
     assert c._netladen_economisch_afgewezen() is False
+
+
+def test_zon_het_net_op_in_smart_is_geen_besluit(make_coordinator, hass):
+    """v5.42: in `smart` vangt de Zendure de zon zelf op. Wat er dan het net
+    op gaat (verschuiving, regelvertraging bij een wolk) is geen planning."""
+    c = _c(make_coordinator, hass, soc="70", net="-1500", accu="-500")
+    c.last_expected_mode = "smart"
+    _rondes(c, LOONT_NIET)
+
+    assert c._pv_export_met_ruimte_kwh == 0.0
+    assert c._netladen_economisch_afgewezen() is True
 
 
 def test_teruglevering_terwijl_de_accu_op_vol_vermogen_laadt_telt_niet(
@@ -187,20 +200,29 @@ def test_de_nieuwe_velden_overleven_een_herstart():
 # --- achteraf: de oude nachten uit het dagverloop -----------------------
 
 
-def _verloop(soc, prijs=30.0, net=0.0, accu=0.0, reden="default_smart", piek=None):
-    """Een venster 09:00-09:00 als dagverloop, voor de nacht van 3 oktober."""
+def _verloop(
+    soc, prijs=30.0, net=0.0, accu=0.0, reden="default_smart", piek=None,
+    nachtprijs=None, stand="smart",
+):
+    """Een venster 09:00-09:00 als dagverloop, voor de nacht van 3 oktober.
+
+    v5.42: vanaf 03:00 (kwartier 72) is de accu leeg en komt 200 W uit het
+    net, tegen `nachtprijs` - het tekort zelf.
+    """
     dagen = {"2026-10-02": [], "2026-10-03": []}
     for k in range(96):
         moment = datetime(2026, 10, 2, 9, 0) + timedelta(minutes=15 * k)
         p = piek if (piek is not None and moment.hour in (18, 19)) else prijs
+        tekort = k >= 72
         dagen[moment.date().isoformat()].append(
             {
                 "tijd": moment.strftime("%H:%M"),
                 "soc": soc(k) if callable(soc) else soc,
-                "net_w": net,
-                "accu_w": accu,
-                "prijs_ct": p,
+                "net_w": 200.0 if tekort else net,
+                "accu_w": 0.0 if tekort else accu,
+                "prijs_ct": (nachtprijs if nachtprijs is not None else p) if tekort else p,
                 "reden": reden,
+                "stand": stand,
             }
         )
     return dagen
@@ -221,7 +243,7 @@ def test_oude_nacht_vol_en_niets_verkocht_wordt_capaciteit(make_coordinator, has
 
     assert c._herleid_onbekende_tekortnachten() == 1
     assert c.reserve_daily_records[0]["tekort_soort"] == "capaciteit"
-    assert c.reserve_daily_records[0]["tekort_soort_herleid"] == "v5.41"
+    assert c.reserve_daily_records[0]["tekort_soort_herleid"] == "v5.42"
     assert c.reserve_daily_records[0]["shortfall"] is True, "de marge telt hem nog mee"
 
 
@@ -235,9 +257,9 @@ def test_oude_nacht_vol_en_daarna_verkocht_wordt_planning(make_coordinator, hass
 
 
 def test_oude_nacht_waarin_laden_nooit_loonde_wordt_economisch(make_coordinator, hass):
-    # 30 ct nu, 44 ct piek: 44 x 0,84 - 11,2 = 25,8 ct < 30 ct.
+    # 30 ct nu, tekort tegen 40 ct: 40 x 0,9 - 11,2 = 24,8 ct < 30 ct.
     c = _c(make_coordinator, hass)
-    _oud(c, _verloop(55, prijs=30.0, piek=44.0))
+    _oud(c, _verloop(55, prijs=30.0, piek=44.0, nachtprijs=40.0))
 
     c._herleid_onbekende_tekortnachten()
 
@@ -248,9 +270,9 @@ def test_oude_nacht_waarin_laden_nooit_loonde_wordt_economisch(make_coordinator,
 def test_oude_nacht_waarin_laden_loonde_en_niet_geladen_wordt_planning(
     make_coordinator, hass
 ):
-    # 20 ct nu, 44 ct piek: 25,8 ct > 20 ct.
+    # 20 ct nu, tekort tegen 40 ct: 40 x 0,84 - 11,2 = 22,4 ct > 20 ct.
     c = _c(make_coordinator, hass)
-    _oud(c, _verloop(55, prijs=20.0, piek=44.0))
+    _oud(c, _verloop(55, prijs=20.0, piek=44.0, nachtprijs=40.0))
 
     c._herleid_onbekende_tekortnachten()
 
@@ -258,8 +280,10 @@ def test_oude_nacht_waarin_laden_loonde_en_niet_geladen_wordt_planning(
 
 
 def test_oude_nacht_met_zon_het_net_op_wordt_planning(make_coordinator, hass):
+    # v5.42: alleen in een stand die de zon buiten de accu houdt.
     c = _c(make_coordinator, hass)
-    _oud(c, _verloop(55, prijs=30.0, piek=44.0, net=-600, accu=-200))
+    _oud(c, _verloop(55, prijs=30.0, piek=44.0, net=-600, accu=-200,
+                     stand="smart_discharging"))
 
     c._herleid_onbekende_tekortnachten()
 
@@ -268,7 +292,8 @@ def test_oude_nacht_met_zon_het_net_op_wordt_planning(make_coordinator, hass):
 
 def test_oude_nacht_waarin_geladen_werd_blijft_onbekend(make_coordinator, hass):
     c = _c(make_coordinator, hass)
-    _oud(c, _verloop(55, prijs=20.0, piek=44.0, reden="grid_charging_profitable"))
+    _oud(c, _verloop(55, prijs=20.0, piek=44.0, nachtprijs=40.0,
+                     reden="grid_charging_profitable"))
 
     assert c._herleid_onbekende_tekortnachten() == 0
     assert "tekort_soort" not in c.reserve_daily_records[0]
