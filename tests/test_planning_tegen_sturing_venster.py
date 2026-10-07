@@ -37,7 +37,7 @@ def _opzet(c):
         {"van": "08:45", "soc_procent": 28, "modus": "smart", "start": NU + timedelta(hours=12, minutes=15)},
     ]
     # De reserve per moment: krimpt naarmate het blok nadert.
-    c._planning_reserve_kwh = lambda moment, cache: {
+    c._planning_reserve_kwh = lambda moment, cache, *_prijzen: {
         30: 5.0, 330: 2.5, 735: 1.3
     }[int((moment - NU).total_seconds() // 60)]
 

@@ -31,6 +31,8 @@ def test_update_shortfall_detection_appends_one_atomic_record(make_coordinator, 
     # met 0,10 kWh netafname als tekortdag, en dat zette vijf procent
     # opslag op de reserve.
     coordinator._netimport_nacht_kwh = 1.05
+    # v5.33: de gekoppelde meting - de nacht die die ochtend afliep.
+    coordinator._tekortnacht_vandaag_kwh = 1.05
     coordinator._excess_detected_today = False
 
     next_day = DAY0.replace(day=5)

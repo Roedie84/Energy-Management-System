@@ -30226,3 +30226,76 @@ definitie te komen.
 Schaduw: dit stuurt niets. Productie ongewijzigd (gouden standaard groen).
 
 **Volledige testsuite**: 4643 tests, allemaal groen.
+
+
+## v5.33 — Het plan volgt de sturing, en tekortdagen zijn echte tekorten
+
+Gevraagd: *"Ik wil nu dat je het Energy Management systeem analyseert"*, en
+daarna: *"Voorstellen uitwerken."* Eerst gemeten (plantoetsing over 30 dagen,
+de dagrecords van 30 september - 6 oktober, en P1 per uur naast de reden),
+dan pas veranderd.
+
+### 1. Het plan nam het blok van nu voor elk kwartier
+
+Gemeten: het plan van 08:00 verkocht over 30 dagen mediaan **68% meer** dan
+er werkelijk verkocht werd; 5 van de 30 dagen klopten binnen de marge. Het
+plan voorspelde een laagste stand van 10-17%, het werd 35-66%.
+
+De oorzaak zat in `_planning_reserve_kwh`: die nam voor elk kwartier het
+goedkope blok van NU. Om 08:00 is dat het middagblok van vandaag. Voor een
+kwartier om 18:30 ligt dat blok al achter het kwartier, en dan gold alleen de
+bodem (1,3 kWh). De sturing kent om 18:30 het blok van morgen en houdt de
+reserve tot dan vast - terecht, want op 4 van de 7 ochtenden stond de accu
+op 7-9%.
+
+Nu neemt het plan per kwartier het blok dat de sturing op dat moment zou
+kennen (`_volgend_blok_voor`): dezelfde dalzoeker, zonder de hysterese van
+nu. Zijn de prijzen van morgen er nog niet, dan geldt het blok van vandaag
+een etmaal later. Binnen het lopende blok blijft het de bodem, net als de
+sturing. De kaart "planning tegen sturing" rekent op dezelfde manier.
+
+### 2. Een tekortdag is één gekoppelde meting
+
+Tot nu toe twee losse metingen: een vlag (één moment boven 100 W in een
+dekkende reden, op elk moment van de dag) én de netafname tussen 22:00 en
+09:00 van dezelfde datum - in elke reden, en uit twee verschillende nachten.
+
+| Datum | Ochtend | Bijgekocht | Was | Wordt |
+|---|---|---|---|---|
+| 1 okt | 37% | 0,56 kWh 22-24 uur, `battery_saved_for_peak` | tekort | geen tekort |
+| 2 okt | 9% | 1,87 kWh in `default_smart` | geen tekort | tekort |
+
+Nu telt alleen netafname in een ronde waarin de accu op zijn vloer staat
+(effectieve minimum-SoC + 3 procentpunt) en de reden geen bewuste
+netafname is (laden uit het net, negatieve prijs, kalibratie, handmatig,
+noodlading, of na een afgesproken piekverkoop). Het venster 22:00-09:00
+loopt over middernacht door en hoort bij de ochtend waarop het afloopt. Een
+accu die boven de vloer vasthoudt, spaart - een grotere reserve lost daar
+niets op. De oude vlag blijft in het dagrecord (`tekortvlag`) maar beslist
+niet meer; de maandsamenvatting telt nu hetzelfde als de reserve.
+
+Bij de eerste start worden de opgeslagen dagen **naar twee kanten**
+herbeoordeeld met wat het record weet (laagste ochtendstand en netafname),
+gemarkeerd met `herbeoordeeld: v5.33`. Voor de week tot 6 oktober blijven
+het er vier, maar andere: 1 oktober vervalt, 2 oktober komt erbij.
+
+### 3. De marge kan weer dalen
+
+De overschotkant (marge -3 procentpunt per dag) trad in zeven dagen nul keer
+op: de drempel was drie keer het nodige. Nu anderhalf keer
+(`RESERVE_EXCESS_RATIO_THRESHOLD`).
+
+### 4. De slimme ontlaadgrens komt van de omvormer
+
+Stond hard op 2000 W. Sinds de accu op een eigen groep zit, staat
+`inverse_max_power` op 2400 W; met de oude grens telde 1900-2400 W al als
+"op de grens", en dan werd een echt tekort daarboven nooit gezien. Nu
+`slimme_ontlaadgrens_w()`, met 2000 W als terugval.
+
+**Verwachting bewust gewijzigd**: `test_het_moment_alleen_zet_nog_geen_tekortdag`
+toetst nu de gekoppelde meting; `test_update_shortfall_detection_appends_one_atomic_record`
+zet de tekortnacht; de nep-`_planning_reserve_kwh` in de vensterkaarttoets
+neemt de prijsreeks mee. Nieuw: `test_v533_tekortmeting.py` en
+`test_v533_plan_volgt_sturing.py`.
+
+**Volledige testsuite**: 4665 tests, allemaal groen.

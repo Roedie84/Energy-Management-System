@@ -1634,6 +1634,37 @@ GRID_IMPORT_SHORTFALL_THRESHOLD_W = 100.0
 # bestond maar op deze plek niet werd gebruikt.
 SHORTFALL_MIN_NETIMPORT_KWH = 0.5
 
+# v5.33: wat een TEKORT is, als één gekoppelde meting.
+#
+# Tot v5.32 waren het twee losse metingen: een vlag (één moment boven 100
+# W in een "dekkende" reden, op elk moment van de dag) én de totale
+# netafname tussen 22:00 en 09:00 (elke reden, ook bewust vasthouden).
+# Gemeten over 30 september - 6 oktober:
+#
+#   1 okt   ochtend 37% laadstand, 0,56 kWh bijgekocht 22-24 uur onder
+#           `battery_saved_for_peak`         -> telde als tekort (onterecht)
+#   2 okt   ochtend 9%, 1,87 kWh bijgekocht in `default_smart`
+#                                            -> telde NIET (gemist)
+#
+# Nu telt alleen netafname in een ronde waarin de accu op zijn vloer staat
+# (effectieve minimum-SoC plus deze marge) en de reden geen bewuste
+# netafname is. Een accu die vasthoudt boven de vloer heeft geen tekort -
+# hij spaart; een extra reserve lost daar niets op. Een lege accu in
+# `default_smart` heeft wél een tekort.
+TEKORT_LEEG_MARGE_PROCENT = 3.0
+
+# Redenen waarin netafname bewust is en dus nooit een tekort (v5.33).
+REDENEN_BEWUSTE_NETAFNAME = (
+    "grid_charging_low_solar",
+    "grid_charging_dip",
+    "grid_charging_profitable",
+    "grid_charging_low_solar_extra_dip",
+    "negative_price",
+    "kalibratie",
+    "force_manual",
+    "emergency_low_battery",
+)
+
 # Hoe ver de accu onder zijn ontlaadgrens mag zitten en toch als "op de
 # grens" telt (v3.99.0). Regelfouten van tientallen watt zijn normaal;
 # 1550 W bij een grens van 1600 is de grens.
@@ -1952,7 +1983,13 @@ EMERGENCY_LOW_BATTERY_KWH_THRESHOLD = 0.3
 # needed while still in a "self-sufficient" window, the reserve looks
 # overly conservative that day - counterbalances the shortfall-based
 # margin increase, so the learned margin isn't a one-way ratchet.
-RESERVE_EXCESS_RATIO_THRESHOLD = 3.0
+#
+# v5.33: van 3,0 naar 1,5. Bij 3,0 trad de overschotkant in de zeven dagen
+# tot 6 oktober nul keer op, terwijl de marge door tekortdagen tot 45%
+# opliep - de marge kon in de praktijk alleen stijgen. Het nodige is al
+# het diepste tekort plus de marge; anderhalf keer dat bedrag is ruim
+# genoeg om "te voorzichtig" te heten.
+RESERVE_EXCESS_RATIO_THRESHOLD = 1.5
 EXCESS_MARGIN_REDUCTION_PER_RECENT_DAY = 3.0
 
 # Floor for the total learned margin bonus (can go negative once excess
@@ -3450,6 +3487,10 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "_fietsladers_complete_today": {"type": "plain"},
     "_laagste_soc_ochtend": {"type": "plain"},
     "_netimport_nacht_kwh": {"type": "plain"},
+    # v5.33: de gekoppelde tekortmeting - de lopende nacht en de nacht die
+    # vanochtend afliep. Bewaard, zodat een herstart de nacht niet kost.
+    "_tekortnacht_lopend_kwh": {"type": "plain"},
+    "_tekortnacht_vandaag_kwh": {"type": "plain"},
     "_lange_horizon_extra_vandaag": {"type": "plain"},
     "_max_ontlaad_w_vandaag": {"type": "plain"},
     "_vermogensgrens_gezien_today": {"type": "plain"},

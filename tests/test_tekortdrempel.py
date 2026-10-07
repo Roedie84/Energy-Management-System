@@ -85,11 +85,11 @@ def test_het_moment_alleen_zet_nog_geen_tekortdag(make_coordinator, hass):
     import custom_components.energy_management_system as pkg
 
     bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    # v5.33: de beoordeling staat vlak boven het record (één gekoppelde
+    # meting); het record neemt de uitkomst over. De vlag beslist niet meer.
+    assert "tekortdag = self._telt_als_tekortdag(tekortnacht)" in bron
     i = bron.index('"shortfall": ')
-    # de toewijzing loopt over twee regels
-    blok = bron[i : i + 220]
-
-    assert "_telt_als_tekortdag" in blok, blok[:160]
+    assert bron[i : i + 40].startswith('"shortfall": tekortdag,'), bron[i : i + 80]
 
 
 def test_de_marge_reageert_op_de_nieuwe_telling(make_coordinator, hass):

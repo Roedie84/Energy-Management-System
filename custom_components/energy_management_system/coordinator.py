@@ -681,6 +681,8 @@ from .const import (
     DIGITAL_TWIN_HORIZON_HOURS,
     SHORTFALL_MARGIN_BONUS_PER_RECENT_DAY,
     SHORTFALL_MIN_NETIMPORT_KWH,
+    TEKORT_LEEG_MARGE_PROCENT,
+    REDENEN_BEWUSTE_NETAFNAME,
     EMERGENCY_LOW_BATTERY_KWH_THRESHOLD,
     RESERVE_EXCESS_RATIO_THRESHOLD,
     EXCESS_MARGIN_REDUCTION_PER_RECENT_DAY,
@@ -21596,7 +21598,7 @@ class EnergyManagementSystemCoordinator:
         return reserve_kwh
 
     def _planning_reserve_kwh(
-        self, moment: datetime, cache: dict[str, float]
+        self, moment: datetime, cache: dict[str, float], entries=None
     ) -> float:
         """De reserve waar de kwartierplanning mee simuleert (v3.92.1).
 
@@ -21621,10 +21623,25 @@ class EnergyManagementSystemCoordinator:
         """
         bodem = self._reserve_bodem_kwh()
         blok = self.last_cheap_block_start
+        # v5.33: is het blok van nu voorbij op dit kwartier, dan het blok dat
+        # de sturing OP DAT MOMENT zou kennen - niet de bodem. Gemeten over
+        # 30 dagen: het plan van 08:00 verkocht 's avonds tot de bodem (laagste
+        # stand 10-17%), want het blok van vanochtend lag dan achter het
+        # kwartier. De sturing kent om 18:30 het blok van morgen en houdt de
+        # reserve tot dan vast. Verkocht: mediaan 68% minder dan gepland,
+        # 5 van de 30 dagen binnen de marge.
+        # Binnen het lopende blok blijft het de bodem, net als de sturing
+        # (`_lopend_blok`, v5.28.5).
+        blok_eind = self.last_cheap_block_end
+        in_blok = blok is not None and blok <= moment and (
+            blok_eind is None or moment < blok_eind
+        )
+        if blok is not None and blok <= moment and not in_blok and entries:
+            blok = self._volgend_blok_voor(entries, moment)
         if blok is None or blok <= moment:
             return bodem
 
-        sleutel = moment.strftime("%Y-%m-%d %H")
+        sleutel = f'{moment.strftime("%Y-%m-%d %H")}|{blok.isoformat()}'
         if sleutel not in cache:
             # v4.1: de ene reserve. Hier stond een eigen berekening -
             # diepste x max(margefactor, 1,25) - de vierde definitie van
@@ -21635,6 +21652,28 @@ class EnergyManagementSystemCoordinator:
             )
             cache[sleutel] = max(bodem, reserve or 0.0)
         return cache[sleutel]
+
+    def _volgend_blok_voor(self, entries, moment: datetime) -> datetime | None:
+        """Het goedkope blok dat de sturing op `moment` zou kiezen (v5.33).
+
+        Dezelfde dalzoeker als de sturing, zonder de hysterese van nu. Ligt
+        het gevonden dal tegen het eind van de bekende prijzen, dan is het
+        echte volgende blok nog onbekend (de prijzen van morgen komen pas
+        rond 13:00); dan geldt het blok van vandaag een etmaal later. Dat
+        is wat de sturing 's avonds ook ziet: het middagdal van morgen.
+        """
+        if not entries:
+            return None
+        start, eind = self._cheapest_block_range(entries, moment, stabiel=False)
+        laatste = max(e[1] for e in entries)
+        if start is not None and eind is not None and eind < laatste:
+            return start
+        basis = self.last_cheap_block_start
+        if basis is None:
+            return start
+        while basis <= moment:
+            basis += timedelta(days=1)
+        return basis
 
     def _plan_netregels(self, now: datetime, entries, blok_drempel_voor) -> dict:
         """Wat het plan nodig heeft om laden en piekverkoop te voorspellen (v5.22).
@@ -21920,7 +21959,7 @@ class EnergyManagementSystemCoordinator:
         reserve_cache: dict[str, float] = {}
 
         def reserve_op(moment: datetime) -> float:
-            return self._planning_reserve_kwh(moment, reserve_cache)
+            return self._planning_reserve_kwh(moment, reserve_cache, entries)
 
         # v5.22: laden en piekverkoop in het plan, met DEZELFDE regels als de
         # beslissing. "Volgende actie" toonde laden pas als het gebeurde.
@@ -23138,7 +23177,7 @@ class EnergyManagementSystemCoordinator:
             eind_kwh=eind,
             bodem_kwh=min(bodem, capaciteit * 0.5),
             laad_kw=abs(self.instelling(CONF_MANUAL_CHARGE_POWER, DEFAULT_MANUAL_CHARGE_POWER)) / 1000,
-            ontlaad_kw=SMART_MAX_DISCHARGE_W / 1000,
+            ontlaad_kw=self.slimme_ontlaadgrens_w() / 1000,
             rendement=rendement,
             slijtage_eur_per_kwh=slijtage,
             tijdstippen=tijden,
@@ -24907,6 +24946,12 @@ class EnergyManagementSystemCoordinator:
     _laagste_soc_ochtend: float | None = None
     _netimport_nacht_kwh: float = 0.0
     _netimport_nacht_laatste: datetime | None = None
+    # v5.33: de gekoppelde tekortmeting (zie TEKORT_LEEG_MARGE_PROCENT).
+    # `lopend` telt in het venster 22:00-09:00 over de datumgrens heen en
+    # is None buiten dat venster; `vandaag` is de nacht die vanochtend om
+    # 09:00 afliep en gaat bij het afsluiten van de dag in het dagrecord.
+    _tekortnacht_lopend_kwh: float | None = None
+    _tekortnacht_vandaag_kwh: float | None = None
     # v3.99.5: welk verschil tussen gevraagd en werkelijk er nu staat, en
     # sinds wanneer. Onveranderlijk, dus als klasse-attribuut veilig.
     _handmatig_verschil: str | None = None
@@ -24915,6 +24960,22 @@ class EnergyManagementSystemCoordinator:
     # veld gezet in `_init_pv_leervelden`: een dict als klasse-attribuut
     # wordt door alle exemplaren gedeeld, en dat viel in de volledige
     # toetsrun meteen door de mand.
+
+    def slimme_ontlaadgrens_w(self) -> float:
+        """Wat de accu in de slimme stand mag leveren (v5.33).
+
+        Stond hard op 2000 W (SMART_MAX_DISCHARGE_W). Sinds de accu op een
+        eigen groep zit, staat `inverse_max_power` op 2400 W; met de oude
+        grens telde een accu die 1900-2400 W leverde al als "op de grens",
+        en dan werd netafname daarboven nooit als tekort gezien. De
+        omvormer weet het zelf; het vaste getal is de terugval.
+        """
+        gemeten = self._read_sensor_float(
+            self.config.get(CONF_BATTERY_MAX_DISCHARGE_POWER_ENTITY)
+        )
+        if gemeten is not None and 100 <= abs(gemeten) <= 12000:
+            return float(abs(gemeten))
+        return SMART_MAX_DISCHARGE_W
 
     def _import_verklaard_door_ontlaadgrens(self, reason: str) -> bool:
         """Levert de accu al op zijn grens? Dan is netimport geen tekort.
@@ -24958,7 +25019,7 @@ class EnergyManagementSystemCoordinator:
         # voor een accu in de slimme stand.
         slim = REASON_TO_MODE.get(reason) in (OPTION_SMART, OPTION_SMART_DISCHARGING)
         if slim:
-            grens_w = SMART_MAX_DISCHARGE_W
+            grens_w = self.slimme_ontlaadgrens_w()
         else:
             grens_w = abs(
                 self.config.get(CONF_MANUAL_DISCHARGE_POWER)
@@ -25015,14 +25076,46 @@ class EnergyManagementSystemCoordinator:
                 soc if self._laagste_soc_ochtend is None else min(self._laagste_soc_ochtend, soc)
             )
         if now.hour >= 22 or now.hour < 9:
+            if self._tekortnacht_lopend_kwh is None:
+                self._tekortnacht_lopend_kwh = 0.0
             net_w = self._read_sensor_float(self.config.get(CONF_CONSUMPTION_POWER_SENSOR))
             if net_w is not None and net_w > 0 and self._netimport_nacht_laatste is not None:
                 uren = (now - self._netimport_nacht_laatste).total_seconds() / 3600
                 if 0 < uren < 0.5:
-                    self._netimport_nacht_kwh += net_w / 1000 * uren
+                    kwh = net_w / 1000 * uren
+                    self._netimport_nacht_kwh += kwh
+                    if self._netimport_is_tekort(now):
+                        self._tekortnacht_lopend_kwh += kwh
             self._netimport_nacht_laatste = now
         else:
             self._netimport_nacht_laatste = None
+            # v5.33: de nacht is om; hij hoort bij het dagrecord van vandaag.
+            if self._tekortnacht_lopend_kwh is not None:
+                self._tekortnacht_vandaag_kwh = round(self._tekortnacht_lopend_kwh, 3)
+                self._tekortnacht_lopend_kwh = None
+
+    def _netimport_is_tekort(self, now: datetime) -> bool:
+        """Is netafname in deze ronde een TEKORT? (v5.33)
+
+        Alleen als de accu op zijn vloer staat - leeg, dus niet meer kon
+        leveren - en de reden geen bewuste netafname is. Netafname bij een
+        accu boven de vloer is vasthouden (sparen voor de piek) of een
+        vermogensgrens; een grotere reserve lost geen van beide op.
+        """
+        reden = self.last_reason or ""
+        if reden in REDENEN_BEWUSTE_NETAFNAME:
+            return False
+        if getattr(self, "kalibratie", False):
+            return False
+        # Na een bewuste piekverkoop onder de reserve is netafname tot het
+        # volgende goedkope blok afgesproken (v5.22).
+        tot = dt_util.parse_datetime(self.piekverkoop_tot or "")
+        if tot is not None and now < tot:
+            return False
+        soc = self.accustand_procent()
+        if soc is None:
+            return False
+        return soc <= self.effective_min_soc_percent() + TEKORT_LEEG_MARGE_PROCENT
 
     def _update_shortfall_detection(
         self,
@@ -25049,13 +25142,18 @@ class EnergyManagementSystemCoordinator:
         """
         if self._shortfall_check_date != now.date():
             if self._shortfall_check_date is not None:
+                # v5.33: één gekoppelde meting - netafname met een lege accu
+                # in een reden zonder bewuste netafname, in de nacht die op
+                # deze dag om 09:00 afliep. De vlag hieronder blijft voor
+                # het logboek, maar beslist niet meer.
+                tekortnacht = self._tekortnacht_vandaag_kwh
+                tekortdag = self._telt_als_tekortdag(tekortnacht)
                 self.reserve_daily_records.append(
                     {
                         "date": self._shortfall_check_date.isoformat(),
-                        # v5.6: de vlag ALLEEN is niet genoeg - zie
-                        # `_telt_als_tekortdag`.
-                        "shortfall": self._shortfall_detected_today
-                        and self._telt_als_tekortdag(self._netimport_nacht_kwh),
+                        "shortfall": tekortdag,
+                        "tekortnacht_kwh": tekortnacht,
+                        "tekortvlag": self._shortfall_detected_today,
                         # v3.99.0: was er een kookpiek boven de
                         # ontlaadgrens? Die telt niet als tekort, maar
                         # hoort wel zichtbaar te zijn - anders is achteraf
@@ -25074,7 +25172,10 @@ class EnergyManagementSystemCoordinator:
                 ]
                 # Also feed the monthly summary - a day just closed out.
                 self.current_month_days_tracked += 1
-                if self._shortfall_detected_today:
+                # v5.33: dezelfde beoordeling als het dagrecord. Telde tot
+                # nu toe de losse vlag, dus de maandsamenvatting meldde
+                # meer tekortdagen dan de reserve.
+                if tekortdag:
                     self.current_month_shortfall_days += 1
                 if self._excess_detected_today:
                     self.current_month_excess_days += 1
@@ -25085,6 +25186,9 @@ class EnergyManagementSystemCoordinator:
             self._lange_horizon_extra_vandaag = 0.0
             self._laagste_soc_ochtend = None
             self._netimport_nacht_kwh = 0.0
+            # v5.33: alleen de afgelopen nacht; de lopende loopt door over
+            # middernacht.
+            self._tekortnacht_vandaag_kwh = None
             # v3.99.19: de dag die voorbij is, nabeschouwen.
             if self._shortfall_check_date is not None:
                 self._sluit_dag_af_met_nabeschouwing(self._shortfall_check_date.isoformat())
@@ -28514,6 +28618,29 @@ class EnergyManagementSystemCoordinator:
             and accu_c is not None
             and accu_c < BATTERY_COOLING_MIN_ABSOLUTE_C
         )
+
+    def _herbeoordeel_tekortdagen(self) -> None:
+        """Opgeslagen tekortdagen met de gekoppelde meting (v5.33)."""
+        # v5.33: de opgeslagen dagen met de gekoppelde meting herbeoordelen,
+        # voor zover het record het toelaat. Een record van vóór v5.33 kent
+        # de tekortnacht niet, maar wel de laagste ochtendstand (03-09 uur)
+        # en de netafname: stond de accu 's ochtends niet op de vloer, dan
+        # was hij die nacht niet leeg en was de netafname vasthouden (1
+        # oktober: 37%). Stond hij wel op de vloer en is er bijgekocht, dan
+        # was het een tekort - ook als de oude vlag het miste (2 oktober).
+        # Naar twee kanten, dus geen eenrichtingsreparatie.
+        vloer = self.effective_min_soc_percent() + TEKORT_LEEG_MARGE_PROCENT
+        for record in self.reserve_daily_records or []:
+            if not isinstance(record, dict) or "tekortnacht_kwh" in record:
+                continue
+            soc = record.get("laagste_soc_ochtend")
+            netimport = record.get("netimport_nacht_kwh")
+            if not isinstance(soc, (int, float)) or not isinstance(netimport, (int, float)):
+                continue
+            nieuw = soc <= vloer and self._telt_als_tekortdag(netimport)
+            if bool(record.get("shortfall")) != nieuw:
+                record["shortfall"] = nieuw
+                record["herbeoordeeld"] = "v5.33"
 
     def _telt_als_tekortdag(self, netimport_kwh: float | None) -> bool:
         """Was er werkelijk een tekort, of één moment van honderd watt?
@@ -33628,6 +33755,8 @@ class EnergyManagementSystemCoordinator:
                 record["shortfall"] = False
                 record["herbeoordeeld"] = "v5.8"
 
+        self._herbeoordeel_tekortdagen()
+
         # v5.6: de al gemeten nachten opschonen met hetzelfde filter.
         # De les van v4.17.1: instroom repareren en de voorraad laten
         # staan is half werk - daar blokkeerden driehonderd oude paren de
@@ -37376,7 +37505,7 @@ class EnergyManagementSystemCoordinator:
         return max(entry[2] for entry in remaining_today) / PRICE_SCALE_FACTOR
 
     def _cheapest_block_range(
-        self, entries: list[PriceEntry], now: datetime
+        self, entries: list[PriceEntry], now: datetime, stabiel: bool = True
     ) -> tuple[datetime | None, datetime | None]:
         """Find the natural cheap price valley around the cheapest upcoming
         interval, instead of searching for a fixed-duration window.
@@ -37412,8 +37541,11 @@ class EnergyManagementSystemCoordinator:
 
         cheapest_idx = min(range(len(upcoming)), key=lambda i: upcoming[i][2])
 
+        # v5.33: `stabiel=False` voor de planning, die het blok voor een
+        # LATER moment zoekt; de hysterese hoort bij de sturing van nu.
         if (
-            self.last_cheap_block_start is not None
+            stabiel
+            and self.last_cheap_block_start is not None
             and price_range > 0
         ):
             previous_idx = next(
@@ -40323,6 +40455,12 @@ class EnergyManagementSystemCoordinator:
         # de kaart vergeleek er niet tegen.
         onder = []
         cache: dict[str, float] = {}
+        # v5.33: met de prijsreeks, zodat ook deze kaart per kwartier het
+        # blok neemt dat de sturing dan kent (zie `_planning_reserve_kwh`).
+        try:
+            prijsreeks = self._get_forecast_entries()
+        except Exception:  # noqa: BLE001
+            prijsreeks = []
         for q in plan:
             soc = q.get("soc_procent")
             if soc is None:
@@ -40332,7 +40470,7 @@ class EnergyManagementSystemCoordinator:
             if isinstance(moment, str):
                 moment = dt_util.parse_datetime(moment)
             reserve_dan = (
-                self._planning_reserve_kwh(moment, cache)
+                self._planning_reserve_kwh(moment, cache, prijsreeks)
                 if moment is not None
                 else reserve
             )
