@@ -1,8 +1,7 @@
-EMS v5.37 - nachtmelding, Monte Carlo zonder prijzen voor morgen, tekort in kWh
+EMS v5.38 - tellingen die kloppen
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
-Stuurt niet anders. "Accu haalt de nacht niet" gaat alleen 's avonds en
-'s nachts af en pas als het tekort een half uur aanhoudt; de
-Monte-Carlo-tekortkans staat niet meer op unknown voordat de prijzen van
-morgen er zijn; het tekort staat ook in kWh; geen prijswaarschuwing meer
-in het log bij een herstart.
+Stuurt niet anders. De tekortdag-sensor laat zien wat de lopende nacht echt
+bijkocht, oude tekortnachten hebben weer een kWh-waarde, de eigen
+accustekker staat niet meer bij de grootverbruikers en de cockpit noemt
+slapende koppelingen.

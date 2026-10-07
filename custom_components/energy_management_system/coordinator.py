@@ -15171,7 +15171,14 @@ class EnergyManagementSystemCoordinator:
             else None
         )
         totaal = len(controle.get("entiteiten") or [])
-        delen = [f"koppelingen {totaal - len(kapot)}/{totaal}"]
+        # v5.38: de diagnoseregel telt slapende koppelingen apart ("config
+        # 70/0/1"), de cockpit telde ze als in orde ("71/71"). Nu staat het
+        # er hier ook bij, zodat de twee niet tegenstrijdig lijken.
+        slaapt = controle.get("aantal_slaapt") or 0
+        delen = [
+            f"koppelingen {totaal - len(kapot)}/{totaal}"
+            + (f" ({slaapt} slaapt)" if slaapt else "")
+        ]
         if balans_klopt is not None:
             delen.append("balans ✓" if balans_klopt else "balans wijkt af")
         # v5.19.5: de spreiding van de zonvoorspelling staat NIET in de
@@ -28743,6 +28750,21 @@ class EnergyManagementSystemCoordinator:
                 record["shortfall"] = nieuw
                 record["herbeoordeeld"] = "v5.33"
 
+    def tekortnacht_tot_nu(self) -> dict:
+        """Hoe de lopende nacht er tot nu toe voor staat (v5.38).
+
+        Op 7 oktober stond `detected_today_so_far` vanaf 00:25 op true en
+        las dat als "vandaag is een tekortdag", terwijl er die nacht niets
+        werd bijgekocht. Die vlag is een signaal; dit is de meting.
+        """
+        lopend = self._tekortnacht_lopend_kwh
+        if lopend is None:
+            lopend = self._tekortnacht_vandaag_kwh
+        return {
+            "tekortnacht_tot_nu_kwh": round(lopend, 3) if lopend is not None else None,
+            "telt_als_tekortdag_tot_nu": self._telt_als_tekortdag(lopend),
+        }
+
     def _telt_als_tekortdag(self, netimport_kwh: float | None) -> bool:
         """Was er werkelijk een tekort, of één moment van honderd watt?
         (v5.6)
@@ -33233,6 +33255,21 @@ class EnergyManagementSystemCoordinator:
         return cheap_block_start
 
     @staticmethod
+    def _tekort_kwh_van(record: dict) -> tuple[float, bool]:
+        """Tekort van één nacht in kWh, en of het een benadering is (v5.38).
+
+        Records van vóór v5.33 hebben alleen `netimport_nacht_kwh`: alle
+        netafname tussen 22:00 en 09:00. Op een tekortdag is dat de beste
+        schatting die er is (bovengrens); op een gewone dag telt hij niet.
+        """
+        gemeten = record.get("tekortnacht_kwh")
+        if gemeten is not None:
+            return float(gemeten), False
+        if record.get("shortfall"):
+            return float(record.get("netimport_nacht_kwh") or 0.0), True
+        return 0.0, False
+
+    @staticmethod
     def _monte_carlo_terugval_horizon(now: datetime) -> datetime:
         """Het eerstvolgende 09:00 (lokale tijd van `now`)."""
         doel = now.replace(
@@ -33272,11 +33309,14 @@ class EnergyManagementSystemCoordinator:
             # v5.37: ook de omvang, zodat te zien is of de marge het tekort
             # kleiner maakt en niet alleen de telling.
             "tekort_kwh_laatste_7": round(
-                sum((r.get("tekortnacht_kwh") or 0.0) for r in records), 2
+                sum(self._tekort_kwh_van(r)[0] for r in records), 2
             ),
             "tekort_kwh_per_nacht": [
-                round(r.get("tekortnacht_kwh") or 0.0, 2) for r in records
+                round(self._tekort_kwh_van(r)[0], 2) for r in records
             ],
+            # v5.38: dagrecords van vóór v5.33 hebben geen tekortnacht_kwh;
+            # daar staat de netimport van de hele nacht (een bovengrens).
+            "tekort_kwh_benaderd": [self._tekort_kwh_van(r)[1] for r in records],
             "dagen_gemeten": len(records),
             "werkelijke_tekortfrequentie_procent": (
                 round(100 * tekort / len(records), 1) if records else None
@@ -34360,14 +34400,42 @@ class EnergyManagementSystemCoordinator:
             toestand = self.hass.states.get(entiteit)
             naam = (toestand.attributes.get("friendly_name") if toestand else None) or entiteit
             bronnen[entiteit] = (str(naam), self._read_sensor_float(entiteit))
-        return [(e, n, v) for e, (n, v) in sorted(bronnen.items())]
+        # v5.38: de eigen accu-meetstekker is geen grootverbruiker (hij laadt
+        # met 2 kW), en een hernoemde of verdwenen entiteit ook niet meer.
+        uitsluiten = self._geen_grootverbruiker()
+        return [
+            (e, n, v)
+            for e, (n, v) in sorted(bronnen.items())
+            if e not in uitsluiten and self.hass.states.get(e) is not None
+        ]
+
+    def _geen_grootverbruiker(self) -> set[str]:
+        """De accu-vermogenssensor en alles op hetzelfde apparaat (v5.38)."""
+        accu = self.config.get(CONF_BATTERY_POWER_SENSOR)
+        if not accu:
+            return set()
+        uit = {accu}
+        try:
+            register = self._entiteitenregister()
+            item = register.async_get(accu) if register is not None else None
+            apparaat = getattr(item, "device_id", None) if item else None
+            if apparaat:
+                for regel in register.entities.values():
+                    if regel.device_id == apparaat:
+                        uit.add(regel.entity_id)
+        except Exception:  # noqa: BLE001 - zonder register alleen de sensor zelf
+            pass
+        return uit
 
     def _leer_grootverbruikers(self, now: datetime) -> None:
         """Eén leerstap voor de grootverbruikers (v5.31, schaduw)."""
         from .grootverbruikers import werk_bij
 
-        leer = dict(self.grootverbruiker_leer or {})
-        for entiteit, naam, vermogen in self._grootverbruiker_bronnen():
+        bronnen = self._grootverbruiker_bronnen()
+        # v5.38: wat geen bron meer is (accustekker, hernoemd), vergeten.
+        geldig = {e for e, _n, _v in bronnen}
+        leer = {e: v for e, v in (self.grootverbruiker_leer or {}).items() if e in geldig}
+        for entiteit, naam, vermogen in bronnen:
             werk_bij(leer, entiteit, naam, vermogen, now)
         self.grootverbruiker_leer = leer
 

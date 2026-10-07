@@ -30458,3 +30458,34 @@ het tekort kleiner maakt, niet alleen de telling.
 
 "No usable forecast entries" kwam bij elke herstart, omdat Zonneplan nog niet
 geladen was. Tijdens de opstartfase is het nu een debugregel.
+
+## v5.38 — Tellingen die kloppen
+
+Uit de uuranalyse van 7 oktober 14:15.
+
+### 1. Tekortnacht tot nu
+
+`detected_today_so_far` stond vanaf 00:25 op true en las als "vandaag is een
+tekortdag", terwijl er die nacht niets werd bijgekocht. Die vlag is een
+signaal; de tekortdag beslist de gemeten netafname met lege accu. De sensor
+Reserve shortfall days toont nu ook `tekortnacht_tot_nu_kwh` en
+`telt_als_tekortdag_tot_nu`.
+
+### 2. Tekort in kWh voor oude dagrecords
+
+Records van vóór v5.33 hebben geen `tekortnacht_kwh`, dus
+`tekort_kwh_per_nacht` gaf 7× 0 bij 4 tekortnachten. Op een tekortdag valt hij
+nu terug op `netimport_nacht_kwh` (bovengrens); `tekort_kwh_benaderd` zegt
+welke nachten benaderd zijn.
+
+### 3. Accustekker geen grootverbruiker
+
+De HomeWizard-stekker van de accu (laadt met 2 kW) stond bij de
+grootverbruikers. De accu-vermogenssensor en alle sensoren op hetzelfde
+apparaat tellen niet meer mee, en verdwenen of hernoemde entiteiten worden
+vergeten.
+
+### 4. Slapende koppelingen in de cockpit
+
+De diagnose zei "config 70/0/1", de cockpit "koppelingen 71/71". De cockpit
+noemt nu "(1 slaapt)", zodat de twee niet tegenstrijdig lijken.

@@ -3182,7 +3182,11 @@ class ReserveShortfallSensor(SensorEntity, RestoreEntity):
         return {
             "history": self._coordinator.reserve_shortfall_history,
             "history_dates": self._coordinator.reserve_shortfall_dates,
+            # Signaal: één moment netafname >100 W tijdens ontladen. Telt NIET
+            # als tekortdag; dat beslist de gemeten netafname met lege accu.
             "detected_today_so_far": self._coordinator._shortfall_detected_today,
+            # v5.38: wat wel beslist - de lopende nacht (22:00-09:00).
+            **self._coordinator.tekortnacht_tot_nu(),
         }
 
     # v4.1: geen `_store_wint` - deze sensor VOEGT SAMEN (vereniging van
