@@ -30799,3 +30799,65 @@ verkocht en regelt de Zendure het zelf (smart-modus: laden bij zonoverschot,
 ontladen voor het huis)."
 
 **Volledige testsuite**: 4788 tests, allemaal groen.
+
+## v5.44 — Een halve volging is geen planning
+
+Gemeld op 7 oktober, 22:52: `verwacht_tekort` stond op 0,63 kWh
+**planning**, met `laadbesluit_sinds_9u` leeg. De accu kwam die dag tot 93%
+en werd niet verder uit het net bijgeladen, omdat dat niet loonde (rendement
+en slijtage). Maar v5.41 was pas om 21:00 geïnstalleerd: het laadbesluit, de
+zon en de verkoop sinds 09:00 waren alleen vanaf dat moment gevolgd. Om
+09:00 zou de nacht als planning worden ingedeeld en de cockpit op LET OP
+gaan - zonder enig bewijs voor een stuurfout.
+
+### 1. Sinds wanneer loopt de volging?
+
+Nieuw, bewaard over een herstart: `_tekort_volg_sinds` (in het attribuut
+`verwacht_tekort` als `tracking_since`) en de laatste ronde van de volging.
+Om 09:00 begint een nieuw venster en loopt de volging vanaf dat moment. Ligt
+de vorige ronde meer dan een half uur terug (een update, een lange herstart),
+dan begint de volging opnieuw. Een korte herstart telt niet: de velden zelf
+worden bewaard (op 7 oktober een stuk of tien keer een halve minuut).
+
+De live volging is **onvolledig** als:
+
+- hij niet vanaf het begin van het venster liep (20 minuten speling voor de
+  eerste ronde na 09:00), of
+- de accu niet vol werd en er geen laadbesluit is vastgelegd: dan is live
+  niet te zeggen of laden loonde.
+
+### 2. Dan uit het dagverloop
+
+De nacht wordt dan ingedeeld met dezelfde regels als de herleiding van oude
+nachten in v5.42: zonder de P1-verschuiving, zon het net op alleen in
+`smart_discharging`, verkopen terwijl de accu niet vol was is planning, en
+de waarde van een extra kWh tegen de prijs waartegen het tekort werkelijk
+werd betaald (x rendement - slijtage). Het dagrecord krijgt
+`tekort_soort_herleid: v5.44` en de reden zegt waarom: "... (uit het
+dagverloop; live gevolgd sinds 07-10 21:03)".
+
+Is ook het dagverloop te dun, dan blijft de soort leeg: **onbekend**,
+informatief, en de uurlijkse herleiding probeert het later opnieuw. Nooit
+planning bij gebrek aan bewijs.
+
+Het verwachte tekort net zo: bij een onvolledige volging uit het dagverloop
+van het lopende venster, met als prijs van het tekort de gemiddelde prijs
+van de rest van het venster (er is nog geen tekortkwartier). Nieuwe velden:
+`tekort_reden`, `soort_bron` (live of dagverloop), `live_onvolledig` en
+`tracking_since`. Is het tekort groter dan wat er in de accu past, dan blijft
+het capaciteit, hoe de dag ook liep.
+
+### 3. Vannacht
+
+Nagerekend met de geschiedenis van 7 oktober vanaf 09:00: de hele dag
+`smart` (geen uitstel van laden, dus zon het net op telt niet), geen
+`grid_charging`, hoogste laadstand 93% (niet vol), verkoop buiten de -50 W
+samen zo'n 0,05 kWh, goedkoopste kwartier 29,7 ct. Een extra kWh tegen een
+nachtprijs van rond de 33 ct is na rendement en slijtage ~16,6 ct waard;
+laden loonde pas bij een tekortprijs boven ~48 ct. Wordt het een
+tekortnacht, dan wordt hij **economisch**, niet planning.
+
+De sturing verandert niet: alleen de indeling en de meldingen.
+
+**Volledige testsuite**: 4804 tests, allemaal groen, waarvan 16 nieuw
+(`test_v544_tekortvolging_onvolledig.py`).

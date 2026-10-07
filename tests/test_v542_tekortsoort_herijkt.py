@@ -226,6 +226,7 @@ def test_live_verkoop_zonder_vol_is_geen_economisch_tekort(make_coordinator, has
     hass.states.set("sensor.soc", "60")
     hass.states.set("sensor.p1", "-1500")
     hass.states.set("sensor.accu", "1700")
+    c._live_tekortvolging_onvolledig = lambda begin: None  # v5.44: live volledig
     c.last_laadbesluit = {"laden": False, "prijs_nu_eur": 0.30, "waarde_eur": 0.25}
     moment = DAG.replace(hour=19)
     for _ in range(12):

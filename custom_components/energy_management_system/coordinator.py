@@ -536,6 +536,9 @@ from .const import (
     TEKORT_STANDEN_ZON_BUITEN_DE_ACCU,
     TEKORT_NACHT_VANAF,
     TEKORT_IMPORT_MIN_W,
+    TEKORT_VERWACHT_MIN_DEEL_KWARTIEREN,
+    TEKORT_VOLG_MAX_GAT_MINUTEN,
+    TEKORT_VOLG_SPELING_MINUTEN,
     NACHT_MELDING_EIND_UUR,
     NACHT_MELDING_START_UUR,
     NACHT_TEKORT_AANHOUDEND_MIN,
@@ -25140,6 +25143,11 @@ class EnergyManagementSystemCoordinator:
     _herleiding_geprobeerd_op: str | None = None
     # v5.42: zie `_tekort_reden`.
     _tekort_reden_vandaag: str | None = None
+    # v5.44: zie `_live_tekortvolging_onvolledig`.
+    _tekort_volg_sinds: str | None = None
+    _tekort_volg_laatst: str | None = None
+    _tekort_herleid_vandaag: str | None = None
+    _verwacht_uit_verloop_cache: tuple | None = None
     # v3.99.5: welk verschil tussen gevraagd en werkelijk er nu staat, en
     # sinds wanneer. Onveranderlijk, dus als klasse-attribuut veilig.
     _handmatig_verschil: str | None = None
@@ -25345,6 +25353,13 @@ class EnergyManagementSystemCoordinator:
                         "tekort_soort": self._tekort_soort_vandaag,
                         # v5.42: en waarom, voor het aandachtspunt.
                         "tekort_reden": self._tekort_reden_vandaag,
+                        # v5.44: "v5.44" als de live volging onvolledig was
+                        # en de nacht uit het dagverloop is ingedeeld.
+                        **(
+                            {"tekort_soort_herleid": self._tekort_herleid_vandaag}
+                            if self._tekort_herleid_vandaag
+                            else {}
+                        ),
                         "tekortvlag": self._shortfall_detected_today,
                         # v3.99.0: was er een kookpiek boven de
                         # ontlaadgrens? Die telt niet als tekort, maar
@@ -25382,6 +25397,7 @@ class EnergyManagementSystemCoordinator:
             # middernacht.
             self._tekortnacht_vandaag_kwh = None
             self._tekort_soort_vandaag = self._tekort_reden_vandaag = None
+            self._tekort_herleid_vandaag = None
             # v3.99.19: de dag die voorbij is, nabeschouwen.
             if self._shortfall_check_date is not None:
                 self._sluit_dag_af_met_nabeschouwing(self._shortfall_check_date.isoformat())
@@ -28903,19 +28919,16 @@ class EnergyManagementSystemCoordinator:
         `_volg_laadbesluit_en_zon`.
         """
         vandaag = now.date().isoformat()
+        self._volg_gat_bij(now)
         if not (now.hour >= 22 or now.hour < 9) and self._nacht_geclassificeerd_op != vandaag:
-            self._tekort_soort_vandaag = self._tekort_soort(
-                self._tekortnacht_vandaag_kwh,
-                self._vol_voor_nacht,
-                self._verkocht_na_vol_kwh,
-                economisch=self._netladen_economisch_afgewezen(),
-            )
-            self._tekort_reden_vandaag = self._tekort_reden(self._tekort_soort_vandaag)
+            self._deel_afgelopen_nacht_in(now)
             self._nacht_geclassificeerd_op = vandaag
             self._vol_voor_nacht = False
             self._verkocht_na_vol_kwh = 0.0
             self._laadbesluit_stand = None
             self._pv_export_met_ruimte_kwh = 0.0
+            # v5.44: het nieuwe venster wordt vanaf nu gevolgd.
+            self._tekort_volg_sinds = now.isoformat()
         soc = self.accustand_procent()
         uren = (
             (now - self._verkoop_laatste).total_seconds() / 3600
@@ -28940,6 +28953,156 @@ class EnergyManagementSystemCoordinator:
         elif soc is not None:
             self._volg_laadbesluit_en_zon(uren)
         self._verkoop_laatste = now
+
+    def _volg_gat_bij(self, now: datetime) -> None:
+        """Loopt de live tekortvolging zonder gat? (v5.44)
+
+        Gemeld op 7 oktober: v5.41 kwam 's avonds om 21:00 binnen. Het
+        laadbesluit, de zon en de verkoop sinds 09:00 werden pas vanaf dat
+        moment gevolgd - het laadbesluit bleef leeg - en de nacht zou om
+        09:00 als planning worden ingedeeld, terwijl de accu die dag bewust
+        niet uit het net was bijgeladen (93%, laden loonde niet). Een
+        herstart halverwege het venster geeft hetzelfde gat.
+
+        `_tekort_volg_laatst` is de vorige ronde (bewaard). Ontbreekt die, of
+        ligt hij meer dan `TEKORT_VOLG_MAX_GAT_MINUTEN` terug, dan begint de
+        volging hier opnieuw. Een korte herstart telt niet: de velden zelf
+        worden bewaard.
+        """
+        laatst = dt_util.parse_datetime(self._tekort_volg_laatst or "")
+        if (
+            laatst is None
+            or self._tekort_volg_sinds is None
+            or not timedelta(0) <= now - laatst <= timedelta(minutes=TEKORT_VOLG_MAX_GAT_MINUTEN)
+        ):
+            self._tekort_volg_sinds = now.isoformat()
+        self._tekort_volg_laatst = now.isoformat()
+
+    @staticmethod
+    def _tekort_venster_begin(now: datetime) -> datetime:
+        """09:00 waarop het lopende venster begon (v5.44)."""
+        begin = now.replace(hour=9, minute=0, second=0, microsecond=0)
+        return begin if now.hour >= 9 else begin - timedelta(days=1)
+
+    def _live_tekortvolging_onvolledig(self, begin: datetime) -> str | None:
+        """Waarom de live volging van het venster vanaf `begin` niet te
+        vertrouwen is, of None als hij dat wel is (v5.44).
+
+        - Hij liep niet vanaf het begin van het venster (een update, een
+          herstart of een gat langer dan een half uur).
+        - De accu werd niet vol en er is geen laadbesluit vastgelegd: dan is
+          live niet te zeggen of laden loonde. Zonder bewijs is dat geen
+          planning.
+        """
+        sinds = dt_util.parse_datetime(self._tekort_volg_sinds or "")
+        if sinds is None:
+            return "live volging ontbreekt"
+        if sinds > begin + timedelta(minutes=TEKORT_VOLG_SPELING_MINUTEN):
+            return f"live gevolgd sinds {dt_util.as_local(sinds):%d-%m %H:%M}"
+        if not self._vol_voor_nacht and self._laadbesluit_stand is None:
+            return "geen laadbesluit vastgelegd sinds 09:00"
+        return None
+
+    def _herleid_parameters(self) -> tuple[float, float | None, float | None, float]:
+        """Vol-grens, rendement, slijtage en P1-verschuiving voor het indelen
+        uit het dagverloop (v5.41, apart sinds v5.44)."""
+        rendement = self.learned_battery_efficiency_percent
+        if rendement is None:
+            rendement = float(
+                self.instelling(
+                    CONF_BATTERY_ROUND_TRIP_EFFICIENCY,
+                    DEFAULT_BATTERY_ROUND_TRIP_EFFICIENCY_PERCENT,
+                )
+            )
+        try:
+            slijtage_ct = (self.get_wear_cost_overview() or {}).get("slijtage_ct_per_kwh")
+        except Exception:  # noqa: BLE001 - bij het opstarten kan er nog iets ontbreken
+            slijtage_ct = None
+        vol_grens = self._bovengrens_procent() - TEKORT_VOL_MARGE_PROCENT
+        return vol_grens, rendement, slijtage_ct, self.regelverschuiving_kw() * 1000
+
+    def _venster_rijen(self, begin_dag: date) -> list:
+        """De kwartieren van het dagverloop van `begin_dag` 09:00 tot de
+        volgende 09:00 - of tot nu, als dat venster nog loopt (v5.44)."""
+        verloop = self.dagverloop or {}
+        if not isinstance(verloop, dict):
+            return []
+        volgende = (begin_dag + timedelta(days=1)).isoformat()
+        return [
+            r for r in (verloop.get(begin_dag.isoformat()) or [])
+            if isinstance(r, dict) and str(r.get("tijd") or "") >= "09:00"
+        ] + [
+            r for r in (verloop.get(volgende) or [])
+            if isinstance(r, dict) and str(r.get("tijd") or "") < "09:00"
+        ]
+
+    def _deel_afgelopen_nacht_in(self, now: datetime) -> None:
+        """De nacht die om 09:00 afliep indelen (v5.40, v5.44).
+
+        Live als de volging het hele venster liep. Anders uit het dagverloop,
+        met dezelfde regels als de herleiding van oude nachten
+        (`_deel_nacht_in_met_reden`: P1-verschuiving, smart tegenover
+        smart_discharging, de prijs waartegen het tekort werd betaald,
+        verkopen terwijl de accu niet vol was). Is het dagverloop te dun,
+        dan blijft de soort leeg - onbekend, informatief - en probeert
+        `_probeer_herleiding` het later opnieuw. Nooit planning bij gebrek
+        aan bewijs.
+        """
+        self._tekort_herleid_vandaag = None
+        soort = self._tekort_soort(
+            self._tekortnacht_vandaag_kwh,
+            self._vol_voor_nacht,
+            self._verkocht_na_vol_kwh,
+            economisch=self._netladen_economisch_afgewezen(),
+        )
+        begin = self._tekort_venster_begin(now) - timedelta(days=1)
+        onvolledig = self._live_tekortvolging_onvolledig(begin) if soort else None
+        if not onvolledig:
+            self._tekort_soort_vandaag = soort
+            self._tekort_reden_vandaag = self._tekort_reden(soort)
+            return
+        vol_grens, rendement, slijtage_ct, verschuiving_w = self._herleid_parameters()
+        soort, reden = self._deel_nacht_in_met_reden(
+            self._venster_rijen(begin.date()), vol_grens, rendement, slijtage_ct, verschuiving_w
+        )
+        self._tekort_soort_vandaag = soort
+        if soort is None:
+            self._tekort_reden_vandaag = (
+                f"onbekend: {onvolledig}, en niet uit het dagverloop te herleiden"
+            )
+            return
+        self._tekort_reden_vandaag = f"{reden} (uit het dagverloop; {onvolledig})"
+        self._tekort_herleid_vandaag = "v5.44"
+
+    def _verwacht_uit_verloop(self, now: datetime, begin: datetime) -> tuple[str | None, str | None]:
+        """Het verwachte tekort indelen uit het dagverloop van het lopende
+        venster (v5.44). Er is nog geen tekortkwartier, dus de prijs van het
+        tekort is de gemiddelde prijs van de rest van het venster.
+
+        Eens per kwartier uitgerekend; het verloop verandert niet vaker.
+        """
+        kwartier = now.replace(minute=(now.minute // 15) * 15, second=0, microsecond=0)
+        sleutel = (kwartier.isoformat(), self._tekort_volg_sinds, self._laadbesluit_stand)
+        cache = self._verwacht_uit_verloop_cache
+        if cache is not None and cache[0] == sleutel:
+            return cache[1]
+        eind = begin + timedelta(days=1)
+        prijzen = [
+            prijs / PRICE_SCALE_FACTOR * 100
+            for start, _einde, prijs in (self._get_forecast_entries() or [])
+            if prijs is not None and now <= start < eind
+        ]
+        verwachte_prijs = sum(prijzen) / len(prijzen) if prijzen else None
+        verstreken = max(0.0, (now - begin).total_seconds() / 900)
+        minimum = max(8, int(verstreken * TEKORT_VERWACHT_MIN_DEEL_KWARTIEREN))
+        vol_grens, rendement, slijtage_ct, verschuiving_w = self._herleid_parameters()
+        uitkomst = self._deel_nacht_in_met_reden(
+            self._venster_rijen(begin.date()), vol_grens, rendement, slijtage_ct,
+            verschuiving_w, verwachte_tekortprijs_ct=verwachte_prijs,
+            min_kwartieren=min(minimum, TEKORT_HERLEIDING_MIN_KWARTIEREN),
+        )
+        self._verwacht_uit_verloop_cache = (sleutel, uitkomst)
+        return uitkomst
 
     def _volg_laadbesluit_en_zon(self, uren: float | None) -> None:
         """Waarom werd de accu niet vol? (v5.41)
@@ -29121,6 +29284,8 @@ class EnergyManagementSystemCoordinator:
         rendement: float | None,
         slijtage_ct: float | None,
         verschuiving_w: float = 0.0,
+        verwachte_tekortprijs_ct: float | None = None,
+        min_kwartieren: int = TEKORT_HERLEIDING_MIN_KWARTIEREN,
     ) -> tuple[str | None, str | None]:
         """Een tekortnacht achteraf indelen, met de reden (v5.41, v5.42).
 
@@ -29146,9 +29311,14 @@ class EnergyManagementSystemCoordinator:
         Verkoop en zon zonder de vaste verschuiving op de P1-meter (v5.20),
         en minstens `TEKORT_IMPORT_MIN_W` eraf als ruisvloer.
         (None, None) als het verloop te dun is of prijzen ontbreken.
+
+        v5.44: ook voor een venster dat nog loopt (het verwachte tekort). Er
+        is dan nog geen tekortkwartier; `verwachte_tekortprijs_ct` is de prijs
+        waartegen het tekort betaald zou worden, en `min_kwartieren` past bij
+        het deel van het venster dat voorbij is.
         """
         rijen = [r for r in rijen if isinstance(r, dict) and r.get("soc") is not None]
-        if len(rijen) < TEKORT_HERLEIDING_MIN_KWARTIEREN:
+        if len(rijen) < min_kwartieren:
             return None, None
         laatste_vol = max(
             (i for i, r in enumerate(rijen) if r["soc"] >= vol_grens), default=None
@@ -29162,6 +29332,8 @@ class EnergyManagementSystemCoordinator:
                 + (f" (gem. {_nl(prijs)} ct)" if prijs is not None else "")
             )
         eerste, tekortprijs = cls._tekortkwartieren(rijen)
+        if tekortprijs is None:
+            tekortprijs = verwachte_tekortprijs_ct
         voor = rijen[:eerste] if eerste is not None else rijen
         verkocht, prijs = cls._verkocht_uit_verloop(voor, verschuiving_w)
         if verkocht > SHORTFALL_MIN_NETIMPORT_KWH:
@@ -29224,23 +29396,9 @@ class EnergyManagementSystemCoordinator:
         een nacht nu niet te bepalen, dan vervalt de oude soort (onbekend,
         later opnieuw geprobeerd) in plaats van dat hij blijft staan.
         """
-        verloop = self.dagverloop or {}
-        if not isinstance(verloop, dict):
+        if not isinstance(self.dagverloop or {}, dict):
             return 0
-        rendement = self.learned_battery_efficiency_percent
-        if rendement is None:
-            rendement = float(
-                self.instelling(
-                    CONF_BATTERY_ROUND_TRIP_EFFICIENCY,
-                    DEFAULT_BATTERY_ROUND_TRIP_EFFICIENCY_PERCENT,
-                )
-            )
-        try:
-            slijtage_ct = (self.get_wear_cost_overview() or {}).get("slijtage_ct_per_kwh")
-        except Exception:  # noqa: BLE001 - bij het opstarten kan er nog iets ontbreken
-            slijtage_ct = None
-        vol_grens = self._bovengrens_procent() - TEKORT_VOL_MARGE_PROCENT
-        verschuiving_w = self.regelverschuiving_kw() * 1000
+        vol_grens, rendement, slijtage_ct, verschuiving_w = self._herleid_parameters()
         ingedeeld = 0
         for record in self.reserve_daily_records or []:
             if (
@@ -29253,14 +29411,7 @@ class EnergyManagementSystemCoordinator:
                 dag = date.fromisoformat(str(record.get("date")))
             except ValueError:
                 continue
-            gisteren = (dag - timedelta(days=1)).isoformat()
-            rijen = [
-                r for r in (verloop.get(gisteren) or [])
-                if isinstance(r, dict) and str(r.get("tijd") or "") >= "09:00"
-            ] + [
-                r for r in (verloop.get(dag.isoformat()) or [])
-                if isinstance(r, dict) and str(r.get("tijd") or "") < "09:00"
-            ]
+            rijen = self._venster_rijen(dag - timedelta(days=1))
             soort, reden = self._deel_nacht_in_met_reden(
                 rijen, vol_grens, rendement, slijtage_ct, verschuiving_w
             )
@@ -29302,9 +29453,30 @@ class EnergyManagementSystemCoordinator:
             tekort, self._vol_voor_nacht, self._verkocht_na_vol_kwh, nodig,
             economisch=self._netladen_economisch_afgewezen(),
         )
+        # v5.44: is de live volging van dit venster onvolledig, dan uit het
+        # dagverloop - behalve als het tekort groter is dan de accu: dat is
+        # capaciteit, hoe de dag ook liep.
+        now = dt_util.now()
+        begin = self._tekort_venster_begin(now)
+        onvolledig = self._live_tekortvolging_onvolledig(begin)
+        bruikbaar = self.bruikbaar_tussen_grenzen_kwh()
+        groter_dan_de_accu = bool(bruikbaar) and nodig > bruikbaar
+        reden = self._tekort_reden(soort)
+        bron = "live"
+        if soort is not None and onvolledig and not groter_dan_de_accu:
+            herleid, herleid_reden = self._verwacht_uit_verloop(now, begin)
+            bron = "dagverloop"
+            soort = herleid or TEKORTSOORT_ONBEKEND
+            reden = herleid_reden or f"{onvolledig}, en niet uit het dagverloop te herleiden"
         return {
             "tekort_kwh": round(tekort, 2),
             "tekort_soort": soort,
+            # v5.44: waarom, waar de soort vandaan komt, en sinds wanneer
+            # de live volging loopt.
+            "tekort_reden": reden,
+            "soort_bron": bron,
+            "live_onvolledig": onvolledig,
+            "tracking_since": self._tekort_volg_sinds,
             "nodig_kwh": round(nodig, 2),
             "past_tussen_grenzen_kwh": (
                 round(self.bruikbaar_tussen_grenzen_kwh(), 2)

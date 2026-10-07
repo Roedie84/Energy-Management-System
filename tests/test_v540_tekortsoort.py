@@ -21,6 +21,9 @@ def _c(make_coordinator, hass, soc="100", net="0", accu="0"):
     hass.states.set("sensor.soc", soc)
     hass.states.set("sensor.p1", net)
     hass.states.set("sensor.accu", accu)
+    # v5.44: deze toetsen gaan over de live regels; de volging telt als
+    # volledig (zie test_v544_tekortvolging_onvolledig.py voor het andere geval).
+    c._live_tekortvolging_onvolledig = lambda begin: None
     return c
 
 

@@ -3527,6 +3527,12 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "_pv_export_met_ruimte_kwh": {"type": "plain"},
     # v5.42: waarom de nacht die vanochtend afliep die soort kreeg.
     "_tekort_reden_vandaag": {"type": "plain"},
+    # v5.44: sinds wanneer de live tekortvolging zonder gat loopt, de laatste
+    # ronde ervan (een herstart is een gat), en of de nacht die vanochtend
+    # afliep uit het dagverloop is ingedeeld.
+    "_tekort_volg_sinds": {"type": "plain"},
+    "_tekort_volg_laatst": {"type": "plain"},
+    "_tekort_herleid_vandaag": {"type": "plain"},
     "_lange_horizon_extra_vandaag": {"type": "plain"},
     "_max_ontlaad_w_vandaag": {"type": "plain"},
     "_vermogensgrens_gezien_today": {"type": "plain"},
@@ -5142,6 +5148,17 @@ TEKORT_NACHT_VANAF = "18:00"
 # v5.42: een kwartier telt als tekortkwartier bij meer import dan dit, met
 # een accu die niet levert en niet laadt (|accu| hooguit even veel).
 TEKORT_IMPORT_MIN_W = 50.0
+# v5.44: de live tekortvolging (vol, verkoop, laadbesluit, zon) van een
+# venster 09:00-09:00 telt alleen als volledig als hij liep vanaf het begin
+# van het venster (met deze speling: de eerste ronde na 09:00) en zonder gat
+# langer dan `TEKORT_VOLG_MAX_GAT_MINUTEN` (een herstart). Anders wordt de
+# nacht uit het dagverloop ingedeeld, en is dat te dun: onbekend.
+TEKORT_VOLG_SPELING_MINUTEN = 20
+TEKORT_VOLG_MAX_GAT_MINUTEN = 30
+# v5.44: het verwachte tekort uit het dagverloop van het lopende venster:
+# minstens dit deel van de verstreken kwartieren moet er zijn (en minstens
+# 8), anders onbekend.
+TEKORT_VERWACHT_MIN_DEEL_KWARTIEREN = 0.8
 
 # --- Plausibiliteitsscan op de eigen waarden (v1.9.5) ----------------
 # Gevraagd: "Heb je de diagnostiek nu zo goed nagekeken dat daar niets

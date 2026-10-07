@@ -1,9 +1,10 @@
-EMS v5.43 - het huis gaat voor, ook in de eerste ronde
+EMS v5.44 - een halve volging is geen planning
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
-Verkopen stopt altijd op de reserve, inclusief marge en lange horizon. De
-lange horizon wordt nu gemeten vóór de beslissing (stond erna: een ronde te
-laat, na een herstart nul). De secundaire prijslaag verkoopt niet meer als
-de verkooptoets nee zegt om een andere reden dan de reserve (zonarme dag,
-voorzien tekort). "Wat doet de integratie nu" eindigt op een hele zin; de
-volledige tekst staat in het attribuut volledige_tekst.
+Liep de live tekortvolging (vol, verkoop, laadbesluit, zon) niet vanaf 09:00
+- na een update, een herstart met een gat van meer dan een half uur, of
+zonder laadbesluit bij een accu die niet vol werd - dan wordt de nacht en
+het verwachte tekort uit het dagverloop ingedeeld, met dezelfde regels als
+de oude nachten. Te weinig dagverloop: onbekend (informatief), nooit
+planning. Nieuw attribuut tracking_since: sinds wanneer de volging loopt.
+De sturing verandert niet.
