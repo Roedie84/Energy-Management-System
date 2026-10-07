@@ -164,6 +164,8 @@ def test_the_big_attributes_stay_out_of_the_recorder():
     verdwijnt dus niets waar iemand op terugkijkt.
     """
     niet_bewaard = _sensor_klasse()._unrecorded_attributes
+    if "*" in niet_bewaard:  # v5.34: MATCH_ALL sluit alles uit
+        return
 
     for sleutel in (
         "kwartierplanning",

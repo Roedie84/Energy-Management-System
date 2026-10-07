@@ -184,6 +184,8 @@ def _vraag_uit(entiteit) -> list[str]:
         # blijft live beschikbaar maar gaat niet naar de database. Het
         # Home Assistant-mechanisme daarvoor is `_unrecorded_attributes`.
         uitgesloten = getattr(type(entiteit), "_unrecorded_attributes", frozenset())
+        if "*" in uitgesloten:  # MATCH_ALL (v5.34): niets eigens bewaard
+            continue
         bewaard = {k: v for k, v in waarde.items() if k not in uitgesloten}
         tekst = json.dumps(bewaard, default=str)
         grootte = len(tekst.encode("utf-8"))

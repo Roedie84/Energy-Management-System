@@ -123,6 +123,18 @@ GACS_TRAAG_MS = 400.0
 # meedeinen en wordt tekenen een bezigheid op zich. Tekenen kost 1 a 2 ms,
 # dus bij twee seconden blijft dat onder een promille van de rekentijd.
 COCKPIT_MIN_INTERVAL_S = 2.0
+
+# v5.34: attributen die alleen voor het dashboard zijn gaan niet naar de
+# recorder. Gemeten op een echte installatie: de EMS-sensoren schreven samen
+# ~190 MB aan attributen per dag naar de database (NILM-apparaten 48 MB,
+# GACS 25 MB, betrouwbaarheid 22 MB, energiebrug 12 MB, ...). De kaarten
+# lezen alleen de huidige toestand; geschiedenis van deze lijsten en plannen
+# bekijkt niemand. "*" is Home Assistants MATCH_ALL: de recorder bewaart dan
+# alleen nog friendly_name, eenheid, device_class en state_class, dus
+# statistieken en history-graph-kaarten op de toestand blijven werken.
+# Na een herstart herstelt RestoreEntity de attributen uit core.restore_state,
+# niet uit de recorder - daar verandert dus niets aan.
+GEEN_ATTRIBUTEN_IN_RECORDER = frozenset({"*"})
 CONF_BATTERY_ROUND_TRIP_EFFICIENCY = "battery_round_trip_efficiency_percent"
 CONF_VACATION_CONSUMPTION_REDUCTION_PERCENT = "vacation_consumption_reduction_percent"
 

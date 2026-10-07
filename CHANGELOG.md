@@ -30299,3 +30299,36 @@ neemt de prijsreeks mee. Nieuw: `test_v533_tekortmeting.py` en
 `test_v533_plan_volgt_sturing.py`.
 
 **Volledige testsuite**: 4665 tests, allemaal groen.
+
+## v5.34 — Dashboardattributen niet meer in de database
+
+De database van Home Assistant groeide met ~750 MB per dag. Per
+EMS-sensor gemeten (wijzigingen per uur maal de attributen die de recorder
+bewaarde) kwam ~190 MB daarvan van deze integratie:
+
+| Sensor | per uur | bewaard | per dag |
+|---|---|---|---|
+| NILM bevestigde apparaten | 119 | 16,9 kB | 48 MB |
+| GACS-zelfbeoordeling | 119 | 8,7 kB | 25 MB |
+| Betrouwbaarheid gegenereerde data | 112 | 8,1 kB | 22 MB |
+| Energiebrug-check | 56 | 8,6 kB | 12 MB |
+| Klimaat-projectie | 32 | 14,0 kB | 11 MB |
+| Digital Twin, MPC, systeemstatus, accu-koeling, ... | | | 70 MB |
+
+Het zijn lijsten, plannen en teksten voor de kaarten. Die lezen de huidige
+toestand; de geschiedenis ervan bekijkt niemand. 23 sensoren krijgen nu
+`_unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER` (`{"*"}`, Home
+Assistants MATCH_ALL). De recorder bewaart dan alleen nog friendly_name,
+eenheid, device_class en state_class: statistieken en history-graph-kaarten
+op de toestand blijven werken, en RestoreEntity herstelt na een herstart uit
+`core.restore_state`, niet uit de recorder.
+
+**GACS hield toch 8,7 kB per wijziging vast.** In de klasse stonden twee
+`_unrecorded_attributes` onder elkaar; de tweede overschreef de eerste, en
+`eisen` ging daardoor toch naar de database. Nu één toekenning, en een
+toets die dubbele toekenningen in één klasse vangt.
+
+**Verwachting bewust gewijzigd**: `test_alles_uitgevraagd.py` en
+`test_attribute_isolation.py` kennen MATCH_ALL. Nieuw: `test_v534_recorder.py`.
+
+**Volledige testsuite**: 4668 tests, allemaal groen.

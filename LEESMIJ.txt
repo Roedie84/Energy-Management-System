@@ -1,7 +1,7 @@
-EMS v5.33 - plan volgt de sturing, eerlijke tekortdagen
+EMS v5.34 - minder schrijven naar de database
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
-Stuurt anders: de kwartierplanning verkoopt niet meer wat de sturing
-tegenhoudt, tekortdagen tellen alleen bij een lege accu, en de marge kan
-ook weer dalen. Bij de eerste start worden de opgeslagen tekortdagen
-herbeoordeeld (zie CHANGELOG).
+Stuurt niet anders. De dashboardattributen van 23 EMS-sensoren gaan niet
+meer naar de recorder (samen ~190 MB per dag). Live op het dashboard
+verandert niets; alleen de geschiedenis van die attributen wordt niet meer
+bewaard (zie CHANGELOG).
