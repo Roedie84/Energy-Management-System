@@ -30332,3 +30332,46 @@ toets die dubbele toekenningen in één klasse vangt.
 `test_attribute_isolation.py` kennen MATCH_ALL. Nieuw: `test_v534_recorder.py`.
 
 **Volledige testsuite**: 4668 tests, allemaal groen.
+
+## v5.35 — Rustiger status, minder logboekruis
+
+Uit de eerste uuranalyse van het EMS (7 oktober).
+
+### 1. Een haperende kernsensor is nog geen STORING
+
+Op 6 oktober sprong de cockpit tussen 11:20 en 14:47 17 keer een ronde op
+STORING. Oorzaak: `sensor.zendure_batterij_vermogen` (een HomeWizard-
+stekker, de accusensor) viel steeds 10-20 seconden weg, en een kapotte
+noodzakelijke koppeling telde meteen als STORING. De configuratiecontrole
+noteert nu hoe lang een entiteit al geen waarde geeft (`geen_waarde_s`);
+de statusmatrix telt hem pas mee na `KOPPELING_HAPERT_S` (180 s). Blijft
+hij weg, dan is het gewoon STORING zoals altijd.
+
+### 2. De cockpit legt de reden vast
+
+`sensor.…_cockpit` heeft een attribuut `reden` (de statusregel). Dat gaat
+wél naar de recorder - klein, en het verandert alleen met de stand - zodat
+een STORING achteraf te herleiden is.
+
+### 3. diagnose_gezondheid verandert niet meer elke ronde
+
+De GACS-duur van de lopende ronde stond in de toestand en wisselde elke
+30 s (284 ms, 291 ms, ...): 2.937 logboekregels in 12 uur zonder dat er iets
+veranderde. Nu staat alleen de traagste ronde erin, en de lopende pas
+vanaf `GACS_DUUR_OPVALLEND_MS` (1000 ms).
+
+### 4. Accumodules heten naar hun apparaat
+
+"Accumodule 1 loopt uit de pas" zei niet welke AB3000 het was. Nu
+"Accumodule 1 (AB3000 00996)", uit het apparaatregister.
+
+**Niet veranderd**: de nachtontlading. De afweging accu-tegen-net rekent al
+mee (`accu_tegen_net`: 50,6 ct uit de accu tegen 34,3 ct van het net), maar
+stuurt sinds v1.62.0 bewust niet: `smart_charging` zet ook de piekbuffer
+uit, waardoor 's nachts elk apparaat volledig van het net komt. Dat vraagt
+een ander mechanisme (basislast van het net, pieken uit de accu) en eerst
+een meting, geen snelle schakelaar.
+
+Nieuw: `test_v535_haperen_en_ruis.py`.
+
+**Volledige testsuite**: 4678 tests, allemaal groen.

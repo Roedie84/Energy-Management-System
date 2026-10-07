@@ -747,6 +747,8 @@ from .const import (
     PRICE_ATTRIBUTE_INCL_TAX,
     CAPACITY_TREND_HISTORY_DAYS,
     PRICE_SHAPE_HISTORY_DAYS,
+    GACS_DUUR_OPVALLEND_MS,
+    KOPPELING_HAPERT_S,
     PROEFSTAND_DAYTYPE_MIN_DIFF_PERCENT,
     PROEFSTAND_MIN_HOURS,
     PROEFSTAND_MIN_SAMPLES,
@@ -9031,6 +9033,31 @@ class EnergyManagementSystemCoordinator:
         except Exception:  # noqa: BLE001 - een melding mag hier niet op vallen
             return None
 
+    def apparaatnaam_van(self, entity_id: str | None) -> str | None:
+        """Naam van het apparaat waar deze sensor bij hoort (v5.35).
+
+        Voor de accumodules: "Accumodule 1" zegt niet welke van de drie
+        AB3000's het is; de apparaatnaam ("AB3000 00996") wel. Zonder
+        register (toetsopzet) gewoon geen naam.
+        """
+        if not entity_id:
+            return None
+        try:
+            register = self._entiteitenregister()
+            item = register.async_get(entity_id) if register is not None else None
+            if item is None or not getattr(item, "device_id", None):
+                return None
+            from homeassistant.helpers import device_registry as dr
+
+            apparaat = dr.async_get(self.hass).async_get(item.device_id)
+            if apparaat is None:
+                return None
+            return getattr(apparaat, "name_by_user", None) or getattr(
+                apparaat, "name", None
+            )
+        except Exception:  # noqa: BLE001 - een melding mag hier niet op vallen
+            return None
+
     def met_gebied(self, entity_id: str | None) -> str:
         """De entiteitsnaam met de kamer erachter, als die bekend is
         (v4.14). "sensor.koelkast_vermogen (Keuken)" scheelt zoeken."""
@@ -15068,10 +15095,19 @@ class EnergyManagementSystemCoordinator:
             return "ONBEKEND", "de diagnostiek is niet op te halen"
         punten = samenvatting.get("aandachtspunten") or []
         fouten = [p for p in punten if isinstance(p, dict) and p.get("ernst") == "fout"]
+        # v5.35: een koppeling die net wegviel, telt pas mee als hij
+        # KOPPELING_HAPERT_S lang weg is. Gemeten op 6 oktober: de
+        # accusensor (een HomeWizard-stekker) viel 11:20-14:47 17 keer 10-20
+        # seconden weg, en elke keer sprong de cockpit een ronde op STORING.
         kapot = [
             r
             for r in (controle.get("entiteiten") or [])
             if r.get("oordeel") not in ("in_orde", "slaapt", "niet_ingesteld")
+            and not (
+                r.get("oordeel") == "geen_waarde"
+                and r.get("geen_waarde_s") is not None
+                and r["geen_waarde_s"] < KOPPELING_HAPERT_S
+            )
         ]
         kapot_noodzakelijk = [
             r for r in kapot if r.get("instelling") in NOODZAKELIJKE_KOPPELINGEN
@@ -16067,6 +16103,13 @@ class EnergyManagementSystemCoordinator:
                     )
                 else:
                     regel["oordeel"] = "geen_waarde"
+                    # v5.35: hoe lang al. Een wifi-stekker valt soms 10-20 s
+                    # weg; dat is nog geen kapotte koppeling.
+                    sinds = getattr(staat, "last_changed", None)
+                    if sinds is not None:
+                        regel["geen_waarde_s"] = round(
+                            (dt_util.now() - sinds).total_seconds()
+                        )
                 regel["waarde"] = staat.state
             else:
                 regel["waarde"] = staat.state
@@ -29349,9 +29392,19 @@ class EnergyManagementSystemCoordinator:
             delta_v = None
             if cel_max is not None and cel_min is not None:
                 delta_v = round(cel_max - cel_min, 4)
+            # v5.35: welke module dit is, als de sensor bij een apparaat hoort.
+            eerste = next(
+                (
+                    lijst[index]
+                    for lijst in (max_v, min_v, socs, powers, temps)
+                    if index < len(lijst) and lijst[index]
+                ),
+                None,
+            )
             modules.append(
                 {
                     "module": index + 1,
+                    "naam": self.apparaatnaam_van(eerste),
                     "cel_max_v": cel_max,
                     "cel_min_v": cel_min,
                     "cel_delta_v": delta_v,
@@ -29981,6 +30034,12 @@ class EnergyManagementSystemCoordinator:
                     **module,
                     "waarschuwingen": staat.get("waarschuwingen", []),
                     "drift_op": drift,
+                    # v5.35: "1 (AB3000 00996)" - welke module het is.
+                    "label": (
+                        f"{module['module']} ({module['naam']})"
+                        if module.get("naam")
+                        else module["module"]
+                    ),
                     "dagen_geleerd": max(
                         (len(v) for v in staat.get("geschiedenis", {}).values()),
                         default=0,
@@ -34875,7 +34934,7 @@ class EnergyManagementSystemCoordinator:
         # modules ook - dat is juist het signaal dat maanden eerder komt
         # dan een merkbaar capaciteitsverlies.
         for module in self.get_battery_module_table():
-            nummer = module.get("module")
+            nummer = module.get("label", module.get("module"))
             for waarschuwing in module.get("waarschuwingen", []):
                 aandachtspunten.append(f"Accumodule {nummer}: {waarschuwing}.")
             if module.get("drift_op"):
@@ -38071,15 +38130,20 @@ class EnergyManagementSystemCoordinator:
 
     def _diagnose_gacs(self) -> str:
         """De GACS-duur voor de diagnoseregel (v5.14.3)."""
-        nu = f"{self.gacs_duur_ms:.0f}ms" if self.gacs_duur_ms is not None else "-"
+        # v5.35: de duur van DEZE ronde alleen als hij opvalt. Hij wisselde
+        # elke 30 s (284ms, 291ms, ...) en daarmee de hele toestand van
+        # diagnose_gezondheid: 2.937 logboekregels in 12 uur, zonder dat er
+        # iets veranderde. De traagste ronde staat er wel altijd.
+        duur = self.gacs_duur_ms
+        nu = f"{duur:.0f}ms" if duur is not None and duur >= GACS_DUUR_OPVALLEND_MS else ""
         traagste = self.gacs_traagste
         if not traagste:
-            return nu
+            return nu or ("ok" if duur is not None else "-")
         waarom = " woud" if traagste.get("woud_trainde") else ""
         onderdelen = traagste.get("traagste_onderdelen") or {}
         grootste = next(iter(onderdelen), None)
         deel = f" ({grootste} {onderdelen[grootste]:.0f})" if grootste else ""
-        return f"{nu} max {traagste['ms']:.0f}{waarom}{deel}"
+        return f"{nu + ' ' if nu else ''}max {traagste['ms']:.0f}{waarom}{deel}"
 
     def _diagnose_gezondheid(self) -> list:
         def zelfcontroles():

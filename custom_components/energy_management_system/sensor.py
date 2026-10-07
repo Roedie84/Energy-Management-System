@@ -4539,7 +4539,15 @@ class CockpitSensor(_CoordinatorDiagnosticSensor):
 
     @property
     def extra_state_attributes(self) -> dict:
-        return {"plaat": self._coordinator.get_cockpit_svg()}
+        # v5.35: de reden staat er ook, en gaat WEL naar de recorder (klein,
+        # verandert alleen als de stand verandert). Een STORING was
+        # achteraf niet te herleiden.
+        return {
+            "plaat": self._coordinator.get_cockpit_svg(),
+            "reden": (self._coordinator.cockpit_gegevens() or {}).get(
+                "status_regel"
+            ),
+        }
 
     async def async_added_to_hass(self) -> None:
         """Luisteren naar de metingen die de plaat laten bewegen."""

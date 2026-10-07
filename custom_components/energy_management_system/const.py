@@ -135,6 +135,14 @@ COCKPIT_MIN_INTERVAL_S = 2.0
 # Na een herstart herstelt RestoreEntity de attributen uit core.restore_state,
 # niet uit de recorder - daar verandert dus niets aan.
 GEEN_ATTRIBUTEN_IN_RECORDER = frozenset({"*"})
+
+# v5.35: een kernkoppeling die korter dan dit weg is, zet de status nog niet
+# op STORING. Een wifi-stekker valt soms 10-20 s weg.
+KOPPELING_HAPERT_S = 180
+
+# v5.35: de GACS-duur van één ronde staat alleen in de diagnoseregel als hij
+# opvalt; anders veranderde de toestand elke ronde.
+GACS_DUUR_OPVALLEND_MS = 1000
 CONF_BATTERY_ROUND_TRIP_EFFICIENCY = "battery_round_trip_efficiency_percent"
 CONF_VACATION_CONSUMPTION_REDUCTION_PERCENT = "vacation_consumption_reduction_percent"
 

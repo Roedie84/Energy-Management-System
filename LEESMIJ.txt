@@ -1,7 +1,7 @@
-EMS v5.34 - minder schrijven naar de database
+EMS v5.35 - rustiger status, minder logboekruis
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
-Stuurt niet anders. De dashboardattributen van 23 EMS-sensoren gaan niet
-meer naar de recorder (samen ~190 MB per dag). Live op het dashboard
-verandert niets; alleen de geschiedenis van die attributen wordt niet meer
-bewaard (zie CHANGELOG).
+Bevat ook v5.34 (dashboardattributen niet meer in de database).
+Stuurt niet anders. Een kernsensor die even wegvalt zet de cockpit pas na
+3 minuten op STORING, de cockpit bewaart de reden, de diagnoseregel
+verandert niet meer elke ronde, en accumodules heten naar hun apparaat.
