@@ -76,3 +76,5 @@ laatste ronde: 08-10 07:40, gemeten t/m 08-10 07:42
 - Geen release (tussenronde, niets acuut; v5.47 net geïnstalleerd).
 
 laatste ronde: 08-10 11:45, gemeten t/m 08-10 11:42
+## 08-10 13:45 (chatsessie)
+- L-EMS-008 (watertrend gelijk-met-gelijk) gebouwd in v5.49, plus cockpit-balans pas "wijkt af" na 3 rondes/3 min en laatste oordeel 5 min vasthouden. Meten: trend overdag niet meer structureel sterk negatief (eerste 3 dagen na update vóór 20:00 geen trend); cockpit LET OP niet meer door korte zonwisselingen.
