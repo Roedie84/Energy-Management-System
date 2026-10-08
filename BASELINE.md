@@ -25,3 +25,5 @@
 | Nacht-export 00-07 (regelverschuiving −50 W) | 0,43 kWh | nacht 07→08, n=7 u | 08-10 07:40 |
 | Nachtverbruik tegen wandeling (22:00→07:40) | +0,29 kWh (+10 %) | 1 nacht | 08-10 07:40 |
 | Lange-horizon-extra in de reserve | 1,59-2,11 kWh | 07/08-10 | 08-10 07:40 |
+| MC-stand tot het blok na v5.47 (overdag) | 0 % (was 96-100 %) | 08-10 11:41 | 08-10 11:45 |
+| Meetlog kwartierdekking na L-EMS-003 | 100 % | 08-10 11:15 | 08-10 11:45 |

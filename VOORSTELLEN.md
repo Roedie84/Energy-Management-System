@@ -43,7 +43,7 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Meten na wijziging: nachtuur-gemiddelde P1 −15..−25 W; nacht-export 00-07 (KPI ems_nacht_export_00_07_kwh) ~0,2 kWh i.p.v. ~0,5; netimport-kwartieren 's nachts niet merkbaar hoger.
 
 ## L-EMS-006 · verwacht tekort en tekortkans splitsen: tot het blok / na het blok (lange horizon)
-- Status: **gebouwd v5.47 (08-10 ~10:30, door chatsessie)** — verifiëren na installatie
+- Status: **gebouwd v5.47**, geïnstalleerd 10:55 — eerste meetpunt gehaald 11:41 (tot blok 0 kWh / 0%, na blok 2,44 apart); Brier-vergelijking na 7 avonden (vanaf 08-10 22:00)
 - (eerder: gepland, zelf bouwen: rapportage en meetbaarheid; raakt de sturing niet)
 - Onderbouwing: 08-10 07:42: verhaal "verwacht tekort tot het goedkope blok 0,61 kWh, economisch", MC 96%. Maar `nodig_kwh` 2,51 bevat `lange_horizon_extra` 2,11 (na 12:15); tot het blok is 0,40 nodig tegen 1,90 beschikbaar (marge +1,50). MC steeg 3% → 96% tussen 04:00 en 07:40 terwijl de marge tot het blok slechts van +1,79 naar +1,50 ging. `kalibratie_22u` vergelijkt deze kans (incl. lange horizon) met de tekortnacht 22-09.
 - Bouw: in `verwacht_tekort` en het MC-attribuut `tekort_tot_blok_kwh` / `tekort_na_blok_kwh` en `tekortkans_tot_blok_pct` (zelfde trajecten zonder lange extra); verhaaltekst noemt het juiste deel; `kalibratie_22u` per nacht beide kansen + Brier van beide. Tests. De reserve en de sturing blijven ongewijzigd.
@@ -53,8 +53,14 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Live vóór bouw (08-10 10:08): MC 100%, `nodig_kwh` 2,47 waarvan `lange_horizon_extra` 2,468, verwacht tekort 1,0 kWh → na installatie moet hier `verwacht_tekort_tot_blok_kwh` 0 en de MC-stand ~0% staan.
 
 ## L-EMS-007 · watersensoren: eenheid m³ → liter, geen nepdag bij eenheidswissel
-- Status: **gebouwd v5.47 (08-10 ~10:30, door chatsessie)** — verifiëren na installatie
+- Status: **gebouwd v5.47**, geïnstalleerd 10:55 — eerste meetpunt gehaald 11:41 (`vandaag_liter` 60 = meter 60 L na herstart met m³-tussenstand; laatste dagwaarde 357 = werkelijk 07-10); dagwissel en 7 dagen nog toetsen
 - Onderbouwing: `sensor.water_verbruik_vandaag` (utility_meter, optie `water_daily_total_sensor_entity`) meldt na elke herstart eerst m³ en direct daarna L (recorder 08-10 07:03, 08:54, 09:01: 0,026/0,052/0,060 m³ tussen L-standen; live 10:08 `0.060 m³`). EMS rekende alleen Wh/MWh om → `vandaag_liter` 0,06, `trend_procent` −100, verhaal "0 L". Een sprong L→m³ is een daling en werd als nieuwe dag gearchiveerd (mogelijk de 109,77 in `geschiedenis_liter_per_dag`; niet zeker, niet gewist). `water_total_usage` (m³) en `water_active_usage` (L/min) melden nu de verwachte eenheid, maar werden ook niet omgerekend.
 - Bouw: `_read_water_volume_l` (L, mL, m³, gal, ft³, CCF; zonder eenheid: dagtotaal L, meterstand m³) en `_read_water_flow_l_per_min` (L/min, L/h, m³/h, gal/min, …) voor dagtotaal, meterstand, debiet, live listener en aanwezigheid. Daling archiveert alleen bij nieuwe `last_reset` (of zonder `last_reset`: andere lokale datum). 13 tests. Stuurt niets.
 - Meten na installatie: na elke herstart `vandaag_liter` ≥ de L-stand van de utility_meter (nooit < 1 bij een stand > 1 L) en `trend_procent` ≠ −100 overdag; `geschiedenis_liter_per_dag` groeit met precies 1 waarde per dag (lengte +1 per dagwissel, geen waarden < 20 L tenzij echt); 7 dagen.
 
+
+## L-EMS-008 · watertrend: dagdeel tegen hetzelfde dagdeel, niet tegen hele dagen
+- Status: **kandidaat (zelf bouwen: rapportage; raakt niets van de sturing) — dagafsluiting**
+- Onderbouwing: 08-10 11:40: `trend_procent` −84,5 = (60 − 386,8)/386,8; 60 L is het verbruik tot 11:40, 386,8 de mediaan van hele dagen (attribuut heet `gemiddeld_liter_per_dag`, is een mediaan). Overdag is de trend dus altijd sterk negatief en zegt niets.
+- Bouw (voorstel): trend tegen de verwachte stand op dit tijdstip (mediaan van eerdere dagen tot hetzelfde uur, uit `water_session_history` of een uurprofiel), of pas na 23:00 tonen; attribuut `mediaan_liter_per_dag` naast het oude. Test.
+- Meten na bouw: overdag `trend_procent` binnen ±50% op gewone dagen; om 23:59 gelijk aan de oude berekening.

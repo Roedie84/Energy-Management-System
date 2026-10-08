@@ -61,3 +61,17 @@ laatste ronde: 08-10 07:40, gemeten t/m 08-10 07:42
 - Live vóór bouw 10:08: MC 100%, verwacht tekort 1,0 kWh terwijl `nodig_kwh` 2,47 volledig lange horizon (2,468) was; `vandaag_liter` 0,06 (sensor 0,060 m³), trend −100%.
 - Leerronde 11:40: L-EMS-006/007 niet opnieuw bouwen; na installatie meten zoals in VOORSTELLEN.md.
 
+
+## 08-10 11:45 · tussenronde
+- Geïnstalleerd: v5.47 (herstart 10:55). Herstarts sinds 07:40: 3 (08:55, 09:01, 10:55).
+- **L-EMS-006 eerste meetpunt gehaald:** 11:41 `verwacht_tekort_tot_blok_kwh` 0, MC-stand 0% (vóór bouw 10:08: 100% / 1,0 kWh); `nodig_na_blok_kwh` 2,44 = `lange_horizon_extra` 2,441; beschikbaar 2,94 kWh. Kalibratie (Brier tot blok) pas na 7 avonden vanaf 08-10 22:00.
+- **L-EMS-007 eerste meetpunt gehaald:** na herstart 10:55 (utility_meter kort 0,060 m³) `vandaag_liter` 60 = meter 60 L; laatste waarde in `geschiedenis_liter_per_dag` 357 = werkelijke 07-10 (357 L om 23:15). Groei per dagwissel toetsen na 00:00.
+- Opgevallen (rapportage): `trend_procent` −84,5 vergelijkt het dagdeel (60 L om 11:40) met de mediaan van hele dagen (386,8, attribuut heet "gemiddeld") → overdag altijd sterk negatief. Kandidaat L-EMS-008 (zelf bouwen, dagafsluiting).
+- **L-EMS-003:** meetlog "dekking 100%"; laatste kwartier 11:15 alle tellers `measured`. Dagdekking 08-10 in de dagafsluiting.
+- Nacht 07→08 afgerond: geen tekort (dagrecord 07-10 `shortfall` false, 0 kWh). Tekortnachten laatste 7: 3 (4,24 kWh), ongewijzigd.
+- PV t/m 11:41: 2,33 kWh tegen Solcast-actueel 2,75 (−15%); uurratio 09:00 0,67, 10:00 0,70 (geleerd profiel 07/08 UTC 0,68/0,90). EMS-dagvoorspelling 10,21, Solcast nu 11,49.
+- Beslissingen sinds 07:40 alleen `default_smart` → 0× verkoop onder de reserve (harde regel gehaald).
+- Lopend: laadblok 12:15; 09-10 zon 2,61 tegen verbruik 8,31 kWh (meetlog) → laadhoeveelheid en nacht 08→09 volgen.
+- Geen release (tussenronde, niets acuut; v5.47 net geïnstalleerd).
+
+laatste ronde: 08-10 11:45, gemeten t/m 08-10 11:42
