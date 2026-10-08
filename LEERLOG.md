@@ -55,3 +55,9 @@ laatste ronde: 08-10 04:40, gemeten t/m 08-10 04:10
 - Geen release (tussenronde, niets acuut).
 
 laatste ronde: 08-10 07:40, gemeten t/m 08-10 07:42
+
+## 08-10 ~10:30 · gebouwd door chatsessie (geen leerronde)
+- **v5.47** uitgebracht (workflow groen, release v5.47, HACS ververst): L-EMS-006 (tekort/tekortkans tot het blok vs. na het blok, kalibratie 22:00 alleen tot het blok, nachtmelding tot het blok) en L-EMS-007 (water: m³/gal → liter, debiet → L/min, nieuwe dag alleen bij nieuwe `last_reset`/datum). Sturing, reserve, drempels en marges ongewijzigd. 24 nieuwe tests, 4855 groen.
+- Live vóór bouw 10:08: MC 100%, verwacht tekort 1,0 kWh terwijl `nodig_kwh` 2,47 volledig lange horizon (2,468) was; `vandaag_liter` 0,06 (sensor 0,060 m³), trend −100%.
+- Leerronde 11:40: L-EMS-006/007 niet opnieuw bouwen; na installatie meten zoals in VOORSTELLEN.md.
+
