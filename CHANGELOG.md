@@ -31108,3 +31108,57 @@ AttributeError, de dienst werkte nooit. Loopt nu over de coordinators.
 `test_state_persistence.py` (`_veroudering_vandaag` niet meer vluchtig,
 nieuwe velden gevuld) en `test_startup_timing.py` (naast `started` nu ook
 een `stop`-luisteraar).
+
+## v5.49 — Gelijk met gelijk
+
+Alleen rapportage. De sturing, de reserve, de drempels, de marges en de
+optie-standaarden zijn niet aangeraakt; `get_energiebalans_controle` en de
+marges van v3.88.0 (200 W / 10%) zijn ongewijzigd.
+
+### 1. De watertrend vergelijkt tot dezelfde kloktijd (L-EMS-008)
+
+Gemeld: "trend -84,5%" midden op de dag. `trend_procent` zette het verbruik
+van vandaag TOT NU tegen de mediaan van HELE dagen; overdag was hij daardoor
+altijd fors negatief.
+
+- Elke ronde legt `_water_profiel_bij` het dagtotaal per uur vast
+  (`water_dagprofiel_vandaag`, "uren"[h] = stand bij de laatste meting in uur
+  h); bij een nieuwe dag gaat het profiel naar `water_dagprofielen` (laatste
+  7 dagen). Een verouderde stand van gisteren vlak na middernacht (de
+  utility_meter is nog niet gereset) telt niet als verbruik van vandaag.
+- `water_trend()` kiest de nauwkeurigste vergelijking die de gegevens
+  toelaten:
+  1. `zelfde_tijdstip` - minstens 3 eerdere dagen met profiel: vandaag-tot-nu
+     tegen de mediaan van het verbruik tot dezelfde kloktijd (lineair binnen
+     het uur). Een dag met een gat op dat tijdstip telt niet mee.
+  2. `geschaald_hele_dag` - nog geen profielen en na 20:00: tegen de mediaan
+     van hele dagen maal het verstreken deel van de dag.
+  3. Anders geen trend (`None`), met de reden in `trend_toelichting`.
+- Nieuwe attributen op de waterverbruiksensor: `trend_methode`,
+  `trend_referentie_liter`, `trend_toelichting`. In de diagnostiek:
+  `water_trend`, `water_dagprofiel_vandaag`, `water_dagprofielen`.
+- Beide profielvelden staan in `PERSISTED_FIELDS`; een opslag van v5.48 laadt
+  gewoon (profiel begint leeg). Tot er drie dagen profiel zijn, staat er
+  overdag dus geen trend.
+
+### 2. De cockpit meldt een afwijkende balans pas als hij aanhoudt
+
+Gemeld: de cockpit sprong op "LET OP · balans wijkt af" bij snelle
+zonwisselingen, en "balans" verdween 1-2 minuten uit de cockpitregel als de
+controle even niet beschikbaar was. De controle vergelijkt momentopnamen:
+de accumeter (elke 5 s) tegen drie modulesensoren met elk een eigen
+tijdstempel.
+
+- `_balans_oordeel`: een afwijking telt pas na
+  `ENERGIEBALANS_AFWIJKING_RONDES` (3) rondes EN
+  `ENERGIEBALANS_AFWIJKING_MIN_S` (180 s) op rij; tot dan blijft het vorige
+  oordeel staan. Klopt de balans weer, dan meteen "balans ✓".
+- Is de controle niet beschikbaar, dan blijft het laatste geldige oordeel
+  `ENERGIEBALANS_OORDEEL_VASTHOUDEN_S` (300 s) staan.
+- Alleen in het geheugen (niet bewaard): na een herstart is het binnen een
+  paar minuten opnieuw bepaald. In de diagnostiek: `energiebalans_oordeel`.
+
+20 nieuwe tests (`test_v549_trend_en_balans.py`), 4897 groen. Aangepast:
+`test_cockpit_matrix.py` (een afwijkende balans houdt eerst aan),
+`test_water_tracking.py` (uurprofielen voor de trend) en
+`test_v547_water_eenheid.py` (overdag zonder profielen geen trend).

@@ -152,6 +152,13 @@ def test_sensor_exposes_current_flow_and_trend(make_coordinator, hass):
     hass.states.set("sensor.water_active", "6.5")
     coordinator.water_daily_total_l = 220.0
     coordinator.water_daily_history = [180.0, 200.0, 190.0]
+    # v5.49: de trend vergelijkt met dezelfde kloktijd op eerdere dagen.
+    # Profielen die gelijk over de dag oplopen tot 180-200 L: vandaag 220 L
+    # ligt op elk tijdstip boven het verbruik tot dan.
+    coordinator.water_dagprofielen = [
+        {"datum": f"2026-01-0{d}", "uren": {str(h): t * (h + 1) / 24 for h in range(24)}, "totaal": t}
+        for d, t in ((1, 180.0), (2, 200.0), (3, 190.0))
+    ]
 
     sensor = WaterUsageSensor(coordinator, "entry1")
 

@@ -98,7 +98,8 @@ def test_sensor_attributen_tonen_liters_en_geen_min_honderd_procent(make_coordin
     a = WaterUsageSensor(c, "x").extra_state_attributes
 
     assert a["vandaag_liter"] == 60.0
-    assert a["trend_procent"] > -100
+    # v5.49: zonder uurprofielen overdag geen trend (L-EMS-008).
+    assert a["trend_procent"] is None or a["trend_procent"] > -100
 
 
 def test_gallons_worden_liter(make_coordinator, hass):

@@ -152,6 +152,8 @@ from .const import (
     WATER_BOILER_ACTIVE_W,
     WATER_BOILER_NAME_HINTS,
     WATER_SESSION_HISTORY_LENGTH,
+    WATER_TREND_MIN_PROFIELDAGEN,
+    WATER_TREND_ZONDER_PROFIEL_VANAF_UUR,
     WATER_SHOWER_MIN_DURATION_MINUTES,
     WATER_SOFTENER_MIN_DURATION_MINUTES,
     WATER_SOURCE_HISTORY_LENGTH,
@@ -766,6 +768,9 @@ from .const import (
     NU_LADEN_MIN_HOURS,
     ENERGIEBALANS_MARGE_W,
     ENERGIEBALANS_MARGE_FRACTIE,
+    ENERGIEBALANS_AFWIJKING_RONDES,
+    ENERGIEBALANS_AFWIJKING_MIN_S,
+    ENERGIEBALANS_OORDEEL_VASTHOUDEN_S,
     MODUSWISSEL_HISTORIE,
     MODUSWISSEL_DREMPEL_PER_UUR,
     OPDRACHT_BEVESTIGING_SECONDEN,
@@ -15286,6 +15291,88 @@ class EnergyManagementSystemCoordinator:
         }
         return uit
 
+    # v5.49: het aanhoudende balansoordeel van de cockpit. Alleen in het
+    # geheugen: na een herstart is het binnen een paar minuten opnieuw
+    # bepaald, en een oud oordeel van voor de herstart hoort er niet te staan.
+    _balans_afwijking_sinds: datetime | None = None
+    _balans_afwijking_rondes: int = 0
+    _balans_stabiel_oordeel: bool | None = None
+    _balans_laatst_geldig: datetime | None = None
+
+    def _balans_oordeel(self, balans: dict, nu: datetime | None = None) -> bool | None:
+        """Klopt de energiebalans, als oordeel voor de cockpit (v5.49).
+
+        Alleen weergave: de controle zelf (`get_energiebalans_controle`),
+        de marges en de sturing veranderen niet.
+
+        Gemeld: de cockpit sprong op "LET OP · balans wijkt af" bij snelle
+        zonwisselingen. De controle vergelijkt momentopnamen - de accumeter
+        (elke 5 s) tegen drie modulesensoren met elk een eigen tijdstempel -
+        tegen 10% of 200 W. Als het vermogen in een paar seconden honderden
+        watts verschuift, valt dat er al buiten zonder dat er iets mis is.
+
+        1. Een afwijking telt pas als hij ENERGIEBALANS_AFWIJKING_RONDES
+           rondes op rij EN ENERGIEBALANS_AFWIJKING_MIN_S seconden aanhoudt.
+           Tot dan blijft het vorige oordeel staan. Een module die echt niet
+           meedoet, blijft afwijken en wordt dus nog steeds gemeld.
+        2. Klopt de balans weer, dan meteen "balans ✓": ruis geeft valse
+           afwijkingen, geen valse overeenkomsten.
+        3. Is de controle even niet beschikbaar (een sensor een ronde
+           onbeschikbaar), dan blijft het laatste geldige oordeel
+           ENERGIEBALANS_OORDEEL_VASTHOUDEN_S seconden staan. Gemeld: "balans"
+           verdween dan steeds 1-2 minuten uit de cockpitregel.
+        """
+        nu = nu or dt_util.now()
+        if not balans.get("beschikbaar"):
+            if (
+                self._balans_laatst_geldig is not None
+                and (nu - self._balans_laatst_geldig).total_seconds()
+                <= ENERGIEBALANS_OORDEEL_VASTHOUDEN_S
+            ):
+                return self._balans_stabiel_oordeel
+            return None
+        self._balans_laatst_geldig = nu
+        if balans.get("alles_klopt"):
+            self._balans_afwijking_sinds = None
+            self._balans_afwijking_rondes = 0
+            self._balans_stabiel_oordeel = True
+            return True
+        if self._balans_afwijking_sinds is None:
+            self._balans_afwijking_sinds = nu
+        self._balans_afwijking_rondes += 1
+        if (
+            self._balans_afwijking_rondes >= ENERGIEBALANS_AFWIJKING_RONDES
+            and (nu - self._balans_afwijking_sinds).total_seconds()
+            >= ENERGIEBALANS_AFWIJKING_MIN_S
+        ):
+            self._balans_stabiel_oordeel = False
+        return self._balans_stabiel_oordeel
+
+    def get_energiebalans_oordeel(self) -> dict:
+        """Het aanhoudende cockpitoordeel naast de momentopname (v5.49)."""
+        return {
+            "oordeel": self._balans_stabiel_oordeel,
+            "afwijking_sinds": (
+                self._balans_afwijking_sinds.isoformat()
+                if self._balans_afwijking_sinds is not None
+                else None
+            ),
+            "afwijking_rondes": self._balans_afwijking_rondes,
+            "laatst_geldig": (
+                self._balans_laatst_geldig.isoformat()
+                if self._balans_laatst_geldig is not None
+                else None
+            ),
+            "toelichting": (
+                f"De cockpit meldt een afwijking pas na "
+                f"{ENERGIEBALANS_AFWIJKING_RONDES} rondes en "
+                f"{ENERGIEBALANS_AFWIJKING_MIN_S // 60} minuten op rij, en "
+                "houdt bij een tijdelijk onbeschikbare controle het laatste "
+                f"oordeel {ENERGIEBALANS_OORDEEL_VASTHOUDEN_S // 60} minuten "
+                "vast. De momentopname staat onder energiebalans_controle."
+            ),
+        }
+
     def _ems_status(self) -> tuple[str, str]:
         """De gezondheid van het HELE EMS, als matrix (v5.18).
 
@@ -15337,8 +15424,9 @@ class EnergyManagementSystemCoordinator:
         kapot_noodzakelijk = [
             r for r in kapot if r.get("instelling") in NOODZAKELIJKE_KOPPELINGEN
         ]
-        balans = self.get_energiebalans_controle() or {}
-        balans_klopt = balans.get("alles_klopt") if balans.get("beschikbaar") else None
+        # v5.49: niet meer de momentopname, maar het aanhoudende oordeel - zie
+        # `_balans_oordeel`.
+        balans_klopt = self._balans_oordeel(self.get_energiebalans_controle() or {})
         spreiding = (
             self.solar_tracker.deviation_stdev_percent
             if self.solar_tracker and self.solar_tracker.enabled
@@ -33774,6 +33862,136 @@ class EnergyManagementSystemCoordinator:
         )
         self._water_last_daily_date = dt_util.as_local(now).date().isoformat()
 
+    # v5.49: het uurprofiel van het waterverbruik (L-EMS-008). Als
+    # klasse-attribuut (`__init__` staat op de ratel); de eerste schrijver
+    # maakt een eigen dict/lijst aan, dus niets wordt tussen instanties
+    # gedeeld. Beide staan in PERSISTED_FIELDS.
+    #
+    #   water_dagprofiel_vandaag  {"datum": "2026-10-08",
+    #                              "uren": {"7": 41.2, "8": 95.0, ...}}
+    #   water_dagprofielen        [{"datum", "uren", "totaal"}, ...]
+    #
+    # "uren"[h] is het dagtotaal bij de LAATSTE meting in uur h, dus het
+    # verbruik tot ongeveer (h+1):00. Een uur zonder meting (HA uit) ontbreekt
+    # gewoon; zo'n dag telt dan niet mee voor dat tijdstip.
+    water_dagprofiel_vandaag: dict | None = None
+    water_dagprofielen: list | None = None
+    # Alleen in het geheugen: de eindstand van gisteren, om een verouderde
+    # uitlezing vlak na middernacht (de sensor is nog niet gereset) niet als
+    # verbruik van vandaag te boeken.
+    _water_profiel_stand_gisteren: float | None = None
+
+    def _water_profiel_bij(self, liter: float, now: datetime) -> None:
+        """Leg het dagtotaal van dit uur vast; archiveer bij een nieuwe dag
+        (v5.49, L-EMS-008). Alleen weergave - stuurt niets."""
+        lokaal = dt_util.as_local(now)
+        dag = lokaal.date().isoformat()
+        profiel = self.water_dagprofiel_vandaag
+        if not isinstance(profiel, dict) or profiel.get("datum") != dag:
+            uren = profiel.get("uren") if isinstance(profiel, dict) else None
+            if uren:
+                archief = [
+                    p for p in (self.water_dagprofielen or []) if isinstance(p, dict)
+                ]
+                archief.append(
+                    {
+                        "datum": profiel.get("datum"),
+                        "uren": dict(uren),
+                        "totaal": round(max(uren.values()), 2),
+                    }
+                )
+                self.water_dagprofielen = archief[-LEARNING_HISTORY_DAYS:]
+                self._water_profiel_stand_gisteren = max(uren.values())
+            profiel = {"datum": dag, "uren": {}}
+            self.water_dagprofiel_vandaag = profiel
+        gisteren = self._water_profiel_stand_gisteren
+        if (
+            lokaal.hour == 0
+            and not profiel["uren"]
+            and gisteren
+            and liter >= gisteren - 0.01
+        ):
+            # Nog de stand van gisteren: de utility_meter reset net na
+            # middernacht, deze ronde kan ervoor vallen.
+            return
+        profiel["uren"][str(lokaal.hour)] = round(liter, 2)
+
+    @staticmethod
+    def _water_tot_tijdstip(profiel: dict, uur: int, deel: float) -> float | None:
+        """Verbruik op een eerdere dag tot dezelfde kloktijd (v5.49).
+
+        Lineair tussen het begin van het uur (eind vorig uur, of 0 om
+        middernacht) en het eind ervan. Ontbreekt een van beide, dan None:
+        liever die dag overslaan dan een gok."""
+        uren = profiel.get("uren") or {}
+        begin = 0.0 if uur == 0 else uren.get(str(uur - 1))
+        eind = uren.get(str(uur))
+        if begin is None or eind is None:
+            return None
+        return float(begin) + (float(eind) - float(begin)) * deel
+
+    def water_trend(self, now: datetime | None = None) -> dict:
+        """De watertrend, gelijk met gelijk (v5.49, L-EMS-008).
+
+        Gemeld: "trend -84,5%" midden op de dag. De trend zette het verbruik
+        van vandaag TOT NU tegen de mediaan van HELE dagen, dus overdag was
+        hij altijd fors negatief - om 09:00 staat er nu eenmaal maar een
+        fractie van een dag in de teller.
+
+        Drie standen, de nauwkeurigste die de opgeslagen gegevens toelaten:
+
+        1. "zelfde_tijdstip": minstens WATER_TREND_MIN_PROFIELDAGEN eerdere
+           dagen met een uurprofiel. Vandaag-tot-nu tegen de mediaan van het
+           verbruik tot dezelfde kloktijd op die dagen. Dat volgt het echte
+           dagpatroon (ochtenddouche, avondwas) in plaats van een rechte lijn.
+        2. "geschaald_hele_dag": nog geen profielen, en het is na
+           WATER_TREND_ZONDER_PROFIEL_VANAF_UUR. Tegen de mediaan van hele
+           dagen maal het verstreken deel van de dag. Grover - waterverbruik
+           is niet gelijk over de dag verdeeld - maar zo laat op de dag is
+           de fout klein.
+        3. Anders geen trend (None), met de reden erbij. Een getal dat er
+           geloofwaardig uitziet maar het niet is, is erger dan geen getal.
+
+        Alleen weergave; geen enkele beslissing hangt hiervan af.
+        """
+        lokaal = dt_util.as_local(now or dt_util.now())
+        vandaag_l = self.water_daily_total_l
+        geschiedenis = self.water_daily_history or []
+        uit = {"procent": None, "methode": None, "referentie_liter": None, "dagen": 0}
+        if vandaag_l is None:
+            uit["reden"] = "Geen dagtotaal van vandaag."
+            return uit
+        deel = (lokaal.minute * 60 + lokaal.second) / 3600
+        dag = lokaal.date().isoformat()
+        waarden = [
+            w
+            for p in (self.water_dagprofielen or [])
+            if isinstance(p, dict) and p.get("datum") != dag
+            for w in [self._water_tot_tijdstip(p, lokaal.hour, deel)]
+            if w is not None
+        ]
+        if len(waarden) >= WATER_TREND_MIN_PROFIELDAGEN:
+            referentie = statistics.median(waarden)
+            uit.update(methode="zelfde_tijdstip", dagen=len(waarden))
+        elif geschiedenis and lokaal.hour >= WATER_TREND_ZONDER_PROFIEL_VANAF_UUR:
+            fractie = (lokaal.hour + deel) / 24
+            referentie = statistics.median(geschiedenis) * fractie
+            uit.update(methode="geschaald_hele_dag", dagen=len(geschiedenis))
+        else:
+            uit["reden"] = (
+                f"Nog geen {WATER_TREND_MIN_PROFIELDAGEN} dagen met een "
+                "uurprofiel; tot "
+                f"{WATER_TREND_ZONDER_PROFIEL_VANAF_UUR}:00 geen trend, want "
+                "een halve dag tegen hele dagen zegt niets."
+            )
+            return uit
+        uit["referentie_liter"] = round(referentie, 1)
+        if referentie <= 0:
+            uit["reden"] = "Op eerdere dagen nog niets verbruikt rond deze tijd."
+            return uit
+        uit["procent"] = round(100 * (vandaag_l - referentie) / referentie, 1)
+        return uit
+
     def _update_water_tracking(self, now: datetime) -> None:
         """Water-tabblad (v0.63.85, gevraagd: "Meldingen/tracking zoals
         bij vaatwasser/wasmachine" - herzien naar "geen meldingen alleen
@@ -33830,6 +34048,7 @@ class EnergyManagementSystemCoordinator:
                 self._water_last_daily_total = daily_total
                 self.water_daily_total_l = round(daily_total, 2)
                 self._water_onthoud_dag(daily_entity, now)
+                self._water_profiel_bij(daily_total, now)
 
         active_entity = self.config.get(CONF_WATER_ACTIVE_USAGE_SENSOR)
         if not active_entity:

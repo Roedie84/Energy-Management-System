@@ -1360,6 +1360,14 @@ WATER_SESSION_COMPLETE_SUSTAINED_MINUTES = 2
 # Water-tabblad (Onderdeel/Waarde-achtige lijst, nieuwste eerst).
 WATER_SESSION_HISTORY_LENGTH = 20
 
+# v5.49: de watertrend vergelijkt gelijk met gelijk (L-EMS-008). ALLEEN
+# weergave. Vanaf zoveel eerdere dagen met een uurprofiel wordt vandaag-tot-nu
+# vergeleken met het verbruik tot dezelfde kloktijd op die dagen. Zonder die
+# dagen: geen trend voor WATER_TREND_ZONDER_PROFIEL_VANAF_UUR, daarna tegen de
+# mediaan van hele dagen, geschaald naar het verstreken deel van de dag.
+WATER_TREND_MIN_PROFIELDAGEN = 3
+WATER_TREND_ZONDER_PROFIEL_VANAF_UUR = 20
+
 # Waterontharder-regeneratie herkennen (v0.63.86, gevraagd: "wanneer
 # hij zijn werk heeft gedaan en hoelang dat geleden is"). Er is geen
 # betrouwbare manier om dit te onderscheiden van ander gebruik puur op
@@ -3452,6 +3460,11 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "temp_consumption_history": {"type": "plain"},
     "temp_consumption_prediction_error_history": {"type": "plain"},
     "water_daily_history": {"type": "plain"},
+    # v5.49: het waterverbruik tot het eind van elk uur, per dag - voor een
+    # watertrend die gelijk met gelijk vergelijkt (L-EMS-008). Een oudere
+    # opslag kent deze velden niet; dan begint het profiel leeg.
+    "water_dagprofiel_vandaag": {"type": "plain"},
+    "water_dagprofielen": {"type": "plain"},
     "water_session_history": {"type": "plain"},
     "weather_ensemble_agreement_history": {"type": "plain"},
     "energy_bridge_transition_log": {"type": "plain"},
@@ -7103,6 +7116,23 @@ MODUSWISSEL_DREMPEL_PER_UUR = 4
 # geen fout.
 ENERGIEBALANS_MARGE_W = 200.0
 ENERGIEBALANS_MARGE_FRACTIE = 0.10
+
+# v5.49: wanneer de cockpit "balans wijkt af" zegt. ALLEEN weergave - de
+# marges hierboven en de sturing veranderen niet.
+#
+# De controle vergelijkt momentopnamen: de accumeter (elke 5 s) tegen drie
+# modulesensoren die op andere momenten bijwerken. Bij een snelle
+# zonwisseling lopen die even uiteen, en sprong de cockpit een ronde op
+# "LET OP · balans wijkt af". Een echte afwijking (een module die niet
+# meedoet, een fase die stilstaat) blijft staan; ruis niet. Dus pas melden
+# als de afwijking minstens zoveel rondes EN zoveel seconden aanhoudt.
+#
+# Valt de controle even weg (een sensor een ronde onbeschikbaar), dan
+# verdween "balans ✓" uit de cockpitregel. Het laatste geldige oordeel blijft
+# nu zo lang staan.
+ENERGIEBALANS_AFWIJKING_RONDES = 3
+ENERGIEBALANS_AFWIJKING_MIN_S = 180
+ENERGIEBALANS_OORDEEL_VASTHOUDEN_S = 300
 
 
 # v5.29: pas melden als de accu zo lang niet aanstuurbaar is. Een losse

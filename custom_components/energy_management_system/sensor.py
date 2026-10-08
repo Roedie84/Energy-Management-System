@@ -3025,14 +3025,18 @@ class WaterUsageSensor(SensorEntity, RestoreEntity):
         history = self._coordinator.water_daily_history
         gemiddeld_l = round(statistics.median(history), 1) if history else None
         vandaag_l = self._coordinator.water_daily_total_l
-        trend = None
-        if vandaag_l is not None and gemiddeld_l is not None and gemiddeld_l > 0:
-            trend = round(100 * (vandaag_l - gemiddeld_l) / gemiddeld_l, 1)
+        # v5.49 (L-EMS-008): de trend vergelijkt vandaag-tot-nu met het
+        # verbruik tot dezelfde kloktijd op eerdere dagen, niet meer met hele
+        # dagen (dat gaf overdag altijd zo'n -85%). Zie `water_trend`.
+        trend = self._coordinator.water_trend()
         last_regen = self._coordinator.water_softener_last_regeneration
         return {
             "vandaag_liter": vandaag_l,
             "gemiddeld_liter_per_dag": gemiddeld_l,
-            "trend_procent": trend,
+            "trend_procent": trend["procent"],
+            "trend_methode": trend["methode"],
+            "trend_referentie_liter": trend["referentie_liter"],
+            "trend_toelichting": trend.get("reden"),
             "geschiedenis_liter_per_dag": history,
             "recente_gebruiksmomenten": list(
                 reversed(self._coordinator.water_session_history)

@@ -40,6 +40,14 @@ def _gezond(c, hass):
     return c
 
 
+def _afwijking_houdt_aan(c):
+    """v5.49: de cockpit meldt een afwijkende balans pas als die aanhoudt."""
+    from homeassistant.util import dt as dt_util
+
+    c._balans_afwijking_sinds = dt_util.now() - timedelta(minutes=10)
+    c._balans_afwijking_rondes = 5
+
+
 # --- de dode band rond 25 W ---------------------------------------------
 
 
@@ -427,6 +435,7 @@ def test_een_afwijkende_balans_alleen_is_let_op(make_coordinator, hass):
     c.get_energiebalans_controle = lambda: {
         "beschikbaar": True, "alles_klopt": False
     }
+    _afwijking_houdt_aan(c)
 
     assert c._ems_status()[0] == "LET OP"
 
@@ -614,6 +623,7 @@ def test_de_reden_staat_vooraan_zodra_het_niet_goed_is(make_coordinator, hass):
     cijfers."""
     c = _gezond(make_coordinator({}), hass)
     c.get_energiebalans_controle = lambda: {"beschikbaar": True, "alles_klopt": False}
+    _afwijking_houdt_aan(c)
 
     stand, regel = c._ems_status()
 

@@ -459,6 +459,11 @@ async def async_get_config_entry_diagnostics(
             "get_energiebalans_controle",
             coordinator.get_energiebalans_controle,
         ),
+        # v5.49: het aanhoudende oordeel dat de cockpit toont.
+        "energiebalans_oordeel": _veilig(
+            "get_energiebalans_oordeel",
+            coordinator.get_energiebalans_oordeel,
+        ),
         # v3.89.0: welke voorwaarden tot de beslissing leidden.
         "afwegingen": _veilig("get_afwegingen", coordinator.get_afwegingen),
         # v3.90.0: het juiste soort entiteit, en de prijsreeks.
@@ -1098,6 +1103,11 @@ async def async_get_config_entry_diagnostics(
             "water_sessions_today_l": round(coordinator.water_sessions_today_l, 2),
             "water_sessions_today_count": coordinator.water_sessions_today_count,
             "water_daily_history": coordinator.water_daily_history,
+            # v5.49: de watertrend gelijk met gelijk, en de uurprofielen
+            # waar hij op rust (L-EMS-008).
+            "water_trend": _veilig("water_trend", coordinator.water_trend),
+            "water_dagprofiel_vandaag": coordinator.water_dagprofiel_vandaag,
+            "water_dagprofielen": coordinator.water_dagprofielen,
             "water_session_history": coordinator.water_session_history,
             "water_softener_last_regeneration": _iso(
                 coordinator.water_softener_last_regeneration
