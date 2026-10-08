@@ -90,3 +90,15 @@ laatste ronde: 08-10 11:45, gemeten t/m 08-10 11:42
 - Geen release (tussenronde; v5.49-52.1 vandaag al uitgebracht en geïnstalleerd).
 
 laatste ronde: 08-10 15:40, gemeten t/m 08-10 15:44
+
+## 08-10 19:40 · tussenronde
+- Geïnstalleerd: v5.53.4 (v5.53-5.53.4 door chatsessie: meelezen, witgoedstatus, tekst, recorder). Herstarts sinds 15:40: 3 (16:31, 17:41, 18:31/18:36). Logboek: 0 EMS-fouten.
+- Dag t/m 19:00: PV 9,58 kWh (Modbus) tegen Solcast 10,2 (−6,1%); import 1,28 / export 1,27 kWh (00-19 u). Beslissingen 15:40-19:40 alleen `default_smart` → 0× verkoop onder de reserve (harde regel gehaald).
+- Nacht →09-10 om 19:40: beschikbaar 5,01 kWh, basis tot blok 11:45 4,18, zon 0,43 → marge tot blok ≈ +1,26 kWh; MC tot blok 0,1%. Reserve 8,64 (+45%, 3 tekortdagen) → geen verkoop. Toetsen in de dagafsluiting van 09-10.
+- **Nieuw opgemerkt (externe instelling, 18:26):** zendure_ha regelt nu op `sensor.hw_p1_regel_zonder_quooker_piek` (template, zonder Quooker-piek); EMS `control_p1_sensor_entity` staat nog op `hw_p1_vermogen_100w`. Beide −30 W in rust → `regelverschuiving` blijft goed gemeten. Gevolg: Quooker-pieken gaan bewust naar het net. P1 18:20-19:42 per kwartier import 6-18 Wh → geen merkbare import. Quooker-import per dag meten in de dagafsluiting. Recorder bewaart de templatesensor niet (alleen begintoestand).
+- **H-EMS-6 (nieuw):** MC-stand tot het blok springt na huishoudpieken kort omhoog terwijl de nacht ruim haalbaar is: 15:54-16:01 21-26% (na 2,4-4,8 kW 15:45-15:51), 17:18-17:27 89-92% (na koken ~1,7 kW 16:47-17:13), 17:58-18:00 55% (Quooker 2,35 kW 17:48-17:56); daarbuiten 0-1%. Oorzaak in de code: livecorrectie = mediaan van 4 monsters/30 min, max +1,5 kWh, vervaagt over 4 u — springt in als ≥2 van 4 monsters hoog zijn, dus juist ná de piek. Sturing niet geraakt (geen verkoop mogelijk), maar `mc_22u`/kalibratie pakt de waarde van 22:00: een piek om 21:45 vervuilt de Brier. Toets: per avond de MC-stand 21:50-22:10 naast `mc_22u`; afwijking > 20 pp = vervuild meetpunt.
+- Lopende hypotheses: H-EMS-2 (PV-bias klein, stabiel), H-EMS-4 (achteraf-optimum, 14 dagen), H-EMS-6 (MC-livecorrectie). H-EMS-3 loopt nu via L-EMS-006 (Brier tot blok).
+- Meetbaarheid: Solcast-limiet 10/10 om 18:36 bereikt ("polling limit exhausted") → voorspelling morgen bevroren op de laatste ophaalbeurt; telt mee bij de PV-fout van 09-10.
+- Geen release (tussenronde, niets acuut).
+
+laatste ronde: 08-10 19:40, gemeten t/m 08-10 19:44

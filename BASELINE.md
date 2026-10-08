@@ -28,3 +28,4 @@
 | MC-stand tot het blok na v5.47 (overdag) | 0 % (was 96-100 %) | 08-10 11:41 | 08-10 11:45 |
 | Meetlog kwartierdekking na L-EMS-003 | 100 % | 08-10 11:15 | 08-10 11:45 |
 | Accurendement AC→AC (Zendure-tellers) | 81,9 % (30 d) · 84,1 % (7 d); geleerd 84,2 % | 08-09..07-10, 215,6 kWh in | 08-10 15:40 |
+| MC tot blok overdag buiten pieken | 0-1 % · na huishoudpieken 21-92 % (20 min/dag) | 08-10 07:00-19:40 | 08-10 19:40 |

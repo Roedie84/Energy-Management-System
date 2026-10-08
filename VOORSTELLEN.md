@@ -44,6 +44,7 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 
 ## L-EMS-006 · verwacht tekort en tekortkans splitsen: tot het blok / na het blok (lange horizon)
 - Status: **gebouwd v5.47**, geïnstalleerd 10:55 — eerste meetpunt gehaald 11:41 (tot blok 0 kWh / 0%, na blok 2,44 apart); Brier-vergelijking na 7 avonden (vanaf 08-10 22:00)
+- 08-10 19:40: overdag MC tot blok 0-1%, behalve 3 korte sprongen (21-92%, samen 20 min) direct na huishoudpieken door de livecorrectie → H-EMS-6; let bij de Brier op vervuilde 22:00-standen.
 - (eerder: gepland, zelf bouwen: rapportage en meetbaarheid; raakt de sturing niet)
 - Onderbouwing: 08-10 07:42: verhaal "verwacht tekort tot het goedkope blok 0,61 kWh, economisch", MC 96%. Maar `nodig_kwh` 2,51 bevat `lange_horizon_extra` 2,11 (na 12:15); tot het blok is 0,40 nodig tegen 1,90 beschikbaar (marge +1,50). MC steeg 3% → 96% tussen 04:00 en 07:40 terwijl de marge tot het blok slechts van +1,79 naar +1,50 ging. `kalibratie_22u` vergelijkt deze kans (incl. lange horizon) met de tekortnacht 22-09.
 - Bouw: in `verwacht_tekort` en het MC-attribuut `tekort_tot_blok_kwh` / `tekort_na_blok_kwh` en `tekortkans_tot_blok_pct` (zelfde trajecten zonder lange extra); verhaaltekst noemt het juiste deel; `kalibratie_22u` per nacht beide kansen + Brier van beide. Tests. De reserve en de sturing blijven ongewijzigd.
