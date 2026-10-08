@@ -9,7 +9,7 @@ Zendure-integratie laat zien.
 
 Wat deze module doet:
 
-- elke 15 seconden `GET http://<accu>/properties/report` (de lokale
+- elke 5 seconden `GET http://<accu>/properties/report` (de lokale
   ZenSDK-API van de SolarFlow, die al aan staat);
 - de ruwe waarden omrekenen naar dezelfde eenheden als de
   Zendure-integratie (temperatuur in tiende kelvin, spanning in
@@ -21,6 +21,10 @@ Wat deze module doet:
   relaisschakelingen per dag (elke wissel laden/ontladen slijt het
   relais), opslagmodus (RAM of flash), kalibratie, foutmelding,
   laad-/ontlaadgrens en het omzetrendement laden en ontladen;
+- bij elke duidelijke wijziging (vermogen, limiet, laad-/ontlaadstand)
+  meten welke bron hem het eerst ziet en hoeveel seconden eerder: het
+  eigen lezen of de Zendure-integratie (die volgt het EMS via
+  toestandswijzigingen, dus op de seconde);
 - de tellingen bewaren, zodat een herstart ze niet wist.
 
 Wat deze module NOOIT doet: schrijven naar de accu. Geen POST, geen
@@ -44,11 +48,11 @@ from typing import Any, Callable
 _LOGGER = logging.getLogger(__name__)
 
 ZENDURE_DOMEIN = "zendure_ha"
-INTERVAL = timedelta(seconds=15)
+INTERVAL = timedelta(seconds=5)
 TIMEOUT_S = 5
 OPSLAG_SLEUTEL = "energy_management_system.zendure_lokaal"
 OPSLAG_VERSIE = 1
-BEWAAR_ELKE_RONDES = 10
+BEWAAR_ELKE_RONDES = 60
 # Pas na zoveel vergelijkingen per veld een oordeel.
 MIN_VERGELIJKINGEN = 20
 # Overeenkomst per veld waarboven het "gelijk" heet.
@@ -340,6 +344,116 @@ def rendement_samenvatting(tellingen: dict) -> dict:
     return uit
 
 
+# --- reactiesnelheid: wie ziet een wijziging het eerst? ---------------------
+#
+# Gevraagd op 8 oktober: "Ik wil eigenlijk ook zien welke er sneller
+# reageert". Per veld: zodra een bron een duidelijke sprong ziet, opent er
+# een wijziging; zodra de andere bron dezelfde waarde laat zien, sluit hij
+# met de voorsprong in seconden. De Zendure-integratie wordt gevolgd via
+# toestandswijzigingen (tijdstempel van Home Assistant), het eigen lezen per
+# ronde - de resolutie daarvan is het leesinterval.
+
+REACTIE_VELDEN = ("gridInputPower", "outputPackPower", "packInputPower", "outputHomePower",
+                  "inputLimit", "outputLimit", "acMode")
+REACTIE_MIN_SPRONG_W = 150.0
+REACTIE_MAX_WACHT_S = 60.0
+REACTIE_LAATSTE = 20
+REACTIE_STEEKPROEF = 300
+BRONNEN = ("lokaal", "zendure")
+
+
+def _sprong(veld: str, oud: float | None, nieuw: float) -> bool:
+    if oud is None:
+        return False
+    if veld == "acMode":
+        return oud != nieuw
+    return abs(nieuw - oud) >= max(REACTIE_MIN_SPRONG_W, 0.15 * max(abs(oud), abs(nieuw)))
+
+
+def _zelfde(veld: str, a: float | None, b: float) -> bool:
+    if a is None:
+        return False
+    if veld == "acMode":
+        return a == b
+    return abs(a - b) <= max(50.0, 0.10 * max(abs(a), abs(b)))
+
+
+def lege_reactie() -> dict:
+    return {"laatst": {}, "open": {}, "eerst": {"lokaal": 0, "zendure": 0}, "niet_gevolgd": 0,
+            "voorsprong": {"lokaal": [], "zendure": []}, "recent": []}
+
+
+def reactie_waarneming(r: dict, bron: str, veld: str, waarde: float | None, t: float) -> None:
+    """Eén waarneming van een bron. Opent of sluit een wijziging."""
+    if waarde is None or veld not in REACTIE_VELDEN or bron not in BRONNEN:
+        return
+    ander = "zendure" if bron == "lokaal" else "lokaal"
+    laatst = r.setdefault("laatst", {}).setdefault(veld, {})
+    open_ = r.setdefault("open", {})
+    # verlopen wijzigingen opruimen
+    for v in [v for v, w in open_.items() if t - w["t"] > REACTIE_MAX_WACHT_S]:
+        open_.pop(v)
+        r["niet_gevolgd"] = r.get("niet_gevolgd", 0) + 1
+    w = open_.get(veld)
+    if w is not None and w["bron"] == ander and _zelfde(veld, w["waarde"], waarde):
+        voorsprong = round(max(0.0, t - w["t"]), 1)
+        r["eerst"][ander] = r["eerst"].get(ander, 0) + 1
+        reeks = r["voorsprong"].setdefault(ander, [])
+        reeks.append(voorsprong)
+        del reeks[:-REACTIE_STEEKPROEF]
+        r["recent"].append({"veld": veld, "eerst": ander, "voorsprong_s": voorsprong,
+                            "waarde": waarde, "t": round(t)})
+        del r["recent"][:-REACTIE_LAATSTE]
+        open_.pop(veld)
+    elif _sprong(veld, laatst.get(bron), waarde) and not _zelfde(veld, laatst.get(ander), waarde):
+        open_[veld] = {"bron": bron, "waarde": waarde, "t": t}
+    laatst[bron] = waarde
+
+
+def zonder_lopende_wijzigingen(vergelijking: list[dict], r: dict, nu: float) -> list[dict]:
+    """Niet vergelijken wat net verspringt (v5.50).
+
+    Loopt er een wijziging die de andere bron nog niet heeft gezien, dan
+    meet een vergelijking alleen het tijdsverschil - dat meet de
+    reactiesnelheid al. Bij een lopende vermogenssprong geldt dat ook voor
+    het vermogen en de stroom per module.
+    """
+    lopend = {v for v, w in (r.get("open") or {}).items() if nu - w["t"] <= REACTIE_MAX_WACHT_S}
+    if not lopend:
+        return vergelijking
+    vermogen = bool(lopend - {"acMode"})
+    uit = []
+    for regel in vergelijking:
+        veld = regel["sleutel"].rsplit(".", 1)[-1]
+        if "." not in regel["sleutel"] and veld in lopend:
+            continue
+        if "." in regel["sleutel"] and vermogen and veld in ("power", "batcur"):
+            continue
+        uit.append(regel)
+    return uit
+
+
+def reactie_samenvatting(r: dict, interval_s: float) -> dict:
+    eerst = r.get("eerst") or {}
+    totaal = sum(eerst.values())
+    uit = {"wijzigingen": totaal, "niet_gevolgd": r.get("niet_gevolgd", 0),
+           "resolutie_lokaal_s": interval_s}
+    for bron in BRONNEN:
+        reeks = (r.get("voorsprong") or {}).get(bron) or []
+        uit[bron] = {
+            "eerst": eerst.get(bron, 0),
+            "aandeel_procent": round(100 * eerst.get(bron, 0) / totaal, 1) if totaal else None,
+            "mediaan_voorsprong_s": round(statistics.median(reeks), 1) if reeks else None,
+        }
+    if totaal:
+        winnaar = max(BRONNEN, key=lambda b: eerst.get(b, 0))
+        uit["sneller"] = winnaar if eerst.get(winnaar, 0) * 2 > totaal else "gelijk op"
+    else:
+        uit["sneller"] = None
+    uit["recent"] = list(r.get("recent") or [])[-5:]
+    return uit
+
+
 # --- tellingen ---------------------------------------------------------------
 
 
@@ -356,6 +470,7 @@ def lege_tellingen() -> dict:
         "sinds": None,
         "relais": {"dag": None, "vandaag": 0, "totaal": 0, "stand": None, "per_dag": {}},
         "rendement": {"laden": [], "ontladen": []},
+        "reactie": lege_reactie(),
     }
 
 
@@ -491,6 +606,20 @@ def tekst(status: str, a: dict) -> str:
                 f"Module …{sn[-5:]}: {m.get('toestand', '-')}, celbalans "
                 f"{cb.get('verschil_mv', '-')} mV ({cb.get('oordeel', '-')})"
             )
+    reactie = a.get("reactiesnelheid") or {}
+    if reactie.get("wijzigingen"):
+        lok, zen = reactie.get("lokaal") or {}, reactie.get("zendure") or {}
+
+        def _s(w):
+            return "-" if w is None else f"{w:.1f}".replace(".", ",")
+
+        oordeel_tekst = {"lokaal": "het EMS zelf", "zendure": "de Zendure-integratie"}.get(
+            reactie.get("sneller"), "gelijk op")
+        regels.append(
+            f"Sneller: **{oordeel_tekst}** · {reactie['wijzigingen']} wijzigingen · "
+            f"EMS eerst {lok.get('eerst', 0)}× (mediaan {_s(lok.get('mediaan_voorsprong_s'))} s voor) · "
+            f"Zendure eerst {zen.get('eerst', 0)}× (mediaan {_s(zen.get('mediaan_voorsprong_s'))} s voor)"
+        )
     for v in a.get("afwijkende_velden") or []:
         laatst = v.get("laatst") or {}
         regels.append(
@@ -507,7 +636,7 @@ def tekst(status: str, a: dict) -> str:
 
 
 class ZendureLokaalMeelezer:
-    """Leest de accu elke 15 s zelf uit en vergelijkt. Schrijft nooit."""
+    """Leest de accu elke 5 s zelf uit en vergelijkt. Schrijft nooit."""
 
     def __init__(self, hass) -> None:
         self._hass = hass
@@ -518,6 +647,7 @@ class ZendureLokaalMeelezer:
         self.apparaat_sn: str | None = None
         self.laatste: dict | None = None
         self.afgeleid: dict | None = None
+        self._luisteraar: Callable[[], None] | None = None
         self._entiteiten: dict[tuple[str | None, str], str] = {}
 
     # adres en entiteiten uit de registers ---------------------------------
@@ -599,10 +729,41 @@ class ZendureLokaalMeelezer:
             self.tellingen = basis
         self._afmelden = async_track_time_interval(self._hass, self._ronde, INTERVAL)
 
+    def _volg_zendure(self) -> None:
+        """Toestandswijzigingen van de Zendure-entiteiten volgen (alleen luisteren)."""
+        from homeassistant.helpers.event import async_track_state_change_event
+
+        per_entiteit = {
+            self._entiteiten[(None, veld)]: veld
+            for veld in REACTIE_VELDEN
+            if (None, veld) in self._entiteiten
+        }
+        if not per_entiteit:
+            return
+
+        def _gewijzigd(event) -> None:
+            nieuw = event.data.get("new_state")
+            veld = per_entiteit.get(event.data.get("entity_id"))
+            if nieuw is None or veld is None:
+                return
+            try:
+                t = event.time_fired.timestamp()
+            except AttributeError:
+                t = time.time()
+            reactie_waarneming(
+                self.tellingen.setdefault("reactie", lege_reactie()),
+                "zendure", veld, ha_waarde(veld, nieuw.state), t,
+            )
+
+        self._luisteraar = async_track_state_change_event(self._hass, list(per_entiteit), _gewijzigd)
+
     async def async_stop(self) -> None:
         afmelden, self._afmelden = self._afmelden, None
         if afmelden is not None:
             afmelden()
+        luisteraar, self._luisteraar = self._luisteraar, None
+        if luisteraar is not None:
+            luisteraar()
         await self._bewaar()
 
     async def _bewaar(self) -> None:
@@ -631,6 +792,8 @@ class ZendureLokaalMeelezer:
         if self.host is None and not self._zoek_apparaat():
             self.tellingen["niet_gevonden"] = True
             return
+        if self._luisteraar is None:
+            self._volg_zendure()
         self.tellingen.pop("niet_gevonden", None)
         sessie = async_get_clientsession(self._hass)
         begin = time.monotonic()
@@ -644,9 +807,13 @@ class ZendureLokaalMeelezer:
         lokaal = normaliseer(rapport)
         self.laatste = lokaal
         nu = time.time()
-        verwerk_ronde(self.tellingen, vergelijk(lokaal, self._zoek_toestand), nu, latentie)
+        r = self.tellingen.setdefault("reactie", lege_reactie())
+        verwerk_ronde(self.tellingen, zonder_lopende_wijzigingen(
+            vergelijk(lokaal, self._zoek_toestand), r, nu), nu, latentie)
         self.afgeleid = afgeleid(rapport)
         verwerk_afgeleid(self.tellingen, self.afgeleid, nu)
+        for veld in REACTIE_VELDEN:
+            reactie_waarneming(r, "lokaal", veld, lokaal["apparaat"].get(veld), nu)
 
     # weergave --------------------------------------------------------------
 
@@ -664,5 +831,8 @@ class ZendureLokaalMeelezer:
             "per_dag": relais.get("per_dag", {}),
         }
         uit["omzetrendement"] = rendement_samenvatting(self.tellingen)
+        uit["reactiesnelheid"] = reactie_samenvatting(
+            self.tellingen.get("reactie") or {}, INTERVAL.total_seconds()
+        )
         uit["tekst"] = tekst(self.status(), uit)
         return uit

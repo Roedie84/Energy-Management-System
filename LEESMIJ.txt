@@ -1,13 +1,11 @@
-EMS v5.50 - de accu zelf meelezen
+EMS v5.51 - wie is er sneller?
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
 Alleen lezen: de sturing, de reserve, de drempels, de marges en de
 optie-standaarden veranderen niet.
-Stap 1 van Zendure in het EMS: het EMS leest de SolarFlow elke 15 s zelf
-uit via de lokale API en vergelijkt elke waarde met de Zendure-integratie.
-Het schrijft nooit naar de accu. Nieuwe sensor "Zendure lokaal meelezen"
-(verzamelt / gelijk / wijkt af / geen verbinding) met daarnaast, overgenomen
-uit Gielz1986/Zendure-HA-zenSDK: celbalans per module, relaisschakelingen
-per dag, opslagmodus (RAM of flash), kalibratie, foutmelding en het
-omzetrendement laden en ontladen. Te zien op de Proefstand en in de
-diagnostiek. De tellingen overleven een herstart.
+Nieuw bij "Zendure lokaal meelezen": per wijziging (vermogen, limiet,
+laad-/ontlaadstand) wordt gemeten wie hem het eerst ziet, het EMS zelf of
+de Zendure-integratie, en hoeveel seconden eerder. Het EMS leest de accu
+nu elke 5 s. Een veld dat net verspringt wordt niet meer vergeleken, zodat
+de vergelijking geen timingverschillen als afwijking telt. Te zien op de
+Proefstand ("Sneller: ...") en in het attribuut reactiesnelheid.

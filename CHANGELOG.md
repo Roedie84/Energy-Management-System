@@ -31223,3 +31223,38 @@ Hun regelmodi, P1-regeling en schrijfopdrachten horen bij stap 2.
 - Diagnostiek: `zendure_lokaal`.
 
 18 nieuwe tests (`test_v550_zendure_lokaal.py`), 4919 groen.
+
+## v5.51 — Wie is er sneller?
+
+Alleen lezen, zoals v5.50. Sturing, reserve, drempels, marges en
+optie-standaarden niet aangeraakt.
+
+### 1. Reactiesnelheid: het EMS zelf tegen de Zendure-integratie
+
+Gevraagd: "Ik wil eigenlijk ook zien welke er sneller reageert".
+
+- Per veld (netvermogen, laad- en ontlaadvermogen, vermogen naar huis,
+  laad- en ontlaadlimiet, laad-/ontlaadstand): zodra een bron een duidelijke
+  sprong ziet (≥ 150 W of 15%, of een andere stand), opent er een
+  wijziging; zodra de andere bron dezelfde waarde laat zien (± 50 W of
+  10%), sluit hij met de voorsprong in seconden. Na 60 s zonder volgen
+  telt hij als "niet gevolgd".
+- De Zendure-integratie wordt gevolgd via toestandswijzigingen (alleen
+  luisteren, tijdstempel van Home Assistant), het eigen lezen per ronde.
+- Het eigen lezen gaat van elke 15 s naar elke 5 s (de accu antwoordt in
+  ~15 ms); de resolutie staat in `reactiesnelheid.resolutie_lokaal_s`.
+- Nieuw attribuut `reactiesnelheid`: per bron hoe vaak eerst, aandeel en
+  mediane voorsprong, het oordeel `sneller` (lokaal / zendure / gelijk op)
+  en de laatste 5 wijzigingen. Bewaard over herstarts.
+- Proefstand: de regel "Sneller: …".
+
+### 2. Niet vergelijken wat net verspringt
+
+Eerste meting na de installatie: netvermogen en laadvermogen 78% gelijk,
+vermogen per module 67%, met verschillen tot 1.600 W - op momenten dat de
+accu net versprong en de twee bronnen op een ander moment lazen. Zolang er
+een wijziging loopt die de andere bron nog niet zag, wordt dat veld niet
+meer vergeleken (bij een vermogenssprong ook vermogen en stroom per module);
+dat tijdsverschil meet de reactiesnelheid al.
+
+6 nieuwe tests in `test_v550_zendure_lokaal.py`.

@@ -230,3 +230,66 @@ def test_de_kaarttekst_komt_uit_de_module():
     assert "2 wissels vandaag" in tekst and "werkgeheugen" in tekst
     assert "laden 94,0%" in tekst and "ontladen -" in tekst
     assert "Module …00996" in tekst and "20 mV (uitstekend)" in tekst
+
+
+# --- reactiesnelheid --------------------------------------------------------
+
+
+def test_wie_ziet_een_sprong_het_eerst():
+    r = zl.lege_reactie()
+    t = 1791460000.0
+    zl.reactie_waarneming(r, "lokaal", "gridInputPower", 100, t)
+    zl.reactie_waarneming(r, "zendure", "gridInputPower", 110, t + 1)
+    # lokaal ziet de sprong eerst
+    zl.reactie_waarneming(r, "lokaal", "gridInputPower", 1700, t + 5)
+    zl.reactie_waarneming(r, "zendure", "gridInputPower", 1690, t + 8.4)
+    # daarna ziet Zendure een sprong eerst
+    zl.reactie_waarneming(r, "zendure", "gridInputPower", 400, t + 20)
+    zl.reactie_waarneming(r, "lokaal", "gridInputPower", 405, t + 25)
+    s = zl.reactie_samenvatting(r, 5)
+    assert s["wijzigingen"] == 2
+    assert s["lokaal"]["eerst"] == 1 and s["lokaal"]["mediaan_voorsprong_s"] == 3.4
+    assert s["zendure"]["eerst"] == 1 and s["zendure"]["mediaan_voorsprong_s"] == 5.0
+    assert s["sneller"] == "gelijk op"
+
+
+def test_kleine_schommeling_is_geen_wijziging():
+    r = zl.lege_reactie()
+    zl.reactie_waarneming(r, "lokaal", "gridInputPower", 1000, 0)
+    zl.reactie_waarneming(r, "lokaal", "gridInputPower", 1100, 5)
+    assert r["open"] == {}
+
+
+def test_niet_gevolgde_wijziging_verloopt():
+    r = zl.lege_reactie()
+    zl.reactie_waarneming(r, "lokaal", "acMode", 1, 0)
+    zl.reactie_waarneming(r, "lokaal", "acMode", 2, 5)
+    assert "acMode" in r["open"]
+    zl.reactie_waarneming(r, "lokaal", "outputLimit", 0, 5 + zl.REACTIE_MAX_WACHT_S + 1)
+    assert r["open"] == {} and r["niet_gevolgd"] == 1
+
+
+def test_lopende_wijziging_wordt_niet_vergeleken():
+    r = zl.lege_reactie()
+    r["open"]["gridInputPower"] = {"bron": "lokaal", "waarde": 1700, "t": 100.0}
+    regels = [
+        {"sleutel": "gridInputPower", "gelijk": False},
+        {"sleutel": "electricLevel", "gelijk": True},
+        {"sleutel": "SN1.power", "gelijk": False},
+        {"sleutel": "SN1.socLevel", "gelijk": True},
+    ]
+    over = [x["sleutel"] for x in zl.zonder_lopende_wijzigingen(regels, r, 101.0)]
+    assert over == ["electricLevel", "SN1.socLevel"]
+    # verlopen: weer alles vergelijken
+    assert len(zl.zonder_lopende_wijzigingen(regels, r, 100.0 + zl.REACTIE_MAX_WACHT_S + 1)) == 4
+
+
+def test_reactie_staat_in_de_kaarttekst():
+    a = zl.samenvatting(zl.lege_tellingen(), None)
+    r = zl.lege_reactie()
+    zl.reactie_waarneming(r, "lokaal", "acMode", 1, 0)
+    zl.reactie_waarneming(r, "zendure", "acMode", 1, 0)
+    zl.reactie_waarneming(r, "lokaal", "acMode", 2, 10)
+    zl.reactie_waarneming(r, "zendure", "acMode", 2, 14)
+    a["reactiesnelheid"] = zl.reactie_samenvatting(r, 5)
+    assert "Sneller: **het EMS zelf**" in zl.tekst("verzamelt", a)
