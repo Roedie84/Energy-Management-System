@@ -81,8 +81,11 @@ def test_the_calendar_binds_before_the_cycles(monkeypatch):
     assert overzicht["cyclus_doorzet_kwh"] == 51840
     # De oude uitkomst blijft zichtbaar om naast te leggen.
     assert overzicht["slijtage_ct_per_kwh_cycli"] == pytest.approx(4.22, abs=0.05)
-    # En de nieuwe ligt ruim twee keer hoger.
-    assert overzicht["slijtage_ct_per_kwh"] > 2 * 4.22
+    # Het levensduurgemiddelde ligt ruim twee keer hoger...
+    assert overzicht["slijtage_ct_per_kwh_gemiddeld"] > 2 * 4.22
+    # ...maar de sturing rekent marginaal (v5.54): de kalender veroudert
+    # ook zonder gebruik, een extra slag kost alleen cyclusslijtage.
+    assert overzicht["slijtage_ct_per_kwh"] == pytest.approx(4.22, abs=0.05)
 
 
 def test_a_short_history_does_not_get_to_double_the_wear(monkeypatch):

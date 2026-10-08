@@ -13133,21 +13133,20 @@ class EnergyManagementSystemCoordinator:
             "onderbouwing": (
                 f"{overzicht['modules']} modules à € "
                 f"{overzicht['moduleprijs_eur']:.0f} over "
-                f"{overzicht['totale_doorzet_kwh']:,.0f} kWh doorzet"
+                f"{overzicht['cyclus_doorzet_kwh']:,.0f} kWh doorzet"
+                # v3.29.0: hier stond "6000 cycli x 7,78 kWh" terwijl de
+                # doorzet met de NOMINALE 8,64 was gerekend.
+                # v5.54: de sturing rekent marginaal (cycli); het
+                # kalendergemiddelde staat er ter vergelijking achter.
+                + f" ({overzicht['cycli_verwacht']} cycli x "
+                f"{overzicht['nominale_capaciteit_kwh']} kWh)"
                 + (
-                    # v3.29.0: hier stond "6000 cycli x 7,78 kWh" terwijl
-                    # de doorzet met de NOMINALE 8,64 was gerekend -
-                    # 6000 x 7,78 is 46.680 en niet 51.840. De zin klopte
-                    # rekenkundig niet.
-                    f" ({overzicht['cycli_verwacht']} cycli x "
-                    f"{overzicht['nominale_capaciteit_kwh']} kWh)."
-                    if overzicht.get("bindende_grens") == "cycli"
-                    else (
-                        f" ({overzicht['kalenderjaren']} jaar x "
-                        f"{overzicht['gemeten_jaardoorzet_kwh']:,.0f} kWh "
-                        "gemeten per jaar - de kalender is eerder op dan "
-                        f"de {overzicht['cycli_verwacht']} cycli)."
-                    )
+                    f"; over de levensduur gemiddeld "
+                    f"{overzicht['slijtage_ct_per_kwh_gemiddeld']:.1f} ct/kWh "
+                    f"({overzicht['kalenderjaren']} jaar x "
+                    f"{overzicht['gemeten_jaardoorzet_kwh']:,.0f} kWh per jaar)."
+                    if overzicht.get("bindende_grens") == "kalender"
+                    else "."
                 )
             ).replace(",", "."),
             "betrouwbaarheid": (
@@ -13849,7 +13848,23 @@ class EnergyManagementSystemCoordinator:
         if kalender_doorzet_kwh and kalender_doorzet_kwh < cyclus_doorzet_kwh:
             doorzet_kwh = kalender_doorzet_kwh
             grens = "kalender"
-        per_kwh = aanschaf / doorzet_kwh
+        # v5.54: sturen op de MARGINALE slijtage, niet op de gemiddelde.
+        #
+        # Gevonden bij de doorlichting van 8 oktober: met de kalendergrens
+        # rekende de sturing 11,2 ct/kWh, en sloeg daardoor arbitrage met
+        # een marge tussen 4,2 en 11,2 ct over. Maar de kalender veroudert
+        # de accu OOK als hij stilstaat - die kosten zijn er hoe dan ook.
+        # Wat één extra kWh door de accu werkelijk kost, is alleen de
+        # cyclusslijtage. Gevraagd door Ruud: "Uitvoeren, als het accu
+        # rendement van teruglevering in het bedrag is meegenomen" - dat
+        # is zo: elke afweging rekent met prijs x rendement min slijtage.
+        #
+        # Het kalendergemiddelde blijft zichtbaar als
+        # `slijtage_ct_per_kwh_gemiddeld`: goed voor de vraag wat de accu
+        # over zijn leven per kWh kost, fout voor de vraag of deze ene
+        # slag het waard is.
+        gemiddeld_per_kwh = aanschaf / doorzet_kwh
+        per_kwh = aanschaf / cyclus_doorzet_kwh
 
         # Het rendementsverlies hoort erbij: om 1 kWh uit de accu te
         # halen moet er meer in dan eruit komt, en dat verschil is even
@@ -13881,6 +13896,8 @@ class EnergyManagementSystemCoordinator:
             "nominale_capaciteit_kwh": round(capaciteit, 2) if capaciteit else None,
             "totale_doorzet_kwh": round(doorzet_kwh),
             "slijtage_ct_per_kwh": round(per_kwh * 100, 2),
+            "slijtage_ct_per_kwh_gemiddeld": round(gemiddeld_per_kwh * 100, 2),
+            "slijtage_grondslag": "marginaal (cycli)",
             "rendement_procent": rendement,
             "rendementsverlies_kwh_per_kwh": (
                 round(verlies_kwh, 3) if verlies_kwh is not None else None
@@ -39911,7 +39928,13 @@ class EnergyManagementSystemCoordinator:
                 f"{b.get('verwachte_pv_kwh', '?')} kWh",
             ),
             ("Diepste tekort onderweg", f"{b.get('diepste_tekort_kwh', '?')} kWh"),
-            ("Veiligheidsmarge", f"+{b.get('veiligheidsmarge_procent', '?')}%"),
+            # v5.54: `.get(..., '?')` vangt alleen een ONTBREKENDE sleutel;
+            # de sleutel staat er altijd, met None. Gemeld als "+None%".
+            ("Veiligheidsmarge", (
+                f"+{b['veiligheidsmarge_procent']}%"
+                if b.get("veiligheidsmarge_procent") is not None
+                else "onbekend"
+            )),
         ]
         lines = [
             "| Onderdeel | Waarde |",
