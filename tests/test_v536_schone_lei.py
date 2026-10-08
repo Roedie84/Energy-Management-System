@@ -116,5 +116,6 @@ def test_de_tekortkans_gebruikt_de_drempel_van_een_tekortdag():
     import custom_components.energy_management_system as pkg
 
     bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
-    i = bron.index("shortfall_count = sum(")
+    # v5.47: de grens staat nu op één plek voor beide kansen.
+    i = bron.index("grens = available_kwh + ")
     assert "SHORTFALL_MIN_NETIMPORT_KWH" in bron[i : i + 300]

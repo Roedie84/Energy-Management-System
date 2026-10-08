@@ -34,8 +34,10 @@ def test_daily_total_archived_on_reset(make_coordinator, hass):
     hass.states.set("sensor.water_daily", "180.0")
     coordinator._update_water_tracking(DAY0)
 
+    # v5.47: alleen een daling over een dagwissel (of een nieuwe last_reset)
+    # is een nieuwe dag - zie test_v547_water_eenheid.py.
     hass.states.set("sensor.water_daily", "0.4")  # reset just happened
-    coordinator._update_water_tracking(DAY0 + timedelta(hours=1))
+    coordinator._update_water_tracking(DAY0 + timedelta(days=1, minutes=5))
 
     assert coordinator.water_daily_history == [180.0]
     assert coordinator.water_daily_total_l == 0.4

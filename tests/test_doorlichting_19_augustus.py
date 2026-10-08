@@ -233,6 +233,10 @@ class _Water:
     def _read_sensor_float(self, entity_id):
         return self.stroom
 
+    # v5.47: het debiet wordt in L/min gelezen (eenheid omgerekend).
+    def _read_water_flow_l_per_min(self, entity_id):
+        return self.stroom
+
 
 def test_running_water_counts_as_someone_being_there():
     """De toelichting bij de constante beschreef dit gedrag al sinds de

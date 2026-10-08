@@ -1337,6 +1337,13 @@ async def async_get_config_entry_diagnostics(
             "monte_carlo_shortfall_probability_percent": (
                 coordinator.monte_carlo_shortfall_probability_percent
             ),
+            # v5.47: de stand is tot het blok; inclusief lange horizon apart.
+            "monte_carlo_kans_incl_lange_horizon_pct": getattr(
+                coordinator, "monte_carlo_kans_incl_lange_horizon_pct", None
+            ),
+            "monte_carlo_mediaan_tot_blok_kwh": getattr(
+                coordinator, "monte_carlo_mediaan_tot_blok_kwh", None
+            ),
             "monte_carlo_simulations_run": coordinator.monte_carlo_simulations_run,
             "monte_carlo_hours_simulated": coordinator.monte_carlo_hours_simulated,
             "monte_carlo_note": coordinator.monte_carlo_note,

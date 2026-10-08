@@ -122,7 +122,13 @@ def test_een_tekort_zoals_op_7_oktober_geeft_een_echte_kans(make_coordinator, ha
     c._run_monte_carlo_simulation(NU, BLOK)
 
     assert c.monte_carlo_deterministisch_kwh > 4.5
-    assert c.monte_carlo_shortfall_probability_percent > 20
+    # v5.47: de deterministische 4,5+ is inclusief 1,7 kWh lange horizon;
+    # die kans staat sinds v5.47 apart. De stand is tot het blok.
+    assert c.monte_carlo_kans_incl_lange_horizon_pct > 20
+    assert (
+        c.monte_carlo_shortfall_probability_percent
+        <= c.monte_carlo_kans_incl_lange_horizon_pct
+    )
 
 
 def test_de_sensor_toont_beide_naast_elkaar(make_coordinator, hass):

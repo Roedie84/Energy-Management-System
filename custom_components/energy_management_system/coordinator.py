@@ -532,6 +532,9 @@ from .const import (
     MONTE_CARLO_TERUGVAL_UUR,
     MC_KALIBRATIE_BEWAAR_AVONDEN,
     MC_KALIBRATIE_UUR,
+    MC_KANS_BASIS_TOT_BLOK,
+    WATER_DEBIET_NAAR_L_PER_MIN,
+    WATER_VOLUME_NAAR_LITER,
     TEKORT_VOL_MARGE_PROCENT,
     TEKORTSOORT_CAPACITEIT,
     TEKORTSOORT_PLANNING,
@@ -3255,6 +3258,57 @@ class EnergyManagementSystemCoordinator:
             return value * 1000
         return value
 
+    def _read_water_volume_l(
+        self, entity_id: str | None, standaard: str = "l"
+    ) -> float | None:
+        """Een watervolume in LITERS, welke eenheid de sensor ook meldt (v5.47).
+
+        Gemeten op 8 oktober: `sensor.water_verbruik_vandaag` (een
+        utility_meter) meldt na elke herstart eerst in m³ (0,060) en direct
+        daarna weer in L (60). `_read_sensor_float` rekent alleen Wh/MWh om,
+        dus `vandaag_liter` werd 0,06, de trend -100% en het verhaal "0 L".
+
+        `standaard` is de eenheid als de sensor er geen meldt: liters voor
+        het dagtotaal, m³ voor de meterstand - wat de code altijd aannam.
+        """
+        if not entity_id:
+            return None
+        state = self.hass.states.get(entity_id)
+        if state is None or state.state in (None, "unknown", "unavailable"):
+            return None
+        try:
+            value = float(state.state)
+        except (TypeError, ValueError):
+            return None
+        unit = (state.attributes.get("unit_of_measurement") or standaard).strip().lower()
+        factor = WATER_VOLUME_NAAR_LITER.get(unit)
+        if factor is None:
+            # Onbekende eenheid: niet gokken - de standaard aanhouden.
+            factor = WATER_VOLUME_NAAR_LITER.get(standaard, 1.0)
+        return value * factor
+
+    @staticmethod
+    def _water_debiet_l_per_min(value: float, unit: str | None) -> float:
+        """Een debiet omgerekend naar L/min (v5.47). Zonder of met een
+        onbekende eenheid blijft het getal staan (L/min, zoals altijd)."""
+        factor = WATER_DEBIET_NAAR_L_PER_MIN.get((unit or "").strip().lower())
+        return value * factor if factor is not None else value
+
+    def _read_water_flow_l_per_min(self, entity_id: str | None) -> float | None:
+        """Het waterdebiet in L/min, ook als de sensor m³/h meldt (v5.47)."""
+        if not entity_id:
+            return None
+        state = self.hass.states.get(entity_id)
+        if state is None or state.state in (None, "unknown", "unavailable"):
+            return None
+        try:
+            value = float(state.state)
+        except (TypeError, ValueError):
+            return None
+        return self._water_debiet_l_per_min(
+            value, state.attributes.get("unit_of_measurement")
+        )
+
     def is_battery_discharging(self) -> bool | None:
         """Ontlaadt de accu op dit moment? (v1.16.9)
 
@@ -4492,9 +4546,11 @@ class EnergyManagementSystemCoordinator:
         # accu haalde de nacht met 18% over. De marge stond op 60% en was
         # zelf opgeblazen door de valse tekortdagen. Die marge is er om te
         # sturen, niet om te waarschuwen.
-        nodig = (self.last_reserve_margin_breakdown or {}).get(
-            "needed_kwh_before_margin"
-        )
+        # v5.47: alleen het deel TOT het goedkope blok. De lange horizon
+        # (v3.99.18) is energie die NA het blok nodig is en in het laadblok
+        # wordt bijgeladen; die telde hier mee terwijl de tekst "tot het
+        # goedkope blok" zegt (L-EMS-006).
+        nodig, _na_blok = self._nodig_tot_en_na_blok_kwh()
         if beschikbaar is not None and nodig is not None and nodig > 0:
             # v1.9.3: pas melden bij een ECHT gat. In één nacht ging deze
             # melding zeven keer af met tekorten van 0,01 tot 0,21 kWh,
@@ -8116,7 +8172,7 @@ class EnergyManagementSystemCoordinator:
         entity_id = self.config.get(CONF_WATER_ACTIVE_USAGE_SENSOR)
         if not entity_id:
             return False
-        stroom = self._read_sensor_float(entity_id)
+        stroom = self._read_water_flow_l_per_min(entity_id)
         if stroom is None:
             return False
         return stroom >= PRESENCE_WATER_MIN_LITERS_PER_MINUTE
@@ -29480,19 +29536,47 @@ class EnergyManagementSystemCoordinator:
         ):
             self._herleid_onbekende_tekortnachten()
 
+    def _nodig_tot_en_na_blok_kwh(self) -> tuple[float | None, float]:
+        """Het diepste tekort zonder marge, gesplitst rond het blok (v5.47).
+
+        `needed_kwh_before_margin` is sinds v3.99.18 het tekort tot het
+        goedkope blok PLUS de lange horizon (`lange_horizon_extra_kwh`): de
+        energie die na het blok nodig is. De sturing houdt die terecht vast,
+        maar de nacht zelf meet alleen het deel tot het blok. Op 8 oktober
+        ~10:00: tot het blok 0,0 kWh nodig, na het blok 2,47 - en de
+        rapportage zei "verwacht tekort tot het goedkope blok 1,0 kWh" en
+        Monte Carlo 100% (L-EMS-006). Alleen weergave; de reserve verandert
+        niet.
+        """
+        u = self.last_reserve_margin_breakdown or {}
+        nodig = u.get("needed_kwh_before_margin")
+        if nodig is None:
+            return None, 0.0
+        na_blok = max(0.0, float(u.get("lange_horizon_extra_kwh") or 0.0))
+        return max(0.0, float(nodig) - na_blok), na_blok
+
     def verwacht_tekort(self) -> dict:
         """Het verwachte tekort tot het goedkope blok, ingedeeld (v5.40).
 
         Hetzelfde getal als de nachtmelding: het diepste tekort zonder
-        marge tegen de beschikbare energie.
+        marge tegen de beschikbare energie. v5.47: alleen TOT het blok -
+        het deel na het blok (lange horizon) staat apart, zie
+        `_nodig_tot_en_na_blok_kwh`.
         """
-        nodig = (self.last_reserve_margin_breakdown or {}).get(
-            "needed_kwh_before_margin"
-        )
+        nodig, na_blok = self._nodig_tot_en_na_blok_kwh()
         beschikbaar = self.beschikbare_energie_kwh()
         if nodig is None or beschikbaar is None:
-            return {"tekort_kwh": None, "tekort_soort": None}
+            return {
+                "tekort_kwh": None,
+                "tekort_soort": None,
+                "verwacht_tekort_tot_blok_kwh": None,
+                "verwacht_tekort_na_blok_kwh": None,
+            }
         tekort = max(0.0, nodig - beschikbaar)
+        # Wat er na het blok nog ontbreekt: het tekort inclusief de lange
+        # horizon min het deel tot het blok. Dat wordt in het laadblok
+        # bijgeladen; geen nachttekort.
+        tekort_na_blok = max(0.0, nodig + na_blok - beschikbaar) - tekort
         soort = self._tekort_soort(
             tekort, self._vol_voor_nacht, self._verkocht_na_vol_kwh, nodig,
             economisch=self._netladen_economisch_afgewezen(),
@@ -29514,6 +29598,16 @@ class EnergyManagementSystemCoordinator:
             reden = herleid_reden or f"{onvolledig}, en niet uit het dagverloop te herleiden"
         return {
             "tekort_kwh": round(tekort, 2),
+            # v5.47: expliciet gesplitst rond het goedkope blok (L-EMS-006).
+            "verwacht_tekort_tot_blok_kwh": round(tekort, 2),
+            "verwacht_tekort_na_blok_kwh": round(tekort_na_blok, 2),
+            "nodig_tot_blok_kwh": round(nodig, 2),
+            "nodig_na_blok_kwh": round(na_blok, 2),
+            "basis": (
+                "tekort_kwh = tot het goedkope blok (wat de nacht meet); het "
+                "deel na het blok (lange horizon) wordt in het laadblok "
+                "bijgeladen en staat apart"
+            ),
             "tekort_soort": soort,
             # v5.44: waarom, waar de soort vandaan komt, en sinds wanneer
             # de live volging loopt.
@@ -33289,8 +33383,10 @@ class EnergyManagementSystemCoordinator:
                 self._water_usage_state = "actief"
                 self._water_session_liters_integrated = 0.0
                 if total_entity:
-                    self._water_session_start_total_m3 = self._read_sensor_float(
-                        total_entity
+                    # v5.47: in m³, ook als de meter liters meldt.
+                    start_l = self._read_water_volume_l(total_entity, standaard="m³")
+                    self._water_session_start_total_m3 = (
+                        start_l / 1000 if start_l is not None else None
                     )
             return
 
@@ -33320,7 +33416,8 @@ class EnergyManagementSystemCoordinator:
 
         meter_liters = None
         if total_entity and self._water_session_start_total_m3 is not None:
-            end_total_m3 = self._read_sensor_float(total_entity)
+            end_total_l = self._read_water_volume_l(total_entity, standaard="m³")
+            end_total_m3 = end_total_l / 1000 if end_total_l is not None else None
             if end_total_m3 is not None:
                 meter_liters = max(
                     0.0,
@@ -33562,6 +33659,11 @@ class EnergyManagementSystemCoordinator:
             flow_l_per_min = float(new_state.state)
         except (TypeError, ValueError):
             return
+        # v5.47: in L/min, ook als de sensor m³/h meldt.
+        flow_l_per_min = self._water_debiet_l_per_min(
+            flow_l_per_min,
+            (getattr(new_state, "attributes", None) or {}).get("unit_of_measurement"),
+        )
         # v0.63.119: `last_changed` levert Home Assistant ALTIJD in UTC
         # aan, terwijl de tick-aanroep lokale tijd doorgeeft. Zonder
         # omrekening kreeg een sessie die via de listener startte een
@@ -33575,6 +33677,38 @@ class EnergyManagementSystemCoordinator:
         # achtertuinsensor-tijdzonebug uit v0.63.93.
         now = dt_util.as_local(new_state.last_changed or dt_util.now())
         self._process_water_flow_sample(flow_l_per_min, now)
+
+    # v5.47: de dag (lokale datum) en last_reset van de vorige dagtotaalmeting.
+    # Als klasse-attribuut (`__init__` staat op de ratel).
+    _water_last_daily_date: str | None = None
+    _water_last_daily_reset: str | None = None
+
+    @staticmethod
+    def _water_reset_van(state) -> str | None:
+        reset = (state.attributes or {}).get("last_reset") if state is not None else None
+        return str(reset) if reset else None
+
+    def _water_nieuwe_dag(self, daily_entity: str, now: datetime) -> bool:
+        """Is een daling van het dagtotaal een echte dagwissel? (v5.47)
+
+        Een daling telde altijd als nieuwe dag, en archiveerde het vorige
+        getal in `geschiedenis_liter_per_dag`. Een eenheidswissel L -> m³
+        (52 -> 0,052, gemeten 8 oktober na een herstart) of een correctie
+        van de meter gaf zo een nepdag. Nu alleen als `last_reset` van de
+        sensor veranderde, of - zonder `last_reset` - als de lokale datum
+        sinds de vorige meting verschoof.
+        """
+        reset = self._water_reset_van(self.hass.states.get(daily_entity))
+        if reset is not None and self._water_last_daily_reset is not None:
+            return reset != self._water_last_daily_reset
+        dag = dt_util.as_local(now).date().isoformat()
+        return self._water_last_daily_date is not None and dag != self._water_last_daily_date
+
+    def _water_onthoud_dag(self, daily_entity: str, now: datetime) -> None:
+        self._water_last_daily_reset = self._water_reset_van(
+            self.hass.states.get(daily_entity)
+        )
+        self._water_last_daily_date = dt_util.as_local(now).date().isoformat()
 
     def _update_water_tracking(self, now: datetime) -> None:
         """Water-tabblad (v0.63.85, gevraagd: "Meldingen/tracking zoals
@@ -33614,11 +33748,14 @@ class EnergyManagementSystemCoordinator:
         """
         daily_entity = self.config.get(CONF_WATER_DAILY_TOTAL_SENSOR)
         if daily_entity:
-            daily_total = self._read_sensor_float(daily_entity)
+            # v5.47: in liters, ook als de utility_meter na een herstart
+            # even in m³ meldt (zie `_read_water_volume_l`).
+            daily_total = self._read_water_volume_l(daily_entity, standaard="l")
             if daily_total is not None:
                 if (
                     self._water_last_daily_total is not None
                     and daily_total < self._water_last_daily_total - 0.01
+                    and self._water_nieuwe_dag(daily_entity, now)
                 ):
                     self.water_daily_history.append(
                         round(self._water_last_daily_total, 2)
@@ -33628,11 +33765,12 @@ class EnergyManagementSystemCoordinator:
                     ]
                 self._water_last_daily_total = daily_total
                 self.water_daily_total_l = round(daily_total, 2)
+                self._water_onthoud_dag(daily_entity, now)
 
         active_entity = self.config.get(CONF_WATER_ACTIVE_USAGE_SENSOR)
         if not active_entity:
             return
-        flow_l_per_min = self._read_sensor_float(active_entity)
+        flow_l_per_min = self._read_water_flow_l_per_min(active_entity)
         if flow_l_per_min is None:
             return
 
@@ -34099,6 +34237,11 @@ class EnergyManagementSystemCoordinator:
         self.monte_carlo_extra_kwh = None
         self.monte_carlo_deterministisch_kwh = self.monte_carlo_lange_extra_kwh = None
         self.monte_carlo_shortfall_probability_percent = None
+        # v5.47: tot het blok (de stand) en inclusief lange horizon apart.
+        self.monte_carlo_kans_incl_lange_horizon_pct = None
+        self.monte_carlo_mediaan_tot_blok_kwh = None
+        self.monte_carlo_p90_tot_blok_kwh = None
+        self.monte_carlo_deterministisch_tot_blok_kwh = None
         self.monte_carlo_simulations_run, self.monte_carlo_hours_simulated = 0, 0
 
         cheap_block_start = self._monte_carlo_horizon_kiezen(now, cheap_block_start)
@@ -34144,12 +34287,26 @@ class EnergyManagementSystemCoordinator:
             if uit_de_wandeling
             else None
         )
-
-        deepest_deficits = self._monte_carlo_trajecten(
-            segments, centrum, vakantie_factor, lange_extra
+        self.monte_carlo_deterministisch_tot_blok_kwh = (
+            round(self._diepste_van(centrum), 3) if uit_de_wandeling else None
         )
-        deepest_deficits.sort()
+
+        # v5.47: de trajecten TOT het blok; het deel na het blok is een vaste
+        # optelling (`lange_extra`), dus de verdeling inclusief lange horizon
+        # is dezelfde lijst plus dat getal. Gemeld op 8 oktober (L-EMS-006):
+        # Monte Carlo 96-100% terwijl tot het blok ~1,4 kWh overbleef - de
+        # kans rekende het deel na het blok mee, dat in het laadblok wordt
+        # bijgeladen en nooit een nachttekort is.
+        tot_blok = self._monte_carlo_trajecten(
+            segments, centrum, vakantie_factor, 0.0
+        )
+        tot_blok.sort()
+        deepest_deficits = [d + lange_extra for d in tot_blok]
         n = len(deepest_deficits)
+        self.monte_carlo_mediaan_tot_blok_kwh = round(tot_blok[n // 2], 3)
+        self.monte_carlo_p90_tot_blok_kwh = round(
+            tot_blok[min(n - 1, int(n * 0.9))], 3
+        )
         self.monte_carlo_simulations_run = n
         self.monte_carlo_median_deficit_kwh = round(deepest_deficits[n // 2], 3)
         self.monte_carlo_p90_deficit_kwh = round(
@@ -34167,20 +34324,24 @@ class EnergyManagementSystemCoordinator:
             # v5.36: dezelfde drempel als een tekortdag. Een tekortdag is pas
             # meer dan SHORTFALL_MIN_NETIMPORT_KWH bijgekocht; een tekort van
             # een paar honderd Wh telde hier al wel.
-            shortfall_count = sum(
-                1
-                for d in deepest_deficits
-                if d > available_kwh + SHORTFALL_MIN_NETIMPORT_KWH
-            )
+            grens = available_kwh + SHORTFALL_MIN_NETIMPORT_KWH
+            # v5.47: de stand is de kans TOT het blok - wat een tekortnacht
+            # meet. Inclusief lange horizon staat apart als attribuut.
             self.monte_carlo_shortfall_probability_percent = round(
-                100 * shortfall_count / n, 1
+                100 * sum(1 for d in tot_blok if d > grens) / n, 1
+            )
+            self.monte_carlo_kans_incl_lange_horizon_pct = round(
+                100 * sum(1 for d in deepest_deficits if d > grens) / n, 1
             )
             self._leg_mc_22u_vast(now, available_kwh)
 
         self.monte_carlo_note = (
-            "Adviserend - gecentreerd op het deterministische diepste "
-            "tekort van de reserve (zelfde wandeling, voorzichtige zon, "
-            "inclusief lange horizon), met daaromheen de spreiding uit "
+            "Adviserend - de tekortkans (stand) gaat over NU TOT het goedkope "
+            "blok, wat een tekortnacht meet. De kans inclusief het deel na "
+            "het blok (lange horizon, wordt in het laadblok bijgeladen) staat "
+            "apart. Gecentreerd op het deterministische diepste "
+            "tekort van de reserve (zelfde wandeling, voorzichtige zon), "
+            "met daaromheen de spreiding uit "
             "1000 gesimuleerde trajecten: per uur een afwijking van het "
             "geleerde verbruik ten opzichte van de mediaan, en een "
             "afwijking van de zonvoorspelling ten opzichte van de mediane "
@@ -34208,7 +34369,15 @@ class EnergyManagementSystemCoordinator:
             return
         self.mc_22u_per_avond[sleutel] = {
             "tijd": now.strftime("%H:%M"),
+            # v5.47: `kans_pct` is de kans TOT het blok (wat de nacht meet);
+            # `basis` markeert dat, zodat de kalibratie oude standen
+            # (inclusief lange horizon) herkent.
             "kans_pct": kans,
+            "basis": MC_KANS_BASIS_TOT_BLOK,
+            "kans_incl_lange_horizon_pct": getattr(
+                self, "monte_carlo_kans_incl_lange_horizon_pct", None
+            ),
+            "lange_horizon_extra_kwh": self.monte_carlo_lange_extra_kwh,
             "deterministisch_kwh": self.monte_carlo_deterministisch_kwh,
             "mediaan_kwh": self.monte_carlo_median_deficit_kwh,
             "p90_kwh": self.monte_carlo_p90_deficit_kwh,
@@ -34243,9 +34412,17 @@ class EnergyManagementSystemCoordinator:
         van 22:00 bewaard is (vanaf v5.45).
         """
         paren = []
+        oude_basis = 0
         for r in self.reserve_daily_records or []:
             stand = r.get("mc_22u") if isinstance(r, dict) else None
             if not isinstance(stand, dict) or stand.get("kans_pct") is None:
+                continue
+            # v5.47: alleen standen TOT het blok. Een stand van vóór v5.47
+            # telde de lange horizon mee (energie na het blok) en is niet te
+            # vergelijken met wat de nacht meet - die telt niet mee in de
+            # Brier, maar wel zichtbaar (L-EMS-006).
+            if stand.get("basis") != MC_KANS_BASIS_TOT_BLOK:
+                oude_basis += 1
                 continue
             uitkomst = 1 if r.get("shortfall") else 0
             paren.append((r.get("date"), float(stand["kans_pct"]) / 100, uitkomst))
@@ -34257,6 +34434,8 @@ class EnergyManagementSystemCoordinator:
         return {
             "nachten": len(paren),
             "brier": brier,
+            "basis": "kans tot het goedkope blok om 22:00 tegen de tekortnacht",
+            "nachten_oude_basis_uitgesloten": oude_basis,
             "per_nacht": [
                 {"nacht_tot": d, "kans_pct": round(k * 100, 1), "tekortnacht": bool(u)}
                 for d, k, u in paren
@@ -34273,6 +34452,11 @@ class EnergyManagementSystemCoordinator:
     # klasse-attribuut veilig (en `__init__` staat op de ratel).
     monte_carlo_deterministisch_kwh: float | None = None
     monte_carlo_lange_extra_kwh: float | None = None
+    # v5.47: de splitsing rond het blok (L-EMS-006), idem.
+    monte_carlo_kans_incl_lange_horizon_pct: float | None = None
+    monte_carlo_mediaan_tot_blok_kwh: float | None = None
+    monte_carlo_p90_tot_blok_kwh: float | None = None
+    monte_carlo_deterministisch_tot_blok_kwh: float | None = None
 
     @staticmethod
     def _diepste_van(segmenten: list) -> float:
@@ -34480,7 +34664,14 @@ class EnergyManagementSystemCoordinator:
         tekort = sum(1 for r in records if r.get("shortfall"))
         horizon = getattr(self, "monte_carlo_horizon", None) or self.last_cheap_block_start
         return {
-            "basis": "nu tot goedkoopste blok, vanaf de huidige accu-inhoud",
+            # v5.47: de stand is de kans TOT het blok; inclusief het deel na
+            # het blok (lange horizon) staat apart (L-EMS-006).
+            "basis": (
+                "stand: kans op tekort van nu tot het goedkoopste blok, vanaf "
+                "de huidige accu-inhoud; tekortkans_incl_lange_horizon_pct "
+                "telt ook de energie na het blok mee (wordt in het laadblok "
+                "bijgeladen)"
+            ),
             "horizon_basis": getattr(self, "monte_carlo_horizon_basis", None),
             "horizon_tot": horizon.isoformat() if horizon else None,
             "tekortdag_basis": (
@@ -34518,7 +34709,9 @@ class EnergyManagementSystemCoordinator:
             "uitleg": (
                 "Niet hetzelfde getal: de tekortkans gaat over de periode tot "
                 "het volgende laadblok, de tekortfrequentie over afgelopen "
-                "nachten. Overdag na het laden is de kans vrijwel altijd 0."
+                "nachten. Overdag na het laden is de kans vrijwel altijd 0. "
+                "De kans inclusief lange horizon zegt of het laadblok genoeg "
+                "moet bijladen voor daarna - geen nachttekort."
             ),
         }
 

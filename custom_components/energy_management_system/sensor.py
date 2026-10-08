@@ -1772,6 +1772,23 @@ class MonteCarloAdvisorySensor(SensorEntity):
             "lange_horizon_extra_kwh": getattr(
                 self._coordinator, "monte_carlo_lange_extra_kwh", None
             ),
+            # v5.47: de stand is de kans TOT het blok; hier beide naast
+            # elkaar, met de tekorten tot het blok (L-EMS-006).
+            "tekortkans_tot_blok_pct": (
+                self._coordinator.monte_carlo_shortfall_probability_percent
+            ),
+            "tekortkans_incl_lange_horizon_pct": getattr(
+                self._coordinator, "monte_carlo_kans_incl_lange_horizon_pct", None
+            ),
+            "mediaan_diepste_tekort_tot_blok_kwh": getattr(
+                self._coordinator, "monte_carlo_mediaan_tot_blok_kwh", None
+            ),
+            "p90_diepste_tekort_tot_blok_kwh": getattr(
+                self._coordinator, "monte_carlo_p90_tot_blok_kwh", None
+            ),
+            "deterministisch_diepste_tekort_tot_blok_kwh": getattr(
+                self._coordinator, "monte_carlo_deterministisch_tot_blok_kwh", None
+            ),
             "aantal_simulaties": self._coordinator.monte_carlo_simulations_run,
             "uren_gesimuleerd": self._coordinator.monte_carlo_hours_simulated,
             "note": self._coordinator.monte_carlo_note,
@@ -2990,7 +3007,8 @@ class WaterUsageSensor(SensorEntity, RestoreEntity):
         active_entity = self._coordinator.config.get(CONF_WATER_ACTIVE_USAGE_SENSOR)
         if not active_entity:
             return None
-        return self._coordinator._read_sensor_float(active_entity)
+        # v5.47: in L/min, ook als de sensor m³/h meldt.
+        return self._coordinator._read_water_flow_l_per_min(active_entity)
 
     @property
     def extra_state_attributes(self) -> dict:

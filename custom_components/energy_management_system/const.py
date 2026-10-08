@@ -5136,6 +5136,33 @@ MONTE_CARLO_TERUGVAL_UUR = 9
 # kalibratie tegen de werkelijke tekortnacht; zoveel avonden blijven staan.
 MC_KALIBRATIE_UUR = 22
 MC_KALIBRATIE_BEWAAR_AVONDEN = 14
+# v5.47: een bewaarde stand van 22:00 met deze basis is de kans TOT het
+# goedkope blok; standen zonder (v5.45-v5.46) telden de lange horizon mee.
+MC_KANS_BASIS_TOT_BLOK = "tot_blok"
+
+# v5.47: watersensoren in liters en L/min, welke eenheid ze ook melden. Een
+# utility_meter meldde na een herstart eerst m³ en daarna weer L.
+WATER_VOLUME_NAAR_LITER = {
+    "l": 1.0,
+    "ml": 0.001,
+    "m³": 1000.0,
+    "m3": 1000.0,
+    "gal": 3.785411784,
+    "ft³": 28.316846592,
+    "ft3": 28.316846592,
+    "ccf": 2831.6846592,
+}
+WATER_DEBIET_NAAR_L_PER_MIN = {
+    "l/min": 1.0,
+    "l/h": 1 / 60,
+    "l/s": 60.0,
+    "m³/h": 1000 / 60,
+    "m3/h": 1000 / 60,
+    "m³/min": 1000.0,
+    "m³/s": 60000.0,
+    "gal/min": 3.785411784,
+    "ft³/min": 28.316846592,
+}
 
 # v5.40: een tekort door CAPACITEIT tegenover een tekort door PLANNING.
 # Gemeld: de cockpit stond op LET OP voor een nacht waarin de accu vol was

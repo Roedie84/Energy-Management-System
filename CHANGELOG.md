@@ -30963,3 +30963,75 @@ het huisverbruik sneller stijgt dan de Zendure bijregelt.
 
 **Volledige testsuite**: 4831 tests, allemaal groen, waarvan 16 nieuw
 (`test_v546_vloerverbruik.py`).
+
+## v5.47 — Tot het blok is tot het blok, en een liter is een liter
+
+Twee rapportage- en meetcorrecties (L-EMS-006 en L-EMS-007). De sturing,
+de reserve, de drempels en de marges veranderen niet.
+
+### 1. Verwacht tekort en Monte Carlo: tot het blok en na het blok apart (L-EMS-006)
+
+Gemeld op 8 oktober ~10:00: Monte Carlo 96-100% en "verwacht tekort tot het
+goedkope blok 1,14 kWh", terwijl er tot het blok (12:15) juist ~1,4 kWh
+overbleef. Live om 10:08: `nodig_kwh` 2,47, waarvan `lange_horizon_extra_kwh`
+2,468 - tot het blok was er dus niets nodig.
+
+Oorzaak: beide lazen `needed_kwh_before_margin`, en daar zit sinds v3.99.18
+de lange horizon in: de energie die NA het laadblok nodig is en in dat blok
+wordt bijgeladen. Voor de sturing klopt dat (de verkoopgrens houdt hem
+vast), maar een tekortnacht meet alleen het deel tot het blok. De kaart
+rekende sinds v5.20.2 al tot het blok; deze twee niet.
+
+- `verwacht_tekort`: `tekort_kwh` is nu het tekort tot het blok. Nieuw:
+  `verwacht_tekort_tot_blok_kwh`, `verwacht_tekort_na_blok_kwh` (het deel dat
+  het laadblok moet aanvullen), `nodig_tot_blok_kwh`, `nodig_na_blok_kwh` en
+  `basis`. De tekortsoort (capaciteit/economisch/planning) en "groter dan de
+  accu" rekenen ook met het deel tot het blok.
+- Monte Carlo: de stand is de kans **tot het blok**. Nieuw:
+  `tekortkans_tot_blok_pct`, `tekortkans_incl_lange_horizon_pct`,
+  `mediaan_diepste_tekort_tot_blok_kwh`, `p90_diepste_tekort_tot_blok_kwh`,
+  `deterministisch_diepste_tekort_tot_blok_kwh`. `mediaan_/p90_/p10_/
+  deterministisch_diepste_tekort_kwh` blijven inclusief lange horizon, naast
+  de reserve (v5.40). Eén set trajecten; inclusief lange horizon is dezelfde
+  lijst plus het vaste deel na het blok. `basis`, `note` en `uitleg` zeggen
+  dat nu.
+- Kalibratie 22:00: de bewaarde stand (`mc_22u`) krijgt `basis: tot_blok`
+  en `kans_incl_lange_horizon_pct`. `kalibratie_22u` rekent de Brier alleen
+  over standen tot het blok; standen van v5.45-v5.46 (inclusief lange
+  horizon, niet vergelijkbaar met de nacht) staan als
+  `nachten_oude_basis_uitgesloten`.
+- Meldingen: de cockpitstatus (LET OP/"Aandacht gewenst") hing niet van deze
+  waarde af - het verwachte tekort is sinds v5.40 alleen informatief. De
+  melding "Accu haalt de nacht waarschijnlijk niet" wel: die vergeleek
+  dezelfde `needed_kwh_before_margin` en zei "tot het goedkope blok". Die
+  gebruikt nu het deel tot het blok. Onderbouwing: de melding gaat over de
+  nacht; het deel na het blok wordt in het laadblok bijgeladen en is geen
+  nachttekort. Met de lange horizon erin kon hij afgaan (of actief blijven
+  via de hysterese) op ochtenden dat de accu het blok ruim haalde. Drempel,
+  hysterese en tijdvenster blijven gelijk.
+
+### 2. Water: eenheden omgerekend, geen nepdagen (L-EMS-007)
+
+`sensor.water_verbruik_vandaag` (utility_meter, optie
+`water_daily_total_sensor_entity`) meldt na elke herstart eerst in m³ (0,060)
+en direct daarna weer in L (60) - in de recorder van 8 oktober 09:01, 08:54
+en 07:03. `_read_sensor_float` rekent alleen Wh/MWh om, dus `vandaag_liter`
+werd 0,06, `trend_procent` -100 en het verhaal "0 L". En een sprong 52 L ->
+0,052 m³ is een daling, die als nieuwe dag in `geschiedenis_liter_per_dag`
+werd gearchiveerd.
+
+- Dagtotaal en meterstand (`water_total_usage_sensor_entity`) worden in
+  liters gelezen (`_read_water_volume_l`): L, mL, m³, gal, ft³, CCF. Zonder
+  eenheid blijft de oude aanname (dagtotaal L, meterstand m³).
+- Debiet (`water_active_usage_sensor_entity`, ook de live listener en de
+  aanwezigheid): L/min, L/h, L/s, m³/h, gal/min, ...  naar L/min.
+- Een daling van het dagtotaal archiveert alleen nog bij een nieuwe
+  `last_reset` van de sensor, of - zonder `last_reset` - bij een andere
+  lokale datum dan bij de vorige meting.
+- Al gearchiveerde dagen blijven staan; wat een nepdag was is achteraf niet
+  zeker te zeggen.
+
+24 nieuwe tests (`test_v547_tekort_tot_blok.py`, `test_v547_water_eenheid.py`),
+4855 groen. Aangepast: drie toetsen die de oude betekenis vastlegden
+(kans inclusief lange horizon, kalibratie zonder basis, een daling binnen
+dezelfde dag als nieuwe dag).

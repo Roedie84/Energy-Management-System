@@ -1,11 +1,15 @@
-EMS v5.46 - het vloerverbruik is een kwartier, geen monster
+EMS v5.47 - tot het blok is tot het blok, en een liter is een liter
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
-Sluipverbruik: het vloerverbruik van een dag is nu het laagste kwartier
-(mediaan per kwartier, nooit onder 0 W) in plaats van het laagste losse
-monster, dat de wisselpieken van de accu ving. De oude, vervuilde reeks
-wordt eenmalig gewist; de detectie staat na de update op "normaal" en heeft
-na tien dagen weer een referentie. Een andere PV-energieteller in de
-instellingen ijkt de dagopwek nu opnieuw in plaats van door te tellen
-vanaf de oude stand. Pas NA deze update de PV-energieteller omzetten naar
-sensor.solaredge_i1_ac_energy. De sturing verandert niet.
+Tekortrapportage: "verwacht tekort tot het goedkope blok" en de Monte-Carlo-
+tekortkans rekenen nu alleen TOT het goedkope blok - wat de nacht meet. Het
+deel NA het blok (lange horizon, wordt in het laadblok bijgeladen) staat
+apart: verwacht_tekort_na_blok_kwh en tekortkans_incl_lange_horizon_pct.
+De kalibratie van 22:00 (Brier) vergelijkt voortaan de kans tot het blok
+met de tekortnacht; oude standen tellen niet mee. De melding "Accu haalt de
+nacht waarschijnlijk niet" gebruikt ook het deel tot het blok.
+Water: het dagtotaal, de meterstand en het debiet worden naar liters (L/min)
+omgerekend, ook als de sensor m3 of gal meldt (na een herstart meldt de
+utility_meter even m3). Een nieuwe dag wordt alleen gearchiveerd bij een
+nieuwe last_reset of een andere datum. De sturing, reserve, drempels en
+marges veranderen niet.

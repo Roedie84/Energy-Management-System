@@ -120,8 +120,9 @@ def test_zonder_bewaarde_avond_geen_veld(make_coordinator, hass):
 def test_kalibratie_brier_over_de_bewaarde_nachten(make_coordinator, hass):
     c = make_coordinator({})
     c.reserve_daily_records = [
-        {"date": "2026-10-08", "shortfall": True, "mc_22u": {"kans_pct": 90.0}},
-        {"date": "2026-10-09", "shortfall": False, "mc_22u": {"kans_pct": 10.0}},
+        # v5.47: alleen standen tot het blok tellen in de kalibratie.
+        {"date": "2026-10-08", "shortfall": True, "mc_22u": {"kans_pct": 90.0, "basis": "tot_blok"}},
+        {"date": "2026-10-09", "shortfall": False, "mc_22u": {"kans_pct": 10.0, "basis": "tot_blok"}},
         {"date": "2026-10-10", "shortfall": False},  # van voor v5.45: telt niet
     ]
 
@@ -136,7 +137,9 @@ def test_kalibratie_brier_over_de_bewaarde_nachten(make_coordinator, hass):
 def test_kalibratie_zonder_nachten(make_coordinator, hass):
     c = make_coordinator({})
 
-    assert c.get_mc_kalibratie_22u() == {"nachten": 0, "brier": None, "per_nacht": []}
+    k = c.get_mc_kalibratie_22u()
+    assert (k["nachten"], k["brier"], k["per_nacht"]) == (0, None, [])
+    assert k["nachten_oude_basis_uitgesloten"] == 0
 
 
 # =========================================================================
