@@ -102,3 +102,14 @@ laatste ronde: 08-10 15:40, gemeten t/m 08-10 15:44
 - Geen release (tussenronde, niets acuut).
 
 laatste ronde: 08-10 19:40, gemeten t/m 08-10 19:44
+
+## 08-10 23:40 · tussenronde
+- Geïnstalleerd: v5.56 (v5.54 marginale slijtage 4,2 ct in de sturing op verzoek van Ruud, v5.55-56 statistieken/rapportage; chatsessie). HA-herstarts sinds 19:40: 5 (19:51, 20:19, 21:12, 22:00, 22:02). Logboek: 0 EMS-fouten.
+- Beslissingen 19:40-23:40 alleen `default_smart` → 0× verkoop onder de reserve (harde regel gehaald). v5.54 (sturen op marginale slijtage) had vanavond nog geen arbitragekwartier; effect meten in de dagafsluitingen (aantal niet-smart-besluiten, verkocht met winst).
+- **L-EMS-005 eerste effectmeting (avond):** export tijdens ontlading 20-23 u 27/23/24 Wh/u (basis ~60 Wh/u bij −50 W). Nacht 00-07 volgt in de dagafsluiting (basis 0,43 kWh).
+- Avond 19-23 u: accu-ontlading 1,39 kWh, import 0,14, export 0,11 → huis ~355 W gem. (geleerd nachtverbruik 306 W). Beschikbaar 5,01 → 3,54 kWh; nodig tot blok 2,72 → marge +0,82 kWh (om 19:40 geschat +1,26). MC tot blok 0%.
+- **H-EMS-6 toets 22:00 (eerste avond met `mc_22u`):** MC-stand 21:12-22:10 doorlopend 0,0% (ook na de herstarts 22:00/22:02) → meetpunt niet vervuild. Wel 23:00-23:21 een sprong naar 1,2-4,4% zónder huishoudpiek (huis 340-390 W 22:30-23:00, daarna 155 W): de livecorrectie reageert dus ook op een avond boven het profiel, niet alleen op pieken. Klein; H-EMS-6 blijft lopen.
+- Meetbaarheid: `mc_22u_per_avond` staat niet in attributen of diagnostics; pas zichtbaar in het dagrecord van 09-10 (09:00). Kandidaat (zelf bouwen, meetbaarheid): laatste avondstand tonen in `kalibratie_22u`. Bouwen in een dagafsluiting.
+- Geen release (tussenronde, niets acuut; v5.54-5.56 vandaag al uitgebracht en geïnstalleerd).
+
+laatste ronde: 08-10 23:40, gemeten t/m 08-10 23:44

@@ -39,11 +39,13 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Onderbouwing: elk nachtuur gemiddeld −47..−53 W, ≈ 0,5 kWh accu-energie per nacht het net op (~27 ct).
 - Waar het zit: niet in EMS-code/-optie en niet in zendure_ha of de firmware. zendure_ha regelt op p1meter `sensor.hw_p1_vermogen_100w` ("HW P1 Vermogen -50W", platform `rest`, unique_id `HW_P1_Vermogen_Min100`), een eigen REST-sensor in de HA-YAML die de HomeWizard-P1 + 50 W meldt (live 08-10: P1 −54 W, regelsensor −4 W). De Zendure houdt die op 0 → echte P1 −50 W.
 - Aanpassen: in de YAML van die REST-sensor de +50 in de value_template vervangen door +20 (naam evt. mee), daarna Ontwikkelhulpmiddelen → YAML → REST-entiteiten herladen (geen herstart nodig). EMS meet de verschuiving live (`regelverschuiving_kw`, v5.20) en rekent vanzelf met 20 W. NB: `TEKORT_IMPORT_MIN_W` = 50 W blijft de vloer in de tekorttelling (export ≤ 50 W telt niet als verkoop) — onschadelijk.
+- 08-10 23:40 eerste effect (avond): export tijdens ontlading 20-23 u 23-27 Wh/u (was ~60). Nacht 00-07 in de dagafsluiting.
 - Afweging: minder accu-energie het net op, iets vaker kort netimport bij snel stijgend huisverbruik.
 - Meten na wijziging: nachtuur-gemiddelde P1 −15..−25 W; nacht-export 00-07 (KPI ems_nacht_export_00_07_kwh) ~0,2 kWh i.p.v. ~0,5; netimport-kwartieren 's nachts niet merkbaar hoger.
 
 ## L-EMS-006 · verwacht tekort en tekortkans splitsen: tot het blok / na het blok (lange horizon)
 - Status: **gebouwd v5.47**, geïnstalleerd 10:55 — eerste meetpunt gehaald 11:41 (tot blok 0 kWh / 0%, na blok 2,44 apart); Brier-vergelijking na 7 avonden (vanaf 08-10 22:00)
+- 08-10 23:40: eerste `mc_22u`-avond: MC 21:12-22:10 doorlopend 0,0% → niet vervuild; dagrecord 09-10 moet `mc_22u.kans_pct` 0 met `basis: tot_blok` dragen.
 - 08-10 19:40: overdag MC tot blok 0-1%, behalve 3 korte sprongen (21-92%, samen 20 min) direct na huishoudpieken door de livecorrectie → H-EMS-6; let bij de Brier op vervuilde 22:00-standen.
 - (eerder: gepland, zelf bouwen: rapportage en meetbaarheid; raakt de sturing niet)
 - Onderbouwing: 08-10 07:42: verhaal "verwacht tekort tot het goedkope blok 0,61 kWh, economisch", MC 96%. Maar `nodig_kwh` 2,51 bevat `lange_horizon_extra` 2,11 (na 12:15); tot het blok is 0,40 nodig tegen 1,90 beschikbaar (marge +1,50). MC steeg 3% → 96% tussen 04:00 en 07:40 terwijl de marge tot het blok slechts van +1,79 naar +1,50 ging. `kalibratie_22u` vergelijkt deze kans (incl. lange horizon) met de tekortnacht 22-09.
