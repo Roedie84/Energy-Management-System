@@ -795,6 +795,7 @@ from .const import (
     PROEFSTAND_EIS_VOORDEEL_CT_PER_KWH,
     RELIABILITY_INDICATIVE,
     PROEFSTAND_LEDGER_DAYS,
+    PROEFSTAND_SLIJTAGE_UITSCHIETER_FACTOR,
     PRICE_SCALE_FACTOR,
     SOC_TAPER_BAND_PERCENT,
     CONF_UPDATE_INTERVAL_SECONDS,
@@ -9744,6 +9745,9 @@ class EnergyManagementSystemCoordinator:
                 regels.append(
                     f"er is {nodig:.1f} kWh nodig om de nacht te overbruggen, "
                     "en dat blijft gereserveerd"
+                    + self._tot_en_na_blok_zin().rstrip(".").replace(
+                        " Opgesplitst", "; opgesplitst"
+                    )
                 )
             if verkoop.get("vrij_te_verkopen_kwh") is not None:
                 regels.append(
@@ -13338,28 +13342,106 @@ class EnergyManagementSystemCoordinator:
         Niet als winst, maar als correctie. De opbrengst die dit systeem
         rapporteert houdt geen rekening met wat de accu zichzelf kost;
         dit bedrag is precies het deel dat er ten onrechte bij staat.
+
+        v5.56: opnieuw uitgerekend uit de doorzet per dag maal de
+        marginale slijtage per kWh, dezelfde als waarmee de sturing sinds
+        v5.54 rekent. Gemeld bij de doorlichting van 8 oktober: "€ 1.214,91
+        over 58 dagen (−€ 7.645/jaar)" - opgeteld uit oude boekingen met
+        het oude tarief, plus dagen waarop de hele levensdoorzet als één
+        dag was geboekt. Dagen met meer doorzet dan
+        PROEFSTAND_SLIJTAGE_UITSCHIETER_FACTOR x de accucapaciteit tellen
+        niet mee; hoeveel dat er zijn, staat erbij. Alleen weergave: de
+        sturing leest dit bedrag niet.
         """
-        balans = self._proefstand_balans("slijtage_eur")
-        if balans is None:
+        geen_boeking = {
+            "te_becijferen": False,
+            "reden": (
+                "Nog geen volledige dag geboekt - de eerste boeking "
+                "komt na middernacht."
+            ),
+        }
+        if not any(
+            isinstance(r, dict) and "slijtage_eur" in r
+            for r in self.proefstand_ledger
+        ):
+            return geen_boeking
+        overzicht = self.get_wear_cost_overview()
+        if not overzicht.get("beschikbaar"):
             return {
                 "te_becijferen": False,
-                "reden": (
-                    "Nog geen volledige dag geboekt - de eerste boeking "
-                    "komt na middernacht."
-                ),
+                "reden": overzicht.get("reden")
+                or "Slijtage per kWh is niet te bepalen.",
             }
+        ct_per_kwh = overzicht["slijtage_ct_per_kwh"]
+        capaciteit = (
+            overzicht.get("nominale_capaciteit_kwh")
+            or overzicht.get("bruikbaar_kwh")
+        )
+        grens_kwh = (
+            capaciteit * PROEFSTAND_SLIJTAGE_UITSCHIETER_FACTOR
+            if capaciteit
+            else None
+        )
+        meegeteld: list[float] = []
+        uitgesloten: list[dict] = []
+        zonder_doorzet = 0
+        for regel in self.proefstand_ledger:
+            if not isinstance(regel, dict) or "slijtage_eur" not in regel:
+                continue
+            doorzet = regel.get("doorzet_kwh")
+            if not isinstance(doorzet, (int, float)):
+                zonder_doorzet += 1
+                continue
+            if grens_kwh is not None and doorzet > grens_kwh:
+                uitgesloten.append(
+                    {"datum": regel.get("datum"), "doorzet_kwh": doorzet}
+                )
+                continue
+            meegeteld.append(float(doorzet))
+        if not meegeteld:
+            uit = dict(geen_boeking)
+            uit["reden"] = (
+                "Alle geboekte dagen vallen buiten de telling "
+                f"({len(uitgesloten)} uitschieter(s), {zonder_doorzet} zonder "
+                "doorzet)."
+            )
+            uit["dagen_uitgesloten"] = len(uitgesloten) + zonder_doorzet
+            return uit
+        dagen = len(meegeteld)
+        doorzet_totaal = sum(meegeteld)
+        totaal_eur = -doorzet_totaal * ct_per_kwh / 100
+        per_dag = totaal_eur / dagen
         return {
             "te_becijferen": True,
-            "bedrag_per_dag_eur": balans["per_dag_eur"],
-            "bedrag_per_jaar_eur": balans["per_jaar_eur"],
-            "dagen": balans["dagen"],
-            "toelichting": (
-                f"Over {balans['dagen']} dag(en) is er voor € "
-                f"{abs(balans['totaal_eur']):.2f} aan slijtage door de accu "
-                "gegaan. Dat staat nu nergens tegenover de gerapporteerde "
-                "opbrengst - sturen zou dit niet verdienen maar vermijden, "
-                "door energie alleen op te slaan als de marge het waard is."
+            "bedrag_per_dag_eur": round(per_dag, 3),
+            "bedrag_per_jaar_eur": round(per_dag * 365, 2),
+            "dagen": dagen,
+            "totaal_eur": round(totaal_eur, 2),
+            "doorzet_kwh": round(doorzet_totaal, 2),
+            "slijtage_ct_per_kwh": ct_per_kwh,
+            "grondslag": "doorzet x marginale slijtage (cycli)",
+            "uitschietergrens_kwh_per_dag": (
+                round(grens_kwh, 2) if grens_kwh is not None else None
             ),
+            "dagen_uitgesloten": len(uitgesloten) + zonder_doorzet,
+            "uitgesloten_uitschieters": uitgesloten[-10:],
+            "uitgesloten_zonder_doorzet": zonder_doorzet,
+            "toelichting": (
+                f"Over {dagen} dag(en) is er {doorzet_totaal:.1f} kWh door de "
+                f"accu gegaan; tegen {ct_per_kwh:.2f} ct/kWh marginale "
+                f"slijtage is dat € {abs(totaal_eur):.2f}. Dat staat nu "
+                "nergens tegenover de gerapporteerde opbrengst - sturen zou "
+                "dit niet verdienen maar vermijden, door energie alleen op "
+                "te slaan als de marge het waard is."
+                + (
+                    f" {len(uitgesloten) + zonder_doorzet} dag(en) niet "
+                    "meegeteld: meer doorzet dan "
+                    f"{PROEFSTAND_SLIJTAGE_UITSCHIETER_FACTOR:.0f}x de "
+                    "accucapaciteit, of geen doorzet geboekt."
+                    if uitgesloten or zonder_doorzet
+                    else ""
+                )
+            ).replace("€ -", "€ "),
         }
 
     def _opbrengst_dagtype(self) -> dict:
@@ -19996,8 +20078,8 @@ class EnergyManagementSystemCoordinator:
             if plan.get("nodig_kwh") is None:
                 return list(gemeenschappelijk)
             regels = [
-                f"er zit {plan['beschikbaar_kwh']:.1f} kWh in de accu, tot het "
-                f"goedkope blok is {plan['nodig_kwh']:.1f} kWh nodig",
+                f"er zit {plan['beschikbaar_kwh']:.1f} kWh in de accu, er is "
+                + self._spaarplan_nodig_tekst(plan, lambda w: f"{w:.1f}"),
             ]
             if plan.get("prijs_nu_eur") is not None and plan.get("grensprijs_eur"):
                 regels.append(
@@ -21670,6 +21752,8 @@ class EnergyManagementSystemCoordinator:
                 if w
             ],
             "diepste_tekort_kwh": u.get("needed_kwh_before_margin"),
+            # v5.56: hetzelfde tekort, rond het blok gesplitst.
+            **self._diepste_tekort_gesplitst(u, u.get("needed_kwh_before_margin")),
             "reserve_kwh": u.get("reserve_kwh_after_margin"),
             # v5.23: voor de doorklik "waarom is de reserve zo hoog" - de
             # verschuiving op de P1-meter (v5.20) en de bodem (v3.92.1)
@@ -24720,10 +24804,17 @@ class EnergyManagementSystemCoordinator:
                 "nodig_voor_woning_kwh": round(veilig, 2),
                 "beschikbaar_kwh": round(beschikbaar, 2),
                 "methode": methode,
+                **self._tot_en_na_blok_velden(),
                 "reden": (
                     f"De woning heeft {veilig:.2f} kWh nodig tot het goedkope "
                     f"blok en er is {beschikbaar:.2f} kWh - verkopen zou het "
                     "huis aan het net leggen."
+                    # v5.56: tot en na het blok apart (alleen tekst).
+                    + (
+                        self._tot_en_na_blok_zin()
+                        if methode == "diepste tekort onderweg"
+                        else ""
+                    )
                     + (
                         f" Pas weer verkopen met {SELL_HYSTERESIS_KWH:.2f} kWh "
                         "ruimte erbovenop (dode zone tegen het schakelen)."
@@ -24740,6 +24831,7 @@ class EnergyManagementSystemCoordinator:
             "beschikbaar_kwh": round(beschikbaar, 2),
             "vrij_te_verkopen_kwh": round(beschikbaar - veilig, 2),
             "methode": methode,
+            **self._tot_en_na_blok_velden(),
             **self._zonvelden(verwacht_vandaag, al_opgewekt, nog_te_komen),
             "reden": (
                 f"{beschikbaar - veilig:.2f} kWh vrij te verkopen: de woning "
@@ -29835,6 +29927,54 @@ class EnergyManagementSystemCoordinator:
             return None, 0.0
         na_blok = max(0.0, float(u.get("lange_horizon_extra_kwh") or 0.0))
         return max(0.0, float(nodig) - na_blok), na_blok
+
+    def _tot_en_na_blok_zin(self) -> str:
+        """Het tekort zonder marge, gesplitst rond het blok, als zin (v5.56).
+
+        De uitleg en de verkooptoets noemden het getal waar de reserve op
+        rust: tot het blok PLUS de lange horizon. Gemeld op 8 oktober:
+        "nodig 8,64 kWh" en "diepste tekort onderweg 8,85 kWh", terwijl de
+        tabel tot het blok veel minder liet zien. Dezelfde blokgrens als
+        Monte Carlo sinds v5.47 (L-EMS-006). Alleen tekst; de reserve en
+        de sturing rekenen met hetzelfde getal als voorheen.
+        """
+        blok = self.last_cheap_block_start
+        if blok is None or blok <= dt_util.now():
+            return ""
+        tot, na = self._nodig_tot_en_na_blok_kwh()
+        if tot is None or na < 0.01:
+            return ""
+        return (
+            f" Opgesplitst, zonder marge: tot het goedkope blok is {tot:.2f} "
+            "kWh nodig - dat telt nu; na het blok nog "
+            f"{na:.2f} kWh (lange horizon), die in het laadblok wordt "
+            "bijgeladen."
+        )
+
+    def _tot_en_na_blok_velden(self) -> dict:
+        """Dezelfde splitsing als attributen (v5.56). Alleen weergave."""
+        blok = self.last_cheap_block_start
+        tot, na = self._nodig_tot_en_na_blok_kwh()
+        if blok is None or blok <= dt_util.now() or tot is None:
+            return {"nodig_tot_blok_kwh": None, "nodig_na_blok_kwh": None}
+        return {
+            "nodig_tot_blok_kwh": round(tot, 2),
+            "nodig_na_blok_kwh": round(na, 2),
+        }
+
+    @staticmethod
+    def _diepste_tekort_gesplitst(u: dict, diepste) -> dict:
+        """Het diepste tekort van de uitlegtabel, rond het blok (v5.56)."""
+        if diepste is None:
+            return {
+                "diepste_tekort_tot_blok_kwh": None,
+                "diepste_tekort_na_blok_kwh": None,
+            }
+        na = max(0.0, float((u or {}).get("lange_horizon_extra_kwh") or 0.0))
+        return {
+            "diepste_tekort_tot_blok_kwh": round(max(0.0, float(diepste) - na), 3),
+            "diepste_tekort_na_blok_kwh": round(na, 3),
+        }
 
     def verwacht_tekort(self) -> dict:
         """Het verwachte tekort tot het goedkope blok, ingedeeld (v5.40).
@@ -40027,8 +40167,24 @@ class EnergyManagementSystemCoordinator:
             "veiligheidsmarge_procent": u.get("total_percent") if u else None,
             "reserve_kwh": u.get("reserve_kwh_after_margin") if u else None,
             "lange_horizon_extra_kwh": u.get("lange_horizon_extra_kwh") if u else None,
+            # v5.56: tot en na het blok apart, zie `_build_needed_kwh_breakdown_table`.
+            **self._diepste_tekort_gesplitst(u, diepste),
             **({} if blok_in_zicht else {"opmerking": "Geen goedkoop blok in zicht; blik van 24 uur zonder reserve."}),
         }
+
+    @staticmethod
+    def _tabelregels_tot_en_na_blok(b: dict) -> list[tuple[str, str]]:
+        """De tekortregels van de uitlegtabel, rond het blok (v5.56)."""
+        tot = b.get("diepste_tekort_tot_blok_kwh")
+        na = b.get("diepste_tekort_na_blok_kwh")
+        totaal = b.get("diepste_tekort_kwh", "?")
+        if tot is None or not na:
+            return [("Diepste tekort onderweg", f"{totaal} kWh")]
+        return [
+            ("Diepste tekort tot het blok (telt nu)", f"{tot} kWh"),
+            ("Na het blok nog nodig (wordt in het laadblok bijgeladen)", f"{na} kWh"),
+            ("Samen, waar de reserve op rust", f"{totaal} kWh"),
+        ]
 
     def _build_needed_kwh_breakdown_table(self) -> str:
         """Render the diepste-tekort breakdown as a small Markdown table
@@ -40068,7 +40224,11 @@ class EnergyManagementSystemCoordinator:
                 "Verwachte zon (na rendementskorting)",
                 f"{b.get('verwachte_pv_kwh', '?')} kWh",
             ),
-            ("Diepste tekort onderweg", f"{b.get('diepste_tekort_kwh', '?')} kWh"),
+            # v5.56: eerst wat er tot het blok nodig is (dat telt nu), dan
+            # apart wat er na het blok nodig is. De lange horizon (v3.99.18)
+            # stond in hetzelfde getal, terwijl Basisverbruik en Zon
+            # hierboven alleen tot het blok lopen.
+            *self._tabelregels_tot_en_na_blok(b),
             # v5.54: `.get(..., '?')` vangt alleen een ONTBREKENDE sleutel;
             # de sleutel staat er altijd, met None. Gemeld als "+None%".
             ("Veiligheidsmarge", (
@@ -40872,6 +41032,7 @@ class EnergyManagementSystemCoordinator:
                     f"{needed_txt} kWh). Daarom wordt laden uitgesteld: de "
                     f"accu dekt het huishoudverbruik zelf (0 op de meter), "
                     f"zonder actief te verkopen (smart_discharging)."
+                    + self._tot_en_na_blok_zin()
                 )
             else:
                 parts.append(
@@ -40901,6 +41062,7 @@ class EnergyManagementSystemCoordinator:
                     f"niet verkocht en regelt de Zendure het zelf "
                     f"(smart-modus: laden bij zonoverschot, ontladen voor "
                     f"het huis)."
+                    + self._tot_en_na_blok_zin()
                 )
             else:
                 price_txt = (
@@ -41957,6 +42119,8 @@ class EnergyManagementSystemCoordinator:
             {
                 "beschikbaar_kwh": round(beschikbaar, 2),
                 "nodig_kwh": round(nodig, 2),
+                # v5.56: tot het blok (telt nu) en na het blok apart.
+                **self._spaarplan_tot_en_na_blok(kwartieren, blok),
                 "blok": blok.isoformat(),
             }
         )
@@ -42015,6 +42179,38 @@ class EnergyManagementSystemCoordinator:
             }
         )
         return uit
+
+    @staticmethod
+    def _spaarplan_tot_en_na_blok(kwartieren: list, blok: datetime) -> dict:
+        """Het spaarplan rond het blok gesplitst (v5.56).
+
+        `nodig_kwh` loopt sinds v5.27.4 tot de accu werkelijk weer wordt
+        bijgevuld, dus soms tot ver na het blok. De tekst zei "tot het
+        goedkope blok is X kWh nodig". Nu apart: wat er tot het blok nodig
+        is en wat erna. Alleen weergave; het plan rekent met `nodig_kwh`
+        zoals voorheen.
+        """
+        tot = sum(k[3] for k in kwartieren if k[0] < blok)
+        na = sum(k[3] for k in kwartieren if k[0] >= blok)
+        return {
+            "nodig_tot_blok_kwh": round(tot, 2),
+            "nodig_na_blok_kwh": round(na, 2),
+        }
+
+    @staticmethod
+    def _spaarplan_nodig_tekst(plan: dict, getal) -> str:
+        """"X kWh nodig tot het blok, na het blok nog Y" (v5.56)."""
+        tot = plan.get("nodig_tot_blok_kwh")
+        na = plan.get("nodig_na_blok_kwh")
+        if tot is None or na is None:
+            return f"{getal(plan['nodig_kwh'])} kWh nodig tot het goedkope blok"
+        tekst = f"{getal(tot)} kWh nodig tot het goedkope blok"
+        if na >= 0.05:
+            tekst += (
+                f", na het blok nog {getal(na)} kWh "
+                f"(samen {getal(plan['nodig_kwh'])})"
+            )
+        return tekst
 
     @staticmethod
     def _aaneengesloten_perioden(kwartieren: list) -> list[str]:
@@ -42153,9 +42349,18 @@ class EnergyManagementSystemCoordinator:
             return f"{waarde:.1f}".replace(".", ",")
 
         tekst = (
-            f"De accu haalt het goedkope blok van {blok:%H:%M} niet: er zit "
-            f"{getal(plan['beschikbaar_kwh'])} kWh in, er is "
-            f"{getal(plan['nodig_kwh'])} kWh nodig. Hij dekt daarom alleen de "
+            (
+                # v5.56: haalt hij het blok wel en schiet hij pas erna
+                # tekort, dan zegt de kop dat.
+                f"De accu haalt het goedkope blok van {blok:%H:%M} wel, maar "
+                "niet de dure kwartieren erna: er zit "
+                if (plan.get("nodig_tot_blok_kwh") is not None
+                    and plan["nodig_tot_blok_kwh"] <= plan["beschikbaar_kwh"])
+                else f"De accu haalt het goedkope blok van {blok:%H:%M} niet: er zit "
+            )
+            + f"{getal(plan['beschikbaar_kwh'])} kWh in, er is "
+            + self._spaarplan_nodig_tekst(plan, getal)
+            + ". Hij dekt daarom alleen de "
             "duurste kwartieren"
             + (f" ({getal(grens * 100)} ct en duurder)" if grens is not None else "")
             + f": {', '.join(plan.get('gedekt') or [])}. Daartussen komt de "

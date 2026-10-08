@@ -6044,6 +6044,13 @@ PROEFSTAND_SHAPE_MAX_SPREAD = 0.25
 # Zonder bedrag is "betrouwbaar" geen argument om iets aan te zetten.
 PROEFSTAND_LEDGER_DAYS = 120
 
+# v5.56: het slijtagebedrag op de proefstand rekent opnieuw uit de doorzet
+# per dag maal de MARGINALE slijtage per kWh (dezelfde als de sturing sinds
+# v5.54), niet uit de opgeslagen bedragen met het oude tarief. Een dag met
+# meer doorzet dan deze factor maal de accucapaciteit is een meetfout (een
+# beginstand die ontbrak, een tellersprong) en telt niet mee.
+PROEFSTAND_SLIJTAGE_UITSCHIETER_FACTOR = 2.0
+
 # --- VERVALLEN in v1.75.0 --------------------------------------------
 # Hier stond `POST_SALDEREN_BARE_SHARE = 0.23`: het kale tarief als vast
 # DEEL van de belaste prijs.

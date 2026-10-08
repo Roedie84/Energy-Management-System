@@ -119,6 +119,51 @@ MODULE_VELDEN: dict[str, tuple[str, Callable[[float], float], Any]] = {
     "state": ("", _gelijk, 0.0),
 }
 
+# v5.56: snel wisselende vermogensvelden. Die werden elke ronde vergeleken,
+# en omdat de twee bronnen niet op hetzelfde moment lezen meldde het
+# meelezen "wijkt af" terwijl het alleen timing was. Ze tellen nu alleen mee
+# als de waarde aan BEIDE kanten minstens STABIEL_S seconden stabiel is;
+# anders "niet vergelijkbaar". Langzame velden (SoC, spanning, temperatuur,
+# instellingen zoals inputLimit/outputLimit/minSoc) worden gewoon vergeleken.
+# batcur (de stroom per module) volgt het vermogen en hoort er dus bij.
+SNELLE_APPARAAT_VELDEN = frozenset({
+    "outputHomePower", "gridInputPower", "outputPackPower", "packInputPower",
+    "solarInputPower",
+})
+SNELLE_MODULE_VELDEN = frozenset({"power", "batcur"})
+STABIEL_S = 5.0
+# Stabiel = binnen deze band rond de waarde waarmee het stabiele stuk begon.
+# Krapper dan de vergelijkingsmarge (25 W of 10%), zodat twee stabiele
+# waarden die toch verschillen ook echt verschillen.
+STABIEL_BAND_W = 15.0
+STABIEL_BAND_A = 0.5
+STABIEL_BAND_FRACTIE = 0.05
+
+
+def snel_veld(sleutel: str) -> bool:
+    """Is dit een snel wisselend vermogensveld? (`sn.veld` = module)."""
+    if "." in sleutel:
+        return sleutel.rsplit(".", 1)[-1] in SNELLE_MODULE_VELDEN
+    return sleutel in SNELLE_APPARAAT_VELDEN
+
+
+def stabiel_sinds(volg: dict, sleutel: str, waarde: float, t: float) -> float:
+    """Hoe lang is deze waarde al stabiel, in seconden? (v5.56)
+
+    `volg` bewaart per sleutel het anker (waarde en moment). Wijkt de nieuwe
+    waarde meer dan de band af van het anker, dan begint er een nieuw stabiel
+    stuk. Wordt per bron apart bijgehouden, elke ronde.
+    """
+    band_basis = STABIEL_BAND_A if sleutel.endswith("batcur") else STABIEL_BAND_W
+    anker = volg.get(sleutel)
+    if anker is not None:
+        band = max(band_basis, STABIEL_BAND_FRACTIE * max(abs(anker[0]), abs(waarde)))
+        if abs(waarde - anker[0]) <= band and t >= anker[1]:
+            return t - anker[1]
+    volg[sleutel] = (waarde, t)
+    return 0.0
+
+
 # De Zendure-integratie toont acMode als select met tekst.
 AC_MODE_TEKST = {"input": 1.0, "output": 2.0}
 
@@ -193,12 +238,19 @@ def marge_voor(marge: Any, lokaal: float, ha: float) -> float:
 def vergelijk(
     lokaal: dict,
     zoek_toestand: Callable[[str | None, str], str | None],
+    stabiliteit: dict | None = None,
+    nu: float | None = None,
 ) -> list[dict]:
     """Per veld: lokaal tegen de Zendure-integratie.
 
     `zoek_toestand(sn_of_None, veld)` geeft de toestand van de
     Zendure-entiteit (None = apparaat, anders het serienummer van de module),
     of None als die entiteit er niet is.
+
+    v5.56: met `stabiliteit` (per bron een volg-dict, zie `stabiel_sinds`) en
+    `nu` worden snelle vermogensvelden alleen vergeleken als ze aan beide
+    kanten minstens STABIEL_S seconden stabiel zijn; anders krijgt de regel
+    `vergelijkbaar: False` en telt hij niet als gelijk of ongelijk.
     """
     uit: list[dict] = []
 
@@ -206,14 +258,24 @@ def vergelijk(
         ha = ha_waarde(veld, zoek_toestand(sn, veld))
         if ha is None:
             return
+        sleutel = veld if sn is None else f"{sn}.{veld}"
         verschil = abs(waarde - ha)
-        uit.append({
-            "sleutel": veld if sn is None else f"{sn}.{veld}",
+        regel = {
+            "sleutel": sleutel,
             "lokaal": waarde,
             "zendure": ha,
             "verschil": round(verschil, 3),
             "gelijk": verschil <= marge_voor(marge, waarde, ha) + 1e-9,
-        })
+        }
+        if stabiliteit is not None and nu is not None and snel_veld(sleutel):
+            # Beide bronnen elke ronde bijwerken, ook als de ene al niet
+            # stabiel is - anders loopt het anker van de andere achter.
+            s_lokaal = stabiel_sinds(stabiliteit.setdefault("lokaal", {}), sleutel, waarde, nu)
+            s_zendure = stabiel_sinds(stabiliteit.setdefault("zendure", {}), sleutel, ha, nu)
+            if min(s_lokaal, s_zendure) < STABIEL_S:
+                regel["vergelijkbaar"] = False
+                regel["gelijk"] = None
+        uit.append(regel)
 
     for veld, waarde in (lokaal.get("apparaat") or {}).items():
         _een(None, veld, waarde, APPARAAT_VELDEN[veld][2])
@@ -779,6 +841,9 @@ def lege_tellingen() -> dict:
         "rendement": {"laden": [], "ontladen": []},
         "reactie": lege_reactie(),
         "referentie": lege_referentie(),
+        # v5.56: de vergelijking van snelle vermogensvelden telt alleen
+        # stabiele waarden; zie `herstel`.
+        "stabiel_vergelijk": True,
     }
 
 
@@ -790,6 +855,14 @@ def herstel(bewaard: dict) -> dict:
         for sleutel in ("velden", "reactie", "referentie", "latentie_ms", "rondes", "gelukt", "mislukt", "sinds"):
             uit.pop(sleutel, None)
         uit["schema"] = SCHEMA
+    # v5.56: de oude tellingen van de snelle vermogensvelden zijn vervuild
+    # door timing ("wijkt af"); die beginnen één keer opnieuw. De rest van
+    # de vergelijking, de relais en de bronmeting blijven staan.
+    if not bewaard.get("stabiel_vergelijk"):
+        velden = uit.get("velden")
+        if isinstance(velden, dict):
+            uit["velden"] = {k: v for k, v in velden.items() if not snel_veld(k)}
+        uit["stabiel_vergelijk"] = True
     return uit
 
 
@@ -807,6 +880,10 @@ def verwerk_ronde(tellingen: dict, vergelijking: list[dict], nu: float, latentie
         v = tellingen["velden"].setdefault(
             regel["sleutel"], {"n": 0, "gelijk": 0, "max_verschil": 0.0}
         )
+        if regel.get("vergelijkbaar") is False:
+            # v5.56: niet stabiel aan beide kanten - telt niet mee.
+            v["niet_vergelijkbaar"] = int(v.get("niet_vergelijkbaar") or 0) + 1
+            continue
         v["n"] += 1
         v["gelijk"] += 1 if regel["gelijk"] else 0
         v["max_verschil"] = max(float(v.get("max_verschil") or 0.0), regel["verschil"])
@@ -861,6 +938,7 @@ def samenvatting(tellingen: dict, host: str | None) -> dict:
     )
     totaal_n = sum(v.get("n", 0) for v in velden.values())
     totaal_gelijk = sum(v.get("gelijk", 0) for v in velden.values())
+    niet_vergelijkbaar = sum(int(v.get("niet_vergelijkbaar") or 0) for v in velden.values())
     lat = list(tellingen.get("latentie_ms") or [])
     lat_s = sorted(lat)
     return {
@@ -876,6 +954,10 @@ def samenvatting(tellingen: dict, host: str | None) -> dict:
             if isinstance(tellingen.get("laatste_fout"), dict) else None
         ),
         "velden_vergeleken": len(velden),
+        # v5.56: snelle vermogensvelden die niet aan beide kanten stabiel
+        # waren; die tellen niet als gelijk of ongelijk.
+        "niet_vergelijkbaar": niet_vergelijkbaar,
+        "stabiel_vereist_s": STABIEL_S,
         "overeenkomst_totaal_procent": round(100 * totaal_gelijk / totaal_n, 1) if totaal_n else None,
         "afwijkende_velden": afwijkend,
         "latentie_mediaan_ms": round(statistics.median(lat), 0) if lat else None,
@@ -885,6 +967,7 @@ def samenvatting(tellingen: dict, host: str | None) -> dict:
                 "overeenkomst_procent": round(100 * v["gelijk"] / v["n"], 1) if v.get("n") else None,
                 "n": v.get("n", 0),
                 "max_verschil": v.get("max_verschil"),
+                "niet_vergelijkbaar": int(v.get("niet_vergelijkbaar") or 0),
             }
             for k, v in sorted(velden.items())
         },
@@ -908,7 +991,14 @@ def tekst(status: str, a: dict) -> str:
     regels = [
         f"**{status}** · {('-' if gelijk is None else str(gelijk).replace('.', ','))}% gelijk "
         f"met de Zendure-integratie · {a.get('rondes', 0)} rondes · "
-        f"latentie {a.get('latentie_mediaan_ms') or '-'} ms",
+        f"latentie {a.get('latentie_mediaan_ms') or '-'} ms"
+        # v5.56: hoeveel vermogenslezingen niet stabiel genoeg waren.
+        + (
+            f" · {a['niet_vergelijkbaar']} vermogenslezingen niet vergelijkbaar "
+            f"(niet {a.get('stabiel_vereist_s', STABIEL_S):.0f} s stabiel)"
+            if a.get("niet_vergelijkbaar")
+            else ""
+        ),
     ]
     if accu:
         extra = ""
@@ -991,6 +1081,8 @@ class ZendureLokaalMeelezer:
         self._luisteraar: Callable[[], None] | None = None
         self._entiteiten: dict[tuple[str | None, str], str] = {}
         self._relais_gewijzigd = False
+        # v5.56: per bron hoe lang elk snel vermogensveld stabiel is.
+        self._stabiliteit: dict = {"lokaal": {}, "zendure": {}}
 
     # adres en entiteiten uit de registers ---------------------------------
 
@@ -1235,7 +1327,7 @@ class ZendureLokaalMeelezer:
         nu = time.time()
         r = self.tellingen.setdefault("reactie", lege_reactie())
         verwerk_ronde(self.tellingen, zonder_lopende_wijzigingen(
-            vergelijk(lokaal, self._zoek_toestand), r, nu), nu, latentie)
+            vergelijk(lokaal, self._zoek_toestand, self._stabiliteit, nu), r, nu), nu, latentie)
         self.afgeleid = afgeleid(rapport)
         if "apparaat_schakelingen" not in self.afgeleid:
             teller = _getal(self._zoek_toestand(None, APPARAAT_SCHAKELTELLER))

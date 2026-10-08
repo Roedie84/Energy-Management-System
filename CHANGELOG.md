@@ -31462,3 +31462,39 @@ telt hem mee zoals voorheen.
 `test_v544_tekortvolging_onvolledig.py` verkochten boven de tekortprijs en
 verwachtten planning; daar ligt de tekortprijs nu boven de verkoopprijs.
 Nieuw: `test_v555_doorlichting.py`.
+
+## v5.56 — Rapportage: slijtage marginaal, tot en na het blok, stabiel meelezen
+
+Alleen weergave, uitleg en diagnose. Sturing, reserve, drempels, marges en
+instellingen ongewijzigd.
+
+**Proefstand-slijtage rekent marginaal.** De kandidaat "slijtage" telde de
+opgeslagen boekingen op: € 1.214,91 over 58 dagen (−€ 7.645/jaar), met het
+oude tarief en dagen waarop de hele levensdoorzet als één dag stond. Nu
+opnieuw uitgerekend uit de doorzet per dag maal de marginale slijtage per
+kWh (`slijtage_ct_per_kwh`, dezelfde als de sturing sinds v5.54). Dagen met
+meer doorzet dan 2× de accucapaciteit tellen niet mee; nieuw:
+`dagen_uitgesloten`, `uitgesloten_uitschieters`, `uitschietergrens_kwh_per_dag`,
+`doorzet_kwh`, `totaal_eur`, `grondslag`.
+
+**Uitleg en spaarplan: eerst tot het blok, dan na het blok.** De uitleg
+noemde "nodig 8,64 kWh" en "diepste tekort onderweg 8,85 kWh" inclusief de
+lange horizon, terwijl de tabel erboven alleen tot het blok liep. Met
+dezelfde blokgrens als Monte Carlo (v5.47, L-EMS-006): de uitlegtabel toont
+"Diepste tekort tot het blok (telt nu)", daarna "Na het blok nog nodig" en
+de som. De uitleg, de waarom-regels en de verkooptoetsreden krijgen de
+splitsing als zin; reservemarge, verkooptoets en spaarplan als attributen
+(`diepste_tekort_tot_blok_kwh`/`_na_blok_kwh`, `nodig_tot_blok_kwh`/
+`nodig_na_blok_kwh`). Haalt de accu het blok wel en schiet hij pas erna
+tekort, dan zegt de spaarmelding dat.
+
+**Zendure meelezen: vermogen alleen als het stabiel is.** Snel wisselende
+vermogensvelden (outputHomePower, gridInputPower, outputPackPower,
+packInputPower, solarInputPower, en per module power en batcur) tellen alleen
+mee als de waarde aan beide kanten minstens 5 s stabiel is; anders
+`niet_vergelijkbaar`. SoC, spanning, temperatuur en instellingen (ook
+inputLimit/outputLimit) worden gewoon vergeleken. De oude, door timing
+vervuilde tellingen van de snelle velden beginnen één keer opnieuw; relais,
+rendement en bronmeting blijven.
+
+Nieuw: `test_v556_rapportage.py`.

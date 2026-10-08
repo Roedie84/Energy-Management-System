@@ -1,6 +1,5 @@
-EMS v5.55 - statistieken, relaistelling en verkopen met winst
+EMS v5.56 - rapportage: proefstand-slijtage marginaal, uitleg tot/na het blok, meelezen op stabiele velden
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
-Sturing, reserve en marges veranderen niet; alleen statistieken, de
-relaistelling van het Zendure-meelezen en de beoordeling achteraf van
-tekortnachten.
+Sturing, reserve, drempels en marges veranderen niet; alleen weergave,
+uitleg en diagnose.
