@@ -12,7 +12,7 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Zelf te bouwen (meetbaarheid) vervalt: `regelverschuiving_w` meet dit al.
 
 ## L-EMS-002 · MC-tekortkans van 22:00 bewaren in het dagrecord
-- Status: **gebouwd v5.45** (08-10 04:33) — verifiëren na installatie
+- Status: **gebouwd v5.45** (08-10 04:33), geïnstalleerd ~06:23 — eerste avond 08-10 22:00 (07-10 22:00 draaide v5.45 nog niet: `kalibratie_22u.nachten` 0)
 - (eerder: gepland, zelf bouwen: meetbaarheid)
 - Onderbouwing: de MC-sensor heeft geen state_class; kalibratie (Brier 0,038, n=8, 30-09..07-10) kan nu alleen uit ~10 dagen recorder. Na 10 dagen is de voorspelling per nacht weg.
 - Bouw: in `reserve_daily_records` per nacht `mc_tekortkans_22u` (en deterministisch tekort) vastleggen; test.
@@ -20,7 +20,7 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Gebouwd: `mc_22u_per_avond` (14 avonden, bewaard), `mc_22u` in dagrecord van de nacht erna, attribuut `kalibratie_22u` met Brier. 11 tests.
 
 ## L-EMS-003 · PV-energieteller van de cloud-dagteller naar de Modbus-teller
-- Status: **akkoord 08-10** → **gebouwd v5.46 (code)**; instelling nog NIET omgezet — pas na installatie van v5.46
+- Status: **akkoord 08-10** → **gebouwd v5.46**, geïnstalleerd 07:03, instelling omgezet 07:04 — eerste meting: kwartier 07:15 pv `measured`, dagopwek 0,0 (geen sprong). Dekking (`kwartieren_bruikbaar` ≥ 90) toetsen in de dagafsluiting van 08-10.
 - Bij de controle vooraf (08-10): eenheid Wh/kWh wordt overal goed omgerekend, maar de premisse "raakt alleen de meetlaag" klopte niet: de dagopwek (`pv_production_today_kwh`) rekent vanaf een bewaard dagbegin van de OUDE meter. Cloud = dagteller (11,868 kWh), Modbus = levensteller (23.426 kWh) → dagopwek ~23.414 kWh. v5.46 onthoudt welke meter bij het dagbegin hoort en ijkt opnieuw bij een andere meter.
 - Na installatie v5.46: `ha_set_integration(entry_id=01KYVA81YPQF0PXKHSWFFQS1E5, config={"pv_energy_sensor_entity": "sensor.solaredge_i1_ac_energy"})`, options-dict voor/na vergelijken, logs controleren, dagopwek dezelfde dag controleren (geen sprong).
 - Onderbouwing: 07-10/08-10: `pv_energy_sensor_entity` = `sensor.solaredge_production_energy` (SolarEdge-cloud, Wh, dagteller) staat elke nacht 00:04-07:07 op unknown en meldt overdag elke 15 min op :02/:17. De kwartierenergie markeert pv dan `invalid`; het schaduw-dagrapport slaat die ~28 nachtkwartieren over (dekking 80,6% op 07-10). `sensor.solaredge_i1_ac_energy` (Modbus, kWh, levenslang) heeft altijd een stand.
@@ -29,7 +29,7 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Meten na wijziging: `kwartieren_bruikbaar` ≥ 90 per dag (v5.45-attribuut in de meetlog).
 
 ## L-EMS-004 · sluipverbruik: robuust vloerverbruik in plaats van het dagminimum van losse monsters
-- Status: **akkoord 08-10** → **gebouwd v5.46** (08-10) — verifiëren na installatie
+- Status: **akkoord 08-10** → **gebouwd v5.46** (08-10), geïnstalleerd 07:03 — eerste meetpunt gehaald (normaal, `methode_versie` 2, reeks leeg); rest na ≥ 10 dagen
 - Onderbouwing: uuranalyse 08-10: referentie vloerverbruik −225 W, 21 van 30 dagminima negatief, alarm "gedetecteerd" (accumulator 0,37 kW, drempel 0,15). Het dagminimum neemt de wisselpieken van de accu mee: P1 −2,1..−2,2 kW gedurende ~10 s elke ~25 min terwijl het accuvermogen nog niet bijgewerkt is (recorder 08-10 02:03). Bij 1 monster/min is dat één monster per kwartier; een gemiddelde per 5 min blijft dan ~−220 W, de mediaan per kwartier niet.
 - Bouw: vloer = laagste kwartier, kwartier = mediaan van ≥ 5 monsters, begrensd ≥ 0 W. Oude reeks + accumulator + alarm eenmalig gewist (`sluipverbruik_methode_versie` = 2), ook uit de na-de-sensoren-opslag; sensorherstel alleen bij gelijk versienummer. 16 tests (incl. L-EMS-003).
 - Meten na bouw: sensor sluipverbruik-detectie direct na update "normaal", `methode_versie` 2; `baseline_load_history` alleen waarden ≥ 0 en in de orde 0,1-0,3 kW; na 10 dagen referentie > 0 W en geen vals alarm.
@@ -41,3 +41,10 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Aanpassen: in de YAML van die REST-sensor de +50 in de value_template vervangen door +20 (naam evt. mee), daarna Ontwikkelhulpmiddelen → YAML → REST-entiteiten herladen (geen herstart nodig). EMS meet de verschuiving live (`regelverschuiving_kw`, v5.20) en rekent vanzelf met 20 W. NB: `TEKORT_IMPORT_MIN_W` = 50 W blijft de vloer in de tekorttelling (export ≤ 50 W telt niet als verkoop) — onschadelijk.
 - Afweging: minder accu-energie het net op, iets vaker kort netimport bij snel stijgend huisverbruik.
 - Meten na wijziging: nachtuur-gemiddelde P1 −15..−25 W; nacht-export 00-07 (KPI ems_nacht_export_00_07_kwh) ~0,2 kWh i.p.v. ~0,5; netimport-kwartieren 's nachts niet merkbaar hoger.
+
+## L-EMS-006 · verwacht tekort en tekortkans splitsen: tot het blok / na het blok (lange horizon)
+- Status: **gepland (zelf bouwen: rapportage en meetbaarheid; raakt de sturing niet)** — dagafsluiting 08-10 of later
+- Onderbouwing: 08-10 07:42: verhaal "verwacht tekort tot het goedkope blok 0,61 kWh, economisch", MC 96%. Maar `nodig_kwh` 2,51 bevat `lange_horizon_extra` 2,11 (na 12:15); tot het blok is 0,40 nodig tegen 1,90 beschikbaar (marge +1,50). MC steeg 3% → 96% tussen 04:00 en 07:40 terwijl de marge tot het blok slechts van +1,79 naar +1,50 ging. `kalibratie_22u` vergelijkt deze kans (incl. lange horizon) met de tekortnacht 22-09.
+- Bouw: in `verwacht_tekort` en het MC-attribuut `tekort_tot_blok_kwh` / `tekort_na_blok_kwh` en `tekortkans_tot_blok_pct` (zelfde trajecten zonder lange extra); verhaaltekst noemt het juiste deel; `kalibratie_22u` per nacht beide kansen + Brier van beide. Tests. De reserve en de sturing blijven ongewijzigd.
+- Verwacht effect: eerlijke uitleg ('s ochtends geen vals "tekort tot het blok"); kalibratie tegen de nacht op de juiste kans.
+- Meten na bouw: na 7 avonden Brier `tot blok` tegen `met lange horizon` naast elkaar; ochtenden waar de tekst tekort meldt en de import vóór het blok < 0,1 kWh blijft → 0.

@@ -44,3 +44,14 @@ laatste ronde: 07-10 23:45, gemeten t/m 07-10 23:44
 - Cockpit LET OP 's nachts door tweede PV-voorspelling (forecast.solar) die elk ander uur `unavailable` is (01:04, 03:04) — externe bron, geen EMS-fout.
 
 laatste ronde: 08-10 04:40, gemeten t/m 08-10 04:10
+
+## 08-10 07:40 · tussenronde
+- Geïnstalleerd: v5.45 (~06:23) en v5.46 (07:03). L-EMS-003 ingesteld om 07:04 (`pv_energy_sensor_entity` = Modbus-teller): kwartier 07:15 pv al `measured` (cloudteller was tot 07:07 unknown), dagopwek 0,0 → geen sprong. Dekking volgt in de dagafsluiting.
+- L-EMS-004: sluipverbruik direct na update `normaal`, `methode_versie` 2, reeks en accumulator leeg → eerste meetpunt gehaald; referentie > 0 W pas na dagen.
+- Nacht 07→08 (t/m 07:40): import 22-07 u 0,12 kWh, accu niet leeg (SoC 34% om 07:01) → geen tekort, zoals om 04:00 verwacht. Nacht-export 00-07 0,43 kWh (regelverschuiving −50 W nog actief; L-EMS-005 is een instelling bij Ruud).
+- Verbruik tegen wandeling: beschikbaar 5,01 → 1,90 kWh (3,11 gebruikt) terwijl de korte-horizonbehoefte 2,82 daalde → 0,29 kWh (+10%) meer dan voorspeld.
+- **H-EMS-5 (nieuw):** MC-tekortkans steeg 3% (04:00) → 96% (07:40) en het verhaal meldt "verwacht tekort tot het goedkope blok 0,61 kWh", maar dat getal is volledig de lange horizon (na 12:15): marge tot het blok zonder lange horizon +1,79 (22:00) → +1,50 kWh (07:42); `lange_horizon_extra` 1,85 → 2,11. MC rekent de lange horizon bewust mee (v5.40), maar `kalibratie_22u` (v5.45) toetst hem tegen de nacht 22-09 → appels/peren. Ook: de Brier 0,038 (n=8) is grotendeels van vóór v5.40; 07-10 22:00 (14,6%) is de eerste avond mét lange horizon.
+- Kandidaat (zelf bouwen, rapportage/meetbaarheid, dagafsluiting): tekort en kans apart tot het blok en na het blok tonen + kalibratie op beide → L-EMS-006.
+- Geen release (tussenronde, niets acuut).
+
+laatste ronde: 08-10 07:40, gemeten t/m 08-10 07:42

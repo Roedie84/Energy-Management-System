@@ -22,3 +22,6 @@
 | Verkoop onder reserve | 0 dagen | 07-10 | 08-10 03:40 |
 | Achteraf (uur, 4,22 ct): werkelijk / optimum t.o.v. zonder accu | +0,29 / −0,55 €/dag | 4 dagen | 08-10 03:40 |
 | Dagrapport-dekking meetlog | 80,6 % | 07-10 | 08-10 03:40 |
+| Nacht-export 00-07 (regelverschuiving −50 W) | 0,43 kWh | nacht 07→08, n=7 u | 08-10 07:40 |
+| Nachtverbruik tegen wandeling (22:00→07:40) | +0,29 kWh (+10 %) | 1 nacht | 08-10 07:40 |
+| Lange-horizon-extra in de reserve | 1,59-2,11 kWh | 07/08-10 | 08-10 07:40 |
