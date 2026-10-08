@@ -3601,6 +3601,8 @@ PERSISTED_FIELDS: dict[str, dict] = {
     # een mens hem aanzette.
     "airco_setpunten": {"type": "plain"},
     "airco_door_ems": {"type": "plain"},
+    # v5.45: de Monte-Carlo-tekortkans van 22:00 per avond (kalibratie).
+    "mc_22u_per_avond": {"type": "plain"},
 }
 
 # Afgeleid, geen eigen lijsten meer.
@@ -5111,6 +5113,11 @@ NACHT_TEKORT_AANHOUDEND_MIN = 30
 # v5.37: horizon van Monte Carlo als er geen toekomstig goedkoopste blok
 # bekend is - het einde van een tekortnacht (22:00-09:00).
 MONTE_CARLO_TERUGVAL_UUR = 9
+
+# v5.45: de tekortkans van dit uur (lokaal) wordt per avond bewaard voor de
+# kalibratie tegen de werkelijke tekortnacht; zoveel avonden blijven staan.
+MC_KALIBRATIE_UUR = 22
+MC_KALIBRATIE_BEWAAR_AVONDEN = 14
 
 # v5.40: een tekort door CAPACITEIT tegenover een tekort door PLANNING.
 # Gemeld: de cockpit stond op LET OP voor een nacht waarin de accu vol was

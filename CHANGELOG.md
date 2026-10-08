@@ -30861,3 +30861,42 @@ De sturing verandert niet: alleen de indeling en de meldingen.
 
 **Volledige testsuite**: 4804 tests, allemaal groen, waarvan 16 nieuw
 (`test_v544_tekortvolging_onvolledig.py`).
+
+## v5.45 — De kans van 22:00 blijft bewaard
+
+Uit de leerronde van 8 oktober (dagafsluiting 7 oktober). Alleen meten; de
+sturing verandert niet.
+
+### 1. Monte Carlo: de tekortkans van 22:00 per avond (L-EMS-002)
+
+De kalibratie van Monte Carlo - de kans om 22:00 naast de uitkomst van de
+nacht - gaf over 30 september tot 7 oktober een Brier-score van 0,038 (8
+nachten: de vier tekortnachten 98/100/45/97%, de andere vier 0%). Dat kon
+alleen uit de recorder: de sensor heeft geen `state_class`, en na ~10 dagen
+is de voorspelling per nacht weg.
+
+Nu bewaart de integratie per avond de eerste kans van het uur 22
+(`mc_22u_per_avond`, 14 avonden, overleeft een herstart): kans,
+deterministisch diepste tekort, mediaan, p90, beschikbaar en de horizon. Het
+dagrecord van de nacht die erop volgt krijgt `mc_22u` (dagrecord D draagt
+de nacht die op D om 09:00 afliep; de kans komt van D-1 om 22:00). Nieuw
+attribuut `kalibratie_22u` op de Monte-Carlo-sensor: per nacht kans en
+uitkomst, en de Brier-score over de bewaarde nachten.
+
+### 2. Het dagrapport zegt hoeveel kwartieren het kon narekenen
+
+Het schaduwdagrapport rekent alleen kwartieren met huisverbruik, zon en
+prijs. De zonteller (`sensor.solaredge_production_energy`, een dagteller uit
+de SolarEdge-cloud) staat van middernacht tot ~07:07 op `unknown`, dus vielen
+elke nacht ~28 kwartieren weg - terwijl `kwartieren_gemeten` 76 zei. Nieuw:
+`kwartieren_bruikbaar` en `kwartieren_ongebruikt` (`pv_onbekend`,
+`andere_teller_onbekend`, `geen_prijs`). Er wordt niets verzonnen: een
+onbekende teller blijft onbekend.
+
+Tip: met `sensor.solaredge_i1_ac_energy` (Modbus, levenslange teller in kWh)
+als PV-energieteller in de instellingen tellen de nachtkwartieren wel mee -
+als `partially_estimated`, want de teller meldt zich 's nachts niet, maar
+met een echte stand.
+
+**Volledige testsuite**: 4815 tests, allemaal groen, waarvan 11 nieuw
+(`test_v545_mc_kalibratie.py`).

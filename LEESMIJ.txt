@@ -1,10 +1,9 @@
-EMS v5.44 - een halve volging is geen planning
+EMS v5.45 - de kans van 22:00 blijft bewaard
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
-Liep de live tekortvolging (vol, verkoop, laadbesluit, zon) niet vanaf 09:00
-- na een update, een herstart met een gat van meer dan een half uur, of
-zonder laadbesluit bij een accu die niet vol werd - dan wordt de nacht en
-het verwachte tekort uit het dagverloop ingedeeld, met dezelfde regels als
-de oude nachten. Te weinig dagverloop: onbekend (informatief), nooit
-planning. Nieuw attribuut tracking_since: sinds wanneer de volging loopt.
-De sturing verandert niet.
+Monte Carlo bewaart per avond de tekortkans van 22:00 (14 avonden) en zet
+hem in het dagrecord van de nacht erna (mc_22u). Nieuw attribuut
+kalibratie_22u op de Monte-Carlo-sensor: kans naast uitkomst per nacht en
+de Brier-score. Het dagrapport van de meetlog zegt hoeveel kwartieren het
+optimum kon narekenen (kwartieren_bruikbaar) en waarom de rest wegviel
+(kwartieren_ongebruikt). Alleen meten; de sturing verandert niet.

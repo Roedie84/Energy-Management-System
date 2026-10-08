@@ -795,6 +795,28 @@ def _zonband(band: dict, pv_reeks: list, begin: datetime, eind: datetime) -> tup
     return round(laag, 4), round(hoog, 4)
 
 
+def _bruikbare_kwartieren(meting: dict) -> tuple[int, dict]:
+    """Hoeveel kwartieren het optimum echt kon narekenen, en waarom de rest
+    wegviel (v5.45).
+
+    Uit de leerronde van 8 oktober: een dagteller voor de zon (SolarEdge-
+    cloud) staat 's nachts op unknown, dus vielen elke nacht ~28 kwartieren
+    stil weg terwijl `kwartieren_gemeten` 76 zei.
+    """
+    ongebruikt = {"pv_onbekend": 0, "andere_teller_onbekend": 0, "geen_prijs": 0}
+    bruikbaar = 0
+    for m in meting.values():
+        if m.get("pv_kwh") is None:
+            ongebruikt["pv_onbekend"] += 1
+        elif m.get("house_kwh") is None:
+            ongebruikt["andere_teller_onbekend"] += 1
+        elif m.get("prijs_eur") is None:
+            ongebruikt["geen_prijs"] += 1
+        else:
+            bruikbaar += 1
+    return bruikbaar, ongebruikt
+
+
 def schaduw_dagrapport(evaluaties: list[dict], kwartieren: list[dict], emax: float, rendement: float,
                        laad_kwh: float = 0.5, ontlaad_kwh: float = 0.4) -> dict:
     """Per slijtagevariant: wat het economische schaduwoptimum met de gemeten
@@ -813,6 +835,7 @@ def schaduw_dagrapport(evaluaties: list[dict], kwartieren: list[dict], emax: flo
     meting = {k["kwartier"][:16]: k for k in kwartieren}
     uit = {"varianten": {}, "kwartieren_gemeten": len(meting),
            "dekking_procent": round(statistics.mean([k.get("coverage_percent") or 0 for k in kwartieren]), 1) if kwartieren else None}
+    uit["kwartieren_bruikbaar"], uit["kwartieren_ongebruikt"] = _bruikbare_kwartieren(meting)
     for ct in schaduw.SLIJTAGEVARIANTEN_CT:
         e_kwh = None
         kas = doorzet = boven_90 = 0.0

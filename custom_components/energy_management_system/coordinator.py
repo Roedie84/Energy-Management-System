@@ -526,6 +526,8 @@ from .const import (
     BATTERY_NIGHT_SHORTFALL_MIN_FRACTION,
     BATTERY_NIGHT_SHORTFALL_MIN_KWH,
     MONTE_CARLO_TERUGVAL_UUR,
+    MC_KALIBRATIE_BEWAAR_AVONDEN,
+    MC_KALIBRATIE_UUR,
     TEKORT_VOL_MARGE_PROCENT,
     TEKORTSOORT_CAPACITEIT,
     TEKORTSOORT_PLANNING,
@@ -25372,6 +25374,12 @@ class EnergyManagementSystemCoordinator:
                         # v3.99.18: de meting van de lange horizon.
                         **self._lange_horizon_dagrecord(),
                         "excess": self._excess_detected_today,
+                        # v5.45: wat Monte Carlo om 22:00 de avond ervoor zei.
+                        **(
+                            {"mc_22u": stand_22u}
+                            if (stand_22u := self._mc_22u_voor_nacht(self._shortfall_check_date))
+                            else {}
+                        ),
                     }
                 )
                 self.reserve_daily_records = self.reserve_daily_records[
@@ -34071,6 +34079,7 @@ class EnergyManagementSystemCoordinator:
             self.monte_carlo_shortfall_probability_percent = round(
                 100 * shortfall_count / n, 1
             )
+            self._leg_mc_22u_vast(now, available_kwh)
 
         self.monte_carlo_note = (
             "Adviserend - gecentreerd op het deterministische diepste "
@@ -34082,6 +34091,87 @@ class EnergyManagementSystemCoordinator:
             "verhouding. Stuurt nooit een commando en past de werkelijke "
             "reserve-marge niet aan."
         )
+
+    def _leg_mc_22u_vast(self, now: datetime, beschikbaar_kwh: float | None) -> None:
+        """Bewaart de eerste tekortkans van het uur 22 per avond (v5.45).
+
+        Uit de leerronde van 7 oktober: de kalibratie (Brier 0,038 over 8
+        nachten) was alleen uit de recorder te halen, en die bewaart ~10
+        dagen. Nu staat per avond wat Monte Carlo om 22:00 zei, en komt het
+        in het dagrecord van de nacht die erop volgt. Stuurt niets.
+        """
+        if now.hour != MC_KALIBRATIE_UUR:
+            return
+        kans = self.monte_carlo_shortfall_probability_percent
+        if kans is None:
+            return
+        if not isinstance(self.mc_22u_per_avond, dict):
+            self.mc_22u_per_avond = {}
+        sleutel = now.date().isoformat()
+        if sleutel in self.mc_22u_per_avond:
+            return
+        self.mc_22u_per_avond[sleutel] = {
+            "tijd": now.strftime("%H:%M"),
+            "kans_pct": kans,
+            "deterministisch_kwh": self.monte_carlo_deterministisch_kwh,
+            "mediaan_kwh": self.monte_carlo_median_deficit_kwh,
+            "p90_kwh": self.monte_carlo_p90_deficit_kwh,
+            "beschikbaar_kwh": (
+                round(float(beschikbaar_kwh), 3) if beschikbaar_kwh is not None else None
+            ),
+            "horizon_basis": self.monte_carlo_horizon_basis,
+        }
+        for oud in sorted(self.mc_22u_per_avond)[:-MC_KALIBRATIE_BEWAAR_AVONDEN]:
+            del self.mc_22u_per_avond[oud]
+        try:
+            self.schedule_persisted_state_save()
+        except Exception:  # noqa: BLE001 - opslaan is bijzaak, de meting niet
+            pass
+
+    def _mc_22u_voor_nacht(self, nacht_eind: date) -> dict | None:
+        """De Monte-Carlo-stand van 22:00 op de avond vóór `nacht_eind` (v5.45).
+
+        Een dagrecord van dag D draagt de tekortnacht die op D om 09:00
+        afliep; de kans daarvoor is uitgerekend op de avond van D-1.
+        """
+        avonden = self.mc_22u_per_avond if isinstance(self.mc_22u_per_avond, dict) else {}
+        stand = avonden.get((nacht_eind - timedelta(days=1)).isoformat())
+        return dict(stand) if isinstance(stand, dict) else None
+
+    def get_mc_kalibratie_22u(self) -> dict:
+        """Voorspelde kans om 22:00 tegen de werkelijke tekortnacht (v5.45).
+
+        Brier-score: het gemiddelde van (kans - uitkomst)^2, met uitkomst 1
+        voor een tekortnacht en 0 voor een gewone nacht. 0 is perfect, 0,25
+        is wat altijd "50%" zeggen oplevert. Alleen nachten waarvoor de kans
+        van 22:00 bewaard is (vanaf v5.45).
+        """
+        paren = []
+        for r in self.reserve_daily_records or []:
+            stand = r.get("mc_22u") if isinstance(r, dict) else None
+            if not isinstance(stand, dict) or stand.get("kans_pct") is None:
+                continue
+            uitkomst = 1 if r.get("shortfall") else 0
+            paren.append((r.get("date"), float(stand["kans_pct"]) / 100, uitkomst))
+        brier = (
+            round(sum((k - u) ** 2 for _d, k, u in paren) / len(paren), 3)
+            if paren
+            else None
+        )
+        return {
+            "nachten": len(paren),
+            "brier": brier,
+            "per_nacht": [
+                {"nacht_tot": d, "kans_pct": round(k * 100, 1), "tekortnacht": bool(u)}
+                for d, k, u in paren
+            ],
+        }
+
+    # v5.45: de tekortkans van 22:00 per avond (sleutel: datum van de avond).
+    # De sensor heeft geen state_class, dus zonder dit is de kalibratie na ~10
+    # dagen recorder weg. Als klasse-attribuut None (`__init__` staat op de
+    # ratel); `_leg_mc_22u_vast` maakt per coördinator een eigen tabel.
+    mc_22u_per_avond: dict | None = None
 
     # v5.40: zie `_run_monte_carlo_simulation`. Onveranderlijk, dus als
     # klasse-attribuut veilig (en `__init__` staat op de ratel).
@@ -34324,6 +34414,8 @@ class EnergyManagementSystemCoordinator:
                 for r in records
             ],
             "dagen_gemeten": len(records),
+            # v5.45: de kans van 22:00 naast de uitkomst, per nacht.
+            "kalibratie_22u": self.get_mc_kalibratie_22u(),
             "werkelijke_tekortfrequentie_procent": (
                 round(100 * tekort / len(records), 1) if records else None
             ),
