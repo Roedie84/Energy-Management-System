@@ -495,6 +495,13 @@ def reactie_samenvatting(r: dict, interval_s: float) -> dict:
 #   tot elke bron de nieuwe waarde laat zien (binnen 50 W of 15%). Het eigen
 #   lezen heeft een resolutie van het leesinterval.
 
+# v5.53: de stekker zelf uitlezen. Via Home Assistant komt zijn waarde maar
+# elke 5 s binnen (de HomeWizard-integratie peilt zo vaak); daarmee was hij
+# trager dan de bronnen die hij moest beoordelen, en scoorde de bron die het
+# minst vers was het best. Is de stekker een HomeWizard, dan leest deze
+# module hem elke seconde zelf via zijn lokale API (GET /api/v1/data).
+REFERENTIE_INTERVAL = timedelta(seconds=1)
+HOMEWIZARD_DOMEIN = "homewizard"
 REFERENTIE_SPRONG_W = 300.0
 REFERENTIE_STABIEL_W = 50.0
 REFERENTIE_STABIEL_S = 5.0
@@ -607,7 +614,12 @@ def steekproef(ref: dict, t: float, waarden: dict[str, float | None]) -> None:
 
 
 def referentie_samenvatting(ref: dict, entiteit: str | None) -> dict:
-    uit: dict[str, Any] = {"meetpunt": entiteit, "sprongen": ref.get("sprongen", 0)}
+    uit: dict[str, Any] = {
+        "meetpunt": entiteit,
+        "sprongen": ref.get("sprongen", 0),
+        "stekker_direct_gelezen": ref.get("direct", 0),
+        "stekker_direct_mislukt": ref.get("direct_mislukt", 0),
+    }
     for bron in BRONNEN:
         afw = sorted((ref.get("afwijking") or {}).get(bron) or [])
         ver = (ref.get("vertraging") or {}).get(bron) or []
@@ -656,10 +668,12 @@ def beste_bron(s: dict) -> tuple[str | None, str]:
 # --- tellingen ---------------------------------------------------------------
 
 
+# v5.53 (schema 3): de beste-bronmeting van v5.52 gebruikte de stekker via
+# Home Assistant, die maar elke 5 s ververst; die tellingen beginnen opnieuw.
 # v5.51.1: de vergelijking en de reactiemeting van v5.50/v5.51.0 telden
 # timingverschillen en opdrachten mee; die tellingen beginnen één keer opnieuw.
 # Relaisschakelingen en rendement blijven.
-SCHEMA = 2
+SCHEMA = 3
 
 
 def lege_tellingen() -> dict:
@@ -833,7 +847,10 @@ def tekst(status: str, a: dict) -> str:
     if beste.get("meetpunt"):
         naam = {"lokaal": "het EMS zelf", "zendure": "de Zendure-integratie",
                 "verschilt": "verschilt per aspect", "gelijkwaardig": "gelijkwaardig"}.get(beste.get("beste"))
-        regels.append(f"Beste bron: **{naam or 'nog onbekend'}** · {beste.get('toelichting', '')}")
+        regels.append(
+            f"Beste bron: **{naam or 'nog onbekend'}** · {beste.get('toelichting', '')} "
+            f"· stekker gelezen {beste.get('stekker_gelezen', '-')}"
+        )
         for bron, label in (("lokaal", "EMS zelf"), ("zendure", "Zendure")):
             b = beste.get(bron) or {}
             regels.append(
@@ -872,6 +889,8 @@ class ZendureLokaalMeelezer:
         self._hass = hass
         self.referentie = referentie
         self._referentie_omkeren = referentie_omkeren
+        self.referentie_adres: str | None = None
+        self._afmelden_ref: Callable[[], None] | None = None
         self._afmelden: Callable[[], None] | None = None
         self._opslag = None
         self.tellingen: dict = lege_tellingen()
@@ -965,6 +984,48 @@ class ZendureLokaalMeelezer:
             basis["mislukt_op_rij"] = 0
             self.tellingen = basis
         self._afmelden = async_track_time_interval(self._hass, self._ronde, INTERVAL)
+        self.referentie_adres = self._zoek_referentie_adres()
+        if self.referentie_adres:
+            self._afmelden_ref = async_track_time_interval(
+                self._hass, self._ref_ronde, REFERENTIE_INTERVAL
+            )
+
+    def _zoek_referentie_adres(self) -> str | None:
+        """Het IP-adres van de stekker, als die een HomeWizard is."""
+        if not self.referentie:
+            return None
+        try:
+            from homeassistant.helpers import entity_registry as er
+
+            ent = er.async_get(self._hass).async_get(self.referentie)
+            if ent is None or ent.platform != HOMEWIZARD_DOMEIN or not ent.config_entry_id:
+                return None
+            entry = self._hass.config_entries.async_get_entry(ent.config_entry_id)
+            adres = (entry.data or {}).get("ip_address") if entry is not None else None
+            return str(adres) if adres else None
+        except Exception:  # noqa: BLE001
+            return None
+
+    async def _ref_ronde(self, _nu=None) -> None:
+        """De stekker elke seconde zelf lezen. Alleen lezen; fouten tellen niet."""
+        import asyncio
+
+        from homeassistant.helpers.aiohttp_client import async_get_clientsession
+
+        try:
+            sessie = async_get_clientsession(self._hass)
+            async with asyncio.timeout(TIMEOUT_S):
+                antwoord = await sessie.get(f"http://{self.referentie_adres}/api/v1/data")
+                gegevens = await antwoord.json(content_type=None)
+            w = _getal((gegevens or {}).get("active_power_w"))
+            if w is None:
+                return
+            ref = self.tellingen.setdefault("referentie", lege_referentie())
+            ref_waarneming(ref, time.time(), -w if self._referentie_omkeren else w)
+            ref["direct"] = ref.get("direct", 0) + 1
+        except Exception:  # noqa: BLE001 - de maatstaf mag het meelezen niet raken
+            ref = self.tellingen.setdefault("referentie", lege_referentie())
+            ref["direct_mislukt"] = ref.get("direct_mislukt", 0) + 1
 
     def _volg_zendure(self) -> None:
         """Toestandswijzigingen van de Zendure-entiteiten volgen (alleen luisteren)."""
@@ -992,7 +1053,8 @@ class ZendureLokaalMeelezer:
                 t = time.time()
             ref = self.tellingen.setdefault("referentie", lege_referentie())
             if eid == self.referentie:
-                ref_waarneming(ref, t, self._referentiewaarde(nieuw.state))
+                if not self.referentie_adres:
+                    ref_waarneming(ref, t, self._referentiewaarde(nieuw.state))
                 return
             veld = per_entiteit.get(eid)
             if veld is None:
@@ -1022,6 +1084,9 @@ class ZendureLokaalMeelezer:
         afmelden, self._afmelden = self._afmelden, None
         if afmelden is not None:
             afmelden()
+        afmelden_ref, self._afmelden_ref = self._afmelden_ref, None
+        if afmelden_ref is not None:
+            afmelden_ref()
         luisteraar, self._luisteraar = self._luisteraar, None
         if luisteraar is not None:
             luisteraar()
@@ -1101,6 +1166,10 @@ class ZendureLokaalMeelezer:
         )
         uit["beste_bron"] = referentie_samenvatting(
             self.tellingen.get("referentie") or {}, self.referentie
+        )
+        uit["beste_bron"]["stekker_gelezen"] = (
+            f"zelf, elke seconde ({self.referentie_adres})" if self.referentie_adres
+            else "via Home Assistant"
         )
         uit["tekst"] = tekst(self.status(), uit)
         return uit

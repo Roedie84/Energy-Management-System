@@ -31326,3 +31326,28 @@ vaak er gelezen wordt, niet in de bron.
   met een standaardwaarde.
 
 2 nieuwe tests.
+
+## v5.53 — Een maatstaf moet sneller zijn dan wat hij meet
+
+Alleen lezen. Sturing, reserve, drempels, marges en optie-standaarden niet
+aangeraakt.
+
+Stand na v5.52.1 (283 metingen, 56 sprongen): Zendure 36 W naast de stekker
+en 1,0 s vertraging, het eigen lezen 73 W en 2,0 s - maar beide met precies
+dezelfde vaste afwijking (-23,6 W), en het eigen lezen met 87% binnen 50 W en
+een p90 van 77 W. Oorzaak gevonden in de geschiedenis: de stekker komt via de
+HomeWizard-integratie maar elke 5 s binnen. Zijn waarde was daardoor vaak
+ouder dan die van beide bronnen, en de bron die het minst vers was, leek het
+best.
+
+- De stekker wordt nu zelf gelezen, elke seconde, via zijn lokale API
+  (`GET http://<ip>/api/v1/data`, `active_power_w`). Het adres komt uit de
+  config entry van de HomeWizard-integratie; is de accuvermogensensor geen
+  HomeWizard, dan blijft de Home Assistant-toestand de maatstaf.
+- Met een directe lezing telt de trage Home Assistant-toestand niet meer mee.
+- In `beste_bron`: `stekker_gelezen`, `stekker_direct_gelezen`,
+  `stekker_direct_mislukt`; op de Proefstand staat hoe de stekker gelezen wordt.
+- Opslagschema 3: de vergelijking, de reactiemeting en de beste-bronmeting
+  beginnen opnieuw; relaisschakelingen en rendement blijven.
+
+3 nieuwe tests.

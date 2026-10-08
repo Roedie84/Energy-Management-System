@@ -11,7 +11,7 @@
   "diagnostics.py": "c08231f4ff64d9e5",
   "grootverbruikers.py": "c1364b66c908464b",
   "kwartierenergie.py": "ebe5bea9fe73e7b2",
-  "manifest.json": "fb82e0e1480709ea",
+  "manifest.json": "7c713261b2809e31",
   "meetlaag.py": "afbdda7a3b846403",
   "meetlog.py": "48e351944317d051",
   "nabeschouwing.py": "e80f0438caab08f5",
@@ -29,6 +29,6 @@
   "tarief.py": "e1434ebb93d2f88b",
   "translations/en.json": "10becac027b5e4fa",
   "translations/nl.json": "77d481486c3fa59a",
-  "zendure_lokaal.py": "b8f0d1b56e20692a",
+  "zendure_lokaal.py": "64ed3fb15fd5e02a",
   "zendure_status.py": "6cd688d4695f6dff"
 }

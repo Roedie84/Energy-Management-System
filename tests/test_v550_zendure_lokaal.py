@@ -408,3 +408,27 @@ def test_apparaten_via_de_zendure_config_entries():
     bron = (MAP / "zendure_lokaal.py").read_text()
     assert "dreg.devices.values()" not in bron
     assert "async_entries_for_config_entry" in bron
+
+
+# --- v5.53: de stekker zelf lezen ---------------------------------------------
+
+
+def test_de_stekker_wordt_zelf_gelezen_alleen_lezen():
+    bron = (MAP / "zendure_lokaal.py").read_text()
+    assert "/api/v1/data" in bron and "REFERENTIE_INTERVAL = timedelta(seconds=1)" in bron
+    # met een directe lezing telt de trage Home Assistant-toestand niet mee
+    assert "if not self.referentie_adres:" in bron
+
+
+def test_schema_3_begint_de_beste_bronmeting_opnieuw():
+    oud = {"schema": 2, "referentie": {"sprongen": 56}, "relais": {"totaal": 13}}
+    uit = zl.herstel(oud)
+    assert "referentie" not in uit and uit["relais"] == {"totaal": 13}
+    assert uit["schema"] == 3
+
+
+def test_zonder_stekker_geen_adres():
+    m = zl.ZendureLokaalMeelezer(object(), referentie=None)
+    assert m._zoek_referentie_adres() is None
+    # een fout bij het opzoeken (geen registers) leidt tot: via Home Assistant
+    assert zl.ZendureLokaalMeelezer(object(), referentie="sensor.x")._zoek_referentie_adres() is None
