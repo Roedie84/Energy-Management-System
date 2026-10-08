@@ -1,14 +1,7 @@
-EMS v5.53.4 - minder in de database
+EMS v5.54 - sturen op wat een extra slag werkelijk kost
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
-De sturing, de reserve, de drempels, de marges en de optie-standaarden
-veranderen niet.
-Vaatwasser en wasmachine heten pas klaar als het apparaat zelf (Home
-Connect) zegt dat het programma klaar is; de melding "klaar" komt niet meer
-tijdens het drogen of een stil deel van het programma. De wasmachine wordt
-nu ook gevonden (zijn status heet sensor.wasmachine_status).
-De cockpit en "Zendure lokaal meelezen" schrijven hun grote attributen
-niet meer naar de database; ze blijven live zichtbaar.
-De gewone stand heet niet meer "Accu beslist zelf" maar "Nul op de meter".
-Bevat ook v5.53: de HomeWizard-stekker van de accu wordt elke seconde zelf
-gelezen als maatstaf voor "Zendure lokaal meelezen".
+De afweging om door de accu te laden en ontladen rekent nu met de
+cyclusslijtage (circa 4,2 ct/kWh) in plaats van het kalendergemiddelde
+(circa 11,2 ct/kWh). Rendement blijft in elke afweging meetellen; de reserve
+en terugleveren tegen de hoogste prijs veranderen niet.

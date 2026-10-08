@@ -31403,3 +31403,19 @@ diagnostiek. "Zendure lokaal meelezen" (9 KB, elke 30 s) bewaart alleen nog
 de toestand, het aantal rondes en de overeenkomst.
 
 2 nieuwe tests (`test_v5534_database.py`).
+
+## v5.54 — Sturen op wat een extra slag werkelijk kost
+
+Op verzoek van Ruud, na de doorlichting van 8 oktober. De sturing rekende met
+11,2 ct/kWh slijtage: de aanschafprijs gedeeld door wat er in twaalf jaar door
+de accu gaat. Maar die kalenderveroudering is er ook als de accu stilstaat;
+één extra kWh kost alleen cyclusslijtage, circa 4,2 ct/kWh. Daardoor bleef
+arbitrage met een marge tussen 4,2 en 11,2 ct liggen. `slijtage_ct_per_kwh`
+is nu marginaal; het levensduurgemiddelde staat ernaast als
+`slijtage_ct_per_kwh_gemiddeld`. Elke afweging blijft rekenen met prijs maal
+rendement min slijtage; reserve en voorrang voor terugleveren tegen de
+hoogste prijs ongewijzigd.
+
+Ook: de reservemelding toonde "+None%" bij een onbekende veiligheidsmarge;
+dat is nu "onbekend".
+
