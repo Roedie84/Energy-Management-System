@@ -31351,3 +31351,25 @@ best.
   beginnen opnieuw; relaisschakelingen en rendement blijven.
 
 3 nieuwe tests.
+
+## v5.53.1 — Drogen is niet klaar
+
+Gemeld: "Ik krijg nu een melding dat de vaatwasser klaar is maar dit klopt
+natuurlijk niet". Quick 65 startte om 15:05 en liep tot 16:16; om 15:58 kwam
+"Vaatwasser klaar". Het droogdeel gebruikt ~2,5 W, en de toestandsmachine
+(v0.63.32) noemt een cyclus klaar na 5 minuten onder de drempel. De Home
+Connect-bedrijfstoestand stond al die tijd op `run`.
+
+- `_apparaat_draait_nog`: zolang de bedrijfstoestand van het apparaat zelf
+  `run`, `pause`, `delayedstart`, `actionrequired` of `aborting` is
+  (`APPARAAT_LOOPT_NOG`), is de cyclus niet klaar en gaat er geen melding
+  uit. Springt hij naar `finished`, dan is hij meteen klaar (de tijd onder de
+  drempel loopt gewoon door).
+- De bedrijfstoestand wordt gezocht in hetzelfde apparaat als de al
+  ingestelde gereed-, starttijd- of eindtijdentiteit (vaatwasser:
+  `dishwasher_ready_sensor_entity`/`dishwasher_start_in_entity`, wasmachine:
+  `washing_machine_ready_sensor_entity`/`washing_machine_end_at_entity`).
+  Niets nieuws in te stellen; zonder bedrijfstoestand beslist het vermogen,
+  zoals voorheen.
+
+3 nieuwe tests (`test_v5531_vaatwasser_droogt_nog.py`).

@@ -752,6 +752,7 @@ from .const import (
     AGING_HIGH_SOC_PERCENT,
     CONF_DISHWASHER_START_IN,
     CONF_WASHING_MACHINE_END_AT,
+    APPARAAT_LOOPT_NOG,
     DEFAULT_DISHWASHER_CYCLE_KWH,
     DEFAULT_WASHING_MACHINE_CYCLE_KWH,
     LOPEND_APPARAAT_VASTE_POST_KWH,
@@ -33381,6 +33382,13 @@ class EnergyManagementSystemCoordinator:
         if elapsed_minutes < APPLIANCE_CYCLE_COMPLETE_SUSTAINED_MINUTES:
             return
 
+        # v5.53.1: zegt het apparaat zelf dat het programma nog loopt, dan is
+        # het niet klaar. Gemeld op 8 oktober: "Vaatwasser klaar" om 15:58
+        # terwijl het programma (Quick 65) tot 16:16 liep - het droogdeel
+        # gebruikt een paar watt, ruim langer dan de 5 minuten onder de drempel.
+        if self._apparaat_draait_nog(naam):
+            return
+
         started_at = getattr(self, cycle_started_attr)
         duration_minutes = None
         if started_at is not None:
@@ -33425,6 +33433,49 @@ class EnergyManagementSystemCoordinator:
                     notification_id=f"ems_{state_attr}_cycle_done",
                     kind="appliance_ready",
                 )
+
+    def _apparaat_draait_nog(self, naam: str) -> bool:
+        """Zegt het apparaat zelf (Home Connect) dat het programma nog loopt?
+
+        De bedrijfstoestand wordt gezocht in hetzelfde apparaat als de al
+        ingestelde gereed-, starttijd- of eindtijdentiteit; er is niets nieuws
+        in te stellen. Geen toestand gevonden of onleesbaar: het vermogen
+        beslist, zoals voorheen.
+        """
+        if naam == "vaatwasser":
+            bronnen = (CONF_DISHWASHER_READY_SENSOR, CONF_DISHWASHER_START_IN)
+        else:
+            bronnen = (CONF_WASHING_MACHINE_READY_SENSOR, CONF_WASHING_MACHINE_END_AT)
+        cache = self.__dict__.setdefault("_bedrijfstoestand_entiteit", {})
+        if naam not in cache:
+            cache[naam] = self._zoek_bedrijfstoestand(
+                [self.config.get(c) for c in bronnen if self.config.get(c)]
+            )
+        eid = cache[naam]
+        if not eid:
+            return False
+        st = self.hass.states.get(eid)
+        toestand = str(getattr(st, "state", "") or "").lower()
+        return toestand in APPARAAT_LOOPT_NOG
+
+    def _zoek_bedrijfstoestand(self, entiteiten: list[str]) -> str | None:
+        try:
+            from homeassistant.helpers import entity_registry as er
+
+            reg = er.async_get(self.hass)
+            for eid in entiteiten:
+                ent = reg.async_get(eid)
+                if ent is None or not ent.device_id:
+                    continue
+                for kandidaat in er.async_entries_for_device(reg, ent.device_id):
+                    if kandidaat.entity_id.startswith("sensor.") and (
+                        kandidaat.entity_id.endswith("_operation_state")
+                        or getattr(kandidaat, "translation_key", None) == "operation_state"
+                    ):
+                        return kandidaat.entity_id
+        except Exception:  # noqa: BLE001 - zonder register beslist het vermogen
+            return None
+        return None
 
     @staticmethod
     def _cyclus_klaar_bericht(

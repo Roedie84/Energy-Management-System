@@ -7148,3 +7148,7 @@ ACCU_NIET_AANSTUURBAAR_MELDING_MINUTEN = 10
 # "staat er al"; en ook dat wordt elke tien minuten herhaald.
 OPDRACHT_HERHAAL_SECONDEN = 600
 
+# v5.53.1: Home Connect-bedrijfstoestanden waarin een programma nog loopt.
+# Een vaatwasser verbruikt tijdens het drogen maar een paar watt; zolang het
+# apparaat zelf zegt dat het programma loopt, is de cyclus niet klaar.
+APPARAAT_LOOPT_NOG = frozenset({"run", "pause", "delayedstart", "actionrequired", "aborting"})
