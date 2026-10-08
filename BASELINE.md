@@ -13,3 +13,12 @@
 | MC-tekortkans 22:00, Brier | 0,038 | 30-09..07-10, n=8 | 07-10 23:45 |
 | Piekverkoop onder reserve | 0× sinds v5.28.4 | 04-10 10:32..07-10 | 07-10 23:45 |
 | PV uurratio werkelijk/Solcast | middag 0,94 · 06-07 en 15-17 UTC 0,52-0,69 | 7 d profiel | 07-10 23:45 |
+| PV-voorspelling MAE (dag) | 10,8 % (30 d) · 5,9 % (7 d) | 08-09..07-10 | 08-10 03:40 |
+| PV-bias bewolkt >70% / ≤70% | −7,2 % / −4,6 % (MAE 9,5 / 9,5) | 30 d, n=15/13 | 08-10 03:40 |
+| Verbruik uurprofiel MAE | 0,13 kWh/u | 7 d leave-one-out | 08-10 03:40 |
+| Verbruik nacht 22-09 bias | −0,08 kWh (−3%) · MAE 0,13 | 7 d | 08-10 03:40 |
+| Verbruik dagtotaal bias | −0,49 kWh/dag · MAE 0,84 | 7 d | 08-10 03:40 |
+| Tekortnachten | 3 / 7 (4,24 kWh) | 01-10..07-10 | 08-10 03:40 |
+| Verkoop onder reserve | 0 dagen | 07-10 | 08-10 03:40 |
+| Achteraf (uur, 4,22 ct): werkelijk / optimum t.o.v. zonder accu | +0,29 / −0,55 €/dag | 4 dagen | 08-10 03:40 |
+| Dagrapport-dekking meetlog | 80,6 % | 07-10 | 08-10 03:40 |

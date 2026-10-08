@@ -32,3 +32,15 @@ laatste ronde: 07-10 23:40, gemeten t/m 07-10 23:40
 - Geen release (tussenronde, geen acute bug).
 
 laatste ronde: 07-10 23:45, gemeten t/m 07-10 23:44
+
+## 08-10 03:40 · dagafsluiting 07-10
+- Dag 07-10: PV 11,87 kWh (voorspeld 12,83, −7,5% bij 100% bewolking), import 0,72, export 2,23, accu 6,61 in / 5,67 uit, huis 9,41 kWh. Nacht 06→07 zonder tekort (SoC 30% om 09:00). 0× verkoop onder de reserve (harde regel gehaald). 15 herstarts.
+- PV 30 d MAE 10,8% (bias −4,5), 7 d 5,9% (−2,4) → H-EMS-2 blijft: klein en stabiel. Bewolkt >70% bias −7,2 vs −4,6 (n=15/13), MAE gelijk 9,5% → geen bewolkingseffect op de fout.
+- Verbruik (nieuw gemeten): uurprofiel MAE 0,13 kWh/u; nacht 22-09 bias −0,08 kWh (−3%) → reserve-invoer klopt. Dagtotaal −0,49 kWh/dag (mediaan per uur mist witgoed; reserve telt gepland witgoed apart).
+- H-EMS-4 (nieuw): achteraf-optimum per uur over 4 dagen (29-09, 30-09, 01-10, 07-10; salderen = symmetrische prijs, slijtage 4,22 ct): werkelijk 1,16 € duurder dan zonder accu, optimum 2,20 € goedkoper. Bij 0 ct slijtage werkelijk ≈ zonder accu (+0,09/dag). Gat: zon opslaan bij ~30 ct levert onder salderen weinig; optimum laadt in de goedkoopste uren en levert in de piek. n=4, aannames (uur, perfecte kennis) → eerst 14 dagen meten, geen voorstel.
+- Meetfout gevonden: `sensor.solaredge_production_energy` (cloud-dagteller) staat 00:04-07:07 op unknown → schaduw-dagrapport slaat nachtkwartieren stil over (dekking 80,6%, `kwartieren_gemeten` 76 is misleidend). Zichtbaar gemaakt in v5.45; instelling → L-EMS-003.
+- Gebouwd **v5.45** (L-EMS-002): MC-kans 22:00 per avond bewaard + `mc_22u` in dagrecord + `kalibratie_22u` (Brier); dagrapport `kwartieren_bruikbaar/ongebruikt`. 4815 tests groen, workflow groen, HACS ververst.
+- Lopend: nacht →08-10 om 04:00 verwacht tekort 0 (MC 2,4%; om 23:45 nog 0,31 kWh/41,7%) → toetsen na 09:00. 09-10 Solcast 1,8 kWh (somber): laadbesluit en reserve volgen.
+- Cockpit LET OP 's nachts door tweede PV-voorspelling (forecast.solar) die elk ander uur `unavailable` is (01:04, 03:04) — externe bron, geen EMS-fout.
+
+laatste ronde: 08-10 04:40, gemeten t/m 08-10 04:10
