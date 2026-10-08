@@ -18,6 +18,7 @@ from homeassistant.helpers import config_validation as cv
 from .const import DOMAIN, PLATFORMS
 from .coordinator import EnergyManagementSystemCoordinator
 from .solar_forecast import SolarForecastAccuracyTracker
+from .zendure_lokaal import ZendureLokaalMeelezer
 
 # v3.81.0: de lijst staat in const.py, zodat de platformcontrole er
 # niet naast kan zitten. Twee lijsten met dezelfde inhoud is precies de
@@ -192,6 +193,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     coordinator.herstel_de_opslag_na_de_sensoren()
     await coordinator.async_setup()
     await solar_tracker.async_setup()
+    # v5.50: de Zendure-accu zelf meelezen, naast de Zendure-integratie.
+    # Alleen lezen en vergelijken; de sturing leest hier niets uit. Een
+    # fout hier mag het EMS nooit tegenhouden.
+    try:
+        meelezer = ZendureLokaalMeelezer(hass)
+        await meelezer.async_start()
+        coordinator.zendure_lokaal = meelezer
+        entry.async_on_unload(meelezer.async_stop)
+    except Exception as err:  # noqa: BLE001
+        _LOGGER.warning("Zendure-meelezen niet gestart: %s", err)
     await hass.async_add_executor_job(_copy_dashboard_template, hass)
     await hass.async_add_executor_job(_copy_overview_background, hass)
 

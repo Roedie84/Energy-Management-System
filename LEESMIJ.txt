@@ -1,15 +1,13 @@
-EMS v5.49 - gelijk met gelijk
+EMS v5.50 - de accu zelf meelezen
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
-Alleen rapportage: de sturing, de reserve, de drempels, de marges en de
+Alleen lezen: de sturing, de reserve, de drempels, de marges en de
 optie-standaarden veranderen niet.
-Water (L-EMS-008): de trend zet vandaag-tot-nu tegen het verbruik tot
-dezelfde kloktijd op eerdere dagen, niet meer tegen hele dagen (dat gaf
-overdag altijd rond -85%). Daarvoor wordt per dag een uurprofiel bewaard.
-Tot er 3 dagen profiel zijn: voor 20:00 geen trend, daarna tegen de mediaan
-van hele dagen geschaald naar het verstreken deel van de dag. Nieuwe
-attributen trend_methode, trend_referentie_liter en trend_toelichting.
-Cockpit: "balans wijkt af" pas als de afwijking 3 rondes en 3 minuten op
-rij aanhoudt; een snelle zonwisseling zet de cockpit niet meer op LET OP.
-Valt de balanscontrole even weg, dan blijft het laatste oordeel 5 minuten
-staan in plaats van uit de cockpitregel te verdwijnen.
+Stap 1 van Zendure in het EMS: het EMS leest de SolarFlow elke 15 s zelf
+uit via de lokale API en vergelijkt elke waarde met de Zendure-integratie.
+Het schrijft nooit naar de accu. Nieuwe sensor "Zendure lokaal meelezen"
+(verzamelt / gelijk / wijkt af / geen verbinding) met daarnaast, overgenomen
+uit Gielz1986/Zendure-HA-zenSDK: celbalans per module, relaisschakelingen
+per dag, opslagmodus (RAM of flash), kalibratie, foutmelding en het
+omzetrendement laden en ontladen. Te zien op de Proefstand en in de
+diagnostiek. De tellingen overleven een herstart.

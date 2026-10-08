@@ -31162,3 +31162,64 @@ tijdstempel.
 `test_cockpit_matrix.py` (een afwijkende balans houdt eerst aan),
 `test_water_tracking.py` (uurprofielen voor de trend) en
 `test_v547_water_eenheid.py` (overdag zonder profielen geen trend).
+
+## v5.50 — De accu zelf meelezen
+
+Stap 1 van "Zendure in het EMS": alleen lezen. De sturing, de reserve, de
+drempels, de marges en de optie-standaarden zijn niet aangeraakt; de
+coördinator leest niets uit de nieuwe module (een toets bewaakt dat).
+
+### 1. Lokaal meelezen naast de Zendure-integratie
+
+Gevraagd: de Zendure-integratie op termijn in het EMS opnemen, zodat het
+EMS er niet meer van afhangt (de dag ervoor liep die vast op hernoemde
+entiteiten en meldde code die in Home Assistant 2027.8 stopt).
+
+- Nieuwe module `zendure_lokaal.py`: elke 15 s `GET /properties/report` op
+  de lokale ZenSDK-API van de SolarFlow. Het adres wordt afgeleid zoals de
+  Zendure-integratie dat doet (`zendure-<model>-<serienummer>.local`, uit het
+  apparaatregister); niets in te stellen.
+- De ruwe waarden worden omgerekend naar de eenheden van de
+  Zendure-integratie (tiende kelvin, centivolt, tiende ampère met teken,
+  promille) en per veld vergeleken met de bijbehorende Zendure-entiteit
+  (gevonden via de unique_id, niet via de entity_id). Marges: vermogen
+  25 W of 10%, laadstand 1%, temperatuur 1 °C, celspanning 0,02 V.
+- Oordeel: `verzamelt` (minder dan 20 vergelijkingen per veld), `gelijk`
+  (elk veld ≥ 95% binnen de marge), `wijkt af`, `geen verbinding` (3
+  mislukte rondes op rij) of `niet gevonden`.
+- Schrijft nooit: geen POST, geen `properties/write`, geen dienstaanroep.
+  Een broncodetoets bewaakt dat. Elke fout in een ronde wordt afgevangen.
+- De tellingen worden bewaard (`energy_management_system.zendure_lokaal`,
+  elke 10 rondes en bij afsluiten); een herstart wist ze niet.
+
+### 2. Wat de Zendure-integratie niet laat zien
+
+Gevraagd: "Neem het beste uit deze integratie ook mee"
+(Gielz1986/Zendure-HA-zenSDK, een volledig lokale YAML-oplossing op dezelfde
+API). Overgenomen, alleen lezend:
+
+- celbalans per module (hoogste min laagste celspanning in mV: ≤ 20
+  uitstekend, ≤ 50 goed, ≤ 80 lichte onbalans, daarboven onbalans);
+- relaisschakelingen: elke wissel tussen laden en ontladen, per dag (14
+  dagen bewaard) en totaal - elke wissel slijt het relais;
+- opslagmodus (`smartMode`: 1 = werkgeheugen, 0 = flash). Voor stap 2: een
+  regelopdracht hoort `smartMode` 1 mee te sturen, anders slijt het flash;
+- kalibratie (`socStatus`), foutmelding (`is_error`), storingsniveau,
+  laad-/ontlaadgrens (`socLimit`), wifi-signaal;
+- omzetrendement van dit moment, laden (gelijkstroom in de modules /
+  wisselstroom van het net) en ontladen (wisselstroom naar huis /
+  gelijkstroom uit de modules), alleen zonder zon en boven 300 W; de
+  mediaan over de laatste 500 metingen en het retourrendement.
+
+Hun regelmodi, P1-regeling en schrijfopdrachten horen bij stap 2.
+
+### Weergave
+
+- Nieuwe sensor `sensor.woonkamer_energy_management_system_zendure_lokaal_meelezen`
+  met het oordeel als toestand en de vergelijking, de afgeleide waarden,
+  relaisschakelingen en het omzetrendement als attributen.
+- Dashboard, Proefstand: een regel met het oordeel en een kaart met relais,
+  opslagmodus, rendement, celbalans per module en de afwijkende velden.
+- Diagnostiek: `zendure_lokaal`.
+
+18 nieuwe tests (`test_v550_zendure_lokaal.py`), 4919 groen.

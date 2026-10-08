@@ -464,6 +464,8 @@ async def async_get_config_entry_diagnostics(
             "get_energiebalans_oordeel",
             coordinator.get_energiebalans_oordeel,
         ),
+        # v5.50: de Zendure-accu zelf meelezen (alleen lezen).
+        "zendure_lokaal": _veilig("zendure_lokaal", lambda: _zendure_lokaal(coordinator)),
         # v3.89.0: welke voorwaarden tot de beslissing leidden.
         "afwegingen": _veilig("get_afwegingen", coordinator.get_afwegingen),
         # v3.90.0: het juiste soort entiteit, en de prijsreeks.
@@ -1579,3 +1581,11 @@ def _json_veilig(waarde: Any) -> Any:
     if isinstance(waarde, (list, tuple, set)):
         return [_json_veilig(x) for x in waarde]
     return str(waarde)
+
+
+def _zendure_lokaal(coord) -> dict:
+    """v5.50: de Zendure-accu zelf meelezen (alleen lezen)."""
+    meelezer = getattr(coord, "zendure_lokaal", None)
+    if meelezer is None:
+        return {"modus": "niet gestart"}
+    return meelezer.attributen() | {"oordeel": meelezer.status()}

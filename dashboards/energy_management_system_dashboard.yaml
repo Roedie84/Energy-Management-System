@@ -2698,6 +2698,19 @@ views:
       grid_options:
         columns: 12
         rows: auto
+    - type: custom:mushroom-template-card
+      entity: sensor.woonkamer_energy_management_system_zendure_lokaal_meelezen
+      primary: Zendure lokaal meelezen
+      secondary: '{{ states(''sensor.woonkamer_energy_management_system_zendure_lokaal_meelezen'') }}'
+      icon: mdi:battery-sync-outline
+      tap_action:
+        action: more-info
+    - type: markdown
+      title: Zendure lokaal (alleen lezen)
+      content: '{{ state_attr(''sensor.woonkamer_energy_management_system_zendure_lokaal_meelezen'', ''tekst'') or ''_Nog geen gegevens._'' }}'
+      grid_options:
+        columns: 12
+        rows: auto
     - type: markdown
       title: Wie staat er klaar?
       content: '{% set p = state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''proefstand'') or {} %}{% set s = p.get(''samenvatting'') or {} %}**{{ s.get(''oordeel'', ''Nog niet bepaald.'') }}**

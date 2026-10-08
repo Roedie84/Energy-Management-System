@@ -163,6 +163,8 @@ async def async_setup_entry(
         DiagnoseGezondheidSensor(coordinator, entry.entry_id),
         DiagnoseSturingSensor(coordinator, entry.entry_id),
         DiagnoseLerenSensor(coordinator, entry.entry_id),
+        # v5.50: de Zendure-accu zelf meelezen (alleen lezen).
+        ZendureLokaalSensor(coordinator, entry.entry_id),
     ]
 
     if tracker.enabled:
@@ -4764,3 +4766,31 @@ class DiagnoseLerenSensor(DiagnoseSensor):
     _attr_name = "Diagnose leren"
     _soort = "leren"
 
+
+class ZendureLokaalSensor(_CoordinatorDiagnosticSensor):
+    """Wat het EMS zelf van de Zendure-accu leest, naast de Zendure-integratie
+    (v5.50). Alleen lezen - stuurt niets. Toestand: verzamelt / gelijk /
+    wijkt af / geen verbinding / niet gevonden."""
+
+    _attr_has_entity_name = True
+    _attr_name = "Zendure lokaal meelezen"
+    _attr_icon = "mdi:battery-sync-outline"
+    _unrecorded_attributes = frozenset({"per_veld", "laatste_lezing", "afwijkende_velden", "accu"})
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        super().__init__(coordinator, entry_id, "zendure_lokaal")
+
+    @property
+    def native_value(self) -> str:
+        meelezer = getattr(self._coordinator, "zendure_lokaal", None)
+        return meelezer.status() if meelezer is not None else "uit"
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        meelezer = getattr(self._coordinator, "zendure_lokaal", None)
+        if meelezer is None:
+            return {"modus": "niet gestart"}
+        try:
+            return meelezer.attributen()
+        except Exception:  # noqa: BLE001 - meelezen mag de sensor niet breken
+            return {"modus": "fout bij samenvatten"}
