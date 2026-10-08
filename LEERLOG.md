@@ -71,6 +71,7 @@ laatste ronde: 08-10 07:40, gemeten t/m 08-10 07:42
 - Nacht 07→08 afgerond: geen tekort (dagrecord 07-10 `shortfall` false, 0 kWh). Tekortnachten laatste 7: 3 (4,24 kWh), ongewijzigd.
 - PV t/m 11:41: 2,33 kWh tegen Solcast-actueel 2,75 (−15%); uurratio 09:00 0,67, 10:00 0,70 (geleerd profiel 07/08 UTC 0,68/0,90). EMS-dagvoorspelling 10,21, Solcast nu 11,49.
 - Beslissingen sinds 07:40 alleen `default_smart` → 0× verkoop onder de reserve (harde regel gehaald).
+- **L-EMS-005 ingesteld door Ruud:** regelsensor `sensor.hw_p1_vermogen_100w` −1003 W bij P1 −1023 W (+20 W, was +50). Nacht-export 00-07 meten in de dagafsluiting (basis 0,43-0,45 kWh).
 - Lopend: laadblok 12:15; 09-10 zon 2,61 tegen verbruik 8,31 kWh (meetlog) → laadhoeveelheid en nacht 08→09 volgen.
 - Geen release (tussenronde, niets acuut; v5.47 net geïnstalleerd).
 

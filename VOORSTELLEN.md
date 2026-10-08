@@ -35,7 +35,7 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Meten na bouw: sensor sluipverbruik-detectie direct na update "normaal", `methode_versie` 2; `baseline_load_history` alleen waarden ≥ 0 en in de orde 0,1-0,3 kW; na 10 dagen referentie > 0 W en geen vals alarm.
 
 ## L-EMS-005 · smart-stand: nachtelijke teruglevering van −50 W naar −20 W
-- Status: **akkoord 08-10** → **niet in EMS; instelling bij Ruud** (gedocumenteerd in v5.46)
+- Status: **akkoord 08-10** → **ingesteld door Ruud (08-10, vóór 11:10)**: regelsensor −1003 W bij P1 −1023 W (+20 W, was +50). Effect meten: nacht 08→09 export 00-07 (basis 0,43-0,45 kWh)
 - Onderbouwing: elk nachtuur gemiddeld −47..−53 W, ≈ 0,5 kWh accu-energie per nacht het net op (~27 ct).
 - Waar het zit: niet in EMS-code/-optie en niet in zendure_ha of de firmware. zendure_ha regelt op p1meter `sensor.hw_p1_vermogen_100w` ("HW P1 Vermogen -50W", platform `rest`, unique_id `HW_P1_Vermogen_Min100`), een eigen REST-sensor in de HA-YAML die de HomeWizard-P1 + 50 W meldt (live 08-10: P1 −54 W, regelsensor −4 W). De Zendure houdt die op 0 → echte P1 −50 W.
 - Aanpassen: in de YAML van die REST-sensor de +50 in de value_template vervangen door +20 (naam evt. mee), daarna Ontwikkelhulpmiddelen → YAML → REST-entiteiten herladen (geen herstart nodig). EMS meet de verschuiving live (`regelverschuiving_kw`, v5.20) en rekent vanzelf met 20 W. NB: `TEKORT_IMPORT_MIN_W` = 50 W blijft de vloer in de tekorttelling (export ≤ 50 W telt niet als verkoop) — onschadelijk.
