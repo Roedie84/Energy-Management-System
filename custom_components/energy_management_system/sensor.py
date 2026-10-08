@@ -20,6 +20,7 @@ from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    SLUIPVERBRUIK_METHODE_VERSIE,
     GEEN_ATTRIBUTEN_IN_RECORDER,
     COCKPIT_MIN_INTERVAL_S,
     CONF_BATTERY_POWER_SENSOR,
@@ -1426,11 +1427,13 @@ class SluipverbruikSensor(SensorEntity, RestoreEntity):
             "cusum_accumulator_kw": round(self._coordinator.cusum_accumulator_kw, 4),
             "baseline_load_history": self._coordinator.baseline_load_history,
             "dagen_geschiedenis": len(self._coordinator.baseline_load_history),
+            "methode_versie": self._coordinator.sluipverbruik_methode_versie,
             "note": (
-                "Vergelijkt het laagste dagelijkse verbruik (meestal "
-                "diep in de nacht) met een langere-termijn-referentie "
-                "(30 dagen). Een geleidelijke stijging die een week "
-                "aanhoudt wordt gemeld; losse hoge nachten niet."
+                "Vergelijkt het laagste kwartier van de dag (mediaan per "
+                "kwartier, nooit onder 0 W; meestal diep in de nacht) met "
+                "een langere-termijn-referentie (30 dagen). Een "
+                "geleidelijke stijging die een week aanhoudt wordt "
+                "gemeld; losse hoge nachten niet."
             ),
         }
 
@@ -1441,6 +1444,11 @@ class SluipverbruikSensor(SensorEntity, RestoreEntity):
         if last_state is None:
             return
         attrs = last_state.attributes
+        # v5.46: alleen een reeks van de huidige vloermethode terugzetten.
+        # De oude (dagminima van losse monsters) is vervuild met de
+        # wisselpieken van de accu - zie SLUIPVERBRUIK_METHODE_VERSIE.
+        if attrs.get("methode_versie") != SLUIPVERBRUIK_METHODE_VERSIE:
+            return
         try:
             raw_history = attrs.get("baseline_load_history")
             if isinstance(raw_history, list):

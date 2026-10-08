@@ -18,12 +18,16 @@ def _base_config(**overrides):
 
 
 def _run_days(coordinator, hass, loads_w, start_day=DAY0):
-    """Simulate one tick per day at a fixed low-load hour, each with the
+    """Simulate one full low-load quarter per day (v5.46: the floor is
+    the median of a quarter, so one tick is not enough), each with the
     given household load (W), to drive the daily floor-load tracker."""
     for i, load_w in enumerate(loads_w):
         hass.states.set("sensor.p1", str(load_w))
         day = start_day + timedelta(days=i)
-        coordinator._update_anomaly_detection(day.replace(hour=3, minute=0))
+        for minuut in range(6):
+            coordinator._update_anomaly_detection(
+                day.replace(hour=3, minute=minuut)
+            )
 
 
 def test_no_detection_with_insufficient_history(make_coordinator, hass):
@@ -95,12 +99,13 @@ def test_lower_reading_within_the_same_day_updates_the_running_minimum(
     make_coordinator, hass
 ):
     coordinator = make_coordinator(_base_config())
-    hass.states.set("sensor.p1", "300")
-    coordinator._update_anomaly_detection(DAY0.replace(hour=1, minute=0))
-    hass.states.set("sensor.p1", "180")
-    coordinator._update_anomaly_detection(DAY0.replace(hour=3, minute=0))
-    hass.states.set("sensor.p1", "400")
-    coordinator._update_anomaly_detection(DAY0.replace(hour=5, minute=0))
+    for uur, waarde in ((1, "300"), (3, "180"), (5, "400")):
+        hass.states.set("sensor.p1", waarde)
+        for minuut in range(6):
+            coordinator._update_anomaly_detection(
+                DAY0.replace(hour=uur, minute=minuut)
+            )
+    coordinator._update_anomaly_detection(DAY0.replace(hour=6, minute=0))
 
     assert coordinator._today_min_load_kw == pytest.approx(0.18)
 

@@ -99,6 +99,13 @@ def _vul_alles(c):
     )
 
     c.energy_balance_method_version = ENERGY_BALANCE_METHOD_VERSION
+    # v5.46: idem voor de vloermethode van de sluipverbruik-detectie - zie
+    # test_v546_vloerverbruik.py.
+    from custom_components.energy_management_system.const import (
+        SLUIPVERBRUIK_METHODE_VERSIE,
+    )
+
+    c.sluipverbruik_methode_versie = SLUIPVERBRUIK_METHODE_VERSIE
     c.battery_cooling_last_change = NOW
 
 

@@ -327,6 +327,10 @@ from .const import (
     CUSUM_REFERENCE_EXCLUDE_RECENT_DAYS,
     CUSUM_SLACK_KW,
     CUSUM_ALARM_THRESHOLD_KW,
+    CUSUM_VLOER_BLOK_MINUTEN,
+    CUSUM_VLOER_MIN_KW,
+    CUSUM_VLOER_MIN_MONSTERS,
+    SLUIPVERBRUIK_METHODE_VERSIE,
     CONF_KNMI_WEATHER_ENTITY,
     CONF_OPENWEATHERMAP_WEATHER_ENTITY,
     CONF_BACKYARD_TEMPERATURE_SENSOR,
@@ -1210,7 +1214,9 @@ class EnergyManagementSystemCoordinator:
         # v1.9.1: dagopwek uit de cumulatieve meterstand in plaats van
         # geintegreerd vermogen. Zie CONF_PV_ENERGY_SENSOR.
         self._pv_energy_meter_day_start: float | None = None
-        self._pv_energy_meter_last: float | None = None
+        # v5.46: en van WELKE meter die standen zijn - zie
+        # `_verwerk_pv_meterstand`.
+        self._pv_energy_meter_last, self._pv_energy_meter_entity = None, None
         self.pv_production_source: str = "geïntegreerd vermogen"
         self.daily_report_history: list[dict] = []
         self._daily_report_day_key: date | None = None
@@ -1371,7 +1377,10 @@ class EnergyManagementSystemCoordinator:
         # CUSUM sluipverbruik-detectie (v0.63.29).
         self.baseline_load_history: list[float] = []
         self._cusum_check_date: date | None = None
-        self._today_min_load_kw: float | None = None
+        # v5.46: het vloerverbruik per kwartier als mediaan (zie
+        # `_update_anomaly_detection`), en met welke methode de reeks is
+        # opgebouwd.
+        self._today_min_load_kw, self._vloer_blok_start, self._vloer_blok_monsters, self.sluipverbruik_methode_versie = None, None, [], None
         self.cusum_accumulator_kw: float = 0.0
         self.sluipverbruik_detected: bool = False
         self.sluipverbruik_estimated_drift_w: float | None = None
@@ -6269,18 +6278,42 @@ class EnergyManagementSystemCoordinator:
             overzicht[naam] = blok
         return overzicht
 
-    def _verwerk_pv_meterstand(self, meter_kwh: float) -> None:
+    def _verwerk_pv_meterstand(
+        self, meter_kwh: float, entity_id: str | None = None
+    ) -> None:
         """Leidt de dagopwek af uit de cumulatieve meterstand (v1.9.1).
 
         Een meterstand hoort te stijgen. Daalt hij, dan is de omvormer
         herstart of de teller teruggezet; het verschil is dan
         betekenisloos en de dag wordt opnieuw geijkt in plaats van een
         negatieve opwek te boeken.
+
+        v5.46: ook opnieuw ijken bij een ANDERE meter. Gevonden bij het
+        omzetten van de opwekteller (L-EMS-003): de cloudteller
+        `sensor.solaredge_production_energy` is een DAGteller (11,868 kWh
+        op 7 oktober, 's nachts 'unknown'), de Modbus-teller
+        `sensor.solaredge_i1_ac_energy` een levenslange (23.426 kWh). Het
+        dagbegin is bewaard in de opslag; met de nieuwe meter ertegen had
+        de dagopwek 23.414 kWh geworden - een stijging, dus de
+        terugzetcontrole hierboven vangt hem niet. De eenheid was nooit
+        het probleem (`_read_sensor_float` rekent Wh om), de herkomst wel.
+
+        Daarom onthoudt de opslag welke meter het dagbegin hoort. Is dat
+        een andere (of onbekend: opslag van vóór v5.46), dan blijft de
+        opwek van vandaag staan en telt de nieuwe meter vanaf hier door.
         """
         self.pv_production_source = "meterstand"
         if self._pv_energy_meter_day_start is None:
             self._pv_energy_meter_day_start = meter_kwh
             self._pv_energy_meter_last = meter_kwh
+            self._pv_energy_meter_entity = entity_id
+            return
+        if entity_id is not None and self._pv_energy_meter_entity != entity_id:
+            self._pv_energy_meter_day_start = meter_kwh - (
+                self.pv_production_today_kwh
+            )
+            self._pv_energy_meter_last = meter_kwh
+            self._pv_energy_meter_entity = entity_id
             return
 
         vorige = self._pv_energy_meter_last
@@ -27349,7 +27382,10 @@ class EnergyManagementSystemCoordinator:
             self.config.get(CONF_PV_ENERGY_SENSOR)
         )
         if meter_kwh is not None:
-            self._verwerk_pv_meterstand(meter_kwh)
+            # v5.46: met de meter erbij - een andere meter ijkt opnieuw.
+            self._verwerk_pv_meterstand(
+                meter_kwh, self.config.get(CONF_PV_ENERGY_SENSOR)
+            )
         else:
             self.pv_production_source = "geïntegreerd vermogen"
             self.pv_production_today_kwh += (pv_power_w / 1000) * elapsed_hours
@@ -32193,17 +32229,77 @@ class EnergyManagementSystemCoordinator:
             return
         household_load_kw = household_load_w / 1000
 
+        # v5.46: eerst het lopende kwartier afsluiten - het hoort bij de
+        # dag waarin het begon, ook als deze ronde al na middernacht valt.
+        blok = now.replace(
+            minute=now.minute - now.minute % CUSUM_VLOER_BLOK_MINUTEN,
+            second=0,
+            microsecond=0,
+        )
+        if self._vloer_blok_start != blok:
+            self._sluit_vloerkwartier()
+            self._vloer_blok_start = blok
+
         if self._cusum_check_date != now.date():
             if self._cusum_check_date is not None and self._today_min_load_kw is not None:
                 self._finalize_baseline_load_day(self._today_min_load_kw)
-            self._today_min_load_kw = household_load_kw
+            self._today_min_load_kw = None
             self._cusum_check_date = now.date()
-            return
 
-        if self._today_min_load_kw is None or household_load_kw < self._today_min_load_kw:
-            self._today_min_load_kw = household_load_kw
+        self._vloer_blok_monsters.append(household_load_kw)
+
+    def _sluit_vloerkwartier(self) -> None:
+        """Het kwartier telt mee als de mediaan van zijn monsters (v5.46).
+
+        Zie CUSUM_VLOER_BLOK_MINUTEN: het dagminimum van losse monsters
+        ving de wisselpieken van de accu. Een kwartier met te weinig
+        monsters (herstart, uitval) telt niet.
+        """
+        monsters = self._vloer_blok_monsters
+        self._vloer_blok_monsters = []
+        if len(monsters) < CUSUM_VLOER_MIN_MONSTERS:
+            return
+        mediaan = max(CUSUM_VLOER_MIN_KW, statistics.median(monsters))
+        if self._today_min_load_kw is None or mediaan < self._today_min_load_kw:
+            self._today_min_load_kw = mediaan
+
+    def _migreer_sluipverbruik_methode(self) -> None:
+        """Wist een vloerreeks van een oudere methode, eenmalig (v5.46).
+
+        De oude reeks bestaat uit dagminima van losse monsters: 21 van de
+        30 negatief, referentie -225 W. Daartegen meten zou het alarm laten
+        staan (de accumulator stond op 0,37 kW, alarm vanaf 0,15) of het
+        later vals opnieuw laten afgaan. Weg ermee, met accumulator,
+        alarm, referentie en schatting; de nieuwe reeks bouwt zich in tien
+        dagen opnieuw op (CUSUM_MIN_HISTORY_FOR_REFERENCE).
+
+        Ook uit de bewaarde opslag die na de sensoren nog een keer wordt
+        toegepast (`herstel_de_opslag_na_de_sensoren`), anders komt de oude
+        reeks daar alsnog terug.
+        """
+        if self.sluipverbruik_methode_versie == SLUIPVERBRUIK_METHODE_VERSIE:
+            return
+        self.baseline_load_history = []
+        self.cusum_accumulator_kw = 0.0
+        self.sluipverbruik_detected = False
+        self.sluipverbruik_reference_w = None
+        self.sluipverbruik_estimated_drift_w = None
+        self._today_min_load_kw = None
+        self._vloer_blok_monsters = []
+        self.sluipverbruik_methode_versie = SLUIPVERBRUIK_METHODE_VERSIE
+        opslag = getattr(self, "_geladen_opslag", None)
+        if isinstance(opslag, dict):
+            for sleutel in (
+                "baseline_load_history",
+                "cusum_accumulator_kw",
+                "sluipverbruik_detected",
+            ):
+                opslag.pop(sleutel, None)
+            opslag["sluipverbruik_methode_versie"] = SLUIPVERBRUIK_METHODE_VERSIE
 
     def _finalize_baseline_load_day(self, floor_load_kw: float) -> None:
+        # v5.46: verbruik is nooit negatief - ook niet uit een oude ronde.
+        floor_load_kw = max(CUSUM_VLOER_MIN_KW, floor_load_kw)
         self.baseline_load_history.append(round(floor_load_kw, 4))
         self.baseline_load_history = self.baseline_load_history[
             -CUSUM_BASELINE_HISTORY_DAYS:
@@ -35285,6 +35381,7 @@ class EnergyManagementSystemCoordinator:
         # een keer teruggezet kan worden - zie `herstel_de_opslag_na_de_sensoren`.
         self._bewaar_geladen_opslag(stored)
         self._discard_history_from_an_older_method()
+        self._migreer_sluipverbruik_methode()
         self._migreer_dagreeks_kosten()
         self._ruim_oude_klimaatcellen_op()
         self._schoon_cyclusduren_op()

@@ -615,6 +615,22 @@ CUSUM_MIN_HISTORY_FOR_REFERENCE = 10
 CUSUM_REFERENCE_EXCLUDE_RECENT_DAYS = 5
 CUSUM_SLACK_KW = 0.02
 CUSUM_ALARM_THRESHOLD_KW = 0.15
+# v5.46: het vloerverbruik van een dag is het laagste KWARTIER, en een
+# kwartier telt als de mediaan van zijn monsters. Het dagminimum van losse
+# monsters stond op 21 van de 30 dagen onder nul (referentie -225 W): de
+# P1-meter en het accuvermogen werken niet tegelijk bij, en elke ~25
+# minuten ving een monster het moment waarop de accu al 2,4 kW leverde en
+# de P1-meter dat nog niet zag (-2,1 tot -2,2 kW, zo'n tien seconden). Bij
+# een ronde per minuut is dat één monster op de vijftien; de mediaan laat
+# hem liggen, een gemiddelde (-220 W per vijf minuten) niet.
+CUSUM_VLOER_BLOK_MINUTEN = 15
+# Minder monsters in een kwartier (herstart, uitval): geen oordeel.
+CUSUM_VLOER_MIN_MONSTERS = 5
+# Verbruik kan niet negatief zijn; wat eronder komt is meetfout.
+CUSUM_VLOER_MIN_KW = 0.0
+# Versie van de vloermethode. Een reeks die met een oudere methode is
+# opgebouwd wordt eenmalig gewist, met accumulator en alarm (v5.46).
+SLUIPVERBRUIK_METHODE_VERSIE = 2
 
 # Weather ensemble cross-check (v0.63.30): compares live PV output
 # against Solcast's own forecast for right now (already computable from
@@ -3343,6 +3359,7 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "kalibratie_meting": {"type": "plain"},
     "_pv_energy_meter_day_start": {"type": "plain"},
     "_pv_energy_meter_last": {"type": "plain"},
+    "_pv_energy_meter_entity": {"type": "plain"},
     "battery_module_health": {"type": "plain"},
     "energy_balance_error_history": {"type": "plain"},
     "energy_balance_method_version": {"type": "plain"},
@@ -3445,6 +3462,7 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "total_feedin_premium_eur": {"type": "plain"},
     "cusum_accumulator_kw": {"type": "plain"},
     "sluipverbruik_detected": {"type": "plain"},
+    "sluipverbruik_methode_versie": {"type": "plain"},
     "battery_cumulative_discharged_kwh": {"type": "plain"},
     "peak_power_all_time_w": {"type": "plain"},
     "peak_power_all_time_date": {"type": "plain"},

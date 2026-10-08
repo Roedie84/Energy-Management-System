@@ -30900,3 +30900,66 @@ met een echte stand.
 
 **Volledige testsuite**: 4815 tests, allemaal groen, waarvan 11 nieuw
 (`test_v545_mc_kalibratie.py`).
+
+## v5.46 — Het vloerverbruik is een kwartier, geen monster
+
+Uit de uuranalyse van 8 oktober, met akkoord van Ruud op drie punten
+(L-EMS-003, L-EMS-004, L-EMS-005). De sturing verandert niet.
+
+### 1. Sluipverbruik: robuust vloerverbruik, oude referentie weg (L-EMS-004)
+
+De sluipverbruik-detectie stond op "gedetecteerd", maar de referentie was
+-225 W en 21 van de 30 dagminima waren negatief. Verbruik kan niet negatief
+zijn: het dagminimum van losse monsters (een per minuut) ving de
+wisselpieken van de accu. Elke ~25 minuten levert de accu kort 2,4 kW; de
+P1-meter ziet dat een paar seconden eerder dan het accuvermogen bijwerkt,
+en een monster in dat gat leest -2,1 tot -2,2 kW als huisverbruik (in de
+recorder van 8 oktober 02:03: ~10 seconden).
+
+Nu is het vloerverbruik van een dag het laagste **kwartier**, en een
+kwartier telt als de **mediaan** van zijn monsters (minstens 5, anders geen
+oordeel), begrensd op ≥ 0 W. De mediaan laat één verkeerd monster op de
+vijftien liggen; een gemiddelde per vijf minuten niet (-220 W). Het laatste
+kwartier van de dag telt voor de dag waarin het begon.
+
+De oude reeks is vervuild en wordt eenmalig gewist, met accumulator (stond
+op 0,37 kW, alarm vanaf 0,15), alarm, referentie en schatting
+(`sluipverbruik_methode_versie` = 2, bewaard). Dat gebeurt bij het laden én
+in de opslag die na de sensoren nog een keer wordt toegepast, en de sensor
+zet alleen een reeks terug met hetzelfde versienummer (nieuw attribuut
+`methode_versie`). Na de update staat de detectie dus op "normaal"; na tien
+dagen is er weer een referentie.
+
+### 2. Andere PV-energieteller: opnieuw ijken in plaats van 23.000 kWh opwek (L-EMS-003)
+
+Voor het omzetten van `pv_energy_sensor_entity` van de cloudteller
+(`sensor.solaredge_production_energy`, Wh) naar de Modbus-teller
+(`sensor.solaredge_i1_ac_energy`, kWh) eerst de code nagelopen. De eenheid
+wordt overal omgerekend (`_read_sensor_float`, de meetlaag via
+`kwartierenergie.stand`, de dagreeks uit de statistieken). Maar de
+cloudteller is een **dag**teller (11,868 kWh op 7 oktober) en de Modbus-
+teller een **levens**teller (23.426 kWh), en het dagbegin van de dagopwek
+staat in de opslag. Met de nieuwe meter ertegen was de dagopwek 23.414 kWh
+geworden - een stijging, dus de terugzetcontrole van v1.9.1 vangt hem niet.
+
+Nu bewaart de opslag welke meter bij het dagbegin hoort
+(`_pv_energy_meter_entity`). Bij een andere meter - of opslag van vóór v5.46
+- blijft de opwek van vandaag staan en telt de nieuwe meter vanaf daar
+door. Daarom is de instelling pas na deze update om te zetten.
+
+### 3. Het terugleverdoel van -50 W zit niet in het EMS (L-EMS-005)
+
+De smart-stand levert 's nachts structureel ~-50 W terug (elk uur -47 tot
+-53 W, ≈ 0,5 kWh accu-energie per nacht het net op). Dat doel zit niet in
+deze integratie: de Zendure regelt (zendure_ha, P1-meter
+`sensor.hw_p1_vermogen_100w`) op een eigen REST-sensor in de Home
+Assistant-configuratie ("HW P1 Vermogen -50W", unique_id
+`HW_P1_Vermogen_Min100`) die de echte P1-meter + 50 W meldt. Naar -20 W gaat
+door in die sensor +50 te vervangen door +20 (YAML, daarna REST-entiteiten
+herladen). Het EMS meet de verschuiving al live (`regelverschuiving_kw`,
+v5.20) en rekent dan vanzelf met 20 W; hier verandert niets.
+De afweging: minder accu-energie het net op, iets vaker kort netimport als
+het huisverbruik sneller stijgt dan de Zendure bijregelt.
+
+**Volledige testsuite**: 4831 tests, allemaal groen, waarvan 16 nieuw
+(`test_v546_vloerverbruik.py`).
