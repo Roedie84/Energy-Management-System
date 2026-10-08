@@ -783,7 +783,7 @@ def test_de_cockpit_toont_de_titel_uit_het_register(make_coordinator, hass):
 
     c._besluit_snapshot_vastleggen(dt_util.now())
 
-    assert c._schema_gegevens()["besluit"] == "Accu beslist zelf"
+    assert c._schema_gegevens()["besluit"] == "Nul op de meter"
 
 
 def test_de_kaart_noemt_de_ruimte_zoals_de_waarom_regel(make_coordinator, hass):

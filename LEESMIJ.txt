@@ -1,4 +1,4 @@
-EMS v5.53.2 - ook de wasmachine
+EMS v5.53.3 - nul op de meter
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
 De sturing, de reserve, de drempels, de marges en de optie-standaarden
@@ -7,5 +7,6 @@ Vaatwasser en wasmachine heten pas klaar als het apparaat zelf (Home
 Connect) zegt dat het programma klaar is; de melding "klaar" komt niet meer
 tijdens het drogen of een stil deel van het programma. De wasmachine wordt
 nu ook gevonden (zijn status heet sensor.wasmachine_status).
+De gewone stand heet niet meer "Accu beslist zelf" maar "Nul op de meter".
 Bevat ook v5.53: de HomeWizard-stekker van de accu wordt elke seconde zelf
 gelezen als maatstaf voor "Zendure lokaal meelezen".

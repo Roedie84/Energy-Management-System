@@ -2545,11 +2545,14 @@ REASON_REGISTRY: dict[str, dict] = {
     },
     "default_smart": {
         "mode": OPTION_SMART,
-        "titel": "Accu beslist zelf",
+        # v5.53.3: "Accu beslist zelf" klonk alsof er niets gebeurde; de accu
+        # houdt in deze stand juist de meter op nul.
+        "titel": "Nul op de meter",
         "uitleg": (
             "Er is geen bijzondere reden om in te grijpen: de prijs is "
             "niet uitzonderlijk en het goedkope blok is gaande of "
-            "voorbij. De accu regelt dit zelf."
+            "voorbij. De accu houdt de meter op nul: hij levert wat het "
+            "huis vraagt en slaat zonne-overschot op."
         ),
         "ernst": "info",
         "getallen": True,

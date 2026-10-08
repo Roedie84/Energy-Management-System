@@ -31383,3 +31383,11 @@ Nu ook herkend aan de unique_id van Home Connect
 (`…BSH.Common.Status.OperationState`).
 
 2 nieuwe tests.
+
+## v5.53.3 — Nul op de meter
+
+Gemeld: "Accu beslist zelf is natuurlijk rare verwoording gezien hij 0 op de
+meter houdt". De titel van de stand `default_smart` is nu "Nul op de meter",
+en de uitleg zegt wat de accu dan doet: leveren wat het huis vraagt en
+zonne-overschot opslaan. Alleen tekst; de stand zelf is ongewijzigd.
+Aangepast: `test_cockpit_matrix.py`.
