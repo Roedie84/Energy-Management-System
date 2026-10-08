@@ -355,6 +355,12 @@ def rendement_samenvatting(tellingen: dict) -> dict:
 
 REACTIE_VELDEN = ("gridInputPower", "outputPackPower", "packInputPower", "outputHomePower",
                   "inputLimit", "outputLimit", "acMode")
+# Limieten en de laad-/ontlaadstand zijn OPDRACHTEN: de Zendure-integratie
+# zet haar entiteit op de nieuwe waarde zodra het EMS de opdracht geeft, nog
+# voor de accu iets doet. Die tellen niet mee in de race (de Zendure-kant
+# wint dan altijd); voor die velden wordt gemeten hoe lang het duurt tot de
+# accu de opdracht zelf laat zien (v5.51.1).
+OPDRACHT_VELDEN = ("inputLimit", "outputLimit", "acMode")
 REACTIE_MIN_SPRONG_W = 150.0
 REACTIE_MAX_WACHT_S = 60.0
 REACTIE_LAATSTE = 20
@@ -380,7 +386,7 @@ def _zelfde(veld: str, a: float | None, b: float) -> bool:
 
 def lege_reactie() -> dict:
     return {"laatst": {}, "open": {}, "eerst": {"lokaal": 0, "zendure": 0}, "niet_gevolgd": 0,
-            "voorsprong": {"lokaal": [], "zendure": []}, "recent": []}
+            "voorsprong": {"lokaal": [], "zendure": []}, "recent": [], "bevestiging": []}
 
 
 def reactie_waarneming(r: dict, bron: str, veld: str, waarde: float | None, t: float) -> None:
@@ -397,6 +403,17 @@ def reactie_waarneming(r: dict, bron: str, veld: str, waarde: float | None, t: f
     w = open_.get(veld)
     if w is not None and w["bron"] == ander and _zelfde(veld, w["waarde"], waarde):
         voorsprong = round(max(0.0, t - w["t"]), 1)
+        open_.pop(veld)
+        if veld in OPDRACHT_VELDEN:
+            if ander == "zendure":
+                reeks = r.setdefault("bevestiging", [])
+                reeks.append(voorsprong)
+                del reeks[:-REACTIE_STEEKPROEF]
+                r["recent"].append({"veld": veld, "soort": "opdracht", "accu_bevestigt_na_s": voorsprong,
+                                    "waarde": waarde, "t": round(t)})
+                del r["recent"][:-REACTIE_LAATSTE]
+            laatst[bron] = waarde
+            return
         r["eerst"][ander] = r["eerst"].get(ander, 0) + 1
         reeks = r["voorsprong"].setdefault(ander, [])
         reeks.append(voorsprong)
@@ -404,7 +421,6 @@ def reactie_waarneming(r: dict, bron: str, veld: str, waarde: float | None, t: f
         r["recent"].append({"veld": veld, "eerst": ander, "voorsprong_s": voorsprong,
                             "waarde": waarde, "t": round(t)})
         del r["recent"][:-REACTIE_LAATSTE]
-        open_.pop(veld)
     elif _sprong(veld, laatst.get(bron), waarde) and not _zelfde(veld, laatst.get(ander), waarde):
         open_[veld] = {"bron": bron, "waarde": waarde, "t": t}
     laatst[bron] = waarde
@@ -450,15 +466,196 @@ def reactie_samenvatting(r: dict, interval_s: float) -> dict:
         uit["sneller"] = winnaar if eerst.get(winnaar, 0) * 2 > totaal else "gelijk op"
     else:
         uit["sneller"] = None
+    bev = r.get("bevestiging") or []
+    uit["opdracht_bevestigd"] = {
+        "n": len(bev),
+        "mediaan_s": round(statistics.median(bev), 1) if bev else None,
+    }
     uit["recent"] = list(r.get("recent") or [])[-5:]
     return uit
+
+
+# --- welke bron is de beste? -------------------------------------------------
+#
+# Gevraagd op 8 oktober: "Afwijken van elkaar kan natuurlijk, maar van belang
+# is natuurlijk welke is de best". Twee bronnen die het oneens zijn zeggen
+# niet wie gelijk heeft. Daarvoor is een onafhankelijke meting nodig, en die
+# is er: de HomeWizard-stekker waar de accu op hangt (de accuvermogensensor
+# van het EMS). Die meet het wisselstroomvermogen aan de stekker, elke paar
+# seconden, los van Zendure.
+#
+# Beide bronnen worden daartegen gelegd op het netto wisselstroomvermogen
+# (naar huis min van het net; ontladen positief):
+#
+# - nauwkeurigheid: elke leesronde, alleen als de stekker de laatste 5 s
+#   stabiel was (binnen 50 W): hoeveel wijkt de waarde af die je OP DAT
+#   MOMENT van elke bron zou krijgen. Bij de Zendure-integratie telt dus ook
+#   mee hoe oud haar waarde is - precies wat het EMS ziet als het die leest;
+# - vertraging: na een sprong van de stekker (>= 300 W), hoeveel seconden
+#   tot elke bron de nieuwe waarde laat zien (binnen 50 W of 15%). Het eigen
+#   lezen heeft een resolutie van het leesinterval.
+
+REFERENTIE_SPRONG_W = 300.0
+REFERENTIE_STABIEL_W = 50.0
+REFERENTIE_STABIEL_S = 5.0
+REFERENTIE_MAX_WACHT_S = 60.0
+REFERENTIE_GESCHIEDENIS_S = 90.0
+REFERENTIE_MIN_STEEKPROEF = 30
+REFERENTIE_MIN_SPRONGEN = 3
+REFERENTIE_STEEKPROEF = 1000
+
+
+def lege_referentie() -> dict:
+    return {
+        "afwijking": {"lokaal": [], "zendure": []},
+        "vertraging": {"lokaal": [], "zendure": []},
+        "gemist": {"lokaal": 0, "zendure": 0},
+        "sprongen": 0,
+        "sprong": None,
+        "geschiedenis": [],
+    }
+
+
+def netto_ac(apparaat: dict) -> float | None:
+    """Naar huis min van het net: ontladen positief, laden negatief."""
+    thuis, net = apparaat.get("outputHomePower"), apparaat.get("gridInputPower")
+    if thuis is None or net is None:
+        return None
+    return float(thuis) - float(net)
+
+
+def _dichtbij(a: float, b: float) -> bool:
+    return abs(a - b) <= max(REFERENTIE_STABIEL_W, 0.15 * max(abs(a), abs(b)))
+
+
+def _sluit_sprong(ref: dict) -> None:
+    sprong = ref.get("sprong")
+    if sprong is None:
+        return
+    for bron in BRONNEN:
+        if bron not in sprong["gezien"]:
+            ref["gemist"][bron] = ref["gemist"].get(bron, 0) + 1
+    ref["sprong"] = None
+
+
+def ref_waarneming(ref: dict, t: float, waarde: float | None) -> None:
+    """Een nieuwe waarde van de stekker."""
+    if waarde is None:
+        return
+    gesch = ref.setdefault("geschiedenis", [])
+    sprong = ref.get("sprong")
+    if sprong is not None and t - sprong["t"] > REFERENTIE_MAX_WACHT_S:
+        _sluit_sprong(ref)
+    vorige = gesch[-1][1] if gesch else None
+    if vorige is not None and abs(waarde - vorige) >= REFERENTIE_SPRONG_W:
+        _sluit_sprong(ref)
+        ref["sprong"] = {"t": t, "waarde": waarde, "gezien": {}}
+        ref["sprongen"] = ref.get("sprongen", 0) + 1
+    elif ref.get("sprong") is not None and not _dichtbij(waarde, ref["sprong"]["waarde"]):
+        # de stekker loopt nog door naar een andere waarde: daar meten we naartoe
+        ref["sprong"]["waarde"] = waarde
+    gesch.append((t, waarde))
+    while gesch and t - gesch[0][0] > REFERENTIE_GESCHIEDENIS_S:
+        gesch.pop(0)
+
+
+def bron_waarneming(ref: dict, bron: str, t: float, waarde: float | None) -> None:
+    """Een nieuwe waarde van een bron: ziet die de lopende sprong?"""
+    sprong = ref.get("sprong")
+    if waarde is None or sprong is None or bron in sprong["gezien"] or t < sprong["t"]:
+        return
+    if _dichtbij(waarde, sprong["waarde"]):
+        vertraging = round(t - sprong["t"], 1)
+        sprong["gezien"][bron] = vertraging
+        reeks = ref["vertraging"].setdefault(bron, [])
+        reeks.append(vertraging)
+        del reeks[:-REFERENTIE_STEEKPROEF]
+        if all(b in sprong["gezien"] for b in BRONNEN):
+            ref["sprong"] = None
+
+
+def ref_stabiel(ref: dict, t: float) -> float | None:
+    """De waarde van de stekker op t, als die de laatste 5 s stabiel was."""
+    gesch = [w for w in ref.get("geschiedenis") or [] if w[0] <= t]
+    if not gesch:
+        return None
+    nu_w = gesch[-1][1]
+    begin = t - REFERENTIE_STABIEL_S
+    ervoor = [w for (tt, w) in gesch if tt <= begin]
+    venster = [w for (tt, w) in gesch if tt > begin] + [nu_w] + ervoor[-1:]
+    if max(venster) - min(venster) > REFERENTIE_STABIEL_W:
+        return None
+    return nu_w
+
+
+def steekproef(ref: dict, t: float, waarden: dict[str, float | None]) -> None:
+    """Afwijking van elke bron tegen de stekker, op hetzelfde moment."""
+    echt = ref_stabiel(ref, t)
+    if echt is None:
+        return
+    for bron, waarde in waarden.items():
+        if waarde is None:
+            continue
+        reeks = ref["afwijking"].setdefault(bron, [])
+        reeks.append(round(abs(waarde - echt), 1))
+        del reeks[:-REFERENTIE_STEEKPROEF]
+
+
+def referentie_samenvatting(ref: dict, entiteit: str | None) -> dict:
+    uit: dict[str, Any] = {"meetpunt": entiteit, "sprongen": ref.get("sprongen", 0)}
+    for bron in BRONNEN:
+        afw = sorted((ref.get("afwijking") or {}).get(bron) or [])
+        ver = (ref.get("vertraging") or {}).get(bron) or []
+        uit[bron] = {
+            "n": len(afw),
+            "gem_afwijking_w": round(sum(afw) / len(afw), 1) if afw else None,
+            "p90_afwijking_w": afw[int(0.9 * (len(afw) - 1))] if afw else None,
+            "binnen_50w_procent": round(100 * sum(1 for a in afw if a <= 50) / len(afw), 1) if afw else None,
+            "sprongen_gezien": len(ver),
+            "mediaan_vertraging_s": round(statistics.median(ver), 1) if ver else None,
+            "gemist": (ref.get("gemist") or {}).get(bron, 0),
+        }
+    uit["beste"], uit["toelichting"] = beste_bron(uit)
+    return uit
+
+
+def beste_bron(s: dict) -> tuple[str | None, str]:
+    lok, zen = s.get("lokaal") or {}, s.get("zendure") or {}
+    if min(lok.get("n", 0), zen.get("n", 0)) < REFERENTIE_MIN_STEEKPROEF:
+        return None, f"verzamelt (minstens {REFERENTIE_MIN_STEEKPROEF} stabiele metingen per bron)"
+    punten = {"lokaal": 0, "zendure": 0}
+    redenen = []
+    a_l, a_z = lok["gem_afwijking_w"], zen["gem_afwijking_w"]
+    if abs(a_l - a_z) > max(5.0, 0.10 * max(a_l, a_z)):
+        w = "lokaal" if a_l < a_z else "zendure"
+        punten[w] += 1
+        redenen.append(f"nauwkeuriger ({min(a_l, a_z):.0f} tegen {max(a_l, a_z):.0f} W)")
+    if min(lok.get("sprongen_gezien", 0), zen.get("sprongen_gezien", 0)) >= REFERENTIE_MIN_SPRONGEN:
+        v_l, v_z = lok["mediaan_vertraging_s"], zen["mediaan_vertraging_s"]
+        if abs(v_l - v_z) > 1.0:
+            w = "lokaal" if v_l < v_z else "zendure"
+            punten[w] += 1
+            redenen.append(f"sneller ({min(v_l, v_z):.1f} tegen {max(v_l, v_z):.1f} s)".replace(".", ","))
+    if punten["lokaal"] and punten["zendure"]:
+        return "verschilt", "de een is nauwkeuriger, de ander sneller"
+    if punten["lokaal"] or punten["zendure"]:
+        w = "lokaal" if punten["lokaal"] else "zendure"
+        return w, " en ".join(redenen)
+    return "gelijkwaardig", "geen wezenlijk verschil in nauwkeurigheid en snelheid"
 
 
 # --- tellingen ---------------------------------------------------------------
 
 
+# v5.51.1: de vergelijking en de reactiemeting van v5.50/v5.51.0 telden
+# timingverschillen en opdrachten mee; die tellingen beginnen één keer opnieuw.
+# Relaisschakelingen en rendement blijven.
+SCHEMA = 2
+
+
 def lege_tellingen() -> dict:
     return {
+        "schema": SCHEMA,
         "rondes": 0,
         "gelukt": 0,
         "mislukt": 0,
@@ -471,7 +668,19 @@ def lege_tellingen() -> dict:
         "relais": {"dag": None, "vandaag": 0, "totaal": 0, "stand": None, "per_dag": {}},
         "rendement": {"laden": [], "ontladen": []},
         "reactie": lege_reactie(),
+        "referentie": lege_referentie(),
     }
+
+
+def herstel(bewaard: dict) -> dict:
+    """Wat er uit de opslag terugkomt; een ouder schema verliest de vergelijking."""
+    basis = lege_tellingen()
+    uit = {k: v for k, v in bewaard.items() if k in basis}
+    if bewaard.get("schema") != SCHEMA:
+        for sleutel in ("velden", "reactie", "referentie", "latentie_ms", "rondes", "gelukt", "mislukt", "sinds"):
+            uit.pop(sleutel, None)
+        uit["schema"] = SCHEMA
+    return uit
 
 
 def verwerk_ronde(tellingen: dict, vergelijking: list[dict], nu: float, latentie_ms: float) -> None:
@@ -572,6 +781,10 @@ def samenvatting(tellingen: dict, host: str | None) -> dict:
     }
 
 
+def _s2(w) -> str:
+    return "-" if w is None else f"{w:.1f}".replace(".", ",")
+
+
 def _procent(r: dict | None) -> str:
     return f"{r['mediaan'] * 100:.1f}%".replace(".", ",") if r else "-"
 
@@ -607,18 +820,26 @@ def tekst(status: str, a: dict) -> str:
                 f"{cb.get('verschil_mv', '-')} mV ({cb.get('oordeel', '-')})"
             )
     reactie = a.get("reactiesnelheid") or {}
-    if reactie.get("wijzigingen"):
-        lok, zen = reactie.get("lokaal") or {}, reactie.get("zendure") or {}
-
-        def _s(w):
-            return "-" if w is None else f"{w:.1f}".replace(".", ",")
-
-        oordeel_tekst = {"lokaal": "het EMS zelf", "zendure": "de Zendure-integratie"}.get(
-            reactie.get("sneller"), "gelijk op")
+    beste = a.get("beste_bron") or {}
+    if beste.get("meetpunt"):
+        naam = {"lokaal": "het EMS zelf", "zendure": "de Zendure-integratie",
+                "verschilt": "verschilt per aspect", "gelijkwaardig": "gelijkwaardig"}.get(beste.get("beste"))
+        regels.append(f"Beste bron: **{naam or 'nog onbekend'}** · {beste.get('toelichting', '')}")
+        for bron, label in (("lokaal", "EMS zelf"), ("zendure", "Zendure")):
+            b = beste.get(bron) or {}
+            regels.append(
+                f"{label}: gem. {_s2(b.get('gem_afwijking_w'))} W naast de stekker "
+                f"({_s2(b.get('binnen_50w_procent'))}% binnen 50 W, n={b.get('n', 0)}) · "
+                f"ziet een sprong na {_s2(b.get('mediaan_vertraging_s'))} s "
+                f"({b.get('sprongen_gezien', 0)} gezien, {b.get('gemist', 0)} gemist)"
+            )
+    else:
+        regels.append("Beste bron: geen onafhankelijke meting ingesteld (accuvermogensensor)")
+    bev = reactie.get("opdracht_bevestigd") or {}
+    if bev.get("n"):
         regels.append(
-            f"Sneller: **{oordeel_tekst}** · {reactie['wijzigingen']} wijzigingen · "
-            f"EMS eerst {lok.get('eerst', 0)}× (mediaan {_s(lok.get('mediaan_voorsprong_s'))} s voor) · "
-            f"Zendure eerst {zen.get('eerst', 0)}× (mediaan {_s(zen.get('mediaan_voorsprong_s'))} s voor)"
+            f"Opdracht → accu: {bev['n']}× gemeten, de accu laat de nieuwe instelling "
+            f"na {_s2(bev.get('mediaan_s'))} s zien (mediaan, resolutie {reactie.get('resolutie_lokaal_s')} s)"
         )
     for v in a.get("afwijkende_velden") or []:
         laatst = v.get("laatst") or {}
@@ -638,8 +859,10 @@ def tekst(status: str, a: dict) -> str:
 class ZendureLokaalMeelezer:
     """Leest de accu elke 5 s zelf uit en vergelijkt. Schrijft nooit."""
 
-    def __init__(self, hass) -> None:
+    def __init__(self, hass, referentie: str | None = None, referentie_omkeren: bool = False) -> None:
         self._hass = hass
+        self.referentie = referentie
+        self._referentie_omkeren = referentie_omkeren
         self._afmelden: Callable[[], None] | None = None
         self._opslag = None
         self.tellingen: dict = lege_tellingen()
@@ -724,7 +947,7 @@ class ZendureLokaalMeelezer:
             bewaard = None
         if isinstance(bewaard, dict):
             basis = lege_tellingen()
-            basis.update({k: v for k, v in bewaard.items() if k in basis})
+            basis.update(herstel(bewaard))
             basis["mislukt_op_rij"] = 0
             self.tellingen = basis
         self._afmelden = async_track_time_interval(self._hass, self._ronde, INTERVAL)
@@ -738,24 +961,48 @@ class ZendureLokaalMeelezer:
             for veld in REACTIE_VELDEN
             if (None, veld) in self._entiteiten
         }
-        if not per_entiteit:
+        volgen = list(per_entiteit)
+        if self.referentie:
+            volgen.append(self.referentie)
+        if not volgen:
             return
 
         def _gewijzigd(event) -> None:
             nieuw = event.data.get("new_state")
-            veld = per_entiteit.get(event.data.get("entity_id"))
-            if nieuw is None or veld is None:
+            eid = event.data.get("entity_id")
+            if nieuw is None:
                 return
             try:
                 t = event.time_fired.timestamp()
             except AttributeError:
                 t = time.time()
+            ref = self.tellingen.setdefault("referentie", lege_referentie())
+            if eid == self.referentie:
+                ref_waarneming(ref, t, self._referentiewaarde(nieuw.state))
+                return
+            veld = per_entiteit.get(eid)
+            if veld is None:
+                return
             reactie_waarneming(
                 self.tellingen.setdefault("reactie", lege_reactie()),
                 "zendure", veld, ha_waarde(veld, nieuw.state), t,
             )
+            if veld in ("outputHomePower", "gridInputPower"):
+                bron_waarneming(ref, "zendure", t, self._zendure_netto())
 
-        self._luisteraar = async_track_state_change_event(self._hass, list(per_entiteit), _gewijzigd)
+        self._luisteraar = async_track_state_change_event(self._hass, volgen, _gewijzigd)
+
+    def _referentiewaarde(self, toestand: str | None) -> float | None:
+        w = _getal(toestand) if toestand not in (None, "unknown", "unavailable", "") else None
+        if w is None:
+            return None
+        return -w if self._referentie_omkeren else w
+
+    def _zendure_netto(self) -> float | None:
+        return netto_ac({
+            veld: ha_waarde(veld, self._zoek_toestand(None, veld))
+            for veld in ("outputHomePower", "gridInputPower")
+        })
 
     async def async_stop(self) -> None:
         afmelden, self._afmelden = self._afmelden, None
@@ -814,6 +1061,10 @@ class ZendureLokaalMeelezer:
         verwerk_afgeleid(self.tellingen, self.afgeleid, nu)
         for veld in REACTIE_VELDEN:
             reactie_waarneming(r, "lokaal", veld, lokaal["apparaat"].get(veld), nu)
+        ref = self.tellingen.setdefault("referentie", lege_referentie())
+        lokaal_netto = netto_ac(lokaal["apparaat"])
+        bron_waarneming(ref, "lokaal", nu, lokaal_netto)
+        steekproef(ref, nu, {"lokaal": lokaal_netto, "zendure": self._zendure_netto()})
 
     # weergave --------------------------------------------------------------
 
@@ -833,6 +1084,9 @@ class ZendureLokaalMeelezer:
         uit["omzetrendement"] = rendement_samenvatting(self.tellingen)
         uit["reactiesnelheid"] = reactie_samenvatting(
             self.tellingen.get("reactie") or {}, INTERVAL.total_seconds()
+        )
+        uit["beste_bron"] = referentie_samenvatting(
+            self.tellingen.get("referentie") or {}, self.referentie
         )
         uit["tekst"] = tekst(self.status(), uit)
         return uit

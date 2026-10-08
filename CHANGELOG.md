@@ -31258,3 +31258,49 @@ meer vergeleken (bij een vermogenssprong ook vermogen en stroom per module);
 dat tijdsverschil meet de reactiesnelheid al.
 
 6 nieuwe tests in `test_v550_zendure_lokaal.py`.
+
+## v5.52 — Wie heeft er gelijk?
+
+Alleen lezen. Sturing, reserve, drempels, marges en optie-standaarden niet
+aangeraakt.
+
+### 1. Beide bronnen tegen een onafhankelijke meting
+
+Gevraagd: "Afwijken van elkaar kan natuurlijk, maar van belang is natuurlijk
+welke is de best". Twee bronnen die het oneens zijn zeggen niet wie gelijk
+heeft. De HomeWizard-stekker waar de accu op hangt (de accuvermogensensor
+van het EMS, met de ingestelde tekenomkering) meet het wisselstroomvermogen
+los van Zendure, en is nu de maatstaf.
+
+- Vergeleken wordt het netto wisselstroomvermogen: naar huis min van het
+  net, ontladen positief (`netto_ac`).
+- Nauwkeurigheid: elke leesronde, alleen als de stekker de laatste 5 s
+  binnen 50 W stabiel was, de afwijking van wat elke bron op dat moment
+  geeft. Voor de Zendure-integratie telt de ouderdom van haar waarde dus mee.
+- Vertraging: na een sprong van de stekker (≥ 300 W) de seconden tot elke
+  bron de nieuwe waarde toont (± 50 W of 15%); na 60 s telt hij als gemist.
+- Oordeel `beste` (lokaal / zendure / verschilt / gelijkwaardig) pas na 30
+  stabiele metingen per bron; de vertraging telt mee vanaf 3 gevolgde
+  sprongen per bron. Een verschil telt vanaf 10% (min. 5 W) in afwijking of
+  1 s in vertraging.
+- Nieuw attribuut `beste_bron`; op de Proefstand de regel "Beste bron" met
+  per bron de gemiddelde afwijking, het aandeel binnen 50 W en de vertraging.
+- De race tussen de twee bronnen (v5.51) staat niet meer op de kaart; het
+  attribuut `reactiesnelheid` blijft.
+
+### 2. Een opdracht is geen meting
+
+Bij de race van v5.51 "won" de Zendure-integratie 11 van de 15 keer, steeds
+met 3,1 s: limieten en de laad-/ontlaadstand zijn opdrachten, en haar
+entiteit springt al bij het geven ervan. Voor die velden (`OPDRACHT_VELDEN`)
+wordt nu gemeten hoe lang het duurt tot de accu de opdracht zelf laat zien
+(`reactiesnelheid.opdracht_bevestigd`, regel "Opdracht → accu").
+
+### 3. Eén keer opnieuw tellen
+
+"Wijkt af" kwam uit tellingen van v5.50 met de timingverschillen van vóór
+v5.51 erin. Opslagschema 2: de vergelijking, de reactiemeting en de
+beste-bronmeting beginnen één keer opnieuw; relaisschakelingen en rendement
+blijven.
+
+15 nieuwe tests in `test_v550_zendure_lokaal.py`.

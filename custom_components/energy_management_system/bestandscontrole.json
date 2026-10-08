@@ -1,5 +1,5 @@
 {
-  "__init__.py": "78146085bd132701",
+  "__init__.py": "70af591cd13f9454",
   "airco_sturing.py": "efce8a1d185bcd90",
   "brand/icon.png": "07df281da7da0080",
   "brand/icon@2x.png": "0d2e1d114f877501",
@@ -11,7 +11,7 @@
   "diagnostics.py": "c08231f4ff64d9e5",
   "grootverbruikers.py": "c1364b66c908464b",
   "kwartierenergie.py": "ebe5bea9fe73e7b2",
-  "manifest.json": "ef23a016aacc555f",
+  "manifest.json": "2ad8df7ef57ca725",
   "meetlaag.py": "afbdda7a3b846403",
   "meetlog.py": "48e351944317d051",
   "nabeschouwing.py": "e80f0438caab08f5",
@@ -29,6 +29,6 @@
   "tarief.py": "e1434ebb93d2f88b",
   "translations/en.json": "10becac027b5e4fa",
   "translations/nl.json": "77d481486c3fa59a",
-  "zendure_lokaal.py": "fb1df227110d79f2",
+  "zendure_lokaal.py": "d6273966e3144ef9",
   "zendure_status.py": "6cd688d4695f6dff"
 }

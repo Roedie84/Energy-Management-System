@@ -16,6 +16,7 @@ except ImportError:  # v2.3.0: oudere versies kennen dit niet
 from homeassistant.helpers import config_validation as cv
 
 from .const import DOMAIN, PLATFORMS
+from .const import CONF_BATTERY_POWER_SENSOR, CONF_INVERT_BATTERY_POWER_SIGN
 from .coordinator import EnergyManagementSystemCoordinator
 from .solar_forecast import SolarForecastAccuracyTracker
 from .zendure_lokaal import ZendureLokaalMeelezer
@@ -197,7 +198,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Alleen lezen en vergelijken; de sturing leest hier niets uit. Een
     # fout hier mag het EMS nooit tegenhouden.
     try:
-        meelezer = ZendureLokaalMeelezer(hass)
+        # v5.52: de accuvermogensensor (HomeWizard-stekker) is de
+        # onafhankelijke meting waartegen beide bronnen worden gelegd.
+        meelezer = ZendureLokaalMeelezer(
+            hass,
+            referentie=config.get(CONF_BATTERY_POWER_SENSOR),
+            referentie_omkeren=bool(config.get(CONF_INVERT_BATTERY_POWER_SIGN, False)),
+        )
         await meelezer.async_start()
         coordinator.zendure_lokaal = meelezer
         entry.async_on_unload(meelezer.async_stop)

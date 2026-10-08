@@ -284,12 +284,111 @@ def test_lopende_wijziging_wordt_niet_vergeleken():
     assert len(zl.zonder_lopende_wijzigingen(regels, r, 100.0 + zl.REACTIE_MAX_WACHT_S + 1)) == 4
 
 
-def test_reactie_staat_in_de_kaarttekst():
+def test_de_race_tussen_bronnen_staat_niet_meer_in_de_kaart():
+    """v5.52: wie de ander voor is zegt niet wie gelijk heeft; de kaart toont
+    het oordeel tegen de stekker."""
     a = zl.samenvatting(zl.lege_tellingen(), None)
     r = zl.lege_reactie()
-    zl.reactie_waarneming(r, "lokaal", "acMode", 1, 0)
-    zl.reactie_waarneming(r, "zendure", "acMode", 1, 0)
-    zl.reactie_waarneming(r, "lokaal", "acMode", 2, 10)
-    zl.reactie_waarneming(r, "zendure", "acMode", 2, 14)
+    zl.reactie_waarneming(r, "lokaal", "gridInputPower", 0, 0)
+    zl.reactie_waarneming(r, "zendure", "gridInputPower", 0, 0)
+    zl.reactie_waarneming(r, "lokaal", "gridInputPower", 1500, 10)
+    zl.reactie_waarneming(r, "zendure", "gridInputPower", 1500, 14)
     a["reactiesnelheid"] = zl.reactie_samenvatting(r, 5)
-    assert "Sneller: **het EMS zelf**" in zl.tekst("verzamelt", a)
+    assert "Sneller:" not in zl.tekst("verzamelt", a)
+
+
+# --- v5.51.1: opdrachten apart, één keer opnieuw tellen ---------------------
+
+
+def test_opdracht_telt_niet_in_de_race_maar_als_bevestiging():
+    r = zl.lege_reactie()
+    zl.reactie_waarneming(r, "zendure", "outputLimit", 0, 0)
+    zl.reactie_waarneming(r, "lokaal", "outputLimit", 0, 1)
+    # EMS geeft via Zendure 549 W op; de accu laat het 3,1 s later zien
+    zl.reactie_waarneming(r, "zendure", "outputLimit", 549, 10)
+    zl.reactie_waarneming(r, "lokaal", "outputLimit", 549, 13.1)
+    s = zl.reactie_samenvatting(r, 5)
+    assert s["wijzigingen"] == 0
+    assert s["opdracht_bevestigd"] == {"n": 1, "mediaan_s": 3.1}
+    assert r["recent"][-1]["soort"] == "opdracht"
+
+
+def test_oud_schema_begint_de_vergelijking_opnieuw():
+    oud = {"rondes": 71, "gelukt": 71, "velden": {"x": {"n": 60, "gelijk": 50}},
+           "reactie": {"eerst": {"zendure": 11}}, "relais": {"totaal": 4}, "rendement": {"laden": [0.9]}}
+    uit = zl.herstel(oud)
+    assert "velden" not in uit and "reactie" not in uit and "rondes" not in uit
+    assert uit["relais"] == {"totaal": 4} and uit["rendement"] == {"laden": [0.9]}
+    assert uit["schema"] == zl.SCHEMA
+    nieuw = {**zl.lege_tellingen(), "rondes": 5}
+    assert zl.herstel(nieuw)["rondes"] == 5
+
+
+# --- v5.52: welke bron is de beste (tegen de HomeWizard-stekker) -------------
+
+
+def test_netto_ac():
+    assert zl.netto_ac({"outputHomePower": 541, "gridInputPower": 0}) == 541
+    assert zl.netto_ac({"outputHomePower": 0, "gridInputPower": 1745}) == -1745
+    assert zl.netto_ac({"outputHomePower": 0}) is None
+
+
+def test_vertraging_na_een_sprong_van_de_stekker():
+    ref = zl.lege_referentie()
+    zl.ref_waarneming(ref, 0, 500)
+    zl.ref_waarneming(ref, 10, -1600)          # sprong naar laden
+    zl.bron_waarneming(ref, "zendure", 11, 500)   # nog oud
+    zl.bron_waarneming(ref, "zendure", 13.5, -1580)
+    zl.bron_waarneming(ref, "lokaal", 15, -1610)
+    s = zl.referentie_samenvatting(ref, "sensor.stekker")
+    assert s["sprongen"] == 1
+    assert s["zendure"]["mediaan_vertraging_s"] == 3.5
+    assert s["lokaal"]["mediaan_vertraging_s"] == 5.0
+    assert ref["sprong"] is None
+
+
+def test_gemiste_sprong():
+    ref = zl.lege_referentie()
+    zl.ref_waarneming(ref, 0, 0)
+    zl.ref_waarneming(ref, 1, 1000)
+    zl.bron_waarneming(ref, "lokaal", 3, 990)
+    zl.ref_waarneming(ref, 1 + zl.REFERENTIE_MAX_WACHT_S + 1, 1000)
+    assert ref["gemist"] == {"lokaal": 0, "zendure": 1}
+
+
+def test_afwijking_alleen_als_de_stekker_stabiel_is():
+    ref = zl.lege_referentie()
+    zl.ref_waarneming(ref, 0, 500)
+    zl.steekproef(ref, 10, {"lokaal": 510, "zendure": 600})
+    assert ref["afwijking"] == {"lokaal": [10.0], "zendure": [100.0]}
+    zl.ref_waarneming(ref, 20, 1500)
+    zl.steekproef(ref, 22, {"lokaal": 1500, "zendure": 500})   # net versprongen: niet tellen
+    assert len(ref["afwijking"]["lokaal"]) == 1
+
+
+def test_beste_bron_oordeel():
+    def s(a_l, a_z, v_l, v_z, n=40, sp=5):
+        return {"lokaal": {"n": n, "gem_afwijking_w": a_l, "sprongen_gezien": sp, "mediaan_vertraging_s": v_l},
+                "zendure": {"n": n, "gem_afwijking_w": a_z, "sprongen_gezien": sp, "mediaan_vertraging_s": v_z}}
+    assert zl.beste_bron(s(10, 40, 2.5, 4.0))[0] == "lokaal"
+    assert zl.beste_bron(s(40, 10, 4.0, 2.5))[0] == "zendure"
+    assert zl.beste_bron(s(10, 40, 4.0, 2.5))[0] == "verschilt"
+    assert zl.beste_bron(s(20, 21, 3.0, 3.4))[0] == "gelijkwaardig"
+    assert zl.beste_bron(s(10, 40, 2.5, 4.0, n=5))[0] is None
+    # te weinig sprongen: alleen nauwkeurigheid telt
+    assert zl.beste_bron(s(10, 40, 9.0, 1.0, sp=1))[0] == "lokaal"
+
+
+def test_beste_bron_in_de_kaarttekst():
+    a = zl.samenvatting(zl.lege_tellingen(), None)
+    a["beste_bron"] = {"meetpunt": "sensor.x", "beste": "lokaal", "toelichting": "nauwkeuriger",
+                       "lokaal": {"gem_afwijking_w": 8.0, "n": 40}, "zendure": {"gem_afwijking_w": 30.0, "n": 40}}
+    t = zl.tekst("gelijk", a)
+    assert "Beste bron: **het EMS zelf**" in t and "gem. 8,0 W" in t
+    a["beste_bron"] = {"meetpunt": None}
+    assert "geen onafhankelijke meting" in zl.tekst("gelijk", a)
+
+
+def test_de_stekker_is_de_referentie():
+    init = (MAP / "__init__.py").read_text()
+    assert "referentie=config.get(CONF_BATTERY_POWER_SENSOR)" in init
