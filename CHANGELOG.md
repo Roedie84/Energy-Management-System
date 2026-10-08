@@ -31391,3 +31391,15 @@ meter houdt". De titel van de stand `default_smart` is nu "Nul op de meter",
 en de uitleg zegt wat de accu dan doet: leveren wat het huis vraagt en
 zonne-overschot opslaan. Alleen tekst; de stand zelf is ongewijzigd.
 Aangepast: `test_cockpit_matrix.py`.
+
+## v5.53.4 — Minder in de database
+
+Alleen opslag; sturing en weergave ongewijzigd. De database is 7,3 GB na 13
+dagen. De zware sensoren houden hun attributen sinds v5.34 al buiten de
+recorder, maar de cockpit (15 KB, elke ronde) niet: die bewaarde alleen
+"plaat" niet. Nu geen attributen meer in de database
+(`GEEN_ATTRIBUTEN_IN_RECORDER`); ze staan live op de entiteit en in de
+diagnostiek. "Zendure lokaal meelezen" (9 KB, elke 30 s) bewaart alleen nog
+de toestand, het aantal rondes en de overeenkomst.
+
+2 nieuwe tests (`test_v5534_database.py`).

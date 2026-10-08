@@ -4656,11 +4656,13 @@ class CockpitSensor(_CoordinatorDiagnosticSensor):
     Met een ondergrens van COCKPIT_MIN_INTERVAL_S tussen twee tekeningen,
     zodat een sensor die per seconde meet geen tekenmachine wordt.
     """
+    # v5.53.4: de cockpit (15 KB, elke ronde) bewaarde alleen "plaat" niet;
+    # nu geen attributen in de database, zoals de andere zware sensoren (v5.34).
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
 
     _attr_has_entity_name = True
     _attr_name = "Cockpit"
     _attr_icon = "mdi:view-dashboard-outline"
-    _unrecorded_attributes = frozenset({"plaat"})
 
     def __init__(self, coordinator, entry_id: str) -> None:
         super().__init__(coordinator, entry_id, "cockpit")
@@ -4775,7 +4777,14 @@ class ZendureLokaalSensor(_CoordinatorDiagnosticSensor):
     _attr_has_entity_name = True
     _attr_name = "Zendure lokaal meelezen"
     _attr_icon = "mdi:battery-sync-outline"
-    _unrecorded_attributes = frozenset({"per_veld", "laatste_lezing", "afwijkende_velden", "accu"})
+    # v5.53.4: ~9 KB aan attributen, elke 30 s; in de database alleen de
+    # kerngetallen (toestand, rondes, overeenkomst), de rest staat live.
+    _unrecorded_attributes = frozenset({
+        "per_veld", "laatste_lezing", "afwijkende_velden", "accu", "tekst",
+        "beste_bron", "reactiesnelheid", "omzetrendement", "relaisschakelingen",
+        "laatste_fout", "laatste_gelukt", "sinds", "adres", "modus",
+        "latentie_mediaan_ms", "latentie_p90_ms", "velden_vergeleken", "gelukt", "mislukt",
+    })
 
     def __init__(self, coordinator, entry_id: str) -> None:
         super().__init__(coordinator, entry_id, "zendure_lokaal")
