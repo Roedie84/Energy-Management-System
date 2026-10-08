@@ -236,6 +236,11 @@ CELBALANS_GRENZEN_MV = ((20, "uitstekend"), (50, "goed"), (80, "lichte onbalans"
 SOC_LIMIET = {0: "normaal", 16: "normaal", 1: "laadgrens bereikt", 17: "laadgrens bereikt",
               2: "ontlaadgrens bereikt", 18: "ontlaadgrens bereikt"}
 RELAIS_STAND = {1: "laden", 2: "ontladen"}
+# v5.55: de cumulatieve relaisteller van de accu zelf (ZenSDK-veld; de
+# Zendure-integratie noemt de entiteit "Switch Count").
+APPARAAT_SCHAKELTELLER = "switchCount"
+# Zoveel dagen per-dag-tellingen bewaren.
+RELAIS_DAGEN = 14
 # smartMode bepaalt waar een schrijfopdracht wordt bewaard. 1 = in het
 # werkgeheugen (geen slijtage), 0 = in het flashgeheugen (slijt bij elke
 # opdracht). Belangrijk voor stap 2: elke regelopdracht hoort smartMode 1
@@ -293,6 +298,13 @@ def afgeleid(rapport: dict) -> dict:
         "wifi_dbm": _int(p.get("rssi")),
         "modules": modules,
     }
+    # v5.55: de eigen relaisteller van de accu (cumulatief, telt nooit
+    # terug), als het rapport hem meestuurt. De Zendure-integratie maakt er
+    # `sensor.<accu>_switch_count` van; komt hij niet in het rapport, dan
+    # leest de meelezer die entiteit (alleen lezen).
+    teller = _int(p.get(APPARAAT_SCHAKELTELLER))
+    if teller is not None:
+        uit["apparaat_schakelingen"] = teller
     # Omzetrendement van dit moment: wisselstroom in -> gelijkstroom in de
     # modules (laden), en gelijkstroom uit de modules -> wisselstroom naar
     # huis (ontladen).
@@ -306,31 +318,106 @@ def afgeleid(rapport: dict) -> dict:
     return uit
 
 
-def verwerk_afgeleid(tellingen: dict, afg: dict, nu: float) -> None:
-    """Relaisschakelingen per dag en het omzetrendement over de tijd."""
-    from datetime import datetime
+def _lokale_dag(nu: float) -> str:
+    """De kalenderdag in de tijdzone van Home Assistant.
 
-    dag = datetime.fromtimestamp(nu).date().isoformat()
+    v5.55: `datetime.fromtimestamp(nu)` volgt de tijdzone van het PROCES.
+    Draait Home Assistant in een container op UTC, dan begon "vandaag" om
+    02:00 ('s zomers); dezelfde fout als v1.48.0 in het uurprofiel.
+    """
+    from datetime import datetime, timezone
+
+    moment = datetime.fromtimestamp(nu, tz=timezone.utc)
+    try:
+        from homeassistant.util import dt as dt_util
+
+        moment = dt_util.as_local(moment)
+    except Exception:  # noqa: BLE001 - buiten Home Assistant: procestijd
+        moment = moment.astimezone()
+    return moment.date().isoformat()
+
+
+def verwerk_afgeleid(tellingen: dict, afg: dict, nu: float) -> bool:
+    """Relaisschakelingen per dag en het omzetrendement over de tijd.
+
+    v5.55: geeft True terug als de relaistellingen veranderden (een wissel,
+    een nieuwe dag of een nieuwe beginstand van de apparaatteller); dan
+    bewaart de meelezer ze meteen, zie `_ronde`.
+    """
+    dag = _lokale_dag(nu)
+    gewijzigd = False
     relais = tellingen.setdefault("relais", {"dag": dag, "vandaag": 0, "totaal": 0, "stand": None, "per_dag": {}})
     if relais.get("dag") is None:
         relais["dag"] = dag
+        gewijzigd = True
+    teller = afg.get("apparaat_schakelingen")
     if relais.get("dag") != dag:
         relais.setdefault("per_dag", {})[relais["dag"]] = relais.get("vandaag", 0)
-        for oud in sorted(relais["per_dag"])[:-14]:
+        for oud in sorted(relais["per_dag"])[:-RELAIS_DAGEN]:
             relais["per_dag"].pop(oud, None)
+        # v5.55: ook de telling van de accu zelf per dag bewaren, en de
+        # nieuwe dag laten beginnen bij de laatst geziene stand (de wissels
+        # tussen de laatste lezing van gisteren en nu tellen dan voor
+        # vandaag, niet voor niemand).
+        if relais.get("apparaat_begin") is not None and relais.get("apparaat_laatst") is not None:
+            per_dag_app = relais.setdefault("per_dag_apparaat", {})
+            per_dag_app[relais["dag"]] = max(0, int(relais["apparaat_laatst"]) - int(relais["apparaat_begin"]))
+            for oud in sorted(per_dag_app)[:-RELAIS_DAGEN]:
+                per_dag_app.pop(oud, None)
+            relais["apparaat_begin"] = relais["apparaat_laatst"]
         relais["dag"], relais["vandaag"] = dag, 0
+        gewijzigd = True
     stand = afg.get("relais_stand")
     if stand in ("laden", "ontladen"):
         if relais.get("stand") in ("laden", "ontladen") and relais["stand"] != stand:
             relais["vandaag"] += 1
             relais["totaal"] += 1
+            gewijzigd = True
+        if relais.get("stand") != stand:
+            gewijzigd = True
         relais["stand"] = stand
+    if isinstance(teller, (int, float)) and not isinstance(teller, bool):
+        teller = int(teller)
+        begin = relais.get("apparaat_begin")
+        # Eerste lezing, of de teller ging terug (accu teruggezet): hier
+        # opnieuw beginnen in plaats van een negatief getal te tonen.
+        if begin is None or teller < int(begin):
+            relais["apparaat_begin"] = teller
+            relais["apparaat_begin_tijd"] = nu
+            gewijzigd = True
+        if relais.get("apparaat_laatst") != teller:
+            relais["apparaat_laatst"] = teller
+            gewijzigd = True
     rend = tellingen.setdefault("rendement", {"laden": [], "ontladen": []})
     for soort in ("laden", "ontladen"):
         w = afg.get(f"rendement_{soort}")
         if w is not None and 0.5 <= w <= 1.05:
             rend[soort].append(w)
             del rend[soort][:-RENDEMENT_STEEKPROEF]
+    return gewijzigd
+
+
+def relais_samenvatting(tellingen: dict) -> dict:
+    """De relaisschakelingen voor de kaart: eigen telling en die van de accu.
+
+    v5.55: `apparaat_vandaag` is de teller van de accu nu min de stand aan
+    het begin van de dag (of bij de eerste lezing, zie `apparaat_sinds`).
+    Zo zijn de eigen telling en die van de accu naast elkaar te leggen.
+    """
+    relais = tellingen.get("relais") or {}
+    uit = {
+        "vandaag": relais.get("vandaag", 0),
+        "totaal": relais.get("totaal", 0),
+        "per_dag": relais.get("per_dag", {}),
+    }
+    begin, laatst = relais.get("apparaat_begin"), relais.get("apparaat_laatst")
+    if begin is not None and laatst is not None:
+        uit["apparaat_vandaag"] = max(0, int(laatst) - int(begin))
+        uit["apparaat_totaal"] = int(laatst)
+        uit["apparaat_sinds"] = _tijd(relais.get("apparaat_begin_tijd"))
+    if relais.get("per_dag_apparaat"):
+        uit["per_dag_apparaat"] = relais["per_dag_apparaat"]
+    return uit
 
 
 def rendement_samenvatting(tellingen: dict) -> dict:
@@ -829,8 +916,11 @@ def tekst(status: str, a: dict) -> str:
             extra += " · kalibreert"
         if accu.get("foutmelding"):
             extra += " · **foutmelding (zie Zendure-app)**"
+        # v5.55: de telling van de accu zelf ernaast, als die er is.
+        app = relais.get("apparaat_vandaag")
+        app_tekst = f" (accu telt {app})" if app is not None else ""
         regels.append(
-            f"Relais: {accu.get('relais_stand', '-')} · {relais.get('vandaag', 0)} wissels vandaag"
+            f"Relais: {accu.get('relais_stand', '-')} · {relais.get('vandaag', 0)} wissels vandaag{app_tekst}"
             f" · opslag {accu.get('opslagmodus', '-')} · {accu.get('soc_limiet', '-')}{extra}"
         )
         regels.append(
@@ -900,6 +990,7 @@ class ZendureLokaalMeelezer:
         self.afgeleid: dict | None = None
         self._luisteraar: Callable[[], None] | None = None
         self._entiteiten: dict[tuple[str | None, str], str] = {}
+        self._relais_gewijzigd = False
 
     # adres en entiteiten uit de registers ---------------------------------
 
@@ -928,7 +1019,7 @@ class ZendureLokaalMeelezer:
 
         self._entiteiten = {}
         omv = self._entiteiten_van(omvormer)
-        for veld in APPARAAT_VELDEN:
+        for veld in (*APPARAAT_VELDEN, APPARAAT_SCHAKELTELLER):
             eid = next((e for u, e in omv.items() if u.endswith("_" + snakecase(veld))), None)
             if eid:
                 self._entiteiten[(None, veld)] = eid
@@ -1106,7 +1197,16 @@ class ZendureLokaalMeelezer:
             await self._ronde_binnen()
         except Exception as err:  # noqa: BLE001
             verwerk_fout(self.tellingen, f"{type(err).__name__}: {err}", time.time())
-        if self.tellingen["rondes"] % BEWAAR_ELKE_RONDES == 0:
+        # v5.55: relaistellingen meteen bewaren als ze veranderen. Gevonden
+        # bij de doorlichting van 8 oktober: na een herstart stond "vandaag"
+        # op 27 terwijl de accu 48 telde. Home Assistant ontlaadt bij een
+        # herstart de integratie niet, dus `async_stop` (en het bewaren
+        # daarin) draait dan niet; wat sinds de laatste bewaarronde (elke
+        # 150 rondes, 5 minuten) was geteld, ging verloren. Een wissel is
+        # zeldzaam (tientallen per dag), dus direct bewaren kost niets. Een
+        # herstart mag de geschiedenis nooit raken.
+        if self._relais_gewijzigd or self.tellingen["rondes"] % BEWAAR_ELKE_RONDES == 0:
+            self._relais_gewijzigd = False
             await self._bewaar()
 
     async def _ronde_binnen(self) -> None:
@@ -1137,7 +1237,12 @@ class ZendureLokaalMeelezer:
         verwerk_ronde(self.tellingen, zonder_lopende_wijzigingen(
             vergelijk(lokaal, self._zoek_toestand), r, nu), nu, latentie)
         self.afgeleid = afgeleid(rapport)
-        verwerk_afgeleid(self.tellingen, self.afgeleid, nu)
+        if "apparaat_schakelingen" not in self.afgeleid:
+            teller = _getal(self._zoek_toestand(None, APPARAAT_SCHAKELTELLER))
+            if teller is not None:
+                self.afgeleid["apparaat_schakelingen"] = int(teller)
+        if verwerk_afgeleid(self.tellingen, self.afgeleid, nu):
+            self._relais_gewijzigd = True
         for veld in REACTIE_VELDEN:
             reactie_waarneming(r, "lokaal", veld, lokaal["apparaat"].get(veld), nu)
         ref = self.tellingen.setdefault("referentie", lege_referentie())
@@ -1154,12 +1259,7 @@ class ZendureLokaalMeelezer:
         uit = samenvatting(self.tellingen, self.host)
         uit["laatste_lezing"] = self.laatste
         uit["accu"] = self.afgeleid
-        relais = self.tellingen.get("relais") or {}
-        uit["relaisschakelingen"] = {
-            "vandaag": relais.get("vandaag", 0),
-            "totaal": relais.get("totaal", 0),
-            "per_dag": relais.get("per_dag", {}),
-        }
+        uit["relaisschakelingen"] = relais_samenvatting(self.tellingen)
         uit["omzetrendement"] = rendement_samenvatting(self.tellingen)
         uit["reactiesnelheid"] = reactie_samenvatting(
             self.tellingen.get("reactie") or {}, INTERVAL.total_seconds()

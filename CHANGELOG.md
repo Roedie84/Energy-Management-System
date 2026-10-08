@@ -31419,3 +31419,46 @@ hoogste prijs ongewijzigd.
 Ook: de reservemelding toonde "+None%" bij een onbekende veiligheidsmarge;
 dat is nu "onbekend".
 
+
+## v5.55 — Statistieken, relaistelling en verkopen met winst
+
+Gevonden bij de doorlichting van 8 oktober. Sturing, reserve en marges
+ongewijzigd.
+
+**Langetermijnstatistieken voor zes sensoren.** Ze hadden een eenheid maar
+geen device_class en geen state_class, dus Home Assistant hield geen
+uurstatistieken bij. Nu `measurement` met: vermogen voor Piekvermogen
+(netimport), Huishoudverbruik (werkelijk), Hourly consumption profile (de
+toestand is één getal: het geleerde vermogen van het huidige uur) en
+Gemiddeld vermogen in het ontlaadvenster; temperatuur voor de
+Klimaat-projectie. Digital Twin nauwkeurigheid bewust zonder device_class:
+het is de gemiddelde absolute afwijking in kWh, een foutmaat en geen
+energietotaal; met ENERGY zou hij in het Energiedashboard opduiken. Alleen
+`measurement`, eenheid blijft kWh. Attributen blijven buiten de recorder.
+
+**Relaisschakelingen overleven een herstart.** Na een herstart stond
+"vandaag" op 27 terwijl de accu 48 telde. Home Assistant ontlaadt de
+integratie niet bij een herstart, dus het bewaren bij het stoppen draaide
+niet; wat sinds de laatste bewaarronde (elke 5 minuten) was geteld, ging
+verloren. Nu wordt elke wijziging van de relaistelling meteen bewaard. De dag
+volgt de tijdzone van Home Assistant (in een UTC-container begon "vandaag"
+om 02:00). Nieuw: `apparaat_vandaag`, de eigen teller van de accu
+(`switchCount` uit het rapport, anders de Switch Count-entiteit van de
+Zendure-integratie, alleen gelezen) min de stand aan het begin van de dag,
+met `per_dag_apparaat`. Bewaard in dezelfde opslag; schema ongewijzigd, oude
+opslag laadt gewoon.
+
+**Verkocht met winst is geen planningstekort.** In de nacht van 2 op 3
+oktober verkocht het EMS 1,9 kWh tegen gemiddeld 45,3 ct en kocht het tekort
+terug tegen 33,3 ct: circa € 0,23 winst. Toch stonden systeemstatus en
+cockpit op LET OP. Een nacht waarin de verkoopprijs hoger was dan de prijs
+waartegen het tekort werd betaald, heet nu `verkocht_met_winst` en is
+informatief; bij een gelijke of lagere verkoopprijs blijft het planning.
+Bewaarde planningsnachten worden één keer opnieuw getoetst (`winsttoets`).
+De nacht blijft een tekortnacht (`shortfall`), dus de zelfcorrigerende marge
+telt hem mee zoals voorheen.
+
+**Verwachting bewust gewijzigd**: `test_v542_tekortsoort_herijkt.py` en
+`test_v544_tekortvolging_onvolledig.py` verkochten boven de tekortprijs en
+verwachtten planning; daar ligt de tekortprijs nu boven de verkoopprijs.
+Nieuw: `test_v555_doorlichting.py`.

@@ -182,10 +182,13 @@ def test_zonder_dagverloop_is_het_onbekend_en_geen_planning(make_coordinator):
 
 
 def test_verkocht_terwijl_niet_vol_blijft_planning_ook_uit_het_dagverloop(make_coordinator):
+    # v5.55: verkocht tegen 28,0 ct, onder de 30 ct van het tekort - geen
+    # winst, dus planning. Tegen 51,5 ct (zoals hier tot v5.54 stond) is het
+    # sinds v5.55 "verkocht met winst" (test_v555_doorlichting.py).
     def rij(k, tijd):
         if 40 <= k < 44:
             return {"soc": 70 - (k - 40) * 4, "net_w": -1450.0, "accu_w": 1636.0,
-                    "prijs_ct": 51.5}
+                    "prijs_ct": 28.0}
         return _zeven_oktober(k, tijd)
 
     c = _c(make_coordinator)

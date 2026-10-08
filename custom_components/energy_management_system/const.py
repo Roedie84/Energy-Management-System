@@ -5222,6 +5222,16 @@ TEKORTSOORT_PLANNING = "planning"
 TEKORTSOORT_ECONOMISCH = "economisch"
 # Nachten van vóór v5.40 die niet uit het dagverloop te herleiden zijn.
 TEKORTSOORT_ONBEKEND = "onbekend"
+# v5.55: een vierde soort. Gevonden bij de doorlichting van 8 oktober: in de
+# nacht van 2 op 3 oktober verkocht het EMS 1,9 kWh uit de accu tegen gemiddeld
+# 45,3 ct en kocht het tekort later terug tegen 33,3 ct - circa € 0,23 winst.
+# Toch telde die nacht als planning, en stonden systeemstatus en cockpit op
+# LET OP. Verkopen tegen meer dan het terugkopen kost, is bewust en loont;
+# geen stuurfout. Alleen als de verkoopprijs HOGER is dan de prijs waartegen
+# het tekort werd betaald; bij gelijk of lager blijft het planning. Alleen de
+# beoordeling achteraf; de nacht blijft een tekortnacht (`shortfall`), dus de
+# zelfcorrigerende marge en de sturing veranderen niet.
+TEKORTSOORT_VERKOCHT_MET_WINST = "verkocht_met_winst"
 # Het deel van de teruglevering dat telt als "zon het net op terwijl de accu
 # ruimte had": niet als de accu al bijna op zijn laadvermogen laadde - dan
 # kon er niet meer in.

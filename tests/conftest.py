@@ -236,6 +236,7 @@ def _install_ha_mocks() -> None:
         MONETARY = "monetary"
         ENERGY = "energy"
         POWER = "power"
+        TEMPERATURE = "temperature"
 
     components_sensor.SensorEntity = SensorEntity
     components_sensor.SensorDeviceClass = SensorDeviceClass

@@ -2371,6 +2371,15 @@ class ClimateForecastSensor(SensorEntity, RestoreEntity):
     _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
     _attr_icon = "mdi:home-thermometer-outline"
     _attr_native_unit_of_measurement = "°C"
+    # v5.55: langetermijnstatistieken. Gevonden bij de doorlichting van 8
+    # oktober: deze sensor had een eenheid maar geen device_class en geen
+    # state_class. Home Assistant bewaart dan alleen de ruwe geschiedenis
+    # (die na de recorder-bewaartermijn verdwijnt) en geen uurstatistieken;
+    # een grafiek over maanden kan dan niet.
+    # De toestand is de gemeten woonkamertemperatuur (float of None).
+    # De attributen blijven buiten de recorder; dat staat hier los van.
+    _attr_device_class = SensorDeviceClass.TEMPERATURE
+    _attr_state_class = "measurement"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(self, coordinator, entry_id: str) -> None:
@@ -2476,6 +2485,14 @@ class HouseholdConsumptionSensor(SensorEntity):
     _attr_name = "Huishoudverbruik (werkelijk)"
     _attr_icon = "mdi:home-lightning-bolt-outline"
     _attr_native_unit_of_measurement = "W"
+    # v5.55: langetermijnstatistieken. Gevonden bij de doorlichting van 8
+    # oktober: deze sensor had een eenheid maar geen device_class en geen
+    # state_class. Home Assistant bewaart dan alleen de ruwe geschiedenis
+    # (die na de recorder-bewaartermijn verdwijnt) en geen uurstatistieken;
+    # een grafiek over maanden kan dan niet.
+    # De toestand is het actuele vermogen in W (float of None).
+    _attr_device_class = SensorDeviceClass.POWER
+    _attr_state_class = "measurement"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(self, coordinator, entry_id: str) -> None:
@@ -2919,6 +2936,15 @@ class PeakPowerSensor(SensorEntity, RestoreEntity):
     _attr_name = "Piekvermogen (netimport)"
     _attr_icon = "mdi:chart-bell-curve"
     _attr_native_unit_of_measurement = "W"
+    # v5.55: langetermijnstatistieken. Gevonden bij de doorlichting van 8
+    # oktober: deze sensor had een eenheid maar geen device_class en geen
+    # state_class. Home Assistant bewaart dan alleen de ruwe geschiedenis
+    # (die na de recorder-bewaartermijn verdwijnt) en geen uurstatistieken;
+    # een grafiek over maanden kan dan niet.
+    # De toestand is de hoogste netimport van vandaag in W; het maximum
+    # per uur in de statistiek is dan precies de piek per uur.
+    _attr_device_class = SensorDeviceClass.POWER
+    _attr_state_class = "measurement"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(self, coordinator, entry_id: str) -> None:
@@ -3567,6 +3593,14 @@ class LearnedNightConsumptionSensor(SensorEntity, RestoreEntity):
     _attr_name = "Gemiddeld vermogen in het ontlaadvenster"
     _attr_icon = "mdi:chart-line"
     _attr_native_unit_of_measurement = "W"
+    # v5.55: langetermijnstatistieken. Gevonden bij de doorlichting van 8
+    # oktober: deze sensor had een eenheid maar geen device_class en geen
+    # state_class. Home Assistant bewaart dan alleen de ruwe geschiedenis
+    # (die na de recorder-bewaartermijn verdwijnt) en geen uurstatistieken;
+    # een grafiek over maanden kan dan niet.
+    # De toestand is een vermogen in W (mediaan, int of None).
+    _attr_device_class = SensorDeviceClass.POWER
+    _attr_state_class = "measurement"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(self, coordinator, entry_id: str) -> None:
@@ -3647,6 +3681,17 @@ class HourlyConsumptionProfileSensor(SensorEntity, RestoreEntity):
     _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
     _attr_icon = "mdi:chart-bell-curve"
     _attr_native_unit_of_measurement = "W"
+    # v5.55: langetermijnstatistieken. Gevonden bij de doorlichting van 8
+    # oktober: deze sensor had een eenheid maar geen device_class en geen
+    # state_class. Home Assistant bewaart dan alleen de ruwe geschiedenis
+    # (die na de recorder-bewaartermijn verdwijnt) en geen uurstatistieken;
+    # een grafiek over maanden kan dan niet.
+    # De toestand is één getal: het geleerde vermogen (W) voor het huidige
+    # uur. Het volledige profiel staat in de attributen, die buiten de
+    # recorder blijven. Als statistiek laat dit zien hoe het geleerde
+    # profiel door de weken verschuift.
+    _attr_device_class = SensorDeviceClass.POWER
+    _attr_state_class = "measurement"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(self, coordinator, entry_id: str) -> None:
@@ -4174,6 +4219,18 @@ class DigitalTwinAccuracySensor(SensorEntity, RestoreEntity):
     _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
     _attr_icon = "mdi:target-variant"
     _attr_native_unit_of_measurement = "kWh"
+    # v5.55: langetermijnstatistieken. Gevonden bij de doorlichting van 8
+    # oktober: deze sensor had een eenheid maar geen device_class en geen
+    # state_class. Home Assistant bewaart dan alleen de ruwe geschiedenis
+    # (die na de recorder-bewaartermijn verdwijnt) en geen uurstatistieken;
+    # een grafiek over maanden kan dan niet.
+    # Bewust GEEN device_class ENERGY: de toestand is de gemiddelde
+    # absolute afwijking (kWh) tussen voorspelde en gemeten accu-inhoud,
+    # een foutmaat en geen energietotaal. Met ENERGY zou Home Assistant hem
+    # aanbieden in het Energiedashboard en een totaal verwachten; ook
+    # ENERGY_STORAGE (opgeslagen energie) klopt niet. Alleen
+    # state_class measurement: gemiddelde/min/max per uur, eenheid blijft kWh.
+    _attr_state_class = "measurement"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(self, coordinator, entry_id: str) -> None:

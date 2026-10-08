@@ -138,13 +138,16 @@ def test_zon_het_net_op_telt_alleen_als_het_ems_de_accu_dichthield(make_coordina
 def test_verkopen_terwijl_de_accu_niet_vol_was_is_planning(make_coordinator, hass):
     """2/3 oktober: 19:00-19:45 1,4 kWh verkocht tegen 51 ct, bij 73% - de
     accu werd nooit vol. v5.41 keek bij een niet-volle accu niet naar
-    verkoop."""
+    verkoop.
+
+    v5.55: het tekort hier tegen 52 ct, boven de verkoopprijs - anders is het
+    "verkocht met winst" (test_v555_doorlichting.py)."""
     def rij(k, tijd):
         if 40 <= k < 44:
             return {"soc": 63 - (k - 40) * 4, "net_w": -1450.0, "accu_w": 1636.0,
                     "prijs_ct": 51.5, "stand": "manual", "reden": "expensive_quarter_peak"}
         if k >= 72:
-            return {"soc": 9, "net_w": 200.0, "accu_w": 0.0, "prijs_ct": 33.0}
+            return {"soc": 9, "net_w": 200.0, "accu_w": 0.0, "prijs_ct": 52.0}
         return {"soc": 50, "net_w": -50.0, "accu_w": 250.0, "prijs_ct": 35.0}
 
     c = _c(make_coordinator, hass)
@@ -157,6 +160,8 @@ def test_verkopen_terwijl_de_accu_niet_vol_was_is_planning(make_coordinator, has
 
 
 def test_vol_en_daarna_verkocht_noemt_hoeveel(make_coordinator, hass):
+    # v5.55: tekort tegen 41 ct, boven de verkoopprijs van 40,6 ct: geen
+    # winst, dus planning.
     def rij(k, tijd):
         if k == 32:
             return {"soc": 100, "net_w": -50.0, "accu_w": 0.0, "prijs_ct": 33.0}
@@ -164,7 +169,7 @@ def test_vol_en_daarna_verkocht_noemt_hoeveel(make_coordinator, hass):
             return {"soc": 90 - (k - 39) * 6, "net_w": -1750.0, "accu_w": 2035.0,
                     "prijs_ct": 40.6, "stand": "manual"}
         if k >= 72:
-            return {"soc": 9, "net_w": 200.0, "accu_w": 0.0, "prijs_ct": 35.0}
+            return {"soc": 9, "net_w": 200.0, "accu_w": 0.0, "prijs_ct": 41.0}
         return {"soc": 60, "net_w": -50.0, "accu_w": 200.0, "prijs_ct": 35.0}
 
     c = _c(make_coordinator, hass)

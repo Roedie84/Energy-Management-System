@@ -1,7 +1,6 @@
-EMS v5.54 - sturen op wat een extra slag werkelijk kost
+EMS v5.55 - statistieken, relaistelling en verkopen met winst
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
-De afweging om door de accu te laden en ontladen rekent nu met de
-cyclusslijtage (circa 4,2 ct/kWh) in plaats van het kalendergemiddelde
-(circa 11,2 ct/kWh). Rendement blijft in elke afweging meetellen; de reserve
-en terugleveren tegen de hoogste prijs veranderen niet.
+Sturing, reserve en marges veranderen niet; alleen statistieken, de
+relaistelling van het Zendure-meelezen en de beoordeling achteraf van
+tekortnachten.
