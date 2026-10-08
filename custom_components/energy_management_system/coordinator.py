@@ -33468,9 +33468,14 @@ class EnergyManagementSystemCoordinator:
                 if ent is None or not ent.device_id:
                     continue
                 for kandidaat in er.async_entries_for_device(reg, ent.device_id):
+                    # v5.53.2: ook op de unique_id van Home Connect - de
+                    # wasmachine heet hier sensor.wasmachine_status.
                     if kandidaat.entity_id.startswith("sensor.") and (
                         kandidaat.entity_id.endswith("_operation_state")
                         or getattr(kandidaat, "translation_key", None) == "operation_state"
+                        or str(getattr(kandidaat, "unique_id", "") or "").endswith(
+                            "BSH.Common.Status.OperationState"
+                        )
                     ):
                         return kandidaat.entity_id
         except Exception:  # noqa: BLE001 - zonder register beslist het vermogen

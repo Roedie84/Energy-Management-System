@@ -31373,3 +31373,13 @@ Connect-bedrijfstoestand stond al die tijd op `run`.
   zoals voorheen.
 
 3 nieuwe tests (`test_v5531_vaatwasser_droogt_nog.py`).
+
+## v5.53.2 — Ook de wasmachine
+
+Gevraagd: "Geldt dit nu ook voor de wasmachine?" Bijna: de bedrijfstoestand
+werd gezocht op een entity_id die eindigt op `_operation_state` of op de
+translation_key, en die van de wasmachine heet `sensor.wasmachine_status`.
+Nu ook herkend aan de unique_id van Home Connect
+(`…BSH.Common.Status.OperationState`).
+
+2 nieuwe tests.
