@@ -53,14 +53,15 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Live vóór bouw (08-10 10:08): MC 100%, `nodig_kwh` 2,47 waarvan `lange_horizon_extra` 2,468, verwacht tekort 1,0 kWh → na installatie moet hier `verwacht_tekort_tot_blok_kwh` 0 en de MC-stand ~0% staan.
 
 ## L-EMS-007 · watersensoren: eenheid m³ → liter, geen nepdag bij eenheidswissel
-- Status: **gebouwd v5.47**, geïnstalleerd 10:55 — eerste meetpunt gehaald 11:41 (`vandaag_liter` 60 = meter 60 L na herstart met m³-tussenstand; laatste dagwaarde 357 = werkelijk 07-10); dagwissel en 7 dagen nog toetsen
+- Status: **gebouwd v5.47**, geïnstalleerd 10:55 — meetpunten 11:41 en 15:40 (na herstart 0,105 m³ → 105 L) gehaald (`vandaag_liter` 60 = meter 60 L na herstart met m³-tussenstand; laatste dagwaarde 357 = werkelijk 07-10); dagwissel en 7 dagen nog toetsen
 - Onderbouwing: `sensor.water_verbruik_vandaag` (utility_meter, optie `water_daily_total_sensor_entity`) meldt na elke herstart eerst m³ en direct daarna L (recorder 08-10 07:03, 08:54, 09:01: 0,026/0,052/0,060 m³ tussen L-standen; live 10:08 `0.060 m³`). EMS rekende alleen Wh/MWh om → `vandaag_liter` 0,06, `trend_procent` −100, verhaal "0 L". Een sprong L→m³ is een daling en werd als nieuwe dag gearchiveerd (mogelijk de 109,77 in `geschiedenis_liter_per_dag`; niet zeker, niet gewist). `water_total_usage` (m³) en `water_active_usage` (L/min) melden nu de verwachte eenheid, maar werden ook niet omgerekend.
 - Bouw: `_read_water_volume_l` (L, mL, m³, gal, ft³, CCF; zonder eenheid: dagtotaal L, meterstand m³) en `_read_water_flow_l_per_min` (L/min, L/h, m³/h, gal/min, …) voor dagtotaal, meterstand, debiet, live listener en aanwezigheid. Daling archiveert alleen bij nieuwe `last_reset` (of zonder `last_reset`: andere lokale datum). 13 tests. Stuurt niets.
 - Meten na installatie: na elke herstart `vandaag_liter` ≥ de L-stand van de utility_meter (nooit < 1 bij een stand > 1 L) en `trend_procent` ≠ −100 overdag; `geschiedenis_liter_per_dag` groeit met precies 1 waarde per dag (lengte +1 per dagwissel, geen waarden < 20 L tenzij echt); 7 dagen.
 
 
 ## L-EMS-008 · watertrend: dagdeel tegen hetzelfde dagdeel, niet tegen hele dagen
-- Status: **kandidaat (zelf bouwen: rapportage; raakt niets van de sturing) — dagafsluiting**
+- Status: **gebouwd v5.49** (chatsessie 08-10 13:31), geïnstalleerd — eerste meetpunt 15:40: overdag `trend_procent` null met toelichting (nog geen 3 dagen profiel); methode 'zelfde_tijdstip' vanaf ~11-10 toetsen
+- (eerder: kandidaat, zelf bouwen: rapportage)
 - Onderbouwing: 08-10 11:40: `trend_procent` −84,5 = (60 − 386,8)/386,8; 60 L is het verbruik tot 11:40, 386,8 de mediaan van hele dagen (attribuut heet `gemiddeld_liter_per_dag`, is een mediaan). Overdag is de trend dus altijd sterk negatief en zegt niets.
 - Bouw (voorstel): trend tegen de verwachte stand op dit tijdstip (mediaan van eerdere dagen tot hetzelfde uur, uit `water_session_history` of een uurprofiel), of pas na 23:00 tonen; attribuut `mediaan_liter_per_dag` naast het oude. Test.
 - Meten na bouw: overdag `trend_procent` binnen ±50% op gewone dagen; om 23:59 gelijk aan de oude berekening.

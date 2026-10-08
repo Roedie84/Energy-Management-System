@@ -78,3 +78,15 @@ laatste ronde: 08-10 07:40, gemeten t/m 08-10 07:42
 laatste ronde: 08-10 11:45, gemeten t/m 08-10 11:42
 ## 08-10 13:45 (chatsessie)
 - L-EMS-008 (watertrend gelijk-met-gelijk) gebouwd in v5.49, plus cockpit-balans pas "wijkt af" na 3 rondes/3 min en laatste oordeel 5 min vasthouden. Meten: trend overdag niet meer structureel sterk negatief (eerste 3 dagen na update vóór 20:00 geen trend); cockpit LET OP niet meer door korte zonwisselingen.
+
+## 08-10 15:40 · tussenronde
+- Geïnstalleerd: v5.52.1 (v5.49-v5.52.1 door chatsessie, alleen rapportage/meelezen). HA-herstarts sinds 11:45: 6 (12:16, 14:19, 14:59, 15:08, 15:25, 15:39), elk ~30 s `unknown`.
+- Beslissingen 11:40-15:40: `default_smart`, plus 13:45-14:00 `grid_charging_low_solar` (1 kwartier, 20,7 ct = goedkoopste kwartier van het blok vanaf 12:15; morgen Solcast 2,39 kWh < drempel 5). Netimport 13-14 u 0,51 kWh. 0× verkoop onder de reserve (harde regel gehaald).
+- PV t/m 15:41: 8,07 kWh tegen Solcast-tot-nu 8,65 (−6,7%); dagvoorspelling Solcast 10,92. SoC 27% (09-10 u) → 86% (15:40), 6,57 kWh beschikbaar voor nacht →09-10; MC tot blok 0%. Toetsen in de dagafsluiting.
+- **Accurendement (nieuw gemeten):** AC in → AC uit (Zendure-tellers net-in/naar-huis) 30 d 215,6 → 176,7 kWh = **81,9%**, 7 d 84,1%; EMS-geleerd 84,2% (wordt overal gebruikt; optie 90% alleen terugval). v5.50 momentane omzet laden 83,2% · ontladen 93,7% (retour 78%, n=67/142, 1 middag). Geleerde waarde klopt met de tellers → geen voorstel.
+- **L-EMS-007** na herstart 15:39 opnieuw goed: utility_meter 0,105 m³ → `vandaag_liter` 105. **L-EMS-008** (v5.49) eerste meetpunt: overdag `trend_procent` null met toelichting (nog geen 3 dagen profiel) i.p.v. −84%.
+- v5.50-52.1 (meelezen) eerste stand: 192/192 rondes, latentie 16 ms, 96,9% gelijk; beste bron Zendure-integratie (64 tegen 130 W naast de stekker). Opvallend: `opslagmodus` flash (smartMode 0) en 13 relaiswissels; hoort bij stap 2 (chatsessie), niets gebouwd.
+- Logboek: 1× sjabloonfout `bedrag_per_dag_eur` (15:39, Proefstand-kaart) — al opgelost in v5.52.1 in `dashboard_template.yaml`; het dashboard in HA draait nog de oude kaart.
+- Geen release (tussenronde; v5.49-52.1 vandaag al uitgebracht en geïnstalleerd).
+
+laatste ronde: 08-10 15:40, gemeten t/m 08-10 15:44

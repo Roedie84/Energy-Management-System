@@ -27,3 +27,4 @@
 | Lange-horizon-extra in de reserve | 1,59-2,11 kWh | 07/08-10 | 08-10 07:40 |
 | MC-stand tot het blok na v5.47 (overdag) | 0 % (was 96-100 %) | 08-10 11:41 | 08-10 11:45 |
 | Meetlog kwartierdekking na L-EMS-003 | 100 % | 08-10 11:15 | 08-10 11:45 |
+| Accurendement AC→AC (Zendure-tellers) | 81,9 % (30 d) · 84,1 % (7 d); geleerd 84,2 % | 08-09..07-10, 215,6 kWh in | 08-10 15:40 |
