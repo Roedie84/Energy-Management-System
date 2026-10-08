@@ -9,7 +9,7 @@ Zendure-integratie laat zien.
 
 Wat deze module doet:
 
-- elke 5 seconden `GET http://<accu>/properties/report` (de lokale
+- elke 2 seconden `GET http://<accu>/properties/report` (de lokale
   ZenSDK-API van de SolarFlow, die al aan staat);
 - de ruwe waarden omrekenen naar dezelfde eenheden als de
   Zendure-integratie (temperatuur in tiende kelvin, spanning in
@@ -48,11 +48,11 @@ from typing import Any, Callable
 _LOGGER = logging.getLogger(__name__)
 
 ZENDURE_DOMEIN = "zendure_ha"
-INTERVAL = timedelta(seconds=5)
+INTERVAL = timedelta(seconds=2)
 TIMEOUT_S = 5
 OPSLAG_SLEUTEL = "energy_management_system.zendure_lokaal"
 OPSLAG_VERSIE = 1
-BEWAAR_ELKE_RONDES = 60
+BEWAAR_ELKE_RONDES = 150
 # Pas na zoveel vergelijkingen per veld een oordeel.
 MIN_VERGELIJKINGEN = 20
 # Overeenkomst per veld waarboven het "gelijk" heet.
@@ -599,6 +599,11 @@ def steekproef(ref: dict, t: float, waarden: dict[str, float | None]) -> None:
         reeks = ref["afwijking"].setdefault(bron, [])
         reeks.append(round(abs(waarde - echt), 1))
         del reeks[:-REFERENTIE_STEEKPROEF]
+        # v5.52.1: met teken, om een vaste afwijking (offset) te herkennen
+        # naast toevallige; positief = de bron geeft meer ontladen dan de stekker
+        teken = ref.setdefault("met_teken", {}).setdefault(bron, [])
+        teken.append(round(waarde - echt, 1))
+        del teken[:-REFERENTIE_STEEKPROEF]
 
 
 def referentie_samenvatting(ref: dict, entiteit: str | None) -> dict:
@@ -614,6 +619,10 @@ def referentie_samenvatting(ref: dict, entiteit: str | None) -> dict:
             "sprongen_gezien": len(ver),
             "mediaan_vertraging_s": round(statistics.median(ver), 1) if ver else None,
             "gemist": (ref.get("gemist") or {}).get(bron, 0),
+            "vaste_afwijking_w": (
+                round(statistics.median((ref.get("met_teken") or {}).get(bron)), 1)
+                if (ref.get("met_teken") or {}).get(bron) else None
+            ),
         }
     uit["beste"], uit["toelichting"] = beste_bron(uit)
     return uit
@@ -857,7 +866,7 @@ def tekst(status: str, a: dict) -> str:
 
 
 class ZendureLokaalMeelezer:
-    """Leest de accu elke 5 s zelf uit en vergelijkt. Schrijft nooit."""
+    """Leest de accu elke 2 s zelf uit en vergelijkt. Schrijft nooit."""
 
     def __init__(self, hass, referentie: str | None = None, referentie_omkeren: bool = False) -> None:
         self._hass = hass
@@ -881,7 +890,12 @@ class ZendureLokaalMeelezer:
         dreg = dr.async_get(self._hass)
         omvormer = None
         sn_naar_apparaat: dict[str, Any] = {}
-        for apparaat in dreg.devices.values():
+        apparaten = [
+            apparaat
+            for entry in self._hass.config_entries.async_entries(ZENDURE_DOMEIN)
+            for apparaat in dr.async_entries_for_config_entry(dreg, entry.entry_id)
+        ]
+        for apparaat in apparaten:
             for domein, ident in apparaat.identifiers:
                 if domein != ZENDURE_DOMEIN:
                     continue

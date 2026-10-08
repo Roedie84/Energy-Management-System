@@ -31304,3 +31304,25 @@ beste-bronmeting beginnen één keer opnieuw; relaisschakelingen en rendement
 blijven.
 
 15 nieuwe tests in `test_v550_zendure_lokaal.py`.
+
+## v5.52.1 — Eerlijk meten
+
+Alleen lezen. Eerste stand na v5.52 (48 metingen, 21 sprongen van de
+stekker): de Zendure-integratie gemiddeld 39 W naast de stekker en 1,2 s
+vertraging, het eigen lezen 86 W en 4,2 s, met 8 gemiste sprongen. Beide
+lezen dezelfde lokale API van dezelfde accu; het verschil zit dus in hoe
+vaak er gelezen wordt, niet in de bron.
+
+- Het eigen lezen gaat van elke 5 s naar elke 2 s, zodat de vergelijking
+  niet door de leesfrequentie wordt beslist. Opslaan elke 150 rondes (5 min).
+- Nieuw per bron: `vaste_afwijking_w`, de mediaan van de afwijking MET
+  teken. Laat zien of een bron structureel naast de stekker zit (offset)
+  of alleen af en toe (timing).
+- De Zendure-apparaten worden gezocht via de config entries van de
+  Zendure-integratie, niet meer via `device_registry.devices.values()`
+  (Home Assistant meldde dat dit in 2027.9 stopt).
+- Proefstand, "Wie staat er klaar?": een uitkomst zonder bedrag gaf een
+  sjabloonfout (`bedrag_per_dag_eur` ontbrak); de kaart leest de velden nu
+  met een standaardwaarde.
+
+2 nieuwe tests.

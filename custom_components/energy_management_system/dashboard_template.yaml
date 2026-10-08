@@ -2737,7 +2737,7 @@ views:
 
         {% endif %}_{{ c.get(''betrouwbaarheid'', '''') }}_
 
-        {% set o = c.get(''zou_hebben_opgeleverd'') or {} %}{% if o.get(''te_becijferen'') %}**Zou hebben opgeleverd: € {{ o.bedrag_per_dag_eur }} per dag (€ {{ o.bedrag_per_jaar_eur }} per jaar, over {{ o.dagen }} dag(en)).** {{ o.toelichting }}
+        {% set o = c.get(''zou_hebben_opgeleverd'') or {} %}{% if o.get(''te_becijferen'') %}**Zou hebben opgeleverd: € {{ o.get(''bedrag_per_dag_eur'', ''-'') }} per dag (€ {{ o.get(''bedrag_per_jaar_eur'', ''-'') }} per jaar, over {{ o.get(''dagen'', ''-'') }} dag(en)).** {{ o.get(''toelichting'', '''') }}
 
         {% elif o.get(''reden'') %}_Nog niet in geld te vangen: {{ o.reden }}_
 

@@ -392,3 +392,19 @@ def test_beste_bron_in_de_kaarttekst():
 def test_de_stekker_is_de_referentie():
     init = (MAP / "__init__.py").read_text()
     assert "referentie=config.get(CONF_BATTERY_POWER_SENSOR)" in init
+
+
+def test_vaste_afwijking_met_teken():
+    ref = zl.lege_referentie()
+    zl.ref_waarneming(ref, 0, -2000)
+    for t in (10, 12, 14):
+        zl.steekproef(ref, t, {"lokaal": -1910, "zendure": -1990})
+    s = zl.referentie_samenvatting(ref, "x")
+    assert s["lokaal"]["vaste_afwijking_w"] == 90.0
+    assert s["zendure"]["vaste_afwijking_w"] == 10.0
+
+
+def test_apparaten_via_de_zendure_config_entries():
+    bron = (MAP / "zendure_lokaal.py").read_text()
+    assert "dreg.devices.values()" not in bron
+    assert "async_entries_for_config_entry" in bron
