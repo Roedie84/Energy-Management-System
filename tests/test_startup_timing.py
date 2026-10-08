@@ -23,9 +23,9 @@ def test_cold_boot_waits_for_homeassistant_started(coordinator_cls):
     asyncio.run(coordinator.async_setup())
 
     assert calls == [], "should not fetch data immediately during a cold boot"
-    assert len(hass.bus.listeners) == 1
-    event_type, _callback_fn = hass.bus.listeners[0]
-    assert event_type == "homeassistant_started"
+    # v5.48: daarnaast luistert hij naar het afsluiten (direct wegschrijven).
+    gestart = [e for e, _f in hass.bus.listeners if e != "homeassistant_stop"]
+    assert gestart == ["homeassistant_started"]
 
 
 def test_reload_after_hass_already_running_fetches_immediately(coordinator_cls):

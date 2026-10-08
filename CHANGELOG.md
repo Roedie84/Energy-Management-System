@@ -31035,3 +31035,76 @@ werd gearchiveerd.
 4855 groen. Aangepast: drie toetsen die de oude betekenis vastlegden
 (kans inclusief lange horizon, kalibratie zonder basis, een daling binnen
 dezelfde dag als nieuwe dag).
+
+## v5.48 — Een herstart verandert niets
+
+Alleen herstartbestendigheid. De sturing, de reserve, de drempels, de marges
+en de optie-standaarden zijn niet aangeraakt; er wordt alleen bestaande
+toestand bewaard, zodat een herstart van Home Assistant (en die gebeurt hier
+vaak) geen teller, kosten, besparing, geleerd model of gedrag verandert.
+
+### 1. Elke ronde een opslag, en direct wegschrijven bij het afsluiten
+
+De opslag werd alleen gepland bij 36 losse gebeurtenissen. De tellers van
+elke ronde - `actual_cost_today_eur`, `battery_cumulative_discharged_kwh`,
+`pv_production_today_kwh`, `grid_import_today_kwh`,
+`total_discharge_value_eur`/`total_charge_cost_eur`,
+`total_battery_savings_eur` - planden er geen. `async_unload` schreef wel
+direct weg, maar draait alleen bij een herlaad van de integratie, niet bij
+een herstart van Home Assistant. Na de herstart won de oudere opslag van de
+herstelde sensoren (`_store_wint`, `herstel_de_opslag_na_de_sensoren`).
+
+- Aan het eind van elke ronde een vertraagde opslag (30 s bundeling; Home
+  Assistant schrijft een geplande opslag bij het afsluiten alsnog weg). Pas
+  nadat de opslag gelezen is.
+- Een luisteraar op `homeassistant_stop` schrijft de toestand en de meetlaag
+  direct weg; opgezegd bij een herlaad.
+- Oplopende tellers (`total_discharge_value_eur`, `total_charge_cost_eur`,
+  `battery_cumulative_discharged_kwh`) dalen na een herstart nooit onder de
+  laatste sensorstand: een `total_increasing`-sensor die daalt, leest de
+  recorder als een meterwissel.
+
+### 2. De kopie voor na de sensoren is de toestand NA het laden
+
+`_bewaar_geladen_opslag` nam de kopie vóór de opschoningen en migraties bij
+het laden; `herstel_de_opslag_na_de_sensoren` zette dan de ruwe opslag terug
+en maakte ze ongedaan. Nu wordt de kopie aan het eind van het laden genomen
+uit `_collect_persisted_state()` - alleen de velden die de opslag had of die
+het laden veranderde, zodat het sensorherstel voor de rest het vangnet blijft.
+
+### 3. Dagsleutels en dagtellers bewaard
+
+Via `PERSISTED_FIELDS`, datums als ISO-tekst; een opslag zonder deze velden
+laadt gewoon (beginwaarde).
+
+- Sluipverbruik: `_today_min_load_kw`, `_cusum_check_date`. Na een herstart
+  begon de dagvloer opnieuw.
+- Capaciteitstrend en proefstand: `_capacity_trend_day_key`,
+  `_proefstand_doorzet_bij_dagstart`. Elke herstart gaf een tweede
+  `capacity_trend_history`-regel voor die dag, en de volgende dag werd de
+  hele levensdoorzet als dagslijtage geboekt (`or 0.0`). Zonder beginstand
+  nu geen slijtageboeking (het dagtype wel); de eerste dag legt de
+  beginstand vast; geen tweede capaciteitsregel voor een datum die er al
+  staat (ook uit een opslag van v5.47).
+- Prijsvorm: `_price_shape_day_key`.
+- Dagrapport: `_daily_report_day_key` (de tellers werden al bewaard maar
+  begonnen opnieuw omdat de sleutel ontbrak).
+- Netladen vandaag: `_grid_charged_today`, `_grid_charged_date`.
+- Veroudering: `_veroudering_vandaag`, `_veroudering_day_key`.
+- `laagste_soc_vandaag_procent`, `_daily_cost_day_key`.
+
+### 4. Meetlaag
+
+Schreef elke 300 s weg, zonder afsluiten. Nieuw: `bewaar_nu()`, aangeroepen
+bij `homeassistant_stop` en bij een herlaad (niet zolang het terugladen
+loopt).
+
+### 5. Dienst `confirm_water_source`
+
+Deed `(gegevens or {}).get("coordinator")` op de coordinator zelf - een
+AttributeError, de dienst werkte nooit. Loopt nu over de coordinators.
+
+22 nieuwe tests (`test_v548_herstartbestendig.py`), 4877 groen. Aangepast:
+`test_state_persistence.py` (`_veroudering_vandaag` niet meer vluchtig,
+nieuwe velden gevuld) en `test_startup_timing.py` (naast `started` nu ook
+een `stop`-luisteraar).

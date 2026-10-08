@@ -338,9 +338,11 @@ def _async_register_nilm_services(hass: HomeAssistant) -> None:
         startpunt, de bevestiging maakt er een feit van.
         """
         bron = call.data["bron"]
-        for gegevens in hass.data.get(DOMAIN, {}).values():
-            coordinator = (gegevens or {}).get("coordinator")
-            if coordinator is not None:
+        # v5.48: hass.data bevat de coordinators zelf (en de zonvolgers),
+        # geen dicts met een sleutel "coordinator". `.get` op een
+        # coordinator gaf een AttributeError: de dienst werkte nooit.
+        for coordinator in _iter_coordinators():
+            if hasattr(coordinator, "confirm_water_source"):
                 coordinator.confirm_water_source(bron)
 
     hass.services.async_register(

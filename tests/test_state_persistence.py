@@ -107,6 +107,19 @@ def _vul_alles(c):
 
     c.sluipverbruik_methode_versie = SLUIPVERBRUIK_METHODE_VERSIE
     c.battery_cooling_last_change = NOW
+    # v5.48: de dagsleutels en dagtellers die een herstart overleven.
+    c._today_min_load_kw = 0.12
+    c._cusum_check_date = date(2026, 8, 6)
+    c._capacity_trend_day_key = date(2026, 8, 6)
+    c._proefstand_doorzet_bij_dagstart = 812.5
+    c._price_shape_day_key = date(2026, 8, 6)
+    c._daily_report_day_key = date(2026, 8, 6)
+    c._daily_cost_day_key = date(2026, 8, 6)
+    c._grid_charged_today = True
+    c._grid_charged_date = date(2026, 8, 6)
+    c._veroudering_vandaag = {"uren_boven_hoge_stand": 1.5}
+    c._veroudering_day_key = date(2026, 8, 6)
+    c.laagste_soc_vandaag_procent = 23.0
 
 
 def _herstart(make_coordinator, bron):
@@ -637,10 +650,10 @@ VLUCHTIG_MET_REDEN = {
     # (`appliance_cycle_kwh`) wordt wel bewaard.
     "_appliance_power_samples": "halve cyclus, hoort te vervallen",
     "_temp_prediction_pending": "openstaande voorspelling zonder waarde",
-    # v1.59.0: de tellers van de lopende dag. Die worden bij middernacht
-    # in `veroudering_history` weggeschreven; halverwege bewaren zou een
-    # halve dag als hele dag laten meetellen.
-    "_veroudering_vandaag": "halve dag, wordt bij middernacht afgesloten",
+    # v5.48: `_veroudering_vandaag` wordt nu WEL bewaard, samen met zijn
+    # dagsleutel. De reden hier ("halve dag als hele dag") klopte niet: het
+    # weggooien maakte er juist een halve dag van, want na een herstart
+    # telde alleen wat er daarna kwam.
     # Korte schuivende vensters van enkele minuten.
     "_recent_consumption_readings_kw": "venster van minuten",
     "_balance_power_samples": "venster van minuten",

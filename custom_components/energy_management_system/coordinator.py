@@ -50,7 +50,7 @@ import re
 from pathlib import Path
 from datetime import date, datetime, timedelta, timezone
 
-from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
+from homeassistant.const import EVENT_HOMEASSISTANT_STARTED, EVENT_HOMEASSISTANT_STOP
 from homeassistant.core import CoreState, Event, HomeAssistant, callback
 from homeassistant.helpers.event import (
     async_track_state_change_event,
@@ -660,6 +660,7 @@ from .const import (
     PERSISTED_DATETIME_FIELDS,
     PERSISTED_INT_FIELDS,
     PERSISTED_INTKEY_DICT_FIELDS,
+    PERSISTED_MONOTONE_FIELDS,
     PERSISTED_PLAIN_FIELDS,
     PERSISTED_STATE_SAVE_DELAY_SECONDS,
     WATER_VOLUME_AGREEMENT_TOLERANCE,
@@ -2174,6 +2175,12 @@ class EnergyManagementSystemCoordinator:
             self._unsub_battery_cooling_state = async_track_state_change_event(
                 self.hass, cooling_entities, self._handle_battery_cooling_change
             )
+        # v5.48: bij het afsluiten van Home Assistant direct wegschrijven.
+        # `async_unload` draait alleen bij een herlaad van de integratie,
+        # niet bij een herstart van Home Assistant zelf.
+        self._unsub_afsluiten = self.hass.bus.async_listen_once(
+            EVENT_HOMEASSISTANT_STOP, self._bij_afsluiten
+        )
         if self.hass.state == CoreState.running:
             # Home Assistant is already fully up (e.g. this integration
             # was just installed/reloaded, not a cold boot) - safe to
@@ -2183,6 +2190,28 @@ class EnergyManagementSystemCoordinator:
             self.hass.bus.async_listen_once(
                 EVENT_HOMEASSISTANT_STARTED, self._handle_hass_started
             )
+
+    async def _bij_afsluiten(self, _event: Event) -> None:
+        """Schrijft de toestand en de meetlaag weg bij het stoppen van Home
+        Assistant (v5.48).
+
+        Een herstart mag niets veranderen. De opslag werd alleen gepland
+        bij een handvol gebeurtenissen; de tellers van elke ronde (kosten,
+        doorzet, opwek, netimport, besparing) kwamen daar niet bij, en na
+        de herstart won de oudere opslag van de herstelde sensoren.
+        """
+        # Eenmalig: na het afgaan is er niets meer op te zeggen.
+        self._unsub_afsluiten = None
+        try:
+            await self.async_save_persisted_state_now()
+        except Exception:  # noqa: BLE001 - afsluiten mag hier niet op stuklopen
+            _LOGGER.exception("Kon de toestand bij het afsluiten niet wegschrijven")
+        laag = getattr(self, "_meetlaag", None)
+        if laag is not None:
+            try:
+                await laag.bewaar_nu()
+            except Exception:  # noqa: BLE001
+                _LOGGER.exception("Kon de meetlaag bij het afsluiten niet wegschrijven")
 
     async def _handle_hass_started(self, _event: Event) -> None:
         """Run the first real update once Home Assistant has finished
@@ -2438,6 +2467,18 @@ class EnergyManagementSystemCoordinator:
         # v1.0.4: een geplande, nog niet uitgevoerde opslag zou bij een
         # herstart alsnog verloren gaan - dus hier hard wegschrijven.
         await self.async_save_persisted_state_now()
+        # v5.48: de afsluitluisteraar opzeggen (hoort bij deze coordinator).
+        opzeggen = getattr(self, "_unsub_afsluiten", None)
+        if opzeggen:
+            opzeggen()
+        self._unsub_afsluiten = None
+        # v5.48: en de meetlaag, die anders tot vijf minuten kwijtraakt.
+        laag = getattr(self, "_meetlaag", None)
+        if laag is not None:
+            try:
+                await laag.bewaar_nu()
+            except Exception:  # noqa: BLE001
+                _LOGGER.exception("Kon de meetlaag bij het herladen niet wegschrijven")
 
     @callback
     async def _watchdog(self, _now) -> None:
@@ -6642,8 +6683,12 @@ class EnergyManagementSystemCoordinator:
         blijft de reserve knellen, neemt het aantal moduswissels toe?
         """
         vandaag = now.date()
-        if self._daily_report_day_key is None:
-            self._daily_report_day_key = vandaag
+        # v5.48: de dagsleutel wordt bewaard; tellers zonder vorm (opslag
+        # zonder tellers) beginnen opnieuw in plaats van om te vallen.
+        if self._daily_report_day_key is None or not isinstance(
+            self._daily_report_counters, dict
+        ) or "ticks" not in self._daily_report_counters:
+            self._daily_report_day_key = self._daily_report_day_key or vandaag
             self._daily_report_counters = self._nieuwe_dagteller()
 
         tellers = self._daily_report_counters
@@ -8610,11 +8655,23 @@ class EnergyManagementSystemCoordinator:
         if self._capacity_trend_day_key != vandaag:
             if self._capacity_trend_day_key is not None:
                 self._boek_proefstand_dag(self._capacity_trend_day_key)
+            elif self._proefstand_doorzet_bij_dagstart is None:
+                # v5.48: de eerste dag ooit - de beginstand nu vastleggen,
+                # zodat morgen alleen de doorzet van vandaag telt.
+                self._proefstand_doorzet_bij_dagstart = (
+                    self.battery_cumulative_discharged_kwh
+                )
             self._capacity_trend_day_key = vandaag
             capaciteit = self._read_sensor_float(
                 self.config.get(CONF_BATTERY_TOTAL_CAPACITY_SENSOR)
             )
-            if capaciteit:
+            # v5.48: één meting per dag, ook als de dagsleutel uit een
+            # opslag van vóór v5.48 komt (die kende hem niet).
+            al_gemeten = any(
+                isinstance(r, dict) and r.get("datum") == vandaag.isoformat()
+                for r in self.capacity_trend_history[-3:]
+            )
+            if capaciteit and not al_gemeten:
                 self.capacity_trend_history.append(
                     {
                         "datum": vandaag.isoformat(),
@@ -10349,8 +10406,15 @@ class EnergyManagementSystemCoordinator:
         #    kostte dat? Dit bedrag zit NIET in de gerapporteerde
         #    opbrengst en maakt die dus te rooskleurig.
         slijtage = self.get_wear_cost_overview()
-        doorzet = self.battery_cumulative_discharged_kwh - (
-            self._proefstand_doorzet_bij_dagstart or 0.0
+        # v5.48: zonder beginstand van de dag geen slijtageboeking. `or 0.0`
+        # boekte dan de hele levensdoorzet als slijtage van één dag - na
+        # elke herstart, want de beginstand stond alleen in het geheugen.
+        # Het dagtype hieronder hangt niet van de beginstand af.
+        beginstand = self._proefstand_doorzet_bij_dagstart
+        doorzet = (
+            self.battery_cumulative_discharged_kwh - beginstand
+            if beginstand is not None
+            else 0.0
         )
         self._proefstand_doorzet_bij_dagstart = (
             self.battery_cumulative_discharged_kwh
@@ -35487,8 +35551,34 @@ class EnergyManagementSystemCoordinator:
 
     def _bewaar_geladen_opslag(self, stored: dict | None) -> None:
         """Houdt de geladen opslag vast tot de sensoren zijn toegevoegd
-        (v5.9)."""
-        self._geladen_opslag = copy.deepcopy(stored) if stored else None
+        (v5.9).
+
+        v5.48: de toestand NA het laden, niet de ruwe opslag. Tot nu toe
+        werd de kopie genomen vóór de opschoningen en migraties bij het
+        laden; `herstel_de_opslag_na_de_sensoren` zette dan de ruwe stand
+        terug en maakte die stilzwijgend weer ongedaan. Alleen de velden
+        die de opslag had of die het laden veranderde: voor de rest blijft
+        het sensorherstel het vangnet, net als in `_store_wint`.
+        """
+        if not stored:
+            self._geladen_opslag = None
+            return
+        begin = getattr(self, "_beginwaarden", None) or {}
+        na_het_laden = self._collect_persisted_state()
+        bewaard = {}
+        for veld, waarde in na_het_laden.items():
+            # Het UTC-kenmerk altijd: zonder kenmerk zou het terugzetten de
+            # al omgezette zoncorrectie nog een keer verschuiven (v5.24).
+            if veld not in stored and veld != "pv_uurbias_in_utc":
+                try:
+                    if veld in begin and waarde == begin[veld]:
+                        continue
+                except Exception:  # noqa: BLE001
+                    pass
+                if waarde is None:
+                    continue
+            bewaard[veld] = waarde
+        self._geladen_opslag = copy.deepcopy(bewaard)
 
     def ruim_vastgelopen_leermodus_op(self) -> bool:
         """Zet een leermodus uit die bij een verdwenen handmatige stand
@@ -35540,10 +35630,26 @@ class EnergyManagementSystemCoordinator:
         """
         opslag = self._geladen_opslag
         self._geladen_opslag = None
+        # v5.48: oplopende tellers nooit terug. Was de opslag ouder dan de
+        # laatste sensorstand (een stroomstoring tussen twee opslagrondes),
+        # dan zou de `total_increasing`-sensor dalen.
+        sensorstand = {
+            veld: getattr(self, veld, None) for veld in PERSISTED_MONOTONE_FIELDS
+        }
         if opslag:
             self._apply_persisted_state(copy.deepcopy(opslag))
+        self._houd_tellers_oplopend(sensorstand)
         # v5.9: pas nu weet de integratie wat de schakelaars herstelden.
         self.ruim_vastgelopen_leermodus_op()
+
+    def _houd_tellers_oplopend(self, eerder: dict) -> None:
+        """Zet een oplopende teller terug op de hoogste bekende stand
+        (v5.48) - zie PERSISTED_MONOTONE_FIELDS."""
+        for veld, oud in (eerder or {}).items():
+            nu = getattr(self, veld, None)
+            if isinstance(oud, (int, float)) and not isinstance(oud, bool):
+                if not isinstance(nu, (int, float)) or oud > nu:
+                    setattr(self, veld, float(oud))
 
     async def async_load_persisted_state(self) -> None:
         await self.async_laad_instellingslabels()
@@ -35570,9 +35676,6 @@ class EnergyManagementSystemCoordinator:
         self._state_store_loaded = True
         if isinstance(stored, dict):
             self._apply_persisted_state(stored)
-        # v5.9: onthouden wat er geladen is, zodat het na de sensoren nog
-        # een keer teruggezet kan worden - zie `herstel_de_opslag_na_de_sensoren`.
-        self._bewaar_geladen_opslag(stored)
         self._discard_history_from_an_older_method()
         self._migreer_sluipverbruik_methode()
         self._migreer_dagreeks_kosten()
@@ -35595,6 +35698,10 @@ class EnergyManagementSystemCoordinator:
         # waardoor hij in de DOEN-stapel belandde terwijl er niets te
         # configureren viel.
         self._recompute_measurement_quality()
+        # v5.9: onthouden wat er geladen is, zodat het na de sensoren nog
+        # een keer teruggezet kan worden - zie `herstel_de_opslag_na_de_sensoren`.
+        # v5.48: pas hier, NA de opschoningen en migraties hierboven.
+        self._bewaar_geladen_opslag(stored if isinstance(stored, dict) else None)
 
     def schedule_persisted_state_save(self) -> None:
         """Plant een vertraagde opslag (v1.0.4).
@@ -39316,6 +39423,17 @@ class EnergyManagementSystemCoordinator:
             # many early `return` points for different decision
             # branches, not one single exit.
             self._notify_listeners()
+            # v5.48: elke ronde een vertraagde opslag plannen. De tellers
+            # van de ronde (kosten, doorzet, opwek, netimport, besparing)
+            # planden er zelf geen; Home Assistant bundelt de schrijfacties
+            # en schrijft een geplande opslag bij het afsluiten alsnog weg.
+            # Pas als de opslag gelezen is: anders zou een ronde vóór het
+            # laden de opslag overschrijven met beginwaarden.
+            try:
+                if self._state_store_loaded:
+                    self.schedule_persisted_state_save()
+            except Exception:  # noqa: BLE001 - de ronde mag hier niet op stuklopen
+                _LOGGER.exception("Kon de opslag niet plannen")
             # v2.1.1: WANDKLOK en REKENTIJD apart.
             #
             # Gemeld: "Mediaan 5613 ms over 1 rondes." Dat getal is om

@@ -20,6 +20,7 @@ from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    PERSISTED_MONOTONE_FIELDS,
     SLUIPVERBRUIK_METHODE_VERSIE,
     GEEN_ATTRIBUTEN_IN_RECORDER,
     COCKPIT_MIN_INTERVAL_S,
@@ -287,6 +288,15 @@ def _store_wint(methode):
                 continue
             store_had_iets = k in begin and oud != begin[k]
             if store_had_iets:
+                # v5.48: een oplopende teller houdt de hoogste stand. Was de
+                # opslag ouder dan de sensor, dan zou de teller dalen.
+                if (
+                    k in PERSISTED_MONOTONE_FIELDS
+                    and isinstance(oud, (int, float))
+                    and isinstance(nieuw, (int, float))
+                    and nieuw > oud
+                ):
+                    continue
                 setattr(c, k, oud)
 
     return omhulling

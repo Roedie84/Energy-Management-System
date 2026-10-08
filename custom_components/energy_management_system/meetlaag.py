@@ -668,17 +668,26 @@ class Meetlaag:
         if time.monotonic() - self._laatste_bewaring < BEWAAR_INTERVAL_S:
             return
         self._laatste_bewaring = time.monotonic()
-        te_bewaren = self.log.te_bewaren()
+        self.c.hass.async_create_task(self._schrijf(self.log.te_bewaren()))
 
-        async def bewaren():
-            for (soort, dag), inhoud in te_bewaren.items():
-                try:
-                    await self._opslag(meetlog.MeetLog.opslagsleutel(soort, dag)).async_save(inhoud)
-                except Exception as err:  # noqa: BLE001
-                    self.log.fouten += 1
-                    self.log.laatste_fout = f"opslag: {err}"
+    async def _schrijf(self, te_bewaren: dict) -> None:
+        for (soort, dag), inhoud in te_bewaren.items():
+            try:
+                await self._opslag(meetlog.MeetLog.opslagsleutel(soort, dag)).async_save(inhoud)
+            except Exception as err:  # noqa: BLE001
+                self.log.fouten += 1
+                self.log.laatste_fout = f"opslag: {err}"
 
-        self.c.hass.async_create_task(bewaren())
+    async def bewaar_nu(self) -> None:
+        """Alles wat sinds de laatste bewaring veranderde, nu wegschrijven
+        (v5.48) - bij het afsluiten van Home Assistant en bij een herlaad.
+        Anders gingen tot vijf minuten metingen verloren (BEWAAR_INTERVAL_S).
+        Niet zolang het terugladen loopt: dan zou het bestand van vandaag
+        overschreven worden met alleen de records van na de herstart."""
+        if self._opslag_factory is None or not self._laden_klaar:
+            return
+        self._laatste_bewaring = time.monotonic()
+        await self._schrijf(self.log.te_bewaren())
 
     def _verwijder(self, soort: str, dag: str) -> None:
         if self._opslag_factory is None or not self._laden_klaar:

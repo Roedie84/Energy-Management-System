@@ -3621,7 +3621,33 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "airco_door_ems": {"type": "plain"},
     # v5.45: de Monte-Carlo-tekortkans van 22:00 per avond (kalibratie).
     "mc_22u_per_avond": {"type": "plain"},
+    # v5.48: herstartbestendig. Deze dagsleutels en dagtellers stonden
+    # alleen in het geheugen; na elke herstart begon de dag opnieuw - een
+    # tweede capaciteitsmeting per dag, de levensdoorzet als dagslijtage,
+    # het laagste kwartier en de laagste stand van vandaag kwijt, en een
+    # winterwacht die na het netladen weer vrijgaf.
+    "_today_min_load_kw": {"type": "plain"},
+    "_cusum_check_date": {"type": "date"},
+    "_capacity_trend_day_key": {"type": "date"},
+    "_proefstand_doorzet_bij_dagstart": {"type": "plain"},
+    "_price_shape_day_key": {"type": "date"},
+    "_daily_report_day_key": {"type": "date"},
+    "_daily_cost_day_key": {"type": "date"},
+    "_grid_charged_today": {"type": "plain"},
+    "_grid_charged_date": {"type": "date"},
+    "_veroudering_vandaag": {"type": "plain"},
+    "_veroudering_day_key": {"type": "date"},
+    "laagste_soc_vandaag_procent": {"type": "plain"},
 }
+
+# v5.48: tellers die alleen oplopen. Na een herstart nooit lager dan wat de
+# sensor al had gemeld: een `total_increasing`-sensor die daalt, leest de
+# recorder als een meterwissel en telt de hele stand opnieuw op.
+PERSISTED_MONOTONE_FIELDS = (
+    "total_discharge_value_eur",
+    "total_charge_cost_eur",
+    "battery_cumulative_discharged_kwh",
+)
 
 # Afgeleid, geen eigen lijsten meer.
 PERSISTED_PLAIN_FIELDS = tuple(

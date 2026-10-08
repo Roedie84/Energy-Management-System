@@ -68,6 +68,7 @@ def _install_ha_mocks() -> None:
     # -- homeassistant.const ---------------------------------------------
     const = types.ModuleType("homeassistant.const")
     const.EVENT_HOMEASSISTANT_STARTED = "homeassistant_started"
+    const.EVENT_HOMEASSISTANT_STOP = "homeassistant_stop"
     sys.modules["homeassistant.const"] = const
 
     # -- homeassistant.config_entries -------------------------------------
