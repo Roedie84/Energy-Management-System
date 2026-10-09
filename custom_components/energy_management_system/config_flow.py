@@ -32,6 +32,9 @@ from .const import (
     CONF_TWEEDE_PV_VOORSPELLING_SENSOR,
     CONF_INSTRALING_SENSOR,
     CONF_GAS_PRICE_SENSOR,
+    CONF_AIRCO_COP_BIJ_7C,
+    CONF_AIRCO_COP_PER_GRAAD,
+    DEFAULT_AIRCO_COP_PER_GRAAD,
     CONF_REGEL_P1_SENSOR,
     CONF_BATTERY_COOLING_FAN_POWER_SENSOR,
     CONF_INKOOP_EUR_VANDAAG_SENSOR,
@@ -185,6 +188,18 @@ def _optioneel(sleutel: str, defaults: dict):
     return vol.Optional(sleutel, default=waarde)
 
 
+def _voorstel(waarde) -> dict | None:
+    """Een voorgestelde waarde voor een optioneel getalveld (v5.59).
+
+    Met `suggested_value` in plaats van `default` toont het formulier de
+    opgeslagen waarde, maar valt een leeggemaakt veld niet terug op die
+    waarde: leeg blijft leeg.
+    """
+    if waarde in (None, ""):
+        return None
+    return {"suggested_value": waarde}
+
+
 def _as_text(waarde) -> str:
     """Toont een opgeslagen getal als tekst in een TextSelector
     (v1.15.1).
@@ -235,6 +250,8 @@ def _validate_input(user_input: dict) -> dict[str, str]:
             errors[CONF_FEEDIN_COST_EUR_PER_KWH] = "invalid_number"
 
     for veld, minimum, maximum in (
+        (CONF_AIRCO_COP_BIJ_7C, 1.5, 6.0),
+        (CONF_AIRCO_COP_PER_GRAAD, 0.0, 0.3),
         (CONF_PV_ACTUAL_AZIMUTH_DEGREES, 0, 360),
         (CONF_PV_ACTUAL_TILT_DEGREES, 0, 90),
     ):
@@ -377,6 +394,28 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
             _optioneel(CONF_TWEEDE_PV_VOORSPELLING_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
             _optioneel(CONF_INSTRALING_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
             _optioneel(CONF_GAS_PRICE_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            # v5.59: de COP van de airco bij 7 °C uit de fabrieksopgave.
+            # Leeg = de algemene schatting. Zonder `default` maar met een
+            # voorgestelde waarde: zo blijft het veld leeg te maken (een
+            # default None gaf in v1.4.2 "expected float").
+            vol.Optional(
+                CONF_AIRCO_COP_BIJ_7C,
+                description=_voorstel(defaults.get(CONF_AIRCO_COP_BIJ_7C)),
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=1.5, max=6.0, step=0.01, mode=selector.NumberSelectorMode.BOX
+                )
+            ),
+            vol.Optional(
+                CONF_AIRCO_COP_PER_GRAAD,
+                default=defaults.get(CONF_AIRCO_COP_PER_GRAAD)
+                if defaults.get(CONF_AIRCO_COP_PER_GRAAD) is not None
+                else DEFAULT_AIRCO_COP_PER_GRAAD,
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=0, max=0.3, step=0.01, mode=selector.NumberSelectorMode.BOX
+                )
+            ),
             _optioneel(CONF_REGEL_P1_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
             _optioneel(CONF_BATTERY_COOLING_FAN_POWER_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
             # v5.15: de dagbedragen van de leverancier, incl en excl btw.

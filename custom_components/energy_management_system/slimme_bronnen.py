@@ -38,31 +38,66 @@ COP_MIN = 2.0
 COP_MAX = 4.5
 
 
-def cop_bij(buiten_c: float | None) -> float:
-    """Geschatte COP van de airco bij deze buitentemperatuur."""
+# v5.59: een fabrieksopgave bij 7 °C buiten kan de algemene lijn vervangen.
+COP_REFERENTIE_C = 7.0
+COP_FABRIEK_MARGE_BOVEN = 0.5
+
+
+def cop_bij(
+    buiten_c: float | None,
+    cop_bij_7c: float | None = None,
+    cop_per_graad: float | None = None,
+) -> float:
+    """Geschatte COP van de airco bij deze buitentemperatuur.
+
+    Zonder `cop_bij_7c` de algemene lijn: 3,0 bij 0 °C, 0,08 per graad,
+    begrensd 2,0..4,5. Met een fabrieksopgave (v5.59) loopt de lijn door
+    dat punt: cop7 + helling x (t - 7), begrensd op 2,0 en op
+    max(4,5, cop7 + 0,5). De helling blijft een aanname.
+    """
+    helling = COP_PER_GRAAD if cop_per_graad in (None, "") else float(cop_per_graad)
+    if cop_bij_7c in (None, ""):
+        if buiten_c is None:
+            return COP_BIJ_0_GRADEN
+        return max(COP_MIN, min(COP_MAX, COP_BIJ_0_GRADEN + helling * buiten_c))
+    cop7 = float(cop_bij_7c)
+    bovengrens = max(COP_MAX, cop7 + COP_FABRIEK_MARGE_BOVEN)
     if buiten_c is None:
-        return COP_BIJ_0_GRADEN
-    return max(COP_MIN, min(COP_MAX, COP_BIJ_0_GRADEN + COP_PER_GRAAD * buiten_c))
+        return max(COP_MIN, min(bovengrens, cop7))
+    return max(
+        COP_MIN, min(bovengrens, cop7 + helling * (buiten_c - COP_REFERENTIE_C))
+    )
+
+
+def cop_bron(cop_bij_7c: float | None) -> str:
+    """Waar de COP vandaan komt, voor uitleg en attributen (v5.59)."""
+    if cop_bij_7c in (None, ""):
+        return "algemene schatting"
+    return f"fabrieksopgave (COP {float(cop_bij_7c):.2f} bij 7 °C)"
 
 
 def verwarmingsadvies(
     gasprijs_m3: float | None,
     stroomprijs_kwh: float | None,
     buiten_c: float | None,
+    cop_bij_7c: float | None = None,
+    cop_per_graad: float | None = None,
 ) -> dict:
     """Kost een kWh warmte minder met de airco of met de cv?
 
-    Bij de prijzen van september 2026 - gas 1,74 euro per m3, stroom rond
-    de 0,24 - kost warmte uit gas ongeveer 0,20 euro per kWh en uit de
-    airco ongeveer 0,08. De airco wint dan ruim, en blijft winnen tot de
-    stroomprijs boven het omslagpunt komt.
+    Warmte uit gas kost gasprijs / 8,8 per kWh, warmte uit de airco
+    stroomprijs / COP. Het omslagpunt - de stroomprijs waarboven de cv
+    wint - is dus gasprijs / 8,8 x COP. Bij gas 1,74 euro per m3 en een
+    COP van 3,0 (de algemene lijn bij 0 °C) ligt dat rond 0,59 euro; met
+    de fabrieksopgave van Ruuds Daikin (4,44 bij 7 °C) rond 0,88 bij 7 °C.
     """
     if gasprijs_m3 is None or stroomprijs_kwh is None or gasprijs_m3 <= 0:
         return {
             "advies": None,
             "reden": "Geen gasprijs of stroomprijs beschikbaar.",
         }
-    cop = cop_bij(buiten_c)
+    cop = cop_bij(buiten_c, cop_bij_7c, cop_per_graad)
+    bron = cop_bron(cop_bij_7c)
     gas_per_kwh = gasprijs_m3 / GAS_KWH_WARMTE_PER_M3
     airco_per_kwh = stroomprijs_kwh / cop
     omslag = gas_per_kwh * cop
@@ -71,6 +106,7 @@ def verwarmingsadvies(
     return {
         "advies": advies,
         "cop_geschat": round(cop, 2),
+        "cop_bron": bron,
         "gas_eur_per_kwh_warmte": round(gas_per_kwh, 4),
         "airco_eur_per_kwh_warmte": round(airco_per_kwh, 4),
         "omslag_stroomprijs_eur": round(omslag, 4),
@@ -78,11 +114,12 @@ def verwarmingsadvies(
         "reden": (
             f"Warmte kost nu {airco_per_kwh:.3f} euro per kWh met de airco "
             f"(COP {cop:.1f} bij {buiten_c if buiten_c is not None else '?'} "
-            f"graden) tegen {gas_per_kwh:.3f} met de cv. Pas boven een "
+            f"graden, {bron}) tegen {gas_per_kwh:.3f} met de cv. Pas boven een "
             f"stroomprijs van {omslag:.2f} euro wint de cv."
             if advies == "airco"
             else f"De stroom is nu zo duur dat de cv goedkoper verwarmt: "
-            f"{gas_per_kwh:.3f} tegen {airco_per_kwh:.3f} euro per kWh."
+            f"{gas_per_kwh:.3f} tegen {airco_per_kwh:.3f} euro per kWh "
+            f"(COP {cop:.1f}, {bron})."
         ),
     }
 

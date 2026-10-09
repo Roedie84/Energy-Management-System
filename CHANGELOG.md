@@ -31603,3 +31603,30 @@ bakje; de laatste 20" en hoe er wordt afgerond. Nieuw:
 `tests/test_v558_airco_bakjes.py` (max. één start per bakje per uur, meerdere
 bakjes tegelijk, afronding 18,8 → 19 en 18,4 → 18, airco al aan → geen start,
 migratie en herstart).
+
+## v5.59 — COP van de airco instelbaar (fabrieksopgave)
+
+**Waarom.** Het verwarmingsadvies (airco tegen cv) rekende met een algemene
+COP-lijn: 3,0 bij 0 °C, 0,08 per graad, begrensd 2,0–4,5. Geen meting en
+geen opgave van deze airco.
+
+**Nieuw.** Optie `airco_cop_bij_7c` — "COP van de airco bij 7 °C buiten
+(fabrieksopgave)", 1,5–6,0, standaard leeg. Leeg = de algemene lijn, exact
+zoals v5.58. Ingevuld: COP(t) = cop7 + helling × (t − 7), begrensd op 2,0 en
+op max(4,5; cop7 + 0,5). De helling is ook instelbaar: `airco_cop_per_graad`,
+standaard 0,08.
+
+**Bron (Ruud).** Daikin data book 3MXM-A (EEDEN22, p.10): buitendeel 3MXM52A
+met FTXA35AW + FTXA25AW, combinatie 2.5 + 3.5 kW-klasse, verwarmen bij binnen
+20 °C DB / buiten 7 °C DB: 6,80 kW warmte bij 1,53 kW → **COP 4,44 bij 7 °C**.
+Daarmee: 3,88 bij 0 °C, 3,08 bij −10 °C. De helling van 0,08 per graad blijft
+een aanname, geen opgave.
+
+**Gevolgen.**
+- `verwarmingsadvies` krijgt het attribuut `cop_bron`: "fabrieksopgave (COP
+  x bij 7 °C)" of "algemene schatting"; de uitleg noemt de bron ook.
+- Omslagpunt = gasprijs / 8,8 × COP.
+- De airco-sturing (regel 5, "gas goedkoper → uit") gebruikt hetzelfde
+  advies; verder geen wijziging aan de sturing.
+- Verouderde toelichting gecorrigeerd: `airco_sturing.py` noemde "COP 4,4 /
+  omslag 83 ct", wat niet met de code klopte.

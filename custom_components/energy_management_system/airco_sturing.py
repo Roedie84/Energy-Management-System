@@ -9,9 +9,11 @@ Dus: elke ronde een BESLUIT, met de redenen erbij, ook als de knop uit
 staat. Alleen met de knop aan wordt het uitgevoerd.
 
 Het economische argument staat al in het verwarmingsadvies (v5.14):
-warmte uit de airco kost bij een COP van 4,4 ongeveer de helft van warmte
-uit gas, tot een stroomprijs van zo'n 83 ct. Zolang de airco de woonkamer op
-temperatuur houdt, slaat de cv-thermostaat niet aan.
+warmte uit gas kost gasprijs / 8,8 per kWh, uit de airco stroomprijs / COP,
+dus de cv wint pas boven een stroomprijs van gasprijs / 8,8 x COP. De COP
+komt uit `slimme_bronnen.cop_bij`: de algemene lijn (3,0 bij 0 °C), of
+sinds v5.59 de fabrieksopgave bij 7 °C als die is ingesteld. Zolang de
+airco de woonkamer op temperatuur houdt, slaat de cv-thermostaat niet aan.
 
 Geen rooster: "ik heb een standaard werkweek maar mijn vrouw en dochter
 niet". De bestaande aanwezigheidsdetectie (bewegingssensoren, lampen, tv)

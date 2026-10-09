@@ -52,6 +52,15 @@ CONF_CO2_INTENSITY_SENSOR = "co2_intensity_sensor_entity"
 CONF_TWEEDE_PV_VOORSPELLING_SENSOR = "second_pv_forecast_today_sensor_entity"
 CONF_INSTRALING_SENSOR = "irradiance_sensor_entity"
 CONF_GAS_PRICE_SENSOR = "gas_price_sensor_entity"
+# v5.59: de COP van de airco bij 7 °C buiten, uit de fabrieksopgave. Leeg =
+# de algemene schattingslijn uit slimme_bronnen (geen gedragswijziging).
+# Bij Ruud: Daikin 3MXM52A met FTXA25AW + FTXA35AW, data book 3MXM-A
+# (EEDEN22, p.10): 6,80 kW warmte bij 1,53 kW -> COP 4,44 bij 7 °C.
+CONF_AIRCO_COP_BIJ_7C = "airco_cop_bij_7c"
+# De helling: hoeveel de COP per graad buitentemperatuur verandert. Een
+# aanname, standaard 0,08 per graad.
+CONF_AIRCO_COP_PER_GRAAD = "airco_cop_per_graad"
+DEFAULT_AIRCO_COP_PER_GRAAD = 0.08
 # v5.20: de P1-sensor waarop de ACCU regelt, als die afwijkt van de echte
 # P1-meter. Bij Ruud een template "P1 + 50", zodat de Zendure de echte meter
 # op -50 W houdt en er altijd iets teruggeleverd wordt. Het verschil tussen

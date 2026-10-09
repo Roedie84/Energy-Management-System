@@ -341,6 +341,9 @@ from .const import (
     CONF_TWEEDE_PV_VOORSPELLING_SENSOR,
     CONF_INSTRALING_SENSOR,
     CONF_GAS_PRICE_SENSOR,
+    CONF_AIRCO_COP_BIJ_7C,
+    CONF_AIRCO_COP_PER_GRAAD,
+    DEFAULT_AIRCO_COP_PER_GRAAD,
     CONF_REGEL_P1_SENSOR,
     CONF_BATTERY_COOLING_FAN_POWER_SENSOR,
     WEATHER_ENSEMBLE_CLEAR_THRESHOLD_PERCENT,
@@ -43498,6 +43501,10 @@ class EnergyManagementSystemCoordinator:
             self._lees_optionele_sensor(CONF_GAS_PRICE_SENSOR),
             self.huidige_prijs_eur_per_kwh(),
             self._get_live_outdoor_temp_c(dt_util.now()),
+            cop_bij_7c=self.instelling(CONF_AIRCO_COP_BIJ_7C, None),
+            cop_per_graad=self.instelling(
+                CONF_AIRCO_COP_PER_GRAAD, DEFAULT_AIRCO_COP_PER_GRAAD
+            ),
         )
 
     def get_pv_ensemble(self) -> dict:
