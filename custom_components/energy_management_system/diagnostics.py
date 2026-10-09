@@ -525,6 +525,8 @@ async def async_get_config_entry_diagnostics(
             "get_klimaat_projectie_kwaliteit",
             coordinator.get_klimaat_projectie_kwaliteit,
         ),
+        # v5.64: wat er over wind in de projectie geleerd is.
+        "klimaat_wind": _veilig("get_klimaat_wind", coordinator.get_klimaat_wind),
         "accumodules": _veilig(
             "get_battery_module_table", coordinator.get_battery_module_table
         ),

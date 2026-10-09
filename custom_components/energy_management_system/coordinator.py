@@ -60,7 +60,7 @@ from homeassistant.helpers.event import (
 from homeassistant.util import dt as dt_util
 from homeassistant.helpers.storage import Store
 
-from . import airco_sturing, slimme_bronnen
+from . import airco_sturing, klimaat_wind, slimme_bronnen
 from .const import (
     DIAGNOSE_REGEL_MAX_TEKENS,
     DASHBOARD_ONBEKEND_IS_NORMAAL,
@@ -1682,7 +1682,7 @@ class EnergyManagementSystemCoordinator:
         # de per-ronde-historie van vóór v5.58 eenmalig wordt gewist.
         # v5.63.1: ook de open waarnemingen (JSON-veilig) en of ze na een herstart al terug zijn
         # (zie `_herstel_airco_waarnemingen`); op één regel vanwege de groeigrens van __init__.
-        self._temp_prediction_pending, self.airco_bakje_laatste_start, self.airco_leer_versie, self.airco_open_waarnemingen, self._airco_waarnemingen_hersteld = [], {}, None, [], False
+        self._temp_prediction_pending, self.airco_bakje_laatste_start, self.airco_leer_versie, self.airco_open_waarnemingen, self._airco_waarnemingen_hersteld, self._klimaat_anker_wind, self._klimaat_wind_per_uur, self.klimaat_wind_residuen = [], {}, None, [], False, None, {}, {}
         self.living_room_current_temp_c: float | None = None
         self.living_room_current_humidity_percent: float | None = None
         # Klimaat-tabblad: geleerde temperatuur-projectie (v0.63.56).
@@ -38609,6 +38609,11 @@ class EnergyManagementSystemCoordinator:
             # tegengestelde acties zijn: "60% kans dat de airco aangaat"
             # betekent iets heel anders bij 18 dan bij 26 graden. Nu
             # wordt per bin bijgehouden wat er gebeurde.
+            # v5.64: zette het EMS hem aan (ook vooruit, op de projectie),
+            # dan is dat geen keuze van jullie - niet meetellen. Anders leert
+            # het EMS van zichzelf en schuift de aanzettemperatuur op.
+            if self.airco_door_ems:
+                self._temp_prediction_pending = []
             richting = self.climate_airco_state
             for pending in self._temp_prediction_pending:
                 pending["airco_seen_active"] = True
@@ -39285,6 +39290,7 @@ class EnergyManagementSystemCoordinator:
             self._climate_anchor_shutter_state,
             self._climate_anchor_airco_state,
         )
+        self._leer_windresidu(key, rate_c_per_hour)
         history = self.climate_rate_history.setdefault(key, [])
         history.append(round(rate_c_per_hour, 3))
         self.climate_rate_history[key] = history[-CLIMATE_RATE_HISTORY_LENGTH:]
@@ -39307,6 +39313,92 @@ class EnergyManagementSystemCoordinator:
         )
         self._climate_anchor_shutter_state = shutter_state
         self._climate_anchor_airco_state = airco_state
+        self._klimaat_anker_wind = self._live_wind()
+
+    def _wind_weerentiteit(self) -> str | None:
+        """De weerentiteit voor wind: dezelfde als voor de buitentemperatuur-
+        voorspelling (v5.64)."""
+        return self.config.get(CONF_KNMI_WEATHER_ENTITY) or self.config.get(
+            CONF_OPENWEATHERMAP_WEATHER_ENTITY
+        )
+
+    def _live_wind(self) -> tuple[float | None, float | None] | None:
+        """Actuele wind (km/h, graden) van de weerentiteit (v5.64)."""
+        entiteit = self._wind_weerentiteit()
+        toestand = self.hass.states.get(entiteit) if entiteit else None
+        if toestand is None:
+            return None
+        kmh, graden = klimaat_wind.uit_attributen(toestand.attributes)
+        return (kmh, graden) if kmh is not None else None
+
+    def _leer_windresidu(self, key: str, rate_c_per_hour: float) -> None:
+        """Wat de kamer dit uur ANDERS deed dan haar cel gewoonlijk, bewaard
+        onder de wind van dat uur (v5.64) - zie `klimaat_wind`.
+
+        Alleen met de airco uit (anders meet je de airco, niet de wind) en
+        alleen als de cel zelf al genoeg metingen heeft om een gewoonte te
+        hebben. De mediaan van de cel wordt VOOR deze meting genomen.
+        """
+        if self._climate_anchor_airco_state != "uit":
+            return
+        wind = self._klimaat_anker_wind or (None, None)
+        sleutel = klimaat_wind.windsleutel(*wind)
+        cel = self.climate_rate_history.get(key) or []
+        if sleutel is None or len(cel) < CLIMATE_RATE_MIN_SAMPLES:
+            return
+        klimaat_wind.leer_residu(
+            self.klimaat_wind_residuen, sleutel, rate_c_per_hour - statistics.median(cel)
+        )
+
+    def _onthoud_voorspelde_wind(self, raw_forecast, entity_id: str) -> None:
+        """De voorspelde wind per uur, naast de temperatuurvoorspelling (v5.64)."""
+        toestand = self.hass.states.get(entity_id)
+        eenheid = toestand.attributes.get("wind_speed_unit") if toestand else None
+        per_uur = {}
+        for item in raw_forecast or []:
+            when = item.get("datetime") if isinstance(item, dict) else None
+            moment = dt_util.parse_datetime(when) if isinstance(when, str) else when
+            kmh = klimaat_wind.naar_kmh(item.get("wind_speed"), eenheid) if moment else None
+            if kmh is None:
+                continue
+            per_uur[dt_util.as_local(moment).strftime("%Y-%m-%dT%H")] = (
+                kmh, item.get("wind_bearing")
+            )
+        self._klimaat_wind_per_uur = per_uur
+
+    def _windcorrectie(self, moment: datetime, airco_state: str) -> dict:
+        """De windcorrectie voor één uur van de projectie (v5.64).
+
+        Alleen met de airco uit - zo is hij ook geleerd. Zonder voorspelde
+        wind voor dat uur, of nog te weinig metingen: geen correctie.
+        """
+        wind = (self._klimaat_wind_per_uur or {}).get(moment.strftime("%Y-%m-%dT%H"))
+        kmh, graden = wind if wind else (None, None)
+        uit = klimaat_wind.correctie(
+            self.klimaat_wind_residuen, klimaat_wind.windsleutel(kmh, graden)
+        )
+        if airco_state != "uit":
+            uit = {"c_per_uur": None, "metingen": uit["metingen"], "betrouwbaar": False}
+        uit["label"] = klimaat_wind.wind_label(kmh, graden)
+        return uit
+
+    def get_klimaat_wind(self) -> dict:
+        """Wat er over wind geleerd is, voor het dashboard (v5.64)."""
+        nu = self._live_wind()
+        return {
+            "nu": klimaat_wind.wind_label(*nu) if nu else None,
+            "per_richting": [
+                r for r in klimaat_wind.overzicht(self.klimaat_wind_residuen)
+                if r["metingen"]
+            ],
+            "toelichting": (
+                "Per windrichting en windklasse (matig 10-25 km/h, hard vanaf "
+                "25 km/h) hoeveel sneller (min) of langzamer (plus) de woonkamer "
+                "per uur afkoelt dan bij dezelfde temperatuur gewoonlijk, met de "
+                "airco uit. Vanaf 5 metingen telt het mee in de indicatieve "
+                "projectie, vanaf 15 ook in de strenge."
+            ),
+        }
 
     def get_climate_rate(
         self, outdoor_bucket: str, shutter_state: str, airco_state: str
@@ -39552,6 +39644,7 @@ class EnergyManagementSystemCoordinator:
                 entries.append((parsed_when, float(temp)))
             except (TypeError, ValueError):
                 continue
+        self._onthoud_voorspelde_wind(raw_forecast, entity_id)
         return entries or None
 
     async def _async_update_climate_forecast(self, now: datetime) -> None:
@@ -39747,10 +39840,14 @@ class EnergyManagementSystemCoordinator:
             rate_value = rate["rate_c_per_hour"]
             indicatief_value = indicatief["rate_c_per_hour"]
 
+            # v5.64: de geleerde windcorrectie erbovenop - zie `klimaat_wind`.
+            wind = self._windcorrectie(hour_dt, airco_state)
             if indicatief["voldoende_data"] and indicatief_value is not None:
-                kort_termijn_temp = kort_termijn_temp + indicatief_value
+                kort_termijn_temp = kort_termijn_temp + indicatief_value + (wind["c_per_uur"] or 0.0)
             if rate["betrouwbaarheid"] == "betrouwbaar" and rate_value is not None:
-                betrouwbaar_temp = betrouwbaar_temp + rate_value
+                betrouwbaar_temp = betrouwbaar_temp + rate_value + (
+                    wind["c_per_uur"] if wind["betrouwbaar"] else 0.0
+                )
 
             trajectory.append(
                 {
@@ -39787,6 +39884,8 @@ class EnergyManagementSystemCoordinator:
                         else "onvoldoende_data"
                     ),
                     "aantal_metingen": rate["sample_count"],
+                    "wind": wind["label"],
+                    "windcorrectie_c_per_uur": wind["c_per_uur"],
                 }
             )
 
@@ -43706,6 +43805,7 @@ class EnergyManagementSystemCoordinator:
             door_ems_aan=self.airco_door_ems,
             setpunten_gezien=len(self.airco_setpunten or []),
             setpunten_nodig=AIRCO_PREDICTION_MIN_SAMPLES,
+            vooruit=self._airco_vooruitblik(),
         )
         uit["knop"] = self.airco_automaat_aan
         uit["toegepast"] = bool(self.airco_automaat_aan and uit["actie"] in ("verwarmen", "uit"))
@@ -43724,6 +43824,34 @@ class EnergyManagementSystemCoordinator:
         self.last_airco_besluit = uit
         if uit["toegepast"]:
             self.hass.async_create_task(self._async_pas_airco_toe(entiteit, uit))
+
+    def _airco_vooruitblik(self) -> dict:
+        """De woonkamertemperatuur over een uur volgens de projectie, en of
+        die goed genoeg is om vooruit op te verwarmen (v5.64).
+
+        Alleen als de projectie over de voorbije uren gemiddeld binnen een
+        halve graad zat - dezelfde grens die de pagina Klimaat "nauwkeurig
+        genoeg om op te bouwen" noemt - en het eerste uur zelf op metingen
+        rust. Anders geen vooruitblik, en dus alleen aanzetten op de meting.
+        """
+        traject = self.climate_forecast_trajectory or []
+        eerste = traject[0] if traject else {}
+        kwaliteit = self.get_klimaat_projectie_kwaliteit()
+        verwacht = eerste.get("kort_termijn_temp_c")
+        bruikbaar = (
+            verwacht is not None
+            and eerste.get("betrouwbaarheid") in ("indicatief", "betrouwbaar")
+            and kwaliteit.get("beschikbaar")
+            and (kwaliteit.get("gemiddelde_afwijking_c") or 99) <= 0.5
+        )
+        if not bruikbaar:
+            reden = (
+                "geen projectie voor het komende uur"
+                if verwacht is None
+                else "projectie nog niet nauwkeurig genoeg om vooruit te verwarmen"
+            )
+            return {"verwacht_c": None, "reden": reden}
+        return {"verwacht_c": verwacht, "wind": eerste.get("wind"), "reden": None}
 
     async def _async_pas_airco_toe(self, entiteit: str, besluit: dict) -> None:
         """Het besluit uitvoeren - alleen met de knop aan (v5.27)."""

@@ -129,6 +129,7 @@ def besluit(
     door_ems_aan: bool,
     setpunten_gezien: int,
     setpunten_nodig: int,
+    vooruit: dict | None = None,
 ) -> dict:
     """Wat het EMS met de woonkamer-airco zou doen, en waarom.
 
@@ -139,7 +140,9 @@ def besluit(
     4. niemand thuis, of iedereen slaapt -> uit, als het EMS hem aanzette
     5. gas is nu goedkoper               -> uit, als het EMS hem aanzette
     6. kouder dan de aanzettemperatuur   -> verwarmen tot de gewenste temperatuur
-    7. anders                            -> niets
+    7. over een uur kouder dan de aanzettemperatuur volgens een projectie
+       die nauwkeurig genoeg is (v5.64)  -> vooruit verwarmen
+    8. anders                            -> niets
 
     Het EMS zet de airco alleen UIT als het hem zelf AANzette; wat een mens
     aanzette, laat het staan.
@@ -203,6 +206,26 @@ def besluit(
             f"onder de {aanzet_c:.1f} °C waarbij jullie hem aanzetten.",
             redenen, doel_c, aanzet_c,
         )
+    verwacht_c = (vooruit or {}).get("verwacht_c")
+    if verwacht_c is not None and verwacht_c < aanzet_c:
+        wind = (vooruit or {}).get("wind")
+        redenen.append(
+            f"over een uur naar verwachting {verwacht_c:.1f} °C"
+            + (f" (wind {wind})" if wind else "")
+        )
+        if airco_stand == "heat":
+            return _uitkomst("niets", "De airco verwarmt al.", redenen, doel_c, aanzet_c)
+        return _uitkomst(
+            "verwarmen",
+            f"Vooruit verwarmen tot {doel_c:.1f} °C: nu {woonkamer_c:.1f} °C, over "
+            f"een uur naar verwachting {verwacht_c:.1f} °C - onder de "
+            f"{aanzet_c:.1f} °C waarbij jullie hem aanzetten.",
+            redenen, doel_c, aanzet_c,
+        )
+    if (vooruit or {}).get("reden"):
+        redenen.append(vooruit["reden"])
+    elif verwacht_c is not None:
+        redenen.append(f"over een uur naar verwachting {verwacht_c:.1f} °C")
     return _uitkomst(
         "niets",
         f"Warm genoeg: {woonkamer_c:.1f} °C, niet onder de {aanzet_c:.1f} °C.",

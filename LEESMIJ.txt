@@ -1,13 +1,20 @@
-EMS v5.63.1 - airco-waarnemingen overleven een herstart
+EMS v5.64 - wind in de klimaatprojectie en vooruit verwarmen
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
 
-Gemeld: de airco ging om 14:26 aan bij 18,8 °C, maar dat werd niet
-geleerd. De airco-verwachting zet bij elke temperatuur een waarneming
-klaar en kijkt een uur of de airco aangaat. Die wachtende waarnemingen
-stonden alleen in het geheugen: een herstart binnen dat uur gooide ze weg
-(op 09-10 vijf keer), terwijl een nieuwe waarneming in hetzelfde bakje nog
-een uur werd tegengehouden. Nu worden ze bewaard en na een herstart
-teruggezet. Verstreek het uur tijdens de herstart en was de airco al
-aangegaan, dan telt dat als "aan"; was hij nog niet gezien, dan vervalt de
-waarneming (onbekend is beter dan fout). De sturing verandert niet.
+Wind in de projectie
+- Per windrichting en windklasse (matig 10-25 km/h, hard vanaf 25 km/h)
+  leert het EMS hoeveel sneller of langzamer de woonkamer afkoelt dan bij
+  dezelfde temperatuur zonder die wind (airco uit).
+- Vanaf 5 metingen telt dat mee in de snelle projectie, vanaf 15 ook in de
+  betrouwbare. Tot die tijd rekent de projectie zoals voorheen.
+- Zichtbaar in het attribuut "wind" van de klimaatsensor en per uur in het
+  traject (wind en windcorrectie_c_per_uur).
+
+Vooruit verwarmen
+- Is het nu nog warm genoeg, maar over een uur volgens de projectie onder
+  de temperatuur waarbij jullie de airco aanzetten, dan zet het EMS hem
+  alvast aan. Alleen als de projectie nauwkeurig genoeg is (gemiddeld
+  binnen 0,5 °C) en de knop Airco automaat aan staat.
+- Een aanzet door het EMS telt niet mee in het leren van jullie
+  aanzettemperatuur.

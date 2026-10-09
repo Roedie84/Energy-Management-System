@@ -2451,6 +2451,8 @@ class ClimateForecastSensor(SensorEntity, RestoreEntity):
             ),
             "kwaliteit": self._coordinator.get_klimaat_projectie_kwaliteit(),
             "geleerde_cellen": self._coordinator.climate_rate_history,
+            # v5.64: wat er over wind geleerd is.
+            "wind": self._coordinator.get_klimaat_wind(),
             "note": self._coordinator.climate_forecast_note,
             # v0.63.95, gevraagd: "zijn er zaken waardoor ik de
             # voorspelling kan verbeteren" - geleerde bias-correctie op

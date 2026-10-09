@@ -31852,3 +31852,36 @@ dat bakje nog een uur tegenhield. Op 09-10 vijf herstarts: de aanzet om
 
 Sturing ongewijzigd. Nieuw: `tests/test_v5631_airco_waarneming_herstart.py`.
 
+
+## v5.64 — wind in de klimaatprojectie en vooruit verwarmen
+
+Gevraagd: "Ook de windrichting is denk ik van belang?" en daarna "Beide
+bouwen".
+
+**Wind in de projectie** (nieuw: `klimaat_wind.py`)
+- Geen extra dimensie in de 252 leercellen, maar een correctie erbovenop:
+  na elke uurmeting met de airco uit wordt bewaard hoeveel sneller of
+  langzamer de kamer afkoelde dan haar cel gewoonlijk doet, per
+  windrichting (8) en windklasse (matig 10-25, hard vanaf 25 km/h).
+  Windstil telt niet. Alleen als de cel zelf al 5 metingen heeft.
+- Wind van de weerentiteit die ook de buitentemperatuur voorspelt (KNMI,
+  anders OpenWeatherMap), eenheid omgerekend naar km/h; per uur uit
+  dezelfde `weather.get_forecasts`-aanroep.
+- Correctie in de indicatieve reeks vanaf 5 metingen, in de strenge vanaf
+  15; alleen met de airco uit. Bewaard veld `klimaat_wind_residuen`.
+- Traject krijgt `wind` en `windcorrectie_c_per_uur`; de klimaatsensor het
+  attribuut `wind` (nu, en wat er geleerd is), ook in de diagnostiek-export.
+  De dashboardtabel blijft ongewijzigd (maximaal drie kolommen).
+
+**Vooruit verwarmen** (`airco_sturing.besluit`, regel 7)
+- Is het nu nog warm genoeg, maar zegt de projectie dat het over een uur
+  onder de aanzettemperatuur is, dan "Vooruit verwarmen" - alleen als de
+  projectie over de voorbije uren gemiddeld binnen 0,5 °C zat en het eerste
+  uur op metingen rust. Thuis, airco goedkoper dan gas en de knop Airco
+  automaat blijven voorwaarden, zoals bij gewoon verwarmen.
+- Een aanzet door het EMS telt niet meer mee in het leren van jullie
+  aanzettemperatuur; anders leert het EMS van zichzelf en schuift die
+  temperatuur steeds verder op.
+
+Laden, ontladen, reserve en marges ongewijzigd. Nieuw:
+`tests/test_v564_wind.py`.

@@ -3476,6 +3476,8 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "baseline_load_history": {"type": "plain"},
     "climate_forecast_bias_history": {"type": "plain"},
     "climate_rate_history": {"type": "plain"},
+    # v5.64: geleerde windcorrectie per richting en windklasse.
+    "klimaat_wind_residuen": {"type": "plain"},
     "digital_twin_accuracy_history": {"type": "plain"},
     "extra_dip_margin_history": {"type": "plain"},
     "fietsladers_charge_duration_history": {"type": "plain"},
