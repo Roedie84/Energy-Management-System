@@ -1,10 +1,11 @@
-EMS v5.67 - de ochtendverwarming in de nachtplanning
+EMS v5.67.1 - de airco gaat altijd om 22:00 uit
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
 
-- Het EMS meet het vermogen van de woonkamer-airco (vanzelf gevonden bij de
-  Daikin, of zelf in te stellen) en wat hij per uur gebruikt.
-- Zet het EMS 's ochtends de airco aan, dan houdt de accu daar 's nachts al
-  rekening mee: de verwachte ochtendverwarming komt bij de reserve, voor
-  zover die niet al in het gewone verbruiksprofiel zit.
-- Alleen met de knop Airco automaat aan.
+- Met de knop Airco automaat aan zet het EMS de woonkamer-airco om 22:00
+  uit. De tijd is aan te passen bij Configureren ("Airco altijd uit om").
+- Eén keer per avond: zet je hem daarna zelf weer aan, dan blijft het EMS
+  eraf.
+- Daarnaast (v5.67): de verwachte ochtendverwarming telt mee in de
+  accureserve voor de nacht, voor zover die niet al in het gewone
+  verbruiksprofiel zit.

@@ -233,6 +233,7 @@ def besluit(
     aanwezigheid: str | None,
     advies: str | None,
     airco_stand: str | None,
+    bedtijd_vast: int | None = None,
 ) -> dict | None:
     """Wat het ritme nu vraagt - of None als het niets te zeggen heeft.
 
@@ -240,16 +241,32 @@ def besluit(
     voorspelde woonkamertemperatuur geeft (of None).
     """
     plek = avond(nu)
-    if plek and airco_stand == "heat":
+    if plek:
         datum_avond, m = plek
         leer = geleerd(ritme, dagsoort(datetime.fromisoformat(datum_avond)))
-        if leer["bedtijd"] is not None and m >= leer["bedtijd"] and ritme["ems"]["uit"] != datum_avond:
-            return {
-                "actie": "uit",
-                "tekst": f"Uitzetten: bedtijd - jullie zetten hem rond {klok(leer['bedtijd'])} uit.",
-                "reden": f"geleerde bedtijd {klok(leer['bedtijd'])} ({leer['keer_uit']} avonden)",
-            }
-        return None
+        vast = bedtijd_vast is not None
+        bed = bedtijd_vast if vast else leer["bedtijd"]
+        if bed is None or m < bed or ritme["ems"]["uit"] == datum_avond:
+            return None
+        # v5.67.1: één keer per avond. Stond hij al uit, dan is de avond
+        # ook afgehandeld - wie hem daarna zelf weer aanzet, zet hem ook
+        # zelf weer uit.
+        if airco_stand != "heat":
+            return {"actie": "niets", "markeer_uit": True, "tekst": "", "reden": ""}
+        return {
+            "actie": "uit",
+            "markeer_uit": True,
+            "tekst": (
+                f"Uitzetten: het is {klok(bed)}, dan gaat de airco uit."
+                if vast
+                else f"Uitzetten: bedtijd - jullie zetten hem rond {klok(bed)} uit."
+            ),
+            "reden": (
+                f"vaste uittijd {klok(bed)}"
+                if vast
+                else f"geleerde bedtijd {klok(bed)} ({leer['keer_uit']} avonden)"
+            ),
+        }
     if not is_ochtend(nu) or aanwezigheid == "weg":
         return None
     soort = dagsoort(nu)
@@ -485,3 +502,17 @@ def nacht_extra_kwh(ritme: dict, van: datetime, tot: datetime, verwacht_op, temp
         "al_in_profiel_kwh": round(al_in_profiel, 3),
         "extra_kwh": round(max(verwacht - al_in_profiel, 0.0), 3),
     }
+
+
+def minuten_uit_klok(waarde) -> int | None:
+    """'22:00' of '22:00:00' -> 1320; leeg of onzin -> None (v5.67.1)."""
+    try:
+        delen = str(waarde).strip().split(":")
+        uur, minuut = int(delen[0]), int(delen[1])
+    except (TypeError, ValueError, IndexError):
+        return None
+    if not (0 <= uur < 24 and 0 <= minuut < 60):
+        return None
+    m = uur * 60 + minuut
+    # Na middernacht hoort bij de avond ervoor (zoals `avond`).
+    return m + 1440 if m < AVOND_TOT_NA_MIDDERNACHT else m

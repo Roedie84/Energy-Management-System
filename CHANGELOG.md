@@ -31985,3 +31985,15 @@ Daikin-vermogenssensor als bron.
 
 Laden, ontladen en marges verder ongewijzigd. Tests in
 `test_v565_airco_ritme.py`.
+
+## v5.67.1 — de airco gaat altijd om 22:00 uit
+
+Gevraagd: "De airco moet altijd om 22:00 uit, als ik hem later of kort
+daarna toch weer aanzet zet ik hem zelf weer uit".
+
+- Nieuwe instelling `airco_uit_om`, standaard 22:00. Die gaat voor de
+  geleerde bedtijd (die blijft zichtbaar).
+- Eén keer per avond: staat hij om 22:00 aan, dan uit; stond hij al uit, dan
+  is de avond ook afgehandeld. Zet iemand hem daarna weer aan, dan laat het
+  EMS hem staan.
+- Met de knop Airco automaat aan, zoals alle airco-sturing.

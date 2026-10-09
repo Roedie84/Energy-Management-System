@@ -324,3 +324,40 @@ def test_vermogen_in_kw_en_uurverbruik(make_coordinator, hass):
     for minuut in range(0, 61, 5):
         c._noteer_airco_verbruik(t + timedelta(minutes=minuut), r)
     assert r["uurverbruik"]["6"] == [1.2]
+
+
+# --- v5.67.1: altijd uit om 22:00 --------------------------------------------
+
+def test_vaste_uittijd_zonder_iets_geleerd():
+    r = ar.leeg()
+    assert _besluit(r, _op(3, 21, 59), airco_stand="heat", bedtijd_vast=1320) is None
+    uit = _besluit(r, _op(3, 22, 0), airco_stand="heat", bedtijd_vast=1320)
+    assert uit["actie"] == "uit" and "22:00" in uit["tekst"]
+
+
+def test_stond_hij_al_uit_dan_is_de_avond_afgehandeld():
+    r = ar.leeg()
+    uit = _besluit(r, _op(3, 22, 0), airco_stand="off", bedtijd_vast=1320)
+    assert uit["markeer_uit"] and uit["actie"] == "niets"
+    ar.noteer_ems_uit(r, _op(3, 22, 0))
+    # Daarna zelf weer aangezet: het EMS blijft eraf.
+    assert _besluit(r, _op(3, 22, 30), airco_stand="heat", bedtijd_vast=1320) is None
+
+
+def test_klok_naar_minuten():
+    assert ar.minuten_uit_klok("22:00") == 1320
+    assert ar.minuten_uit_klok("22:00:00") == 1320
+    assert ar.minuten_uit_klok("00:30") == 1470
+    assert ar.minuten_uit_klok("") is None
+
+
+def test_coordinator_zet_om_22_uur_uit_en_markeert_ook_als_hij_al_uit_was(make_coordinator):
+    c = make_coordinator({})
+    c.airco_ritme = ar.leeg()
+    c.airco_automaat_aan = True
+    c.presence_state = "thuis"
+    basis = {"actie": "niets", "tekst": "x", "redenen": [], "redenen_tekst": "", "doel_c": 21.0}
+    assert c._airco_ritme_ronde(_op(3, 22, 1), basis, "heat")["actie"] == "uit"
+    c.airco_ritme = ar.leeg()
+    assert c._airco_ritme_ronde(_op(3, 22, 1), basis, "off")["actie"] == "niets"
+    assert c._airco_ritme_ronde(_op(3, 22, 40), basis, "heat")["actie"] == "niets"

@@ -107,6 +107,8 @@ from .const import (
     CONF_QUOOKER_POWER_SENSOR,
     CONF_AIRCO_CLIMATE_ENTITY,
     CONF_AIRCO_POWER_SENSOR,
+    CONF_AIRCO_UIT_OM,
+    DEFAULT_AIRCO_UIT_OM,
     CONF_SLAAPKAMER_CLIMATE_ENTITY,
     CONF_LIVING_ROOM_TEMPERATURE_SENSOR,
     CONF_LIVING_ROOM_HUMIDITY_SENSOR,
@@ -44037,16 +44039,19 @@ class EnergyManagementSystemCoordinator:
             aanwezigheid=self.presence_state,
             advies=(self.get_verwarmingsadvies() or {}).get("advies"),
             airco_stand=stand,
+            bedtijd_vast=airco_ritme.minuten_uit_klok(self.instelling(CONF_AIRCO_UIT_OM, DEFAULT_AIRCO_UIT_OM)),
         )
         if vraag is None:
+            return uit
+        if vraag.get("markeer_uit") and (self.airco_automaat_aan or vraag["actie"] != "uit"):
+            airco_ritme.noteer_ems_uit(ritme, now)
+        if not vraag["reden"]:
             return uit
         nieuw = dict(uit)
         nieuw["redenen"] = list(uit.get("redenen") or []) + [vraag["reden"]]
         nieuw["redenen_tekst"] = " · ".join(nieuw["redenen"])
         if vraag["actie"] == "uit":
             nieuw.update(actie="uit", tekst=vraag["tekst"])
-            if self.airco_automaat_aan:
-                airco_ritme.noteer_ems_uit(ritme, now)
         elif vraag.get("houd_aan"):
             if uit["actie"] == "uit":
                 nieuw.update(actie="niets", tekst=vraag["tekst"])
