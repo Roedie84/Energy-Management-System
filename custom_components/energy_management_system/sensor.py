@@ -2219,7 +2219,7 @@ class LivingRoomAircoPredictionSensor(SensorEntity, RestoreEntity):
     Genuine anticipation, not just "is the airco on right now" - uses
     the same "queue an observation, confirm it later" technique as the
     PV-forecast-accuracy tracker. Each living-room temperature reading
-    is bucketed (1°C bins) and, 60 minutes later, confirmed True/False
+    is bucketed (0.5°C bins since v5.60) and, 60 minutes later, confirmed True/False
     depending on whether the airco was seen active at any point during
     that window - learned per bucket, over a short rolling window (not
     a long/seasonal one), since spring/autumn conditions can swing day
@@ -2263,7 +2263,8 @@ class LivingRoomAircoPredictionSensor(SensorEntity, RestoreEntity):
         `probability_percent` en werd nergens getoond.
 
         Het leermechanisme uit v0.63.55 doet precies wat er gevraagd
-        werd: elke temperatuurmeting wordt in een bin van 1°C gezet en
+        werd: elke temperatuurmeting wordt in een bakje gezet (sinds v5.60
+        een halve graad) en
         krijgt een uur de tijd; gaat de airco in dat uur aan, dan telt
         die waarneming als "ja" voor die bin. Alleen kwam het antwoord
         niet in beeld.
@@ -2274,7 +2275,8 @@ class LivingRoomAircoPredictionSensor(SensorEntity, RestoreEntity):
         from .airco_sturing import temperatuurbakje
         from .const import LIVING_ROOM_TEMP_BUCKET_SIZE_C
 
-        # v5.58: hetzelfde bakje als de leerstap (half naar boven).
+        # v5.58/v5.60: hetzelfde bakje als de leerstap (halve graad, half
+        # naar boven).
         bucket_key = temperatuurbakje(temp_c, LIVING_ROOM_TEMP_BUCKET_SIZE_C)
         return self._coordinator.get_airco_activation_probability(bucket_key)[
             "probability_percent"
@@ -2282,6 +2284,8 @@ class LivingRoomAircoPredictionSensor(SensorEntity, RestoreEntity):
 
     @property
     def extra_state_attributes(self) -> dict:
+        from .airco_sturing import bakje_label
+
         temp_c = self._coordinator.living_room_current_temp_c
         bucket_key = None
         current = {
@@ -2302,11 +2306,19 @@ class LivingRoomAircoPredictionSensor(SensorEntity, RestoreEntity):
                 self._coordinator.living_room_current_humidity_percent
             ),
             "huidige_bucket": bucket_key,
+            "huidige_bucket_label": (
+                bakje_label(bucket_key) if bucket_key is not None else None
+            ),
             "kans_airco_binnen_1_uur_procent": current["probability_percent"],
             # v1.17.6: alle geleerde bins, zodat zichtbaar is BIJ WELKE
             # temperatuur je ingrijpt - niet alleen de huidige.
+            # v5.60: oplopend, met een label per bakje ("19,5 °C") zodat het
+            # dashboard geen afronding of komma's hoeft te rekenen.
             "geleerde_buckets": {
-                sleutel: self._coordinator.get_airco_activation_probability(sleutel)
+                sleutel: {
+                    **self._coordinator.get_airco_activation_probability(sleutel),
+                    "label": bakje_label(sleutel),
+                }
                 for sleutel in sorted(
                     self._coordinator.living_room_temp_bucket_history,
                     key=lambda x: float(x),
@@ -2324,11 +2336,13 @@ class LivingRoomAircoPredictionSensor(SensorEntity, RestoreEntity):
                 "bakje tellen de laatste 20 (dus 20 verschillende "
                 "uren), zodat het meebeweegt met het seizoen. Pas vanaf "
                 "5 waarnemingen in een bakje telt de kans. Waarnemingen "
-                "starten alleen als de airco uit staat. Bakje = hele "
-                "graad, half naar boven afgerond: 18,5-18,9 °C en "
-                "19,0-19,4 °C vallen in bakje 19 (18,8 °C -> 19, "
-                "18,4 °C -> 18). Sinds v5.58 opnieuw begonnen: de "
-                "oudere historie telde elke minuut mee. Stuurt zelf "
+                "starten alleen als de airco uit staat. Bakje = "
+                "dichtstbijzijnde halve graad, half naar boven, vanaf "
+                "de temperatuur op één decimaal: 18,8-19,2 °C valt in "
+                "bakje 19,0 en 19,3-19,7 °C in bakje 19,5 (18,7 °C -> "
+                "18,5; 18,8 °C -> 19,0; 19,2 °C -> 19,0; 19,3 °C -> "
+                "19,5). Sinds v5.60 opnieuw begonnen: de bakjes waren "
+                "eerst een hele graad. Stuurt zelf "
                 "niets, maar de airco-automaat (alleen met de knop aan) "
                 "leidt hieruit af bij welke temperatuur jullie gaan "
                 "verwarmen."

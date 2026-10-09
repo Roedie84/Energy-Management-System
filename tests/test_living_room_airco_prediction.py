@@ -42,7 +42,7 @@ def test_reads_temperature_and_humidity(make_coordinator, hass):
 
 
 def test_queues_an_observation(make_coordinator, hass):
-    hass.states.set("sensor.living_room_temp", "19.4")
+    hass.states.set("sensor.living_room_temp", "19.2")  # v5.60: bakje 19.0 = 18,8-19,2
     coordinator = make_coordinator(_base_config())
 
     coordinator._update_living_room_airco_prediction(DAY0)
@@ -54,7 +54,7 @@ def test_queues_an_observation(make_coordinator, hass):
 def test_finalises_after_the_lookahead_window_with_airco_inactive(
     make_coordinator, hass
 ):
-    hass.states.set("sensor.living_room_temp", "19.4")
+    hass.states.set("sensor.living_room_temp", "19.2")  # v5.60: bakje 19.0 = 18,8-19,2
     coordinator = make_coordinator(_base_config())
     coordinator.last_heavy_load_source = None  # airco not active
 
@@ -171,7 +171,7 @@ def test_humidity_tracked_as_context_per_bucket(make_coordinator, hass):
 
 
 def test_never_calls_any_hass_service(make_coordinator, hass):
-    hass.states.set("sensor.living_room_temp", "19.4")
+    hass.states.set("sensor.living_room_temp", "19.2")  # v5.60: bakje 19.0 = 18,8-19,2
     coordinator = make_coordinator(_base_config())
 
     coordinator._update_living_room_airco_prediction(DAY0)

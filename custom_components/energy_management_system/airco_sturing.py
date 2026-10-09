@@ -26,37 +26,72 @@ sturen.
 """
 from __future__ import annotations
 
-import math
 import statistics
+from decimal import ROUND_FLOOR, ROUND_HALF_UP, Decimal
 
 # "Meer kans dan niet": vanaf deze kans telt een temperatuur als het moment
 # waarop jullie de airco op verwarmen zetten.
 KANS_MEER_DAN_NIET_PROCENT = 50.0
 
 
-def temperatuurbakje(temp_c: float, bakgrootte_c: float = 1.0) -> str:
-    """Het bakje (graad) waarin een woonkamertemperatuur valt (v5.58).
+def een_decimaal(temp_c: float) -> float:
+    """Een temperatuur op één decimaal, de helft naar boven (v5.60).
 
-    Gewoon afronden op hele graden, de helft naar boven: 18,5 tot en met
-    18,9 °C hoort bij 19, 18,4 °C bij 18. Dus 18,8 °C -> bakje 19.
-
-    Eerst op één decimaal, zoals de sensor de temperatuur toont, zodat de
-    leerstap en de sensor nooit een ander bakje kiezen. En niet met
-    Pythons `round`: die rondt een halve af naar het even getal
-    (round(18.5) == 18, round(19.5) == 20), wat de grens per bakje liet
-    verspringen.
+    Zoals de sensor de woonkamertemperatuur toont. Niet met Pythons
+    `round`: die rondt een exacte helft naar het even cijfer af
+    (round(19.25, 1) == 19.2), waardoor 19,25 °C in bakje 19,0 viel in
+    plaats van 19,5. Via de decimale schrijfwijze, zodat 19.25 ook echt
+    als 19,25 telt en niet als 19,2499999...
     """
-    t = round(float(temp_c), 1)
-    return str(float(math.floor(t / bakgrootte_c + 0.5)) * bakgrootte_c)
+    return float(
+        Decimal(repr(float(temp_c))).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
+    )
+
+
+def temperatuurbakje(temp_c: float, bakgrootte_c: float = 0.5) -> str:
+    """Het bakje waarin een woonkamertemperatuur valt (v5.58, v5.60).
+
+    Sinds v5.60 per halve graad (LIVING_ROOM_TEMP_BUCKET_SIZE_C = 0,5, besluit
+    Ruud 9 oktober 2026): de dichtstbijzijnde halve graad, de helft naar
+    boven.
+
+    Eerst op één decimaal (`een_decimaal`), zoals de sensor de temperatuur
+    toont, zodat de leerstap en de sensor nooit een ander bakje kiezen. Dan
+    naar de dichtstbijzijnde halve graad, een exacte helft (x,25 / x,75)
+    naar boven:
+
+        18,75-19,24 °C  ->  bakje "19.0"   (getoond: 18,8 tot en met 19,2)
+        19,25-19,74 °C  ->  bakje "19.5"   (getoond: 19,3 tot en met 19,7)
+
+    Dus 18,8 -> 19,0; 18,7 -> 18,5; 19,2 -> 19,0; 19,3 -> 19,5.
+
+    Sleutels zijn tekst met één decimaal: "19.0", "19.5". Gerekend met
+    Decimal, zodat er geen 19.499999 of 0.1-ruis in een sleutel komt. Met
+    bakgrootte_c = 1.0 is het de indeling van v5.58 (hele graden).
+    """
+    t = Decimal(repr(een_decimaal(temp_c)))
+    b = Decimal(repr(float(bakgrootte_c)))
+    bakje = (t / b + Decimal("0.5")).to_integral_value(rounding=ROUND_FLOOR) * b
+    return str(float(bakje))
+
+
+def bakje_label(sleutel) -> str:
+    """Hoe een bakje op het dashboard staat: "19.5" -> "19,5 °C" (v5.60)."""
+    try:
+        return f"{float(sleutel):.1f}".replace(".", ",") + " °C"
+    except (TypeError, ValueError):
+        return "—"
 
 
 def aanzettemperatuur(bakjes: dict) -> float | None:
     """De hoogste temperatuur waarbij jullie de airco op verwarmen zetten.
 
-    Uit de bestaande leercurve (`get_airco_kansen_per_bakje`): per graad de
+    Uit de bestaande leercurve (`get_airco_kansen_per_bakje`): per bakje
+    (sinds v5.60 een halve graad, dus ook 19,5 kan het antwoord zijn) de
     kans dat de airco binnen een uur aangaat, en in welke richting. Alleen
     bakjes met genoeg metingen, richting "verwarmen" en meer kans dan niet.
-    None zolang dat nog nooit gezien is.
+    None zolang dat nog nooit gezien is. De besluittekst toont hem met één
+    decimaal (v5.60), anders verscheen 19,5 als 20.
     """
     kandidaten = []
     for sleutel, bakje in (bakjes or {}).items():
@@ -137,7 +172,7 @@ def besluit(
             "jullie de airco op verwarmen zetten.",
             redenen, doel_c, aanzet_c,
         )
-    redenen.append(f"jullie zetten hem op verwarmen onder {aanzet_c:.0f} °C")
+    redenen.append(f"jullie zetten hem op verwarmen onder {aanzet_c:.1f} °C")
     if doel_c is None:
         redenen.append(
             f"gewenste temperatuur nog niet geleerd ({setpunten_gezien} van "
@@ -165,12 +200,12 @@ def besluit(
         return _uitkomst(
             "verwarmen",
             f"Verwarmen tot {doel_c:.1f} °C: het is {woonkamer_c:.1f} °C, "
-            f"onder de {aanzet_c:.0f} °C waarbij jullie hem aanzetten.",
+            f"onder de {aanzet_c:.1f} °C waarbij jullie hem aanzetten.",
             redenen, doel_c, aanzet_c,
         )
     return _uitkomst(
         "niets",
-        f"Warm genoeg: {woonkamer_c:.1f} °C, niet onder de {aanzet_c:.0f} °C.",
+        f"Warm genoeg: {woonkamer_c:.1f} °C, niet onder de {aanzet_c:.1f} °C.",
         redenen, doel_c, aanzet_c,
     )
 

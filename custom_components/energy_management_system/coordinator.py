@@ -38257,7 +38257,7 @@ class EnergyManagementSystemCoordinator:
         technique already established by `SolarForecastAccuracyTracker`
         (a prediction captured today, compared against tomorrow's
         actual yield): each living-room temperature reading is bucketed
-        (LIVING_ROOM_TEMP_BUCKET_SIZE_C = 1°C bins) and queued with a
+        (LIVING_ROOM_TEMP_BUCKET_SIZE_C; sinds v5.60 halve graden) and queued with a
         deadline `AIRCO_PREDICTION_LOOKAHEAD_MINUTES` (60 min) later.
         Every tick, any still-open queued observation gets marked "seen
         active" the moment the airco is confirmed active (regardless of
@@ -38280,8 +38280,8 @@ class EnergyManagementSystemCoordinator:
 
         v5.58: niet elke meting maar per bakje hooguit één waarneming per
         uur (`_airco_bakje_mag_starten`), zodat de laatste 20 ook 20
-        verschillende uren zijn. Bakje = graad, half naar boven afgerond
-        (18,8 °C -> 19).
+        verschillende uren zijn. v5.60: bakje = dichtstbijzijnde halve
+        graad, half naar boven (18,8 °C -> 19,0; 19,3 °C -> 19,5).
         """
         temp_entity = self.config.get(CONF_LIVING_ROOM_TEMPERATURE_SENSOR)
         if not temp_entity:
@@ -38297,7 +38297,9 @@ class EnergyManagementSystemCoordinator:
         # zelf met hoge precisie (bijv. een Zigbee-sensor); hier
         # afronden op 1 decimaal, consistent met hoe elke andere
         # temperatuurweergave in deze integratie wordt getoond.
-        self.living_room_current_temp_c = round(temp_c, 1)
+        # v5.60: half naar boven (zie `airco_sturing.een_decimaal`), net als
+        # de leerstap, zodat 19,25 °C hier 19,3 wordt en niet 19,2.
+        self.living_room_current_temp_c = airco_sturing.een_decimaal(temp_c)
 
         humidity_entity = self.config.get(CONF_LIVING_ROOM_HUMIDITY_SENSOR)
         humidity_percent = (
@@ -38313,8 +38315,9 @@ class EnergyManagementSystemCoordinator:
             round(humidity_percent, 1) if humidity_percent is not None else None
         )
 
-        # v5.58: half naar boven, vanaf de getoonde waarde (één decimaal) -
-        # 18,8 °C hoort bij bakje 19. Zie `airco_sturing.temperatuurbakje`.
+        # v5.58/v5.60: half naar boven, vanaf de getoonde waarde (één
+        # decimaal), per halve graad - 18,8 °C hoort bij bakje 19,0 en
+        # 19,3 °C bij 19,5. Zie `airco_sturing.temperatuurbakje`.
         bucket_key = airco_sturing.temperatuurbakje(
             temp_c, LIVING_ROOM_TEMP_BUCKET_SIZE_C
         )
@@ -38406,8 +38409,8 @@ class EnergyManagementSystemCoordinator:
 
         Nee zolang er voor dit bakje nog een open staat, en nee binnen
         AIRCO_PREDICTION_LOOKAHEAD_MINUTES na de vorige start in dit bakje.
-        Andere bakjes tellen niet mee: zakt de kamer van 22 naar 21 °C, dan
-        start bakje 21 meteen.
+        Andere bakjes tellen niet mee: zakt de kamer van 22,0 naar 21,5 °C,
+        dan start bakje 21,5 meteen.
         """
         if any(p.get("bucket") == bucket_key for p in self._temp_prediction_pending):
             return False
@@ -38439,6 +38442,10 @@ class EnergyManagementSystemCoordinator:
         AIRCO_PREDICTION_MIN_SAMPLES uurwaarnemingen voordat het telt (ook
         voor de airco-automaat, die tot dan "leert nog" meldt). De
         gekozen setpunten blijven: die zijn per bediening, niet per ronde.
+
+        v5.60 (AIRCO_LEER_VERSIE = 3): dezelfde wis nog één keer, omdat de
+        bakjes van één graad niet op die van een halve graad passen (bakje
+        "19.0" was 18,5-19,4 °C, nu 18,8-19,2 °C). Het leren begint opnieuw.
         """
         if self.airco_leer_versie == AIRCO_LEER_VERSIE:
             return

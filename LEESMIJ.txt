@@ -1,8 +1,11 @@
-EMS v5.59 - COP van de airco instelbaar (fabrieksopgave)
+EMS v5.60 - airco-bakjes per halve graad
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
-Nieuwe optie (Configureren, zelfde formulier als de gasprijs): "COP van de
-airco bij 7 °C buiten (fabrieksopgave)" = airco_cop_bij_7c. Leeg = algemene
-schatting zoals voorheen. Daikin 3MXM52A + FTXA25AW/FTXA35AW: 4,44 (data book
-3MXM-A, p.10). Helling: airco_cop_per_graad, standaard 0,08 (aanname). Het
-verwarmingsadvies toont de bron in attribuut cop_bron.
+De airco-voorspelling leert nu per halve graad in plaats van per hele graad
+(besluit Ruud). Bakje = dichtstbijzijnde halve graad, half naar boven, vanaf
+de temperatuur op één decimaal: 18,8-19,2 °C -> 19,0; 19,3-19,7 °C -> 19,5
+(18,7 -> 18,5). De geleerde bakjes van één graad worden bij de eerste start
+eenmalig gewist; het leren begint opnieuw. Nadeel: per bakje duurt het
+ongeveer twee keer zo lang voor er 5 uurwaarnemingen zijn; tot dan meldt de
+airco-automaat "leert nog". Dashboard (Klimaat) bijgewerkt: tabel met
+"19,5 °C". De aanzettemperatuur in het besluit staat met één decimaal.

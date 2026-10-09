@@ -31630,3 +31630,51 @@ een aanname, geen opgave.
   advies; verder geen wijziging aan de sturing.
 - Verouderde toelichting gecorrigeerd: `airco_sturing.py` noemde "COP 4,4 /
   omslag 83 ct", wat niet met de code klopte.
+
+## v5.60 — airco-bakjes per halve graad
+
+**Besluit (Ruud, 9 oktober 2026, 12:26).** De temperatuurbakjes van de
+airco-voorspelling van 1 °C naar 0,5 °C, na uitleg van het nadeel.
+
+**Indeling.** `LIVING_ROOM_TEMP_BUCKET_SIZE_C = 0.5`. Bakje = de
+dichtstbijzijnde halve graad, een exacte helft naar boven, gerekend vanaf de
+temperatuur op één decimaal (`airco_sturing.temperatuurbakje`):
+18,75–19,24 °C → `"19.0"`, 19,25–19,74 °C → `"19.5"`. Dus 18,8 → 19,0;
+18,7 → 18,5; 19,2 → 19,0; 19,3 → 19,5. Sleutels blijven tekst met één
+decimaal (`"19.0"`, `"19.5"`), berekend met Decimal zodat er geen float-ruis
+in komt.
+
+**Afronden op één decimaal: half naar boven.** Nieuw: `airco_sturing.een_decimaal`.
+Pythons `round(19.25, 1)` geeft 19,2 (naar het even cijfer), zodat 19,25 °C
+in bakje 19,0 zou vallen in plaats van 19,5. De getoonde
+woonkamertemperatuur (`living_room_current_temp_c`) gebruikt dezelfde
+afronding, zodat sensor en leerstap altijd hetzelfde bakje kiezen.
+
+**Leren begint opnieuw.** `AIRCO_LEER_VERSIE = 3`: de bakjes van één graad
+(sinds v5.58, nog maar enkele uren oud) passen niet op die van een halve
+graad en worden bij de eerste start eenmalig gewist, met kans, richting,
+luchtvochtigheid en starttijden. Het herstel uit de sensorattributen slaat
+versie-2-historie ook over. De gekozen airco-setpunten blijven staan.
+
+**Nadeel, bewust geaccepteerd.** Twee keer zoveel bakjes over hetzelfde
+temperatuurbereik, en per bakje hooguit één waarneming per uur: per bakje is
+ongeveer twee keer zoveel tijd nodig om de 5 uurwaarnemingen
+(`AIRCO_PREDICTION_MIN_SAMPLES`) te verzamelen. Tot dan meldt de
+airco-automaat "leert nog" (de knop staat uit; alleen het voorgestelde
+besluit is geraakt).
+
+**Afnemers.**
+- `aanzettemperatuur` werkt met de float-sleutels en kan nu ook 19,5
+  opleveren. De besluittekst toont hem met één decimaal (`{aanzet_c:.1f}`);
+  met `:.0f` verscheen 19,5 als 20.
+- Sensor Airco-verwachting: `geleerde_buckets` oplopend, met per bakje
+  `label` ("19,5 °C"); nieuw `huidige_bucket_label`. Uitleg (`note`)
+  bijgewerkt.
+- Dashboard (Klimaat): de tabel en de regel "bij … °C" gebruiken de labels;
+  de uitleg noemt bakjes van 0,5 °C met de grenzen.
+- Diagnostiek en export: ongewijzigd, sleutels zijn tekst.
+
+Nieuw: `tests/test_v560_halve_graden.py` (grenswaarden, sleutels, labels,
+aanzettemperatuur 19,5, besluittekst, migratie, sensor-tabel). Aangepast:
+v5.58-toetsen rekenen expliciet met bakgrootte 1,0 waar ze de oude indeling
+toetsen.

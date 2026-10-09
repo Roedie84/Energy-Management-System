@@ -70,17 +70,20 @@ def test_meerdere_bakjes_tegelijk(make_coordinator, hass):
 
 
 def test_afronding_half_naar_boven():
-    assert temperatuurbakje(18.8) == "19.0"
-    assert temperatuurbakje(18.4) == "18.0"
-    assert temperatuurbakje(18.5) == "19.0"  # Python's round(18.5) gaf 18
-    assert temperatuurbakje(19.5) == "20.0"
-    assert temperatuurbakje(18.46) == "19.0"  # getoond als 18,5
+    """Hele graden (de v5.58-indeling) blijven werken met bakgrootte 1,0;
+    sinds v5.60 is de standaard 0,5 - zie test_v560_halve_graden."""
+    assert temperatuurbakje(18.8, 1.0) == "19.0"
+    assert temperatuurbakje(18.4, 1.0) == "18.0"
+    assert temperatuurbakje(18.5, 1.0) == "19.0"  # Python's round(18.5) gaf 18
+    assert temperatuurbakje(19.5, 1.0) == "20.0"
+    assert temperatuurbakje(18.46, 1.0) == "19.0"  # getoond als 18,5
 
 
 def test_afronding_in_de_leerstap(make_coordinator, hass):
     c = _verse(make_coordinator)
     _ronde(c, hass, NU, 18.8)
-    _ronde(c, hass, NU + timedelta(minutes=1), 18.4)
+    _ronde(c, hass, NU + timedelta(minutes=1), 18.2)
+    # v5.60: halve graden - 18,8 -> 19,0 en 18,2 -> 18,0
     assert sorted(p["bucket"] for p in c._temp_prediction_pending) == ["18.0", "19.0"]
 
 

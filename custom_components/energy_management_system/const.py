@@ -1479,7 +1479,14 @@ SUSTAINED_HEAVY_LOAD_SOURCES = {"airco", "slaapkamer"}
 # conditions can swing day to day, so a bucket's learned probability
 # should track recent behaviour, not get diluted by weeks-old data from
 # a different regime.
-LIVING_ROOM_TEMP_BUCKET_SIZE_C = 1.0
+# v5.60: per halve graad (besluit Ruud, 9 oktober 2026). Bakje = de
+# dichtstbijzijnde halve graad, een exacte helft naar boven, gerekend vanaf
+# de temperatuur op één decimaal: 18,75-19,24 °C -> "19.0", 19,25-19,74 °C
+# -> "19.5" (zie `airco_sturing.temperatuurbakje`). Nadeel, bewust
+# geaccepteerd: twee keer zoveel bakjes over hetzelfde temperatuurbereik,
+# dus per bakje duurt het ongeveer twee keer zo lang voordat er
+# AIRCO_PREDICTION_MIN_SAMPLES uurwaarnemingen zijn.
+LIVING_ROOM_TEMP_BUCKET_SIZE_C = 0.5
 AIRCO_PREDICTION_LOOKAHEAD_MINUTES = 60
 AIRCO_PREDICTION_MIN_SAMPLES = 5
 AIRCO_PREDICTION_HISTORY_LENGTH = 20
@@ -1489,7 +1496,10 @@ AIRCO_PREDICTION_HISTORY_LENGTH = 20
 # waren in plaats van 20 losse momenten. De historie van vóór deze versie is
 # daarmee vervuild en wordt eenmalig gewist; deze versie markeert de opslag
 # die al volgens de nieuwe regel is opgebouwd.
-AIRCO_LEER_VERSIE = 2
+# v5.60: versie 3 - de bakjes van één graad (sleutels "19.0" voor
+# 18,5-19,4 °C) passen niet op die van een halve graad en worden ook
+# eenmalig gewist.
+AIRCO_LEER_VERSIE = 3
 
 # Klimaat-tabblad: geleerde woonkamertemperatuur-projectie (v0.63.56,
 # requested). Bewust vereenvoudigd t.o.v. een volledig model (buitentemp
