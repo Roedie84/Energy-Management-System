@@ -1714,10 +1714,10 @@ views:
         rows: auto
     - type: markdown
       title: Hoe de airco-verwachting werkt
-      content: 'Elke temperatuurmeting van de woonkamer gaat in een bin van 1 °C en krijgt een uur de tijd. Zet je de airco in dat uur aan, dan telt die waarneming als **ja** voor die bin.
+      content: 'Per bin van 1 °C (18,8 °C → 19) start hooguit één waarneming per uur, met een uur de tijd. Gaat de airco in dat uur aan, dan telt die als **ja**.
 
 
-        Zo leert de integratie van jouw gedrag: bij welke temperatuur grijp je in? Per bin worden de laatste 20 waarnemingen bewaard, zodat het meebeweegt met het seizoen.
+        Zo leert de integratie bij welke temperatuur je ingrijpt. Per bin tellen de laatste 20 waarnemingen (20 uren), zodat het meebeweegt met het seizoen.
 
 
         {% set h = state_attr(''sensor.woonkamer_energy_management_system_airco_verwachting_woonkamertemperatuur'', ''geleerde_buckets'') or {} %}{% if h %}| Temperatuur | Kans | Richting | Waarnemingen |

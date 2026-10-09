@@ -1,5 +1,7 @@
-EMS v5.57.1 - zelfbeoordeling niet meer traag (cache)
+EMS v5.58 - airco-voorspelling leert per uur, niet per ronde
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
-Correctie: de heldere-hemel-ijking rekent snel en alleen opnieuw als de
-metingen veranderen. Sturing en uitkomsten ongewijzigd.
+Per temperatuurbakje nog maar één waarneming per uur (was: elke ronde). De
+oude, per minuut vervuilde historie wordt eenmalig gewist: het leren begint
+opnieuw en de airco-automaat heeft per bakje eerst 5 uurwaarnemingen nodig
+(tot dan "leert nog"). Bakje = hele graad, half naar boven: 18,8 °C -> 19.

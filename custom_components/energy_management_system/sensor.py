@@ -2271,12 +2271,11 @@ class LivingRoomAircoPredictionSensor(SensorEntity, RestoreEntity):
         temp_c = self._coordinator.living_room_current_temp_c
         if temp_c is None:
             return None
+        from .airco_sturing import temperatuurbakje
         from .const import LIVING_ROOM_TEMP_BUCKET_SIZE_C
 
-        bucket_key = str(
-            round(temp_c / LIVING_ROOM_TEMP_BUCKET_SIZE_C)
-            * LIVING_ROOM_TEMP_BUCKET_SIZE_C
-        )
+        # v5.58: hetzelfde bakje als de leerstap (half naar boven).
+        bucket_key = temperatuurbakje(temp_c, LIVING_ROOM_TEMP_BUCKET_SIZE_C)
         return self._coordinator.get_airco_activation_probability(bucket_key)[
             "probability_percent"
         ]
@@ -2293,12 +2292,10 @@ class LivingRoomAircoPredictionSensor(SensorEntity, RestoreEntity):
             "voldoende_data": False,
         }
         if temp_c is not None:
+            from .airco_sturing import temperatuurbakje
             from .const import LIVING_ROOM_TEMP_BUCKET_SIZE_C
 
-            bucket_key = str(
-                round(temp_c / LIVING_ROOM_TEMP_BUCKET_SIZE_C)
-                * LIVING_ROOM_TEMP_BUCKET_SIZE_C
-            )
+            bucket_key = temperatuurbakje(temp_c, LIVING_ROOM_TEMP_BUCKET_SIZE_C)
             current = self._coordinator.get_airco_activation_probability(bucket_key)
         return {
             "huidige_luchtvochtigheid_percent": (
@@ -2318,13 +2315,23 @@ class LivingRoomAircoPredictionSensor(SensorEntity, RestoreEntity):
             "aantal_metingen_deze_bucket": current["sample_count"],
             "voldoende_data": current["voldoende_data"],
             "alle_buckets": self._coordinator.living_room_temp_bucket_history,
+            # v5.58: zie AIRCO_LEER_VERSIE - bepaalt of het herstel hieruit mag.
+            "leer_versie": self._coordinator.airco_leer_versie,
             "note": (
-                "Bij de huidige woonkamertemperatuur: hoe vaak is de "
-                "airco historisch binnen het uur na een meting op deze "
-                "temperatuur aangeslagen? Kort, glijdend venster per "
-                "bucket (niet seizoensgebonden) - reageert dus snel op "
-                "veranderend weer in lente/herfst. Puur informatief, "
-                "stuurt nooit iets aan."
+                "Bij de huidige woonkamertemperatuur: hoe vaak ging de "
+                "airco aan binnen het uur na een moment op deze "
+                "temperatuur? Eén waarneming per uur per bakje; per "
+                "bakje tellen de laatste 20 (dus 20 verschillende "
+                "uren), zodat het meebeweegt met het seizoen. Pas vanaf "
+                "5 waarnemingen in een bakje telt de kans. Waarnemingen "
+                "starten alleen als de airco uit staat. Bakje = hele "
+                "graad, half naar boven afgerond: 18,5-18,9 °C en "
+                "19,0-19,4 °C vallen in bakje 19 (18,8 °C -> 19, "
+                "18,4 °C -> 18). Sinds v5.58 opnieuw begonnen: de "
+                "oudere historie telde elke minuut mee. Stuurt zelf "
+                "niets, maar de airco-automaat (alleen met de knop aan) "
+                "leidt hieruit af bij welke temperatuur jullie gaan "
+                "verwarmen."
             ),
         }
 
@@ -2333,6 +2340,12 @@ class LivingRoomAircoPredictionSensor(SensorEntity, RestoreEntity):
         await super().async_added_to_hass()
         last_state = await self.async_get_last_state()
         if last_state is None:
+            return
+        # v5.58: alleen historie die al per uur is opgebouwd terugzetten;
+        # de oudere telde elke ronde mee (zie AIRCO_LEER_VERSIE).
+        from .const import AIRCO_LEER_VERSIE
+
+        if last_state.attributes.get("leer_versie") != AIRCO_LEER_VERSIE:
             return
         raw_buckets = last_state.attributes.get("alle_buckets")
         if isinstance(raw_buckets, dict):

@@ -31561,3 +31561,45 @@ direct na een nieuwe meting; betrouwbaarheid 750 → 2,5 ms. Geen andere
 sensor boven de 10 ms. Nieuw: `tests/test_v5571_snelheid.py` (gelijkheid met
 de oude telling en de oude paren, cache gelijk aan vers rekenen, vervallen
 van de cache, tijdsgrens per entiteit).
+
+## v5.58 — Airco-voorspelling leert per uur, niet per ronde
+
+**Meetfout.** De airco-voorspelling per woonkamertemperatuur startte elke
+coordinator-ronde een nieuwe waarneming. De "laatste 20 waarnemingen" van een
+bakje waren daardoor ~20 opeenvolgende minuten van één middag in plaats van
+20 losse momenten, en het venster bewoog dus niet mee met het seizoen. De
+luchtvochtigheid per bakje groeide ook per ronde.
+
+**Reparatie.**
+- Per bakje hooguit één nieuwe waarneming per uur
+  (`AIRCO_PREDICTION_LOOKAHEAD_MINUTES`): alleen als er voor dat bakje geen
+  waarneming meer open staat én de vorige start in dat bakje minstens 60 min
+  geleden is (`airco_bakje_laatste_start`, bewaard over een herstart). Andere
+  bakjes starten gewoon. 20 waarnemingen zijn nu 20 verschillende uren.
+- De luchtvochtigheid wordt één keer per waarneming bijgehouden.
+- De v5.13-regel blijft: staat de airco al aan, dan start er geen waarneming.
+- Afronding: een bakje is een hele graad, half naar boven afgerond vanaf de
+  getoonde waarde (één decimaal): 18,5–19,4 °C → bakje 19, dus 18,8 °C → 19
+  en 18,4 °C → 18. Pythons `round` rondde een halve af naar het even getal
+  (18,5 → 18, 19,5 → 20); dat is nu gelijkgetrokken in leerstap en sensor
+  (`airco_sturing.temperatuurbakje`).
+
+**Migratie: het leren begint opnieuw.** De opgeslagen historie heeft geen
+starttijden, dus is niet te zeggen welke waarnemingen echt losse momenten
+waren; inkorten zou nog steeds per-minuut-duplicaten bewaren. Daarom wordt per
+bakje eenmalig alles gewist (kans, richting, luchtvochtigheid), gemarkeerd met
+`airco_leer_versie` (`AIRCO_LEER_VERSIE = 2`). Ook de sensor zet alleen
+bakjes terug met die versie, zodat de oude historie niet via de
+sensorattributen terugkomt. De gekozen airco-setpunten blijven staan.
+
+**Gevolg voor de airco-automaat.** De voorspelling stuurt zelf niets, maar de
+airco-automaat (v5.27) leidt er de aanzettemperatuur uit af. Per bakje zijn
+eerst weer 5 uurwaarnemingen nodig; tot dan meldt het airco-besluit "leert
+nog" en doet niets. De knop Airco automaat stond bij deze release uit, dus
+alleen het voorgestelde besluit en de weergave zijn geraakt.
+
+Sensor-uitleg en het dashboard (Klimaat) zeggen nu "één waarneming per uur per
+bakje; de laatste 20" en hoe er wordt afgerond. Nieuw:
+`tests/test_v558_airco_bakjes.py` (max. één start per bakje per uur, meerdere
+bakjes tegelijk, afronding 18,8 → 19 en 18,4 → 18, airco al aan → geen start,
+migratie en herstart).

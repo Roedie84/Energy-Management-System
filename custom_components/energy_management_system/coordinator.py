@@ -173,6 +173,7 @@ from .const import (
     AIRCO_PREDICTION_LOOKAHEAD_MINUTES,
     AIRCO_PREDICTION_MIN_SAMPLES,
     AIRCO_PREDICTION_HISTORY_LENGTH,
+    AIRCO_LEER_VERSIE,
     OUTDOOR_TEMP_BUCKET_SIZE_C,
     CLIMATE_RATE_HISTORY_LENGTH,
     CLIMATE_RATE_MIN_INTERVAL_HOURS,
@@ -1642,7 +1643,10 @@ class EnergyManagementSystemCoordinator:
         # v1.18.1: verwarmen of koelen per bin - bij 18 °C betekent
         # "airco aan" iets anders dan bij 26 °C.
         self.living_room_temp_bucket_direction: dict[str, list[str]] = {}
-        self._temp_prediction_pending: list[dict] = []
+        # v5.58: per bakje wanneer de laatste waarneming startte (ISO), zodat
+        # er per bakje hooguit één per uur bijkomt; en de leerversie, zodat
+        # de per-ronde-historie van vóór v5.58 eenmalig wordt gewist.
+        self._temp_prediction_pending, self.airco_bakje_laatste_start, self.airco_leer_versie = [], {}, None
         self.living_room_current_temp_c: float | None = None
         self.living_room_current_humidity_percent: float | None = None
         # Klimaat-tabblad: geleerde temperatuur-projectie (v0.63.56).
@@ -36389,6 +36393,7 @@ class EnergyManagementSystemCoordinator:
             self._apply_persisted_state(stored)
         self._discard_history_from_an_older_method()
         self._migreer_sluipverbruik_methode()
+        self._migreer_airco_leren()
         self._migreer_dagreeks_kosten()
         self._ruim_oude_klimaatcellen_op()
         self._schoon_cyclusduren_op()
@@ -38269,6 +38274,11 @@ class EnergyManagementSystemCoordinator:
         display (its own rolling average) - not a second bucketing
         dimension, which would fragment the already-limited sample count
         per cell too thinly to ever reach AIRCO_PREDICTION_MIN_SAMPLES.
+
+        v5.58: niet elke meting maar per bakje hooguit één waarneming per
+        uur (`_airco_bakje_mag_starten`), zodat de laatste 20 ook 20
+        verschillende uren zijn. Bakje = graad, half naar boven afgerond
+        (18,8 °C -> 19).
         """
         temp_entity = self.config.get(CONF_LIVING_ROOM_TEMPERATURE_SENSOR)
         if not temp_entity:
@@ -38300,8 +38310,10 @@ class EnergyManagementSystemCoordinator:
             round(humidity_percent, 1) if humidity_percent is not None else None
         )
 
-        bucket_key = str(
-            round(temp_c / LIVING_ROOM_TEMP_BUCKET_SIZE_C) * LIVING_ROOM_TEMP_BUCKET_SIZE_C
+        # v5.58: half naar boven, vanaf de getoonde waarde (één decimaal) -
+        # 18,8 °C hoort bij bakje 19. Zie `airco_sturing.temperatuurbakje`.
+        bucket_key = airco_sturing.temperatuurbakje(
+            temp_c, LIVING_ROOM_TEMP_BUCKET_SIZE_C
         )
 
         airco_active_now = self.last_heavy_load_source == "airco"
@@ -38358,7 +38370,14 @@ class EnergyManagementSystemCoordinator:
         # airco al aan, dan kreeg die meteen het label "aan" - bij de
         # temperatuur die de airco zelf had veroorzaakt. Koelen van 25
         # naar 21 °C leerde zo dat je bij 21 °C aanzet.
-        if not airco_active_now:
+        #
+        # v5.58: en per bakje hooguit één per uur. Elke ronde (elke minuut)
+        # startte er een, dus "de laatste 20" in een bakje waren ~20
+        # opeenvolgende minuten van één middag - geen 20 losse momenten,
+        # en niets dat "meebeweegt met het seizoen". Nu alleen als er voor
+        # dit bakje geen waarneming meer open staat én de vorige start in
+        # dit bakje minstens AIRCO_PREDICTION_LOOKAHEAD_MINUTES geleden is.
+        if not airco_active_now and self._airco_bakje_mag_starten(bucket_key, now):
             self._temp_prediction_pending.append(
                 {
                     "bucket": bucket_key,
@@ -38367,15 +38386,75 @@ class EnergyManagementSystemCoordinator:
                     "airco_seen_active": False,
                 }
             )
+            self.airco_bakje_laatste_start[bucket_key] = now.isoformat()
+            # v5.58: de luchtvochtigheid ook één keer per waarneming, niet
+            # per ronde.
+            if humidity_percent is not None:
+                humidity_history = self.living_room_temp_bucket_humidity.setdefault(
+                    bucket_key, []
+                )
+                humidity_history.append(round(humidity_percent, 1))
+                self.living_room_temp_bucket_humidity[bucket_key] = humidity_history[
+                    -AIRCO_PREDICTION_HISTORY_LENGTH:
+                ]
 
-        if humidity_percent is not None:
-            humidity_history = self.living_room_temp_bucket_humidity.setdefault(
-                bucket_key, []
-            )
-            humidity_history.append(humidity_percent)
-            self.living_room_temp_bucket_humidity[bucket_key] = humidity_history[
-                -AIRCO_PREDICTION_HISTORY_LENGTH:
-            ]
+    def _airco_bakje_mag_starten(self, bucket_key: str, now: datetime) -> bool:
+        """Mag er in dit bakje een nieuwe waarneming starten? (v5.58)
+
+        Nee zolang er voor dit bakje nog een open staat, en nee binnen
+        AIRCO_PREDICTION_LOOKAHEAD_MINUTES na de vorige start in dit bakje.
+        Andere bakjes tellen niet mee: zakt de kamer van 22 naar 21 °C, dan
+        start bakje 21 meteen.
+        """
+        if any(p.get("bucket") == bucket_key for p in self._temp_prediction_pending):
+            return False
+        vorige = (self.airco_bakje_laatste_start or {}).get(bucket_key)
+        if not vorige:
+            return True
+        try:
+            vorige_dt = datetime.fromisoformat(str(vorige))
+            if vorige_dt.tzinfo is None and now.tzinfo is not None:
+                vorige_dt = vorige_dt.replace(tzinfo=now.tzinfo)
+            verstreken = now - vorige_dt
+        except (TypeError, ValueError):
+            return True
+        # Klok teruggezet of een vreemde stand: dan niet eeuwig blokkeren.
+        if verstreken < timedelta(0):
+            return True
+        return verstreken >= timedelta(minutes=AIRCO_PREDICTION_LOOKAHEAD_MINUTES)
+
+    def _migreer_airco_leren(self) -> None:
+        """Wist de per-ronde-historie van de airco-voorspelling, eenmalig
+        (v5.58).
+
+        Tot v5.57 kwam er elke ronde een waarneming bij, dus de opgeslagen
+        bakjes bestaan uit blokken van tientallen bijna identieke minuten.
+        Zonder starttijden is niet terug te halen welke daarvan echt losse
+        momenten waren; inkorten zou nog steeds per-minuut-duplicaten
+        bewaren. Daarom per bakje leeg, met kans, richting en
+        luchtvochtigheid. Het leren begint opnieuw: per bakje eerst
+        AIRCO_PREDICTION_MIN_SAMPLES uurwaarnemingen voordat het telt (ook
+        voor de airco-automaat, die tot dan "leert nog" meldt). De
+        gekozen setpunten blijven: die zijn per bediening, niet per ronde.
+        """
+        if self.airco_leer_versie == AIRCO_LEER_VERSIE:
+            return
+        self.living_room_temp_bucket_history = {}
+        self.living_room_temp_bucket_humidity = {}
+        self.living_room_temp_bucket_direction = {}
+        self._temp_prediction_pending = []
+        self.airco_bakje_laatste_start = {}
+        self.airco_leer_versie = AIRCO_LEER_VERSIE
+        opslag = getattr(self, "_geladen_opslag", None)
+        if isinstance(opslag, dict):
+            for sleutel in (
+                "living_room_temp_bucket_history",
+                "living_room_temp_bucket_humidity",
+                "living_room_temp_bucket_direction",
+                "airco_bakje_laatste_start",
+            ):
+                opslag.pop(sleutel, None)
+            opslag["airco_leer_versie"] = AIRCO_LEER_VERSIE
 
     def get_airco_kansen_per_bakje(self) -> dict:
         """De aircokans voor alle geleerde temperatuurbakjes (v5.8).

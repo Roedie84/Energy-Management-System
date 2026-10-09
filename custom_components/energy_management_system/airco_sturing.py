@@ -24,11 +24,28 @@ sturen.
 """
 from __future__ import annotations
 
+import math
 import statistics
 
 # "Meer kans dan niet": vanaf deze kans telt een temperatuur als het moment
 # waarop jullie de airco op verwarmen zetten.
 KANS_MEER_DAN_NIET_PROCENT = 50.0
+
+
+def temperatuurbakje(temp_c: float, bakgrootte_c: float = 1.0) -> str:
+    """Het bakje (graad) waarin een woonkamertemperatuur valt (v5.58).
+
+    Gewoon afronden op hele graden, de helft naar boven: 18,5 tot en met
+    18,9 °C hoort bij 19, 18,4 °C bij 18. Dus 18,8 °C -> bakje 19.
+
+    Eerst op één decimaal, zoals de sensor de temperatuur toont, zodat de
+    leerstap en de sensor nooit een ander bakje kiezen. En niet met
+    Pythons `round`: die rondt een halve af naar het even getal
+    (round(18.5) == 18, round(19.5) == 20), wat de grens per bakje liet
+    verspringen.
+    """
+    t = round(float(temp_c), 1)
+    return str(float(math.floor(t / bakgrootte_c + 0.5)) * bakgrootte_c)
 
 
 def aanzettemperatuur(bakjes: dict) -> float | None:

@@ -1474,6 +1474,13 @@ LIVING_ROOM_TEMP_BUCKET_SIZE_C = 1.0
 AIRCO_PREDICTION_LOOKAHEAD_MINUTES = 60
 AIRCO_PREDICTION_MIN_SAMPLES = 5
 AIRCO_PREDICTION_HISTORY_LENGTH = 20
+# v5.58: per bakje hooguit één nieuwe waarneming per
+# AIRCO_PREDICTION_LOOKAHEAD_MINUTES. Tot v5.57 startte elke coordinator-
+# ronde er een, zodat "de laatste 20" in een bakje ~20 opeenvolgende minuten
+# waren in plaats van 20 losse momenten. De historie van vóór deze versie is
+# daarmee vervuild en wordt eenmalig gewist; deze versie markeert de opslag
+# die al volgens de nieuwe regel is opgebouwd.
+AIRCO_LEER_VERSIE = 2
 
 # Klimaat-tabblad: geleerde woonkamertemperatuur-projectie (v0.63.56,
 # requested). Bewust vereenvoudigd t.o.v. een volledig model (buitentemp
@@ -3457,6 +3464,9 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "grootverbruiker_leer": {"type": "plain"},
     "learned_efficiency_history": {"type": "plain"},
     "living_room_temp_bucket_history": {"type": "plain"},
+    # v5.58: per bakje de laatste start (ISO) en de leerversie.
+    "airco_bakje_laatste_start": {"type": "plain"},
+    "airco_leer_versie": {"type": "plain"},
     "night_consumption_history": {"type": "plain"},
     "peak_power_daily_history": {"type": "plain"},
     "steelstofzuiger_charge_duration_history": {"type": "plain"},

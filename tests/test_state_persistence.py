@@ -106,6 +106,11 @@ def _vul_alles(c):
     )
 
     c.sluipverbruik_methode_versie = SLUIPVERBRUIK_METHODE_VERSIE
+    # v5.58: idem voor de airco-voorspelling - zie test_v558_airco_bakjes.py.
+    from custom_components.energy_management_system.const import AIRCO_LEER_VERSIE
+
+    c.airco_leer_versie = AIRCO_LEER_VERSIE
+    c.airco_bakje_laatste_start = {"24.0": "2026-08-06T12:00:00+00:00"}
     c.battery_cooling_last_change = NOW
     # v5.48: de dagsleutels en dagtellers die een herstart overleven.
     c._today_min_load_kw = 0.12
