@@ -378,3 +378,50 @@ def test_vaste_uittijd_ook_met_de_knop_uit(make_coordinator):
 def test_geleerde_bedtijd_blijft_achter_de_knop():
     r = _geleerd_ritme()
     assert not _besluit(r, _op(3, 22, 5), airco_stand="heat").get("altijd")
+
+
+# --- v5.69: kort weg (de hond uitlaten) --------------------------------------
+
+def test_kort_weg_eerst_een_uur():
+    r = ar.leeg()
+    assert ar.kort_weg(r, 30, 0.8)["uitstel_min"] == 60
+    assert ar.kort_weg(r, 61, 0.8) is None
+    assert ar.kort_weg(r, 10, 5.0) is None
+    assert ar.kort_weg(r, 10, None) is not None
+
+
+def test_uitstel_wordt_geleerd():
+    r = ar.leeg()
+    for m in (40, 45, 50, 55, 70, 300):
+        ar.noteer_afwezigheid(r, m)
+    assert r["afwezig"] == [40, 45, 50, 55, 70]
+    assert ar.kort_weg_uitstel(r) == 55
+
+
+def _uit_door_weg():
+    return {"actie": "uit", "tekst": "Uitzetten: niemand thuis", "redenen": [], "redenen_tekst": "", "doel_c": 21.0}
+
+
+def test_coordinator_houdt_hem_aan_tijdens_een_wandeling(make_coordinator):
+    c = make_coordinator({})
+    c.airco_ritme = ar.leeg()
+    c._nadering = lambda: ("away_from", 1.2)
+    c.presence_state = "weg"
+    t = _op(3, 19, 0)
+    assert c._airco_kort_weg_ronde(t, _uit_door_weg())["actie"] == "niets"
+    assert c._airco_kort_weg_ronde(t + timedelta(minutes=61), _uit_door_weg())["actie"] == "uit"
+    c.presence_state = "thuis"
+    c._airco_kort_weg_ronde(t + timedelta(minutes=70), {"actie": "niets"})
+    assert c.airco_ritme["afwezig"] == [70]
+
+
+def test_met_de_auto_weg_meteen_uit_en_22_uur_gaat_voor(make_coordinator):
+    c = make_coordinator({})
+    c.airco_ritme = ar.leeg()
+    c.presence_state = "weg"
+    c._nadering = lambda: ("away_from", 12.0)
+    assert c._airco_kort_weg_ronde(_op(3, 19, 0), _uit_door_weg())["actie"] == "uit"
+    c._weg_sinds = None
+    c._nadering = lambda: ("away_from", 0.5)
+    altijd = dict(_uit_door_weg(), altijd=True)
+    assert c._airco_kort_weg_ronde(_op(3, 22, 0), altijd)["actie"] == "uit"

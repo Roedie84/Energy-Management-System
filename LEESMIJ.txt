@@ -1,9 +1,13 @@
-EMS v5.68.4 - melding per accumodule uit te zetten
+EMS v5.69 - kort weg: de airco blijft aan
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
 
-- De melding "Accumodule loopt uit de pas" kan per module uit, met de dienst
-  "Melding per accumodule" (apparaatnaam, bijvoorbeeld AB3000 00996). De
-  andere modules blijven bewaakt.
-- Een nieuwe module op dezelfde plek heeft een andere naam: die wordt
-  vanzelf weer bewaakt en begint met een schone lei.
+- Gaan jullie even weg (de hond uitlaten), dan zet het EMS de airco niet
+  meteen uit: eerst na een uur, en zodra het genoeg korte uitstapjes heeft
+  gezien, na zo lang als die meestal duren (30-120 minuten).
+- Is iemand verder dan 3 km van huis, dan gaat hij meteen uit.
+- Om 22:00 gaat hij altijd uit.
+
+Ook in deze versie: de melding "Accumodule loopt uit de pas" per module uit
+te zetten (op fabrieksnaam, bv. AB3000 00996); een vervangen module begint
+met een schone lei.

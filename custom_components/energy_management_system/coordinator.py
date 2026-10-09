@@ -1686,7 +1686,7 @@ class EnergyManagementSystemCoordinator:
         # de per-ronde-historie van vóór v5.58 eenmalig wordt gewist.
         # v5.63.1: ook de open waarnemingen (JSON-veilig) en of ze na een herstart al terug zijn
         # (zie `_herstel_airco_waarnemingen`); op één regel vanwege de groeigrens van __init__.
-        self._temp_prediction_pending, self.airco_bakje_laatste_start, self.airco_leer_versie, self.airco_open_waarnemingen, self._airco_waarnemingen_hersteld, self._klimaat_anker_wind, self._klimaat_wind_per_uur, self.airco_ritme, self._klimaat_anker_zon, self._nadering_vorige, self._airco_uur_acc, self.battery_module_stil, self.klimaat_zon_residuen, self.klimaat_wind_residuen = [], {}, None, [], False, None, {}, {}, None, None, None, [], {}, {}
+        self._temp_prediction_pending, self.airco_bakje_laatste_start, self.airco_leer_versie, self.airco_open_waarnemingen, self._airco_waarnemingen_hersteld, self._klimaat_anker_wind, self._klimaat_wind_per_uur, self.airco_ritme, self._klimaat_anker_zon, self._nadering_vorige, self._airco_uur_acc, self._weg_sinds, self.battery_module_stil, self.klimaat_zon_residuen, self.klimaat_wind_residuen = [], {}, None, [], False, None, {}, {}, None, None, None, None, [], {}, {}
         self.living_room_current_temp_c: float | None = None
         self.living_room_current_humidity_percent: float | None = None
         # Klimaat-tabblad: geleerde temperatuur-projectie (v0.63.56).
@@ -43997,6 +43997,7 @@ class EnergyManagementSystemCoordinator:
             vooruit=self._airco_vooruitblik(),
         )
         uit = self._airco_ritme_ronde(now, uit, stand)
+        uit = self._airco_kort_weg_ronde(now, uit)
         uit = self._airco_thuiskomst_ronde(now, uit, stand)
         uit = self._airco_buffer_ronde(now, uit, stand)
         uit["knop"] = self.airco_automaat_aan
@@ -44189,6 +44190,31 @@ class EnergyManagementSystemCoordinator:
                     km = waarde / 1000 if eenheid == "m" else (waarde * 1.609344 if eenheid == "mi" else waarde)
             return toestand.state, km
         return None, None
+
+    def _airco_kort_weg_ronde(self, now: datetime, uit: dict) -> dict:
+        """Kort weg: de airco niet meteen uit (v5.69) - zie `airco_ritme.kort_weg`.
+
+        Houdt bij hoe lang afwezigheden duren, en houdt een "uit omdat
+        niemand thuis is" tegen zolang het een kort uitstapje lijkt. De
+        vaste uittijd van 22:00 gaat altijd voor.
+        """
+        ritme = self._airco_ritme()
+        if self.presence_state == "weg":
+            if self._weg_sinds is None:
+                self._weg_sinds = now
+        elif self._weg_sinds is not None:
+            if self.presence_state == "thuis":
+                airco_ritme.noteer_afwezigheid(ritme, (now - self._weg_sinds).total_seconds() / 60)
+            self._weg_sinds = None
+        if uit.get("actie") != "uit" or uit.get("altijd") or self.presence_state != "weg":
+            return uit
+        _, km = self._nadering()
+        vraag = airco_ritme.kort_weg(ritme, (now - self._weg_sinds).total_seconds() / 60, km)
+        if vraag is None:
+            return uit
+        redenen = list(uit.get("redenen") or []) + [vraag["reden"]]
+        return dict(uit, actie="niets", tekst=vraag["tekst"], redenen=redenen,
+                    redenen_tekst=" · ".join(redenen))
 
     def _airco_thuiskomst_ronde(self, now: datetime, uit: dict, stand: str | None) -> dict:
         """Warm bij thuiskomst (v5.66) - zie `airco_ritme.thuiskomst`."""

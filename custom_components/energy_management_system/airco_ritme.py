@@ -59,6 +59,7 @@ def leeg() -> dict:
         "snelheden": [],
         "vermogens": [],
         "uurverbruik": {},
+        "afwezig": [],
     }
 
 
@@ -88,6 +89,9 @@ def geldig(ritme) -> dict:
             str(k): [float(v) for v in reeks if isinstance(v, (int, float))][-UURVERBRUIK_DAGEN:]
             for k, reeks in uren.items() if isinstance(reeks, list)
         }
+    afwezig = ritme.get("afwezig")
+    if isinstance(afwezig, list):
+        basis["afwezig"] = [float(v) for v in afwezig if isinstance(v, (int, float))][-HISTORIE:]
     ems = ritme.get("ems")
     if isinstance(ems, dict):
         basis["ems"].update({k: ems.get(k) for k in ("aan", "uit")})
@@ -518,3 +522,55 @@ def minuten_uit_klok(waarde) -> int | None:
     m = uur * 60 + minuut
     # Na middernacht hoort bij de avond ervoor (zoals `avond`).
     return m + 1440 if m < AVOND_TOT_NA_MIDDERNACHT else m
+
+
+# --- v5.69: kort weg (de hond uitlaten) -------------------------------------
+
+KORT_WEG_STANDAARD_MIN = 60
+KORT_WEG_MIN_MIN = 30
+KORT_WEG_MAX_MIN = 120
+KORT_WEG_GRENS_MIN = 180
+KORT_WEG_VER_KM = 3.0
+
+
+def noteer_afwezigheid(ritme: dict, minuten: float) -> None:
+    """Hoe lang een afwezigheid duurde - alleen de korte (< 3 uur) tellen
+    voor "even weg"."""
+    if 0 < minuten < KORT_WEG_GRENS_MIN:
+        ritme["afwezig"].append(round(minuten, 0))
+        del ritme["afwezig"][:-HISTORIE]
+
+
+def kort_weg_uitstel(ritme: dict) -> int:
+    """Hoe lang de airco aan blijft bij vertrek: zo lang als driekwart van
+    jullie korte uitstapjes duurt (vanaf 5 keer), 30-120 min; eerst 60."""
+    reeks = sorted(ritme.get("afwezig") or [])
+    if len(reeks) < 5:
+        return KORT_WEG_STANDAARD_MIN
+    p75 = reeks[min(len(reeks) - 1, int(round(0.75 * (len(reeks) - 1))))]
+    return int(min(max(p75, KORT_WEG_MIN_MIN), KORT_WEG_MAX_MIN))
+
+
+def kort_weg(ritme: dict, weg_minuten: float | None, km: float | None) -> dict | None:
+    """Even weg? Dan de airco laten lopen (v5.69, gevraagd: "soms een uur
+    met de hond wandelen"). None = niet kort weg: gewoon uit.
+
+    Verder dan 3 km van huis (bijvoorbeeld met de auto) is geen wandeling:
+    dan meteen uit. Afstand onbekend: alleen de tijd telt.
+    """
+    if weg_minuten is None:
+        return None
+    if km is not None and km > KORT_WEG_VER_KM:
+        return None
+    uitstel = kort_weg_uitstel(ritme)
+    if weg_minuten >= uitstel:
+        return None
+    return {
+        "uitstel_min": uitstel,
+        "tekst": (
+            f"Even weg ({weg_minuten:.0f} van {uitstel} min"
+            + (f", {km:.1f} km van huis" if km is not None else "")
+            + "): de airco blijft aan."
+        ),
+        "reden": f"kort weg, uit na {uitstel} min",
+    }

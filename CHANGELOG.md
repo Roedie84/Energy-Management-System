@@ -32091,3 +32091,19 @@ een vervangen module die weer "Accu module 1" heet niet herkend worden.
   `accumodule_melding` accepteert de fabrieksnaam én de eigen naam.
 - Een eerder bewaarde eigen naam telt niet als vervanging, dus de
   geleerde geschiedenis blijft staan.
+
+## v5.69 — kort weg: de airco blijft aan
+
+Gevraagd: "Hoe gaat de airco sturing om met het feit dat wij soms een uur
+met de hond wandelen en dus niet aanwezig zijn?" - en "Ja graag".
+
+- Een "uit omdat niemand thuis is" (alleen voor een airco die het EMS
+  aanzette) wordt uitgesteld zolang het een kort uitstapje lijkt: eerst 60
+  minuten; vanaf 5 korte afwezigheden (< 3 uur) driekwart van hoe lang die
+  duren, begrensd op 30-120 minuten.
+- Verder dan 3 km van huis (Nabijheid, wie het dichtst bij huis is):
+  meteen uit. Afstand onbekend: alleen de tijd telt.
+- De vaste uittijd van 22:00 gaat altijd voor.
+- Bewaard in `airco_ritme["afwezig"]`.
+
+Laden, ontladen, reserve en marges ongewijzigd.
