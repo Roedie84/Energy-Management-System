@@ -935,6 +935,75 @@ def _kort_punt(tekst) -> str:
     return zin if len(zin) <= 60 else zin[:57].rstrip() + "…"
 
 
+def _tel_rangorde(paren: list[tuple[float, float]]) -> tuple[int, int]:
+    """(eens, totaal) voor de rangorde van een weerbron (v5.57.1).
+
+    Precies dezelfde telling als de dubbele lus die hier stond: over alle
+    paren momenten met verschillende bewolking EN verschillende
+    helderheid (`totaal`), hoe vaak meer bewolking samengaat met minder
+    helderheid (`eens`). Alleen niet door elk paar tegen elk ander te
+    houden - n² - maar door te sorteren en te tellen: n log n. Bij 480
+    paren 115.000 vergelijkingen tegen een paar duizend stappen.
+
+    Gehele tellingen, dus geen afrondingsverschil met de oude lus; de
+    toets `test_v5571_snelheid` legt beide naast elkaar. Met een NaN in de
+    reeks gaat het langs de oude weg - daar gelden geen ordeningsregels.
+    """
+    n = len(paren)
+    if any(x != x or y != y for x, y in paren):
+        eens = totaal = 0
+        for i in range(n):
+            x_i, y_i = paren[i]
+            for j in range(i + 1, n):
+                x_j, y_j = paren[j]
+                if x_i == x_j or y_i == y_j:
+                    continue
+                totaal += 1
+                if (x_i > x_j) == (y_i < y_j):
+                    eens += 1
+        return eens, totaal
+
+    def _gelijk(sleutels) -> int:
+        tellingen: dict = {}
+        for k in sleutels:
+            tellingen[k] = tellingen.get(k, 0) + 1
+        return sum(c * (c - 1) // 2 for c in tellingen.values())
+
+    totaal = (
+        n * (n - 1) // 2
+        - _gelijk(x for x, _ in paren)
+        - _gelijk(y for _, y in paren)
+        + _gelijk(paren)
+    )
+    # Omgekeerd geordend: x_a < x_b en y_a > y_b. Op bewolking oplopend,
+    # per groep gelijke bewolking eerst tellen en dan pas toevoegen.
+    rang = {y: i + 1 for i, y in enumerate(sorted({y for _, y in paren}))}
+    boom = [0] * (len(rang) + 1)
+    ingevoegd = 0
+    eens = 0
+    gesorteerd = sorted(paren, key=lambda p: p[0])
+    i = 0
+    while i < n:
+        j = i
+        while j < n and gesorteerd[j][0] == gesorteerd[i][0]:
+            j += 1
+        for _, y in gesorteerd[i:j]:
+            k = rang[y]
+            tot_en_met = 0
+            while k > 0:
+                tot_en_met += boom[k]
+                k -= k & -k
+            eens += ingevoegd - tot_en_met
+        for _, y in gesorteerd[i:j]:
+            k = rang[y]
+            while k < len(boom):
+                boom[k] += 1
+                k += k & -k
+            ingevoegd += 1
+        i = j
+    return eens, totaal
+
+
 class EnergyManagementSystemCoordinator:
     """Runs the control loop that decides the Zendure operation mode."""
 
@@ -5419,6 +5488,10 @@ class EnergyManagementSystemCoordinator:
         niet te achterhalen.
         """
         uit = []
+        # v5.57.1: de ijklijn per bakje één keer, niet per paar. Hier werd
+        # voor elk van de 480 paren de reeks van 400 metingen opnieuw
+        # gesorteerd - zelfde uitkomst, honderden keren te vaak.
+        ijklijnen: dict[str, float | None] = {}
         for paar in self.weerbron_helderheid_paren.get(bron) or []:
             # v3.98.1: alleen paren MET een dag. De 600 van 1 september
             # hebben er geen en zijn niet te plaatsen; het was toch een
@@ -5432,19 +5505,27 @@ class EnergyManagementSystemCoordinator:
             if len(paar) < 5:
                 continue
             bewolking, pv_w, bakje = paar[0], paar[1], paar[2]
-            metingen = self.helderheid_ijklijn.get(str(bakje))
-            if not metingen or len(metingen) < HELDERHEID_MIN_METINGEN_PER_BAKJE:
-                continue
-            gesorteerd = sorted(metingen)
-            index = min(
-                len(gesorteerd) - 1,
-                int(len(gesorteerd) * HELDERHEID_IJKLIJN_PERCENTIEL),
-            )
-            ijklijn = gesorteerd[index]
+            sleutel = str(bakje)
+            if sleutel not in ijklijnen:
+                ijklijnen[sleutel] = self._ijklijn_van_bakje(sleutel)
+            ijklijn = ijklijnen[sleutel]
             if not ijklijn:
                 continue
             uit.append((float(bewolking), max(0.0, float(pv_w)) / ijklijn))
         return uit
+
+    def _ijklijn_van_bakje(self, bakje: str) -> float | None:
+        """Het hoge percentiel van één bakje, of None als het te leeg is
+        (v5.57.1, uit `_helderheidsparen` gehaald)."""
+        metingen = self.helderheid_ijklijn.get(bakje)
+        if not metingen or len(metingen) < HELDERHEID_MIN_METINGEN_PER_BAKJE:
+            return None
+        gesorteerd = sorted(metingen)
+        index = min(
+            len(gesorteerd) - 1,
+            int(len(gesorteerd) * HELDERHEID_IJKLIJN_PERCENTIEL),
+        )
+        return gesorteerd[index]
 
     def weerbron_rangorde_score(self, bron: str) -> float | None:
         """Hoe vaak ordent deze bron twee momenten goed? (v3.94.0)
@@ -5473,18 +5554,7 @@ class EnergyManagementSystemCoordinator:
         }
         if len(dagen) < HELDERHEID_MIN_DAGEN_PAREN:
             return None
-        eens = 0
-        totaal = 0
-        for i in range(len(paren)):
-            bewolking_i, helder_i = paren[i]
-            for j in range(i + 1, len(paren)):
-                bewolking_j, helder_j = paren[j]
-                if bewolking_i == bewolking_j or helder_i == helder_j:
-                    # Gelijkspel zegt niets over de ordening.
-                    continue
-                totaal += 1
-                if (bewolking_i > bewolking_j) == (helder_i < helder_j):
-                    eens += 1
+        eens, totaal = _tel_rangorde(paren)
         if not totaal:
             return None
         return round(100 * eens / totaal, 1)
@@ -5503,6 +5573,50 @@ class EnergyManagementSystemCoordinator:
         return len(paren)
 
     def get_helderheid_ijking(self) -> dict:
+        """De ijking, alleen opnieuw berekend als de metingen veranderen
+        (v5.57.1).
+
+        Gemeld: "Updating state for ...gacs_zelfbeoordeling took 2.315
+        seconds". Gemeten: deze functie werd per toestand van die sensor
+        vijf keer aangeroepen (zelf, en via samenvattingen, overzichtstatus,
+        meet_stuurt_niet en nog_niet_bepaald), en elke keer telde de
+        rangorde alle paren tegen elkaar - 480 paren per bron is 115.000
+        vergelijkingen, maal vier bronnen. Met volle reeksen 1,2 seconde
+        per toestand, en het groeide met elk uur zon.
+
+        De sleutel is de INHOUD van de drie reeksen, niet een teller: een
+        teller mist een wijziging die buiten de twee schrijvers om gaat.
+        Vergelijken kost minder dan een milliseconde. Alleen de twee
+        velden die het moment volgen (helderheid en ijklijn van NU)
+        worden elke keer vers gelezen.
+        """
+        sleutel = self._helderheid_sleutel()
+        cache = getattr(self, "_helderheid_ijking_cache", None)
+        if cache is None or cache[0] != sleutel:
+            cache = (sleutel, self._bereken_helderheid_ijking())
+            self._helderheid_ijking_cache = cache
+        uit = dict(cache[1])
+        uit["helderheid_nu"] = self.gemeten_helderheid()
+        uit["ijklijn_nu_w"] = self.ijklijn_vermogen_w(
+            self.get_sun_elevation_degrees()
+        )
+        return uit
+
+    def _helderheid_sleutel(self) -> tuple:
+        """De inhoud waar de ijking van afhangt, als vergelijkbare sleutel."""
+        def _reeksen(bron) -> tuple:
+            return tuple(
+                (k, tuple(tuple(x) if isinstance(x, list) else x for x in (v or ())))
+                for k, v in (bron or {}).items()
+            )
+
+        return (
+            _reeksen(self.helderheid_ijklijn),
+            _reeksen(self.weerbron_helderheid_paren),
+            _reeksen(self.helderheid_dagen),
+        )
+
+    def _bereken_helderheid_ijking(self) -> dict:
         """Werkt de ijklijn al, en valt er iets mee te sturen? (v3.94.0)
 
         Gevraagd: "zelf middels diagnostiek aangeven of het werkt of niet

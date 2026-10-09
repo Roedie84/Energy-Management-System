@@ -1,5 +1,5 @@
-EMS v5.57 - meetlaag: het kwartier van een herstart wordt gemeten
+EMS v5.57.1 - zelfbeoordeling niet meer traag (cache)
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
-Sturing, reserve, drempels en marges veranderen niet; alleen meten en
-diagnose (meetlaag, dagrapport, kalibratie 22:00).
+Correctie: de heldere-hemel-ijking rekent snel en alleen opnieuw als de
+metingen veranderen. Sturing en uitkomsten ongewijzigd.

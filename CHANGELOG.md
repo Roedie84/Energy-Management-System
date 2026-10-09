@@ -31526,3 +31526,38 @@ nog loopt) en `avonden_bewaard`. Tot nu toe was de stand pas de ochtend erna
 om 09:00 te zien, in het dagrecord.
 
 Nieuw: `test_v557_leerronde.py`.
+
+## v5.57.1 — Correctie: zelfbeoordeling niet meer traag (cache)
+
+Gemeld uit het logboek van 9 oktober 10:42: "Updating state for
+sensor...gacs_zelfbeoordeling took 2.315 seconds". Alleen rekentijd;
+sturing, getallen en instellingen ongewijzigd.
+
+**Oorzaak (gemeten, niet de proefstand-slijtage).** `_opbrengst_slijtage`
+loopt één keer door ~60 boekingen en kost microseconden. De tijd zat in
+`get_helderheid_ijking`: die werd per toestand van de zelfbeoordeling vijf
+keer opgebouwd (direct en via samenvattingen, overzichtstatus,
+meet_stuurt_niet en nog_niet_bepaald), en de betrouwbaarheidssensor deed het
+nog eens. Elke keer telde de rangorde alle paren tegen elkaar (n², 480 paren
+per bron) en sorteerde `_helderheidsparen` de ijklijn (400 metingen) opnieuw
+voor elk paar. In bedrijf stond `rekentijd_ms` op 248 ms met vijf onderdelen
+van elk ~45 ms; met volle reeksen (4 bronnen × 480 paren, 12 bakjes × 400
+metingen) 1.380 ms voor de zelfbeoordeling plus 750 ms voor de
+betrouwbaarheidssensor - en dat groeide met elk uur zon.
+
+**Reparatie.**
+- De rangorde telt in n log n (sorteren plus Fenwick-boom) met precies
+  dezelfde gehele tellingen als de dubbele lus; bij een NaN valt hij terug
+  op de oude lus.
+- De ijklijn per bakje wordt per aanroep één keer bepaald in plaats van per
+  paar.
+- `get_helderheid_ijking` bewaart zijn uitkomst tot de inhoud van
+  `helderheid_ijklijn`, `weerbron_helderheid_paren` of `helderheid_dagen`
+  verandert (vergelijking op inhoud, geen teller). `helderheid_nu` en
+  `ijklijn_nu_w` worden elke keer vers gelezen.
+
+Gemeten met volle reeksen: zelfbeoordeling 1.380 → 3 ms (cache) en 12 ms
+direct na een nieuwe meting; betrouwbaarheid 750 → 2,5 ms. Geen andere
+sensor boven de 10 ms. Nieuw: `tests/test_v5571_snelheid.py` (gelijkheid met
+de oude telling en de oude paren, cache gelijk aan vers rekenen, vervallen
+van de cache, tijdsgrens per entiteit).
