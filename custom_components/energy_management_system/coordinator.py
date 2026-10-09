@@ -11050,7 +11050,10 @@ class EnergyManagementSystemCoordinator:
                     + "; ".join(ontbreekt)
                 )
         else:
-            gereed = "mag meesturen"
+            # v5.67.3: was "mag meesturen" - de melding, de maandagherinnering
+            # en het dashboard zochten "klaar om mee te doen" en zagen een
+            # rijpe kandidaat dus nooit.
+            gereed = "klaar om mee te doen"
             uitleg = (
                 "Meting, winst en toelatingseis zijn alle drie rond. Dit "
                 "is de kandidaat om te laten meesturen - één tegelijk, "
@@ -24023,9 +24026,12 @@ class EnergyManagementSystemCoordinator:
         items.append({"naam": "PV-model (regressiewoud)", "bron": "proef", "status": "betrouwbaar" if pv.get("beter") else "indicatief",
                       "rijp": bool(pv.get("beter")), "waarde": f"{pv.get('winst_procent')}% tegenover de uurcorrectie" if pv.get("beschikbaar") else "nog niet berekend",
                       "zou_veranderen": "de zoncorrectie per uur"})
-        items.append({"naam": "Gemeten capaciteit", "bron": "kalibratie", "status": "betrouwbaar" if self.gemeten_capaciteit_kwh() else "onvoldoende_data",
-                      "rijp": bool(self.gemeten_capaciteit_kwh()), "waarde": self.gemeten_capaciteit_kwh() or "wacht op een kalibratie vanaf onder de 30%",
-                      "zou_veranderen": "de capaciteit waarmee de reserve rekent"})
+        # v5.67.3: na één kalibratie rekent de reserve er al mee
+        # (`bruikbare_capaciteit_kwh`) - dan stuurt hij en hoort hij hier niet.
+        if not self.gemeten_capaciteit_kwh():
+            items.append({"naam": "Gemeten capaciteit", "bron": "kalibratie", "status": "onvoldoende_data",
+                          "rijp": False, "waarde": "wacht op een kalibratie vanaf onder de 30%",
+                          "zou_veranderen": "de capaciteit waarmee de reserve rekent"})
         water = self.get_water_source_overview() or {}
         items.append({"naam": "Waterbronprofielen", "bron": "bevestigingen", "status": "betrouwbaar" if water else "onvoldoende_data",
                       "rijp": bool(water), "waarde": f"{len(water)} bron(nen) geleerd" if water else "wacht op bevestigingen",

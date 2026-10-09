@@ -450,7 +450,7 @@ def test_both_together_are_not_enough(make_coordinator, hass):
     )
 
     assert uitkomst["mag_meesturen"] is False
-    assert uitkomst["gereedheid"] != "mag meesturen"
+    assert uitkomst["gereedheid"] != "klaar om mee te doen"
 
 
 def test_a_negative_result_is_named_as_such(make_coordinator, hass):
@@ -489,7 +489,7 @@ def test_a_fully_admitted_candidate_may_steer(make_coordinator, hass):
         }
     )
 
-    assert uitkomst["gereedheid"] == "mag meesturen"
+    assert uitkomst["gereedheid"] == "klaar om mee te doen"
     assert uitkomst["mag_meesturen"] is True
     assert "één tegelijk" in uitkomst["gereedheid_uitleg"]
 
@@ -515,6 +515,8 @@ def test_every_candidate_carries_a_readiness(make_coordinator, hass):
         assert k["gereedheid"] in (
             "meet nog",
             "winst onbekend",
+            "voldoet nog niet aan de eis",
+            "gemeten: levert niets op",
             "klaar om mee te doen",
         ), k["naam"]
 
@@ -561,3 +563,16 @@ def test_every_candidate_explains_itself_in_a_readable_field(
         "deze kandidaten leggen nergens uit waar hun getal vandaan komt: "
         f"{zonder_uitleg}"
     )
+
+
+def test_de_gereedheid_die_de_melding_zoekt_bestaat():
+    """v5.67.3: `_met_gereedheid` schreef "mag meesturen", de melding en
+    het dashboard zochten "klaar om mee te doen" - een rijpe kandidaat werd
+    zo nooit gemeld."""
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    bron = (Path(pkg.__file__).parent / "coordinator.py").read_text()
+    assert 'gereed = "klaar om mee te doen"' in bron
+    assert 'gereed = "mag meesturen"' not in bron

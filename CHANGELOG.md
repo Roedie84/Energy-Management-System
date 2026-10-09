@@ -32007,3 +32007,18 @@ Gevraagd: "Airco moet ook om 22:00 uit zonder knop aan".
   zelf weer aanzet, houdt hem aan.
 - Al het andere (aanzetten, voorverwarmen, thuiskomst, de geleerde
   bedtijd) blijft achter de knop.
+
+## v5.67.3 — een rijpe kandidaat wordt weer gemeld
+
+Gevonden bij de inventaris "alles wat het EMS leert moet optimaal benut
+worden".
+
+- `_met_gereedheid` schreef `mag meesturen`; de melding bij rijp worden,
+  de maandagherinnering (09:00) en het dashboard zochten `klaar om mee te
+  doen`. Een rijpe proefstandkandidaat werd dus nooit gemeld. Nu één label:
+  `klaar om mee te doen`.
+- "Wat meet en nog niet stuurt" noemde de gemeten capaciteit ook als die al
+  meestuurde (na één kalibratie rekent de reserve ermee). Nu alleen zolang
+  er nog geen kalibratie is.
+
+Sturing ongewijzigd.
