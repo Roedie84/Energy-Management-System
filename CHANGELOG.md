@@ -31834,3 +31834,21 @@ buitentemperatuur x rolluiken x airco), alsof de zon volop binnenkwam.
 Sturing (laden, ontladen, reserve, marges) ongewijzigd. Nieuw:
 `tests/test_v563_rolluikstand.py`.
 
+## v5.63.1 — airco-waarnemingen overleven een herstart
+
+Gemeld: "vanmiddag is de airco bij 18,8 aangegaan" en het stond nergens.
+`_temp_prediction_pending` (waarneming wacht 60 min of de airco aangaat)
+stond alleen in het geheugen. Een herstart binnen dat uur wiste hem, terwijl
+`airco_bakje_laatste_start` wél bewaard bleef en een nieuwe waarneming in
+dat bakje nog een uur tegenhield. Op 09-10 vijf herstarts: de aanzet om
+14:26 (bakje 19,0) ging verloren.
+
+- Nieuw bewaard veld `airco_open_waarnemingen` (JSON-veilig, deadline als
+  ISO-tijd), bijgewerkt na elke ronde.
+- `_herstel_airco_waarnemingen` zet ze bij de eerste ronde na een start
+  terug: deadline nog niet voorbij → verder wachten; voorbij en al "aan"
+  gezien → afronden als aan; voorbij en niet gezien → vervalt.
+- De leerversie-wis van v5.58/v5.60 wist het nieuwe veld mee.
+
+Sturing ongewijzigd. Nieuw: `tests/test_v5631_airco_waarneming_herstart.py`.
+

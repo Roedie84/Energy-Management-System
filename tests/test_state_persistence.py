@@ -523,6 +523,7 @@ def test_a_current_store_keeps_the_balance_history(make_coordinator, hass):
 # precies één van drie bakken vallen. Wie er een nieuwe bijzet en niets
 # kiest, krijgt hier een rode test in plaats van stille dataverlies.
 VLUCHTIG_MET_REDEN = {
+    "_airco_waarnemingen_hersteld": "vlag 'al teruggezet sinds het opstarten'; hoort na elke herstart weer onwaar te zijn (de regex ziet hem als lijst door de gecombineerde toewijzing)",
     "prijsreeks_bevindingen": "dubbele of ontbrekende kwartieren in de prijsreeks; elke keer opnieuw bepaald bij het inlezen",
     "_afwegingen_deze_ronde": "de afwegingen die nu worden verzameld; elke ronde opnieuw",
     "laatste_afwegingen": "de afwegingen van de laatste beslissing; na een herstart hoort er een verse beslissing te komen voordat er iets te verklaren valt",

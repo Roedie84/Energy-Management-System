@@ -1680,7 +1680,9 @@ class EnergyManagementSystemCoordinator:
         # v5.58: per bakje wanneer de laatste waarneming startte (ISO), zodat
         # er per bakje hooguit één per uur bijkomt; en de leerversie, zodat
         # de per-ronde-historie van vóór v5.58 eenmalig wordt gewist.
-        self._temp_prediction_pending, self.airco_bakje_laatste_start, self.airco_leer_versie = [], {}, None
+        # v5.63.1: ook de open waarnemingen (JSON-veilig) en of ze na een herstart al terug zijn
+        # (zie `_herstel_airco_waarnemingen`); op één regel vanwege de groeigrens van __init__.
+        self._temp_prediction_pending, self.airco_bakje_laatste_start, self.airco_leer_versie, self.airco_open_waarnemingen, self._airco_waarnemingen_hersteld = [], {}, None, [], False
         self.living_room_current_temp_c: float | None = None
         self.living_room_current_humidity_percent: float | None = None
         # Klimaat-tabblad: geleerde temperatuur-projectie (v0.63.56).
@@ -38588,6 +38590,9 @@ class EnergyManagementSystemCoordinator:
 
         airco_active_now = self.last_heavy_load_source == "airco"
 
+        # v5.63.1: open waarnemingen van vóór een herstart terugzetten.
+        self._herstel_airco_waarnemingen(now)
+
         # Mark every still-open pending observation "seen active" if the
         # airco is active on this tick - a queued observation from any
         # earlier tick (as long as its deadline hasn't passed yet) counts.
@@ -38667,6 +38672,82 @@ class EnergyManagementSystemCoordinator:
                 self.living_room_temp_bucket_humidity[bucket_key] = humidity_history[
                     -AIRCO_PREDICTION_HISTORY_LENGTH:
                 ]
+        self._bewaar_airco_waarnemingen()
+
+    def _herstel_airco_waarnemingen(self, now: datetime) -> None:
+        """Zet de open airco-waarnemingen van vóór een herstart terug (v5.63.1).
+
+        Gemeld: "vanmiddag is de airco bij 18,8 aangegaan" en dat stond
+        nergens. De open waarnemingen (wacht een uur of de airco aangaat)
+        stonden alleen in het geheugen. Een herstart binnen dat uur - op
+        09-10 gebeurde dat vijf keer - gooide ze weg, terwijl de starttijd
+        per bakje wél bewaard bleef en een nieuwe waarneming in dat bakje
+        nog een uur tegenhield. De aanzet om 14:26 viel zo tussen wal en
+        schip.
+
+        Nu bewaard (`airco_open_waarnemingen`) en bij de eerste ronde terug:
+        - deadline nog niet voorbij: gewoon verder wachten;
+        - deadline tijdens de herstart verstreken en de airco was al gezien:
+          afronden als "aan" (dat is waargenomen);
+        - verstreken en niet gezien: weg, want of hij tijdens de herstart
+          aanging is niet te weten - liever geen waarneming dan een
+          verkeerde.
+        """
+        if self._airco_waarnemingen_hersteld:
+            return
+        self._airco_waarnemingen_hersteld = True
+        bewaard = getattr(self, "airco_open_waarnemingen", None) or []
+        if not isinstance(bewaard, list) or self._temp_prediction_pending:
+            return
+        for item in bewaard:
+            if not isinstance(item, dict) or not item.get("bucket"):
+                continue
+            try:
+                deadline = datetime.fromisoformat(str(item.get("deadline")))
+            except (TypeError, ValueError):
+                continue
+            if deadline.tzinfo is None and now.tzinfo is not None:
+                deadline = deadline.replace(tzinfo=now.tzinfo)
+            gezien = bool(item.get("airco_seen_active"))
+            if deadline > now:
+                herstel = {
+                    "bucket": item["bucket"],
+                    "deadline": deadline,
+                    "airco_seen_active": gezien,
+                }
+                if item.get("airco_richting"):
+                    herstel["airco_richting"] = item["airco_richting"]
+                self._temp_prediction_pending.append(herstel)
+            elif gezien:
+                bucket = item["bucket"]
+                history = self.living_room_temp_bucket_history.setdefault(bucket, [])
+                history.append(True)
+                self.living_room_temp_bucket_history[bucket] = history[
+                    -AIRCO_PREDICTION_HISTORY_LENGTH:
+                ]
+                richting = item.get("airco_richting")
+                if richting:
+                    richtingen = self.living_room_temp_bucket_direction.setdefault(
+                        bucket, []
+                    )
+                    richtingen.append(richting)
+                    self.living_room_temp_bucket_direction[bucket] = richtingen[
+                        -AIRCO_PREDICTION_HISTORY_LENGTH:
+                    ]
+
+    def _bewaar_airco_waarnemingen(self) -> None:
+        """JSON-veilige kopie van de open waarnemingen voor de opslag (v5.63.1)."""
+        self.airco_open_waarnemingen = [
+            {
+                "bucket": p["bucket"],
+                "deadline": p["deadline"].isoformat()
+                if isinstance(p.get("deadline"), datetime)
+                else str(p.get("deadline")),
+                "airco_seen_active": bool(p.get("airco_seen_active")),
+                **({"airco_richting": p["airco_richting"]} if p.get("airco_richting") else {}),
+            }
+            for p in self._temp_prediction_pending
+        ]
 
     def _airco_bakje_mag_starten(self, bucket_key: str, now: datetime) -> bool:
         """Mag er in dit bakje een nieuwe waarneming starten? (v5.58)
@@ -38717,6 +38798,7 @@ class EnergyManagementSystemCoordinator:
         self.living_room_temp_bucket_humidity = {}
         self.living_room_temp_bucket_direction = {}
         self._temp_prediction_pending = []
+        self.airco_open_waarnemingen = []
         self.airco_bakje_laatste_start = {}
         self.airco_leer_versie = AIRCO_LEER_VERSIE
         opslag = getattr(self, "_geladen_opslag", None)
@@ -38726,6 +38808,7 @@ class EnergyManagementSystemCoordinator:
                 "living_room_temp_bucket_humidity",
                 "living_room_temp_bucket_direction",
                 "airco_bakje_laatste_start",
+                "airco_open_waarnemingen",
             ):
                 opslag.pop(sleutel, None)
             opslag["airco_leer_versie"] = AIRCO_LEER_VERSIE

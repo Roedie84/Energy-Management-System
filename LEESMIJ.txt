@@ -1,13 +1,13 @@
-EMS v5.63 - klimaatprojectie leest de echte rolluikstand
+EMS v5.63.1 - airco-waarnemingen overleven een herstart
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
 
-De klimaatprojectie van de woonkamer leert per groep (buitentemperatuur x
-rolluiken x airco) hoe snel het binnen opwarmt of afkoelt. De rolluiken
-telden daarbij alleen als open of dicht; een rolluik op 20% stond als
-"open" te boek, alsof de zon volop binnenkwam. Nu de rolluiken gekalibreerd
-zijn (current_position), telt het gemiddelde van de standen: vanaf 90%
-"beide open", tot en met 10% "beide dicht", daartussen "gedeeltelijk".
-Dezelfde drie groepen, dus wat al geleerd is blijft bruikbaar. Rolluiken
-zonder positie werken precies zoals voorheen. De sturing (laden, ontladen,
-reserve, marges) verandert niet.
+Gemeld: de airco ging om 14:26 aan bij 18,8 °C, maar dat werd niet
+geleerd. De airco-verwachting zet bij elke temperatuur een waarneming
+klaar en kijkt een uur of de airco aangaat. Die wachtende waarnemingen
+stonden alleen in het geheugen: een herstart binnen dat uur gooide ze weg
+(op 09-10 vijf keer), terwijl een nieuwe waarneming in hetzelfde bakje nog
+een uur werd tegengehouden. Nu worden ze bewaard en na een herstart
+teruggezet. Verstreek het uur tijdens de herstart en was de airco al
+aangegaan, dan telt dat als "aan"; was hij nog niet gezien, dan vervalt de
+waarneming (onbekend is beter dan fout). De sturing verandert niet.

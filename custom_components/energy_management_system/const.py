@@ -3486,6 +3486,8 @@ PERSISTED_FIELDS: dict[str, dict] = {
     # v5.58: per bakje de laatste start (ISO) en de leerversie.
     "airco_bakje_laatste_start": {"type": "plain"},
     "airco_leer_versie": {"type": "plain"},
+    # v5.63.1: open airco-waarnemingen overleven een herstart.
+    "airco_open_waarnemingen": {"type": "plain"},
     "night_consumption_history": {"type": "plain"},
     "peak_power_daily_history": {"type": "plain"},
     "steelstofzuiger_charge_duration_history": {"type": "plain"},
