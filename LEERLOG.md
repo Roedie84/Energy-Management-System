@@ -152,3 +152,14 @@ laatste ronde: 09-10 07:40, gemeten t/m 09-10 07:45
 - Hypotheses H-EMS-2, H-EMS-4, H-EMS-6 ongewijzigd (geen nieuwe dag/avond). Geen release (tussenronde, niets acuut; v5.57.1 nog niet geïnstalleerd).
 
 laatste ronde: 09-10 11:40, gemeten t/m 09-10 11:44
+
+## 09-10 15:40 · tussenronde
+- Geïnstalleerd: **v5.62** (v5.57.1-v5.62 via chatsessies). HA-herstarts sinds 11:44: 6 (12:11, 12:25, 12:40, 12:51, 13:55, 14:43). Logboek: geen EMS-fouten na 14:43; meetlog dekking 97 % (1016 evaluaties).
+- **L-EMS-010 geverifieerd:** nachten →03-10 en →04-10 heten nu `onbekend` ("niet na te gaan of dat boven de reserve lag: reserve of laadstand ontbreekt in het dagverloop"), `tekortnachten_verkocht_met_winst` 0. Geen "bewust" meer. Kanttekening: de leerronde van 07-10 toonde uit de recorder dat het onder de reserve was; het dagverloop van toen mist die velden → onbekend is het eerlijkste wat de code kan.
+- Beslissingen 11:44-15:42: `battery_saved_for_peak` tot 12:15, `default_smart`, 2× `grid_charging_profitable` (13:28-13:45, 14:45-15:34; import 13-15 u 1,78 kWh) → accu 20 → 37-38 %. 0× verkoop onder de reserve (harde regel gehaald). Planning: nog 16:00 laden (18,8 ct), daarna smart tot morgen 12:00, laadblok morgen 12:00-15:00 (12,5-12,9 ct).
+- Donkere dag: PV t/m 15:00 0,99 kWh (Modbus), Solcast day-ahead 2,68, nu 2,16 → dag ~1,2 = **−55 %** t.o.v. day-ahead. Past bij H-EMS-2 (somber → te hoog); weegt mee in de dagafsluiting.
+- MC tot "blok" 100 % (mediaan tekort 7,0 kWh, beschikbaar 2,42): het blok van vandaag (12:15-16:45) loopt nog, dus valt de horizon terug op 09:00 met de tekst **"prijzen morgen nog onbekend"** — terwijl nordpool `tomorrow_valid` true is en de planning morgen al kent. Rapportagefout in `_monte_carlo_horizon_kiezen` (terugval ook bij een lopend blok). De uitleg zegt ook "3x onverwacht stroom … terwijl de accu genoeg had moeten hebben" terwijl de 3 nachten nu economisch/onbekend heten. → L-EMS-012 (zelf bouwen: rapportage, dagafsluiting).
+- Verwachting vannacht: tekortnacht waarschijnlijk (accu leeg rond 22 u, nachtprijs 13-15 ct = goedkoopste van het etmaal) → soort zou `economisch` moeten worden. Toets 10-10. Eerste `kalibratie_22u`-paar 10-10 00:00 (avond 08-10, 0 %, geen tekort).
+- Hypotheses H-EMS-2, H-EMS-4, H-EMS-6 ongewijzigd. Geen release (tussenronde, niets acuut).
+
+laatste ronde: 09-10 15:40, gemeten t/m 09-10 15:44
