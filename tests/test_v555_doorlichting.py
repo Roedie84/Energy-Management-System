@@ -225,8 +225,13 @@ def _venster(verkoopprijs, tekortprijs):
         moment = datetime(2026, 10, 2, 9, 0) + timedelta(minutes=15 * k)
         tijd = moment.strftime("%H:%M")
         if 40 <= k < 44:
+            # v5.61 (L-EMS-010): winst telt alleen als de verkoop BOVEN de
+            # reserve lag; zonder reserve in het dagverloop is het onbekend.
+            # Daarom hier de reserve en de beschikbare energie erbij: ruim
+            # boven de reserve, zodat deze nacht "verkocht met winst" blijft.
             rij = {"soc": 70 - (k - 40) * 4, "net_w": -1950.0, "accu_w": 2100.0,
-                   "prijs_ct": verkoopprijs}
+                   "prijs_ct": verkoopprijs, "beschikbaar_kwh": 5.0 - (k - 40) * 0.4,
+                   "reserve_kwh": 2.0}
         elif k >= 72:
             rij = {"soc": 9, "net_w": 300.0, "accu_w": 0.0, "prijs_ct": tekortprijs}
         else:

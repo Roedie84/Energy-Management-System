@@ -1,11 +1,13 @@
-EMS v5.60 - airco-bakjes per halve graad
+EMS v5.61 - verkoop onder de reserve nooit "verkocht met winst" (L-EMS-010)
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
-De airco-voorspelling leert nu per halve graad in plaats van per hele graad
-(besluit Ruud). Bakje = dichtstbijzijnde halve graad, half naar boven, vanaf
-de temperatuur op één decimaal: 18,8-19,2 °C -> 19,0; 19,3-19,7 °C -> 19,5
-(18,7 -> 18,5). De geleerde bakjes van één graad worden bij de eerste start
-eenmalig gewist; het leren begint opnieuw. Nadeel: per bakje duurt het
-ongeveer twee keer zo lang voor er 5 uurwaarnemingen zijn; tot dan meldt de
-airco-automaat "leert nog". Dashboard (Klimaat) bijgewerkt: tabel met
-"19,5 °C". De aanzettemperatuur in het besluit staat met één decimaal.
+Alleen de beoordeling van tekortnachten verandert; de sturing (laden,
+ontladen, reserve, marges) niet. Een tekortnacht waarin de accu op of onder
+de reserve aan het net verkocht, heet nooit meer "verkocht met winst / bewust"
+maar planning (aandachtspunt), met de reden "... kWh verkocht onder de
+reserve ... stuurfout, ook al was de prijs gunstig". Alleen verkoop boven de
+reserve kan "verkocht met winst" zijn. Is uit het dagverloop niet na te gaan
+of de verkoop boven de reserve lag: onbekend, niet "bewust". De bewaarde
+"verkocht met winst"-nachten (o.a. naar 3 en 4 oktober) worden binnen het
+eerste uur na de herstart opnieuw ingedeeld. Het dagverloop legt per kwartier
+ook de beschikbare energie vast (beschikbaar_kwh).

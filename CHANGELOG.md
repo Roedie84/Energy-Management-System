@@ -31678,3 +31678,62 @@ Nieuw: `tests/test_v560_halve_graden.py` (grenswaarden, sleutels, labels,
 aanzettemperatuur 19,5, besluittekst, migratie, sensor-tabel). Aangepast:
 v5.58-toetsen rekenen expliciet met bakgrootte 1,0 waar ze de oude indeling
 toetsen.
+
+## v5.61 — verkoop onder de reserve nooit "verkocht met winst" (L-EMS-010)
+
+**Besluit (Ruud, 9 oktober 2026, akkoord L-EMS-010).** "Verkoop onder de
+reserve nooit als 'verkocht met winst / bewust' labelen. De nachten naar 3 en
+4 oktober heten nog steeds zo, maar dat was de piekregel-bug (hersteld in
+v5.28.4)." Sinds v5.55 telde een tekortnacht als `verkocht_met_winst` zodra de
+verkoopprijs hoger was dan de prijs waartegen het tekort werd teruggekocht -
+ook als die verkoop via `expensive_quarter_peak` onder de reserve ging. Het
+huis gaat voor: dat is een stuurfout, ook als de prijs achteraf gunstig
+uitviel.
+
+**De regel.** Per kwartier met verkoop (dezelfde telling als
+`_verkocht_uit_verloop`: teruglevering zonder de P1-verschuiving, begrensd op
+wat de accu leverde) de beschikbare energie tegen de reserve van dat kwartier
+(`reserve_kwh`, sinds v4.2 in het dagverloop) - nieuw:
+`_verkocht_onder_reserve`. Daarna `_winst_of_onder_reserve`:
+- verkoopprijs niet hoger dan de terugkoopprijs: planning, zoals voorheen;
+  lag een deel op of onder de reserve, dan staat dat er nu bij ("; waarvan
+  … kWh onder de reserve");
+- winstgevend en iets op of onder de reserve verkocht: **planning** (stuurfout,
+  aandachtspunt), reden "… kWh verkocht onder de reserve (van … kWh verkocht,
+  gem. … ct; tekort teruggekocht tegen … ct) - het huis gaat voor: stuurfout,
+  ook al was de prijs gunstig";
+- winstgevend, maar voor een verkoopkwartier ontbreekt de reserve of de
+  beschikbare energie: **onbekend** (informatief), nooit "bewust";
+- alleen winstgevend én volledig boven de reserve: `verkocht_met_winst`, reden
+  "… kWh boven de reserve verkocht met winst …".
+
+**Beschikbare energie.** Het dagverloop legt per kwartier nu ook
+`beschikbaar_kwh` vast. Oudere regels rekenen de laadstand om met dezelfde
+formule als `accustand_procent`: capaciteit × (laadstand − minimum) / 100
+(`_reserve_omrekening`: `bruikbare_capaciteit_kwh` en
+`effective_min_soc_percent`).
+
+**Bewaarde nachten.** De soort staat in `reserve_daily_records`; zonder
+herberekening bleef het oude label staan. `_toets_winstnachten_op_reserve`
+deelt elke bewaarde `verkocht_met_winst`-nacht één keer opnieuw in uit het
+dagverloop (via `_probeer_herleiding`, het eerste uur na de start) en zet
+`reservetoets: "v5.61"`. Is het dagverloop van die nacht te dun, dan wordt hij
+meteen onbekend (niet meer "bewust") met `reservetoets: "open"` en later
+opnieuw geprobeerd. Nieuwe planningsnachten die op winst getoetst worden
+(`_toets_planningsnachten_op_winst`), de live indeling om 09:00 en het
+verwachte tekort gebruiken dezelfde regel.
+
+**Teksten.** "verkocht met winst" in de systeemstatus: "de accu verkocht boven
+de reserve tegen een hogere prijs …". De zin over onbekende nachten noemt ook
+"niet na te gaan of een verkoop boven de reserve lag".
+
+**Niet veranderd.** De sturing (laden, ontladen, reserve, marges, piekregel)
+en de zelfcorrigerende marge: die kijkt naar `shortfall`, niet naar de soort.
+
+Nieuw: `tests/test_v561_verkoop_onder_reserve.py` (onder de reserve met winst →
+planning, ook na vol en precies op de reserve; boven de reserve → winst; geen
+reserve of laadstand → onbekend; omrekening uit de laadstand; bewaarde nacht
+wordt stuurfout / blijft winst / zonder dagverloop onbekend en later alsnog;
+live indeling). Aangepast: `test_v555_doorlichting.py` - het testvenster had
+geen reserve in het dagverloop en zou nu onbekend zijn; de verkoopkwartieren
+krijgen een reserve en beschikbare energie ruim erboven.

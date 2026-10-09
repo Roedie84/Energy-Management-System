@@ -5264,6 +5264,16 @@ TEKORTSOORT_ONBEKEND = "onbekend"
 # beoordeling achteraf; de nacht blijft een tekortnacht (`shortfall`), dus de
 # zelfcorrigerende marge en de sturing veranderen niet.
 TEKORTSOORT_VERKOCHT_MET_WINST = "verkocht_met_winst"
+# v5.61 (L-EMS-010): "verkocht met winst" alleen als de verkoop BOVEN de
+# reserve lag. De nachten naar 3 en 4 oktober heetten "verkocht met winst,
+# bewust", maar die verkoop ging via de piekregel onder de reserve - de fout
+# die v5.28.4 herstelde. Het huis gaat voor: verkoop onder de reserve is een
+# stuurfout (planning), ook als de prijs achteraf gunstig uitviel. Is uit het
+# dagverloop niet na te gaan of de verkoop boven de reserve lag, dan onbekend,
+# nooit "bewust". Alleen de beoordeling; de sturing verandert niet.
+# `TEKORT_RESERVETOETS` markeert de bewaarde nachten die al opnieuw zijn
+# getoetst.
+TEKORT_RESERVETOETS = "v5.61"
 # Het deel van de teruglevering dat telt als "zon het net op terwijl de accu
 # ruimte had": niet als de accu al bijna op zijn laadvermogen laadde - dan
 # kon er niet meer in.
