@@ -1,26 +1,14 @@
-EMS v5.65.1 - dagbedragen van de leverancier na middernacht
+EMS v5.66 - zon, voorverwarmen, rolluik-isolatie en thuiskomst
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
 
-Na middernacht begint de energieleverancier een nieuwe dag. De dagbedragen
-(kosten, teruglevering, gas) staan dan een tijd op "unknown": op 9 oktober
-bij Zonneplan van 00:02 tot 01:07. De configuratiecontrole telde dat als
-kapotte koppeling. Tot 03:00 telt het nu als "slaapt", net als een
-apparaat dat uit staat of een omvormer zonder zon. Blijft een dagbedrag na
-03:00 leeg, dan is het weer een storing. De sturing verandert niet.
+1. Zon: het EMS leert hoeveel de zon (gemeten aan je eigen PV) de woonkamer
+   opwarmt, per rolluikstand, en neemt dat mee in de voorspelling.
+2. Voorverwarmen: stookt het EMS de airco, dan een halve graad hoger vlak
+   voor een duur blok en een halve graad lager in een duur kwartier.
+3. Rolluik isolatie: nieuwe sensor die "dicht" zegt als koude wind
+   aantoonbaar warmte kost en er geen zon meer binnenkomt.
+4. Thuiskomst: is niemand thuis en komt iemand naar huis, dan gaat de airco
+   op tijd aan zodat het warm is bij binnenkomst.
 
-Ook in deze update (v5.65 - het dagritme van de airco):
-Het EMS leert uit jullie eigen bediening van de woonkamer-airco, apart voor
-werkdagen en het weekend (vanaf 3 keer):
-- hoe laat jullie 's ochtends warmte willen en op welke temperatuur;
-- hoe laat de airco 's avonds uit gaat.
-
-Met de knop Airco automaat aan:
-- 's ochtends zet het EMS de airco zo vroeg aan dat het op het geleerde
-  moment warm is. Hoe vroeg volgt uit de voorspelde temperatuur en hoe snel
-  de airco de kamer opwarmt;
-- 's avonds op de geleerde bedtijd gaat hij uit.
-
-Wat het EMS zelf doet, telt niet mee in het leren. Zet je een ochtend die
-het EMS aanzette weer uit, dan leert het dat die niet gewenst was.
-Te zien bij de sensor "Airco besluit", attribuut "dagritme".
+Alles wat de airco aanstuurt alleen met de knop Airco automaat aan.

@@ -132,3 +132,38 @@ def overzicht(residuen: dict) -> list[dict]:
                 }
             )
     return uit
+
+
+# --- v5.66: rolluiken als isolatie ------------------------------------------
+
+ISOLATIE_ZONHOOGTE_GRADEN = 8.0
+ISOLATIE_MIN_VERLIES_C_PER_UUR = -0.10
+ISOLATIE_MIN_VERSCHIL_C = 5.0
+
+
+def isolatie_advies(
+    wind_correctie_c_per_uur, zon_klasse, zonhoogte, buiten_c, binnen_c, wind_label_nu=None
+) -> dict:
+    """Rolluiken eerder dicht tegen koude wind? (v5.66)
+
+    Alleen als het EMS heeft GELEERD dat deze wind de woonkamer merkbaar
+    sneller laat afkoelen (minstens 0,1 °C per uur extra), het buiten
+    minstens 5 graden kouder is, er geen zon van betekenis meer binnenkomt
+    en de zon laag staat (onder 8°, het laatste uur voor zonsondergang en
+    later). Overdag met zon blijven ze open: dan levert het raam meer warmte
+    op dan het kost.
+    """
+    redenen = []
+    if wind_correctie_c_per_uur is None:
+        return {"stand": "open", "reden": "nog niet geleerd wat deze wind kost"}
+    if wind_correctie_c_per_uur > ISOLATIE_MIN_VERLIES_C_PER_UUR:
+        return {"stand": "open", "reden": "deze wind kost weinig warmte"}
+    if buiten_c is None or binnen_c is None or binnen_c - buiten_c < ISOLATIE_MIN_VERSCHIL_C:
+        return {"stand": "open", "reden": "buiten niet koud genoeg"}
+    if zon_klasse not in (None, "zwak"):
+        return {"stand": "open", "reden": "er komt nog zon binnen"}
+    if zonhoogte is None or zonhoogte >= ISOLATIE_ZONHOOGTE_GRADEN:
+        return {"stand": "open", "reden": "zon staat nog hoog"}
+    redenen.append(f"wind {wind_label_nu or ''} kost {abs(wind_correctie_c_per_uur):.2f} °C per uur".replace("  ", " "))
+    redenen.append(f"buiten {buiten_c:.1f} °C, binnen {binnen_c:.1f} °C")
+    return {"stand": "dicht", "reden": "; ".join(redenen)}

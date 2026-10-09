@@ -164,6 +164,7 @@ async def async_setup_entry(
         # v5.19: de cockpit, die meebeweegt met de metingen.
         CockpitSensor(coordinator, entry.entry_id),
         AircoBesluitSensor(coordinator, entry.entry_id),
+        RolluikIsolatieSensor(coordinator, entry.entry_id),
         MeetlogSensor(coordinator, entry.entry_id),
         DiagnoseGezondheidSensor(coordinator, entry.entry_id),
         DiagnoseSturingSensor(coordinator, entry.entry_id),
@@ -2453,6 +2454,8 @@ class ClimateForecastSensor(SensorEntity, RestoreEntity):
             "geleerde_cellen": self._coordinator.climate_rate_history,
             # v5.64: wat er over wind geleerd is.
             "wind": self._coordinator.get_klimaat_wind(),
+            # v5.66: wat er over de zon geleerd is.
+            "zon": self._coordinator.get_klimaat_zon(),
             "note": self._coordinator.climate_forecast_note,
             # v0.63.95, gevraagd: "zijn er zaken waardoor ik de
             # voorspelling kan verbeteren" - geleerde bias-correctie op
@@ -5025,6 +5028,29 @@ class AircoBesluitSensor(_CoordinatorDiagnosticSensor):
         # v5.65: wat er van jullie dagritme geleerd is.
         uit["dagritme"] = self._coordinator.get_airco_ritme()
         return uit
+
+
+class RolluikIsolatieSensor(_CoordinatorDiagnosticSensor):
+    """Rolluiken eerder dicht tegen koude wind? (v5.66)
+
+    "dicht" of "open", met de reden. Stuurt zelf niets: de rolluik-
+    automatisering leest hem.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Rolluik isolatie"
+    _attr_icon = "mdi:window-shutter-alert"
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        super().__init__(coordinator, entry_id, "rolluik_isolatie")
+
+    @property
+    def native_value(self) -> str:
+        return self._coordinator.get_rolluik_isolatie()["stand"]
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return {"reden": self._coordinator.get_rolluik_isolatie()["reden"]}
 
 
 class CockpitSensor(_CoordinatorDiagnosticSensor):

@@ -1671,6 +1671,14 @@ views:
       tap_action:
         action: more-info
     - type: custom:mushroom-template-card
+      entity: sensor.woonkamer_energy_management_system_rolluik_isolatie
+      primary: Rolluik isolatie
+      secondary: '{{ states(''sensor.woonkamer_energy_management_system_rolluik_isolatie'') }}: {{ state_attr(''sensor.woonkamer_energy_management_system_rolluik_isolatie'', ''reden'') }}'
+      multiline_secondary: true
+      icon: mdi:window-shutter-alert
+      tap_action:
+        action: more-info
+    - type: custom:mushroom-template-card
       primary: Klimaatmodel
       secondary: '{% set s = (state_attr(''sensor.woonkamer_energy_management_system_gacs_zelfbeoordeling'', ''samenvattingen'') or {}).get(''klimaat'') or {} %}{{ s.get(''zin'', ''Nog geen gegevens.'') }}'
       multiline_secondary: true

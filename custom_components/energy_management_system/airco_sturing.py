@@ -242,3 +242,48 @@ def _uitkomst(actie, tekst, redenen, doel_c, aanzet_c) -> dict:
         "doel_c": doel_c,
         "aanzet_c": aanzet_c,
     }
+
+
+# --- v5.66: voorverwarmen op goedkope stroom ---------------------------------
+
+BUFFER_C = 0.5
+BUFFER_VOORUIT_UREN = 3
+BUFFER_MIN_VERSCHIL_EUR = 0.05
+BUFFER_VERHOUDING = 0.8
+
+
+def buffer(doel_c: float | None, prijs_nu: float | None, komende: list) -> dict:
+    """Het huis als warmtebuffer (v5.66, gevraagd: "voorverwarmen op goedkope
+    stroom").
+
+    `komende`: de prijzen van de komende `BUFFER_VOORUIT_UREN` uur, na dit
+    kwartier. Komt er een duur blok aan en is het nu duidelijk goedkoper
+    (minstens 5 cent en hoogstens 80% van de duurste), dan een halve graad
+    hoger: de kamer slaat warmte op voor straks. Is het nu juist het dure
+    blok (de goedkoopste komende prijs is minstens 5 cent en 20% lager), dan
+    een halve graad lager: de opgeslagen warmte opmaken en stoken als het
+    weer goedkoop is. Daartussen: het gewone doel.
+
+    Altijd binnen een halve graad van wat jullie zelf kiezen.
+    """
+    if doel_c is None or prijs_nu is None or not komende:
+        return {"doel_c": doel_c, "reden": None}
+    duurst = max(komende)
+    goedkoopst = min(komende)
+    if duurst - prijs_nu >= BUFFER_MIN_VERSCHIL_EUR and prijs_nu <= duurst * BUFFER_VERHOUDING:
+        return {
+            "doel_c": round(doel_c + BUFFER_C, 1),
+            "reden": (
+                f"voorverwarmen: nu {prijs_nu * 100:.0f} ct, straks tot "
+                f"{duurst * 100:.0f} ct - een halve graad warmer"
+            ),
+        }
+    if prijs_nu - goedkoopst >= BUFFER_MIN_VERSCHIL_EUR and goedkoopst <= prijs_nu * BUFFER_VERHOUDING:
+        return {
+            "doel_c": round(doel_c - BUFFER_C, 1),
+            "reden": (
+                f"duur kwartier: nu {prijs_nu * 100:.0f} ct, straks "
+                f"{goedkoopst * 100:.0f} ct - een halve graad lager"
+            ),
+        }
+    return {"doel_c": doel_c, "reden": None}

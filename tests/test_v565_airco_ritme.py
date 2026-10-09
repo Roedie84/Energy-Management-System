@@ -155,3 +155,113 @@ def test_ritme_wordt_bewaard():
     from custom_components.energy_management_system.const import PERSISTED_PLAIN_FIELDS
 
     assert "airco_ritme" in PERSISTED_PLAIN_FIELDS
+
+
+# --- v5.66: voorverwarmen op goedkope stroom ---------------------------------
+
+from custom_components.energy_management_system import airco_sturing  # noqa: E402
+
+
+def test_buffer_hoger_voor_een_duur_blok():
+    b = airco_sturing.buffer(19.0, 0.20, [0.22, 0.35, 0.40])
+    assert b["doel_c"] == 19.5 and "voorverwarmen" in b["reden"]
+
+
+def test_buffer_lager_in_een_duur_kwartier():
+    b = airco_sturing.buffer(19.0, 0.40, [0.38, 0.25, 0.22])
+    assert b["doel_c"] == 18.5
+
+
+def test_buffer_vlak_bij_gelijke_prijzen():
+    assert airco_sturing.buffer(19.0, 0.25, [0.26, 0.27, 0.24])["doel_c"] == 19.0
+    assert airco_sturing.buffer(None, 0.25, [0.40])["doel_c"] is None
+
+
+def _met_prijzen(c, nu, nu_prijs, later):
+    c._get_forecast_entries = lambda *a, **k: [
+        (nu + timedelta(minutes=15 * (i + 1)), nu + timedelta(minutes=15 * (i + 2)), p)
+        for i, p in enumerate(later)
+    ]
+    c.huidige_prijs_eur_per_kwh = lambda now=None: nu_prijs
+
+
+def test_buffer_op_een_nieuw_verwarmen(make_coordinator):
+    c = make_coordinator({})
+    nu = _op(3, 17, 0)
+    _met_prijzen(c, nu, 0.20, [0.30, 0.40])
+    uit = c._airco_buffer_ronde(nu, {"actie": "verwarmen", "doel_c": 21.0, "tekst": "t", "redenen": []}, "off")
+    assert uit["doel_c"] == 21.5 and uit["basis_doel_c"] == 21.0
+
+
+def test_buffer_stelt_lopende_ems_airco_bij_maar_niet_handmatig(make_coordinator):
+    c = make_coordinator({})
+    nu = _op(3, 17, 0)
+    _met_prijzen(c, nu, 0.20, [0.30, 0.40])
+    c.airco_door_ems = True
+    c._airco_handmatig_bij = None
+    c._airco_laatste_ems = {"stand": "heat", "doel": 19.0, "basis": 19.0}
+    basis = {"actie": "niets", "doel_c": 21.0, "tekst": "De airco verwarmt al.", "redenen": []}
+    uit = c._airco_buffer_ronde(nu, basis, "heat")
+    assert uit["actie"] == "verwarmen" and uit["doel_c"] == 19.5
+    c._airco_laatste_ems = {"stand": "heat", "doel": 19.5, "basis": 19.0}
+    assert c._airco_buffer_ronde(nu, basis, "heat")["actie"] == "niets"
+    c._airco_handmatig_bij = "thuis"
+    c._airco_laatste_ems = {"stand": "heat", "doel": 19.0, "basis": 19.0}
+    assert c._airco_buffer_ronde(nu, basis, "heat")["actie"] == "niets"
+
+
+# --- v5.66: warm bij thuiskomst ----------------------------------------------
+
+def _thuis(r, **extra):
+    basis = dict(
+        koers="towards", km=10.0, aanwezigheid="weg", woonkamer_c=18.0, doel_c=21.0,
+        tempo_c_per_uur=3.0, advies="airco", airco_stand="off", door_ems=False,
+    )
+    basis.update(extra)
+    return ar.thuiskomst(r, **basis)
+
+
+def test_thuiskomst_aan_als_reistijd_korter_dan_opwarmen():
+    r = ar.leeg()
+    # 3 graden tekort / 3 °C per uur = 60 min; 10 km / 50 km/h = 12 min.
+    assert _thuis(r)["actie"] == "verwarmen"
+    # 60 km weg: buiten bereik.
+    assert _thuis(r, km=60.0) is None
+    # 1 graad tekort / 3 = 20 min opwarmen, 25 km = 30 min reizen: nog niet.
+    assert _thuis(r, km=25.0, woonkamer_c=20.0) is None
+
+
+def test_thuiskomst_niet_als_iemand_thuis_is_of_weggaat():
+    r = ar.leeg()
+    assert _thuis(r, aanwezigheid="thuis") is None
+    assert _thuis(r, koers="away_from") is None
+    assert _thuis(r, advies="cv") is None
+
+
+def test_thuiskomst_houdt_ems_airco_aan_tijdens_naderen():
+    r = ar.leeg()
+    assert _thuis(r, airco_stand="heat", door_ems=True)["houd_aan"]
+
+
+def test_reissnelheid_wordt_geleerd():
+    r = ar.leeg()
+    t = _op(3, 17, 0)
+    vorige = None
+    for i, km in enumerate([20.0, 15.0, 10.0, 5.0]):
+        moment = t + timedelta(minutes=5 * i)
+        ar.noteer_nadering(r, vorige, moment, km)
+        vorige = (moment, km)
+    assert ar.reissnelheid(r) == 60.0
+
+
+def test_thuiskomst_in_de_coordinator(make_coordinator, hass):
+    c = make_coordinator({})
+    hass.states.set("sensor.thuis_nearest_direction_of_travel", "towards", {})
+    hass.states.set("sensor.thuis_nearest_distance", "8000", {"unit_of_measurement": "m"})
+    assert c._nadering() == ("towards", 8.0)
+    c.presence_state = "weg"
+    c.living_room_current_temp_c = 18.0
+    c._airco_handmatig_bij = None
+    c.get_verwarmingsadvies = lambda: {"advies": "airco"}
+    basis = {"actie": "niets", "tekst": "x", "redenen": [], "redenen_tekst": "", "doel_c": 21.0}
+    assert c._airco_thuiskomst_ronde(_op(3, 17, 0), basis, "off")["actie"] == "verwarmen"

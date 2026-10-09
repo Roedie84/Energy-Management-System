@@ -31929,3 +31929,38 @@ gas) stonden 00:02-01:07 op `unknown`. De configuratiecontrole noemde dat
   `geen_waarde`.
 
 Sturing ongewijzigd. Nieuw: `tests/test_v5651_prijsdag_slaapt.py`.
+
+## v5.66 — zon, voorverwarmen, rolluik-isolatie en thuiskomst
+
+Gevraagd: "Daarna stap 1 t/m 5". Stap 1 t/m 4 in deze versie.
+
+**1. Zon in de klimaatprojectie** (`klimaat_zon.py`)
+- Zelfde opzet als de wind: per rolluikstand en zonklasse (PV-opbrengst
+  als deel van de hoogste ooit gemeten: zwak 5-30%, matig 30-60%, sterk
+  vanaf 60%) hoeveel sneller de kamer opwarmt dan haar cel gewoonlijk, met
+  de airco uit. Per uur van de projectie uit de verwachte PV.
+- Niet dubbel tellen: de wind leert alleen nog in uren met weinig zon; de
+  zon leert na aftrek van de bekende windcorrectie.
+- Bewaard veld `klimaat_zon_residuen`; attribuut `zon` van de klimaatsensor.
+
+**2. Voorverwarmen op goedkope stroom** (`airco_sturing.buffer`)
+- Wat het EMS zelf stookt: een halve graad hoger als er binnen 3 uur een
+  duidelijk duurder blok komt (≥ 5 ct en nu ≤ 80% daarvan), een halve
+  graad lager in een duur kwartier als het straks duidelijk goedkoper is.
+  Nooit verder dan een halve graad van het doel; wat jullie zelf instellen
+  blijft staan.
+
+**3. Rolluiken als isolatie** (`klimaat_wind.isolatie_advies`)
+- Nieuwe sensor "Rolluik isolatie": "dicht" als het EMS heeft geleerd dat
+  de huidige wind ≥ 0,1 °C per uur extra kost, het buiten ≥ 5 graden
+  kouder is, er geen zon van betekenis binnenkomt en de zon onder 8° staat.
+  Stuurt zelf niets; de rolluikautomatisering leest hem.
+
+**4. Warm bij thuiskomst** (`airco_ritme.thuiskomst`)
+- Niemand thuis en iemand komt richting huis (integratie Nabijheid, vanzelf
+  gevonden): de airco gaat aan zodra de reistijd (afstand / geleerde
+  reissnelheid, eerst 50 km/h) korter is dan de opwarmtijd. Binnen 30 km;
+  houdt hem aan zolang iemand nadert.
+
+Laden, ontladen, reserve en marges ongewijzigd. Tests uitgebreid in
+`test_v564_wind.py` en `test_v565_airco_ritme.py`.

@@ -51,6 +51,7 @@ def leeg() -> dict:
         "uit": {"werkdag": {}, "weekend": {}},
         "ochtenden": {"werkdag": [], "weekend": []},
         "ems": {"aan": None, "uit": None},
+        "snelheden": [],
     }
 
 
@@ -68,6 +69,9 @@ def geldig(ritme) -> dict:
         waarde = (ritme.get("ochtenden") or {}).get(soort)
         if isinstance(waarde, list):
             basis["ochtenden"][soort] = [str(d) for d in waarde]
+    snelheden = ritme.get("snelheden")
+    if isinstance(snelheden, list):
+        basis["snelheden"] = [float(v) for v in snelheden if isinstance(v, (int, float))][-HISTORIE:]
     ems = ritme.get("ems")
     if isinstance(ems, dict):
         basis["ems"].update({k: ems.get(k) for k in ("aan", "uit")})
@@ -297,3 +301,86 @@ def overzicht(ritme: dict) -> dict:
         "bedtijd. Alleen met de knop Airco automaat aan."
     )
     return uit
+
+
+# --- v5.66: warm bij thuiskomst --------------------------------------------
+
+THUISKOMST_MIN_KM = 0.3
+THUISKOMST_MAX_KM = 30.0
+SNELHEID_STANDAARD_KMH = 50.0
+SNELHEID_MIN_KMH = 5.0
+SNELHEID_MAX_KMH = 130.0
+THUISKOMST_MARGE_MIN = 5
+
+
+def noteer_nadering(ritme: dict, vorige, nu: datetime, km: float) -> None:
+    """Hoe snel komen jullie naar huis? Uit twee metingen tijdens het
+    naderen (afstand en tijd), begrensd tot een plausibele snelheid."""
+    if not vorige:
+        return
+    t0, km0 = vorige
+    uren = (nu - t0).total_seconds() / 3600
+    if uren <= 0 or uren > 0.5 or km0 is None or km >= km0:
+        return
+    snelheid = (km0 - km) / uren
+    if SNELHEID_MIN_KMH <= snelheid <= SNELHEID_MAX_KMH:
+        ritme["snelheden"].append(round(snelheid, 1))
+        del ritme["snelheden"][:-HISTORIE]
+
+
+def reissnelheid(ritme: dict) -> float:
+    reeks = ritme.get("snelheden") or []
+    return statistics.median(reeks) if len(reeks) >= MIN_KEER else SNELHEID_STANDAARD_KMH
+
+
+def thuiskomst(
+    ritme: dict,
+    *,
+    koers: str | None,
+    km: float | None,
+    aanwezigheid: str | None,
+    woonkamer_c: float | None,
+    doel_c: float | None,
+    tempo_c_per_uur,
+    advies: str | None,
+    airco_stand: str | None,
+    door_ems: bool,
+) -> dict | None:
+    """Iemand komt naar huis terwijl er niemand is (v5.66, gevraagd: "warm
+    bij thuiskomst").
+
+    Zet de airco zo vroeg aan dat de kamer warm is als jullie binnenkomen:
+    de verwachte reistijd (afstand / geleerde reissnelheid, eerst 50 km/h)
+    tegenover de opwarmtijd. Alleen binnen 30 km en als jullie richting huis
+    gaan; draait hij al voor de thuiskomst, dan houdt dit hem aan zolang
+    iemand nadert, ook al zegt de aanwezigheid nog "weg".
+    """
+    if aanwezigheid != "weg" or koers != "towards" or km is None:
+        return None
+    if not THUISKOMST_MIN_KM <= km <= THUISKOMST_MAX_KM:
+        return None
+    snelheid = reissnelheid(ritme)
+    eta_min = round(km / snelheid * 60)
+    if airco_stand == "heat" and door_ems:
+        return {
+            "actie": "niets",
+            "houd_aan": True,
+            "tekst": f"Thuiskomst: iemand is {km:.1f} km van huis, ongeveer {eta_min} min.",
+            "reden": f"thuiskomst over ongeveer {eta_min} min",
+        }
+    if doel_c is None or woonkamer_c is None or advies != "airco" or airco_stand == "heat":
+        return None
+    if woonkamer_c >= doel_c - MARGE_C:
+        return None
+    opwarmen_min = round(voorloop_uren(woonkamer_c, doel_c, tempo_c_per_uur) * 60)
+    if eta_min > opwarmen_min + THUISKOMST_MARGE_MIN:
+        return None
+    return {
+        "actie": "verwarmen",
+        "doel_c": doel_c,
+        "tekst": (
+            f"Thuiskomst: verwarmen tot {doel_c:.1f} °C - iemand is {km:.1f} km van "
+            f"huis, ongeveer {eta_min} min; opwarmen duurt ongeveer {opwarmen_min} min."
+        ),
+        "reden": f"thuiskomst over ongeveer {eta_min} min ({snelheid:.0f} km/h)",
+    }
