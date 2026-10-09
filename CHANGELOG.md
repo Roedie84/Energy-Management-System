@@ -32060,3 +32060,15 @@ uitgezet.
   de oude deed.
 
 Sturing ongewijzigd. Nieuw: `tests/test_v5681_module_vervangen.py`.
+
+## v5.68.2 — melding per accumodule uit te zetten
+
+Gevraagd: "Melding mag zeker aanblijven alleen niet voor het genoemde
+nummer".
+
+- Nieuwe dienst `energy_management_system.accumodule_melding` (`naam`,
+  `melden`): zet de melding "Accumodule loopt uit de pas" uit of weer aan
+  voor één module, op apparaatnaam. Bewaard in `battery_module_stil`.
+- Omdat het op apparaatnaam gaat, wordt een nieuwe module op dezelfde plek
+  vanzelf weer bewaakt (en begint sinds v5.68.1 met een schone lei).
+- De moduletabel toont `melding_uit` per module.

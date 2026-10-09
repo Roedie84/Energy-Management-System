@@ -215,8 +215,35 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     entry.async_on_unload(entry.add_update_listener(async_update_options))
     _async_register_nilm_services(hass)
+    _async_register_module_service(hass)
 
     return True
+
+
+def _async_register_module_service(hass: HomeAssistant) -> None:
+    """De melding "Accumodule loopt uit de pas" per module uit- of weer
+    aanzetten (v5.68.2), op apparaatnaam - een nieuwe module met een andere
+    naam wordt dus vanzelf weer bewaakt."""
+    if hass.services.has_service(DOMAIN, "accumodule_melding"):
+        return
+
+    async def _handle(call: ServiceCall) -> None:
+        naam = str(call.data["naam"]).strip()
+        aan = bool(call.data.get("melden", False))
+        for key, value in hass.data.get(DOMAIN, {}).items():
+            if isinstance(key, str) and key.endswith("_solar_tracker"):
+                continue
+            if hasattr(value, "zet_module_melding"):
+                value.zet_module_melding(naam, aan)
+
+    hass.services.async_register(
+        DOMAIN,
+        "accumodule_melding",
+        _handle,
+        schema=vol.Schema(
+            {vol.Required("naam"): cv.string, vol.Optional("melden", default=False): cv.boolean}
+        ),
+    )
 
 
 def _async_register_nilm_services(hass: HomeAssistant) -> None:

@@ -1,12 +1,9 @@
-EMS v5.68.1 - een vervangen accumodule begint met een schone lei
+EMS v5.68.2 - melding per accumodule uit te zetten
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
 
-- Komt er een nieuwe accumodule op de plek van een oude (bijvoorbeeld de
-  AB3000 00996), dan vergeet het EMS wat het van de oude module had
-  geleerd en begint het voor de nieuwe opnieuw.
-- De melding "Accumodule loopt uit de pas" staat uit; zet hem na de
-  vervanging weer aan bij de meldingen van het EMS.
-
-Ook in v5.68: koude nachten in de accureserve, bewolking uit het
-weerensemble.
+- De melding "Accumodule loopt uit de pas" kan per module uit, met de dienst
+  "Melding per accumodule" (apparaatnaam, bijvoorbeeld AB3000 00996). De
+  andere modules blijven bewaakt.
+- Een nieuwe module op dezelfde plek heeft een andere naam: die wordt
+  vanzelf weer bewaakt en begint met een schone lei.

@@ -3495,6 +3495,8 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "klimaat_zon_residuen": {"type": "plain"},
     # v5.65: het geleerde dagritme van de woonkamer-airco.
     "airco_ritme": {"type": "plain"},
+    # v5.68.2: accumodules (apparaatnaam) zonder melding "loopt uit de pas".
+    "battery_module_stil": {"type": "plain"},
     "digital_twin_accuracy_history": {"type": "plain"},
     "extra_dip_margin_history": {"type": "plain"},
     "fietsladers_charge_duration_history": {"type": "plain"},

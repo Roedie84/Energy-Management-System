@@ -134,3 +134,25 @@ vraag:
       example: Wat zijn de kosten vandaag?
       selector:
         text:
+
+accumodule_melding:
+  name: Melding per accumodule
+  description: >-
+    Zet de melding "Accumodule loopt uit de pas" uit (of weer aan) voor één
+    module, op apparaatnaam. Een nieuwe module met een andere naam wordt
+    vanzelf weer bewaakt.
+  fields:
+    naam:
+      name: Apparaatnaam
+      description: De apparaatnaam van de module, zoals op het tabblad Accumodules.
+      required: true
+      example: AB3000 00996
+      selector:
+        text:
+    melden:
+      name: Melden
+      description: Aan = de melding weer aanzetten voor deze module.
+      required: false
+      default: false
+      selector:
+        boolean:

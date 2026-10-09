@@ -31,3 +31,29 @@ def test_andere_apparaatnaam_wist_de_geschiedenis(make_coordinator):
     assert not c.battery_module_health["1"]["geschiedenis"]
     assert not c.battery_module_health["1"]["cusum"]
     assert c.battery_module_health["2"]["apparaat"] == "AB3000 00123"
+
+
+def test_melding_per_module_uit(make_coordinator):
+    """v5.68.2: "Melding mag zeker aanblijven alleen niet voor het genoemde
+    nummer"."""
+    c = make_coordinator({})
+    c._read_battery_modules = lambda: _modules("AB3000 00996")
+    c._update_battery_module_health(NU)
+    for staat in c.battery_module_health.values():
+        staat["cusum"] = {"temperatuur_afwijking_c": {"drift": True}}
+    verstuurd = []
+    c._dispatch_notification = lambda **k: verstuurd.append(k.get("message") or "")
+    c.zet_module_melding("AB3000 00996", False)
+    c._evaluate_new_notifications(NU)
+    drift = [m for m in verstuurd if "wijkt" in m and "Module" in m]
+    assert drift and "1" not in drift[0].split("wijkt")[0]
+    c.zet_module_melding("AB3000 00996", True)
+    assert c.battery_module_stil == []
+
+
+def test_dienst_is_beschreven():
+    from pathlib import Path
+
+    import custom_components.energy_management_system as pkg
+
+    assert "accumodule_melding:" in (Path(pkg.__file__).parent / "services.yaml").read_text()

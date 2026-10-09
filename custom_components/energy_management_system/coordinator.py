@@ -1686,7 +1686,7 @@ class EnergyManagementSystemCoordinator:
         # de per-ronde-historie van vóór v5.58 eenmalig wordt gewist.
         # v5.63.1: ook de open waarnemingen (JSON-veilig) en of ze na een herstart al terug zijn
         # (zie `_herstel_airco_waarnemingen`); op één regel vanwege de groeigrens van __init__.
-        self._temp_prediction_pending, self.airco_bakje_laatste_start, self.airco_leer_versie, self.airco_open_waarnemingen, self._airco_waarnemingen_hersteld, self._klimaat_anker_wind, self._klimaat_wind_per_uur, self.airco_ritme, self._klimaat_anker_zon, self._nadering_vorige, self._airco_uur_acc, self.klimaat_zon_residuen, self.klimaat_wind_residuen = [], {}, None, [], False, None, {}, {}, None, None, None, {}, {}
+        self._temp_prediction_pending, self.airco_bakje_laatste_start, self.airco_leer_versie, self.airco_open_waarnemingen, self._airco_waarnemingen_hersteld, self._klimaat_anker_wind, self._klimaat_wind_per_uur, self.airco_ritme, self._klimaat_anker_zon, self._nadering_vorige, self._airco_uur_acc, self.battery_module_stil, self.klimaat_zon_residuen, self.klimaat_wind_residuen = [], {}, None, [], False, None, {}, {}, None, None, None, [], {}, {}
         self.living_room_current_temp_c: float | None = None
         self.living_room_current_humidity_percent: float | None = None
         # Klimaat-tabblad: geleerde temperatuur-projectie (v0.63.56).
@@ -5084,10 +5084,13 @@ class EnergyManagementSystemCoordinator:
                 "beschaduwing, vervuiling of een uitgevallen streng.",
             )
 
+        # v5.68.2: modules waarvoor de melding is uitgezet (op apparaatnaam).
+        stil = set(self.battery_module_stil or [])
         modules_met_drift = [
             nummer
             for nummer, gegevens in (self.battery_module_health or {}).items()
-            if self._module_drift_velden(nummer, gegevens)
+            if gegevens.get("apparaat") not in stil
+            and self._module_drift_velden(nummer, gegevens)
         ]
         if modules_met_drift:
             stuur(
@@ -32046,6 +32049,14 @@ class EnergyManagementSystemCoordinator:
             velden.remove("cel_delta_afwijking_v")
         return velden
 
+    def zet_module_melding(self, naam: str, melden: bool) -> None:
+        """De melding per accumodule uit of weer aan (v5.68.2) - zie de
+        dienst `accumodule_melding`."""
+        stil = [n for n in (self.battery_module_stil or []) if n != naam]
+        if not melden and naam:
+            stil.append(naam)
+        self.battery_module_stil = stil
+
     def get_battery_module_table(self) -> list[dict]:
         """Overzicht per module voor het dashboard (v0.63.123) - live
         waarden plus de status van de drift-detectie."""
@@ -32058,6 +32069,8 @@ class EnergyManagementSystemCoordinator:
                     **module,
                     "waarschuwingen": staat.get("waarschuwingen", []),
                     "drift_op": drift,
+                    # v5.68.2: melding uitgezet voor deze module.
+                    "melding_uit": module.get("naam") in (self.battery_module_stil or []),
                     # v5.35: "1 (AB3000 00996)" - welke module het is.
                     "label": (
                         f"{module['module']} ({module['naam']})"
