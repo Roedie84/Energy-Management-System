@@ -163,3 +163,28 @@ datumtijd,type,kpi,waarde,n,opmerking
 2026-10-08 23:40,TUSSEN,ems_mc_2150_2210_max_pct,0,1,"H-EMS-6: 22:00-meetpunt niet vervuild (eerste mc_22u-avond)"
 2026-10-08 23:40,TUSSEN,ems_mc_sprong_2300_max_pct,4.4,1,"23:00-23:21 zonder piek; livecorrectie op avond boven profiel"
 2026-10-08 23:40,TUSSEN,ems_herstarts,5,1,"19:51 20:19 21:12 22:00 22:02"
+2026-10-08,DAG,ems_pv_kwh,9.580,1,solaredge_i1_ac_energy statistics
+2026-10-08,DAG,ems_net_import_kwh,1.462,1,p1 statistics
+2026-10-08,DAG,ems_net_export_kwh,1.525,1,p1 statistics
+2026-10-08,DAG,ems_accu_ontladen_kwh,5.846,1,solarflow aggr
+2026-10-08,DAG,ems_accu_laden_kwh,6.563,1,solarflow aggr
+2026-10-08,DAG,ems_huisverbruik_kwh,8.80,24,imp-exp+ontl-laden+pv per uur
+2026-10-08,DAG,ems_nacht_export_00_07_kwh,0.433,7,"laatste nacht met regelverschuiving 50 W (L-EMS-005 pas ~11:00 ingesteld)"
+2026-10-08,DAG,ems_pv_afwijking_pct,-6.1,1,"day-ahead Solcast 10.21, werkelijk 9.58; bewolking 95.6%"
+2026-10-08,DAG,ems_tekort_nacht_kwh,0,1,"nacht 07->08 geen tekort"
+2026-10-08,DAG,ems_verkoop_onder_reserve,0,1,"alleen default_smart + 1x grid_charging_low_solar 13:45"
+2026-10-08,DAG,ems_verbruik_uur_mae_kwh,0.155,24,"profiel = mediaan 7 andere dagen (01-07/10), leave-one-out"
+2026-10-08,DAG,ems_verbruik_dag_bias_kwh,0.41,1,"werkelijk 8.80 tegen profielsom 8.39"
+2026-10-08,DAG,ems_nacht_22_09_kwh,2.45,11,"nacht 07->08; 7 nachten 2.40-2.66 (gem. 2.48)"
+2026-10-08,DAG,ems_herstarts,20,20,"06:23-22:02 (unknown-wissels last_decision_reason)"
+2026-10-08,DAG,ems_achteraf_werkelijk_min_zonder_accu_eur,0.03,1,"slijtage 4.22 ct, uur, salderen; 0 ct: -0.21"
+2026-10-08,DAG,ems_achteraf_optimum_min_zonder_accu_eur,-0.61,1,"zelfde model; 0 ct: -1.01; prijs 22.0 ct (14 u) - 40.9 ct (20 u)"
+2026-10-08,DAG,ems_dagrapport_dekking_pct,98.5,74,"gemeten 74/96, bruikbaar 47, pv_onbekend 27 (00-07 nog cloudteller)"
+2026-10-08,DAG,ems_accu_max_soc_pct,86,1,"niet vol; minimaal 27% (09-10 u)"
+2026-10-08,DAG,ems_water_dag_l,215,1,"L-EMS-007: geschiedenis +1 waarde bij dagwissel"
+2026-10-09 03:40,TUSSEN,ems_nacht_export_wh_per_u,23.7,3,"00-03 u 27/22/22 Wh/u na L-EMS-005 (was 59-65)"
+2026-10-09 03:40,TUSSEN,ems_quooker_nachtimport_wh_per_u,12,10,"00-07 08-10 en 00-03 09-10: vrijwel alle nachtimport = Quooker-opwarmen (~6 Wh per keer, 2x/u); voor en na regelsensor-wissel gelijk"
+2026-10-09 03:40,TUSSEN,ems_mc_tot_blok_pct,0,1000,"nacht 08->09: beschikbaar 2.51, nodig tot blok 12:15 1.73 -> marge +0.78 (23:40 geschat +0.82)"
+2026-10-09 03:40,TUSSEN,ems_pv_mae_30d_pct,9.49,30,"bias -6.2; 14 d 5.5/-2.7; 7 d 6.0/-2.5 (day-ahead Solcast)"
+2026-10-09 03:40,TUSSEN,ems_achteraf_5d_werkelijk_min_zonder_eur,1.19,5,"29/9,30/9,1/10,7/10,8/10; optimum -2.81"
+2026-10-09 03:40,TUSSEN,ems_meetlog_kwartier_pv_nacht,measured,1,"03:15 pv measured -> L-EMS-003 werkt ook 's nachts"

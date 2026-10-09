@@ -29,3 +29,10 @@
 | Meetlog kwartierdekking na L-EMS-003 | 100 % | 08-10 11:15 | 08-10 11:45 |
 | Accurendement AC→AC (Zendure-tellers) | 81,9 % (30 d) · 84,1 % (7 d); geleerd 84,2 % | 08-09..07-10, 215,6 kWh in | 08-10 15:40 |
 | MC tot blok overdag buiten pieken | 0-1 % · na huishoudpieken 21-92 % (20 min/dag) | 08-10 07:00-19:40 | 08-10 19:40 |
+| PV-voorspelling MAE (dag, day-ahead Solcast) | 9,5 % (30 d) · 5,5 % (14 d) · 6,0 % (7 d); bias −6,2 / −2,7 / −2,5 | 09-09..08-10 | 09-10 03:40 |
+| Verbruik uurprofiel MAE | 0,105-0,155 kWh/u | 07-10, 08-10 | 09-10 03:40 |
+| Nachtverbruik 22-09 | 2,48 kWh (2,40-2,66) | 7 nachten t/m 07→08 | 09-10 03:40 |
+| Nachtimport door Quooker-opwarmen | ~12 Wh/u (~6 Wh × 2/u) | 08-10, 09-10 00-03 | 09-10 03:40 |
+| Export tijdens ontlading na L-EMS-005 | 22-27 Wh/u (was 59-65) | 08→09 00-03 u | 09-10 03:40 |
+| Achteraf (uur, 4,22 ct): werkelijk / optimum t.o.v. zonder accu | +0,24 / −0,56 €/dag | 5 dagen | 09-10 03:40 |
+| Meetlog kwartieren gemeten | 74/96 (20 herstarts) · 76/96 (15) | 08-10, 07-10 | 09-10 03:40 |

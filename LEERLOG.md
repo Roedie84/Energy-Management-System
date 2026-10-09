@@ -113,3 +113,18 @@ laatste ronde: 08-10 19:40, gemeten t/m 08-10 19:44
 - Geen release (tussenronde, niets acuut; v5.54-5.56 vandaag al uitgebracht en geïnstalleerd).
 
 laatste ronde: 08-10 23:40, gemeten t/m 08-10 23:44
+
+## 09-10 03:40 · dagafsluiting 08-10
+- Dag 08-10: PV 9,58 kWh (day-ahead Solcast 10,21 → −6,1% bij 96% bewolking), import 1,46, export 1,53, accu 6,56 in / 5,85 uit, huis 8,80 kWh; accu max 86% (niet vol). Beslissingen: `default_smart` + 1× `grid_charging_low_solar` (13:45) → 0× verkoop onder de reserve (harde regel gehaald). 20 HA-herstarts. Nacht 07→08 geen tekort; tekortnachten 7 d nog 3 (4,24 kWh).
+- PV 30 d MAE 9,5% (bias −6,2), 14 d 5,5% (−2,7), 7 d 6,0% (−2,5); 10 van de laatste 14 dagen te hoog voorspeld. H-EMS-2 (klein, stabiel) blijft; integratie leert zelf −5,7%.
+- Verbruik: uurprofiel MAE 0,155 kWh/u (07-10: 0,105), dag +0,41 kWh boven profiel. Nacht 22-09 opvallend stabiel: 7 nachten 2,40-2,66 kWh (gem. 2,48).
+- H-EMS-4 (achteraf, uur, 4,22 ct): 08-10 werkelijk +0,03 € t.o.v. zonder accu, optimum −0,61 €; prijs 22,0 ct (14 u) tot 40,9 ct (20 u). 5 dagen samen werkelijk +1,19 €, optimum −2,81 €. Gat zit in laden in het middagdal en leveren in de avondpiek; de reserve (+40-45% marge, lange horizon) hield verkoop tegen — bewust. n=5, door tot 14 dagen.
+- Quooker (19:40-opmerking): de nachtimport (~12 Wh/u) is vrijwel geheel het opwarmen van de Quooker (~6 Wh per keer, 2× per uur, 5-minutenstatistiek) — vóór en ná de regelsensor-wissel van 18:26 gelijk; de Zendure kan pulsen van ~12 s niet volgen. ~0,3 kWh/dag, geen voorstel.
+- **L-EMS-005 effect (nacht):** export tijdens ontlading 00-03 u 27/22/22 Wh/u (was 59-65) → −60%. Volledige nacht 00-07 in de volgende ronde.
+- **L-EMS-003:** dagrapport 08-10 nog 27× `pv_onbekend` (00-07, cloudteller tot 07:04); vannacht 03:15 pv `measured` → nacht werkt. Dagdekking 09-10 is de echte toets.
+- **Meetfout gevonden en gebouwd (L-EMS-009, v5.57):** dagrapport 08-10 `kwartieren_gemeten` 74 van 96. Oorzaak in de code: na een herstart is er geen beginstand, dus valt het kwartier van elke herstart weg (18 kwartieren met een herstart). v5.57 bewaart de tellerstanden per grens en rekent dat kwartier alsnog uit (alleen bij precies 1 kwartier en dezelfde tellers; accutellers `partially_estimated`). Plus `kwartieren_niet_gemeten`/`_over_herstart` en `kalibratie_22u.laatste_avond` (kandidaat van 23:40). 4997 tests groen, workflow groen, HACS ververst.
+- **L-EMS-007 dagwissel geverifieerd:** `geschiedenis_liter_per_dag` +1 waarde (215 L = utility_meter last_period 0,215 m³). Water loopt sinds 03:07 ~9 L/min (161 L om 03:45) — tijdstip gelijk aan de vorige ontharder-regeneratie (29-09 03:07); herkenning volgende ronde toetsen.
+- **Nieuw voorstel L-EMS-010:** sinds v5.55 heten de nachten →03-10 en →04-10 "verkocht met winst … bewust, geen stuurfout", maar die verkoop gebeurde onder de reserve door de piekregel-bug (hersteld v5.28.4, zie 07-10 23:45). Voorstel: verkoop onder de reserve nooit als "bewust" labelen.
+- Nacht 08→09 om 03:41: beschikbaar 2,51, nodig tot blok 12:15 1,73 → marge +0,78 (23:40 geschat +0,82); MC tot blok 0%. 09-10 zon 2,39 kWh (somber).
+
+laatste ronde: 09-10 03:40, gemeten t/m 09-10 03:50

@@ -21,6 +21,7 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 
 ## L-EMS-003 · PV-energieteller van de cloud-dagteller naar de Modbus-teller
 - Status: **akkoord 08-10** → **gebouwd v5.46**, geïnstalleerd 07:03, instelling omgezet 07:04 — eerste meting: kwartier 07:15 pv `measured`, dagopwek 0,0 (geen sprong). Dekking (`kwartieren_bruikbaar` ≥ 90) toetsen in de dagafsluiting van 08-10.
+- 09-10 03:40: dagrapport 08-10 bruikbaar 47/74 met 27× `pv_onbekend` (00-07, vóór de omzetting) → verwacht; 09-10 03:15 pv `measured` 's nachts. Toets: dagrapport 09-10 `pv_onbekend` ≈ 0. NB `kwartieren_gemeten` 74/96 komt van herstarts → L-EMS-009.
 - Bij de controle vooraf (08-10): eenheid Wh/kWh wordt overal goed omgerekend, maar de premisse "raakt alleen de meetlaag" klopte niet: de dagopwek (`pv_production_today_kwh`) rekent vanaf een bewaard dagbegin van de OUDE meter. Cloud = dagteller (11,868 kWh), Modbus = levensteller (23.426 kWh) → dagopwek ~23.414 kWh. v5.46 onthoudt welke meter bij het dagbegin hoort en ijkt opnieuw bij een andere meter.
 - Na installatie v5.46: `ha_set_integration(entry_id=01KYVA81YPQF0PXKHSWFFQS1E5, config={"pv_energy_sensor_entity": "sensor.solaredge_i1_ac_energy"})`, options-dict voor/na vergelijken, logs controleren, dagopwek dezelfde dag controleren (geen sprong).
 - Onderbouwing: 07-10/08-10: `pv_energy_sensor_entity` = `sensor.solaredge_production_energy` (SolarEdge-cloud, Wh, dagteller) staat elke nacht 00:04-07:07 op unknown en meldt overdag elke 15 min op :02/:17. De kwartierenergie markeert pv dan `invalid`; het schaduw-dagrapport slaat die ~28 nachtkwartieren over (dekking 80,6% op 07-10). `sensor.solaredge_i1_ac_energy` (Modbus, kWh, levenslang) heeft altijd een stand.
@@ -36,6 +37,7 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 
 ## L-EMS-005 · smart-stand: nachtelijke teruglevering van −50 W naar −20 W
 - Status: **akkoord 08-10** → **ingesteld door Ruud (08-10, vóór 11:10)**: regelsensor −1003 W bij P1 −1023 W (+20 W, was +50). Effect meten: nacht 08→09 export 00-07 (basis 0,43-0,45 kWh)
+- 09-10 03:40: nacht 08→09 00-03 u 27/22/22 Wh/u (basis 08-10 59-65 Wh/u, 00-07 0,433 kWh) → −60%; volledige nacht in de volgende ronde.
 - Onderbouwing: elk nachtuur gemiddeld −47..−53 W, ≈ 0,5 kWh accu-energie per nacht het net op (~27 ct).
 - Waar het zit: niet in EMS-code/-optie en niet in zendure_ha of de firmware. zendure_ha regelt op p1meter `sensor.hw_p1_vermogen_100w` ("HW P1 Vermogen -50W", platform `rest`, unique_id `HW_P1_Vermogen_Min100`), een eigen REST-sensor in de HA-YAML die de HomeWizard-P1 + 50 W meldt (live 08-10: P1 −54 W, regelsensor −4 W). De Zendure houdt die op 0 → echte P1 −50 W.
 - Aanpassen: in de YAML van die REST-sensor de +50 in de value_template vervangen door +20 (naam evt. mee), daarna Ontwikkelhulpmiddelen → YAML → REST-entiteiten herladen (geen herstart nodig). EMS meet de verschuiving live (`regelverschuiving_kw`, v5.20) en rekent vanzelf met 20 W. NB: `TEKORT_IMPORT_MIN_W` = 50 W blijft de vloer in de tekorttelling (export ≤ 50 W telt niet als verkoop) — onschadelijk.
@@ -45,6 +47,7 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 
 ## L-EMS-006 · verwacht tekort en tekortkans splitsen: tot het blok / na het blok (lange horizon)
 - Status: **gebouwd v5.47**, geïnstalleerd 10:55 — eerste meetpunt gehaald 11:41 (tot blok 0 kWh / 0%, na blok 2,44 apart); Brier-vergelijking na 7 avonden (vanaf 08-10 22:00)
+- 09-10 03:40: nacht 08→09 om 03:41 MC tot blok 0% (marge +0,78 kWh), incl. lange horizon 100% (na-blok 4,45 kWh) — splitsing doet wat hij moet. `kalibratie_22u` nog 0 nachten (dagrecord 09-10 om 09:00); v5.57 toont `laatste_avond` al dezelfde avond.
 - 08-10 23:40: eerste `mc_22u`-avond: MC 21:12-22:10 doorlopend 0,0% → niet vervuild; dagrecord 09-10 moet `mc_22u.kans_pct` 0 met `basis: tot_blok` dragen.
 - 08-10 19:40: overdag MC tot blok 0-1%, behalve 3 korte sprongen (21-92%, samen 20 min) direct na huishoudpieken door de livecorrectie → H-EMS-6; let bij de Brier op vervuilde 22:00-standen.
 - (eerder: gepland, zelf bouwen: rapportage en meetbaarheid; raakt de sturing niet)
@@ -57,6 +60,7 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 
 ## L-EMS-007 · watersensoren: eenheid m³ → liter, geen nepdag bij eenheidswissel
 - Status: **gebouwd v5.47**, geïnstalleerd 10:55 — meetpunten 11:41 en 15:40 (na herstart 0,105 m³ → 105 L) gehaald (`vandaag_liter` 60 = meter 60 L na herstart met m³-tussenstand; laatste dagwaarde 357 = werkelijk 07-10); dagwissel en 7 dagen nog toetsen
+- 09-10 03:40: dagwissel 08→09 goed (+1 waarde: 215 L = utility_meter `last_period` 0,215 m³). Nog 6 dagwissels.
 - Onderbouwing: `sensor.water_verbruik_vandaag` (utility_meter, optie `water_daily_total_sensor_entity`) meldt na elke herstart eerst m³ en direct daarna L (recorder 08-10 07:03, 08:54, 09:01: 0,026/0,052/0,060 m³ tussen L-standen; live 10:08 `0.060 m³`). EMS rekende alleen Wh/MWh om → `vandaag_liter` 0,06, `trend_procent` −100, verhaal "0 L". Een sprong L→m³ is een daling en werd als nieuwe dag gearchiveerd (mogelijk de 109,77 in `geschiedenis_liter_per_dag`; niet zeker, niet gewist). `water_total_usage` (m³) en `water_active_usage` (L/min) melden nu de verwachte eenheid, maar werden ook niet omgerekend.
 - Bouw: `_read_water_volume_l` (L, mL, m³, gal, ft³, CCF; zonder eenheid: dagtotaal L, meterstand m³) en `_read_water_flow_l_per_min` (L/min, L/h, m³/h, gal/min, …) voor dagtotaal, meterstand, debiet, live listener en aanwezigheid. Daling archiveert alleen bij nieuwe `last_reset` (of zonder `last_reset`: andere lokale datum). 13 tests. Stuurt niets.
 - Meten na installatie: na elke herstart `vandaag_liter` ≥ de L-stand van de utility_meter (nooit < 1 bij een stand > 1 L) en `trend_procent` ≠ −100 overdag; `geschiedenis_liter_per_dag` groeit met precies 1 waarde per dag (lengte +1 per dagwissel, geen waarden < 20 L tenzij echt); 7 dagen.
@@ -68,3 +72,16 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Onderbouwing: 08-10 11:40: `trend_procent` −84,5 = (60 − 386,8)/386,8; 60 L is het verbruik tot 11:40, 386,8 de mediaan van hele dagen (attribuut heet `gemiddeld_liter_per_dag`, is een mediaan). Overdag is de trend dus altijd sterk negatief en zegt niets.
 - Bouw (voorstel): trend tegen de verwachte stand op dit tijdstip (mediaan van eerdere dagen tot hetzelfde uur, uit `water_session_history` of een uurprofiel), of pas na 23:00 tonen; attribuut `mediaan_liter_per_dag` naast het oude. Test.
 - Meten na bouw: overdag `trend_procent` binnen ±50% op gewone dagen; om 23:59 gelijk aan de oude berekening.
+
+## L-EMS-009 · meetlaag: het kwartier van een herstart meten
+- Status: **gebouwd v5.57** (09-10 03:56, zelf gebouwd: meetfout; stuurt niets) — wacht op installatie
+- Onderbouwing: dagrapport 08-10 `kwartieren_gemeten` 74 van 96 bij 20 herstarts (18 kwartieren met een herstart); 07-10 76 bij 15. Code: `_kwartiergrens` slaat het eerste kwartier na de start over (`_vorige_standen` None). De tellers (P1, omvormer) lopen in het apparaat door; de accutellers van zendure_ha zijn in HA opgeteld vermogen.
+- Bouw: tellerstanden per grens in de bewaarde toestand (`meetlaag_kwartierstanden`); eerste grens na de start gebruikt ze alleen als ze precies 15 min ouder zijn én van dezelfde tellers (anders ongemeten zoals voorheen). Record `over_herstart`, accutellers `partially_estimated`. Dagrapport `kwartieren_niet_gemeten`, `kwartieren_over_herstart`. Ook `kalibratie_22u.laatste_avond` en `avonden_bewaard`. 8 tests (`test_v557_leerronde.py`), suite 4997 groen.
+- Meten na installatie: dagrapport `kwartieren_niet_gemeten` ≈ 0 op een dag met herstarts < 15 min, `kwartieren_over_herstart` ≈ aantal herstarts; geen kwartier met `house_kwh` < 0 of > 3 kWh rond een herstart.
+
+## L-EMS-010 · "verkocht met winst" alleen als de verkoop boven de reserve lag
+- Status: **open** (rapportage/classificatie, maar raakt een bewuste keuze van v5.55 → Ruud beslist)
+- Onderbouwing: sinds v5.55 heten de nachten →03-10 (1,9 kWh verkocht, 0,68 tekort) en →04-10 (4,6 kWh, 1,68 tekort) `verkocht_met_winst`: "bewust, geen stuurfout". De leerronde van 07-10 23:45 toonde dat die verkoop via `expensive_quarter_peak` ONDER de reserve ging (04-10 vanaf 19:55 beschikbaar < reserve) — een fout die v5.28.4 herstelde. Verkoop onder de reserve is een schending van de harde regel "huis gaat voor", ook als de prijs achteraf gunstig uitviel.
+- Voorstel: in de tekortsoort eerst toetsen of er die avond verkocht werd terwijl beschikbaar < reserve; zo ja: soort `verkocht_onder_reserve` (LET OP, nooit "bewust"), ongeacht de prijs. Alleen verkoop boven de reserve kan `verkocht_met_winst` zijn. Test met de reeks van 04-10.
+- Verwacht effect: een herhaling van de piekregel-bug wordt niet meer weggeschreven als "bewust". Sturing ongewijzigd.
+- Meten na bouw: per tekortnacht de soort naast "verkocht onder reserve ja/nee" uit de recorder; 0 nachten `verkocht_met_winst` met verkoop onder de reserve.
