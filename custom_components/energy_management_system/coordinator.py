@@ -664,6 +664,7 @@ from .const import (
     CONF_TERUGLEVER_EUR_VANDAAG_SENSOR,
     CONF_GAS_M3_VANDAAG_SENSOR,
     PRIJSDAG_VELDEN,
+    PRIJSDAG_SLAAPT_TOT_UUR,
     PERSISTED_DATE_FIELDS,
     PERSISTED_FIELDS,
     PERSISTED_DATETIME_FIELDS,
@@ -16706,6 +16707,20 @@ class EnergyManagementSystemCoordinator:
                         "is, en meldt dan niets. De zon staat nu onder de "
                         "horizon. Blijft dit staan terwijl de zon op is, "
                         "dan is er wél iets aan de hand."
+                    )
+                elif (
+                    sleutel in PRIJSDAG_VELDEN.values()
+                    and dt_util.now().hour < PRIJSDAG_SLAAPT_TOT_UUR
+                ):
+                    # v5.65.1: na middernacht begint de leverancier een
+                    # nieuwe dag en meldt hij een tijd niets. Op 9 oktober
+                    # 00:02-01:07 telde dat als kapotte koppeling.
+                    regel["oordeel"] = "slaapt"
+                    regel["uitleg"] = (
+                        "De leverancier begint na middernacht een nieuwe dag "
+                        "en meldt de dagbedragen dan een tijd niet. Blijft "
+                        f"dit na {PRIJSDAG_SLAAPT_TOT_UUR}:00 staan, dan is "
+                        "er wél iets aan de hand."
                     )
                 else:
                     regel["oordeel"] = "geen_waarde"

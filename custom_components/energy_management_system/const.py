@@ -98,6 +98,12 @@ PRIJSDAG_VELDEN = {
     "gas_eur_excl": CONF_GAS_EUR_VANDAAG_EXCL_SENSOR,
 }
 
+# v5.65.1: de dagbedragen van de leverancier beginnen na middernacht
+# opnieuw en staan dan een tijd op "unknown". Gemeten op 9 oktober:
+# Zonneplan-kosten en -gas 00:02-01:07 unknown. Tot dit uur telt dat als
+# "slaapt" (zoals een apparaat dat uit staat), daarna weer als storing.
+PRIJSDAG_SLAAPT_TOT_UUR = 3
+
 # Hoe lang de toestand van een sensor mag zijn (v5.14). Home Assistant
 # weigert een toestand boven de 255 tekens - de sensor valt dan terug op
 # "unknown". De diagnoseregels passen er daarom altijd in.

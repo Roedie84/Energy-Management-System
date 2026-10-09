@@ -31915,3 +31915,17 @@ sensor Airco besluit en in de diagnostiek-export.
 
 Laden, ontladen, reserve en marges ongewijzigd. Nieuw:
 `tests/test_v565_airco_ritme.py`.
+
+
+## v5.65.1 — dagbedragen van de leverancier slapen na middernacht
+
+Gemeten op 9 oktober: de Zonneplan-dagsensoren (kosten, afname excl. btw,
+gas) stonden 00:02-01:07 op `unknown`. De configuratiecontrole noemde dat
+`geen_waarde` en telde ze als kapotte koppeling.
+
+- Instellingen uit `PRIJSDAG_VELDEN` krijgen tot `PRIJSDAG_SLAAPT_TOT_UUR`
+  (03:00) het oordeel `slaapt` bij `unknown`/`unavailable`, zoals
+  `APPARAAT_INSTELLINGEN` en `OMVORMER_INSTELLINGEN`. Daarna weer
+  `geen_waarde`.
+
+Sturing ongewijzigd. Nieuw: `tests/test_v5651_prijsdag_slaapt.py`.
