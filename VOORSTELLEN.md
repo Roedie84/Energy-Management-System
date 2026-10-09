@@ -17,6 +17,7 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Onderbouwing: de MC-sensor heeft geen state_class; kalibratie (Brier 0,038, n=8, 30-09..07-10) kan nu alleen uit ~10 dagen recorder. Na 10 dagen is de voorspelling per nacht weg.
 - Bouw: in `reserve_daily_records` per nacht `mc_tekortkans_22u` (en deterministisch tekort) vastleggen; test.
 - Meten na bouw: veld aanwezig in het dagrecord en gelijk aan de sensorwaarde om 22:00 (±0,1); `kalibratie_22u.nachten` loopt op.
+- 09-10 11:40: dagrecord ontstaat om 00:00 (datum D = nacht tot D 09:00, stand van D−1 22:00) → eerste paar op 10-10 00:00 (avond 08-10 0 %, nacht zonder tekort). Toets in de dagafsluiting van 10-10.
 - Gebouwd: `mc_22u_per_avond` (14 avonden, bewaard), `mc_22u` in dagrecord van de nacht erna, attribuut `kalibratie_22u` met Brier. 11 tests.
 
 ## L-EMS-003 · PV-energieteller van de cloud-dagteller naar de Modbus-teller

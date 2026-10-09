@@ -140,3 +140,15 @@ laatste ronde: 09-10 03:40, gemeten t/m 09-10 03:50
 - Hypotheses: H-EMS-2, H-EMS-4, H-EMS-6 ongewijzigd (geen nieuwe dag/avond). Geen release (tussenronde, niets acuut).
 
 laatste ronde: 09-10 07:40, gemeten t/m 09-10 07:45
+
+## 09-10 11:40 · tussenronde
+- Geïnstalleerd: v5.57; **v5.57.1** (zelfbeoordeling-cache, chatsessie 09:28) staat klaar in HACS. HA-herstarts sinds 07:45: 2 (10:09, 10:40). Logboek: 1× `GacsAssessmentSensor` 2,3 s bij de start van 10:40 — dat lost v5.57.1 op; geen andere EMS-fouten.
+- **Nacht 08→09 afgerond: geen tekort.** Om 09:00 accu 23 % (1,12 kWh beschikbaar); import 22-09 0,268 kWh, waarvan 0,118 de twee `battery_saved_for_peak`-kwartieren (03:45/04:45). Export 22-09 0,270 kWh (17-34 Wh/u, regelverschuiving 20 W). Om 22:00 MC tot blok 0 % → kwam uit.
+- **Correctie verwachting:** het dagrecord met `mc_22u` ontstaat bij de **datumwissel (00:00)**, niet om 09:00: het record van datum D draagt de nacht die op D 09:00 afliep en de MC-stand van D−1 22:00. Record 08-10 (00:00 vannacht) kreeg dus de avond van 07-10 (nog zonder v5.45) → `kalibratie_22u.nachten` 0 is correct. Eerste Brier-paar: 10-10 00:00 (avond 08-10, 0 %, geen tekort). Geen bug.
+- Beslissingen 07:45-11:42 `default_smart`, sinds 11:30 `battery_saved_for_peak` (accu haalt het blok niet: rest 0,86 kWh naar de duurste kwartieren, huis nu uit het net bij 22,6 ct) → 0× verkoop onder de reserve (harde regel gehaald).
+- Donkere dag: PV t/m 11:43 0,296 kWh tegen Solcast-tot-nu 0,547 (−46 %, dag 2,68). Blok schoof 12:15 → 14:30 (08:15) → 14:45 (08:45). MC tot blok 0 % (07:42) → 39,8 % (11:42), deterministisch tekort tot blok 0,33 kWh: echt (zon), geen H-EMS-6-sprong. Overdag kan dit geen tekortnacht worden.
+- MC-drempel nagerekend: kans = P(behoefte > beschikbaar + 0,5 kWh) — zelfde grens als een tekortdag (v5.36). Mediaan 1,21 > 0,86 beschikbaar maar < 1,36 → 39,8 % klopt.
+- Meetlog: dekking 96 % (759 evaluaties) na 2 herstarts; dagrapport 09-10 (L-EMS-009) in de dagafsluiting van 10-10.
+- Hypotheses H-EMS-2, H-EMS-4, H-EMS-6 ongewijzigd (geen nieuwe dag/avond). Geen release (tussenronde, niets acuut; v5.57.1 nog niet geïnstalleerd).
+
+laatste ronde: 09-10 11:40, gemeten t/m 09-10 11:44
