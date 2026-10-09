@@ -57,3 +57,27 @@ def test_dienst_is_beschreven():
     import custom_components.energy_management_system as pkg
 
     assert "accumodule_melding:" in (Path(pkg.__file__).parent / "services.yaml").read_text()
+
+
+def test_fabrieksnaam_telt_niet_de_eigen_naam(make_coordinator):
+    """v5.68.4: de modules heten in HA "Accu module 1"; de fabrieksnaam
+    "AB3000 00996" is wat bij vervanging verandert. Een eerder bewaarde
+    eigen naam is geen vervanging."""
+    c = make_coordinator({})
+    mods = _modules("Accu module 1")
+    for m, fabriek in zip(mods, ("AB3000 00996", "AB3000 00917", "AB3000 02093")):
+        m["apparaat_id"] = fabriek
+    c._read_battery_modules = lambda: mods
+    c.battery_module_health = {"1": {"apparaat": "Accu module 1", "dag_metingen": {}, "geschiedenis": {"cel_delta_v": [0.02]}, "cusum": {}, "soc_buckets": {}, "waarschuwingen": []}}
+    c._update_battery_module_health(NU)
+    assert c.battery_module_health["1"]["geschiedenis"]
+    assert c.battery_module_health["1"]["apparaat"] == "AB3000 00996"
+    c.zet_module_melding("AB3000 00996", False)
+    for staat in c.battery_module_health.values():
+        staat["cusum"] = {"temperatuur_afwijking_c": {"drift": True}}
+    assert "1" not in c._modules_met_drift()
+    nieuw = [dict(m) for m in mods]
+    nieuw[0]["apparaat_id"] = "AB3000 05555"
+    c._read_battery_modules = lambda: nieuw
+    c._update_battery_module_health(NU)
+    assert not c.battery_module_health["1"]["geschiedenis"]

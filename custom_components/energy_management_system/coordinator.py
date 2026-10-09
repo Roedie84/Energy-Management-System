@@ -9425,7 +9425,7 @@ class EnergyManagementSystemCoordinator:
         except Exception:  # noqa: BLE001 - een melding mag hier niet op vallen
             return None
 
-    def apparaatnaam_van(self, entity_id: str | None) -> str | None:
+    def apparaatnaam_van(self, entity_id: str | None, eigen_naam: bool = True) -> str | None:
         """Naam van het apparaat waar deze sensor bij hoort (v5.35).
 
         Voor de accumodules: "Accumodule 1" zegt niet welke van de drie
@@ -9444,6 +9444,8 @@ class EnergyManagementSystemCoordinator:
             apparaat = dr.async_get(self.hass).async_get(item.device_id)
             if apparaat is None:
                 return None
+            if not eigen_naam:
+                return getattr(apparaat, "name", None)
             return getattr(apparaat, "name_by_user", None) or getattr(
                 apparaat, "name", None
             )
@@ -31388,6 +31390,10 @@ class EnergyManagementSystemCoordinator:
                 {
                     "module": index + 1,
                     "naam": self.apparaatnaam_van(eerste),
+                    # v5.68.4: de fabrieksnaam ("AB3000 00996"), ook als het
+                    # apparaat een eigen naam kreeg ("Accu module 1") - zo
+                    # herkent het EMS een vervangen module.
+                    "apparaat_id": self.apparaatnaam_van(eerste, eigen_naam=False),
                     "cel_max_v": cel_max,
                     "cel_min_v": cel_min,
                     "cel_delta_v": delta_v,
@@ -31673,8 +31679,10 @@ class EnergyManagementSystemCoordinator:
             # v5.68.1: een vervangen module (andere apparaatnaam, bv. een
             # nieuwe AB3000 voor 00996) begint met een schone lei - de
             # geschiedenis en de CUSUM van de oude accu horen er niet bij.
+            identiteit = module.get("apparaat_id") or module.get("naam")
             vorige = (self.battery_module_health.get(sleutel) or {}).get("apparaat")
-            if module.get("naam") and vorige and vorige != module["naam"]:
+            # (v5.68.1-v5.68.3 bewaarden de eigen naam; die is geen vervanging.)
+            if identiteit and vorige and vorige not in (identiteit, module.get("naam")):
                 self.battery_module_health.pop(sleutel, None)
             staat = self.battery_module_health.setdefault(
                 sleutel,
@@ -31686,8 +31694,9 @@ class EnergyManagementSystemCoordinator:
                     "waarschuwingen": [],
                 },
             )
-            if module.get("naam"):
-                staat["apparaat"] = module["naam"]
+            if identiteit:
+                staat["apparaat"] = identiteit
+                staat["naam"] = module.get("naam")
             metingen = staat["dag_metingen"]
             for veld, waarde in (
                 ("cel_delta_afwijking_v", module["cel_delta_afwijking_v"]),
@@ -32050,6 +32059,7 @@ class EnergyManagementSystemCoordinator:
             nummer
             for nummer, gegevens in (self.battery_module_health or {}).items()
             if gegevens.get("apparaat") not in stil
+            and gegevens.get("naam") not in stil
             and self._module_drift_velden(nummer, gegevens)
         ]
 
@@ -32074,7 +32084,9 @@ class EnergyManagementSystemCoordinator:
                     "waarschuwingen": staat.get("waarschuwingen", []),
                     "drift_op": drift,
                     # v5.68.2: melding uitgezet voor deze module.
-                    "melding_uit": module.get("naam") in (self.battery_module_stil or []),
+                    "melding_uit": bool(
+                        {module.get("naam"), module.get("apparaat_id")} & set(self.battery_module_stil or [])
+                    ),
                     # v5.35: "1 (AB3000 00996)" - welke module het is.
                     "label": (
                         f"{module['module']} ({module['naam']})"

@@ -104,7 +104,7 @@ def test_een_opvallende_gacs_duur_staat_er_wel(make_coordinator, hass):
 
 def test_de_accumodule_heet_naar_zijn_apparaat(make_coordinator, hass):
     c = make_coordinator({"battery_module_cell_voltage_max_sensor_entities": ["sensor.a", "sensor.b"]})
-    c.apparaatnaam_van = lambda e: {"sensor.a": "AB3000 00996"}.get(e)
+    c.apparaatnaam_van = lambda e, eigen_naam=True: {"sensor.a": "AB3000 00996"}.get(e)
 
     modules = c._read_battery_modules()
     assert modules[0]["naam"] == "AB3000 00996"

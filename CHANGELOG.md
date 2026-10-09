@@ -32079,3 +32079,15 @@ nummer".
   het herladen van de integratie netjes wordt afgemeld.
 - De modulefilter staat in een eigen functie (`_modules_met_drift`); de
   meldingenfunctie groeide anders voorbij haar bevroren grootte.
+
+## v5.68.4 — modules herkennen op fabrieksnaam
+
+Gezien na de installatie: de modules heten in HA "Accu module 1/2/3" (eigen
+naam); de fabrieksnaam "AB3000 00996" staat daaronder. Op de eigen naam zou
+een vervangen module die weer "Accu module 1" heet niet herkend worden.
+
+- `apparaat_id` per module: de fabrieksnaam van het apparaat. De schone lei
+  (v5.68.1) en de stille modules (v5.68.2) gebruiken die; de dienst
+  `accumodule_melding` accepteert de fabrieksnaam én de eigen naam.
+- Een eerder bewaarde eigen naam telt niet als vervanging, dus de
+  geleerde geschiedenis blijft staan.
