@@ -31812,3 +31812,25 @@ cockpit: één keer per toestand). Aangepast aan de verhuizing naar de
 pagina-sensoren: `test_attribute_isolation.py`, `test_dashboard_health_export.py`,
 `test_dashboard_entity_references.py`, `test_export_never_500s.py`,
 `test_v535_haperen_en_ruis.py`.
+
+## v5.63 — klimaatprojectie leest de echte rolluikstand
+
+De rolluiken in de woonkamer zijn gekalibreerd en melden nu
+`current_position` (0 = dicht, 100 = open). `_get_shutter_state_label`
+keek alleen naar de toestand: alleen "open" telde als open. Een rolluik op
+20% stond daardoor als open te boek in de klimaatprojectie (leren per
+buitentemperatuur x rolluiken x airco), alsof de zon volop binnenkwam.
+
+- Nieuw: `rolluikstand_procent(toestand, attributen)` — de positie als die
+  er is (0-100), anders "open" = 100 en elke andere toestand = 0 (zoals
+  voorheen); onbeschikbaar/onbekend telt niet mee.
+- Nieuw: `rolluiklabel(gemiddelde)` — >= 90% `beide_open`, <= 10%
+  `beide_dicht`, daartussen `gedeeltelijk`. Dezelfde drie labels als
+  voorheen, dus de geleerde klimaatcellen blijven bruikbaar; ze worden
+  alleen juister gevuld.
+- Eén onbeschikbaar rolluik telt niet meer als "dicht"; de stand van het
+  andere bepaalt dan het label.
+
+Sturing (laden, ontladen, reserve, marges) ongewijzigd. Nieuw:
+`tests/test_v563_rolluikstand.py`.
+

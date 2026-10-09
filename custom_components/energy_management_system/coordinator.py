@@ -840,6 +840,35 @@ def _quarter_plan_day_label(start: datetime, now: datetime) -> str:
     return f"+{verschil}d "
 
 
+
+def rolluikstand_procent(toestand, attributen) -> float | None:
+    """Stand van een rolluik in procent open (v5.63), of None als onbekend.
+
+    Een gekalibreerd rolluik geeft `current_position`; anders telt "open"
+    als 100 en elke andere stand ("closed", "opening", "closing") als 0,
+    precies zoals voor v5.63. Onbeschikbaar of onbekend: None.
+    """
+    if toestand in (None, "unavailable", "unknown", ""):
+        return None
+    positie = (attributen or {}).get("current_position")
+    try:
+        if positie is not None:
+            p = float(positie)
+            if 0 <= p <= 100:
+                return p
+    except (TypeError, ValueError):
+        pass
+    return 100.0 if toestand == "open" else 0.0
+
+
+def rolluiklabel(gemiddelde_procent: float) -> str:
+    """Drie klimaatgroepen uit de gemiddelde rolluikstand (v5.63)."""
+    if gemiddelde_procent >= 90:
+        return "beide_open"
+    if gemiddelde_procent <= 10:
+        return "beide_dicht"
+    return "gedeeltelijk"
+
 class _ChronologicalValueTracker:
     """Tracks the latest known float value from a chronologically sorted
     list of recorder states, as you advance forward through increasing
@@ -38760,24 +38789,31 @@ class EnergyManagementSystemCoordinator:
         this room's windows), "gedeeltelijk" (one open, one closed), or
         "beide_open" (maximum solar gain potential). None if neither
         entity is configured or readable.
+
+        v5.63: met de echte stand. Een gekalibreerd rolluik meldt
+        `current_position` (0 = dicht, 100 = open); een rolluik op 20% stond
+        hiervoor als "open" te boek, alsof de zon volop binnenkwam. Nu telt
+        het gemiddelde van de standen: >= 90% "beide_open", <= 10%
+        "beide_dicht", daartussen "gedeeltelijk". Dezelfde drie labels, dus
+        wat de klimaatprojectie al leerde blijft bruikbaar. Zonder positie
+        (niet gekalibreerd) telt open als 100 en dicht als 0, precies zoals
+        hiervoor. Onbeschikbare rolluiken tellen niet mee.
         """
         entity_1 = self.config.get(CONF_LIVING_ROOM_SHUTTER_ENTITY_1)
         entity_2 = self.config.get(CONF_LIVING_ROOM_SHUTTER_ENTITY_2)
-        states = []
+        standen: list[float] = []
         for entity_id in (entity_1, entity_2):
             if not entity_id:
                 continue
             state = self.hass.states.get(entity_id)
-            if state is not None:
-                states.append(state.state)
-        if not states:
+            if state is None:
+                continue
+            stand = rolluikstand_procent(state.state, state.attributes)
+            if stand is not None:
+                standen.append(stand)
+        if not standen:
             return None
-        open_count = sum(1 for s in states if s == "open")
-        if open_count == len(states):
-            return "beide_open"
-        if open_count == 0:
-            return "beide_dicht"
-        return "gedeeltelijk"
+        return rolluiklabel(sum(standen) / len(standen))
 
     def _get_current_airco_state_label(self) -> str:
         """Uit/verwarmen/koelen op basis van `hvac_action` (v0.63.56) -
