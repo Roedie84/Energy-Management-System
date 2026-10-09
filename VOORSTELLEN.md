@@ -36,7 +36,7 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Meten na bouw: sensor sluipverbruik-detectie direct na update "normaal", `methode_versie` 2; `baseline_load_history` alleen waarden ≥ 0 en in de orde 0,1-0,3 kW; na 10 dagen referentie > 0 W en geen vals alarm.
 
 ## L-EMS-005 · smart-stand: nachtelijke teruglevering van −50 W naar −20 W
-- Status: **akkoord 08-10** → **ingesteld door Ruud (08-10, vóór 11:10)**: regelsensor −1003 W bij P1 −1023 W (+20 W, was +50). Effect meten: nacht 08→09 export 00-07 (basis 0,43-0,45 kWh)
+- Status: **geverifieerd 09-10 07:40** — nacht 08→09 export 00-07 0,163 kWh (basis 0,433, −62%), nachtimport buiten arbitrage 10-17 Wh/u (Quooker-niveau, niet hoger). Eerder: **akkoord 08-10** → **ingesteld door Ruud (08-10, vóór 11:10)**: regelsensor −1003 W bij P1 −1023 W (+20 W, was +50). Effect meten: nacht 08→09 export 00-07 (basis 0,43-0,45 kWh)
 - 09-10 03:40: nacht 08→09 00-03 u 27/22/22 Wh/u (basis 08-10 59-65 Wh/u, 00-07 0,433 kWh) → −60%; volledige nacht in de volgende ronde.
 - Onderbouwing: elk nachtuur gemiddeld −47..−53 W, ≈ 0,5 kWh accu-energie per nacht het net op (~27 ct).
 - Waar het zit: niet in EMS-code/-optie en niet in zendure_ha of de firmware. zendure_ha regelt op p1meter `sensor.hw_p1_vermogen_100w` ("HW P1 Vermogen -50W", platform `rest`, unique_id `HW_P1_Vermogen_Min100`), een eigen REST-sensor in de HA-YAML die de HomeWizard-P1 + 50 W meldt (live 08-10: P1 −54 W, regelsensor −4 W). De Zendure houdt die op 0 → echte P1 −50 W.
@@ -74,7 +74,7 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Meten na bouw: overdag `trend_procent` binnen ±50% op gewone dagen; om 23:59 gelijk aan de oude berekening.
 
 ## L-EMS-009 · meetlaag: het kwartier van een herstart meten
-- Status: **gebouwd v5.57** (09-10 03:56, zelf gebouwd: meetfout; stuurt niets) — wacht op installatie
+- Status: **gebouwd v5.57** (09-10 03:56, zelf gebouwd: meetfout; stuurt niets), geïnstalleerd 06:02 — toets: dagrapport 09-10 (4 herstarts t/m 07:42) in de dagafsluiting van 10-10
 - Onderbouwing: dagrapport 08-10 `kwartieren_gemeten` 74 van 96 bij 20 herstarts (18 kwartieren met een herstart); 07-10 76 bij 15. Code: `_kwartiergrens` slaat het eerste kwartier na de start over (`_vorige_standen` None). De tellers (P1, omvormer) lopen in het apparaat door; de accutellers van zendure_ha zijn in HA opgeteld vermogen.
 - Bouw: tellerstanden per grens in de bewaarde toestand (`meetlaag_kwartierstanden`); eerste grens na de start gebruikt ze alleen als ze precies 15 min ouder zijn én van dezelfde tellers (anders ongemeten zoals voorheen). Record `over_herstart`, accutellers `partially_estimated`. Dagrapport `kwartieren_niet_gemeten`, `kwartieren_over_herstart`. Ook `kalibratie_22u.laatste_avond` en `avonden_bewaard`. 8 tests (`test_v557_leerronde.py`), suite 4997 groen.
 - Meten na installatie: dagrapport `kwartieren_niet_gemeten` ≈ 0 op een dag met herstarts < 15 min, `kwartieren_over_herstart` ≈ aantal herstarts; geen kwartier met `house_kwh` < 0 of > 3 kWh rond een herstart.
@@ -85,3 +85,9 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Voorstel: in de tekortsoort eerst toetsen of er die avond verkocht werd terwijl beschikbaar < reserve; zo ja: soort `verkocht_onder_reserve` (LET OP, nooit "bewust"), ongeacht de prijs. Alleen verkoop boven de reserve kan `verkocht_met_winst` zijn. Test met de reeks van 04-10.
 - Verwacht effect: een herhaling van de piekregel-bug wordt niet meer weggeschreven als "bewust". Sturing ongewijzigd.
 - Meten na bouw: per tekortnacht de soort naast "verkocht onder reserve ja/nee" uit de recorder; 0 nachten `verkocht_met_winst` met verkoop onder de reserve.
+
+## L-EMS-011 · waterontharder: regel krijgt ook bron "waterontharder"
+- Status: **gepland (zelf bouwen: rapportage/classificatie; stuurt niets)** — bouwen in de dagafsluiting
+- Onderbouwing: 09-10 03:07 sessie 154 L / 38 min: `waarschijnlijk_waterontharder` true en `waterontharder_laatste_regeneratie` gezet, maar in dezelfde regel `bron` null, `zekerheid` "onbekend", `reden` "Geen apparaat actief en geen herkenbaar patroon." Oorzaak: `classify_water_session(liters, duur)` kent de ontharder-vlag niet (coordinator.py, sessie-afsluiting).
+- Bouw: bij `is_waterontharder` bron "waterontharder", zekerheid "waarschijnlijk", reden met tijdvenster/volume/duur; anders ongewijzigd. Test met de sessie van 09-10.
+- Meten na bouw: volgende regeneratie (~10 dagen) toont bron "waterontharder"; overige sessies ongewijzigd.

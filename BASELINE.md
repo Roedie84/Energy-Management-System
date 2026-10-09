@@ -36,3 +36,4 @@
 | Export tijdens ontlading na L-EMS-005 | 22-27 Wh/u (was 59-65) | 08→09 00-03 u | 09-10 03:40 |
 | Achteraf (uur, 4,22 ct): werkelijk / optimum t.o.v. zonder accu | +0,24 / −0,56 €/dag | 5 dagen | 09-10 03:40 |
 | Meetlog kwartieren gemeten | 74/96 (20 herstarts) · 76/96 (15) | 08-10, 07-10 | 09-10 03:40 |
+| Nacht-export 00-07 na L-EMS-005 | 0,163 kWh (−62%) | nacht 08→09 | 09-10 07:40 |

@@ -128,3 +128,15 @@ laatste ronde: 08-10 23:40, gemeten t/m 08-10 23:44
 - Nacht 08→09 om 03:41: beschikbaar 2,51, nodig tot blok 12:15 1,73 → marge +0,78 (23:40 geschat +0,82); MC tot blok 0%. 09-10 zon 2,39 kWh (somber).
 
 laatste ronde: 09-10 03:40, gemeten t/m 09-10 03:50
+
+## 09-10 07:40 · tussenronde
+- Geïnstalleerd 06:02: **v5.57** (L-EMS-009). HA-herstarts sinds 03:50: 4 (06:03, 06:57, 07:02, 07:42; installaties EMS/Stormchase/Gold Scalper) → goede toets voor L-EMS-009 in het dagrapport 09-10.
+- **L-EMS-005 geverifieerd (nacht 08→09):** export 00-07 0,163 kWh (basis 0,433 → −62%), 17-31 Wh/u. Import 00-07 0,186 kWh, waarvan 0,118 in de twee kwartieren hieronder; rest 10-17 Wh/u = Quooker-niveau → niet meer netimport.
+- **Eerste arbitragekwartieren na v5.54:** 2× `battery_saved_for_peak` (03:45 22,42 ct, 04:45 22,76 ct = de twee goedkoopste nachtkwartieren; ochtend 25-31 ct). Huis ~240 W uit het net, ~0,12 kWh bewaard. Overig alleen `default_smart` → 0× verkoop onder de reserve (harde regel gehaald).
+- Nacht 08→09: om 07:42 beschikbaar 1,47 kWh, blok 12:15, zon somber → marge klein; MC tot blok 0%. Tekort ja/nee toetsen om 11:40.
+- **v5.57 `kalibratie_22u.laatste_avond`** werkt: 08-10 22:00 kans 0% (tot blok), incl. lange horizon 100%, beschikbaar 4,06. Dagrecord (Brier) om 09:00.
+- **Ontharder 03:07** herkend (`waarschijnlijk_waterontharder` true, 154 L in 38 min, vorige 29-09 03:07), maar dezelfde regel zegt `bron` null, zekerheid "onbekend", reden "geen herkenbaar patroon": `classify_water_session` krijgt de ontharder-vlag niet mee (coordinator.py ~33990). Rapportagefout → L-EMS-011 (zelf bouwen, dagafsluiting).
+- Logboek: 1× `GacsAssessmentSensor` update 0,61 s bij de start (07:42); volgen of het terugkomt buiten herstarts.
+- Hypotheses: H-EMS-2, H-EMS-4, H-EMS-6 ongewijzigd (geen nieuwe dag/avond). Geen release (tussenronde, niets acuut).
+
+laatste ronde: 09-10 07:40, gemeten t/m 09-10 07:45
