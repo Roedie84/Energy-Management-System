@@ -5010,7 +5010,7 @@ class AircoBesluitSensor(_CoordinatorDiagnosticSensor):
     _attr_has_entity_name = True
     _attr_name = "Airco besluit"
     _attr_icon = "mdi:air-conditioner"
-    _unrecorded_attributes = frozenset({"redenen", "redenen_tekst", "tekst"})
+    _unrecorded_attributes = frozenset({"redenen", "redenen_tekst", "tekst", "dagritme"})
 
     def __init__(self, coordinator, entry_id: str) -> None:
         super().__init__(coordinator, entry_id, "airco_besluit")
@@ -5021,7 +5021,10 @@ class AircoBesluitSensor(_CoordinatorDiagnosticSensor):
 
     @property
     def extra_state_attributes(self) -> dict:
-        return dict(self._coordinator.last_airco_besluit or {})
+        uit = dict(self._coordinator.last_airco_besluit or {})
+        # v5.65: wat er van jullie dagritme geleerd is.
+        uit["dagritme"] = self._coordinator.get_airco_ritme()
+        return uit
 
 
 class CockpitSensor(_CoordinatorDiagnosticSensor):

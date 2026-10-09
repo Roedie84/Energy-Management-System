@@ -60,7 +60,7 @@ from homeassistant.helpers.event import (
 from homeassistant.util import dt as dt_util
 from homeassistant.helpers.storage import Store
 
-from . import airco_sturing, klimaat_wind, slimme_bronnen
+from . import airco_ritme, airco_sturing, klimaat_wind, slimme_bronnen
 from .const import (
     DIAGNOSE_REGEL_MAX_TEKENS,
     DASHBOARD_ONBEKEND_IS_NORMAAL,
@@ -1682,7 +1682,7 @@ class EnergyManagementSystemCoordinator:
         # de per-ronde-historie van vóór v5.58 eenmalig wordt gewist.
         # v5.63.1: ook de open waarnemingen (JSON-veilig) en of ze na een herstart al terug zijn
         # (zie `_herstel_airco_waarnemingen`); op één regel vanwege de groeigrens van __init__.
-        self._temp_prediction_pending, self.airco_bakje_laatste_start, self.airco_leer_versie, self.airco_open_waarnemingen, self._airco_waarnemingen_hersteld, self._klimaat_anker_wind, self._klimaat_wind_per_uur, self.klimaat_wind_residuen = [], {}, None, [], False, None, {}, {}
+        self._temp_prediction_pending, self.airco_bakje_laatste_start, self.airco_leer_versie, self.airco_open_waarnemingen, self._airco_waarnemingen_hersteld, self._klimaat_anker_wind, self._klimaat_wind_per_uur, self.airco_ritme, self.klimaat_wind_residuen = [], {}, None, [], False, None, {}, {}, {}
         self.living_room_current_temp_c: float | None = None
         self.living_room_current_humidity_percent: float | None = None
         # Klimaat-tabblad: geleerde temperatuur-projectie (v0.63.56).
@@ -43785,6 +43785,8 @@ class EnergyManagementSystemCoordinator:
             # EMS.
             self._airco_handmatig_bij = self.presence_state
             self.airco_door_ems = False
+            # v5.65: en het dagritme leert ervan - zie `airco_ritme`.
+            airco_ritme.noteer_bediening(self._airco_ritme(), now, stand, doel_nu)
             if stand == "heat" and doel_nu is not None:
                 self.airco_setpunten = (list(self.airco_setpunten or []) + [float(doel_nu)])[
                     -AIRCO_PREDICTION_HISTORY_LENGTH:
@@ -43807,6 +43809,7 @@ class EnergyManagementSystemCoordinator:
             setpunten_nodig=AIRCO_PREDICTION_MIN_SAMPLES,
             vooruit=self._airco_vooruitblik(),
         )
+        uit = self._airco_ritme_ronde(now, uit, stand)
         uit["knop"] = self.airco_automaat_aan
         uit["toegepast"] = bool(self.airco_automaat_aan and uit["actie"] in ("verwarmen", "uit"))
         # Een regel voor het dashboard - tekst uit de code, niet uit een sjabloon.
@@ -43824,6 +43827,78 @@ class EnergyManagementSystemCoordinator:
         self.last_airco_besluit = uit
         if uit["toegepast"]:
             self.hass.async_create_task(self._async_pas_airco_toe(entiteit, uit))
+
+    def _airco_ritme(self) -> dict:
+        """Het geleerde dagritme, altijd in een bruikbare vorm (v5.65)."""
+        self.airco_ritme = airco_ritme.geldig(self.airco_ritme)
+        return self.airco_ritme
+
+    def _airco_opwarmtempo(self) -> float | None:
+        """Hoe snel de airco de woonkamer opwarmt (°C per uur): de mediaan
+        van alle geleerde klimaatmetingen met de airco op verwarmen (v5.65)."""
+        waarden = [
+            w
+            for sleutel, reeks in (self.climate_rate_history or {}).items()
+            if str(sleutel).endswith("|verwarmen")
+            for w in reeks
+        ]
+        if len(waarden) < CLIMATE_RATE_MIN_SAMPLES:
+            return None
+        tempo = statistics.median(waarden)
+        return tempo if tempo > 0 else None
+
+    def _woonkamer_verwacht_om(self, minuut: int) -> float | None:
+        """De voorspelde woonkamertemperatuur op een minuut van vandaag (v5.65)."""
+        uur = f"{dt_util.now().date().isoformat()}T{minuut // 60:02d}"
+        for regel in self.climate_forecast_trajectory or []:
+            if str(regel.get("tijd") or "")[:13] == uur:
+                return regel.get("kort_termijn_temp_c")
+        return None
+
+    def _airco_ritme_ronde(self, now: datetime, uit: dict, stand: str | None) -> dict:
+        """Het dagritme naast het gewone besluit (v5.65) - zie `airco_ritme`.
+
+        - bedtijd: "uit" gaat voor, ook als iemand hem zelf aanzette (één keer
+          per avond);
+        - ochtend: "verwarmen" alleen als het gewone besluit niets doet en
+          niemand de airco zelf bedient;
+        - ochtendverwarming loopt: een "uit" omdat iedereen nog slaapt, wordt
+          tegengehouden tot een uur na het geleerde moment.
+        """
+        ritme = self._airco_ritme()
+        if self.presence_state not in (None, "weg"):
+            airco_ritme.noteer_ochtend_thuis(ritme, now)
+        vraag = airco_ritme.besluit(
+            ritme,
+            nu=now,
+            woonkamer_c=self.living_room_current_temp_c,
+            verwacht_bij_warm_om=self._woonkamer_verwacht_om,
+            tempo_c_per_uur=self._airco_opwarmtempo(),
+            aanwezigheid=self.presence_state,
+            advies=(self.get_verwarmingsadvies() or {}).get("advies"),
+            airco_stand=stand,
+        )
+        if vraag is None:
+            return uit
+        nieuw = dict(uit)
+        nieuw["redenen"] = list(uit.get("redenen") or []) + [vraag["reden"]]
+        nieuw["redenen_tekst"] = " · ".join(nieuw["redenen"])
+        if vraag["actie"] == "uit":
+            nieuw.update(actie="uit", tekst=vraag["tekst"])
+            if self.airco_automaat_aan:
+                airco_ritme.noteer_ems_uit(ritme, now)
+        elif vraag.get("houd_aan"):
+            if uit["actie"] == "uit":
+                nieuw.update(actie="niets", tekst=vraag["tekst"])
+        elif uit["actie"] == "niets" and self._airco_handmatig_bij is None:
+            nieuw.update(actie="verwarmen", tekst=vraag["tekst"], doel_c=vraag["doel_c"])
+            if self.airco_automaat_aan:
+                airco_ritme.noteer_ems_aan(ritme, now)
+        return nieuw
+
+    def get_airco_ritme(self) -> dict:
+        """Wat er van jullie dagritme geleerd is (v5.65)."""
+        return airco_ritme.overzicht(self._airco_ritme())
 
     def _airco_vooruitblik(self) -> dict:
         """De woonkamertemperatuur over een uur volgens de projectie, en of

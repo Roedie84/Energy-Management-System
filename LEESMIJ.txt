@@ -1,20 +1,18 @@
-EMS v5.64 - wind in de klimaatprojectie en vooruit verwarmen
+EMS v5.65 - het dagritme van de airco
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
 
-Wind in de projectie
-- Per windrichting en windklasse (matig 10-25 km/h, hard vanaf 25 km/h)
-  leert het EMS hoeveel sneller of langzamer de woonkamer afkoelt dan bij
-  dezelfde temperatuur zonder die wind (airco uit).
-- Vanaf 5 metingen telt dat mee in de snelle projectie, vanaf 15 ook in de
-  betrouwbare. Tot die tijd rekent de projectie zoals voorheen.
-- Zichtbaar in het attribuut "wind" van de klimaatsensor en per uur in het
-  traject (wind en windcorrectie_c_per_uur).
+Het EMS leert uit jullie eigen bediening van de woonkamer-airco, apart voor
+werkdagen en het weekend (vanaf 3 keer):
+- hoe laat jullie 's ochtends warmte willen en op welke temperatuur;
+- hoe laat de airco 's avonds uit gaat.
 
-Vooruit verwarmen
-- Is het nu nog warm genoeg, maar over een uur volgens de projectie onder
-  de temperatuur waarbij jullie de airco aanzetten, dan zet het EMS hem
-  alvast aan. Alleen als de projectie nauwkeurig genoeg is (gemiddeld
-  binnen 0,5 °C) en de knop Airco automaat aan staat.
-- Een aanzet door het EMS telt niet mee in het leren van jullie
-  aanzettemperatuur.
+Met de knop Airco automaat aan:
+- 's ochtends zet het EMS de airco zo vroeg aan dat het op het geleerde
+  moment warm is. Hoe vroeg volgt uit de voorspelde temperatuur en hoe snel
+  de airco de kamer opwarmt;
+- 's avonds op de geleerde bedtijd gaat hij uit.
+
+Wat het EMS zelf doet, telt niet mee in het leren. Zet je een ochtend die
+het EMS aanzette weer uit, dan leert het dat die niet gewenst was.
+Te zien bij de sensor "Airco besluit", attribuut "dagritme".

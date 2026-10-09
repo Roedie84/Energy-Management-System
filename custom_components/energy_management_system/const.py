@@ -3478,6 +3478,8 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "climate_rate_history": {"type": "plain"},
     # v5.64: geleerde windcorrectie per richting en windklasse.
     "klimaat_wind_residuen": {"type": "plain"},
+    # v5.65: het geleerde dagritme van de woonkamer-airco.
+    "airco_ritme": {"type": "plain"},
     "digital_twin_accuracy_history": {"type": "plain"},
     "extra_dip_margin_history": {"type": "plain"},
     "fietsladers_charge_duration_history": {"type": "plain"},

@@ -31885,3 +31885,33 @@ bouwen".
 
 Laden, ontladen, reserve en marges ongewijzigd. Nieuw:
 `tests/test_v564_wind.py`.
+
+## v5.65 — het dagritme van de airco, geleerd uit jullie bediening
+
+Gevraagd: "Ik wil dat het EMS dit gaat regelen, dus leert van mijn gedrag,
+geen extra automatisering" en "op basis van voorspelling niet op
+tijdstippen". De knop Airco automaat blijft de enige schakelaar.
+
+Nieuw: `airco_ritme.py`. Apart voor werkdagen en weekend, vanaf 3 keer:
+- **warm om**: hoe laat jullie 's ochtends (04-11 uur) op verwarmen zetten;
+- **ochtendtemperatuur**: op welke temperatuur (los van de dagwaarde);
+- **hoe vaak**: op welk deel van de ochtenden met iemand thuis (≥ 50%);
+- **bedtijd**: hoe laat jullie hem 's avonds (19-03 uur) uitzetten.
+
+Uitvoeren (alleen met de knop aan):
+- 's ochtends aan zo vroeg dat het op "warm om" de ochtendtemperatuur is:
+  voorloop = (ochtendtemperatuur − voorspelde temperatuur op dat moment) /
+  geleerd opwarmtempo van de airco, 15-90 minuten (onbekend: 30). Niet als
+  niemand thuis is, gas goedkoper is, het al warm genoeg is of iemand de
+  airco zelf bedient. Een "uit omdat iedereen slaapt" wordt tegengehouden
+  tot een uur na het geleerde moment;
+- op de geleerde bedtijd uit, ook als iemand hem zelf aanzette; één keer
+  per avond.
+
+Wat het EMS zelf doet, telt niet als waarneming. Zet iemand een ochtend die
+het EMS aanzette binnen de ochtend uit, dan telt die als "niet gewenst".
+Bewaard veld `airco_ritme`; zichtbaar als attribuut `dagritme` van de
+sensor Airco besluit en in de diagnostiek-export.
+
+Laden, ontladen, reserve en marges ongewijzigd. Nieuw:
+`tests/test_v565_airco_ritme.py`.
