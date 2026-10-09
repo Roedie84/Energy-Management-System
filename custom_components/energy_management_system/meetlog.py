@@ -98,6 +98,15 @@ class MeetLog:
     def regels(self, soort: str, dag: date) -> list[dict]:
         return copy.deepcopy(self._dagen.get((soort, dag.isoformat()), {}).get("regels", []))
 
+    def regels_alleen_lezen(self, soort: str, dag: date) -> list[dict]:
+        """De regels ZONDER kopie (v5.62), voor tellen en samenvatten.
+
+        `regels()` kopieert alles, en een dag evaluaties is groot: de
+        meetlogsensor deed dat elke 30 seconden en hield de event loop tot
+        twee seconden vast. Niets wijzigen aan wat hier terugkomt.
+        """
+        return self._dagen.get((soort, dag.isoformat()), {}).get("regels", [])
+
     def grootte_bytes(self) -> int:
         return sum(self._groottes.values())
 

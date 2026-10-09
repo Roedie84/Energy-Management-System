@@ -390,6 +390,12 @@ async def async_get_config_entry_diagnostics(
 
     config = {**entry.data, **entry.options}
 
+    # v5.62: de volledige zelfbeoordeling (de sensor toont een uittreksel).
+    def _gacs_volledig(c):
+        from .sensor import gacs_volledig
+
+        return gacs_volledig(c)
+
     # v1.19.3, gemeld: "De diagnostiek blijft nu een text file, wordt
     # geen json, dit suggereert dat daar nu ook iets fout gaat?"
     #
@@ -1027,6 +1033,12 @@ async def async_get_config_entry_diagnostics(
             # alleen gemeten?
             "pv_correction_status": _veilig("get_pv_correction_status", coordinator.get_pv_correction_status),
             "dashboard_health": _veilig("get_dashboard_health", coordinator.get_dashboard_health),
+            # v5.62: de zelfbeoordelingssensor draagt alleen nog wat het
+            # dashboard leest (de laatste 14 dagen plantoetsing, 40
+            # logboekregels, ...). Hier staat alles.
+            "gacs_zelfbeoordeling_volledig": _veilig(
+                "gacs_zelfbeoordeling_volledig", lambda: _gacs_volledig(coordinator)
+            ),
             "stalled_series": _veilig("get_stalled_series_report", coordinator.get_stalled_series_report),
             "plausibility_warnings": _veilig("get_plausibility_warnings", coordinator.get_plausibility_warnings),
             "sensor_health_breakdown": _veilig("get_sensor_health_breakdown", coordinator.get_sensor_health_breakdown),

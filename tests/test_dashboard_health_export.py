@@ -131,6 +131,10 @@ def test_a_missing_attribute_is_reported(make_coordinator, hass):
     """
     c = make_coordinator({})
     _gacs(hass, {})
+    # v5.62: de zonvoorspelling staat op een eigen pagina-sensor.
+    hass.states.set(
+        "sensor.woonkamer_energy_management_system_zonvoorspelling_ijking", "5", {}
+    )
 
     ontbrekend = c.get_dashboard_health()["ontbrekende_attributen"]
 

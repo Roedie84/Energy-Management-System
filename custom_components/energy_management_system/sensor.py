@@ -96,6 +96,11 @@ async def async_setup_entry(
         DigitalTwinAccuracySensor(coordinator, entry.entry_id),
         ReliabilityOverviewSensor(coordinator, entry.entry_id),
         GacsAssessmentSensor(coordinator, entry.entry_id),
+        # v5.62: de grote tabellen van de zelfbeoordeling, elk apart.
+        *(
+            DashboardPaginaSensor(coordinator, entry.entry_id, *pagina)
+            for pagina in DASHBOARD_PAGINA_SENSOREN
+        ),
         PvInstallationProfileSensor(coordinator, entry.entry_id),
         EnergyBalanceHealthSensor(coordinator, entry.entry_id),
         SluipverbruikSensor(coordinator, entry.entry_id),
@@ -4493,8 +4498,10 @@ class GacsAssessmentSensor(SensorEntity):
         start = time.perf_counter()
         attributen: dict = {}
         try:
-            attributen = self._bouw_attributen()
-            return attributen
+            attributen = self._bouw_attributen(GACS_DASHBOARD_SLEUTELS)
+            # v5.62: alleen wat het dashboard leest. De volledige set staat
+            # in de diagnostiek (`gacs_zelfbeoordeling_volledig`).
+            return gacs_voor_het_dashboard(attributen)
         finally:
             # v5.14.4: de traagste onderdelen meegeven. Die worden sinds
             # v4.9.7 al gemeten (`rekentijd_ms`), maar alleen als attribuut -
@@ -4504,7 +4511,7 @@ class GacsAssessmentSensor(SensorEntity):
                 (attributen.get("rekentijd_ms") or {}).get("traagste") or {},
             )
 
-    def _bouw_attributen(self) -> dict:
+    def _bouw_attributen(self, sleutels=None) -> dict:
         """Alle samenvattingen, elk apart afgeschermd (v1.19.1).
 
         Gemeld: alle acht tegels onder "Status per onderwerp" toonden
@@ -4617,6 +4624,11 @@ class GacsAssessmentSensor(SensorEntity):
             ),
             ("nog_niet_bepaald", self._coordinator.get_pending_overview),
         ):
+            # v5.62: alleen de gevraagde onderdelen (None = alles, voor de
+            # diagnostiek). De dashboardpagina-sensoren vragen elk hun eigen
+            # deel; de zelfbeoordeling rekent die niet meer mee.
+            if sleutels is not None and sleutel not in sleutels:
+                continue
             try:
                 _t0 = time.perf_counter()
                 attributen[sleutel] = functie()
@@ -4638,8 +4650,11 @@ class GacsAssessmentSensor(SensorEntity):
                     f"{type(fout).__name__}: {fout}"
                 )
         try:
-            attributen.update(self._coordinator.get_gacs_assessment())
-            self._coordinator.internal_failures.pop("gacs_beoordeling", None)
+            # v5.62: een pagina-sensor slaat de beoordeling over, en ruimt
+            # dan ook geen fout van de zelfbeoordeling op.
+            if sleutels is None or "verbetermogelijkheden" in sleutels:
+                attributen.update(self._coordinator.get_gacs_assessment())
+                self._coordinator.internal_failures.pop("gacs_beoordeling", None)
         except Exception as fout:  # noqa: BLE001
             _LOGGER.exception("Kon de GACS-beoordeling niet berekenen")
             attributen["gacs_fout"] = f"{type(fout).__name__}: {fout}"
@@ -4663,6 +4678,293 @@ class GacsAssessmentSensor(SensorEntity):
                 "een systeem sterk en zwak staat."
             ),
         }
+
+
+# v5.62: de zelfbeoordeling droeg ~204 kB aan attributen. Home Assistant
+# stuurt die bij elke toestand in zijn geheel naar elke open browser en
+# vergelijkt hem met de vorige; dat gaf "Updating state ... took 2.3
+# seconds" en houdt de event loop vast. Home Assistant raadt aan om ruim
+# onder de 16 kB te blijven.
+#
+# Nu krijgt de sensor alleen de onderdelen die het dashboardsjabloon van
+# hem leest, en van de grote lijsten alleen wat een kaart toont. De grote
+# pagina's (kwartierplanning, smart-charging-proef, logboek, proefstand,
+# aanwezigheid, plantoetsing, perioden, veroudering, nog niet bepaald,
+# uitbreidingsadvies, zonvoorspelling) staan elk op een eigen pagina-sensor
+# (DASHBOARD_PAGINA_SENSOREN): die rekenen alleen hun eigen deel uit. De volledige set staat in de diagnostiek
+# (`gacs_zelfbeoordeling_volledig`). Een test houdt deze lijsten en het
+# sjabloon gelijk.
+GACS_DASHBOARD_SLEUTELS = frozenset(
+    {
+        "besparingscorrectie",
+        "cycluskosten",
+        "eigen_ingrepen",
+        "gepland_witgoed",
+        "geschiedenisbronnen",
+        "gezondheid",
+        "haalt_de_accu_het",
+        "kwartier_samenvatting",
+        "prijstoets",
+        "rendement",
+        "reservemarge",
+        "rondeduur",
+        "samenvattingen",
+        "terugvallen",
+        "verbetermogelijkheden",
+        "verkooptoets",
+        "waarom_nu",
+        "weerbron_vergelijking",
+        "weerbronnen",
+        "zelfcontrole",
+        "zon_uitstelplan",
+        "zon_vandaag",
+        "zonstand",
+        # Een fout in het opbouwen van de beoordeling blijft zichtbaar.
+        "gacs_fout",
+        # Klein (0,3 kB) en de eerste plek om te kijken bij een trage keer.
+        "rekentijd_ms",
+    }
+)
+# Hoeveel dagen de plantoetsing per dag toont, en hoeveel logboekregels.
+GACS_PLANTOETSING_DAGEN = 14
+GACS_LOGBOEK_REGELS = 40
+GACS_LOGBOEK_DETAIL_TEKENS = 70
+
+
+def _alleen(bron, velden) -> dict:
+    """Alleen de genoemde velden van een woordenboek (wat er is)."""
+    if not isinstance(bron, dict):
+        return {}
+    return {v: bron[v] for v in velden if v in bron}
+
+
+def _plantoetsing_voor_het_dashboard(p):
+    if not isinstance(p, dict) or "dagen_overzicht" not in p:
+        return p
+    uit = {k: v for k, v in p.items() if k != "dagen_overzicht"}
+    uit["dagen_overzicht"] = [
+        {
+            **_alleen(r, ("datum", "oordeel")),
+            "zon": _alleen(r.get("zon"), ("voorspeld_kwh", "werkelijk_kwh")),
+            "verkocht": _alleen(r.get("verkocht"), ("voorspeld_kwh", "werkelijk_kwh")),
+            "opbrengst": _alleen(r.get("opbrengst"), ("voorspeld_eur", "werkelijk_eur")),
+            "laagste_soc": _alleen(
+                r.get("laagste_soc"), ("voorspeld_procent", "werkelijk_procent")
+            ),
+        }
+        for r in (p.get("dagen_overzicht") or [])[:GACS_PLANTOETSING_DAGEN]
+        if isinstance(r, dict)
+    ]
+    return uit
+
+
+def _logboek_voor_het_dashboard(l):
+    if not isinstance(l, dict) or "regels" not in l:
+        return l
+    uit = {k: v for k, v in l.items() if k != "regels"}
+    regels = []
+    for r in (l.get("regels") or [])[:GACS_LOGBOEK_REGELS]:
+        if not isinstance(r, dict):
+            continue
+        regel = _alleen(r, ("moment", "prio", "tekst"))
+        if r.get("detail"):
+            regel["detail"] = str(r["detail"])[:GACS_LOGBOEK_DETAIL_TEKENS]
+        regels.append(regel)
+    uit["regels"] = regels
+    return uit
+
+
+def _proefstand_voor_het_dashboard(p):
+    if not isinstance(p, dict) or "kandidaten" not in p:
+        return p
+    uit = _alleen(p, ("toelichting", "samenvatting"))
+    kandidaten = []
+    for k in p.get("kandidaten") or []:
+        if not isinstance(k, dict):
+            continue
+        kort = _alleen(
+            k,
+            (
+                "naam",
+                "gereedheid",
+                "waarde",
+                "onderbouwing",
+                "betrouwbaarheid",
+                "zou_veranderen",
+            ),
+        )
+        if "zou_hebben_opgeleverd" in k:
+            kort["zou_hebben_opgeleverd"] = _alleen(
+                k["zou_hebben_opgeleverd"],
+                (
+                    "te_becijferen",
+                    "bedrag_per_dag_eur",
+                    "bedrag_per_jaar_eur",
+                    "dagen",
+                    "toelichting",
+                    "reden",
+                ),
+            )
+        kandidaten.append(kort)
+    uit["kandidaten"] = kandidaten
+    return uit
+
+
+def _nog_niet_bepaald_voor_het_dashboard(p):
+    if not isinstance(p, dict):
+        return p
+    uit = dict(p)
+    for lijst in ("wachten", "doen"):
+        if isinstance(p.get(lijst), list):
+            uit[lijst] = [_alleen(r, ("naam", "wat_ontbreekt")) for r in p[lijst]]
+    return uit
+
+
+def _aanwezigheid_voor_het_dashboard(p):
+    """Zonder het weekprofiel per halfuur (313 vakjes, geen kaart toont
+    het); de tijdlijn alleen met de kolommen van de tabel."""
+    if not isinstance(p, dict):
+        return p
+    uit = {k: v for k, v in p.items() if k != "profiel"}
+    if isinstance(p.get("tijdlijn"), list):
+        uit["tijdlijn"] = [
+            _alleen(r, ("dag", "van", "tot", "staat", "duur", "aanleiding"))
+            for r in p["tijdlijn"]
+        ]
+    return uit
+
+
+def _smart_charging_proef_voor_het_dashboard(p):
+    """Alleen de kwartieren met een tekort: de tabel slaat de andere over."""
+    if not isinstance(p, dict) or "rijen" not in p:
+        return p
+    uit = {k: v for k, v in p.items() if k != "rijen"}
+    uit["rijen"] = [
+        _alleen(
+            r,
+            (
+                "van",
+                "prijs_ct",
+                "zon_kwh",
+                "tekort_kwh",
+                "hoogste_prijs_hierna_ct",
+                "smart_charging_beter",
+                "voordeel_eur",
+            ),
+        )
+        for r in p.get("rijen") or []
+        if isinstance(r, dict) and (r.get("tekort_kwh") or 0) > 0
+    ]
+    return uit
+
+
+_GACS_INKORTEN = {
+    "plantoetsing": _plantoetsing_voor_het_dashboard,
+    "logboek": _logboek_voor_het_dashboard,
+    "proefstand": _proefstand_voor_het_dashboard,
+    "nog_niet_bepaald": _nog_niet_bepaald_voor_het_dashboard,
+    "aanwezigheid": _aanwezigheid_voor_het_dashboard,
+    "smart_charging_proef": _smart_charging_proef_voor_het_dashboard,
+}
+
+
+def gacs_voor_het_dashboard(volledig: dict, sleutels=GACS_DASHBOARD_SLEUTELS) -> dict:
+    """De attributen zoals het dashboard ze leest (v5.62). Zelfde waarden,
+    minder ballast; zie GACS_DASHBOARD_SLEUTELS."""
+    uit = {}
+    for sleutel, waarde in (volledig or {}).items():
+        if sleutel not in sleutels:
+            continue
+        inkorten = _GACS_INKORTEN.get(sleutel)
+        uit[sleutel] = inkorten(waarde) if inkorten else waarde
+    return uit
+
+
+def gacs_volledig(coordinator) -> dict:
+    """De volledige zelfbeoordeling, voor de diagnostiek (v5.62)."""
+    return GacsAssessmentSensor(coordinator, "diagnostiek")._bouw_attributen()
+
+
+def _aantal(attributen: dict, sleutel: str, lijst: str | None = None) -> int:
+    waarde = attributen.get(sleutel)
+    if lijst is not None:
+        waarde = waarde.get(lijst) if isinstance(waarde, dict) else None
+    return len(waarde) if isinstance(waarde, (list, dict)) else 0
+
+
+class DashboardPaginaSensor(_CoordinatorDiagnosticSensor):
+    """Eén grote dashboardtabel op een eigen sensor (v5.62).
+
+    Stond eerst op de zelfbeoordeling, die daardoor ~204 kB groot werd. Nu
+    rekent elke pagina-sensor alleen zijn eigen onderdeel uit, met dezelfde
+    afscherming als de zelfbeoordeling (een fout wordt een leesbare tekst en
+    een aandachtspunt). De toestand is het aantal regels.
+    """
+
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+
+    def __init__(
+        self,
+        coordinator,
+        entry_id: str,
+        suffix: str,
+        naam: str,
+        icoon: str,
+        sleutels: tuple[str, ...],
+        lijst: str | None,
+    ) -> None:
+        super().__init__(coordinator, entry_id, suffix)
+        self._attr_name = naam
+        self._attr_icon = icoon
+        self._sleutels = frozenset(sleutels)
+        self._telt = sleutels[0]
+        self._lijst = lijst
+        self._laatst: tuple[float, dict] | None = None
+
+    def _attributen(self) -> dict:
+        """Eén keer per toestand: HA vraagt de waarde en de attributen
+        direct na elkaar op; binnen een seconde wordt er niet opnieuw
+        gerekend."""
+        nu = time.monotonic()
+        if self._laatst is not None and nu - self._laatst[0] < 1.0:
+            return self._laatst[1]
+        # Dezelfde opbouw en afscherming als de zelfbeoordeling, alleen
+        # voor de eigen onderdelen (de methode leest alleen _coordinator).
+        volledig = GacsAssessmentSensor._bouw_attributen(self, self._sleutels)
+        attributen = gacs_voor_het_dashboard(volledig, self._sleutels)
+        self._laatst = (nu, attributen)
+        return attributen
+
+    @property
+    def native_value(self) -> int:
+        return _aantal(self._attributen(), self._telt, self._lijst)
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return self._attributen()
+
+
+# v5.62: (suffix, naam, icoon, attributen, lijst die de toestand telt).
+# De toestand is het aantal regels van het eerste attribuut.
+DASHBOARD_PAGINA_SENSOREN = (
+    ("kwartierplanning_tabel", "Kwartierplanning", "mdi:table-clock", ("kwartierplanning",), None),
+    ("smart_charging_proef", "Smart charging proef", "mdi:flask-outline", ("smart_charging_proef",), "rijen"),
+    ("logboek", "Logboek", "mdi:notebook-outline", ("logboek",), "regels"),
+    ("proefstand", "Proefstand", "mdi:test-tube", ("proefstand",), "kandidaten"),
+    ("aanwezigheid", "Aanwezigheid", "mdi:home-account", ("aanwezigheid",), "tijdlijn"),
+    ("plantoetsing", "Plantoetsing", "mdi:clipboard-text-clock-outline", ("plantoetsing",), "dagen_overzicht"),
+    ("perioden", "Perioden", "mdi:calendar-range", ("perioden", "zelfconsumptie"), "perioden"),
+    ("veroudering", "Veroudering", "mdi:battery-clock-outline", ("veroudering",), "dagen_overzicht"),
+    ("nog_niet_bepaald", "Nog niet bepaald", "mdi:progress-question", ("nog_niet_bepaald",), "wachten"),
+    ("uitbreidingsadvies", "Uitbreidingsadvies", "mdi:battery-plus-outline", ("uitbreidingsadvies",), None),
+    (
+        "zonvoorspelling_ijking",
+        "Zonvoorspelling ijking",
+        "mdi:weather-sunny-alert",
+        ("helderheid_ijking", "zonband_ijking", "zonspreiding", "pv_correctie", "pv_voorspelkwaliteit"),
+        None,
+    ),
+)
 
 
 class MeetlogSensor(_CoordinatorDiagnosticSensor):
@@ -4751,23 +5053,32 @@ class CockpitSensor(_CoordinatorDiagnosticSensor):
     def __init__(self, coordinator, entry_id: str) -> None:
         super().__init__(coordinator, entry_id, "cockpit")
         self._laatst = None
+        self._gegevens_cache: tuple[float, dict] | None = None
+
+    def _gegevens(self) -> dict:
+        """v5.62: één keer per toestand. Home Assistant vraagt de waarde en
+        de attributen direct na elkaar; eerst werden de gegevens drie keer
+        opgebouwd (waarde, plaat, reden)."""
+        nu = time.monotonic()
+        if self._gegevens_cache is not None and nu - self._gegevens_cache[0] < 1.0:
+            return self._gegevens_cache[1]
+        gegevens = self._coordinator.cockpit_gegevens() or {}
+        self._gegevens_cache = (nu, gegevens)
+        return gegevens
 
     @property
     def native_value(self) -> str:
-        return (self._coordinator.cockpit_gegevens() or {}).get(
-            "status_kort"
-        ) or "onbekend"
+        return self._gegevens().get("status_kort") or "onbekend"
 
     @property
     def extra_state_attributes(self) -> dict:
         # v5.35: de reden staat er ook, en gaat WEL naar de recorder (klein,
         # verandert alleen als de stand verandert). Een STORING was
         # achteraf niet te herleiden.
+        gegevens = self._gegevens()
         return {
-            "plaat": self._coordinator.get_cockpit_svg(),
-            "reden": (self._coordinator.cockpit_gegevens() or {}).get(
-                "status_regel"
-            ),
+            "plaat": self._coordinator.get_cockpit_svg(gegevens),
+            "reden": gegevens.get("status_regel"),
         }
 
     async def async_added_to_hass(self) -> None:

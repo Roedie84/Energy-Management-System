@@ -35,6 +35,12 @@ def _sensornamen() -> set[str]:
     Assistant dat doet bij het aanmaken van een entity_id."""
     bron = (PAKKET / "sensor.py").read_text()
     namen = re.findall(r'_attr_name\s*=\s*"([^"]+)"', bron)
+    # v5.62: de pagina-sensoren krijgen hun naam uit één tabel.
+    from custom_components.energy_management_system.sensor import (
+        DASHBOARD_PAGINA_SENSOREN,
+    )
+
+    namen += [rij[1] for rij in DASHBOARD_PAGINA_SENSOREN]
     return {_slug(naam) for naam in namen}
 
 

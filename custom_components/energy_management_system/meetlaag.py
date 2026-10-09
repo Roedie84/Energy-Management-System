@@ -766,8 +766,25 @@ class Meetlaag:
         """Een regel voor de diagnosesensor: draait hij, klopt de spiegel,
         hoeveel komt uit tellers."""
         vandaag = self._dag
-        evaluaties = self.log.regels("evaluatie", vandaag) if vandaag else []
-        kwartieren = [kwartierenergie.uitpakken(k) for k in self.log.regels("kwartier", vandaag)] if vandaag else []
+        # v5.62: zonder kopie, en alleen opnieuw tellen als er iets bij is
+        # gekomen. Elke 30 seconden een volledige kopie van een dag
+        # evaluaties kostte tot twee seconden in de event loop.
+        evaluaties = self.log.regels_alleen_lezen("evaluatie", vandaag) if vandaag else []
+        ruwe_kwartieren = self.log.regels_alleen_lezen("kwartier", vandaag) if vandaag else []
+        # id(): na het inladen van een bewaarde dag is het een nieuwe lijst.
+        sleutel = (
+            vandaag, id(evaluaties), len(evaluaties),
+            id(ruwe_kwartieren), len(ruwe_kwartieren), self.log.fouten,
+        )
+        bewaard = getattr(self, "_status_cache", None)
+        if bewaard is not None and bewaard[0] == sleutel:
+            return bewaard[1]
+        tekst = self._status_tekst(evaluaties, ruwe_kwartieren)
+        self._status_cache = (sleutel, tekst)
+        return tekst
+
+    def _status_tekst(self, evaluaties: list, ruwe_kwartieren: list) -> str:
+        kwartieren = [kwartierenergie.uitpakken(k) for k in ruwe_kwartieren]
         kwartieren = [k for k in kwartieren if "reden" not in k]   # v5.28-formaat telt niet mee
         met_spiegel = [e for e in evaluaties if e.get("mirror_matches_production") is not None]
         spiegel = (

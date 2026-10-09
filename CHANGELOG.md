@@ -31737,3 +31737,78 @@ wordt stuurfout / blijft winst / zonder dagverloop onbekend en later alsnog;
 live indeling). Aangepast: `test_v555_doorlichting.py` - het testvenster had
 geen reserve in het dagverloop en zou nu onbekend zijn; de verkoopkwartieren
 krijgen een reserve en beschikbare energie ruim erboven.
+
+## v5.62 — dashboardfouten en lichtere sensorattributen
+
+**Aanleiding.** Doorlichting van de live installatie op 9 oktober 2026: een
+sjabloonfout in het logboek, "Updating state ... took 2.3 seconds" voor de
+zelfbeoordeling, en zes dashboardentiteiten die als ontbrekend werden gezien.
+De sturing (laden, ontladen, reserve, marges, drempels) verandert niet.
+
+**1. Plantoetsing.** De kaart "Wat er structureel opvalt" las
+`opbrengst_afwijking_mediaan_procent`; die sleutel bestaat sinds v3.71.0 niet
+meer (het oordeel gaat over het verkochte). Home Assistant logde
+`UndefinedError: 'dict object' has no attribute ...`. Nu: "Verkocht, mediane
+afwijking" uit `verkocht_afwijking_mediaan_procent`, en elke waarde via
+`.get(..., '–')`; een ontbrekend getal wordt een streepje. Ook de tabel "Per
+dag" leest elk veld defensief.
+
+**2. Drie besparingstegels zonder kleur.** De icoonkleur van de tegels
+vandaag/week/maand had verdubbelde aanhalingstekens (`''''sensor...''''` in
+het bestand): geen geldig Jinja, dus nooit groen of rood. Hersteld.
+
+**3. "Ontbrekende" entiteiten.** De vier nooit ingedrukte waterknoppen
+(`button.water_was_*`), `sensor.energy_management_system_battery_protection`
+(geen ontlaadgrens actief) en de airco-verwachting (nog aan het leren) bestaan
+live gewoon; hun toestand is `unknown`. De dashboardcontrole zette ze tussen de
+lege entiteiten. Nu staan ze apart onder `onbekend_maar_normaal`: knoppen
+altijd (hun toestand is het tijdstip van de laatste druk), de twee sensoren via
+`DASHBOARD_ONBEKEND_IS_NORMAAL`. Het dashboard zelf verwees al naar de juiste
+ids. Het YAML-dashboard in Home Assistant wordt bij elke start van de
+integratie overschreven met `dashboard_template.yaml`
+(`_copy_dashboard_template`); na de update hoeft er niets gekopieerd te worden.
+
+**4. Lichtere attributen.** De zelfbeoordeling droeg live ~204 kB: 30 dagen
+plantoetsing met elke dag dezelfde toelichting, 120 logboekregels, een
+weekprofiel per halfuur, twee SVG's die geen kaart meer las, 136 kwartieren
+smart-charging-proef waarvan de tabel er 102 toont. Home Assistant stuurt dat
+bij elke toestand naar elke open browser en vergelijkt het met de vorige.
+- De zelfbeoordeling draagt alleen nog de attributen die het dashboard van hem
+  leest (`GACS_DASHBOARD_SLEUTELS`): ~13 kB live (was ~204 kB).
+- Elf grote pagina's staan op een eigen diagnostische sensor
+  (`DashboardPaginaSensor`, `DASHBOARD_PAGINA_SENSOREN`, attributen niet in de
+  recorder): Kwartierplanning, Smart charging proef, Logboek, Proefstand,
+  Aanwezigheid, Plantoetsing, Perioden (met zelfconsumptie), Veroudering, Nog
+  niet bepaald, Uitbreidingsadvies, Zonvoorspelling ijking. Elke sensor rekent
+  alleen zijn eigen onderdeel uit, met dezelfde afscherming per onderdeel, en
+  één keer per toestand. De zelfbeoordeling rekent die onderdelen niet meer.
+- Ingekort tot wat een kaart toont: plantoetsing 14 dagen met alleen de
+  getoonde velden, logboek 40 regels met detail tot 70 tekens, proefstand de
+  getoonde velden, aanwezigheid zonder weekprofiel, smart-charging-proef alleen
+  de kwartieren met een tekort, nog-niet-bepaald naam en wat ontbreekt.
+- Live gemeten, na: Kwartierplanning ~27 kB en Smart charging proef ~17 kB (de
+  tabelregels zíjn de inhoud), de andere pagina's 0,1-11 kB.
+- Alles volledig in de diagnostiek: `gacs_zelfbeoordeling_volledig`.
+- Het dashboard leest dezelfde waarden, nu van de pagina-sensoren.
+
+**5. Meetlog en cockpit.** De statusregel van de meetlog kopieerde elke 30
+seconden alle evaluaties van vandaag (deepcopy) om ze te tellen; nu zonder
+kopie (`MeetLog.regels_alleen_lezen`) en alleen opnieuw als er iets bij kwam
+(3000 evaluaties: 180 ms → < 0,01 ms), zelfde tekst. De cockpitsensor bouwde
+zijn gegevens per toestand drie keer op, voor de eerste ronde elke keer met de
+trage helft; nu één keer per toestand, en de trage helft één keer tot de ronde
+hem ververst.
+
+Nieuw: `tests/test_v562_dashboardfouten.py` (plantoetsing rendert met echte en
+met onvolledige gegevens zonder ontbrekende sleutels; elk sjabloon is geldig
+Jinja; elke sleutel die het dashboard leest bestaat in de code; onbekend maar
+normaal; de waterknoppen; het dashboard wordt bij de start overschreven),
+`tests/test_v562_lichtere_attributen.py` (zelfbeoordeling < 16 kB met
+live-grote gegevens; pagina's < 16 kB behalve de twee kwartiertabellen; lijsten
+en sjabloon gelijk; het inkorten laat niets weg wat een kaart leest; volledige
+set in de diagnostiek; elke sensor rekent alleen zijn eigen deel),
+`tests/test_v562_snelheid.py` (meetlog: dezelfde regel, geen kopie, snel;
+cockpit: één keer per toestand). Aangepast aan de verhuizing naar de
+pagina-sensoren: `test_attribute_isolation.py`, `test_dashboard_health_export.py`,
+`test_dashboard_entity_references.py`, `test_export_never_500s.py`,
+`test_v535_haperen_en_ruis.py`.

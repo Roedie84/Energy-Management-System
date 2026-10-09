@@ -29,6 +29,14 @@ def _sensor_klasse():
     )
 
 
+def _pagina(c, attribuut):
+    """v5.62: de pagina-sensor die dit attribuut draagt."""
+    import custom_components.energy_management_system.sensor as m
+
+    rij = next(r for r in m.DASHBOARD_PAGINA_SENSOREN if attribuut in r[3])
+    return m.DashboardPaginaSensor(c, "x", *rij)
+
+
 def _met_kapotte(make_coordinator, naam):
     c = make_coordinator({})
 
@@ -48,8 +56,11 @@ def test_one_broken_call_does_not_blank_the_rest(make_coordinator, hass):
     attributen = _sensor_klasse()(c, "x").extra_state_attributes
 
     assert "samenvattingen" in attributen
-    assert "aanwezigheid" in attributen
-    assert "uitbreidingsadvies" in attributen
+    assert "zelfcontrole" in attributen
+    # v5.62: aanwezigheid en uitbreidingsadvies staan op een eigen
+    # pagina-sensor.
+    assert "aanwezigheid" in _pagina(c, "aanwezigheid").extra_state_attributes
+    assert "uitbreidingsadvies" in _pagina(c, "uitbreidingsadvies").extra_state_attributes
 
 
 def test_the_failure_is_visible(make_coordinator, hass):
@@ -57,9 +68,12 @@ def test_the_failure_is_visible(make_coordinator, hass):
     verkeerde hoek."""
     c = _met_kapotte(make_coordinator, "get_pv_forecast_quality")
 
-    attributen = _sensor_klasse()(c, "x").extra_state_attributes
+    # v5.62: de PV-voorspelkwaliteit staat op de pagina-sensor
+    # "Zonvoorspelling ijking", met dezelfde afscherming.
+    attributen = _pagina(c, "pv_voorspelkwaliteit").extra_state_attributes
 
     assert "KeyError" in str(attributen["pv_voorspelkwaliteit"])
+    assert "helderheid_ijking" in attributen
 
 
 def test_a_broken_gacs_assessment_is_survivable(make_coordinator, hass):
@@ -132,7 +146,7 @@ def test_the_block_is_built_incrementally():
     bron = (Path(pkg.__file__).parent / "sensor.py").read_text()
     # v5.14.3: de opbouw staat in `_bouw_attributen`; de eigenschap meet
     # alleen nog hoe lang die duurt.
-    start = bron.index("def _bouw_attributen(self) -> dict:\n        \"\"\"Alle samenvattingen")
+    start = bron.index("def _bouw_attributen(self, sleutels=None) -> dict:\n        \"\"\"Alle samenvattingen")
     # v3.61.0: tot het EINDE van de functie in plaats van een vast
     # aantal tekens.
     #
@@ -185,7 +199,8 @@ def test_the_dashboard_attribute_is_the_compact_plan(make_coordinator, hass):
     gezien = []
     c.get_quarter_plan_compact = lambda *a, **k: gezien.append(True) or []
 
-    _sensor_klasse()(c, "x").extra_state_attributes
+    # v5.62: de kwartierplanning staat op een eigen pagina-sensor.
+    _pagina(c, "kwartierplanning").extra_state_attributes
 
     assert gezien
 

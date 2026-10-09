@@ -63,6 +63,7 @@ from homeassistant.helpers.storage import Store
 from . import airco_sturing, slimme_bronnen
 from .const import (
     DIAGNOSE_REGEL_MAX_TEKENS,
+    DASHBOARD_ONBEKEND_IS_NORMAAL,
     GACS_TRAAG_MS,
     DOMAIN,
     DEFAULT_NAME,
@@ -6942,12 +6943,26 @@ class EnergyManagementSystemCoordinator:
         )
         ontbrekend: list[str] = []
         leeg: list[str] = []
+        # v5.62: "onbekend" dat normaal is apart. Een knop die nog nooit is
+        # ingedrukt staat op unknown (zijn toestand is het tijdstip van de
+        # laatste druk), en een paar sensoren melden bewust niets zolang er
+        # niets te melden is; de kaarten tonen daar een eigen tekst. Zo
+        # stonden de vier nooit gebruikte waterknoppen, de accubescherming
+        # en de airco-verwachting tussen de "lege" entiteiten - en werden ze
+        # bij een doorlichting voor ontbrekende entiteiten aangezien.
+        normaal_onbekend: list[str] = []
         for entity_id in verwezen:
             staat = self.hass.states.get(entity_id)
             if staat is None:
                 ontbrekend.append(entity_id)
             elif staat.state in ("unknown", "unavailable"):
-                leeg.append(entity_id)
+                if staat.state == "unknown" and (
+                    entity_id.startswith("button.")
+                    or entity_id in DASHBOARD_ONBEKEND_IS_NORMAAL
+                ):
+                    normaal_onbekend.append(entity_id)
+                else:
+                    leeg.append(entity_id)
 
         # v1.19.2, gemeld: kaarten die "Nog geen gegevens" tonen terwijl
         # de entiteit gewoon bestaat. De controle keek alleen of de
@@ -6981,13 +6996,17 @@ class EnergyManagementSystemCoordinator:
             "gecontroleerd": len(verwezen),
             "niet_bestaande_entiteiten": ontbrekend,
             "lege_entiteiten": leeg,
+            "onbekend_maar_normaal": normaal_onbekend,
             "ontbrekende_attributen": sorted(gemiste_attributen),
             "toelichting": (
                 "Een niet-bestaande entiteit toont 'Entiteit niet "
                 "gevonden'; een lege toont 'Onbekend'. Een ontbrekend "
                 "ATTRIBUUT is het lastigst: de kaart toont dan zijn "
                 "vangnettekst, wat op het scherm niet te onderscheiden "
-                "is van 'nog niets geleerd'."
+                "is van 'nog niets geleerd'. 'Onbekend maar normaal': een "
+                "knop die nog nooit is ingedrukt, of een sensor die "
+                "bewust niets meldt (geen ontlaadgrens actief, airco-"
+                "verwachting nog aan het leren); die bestaan gewoon."
             ),
         }
 
@@ -15774,7 +15793,13 @@ class EnergyManagementSystemCoordinator:
 
     def cockpit_gegevens(self) -> dict:
         """De bewaarde context met de LIVE metingen erbovenop (v5.19)."""
-        gegevens = dict(self._cockpit_context or self._schema_gegevens())
+        # v5.62: ook zonder ronde maar één keer de trage helft. Voor de
+        # eerste ronde werd die bij elke tekening opnieuw opgebouwd (drie
+        # keer per toestand van de cockpitsensor); de eerstvolgende ronde
+        # ververst hem zoals altijd.
+        if not self._cockpit_context:
+            self._cockpit_context = self._schema_gegevens()
+        gegevens = dict(self._cockpit_context)
         gegevens.update(
             {
                 "moment": dt_util.now().strftime("%d-%m %H:%M:%S"),
@@ -15935,11 +15960,17 @@ class EnergyManagementSystemCoordinator:
             ],
         }
 
-    def get_cockpit_svg(self) -> str:
-        """De cockpit, getekend uit de bewaarde context (v5.19)."""
+    def get_cockpit_svg(self, gegevens: dict | None = None) -> str:
+        """De cockpit, getekend uit de bewaarde context (v5.19).
+
+        v5.62: `gegevens` meegeven als die er al zijn, dan worden de live
+        metingen per toestand maar één keer gelezen."""
         from .overview_svg import als_afbeelding, bouw_scada
 
-        return als_afbeelding(bouw_scada(self.cockpit_gegevens()), "EMS-cockpit")
+        return als_afbeelding(
+            bouw_scada(gegevens if gegevens is not None else self.cockpit_gegevens()),
+            "EMS-cockpit",
+        )
 
     def get_overview_svg(self) -> str:
         """Het dynamische overzichtsplaatje (v3.17.0).

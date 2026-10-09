@@ -76,7 +76,7 @@ def test_de_cockpit_legt_de_reden_vast(make_coordinator, hass):
 
     c = make_coordinator({})
     c.cockpit_gegevens = lambda: {"status_kort": "STORING", "status_regel": "x kapot"}
-    c.get_cockpit_svg = lambda: "<svg/>"
+    c.get_cockpit_svg = lambda *_: "<svg/>"  # v5.62: krijgt de gegevens mee
     attrs = CockpitSensor(c, "e").extra_state_attributes
 
     assert attrs["reden"] == "x kapot"

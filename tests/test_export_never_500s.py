@@ -91,6 +91,9 @@ def _met_fout(make_coordinator):
 
     c.get_pv_forecast_quality = stuk
     klasse(c, "x").extra_state_attributes
+    # v5.62: de PV-voorspelkwaliteit staat op een eigen pagina-sensor.
+    for rij in m.DASHBOARD_PAGINA_SENSOREN:
+        m.DashboardPaginaSensor(c, "x", *rij).extra_state_attributes
     return c
 
 

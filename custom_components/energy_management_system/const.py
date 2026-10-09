@@ -7214,3 +7214,18 @@ OPDRACHT_HERHAAL_SECONDEN = 600
 # Een vaatwasser verbruikt tijdens het drogen maar een paar watt; zolang het
 # apparaat zelf zegt dat het programma loopt, is de cyclus niet klaar.
 APPARAAT_LOOPT_NOG = frozenset({"run", "pause", "delayedstart", "actionrequired", "aborting"})
+
+
+# v5.62: entiteiten op het dashboard waarvoor "unknown" een gewone toestand
+# is, met een eigen tekst op de kaart. De dashboardcontrole zet ze apart in
+# plaats van tussen de lege entiteiten (knoppen gaan daar altijd heen: hun
+# toestand is het tijdstip van de laatste druk).
+DASHBOARD_ONBEKEND_IS_NORMAAL = frozenset(
+    {
+        # Geen ontlaadgrens actief: de kaart toont "geen grens actief".
+        "sensor.energy_management_system_battery_protection",
+        # Nog te weinig waarnemingen in dit bakje: "nog niet genoeg
+        # waarnemingen".
+        "sensor.woonkamer_energy_management_system_airco_verwachting_woonkamertemperatuur",
+    }
+)
