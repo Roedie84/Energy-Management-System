@@ -1,9 +1,13 @@
-EMS v5.67.3 - een rijpe kandidaat wordt weer gemeld
+EMS v5.68 - wat het EMS leert, ook gebruiken
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
 
-- De melding "een kandidaat is klaar om mee te doen" en de maandaglijst
-  konden nooit afgaan door een verkeerd label. Opgelost.
-- "Wat meet en nog niet stuurt" toont de gemeten capaciteit niet meer als
-  die al meestuurt.
-- Sinds v5.67.2: de airco gaat om 22:00 uit, ook met de knop uit.
+1. Koude nachten: het EMS leerde al hoeveel het huis 's nachts gebruikt per
+   buitentemperatuur. Nu houdt de accu daar rekening mee: zegt dat model
+   bij de voorspelde temperatuur meer dan het gewone profiel, dan blijft er
+   meer in de accu. Nooit minder dan het profiel.
+2. Bewolking: de zoncorrectie gebruikt nu de bewolking van het
+   weerensemble, waar onbetrouwbare weerbronnen al uit zijn gehaald.
+
+Ook in deze versie (v5.67.3): de melding dat een proefstandkandidaat klaar
+is, werkt weer.

@@ -32022,3 +32022,28 @@ worden".
   er nog geen kalibratie is.
 
 Sturing ongewijzigd.
+
+## v5.68 — wat het EMS leert, ook gebruiken
+
+Gevraagd: "Alles wat HA en vooral het EMS leert moet optimaal benut
+worden"; akkoord op punt 1 en 2 van de inventaris.
+
+**1. Het temperatuurmodel in de nachtreserve**
+- Het nachtverbruik per buitentemperatuur (`_predict_temp_consumption_kw`)
+  werd geleerd maar alleen naast de meting gelegd. Nu: bij de voorspelde
+  gemiddelde buitentemperatuur (met de geleerde bias) tot het goedkope
+  blok, het model × de uren min het uurprofiel - als dat positief is, komt
+  het bij de reserve. Nooit lager dan het profiel.
+- Alleen als het model zichzelf bruikbaar vindt (genoeg metingen, ≥ 8 °C
+  bereik, geen positieve helling onder het gemeten bereik).
+- De geplande ochtendverwarming (v5.67) wordt eraf getrokken, zodat die
+  niet dubbel telt. In de uitsplitsing: `temperatuur_extra_kwh` en
+  `temperatuur_model_kw`.
+
+**2. Bewolking uit het weerensemble**
+- `_weather_cloud_cover_percent` (de bewolkingsklasse voor de zoncorrectie
+  en het regressiewoud) nam de kale mediaan van KNMI en OpenWeatherMap.
+  Nu eerst de uitkomst van het ensemble, waar bronnen gewogen en
+  onbetrouwbare geweerd zijn; de mediaan alleen als terugval.
+
+Nieuw: `tests/test_v568_benutten.py`.

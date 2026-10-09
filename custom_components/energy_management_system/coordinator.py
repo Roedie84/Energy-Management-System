@@ -22085,6 +22085,50 @@ class EnergyManagementSystemCoordinator:
     _reserve_ronde_cache: tuple | None = None
     _reserve_laatste_uitsplitsing: dict | None = None
 
+    def _voorspelde_buitentemp_c(self, van: datetime, tot: datetime) -> float | None:
+        """Gemiddelde voorspelde buitentemperatuur over een venster, met de
+        geleerde bias (v5.68). None zonder voorspelling."""
+        bias = self.climate_forecast_learned_bias_c or 0.0
+        waarden = [
+            t + bias for moment, t in (self._climate_cached_forecast or [])
+            if van - timedelta(hours=1) < moment < tot
+        ]
+        return sum(waarden) / len(waarden) if waarden else None
+
+    def _temperatuur_extra_kwh(
+        self, now: datetime, tot: datetime | None, al_erbij_kwh: float = 0.0
+    ) -> dict:
+        """Het temperatuurmodel in de reserve (v5.68, akkoord Ruud).
+
+        Het EMS leert het nachtverbruik per buitentemperatuur
+        (`_predict_temp_consumption_kw`), maar de reserve rekende alleen met
+        het uurprofiel van de laatste dagen. Op de eerste koude nacht na een
+        zachte week ligt dat profiel te laag. Nu: zegt het model bij de
+        voorspelde temperatuur meer dan het profiel, dan komt het verschil
+        erbij. Nooit minder - het profiel wordt niet verlaagd.
+
+        Het model doet alleen mee als het zichzelf bruikbaar vindt (genoeg
+        metingen over een breed genoeg temperatuurbereik, geen positieve
+        helling onder het gemeten bereik).
+
+        `al_erbij_kwh`: wat er al bovenop het profiel kwam (de geplande
+        ochtendverwarming) - het model ziet de hele nacht, dus dat telt
+        het niet nog eens.
+        """
+        leeg = {"extra_kwh": 0.0, "model_kw": None}
+        if tot is None or tot <= now:
+            return leeg
+        buiten = self._voorspelde_buitentemp_c(now, tot)
+        model_kw = self._predict_temp_consumption_kw(buiten) if buiten is not None else None
+        profiel = self._estimate_consumption_kwh_for_period(now, tot)
+        if model_kw is None or model_kw <= 0 or profiel is None:
+            return leeg
+        uren = (tot - now).total_seconds() / 3600
+        return {
+            "extra_kwh": round(max(model_kw * uren - profiel - al_erbij_kwh, 0.0), 3),
+            "model_kw": round(model_kw, 3),
+        }
+
     def _bereken_dynamische_reserve_kwh(
         self,
         now: datetime,
@@ -22177,6 +22221,9 @@ class EnergyManagementSystemCoordinator:
         # nog niet meeneemt - zie `_airco_ochtend_extra_kwh`.
         airco_ochtend = self._airco_ochtend_extra_kwh(now, cheap_block_start)
         needed_kwh += airco_ochtend["extra_kwh"]
+        # v5.68: het temperatuurmodel op koude nachten - zie `_temperatuur_extra_kwh`.
+        temperatuur = self._temperatuur_extra_kwh(now, cheap_block_start, airco_ochtend["extra_kwh"])
+        needed_kwh += temperatuur["extra_kwh"]
         recent_shortfalls = sum(1 for v in self.reserve_shortfall_history if v)
         shortfall_bonus_percent = (
             recent_shortfalls * SHORTFALL_MARGIN_BONUS_PER_RECENT_DAY
@@ -22288,6 +22335,8 @@ class EnergyManagementSystemCoordinator:
             "regelverschuiving_w": round(self.regelverschuiving_kw() * 1000),
             "lange_horizon_extra_kwh": round(lange_horizon_extra, 3),
             "airco_ochtend_extra_kwh": airco_ochtend["extra_kwh"],
+            "temperatuur_extra_kwh": temperatuur["extra_kwh"],
+            "temperatuur_model_kw": temperatuur["model_kw"],
             "reserve_kwh_after_margin": round(reserve_kwh, 3),
             # v3.74.0: en of die bodem het is die bindt.
             "bodem_kwh": round(bodem_kwh, 3),
@@ -28373,7 +28422,15 @@ class EnergyManagementSystemCoordinator:
         want die liepen op 16 augustus 85 procentpunt uiteen - 100% tegen
         15%. Bij twee bronnen is de mediaan het gemiddelde, maar bij een
         derde bron werkt dit vanzelf beter.
+
+        v5.68 (akkoord Ruud): eerst de uitkomst van het weerensemble - daar
+        zijn de bronnen al gewogen en de onbetrouwbare geweerd
+        (`_weer_de_slechte_bronnen`). De kale mediaan van KNMI en
+        OpenWeatherMap alleen nog als het ensemble niets heeft.
         """
+        ensemble = getattr(self, "weather_ensemble_cloud_cover_percent", None)
+        if isinstance(ensemble, (int, float)):
+            return float(ensemble)
         waarden = []
         for sleutel in (
             CONF_KNMI_WEATHER_ENTITY,
