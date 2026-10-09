@@ -265,3 +265,62 @@ def test_thuiskomst_in_de_coordinator(make_coordinator, hass):
     c.get_verwarmingsadvies = lambda: {"advies": "airco"}
     basis = {"actie": "niets", "tekst": "x", "redenen": [], "redenen_tekst": "", "doel_c": 21.0}
     assert c._airco_thuiskomst_ronde(_op(3, 17, 0), basis, "off")["actie"] == "verwarmen"
+
+
+# --- v5.67: ochtendverwarming in de nachtplanning ----------------------------
+
+def _met_vermogen(r, w=1200.0):
+    for _ in range(5):
+        ar.noteer_vermogen(r, w)
+    return r
+
+
+def test_verwacht_ochtendverbruik_in_het_venster():
+    r = _met_vermogen(_geleerd_ritme())
+    van, tot = _op(2, 23, 0), _op(3, 8, 0)
+    # warm om 06:45, 2 graden tekort bij 2 °C/uur: 1 uur opwarmen op 1,2 kW,
+    # daarna een uur vasthouden op 0,6 kW.
+    uit = ar.nacht_extra_kwh(r, van, tot, lambda m: 17.0, 2.0)
+    assert uit["verwacht_kwh"] == 1.8 and uit["extra_kwh"] == 1.8
+
+
+def test_wat_het_profiel_al_meeneemt_telt_niet_dubbel():
+    r = _met_vermogen(_geleerd_ritme())
+    for _ in range(3):
+        ar.noteer_uur(r, 6, 0.8)
+    uit = ar.nacht_extra_kwh(r, _op(2, 23, 0), _op(3, 8, 0), lambda m: 17.0, 2.0)
+    assert uit["al_in_profiel_kwh"] == 0.8 and uit["extra_kwh"] == 1.0
+
+
+def test_geen_extra_zonder_vermogen_of_als_het_warm_genoeg_is():
+    r = _geleerd_ritme()
+    assert ar.nacht_extra_kwh(r, _op(2, 23, 0), _op(3, 8, 0), lambda m: 17.0, 2.0)["extra_kwh"] == 0.0
+    r = _met_vermogen(r)
+    assert ar.nacht_extra_kwh(r, _op(2, 23, 0), _op(3, 8, 0), lambda m: 19.5, 2.0)["extra_kwh"] == 0.0
+
+
+def test_buiten_het_venster_telt_niet():
+    r = _met_vermogen(_geleerd_ritme())
+    assert ar.nacht_extra_kwh(r, _op(2, 23, 0), _op(3, 4, 0), lambda m: 17.0, 2.0)["extra_kwh"] == 0.0
+
+
+def test_reserve_alleen_met_de_knop_aan(make_coordinator):
+    c = make_coordinator({})
+    c.airco_ritme = _met_vermogen(_geleerd_ritme())
+    c._woonkamer_verwacht_op = lambda m: 17.0
+    c.airco_automaat_aan = False
+    assert c._airco_ochtend_extra_kwh(_op(2, 23, 0), _op(3, 8, 0))["extra_kwh"] == 0.0
+    c.airco_automaat_aan = True
+    assert c._airco_ochtend_extra_kwh(_op(2, 23, 0), _op(3, 8, 0))["extra_kwh"] > 1.0
+
+
+def test_vermogen_in_kw_en_uurverbruik(make_coordinator, hass):
+    c = make_coordinator({})
+    c.config = dict(c.config or {}, airco_power_sensor_entity="sensor.airco_power")
+    hass.states.set("sensor.airco_power", "1.2", {"unit_of_measurement": "kW"})
+    assert c._airco_vermogen_w() == 1200.0
+    r = ar.leeg()
+    t = _op(3, 6, 0)
+    for minuut in range(0, 61, 5):
+        c._noteer_airco_verbruik(t + timedelta(minutes=minuut), r)
+    assert r["uurverbruik"]["6"] == [1.2]

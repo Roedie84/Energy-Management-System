@@ -37,6 +37,11 @@ AVOND_VAN = 19 * 60
 AVOND_TOT_NA_MIDDERNACHT = 3 * 60
 MIN_KEER = 3
 HISTORIE = 20
+VERMOGEN_HISTORIE = 50
+UURVERBRUIK_DAGEN = 14
+VERMOGEN_AAN_W = 150.0
+VERMOGEN_MIN_METINGEN = 5
+VASTHOUDEN_FACTOR = 0.5
 KANS_MINIMAAL = 0.5
 NA_WARM_OM_MIN = 60
 VOORLOOP_MIN_UUR = 0.25
@@ -52,6 +57,8 @@ def leeg() -> dict:
         "ochtenden": {"werkdag": [], "weekend": []},
         "ems": {"aan": None, "uit": None},
         "snelheden": [],
+        "vermogens": [],
+        "uurverbruik": {},
     }
 
 
@@ -72,6 +79,15 @@ def geldig(ritme) -> dict:
     snelheden = ritme.get("snelheden")
     if isinstance(snelheden, list):
         basis["snelheden"] = [float(v) for v in snelheden if isinstance(v, (int, float))][-HISTORIE:]
+    vermogens = ritme.get("vermogens")
+    if isinstance(vermogens, list):
+        basis["vermogens"] = [float(v) for v in vermogens if isinstance(v, (int, float))][-VERMOGEN_HISTORIE:]
+    uren = ritme.get("uurverbruik")
+    if isinstance(uren, dict):
+        basis["uurverbruik"] = {
+            str(k): [float(v) for v in reeks if isinstance(v, (int, float))][-UURVERBRUIK_DAGEN:]
+            for k, reeks in uren.items() if isinstance(reeks, list)
+        }
     ems = ritme.get("ems")
     if isinstance(ems, dict):
         basis["ems"].update({k: ems.get(k) for k in ("aan", "uit")})
@@ -294,6 +310,8 @@ def overzicht(ritme: dict) -> dict:
             "warm_om_klok": klok(leer["warm_om"]),
             "bedtijd_klok": klok(leer["bedtijd"]),
         }
+    uit["verwarmvermogen_kw"] = verwarmvermogen_kw(ritme)
+    uit["vermogensmetingen"] = len(ritme.get("vermogens") or [])
     uit["toelichting"] = (
         f"Geleerd uit jullie eigen bediening, vanaf {MIN_KEER} keer. 's Ochtends "
         "(04-11 uur) zet het EMS de airco zo vroeg aan dat het op het geleerde "
@@ -383,4 +401,87 @@ def thuiskomst(
             f"huis, ongeveer {eta_min} min; opwarmen duurt ongeveer {opwarmen_min} min."
         ),
         "reden": f"thuiskomst over ongeveer {eta_min} min ({snelheid:.0f} km/h)",
+    }
+
+
+# --- v5.67: de ochtendverwarming in de nachtplanning ------------------------
+
+def noteer_vermogen(ritme: dict, vermogen_w) -> None:
+    """Het vermogen van de airco terwijl hij draait - voor de schatting."""
+    if vermogen_w is not None and vermogen_w >= VERMOGEN_AAN_W:
+        ritme["vermogens"].append(round(float(vermogen_w), 0))
+        del ritme["vermogens"][:-VERMOGEN_HISTORIE]
+
+
+def verwarmvermogen_kw(ritme: dict) -> float | None:
+    reeks = ritme.get("vermogens") or []
+    if len(reeks) < VERMOGEN_MIN_METINGEN:
+        return None
+    return statistics.median(reeks) / 1000
+
+
+def noteer_uur(ritme: dict, uur: int, kwh: float) -> None:
+    """Wat de airco in een afgelopen uur gebruikte (ook 0)."""
+    reeks = ritme["uurverbruik"].setdefault(str(uur), [])
+    reeks.append(round(max(kwh, 0.0), 3))
+    del reeks[:-UURVERBRUIK_DAGEN]
+
+
+def _overlap_uren(a_van: datetime, a_tot: datetime, b_van: datetime, b_tot: datetime) -> float:
+    return max((min(a_tot, b_tot) - max(a_van, b_van)).total_seconds() / 3600, 0.0)
+
+
+def profiel_kwh(ritme: dict, van: datetime, tot: datetime) -> float:
+    """Hoeveel airco-verbruik het gewone verbruiksprofiel al meeneemt in dit
+    venster: per klokuur de mediaan van wat de airco de laatste dagen in
+    dat uur gebruikte."""
+    totaal = 0.0
+    uur = van.replace(minute=0, second=0, microsecond=0)
+    while uur < tot:
+        reeks = ritme["uurverbruik"].get(str(uur.hour)) or []
+        if reeks:
+            totaal += statistics.median(reeks) * _overlap_uren(uur, uur + timedelta(hours=1), van, tot)
+        uur += timedelta(hours=1)
+    return totaal
+
+
+def ochtend_kwh(ritme: dict, van: datetime, tot: datetime, verwacht_op, tempo_c_per_uur) -> float:
+    """Het verwachte verbruik van de ochtendverwarming in dit venster:
+    opwarmen op vol vermogen, daarna een uur vasthouden op half vermogen."""
+    vermogen = verwarmvermogen_kw(ritme)
+    if vermogen is None:
+        return 0.0
+    totaal = 0.0
+    dag = van.date()
+    while dag <= tot.date():
+        leer = geleerd(ritme, dagsoort(dag))
+        if (
+            leer["warm_om"] is not None and leer["ochtend_doel_c"] is not None
+            and (leer["kans"] or 0) >= KANS_MINIMAAL
+            and ritme["ems"]["aan"] != dag.isoformat()
+        ):
+            middernacht = datetime.combine(dag, datetime.min.time(), tzinfo=van.tzinfo)
+            warm = middernacht + timedelta(minutes=leer["warm_om"])
+            voorspeld = verwacht_op(warm) if verwacht_op else None
+            voorloop = voorloop_uren(voorspeld, leer["ochtend_doel_c"], tempo_c_per_uur)
+            if voorspeld is None or voorspeld < leer["ochtend_doel_c"] - MARGE_C:
+                start = warm - timedelta(hours=voorloop)
+                totaal += vermogen * _overlap_uren(start, warm, van, tot)
+                totaal += vermogen * VASTHOUDEN_FACTOR * _overlap_uren(
+                    warm, warm + timedelta(minutes=NA_WARM_OM_MIN), van, tot
+                )
+        dag += timedelta(days=1)
+    return totaal
+
+
+def nacht_extra_kwh(ritme: dict, van: datetime, tot: datetime, verwacht_op, tempo_c_per_uur) -> dict:
+    """Wat er bovenop het gewone verbruiksprofiel bij moet: de verwachte
+    ochtendverwarming min wat het profiel al aan airco meeneemt. Nooit
+    negatief - het profiel wordt hier niet verlaagd."""
+    verwacht = ochtend_kwh(ritme, van, tot, verwacht_op, tempo_c_per_uur)
+    al_in_profiel = profiel_kwh(ritme, van, tot)
+    return {
+        "verwacht_kwh": round(verwacht, 3),
+        "al_in_profiel_kwh": round(al_in_profiel, 3),
+        "extra_kwh": round(max(verwacht - al_in_profiel, 0.0), 3),
     }

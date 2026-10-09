@@ -191,6 +191,9 @@ CONF_WASHING_MACHINE_READY_SENSOR = "washing_machine_ready_sensor_entity"
 CONF_QUOOKER_POWER_SENSOR = "quooker_power_sensor_entity"
 CONF_AIRCO_CLIMATE_ENTITY = "airco_climate_entity"
 CONF_SLAAPKAMER_CLIMATE_ENTITY = "slaapkamer_climate_entity"
+# v5.67: vermogen van de woonkamer-airco (W of kW). Leeg: vanzelf gezocht
+# bij hetzelfde apparaat als de airco.
+CONF_AIRCO_POWER_SENSOR = "airco_power_sensor_entity"
 CONF_LIVING_ROOM_TEMPERATURE_SENSOR = "living_room_temperature_sensor_entity"
 CONF_LIVING_ROOM_HUMIDITY_SENSOR = "living_room_humidity_sensor_entity"
 CONF_LIVING_ROOM_SHUTTER_ENTITY_1 = "living_room_shutter_entity_1"

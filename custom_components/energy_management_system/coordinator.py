@@ -106,6 +106,7 @@ from .const import (
     CONF_WASHING_MACHINE_READY_SENSOR,
     CONF_QUOOKER_POWER_SENSOR,
     CONF_AIRCO_CLIMATE_ENTITY,
+    CONF_AIRCO_POWER_SENSOR,
     CONF_SLAAPKAMER_CLIMATE_ENTITY,
     CONF_LIVING_ROOM_TEMPERATURE_SENSOR,
     CONF_LIVING_ROOM_HUMIDITY_SENSOR,
@@ -1683,7 +1684,7 @@ class EnergyManagementSystemCoordinator:
         # de per-ronde-historie van vóór v5.58 eenmalig wordt gewist.
         # v5.63.1: ook de open waarnemingen (JSON-veilig) en of ze na een herstart al terug zijn
         # (zie `_herstel_airco_waarnemingen`); op één regel vanwege de groeigrens van __init__.
-        self._temp_prediction_pending, self.airco_bakje_laatste_start, self.airco_leer_versie, self.airco_open_waarnemingen, self._airco_waarnemingen_hersteld, self._klimaat_anker_wind, self._klimaat_wind_per_uur, self.airco_ritme, self._klimaat_anker_zon, self._nadering_vorige, self.klimaat_zon_residuen, self.klimaat_wind_residuen = [], {}, None, [], False, None, {}, {}, None, None, {}, {}
+        self._temp_prediction_pending, self.airco_bakje_laatste_start, self.airco_leer_versie, self.airco_open_waarnemingen, self._airco_waarnemingen_hersteld, self._klimaat_anker_wind, self._klimaat_wind_per_uur, self.airco_ritme, self._klimaat_anker_zon, self._nadering_vorige, self._airco_uur_acc, self.klimaat_zon_residuen, self.klimaat_wind_residuen = [], {}, None, [], False, None, {}, {}, None, None, None, {}, {}
         self.living_room_current_temp_c: float | None = None
         self.living_room_current_humidity_percent: float | None = None
         # Klimaat-tabblad: geleerde temperatuur-projectie (v0.63.56).
@@ -22167,6 +22168,10 @@ class EnergyManagementSystemCoordinator:
         # happening during periods we believed were self-sufficient, the
         # reserve has been running too tight - add a bonus proportional to
         # how often that's happened in the last LEARNING_HISTORY_DAYS.
+        # v5.67: de geplande ochtendverwarming, voor zover het profiel die
+        # nog niet meeneemt - zie `_airco_ochtend_extra_kwh`.
+        airco_ochtend = self._airco_ochtend_extra_kwh(now, cheap_block_start)
+        needed_kwh += airco_ochtend["extra_kwh"]
         recent_shortfalls = sum(1 for v in self.reserve_shortfall_history if v)
         shortfall_bonus_percent = (
             recent_shortfalls * SHORTFALL_MARGIN_BONUS_PER_RECENT_DAY
@@ -22277,6 +22282,7 @@ class EnergyManagementSystemCoordinator:
             # zodat in de export na te kijken is waar de reserve op rust.
             "regelverschuiving_w": round(self.regelverschuiving_kw() * 1000),
             "lange_horizon_extra_kwh": round(lange_horizon_extra, 3),
+            "airco_ochtend_extra_kwh": airco_ochtend["extra_kwh"],
             "reserve_kwh_after_margin": round(reserve_kwh, 3),
             # v3.74.0: en of die bodem het is die bindt.
             "bodem_kwh": round(bodem_kwh, 3),
@@ -43930,11 +43936,83 @@ class EnergyManagementSystemCoordinator:
 
     def _woonkamer_verwacht_om(self, minuut: int) -> float | None:
         """De voorspelde woonkamertemperatuur op een minuut van vandaag (v5.65)."""
-        uur = f"{dt_util.now().date().isoformat()}T{minuut // 60:02d}"
+        middernacht = dt_util.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        return self._woonkamer_verwacht_op(middernacht + timedelta(minutes=minuut))
+
+    def _woonkamer_verwacht_op(self, moment: datetime) -> float | None:
+        """De voorspelde woonkamertemperatuur in het uur van `moment` (v5.67)."""
+        uur = moment.strftime("%Y-%m-%dT%H")
         for regel in self.climate_forecast_trajectory or []:
             if str(regel.get("tijd") or "")[:13] == uur:
                 return regel.get("kort_termijn_temp_c")
         return None
+
+    def _airco_vermogen_w(self) -> float | None:
+        """Het vermogen van de woonkamer-airco in W (v5.67): de ingestelde
+        sensor, of vanzelf gevonden bij hetzelfde apparaat als de airco - een
+        sensor in W of kW met "power" in de naam."""
+        entiteit = self.config.get(CONF_AIRCO_POWER_SENSOR) or getattr(self, "_airco_vermogen_gevonden", None)
+        if entiteit is None and not getattr(self, "_airco_vermogen_gezocht", False):
+            self._airco_vermogen_gezocht = True
+            entiteit = self._airco_vermogen_gevonden = self._zoek_airco_vermogen()
+        toestand = self.hass.states.get(entiteit) if entiteit else None
+        if toestand is None:
+            return None
+        waarde = klimaat_wind.naar_kmh(toestand.state, None)
+        if waarde is None:
+            return None
+        return waarde * 1000 if toestand.attributes.get("unit_of_measurement") == "kW" else waarde
+
+    def _zoek_airco_vermogen(self) -> str | None:
+        try:
+            from homeassistant.helpers import entity_registry as er
+
+            register = er.async_get(self.hass)
+            airco = register.async_get(self.config.get(CONF_AIRCO_CLIMATE_ENTITY) or "")
+            if airco is None or not airco.device_id:
+                return None
+            for item in er.async_entries_for_device(register, airco.device_id):
+                toestand = self.hass.states.get(item.entity_id)
+                if (
+                    item.entity_id.startswith("sensor.") and "power" in item.entity_id
+                    and toestand is not None
+                    and toestand.attributes.get("unit_of_measurement") in ("W", "kW")
+                ):
+                    return item.entity_id
+        except Exception:  # noqa: BLE001 - zoeken mag de ronde nooit breken
+            return None
+        return None
+
+    def _noteer_airco_verbruik(self, now: datetime, ritme: dict) -> None:
+        """Vermogen en verbruik per klokuur van de airco bijhouden (v5.67)."""
+        vermogen_w = self._airco_vermogen_w()
+        if vermogen_w is None:
+            return
+        airco_ritme.noteer_vermogen(ritme, vermogen_w)
+        uur = now.replace(minute=0, second=0, microsecond=0)
+        vorige = self._airco_uur_acc
+        if vorige is None or vorige[0] != uur:
+            if vorige is not None and uur - vorige[0] == timedelta(hours=1):
+                staart = (uur - vorige[2]).total_seconds() / 3600
+                laatste = vorige[3] / 1000 * staart if 0 <= staart <= 0.5 else 0.0
+                airco_ritme.noteer_uur(ritme, vorige[0].hour, vorige[1] + laatste)
+            self._airco_uur_acc = (uur, 0.0, now, vermogen_w)
+            return
+        _, kwh, t0, w0 = vorige
+        uren = (now - t0).total_seconds() / 3600
+        if 0 < uren <= 0.5:
+            kwh += w0 / 1000 * uren
+        self._airco_uur_acc = (uur, kwh, now, vermogen_w)
+
+    def _airco_ochtend_extra_kwh(self, now: datetime, tot: datetime) -> dict:
+        """De ochtendverwarming in de nachtplanning (v5.67) - zie
+        `airco_ritme.nacht_extra_kwh`. Alleen met de knop Airco automaat aan:
+        anders stookt het EMS 's ochtends niet."""
+        if not self.airco_automaat_aan or tot <= now:
+            return {"extra_kwh": 0.0, "verwacht_kwh": 0.0, "al_in_profiel_kwh": 0.0}
+        return airco_ritme.nacht_extra_kwh(
+            self._airco_ritme(), now, tot, self._woonkamer_verwacht_op, self._airco_opwarmtempo()
+        )
 
     def _airco_ritme_ronde(self, now: datetime, uit: dict, stand: str | None) -> dict:
         """Het dagritme naast het gewone besluit (v5.65) - zie `airco_ritme`.
@@ -43949,6 +44027,7 @@ class EnergyManagementSystemCoordinator:
         ritme = self._airco_ritme()
         if self.presence_state not in (None, "weg"):
             airco_ritme.noteer_ochtend_thuis(ritme, now)
+        self._noteer_airco_verbruik(now, ritme)
         vraag = airco_ritme.besluit(
             ritme,
             nu=now,

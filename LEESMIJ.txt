@@ -1,14 +1,10 @@
-EMS v5.66 - zon, voorverwarmen, rolluik-isolatie en thuiskomst
+EMS v5.67 - de ochtendverwarming in de nachtplanning
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
 
-1. Zon: het EMS leert hoeveel de zon (gemeten aan je eigen PV) de woonkamer
-   opwarmt, per rolluikstand, en neemt dat mee in de voorspelling.
-2. Voorverwarmen: stookt het EMS de airco, dan een halve graad hoger vlak
-   voor een duur blok en een halve graad lager in een duur kwartier.
-3. Rolluik isolatie: nieuwe sensor die "dicht" zegt als koude wind
-   aantoonbaar warmte kost en er geen zon meer binnenkomt.
-4. Thuiskomst: is niemand thuis en komt iemand naar huis, dan gaat de airco
-   op tijd aan zodat het warm is bij binnenkomst.
-
-Alles wat de airco aanstuurt alleen met de knop Airco automaat aan.
+- Het EMS meet het vermogen van de woonkamer-airco (vanzelf gevonden bij de
+  Daikin, of zelf in te stellen) en wat hij per uur gebruikt.
+- Zet het EMS 's ochtends de airco aan, dan houdt de accu daar 's nachts al
+  rekening mee: de verwachte ochtendverwarming komt bij de reserve, voor
+  zover die niet al in het gewone verbruiksprofiel zit.
+- Alleen met de knop Airco automaat aan.

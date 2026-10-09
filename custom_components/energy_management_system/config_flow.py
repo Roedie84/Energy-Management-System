@@ -57,6 +57,7 @@ from .const import (
     CONF_WASHING_MACHINE_READY_SENSOR,
     CONF_QUOOKER_POWER_SENSOR,
     CONF_AIRCO_CLIMATE_ENTITY,
+    CONF_AIRCO_POWER_SENSOR,
     CONF_SLAAPKAMER_CLIMATE_ENTITY,
     BATTERY_COOLING_OPPORTUNITY_MIN_C,
     CONF_BATTERY_COOLING_FAN_SWITCH,
@@ -467,6 +468,9 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
             _optioneel(CONF_QUOOKER_POWER_SENSOR, defaults): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
             _optioneel(CONF_AIRCO_CLIMATE_ENTITY, defaults): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="climate")
+            ),
+            _optioneel(CONF_AIRCO_POWER_SENSOR, defaults): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="sensor")
             ),
             _optioneel(CONF_SLAAPKAMER_CLIMATE_ENTITY, defaults): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="climate")

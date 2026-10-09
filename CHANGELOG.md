@@ -31964,3 +31964,24 @@ Gevraagd: "Daarna stap 1 t/m 5". Stap 1 t/m 4 in deze versie.
 
 Laden, ontladen, reserve en marges ongewijzigd. Tests uitgebreid in
 `test_v564_wind.py` en `test_v565_airco_ritme.py`.
+
+## v5.67 — de ochtendverwarming in de nachtplanning
+
+Gevraagd: stap 5, "warmtevraag in de nachtplanning", akkoord op de
+Daikin-vermogenssensor als bron.
+
+- Nieuwe instelling `airco_power_sensor_entity` (W of kW). Leeg: het EMS
+  zoekt zelf een sensor met "power" in de naam bij hetzelfde apparaat als
+  de woonkamer-airco.
+- Het EMS houdt het vermogen van de airco bij als hij draait (> 150 W) en
+  wat hij per klokuur gebruikt (laatste 14 dagen).
+- De accureserve tot het goedkope blok krijgt er de geplande
+  ochtendverwarming bij: opwarmen op het geleerde vermogen (voorloop als in
+  v5.65), daarna een uur vasthouden op half vermogen - **min** wat het
+  verbruiksprofiel per klokuur al aan airco meeneemt. Nooit negatief, dus
+  geen dubbeltelling en geen verlaging van het profiel.
+- Alleen met de knop Airco automaat aan. Zichtbaar als
+  `airco_ochtend_extra_kwh` in de uitsplitsing van de reserve.
+
+Laden, ontladen en marges verder ongewijzigd. Tests in
+`test_v565_airco_ritme.py`.
