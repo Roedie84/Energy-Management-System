@@ -175,3 +175,14 @@ laatste ronde: 09-10 15:40, gemeten t/m 09-10 15:44
 - Geen release (tussenronde, niets acuut).
 
 laatste ronde: 09-10 19:40, gemeten t/m 09-10 19:44
+
+## 09-10 23:40 · tussenronde
+- Geïnstalleerd: **v5.69** (v5.68.1-v5.69 via chatsessie: accumodules, airco). HA-herstarts sinds 19:44: 3 (19:48, 20:53, 22:43). Logboek: 0 EMS-fouten (diagnose "fout 1" = REST-time-out P1-API bij de start 22:43, extern).
+- Beslissingen 19:44-23:52 alleen `default_smart` → 0× verkoop onder de reserve (harde regel gehaald). P1 19-23 u: import 0,203 kWh (0,153 in 22-23 u), export 0,081.
+- **Accu leeg om 22:34**, met een SoC-sprong 11 → 7 % (BMS-herijking bij leeg; ~0,35 kWh van 8,64) en `available_kwh` −0,26 daarna. Beschikbaar om 19:42 1,56 → 22:00 0,35 kWh: ~0,5 kW avondverbruik (geleerd nacht 306 W).
+- **H-EMS-8 (nieuw):** de SoC overschat de inhoud vlak boven leeg (sprong van 4 pp bij leeglopen) → beschikbaar en marge zijn de laatste uren ~0,3 kWh te optimistisch. Toets in de dagafsluiting: SoC-sprongen ≥ 3 pp omlaag bij < 15 % in de recorder (tekortnachten 30-09..04-10 en vannacht).
+- Nacht →10-10: verwacht tekort tot blok 10:30 **2,38 kWh, soort `economisch` (live)**; MC tot blok 100 % doorlopend sinds 19:48 → `kalibratie_22u.laatste_avond` 100 % (beschikbaar 0,35). H-EMS-6: 22:00-stand niet vervuild. Eerste Brier-paar (avond 08-10) om 00:00.
+- v5.68 temperatuurmodel: `temperatuur_extra_kwh` 0, `temperatuur_model_kw` null (nog niet bruikbaar); reserve 6,43 kWh = 4,59 × 1,40 (basis 10 + tekort 15 + nasleep 15 %).
+- Lopend: L-EMS-013 (open, Ruud). H-EMS-2, H-EMS-4, H-EMS-6 ongewijzigd. Geen release (tussenronde, niets acuut).
+
+laatste ronde: 09-10 23:40, gemeten t/m 09-10 23:52
