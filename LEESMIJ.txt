@@ -1,4 +1,4 @@
-EMS v5.68.2 - melding per accumodule uit te zetten
+EMS v5.68.3 - melding per accumodule uit te zetten
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
 

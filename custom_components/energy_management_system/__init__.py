@@ -157,6 +157,7 @@ EIGEN_SERVICES = (
     SERVICE_CONFIRM_NILM_DUPLICATE,
     SERVICE_VRAAG,
     "confirm_water_source",
+    "accumodule_melding",
 )
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

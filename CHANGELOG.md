@@ -32072,3 +32072,10 @@ nummer".
 - Omdat het op apparaatnaam gaat, wordt een nieuwe module op dezelfde plek
   vanzelf weer bewaakt (en begint sinds v5.68.1 met een schone lei).
 - De moduletabel toont `melding_uit` per module.
+
+## v5.68.3 — opruimen bij herladen
+
+- `accumodule_melding` staat nu in `EIGEN_SERVICES`, zodat de dienst bij
+  het herladen van de integratie netjes wordt afgemeld.
+- De modulefilter staat in een eigen functie (`_modules_met_drift`); de
+  meldingenfunctie groeide anders voorbij haar bevroren grootte.

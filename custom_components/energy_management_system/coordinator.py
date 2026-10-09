@@ -5084,14 +5084,7 @@ class EnergyManagementSystemCoordinator:
                 "beschaduwing, vervuiling of een uitgevallen streng.",
             )
 
-        # v5.68.2: modules waarvoor de melding is uitgezet (op apparaatnaam).
-        stil = set(self.battery_module_stil or [])
-        modules_met_drift = [
-            nummer
-            for nummer, gegevens in (self.battery_module_health or {}).items()
-            if gegevens.get("apparaat") not in stil
-            and self._module_drift_velden(nummer, gegevens)
-        ]
+        modules_met_drift = self._modules_met_drift()
         if modules_met_drift:
             stuur(
                 "battery_module_drift",
@@ -32048,6 +32041,17 @@ class EnergyManagementSystemCoordinator:
         if delta is not None and delta < BATTERY_MODULE_CELL_DELTA_MATERIEEL_V:
             velden.remove("cel_delta_afwijking_v")
         return velden
+
+    def _modules_met_drift(self) -> list[str]:
+        """Modules die materieel uit de pas lopen, zonder die waarvoor de
+        melding is uitgezet (v5.68.2, op apparaatnaam)."""
+        stil = set(self.battery_module_stil or [])
+        return [
+            nummer
+            for nummer, gegevens in (self.battery_module_health or {}).items()
+            if gegevens.get("apparaat") not in stil
+            and self._module_drift_velden(nummer, gegevens)
+        ]
 
     def zet_module_melding(self, naam: str, melden: bool) -> None:
         """De melding per accumodule uit of weer aan (v5.68.2) - zie de
