@@ -163,3 +163,15 @@ laatste ronde: 09-10 11:40, gemeten t/m 09-10 11:44
 - Hypotheses H-EMS-2, H-EMS-4, H-EMS-6 ongewijzigd. Geen release (tussenronde, niets acuut).
 
 laatste ronde: 09-10 15:40, gemeten t/m 09-10 15:44
+
+## 09-10 19:40 · tussenronde
+- Geïnstalleerd: **v5.68.1** (v5.63-v5.68.1 via chatsessies: airco/klimaat, v5.68 temperatuurmodel in de nachtreserve + bewolking uit het ensemble). HA-herstarts sinds 15:44: 7 (16:16, 17:24, 18:02, 18:36, 19:00, 19:07, 19:29). Logboek: 0 EMS-fouten; Solcast-limiet 10/10 bereikt (extern).
+- Beslissingen 15:44-19:44: `default_smart`, `grid_charging_profitable` 16:00-16:15 (20,2 ct spot), `battery_saved_for_peak` 16:45-17:15 en 17:30-17:45 (24,7-28,4 ct; bewaard voor 18-20 u 32-36 ct) → 0× verkoop onder de reserve (harde regel gehaald). 16-19 u: import 2,00 kWh, accu 0,59 in / 1,01 uit.
+- PV dag 1,24 kWh (Modbus, af) tegen Solcast day-ahead 2,68 → **−54 %**; tweede donkere dag op rij met grote overschatting (H-EMS-2 weegt mee in de dagafsluiting).
+- **v5.68 eerste meetpunt:** `temperatuur_extra_kwh` 0, `temperatuur_model_kw` null (model acht zichzelf nog niet bruikbaar), `airco_ochtend_extra_kwh` 0 → reserve vanavond ongewijzigd door v5.68. Meetbaar via diagnostics (`coordinator.last_reserve_margin_breakdown`).
+- Nacht →10-10 om 19:42: beschikbaar 1,56 kWh, nodig tot blok 10:30 3,55 → verwacht tekort 1,99 kWh, soort `economisch` (live, nachtprijs 12,8-14,4 ct spot = goedkoopst tot het blok). MC tot blok 100 %. Toets 10-10: tekortnacht ja, soort economisch.
+- **L-EMS-012 deels:** nu het blok van vandaag voorbij is valt de horizon goed op het blok van morgen (10:30); de terugvalfout zit alleen in de uren dat een blok loopt. De "Let op: 3x onverwacht stroom … accu genoeg had moeten hebben"-zin staat er nog (1 economisch + 2 onbekend).
+- **Nieuw H-EMS-7 → voorstel L-EMS-013:** de marge-opslag `shortfall_bonus_percent` telt alle 3 tekortnachten (+15 %, 0,84 kWh vanavond), ook de economische. Een economische tekortnacht zegt niets over een te krappe reserve. Ruud beslist (marge = sturing).
+- Geen release (tussenronde, niets acuut).
+
+laatste ronde: 09-10 19:40, gemeten t/m 09-10 19:44

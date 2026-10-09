@@ -96,7 +96,14 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Meten na bouw: volgende regeneratie (~10 dagen) toont bron "waterontharder"; overige sessies ongewijzigd.
 
 ## L-EMS-012 · MC-horizon en uitleg: juiste reden bij een lopend blok, tekortsoort in de "Let op"-zin
-- Status: **gepland (zelf bouwen: rapportage; stuurt niets)** — bouwen in de dagafsluiting
+- Status: **gepland (zelf bouwen: rapportage; stuurt niets)** — bouwen in de dagafsluiting. 19:40: na afloop van het blok staat de horizon goed (10:30 morgen); fout alleen zolang een blok loopt. Let-op-zin telt nog 3 nachten zonder soort.
 - Onderbouwing: 09-10 15:42: MC `horizon_basis` "tot 09:00 (prijzen morgen nog onbekend)" terwijl nordpool `tomorrow_valid` true (96 kwartieren) en de planning morgen 12:00-15:00 laden kent. Oorzaak: `_monte_carlo_horizon_kiezen` valt terug op 09:00 zodra `cheap_block_start <= now`, ook als het blok van vandaag nog loopt (12:15-16:45). Zelfde uitleg: "3x onverwacht stroom van het net terwijl de accu genoeg had moeten hebben" (coordinator.py ~41600) telt `reserve_shortfall_history` zonder soort; de 3 nachten zijn nu 1 economisch + 2 onbekend.
 - Bouw: reden "blok van vandaag loopt nog / is voorbij" vs "prijzen morgen nog onbekend" naar de werkelijke prijsbeschikbaarheid; "Let op"-zin splitst per soort (alleen planning/capaciteit = "had genoeg moeten hebben"). Horizon zelf (09:00 = einde tekortnacht) ongewijzigd. Tests.
 - Meten na bouw: middag na publicatie van de prijzen tekst zonder "onbekend"; "Let op"-zin noemt economische nachten niet als onverwacht.
+
+## L-EMS-013 · marge-opslag voor tekortnachten alleen bij een reserve-tekort, niet bij een economische nacht
+- Status: **open** (sturing/marge: Ruud beslist)
+- Onderbouwing: 09-10 19:42 `shortfall_bonus_percent` 15 (3 × 5 %) op `needed_kwh` 5,62 = +0,84 kWh reserve. De 3 nachten zijn volgens de eigen classificatie (v5.61) 1× `economisch` ("laden loonde nergens") en 2× `onbekend` (verkoop door de piekregel-bug, hersteld v5.28.4). `recent_shortfalls` (coordinator ~22227) telt elke tekortnacht, ongeacht soort. Een economische tekortnacht betekent: bijkopen was goedkoper dan vooraf laden — geen te krappe reserve. Vannacht →10-10 wordt naar verwachting weer `economisch` (1,99 kWh), waardoor de opslag 7 dagen blijft staan.
+- Voorstel: alleen nachten van soort `capaciteit`, `planning` en `onbekend` tellen voor de opslag; `economisch` niet. (Voorzichtig: `onbekend` blijft meetellen, huis gaat voor.)
+- Verwacht effect: bij 1 economische nacht in 7 dagen −5 % marge (~0,3 kWh minder reserve op een avond met ~6 kWh behoefte) → iets meer verkoop op zonnige dagen; geen effect op dagen dat de accu toch onder de reserve zit.
+- Meten na bouw: `shortfall_bonus_percent` tegen het aantal niet-economische nachten; tekortnachten van soort `capaciteit`/`planning` (moet 0 blijven) en verkocht boven de reserve over 14 dagen.
