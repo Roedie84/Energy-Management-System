@@ -3637,6 +3637,9 @@ PERSISTED_FIELDS: dict[str, dict] = {
     "airco_door_ems": {"type": "plain"},
     # v5.45: de Monte-Carlo-tekortkans van 22:00 per avond (kalibratie).
     "mc_22u_per_avond": {"type": "plain"},
+    # v5.57: de tellerstanden van de laatste kwartiergrens, zodat het
+    # kwartier waarin Home Assistant herstart toch gemeten wordt.
+    "meetlaag_kwartierstanden": {"type": "plain"},
     # v5.48: herstartbestendig. Deze dagsleutels en dagtellers stonden
     # alleen in het geheugen; na elke herstart begon de dag opnieuw - een
     # tweede capaciteitsmeting per dag, de levensdoorzet als dagslijtage,

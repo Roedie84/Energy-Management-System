@@ -35068,9 +35068,29 @@ class EnergyManagementSystemCoordinator:
             if paren
             else None
         )
+        # v5.57: de laatst vastgelegde avondstand, ook als zijn nacht nog
+        # loopt. Tot nu toe pas de volgende ochtend om 09:00 zichtbaar (in
+        # het dagrecord); de leerronde kon een vervuilde 22:00-stand
+        # (H-EMS-6) dan niet dezelfde avond toetsen.
+        avonden = self.mc_22u_per_avond if isinstance(self.mc_22u_per_avond, dict) else {}
+        laatste = None
+        if avonden:
+            sleutel = max(avonden)
+            stand = avonden.get(sleutel)
+            if isinstance(stand, dict):
+                laatste = {
+                    "avond": sleutel,
+                    "tijd": stand.get("tijd"),
+                    "kans_pct": stand.get("kans_pct"),
+                    "basis": stand.get("basis"),
+                    "kans_incl_lange_horizon_pct": stand.get("kans_incl_lange_horizon_pct"),
+                    "beschikbaar_kwh": stand.get("beschikbaar_kwh"),
+                }
         return {
             "nachten": len(paren),
             "brier": brier,
+            "laatste_avond": laatste,
+            "avonden_bewaard": len(avonden),
             "basis": "kans tot het goedkope blok om 22:00 tegen de tekortnacht",
             "nachten_oude_basis_uitgesloten": oude_basis,
             "per_nacht": [
@@ -35084,6 +35104,10 @@ class EnergyManagementSystemCoordinator:
     # dagen recorder weg. Als klasse-attribuut None (`__init__` staat op de
     # ratel); `_leg_mc_22u_vast` maakt per coördinator een eigen tabel.
     mc_22u_per_avond: dict | None = None
+
+    # v5.57: tellerstanden van de laatste kwartiergrens (meetlaag), bewaard
+    # over een herstart. Klasse-attribuut om dezelfde reden als hierboven.
+    meetlaag_kwartierstanden: dict | None = None
 
     # v5.40: zie `_run_monte_carlo_simulation`. Onveranderlijk, dus als
     # klasse-attribuut veilig (en `__init__` staat op de ratel).

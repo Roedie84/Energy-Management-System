@@ -49,6 +49,8 @@ class Meetlaag:
         self._vorige_grens = None
         self._vorige_standen = None
         self._accu_in_monsters: list[float] = []
+        self._hersteld = False
+        self.kwartieren_over_herstart = 0
         self._laatste_bewaring = float("-inf")   # eerste keer meteen, ongeacht de uptime
         self._geladen = False
         self._laden_klaar = False
@@ -571,7 +573,12 @@ class Meetlaag:
             eenheid = (getattr(toestand, "attributes", None) or {}).get("unit_of_measurement") if toestand else None
             standen[naam] = kwartierenergie.stand(toestand.state if toestand else None, gemeld, grens, eenheid)
         vorige, vorige_grens = self._vorige_standen, self._vorige_grens
+        over_herstart = False
+        if vorige is None:
+            vorige, vorige_grens = self._standen_van_voor_herstart(grens, tellers)
+            over_herstart = vorige is not None
         self._vorige_standen, self._vorige_grens = standen, grens
+        self._bewaar_standen(grens, standen, tellers)
         geschat = (sum(self._accu_in_monsters) / len(self._accu_in_monsters) / 4000) if self._accu_in_monsters else None
         self._accu_in_monsters = []
         if vorige is None or vorige_grens != grens - timedelta(minutes=15):
@@ -586,6 +593,18 @@ class Meetlaag:
             vorige_grens, vorige, standen, prijs,
             accu_in_geschat_kwh=geschat if not tellers.get("battery_in") else None,
         )
+        if over_herstart:
+            # v5.57: de accutellers van zendure_ha zijn in HA opgeteld
+            # vermogen - tijdens de herstart telden ze niet mee. De
+            # P1- en omvormertellers zijn tellers in het apparaat zelf.
+            for teller in ("battery_out", "battery_in"):
+                if record["kwaliteit_per_teller"].get(teller) == "measured":
+                    record["kwaliteit_per_teller"][teller] = "partially_estimated"
+            record["quality"] = max(
+                record["kwaliteit_per_teller"].values(), key=lambda k: kwartierenergie._RANG[k]
+            )
+            record["over_herstart"] = True
+            self.kwartieren_over_herstart += 1
         record["bron_accu_in"] = (
             "teller" if tellers.get("battery_in") and tellers["battery_in"] == (self.c.config or {}).get(CONF_BATTERY_CHARGE_ENERGY_SENSOR)
             else ("teller (naamgenoot van de ontlaadteller)" if tellers.get("battery_in") else "geschat uit accuvermogen")
@@ -594,6 +613,48 @@ class Meetlaag:
         opslag = kwartierenergie.compact(record)
         opslag["bron"] = {"teller": "t", "teller (naamgenoot van de ontlaadteller)": "n"}.get(record["bron_accu_in"], "g")
         self.log.voeg_toe("kwartier", vorige_grens, opslag)
+
+    def _bewaar_standen(self, grens: datetime, standen: dict, tellers: dict) -> None:
+        """De tellerstanden van deze kwartiergrens bewaren (v5.57).
+
+        Uit de leerronde van 9 oktober: na elke herstart ontbrak het kwartier
+        waarin de herstart viel - er was geen beginstand. Op 8 oktober (20
+        herstarts) waren 74 van de 96 kwartieren gemeten. De tellers lopen
+        door terwijl Home Assistant herstart, dus met de bewaarde stand van
+        de laatste grens is dat kwartier gewoon uit te rekenen.
+        """
+        try:
+            self.c.meetlaag_kwartierstanden = {
+                "grens": grens.isoformat(),
+                "tellers": dict(tellers),
+                "standen": standen,
+            }
+            self.c.schedule_persisted_state_save()
+        except Exception:  # noqa: BLE001 - bewaren is bijzaak
+            pass
+
+    def _standen_van_voor_herstart(self, grens: datetime, tellers: dict):
+        """De bewaarde standen van de vorige grens, als die precies één
+        kwartier terug ligt en met dezelfde tellers gemeten is (v5.57).
+        Anders (None, None): dan blijft het kwartier ongemeten, zoals
+        voorheen. Een andere teller (L-EMS-003) of een langere onderbreking
+        geeft nooit een verkeerd verschil."""
+        bewaard = getattr(self.c, "meetlaag_kwartierstanden", None)
+        if not isinstance(bewaard, dict) or self._hersteld:
+            return None, None
+        self._hersteld = True
+        try:
+            vorige_grens = datetime.fromisoformat(bewaard.get("grens"))
+        except (TypeError, ValueError):
+            return None, None
+        if vorige_grens != grens - timedelta(minutes=15):
+            return None, None
+        if bewaard.get("tellers") != dict(tellers) or not tellers.get("battery_in"):
+            return None, None
+        standen = bewaard.get("standen")
+        if not isinstance(standen, dict) or set(standen) != set(tellers):
+            return None, None
+        return standen, vorige_grens
 
     # =====================================================================
     # dag, opslag
@@ -804,6 +865,27 @@ def _zonband(band: dict, pv_reeks: list, begin: datetime, eind: datetime) -> tup
     return round(laag, 4), round(hoog, 4)
 
 
+def _kwartieren_op_dag(kwartieren: list[dict]) -> int:
+    """Het aantal kwartieren van de kalenderdag van deze records: 96, of
+    92/100 op de dag van de zomer-/wintertijdwissel (v5.57)."""
+    try:
+        eerste = datetime.fromisoformat(kwartieren[0]["kwartier"])
+    except (KeyError, IndexError, TypeError, ValueError):
+        return 96
+    if eerste.tzinfo is None:
+        return 96
+    from zoneinfo import ZoneInfo
+
+    tz = getattr(eerste.tzinfo, "key", None)
+    zone = ZoneInfo(tz) if tz else ZoneInfo("Europe/Amsterdam")
+    begin = datetime.combine(eerste.astimezone(zone).date(), datetime.min.time(), tzinfo=zone)
+    eind = datetime.combine(begin.date() + timedelta(days=1), datetime.min.time(), tzinfo=zone)
+    # Eerst naar UTC: binnen één tijdzone rekent Python in wandkloktijd.
+    from datetime import timezone as _utc
+
+    return round((eind.astimezone(_utc.utc) - begin.astimezone(_utc.utc)).total_seconds() / 900)
+
+
 def _bruikbare_kwartieren(meting: dict) -> tuple[int, dict]:
     """Hoeveel kwartieren het optimum echt kon narekenen, en waarom de rest
     wegviel (v5.45).
@@ -845,6 +927,11 @@ def schaduw_dagrapport(evaluaties: list[dict], kwartieren: list[dict], emax: flo
     uit = {"varianten": {}, "kwartieren_gemeten": len(meting),
            "dekking_procent": round(statistics.mean([k.get("coverage_percent") or 0 for k in kwartieren]), 1) if kwartieren else None}
     uit["kwartieren_bruikbaar"], uit["kwartieren_ongebruikt"] = _bruikbare_kwartieren(meting)
+    # v5.57: hoeveel kwartieren er die dag hadden moeten zijn en niet in de
+    # meting staan (vooral: het kwartier van een herstart, tot v5.57), en
+    # hoeveel er over een herstart heen uit bewaarde standen kwamen.
+    uit["kwartieren_niet_gemeten"] = max(0, _kwartieren_op_dag(kwartieren) - len(meting)) if kwartieren else None
+    uit["kwartieren_over_herstart"] = sum(1 for k in kwartieren if k.get("over_herstart"))
     for ct in schaduw.SLIJTAGEVARIANTEN_CT:
         e_kwh = None
         kas = doorzet = boven_90 = 0.0

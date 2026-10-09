@@ -31498,3 +31498,31 @@ vervuilde tellingen van de snelle velden beginnen één keer opnieuw; relais,
 rendement en bronmeting blijven.
 
 Nieuw: `test_v556_rapportage.py`.
+
+## v5.57 — Meetlaag: het kwartier van een herstart wordt gemeten
+
+Uit de leerronde van 9 oktober. Alleen meten en diagnose; sturing, reserve,
+drempels, marges en instellingen ongewijzigd.
+
+**Kwartier over een herstart heen.** Op 8 oktober (20 herstarts) stonden 74
+van de 96 kwartieren in de meetlog: het kwartier waarin Home Assistant
+herstartte had geen beginstand en viel weg. De tellerstanden van elke
+kwartiergrens worden nu bewaard (`meetlaag_kwartierstanden`, in de bestaande
+opslag). Ligt de bewaarde grens precies één kwartier vóór de eerste grens na
+de start en zijn het dezelfde tellers, dan wordt dat kwartier alsnog
+uitgerekend; anders blijft het ongemeten zoals voorheen (een langere
+onderbreking of een andere teller, zie L-EMS-003, geeft nooit een verkeerd
+verschil). Zo'n kwartier heet `over_herstart`; de accutellers van zendure_ha
+tellen in HA en liepen tijdens de herstart niet mee, dus die staan daar op
+`partially_estimated`, nooit op `measured`.
+
+**Dagrapport telt wat ontbreekt.** Nieuw: `kwartieren_niet_gemeten` (96, of
+92/100 op de dag van de klokwissel, min de gemeten kwartieren) en
+`kwartieren_over_herstart`.
+
+**Kalibratie 22:00 dezelfde avond zichtbaar.** `kalibratie_22u` toont nu
+`laatste_avond` (de vastgelegde stand van de laatste avond, ook als de nacht
+nog loopt) en `avonden_bewaard`. Tot nu toe was de stand pas de ochtend erna
+om 09:00 te zien, in het dagrecord.
+
+Nieuw: `test_v557_leerronde.py`.

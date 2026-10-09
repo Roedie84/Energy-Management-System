@@ -125,6 +125,8 @@ def compact(record: dict) -> dict:
            "a": [(record.get("leeftijd_s") or {}).get(t) for t in TELLERS]}
     for teller, kort in _KORT.items():
         uit[kort] = record[f"{teller}_kwh"]
+    if record.get("over_herstart"):
+        uit["oh"] = 1   # v5.57: beginstand van vóór een herstart
     return uit
 
 
@@ -155,4 +157,5 @@ def uitpakken(kort: dict) -> dict:
         "quality": max(kwaliteit.values(), key=lambda q: _RANG[q]),
         "coverage_percent": kort["cov"],
         "leeftijd_s": dict(zip(TELLERS, kort.get("a") or [None] * len(TELLERS))),
+        **({"over_herstart": True} if kort.get("oh") else {}),
     }

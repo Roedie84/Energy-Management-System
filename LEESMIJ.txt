@@ -1,5 +1,5 @@
-EMS v5.56 - rapportage: proefstand-slijtage marginaal, uitleg tot/na het blok, meelezen op stabiele velden
+EMS v5.57 - meetlaag: het kwartier van een herstart wordt gemeten
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
-Sturing, reserve, drempels en marges veranderen niet; alleen weergave,
-uitleg en diagnose.
+Sturing, reserve, drempels en marges veranderen niet; alleen meten en
+diagnose (meetlaag, dagrapport, kalibratie 22:00).
