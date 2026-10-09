@@ -81,11 +81,13 @@ Status: open / akkoord / afgewezen / gebouwd vX / geverifieerd / teruggedraaid. 
 - Meten na installatie: dagrapport `kwartieren_niet_gemeten` ≈ 0 op een dag met herstarts < 15 min, `kwartieren_over_herstart` ≈ aantal herstarts; geen kwartier met `house_kwh` < 0 of > 3 kWh rond een herstart.
 
 ## L-EMS-010 · "verkocht met winst" alleen als de verkoop boven de reserve lag
-- Status: **open** (rapportage/classificatie, maar raakt een bewuste keuze van v5.55 → Ruud beslist)
+- Status: **akkoord 09-10** → **uitgevoerd v5.61** (09-10, chatsessie; alleen rapportage/classificatie, sturing ongewijzigd) — nog niet geïnstalleerd; toets na installatie: binnen het eerste uur nachten →03-10 en →04-10 niet meer `verkocht_met_winst` (planning met "onder de reserve", of onbekend als het dagverloop het niet uitwijst), `reservetoets` "v5.61"
+- (eerder: open, raakt een bewuste keuze van v5.55 → Ruud beslist)
 - Onderbouwing: sinds v5.55 heten de nachten →03-10 (1,9 kWh verkocht, 0,68 tekort) en →04-10 (4,6 kWh, 1,68 tekort) `verkocht_met_winst`: "bewust, geen stuurfout". De leerronde van 07-10 23:45 toonde dat die verkoop via `expensive_quarter_peak` ONDER de reserve ging (04-10 vanaf 19:55 beschikbaar < reserve) — een fout die v5.28.4 herstelde. Verkoop onder de reserve is een schending van de harde regel "huis gaat voor", ook als de prijs achteraf gunstig uitviel.
 - Voorstel: in de tekortsoort eerst toetsen of er die avond verkocht werd terwijl beschikbaar < reserve; zo ja: soort `verkocht_onder_reserve` (LET OP, nooit "bewust"), ongeacht de prijs. Alleen verkoop boven de reserve kan `verkocht_met_winst` zijn. Test met de reeks van 04-10.
 - Verwacht effect: een herhaling van de piekregel-bug wordt niet meer weggeschreven als "bewust". Sturing ongewijzigd.
 - Meten na bouw: per tekortnacht de soort naast "verkocht onder reserve ja/nee" uit de recorder; 0 nachten `verkocht_met_winst` met verkoop onder de reserve.
+- Gebouwd (v5.61): per verkoopkwartier beschikbaar (nieuw `beschikbaar_kwh` in het dagverloop, oudere regels uit de laadstand: capaciteit × (soc − min) / 100) tegen `reserve_kwh`. Op of onder de reserve → planning ("… kWh verkocht onder de reserve … stuurfout, ook al was de prijs gunstig"); winst maar reserve/laadstand onbekend → onbekend; alleen volledig boven de reserve → `verkocht_met_winst`. Bewaarde winstnachten eenmalig herberekend (`reservetoets`; zonder dagverloop onbekend + "open"). 17 tests; 5114 groen.
 
 ## L-EMS-011 · waterontharder: regel krijgt ook bron "waterontharder"
 - Status: **gepland (zelf bouwen: rapportage/classificatie; stuurt niets)** — bouwen in de dagafsluiting
