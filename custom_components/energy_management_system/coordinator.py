@@ -31674,6 +31674,12 @@ class EnergyManagementSystemCoordinator:
 
         for module in modules:
             sleutel = str(module["module"])
+            # v5.68.1: een vervangen module (andere apparaatnaam, bv. een
+            # nieuwe AB3000 voor 00996) begint met een schone lei - de
+            # geschiedenis en de CUSUM van de oude accu horen er niet bij.
+            vorige = (self.battery_module_health.get(sleutel) or {}).get("apparaat")
+            if module.get("naam") and vorige and vorige != module["naam"]:
+                self.battery_module_health.pop(sleutel, None)
             staat = self.battery_module_health.setdefault(
                 sleutel,
                 {
@@ -31684,6 +31690,8 @@ class EnergyManagementSystemCoordinator:
                     "waarschuwingen": [],
                 },
             )
+            if module.get("naam"):
+                staat["apparaat"] = module["naam"]
             metingen = staat["dag_metingen"]
             for veld, waarde in (
                 ("cel_delta_afwijking_v", module["cel_delta_afwijking_v"]),

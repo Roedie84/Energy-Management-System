@@ -32047,3 +32047,16 @@ worden"; akkoord op punt 1 en 2 van de inventaris.
   onbetrouwbare geweerd zijn; de mediaan alleen als terugval.
 
 Nieuw: `tests/test_v568_benutten.py`.
+
+## v5.68.1 — een vervangen accumodule begint met een schone lei
+
+Gemeld: "Accumelding dat hij afwijkt hoeft niet meer, gaat om de 996 accu
+die wordt vervangen". De melding "Accumodule loopt uit de pas" is in HA
+uitgezet.
+
+- Per module wordt de apparaatnaam bewaard (`apparaat`). Verandert die -
+  een nieuwe AB3000 op de plek van 00996 - dan worden de geschiedenis en de
+  CUSUM van die module gewist: de nieuwe accu wordt niet beoordeeld op wat
+  de oude deed.
+
+Sturing ongewijzigd. Nieuw: `tests/test_v5681_module_vervangen.py`.

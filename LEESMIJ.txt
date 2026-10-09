@@ -1,13 +1,12 @@
-EMS v5.68 - wat het EMS leert, ook gebruiken
+EMS v5.68.1 - een vervangen accumodule begint met een schone lei
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
 
-1. Koude nachten: het EMS leerde al hoeveel het huis 's nachts gebruikt per
-   buitentemperatuur. Nu houdt de accu daar rekening mee: zegt dat model
-   bij de voorspelde temperatuur meer dan het gewone profiel, dan blijft er
-   meer in de accu. Nooit minder dan het profiel.
-2. Bewolking: de zoncorrectie gebruikt nu de bewolking van het
-   weerensemble, waar onbetrouwbare weerbronnen al uit zijn gehaald.
+- Komt er een nieuwe accumodule op de plek van een oude (bijvoorbeeld de
+  AB3000 00996), dan vergeet het EMS wat het van de oude module had
+  geleerd en begint het voor de nieuwe opnieuw.
+- De melding "Accumodule loopt uit de pas" staat uit; zet hem na de
+  vervanging weer aan bij de meldingen van het EMS.
 
-Ook in deze versie (v5.67.3): de melding dat een proefstandkandidaat klaar
-is, werkt weer.
+Ook in v5.68: koude nachten in de accureserve, bewolking uit het
+weerensemble.
