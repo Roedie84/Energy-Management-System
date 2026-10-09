@@ -1,9 +1,9 @@
-EMS v5.67.1 - de airco gaat altijd om 22:00 uit
+EMS v5.67.2 - de airco gaat altijd om 22:00 uit
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.
 
-- Met de knop Airco automaat aan zet het EMS de woonkamer-airco om 22:00
-  uit. De tijd is aan te passen bij Configureren ("Airco altijd uit om").
+- Het EMS zet de woonkamer-airco om 22:00 uit, ook met de knop Airco automaat uit.
+  De tijd is aan te passen bij Configureren ("Airco altijd uit om").
 - Eén keer per avond: zet je hem daarna zelf weer aan, dan blijft het EMS
   eraf.
 - Daarnaast (v5.67): de verwachte ochtendverwarming telt mee in de

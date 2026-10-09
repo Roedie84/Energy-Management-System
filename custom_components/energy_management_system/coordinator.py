@@ -43900,7 +43900,10 @@ class EnergyManagementSystemCoordinator:
         uit = self._airco_thuiskomst_ronde(now, uit, stand)
         uit = self._airco_buffer_ronde(now, uit, stand)
         uit["knop"] = self.airco_automaat_aan
-        uit["toegepast"] = bool(self.airco_automaat_aan and uit["actie"] in ("verwarmen", "uit"))
+        # v5.67.2: de vaste uittijd geldt ook met de knop uit.
+        uit["toegepast"] = bool(
+            (self.airco_automaat_aan or uit.get("altijd")) and uit["actie"] in ("verwarmen", "uit")
+        )
         # Een regel voor het dashboard - tekst uit de code, niet uit een sjabloon.
         uit["status_tekst"] = (
             "Uitgevoerd."
@@ -44043,7 +44046,9 @@ class EnergyManagementSystemCoordinator:
         )
         if vraag is None:
             return uit
-        if vraag.get("markeer_uit") and (self.airco_automaat_aan or vraag["actie"] != "uit"):
+        if vraag.get("markeer_uit") and (
+            self.airco_automaat_aan or vraag.get("altijd") or vraag["actie"] != "uit"
+        ):
             airco_ritme.noteer_ems_uit(ritme, now)
         if not vraag["reden"]:
             return uit
@@ -44051,7 +44056,7 @@ class EnergyManagementSystemCoordinator:
         nieuw["redenen"] = list(uit.get("redenen") or []) + [vraag["reden"]]
         nieuw["redenen_tekst"] = " · ".join(nieuw["redenen"])
         if vraag["actie"] == "uit":
-            nieuw.update(actie="uit", tekst=vraag["tekst"])
+            nieuw.update(actie="uit", tekst=vraag["tekst"], altijd=bool(vraag.get("altijd")))
         elif vraag.get("houd_aan"):
             if uit["actie"] == "uit":
                 nieuw.update(actie="niets", tekst=vraag["tekst"])

@@ -31997,3 +31997,13 @@ daarna toch weer aanzet zet ik hem zelf weer uit".
   is de avond ook afgehandeld. Zet iemand hem daarna weer aan, dan laat het
   EMS hem staan.
 - Met de knop Airco automaat aan, zoals alle airco-sturing.
+
+## v5.67.2 — 22:00 uit, ook met de knop uit
+
+Gevraagd: "Airco moet ook om 22:00 uit zonder knop aan".
+
+- De vaste uittijd (`airco_uit_om`, standaard 22:00) wordt uitgevoerd los
+  van de knop Airco automaat. Nog steeds één keer per avond; wie hem daarna
+  zelf weer aanzet, houdt hem aan.
+- Al het andere (aanzetten, voorverwarmen, thuiskomst, de geleerde
+  bedtijd) blijft achter de knop.

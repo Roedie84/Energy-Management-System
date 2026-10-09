@@ -256,6 +256,8 @@ def besluit(
         return {
             "actie": "uit",
             "markeer_uit": True,
+            # v5.67.2: de vaste uittijd geldt ook met de knop Airco automaat uit.
+            "altijd": vast,
             "tekst": (
                 f"Uitzetten: het is {klok(bed)}, dan gaat de airco uit."
                 if vast

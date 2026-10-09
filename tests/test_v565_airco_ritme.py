@@ -361,3 +361,20 @@ def test_coordinator_zet_om_22_uur_uit_en_markeert_ook_als_hij_al_uit_was(make_c
     c.airco_ritme = ar.leeg()
     assert c._airco_ritme_ronde(_op(3, 22, 1), basis, "off")["actie"] == "niets"
     assert c._airco_ritme_ronde(_op(3, 22, 40), basis, "heat")["actie"] == "niets"
+
+
+def test_vaste_uittijd_ook_met_de_knop_uit(make_coordinator):
+    """v5.67.2: "Airco moet ook om 22:00 uit zonder knop aan"."""
+    c = make_coordinator({})
+    c.airco_ritme = ar.leeg()
+    c.airco_automaat_aan = False
+    c.presence_state = "thuis"
+    basis = {"actie": "niets", "tekst": "x", "redenen": [], "redenen_tekst": "", "doel_c": 21.0}
+    uit = c._airco_ritme_ronde(_op(3, 22, 1), basis, "heat")
+    assert uit["actie"] == "uit" and uit["altijd"]
+    assert c.airco_ritme["ems"]["uit"] == "2026-10-08"
+
+
+def test_geleerde_bedtijd_blijft_achter_de_knop():
+    r = _geleerd_ritme()
+    assert not _besluit(r, _op(3, 22, 5), airco_stand="heat").get("altijd")
