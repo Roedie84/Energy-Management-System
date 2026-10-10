@@ -1,3 +1,14 @@
+EMS v5.77.0 - raam open, airco nooit aan
+
+Installeren: via HACS bijwerken en Home Assistant herstarten. Daarna in
+Instellingen > Apparaten en diensten > Energy Management System > Configureren
+de nieuwe optie "Ramen woonkamer en keuken" invullen (leeg = geen blokkade).
+
+- Staat een van die ramen open (ook op de ventilatiestand), dan zet het EMS
+  de woonkamer-airco nooit aan en nooit hoger; heeft het EMS hem aangezet,
+  dan zet het hem uit. Een raamsensor die onbekend of onbeschikbaar is,
+  blokkeert niet, maar staat wel in de redenen. De vaste uittijd blijft.
+
 EMS v5.76.1 - historie uit een P1-bron die wel bewaard wordt
 
 Installeren: via HACS bijwerken en Home Assistant herstarten.

@@ -7371,3 +7371,12 @@ VLOER_BOOTSTRAP_MIN_KWARTIEREN = 80
 # metingen dan dit in de periode telt als "geen historie".
 CONF_P1_HISTORY_SENSOR = "p1_history_sensor_entity"
 P1_HISTORIE_MIN_METINGEN = 12
+
+# v5.77 (Ruud 10-10: "Staan de ramen in de woonkamer open? Dan mag de airco
+# nooit aan" - "Keuken hoort bij woonkamer, is dezelfde ruimte"): de
+# raamsensoren van de woonkamer en de keuken. Eén raam open ("on", ook de
+# ventilatiestand) en de airco gaat niet aan; heeft het EMS hem aangezet, dan
+# zet het EMS hem uit. Onbekend/onbeschikbaar telt niet als open (een kapotte
+# sensor mag de airco niet blokkeren), maar staat wel in de redenen. Leeg =
+# geen blokkade.
+CONF_AIRCO_RAAM_ENTITIES = "airco_raam_entities"

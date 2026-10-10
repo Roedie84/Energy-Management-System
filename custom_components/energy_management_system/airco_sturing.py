@@ -287,3 +287,51 @@ def buffer(doel_c: float | None, prijs_nu: float | None, komende: list) -> dict:
             ),
         }
     return {"doel_c": doel_c, "reden": None}
+
+
+# --- v5.77: een raam open = de airco nooit aan -------------------------------
+
+
+def ramen(toestanden: list) -> dict:
+    """Welke ramen open staan, en welke onbekend zijn (v5.77).
+
+    `toestanden`: (naam, toestand) per raamsensor. "on" is open - ook de
+    ventilatiestand. "unknown"/"unavailable"/None telt NIET als open (een
+    kapotte sensor mag de airco niet blokkeren), maar wordt wel genoemd.
+    """
+    open_, onbekend = [], []
+    for naam, toestand in toestanden or []:
+        if toestand == "on":
+            open_.append(naam)
+        elif toestand not in ("off",):
+            onbekend.append(naam)
+    return {"open": open_, "onbekend": onbekend}
+
+
+def raam_open(uit: dict, raam: dict, *, airco_stand: str | None, door_ems_aan: bool) -> dict:
+    """Het besluit met de ramen erbij (v5.77, Ruud 10-10).
+
+    Na alle andere stappen (gewoon besluit, dagritme, thuiskomst,
+    voorverwarmen), zodat geen enkele weg de airco aanzet of een hoger doel
+    zet terwijl een raam open is. Staat de airco aan door het EMS, dan zet het
+    EMS hem uit - net als de Home Assistant-automatisering die hetzelfde doet;
+    beide zetten hem uit, dus er is geen gevecht. Een "uit" (bijvoorbeeld de
+    vaste uittijd van 22:00) blijft staan.
+    """
+    redenen = list(uit.get("redenen") or [])
+    if raam.get("onbekend"):
+        redenen.append("raamsensor onbekend (telt niet als open): " + ", ".join(raam["onbekend"]))
+    if not raam.get("open"):
+        if redenen == list(uit.get("redenen") or []):
+            return uit
+        return dict(uit, redenen=redenen, redenen_tekst=" · ".join(redenen))
+    reden = "raam open: " + ", ".join(raam["open"])
+    redenen.append(reden)
+    nieuw = dict(uit, redenen=redenen, redenen_tekst=" · ".join(redenen), raam_open=True)
+    if uit.get("actie") == "uit":
+        return nieuw
+    if door_ems_aan and airco_stand == "heat":
+        nieuw.update(actie="uit", tekst="Uitzetten: " + reden + ".")
+    else:
+        nieuw.update(actie="niets", tekst="Niet aanzetten: " + reden + ".")
+    return nieuw

@@ -108,6 +108,7 @@ from .const import (
     CONF_AIRCO_CLIMATE_ENTITY,
     CONF_AIRCO_POWER_SENSOR,
     CONF_AIRCO_UIT_OM,
+    CONF_AIRCO_RAAM_ENTITIES,
     DEFAULT_AIRCO_UIT_OM,
     CONF_SLAAPKAMER_CLIMATE_ENTITY,
     CONF_LIVING_ROOM_TEMPERATURE_SENSOR,
@@ -45579,6 +45580,10 @@ class EnergyManagementSystemCoordinator:
         uit = self._airco_kort_weg_ronde(now, uit)
         uit = self._airco_thuiskomst_ronde(now, uit, stand)
         uit = self._airco_buffer_ronde(now, uit, stand)
+        # v5.77: als laatste - een raam open en de airco gaat nooit aan.
+        uit = airco_sturing.raam_open(
+            uit, self._airco_ramen(), airco_stand=stand, door_ems_aan=self.airco_door_ems
+        )
         uit["knop"] = self.airco_automaat_aan
         # v5.67.2: de vaste uittijd geldt ook met de knop uit.
         uit["toegepast"] = bool(
@@ -45599,6 +45604,17 @@ class EnergyManagementSystemCoordinator:
         self.last_airco_besluit = uit
         if uit["toegepast"]:
             self.hass.async_create_task(self._async_pas_airco_toe(entiteit, uit))
+
+    def _airco_ramen(self) -> dict:
+        """De ramen van woonkamer en keuken (v5.77) - zie `airco_sturing.ramen`."""
+        toestanden = []
+        for entiteit in self.config.get(CONF_AIRCO_RAAM_ENTITIES) or []:
+            toestand = self.hass.states.get(entiteit)
+            naam = (
+                toestand.attributes.get("friendly_name") if toestand is not None else None
+            ) or entiteit
+            toestanden.append((naam, toestand.state if toestand is not None else None))
+        return airco_sturing.ramen(toestanden)
 
     def _airco_ritme(self) -> dict:
         """Het geleerde dagritme, altijd in een bruikbare vorm (v5.65)."""

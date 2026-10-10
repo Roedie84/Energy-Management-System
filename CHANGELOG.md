@@ -32506,3 +32506,29 @@ Zelfde teken als de P1-sensor (+ afname, − teruglevering; live nagekeken:
 sluipverbruiksensor, en bij terugvallen in het logboek (info).
 
 Tests: `test_v5761.py` (6).
+
+## v5.77.0 — raam open, airco nooit aan
+
+Gevraagd (Ruud, 10-10 16:07): "Staan de ramen in de woonkamer open? Dan mag
+de airco nooit aan" en "Keuken hoort bij woonkamer, is dezelfde ruimte".
+Eerder was besloten raamsensoren niet te gebruiken omdat de ventilatiestand
+als open telt; nu blokkeert juist ook die.
+
+- Nieuwe optie `airco_raam_entities` (binary_sensors, meerdere; standaard
+  leeg = geen blokkade), in het opties-scherm direct onder "Airco altijd uit
+  om". Bij Ruud in te vullen met de raamsensoren woonkamer voor/achter en
+  keuken (on = open).
+- `airco_sturing.ramen` / `airco_sturing.raam_open`, als laatste stap van
+  `_airco_ronde` - na het gewone besluit, het dagritme, de thuiskomst en het
+  voorverwarmen/bijstellen (v5.66), zodat geen enkele weg de airco aanzet of
+  hoger zet terwijl een raam open is. Raam open: actie "niets" met reden
+  "raam open: <naam>"; heeft het EMS hem aangezet en verwarmt hij, dan
+  "uit" (de bestaande HA-automatisering doet hetzelfde - beide zetten uit,
+  dus geen gevecht). Wat iemand zelf aanzette, blijft van het EMS
+  onaangeroerd. Een "uit" (zoals de vaste uittijd van 22:00) blijft staan.
+- Onbekend/onbeschikbaar telt niet als open (een kapotte sensor mag de airco
+  niet blokkeren), maar staat in de redenen ("raamsensor onbekend ...").
+- Zichtbaar in de airco-besluitsensor (`redenen`, `samenvatting`, `tekst`,
+  `raam_open`), en daarmee op de kaart en de cockpit.
+
+Tests: `test_v577.py` (9).

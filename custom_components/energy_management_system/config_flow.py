@@ -59,6 +59,7 @@ from .const import (
     CONF_AIRCO_CLIMATE_ENTITY,
     CONF_AIRCO_POWER_SENSOR,
     CONF_AIRCO_UIT_OM,
+    CONF_AIRCO_RAAM_ENTITIES,
     DEFAULT_AIRCO_UIT_OM,
     CONF_SLAAPKAMER_CLIMATE_ENTITY,
     BATTERY_COOLING_OPPORTUNITY_MIN_C,
@@ -478,6 +479,13 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
                 CONF_AIRCO_UIT_OM,
                 default=_as_text(defaults.get(CONF_AIRCO_UIT_OM, DEFAULT_AIRCO_UIT_OM)),
             ): selector.TextSelector(),
+            # v5.77: ramen van woonkamer en keuken - open = airco nooit aan.
+            vol.Optional(
+                CONF_AIRCO_RAAM_ENTITIES,
+                default=defaults.get(CONF_AIRCO_RAAM_ENTITIES, []),
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="binary_sensor", multiple=True)
+            ),
             _optioneel(CONF_SLAAPKAMER_CLIMATE_ENTITY, defaults): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="climate")
             ),
