@@ -1,13 +1,18 @@
-EMS v5.70 - winstgevend verkopen, het huis gaat voor
+EMS v5.71 - de energiecockpit
 
-Installeren: via HACS bijwerken en Home Assistant herstarten.
+Installeren: via HACS bijwerken en Home Assistant herstarten. Daarna de
+browser een keer hard verversen (Ctrl+Shift+R; in de app de cache wissen).
 
-- 's Avonds wordt de energie die pas na het volgende goedkope blok nodig
-  is niet meer vastgehouden als dat blok hem goedkoper teruglaadt dan
-  verkopen nu oplevert (minstens 2 ct per kWh, na rendement en slijtage).
-  De energie tot het blok blijft volledig beschermd, met marge en bodem.
-- Economische tekortnachten (bijladen loonde niet) verhogen de
-  veiligheidsmarge niet meer (L-EMS-013).
-- De verkooptoets laat zien hoeveel er vrijkwam en waarom.
+- Nieuw dashboard "Energiecockpit": alles op een pagina in de stijl van
+  StormchaseNL en Gold Scalper - accu, wat het EMS nu doet en waarom,
+  stroomprijs, live energiestroom, planning per kwartier met prijs,
+  geplande stand, laadstand en zon, verkopen en reserve, accumodules, zon,
+  huis en apparaten, geld, en de meest gebruikte knoppen.
+- De tabel "Komend schema" heeft een kolom Accu ("38 -> 66%").
+- Nieuwe sensor Dashboardbronnen: welke entiteiten de cockpit leest.
 
-Laden, de nachtreserve tot het blok, de bodem en de piekregel ongewijzigd.
+Bevat ook v5.70: 's avonds winstgevend verkopen wat pas na het volgende
+goedkope blok nodig is, en economische tekortnachten verhogen de marge
+niet meer. De energie tot het blok blijft volledig beschermd.
+
+Sturing ongewijzigd ten opzichte van v5.70.

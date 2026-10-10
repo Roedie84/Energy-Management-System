@@ -5,7 +5,7 @@
 **Home Assistant-integratie die een thuisaccu aanstuurt op dynamische energieprijzen — en zichzelf bijleert.**
 
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=flat-square)](https://hacs.xyz)
-[![Version](https://img.shields.io/badge/versie-5.70-blue.svg?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/versie-5.71-blue.svg?style=flat-square)](CHANGELOG.md)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2024.6.0%2B-41BDF5.svg?style=flat-square)](https://www.home-assistant.io)
 [![Tests](https://img.shields.io/badge/tests-5275%20groen-brightgreen.svg?style=flat-square)](tests)
 [![License](https://img.shields.io/badge/licentie-MIT-lightgrey.svg?style=flat-square)](LICENSE)
@@ -267,6 +267,28 @@ over is.
 **Vangnet tegen uitschieters:** één extreme piek rekt de spreiding op en
 tilt de drempel mee omhoog. Is de hoogste prijs meer dan tweemaal de
 mediaan, dan geldt ook een mediaanmaat en wint de ruimste van de twee.
+
+### De energiecockpit (v5.71)
+
+Een eigen dashboard met alles op een pagina, in dezelfde stijl als
+StormchaseNL en Gold Scalper: de accu en wat het EMS nu doet en waarom, de
+stroomprijs, de energiestroom (zon, net, huis, accu) live, de planning per
+kwartier met prijs, geplande stand, verwachte laadstand en zon, de verkoop-
+en reservetoets, de accumodules, zon, huis en apparaten, geld, en de knoppen
+die je het meest gebruikt. De kaart komt met de integratie mee
+(`/energy_management_system/ems-cockpit.js`, als Lovelace-bron vastgelegd)
+en vindt zijn entiteiten zelf via de sensor *Dashboardbronnen*.
+
+Een dashboard aanmaken: Instellingen > Dashboards > Dashboard toevoegen >
+Nieuw dashboard, en in de onbewerkte configuratie:
+
+```yaml
+strategy:
+  type: custom:ems
+```
+
+Of de kaart los op een eigen view: `type: custom:ems-cockpit-card`
+(paneelweergave). Op Overzicht staat een tegel die naar `/ems-cockpit` gaat.
 
 ### De nachtreserve
 

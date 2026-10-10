@@ -32179,3 +32179,45 @@ voor). De "Let op"-zin zegt of de nachten de marge verhoogden.
 
 Tests: `test_v570_verkoopreserve.py` (14). `test_v528_meetlaag` volgt de
 nieuwe verkoopregel in het plan.
+
+## v5.70.1 — accustand in "Komend schema"
+
+Gemeld bij de tabel: "tevens accu percentage niet". De blokken van het plan
+(`get_plan_blokken`, attribuut `transitions` van de schemasensor) dragen nu
+`soc_begin` en `soc_eind`: de verwachte accustand (%) aan het begin en eind
+van het blok. Het eerste blok begint bij de stand van nu. De kaart toont ze
+in een nieuwe kolom Accu ("38 → 66%"; gelijk of onbekend: één getal of —).
+Alleen weergave; sturing ongewijzigd. Tests in `test_v570_verkoopreserve.py`.
+
+## v5.71 — de energiecockpit
+
+Gevraagd (10-10): "De landingspagina van het EMS is niet fancy, kan er een
+pagina voor komen als dashboard die alle informatie in 1 pagina
+inzichtelijk maakt? Met de meest gebruikte buttons en planning. Moet een
+beetje lijken op de dashboards van de andere 2 integraties."
+
+- **`www/ems-cockpit.js`**: de kaart `custom:ems-cockpit-card` en de
+  strategie `custom:ems`. Eigen element met Shadow DOM, geen HACS-kaarten,
+  geen externe bestanden, alleen ASCII in de bron. Panelen: kop (status,
+  stand van de accu, prijs, klok), aandachtspunten, vier tegels (thuisaccu
+  met laadstand, wat het EMS nu doet en waarom, stroomprijs met het
+  goedkoopste blok, vandaag), energiestroom live (zon, net, huis, accu met
+  bewegende stromen), planning (staafgrafiek per kwartier in de kleur van de
+  geplande stand, lijn met de verwachte laadstand, vlak met de zon,
+  drempellijn, nu-lijn, en de bloktabel met Accu-kolom), verkopen en
+  reserve, accumodules met koeling, zon, huis en apparaten, geld, en
+  bediening (twaalf schakelaars; wat de sturing overneemt vraagt eerst om
+  bevestiging). Tekent alleen het paneel opnieuw waarvan een waarde
+  veranderde. Breedtes: telefoon, tablet, breed scherm.
+- **`cockpit_frontend.py`**: serveert het script en legt het vast als
+  Lovelace-bron, met versie en starttijd in de URL (zelfde route als
+  StormchaseNL). `manifest.json`: `after_dependencies` frontend, http,
+  lovelace.
+- **Sensor Dashboardbronnen** (`cockpit_bronnen.py`): de geconfigureerde
+  sensoren (laadstand, P1, zon, prijs, ...) en de eigen entiteiten op hun
+  vaste sleutel (unique_id), zodat de kaart nooit een entity-id raadt -
+  ook niet na hernoemen. Geen attributen in de recorder.
+- **Overzicht**: tegel "Energiecockpit" naar `/ems-cockpit`.
+- **Komend schema**: kolom Accu (zie v5.70.1).
+
+Sturing ongewijzigd. Tests in `test_v571_cockpit.py`.

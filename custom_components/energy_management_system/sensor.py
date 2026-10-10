@@ -163,6 +163,8 @@ async def async_setup_entry(
         # v5.14: de kern van de diagnostiek, leesbaar voor de assistent.
         # v5.19: de cockpit, die meebeweegt met de metingen.
         CockpitSensor(coordinator, entry.entry_id),
+        # v5.71: welke entiteiten het cockpitdashboard leest.
+        DashboardBronnenSensor(coordinator, entry.entry_id),
         AircoBesluitSensor(coordinator, entry.entry_id),
         RolluikIsolatieSensor(coordinator, entry.entry_id),
         MeetlogSensor(coordinator, entry.entry_id),
@@ -5229,3 +5231,58 @@ class ZendureLokaalSensor(_CoordinatorDiagnosticSensor):
             return meelezer.attributen()
         except Exception:  # noqa: BLE001 - meelezen mag de sensor niet breken
             return {"modus": "fout bij samenvatten"}
+
+
+
+class DashboardBronnenSensor(_CoordinatorDiagnosticSensor):
+    """Welke entiteiten het cockpitdashboard leest (v5.71).
+
+    Gevraagd: "De landingspagina van het EMS is niet fancy, kan er een
+    pagina voor komen als dashboard die alle informatie in 1 pagina
+    inzichtelijk maakt?" Die kaart draait in de browser en kent de
+    configuratie niet. Hier staat het op een rij: de geconfigureerde
+    sensoren (laadstand, P1, zon, prijs, ...) en de eigen entiteiten op hun
+    vaste sleutel. De kaart vindt deze sensor op het attribuut
+    `ems_cockpit`.
+    """
+
+    _unrecorded_attributes = GEEN_ATTRIBUTEN_IN_RECORDER
+    _attr_has_entity_name = True
+    _attr_name = "Dashboardbronnen"
+    _attr_icon = "mdi:view-dashboard-variant-outline"
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        super().__init__(coordinator, entry_id, "dashboard_bronnen")
+        self._entry_id = entry_id
+
+    def _eigen(self) -> dict:
+        from .cockpit_bronnen import eigen_entiteiten
+
+        hass = getattr(self, "hass", None)
+        if hass is None:
+            return {}
+        try:
+            from homeassistant.helpers import entity_registry as er
+
+            register = er.async_get(hass)
+            regels = [
+                (r.unique_id, r.entity_id)
+                for r in er.async_entries_for_config_entry(register, self._entry_id)
+            ]
+        except Exception:  # noqa: BLE001 - het dashboard mag nooit de sensor breken
+            return {}
+        return eigen_entiteiten(self._entry_id, regels)
+
+    @property
+    def native_value(self) -> int:
+        return len(self._eigen())
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        from .cockpit_bronnen import externe_bronnen
+
+        return {
+            "ems_cockpit": 1,
+            "bronnen": externe_bronnen(self._coordinator.config or {}),
+            "eigen": self._eigen(),
+        }

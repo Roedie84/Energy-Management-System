@@ -32,7 +32,9 @@ def _navigatiedoelen():
     tekst = (PAKKET / "dashboard_template.yaml").read_text()
     import re
 
-    tegels = set(re.findall(r"navigation_path: \S*/([a-z-]+)", tekst))
+    # v5.71: alleen paden BINNEN dit dashboard; de tegel naar de cockpit
+    # gaat naar een eigen dashboard (/ems-cockpit).
+    tegels = set(re.findall(r"navigation_path: /energy-management-system/([a-z-]+)", tekst))
     links = set(re.findall(r"\]\(/energy-management-system/([a-z-]+)\)", tekst))
     return tegels | links
 

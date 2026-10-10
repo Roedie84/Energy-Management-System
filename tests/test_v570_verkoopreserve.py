@@ -191,3 +191,64 @@ def test_de_zin_noemt_wat_er_vrijkomt(make_coordinator, monkeypatch):
     zin = c._verkoopreserve_zin(uit)
     assert "na het blok" in zin and "33.7 ct" in zin
     assert c._verkoopreserve_zin({"toegepast": False}) == ""
+
+
+# --- 3. v5.70.1: accustand in "Komend schema" -------------------------------
+
+
+def _plan_rij(kwartier: int, modus: str, soc: int) -> dict:
+    begin = datetime(2026, 10, 10, 12, 0, tzinfo=TZ) + timedelta(minutes=15 * kwartier)
+    return {"start": begin.isoformat(), "modus": modus, "prijs_ct": 12.6, "soc_procent": soc}
+
+
+def test_blokken_dragen_de_accustand_van_begin_tot_eind(make_coordinator):
+    c = make_coordinator({})
+    c.accustand_procent = lambda: 38.0
+    c.get_quarter_plan = lambda now=None: [
+        _plan_rij(0, "manual (laden)", 45),
+        _plan_rij(1, "manual (laden)", 52),
+        _plan_rij(2, "smart", 53),
+        _plan_rij(3, "smart", 54),
+    ]
+    blokken = c.get_plan_blokken()
+    assert (blokken[0]["soc_begin"], blokken[0]["soc_eind"]) == (38, 52)
+    assert (blokken[1]["soc_begin"], blokken[1]["soc_eind"]) == (52, 54)
+    assert blokken[0]["accu_tekst"] == "38 → 52%"
+    assert c._accu_tekst(100, 100) == "100%"
+    assert c._accu_tekst(None, None) == "—"
+
+
+def test_de_kaart_toont_de_accukolom():
+    import yaml
+    from jinja2 import Environment
+
+    data = yaml.safe_load(
+        open(
+            "custom_components/energy_management_system/dashboard_template.yaml",
+            encoding="utf-8",
+        )
+    )
+    kaart = next(
+        k
+        for v in data["views"]
+        for s in v.get("sections") or []
+        for k in s.get("cards") or []
+        if k.get("title") == "Komend schema"
+    )
+    inhoud = kaart["content"].replace(
+        "state_attr('sensor.energy_management_system_upcoming_schedule', 'transitions')",
+        "BLOKKEN",
+    )
+    uit = Environment().from_string(inhoud).render(
+        BLOKKEN=[
+            {"van_tekst": "12:00", "tot_tekst": "13:00", "mode": "manual (laden)",
+             "min_price_per_kwh": 0.125, "max_price_per_kwh": 0.127,
+             "soc_begin": 38, "soc_eind": 66, "accu_tekst": "38 → 66%"},
+            {"van_tekst": "13:00", "tot_tekst": "14:00", "mode": "smart",
+             "min_price_per_kwh": 0.13, "max_price_per_kwh": 0.13,
+             "soc_begin": None, "soc_eind": None},
+        ]
+    )
+    assert "| Accu |" in uit
+    assert "38 → 66%" in uit
+    assert "| — |" in uit

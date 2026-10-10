@@ -23091,6 +23091,10 @@ class EnergyManagementSystemCoordinator:
         blokken: list[dict] = []
         vandaag = (now or dt_util.now()).date()
         rijen = self.get_quarter_plan(now)
+        # v5.70.1: de accustand per blok, van begin tot eind. Gevraagd bij
+        # de tabel: "tevens accu percentage niet". De stand van een rij is
+        # die NA dat kwartier; het begin van het eerste blok is de stand nu.
+        soc_voor = self.accustand_procent()
         for rij in rijen or []:
             begin = dt_util.parse_datetime(str(rij.get("start") or ""))
             if begin is None:
@@ -23098,11 +23102,14 @@ class EnergyManagementSystemCoordinator:
             eind = begin + timedelta(minutes=15)
             prijs = (rij.get("prijs_ct") or 0.0) / 100
             modus = rij.get("modus")
+            soc_na = rij.get("soc_procent")
             vorige = blokken[-1] if blokken else None
             if vorige and vorige["mode"] == modus and vorige["_eind"] == begin:
                 vorige["_eind"] = eind
                 vorige["min_price_per_kwh"] = min(vorige["min_price_per_kwh"], prijs)
                 vorige["max_price_per_kwh"] = max(vorige["max_price_per_kwh"], prijs)
+                vorige["soc_eind"] = soc_na
+                soc_voor = soc_na
                 continue
             blokken.append(
                 {
@@ -23111,8 +23118,11 @@ class EnergyManagementSystemCoordinator:
                     "_eind": eind,
                     "min_price_per_kwh": prijs,
                     "max_price_per_kwh": prijs,
+                    "soc_begin": soc_voor if soc_voor is not None else soc_na,
+                    "soc_eind": soc_na,
                 }
             )
+            soc_voor = soc_na
         return [
             {
                 "mode": b["mode"],
@@ -23124,9 +23134,28 @@ class EnergyManagementSystemCoordinator:
                 "tot_tekst": self._plan_tijd_tekst(b["_eind"], vandaag, eind=True),
                 "min_price_per_kwh": round(b["min_price_per_kwh"], 4),
                 "max_price_per_kwh": round(b["max_price_per_kwh"], 4),
+                # v5.70.1: accustand (%) aan het begin en eind van het blok.
+                "soc_begin": (
+                    round(b["soc_begin"]) if b.get("soc_begin") is not None else None
+                ),
+                "soc_eind": (
+                    round(b["soc_eind"]) if b.get("soc_eind") is not None else None
+                ),
+                # De kaart toont dit letterlijk: logica hoort hier, niet in
+                # het sjabloon (sjabloonratel v3.95.4).
+                "accu_tekst": self._accu_tekst(b.get("soc_begin"), b.get("soc_eind")),
             }
             for b in blokken
         ]
+
+    @staticmethod
+    def _accu_tekst(begin, eind) -> str:
+        """"38 → 66%", "100%" of "—" voor de kolom Accu (v5.70.1)."""
+        if eind is None:
+            return "—"
+        if begin is None or round(begin) == round(eind):
+            return f"{round(eind)}%"
+        return f"{round(begin)} → {round(eind)}%"
 
     def get_quarter_plan_compact(self, now: datetime | None = None) -> list[dict]:
         """Het kwartierplan met alleen wat de tabel toont (v1.25.0).
