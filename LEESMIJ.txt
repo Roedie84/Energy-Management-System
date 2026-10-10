@@ -1,3 +1,12 @@
+EMS v5.79.0 - ontladen dekt het huis, terugleveren alleen uit vrije ruimte
+
+Installeren: via HACS bijwerken en Home Assistant herstarten.
+
+- In een duur kwartier ontlaadt de accu nooit meer dan het huisverbruik plus
+  wat er boven de reserve tot het goedkope blok vrij is, verdeeld over de
+  rest van het kwartier. Zegt de verkooptoets nee, dan dekt de accu alleen
+  het huis en gaat er niets het net op.
+
 EMS v5.77.0 - raam open, airco nooit aan
 
 Installeren: via HACS bijwerken en Home Assistant herstarten. Daarna in

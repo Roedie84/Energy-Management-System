@@ -24365,6 +24365,9 @@ class EnergyManagementSystemCoordinator:
             "beschikbaar_kwh": (
                 round(b, 3) if (b := self.beschikbare_energie_kwh()) is not None else None
             ),
+            # v5.79: de verkooptoets van dit kwartier, zodat achteraf te zien
+            # is of er teruggeleverd werd terwijl het niet mocht.
+            "mag_verkopen": (self.last_sell_check or {}).get("mag_verkopen"),
         }
         reeks = self.dagverloop.setdefault(dag, [])
         # v5.72: reserve en laadstand ALTIJD in het dagverloop, zodat een
@@ -26178,6 +26181,8 @@ class EnergyManagementSystemCoordinator:
         lage SoC: niet forceren, de accu zijn eigen slimme modus laten
         draaien.
         """
+        # v5.79: eerst de verkoopruimte - ook zolang salderen geldt.
+        discharge_power_w = self._begrens_tot_verkoopruimte(now, discharge_power_w)
         if discharge_power_w is None or self._is_salderen_active(now):
             return discharge_power_w
 
@@ -26197,6 +26202,78 @@ class EnergyManagementSystemCoordinator:
 
         maximum_w = household_load_w + POST_SALDEREN_DISCHARGE_OVERSHOOT_W
         return round(min(discharge_power_w, maximum_w), 1)
+
+    # v5.79: de laatste begrenzing van het ontlaadvermogen, voor de export.
+    last_ontlaadgrens: dict | None = None
+
+    def _begrens_tot_verkoopruimte(
+        self, now: datetime, vermogen_w: float | None
+    ) -> float | None:
+        """Ontladen = het huis dekken; terugleveren alleen uit de vrije ruimte
+        (v5.79, akkoord Ruud 10-10).
+
+        Gezien op 10-10 18:45-19:00: stand expensive_quarter, de Zendure
+        ontlaadde ~2,4 kW, de P1-meter stond op -1,8 tot -1,9 kW (~0,47 kWh
+        teruggeleverd), en de beschikbare energie zakte van 6,91 naar 6,22
+        kWh tegen een reserve tot het blok van 6,78 kWh (5,42 x marge). De
+        oorzaak zat in het VERMOGEN, niet in de poort: de poort
+        (`may_sell_now`) keek per ronde of er nog iets boven de reserve zat,
+        maar het vermogen werd niet op die ruimte afgestemd. De ruimte werd
+        omgerekend over vijf minuten (`UPDATE_INTERVAL_MINUTES`) en minstens
+        het huis plus wat er vrij was - en zolang salderen geldt, begrensde
+        niets daarna het vermogen (`cap_discharge_to_own_consumption` gaf het
+        ongewijzigd terug). Met 2,4 kW vast vermogen schiet één ronde dan ver
+        door de reserve heen.
+
+        Nu: het vermogen is hooguit het huisverbruik plus wat er vrij te
+        verkopen is, verdeeld over de rest van het kwartier (minstens één
+        ronde, zodat één ronde nooit meer kan verkopen dan er vrij is). Vrij
+        is het kleinste van (a) wat de verkooptoets vrij gaf, en (b) de
+        beschikbare energie min de reserve TOT HET BLOK (nodig tot het blok x
+        marge, minstens de bodem). Zei de verkooptoets nee, dan nul: alleen
+        het huis. Zonder verkooptoets in deze ronde (los aangeroepen) blijft
+        het vermogen zoals het was.
+        """
+        toets = self.last_sell_check
+        if vermogen_w is None or not isinstance(toets, dict) or "mag_verkopen" not in toets:
+            return vermogen_w
+        beschikbaar = toets.get("beschikbaar_kwh")
+        if beschikbaar is None:
+            beschikbaar = self.beschikbare_energie_kwh()
+        if beschikbaar is None and toets.get("mag_verkopen"):
+            # Zonder accumeting bewaakt de bestaande reserve het (zie
+            # `may_sell_now`): dan niets extra begrenzen.
+            return vermogen_w
+        vrij = 0.0
+        if toets.get("mag_verkopen") and beschikbaar is not None:
+            vrij = float(toets.get("vrij_te_verkopen_kwh") or 0.0)
+            u = self.last_reserve_margin_breakdown or {}
+            tot, _na = self._nodig_tot_en_na_blok_kwh()
+            marge = 1 + float(u.get("total_percent") or 0.0) / 100
+            grens = max(self._reserve_bodem_kwh(), (tot or 0.0) * marge)
+            vrij = max(0.0, min(vrij, float(beschikbaar) - grens))
+        huis_w = self._read_corrected_consumption_power()
+        volgend = now.replace(minute=(now.minute // 15) * 15, second=0, microsecond=0) + timedelta(minutes=15)
+        rest_h = max(
+            (volgend - now).total_seconds() / 3600,
+            float(self.update_interval_seconds) / 3600,
+        )
+        export_w = vrij / rest_h * 1000 if rest_h > 0 else 0.0
+        maximum_w = max(0.0, huis_w or 0.0) + export_w
+        self.last_ontlaadgrens = {
+            "moment": now.isoformat(),
+            "gevraagd_w": round(vermogen_w, 1),
+            "huis_w": round(huis_w, 1) if huis_w is not None else None,
+            "vrij_te_verkopen_kwh": round(vrij, 3),
+            "export_max_w": round(export_w, 1),
+            "maximum_w": round(maximum_w, 1),
+            "mag_verkopen": bool(toets.get("mag_verkopen")),
+        }
+        if maximum_w < POST_SALDEREN_MIN_USEFUL_DISCHARGE_W:
+            # Niets te dekken en niets te verkopen: de accu in zijn eigen
+            # slimme stand, die het huis volgt.
+            return None
+        return round(min(vermogen_w, maximum_w), 1)
 
     _negatieve_prijs_sinds: datetime | None = None
 

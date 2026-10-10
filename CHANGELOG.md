@@ -32544,3 +32544,37 @@ Gevraagd (Ruud, 10-10 16:31): "pas uit na 5 minuten als er iets open gaat".
 - Aanzetten of hoger zetten met een raam open blijft direct geblokkeerd.
 
 Tests: `test_v578.py` (3).
+
+## v5.79.0 — ontladen dekt het huis, terugleveren alleen uit vrije ruimte
+
+Gezien op 10-10 18:45-19:00 (v5.78.0, akkoord Ruud 19:37): stand
+`expensive_quarter`, de Zendure ontlaadde ~2,4 kW, de P1-meter stond op -1,8
+tot -1,9 kW (~0,47 kWh teruggeleverd). De beschikbare energie zakte van 6,91
+naar 6,22 kWh tegen een reserve tot het blok van 6,78 kWh (5,42 × marge),
+blok morgen 10:45.
+
+**Oorzaak.** De poort (`may_sell_now`) toetst per ronde of er nog iets boven
+de reserve zit, maar het VERMOGEN werd daar niet op afgestemd: de ruimte werd
+over vijf minuten omgerekend (`UPDATE_INTERVAL_MINUTES`, terwijl een ronde
+hier 60 s duurt), met het huisverbruik als ondergrens, en zolang salderen
+geldt begrensde niets daarna het vermogen (`cap_discharge_to_own_consumption`
+gaf het ongewijzigd terug). Met 2,4 kW vast vermogen schoot het kwartier
+door de reserve heen, terwijl de poort pas weer sloot nadat de ruimte al
+op was. De precieze waarde van de poort per ronde is niet meer na te lezen:
+sinds v5.76 staan de attributen niet meer in de recorder (daarom staat de
+verkooptoets nu in het dagverloop).
+
+**Fix** (`_begrens_tot_verkoopruimte`, eerste stap van
+`cap_discharge_to_own_consumption`, dus voor elke ontlaadstand in een duur
+kwartier en ook zolang salderen geldt): het ontlaadvermogen is hooguit het
+huisverbruik plus de vrije ruimte gedeeld door de rest van het kwartier
+(minstens één ronde, zodat één ronde nooit meer verkoopt dan er vrij is).
+Vrij = het kleinste van wat de verkooptoets vrij gaf en de beschikbare
+energie min de reserve tot het blok (nodig tot het blok × marge, minstens de
+bodem). Zegt de verkooptoets nee: geen export, alleen het huis. Is er niets
+te dekken en niets vrij: de slimme stand.
+
+- Zichtbaar: `ontlaadgrens` in de export (gevraagd, huis, vrij, maximum).
+- Het dagverloop bewaart per kwartier `mag_verkopen`.
+
+Tests: `test_v579.py` (8).

@@ -10,7 +10,7 @@
   "iot_class": "local_polling",
   "integration_type": "service",
   "requirements": [],
-  "version": "5.78.0",
+  "version": "5.79.0",
   "after_dependencies": [
     "frontend",
     "http",
